@@ -8,6 +8,8 @@ V4L2_META_FMT_GENERIC_8 ('MET8'), V4L2_META_FMT_GENERIC_CSI2_10 ('MECA'), V4L2_M
 
 Generic line-based metadata formats
 
+.. _v4l2-format-generic-meta:
+
 Description
 ===========
 

@@ -164,6 +164,18 @@ Image Source Control IDs
     :ref:`generic metadata formats <media-bus-format-generic-meta>` formats to
     specify the layout of the data.
 
+.. flat-table:: V4L2 metadata layouts
+    :header-rows:  1
+    :stub-columns: 0
+    :widths:       1 2 1
+
+    * - Macro name
+      - Synopsis
+      - Value
+    * - V4L2_METADATA_LAYOUT_CCS
+      - :ref:`CCS embedded data <media-metadata-layout-ccs>`
+      - 1
+
 .. _image_source_control_binning_factors:
 
 ``V4L2_CID_BINNING_FACTORS (integer menu)``
