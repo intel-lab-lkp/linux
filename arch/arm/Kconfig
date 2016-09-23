@@ -321,11 +321,22 @@ config MMU
 	  Select if you want MMU-based virtualised addressing space
 	  support by paged memory management. If unsure, say 'Y'.
 
+choice
+	prompt "ARM system type"
+	depends on !MMU
+	default ARM_SINGLE_ARMV7M
+
 config ARM_SINGLE_ARMV7M
-	def_bool !MMU
+	bool "ARMv7-M based platforms (Cortex-M0/M3/M4)"
 	select ARM_NVIC
 	select CPU_V7M
 	select NO_IOPORT_MAP
+
+config ARM_SINGLE_VERSATILE
+	bool "Versatile based platform"
+	select CPU_ARM926T
+
+endchoice
 
 config ARCH_MMAP_RND_BITS_MIN
 	default 8
