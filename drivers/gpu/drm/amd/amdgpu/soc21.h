@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 Advanced Micro Devices, Inc.
+ * Copyright 2021 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,16 +20,11 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  *
  */
+#ifndef __SOC21_H__
+#define __SOC21_H__
 
-#ifndef __AMDGPU_DISCOVERY__
-#define __AMDGPU_DISCOVERY__
+extern const struct amdgpu_ip_block_version soc21_common_ip_block;
 
-#define DISCOVERY_TMR_SIZE      (4 << 10)
-#define DISCOVERY_TMR_OFFSET    (64 << 10)
-
-void amdgpu_discovery_fini(struct amdgpu_device *adev);
-int amdgpu_discovery_get_ip_version(struct amdgpu_device *adev, int hw_id, int number_instance,
-                                    int *major, int *minor, int *revision);
-int amdgpu_discovery_set_ip_blocks(struct amdgpu_device *adev);
-
-#endif /* __AMDGPU_DISCOVERY__ */
+void soc21_grbm_select(struct amdgpu_device *adev,
+		    u32 me, u32 pipe, u32 queue, u32 vmid);
+#endif
