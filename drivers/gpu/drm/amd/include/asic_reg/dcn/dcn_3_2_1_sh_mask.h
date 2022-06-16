@@ -6350,6 +6350,10 @@
 #define COMPBUF_RESERVED_SPACE__COMPBUF_RESERVED_SPACE_64B_MASK                                               0x00000FFFL
 #define COMPBUF_RESERVED_SPACE__COMPBUF_RESERVED_SPACE_ZS_MASK                                                0x0FFF0000L
 
+//DCHUBBUB_DEBUG_CTRL_0
+#define DCHUBBUB_DEBUG_CTRL_0__DET_DEPTH__SHIFT                                                               0x10
+#define DCHUBBUB_DEBUG_CTRL_0__DET_DEPTH_MASK                                                                 0x07FF0000L
+
 
 // addressBlock: dce_dc_dchubbubl_hubbub_vmrq_if_dispdec
 //DCN_VM_CONTEXT0_CNTL
