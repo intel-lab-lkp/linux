@@ -34,6 +34,10 @@
 #define cls_dev_to_mmc_host(d)	container_of(d, struct mmc_host, class_dev)
 
 static DEFINE_IDA(mmc_host_ida);
+static unsigned int caps_clear, caps2_clear;
+
+module_param(caps_clear, uint, 0644);
+module_param(caps2_clear, uint, 0644);
 
 #ifdef CONFIG_PM_SLEEP
 static int mmc_host_class_prepare(struct device *dev)
@@ -410,6 +414,14 @@ int mmc_of_parse(struct mmc_host *host)
 	if (device_property_read_bool(dev, "no-mmc-hs400"))
 		host->caps2 &= ~(MMC_CAP2_HS400_1_8V | MMC_CAP2_HS400_1_2V |
 				 MMC_CAP2_HS400_ES);
+
+	if (caps_clear || caps2_clear)
+		dev_warn(host->parent,
+			 "clearing host controller caps %#x caps2 %#x\n",
+			 caps_clear, caps2_clear);
+
+	host->caps &= ~caps_clear;
+	host->caps2 &= ~caps2_clear;
 
 	/* Must be after "non-removable" check */
 	if (device_property_read_u32(dev, "fixed-emmc-driver-type", &drv_type) == 0) {
