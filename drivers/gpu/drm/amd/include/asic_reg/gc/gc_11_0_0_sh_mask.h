@@ -29424,6 +29424,31 @@
 #define GL1C_STATUS__TAG_EVICT_MASK                                                                           0x04000000L
 #define GL1C_STATUS__TAG_REQUEST_STATE_OPERATION_MASK                                                         0x78000000L
 #define GL1C_STATUS__TRACKER_LAST_SET_MATCHES_CURRENT_SET_MASK                                                0x80000000L
+//GL1C_UTCL0_CNTL1
+#define GL1C_UTCL0_CNTL1__FORCE_4K_L2_RESP__SHIFT                                                             0x0
+#define GL1C_UTCL0_CNTL1__GPUVM_64K_DEF__SHIFT                                                                0x1
+#define GL1C_UTCL0_CNTL1__GPUVM_PERM_MODE__SHIFT                                                              0x2
+#define GL1C_UTCL0_CNTL1__RESP_MODE__SHIFT                                                                    0x3
+#define GL1C_UTCL0_CNTL1__RESP_FAULT_MODE__SHIFT                                                              0x5
+#define GL1C_UTCL0_CNTL1__CLIENTID__SHIFT                                                                     0x7
+#define GL1C_UTCL0_CNTL1__REG_INV_VMID__SHIFT                                                                 0x13
+#define GL1C_UTCL0_CNTL1__REG_INV_TOGGLE__SHIFT                                                               0x18
+#define GL1C_UTCL0_CNTL1__FORCE_MISS__SHIFT                                                                   0x1a
+#define GL1C_UTCL0_CNTL1__FORCE_IN_ORDER__SHIFT                                                               0x1b
+#define GL1C_UTCL0_CNTL1__REDUCE_FIFO_DEPTH_BY_2__SHIFT                                                       0x1c
+#define GL1C_UTCL0_CNTL1__REDUCE_CACHE_SIZE_BY_2__SHIFT                                                       0x1e
+#define GL1C_UTCL0_CNTL1__FORCE_4K_L2_RESP_MASK                                                               0x00000001L
+#define GL1C_UTCL0_CNTL1__GPUVM_64K_DEF_MASK                                                                  0x00000002L
+#define GL1C_UTCL0_CNTL1__GPUVM_PERM_MODE_MASK                                                                0x00000004L
+#define GL1C_UTCL0_CNTL1__RESP_MODE_MASK                                                                      0x00000018L
+#define GL1C_UTCL0_CNTL1__RESP_FAULT_MODE_MASK                                                                0x00000060L
+#define GL1C_UTCL0_CNTL1__CLIENTID_MASK                                                                       0x0000FF80L
+#define GL1C_UTCL0_CNTL1__REG_INV_VMID_MASK                                                                   0x00780000L
+#define GL1C_UTCL0_CNTL1__REG_INV_TOGGLE_MASK                                                                 0x01000000L
+#define GL1C_UTCL0_CNTL1__FORCE_MISS_MASK                                                                     0x04000000L
+#define GL1C_UTCL0_CNTL1__FORCE_IN_ORDER_MASK                                                                 0x06000000L
+#define GL1C_UTCL0_CNTL1__REDUCE_FIFO_DEPTH_BY_2_MASK                                                         0x30000000L
+#define GL1C_UTCL0_CNTL1__REDUCE_CACHE_SIZE_BY_2_MASK                                                         0xC0000000L
 //GL1C_UTCL0_CNTL2
 #define GL1C_UTCL0_CNTL2__SPARE__SHIFT                                                                        0x0
 #define GL1C_UTCL0_CNTL2__COMP_SYNC_DISABLE__SHIFT                                                            0x8
