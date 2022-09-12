@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Advanced Micro Devices, Inc.
+ * Copyright 2021 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -19,16 +19,14 @@
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
  * OTHER DEALINGS IN THE SOFTWARE.
  *
- * Authors: AMD
- *
  */
 
-#ifndef DML_WRAPPER_H_
-#define DML_WRAPPER_H_
+#ifndef __SIENNA_CICHLID_H__
+#define __SIENNA_CICHLID_H__
 
-#include "dc.h"
-#include "dml/display_mode_vba.h"
+#include "amdgpu.h"
 
-bool dml_validate(struct dc *dc, struct dc_state *context, bool fast_validate);
+int sienna_cichlid_reset_init(struct amdgpu_device *adev);
+int sienna_cichlid_reset_fini(struct amdgpu_device *adev);
 
 #endif

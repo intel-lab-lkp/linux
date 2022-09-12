@@ -34547,6 +34547,16 @@
 
 
 // addressBlock: gc_pwrdec
+//CGTS_TCC_DISABLE
+#define CGTS_TCC_DISABLE__HI_TCC_DISABLE__SHIFT                                                               0x8
+#define CGTS_TCC_DISABLE__TCC_DISABLE__SHIFT                                                                  0x10
+#define CGTS_TCC_DISABLE__HI_TCC_DISABLE_MASK                                                                 0x0000FF00L
+#define CGTS_TCC_DISABLE__TCC_DISABLE_MASK                                                                    0xFFFF0000L
+//CGTS_USER_TCC_DISABLE
+#define CGTS_USER_TCC_DISABLE__HI_TCC_DISABLE__SHIFT                                                          0x8
+#define CGTS_USER_TCC_DISABLE__TCC_DISABLE__SHIFT                                                             0x10
+#define CGTS_USER_TCC_DISABLE__HI_TCC_DISABLE_MASK                                                            0x0000FF00L
+#define CGTS_USER_TCC_DISABLE__TCC_DISABLE_MASK                                                               0xFFFF0000L
 //SQ_ALU_CLK_CTRL
 #define SQ_ALU_CLK_CTRL__FORCE_WGP_ON_SA0__SHIFT                                                              0x0
 #define SQ_ALU_CLK_CTRL__FORCE_WGP_ON_SA1__SHIFT                                                              0x10
