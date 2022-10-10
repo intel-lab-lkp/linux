@@ -31641,6 +31641,11 @@
 #define GDC0_BIF_RLC_DOORBELL_RANGE__SIZE__SHIFT                                                              0x10
 #define GDC0_BIF_RLC_DOORBELL_RANGE__OFFSET_MASK                                                              0x00000FFCL
 #define GDC0_BIF_RLC_DOORBELL_RANGE__SIZE_MASK                                                                0x001F0000L
+//GDC0_BIF_CSDMA_DOORBELL_RANGE
+#define GDC0_BIF_CSDMA_DOORBELL_RANGE__OFFSET__SHIFT                                                          0x2
+#define GDC0_BIF_CSDMA_DOORBELL_RANGE__SIZE__SHIFT                                                            0x10
+#define GDC0_BIF_CSDMA_DOORBELL_RANGE__OFFSET_MASK                                                            0x00000FFCL
+#define GDC0_BIF_CSDMA_DOORBELL_RANGE__SIZE_MASK                                                              0x00FF0000L
 //GDC0_ATDMA_MISC_CNTL
 #define GDC0_ATDMA_MISC_CNTL__WRR_ARB_MODE__SHIFT                                                             0x0
 #define GDC0_ATDMA_MISC_CNTL__ATDMA_MISC_CNTL_INSERT_RD_ON_2ND_WDAT_EN__SHIFT                                 0x1
@@ -119765,6 +119770,11 @@
 #define GDC1_BIF_SDMA5_DOORBELL_RANGE__SIZE__SHIFT                                                            0x10
 #define GDC1_BIF_SDMA5_DOORBELL_RANGE__OFFSET_MASK                                                            0x00000FFCL
 #define GDC1_BIF_SDMA5_DOORBELL_RANGE__SIZE_MASK                                                              0x001F0000L
+//GDC1_BIF_CSDMA_DOORBELL_RANGE
+#define GDC1_BIF_CSDMA_DOORBELL_RANGE__OFFSET__SHIFT                                                          0x2
+#define GDC1_BIF_CSDMA_DOORBELL_RANGE__SIZE__SHIFT                                                            0x10
+#define GDC1_BIF_CSDMA_DOORBELL_RANGE__OFFSET_MASK                                                            0x00000FFCL
+#define GDC1_BIF_CSDMA_DOORBELL_RANGE__SIZE_MASK                                                              0x00FF0000L
 //GDC1_ATDMA_MISC_CNTL
 #define GDC1_ATDMA_MISC_CNTL__WRR_ARB_MODE__SHIFT                                                             0x0
 #define GDC1_ATDMA_MISC_CNTL__ATDMA_MISC_CNTL_INSERT_RD_ON_2ND_WDAT_EN__SHIFT                                 0x1
