@@ -502,8 +502,14 @@ static bool ghes_handle_memory_failure(struct acpi_hest_generic_data *gdata,
 	if (sec_sev == GHES_SEV_CORRECTED &&
 	    (gdata->flags & CPER_SEC_ERROR_THRESHOLD_EXCEEDED))
 		flags = MF_SOFT_OFFLINE;
-	if (sev == GHES_SEV_RECOVERABLE && sec_sev == GHES_SEV_RECOVERABLE)
-		flags = 0;
+	if (sev == GHES_SEV_RECOVERABLE && sec_sev == GHES_SEV_RECOVERABLE) {
+		if (mem_err->validation_bits & CPER_MEM_VALID_ERROR_TYPE)
+			flags = mem_err->error_type == CPER_MEM_SCRUB_UC ?
+					0 :
+					MF_ACTION_REQUIRED;
+		else
+			flags = MF_ACTION_REQUIRED;
+	}
 
 	if (flags != -1)
 		return ghes_do_memory_failure(mem_err->physical_addr, flags);
