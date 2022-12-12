@@ -85627,6 +85627,19 @@
 #define BIF0_PCIE_TX_TRACKING_CTRL_STATUS__TX_TRACKING_PORT_MASK                                              0x0000000EL
 #define BIF0_PCIE_TX_TRACKING_CTRL_STATUS__TX_TRACKING_UNIT_ID_MASK                                           0x00007F00L
 #define BIF0_PCIE_TX_TRACKING_CTRL_STATUS__TX_TRACKING_STATUS_VALID_MASK                                      0x00008000L
+//BIF0_PCIE_TX_POWER_CTRL_1
+#define BIF0_PCIE_TX_POWER_CTRL_1__MST_MEM_LS_EN__SHIFT                                                       0x0
+#define BIF0_PCIE_TX_POWER_CTRL_1__MST_MEM_DS_EN__SHIFT                                                       0x1
+#define BIF0_PCIE_TX_POWER_CTRL_1__MST_MEM_SD_EN__SHIFT                                                       0x2
+#define BIF0_PCIE_TX_POWER_CTRL_1__REPLAY_MEM_LS_EN__SHIFT                                                    0x3
+#define BIF0_PCIE_TX_POWER_CTRL_1__REPLAY_MEM_DS_EN__SHIFT                                                    0x4
+#define BIF0_PCIE_TX_POWER_CTRL_1__REPLAY_MEM_SD_EN__SHIFT                                                    0x5
+#define BIF0_PCIE_TX_POWER_CTRL_1__MST_MEM_LS_EN_MASK                                                         0x00000001L
+#define BIF0_PCIE_TX_POWER_CTRL_1__MST_MEM_DS_EN_MASK                                                         0x00000002L
+#define BIF0_PCIE_TX_POWER_CTRL_1__MST_MEM_SD_EN_MASK                                                         0x00000004L
+#define BIF0_PCIE_TX_POWER_CTRL_1__REPLAY_MEM_LS_EN_MASK                                                      0x00000008L
+#define BIF0_PCIE_TX_POWER_CTRL_1__REPLAY_MEM_DS_EN_MASK                                                      0x00000010L
+#define BIF0_PCIE_TX_POWER_CTRL_1__REPLAY_MEM_SD_EN_MASK                                                      0x00000020L
 //BIF0_PCIE_TX_CTRL_4
 #define BIF0_PCIE_TX_CTRL_4__TX_PORT_ACCESS_TIMER_SKEW__SHIFT                                                 0x0
 #define BIF0_PCIE_TX_CTRL_4__TX_PORT_ACCESS_TIMER_SKEW_MASK                                                   0x0000000FL
