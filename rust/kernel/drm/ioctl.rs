@@ -121,22 +121,20 @@ macro_rules! declare_drm_ioctls {
                                 raw_data: *mut ::core::ffi::c_void,
                                 raw_file_priv: *mut $crate::drm::ioctl::internal::drm_file,
                         ) -> core::ffi::c_int {
-                            // SAFETY: We never drop this, and the DRM core ensures the device lives
-                            // while callbacks are being called.
+                            // SAFETY: The DRM core ensures the device lives while callbacks are
+                            // being called.
                             //
                             // FIXME: Currently there is nothing enforcing that the types of the
                             // dev/file match the current driver these ioctls are being declared
                             // for, and it's not clear how to enforce this within the type system.
-                            let dev = ::core::mem::ManuallyDrop::new(unsafe {
-                                $crate::drm::device::Device::from_raw(raw_dev)
-                            });
+                            let dev = $crate::drm::device::Device::borrow(raw_dev);
                             // SAFETY: This is just the ioctl argument, which hopefully has the right type
                             // (we've done our best checking the size).
                             let data = unsafe { &mut *(raw_data as *mut $crate::uapi::$struct) };
                             // SAFETY: This is just the DRM file structure
                             let file = unsafe { $crate::drm::file::File::from_raw(raw_file_priv) };
 
-                            match $func(&*dev, data, &file) {
+                            match $func(dev, data, &file) {
                                 Err(e) => e.to_errno(),
                                 Ok(i) => i.try_into().unwrap_or(ERANGE.to_errno()),
                             }
