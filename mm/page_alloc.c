@@ -3070,6 +3070,11 @@ retry:
 			(alloc_flags & ALLOC_CPUSET) &&
 			!__cpuset_zone_allowed(zone, gfp_mask))
 				continue;
+
+		/* Don't allocate page from memoryless nodes. */
+		if (!node_state((zone_to_nid(zone)), N_MEMORY))
+			continue;
+
 		/*
 		 * When allocating a page cache page for writing, we
 		 * want to get it from a node that is within its dirty
