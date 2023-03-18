@@ -71,7 +71,7 @@ bcom_task_alloc(int bd_count, int bd_size, int priv_size)
 	/* Allocate our structure */
 	tsk = kzalloc(sizeof(struct bcom_task) + priv_size, GFP_KERNEL);
 	if (!tsk)
-		goto error;
+		goto reset_stop;
 
 	tsk->tasknum = tasknum;
 	if (priv_size)
@@ -80,18 +80,18 @@ bcom_task_alloc(int bd_count, int bd_size, int priv_size)
 	/* Get IRQ of that task */
 	tsk->irq = irq_of_parse_and_map(bcom_eng->ofnode, tsk->tasknum);
 	if (!tsk->irq)
-		goto error;
+		goto free_task;
 
 	/* Init the BDs, if needed */
 	if (bd_count) {
 		tsk->cookie = kmalloc_array(bd_count, sizeof(void *),
 					    GFP_KERNEL);
 		if (!tsk->cookie)
-			goto error;
+			goto dispose_mapping;
 
 		tsk->bd = bcom_sram_alloc(bd_count * bd_size, 4, &tsk->bd_pa);
 		if (!tsk->bd)
-			goto error;
+			goto free_cookie;
 		memset_io(tsk->bd, 0x00, bd_count * bd_size);
 
 		tsk->num_bd = bd_count;
@@ -100,15 +100,13 @@ bcom_task_alloc(int bd_count, int bd_size, int priv_size)
 
 	return tsk;
 
-error:
-	if (tsk) {
-		if (tsk->irq)
-			irq_dispose_mapping(tsk->irq);
-		bcom_sram_free(tsk->bd);
-		kfree(tsk->cookie);
-		kfree(tsk);
-	}
-
+free_cookie:
+	kfree(tsk->cookie);
+dispose_mapping:
+	irq_dispose_mapping(tsk->irq);
+free_task:
+	kfree(tsk);
+reset_stop:
 	bcom_eng->tdt[tasknum].stop = 0;
 
 	return NULL;
