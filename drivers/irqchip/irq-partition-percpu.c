@@ -212,21 +212,21 @@ struct partition_desc *partition_create_desc(struct fwnode_handle *fwnode,
 
 	d = irq_domain_create_linear(fwnode, nr_parts, &desc->ops, desc);
 	if (!d)
-		goto out;
+		goto free_desc;
 	desc->domain = d;
 
 	desc->bitmap = bitmap_zalloc(nr_parts, GFP_KERNEL);
 	if (WARN_ON(!desc->bitmap))
-		goto out;
+		goto remove_domain;
 
 	desc->chained_desc = irq_to_desc(chained_irq);
 	desc->nr_parts = nr_parts;
 	desc->parts = parts;
 
 	return desc;
-out:
-	if (d)
-		irq_domain_remove(d);
+remove_domain:
+	irq_domain_remove(d);
+free_desc:
 	kfree(desc);
 
 	return NULL;
