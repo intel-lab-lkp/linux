@@ -631,7 +631,7 @@ static struct mtd_info *cfi_intelext_setup(struct mtd_info *mtd)
 				    sizeof(struct mtd_erase_region_info),
 				    GFP_KERNEL);
 	if (!mtd->eraseregions)
-		goto setup_err;
+		goto free_mtd;
 
 	for (i=0; i<cfi->cfiq->NumEraseRegions; i++) {
 		unsigned long ernum, ersize;
@@ -647,7 +647,7 @@ static struct mtd_info *cfi_intelext_setup(struct mtd_info *mtd)
 			mtd->eraseregions[(j*cfi->cfiq->NumEraseRegions)+i].numblocks = ernum;
 			mtd->eraseregions[(j*cfi->cfiq->NumEraseRegions)+i].lockmap = kmalloc(ernum / 8 + 1, GFP_KERNEL);
 			if (!mtd->eraseregions[(j*cfi->cfiq->NumEraseRegions)+i].lockmap)
-				goto setup_err;
+				goto release_loop;
 		}
 		offset += (ersize * ernum);
 	}
@@ -655,7 +655,7 @@ static struct mtd_info *cfi_intelext_setup(struct mtd_info *mtd)
 	if (offset != devsize) {
 		/* Argh */
 		printk(KERN_WARNING "Sum of regions (%lx) != total size of set of interleaved chips (%lx)\n", offset, devsize);
-		goto setup_err;
+		goto release_loop;
 	}
 
 	for (i=0; i<mtd->numeraseregions;i++){
@@ -677,18 +677,18 @@ static struct mtd_info *cfi_intelext_setup(struct mtd_info *mtd)
 	/* This function has the potential to distort the reality
 	   a bit and therefore should be called last. */
 	if (cfi_intelext_partition_fixup(mtd, &cfi) != 0)
-		goto setup_err;
+		goto release_loop;
 
 	__module_get(THIS_MODULE);
 	register_reboot_notifier(&mtd->reboot_notifier);
 	return mtd;
 
- setup_err:
-	if (mtd->eraseregions)
-		for (i=0; i<cfi->cfiq->NumEraseRegions; i++)
-			for (j=0; j<cfi->numchips; j++)
-				kfree(mtd->eraseregions[(j*cfi->cfiq->NumEraseRegions)+i].lockmap);
+release_loop:
+	for (i=0; i<cfi->cfiq->NumEraseRegions; i++)
+		for (j=0; j<cfi->numchips; j++)
+			kfree(mtd->eraseregions[(j*cfi->cfiq->NumEraseRegions)+i].lockmap);
 	kfree(mtd->eraseregions);
+free_mtd:
 	kfree(mtd);
 	kfree(cfi->cmdset_priv);
 	return NULL;
