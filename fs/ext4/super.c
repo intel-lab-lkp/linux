@@ -2477,7 +2477,7 @@ static int parse_apply_sb_mount_options(struct super_block *sb,
 
 	fc = kzalloc(sizeof(struct fs_context), GFP_KERNEL);
 	if (!fc)
-		goto out_free;
+		goto free_mount_opts;
 
 	s_ctx = kzalloc(sizeof(struct ext4_fs_context), GFP_KERNEL);
 	if (!s_ctx)
@@ -2509,10 +2509,9 @@ parse_failed:
 	ret = 0;
 
 out_free:
-	if (fc) {
-		ext4_fc_free(fc);
-		kfree(fc);
-	}
+	ext4_fc_free(fc);
+	kfree(fc);
+free_mount_opts:
 	kfree(s_mount_opts);
 	return ret;
 }
