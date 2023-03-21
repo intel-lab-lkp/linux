@@ -307,19 +307,19 @@ static struct bbc_i2c_bus * attach_one_i2c(struct platform_device *op, int index
 
 	bp->i2c_control_regs = of_ioremap(&op->resource[0], 0, 0x2, "bbc_i2c_regs");
 	if (!bp->i2c_control_regs)
-		goto fail;
+		goto free_bus;
 
 	if (op->num_resources == 2) {
 		bp->i2c_bussel_reg = of_ioremap(&op->resource[1], 0, 0x1, "bbc_i2c_bussel");
 		if (!bp->i2c_bussel_reg)
-			goto fail;
+			goto unmap_io_control_regs;
 	}
 
 	bp->waiting = 0;
 	init_waitqueue_head(&bp->wq);
 	if (request_irq(op->archdata.irqs[0], bbc_i2c_interrupt,
 			IRQF_SHARED, "bbc_i2c", bp))
-		goto fail;
+		goto recheck_bussel_reg;
 
 	bp->index = index;
 	bp->op = op;
@@ -349,11 +349,12 @@ static struct bbc_i2c_bus * attach_one_i2c(struct platform_device *op, int index
 
 	return bp;
 
-fail:
+recheck_bussel_reg:
 	if (bp->i2c_bussel_reg)
 		of_iounmap(&op->resource[1], bp->i2c_bussel_reg, 1);
-	if (bp->i2c_control_regs)
-		of_iounmap(&op->resource[0], bp->i2c_control_regs, 2);
+unmap_io_control_regs:
+	of_iounmap(&op->resource[0], bp->i2c_control_regs, 2);
+free_bus:
 	kfree(bp);
 	return NULL;
 }
