@@ -8228,23 +8228,22 @@ static int relocating_repair_kthread(void *data)
 	/* Ensure block group still exists */
 	cache = btrfs_lookup_block_group(fs_info, target);
 	if (!cache)
-		goto out;
+		goto unlock;
 
 	if (!test_bit(BLOCK_GROUP_FLAG_RELOCATING_REPAIR, &cache->runtime_flags))
-		goto out;
+		goto put_block_group;
 
 	ret = btrfs_may_alloc_data_chunk(fs_info, target);
 	if (ret < 0)
-		goto out;
+		goto put_block_group;
 
 	btrfs_info(fs_info,
 		   "zoned: relocating block group %llu to repair IO failure",
 		   target);
 	ret = btrfs_relocate_chunk(fs_info, target);
-
-out:
-	if (cache)
-		btrfs_put_block_group(cache);
+put_block_group:
+	btrfs_put_block_group(cache);
+unlock:
 	mutex_unlock(&fs_info->reclaim_bgs_lock);
 	btrfs_exclop_finish(fs_info);
 	sb_end_write(fs_info->sb);
