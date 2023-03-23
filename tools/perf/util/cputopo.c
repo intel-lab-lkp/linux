@@ -113,10 +113,10 @@ try_threads:
 	}
 	fp = fopen(filename, "r");
 	if (!fp)
-		goto done;
+		goto exit;
 
 	if (getline(&buf, &len, fp) <= 0)
-		goto done;
+		goto close_file;
 
 	p = strchr(buf, '\n');
 	if (p)
@@ -132,10 +132,10 @@ try_threads:
 		buf = NULL;
 	}
 	ret = 0;
-done:
-	if (fp)
-		fclose(fp);
 	free(buf);
+close_file:
+	fclose(fp);
+exit:
 	return ret;
 }
 
