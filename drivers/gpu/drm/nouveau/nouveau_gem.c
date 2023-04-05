@@ -840,7 +840,7 @@ revalidate:
 			reloc = u_memcpya(req->relocs, req->nr_relocs, sizeof(*reloc));
 			if (IS_ERR(reloc)) {
 				ret = PTR_ERR(reloc);
-				goto out_prevalid;
+				goto out_free_bo;
 			}
 
 			goto revalidate;
@@ -957,6 +957,7 @@ out:
 out_prevalid:
 	if (!IS_ERR(reloc))
 		u_free(reloc);
+out_free_bo:
 	u_free(bo);
 	u_free(push);
 
