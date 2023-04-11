@@ -349,7 +349,7 @@ static void qed_ll2_txq_flush(struct qed_hwfn *p_hwfn, u8 connection_handle)
 static int qed_ll2_txq_completion(struct qed_hwfn *p_hwfn, void *p_cookie)
 {
 	struct qed_ll2_info *p_ll2_conn = p_cookie;
-	struct qed_ll2_tx_queue *p_tx = &p_ll2_conn->tx_queue;
+	struct qed_ll2_tx_queue *p_tx;
 	u16 new_idx = 0, num_bds = 0, num_bds_in_packet = 0;
 	struct qed_ll2_tx_packet *p_pkt;
 	bool b_last_frag = false;
@@ -359,6 +359,7 @@ static int qed_ll2_txq_completion(struct qed_hwfn *p_hwfn, void *p_cookie)
 	if (!p_ll2_conn)
 		return rc;
 
+	p_tx = &p_ll2_conn->tx_queue;
 	spin_lock_irqsave(&p_tx->lock, flags);
 	if (p_tx->b_completing_packet) {
 		rc = -EBUSY;
@@ -526,7 +527,7 @@ qed_ll2_rxq_handle_completion(struct qed_hwfn *p_hwfn,
 static int qed_ll2_rxq_completion(struct qed_hwfn *p_hwfn, void *cookie)
 {
 	struct qed_ll2_info *p_ll2_conn = (struct qed_ll2_info *)cookie;
-	struct qed_ll2_rx_queue *p_rx = &p_ll2_conn->rx_queue;
+	struct qed_ll2_rx_queue *p_rx;
 	union core_rx_cqe_union *cqe = NULL;
 	u16 cq_new_idx = 0, cq_old_idx = 0;
 	unsigned long flags = 0;
@@ -535,6 +536,7 @@ static int qed_ll2_rxq_completion(struct qed_hwfn *p_hwfn, void *cookie)
 	if (!p_ll2_conn)
 		return rc;
 
+	p_rx = &p_ll2_conn->rx_queue;
 	spin_lock_irqsave(&p_rx->lock, flags);
 
 	if (!QED_LL2_RX_REGISTERED(p_ll2_conn)) {
