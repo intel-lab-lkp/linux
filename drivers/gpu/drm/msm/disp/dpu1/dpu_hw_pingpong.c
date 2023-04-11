@@ -145,7 +145,7 @@ static int dpu_hw_pp_disable_te(struct dpu_hw_pingpong *pp)
 static int dpu_hw_pp_connect_external_te(struct dpu_hw_pingpong *pp,
 		bool enable_external_te)
 {
-	struct dpu_hw_blk_reg_map *c = &pp->hw;
+	struct dpu_hw_blk_reg_map *c;
 	u32 cfg;
 	int orig;
 
@@ -190,7 +190,7 @@ static int dpu_hw_pp_get_vsync_info(struct dpu_hw_pingpong *pp,
 
 static u32 dpu_hw_pp_get_line_count(struct dpu_hw_pingpong *pp)
 {
-	struct dpu_hw_blk_reg_map *c = &pp->hw;
+	struct dpu_hw_blk_reg_map *c;
 	u32 height, init;
 	u32 line = 0xFFFF;
 
