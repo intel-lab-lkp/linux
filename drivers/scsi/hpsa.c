@@ -5098,8 +5098,8 @@ static int hpsa_scsi_ioaccel_raid_map(struct ctlr_info *h,
 {
 	struct scsi_cmnd *cmd = c->scsi_cmd;
 	struct hpsa_scsi_dev_t *dev = cmd->device->hostdata;
-	struct raid_map_data *map = &dev->raid_map;
-	struct raid_map_disk_data *dd = &map->data[0];
+	struct raid_map_data *map;
+	struct raid_map_disk_data *dd;
 	int is_write = 0;
 	u32 map_index;
 	u64 first_block, last_block;
@@ -5202,6 +5202,8 @@ static int hpsa_scsi_ioaccel_raid_map(struct ctlr_info *h,
 	/* check for write to non-RAID-0 */
 	if (is_write && dev->raid_level != 0)
 		return IO_ACCEL_INELIGIBLE;
+
+	map = &dev->raid_map;
 
 	/* check for invalid block or wraparound */
 	if (last_block >= le64_to_cpu(map->volume_blk_cnt) ||
@@ -5391,6 +5393,7 @@ static int hpsa_scsi_ioaccel_raid_map(struct ctlr_info *h,
 	if (!c->phys_disk)
 		return IO_ACCEL_INELIGIBLE;
 
+	dd = &map->data[0];
 	disk_handle = dd[map_index].ioaccel_handle;
 	disk_block = le64_to_cpu(map->disk_starting_blk) +
 			first_row * le16_to_cpu(map->strip_size) +
