@@ -1866,11 +1866,15 @@ EXPORT_SYMBOL(il_send_add_sta);
 static void
 il_set_ht_add_station(struct il_priv *il, u8 idx, struct ieee80211_sta *sta)
 {
-	struct ieee80211_sta_ht_cap *sta_ht_inf = &sta->deflink.ht_cap;
+	struct ieee80211_sta_ht_cap *sta_ht_inf;
 	__le32 sta_flags;
 
-	if (!sta || !sta_ht_inf->ht_supported)
-		goto done;
+	if (!sta)
+		return;
+
+	sta_ht_inf = &sta->deflink.ht_cap;
+	if (!sta_ht_inf->ht_supported)
+		return;
 
 	D_ASSOC("spatial multiplexing power save mode: %s\n",
 		(sta->deflink.smps_mode == IEEE80211_SMPS_STATIC) ? "static" :
@@ -1909,8 +1913,6 @@ il_set_ht_add_station(struct il_priv *il, u8 idx, struct ieee80211_sta *sta)
 		sta_flags &= ~STA_FLG_HT40_EN_MSK;
 
 	il->stations[idx].sta.station_flags = sta_flags;
-done:
-	return;
 }
 
 /*
