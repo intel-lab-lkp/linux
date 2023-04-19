@@ -2392,7 +2392,7 @@ static void dwc2_hsotg_handle_outdone(struct dwc2_hsotg *hsotg, int epnum)
 	u32 epsize = dwc2_readl(hsotg, DOEPTSIZ(epnum));
 	struct dwc2_hsotg_ep *hs_ep = hsotg->eps_out[epnum];
 	struct dwc2_hsotg_req *hs_req = hs_ep->req;
-	struct usb_request *req = &hs_req->req;
+	struct usb_request *req;
 	unsigned int size_left = DXEPTSIZ_XFERSIZE_GET(epsize);
 	int result = 0;
 
@@ -2410,6 +2410,8 @@ static void dwc2_hsotg_handle_outdone(struct dwc2_hsotg *hsotg, int epnum)
 
 	if (using_desc_dma(hsotg))
 		size_left = dwc2_gadget_get_xfersize_ddma(hs_ep);
+
+	req = &hs_req->req;
 
 	if (using_dma(hsotg)) {
 		unsigned int size_done;
