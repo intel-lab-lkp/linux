@@ -147,7 +147,7 @@ static void iwl_sta_calc_ht_flags(struct iwl_priv *priv,
 				  struct iwl_rxon_context *ctx,
 				  __le32 *flags, __le32 *mask)
 {
-	struct ieee80211_sta_ht_cap *sta_ht_inf = &sta->deflink.ht_cap;
+	struct ieee80211_sta_ht_cap *sta_ht_inf;
 
 	*mask = STA_FLG_RTS_MIMO_PROT_MSK |
 		STA_FLG_MIMO_DIS_MSK |
@@ -156,7 +156,11 @@ static void iwl_sta_calc_ht_flags(struct iwl_priv *priv,
 		STA_FLG_AGG_MPDU_DENSITY_MSK;
 	*flags = 0;
 
-	if (!sta || !sta_ht_inf->ht_supported)
+	if (!sta)
+		return;
+
+	sta_ht_inf = &sta->deflink.ht_cap;
+	if (!sta_ht_inf->ht_supported)
 		return;
 
 	IWL_DEBUG_INFO(priv, "STA %pM SM PS mode: %s\n",
