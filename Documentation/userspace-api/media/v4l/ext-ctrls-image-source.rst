@@ -156,6 +156,8 @@ Image Source Control IDs
 
     This is a read-only control.
 
+.. _image_source_control_metadata_layout:
+
 ``V4L2_CID_METADATA_LAYOUT (integer)``
     The metadata layout control defines the metadata layout on the device's data
     interface for metadata streams. The control is used in conjunction with
