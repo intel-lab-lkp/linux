@@ -12,12 +12,16 @@ use crate::{
     error::{to_result, Result},
     prelude::*,
 };
-use core::{mem, ops::Deref, ops::DerefMut};
+use core::{marker::PhantomPinned, mem, ops::Deref, ops::DerefMut};
 
 /// GEM object functions, which must be implemented by drivers.
 pub trait BaseDriverObject<T: BaseObject>: Sync + Send + Sized {
+    /// The return type of the new() function. Should be `impl PinInit<Self, Error>`.
+    /// TODO: Remove this when return_position_impl_trait_in_trait is stable.
+    type Initializer: PinInit<Self, Error>;
+
     /// Create a new driver data object for a GEM object of a given size.
-    fn new(dev: &device::Device<T::Driver>, size: usize) -> Result<Self>;
+    fn new(dev: &device::Device<T::Driver>, size: usize) -> Self::Initializer;
 
     /// Open a new handle to an existing object, associated with a File.
     fn open(
@@ -188,13 +192,20 @@ impl<T: IntoGEMObject> BaseObject for T {}
 
 /// A base GEM object.
 #[repr(C)]
+#[pin_data]
 pub struct Object<T: DriverObject> {
     obj: bindings::drm_gem_object,
     // The DRM core ensures the Device exists as long as its objects exist, so we don't need to
     // manage the reference count here.
     dev: *const bindings::drm_device,
+    #[pin]
     inner: T,
+    #[pin]
+    _p: PhantomPinned,
 }
+
+// SAFETY: This struct is safe to zero-initialize
+unsafe impl init::Zeroable for bindings::drm_gem_object {}
 
 impl<T: DriverObject> Object<T> {
     /// The size of this object's structure.
@@ -219,23 +230,33 @@ impl<T: DriverObject> Object<T> {
     };
 
     /// Create a new GEM object.
-    pub fn new(dev: &device::Device<T::Driver>, size: usize) -> Result<UniqueObjectRef<Self>> {
-        let mut obj: Box<Self> = Box::try_new(Self {
+    pub fn new(dev: &device::Device<T::Driver>, size: usize) -> Result<Pin<UniqueObjectRef<Self>>> {
+        let obj: Pin<Box<Self>> = Box::pin_init(try_pin_init!(Self {
             // SAFETY: This struct is expected to be zero-initialized
-            obj: unsafe { mem::zeroed() },
+            obj: bindings::drm_gem_object {
+                funcs: &Self::OBJECT_FUNCS,
+                ..Default::default()
+            },
+            inner <- T::new(dev, size),
             // SAFETY: The drm subsystem guarantees that the drm_device will live as long as
             // the GEM object lives, so we can conjure a reference out of thin air.
             dev: dev.drm.get(),
-            inner: T::new(dev, size)?,
-        })?;
+            _p: PhantomPinned
+        }))?;
 
-        obj.obj.funcs = &Self::OBJECT_FUNCS;
         to_result(unsafe {
-            bindings::drm_gem_object_init(dev.raw_mut() as *mut _, &mut obj.obj, size)
+            bindings::drm_gem_object_init(
+                dev.raw_mut() as *mut _, &obj.obj as *const _ as *mut _, size
+            )
         })?;
 
-        let obj_ref = UniqueObjectRef {
-            ptr: Box::leak(obj),
+        // SAFETY: We never move out of self
+        let obj_ref = unsafe {
+            Pin::new_unchecked(UniqueObjectRef {
+                // SAFETY: We never move out of the Box
+                ptr: Box::leak(Pin::into_inner_unchecked(obj)),
+                _p: PhantomPinned,
+            })
         };
 
         Ok(obj_ref)
@@ -317,6 +338,7 @@ pub struct UniqueObjectRef<T: IntoGEMObject> {
     // Invariant: the pointer is valid and initialized, and this ObjectRef owns the only reference
     // to it.
     ptr: *mut T,
+    _p: PhantomPinned,
 }
 
 impl<T: IntoGEMObject> UniqueObjectRef<T> {
