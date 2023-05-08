@@ -1343,7 +1343,7 @@ static void phy_process_error(struct phy_device *phydev)
 static void phy_error_precise(struct phy_device *phydev,
 			      const void *func, int err)
 {
-	WARN(1, "%pS: returned: %d\n", func, err);
+	pr_notice_once("%pS: returned: %d\n", func, err);
 	phy_process_error(phydev);
 }
 
@@ -1357,7 +1357,7 @@ static void phy_error_precise(struct phy_device *phydev,
  */
 void phy_error(struct phy_device *phydev)
 {
-	WARN_ON(1);
+	pr_notice_once("%s\n", __func__);
 	phy_process_error(phydev);
 }
 EXPORT_SYMBOL(phy_error);
