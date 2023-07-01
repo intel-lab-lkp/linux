@@ -290,6 +290,14 @@ config BACKLIGHT_APPLE
 	  If you have an Intel-based Apple say Y to enable a driver for its
 	  backlight.
 
+config BACKLIGHT_APPLE_USB
+	tristate "Apple USB Backlight Driver"
+	depends on USB
+	help
+	  If you have an external display from Apple that is attached via USB
+	  say Y to enable a driver for its backlight. Currently it supports the
+	  Apple Studio Display.
+
 config BACKLIGHT_QCOM_WLED
 	tristate "Qualcomm PMIC WLED Driver"
 	select REGMAP
