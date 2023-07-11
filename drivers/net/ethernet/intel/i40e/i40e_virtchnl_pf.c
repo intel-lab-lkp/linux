@@ -1502,7 +1502,6 @@ static void i40e_cleanup_reset_vf(struct i40e_vf *vf)
 	if (!i40e_alloc_vf_res(vf)) {
 		int abs_vf_id = vf->vf_id + hw->func_caps.vf_base_id;
 		i40e_enable_vf_mappings(vf);
-		set_bit(I40E_VF_STATE_ACTIVE, &vf->vf_states);
 		clear_bit(I40E_VF_STATE_DISABLED, &vf->vf_states);
 		/* Do not notify the client during VF init */
 		if (!test_and_clear_bit(I40E_VF_STATE_PRE_ENABLE,
@@ -4145,6 +4144,7 @@ int i40e_vc_process_vf_msg(struct i40e_pf *pf, s16 vf_id, u32 v_opcode,
 		i40e_vc_notify_vf_link_state(vf);
 		break;
 	case VIRTCHNL_OP_RESET_VF:
+		clear_bit(I40E_VF_STATE_ACTIVE, &pf->vf->vf_states);
 		i40e_vc_reset_vf(vf, false);
 		ret = 0;
 		break;
@@ -4347,12 +4347,14 @@ int i40e_ndo_set_vf_mac(struct net_device *netdev, int vf_id, u8 *mac)
 			break;
 		msleep(20);
 	}
-	if (!test_bit(I40E_VF_STATE_INIT, &vf->vf_states)) {
+	if (!test_bit(I40E_VF_STATE_INIT, &vf->vf_states) ||
+	    !test_bit(I40E_VF_STATE_ACTIVE, &vf->vf_states)) {
 		dev_err(&pf->pdev->dev, "VF %d still in reset. Try again.\n",
 			vf_id);
 		ret = -EAGAIN;
 		goto error_param;
 	}
+
 	vsi = pf->vsi[vf->lan_vsi_idx];
 
 	if (is_multicast_ether_addr(mac)) {
@@ -4452,7 +4454,8 @@ int i40e_ndo_set_vf_port_vlan(struct net_device *netdev, int vf_id,
 
 	vf = &pf->vf[vf_id];
 	vsi = pf->vsi[vf->lan_vsi_idx];
-	if (!test_bit(I40E_VF_STATE_INIT, &vf->vf_states)) {
+	if (!test_bit(I40E_VF_STATE_INIT, &vf->vf_states) ||
+	    !test_bit(I40E_VF_STATE_ACTIVE, &vf->vf_states)) {
 		dev_err(&pf->pdev->dev, "VF %d still in reset. Try again.\n",
 			vf_id);
 		ret = -EAGAIN;
@@ -4840,6 +4843,13 @@ int i40e_ndo_set_vf_trust(struct net_device *netdev, int vf_id, bool setting)
 
 	if (setting == vf->trusted)
 		goto out;
+
+	if (!test_bit(I40E_VF_STATE_ACTIVE, &vf->vf_states)) {
+		dev_err(&pf->pdev->dev, "VF %d still in reset. Try again.\n",
+			vf_id);
+		ret = -EAGAIN;
+		goto out;
+	}
 
 	vf->trusted = setting;
 
