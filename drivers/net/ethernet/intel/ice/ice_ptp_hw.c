@@ -3151,6 +3151,21 @@ void ice_ptp_unlock(struct ice_hw *hw)
 }
 
 /**
+ * ice_ptp_init_phy_model - Initialize hw->phy_model based on device type
+ * @hw: pointer to the HW structure
+ *
+ * Determine the PHY model for the device, and initialize hw->phy_model
+ * for use by other functions.
+ */
+void ice_ptp_init_phy_model(struct ice_hw *hw)
+{
+	if (ice_is_e810(hw))
+		hw->phy_model = ICE_PHY_E810;
+	else
+		hw->phy_model = ICE_PHY_E822;
+}
+
+/**
  * ice_ptp_tmr_cmd - Prepare and trigger a timer sync command
  * @hw: pointer to HW struct
  * @cmd: the command to issue
@@ -3168,10 +3183,17 @@ static int ice_ptp_tmr_cmd(struct ice_hw *hw, enum ice_ptp_tmr_cmd cmd)
 	ice_ptp_src_cmd(hw, cmd);
 
 	/* Next, prepare the ports */
-	if (ice_is_e810(hw))
+	switch (hw->phy_model) {
+	case ICE_PHY_E810:
 		err = ice_ptp_port_cmd_e810(hw, cmd);
-	else
+		break;
+	case ICE_PHY_E822:
 		err = ice_ptp_port_cmd_e822(hw, cmd);
+		break;
+	default:
+		err = -EOPNOTSUPP;
+	}
+
 	if (err) {
 		ice_debug(hw, ICE_DBG_PTP, "Failed to prepare PHY ports for timer command %u, err %d\n",
 			  cmd, err);
@@ -3213,10 +3235,17 @@ int ice_ptp_init_time(struct ice_hw *hw, u64 time)
 
 	/* PHY timers */
 	/* Fill Rx and Tx ports and send msg to PHY */
-	if (ice_is_e810(hw))
+	switch (hw->phy_model) {
+	case ICE_PHY_E810:
 		err = ice_ptp_prep_phy_time_e810(hw, time & 0xFFFFFFFF);
-	else
+		break;
+	case ICE_PHY_E822:
 		err = ice_ptp_prep_phy_time_e822(hw, time & 0xFFFFFFFF);
+		break;
+	default:
+		err = -EOPNOTSUPP;
+	}
+
 	if (err)
 		return err;
 
@@ -3248,10 +3277,17 @@ int ice_ptp_write_incval(struct ice_hw *hw, u64 incval)
 	wr32(hw, GLTSYN_SHADJ_L(tmr_idx), lower_32_bits(incval));
 	wr32(hw, GLTSYN_SHADJ_H(tmr_idx), upper_32_bits(incval));
 
-	if (ice_is_e810(hw))
+	switch (hw->phy_model) {
+	case ICE_PHY_E810:
 		err = ice_ptp_prep_phy_incval_e810(hw, incval);
-	else
+		break;
+	case ICE_PHY_E822:
 		err = ice_ptp_prep_phy_incval_e822(hw, incval);
+		break;
+	default:
+		err = -EOPNOTSUPP;
+	}
+
 	if (err)
 		return err;
 
@@ -3307,10 +3343,17 @@ int ice_ptp_adj_clock(struct ice_hw *hw, s32 adj)
 	wr32(hw, GLTSYN_SHADJ_L(tmr_idx), 0);
 	wr32(hw, GLTSYN_SHADJ_H(tmr_idx), adj);
 
-	if (ice_is_e810(hw))
+	switch (hw->phy_model) {
+	case ICE_PHY_E810:
 		err = ice_ptp_prep_phy_adj_e810(hw, adj);
-	else
+		break;
+	case ICE_PHY_E822:
 		err = ice_ptp_prep_phy_adj_e822(hw, adj);
+		break;
+	default:
+		err = -EOPNOTSUPP;
+	}
+
 	if (err)
 		return err;
 
@@ -3330,10 +3373,14 @@ int ice_ptp_adj_clock(struct ice_hw *hw, s32 adj)
  */
 int ice_read_phy_tstamp(struct ice_hw *hw, u8 block, u8 idx, u64 *tstamp)
 {
-	if (ice_is_e810(hw))
+	switch (hw->phy_model) {
+	case ICE_PHY_E810:
 		return ice_read_phy_tstamp_e810(hw, block, idx, tstamp);
-	else
+	case ICE_PHY_E822:
 		return ice_read_phy_tstamp_e822(hw, block, idx, tstamp);
+	default:
+		return -EOPNOTSUPP;
+	}
 }
 
 /**
@@ -3348,10 +3395,14 @@ int ice_read_phy_tstamp(struct ice_hw *hw, u8 block, u8 idx, u64 *tstamp)
  */
 int ice_clear_phy_tstamp(struct ice_hw *hw, u8 block, u8 idx)
 {
-	if (ice_is_e810(hw))
+	switch (hw->phy_model) {
+	case ICE_PHY_E810:
 		return ice_clear_phy_tstamp_e810(hw, block, idx);
-	else
+	case ICE_PHY_E822:
 		return ice_clear_phy_tstamp_e822(hw, block, idx);
+	default:
+		return -EOPNOTSUPP;
+	}
 }
 
 /**
@@ -3360,10 +3411,14 @@ int ice_clear_phy_tstamp(struct ice_hw *hw, u8 block, u8 idx)
  */
 void ice_ptp_reset_ts_memory(struct ice_hw *hw)
 {
-	if (ice_is_e810(hw))
+	switch (hw->phy_model) {
+	case ICE_PHY_E822:
+		ice_ptp_reset_ts_memory_e822(hw);
+		break;
+	case ICE_PHY_E810:
+	default:
 		return;
-
-	ice_ptp_reset_ts_memory_e822(hw);
+	}
 }
 
 /**
@@ -3382,10 +3437,14 @@ int ice_ptp_init_phc(struct ice_hw *hw)
 	/* Clear event err indications for auxiliary pins */
 	(void)rd32(hw, GLTSYN_STAT(src_idx));
 
-	if (ice_is_e810(hw))
+	switch (hw->phy_model) {
+	case ICE_PHY_E810:
 		return ice_ptp_init_phc_e810(hw);
-	else
+	case ICE_PHY_E822:
 		return ice_ptp_init_phc_e822(hw);
+	default:
+		return -EOPNOTSUPP;
+	}
 }
 
 /**
@@ -3401,10 +3460,15 @@ int ice_ptp_init_phc(struct ice_hw *hw)
  */
 int ice_get_phy_tx_tstamp_ready(struct ice_hw *hw, u8 block, u64 *tstamp_ready)
 {
-	if (ice_is_e810(hw))
+	switch (hw->phy_model) {
+	case ICE_PHY_E810:
 		return ice_get_phy_tx_tstamp_ready_e810(hw, block,
 							tstamp_ready);
-	else
+	case ICE_PHY_E822:
 		return ice_get_phy_tx_tstamp_ready_e822(hw, block,
 							tstamp_ready);
+		break;
+	default:
+		return -EOPNOTSUPP;
+	}
 }
