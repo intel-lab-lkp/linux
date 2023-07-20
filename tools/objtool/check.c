@@ -1985,6 +1985,9 @@ static int add_special_section_alts(struct objtool_file *file)
 		alt->next = orig_insn->alts;
 		orig_insn->alts = alt;
 
+		if (special_alt->key_sym)
+			orig_insn->key_sym = special_alt->key_sym;
+
 		list_del(&special_alt->list);
 		free(special_alt);
 	}
@@ -3501,6 +3504,20 @@ static int validate_return(struct symbol *func, struct instruction *insn, struct
 	return 0;
 }
 
+static int validate_static_key(struct instruction *insn, struct insn_state *state)
+{
+	if (state->noinstr && state->instr <= 0) {
+		if ((strcmp(insn->key_sym->sec->name, ".data..ro_after_init"))) {
+			WARN_INSN(insn,
+				  "Non __ro_after_init static key \"%s\" in .noinstr section",
+				  insn->key_sym->name);
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
 static struct instruction *next_insn_to_validate(struct objtool_file *file,
 						 struct instruction *insn)
 {
@@ -3649,6 +3666,9 @@ static int validate_branch(struct objtool_file *file, struct symbol *func,
 
 		if (handle_insn_ops(insn, next_insn, &state))
 			return 1;
+
+		if (insn->key_sym)
+			validate_static_key(insn, &state);
 
 		switch (insn->type) {
 

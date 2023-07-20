@@ -127,6 +127,9 @@ static int get_alt_entry(struct elf *elf, const struct special_entry *entry,
 			return -1;
 		}
 		alt->key_addend = reloc_addend(key_reloc);
+
+		reloc_to_sec_off(key_reloc, &sec, &offset);
+		alt->key_sym = find_symbol_by_offset(sec, offset & ~2);
 	}
 
 	return 0;

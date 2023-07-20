@@ -27,6 +27,8 @@ struct special_alt {
 	struct section *new_sec;
 	unsigned long new_off;
 
+	struct symbol *key_sym;
+
 	unsigned int orig_len, new_len; /* group only */
 };
 
