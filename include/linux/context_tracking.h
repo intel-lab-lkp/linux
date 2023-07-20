@@ -12,7 +12,8 @@
 
 #ifdef CONFIG_CONTEXT_TRACKING_WORK
 static_assert(CONTEXT_WORK_MAX_OFFSET <= CONTEXT_WORK_END + 1 - CONTEXT_WORK_START,
-	      "Not enough bits for CONTEXT_WORK");
+	      "Not enough bits for CONTEXT_WORK, "
+	      "CONFIG_RCU_DYNTICKS_BITS might be too high");
 #endif
 
 #ifdef CONFIG_CONTEXT_TRACKING_USER

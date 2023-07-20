@@ -332,4 +332,37 @@ config RCU_DOUBLE_CHECK_CB_TIME
 	  Say Y here if you need tighter callback-limit enforcement.
 	  Say N here if you are unsure.
 
+config RCU_DYNTICKS_RANGE_BEGIN
+	int
+	depends on !RCU_EXPERT
+	default 31 if !CONTEXT_TRACKING_WORK
+	default 16 if CONTEXT_TRACKING_WORK
+
+config RCU_DYNTICKS_RANGE_BEGIN
+	int
+	depends on RCU_EXPERT
+	default 2
+
+config RCU_DYNTICKS_RANGE_END
+	int
+	default 31 if !CONTEXT_TRACKING_WORK
+	default 16 if CONTEXT_TRACKING_WORK
+
+config RCU_DYNTICKS_BITS_DEFAULT
+       int
+       default 31 if !CONTEXT_TRACKING_WORK
+       default 16 if CONTEXT_TRACKING_WORK
+
+config RCU_DYNTICKS_BITS
+	int "Dynticks counter width" if CONTEXT_TRACKING_WORK
+	range RCU_DYNTICKS_RANGE_BEGIN RCU_DYNTICKS_RANGE_END
+	default RCU_DYNTICKS_BITS_DEFAULT
+	help
+	  This option controls the width of the dynticks counter.
+
+	  Lower values will make overflows more frequent, which will increase
+	  the likelihood of extending grace-periods.
+
+	  Don't touch this unless you are running some tests.
+
 endmenu # "RCU Subsystem"
