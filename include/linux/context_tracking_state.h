@@ -62,6 +62,10 @@ enum ctx_state {
 #define RCU_DYNTICKS_END   (CT_STATE_SIZE - 1)
 #define RCU_DYNTICKS_IDX   BIT(RCU_DYNTICKS_START)
 
+/*
+ * When CONFIG_CONTEXT_TRACKING_WORK=n, _END is 1 behind _START, which makes
+ * the CONTEXT_WORK size computation below 0, which is what we want!
+ */
 #define	CONTEXT_WORK_START (CONTEXT_STATE_END + 1)
 #define CONTEXT_WORK_END   (RCU_DYNTICKS_START - 1)
 

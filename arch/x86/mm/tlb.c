@@ -1237,6 +1237,23 @@ void __flush_tlb_all(void)
 }
 EXPORT_SYMBOL_GPL(__flush_tlb_all);
 
+void noinstr __flush_tlb_all_noinstr(void)
+{
+	/*
+	 * This is for invocation in early entry code that cannot be
+	 * instrumented. A RMW to CR4 works for most cases, but relies on
+	 * being able to flip either of the PGE or PCIDE bits. Flipping CR4.PCID
+	 * would require also resetting CR3.PCID, so just try with CR4.PGE, else
+	 * do the CR3 write.
+	 *
+	 * TODO: paravirt
+	 */
+	if (cpu_feature_enabled(X86_FEATURE_PGE))
+		__native_tlb_flush_global(this_cpu_read(cpu_tlbstate.cr4));
+	else
+		flush_tlb_local();
+}
+
 void arch_tlbbatch_flush(struct arch_tlbflush_unmap_batch *batch)
 {
 	struct flush_tlb_info *info;
