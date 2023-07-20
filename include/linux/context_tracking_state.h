@@ -9,21 +9,6 @@
 /* Offset to allow distinguishing irq vs. task-based idle entry/exit. */
 #define DYNTICK_IRQ_NONIDLE	((LONG_MAX / 2) + 1)
 
-enum ctx_state {
-	CONTEXT_DISABLED	= -1,	/* returned by ct_state() if unknown */
-	CONTEXT_KERNEL		= 0,
-	CONTEXT_IDLE		= 1,
-	CONTEXT_USER		= 2,
-	CONTEXT_GUEST		= 3,
-	CONTEXT_MAX		= 4,
-};
-
-/* Even value for idle, else odd. */
-#define RCU_DYNTICKS_IDX CONTEXT_MAX
-
-#define CT_STATE_MASK (CONTEXT_MAX - 1)
-#define CT_DYNTICKS_MASK (~CT_STATE_MASK)
-
 struct context_tracking {
 #ifdef CONFIG_CONTEXT_TRACKING_USER
 	/*
@@ -43,6 +28,53 @@ struct context_tracking {
 	long dynticks_nmi_nesting;	/* Track irq/NMI nesting level. */
 #endif
 };
+
+enum ctx_state {
+	/* Following are values */
+	CONTEXT_DISABLED	= -1,	/* returned by ct_state() if unknown */
+	CONTEXT_KERNEL		= 0,
+	CONTEXT_IDLE		= 1,
+	CONTEXT_USER		= 2,
+	CONTEXT_GUEST		= 3,
+	CONTEXT_MAX             = 4,
+};
+
+/*
+ * We cram three different things within the same atomic variable:
+ *
+ *                CONTEXT_STATE_END                        RCU_DYNTICKS_END
+ *                         |       CONTEXT_WORK_END                |
+ *                         |               |                       |
+ *                         v               v                       v
+ *         [ context_state ][ context work ][ RCU dynticks counter ]
+ *         ^                ^               ^
+ *         |                |               |
+ *         |        CONTEXT_WORK_START      |
+ * CONTEXT_STATE_START              RCU_DYNTICKS_START
+ */
+
+#define CT_STATE_SIZE (sizeof(((struct context_tracking *)0)->state) * BITS_PER_BYTE)
+
+#define CONTEXT_STATE_START 0
+#define CONTEXT_STATE_END   (bits_per(CONTEXT_MAX - 1) - 1)
+
+#define RCU_DYNTICKS_BITS  (IS_ENABLED(CONFIG_CONTEXT_TRACKING_WORK) ? 16 : 31)
+#define RCU_DYNTICKS_START (CT_STATE_SIZE - RCU_DYNTICKS_BITS)
+#define RCU_DYNTICKS_END   (CT_STATE_SIZE - 1)
+#define RCU_DYNTICKS_IDX   BIT(RCU_DYNTICKS_START)
+
+#define	CONTEXT_WORK_START (CONTEXT_STATE_END + 1)
+#define CONTEXT_WORK_END   (RCU_DYNTICKS_START - 1)
+
+/* Make sure all our bits are accounted for */
+static_assert((CONTEXT_STATE_END + 1 - CONTEXT_STATE_START) +
+	      (CONTEXT_WORK_END  + 1 - CONTEXT_WORK_START) +
+	      (RCU_DYNTICKS_END  + 1 - RCU_DYNTICKS_START) ==
+	      CT_STATE_SIZE);
+
+#define CT_STATE_MASK GENMASK(CONTEXT_STATE_END, CONTEXT_STATE_START)
+#define CT_WORK_MASK  GENMASK(CONTEXT_WORK_END, CONTEXT_WORK_START)
+#define CT_DYNTICKS_MASK GENMASK(RCU_DYNTICKS_END, RCU_DYNTICKS_START)
 
 #ifdef CONFIG_CONTEXT_TRACKING
 DECLARE_PER_CPU(struct context_tracking, context_tracking);

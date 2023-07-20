@@ -5,10 +5,15 @@
 #include <linux/sched.h>
 #include <linux/vtime.h>
 #include <linux/context_tracking_state.h>
+#include <linux/context_tracking_work.h>
 #include <linux/instrumentation.h>
 
 #include <asm/ptrace.h>
 
+#ifdef CONFIG_CONTEXT_TRACKING_WORK
+static_assert(CONTEXT_WORK_MAX_OFFSET <= CONTEXT_WORK_END + 1 - CONTEXT_WORK_START,
+	      "Not enough bits for CONTEXT_WORK");
+#endif
 
 #ifdef CONFIG_CONTEXT_TRACKING_USER
 extern void ct_cpu_track_user(int cpu);
@@ -130,6 +135,26 @@ static __always_inline unsigned long ct_state_inc(int incby)
 {
 	return raw_atomic_add_return(incby, this_cpu_ptr(&context_tracking.state));
 }
+
+#ifdef CONTEXT_TRACKING_WORK
+static __always_inline unsigned long ct_state_inc_clear_work(int incby)
+{
+	struct context_tracking *ct = this_cpu_ptr(&context_tracking);
+	unsigned long new, old, state;
+
+	state = arch_atomic_read(&ct->state);
+	do {
+		old = state;
+		new = old & ~CONTEXT_WORK_MASK;
+		new += incby;
+		state = arch_atomic_cmpxchg(&ct->state, old, new);
+	} while (old != state);
+
+	return new;
+}
+#else
+#define ct_state_inc_clear_work(x) ct_state_inc(x)
+#endif
 
 static __always_inline bool warn_rcu_enter(void)
 {

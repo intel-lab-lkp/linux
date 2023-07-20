@@ -1,0 +1,14 @@
+/* SPDX-License-Identifier: GPL-2.0 */
+#ifndef _ASM_X86_CONTEXT_TRACKING_WORK_H
+#define _ASM_X86_CONTEXT_TRACKING_WORK_H
+
+static __always_inline void arch_context_tracking_work(int work)
+{
+	switch (work) {
+	case CONTEXT_WORK_n:
+		// Do work...
+		break;
+	}
+}
+
+#endif
