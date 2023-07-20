@@ -4,9 +4,11 @@
  *
  * quality of service module includes:
  * Enhanced Scheduler Traffic (EST - P802.1Qbv/D2.2)
+ * Interspersed Express Traffic (IET - P802.3br/D2.0)
  */
 
 #include <linux/pm_runtime.h>
+#include <linux/units.h>
 #include <linux/time.h>
 #include <net/pkt_cls.h>
 
@@ -14,50 +16,6 @@
 #include "am65-cpsw-qos.h"
 #include "am65-cpts.h"
 #include "cpsw_ale.h"
-
-#define AM65_CPSW_REG_CTL			0x004
-#define AM65_CPSW_P0_REG_TX_PRI_MAP		0x018
-#define AM65_CPSW_P0_REG_RX_PRI_MAP		0x020
-#define AM65_CPSW_P0_REG_FIFO_STATUS		0x050
-#define AM65_CPSW_P0_REG_PRI_CIR(pri)		(0x140 + 4 * (pri))
-#define AM65_CPSW_P0_REG_PRI_EIR(pri)		(0x160 + 4 * (pri))
-
-#define AM65_CPSW_PN_REG_CTL			0x004
-#define AM65_CPSW_PN_REG_TX_PRI_MAP		0x018
-#define AM65_CPSW_PN_REG_RX_PRI_MAP		0x020
-#define AM65_CPSW_PN_REG_FIFO_STATUS		0x050
-#define AM65_CPSW_PN_REG_EST_CTL		0x060
-#define AM65_CPSW_PN_REG_PRI_CIR(pri)		(0x140 + 4 * (pri))
-#define AM65_CPSW_PN_REG_PRI_EIR(pri)		(0x160 + 4 * (pri))
-
-/* AM65_CPSW_REG_CTL register fields */
-#define AM65_CPSW_CTL_EST_EN			BIT(18)
-
-/* AM65_CPSW_PN_REG_CTL register fields */
-#define AM65_CPSW_PN_CTL_EST_PORT_EN		BIT(17)
-
-/* AM65_CPSW_PN_REG_EST_CTL register fields */
-#define AM65_CPSW_PN_EST_ONEBUF			BIT(0)
-#define AM65_CPSW_PN_EST_BUFSEL			BIT(1)
-#define AM65_CPSW_PN_EST_TS_EN			BIT(2)
-#define AM65_CPSW_PN_EST_TS_FIRST		BIT(3)
-#define AM65_CPSW_PN_EST_ONEPRI			BIT(4)
-#define AM65_CPSW_PN_EST_TS_PRI_MSK		GENMASK(7, 5)
-
-/* AM65_CPSW_PN_REG_FIFO_STATUS register fields */
-#define AM65_CPSW_PN_FST_TX_PRI_ACTIVE_MSK	GENMASK(7, 0)
-#define AM65_CPSW_PN_FST_TX_E_MAC_ALLOW_MSK	GENMASK(15, 8)
-#define AM65_CPSW_PN_FST_EST_CNT_ERR		BIT(16)
-#define AM65_CPSW_PN_FST_EST_ADD_ERR		BIT(17)
-#define AM65_CPSW_PN_FST_EST_BUFACT		BIT(18)
-
-/* EST FETCH COMMAND RAM */
-#define AM65_CPSW_FETCH_RAM_CMD_NUM		0x80
-#define AM65_CPSW_FETCH_CNT_MSK			GENMASK(21, 8)
-#define AM65_CPSW_FETCH_CNT_MAX			(AM65_CPSW_FETCH_CNT_MSK >> 8)
-#define AM65_CPSW_FETCH_CNT_OFFSET		8
-#define AM65_CPSW_FETCH_ALLOW_MSK		GENMASK(7, 0)
-#define AM65_CPSW_FETCH_ALLOW_MAX		AM65_CPSW_FETCH_ALLOW_MSK
 
 #define TO_MBPS(x)	((x) * 8 / 1000000)
 
@@ -67,10 +25,193 @@ enum timer_act {
 	TACT_SKIP_PROG,		/* just buffer can be updated */
 };
 
-/* number of priority queues per port FIFO */
-#define AM65_CPSW_PN_FIFO_PRIO_NUM		8
-#define AM65_CPSW_PN_TX_PRI_MAP_DEFAULT		0x76543210
+/* IET */
+static int am65_cpsw_iet_set_verify_timeout_count(struct am65_cpsw_port *port)
+{
+	int verify_time_ms = port->qos.iet.verify_time_ms;
+	int link_speed = port->qos.link_speed;
+	u32 val;
 
+	if (WARN_ON(link_speed == SPEED_UNKNOWN))
+		return -ENODEV;
+
+	/* The number of wireside clocks contained in the verify
+	 * timeout counter. The default is 0x1312d0
+	 * (10ms at 125Mhz in 1G mode).
+	 */
+	val = 125 * HZ_PER_MHZ;	/* assuming 125MHz wireside clock */
+
+	val /= MILLIHZ_PER_HZ;		/* count per ms timeout */
+	val *= verify_time_ms;		/* count for timeout ms */
+	if (link_speed < SPEED_1000)
+		val <<= 1;	/* FIXME: Is this correct? */
+
+	if (val > AM65_CPSW_PN_MAC_VERIFY_CNT_MASK)
+		return -EINVAL;
+
+	writel(val, port->port_base + AM65_CPSW_PN_REG_IET_VERIFY);
+
+	return 0;
+}
+
+unsigned int am65_cpsw_iet_get_verify_timeout_ms(u32 count, struct am65_cpsw_port *port)
+{
+	int link_speed = port->qos.link_speed;
+	u32 val = 125 * HZ_PER_MHZ;	/* assuming 125MHz wireside clock */
+	unsigned int timeout_ms;
+
+	if (link_speed == SPEED_UNKNOWN)
+		link_speed = SPEED_1000;
+
+	val /= MILLIHZ_PER_HZ;		/* count per ms timeout */
+
+	timeout_ms = count / val;
+
+	if (link_speed < SPEED_1000)
+		timeout_ms >>= 1;	/* FIXME: Is this correct? */
+
+	return timeout_ms;
+}
+
+static int am65_cpsw_iet_verify_wait(struct am65_cpsw_port *port)
+{
+	u32 ctrl, status;
+	int try;
+
+	try = 20;
+	do {
+		/* Clear MAC_LINKFAIL bit to start Verify. */
+		ctrl = readl(port->port_base + AM65_CPSW_PN_REG_IET_CTRL);
+		ctrl &= ~AM65_CPSW_PN_IET_MAC_LINKFAIL;
+		writel(ctrl, port->port_base + AM65_CPSW_PN_REG_IET_CTRL);
+
+		msleep(port->qos.iet.verify_time_ms);
+
+		status = readl(port->port_base + AM65_CPSW_PN_REG_IET_STATUS);
+		if (status & AM65_CPSW_PN_MAC_VERIFIED)
+			return 0;
+
+		if (status & AM65_CPSW_PN_MAC_VERIFY_FAIL) {
+			netdev_dbg(port->ndev,
+				   "MAC Merge verify failed, trying again");
+			/* Reset the verify state machine by writing 1
+			 * to LINKFAIL
+			 */
+			ctrl = readl(port->port_base + AM65_CPSW_PN_REG_IET_CTRL);
+			ctrl |= AM65_CPSW_PN_IET_MAC_LINKFAIL;
+			writel(ctrl, port->port_base + AM65_CPSW_PN_REG_IET_CTRL);
+			continue;
+		}
+
+		if (status & AM65_CPSW_PN_MAC_RESPOND_ERR) {
+			netdev_dbg(port->ndev, "MAC Merge respond error");
+			return -ENODEV;
+		}
+
+		if (status & AM65_CPSW_PN_MAC_VERIFY_ERR) {
+			netdev_dbg(port->ndev, "MAC Merge verify error");
+			return -ENODEV;
+		}
+	} while (try-- > 0);
+
+	netdev_dbg(port->ndev, "MAC Merge verify timeout");
+	return -ETIMEDOUT;
+}
+
+static void am65_cpsw_iet_set_preempt_mask(struct am65_cpsw_port *port, u8 preemptible_tcs)
+{
+	u32 val;
+
+	val = readl(port->port_base + AM65_CPSW_PN_REG_IET_CTRL);
+	val &= ~AM65_CPSW_PN_IET_MAC_PREMPT_MASK;
+	val |= AM65_CPSW_PN_IET_MAC_SET_PREEMPT(preemptible_tcs);
+	writel(val, port->port_base + AM65_CPSW_PN_REG_IET_CTRL);
+}
+
+/* enable common IET_ENABLE only if at least 1 port has rx IET enabled.
+ * UAPI doesn't allow tx enable without rx enable.
+ */
+void am65_cpsw_iet_common_enable(struct am65_cpsw_common *common)
+{
+	struct am65_cpsw_port *port;
+	bool rx_enable = false;
+	u32 val;
+	int i;
+
+	for (i = 0; i < common->port_num; i++) {
+		port = &common->ports[i];
+		val = readl(port->port_base + AM65_CPSW_PN_REG_CTL);
+		rx_enable = !!(val & AM65_CPSW_PN_CTL_IET_PORT_EN);
+		if (rx_enable)
+			break;
+	}
+
+	val = readl(common->cpsw_base + AM65_CPSW_REG_CTL);
+
+	if (rx_enable)
+		val |= AM65_CPSW_CTL_IET_EN;
+	else
+		val &= ~AM65_CPSW_CTL_IET_EN;
+
+	writel(val, common->cpsw_base + AM65_CPSW_REG_CTL);
+	common->iet_enabled = rx_enable;
+}
+
+/* CPSW does not have an IRQ to notify changes to the MAC Merge TX status
+ * (active/inactive), but the preemptible traffic classes should only be
+ * committed to hardware once TX is active. Resort to polling.
+ */
+void am65_cpsw_iet_commit_preemptible_tcs(struct am65_cpsw_port *port)
+{
+	u8 preemptible_tcs = 0;
+	int err;
+	u32 val;
+
+	if (port->qos.link_speed == SPEED_UNKNOWN)
+		return;
+
+	val = readl(port->port_base + AM65_CPSW_PN_REG_CTL);
+	if (!(val & AM65_CPSW_PN_CTL_IET_PORT_EN))
+		return;
+
+	/* update common IET enable */
+	am65_cpsw_iet_common_enable(port->common);
+
+	/* update verify count */
+	err = am65_cpsw_iet_set_verify_timeout_count(port);
+	if (err) {
+		netdev_err(port->ndev, "couldn't set verify count: %d\n", err);
+		return;
+	}
+
+	val = readl(port->port_base + AM65_CPSW_PN_REG_IET_CTRL);
+	if (!(val & AM65_CPSW_PN_IET_MAC_DISABLEVERIFY)) {
+		err = am65_cpsw_iet_verify_wait(port);
+		if (err)
+			return;
+	}
+
+	preemptible_tcs = port->qos.iet.preemptible_tcs;
+	am65_cpsw_iet_set_preempt_mask(port, preemptible_tcs);
+}
+
+static void am65_cpsw_iet_change_preemptible_tcs(struct am65_cpsw_port *port, u8 preemptible_tcs)
+{
+	port->qos.iet.preemptible_tcs = preemptible_tcs;
+	am65_cpsw_iet_commit_preemptible_tcs(port);
+}
+
+static void am65_cpsw_iet_link_state_update(struct net_device *ndev)
+{
+	struct am65_cpsw_ndev_priv *priv = am65_ndev_to_priv(ndev);
+	struct am65_cpsw_port *port = am65_ndev_to_port(ndev);
+
+	mutex_lock(&priv->mm_lock);
+	am65_cpsw_iet_commit_preemptible_tcs(port);
+	mutex_unlock(&priv->mm_lock);
+}
+
+/* EST */
 static int am65_cpsw_port_est_enabled(struct am65_cpsw_port *port)
 {
 	return port->qos.est_oper || port->qos.est_admin;
@@ -601,6 +742,8 @@ static int am65_cpsw_setup_taprio(struct net_device *ndev, void *type_data)
 
 	if (port->qos.link_speed == SPEED_UNKNOWN)
 		return -ENOLINK;
+
+	am65_cpsw_iet_change_preemptible_tcs(port, taprio->mqprio.preemptible_tcs);
 
 	return am65_cpsw_set_taprio(ndev, type_data);
 }
@@ -1143,6 +1286,7 @@ static int am65_cpsw_setup_mqprio(struct net_device *ndev, void *type_data)
 	       port->port_base + AM65_CPSW_PN_REG_TX_PRI_MAP);
 
 	am65_cpsw_tx_pn_shaper_apply(port);
+	am65_cpsw_iet_change_preemptible_tcs(port, mqprio->preemptible_tcs);
 
 exit_put:
 	pm_runtime_put(common->dev);
@@ -1172,6 +1316,7 @@ void am65_cpsw_qos_link_up(struct net_device *ndev, int link_speed)
 
 	port->qos.link_speed = link_speed;
 	am65_cpsw_tx_pn_shaper_apply(port);
+	am65_cpsw_iet_link_state_update(ndev);
 
 	if (!IS_ENABLED(CONFIG_TI_AM65_CPSW_TAS))
 		return;
@@ -1186,6 +1331,7 @@ void am65_cpsw_qos_link_down(struct net_device *ndev)
 
 	port->qos.link_speed = SPEED_UNKNOWN;
 	am65_cpsw_tx_pn_shaper_apply(port);
+	am65_cpsw_iet_link_state_update(ndev);
 
 	if (!IS_ENABLED(CONFIG_TI_AM65_CPSW_TAS))
 		return;
