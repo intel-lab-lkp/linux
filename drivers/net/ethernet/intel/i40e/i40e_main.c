@@ -10014,42 +10014,44 @@ static void i40e_reset_subtask(struct i40e_pf *pf)
 {
 	u32 reset_flags = 0;
 
-	if (test_bit(__I40E_REINIT_REQUESTED, pf->state)) {
+	if (test_and_clear_bit(__I40E_REINIT_REQUESTED, pf->state))
 		reset_flags |= BIT(__I40E_REINIT_REQUESTED);
-		clear_bit(__I40E_REINIT_REQUESTED, pf->state);
-	}
-	if (test_bit(__I40E_PF_RESET_REQUESTED, pf->state)) {
+	if (test_and_clear_bit(__I40E_PF_RESET_REQUESTED, pf->state))
 		reset_flags |= BIT(__I40E_PF_RESET_REQUESTED);
-		clear_bit(__I40E_PF_RESET_REQUESTED, pf->state);
-	}
-	if (test_bit(__I40E_CORE_RESET_REQUESTED, pf->state)) {
+	if (test_and_clear_bit(__I40E_CORE_RESET_REQUESTED, pf->state))
 		reset_flags |= BIT(__I40E_CORE_RESET_REQUESTED);
-		clear_bit(__I40E_CORE_RESET_REQUESTED, pf->state);
-	}
-	if (test_bit(__I40E_GLOBAL_RESET_REQUESTED, pf->state)) {
+	if (test_and_clear_bit(__I40E_GLOBAL_RESET_REQUESTED, pf->state))
 		reset_flags |= BIT(__I40E_GLOBAL_RESET_REQUESTED);
-		clear_bit(__I40E_GLOBAL_RESET_REQUESTED, pf->state);
-	}
-	if (test_bit(__I40E_DOWN_REQUESTED, pf->state)) {
+	if (test_and_clear_bit(__I40E_DOWN_REQUESTED, pf->state))
 		reset_flags |= BIT(__I40E_DOWN_REQUESTED);
-		clear_bit(__I40E_DOWN_REQUESTED, pf->state);
-	}
+	if (test_and_clear_bit(__I40E_RESET_INTR_RECEIVED, pf->state))
+		reset_flags |= BIT(__I40E_RESET_INTR_RECEIVED);
+
+	if (!(reset_flags & (BIT(__I40E_PF_RESET_REQUESTED) |
+			     BIT(__I40E_CORE_RESET_REQUESTED) |
+			     BIT(__I40E_GLOBAL_RESET_REQUESTED) |
+			     BIT(__I40E_RESET_INTR_RECEIVED))))
+		return;
+
+	rtnl_lock();
 
 	/* If there's a recovery already waiting, it takes
 	 * precedence before starting a new reset sequence.
 	 */
-	if (test_bit(__I40E_RESET_INTR_RECEIVED, pf->state)) {
+	if (reset_flags & BIT(__I40E_RESET_INTR_RECEIVED)) {
 		i40e_prep_for_reset(pf);
 		i40e_reset(pf);
-		i40e_rebuild(pf, false, false);
+		i40e_rebuild(pf, false, true);
 	}
 
 	/* If we're already down or resetting, just bail */
 	if (reset_flags &&
 	    !test_bit(__I40E_DOWN, pf->state) &&
 	    !test_bit(__I40E_CONFIG_BUSY, pf->state)) {
-		i40e_do_reset(pf, reset_flags, false);
+		i40e_do_reset(pf, reset_flags, true);
 	}
+
+	rtnl_unlock();
 }
 
 /**
@@ -10697,7 +10699,6 @@ static void i40e_prep_for_reset(struct i40e_pf *pf)
 	int ret = 0;
 	u32 v;
 
-	clear_bit(__I40E_RESET_INTR_RECEIVED, pf->state);
 	if (test_and_set_bit(__I40E_RESET_RECOVERY_PENDING, pf->state))
 		return;
 	if (i40e_check_asq_alive(&pf->hw))
