@@ -1,0 +1,24 @@
+drm drm-fixes 1958b0f95a35e4443573c4c3ec2efd89d2d00d82
+	Merge tag 'drm-intel-fixes-2023-08-03' of git://anongit.freedesktop.org/drm/drm-intel into drm-fixes
+drm-misc drm-misc-fixes 421dabcad1c69e02a41c0d601aefbc29ee3f5368
+	drm/nouveau: remove unused tu102_gr_load() function
+drm-intel drm-intel-fixes 0bc057eae2610c275361766a064a23cc2758f3ff
+	Merge tag 'gvt-fixes-2023-08-02' of https://github.com/intel/gvt-linux into drm-intel-fixes
+drm drm-next 52920704df878050123dfeb469aa6ab8022547c1
+	Merge tag 'drm-misc-next-2023-07-27' of git://anongit.freedesktop.org/drm/drm-misc into drm-next
+drm-misc drm-misc-next-fixes 59bba51ec2a50e3dc5c3ee80f0a23207346303ff
+	drm/panel: Fine tune Starry-ili9882t panel HFP and HBP
+drm-intel drm-intel-next-fixes f6cf3883df471abbcf1553127681dc244c8ff8dd
+	drm/i915: use mock device info for creating mock device
+drm-misc drm-misc-next e4774e9968b26dc5d225ce629af8081ddab0029a
+	drm/doc: fix underline for section "DRM Sync Objects"
+drm-intel drm-intel-next d823445b09a2f1c43877b87a55fc699c3a836fc2
+	drm/i915/uncore: fix race around i915->params.mmio_debug
+drm-intel drm-intel-gt-next 28e671114fb0f28f334fac8d0a6b9c395c7b0498
+	drm/i915/guc/slpc: Restore efficient freq earlier
+drm-intel topic/core-for-CI c0ea2fa0491287dea97b384bec1b5a614408b8e3
+	drm/i915/gsc: define gsc fw
+drm-misc topic/i915-ttm 1e3944578b749449bd7fa6bf0bae4c3d3f5f1733
+	Merge tag 'amd-drm-next-5.16-2021-09-27' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm topic/nouveau-misc dfc4005f8c172eea359f9db08c3b2b0ff0153699
+	drm/nouveau/disp: move DAC load detection method
