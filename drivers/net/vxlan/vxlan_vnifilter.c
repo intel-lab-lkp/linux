@@ -740,6 +740,7 @@ static int vxlan_vni_add(struct vxlan_dev *vxlan,
 					    &vninode->vnode,
 					    vxlan_vni_rht_params);
 	if (err) {
+		free_percpu(vninode->stats);
 		kfree(vninode);
 		return err;
 	}
