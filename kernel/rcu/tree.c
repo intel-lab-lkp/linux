@@ -4083,7 +4083,7 @@ retry:
 }
 EXPORT_SYMBOL_GPL(rcu_barrier);
 
-unsigned long rcu_barrier_last_throttle;
+static unsigned long rcu_barrier_last_throttle;
 
 /**
  * rcu_barrier_throttled - Do rcu_barrier(), but limit to one per second
@@ -4098,19 +4098,26 @@ unsigned long rcu_barrier_last_throttle;
  * callbacks from the previous test before starting the next.  See the
  * rcutree.do_rcu_barrier module parameter for more information.
  *
- * Why not simply make rcu_barrier() more scalable?  That might be the
- * eventual endpoint, but let's keep it simple for the time being.
+ * Why not simply make rcu_barrier() more scalable?  That might be
+ * the eventual endpoint, but let's keep it simple for the time being.
+ * Note that the module parameter infrastructure serializes calls to a
+ * given .set() function, but should concurrent .set() invocation ever be
+ * possible, we are ready!
  */
-void rcu_barrier_throttled(void)
+static void rcu_barrier_throttled(void)
 {
 	unsigned long j = jiffies;
 	unsigned long old = READ_ONCE(rcu_barrier_last_throttle);
 	unsigned long s = rcu_seq_snap(&rcu_state.barrier_sequence);
 
-	while (time_after(old + HZ, j) || !try_cmpxchg(&rcu_barrier_last_throttle, &old, j + HZ)) {
-		schedule_timeout_idle(HZ);
-		if (rcu_seq_done(&rcu_state.barrier_sequence, s))
+	while (time_in_range(j, old, old + HZ / 16) ||
+	       !try_cmpxchg(&rcu_barrier_last_throttle, &old, j)) {
+		schedule_timeout_idle(HZ / 16);
+		if (rcu_seq_done(&rcu_state.barrier_sequence, s)) {
+			smp_mb(); /* caller's subsequent code after above check. */
 			return;
+		}
+		j = jiffies;
 		old = READ_ONCE(rcu_barrier_last_throttle);
 	}
 	rcu_barrier();
@@ -4142,7 +4149,7 @@ static int param_set_do_rcu_barrier(const char *val, const struct kernel_param *
  */
 static int param_get_do_rcu_barrier(char *buffer, const struct kernel_param *kp)
 {
-	return sprintf(buffer, "%d", atomic_read((atomic_t *)kp->arg));
+	return sprintf(buffer, "%d\n", atomic_read((atomic_t *)kp->arg));
 }
 
 static const struct kernel_param_ops do_rcu_barrier_ops = {
