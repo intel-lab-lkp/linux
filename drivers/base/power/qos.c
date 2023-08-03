@@ -185,17 +185,23 @@ static int apply_constraint(struct dev_pm_qos_request *req,
 }
 
 /*
- * dev_pm_qos_constraints_allocate
+ * dev_pm_qos_constraints_ensure_allocated
  * @dev: device to allocate data for
  *
- * Called at the first call to add_request, for constraint data allocation
- * Must be called with the dev_pm_qos_mtx mutex held
+ * Called to ensure that devices qos is allocated, before acquiring
+ * dev_pm_qos_mtx.
  */
-static int dev_pm_qos_constraints_allocate(struct device *dev)
+static int dev_pm_qos_constraints_ensure_allocated(struct device *dev)
 {
 	struct dev_pm_qos *qos;
 	struct pm_qos_constraints *c;
 	struct blocking_notifier_head *n;
+
+	if (!dev)
+		return -ENODEV;
+
+	if (!IS_ERR_OR_NULL(dev->power.qos))
+		return 0;
 
 	qos = kzalloc(sizeof(*qos), GFP_KERNEL);
 	if (!qos)
@@ -227,9 +233,25 @@ static int dev_pm_qos_constraints_allocate(struct device *dev)
 
 	INIT_LIST_HEAD(&qos->flags.list);
 
+	mutex_lock(&dev_pm_qos_mtx);
+
+	if (!IS_ERR_OR_NULL(dev->power.qos)) {
+		/*
+		 * We have raced with another task to create the qos.
+		 * No biggie, just free the resources we've allocated
+		 * outside of dev_pm_qos_mtx and move on with life.
+		 */
+		kfree(n);
+		kfree(qos);
+		goto unlock;
+	}
+
 	spin_lock_irq(&dev->power.lock);
 	dev->power.qos = qos;
 	spin_unlock_irq(&dev->power.lock);
+
+unlock:
+	mutex_unlock(&dev_pm_qos_mtx);
 
 	return 0;
 }
@@ -331,17 +353,15 @@ static int __dev_pm_qos_add_request(struct device *dev,
 {
 	int ret = 0;
 
-	if (!dev || !req || dev_pm_qos_invalid_req_type(dev, type))
+	if (!req || dev_pm_qos_invalid_req_type(dev, type))
 		return -EINVAL;
 
 	if (WARN(dev_pm_qos_request_active(req),
 		 "%s() called for already added request\n", __func__))
 		return -EINVAL;
 
-	if (IS_ERR(dev->power.qos))
+	if (IS_ERR_OR_NULL(dev->power.qos))
 		ret = -ENODEV;
-	else if (!dev->power.qos)
-		ret = dev_pm_qos_constraints_allocate(dev);
 
 	trace_dev_pm_qos_add_request(dev_name(dev), type, value);
 	if (ret)
@@ -389,6 +409,10 @@ int dev_pm_qos_add_request(struct device *dev, struct dev_pm_qos_request *req,
 			   enum dev_pm_qos_req_type type, s32 value)
 {
 	int ret;
+
+	ret = dev_pm_qos_constraints_ensure_allocated(dev);
+	if (ret)
+		return ret;
 
 	mutex_lock(&dev_pm_qos_mtx);
 	ret = __dev_pm_qos_add_request(dev, req, type, value);
@@ -537,15 +561,11 @@ int dev_pm_qos_add_notifier(struct device *dev, struct notifier_block *notifier,
 {
 	int ret = 0;
 
-	mutex_lock(&dev_pm_qos_mtx);
-
-	if (IS_ERR(dev->power.qos))
-		ret = -ENODEV;
-	else if (!dev->power.qos)
-		ret = dev_pm_qos_constraints_allocate(dev);
-
+	ret = dev_pm_qos_constraints_ensure_allocated(dev);
 	if (ret)
-		goto unlock;
+		return ret;
+
+	mutex_lock(&dev_pm_qos_mtx);
 
 	switch (type) {
 	case DEV_PM_QOS_RESUME_LATENCY:
@@ -565,7 +585,6 @@ int dev_pm_qos_add_notifier(struct device *dev, struct notifier_block *notifier,
 		ret = -EINVAL;
 	}
 
-unlock:
 	mutex_unlock(&dev_pm_qos_mtx);
 	return ret;
 }
@@ -905,10 +924,13 @@ int dev_pm_qos_update_user_latency_tolerance(struct device *dev, s32 val)
 {
 	int ret;
 
+	ret = dev_pm_qos_constraints_ensure_allocated(dev);
+	if (ret)
+		return ret;
+
 	mutex_lock(&dev_pm_qos_mtx);
 
-	if (IS_ERR_OR_NULL(dev->power.qos)
-	    || !dev->power.qos->latency_tolerance_req) {
+	if (!dev->power.qos->latency_tolerance_req) {
 		struct dev_pm_qos_request *req;
 
 		if (val < 0) {
