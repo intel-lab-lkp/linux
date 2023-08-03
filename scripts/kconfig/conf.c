@@ -376,6 +376,15 @@ static int conf_string(struct menu *menu)
 		}
 		if (def && sym_set_string_value(sym, def))
 			return 0;
+		else {
+			if (feof(stdin) && !sym_string_valid(sym, sym_get_string_value(sym))) {
+				fprintf(stderr,
+						"Symbol %s has invalid default value and stdin reached EOF\n",
+						sym->name);
+				exit(1);
+			}
+		}
+
 	}
 }
 
