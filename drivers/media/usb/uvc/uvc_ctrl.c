@@ -748,6 +748,15 @@ static const struct uvc_control_mapping uvc_ctrl_mappings[] = {
 		.v4l2_type	= V4L2_CTRL_TYPE_BOOLEAN,
 		.data_type	= UVC_CTRL_DATA_TYPE_BOOLEAN,
 	},
+	{
+		.id		= V4L2_CID_ROLL_ABSOLUTE,
+		.entity		= UVC_GUID_UVC_CAMERA,
+		.selector	= UVC_CT_ROLL_ABSOLUTE_CONTROL,
+		.size		= 16,
+		.offset		= 0,
+		.v4l2_type	= V4L2_CTRL_TYPE_INTEGER,
+		.data_type	= UVC_CTRL_DATA_TYPE_SIGNED,
+	},
 };
 
 const struct uvc_control_mapping uvc_ctrl_power_line_mapping_limited = {
