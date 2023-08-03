@@ -672,3 +672,8 @@ enum v4l2_scene_mode -
 
     As modes differ for each sensor, menu items are not standardized by this
     control and are left to the programmer.
+
+``V4L2_CID_ROLL_ABSOLUTE (integer)``
+    This control describes the camera rotation along the image viewing axis in
+    degrees. Values range from -180 to +180, the default is zero. Positive
+    values rotate the camera clockwise, negative values counter-clockwise.
