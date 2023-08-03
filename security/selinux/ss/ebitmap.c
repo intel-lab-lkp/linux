@@ -81,18 +81,52 @@ int ebitmap_cpy(struct ebitmap *dst, const struct ebitmap *src)
 
 int ebitmap_and(struct ebitmap *dst, const struct ebitmap *e1, const struct ebitmap *e2)
 {
-	struct ebitmap_node *n;
-	int bit, rc;
+	const struct ebitmap_node *n1, *n2;
+	struct ebitmap_node *new = NULL, **prev;
 
 	ebitmap_init(dst);
 
-	ebitmap_for_each_positive_bit(e1, n, bit) {
-		if (ebitmap_get_bit(e2, bit)) {
-			rc = ebitmap_set_bit(dst, bit, 1);
-			if (rc < 0)
-				return rc;
+	prev = &dst->node;
+	n1 = e1->node;
+	n2 = e2->node;
+	while (n1 && n2) {
+		if (n1->startbit == n2->startbit) {
+			unsigned long testmap[EBITMAP_UNIT_NUMS];
+			unsigned int i;
+			bool match = false;
+
+			for (i = 0; i < ARRAY_SIZE(testmap); i++) {
+				testmap[i] = n1->maps[i] & n2->maps[i];
+				if (testmap[i] != 0)
+					match = true;
+			}
+
+			if (match) {
+				new = kmem_cache_zalloc(ebitmap_node_cachep, GFP_ATOMIC);
+				if (!new) {
+					ebitmap_destroy(dst);
+					return -ENOMEM;
+				}
+				new->startbit = n1->startbit;
+				memcpy(new->maps, testmap, EBITMAP_SIZE / 8);
+				new->next = NULL;
+
+				*prev = new;
+				prev = &(new->next);
+			}
+
+			n1 = n1->next;
+			n2 = n2->next;
+		} else if (n1->startbit > n2->startbit) {
+			n2 = n2->next;
+		} else {
+			n1 = n1->next;
 		}
 	}
+
+	if (new)
+		dst->highbit = new->startbit + EBITMAP_SIZE;
+
 	return 0;
 }
 
