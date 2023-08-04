@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/rtc/epson,rx8111.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Epson RX8111 Real-Time Clock
+
+maintainers:
+  - Waqar Hameed <waqar.hameed@axis.com>
+
+description: |
+  RTC with timestamp functionality.
+
+  https://support.epson.biz/td/api/doc_check.php?dl=app_RX8111CE&lang=en
+
+properties:
+  compatible:
+    const: epson,rx8111
+
+  reg:
+    const: 0x32
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        rtc@32 {
+            compatible = "epson,rx8111";
+            reg = <0x32>;
+        };
+    };
+...
