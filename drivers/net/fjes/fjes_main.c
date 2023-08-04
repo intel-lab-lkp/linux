@@ -612,7 +612,7 @@ fjes_xmit_frame(struct sk_buff *skb, struct net_device *netdev)
 	eth = (struct ethhdr *)skb->data;
 	my_epid = hw->my_epid;
 
-	vlan = (vlan_get_tag(skb, &vlan_id) == 0) ? true : false;
+	vlan = vlan_get_tag(skb, &vlan_id) == 0;
 
 	data = skb->data;
 	len = skb->len;
