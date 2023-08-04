@@ -2084,13 +2084,11 @@ static void tda998x_remove(struct i2c_client *client)
 	tda998x_destroy(&client->dev);
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id tda998x_dt_ids[] = {
 	{ .compatible = "nxp,tda998x", },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, tda998x_dt_ids);
-#endif
 
 static const struct i2c_device_id tda998x_ids[] = {
 	{ "tda998x", 0 },
@@ -2103,7 +2101,7 @@ static struct i2c_driver tda998x_driver = {
 	.remove = tda998x_remove,
 	.driver = {
 		.name = "tda998x",
-		.of_match_table = of_match_ptr(tda998x_dt_ids),
+		.of_match_table = tda998x_dt_ids,
 	},
 	.id_table = tda998x_ids,
 };
