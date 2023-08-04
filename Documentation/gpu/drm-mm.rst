@@ -517,8 +517,10 @@ DRM Cache Handling and Fast WC memcpy()
 .. kernel-doc:: drivers/gpu/drm/drm_cache.c
    :export:
 
+.. _drm_sync_objects:
+
 DRM Sync Objects
-===========================
+================
 
 .. kernel-doc:: drivers/gpu/drm/drm_syncobj.c
    :doc: Overview
