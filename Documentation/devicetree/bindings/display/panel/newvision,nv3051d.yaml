@@ -8,8 +8,8 @@ title: NewVision NV3051D based LCD panel
 
 description: |
   The NewVision NV3051D is a driver chip used to drive DSI panels. For now,
-  this driver only supports the 640x480 panels found in the Anbernic RG353
-  based devices.
+  this driver only supports the 640x480 panels found in the Anbernic RG351
+  and 353 based devices.
 
 maintainers:
   - Chris Morgan <macromorgan@hotmail.com>
@@ -19,11 +19,15 @@ allOf:
 
 properties:
   compatible:
-    items:
-      - enum:
-          - anbernic,rg353p-panel
-          - anbernic,rg353v-panel
-      - const: newvision,nv3051d
+    oneOf:
+      - items:
+          - enum:
+              - anbernic,rg353p-panel
+              - anbernic,rg353v-panel
+          - const: newvision,nv3051d
+
+      - items:
+          - const: anbernic,rg351v-panel
 
   reg: true
   backlight: true
