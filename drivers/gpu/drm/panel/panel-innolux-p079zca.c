@@ -16,6 +16,7 @@
 #include <drm/drm_mipi_dsi.h>
 #include <drm/drm_modes.h>
 #include <drm/drm_panel.h>
+#include <drm/drm_panel_helper.h>
 
 struct panel_init_cmd {
 	size_t len;
@@ -51,9 +52,6 @@ struct innolux_panel {
 
 	struct regulator_bulk_data *supplies;
 	struct gpio_desc *enable_gpio;
-
-	bool prepared;
-	bool enabled;
 };
 
 static inline struct innolux_panel *to_innolux_panel(struct drm_panel *panel)
@@ -61,25 +59,10 @@ static inline struct innolux_panel *to_innolux_panel(struct drm_panel *panel)
 	return container_of(panel, struct innolux_panel, base);
 }
 
-static int innolux_panel_disable(struct drm_panel *panel)
-{
-	struct innolux_panel *innolux = to_innolux_panel(panel);
-
-	if (!innolux->enabled)
-		return 0;
-
-	innolux->enabled = false;
-
-	return 0;
-}
-
 static int innolux_panel_unprepare(struct drm_panel *panel)
 {
 	struct innolux_panel *innolux = to_innolux_panel(panel);
 	int err;
-
-	if (!innolux->prepared)
-		return 0;
 
 	err = mipi_dsi_dcs_set_display_off(innolux->link);
 	if (err < 0)
@@ -104,8 +87,6 @@ static int innolux_panel_unprepare(struct drm_panel *panel)
 	if (err < 0)
 		return err;
 
-	innolux->prepared = false;
-
 	return 0;
 }
 
@@ -113,9 +94,6 @@ static int innolux_panel_prepare(struct drm_panel *panel)
 {
 	struct innolux_panel *innolux = to_innolux_panel(panel);
 	int err;
-
-	if (innolux->prepared)
-		return 0;
 
 	gpiod_set_value_cansleep(innolux->enable_gpio, 0);
 
@@ -178,8 +156,6 @@ static int innolux_panel_prepare(struct drm_panel *panel)
 	/* T7: 5ms */
 	usleep_range(5000, 6000);
 
-	innolux->prepared = true;
-
 	return 0;
 
 poweroff:
@@ -187,18 +163,6 @@ poweroff:
 	regulator_bulk_disable(innolux->desc->num_supplies, innolux->supplies);
 
 	return err;
-}
-
-static int innolux_panel_enable(struct drm_panel *panel)
-{
-	struct innolux_panel *innolux = to_innolux_panel(panel);
-
-	if (innolux->enabled)
-		return 0;
-
-	innolux->enabled = true;
-
-	return 0;
 }
 
 static const char * const innolux_p079zca_supply_names[] = {
@@ -407,10 +371,8 @@ static int innolux_panel_get_modes(struct drm_panel *panel,
 }
 
 static const struct drm_panel_funcs innolux_panel_funcs = {
-	.disable = innolux_panel_disable,
 	.unprepare = innolux_panel_unprepare,
 	.prepare = innolux_panel_prepare,
-	.enable = innolux_panel_enable,
 	.get_modes = innolux_panel_get_modes,
 };
 
@@ -510,13 +472,7 @@ static void innolux_panel_remove(struct mipi_dsi_device *dsi)
 	struct innolux_panel *innolux = mipi_dsi_get_drvdata(dsi);
 	int err;
 
-	err = drm_panel_unprepare(&innolux->base);
-	if (err < 0)
-		dev_err(&dsi->dev, "failed to unprepare panel: %d\n", err);
-
-	err = drm_panel_disable(&innolux->base);
-	if (err < 0)
-		dev_err(&dsi->dev, "failed to disable panel: %d\n", err);
+	drm_panel_helper_shutdown(&innolux->base);
 
 	err = mipi_dsi_detach(dsi);
 	if (err < 0)
@@ -529,8 +485,7 @@ static void innolux_panel_shutdown(struct mipi_dsi_device *dsi)
 {
 	struct innolux_panel *innolux = mipi_dsi_get_drvdata(dsi);
 
-	drm_panel_unprepare(&innolux->base);
-	drm_panel_disable(&innolux->base);
+	drm_panel_helper_shutdown(&innolux->base);
 }
 
 static struct mipi_dsi_driver innolux_panel_driver = {

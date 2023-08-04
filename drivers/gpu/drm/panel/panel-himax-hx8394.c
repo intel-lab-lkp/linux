@@ -23,6 +23,7 @@
 #include <drm/drm_mipi_dsi.h>
 #include <drm/drm_modes.h>
 #include <drm/drm_panel.h>
+#include <drm/drm_panel_helper.h>
 
 #define DRV_NAME "panel-himax-hx8394"
 
@@ -68,7 +69,6 @@ struct hx8394 {
 	struct gpio_desc *reset_gpio;
 	struct regulator *vcc;
 	struct regulator *iovcc;
-	bool prepared;
 
 	const struct hx8394_panel_desc *desc;
 };
@@ -262,15 +262,10 @@ static int hx8394_unprepare(struct drm_panel *panel)
 {
 	struct hx8394 *ctx = panel_to_hx8394(panel);
 
-	if (!ctx->prepared)
-		return 0;
-
 	gpiod_set_value_cansleep(ctx->reset_gpio, 1);
 
 	regulator_disable(ctx->iovcc);
 	regulator_disable(ctx->vcc);
-
-	ctx->prepared = false;
 
 	return 0;
 }
@@ -279,9 +274,6 @@ static int hx8394_prepare(struct drm_panel *panel)
 {
 	struct hx8394 *ctx = panel_to_hx8394(panel);
 	int ret;
-
-	if (ctx->prepared)
-		return 0;
 
 	gpiod_set_value_cansleep(ctx->reset_gpio, 1);
 
@@ -300,8 +292,6 @@ static int hx8394_prepare(struct drm_panel *panel)
 	gpiod_set_value_cansleep(ctx->reset_gpio, 0);
 
 	msleep(180);
-
-	ctx->prepared = true;
 
 	return 0;
 
@@ -404,15 +394,8 @@ static int hx8394_probe(struct mipi_dsi_device *dsi)
 static void hx8394_shutdown(struct mipi_dsi_device *dsi)
 {
 	struct hx8394 *ctx = mipi_dsi_get_drvdata(dsi);
-	int ret;
 
-	ret = drm_panel_disable(&ctx->panel);
-	if (ret < 0)
-		dev_err(&dsi->dev, "Failed to disable panel: %d\n", ret);
-
-	ret = drm_panel_unprepare(&ctx->panel);
-	if (ret < 0)
-		dev_err(&dsi->dev, "Failed to unprepare panel: %d\n", ret);
+	drm_panel_helper_shutdown(&ctx->panel);
 }
 
 static void hx8394_remove(struct mipi_dsi_device *dsi)

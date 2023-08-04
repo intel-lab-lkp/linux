@@ -14,6 +14,7 @@
 #include <drm/drm_crtc.h>
 #include <drm/drm_mipi_dsi.h>
 #include <drm/drm_panel.h>
+#include <drm/drm_panel_helper.h>
 
 #include <video/mipi_display.h>
 
@@ -50,8 +51,6 @@ struct boe_panel {
 	struct regulator *avee;
 	struct regulator *avdd;
 	struct gpio_desc *enable_gpio;
-
-	bool prepared;
 };
 
 enum dsi_cmd_type {
@@ -1792,9 +1791,6 @@ static int boe_panel_unprepare(struct drm_panel *panel)
 {
 	struct boe_panel *boe = to_boe_panel(panel);
 
-	if (!boe->prepared)
-		return 0;
-
 	if (boe->desc->discharge_on_disable) {
 		regulator_disable(boe->avee);
 		regulator_disable(boe->avdd);
@@ -1813,8 +1809,6 @@ static int boe_panel_unprepare(struct drm_panel *panel)
 		regulator_disable(boe->pp3300);
 	}
 
-	boe->prepared = false;
-
 	return 0;
 }
 
@@ -1822,9 +1816,6 @@ static int boe_panel_prepare(struct drm_panel *panel)
 {
 	struct boe_panel *boe = to_boe_panel(panel);
 	int ret;
-
-	if (boe->prepared)
-		return 0;
 
 	gpiod_set_value(boe->enable_gpio, 0);
 	usleep_range(1000, 1500);
@@ -1864,8 +1855,6 @@ static int boe_panel_prepare(struct drm_panel *panel)
 		dev_err(panel->dev, "failed to init panel: %d\n", ret);
 		goto poweroff;
 	}
-
-	boe->prepared = true;
 
 	return 0;
 
@@ -2292,8 +2281,7 @@ static void boe_panel_shutdown(struct mipi_dsi_device *dsi)
 {
 	struct boe_panel *boe = mipi_dsi_get_drvdata(dsi);
 
-	drm_panel_disable(&boe->base);
-	drm_panel_unprepare(&boe->base);
+	drm_panel_helper_shutdown(&boe->base);
 }
 
 static void boe_panel_remove(struct mipi_dsi_device *dsi)

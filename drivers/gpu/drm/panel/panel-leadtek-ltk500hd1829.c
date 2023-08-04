@@ -20,6 +20,7 @@
 #include <drm/drm_mipi_dsi.h>
 #include <drm/drm_modes.h>
 #include <drm/drm_panel.h>
+#include <drm/drm_panel_helper.h>
 
 struct ltk500hd1829 {
 	struct device *dev;
@@ -27,7 +28,6 @@ struct ltk500hd1829 {
 	struct gpio_desc *reset_gpio;
 	struct regulator *vcc;
 	struct regulator *iovcc;
-	bool prepared;
 };
 
 struct ltk500hd1829_cmd {
@@ -272,9 +272,6 @@ static int ltk500hd1829_unprepare(struct drm_panel *panel)
 	struct mipi_dsi_device *dsi = to_mipi_dsi_device(ctx->dev);
 	int ret;
 
-	if (!ctx->prepared)
-		return 0;
-
 	ret = mipi_dsi_dcs_set_display_off(dsi);
 	if (ret < 0)
 		dev_err(panel->dev, "failed to set display off: %d\n", ret);
@@ -290,8 +287,6 @@ static int ltk500hd1829_unprepare(struct drm_panel *panel)
 	regulator_disable(ctx->iovcc);
 	regulator_disable(ctx->vcc);
 
-	ctx->prepared = false;
-
 	return 0;
 }
 
@@ -301,9 +296,6 @@ static int ltk500hd1829_prepare(struct drm_panel *panel)
 	struct mipi_dsi_device *dsi = to_mipi_dsi_device(ctx->dev);
 	unsigned int i;
 	int ret;
-
-	if (ctx->prepared)
-		return 0;
 
 	ret = regulator_enable(ctx->vcc);
 	if (ret < 0) {
@@ -347,8 +339,6 @@ static int ltk500hd1829_prepare(struct drm_panel *panel)
 		dev_err(panel->dev, "failed to set display on: %d\n", ret);
 		goto disable_iovcc;
 	}
-
-	ctx->prepared = true;
 
 	return 0;
 
@@ -466,15 +456,8 @@ static int ltk500hd1829_probe(struct mipi_dsi_device *dsi)
 static void ltk500hd1829_shutdown(struct mipi_dsi_device *dsi)
 {
 	struct ltk500hd1829 *ctx = mipi_dsi_get_drvdata(dsi);
-	int ret;
 
-	ret = drm_panel_unprepare(&ctx->panel);
-	if (ret < 0)
-		dev_err(&dsi->dev, "Failed to unprepare panel: %d\n", ret);
-
-	ret = drm_panel_disable(&ctx->panel);
-	if (ret < 0)
-		dev_err(&dsi->dev, "Failed to disable panel: %d\n", ret);
+	drm_panel_helper_shutdown(&ctx->panel);
 }
 
 static void ltk500hd1829_remove(struct mipi_dsi_device *dsi)
