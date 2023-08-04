@@ -22,6 +22,7 @@
 #define GAMMA_RELAY_MODE				BIT(0)
 #define GAMMA_LUT_EN					BIT(1)
 #define GAMMA_DITHERING					BIT(2)
+#define GAMMA_LUT_TYPE					BIT(2)
 #define DISP_GAMMA_SIZE				0x0030
 #define DISP_GAMMA_SIZE_HSIZE				GENMASK(28, 16)
 #define DISP_GAMMA_SIZE_VSIZE				GENMASK(12, 0)
@@ -84,6 +85,17 @@ unsigned int mtk_gamma_get_lut_size(struct device *dev)
 	if (gamma && gamma->data)
 		return gamma->data->lut_size;
 	return LUT_SIZE_DEFAULT;
+}
+
+static bool mtk_gamma_lut_is_descending(struct drm_color_lut *lut, u32 lut_size)
+{
+	u64 first, last;
+	int last_entry = lut_size - 1;
+
+	first = lut[0].red + lut[0].green + lut[0].blue;
+	last = lut[last_entry].red + lut[last_entry].green + lut[last_entry].blue;
+
+	return !!(first > last);
 }
 
 /*
@@ -173,6 +185,14 @@ void mtk_gamma_set(struct device *dev, struct drm_crtc_state *state)
 			if (gamma->data->lut_bits == 12)
 				writel(word[1], (lut1_base + i * 4));
 		}
+	}
+
+	if (!gamma->data->has_dither) {
+		/* Descending or Rising LUT */
+		if (mtk_gamma_lut_is_descending(lut, gamma->data->lut_size - 1))
+			cfg_val |= FIELD_PREP(GAMMA_LUT_TYPE, 1);
+		else
+			cfg_val &= ~GAMMA_LUT_TYPE;
 	}
 
 	/* Enable the gamma table */
