@@ -33,6 +33,7 @@
 #include <linux/debugfs.h>
 #include <linux/cpuhotplug.h>
 #include <linux/part_stat.h>
+#include <linux/memcontrol.h>
 
 #include "zram_drv.h"
 
@@ -133,6 +134,18 @@ static void zram_set_obj_size(struct zram *zram,
 	unsigned long flags = zram->table[index].flags >> ZRAM_FLAG_SHIFT;
 
 	zram->table[index].flags = (flags << ZRAM_FLAG_SHIFT) | size;
+}
+
+static inline void zram_set_obj_cgroup(struct zram *zram, u32 index,
+		struct obj_cgroup *objcg)
+{
+	zram->table[index].objcg = objcg;
+}
+
+static inline struct obj_cgroup *zram_get_obj_cgroup(struct zram *zram,
+		u32 index)
+{
+	return zram->table[index].objcg;
 }
 
 static inline bool zram_allocated(struct zram *zram, u32 index)
@@ -1256,6 +1269,7 @@ static bool zram_meta_alloc(struct zram *zram, u64 disksize)
 static void zram_free_page(struct zram *zram, size_t index)
 {
 	unsigned long handle;
+	struct obj_cgroup *objcg;
 
 #ifdef CONFIG_ZRAM_MEMORY_TRACKING
 	zram->table[index].ac_time = 0;
@@ -1287,6 +1301,13 @@ static void zram_free_page(struct zram *zram, size_t index)
 		zram_clear_flag(zram, index, ZRAM_SAME);
 		atomic64_dec(&zram->stats.same_pages);
 		goto out;
+	}
+
+	objcg = zram_get_obj_cgroup(zram, index);
+	if (objcg) {
+		obj_cgroup_uncharge_zram(objcg, zram_get_obj_size(zram, index));
+		obj_cgroup_put(objcg);
+		zram_set_obj_cgroup(zram, index, NULL);
 	}
 
 	handle = zram_get_handle(zram, index);
@@ -1419,6 +1440,7 @@ static int zram_write_page(struct zram *zram, struct page *page, u32 index)
 	struct zcomp_strm *zstrm;
 	unsigned long element = 0;
 	enum zram_pageflags flags = 0;
+	struct obj_cgroup *objcg;
 
 	mem = kmap_atomic(page);
 	if (page_same_filled(mem, &element)) {
@@ -1494,6 +1516,14 @@ compress_again:
 		return -ENOMEM;
 	}
 
+	objcg = get_obj_cgroup_from_page(page);
+	if (objcg && obj_cgroup_charge_zram(objcg, GFP_KERNEL, comp_len)) {
+		zcomp_stream_put(zram->comps[ZRAM_PRIMARY_COMP]);
+		zs_free(zram->mem_pool, handle);
+		obj_cgroup_put(objcg);
+		return -ENOMEM;
+	}
+
 	dst = zs_map_object(zram->mem_pool, handle, ZS_MM_WO);
 
 	src = zstrm->buffer;
@@ -1526,6 +1556,7 @@ out:
 	}  else {
 		zram_set_handle(zram, index, handle);
 		zram_set_obj_size(zram, index, comp_len);
+		zram_set_obj_cgroup(zram, index, objcg);
 	}
 	zram_slot_unlock(zram, index);
 
@@ -1575,6 +1606,7 @@ static int zram_recompress(struct zram *zram, u32 index, struct page *page,
 			   u32 threshold, u32 prio, u32 prio_max)
 {
 	struct zcomp_strm *zstrm = NULL;
+	struct obj_cgroup *objcg;
 	unsigned long handle_old;
 	unsigned long handle_new;
 	unsigned int comp_len_old;
@@ -1669,6 +1701,16 @@ static int zram_recompress(struct zram *zram, u32 index, struct page *page,
 	if (threshold && comp_len_new >= threshold)
 		return 0;
 
+	objcg  = zram_get_obj_cgroup(zram, index);
+	if (objcg) {
+		obj_cgroup_get(objcg);
+		if (obj_cgroup_charge_zram(objcg, GFP_KERNEL, comp_len_new)) {
+			zcomp_stream_put(zram->comps[prio]);
+			obj_cgroup_put(objcg);
+			return -ENOMEM;
+		}
+	}
+
 	/*
 	 * No direct reclaim (slow path) for handle allocation and no
 	 * re-compression attempt (unlike in zram_write_bvec()) since
@@ -1683,6 +1725,8 @@ static int zram_recompress(struct zram *zram, u32 index, struct page *page,
 			       __GFP_MOVABLE);
 	if (IS_ERR_VALUE(handle_new)) {
 		zcomp_stream_put(zram->comps[prio]);
+		obj_cgroup_uncharge_zram(objcg, comp_len_new);
+		obj_cgroup_put(objcg);
 		return PTR_ERR((void *)handle_new);
 	}
 
@@ -1696,6 +1740,7 @@ static int zram_recompress(struct zram *zram, u32 index, struct page *page,
 	zram_set_handle(zram, index, handle_new);
 	zram_set_obj_size(zram, index, comp_len_new);
 	zram_set_priority(zram, index, prio);
+	zram_set_obj_cgroup(zram, index, objcg);
 
 	atomic64_add(comp_len_new, &zram->stats.compr_data_size);
 	atomic64_inc(&zram->stats.pages_stored);
