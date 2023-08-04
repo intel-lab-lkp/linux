@@ -1097,7 +1097,7 @@ static void fill_default_mask(struct ch_filter_specification *fs)
 		memset(fs->mask.lip, ~0, sizeof(fs->mask.lip));
 
 	if (fip && !fip_mask)
-		memset(fs->mask.fip, ~0, sizeof(fs->mask.lip));
+		memset(fs->mask.fip, ~0, sizeof(fs->mask.fip));
 
 	if (fs->val.lport && !fs->mask.lport)
 		fs->mask.lport = ~0;
