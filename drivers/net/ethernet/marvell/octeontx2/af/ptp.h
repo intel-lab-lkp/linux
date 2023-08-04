@@ -25,7 +25,7 @@ struct ptp {
 
 struct ptp *ptp_get(void);
 void ptp_put(struct ptp *ptp);
-void ptp_start(struct ptp *ptp, u64 sclk, u32 ext_clk_freq, u32 extts);
+void ptp_start(struct rvu *rvu, u64 sclk, u32 ext_clk_freq, u32 extts);
 
 extern struct pci_driver ptp_driver;
 
