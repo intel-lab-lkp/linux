@@ -108,6 +108,7 @@ notrace void arch_touch_nmi_watchdog(void)
 }
 EXPORT_SYMBOL(arch_touch_nmi_watchdog);
 
+#if defined(CONFIG_SMP) && defined(CONFIG_SYSCTL)
 static int hardlockup_all_cpu_backtrace_proc_handler(struct ctl_table *table, int write,
 		  void *buffer, size_t *lenp, loff_t *ppos)
 {
@@ -130,6 +131,7 @@ static int hardlockup_all_cpu_backtrace_proc_handler(struct ctl_table *table, in
 
 	return ret;
 }
+#endif
 
 void watchdog_hardlockup_touch_cpu(unsigned int cpu)
 {
