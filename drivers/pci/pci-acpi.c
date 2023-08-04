@@ -1043,6 +1043,28 @@ bool acpi_pci_bridge_d3(struct pci_dev *dev)
 	return false;
 }
 
+/**
+ * acpi_pci_device_constraint - determine if the platform has a contraint for the device
+ * @dev: PCI device to check
+ * @result (out): the constraint specified by the platform
+ *
+ * If the platform has specified a constraint for a device, this function will
+ * return 0 and set @result to the constraint.
+ * Otherwise, it will return an error code.
+ */
+int acpi_pci_device_constraint(struct pci_dev *dev, int *result)
+{
+	int constraint;
+
+	constraint = acpi_get_lps0_constraint(&dev->dev);
+	pci_dbg(dev, "ACPI device constraint: %d\n", constraint);
+	if (constraint < 0)
+		return constraint;
+	*result = constraint;
+
+	return 0;
+}
+
 static void acpi_pci_config_space_access(struct pci_dev *dev, bool enable)
 {
 	int val = enable ? ACPI_REG_CONNECT : ACPI_REG_DISCONNECT;

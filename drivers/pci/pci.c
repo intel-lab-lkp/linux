@@ -1082,6 +1082,14 @@ static inline bool platform_pci_bridge_d3(struct pci_dev *dev)
 	return acpi_pci_bridge_d3(dev);
 }
 
+static inline int platform_get_constraint(struct pci_dev *dev, int *result)
+{
+	if (pci_use_mid_pm())
+		return -ENODEV;
+
+	return acpi_pci_device_constraint(dev, result);
+}
+
 /**
  * pci_update_current_state - Read power state of given device and cache it
  * @dev: PCI device to handle.
@@ -2671,6 +2679,8 @@ EXPORT_SYMBOL(pci_wake_from_d3);
  */
 static pci_power_t pci_target_state(struct pci_dev *dev, bool wakeup)
 {
+	int val;
+
 	if (platform_pci_power_manageable(dev)) {
 		/*
 		 * Call the platform to find the target state for the device.
@@ -2690,6 +2700,10 @@ static pci_power_t pci_target_state(struct pci_dev *dev, bool wakeup)
 
 		return state;
 	}
+
+	/* if platform indicates in a device constraint, use it */
+	if (!platform_get_constraint(dev, &val))
+		return val;
 
 	/*
 	 * If the device is in D3cold even though it's not power-manageable by
