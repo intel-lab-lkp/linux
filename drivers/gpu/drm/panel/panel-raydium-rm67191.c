@@ -20,6 +20,7 @@
 #include <drm/drm_crtc.h>
 #include <drm/drm_mipi_dsi.h>
 #include <drm/drm_panel.h>
+#include <drm/drm_panel_helper.h>
 
 /* Panel specific color-format bits */
 #define COL_FMT_16BPP 0x55
@@ -205,7 +206,6 @@ struct rad_panel {
 	unsigned int num_supplies;
 
 	bool prepared;
-	bool enabled;
 };
 
 static const struct drm_display_mode default_mode = {
@@ -267,9 +267,6 @@ static int rad_panel_prepare(struct drm_panel *panel)
 	struct rad_panel *rad = to_rad_panel(panel);
 	int ret;
 
-	if (rad->prepared)
-		return 0;
-
 	ret = regulator_bulk_enable(rad->num_supplies, rad->supplies);
 	if (ret)
 		return ret;
@@ -290,9 +287,6 @@ static int rad_panel_unprepare(struct drm_panel *panel)
 {
 	struct rad_panel *rad = to_rad_panel(panel);
 	int ret;
-
-	if (!rad->prepared)
-		return 0;
 
 	/*
 	 * Right after asserting the reset, we need to release it, so that the
@@ -321,9 +315,6 @@ static int rad_panel_enable(struct drm_panel *panel)
 	struct device *dev = &dsi->dev;
 	int color_format = color_format_from_dsi_format(dsi->format);
 	int ret;
-
-	if (rad->enabled)
-		return 0;
 
 	dsi->mode_flags |= MIPI_DSI_MODE_LPM;
 
@@ -389,8 +380,6 @@ static int rad_panel_enable(struct drm_panel *panel)
 
 	backlight_enable(rad->backlight);
 
-	rad->enabled = true;
-
 	return 0;
 
 fail:
@@ -405,9 +394,6 @@ static int rad_panel_disable(struct drm_panel *panel)
 	struct mipi_dsi_device *dsi = rad->dsi;
 	struct device *dev = &dsi->dev;
 	int ret;
-
-	if (!rad->enabled)
-		return 0;
 
 	dsi->mode_flags |= MIPI_DSI_MODE_LPM;
 
@@ -428,8 +414,6 @@ static int rad_panel_disable(struct drm_panel *panel)
 		dev_err(dev, "Failed to enter sleep mode (%d)\n", ret);
 		return ret;
 	}
-
-	rad->enabled = false;
 
 	return 0;
 }
@@ -633,8 +617,7 @@ static void rad_panel_shutdown(struct mipi_dsi_device *dsi)
 {
 	struct rad_panel *rad = mipi_dsi_get_drvdata(dsi);
 
-	rad_panel_disable(&rad->panel);
-	rad_panel_unprepare(&rad->panel);
+	drm_panel_helper_shutdown(&rad->panel);
 }
 
 static const struct of_device_id rad_of_match[] = {
