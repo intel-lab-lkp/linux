@@ -18,6 +18,7 @@
 #include <drm/drm_mipi_dsi.h>
 #include <drm/drm_modes.h>
 #include <drm/drm_panel.h>
+#include <drm/drm_panel_helper.h>
 
 #include <video/mipi_display.h>
 
@@ -47,9 +48,6 @@ struct panel_info {
 	struct gpio_desc *enable_gpio;
 	struct gpio_desc *pp33_gpio;
 	struct gpio_desc *pp18_gpio;
-
-	bool prepared;
-	bool enabled;
 };
 
 static inline struct panel_info *to_panel_info(struct drm_panel *panel)
@@ -86,16 +84,11 @@ static int boe_panel_disable(struct drm_panel *panel)
 	struct panel_info *pinfo = to_panel_info(panel);
 	int err;
 
-	if (!pinfo->enabled)
-		return 0;
-
 	err = mipi_dsi_dcs_set_display_off(pinfo->link);
 	if (err < 0) {
 		dev_err(panel->dev, "failed to set display off: %d\n", err);
 		return err;
 	}
-
-	pinfo->enabled = false;
 
 	return 0;
 }
@@ -104,9 +97,6 @@ static int boe_panel_unprepare(struct drm_panel *panel)
 {
 	struct panel_info *pinfo = to_panel_info(panel);
 	int err;
-
-	if (!pinfo->prepared)
-		return 0;
 
 	err = mipi_dsi_dcs_set_display_off(pinfo->link);
 	if (err < 0)
@@ -121,8 +111,6 @@ static int boe_panel_unprepare(struct drm_panel *panel)
 
 	disable_gpios(pinfo);
 
-	pinfo->prepared = false;
-
 	return 0;
 }
 
@@ -130,9 +118,6 @@ static int boe_panel_prepare(struct drm_panel *panel)
 {
 	struct panel_info *pinfo = to_panel_info(panel);
 	int err;
-
-	if (pinfo->prepared)
-		return 0;
 
 	gpiod_set_value(pinfo->pp18_gpio, 1);
 	/* T1: 5ms - 6ms */
@@ -180,8 +165,6 @@ static int boe_panel_prepare(struct drm_panel *panel)
 	/* T7: 20ms - 21ms */
 	usleep_range(20000, 21000);
 
-	pinfo->prepared = true;
-
 	return 0;
 
 poweroff:
@@ -194,9 +177,6 @@ static int boe_panel_enable(struct drm_panel *panel)
 	struct panel_info *pinfo = to_panel_info(panel);
 	int ret;
 
-	if (pinfo->enabled)
-		return 0;
-
 	usleep_range(120000, 121000);
 
 	ret = mipi_dsi_dcs_set_display_on(pinfo->link);
@@ -204,8 +184,6 @@ static int boe_panel_enable(struct drm_panel *panel)
 		dev_err(panel->dev, "failed to set display on: %d\n", ret);
 		return ret;
 	}
-
-	pinfo->enabled = true;
 
 	return 0;
 }
@@ -923,14 +901,7 @@ static void panel_remove(struct mipi_dsi_device *dsi)
 	struct panel_info *pinfo = mipi_dsi_get_drvdata(dsi);
 	int err;
 
-	err = boe_panel_disable(&pinfo->base);
-	if (err < 0)
-		dev_err(&dsi->dev, "failed to disable panel: %d\n", err);
-
-	err = boe_panel_unprepare(&pinfo->base);
-	if (err < 0)
-		dev_err(&dsi->dev, "failed to unprepare panel: %d\n", err);
-
+	drm_panel_helper_shutdown(&pinfo->base);
 	err = mipi_dsi_detach(dsi);
 	if (err < 0)
 		dev_err(&dsi->dev, "failed to detach from DSI host: %d\n", err);
@@ -942,8 +913,7 @@ static void panel_shutdown(struct mipi_dsi_device *dsi)
 {
 	struct panel_info *pinfo = mipi_dsi_get_drvdata(dsi);
 
-	boe_panel_disable(&pinfo->base);
-	boe_panel_unprepare(&pinfo->base);
+	drm_panel_helper_shutdown(&pinfo->base);
 }
 
 static struct mipi_dsi_driver panel_driver = {
