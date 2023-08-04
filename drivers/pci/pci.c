@@ -1082,6 +1082,14 @@ static inline bool platform_pci_bridge_d3(struct pci_dev *dev)
 	return acpi_pci_bridge_d3(dev);
 }
 
+static inline int platform_get_constraint(struct pci_dev *dev)
+{
+	if (pci_use_mid_pm())
+		return -ENODEV;
+
+	return acpi_get_lps0_constraint(&dev->dev);
+}
+
 /**
  * pci_update_current_state - Read power state of given device and cache it
  * @dev: PCI device to handle.
@@ -2660,6 +2668,20 @@ int pci_wake_from_d3(struct pci_dev *dev, bool enable)
 }
 EXPORT_SYMBOL(pci_wake_from_d3);
 
+/*
+ * Find the deepest state from which the device can generate
+ * PME#.
+ */
+static pci_power_t pci_get_wake_pme_state(struct pci_dev *dev)
+{
+	pci_power_t state = PCI_D3hot;
+
+	while (state && !(dev->pme_support & (1 << state)))
+		state--;
+
+	return state;
+}
+
 /**
  * pci_target_state - find an appropriate low power state for a given PCI dev
  * @dev: PCI device
@@ -2671,6 +2693,8 @@ EXPORT_SYMBOL(pci_wake_from_d3);
  */
 static pci_power_t pci_target_state(struct pci_dev *dev, bool wakeup)
 {
+	pci_power_t constraint;
+
 	if (platform_pci_power_manageable(dev)) {
 		/*
 		 * Call the platform to find the target state for the device.
@@ -2701,23 +2725,20 @@ static pci_power_t pci_target_state(struct pci_dev *dev, bool wakeup)
 	else if (!dev->pm_cap)
 		return PCI_D0;
 
+	/* if platform indicates preferred state device constraint, use it */
+	constraint = platform_get_constraint(dev);
+	if (constraint < 0)
+		constraint = PCI_D3hot;
+
 	if (wakeup && dev->pme_support) {
-		pci_power_t state = PCI_D3hot;
+		pci_power_t pme_state = pci_get_wake_pme_state(dev);
 
-		/*
-		 * Find the deepest state from which the device can generate
-		 * PME#.
-		 */
-		while (state && !(dev->pme_support & (1 << state)))
-			state--;
-
-		if (state)
-			return state;
-		else if (dev->pme_support & 1)
-			return PCI_D0;
+		/* pick the lesser of any specified constraints */
+		if (pme_state < constraint)
+			constraint = pme_state;
 	}
 
-	return PCI_D3hot;
+	return constraint;
 }
 
 /**
