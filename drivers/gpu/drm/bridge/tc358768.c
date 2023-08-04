@@ -131,8 +131,17 @@ static const char * const tc358768_supplies[] = {
 
 struct tc358768_dsi_output {
 	struct mipi_dsi_device *dev;
+
+	/* Legacy field if DRM_BRIDGE_ATTACH_NO_CONNECTOR is not used */
 	struct drm_panel *panel;
-	struct drm_bridge *bridge;
+
+	/*
+	 * If DRM_BRIDGE_ATTACH_NO_CONNECTOR is not used and a panel is attached
+	 * to tc358768, 'next_bridge' contains the bridge the driver created
+	 * with drm_panel_bridge_add_typed(). Otherwise 'next_bridge' contains
+	 * the next bridge the driver found.
+	 */
+	struct drm_bridge *next_bridge;
 };
 
 struct tc358768_priv {
@@ -391,8 +400,6 @@ static int tc358768_dsi_host_attach(struct mipi_dsi_host *host,
 				    struct mipi_dsi_device *dev)
 {
 	struct tc358768_priv *priv = dsi_host_to_tc358768(host);
-	struct drm_bridge *bridge;
-	struct drm_panel *panel;
 	struct device_node *ep;
 	int ret;
 
@@ -420,21 +427,7 @@ static int tc358768_dsi_host_attach(struct mipi_dsi_host *host,
 		return -ENOTSUPP;
 	}
 
-	ret = drm_of_find_panel_or_bridge(host->dev->of_node, 1, 0, &panel,
-					  &bridge);
-	if (ret)
-		return ret;
-
-	if (panel) {
-		bridge = drm_panel_bridge_add_typed(panel,
-						    DRM_MODE_CONNECTOR_DSI);
-		if (IS_ERR(bridge))
-			return PTR_ERR(bridge);
-	}
-
 	priv->output.dev = dev;
-	priv->output.bridge = bridge;
-	priv->output.panel = panel;
 
 	priv->dsi_lanes = dev->lanes;
 	priv->dsi_bpp = mipi_dsi_pixel_format_to_bpp(dev->format);
@@ -463,7 +456,7 @@ static int tc358768_dsi_host_detach(struct mipi_dsi_host *host,
 
 	drm_bridge_remove(&priv->bridge);
 	if (priv->output.panel)
-		drm_panel_bridge_remove(priv->output.bridge);
+		drm_panel_bridge_remove(priv->output.next_bridge);
 
 	return 0;
 }
@@ -544,7 +537,40 @@ static int tc358768_bridge_attach(struct drm_bridge *bridge,
 		return -ENOTSUPP;
 	}
 
-	return drm_bridge_attach(bridge->encoder, priv->output.bridge, bridge,
+	if (flags & DRM_BRIDGE_ATTACH_NO_CONNECTOR) {
+		struct device_node *node;
+
+		/* Get the next bridge, connected to port@1. */
+		node = of_graph_get_remote_node(priv->dev->of_node, 1, -1);
+		if (!node)
+			return -ENODEV;
+
+		priv->output.next_bridge = of_drm_find_bridge(node);
+		of_node_put(node);
+		if (!priv->output.next_bridge)
+			return -EPROBE_DEFER;
+	} else {
+		struct drm_bridge *bridge;
+		struct drm_panel *panel;
+		int ret;
+
+		ret = drm_of_find_panel_or_bridge(priv->dev->of_node, 1, 0,
+						  &panel, &bridge);
+		if (ret)
+			return ret;
+
+		if (panel) {
+			bridge = drm_panel_bridge_add_typed(panel,
+				DRM_MODE_CONNECTOR_DSI);
+			if (IS_ERR(bridge))
+				return PTR_ERR(bridge);
+		}
+
+		priv->output.next_bridge = bridge;
+		priv->output.panel = panel;
+	}
+
+	return drm_bridge_attach(bridge->encoder, priv->output.next_bridge, bridge,
 				 flags);
 }
 
