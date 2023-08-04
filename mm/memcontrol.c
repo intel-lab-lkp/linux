@@ -3059,6 +3059,7 @@ struct obj_cgroup *get_obj_cgroup_from_page(struct page *page)
 	}
 	return objcg;
 }
+EXPORT_SYMBOL(get_obj_cgroup_from_page);
 
 static void memcg_account_kmem(struct mem_cgroup *memcg, int nr_pages)
 {
@@ -3408,6 +3409,29 @@ void obj_cgroup_uncharge(struct obj_cgroup *objcg, size_t size)
 {
 	refill_obj_stock(objcg, size, true);
 }
+
+int obj_cgroup_charge_zram(struct obj_cgroup *objcg, gfp_t gfp,
+							size_t size)
+{
+	if (!cgroup_subsys_on_dfl(memory_cgrp_subsys))
+		return 0;
+
+	/*
+	 * Indirect zram usage in PF_MEMALLOC, charging must succeed.
+	 * Direct zram usage, charging  may failed.
+	 */
+	return obj_cgroup_charge(objcg, gfp, size);
+}
+EXPORT_SYMBOL(obj_cgroup_charge_zram);
+
+void obj_cgroup_uncharge_zram(struct obj_cgroup *objcg, size_t size)
+{
+	if (!cgroup_subsys_on_dfl(memory_cgrp_subsys))
+		return;
+
+	obj_cgroup_uncharge(objcg, size);
+}
+EXPORT_SYMBOL(obj_cgroup_uncharge_zram);
 
 #endif /* CONFIG_MEMCG_KMEM */
 

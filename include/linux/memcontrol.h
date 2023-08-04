@@ -1819,6 +1819,9 @@ static inline void count_objcg_event(struct obj_cgroup *objcg,
 	rcu_read_unlock();
 }
 
+int obj_cgroup_charge_zram(struct obj_cgroup *objcg, gfp_t gfp,
+					size_t size);
+void obj_cgroup_uncharge_zram(struct obj_cgroup *objcg, size_t size);
 #else
 static inline bool mem_cgroup_kmem_disabled(void)
 {
@@ -1880,6 +1883,15 @@ static inline void count_objcg_event(struct obj_cgroup *objcg,
 {
 }
 
+int obj_cgroup_charge_zram(struct obj_cgroup *objcg, gfp_t gfp,
+					size_t size)
+{
+	return 0;
+}
+
+void obj_cgroup_uncharge_zram(struct obj_cgroup *objcg, size_t size)
+{
+}
 #endif /* CONFIG_MEMCG_KMEM */
 
 #if defined(CONFIG_MEMCG_KMEM) && defined(CONFIG_ZSWAP)
