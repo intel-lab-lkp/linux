@@ -453,7 +453,7 @@ int nd_pfn_validate(struct nd_pfn *nd_pfn, const char *sig)
 	struct resource *res;
 	enum nd_pfn_mode mode;
 	struct nd_namespace_io *nsio;
-	unsigned long align, start_pad;
+	unsigned long align, start_pad, end_trunc;
 	struct nd_pfn_sb *pfn_sb = nd_pfn->pfn_sb;
 	struct nd_namespace_common *ndns = nd_pfn->ndns;
 	const uuid_t *parent_uuid = nd_dev_to_uuid(&ndns->dev);
@@ -503,6 +503,7 @@ int nd_pfn_validate(struct nd_pfn *nd_pfn, const char *sig)
 	align = le32_to_cpu(pfn_sb->align);
 	offset = le64_to_cpu(pfn_sb->dataoff);
 	start_pad = le32_to_cpu(pfn_sb->start_pad);
+	end_trunc = le32_to_cpu(pfn_sb->end_trunc);
 	if (align == 0)
 		align = 1UL << ilog2(offset);
 	mode = le32_to_cpu(pfn_sb->mode);
@@ -610,6 +611,10 @@ int nd_pfn_validate(struct nd_pfn *nd_pfn, const char *sig)
 		return -EOPNOTSUPP;
 	}
 
+	if (offset >= (res->end - res->start + 1 - start_pad - end_trunc)) {
+		dev_err(&nd_pfn->dev, "bad offset with small namespace\n");
+		return -EOPNOTSUPP;
+	}
 	return 0;
 }
 EXPORT_SYMBOL(nd_pfn_validate);
@@ -810,7 +815,8 @@ static int nd_pfn_init(struct nd_pfn *nd_pfn)
 	else
 		return -ENXIO;
 
-	if (offset >= size) {
+	if (offset >= (size - end_trunc)) {
+		/* This implies we result in zero size devices */
 		dev_err(&nd_pfn->dev, "%s unable to satisfy requested alignment\n",
 				dev_name(&ndns->dev));
 		return -ENXIO;
