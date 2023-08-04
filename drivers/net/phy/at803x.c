@@ -993,6 +993,25 @@ static int at8031_pll_config(struct phy_device *phydev)
 static int at803x_hibernation_mode_config(struct phy_device *phydev)
 {
 	struct at803x_priv *priv = phydev->priv;
+	int ret;
+
+	/* Toggle hibernation mode OFF and ON to wake the PHY up and
+	 * make it generate clock on RX_CLK pin for about 10 seconds.
+	 * These clock are needed during start up by MACs like DWMAC
+	 * in NXP i.MX8M Plus to release their DMA from reset. After
+	 * the MAC has started up, the PHY can enter hibernation and
+	 * disable the RX_CLK clock, this poses no problem for the MAC.
+	 */
+	ret = at803x_debug_reg_mask(phydev, AT803X_DEBUG_REG_HIB_CTRL,
+				    AT803X_DEBUG_HIB_CTRL_PS_HIB_EN, 0);
+	if (ret < 0)
+		return ret;
+
+	ret = at803x_debug_reg_mask(phydev, AT803X_DEBUG_REG_HIB_CTRL,
+				    AT803X_DEBUG_HIB_CTRL_PS_HIB_EN,
+				    AT803X_DEBUG_HIB_CTRL_PS_HIB_EN);
+	if (ret < 0)
+		return ret;
 
 	/* The default after hardware reset is hibernation mode enabled. After
 	 * software reset, the value is retained.
