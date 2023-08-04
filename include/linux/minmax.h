@@ -74,6 +74,23 @@
 #define max(x, y)	__careful_cmp(x, y, >)
 
 /**
+ * min_unsigned - return minimum of two non-negative values
+ *   Signed types are zero extended to match a larger unsigned type.
+ * @x: first value
+ * @y: second value
+ */
+#define min_unsigned(x, y)	\
+	__careful_cmp((x) + 0u + 0ul + 0ull, (y) + 0u + 0ul + 0ull, <)
+
+/**
+ * max_unsigned - return maximum of two non-negative values
+ * @x: first value
+ * @y: second value
+ */
+#define max_unsigned(x, y)	\
+	__careful_cmp((x) + 0u + 0ul + 0ull, (y) + 0u + 0ul + 0ull, >)
+
+/**
  * min3 - return minimum of three values
  * @x: first value
  * @y: second value
