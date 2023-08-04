@@ -81,6 +81,8 @@ struct fwnode_handle *__irq_domain_alloc_fwnode(unsigned int type, int id,
 	char *n;
 
 	fwid = kzalloc(sizeof(*fwid), GFP_KERNEL);
+	if (!fwid)
+		return NULL;
 
 	switch (type) {
 	case IRQCHIP_FWNODE_NAMED:
@@ -93,10 +95,8 @@ struct fwnode_handle *__irq_domain_alloc_fwnode(unsigned int type, int id,
 		n = kasprintf(GFP_KERNEL, "irqchip@%pa", pa);
 		break;
 	}
-
-	if (!fwid || !n) {
+	if (!n) {
 		kfree(fwid);
-		kfree(n);
 		return NULL;
 	}
 
