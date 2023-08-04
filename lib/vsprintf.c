@@ -20,7 +20,6 @@
 #include <linux/build_bug.h>
 #include <linux/clk.h>
 #include <linux/clk-provider.h>
-#include <linux/compiler.h>
 #include <linux/cred.h>
 #include <linux/ctype.h>
 #include <linux/dcache.h>
@@ -36,7 +35,6 @@
 #include <linux/rtc.h>
 #include <linux/siphash.h>
 #include <linux/stdarg.h>
-#include <linux/string.h>
 #include <linux/string_helpers.h>
 #include <linux/time.h>
 #include <linux/types.h>
