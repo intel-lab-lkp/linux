@@ -245,7 +245,6 @@ static int bluefield_edac_mc_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct edac_mc_layer layers[1];
 	struct mem_ctl_info *mci;
-	struct resource *emi_res;
 	unsigned int mc_idx, dimm_count;
 	int rc, ret;
 
@@ -266,10 +265,6 @@ static int bluefield_edac_mc_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
-	emi_res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!emi_res)
-		return -EINVAL;
-
 	layers[0].type = EDAC_MC_LAYER_SLOT;
 	layers[0].size = dimm_count;
 	layers[0].is_virt_csrow = true;
@@ -281,7 +276,7 @@ static int bluefield_edac_mc_probe(struct platform_device *pdev)
 	priv = mci->pvt_info;
 
 	priv->dimm_per_mc = dimm_count;
-	priv->emi_base = devm_ioremap_resource(dev, emi_res);
+	priv->emi_base = devm_platform_get_and_ioremap_resource(pdev, 0, NULL);
 	if (IS_ERR(priv->emi_base)) {
 		dev_err(dev, "failed to map EMI IO resource\n");
 		ret = PTR_ERR(priv->emi_base);
