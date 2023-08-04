@@ -183,6 +183,9 @@ static int test_kmem_memcg_deletion(const char *root)
 	if (cg_run_in_subcgroups(parent, alloc_kmem_smp, NULL, 100))
 		goto cleanup;
 
+	/* wait for RCU freeing */
+	sleep(1);
+
 	current = cg_read_long(parent, "memory.current");
 	slab = cg_read_key_long(parent, "memory.stat", "slab ");
 	anon = cg_read_key_long(parent, "memory.stat", "anon ");
