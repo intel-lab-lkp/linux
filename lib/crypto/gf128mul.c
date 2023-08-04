@@ -208,11 +208,11 @@ void gf128mul_lle(be128 *r, const be128 *b)
 	for (i = 0;;) {
 		u8 ch = ((u8 *)b)[15 - i];
 
-		be128_xor(r, r, &p[ 0 + !(ch & 0x80)]);
-		be128_xor(r, r, &p[ 2 + !(ch & 0x40)]);
-		be128_xor(r, r, &p[ 4 + !(ch & 0x20)]);
-		be128_xor(r, r, &p[ 6 + !(ch & 0x10)]);
-		be128_xor(r, r, &p[ 8 + !(ch & 0x08)]);
+		be128_xor(r, r, &p[0 + !(ch & 0x80)]);
+		be128_xor(r, r, &p[2 + !(ch & 0x40)]);
+		be128_xor(r, r, &p[4 + !(ch & 0x20)]);
+		be128_xor(r, r, &p[6 + !(ch & 0x10)]);
+		be128_xor(r, r, &p[8 + !(ch & 0x08)]);
 		be128_xor(r, r, &p[10 + !(ch & 0x04)]);
 		be128_xor(r, r, &p[12 + !(ch & 0x02)]);
 		be128_xor(r, r, &p[14 + !(ch & 0x01)]);
