@@ -34,6 +34,7 @@
 #include <linux/property.h>
 #include <linux/rtc.h>
 #include <linux/siphash.h>
+#include <linux/sprintf.h>
 #include <linux/stdarg.h>
 #include <linux/string_helpers.h>
 #include <linux/time.h>
