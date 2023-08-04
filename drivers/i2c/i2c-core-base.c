@@ -116,20 +116,19 @@ EXPORT_SYMBOL_GPL(i2c_match_id);
 
 const void *i2c_get_match_data(const struct i2c_client *client)
 {
-	struct i2c_driver *driver = to_i2c_driver(client->dev.driver);
+	const struct i2c_driver *driver = to_i2c_driver(client->dev.driver);
 	const struct i2c_device_id *match;
 	const void *data;
 
 	data = device_get_match_data(&client->dev);
-	if (!data) {
-		match = i2c_match_id(driver->id_table, client);
-		if (!match)
-			return NULL;
+	if (data)
+		return data;
 
-		data = (const void *)match->driver_data;
-	}
+	match = i2c_match_id(driver->id_table, client);
+	if (!match)
+		return NULL;
 
-	return data;
+	return (const void *)match->driver_data;
 }
 EXPORT_SYMBOL(i2c_get_match_data);
 
