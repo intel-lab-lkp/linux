@@ -553,7 +553,7 @@ static void kmem_obj_info(struct kmem_obj_info *kpp, void *object, struct slab *
 bool kmem_dump_obj(void *object)
 {
 	char *cp = IS_ENABLED(CONFIG_MMU) ? "" : "/vmalloc";
-	int i;
+	int i, object_size = 0;
 	struct slab *slab;
 	unsigned long ptroffset;
 	struct kmem_obj_info kp = { };
@@ -580,12 +580,33 @@ bool kmem_dump_obj(void *object)
 		ptroffset = ((char *)object - (char *)kp.kp_objp) - kp.kp_data_offset;
 		pr_cont(" pointer offset %lu", ptroffset);
 	}
-	if (kp.kp_slab_cache && kp.kp_slab_cache->object_size)
-		pr_cont(" size %u", kp.kp_slab_cache->object_size);
+	if (kp.kp_slab_cache && kp.kp_slab_cache->object_size) {
+		object_size = kp.kp_slab_cache->object_size;
+		pr_cont(" size %u", object_size);
+	}
 	if (kp.kp_ret)
 		pr_cont(" allocated at %pS\n", kp.kp_ret);
 	else
 		pr_cont("\n");
+
+	/* Dump a small piece of memory centered on 'object' */
+	if (kp.kp_objp && object_size) {
+		void *p = object;
+		int dump_size = 64;
+
+		p += dump_size / 2;
+		if (p > kp.kp_objp + object_size)
+			p = kp.kp_objp + object_size;
+
+		p -= dump_size;
+		if (p < kp.kp_objp)
+			p = kp.kp_objp;
+
+		dump_size = min(object_size, dump_size);
+		print_hex_dump(KERN_INFO, "",
+			       DUMP_PREFIX_ADDRESS_LOW16, 16, 4, p, dump_size, false);
+	}
+
 	for (i = 0; i < ARRAY_SIZE(kp.kp_stack); i++) {
 		if (!kp.kp_stack[i])
 			break;
