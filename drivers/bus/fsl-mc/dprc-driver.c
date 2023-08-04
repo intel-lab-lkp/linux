@@ -870,7 +870,6 @@ static const struct fsl_mc_device_id match_id_table[] = {
 static struct fsl_mc_driver dprc_driver = {
 	.driver = {
 		   .name = FSL_MC_DPRC_DRIVER_NAME,
-		   .owner = THIS_MODULE,
 		   .pm = NULL,
 		   },
 	.match_id_table = match_id_table,
