@@ -106,7 +106,7 @@ struct ath6kl_usb_ctrl_diag_cmd_write {
 	__le32 cmd;
 	__le32 address;
 	__le32 value;
-	__le32 _pad[1];
+	__le32 _pad[];
 } __packed;
 
 struct ath6kl_usb_ctrl_diag_cmd_read {
