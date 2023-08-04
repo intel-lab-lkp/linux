@@ -164,6 +164,14 @@ static const struct dmi_system_id tpm_tis_dmi_table[] = {
 	},
 	{
 		.callback = tpm_tis_disable_irq,
+		.ident = "ThinkStation P620",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_VERSION, "ThinkStation P620"),
+		},
+	},
+	{
+		.callback = tpm_tis_disable_irq,
 		.ident = "UPX-TGL",
 		.matches = {
 			DMI_MATCH(DMI_SYS_VENDOR, "AAEON"),
