@@ -129,10 +129,11 @@ static struct team_port *lb_hash_select_tx_port(struct team *team,
 
 /* Hash to port mapping select tx port */
 static struct team_port *lb_htpm_select_tx_port(struct team *team,
-						struct lb_priv *lb_priv,
+						struct lb_priv *lb__priv,
 						struct sk_buff *skb,
 						unsigned char hash)
 {
+	struct lb_priv *lb_priv = get_lb_priv(team);
 	struct team_port *port;
 
 	port = rcu_dereference_bh(LB_HTPM_PORT_BY_HASH(lb_priv, hash));
