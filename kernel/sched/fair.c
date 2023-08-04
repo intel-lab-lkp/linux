@@ -11489,6 +11489,9 @@ static inline int find_new_ilb(void)
 		if (ilb == smp_processor_id())
 			continue;
 
+		if (unlikely(on_null_domain(cpu_rq(ilb))))
+			continue;
+
 		if (idle_cpu(ilb))
 			return ilb;
 	}
