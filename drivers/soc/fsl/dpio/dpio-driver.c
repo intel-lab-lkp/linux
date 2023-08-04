@@ -312,7 +312,6 @@ static const struct fsl_mc_device_id dpaa2_dpio_match_id_table[] = {
 static struct fsl_mc_driver dpaa2_dpio_driver = {
 	.driver = {
 		.name		= KBUILD_MODNAME,
-		.owner		= THIS_MODULE,
 	},
 	.probe		= dpaa2_dpio_probe,
 	.remove		= dpaa2_dpio_remove,
