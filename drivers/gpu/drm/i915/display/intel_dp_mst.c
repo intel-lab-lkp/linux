@@ -381,6 +381,9 @@ static int intel_dp_mst_compute_config(struct intel_encoder *encoder,
 	if (ret)
 		return ret;
 
+	/* Update the SDP split decision flag */
+	intel_dp_audio_compute_config(pipe_config, conn_state);
+
 	pipe_config->limited_color_range =
 		intel_dp_limited_color_range(pipe_config, conn_state);
 
