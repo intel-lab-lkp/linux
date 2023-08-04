@@ -426,15 +426,15 @@ int tipc_enable_l2_media(struct net *net, struct tipc_bearer *b,
 	struct net_device *dev;
 
 	/* Find device with specified name */
-	dev = dev_get_by_name(net, dev_name);
+	dev = netdev_get_by_name(net, dev_name, &b->devtracker, GFP_KERNEL);
 	if (!dev)
 		return -ENODEV;
 	if (tipc_mtu_bad(dev)) {
-		dev_put(dev);
+		netdev_put(dev, &b->devtracker);
 		return -EINVAL;
 	}
 	if (dev == net->loopback_dev) {
-		dev_put(dev);
+		netdev_put(dev, &b->devtracker);
 		pr_info("Enabling <%s> not permitted\n", b->name);
 		return -EINVAL;
 	}
@@ -445,7 +445,7 @@ int tipc_enable_l2_media(struct net *net, struct tipc_bearer *b,
 		tipc_net_init(net, node_id, 0);
 	}
 	if (!tipc_own_id(net)) {
-		dev_put(dev);
+		netdev_put(dev, &b->devtracker);
 		pr_warn("Failed to obtain node identity\n");
 		return -EINVAL;
 	}
@@ -479,7 +479,7 @@ void tipc_disable_l2_media(struct tipc_bearer *b)
 	dev_remove_pack(&b->pt);
 	RCU_INIT_POINTER(dev->tipc_ptr, NULL);
 	synchronize_net();
-	dev_put(dev);
+	netdev_put(dev, &b->devtracker);
 }
 
 /**

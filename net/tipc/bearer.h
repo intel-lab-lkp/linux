@@ -174,6 +174,7 @@ struct tipc_bearer {
 	u16 encap_hlen;
 	unsigned long up;
 	refcount_t refcnt;
+	netdevice_tracker	devtracker;
 };
 
 struct tipc_bearer_names {
