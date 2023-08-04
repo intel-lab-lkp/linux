@@ -17,7 +17,7 @@
 #include "kmb_plane.h"
 #include "kmb_regs.h"
 
-const u32 layer_irqs[] = {
+static const u32 layer_irqs[] = {
 	LCD_INT_VL0,
 	LCD_INT_VL1,
 	LCD_INT_GL0,
