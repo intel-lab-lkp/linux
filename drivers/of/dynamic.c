@@ -563,7 +563,7 @@ static int __of_changeset_entry_notify(struct of_changeset_entry *ce,
 
 static int __of_changeset_entry_apply(struct of_changeset_entry *ce)
 {
-	struct property *old_prop, **propp;
+	struct property **propp;
 	unsigned long flags;
 	int ret = 0;
 
@@ -603,7 +603,7 @@ static int __of_changeset_entry_apply(struct of_changeset_entry *ce)
 			}
 		}
 
-		ret = __of_update_property(ce->np, ce->prop, &old_prop);
+		ret = __of_update_property(ce->np, ce->prop, &ce->old_prop);
 		break;
 	default:
 		ret = -EINVAL;
@@ -903,9 +903,6 @@ int of_changeset_action(struct of_changeset *ocs, unsigned long action,
 	ce->action = action;
 	ce->np = of_node_get(np);
 	ce->prop = prop;
-
-	if (action == OF_RECONFIG_UPDATE_PROPERTY && prop)
-		ce->old_prop = of_find_property(np, prop->name, NULL);
 
 	/* add it to the list */
 	list_add_tail(&ce->node, &ocs->entries);
