@@ -22,6 +22,7 @@
 #include <drm/drm_mipi_dsi.h>
 #include <drm/drm_modes.h>
 #include <drm/drm_panel.h>
+#include <drm/drm_panel_helper.h>
 
 #define DRV_NAME "panel-sitronix-st7703"
 
@@ -58,7 +59,6 @@ struct st7703 {
 	struct gpio_desc *reset_gpio;
 	struct regulator *vcc;
 	struct regulator *iovcc;
-	bool prepared;
 
 	struct dentry *debugfs;
 	const struct st7703_panel_desc *desc;
@@ -486,13 +486,9 @@ static int st7703_unprepare(struct drm_panel *panel)
 {
 	struct st7703 *ctx = panel_to_st7703(panel);
 
-	if (!ctx->prepared)
-		return 0;
-
 	gpiod_set_value_cansleep(ctx->reset_gpio, 1);
 	regulator_disable(ctx->iovcc);
 	regulator_disable(ctx->vcc);
-	ctx->prepared = false;
 
 	return 0;
 }
@@ -501,9 +497,6 @@ static int st7703_prepare(struct drm_panel *panel)
 {
 	struct st7703 *ctx = panel_to_st7703(panel);
 	int ret;
-
-	if (ctx->prepared)
-		return 0;
 
 	dev_dbg(ctx->dev, "Resetting the panel\n");
 	ret = regulator_enable(ctx->vcc);
@@ -521,8 +514,6 @@ static int st7703_prepare(struct drm_panel *panel)
 	usleep_range(20, 40);
 	gpiod_set_value_cansleep(ctx->reset_gpio, 0);
 	msleep(20);
-
-	ctx->prepared = true;
 
 	return 0;
 
@@ -665,15 +656,8 @@ static int st7703_probe(struct mipi_dsi_device *dsi)
 static void st7703_shutdown(struct mipi_dsi_device *dsi)
 {
 	struct st7703 *ctx = mipi_dsi_get_drvdata(dsi);
-	int ret;
 
-	ret = drm_panel_unprepare(&ctx->panel);
-	if (ret < 0)
-		dev_err(&dsi->dev, "Failed to unprepare panel: %d\n", ret);
-
-	ret = drm_panel_disable(&ctx->panel);
-	if (ret < 0)
-		dev_err(&dsi->dev, "Failed to disable panel: %d\n", ret);
+	drm_panel_helper_shutdown(&ctx->panel);
 }
 
 static void st7703_remove(struct mipi_dsi_device *dsi)
