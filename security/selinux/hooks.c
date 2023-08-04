@@ -2745,6 +2745,30 @@ static int selinux_umount(struct vfsmount *mnt, int flags)
 				   FILESYSTEM__UNMOUNT, NULL);
 }
 
+static int selinux_fs_context_init(struct fs_context *fc,
+				   struct dentry *reference)
+{
+	const struct superblock_security_struct *sbsec;
+	struct selinux_mnt_opts *opts;
+
+	if (!reference || fc->purpose != FS_CONTEXT_FOR_SUBMOUNT)
+		return 0;
+
+	opts = kzalloc(sizeof(*opts), GFP_KERNEL);
+	if (!opts)
+		return -ENOMEM;
+
+	sbsec = selinux_superblock(reference->d_sb);
+	if (sbsec->flags & FSCONTEXT_MNT)
+		opts->fscontext_sid = sbsec->sid;
+	if (sbsec->flags & CONTEXT_MNT)
+		opts->context_sid = sbsec->mntpoint_sid;
+	if (sbsec->flags & DEFCONTEXT_MNT)
+		opts->defcontext_sid = sbsec->def_sid;
+	fc->security = opts;
+	return 0;
+}
+
 static int selinux_fs_context_dup(struct fs_context *fc,
 				  struct fs_context *src_fc)
 {
@@ -7182,6 +7206,7 @@ static struct security_hook_list selinux_hooks[] __ro_after_init = {
 	/*
 	 * PUT "CLONING" (ACCESSING + ALLOCATING) HOOKS HERE
 	 */
+	LSM_HOOK_INIT(fs_context_init, selinux_fs_context_init),
 	LSM_HOOK_INIT(fs_context_dup, selinux_fs_context_dup),
 	LSM_HOOK_INIT(fs_context_parse_param, selinux_fs_context_parse_param),
 	LSM_HOOK_INIT(sb_eat_lsm_opts, selinux_sb_eat_lsm_opts),

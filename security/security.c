@@ -1139,6 +1139,20 @@ void security_bprm_committed_creds(struct linux_binprm *bprm)
 }
 
 /**
+ * security_fs_context_init() - Initialise fc->security
+ * @fc: new filesystem context
+ * @dentry: dentry reference for submount/remount
+ *
+ * Fill out the ->security field for a new fs_context.
+ *
+ * Return: Returns 0 on success or negative error code on failure.
+ */
+int security_fs_context_init(struct fs_context *fc, struct dentry *reference)
+{
+	return call_int_hook(fs_context_init, 0, fc, reference);
+}
+
+/**
  * security_fs_context_dup() - Duplicate a fs_context LSM blob
  * @fc: destination filesystem context
  * @src_fc: source filesystem context
