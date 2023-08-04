@@ -263,11 +263,20 @@ void print_hex_dump(const char *level, const char *prefix_str, int prefix_type,
 		    const void *buf, size_t len, bool ascii)
 {
 	const u8 *ptr = buf;
-	int i, linelen, remaining = len;
+	int i, linelen, width = 0, remaining = len;
 	unsigned char linebuf[32 * 3 + 2 + 32 + 1];
 
 	if (rowsize != 16 && rowsize != 32)
 		rowsize = 16;
+
+	if (prefix_type == DUMP_PREFIX_OFFSET) {
+		unsigned long tmp = len;
+
+		do {
+			width++;
+			tmp >>= 4;
+		} while (tmp);
+	}
 
 	for (i = 0; i < len; i += rowsize) {
 		linelen = min(remaining, rowsize);
@@ -286,7 +295,7 @@ void print_hex_dump(const char *level, const char *prefix_str, int prefix_type,
 			       prefix_str, 0xffff & (unsigned long)(ptr + i), linebuf);
 			break;
 		case DUMP_PREFIX_OFFSET:
-			printk("%s%s%.8x: %s\n", level, prefix_str, i, linebuf);
+			printk("%s%s%0*x: %s\n", level, prefix_str, width, i, linebuf);
 			break;
 		default:
 			printk("%s%s%s\n", level, prefix_str, linebuf);
