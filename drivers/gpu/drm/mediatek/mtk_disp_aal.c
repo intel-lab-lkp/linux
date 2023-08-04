@@ -122,6 +122,9 @@ void mtk_aal_gamma_set(struct device *dev, struct drm_crtc_state *state)
 		writel(word, (aal->regs + DISP_AAL_GAMMA_LUT) + (i * 4));
 	}
 
+	/* Disable RELAY mode to pass the processed image */
+	cfg_val &= ~AAL_RELAY_MODE;
+
 	writel(cfg_val, aal->regs + DISP_AAL_CFG);
 }
 
