@@ -179,12 +179,14 @@ config PCI_MVEBU
 	depends on MVEBU_MBUS
 	depends on ARM
 	depends on OF
-	depends on BROKEN
 	select PCI_BRIDGE_EMUL
 	help
 	 Add support for Marvell EBU PCIe controller. This PCIe controller
 	 is used on 32-bit Marvell ARM SoCs: Dove, Kirkwood, Armada 370,
 	 Armada XP, Armada 375, Armada 38x and Armada 39x.
+
+	 This driver has known problems that may cause crashes during boot
+	 and failure to detect PCIe devices in some cases.
 
 config PCIE_MEDIATEK
 	tristate "MediaTek PCIe controller"
