@@ -2826,7 +2826,7 @@ static struct irdma_mr *irdma_alloc_iwmr(struct ib_umem *region,
 {
 	struct irdma_device *iwdev = to_iwdev(pd->device);
 	struct irdma_pbl *iwpbl = NULL;
-	struct irdma_mr *iwmr = NULL;
+	struct irdma_mr *iwmr;
 	unsigned long pgsz_bitmap;
 
 	iwmr = kzalloc(sizeof(*iwmr), GFP_KERNEL);
