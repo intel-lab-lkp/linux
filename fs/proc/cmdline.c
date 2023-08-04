@@ -13,13 +13,6 @@ static int cmdline_proc_show(struct seq_file *m, void *v)
 	return 0;
 }
 
-static int cmdline_load_proc_show(struct seq_file *m, void *v)
-{
-	seq_puts(m, boot_command_line);
-	seq_putc(m, '\n');
-	return 0;
-}
-
 static int __init proc_cmdline_init(void)
 {
 	struct proc_dir_entry *pde;
@@ -27,11 +20,6 @@ static int __init proc_cmdline_init(void)
 	pde = proc_create_single("cmdline", 0, NULL, cmdline_proc_show);
 	pde_make_permanent(pde);
 	pde->size = saved_command_line_len + 1;
-	if (IS_ENABLED(CONFIG_BOOT_CONFIG_FORCE)) {
-		pde = proc_create_single("cmdline_load", 0, NULL, cmdline_load_proc_show);
-		pde_make_permanent(pde);
-		pde->size = strnlen(boot_command_line, COMMAND_LINE_SIZE) + 1;
-	}
 	return 0;
 }
 fs_initcall(proc_cmdline_init);
