@@ -114,21 +114,61 @@ const struct i2c_device_id *i2c_match_id(const struct i2c_device_id *id,
 }
 EXPORT_SYMBOL_GPL(i2c_match_id);
 
-const void *i2c_get_match_data(const struct i2c_client *client)
+static const void *i2c_get_match_data_helper(const struct i2c_client *client)
 {
 	const struct i2c_driver *driver = to_i2c_driver(client->dev.driver);
 	const struct i2c_device_id *match;
-	const void *data;
-
-	data = device_get_match_data(&client->dev);
-	if (data)
-		return data;
 
 	match = i2c_match_id(driver->id_table, client);
 	if (!match)
 		return NULL;
 
 	return (const void *)match->driver_data;
+}
+
+static const void *i2c_device_get_match_data(const struct device *dev)
+{
+	const struct device_driver *drv = dev->driver;
+	const struct i2c_client *client;
+	const void *data;
+
+	/*
+	 * It is not guaranteed that the function is always called on a device
+	 * bound to a driver (even though we normally expect this to be the
+	 * case).
+	 */
+	if (!drv)
+		return NULL;
+
+	/* TODO: use i2c_verify_client() when it accepts const pointer */
+	client = (dev->type == &i2c_client_type) ? to_i2c_client(dev) : NULL;
+	if (!client)
+		return NULL;
+
+	data = i2c_get_match_data_helper(client);
+	if (data)
+		return data;
+
+	if (drv->of_match_table) {
+		const struct of_device_id *match;
+
+		match = i2c_of_match_device_sysfs(drv->of_match_table, client);
+		if (match)
+			return match->data;
+	}
+
+	return NULL;
+}
+
+const void *i2c_get_match_data(const struct i2c_client *client)
+{
+	const void *data;
+
+	data = device_get_match_data(&client->dev);
+	if (data)
+		return data;
+
+	return i2c_get_match_data_helper(client);
 }
 EXPORT_SYMBOL(i2c_get_match_data);
 
@@ -694,6 +734,7 @@ struct bus_type i2c_bus_type = {
 	.probe		= i2c_device_probe,
 	.remove		= i2c_device_remove,
 	.shutdown	= i2c_device_shutdown,
+	.get_match_data	= i2c_device_get_match_data,
 };
 EXPORT_SYMBOL_GPL(i2c_bus_type);
 
