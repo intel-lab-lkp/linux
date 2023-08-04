@@ -1683,10 +1683,6 @@ static int tcpm_pd_svdm(struct tcpm_port *port, struct typec_altmode *adev,
 			      (VDO_SVDM_VERS(typec_get_negotiated_svdm_version(typec)));
 		break;
 	case CMDT_RSP_ACK:
-		/* silently drop message if we are not connected */
-		if (IS_ERR_OR_NULL(port->partner))
-			break;
-
 		tcpm_ams_finish(port);
 
 		switch (cmd) {
@@ -1791,6 +1787,12 @@ static void tcpm_handle_vdm_request(struct tcpm_port *port,
 	u32 p[PD_MAX_PAYLOAD];
 	u32 response[8] = { };
 	int i, rlen = 0;
+
+	/* silently drop message if we are not connected */
+	if (IS_ERR_OR_NULL(port->partner)) {
+		dev_warn(port->dev, "port partner is an error or NULL\n");
+		return;
+	}
 
 	for (i = 0; i < cnt; i++)
 		p[i] = le32_to_cpu(payload[i]);
