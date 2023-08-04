@@ -1530,6 +1530,21 @@ int of_count_phandle_with_args(const struct device_node *np, const char *list_na
 }
 EXPORT_SYMBOL(of_count_phandle_with_args);
 
+static void __of_remove_dead_property(struct device_node *np, struct property *prop)
+{
+	struct property **next;
+
+	/* If the property is in deadprops then it must be removed */
+	for (next = &np->deadprops; *next; next = &(*next)->next) {
+		if (*next != prop)
+			continue;
+
+		*next = prop->next;
+		prop->next = NULL;
+		break;
+	}
+}
+
 /**
  * __of_add_property - Add a property to a node without lock operations
  * @np:		Caller's Device Node
@@ -1538,6 +1553,8 @@ EXPORT_SYMBOL(of_count_phandle_with_args);
 int __of_add_property(struct device_node *np, struct property *prop)
 {
 	struct property **next;
+
+	__of_remove_dead_property(np, prop);
 
 	prop->next = NULL;
 	next = &np->properties;
@@ -1640,6 +1657,8 @@ int __of_update_property(struct device_node *np, struct property *newprop,
 		struct property **oldpropp)
 {
 	struct property **next, *oldprop;
+
+	__of_remove_dead_property(np, newprop);
 
 	for (next = &np->properties; *next; next = &(*next)->next) {
 		if (of_prop_cmp((*next)->name, newprop->name) == 0)
