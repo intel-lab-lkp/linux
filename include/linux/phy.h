@@ -619,6 +619,7 @@ struct macsec_ops;
  * @link_down_events: Number of times link was lost
  * @shared: Pointer to private data shared by phys in one package
  * @priv: Pointer to driver private data
+ * @cur_link_an_mode: Current AN mode setting with phylink framework
  *
  * interrupts currently only supports enabled or disabled,
  * but could be changed in the future to support enabling
@@ -757,6 +758,8 @@ struct phy_device {
 	/* MACsec management functions */
 	const struct macsec_ops *macsec_ops;
 #endif
+	/* For communicate the AN mode setting with phylink framework. */
+	u8 cur_link_an_mode;
 };
 
 /* Generic phy_device::dev_flags */
