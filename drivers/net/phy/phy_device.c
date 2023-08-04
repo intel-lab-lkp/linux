@@ -3340,6 +3340,15 @@ static void phy_shutdown(struct device *dev)
 	if (phydev->state == PHY_READY || !phydev->attached_dev)
 		return;
 
+	/* Most phys signal WoL via the irq line. So for these irqs shouldn't be
+	 * disabled.
+	 */
+	if (phydev->wol_enabled)
+		return;
+
+	/* On shutdown disable irqs to prevent an irq storm on systems where the
+	 * irq line is shared by several devices.
+	 */
 	phy_disable_interrupts(phydev);
 }
 
