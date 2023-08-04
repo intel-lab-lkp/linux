@@ -113,9 +113,9 @@ void of_i2c_register_devices(struct i2c_adapter *adap)
 	of_node_put(bus);
 }
 
-static const struct of_device_id*
+const struct of_device_id *
 i2c_of_match_device_sysfs(const struct of_device_id *matches,
-				  struct i2c_client *client)
+			  const struct i2c_client *client)
 {
 	const char *name;
 
