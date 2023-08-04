@@ -2709,6 +2709,28 @@ static int match_region_by_range(struct device *dev, void *data)
 	return rc;
 }
 
+static int insert_resource_soft_reserved(struct resource *soft_res, void *arg)
+{
+	struct resource *parent, *new, *res = arg;
+	bool found = false;
+
+	parent = soft_res->parent;
+	if (!parent)
+		return 0;
+
+	/* Caller provides a copy of soft_res. Find the actual resource. */
+	for (new = parent->child; new; new = new->sibling) {
+		if (resource_contains(new, soft_res)) {
+			found = true;
+			break;
+		}
+	}
+	if (found)
+		return insert_resource(new, res) == 0;
+
+	return 0;
+}
+
 /* Establish an empty region covering the given HPA range */
 static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 					   struct cxl_endpoint_decoder *cxled)
@@ -2719,7 +2741,7 @@ static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 	struct cxl_region_params *p;
 	struct cxl_region *cxlr;
 	struct resource *res;
-	int rc;
+	int rc = 0;
 
 	do {
 		cxlr = __create_region(cxlrd, cxled->mode,
@@ -2755,7 +2777,13 @@ static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 
 	*res = DEFINE_RES_MEM_NAMED(hpa->start, range_len(hpa),
 				    dev_name(&cxlr->dev));
-	rc = insert_resource(cxlrd->res, res);
+
+	/* Try inserting to a Soft Reserved parent, fallback to root decoder */
+	if (walk_iomem_res_desc(IORES_DESC_SOFT_RESERVED, 0,
+				res->start, res->end, res,
+				insert_resource_soft_reserved) != 1)
+		rc = insert_resource(cxlrd->res, res);
+
 	if (rc) {
 		/*
 		 * Platform-firmware may not have split resources like "System
