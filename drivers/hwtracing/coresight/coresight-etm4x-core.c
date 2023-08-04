@@ -1126,7 +1126,7 @@ static void cpu_detect_trace_filtering(struct etmv4_drvdata *drvdata)
 
 	/* If we are running at EL2, allow tracing the CONTEXTIDR_EL2. */
 	if (is_kernel_in_hyp_mode())
-		trfcr |= TRFCR_EL2_CX;
+		trfcr |= TRFCR_ELx_CX;
 
 	drvdata->trfcr = trfcr;
 }
