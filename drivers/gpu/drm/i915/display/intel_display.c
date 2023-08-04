@@ -402,6 +402,9 @@ void intel_enable_transcoder(const struct intel_crtc_state *new_crtc_state)
 
 	assert_planes_disabled(crtc);
 
+	/* Enable/Disable DP2.0 SDP split config before transcoder */
+	intel_audio_sdp_split_update(new_crtc_state);
+
 	/*
 	 * A pipe without a PLL won't actually be able to drive bits from
 	 * a plane.  On ILK+ the pipe PLLs are integrated, so we don't
