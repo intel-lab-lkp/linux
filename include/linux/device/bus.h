@@ -60,6 +60,7 @@ struct fwnode_handle;
  *			this bus.
  * @dma_cleanup:	Called to cleanup DMA configuration on a device on
  *			this bus.
+ * @get_match_data:	Called to get match data on a device on this bus.
  * @pm:		Power management operations of this bus, callback the specific
  *		device driver's pm-ops.
  * @iommu_ops:  IOMMU specific operations for this bus, used to attach IOMMU
@@ -101,6 +102,8 @@ struct bus_type {
 
 	int (*dma_configure)(struct device *dev);
 	void (*dma_cleanup)(struct device *dev);
+
+	const void *(*get_match_data)(const struct device *dev);
 
 	const struct dev_pm_ops *pm;
 
