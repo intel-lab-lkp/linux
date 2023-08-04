@@ -295,6 +295,35 @@ free_acpi_buffer:
 	ACPI_FREE(out_obj);
 }
 
+/**
+ * acpi_get_lps0_constraint - get any LPS0 constraint for a device
+ * @dev: device to get constraints for
+ *
+ * Returns:
+ *  - If the constraint is enabled, the value for constraint.
+ *  - If the constraint is disabled, 0.
+ *  - Otherwise, -ENODEV.
+ */
+int acpi_get_lps0_constraint(struct device *dev)
+{
+	int i;
+
+	for (i = 0; i < lpi_constraints_table_size; ++i) {
+		static struct lpi_constraints *entry;
+		int val;
+
+		entry = &lpi_constraints_table[i];
+		if (!device_match_acpi_handle(dev, entry->handle))
+			continue;
+		val = entry->enabled ? entry->min_dstate : 0;
+		acpi_handle_debug(entry->handle,
+				  "ACPI device constraint: %d\n", val);
+		return val;
+	}
+
+	return -ENODEV;
+}
+
 static void lpi_check_constraints(void)
 {
 	int i;
