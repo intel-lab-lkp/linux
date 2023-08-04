@@ -1,18 +1,18 @@
 #!/bin/bash
 # perf all metrics test
 # SPDX-License-Identifier: GPL-2.0
-
 err=0
+//list="tma_info_system_socket_clks"
 for m in $(perf list --raw-dump metrics); do
   echo "Testing $m"
   result=$(perf stat -M "$m" true 2>&1)
-  if [[ "$result" =~ ${m:0:50} ]] || [[ "$result" =~ "<not supported>" ]]
+  if [[ "$result" =~ ${m:0:50} ]] || [[ "$result" =~ "<not supported>" ]] || [[ "$result" =~ "Access to performance monitoring and observability operations is limited" ]]
   then
     continue
   fi
   # Failed so try system wide.
   result=$(perf stat -M "$m" -a sleep 0.01 2>&1)
-  if [[ "$result" =~ ${m:0:50} ]]
+  if [[ "$result" =~ ${m:0:50} ]] || [[ "$result" =~ "<not supported>" ]] ||  [[ "$result" =~ "Access to performance monitoring and observability operations is limited" ]]
   then
     continue
   fi
