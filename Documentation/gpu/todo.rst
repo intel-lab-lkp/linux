@@ -460,26 +460,19 @@ Contact: Thomas Zimmermann <tzimmermann@suse.de>
 
 Level: Starter
 
-Clean up checks for already prepared/enabled in panels
-------------------------------------------------------
+Never double prepare/enable/disable/unprepare a panel
+-----------------------------------------------------
 
-In a whole pile of panel drivers, we have code to make the
-prepare/unprepare/enable/disable callbacks behave as no-ops if they've already
-been called. To get some idea of the duplicated code, try::
+As of commit d2aacaf07395 ("drm/panel: Check for already prepared/enabled in
+drm_panel"), we have a check in the drm_panel core to make sure nobody
+double-calls prepare/enable/disable/unprepare. However, that extra double-check
+shouldn't be necessary. The caller should always be matching up calls of
+prepare/unprepare and matching up calls of enable/disable.
 
-  git grep 'if.*>prepared' -- drivers/gpu/drm/panel
-  git grep 'if.*>enabled' -- drivers/gpu/drm/panel
-
-In the patch ("drm/panel: Check for already prepared/enabled in drm_panel")
-we've moved this check to the core. Now we can most definitely remove the
-check from the individual panels and save a pile of code.
-
-In adition to removing the check from the individual panels, it is believed
-that even the core shouldn't need this check and that should be considered
-an error if other code ever relies on this check. The check in the core
-currently prints a warning whenever something is relying on this check with
-dev_warn(). After a little while, we likely want to promote this to a
-WARN(1) to help encourage folks not to rely on this behavior.
+Hopefully the warning printed will encourage everyone to fix this. Eventually
+we'll likely want to change this to a WARN_ON and (perhaps) fully remove the
+check. NOTE: even if we remove the double-check, drm_panel core still needs
+to track the enabled/prepared state for its own purposes.
 
 Contact: Douglas Anderson <dianders@chromium.org>
 
