@@ -55,6 +55,9 @@ struct udp_tunnel_nic {
  */
 static struct workqueue_struct *udp_tunnel_nic_workqueue;
 
+/* To track netdev_hold and netdev_put */
+static netdevice_tracker udp_tunnel_nic_devtracker;
+
 static const char *udp_tunnel_nic_tunnel_type_name(unsigned int type)
 {
 	switch (type) {
@@ -825,7 +828,7 @@ static int udp_tunnel_nic_register(struct net_device *dev)
 	}
 
 	utn->dev = dev;
-	dev_hold(dev);
+	netdev_hold(dev, &udp_tunnel_nic_devtracker, GFP_KERNEL);
 	dev->udp_tunnel_nic = utn;
 
 	if (!(info->flags & UDP_TUNNEL_NIC_INFO_OPEN_ONLY))
@@ -879,7 +882,7 @@ udp_tunnel_nic_unregister(struct net_device *dev, struct udp_tunnel_nic *utn)
 	udp_tunnel_nic_free(utn);
 release_dev:
 	dev->udp_tunnel_nic = NULL;
-	dev_put(dev);
+	netdev_put(dev, &udp_tunnel_nic_devtracker);
 }
 
 static int
