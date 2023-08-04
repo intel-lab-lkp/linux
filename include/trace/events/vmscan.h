@@ -372,6 +372,7 @@ TRACE_EVENT(mm_vmscan_lru_shrink_inactive,
 		__field(unsigned long, nr_unmap_fail)
 		__field(int, priority)
 		__field(int, reclaim_flags)
+		__field(int, file)
 	),
 
 	TP_fast_assign(
@@ -388,10 +389,11 @@ TRACE_EVENT(mm_vmscan_lru_shrink_inactive,
 		__entry->nr_unmap_fail = stat->nr_unmap_fail;
 		__entry->priority = priority;
 		__entry->reclaim_flags = trace_reclaim_flags(file);
+		__entry->file = file;
 	),
 
-	TP_printk("nid=%d nr_scanned=%ld nr_reclaimed=%ld nr_dirty=%ld nr_writeback=%ld nr_congested=%ld nr_immediate=%ld nr_activate_anon=%d nr_activate_file=%d nr_ref_keep=%ld nr_unmap_fail=%ld priority=%d flags=%s",
-		__entry->nid,
+	TP_printk("nid=%d is_file=%d nr_scanned=%ld nr_reclaimed=%ld nr_dirty=%ld nr_writeback=%ld nr_congested=%ld nr_immediate=%ld nr_activate_anon=%d nr_activate_file=%d nr_ref_keep=%ld nr_unmap_fail=%ld priority=%d flags=%s",
+		__entry->nid, __entry->file,
 		__entry->nr_scanned, __entry->nr_reclaimed,
 		__entry->nr_dirty, __entry->nr_writeback,
 		__entry->nr_congested, __entry->nr_immediate,
@@ -417,6 +419,7 @@ TRACE_EVENT(mm_vmscan_lru_shrink_active,
 		__field(unsigned long, nr_referenced)
 		__field(int, priority)
 		__field(int, reclaim_flags)
+		__field(int, file)
 	),
 
 	TP_fast_assign(
@@ -427,10 +430,11 @@ TRACE_EVENT(mm_vmscan_lru_shrink_active,
 		__entry->nr_referenced = nr_referenced;
 		__entry->priority = priority;
 		__entry->reclaim_flags = trace_reclaim_flags(file);
+		__entry->file = file;
 	),
 
-	TP_printk("nid=%d nr_taken=%ld nr_active=%ld nr_deactivated=%ld nr_referenced=%ld priority=%d flags=%s",
-		__entry->nid,
+	TP_printk("nid=%d is_file=%d nr_taken=%ld nr_active=%ld nr_deactivated=%ld nr_referenced=%ld priority=%d flags=%s",
+		__entry->nid, __entry->file,
 		__entry->nr_taken,
 		__entry->nr_active, __entry->nr_deactivated, __entry->nr_referenced,
 		__entry->priority,
