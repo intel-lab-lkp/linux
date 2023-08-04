@@ -61,6 +61,7 @@ static int pneigh_ifdown_and_unlock(struct neigh_table *tbl,
 static const struct seq_operations neigh_stat_seq_ops;
 #endif
 
+static netdevice_tracker pneigh_queue_dev_tracker;
 /*
    Neighbour hash table buckets are protected with rwlock tbl->lock.
 
@@ -364,7 +365,7 @@ static void pneigh_queue_purge(struct sk_buff_head *list, struct net *net,
 	spin_unlock_irqrestore(&list->lock, flags);
 
 	while ((skb = __skb_dequeue(&tmp))) {
-		dev_put(skb->dev);
+		netdev_put(skb->dev, &pneigh_queue_dev_tracker);
 		kfree_skb(skb);
 	}
 }
@@ -1633,7 +1634,7 @@ static void neigh_proxy_process(struct timer_list *t)
 				kfree_skb(skb);
 			}
 
-			dev_put(dev);
+			netdev_put(skb->dev, &pneigh_queue_dev_tracker);
 		} else if (!sched_next || tdif < sched_next)
 			sched_next = tdif;
 	}
@@ -1673,7 +1674,7 @@ void pneigh_enqueue(struct neigh_table *tbl, struct neigh_parms *p,
 			sched_next = tbl->proxy_timer.expires;
 	}
 	skb_dst_drop(skb);
-	dev_hold(skb->dev);
+	netdev_hold(skb->dev, &pneigh_queue_dev_tracker, GFP_KERNEL);
 	__skb_queue_tail(&tbl->proxy_queue, skb);
 	p->qlen++;
 	mod_timer(&tbl->proxy_timer, sched_next);
