@@ -27351,8 +27351,7 @@ static int wlc_phy_cal_rxiq_nphy_rev3(struct brcms_phy *pi,
 
 	for (rx_core = 0; rx_core < pi->pubpi.phy_corenum; rx_core++) {
 
-		skip_rxiqcal =
-			((rxcore_state & (1 << rx_core)) == 0) ? true : false;
+		skip_rxiqcal = (rxcore_state & (1 << rx_core)) == 0;
 
 		wlc_phy_rxcal_physetup_nphy(pi, rx_core);
 
