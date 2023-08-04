@@ -1,0 +1,17 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0
+# description: Snapshot and tracing_cpumask
+# requires: trace_marker tracing_cpumask snapshot
+# flags: instance
+
+# This testcase is constrived to reproduce a problem that the cpu buffers
+# become unavailable which is due to 'record_disabled' of array_buffer and
+# max_buffer being messed up.
+
+ORIG_CPUMASK=`cat tracing_cpumask`
+echo 0 > tracing_cpumask
+echo 1 > snapshot
+echo ${ORIG_CPUMASK} > tracing_cpumask
+echo "test input 1" > trace_marker
+grep -q "test input 1" trace
+exit 0
