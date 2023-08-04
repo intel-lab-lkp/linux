@@ -9,6 +9,7 @@
 #include <linux/coresight-pmu.h>
 #include <linux/cpumask.h>
 #include <linux/device.h>
+#include <linux/kvm_host.h>
 #include <linux/list.h>
 #include <linux/mm.h>
 #include <linux/init.h>
@@ -510,6 +511,7 @@ static void etm_event_start(struct perf_event *event, int flags)
 	}
 
 out:
+	kvm_etm_set_events(&event->attr);
 	/* Tell the perf core the event is alive */
 	event->hw.state = 0;
 	/* Save the event_data for this ETM */
@@ -627,6 +629,8 @@ static void etm_event_stop(struct perf_event *event, int mode)
 
 	/* Disabling the path make its elements available to other sessions */
 	coresight_disable_path(path);
+
+	kvm_etm_clr_events();
 }
 
 static int etm_event_add(struct perf_event *event, int mode)
