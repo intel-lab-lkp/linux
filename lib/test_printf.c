@@ -24,6 +24,8 @@
 
 #include <linux/property.h>
 
+#include "vsprintf.h"
+
 #include "../tools/testing/selftests/kselftest_module.h"
 
 #define BUF_SIZE 256
@@ -40,8 +42,6 @@ KSTM_MODULE_GLOBALS();
 
 static char *test_buffer __initdata;
 static char *alloced_buffer __initdata;
-
-extern bool no_hash_pointers;
 
 static int __printf(4, 0) __init
 do_test(int bufsize, const char *expect, int elen,

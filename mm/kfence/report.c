@@ -19,14 +19,13 @@
 
 #include <asm/kfence.h>
 
+#include "../../lib/vsprintf.h"
 #include "kfence.h"
 
 /* May be overridden by <asm/kfence.h>. */
 #ifndef ARCH_FUNC_PREFIX
 #define ARCH_FUNC_PREFIX ""
 #endif
-
-extern bool no_hash_pointers;
 
 /* Helper function to either print to a seq_file or to console. */
 __printf(2, 3)
