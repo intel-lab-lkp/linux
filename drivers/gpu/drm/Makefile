@@ -118,6 +118,7 @@ drm_kms_helper-y := \
 	drm_gem_framebuffer_helper.o \
 	drm_kms_helper_common.o \
 	drm_modeset_helper.o \
+	drm_panel_helper.o \
 	drm_plane_helper.o \
 	drm_probe_helper.o \
 	drm_rect.o \
