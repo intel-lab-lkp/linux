@@ -587,7 +587,7 @@ static int dw8250_probe(struct platform_device *pdev)
 
 	if (device_property_read_bool(dev, "ri-override")) {
 		/* Always report Ring indicator as inactive */
-		data->msr_mask_off |= UART_MSR_RI;
+		data->msr_mask_on |= UART_MSR_RI;
 		data->msr_mask_off |= UART_MSR_TERI;
 	}
 
