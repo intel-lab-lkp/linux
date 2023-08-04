@@ -246,8 +246,6 @@ ENTRY(vector_swi)
 	bic	scno, scno, #0xff000000		@ mask off SWI op-code
 	str	scno, [tsk, #TI_ABI_SYSCALL]
 	eor	scno, scno, #__NR_SYSCALL_BASE	@ check OS number
-#else
-	str	scno, [tsk, #TI_ABI_SYSCALL]
 #endif
 	/*
 	 * Reload the registers that may have been corrupted on entry to
@@ -256,6 +254,9 @@ ENTRY(vector_swi)
  TRACE(	ldmia	sp, {r0 - r3}		)
 
 local_restart:
+#if defined(CONFIG_AEABI) && !defined(CONFIG_OABI_COMPAT)
+	str	scno, [tsk, #TI_ABI_SYSCALL]	@ store scno for syscall restart
+#endif
 	ldr	r10, [tsk, #TI_FLAGS]		@ check for syscall tracing
 	stmdb	sp!, {r4, r5}			@ push fifth and sixth args
 
