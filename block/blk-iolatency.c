@@ -826,7 +826,6 @@ static void iolatency_clear_scaling(struct blkcg_gq *blkg)
 
 static int blk_iolatency_try_init(struct blkg_conf_ctx *ctx)
 {
-	static DEFINE_MUTEX(init_mutex);
 	int ret;
 
 	ret = blkg_conf_open_bdev(ctx);
@@ -837,12 +836,8 @@ static int blk_iolatency_try_init(struct blkg_conf_ctx *ctx)
 	 * blk_iolatency_init() may fail after rq_qos_add() succeeds which can
 	 * confuse iolat_rq_qos() test. Make the test and init atomic.
 	 */
-	mutex_lock(&init_mutex);
-
 	if (!iolat_rq_qos(ctx->bdev->bd_queue))
 		ret = blk_iolatency_init(ctx->bdev->bd_disk);
-
-	mutex_unlock(&init_mutex);
 
 	return ret;
 }
