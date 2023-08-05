@@ -626,7 +626,7 @@ static int atomisp_csi2_connect_sensor(const struct atomisp_csi2_sensor_config *
 			goto err_put_adev;
 
 		sensor->port = atomisp_csi2_get_port(adev, clock_num);
-		if (sensor->port >= ATOMISP_CAMERA_NR_PORTS) {
+		if (sensor->port < 0 || sensor->port >= ATOMISP_CAMERA_NR_PORTS) {
 			acpi_handle_err(adev->handle, "Invalid port: %d\n", sensor->port);
 			ret = -EINVAL;
 			goto err_put_adev;
