@@ -17,42 +17,44 @@
  * - scnprintf and vscnprintf
  */
 
-#include <linux/stdarg.h>
 #include <linux/build_bug.h>
 #include <linux/clk.h>
 #include <linux/clk-provider.h>
-#include <linux/errname.h>
-#include <linux/module.h>	/* for KSYM_SYMBOL_LEN */
-#include <linux/types.h>
-#include <linux/string.h>
-#include <linux/ctype.h>
-#include <linux/kernel.h>
-#include <linux/kallsyms.h>
-#include <linux/math64.h>
-#include <linux/uaccess.h>
-#include <linux/ioport.h>
-#include <linux/dcache.h>
-#include <linux/cred.h>
-#include <linux/rtc.h>
-#include <linux/time.h>
-#include <linux/uuid.h>
-#include <linux/of.h>
-#include <net/addrconf.h>
-#include <linux/siphash.h>
 #include <linux/compiler.h>
-#include <linux/property.h>
+#include <linux/cred.h>
+#include <linux/ctype.h>
+#include <linux/dcache.h>
+#include <linux/errname.h>
+#include <linux/ioport.h>
+#include <linux/kallsyms.h>
+#include <linux/kernel.h>
+#include <linux/math64.h>
+#include <linux/module.h>	/* for KSYM_SYMBOL_LEN */
 #include <linux/notifier.h>
+#include <linux/of.h>
+#include <linux/property.h>
+#include <linux/rtc.h>
+#include <linux/siphash.h>
+#include <linux/stdarg.h>
+#include <linux/string.h>
+#include <linux/string_helpers.h>
+#include <linux/time.h>
+#include <linux/types.h>
+#include <linux/uaccess.h>
+#include <linux/uuid.h>
+
 #ifdef CONFIG_BLOCK
 #include <linux/blkdev.h>
 #endif
 
+#include <net/addrconf.h>
+
 #include "../mm/internal.h"	/* For the trace_print_flags arrays */
 
-#include <asm/page.h>		/* for PAGE_SIZE */
 #include <asm/byteorder.h>	/* cpu_to_le16 */
+#include <asm/page.h>		/* for PAGE_SIZE */
 #include <asm/unaligned.h>
 
-#include <linux/string_helpers.h>
 #include "kstrtox.h"
 
 /* Disable pointer hashing if requested */
