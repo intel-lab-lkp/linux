@@ -2128,6 +2128,25 @@ int sched_numa_find_nth_cpu(const struct cpumask *cpus, int cpu, int node)
 
 	rcu_read_lock();
 
+	/*
+	 * When the target node is CPU-less, we cannot use it directly since
+	 * we didn't initialise sched_domains_numa_masks[level][node]. Use the
+	 * closet online node instead.
+	 */
+	if (!node_state(node, N_CPU)) {
+		int tmp, closet_node, closet_distance = INT_MAX;
+
+		for_each_node_state(tmp, N_CPU) {
+			if (node_distance(tmp, node) < closet_distance) {
+				closet_node = tmp;
+				closet_distance = node_distance(tmp, node);
+			}
+		}
+
+		k.node = closet_node;
+		node = closet_node;
+	}
+
 	k.masks = rcu_dereference(sched_domains_numa_masks);
 	if (!k.masks)
 		goto unlock;
@@ -2169,7 +2188,7 @@ const struct cpumask *sched_numa_hop_mask(unsigned int node, unsigned int hops)
 		return ERR_PTR(-EINVAL);
 
 	masks = rcu_dereference(sched_domains_numa_masks);
-	if (!masks)
+	if (!masks || !masks[hops] || !masks[hops][node])
 		return ERR_PTR(-EBUSY);
 
 	return masks[hops][node];
