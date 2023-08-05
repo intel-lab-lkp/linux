@@ -19,6 +19,7 @@
 #include <linux/rtc.h>
 #include <linux/slab.h>
 #include <linux/socket.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 
 #include "../tools/testing/selftests/kselftest_module.h"
