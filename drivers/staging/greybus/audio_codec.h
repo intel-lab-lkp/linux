@@ -176,7 +176,11 @@ int gbaudio_module_update(struct gbaudio_codec_info *codec,
 int gbaudio_register_module(struct gbaudio_module_info *module);
 void gbaudio_unregister_module(struct gbaudio_module_info *module);
 
+struct gb_audio_topology *gb_audio_gb_alloc_topology(u16 size);
+
 /* protocol related */
+int gb_audio_gb_get_topology_size(struct gb_connection *connection,
+                 u16 *size);
 int gb_audio_gb_get_topology(struct gb_connection *connection,
 			     struct gb_audio_topology **topology);
 int gb_audio_gb_get_control(struct gb_connection *connection,
