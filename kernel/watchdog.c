@@ -155,6 +155,8 @@ void watchdog_hardlockup_check(unsigned int cpu, struct pt_regs *regs)
 		/* Only print hardlockups once. */
 		if (per_cpu(watchdog_hardlockup_warned, cpu))
 			return;
+		else
+			per_cpu(watchdog_hardlockup_warned, cpu) = true;
 
 		pr_emerg("Watchdog detected hard LOCKUP on cpu %d\n", cpu);
 		print_modules();
@@ -178,8 +180,6 @@ void watchdog_hardlockup_check(unsigned int cpu, struct pt_regs *regs)
 
 		if (hardlockup_panic)
 			nmi_panic(regs, "Hard LOCKUP");
-
-		per_cpu(watchdog_hardlockup_warned, cpu) = true;
 	} else {
 		per_cpu(watchdog_hardlockup_warned, cpu) = false;
 	}
