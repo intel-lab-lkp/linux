@@ -2963,12 +2963,8 @@ static void kcompactd_do_work(pg_data_t *pgdat)
 		if (compaction_deferred(zone, cc.order))
 			continue;
 
-		/* Allocation can already succeed, nothing to do */
-		if (zone_watermark_ok(zone, cc.order,
-				      min_wmark_pages(zone), zoneid, 0))
-			continue;
-
-		if (!compaction_suitable(zone, cc.order, zoneid))
+		if (compaction_suit_allocation_order(zone,
+				cc.order, zoneid, 0) != COMPACT_CONTINUE)
 			continue;
 
 		if (kthread_should_stop())
