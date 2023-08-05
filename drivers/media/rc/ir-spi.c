@@ -119,7 +119,7 @@ static int ir_spi_probe(struct spi_device *spi)
 	if (!idata)
 		return -ENOMEM;
 
-	idata->regulator = devm_regulator_get(&spi->dev, "irda_regulator");
+	idata->regulator = devm_regulator_get(&spi->dev, "power");
 	if (IS_ERR(idata->regulator))
 		return PTR_ERR(idata->regulator);
 
