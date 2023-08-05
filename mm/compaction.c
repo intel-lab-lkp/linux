@@ -631,6 +631,14 @@ static unsigned long isolate_freepages_block(struct compact_control *cc,
 				page += (1UL << order) - 1;
 				nr_scanned += (1UL << order) - 1;
 			}
+			/*
+			 * There is a tiny chance that we have read bogus
+			 * compound_order(), so be careful to not go outside
+			 * of the pageblock.
+			 */
+			if (unlikely(blockpfn >= end_pfn))
+				blockpfn = end_pfn - 1;
+
 			goto isolate_fail;
 		}
 
@@ -677,17 +685,10 @@ isolate_fail:
 	if (locked)
 		spin_unlock_irqrestore(&cc->zone->lock, flags);
 
-	/*
-	 * There is a tiny chance that we have read bogus compound_order(),
-	 * so be careful to not go outside of the pageblock.
-	 */
-	if (unlikely(blockpfn > end_pfn))
-		blockpfn = end_pfn;
-
 	trace_mm_compaction_isolate_freepages(*start_pfn, blockpfn,
 					nr_scanned, total_isolated);
 
-	/* Record how far we have got within the block */
+	/* Record how far we have got */
 	*start_pfn = blockpfn;
 
 	/*
@@ -1443,7 +1444,7 @@ fast_isolate_around(struct compact_control *cc, unsigned long pfn)
 	isolate_freepages_block(cc, &start_pfn, end_pfn, &cc->freepages, 1, false);
 
 	/* Skip this pageblock in the future as it's full or nearly full */
-	if (start_pfn == end_pfn && !cc->no_set_skip_hint)
+	if (start_pfn >= end_pfn && !cc->no_set_skip_hint)
 		set_pageblock_skip(page);
 }
 
@@ -1712,7 +1713,7 @@ static void isolate_freepages(struct compact_control *cc)
 					block_end_pfn, freelist, stride, false);
 
 		/* Update the skip hint if the full pageblock was scanned */
-		if (isolate_start_pfn == block_end_pfn)
+		if (isolate_start_pfn >= block_end_pfn)
 			update_pageblock_skip(cc, page, block_start_pfn -
 					      pageblock_nr_pages);
 
