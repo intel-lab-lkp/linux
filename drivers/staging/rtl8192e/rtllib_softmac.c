@@ -1564,7 +1564,7 @@ inline void rtllib_softmac_new_net(struct rtllib_device *ieee,
 				    (!strncmp(ieee->current_network.ssid,
 				    net->hidden_ssid, net->hidden_ssid_len));
 			if (net->hidden_ssid_len > 0) {
-				strncpy(net->ssid, net->hidden_ssid,
+				strscpy(net->ssid, net->hidden_ssid,
 					net->hidden_ssid_len);
 				net->ssid_len = net->hidden_ssid_len;
 				ssidbroad = 1;
@@ -2431,7 +2431,7 @@ static void rtllib_start_master_bss(struct rtllib_device *ieee)
 	ieee->assoc_id = 1;
 
 	if (ieee->current_network.ssid_len == 0) {
-		strncpy(ieee->current_network.ssid,
+		strscpy(ieee->current_network.ssid,
 			RTLLIB_DEFAULT_TX_ESSID,
 			IW_ESSID_MAX_SIZE);
 
