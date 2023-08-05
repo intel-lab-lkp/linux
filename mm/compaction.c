@@ -2055,12 +2055,11 @@ static isolate_migrate_t isolate_migratepages(struct compact_control *cc)
 }
 
 /*
- * order == -1 is expected when compacting via
- * /proc/sys/vm/compact_memory
+ * compact to satisfy allocation with target order
  */
-static inline bool is_via_compact_memory(int order)
+static inline bool compaction_with_allocation_order(int order)
 {
-	return order == -1;
+	return order != -1;
 }
 
 /*
@@ -2200,7 +2199,7 @@ static enum compact_result __compact_finished(struct compact_control *cc)
 		goto out;
 	}
 
-	if (is_via_compact_memory(cc->order))
+	if (!compaction_with_allocation_order(cc->order))
 		return COMPACT_CONTINUE;
 
 	/*
@@ -2390,7 +2389,7 @@ compact_zone(struct compact_control *cc, struct capture_control *capc)
 
 	cc->migratetype = gfp_migratetype(cc->gfp_mask);
 
-	if (!is_via_compact_memory(cc->order)) {
+	if (compaction_with_allocation_order(cc->order)) {
 		unsigned long watermark;
 
 		/* Allocation can already succeed, nothing to do */
