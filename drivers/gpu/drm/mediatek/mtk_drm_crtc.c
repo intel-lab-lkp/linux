@@ -329,7 +329,7 @@ static void ddp_cmdq_cb(struct mbox_client *cl, void *mssg)
 }
 #endif
 
-static int mtk_crtc_ddp_hw_init(struct mtk_drm_crtc *mtk_crtc)
+static int mtk_crtc_ddp_hw_init(struct mtk_drm_crtc *mtk_crtc, struct drm_atomic_state *state)
 {
 	struct drm_crtc *crtc = &mtk_crtc->base;
 	struct drm_connector *connector;
@@ -406,11 +406,18 @@ static int mtk_crtc_ddp_hw_init(struct mtk_drm_crtc *mtk_crtc)
 	/* Initially configure all planes */
 	for (i = 0; i < mtk_crtc->layer_nr; i++) {
 		struct drm_plane *plane = &mtk_crtc->planes[i];
-		struct mtk_plane_state *plane_state;
+		struct drm_plane_state *new_state;
+		struct mtk_plane_state *plane_state = to_mtk_plane_state(plane->state);
 		struct mtk_ddp_comp *comp;
 		unsigned int local_layer;
 
-		plane_state = to_mtk_plane_state(plane->state);
+		/* sync the new plane state from drm_atomic_state */
+		if (state->planes[i].ptr) {
+			new_state = drm_atomic_get_new_plane_state(state, state->planes[i].ptr);
+			plane_state = to_mtk_plane_state(mtk_crtc->planes[i].state);
+			mtk_plane_update_new_state(new_state, plane_state);
+		}
+
 		comp = mtk_drm_ddp_comp_for_plane(crtc, plane, &local_layer);
 		if (comp)
 			mtk_ddp_comp_layer_config(comp, local_layer,
@@ -688,7 +695,7 @@ static void mtk_drm_crtc_atomic_enable(struct drm_crtc *crtc,
 		return;
 	}
 
-	ret = mtk_crtc_ddp_hw_init(mtk_crtc);
+	ret = mtk_crtc_ddp_hw_init(mtk_crtc, state);
 	if (ret) {
 		pm_runtime_put(comp->dev);
 		return;
