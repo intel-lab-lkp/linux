@@ -5415,16 +5415,43 @@ int hci_abort_conn_sync(struct hci_dev *hdev, struct hci_conn *conn, u8 reason)
 
 static int hci_disconnect_all_sync(struct hci_dev *hdev, u8 reason)
 {
-	struct hci_conn *conn, *tmp;
-	int err;
+	struct hci_conn *c, *conn;
+	int err = 0;
 
-	list_for_each_entry_safe(conn, tmp, &hdev->conn_hash.list, list) {
+	rcu_read_lock();
+
+	/* Any conn may be gone while waiting for events, iterate safely.
+	 * If conn is in conn_hash and we didn't abort it, it probably
+	 * has not yet been aborted.
+	 */
+	list_for_each_entry_rcu(c, &hdev->conn_hash.list, list)
+		c->abort_reason = (reason == 0xff) ? 0xfe : 0xff;
+
+	do {
+		conn = NULL;
+		list_for_each_entry_rcu(c, &hdev->conn_hash.list, list) {
+			if (c->abort_reason != reason) {
+				conn = c;
+				break;
+			}
+		}
+		if (!conn)
+			break;
+
+		conn->abort_reason = reason;
+		hci_conn_get(conn);
+
+		rcu_read_unlock();
+
 		err = hci_abort_conn_sync(hdev, conn, reason);
-		if (err)
-			return err;
-	}
+		hci_conn_put(conn);
 
-	return 0;
+		rcu_read_lock();
+	} while (!err);
+
+	rcu_read_unlock();
+
+	return err;
 }
 
 /* This function perform power off HCI command sequence as follows:
