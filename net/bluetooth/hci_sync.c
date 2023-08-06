@@ -5253,13 +5253,14 @@ static int hci_disconnect_sync(struct hci_dev *hdev, struct hci_conn *conn,
 }
 
 static int hci_le_connect_cancel_sync(struct hci_dev *hdev,
-				      struct hci_conn *conn, u8 reason)
+				      struct hci_conn *conn, u8 reason,
+				      bool *del)
 {
-	/* Return reason if scanning since the connection shall probably be
-	 * cleanup directly.
-	 */
-	if (test_bit(HCI_CONN_SCANNING, &conn->flags))
-		return reason;
+	/* If scanning, connection can be just deleted */
+	if (test_bit(HCI_CONN_SCANNING, &conn->flags)) {
+		*del = true;
+		return 0;
+	}
 
 	if (conn->role == HCI_ROLE_SLAVE ||
 	    test_and_set_bit(HCI_CONN_CANCEL, &conn->flags))
@@ -5270,10 +5271,10 @@ static int hci_le_connect_cancel_sync(struct hci_dev *hdev,
 }
 
 static int hci_connect_cancel_sync(struct hci_dev *hdev, struct hci_conn *conn,
-				   u8 reason)
+				   u8 reason, bool *del)
 {
 	if (conn->type == LE_LINK)
-		return hci_le_connect_cancel_sync(hdev, conn, reason);
+		return hci_le_connect_cancel_sync(hdev, conn, reason, del);
 
 	if (conn->type == ISO_LINK) {
 		/* BLUETOOTH CORE SPECIFICATION Version 5.3 | Vol 4, Part E
@@ -5287,9 +5288,9 @@ static int hci_connect_cancel_sync(struct hci_dev *hdev, struct hci_conn *conn,
 		if (test_bit(HCI_CONN_CREATE_CIS, &conn->flags))
 			return hci_disconnect_sync(hdev, conn, reason);
 
-		/* CIS with no Create CIS sent have nothing to cancel */
+		/* CIS with no Create CIS sent can be just deleted */
 		if (bacmp(&conn->dst, BDADDR_ANY))
-			return HCI_ERROR_LOCAL_HOST_TERM;
+			*del = true;
 
 		/* There is no way to cancel a BIS without terminating the BIG
 		 * which is done later on connection cleanup.
@@ -5370,6 +5371,7 @@ int hci_abort_conn_sync(struct hci_dev *hdev, struct hci_conn *conn, u8 reason)
 {
 	int err = 0;
 	u16 handle = conn->handle;
+	bool del = false;
 
 	switch (conn->state) {
 	case BT_CONNECTED:
@@ -5377,17 +5379,15 @@ int hci_abort_conn_sync(struct hci_dev *hdev, struct hci_conn *conn, u8 reason)
 		err = hci_disconnect_sync(hdev, conn, reason);
 		break;
 	case BT_CONNECT:
-		err = hci_connect_cancel_sync(hdev, conn, reason);
+		err = hci_connect_cancel_sync(hdev, conn, reason, &del);
 		break;
 	case BT_CONNECT2:
 		err = hci_reject_conn_sync(hdev, conn, reason);
 		break;
 	case BT_OPEN:
 	case BT_BOUND:
-		hci_dev_lock(hdev);
-		hci_conn_failed(conn, reason);
-		hci_dev_unlock(hdev);
-		return 0;
+		del = true;
+		break;
 	default:
 		conn->state = BT_CLOSED;
 		return 0;
@@ -5398,18 +5398,15 @@ int hci_abort_conn_sync(struct hci_dev *hdev, struct hci_conn *conn, u8 reason)
 	 * or in case of LE it was still scanning so it can be cleanup
 	 * safely.
 	 */
-	if (err) {
-		struct hci_conn *c;
+	if (err || del) {
+		hci_dev_lock(hdev);
 
 		/* Check if the connection hasn't been cleanup while waiting
 		 * commands to complete.
 		 */
-		c = hci_conn_hash_lookup_handle(hdev, handle);
-		if (!c || c != conn)
-			return 0;
+		if (hci_conn_hash_lookup_handle(hdev, handle) == conn)
+			hci_conn_failed(conn, del ? reason : err);
 
-		hci_dev_lock(hdev);
-		hci_conn_failed(conn, err);
 		hci_dev_unlock(hdev);
 	}
 
@@ -6311,8 +6308,11 @@ int hci_le_create_conn_sync(struct hci_dev *hdev, struct hci_conn *conn)
 				       conn->conn_timeout, NULL);
 
 done:
-	if (err == -ETIMEDOUT)
-		hci_le_connect_cancel_sync(hdev, conn, 0x00);
+	if (err == -ETIMEDOUT) {
+		bool __maybe_unused del;
+
+		hci_le_connect_cancel_sync(hdev, conn, 0x00, &del);
+	}
 
 	/* Re-enable advertising after the connection attempt is finished. */
 	hci_resume_advertising_sync(hdev);
