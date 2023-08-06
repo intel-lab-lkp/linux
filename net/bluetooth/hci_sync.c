@@ -5435,10 +5435,26 @@ static int hci_disconnect_all_sync(struct hci_dev *hdev, u8 reason)
 	do {
 		conn = NULL;
 		list_for_each_entry_rcu(c, &hdev->conn_hash.list, list) {
+			struct hci_link *link;
+
 			if (c->abort_reason == reason)
 				continue;
 
 			conn = c;
+
+			/* Abort linked connections first. Disconnecting ACL
+			 * implicitly disconnects SCO/ISO, and controller may
+			 * error commands disconnecting them after ACL.
+			 * (See Core v5.4 Vol 4 Part E Sec 7.1.6)
+			 */
+			if (conn->parent)
+				break;
+			list_for_each_entry_rcu(link, &conn->link_list, list) {
+				if (link->conn->abort_reason != reason) {
+					conn = link->conn;
+					break;
+				}
+			}
 			break;
 		}
 		if (!conn)
