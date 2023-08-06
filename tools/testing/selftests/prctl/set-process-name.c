@@ -47,6 +47,28 @@ int check_null_pointer(char *check_name)
 	return res;
 }
 
+int check_name(void)
+{
+
+	int pid;
+
+	pid = getpid();
+	FILE *fptr;
+	char path[50] = {};
+	int j;
+
+	j = snprintf(path, 50, "/proc/self/task/%d/comm", pid);
+	fptr = fopen(path, "r");
+	char name[TASK_COMM_LEN] = {};
+	int res = prctl(PR_GET_NAME, name, NULL, NULL, NULL);
+	char output[TASK_COMM_LEN] = {};
+
+	fscanf(fptr, "%s", output);
+
+	return !strcmp(output, name);
+
+}
+
 TEST(rename_process) {
 
 	EXPECT_GE(set_name(CHANGE_NAME), 0);
@@ -57,6 +79,9 @@ TEST(rename_process) {
 
 	EXPECT_GE(set_name(CHANGE_NAME), 0);
 	EXPECT_LT(check_null_pointer(CHANGE_NAME), 0);
+
+	EXPECT_TRUE(check_name());
+
 }
 
 TEST_HARNESS_MAIN
