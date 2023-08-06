@@ -2343,14 +2343,13 @@ retry:
 		}
 
 		remove_hugetlb_folio(h, folio, false);
-		h->max_huge_pages--;
 		spin_unlock_irq(&hugetlb_lock);
 
 		/*
 		 * Normally update_and_free_hugtlb_folio will allocate required vmemmmap
 		 * before freeing the page.  update_and_free_hugtlb_folio will fail to
 		 * free the page if it can not allocate required vmemmap.  We
-		 * need to adjust max_huge_pages if the page is not freed.
+		 * need to adjust nr_huge_pages if the page is not freed.
 		 * Attempt to allocate vmemmmap here so that we can take
 		 * appropriate action on failure.
 		 */
@@ -2360,7 +2359,6 @@ retry:
 		} else {
 			spin_lock_irq(&hugetlb_lock);
 			add_hugetlb_folio(h, folio, false);
-			h->max_huge_pages++;
 			spin_unlock_irq(&hugetlb_lock);
 		}
 
@@ -3274,8 +3272,6 @@ static void __init hugetlb_hstate_alloc_pages_onenode(struct hstate *h, int nid)
 	string_get_size(huge_page_size(h), 1, STRING_UNITS_2, buf, 32);
 	pr_warn("HugeTLB: allocating %u of page size %s failed node%d.  Only allocated %lu hugepages.\n",
 		h->max_huge_pages_node[nid], buf, nid, i);
-	h->max_huge_pages -= (h->max_huge_pages_node[nid] - i);
-	h->max_huge_pages_node[nid] = i;
 }
 
 static void __init hugetlb_hstate_alloc_pages(struct hstate *h)
@@ -3336,7 +3332,6 @@ static void __init hugetlb_hstate_alloc_pages(struct hstate *h)
 		string_get_size(huge_page_size(h), 1, STRING_UNITS_2, buf, 32);
 		pr_warn("HugeTLB: allocating %lu of page size %s failed.  Only allocated %lu hugepages.\n",
 			h->max_huge_pages, buf, i);
-		h->max_huge_pages = i;
 	}
 	kfree(node_alloc_noretry);
 }
@@ -3460,7 +3455,7 @@ found:
 }
 
 #define persistent_huge_pages(h) (h->nr_huge_pages - h->surplus_huge_pages)
-static int set_max_huge_pages(struct hstate *h, unsigned long count, int nid,
+static int set_nr_huge_pages(struct hstate *h, unsigned long count, int nid,
 			      nodemask_t *nodes_allowed)
 {
 	unsigned long min_count, ret;
@@ -3601,7 +3596,6 @@ static int set_max_huge_pages(struct hstate *h, unsigned long count, int nid,
 			break;
 	}
 out:
-	h->max_huge_pages = persistent_huge_pages(h);
 	spin_unlock_irq(&hugetlb_lock);
 	mutex_unlock(&h->resize_lock);
 
@@ -3639,7 +3633,7 @@ static int demote_free_hugetlb_folio(struct hstate *h, struct folio *folio)
 	destroy_compound_hugetlb_folio_for_demote(folio, huge_page_order(h));
 
 	/*
-	 * Taking target hstate mutex synchronizes with set_max_huge_pages.
+	 * Taking target hstate mutex synchronizes with set_nr_huge_pages.
 	 * Without the mutex, pages added to target hstate could be marked
 	 * as surplus.
 	 *
@@ -3663,14 +3657,6 @@ static int demote_free_hugetlb_folio(struct hstate *h, struct folio *folio)
 	mutex_unlock(&target_hstate->resize_lock);
 
 	spin_lock_irq(&hugetlb_lock);
-
-	/*
-	 * Not absolutely necessary, but for consistency update max_huge_pages
-	 * based on pool changes for the demoted page.
-	 */
-	h->max_huge_pages--;
-	target_hstate->max_huge_pages +=
-		pages_per_huge_page(h) / pages_per_huge_page(target_hstate);
 
 	return rc;
 }
@@ -3770,13 +3756,13 @@ static ssize_t __nr_hugepages_store_common(bool obey_mempolicy,
 	} else {
 		/*
 		 * Node specific request.  count adjustment happens in
-		 * set_max_huge_pages() after acquiring hugetlb_lock.
+		 * set_nr_huge_pages() after acquiring hugetlb_lock.
 		 */
 		init_nodemask_of_node(&nodes_allowed, nid);
 		n_mask = &nodes_allowed;
 	}
 
-	err = set_max_huge_pages(h, count, nid, n_mask);
+	err = set_nr_huge_pages(h, count, nid, n_mask);
 
 	return err ? err : len;
 }

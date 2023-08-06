@@ -1375,7 +1375,7 @@ hugetlbfs_size_to_hpages(struct hstate *h, unsigned long long size_opt,
 
 	if (val_type == SIZE_PERCENT) {
 		size_opt <<= huge_page_shift(h);
-		size_opt *= h->max_huge_pages;
+		size_opt *= (h->nr_huge_pages - h->surplus_huge_pages);
 		do_div(size_opt, 100);
 	}
 
