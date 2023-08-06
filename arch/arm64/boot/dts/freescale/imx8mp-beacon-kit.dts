@@ -23,6 +23,12 @@
 		stdout-path = &uart2;
 	};
 
+	clk_xtal25: clk-xtal25 {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <25000000>;
+	};
+
 	connector {
 		compatible = "usb-c-connector";
 		label = "USB-C";
@@ -246,6 +252,13 @@
 		interrupt-controller;
 		#interrupt-cells = <2>;
 	};
+
+	pcieclk: clk@68 {
+		compatible = "renesas,9fgv0241";
+		reg = <0x68>;
+		clocks = <&clk_xtal25>;
+		#clock-cells = <1>;
+	};
 };
 
 &i2c3 {
@@ -372,8 +385,9 @@
 };
 
 &pcie_phy {
+	fsl,clkreq-unsupported;
 	fsl,refclk-pad-mode = <IMX8_PCIE_REFCLK_PAD_INPUT>;
-	clocks = <&pcie0_refclk>;
+	clocks = <&pcieclk 1>;
 	clock-names = "ref";
 	status = "okay";
 };
