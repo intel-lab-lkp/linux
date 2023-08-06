@@ -351,7 +351,7 @@ static void setup_debugfs(struct edac_device_ctl_info *edac_dev)
 	struct edac_priv *priv = edac_dev->pvt_info;
 
 	priv->debugfs_dir = edac_debugfs_create_dir("ocm");
-	if (!priv->debugfs_dir)
+	if (IS_ERR(priv->debugfs_dir))
 		return;
 
 	edac_debugfs_create_x32("inject_fault_count", 0644, priv->debugfs_dir,
