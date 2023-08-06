@@ -1503,7 +1503,7 @@ SYSCALL_DEFINE2(creat, const char __user *, pathname, umode_t, mode)
  * "id" is the POSIX thread ID. We use the
  * files pointer for this..
  */
-int filp_close(struct file *filp, fl_owner_t id)
+static __always_inline int __filp_close(struct file *filp, fl_owner_t id, bool sync)
 {
 	int retval = 0;
 
@@ -1520,11 +1520,26 @@ int filp_close(struct file *filp, fl_owner_t id)
 		dnotify_flush(filp, id);
 		locks_remove_posix(filp, id);
 	}
-	fput(filp);
+	if (sync)
+		__fput_sync(filp);
+	else
+		fput(filp);
 	return retval;
 }
 
+int filp_close_sync(struct file *filp, fl_owner_t id)
+{
+	return __filp_close(filp, id, true);
+}
+EXPORT_SYMBOL(filp_close_sync);
+
+int filp_close(struct file *filp, fl_owner_t id)
+{
+	return __filp_close(filp, id, false);
+}
 EXPORT_SYMBOL(filp_close);
+
+extern unsigned long sysctl_fput_sync;
 
 /*
  * Careful here! We test whether the file pointer is NULL before
@@ -1533,7 +1548,7 @@ EXPORT_SYMBOL(filp_close);
  */
 SYSCALL_DEFINE1(close, unsigned int, fd)
 {
-	int retval = close_fd(fd);
+	int retval = close_fd_sync(fd);
 
 	/* can't restart close syscall because file table entry was cleared */
 	if (unlikely(retval == -ERESTARTSYS ||

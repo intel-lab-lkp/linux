@@ -651,7 +651,7 @@ static struct file *pick_file(struct files_struct *files, unsigned fd)
 	return file;
 }
 
-int close_fd(unsigned fd)
+static __always_inline int __close_fd(unsigned fd, bool sync)
 {
 	struct files_struct *files = current->files;
 	struct file *file;
@@ -662,9 +662,23 @@ int close_fd(unsigned fd)
 	if (!file)
 		return -EBADF;
 
-	return filp_close(file, files);
+	if (sync)
+		return filp_close_sync(file, files);
+	else
+		return filp_close(file, files);
 }
-EXPORT_SYMBOL(close_fd); /* for ksys_close() */
+
+int close_fd_sync(unsigned fd)
+{
+	return __close_fd(fd, true);
+}
+EXPORT_SYMBOL(close_fd_sync); /* for ksys_close() */
+
+int close_fd(unsigned fd)
+{
+	return __close_fd(fd, false);
+}
+EXPORT_SYMBOL(close_fd);
 
 /**
  * last_fd - return last valid index into fd table
