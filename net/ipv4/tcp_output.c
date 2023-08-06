@@ -141,6 +141,7 @@ static __u16 tcp_advertise_mss(struct sock *sk)
  */
 void tcp_cwnd_restart(struct sock *sk, s32 delta)
 {
+	trace_tcp_cwnd_restart(sk);
 	struct tcp_sock *tp = tcp_sk(sk);
 	u32 restart_cwnd = tcp_init_cwnd(tp, __sk_dst_get(sk));
 	u32 cwnd = tcp_snd_cwnd(tp);
