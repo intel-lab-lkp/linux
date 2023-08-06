@@ -5570,6 +5570,7 @@ out:
 static int
 _base_static_config_pages(struct MPT3SAS_ADAPTER *ioc)
 {
+	Mpi2IOUnitPage8_t iounit_pg8;
 	Mpi2ConfigReply_t mpi_reply;
 	u32 iounit_pg1_flags;
 	int tg_flags = 0;
@@ -5666,7 +5667,7 @@ _base_static_config_pages(struct MPT3SAS_ADAPTER *ioc)
 	rc = mpt3sas_config_get_iounit_pg1(ioc, &mpi_reply, &ioc->iounit_pg1);
 	if (rc)
 		return rc;
-	rc = mpt3sas_config_get_iounit_pg8(ioc, &mpi_reply, &ioc->iounit_pg8);
+	rc = mpt3sas_config_get_iounit_pg8(ioc, &mpi_reply, &iounit_pg8);
 	if (rc)
 		return rc;
 	_base_display_ioc_capabilities(ioc);
@@ -5688,8 +5689,8 @@ _base_static_config_pages(struct MPT3SAS_ADAPTER *ioc)
 	if (rc)
 		return rc;
 
-	if (ioc->iounit_pg8.NumSensors)
-		ioc->temp_sensors_count = ioc->iounit_pg8.NumSensors;
+	if (iounit_pg8.NumSensors)
+		ioc->temp_sensors_count = iounit_pg8.NumSensors;
 	if (ioc->is_aero_ioc) {
 		rc = _base_update_ioc_page1_inlinewith_perf_mode(ioc);
 		if (rc)
