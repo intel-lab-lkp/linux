@@ -83,7 +83,14 @@ KBUILD_CFLAGS_KERNEL		+= -fPIE
 LDFLAGS_vmlinux			+= -static -pie --no-dynamic-linker -z notext
 endif
 
-cflags-y += -ffreestanding
+# Make sure the memory libcalls are not expanded by the compiler, for better
+# control over unaligned accesses with respect to CONFIG_ARCH_STRICT_ALIGN,
+# and also for avoiding https://gcc.gnu.org/PR109465.
+#
+# The overly broad -ffreestanding is undesirable as it disables *all* libcall
+# handling, that unfortunately includes proper FORTIFY_SOURCE instrumentation.
+cflags-y += -fno-builtin-memcpy -fno-builtin-memmove -fno-builtin-memset
+
 cflags-y += $(call cc-option, -mno-check-zero-division)
 
 load-y		= 0x9000000000200000
