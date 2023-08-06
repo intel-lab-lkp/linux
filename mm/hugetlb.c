@@ -4606,7 +4606,7 @@ static int hugetlb_sysctl_handler_common(bool obey_mempolicy,
 			 void *buffer, size_t *length, loff_t *ppos)
 {
 	struct hstate *h = &default_hstate;
-	unsigned long tmp = h->max_huge_pages;
+	unsigned long tmp = h->nr_huge_pages;
 	int ret;
 
 	if (!hugepages_supported())
