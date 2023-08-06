@@ -25,7 +25,7 @@ automatically when CONFIG_HUGETLBFS is selected) configuration
 options.
 
 The ``/proc/meminfo`` file provides information about the total number of
-persistent hugetlb pages in the kernel's huge page pool.  It also displays
+hugetlb pages in the kernel's huge page pool.  It also displays
 default huge page size and information about the number of free, reserved
 and surplus huge pages in the pool of huge pages of default size.
 The huge page size is needed for generating the proper alignment and
@@ -54,10 +54,11 @@ HugePages_Rsvd
         guarantee that an application will be able to allocate a
         huge page from the pool of huge pages at fault time.
 HugePages_Surp
-	is short for "surplus," and is the number of huge pages in
-        the pool above the value in ``/proc/sys/vm/nr_hugepages``. The
-        maximum number of surplus huge pages is controlled by
-        ``/proc/sys/vm/nr_overcommit_hugepages``.
+	is short for "surplus," and is the number of huge pages which will be
+        freed back to the kernel's normal page pool upon becoming unused. In
+        contrast, persistent huge pages will not be freed back even if the task
+        no longer uses it. The maximum number of surplus huge pages is
+        controlled by ``/proc/sys/vm/nr_overcommit_hugepages``.
 	Note: When the feature of freeing unused vmemmap pages associated
 	with each hugetlb page is enabled, the number of surplus huge pages
 	may be temporarily larger than the maximum number of surplus huge
@@ -76,11 +77,11 @@ Hugetlb
 ``/proc/filesystems`` should also show a filesystem of type "hugetlbfs"
 configured in the kernel.
 
-``/proc/sys/vm/nr_hugepages`` indicates the current number of "persistent" huge
-pages in the kernel's huge page pool.  "Persistent" huge pages will be
-returned to the huge page pool when freed by a task.  A user with root
-privileges can dynamically allocate more or free some persistent huge pages
-by increasing or decreasing the value of ``nr_hugepages``.
+``/proc/sys/vm/nr_hugepages`` returns the total number of huge pages. When this
+file is written, the number of persistent huge pages will be adjusted to the
+specified value. A user with root privileges can dynamically allocate more or
+free some persistent huge pages by increasing or decreasing the value of
+``nr_hugepages``.
 
 Note: When the feature of freeing unused vmemmap pages associated with each
 hugetlb page is enabled, we can fail to free the huge pages triggered by
@@ -95,7 +96,7 @@ pool, a user with appropriate privilege can use either the mmap system call
 or shared memory system calls to use the huge pages.  See the discussion of
 :ref:`Using Huge Pages <using_huge_pages>`, below.
 
-The administrator can allocate persistent huge pages on the kernel boot
+The administrator can allocate huge pages on the kernel boot
 command line by specifying the "hugepages=N" parameter, where 'N' = the
 number of huge pages requested.  This is the most reliable method of
 allocating huge pages as memory has not yet become fragmented.
@@ -173,7 +174,7 @@ default sized persistent huge pages::
 	echo 20 > /proc/sys/vm/nr_hugepages
 
 This command will try to adjust the number of default sized huge pages in the
-huge page pool to 20, allocating or freeing huge pages, as required.
+persistent huge page pool to 20, allocating or freeing huge pages, as required.
 
 On a NUMA platform, the kernel will attempt to distribute the huge page pool
 over all the set of allowed nodes specified by the NUMA memory policy of the
@@ -406,12 +407,12 @@ default huge page size and associated pool will be used.
 
 The ``size`` option sets the maximum value of memory (huge pages) allowed
 for that filesystem (``/mnt/huge``). The ``size`` option can be specified
-in bytes, or as a percentage of the specified huge page pool (``nr_hugepages``).
-The size is rounded down to HPAGE_SIZE boundary.
+in bytes, or as a percentage of the specified persistent huge page pool
+(``nr_hugepages``). The size is rounded down to HPAGE_SIZE boundary.
 
 The ``min_size`` option sets the minimum value of memory (huge pages) allowed
 for the filesystem. ``min_size`` can be specified in the same way as ``size``,
-either bytes or a percentage of the huge page pool.
+either bytes or a percentage of the persistent huge page pool.
 At mount time, the number of huge pages specified by ``min_size`` are reserved
 for use by the filesystem.
 If there are not enough free huge pages available, the mount will fail.
