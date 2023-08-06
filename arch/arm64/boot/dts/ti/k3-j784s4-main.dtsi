@@ -6,6 +6,7 @@
  */
 
 &cbass_main {
+	bootph-pre-ram;
 	msmc_ram: sram@70000000 {
 		compatible = "mmio-sram";
 		reg = <0x00 0x70000000 0x00 0x800000>;
@@ -670,6 +671,7 @@
 	};
 
 	main_navss: bus@30000000 {
+		bootph-pre-ram;
 		compatible = "simple-bus";
 		#address-cells = <2>;
 		#size-cells = <2>;
@@ -705,6 +707,7 @@
 		};
 
 		secure_proxy_main: mailbox@32c00000 {
+			bootph-pre-ram;
 			compatible = "ti,am654-secure-proxy";
 			#mbox-cells = <1>;
 			reg-names = "target_data", "rt", "scfg";
