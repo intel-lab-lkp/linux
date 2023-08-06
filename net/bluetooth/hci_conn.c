@@ -2861,7 +2861,7 @@ static int abort_conn_sync(struct hci_dev *hdev, void *data)
 	u16 handle = PTR_ERR(data);
 
 	conn = hci_conn_hash_lookup_handle(hdev, handle);
-	if (!conn)
+	if (!conn || !conn->abort_reason)
 		return 0;
 
 	return hci_abort_conn_sync(hdev, conn, conn->abort_reason);
@@ -2876,6 +2876,8 @@ int hci_abort_conn(struct hci_conn *conn, u8 reason)
 	 */
 	if (conn->abort_reason)
 		return 0;
+	if (!reason)
+		return -EINVAL;
 
 	bt_dev_dbg(hdev, "handle 0x%2.2x reason 0x%2.2x", conn->handle, reason);
 
