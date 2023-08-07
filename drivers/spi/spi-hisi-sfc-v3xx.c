@@ -443,8 +443,6 @@ static int hisi_sfc_v3xx_probe(struct platform_device *pdev)
 	host = spi_controller_get_devdata(ctlr);
 	host->dev = dev;
 
-	platform_set_drvdata(pdev, host);
-
 	host->regbase = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(host->regbase)) {
 		ret = PTR_ERR(host->regbase);
