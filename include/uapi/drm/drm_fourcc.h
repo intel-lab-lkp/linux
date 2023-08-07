@@ -38,6 +38,13 @@ extern "C" {
  * fourcc code, a Format Modifier may optionally be provided, in order to
  * further describe the buffer's format - for example tiling or compression.
  *
+ * DRM drivers should not do software color conversion, and only advertise the
+ * format they support in hardware. But there are two exceptions:
+ * The first is to support XRGB8888 if the hardware doesn't support it, because
+ * it's the de facto standard for userspace applications.
+ * The second is to drop the unused bits when sending the data to the hardware,
+ * to improve the bandwidth, like dropping the "X" in XRGB8888.
+ *
  * Format Modifiers
  * ----------------
  *
