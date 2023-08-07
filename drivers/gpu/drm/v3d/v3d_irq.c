@@ -102,9 +102,13 @@ v3d_irq(int irq, void *arg)
 		struct v3d_fence *fence =
 			to_v3d_fence(v3d->bin_job->base.irq_fence);
 		struct v3d_file_priv *file = v3d->bin_job->base.file->driver_priv;
+		u64 runtime = local_clock() - file->start_ns[V3D_BIN];
 
-		file->enabled_ns[V3D_BIN] += local_clock() - file->start_ns[V3D_BIN];
 		file->start_ns[V3D_BIN] = 0;
+		v3d->queue[V3D_BIN].start_ns = 0;
+
+		file->enabled_ns[V3D_BIN] += runtime;
+		v3d->queue[V3D_BIN].enabled_ns += runtime;
 
 		trace_v3d_bcl_irq(&v3d->drm, fence->seqno);
 		dma_fence_signal(&fence->base);
@@ -115,9 +119,13 @@ v3d_irq(int irq, void *arg)
 		struct v3d_fence *fence =
 			to_v3d_fence(v3d->render_job->base.irq_fence);
 		struct v3d_file_priv *file = v3d->render_job->base.file->driver_priv;
+		u64 runtime = local_clock() - file->start_ns[V3D_RENDER];
 
-		file->enabled_ns[V3D_RENDER] += local_clock() - file->start_ns[V3D_RENDER];
 		file->start_ns[V3D_RENDER] = 0;
+		v3d->queue[V3D_RENDER].start_ns = 0;
+
+		file->enabled_ns[V3D_RENDER] += runtime;
+		v3d->queue[V3D_RENDER].enabled_ns += runtime;
 
 		trace_v3d_rcl_irq(&v3d->drm, fence->seqno);
 		dma_fence_signal(&fence->base);
@@ -128,9 +136,13 @@ v3d_irq(int irq, void *arg)
 		struct v3d_fence *fence =
 			to_v3d_fence(v3d->csd_job->base.irq_fence);
 		struct v3d_file_priv *file = v3d->csd_job->base.file->driver_priv;
+		u64 runtime = local_clock() - file->start_ns[V3D_CSD];
 
-		file->enabled_ns[V3D_CSD] += local_clock() - file->start_ns[V3D_CSD];
 		file->start_ns[V3D_CSD] = 0;
+		v3d->queue[V3D_CSD].start_ns = 0;
+
+		file->enabled_ns[V3D_CSD] += runtime;
+		v3d->queue[V3D_CSD].enabled_ns += runtime;
 
 		trace_v3d_csd_irq(&v3d->drm, fence->seqno);
 		dma_fence_signal(&fence->base);
@@ -168,9 +180,13 @@ v3d_hub_irq(int irq, void *arg)
 		struct v3d_fence *fence =
 			to_v3d_fence(v3d->tfu_job->base.irq_fence);
 		struct v3d_file_priv *file = v3d->tfu_job->base.file->driver_priv;
+		u64 runtime = local_clock() - file->start_ns[V3D_TFU];
 
-		file->enabled_ns[V3D_TFU] += local_clock() - file->start_ns[V3D_TFU];
 		file->start_ns[V3D_TFU] = 0;
+		v3d->queue[V3D_TFU].start_ns = 0;
+
+		file->enabled_ns[V3D_TFU] += runtime;
+		v3d->queue[V3D_TFU].enabled_ns += runtime;
 
 		trace_v3d_tfu_irq(&v3d->drm, fence->seqno);
 		dma_fence_signal(&fence->base);

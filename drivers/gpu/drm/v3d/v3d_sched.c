@@ -110,6 +110,7 @@ static struct dma_fence *v3d_bin_job_run(struct drm_sched_job *sched_job)
 			    job->start, job->end);
 
 	file->start_ns[V3D_BIN] = local_clock();
+	v3d->queue[V3D_BIN].start_ns = file->start_ns[V3D_BIN];
 	file->jobs_sent[V3D_BIN]++;
 
 	v3d_switch_perfmon(v3d, &job->base);
@@ -165,6 +166,7 @@ static struct dma_fence *v3d_render_job_run(struct drm_sched_job *sched_job)
 			    job->start, job->end);
 
 	file->start_ns[V3D_RENDER] = local_clock();
+	v3d->queue[V3D_RENDER].start_ns = file->start_ns[V3D_RENDER];
 	file->jobs_sent[V3D_RENDER]++;
 
 	v3d_switch_perfmon(v3d, &job->base);
@@ -201,6 +203,7 @@ v3d_tfu_job_run(struct drm_sched_job *sched_job)
 	trace_v3d_submit_tfu(dev, to_v3d_fence(fence)->seqno);
 
 	file->start_ns[V3D_TFU] = local_clock();
+	v3d->queue[V3D_TFU].start_ns = file->start_ns[V3D_TFU];
 	file->jobs_sent[V3D_TFU]++;
 
 	V3D_WRITE(V3D_TFU_IIA, job->args.iia);
@@ -246,6 +249,7 @@ v3d_csd_job_run(struct drm_sched_job *sched_job)
 	trace_v3d_submit_csd(dev, to_v3d_fence(fence)->seqno);
 
 	file->start_ns[V3D_CSD] = local_clock();
+	v3d->queue[V3D_CSD].start_ns = file->start_ns[V3D_CSD];
 	file->jobs_sent[V3D_CSD]++;
 
 	v3d_switch_perfmon(v3d, &job->base);
@@ -264,14 +268,21 @@ v3d_cache_clean_job_run(struct drm_sched_job *sched_job)
 	struct v3d_job *job = to_v3d_job(sched_job);
 	struct v3d_dev *v3d = job->v3d;
 	struct v3d_file_priv *file = job->file->driver_priv;
+	u64 runtime;
 
 	file->start_ns[V3D_CACHE_CLEAN] = local_clock();
+	v3d->queue[V3D_CACHE_CLEAN].start_ns = file->start_ns[V3D_CACHE_CLEAN];
 	file->jobs_sent[V3D_CACHE_CLEAN]++;
 
 	v3d_clean_caches(v3d);
 
-	file->enabled_ns[V3D_CACHE_CLEAN] += local_clock() - file->start_ns[V3D_CACHE_CLEAN];
+	runtime = local_clock() - file->start_ns[V3D_CACHE_CLEAN];
+
+	file->enabled_ns[V3D_CACHE_CLEAN] += runtime;
+	v3d->queue[V3D_CACHE_CLEAN].enabled_ns += runtime;
+
 	file->start_ns[V3D_CACHE_CLEAN] = 0;
+	v3d->queue[V3D_CACHE_CLEAN].start_ns = 0;
 
 	return NULL;
 }
