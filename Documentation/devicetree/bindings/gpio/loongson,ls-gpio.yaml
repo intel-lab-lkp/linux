@@ -14,6 +14,7 @@ properties:
     enum:
       - loongson,ls2k-gpio
       - loongson,ls7a-gpio
+      - loongson,ls2k1000-gpio
 
   reg:
     maxItems: 1
@@ -29,6 +30,33 @@ properties:
 
   gpio-ranges: true
 
+  loongson,gpio-conf-offset:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      This option indicate this GPIO configuration register offset address.
+
+  loongson,gpio-out-offset:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      This option indicate this GPIO output register offset address.
+
+  loongson,gpio-in-offset:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      This option indicate this GPIO input register offset address.
+
+  loongson,gpio-ctrl-mode:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      This option indicate this GPIO control mode, where '0' represents
+      bit control mode and '1' represents byte control mode.
+
+  loongson,gpio-inten-offset:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      This option indicate this GPIO interrupt enable register offset
+      address.
+
   interrupts:
     minItems: 1
     maxItems: 64
@@ -39,6 +67,11 @@ required:
   - ngpios
   - "#gpio-cells"
   - gpio-controller
+  - loongson,gpio-conf-offset
+  - loongson,gpio-in-offset
+  - loongson,gpio-out-offset
+  - loongson,gpio-ctrl-mode
+  - loongson,gpio-inten-offset
   - gpio-ranges
   - interrupts
 
@@ -49,11 +82,16 @@ examples:
     #include <dt-bindings/interrupt-controller/irq.h>
 
     gpio0: gpio@1fe00500 {
-      compatible = "loongson,ls2k-gpio";
+      compatible = "loongson,ls2k1000-gpio";
       reg = <0x1fe00500 0x38>;
       ngpios = <64>;
       #gpio-cells = <2>;
       gpio-controller;
+      loongson,gpio-conf-offset = <0>;
+      loongson,gpio-in-offset = <0x20>;
+      loongson,gpio-out-offset = <0x10>;
+      loongson,gpio-ctrl-mode = <0>;
+      loongson,gpio-inten-offset = <0x30>;
       gpio-ranges = <&pctrl 0 0 15>,
                     <&pctrl 16 16 15>,
                     <&pctrl 32 32 10>,
