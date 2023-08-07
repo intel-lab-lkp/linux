@@ -436,6 +436,10 @@ struct axidma_bd {
  * @coalesce_count_tx:	Store the irq coalesce on TX side.
  * @coalesce_usec_tx:	IRQ coalesce delay for TX
  * @use_dmaengine: flag to check dmaengine framework usage.
+ * @tx_chan:	TX DMA channel.
+ * @rx_chan:	RX DMA channel.
+ * @skb_cache:	Custom skb slab allocator
+ * @rx_chan_skb: List to store RX descriptors custom SKB pointer
  */
 struct axienet_local {
 	struct net_device *ndev;
@@ -501,6 +505,10 @@ struct axienet_local {
 	u32 coalesce_count_tx;
 	u32 coalesce_usec_tx;
 	u8  use_dmaengine;
+	struct dma_chan *tx_chan;
+	struct dma_chan *rx_chan;
+	struct kmem_cache *skb_cache;
+	struct list_head rx_chan_skb;
 };
 
 /**
