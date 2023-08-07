@@ -177,6 +177,13 @@ UNUSUAL_DEV(0x4971, 0x8017, 0x0000, 0x9999,
 		USB_SC_DEVICE, USB_PR_DEVICE, NULL,
 		US_FL_NO_REPORT_OPCODES),
 
+/* Reported-by: Piyush Mehta <piyush.mehta@amd.com> */
+UNUSUAL_DEV(0x0525, 0xa4a5, 0x0000, 0x9999,
+		"NetChip",
+		"Target Product",
+		USB_SC_DEVICE, USB_PR_DEVICE, NULL,
+		US_FL_NO_ATA_1X),
+
 /* "G-DRIVE" external HDD hangs on write without these.
  * Patch submitted by Alexander Kappner <agk@godking.net>
  */
