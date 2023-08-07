@@ -1169,6 +1169,7 @@ static int smc_connect_rdma_v2_prepare(struct smc_sock *smc,
 	struct smc_clc_first_contact_ext *fce =
 		(struct smc_clc_first_contact_ext *)
 			(((u8 *)clc_v2) + sizeof(*clc_v2));
+	int rc;
 
 	if (!ini->first_contact_peer || aclc->hdr.version == SMC_V1)
 		return 0;
@@ -1191,6 +1192,9 @@ static int smc_connect_rdma_v2_prepare(struct smc_sock *smc,
 	if (fce->release > SMC_RELEASE)
 		return SMC_CLC_DECL_VERSMISMAT;
 	ini->release_ver = fce->release;
+	rc = smc_clc_cli_v2x_features_validate(fce, ini);
+	if (rc)
+		return rc;
 
 	return 0;
 }
@@ -1367,6 +1371,9 @@ static int smc_connect_ism(struct smc_sock *smc,
 			if (fce->release > SMC_RELEASE)
 				return SMC_CLC_DECL_VERSMISMAT;
 			ini->release_ver = fce->release;
+			rc = smc_clc_cli_v2x_features_validate(fce, ini);
+			if (rc)
+				return rc;
 		}
 
 		rc = smc_v2_determine_accepted_chid(aclc_v2, ini);
@@ -2417,6 +2424,10 @@ static void smc_listen_work(struct work_struct *work)
 	if (rc)
 		goto out_decl;
 
+	rc = smc_clc_srv_v2x_features_validate(pclc, ini);
+	if (rc)
+		goto out_decl;
+
 	mutex_lock(&smc_server_lgr_pending);
 	smc_close_init(new_smc);
 	smc_rx_init(new_smc);
@@ -2443,6 +2454,13 @@ static void smc_listen_work(struct work_struct *work)
 	cclc = (struct smc_clc_msg_accept_confirm *)buf;
 	rc = smc_clc_wait_msg(new_smc, cclc, sizeof(*buf),
 			      SMC_CLC_CONFIRM, CLC_WAIT_TIME);
+	if (rc) {
+		if (!ini->is_smcd)
+			goto out_unlock;
+		goto out_decl;
+	}
+
+	rc = smc_clc_v2x_features_confirm_check(cclc, ini);
 	if (rc) {
 		if (!ini->is_smcd)
 			goto out_unlock;
