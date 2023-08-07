@@ -718,7 +718,7 @@ static void __dma_page_dev_to_cpu(struct page *page, unsigned long off,
 			folio = folio_next(folio);
 		}
 
-		while (left >= (ssize_t)folio_size(folio)) {
+		while (left && left >= (ssize_t)folio_size(folio)) {
 			set_bit(PG_dcache_clean, &folio->flags);
 			left -= folio_size(folio);
 			folio = folio_next(folio);
