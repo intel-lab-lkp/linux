@@ -185,27 +185,33 @@ static int apply_constraint(struct dev_pm_qos_request *req,
 }
 
 /*
- * dev_pm_qos_constraints_allocate
+ * dev_pm_qos_constraints_allocate: Allocate and initializes qos constraints
  * @dev: device to allocate data for
  *
- * Called at the first call to add_request, for constraint data allocation
- * Must be called with the dev_pm_qos_mtx mutex held
+ * Called to allocate constraints before dev_pm_qos_mtx mutex is held.  Should
+ * be matched with a call to dev_pm_qos_constraints_set() once dev_pm_qos_mtx
+ * is held.
  */
-static int dev_pm_qos_constraints_allocate(struct device *dev)
+static struct dev_pm_qos *dev_pm_qos_constraints_allocate(struct device *dev)
 {
 	struct dev_pm_qos *qos;
 	struct pm_qos_constraints *c;
 	struct blocking_notifier_head *n;
 
-	qos = kzalloc(sizeof(*qos), GFP_KERNEL);
-	if (!qos)
-		return -ENOMEM;
+	/*
+	 * If constraints are already allocated, we can skip speculatively
+	 * allocating a new one, as we don't have to work about qos transitioning
+	 * from non-null to null.  The constraints are only freed on device
+	 * removal.
+	 */
+	if (dev->power.qos)
+		return NULL;
 
-	n = kzalloc(3 * sizeof(*n), GFP_KERNEL);
-	if (!n) {
-		kfree(qos);
-		return -ENOMEM;
-	}
+	qos = kzalloc(sizeof(*qos) + 3 * sizeof(*n), GFP_KERNEL);
+	if (!qos)
+		return NULL;
+
+	n = (struct blocking_notifier_head *)(qos + 1);
 
 	c = &qos->resume_latency;
 	plist_head_init(&c->list);
@@ -227,11 +233,29 @@ static int dev_pm_qos_constraints_allocate(struct device *dev)
 
 	INIT_LIST_HEAD(&qos->flags.list);
 
+	return qos;
+}
+
+/*
+ * dev_pm_qos_constraints_set: Ensure dev->power.qos is set
+ *
+ * If dev->power.qos is already set, free the newly allocated qos constraints.
+ * Otherwise set dev->power.qos.  Must be called with dev_pm_qos_mtx held.
+ *
+ * This split unsynchronized allocation and synchronized set moves allocation
+ * out from under dev_pm_qos_mtx, so that lockdep does does not get angry about
+ * drivers which use dev_pm_qos in paths related to shrinker/reclaim.
+ */
+static void dev_pm_qos_constraints_set(struct device *dev, struct dev_pm_qos *qos)
+{
+	if (dev->power.qos) {
+		kfree(qos);
+		return;
+	}
+
 	spin_lock_irq(&dev->power.lock);
 	dev->power.qos = qos;
 	spin_unlock_irq(&dev->power.lock);
-
-	return 0;
 }
 
 static void __dev_pm_qos_hide_latency_limit(struct device *dev);
@@ -309,7 +333,6 @@ void dev_pm_qos_constraints_destroy(struct device *dev)
 	dev->power.qos = ERR_PTR(-ENODEV);
 	spin_unlock_irq(&dev->power.lock);
 
-	kfree(qos->resume_latency.notifiers);
 	kfree(qos);
 
  out:
@@ -341,7 +364,7 @@ static int __dev_pm_qos_add_request(struct device *dev,
 	if (IS_ERR(dev->power.qos))
 		ret = -ENODEV;
 	else if (!dev->power.qos)
-		ret = dev_pm_qos_constraints_allocate(dev);
+		ret = -ENOMEM;
 
 	trace_dev_pm_qos_add_request(dev_name(dev), type, value);
 	if (ret)
@@ -388,9 +411,11 @@ static int __dev_pm_qos_add_request(struct device *dev,
 int dev_pm_qos_add_request(struct device *dev, struct dev_pm_qos_request *req,
 			   enum dev_pm_qos_req_type type, s32 value)
 {
+	struct dev_pm_qos *qos = dev_pm_qos_constraints_allocate(dev);
 	int ret;
 
 	mutex_lock(&dev_pm_qos_mtx);
+	dev_pm_qos_constraints_set(dev, qos);
 	ret = __dev_pm_qos_add_request(dev, req, type, value);
 	mutex_unlock(&dev_pm_qos_mtx);
 	return ret;
@@ -535,14 +560,15 @@ EXPORT_SYMBOL_GPL(dev_pm_qos_remove_request);
 int dev_pm_qos_add_notifier(struct device *dev, struct notifier_block *notifier,
 			    enum dev_pm_qos_req_type type)
 {
+	struct dev_pm_qos *qos = dev_pm_qos_constraints_allocate(dev);
 	int ret = 0;
 
 	mutex_lock(&dev_pm_qos_mtx);
 
+	dev_pm_qos_constraints_set(dev, qos);
+
 	if (IS_ERR(dev->power.qos))
 		ret = -ENODEV;
-	else if (!dev->power.qos)
-		ret = dev_pm_qos_constraints_allocate(dev);
 
 	if (ret)
 		goto unlock;
@@ -903,12 +929,22 @@ s32 dev_pm_qos_get_user_latency_tolerance(struct device *dev)
  */
 int dev_pm_qos_update_user_latency_tolerance(struct device *dev, s32 val)
 {
-	int ret;
+	struct dev_pm_qos *qos = dev_pm_qos_constraints_allocate(dev);
+	int ret = 0;
 
 	mutex_lock(&dev_pm_qos_mtx);
 
-	if (IS_ERR_OR_NULL(dev->power.qos)
-	    || !dev->power.qos->latency_tolerance_req) {
+	dev_pm_qos_constraints_set(dev, qos);
+
+	if (IS_ERR(dev->power.qos))
+		ret = -ENODEV;
+	else if (!dev->power.qos)
+		ret = -ENOMEM;
+
+	if (ret)
+		goto out;
+
+	if (!dev->power.qos->latency_tolerance_req) {
 		struct dev_pm_qos_request *req;
 
 		if (val < 0) {
