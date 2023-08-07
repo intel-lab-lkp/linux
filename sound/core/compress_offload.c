@@ -1189,7 +1189,7 @@ int snd_compress_new(struct snd_card *card, int device,
 
 	snd_compress_set_id(compr, id);
 
-	snd_device_initialize(&compr->dev, card, NULL);
+	snd_device_initialize(&compr->dev, card, card);
 	dev_set_name(&compr->dev, "comprC%iD%i", card->number, device);
 
 	ret = snd_device_new(card, SNDRV_DEV_COMPRESS, compr, &ops);
