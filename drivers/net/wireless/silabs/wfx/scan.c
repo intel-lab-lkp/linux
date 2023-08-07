@@ -160,7 +160,7 @@ void wfx_remain_on_channel_work(struct work_struct *work)
 		dev_info(wvif->wdev->dev, "abort in-progress REQ_JOIN");
 		wfx_reset(wvif);
 	}
-	wfx_tx_lock_flush(wvif->wdev);
+	wfx_tx_flush(wvif->wdev);
 
 	reinit_completion(&wvif->scan_complete);
 	ret = wfx_hif_scan_uniq(wvif, chan, duration);
@@ -178,9 +178,9 @@ void wfx_remain_on_channel_work(struct work_struct *work)
 		dev_err(wvif->wdev->dev, "roc didn't stop\n");
 	ieee80211_remain_on_channel_expired(wvif->wdev->hw);
 end:
-	wfx_tx_unlock(wvif->wdev);
 	mutex_unlock(&wvif->scan_lock);
 	mutex_unlock(&wvif->wdev->conf_mutex);
+	wfx_bh_request_tx(wvif->wdev);
 }
 
 int wfx_remain_on_channel(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
