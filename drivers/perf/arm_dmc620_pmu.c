@@ -68,6 +68,7 @@
 
 static LIST_HEAD(dmc620_pmu_irqs);
 static DEFINE_MUTEX(dmc620_pmu_irqs_lock);
+static DEFINE_MUTEX(dmc620_pmu_get_irq_lock);
 
 struct dmc620_pmu_irq {
 	struct hlist_node node;
@@ -421,11 +422,18 @@ static irqreturn_t dmc620_pmu_handle_irq(int irq_num, void *data)
 static struct dmc620_pmu_irq *__dmc620_pmu_get_irq(int irq_num)
 {
 	struct dmc620_pmu_irq *irq;
+	bool found = false;
 	int ret;
 
+	mutex_lock(&dmc620_pmu_irqs_lock);
 	list_for_each_entry(irq, &dmc620_pmu_irqs, irqs_node)
-		if (irq->irq_num == irq_num && refcount_inc_not_zero(&irq->refcount))
-			return irq;
+		if (irq->irq_num == irq_num && refcount_inc_not_zero(&irq->refcount)) {
+			found = true;
+			break;
+		}
+	mutex_unlock(&dmc620_pmu_irqs_lock);
+	if (found)
+		return irq;
 
 	irq = kzalloc(sizeof(*irq), GFP_KERNEL);
 	if (!irq)
@@ -452,7 +460,9 @@ static struct dmc620_pmu_irq *__dmc620_pmu_get_irq(int irq_num)
 		goto out_free_irq;
 
 	irq->irq_num = irq_num;
+	mutex_lock(&dmc620_pmu_irqs_lock);
 	list_add(&irq->irqs_node, &dmc620_pmu_irqs);
+	mutex_unlock(&dmc620_pmu_irqs_lock);
 
 	return irq;
 
@@ -467,9 +477,9 @@ static int dmc620_pmu_get_irq(struct dmc620_pmu *dmc620_pmu, int irq_num)
 {
 	struct dmc620_pmu_irq *irq;
 
-	mutex_lock(&dmc620_pmu_irqs_lock);
+	mutex_lock(&dmc620_pmu_get_irq_lock);
 	irq = __dmc620_pmu_get_irq(irq_num);
-	mutex_unlock(&dmc620_pmu_irqs_lock);
+	mutex_unlock(&dmc620_pmu_get_irq_lock);
 
 	if (IS_ERR(irq))
 		return PTR_ERR(irq);
