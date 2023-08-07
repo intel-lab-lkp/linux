@@ -5059,12 +5059,20 @@ static void tcp_data_queue(struct sock *sk, struct sk_buff *skb)
 
 		/* Ok. In sequence. In window. */
 queue_and_out:
-		if (skb_queue_len(&sk->sk_receive_queue) == 0)
-			sk_forced_mem_schedule(sk, skb->truesize);
-		else if (tcp_try_rmem_schedule(sk, skb, skb->truesize)) {
+		if (skb_queue_len(&sk->sk_receive_queue) == 0) {
+			if (tcp_try_rmem_schedule(sk, skb, skb->truesize)) {
+				sk_forced_mem_schedule(sk, skb->truesize);
+				inet_csk(sk)->icsk_ack.pending |=
+					(ICSK_ACK_NOMEM | ICSK_ACK_NOW);
+				inet_csk_schedule_ack(sk);
+			}
+		} else if (tcp_try_rmem_schedule(sk, skb, skb->truesize)) {
 			reason = SKB_DROP_REASON_PROTO_MEM;
 			NET_INC_STATS(sock_net(sk), LINUX_MIB_TCPRCVQDROP);
 			sk->sk_data_ready(sk);
+			inet_csk(sk)->icsk_ack.pending |=
+				(ICSK_ACK_NOMEM | ICSK_ACK_NOW);
+			inet_csk_schedule_ack(sk);
 			goto drop;
 		}
 
