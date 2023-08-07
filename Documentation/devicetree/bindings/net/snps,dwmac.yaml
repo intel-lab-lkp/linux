@@ -500,6 +500,12 @@ properties:
     required:
       - compatible
 
+  snps,shared-mdio:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description:
+      Phandle to the mdio node defined on a different MAC node which this
+      device shares.
+
   stmmac-axi-config:
     type: object
     unevaluatedProperties: false
