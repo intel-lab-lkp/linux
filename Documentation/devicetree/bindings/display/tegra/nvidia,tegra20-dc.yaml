@@ -127,6 +127,37 @@ allOf:
               $ref: /schemas/types.yaml#/definitions/phandle
               description: phandle of a display panel
 
+            port:
+              $ref: /schemas/graph.yaml#/$defs/port-base
+              description: Parallel RGB output port
+
+              properties:
+                endpoint:
+                  $ref: /schemas/media/video-interfaces.yaml#
+                  unevaluatedProperties: false
+
+              unevaluatedProperties: false
+
+          anyOf:
+            - if:
+                not:
+                  properties:
+                    nvidia,panel: false
+              then:
+                not:
+                  properties:
+                    port: true
+            - if:
+                not:
+                  properties:
+                    port: false
+              then:
+                not:
+                  properties:
+                    nvidia,panel: true
+
+          additionalProperties: false
+
   - if:
       properties:
         compatible:
