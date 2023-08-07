@@ -340,6 +340,12 @@ static int stmmac_dt_phy(struct plat_stmmacenet_data *plat,
 		}
 	}
 
+	if (!plat->mdio_node) {
+		plat->mdio_node = of_parse_phandle(np, "snps,shared-mdio", 0);
+		if (plat->mdio_node)
+			plat->flags |= STMMAC_FLAG_SHARED_MDIO;
+	}
+
 	if (plat->mdio_node) {
 		dev_dbg(dev, "Found MDIO subnode\n");
 		mdio = true;

@@ -543,6 +543,14 @@ int stmmac_mdio_register(struct net_device *ndev)
 	if (!mdio_bus_data)
 		return 0;
 
+	if (priv->plat->flags & STMMAC_FLAG_SHARED_MDIO) {
+		new_bus = of_mdio_find_bus(mdio_node);
+		if (!new_bus)
+			return -EPROBE_DEFER;
+
+		goto bus_register_done;
+	}
+
 	new_bus = mdiobus_alloc();
 	if (!new_bus)
 		return -ENOMEM;
