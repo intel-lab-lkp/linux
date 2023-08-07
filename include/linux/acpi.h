@@ -1476,6 +1476,15 @@ static inline int lpit_read_residency_count_address(u64 *address)
 }
 #endif
 
+#ifndef arch_update_idle_state_flags
+static __always_inline void arch_update_idle_state_flags(u32 arch_flags,
+							unsigned int *sflags)
+{
+
+}
+#define arch_update_idle_state_flags arch_update_idle_state_flags
+#endif
+
 #ifdef CONFIG_ACPI_PPTT
 int acpi_pptt_cpu_is_thread(unsigned int cpu);
 int find_acpi_cpu_topology(unsigned int cpu, int level);
