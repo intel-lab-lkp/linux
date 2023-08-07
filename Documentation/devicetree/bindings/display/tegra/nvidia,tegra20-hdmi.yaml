@@ -82,8 +82,38 @@ properties:
     description: phandle of a display panel
     $ref: /schemas/types.yaml#/definitions/phandle
 
+  port:
+    description: HDMI output port
+    $ref: /schemas/graph.yaml#/properties/port
+
   "#sound-dai-cells":
     const: 0
+
+anyOf:
+  - if:
+      not:
+        properties:
+          nvidia,panel: false
+    then:
+      not:
+        properties:
+          port: true
+  - if:
+      not:
+        properties:
+          port: false
+    then:
+      not:
+        properties:
+          nvidia,panel: true
+
+if:
+  properties:
+    port: false
+then:
+  required:
+    - nvidia,ddc-i2c-bus
+    - nvidia,hpd-gpio
 
 additionalProperties: false
 
@@ -97,8 +127,6 @@ required:
   - reset-names
   - pll-supply
   - vdd-supply
-  - nvidia,ddc-i2c-bus
-  - nvidia,hpd-gpio
 
 examples:
   - |
