@@ -650,7 +650,7 @@ int snd_pcm_new_stream(struct snd_pcm *pcm, int stream, int substream_count)
 	if (!substream_count)
 		return 0;
 
-	snd_device_initialize(&pstr->dev, pcm->card, NULL);
+	snd_device_initialize(&pstr->dev, pcm->card, pcm);
 	pstr->dev.groups = pcm_dev_attr_groups;
 	pstr->dev.type = &pcm_dev_type;
 	dev_set_name(&pstr->dev, "pcmC%iD%i%c", pcm->card->number, pcm->device,
@@ -721,7 +721,7 @@ static int _snd_pcm_new(struct snd_card *card, const char *id, int device,
 		return -ENXIO;
 	if (rpcm)
 		*rpcm = NULL;
-	pcm = kzalloc(sizeof(*pcm), GFP_KERNEL);
+	pcm = snd_refmem_alloc(sizeof(*pcm), card);
 	if (!pcm)
 		return -ENOMEM;
 	pcm->card = card;
@@ -870,7 +870,7 @@ static int snd_pcm_free(struct snd_pcm *pcm)
 	snd_pcm_lib_preallocate_free_for_all(pcm);
 	snd_pcm_free_stream(&pcm->streams[SNDRV_PCM_STREAM_PLAYBACK]);
 	snd_pcm_free_stream(&pcm->streams[SNDRV_PCM_STREAM_CAPTURE]);
-	kfree(pcm);
+	snd_refmem_put(pcm);
 	return 0;
 }
 
