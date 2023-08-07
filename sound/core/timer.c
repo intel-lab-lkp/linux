@@ -2311,7 +2311,7 @@ static int __init alsa_timer_init(void)
 {
 	int err;
 
-	snd_device_initialize(&timer_dev, NULL);
+	snd_device_initialize(&timer_dev, NULL, NULL);
 	dev_set_name(&timer_dev, "timer");
 
 #ifdef SNDRV_OSS_INFO_DEV_TIMERS

@@ -382,7 +382,7 @@ int snd_hwdep_new(struct snd_card *card, char *id, int device,
 	if (id)
 		strscpy(hwdep->id, id, sizeof(hwdep->id));
 
-	snd_device_initialize(&hwdep->dev, card);
+	snd_device_initialize(&hwdep->dev, card, NULL);
 	hwdep->dev.release = release_hwdep_device;
 	dev_set_name(&hwdep->dev, "hwC%iD%i", card->number, device);
 #ifdef CONFIG_SND_OSSEMUL

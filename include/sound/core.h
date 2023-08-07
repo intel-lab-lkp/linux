@@ -244,7 +244,7 @@ extern struct dentry *sound_debugfs_root;
 
 void snd_request_card(int card);
 
-void snd_device_initialize(struct device *dev, struct snd_card *card);
+void snd_device_initialize(struct device *dev, struct snd_card *card, void *refp);
 
 int snd_register_device(int type, struct snd_card *card, int dev,
 			const struct file_operations *f_ops,

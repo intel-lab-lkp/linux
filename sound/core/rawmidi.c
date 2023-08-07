@@ -1906,7 +1906,7 @@ int snd_rawmidi_init(struct snd_rawmidi *rmidi,
 	if (id != NULL)
 		strscpy(rmidi->id, id, sizeof(rmidi->id));
 
-	snd_device_initialize(&rmidi->dev, card);
+	snd_device_initialize(&rmidi->dev, card, NULL);
 	rmidi->dev.release = release_rawmidi_device;
 	if (rawmidi_is_ump(rmidi))
 		dev_set_name(&rmidi->dev, "umpC%iD%i", card->number, device);

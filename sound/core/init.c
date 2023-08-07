@@ -170,25 +170,28 @@ void snd_refmem_put(void *p)
 EXPORT_SYMBOL_GPL(snd_refmem_put);
 
 /* the default release callback set in snd_device_initialize() below;
- * this is just NOP for now, as almost all jobs are already done in
- * dev_free callback of snd_device chain instead.
+ * unreference the memory here if it's specified at initialization
  */
 static void default_release(struct device *dev)
 {
+	snd_refmem_put(dev_get_drvdata(dev));
 }
 
 /**
  * snd_device_initialize - Initialize struct device for sound devices
  * @dev: device to initialize
  * @card: card to assign, optional
+ * @refp: memory associated with snd_refmem
  */
-void snd_device_initialize(struct device *dev, struct snd_card *card)
+void snd_device_initialize(struct device *dev, struct snd_card *card, void *refp)
 {
 	device_initialize(dev);
 	if (card)
 		dev->parent = &card->card_dev;
 	dev->class = &sound_class;
 	dev->release = default_release;
+	dev_set_drvdata(dev, refp);
+	snd_refmem_get(refp);
 }
 EXPORT_SYMBOL_GPL(snd_device_initialize);
 

@@ -2730,7 +2730,7 @@ int __init snd_sequencer_device_init(void)
 {
 	int err;
 
-	snd_device_initialize(&seq_dev, NULL);
+	snd_device_initialize(&seq_dev, NULL, NULL);
 	dev_set_name(&seq_dev, "seq");
 
 	mutex_lock(&register_mutex);
