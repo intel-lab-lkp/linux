@@ -263,7 +263,6 @@ static int gxp_spifi_probe(struct platform_device *pdev)
 
 	spifi = spi_controller_get_devdata(ctlr);
 
-	platform_set_drvdata(pdev, spifi);
 	spifi->data = data;
 	spifi->dev = dev;
 
