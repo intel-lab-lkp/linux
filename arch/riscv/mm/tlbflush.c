@@ -149,3 +149,15 @@ void flush_pmd_tlb_range(struct vm_area_struct *vma, unsigned long start,
 	__flush_tlb_range(vma->vm_mm, start, end - start, PMD_SIZE);
 }
 #endif
+
+/*
+ * Since RISC-V is a microarchitecture that allows caching invalid entries in the TLB,
+ * it is necessary to issue a "preventive" SFENCE.VMA to ensure that each core obtains
+ * the correct kernel mapping. arch_sync_kernel_mappings() will ensure that kernel
+ * page table mappings created via vmap/vmalloc() are updated before switching MM.
+ */
+void arch_sync_kernel_mappings(unsigned long start, unsigned long end)
+{
+	if (start < VMALLOC_END && end > VMALLOC_START)
+		flush_tlb_all();
+}
