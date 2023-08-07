@@ -162,7 +162,6 @@ static int jcore_spi_probe(struct platform_device *pdev)
 
 	hw = spi_master_get_devdata(master);
 	hw->master = master;
-	platform_set_drvdata(pdev, hw);
 
 	/* Find and map our resources */
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
