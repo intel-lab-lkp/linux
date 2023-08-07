@@ -870,12 +870,14 @@ int bpf__probe(struct bpf_object *obj)
 			goto out;
 		}
 
-		if (priv->is_tp) {
+		if (priv->is_tp && bpf_program__type(prog) != BPF_PROG_TYPE_TRACEPOINT) {
 			bpf_program__set_type(prog, BPF_PROG_TYPE_TRACEPOINT);
 			continue;
 		}
 
-		bpf_program__set_type(prog, BPF_PROG_TYPE_KPROBE);
+		if (bpf_program__type(prog) != BPF_PROG_TYPE_KPROBE)
+			bpf_program__set_type(prog, BPF_PROG_TYPE_KPROBE);
+
 		pev = &priv->pev;
 
 		err = convert_perf_probe_events(pev, 1);
