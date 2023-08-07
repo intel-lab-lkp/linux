@@ -75,6 +75,11 @@ struct snd_device {
 
 #define snd_device(n) list_entry(n, struct snd_device, list)
 
+/* referenced memory allocation */
+void *snd_refmem_alloc(size_t bytes, void *parent);
+void *snd_refmem_get(void *p);
+void snd_refmem_put(void *p);
+
 /* main structure for soundcard */
 
 struct snd_card {

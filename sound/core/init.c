@@ -111,6 +111,64 @@ static int get_slot_from_bitmask(int mask, int (*check)(struct module *, int),
 	return mask; /* unchanged */
 }
 
+/*
+ * referenced memory allocation
+ */
+
+struct snd_refmem {
+	struct kref kref;
+	void *parent;
+	char data[];
+};
+
+#define to_refmem(p)	container_of(p, struct snd_refmem, data)
+
+void *snd_refmem_alloc(size_t bytes, void *parent)
+{
+	struct snd_refmem *ref;
+
+	ref = kzalloc(bytes + sizeof(*ref), GFP_KERNEL);
+	if (!ref)
+		return NULL;
+	kref_init(&ref->kref);
+	ref->parent = parent;
+	snd_refmem_get(parent);
+	return ref->data;
+}
+EXPORT_SYMBOL_GPL(snd_refmem_alloc);
+
+void *snd_refmem_get(void *p)
+{
+	struct snd_refmem *ref;
+
+	if (!p)
+		return NULL;
+	ref = to_refmem(p);
+	kref_get(&ref->kref);
+	return p;
+}
+EXPORT_SYMBOL_GPL(snd_refmem_get);
+
+static void snd_refmem_release(struct kref *kref)
+{
+	struct snd_refmem *ref = container_of(kref, struct snd_refmem, kref);
+	void *parent = ref->parent;
+
+	kfree(ref);
+	snd_refmem_put(parent);
+}
+
+void snd_refmem_put(void *p)
+{
+	struct snd_refmem *ref;
+
+	if (!p)
+		return;
+	ref = to_refmem(p);
+	kref_put(&ref->kref, snd_refmem_release);
+}
+EXPORT_SYMBOL_GPL(snd_refmem_put);
+
 /* the default release callback set in snd_device_initialize() below;
  * this is just NOP for now, as almost all jobs are already done in
  * dev_free callback of snd_device chain instead.
