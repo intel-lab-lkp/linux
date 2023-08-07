@@ -889,17 +889,13 @@ nv50_msto_cleanup(struct drm_atomic_state *state,
 	struct nouveau_drm *drm = nouveau_drm(msto->encoder.dev);
 	struct drm_dp_mst_atomic_payload *new_payload =
 		drm_atomic_get_mst_payload_state(new_mst_state, msto->mstc->port);
-	struct drm_dp_mst_topology_state *old_mst_state =
-		drm_atomic_get_old_mst_topology_state(state, mgr);
-	const struct drm_dp_mst_atomic_payload *old_payload =
-		drm_atomic_get_mst_payload_state(old_mst_state, msto->mstc->port);
 
 	NV_ATOMIC(drm, "%s: msto cleanup\n", msto->encoder.name);
 
 	if (msto->disabled) {
 		msto->mstc = NULL;
 		msto->disabled = false;
-		drm_dp_remove_payload_part2(mgr, new_mst_state, old_payload, new_payload);
+		drm_dp_remove_payload_part2(mgr, new_mst_state, new_payload);
 	} else if (msto->enabled) {
 		drm_dp_add_payload_part2(mgr, state, new_payload);
 		msto->enabled = false;
