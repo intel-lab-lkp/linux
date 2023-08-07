@@ -231,7 +231,7 @@ int snd_card_new(struct device *parent, int idx, const char *xid,
 
 	if (extra_size < 0)
 		extra_size = 0;
-	card = kzalloc(sizeof(*card) + extra_size, GFP_KERNEL);
+	card = snd_refmem_alloc(sizeof(*card) + extra_size, NULL);
 	if (!card)
 		return -ENOMEM;
 
@@ -246,7 +246,14 @@ EXPORT_SYMBOL(snd_card_new);
 
 static void __snd_card_release(struct device *dev, void *data)
 {
-	snd_card_free(data);
+	struct snd_card **card_p = data;
+	struct snd_card *card;
+
+	if (card_p) {
+		card = *card_p;
+		snd_card_free(card);
+		snd_refmem_put(card);
+	}
 }
 
 /**
@@ -279,21 +286,22 @@ int snd_devm_card_new(struct device *parent, int idx, const char *xid,
 		      struct snd_card **card_ret)
 {
 	struct snd_card *card;
+	struct snd_card **card_devres;
 	int err;
 
 	*card_ret = NULL;
-	card = devres_alloc(__snd_card_release, sizeof(*card) + extra_size,
-			    GFP_KERNEL);
-	if (!card)
+	card_devres = devres_alloc(__snd_card_release, sizeof(void *), GFP_KERNEL);
+	if (!card_devres)
 		return -ENOMEM;
-	card->managed = true;
-	err = snd_card_init(card, parent, idx, xid, module, extra_size);
-	if (err < 0) {
-		devres_free(card); /* in managed mode, we need to free manually */
-		return err;
-	}
+	devres_add(parent, card_devres);
 
-	devres_add(parent, card);
+	err = snd_card_new(parent, idx, xid, module, extra_size, &card);
+	if (err)
+		return err;
+
+	card->managed = true;
+	snd_refmem_get(card);
+	*card_devres = card;
 	*card_ret = card;
 	return 0;
 }
@@ -353,8 +361,7 @@ static int snd_card_init(struct snd_card *card, struct device *parent,
 		mutex_unlock(&snd_card_mutex);
 		dev_err(parent, "cannot find the slot for index %d (range 0-%i), error: %d\n",
 			 idx, snd_ecards_limit - 1, err);
-		if (!card->managed)
-			kfree(card); /* manually free here, as no destructor called */
+		snd_refmem_put(card); /* manually free here, as no destructor called */
 		return err;
 	}
 	set_bit(idx, snd_cards_lock);		/* lock it */
@@ -650,8 +657,7 @@ static int snd_card_do_free(struct snd_card *card)
 #endif
 	if (card->release_completion)
 		complete(card->release_completion);
-	if (!card->managed)
-		kfree(card);
+	snd_refmem_put(card);
 	return 0;
 }
 
