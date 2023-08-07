@@ -946,7 +946,14 @@ static const struct of_device_id smmu_pmu_of_match[] = {
 MODULE_DEVICE_TABLE(of, smmu_pmu_of_match);
 #endif
 
+static const struct platform_device_id smmu_pmu_platform_match[] = {
+	{ "arm-smmu-v3-pmcg", 0 },
+	{}
+};
+MODULE_DEVICE_TABLE(platform, smmu_pmu_platform_match);
+
 static struct platform_driver smmu_pmu_driver = {
+	.id_table = smmu_pmu_platform_match,
 	.driver = {
 		.name = "arm-smmu-v3-pmcg",
 		.of_match_table = of_match_ptr(smmu_pmu_of_match),
