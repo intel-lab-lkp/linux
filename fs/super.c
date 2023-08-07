@@ -1369,7 +1369,6 @@ int get_tree_bdev(struct fs_context *fc,
 			return error;
 		}
 		s->s_flags |= SB_ACTIVE;
-		s->s_bdev->bd_super = s;
 	}
 
 	BUG_ON(fc->root);
@@ -1423,7 +1422,6 @@ struct dentry *mount_bdev(struct file_system_type *fs_type,
 		}
 
 		s->s_flags |= SB_ACTIVE;
-		s->s_bdev->bd_super = s;
 	}
 
 	return dget(s->s_root);
@@ -1436,7 +1434,6 @@ void kill_block_super(struct super_block *sb)
 
 	generic_shutdown_super(sb);
 	if (bdev) {
-		bdev->bd_super = NULL;
 		sync_blockdev(bdev);
 		blkdev_put(bdev, sb);
 	}

@@ -494,7 +494,6 @@ static void cramfs_kill_sb(struct super_block *sb)
 		put_mtd_device(sb->s_mtd);
 		sb->s_mtd = NULL;
 	} else if (IS_ENABLED(CONFIG_CRAMFS_BLOCKDEV) && sb->s_bdev) {
-		sb->s_bdev->bd_super = NULL;
 		sync_blockdev(sb->s_bdev);
 		blkdev_put(sb->s_bdev, sb);
 	}
