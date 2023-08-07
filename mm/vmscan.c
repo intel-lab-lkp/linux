@@ -6274,7 +6274,7 @@ static void shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 	unsigned long nr_to_scan;
 	enum lru_list lru;
 	unsigned long nr_reclaimed = 0;
-	unsigned long nr_to_reclaim = sc->nr_to_reclaim;
+	unsigned long nr_to_reclaim = sc->nr_to_reclaim - sc->nr_reclaimed;
 	bool proportional_reclaim;
 	struct blk_plug plug;
 
