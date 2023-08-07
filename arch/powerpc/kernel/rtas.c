@@ -1330,33 +1330,34 @@ bool __ref rtas_busy_delay(int status)
 }
 EXPORT_SYMBOL_GPL(rtas_busy_delay);
 
-static int rtas_error_rc(int rtas_rc)
+int rtas_generic_errno(int rtas_rc)
 {
 	int rc;
 
 	switch (rtas_rc) {
-		case -1: 		/* Hardware Error */
-			rc = -EIO;
-			break;
-		case -3:		/* Bad indicator/domain/etc */
-			rc = -EINVAL;
-			break;
-		case -9000:		/* Isolation error */
-			rc = -EFAULT;
-			break;
-		case -9001:		/* Outstanding TCE/PTE */
-			rc = -EEXIST;
-			break;
-		case -9002:		/* No usable slot */
-			rc = -ENODEV;
-			break;
-		default:
-			pr_err("%s: unexpected error %d\n", __func__, rtas_rc);
-			rc = -ERANGE;
-			break;
+	case RTAS_HARDWARE_ERROR:	/* Hardware Error */
+		rc = -EIO;
+		break;
+	case RTAS_INVALID_PARAMETER:	/* Bad indicator/domain/etc */
+		rc = -EINVAL;
+		break;
+	case RTAS_SLOT_UNISOLATED:	/* Isolation error */
+		rc = -EFAULT;
+		break;
+	case RTAS_SLOT_NOT_UNISOLATED:	/* Outstanding TCE/PTE */
+		rc = -EEXIST;
+		break;
+	case RTAS_SLOT_NOT_USABLE:	/* No usable slot */
+		rc = -ENODEV;
+		break;
+	default:
+		pr_err("%s: unexpected error %d\n", __func__, rtas_rc);
+		rc = -ERANGE;
+		break;
 	}
 	return rc;
 }
+EXPORT_SYMBOL(rtas_generic_errno);
 
 int rtas_get_power_level(int powerdomain, int *level)
 {
@@ -1370,7 +1371,7 @@ int rtas_get_power_level(int powerdomain, int *level)
 		udelay(1);
 
 	if (rc < 0)
-		return rtas_error_rc(rc);
+		return rtas_generic_errno(rc);
 	return rc;
 }
 EXPORT_SYMBOL_GPL(rtas_get_power_level);
@@ -1388,7 +1389,7 @@ int rtas_set_power_level(int powerdomain, int level, int *setlevel)
 	} while (rtas_busy_delay(rc));
 
 	if (rc < 0)
-		return rtas_error_rc(rc);
+		return rtas_generic_errno(rc);
 	return rc;
 }
 EXPORT_SYMBOL_GPL(rtas_set_power_level);
@@ -1406,7 +1407,7 @@ int rtas_get_sensor(int sensor, int index, int *state)
 	} while (rtas_busy_delay(rc));
 
 	if (rc < 0)
-		return rtas_error_rc(rc);
+		return rtas_generic_errno(rc);
 	return rc;
 }
 EXPORT_SYMBOL_GPL(rtas_get_sensor);
@@ -1424,7 +1425,7 @@ int rtas_get_sensor_fast(int sensor, int index, int *state)
 				    rc <= RTAS_EXTENDED_DELAY_MAX));
 
 	if (rc < 0)
-		return rtas_error_rc(rc);
+		return rtas_generic_errno(rc);
 	return rc;
 }
 
@@ -1466,7 +1467,7 @@ int rtas_set_indicator(int indicator, int index, int new_value)
 	} while (rtas_busy_delay(rc));
 
 	if (rc < 0)
-		return rtas_error_rc(rc);
+		return rtas_generic_errno(rc);
 	return rc;
 }
 EXPORT_SYMBOL_GPL(rtas_set_indicator);
@@ -1488,7 +1489,7 @@ int rtas_set_indicator_fast(int indicator, int index, int new_value)
 				    rc <= RTAS_EXTENDED_DELAY_MAX));
 
 	if (rc < 0)
-		return rtas_error_rc(rc);
+		return rtas_generic_errno(rc);
 
 	return rc;
 }
