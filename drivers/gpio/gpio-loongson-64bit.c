@@ -26,6 +26,7 @@ struct loongson_gpio_chip_data {
 	unsigned int		conf_offset;
 	unsigned int		out_offset;
 	unsigned int		in_offset;
+	unsigned int		inten_offset;
 };
 
 struct loongson_gpio_chip {
@@ -117,7 +118,17 @@ static void loongson_gpio_set(struct gpio_chip *chip, unsigned int pin, int valu
 
 static int loongson_gpio_to_irq(struct gpio_chip *chip, unsigned int offset)
 {
+	unsigned int u;
 	struct platform_device *pdev = to_platform_device(chip->parent);
+	struct loongson_gpio_chip *lgpio = to_loongson_gpio_chip(chip);
+
+	if (lgpio->chip_data->mode == BIT_CTRL_MODE) {
+		u = readl(lgpio->reg_base + lgpio->chip_data->inten_offset + offset / 32 * 4);
+		u |= BIT(offset % 32);
+		writel(u, lgpio->reg_base + lgpio->chip_data->inten_offset + offset / 32 * 4);
+	} else {
+		writeb(1, lgpio->reg_base + lgpio->chip_data->inten_offset + offset);
+	}
 
 	return platform_get_irq(pdev, offset);
 }
@@ -127,11 +138,30 @@ static int loongson_gpio_init(struct device *dev, struct loongson_gpio_chip *lgp
 {
 	int ret;
 	u32 ngpios;
+	unsigned int io_width;
 
 	lgpio->reg_base = reg_base;
+	if (device_property_read_u32(dev, "ngpios", &ngpios) || !ngpios)
+		return -EINVAL;
+
+	ret = DIV_ROUND_UP(ngpios, 8);
+	switch (ret) {
+	case 1 ... 2:
+		io_width = ret;
+		break;
+	case 3 ... 4:
+		io_width = 0x4;
+		break;
+	case 5 ... 8:
+		io_width = 0x8;
+		break;
+	default:
+		dev_err(dev, "unsupported io width\n");
+		return -EINVAL;
+	}
 
 	if (lgpio->chip_data->mode == BIT_CTRL_MODE) {
-		ret = bgpio_init(&lgpio->chip, dev, 8,
+		ret = bgpio_init(&lgpio->chip, dev, io_width,
 				lgpio->reg_base + lgpio->chip_data->in_offset,
 				lgpio->reg_base + lgpio->chip_data->out_offset,
 				NULL, NULL,
@@ -151,14 +181,33 @@ static int loongson_gpio_init(struct device *dev, struct loongson_gpio_chip *lgp
 		spin_lock_init(&lgpio->lock);
 	}
 
-	device_property_read_u32(dev, "ngpios", &ngpios);
-
-	lgpio->chip.can_sleep = 0;
 	lgpio->chip.ngpio = ngpios;
-	lgpio->chip.label = lgpio->chip_data->label;
-	lgpio->chip.to_irq = loongson_gpio_to_irq;
+	lgpio->chip.can_sleep = 0;
+	if (lgpio->chip_data->label)
+		lgpio->chip.label = lgpio->chip_data->label;
+	else
+		lgpio->chip.label = kstrdup(to_platform_device(dev)->name, GFP_KERNEL);
+
+	if (lgpio->chip_data->inten_offset)
+		lgpio->chip.to_irq = loongson_gpio_to_irq;
 
 	return devm_gpiochip_add_data(dev, &lgpio->chip, lgpio);
+}
+
+static int loongson_gpio_get_props(struct device *dev,
+				    struct loongson_gpio_chip *lgpio)
+{
+	const struct loongson_gpio_chip_data *d = lgpio->chip_data;
+
+	if (device_property_read_u32(dev, "loongson,gpio-conf-offset", (u32 *)&d->conf_offset)
+	    || device_property_read_u32(dev, "loongson,gpio-in-offset", (u32 *)&d->in_offset)
+	    || device_property_read_u32(dev, "loongson,gpio-out-offset", (u32 *)&d->out_offset)
+	    || device_property_read_u32(dev, "loongson,gpio-ctrl-mode", (u32 *)&d->mode))
+		return -EINVAL;
+
+	device_property_read_u32(dev, "loongson,gpio-inten-offset", (u32 *)&d->inten_offset);
+
+	return 0;
 }
 
 static int loongson_gpio_probe(struct platform_device *pdev)
@@ -172,7 +221,12 @@ static int loongson_gpio_probe(struct platform_device *pdev)
 	if (!lgpio)
 		return -ENOMEM;
 
-	lgpio->chip_data = device_get_match_data(dev);
+	lgpio->chip_data = devm_kzalloc(dev, sizeof(*lgpio->chip_data), GFP_KERNEL);
+	if (!lgpio->chip_data)
+		return -ENOMEM;
+
+	if (loongson_gpio_get_props(dev, lgpio))
+		lgpio->chip_data = device_get_match_data(dev);
 
 	reg_base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(reg_base))
@@ -206,6 +260,9 @@ static const struct of_device_id loongson_gpio_of_match[] = {
 		.compatible = "loongson,ls7a-gpio",
 		.data = &loongson_gpio_ls7a_data,
 	},
+	{
+		.compatible = "loongson,ls2k1000-gpio",
+	},
 	{}
 };
 MODULE_DEVICE_TABLE(of, loongson_gpio_of_match);
@@ -214,6 +271,9 @@ static const struct acpi_device_id loongson_gpio_acpi_match[] = {
 	{
 		.id = "LOON0002",
 		.driver_data = (kernel_ulong_t)&loongson_gpio_ls7a_data,
+	},
+	{
+		.id = "LOON0007",
 	},
 	{}
 };
