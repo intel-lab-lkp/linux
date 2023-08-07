@@ -34,6 +34,16 @@ struct tcp_congestion_ops *tcp_ca_find(const char *name)
 	return NULL;
 }
 
+void tcp_ca_event(struct sock *sk, const enum tcp_ca_event event)
+{
+	const struct inet_connection_sock *icsk = inet_csk(sk);
+
+	trace_tcp_ca_event_set(sk, (u8)event);
+
+	if (icsk->icsk_ca_ops->cwnd_event)
+		icsk->icsk_ca_ops->cwnd_event(sk, event);
+}
+
 void tcp_set_ca_state(struct sock *sk, const u8 ca_state)
 {
 	struct inet_connection_sock *icsk = inet_csk(sk);
