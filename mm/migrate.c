@@ -2221,7 +2221,9 @@ static int do_pages_move(struct mm_struct *mm, nodemask_t task_nodes,
 		 * If the page is already on the target node (!err), store the
 		 * node, otherwise, store the err.
 		 */
-		err = store_status(status, i, err ? : current_node, 1);
+		err1 = store_status(status, i, err ? : current_node, 1);
+		if (err1)
+			err = err1;
 		if (err)
 			goto out_flush;
 
