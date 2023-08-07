@@ -79,6 +79,17 @@ enum {
 	UFS_MEM_CQIS_VS		= 0x8,
 };
 
+
+/* QCOM UFS host controller core clk frequencies */
+#define MHZ_37_5	37500000
+#define MHZ_50		50000000
+#define MHZ_75		75000000
+#define MHZ_100		100000000
+#define MHZ_150		150000000
+#define MHZ_300		300000000
+#define MHZ_201_5	201500000
+#define MHZ_403		403000000
+
 #define UFS_CNTLR_2_x_x_VEN_REGS_OFFSET(x)	(0x000 + x)
 #define UFS_CNTLR_3_x_x_VEN_REGS_OFFSET(x)	(0x400 + x)
 
@@ -129,9 +140,12 @@ enum {
 #define PA_VS_CONFIG_REG1	0x9000
 #define DME_VS_CORE_CLK_CTRL	0xD002
 /* bit and mask definitions for DME_VS_CORE_CLK_CTRL attribute */
-#define DME_VS_CORE_CLK_CTRL_CORE_CLK_DIV_EN_BIT		BIT(8)
-#define DME_VS_CORE_CLK_CTRL_MAX_CORE_CLK_1US_CYCLES_MASK	0xFF
-
+#define MAX_CORE_CLK_1US_CYCLES_MASK_V4			0xFFF
+#define MAX_CORE_CLK_1US_CYCLES_OFFSET_V4		0x10
+#define MAX_CORE_CLK_1US_CYCLES_MASK			0xFF
+#define CORE_CLK_DIV_EN_BIT				BIT(8)
+#define PA_VS_CORE_CLK_40NS_CYCLES			0x9007
+#define PA_VS_CORE_CLK_40NS_CYCLES_MASK			0x3F
 static inline void
 ufs_qcom_get_controller_revision(struct ufs_hba *hba,
 				 u8 *major, u16 *minor, u16 *step)
