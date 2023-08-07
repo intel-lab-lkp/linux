@@ -527,7 +527,6 @@ static __init int armada38x_rtc_probe(struct platform_device *pdev)
 		dev_warn(&pdev->dev, "Interrupt not available.\n");
 		rtc->irq = -1;
 	}
-	platform_set_drvdata(pdev, rtc);
 
 	if (rtc->irq != -1)
 		device_init_wakeup(&pdev->dev, 1);
