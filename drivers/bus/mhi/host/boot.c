@@ -495,6 +495,13 @@ skip_req_fw:
 	 * device transitioning into MHI READY state
 	 */
 	if (mhi_cntrl->fbc_download) {
+		dev_dbg(dev, "standard_elf_image: %s\n",
+				(mhi_cntrl->standard_elf_image ? "True" : "False"));
+		if (mhi_cntrl->standard_elf_image) {
+			fw_data = firmware->data + mhi_cntrl->sbl_size;
+			fw_sz = fw_sz - mhi_cntrl->sbl_size;
+		}
+
 		ret = mhi_alloc_bhie_table(mhi_cntrl, &mhi_cntrl->fbc_image, fw_sz);
 		if (ret) {
 			release_firmware(firmware);
