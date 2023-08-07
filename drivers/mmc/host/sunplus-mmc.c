@@ -955,7 +955,6 @@ static int spmmc_drv_remove(struct platform_device *dev)
 	clk_disable_unprepare(host->clk);
 	pm_runtime_put_noidle(&dev->dev);
 	pm_runtime_disable(&dev->dev);
-	platform_set_drvdata(dev, NULL);
 	mmc_free_host(host->mmc);
 
 	return 0;
