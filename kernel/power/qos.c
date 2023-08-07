@@ -379,17 +379,11 @@ static ssize_t cpu_latency_qos_write(struct file *filp, const char __user *buf,
 				     size_t count, loff_t *f_pos)
 {
 	s32 value;
+	int ret;
 
-	if (count == sizeof(s32)) {
-		if (copy_from_user(&value, buf, sizeof(s32)))
-			return -EFAULT;
-	} else {
-		int ret;
-
-		ret = kstrtos32_from_user(buf, count, 16, &value);
-		if (ret)
-			return ret;
-	}
+	ret = kstrtos32_from_user(buf, count, 16, &value);
+	if (ret)
+		return ret;
 
 	cpu_latency_qos_update_request(filp->private_data, value);
 
