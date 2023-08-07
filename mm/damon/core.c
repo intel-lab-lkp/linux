@@ -971,7 +971,7 @@ static void damos_apply_scheme(struct damon_ctx *c, struct damon_target *t,
 			quota->charge_addr_from = r->ar.end + 1;
 		}
 	}
-	if (s->action != DAMOS_STAT)
+	if (s->action != DAMOS_STAT && sz_applied > 0)
 		r->age = 0;
 
 update_stat:
