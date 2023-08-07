@@ -1029,10 +1029,9 @@ char *usb_cache_string(struct usb_device *udev, int index)
 	if (buf) {
 		len = usb_string(udev, index, buf, MAX_USB_STRING_SIZE);
 		if (len > 0) {
-			smallbuf = kmalloc(++len, GFP_NOIO);
+			smallbuf = kmemdup_nul(buf, len, GFP_NOIO);
 			if (!smallbuf)
 				return buf;
-			memcpy(smallbuf, buf, len);
 		}
 		kfree(buf);
 	}
