@@ -62,6 +62,7 @@ struct samsung_dsim_driver_data {
 	const unsigned int *reg_values;
 	u16 m_min;
 	u16 m_max;
+	unsigned int has_broken_fifoctrl_emptyhdr;
 };
 
 struct samsung_dsim_host_ops {
