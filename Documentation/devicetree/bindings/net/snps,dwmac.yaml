@@ -109,6 +109,7 @@ properties:
       - description: The interrupt that occurs when Rx exits the LPI state
       - description: The interrupt that occurs when Safety Feature Correctible Errors happen
       - description: The interrupt that occurs when Safety Feature Uncorrectible Errors happen
+      - description: All of the rx/tx per-channel interrupts
 
   interrupt-names:
     minItems: 1
@@ -118,6 +119,38 @@ properties:
       - const: eth_lpi
       - const: sfty_ce
       - const: sfty_ue
+      - const: rx0
+      - const: rx1
+      - const: rx2
+      - const: rx3
+      - const: rx4
+      - const: rx5
+      - const: rx6
+      - const: rx7
+      - const: rx8
+      - const: rx9
+      - const: rx10
+      - const: rx11
+      - const: rx12
+      - const: rx13
+      - const: rx14
+      - const: rx15
+      - const: tx0
+      - const: tx1
+      - const: tx2
+      - const: tx3
+      - const: tx4
+      - const: tx5
+      - const: tx6
+      - const: tx7
+      - const: tx8
+      - const: tx9
+      - const: tx10
+      - const: tx11
+      - const: tx12
+      - const: tx13
+      - const: tx14
+      - const: tx15
 
   clocks:
     minItems: 1
