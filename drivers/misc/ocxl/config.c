@@ -39,23 +39,14 @@ static int find_dvsec(struct pci_dev *dev, int dvsec_id)
 static int find_dvsec_afu_ctrl(struct pci_dev *dev, u8 afu_idx)
 {
 	int vsec = 0;
-	u16 vendor, id;
 	u8 idx;
 
-	while ((vsec = pci_find_next_ext_capability(dev, vsec,
-						    OCXL_EXT_CAP_ID_DVSEC))) {
-		pci_read_config_word(dev, vsec + OCXL_DVSEC_VENDOR_OFFSET,
-				&vendor);
-		pci_read_config_word(dev, vsec + OCXL_DVSEC_ID_OFFSET, &id);
-
-		if (vendor == PCI_VENDOR_ID_IBM &&
-			id == OCXL_DVSEC_AFU_CTRL_ID) {
-			pci_read_config_byte(dev,
-					vsec + OCXL_DVSEC_AFU_CTRL_AFU_IDX,
-					&idx);
-			if (idx == afu_idx)
-				return vsec;
-		}
+	while ((vsec = pci_find_next_dvsec_capability(dev, vsec,
+				PCI_VENDOR_ID_IBM, OCXL_DVSEC_AFU_CTRL_ID))) {
+		pci_read_config_byte(dev, vsec + OCXL_DVSEC_AFU_CTRL_AFU_IDX,
+				     &idx);
+		if (idx == afu_idx)
+			return vsec;
 	}
 	return 0;
 }

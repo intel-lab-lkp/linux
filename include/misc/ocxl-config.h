@@ -10,10 +10,6 @@
  * It follows the specification for opencapi 3.0
  */
 
-#define OCXL_EXT_CAP_ID_DVSEC                 0x23
-
-#define OCXL_DVSEC_VENDOR_OFFSET              0x4
-#define OCXL_DVSEC_ID_OFFSET                  0x8
 #define OCXL_DVSEC_TL_ID                      0xF000
 #define   OCXL_DVSEC_TL_BACKOFF_TIMERS          0x10
 #define   OCXL_DVSEC_TL_RECV_CAP                0x18
