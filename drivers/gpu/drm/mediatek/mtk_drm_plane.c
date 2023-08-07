@@ -134,8 +134,8 @@ static int mtk_plane_atomic_async_check(struct drm_plane *plane,
 						   true, true);
 }
 
-static void mtk_plane_update_new_state(struct drm_plane_state *new_state,
-				       struct mtk_plane_state *mtk_plane_state)
+void mtk_plane_update_new_state(struct drm_plane_state *new_state,
+				struct mtk_plane_state *mtk_plane_state)
 {
 	struct drm_framebuffer *fb = new_state->fb;
 	struct drm_gem_object *gem;
@@ -145,6 +145,11 @@ static void mtk_plane_update_new_state(struct drm_plane_state *new_state,
 	dma_addr_t addr;
 	dma_addr_t hdr_addr = 0;
 	unsigned int hdr_pitch = 0;
+
+	if (!fb) {
+		mtk_plane_state->pending.enable = false;
+		return;
+	}
 
 	gem = fb->obj[0];
 	mtk_gem = to_mtk_gem_obj(gem);
@@ -180,7 +185,7 @@ static void mtk_plane_update_new_state(struct drm_plane_state *new_state,
 		       fb->format->cpp[0] * (x_offset_in_blocks + 1);
 	}
 
-	mtk_plane_state->pending.enable = true;
+	mtk_plane_state->pending.enable = new_state->visible;
 	mtk_plane_state->pending.pitch = pitch;
 	mtk_plane_state->pending.hdr_pitch = hdr_pitch;
 	mtk_plane_state->pending.format = format;
