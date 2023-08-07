@@ -2478,7 +2478,11 @@ static int test__pmu_events(struct test_suite *test __maybe_unused, int subtest 
 	while ((pmu = perf_pmus__scan(pmu)) != NULL) {
 		struct stat st;
 		char path[PATH_MAX];
+		char pmu_event[PATH_MAX + 256];
+		char *buf = NULL;
+		FILE *file;
 		struct dirent *ent;
+		size_t len = 0;
 		DIR *dir;
 		int err;
 
@@ -2502,10 +2506,38 @@ static int test__pmu_events(struct test_suite *test __maybe_unused, int subtest 
 			struct evlist_test e = { .name = NULL, };
 			char name[2 * NAME_MAX + 1 + 12 + 3];
 			int test_ret;
+			int skip = 0;
 
 			/* Names containing . are special and cannot be used directly */
 			if (strchr(ent->d_name, '.'))
 				continue;
+
+			/* exclude parametrized ones (name contains '?') */
+			snprintf(pmu_event, PATH_MAX + 256, "%s%s", path, ent->d_name);
+			file = fopen(pmu_event, "r");
+			if (!file) {
+				pr_debug("can't open pmu event file for '%s'\n", ent->d_name);
+				ret = combine_test_results(ret, TEST_FAIL);
+				continue;
+			}
+
+			if (getline(&buf, &len, file) < 0) {
+				pr_debug(" pmu event: %s is a null event\n", ent->d_name);
+				ret = combine_test_results(ret, TEST_FAIL);
+				continue;
+			}
+
+			if (strchr(buf, '?'))
+				skip = 1;
+
+			free(buf);
+			buf = NULL;
+			fclose(file);
+
+			if (skip == 1) {
+				pr_debug("skipping parametrized PMU event: %s which contains ?\n", pmu_event);
+				continue;
+			}
 
 			snprintf(name, sizeof(name), "%s/event=%s/u", pmu->name, ent->d_name);
 
