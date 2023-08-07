@@ -1188,6 +1188,12 @@ enum kvm_apicv_inhibit {
 	APICV_INHIBIT_REASON_APIC_ID_MODIFIED,
 	APICV_INHIBIT_REASON_APIC_BASE_MODIFIED,
 
+	/*
+	 * APICv is disabled because L1 hypervisor allows L2 guest to access
+	 * APIC directly.
+	 */
+	APICV_INHIBIT_REASON_L2_PASSTHROUGH_ACCESS,
+
 	/******************************************************/
 	/* INHIBITs that are relevant only to the AMD's AVIC. */
 	/******************************************************/

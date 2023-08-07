@@ -4293,6 +4293,30 @@ void kvm_arch_async_page_ready(struct kvm_vcpu *vcpu, struct kvm_async_pf *work)
 	kvm_mmu_do_page_fault(vcpu, work->cr2_or_gpa, 0, true, NULL);
 }
 
+static int __kvm_faultin_pfn_guest_mode(struct kvm_vcpu *vcpu,
+					struct kvm_page_fault *fault)
+{
+	struct kvm_memory_slot *slot = fault->slot;
+
+	/* Don't expose private memslots to L2. */
+	fault->slot = NULL;
+	fault->pfn = KVM_PFN_NOSLOT;
+	fault->map_writable = false;
+
+	/*
+	 * APICv does not work when L1 hypervisor allows L2 guest to access
+	 * APIC directly. As this kind of L1 hypervisor is rare, it is simpler
+	 * to inhibit APICv when we detect direct APIC access from L2, and
+	 * fallback to emulation path to avoid interrupt lost.
+	 */
+	if (unlikely(slot && slot->id == APIC_ACCESS_PAGE_PRIVATE_MEMSLOT &&
+		     kvm_apicv_activated(vcpu->kvm)))
+		kvm_set_apicv_inhibit(vcpu->kvm,
+				      APICV_INHIBIT_REASON_L2_PASSTHROUGH_ACCESS);
+
+	return RET_PF_CONTINUE;
+}
+
 static int __kvm_faultin_pfn(struct kvm_vcpu *vcpu, struct kvm_page_fault *fault)
 {
 	struct kvm_memory_slot *slot = fault->slot;
@@ -4307,13 +4331,8 @@ static int __kvm_faultin_pfn(struct kvm_vcpu *vcpu, struct kvm_page_fault *fault
 		return RET_PF_RETRY;
 
 	if (!kvm_is_visible_memslot(slot)) {
-		/* Don't expose private memslots to L2. */
-		if (is_guest_mode(vcpu)) {
-			fault->slot = NULL;
-			fault->pfn = KVM_PFN_NOSLOT;
-			fault->map_writable = false;
-			return RET_PF_CONTINUE;
-		}
+		if (is_guest_mode(vcpu))
+			return __kvm_faultin_pfn_guest_mode(vcpu, fault);
 		/*
 		 * If the APIC access page exists but is disabled, go directly
 		 * to emulation without caching the MMIO access or creating a
