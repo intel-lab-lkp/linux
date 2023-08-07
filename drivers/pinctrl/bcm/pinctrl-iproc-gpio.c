@@ -892,7 +892,7 @@ static int iproc_gpio_probe(struct platform_device *pdev)
 
 	ret = gpiochip_add_data(gc, chip);
 	if (ret < 0) {
-		dev_err(dev, "unable to add GPIO chip\n");
+		dev_err_probe(dev, ret, "unable to add GPIO chip\n");
 		return ret;
 	}
 
