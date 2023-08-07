@@ -172,6 +172,17 @@ config TINYDRM_MI0283QT
 	  DRM driver for the Multi-Inno MI0283QT display panel
 	  If M is selected the module will be called mi0283qt.
 
+config TINYDRM_PCD8544
+	tristate "DRM support for PCD8544 displays"
+	depends on DRM && SPI
+	select DRM_KMS_HELPER
+	select DRM_GEM_DMA_HELPER
+	select BACKLIGHT_CLASS_DEVICE
+	help
+	  DRM driver for PCD8544 (Nokia 5110/3310) 84x48 LCD displays.
+
+	  If M is selected the module will be called pcd8544.
+
 config TINYDRM_REPAPER
 	tristate "DRM support for Pervasive Displays RePaper panels (V231)"
 	depends on DRM && SPI
