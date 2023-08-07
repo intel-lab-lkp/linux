@@ -22,7 +22,7 @@
 #include <linux/tty_flip.h>
 
 /* device name */
-#define UART_NR_MAX		8
+#define UART_NR_MAX		12
 #define SPRD_TTY_NAME		"ttyS"
 #define SPRD_FIFO_SIZE		128
 #define SPRD_DEF_RATE		26000000
