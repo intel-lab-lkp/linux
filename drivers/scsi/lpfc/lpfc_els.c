@@ -1331,7 +1331,7 @@ lpfc_issue_els_flogi(struct lpfc_vport *vport, struct lpfc_nodelist *ndlp,
 	if (phba->cfg_vmid_priority_tagging) {
 		sp->cmn.priority_tagging = 1;
 		/* lpfc_vmid_host_uuid is combination of wwpn and wwnn */
-		if (uuid_is_null((uuid_t *)vport->lpfc_vmid_host_uuid)) {
+		if (memchr_inv(vport->lpfc_vmid_host_uuid, 0, LPFC_COMPRESS_VMID_SIZE)) {
 			memcpy(vport->lpfc_vmid_host_uuid, phba->wwpn,
 			       sizeof(phba->wwpn));
 			memcpy(&vport->lpfc_vmid_host_uuid[8], phba->wwnn,
@@ -12357,7 +12357,7 @@ lpfc_vmid_uvem(struct lpfc_vport *vport,
 	elsiocb->vmid_tag.vmid_context = vmid_context;
 	pcmd = (u8 *)elsiocb->cmd_dmabuf->virt;
 
-	if (uuid_is_null((uuid_t *)vport->lpfc_vmid_host_uuid))
+	if (memchr_inv(vport->lpfc_vmid_host_uuid, 0, LPFC_COMPRESS_VMID_SIZE))
 		memcpy(vport->lpfc_vmid_host_uuid, vmid->host_vmid,
 		       LPFC_COMPRESS_VMID_SIZE);
 
