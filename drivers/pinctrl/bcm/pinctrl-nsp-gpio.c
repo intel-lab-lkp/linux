@@ -686,7 +686,7 @@ static int nsp_gpio_probe(struct platform_device *pdev)
 
 	ret = devm_gpiochip_add_data(dev, gc, chip);
 	if (ret < 0) {
-		dev_err(dev, "unable to add GPIO chip\n");
+		dev_err_probe(dev, ret, "unable to add GPIO chip\n");
 		return ret;
 	}
 
