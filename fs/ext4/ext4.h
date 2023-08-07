@@ -2386,39 +2386,41 @@ static inline unsigned int ext4_dir_rec_len(__u8 name_len,
 }
 
 /*
- * If we ever get support for fs block sizes > page_size, we'll need
- * to remove the #if statements in the next two functions...
+ * The next two helpers facilitate the conversion between the encoded
+ * and plain forms of rec_len. Try to access rec_len through these helpers
+ * rather than accessing it directly.
  */
-static inline unsigned int
-ext4_rec_len_from_disk(__le16 dlen, unsigned blocksize)
+static inline
+unsigned int ext4_rec_len_from_disk(__le16 dlen, unsigned blocksize)
 {
 	unsigned len = le16_to_cpu(dlen);
 
-#if (PAGE_SIZE >= 65536)
+	if (blocksize < 65536)
+		return len;
+
 	if (len == EXT4_MAX_REC_LEN || len == 0)
 		return blocksize;
+
 	return (len & 65532) | ((len & 3) << 16);
-#else
-	return len;
-#endif
 }
 
 static inline __le16 ext4_rec_len_to_disk(unsigned len, unsigned blocksize)
 {
-	BUG_ON((len > blocksize) || (blocksize > (1 << 18)) || (len & 3));
-#if (PAGE_SIZE >= 65536)
-	if (len < 65536)
+	BUG_ON(len > blocksize);
+	BUG_ON(blocksize > (1 << 18));
+	BUG_ON(len & 3);
+
+	if (len < 65536) /* always true for blocksize < 65536 */
 		return cpu_to_le16(len);
+
 	if (len == blocksize) {
 		if (blocksize == 65536)
 			return cpu_to_le16(EXT4_MAX_REC_LEN);
-		else
-			return cpu_to_le16(0);
+
+		return cpu_to_le16(0);
 	}
+
 	return cpu_to_le16((len & 65532) | ((len >> 16) & 3));
-#else
-	return cpu_to_le16(len);
-#endif
 }
 
 /*
