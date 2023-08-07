@@ -52,6 +52,12 @@ FIXTURE_SETUP(migration)
 	ASSERT_NE(self->threads, NULL);
 	self->pids = malloc(self->nthreads * sizeof(*self->pids));
 	ASSERT_NE(self->pids, NULL);
+
+	/*
+	 * Disable NUMA balancing which can cause migration
+	 * failures.
+	 */
+	numa_set_membind(numa_all_nodes_ptr);
 };
 
 FIXTURE_TEARDOWN(migration)
@@ -63,13 +69,14 @@ FIXTURE_TEARDOWN(migration)
 int migrate(uint64_t *ptr, int n1, int n2)
 {
 	int ret, tmp;
-	int status = 0;
 	struct timespec ts1, ts2;
 
 	if (clock_gettime(CLOCK_MONOTONIC, &ts1))
 		return -1;
 
 	while (1) {
+		int status = NUMA_NUM_NODES + 1;
+
 		if (clock_gettime(CLOCK_MONOTONIC, &ts2))
 			return -1;
 
@@ -83,6 +90,15 @@ int migrate(uint64_t *ptr, int n1, int n2)
 				printf("Didn't migrate %d pages\n", ret);
 			else
 				perror("Couldn't migrate pages");
+			return -2;
+		}
+
+		/*
+		 * Note we should never see this because move_pages() should
+		 * have indicated a page couldn't migrate above.
+		 */
+		if (status < 0) {
+			printf("Page didn't migrate, error %d\n", status);
 			return -2;
 		}
 
