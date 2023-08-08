@@ -205,23 +205,42 @@ static inline int io_uring_cmd_setsockopt(struct socket *sock,
 {
 	void __user *optval = u64_to_user_ptr(READ_ONCE(cmd->sqe->optval));
 	int optname = READ_ONCE(cmd->sqe->optname);
+	sockptr_t optval_s = USER_SOCKPTR(optval);
 	int optlen = READ_ONCE(cmd->sqe->optlen);
 	int level = READ_ONCE(cmd->sqe->level);
+	char *kernel_optval = NULL;
 	int err;
 
 	err = security_socket_setsockopt(sock, level, optname);
 	if (err)
 		return err;
 
+	if (!in_compat_syscall()) {
+		err = BPF_CGROUP_RUN_PROG_SETSOCKOPT(sock->sk, &level,
+						     &optname,
+						     USER_SOCKPTR(optval),
+						     &optlen,
+						     &kernel_optval);
+		if (err < 0)
+			return err;
+		if (err > 0)
+			return 0;
+
+		/* Replace optval by the one returned by BPF */
+		if (kernel_optval)
+			optval_s = KERNEL_SOCKPTR(kernel_optval);
+	}
+
 	if (level == SOL_SOCKET && !sock_use_custom_sol_socket(sock))
 		err = sock_setsockopt(sock, level, optname,
-				      USER_SOCKPTR(optval), optlen);
+				      optval_s, optlen);
 	else if (unlikely(!sock->ops->setsockopt))
 		err = -EOPNOTSUPP;
 	else
 		err = sock->ops->setsockopt(sock, level, optname,
-					    USER_SOCKPTR(koptval), optlen);
+					    optval_s, optlen);
 
+	kfree(kernel_optval);
 	return err;
 }
 
