@@ -749,34 +749,47 @@ u16 pci_find_vsec_capability(struct pci_dev *dev, u16 vendor, int cap)
 EXPORT_SYMBOL_GPL(pci_find_vsec_capability);
 
 /**
- * pci_find_dvsec_capability - Find DVSEC for vendor
+ * pci_find_next_dvsec_capability - Find next DVSEC for vendor
  * @dev: PCI device to query
+ * @start: Address at which to start looking (0 to start at beginning of list)
  * @vendor: Vendor ID to match for the DVSEC
- * @dvsec: Designated Vendor-specific capability ID
+ * @dvsec: Vendor-defined DVSEC ID
  *
- * If DVSEC has Vendor ID @vendor and DVSEC ID @dvsec return the capability
- * offset in config space; otherwise return 0.
+ * Returns the address of the next DVSEC if the DVSEC has Vendor ID @vendor and
+ * DVSEC ID @dvsec; otherwise return 0. DVSEC can occur several times with the
+ * same DVSEC ID for some devices, and this provides a way to find them all.
  */
-u16 pci_find_dvsec_capability(struct pci_dev *dev, u16 vendor, u16 dvsec)
+u16 pci_find_next_dvsec_capability(struct pci_dev *dev, u16 start, u16 vendor,
+				   u16 dvsec)
 {
-	int pos;
+	u16 pos = start;
 
-	pos = pci_find_ext_capability(dev, PCI_EXT_CAP_ID_DVSEC);
-	if (!pos)
-		return 0;
-
-	while (pos) {
+	while ((pos = pci_find_next_ext_capability(dev, pos,
+						  PCI_EXT_CAP_ID_DVSEC))) {
 		u16 v, id;
 
 		pci_read_config_word(dev, pos + PCI_DVSEC_HEADER1, &v);
 		pci_read_config_word(dev, pos + PCI_DVSEC_HEADER2, &id);
 		if (vendor == v && dvsec == id)
 			return pos;
-
-		pos = pci_find_next_ext_capability(dev, pos, PCI_EXT_CAP_ID_DVSEC);
 	}
 
 	return 0;
+}
+EXPORT_SYMBOL_GPL(pci_find_next_dvsec_capability);
+
+/**
+ * pci_find_dvsec_capability - Find DVSEC for vendor
+ * @dev: PCI device to query
+ * @vendor: Vendor ID to match for the DVSEC
+ * @dvsec: Vendor-defined DVSEC ID
+ *
+ * If DVSEC has Vendor ID @vendor and DVSEC ID @dvsec return the capability
+ * offset in config space; otherwise return 0.
+ */
+u16 pci_find_dvsec_capability(struct pci_dev *dev, u16 vendor, u16 dvsec)
+{
+	return pci_find_next_dvsec_capability(dev, 0, vendor, dvsec);
 }
 EXPORT_SYMBOL_GPL(pci_find_dvsec_capability);
 
