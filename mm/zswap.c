@@ -182,7 +182,7 @@ struct zswap_pool {
  * page within zswap.
  *
  * rbnode - links the entry into red-black tree for the appropriate swap type
- * offset - the swap offset for the entry.  Index into the red-black tree.
+ * swpentry - the swap entry for the entry, include 'type' and 'offset' fields
  * refcount - the number of outstanding reference to the entry. This is needed
  *            to protect against premature freeing of the entry by code
  *            concurrent calls to load, invalidate, and writeback.  The lock
@@ -195,6 +195,7 @@ struct zswap_pool {
  * pool - the zswap_pool the entry's data is in
  * handle - zpool allocation handle that stores the compressed page data
  * value - value of the same-value filled pages which have same content
+ * objcg - the obj_cgroup(actually memcg) this entry belongs to
  * lru - handle to the pool's lru used to evict pages.
  */
 struct zswap_entry {
