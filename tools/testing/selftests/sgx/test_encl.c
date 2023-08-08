@@ -119,21 +119,32 @@ static void do_encl_op_nop(void *_op)
 
 }
 
+/*
+ * Symbol placed at the start of the enclave image by the linker script.
+ * Declare this extern symbol with visibility "hidden" to ensure the
+ * compiler does not access it through the GOT.
+ */
+extern uint8_t __attribute__((visibility("hidden"))) __enclave_base;
+
+void (*encl_op_array[ENCL_OP_MAX])(void *) = {
+	do_encl_op_put_to_buf,
+	do_encl_op_get_from_buf,
+	do_encl_op_put_to_addr,
+	do_encl_op_get_from_addr,
+	do_encl_op_nop,
+	do_encl_eaccept,
+	do_encl_emodpe,
+	do_encl_init_tcs_page,
+};
+
 void encl_body(void *rdi,  void *rsi)
 {
-	const void (*encl_op_array[ENCL_OP_MAX])(void *) = {
-		do_encl_op_put_to_buf,
-		do_encl_op_get_from_buf,
-		do_encl_op_put_to_addr,
-		do_encl_op_get_from_addr,
-		do_encl_op_nop,
-		do_encl_eaccept,
-		do_encl_emodpe,
-		do_encl_init_tcs_page,
-	};
-
 	struct encl_op_header *op = (struct encl_op_header *)rdi;
 
+	/*
+	 * Manually rebase the loaded function pointer as enclaves cannot
+	 * rely on startup routines to perform static pie relocations.
+	 */
 	if (op->type < ENCL_OP_MAX)
-		(*encl_op_array[op->type])(op);
+		(*(((uint64_t) &__enclave_base) + encl_op_array[op->type]))(op);
 }

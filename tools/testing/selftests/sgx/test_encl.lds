@@ -32,6 +32,9 @@ SECTIONS
 		*(.note*)
 		*(.debug*)
 		*(.eh_frame*)
+		/* Dynamic symbol table not supported in enclaves */
+		*(.dyn*)
+		*(.gnu.hash)
 	}
 }
 
