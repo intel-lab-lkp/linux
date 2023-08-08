@@ -2746,7 +2746,7 @@ enum drbd_ret_code drbd_create_device(struct drbd_config_context *adm_ctx, unsig
 			err = ERR_MINOR_OR_VOLUME_EXISTS;
 		goto out_no_minor_idr;
 	}
-	kref_get(&device->kref);
+	get_drbd_dev(device);
 
 	id = idr_alloc(&resource->devices, device, vnr, vnr + 1, GFP_KERNEL);
 	if (id < 0) {
@@ -2754,7 +2754,7 @@ enum drbd_ret_code drbd_create_device(struct drbd_config_context *adm_ctx, unsig
 			err = ERR_MINOR_OR_VOLUME_EXISTS;
 		goto out_idr_remove_minor;
 	}
-	kref_get(&device->kref);
+	get_drbd_dev(device);
 
 	INIT_LIST_HEAD(&device->peer_devices);
 	INIT_LIST_HEAD(&device->pending_bitmap_io);
@@ -2766,7 +2766,7 @@ enum drbd_ret_code drbd_create_device(struct drbd_config_context *adm_ctx, unsig
 		peer_device->device = device;
 
 		list_add(&peer_device->peer_devices, &device->peer_devices);
-		kref_get(&device->kref);
+		get_drbd_dev(device);
 
 		id = idr_alloc(&connection->peer_devices, peer_device, vnr, vnr + 1, GFP_KERNEL);
 		if (id < 0) {
@@ -2839,15 +2839,15 @@ void drbd_delete_device(struct drbd_device *device)
 	drbd_debugfs_device_cleanup(device);
 	for_each_connection(connection, resource) {
 		idr_remove(&connection->peer_devices, device->vnr);
-		kref_put(&device->kref, drbd_destroy_device);
+		put_drbd_dev(device);
 	}
 	idr_remove(&resource->devices, device->vnr);
-	kref_put(&device->kref, drbd_destroy_device);
+	put_drbd_dev(device);
 	idr_remove(&drbd_devices, device_to_minor(device));
-	kref_put(&device->kref, drbd_destroy_device);
+	put_drbd_dev(device);
 	del_gendisk(device->vdisk);
 	synchronize_rcu();
-	kref_put(&device->kref, drbd_destroy_device);
+	put_drbd_dev(device);
 }
 
 static int __init drbd_init(void)
@@ -2959,10 +2959,10 @@ void conn_md_sync(struct drbd_connection *connection)
 	idr_for_each_entry(&connection->peer_devices, peer_device, vnr) {
 		struct drbd_device *device = peer_device->device;
 
-		kref_get(&device->kref);
+		get_drbd_dev(device);
 		rcu_read_unlock();
 		drbd_md_sync(device);
-		kref_put(&device->kref, drbd_destroy_device);
+		put_drbd_dev(device);
 		rcu_read_lock();
 	}
 	rcu_read_unlock();

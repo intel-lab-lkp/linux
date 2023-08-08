@@ -751,7 +751,7 @@ static int device_ ## name ## _open(struct inode *inode, struct file *file)	\
 static int device_ ## name ## _release(struct inode *inode, struct file *file)	\
 {										\
 	struct drbd_device *device = inode->i_private;				\
-	kref_put(&device->kref, drbd_destroy_device);				\
+	put_drbd_dev(device);							\
 	return single_release(inode, file);					\
 }										\
 static const struct file_operations device_ ## name ## _fops = {		\

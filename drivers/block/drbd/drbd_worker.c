@@ -147,9 +147,9 @@ void drbd_endio_write_sec_final(struct drbd_peer_request *peer_req) __releases(l
 		__drbd_chk_io_error(device, DRBD_WRITE_ERROR);
 
 	if (connection->cstate >= C_WF_REPORT_PARAMS) {
-		kref_get(&device->kref); /* put is in drbd_send_acks_wf() */
+		get_drbd_dev(device); /* put is in drbd_send_acks_wf() */
 		if (!queue_work(connection->ack_sender, &peer_device->send_acks_work))
-			kref_put(&device->kref, drbd_destroy_device);
+			put_drbd_dev(device);
 	}
 	spin_unlock_irqrestore(&device->resource->req_lock, flags);
 
@@ -2065,10 +2065,10 @@ static void do_unqueued_work(struct drbd_connection *connection)
 		if (!todo)
 			continue;
 
-		kref_get(&device->kref);
+		get_drbd_dev(device);
 		rcu_read_unlock();
 		do_device_work(device, todo);
-		kref_put(&device->kref, drbd_destroy_device);
+		put_drbd_dev(device);
 		rcu_read_lock();
 	}
 	rcu_read_unlock();
@@ -2229,10 +2229,10 @@ int drbd_worker(struct drbd_thread *thi)
 	idr_for_each_entry(&connection->peer_devices, peer_device, vnr) {
 		struct drbd_device *device = peer_device->device;
 		D_ASSERT(device, device->state.disk == D_DISKLESS && device->state.conn == C_STANDALONE);
-		kref_get(&device->kref);
+		get_drbd_dev(device);
 		rcu_read_unlock();
 		drbd_device_cleanup(device);
-		kref_put(&device->kref, drbd_destroy_device);
+		put_drbd_dev(device);
 		rcu_read_lock();
 	}
 	rcu_read_unlock();

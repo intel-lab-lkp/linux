@@ -1372,6 +1372,16 @@ extern enum drbd_ret_code drbd_create_device(struct drbd_config_context *adm_ctx
 extern void drbd_destroy_device(struct kref *kref);
 extern void drbd_delete_device(struct drbd_device *device);
 
+static inline void get_drbd_dev(struct drbd_device *dev)
+{
+	kref_get(&dev->kref);
+}
+
+static inline void put_drbd_dev(struct drbd_device *dev)
+{
+	kref_put(&dev->kref, drbd_destroy_device);
+}
+
 extern struct drbd_resource *drbd_create_resource(const char *name);
 extern void drbd_free_resource(struct drbd_resource *resource);
 

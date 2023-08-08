@@ -228,7 +228,7 @@ static int drbd_adm_prepare(struct drbd_config_context *adm_ctx,
 	 * But we may explicitly drop it/retake it in drbd_adm_set_role(),
 	 * so make sure this object stays around. */
 	if (adm_ctx->device)
-		kref_get(&adm_ctx->device->kref);
+		get_drbd_dev(adm_ctx->device);
 
 	if (adm_ctx->resource_name) {
 		adm_ctx->resource = drbd_find_resource(adm_ctx->resource_name);
@@ -304,7 +304,7 @@ static int drbd_adm_finish(struct drbd_config_context *adm_ctx,
 	struct genl_info *info, int retcode)
 {
 	if (adm_ctx->device) {
-		kref_put(&adm_ctx->device->kref, drbd_destroy_device);
+		put_drbd_dev(adm_ctx->device);
 		adm_ctx->device = NULL;
 	}
 	if (adm_ctx->connection) {

@@ -230,10 +230,10 @@ static void conn_reclaim_net_peer_reqs(struct drbd_connection *connection)
 		if (!atomic_read(&device->pp_in_use_by_net))
 			continue;
 
-		kref_get(&device->kref);
+		get_drbd_dev(device);
 		rcu_read_unlock();
 		drbd_reclaim_net_peer_reqs(device);
-		kref_put(&device->kref, drbd_destroy_device);
+		put_drbd_dev(device);
 		rcu_read_lock();
 	}
 	rcu_read_unlock();
@@ -1105,7 +1105,7 @@ randomize:
 	rcu_read_lock();
 	idr_for_each_entry(&connection->peer_devices, peer_device, vnr) {
 		struct drbd_device *device = peer_device->device;
-		kref_get(&device->kref);
+		get_drbd_dev(device);
 		rcu_read_unlock();
 
 		if (discard_my_data)
@@ -1114,7 +1114,7 @@ randomize:
 			clear_bit(DISCARD_MY_DATA, &device->flags);
 
 		drbd_connected(peer_device);
-		kref_put(&device->kref, drbd_destroy_device);
+		put_drbd_dev(device);
 		rcu_read_lock();
 	}
 	rcu_read_unlock();
@@ -1273,7 +1273,7 @@ static void one_flush_endio(struct bio *bio)
 
 	clear_bit(FLUSH_PENDING, &device->flags);
 	put_ldev(device);
-	kref_put(&device->kref, drbd_destroy_device);
+	put_drbd_dev(device);
 
 	if (atomic_dec_and_test(&ctx->pending))
 		complete(&ctx->done);
@@ -1294,7 +1294,7 @@ static void submit_one_flush(struct drbd_device *device, struct issue_flush_cont
 
 		ctx->error = -ENOMEM;
 		put_ldev(device);
-		kref_put(&device->kref, drbd_destroy_device);
+		put_drbd_dev(device);
 		return;
 	}
 
@@ -1326,7 +1326,7 @@ static void drbd_flush(struct drbd_connection *connection)
 
 			if (!get_ldev(device))
 				continue;
-			kref_get(&device->kref);
+			get_drbd_dev(device);
 			rcu_read_unlock();
 
 			submit_one_flush(device, &ctx);
@@ -1746,10 +1746,10 @@ static void conn_wait_active_ee_empty(struct drbd_connection *connection)
 	idr_for_each_entry(&connection->peer_devices, peer_device, vnr) {
 		struct drbd_device *device = peer_device->device;
 
-		kref_get(&device->kref);
+		get_drbd_dev(device);
 		rcu_read_unlock();
 		drbd_wait_ee_list_empty(device, &device->active_ee);
-		kref_put(&device->kref, drbd_destroy_device);
+		put_drbd_dev(device);
 		rcu_read_lock();
 	}
 	rcu_read_unlock();
@@ -5129,10 +5129,10 @@ static void conn_disconnect(struct drbd_connection *connection)
 	rcu_read_lock();
 	idr_for_each_entry(&connection->peer_devices, peer_device, vnr) {
 		struct drbd_device *device = peer_device->device;
-		kref_get(&device->kref);
+		get_drbd_dev(device);
 		rcu_read_unlock();
 		drbd_disconnected(peer_device);
-		kref_put(&device->kref, drbd_destroy_device);
+		put_drbd_dev(device);
 		rcu_read_lock();
 	}
 	rcu_read_unlock();
@@ -6112,7 +6112,7 @@ void drbd_send_acks_wf(struct work_struct *ws)
 		tcp_sock_set_cork(connection->meta.socket->sk, true);
 
 	err = drbd_finish_peer_reqs(device);
-	kref_put(&device->kref, drbd_destroy_device);
+	put_drbd_dev(device);
 	/* get is in drbd_endio_write_sec_final(). That is necessary to keep the
 	   struct work_struct send_acks_work alive, which is in the peer_device object */
 

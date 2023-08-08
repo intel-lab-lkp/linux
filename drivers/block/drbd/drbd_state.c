@@ -122,7 +122,7 @@ struct drbd_state_change *remember_old_state(struct drbd_resource *resource, gfp
 	device_state_change = state_change->devices;
 	peer_device_state_change = state_change->peer_devices;
 	idr_for_each_entry(&resource->devices, device, vnr) {
-		kref_get(&device->kref);
+		get_drbd_dev(device);
 		device_state_change->device = device;
 		device_state_change->disk_state[OLD] = device->state.disk;
 
@@ -264,7 +264,7 @@ void forget_state_change(struct drbd_state_change *state_change)
 		struct drbd_device *device = state_change->devices[n].device;
 
 		if (device)
-			kref_put(&device->kref, drbd_destroy_device);
+			put_drbd_dev(device);
 	}
 	for (n = 0; n < state_change->n_connections; n++) {
 		struct drbd_connection *connection =
