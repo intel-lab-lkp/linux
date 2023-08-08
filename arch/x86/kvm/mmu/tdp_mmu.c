@@ -1243,10 +1243,77 @@ bool kvm_tdp_mmu_test_age_gfn(struct kvm *kvm, struct kvm_gfn_range *range)
  */
 bool kvm_tdp_mmu_set_spte_gfn(struct kvm *kvm, struct kvm_gfn_range *range)
 {
+	struct kvm_mmu_page *root;
+	struct kvm_mmu_page *sp;
+	bool wrprot, writable;
+	struct kvm_vcpu *vcpu;
+	struct tdp_iter iter;
+	bool flush = false;
+	kvm_pfn_t pfn;
+	u64 new_spte;
+
 	/* Huge pages aren't expected to be modified */
 	WARN_ON(pte_huge(range->arg.pte) || range->start + 1 != range->end);
 
-	return false;
+	/*
+	 * Get current running vCPU to be used in below prefetch in make_spte().
+	 * If no running vCPU, .change_pte() is probably not triggered by vCPU
+	 * writes, drop prefetching SPTEs in that case.
+	 * Also only prefetch for L1 vCPUs.
+	 * If later the vCPU is scheduled out, it's still all right to prefetch
+	 * with the same vCPU except the prefetched SPTE may not be accessed
+	 * immediately.
+	 */
+	vcpu = kvm_get_running_vcpu();
+	if (!vcpu || vcpu->kvm != kvm || is_guest_mode(vcpu))
+		return flush;
+
+	writable = !(range->slot->flags & KVM_MEM_READONLY) && pte_write(range->arg.pte);
+	pfn = pte_pfn(range->arg.pte);
+
+	/* Do not allow rescheduling just as kvm_tdp_mmu_handle_gfn() */
+	for_each_tdp_mmu_root(kvm, root, range->slot->as_id) {
+		rcu_read_lock();
+
+		tdp_root_for_each_pte(iter, root, range->start, range->end) {
+			if (iter.level > PG_LEVEL_4K)
+				continue;
+
+			sp = sptep_to_sp(rcu_dereference(iter.sptep));
+
+			/* make the SPTE as prefetch */
+			wrprot = make_spte(vcpu, sp, range->slot, ACC_ALL, iter.gfn,
+					  pfn, iter.old_spte, true, true, writable,
+					  &new_spte);
+			/*
+			 * Do not prefetch new PFN for page tracked GFN
+			 * as we want page fault handler to be triggered later
+			 */
+			if (wrprot)
+				continue;
+
+			/*
+			 * Warn if an existing SPTE is found becasuse it must not happen:
+			 * .change_pte() must be surrounded by .invalidate_range_{start,end}(),
+			 * so (1) kvm_unmap_gfn_range() should have zapped the old SPTE,
+			 * (2) page fault handler should not be able to install new SPTE until
+			 * .invalidate_range_end() completes.
+			 *
+			 * Even if the warn is hit and flush is true,
+			 * (which indicates bugs in mmu notifier handler),
+			 * there's no need to handle the remote TLB flush under RCU protection,
+			 * target SPTE _must_ be a leaf SPTE, i.e. cannot result in freeing a
+			 * shadow page.
+			 */
+			flush = WARN_ON(is_shadow_present_pte(iter.old_spte));
+			tdp_mmu_iter_set_spte(kvm, &iter, new_spte);
+
+		}
+
+		rcu_read_unlock();
+	}
+
+	return flush;
 }
 
 /*
