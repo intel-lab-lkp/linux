@@ -1089,7 +1089,7 @@ static struct page *first_bvec_segment(const struct iov_iter *i,
 		*size = len;
 	skip += i->bvec->bv_offset;
 	page = i->bvec->bv_page + skip / PAGE_SIZE;
-	*start = skip % PAGE_SIZE;
+	*start = offset_in_page(skip);
 	return page;
 }
 
@@ -1116,7 +1116,7 @@ static ssize_t __iov_iter_get_pages_alloc(struct iov_iter *i,
 			gup_flags |= FOLL_NOFAULT;
 
 		addr = first_iovec_segment(i, &maxsize);
-		*start = addr % PAGE_SIZE;
+		*start = offset_in_page(addr);
 		addr &= PAGE_MASK;
 		n = want_pages_array(pages, maxsize, *start, maxpages);
 		if (!n)
@@ -1280,7 +1280,7 @@ static int bvec_npages(const struct iov_iter *i, int maxpages)
 	int npages = 0;
 
 	for (p = i->bvec; size; skip = 0, p++) {
-		unsigned offs = (p->bv_offset + skip) % PAGE_SIZE;
+		unsigned int offs = offset_in_page(p->bv_offset + skip);
 		size_t len = min(p->bv_len - skip, size);
 
 		size -= len;
@@ -1306,7 +1306,7 @@ int iov_iter_npages(const struct iov_iter *i, int maxpages)
 	if (iov_iter_is_bvec(i))
 		return bvec_npages(i, maxpages);
 	if (iov_iter_is_xarray(i)) {
-		unsigned offset = (i->xarray_start + i->iov_offset) % PAGE_SIZE;
+		unsigned int offset = offset_in_page(i->xarray_start + i->iov_offset);
 		int npages = DIV_ROUND_UP(offset + i->count, PAGE_SIZE);
 		return min(npages, maxpages);
 	}
@@ -1670,7 +1670,7 @@ static ssize_t iov_iter_extract_bvec_pages(struct iov_iter *i,
 
 	skip += i->bvec->bv_offset;
 	page = i->bvec->bv_page + skip / PAGE_SIZE;
-	offset = skip % PAGE_SIZE;
+	offset = offset_in_page(skip);
 	*offset0 = offset;
 
 	maxpages = want_pages_array(pages, maxsize, offset, maxpages);
@@ -1773,7 +1773,7 @@ static ssize_t iov_iter_extract_user_pages(struct iov_iter *i,
 		gup_flags |= FOLL_NOFAULT;
 
 	addr = first_iovec_segment(i, &maxsize);
-	*offset0 = offset = addr % PAGE_SIZE;
+	*offset0 = offset = offset_in_page(addr);
 	addr &= PAGE_MASK;
 	maxpages = want_pages_array(pages, maxsize, offset, maxpages);
 	if (!maxpages)
