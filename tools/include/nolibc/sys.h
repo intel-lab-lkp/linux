@@ -28,22 +28,25 @@
 #include "types.h"
 
 
-/* Syscall return helper for library routines, set errno as -ret when ret is in
- * range of [-MAX_ERRNO, -1]
- *
- * Note, No official reference states the errno range here aligns with musl
- * (src/internal/syscall_ret.c) and glibc (sysdeps/unix/sysv/linux/sysdep.h)
+/* Syscall return helper: takes the syscall value in argument and checks for an
+ * error in it. For unsigned returns, an error is within [-MAX_ERRNO, -1]. For
+ * signed returns, an error is any value < 0. When an error is encountered,
+ * -ret is set into errno and -1 is returned. Otherwise the returned value is
+ * passed as-is with its type preserved.
  */
 
-static __inline__ __attribute__((unused, always_inline))
-long __sysret(unsigned long ret)
-{
-	if (ret >= (unsigned long)-MAX_ERRNO) {
-		SET_ERRNO(-(long)ret);
-		return -1;
-	}
-	return ret;
-}
+#define __sysret(arg)								\
+({										\
+	__typeof__(arg) __sysret_arg = (arg);					\
+	((((__typeof__(arg)) -1) > (__typeof__(arg)) 1) ?   /* unsigned arg? */	\
+	 (uintptr_t)__sysret_arg >= (uintptr_t)-(MAX_ERRNO) :      /* errors */	\
+	 (__sysret_arg + 1) < ((__typeof__(arg))1)     /* signed: <0 = error */	\
+	) ? ({									\
+		SET_ERRNO(-(intptr_t)__sysret_arg);				\
+		((__typeof__(arg)) -1);              /* return -1 upon error */	\
+	}) : __sysret_arg;        /* return original value & type on success */	\
+})
+
 
 /* Functions in this file only describe syscalls. They're declared static so
  * that the compiler usually decides to inline them while still being allowed
@@ -94,7 +97,7 @@ void *sbrk(intptr_t inc)
 	if (ret && sys_brk(ret + inc) == ret + inc)
 		return ret + inc;
 
-	return (void *)__sysret(-ENOMEM);
+	return __sysret((void *)-ENOMEM);
 }
 
 
@@ -682,7 +685,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd,
 static __attribute__((unused))
 void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
 {
-	return (void *)__sysret((unsigned long)sys_mmap(addr, length, prot, flags, fd, offset));
+	return __sysret(sys_mmap(addr, length, prot, flags, fd, offset));
 }
 
 static __attribute__((unused))
