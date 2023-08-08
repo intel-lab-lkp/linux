@@ -2072,8 +2072,7 @@ __rmqueue_fallback(struct zone *zone, int order, int start_migratetype,
 		 * allocation falls back into a different pageblock than this
 		 * one, it won't cause permanent fragmentation.
 		 */
-		if (!can_steal && start_migratetype == MIGRATE_MOVABLE
-					&& current_order > order)
+		if (!can_steal && start_migratetype == MIGRATE_MOVABLE)
 			goto find_smallest;
 
 		goto do_steal;
