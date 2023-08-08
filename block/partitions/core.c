@@ -12,6 +12,9 @@
 #include <linux/raid/detect.h>
 #include "check.h"
 
+#undef pr_fmt
+#define pr_fmt(fmt) "partition: " fmt
+
 static int (*const check_part[])(struct parsed_partitions *) = {
 	/*
 	 * Probe partition formats with tables at disk address 0
@@ -147,8 +150,7 @@ static struct parsed_partitions *check_partition(struct gendisk *hd)
 
 	}
 	if (res > 0) {
-		printk(KERN_INFO "%s", state->pp_buf);
-
+		pr_info("%s", state->pp_buf);
 		free_page((unsigned long)state->pp_buf);
 		return state;
 	}
@@ -162,7 +164,7 @@ static struct parsed_partitions *check_partition(struct gendisk *hd)
 	if (res) {
 		strlcat(state->pp_buf,
 			" unable to read partition table\n", PAGE_SIZE);
-		printk(KERN_INFO "%s", state->pp_buf);
+		pr_info("%s", state->pp_buf);
 	}
 
 	free_page((unsigned long)state->pp_buf);
@@ -526,11 +528,11 @@ static bool disk_unlock_native_capacity(struct gendisk *disk)
 {
 	if (!disk->fops->unlock_native_capacity ||
 	    test_and_set_bit(GD_NATIVE_CAPACITY, &disk->state)) {
-		printk(KERN_CONT "truncated\n");
+		pr_cont("truncated\n");
 		return false;
 	}
 
-	printk(KERN_CONT "enabling native capacity\n");
+	pr_cont("enabling native capacity\n");
 	disk->fops->unlock_native_capacity(disk);
 	return true;
 }
@@ -546,18 +548,16 @@ static bool blk_add_partition(struct gendisk *disk,
 		return true;
 
 	if (from >= get_capacity(disk)) {
-		printk(KERN_WARNING
-		       "%s: p%d start %llu is beyond EOD, ",
-		       disk->disk_name, p, (unsigned long long) from);
+		pr_warn("%s: p%d start %llu is beyond EOD, ",
+			disk->disk_name, p, (unsigned long long) from);
 		if (disk_unlock_native_capacity(disk))
 			return false;
 		return true;
 	}
 
 	if (from + size > get_capacity(disk)) {
-		printk(KERN_WARNING
-		       "%s: p%d size %llu extends beyond EOD, ",
-		       disk->disk_name, p, (unsigned long long) size);
+		pr_warn("%s: p%d size %llu extends beyond EOD, ",
+			disk->disk_name, p, (unsigned long long) size);
 
 		if (disk_unlock_native_capacity(disk))
 			return false;
@@ -573,7 +573,7 @@ static bool blk_add_partition(struct gendisk *disk,
 	part = add_partition(disk, p, from, size, state->parts[p].flags,
 			     &state->parts[p].info);
 	if (IS_ERR(part) && PTR_ERR(part) != -ENXIO) {
-		printk(KERN_ERR " %s: p%d could not be added: %ld\n",
+		pr_err(" %s: p%d could not be added: %ld\n",
 		       disk->disk_name, p, -PTR_ERR(part));
 		return true;
 	}
@@ -605,8 +605,8 @@ static int blk_add_partitions(struct gendisk *disk)
 		 * beyond EOD, retry after unlocking the native capacity.
 		 */
 		if (PTR_ERR(state) == -ENOSPC) {
-			printk(KERN_WARNING "%s: partition table beyond EOD, ",
-			       disk->disk_name);
+			pr_warn("%s: partition table beyond EOD, ",
+				disk->disk_name);
 			if (disk_unlock_native_capacity(disk))
 				return -EAGAIN;
 		}
@@ -629,9 +629,8 @@ static int blk_add_partitions(struct gendisk *disk)
 	 * partitions.
 	 */
 	if (state->access_beyond_eod) {
-		printk(KERN_WARNING
-		       "%s: partition table partially beyond EOD, ",
-		       disk->disk_name);
+		pr_warn("%s: partition table partially beyond EOD, ",
+			disk->disk_name);
 		if (disk_unlock_native_capacity(disk))
 			goto out_free_state;
 	}

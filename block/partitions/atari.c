@@ -12,6 +12,9 @@
 #include "check.h"
 #include "atari.h"
 
+#undef pr_fmt
+#define pr_fmt(fmt) "partition: atari: " fmt
+
 /* ++guenther: this should be settable by the user ("make config")?.
  */
 #define ICD_PARTS
@@ -94,14 +97,14 @@ int atari_partition(struct parsed_partitions *state)
 		while (1) {
 			xrs = read_part_sector(state, partsect, &sect2);
 			if (!xrs) {
-				printk (" block %ld read failed\n", partsect);
+				pr_err(" block %ld read failed\n", partsect);
 				put_dev_sector(sect);
 				return -1;
 			}
 
 			/* ++roman: sanity check: bit 0 of flg field must be set */
 			if (!(xrs->part[0].flg & 1)) {
-				printk( "\nFirst sub-partition in extended partition is not valid!\n" );
+				pr_err("\nFirst sub-partition in extended partition is not valid!\n");
 				put_dev_sector(sect2);
 				break;
 			}
@@ -116,7 +119,7 @@ int atari_partition(struct parsed_partitions *state)
 				break;
 			}
 			if (memcmp( xrs->part[1].id, "XGM", 3 ) != 0) {
-				printk("\nID of extended partition is not XGM!\n");
+				pr_err("\nID of extended partition is not XGM!\n");
 				put_dev_sector(sect2);
 				break;
 			}
@@ -124,7 +127,7 @@ int atari_partition(struct parsed_partitions *state)
 			partsect = be32_to_cpu(xrs->part[1].st) + extensect;
 			put_dev_sector(sect2);
 			if (++slot == state->limit) {
-				printk( "\nMaximum number of partitions reached!\n" );
+				pr_err("\nMaximum number of partitions reached!\n");
 				break;
 			}
 		}

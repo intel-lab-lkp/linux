@@ -7,6 +7,9 @@
 
 #include "check.h"
 
+#undef pr_fmt
+#define pr_fmt(fmt) "partition: sgi: " fmt
+
 #define SGI_LABEL_MAGIC 0x0be5a941
 
 enum {
@@ -61,8 +64,8 @@ int sgi_partition(struct parsed_partitions *state)
 		csum += be32_to_cpu(cs);
 	}
 	if(csum) {
-		printk(KERN_WARNING "Dev %s SGI disklabel: csum bad, label corrupted\n",
-		       state->disk->disk_name);
+		pr_warn("Dev %s SGI disklabel: csum bad, label corrupted\n",
+			state->disk->disk_name);
 		put_dev_sector(sect);
 		return 0;
 	}

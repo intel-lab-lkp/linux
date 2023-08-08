@@ -10,6 +10,9 @@
 
 #include "check.h"
 
+#undef pr_fmt
+#define pr_fmt(fmt) "partition: sun: " fmt
+
 #define SUN_LABEL_MAGIC          0xDABE
 #define SUN_VTOC_SANITY          0x600DDEEE
 
@@ -84,7 +87,7 @@ int sun_partition(struct parsed_partitions *state)
 	for (csum = 0; ush >= ((__be16 *) label);)
 		csum ^= *ush--;
 	if (csum) {
-		printk("Dev %s Sun disklabel: Csum bad, label corrupted\n",
+		pr_err("Dev %s Sun disklabel: Csum bad, label corrupted\n",
 		       state->disk->disk_name);
 		put_dev_sector(sect);
 		return 0;
