@@ -644,7 +644,7 @@ static struct platform_driver mtk_uart_apdma_driver = {
 	.driver = {
 		.name		= KBUILD_MODNAME,
 		.pm		= &mtk_uart_apdma_pm_ops,
-		.of_match_table = of_match_ptr(mtk_uart_apdma_match),
+		.of_match_table = mtk_uart_apdma_match,
 	},
 };
 
