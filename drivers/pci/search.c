@@ -335,6 +335,36 @@ struct pci_dev *pci_get_device(unsigned int vendor, unsigned int device,
 EXPORT_SYMBOL(pci_get_device);
 
 /**
+ * pci_get_class_masked - begin or continue searching for a PCI device by class and mask
+ * @class: search for a PCI device with this class designation
+ * @from: Previous PCI device found in search, or %NULL for new search.
+ *
+ * Iterates through the list of known PCI devices.  If a PCI device is
+ * found with a matching @class, the reference count to the device is
+ * incremented and a pointer to its device structure is returned.
+ * Otherwise, %NULL is returned.
+ * A new search is initiated by passing %NULL as the @from argument.
+ * Otherwise if @from is not %NULL, searches continue from next device
+ * on the global list.  The reference count for @from is always decremented
+ * if it is not %NULL.
+ */
+struct pci_dev *pci_get_class_masked(unsigned int class, unsigned int mask,
+				     struct pci_dev *from)
+{
+	struct pci_device_id id = {
+		.vendor = PCI_ANY_ID,
+		.device = PCI_ANY_ID,
+		.subvendor = PCI_ANY_ID,
+		.subdevice = PCI_ANY_ID,
+		.class_mask = mask,
+		.class = class,
+	};
+
+	return pci_get_dev_by_id(&id, from);
+}
+EXPORT_SYMBOL(pci_get_class_masked);
+
+/**
  * pci_get_class - begin or continue searching for a PCI device by class
  * @class: search for a PCI device with this class designation
  * @from: Previous PCI device found in search, or %NULL for new search.
