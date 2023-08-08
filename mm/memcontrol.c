@@ -4994,10 +4994,8 @@ out_kfree:
 #if defined(CONFIG_MEMCG_KMEM) && (defined(CONFIG_SLAB) || defined(CONFIG_SLUB_DEBUG))
 static int mem_cgroup_slab_show(struct seq_file *m, void *p)
 {
-	/*
-	 * Deprecated.
-	 * Please, take a look at tools/cgroup/memcg_slabinfo.py .
-	 */
+	seq_puts(m, "This file is deprecated.\n"
+		"Please use tools/cgroup/memcg_slabinfo.py, which is in kernel source.\n");
 	return 0;
 }
 #endif
