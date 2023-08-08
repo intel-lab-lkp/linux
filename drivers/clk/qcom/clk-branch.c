@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2013, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/kernel.h>
@@ -133,6 +134,43 @@ static void clk_branch2_disable(struct clk_hw *hw)
 {
 	clk_branch_toggle(hw, false, clk_branch2_check_halt);
 }
+
+static int clk_branch2_mem_enable(struct clk_hw *hw)
+{
+	struct clk_branch *br = to_clk_branch(hw);
+	u32 val;
+	int count = 200;
+
+	regmap_update_bits(br->clkr.regmap, br->mem_enable_reg,
+			br->mem_enable_ack_bit, br->mem_enable_ack_bit);
+
+	regmap_read(br->clkr.regmap, br->mem_ack_reg, &val);
+
+	while (count-- > 0) {
+		if (val & br->mem_enable_ack_bit)
+			return clk_branch2_enable(hw);
+		udelay(1);
+		regmap_read(br->clkr.regmap, br->mem_ack_reg, &val);
+	}
+
+	return -EBUSY;
+}
+
+static void clk_branch2_mem_disable(struct clk_hw *hw)
+{
+	struct clk_branch *br = to_clk_branch(hw);
+
+	regmap_update_bits(br->clkr.regmap, br->mem_enable_reg,
+						br->mem_enable_ack_bit, 0);
+	return clk_branch2_disable(hw);
+}
+
+const struct clk_ops clk_branch2_mem_ops = {
+	.enable = clk_branch2_mem_enable,
+	.disable = clk_branch2_mem_disable,
+	.is_enabled = clk_is_enabled_regmap,
+};
+EXPORT_SYMBOL(clk_branch2_mem_ops);
 
 const struct clk_ops clk_branch2_ops = {
 	.enable = clk_branch2_enable,
