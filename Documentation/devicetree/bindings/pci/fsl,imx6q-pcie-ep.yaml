@@ -19,6 +19,8 @@ description: |+
 properties:
   compatible:
     enum:
+      - fsl,imx6q-pcie-ep
+      - fsl,imx6qp-pcie-ep
       - fsl,imx8mm-pcie-ep
       - fsl,imx8mq-pcie-ep
       - fsl,imx8mp-pcie-ep
@@ -46,7 +48,7 @@ properties:
 
   interrupts:
     items:
-      - description: builtin eDMA interrupter.
+      - description: builtin eDMA interrupter (optional).
 
   interrupt-names:
     items:
@@ -56,8 +58,6 @@ required:
   - compatible
   - reg
   - reg-names
-  - interrupts
-  - interrupt-names
 
 allOf:
   - $ref: /schemas/pci/snps,dw-pcie-ep.yaml#
@@ -77,7 +77,30 @@ allOf:
             - const: pcie_bus
             - const: pcie_phy
             - const: pcie_aux
-    else:
+
+  - if:
+      properties:
+        compatible:
+          enum:
+            - fsl,imx6q-pcie-ep
+            - fsl,imx6qp-pcie-ep
+    then:
+      properties:
+        clocks:
+          maxItems: 3
+        clock-names:
+          items:
+            - const: pcie
+            - const: pcie_bus
+            - const: pcie_phy
+
+  - if:
+      properties:
+        compatible:
+          enum:
+            - fsl,imx8mm-pcie-ep
+            - fsl,imx8mp-pcie-ep
+    then:
       properties:
         clocks:
           maxItems: 3
