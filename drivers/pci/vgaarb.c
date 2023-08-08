@@ -79,14 +79,16 @@ static const char *vga_iostate_to_str(unsigned int iostate)
 
 static int vga_str_to_iostate(char *buf, int str_size, unsigned int *io_state)
 {
-	/* we could in theory hand out locks on IO and mem
-	 * separately to userspace but it can cause deadlocks */
+	/*
+	 * In theory, we could hand out locks on IO and MEM separately to
+	 * userspace, but this can cause deadlocks.
+	 */
 	if (strncmp(buf, "none", 4) == 0) {
 		*io_state = VGA_RSRC_NONE;
 		return 1;
 	}
 
-	/* XXX We're not chekcing the str_size! */
+	/* XXX We're not checking the str_size! */
 	if (strncmp(buf, "io+mem", 6) == 0)
 		goto both;
 	else if (strncmp(buf, "io", 2) == 0)
