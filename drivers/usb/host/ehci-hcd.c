@@ -762,6 +762,11 @@ restart:
 		bh = 1;
 	}
 
+	/* Force to check port status */
+	if (ehci->has_ci_pec_bug && (status & STS_ERR)
+			&& !(status & STS_PCD))
+		status |= STS_PCD;
+
 	/* complete the unlinking of some qh [4.15.2.3] */
 	if (status & STS_IAA) {
 
