@@ -13022,6 +13022,8 @@ lpfc_sli4_enable_msix(struct lpfc_hba *phba)
 		flags |= PCI_IRQ_AFFINITY;
 	}
 
+	vectors = min_t(unsigned int, vectors, scsi_max_nr_hw_queues());
+
 	rc = pci_alloc_irq_vectors(phba->pcidev, 1, vectors, flags);
 	if (rc < 0) {
 		lpfc_printf_log(phba, KERN_INFO, LOG_INIT,
