@@ -1295,6 +1295,24 @@ static inline void trace_branch_disable(void)
 /* set ring buffers to default size if not already done so */
 int tracing_update_buffers(void);
 
+struct trace_dynamic {
+	union {
+		u8 as_u8;
+		u16 as_u16;
+		u32 as_u32;
+		u64 as_u64;
+		struct {
+#ifdef CONFIG_CPU_BIG_ENDIAN
+			u16 offset;
+			u16 len;
+#else
+			u16 len;
+			u16 offset;
+#endif
+		};
+	};
+};
+
 struct ftrace_event_field {
 	struct list_head	link;
 	const char		*name;
