@@ -23,6 +23,7 @@
 		i2c18 = &i2c18;
 		spi16 = &spi16;
 		ufshc1 = &ufs_mem_hc;
+		ethernet0 = &ethernet0;
 	};
 
 	chosen {
