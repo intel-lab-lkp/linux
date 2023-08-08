@@ -5,6 +5,8 @@
 #include <linux/io_uring.h>
 #include <linux/security.h>
 #include <linux/nospec.h>
+#include <linux/compat.h>
+#include <linux/bpf-cgroup.h>
 
 #include <uapi/linux/io_uring.h>
 #include <uapi/asm-generic/ioctls.h>
@@ -179,17 +181,23 @@ static inline int io_uring_cmd_getsockopt(struct socket *sock,
 	if (err)
 		return err;
 
-	if (level == SOL_SOCKET) {
+	err = -EOPNOTSUPP;
+	if (level == SOL_SOCKET)
 		err = sk_getsockopt(sock->sk, level, optname,
 				    USER_SOCKPTR(optval),
 				    KERNEL_SOCKPTR(&optlen));
-		if (err)
-			return err;
 
+	if (!in_compat_syscall())
+		err = BPF_CGROUP_RUN_PROG_GETSOCKOPT(sock->sk, level,
+						     optname,
+						     USER_SOCKPTR(optval),
+						     KERNEL_SOCKPTR(&optlen),
+						     optlen, err);
+
+	if (!err)
 		return optlen;
-	}
 
-	return -EOPNOTSUPP;
+	return err;
 }
 
 static inline int io_uring_cmd_setsockopt(struct socket *sock,
