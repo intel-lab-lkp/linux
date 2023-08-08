@@ -8491,3 +8491,35 @@ and finally the bit number in subscript. "p" indicates a padding bit.
       - p
       - p
       - p
+
+MIPI CCS Embedded Data Formats
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+`MIPI CCS <https://www.mipi.org/specifications/camera-command-set>`_ defines an
+metadata format for sensor embedded data, which is used to store the register
+configuration used for capturing a given frame. The format is defined in the CCS
+specification.
+
+The bit depth of the CCS embedded data matches the pixel data bit depth
+configured on the sensor. The formats used and their corresponding generic
+formats are listed in the table below.
+
+.. flat-table: CCS embedded data mbus formats and corresponding generic formats
+    :header-rows: 1
+
+    * - CCS embedded data mbus format
+      - Generic metadata format
+    * - MEDIA_BUS_FMT_CCS_EMBEDDED_8
+      - MEDIA_BUS_FMT_META_8
+    * - MEDIA_BUS_FMT_CCS_EMBEDDED_10
+      - MEDIA_BUS_FMT_META_10
+    * - MEDIA_BUS_FMT_CCS_EMBEDDED_12
+      - MEDIA_BUS_FMT_META_12
+    * - MEDIA_BUS_FMT_CCS_EMBEDDED_14
+      - MEDIA_BUS_FMT_META_14
+    * - MEDIA_BUS_FMT_CCS_EMBEDDED_16
+      - MEDIA_BUS_FMT_META_16
+    * - MEDIA_BUS_FMT_CCS_EMBEDDED_20
+      - MEDIA_BUS_FMT_META_20
+    * - MEDIA_BUS_FMT_CCS_EMBEDDED_24
+      - MEDIA_BUS_FMT_META_24
