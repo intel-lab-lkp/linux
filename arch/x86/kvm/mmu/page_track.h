@@ -52,7 +52,7 @@ static inline void kvm_page_track_write(struct kvm_vcpu *vcpu, gpa_t gpa,
 {
 	__kvm_page_track_write(vcpu->kvm, gpa, new, bytes);
 
-	kvm_mmu_track_write(vcpu, gpa, new, bytes);
+	kvm_mmu_track_write(vcpu, gpa, bytes);
 }
 
 #endif /* __KVM_X86_PAGE_TRACK_H */
