@@ -141,6 +141,14 @@ struct panfrost_file_priv {
 	struct drm_sched_entity sched_entity[NUM_JOB_SLOTS];
 
 	struct panfrost_mmu *mmu;
+
+	uint64_t elapsed_ns;
+};
+
+struct drm_info_gpu {
+	unsigned long long engine;
+	unsigned long long cycles;
+	unsigned int maxfreq;
 };
 
 static inline struct panfrost_device *to_panfrost_device(struct drm_device *ddev)
@@ -172,6 +180,8 @@ int panfrost_unstable_ioctl_check(void);
 int panfrost_device_init(struct panfrost_device *pfdev);
 void panfrost_device_fini(struct panfrost_device *pfdev);
 void panfrost_device_reset(struct panfrost_device *pfdev);
+struct drm_info_gpu panfrost_device_get_counters(struct panfrost_device *pfdev,
+						 struct panfrost_file_priv *panfrost_priv);
 
 extern const struct dev_pm_ops panfrost_pm_ops;
 

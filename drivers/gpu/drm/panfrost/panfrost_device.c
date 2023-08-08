@@ -401,6 +401,18 @@ void panfrost_device_reset(struct panfrost_device *pfdev)
 	panfrost_job_enable_interrupts(pfdev);
 }
 
+struct drm_info_gpu panfrost_device_get_counters(struct panfrost_device *pfdev,
+						 struct panfrost_file_priv *panfrost_priv)
+{
+	struct drm_info_gpu gpu_info;
+
+	gpu_info.engine =  panfrost_priv->elapsed_ns;
+	gpu_info.cycles =  panfrost_priv->elapsed_ns * clk_get_rate(pfdev->clock);
+	gpu_info.maxfreq =  clk_get_rate(pfdev->clock);
+
+	return gpu_info;
+}
+
 static int panfrost_device_resume(struct device *dev)
 {
 	struct panfrost_device *pfdev = dev_get_drvdata(dev);

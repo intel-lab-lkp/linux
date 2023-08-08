@@ -157,6 +157,11 @@ static struct panfrost_job *
 panfrost_dequeue_job(struct panfrost_device *pfdev, int slot)
 {
 	struct panfrost_job *job = pfdev->jobs[slot][0];
+	job->priv->elapsed_ns +=
+		ktime_to_ns(ktime_sub(ktime_get(), job->start_time));
+
+	/* Reset in case the job has to be requeued */
+	job->start_time = 0;
 
 	WARN_ON(!job);
 	pfdev->jobs[slot][0] = pfdev->jobs[slot][1];
@@ -233,6 +238,7 @@ static void panfrost_job_hw_submit(struct panfrost_job *job, int js)
 	subslot = panfrost_enqueue_job(pfdev, js, job);
 	/* Don't queue the job if a reset is in progress */
 	if (!atomic_read(&pfdev->reset.pending)) {
+		job->start_time = ktime_get();
 		job_write(pfdev, JS_COMMAND_NEXT(js), JS_COMMAND_START);
 		dev_dbg(pfdev->dev,
 			"JS: Submitting atom %p to js[%d][%d] with head=0x%llx AS %d",
