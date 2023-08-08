@@ -282,8 +282,6 @@ int acpiphp_register_hotplug_slot(struct acpiphp_slot *acpiphp_slot,
 		goto error_slot;
 	}
 
-	pr_info("Slot [%s] registered\n", slot_name(slot));
-
 	return 0;
 error_slot:
 	kfree(slot);
@@ -295,8 +293,6 @@ error:
 void acpiphp_unregister_hotplug_slot(struct acpiphp_slot *acpiphp_slot)
 {
 	struct slot *slot = acpiphp_slot->slot;
-
-	pr_info("Slot [%s] unregistered\n", slot_name(slot));
 
 	pci_hp_deregister(&slot->hotplug_slot);
 	kfree(slot);

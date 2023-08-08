@@ -25,7 +25,7 @@
  *    bus. It loses the refcount when the driver unloads.
  */
 
-#define pr_fmt(fmt) "acpiphp_glue: " fmt
+#define pr_fmt(fmt) "acpiphp: " fmt
 
 #include <linux/module.h>
 
@@ -333,6 +333,12 @@ static acpi_status acpiphp_add_context(acpi_handle handle, u32 lvl, void *data,
 				       &val, 60*1000))
 		slot->flags |= SLOT_ENABLED;
 
+	if (slot->slot)
+		pr_info("pci %04x:%02x:%02x Slot(%s) registered (%s)\n",
+			pci_domain_nr(slot->bus), slot->bus->number,
+			slot->device, slot_name(slot->slot),
+			slot->flags & SLOT_ENABLED ? "enabled" : "empty");
+
 	return AE_OK;
 }
 
@@ -351,8 +357,13 @@ static void cleanup_bridge(struct acpiphp_bridge *bridge)
 			acpi_unlock_hp_context();
 		}
 		slot->flags |= SLOT_IS_GOING_AWAY;
-		if (slot->slot)
+		if (slot->slot) {
+			pr_info("pci %04x:%02x:%02x Slot(%s) unregistered\n",
+				pci_domain_nr(slot->bus), slot->bus->number,
+				slot->device, slot_name(slot->slot));
+
 			acpiphp_unregister_hotplug_slot(slot);
+		}
 	}
 
 	mutex_lock(&bridge_mutex);
@@ -792,6 +803,14 @@ static void hotplug_event(u32 type, struct acpiphp_context *context)
 	acpi_unlock_hp_context();
 
 	pci_lock_rescan_remove();
+
+	pr_info("pci %04x:%02x:%02x Slot(%s) %s\n",
+		pci_domain_nr(slot->bus), slot->bus->number,
+		slot->device, slot_name(slot->slot),
+		type == ACPI_NOTIFY_BUS_CHECK ? "Bus Check" :
+		type == ACPI_NOTIFY_DEVICE_CHECK ? "Device Check" :
+		type == ACPI_NOTIFY_EJECT_REQUEST ? "Eject Request" :
+		"Notification");
 
 	switch (type) {
 	case ACPI_NOTIFY_BUS_CHECK:
