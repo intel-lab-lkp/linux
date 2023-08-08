@@ -1690,6 +1690,17 @@ config SIEMENS_SIMATIC_IPC_WDT
 	  To compile this driver as a module, choose M here: the module will be
 	  called simatic-ipc-wdt.
 
+config NCT6692_WDT
+	tristate "Nuvoton NCT6692D Watchdog"
+	depends on HAS_IOMEM
+	select WATCHDOG_CORE
+	help
+	  If you say yes here you get support for the hardware watchdog
+	  functionality of the Nuvoton NCT6692D eSIO chip.
+
+	  This driver can also be built as a module. If so, the module
+	  will be called nct6692_wdt.
+
 # M68K Architecture
 
 config M54xx_WATCHDOG
