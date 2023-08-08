@@ -459,12 +459,13 @@ static int copy_fid_info_to_user(__kernel_fsid_t *fsid, struct fanotify_fh *fh,
 	if (WARN_ON_ONCE(len < sizeof(handle)))
 		return -EFAULT;
 
-	handle.handle_type = fh->type;
 	handle.handle_bytes = fh_len;
 
 	/* Mangle handle_type for bad file_handle */
 	if (!fh_len)
 		handle.handle_type = FILEID_INVALID;
+	else
+		handle.handle_type = fh->type;
 
 	if (copy_to_user(buf, &handle, sizeof(handle)))
 		return -EFAULT;
