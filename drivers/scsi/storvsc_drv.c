@@ -2034,6 +2034,9 @@ static int storvsc_probe(struct hv_device *device,
 			host->nr_hw_queues = storvsc_max_hw_queues;
 		else
 			host->nr_hw_queues = num_present_cpus;
+		if (host->nr_hw_queues > scsi_max_nr_hw_queues())
+			host->nr_hw_queues = scsi_max_nr_hw_queues();
+
 	}
 
 	/*
