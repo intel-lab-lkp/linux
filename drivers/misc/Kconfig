@@ -276,6 +276,14 @@ config QCOM_COINCELL
 	  to maintain PMIC register and RTC state in the absence of
 	  external power.
 
+config QCOM_DCC
+	tristate "Qualcomm Technologies, Inc. Data Capture and Compare (DCC) engine driver"
+	depends on ARCH_QCOM || COMPILE_TEST
+	help
+	  This option enables the driver for the Data Capture and Compare engine. DCC
+	  driver provides interfaces to configure DCC block and read back the captured
+	  data from the DCC's internal SRAM. The module name for this is qcom-dcc.
+
 config QCOM_FASTRPC
 	tristate "Qualcomm FastRPC"
 	depends on ARCH_QCOM || COMPILE_TEST

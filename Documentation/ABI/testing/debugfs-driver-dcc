@@ -1,4 +1,4 @@
-What:           /sys/kernel/debug/dcc/.../ready
+What:           /sys/kernel/debug/qcom-dcc/.../ready
 Date:           December 2022
 Contact:        Souradeep Chowdhury <quic_schowdhu@quicinc.com>
 Description:
@@ -6,7 +6,7 @@ Description:
 		hardware if it's ready to receive user configurations.
 		A 'Y' here indicates dcc is ready.
 
-What:           /sys/kernel/debug/dcc/.../trigger
+What:           /sys/kernel/debug/qcom-dcc/.../trigger
 Date:           December 2022
 Contact:        Souradeep Chowdhury <quic_schowdhu@quicinc.com>
 Description:
@@ -14,7 +14,7 @@ Description:
 		triggers. The trigger can be invoked by writing '1'
 		to the file.
 
-What:           /sys/kernel/debug/dcc/.../config_reset
+What:           /sys/kernel/debug/qcom-dcc/.../config_reset
 Date:           December 2022
 Contact:        Souradeep Chowdhury <quic_schowdhu@quicinc.com>
 Description:
@@ -24,7 +24,7 @@ Description:
 		stored in the driver gets removed and users need to
 		reconfigure addresses again.
 
-What:           /sys/kernel/debug/dcc/.../[list-number]/config
+What:           /sys/kernel/debug/qcom-dcc/.../[list-number]/config
 Date:		 December 2022
 Contact:        Souradeep Chowdhury <quic_schowdhu@quicinc.com>
 Description:
@@ -109,7 +109,7 @@ Description:
 		    <address>
 			Space-separated list of addresses.
 
-What:           /sys/kernel/debug/dcc/.../[list-number]/enable
+What:           /sys/kernel/debug/qcom-dcc/.../[list-number]/enable
 Date:           December 2022
 Contact:        Souradeep Chowdhury <quic_schowdhu@quicinc.com>
 Description:
