@@ -533,9 +533,16 @@ static struct kunit_suite kunit_resource_test_suite = {
 static void kunit_log_test(struct kunit *test)
 {
 	struct kunit_suite suite;
+	struct kunit_log_frag *frag;
 
-	suite.log = kunit_kzalloc(test, KUNIT_LOG_SIZE, GFP_KERNEL);
+	suite.log = kunit_kzalloc(test, sizeof(*suite.log), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, suite.log);
+	INIT_LIST_HEAD(suite.log);
+	frag = kunit_kmalloc(test, sizeof(*frag), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, frag);
+	kunit_init_log_frag(frag);
+	KUNIT_EXPECT_EQ(test, frag->buf[0], '\0');
+	list_add_tail(&frag->list, suite.log);
 
 	kunit_log(KERN_INFO, test, "put this in log.");
 	kunit_log(KERN_INFO, test, "this too.");
@@ -543,14 +550,17 @@ static void kunit_log_test(struct kunit *test)
 	kunit_log(KERN_INFO, &suite, "along with this.");
 
 #ifdef CONFIG_KUNIT_DEBUGFS
+	frag = list_first_entry(test->log, struct kunit_log_frag, list);
 	KUNIT_EXPECT_NOT_ERR_OR_NULL(test,
-				     strstr(test->log, "put this in log."));
+				     strstr(frag->buf, "put this in log."));
 	KUNIT_EXPECT_NOT_ERR_OR_NULL(test,
-				     strstr(test->log, "this too."));
+				     strstr(frag->buf, "this too."));
+
+	frag = list_first_entry(suite.log, struct kunit_log_frag, list);
 	KUNIT_EXPECT_NOT_ERR_OR_NULL(test,
-				     strstr(suite.log, "add to suite log."));
+				     strstr(frag->buf, "add to suite log."));
 	KUNIT_EXPECT_NOT_ERR_OR_NULL(test,
-				     strstr(suite.log, "along with this."));
+				     strstr(frag->buf, "along with this."));
 #else
 	KUNIT_EXPECT_NULL(test, test->log);
 #endif
@@ -558,11 +568,14 @@ static void kunit_log_test(struct kunit *test)
 
 static void kunit_log_newline_test(struct kunit *test)
 {
+	struct kunit_log_frag *frag;
+
 	kunit_info(test, "Add newline\n");
 	if (test->log) {
-		KUNIT_ASSERT_NOT_NULL_MSG(test, strstr(test->log, "Add newline\n"),
-			"Missing log line, full log:\n%s", test->log);
-		KUNIT_EXPECT_NULL(test, strstr(test->log, "Add newline\n\n"));
+		frag = list_first_entry(test->log, struct kunit_log_frag, list);
+		KUNIT_ASSERT_NOT_NULL_MSG(test, strstr(frag->buf, "Add newline\n"),
+			"Missing log line, full log:\n%s", frag->buf);
+		KUNIT_EXPECT_NULL(test, strstr(frag->buf, "Add newline\n\n"));
 	} else {
 		kunit_skip(test, "only useful when debugfs is enabled");
 	}

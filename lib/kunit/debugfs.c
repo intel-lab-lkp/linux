@@ -5,6 +5,7 @@
  */
 
 #include <linux/debugfs.h>
+#include <linux/list.h>
 #include <linux/module.h>
 
 #include <kunit/test.h>
@@ -37,14 +38,15 @@ void kunit_debugfs_init(void)
 		debugfs_rootdir = debugfs_create_dir(KUNIT_DEBUGFS_ROOT, NULL);
 }
 
-static void debugfs_print_result(struct seq_file *seq,
-				 struct kunit_suite *suite,
-				 struct kunit_case *test_case)
+static void debugfs_print_log(struct seq_file *seq, const struct list_head *log)
 {
-	if (!test_case || !test_case->log)
+	struct kunit_log_frag *frag;
+
+	if (!log)
 		return;
 
-	seq_printf(seq, "%s", test_case->log);
+	list_for_each_entry(frag, log, list)
+		seq_puts(seq, frag->buf);
 }
 
 /*
@@ -69,10 +71,9 @@ static int debugfs_print_results(struct seq_file *seq, void *v)
 	seq_printf(seq, KUNIT_SUBTEST_INDENT "1..%zd\n", kunit_suite_num_test_cases(suite));
 
 	kunit_suite_for_each_test_case(suite, test_case)
-		debugfs_print_result(seq, suite, test_case);
+		debugfs_print_log(seq, test_case->log);
 
-	if (suite->log)
-		seq_printf(seq, "%s", suite->log);
+	debugfs_print_log(seq, suite->log);
 
 	seq_printf(seq, "%s %d %s\n",
 		   kunit_status_to_ok_not_ok(success), 1, suite->name);
@@ -100,14 +101,53 @@ static const struct file_operations debugfs_results_fops = {
 	.release = debugfs_release,
 };
 
+static struct list_head *kunit_debugfs_alloc_log(void)
+{
+	struct list_head *log;
+	struct kunit_log_frag *frag;
+
+	log = kzalloc(sizeof(*log), GFP_KERNEL);
+	if (!log)
+		return NULL;
+
+	INIT_LIST_HEAD(log);
+
+	frag = kmalloc(sizeof(*frag), GFP_KERNEL);
+	if (!frag) {
+		kfree(log);
+		return NULL;
+	}
+
+	kunit_init_log_frag(frag);
+	list_add_tail(&frag->list, log);
+
+	return log;
+}
+
+static void kunit_debugfs_free_log(struct list_head *log)
+{
+	struct kunit_log_frag *frag, *n;
+
+	if (!log)
+		return;
+
+	list_for_each_entry_safe(frag, n, log, list) {
+		list_del(&frag->list);
+		kfree(frag);
+	}
+
+	kfree(log);
+}
+
 void kunit_debugfs_create_suite(struct kunit_suite *suite)
 {
 	struct kunit_case *test_case;
 
 	/* Allocate logs before creating debugfs representation. */
-	suite->log = kzalloc(KUNIT_LOG_SIZE, GFP_KERNEL);
+	suite->log = kunit_debugfs_alloc_log();
+
 	kunit_suite_for_each_test_case(suite, test_case)
-		test_case->log = kzalloc(KUNIT_LOG_SIZE, GFP_KERNEL);
+		test_case->log = kunit_debugfs_alloc_log();
 
 	suite->debugfs = debugfs_create_dir(suite->name, debugfs_rootdir);
 
@@ -121,7 +161,8 @@ void kunit_debugfs_destroy_suite(struct kunit_suite *suite)
 	struct kunit_case *test_case;
 
 	debugfs_remove_recursive(suite->debugfs);
-	kfree(suite->log);
+	kunit_debugfs_free_log(suite->log);
+
 	kunit_suite_for_each_test_case(suite, test_case)
-		kfree(test_case->log);
+		kunit_debugfs_free_log(test_case->log);
 }
