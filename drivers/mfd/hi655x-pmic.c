@@ -162,7 +162,7 @@ MODULE_DEVICE_TABLE(of, hi655x_pmic_match);
 static struct platform_driver hi655x_pmic_driver = {
 	.driver	= {
 		.name =	"hi655x-pmic",
-		.of_match_table = of_match_ptr(hi655x_pmic_match),
+		.of_match_table = hi655x_pmic_match,
 	},
 	.probe  = hi655x_pmic_probe,
 	.remove = hi655x_pmic_remove,
