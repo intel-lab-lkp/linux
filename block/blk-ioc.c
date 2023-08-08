@@ -14,6 +14,9 @@
 #include "blk.h"
 #include "blk-mq-sched.h"
 
+#undef pr_fmt
+#define pr_fmt(fmt) "blk-ioc: " fmt
+
 /*
  * For io context allocations
  */
@@ -395,7 +398,7 @@ static struct io_cq *ioc_create_icq(struct request_queue *q)
 		kmem_cache_free(et->icq_cache, icq);
 		icq = ioc_lookup_icq(q);
 		if (!icq)
-			printk(KERN_ERR "cfq: icq link failed!\n");
+			pr_err("icq link failed!\n");
 	}
 
 	spin_unlock(&ioc->lock);

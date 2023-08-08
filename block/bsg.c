@@ -17,6 +17,9 @@
 #include <scsi/scsi_ioctl.h>
 #include <scsi/sg.h>
 
+#undef pr_fmt
+#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+
 #define BSG_DESCRIPTION	"Block layer SCSI generic (bsg) driver"
 #define BSG_VERSION	"0.4"
 
@@ -261,8 +264,8 @@ static int __init bsg_init(void)
 		goto destroy_bsg_class;
 	bsg_major = MAJOR(devid);
 
-	printk(KERN_INFO BSG_DESCRIPTION " version " BSG_VERSION
-	       " loaded (major %d)\n", bsg_major);
+	pr_info(BSG_DESCRIPTION " version " BSG_VERSION
+		" loaded (major %d)\n", bsg_major);
 	return 0;
 
 destroy_bsg_class:

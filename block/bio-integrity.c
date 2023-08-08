@@ -14,6 +14,9 @@
 #include <linux/slab.h>
 #include "blk.h"
 
+#undef pr_fmt
+#define pr_fmt(fmt) "bio-integrity: " fmt
+
 static struct kmem_cache *bip_slab;
 static struct workqueue_struct *kintegrityd_wq;
 
@@ -126,7 +129,7 @@ int bio_integrity_add_page(struct bio *bio, struct page *page,
 	struct bio_integrity_payload *bip = bio_integrity(bio);
 
 	if (bip->bip_vcnt >= bip->bip_max_vcnt) {
-		printk(KERN_ERR "%s: bip_vec full\n", __func__);
+		pr_err("%s: bip_vec full\n", __func__);
 		return 0;
 	}
 
@@ -227,7 +230,7 @@ bool bio_integrity_prep(struct bio *bio)
 	len = bio_integrity_bytes(bi, bio_sectors(bio));
 	buf = kmalloc(len, GFP_NOIO);
 	if (unlikely(buf == NULL)) {
-		printk(KERN_ERR "could not allocate integrity buffer\n");
+		pr_err("could not allocate integrity buffer\n");
 		goto err_end_io;
 	}
 
@@ -238,7 +241,7 @@ bool bio_integrity_prep(struct bio *bio)
 	/* Allocate bio integrity payload and integrity vectors */
 	bip = bio_integrity_alloc(bio, GFP_NOIO, nr_pages);
 	if (IS_ERR(bip)) {
-		printk(KERN_ERR "could not allocate data integrity bioset\n");
+		pr_err("could not allocate data integrity bioset\n");
 		kfree(buf);
 		goto err_end_io;
 	}
@@ -266,7 +269,7 @@ bool bio_integrity_prep(struct bio *bio)
 					     bytes, offset);
 
 		if (ret == 0) {
-			printk(KERN_ERR "could not attach integrity payload\n");
+			pr_err("could not attach integrity payload\n");
 			goto err_end_io;
 		}
 

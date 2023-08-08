@@ -45,6 +45,9 @@
 #include "blk-wbt.h"
 #include "blk-cgroup.h"
 
+#undef pr_fmt
+#define pr_fmt(fmt) "elevator: " fmt
+
 static DEFINE_SPINLOCK(elv_list_lock);
 static LIST_HEAD(elv_list);
 
@@ -527,7 +530,7 @@ int elv_register(struct elevator_type *e)
 	list_add_tail(&e->list, &elv_list);
 	spin_unlock(&elv_list_lock);
 
-	printk(KERN_INFO "io scheduler %s registered\n", e->elevator_name);
+	pr_info("io scheduler %s registered\n", e->elevator_name);
 
 	return 0;
 }

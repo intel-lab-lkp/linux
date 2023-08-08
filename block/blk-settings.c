@@ -19,6 +19,9 @@
 #include "blk-rq-qos.h"
 #include "blk-wbt.h"
 
+#undef pr_fmt
+#define pr_fmt(fmt) "blk-settings: " fmt
+
 void blk_queue_rq_timeout(struct request_queue *q, unsigned int timeout)
 {
 	q->rq_timeout = timeout;
@@ -127,8 +130,8 @@ void blk_queue_max_hw_sectors(struct request_queue *q, unsigned int max_hw_secto
 
 	if ((max_hw_sectors << 9) < PAGE_SIZE) {
 		max_hw_sectors = 1 << PAGE_SECTORS_SHIFT;
-		printk(KERN_INFO "%s: set to minimum %d\n",
-		       __func__, max_hw_sectors);
+		pr_info("Set max_hw_sectors to minimum %u\n",
+			max_hw_sectors);
 	}
 
 	max_hw_sectors = round_down(max_hw_sectors,
@@ -248,8 +251,8 @@ void blk_queue_max_segments(struct request_queue *q, unsigned short max_segments
 {
 	if (!max_segments) {
 		max_segments = 1;
-		printk(KERN_INFO "%s: set to minimum %d\n",
-		       __func__, max_segments);
+		pr_info("Set max_segments to minimum %u\n",
+			max_segments);
 	}
 
 	q->limits.max_segments = max_segments;
@@ -285,8 +288,8 @@ void blk_queue_max_segment_size(struct request_queue *q, unsigned int max_size)
 {
 	if (max_size < PAGE_SIZE) {
 		max_size = PAGE_SIZE;
-		printk(KERN_INFO "%s: set to minimum %d\n",
-		       __func__, max_size);
+		pr_info("Set max_segment_size to minimum %u\n",
+			max_size);
 	}
 
 	/* see blk_queue_virt_boundary() for the explanation */
@@ -740,8 +743,8 @@ void blk_queue_segment_boundary(struct request_queue *q, unsigned long mask)
 {
 	if (mask < PAGE_SIZE - 1) {
 		mask = PAGE_SIZE - 1;
-		printk(KERN_INFO "%s: set to minimum %lx\n",
-		       __func__, mask);
+		pr_info("Set segment_boundary to minimum %lx\n",
+			mask);
 	}
 
 	q->limits.seg_boundary_mask = mask;

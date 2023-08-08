@@ -42,6 +42,9 @@
 #include "blk-rq-qos.h"
 #include "blk-ioprio.h"
 
+#undef pr_fmt
+#define pr_fmt(fmt) "blk-mq: " fmt
+
 static DEFINE_PER_CPU(struct llist_head, blk_cpu_done);
 static DEFINE_PER_CPU(call_single_data_t, blk_cpu_csd);
 
@@ -733,15 +736,15 @@ void blk_mq_free_plug_rqs(struct blk_plug *plug)
 
 void blk_dump_rq_flags(struct request *rq, char *msg)
 {
-	printk(KERN_INFO "%s: dev %s: flags=%llx\n", msg,
+	pr_info("%s: dev %s: flags=%llx\n", msg,
 		rq->q->disk ? rq->q->disk->disk_name : "?",
 		(__force unsigned long long) rq->cmd_flags);
 
-	printk(KERN_INFO "  sector %llu, nr/cnr %u/%u\n",
-	       (unsigned long long)blk_rq_pos(rq),
-	       blk_rq_sectors(rq), blk_rq_cur_sectors(rq));
-	printk(KERN_INFO "  bio %p, biotail %p, len %u\n",
-	       rq->bio, rq->biotail, blk_rq_bytes(rq));
+	pr_info("  sector %llu, nr/cnr %u/%u\n",
+		(unsigned long long)blk_rq_pos(rq),
+		blk_rq_sectors(rq), blk_rq_cur_sectors(rq));
+	pr_info("  bio %p, biotail %p, len %u\n",
+		rq->bio, rq->biotail, blk_rq_bytes(rq));
 }
 EXPORT_SYMBOL(blk_dump_rq_flags);
 
@@ -783,7 +786,7 @@ static void blk_account_io_completion(struct request *req, unsigned int bytes)
 
 static void blk_print_req_error(struct request *req, blk_status_t status)
 {
-	printk_ratelimited(KERN_ERR
+	pr_err_ratelimited(
 		"%s error, dev %s, sector %llu op 0x%x:(%s) flags 0x%x "
 		"phys_seg %u prio class %u\n",
 		blk_status_to_str(status),
@@ -3032,8 +3035,8 @@ blk_status_t blk_insert_cloned_request(struct request *rq)
 		if (max_sectors == 0)
 			return BLK_STS_NOTSUPP;
 
-		printk(KERN_ERR "%s: over max size limit. (%u > %u)\n",
-			__func__, blk_rq_sectors(rq), max_sectors);
+		pr_err("%s: over max size limit. (%u > %u)\n",
+		       __func__, blk_rq_sectors(rq), max_sectors);
 		return BLK_STS_IOERR;
 	}
 
@@ -3043,8 +3046,8 @@ blk_status_t blk_insert_cloned_request(struct request *rq)
 	 */
 	rq->nr_phys_segments = blk_recalc_rq_segments(rq);
 	if (rq->nr_phys_segments > max_segments) {
-		printk(KERN_ERR "%s: over max segments limit. (%u > %u)\n",
-			__func__, rq->nr_phys_segments, max_segments);
+		pr_err("%s: over max segments limit. (%u > %u)\n",
+		       __func__, rq->nr_phys_segments, max_segments);
 		return BLK_STS_IOERR;
 	}
 

@@ -33,6 +33,9 @@
 #include "blk-rq-qos.h"
 #include "blk-cgroup.h"
 
+#undef pr_fmt
+#define pr_fmt(fmt) "genhd: " fmt
+
 static struct kobject *block_depr;
 
 /*
@@ -227,7 +230,7 @@ int __register_blkdev(unsigned int major, const char *name,
 		}
 
 		if (index == 0) {
-			printk("%s: failed to get major for %s\n",
+			pr_err("%s: Failed to get major for %s\n",
 			       __func__, name);
 			ret = -EBUSY;
 			goto out;
@@ -270,7 +273,7 @@ int __register_blkdev(unsigned int major, const char *name,
 	spin_unlock(&major_names_spinlock);
 
 	if (ret < 0) {
-		printk("register_blkdev: cannot get major %u for %s\n",
+		pr_err("register_blkdev: cannot get major %u for %s\n",
 		       major, name);
 		kfree(p);
 	}
