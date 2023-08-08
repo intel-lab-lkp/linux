@@ -14,6 +14,7 @@ struct idpf_vport_max_q;
 #include <linux/etherdevice.h>
 #include <linux/pci.h>
 #include <linux/bitfield.h>
+#include <linux/dim.h>
 
 #include "virtchnl2.h"
 #include "idpf_lan_txrx.h"
@@ -40,6 +41,8 @@ struct idpf_vport_max_q;
 
 /* available message levels */
 #define IDPF_AVAIL_NETIF_M (NETIF_MSG_DRV | NETIF_MSG_PROBE | NETIF_MSG_LINK)
+
+#define IDPF_DIM_PROFILE_SLOTS  5
 
 #define IDPF_VIRTCHNL_VERSION_MAJOR VIRTCHNL2_VERSION_MAJOR_2
 #define IDPF_VIRTCHNL_VERSION_MINOR VIRTCHNL2_VERSION_MINOR_0
@@ -236,11 +239,14 @@ extern const char * const idpf_vport_vc_state_str[];
 
 /**
  * enum idpf_vport_flags - Vport flags
+ * @IDPF_VPORT_SW_MARKER: Indicate TX pipe drain software marker packets
+ *			  processing is done
  * @IDPF_VPORT_ADD_MAC_REQ: Asynchronous add ether address in flight
  * @IDPF_VPORT_DEL_MAC_REQ: Asynchronous delete ether address in flight
  * @IDPF_VPORT_FLAGS_NBITS: Must be last
  */
 enum idpf_vport_flags {
+	IDPF_VPORT_SW_MARKER,
 	IDPF_VPORT_ADD_MAC_REQ,
 	IDPF_VPORT_DEL_MAC_REQ,
 	IDPF_VPORT_FLAGS_NBITS,
@@ -264,6 +270,7 @@ enum idpf_vport_state {
  * @num_complq: Number of allocated completion queues
  * @txq_desc_count: TX queue descriptor count
  * @complq_desc_count: Completion queue descriptor count
+ * @compln_clean_budget: Work budget for completion clean
  * @num_txq_grp: Number of TX queue groups
  * @txq_grps: Array of TX queue groups
  * @txq_model: Split queue or single queue queuing model
@@ -295,11 +302,13 @@ enum idpf_vport_state {
  * @q_vector_idxs: Starting index of queue vectors
  * @max_mtu: device given max possible MTU
  * @default_mac_addr: device will give a default MAC to use
+ * @tx_itr_profile: TX profiles for Dynamic Interrupt Moderation
  * @link_up: True if link is up
  * @vc_msg: Virtchnl message buffer
  * @vc_state: Virtchnl message state
  * @state: See enum idpf_vport_state
  * @vchnl_wq: Wait queue for virtchnl messages
+ * @sw_marker_wq: workqueue for marker packets
  * @stop_mutex: Lock to protect against multiple stop threads, which can happen
  *		when the driver is in a namespace in a system that is being
  *		shutdown.
@@ -311,6 +320,7 @@ struct idpf_vport {
 	u16 num_complq;
 	u32 txq_desc_count;
 	u32 complq_desc_count;
+	u32 compln_clean_budget;
 	u16 num_txq_grp;
 	struct idpf_txq_group *txq_grps;
 	u32 txq_model;
@@ -341,6 +351,7 @@ struct idpf_vport {
 	u16 *q_vector_idxs;
 	u16 max_mtu;
 	u8 default_mac_addr[ETH_ALEN];
+	u16 tx_itr_profile[IDPF_DIM_PROFILE_SLOTS];
 
 	bool link_up;
 
@@ -349,6 +360,7 @@ struct idpf_vport {
 
 	enum idpf_vport_state state;
 	wait_queue_head_t vchnl_wq;
+	wait_queue_head_t sw_marker_wq;
 	struct mutex stop_mutex;
 	struct mutex vc_buf_lock;
 
