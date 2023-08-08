@@ -1079,23 +1079,34 @@ bool nfssvc_encode_voidres(struct svc_rqst *rqstp, struct xdr_stream *xdr)
 	return true;
 }
 
-int nfsd_pool_stats_open(struct inode *inode, struct file *file)
+static int nfsd_stats_open(struct inode *inode)
 {
-	int ret;
 	struct nfsd_net *nn = net_generic(inode->i_sb->s_fs_info, nfsd_net_id);
 
 	mutex_lock(&nfsd_mutex);
-	if (nn->nfsd_serv == NULL) {
+	if (!nn->nfsd_serv) {
 		mutex_unlock(&nfsd_mutex);
 		return -ENODEV;
 	}
+
 	svc_get(nn->nfsd_serv);
-	ret = svc_pool_stats_open(nn->nfsd_serv, file);
 	mutex_unlock(&nfsd_mutex);
-	return ret;
+
+	return 0;
 }
 
-int nfsd_pool_stats_release(struct inode *inode, struct file *file)
+int nfsd_pool_stats_open(struct inode *inode, struct file *file)
+{
+	struct nfsd_net *nn = net_generic(inode->i_sb->s_fs_info, nfsd_net_id);
+	int ret = nfsd_stats_open(inode);
+
+	if (ret)
+		return ret;
+
+	return svc_pool_stats_open(nn->nfsd_serv, file);
+}
+
+int nfsd_stats_release(struct inode *inode, struct file *file)
 {
 	int ret = seq_release(inode, file);
 	struct net *net = inode->i_sb->s_fs_info;
@@ -1217,16 +1228,10 @@ static int nfsd_rpc_status_show(struct seq_file *m, void *v)
  */
 int nfsd_rpc_status_open(struct inode *inode, struct file *file)
 {
-	struct nfsd_net *nn = net_generic(inode->i_sb->s_fs_info, nfsd_net_id);
+	int ret = nfsd_stats_open(inode);
 
-	mutex_lock(&nfsd_mutex);
-	if (!nn->nfsd_serv) {
-		mutex_unlock(&nfsd_mutex);
-		return -ENODEV;
-	}
-
-	svc_get(nn->nfsd_serv);
-	mutex_unlock(&nfsd_mutex);
+	if (ret)
+		return ret;
 
 	return single_open(file, nfsd_rpc_status_show, inode->i_private);
 }

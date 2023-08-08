@@ -93,7 +93,7 @@ int		nfsd_nrpools(struct net *);
 int		nfsd_get_nrthreads(int n, int *, struct net *);
 int		nfsd_set_nrthreads(int n, int *, struct net *);
 int		nfsd_pool_stats_open(struct inode *, struct file *);
-int		nfsd_pool_stats_release(struct inode *, struct file *);
+int		nfsd_stats_release(struct inode *, struct file *);
 int		nfsd_rpc_status_open(struct inode *inode, struct file *file);
 void		nfsd_shutdown_threads(struct net *net);
 
