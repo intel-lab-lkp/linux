@@ -187,7 +187,7 @@ static int ufshcd_mcq_config_nr_queues(struct ufs_hba *hba)
 
 	if (!hba->nr_queues[HCTX_TYPE_DEFAULT])
 		hba->nr_queues[HCTX_TYPE_DEFAULT] = min3(rem, rw_queues,
-							 num_possible_cpus());
+							 scsi_max_nr_hw_queues());
 
 	for (i = 0; i < HCTX_MAX_TYPES; i++)
 		host->nr_hw_queues += hba->nr_queues[i];
