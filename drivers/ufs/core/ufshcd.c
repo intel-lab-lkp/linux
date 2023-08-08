@@ -9121,17 +9121,18 @@ out:
 
 static int ufshcd_variant_hba_init(struct ufs_hba *hba)
 {
-	int err = 0;
+	int ret;
 
 	if (!hba->vops)
-		goto out;
+		return 0;
 
-	err = ufshcd_vops_init(hba);
-	if (err)
-		dev_err(hba->dev, "%s: variant %s init failed err %d\n",
-			__func__, ufshcd_get_var_name(hba), err);
-out:
-	return err;
+	ret = ufshcd_vops_init(hba);
+	if (ret)
+		dev_err_probe(hba->dev, ret,
+			      "%s: variant %s init failed with error %d\n",
+			      __func__, ufshcd_get_var_name(hba), ret);
+
+	return ret;
 }
 
 static void ufshcd_variant_hba_exit(struct ufs_hba *hba)
