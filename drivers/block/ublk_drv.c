@@ -2044,7 +2044,7 @@ static int ublk_ctrl_add_dev(struct io_uring_cmd *cmd)
 	ub->dev_info.flags &= ~UBLK_F_SUPPORT_ZERO_COPY;
 
 	ub->dev_info.nr_hw_queues = min_t(unsigned int,
-			ub->dev_info.nr_hw_queues, nr_cpu_ids);
+			ub->dev_info.nr_hw_queues, blk_mq_max_nr_hw_queues());
 	ublk_align_max_io_size(ub);
 
 	ret = ublk_init_queues(ub);
