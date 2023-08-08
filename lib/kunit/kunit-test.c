@@ -613,6 +613,12 @@ static void kunit_log_newline_test(struct kunit *test)
 		kunit_init_log_frag(frag);
 		list_add_tail(&frag->list, suite.log);
 
+		/* Log only a newline */
+		kunit_log_append(suite.log, "\n");
+		KUNIT_EXPECT_TRUE(test, list_is_singular(suite.log));
+		KUNIT_EXPECT_STREQ(test, frag->buf, "\n");
+		frag->buf[0] = '\0';
+
 		/* String that exactly fills fragment leaving no room for \n */
 		memset(frag->buf, 0, sizeof(frag->buf));
 		memset(frag->buf, 'x', sizeof(frag->buf) - 9);
