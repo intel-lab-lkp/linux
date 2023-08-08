@@ -71,29 +71,13 @@ static DEFINE_MUTEX(links_list_lock);
  * the AFUs, by pro-rating if needed.
  */
 
-static int find_dvsec_from_pos(struct pci_dev *dev, int dvsec_id, int pos)
-{
-	int vsec = pos;
-	u16 vendor, id;
-
-	while ((vsec = pci_find_next_ext_capability(dev, vsec,
-						    OCXL_EXT_CAP_ID_DVSEC))) {
-		pci_read_config_word(dev, vsec + OCXL_DVSEC_VENDOR_OFFSET,
-				&vendor);
-		pci_read_config_word(dev, vsec + OCXL_DVSEC_ID_OFFSET, &id);
-		if (vendor == PCI_VENDOR_ID_IBM && id == dvsec_id)
-			return vsec;
-	}
-	return 0;
-}
-
 static int find_dvsec_afu_ctrl(struct pci_dev *dev, u8 afu_idx)
 {
 	int vsec = 0;
 	u8 idx;
 
-	while ((vsec = find_dvsec_from_pos(dev, OCXL_DVSEC_AFU_CTRL_ID,
-					   vsec))) {
+	while ((vsec = pci_find_next_dvsec_capability(dev, vsec,
+				PCI_VENDOR_ID_IBM, OCXL_DVSEC_AFU_CTRL_ID))) {
 		pci_read_config_byte(dev, vsec + OCXL_DVSEC_AFU_CTRL_AFU_IDX,
 				&idx);
 		if (idx == afu_idx)
