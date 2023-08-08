@@ -1289,7 +1289,7 @@ static int clocksource_unbind(struct clocksource *cs)
  */
 int clocksource_unregister(struct clocksource *cs)
 {
-	int ret = 0;
+	int ret;
 
 	mutex_lock(&clocksource_mutex);
 	if (!list_empty(&cs->list))
