@@ -4103,12 +4103,14 @@ static int macsec_newlink(struct net *net, struct net_device *dev,
 	/* need to be already registered so that ->init has run and
 	 * the MAC addr is set
 	 */
-	if (data && data[IFLA_MACSEC_SCI])
+	if (data && data[IFLA_MACSEC_SCI]) {
 		sci = nla_get_sci(data[IFLA_MACSEC_SCI]);
-	else if (data && data[IFLA_MACSEC_PORT])
+		eth_hw_addr_set(dev, (u8 *)&sci);
+	} else if (data && data[IFLA_MACSEC_PORT]) {
 		sci = dev_to_sci(dev, nla_get_be16(data[IFLA_MACSEC_PORT]));
-	else
+	} else {
 		sci = dev_to_sci(dev, MACSEC_PORT_ES);
+	}
 
 	if (rx_handler && sci_exists(real_dev, sci)) {
 		err = -EBUSY;
