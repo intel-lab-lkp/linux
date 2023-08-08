@@ -182,4 +182,7 @@
 #define MEDIA_BUS_FMT_META_20			0x8006
 #define MEDIA_BUS_FMT_META_24			0x8007
 
+#define MEDIA_BUS_FMT_IS_META(code)		\
+	((code) & 0xf000 == 0x7000 || (code) & 0xf000 == 0x8000)
+
 #endif /* __LINUX_MEDIA_BUS_FORMAT_H */
