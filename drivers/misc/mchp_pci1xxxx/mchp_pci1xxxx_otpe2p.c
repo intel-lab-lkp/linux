@@ -379,8 +379,8 @@ static int pci1xxxx_otp_eeprom_probe(struct auxiliary_device *aux_dev,
 
 		priv->nvmem_eeprom = devm_nvmem_register(&aux_dev->dev,
 							 &priv->nvmem_config_eeprom);
-		if (!priv->nvmem_eeprom)
-			return -ENOMEM;
+		if (IS_ERR(priv->nvmem_eeprom))
+			return PTR_ERR(priv->nvmem_eeprom);
 	}
 
 	release_sys_lock(priv);
@@ -398,10 +398,8 @@ static int pci1xxxx_otp_eeprom_probe(struct auxiliary_device *aux_dev,
 
 	priv->nvmem_otp = devm_nvmem_register(&aux_dev->dev,
 					      &priv->nvmem_config_otp);
-	if (!priv->nvmem_otp)
-		return -ENOMEM;
 
-	return ret;
+	return PTR_ERR_OR_ZERO(priv->nvmem_otp);
 }
 
 static void pci1xxxx_otp_eeprom_remove(struct auxiliary_device *aux_dev)
