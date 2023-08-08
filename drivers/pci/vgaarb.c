@@ -964,7 +964,7 @@ EXPORT_SYMBOL(vga_set_legacy_decoding);
  *
  * To unregister just call vga_client_unregister().
  *
- * Returns: 0 on success, -1 on failure
+ * Returns: 0 on success, -ENODEV on failure
  */
 int vga_client_register(struct pci_dev *pdev,
 		unsigned int (*set_decode)(struct pci_dev *pdev, bool decode))
@@ -975,16 +975,13 @@ int vga_client_register(struct pci_dev *pdev,
 
 	spin_lock_irqsave(&vga_lock, flags);
 	vgadev = vgadev_find(pdev);
-	if (!vgadev)
-		goto bail;
-
-	vgadev->set_decode = set_decode;
-	ret = 0;
-
-bail:
+	if (vgadev) {
+		vgadev->set_decode = set_decode;
+		ret = 0;
+	}
 	spin_unlock_irqrestore(&vga_lock, flags);
-	return ret;
 
+	return ret;
 }
 EXPORT_SYMBOL(vga_client_register);
 
