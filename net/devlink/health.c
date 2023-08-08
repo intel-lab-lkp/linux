@@ -51,25 +51,6 @@ static void devlink_fmsg_free(struct devlink_fmsg *fmsg)
 	kfree(fmsg);
 }
 
-struct devlink_health_reporter {
-	struct list_head list;
-	void *priv;
-	const struct devlink_health_reporter_ops *ops;
-	struct devlink *devlink;
-	struct devlink_port *devlink_port;
-	struct devlink_fmsg *dump_fmsg;
-	struct mutex dump_lock; /* lock parallel read/write from dump buffers */
-	u64 graceful_period;
-	bool auto_recover;
-	bool auto_dump;
-	u8 health_state;
-	u64 dump_ts;
-	u64 dump_real_ts;
-	u64 error_count;
-	u64 recovery_count;
-	u64 last_recovery_ts;
-};
-
 void *
 devlink_health_reporter_priv(struct devlink_health_reporter *reporter)
 {
@@ -480,7 +461,8 @@ static void devlink_recover_notify(struct devlink_health_reporter *reporter,
 	int err;
 
 	WARN_ON(cmd != DEVLINK_CMD_HEALTH_REPORTER_RECOVER);
-	ASSERT_DEVLINK_REGISTERED(devlink);
+	if (!devl_is_registered(devlink))
+		return;
 
 	msg = nlmsg_new(NLMSG_DEFAULT_SIZE, GFP_KERNEL);
 	if (!msg)
@@ -494,6 +476,13 @@ static void devlink_recover_notify(struct devlink_health_reporter *reporter,
 
 	genlmsg_multicast_netns(&devlink_nl_family, devlink_net(devlink), msg,
 				0, DEVLINK_MCGRP_CONFIG, GFP_KERNEL);
+}
+
+void devlink_recover_notify_check(struct devlink_health_reporter *reporter,
+				  enum devlink_command cmd)
+{
+	if (reporter->error_count)
+		devlink_recover_notify(reporter, cmd);
 }
 
 void

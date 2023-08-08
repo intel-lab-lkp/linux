@@ -6659,6 +6659,7 @@ void devlink_notify_register(struct devlink *devlink)
 {
 	struct devlink_trap_policer_item *policer_item;
 	struct devlink_trap_group_item *group_item;
+	struct devlink_health_reporter *reporter;
 	struct devlink_param_item *param_item;
 	struct devlink_trap_item *trap_item;
 	struct devlink_port *devlink_port;
@@ -6695,6 +6696,10 @@ void devlink_notify_register(struct devlink *devlink)
 	xa_for_each(&devlink->params, param_id, param_item)
 		devlink_param_notify(devlink, 0, param_item,
 				     DEVLINK_CMD_PARAM_NEW);
+
+	list_for_each_entry(reporter, &devlink->reporter_list, list)
+		devlink_recover_notify_check(reporter,
+					     DEVLINK_CMD_HEALTH_REPORTER_RECOVER);
 }
 
 void devlink_notify_unregister(struct devlink *devlink)

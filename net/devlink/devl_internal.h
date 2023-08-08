@@ -53,6 +53,25 @@ struct devlink {
 	char priv[] __aligned(NETDEV_ALIGN);
 };
 
+struct devlink_health_reporter {
+	struct list_head list;
+	void *priv;
+	const struct devlink_health_reporter_ops *ops;
+	struct devlink *devlink;
+	struct devlink_port *devlink_port;
+	struct devlink_fmsg *dump_fmsg;
+	struct mutex dump_lock; /* lock parallel read/write from dump buffers */
+	u64 graceful_period;
+	bool auto_recover;
+	bool auto_dump;
+	u8 health_state;
+	u64 dump_ts;
+	u64 dump_real_ts;
+	u64 error_count;
+	u64 recovery_count;
+	u64 last_recovery_ts;
+};
+
 extern struct xarray devlinks;
 extern struct genl_family devlink_nl_family;
 
@@ -168,6 +187,8 @@ extern const struct devlink_cmd devl_cmd_selftests_get;
 
 /* Notify */
 void devlink_notify(struct devlink *devlink, enum devlink_command cmd);
+void devlink_recover_notify_check(struct devlink_health_reporter *reporter,
+				  enum devlink_command cmd);
 
 /* Ports */
 int devlink_port_netdevice_event(struct notifier_block *nb,
