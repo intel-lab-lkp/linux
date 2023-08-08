@@ -205,10 +205,14 @@ static inline int io_uring_cmd_setsockopt(struct socket *sock,
 	if (err)
 		return err;
 
-	err = -EOPNOTSUPP;
 	if (level == SOL_SOCKET && !sock_use_custom_sol_socket(sock))
 		err = sock_setsockopt(sock, level, optname,
 				      USER_SOCKPTR(optval), optlen);
+	else if (unlikely(!sock->ops->setsockopt))
+		err = -EOPNOTSUPP;
+	else
+		err = sock->ops->setsockopt(sock, level, optname,
+					    USER_SOCKPTR(koptval), optlen);
 
 	return err;
 }
