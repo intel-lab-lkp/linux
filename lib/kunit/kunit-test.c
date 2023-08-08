@@ -7,6 +7,7 @@
  */
 #include <kunit/test.h>
 #include <kunit/test-bug.h>
+#include <linux/prandom.h>
 
 #include "try-catch-impl.h"
 
@@ -530,6 +531,31 @@ static struct kunit_suite kunit_resource_test_suite = {
 	.test_cases = kunit_resource_test_cases,
 };
 
+static char *get_concatenated_log(struct kunit *test, const struct list_head *log,
+				  int *num_frags)
+{
+	struct kunit_log_frag *frag;
+	size_t len = 0;
+	int frag_count = 0;
+	char *p;
+
+	list_for_each_entry(frag, log, list)
+		len += strlen(frag->buf);
+
+	len++; /* for terminating '\0' */
+	p = kunit_kmalloc(test, len, GFP_KERNEL);
+
+	list_for_each_entry(frag, log, list) {
+		strlcat(p, frag->buf, len);
+		++frag_count;
+	}
+
+	if (num_frags)
+		*num_frags = frag_count;
+
+	return p;
+}
+
 static void kunit_log_test(struct kunit *test)
 {
 	struct kunit_suite suite;
@@ -568,7 +594,9 @@ static void kunit_log_test(struct kunit *test)
 
 static void kunit_log_newline_test(struct kunit *test)
 {
+	struct kunit_suite suite;
 	struct kunit_log_frag *frag;
+	char *p;
 
 	kunit_info(test, "Add newline\n");
 	if (test->log) {
@@ -576,14 +604,190 @@ static void kunit_log_newline_test(struct kunit *test)
 		KUNIT_ASSERT_NOT_NULL_MSG(test, strstr(frag->buf, "Add newline\n"),
 			"Missing log line, full log:\n%s", frag->buf);
 		KUNIT_EXPECT_NULL(test, strstr(frag->buf, "Add newline\n\n"));
+
+		suite.log = kunit_kzalloc(test, sizeof(*suite.log), GFP_KERNEL);
+		KUNIT_ASSERT_NOT_ERR_OR_NULL(test, suite.log);
+		INIT_LIST_HEAD(suite.log);
+		frag = kunit_kmalloc(test, sizeof(*frag), GFP_KERNEL);
+		KUNIT_ASSERT_NOT_ERR_OR_NULL(test, frag);
+		kunit_init_log_frag(frag);
+		list_add_tail(&frag->list, suite.log);
+
+		/* String that exactly fills fragment leaving no room for \n */
+		memset(frag->buf, 0, sizeof(frag->buf));
+		memset(frag->buf, 'x', sizeof(frag->buf) - 9);
+		kunit_log_append(suite.log, "12345678");
+		p = get_concatenated_log(test, suite.log, NULL);
+		KUNIT_ASSERT_NOT_ERR_OR_NULL(test, p);
+		KUNIT_EXPECT_NOT_NULL_MSG(test, strstr(p, "x12345678\n"),
+			"Newline not appended when fragment is full. Log is:\n'%s'", p);
 	} else {
 		kunit_skip(test, "only useful when debugfs is enabled");
 	}
 }
 
+static void kunit_log_extend_test_1(struct kunit *test)
+{
+#ifdef CONFIG_KUNIT_DEBUGFS
+	struct kunit_suite suite;
+	struct kunit_log_frag *frag;
+	char line[60];
+	char *p, *pn;
+	size_t len, n;
+	int num_lines, num_frags, i;
+
+	suite.log = kunit_kzalloc(test, sizeof(*suite.log), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, suite.log);
+	INIT_LIST_HEAD(suite.log);
+	frag = kunit_kmalloc(test, sizeof(*frag), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, frag);
+	kunit_init_log_frag(frag);
+	KUNIT_EXPECT_EQ(test, frag->buf[0], '\0');
+	list_add_tail(&frag->list, suite.log);
+
+	i = 0;
+	len = 0;
+	do {
+		n = snprintf(line, sizeof(line),
+			     "The quick brown fox jumps over the lazy penguin %d\n", i);
+		KUNIT_ASSERT_LT(test, n, sizeof(line));
+		kunit_log_append(suite.log, line);
+		++i;
+		len += n;
+	}  while (len < (sizeof(frag->buf) * 30));
+	num_lines = i;
+
+	p = get_concatenated_log(test, suite.log, &num_frags);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, p);
+	KUNIT_EXPECT_GT(test, num_frags, 1);
+
+	kunit_info(test, "num lines:%d num_frags:%d total len:%zu\n",
+		   num_lines, num_frags, strlen(p));
+
+	i = 0;
+	while ((pn = strchr(p, '\n')) != NULL) {
+		*pn = '\0';
+		snprintf(line, sizeof(line),
+			 "The quick brown fox jumps over the lazy penguin %d", i);
+		KUNIT_EXPECT_STREQ(test, p, line);
+		p = pn + 1;
+		++i;
+	}
+	KUNIT_EXPECT_EQ(test, i, num_lines);
+#else
+	kunit_skip(test, "only useful when debugfs is enabled");
+#endif
+}
+
+static void kunit_log_extend_test_2(struct kunit *test)
+{
+#ifdef CONFIG_KUNIT_DEBUGFS
+	struct kunit_suite suite;
+	struct kunit_log_frag *frag;
+	struct rnd_state rnd;
+	char line[101];
+	char *p, *pn;
+	size_t len;
+	int num_lines, num_frags, n, i;
+
+	suite.log = kunit_kzalloc(test, sizeof(*suite.log), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, suite.log);
+	INIT_LIST_HEAD(suite.log);
+	frag = kunit_kmalloc(test, sizeof(*frag), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, frag);
+	kunit_init_log_frag(frag);
+	KUNIT_EXPECT_EQ(test, frag->buf[0], '\0');
+	list_add_tail(&frag->list, suite.log);
+
+	/* Build log line of varying content */
+	line[0] = '\0';
+	i = 0;
+	do {
+		char tmp[9];
+
+		snprintf(tmp, sizeof(tmp), "%x", i++);
+		len = strlcat(line, tmp, sizeof(line));
+	} while (len < sizeof(line) - 1);
+
+	/*
+	 * Log lines of different lengths until we have created
+	 * many fragments.
+	 * The "randomness" must be repeatable.
+	 */
+	prandom_seed_state(&rnd, 3141592653589793238ULL);
+	i = 0;
+	len = 0;
+	num_lines = 0;
+	do {
+		kunit_log_append(suite.log, "%s\n", &line[i]);
+		len += sizeof(line) - i;
+		num_lines++;
+		i = prandom_u32_state(&rnd) % (sizeof(line) - 1);
+	} while (len < (sizeof(frag->buf) * 30));
+
+	/* There must be more than one buffer fragment now */
+	KUNIT_EXPECT_FALSE(test, list_is_singular(suite.log));
+
+	p = get_concatenated_log(test, suite.log, &num_frags);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, p);
+	KUNIT_EXPECT_GT(test, num_frags, 1);
+
+	kunit_info(test, "num lines:%d num_frags:%d total len:%zu\n",
+		   num_lines, num_frags, strlen(p));
+
+	prandom_seed_state(&rnd, 3141592653589793238ULL);
+	i = 0;
+	n = 0;
+	while ((pn = strchr(p, '\n')) != NULL) {
+		*pn = '\0';
+		KUNIT_EXPECT_STREQ(test, p, &line[i]);
+		p = pn + 1;
+		n++;
+		i = prandom_u32_state(&rnd) % (sizeof(line) - 1);
+	}
+	KUNIT_EXPECT_EQ_MSG(test, n, num_lines, "Not enough lines.");
+#else
+	kunit_skip(test, "only useful when debugfs is enabled");
+#endif
+}
+
+static void kunit_log_frag_sized_line_test(struct kunit *test)
+{
+#ifdef CONFIG_KUNIT_DEBUGFS
+	struct kunit_suite suite;
+	struct kunit_log_frag *frag, *src;
+
+	suite.log = kunit_kzalloc(test, sizeof(*suite.log), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, suite.log);
+	INIT_LIST_HEAD(suite.log);
+	frag = kunit_kmalloc(test, sizeof(*frag), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, frag);
+	kunit_init_log_frag(frag);
+	KUNIT_EXPECT_EQ(test, frag->buf[0], '\0');
+	list_add_tail(&frag->list, suite.log);
+
+	src = kunit_kzalloc(test, sizeof(*src), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, src);
+	memset(src->buf, 'x', sizeof(src->buf) - 2);
+	KUNIT_ASSERT_EQ(test, strlen(src->buf), sizeof(src->buf) - 2);
+
+	/* Log a string that exactly fills the fragment */
+	kunit_log_append(suite.log, "%s\n", src->buf);
+	KUNIT_EXPECT_TRUE(test, list_is_singular(suite.log));
+	KUNIT_EXPECT_EQ(test, strlen(frag->buf), sizeof(frag->buf) - 1);
+	strlcat(src->buf, "\n", sizeof(src->buf));
+	KUNIT_EXPECT_STREQ(test, frag->buf, src->buf);
+#else
+	kunit_skip(test, "only useful when debugfs is enabled");
+#endif
+}
+
 static struct kunit_case kunit_log_test_cases[] = {
 	KUNIT_CASE(kunit_log_test),
 	KUNIT_CASE(kunit_log_newline_test),
+	KUNIT_CASE(kunit_log_extend_test_1),
+	KUNIT_CASE(kunit_log_extend_test_2),
+	KUNIT_CASE(kunit_log_frag_sized_line_test),
 	{}
 };
 
