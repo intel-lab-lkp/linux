@@ -127,7 +127,14 @@ struct lppaca {
  */
 #define LPPACA_OLD_SHARED_PROC		2
 
-static inline bool lppaca_shared_proc(struct lppaca *l)
+/*
+ * All CPUs should have the same shared proc value, so directly access the PACA
+ * to avoid false positives from DEBUG_PREEMPT.
+ *
+ * local_paca can't be referenced directly from lppaca.h, hence the macro.
+ */
+#define lppaca_shared_proc() (__lppaca_shared_proc(local_paca->lppaca_ptr))
+static inline bool __lppaca_shared_proc(struct lppaca *l)
 {
 	if (!firmware_has_feature(FW_FEATURE_SPLPAR))
 		return false;

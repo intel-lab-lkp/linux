@@ -49,6 +49,11 @@ extern unsigned int debug_smp_processor_id(void); /* from linux/smp.h */
 
 #ifdef CONFIG_PPC_PSERIES
 #define get_lppaca()	(get_paca()->lppaca_ptr)
+/*
+ * All CPUs should have the same shared proc value, so directly access the PACA
+ * to avoid false positives from DEBUG_PREEMPT.
+ */
+#define lppaca_shared_proc() (__lppaca_shared_proc(local_paca->lppaca_ptr))
 #endif
 
 #define get_slb_shadow()	(get_paca()->slb_shadow_ptr)
