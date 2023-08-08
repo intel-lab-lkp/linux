@@ -171,7 +171,7 @@ input_file() {
 		print_mtime "$1" >> $cpio_list
 		cat "$1"         >> $cpio_list
 		if [ -n "$dep_list" ]; then
-		        echo "$1 \\"  >> $dep_list
+			echo "$1 \\"  >> $dep_list
 			cat "$1" | while read type dir file perm ; do
 				if [ "$type" = "file" ]; then
 					echo "$file \\" >> $dep_list
