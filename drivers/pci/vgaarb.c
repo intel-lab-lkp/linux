@@ -754,10 +754,6 @@ static bool vga_arbiter_add_pci_device(struct pci_dev *pdev)
 	struct pci_dev *bridge;
 	u16 cmd;
 
-	/* Only deal with VGA class devices */
-	if ((pdev->class >> 8) != PCI_CLASS_DISPLAY_VGA)
-		return false;
-
 	/* Allocate structure */
 	vgadev = kzalloc(sizeof(struct vga_device), GFP_KERNEL);
 	if (vgadev == NULL) {
@@ -1493,6 +1489,42 @@ static void vga_arbiter_notify_clients(void)
 	spin_unlock_irqrestore(&vga_lock, flags);
 }
 
+/*
+ * The PCI Class Code spec implies that only VGA devices with programming
+ * interface 0x00 can depend on the legacy VGA address range. VGA devices
+ * with programming interface 0x01 are 8514-compatible controllers. Since
+ * VGA devices with programming interface 0x00 is VGA compatible, the 'vga'
+ * suffix here should refer to the VGA-compatible devices after a strict
+ * reading of that specification. But considering the fact that there
+ * probably don't has a 8514-compatible controller that could be used with
+ * upstream kernel anymore, we would like to just ignore the programming
+ * interface byte.
+ *
+ * Besides, there do exist non VGA-compatible display controllers in the
+ * world and hardware vendors may abandon the old VGA standard someday.
+ * The meaning of 'vga' suffix here may change to evolve with time.
+ *
+ * A strict understanding of 'vga' certainly should be VGA-compatible, While
+ * a relaxed understanding of 'vga' would be PCI devices that are able to
+ * display. Currently, we just keep aligned to the previous behavior.
+ * Deal with VGA class devices.
+ */
+static bool pci_dev_is_vga(struct pci_dev *pdev)
+{
+	if ((pdev->class >> 8) == PCI_CLASS_DISPLAY_VGA)
+		return true;
+
+	/*
+	 * The PCI_CLASS_NOT_DEFINED_VGA is defined to provide backward
+	 * compatibility for devices that were built before the class code
+	 * field was defined.
+	 */
+	if ((pdev->class >> 8) == PCI_CLASS_NOT_DEFINED_VGA)
+		return true;
+
+	return false;
+}
+
 static int pci_notify(struct notifier_block *nb, unsigned long action,
 		      void *data)
 {
@@ -1501,6 +1533,9 @@ static int pci_notify(struct notifier_block *nb, unsigned long action,
 	bool notify = false;
 
 	vgaarb_dbg(dev, "%s\n", __func__);
+
+	if (!pci_dev_is_vga(pdev))
+		return 0;
 
 	/* For now we're only intereted in devices added and removed. I didn't
 	 * test this thing here, so someone needs to double check for the
@@ -1534,8 +1569,8 @@ static struct miscdevice vga_arb_device = {
 
 static int __init vga_arb_device_init(void)
 {
+	struct pci_dev *pdev = NULL;
 	int rc;
-	struct pci_dev *pdev;
 
 	rc = misc_register(&vga_arb_device);
 	if (rc < 0)
@@ -1543,13 +1578,22 @@ static int __init vga_arb_device_init(void)
 
 	bus_register_notifier(&pci_bus_type, &pci_notifier);
 
-	/* We add all PCI devices satisfying VGA class in the arbiter by
-	 * default */
-	pdev = NULL;
-	while ((pdev =
-		pci_get_subsys(PCI_ANY_ID, PCI_ANY_ID, PCI_ANY_ID,
-			       PCI_ANY_ID, pdev)) != NULL)
-		vga_arbiter_add_pci_device(pdev);
+	/*
+	 * We add all PCI devices satisfying VGA class in the arbiter
+	 * by default, but we ignore the programming interface byte
+	 * intentionally.
+	 */
+	do {
+		pdev = pci_get_class_masked(PCI_CLASS_DISPLAY_VGA << 8, 0xFFFF00, pdev);
+		if (pdev && pci_dev_is_vga(pdev))
+			vga_arbiter_add_pci_device(pdev);
+	} while (pdev);
+
+	do {
+		pdev = pci_get_class_masked(PCI_CLASS_NOT_DEFINED_VGA << 8, 0xFFFF00, pdev);
+		if (pdev && pci_dev_is_vga(pdev))
+			vga_arbiter_add_pci_device(pdev);
+	} while (pdev);
 
 	pr_info("loaded\n");
 	return rc;
