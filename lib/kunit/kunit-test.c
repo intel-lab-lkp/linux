@@ -596,7 +596,7 @@ static void kunit_log_newline_test(struct kunit *test)
 {
 	struct kunit_suite suite;
 	struct kunit_log_frag *frag;
-	char *p;
+	char *p, *line;
 
 	kunit_info(test, "Add newline\n");
 	if (test->log) {
@@ -621,6 +621,33 @@ static void kunit_log_newline_test(struct kunit *test)
 		KUNIT_ASSERT_NOT_ERR_OR_NULL(test, p);
 		KUNIT_EXPECT_NOT_NULL_MSG(test, strstr(p, "x12345678\n"),
 			"Newline not appended when fragment is full. Log is:\n'%s'", p);
+		kunit_kfree(test, p);
+
+		/* String that is much longer than a fragment */
+		line = kunit_kzalloc(test, sizeof(frag->buf) * 6, GFP_KERNEL);
+		KUNIT_ASSERT_NOT_ERR_OR_NULL(test, line);
+		memset(line, 'x', (sizeof(frag->buf) * 6) - 1);
+		kunit_log_append(suite.log, "%s", line);
+		p = get_concatenated_log(test, suite.log, NULL);
+		KUNIT_ASSERT_NOT_ERR_OR_NULL(test, p);
+		KUNIT_EXPECT_EQ(test, p[strlen(p) - 1], '\n');
+		KUNIT_EXPECT_NULL(test, strstr(p, "\n\n"));
+		kunit_kfree(test, p);
+
+		kunit_log_append(suite.log, "%s\n", line);
+		p = get_concatenated_log(test, suite.log, NULL);
+		KUNIT_ASSERT_NOT_ERR_OR_NULL(test, p);
+		KUNIT_EXPECT_EQ(test, p[strlen(p) - 1], '\n');
+		KUNIT_EXPECT_NULL(test, strstr(p, "\n\n"));
+		kunit_kfree(test, p);
+
+		line[strlen(line) - 1] = '\n';
+		kunit_log_append(suite.log, "%s", line);
+		p = get_concatenated_log(test, suite.log, NULL);
+		KUNIT_ASSERT_NOT_ERR_OR_NULL(test, p);
+		KUNIT_EXPECT_EQ(test, p[strlen(p) - 1], '\n');
+		KUNIT_EXPECT_NULL(test, strstr(p, "\n\n"));
+		kunit_kfree(test, p);
 	} else {
 		kunit_skip(test, "only useful when debugfs is enabled");
 	}
@@ -782,12 +809,67 @@ static void kunit_log_frag_sized_line_test(struct kunit *test)
 #endif
 }
 
+static void kunit_log_long_line_test(struct kunit *test)
+{
+#ifdef CONFIG_KUNIT_DEBUGFS
+	struct kunit_suite suite;
+	struct kunit_log_frag *frag;
+	struct rnd_state rnd;
+	char *line, *p, *pn;
+	size_t line_buf_size, len;
+	int num_frags, i;
+
+	suite.log = kunit_kzalloc(test, sizeof(*suite.log), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, suite.log);
+	INIT_LIST_HEAD(suite.log);
+	frag = kunit_kmalloc(test, sizeof(*frag), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, frag);
+	kunit_init_log_frag(frag);
+	KUNIT_EXPECT_EQ(test, frag->buf[0], '\0');
+	list_add_tail(&frag->list, suite.log);
+
+	/* Create a very long string to be logged */
+	line_buf_size = sizeof(frag->buf) * 6;
+	line = kunit_kmalloc(test, line_buf_size, GFP_KERNEL);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, line);
+	line[0] = '\0';
+
+	prandom_seed_state(&rnd, 3141592653589793238ULL);
+	len = 0;
+	do {
+		static const char fill[] =
+			"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+
+		i = prandom_u32_state(&rnd) % (sizeof(fill) - 1);
+		len = strlcat(line, &fill[i], line_buf_size);
+	} while (len < line_buf_size);
+
+	kunit_log_append(suite.log, "%s\n", line);
+
+	p = get_concatenated_log(test, suite.log, &num_frags);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, p);
+	KUNIT_EXPECT_GT(test, num_frags, 1);
+
+	kunit_info(test, "num_frags:%d total len:%zu\n", num_frags, strlen(p));
+
+	/* Don't compare the trailing '\n' */
+	pn = strrchr(p, '\n');
+	KUNIT_EXPECT_NOT_ERR_OR_NULL(test, pn);
+	*pn = '\0';
+	KUNIT_EXPECT_EQ(test, strlen(p), strlen(line));
+	KUNIT_EXPECT_STREQ(test, p, line);
+#else
+	kunit_skip(test, "only useful when debugfs is enabled");
+#endif
+}
+
 static struct kunit_case kunit_log_test_cases[] = {
 	KUNIT_CASE(kunit_log_test),
 	KUNIT_CASE(kunit_log_newline_test),
 	KUNIT_CASE(kunit_log_extend_test_1),
 	KUNIT_CASE(kunit_log_extend_test_2),
 	KUNIT_CASE(kunit_log_frag_sized_line_test),
+	KUNIT_CASE(kunit_log_long_line_test),
 	{}
 };
 
