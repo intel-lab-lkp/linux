@@ -19,39 +19,18 @@
 #include "ldm.h"
 #include "check.h"
 
+#undef pr_fmt
+#define pr_fmt(fmt) "partition: ldm: " fmt
+
 /*
  * ldm_debug/info/error/crit - Output an error message
  * @f:    A printf format string containing the message
  * @...:  Variables to substitute into @f
- *
- * ldm_debug() writes a DEBUG level message to the syslog but only if the
- * driver was compiled with debug enabled. Otherwise, the call turns into a NOP.
  */
-#ifndef CONFIG_LDM_DEBUG
-#define ldm_debug(...)	do {} while (0)
-#else
-#define ldm_debug(f, a...) _ldm_printk (KERN_DEBUG, __func__, f, ##a)
-#endif
-
-#define ldm_crit(f, a...)  _ldm_printk (KERN_CRIT,  __func__, f, ##a)
-#define ldm_error(f, a...) _ldm_printk (KERN_ERR,   __func__, f, ##a)
-#define ldm_info(f, a...)  _ldm_printk (KERN_INFO,  __func__, f, ##a)
-
-static __printf(3, 4)
-void _ldm_printk(const char *level, const char *function, const char *fmt, ...)
-{
-	struct va_format vaf;
-	va_list args;
-
-	va_start (args, fmt);
-
-	vaf.fmt = fmt;
-	vaf.va = &args;
-
-	printk("%s%s(): %pV\n", level, function, &vaf);
-
-	va_end(args);
-}
+#define ldm_debug(f, a...) pr_debug("%s(): " f, __func__, ##a)
+#define ldm_crit(f, a...)  pr_crit("%s(): " f, __func__, ##a)
+#define ldm_error(f, a...) pr_err("%s(): " f, __func__, ##a)
+#define ldm_info(f, a...)  pr_info("%s(): " f, __func__, ##a)
 
 /**
  * ldm_parse_privhead - Read the LDM Database PRIVHEAD structure

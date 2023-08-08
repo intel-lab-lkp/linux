@@ -80,10 +80,9 @@ To enable LDM, choose the following two options:
   - "Advanced partition selection" CONFIG_PARTITION_ADVANCED
   - "Windows Logical Disk Manager (Dynamic Disk) support" CONFIG_LDM_PARTITION
 
-If you believe the driver isn't working as it should, you can enable the extra
-debugging code.  This will produce a LOT of output.  The option is:
-
-  - "Windows LDM extra logging" CONFIG_LDM_DEBUG
+If you believe the driver isn't working as it should, you can enable extra
+debugging messages using dynamic debug.  This will produce a LOT of output.
+See Documentation/admin-guide/dynamic-debug-howto.rst for details.
 
 N.B. The partition code cannot be compiled as a module.
 
