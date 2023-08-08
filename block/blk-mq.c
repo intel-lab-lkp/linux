@@ -147,6 +147,8 @@ EXPORT_SYMBOL_GPL(blk_mq_freeze_queue_wait);
  * driver has to take blk-mq max supported nr_hw_queues into account
  * when figuring out nr_hw_queues from hardware info, for avoiding
  * inconsistency between driver and blk-mq.
+ *
+ * Limit to single queue in case of kdump kernel
  */
 unsigned int blk_mq_max_nr_hw_queues(void)
 {
@@ -4350,7 +4352,7 @@ static void blk_mq_update_queue_map(struct blk_mq_tag_set *set)
 	if (set->nr_maps == 1)
 		set->map[HCTX_TYPE_DEFAULT].nr_queues = set->nr_hw_queues;
 
-	if (set->ops->map_queues && !is_kdump_kernel()) {
+	if (set->ops->map_queues) {
 		int i;
 
 		/*
@@ -4400,6 +4402,22 @@ done:
 	return 0;
 }
 
+/* Limit to single map in case of kdump kernel */
+static unsigned int blk_mq_max_nr_maps(void)
+{
+	if (is_kdump_kernel())
+		return 1;
+	return HCTX_MAX_TYPES;
+}
+
+/* Limit to 64 in case of kdump kernel */
+static unsigned int blk_mq_max_depth(void)
+{
+	if (is_kdump_kernel())
+		return 64;
+	return BLK_MQ_MAX_DEPTH;
+}
+
 /*
  * Alloc a tag set to be associated with one or more request queues.
  * May fail with EINVAL for various error conditions. May adjust the
@@ -4436,16 +4454,13 @@ int blk_mq_alloc_tag_set(struct blk_mq_tag_set *set)
 	else if (set->nr_maps > HCTX_MAX_TYPES)
 		return -EINVAL;
 
-	/*
-	 * If a crashdump is active, then we are potentially in a very
-	 * memory constrained environment. Limit us to 1 queue and
-	 * 64 tags to prevent using too much memory.
-	 */
-	if (is_kdump_kernel()) {
-		set->nr_hw_queues = 1;
-		set->nr_maps = 1;
-		set->queue_depth = min(64U, set->queue_depth);
-	}
+	if (set->nr_hw_queues > blk_mq_max_nr_hw_queues())
+		set->nr_hw_queues = blk_mq_max_nr_hw_queues();
+	if (set->nr_maps > blk_mq_max_nr_maps())
+		set->nr_maps = blk_mq_max_nr_maps();
+	if (set->queue_depth > blk_mq_max_depth())
+		set->queue_depth = blk_mq_max_depth();
+
 	/*
 	 * There is no use for more h/w queues than cpus if we just have
 	 * a single map
@@ -4475,7 +4490,7 @@ int blk_mq_alloc_tag_set(struct blk_mq_tag_set *set)
 						  GFP_KERNEL, set->numa_node);
 		if (!set->map[i].mq_map)
 			goto out_free_mq_map;
-		set->map[i].nr_queues = is_kdump_kernel() ? 1 : set->nr_hw_queues;
+		set->map[i].nr_queues = set->nr_hw_queues;
 	}
 
 	blk_mq_update_queue_map(set);
