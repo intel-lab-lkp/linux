@@ -355,4 +355,9 @@ u32 kernel_sock_ip_overhead(struct sock *sk);
 #define MODULE_ALIAS_NET_PF_PROTO_NAME(pf, proto, name) \
 	MODULE_ALIAS("net-pf-" __stringify(pf) "-proto-" __stringify(proto) \
 		     name)
+
+static inline bool sock_use_custom_sol_socket(const struct socket *sock)
+{
+	return test_bit(SOCK_CUSTOM_SOCKOPT, &sock->flags);
+}
 #endif	/* _LINUX_NET_H */
