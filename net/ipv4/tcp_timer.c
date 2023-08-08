@@ -454,6 +454,18 @@ static void tcp_fastopen_synack_timer(struct sock *sk, struct request_sock *req)
 			  req->timeout << req->num_timeout, TCP_RTO_MAX);
 }
 
+static bool tcp_rtx_probe0_timed_out(struct sock *sk)
+{
+	struct tcp_sock *tp = tcp_sk(sk);
+	u32 timeout_ts, rtx_ts, rcv_ts;
+
+	rtx_ts = tp->retrans_stamp;
+	rcv_ts = tp->rcv_tstamp;
+	timeout_ts = after(rtx_ts, rcv_ts) ? rtx_ts : rcv_ts;
+	timeout_ts += TCP_RTO_MAX;
+
+	return after(inet_csk(sk)->icsk_timeout, timeout_ts);
+}
 
 /**
  *  tcp_retransmit_timer() - The TCP retransmit timeout handler
@@ -519,7 +531,7 @@ void tcp_retransmit_timer(struct sock *sk)
 					    tp->snd_una, tp->snd_nxt);
 		}
 #endif
-		if (tcp_jiffies32 - tp->rcv_tstamp > TCP_RTO_MAX) {
+		if (tcp_rtx_probe0_timed_out(sk)) {
 			tcp_write_err(sk);
 			goto out;
 		}
