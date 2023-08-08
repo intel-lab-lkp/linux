@@ -5921,6 +5921,10 @@ __megasas_alloc_irq_vectors(struct megasas_instance *instance)
 	int i, irq_flags;
 	struct irq_affinity desc = { .pre_vectors = instance->low_latency_index_start };
 	struct irq_affinity *descp = &desc;
+	unsigned max_vecs = instance->msix_vectors - instance->iopoll_q_count;
+
+	if (max_vecs > scsi_max_nr_hw_queues())
+		max_vecs = scsi_max_nr_hw_queues();
 
 	irq_flags = PCI_IRQ_MSIX;
 
@@ -5934,7 +5938,7 @@ __megasas_alloc_irq_vectors(struct megasas_instance *instance)
 	 */
 	i = pci_alloc_irq_vectors_affinity(instance->pdev,
 		instance->low_latency_index_start,
-		instance->msix_vectors - instance->iopoll_q_count, irq_flags, descp);
+		max_vecs, irq_flags, descp);
 
 	return i;
 }
