@@ -281,6 +281,10 @@ void print_hex_dump(const char *level, const char *prefix_str, int prefix_type,
 			printk("%s%s%p: %s\n",
 			       level, prefix_str, ptr + i, linebuf);
 			break;
+		case DUMP_PREFIX_ADDRESS_LOW16:
+			printk("%s%s%04lx: %s\n", level,
+			       prefix_str, 0xffff & (unsigned long)(ptr + i), linebuf);
+			break;
 		case DUMP_PREFIX_OFFSET:
 			if (!width) {
 				unsigned long tmp = len - 1; /* offset start from 0, so minus 1 */
