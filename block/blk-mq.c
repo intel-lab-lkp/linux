@@ -140,6 +140,22 @@ void blk_mq_freeze_queue_wait(struct request_queue *q)
 }
 EXPORT_SYMBOL_GPL(blk_mq_freeze_queue_wait);
 
+/*
+ * Return the max supported nr_hw_queues for each hw queue type
+ *
+ * blk_mq_alloc_tag_set() may change nr_hw_queues for kdump kernel, so
+ * driver has to take blk-mq max supported nr_hw_queues into account
+ * when figuring out nr_hw_queues from hardware info, for avoiding
+ * inconsistency between driver and blk-mq.
+ */
+unsigned int blk_mq_max_nr_hw_queues(void)
+{
+	if (is_kdump_kernel())
+		return 1;
+	return nr_cpu_ids;
+}
+EXPORT_SYMBOL_GPL(blk_mq_max_nr_hw_queues);
+
 int blk_mq_freeze_queue_wait_timeout(struct request_queue *q,
 				     unsigned long timeout)
 {
