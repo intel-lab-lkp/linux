@@ -25,12 +25,17 @@ static void idpf_remove(struct pci_dev *pdev)
 	 * end up in bad state.
 	 */
 	cancel_delayed_work_sync(&adapter->vc_event_task);
+	idpf_vc_core_deinit(adapter);
 	/* Be a good citizen and leave the device clean on exit */
 	adapter->dev_ops.reg_ops.trigger_reset(adapter, IDPF_HR_FUNC_RESET);
 	idpf_deinit_dflt_mbx(adapter);
 
+	destroy_workqueue(adapter->serv_wq);
+	destroy_workqueue(adapter->mbx_wq);
 	destroy_workqueue(adapter->vc_event_wq);
 	mutex_destroy(&adapter->reset_lock);
+	mutex_destroy(&adapter->vector_lock);
+	mutex_destroy(&adapter->vc_buf_lock);
 
 	pci_disable_pcie_error_reporting(pdev);
 	pci_set_drvdata(pdev, NULL);
@@ -127,6 +132,24 @@ static int idpf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	pci_set_master(pdev);
 	pci_set_drvdata(pdev, adapter);
 
+	adapter->serv_wq = alloc_workqueue("%s-%s-service", 0, 0,
+					   dev_driver_string(dev),
+					   dev_name(dev));
+	if (!adapter->serv_wq) {
+		dev_err(dev, "Failed to allocate service workqueue\n");
+		err = -ENOMEM;
+		goto err_serv_wq_alloc;
+	}
+
+	adapter->mbx_wq = alloc_workqueue("%s-%s-mbx", 0, 0,
+					  dev_driver_string(dev),
+					  dev_name(dev));
+	if (!adapter->mbx_wq) {
+		dev_err(dev, "Failed to allocate mailbox workqueue\n");
+		err = -ENOMEM;
+		goto err_mbx_wq_alloc;
+	}
+
 	adapter->vc_event_wq = alloc_workqueue("%s-%s-vc_event", 0, 0,
 					       dev_driver_string(dev),
 					       dev_name(dev));
@@ -147,7 +170,13 @@ static int idpf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	}
 
 	mutex_init(&adapter->reset_lock);
+	mutex_init(&adapter->vector_lock);
+	mutex_init(&adapter->vc_buf_lock);
 
+	init_waitqueue_head(&adapter->vchnl_wq);
+
+	INIT_DELAYED_WORK(&adapter->serv_task, idpf_service_task);
+	INIT_DELAYED_WORK(&adapter->mbx_task, idpf_mbx_task);
 	INIT_DELAYED_WORK(&adapter->vc_event_task, idpf_vc_event_task);
 
 	adapter->dev_ops.reg_ops.reset_reg_init(adapter);
@@ -160,6 +189,10 @@ static int idpf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 err_cfg_hw:
 	destroy_workqueue(adapter->vc_event_wq);
 err_vc_event_wq_alloc:
+	destroy_workqueue(adapter->mbx_wq);
+err_mbx_wq_alloc:
+	destroy_workqueue(adapter->serv_wq);
+err_serv_wq_alloc:
 	pci_disable_pcie_error_reporting(pdev);
 err_free:
 	kfree(adapter);
