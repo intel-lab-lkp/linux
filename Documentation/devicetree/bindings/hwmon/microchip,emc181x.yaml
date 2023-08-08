@@ -1,0 +1,45 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+
+$id: http://devicetree.org/schemas/hwmon/microchip,emc181x.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Microchip EMC1812/EMC1813/EMC1814/EMC1815/EMC1833 temperature sensors
+
+maintainers:
+  - Mark Tomlinson <mark.tomlinson@alliedtelesis.co.nz>
+
+properties:
+  compatible:
+    enum:
+      - microchip,emc1812
+      - microchip,emc1813
+      - microchip,emc1814
+      - microchip,emc1815
+      - microchip,emc1833
+
+  reg:
+    maxItems: 1
+
+  emc181x,extended-range:
+    description: Allow for reading of extended temperature range (-64-192C)
+
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        temperature-sensor@7c {
+            compatible = "microchip,emc1812";
+            reg = <0x7c>;
+        };
+    };
