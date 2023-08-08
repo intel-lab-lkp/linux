@@ -238,6 +238,12 @@ static int xpcs_write_vpcs(struct dw_xpcs *xpcs, int reg, u16 val)
 	return xpcs_write_vendor(xpcs, MDIO_MMD_PCS, reg, val);
 }
 
+static void xpcs_dev_flag(struct dw_xpcs *xpcs)
+{
+	if (!strcmp(xpcs->mdiodev->bus->name, "txgbe_pcs_mdio_bus"))
+		xpcs->dev_flag = DW_DEV_TXGBE;
+}
+
 static int xpcs_poll_reset(struct dw_xpcs *xpcs, int dev)
 {
 	/* Poll until the reset bit clears (50ms per retry == 0.6 sec) */
@@ -1284,12 +1290,14 @@ static struct dw_xpcs *xpcs_create(struct mdio_device *mdiodev,
 			goto out;
 		}
 
+		xpcs_dev_flag(xpcs);
 		xpcs->pcs.ops = &xpcs_phylink_ops;
 		xpcs->pcs.neg_mode = true;
 		if (compat->an_mode == DW_10GBASER)
 			return xpcs;
 
-		xpcs->pcs.poll = true;
+		if (xpcs->dev_flag != DW_DEV_TXGBE)
+			xpcs->pcs.poll = true;
 
 		ret = xpcs_soft_reset(xpcs, compat);
 		if (ret)
