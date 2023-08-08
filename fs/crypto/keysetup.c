@@ -302,44 +302,30 @@ void fscrypt_hash_inode_number(struct fscrypt_info *ci,
 					      &mk->mk_ino_hash_key);
 }
 
-static int fscrypt_setup_iv_ino_lblk_32_key(struct fscrypt_info *ci,
-					    struct fscrypt_master_key *mk)
+static int fscrypt_setup_ino_hash_key(struct fscrypt_master_key *mk)
 {
 	int err;
 
-	err = find_mode_prepared_key(ci, mk, mk->mk_iv_ino_lblk_32_keys,
-				     HKDF_CONTEXT_IV_INO_LBLK_32_KEY, true);
-	if (err)
-		return err;
-
 	/* pairs with smp_store_release() below */
-	if (!smp_load_acquire(&mk->mk_ino_hash_key_initialized)) {
+	if (smp_load_acquire(&mk->mk_ino_hash_key_initialized))
+		return 0;
 
-		mutex_lock(&fscrypt_mode_key_setup_mutex);
+	mutex_lock(&fscrypt_mode_key_setup_mutex);
 
-		if (mk->mk_ino_hash_key_initialized)
-			goto unlock;
+	if (mk->mk_ino_hash_key_initialized)
+		goto unlock;
 
-		err = fscrypt_derive_siphash_key(mk,
-						 HKDF_CONTEXT_INODE_HASH_KEY,
-						 NULL, 0, &mk->mk_ino_hash_key);
-		if (err)
-			goto unlock;
-		/* pairs with smp_load_acquire() above */
-		smp_store_release(&mk->mk_ino_hash_key_initialized, true);
+	err = fscrypt_derive_siphash_key(mk,
+					 HKDF_CONTEXT_INODE_HASH_KEY,
+					 NULL, 0, &mk->mk_ino_hash_key);
+	if (err)
+		goto unlock;
+	/* pairs with smp_load_acquire() above */
+	smp_store_release(&mk->mk_ino_hash_key_initialized, true);
 unlock:
-		mutex_unlock(&fscrypt_mode_key_setup_mutex);
-		if (err)
-			return err;
-	}
+	mutex_unlock(&fscrypt_mode_key_setup_mutex);
 
-	/*
-	 * New inodes may not have an inode number assigned yet.
-	 * Hashing their inode number is delayed until later.
-	 */
-	if (ci->ci_inode->i_ino)
-		fscrypt_hash_inode_number(ci, mk);
-	return 0;
+	return err;
 }
 
 static int fscrypt_setup_v2_file_key(struct fscrypt_info *ci,
@@ -371,7 +357,9 @@ static int fscrypt_setup_v2_file_key(struct fscrypt_info *ci,
 					     true);
 	} else if (ci->ci_policy.v2.flags &
 		   FSCRYPT_POLICY_FLAG_IV_INO_LBLK_32) {
-		err = fscrypt_setup_iv_ino_lblk_32_key(ci, mk);
+		err = find_mode_prepared_key(ci, mk, mk->mk_iv_ino_lblk_32_keys,
+					     HKDF_CONTEXT_IV_INO_LBLK_32_KEY,
+					     true);
 	} else {
 		u8 derived_key[FSCRYPT_MAX_KEY_SIZE];
 
@@ -627,6 +615,20 @@ fscrypt_setup_encryption_info(struct inode *inode,
 		res = fscrypt_derive_dirhash_key(crypt_info, mk);
 		if (res)
 			goto out;
+	}
+
+	/*
+	 * The IV_INO_LBLK_32 policy needs a hashed inode number, but new
+	 * inodes may not have an inode number assigned yet.
+	 */
+	if (policy->version == FSCRYPT_POLICY_V2 &&
+	    (policy->v2.flags & FSCRYPT_POLICY_FLAG_IV_INO_LBLK_32)) {
+		res = fscrypt_setup_ino_hash_key(mk);
+		if (res)
+			goto out;
+
+		if (inode->i_ino)
+			fscrypt_hash_inode_number(crypt_info, mk);
 	}
 
 	/*
