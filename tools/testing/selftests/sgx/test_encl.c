@@ -5,11 +5,12 @@
 #include "defines.h"
 
 /*
- * Data buffer spanning two pages that will be placed first in .data
- * segment. Even if not used internally the second page is needed by
- * external test manipulating page permissions.
+ * Data buffer spanning two pages that will be placed first in the .data
+ * segment via the linker script. Even if not used internally the second page
+ * is needed by external test manipulating page permissions, so do not declare
+ * encl_buffer as static to make sure it is entirely preserved by the compiler.
  */
-static uint8_t encl_buffer[8192] = { 1 };
+uint8_t __attribute__((section(".data.encl_buffer"))) encl_buffer[8192];
 
 enum sgx_enclu_function {
 	EACCEPT = 0x5,
