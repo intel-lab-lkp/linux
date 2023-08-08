@@ -173,25 +173,27 @@ umount:
 
 int main(int argc, char **argv)
 {
-	bool has_ben = false, mbm_test = true, mba_test = true, cmt_test = true;
-	int c, cpu_no = 1, argc_new = argc, i, no_of_bits = 0;
+	bool mbm_test = true, mba_test = true, cmt_test = true;
+	int c, cpu_no = 1, i, no_of_bits = 0;
 	const char *benchmark_cmd[BENCHMARK_ARGS];
-	int ben_ind, tests = 0;
 	bool cat_test = true;
+	int tests = 0;
 
-	for (i = 0; i < argc; i++) {
-		if (strcmp(argv[i], "-b") == 0) {
-			ben_ind = i + 1;
-			argc_new = ben_ind - 1;
-			has_ben = true;
-			break;
-		}
-	}
-
-	while ((c = getopt(argc_new, argv, "ht:b:n:p:")) != -1) {
+	while ((c = getopt(argc, argv, "ht:b:n:p:")) != -1) {
 		char *token;
 
 		switch (c) {
+		case 'b':
+			optind--;			/* Back to optarg */
+			if (argc - optind >= BENCHMARK_ARGS - 1)
+				ksft_exit_fail_msg("Too long benchmark command");
+
+			/* Extract benchmark command from command line. */
+			for (i = 0; i < argc - optind; i++)
+				benchmark_cmd[i] = argv[i + optind];
+			benchmark_cmd[i] = NULL;
+
+			goto last_arg;
 		case 't':
 			token = strtok(optarg, ",");
 
@@ -241,6 +243,16 @@ int main(int argc, char **argv)
 		}
 	}
 
+	/* If no benchmark is given by "-b" argument, use fill_buf. */
+	benchmark_cmd[0] = "fill_buf";
+	benchmark_cmd[1] = DEFAULT_SPAN_STR;
+	benchmark_cmd[2] = "1";
+	benchmark_cmd[3] = "0";
+	benchmark_cmd[4] = "false";
+	benchmark_cmd[5] = NULL;
+
+last_arg:
+
 	ksft_print_header();
 
 	/*
@@ -250,24 +262,6 @@ int main(int argc, char **argv)
 	 */
 	if (geteuid() != 0)
 		return ksft_exit_skip("Not running as root. Skipping...\n");
-
-	if (has_ben) {
-		if (argc - ben_ind >= BENCHMARK_ARGS - 1)
-			ksft_exit_fail_msg("Too long benchmark command");
-
-		/* Extract benchmark command from command line. */
-		for (i = 0; i < argc - ben_ind; i++)
-			benchmark_cmd[i] = argv[i + ben_ind];
-		benchmark_cmd[i] = NULL;
-	} else {
-		/* If no benchmark is given by "-b" argument, use fill_buf. */
-		benchmark_cmd[0] = "fill_buf";
-		benchmark_cmd[1] = DEFAULT_SPAN_STR;
-		benchmark_cmd[2] = "1";
-		benchmark_cmd[3] = "0";
-		benchmark_cmd[4] = "false";
-		benchmark_cmd[5] = NULL;
-	}
 
 	if (!check_resctrlfs_support())
 		return ksft_exit_skip("resctrl FS does not exist. Enable X86_CPU_RESCTRL config option.\n");
