@@ -191,11 +191,11 @@ void fscrypt_destroy_prepared_key(struct super_block *sb,
 /* Given a per-file encryption key, set up the file's crypto transform object */
 int fscrypt_set_per_file_enc_key(struct fscrypt_info *ci, const u8 *raw_key)
 {
-	ci->ci_owns_key = true;
 	ci->ci_enc_key = kzalloc(sizeof(*ci->ci_enc_key), GFP_KERNEL);
 	if (!ci->ci_enc_key)
 		return -ENOMEM;
 
+	ci->ci_enc_key->type = FSCRYPT_KEY_PER_INFO;
 	return fscrypt_prepare_key(ci->ci_enc_key, raw_key, ci);
 }
 
@@ -290,7 +290,8 @@ static int setup_new_mode_prepared_key(struct fscrypt_master_key *mk,
 				  hkdf_context, hkdf_info, hkdf_infolen,
 				  mode_key, mode->keysize);
 	if (err)
-		goto out_unlock;
+		return err;
+	prep_key->type = FSCRYPT_KEY_MASTER_KEY;
 	err = fscrypt_prepare_key(prep_key, mode_key, ci);
 	memzero_explicit(mode_key, mode->keysize);
 
@@ -584,12 +585,16 @@ static void put_crypt_info(struct fscrypt_info *ci)
 	if (!ci)
 		return;
 
-	if (ci->ci_direct_key)
-		fscrypt_put_direct_key(ci->ci_direct_key);
-	else if (ci->ci_owns_key) {
-		fscrypt_destroy_prepared_key(ci->ci_inode->i_sb,
-					     ci->ci_enc_key);
-		kfree_sensitive(ci->ci_enc_key);
+	if (ci->ci_enc_key) {
+		enum fscrypt_prepared_key_type type = ci->ci_enc_key->type;
+
+		if (type == FSCRYPT_KEY_DIRECT_V1)
+			fscrypt_put_direct_key(ci->ci_enc_key);
+		if (type == FSCRYPT_KEY_PER_INFO) {
+			fscrypt_destroy_prepared_key(ci->ci_inode->i_sb,
+						     ci->ci_enc_key);
+			kfree_sensitive(ci->ci_enc_key);
+		}
 	}
 
 	mk = ci->ci_master_key;

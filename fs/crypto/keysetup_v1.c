@@ -160,8 +160,11 @@ static void free_direct_key(struct fscrypt_direct_key *dk)
 	}
 }
 
-void fscrypt_put_direct_key(struct fscrypt_direct_key *dk)
+void fscrypt_put_direct_key(struct fscrypt_prepared_key *prep_key)
 {
+	struct fscrypt_direct_key *dk =
+		container_of(prep_key, struct fscrypt_direct_key, dk_key);
+
 	if (!refcount_dec_and_lock(&dk->dk_refcount, &fscrypt_direct_keys_lock))
 		return;
 	hash_del(&dk->dk_node);
@@ -235,6 +238,7 @@ fscrypt_get_direct_key(const struct fscrypt_info *ci, const u8 *raw_key)
 	dk->dk_sb = ci->ci_inode->i_sb;
 	refcount_set(&dk->dk_refcount, 1);
 	dk->dk_mode = ci->ci_mode;
+	dk->dk_key.type = FSCRYPT_KEY_DIRECT_V1;
 	err = fscrypt_prepare_key(&dk->dk_key, raw_key, ci);
 	if (err)
 		goto err_free_dk;
@@ -258,7 +262,6 @@ static int setup_v1_file_key_direct(struct fscrypt_info *ci,
 	dk = fscrypt_get_direct_key(ci, raw_master_key);
 	if (IS_ERR(dk))
 		return PTR_ERR(dk);
-	ci->ci_direct_key = dk;
 	ci->ci_enc_key = &dk->dk_key;
 	return 0;
 }

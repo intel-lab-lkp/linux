@@ -175,17 +175,38 @@ struct fscrypt_symlink_data {
 } __packed;
 
 /**
+ * enum fscrypt_prepared_key_type - records a prepared key's ownership
+ *
+ * @FSCRYPT_KEY_PER_INFO: this prepared key is allocated for a specific info
+ *		          and is never shared.
+ * @FSCRYPT_KEY_DIRECT_V1: this prepared key is embedded in a fscrypt_direct_key
+ *		           used in v1 direct key policies.
+ * @FSCRYPT_KEY_MASTER_KEY: this prepared key is a per-mode and policy key,
+ *			    part of a fscrypt_master_key, shared between all
+ *			    users of this master key having this mode and
+ *			    policy.
+ */
+enum fscrypt_prepared_key_type {
+	FSCRYPT_KEY_PER_INFO = 1,
+	FSCRYPT_KEY_DIRECT_V1,
+	FSCRYPT_KEY_MASTER_KEY,
+} __packed;
+
+/**
  * struct fscrypt_prepared_key - a key prepared for actual encryption/decryption
  * @tfm: crypto API transform object
  * @blk_key: key for blk-crypto
+ * @type: records the ownership type of the prepared key
  *
- * Normally only one of the fields will be non-NULL.
+ * Normally only one of @tfm and @blk_key will be non-NULL, although it is
+ * possible if @type is FSCRYPT_KEY_MASTER_KEY.
  */
 struct fscrypt_prepared_key {
 	struct crypto_skcipher *tfm;
 #ifdef CONFIG_FS_ENCRYPTION_INLINE_CRYPT
 	struct blk_crypto_key *blk_key;
 #endif
+	enum fscrypt_prepared_key_type type;
 };
 
 /*
@@ -232,12 +253,6 @@ struct fscrypt_info {
 	 * Only used when ->ci_master_key is set.
 	 */
 	struct list_head ci_master_key_link;
-
-	/*
-	 * If non-NULL, then encryption is done using the master key directly
-	 * and ci_enc_key will equal ci_direct_key->dk_key.
-	 */
-	struct fscrypt_direct_key *ci_direct_key;
 
 	/*
 	 * This inode's hash key for filenames.  This is a 128-bit SipHash-2-4
@@ -641,7 +656,7 @@ static inline int fscrypt_require_key(struct inode *inode)
 
 /* keysetup_v1.c */
 
-void fscrypt_put_direct_key(struct fscrypt_direct_key *dk);
+void fscrypt_put_direct_key(struct fscrypt_prepared_key *prep_key);
 
 int fscrypt_setup_v1_file_key(struct fscrypt_info *ci,
 			      const u8 *raw_master_key);
