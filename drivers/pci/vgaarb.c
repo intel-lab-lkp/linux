@@ -99,7 +99,7 @@ both:
 	return 1;
 }
 
-/* this is only used a cookie - it should not be dereferenced */
+/* This is only used as a cookie, it should not be dereferenced */
 static struct pci_dev *vga_default;
 
 /* Find somebody in our list */
