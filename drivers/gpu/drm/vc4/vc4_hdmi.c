@@ -929,13 +929,8 @@ static void vc4_hdmi_set_avi_infoframe(struct drm_encoder *encoder)
 static void vc4_hdmi_set_spd_infoframe(struct drm_encoder *encoder)
 {
 	union hdmi_infoframe frame;
-	int ret;
 
-	ret = hdmi_spd_infoframe_init(&frame.spd, "Broadcom", "Videocore");
-	if (ret < 0) {
-		DRM_ERROR("couldn't fill SPD infoframe\n");
-		return;
-	}
+	hdmi_spd_infoframe_init(&frame.spd, "Broadcom", "Videocore");
 
 	frame.spd.sdi = HDMI_SPD_SDI_PC;
 

@@ -2022,11 +2022,7 @@ static int tegra_sor_hdmi_enable_audio_infoframe(struct tegra_sor *sor)
 	u32 value;
 	int err;
 
-	err = hdmi_audio_infoframe_init(&frame);
-	if (err < 0) {
-		dev_err(sor->dev, "failed to setup audio infoframe: %d\n", err);
-		return err;
-	}
+	hdmi_audio_infoframe_init(&frame);
 
 	frame.channels = sor->format.channels;
 

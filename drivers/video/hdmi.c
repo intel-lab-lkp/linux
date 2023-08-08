@@ -216,11 +216,9 @@ EXPORT_SYMBOL(hdmi_avi_infoframe_pack);
  * @frame: HDMI SPD infoframe
  * @vendor: vendor string
  * @product: product string
- *
- * Returns 0 on success or a negative error code on failure.
  */
-int hdmi_spd_infoframe_init(struct hdmi_spd_infoframe *frame,
-			    const char *vendor, const char *product)
+void hdmi_spd_infoframe_init(struct hdmi_spd_infoframe *frame,
+			     const char *vendor, const char *product)
 {
 	size_t len;
 
@@ -234,8 +232,6 @@ int hdmi_spd_infoframe_init(struct hdmi_spd_infoframe *frame,
 	memcpy(frame->vendor, vendor, min(len, sizeof(frame->vendor)));
 	len = strlen(product);
 	memcpy(frame->product, product, min(len, sizeof(frame->product)));
-
-	return 0;
 }
 EXPORT_SYMBOL(hdmi_spd_infoframe_init);
 
@@ -348,18 +344,14 @@ EXPORT_SYMBOL(hdmi_spd_infoframe_pack);
 /**
  * hdmi_audio_infoframe_init() - initialize an HDMI audio infoframe
  * @frame: HDMI audio infoframe
- *
- * Returns 0 on success or a negative error code on failure.
  */
-int hdmi_audio_infoframe_init(struct hdmi_audio_infoframe *frame)
+void hdmi_audio_infoframe_init(struct hdmi_audio_infoframe *frame)
 {
 	memset(frame, 0, sizeof(*frame));
 
 	frame->type = HDMI_INFOFRAME_TYPE_AUDIO;
 	frame->version = 1;
 	frame->length = HDMI_AUDIO_INFOFRAME_SIZE;
-
-	return 0;
 }
 EXPORT_SYMBOL(hdmi_audio_infoframe_init);
 
@@ -526,10 +518,8 @@ EXPORT_SYMBOL(hdmi_audio_infoframe_pack_for_dp);
 /**
  * hdmi_vendor_infoframe_init() - initialize an HDMI vendor infoframe
  * @frame: HDMI vendor infoframe
- *
- * Returns 0 on success or a negative error code on failure.
  */
-int hdmi_vendor_infoframe_init(struct hdmi_vendor_infoframe *frame)
+void hdmi_vendor_infoframe_init(struct hdmi_vendor_infoframe *frame)
 {
 	memset(frame, 0, sizeof(*frame));
 
@@ -544,8 +534,6 @@ int hdmi_vendor_infoframe_init(struct hdmi_vendor_infoframe *frame)
 	 */
 	frame->s3d_struct = HDMI_3D_STRUCTURE_INVALID;
 	frame->length = HDMI_VENDOR_INFOFRAME_SIZE;
-
-	return 0;
 }
 EXPORT_SYMBOL(hdmi_vendor_infoframe_init);
 
@@ -698,18 +686,14 @@ hdmi_vendor_any_infoframe_check_only(const union hdmi_vendor_any_infoframe *fram
  * hdmi_drm_infoframe_init() - initialize an HDMI Dynaminc Range and
  * mastering infoframe
  * @frame: HDMI DRM infoframe
- *
- * Returns 0 on success or a negative error code on failure.
  */
-int hdmi_drm_infoframe_init(struct hdmi_drm_infoframe *frame)
+void hdmi_drm_infoframe_init(struct hdmi_drm_infoframe *frame)
 {
 	memset(frame, 0, sizeof(*frame));
 
 	frame->type = HDMI_INFOFRAME_TYPE_DRM;
 	frame->version = 1;
 	frame->length = HDMI_DRM_INFOFRAME_SIZE;
-
-	return 0;
 }
 EXPORT_SYMBOL(hdmi_drm_infoframe_init);
 
@@ -1661,7 +1645,6 @@ static int hdmi_spd_infoframe_unpack(struct hdmi_spd_infoframe *frame,
 				     const void *buffer, size_t size)
 {
 	const u8 *ptr = buffer;
-	int ret;
 
 	if (size < HDMI_INFOFRAME_SIZE(SPD))
 		return -EINVAL;
@@ -1677,9 +1660,7 @@ static int hdmi_spd_infoframe_unpack(struct hdmi_spd_infoframe *frame,
 
 	ptr += HDMI_INFOFRAME_HEADER_SIZE;
 
-	ret = hdmi_spd_infoframe_init(frame, ptr, ptr + 8);
-	if (ret)
-		return ret;
+	hdmi_spd_infoframe_init(frame, ptr, ptr + 8);
 
 	frame->sdi = ptr[24];
 
@@ -1703,7 +1684,6 @@ static int hdmi_audio_infoframe_unpack(struct hdmi_audio_infoframe *frame,
 				       const void *buffer, size_t size)
 {
 	const u8 *ptr = buffer;
-	int ret;
 
 	if (size < HDMI_INFOFRAME_SIZE(AUDIO))
 		return -EINVAL;
@@ -1717,9 +1697,7 @@ static int hdmi_audio_infoframe_unpack(struct hdmi_audio_infoframe *frame,
 	if (hdmi_infoframe_checksum(buffer, HDMI_INFOFRAME_SIZE(AUDIO)) != 0)
 		return -EINVAL;
 
-	ret = hdmi_audio_infoframe_init(frame);
-	if (ret)
-		return ret;
+	hdmi_audio_infoframe_init(frame);
 
 	ptr += HDMI_INFOFRAME_HEADER_SIZE;
 
@@ -1755,7 +1733,6 @@ hdmi_vendor_any_infoframe_unpack(union hdmi_vendor_any_infoframe *frame,
 {
 	const u8 *ptr = buffer;
 	size_t length;
-	int ret;
 	u8 hdmi_video_format;
 	struct hdmi_vendor_infoframe *hvf = &frame->hdmi;
 
@@ -1789,9 +1766,7 @@ hdmi_vendor_any_infoframe_unpack(union hdmi_vendor_any_infoframe *frame,
 	if (hdmi_video_format > 0x2)
 		return -EINVAL;
 
-	ret = hdmi_vendor_infoframe_init(hvf);
-	if (ret)
-		return ret;
+	hdmi_vendor_infoframe_init(hvf);
 
 	hvf->length = length;
 
@@ -1837,15 +1812,12 @@ int hdmi_drm_infoframe_unpack_only(struct hdmi_drm_infoframe *frame,
 	const u8 *temp;
 	u8 x_lsb, x_msb;
 	u8 y_lsb, y_msb;
-	int ret;
 	int i;
 
 	if (size < HDMI_DRM_INFOFRAME_SIZE)
 		return -EINVAL;
 
-	ret = hdmi_drm_infoframe_init(frame);
-	if (ret)
-		return ret;
+	hdmi_drm_infoframe_init(frame);
 
 	frame->eotf = ptr[0] & 0x7;
 	frame->metadata_type = ptr[1] & 0x7;

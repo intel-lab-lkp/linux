@@ -27,7 +27,6 @@ int drm_hdmi_infoframe_set_hdr_metadata(struct hdmi_drm_infoframe *frame,
 {
 	struct drm_connector *connector;
 	struct hdr_output_metadata *hdr_metadata;
-	int err;
 
 	if (!frame || !conn_state)
 		return -EINVAL;
@@ -47,9 +46,7 @@ int drm_hdmi_infoframe_set_hdr_metadata(struct hdmi_drm_infoframe *frame,
 	    connector->hdr_sink_metadata.hdmi_type1.eotf))
 		DRM_DEBUG_KMS("Unknown EOTF %d\n", hdr_metadata->hdmi_metadata_type1.eotf);
 
-	err = hdmi_drm_infoframe_init(frame);
-	if (err < 0)
-		return err;
+	hdmi_drm_infoframe_init(frame);
 
 	frame->eotf = hdr_metadata->hdmi_metadata_type1.eotf;
 	frame->metadata_type = hdr_metadata->hdmi_metadata_type1.metadata_type;

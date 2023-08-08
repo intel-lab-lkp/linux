@@ -763,12 +763,9 @@ intel_hdmi_compute_spd_infoframe(struct intel_encoder *encoder,
 		intel_hdmi_infoframe_enable(HDMI_INFOFRAME_TYPE_SPD);
 
 	if (IS_DGFX(i915))
-		ret = hdmi_spd_infoframe_init(frame, "Intel", "Discrete gfx");
+		hdmi_spd_infoframe_init(frame, "Intel", "Discrete gfx");
 	else
-		ret = hdmi_spd_infoframe_init(frame, "Intel", "Integrated gfx");
-
-	if (drm_WARN_ON(encoder->base.dev, ret))
-		return false;
+		hdmi_spd_infoframe_init(frame, "Intel", "Integrated gfx");
 
 	frame->sdi = HDMI_SPD_SDI_PC;
 

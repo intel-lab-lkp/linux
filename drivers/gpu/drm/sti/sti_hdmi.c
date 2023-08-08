@@ -1322,11 +1322,7 @@ static int sti_hdmi_bind(struct device *dev, struct device *master, void *data)
 	}
 
 	/* Initialize audio infoframe */
-	err = hdmi_audio_infoframe_init(&hdmi->audio.cea);
-	if (err) {
-		DRM_ERROR("Failed to init audio infoframe\n");
-		goto err_sysfs;
-	}
+	hdmi_audio_infoframe_init(&hdmi->audio.cea);
 
 	cec_fill_conn_info_from_drm(&conn_info, drm_connector);
 	hdmi->notifier = cec_notifier_conn_register(&hdmi->dev, NULL,

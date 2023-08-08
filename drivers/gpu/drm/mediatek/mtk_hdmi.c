@@ -995,12 +995,7 @@ static int mtk_hdmi_setup_spd_infoframe(struct mtk_hdmi *hdmi,
 	u8 buffer[HDMI_INFOFRAME_HEADER_SIZE + HDMI_SPD_INFOFRAME_SIZE];
 	ssize_t err;
 
-	err = hdmi_spd_infoframe_init(&frame, vendor, product);
-	if (err < 0) {
-		dev_err(hdmi->dev, "Failed to initialize SPD infoframe: %zd\n",
-			err);
-		return err;
-	}
+	hdmi_spd_infoframe_init(&frame, vendor, product);
 
 	err = hdmi_spd_infoframe_pack(&frame, buffer, sizeof(buffer));
 	if (err < 0) {
@@ -1018,12 +1013,7 @@ static int mtk_hdmi_setup_audio_infoframe(struct mtk_hdmi *hdmi)
 	u8 buffer[HDMI_INFOFRAME_HEADER_SIZE + HDMI_AUDIO_INFOFRAME_SIZE];
 	ssize_t err;
 
-	err = hdmi_audio_infoframe_init(&frame);
-	if (err < 0) {
-		dev_err(hdmi->dev, "Failed to setup audio infoframe: %zd\n",
-			err);
-		return err;
-	}
+	hdmi_audio_infoframe_init(&frame);
 
 	frame.coding_type = HDMI_AUDIO_CODING_TYPE_STREAM;
 	frame.sample_frequency = HDMI_AUDIO_SAMPLE_FREQUENCY_STREAM;

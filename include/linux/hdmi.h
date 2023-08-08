@@ -214,7 +214,7 @@ ssize_t hdmi_avi_infoframe_pack(struct hdmi_avi_infoframe *frame, void *buffer,
 ssize_t hdmi_avi_infoframe_pack_only(const struct hdmi_avi_infoframe *frame,
 				     void *buffer, size_t size);
 int hdmi_avi_infoframe_check(struct hdmi_avi_infoframe *frame);
-int hdmi_drm_infoframe_init(struct hdmi_drm_infoframe *frame);
+void hdmi_drm_infoframe_init(struct hdmi_drm_infoframe *frame);
 ssize_t hdmi_drm_infoframe_pack(struct hdmi_drm_infoframe *frame, void *buffer,
 				size_t size);
 ssize_t hdmi_drm_infoframe_pack_only(const struct hdmi_drm_infoframe *frame,
@@ -249,8 +249,8 @@ struct hdmi_spd_infoframe {
 	enum hdmi_spd_sdi sdi;
 };
 
-int hdmi_spd_infoframe_init(struct hdmi_spd_infoframe *frame,
-			    const char *vendor, const char *product);
+void hdmi_spd_infoframe_init(struct hdmi_spd_infoframe *frame,
+			     const char *vendor, const char *product);
 ssize_t hdmi_spd_infoframe_pack(struct hdmi_spd_infoframe *frame, void *buffer,
 				size_t size);
 ssize_t hdmi_spd_infoframe_pack_only(const struct hdmi_spd_infoframe *frame,
@@ -331,7 +331,7 @@ struct hdmi_audio_infoframe {
 
 };
 
-int hdmi_audio_infoframe_init(struct hdmi_audio_infoframe *frame);
+void hdmi_audio_infoframe_init(struct hdmi_audio_infoframe *frame);
 ssize_t hdmi_audio_infoframe_pack(struct hdmi_audio_infoframe *frame,
 				  void *buffer, size_t size);
 ssize_t hdmi_audio_infoframe_pack_only(const struct hdmi_audio_infoframe *frame,
@@ -393,7 +393,7 @@ struct hdr_sink_metadata {
 	};
 };
 
-int hdmi_vendor_infoframe_init(struct hdmi_vendor_infoframe *frame);
+void hdmi_vendor_infoframe_init(struct hdmi_vendor_infoframe *frame);
 ssize_t hdmi_vendor_infoframe_pack(struct hdmi_vendor_infoframe *frame,
 				   void *buffer, size_t size);
 ssize_t hdmi_vendor_infoframe_pack_only(const struct hdmi_vendor_infoframe *frame,

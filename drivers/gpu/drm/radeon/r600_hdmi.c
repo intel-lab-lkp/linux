@@ -432,11 +432,7 @@ void r600_hdmi_update_audio_settings(struct drm_encoder *encoder)
 	DRM_DEBUG("0x%02X IEC60958 status bits and 0x%02X category code\n",
 		  (int)audio.status_bits, (int)audio.category_code);
 
-	err = hdmi_audio_infoframe_init(&frame);
-	if (err < 0) {
-		DRM_ERROR("failed to setup audio infoframe\n");
-		return;
-	}
+	hdmi_audio_infoframe_init(&frame);
 
 	frame.channels = audio.channels;
 

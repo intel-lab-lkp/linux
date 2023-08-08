@@ -7236,7 +7236,6 @@ drm_hdmi_vendor_infoframe_from_display_mode(struct hdmi_vendor_infoframe *frame,
 	 */
 	bool has_hdmi_infoframe = connector ?
 		connector->display_info.has_hdmi_infoframe : false;
-	int err;
 
 	if (!frame || !mode)
 		return -EINVAL;
@@ -7244,9 +7243,7 @@ drm_hdmi_vendor_infoframe_from_display_mode(struct hdmi_vendor_infoframe *frame,
 	if (!has_hdmi_infoframe)
 		return -EINVAL;
 
-	err = hdmi_vendor_infoframe_init(frame);
-	if (err < 0)
-		return err;
+	hdmi_vendor_infoframe_init(frame);
 
 	/*
 	 * Even if it's not absolutely necessary to send the infoframe

@@ -749,12 +749,7 @@ static void tegra_hdmi_setup_audio_infoframe(struct tegra_hdmi *hdmi)
 	u8 buffer[14];
 	ssize_t err;
 
-	err = hdmi_audio_infoframe_init(&frame);
-	if (err < 0) {
-		dev_err(hdmi->dev, "failed to setup audio infoframe: %zd\n",
-			err);
-		return;
-	}
+	hdmi_audio_infoframe_init(&frame);
 
 	frame.channels = hdmi->format.channels;
 
