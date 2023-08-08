@@ -1535,9 +1535,11 @@ static int pci_notify(struct notifier_block *nb, unsigned long action,
 	if (!pci_dev_is_vga(pdev))
 		return 0;
 
-	/* For now we're only intereted in devices added and removed. I didn't
-	 * test this thing here, so someone needs to double check for the
-	 * cases of hotplugable vga cards. */
+	/*
+	 * For now, we're only interested in devices added and removed.
+	 * I didn't test this thing here, so someone needs to double check
+	 * for the cases of hot-pluggable VGA cards.
+	 */
 	if (action == BUS_NOTIFY_ADD_DEVICE)
 		notify = vga_arbiter_add_pci_device(pdev);
 	else if (action == BUS_NOTIFY_DEL_DEVICE)
