@@ -140,24 +140,81 @@ static struct kunit_log_frag *kunit_log_extend(struct list_head *log)
 	return frag;
 }
 
+static void kunit_log_append_string(struct list_head *log, const char *src)
+{
+	struct kunit_log_frag *frag, *new_frag;
+	int log_len, bytes_left;
+	ssize_t written;
+	char *p;
+
+	frag = list_last_entry(log, struct kunit_log_frag, list);
+	log_len = strlen(frag->buf);
+	bytes_left = sizeof(frag->buf) - log_len;
+
+	written = strscpy(frag->buf + log_len, src, bytes_left);
+	if (written != -E2BIG)
+		goto newline;
+
+	src += bytes_left - 1;
+	do {
+		new_frag = kunit_log_extend(log);
+		if (!new_frag)
+			goto newline;
+
+		frag = new_frag;
+		written = strscpy(frag->buf, src, sizeof(frag->buf));
+		src += sizeof(frag->buf) - 1;
+	} while (written == -E2BIG);
+
+newline:
+	if (written == -E2BIG)
+		written = strlen(frag->buf);
+
+	p = &frag->buf[written - 1];
+	if (*p != '\n') {
+		if (strlcat(frag->buf, "\n", sizeof(frag->buf)) >= sizeof(frag->buf)) {
+			frag = kunit_log_extend(log);
+			if (!frag) {
+				*p = '\n';
+				return;
+			}
+
+			frag->buf[0] = '\n';
+			frag->buf[1] = '\0';
+		}
+	}
+}
+
 /* Append formatted message to log, extending the log buffer if necessary. */
 void kunit_log_append(struct list_head *log, const char *fmt, ...)
 {
 	va_list args;
 	struct kunit_log_frag *frag;
 	int len, log_len, len_left;
+	char *tmp = NULL;
 
 	if (!log)
 		return;
-
-	frag = list_last_entry(log, struct kunit_log_frag, list);
-	log_len = strlen(frag->buf);
-	len_left = sizeof(frag->buf) - log_len - 1;
 
 	/* Evaluate length of line to add to log */
 	va_start(args, fmt);
 	len = vsnprintf(NULL, 0, fmt, args) + 1;
 	va_end(args);
+
+	if (len > sizeof(frag->buf) - 1) {
+		va_start(args, fmt);
+		tmp = kvasprintf(GFP_KERNEL, fmt, args);
+		va_end(args);
+
+		kunit_log_append_string(log, tmp);
+		kfree(tmp);
+
+		return;
+	}
+
+	frag = list_last_entry(log, struct kunit_log_frag, list);
+	log_len = strlen(frag->buf);
+	len_left = sizeof(frag->buf) - log_len - 1;
 
 	if (len > len_left) {
 		frag = kunit_log_extend(log);
