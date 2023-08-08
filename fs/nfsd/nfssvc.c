@@ -1106,6 +1106,9 @@ int nfsd_pool_stats_release(struct inode *inode, struct file *file)
 	return ret;
 }
 
+/* Increment NFSD_RPC_STATUS_VERSION adding new info to the handler */
+#define NFSD_RPC_STATUS_VERSION		1
+
 static int nfsd_rpc_status_show(struct seq_file *m, void *v)
 {
 	struct inode *inode = file_inode(m->file);
@@ -1113,6 +1116,8 @@ static int nfsd_rpc_status_show(struct seq_file *m, void *v)
 	int i;
 
 	rcu_read_lock();
+
+	seq_printf(m, "# version %u\n", NFSD_RPC_STATUS_VERSION);
 
 	for (i = 0; i < nn->nfsd_serv->sv_nrpools; i++) {
 		struct svc_rqst *rqstp;
