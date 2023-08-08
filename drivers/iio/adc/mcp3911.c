@@ -33,7 +33,7 @@
 #define MCP3911_GAIN_VAL(ch, val)      ((val << 3 * ch) & MCP3911_GAIN_MASK(ch))
 
 #define MCP3911_REG_STATUSCOM		0x0a
-#define MCP3911_STATUSCOM_DRHIZ         BIT(12)
+#define MCP3911_STATUSCOM_DRHIZ		BIT(12)
 #define MCP3911_STATUSCOM_READ		GENMASK(7, 6)
 #define MCP3911_STATUSCOM_CH1_24WIDTH	BIT(4)
 #define MCP3911_STATUSCOM_CH0_24WIDTH	BIT(3)
@@ -112,7 +112,7 @@ static int mcp3911_write(struct mcp3911 *adc, u8 reg, u32 val, u8 len)
 }
 
 static int mcp3911_update(struct mcp3911 *adc, u8 reg, u32 mask,
-		u32 val, u8 len)
+			  u32 val, u8 len)
 {
 	u32 tmp;
 	int ret;
@@ -127,8 +127,8 @@ static int mcp3911_update(struct mcp3911 *adc, u8 reg, u32 mask,
 }
 
 static int mcp3911_write_raw_get_fmt(struct iio_dev *indio_dev,
-					struct iio_chan_spec const *chan,
-					long mask)
+				     struct iio_chan_spec const *chan,
+				     long mask)
 {
 	switch (mask) {
 	case IIO_CHAN_INFO_SCALE:
@@ -141,9 +141,9 @@ static int mcp3911_write_raw_get_fmt(struct iio_dev *indio_dev,
 }
 
 static int mcp3911_read_avail(struct iio_dev *indio_dev,
-			     struct iio_chan_spec const *chan,
-			     const int **vals, int *type, int *length,
-			     long info)
+			      struct iio_chan_spec const *chan,
+			      const int **vals, int *type, int *length,
+			      long info)
 {
 	switch (info) {
 	case IIO_CHAN_INFO_OVERSAMPLING_RATIO:
@@ -212,8 +212,8 @@ out:
 }
 
 static int mcp3911_write_raw(struct iio_dev *indio_dev,
-			    struct iio_chan_spec const *channel, int val,
-			    int val2, long mask)
+			     struct iio_chan_spec const *channel, int val,
+			     int val2, long mask)
 {
 	struct mcp3911 *adc = iio_priv(indio_dev);
 	int ret = -EINVAL;
@@ -223,12 +223,12 @@ static int mcp3911_write_raw(struct iio_dev *indio_dev,
 	case IIO_CHAN_INFO_SCALE:
 		for (int i = 0; i < MCP3911_NUM_SCALES; i++) {
 			if (val == mcp3911_scale_table[i][0] &&
-				val2 == mcp3911_scale_table[i][1]) {
+			    val2 == mcp3911_scale_table[i][1]) {
 
 				adc->gain[channel->channel] = BIT(i);
 				ret = mcp3911_update(adc, MCP3911_REG_GAIN,
-						MCP3911_GAIN_MASK(channel->channel),
-						MCP3911_GAIN_VAL(channel->channel, i), 1);
+						     MCP3911_GAIN_MASK(channel->channel),
+						     MCP3911_GAIN_VAL(channel->channel, i), 1);
 			}
 		}
 		break;
@@ -246,8 +246,8 @@ static int mcp3911_write_raw(struct iio_dev *indio_dev,
 
 		/* Enable offset*/
 		ret = mcp3911_update(adc, MCP3911_REG_STATUSCOM,
-				MCP3911_STATUSCOM_EN_OFFCAL,
-				MCP3911_STATUSCOM_EN_OFFCAL, 2);
+				     MCP3911_STATUSCOM_EN_OFFCAL,
+				     MCP3911_STATUSCOM_EN_OFFCAL, 2);
 		break;
 
 	case IIO_CHAN_INFO_OVERSAMPLING_RATIO:
@@ -255,7 +255,7 @@ static int mcp3911_write_raw(struct iio_dev *indio_dev,
 			if (val == mcp3911_osr_table[i]) {
 				val = FIELD_PREP(MCP3911_CONFIG_OSR, i);
 				ret = mcp3911_update(adc, MCP3911_REG_CONFIG, MCP3911_CONFIG_OSR,
-						val, 2);
+						     val, 2);
 				break;
 			}
 		}
@@ -279,7 +279,7 @@ static int mcp3911_calc_scale_table(struct mcp3911 *adc)
 		if (ret < 0) {
 			dev_err(&adc->spi->dev,
 				"failed to get vref voltage: %d\n",
-			       ret);
+				ret);
 			return ret;
 		}
 
@@ -305,25 +305,25 @@ static int mcp3911_calc_scale_table(struct mcp3911 *adc)
 	return 0;
 }
 
-#define MCP3911_CHAN(idx) {					\
-		.type = IIO_VOLTAGE,				\
-		.indexed = 1,					\
-		.channel = idx,					\
-		.scan_index = idx,				\
-		.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_OVERSAMPLING_RATIO), \
-		.info_mask_separate = BIT(IIO_CHAN_INFO_RAW) |	\
-			BIT(IIO_CHAN_INFO_OFFSET) |		\
-			BIT(IIO_CHAN_INFO_SCALE),		\
-		.info_mask_shared_by_type_available =           \
-			BIT(IIO_CHAN_INFO_OVERSAMPLING_RATIO),	\
-		.info_mask_separate_available =			\
-			BIT(IIO_CHAN_INFO_SCALE),		\
-		.scan_type = {					\
-			.sign = 's',				\
-			.realbits = 24,				\
-			.storagebits = 32,			\
-			.endianness = IIO_BE,			\
-		},						\
+#define MCP3911_CHAN(idx) {				\
+	.type = IIO_VOLTAGE,				\
+	.indexed = 1,					\
+	.channel = idx,					\
+	.scan_index = idx,				\
+	.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_OVERSAMPLING_RATIO), \
+	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW) |	\
+	BIT(IIO_CHAN_INFO_OFFSET) |			\
+	BIT(IIO_CHAN_INFO_SCALE),			\
+	.info_mask_shared_by_type_available =           \
+	BIT(IIO_CHAN_INFO_OVERSAMPLING_RATIO),		\
+	.info_mask_separate_available =			\
+	BIT(IIO_CHAN_INFO_SCALE),			\
+	.scan_type = {					\
+		.sign = 's',				\
+		.realbits = 24,				\
+		.storagebits = 32,			\
+		.endianness = IIO_BE,			\
+	},						\
 }
 
 static const struct iio_chan_spec mcp3911_channels[] = {
@@ -355,7 +355,7 @@ static irqreturn_t mcp3911_trigger_handler(int irq, void *p)
 	ret = spi_sync_transfer(adc->spi, xfer, ARRAY_SIZE(xfer));
 	if (ret < 0) {
 		dev_warn(&adc->spi->dev,
-				"failed to get conversion data\n");
+			 "failed to get conversion data\n");
 		goto out;
 	}
 
@@ -494,7 +494,7 @@ static int mcp3911_probe(struct spi_device *spi)
 			return ret;
 
 		ret = devm_add_action_or_reset(&spi->dev,
-				mcp3911_cleanup_regulator, adc->vref);
+					       mcp3911_cleanup_regulator, adc->vref);
 		if (ret)
 			return ret;
 	}
@@ -517,10 +517,10 @@ static int mcp3911_probe(struct spi_device *spi)
 
 	if (device_property_read_bool(&spi->dev, "microchip,data-ready-hiz"))
 		ret = mcp3911_update(adc, MCP3911_REG_STATUSCOM, MCP3911_STATUSCOM_DRHIZ,
-				0, 2);
+				     0, 2);
 	else
 		ret = mcp3911_update(adc, MCP3911_REG_STATUSCOM, MCP3911_STATUSCOM_DRHIZ,
-				MCP3911_STATUSCOM_DRHIZ, 2);
+				     MCP3911_STATUSCOM_DRHIZ, 2);
 	if (ret)
 		return ret;
 
@@ -528,12 +528,12 @@ static int mcp3911_probe(struct spi_device *spi)
 	if (ret)
 		return ret;
 
-       /* Set gain to 1 for all channels */
+	/* Set gain to 1 for all channels */
 	for (int i = 0; i < MCP3911_NUM_CHANNELS; i++) {
 		adc->gain[i] = 1;
 		ret = mcp3911_update(adc, MCP3911_REG_GAIN,
-				MCP3911_GAIN_MASK(i),
-				MCP3911_GAIN_VAL(i, 0), 1);
+				     MCP3911_GAIN_MASK(i),
+				     MCP3911_GAIN_VAL(i, 0), 1);
 		if (ret)
 			return ret;
 	}
@@ -550,8 +550,8 @@ static int mcp3911_probe(struct spi_device *spi)
 
 	if (spi->irq > 0) {
 		adc->trig = devm_iio_trigger_alloc(&spi->dev, "%s-dev%d",
-				indio_dev->name,
-				iio_device_id(indio_dev));
+						   indio_dev->name,
+						   iio_device_id(indio_dev));
 		if (!adc->trig)
 			return -ENOMEM;
 
@@ -567,15 +567,16 @@ static int mcp3911_probe(struct spi_device *spi)
 		 * don't enable the interrupt to avoid extra load on the system.
 		 */
 		ret = devm_request_irq(&spi->dev, spi->irq,
-				&iio_trigger_generic_data_rdy_poll, IRQF_NO_AUTOEN | IRQF_ONESHOT,
-				indio_dev->name, adc->trig);
+				       &iio_trigger_generic_data_rdy_poll,
+				       IRQF_NO_AUTOEN | IRQF_ONESHOT,
+				       indio_dev->name, adc->trig);
 		if (ret)
 			return ret;
 	}
 
 	ret = devm_iio_triggered_buffer_setup(&spi->dev, indio_dev,
-			NULL,
-			mcp3911_trigger_handler, NULL);
+					      NULL,
+					      mcp3911_trigger_handler, NULL);
 	if (ret)
 		return ret;
 
