@@ -126,7 +126,7 @@ void blk_queue_max_hw_sectors(struct request_queue *q, unsigned int max_hw_secto
 	unsigned int max_sectors;
 
 	if ((max_hw_sectors << 9) < PAGE_SIZE) {
-		max_hw_sectors = 1 << (PAGE_SHIFT - 9);
+		max_hw_sectors = 1 << PAGE_SECTORS_SHIFT;
 		printk(KERN_INFO "%s: set to minimum %d\n",
 		       __func__, max_hw_sectors);
 	}
@@ -148,7 +148,7 @@ void blk_queue_max_hw_sectors(struct request_queue *q, unsigned int max_hw_secto
 
 	if (!q->disk)
 		return;
-	q->disk->bdi->io_pages = max_sectors >> (PAGE_SHIFT - 9);
+	q->disk->bdi->io_pages = max_sectors >> PAGE_SECTORS_SHIFT;
 }
 EXPORT_SYMBOL(blk_queue_max_hw_sectors);
 
@@ -398,7 +398,7 @@ void disk_update_readahead(struct gendisk *disk)
 	 */
 	disk->bdi->ra_pages =
 		max(queue_io_opt(q) * 2 / PAGE_SIZE, VM_READAHEAD_PAGES);
-	disk->bdi->io_pages = queue_max_sectors(q) >> (PAGE_SHIFT - 9);
+	disk->bdi->io_pages = queue_max_sectors(q) >> PAGE_SECTORS_SHIFT;
 }
 EXPORT_SYMBOL_GPL(disk_update_readahead);
 
