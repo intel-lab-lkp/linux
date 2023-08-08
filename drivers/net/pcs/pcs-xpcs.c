@@ -228,12 +228,12 @@ static int xpcs_write_vendor(struct dw_xpcs *xpcs, int dev, int reg,
 	return xpcs_write(xpcs, dev, DW_VENDOR | reg, val);
 }
 
-static int xpcs_read_vpcs(struct dw_xpcs *xpcs, int reg)
+int xpcs_read_vpcs(struct dw_xpcs *xpcs, int reg)
 {
 	return xpcs_read_vendor(xpcs, MDIO_MMD_PCS, reg);
 }
 
-static int xpcs_write_vpcs(struct dw_xpcs *xpcs, int reg, u16 val)
+int xpcs_write_vpcs(struct dw_xpcs *xpcs, int reg, u16 val)
 {
 	return xpcs_write_vendor(xpcs, MDIO_MMD_PCS, reg, val);
 }
@@ -824,6 +824,12 @@ int xpcs_do_config(struct dw_xpcs *xpcs, phy_interface_t interface,
 	if (!compat)
 		return -ENODEV;
 
+	if (xpcs->dev_flag == DW_DEV_TXGBE) {
+		ret = txgbe_xpcs_switch_mode(xpcs, interface);
+		if (ret)
+			return ret;
+	}
+
 	switch (compat->an_mode) {
 	case DW_10GBASER:
 		break;
@@ -1293,8 +1299,6 @@ static struct dw_xpcs *xpcs_create(struct mdio_device *mdiodev,
 		xpcs_dev_flag(xpcs);
 		xpcs->pcs.ops = &xpcs_phylink_ops;
 		xpcs->pcs.neg_mode = true;
-		if (compat->an_mode == DW_10GBASER)
-			return xpcs;
 
 		if (xpcs->dev_flag != DW_DEV_TXGBE)
 			xpcs->pcs.poll = true;

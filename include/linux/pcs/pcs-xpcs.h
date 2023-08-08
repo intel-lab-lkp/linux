@@ -29,6 +29,7 @@ struct dw_xpcs {
 	struct mdio_device *mdiodev;
 	const struct xpcs_id *id;
 	struct phylink_pcs pcs;
+	phy_interface_t interface;
 	int dev_flag;
 };
 
