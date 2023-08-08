@@ -3132,11 +3132,12 @@ void __meminit kcompactd_run(int nid)
 	}
 }
 
+#ifdef CONFIG_MEMORY_HOTREMOVE
 /*
  * Called by memory hotplug when all memory in a node is offlined. Caller must
  * be holding mem_hotplug_begin/done().
  */
-void __meminit kcompactd_stop(int nid)
+void kcompactd_stop(int nid)
 {
 	struct task_struct *kcompactd = NODE_DATA(nid)->kcompactd;
 
@@ -3145,6 +3146,7 @@ void __meminit kcompactd_stop(int nid)
 		NODE_DATA(nid)->kcompactd = NULL;
 	}
 }
+#endif
 
 /*
  * It's optimal to keep kcompactd on the same CPUs as their memory, but

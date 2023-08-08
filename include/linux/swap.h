@@ -437,7 +437,7 @@ static inline bool node_reclaim_enabled(void)
 void check_move_unevictable_folios(struct folio_batch *fbatch);
 
 extern void __meminit kswapd_run(int nid);
-extern void __meminit kswapd_stop(int nid);
+extern void kswapd_stop(int nid);
 
 #ifdef CONFIG_SWAP
 

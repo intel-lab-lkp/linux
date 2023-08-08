@@ -7897,11 +7897,12 @@ void __meminit kswapd_run(int nid)
 	pgdat_kswapd_unlock(pgdat);
 }
 
+#ifdef CONFIG_MEMORY_HOTREMOVE
 /*
  * Called by memory hotplug when all memory in a node is offlined.  Caller must
  * be holding mem_hotplug_begin/done().
  */
-void __meminit kswapd_stop(int nid)
+void kswapd_stop(int nid)
 {
 	pg_data_t *pgdat = NODE_DATA(nid);
 	struct task_struct *kswapd;
@@ -7914,6 +7915,7 @@ void __meminit kswapd_stop(int nid)
 	}
 	pgdat_kswapd_unlock(pgdat);
 }
+#endif
 
 static int __init kswapd_init(void)
 {
