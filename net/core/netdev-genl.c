@@ -10,11 +10,11 @@
 
 static int
 netdev_nl_dev_fill(struct net_device *netdev, struct sk_buff *rsp,
-		   u32 portid, u32 seq, int flags, u32 cmd)
+		   const struct genl_info *info)
 {
 	void *hdr;
 
-	hdr = genlmsg_put(rsp, portid, seq, &netdev_nl_family, flags, cmd);
+	hdr = genlmsg_iput(rsp, info);
 	if (!hdr)
 		return -EMSGSIZE;
 
@@ -41,6 +41,7 @@ netdev_nl_dev_fill(struct net_device *netdev, struct sk_buff *rsp,
 static void
 netdev_genl_dev_notify(struct net_device *netdev, int cmd)
 {
+	GENL_INFO_NTF(info, &netdev_nl_family, cmd);
 	struct sk_buff *ntf;
 
 	if (!genl_has_listeners(&netdev_nl_family, dev_net(netdev),
@@ -51,7 +52,7 @@ netdev_genl_dev_notify(struct net_device *netdev, int cmd)
 	if (!ntf)
 		return;
 
-	if (netdev_nl_dev_fill(netdev, ntf, 0, 0, 0, cmd)) {
+	if (netdev_nl_dev_fill(netdev, ntf, &info)) {
 		nlmsg_free(ntf);
 		return;
 	}
@@ -80,8 +81,7 @@ int netdev_nl_dev_get_doit(struct sk_buff *skb, struct genl_info *info)
 
 	netdev = __dev_get_by_index(genl_info_net(info), ifindex);
 	if (netdev)
-		err = netdev_nl_dev_fill(netdev, rsp, info->snd_portid,
-					 info->snd_seq, 0, info->genlhdr->cmd);
+		err = netdev_nl_dev_fill(netdev, rsp, info);
 	else
 		err = -ENODEV;
 
@@ -105,10 +105,7 @@ int netdev_nl_dev_get_dumpit(struct sk_buff *skb, struct netlink_callback *cb)
 
 	rtnl_lock();
 	for_each_netdev_dump(net, netdev, cb->args[0]) {
-		err = netdev_nl_dev_fill(netdev, skb,
-					 NETLINK_CB(cb->skb).portid,
-					 cb->nlh->nlmsg_seq, 0,
-					 NETDEV_CMD_DEV_GET);
+		err = netdev_nl_dev_fill(netdev, skb, genl_info_dump(cb));
 		if (err < 0)
 			break;
 	}
