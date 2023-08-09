@@ -487,9 +487,11 @@ extern int sched_group_set_idle(struct task_group *tg, long idle);
 #ifdef CONFIG_SMP
 extern void set_task_rq_fair(struct sched_entity *se,
 			     struct cfs_rq *prev, struct cfs_rq *next);
+extern void sched_update_domains(void);
 #else /* !CONFIG_SMP */
 static inline void set_task_rq_fair(struct sched_entity *se,
 			     struct cfs_rq *prev, struct cfs_rq *next) { }
+static inline void sched_update_domains(void) {}
 #endif /* CONFIG_SMP */
 #endif /* CONFIG_FAIR_GROUP_SCHED */
 
@@ -578,6 +580,7 @@ struct cfs_rq {
 #endif
 
 #ifdef CONFIG_SMP
+	struct shared_runq	*shared_runq;
 	/*
 	 * CFS load tracking
 	 */
@@ -2282,6 +2285,7 @@ struct sched_class {
 	void (*rq_offline)(struct rq *rq);
 
 	struct rq *(*find_lock_rq)(struct task_struct *p, struct rq *rq);
+	void (*update_domains)(void);
 #endif
 
 	void (*task_tick)(struct rq *rq, struct task_struct *p, int queued);

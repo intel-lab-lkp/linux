@@ -139,20 +139,235 @@ static int __init setup_sched_thermal_decay_shift(char *str)
 }
 __setup("sched_thermal_decay_shift=", setup_sched_thermal_decay_shift);
 
+/**
+ * struct shared_runq - Per-LLC queue structure for enqueuing and migrating
+ * runnable tasks within an LLC.
+ *
+ * WHAT
+ * ====
+ *
+ * This structure enables the scheduler to be more aggressively work
+ * conserving, by placing waking tasks on a per-LLC FIFO queue that can then be
+ * pulled from when another core in the LLC is going to go idle.
+ *
+ * struct rq stores a pointer to its LLC's shared_runq via struct cfs_rq.
+ * Waking tasks are enqueued in the calling CPU's struct shared_runq in
+ * __enqueue_entity(), and are opportunistically pulled from the shared_runq
+ * in newidle_balance(). Tasks enqueued in a shared_runq may be scheduled prior
+ * to being pulled from the shared_runq, in which case they're simply dequeued
+ * from the shared_runq in __dequeue_entity().
+ *
+ * There is currently no task-stealing between shared_runqs in different LLCs,
+ * which means that shared_runq is not fully work conserving. This could be
+ * added at a later time, with tasks likely only being stolen across
+ * shared_runqs on the same NUMA node to avoid violating NUMA affinities.
+ *
+ * HOW
+ * ===
+ *
+ * A shared_runq is comprised of a list, and a spinlock for synchronization.
+ * Given that the critical section for a shared_runq is typically a fast list
+ * operation, and that the shared_runq is localized to a single LLC, the
+ * spinlock will typically only be contended on workloads that do little else
+ * other than hammer the runqueue.
+ *
+ * WHY
+ * ===
+ *
+ * As mentioned above, the main benefit of shared_runq is that it enables more
+ * aggressive work conservation in the scheduler. This can benefit workloads
+ * that benefit more from CPU utilization than from L1/L2 cache locality.
+ *
+ * shared_runqs are segmented across LLCs both to avoid contention on the
+ * shared_runq spinlock by minimizing the number of CPUs that could contend on
+ * it, as well as to strike a balance between work conservation, and L3 cache
+ * locality.
+ */
+struct shared_runq {
+	struct list_head list;
+	raw_spinlock_t lock;
+} ____cacheline_aligned;
+
 #ifdef CONFIG_SMP
+
+static DEFINE_PER_CPU(struct shared_runq, shared_runqs);
+
+static struct shared_runq *rq_shared_runq(struct rq *rq)
+{
+	return rq->cfs.shared_runq;
+}
+
+static void shared_runq_reassign_domains(void)
+{
+	int i;
+	struct shared_runq *shared_runq;
+	struct rq *rq;
+	struct rq_flags rf;
+
+	for_each_possible_cpu(i) {
+		rq = cpu_rq(i);
+		shared_runq = &per_cpu(shared_runqs, per_cpu(sd_llc_id, i));
+
+		rq_lock(rq, &rf);
+		rq->cfs.shared_runq = shared_runq;
+		rq_unlock(rq, &rf);
+	}
+}
+
+static void __shared_runq_drain(struct shared_runq *shared_runq)
+{
+	struct task_struct *p, *tmp;
+
+	raw_spin_lock(&shared_runq->lock);
+	list_for_each_entry_safe(p, tmp, &shared_runq->list, shared_runq_node)
+		list_del_init(&p->shared_runq_node);
+	raw_spin_unlock(&shared_runq->lock);
+}
+
+static void update_domains_fair(void)
+{
+	int i;
+	struct shared_runq *shared_runq;
+
+	/* Avoid racing with SHARED_RUNQ enable / disable. */
+	lockdep_assert_cpus_held();
+
+	shared_runq_reassign_domains();
+
+	/* Ensure every core sees its updated shared_runq pointers. */
+	synchronize_rcu();
+
+	/*
+	 * Drain all tasks from all shared_runq's to ensure there are no stale
+	 * tasks in any prior domain runq. This can cause us to drain live
+	 * tasks that would otherwise have been safe to schedule, but this
+	 * isn't a practical problem given how infrequently domains are
+	 * rebuilt.
+	 */
+	for_each_possible_cpu(i) {
+		shared_runq = &per_cpu(shared_runqs, i);
+		__shared_runq_drain(shared_runq);
+	}
+}
+
 void shared_runq_toggle(bool enabling)
-{}
+{
+	int cpu;
+
+	if (enabling)
+		return;
+
+	/* Avoid racing with hotplug. */
+	lockdep_assert_cpus_held();
+
+	/* Ensure all cores have stopped enqueueing / dequeuing tasks. */
+	synchronize_rcu();
+
+	for_each_possible_cpu(cpu) {
+		int sd_id;
+
+		sd_id = per_cpu(sd_llc_id, cpu);
+		if (cpu == sd_id)
+			__shared_runq_drain(rq_shared_runq(cpu_rq(cpu)));
+	}
+}
+
+static struct task_struct *shared_runq_pop_task(struct rq *rq)
+{
+	struct task_struct *p;
+	struct shared_runq *shared_runq;
+
+	shared_runq = rq_shared_runq(rq);
+	if (list_empty(&shared_runq->list))
+		return NULL;
+
+	raw_spin_lock(&shared_runq->lock);
+	p = list_first_entry_or_null(&shared_runq->list, struct task_struct,
+				     shared_runq_node);
+	if (p && is_cpu_allowed(p, cpu_of(rq)))
+		list_del_init(&p->shared_runq_node);
+	else
+		p = NULL;
+	raw_spin_unlock(&shared_runq->lock);
+
+	return p;
+}
+
+static void shared_runq_push_task(struct rq *rq, struct task_struct *p)
+{
+	struct shared_runq *shared_runq;
+
+	shared_runq = rq_shared_runq(rq);
+	raw_spin_lock(&shared_runq->lock);
+	list_add_tail(&p->shared_runq_node, &shared_runq->list);
+	raw_spin_unlock(&shared_runq->lock);
+}
 
 static void shared_runq_enqueue_task(struct rq *rq, struct task_struct *p)
-{}
+{
+	/*
+	 * Only enqueue the task in the shared runqueue if:
+	 *
+	 * - SHARED_RUNQ is enabled
+	 * - The task isn't pinned to a specific CPU
+	 */
+	if (p->nr_cpus_allowed == 1)
+		return;
+
+	shared_runq_push_task(rq, p);
+}
 
 static int shared_runq_pick_next_task(struct rq *rq, struct rq_flags *rf)
 {
-	return 0;
+	struct task_struct *p = NULL;
+	struct rq *src_rq;
+	struct rq_flags src_rf;
+	int ret = -1;
+
+	p = shared_runq_pop_task(rq);
+	if (!p)
+		return 0;
+
+	rq_unpin_lock(rq, rf);
+	raw_spin_rq_unlock(rq);
+
+	src_rq = task_rq_lock(p, &src_rf);
+
+	if (task_on_rq_queued(p) && !task_on_cpu(src_rq, p)) {
+		update_rq_clock(src_rq);
+		src_rq = move_queued_task(src_rq, &src_rf, p, cpu_of(rq));
+		ret = 1;
+	}
+
+	if (src_rq != rq) {
+		task_rq_unlock(src_rq, p, &src_rf);
+		raw_spin_rq_lock(rq);
+	} else {
+		rq_unpin_lock(rq, &src_rf);
+		raw_spin_unlock_irqrestore(&p->pi_lock, src_rf.flags);
+	}
+	rq_repin_lock(rq, rf);
+
+	return ret;
 }
 
 static void shared_runq_dequeue_task(struct task_struct *p)
-{}
+{
+	struct shared_runq *shared_runq;
+
+	if (!list_empty(&p->shared_runq_node)) {
+		shared_runq = rq_shared_runq(task_rq(p));
+		raw_spin_lock(&shared_runq->lock);
+		/*
+		 * Need to double-check for the list being empty to avoid
+		 * racing with the list being drained on the domain recreation
+		 * or SHARED_RUNQ feature enable / disable path.
+		 */
+		if (likely(!list_empty(&p->shared_runq_node)))
+			list_del_init(&p->shared_runq_node);
+		raw_spin_unlock(&shared_runq->lock);
+	}
+}
 
 /*
  * For asym packing, by default the lower numbered CPU has higher priority.
@@ -12093,6 +12308,16 @@ static int newidle_balance(struct rq *this_rq, struct rq_flags *rf)
 	rcu_read_lock();
 	sd = rcu_dereference_check_sched_domain(this_rq->sd);
 
+	/*
+	 * Skip <= LLC domains as they likely won't have any tasks if the
+	 * shared runq is empty.
+	 */
+	if (sched_feat(SHARED_RUNQ)) {
+		sd = rcu_dereference(*this_cpu_ptr(&sd_llc));
+		if (likely(sd))
+			sd = sd->parent;
+	}
+
 	if (!READ_ONCE(this_rq->rd->overload) ||
 	    (sd && this_rq->avg_idle < sd->max_newidle_lb_cost)) {
 
@@ -12969,6 +13194,7 @@ DEFINE_SCHED_CLASS(fair) = {
 
 	.task_dead		= task_dead_fair,
 	.set_cpus_allowed	= set_cpus_allowed_common,
+	.update_domains		= update_domains_fair,
 #endif
 
 	.task_tick		= task_tick_fair,
@@ -13035,6 +13261,7 @@ __init void init_sched_fair_class(void)
 {
 #ifdef CONFIG_SMP
 	int i;
+	struct shared_runq *shared_runq;
 
 	for_each_possible_cpu(i) {
 		zalloc_cpumask_var_node(&per_cpu(load_balance_mask, i), GFP_KERNEL, cpu_to_node(i));
@@ -13044,6 +13271,9 @@ __init void init_sched_fair_class(void)
 		INIT_CSD(&cpu_rq(i)->cfsb_csd, __cfsb_csd_unthrottle, cpu_rq(i));
 		INIT_LIST_HEAD(&cpu_rq(i)->cfsb_csd_list);
 #endif
+		shared_runq = &per_cpu(shared_runqs, i);
+		INIT_LIST_HEAD(&shared_runq->list);
+		raw_spin_lock_init(&shared_runq->lock);
 	}
 
 	open_softirq(SCHED_SOFTIRQ, run_rebalance_domains);

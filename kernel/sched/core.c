@@ -4529,6 +4529,7 @@ static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
 #ifdef CONFIG_SMP
 	p->wake_entry.u_flags = CSD_TYPE_TTWU;
 	p->migration_pending = NULL;
+	INIT_LIST_HEAD(&p->shared_runq_node);
 #endif
 	init_sched_mm_cid(p);
 }
@@ -9762,6 +9763,18 @@ int sched_cpu_deactivate(unsigned int cpu)
 	}
 	sched_domains_numa_masks_clear(cpu);
 	return 0;
+}
+
+void sched_update_domains(void)
+{
+	const struct sched_class *class;
+
+	update_sched_domain_debugfs();
+
+	for_each_class(class) {
+		if (class->update_domains)
+			class->update_domains();
+	}
 }
 
 static void sched_rq_cpu_starting(unsigned int cpu)
