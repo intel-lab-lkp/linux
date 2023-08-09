@@ -4229,6 +4229,10 @@ out:
 	return event;
 }
 
+void __weak arch_perf_rotate_pmu_set(void)
+{
+}
+
 static bool perf_rotate_context(struct perf_cpu_pmu_context *cpc)
 {
 	struct perf_cpu_context *cpuctx = this_cpu_ptr(&perf_cpu_context);
@@ -4282,6 +4286,7 @@ static bool perf_rotate_context(struct perf_cpu_pmu_context *cpc)
 	if (task_event || (task_epc && cpu_event))
 		__pmu_ctx_sched_in(task_epc->ctx, pmu);
 
+	arch_perf_rotate_pmu_set();
 	perf_pmu_enable(pmu);
 	perf_ctx_unlock(cpuctx, cpuctx->task_ctx);
 

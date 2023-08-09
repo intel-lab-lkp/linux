@@ -218,6 +218,15 @@ void vcpu_load(struct kvm_vcpu *vcpu)
 }
 EXPORT_SYMBOL_GPL(vcpu_load);
 
+/* Do we in the guest? */
+bool is_guest(void)
+{
+	struct kvm_vcpu *vcpu;
+
+	vcpu = __this_cpu_read(kvm_running_vcpu);
+	return !!vcpu;
+}
+
 void vcpu_put(struct kvm_vcpu *vcpu)
 {
 	preempt_disable();

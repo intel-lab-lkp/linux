@@ -210,6 +210,14 @@ void kvm_vcpu_pmu_restore_host(struct kvm_vcpu *vcpu)
 	kvm_vcpu_pmu_disable_el0(events_guest);
 }
 
+void arch_perf_rotate_pmu_set(void)
+{
+	if (is_guest())
+		kvm_vcpu_pmu_restore_guest(NULL);
+	else
+		kvm_vcpu_pmu_restore_host(NULL);
+}
+
 /*
  * With VHE, keep track of the PMUSERENR_EL0 value for the host EL0 on the pCPU
  * where PMUSERENR_EL0 for the guest is loaded, since PMUSERENR_EL0 is switched
