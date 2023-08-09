@@ -583,6 +583,7 @@ void prep_transhuge_page(struct page *page)
 
 	VM_BUG_ON_FOLIO(folio_order(folio) < 2, folio);
 	INIT_LIST_HEAD(&folio->_deferred_list);
+	atomic_set(&folio->_nr_pages_mapped, 0);
 	folio_set_compound_dtor(folio, TRANSHUGE_PAGE_DTOR);
 }
 
@@ -2795,6 +2796,7 @@ void free_transhuge_page(struct page *page)
 		}
 		spin_unlock_irqrestore(&ds_queue->split_queue_lock, flags);
 	}
+	VM_WARN_ON_ONCE(atomic_read(&folio->_nr_pages_mapped));
 	free_compound_page(page);
 }
 

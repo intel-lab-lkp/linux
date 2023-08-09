@@ -1070,29 +1070,6 @@ int pfn_mkclean_range(unsigned long pfn, unsigned long nr_pages, pgoff_t pgoff,
 	return page_vma_mkclean_one(&pvmw);
 }
 
-int folio_total_mapcount(struct folio *folio)
-{
-	int mapcount = folio_entire_mapcount(folio);
-	int nr_pages;
-	int i;
-
-	/* In the common case, avoid the loop when no pages mapped by PTE */
-	if (folio_nr_pages_mapped(folio) == 0)
-		return mapcount;
-	/*
-	 * Add all the PTE mappings of those pages mapped by PTE.
-	 * Limit the loop to folio_nr_pages_mapped()?
-	 * Perhaps: given all the raciness, that may be a good or a bad idea.
-	 */
-	nr_pages = folio_nr_pages(folio);
-	for (i = 0; i < nr_pages; i++)
-		mapcount += atomic_read(&folio_page(folio, i)->_mapcount);
-
-	/* But each of those _mapcounts was based on -1 */
-	mapcount += nr_pages;
-	return mapcount;
-}
-
 /**
  * page_move_anon_rmap - move a page to our anon_vma
  * @page:	the page to move to our anon_vma
@@ -1236,6 +1213,9 @@ void page_add_anon_rmap(struct page *page, struct vm_area_struct *vma,
 		}
 	}
 
+	if (folio_test_large(folio))
+		atomic_inc(&folio->_total_mapcount);
+
 	VM_BUG_ON_PAGE(!first && (flags & RMAP_EXCLUSIVE), page);
 	VM_BUG_ON_PAGE(!first && PageAnonExclusive(page), page);
 
@@ -1289,6 +1269,10 @@ void folio_add_new_anon_rmap(struct folio *folio, struct vm_area_struct *vma,
 		__lruvec_stat_mod_folio(folio, NR_ANON_THPS, nr);
 	}
 
+	if (folio_test_large(folio))
+		/* increment count (starts at -1) */
+		atomic_set(&folio->_total_mapcount, 0);
+
 	__lruvec_stat_mod_folio(folio, NR_ANON_MAPPED, nr);
 	__page_set_anon_rmap(folio, &folio->page, vma, address, 1);
 }
@@ -1310,14 +1294,14 @@ void folio_add_file_rmap_range(struct folio *folio, struct page *page,
 			bool compound)
 {
 	atomic_t *mapped = &folio->_nr_pages_mapped;
-	unsigned int nr_pmdmapped = 0, first;
+	unsigned int nr_pmdmapped = 0, i, first;
 	int nr = 0;
 
 	VM_WARN_ON_FOLIO(compound && !folio_test_pmd_mappable(folio), folio);
 
 	/* Is page being mapped by PTE? Is this its first map to be added? */
 	if (likely(!compound)) {
-		do {
+		for (i = 0; i < nr_pages; i++, page++) {
 			first = atomic_inc_and_test(&page->_mapcount);
 			if (first && folio_test_large(folio)) {
 				first = atomic_inc_return_relaxed(mapped);
@@ -1326,7 +1310,7 @@ void folio_add_file_rmap_range(struct folio *folio, struct page *page,
 
 			if (first)
 				nr++;
-		} while (page++, --nr_pages > 0);
+		}
 	} else if (folio_test_pmd_mappable(folio)) {
 		/* That test is redundant: it's for safety or to optimize out */
 
@@ -1345,6 +1329,9 @@ void folio_add_file_rmap_range(struct folio *folio, struct page *page,
 			}
 		}
 	}
+
+	if (folio_test_large(folio))
+		atomic_add(compound ? 1 : nr_pages, &folio->_total_mapcount);
 
 	if (nr_pmdmapped)
 		__lruvec_stat_mod_folio(folio, folio_test_swapbacked(folio) ?
@@ -1397,6 +1384,9 @@ void page_remove_rmap(struct page *page, struct vm_area_struct *vma,
 	enum node_stat_item idx;
 
 	VM_BUG_ON_PAGE(compound && !PageHead(page), page);
+
+	if (folio_test_large(folio))
+		atomic_dec(&folio->_total_mapcount);
 
 	/* Hugetlb pages are not counted in NR_*MAPPED */
 	if (unlikely(folio_test_hugetlb(folio))) {
@@ -2538,6 +2528,7 @@ void hugepage_add_anon_rmap(struct page *page, struct vm_area_struct *vma,
 	BUG_ON(!anon_vma);
 	/* address might be in next vma when migration races vma_merge */
 	first = atomic_inc_and_test(&folio->_entire_mapcount);
+	atomic_inc(&folio->_total_mapcount);
 	VM_BUG_ON_PAGE(!first && (flags & RMAP_EXCLUSIVE), page);
 	VM_BUG_ON_PAGE(!first && PageAnonExclusive(page), page);
 	if (first)
@@ -2551,6 +2542,7 @@ void hugepage_add_new_anon_rmap(struct folio *folio,
 	BUG_ON(address < vma->vm_start || address >= vma->vm_end);
 	/* increment count (starts at -1) */
 	atomic_set(&folio->_entire_mapcount, 0);
+	atomic_set(&folio->_total_mapcount, 0);
 	folio_clear_hugetlb_restore_reserve(folio);
 	__page_set_anon_rmap(folio, &folio->page, vma, address, 1);
 }
