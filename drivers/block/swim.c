@@ -933,8 +933,7 @@ static int swim_remove(struct platform_device *dev)
 		floppy_eject(&swd->unit[drive]);
 
 	res = platform_get_resource(dev, IORESOURCE_MEM, 0);
-	if (res)
-		release_mem_region(res->start, resource_size(res));
+	release_mem_region(res->start, resource_size(res));
 
 	kfree(swd);
 
