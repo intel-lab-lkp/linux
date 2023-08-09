@@ -143,19 +143,27 @@ __setup("sched_thermal_decay_shift=", setup_sched_thermal_decay_shift);
  * struct shared_runq - Per-LLC queue structure for enqueuing and migrating
  * runnable tasks within an LLC.
  *
+ * struct shared_runq_shard - A structure containing a task list and a spinlock
+ * for a subset of cores in a struct shared_runq.
+ *
  * WHAT
  * ====
  *
  * This structure enables the scheduler to be more aggressively work
- * conserving, by placing waking tasks on a per-LLC FIFO queue that can then be
- * pulled from when another core in the LLC is going to go idle.
+ * conserving, by placing waking tasks on a per-LLC FIFO queue shard that can
+ * then be pulled from when another core in the LLC is going to go idle.
  *
- * struct rq stores a pointer to its LLC's shared_runq via struct cfs_rq.
- * Waking tasks are enqueued in the calling CPU's struct shared_runq in
- * __enqueue_entity(), and are opportunistically pulled from the shared_runq
- * in newidle_balance(). Tasks enqueued in a shared_runq may be scheduled prior
- * to being pulled from the shared_runq, in which case they're simply dequeued
- * from the shared_runq in __dequeue_entity().
+ * struct rq stores two pointers in its struct cfs_rq:
+ *
+ * 1. The per-LLC struct shared_runq which contains one or more shards of
+ *    enqueued tasks.
+ *
+ * 2. The shard inside of the per-LLC struct shared_runq which contains the
+ *    list of runnable tasks for that shard.
+ *
+ * Waking tasks are enqueued in the calling CPU's struct shared_runq_shard in
+ * __enqueue_entity(), and are opportunistically pulled from the shared_runq in
+ * newidle_balance(). Pulling from shards is an O(# shards) operation.
  *
  * There is currently no task-stealing between shared_runqs in different LLCs,
  * which means that shared_runq is not fully work conserving. This could be
@@ -165,11 +173,12 @@ __setup("sched_thermal_decay_shift=", setup_sched_thermal_decay_shift);
  * HOW
  * ===
  *
- * A shared_runq is comprised of a list, and a spinlock for synchronization.
- * Given that the critical section for a shared_runq is typically a fast list
- * operation, and that the shared_runq is localized to a single LLC, the
- * spinlock will typically only be contended on workloads that do little else
- * other than hammer the runqueue.
+ * A struct shared_runq_shard is comprised of a list, and a spinlock for
+ * synchronization.  Given that the critical section for a shared_runq is
+ * typically a fast list operation, and that the shared_runq_shard is localized
+ * to a subset of cores on a single LLC (plus other cores in the LLC that pull
+ * from the shard in newidle_balance()), the spinlock will typically only be
+ * contended on workloads that do little else other than hammer the runqueue.
  *
  * WHY
  * ===
@@ -183,9 +192,19 @@ __setup("sched_thermal_decay_shift=", setup_sched_thermal_decay_shift);
  * it, as well as to strike a balance between work conservation, and L3 cache
  * locality.
  */
-struct shared_runq {
+struct shared_runq_shard {
 	struct list_head list;
 	raw_spinlock_t lock;
+} ____cacheline_aligned;
+
+/* This would likely work better as a configurable knob via debugfs */
+#define SHARED_RUNQ_SHARD_SZ 6
+#define SHARED_RUNQ_MAX_SHARDS \
+	((NR_CPUS / SHARED_RUNQ_SHARD_SZ) + (NR_CPUS % SHARED_RUNQ_SHARD_SZ != 0))
+
+struct shared_runq {
+	unsigned int num_shards;
+	struct shared_runq_shard shards[SHARED_RUNQ_MAX_SHARDS];
 } ____cacheline_aligned;
 
 #ifdef CONFIG_SMP
@@ -197,31 +216,61 @@ static struct shared_runq *rq_shared_runq(struct rq *rq)
 	return rq->cfs.shared_runq;
 }
 
+static struct shared_runq_shard *rq_shared_runq_shard(struct rq *rq)
+{
+	return rq->cfs.shard;
+}
+
+static int shared_runq_shard_idx(const struct shared_runq *runq, int cpu)
+{
+	return (cpu >> 1) % runq->num_shards;
+}
+
 static void shared_runq_reassign_domains(void)
 {
 	int i;
 	struct shared_runq *shared_runq;
 	struct rq *rq;
 	struct rq_flags rf;
+	unsigned int num_shards, shard_idx;
+
+	for_each_possible_cpu(i) {
+		if (per_cpu(sd_llc_id, i) == i) {
+			shared_runq = &per_cpu(shared_runqs, per_cpu(sd_llc_id, i));
+
+			num_shards = per_cpu(sd_llc_size, i) / SHARED_RUNQ_SHARD_SZ;
+			if (per_cpu(sd_llc_size, i) % SHARED_RUNQ_SHARD_SZ)
+				num_shards++;
+			shared_runq->num_shards = num_shards;
+		}
+	}
 
 	for_each_possible_cpu(i) {
 		rq = cpu_rq(i);
 		shared_runq = &per_cpu(shared_runqs, per_cpu(sd_llc_id, i));
 
+		shard_idx = shared_runq_shard_idx(shared_runq, i);
 		rq_lock(rq, &rf);
 		rq->cfs.shared_runq = shared_runq;
+		rq->cfs.shard = &shared_runq->shards[shard_idx];
 		rq_unlock(rq, &rf);
 	}
 }
 
 static void __shared_runq_drain(struct shared_runq *shared_runq)
 {
-	struct task_struct *p, *tmp;
+	unsigned int i;
 
-	raw_spin_lock(&shared_runq->lock);
-	list_for_each_entry_safe(p, tmp, &shared_runq->list, shared_runq_node)
-		list_del_init(&p->shared_runq_node);
-	raw_spin_unlock(&shared_runq->lock);
+	for (i = 0; i < shared_runq->num_shards; i++) {
+		struct shared_runq_shard *shard;
+		struct task_struct *p, *tmp;
+
+		shard = &shared_runq->shards[i];
+		raw_spin_lock(&shard->lock);
+		list_for_each_entry_safe(p, tmp, &shard->list, shared_runq_node)
+			list_del_init(&p->shared_runq_node);
+		raw_spin_unlock(&shard->lock);
+	}
 }
 
 static void update_domains_fair(void)
@@ -272,35 +321,32 @@ void shared_runq_toggle(bool enabling)
 	}
 }
 
-static struct task_struct *shared_runq_pop_task(struct rq *rq)
+static struct task_struct *
+shared_runq_pop_task(struct shared_runq_shard *shard, int target)
 {
 	struct task_struct *p;
-	struct shared_runq *shared_runq;
 
-	shared_runq = rq_shared_runq(rq);
-	if (list_empty(&shared_runq->list))
+	if (list_empty(&shard->list))
 		return NULL;
 
-	raw_spin_lock(&shared_runq->lock);
-	p = list_first_entry_or_null(&shared_runq->list, struct task_struct,
+	raw_spin_lock(&shard->lock);
+	p = list_first_entry_or_null(&shard->list, struct task_struct,
 				     shared_runq_node);
-	if (p && is_cpu_allowed(p, cpu_of(rq)))
+	if (p && is_cpu_allowed(p, target))
 		list_del_init(&p->shared_runq_node);
 	else
 		p = NULL;
-	raw_spin_unlock(&shared_runq->lock);
+	raw_spin_unlock(&shard->lock);
 
 	return p;
 }
 
-static void shared_runq_push_task(struct rq *rq, struct task_struct *p)
+static void shared_runq_push_task(struct shared_runq_shard *shard,
+				  struct task_struct *p)
 {
-	struct shared_runq *shared_runq;
-
-	shared_runq = rq_shared_runq(rq);
-	raw_spin_lock(&shared_runq->lock);
-	list_add_tail(&p->shared_runq_node, &shared_runq->list);
-	raw_spin_unlock(&shared_runq->lock);
+	raw_spin_lock(&shard->lock);
+	list_add_tail(&p->shared_runq_node, &shard->list);
+	raw_spin_unlock(&shard->lock);
 }
 
 static void shared_runq_enqueue_task(struct rq *rq, struct task_struct *p)
@@ -314,7 +360,7 @@ static void shared_runq_enqueue_task(struct rq *rq, struct task_struct *p)
 	if (p->nr_cpus_allowed == 1)
 		return;
 
-	shared_runq_push_task(rq, p);
+	shared_runq_push_task(rq_shared_runq_shard(rq), p);
 }
 
 static int shared_runq_pick_next_task(struct rq *rq, struct rq_flags *rf)
@@ -322,9 +368,22 @@ static int shared_runq_pick_next_task(struct rq *rq, struct rq_flags *rf)
 	struct task_struct *p = NULL;
 	struct rq *src_rq;
 	struct rq_flags src_rf;
+	struct shared_runq *shared_runq;
+	struct shared_runq_shard *shard;
+	u32 i, starting_idx, curr_idx, num_shards;
 	int ret = -1;
 
-	p = shared_runq_pop_task(rq);
+	shared_runq = rq_shared_runq(rq);
+	num_shards = shared_runq->num_shards;
+	starting_idx = shared_runq_shard_idx(shared_runq, cpu_of(rq));
+	for (i = 0; i < num_shards; i++) {
+		curr_idx = (starting_idx + i) % num_shards;
+		shard = &shared_runq->shards[curr_idx];
+
+		p = shared_runq_pop_task(shard, cpu_of(rq));
+		if (p)
+			break;
+	}
 	if (!p)
 		return 0;
 
@@ -353,11 +412,11 @@ static int shared_runq_pick_next_task(struct rq *rq, struct rq_flags *rf)
 
 static void shared_runq_dequeue_task(struct task_struct *p)
 {
-	struct shared_runq *shared_runq;
+	struct shared_runq_shard *shard;
 
 	if (!list_empty(&p->shared_runq_node)) {
-		shared_runq = rq_shared_runq(task_rq(p));
-		raw_spin_lock(&shared_runq->lock);
+		shard = rq_shared_runq_shard(task_rq(p));
+		raw_spin_lock(&shard->lock);
 		/*
 		 * Need to double-check for the list being empty to avoid
 		 * racing with the list being drained on the domain recreation
@@ -365,7 +424,7 @@ static void shared_runq_dequeue_task(struct task_struct *p)
 		 */
 		if (likely(!list_empty(&p->shared_runq_node)))
 			list_del_init(&p->shared_runq_node);
-		raw_spin_unlock(&shared_runq->lock);
+		raw_spin_unlock(&shard->lock);
 	}
 }
 
@@ -13260,8 +13319,9 @@ void show_numa_stats(struct task_struct *p, struct seq_file *m)
 __init void init_sched_fair_class(void)
 {
 #ifdef CONFIG_SMP
-	int i;
+	int i, j;
 	struct shared_runq *shared_runq;
+	struct shared_runq_shard *shard;
 
 	for_each_possible_cpu(i) {
 		zalloc_cpumask_var_node(&per_cpu(load_balance_mask, i), GFP_KERNEL, cpu_to_node(i));
@@ -13272,8 +13332,11 @@ __init void init_sched_fair_class(void)
 		INIT_LIST_HEAD(&cpu_rq(i)->cfsb_csd_list);
 #endif
 		shared_runq = &per_cpu(shared_runqs, i);
-		INIT_LIST_HEAD(&shared_runq->list);
-		raw_spin_lock_init(&shared_runq->lock);
+		for (j = 0; j < SHARED_RUNQ_MAX_SHARDS; j++) {
+			shard = &shared_runq->shards[j];
+			INIT_LIST_HEAD(&shard->list);
+			raw_spin_lock_init(&shard->lock);
+		}
 	}
 
 	open_softirq(SCHED_SOFTIRQ, run_rebalance_domains);

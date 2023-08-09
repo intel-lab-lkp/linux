@@ -580,7 +580,8 @@ struct cfs_rq {
 #endif
 
 #ifdef CONFIG_SMP
-	struct shared_runq	*shared_runq;
+	struct shared_runq	 *shared_runq;
+	struct shared_runq_shard *shard;
 	/*
 	 * CFS load tracking
 	 */
