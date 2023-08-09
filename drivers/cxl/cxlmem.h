@@ -868,6 +868,7 @@ static inline void cxl_mem_active_dec(void)
 #endif
 
 int cxl_mem_sanitize(struct cxl_memdev_state *mds, u16 cmd);
+int cxl_memdev_security_state_init(struct cxl_memdev_state *mds);
 
 struct cxl_hdm {
 	struct cxl_component_regs regs;

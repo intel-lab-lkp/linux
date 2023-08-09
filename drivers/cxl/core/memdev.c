@@ -542,7 +542,7 @@ static void cxl_memdev_security_shutdown(struct device *dev)
 	struct cxl_memdev *cxlmd = to_cxl_memdev(dev);
 	struct cxl_memdev_state *mds = to_cxl_memdev_state(cxlmd->cxlds);
 
-	if (mds->security.poll)
+	if (mds && mds->security.poll)
 		cancel_delayed_work_sync(&mds->security.poll_dwork);
 }
 
@@ -551,7 +551,6 @@ static void cxl_memdev_shutdown(struct device *dev)
 	struct cxl_memdev *cxlmd = to_cxl_memdev(dev);
 
 	down_write(&cxl_memdev_rwsem);
-	cxl_memdev_security_shutdown(dev);
 	cxlmd->cxlds = NULL;
 	up_write(&cxl_memdev_rwsem);
 }
@@ -561,6 +560,7 @@ static void cxl_memdev_unregister(void *_cxlmd)
 	struct cxl_memdev *cxlmd = _cxlmd;
 	struct device *dev = &cxlmd->dev;
 
+	cxl_memdev_security_shutdown(dev);
 	cxl_memdev_shutdown(dev);
 	cdev_device_del(&cxlmd->cdev, dev);
 	put_device(dev);
@@ -990,11 +990,10 @@ static void put_sanitize(void *data)
 	sysfs_put(mds->security.sanitize_node);
 }
 
-static int cxl_memdev_security_init(struct cxl_memdev *cxlmd)
+int cxl_memdev_security_state_init(struct cxl_memdev_state *mds)
 {
-	struct cxl_dev_state *cxlds = cxlmd->cxlds;
-	struct cxl_memdev_state *mds = to_cxl_memdev_state(cxlds);
-	struct device *dev = &cxlmd->dev;
+	struct cxl_dev_state *cxlds = &mds->cxlds;
+	struct device *dev = &cxlds->cxlmd->dev;
 	struct kernfs_node *sec;
 
 	sec = sysfs_get_dirent(dev->kobj.sd, "security");
@@ -1010,7 +1009,7 @@ static int cxl_memdev_security_init(struct cxl_memdev *cxlmd)
 	}
 
 	return devm_add_action_or_reset(cxlds->dev, put_sanitize, mds);
- }
+}
 
 struct cxl_memdev *devm_cxl_add_memdev(struct cxl_dev_state *cxlds)
 {
@@ -1037,10 +1036,6 @@ struct cxl_memdev *devm_cxl_add_memdev(struct cxl_dev_state *cxlds)
 
 	cdev = &cxlmd->cdev;
 	rc = cdev_device_add(cdev, dev);
-	if (rc)
-		goto err;
-
-	rc = cxl_memdev_security_init(cxlmd);
 	if (rc)
 		goto err;
 

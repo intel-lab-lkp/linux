@@ -887,6 +887,10 @@ static int cxl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (IS_ERR(cxlmd))
 		return PTR_ERR(cxlmd);
 
+	rc = cxl_memdev_security_state_init(mds);
+	if (rc)
+		return rc;
+
 	rc = cxl_memdev_setup_fw_upload(mds);
 	if (rc)
 		return rc;
