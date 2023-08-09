@@ -106,6 +106,8 @@ enum tps65086_irqs {
 	TPS65086_IRQ_FAULT,
 };
 
+struct tps65086_regulator_config;
+
 /**
  * struct tps65086 - state holder for the tps65086 driver
  *
@@ -115,6 +117,7 @@ struct tps65086 {
 	struct device *dev;
 	struct regmap *regmap;
 	unsigned int chip_id;
+	const struct tps65086_regulator_config *reg_config;
 
 	/* IRQ Data */
 	int irq;
