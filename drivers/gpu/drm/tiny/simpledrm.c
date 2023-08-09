@@ -25,6 +25,7 @@
 #include <drm/drm_modeset_helper_vtables.h>
 #include <drm/drm_plane_helper.h>
 #include <drm/drm_probe_helper.h>
+#include <drm/drm_panic.h>
 
 #define DRIVER_NAME	"simpledrm"
 #define DRIVER_DESC	"DRM driver for simple-framebuffer platform devices"
@@ -884,6 +885,7 @@ static int simpledrm_probe(struct platform_device *pdev)
 		color_mode = sdev->format->depth; // can be 15 or 16
 
 	drm_fbdev_generic_setup(dev, color_mode);
+	drm_panic_init_client(dev);
 
 	return 0;
 }
