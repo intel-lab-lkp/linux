@@ -103,3 +103,5 @@ SCHED_FEAT(ALT_PERIOD, true)
 SCHED_FEAT(BASE_SLICE, true)
 
 SCHED_FEAT(HZ_BW, true)
+
+SCHED_FEAT_CALLBACK(SHARED_RUNQ, false, shared_runq_toggle)

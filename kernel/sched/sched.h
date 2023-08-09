@@ -2132,6 +2132,7 @@ static const_debug __maybe_unused unsigned int sysctl_sched_features =
 #endif /* SCHED_DEBUG */
 
 typedef void (*sched_feat_change_f)(bool enabling);
+extern void shared_runq_toggle(bool enabling);
 
 extern struct static_key_false sched_numa_balancing;
 extern struct static_key_false sched_schedstats;

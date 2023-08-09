@@ -140,6 +140,20 @@ static int __init setup_sched_thermal_decay_shift(char *str)
 __setup("sched_thermal_decay_shift=", setup_sched_thermal_decay_shift);
 
 #ifdef CONFIG_SMP
+void shared_runq_toggle(bool enabling)
+{}
+
+static void shared_runq_enqueue_task(struct rq *rq, struct task_struct *p)
+{}
+
+static int shared_runq_pick_next_task(struct rq *rq, struct rq_flags *rf)
+{
+	return 0;
+}
+
+static void shared_runq_dequeue_task(struct task_struct *p)
+{}
+
 /*
  * For asym packing, by default the lower numbered CPU has higher priority.
  */
@@ -162,6 +176,15 @@ int __weak arch_asym_cpu_priority(int cpu)
  * (default: ~5%)
  */
 #define capacity_greater(cap1, cap2) ((cap1) * 1024 > (cap2) * 1078)
+#else
+void shared_runq_toggle(bool enabling)
+{}
+
+static void shared_runq_enqueue_task(struct rq *rq, struct task_struct *p)
+{}
+
+static void shared_runq_dequeue_task(struct task_struct *p)
+{}
 #endif
 
 #ifdef CONFIG_CFS_BANDWIDTH
@@ -642,11 +665,15 @@ static inline bool __entity_less(struct rb_node *a, const struct rb_node *b)
  */
 static void __enqueue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
+	if (sched_feat(SHARED_RUNQ) && entity_is_task(se))
+		shared_runq_enqueue_task(rq_of(cfs_rq), task_of(se));
 	rb_add_cached(&se->run_node, &cfs_rq->tasks_timeline, __entity_less);
 }
 
 static void __dequeue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
+	if (sched_feat(SHARED_RUNQ) && entity_is_task(se))
+		shared_runq_dequeue_task(task_of(se));
 	rb_erase_cached(&se->run_node, &cfs_rq->tasks_timeline);
 }
 
@@ -12043,6 +12070,12 @@ static int newidle_balance(struct rq *this_rq, struct rq_flags *rf)
 	if (!cpu_active(this_cpu))
 		return 0;
 
+	if (sched_feat(SHARED_RUNQ)) {
+		pulled_task = shared_runq_pick_next_task(this_rq, rf);
+		if (pulled_task)
+			return pulled_task;
+	}
+
 	/*
 	 * We must set idle_stamp _before_ calling idle_balance(), such that we
 	 * measure the duration of idle_balance() as idle time.
@@ -12543,6 +12576,7 @@ static void attach_task_cfs_rq(struct task_struct *p)
 
 static void switched_from_fair(struct rq *rq, struct task_struct *p)
 {
+	shared_runq_dequeue_task(p);
 	detach_task_cfs_rq(p);
 }
 
