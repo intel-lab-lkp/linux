@@ -278,12 +278,21 @@ static int tps65219_probe(struct i2c_client *client)
 		}
 	}
 
-	ret = devm_register_restart_handler(tps->dev,
-					    tps65219_restart_handler,
-					    tps);
+	ret = devm_register_cold_restart_handler(tps->dev,
+						 tps65219_restart_handler,
+						 tps);
 
 	if (ret) {
-		dev_err(tps->dev, "cannot register restart handler, %d\n", ret);
+		dev_err(tps->dev, "cannot register cold restart handler, %d\n", ret);
+		return ret;
+	}
+
+	ret = devm_register_warm_restart_handler(tps->dev,
+						 tps65219_restart_handler,
+						 tps);
+
+	if (ret) {
+		dev_err(tps->dev, "cannot register warm restart handler, %d\n", ret);
 		return ret;
 	}
 
