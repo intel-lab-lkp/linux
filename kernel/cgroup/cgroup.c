@@ -755,7 +755,7 @@ struct css_set init_css_set = {
 	.dfl_cgrp		= &cgrp_dfl_root.cgrp,
 };
 
-static int css_set_count	= 1;	/* 1 for init_css_set */
+static int css_set_count = 1;	/* 1 for init_css_set */
 
 static bool css_set_threaded(struct css_set *cset)
 {
