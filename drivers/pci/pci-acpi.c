@@ -884,6 +884,56 @@ acpi_status pci_acpi_add_pm_notifier(struct acpi_device *dev,
 	return acpi_add_pm_notifier(dev, &pci_dev->dev, pci_acpi_wake_dev);
 }
 
+/**
+ * map_pci_to_acpi - map a PCI power state to an ACPI D-state
+ * @state: PCI power state to map
+ *
+ * Returns: Corresponding ACPI D-state, otherwise ACPI_STATE_UNKNOWN
+ */
+static u8 map_pci_to_acpi(pci_power_t state)
+{
+	switch (state) {
+	case PCI_D0:
+		return ACPI_STATE_D0;
+	case PCI_D1:
+		return ACPI_STATE_D1;
+	case PCI_D2:
+		return ACPI_STATE_D2;
+	case PCI_D3hot:
+		return ACPI_STATE_D3_HOT;
+	case PCI_D3cold:
+		return ACPI_STATE_D3_COLD;
+	}
+
+	return ACPI_STATE_UNKNOWN;
+}
+
+/**
+ * map_acpi_to_pci - map an ACPI D-state to a PCI power state
+ * @state: ACPI D-state to map
+ *
+ * Returns: Corresponding PCI power state, otherwise PCI_POWER_ERROR.
+ */
+static pci_power_t map_acpi_to_pci(int state)
+{
+	switch (state) {
+	case ACPI_STATE_D0:
+		return PCI_D0;
+	case ACPI_STATE_D1:
+		return PCI_D1;
+	case ACPI_STATE_D2:
+		return PCI_D2;
+	case ACPI_STATE_D3_HOT:
+		return PCI_D3hot;
+	case ACPI_STATE_D3_COLD:
+		return PCI_D3cold;
+	case ACPI_STATE_UNKNOWN:
+		return PCI_UNKNOWN;
+	}
+
+	return PCI_POWER_ERROR;
+}
+
 /*
  * _SxD returns the D-state with the highest power
  * (lowest D-state number) supported in the S-state "x".
@@ -919,19 +969,7 @@ pci_power_t acpi_pci_choose_state(struct pci_dev *pdev)
 	if (acpi_state < 0)
 		return PCI_POWER_ERROR;
 
-	switch (acpi_state) {
-	case ACPI_STATE_D0:
-		return PCI_D0;
-	case ACPI_STATE_D1:
-		return PCI_D1;
-	case ACPI_STATE_D2:
-		return PCI_D2;
-	case ACPI_STATE_D3_HOT:
-		return PCI_D3hot;
-	case ACPI_STATE_D3_COLD:
-		return PCI_D3cold;
-	}
-	return PCI_POWER_ERROR;
+	return map_acpi_to_pci(acpi_state);
 }
 
 static struct acpi_device *acpi_pci_find_companion(struct device *dev);
@@ -1056,13 +1094,6 @@ static void acpi_pci_config_space_access(struct pci_dev *dev, bool enable)
 int acpi_pci_set_power_state(struct pci_dev *dev, pci_power_t state)
 {
 	struct acpi_device *adev = ACPI_COMPANION(&dev->dev);
-	static const u8 state_conv[] = {
-		[PCI_D0] = ACPI_STATE_D0,
-		[PCI_D1] = ACPI_STATE_D1,
-		[PCI_D2] = ACPI_STATE_D2,
-		[PCI_D3hot] = ACPI_STATE_D3_HOT,
-		[PCI_D3cold] = ACPI_STATE_D3_COLD,
-	};
 	int error;
 
 	/* If the ACPI device has _EJ0, ignore the device */
@@ -1089,7 +1120,7 @@ int acpi_pci_set_power_state(struct pci_dev *dev, pci_power_t state)
 		acpi_pci_config_space_access(dev, false);
 	}
 
-	error = acpi_device_set_power(adev, state_conv[state]);
+	error = acpi_device_set_power(adev, map_pci_to_acpi(state));
 	if (error)
 		return error;
 
@@ -1111,23 +1142,11 @@ int acpi_pci_set_power_state(struct pci_dev *dev, pci_power_t state)
 pci_power_t acpi_pci_get_power_state(struct pci_dev *dev)
 {
 	struct acpi_device *adev = ACPI_COMPANION(&dev->dev);
-	static const pci_power_t state_conv[] = {
-		[ACPI_STATE_D0]      = PCI_D0,
-		[ACPI_STATE_D1]      = PCI_D1,
-		[ACPI_STATE_D2]      = PCI_D2,
-		[ACPI_STATE_D3_HOT]  = PCI_D3hot,
-		[ACPI_STATE_D3_COLD] = PCI_D3cold,
-	};
-	int state;
 
 	if (!adev || !acpi_device_power_manageable(adev))
 		return PCI_UNKNOWN;
 
-	state = adev->power.state;
-	if (state == ACPI_STATE_UNKNOWN)
-		return PCI_UNKNOWN;
-
-	return state_conv[state];
+	return map_acpi_to_pci(adev->power.state);
 }
 
 void acpi_pci_refresh_power_state(struct pci_dev *dev)
