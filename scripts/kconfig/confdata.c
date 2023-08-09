@@ -154,6 +154,7 @@ static void conf_message(const char *fmt, ...)
 
 static const char *conf_filename;
 static int conf_lineno, conf_warnings;
+const char *verbose;
 
 static void conf_warning(const char *fmt, ...)
 {
@@ -226,7 +227,7 @@ static const char *conf_get_rustccfg_name(void)
 static int conf_set_sym_val(struct symbol *sym, int def, int def_flags, char *p)
 {
 	char *p2;
-
+	static const char * const type[] = {"unknown", "bool", "tristate", "int", "hex", "string"};
 	switch (sym->type) {
 	case S_TRISTATE:
 		if (p[0] == 'm') {
@@ -246,9 +247,14 @@ static int conf_set_sym_val(struct symbol *sym, int def, int def_flags, char *p)
 			sym->flags |= def_flags;
 			break;
 		}
-		if (def != S_DEF_AUTO)
-			conf_warning("symbol value '%s' invalid for %s",
+		if (def != S_DEF_AUTO) {
+			if (verbose)
+				conf_warning("symbol value '%s' invalid for %s\n due to its type is %s",
+				     p, sym->name, type[sym->type]);
+			else
+				conf_warning("symbol value '%s' invalid for %s",
 				     p, sym->name);
+		}
 		return 1;
 	case S_STRING:
 		/* No escaping for S_DEF_AUTO (include/config/auto.conf) */
@@ -274,9 +280,14 @@ static int conf_set_sym_val(struct symbol *sym, int def, int def_flags, char *p)
 			sym->def[def].val = xstrdup(p);
 			sym->flags |= def_flags;
 		} else {
-			if (def != S_DEF_AUTO)
-				conf_warning("symbol value '%s' invalid for %s",
-					     p, sym->name);
+			if (def != S_DEF_AUTO) {
+				if (verbose)
+					conf_warning("symbol value '%s' invalid for %s\n due to its type is %s",
+						p, sym->name, type[sym->type]);
+				else
+					conf_warning("symbol value '%s' invalid for %s",
+						p, sym->name);
+			}
 			return 1;
 		}
 		break;
@@ -528,6 +539,7 @@ int conf_read(const char *name)
 	int conf_unsaved = 0;
 	int i;
 
+	verbose = getenv("KCONFIG_VERBOSE");
 	conf_set_changed(false);
 
 	if (conf_read_simple(name, S_DEF_USER)) {
@@ -559,6 +571,103 @@ int conf_read(const char *name)
 			continue;
 		conf_unsaved++;
 		/* maybe print value in verbose mode... */
+		if (verbose) {
+			if (sym_is_choice_value(sym)) {
+				struct property *prop = sym_get_choice_prop(sym);
+				struct symbol *defsym = prop_get_symbol(prop)->curr.val;
+
+				if (defsym && defsym != sym) {
+					struct gstr gs = str_new();
+
+					str_printf(&gs,
+						"\nERROR : %s[%c => %c] value is invalid\n",
+						sym->name,
+						tristate2char[sym->def[S_DEF_USER].tri],
+						tristate2char[sym->curr.tri]);
+					str_printf(&gs,
+						" due to its not the choice default symbol\n");
+					str_printf(&gs,
+						" the default symbol is %s\n",
+						defsym->name);
+					fputs(str_get(&gs), stderr);
+				}
+			} else {
+				switch (sym->type) {
+				case S_BOOLEAN:
+				case S_TRISTATE:
+					if (sym->dir_dep.tri == no &&
+						sym->def[S_DEF_USER].tri != no) {
+						struct gstr gs = str_new();
+
+						str_printf(&gs,
+							"\nERROR: unmet direct dependencies detected for %s[%c => %c]\n",
+							sym->name,
+							tristate2char[sym->def[S_DEF_USER].tri],
+							tristate2char[sym->curr.tri]);
+						str_printf(&gs,
+							"  Depends on [%c]: ",
+							sym->dir_dep.tri == mod ? 'm' : 'n');
+						expr_gstr_print(sym->dir_dep.expr, &gs);
+						str_printf(&gs, "\n");
+						fputs(str_get(&gs), stderr);
+					} else if (sym->rev_dep.tri != no) {
+						struct gstr gs = str_new();
+
+						str_printf(&gs,
+							"\nERROR : %s[%c => %c] value is invalid\n",
+							sym->name,
+							tristate2char[sym->def[S_DEF_USER].tri],
+							tristate2char[sym->curr.tri]);
+						str_printf(&gs,
+							" due to its invisible and it is selected\n");
+						expr_gstr_print_revdep(sym->rev_dep.expr, &gs, yes,
+									"  Selected by [y]:\n");
+						expr_gstr_print_revdep(sym->rev_dep.expr, &gs, mod,
+									"  Selected by [m]:\n");
+						fputs(str_get(&gs), stderr);
+					} else {
+						sym_validate_default(sym);
+					}
+					break;
+				case S_INT:
+				case S_HEX:
+					if (sym->dir_dep.tri == no &&
+					strcmp((char *)(sym->def[S_DEF_USER].val), "") != 0) {
+						struct gstr gs = str_new();
+
+						str_printf(&gs,
+							"\nERROR: unmet direct dependencies detected for %s\n",
+							sym->name);
+						str_printf(&gs,
+							"  Depends on [%c]: ",
+							sym->dir_dep.tri == mod ? 'm' : 'n');
+						expr_gstr_print(sym->dir_dep.expr, &gs);
+						str_printf(&gs, "\n");
+						fputs(str_get(&gs), stderr);
+					} else {
+						sym_validate_default(sym);
+					}
+					break;
+				case S_STRING:
+					if (sym->dir_dep.tri == no &&
+					strcmp((char *)(sym->def[S_DEF_USER].val), "") != 0) {
+						struct gstr gs = str_new();
+
+						str_printf(&gs,
+							"\nERROR: unmet direct dependencies detected for %s\n",
+							sym->name);
+						str_printf(&gs,
+							"  Depends on [%c]: ",
+							sym->dir_dep.tri == mod ? 'm' : 'n');
+						expr_gstr_print(sym->dir_dep.expr, &gs);
+						str_printf(&gs, "\n");
+						fputs(str_get(&gs), stderr);
+					}
+				default:
+					break;
+				}
+			}
+		}
 	}
 
 	for_all_symbols(i, sym) {

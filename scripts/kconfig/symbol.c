@@ -91,6 +91,53 @@ static struct property *sym_get_default_prop(struct symbol *sym)
 	return NULL;
 }
 
+void sym_validate_default(struct symbol *sym)
+{
+	if (sym->visible == no) {
+		struct gstr gs = str_new();
+		const char *value = sym_get_string_default(sym);
+
+		switch (sym->type) {
+		case S_BOOLEAN:
+		case S_TRISTATE:
+			if (strcmp(value, "n") != 0) {
+				str_printf(&gs,
+					"\nERROR : %s[%c => %c] value is invalid\n due to it has default value\n",
+					sym->name,
+					tristate2char[sym->def[S_DEF_USER].tri],
+					tristate2char[sym->curr.tri]);
+			} else if (sym->implied.tri != no) {
+				str_printf(&gs,
+					"\nERROR : %s[%c => %c] value is invalid\n due to its invisible and has imply value\n",
+					sym->name,
+					tristate2char[sym->def[S_DEF_USER].tri],
+					tristate2char[sym->curr.tri]);
+				str_printf(&gs,
+					" Imply : ");
+				expr_gstr_print(sym->implied.expr, &gs);
+				str_printf(&gs, "\n");
+			}
+			break;
+		case S_STRING:
+		case S_INT:
+		case S_HEX:
+			if (strcmp(value, "") != 0) {
+				str_printf(&gs,
+					"\nERROR : %s[%s => %s] value is invalid\n",
+					sym->name,
+					(char *)(sym->def[S_DEF_USER].val),
+					(char *)(sym->curr.val));
+				str_printf(&gs,
+					" due to it has default value\n");
+			}
+			break;
+		default:
+			break;
+		}
+		fputs(str_get(&gs), stderr);
+	}
+}
+
 struct property *sym_get_range_prop(struct symbol *sym)
 {
 	struct property *prop;
@@ -600,7 +647,8 @@ bool sym_string_valid(struct symbol *sym, const char *str)
 bool sym_string_within_range(struct symbol *sym, const char *str)
 {
 	struct property *prop;
-	long long val;
+	long long val, left, right;
+	struct gstr gs = str_new();
 
 	switch (sym->type) {
 	case S_STRING:
@@ -612,8 +660,20 @@ bool sym_string_within_range(struct symbol *sym, const char *str)
 		if (!prop)
 			return true;
 		val = strtoll(str, NULL, 10);
-		return val >= sym_get_range_val(prop->expr->left.sym, 10) &&
-		       val <= sym_get_range_val(prop->expr->right.sym, 10);
+		left = sym_get_range_val(prop->expr->left.sym, 10);
+		right = sym_get_range_val(prop->expr->right.sym, 10);
+		if (val >= left && val <= right)
+			return true;
+		if (verbose) {
+			str_printf(&gs,
+				"\nERROR: unmet range detected for %s\n",
+				sym->name);
+			str_printf(&gs,
+				" symbol value is %lld, the range is (%lld %lld)\n",
+				val, left, right);
+			fputs(str_get(&gs), stderr);
+		}
+		return false;
 	case S_HEX:
 		if (!sym_string_valid(sym, str))
 			return false;
@@ -621,8 +681,20 @@ bool sym_string_within_range(struct symbol *sym, const char *str)
 		if (!prop)
 			return true;
 		val = strtoll(str, NULL, 16);
-		return val >= sym_get_range_val(prop->expr->left.sym, 16) &&
-		       val <= sym_get_range_val(prop->expr->right.sym, 16);
+		left = sym_get_range_val(prop->expr->left.sym, 16);
+		right = sym_get_range_val(prop->expr->right.sym, 16);
+		if (val >= left && val <= right)
+			return true;
+		if (verbose) {
+			str_printf(&gs,
+				"\nERROR: unmet range detected for %s\n",
+				sym->name);
+			str_printf(&gs,
+				" symbol value is 0x%llx, the range is (0x%llx 0x%llx)\n",
+				val, left, right);
+			fputs(str_get(&gs), stderr);
+		}
+		return false;
 	case S_BOOLEAN:
 	case S_TRISTATE:
 		switch (str[0]) {
