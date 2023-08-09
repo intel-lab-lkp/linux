@@ -524,10 +524,17 @@ static struct thermal_zone_device *thermal_of_zone_register(struct device_node *
 	tz = thermal_zone_device_register_with_trips(np->name, trips, ntrips,
 						     mask, data, of_ops, tzp,
 						     pdelay, delay);
+
+	/*
+	 * thermal_zone_device_register_with_trips() copies the tzp info.
+	 * We don't need it after that point.
+	 */
+	kfree(tzp);
+
 	if (IS_ERR(tz)) {
 		ret = PTR_ERR(tz);
 		pr_err("Failed to register thermal zone %pOFn: %d\n", np, ret);
-		goto out_kfree_tzp;
+		goto out_kfree_trips;
 	}
 
 	ret = thermal_zone_device_enable(tz);
@@ -540,8 +547,6 @@ static struct thermal_zone_device *thermal_of_zone_register(struct device_node *
 
 	return tz;
 
-out_kfree_tzp:
-	kfree(tzp);
 out_kfree_trips:
 	kfree(trips);
 out_kfree_of_ops:
