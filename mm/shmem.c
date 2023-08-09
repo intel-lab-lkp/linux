@@ -2720,6 +2720,16 @@ shmem_write_end(struct file *file, struct address_space *mapping,
 	return copied;
 }
 
+static ssize_t shmem_direct_IO(struct kiocb *iocb, struct iov_iter *iter)
+{
+	/*
+	 * Just leave all the work to the buffered fallback.
+	 * Some LTP tests may expect us to enforce alignment restrictions,
+	 * but the fallback works just fine with any alignment, so allow it.
+	 */
+	return 0;
+}
+
 static ssize_t shmem_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 {
 	struct file *file = iocb->ki_filp;
@@ -4424,6 +4434,7 @@ const struct address_space_operations shmem_aops = {
 #ifdef CONFIG_TMPFS
 	.write_begin	= shmem_write_begin,
 	.write_end	= shmem_write_end,
+	.direct_IO	= shmem_direct_IO,
 #endif
 #ifdef CONFIG_MIGRATION
 	.migrate_folio	= migrate_folio,
