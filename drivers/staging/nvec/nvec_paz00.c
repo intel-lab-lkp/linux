@@ -53,8 +53,6 @@ static int nvec_paz00_probe(struct platform_device *pdev)
 	led->cdev.flags |= LED_CORE_SUSPENDRESUME;
 	led->nvec = nvec;
 
-	platform_set_drvdata(pdev, led);
-
 	ret = devm_led_classdev_register(&pdev->dev, &led->cdev);
 	if (ret < 0)
 		return ret;
