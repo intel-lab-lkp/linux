@@ -44,9 +44,6 @@
 		AVDD-supply = <&camera_vdda_2v8>;
 		DVDD-supply = <&camera_vddd_1v5>;
 
-		/* No camera mezzanine by default */
-		status = "disabled";
-
 		port {
 			ov5640_ep: endpoint {
 				data-lanes = <1 2>;
