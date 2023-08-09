@@ -374,7 +374,7 @@ beiscsi_iface_config_ipv4(struct Scsi_Host *shost,
 	case ISCSI_NET_PARAM_IPV4_ADDR:
 		ip = info->value;
 		nla = nla_find(data, dt_len, ISCSI_NET_PARAM_IPV4_SUBNET);
-		if (nla) {
+		if (nla && nla_len(nla) >= sizeof(*info)) {
 			info = nla_data(nla);
 			subnet = info->value;
 		}
@@ -388,7 +388,7 @@ beiscsi_iface_config_ipv4(struct Scsi_Host *shost,
 		 */
 		subnet = info->value;
 		nla = nla_find(data, dt_len, ISCSI_NET_PARAM_IPV4_ADDR);
-		if (nla) {
+		if (nla && nla_len(nla) >= sizeof(*info)) {
 			info = nla_data(nla);
 			ip = info->value;
 		}
