@@ -255,6 +255,15 @@
 	label = "LS-UART1";
 };
 
+&camss {
+	status = "okay";
+	ports {
+		port@0 {
+			reg = <0>;
+		};
+	};
+};
+
 &lpass {
 	status = "okay";
 };
