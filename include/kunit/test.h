@@ -33,8 +33,8 @@ DECLARE_STATIC_KEY_FALSE(kunit_running);
 
 struct kunit;
 
-/* Size of log associated with test. */
-#define KUNIT_LOG_SIZE 2048
+/* Size of log buffer fragments. */
+#define KUNIT_LOG_FRAGMENT_SIZE (256 - sizeof(struct list_head))
 
 /* Maximum size of parameter description string. */
 #define KUNIT_PARAM_DESC_SIZE 128
@@ -85,6 +85,17 @@ struct kunit_attributes {
 	enum kunit_speed speed;
 };
 
+struct kunit_log_frag {
+	struct list_head list;
+	char buf[KUNIT_LOG_FRAGMENT_SIZE];
+};
+
+static inline void kunit_init_log_frag(struct kunit_log_frag *frag)
+{
+	INIT_LIST_HEAD(&frag->list);
+	frag->buf[0] = '\0';
+}
+
 /**
  * struct kunit_case - represents an individual test case.
  *
@@ -132,7 +143,7 @@ struct kunit_case {
 	/* private: internal use only. */
 	enum kunit_status status;
 	char *module_name;
-	char *log;
+	struct list_head *log;
 };
 
 static inline char *kunit_status_to_ok_not_ok(enum kunit_status status)
@@ -252,7 +263,7 @@ struct kunit_suite {
 	/* private: internal use only */
 	char status_comment[KUNIT_STATUS_COMMENT_SIZE];
 	struct dentry *debugfs;
-	char *log;
+	struct list_head *log;
 	int suite_init_err;
 };
 
@@ -278,7 +289,7 @@ struct kunit {
 
 	/* private: internal use only. */
 	const char *name; /* Read only after initialization! */
-	char *log; /* Points at case log after initialization */
+	struct list_head *log; /* Points at case log after initialization */
 	struct kunit_try_catch try_catch;
 	/* param_value is the current parameter value for a test case. */
 	const void *param_value;
@@ -314,7 +325,7 @@ const char *kunit_filter_glob(void);
 char *kunit_filter(void);
 char *kunit_filter_action(void);
 
-void kunit_init_test(struct kunit *test, const char *name, char *log);
+void kunit_init_test(struct kunit *test, const char *name, struct list_head *log);
 
 int kunit_run_tests(struct kunit_suite *suite);
 
@@ -472,7 +483,7 @@ static inline void *kunit_kcalloc(struct kunit *test, size_t n, size_t size, gfp
 
 void kunit_cleanup(struct kunit *test);
 
-void __printf(2, 3) kunit_log_append(char *log, const char *fmt, ...);
+void __printf(2, 3) kunit_log_append(struct list_head *log, const char *fmt, ...);
 
 /**
  * kunit_mark_skipped() - Marks @test_or_suite as skipped

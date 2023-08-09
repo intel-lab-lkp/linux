@@ -11,6 +11,7 @@
 #include <kunit/test-bug.h>
 #include <kunit/attributes.h>
 #include <linux/kernel.h>
+#include <linux/list.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/panic.h>
@@ -114,46 +115,66 @@ static void kunit_print_test_stats(struct kunit *test,
  * already present.
  * @log: The log to add the newline to.
  */
-static void kunit_log_newline(char *log)
+static void kunit_log_newline(struct kunit_log_frag *frag)
 {
 	int log_len, len_left;
 
-	log_len = strlen(log);
-	len_left = KUNIT_LOG_SIZE - log_len - 1;
+	log_len = strlen(frag->buf);
+	len_left = sizeof(frag->buf) - log_len - 1;
 
-	if (log_len > 0 && log[log_len - 1] != '\n')
-		strncat(log, "\n", len_left);
+	if (log_len > 0 && frag->buf[log_len - 1] != '\n')
+		strncat(frag->buf, "\n", len_left);
 }
 
-/*
- * Append formatted message to log, size of which is limited to
- * KUNIT_LOG_SIZE bytes (including null terminating byte).
- */
-void kunit_log_append(char *log, const char *fmt, ...)
+static struct kunit_log_frag *kunit_log_extend(struct list_head *log)
+{
+	struct kunit_log_frag *frag;
+
+	frag = kmalloc(sizeof(*frag), GFP_KERNEL);
+	if (!frag)
+		return NULL;
+
+	kunit_init_log_frag(frag);
+	list_add_tail(&frag->list, log);
+
+	return frag;
+}
+
+/* Append formatted message to log, extending the log buffer if necessary. */
+void kunit_log_append(struct list_head *log, const char *fmt, ...)
 {
 	va_list args;
+	struct kunit_log_frag *frag;
 	int len, log_len, len_left;
 
 	if (!log)
 		return;
 
-	log_len = strlen(log);
-	len_left = KUNIT_LOG_SIZE - log_len - 1;
-	if (len_left <= 0)
-		return;
+	frag = list_last_entry(log, struct kunit_log_frag, list);
+	log_len = strlen(frag->buf);
+	len_left = sizeof(frag->buf) - log_len - 1;
 
 	/* Evaluate length of line to add to log */
 	va_start(args, fmt);
 	len = vsnprintf(NULL, 0, fmt, args) + 1;
 	va_end(args);
 
+	if (len > len_left) {
+		frag = kunit_log_extend(log);
+		if (!frag)
+			return;
+
+		len_left = sizeof(frag->buf) - 1;
+		log_len = 0;
+	}
+
 	/* Print formatted line to the log */
 	va_start(args, fmt);
-	vsnprintf(log + log_len, min(len, len_left), fmt, args);
+	vsnprintf(frag->buf + log_len, min(len, len_left), fmt, args);
 	va_end(args);
 
 	/* Add newline to end of log if not already present. */
-	kunit_log_newline(log);
+	kunit_log_newline(frag);
 }
 EXPORT_SYMBOL_GPL(kunit_log_append);
 
@@ -359,14 +380,18 @@ void __kunit_do_failed_assertion(struct kunit *test,
 }
 EXPORT_SYMBOL_GPL(__kunit_do_failed_assertion);
 
-void kunit_init_test(struct kunit *test, const char *name, char *log)
+void kunit_init_test(struct kunit *test, const char *name, struct list_head *log)
 {
 	spin_lock_init(&test->lock);
 	INIT_LIST_HEAD(&test->resources);
 	test->name = name;
 	test->log = log;
-	if (test->log)
-		test->log[0] = '\0';
+	if (test->log) {
+		struct kunit_log_frag *frag = list_first_entry(test->log,
+							       struct kunit_log_frag,
+							       list);
+		frag->buf[0] = '\0';
+	}
 	test->status = KUNIT_SUCCESS;
 	test->status_comment[0] = '\0';
 }
