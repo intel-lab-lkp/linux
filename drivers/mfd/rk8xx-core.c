@@ -696,9 +696,9 @@ int rk8xx_probe(struct device *dev, int variant, unsigned int irq, struct regmap
 		switch (rk808->variant) {
 		case RK809_ID:
 		case RK817_ID:
-			ret = devm_register_sys_off_handler(dev,
-							    SYS_OFF_MODE_RESTART, SYS_OFF_PRIO_HIGH,
-							    &rk808_restart, rk808);
+			ret = devm_register_cold_restart_handler(dev,
+								 &rk808_restart,
+								 rk808);
 			if (ret)
 				dev_warn(dev, "failed to register rst handler, %d\n", ret);
 			break;
