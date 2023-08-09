@@ -148,9 +148,15 @@ EXPORT_SYMBOL(devm_register_reboot_notifier);
 
 /*
  *	Notifier list for kernel code which wants to be called
- *	to restart the system.
+ *	to cold restart the system.
  */
-static ATOMIC_NOTIFIER_HEAD(restart_handler_list);
+static ATOMIC_NOTIFIER_HEAD(cold_restart_handler_list);
+
+/*
+ *	Notifier list for kernel code which wants to be called
+ *	to warm restart the system.
+ */
+static ATOMIC_NOTIFIER_HEAD(warm_restart_handler_list);
 
 /**
  *	register_restart_handler - Register function to be called to reset
@@ -192,7 +198,11 @@ static ATOMIC_NOTIFIER_HEAD(restart_handler_list);
  */
 int register_restart_handler(struct notifier_block *nb)
 {
-	return atomic_notifier_chain_register(&restart_handler_list, nb);
+	/*
+	 * Store all non-devm-based handlers in the warm list to ensure that the
+	 * "specified" handler are preferred over the "unspecified" ones.
+	 */
+	return atomic_notifier_chain_register(&warm_restart_handler_list, nb);
 }
 EXPORT_SYMBOL(register_restart_handler);
 
@@ -207,7 +217,14 @@ EXPORT_SYMBOL(register_restart_handler);
  */
 int unregister_restart_handler(struct notifier_block *nb)
 {
-	return atomic_notifier_chain_unregister(&restart_handler_list, nb);
+	int ret;
+
+	ret = atomic_notifier_chain_unregister(&warm_restart_handler_list, nb);
+	if (ret == -ENOENT)
+		ret = atomic_notifier_chain_unregister(&cold_restart_handler_list,
+						       nb);
+
+	return ret;
 }
 EXPORT_SYMBOL(unregister_restart_handler);
 
@@ -224,7 +241,20 @@ EXPORT_SYMBOL(unregister_restart_handler);
  */
 void do_kernel_restart(char *cmd)
 {
-	atomic_notifier_call_chain(&restart_handler_list, reboot_mode, cmd);
+	/*
+	 * REBOOT_GPIO can be either cold or warm -> let handler decide.
+	 * Prefer cold reboot if mode not specified.
+	 */
+	if (reboot_mode == REBOOT_UNDEFINED || reboot_mode == REBOOT_GPIO ||
+	    reboot_mode == REBOOT_HARD || reboot_mode == REBOOT_COLD) {
+		atomic_notifier_call_chain(&cold_restart_handler_list,
+					   reboot_mode, cmd);
+		if (reboot_mode == REBOOT_HARD || reboot_mode == REBOOT_COLD)
+			pr_emerg("hard/cold reboot failed, fallback!\n");
+	}
+
+	/* Always execute warm handler as fallback */
+	atomic_notifier_call_chain(&warm_restart_handler_list, reboot_mode, cmd);
 }
 
 void migrate_to_reboot_cpu(void)
@@ -417,7 +447,15 @@ register_sys_off_handler(enum sys_off_mode mode,
 		break;
 
 	case SYS_OFF_MODE_RESTART:
-		handler->list = &restart_handler_list;
+		handler->list = &warm_restart_handler_list;
+		break;
+
+	case SYS_OFF_MODE_RESTART_COLD:
+		handler->list = &cold_restart_handler_list;
+		break;
+
+	case SYS_OFF_MODE_RESTART_WARM:
+		handler->list = &warm_restart_handler_list;
 		break;
 
 	default:
@@ -563,6 +601,50 @@ int devm_register_restart_handler(struct device *dev,
 					     callback, cb_data);
 }
 EXPORT_SYMBOL_GPL(devm_register_restart_handler);
+
+/**
+ *	devm_register_cold_restart_handler - Register cold restart handler
+ *	@dev: Device that registers callback
+ *	@callback: Callback function
+ *	@cb_data: Callback's argument
+ *
+ *	Registers resource-managed sys-off handler with a default priority
+ *	and using cold restart mode.
+ *
+ *	Returns zero on success, or error code on failure.
+ */
+int devm_register_cold_restart_handler(struct device *dev,
+				       int (*callback)(struct sys_off_data *data),
+				       void *cb_data)
+{
+	return devm_register_sys_off_handler(dev,
+					     SYS_OFF_MODE_RESTART_COLD,
+					     SYS_OFF_PRIO_DEFAULT,
+					     callback, cb_data);
+}
+EXPORT_SYMBOL_GPL(devm_register_cold_restart_handler);
+
+/**
+ *	devm_register_warm_restart_handler - Register warm restart handler
+ *	@dev: Device that registers callback
+ *	@callback: Callback function
+ *	@cb_data: Callback's argument
+ *
+ *	Registers resource-managed sys-off handler with a default priority
+ *	and using warm restart mode.
+ *
+ *	Returns zero on success, or error code on failure.
+ */
+int devm_register_warm_restart_handler(struct device *dev,
+				       int (*callback)(struct sys_off_data *data),
+				       void *cb_data)
+{
+	return devm_register_sys_off_handler(dev,
+					     SYS_OFF_MODE_RESTART_WARM,
+					     SYS_OFF_PRIO_DEFAULT,
+					     callback, cb_data);
+}
+EXPORT_SYMBOL_GPL(devm_register_warm_restart_handler);
 
 static struct sys_off_handler *platform_power_off_handler;
 

@@ -119,6 +119,20 @@ enum sys_off_mode {
 	 * Handlers restart system. Handlers are disallowed to sleep.
 	 */
 	SYS_OFF_MODE_RESTART,
+
+	/**
+	 * @SYS_OFF_MODE_RESTART_COLD:
+	 *
+	 * Handlers cold restart system. Handlers are disallowed to sleep.
+	 */
+	SYS_OFF_MODE_RESTART_COLD,
+
+	/**
+	 * @SYS_OFF_MODE_RESTART_WARM:
+	 *
+	 * Handlers warm restart system. Handlers are disallowed to sleep.
+	 */
+	SYS_OFF_MODE_RESTART_WARM,
 };
 
 /**
@@ -159,6 +173,14 @@ int devm_register_power_off_handler(struct device *dev,
 int devm_register_restart_handler(struct device *dev,
 				  int (*callback)(struct sys_off_data *data),
 				  void *cb_data);
+
+int devm_register_cold_restart_handler(struct device *dev,
+				       int (*callback)(struct sys_off_data *data),
+				       void *cb_data);
+
+int devm_register_warm_restart_handler(struct device *dev,
+				       int (*callback)(struct sys_off_data *data),
+				       void *cb_data);
 
 int register_platform_power_off(void (*power_off)(void));
 void unregister_platform_power_off(void (*power_off)(void));
