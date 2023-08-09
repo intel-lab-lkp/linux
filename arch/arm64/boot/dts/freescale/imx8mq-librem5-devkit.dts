@@ -231,16 +231,11 @@
 		vcc-supply = <&reg_3v3_p>;
 	};
 
-	wifi_pwr_en: regulator-wifi-en {
-		compatible = "regulator-fixed";
+	wifi_pwrseq: pwrseq {
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_wifi_pwr_en>;
-		regulator-name = "WIFI_EN";
-		regulator-min-microvolt = <3300000>;
-		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio3 5 GPIO_ACTIVE_HIGH>;
-		enable-active-high;
-		regulator-always-on;
+		compatible = "mmc-pwrseq-simple";
+		reset-gpios = <&gpio3 5 GPIO_ACTIVE_LOW>;
 	};
 };
 
@@ -1032,7 +1027,7 @@
 	pinctrl-2 = <&pinctrl_usdhc2_200mhz>;
 	bus-width = <4>;
 	vmmc-supply = <&reg_usdhc2_vmmc>;
-	power-supply = <&wifi_pwr_en>;
+	mmc-pwrseq = <&wifi_pwrseq>;
 	broken-cd;
 	disable-wp;
 	cap-sdio-irq;
