@@ -35,7 +35,7 @@ static int go7007_loader_probe(struct usb_interface *interface,
 				const struct usb_device_id *id)
 {
 	struct usb_device *usbdev;
-	const struct firmware *fw;
+	const struct firmware *fw_1, *fw_2;
 	u16 vendor, product;
 	const char *fw1, *fw2;
 	int ret;
@@ -67,13 +67,13 @@ static int go7007_loader_probe(struct usb_interface *interface,
 
 	dev_info(&interface->dev, "loading firmware %s\n", fw1);
 
-	if (request_firmware(&fw, fw1, &usbdev->dev)) {
+	if (request_firmware(&fw_1, fw1, &usbdev->dev)) {
 		dev_err(&interface->dev,
 			"unable to load firmware from file \"%s\"\n", fw1);
 		goto failed2;
 	}
-	ret = cypress_load_firmware(usbdev, fw, CYPRESS_FX2);
-	release_firmware(fw);
+	ret = cypress_load_firmware(usbdev, fw_1, CYPRESS_FX2);
+	release_firmware(fw_1);
 	if (0 != ret) {
 		dev_err(&interface->dev, "loader download failed\n");
 		goto failed2;
@@ -82,13 +82,13 @@ static int go7007_loader_probe(struct usb_interface *interface,
 	if (fw2 == NULL)
 		return 0;
 
-	if (request_firmware(&fw, fw2, &usbdev->dev)) {
+	if (request_firmware(&fw_2, fw2, &usbdev->dev)) {
 		dev_err(&interface->dev,
 			"unable to load firmware from file \"%s\"\n", fw2);
 		goto failed2;
 	}
-	ret = cypress_load_firmware(usbdev, fw, CYPRESS_FX2);
-	release_firmware(fw);
+	ret = cypress_load_firmware(usbdev, fw_2, CYPRESS_FX2);
+	release_firmware(fw_2);
 	if (0 != ret) {
 		dev_err(&interface->dev, "firmware download failed\n");
 		goto failed2;
