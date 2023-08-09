@@ -763,12 +763,49 @@ static void kunit_log_extend_test_2(struct kunit *test)
 #endif
 }
 
+static void kunit_log_frag_sized_line_test(struct kunit *test)
+{
+#ifdef CONFIG_KUNIT_DEBUGFS
+	struct kunit_suite suite;
+	struct kunit_log_frag *frag, *src;
+
+	suite.log = kunit_kzalloc(test, sizeof(*suite.log), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, suite.log);
+	INIT_LIST_HEAD(suite.log);
+	frag = kunit_kzalloc(test, sizeof(*frag), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, frag);
+	kunit_init_log_frag(frag);
+	list_add_tail(&frag->list, suite.log);
+
+	src = kunit_kzalloc(test, sizeof(*src), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, src);
+	memset(src->buf, 'x', sizeof(src->buf) - 2);
+	KUNIT_ASSERT_EQ(test, strlen(src->buf), sizeof(src->buf) - 2);
+
+	/* Log a string that exactly fills the fragment */
+	kunit_log_append(suite.log, "%s\n", src->buf);
+	KUNIT_EXPECT_TRUE(test, list_is_singular(suite.log));
+	KUNIT_EXPECT_EQ(test, strlen(frag->buf), sizeof(frag->buf) - 1);
+	strlcat(src->buf, "\n", sizeof(src->buf));
+	KUNIT_EXPECT_STREQ(test, frag->buf, src->buf);
+
+	/* Logging another string should extend the log */
+	kunit_log_append(suite.log, "Next\n");
+	KUNIT_EXPECT_EQ(test, list_count_nodes(suite.log), 2);
+	frag = list_last_entry(suite.log, struct kunit_log_frag, list);
+	KUNIT_EXPECT_STREQ(test, frag->buf, "Next\n");
+#else
+	kunit_skip(test, "only useful when debugfs is enabled");
+#endif
+}
+
 static struct kunit_case kunit_log_test_cases[] = {
 	KUNIT_CASE(kunit_log_init_frag_test),
 	KUNIT_CASE(kunit_log_test),
 	KUNIT_CASE(kunit_log_newline_test),
 	KUNIT_CASE(kunit_log_extend_test_1),
 	KUNIT_CASE(kunit_log_extend_test_2),
+	KUNIT_CASE(kunit_log_frag_sized_line_test),
 	{}
 };
 
