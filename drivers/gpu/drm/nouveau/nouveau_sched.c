@@ -407,9 +407,10 @@ int nouveau_sched_init(struct nouveau_drm *drm)
 	if (!drm->sched_wq)
 		return -ENOMEM;
 
-	return drm_sched_init(sched, &nouveau_sched_ops,
-			      NOUVEAU_SCHED_HW_SUBMISSIONS, 0, job_hang_limit,
-			      NULL, NULL, "nouveau_sched", drm->dev->dev);
+	return drm_sched_init(sched, DRM_GPU_SCHEDULER_MODE_MULTI_RING,
+			      &nouveau_sched_ops, NOUVEAU_SCHED_HW_SUBMISSIONS,
+			      0, job_hang_limit, NULL, NULL, "nouveau_sched",
+			      drm->dev->dev);
 }
 
 void nouveau_sched_fini(struct nouveau_drm *drm)

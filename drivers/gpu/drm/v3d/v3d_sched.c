@@ -387,7 +387,7 @@ v3d_sched_init(struct v3d_dev *v3d)
 	int hang_limit_ms = 500;
 	int ret;
 
-	ret = drm_sched_init(&v3d->queue[V3D_BIN].sched,
+	ret = drm_sched_init(&v3d->queue[V3D_BIN].sched, 0,
 			     &v3d_bin_sched_ops,
 			     hw_jobs_limit, job_hang_limit,
 			     msecs_to_jiffies(hang_limit_ms), NULL,
@@ -395,7 +395,7 @@ v3d_sched_init(struct v3d_dev *v3d)
 	if (ret)
 		return ret;
 
-	ret = drm_sched_init(&v3d->queue[V3D_RENDER].sched,
+	ret = drm_sched_init(&v3d->queue[V3D_RENDER].sched, 0,
 			     &v3d_render_sched_ops,
 			     hw_jobs_limit, job_hang_limit,
 			     msecs_to_jiffies(hang_limit_ms), NULL,
@@ -403,7 +403,7 @@ v3d_sched_init(struct v3d_dev *v3d)
 	if (ret)
 		goto fail;
 
-	ret = drm_sched_init(&v3d->queue[V3D_TFU].sched,
+	ret = drm_sched_init(&v3d->queue[V3D_TFU].sched, 0,
 			     &v3d_tfu_sched_ops,
 			     hw_jobs_limit, job_hang_limit,
 			     msecs_to_jiffies(hang_limit_ms), NULL,
@@ -412,7 +412,7 @@ v3d_sched_init(struct v3d_dev *v3d)
 		goto fail;
 
 	if (v3d_has_csd(v3d)) {
-		ret = drm_sched_init(&v3d->queue[V3D_CSD].sched,
+		ret = drm_sched_init(&v3d->queue[V3D_CSD].sched, 0,
 				     &v3d_csd_sched_ops,
 				     hw_jobs_limit, job_hang_limit,
 				     msecs_to_jiffies(hang_limit_ms), NULL,
@@ -420,7 +420,7 @@ v3d_sched_init(struct v3d_dev *v3d)
 		if (ret)
 			goto fail;
 
-		ret = drm_sched_init(&v3d->queue[V3D_CACHE_CLEAN].sched,
+		ret = drm_sched_init(&v3d->queue[V3D_CACHE_CLEAN].sched, 0,
 				     &v3d_cache_clean_sched_ops,
 				     hw_jobs_limit, job_hang_limit,
 				     msecs_to_jiffies(hang_limit_ms), NULL,

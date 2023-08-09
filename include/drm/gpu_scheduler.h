@@ -466,6 +466,20 @@ struct drm_sched_backend_ops {
 };
 
 /**
+ * DRM_GPU_SCHEDULER_MODE_MULTI_RING - Run the scheduler in multi ring mode
+ *
+ * The &drm_gpu_scheduler typically represents one HW ring with
+ * &drm_sched_entities feeding into one or multiple scheduler instances.
+ *
+ * In multi ring mode it is assumed there is a single &drm_gpu_scheduler
+ * instance only, where &drm_sched_entities represent rings instead.
+ *
+ * This is useful for GPUs where the &drm_gpu_scheduler should feed a firmware
+ * scheduler with an arbitrary amount of rings.
+ */
+#define DRM_GPU_SCHEDULER_MODE_MULTI_RING	(1 << 0)
+
+/**
  * struct drm_gpu_scheduler - scheduler instance-specific data
  *
  * @ops: backend operations provided by the driver.
@@ -493,6 +507,7 @@ struct drm_sched_backend_ops {
  * @ready: marks if the underlying HW is ready to work
  * @free_guilty: A hit to time out handler to free the guilty job.
  * @dev: system &struct device
+ * @flags: the flags for the &drm_gpu_scheduler
  *
  * One scheduler is implemented for each hardware ring.
  */
@@ -517,9 +532,10 @@ struct drm_gpu_scheduler {
 	bool				ready;
 	bool				free_guilty;
 	struct device			*dev;
+	unsigned long			flags;
 };
 
-int drm_sched_init(struct drm_gpu_scheduler *sched,
+int drm_sched_init(struct drm_gpu_scheduler *sched, unsigned int flags,
 		   const struct drm_sched_backend_ops *ops,
 		   uint32_t hw_submission, unsigned hang_limit,
 		   long timeout, struct workqueue_struct *timeout_wq,

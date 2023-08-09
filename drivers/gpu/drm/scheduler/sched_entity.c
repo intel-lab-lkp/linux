@@ -401,7 +401,8 @@ static bool drm_sched_entity_add_dependency_cb(struct drm_sched_entity *entity)
 
 	s_fence = to_drm_sched_fence(fence);
 	if (!fence->error && s_fence && s_fence->sched == sched &&
-	    !test_bit(DRM_SCHED_FENCE_DONT_PIPELINE, &fence->flags)) {
+	    !test_bit(DRM_SCHED_FENCE_DONT_PIPELINE, &fence->flags) &&
+	    !(sched->flags & DRM_GPU_SCHEDULER_MODE_MULTI_RING)) {
 
 		/*
 		 * Fence is from the same scheduler, only need to wait for

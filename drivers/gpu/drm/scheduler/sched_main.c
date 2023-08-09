@@ -24,28 +24,50 @@
 /**
  * DOC: Overview
  *
- * The GPU scheduler provides entities which allow userspace to push jobs
- * into software queues which are then scheduled on a hardware run queue.
- * The software queues have a priority among them. The scheduler selects the entities
- * from the run queue using a FIFO. The scheduler provides dependency handling
- * features among jobs. The driver is supposed to provide callback functions for
- * backend operations to the scheduler like submitting a job to hardware run queue,
- * returning the dependencies of a job etc.
+ * The GPU scheduler is mainly structured into the scheduler itself
+ * (&drm_gpu_scheduler), scheduler entities (&drm_sched_entity) and scheduler
+ * jobs (&drm_sched_job).
  *
- * The organisation of the scheduler is the following:
+ * Each &drm_gpu_scheduler has different priority run queues (e.g. HIGH_HW,
+ * HIGH_SW, KERNEL, NORMAL), which themselfs contain a list of &drm_sched_entity
+ * objects, while each &drm_sched_entity maintains a queue of &drm_sched_jobs.
  *
- * 1. Each hw run queue has one scheduler
- * 2. Each scheduler has multiple run queues with different priorities
- *    (e.g., HIGH_HW,HIGH_SW, KERNEL, NORMAL)
- * 3. Each scheduler run queue has a queue of entities to schedule
- * 4. Entities themselves maintain a queue of jobs that will be scheduled on
- *    the hardware.
+ * There are two modes of operation, single ring mode and multi ring mode.
+ * Depending on the mode of operation, the mental model of what the named
+ * structures represent differs.
  *
- * The jobs in a entity are always scheduled in the order that they were pushed.
+ * In single ring mode (which is the default) every &drm_gpu_scheduler
+ * instance represents a single HW ring, while every &drm_sched_entity
+ * represents a software queue feeding into one or multiple &drm_gpu_scheduler
+ * instances and hence into one or multiple HW rings.
+ *
+ * Single ring mode may be used when the GPU has a fixed amount of HW rings
+ * which can be directly fed by the driver.
+ *
+ * In multi ring mode (enabled by passing the &drm_gpu_scheduler the
+ * &DRM_GPU_SCHEDULER_MODE_MULTI_RING flag) each &drm_sched_entity represents a
+ * HW ring, while the &drm_gpu_scheduler itself only exists to sort out job
+ * dependencies and actually process the jobs of each &drm_sched_entity.
+ *
+ * Multi ring mode may be used when the GPU has a firmware scheduler feeding the
+ * actual HW rings, while the driver feeds the firmware scheduler through an
+ * arbitrary amount of dynamically created rings.
+ *
+ * While one or the other mental model could be applied without setting the ring
+ * mode through a flag, the scheduler needs to know the mode of operation in
+ * order to be able to make correct decitions when it comes to handling job
+ * dependencies.
+ *
+ * Independent of the mode of operation jobs within an entity are always
+ * scheduled in the order in which they were submitted.
  *
  * Note that once a job was taken from the entities queue and pushed to the
  * hardware, i.e. the pending queue, the entity must not be referenced anymore
  * through the jobs entity pointer.
+ *
+ * In order for the scheduler to actually prepare, process or free a job once it
+ * is completed, the driver is supposed to provide the corresponding callback
+ * functions (&drm_sched_backend_ops) to the scheduler.
  */
 
 #include <linux/kthread.h>
@@ -1082,7 +1104,7 @@ static int drm_sched_main(void *param)
  *
  * Return 0 on success, otherwise error code.
  */
-int drm_sched_init(struct drm_gpu_scheduler *sched,
+int drm_sched_init(struct drm_gpu_scheduler *sched, unsigned int flags,
 		   const struct drm_sched_backend_ops *ops,
 		   unsigned hw_submission, unsigned hang_limit,
 		   long timeout, struct workqueue_struct *timeout_wq,
@@ -1097,6 +1119,7 @@ int drm_sched_init(struct drm_gpu_scheduler *sched,
 	sched->hang_limit = hang_limit;
 	sched->score = score ? score : &sched->_score;
 	sched->dev = dev;
+	sched->flags = flags;
 	for (i = DRM_SCHED_PRIORITY_MIN; i < DRM_SCHED_PRIORITY_COUNT; i++)
 		drm_sched_rq_init(sched, &sched->sched_rq[i]);
 

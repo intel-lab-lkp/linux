@@ -814,7 +814,7 @@ int panfrost_job_init(struct panfrost_device *pfdev)
 	for (j = 0; j < NUM_JOB_SLOTS; j++) {
 		js->queue[j].fence_context = dma_fence_context_alloc(1);
 
-		ret = drm_sched_init(&js->queue[j].sched,
+		ret = drm_sched_init(&js->queue[j].sched, 0,
 				     &panfrost_sched_ops,
 				     nentries, 0,
 				     msecs_to_jiffies(JOB_TIMEOUT_MS),
