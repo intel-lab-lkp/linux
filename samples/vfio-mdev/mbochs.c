@@ -1262,7 +1262,7 @@ static long mbochs_ioctl(struct vfio_device *vdev, unsigned int cmd,
 
 	case VFIO_DEVICE_QUERY_GFX_PLANE:
 	{
-		struct vfio_device_gfx_plane_info plane;
+		struct vfio_device_gfx_plane_info plane = {};
 
 		minsz = offsetofend(struct vfio_device_gfx_plane_info,
 				    region_index);
@@ -1273,11 +1273,13 @@ static long mbochs_ioctl(struct vfio_device *vdev, unsigned int cmd,
 		if (plane.argsz < minsz)
 			return -EINVAL;
 
+		outsz = min_t(unsigned long, plane.argsz, sizeof(plane));
+
 		ret = mbochs_query_gfx_plane(mdev_state, &plane);
 		if (ret)
 			return ret;
 
-		if (copy_to_user((void __user *)arg, &plane, minsz))
+		if (copy_to_user((void __user *)arg, &plane, outsz))
 			return -EFAULT;
 
 		return 0;
