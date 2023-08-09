@@ -2660,6 +2660,20 @@ int pci_wake_from_d3(struct pci_dev *dev, bool enable)
 }
 EXPORT_SYMBOL(pci_wake_from_d3);
 
+/*
+ * Find the deepest state from which the device can generate
+ * PME#.
+ */
+static inline pci_power_t pci_get_wake_pme_state(struct pci_dev *dev)
+{
+	pci_power_t state = PCI_D3hot;
+
+	while (state && !(dev->pme_support & (1 << state)))
+		state--;
+
+	return state;
+}
+
 /**
  * pci_target_state - find an appropriate low power state for a given PCI dev
  * @dev: PCI device
@@ -2701,21 +2715,8 @@ static pci_power_t pci_target_state(struct pci_dev *dev, bool wakeup)
 	else if (!dev->pm_cap)
 		return PCI_D0;
 
-	if (wakeup && dev->pme_support) {
-		pci_power_t state = PCI_D3hot;
-
-		/*
-		 * Find the deepest state from which the device can generate
-		 * PME#.
-		 */
-		while (state && !(dev->pme_support & (1 << state)))
-			state--;
-
-		if (state)
-			return state;
-		else if (dev->pme_support & 1)
-			return PCI_D0;
-	}
+	if (wakeup && dev->pme_support)
+		return pci_get_wake_pme_state(dev);
 
 	return PCI_D3hot;
 }
