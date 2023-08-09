@@ -38,6 +38,11 @@ struct pca9450 {
 	int irq;
 };
 
+static inline struct pca9450 *dev_to_pca9450(struct device *dev)
+{
+	return dev_get_drvdata(dev);
+}
+
 static const struct regmap_range pca9450_status_range = {
 	.range_min = PCA9450_REG_INT1,
 	.range_max = PCA9450_REG_PWRON_STAT,
@@ -217,6 +222,42 @@ static int pca9450_set_dvs_levels(struct device_node *np,
 	}
 
 	return ret;
+}
+
+static int pca9450_cold_reset(struct pca9450 *pca9450)
+{
+	int ret;
+
+	ret = regmap_write(pca9450->regmap, PCA9450_REG_SWRST,
+			   SWRST_RESET_COLD_LDO12);
+	if (ret)
+		return ret;
+
+	/* t_RESTART is 250 ms. */
+	mdelay(500);
+	return -ETIME;
+}
+
+static int pca9450_warm_reset(struct pca9450 *pca9450)
+{
+	int ret;
+
+	ret = regmap_write(pca9450->regmap, PCA9450_REG_SWRST,
+			   SWRST_RESET_WARM);
+	if (ret)
+		return ret;
+
+	/* t_RESET is 20 ms. */
+	mdelay(50);
+	return -ETIME;
+}
+
+static int pca9450_restart_handler(struct sys_off_data *data)
+{
+	int (*handler)(struct pca9450 *) = data->cb_data;
+	struct pca9450 *pca9450 = dev_to_pca9450(data->dev);
+
+	return handler(pca9450);
 }
 
 static const struct pca9450_regulator_desc pca9450a_regulators[] = {
@@ -843,6 +884,24 @@ static int pca9450_i2c_probe(struct i2c_client *i2c)
 	if (IS_ERR(pca9450->sd_vsel_gpio)) {
 		dev_err(&i2c->dev, "Failed to get SD_VSEL GPIO\n");
 		return PTR_ERR(pca9450->sd_vsel_gpio);
+	}
+
+	ret = devm_register_cold_restart_handler(pca9450->dev,
+						 pca9450_restart_handler,
+						 pca9450_cold_reset);
+	if (ret) {
+		dev_err(&i2c->dev, "register cold restart handler failed: %d\n",
+			ret);
+		return ret;
+	}
+
+	ret = devm_register_warm_restart_handler(pca9450->dev,
+						 pca9450_restart_handler,
+						 pca9450_warm_reset);
+	if (ret) {
+		dev_err(&i2c->dev, "register warm restart handler failed: %d\n",
+			ret);
+		return ret;
 	}
 
 	dev_info(&i2c->dev, "%s probed.\n",
