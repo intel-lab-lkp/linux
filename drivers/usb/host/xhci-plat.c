@@ -451,7 +451,7 @@ static int __maybe_unused xhci_plat_suspend(struct device *dev)
 	return 0;
 }
 
-static int __maybe_unused xhci_plat_resume(struct device *dev)
+static int __maybe_unused xhci_plat_resume_common(struct device *dev, struct pm_message pmsg)
 {
 	struct usb_hcd	*hcd = dev_get_drvdata(dev);
 	struct xhci_hcd	*xhci = hcd_to_xhci(hcd);
@@ -466,7 +466,7 @@ static int __maybe_unused xhci_plat_resume(struct device *dev)
 	if (ret)
 		return ret;
 
-	ret = xhci_resume(xhci, PMSG_RESUME);
+	ret = xhci_resume(xhci, pmsg);
 	if (ret)
 		return ret;
 
@@ -475,6 +475,16 @@ static int __maybe_unused xhci_plat_resume(struct device *dev)
 	pm_runtime_enable(dev);
 
 	return 0;
+}
+
+static int __maybe_unused xhci_plat_resume(struct device *dev)
+{
+	return xhci_plat_resume_common(dev, PMSG_RESUME);
+}
+
+static int __maybe_unused xhci_plat_restore(struct device *dev)
+{
+	return xhci_plat_resume_common(dev, PMSG_RESTORE);
 }
 
 static int __maybe_unused xhci_plat_runtime_suspend(struct device *dev)
@@ -499,8 +509,14 @@ static int __maybe_unused xhci_plat_runtime_resume(struct device *dev)
 }
 
 const struct dev_pm_ops xhci_plat_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(xhci_plat_suspend, xhci_plat_resume)
-
+#ifdef CONFIG_PM_SLEEP
+	.suspend = xhci_plat_suspend,
+	.resume = xhci_plat_resume,
+	.freeze = xhci_plat_suspend,
+	.thaw = xhci_plat_resume,
+	.poweroff = xhci_plat_suspend,
+	.restore = xhci_plat_restore,
+#endif
 	SET_RUNTIME_PM_OPS(xhci_plat_runtime_suspend,
 			   xhci_plat_runtime_resume,
 			   NULL)
