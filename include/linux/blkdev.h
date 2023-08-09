@@ -316,6 +316,7 @@ struct queue_limits {
 	unsigned char		misaligned;
 	unsigned char		discard_misaligned;
 	unsigned char		raid_partial_stripes_expensive;
+	bool			use_zone_write_lock;
 	enum blk_zoned_model	zoned;
 
 	/*
