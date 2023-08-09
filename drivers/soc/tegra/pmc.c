@@ -2962,7 +2962,7 @@ static int tegra_pmc_probe(struct platform_device *pdev)
 	}
 
 	err = devm_register_sys_off_handler(&pdev->dev,
-					    SYS_OFF_MODE_RESTART,
+					    SYS_OFF_MODE_RESTART_WARM,
 					    SYS_OFF_PRIO_LOW,
 					    tegra_pmc_restart_handler, NULL);
 	if (err) {
