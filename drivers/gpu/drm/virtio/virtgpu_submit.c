@@ -274,7 +274,7 @@ static int virtio_gpu_fence_event_create(struct drm_device *dev,
 					 struct virtio_gpu_fence *fence,
 					 u32 ring_idx)
 {
-	struct virtio_gpu_fence_event *e = NULL;
+	struct virtio_gpu_fence_event *e;
 	int ret;
 
 	e = kzalloc(sizeof(*e), GFP_KERNEL);
