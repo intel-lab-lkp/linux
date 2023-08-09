@@ -1763,6 +1763,9 @@ init_numa_balancing(unsigned long clone_flags, struct task_struct *p)
 
 #ifdef CONFIG_SMP
 
+
+extern struct rq *move_queued_task(struct rq *rq, struct rq_flags *rf,
+				   struct task_struct *p, int new_cpu);
 static inline void
 queue_balance_callback(struct rq *rq,
 		       struct balance_callback *head,
