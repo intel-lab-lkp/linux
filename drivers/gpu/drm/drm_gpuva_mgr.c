@@ -1076,7 +1076,7 @@ __drm_gpuva_sm_map(struct drm_gpuva_manager *mgr,
 		   u64 req_addr, u64 req_range,
 		   struct drm_gem_object *req_obj, u64 req_offset)
 {
-	struct drm_gpuva *va, *next, *prev = NULL;
+	struct drm_gpuva *va, *next = NULL;
 	u64 req_end = req_addr + req_range;
 	int ret;
 
@@ -1206,7 +1206,6 @@ __drm_gpuva_sm_map(struct drm_gpuva_manager *mgr,
 			}
 		}
 next:
-		prev = va;
 	}
 
 	return op_map_cb(ops, priv,
