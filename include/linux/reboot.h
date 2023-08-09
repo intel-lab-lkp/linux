@@ -114,13 +114,6 @@ enum sys_off_mode {
 	SYS_OFF_MODE_RESTART_PREPARE,
 
 	/**
-	 * @SYS_OFF_MODE_RESTART:
-	 *
-	 * Handlers restart system. Handlers are disallowed to sleep.
-	 */
-	SYS_OFF_MODE_RESTART,
-
-	/**
 	 * @SYS_OFF_MODE_RESTART_COLD:
 	 *
 	 * Handlers cold restart system. Handlers are disallowed to sleep.
@@ -169,10 +162,6 @@ int devm_register_sys_off_handler(struct device *dev,
 int devm_register_power_off_handler(struct device *dev,
 				    int (*callback)(struct sys_off_data *data),
 				    void *cb_data);
-
-int devm_register_restart_handler(struct device *dev,
-				  int (*callback)(struct sys_off_data *data),
-				  void *cb_data);
 
 int devm_register_cold_restart_handler(struct device *dev,
 				       int (*callback)(struct sys_off_data *data),
