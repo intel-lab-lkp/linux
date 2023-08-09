@@ -81,6 +81,15 @@
  */
 #define MLXBF_BOOTCTL_FW_RESET  0x8200000D
 
+/*
+ * SMC function IDs to set and get the large ICM carveout size
+ * stored in the eeprom.
+ */
+#define MLNX_HANDLE_SET_ICM_INFO    0x82000012
+#define MLNX_HANDLE_GET_ICM_INFO    0x82000013
+
+#define MAX_ICM_BUFFER_SIZE 10
+
 /* SMC function IDs for SiP Service queries */
 #define MLXBF_BOOTCTL_SIP_SVC_CALL_COUNT	0x8200ff00
 #define MLXBF_BOOTCTL_SIP_SVC_UID		0x8200ff01
