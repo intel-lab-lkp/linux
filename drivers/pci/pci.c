@@ -1082,6 +1082,14 @@ static inline bool platform_pci_bridge_d3(struct pci_dev *dev)
 	return acpi_pci_bridge_d3(dev);
 }
 
+static inline pci_power_t platform_get_constraint(struct pci_dev *dev)
+{
+	if (pci_use_mid_pm())
+		return PCI_POWER_ERROR;
+
+	return acpi_pci_device_constraint(dev);
+}
+
 /**
  * pci_update_current_state - Read power state of given device and cache it
  * @dev: PCI device to handle.
@@ -2685,11 +2693,13 @@ static inline pci_power_t pci_get_wake_pme_state(struct pci_dev *dev)
  */
 static pci_power_t pci_target_state(struct pci_dev *dev, bool wakeup)
 {
+	pci_power_t state;
+
 	if (platform_pci_power_manageable(dev)) {
 		/*
 		 * Call the platform to find the target state for the device.
 		 */
-		pci_power_t state = platform_pci_choose_state(dev);
+		state = platform_pci_choose_state(dev);
 
 		switch (state) {
 		case PCI_POWER_ERROR:
@@ -2714,6 +2724,11 @@ static pci_power_t pci_target_state(struct pci_dev *dev, bool wakeup)
 		return PCI_D3cold;
 	else if (!dev->pm_cap)
 		return PCI_D0;
+
+	/* if platform indicates preferred state device constraint, use it */
+	state = platform_get_constraint(dev);
+	if (state != PCI_POWER_ERROR)
+		return state;
 
 	if (wakeup && dev->pme_support)
 		return pci_get_wake_pme_state(dev);

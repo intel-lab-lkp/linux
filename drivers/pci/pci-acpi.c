@@ -1081,6 +1081,18 @@ bool acpi_pci_bridge_d3(struct pci_dev *dev)
 	return false;
 }
 
+/**
+ * acpi_pci_device_constraint - return any PCI power state constraints
+ * @dev: PCI device to check
+ *
+ * Returns: Any valid constraint specified by platform for a device.
+ * Otherwise PCI_POWER_ERROR.
+ */
+pci_power_t acpi_pci_device_constraint(struct pci_dev *dev)
+{
+	return map_acpi_to_pci(acpi_get_lps0_constraint(&dev->dev));
+}
+
 static void acpi_pci_config_space_access(struct pci_dev *dev, bool enable)
 {
 	int val = enable ? ACPI_REG_CONNECT : ACPI_REG_DISCONNECT;
