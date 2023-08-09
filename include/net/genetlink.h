@@ -113,7 +113,7 @@ struct genl_info {
 	struct netlink_ext_ack *extack;
 };
 
-static inline struct net *genl_info_net(struct genl_info *info)
+static inline struct net *genl_info_net(const struct genl_info *info)
 {
 	return read_pnet(&info->_net);
 }
@@ -270,6 +270,31 @@ genl_info_dump(struct netlink_callback *cb)
 	return &genl_dumpit_info(cb)->info;
 }
 
+#ifdef __LITTLE_ENDIAN
+#define __GENL_PTR_LOW(byte)	((void *)(unsigned long)(byte))
+#else
+#define __GENL_PTR_LOW(byte)	\
+	((void *)((unsigned long)(byte) << (BITS_PER_LONG - 8)))
+#endif
+
+/**
+ * GENL_INFO_NTF() - define genl_info for notifications
+ * @__name: name of declared variable
+ * @__family: pointer to the genetlink family
+ * @__cmd: command to be used in the notification
+ */
+#define GENL_INFO_NTF(__name, __family, __cmd)			\
+	struct genl_info __name = {				\
+		.family = (__family),				\
+		.genlhdr = (void *)&(__name.user_ptr[0]),	\
+		.user_ptr[0] = __GENL_PTR_LOW(__cmd),		\
+	}
+
+static inline bool genl_info_is_ntf(const struct genl_info *info)
+{
+	return !info->nlhdr;
+}
+
 int genl_register_family(struct genl_family *family);
 int genl_unregister_family(const struct genl_family *family);
 void genl_notify(const struct genl_family *family, struct sk_buff *skb,
@@ -277,6 +302,29 @@ void genl_notify(const struct genl_family *family, struct sk_buff *skb,
 
 void *genlmsg_put(struct sk_buff *skb, u32 portid, u32 seq,
 		  const struct genl_family *family, int flags, u8 cmd);
+
+static inline void *
+__genlmsg_iput(struct sk_buff *skb, const struct genl_info *info, int flags)
+{
+	return genlmsg_put(skb, info->snd_portid, info->snd_seq, info->family,
+			   flags, info->genlhdr->cmd);
+}
+
+/**
+ * genlmsg_iput - start genetlink message based on genl_info
+ * @skb: skb in which message header will be placed
+ * @info: genl_info as provided to do/dump handlers
+ *
+ * Convenience wrapper which starts a genetlink message based on
+ * information in user request (or info constructed with GENL_INFO_NTF()).
+ *
+ * Returns pointer to new genetlink header.
+ */
+static inline void *
+genlmsg_iput(struct sk_buff *skb, const struct genl_info *info)
+{
+	return __genlmsg_iput(skb, info, 0);
+}
 
 /**
  * genlmsg_nlhdr - Obtain netlink header from user specified header
