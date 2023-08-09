@@ -3638,26 +3638,44 @@ EXPORT_SYMBOL_GPL(fs_reclaim_release);
 
 /*
  * Zonelists may change due to hotplug during allocation. Detect when zonelists
- * have been rebuilt so allocation retries. Reader side does not lock and
- * retries the allocation if zonelist changes. Writer side is protected by the
- * embedded spin_lock.
+ * have been rebuilt so __GFP_DIRECT_RECLAIM allocation retries. Writer side
+ * makes this sequence odd before rebuilding zonelists and makes this sequence
+ * even after rebuilding zonelists. Sine writer side disables context switching
+ * when rebuilding zonelists, and !__GFP_DIRECT_RECLAIM allocation will not
+ * retry when zonelists changed, reader side does not need to hold a lock (but
+ * needs to use data_race() annotation), making locking dependency simpler.
  */
-static DEFINE_SEQLOCK(zonelist_update_seq);
+static unsigned int zonelist_update_seq;
 
 static unsigned int zonelist_iter_begin(void)
 {
 	if (IS_ENABLED(CONFIG_MEMORY_HOTREMOVE))
-		return read_seqbegin(&zonelist_update_seq);
+		/* See comment above. */
+		return data_race(READ_ONCE(zonelist_update_seq));
 
 	return 0;
 }
 
-static unsigned int check_retry_zonelist(unsigned int seq)
+static unsigned int check_retry_zonelist(gfp_t gfp, unsigned int seq)
 {
-	if (IS_ENABLED(CONFIG_MEMORY_HOTREMOVE))
-		return read_seqretry(&zonelist_update_seq, seq);
+	if (IS_ENABLED(CONFIG_MEMORY_HOTREMOVE) && (gfp & __GFP_DIRECT_RECLAIM)) {
+		/* See comment above. */
+		unsigned int seq2 = data_race(READ_ONCE(zonelist_update_seq));
 
-	return seq;
+		/*
+		 * "seq != seq2" indicates that __build_all_zonelists() has
+		 * started or has finished rebuilding zonelists, hence retry.
+		 * "seq == seq2 && (seq2 & 1)" indicates that
+		 * __build_all_zonelists() is still rebuilding zonelists
+		 * with context switching disabled, hence retry.
+		 * "seq == seq2 && !(seq2 & 1)" indicates that
+		 * __build_all_zonelists() did not rebuild zonelists, hence
+		 * no retry.
+		 */
+		return unlikely(seq != seq2 || (seq2 & 1));
+	}
+
+	return 0;
 }
 
 /* Perform direct synchronous page reclaim */
@@ -4146,7 +4164,7 @@ retry:
 	 * a unnecessary OOM kill.
 	 */
 	if (check_retry_cpuset(cpuset_mems_cookie, ac) ||
-	    check_retry_zonelist(zonelist_iter_cookie))
+	    check_retry_zonelist(gfp_mask, zonelist_iter_cookie))
 		goto restart;
 
 	/* Reclaim has failed us, start killing things */
@@ -4172,7 +4190,7 @@ nopage:
 	 * a unnecessary OOM kill.
 	 */
 	if (check_retry_cpuset(cpuset_mems_cookie, ac) ||
-	    check_retry_zonelist(zonelist_iter_cookie))
+	    check_retry_zonelist(gfp_mask, zonelist_iter_cookie))
 		goto restart;
 
 	/*
@@ -5136,22 +5154,17 @@ static void __build_all_zonelists(void *data)
 	int nid;
 	int __maybe_unused cpu;
 	pg_data_t *self = data;
+	static DEFINE_SPINLOCK(lock);
 	unsigned long flags;
 
-	/*
-	 * Explicitly disable this CPU's interrupts before taking seqlock
-	 * to prevent any IRQ handler from calling into the page allocator
-	 * (e.g. GFP_ATOMIC) that could hit zonelist_iter_begin and livelock.
-	 */
-	local_irq_save(flags);
-	/*
-	 * Explicitly disable this CPU's synchronous printk() before taking
-	 * seqlock to prevent any printk() from trying to hold port->lock, for
-	 * tty_insert_flip_string_and_push_buffer() on other CPU might be
-	 * calling kmalloc(GFP_ATOMIC | __GFP_NOWARN) with port->lock held.
-	 */
-	printk_deferred_enter();
-	write_seqlock(&zonelist_update_seq);
+#ifdef CONFIG_PREEMPT_RT
+	migrate_disable()
+#endif
+	/* Serialize increments of zonelist_update_seq. */
+	spin_lock_irqsave(&lock, flags);
+	zonelist_update_seq++;
+	/* Tell check_retry_zonelist() that we started rebuilding zonelists. */
+	smp_wmb();
 
 #ifdef CONFIG_NUMA
 	memset(node_load, 0, sizeof(node_load));
@@ -5188,9 +5201,13 @@ static void __build_all_zonelists(void *data)
 #endif
 	}
 
-	write_sequnlock(&zonelist_update_seq);
-	printk_deferred_exit();
-	local_irq_restore(flags);
+	/* Tell check_retry_zonelist() that we finished rebuilding zonelists. */
+	smp_wmb();
+	zonelist_update_seq++;
+	spin_unlock_irqrestore(&lock, flags);
+#ifdef CONFIG_PREEMPT_RT
+	migrate_enable()
+#endif
 }
 
 static noinline void __init
