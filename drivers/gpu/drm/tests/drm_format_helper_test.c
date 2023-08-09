@@ -452,7 +452,7 @@ static size_t conversion_buf_size(u32 dst_format, unsigned int dst_pitch,
 
 static u16 *le16buf_to_cpu(struct kunit *test, const __le16 *buf, size_t buf_size)
 {
-	u16 *dst = NULL;
+	u16 *dst;
 	int n;
 
 	dst = kunit_kzalloc(test, sizeof(*dst) * buf_size, GFP_KERNEL);
@@ -467,7 +467,7 @@ static u16 *le16buf_to_cpu(struct kunit *test, const __le16 *buf, size_t buf_siz
 
 static u32 *le32buf_to_cpu(struct kunit *test, const __le32 *buf, size_t buf_size)
 {
-	u32 *dst = NULL;
+	u32 *dst;
 	int n;
 
 	dst = kunit_kzalloc(test, sizeof(*dst) * buf_size, GFP_KERNEL);
@@ -482,7 +482,7 @@ static u32 *le32buf_to_cpu(struct kunit *test, const __le32 *buf, size_t buf_siz
 
 static __le32 *cpubuf_to_le32(struct kunit *test, const u32 *buf, size_t buf_size)
 {
-	__le32 *dst = NULL;
+	__le32 *dst;
 	int n;
 
 	dst = kunit_kzalloc(test, sizeof(*dst) * buf_size, GFP_KERNEL);
@@ -509,7 +509,7 @@ static void drm_test_fb_xrgb8888_to_gray8(struct kunit *test)
 	const struct convert_xrgb8888_case *params = test->param_value;
 	const struct convert_to_gray8_result *result = &params->gray8_result;
 	size_t dst_size;
-	u8 *buf = NULL;
+	u8 *buf;
 	__le32 *xrgb8888 = NULL;
 	struct iosys_map dst, src;
 
@@ -539,7 +539,7 @@ static void drm_test_fb_xrgb8888_to_rgb332(struct kunit *test)
 	const struct convert_xrgb8888_case *params = test->param_value;
 	const struct convert_to_rgb332_result *result = &params->rgb332_result;
 	size_t dst_size;
-	u8 *buf = NULL;
+	u8 *buf;
 	__le32 *xrgb8888 = NULL;
 	struct iosys_map dst, src;
 
@@ -569,7 +569,7 @@ static void drm_test_fb_xrgb8888_to_rgb565(struct kunit *test)
 	const struct convert_xrgb8888_case *params = test->param_value;
 	const struct convert_to_rgb565_result *result = &params->rgb565_result;
 	size_t dst_size;
-	u16 *buf = NULL;
+	u16 *buf;
 	__le32 *xrgb8888 = NULL;
 	struct iosys_map dst, src;
 
@@ -605,7 +605,7 @@ static void drm_test_fb_xrgb8888_to_xrgb1555(struct kunit *test)
 	const struct convert_xrgb8888_case *params = test->param_value;
 	const struct convert_to_xrgb1555_result *result = &params->xrgb1555_result;
 	size_t dst_size;
-	u16 *buf = NULL;
+	u16 *buf;
 	__le32 *xrgb8888 = NULL;
 	struct iosys_map dst, src;
 
@@ -636,7 +636,7 @@ static void drm_test_fb_xrgb8888_to_argb1555(struct kunit *test)
 	const struct convert_xrgb8888_case *params = test->param_value;
 	const struct convert_to_argb1555_result *result = &params->argb1555_result;
 	size_t dst_size;
-	u16 *buf = NULL;
+	u16 *buf;
 	__le32 *xrgb8888 = NULL;
 	struct iosys_map dst, src;
 
@@ -667,7 +667,7 @@ static void drm_test_fb_xrgb8888_to_rgba5551(struct kunit *test)
 	const struct convert_xrgb8888_case *params = test->param_value;
 	const struct convert_to_rgba5551_result *result = &params->rgba5551_result;
 	size_t dst_size;
-	u16 *buf = NULL;
+	u16 *buf;
 	__le32 *xrgb8888 = NULL;
 	struct iosys_map dst, src;
 
@@ -698,7 +698,7 @@ static void drm_test_fb_xrgb8888_to_rgb888(struct kunit *test)
 	const struct convert_xrgb8888_case *params = test->param_value;
 	const struct convert_to_rgb888_result *result = &params->rgb888_result;
 	size_t dst_size;
-	u8 *buf = NULL;
+	u8 *buf;
 	__le32 *xrgb8888 = NULL;
 	struct iosys_map dst, src;
 
@@ -732,7 +732,7 @@ static void drm_test_fb_xrgb8888_to_argb8888(struct kunit *test)
 	const struct convert_xrgb8888_case *params = test->param_value;
 	const struct convert_to_argb8888_result *result = &params->argb8888_result;
 	size_t dst_size;
-	u32 *buf = NULL;
+	u32 *buf;
 	__le32 *xrgb8888 = NULL;
 	struct iosys_map dst, src;
 
@@ -763,7 +763,7 @@ static void drm_test_fb_xrgb8888_to_xrgb2101010(struct kunit *test)
 	const struct convert_xrgb8888_case *params = test->param_value;
 	const struct convert_to_xrgb2101010_result *result = &params->xrgb2101010_result;
 	size_t dst_size;
-	u32 *buf = NULL;
+	u32 *buf;
 	__le32 *xrgb8888 = NULL;
 	struct iosys_map dst, src;
 
@@ -794,7 +794,7 @@ static void drm_test_fb_xrgb8888_to_argb2101010(struct kunit *test)
 	const struct convert_xrgb8888_case *params = test->param_value;
 	const struct convert_to_argb2101010_result *result = &params->argb2101010_result;
 	size_t dst_size;
-	u32 *buf = NULL;
+	u32 *buf;
 	__le32 *xrgb8888 = NULL;
 	struct iosys_map dst, src;
 
@@ -825,7 +825,7 @@ static void drm_test_fb_xrgb8888_to_mono(struct kunit *test)
 	const struct convert_xrgb8888_case *params = test->param_value;
 	const struct convert_to_mono_result *result = &params->mono_result;
 	size_t dst_size;
-	u8 *buf = NULL;
+	u8 *buf;
 	__le32 *xrgb8888 = NULL;
 	struct iosys_map dst, src;
 
