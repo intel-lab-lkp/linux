@@ -402,7 +402,7 @@ static int ext4_validate_block_bitmap(struct super_block *sb,
 	ext4_fsblk_t	blk;
 	struct ext4_group_info *grp;
 
-	if (EXT4_SB(sb)->s_mount_state & EXT4_FC_REPLAY)
+	if (ext4_test_mount_state(sb, EXT4_FC_REPLAY))
 		return 0;
 
 	grp = ext4_get_group_info(sb, block_group);

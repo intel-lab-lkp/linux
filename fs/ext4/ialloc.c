@@ -84,7 +84,7 @@ static int ext4_validate_inode_bitmap(struct super_block *sb,
 	ext4_fsblk_t	blk;
 	struct ext4_group_info *grp;
 
-	if (EXT4_SB(sb)->s_mount_state & EXT4_FC_REPLAY)
+	if (ext4_test_mount_state(sb, EXT4_FC_REPLAY))
 		return 0;
 
 	grp = ext4_get_group_info(sb, block_group);
@@ -291,7 +291,7 @@ void ext4_free_inode(handle_t *handle, struct inode *inode)
 		bitmap_bh = NULL;
 		goto error_return;
 	}
-	if (!(sbi->s_mount_state & EXT4_FC_REPLAY)) {
+	if (!ext4_test_mount_state(sb, EXT4_FC_REPLAY)) {
 		grp = ext4_get_group_info(sb, block_group);
 		if (!grp || unlikely(EXT4_MB_GRP_IBITMAP_CORRUPT(grp))) {
 			fatal = -EFSCORRUPTED;
@@ -1040,7 +1040,7 @@ got_group:
 		if (ext4_free_inodes_count(sb, gdp) == 0)
 			goto next_group;
 
-		if (!(sbi->s_mount_state & EXT4_FC_REPLAY)) {
+		if (!ext4_test_mount_state(sb, EXT4_FC_REPLAY)) {
 			grp = ext4_get_group_info(sb, group);
 			/*
 			 * Skip groups with already-known suspicious inode
@@ -1053,7 +1053,7 @@ got_group:
 		brelse(inode_bitmap_bh);
 		inode_bitmap_bh = ext4_read_inode_bitmap(sb, group);
 		/* Skip groups with suspicious inode tables */
-		if (((!(sbi->s_mount_state & EXT4_FC_REPLAY))
+		if (((ext4_test_mount_state(sb, EXT4_FC_REPLAY))
 		     && EXT4_MB_GRP_IBITMAP_CORRUPT(grp)) ||
 		    IS_ERR(inode_bitmap_bh)) {
 			inode_bitmap_bh = NULL;
@@ -1073,7 +1073,7 @@ repeat_in_this_group:
 			goto next_group;
 		}
 
-		if ((!(sbi->s_mount_state & EXT4_FC_REPLAY)) && !handle) {
+		if (!ext4_test_mount_state(sb, EXT4_FC_REPLAY) && !handle) {
 			BUG_ON(nblocks <= 0);
 			handle = __ext4_journal_start_sb(NULL, dir->i_sb,
 				 line_no, handle_type, nblocks, 0,
@@ -1181,7 +1181,7 @@ got:
 		int free;
 		struct ext4_group_info *grp = NULL;
 
-		if (!(sbi->s_mount_state & EXT4_FC_REPLAY)) {
+		if (!ext4_test_mount_state(sb, EXT4_FC_REPLAY)) {
 			grp = ext4_get_group_info(sb, group);
 			if (!grp) {
 				err = -EFSCORRUPTED;
@@ -1207,7 +1207,7 @@ got:
 		if (ino > free)
 			ext4_itable_unused_set(sb, gdp,
 					(EXT4_INODES_PER_GROUP(sb) - ino));
-		if (!(sbi->s_mount_state & EXT4_FC_REPLAY))
+		if (!ext4_test_mount_state(sb, EXT4_FC_REPLAY))
 			up_read(&grp->alloc_sem);
 	} else {
 		ext4_lock_group(sb, group);

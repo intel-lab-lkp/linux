@@ -309,7 +309,7 @@ void ext4_es_find_extent_range(struct inode *inode,
 			       ext4_lblk_t lblk, ext4_lblk_t end,
 			       struct extent_status *es)
 {
-	if (EXT4_SB(inode->i_sb)->s_mount_state & EXT4_FC_REPLAY)
+	if (ext4_test_mount_state(inode->i_sb, EXT4_FC_REPLAY))
 		return;
 
 	trace_ext4_es_find_extent_range_enter(inode, lblk);
@@ -362,7 +362,7 @@ bool ext4_es_scan_range(struct inode *inode,
 {
 	bool ret;
 
-	if (EXT4_SB(inode->i_sb)->s_mount_state & EXT4_FC_REPLAY)
+	if (ext4_test_mount_state(inode->i_sb, EXT4_FC_REPLAY))
 		return false;
 
 	read_lock(&EXT4_I(inode)->i_es_lock);
@@ -408,7 +408,7 @@ bool ext4_es_scan_clu(struct inode *inode,
 {
 	bool ret;
 
-	if (EXT4_SB(inode->i_sb)->s_mount_state & EXT4_FC_REPLAY)
+	if (ext4_test_mount_state(inode->i_sb, EXT4_FC_REPLAY))
 		return false;
 
 	read_lock(&EXT4_I(inode)->i_es_lock);
@@ -842,7 +842,7 @@ void ext4_es_insert_extent(struct inode *inode, ext4_lblk_t lblk,
 	struct extent_status *es1 = NULL;
 	struct extent_status *es2 = NULL;
 
-	if (EXT4_SB(inode->i_sb)->s_mount_state & EXT4_FC_REPLAY)
+	if (ext4_test_mount_state(inode->i_sb, EXT4_FC_REPLAY))
 		return;
 
 	es_debug("add [%u/%u) %llu %x to extent status tree of inode %lu\n",
@@ -917,7 +917,7 @@ void ext4_es_cache_extent(struct inode *inode, ext4_lblk_t lblk,
 	struct extent_status newes;
 	ext4_lblk_t end = lblk + len - 1;
 
-	if (EXT4_SB(inode->i_sb)->s_mount_state & EXT4_FC_REPLAY)
+	if (ext4_test_mount_state(inode->i_sb, EXT4_FC_REPLAY))
 		return;
 
 	newes.es_lblk = lblk;
@@ -955,7 +955,7 @@ int ext4_es_lookup_extent(struct inode *inode, ext4_lblk_t lblk,
 	struct rb_node *node;
 	int found = 0;
 
-	if (EXT4_SB(inode->i_sb)->s_mount_state & EXT4_FC_REPLAY)
+	if (ext4_test_mount_state(inode->i_sb, EXT4_FC_REPLAY))
 		return 0;
 
 	trace_ext4_es_lookup_extent_enter(inode, lblk);
@@ -1468,7 +1468,7 @@ void ext4_es_remove_extent(struct inode *inode, ext4_lblk_t lblk,
 	int reserved = 0;
 	struct extent_status *es = NULL;
 
-	if (EXT4_SB(inode->i_sb)->s_mount_state & EXT4_FC_REPLAY)
+	if (ext4_test_mount_state(inode->i_sb, EXT4_FC_REPLAY))
 		return;
 
 	trace_ext4_es_remove_extent(inode, lblk, len);
@@ -2024,7 +2024,7 @@ void ext4_es_insert_delayed_block(struct inode *inode, ext4_lblk_t lblk,
 	struct extent_status *es1 = NULL;
 	struct extent_status *es2 = NULL;
 
-	if (EXT4_SB(inode->i_sb)->s_mount_state & EXT4_FC_REPLAY)
+	if (ext4_test_mount_state(inode->i_sb, EXT4_FC_REPLAY))
 		return;
 
 	es_debug("add [%u/1) delayed to extent status tree of inode %lu\n",

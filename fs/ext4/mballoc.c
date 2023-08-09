@@ -1911,7 +1911,7 @@ static void mb_free_blocks(struct inode *inode, struct ext4_buddy *e4b,
 
 		blocknr = ext4_group_first_block_no(sb, e4b->bd_group);
 		blocknr += EXT4_C2B(sbi, block);
-		if (!(sbi->s_mount_state & EXT4_FC_REPLAY)) {
+		if (!ext4_test_mount_state(sb, EXT4_FC_REPLAY)) {
 			ext4_grp_locked_error(sb, e4b->bd_group,
 					      inode ? inode->i_ino : 0,
 					      blocknr,
@@ -5538,7 +5538,7 @@ void ext4_discard_preallocations(struct inode *inode, unsigned int needed)
 		return;
 	}
 
-	if (EXT4_SB(sb)->s_mount_state & EXT4_FC_REPLAY)
+	if (ext4_test_mount_state(sb, EXT4_FC_REPLAY))
 		return;
 
 	mb_debug(sb, "discard preallocation for inode %lu\n",
@@ -6175,7 +6175,7 @@ ext4_fsblk_t ext4_mb_new_blocks(handle_t *handle,
 	sbi = EXT4_SB(sb);
 
 	trace_ext4_request_blocks(ar);
-	if (sbi->s_mount_state & EXT4_FC_REPLAY)
+	if (ext4_test_mount_state(sb, EXT4_FC_REPLAY))
 		return ext4_mb_new_blocks_simple(ar, errp);
 
 	/* Allow to use superuser reservation for quota file */
@@ -6672,7 +6672,7 @@ void ext4_free_blocks(handle_t *handle, struct inode *inode,
 			block = bh->b_blocknr;
 	}
 
-	if (sbi->s_mount_state & EXT4_FC_REPLAY) {
+	if (ext4_test_mount_state(sb, EXT4_FC_REPLAY)) {
 		ext4_free_blocks_simple(inode, block, EXT4_NUM_B2C(sbi, count));
 		return;
 	}

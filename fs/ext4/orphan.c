@@ -233,7 +233,8 @@ int ext4_orphan_del(handle_t *handle, struct inode *inode)
 	struct ext4_iloc iloc;
 	int err = 0;
 
-	if (!sbi->s_journal && !(sbi->s_mount_state & EXT4_ORPHAN_FS))
+	if (!sbi->s_journal &&
+	    !ext4_test_mount_state(inode->i_sb, EXT4_ORPHAN_FS))
 		return 0;
 
 	WARN_ON_ONCE(!(inode->i_state & (I_NEW | I_FREEING)) &&
@@ -408,7 +409,7 @@ void ext4_orphan_cleanup(struct super_block *sb, struct ext4_super_block *es)
 		return;
 	}
 
-	if (EXT4_SB(sb)->s_mount_state & EXT4_ERROR_FS) {
+	if (ext4_test_mount_state(sb, EXT4_ERROR_FS)) {
 		/* don't clear list on RO mount w/ errors */
 		if (es->s_last_orphan && !(s_flags & SB_RDONLY)) {
 			ext4_msg(sb, KERN_INFO, "Errors on filesystem, "
@@ -458,7 +459,7 @@ void ext4_orphan_cleanup(struct super_block *sb, struct ext4_super_block *es)
 		 * We may have encountered an error during cleanup; if
 		 * so, skip the rest.
 		 */
-		if (EXT4_SB(sb)->s_mount_state & EXT4_ERROR_FS) {
+		if (ext4_test_mount_state(sb, EXT4_ERROR_FS)) {
 			ext4_debug("Skipping orphan recovery on fs with errors.\n");
 			es->s_last_orphan = 0;
 			break;

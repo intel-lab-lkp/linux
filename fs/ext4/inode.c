@@ -502,7 +502,7 @@ int ext4_map_blocks(handle_t *handle, struct inode *inode,
 		return -EFSCORRUPTED;
 
 	/* Lookup extent status tree firstly */
-	if (!(EXT4_SB(inode->i_sb)->s_mount_state & EXT4_FC_REPLAY) &&
+	if (!ext4_test_mount_state(inode->i_sb, EXT4_FC_REPLAY) &&
 	    ext4_es_lookup_extent(inode, map->m_lblk, NULL, &es)) {
 		if (ext4_es_is_written(&es) || ext4_es_is_unwritten(&es)) {
 			map->m_pblk = ext4_es_pblock(&es) +
@@ -810,7 +810,7 @@ struct buffer_head *ext4_getblk(handle_t *handle, struct inode *inode,
 	bool nowait = map_flags & EXT4_GET_BLOCKS_CACHED_NOWAIT;
 	int err;
 
-	ASSERT((EXT4_SB(inode->i_sb)->s_mount_state & EXT4_FC_REPLAY)
+	ASSERT(ext4_test_mount_state(inode->i_sb, EXT4_FC_REPLAY)
 		    || handle != NULL || create == 0);
 	ASSERT(create == 0 || !nowait);
 
@@ -831,7 +831,7 @@ struct buffer_head *ext4_getblk(handle_t *handle, struct inode *inode,
 		return ERR_PTR(-ENOMEM);
 	if (map.m_flags & EXT4_MAP_NEW) {
 		ASSERT(create != 0);
-		ASSERT((EXT4_SB(inode->i_sb)->s_mount_state & EXT4_FC_REPLAY)
+		ASSERT(ext4_test_mount_state(inode->i_sb, EXT4_FC_REPLAY)
 			    || (handle != NULL));
 
 		/*
@@ -4723,7 +4723,7 @@ struct inode *__ext4_iget(struct super_block *sb, unsigned long ino,
 
 	if ((!ext4_inode_csum_verify(inode, raw_inode, ei) ||
 	    ext4_simulate_fail(sb, EXT4_SIM_INODE_CRC)) &&
-	     (!(EXT4_SB(sb)->s_mount_state & EXT4_FC_REPLAY))) {
+	     (!ext4_test_mount_state(inode->i_sb, EXT4_FC_REPLAY))) {
 		ext4_error_inode_err(inode, function, line, 0,
 				EFSBADCRC, "iget: checksum invalid");
 		ret = -EFSBADCRC;
@@ -4760,7 +4760,7 @@ struct inode *__ext4_iget(struct super_block *sb, unsigned long ino,
 	 */
 	if (inode->i_nlink == 0) {
 		if ((inode->i_mode == 0 || flags & EXT4_IGET_SPECIAL ||
-		     !(EXT4_SB(inode->i_sb)->s_mount_state & EXT4_ORPHAN_FS)) &&
+		     !ext4_test_mount_state(inode->i_sb, EXT4_FC_REPLAY)) &&
 		    ino != EXT4_BOOT_LOADER_INO) {
 			/* this inode is deleted or unallocated */
 			if (flags & EXT4_IGET_SPECIAL) {
@@ -4884,7 +4884,7 @@ struct inode *__ext4_iget(struct super_block *sb, unsigned long ino,
 		goto bad_inode;
 	} else if (!ext4_has_inline_data(inode)) {
 		/* validate the block references in the inode */
-		if (!(EXT4_SB(sb)->s_mount_state & EXT4_FC_REPLAY) &&
+		if (!ext4_test_mount_state(sb, EXT4_FC_REPLAY) &&
 			(S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode) ||
 			(S_ISLNK(inode->i_mode) &&
 			!ext4_inode_is_fast_symlink(inode)))) {

@@ -79,7 +79,7 @@ int ext4_resize_begin(struct super_block *sb)
 	 * We are not allowed to do online-resizing on a filesystem mounted
 	 * with error, because it can destroy the filesystem easily.
 	 */
-	if (EXT4_SB(sb)->s_mount_state & EXT4_ERROR_FS) {
+	if (ext4_test_mount_state(sb, EXT4_ERROR_FS)) {
 		ext4_warning(sb, "There are errors in the filesystem, "
 			     "so online resizing is not allowed");
 		return -EPERM;
@@ -1230,7 +1230,7 @@ exit_err:
 	if (err) {
 		ext4_warning(sb, "can't update backup for group %u (err %d), "
 			     "forcing fsck on next reboot", group, err);
-		sbi->s_mount_state &= ~EXT4_VALID_FS;
+		ext4_clear_mount_state(sb, EXT4_VALID_FS);
 		sbi->s_es->s_state &= cpu_to_le16(~EXT4_VALID_FS);
 		mark_buffer_dirty(sbi->s_sbh);
 	}

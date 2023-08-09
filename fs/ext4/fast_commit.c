@@ -232,7 +232,7 @@ __releases(&EXT4_SB(inode->i_sb)->s_fc_lock)
 static bool ext4_fc_disabled(struct super_block *sb)
 {
 	return (!test_opt2(sb, JOURNAL_FAST_COMMIT) ||
-		(EXT4_SB(sb)->s_mount_state & EXT4_FC_REPLAY));
+		ext4_test_mount_state(sb, EXT4_FC_REPLAY));
 }
 
 /*
@@ -1975,7 +1975,7 @@ void ext4_fc_replay_cleanup(struct super_block *sb)
 {
 	struct ext4_sb_info *sbi = EXT4_SB(sb);
 
-	sbi->s_mount_state &= ~EXT4_FC_REPLAY;
+	ext4_clear_mount_state(sb, EXT4_FC_REPLAY);
 	kfree(sbi->s_fc_replay_state.fc_regions);
 	kfree(sbi->s_fc_replay_state.fc_modified_inodes);
 }
@@ -2165,7 +2165,7 @@ static int ext4_fc_replay(journal_t *journal, struct buffer_head *bh,
 
 	if (state->fc_current_pass != pass) {
 		state->fc_current_pass = pass;
-		sbi->s_mount_state |= EXT4_FC_REPLAY;
+		ext4_set_mount_state(sb, EXT4_FC_REPLAY);
 	}
 	if (!sbi->s_fc_replay_state.fc_replay_num_tags) {
 		ext4_debug("Replay stops\n");

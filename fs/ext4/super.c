@@ -652,7 +652,7 @@ static void ext4_handle_error(struct super_block *sb, bool force_ro, int error,
 	journal_t *journal = EXT4_SB(sb)->s_journal;
 	bool continue_fs = !force_ro && test_opt(sb, ERRORS_CONT);
 
-	EXT4_SB(sb)->s_mount_state |= EXT4_ERROR_FS;
+	ext4_set_mount_state(sb, EXT4_ERROR_FS);
 	if (test_opt(sb, WARN_ON_ERROR))
 		WARN_ON_ONCE(1);
 
@@ -1014,7 +1014,7 @@ __acquires(bitlock)
 	if (test_opt(sb, ERRORS_CONT)) {
 		if (test_opt(sb, WARN_ON_ERROR))
 			WARN_ON_ONCE(1);
-		EXT4_SB(sb)->s_mount_state |= EXT4_ERROR_FS;
+		ext4_set_mount_state(sb, EXT4_ERROR_FS);
 		if (!bdev_read_only(sb->s_bdev)) {
 			save_error_info(sb, EFSCORRUPTED, ino, block, function,
 					line);
@@ -3090,10 +3090,10 @@ static int ext4_setup_super(struct super_block *sb, struct ext4_super_block *es,
 	}
 	if (read_only)
 		goto done;
-	if (!(sbi->s_mount_state & EXT4_VALID_FS))
+	if (!ext4_test_mount_state(sb, EXT4_VALID_FS))
 		ext4_msg(sb, KERN_WARNING, "warning: mounting unchecked fs, "
 			 "running e2fsck is recommended");
-	else if (sbi->s_mount_state & EXT4_ERROR_FS)
+	else if (ext4_test_mount_state(sb, EXT4_ERROR_FS))
 		ext4_msg(sb, KERN_WARNING,
 			 "warning: mounting fs with errors, "
 			 "running e2fsck is recommended");
@@ -5573,9 +5573,9 @@ static int __ext4_fill_super(struct fs_context *fc, struct super_block *sb)
 	errseq_check_and_advance(&sb->s_bdev->bd_inode->i_mapping->wb_err,
 				 &sbi->s_bdev_wb_err);
 	sb->s_bdev->bd_super = sb;
-	EXT4_SB(sb)->s_mount_state |= EXT4_ORPHAN_FS;
+	ext4_set_mount_state(sb, EXT4_ORPHAN_FS);
 	ext4_orphan_cleanup(sb, es);
-	EXT4_SB(sb)->s_mount_state &= ~EXT4_ORPHAN_FS;
+	ext4_clear_mount_state(sb, EXT4_ORPHAN_FS);
 	/*
 	 * Update the checksum after updating free space/inode counters and
 	 * ext4_orphan_cleanup. Otherwise the superblock can have an incorrect
@@ -6023,8 +6023,8 @@ static int ext4_load_journal(struct super_block *sb,
 		}
 		kfree(save);
 		orig_state = es->s_state;
-		es->s_state |= cpu_to_le16(EXT4_SB(sb)->s_mount_state &
-					   EXT4_ERROR_FS);
+		es->s_state |= cpu_to_le16(ext4_test_mount_state(sb,
+					   EXT4_ERROR_FS));
 		if (orig_state != es->s_state)
 			changed = true;
 		/* Write out restored error information to the superblock */
@@ -6263,7 +6263,7 @@ static int ext4_clear_journal_err(struct super_block *sb,
 		ext4_warning(sb, "Filesystem error recorded "
 			     "from previous mount: %s", errstr);
 
-		EXT4_SB(sb)->s_mount_state |= EXT4_ERROR_FS;
+		ext4_set_mount_state(sb, EXT4_ERROR_FS);
 		es->s_state |= cpu_to_le16(EXT4_ERROR_FS);
 		j_errno = ext4_commit_super(sb);
 		if (j_errno)
@@ -6544,7 +6544,7 @@ static int __ext4_remount(struct fs_context *fc, struct super_block *sb)
 			 * mark the partition as valid again.
 			 */
 			if (!(es->s_state & cpu_to_le16(EXT4_VALID_FS)) &&
-			    (sbi->s_mount_state & EXT4_VALID_FS))
+			    (ext4_test_mount_state(sb, EXT4_VALID_FS)))
 				es->s_state = cpu_to_le16(sbi->s_mount_state);
 
 			if (sbi->s_journal) {

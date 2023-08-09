@@ -3251,7 +3251,7 @@ int __ext4_unlink(struct inode *dir, const struct qstr *d_name,
 		 * the inode. That's because it might have gotten
 		 * renamed to a different inode number
 		 */
-		if (EXT4_SB(inode->i_sb)->s_mount_state & EXT4_FC_REPLAY)
+		if (ext4_test_mount_state(inode->i_sb, EXT4_FC_REPLAY))
 			skip_remove_dentry = 1;
 		else
 			goto out_bh;
@@ -3996,7 +3996,7 @@ static int ext4_rename(struct mnt_idmap *idmap, struct inode *old_dir,
 		if (new.inode)
 			ext4_fc_track_unlink(handle, new.dentry);
 		if (test_opt2(sb, JOURNAL_FAST_COMMIT) &&
-		    !(EXT4_SB(sb)->s_mount_state & EXT4_FC_REPLAY) &&
+		    !(ext4_test_mount_state(sb, EXT4_FC_REPLAY)) &&
 		    !(ext4_test_mount_flag(sb, EXT4_MF_FC_INELIGIBLE))) {
 			__ext4_fc_track_link(handle, old.inode, new.dentry);
 			__ext4_fc_track_unlink(handle, old.inode, old.dentry);
