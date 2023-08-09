@@ -2065,6 +2065,8 @@ static inline void __set_task_cpu(struct task_struct *p, unsigned int cpu)
 #endif
 }
 
+#define SCHED_FEAT(name, enabled) SCHED_FEAT_CALLBACK(name, enabled, NULL)
+
 /*
  * Tunables that become constants when CONFIG_SCHED_DEBUG is off:
  */
@@ -2074,7 +2076,7 @@ static inline void __set_task_cpu(struct task_struct *p, unsigned int cpu)
 # define const_debug const
 #endif
 
-#define SCHED_FEAT(name, enabled)	\
+#define SCHED_FEAT_CALLBACK(name, enabled, cb)	\
 	__SCHED_FEAT_##name ,
 
 enum {
@@ -2082,7 +2084,7 @@ enum {
 	__SCHED_FEAT_NR,
 };
 
-#undef SCHED_FEAT
+#undef SCHED_FEAT_CALLBACK
 
 #ifdef CONFIG_SCHED_DEBUG
 
@@ -2093,14 +2095,14 @@ enum {
 extern const_debug unsigned int sysctl_sched_features;
 
 #ifdef CONFIG_JUMP_LABEL
-#define SCHED_FEAT(name, enabled)					\
+#define SCHED_FEAT_CALLBACK(name, enabled, cb)				\
 static __always_inline bool static_branch_##name(struct static_key *key) \
 {									\
 	return static_key_##enabled(key);				\
 }
 
 #include "features.h"
-#undef SCHED_FEAT
+#undef SCHED_FEAT_CALLBACK
 
 extern struct static_key sched_feat_keys[__SCHED_FEAT_NR];
 #define sched_feat(x) (static_branch_##x(&sched_feat_keys[__SCHED_FEAT_##x]))
@@ -2118,16 +2120,18 @@ extern struct static_key sched_feat_keys[__SCHED_FEAT_NR];
  * constants propagation at compile time and compiler optimization based on
  * features default.
  */
-#define SCHED_FEAT(name, enabled)	\
+#define SCHED_FEAT_CALLBACK(name, enabled, cb)	\
 	(1UL << __SCHED_FEAT_##name) * enabled |
 static const_debug __maybe_unused unsigned int sysctl_sched_features =
 #include "features.h"
 	0;
-#undef SCHED_FEAT
+#undef SCHED_FEAT_CALLBACK
 
 #define sched_feat(x) !!(sysctl_sched_features & (1UL << __SCHED_FEAT_##x))
 
 #endif /* SCHED_DEBUG */
+
+typedef void (*sched_feat_change_f)(bool enabling);
 
 extern struct static_key_false sched_numa_balancing;
 extern struct static_key_false sched_schedstats;
