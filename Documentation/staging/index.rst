@@ -8,6 +8,7 @@ Unsorted Documentation
 
    crc32
    lzo
+   netlink-attrs-best-practices
    remoteproc
    rpmsg
    speculation

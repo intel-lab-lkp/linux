@@ -14734,6 +14734,7 @@ F:	Documentation/core-api/netlink.rst
 F:	Documentation/netlink/
 F:	Documentation/networking/
 F:	Documentation/process/maintainer-netdev.rst
+F:	Documentation/staging/netlink-attrs-best-practices.rst
 F:	Documentation/userspace-api/netlink/
 F:	include/linux/in.h
 F:	include/linux/net.h
