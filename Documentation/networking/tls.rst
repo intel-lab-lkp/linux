@@ -200,6 +200,27 @@ received without a cmsg buffer set.
 
 recv will never return data from mixed types of TLS records.
 
+TLS 1.3 Key Updates
+-------------------
+
+In TLS 1.3, KeyUpdate handshake messages signal that the sender is
+updating its TX key. Any message sent after a KeyUpdate will be
+encrypted using the new key. The userspace library can pass the new
+key to the kernel using the TLS_TX and TLS_RX socket options, as for
+the initial keys. TLS version and cipher cannot be changed.
+
+To prevent attempting to decrypt incoming records using the wrong key,
+decryption will be paused when a KeyUpdate message is received by the
+kernel, until the new key has been provided using the TLS_RX socket
+option. Any read occurring after the KeyUpdate has been read and
+before the new key is provided will fail with EKEYEXPIRED. Poll()'ing
+the socket will also sleep until the new key is provided. There is no
+pausing on the transmit side.
+
+Userspace should make sure that the crypto_info provided has been set
+properly. In particular, the kernel will not check for key/nonce
+reuse.
+
 Integrating in to userspace TLS library
 ---------------------------------------
 
