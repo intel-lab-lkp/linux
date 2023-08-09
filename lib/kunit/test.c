@@ -196,10 +196,20 @@ void kunit_log_append(struct list_head *log, const char *fmt, ...)
 	if (!log)
 		return;
 
-	/* Evaluate length of line to add to log */
+	frag = list_last_entry(log, struct kunit_log_frag, list);
+	log_len = strlen(frag->buf);
+	len_left = sizeof(frag->buf) - log_len - 1;
+
+	/* Attempt to print formatted line to current fragment */
 	va_start(args, fmt);
-	len = vsnprintf(NULL, 0, fmt, args) + 1;
+	len = vsnprintf(frag->buf + log_len, len_left, fmt, args) + 1;
 	va_end(args);
+
+	if (len <= len_left)
+		goto out_newline;
+
+	/* Abandon the truncated result of vsnprintf */
+	frag->buf[log_len] = '\0';
 
 	if (len > sizeof(frag->buf) - 1) {
 		va_start(args, fmt);
@@ -212,24 +222,15 @@ void kunit_log_append(struct list_head *log, const char *fmt, ...)
 		return;
 	}
 
-	frag = list_last_entry(log, struct kunit_log_frag, list);
-	log_len = strlen(frag->buf);
-	len_left = sizeof(frag->buf) - log_len - 1;
-
-	if (len > len_left) {
-		frag = kunit_log_extend(log);
-		if (!frag)
-			return;
-
-		len_left = sizeof(frag->buf) - 1;
-		log_len = 0;
-	}
+	frag = kunit_log_extend(log);
+	if (!frag)
+		return;
 
 	/* Print formatted line to the log */
 	va_start(args, fmt);
-	vsnprintf(frag->buf + log_len, min(len, len_left), fmt, args);
+	vsnprintf(frag->buf, sizeof(frag->buf) - 1, fmt, args);
 	va_end(args);
-
+out_newline:
 	/* Add newline to end of log if not already present. */
 	kunit_log_newline(frag);
 }
