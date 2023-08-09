@@ -21,11 +21,19 @@
 #define O_PATH 010000000
 #endif
 
+static bool has_syscall(void)
+{
+	return landlock_create_ruleset(NULL, 0, 0) == -1 && errno != ENOSYS;
+}
+
 TEST(inconsistent_attr)
 {
 	const long page_size = sysconf(_SC_PAGESIZE);
 	char *const buf = malloc(page_size + 1);
 	struct landlock_ruleset_attr *const ruleset_attr = (void *)buf;
+
+	if (!has_syscall())
+		SKIP(return, "landlock syscall not available");
 
 	ASSERT_NE(NULL, buf);
 
@@ -75,6 +83,10 @@ TEST(abi_version)
 	const struct landlock_ruleset_attr ruleset_attr = {
 		.handled_access_fs = LANDLOCK_ACCESS_FS_READ_FILE,
 	};
+
+	if (!has_syscall())
+		SKIP(return, "landlock syscall not available");
+
 	ASSERT_NE(0, landlock_create_ruleset(NULL, 0,
 					     LANDLOCK_CREATE_RULESET_VERSION));
 
@@ -106,6 +118,9 @@ TEST(create_ruleset_checks_ordering)
 	const struct landlock_ruleset_attr ruleset_attr = {
 		.handled_access_fs = LANDLOCK_ACCESS_FS_READ_FILE,
 	};
+
+	if (!has_syscall())
+		SKIP(return, "landlock syscall not available");
 
 	/* Checks priority for invalid flags. */
 	ASSERT_EQ(-1, landlock_create_ruleset(NULL, 0, invalid_flag));
@@ -152,6 +167,9 @@ TEST(add_rule_checks_ordering)
 	};
 	const int ruleset_fd =
 		landlock_create_ruleset(&ruleset_attr, sizeof(ruleset_attr), 0);
+
+	if (!has_syscall())
+		SKIP(return, "landlock syscall not available");
 
 	ASSERT_LE(0, ruleset_fd);
 
@@ -200,6 +218,9 @@ TEST(restrict_self_checks_ordering)
 	const int ruleset_fd =
 		landlock_create_ruleset(&ruleset_attr, sizeof(ruleset_attr), 0);
 
+	if (!has_syscall())
+		SKIP(return, "landlock syscall not available");
+
 	ASSERT_LE(0, ruleset_fd);
 	path_beneath_attr.parent_fd =
 		open("/tmp", O_PATH | O_NOFOLLOW | O_DIRECTORY | O_CLOEXEC);
@@ -240,6 +261,9 @@ TEST(ruleset_fd_io)
 	int ruleset_fd;
 	char buf;
 
+	if (!has_syscall())
+		SKIP(return, "landlock syscall not available");
+
 	drop_caps(_metadata);
 	ruleset_fd =
 		landlock_create_ruleset(&ruleset_attr, sizeof(ruleset_attr), 0);
@@ -266,6 +290,9 @@ TEST(ruleset_fd_transfer)
 	int socket_fds[2];
 	pid_t child;
 	int status;
+
+	if (!has_syscall())
+		SKIP(return, "landlock syscall not available");
 
 	drop_caps(_metadata);
 
