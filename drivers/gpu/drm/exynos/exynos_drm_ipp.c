@@ -695,7 +695,7 @@ static int exynos_drm_ipp_task_setup_buffers(struct exynos_drm_ipp_task *task,
 static int exynos_drm_ipp_event_create(struct exynos_drm_ipp_task *task,
 				 struct drm_file *file_priv, uint64_t user_data)
 {
-	struct drm_pending_exynos_ipp_event *e = NULL;
+	struct drm_pending_exynos_ipp_event *e;
 	int ret;
 
 	e = kzalloc(sizeof(*e), GFP_KERNEL);

@@ -384,7 +384,7 @@ int drm_legacy_agp_free_ioctl(struct drm_device *dev, void *data,
 struct drm_agp_head *drm_legacy_agp_init(struct drm_device *dev)
 {
 	struct pci_dev *pdev = to_pci_dev(dev->dev);
-	struct drm_agp_head *head = NULL;
+	struct drm_agp_head *head;
 
 	head = kzalloc(sizeof(*head), GFP_KERNEL);
 	if (!head)
