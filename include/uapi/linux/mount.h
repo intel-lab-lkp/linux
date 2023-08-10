@@ -132,9 +132,11 @@ struct mount_attr {
 	__u64 attr_clr;
 	__u64 propagation;
 	__u64 userns_fd;
+	__u64 attr_lock;
 };
 
 /* List of all mount_attr versions. */
 #define MOUNT_ATTR_SIZE_VER0	32 /* sizeof first published struct */
+#define MOUNT_ATTR_SIZE_VER1	40
 
 #endif /* _UAPI_LINUX_MOUNT_H */

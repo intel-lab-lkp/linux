@@ -78,6 +78,7 @@ static LIST_HEAD(ex_mountpoints); /* protected by namespace_sem */
 struct mount_kattr {
 	unsigned int attr_set;
 	unsigned int attr_clr;
+	unsigned int attr_lock;
 	unsigned int propagation;
 	unsigned int lookup_flags;
 	bool recurse;
@@ -3901,6 +3902,9 @@ out_type:
 
 #define MOUNT_SETATTR_PROPAGATION_FLAGS \
 	(MS_UNBINDABLE | MS_PRIVATE | MS_SLAVE | MS_SHARED)
+#define MOUNT_SETATTR_VALID_LOCK_FLAGS					       \
+	(MOUNT_ATTR_RDONLY | MOUNT_ATTR_NOSUID | MOUNT_ATTR_NODEV |	       \
+	 MOUNT_ATTR_NOEXEC)
 
 static unsigned int attr_flags_to_mnt_flags(u64 attr_flags)
 {
@@ -3918,6 +3922,22 @@ static unsigned int attr_flags_to_mnt_flags(u64 attr_flags)
 		mnt_flags |= MNT_NODIRATIME;
 	if (attr_flags & MOUNT_ATTR_NOSYMFOLLOW)
 		mnt_flags |= MNT_NOSYMFOLLOW;
+
+	return mnt_flags;
+}
+
+static unsigned int attr_flags_to_mnt_lock_flags(u64 attr_flags)
+{
+	unsigned int mnt_flags = 0;
+
+	if (attr_flags & MOUNT_ATTR_RDONLY)
+		mnt_flags |= MNT_LOCK_READONLY;
+	if (attr_flags & MOUNT_ATTR_NOSUID)
+		mnt_flags |= MNT_LOCK_NOSUID;
+	if (attr_flags & MOUNT_ATTR_NODEV)
+		mnt_flags |= MNT_LOCK_NODEV;
+	if (attr_flags & MOUNT_ATTR_NOEXEC)
+		mnt_flags |= MNT_LOCK_NOEXEC;
 
 	return mnt_flags;
 }
@@ -4335,8 +4355,15 @@ static int mount_setattr_prepare(struct mount_kattr *kattr, struct mount *mnt)
 	int err;
 
 	for (m = mnt; m; m = next_mnt(m, mnt)) {
-		if (!can_change_locked_flags(m, recalc_flags(kattr, m))) {
+		int new_mount_flags = recalc_flags(kattr, m);
+
+		if (!can_change_locked_flags(m, new_mount_flags)) {
 			err = -EPERM;
+			break;
+		}
+
+		if ((new_mount_flags & kattr->attr_lock) != kattr->attr_lock) {
+			err = -EINVAL;
 			break;
 		}
 
@@ -4576,8 +4603,14 @@ static int build_mount_kattr(const struct mount_attr *attr, size_t usize,
 	if ((attr->attr_set | attr->attr_clr) & ~MOUNT_SETATTR_VALID_FLAGS)
 		return -EINVAL;
 
+	if (attr->attr_lock & ~MOUNT_SETATTR_VALID_LOCK_FLAGS)
+		return -EINVAL;
+
 	kattr->attr_set = attr_flags_to_mnt_flags(attr->attr_set);
 	kattr->attr_clr = attr_flags_to_mnt_flags(attr->attr_clr);
+	kattr->attr_lock = attr_flags_to_mnt_flags(attr->attr_lock);
+	kattr->attr_set |= attr_flags_to_mnt_lock_flags(attr->attr_lock);
+
 
 	/*
 	 * Since the MOUNT_ATTR_<atime> values are an enum, not a bitmap,
@@ -4635,7 +4668,7 @@ SYSCALL_DEFINE5(mount_setattr, int, dfd, const char __user *, path,
 	struct mount_attr attr;
 	struct mount_kattr kattr;
 
-	BUILD_BUG_ON(sizeof(struct mount_attr) != MOUNT_ATTR_SIZE_VER0);
+	BUILD_BUG_ON(sizeof(struct mount_attr) != MOUNT_ATTR_SIZE_VER1);
 
 	if (flags & ~(AT_EMPTY_PATH |
 		      AT_RECURSIVE |
@@ -4658,7 +4691,8 @@ SYSCALL_DEFINE5(mount_setattr, int, dfd, const char __user *, path,
 	/* Don't bother walking through the mounts if this is a nop. */
 	if (attr.attr_set == 0 &&
 	    attr.attr_clr == 0 &&
-	    attr.propagation == 0)
+	    attr.propagation == 0 &&
+	    attr.attr_lock == 0)
 		return 0;
 
 	err = build_mount_kattr(&attr, usize, &kattr, flags);
