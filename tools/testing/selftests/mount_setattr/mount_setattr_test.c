@@ -1551,4 +1551,46 @@ TEST_F(mount_setattr, mount_attr_lock)
 	ASSERT_EQ(sys_mount_setattr(-1, "/tmp/C", 0, &attr, sizeof(attr)), 0);
 }
 
+TEST_F(mount_setattr, mount_attr_do_lock)
+{
+	struct mount_attr attr = {};
+
+	attr.attr_lock = MOUNT_ATTR_NODIRATIME;
+	ASSERT_EQ(sys_mount_setattr(-1, "/tmp/C", 0, &attr, sizeof(attr)), -1);
+	ASSERT_EQ(errno, EINVAL);
+
+	attr.attr_lock = MOUNT_ATTR__ATIME;
+	ASSERT_EQ(sys_mount_setattr(-1, "/tmp/C", 0, &attr, sizeof(attr)), -1);
+	ASSERT_EQ(errno, EINVAL);
+
+	/* Do not allow locking unset locks */
+	attr.attr_lock = MOUNT_ATTR_NOEXEC;
+	ASSERT_EQ(sys_mount_setattr(-1, "/tmp/C", 0, &attr, sizeof(attr)), -1);
+	ASSERT_EQ(errno, EINVAL);
+
+	/* Set and lock at the same time */
+	attr.attr_set = MOUNT_ATTR_NOEXEC;
+	ASSERT_EQ(sys_mount_setattr(-1, "/tmp/C", 0, &attr, sizeof(attr)), 0);
+	ASSERT_EQ(errno, EINVAL);
+
+	memset(&attr, 0, sizeof(attr));
+	/* Make sure we can't clear noexec now (that locking worked) */
+	attr.attr_clr = MOUNT_ATTR_NOEXEC;
+	ASSERT_EQ(sys_mount_setattr(-1, "/tmp/C", 0, &attr, sizeof(attr)), -1);
+	ASSERT_EQ(errno, EPERM);
+
+	memset(&attr, 0, sizeof(attr));
+	attr.attr_set = MOUNT_ATTR_NODEV;
+	ASSERT_EQ(sys_mount_setattr(-1, "/tmp/C", 0, &attr, sizeof(attr)), 0);
+
+	memset(&attr, 0, sizeof(attr));
+	attr.attr_lock = MOUNT_ATTR_NODEV;
+	ASSERT_EQ(sys_mount_setattr(-1, "/tmp/C", 0, &attr, sizeof(attr)), 0);
+
+	/* Make sure we can't clear MOUNT_ATTR_NODEV */
+	memset(&attr, 0, sizeof(attr));
+	attr.attr_clr = MOUNT_ATTR_NODEV;
+	ASSERT_EQ(sys_mount_setattr(-1, "/tmp/C", 0, &attr, sizeof(attr)), -1);
+	ASSERT_EQ(errno, EPERM);
+}
 TEST_HARNESS_MAIN

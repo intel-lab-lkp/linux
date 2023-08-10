@@ -136,5 +136,6 @@ struct mount_attr {
 
 /* List of all mount_attr versions. */
 #define MOUNT_ATTR_SIZE_VER0	32 /* sizeof first published struct */
+#define MOUNT_ATTR_SIZE_VER1	40
 
 #endif /* _UAPI_LINUX_MOUNT_H */
