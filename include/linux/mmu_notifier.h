@@ -132,6 +132,10 @@ struct mmu_notifier_ops {
 			   unsigned long address,
 			   pte_t pte);
 
+	void (*numa_protect)(struct mmu_notifier *subscription,
+			     struct mm_struct *mm,
+			     unsigned long start,
+			     unsigned long end);
 	/*
 	 * invalidate_range_start() and invalidate_range_end() must be
 	 * paired and are called only when the mmap_lock and/or the
@@ -395,6 +399,9 @@ extern int __mmu_notifier_test_young(struct mm_struct *mm,
 				     unsigned long address);
 extern void __mmu_notifier_change_pte(struct mm_struct *mm,
 				      unsigned long address, pte_t pte);
+extern void __mmu_notifier_numa_protect(struct mm_struct *mm,
+					unsigned long start,
+					unsigned long end);
 extern int __mmu_notifier_invalidate_range_start(struct mmu_notifier_range *r);
 extern void __mmu_notifier_invalidate_range_end(struct mmu_notifier_range *r,
 				  bool only_end);
@@ -446,6 +453,14 @@ static inline void mmu_notifier_change_pte(struct mm_struct *mm,
 {
 	if (mm_has_notifiers(mm))
 		__mmu_notifier_change_pte(mm, address, pte);
+}
+
+static inline void mmu_notifier_numa_protect(struct mm_struct *mm,
+					     unsigned long start,
+					     unsigned long end)
+{
+	if (mm_has_notifiers(mm))
+		__mmu_notifier_numa_protect(mm, start, end);
 }
 
 static inline void

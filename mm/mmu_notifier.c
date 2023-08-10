@@ -382,6 +382,24 @@ int __mmu_notifier_clear_flush_young(struct mm_struct *mm,
 	return young;
 }
 
+void __mmu_notifier_numa_protect(struct mm_struct *mm,
+				 unsigned long start,
+				 unsigned long end)
+{
+	struct mmu_notifier *subscription;
+	int id;
+
+	id = srcu_read_lock(&srcu);
+	hlist_for_each_entry_rcu(subscription,
+				 &mm->notifier_subscriptions->list, hlist,
+				 srcu_read_lock_held(&srcu)) {
+		if (subscription->ops->numa_protect)
+			subscription->ops->numa_protect(subscription, mm, start,
+							end);
+	}
+	srcu_read_unlock(&srcu, id);
+}
+
 int __mmu_notifier_clear_young(struct mm_struct *mm,
 			       unsigned long start,
 			       unsigned long end)
