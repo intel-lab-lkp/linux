@@ -1364,3 +1364,58 @@ ssize_t extract_iter_to_sg(struct iov_iter *iter, size_t maxsize,
 	}
 }
 EXPORT_SYMBOL_GPL(extract_iter_to_sg);
+
+/**
+ * kmap_sg - find and kmap an sg-elemnt
+ * @sgl:	scatter-gather list
+ * @sg_count:	number of segments in sg
+ * @offset:	offset in bytes into sg, on return offset into the mapped area
+ * @len:	bytes to map, on return number of bytes mapped
+ *
+ * Returns virtual address of the start of the mapped page
+ */
+void *kmap_sg(struct scatterlist *sgl, int sg_count, size_t *offset, size_t *len)
+{
+	int i;
+	size_t sg_len = 0, len_complete = 0;
+	struct scatterlist *sg;
+	struct page *page;
+
+	for_each_sg(sgl, sg, sg_count, i) {
+		len_complete = sg_len; /* Complete sg-entries */
+		sg_len += sg->length;
+		if (sg_len > *offset)
+			break;
+	}
+
+	if (WARN_ON_ONCE(i == sg_count)) {
+		pr_err("%s: Bytes in sg: %zu, requested offset %zu, elements %d\n",
+		       __func__, sg_len, *offset, sg_count);
+		return NULL;
+	}
+
+	/* Offset starting from the beginning of first page in this sg-entry */
+	*offset = *offset - len_complete + sg->offset;
+
+	/* Assumption: contiguous pages can be accessed as "page + i" */
+	page = nth_page(sg_page(sg), (*offset >> PAGE_SHIFT));
+	*offset &= ~PAGE_MASK;
+
+	/* Bytes in this sg-entry from *offset to the end of the page */
+	sg_len = PAGE_SIZE - *offset;
+	if (*len > sg_len)
+		*len = sg_len;
+
+	return kmap_local_page(page);
+}
+EXPORT_SYMBOL(kmap_sg);
+
+/**
+ * kunmap_sg - atomically unmap a virtual address, previously mapped with kmap_sg
+ * @virt:	virtual address to be unmapped
+ */
+void kunmap_sg(void *virt)
+{
+	kunmap_local(virt);
+}
+EXPORT_SYMBOL(kunmap_sg);

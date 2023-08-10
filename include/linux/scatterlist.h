@@ -692,4 +692,7 @@ bool sg_miter_skip(struct sg_mapping_iter *miter, off_t offset);
 bool sg_miter_next(struct sg_mapping_iter *miter);
 void sg_miter_stop(struct sg_mapping_iter *miter);
 
+void *kmap_sg(struct scatterlist *sgl, int sg_count, size_t *offset, size_t *len);
+void kunmap_sg(void *virt);
+
 #endif /* _LINUX_SCATTERLIST_H */
