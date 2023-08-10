@@ -88,6 +88,8 @@ static inline u64 get_jiffies_64(void)
 }
 #endif
 
+void do_update_jiffies_64(s64 now); /* typedef s64 ktime_t */
+
 /*
  *	These inlines deal with timer wrapping correctly. You are 
  *	strongly encouraged to use them

@@ -45,113 +45,6 @@ struct tick_sched *tick_get_tick_sched(int cpu)
 
 #if defined(CONFIG_NO_HZ_COMMON) || defined(CONFIG_HIGH_RES_TIMERS)
 /*
- * The time, when the last jiffy update happened. Write access must hold
- * jiffies_lock and jiffies_seq. tick_nohz_next_event() needs to get a
- * consistent view of jiffies and last_jiffies_update.
- */
-static ktime_t last_jiffies_update;
-
-/*
- * Must be called with interrupts disabled !
- */
-static void tick_do_update_jiffies64(ktime_t now)
-{
-	unsigned long ticks = 1;
-	ktime_t delta, nextp;
-
-	/*
-	 * 64bit can do a quick check without holding jiffies lock and
-	 * without looking at the sequence count. The smp_load_acquire()
-	 * pairs with the update done later in this function.
-	 *
-	 * 32bit cannot do that because the store of tick_next_period
-	 * consists of two 32bit stores and the first store could move it
-	 * to a random point in the future.
-	 */
-	if (IS_ENABLED(CONFIG_64BIT)) {
-		if (ktime_before(now, smp_load_acquire(&tick_next_period)))
-			return;
-	} else {
-		unsigned int seq;
-
-		/*
-		 * Avoid contention on jiffies_lock and protect the quick
-		 * check with the sequence count.
-		 */
-		do {
-			seq = read_seqcount_begin(&jiffies_seq);
-			nextp = tick_next_period;
-		} while (read_seqcount_retry(&jiffies_seq, seq));
-
-		if (ktime_before(now, nextp))
-			return;
-	}
-
-	/* Quick check failed, i.e. update is required. */
-	raw_spin_lock(&jiffies_lock);
-	/*
-	 * Reevaluate with the lock held. Another CPU might have done the
-	 * update already.
-	 */
-	if (ktime_before(now, tick_next_period)) {
-		raw_spin_unlock(&jiffies_lock);
-		return;
-	}
-
-	write_seqcount_begin(&jiffies_seq);
-
-	delta = ktime_sub(now, tick_next_period);
-	if (unlikely(delta >= TICK_NSEC)) {
-		/* Slow path for long idle sleep times */
-		s64 incr = TICK_NSEC;
-
-		ticks += ktime_divns(delta, incr);
-
-		last_jiffies_update = ktime_add_ns(last_jiffies_update,
-						   incr * ticks);
-	} else {
-		last_jiffies_update = ktime_add_ns(last_jiffies_update,
-						   TICK_NSEC);
-	}
-
-	/* Advance jiffies to complete the jiffies_seq protected job */
-	jiffies_64 += ticks;
-
-	/*
-	 * Keep the tick_next_period variable up to date.
-	 */
-	nextp = ktime_add_ns(last_jiffies_update, TICK_NSEC);
-
-	if (IS_ENABLED(CONFIG_64BIT)) {
-		/*
-		 * Pairs with smp_load_acquire() in the lockless quick
-		 * check above and ensures that the update to jiffies_64 is
-		 * not reordered vs. the store to tick_next_period, neither
-		 * by the compiler nor by the CPU.
-		 */
-		smp_store_release(&tick_next_period, nextp);
-	} else {
-		/*
-		 * A plain store is good enough on 32bit as the quick check
-		 * above is protected by the sequence count.
-		 */
-		tick_next_period = nextp;
-	}
-
-	/*
-	 * Release the sequence count. calc_global_load() below is not
-	 * protected by it, but jiffies_lock needs to be held to prevent
-	 * concurrent invocations.
-	 */
-	write_seqcount_end(&jiffies_seq);
-
-	calc_global_load();
-
-	raw_spin_unlock(&jiffies_lock);
-	update_wall_time();
-}
-
-/*
  * Initialize and return retrieve the jiffies update.
  */
 static ktime_t tick_init_jiffy_update(void)
@@ -207,7 +100,7 @@ static void tick_sched_do_timer(struct tick_sched *ts, ktime_t now)
 
 	/* Check, if the jiffies need an update */
 	if (tick_do_timer_cpu == cpu)
-		tick_do_update_jiffies64(now);
+		do_update_jiffies_64(now);
 
 	/*
 	 * If jiffies update stalled for too long (timekeeper in stop_machine()
@@ -652,7 +545,7 @@ static void tick_nohz_update_jiffies(ktime_t now)
 	__this_cpu_write(tick_cpu_sched.idle_waketime, now);
 
 	local_irq_save(flags);
-	tick_do_update_jiffies64(now);
+	do_update_jiffies_64(now);
 	local_irq_restore(flags);
 
 	touch_softlockup_watchdog_sched();
@@ -975,7 +868,7 @@ static void tick_nohz_stop_sched_tick(struct tick_sched *ts, int cpu)
 static void tick_nohz_restart_sched_tick(struct tick_sched *ts, ktime_t now)
 {
 	/* Update jiffies first */
-	tick_do_update_jiffies64(now);
+	do_update_jiffies_64(now);
 
 	/*
 	 * Clear the timer idle flag, so we avoid IPIs on remote queueing and
