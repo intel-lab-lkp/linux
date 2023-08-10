@@ -711,6 +711,20 @@ static void kvm_mmu_notifier_change_pte(struct mmu_notifier *mn,
 	kvm_handle_hva_range(mn, address, address + 1, pte, kvm_change_spte_gfn);
 }
 
+static void kvm_mmu_notifier_numa_protect(struct mmu_notifier *mn,
+					  struct mm_struct *mm,
+					  unsigned long start,
+					  unsigned long end)
+{
+	struct kvm *kvm = mmu_notifier_to_kvm(mn);
+
+	WARN_ON_ONCE(!READ_ONCE(kvm->mn_active_invalidate_count));
+	if (!READ_ONCE(kvm->mmu_invalidate_in_progress))
+		return;
+
+	kvm_handle_hva_range(mn, start, end, __pte(0), kvm_unmap_gfn_range);
+}
+
 void kvm_mmu_invalidate_begin(struct kvm *kvm, unsigned long start,
 			      unsigned long end)
 {
@@ -744,14 +758,18 @@ static int kvm_mmu_notifier_invalidate_range_start(struct mmu_notifier *mn,
 					const struct mmu_notifier_range *range)
 {
 	struct kvm *kvm = mmu_notifier_to_kvm(mn);
+	bool is_numa = (range->event == MMU_NOTIFY_PROTECTION_VMA) &&
+		       (range->flags & MMU_NOTIFIER_RANGE_NUMA);
 	const struct kvm_hva_range hva_range = {
 		.start		= range->start,
 		.end		= range->end,
 		.pte		= __pte(0),
-		.handler	= kvm_unmap_gfn_range,
+		.handler	= !is_numa ? kvm_unmap_gfn_range :
+				  (void *)kvm_null_fn,
 		.on_lock	= kvm_mmu_invalidate_begin,
-		.on_unlock	= kvm_arch_guest_memory_reclaimed,
-		.flush_on_ret	= true,
+		.on_unlock	= !is_numa ? kvm_arch_guest_memory_reclaimed :
+				  (void *)kvm_null_fn,
+		.flush_on_ret	= !is_numa ? true : false,
 		.may_block	= mmu_notifier_range_blockable(range),
 	};
 
@@ -899,6 +917,7 @@ static const struct mmu_notifier_ops kvm_mmu_notifier_ops = {
 	.clear_young		= kvm_mmu_notifier_clear_young,
 	.test_young		= kvm_mmu_notifier_test_young,
 	.change_pte		= kvm_mmu_notifier_change_pte,
+	.numa_protect		= kvm_mmu_notifier_numa_protect,
 	.release		= kvm_mmu_notifier_release,
 };
 
