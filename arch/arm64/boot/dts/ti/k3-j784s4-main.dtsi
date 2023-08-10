@@ -1378,6 +1378,7 @@
 		ranges = <0x5c00000 0x00 0x5c00000 0x20000>,
 			 <0x5d00000 0x00 0x5d00000 0x20000>;
 		power-domains = <&k3_pds 336 TI_SCI_PD_EXCLUSIVE>;
+		status = "disabled";
 
 		main_r5fss0_core0: r5f@5c00000 {
 			compatible = "ti,j721s2-r5f";
@@ -1418,6 +1419,7 @@
 		ranges = <0x5e00000 0x00 0x5e00000 0x20000>,
 			 <0x5f00000 0x00 0x5f00000 0x20000>;
 		power-domains = <&k3_pds 337 TI_SCI_PD_EXCLUSIVE>;
+		status = "disabled";
 
 		main_r5fss1_core0: r5f@5e00000 {
 			compatible = "ti,j721s2-r5f";
@@ -1458,6 +1460,7 @@
 		ranges = <0x5900000 0x00 0x5900000 0x20000>,
 			 <0x5a00000 0x00 0x5a00000 0x20000>;
 		power-domains = <&k3_pds 338 TI_SCI_PD_EXCLUSIVE>;
+		status = "disabled";
 
 		main_r5fss2_core0: r5f@5900000 {
 			compatible = "ti,j721s2-r5f";
@@ -1500,6 +1503,7 @@
 		ti,sci-proc-ids = <0x30 0xff>;
 		resets = <&k3_reset 30 1>;
 		firmware-name = "j784s4-c71_0-fw";
+		status = "disabled";
 	};
 
 	c71_1: dsp@65800000 {
@@ -1512,6 +1516,7 @@
 		ti,sci-proc-ids = <0x31 0xff>;
 		resets = <&k3_reset 33 1>;
 		firmware-name = "j784s4-c71_1-fw";
+		status = "disabled";
 	};
 
 	c71_2: dsp@66800000 {
@@ -1524,6 +1529,7 @@
 		ti,sci-proc-ids = <0x32 0xff>;
 		resets = <&k3_reset 37 1>;
 		firmware-name = "j784s4-c71_2-fw";
+		status = "disabled";
 	};
 
 	c71_3: dsp@67800000 {
@@ -1536,5 +1542,6 @@
 		ti,sci-proc-ids = <0x33 0xff>;
 		resets = <&k3_reset 40 1>;
 		firmware-name = "j784s4-c71_3-fw";
+		status = "disabled";
 	};
 };
