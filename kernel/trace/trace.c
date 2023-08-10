@@ -7054,13 +7054,15 @@ static ssize_t tracing_splice_read_pipe(struct file *filp,
 	if (ret <= 0)
 		goto out_err;
 
-	if (!iter->ent && !trace_find_next_entry_inc(iter)) {
+	trace_event_read_lock();
+	trace_access_lock(iter->cpu_file);
+
+	if (!trace_find_next_entry_inc(iter)) {
+		trace_access_unlock(iter->cpu_file);
+		trace_event_read_unlock();
 		ret = -EFAULT;
 		goto out_err;
 	}
-
-	trace_event_read_lock();
-	trace_access_lock(iter->cpu_file);
 
 	/* Fill as many pages as possible. */
 	for (i = 0, rem = len; i < spd.nr_pages_max && rem; i++) {
