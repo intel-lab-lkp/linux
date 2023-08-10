@@ -253,17 +253,25 @@ line of text and contains the following stats separated by whitespace:
  orig_data_size   uncompressed size of data stored in this disk.
                   Unit: bytes
  compr_data_size  compressed size of data stored in this disk
- mem_used_total   the amount of memory allocated for this disk. This
-                  includes allocator fragmentation and metadata overhead,
-                  allocated for this disk. So, allocator space efficiency
-                  can be calculated using compr_data_size and this statistic.
-                  Unit: bytes
+ mem_used_total   the amount of memory currently used by the compressed
+                  memory allocator to hold compressed data. This
+                  includes allocator fragmentation and metadata
+                  overhead.  The device space efficiency can be
+                  calculated as a ratio of the compr_data_size /
+                  mem_used_total.  Note this value may be zero;
+                  particularly if all pages are filled with identical
+                  data (see same_pages).
  mem_limit        the maximum amount of memory ZRAM can use to store
                   the compressed data
  mem_used_max     the maximum amount of memory zram has consumed to
                   store the data
- same_pages       the number of same element filled pages written to this disk.
-                  No memory is allocated for such pages.
+ same_pages       pages identified as being filled exclusivley with an
+                  identicial unsigned-long value are recorded
+                  specially by zram and thus are not stored via the
+                  compression allocator.  This avoids fragmentation
+                  and metadata overheads for common cases such as
+                  zeroed or poision data.  same_pages is the current
+                  number of pages kept in this de-duplicated form.
  pages_compacted  the number of pages freed during compaction
  huge_pages	  the number of incompressible pages
  huge_pages_since the number of incompressible pages since zram set up

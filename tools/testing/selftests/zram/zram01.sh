@@ -33,16 +33,30 @@ zram_algs="lzo"
 
 zram_fill_fs()
 {
+	local page_size=$(getconf PAGE_SIZE)
 	for i in $(seq $dev_start $dev_end); do
 		echo "fill zram$i..."
 		local b=0
 		while [ true ]; do
-			dd conv=notrunc if=/dev/zero of=zram${i}/file \
+			# If we fill with all zeros, every page hits
+			# the same-page detection and never makes it
+			# to compressed backing.  Filling the first 1K
+			# of the page with (likely lowly compressible)
+			# random data ensures we hit the compression
+			# paths, but the highly compressible rest of
+			# the page also ensures we get a sufficiently
+			# high ratio to assert on below.
+			local input_file='/dev/zero'
+			if [ $(( (b * 1024) % page_size )) -eq 0 ]; then
+			    input_file='/dev/urandom'
+			fi
+			dd conv=notrunc if=${input_file} of=zram${i}/file \
 				oflag=append count=1 bs=1024 status=none \
 				> /dev/null 2>&1 || break
 			b=$(($b + 1))
 		done
-		echo "zram$i can be filled with '$b' KB"
+		echo "zram$i was filled with '$b' KB"
+		sync
 
 		local mem_used_total=`awk '{print $3}' "/sys/block/zram$i/mm_stat"`
 		local v=$((100 * 1024 * $b / $mem_used_total))
