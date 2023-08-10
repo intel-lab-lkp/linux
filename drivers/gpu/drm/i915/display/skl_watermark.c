@@ -2614,13 +2614,6 @@ skl_compute_ddb(struct intel_atomic_state *state)
 		if (ret)
 			return ret;
 
-		if (old_dbuf_state->joined_mbus != new_dbuf_state->joined_mbus) {
-			/* TODO: Implement vblank synchronized MBUS joining changes */
-			ret = intel_modeset_all_pipes(state, "MBUS joining change");
-			if (ret)
-				return ret;
-		}
-
 		drm_dbg_kms(&i915->drm,
 			    "Enabled dbuf slices 0x%x -> 0x%x (total dbuf slices 0x%x), mbus joined? %s->%s\n",
 			    old_dbuf_state->enabled_slices,
@@ -3523,6 +3516,24 @@ void intel_dbuf_pre_plane_update(struct intel_atomic_state *state)
 		return;
 
 	WARN_ON(!new_dbuf_state->base.changed);
+
+	/*
+	 * If we are not doing a modeset, that means we must synchronize
+	 * our MBUS configuration changes with vblank for all active crtcs.
+	 */
+	if (!state->modeset) {
+		struct intel_crtc *crtc;
+		struct intel_crtc_state *new_crtc_state;
+		int i;
+
+		for_each_new_intel_crtc_in_state(state, crtc, new_crtc_state, i) {
+
+			if (!new_crtc_state->hw.active)
+				continue;
+
+			intel_crtc_wait_for_next_vblank(crtc);
+		}
+	}
 
 	update_mbus_pre_enable(state);
 	gen9_dbuf_slices_update(i915,
