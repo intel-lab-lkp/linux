@@ -731,44 +731,6 @@ out_unlock:
 	return err;
 }
 
-/*
- * Basically a copy of scsi_kmap_atomic_sg().
- * As long scsi_kmap_atomic_sg() is not part of lib/scatterlist.c have
- * our own version to avoid a dependency on CONFIG_SCSI.
- */
-static void *ubi_kmap_atomic_sg(struct scatterlist *sgl, int sg_count,
-			  size_t *offset, size_t *len)
-{
-	int i;
-	size_t sg_len = 0, len_complete = 0;
-	struct scatterlist *sg;
-	struct page *page;
-
-	for_each_sg(sgl, sg, sg_count, i) {
-		len_complete = sg_len; /* Complete sg-entries */
-		sg_len += sg->length;
-		if (sg_len > *offset)
-			break;
-	}
-
-	if (WARN_ON_ONCE(i == sg_count))
-		return NULL;
-
-	/* Offset starting from the beginning of first page in this sg-entry */
-	*offset = *offset - len_complete + sg->offset;
-
-	/* Assumption: contiguous pages can be accessed as "page + i" */
-	page = nth_page(sg_page(sg), (*offset >> PAGE_SHIFT));
-	*offset &= ~PAGE_MASK;
-
-	/* Bytes in this sg-entry from *offset to the end of the page */
-	sg_len = PAGE_SIZE - *offset;
-	if (*len > sg_len)
-		*len = sg_len;
-
-	return kmap_atomic(page);
-}
-
 /**
  * ubi_eba_read_leb_sg - read data into a scatter gather list.
  * @ubi: UBI device description object
@@ -789,17 +751,6 @@ int ubi_eba_read_leb_sg(struct ubi_device *ubi, struct ubi_volume *vol,
 {
 	size_t map_len, map_offset, cur_offset;
 	int ret, to_read = len;
-	char *bounce_buf;
-
-	bounce_buf = kvmalloc(to_read, GFP_KERNEL);
-	if (!bounce_buf) {
-		ret = -ENOMEM;
-		goto out;
-	}
-
-	ret = ubi_eba_read_leb(ubi, vol, lnum, bounce_buf, offset, to_read, check);
-	if (ret < 0)
-		goto out;
 
 	cur_offset = 0;
 	while (to_read > 0) {
@@ -808,9 +759,12 @@ int ubi_eba_read_leb_sg(struct ubi_device *ubi, struct ubi_volume *vol,
 		map_len = to_read;
 		map_offset = cur_offset + sgl->tot_offset;
 
-		dst = ubi_kmap_atomic_sg(sgl->sg, sgl->len, &map_offset, &map_len);
-		memcpy(dst + map_offset, bounce_buf + cur_offset, map_len);
-		kunmap_atomic(dst);
+		dst = kmap_sg(sgl->sg, sgl->len, &map_offset, &map_len);
+		ret = ubi_eba_read_leb(ubi, vol, lnum, dst + map_offset, offset + cur_offset,
+				       map_len, check);
+		if (ret < 0)
+			goto out;
+		kunmap_sg(dst);
 
 		cur_offset += map_len;
 		to_read -= map_len;
@@ -818,7 +772,6 @@ int ubi_eba_read_leb_sg(struct ubi_device *ubi, struct ubi_volume *vol,
 
 	ret = 0;
 out:
-	kvfree(bounce_buf);
 	return ret;
 }
 
