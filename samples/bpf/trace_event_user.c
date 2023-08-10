@@ -348,5 +348,6 @@ int main(int argc, char **argv)
 
 cleanup:
 	bpf_object__close(obj);
+	free_kallsyms();
 	err_exit(error);
 }

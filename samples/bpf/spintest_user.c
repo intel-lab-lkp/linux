@@ -88,5 +88,6 @@ cleanup:
 		bpf_link__destroy(links[j]);
 
 	bpf_object__close(obj);
+	free_kallsyms();
 	return 0;
 }

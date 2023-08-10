@@ -146,4 +146,5 @@ close_prog:
 	bpf_link__destroy(link);
 	perf_buffer__free(pb);
 	bpf_object__close(obj);
+	free_kallsyms();
 }

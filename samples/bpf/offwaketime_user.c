@@ -149,5 +149,6 @@ cleanup:
 		bpf_link__destroy(links[i]);
 
 	bpf_object__close(obj);
+	free_kallsyms();
 	return 0;
 }

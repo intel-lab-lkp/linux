@@ -18,9 +18,32 @@
 #define TRACEFS_PIPE	"/sys/kernel/tracing/trace_pipe"
 #define DEBUGFS_PIPE	"/sys/kernel/debug/tracing/trace_pipe"
 
-#define MAX_SYMS 400000
-static struct ksym syms[MAX_SYMS];
-static int sym_cnt;
+static struct {
+	struct ksym *syms;
+	unsigned int sym_cnt;
+} ksyms = {
+	.syms = NULL,
+	.sym_cnt = 0,
+};
+
+static int ksyms__add_symbol(const char *name, unsigned long addr)
+{
+	void *tmp;
+	unsigned int cnt = ksyms.sym_cnt;
+
+	cnt++;
+	tmp = realloc(ksyms.syms, sizeof(struct ksym) * cnt);
+	if (!tmp)
+		return -ENOMEM;
+
+	ksyms.sym_cnt = cnt;
+	ksyms.syms = tmp;
+
+	ksyms.syms[ksyms.sym_cnt - 1].addr = addr;
+	ksyms.syms[ksyms.sym_cnt - 1].name = strdup(name);
+
+	return 0;
+}
 
 static int ksym_cmp(const void *p1, const void *p2)
 {
@@ -33,9 +56,6 @@ int load_kallsyms_refresh(void)
 	char func[256], buf[256];
 	char symbol;
 	void *addr;
-	int i = 0;
-
-	sym_cnt = 0;
 
 	f = fopen("/proc/kallsyms", "r");
 	if (!f)
@@ -46,16 +66,10 @@ int load_kallsyms_refresh(void)
 			break;
 		if (!addr)
 			continue;
-		if (i >= MAX_SYMS)
-			return -EFBIG;
-
-		syms[i].addr = (long) addr;
-		syms[i].name = strdup(func);
-		i++;
+		ksyms__add_symbol(func, (unsigned long)addr);
 	}
 	fclose(f);
-	sym_cnt = i;
-	qsort(syms, sym_cnt, sizeof(struct ksym), ksym_cmp);
+	qsort(ksyms.syms, ksyms.sym_cnt, sizeof(struct ksym), ksym_cmp);
 	return 0;
 }
 
@@ -65,48 +79,56 @@ int load_kallsyms(void)
 	 * This is called/used from multiplace places,
 	 * load symbols just once.
 	 */
-	if (sym_cnt)
+	if (ksyms.sym_cnt)
 		return 0;
 	return load_kallsyms_refresh();
 }
 
+void free_kallsyms(void)
+{
+	if (!ksyms.sym_cnt)
+		return;
+	free(ksyms.syms);
+	ksyms.sym_cnt = 0;
+}
+
 struct ksym *ksym_search(long key)
 {
-	int start = 0, end = sym_cnt;
+	int start = 0, end = ksyms.sym_cnt;
 	int result;
 
 	/* kallsyms not loaded. return NULL */
-	if (sym_cnt <= 0)
+	if (ksyms.sym_cnt <= 0)
 		return NULL;
 
 	while (start < end) {
 		size_t mid = start + (end - start) / 2;
 
-		result = key - syms[mid].addr;
+		result = key - ksyms.syms[mid].addr;
 		if (result < 0)
 			end = mid;
 		else if (result > 0)
 			start = mid + 1;
 		else
-			return &syms[mid];
+			return &ksyms.syms[mid];
 	}
 
-	if (start >= 1 && syms[start - 1].addr < key &&
-	    key < syms[start].addr)
+	if (start >= 1 && ksyms.syms[start - 1].addr < key &&
+	    key < ksyms.syms[start].addr)
 		/* valid ksym */
-		return &syms[start - 1];
+		return &ksyms.syms[start - 1];
 
 	/* out of range. return _stext */
-	return &syms[0];
+	return &ksyms.syms[0];
 }
 
 long ksym_get_addr(const char *name)
 {
 	int i;
 
-	for (i = 0; i < sym_cnt; i++) {
-		if (strcmp(syms[i].name, name) == 0)
-			return syms[i].addr;
+	for (i = 0; i < ksyms.sym_cnt; i++) {
+		if (strcmp(ksyms.syms[i].name, name) == 0)
+			return ksyms.syms[i].addr;
 	}
 
 	return 0;

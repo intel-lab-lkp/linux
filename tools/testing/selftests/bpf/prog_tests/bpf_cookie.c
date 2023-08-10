@@ -170,6 +170,7 @@ static void kprobe_multi_link_api_subtest(void)
 cleanup:
 	close(link1_fd);
 	close(link2_fd);
+	free_kallsyms();
 	kprobe_multi__destroy(skel);
 }
 

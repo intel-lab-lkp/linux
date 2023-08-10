@@ -86,4 +86,6 @@ void serial_test_kprobe_multi_testmod_test(void)
 		test_testmod_attach_api_syms();
 	if (test__start_subtest("testmod_attach_api_addrs"))
 		test_testmod_attach_api_addrs();
+
+	free_kallsyms();
 }

@@ -230,5 +230,6 @@ cleanup:
 
 	free(links);
 	bpf_object__close(obj);
+	free_kallsyms();
 	return error;
 }
