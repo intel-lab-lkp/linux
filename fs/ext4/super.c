@@ -5827,7 +5827,7 @@ static journal_t *ext4_get_journal(struct super_block *sb,
 		return NULL;
 
 	journal = jbd2_journal_init_inode(journal_inode);
-	if (!journal) {
+	if (IS_ERR(journal)) {
 		ext4_msg(sb, KERN_ERR, "Could not load journal inode");
 		iput(journal_inode);
 		return NULL;
@@ -5906,7 +5906,7 @@ static journal_t *ext4_get_dev_journal(struct super_block *sb,
 
 	journal = jbd2_journal_init_dev(bdev, sb->s_bdev,
 					start, len, blocksize);
-	if (!journal) {
+	if (IS_ERR(journal)) {
 		ext4_msg(sb, KERN_ERR, "failed to create device journal");
 		goto out_bdev;
 	}
