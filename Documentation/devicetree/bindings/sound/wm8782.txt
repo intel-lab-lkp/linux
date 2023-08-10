@@ -7,6 +7,7 @@ Required properties:
  - compatible  : "wlf,wm8782"
  - Vdda-supply : phandle to a regulator for the analog power supply (2.7V - 5.5V)
  - Vdd-supply  : phandle to a regulator for the digital power supply (2.7V - 3.6V)
+ - max-rate    : max supported audio rate configured by FSAMPEN pin, defaults to 48000
 
 Example:
 
@@ -14,4 +15,5 @@ wm8782: stereo-adc {
 	compatible = "wlf,wm8782";
 	Vdda-supply = <&vdda_supply>;
 	Vdd-supply = <&vdd_supply>;
+	max-rate = <96000>; /* FSAMPEN is 1 */
 };
