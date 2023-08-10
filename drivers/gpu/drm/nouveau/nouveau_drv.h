@@ -192,9 +192,7 @@ u_memcpya(uint64_t user, unsigned int nmemb, unsigned int size)
 	void *mem;
 	void __user *userptr = (void __force __user *)(uintptr_t)user;
 
-	size *= nmemb;
-
-	mem = kvmalloc(size, GFP_KERNEL);
+	mem = kvmalloc_array(nmemb, size, GFP_KERNEL);
 	if (!mem)
 		return ERR_PTR(-ENOMEM);
 
