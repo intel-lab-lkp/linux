@@ -14,5 +14,6 @@ KVM for x86 systems
    mmu
    msr
    nested-vmx
+   pmu
    running-nested-guests
    timekeeping
