@@ -1341,9 +1341,8 @@ static void raid1_write_request(struct mddev *mddev, struct bio *bio,
 	struct bitmap *bitmap = mddev->bitmap;
 	unsigned long flags;
 	struct md_rdev *blocked_rdev;
-	int first_clone;
 	int max_sectors;
-	bool write_behind = false;
+	bool first_clone, write_behind = false;
 
 	if (mddev_is_clustered(mddev) &&
 	     md_cluster_ops->area_resyncing(mddev, WRITE,
@@ -1509,7 +1508,7 @@ static void raid1_write_request(struct mddev *mddev, struct bio *bio,
 	atomic_set(&r1_bio->remaining, 1);
 	atomic_set(&r1_bio->behind_remaining, 0);
 
-	first_clone = 1;
+	first_clone = true;
 
 	for (i = 0; i < disks; i++) {
 		struct bio *mbio = NULL;
@@ -1532,7 +1531,7 @@ static void raid1_write_request(struct mddev *mddev, struct bio *bio,
 
 			md_bitmap_startwrite(bitmap, r1_bio->sector, r1_bio->sectors,
 					     test_bit(R1BIO_BehindIO, &r1_bio->state));
-			first_clone = 0;
+			first_clone = false;
 		}
 
 		if (r1_bio->behind_master_bio) {
