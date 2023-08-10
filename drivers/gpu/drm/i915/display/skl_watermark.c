@@ -2614,13 +2614,6 @@ skl_compute_ddb(struct intel_atomic_state *state)
 		if (ret)
 			return ret;
 
-		if (old_dbuf_state->joined_mbus != new_dbuf_state->joined_mbus) {
-			/* TODO: Implement vblank synchronized MBUS joining changes */
-			ret = intel_modeset_all_pipes(state, "MBUS joining change");
-			if (ret)
-				return ret;
-		}
-
 		drm_dbg_kms(&i915->drm,
 			    "Enabled dbuf slices 0x%x -> 0x%x (total dbuf slices 0x%x), mbus joined? %s->%s\n",
 			    old_dbuf_state->enabled_slices,
@@ -3528,6 +3521,35 @@ void intel_dbuf_pre_plane_update(struct intel_atomic_state *state)
 	gen9_dbuf_slices_update(i915,
 				old_dbuf_state->enabled_slices |
 				new_dbuf_state->enabled_slices);
+
+	/*
+	 * If we are not doing a modeset, that means we must synchronize
+	 * our MBUS configuration changes with vblank.
+	 * According to MBus programming section of BSpec, we must wait for vblank
+	 * on active crtc, which was single display, when switching from single
+	 * display(mbus joined) to additional multiple displays(mbus not joined)
+	 * after Mbus/Dbuf slice programming is done.
+	 */
+	if (!state->modeset && !new_dbuf_state->joined_mbus && old_dbuf_state->joined_mbus) {
+		struct intel_crtc *crtc;
+		struct intel_crtc_state *new_crtc_state, *old_crtc_state;
+		int i;
+
+		for_each_oldnew_intel_crtc_in_state(state, crtc, old_crtc_state, new_crtc_state, i) {
+			/*
+			 * Need to wait for vblank only if crtc was active prior to that change,
+			 * i.e this is a scenario when we switch from single display to multiple
+			 * displays, without doing a full modeset and it still stays on, according
+			 * to BSpec only in that case we need to wait for vblank on that previously
+			 * single display. Otherwise no wait is needed. Rest of the cases, are not
+			 * possible without a modeset anyway.
+			 */
+			if (!new_crtc_state->hw.active || !old_crtc_state->hw.active)
+				continue;
+
+			intel_crtc_wait_for_next_vblank(crtc);
+		}
+	}
 }
 
 void intel_dbuf_post_plane_update(struct intel_atomic_state *state)
