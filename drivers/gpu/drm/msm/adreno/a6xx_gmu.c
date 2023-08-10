@@ -961,6 +961,8 @@ int a6xx_gmu_resume(struct a6xx_gpu *a6xx_gpu)
 	/* Set the bus quota to a reasonable value for boot */
 	a6xx_gmu_set_initial_bw(gpu, gmu);
 
+	mutex_lock(&gmu->lock);
+
 	/* Enable the GMU interrupt */
 	gmu_write(gmu, REG_A6XX_GMU_AO_HOST_INTERRUPT_CLR, ~0);
 	gmu_write(gmu, REG_A6XX_GMU_AO_HOST_INTERRUPT_MASK, ~A6XX_GMU_IRQ_MASK);
@@ -1004,6 +1006,8 @@ out:
 		pm_runtime_put(gmu->gxpd);
 		pm_runtime_put(gmu->dev);
 	}
+
+	mutex_unlock(&gmu->lock);
 
 	return ret;
 }
