@@ -1875,6 +1875,11 @@ int change_huge_pmd(struct mmu_gather *tlb, struct vm_area_struct *vma,
 			goto unlock;
 
 		page = pmd_page(*pmd);
+
+		if (PageAnon(page) && PageAnonExclusive(page) &&
+		    page_maybe_dma_pinned(page))
+			goto unlock;
+
 		toptier = node_is_toptier(page_to_nid(page));
 		/*
 		 * Skip scanning top tier node if normal numa

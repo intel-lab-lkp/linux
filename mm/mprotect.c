@@ -146,6 +146,11 @@ static long change_pte_range(struct mmu_gather *tlb,
 				nid = page_to_nid(page);
 				if (target_node == nid)
 					continue;
+
+				if (PageAnon(page) && PageAnonExclusive(page) &&
+				    page_maybe_dma_pinned(page))
+					continue;
+
 				toptier = node_is_toptier(nid);
 
 				/*
