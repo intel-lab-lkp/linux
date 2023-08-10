@@ -636,7 +636,7 @@ static int aw88261_dev_stop(struct aw_device *aw_dev)
 static int aw88261_reg_update(struct aw88261 *aw88261, bool force)
 {
 	struct aw_device *aw_dev = aw88261->aw_pa;
-	int ret;
+	int ret = 0;
 
 	if (force) {
 		ret = regmap_write(aw_dev->regmap,
