@@ -262,9 +262,8 @@ static __init void __parse_cmdline(const char *cmdline, bool parse_aliases)
 		if (!len)
 			return;
 
-		len = min(len, ARRAY_SIZE(buf) - 1);
-		strncpy(buf, cmdline, len);
-		buf[len] = 0;
+		len = min(len, ARRAY_SIZE(buf));
+		strscpy(buf, cmdline, len);
 
 		if (strcmp(buf, "--") == 0)
 			return;
