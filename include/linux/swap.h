@@ -453,7 +453,7 @@ static inline unsigned long total_swapcache_pages(void)
 
 extern void free_swap_cache(struct page *page);
 extern void free_page_and_swap_cache(struct page *);
-extern void free_pages_and_swap_cache(struct page **, int);
+extern void free_folios_and_swap_cache(struct folio_range *, int);
 /* linux/mm/swapfile.c */
 extern atomic_long_t nr_swap_pages;
 extern long total_swap_pages;
@@ -530,8 +530,8 @@ static inline void put_swap_device(struct swap_info_struct *si)
  * so leave put_page and release_pages undeclared... */
 #define free_page_and_swap_cache(page) \
 	put_page(page)
-#define free_pages_and_swap_cache(pages, nr) \
-	release_pages((pages), (nr));
+#define free_folios_and_swap_cache(folios, nr) \
+	folios_put_refs((folios), (nr))
 
 /* used to sanity check ptes in zap_pte_range when CONFIG_SWAP=0 */
 #define free_swap_and_cache(e) is_pfn_swap_entry(e)

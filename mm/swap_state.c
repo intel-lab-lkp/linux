@@ -304,15 +304,16 @@ void free_page_and_swap_cache(struct page *page)
 }
 
 /*
- * Passed an array of pages, drop them all from swapcache and then release
- * them.  They are removed from the LRU and freed if this is their last use.
+ * Passed an array of folio ranges, drop all folios from swapcache and then put
+ * a folio reference for each page in the range.  They are removed from the LRU
+ * and freed if this is their last use.
  */
-void free_pages_and_swap_cache(struct page **pages, int nr)
+void free_folios_and_swap_cache(struct folio_range *folios, int nr)
 {
 	lru_add_drain();
 	for (int i = 0; i < nr; i++)
-		free_swap_cache(pages[i]);
-	release_pages(pages, nr);
+		free_swap_cache(folios[i].start);
+	folios_put_refs(folios, nr);
 }
 
 static inline bool swap_use_vma_readahead(void)

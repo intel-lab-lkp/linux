@@ -22,6 +22,7 @@ static bool tlb_next_batch(struct mmu_gather *tlb)
 	batch = tlb->active;
 	if (batch->next) {
 		tlb->active = batch->next;
+		tlb->range_limit = NULL;
 		return true;
 	}
 
@@ -39,6 +40,7 @@ static bool tlb_next_batch(struct mmu_gather *tlb)
 
 	tlb->active->next = batch;
 	tlb->active = batch;
+	tlb->range_limit = NULL;
 
 	return true;
 }
@@ -49,9 +51,11 @@ static void tlb_flush_rmap_batch(struct mmu_gather_batch *batch,
 				 struct vm_area_struct *vma)
 {
 	for (int i = first; i < batch->nr; i++) {
-		struct page *page = batch->pages[i];
+		struct folio_range *range = &batch->ranges[i];
+		int nr = range->end - range->start;
+		struct folio *folio = page_folio(range->start);
 
-		page_remove_rmap(page, vma, false);
+		folio_remove_rmap_range(folio, range->start, nr, vma);
 	}
 }
 
@@ -75,6 +79,11 @@ void tlb_flush_rmaps(struct mmu_gather *tlb, struct vm_area_struct *vma)
 	for (batch = batch->next; batch && batch->nr; batch = batch->next)
 		tlb_flush_rmap_batch(batch, 0, vma);
 
+	/*
+	 * Move to the next range on next page insertion to prevent any future
+	 * pages from being accumulated into the range we just did the rmap for.
+	 */
+	tlb->range_limit = NULL;
 	tlb_discard_rmaps(tlb);
 }
 
@@ -94,7 +103,7 @@ static void tlb_batch_pages_flush(struct mmu_gather *tlb)
 	struct mmu_gather_batch *batch;
 
 	for (batch = &tlb->local; batch && batch->nr; batch = batch->next) {
-		struct page **pages = batch->pages;
+		struct folio_range *ranges = batch->ranges;
 
 		do {
 			/*
@@ -102,14 +111,15 @@ static void tlb_batch_pages_flush(struct mmu_gather *tlb)
 			 */
 			unsigned int nr = min(512U, batch->nr);
 
-			free_pages_and_swap_cache(pages, nr);
-			pages += nr;
+			free_folios_and_swap_cache(ranges, nr);
+			ranges += nr;
 			batch->nr -= nr;
 
 			cond_resched();
 		} while (batch->nr);
 	}
 	tlb->active = &tlb->local;
+	tlb->range_limit = NULL;
 	tlb_discard_rmaps(tlb);
 }
 
@@ -127,6 +137,7 @@ static void tlb_batch_list_free(struct mmu_gather *tlb)
 bool __tlb_remove_page_size(struct mmu_gather *tlb, struct page *page, int page_size)
 {
 	struct mmu_gather_batch *batch;
+	struct folio_range *range;
 
 	VM_BUG_ON(!tlb->end);
 
@@ -135,11 +146,37 @@ bool __tlb_remove_page_size(struct mmu_gather *tlb, struct page *page, int page_
 #endif
 
 	batch = tlb->active;
+	range = &batch->ranges[batch->nr - 1];
+
 	/*
-	 * Add the page and check if we are full. If so
-	 * force a flush.
+	 * If there is a range being accumulated, add the page to the range if
+	 * its contiguous, else start the next range. range_limit is always NULL
+	 * when nr is 0, which protects the batch->ranges[-1] case.
 	 */
-	batch->pages[batch->nr++] = page;
+	if (tlb->range_limit && page == range->end) {
+		range->end++;
+	} else {
+		struct folio *folio = page_folio(page);
+
+		range = &batch->ranges[batch->nr++];
+		range->start = page;
+		range->end = page + 1;
+
+		tlb->range_limit = &folio->page + folio_nr_pages(folio);
+	}
+
+	/*
+	 * If we have reached the end of the folio, move to the next range when
+	 * we add the next page; Never span multiple folios in the same range.
+	 */
+	if (range->end == tlb->range_limit)
+		tlb->range_limit = NULL;
+
+	/*
+	 * Check if we are full. If so force a flush. In order to ensure we
+	 * always have a free range for the next added page, the last range in a
+	 * batch always only has a single page.
+	 */
 	if (batch->nr == batch->max) {
 		if (!tlb_next_batch(tlb))
 			return true;
@@ -318,8 +355,9 @@ static void __tlb_gather_mmu(struct mmu_gather *tlb, struct mm_struct *mm,
 	tlb->need_flush_all = 0;
 	tlb->local.next = NULL;
 	tlb->local.nr   = 0;
-	tlb->local.max  = ARRAY_SIZE(tlb->__pages);
+	tlb->local.max  = ARRAY_SIZE(tlb->__ranges);
 	tlb->active     = &tlb->local;
+	tlb->range_limit = NULL;
 	tlb->batch_count = 0;
 	tlb->rmap_pend	= &tlb->local;
 	tlb->rmap_pend_first = 0;

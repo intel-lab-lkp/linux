@@ -1041,6 +1041,97 @@ void release_pages(release_pages_arg arg, int nr)
 }
 EXPORT_SYMBOL(release_pages);
 
+/**
+ * folios_put_refs - batched folio_put_refs()
+ * @folios: array of `struct folio_range`s to release
+ * @nr: number of folio ranges
+ *
+ * Each `struct folio_range` describes the start and end page of a range within
+ * a folio. The folio reference count is decremented once for each page in the
+ * range. If it fell to zero, remove the page from the LRU and free it.
+ */
+void folios_put_refs(struct folio_range *folios, int nr)
+{
+	int i;
+	LIST_HEAD(pages_to_free);
+	struct lruvec *lruvec = NULL;
+	unsigned long flags = 0;
+	unsigned int lock_batch;
+
+	for (i = 0; i < nr; i++) {
+		struct folio *folio = page_folio(folios[i].start);
+		int refs = folios[i].end - folios[i].start;
+
+		/*
+		 * Make sure the IRQ-safe lock-holding time does not get
+		 * excessive with a continuous string of pages from the
+		 * same lruvec. The lock is held only if lruvec != NULL.
+		 */
+		if (lruvec && ++lock_batch == SWAP_CLUSTER_MAX) {
+			unlock_page_lruvec_irqrestore(lruvec, flags);
+			lruvec = NULL;
+		}
+
+		if (is_huge_zero_page(&folio->page))
+			continue;
+
+		if (folio_is_zone_device(folio)) {
+			if (lruvec) {
+				unlock_page_lruvec_irqrestore(lruvec, flags);
+				lruvec = NULL;
+			}
+			if (put_devmap_managed_page(&folio->page))
+				continue;
+			if (folio_put_testzero(folio))
+				free_zone_device_page(&folio->page);
+			continue;
+		}
+
+		if (!folio_ref_sub_and_test(folio, refs))
+			continue;
+
+		if (folio_test_large(folio)) {
+			if (lruvec) {
+				unlock_page_lruvec_irqrestore(lruvec, flags);
+				lruvec = NULL;
+			}
+			__folio_put_large(folio);
+			continue;
+		}
+
+		if (folio_test_lru(folio)) {
+			struct lruvec *prev_lruvec = lruvec;
+
+			lruvec = folio_lruvec_relock_irqsave(folio, lruvec,
+									&flags);
+			if (prev_lruvec != lruvec)
+				lock_batch = 0;
+
+			lruvec_del_folio(lruvec, folio);
+			__folio_clear_lru_flags(folio);
+		}
+
+		/*
+		 * In rare cases, when truncation or holepunching raced with
+		 * munlock after VM_LOCKED was cleared, Mlocked may still be
+		 * found set here.  This does not indicate a problem, unless
+		 * "unevictable_pgs_cleared" appears worryingly large.
+		 */
+		if (unlikely(folio_test_mlocked(folio))) {
+			__folio_clear_mlocked(folio);
+			zone_stat_sub_folio(folio, NR_MLOCK);
+			count_vm_event(UNEVICTABLE_PGCLEARED);
+		}
+
+		list_add(&folio->lru, &pages_to_free);
+	}
+	if (lruvec)
+		unlock_page_lruvec_irqrestore(lruvec, flags);
+
+	mem_cgroup_uncharge_list(&pages_to_free);
+	free_unref_page_list(&pages_to_free);
+}
+
 /*
  * The folios which we're about to release may be in the deferred lru-addition
  * queues.  That would prevent them from really being freed right now.  That's

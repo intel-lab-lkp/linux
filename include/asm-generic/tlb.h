@@ -246,11 +246,11 @@ struct mmu_gather_batch {
 	struct mmu_gather_batch	*next;
 	unsigned int		nr;
 	unsigned int		max;
-	struct page		*pages[];
+	struct folio_range	ranges[];
 };
 
 #define MAX_GATHER_BATCH	\
-	((PAGE_SIZE - sizeof(struct mmu_gather_batch)) / sizeof(void *))
+	((PAGE_SIZE - sizeof(struct mmu_gather_batch)) / sizeof(struct folio_range))
 
 /*
  * Limit the maximum number of mmu_gather batches to reduce a risk of soft
@@ -342,7 +342,8 @@ struct mmu_gather {
 #ifndef CONFIG_MMU_GATHER_NO_GATHER
 	struct mmu_gather_batch *active;
 	struct mmu_gather_batch	local;
-	struct page		*__pages[MMU_GATHER_BUNDLE];
+	struct folio_range	__ranges[MMU_GATHER_BUNDLE];
+	struct page		*range_limit;
 	struct mmu_gather_batch *rmap_pend;
 	unsigned int		rmap_pend_first;
 
