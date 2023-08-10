@@ -688,9 +688,8 @@ intel_legacy_cursor_update(struct drm_plane *_plane,
 	if (ret)
 		goto out_free;
 
-	ret = intel_plane_pin_fb(new_plane_state);
-	if (ret)
-		goto out_free;
+	/* magic trick! */
+	swap(new_plane_state->ggtt_vma, old_plane_state->ggtt_vma);
 
 	intel_frontbuffer_flush(to_intel_frontbuffer(new_plane_state->hw.fb),
 				ORIGIN_CURSOR_UPDATE);
