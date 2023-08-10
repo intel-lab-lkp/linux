@@ -66,8 +66,14 @@
 #define DMC620_PMU_COUNTERn_OFFSET(n) \
 	(DMC620_PMU_COUNTERS_BASE + 0x28 * (n))
 
+/*
+ * The allowable lock ordering is:
+ * - dmc620_pmu_get_lock (protects call to __dmc620_pmu_get_irq())
+ * - dmc620_pmu_list_lock (protects pmus_node & irqs_node lists)
+ */
+static DEFINE_MUTEX(dmc620_pmu_get_lock);
+static DEFINE_MUTEX(dmc620_pmu_list_lock);
 static LIST_HEAD(dmc620_pmu_irqs);
-static DEFINE_MUTEX(dmc620_pmu_irqs_lock);
 
 struct dmc620_pmu_irq {
 	struct hlist_node node;
@@ -423,9 +429,11 @@ static struct dmc620_pmu_irq *__dmc620_pmu_get_irq(int irq_num)
 	struct dmc620_pmu_irq *irq;
 	int ret;
 
+	mutex_lock(&dmc620_pmu_list_lock);
 	list_for_each_entry(irq, &dmc620_pmu_irqs, irqs_node)
 		if (irq->irq_num == irq_num && refcount_inc_not_zero(&irq->refcount))
-			return irq;
+			goto unlock_out;
+	mutex_unlock(&dmc620_pmu_list_lock);
 
 	irq = kzalloc(sizeof(*irq), GFP_KERNEL);
 	if (!irq)
@@ -452,8 +460,10 @@ static struct dmc620_pmu_irq *__dmc620_pmu_get_irq(int irq_num)
 		goto out_free_irq;
 
 	irq->irq_num = irq_num;
+	mutex_lock(&dmc620_pmu_list_lock);
 	list_add(&irq->irqs_node, &dmc620_pmu_irqs);
-
+unlock_out:
+	mutex_unlock(&dmc620_pmu_list_lock);
 	return irq;
 
 out_free_irq:
@@ -467,17 +477,17 @@ static int dmc620_pmu_get_irq(struct dmc620_pmu *dmc620_pmu, int irq_num)
 {
 	struct dmc620_pmu_irq *irq;
 
-	mutex_lock(&dmc620_pmu_irqs_lock);
+	mutex_lock(&dmc620_pmu_get_lock);
 	irq = __dmc620_pmu_get_irq(irq_num);
-	mutex_unlock(&dmc620_pmu_irqs_lock);
+	mutex_unlock(&dmc620_pmu_get_lock);
 
 	if (IS_ERR(irq))
 		return PTR_ERR(irq);
 
 	dmc620_pmu->irq = irq;
-	mutex_lock(&dmc620_pmu_irqs_lock);
+	mutex_lock(&dmc620_pmu_list_lock);
 	list_add_rcu(&dmc620_pmu->pmus_node, &irq->pmus_node);
-	mutex_unlock(&dmc620_pmu_irqs_lock);
+	mutex_unlock(&dmc620_pmu_list_lock);
 
 	return 0;
 }
@@ -486,16 +496,16 @@ static void dmc620_pmu_put_irq(struct dmc620_pmu *dmc620_pmu)
 {
 	struct dmc620_pmu_irq *irq = dmc620_pmu->irq;
 
-	mutex_lock(&dmc620_pmu_irqs_lock);
+	mutex_lock(&dmc620_pmu_list_lock);
 	list_del_rcu(&dmc620_pmu->pmus_node);
 
 	if (!refcount_dec_and_test(&irq->refcount)) {
-		mutex_unlock(&dmc620_pmu_irqs_lock);
+		mutex_unlock(&dmc620_pmu_list_lock);
 		return;
 	}
 
 	list_del(&irq->irqs_node);
-	mutex_unlock(&dmc620_pmu_irqs_lock);
+	mutex_unlock(&dmc620_pmu_list_lock);
 
 	free_irq(irq->irq_num, irq);
 	cpuhp_state_remove_instance_nocalls(cpuhp_state_num, &irq->node);
@@ -638,10 +648,10 @@ static int dmc620_pmu_cpu_teardown(unsigned int cpu,
 		return 0;
 
 	/* We're only reading, but this isn't the place to be involving RCU */
-	mutex_lock(&dmc620_pmu_irqs_lock);
+	mutex_lock(&dmc620_pmu_list_lock);
 	list_for_each_entry(dmc620_pmu, &irq->pmus_node, pmus_node)
 		perf_pmu_migrate_context(&dmc620_pmu->pmu, irq->cpu, target);
-	mutex_unlock(&dmc620_pmu_irqs_lock);
+	mutex_unlock(&dmc620_pmu_list_lock);
 
 	WARN_ON(irq_set_affinity(irq->irq_num, cpumask_of(target)));
 	irq->cpu = target;
