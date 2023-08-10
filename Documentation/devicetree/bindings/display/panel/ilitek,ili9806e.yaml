@@ -1,0 +1,63 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/display/panel/ilitek,ili9806e.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Ilitek ILI9806E display panels
+
+maintainers:
+  - Luca Ceresoli <luca.ceresoli@bootlin.com>
+
+description:
+  This binding is for display panels using an Ilitek ILI9806E controller in
+  SPI mode.
+
+allOf:
+  - $ref: panel-common.yaml#
+  - $ref: /schemas/spi/spi-peripheral-props.yaml#
+
+properties:
+  compatible:
+    items:
+      - enum:
+          # ShenZhen New Display Co 3.97" 480x800 RGB a-SI TFT LCD
+          - newdisplay,nds040480800-v3
+      - const: ilitek,ili9806e
+
+  reg:
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+  - port
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+
+    spi {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        display@0 {
+            compatible = "newdisplay,nds040480800-v3", "ilitek,ili9806e";
+            reg = <0>;
+            spi-max-frequency = <1000000>;
+            pinctrl-names = "default";
+            pinctrl-0 = <&pinctrl_lcdgpios>;
+            reset-gpios = <&gpio 26 GPIO_ACTIVE_LOW>;
+            backlight = <&backlight>;
+
+            port {
+                ili9806e_in: endpoint {
+                    remote-endpoint = <&lcdif_out>;
+                };
+            };
+        };
+    };
+
+...
