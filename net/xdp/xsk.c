@@ -572,22 +572,23 @@ static void xsk_drop_skb(struct sk_buff *skb)
 }
 
 static struct sk_buff *xsk_build_skb_zerocopy(struct xdp_sock *xs,
-					      struct xdp_desc *desc)
+					      struct xdp_desc *desc,
+					      int *err)
 {
 	struct xsk_buff_pool *pool = xs->pool;
 	u32 hr, len, ts, offset, copy, copied;
 	struct sk_buff *skb = xs->skb;
 	struct page *page;
 	void *buffer;
-	int err, i;
 	u64 addr;
+	int i;
 
 	if (!skb) {
 		hr = max(NET_SKB_PAD, L1_CACHE_ALIGN(xs->dev->needed_headroom));
 
-		skb = sock_alloc_send_skb(&xs->sk, hr, 1, &err);
+		skb = sock_alloc_send_skb(&xs->sk, hr, 1, err);
 		if (unlikely(!skb))
-			return ERR_PTR(err);
+			goto ret_err;
 
 		skb_reserve(skb, hr);
 	}
@@ -601,8 +602,10 @@ static struct sk_buff *xsk_build_skb_zerocopy(struct xdp_sock *xs,
 	addr = buffer - pool->addrs;
 
 	for (copied = 0, i = skb_shinfo(skb)->nr_frags; copied < len; i++) {
-		if (unlikely(i >= MAX_SKB_FRAGS))
-			return ERR_PTR(-EFAULT);
+		if (unlikely(i >= MAX_SKB_FRAGS)) {
+			*err = -EFAULT;
+			goto ret_err;
+		}
 
 		page = pool->umem->pgs[addr >> PAGE_SHIFT];
 		get_page(page);
@@ -620,7 +623,8 @@ static struct sk_buff *xsk_build_skb_zerocopy(struct xdp_sock *xs,
 	skb->truesize += ts;
 
 	refcount_add(ts, &xs->sk.sk_wmem_alloc);
-
+	*err = 0;
+ret_err:
 	return skb;
 }
 
@@ -632,11 +636,9 @@ static struct sk_buff *xsk_build_skb(struct xdp_sock *xs,
 	int err;
 
 	if (dev->priv_flags & IFF_TX_SKB_NO_LINEAR) {
-		skb = xsk_build_skb_zerocopy(xs, desc);
-		if (IS_ERR(skb)) {
-			err = PTR_ERR(skb);
+		skb = xsk_build_skb_zerocopy(xs, desc, &err);
+		if (err)
 			goto free_err;
-		}
 	} else {
 		u32 hr, tr, len;
 		void *buffer;
@@ -692,7 +694,7 @@ static struct sk_buff *xsk_build_skb(struct xdp_sock *xs,
 free_err:
 	if (err == -EAGAIN) {
 		xsk_cq_cancel_locked(xs, 1);
-	} else {
+	} else if (skb) {
 		xsk_set_destructor_arg(skb);
 		xsk_drop_skb(skb);
 		xskq_cons_release(xs->tx);
