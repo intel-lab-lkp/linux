@@ -3001,66 +3001,6 @@ scsi_host_unblock(struct Scsi_Host *shost, int new_state)
 }
 EXPORT_SYMBOL_GPL(scsi_host_unblock);
 
-/**
- * scsi_kmap_atomic_sg - find and atomically map an sg-elemnt
- * @sgl:	scatter-gather list
- * @sg_count:	number of segments in sg
- * @offset:	offset in bytes into sg, on return offset into the mapped area
- * @len:	bytes to map, on return number of bytes mapped
- *
- * Returns virtual address of the start of the mapped page
- */
-void *scsi_kmap_atomic_sg(struct scatterlist *sgl, int sg_count,
-			  size_t *offset, size_t *len)
-{
-	int i;
-	size_t sg_len = 0, len_complete = 0;
-	struct scatterlist *sg;
-	struct page *page;
-
-	WARN_ON(!irqs_disabled());
-
-	for_each_sg(sgl, sg, sg_count, i) {
-		len_complete = sg_len; /* Complete sg-entries */
-		sg_len += sg->length;
-		if (sg_len > *offset)
-			break;
-	}
-
-	if (unlikely(i == sg_count)) {
-		printk(KERN_ERR "%s: Bytes in sg: %zu, requested offset %zu, "
-			"elements %d\n",
-		       __func__, sg_len, *offset, sg_count);
-		WARN_ON(1);
-		return NULL;
-	}
-
-	/* Offset starting from the beginning of first page in this sg-entry */
-	*offset = *offset - len_complete + sg->offset;
-
-	/* Assumption: contiguous pages can be accessed as "page + i" */
-	page = nth_page(sg_page(sg), (*offset >> PAGE_SHIFT));
-	*offset &= ~PAGE_MASK;
-
-	/* Bytes in this sg-entry from *offset to the end of the page */
-	sg_len = PAGE_SIZE - *offset;
-	if (*len > sg_len)
-		*len = sg_len;
-
-	return kmap_atomic(page);
-}
-EXPORT_SYMBOL(scsi_kmap_atomic_sg);
-
-/**
- * scsi_kunmap_atomic_sg - atomically unmap a virtual address, previously mapped with scsi_kmap_atomic_sg
- * @virt:	virtual address to be unmapped
- */
-void scsi_kunmap_atomic_sg(void *virt)
-{
-	kunmap_atomic(virt);
-}
-EXPORT_SYMBOL(scsi_kunmap_atomic_sg);
-
 void sdev_disable_disk_events(struct scsi_device *sdev)
 {
 	atomic_inc(&sdev->disk_events_disable_depth);

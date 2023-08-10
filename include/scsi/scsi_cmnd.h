@@ -163,10 +163,6 @@ void scsi_done_direct(struct scsi_cmnd *cmd);
 
 extern void scsi_finish_command(struct scsi_cmnd *cmd);
 
-extern void *scsi_kmap_atomic_sg(struct scatterlist *sg, int sg_count,
-				 size_t *offset, size_t *len);
-extern void scsi_kunmap_atomic_sg(void *virt);
-
 blk_status_t scsi_alloc_sgtables(struct scsi_cmnd *cmd);
 void scsi_free_sgtables(struct scsi_cmnd *cmd);
 
