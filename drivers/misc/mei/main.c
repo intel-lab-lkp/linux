@@ -27,7 +27,9 @@
 #include "mei_dev.h"
 #include "client.h"
 
-static struct class *mei_class;
+static const struct class mei_class = {
+	.name = "mei",
+};
 static dev_t mei_devt;
 #define MEI_MAX_DEVS  MINORMASK
 static DEFINE_MUTEX(mei_minor_lock);
@@ -1115,7 +1117,7 @@ void mei_set_devstate(struct mei_device *dev, enum mei_dev_state state)
 
 	dev->dev_state = state;
 
-	clsdev = class_find_device_by_devt(mei_class, dev->cdev.dev);
+	clsdev = class_find_device_by_devt(&mei_class, dev->cdev.dev);
 	if (clsdev) {
 		sysfs_notify(&clsdev->kobj, NULL, "dev_state");
 		put_device(clsdev);
@@ -1232,7 +1234,7 @@ int mei_register(struct mei_device *dev, struct device *parent)
 		goto err_dev_add;
 	}
 
-	clsdev = device_create_with_groups(mei_class, parent, devno,
+	clsdev = device_create_with_groups(&mei_class, parent, devno,
 					   dev, mei_groups,
 					   "mei%d", dev->minor);
 
@@ -1264,7 +1266,7 @@ void mei_deregister(struct mei_device *dev)
 
 	mei_dbgfs_deregister(dev);
 
-	device_destroy(mei_class, devno);
+	device_destroy(&mei_class, devno);
 
 	mei_minor_free(dev);
 }
@@ -1274,10 +1276,9 @@ static int __init mei_init(void)
 {
 	int ret;
 
-	mei_class = class_create("mei");
-	if (IS_ERR(mei_class)) {
+	ret = class_register(&mei_class);
+	if (ret) {
 		pr_err("couldn't create class\n");
-		ret = PTR_ERR(mei_class);
 		goto err;
 	}
 
@@ -1298,7 +1299,7 @@ static int __init mei_init(void)
 err_chrdev:
 	unregister_chrdev_region(mei_devt, MEI_MAX_DEVS);
 err_class:
-	class_destroy(mei_class);
+	class_unregister(&mei_class);
 err:
 	return ret;
 }
@@ -1306,7 +1307,7 @@ err:
 static void __exit mei_exit(void)
 {
 	unregister_chrdev_region(mei_devt, MEI_MAX_DEVS);
-	class_destroy(mei_class);
+	class_unregister(&mei_class);
 	mei_cl_bus_exit();
 }
 
