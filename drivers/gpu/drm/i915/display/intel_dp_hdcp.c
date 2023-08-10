@@ -452,7 +452,10 @@ int intel_dp_hdcp2_write_msg(struct intel_connector *connector,
 
 	offset = hdcp2_msg_data->offset;
 
-	aux = &dig_port->dp.aux;
+	if (intel_encoder_is_mst(connector->encoder))
+		aux = &connector->port->aux;
+	else
+		aux = &dig_port->dp.aux;
 
 	/* No msg_id in DP HDCP2.2 msgs */
 	bytes_to_write = size - 1;
@@ -518,7 +521,10 @@ int intel_dp_hdcp2_read_msg(struct intel_connector *connector,
 		return -EINVAL;
 	offset = hdcp2_msg_data->offset;
 
-	aux = &dp->aux;
+	if (intel_encoder_is_mst(connector->encoder))
+		aux = &connector->port->aux;
+	else
+		aux = &dp->aux;
 
 	ret = intel_dp_hdcp2_wait_for_msg(i915, aux, hdcp, hdcp2_msg_data);
 	if (ret < 0)
