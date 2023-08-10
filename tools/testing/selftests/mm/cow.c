@@ -723,25 +723,25 @@ static void run_with_base_page_swap(test_fn fn, const char *desc)
 	do_run_with_base_page(fn, true);
 }
 
-enum thp_run {
-	THP_RUN_PMD,
-	THP_RUN_PMD_SWAPOUT,
-	THP_RUN_PTE,
-	THP_RUN_PTE_SWAPOUT,
-	THP_RUN_SINGLE_PTE,
-	THP_RUN_SINGLE_PTE_SWAPOUT,
-	THP_RUN_PARTIAL_MREMAP,
-	THP_RUN_PARTIAL_SHARED,
+enum large_run {
+	LARGE_RUN_PMD,
+	LARGE_RUN_PMD_SWAPOUT,
+	LARGE_RUN_PTE,
+	LARGE_RUN_PTE_SWAPOUT,
+	LARGE_RUN_SINGLE_PTE,
+	LARGE_RUN_SINGLE_PTE_SWAPOUT,
+	LARGE_RUN_PARTIAL_MREMAP,
+	LARGE_RUN_PARTIAL_SHARED,
 };
 
-static void do_run_with_thp(test_fn fn, enum thp_run thp_run)
+static void do_run_with_large(test_fn fn, enum large_run large_run, size_t size)
 {
 	char *mem, *mmap_mem, *tmp, *mremap_mem = MAP_FAILED;
-	size_t size, mmap_size, mremap_size;
+	size_t mmap_size, mremap_size;
 	int ret;
 
-	/* For alignment purposes, we need twice the thp size. */
-	mmap_size = 2 * thpsize;
+	/* For alignment purposes, we need twice the requested size. */
+	mmap_size = 2 * size;
 	mmap_mem = mmap(NULL, mmap_size, PROT_READ | PROT_WRITE,
 			MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 	if (mmap_mem == MAP_FAILED) {
@@ -749,36 +749,40 @@ static void do_run_with_thp(test_fn fn, enum thp_run thp_run)
 		return;
 	}
 
-	/* We need a THP-aligned memory area. */
-	mem = (char *)(((uintptr_t)mmap_mem + thpsize) & ~(thpsize - 1));
+	/* We need to naturally align the memory area. */
+	mem = (char *)(((uintptr_t)mmap_mem + size) & ~(size - 1));
 
-	ret = madvise(mem, thpsize, MADV_HUGEPAGE);
+	ret = madvise(mem, size, MADV_HUGEPAGE);
 	if (ret) {
 		ksft_test_result_fail("MADV_HUGEPAGE failed\n");
 		goto munmap;
 	}
 
 	/*
-	 * Try to populate a THP. Touch the first sub-page and test if we get
-	 * another sub-page populated automatically.
+	 * Try to populate a large folio. Touch the first sub-page and test if
+	 * we get the last sub-page populated automatically.
 	 */
 	mem[0] = 0;
-	if (!pagemap_is_populated(pagemap_fd, mem + pagesize)) {
-		ksft_test_result_skip("Did not get a THP populated\n");
+	if (!pagemap_is_populated(pagemap_fd, mem + size - pagesize)) {
+		ksft_test_result_skip("Did not get fully populated\n");
 		goto munmap;
 	}
-	memset(mem, 0, thpsize);
+	memset(mem, 0, size);
 
-	size = thpsize;
-	switch (thp_run) {
-	case THP_RUN_PMD:
-	case THP_RUN_PMD_SWAPOUT:
+	switch (large_run) {
+	case LARGE_RUN_PMD:
+	case LARGE_RUN_PMD_SWAPOUT:
+		if (size != thpsize) {
+			ksft_test_result_fail("test bug: can't PMD-map size\n");
+			goto munmap;
+		}
 		break;
-	case THP_RUN_PTE:
-	case THP_RUN_PTE_SWAPOUT:
+	case LARGE_RUN_PTE:
+	case LARGE_RUN_PTE_SWAPOUT:
 		/*
-		 * Trigger PTE-mapping the THP by temporarily mapping a single
-		 * subpage R/O.
+		 * Trigger PTE-mapping the large folio by temporarily mapping a
+		 * single subpage R/O. This is a noop if the large-folio is not
+		 * thpsize (and therefore already PTE-mapped).
 		 */
 		ret = mprotect(mem + pagesize, pagesize, PROT_READ);
 		if (ret) {
@@ -791,25 +795,25 @@ static void do_run_with_thp(test_fn fn, enum thp_run thp_run)
 			goto munmap;
 		}
 		break;
-	case THP_RUN_SINGLE_PTE:
-	case THP_RUN_SINGLE_PTE_SWAPOUT:
+	case LARGE_RUN_SINGLE_PTE:
+	case LARGE_RUN_SINGLE_PTE_SWAPOUT:
 		/*
-		 * Discard all but a single subpage of that PTE-mapped THP. What
-		 * remains is a single PTE mapping a single subpage.
+		 * Discard all but a single subpage of that PTE-mapped large
+		 * folio. What remains is a single PTE mapping a single subpage.
 		 */
-		ret = madvise(mem + pagesize, thpsize - pagesize, MADV_DONTNEED);
+		ret = madvise(mem + pagesize, size - pagesize, MADV_DONTNEED);
 		if (ret) {
 			ksft_test_result_fail("MADV_DONTNEED failed\n");
 			goto munmap;
 		}
 		size = pagesize;
 		break;
-	case THP_RUN_PARTIAL_MREMAP:
+	case LARGE_RUN_PARTIAL_MREMAP:
 		/*
-		 * Remap half of the THP. We need some new memory location
-		 * for that.
+		 * Remap half of the lareg folio. We need some new memory
+		 * location for that.
 		 */
-		mremap_size = thpsize / 2;
+		mremap_size = size / 2;
 		mremap_mem = mmap(NULL, mremap_size, PROT_NONE,
 				  MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 		if (mem == MAP_FAILED) {
@@ -824,13 +828,13 @@ static void do_run_with_thp(test_fn fn, enum thp_run thp_run)
 		}
 		size = mremap_size;
 		break;
-	case THP_RUN_PARTIAL_SHARED:
+	case LARGE_RUN_PARTIAL_SHARED:
 		/*
-		 * Share the first page of the THP with a child and quit the
-		 * child. This will result in some parts of the THP never
-		 * have been shared.
+		 * Share the first page of the large folio with a child and quit
+		 * the child. This will result in some parts of the large folio
+		 * never have been shared.
 		 */
-		ret = madvise(mem + pagesize, thpsize - pagesize, MADV_DONTFORK);
+		ret = madvise(mem + pagesize, size - pagesize, MADV_DONTFORK);
 		if (ret) {
 			ksft_test_result_fail("MADV_DONTFORK failed\n");
 			goto munmap;
@@ -844,7 +848,7 @@ static void do_run_with_thp(test_fn fn, enum thp_run thp_run)
 		}
 		wait(&ret);
 		/* Allow for sharing all pages again. */
-		ret = madvise(mem + pagesize, thpsize - pagesize, MADV_DOFORK);
+		ret = madvise(mem + pagesize, size - pagesize, MADV_DOFORK);
 		if (ret) {
 			ksft_test_result_fail("MADV_DOFORK failed\n");
 			goto munmap;
@@ -854,10 +858,10 @@ static void do_run_with_thp(test_fn fn, enum thp_run thp_run)
 		assert(false);
 	}
 
-	switch (thp_run) {
-	case THP_RUN_PMD_SWAPOUT:
-	case THP_RUN_PTE_SWAPOUT:
-	case THP_RUN_SINGLE_PTE_SWAPOUT:
+	switch (large_run) {
+	case LARGE_RUN_PMD_SWAPOUT:
+	case LARGE_RUN_PTE_SWAPOUT:
+	case LARGE_RUN_SINGLE_PTE_SWAPOUT:
 		madvise(mem, size, MADV_PAGEOUT);
 		if (!range_is_swapped(mem, size)) {
 			ksft_test_result_skip("MADV_PAGEOUT did not work, is swap enabled?\n");
@@ -878,49 +882,49 @@ munmap:
 static void run_with_thp(test_fn fn, const char *desc)
 {
 	ksft_print_msg("[RUN] %s ... with THP\n", desc);
-	do_run_with_thp(fn, THP_RUN_PMD);
+	do_run_with_large(fn, LARGE_RUN_PMD, thpsize);
 }
 
 static void run_with_thp_swap(test_fn fn, const char *desc)
 {
 	ksft_print_msg("[RUN] %s ... with swapped-out THP\n", desc);
-	do_run_with_thp(fn, THP_RUN_PMD_SWAPOUT);
+	do_run_with_large(fn, LARGE_RUN_PMD_SWAPOUT, thpsize);
 }
 
 static void run_with_pte_mapped_thp(test_fn fn, const char *desc)
 {
 	ksft_print_msg("[RUN] %s ... with PTE-mapped THP\n", desc);
-	do_run_with_thp(fn, THP_RUN_PTE);
+	do_run_with_large(fn, LARGE_RUN_PTE, thpsize);
 }
 
 static void run_with_pte_mapped_thp_swap(test_fn fn, const char *desc)
 {
 	ksft_print_msg("[RUN] %s ... with swapped-out, PTE-mapped THP\n", desc);
-	do_run_with_thp(fn, THP_RUN_PTE_SWAPOUT);
+	do_run_with_large(fn, LARGE_RUN_PTE_SWAPOUT, thpsize);
 }
 
 static void run_with_single_pte_of_thp(test_fn fn, const char *desc)
 {
 	ksft_print_msg("[RUN] %s ... with single PTE of THP\n", desc);
-	do_run_with_thp(fn, THP_RUN_SINGLE_PTE);
+	do_run_with_large(fn, LARGE_RUN_SINGLE_PTE, thpsize);
 }
 
 static void run_with_single_pte_of_thp_swap(test_fn fn, const char *desc)
 {
 	ksft_print_msg("[RUN] %s ... with single PTE of swapped-out THP\n", desc);
-	do_run_with_thp(fn, THP_RUN_SINGLE_PTE_SWAPOUT);
+	do_run_with_large(fn, LARGE_RUN_SINGLE_PTE_SWAPOUT, thpsize);
 }
 
 static void run_with_partial_mremap_thp(test_fn fn, const char *desc)
 {
 	ksft_print_msg("[RUN] %s ... with partially mremap()'ed THP\n", desc);
-	do_run_with_thp(fn, THP_RUN_PARTIAL_MREMAP);
+	do_run_with_large(fn, LARGE_RUN_PARTIAL_MREMAP, thpsize);
 }
 
 static void run_with_partial_shared_thp(test_fn fn, const char *desc)
 {
 	ksft_print_msg("[RUN] %s ... with partially shared THP\n", desc);
-	do_run_with_thp(fn, THP_RUN_PARTIAL_SHARED);
+	do_run_with_large(fn, LARGE_RUN_PARTIAL_SHARED, thpsize);
 }
 
 static void run_with_hugetlb(test_fn fn, const char *desc, size_t hugetlbsize)
@@ -1338,7 +1342,7 @@ static void run_anon_thp_test_cases(void)
 		struct test_case const *test_case = &anon_thp_test_cases[i];
 
 		ksft_print_msg("[RUN] %s\n", test_case->desc);
-		do_run_with_thp(test_case->fn, THP_RUN_PMD);
+		do_run_with_large(test_case->fn, LARGE_RUN_PMD, thpsize);
 	}
 }
 
