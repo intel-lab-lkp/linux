@@ -2122,7 +2122,7 @@ static void data_in_phase0(struct AdapterCtlBlk *acb, struct ScsiReqBlk *srb,
 				local_irq_save(flags);
 				/* Assumption: it's inside one page as it's at most 4 bytes and
 				   I just assume it's on a 4-byte boundary */
-				base = scsi_kmap_atomic_sg(scsi_sglist(srb->cmd),
+				base = kmap_sg(scsi_sglist(srb->cmd),
 							   srb->sg_count, &offset, &len);
 				virt = base + offset;
 
@@ -2165,7 +2165,7 @@ static void data_in_phase0(struct AdapterCtlBlk *acb, struct ScsiReqBlk *srb,
 					DC395x_write8(acb, TRM_S1040_SCSI_CONFIG2, 0);
 				}
 
-				scsi_kunmap_atomic_sg(base);
+				kunmap_sg(base);
 				local_irq_restore(flags);
 			}
 			/*printk(" %08x", *(u32*)(bus_to_virt (addr))); */
@@ -2339,7 +2339,7 @@ static void data_io_transfer(struct AdapterCtlBlk *acb,
 
 				local_irq_save(flags);
 				/* Again, max 4 bytes */
-				base = scsi_kmap_atomic_sg(scsi_sglist(srb->cmd),
+				base = kmap_sg(scsi_sglist(srb->cmd),
 							   srb->sg_count, &offset, &len);
 				virt = base + offset;
 
@@ -2354,7 +2354,7 @@ static void data_io_transfer(struct AdapterCtlBlk *acb,
 					sg_subtract_one(srb);
 				}
 
-				scsi_kunmap_atomic_sg(base);
+				kunmap_sg(base);
 				local_irq_restore(flags);
 			}
 			if (srb->dcb->sync_period & WIDE_SYNC) {
@@ -3290,7 +3290,7 @@ static void srb_done(struct AdapterCtlBlk *acb, struct DeviceCtlBlk *dcb,
 		size_t offset = 0, len = sizeof(struct ScsiInqData);
 
 		local_irq_save(flags);
-		base = scsi_kmap_atomic_sg(sg, scsi_sg_count(cmd), &offset, &len);
+		base = kmap_sg(sg, scsi_sg_count(cmd), &offset, &len);
 		ptr = (struct ScsiInqData *)(base + offset);
 
 		if (!ckc_only && get_host_byte(cmd) == DID_OK
@@ -3308,7 +3308,7 @@ static void srb_done(struct AdapterCtlBlk *acb, struct DeviceCtlBlk *dcb,
 			}
 		}
 
-		scsi_kunmap_atomic_sg(base);
+		kunmap_sg(base);
 		local_irq_restore(flags);
 	}
 
