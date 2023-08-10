@@ -792,6 +792,9 @@ struct fuse_conn {
 	/* Is tmpfile not implemented by fs? */
 	unsigned int no_tmpfile:1;
 
+	/* Is statx not implemented by fs? */
+	unsigned int no_statx:1;
+
 	/** The number of requests waiting for completion */
 	atomic_t num_waiting;
 
