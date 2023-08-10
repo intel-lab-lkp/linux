@@ -312,6 +312,7 @@ static int intel_dp_mst_compute_config(struct intel_encoder *encoder,
 	struct intel_dp *intel_dp = &intel_mst->primary->dp;
 	const struct drm_display_mode *adjusted_mode =
 		&pipe_config->hw.adjusted_mode;
+	bool dp_mst_has_audio = intel_dp_mst_has_audio(conn_state);
 	struct link_config_limits limits;
 	int ret;
 
@@ -321,10 +322,6 @@ static int intel_dp_mst_compute_config(struct intel_encoder *encoder,
 	pipe_config->sink_format = INTEL_OUTPUT_FORMAT_RGB;
 	pipe_config->output_format = INTEL_OUTPUT_FORMAT_RGB;
 	pipe_config->has_pch_encoder = false;
-
-	pipe_config->has_audio =
-		intel_dp_mst_has_audio(conn_state) &&
-		intel_audio_compute_config(encoder, pipe_config, conn_state);
 
 	/*
 	 * for MST we always configure max link bw - the spec doesn't
@@ -387,6 +384,9 @@ static int intel_dp_mst_compute_config(struct intel_encoder *encoder,
 	if (IS_GEMINILAKE(dev_priv) || IS_BROXTON(dev_priv))
 		pipe_config->lane_lat_optim_mask =
 			bxt_ddi_phy_calc_lane_lat_optim_mask(pipe_config->lane_count);
+
+	intel_dp_audio_compute_config(encoder, pipe_config, conn_state,
+				      dp_mst_has_audio);
 
 	intel_ddi_compute_min_voltage_level(dev_priv, pipe_config);
 
@@ -791,6 +791,9 @@ static void intel_mst_enable_dp(struct intel_atomic_state *state,
 	else if (DISPLAY_VER(dev_priv) >= 12 && pipe_config->fec_enable)
 		intel_de_rmw(dev_priv, CHICKEN_TRANS(trans), 0,
 			     FECSTALL_DIS_DPTSTREAM_DPTTG);
+
+	/* Enable/Disable DP2.0 SDP split config before transcoder */
+	intel_audio_sdp_split_update(pipe_config);
 
 	intel_enable_transcoder(pipe_config);
 
