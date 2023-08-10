@@ -4469,6 +4469,10 @@
 			allocator.  This parameter is primarily	for debugging
 			and performance comparison.
 
+	phat_disable=	[ACPI]
+			Disable PHAT table parsing and logging of Firmware
+			Version and Health Data records.
+
 	pirq=		[SMP,APIC] Manual mp-table setup
 			See Documentation/arch/x86/i386/IO-APIC.rst.
 

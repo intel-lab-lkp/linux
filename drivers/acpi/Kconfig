@@ -96,6 +96,15 @@ config ACPI_FPDT
 	  This table provides information on the timing of the system
 	  boot, S3 suspend and S3 resume firmware code paths.
 
+config ACPI_PHAT
+	bool "ACPI Platform Health Assessment Table (PHAT) support"
+	depends on X86_64 || ARM64
+	help
+	  Enable support for Platform Health Assessment Table (PHAT).
+	  This table exposes an extensible set of platform health
+	  related telemetry through Firmware Version and Firmware Health
+	  Data Records.
+
 config ACPI_LPIT
 	bool
 	depends on X86_64

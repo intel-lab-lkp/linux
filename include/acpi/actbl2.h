@@ -2408,6 +2408,24 @@ struct acpi_phat_health_data {
 #define ACPI_PHAT_UNKNOWN_ERRORS        2
 #define ACPI_PHAT_ADVISORY              3
 
+/* Reset Reason Health Record Structure */
+
+struct acpi_phat_reset_reason {
+	u8 supported_reset_sources;
+	u8 reset_source;
+	u8 reset_sub_source;
+	u8 reset_reason;
+	u16 vendor_count;
+};
+
+/* Reset Reason Health Record Vendor Data Entry */
+
+struct acpi_phat_vendor_reset_data {
+	u8 vendor_id[16];
+	u16 length;
+	u16 revision;
+};
+
 /*******************************************************************************
  *
  * PMTT - Platform Memory Topology Table (ACPI 5.0)
