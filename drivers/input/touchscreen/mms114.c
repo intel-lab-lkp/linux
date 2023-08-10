@@ -504,7 +504,7 @@ static int mms114_probe(struct i2c_client *client)
 	if (!match_data)
 		return -EINVAL;
 
-	data->type = (enum mms_type)match_data;
+	data->type = (uintptr_t)match_data;
 
 	data->num_keycodes = device_property_count_u32(&client->dev,
 						       "linux,keycodes");
