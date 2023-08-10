@@ -158,7 +158,7 @@ int proc_pid_arch_status(struct seq_file *m, struct pid_namespace *ns,
 			struct pid *pid, struct task_struct *task);
 #endif /* CONFIG_PROC_PID_ARCH_STATUS */
 
-void arch_report_meminfo(struct seq_file *m);
+extern void arch_report_meminfo(struct seq_file *m);
 
 #else /* CONFIG_PROC_FS */
 
