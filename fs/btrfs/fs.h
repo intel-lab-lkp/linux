@@ -91,6 +91,12 @@ enum {
 	 */
 	BTRFS_FS_BALANCE_RUNNING,
 
+	/* Indicate that balance has been paused. */
+	BTRFS_FS_BALANCE_PAUSED,
+
+	/* Indicate that balance has been canceled. */
+	BTRFS_FS_BALANCE_CANCELED,
+
 	/*
 	 * Indicate that relocation of a chunk has started, it's set per chunk
 	 * and is toggled between chunks.

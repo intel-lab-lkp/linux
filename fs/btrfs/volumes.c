@@ -4261,7 +4261,6 @@ int btrfs_balance(struct btrfs_fs_info *fs_info,
 	u64 num_devices;
 	unsigned seq;
 	bool reducing_redundancy;
-	bool paused = false;
 	int i;
 
 	if (btrfs_fs_closing(fs_info) ||
@@ -4384,6 +4383,8 @@ int btrfs_balance(struct btrfs_fs_info *fs_info,
 	ASSERT(!test_bit(BTRFS_FS_BALANCE_RUNNING, &fs_info->flags));
 	set_bit(BTRFS_FS_BALANCE_RUNNING, &fs_info->flags);
 	describe_balance_start_or_resume(fs_info);
+	clear_bit(BTRFS_FS_BALANCE_PAUSED, &fs_info->flags);
+	clear_bit(BTRFS_FS_BALANCE_CANCELED, &fs_info->flags);
 	mutex_unlock(&fs_info->balance_mutex);
 
 	ret = __btrfs_balance(fs_info);
@@ -4392,7 +4393,7 @@ int btrfs_balance(struct btrfs_fs_info *fs_info,
 	if (ret == -ECANCELED && atomic_read(&fs_info->balance_pause_req)) {
 		btrfs_info(fs_info, "balance: paused");
 		btrfs_exclop_balance(fs_info, BTRFS_EXCLOP_BALANCE_PAUSED);
-		paused = true;
+		set_bit(BTRFS_FS_BALANCE_PAUSED, &fs_info->flags);
 	}
 	/*
 	 * Balance can be canceled by:
@@ -4409,8 +4410,10 @@ int btrfs_balance(struct btrfs_fs_info *fs_info,
 	 *
 	 * So here we only check the return value to catch canceled balance.
 	 */
-	else if (ret == -ECANCELED || ret == -EINTR)
+	else if (ret == -ECANCELED || ret == -EINTR) {
 		btrfs_info(fs_info, "balance: canceled");
+		set_bit(BTRFS_FS_BALANCE_CANCELED, &fs_info->flags);
+	}
 	else
 		btrfs_info(fs_info, "balance: ended with status: %d", ret);
 
@@ -4422,7 +4425,7 @@ int btrfs_balance(struct btrfs_fs_info *fs_info,
 	}
 
 	/* We didn't pause, we can clean everything up. */
-	if (!paused) {
+	if (!test_bit(BTRFS_FS_BALANCE_PAUSED, &fs_info->flags)) {
 		reset_balance_state(fs_info);
 		btrfs_exclop_finish(fs_info);
 	}
@@ -4581,6 +4584,7 @@ int btrfs_pause_balance(struct btrfs_fs_info *fs_info)
 		/* we are good with balance_ctl ripped off from under us */
 		BUG_ON(test_bit(BTRFS_FS_BALANCE_RUNNING, &fs_info->flags));
 		atomic_dec(&fs_info->balance_pause_req);
+		ret = test_bit(BTRFS_FS_BALANCE_PAUSED, &fs_info->flags) ? 0 : -EINVAL;
 	} else {
 		ret = -ENOTCONN;
 	}
@@ -4636,7 +4640,7 @@ int btrfs_cancel_balance(struct btrfs_fs_info *fs_info)
 		test_bit(BTRFS_FS_BALANCE_RUNNING, &fs_info->flags));
 	atomic_dec(&fs_info->balance_cancel_req);
 	mutex_unlock(&fs_info->balance_mutex);
-	return 0;
+	return test_bit(BTRFS_FS_BALANCE_CANCELED, &fs_info->flags) ? 0 : -EINVAL;
 }
 
 int btrfs_uuid_scan_kthread(void *data)
