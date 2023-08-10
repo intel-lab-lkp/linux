@@ -457,7 +457,7 @@ void iounmap(volatile void __iomem *addr)
 {
 	struct vm_struct *p, *o;
 
-	if ((void __force *)addr <= high_memory)
+	if (!is_vmalloc_addr((void __force *)addr))
 		return;
 
 	/*
