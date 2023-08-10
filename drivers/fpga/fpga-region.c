@@ -16,21 +16,6 @@
 #include <linux/spinlock.h>
 
 static DEFINE_IDA(fpga_region_ida);
-static struct class *fpga_region_class;
-
-struct fpga_region *
-fpga_region_class_find(struct device *start, const void *data,
-		       int (*match)(struct device *, const void *))
-{
-	struct device *dev;
-
-	dev = class_find_device(fpga_region_class, start, data, match);
-	if (!dev)
-		return NULL;
-
-	return to_fpga_region(dev);
-}
-EXPORT_SYMBOL_GPL(fpga_region_class_find);
 
 /**
  * fpga_region_get - get an exclusive reference to an fpga region
@@ -179,6 +164,34 @@ static struct attribute *fpga_region_attrs[] = {
 };
 ATTRIBUTE_GROUPS(fpga_region);
 
+static void fpga_region_dev_release(struct device *dev)
+{
+	struct fpga_region *region = to_fpga_region(dev);
+
+	ida_free(&fpga_region_ida, region->dev.id);
+	kfree(region);
+}
+
+static const struct class fpga_region_class = {
+	.name = "fpga_region",
+	.dev_groups = fpga_region_groups,
+	.dev_release = fpga_region_dev_release,
+};
+
+struct fpga_region *
+fpga_region_class_find(struct device *start, const void *data,
+		       int (*match)(struct device *, const void *))
+{
+	struct device *dev;
+
+	dev = class_find_device(&fpga_region_class, start, data, match);
+	if (!dev)
+		return NULL;
+
+	return to_fpga_region(dev);
+}
+EXPORT_SYMBOL_GPL(fpga_region_class_find);
+
 /**
  * fpga_region_register_full - create and register an FPGA Region device
  * @parent: device parent
@@ -216,7 +229,7 @@ fpga_region_register_full(struct device *parent, const struct fpga_region_info *
 	mutex_init(&region->mutex);
 	INIT_LIST_HEAD(&region->bridge_list);
 
-	region->dev.class = fpga_region_class;
+	region->dev.class = &fpga_region_class;
 	region->dev.parent = parent;
 	region->dev.of_node = parent->of_node;
 	region->dev.id = id;
@@ -279,33 +292,18 @@ void fpga_region_unregister(struct fpga_region *region)
 }
 EXPORT_SYMBOL_GPL(fpga_region_unregister);
 
-static void fpga_region_dev_release(struct device *dev)
-{
-	struct fpga_region *region = to_fpga_region(dev);
-
-	ida_free(&fpga_region_ida, region->dev.id);
-	kfree(region);
-}
-
 /**
  * fpga_region_init - init function for fpga_region class
  * Creates the fpga_region class and registers a reconfig notifier.
  */
 static int __init fpga_region_init(void)
 {
-	fpga_region_class = class_create("fpga_region");
-	if (IS_ERR(fpga_region_class))
-		return PTR_ERR(fpga_region_class);
-
-	fpga_region_class->dev_groups = fpga_region_groups;
-	fpga_region_class->dev_release = fpga_region_dev_release;
-
-	return 0;
+	return class_register(&fpga_region_class);
 }
 
 static void __exit fpga_region_exit(void)
 {
-	class_destroy(fpga_region_class);
+	class_unregister(&fpga_region_class);
 	ida_destroy(&fpga_region_ida);
 }
 
