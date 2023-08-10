@@ -150,25 +150,19 @@ static void mcf_edma_irq_free(struct platform_device *pdev,
 
 	res = platform_get_resource_byname(pdev,
 			IORESOURCE_IRQ, "edma-tx-00-15");
-	if (res) {
-		for (irq = res->start; irq <= res->end; irq++)
-			free_irq(irq, mcf_edma);
-	}
+	for (irq = res->start; irq <= res->end; irq++)
+		free_irq(irq, mcf_edma);
 
 	res = platform_get_resource_byname(pdev,
 			IORESOURCE_IRQ, "edma-tx-16-55");
-	if (res) {
-		for (irq = res->start; irq <= res->end; irq++)
-			free_irq(irq, mcf_edma);
-	}
+	for (irq = res->start; irq <= res->end; irq++)
+		free_irq(irq, mcf_edma);
 
 	irq = platform_get_irq_byname(pdev, "edma-tx-56-63");
-	if (irq != -ENXIO)
-		free_irq(irq, mcf_edma);
+	free_irq(irq, mcf_edma);
 
 	irq = platform_get_irq_byname(pdev, "edma-err");
-	if (irq != -ENXIO)
-		free_irq(irq, mcf_edma);
+	free_irq(irq, mcf_edma);
 }
 
 static struct fsl_edma_drvdata mcf_data = {
