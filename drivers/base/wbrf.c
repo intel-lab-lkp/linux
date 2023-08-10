@@ -6,9 +6,25 @@
  */
 
 #include <linux/wbrf.h>
+#include <linux/acpi_amd_wbrf.h>
 
 static BLOCKING_NOTIFIER_HEAD(wbrf_chain_head);
+
 static DEFINE_MUTEX(wbrf_mutex);
+
+static struct exclusion_range_pool {
+	struct exclusion_range	band_list[MAX_NUM_OF_WBRF_RANGES];
+	u64			ref_counter[MAX_NUM_OF_WBRF_RANGES];
+} wbrf_pool;
+
+enum WBRF_SUPPORT_CHECK {
+	WBRF_SUPPORT_UNCHECKED,
+	WBRF_SUPPORT_NONE,
+	WBRF_SUPPORT_GENERIC,
+	WBRF_SUPPORT_OTHERS,
+};
+static atomic_t wbrf_support_check = ATOMIC_INIT(WBRF_SUPPORT_UNCHECKED);
+
 static enum WBRF_POLICY_MODE {
 	WBRF_POLICY_FORCE_DISABLE,
 	WBRF_POLICY_AUTO,
@@ -29,11 +45,6 @@ static int __init parse_wbrf_policy_mode(char *p)
 	return 0;
 }
 early_param("wbrf", parse_wbrf_policy_mode);
-
-static struct exclusion_range_pool {
-	struct exclusion_range	band_list[MAX_NUM_OF_WBRF_RANGES];
-	u64			ref_counter[MAX_NUM_OF_WBRF_RANGES];
-} wbrf_pool;
 
 static int _wbrf_add_exclusion_ranges(struct wbrf_ranges_in *in)
 {
@@ -121,20 +132,45 @@ static int _wbrf_retrieve_exclusion_ranges(struct wbrf_ranges_out *out)
  *
  * WBRF is used to mitigate devices that cause harmonic interference.
  * This function will determine if the platform is able to support the
- * WBRF features.
+ * WBRF features. For example, for AMD ACPI implementation it should say
+ * true only when the necessary AML code/logic supporting wbrf feature
+ * available.
  */
-static bool wbrf_supported_system(void)
+static enum WBRF_SUPPORT_CHECK wbrf_supported_system(void)
 {
+	enum WBRF_SUPPORT_CHECK support_check;
+
+	support_check = atomic_read(&wbrf_support_check);
+	if (support_check != WBRF_SUPPORT_UNCHECKED)
+		return support_check;
+
+	support_check = WBRF_SUPPORT_NONE;
+
 	switch (wbrf_policy) {
 	case WBRF_POLICY_FORCE_ENABLE:
-		return true;
+#if IS_ENABLED(CONFIG_WBRF_AMD_ACPI)
+		if (acpi_amd_wbrf_supported_system()) {
+			support_check = WBRF_SUPPORT_OTHERS;
+			break;
+		}
+		pr_warn_once("Force WBRF w/o acpi_amd_wbrf support\n");
+		pr_warn_once("Fall back to generic version\n");
+#endif
+		support_check = WBRF_SUPPORT_GENERIC;
+		break;
 	case WBRF_POLICY_FORCE_DISABLE:
-		return false;
+		break;
 	case WBRF_POLICY_AUTO:
-		return false;
+#if IS_ENABLED(CONFIG_WBRF_AMD_ACPI)
+		if (acpi_amd_wbrf_supported_system())
+			support_check = WBRF_SUPPORT_OTHERS;
+#endif
+		break;
 	}
 
-	return false;
+	atomic_set(&wbrf_support_check, support_check);
+
+	return support_check;
 }
 
 /**
@@ -144,13 +180,22 @@ static bool wbrf_supported_system(void)
  *
  * WBRF is used to mitigate devices that cause harmonic interference.
  * This function will determine if this device should report such frequencies.
+ * For example, for AMD ACPI implementation it should say true only when the
+ * necessary AML code/logic supporting wbrf feature available for this device.
  */
 bool wbrf_supported_producer(struct device *dev)
 {
-	if (!wbrf_supported_system())
+	switch (wbrf_supported_system()) {
+	case WBRF_SUPPORT_GENERIC:
+		return true;
+	case WBRF_SUPPORT_OTHERS:
+#if IS_ENABLED(CONFIG_WBRF_AMD_ACPI)
+		return acpi_amd_wbrf_supported_producer(dev);
+#endif
+		fallthrough;
+	default:
 		return false;
-
-	return true;
+	}
 }
 EXPORT_SYMBOL_GPL(wbrf_supported_producer);
 
@@ -166,11 +211,22 @@ EXPORT_SYMBOL_GPL(wbrf_supported_producer);
 int wbrf_add_exclusion(struct device *dev,
 		       struct wbrf_ranges_in *in)
 {
-	int r;
+	int r = -ENODEV;
 
 	mutex_lock(&wbrf_mutex);
 
-	r = _wbrf_add_exclusion_ranges(in);
+	switch (wbrf_supported_system()) {
+	case WBRF_SUPPORT_OTHERS:
+#if IS_ENABLED(CONFIG_WBRF_AMD_ACPI)
+		r = acpi_amd_wbrf_add_exclusion(dev, in);
+#endif
+		break;
+	case WBRF_SUPPORT_GENERIC:
+		r = _wbrf_add_exclusion_ranges(in);
+		break;
+	default:
+		break;
+	}
 
 	mutex_unlock(&wbrf_mutex);
 	if (r)
@@ -194,11 +250,22 @@ EXPORT_SYMBOL_GPL(wbrf_add_exclusion);
 int wbrf_remove_exclusion(struct device *dev,
 			  struct wbrf_ranges_in *in)
 {
-	int r;
+	int r = -ENODEV;
 
 	mutex_lock(&wbrf_mutex);
 
-	r = _wbrf_remove_exclusion_ranges(in);
+	switch (wbrf_supported_system()) {
+	case WBRF_SUPPORT_OTHERS:
+#if IS_ENABLED(CONFIG_WBRF_AMD_ACPI)
+		r  = acpi_amd_wbrf_remove_exclusion(dev, in);
+#endif
+		break;
+	case WBRF_SUPPORT_GENERIC:
+		r = _wbrf_remove_exclusion_ranges(in);
+		break;
+	default:
+		break;
+	}
 
 	mutex_unlock(&wbrf_mutex);
 	if (r)
@@ -217,14 +284,23 @@ EXPORT_SYMBOL_GPL(wbrf_remove_exclusion);
  *
  * WBRF is used to mitigate devices that cause harmonic interference.
  * This function will determine if this device should react to reports from
- * other devices for such frequencies.
+ * other devices for such frequencies. For example, for AMD ACPI implementation
+ * it should say true only when the necessary AML code/logic supporting wbrf
+ * feature available for this device.
  */
 bool wbrf_supported_consumer(struct device *dev)
 {
-	if (!wbrf_supported_system())
+	switch (wbrf_supported_system()) {
+	case WBRF_SUPPORT_GENERIC:
+		return true;
+	case WBRF_SUPPORT_OTHERS:
+#if IS_ENABLED(CONFIG_WBRF_AMD_ACPI)
+		return acpi_amd_wbrf_supported_consumer(dev);
+#endif
+		fallthrough;
+	default:
 		return false;
-
-	return true;
+	}
 }
 EXPORT_SYMBOL_GPL(wbrf_supported_consumer);
 
@@ -267,11 +343,22 @@ EXPORT_SYMBOL_GPL(wbrf_unregister_notifier);
 int wbrf_retrieve_exclusions(struct device *dev,
 			     struct wbrf_ranges_out *out)
 {
-	int r;
+	int r = -ENODEV;
 
 	mutex_lock(&wbrf_mutex);
 
-	r = _wbrf_retrieve_exclusion_ranges(out);
+	switch (wbrf_supported_system()) {
+	case WBRF_SUPPORT_OTHERS:
+#if IS_ENABLED(CONFIG_WBRF_AMD_ACPI)
+		r = acpi_amd_wbrf_retrieve_exclusions(dev, out);
+#endif
+		break;
+	case WBRF_SUPPORT_GENERIC:
+		r = _wbrf_retrieve_exclusion_ranges(out);
+		break;
+	default:
+		break;
+	}
 
 	mutex_unlock(&wbrf_mutex);
 
