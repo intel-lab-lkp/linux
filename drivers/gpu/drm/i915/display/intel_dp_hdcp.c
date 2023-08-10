@@ -571,7 +571,7 @@ int intel_dp_hdcp2_read_msg(struct intel_connector *connector,
 		offset += ret;
 	}
 
-	if (hdcp2_msg_data->msg_read_timeout > 0) {
+	if (hdcp2_msg_data->msg_read_timeout > 0 && !aux->is_remote) {
 		msg_expired = ktime_after(ktime_get_raw(), msg_end);
 		if (msg_expired) {
 			drm_dbg_kms(&i915->drm, "msg_id %d, entire msg read timeout(mSec): %d\n",
