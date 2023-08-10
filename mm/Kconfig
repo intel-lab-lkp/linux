@@ -1243,4 +1243,14 @@ config LOCK_MM_AND_FIND_VMA
 
 source "mm/damon/Kconfig"
 
+config LARGE_ANON_FOLIO
+	bool "Allocate large folios for anonymous memory"
+	depends on TRANSPARENT_HUGEPAGE
+	default n
+	help
+	  Use large (bigger than order-0) folios to back anonymous memory where
+	  possible, even for pte-mapped memory. This reduces the number of page
+	  faults, as well as other per-page overheads to improve performance for
+	  many workloads.
+
 endmenu

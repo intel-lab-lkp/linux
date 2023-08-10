@@ -4073,6 +4073,123 @@ out_release:
 	return ret;
 }
 
+static bool vmf_pte_range_changed(struct vm_fault *vmf, int nr_pages)
+{
+	int i;
+
+	if (nr_pages == 1)
+		return vmf_pte_changed(vmf);
+
+	for (i = 0; i < nr_pages; i++) {
+		if (!pte_none(ptep_get_lockless(vmf->pte + i)))
+			return true;
+	}
+
+	return false;
+}
+
+#ifdef CONFIG_LARGE_ANON_FOLIO
+#define ANON_FOLIO_MAX_ORDER_UNHINTED \
+		(ilog2(max_t(unsigned long, SZ_64K, PAGE_SIZE)) - PAGE_SHIFT)
+
+static int anon_folio_order(struct vm_area_struct *vma)
+{
+	int order;
+
+	/*
+	 * If the vma is eligible for thp, allocate a large folio of the size
+	 * preferred by the arch. Or if the arch requested a very small size or
+	 * didn't request a size, then use PAGE_ALLOC_COSTLY_ORDER, which still
+	 * meets the arch's requirements but means we still take advantage of SW
+	 * optimizations (e.g. fewer page faults).
+	 *
+	 * If the vma isn't eligible for thp, take the arch-preferred size and
+	 * limit it to ANON_FOLIO_MAX_ORDER_UNHINTED. This ensures workloads
+	 * that have not explicitly opted-in take benefit while capping the
+	 * potential for internal fragmentation.
+	 */
+
+	order = max(arch_wants_pte_order(), PAGE_ALLOC_COSTLY_ORDER);
+
+	if (!hugepage_vma_check(vma, vma->vm_flags, false, true, true))
+		order = min(order, ANON_FOLIO_MAX_ORDER_UNHINTED);
+
+	return order;
+}
+
+static struct folio *alloc_anon_folio(struct vm_fault *vmf)
+{
+	int i;
+	gfp_t gfp;
+	pte_t *pte;
+	unsigned long addr;
+	struct folio *folio;
+	struct vm_area_struct *vma = vmf->vma;
+	int prefer = anon_folio_order(vma);
+	int orders[] = {
+		prefer,
+		prefer > PAGE_ALLOC_COSTLY_ORDER ? PAGE_ALLOC_COSTLY_ORDER : 0,
+		0,
+	};
+
+	/*
+	 * If uffd is active for the vma we need per-page fault fidelity to
+	 * maintain the uffd semantics.
+	 */
+	if (userfaultfd_armed(vma))
+		goto fallback;
+
+	/*
+	 * If hugepages are explicitly disabled for the vma (either
+	 * MADV_NOHUGEPAGE or prctl) fallback to order-0. Failure to do this
+	 * breaks correctness for user space. We ignore the sysfs global knob.
+	 */
+	if (!hugepage_vma_check(vma, vma->vm_flags, false, true, false))
+		goto fallback;
+
+	for (i = 0; orders[i]; i++) {
+		addr = ALIGN_DOWN(vmf->address, PAGE_SIZE << orders[i]);
+		if (addr >= vma->vm_start &&
+		    addr + (PAGE_SIZE << orders[i]) <= vma->vm_end)
+			break;
+	}
+
+	if (!orders[i])
+		goto fallback;
+
+	pte = pte_offset_map(vmf->pmd, vmf->address & PMD_MASK);
+	if (!pte)
+		return ERR_PTR(-EAGAIN);
+
+	for (; orders[i]; i++) {
+		addr = ALIGN_DOWN(vmf->address, PAGE_SIZE << orders[i]);
+		vmf->pte = pte + pte_index(addr);
+		if (!vmf_pte_range_changed(vmf, 1 << orders[i]))
+			break;
+	}
+
+	vmf->pte = NULL;
+	pte_unmap(pte);
+
+	gfp = vma_thp_gfp_mask(vma);
+
+	for (; orders[i]; i++) {
+		addr = ALIGN_DOWN(vmf->address, PAGE_SIZE << orders[i]);
+		folio = vma_alloc_folio(gfp, orders[i], vma, addr, true);
+		if (folio) {
+			clear_huge_page(&folio->page, addr, 1 << orders[i]);
+			return folio;
+		}
+	}
+
+fallback:
+	return vma_alloc_zeroed_movable_folio(vma, vmf->address);
+}
+#else
+#define alloc_anon_folio(vmf) \
+		vma_alloc_zeroed_movable_folio((vmf)->vma, (vmf)->address)
+#endif
+
 /*
  * We enter with non-exclusive mmap_lock (to exclude vma changes,
  * but allow concurrent faults), and pte mapped but not yet locked.
@@ -4080,6 +4197,9 @@ out_release:
  */
 static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
 {
+	int i;
+	int nr_pages = 1;
+	unsigned long addr = vmf->address;
 	bool uffd_wp = vmf_orig_pte_uffd_wp(vmf);
 	struct vm_area_struct *vma = vmf->vma;
 	struct folio *folio;
@@ -4124,9 +4244,14 @@ static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
 	/* Allocate our own private page. */
 	if (unlikely(anon_vma_prepare(vma)))
 		goto oom;
-	folio = vma_alloc_zeroed_movable_folio(vma, vmf->address);
+	folio = alloc_anon_folio(vmf);
+	if (IS_ERR(folio))
+		return 0;
 	if (!folio)
 		goto oom;
+
+	nr_pages = folio_nr_pages(folio);
+	addr = ALIGN_DOWN(vmf->address, nr_pages * PAGE_SIZE);
 
 	if (mem_cgroup_charge(folio, vma->vm_mm, GFP_KERNEL))
 		goto oom_free_page;
@@ -4144,12 +4269,12 @@ static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
 	if (vma->vm_flags & VM_WRITE)
 		entry = pte_mkwrite(pte_mkdirty(entry));
 
-	vmf->pte = pte_offset_map_lock(vma->vm_mm, vmf->pmd, vmf->address,
-			&vmf->ptl);
+	vmf->pte = pte_offset_map_lock(vma->vm_mm, vmf->pmd, addr, &vmf->ptl);
 	if (!vmf->pte)
 		goto release;
-	if (vmf_pte_changed(vmf)) {
-		update_mmu_tlb(vma, vmf->address, vmf->pte);
+	if (vmf_pte_range_changed(vmf, nr_pages)) {
+		for (i = 0; i < nr_pages; i++)
+			update_mmu_tlb(vma, addr + PAGE_SIZE * i, vmf->pte + i);
 		goto release;
 	}
 
@@ -4164,16 +4289,17 @@ static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
 		return handle_userfault(vmf, VM_UFFD_MISSING);
 	}
 
-	inc_mm_counter(vma->vm_mm, MM_ANONPAGES);
-	folio_add_new_anon_rmap(folio, vma, vmf->address);
+	folio_ref_add(folio, nr_pages - 1);
+	add_mm_counter(vma->vm_mm, MM_ANONPAGES, nr_pages);
+	folio_add_new_anon_rmap(folio, vma, addr);
 	folio_add_lru_vma(folio, vma);
 setpte:
 	if (uffd_wp)
 		entry = pte_mkuffd_wp(entry);
-	set_pte_at(vma->vm_mm, vmf->address, vmf->pte, entry);
+	set_ptes(vma->vm_mm, addr, vmf->pte, entry, nr_pages);
 
 	/* No need to invalidate - it was non-present before */
-	update_mmu_cache_range(vmf, vma, vmf->address, vmf->pte, 1);
+	update_mmu_cache_range(vmf, vma, addr, vmf->pte, nr_pages);
 unlock:
 	if (vmf->pte)
 		pte_unmap_unlock(vmf->pte, vmf->ptl);
