@@ -163,6 +163,7 @@ uint amdgpu_force_long_training;
 int amdgpu_lbpw = -1;
 int amdgpu_compute_multipipe = -1;
 int amdgpu_gpu_recovery = -1; /* auto */
+bool amdgpu_soft_recovery = true;
 int amdgpu_emu_mode;
 uint amdgpu_smu_memory_pool_size;
 int amdgpu_smu_pptable_id = -1;
@@ -539,6 +540,14 @@ module_param_named(compute_multipipe, amdgpu_compute_multipipe, int, 0444);
  */
 MODULE_PARM_DESC(gpu_recovery, "Enable GPU recovery mechanism, (1 = enable, 0 = disable, -1 = auto)");
 module_param_named(gpu_recovery, amdgpu_gpu_recovery, int, 0444);
+
+/**
+ * DOC: gpu_soft_recovery (bool)
+ * Set true to allow the driver to try soft recoveries if a job get stuck. Set
+ * to false to always force a GPU reset during recovery.
+ */
+MODULE_PARM_DESC(gpu_soft_recovery, "Enable GPU soft recovery mechanism (default: true)");
+module_param_named(gpu_soft_recovery, amdgpu_soft_recovery, bool, 0644);
 
 /**
  * DOC: emu_mode (int)
