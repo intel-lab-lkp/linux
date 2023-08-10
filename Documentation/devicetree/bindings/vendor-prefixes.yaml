@@ -933,6 +933,8 @@ patternProperties:
     description: Netronix, Inc.
   "^netxeon,.*":
     description: Shenzhen Netxeon Technology CO., LTD
+  "^newdisplay,.*":
+    description: ShenZhen New Display Co., Limited
   "^neweast,.*":
     description: Guangdong Neweast Optoelectronics CO., LTD
   "^newhaven,.*":
