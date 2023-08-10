@@ -5958,8 +5958,8 @@ static void stmmac_poll_controller(struct net_device *dev)
 		for (i = 0; i < priv->plat->tx_queues_to_use; i++)
 			stmmac_msi_intr_tx(0, &priv->dma_conf.tx_queue[i]);
 	} else {
-		disable_irq(dev->irq);
-		stmmac_interrupt(dev->irq, dev);
+		if (disable_hardirq(dev->irq))
+			stmmac_interrupt(dev->irq, dev);
 		enable_irq(dev->irq);
 	}
 }
