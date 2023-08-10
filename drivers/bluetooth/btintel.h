@@ -137,11 +137,9 @@ struct intel_offload_use_cases {
 	__u8	preset[8];
 } __packed;
 
-struct btintel_loc_aware_reg {
-	__le32 mcc;
-	__le32 sel;
-	__le32 delta;
-} __packed;
+struct hci_ppag_enable_cmd {
+	u32 ppag_enable_flags;
+};
 
 #define INTEL_TLV_TYPE_ID		0x01
 
