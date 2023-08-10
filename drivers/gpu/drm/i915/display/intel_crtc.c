@@ -389,8 +389,13 @@ fail:
 	return ret;
 }
 
-static bool intel_crtc_needs_vblank_work(const struct intel_crtc_state *crtc_state)
+static bool intel_crtc_needs_vblank_work(const struct intel_atomic_state *state,
+					 const struct intel_crtc_state *crtc_state)
 {
+	/* Always init for legacy cursor update, so we can sync on teardown */
+	if (state->base.legacy_cursor_update)
+		return true;
+
 	return crtc_state->hw.active &&
 		!intel_crtc_needs_modeset(crtc_state) &&
 		!crtc_state->preload_luts &&
@@ -438,7 +443,7 @@ void intel_wait_for_vblank_workers(struct intel_atomic_state *state)
 	int i;
 
 	for_each_new_intel_crtc_in_state(state, crtc, crtc_state, i) {
-		if (!intel_crtc_needs_vblank_work(crtc_state))
+		if (!intel_crtc_needs_vblank_work(state, crtc_state))
 			continue;
 
 		drm_vblank_work_flush(&crtc_state->vblank_work);
@@ -470,6 +475,7 @@ static int intel_mode_vblank_start(const struct drm_display_mode *mode)
 
 /**
  * intel_pipe_update_start() - start update of a set of display registers
+ * @state: the intel atomic state
  * @new_crtc_state: the new crtc state
  *
  * Mark the start of an update to pipe registers that should be updated
@@ -480,7 +486,8 @@ static int intel_mode_vblank_start(const struct drm_display_mode *mode)
  * until a subsequent call to intel_pipe_update_end(). That is done to
  * avoid random delays.
  */
-void intel_pipe_update_start(struct intel_crtc_state *new_crtc_state)
+void intel_pipe_update_start(struct intel_atomic_state *state,
+			     struct intel_crtc_state *new_crtc_state)
 {
 	struct intel_crtc *crtc = to_intel_crtc(new_crtc_state->uapi.crtc);
 	struct drm_i915_private *dev_priv = to_i915(crtc->base.dev);
@@ -497,7 +504,7 @@ void intel_pipe_update_start(struct intel_crtc_state *new_crtc_state)
 	if (new_crtc_state->do_async_flip)
 		return;
 
-	if (intel_crtc_needs_vblank_work(new_crtc_state))
+	if (intel_crtc_needs_vblank_work(state, new_crtc_state))
 		intel_crtc_vblank_work_init(new_crtc_state);
 
 	if (new_crtc_state->vrr.enable) {
@@ -631,13 +638,15 @@ static void dbg_vblank_evade(struct intel_crtc *crtc, ktime_t end) {}
 
 /**
  * intel_pipe_update_end() - end update of a set of display registers
+ * @state: the intel atomic state
  * @new_crtc_state: the new crtc state
  *
  * Mark the end of an update started with intel_pipe_update_start(). This
  * re-enables interrupts and verifies the update was actually completed
  * before a vblank.
  */
-void intel_pipe_update_end(struct intel_crtc_state *new_crtc_state)
+void intel_pipe_update_end(struct intel_atomic_state *state,
+			   struct intel_crtc_state *new_crtc_state)
 {
 	struct intel_crtc *crtc = to_intel_crtc(new_crtc_state->uapi.crtc);
 	enum pipe pipe = crtc->pipe;
@@ -665,7 +674,7 @@ void intel_pipe_update_end(struct intel_crtc_state *new_crtc_state)
 	 * Would be slightly nice to just grab the vblank count and arm the
 	 * event outside of the critical section - the spinlock might spin for a
 	 * while ... */
-	if (intel_crtc_needs_vblank_work(new_crtc_state)) {
+	if (intel_crtc_needs_vblank_work(state, new_crtc_state)) {
 		drm_vblank_work_schedule(&new_crtc_state->vblank_work,
 					 drm_crtc_accurate_vblank_count(&crtc->base) + 1,
 					 false);

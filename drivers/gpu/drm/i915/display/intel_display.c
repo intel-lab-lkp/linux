@@ -6604,7 +6604,7 @@ static void intel_update_crtc(struct intel_atomic_state *state,
 	intel_crtc_planes_update_noarm(state, crtc);
 
 	/* Perform vblank evasion around commit operation */
-	intel_pipe_update_start(new_crtc_state);
+	intel_pipe_update_start(state, new_crtc_state);
 
 	commit_pipe_pre_planes(state, crtc);
 
@@ -6612,7 +6612,7 @@ static void intel_update_crtc(struct intel_atomic_state *state,
 
 	commit_pipe_post_planes(state, crtc);
 
-	intel_pipe_update_end(new_crtc_state);
+	intel_pipe_update_end(state, new_crtc_state);
 
 	/*
 	 * We usually enable FIFO underrun interrupts as part of the
@@ -6895,6 +6895,9 @@ static void intel_atomic_cleanup_work(struct work_struct *work)
 	struct intel_crtc *crtc;
 	int i;
 
+	if (state->base.legacy_cursor_update)
+		intel_wait_for_vblank_workers(state);
+
 	for_each_old_intel_crtc_in_state(state, crtc, old_crtc_state, i)
 		intel_color_cleanup_commit(old_crtc_state);
 
@@ -7056,7 +7059,8 @@ static void intel_atomic_commit_tail(struct intel_atomic_state *state)
 	if (state->modeset)
 		intel_set_cdclk_post_plane_update(state);
 
-	intel_wait_for_vblank_workers(state);
+	if (!state->base.legacy_cursor_update)
+		intel_wait_for_vblank_workers(state);
 
 	/* FIXME: We should call drm_atomic_helper_commit_hw_done() here
 	 * already, but still need the state for the delayed optimization. To
