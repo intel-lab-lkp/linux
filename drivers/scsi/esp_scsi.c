@@ -1355,11 +1355,11 @@ static int esp_data_bytes_sent(struct esp *esp, struct esp_cmd_entry *ent,
 			struct esp_cmd_priv *p = ESP_CMD_PRIV(cmd);
 			u8 *ptr;
 
-			ptr = scsi_kmap_atomic_sg(p->cur_sg, p->num_sg,
+			ptr = kmap_sg(p->cur_sg, p->num_sg,
 						  &offset, &count);
 			if (likely(ptr)) {
 				*(ptr + offset) = bval;
-				scsi_kunmap_atomic_sg(ptr);
+				kunmap_sg(ptr);
 			}
 		}
 		bytes_sent += fifo_cnt;
