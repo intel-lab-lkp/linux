@@ -379,27 +379,27 @@ static int dwmac4_get_hw_feature(void __iomem *ioaddr,
 {
 	u32 hw_cap = readl(ioaddr + GMAC_HW_FEATURE0);
 
-	/*  MAC HW feature0 */
-	dma_cap->mbps_10_100 = (hw_cap & GMAC_HW_FEAT_MIISEL);
-	dma_cap->mbps_1000 = (hw_cap & GMAC_HW_FEAT_GMIISEL) >> 1;
-	dma_cap->half_duplex = (hw_cap & GMAC_HW_FEAT_HDSEL) >> 2;
-	dma_cap->vlhash = (hw_cap & GMAC_HW_FEAT_VLHASH) >> 4;
+	/* MAC HW feature0 */
+	dma_cap->vlins = (hw_cap & GMAC_HW_FEAT_SAVLANINS) >> 27;
 	dma_cap->multi_addr = (hw_cap & GMAC_HW_FEAT_ADDMAC) >> 18;
-	dma_cap->pcs = (hw_cap & GMAC_HW_FEAT_PCSSEL) >> 3;
-	dma_cap->sma_mdio = (hw_cap & GMAC_HW_FEAT_SMASEL) >> 5;
-	dma_cap->pmt_remote_wake_up = (hw_cap & GMAC_HW_FEAT_RWKSEL) >> 6;
-	dma_cap->pmt_magic_frame = (hw_cap & GMAC_HW_FEAT_MGKSEL) >> 7;
-	/* MMC */
-	dma_cap->rmon = (hw_cap & GMAC_HW_FEAT_MMCSEL) >> 8;
-	/* IEEE 1588-2008 */
-	dma_cap->atime_stamp = (hw_cap & GMAC_HW_FEAT_TSSEL) >> 12;
+	/* TX and RX csum */
+	dma_cap->rx_coe =  (hw_cap & GMAC_HW_FEAT_RXCOESEL) >> 16;
+	dma_cap->tx_coe = (hw_cap & GMAC_HW_FEAT_TXCOSEL) >> 14;
 	/* 802.3az - Energy-Efficient Ethernet (EEE) */
 	dma_cap->eee = (hw_cap & GMAC_HW_FEAT_EEESEL) >> 13;
-	/* TX and RX csum */
-	dma_cap->tx_coe = (hw_cap & GMAC_HW_FEAT_TXCOSEL) >> 14;
-	dma_cap->rx_coe =  (hw_cap & GMAC_HW_FEAT_RXCOESEL) >> 16;
-	dma_cap->vlins = (hw_cap & GMAC_HW_FEAT_SAVLANINS) >> 27;
+	/* IEEE 1588-2008 */
+	dma_cap->atime_stamp = (hw_cap & GMAC_HW_FEAT_TSSEL) >> 12;
 	dma_cap->arpoffsel = (hw_cap & GMAC_HW_FEAT_ARPOFFSEL) >> 9;
+	/* MMC */
+	dma_cap->rmon = (hw_cap & GMAC_HW_FEAT_MMCSEL) >> 8;
+	dma_cap->pmt_magic_frame = (hw_cap & GMAC_HW_FEAT_MGKSEL) >> 7;
+	dma_cap->pmt_remote_wake_up = (hw_cap & GMAC_HW_FEAT_RWKSEL) >> 6;
+	dma_cap->sma_mdio = (hw_cap & GMAC_HW_FEAT_SMASEL) >> 5;
+	dma_cap->vlhash = (hw_cap & GMAC_HW_FEAT_VLHASH) >> 4;
+	dma_cap->pcs = (hw_cap & GMAC_HW_FEAT_PCSSEL) >> 3;
+	dma_cap->half_duplex = (hw_cap & GMAC_HW_FEAT_HDSEL) >> 2;
+	dma_cap->mbps_1000 = (hw_cap & GMAC_HW_FEAT_GMIISEL) >> 1;
+	dma_cap->mbps_10_100 = (hw_cap & GMAC_HW_FEAT_MIISEL);
 
 	/* MAC HW feature1 */
 	hw_cap = readl(ioaddr + GMAC_HW_FEATURE1);
@@ -408,7 +408,6 @@ static int dwmac4_get_hw_feature(void __iomem *ioaddr,
 	dma_cap->av = (hw_cap & GMAC_HW_FEAT_AVSEL) >> 20;
 	dma_cap->tsoen = (hw_cap & GMAC_HW_TSOEN) >> 18;
 	dma_cap->sphen = (hw_cap & GMAC_HW_FEAT_SPHEN) >> 17;
-
 	dma_cap->addr64 = (hw_cap & GMAC_HW_ADDR64) >> 14;
 	switch (dma_cap->addr64) {
 	case 0:
@@ -424,31 +423,30 @@ static int dwmac4_get_hw_feature(void __iomem *ioaddr,
 		dma_cap->addr64 = 32;
 		break;
 	}
-
 	/* RX and TX FIFO sizes are encoded as log2(n / 128). Undo that by
 	 * shifting and store the sizes in bytes.
 	 */
 	dma_cap->tx_fifo_size = 128 << ((hw_cap & GMAC_HW_TXFIFOSIZE) >> 6);
 	dma_cap->rx_fifo_size = 128 << ((hw_cap & GMAC_HW_RXFIFOSIZE) >> 0);
+
 	/* MAC HW feature2 */
 	hw_cap = readl(ioaddr + GMAC_HW_FEATURE2);
-	/* TX and RX number of channels */
-	dma_cap->number_rx_channel =
-		((hw_cap & GMAC_HW_FEAT_RXCHCNT) >> 12) + 1;
-	dma_cap->number_tx_channel =
-		((hw_cap & GMAC_HW_FEAT_TXCHCNT) >> 18) + 1;
-	/* TX and RX number of queues */
-	dma_cap->number_rx_queues =
-		((hw_cap & GMAC_HW_FEAT_RXQCNT) >> 0) + 1;
-	dma_cap->number_tx_queues =
-		((hw_cap & GMAC_HW_FEAT_TXQCNT) >> 6) + 1;
-	/* PPS output */
-	dma_cap->pps_out_num = (hw_cap & GMAC_HW_FEAT_PPSOUTNUM) >> 24;
-
-	/* IEEE 1588-2002 */
-	dma_cap->time_stamp = 0;
 	/* Number of Auxiliary Snapshot Inputs */
 	dma_cap->aux_snapshot_n = (hw_cap & GMAC_HW_FEAT_AUXSNAPNUM) >> 28;
+	/* PPS output */
+	dma_cap->pps_out_num = (hw_cap & GMAC_HW_FEAT_PPSOUTNUM) >> 24;
+	/* TX and RX number of channels */
+	dma_cap->number_tx_channel =
+		((hw_cap & GMAC_HW_FEAT_TXCHCNT) >> 18) + 1;
+	dma_cap->number_rx_channel =
+		((hw_cap & GMAC_HW_FEAT_RXCHCNT) >> 12) + 1;
+	/* TX and RX number of queues */
+	dma_cap->number_tx_queues =
+		((hw_cap & GMAC_HW_FEAT_TXQCNT) >> 6) + 1;
+	dma_cap->number_rx_queues =
+		((hw_cap & GMAC_HW_FEAT_RXQCNT) >> 0) + 1;
+	/* IEEE 1588-2002 */
+	dma_cap->time_stamp = 0;
 
 	/* MAC HW feature3 */
 	hw_cap = readl(ioaddr + GMAC_HW_FEATURE3);
