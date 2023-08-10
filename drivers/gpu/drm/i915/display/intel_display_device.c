@@ -813,6 +813,15 @@ probe_gmdid_display(struct drm_i915_private *i915, u16 *ver, u16 *rel, u16 *step
 	u32 val;
 	int i;
 
+	/* The caller expects to ver, rel and step to be initialized
+	 * here, and there's no good way to check when there was a
+	 * failure and no_display was returned.  So initialize all these
+	 * values here zero, to be sure.
+	 */
+	*ver = 0;
+	*rel = 0;
+	*step = 0;
+
 	addr = pci_iomap_range(pdev, 0, i915_mmio_reg_offset(GMD_ID_DISPLAY), sizeof(u32));
 	if (!addr) {
 		drm_err(&i915->drm, "Cannot map MMIO BAR to read display GMD_ID\n");
@@ -822,9 +831,10 @@ probe_gmdid_display(struct drm_i915_private *i915, u16 *ver, u16 *rel, u16 *step
 	val = ioread32(addr);
 	pci_iounmap(pdev, addr);
 
-	if (val == 0)
-		/* Platform doesn't have display */
+	if (val == 0) {
+		drm_dbg_kms(&i915->drm, "Device doesn't have display\n");
 		return &no_display;
+	}
 
 	*ver = REG_FIELD_GET(GMD_ID_ARCH_MASK, val);
 	*rel = REG_FIELD_GET(GMD_ID_RELEASE_MASK, val);
@@ -876,7 +886,7 @@ void intel_display_device_info_runtime_init(struct drm_i915_private *i915)
 	BUILD_BUG_ON(BITS_PER_TYPE(display_runtime->port_mask) < I915_MAX_PORTS);
 
 	/* Wa_14011765242: adl-s A0,A1 */
-	if (IS_ADLS_DISPLAY_STEP(i915, STEP_A0, STEP_A2))
+	if (IS_ALDERLAKE_S(i915) && IS_DISPLAY_STEP(i915, STEP_A0, STEP_A2))
 		for_each_pipe(i915, pipe)
 			display_runtime->num_scalers[pipe] = 0;
 	else if (DISPLAY_VER(i915) >= 11) {
