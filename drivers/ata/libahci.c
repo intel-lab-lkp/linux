@@ -679,8 +679,20 @@ static int ahci_scr_write(struct ata_link *link, unsigned int sc_reg, u32 val)
 
 void ahci_start_engine(struct ata_port *ap)
 {
+	struct ahci_host_priv *hpriv = ap->host->private_data;
 	void __iomem *port_mmio = ahci_port_base(ap);
 	u32 tmp;
+
+	/* clear SError */
+	tmp = readl(port_mmio + PORT_SCR_ERR);
+	writel(tmp, port_mmio + PORT_SCR_ERR);
+
+	/* clear port IRQ */
+	tmp = readl(port_mmio + PORT_IRQ_STAT);
+	if (tmp)
+		writel(tmp, port_mmio + PORT_IRQ_STAT);
+
+	writel(1 << ap->port_no, hpriv->mmio + PORT_IRQ_STAT);
 
 	/* start DMA */
 	tmp = readl(port_mmio + PORT_CMD);
