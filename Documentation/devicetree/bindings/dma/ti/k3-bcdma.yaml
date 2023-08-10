@@ -37,11 +37,11 @@ properties:
 
   reg:
     minItems: 3
-    maxItems: 5
+    maxItems: 8
 
   reg-names:
     minItems: 3
-    maxItems: 5
+    maxItems: 8
 
   "#dma-cells":
     const: 3
@@ -161,14 +161,19 @@ allOf:
       properties:
         reg:
           minItems: 5
+          maxItems: 8
 
         reg-names:
+          minItems: 5
           items:
             - const: gcfg
             - const: bchanrt
             - const: rchanrt
             - const: tchanrt
             - const: ringrt
+            - const: cfg
+            - const: tchan
+            - const: rchan
 
       required:
         - ti,sci-rm-range-bchan
@@ -216,12 +221,16 @@ examples:
             main_bcdma: dma-controller@485c0100 {
                 compatible = "ti,am64-dmss-bcdma";
 
-                reg = <0x0 0x485c0100 0x0 0x100>,
-                      <0x0 0x4c000000 0x0 0x20000>,
-                      <0x0 0x4a820000 0x0 0x20000>,
-                      <0x0 0x4aa40000 0x0 0x20000>,
-                      <0x0 0x4bc00000 0x0 0x100000>;
-                reg-names = "gcfg", "bchanrt", "rchanrt", "tchanrt", "ringrt";
+                reg = <0x00 0x485c0100 0x00 0x100>,
+                      <0x00 0x4c000000 0x00 0x20000>,
+                      <0x00 0x4a820000 0x00 0x20000>,
+                      <0x00 0x4aa40000 0x00 0x20000>,
+                      <0x00 0x4bc00000 0x00 0x100000>,
+                      <0x00 0x48600000 0x00 0x8000>,
+                      <0x00 0x484a4000 0x00 0x2000>,
+                      <0x00 0x484c2000 0x00 0x2000>;
+                reg-names = "gcfg", "bchanrt", "rchanrt", "tchanrt", "ringrt",
+                            "cfg", "tchan", "rchan";
                 msi-parent = <&inta_main_dmss>;
                 #dma-cells = <3>;
 
