@@ -1817,7 +1817,8 @@ struct mem_section {
 #define SECTIONS_PER_ROOT	1
 #endif
 
-#define SECTION_NR_TO_ROOT(sec)	((sec) / SECTIONS_PER_ROOT)
+#define SECTION_ROOT_SHIFT        (__builtin_popcount(SECTIONS_PER_ROOT - 1))
+#define SECTION_NR_TO_ROOT(sec)	((sec) >> SECTION_ROOT_SHIFT)
 #define NR_SECTION_ROOTS	DIV_ROUND_UP(NR_MEM_SECTIONS, SECTIONS_PER_ROOT)
 #define SECTION_ROOT_MASK	(SECTIONS_PER_ROOT - 1)
 
