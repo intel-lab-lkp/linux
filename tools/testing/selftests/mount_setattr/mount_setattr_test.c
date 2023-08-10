@@ -400,6 +400,11 @@ FIXTURE_SETUP(mount_setattr)
 	ASSERT_EQ(mount("testing", "/tmp/B/BB", "tmpfs", MS_NOATIME | MS_NODEV,
 			"size=100000,mode=700"), 0);
 
+	ASSERT_EQ(mkdir("/tmp/C", 0777), 0);
+
+	ASSERT_EQ(mount("testing", "/tmp/C", "tmpfs", MS_NOATIME,
+			"size=100000,mode=700"), 0);
+
 	ASSERT_EQ(mount("testing", "/mnt", "tmpfs", MS_NOATIME | MS_NODEV,
 			"size=100000,mode=700"), 0);
 
@@ -1495,6 +1500,55 @@ TEST_F(mount_setattr, mount_attr_nosymfollow)
 	fd = open(NOSYMFOLLOW_SYMLINK, O_RDWR | O_CLOEXEC);
 	ASSERT_GT(fd, 0);
 	ASSERT_EQ(close(fd), 0);
+}
+
+TEST_F(mount_setattr, mount_attr_lock)
+{
+	struct mount_attr attr = {
+		.attr_set = MOUNT_ATTR_RDONLY|MOUNT_ATTR_NOSUID|MOUNT_ATTR_NODEV,
+	};
+
+	ASSERT_EQ(sys_mount_setattr(-1, "/tmp/C", 0, &attr, sizeof(attr)), 0);
+	ASSERT_EQ(prepare_unpriv_mountns(), 0);
+
+	attr.attr_set = 0;
+	attr.attr_clr = MOUNT_ATTR_RDONLY;
+	ASSERT_EQ(sys_mount_setattr(-1, "/tmp/C", 0, &attr, sizeof(attr)), -1);
+	ASSERT_EQ(errno, EPERM);
+
+	attr.attr_clr = MOUNT_ATTR_NOSUID;
+	ASSERT_EQ(sys_mount_setattr(-1, "/tmp/C", 0, &attr, sizeof(attr)), -1);
+	ASSERT_EQ(errno, EPERM);
+
+	attr.attr_clr = MOUNT_ATTR_NODEV;
+	ASSERT_EQ(sys_mount_setattr(-1, "/tmp/C", 0, &attr, sizeof(attr)), -1);
+	ASSERT_EQ(errno, EPERM);
+
+	/* Do not allow changing any atime flags after locking */
+	attr.attr_set = MOUNT_ATTR_RELATIME;
+	attr.attr_clr = MOUNT_ATTR__ATIME;
+	ASSERT_EQ(sys_mount_setattr(-1, "/tmp/C", 0, &attr, sizeof(attr)), -1);
+	ASSERT_EQ(errno, EPERM);
+
+	attr.attr_set = MOUNT_ATTR_STRICTATIME;
+	ASSERT_EQ(sys_mount_setattr(-1, "/tmp/C", 0, &attr, sizeof(attr)), -1);
+	ASSERT_EQ(errno, EPERM);
+
+	attr.attr_set = MOUNT_ATTR_NODIRATIME;
+	ASSERT_EQ(sys_mount_setattr(-1, "/tmp/C", 0, &attr, sizeof(attr)), -1);
+	ASSERT_EQ(errno, EPERM);
+
+	/*
+	 * "re-setting" the atime setting to the same value should work.
+	 * Also, to make sure this isn't a no-op, try making things less permissive
+	 */
+	attr.attr_set = MOUNT_ATTR_NOATIME | MOUNT_ATTR_NOEXEC;
+	ASSERT_EQ(sys_mount_setattr(-1, "/tmp/C", 0, &attr, sizeof(attr)), 0);
+
+	/* We should still be allowed to clear the attribute we set */
+	attr.attr_set = 0;
+	attr.attr_clr = MOUNT_ATTR_NOEXEC;
+	ASSERT_EQ(sys_mount_setattr(-1, "/tmp/C", 0, &attr, sizeof(attr)), 0);
 }
 
 TEST_HARNESS_MAIN
