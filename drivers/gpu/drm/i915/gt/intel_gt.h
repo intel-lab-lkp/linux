@@ -25,6 +25,26 @@ struct drm_printer;
 	GRAPHICS_VER_FULL((gt)->i915) >= (from) && \
 	GRAPHICS_VER_FULL((gt)->i915) <= (until)))
 
+/*
+ * Check that the GT is a graphics GT with a specific IP version and has
+ * a stepping in the range [begin, fixed).  The lower stepping bound is
+ * inclusive, the upper bound is exclusive (corresponding to the first hardware
+ * stepping at which the workaround is no longer needed).  E.g.,
+ *
+ *    IS_GFX_GT_IP_STEP(GFX, IP_VER(12, 70), STEP_A0, STEP_B0)
+ *    IS_GFX_GT_IP_STEP(GFX, IP_VER(12, 71), STEP_B1, STEP_FOREVER)
+ *
+ * "STEP_FOREVER" can be passed as the upper stepping bound for workarounds
+ * that have no "fixed" version for the specified IP version.
+ */
+#define IS_GFX_GT_IP_STEP(gt, ipver, begin, fixed) ( \
+	BUILD_BUG_ON_ZERO((ipver) < IP_VER(2, 0)) + \
+	BUILD_BUG_ON_ZERO((fixed) <= (begin)) + \
+	((gt)->type != GT_MEDIA && \
+	 GRAPHICS_VER_FULL((gt)->i915) == (ipver) && \
+	 INTEL_GRAPHICS_STEP((gt)->i915) >= (begin) && \
+	 INTEL_GRAPHICS_STEP((gt)->i915) < (fixed)))
+
 #define GT_TRACE(gt, fmt, ...) do {					\
 	const struct intel_gt *gt__ __maybe_unused = (gt);		\
 	GEM_TRACE("%s " fmt, dev_name(gt__->i915->drm.dev),		\
