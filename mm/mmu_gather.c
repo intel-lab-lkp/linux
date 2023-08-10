@@ -19,10 +19,6 @@ static bool tlb_next_batch(struct mmu_gather *tlb)
 {
 	struct mmu_gather_batch *batch;
 
-	/* Limit batching if we have delayed rmaps pending */
-	if (tlb->delayed_rmap && tlb->active != &tlb->local)
-		return false;
-
 	batch = tlb->active;
 	if (batch->next) {
 		tlb->active = batch->next;
@@ -48,36 +44,49 @@ static bool tlb_next_batch(struct mmu_gather *tlb)
 }
 
 #ifdef CONFIG_SMP
-static void tlb_flush_rmap_batch(struct mmu_gather_batch *batch, struct vm_area_struct *vma)
+static void tlb_flush_rmap_batch(struct mmu_gather_batch *batch,
+				 unsigned int first,
+				 struct vm_area_struct *vma)
 {
-	for (int i = 0; i < batch->nr; i++) {
+	for (int i = first; i < batch->nr; i++) {
 		struct encoded_page *enc = batch->encoded_pages[i];
+		struct page *page = encoded_page_ptr(enc);
 
-		if (encoded_page_flags(enc)) {
-			struct page *page = encoded_page_ptr(enc);
-			page_remove_rmap(page, vma, false);
-		}
+		page_remove_rmap(page, vma, false);
 	}
 }
 
 /**
- * tlb_flush_rmaps - do pending rmap removals after we have flushed the TLB
+ * tlb_flush_rmaps - do pending rmap removals
  * @tlb: the current mmu_gather
+ * @vma: vm area from which all pages are removed
  *
- * Note that because of how tlb_next_batch() above works, we will
- * never start multiple new batches with pending delayed rmaps, so
- * we only need to walk through the current active batch and the
- * original local one.
+ * Removes rmap from all pages added via (e.g.) __tlb_remove_page_size() since
+ * the last call to tlb_discard_rmaps() or tlb_flush_rmaps(). All of those pages
+ * must have been mapped by vma. Must be called after the pte(s) are cleared,
+ * and before the ptl lock that was held for clearing the pte is released. Pages
+ * are accounted using the order-0 folio (or base page) scheme.
  */
 void tlb_flush_rmaps(struct mmu_gather *tlb, struct vm_area_struct *vma)
 {
-	if (!tlb->delayed_rmap)
-		return;
+	struct mmu_gather_batch *batch = tlb->rmap_pend;
 
-	tlb_flush_rmap_batch(&tlb->local, vma);
-	if (tlb->active != &tlb->local)
-		tlb_flush_rmap_batch(tlb->active, vma);
-	tlb->delayed_rmap = 0;
+	tlb_flush_rmap_batch(batch, tlb->rmap_pend_first, vma);
+
+	for (batch = batch->next; batch && batch->nr; batch = batch->next)
+		tlb_flush_rmap_batch(batch, 0, vma);
+
+	tlb_discard_rmaps(tlb);
+}
+
+/**
+ * tlb_discard_rmaps - discard any pending rmap removals
+ * @tlb: the current mmu_gather
+ */
+void tlb_discard_rmaps(struct mmu_gather *tlb)
+{
+	tlb->rmap_pend = tlb->active;
+	tlb->rmap_pend_first = tlb->active->nr;
 }
 #endif
 
@@ -102,6 +111,7 @@ static void tlb_batch_pages_flush(struct mmu_gather *tlb)
 		} while (batch->nr);
 	}
 	tlb->active = &tlb->local;
+	tlb_discard_rmaps(tlb);
 }
 
 static void tlb_batch_list_free(struct mmu_gather *tlb)
@@ -312,8 +322,9 @@ static void __tlb_gather_mmu(struct mmu_gather *tlb, struct mm_struct *mm,
 	tlb->local.max  = ARRAY_SIZE(tlb->__pages);
 	tlb->active     = &tlb->local;
 	tlb->batch_count = 0;
+	tlb->rmap_pend	= &tlb->local;
+	tlb->rmap_pend_first = 0;
 #endif
-	tlb->delayed_rmap = 0;
 
 	tlb_table_init(tlb);
 #ifdef CONFIG_MMU_GATHER_PAGE_SIZE
