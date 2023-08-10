@@ -113,6 +113,7 @@
 		 ASPEED_I2CD_M_RX_CMD |					       \
 		 ASPEED_I2CD_M_TX_CMD |					       \
 		 ASPEED_I2CD_M_START_CMD)
+#define ASPEED_I2CD_SLAVE_CMDS_MASK			GENMASK(31, 29)
 
 /* 0x18 : I2CD Slave Device Address Register   */
 #define ASPEED_I2CD_DEV_ADDR_MASK			GENMASK(6, 0)
@@ -705,6 +706,22 @@ static int aspeed_i2c_master_xfer(struct i2c_adapter *adap,
 		    (readl(bus->base + ASPEED_I2C_CMD_REG) &
 		     ASPEED_I2CD_BUS_BUSY_STS))
 			aspeed_i2c_recover_bus(bus);
+
+#if IS_ENABLED(CONFIG_I2C_SLAVE)
+		/*
+		 * If master timed out and bus is in slave mode.
+		 * reset the slave mode.
+		 */
+		if (readl(bus->base + ASPEED_I2C_CMD_REG) & ASPEED_I2CD_SLAVE_CMDS_MASK) {
+			spin_lock_irqsave(&bus->lock, flags);
+			u32 func_ctrl_reg_val = readl(bus->base + ASPEED_I2C_FUN_CTRL_REG);
+
+			writel(0, bus->base + ASPEED_I2C_FUN_CTRL_REG);
+			writel(func_ctrl_reg_val, bus->base + ASPEED_I2C_FUN_CTRL_REG);
+			bus->slave_state = ASPEED_I2C_SLAVE_INACTIVE;
+			spin_unlock_irqrestore(&bus->lock, flags);
+		}
+#endif
 
 		/*
 		 * If timed out and the state is still pending, drop the pending
