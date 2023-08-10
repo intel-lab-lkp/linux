@@ -715,6 +715,8 @@ static void __dma_page_dev_to_cpu(struct page *page, unsigned long off,
 
 		if (offset) {
 			left -= folio_size(folio) - offset;
+			if (left <= 0)
+				return;
 			folio = folio_next(folio);
 		}
 
