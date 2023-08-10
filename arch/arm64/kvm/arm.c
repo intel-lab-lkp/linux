@@ -926,8 +926,17 @@ int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu)
 		if (!ret)
 			ret = 1;
 
-		if (ret > 0)
+		if (ret > 0) {
+			/*
+			 * The perf_rotate_context() may rotate the events and
+			 * reprogram PMU with filters for host context.
+			 * So make a request before reentering the guest to
+			 * reconfigurate the event filters for guest context.
+			 */
+			kvm_make_request(KVM_REQ_RELOAD_PMU, vcpu);
+
 			ret = check_vcpu_requests(vcpu);
+		}
 
 		/*
 		 * Preparing the interrupts to be injected also
