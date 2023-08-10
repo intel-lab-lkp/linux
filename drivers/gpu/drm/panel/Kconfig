@@ -194,6 +194,19 @@ config DRM_PANEL_ILITEK_ILI9341
 	  QVGA (240x320) RGB panels. support serial & parallel rgb
 	  interface.
 
+config DRM_PANEL_ILITEK_ILI9806E
+	tristate "Ilitek ILI9806E panel"
+	depends on OF
+	depends on BACKLIGHT_CLASS_DEVICE
+	select VIDEOMODE_HELPERS
+	select DRM_MIPI_DBI
+	help
+	  Say Y here if you want to enable support for LCD panels connected
+	  over SPI and based on the Ilitek ILI9806E controller.
+
+	  The ILI9806E is an LCD controller capable of driving 18-bit a-Si
+	  TFT LCDs up to a resolution of 480x800.
+
 config DRM_PANEL_ILITEK_ILI9881C
 	tristate "Ilitek ILI9881C-based panels"
 	depends on OF
