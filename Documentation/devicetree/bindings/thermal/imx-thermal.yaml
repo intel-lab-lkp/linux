@@ -60,12 +60,18 @@ properties:
   clocks:
     maxItems: 1
 
+  "#thermal-sensor-cells":
+    const: 0
+
 required:
   - compatible
   - interrupts
   - fsl,tempmon
   - nvmem-cells
   - nvmem-cell-names
+
+allOf:
+  - $ref: thermal-sensor.yaml#
 
 additionalProperties: false
 
