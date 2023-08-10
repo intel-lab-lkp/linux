@@ -313,41 +313,99 @@ struct folio {
 		};
 		struct page page;
 	};
+	/*
+	 * Some of the tail page fields (out of 8 WORDs for either 32/64
+	 * bits archs) may not be reused by the folio object because
+	 * they're already been used by the page struct:
+	 *
+	 * |-------+---------------|
+	 * | Index | Field         |
+	 * |-------+---------------|
+	 * |     0 | flag          |
+	 * |     1 | compound_head |
+	 * |     2 | N/A [0]       |
+	 * |     3 | mapping [1]   |
+	 * |     4 | N/A [0]       |
+	 * |     5 | private [2]   |
+	 * |     6 | mapcount      |
+	 * |     7 | N/A [0]       |
+	 * |-------+---------------|
+	 *
+	 * [0] "N/A" marks fields that are available to leverage for the
+	 *     large folio.
+	 *
+	 * [1] "mapping" field is only used for sanity check, see
+	 *     TAIL_MAPPING.  Still valid to use for tail pages 1/2.
+	 *     (for that, see __split_huge_page_tail()).
+	 *
+	 * [2] "private" field is used when THP_SWAP is on (disabled on 32
+	 *     bits, or on hugetlb folios) .
+	 */
 	union {
 		struct {
+	/* WORD 0-1: not valid to reuse */
 			unsigned long _flags_1;
 			unsigned long _head_1;
-	/* public: */
+	/* WORD 2 */
 			unsigned char _folio_dtor;
 			unsigned char _folio_order;
+			unsigned char _holes_1[2];
+#ifdef CONFIG_64BIT
 			atomic_t _entire_mapcount;
+	/* WORD 3 */
 			atomic_t _nr_pages_mapped;
 			atomic_t _pincount;
-#ifdef CONFIG_64BIT
+	/* WORD 4 */
 			unsigned int _folio_nr_pages;
+			unsigned int _reserved_1_1;
+	/* WORD 5-6: not valid to reuse */
+			unsigned long _used_1_2[2];
+	/* WORD 7 */
+			unsigned long _reserved_1_2;
+#else
+	/* WORD 3 */
+			atomic_t _entire_mapcount;
+	/* WORD 4 */
+			atomic_t _nr_pages_mapped;
+	/* WORD 5: only valid for 32bits */
+			atomic_t _pincount;
+	/* WORD 6: not valid to reuse */
+			unsigned long _used_1_2;
+	/* WORD 7 */
+			unsigned long _reserved_1;
 #endif
-	/* private: the union with struct page is transitional */
 		};
+	/* private: the union with struct page is transitional */
 		struct page __page_1;
 	};
 	union {
 		struct {
+	/* WORD 0-1: not valid to reuse */
 			unsigned long _flags_2;
 			unsigned long _head_2;
-	/* public: */
+	/* WORD 2-5 */
 			void *_hugetlb_subpool;
 			void *_hugetlb_cgroup;
 			void *_hugetlb_cgroup_rsvd;
 			void *_hugetlb_hwpoison;
-	/* private: the union with struct page is transitional */
+	/* WORD 6: not valid to reuse */
+			unsigned long _used_2_2;
+	/* WORD 7: */
+			unsigned long _reserved_2_1;
 		};
 		struct {
-			unsigned long _flags_2a;
-			unsigned long _head_2a;
-	/* public: */
+	/* WORD 0-1: not valid to reuse */
+			unsigned long _used_2_3[2];
+	/* WORD 2-3: */
 			struct list_head _deferred_list;
-	/* private: the union with struct page is transitional */
+	/* WORD 4: */
+			unsigned long _reserved_2_2;
+	/* WORD 5-6: not valid to reuse */
+			unsigned long _used_2_4[2];
+	/* WORD 7: */
+			unsigned long _reserved_2_3;
 		};
+	/* private: the union with struct page is transitional */
 		struct page __page_2;
 	};
 };
