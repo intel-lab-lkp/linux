@@ -104,7 +104,9 @@ enum {
 #define ESR_EC_SHIFT		26
 #define ESR_EC_MASK		(ESR_EC_NUM - 1)
 
+#define ESR_EC_UNKNOWN		0x00
 #define ESR_EC_SVC64		0x15
+#define ESR_EC_FPAC		0x1c
 #define ESR_EC_IABT		0x21
 #define ESR_EC_DABT		0x25
 #define ESR_EC_HW_BP_CURRENT	0x31
