@@ -31,6 +31,7 @@
 #include <linux/slab.h>
 #include <linux/crc32.h>
 #include <linux/err.h>
+#include <linux/highmem.h>
 #include "ubi.h"
 
 /* Number of physical eraseblocks reserved for atomic LEB change operation */
@@ -730,6 +731,44 @@ out_unlock:
 	return err;
 }
 
+/*
+ * Basically a copy of scsi_kmap_atomic_sg().
+ * As long scsi_kmap_atomic_sg() is not part of lib/scatterlist.c have
+ * our own version to avoid a dependency on CONFIG_SCSI.
+ */
+static void *ubi_kmap_atomic_sg(struct scatterlist *sgl, int sg_count,
+			  size_t *offset, size_t *len)
+{
+	int i;
+	size_t sg_len = 0, len_complete = 0;
+	struct scatterlist *sg;
+	struct page *page;
+
+	for_each_sg(sgl, sg, sg_count, i) {
+		len_complete = sg_len; /* Complete sg-entries */
+		sg_len += sg->length;
+		if (sg_len > *offset)
+			break;
+	}
+
+	if (WARN_ON_ONCE(i == sg_count))
+		return NULL;
+
+	/* Offset starting from the beginning of first page in this sg-entry */
+	*offset = *offset - len_complete + sg->offset;
+
+	/* Assumption: contiguous pages can be accessed as "page + i" */
+	page = nth_page(sg_page(sg), (*offset >> PAGE_SHIFT));
+	*offset &= ~PAGE_MASK;
+
+	/* Bytes in this sg-entry from *offset to the end of the page */
+	sg_len = PAGE_SIZE - *offset;
+	if (*len > sg_len)
+		*len = sg_len;
+
+	return kmap_atomic(page);
+}
+
 /**
  * ubi_eba_read_leb_sg - read data into a scatter gather list.
  * @ubi: UBI device description object
@@ -748,40 +787,38 @@ int ubi_eba_read_leb_sg(struct ubi_device *ubi, struct ubi_volume *vol,
 			struct ubi_sgl *sgl, int lnum, int offset, int len,
 			int check)
 {
-	int to_read;
-	int ret;
-	struct scatterlist *sg;
+	size_t map_len, map_offset, cur_offset;
+	int ret, to_read = len;
+	char *bounce_buf;
 
-	for (;;) {
-		ubi_assert(sgl->list_pos < UBI_MAX_SG_COUNT);
-		sg = &sgl->sg[sgl->list_pos];
-		if (len < sg->length - sgl->page_pos)
-			to_read = len;
-		else
-			to_read = sg->length - sgl->page_pos;
-
-		ret = ubi_eba_read_leb(ubi, vol, lnum,
-				       sg_virt(sg) + sgl->page_pos, offset,
-				       to_read, check);
-		if (ret < 0)
-			return ret;
-
-		offset += to_read;
-		len -= to_read;
-		if (!len) {
-			sgl->page_pos += to_read;
-			if (sgl->page_pos == sg->length) {
-				sgl->list_pos++;
-				sgl->page_pos = 0;
-			}
-
-			break;
-		}
-
-		sgl->list_pos++;
-		sgl->page_pos = 0;
+	bounce_buf = kvmalloc(to_read, GFP_KERNEL);
+	if (!bounce_buf) {
+		ret = -ENOMEM;
+		goto out;
 	}
 
+	ret = ubi_eba_read_leb(ubi, vol, lnum, bounce_buf, offset, to_read, check);
+	if (ret < 0)
+		goto out;
+
+	cur_offset = 0;
+	while (to_read > 0) {
+		char *dst;
+
+		map_len = to_read;
+		map_offset = cur_offset + sgl->tot_offset;
+
+		dst = ubi_kmap_atomic_sg(sgl->sg, sgl->len, &map_offset, &map_len);
+		memcpy(dst + map_offset, bounce_buf + cur_offset, map_len);
+		kunmap_atomic(dst);
+
+		cur_offset += map_len;
+		to_read -= map_len;
+	}
+
+	ret = 0;
+out:
+	kvfree(bounce_buf);
 	return ret;
 }
 

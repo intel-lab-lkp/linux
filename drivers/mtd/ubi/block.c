@@ -193,13 +193,10 @@ static blk_status_t ubiblock_read(struct request *req)
 
 	blk_mq_start_request(req);
 
-	/*
-	 * It is safe to ignore the return value of blk_rq_map_sg() because
-	 * the number of sg entries is limited to UBI_MAX_SG_COUNT
-	 * and ubi_read_sg() will check that limit.
-	 */
 	ubi_sgl_init(&pdu->usgl);
-	blk_rq_map_sg(req->q, req, pdu->usgl.sg);
+	ret = blk_rq_map_sg(req->q, req, pdu->usgl.sg);
+	ubi_assert(ret > 0 && ret < UBI_MAX_SG_COUNT);
+	pdu->usgl.len = ret;
 
 	while (bytes_left) {
 		/*
@@ -212,7 +209,7 @@ static blk_status_t ubiblock_read(struct request *req)
 		ret = ubi_read_sg(dev->desc, leb, &pdu->usgl, offset, to_read);
 		if (ret < 0)
 			break;
-
+		pdu->usgl.tot_offset += to_read;
 		bytes_left -= to_read;
 		to_read = bytes_left;
 		leb += 1;

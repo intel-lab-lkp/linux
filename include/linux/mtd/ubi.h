@@ -115,8 +115,8 @@ struct ubi_volume_info {
 
 /**
  * struct ubi_sgl - UBI scatter gather list data structure.
- * @list_pos: current position in @sg[]
- * @page_pos: current position in @sg[@list_pos]
+ * @list_len: number of elemtns in @sg[]
+ * @tot_offset: current position the scatter gather list
  * @sg: the scatter gather list itself
  *
  * ubi_sgl is a wrapper around a scatter list which keeps track of the
@@ -124,8 +124,8 @@ struct ubi_volume_info {
  * it can be used across multiple ubi_leb_read_sg() calls.
  */
 struct ubi_sgl {
-	int list_pos;
-	int page_pos;
+	int len;
+	int tot_offset;
 	struct scatterlist sg[UBI_MAX_SG_COUNT];
 };
 
@@ -138,8 +138,8 @@ struct ubi_sgl {
  */
 static inline void ubi_sgl_init(struct ubi_sgl *usgl)
 {
-	usgl->list_pos = 0;
-	usgl->page_pos = 0;
+	usgl->len = 0;
+	usgl->tot_offset = 0;
 }
 
 /**
