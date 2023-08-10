@@ -1460,7 +1460,7 @@ static unsigned long zap_pte_range(struct mmu_gather *tlb,
 				if (unlikely(page_mapcount(page) < 0))
 					print_bad_pte(vma, addr, ptent, page);
 			}
-			if (unlikely(__tlb_remove_page(tlb, page, 0))) {
+			if (unlikely(__tlb_remove_page(tlb, page))) {
 				force_flush = 1;
 				addr += PAGE_SIZE;
 				break;

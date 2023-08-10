@@ -1518,8 +1518,7 @@ static inline void folio_put_refs(struct folio *folio, int refs)
  *
  * release_pages() releases a simple array of multiple pages, and
  * accepts various different forms of said page array: either
- * a regular old boring array of pages, an array of folios, or
- * an array of encoded page pointers.
+ * a regular old boring array of pages or an array of folios.
  *
  * The transparent union syntax for this kind of "any of these
  * argument types" is all kinds of ugly, so look away.
@@ -1527,7 +1526,6 @@ static inline void folio_put_refs(struct folio *folio, int refs)
 typedef union {
 	struct page **pages;
 	struct folio **folios;
-	struct encoded_page **encoded_pages;
 } release_pages_arg __attribute__ ((__transparent_union__));
 
 void release_pages(release_pages_arg, int nr);

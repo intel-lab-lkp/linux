@@ -307,11 +307,11 @@ void free_page_and_swap_cache(struct page *page)
  * Passed an array of pages, drop them all from swapcache and then release
  * them.  They are removed from the LRU and freed if this is their last use.
  */
-void free_pages_and_swap_cache(struct encoded_page **pages, int nr)
+void free_pages_and_swap_cache(struct page **pages, int nr)
 {
 	lru_add_drain();
 	for (int i = 0; i < nr; i++)
-		free_swap_cache(encoded_page_ptr(pages[i]));
+		free_swap_cache(pages[i]);
 	release_pages(pages, nr);
 }
 
