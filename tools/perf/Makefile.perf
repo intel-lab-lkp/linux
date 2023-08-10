@@ -425,19 +425,6 @@ endif
 EXTLIBS := $(call filter-out,$(EXCLUDE_EXTLIBS),$(EXTLIBS))
 LIBS = -Wl,--whole-archive $(PERFLIBS) $(EXTRA_PERFLIBS) -Wl,--no-whole-archive -Wl,--start-group $(EXTLIBS) -Wl,--end-group
 
-ifeq ($(USE_CLANG), 1)
-  LIBS += -L$(shell $(LLVM_CONFIG) --libdir) -lclang-cpp
-endif
-
-ifeq ($(USE_LLVM), 1)
-  LIBLLVM = $(shell $(LLVM_CONFIG) --libs all) $(shell $(LLVM_CONFIG) --system-libs)
-  LIBS += -L$(shell $(LLVM_CONFIG) --libdir) $(LIBLLVM)
-endif
-
-ifeq ($(USE_CXX), 1)
-  LIBS += -lstdc++
-endif
-
 export INSTALL SHELL_PATH
 
 ### Build rules

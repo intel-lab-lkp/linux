@@ -22,7 +22,6 @@ perf-y += evswitch.o
 perf-y += find_bit.o
 perf-y += get_current_dir_name.o
 perf-y += levenshtein.o
-perf-y += llvm-utils.o
 perf-y += mmap.o
 perf-y += memswap.o
 perf-y += parse-events.o
@@ -149,7 +148,6 @@ perf-y += list_sort.o
 perf-y += mutex.o
 perf-y += sharded_mutex.o
 
-perf-$(CONFIG_LIBBPF) += bpf-loader.o
 perf-$(CONFIG_LIBBPF) += bpf_map.o
 perf-$(CONFIG_PERF_BPF_SKEL) += bpf_counter.o
 perf-$(CONFIG_PERF_BPF_SKEL) += bpf_counter_cgroup.o
@@ -167,7 +165,6 @@ ifeq ($(CONFIG_LIBTRACEEVENT),y)
   perf-$(CONFIG_PERF_BPF_SKEL) += bpf_kwork.o
 endif
 
-perf-$(CONFIG_BPF_PROLOGUE) += bpf-prologue.o
 perf-$(CONFIG_LIBELF) += symbol-elf.o
 perf-$(CONFIG_LIBELF) += probe-file.o
 perf-$(CONFIG_LIBELF) += probe-event.o
@@ -231,12 +228,9 @@ perf-y += perf-hooks.o
 perf-$(CONFIG_LIBBPF) += bpf-event.o
 perf-$(CONFIG_LIBBPF) += bpf-utils.o
 
-perf-$(CONFIG_CXX) += c++/
-
 perf-$(CONFIG_LIBPFM4) += pfm.o
 
 CFLAGS_config.o   += -DETC_PERFCONFIG="BUILD_STR($(ETC_PERFCONFIG_SQ))"
-CFLAGS_llvm-utils.o += -DLIBBPF_INCLUDE_DIR="BUILD_STR($(libbpf_include_dir_SQ))"
 
 # avoid compiler warnings in 32-bit mode
 CFLAGS_genelf_debug.o  += -Wno-packed
@@ -301,7 +295,7 @@ else
   flex_flags := -w
 endif
 
-CFLAGS_parse-events-flex.o  += $(flex_flags)
+CFLAGS_parse-events-flex.o  += $(flex_flags) -Wno-unused-label
 CFLAGS_pmu-flex.o           += $(flex_flags)
 CFLAGS_expr-flex.o          += $(flex_flags)
 CFLAGS_bpf-filter-flex.o    += $(flex_flags)
