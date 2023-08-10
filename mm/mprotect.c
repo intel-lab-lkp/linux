@@ -381,7 +381,9 @@ again:
 		/* invoke the mmu notifier if the pmd is populated */
 		if (!range.start) {
 			mmu_notifier_range_init(&range,
-				MMU_NOTIFY_PROTECTION_VMA, 0,
+				MMU_NOTIFY_PROTECTION_VMA,
+				cp_flags & MM_CP_PROT_NUMA ?
+				MMU_NOTIFIER_RANGE_NUMA : 0,
 				vma->vm_mm, addr, end);
 			mmu_notifier_invalidate_range_start(&range);
 		}

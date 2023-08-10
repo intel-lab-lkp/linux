@@ -60,6 +60,7 @@ enum mmu_notifier_event {
 };
 
 #define MMU_NOTIFIER_RANGE_BLOCKABLE (1 << 0)
+#define MMU_NOTIFIER_RANGE_NUMA (1 << 1)
 
 struct mmu_notifier_ops {
 	/*
