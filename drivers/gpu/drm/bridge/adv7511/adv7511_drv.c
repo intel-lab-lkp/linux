@@ -1211,7 +1211,7 @@ static int adv7511_probe(struct i2c_client *i2c)
 	adv7511->status = connector_status_disconnected;
 
 	if (dev->of_node)
-		adv7511->type = (enum adv7511_type)of_device_get_match_data(dev);
+		adv7511->type = (uintptr_t)of_device_get_match_data(dev);
 	else
 		adv7511->type = id->driver_data;
 
