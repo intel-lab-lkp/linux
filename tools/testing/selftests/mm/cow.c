@@ -33,6 +33,7 @@
 static size_t pagesize;
 static int pagemap_fd;
 static size_t thpsize;
+static size_t lafsize;
 static int nr_hugetlbsizes;
 static size_t hugetlbsizes[10];
 static int gup_fd;
@@ -927,6 +928,42 @@ static void run_with_partial_shared_thp(test_fn fn, const char *desc)
 	do_run_with_large(fn, LARGE_RUN_PARTIAL_SHARED, thpsize);
 }
 
+static void run_with_laf(test_fn fn, const char *desc)
+{
+	ksft_print_msg("[RUN] %s ... with large anon folio\n", desc);
+	do_run_with_large(fn, LARGE_RUN_PTE, lafsize);
+}
+
+static void run_with_laf_swap(test_fn fn, const char *desc)
+{
+	ksft_print_msg("[RUN] %s ... with swapped-out large anon folio\n", desc);
+	do_run_with_large(fn, LARGE_RUN_PTE_SWAPOUT, lafsize);
+}
+
+static void run_with_single_pte_of_laf(test_fn fn, const char *desc)
+{
+	ksft_print_msg("[RUN] %s ... with single PTE of large anon folio\n", desc);
+	do_run_with_large(fn, LARGE_RUN_SINGLE_PTE, lafsize);
+}
+
+static void run_with_single_pte_of_laf_swap(test_fn fn, const char *desc)
+{
+	ksft_print_msg("[RUN] %s ... with single PTE of swapped-out large anon folio\n", desc);
+	do_run_with_large(fn, LARGE_RUN_SINGLE_PTE_SWAPOUT, lafsize);
+}
+
+static void run_with_partial_mremap_laf(test_fn fn, const char *desc)
+{
+	ksft_print_msg("[RUN] %s ... with partially mremap()'ed large anon folio\n", desc);
+	do_run_with_large(fn, LARGE_RUN_PARTIAL_MREMAP, lafsize);
+}
+
+static void run_with_partial_shared_laf(test_fn fn, const char *desc)
+{
+	ksft_print_msg("[RUN] %s ... with partially shared large anon folio\n", desc);
+	do_run_with_large(fn, LARGE_RUN_PARTIAL_SHARED, lafsize);
+}
+
 static void run_with_hugetlb(test_fn fn, const char *desc, size_t hugetlbsize)
 {
 	int flags = MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB;
@@ -1105,6 +1142,14 @@ static void run_anon_test_case(struct test_case const *test_case)
 		run_with_partial_mremap_thp(test_case->fn, test_case->desc);
 		run_with_partial_shared_thp(test_case->fn, test_case->desc);
 	}
+	if (lafsize) {
+		run_with_laf(test_case->fn, test_case->desc);
+		run_with_laf_swap(test_case->fn, test_case->desc);
+		run_with_single_pte_of_laf(test_case->fn, test_case->desc);
+		run_with_single_pte_of_laf_swap(test_case->fn, test_case->desc);
+		run_with_partial_mremap_laf(test_case->fn, test_case->desc);
+		run_with_partial_shared_laf(test_case->fn, test_case->desc);
+	}
 	for (i = 0; i < nr_hugetlbsizes; i++)
 		run_with_hugetlb(test_case->fn, test_case->desc,
 				 hugetlbsizes[i]);
@@ -1126,6 +1171,8 @@ static int tests_per_anon_test_case(void)
 
 	if (thpsize)
 		tests += 8;
+	if (lafsize)
+		tests += 6;
 	return tests;
 }
 
@@ -1680,15 +1727,74 @@ static int tests_per_non_anon_test_case(void)
 	return tests;
 }
 
+static size_t large_anon_folio_size(void)
+{
+	/*
+	 * There is no interface to query this. But we know that it must be less
+	 * than thpsize. So we map a thpsize area, aligned to thpsize offset by
+	 * thpsize/2 (to avoid a hugepage being allocated), then touch the first
+	 * page and see how many pages get faulted in.
+	 */
+
+	int max_order = __builtin_ctz(thpsize);
+	size_t mmap_size = thpsize * 3;
+	char *mmap_mem = NULL;
+	int order = 0;
+	char *mem;
+	size_t offset;
+	int ret;
+
+	/* For alignment purposes, we need 2.5x the requested size. */
+	mmap_mem = mmap(NULL, mmap_size, PROT_READ | PROT_WRITE,
+			MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	if (mmap_mem == MAP_FAILED)
+		goto out;
+
+	/* Align the memory area to thpsize then offset it by thpsize/2. */
+	mem = (char *)(((uintptr_t)mmap_mem + thpsize) & ~(thpsize - 1));
+	mem += thpsize / 2;
+
+	/* We might get a bigger large anon folio when MADV_HUGEPAGE is set. */
+	ret = madvise(mem, thpsize, MADV_HUGEPAGE);
+	if (ret)
+		goto out;
+
+	/* Probe the memory to see how much is populated. */
+	mem[0] = 0;
+	for (order = 0; order < max_order; order++) {
+		offset = (1 << order) * pagesize;
+		if (!pagemap_is_populated(pagemap_fd, mem + offset))
+			break;
+	}
+
+out:
+	if (mmap_mem)
+		munmap(mmap_mem, mmap_size);
+
+	if (order == 0)
+		return 0;
+
+	return offset;
+}
+
 int main(int argc, char **argv)
 {
 	int err;
+
+	gup_fd = open("/sys/kernel/debug/gup_test", O_RDWR);
+	pagemap_fd = open("/proc/self/pagemap", O_RDONLY);
+	if (pagemap_fd < 0)
+		ksft_exit_fail_msg("opening pagemap failed\n");
 
 	pagesize = getpagesize();
 	thpsize = read_pmd_pagesize();
 	if (thpsize)
 		ksft_print_msg("[INFO] detected THP size: %zu KiB\n",
 			       thpsize / 1024);
+	lafsize = large_anon_folio_size();
+	if (lafsize)
+		ksft_print_msg("[INFO] detected large anon folio size: %zu KiB\n",
+			       lafsize / 1024);
 	nr_hugetlbsizes = detect_hugetlb_page_sizes(hugetlbsizes,
 						    ARRAY_SIZE(hugetlbsizes));
 	detect_huge_zeropage();
@@ -1697,11 +1803,6 @@ int main(int argc, char **argv)
 	ksft_set_plan(ARRAY_SIZE(anon_test_cases) * tests_per_anon_test_case() +
 		      ARRAY_SIZE(anon_thp_test_cases) * tests_per_anon_thp_test_case() +
 		      ARRAY_SIZE(non_anon_test_cases) * tests_per_non_anon_test_case());
-
-	gup_fd = open("/sys/kernel/debug/gup_test", O_RDWR);
-	pagemap_fd = open("/proc/self/pagemap", O_RDONLY);
-	if (pagemap_fd < 0)
-		ksft_exit_fail_msg("opening pagemap failed\n");
 
 	run_anon_test_cases();
 	run_anon_thp_test_cases();
