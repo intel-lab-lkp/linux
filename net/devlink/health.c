@@ -1250,7 +1250,7 @@ devlink_health_reporter_get_from_cb(struct netlink_callback *cb)
 {
 	const struct genl_dumpit_info *info = genl_dumpit_info(cb);
 	struct devlink_health_reporter *reporter;
-	struct nlattr **attrs = info->attrs;
+	struct nlattr **attrs = info->info.attrs;
 	struct devlink *devlink;
 
 	devlink = devlink_get_from_attrs_lock(sock_net(cb->skb->sk), attrs);
