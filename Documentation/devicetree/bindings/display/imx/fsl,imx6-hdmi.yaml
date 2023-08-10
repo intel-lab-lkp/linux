@@ -22,6 +22,9 @@ properties:
       - fsl,imx6dl-hdmi
       - fsl,imx6q-hdmi
 
+  reg: true
+  interrupts: true
+
   reg-io-width:
     const: 1
 
