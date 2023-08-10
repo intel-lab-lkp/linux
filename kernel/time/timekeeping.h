@@ -28,6 +28,7 @@ extern void update_wall_time(void);
 
 extern raw_spinlock_t jiffies_lock;
 extern seqcount_raw_spinlock_t jiffies_seq;
+extern ktime_t last_jiffies_update;
 
 #define CS_NAME_LEN	32
 
