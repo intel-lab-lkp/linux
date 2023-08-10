@@ -223,15 +223,14 @@ static void fdomain_read_data(struct scsi_cmnd *cmd)
 
 	while ((len = inw(fd->base + REG_FIFO_COUNT)) > 0) {
 		offset = scsi_bufflen(cmd) - scsi_get_resid(cmd);
-		virt = scsi_kmap_atomic_sg(scsi_sglist(cmd), scsi_sg_count(cmd),
-					   &offset, &len);
+		virt = kmap_sg(scsi_sglist(cmd), scsi_sg_count(cmd), &offset, &len);
 		ptr = virt + offset;
 		if (len & 1)
 			*ptr++ = inb(fd->base + REG_FIFO);
 		if (len > 1)
 			insw(fd->base + REG_FIFO, ptr, len >> 1);
 		scsi_set_resid(cmd, scsi_get_resid(cmd) - len);
-		scsi_kunmap_atomic_sg(virt);
+		kunmap_sg(virt);
 	}
 }
 
@@ -250,15 +249,14 @@ static void fdomain_write_data(struct scsi_cmnd *cmd)
 			if (len == 0)
 				break;
 		}
-		virt = scsi_kmap_atomic_sg(scsi_sglist(cmd), scsi_sg_count(cmd),
-					   &offset, &len);
+		virt = kmap_sg(scsi_sglist(cmd), scsi_sg_count(cmd), &offset, &len);
 		ptr = virt + offset;
 		if (len & 1)
 			outb(*ptr++, fd->base + REG_FIFO);
 		if (len > 1)
 			outsw(fd->base + REG_FIFO, ptr, len >> 1);
 		scsi_set_resid(cmd, scsi_get_resid(cmd) - len);
-		scsi_kunmap_atomic_sg(virt);
+		kunmap_sg(virt);
 	}
 }
 
