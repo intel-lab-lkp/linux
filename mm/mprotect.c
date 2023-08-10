@@ -164,6 +164,7 @@ static long change_pte_range(struct mmu_gather *tlb,
 				    !toptier)
 					xchg_page_access_time(page,
 						jiffies_to_msecs(jiffies));
+				mmu_notifier_numa_protect(vma->vm_mm, addr, addr + PAGE_SIZE);
 			}
 
 			oldpte = ptep_modify_prot_start(vma, addr, pte);
