@@ -71,6 +71,23 @@ struct drm_printer;
 #define OVERLAY_NEEDS_PHYSICAL(i915)	(DISPLAY_INFO(i915)->overlay_needs_physical)
 #define SUPPORTS_TV(i915)		(DISPLAY_INFO(i915)->supports_tv)
 
+/*
+ * Check if a device has a specific IP version as well as a stepping within
+ * the specified range [begin, fixed).  The lower bound is inclusive, the upper
+ * bound is exclusive (corresponding to the first hardware stepping when the
+ * workaround is no longer needed).  E.g.,
+ *
+ *    IS_DISPLAY_IP_STEP(GFX, IP_VER(14, 0), STEP_A0, STEP_B2)
+ *    IS_DISPLAY_IP_STEP(GFX, IP_VER(14, 0), STEP_C0, STEP_FOREVER)
+ *
+ * "STEP_FOREVER" can be passed as the upper stepping bound for workarounds that
+ * have no upper bound on steppings of the specified IP version.
+ */
+#define IS_DISPLAY_IP_STEP(__i915, ipver, begin, fixed) \
+	(BUILD_BUG_ON_ZERO((ipver) < IP_VER(2, 0)) + \
+	 DISPLAY_VER_FULL(__i915) == (ipver) && \
+	 IS_DISPLAY_STEP((__i915), (begin), (fixed)))
+
 struct intel_display_runtime_info {
 	struct {
 		u16 ver;
