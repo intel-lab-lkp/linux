@@ -111,7 +111,6 @@ else:
     properties:
       compatible:
         enum:
-          - ti,am62a-c7xv-dsp
           - ti,j721e-c71-dsp
           - ti,j721s2-c71-dsp
   then:
@@ -124,6 +123,20 @@ else:
         items:
           - const: l2sram
           - const: l1dram
+  else:
+    if:
+      properties:
+        compatible:
+          enum:
+            - ti,am62a-c7xv-dsp
+    then:
+      properties:
+        reg:
+          items:
+            - description: Address and Size of the L2 SRAM internal memory region
+        reg-names:
+          items:
+            - const: l2sram
 
 required:
   - compatible
@@ -135,7 +148,6 @@ required:
   - resets
   - firmware-name
   - mboxes
-  - memory-region
 
 unevaluatedProperties: false
 
