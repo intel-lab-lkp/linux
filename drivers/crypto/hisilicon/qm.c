@@ -181,9 +181,9 @@
 #define QM_IFC_INT_DISABLE		BIT(0)
 #define QM_IFC_INT_STATUS_MASK		BIT(0)
 #define QM_IFC_INT_SET_MASK		BIT(0)
-#define QM_WAIT_DST_ACK			10
-#define QM_MAX_PF_WAIT_COUNT		10
-#define QM_MAX_VF_WAIT_COUNT		40
+#define QM_WAIT_DST_ACK			100
+#define QM_MAX_PF_WAIT_COUNT		50
+#define QM_MAX_VF_WAIT_COUNT		100
 #define QM_VF_RESET_WAIT_US            20000
 #define QM_VF_RESET_WAIT_CNT           3000
 #define QM_VF_RESET_WAIT_TIMEOUT_US    \
