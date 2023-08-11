@@ -194,6 +194,25 @@ static void fuse_lookup_init(struct fuse_conn *fc, struct fuse_args *args,
 }
 
 /*
+ * If open atomic is supported by FUSE then use this opportunity
+ * to avoid this lookup and combine lookup + open into a single call.
+ */
+static int fuse_dentry_do_atomic_revalidate(struct dentry *entry,
+					     unsigned int flags,
+					     struct fuse_conn *fc)
+{
+	int ret = 0;
+	if (flags & LOOKUP_OPEN && flags & LOOKUP_ATOMIC_REVALIDATE &&
+	    fc->has_open_atomic) {
+		spin_lock(&entry->d_lock);
+		entry->d_flags |= DCACHE_ATOMIC_OPEN;
+		ret = 1;
+		spin_unlock(&entry->d_lock);
+	}
+	return ret;
+}
+
+/*
  * Check whether the dentry is still valid
  *
  * If the entry validity timeout has expired and the dentry is
@@ -230,24 +249,10 @@ static int fuse_dentry_revalidate(struct dentry *entry, unsigned int flags)
 
 		fm = get_fuse_mount(inode);
 
-		/* If open atomic is supported by FUSE then use this opportunity
-		 * to avoid this lookup and combine lookup + open into a single call.
-		 *
-		 * Note: Fuse detects open atomic implementation automatically.
-		 * Therefore first few call would go into open atomic code path
-		 * , detects that open atomic is implemented or not by setting
-		 * fc->no_open_atomic. In case open atomic is not implemented,
-		 * calls fall back to non-atomic open.
-		 */
-		if (fm->fc->has_open_atomic && flags & LOOKUP_OPEN &&
-		    flags & LOOKUP_ATOMIC_REVALIDATE) {
-			spin_lock(&entry->d_lock);
-			entry->d_flags |= DCACHE_ATOMIC_OPEN;
-			spin_unlock(&entry->d_lock);
-
-			ret = 1;
+		ret = fuse_dentry_do_atomic_revalidate(entry, flags, fm->fc);
+		if (ret)
 			goto out;
-		}
+
 		forget = fuse_alloc_forget();
 		ret = -ENOMEM;
 		if (!forget)
@@ -290,6 +295,16 @@ static int fuse_dentry_revalidate(struct dentry *entry, unsigned int flags)
 	} else if (inode) {
 		fi = get_fuse_inode(inode);
 		if (flags & LOOKUP_RCU) {
+			fm = get_fuse_mount(inode);
+			if (fm->fc->has_open_atomic) {
+				/* Atomic open is preferred, as it does entry
+				 * revalidate and attribute refresh, but
+				 * DCACHE_ATOMIC_OPEN cannot be set in RCU mode
+				 */
+				if (flags & LOOKUP_OPEN)
+					return -ECHILD;
+			}
+
 			if (test_bit(FUSE_I_INIT_RDPLUS, &fi->state))
 				return -ECHILD;
 		} else if (test_and_clear_bit(FUSE_I_INIT_RDPLUS, &fi->state)) {
@@ -297,6 +312,12 @@ static int fuse_dentry_revalidate(struct dentry *entry, unsigned int flags)
 			fuse_advise_use_readdirplus(d_inode(parent));
 			dput(parent);
 		}
+
+		/* revalidate is skipped, but we still want atomic open to
+		 * update attributes during open
+		 */
+		fm = get_fuse_mount(inode);
+		fuse_dentry_do_atomic_revalidate(entry, flags, fm->fc);
 	}
 	ret = 1;
 out:
@@ -941,11 +962,10 @@ static int _fuse_atomic_open(struct inode *dir, struct dentry *entry,
 			 * return -ENOSYS for OPEN_ATOMIC after it was
 			 * aready working
 			 */
-			if (unlikely(fc->has_open_atomic == 1)) {
+			if (unlikely(fc->has_open_atomic == 1))
 				pr_info("fuse server/daemon bug, atomic open "
 					"got -ENOSYS although it was already "
 					"succeeding before.");
-			}
 
 			/* This should better never happen, revalidate
 			 * is missing for this entry*/
