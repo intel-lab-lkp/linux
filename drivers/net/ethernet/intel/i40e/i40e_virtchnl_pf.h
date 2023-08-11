@@ -64,6 +64,8 @@ struct i40evf_channel {
 
 struct i40e_mdd_vf_events {
 	u64 count; /* total count of Rx|Tx events */
+	/* count number of the last printed event */
+	u64 last_printed;
 };
 
 /* VF information structure */
