@@ -252,6 +252,8 @@ static int lp855x_bl_update_status(struct backlight_device *bl)
 	else if (lp->mode == REGISTER_BASED)
 		ret = lp855x_write_byte(lp, lp->cfg->reg_brightness,
 					(u8)brightness);
+	else
+		ret = -EINVAL;
 
 	return ret;
 }
