@@ -6387,10 +6387,23 @@ static void wq_watchdog_timer_fn(struct timer_list *unused)
 	rcu_read_lock();
 
 	for_each_pool(pool, pi) {
+		struct worker *worker;
 		unsigned long pool_ts, touched, ts;
+		bool check_intensive = false;
 
 		pool->cpu_stall = false;
-		if (list_empty(&pool->worklist))
+
+		/* Not sure if we should let WORKER_UNBOUND to
+		 * be included? Since let a unbound work to last
+		 * more than e,g, 30 seconds seem also unacceptable.
+		 */
+		for_each_pool_worker(worker, pool) {
+			if (worker->flags & WORKER_CPU_INTENSIVE) {
+				check_intensive = true;
+				break;
+			}
+		}
+		if (list_empty(&pool->worklist) && !check_intensive)
 			continue;
 
 		/*
