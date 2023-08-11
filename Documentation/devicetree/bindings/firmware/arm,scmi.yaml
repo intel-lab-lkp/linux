@@ -284,35 +284,34 @@ $defs:
 required:
   - compatible
 
-if:
-  properties:
-    compatible:
-      contains:
-        const: arm,scmi
-then:
-  properties:
-    interrupts: false
-    interrupt-names: false
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: arm,scmi
+    then:
+      properties:
+        interrupts: false
+        interrupt-names: false
 
-  required:
-    - mboxes
-    - shmem
+      required:
+        - mboxes
+        - shmem
 
-else:
-  if:
-    properties:
-      compatible:
-        contains:
-          enum:
-            - arm,scmi-smc
-            - arm,scmi-smc-param
-  then:
-    required:
-      - arm,smc-id
-      - shmem
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - arm,scmi-smc
+              - arm,scmi-smc-param
+    then:
+      required:
+        - arm,smc-id
+        - shmem
 
-  else:
-    if:
+  - if:
       properties:
         compatible:
           contains:
