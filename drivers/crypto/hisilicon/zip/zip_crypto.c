@@ -42,6 +42,9 @@
 #define HZIP_ALG_ZLIB				GENMASK(1, 0)
 #define HZIP_ALG_GZIP				GENMASK(3, 2)
 
+static DEFINE_MUTEX(zip_algs_lock);
+static unsigned int zip_available_devs;
+
 static const u8 zlib_head[HZIP_ZLIB_HEAD_SIZE] = {0x78, 0x9c};
 static const u8 gzip_head[HZIP_GZIP_HEAD_SIZE] = {
 	0x1f, 0x8b, 0x08, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x03
@@ -821,19 +824,41 @@ int hisi_zip_register_to_crypto(struct hisi_qm *qm)
 {
 	int ret = 0;
 
+	mutex_lock(&zip_algs_lock);
+	if (zip_available_devs) {
+		zip_available_devs++;
+		goto unlock;
+	}
+
 	ret = hisi_zip_register_zlib(qm);
 	if (ret)
-		return ret;
+		goto unlock;
 
 	ret = hisi_zip_register_gzip(qm);
 	if (ret)
-		hisi_zip_unregister_zlib(qm);
+		goto unreg_zlib;
 
+	zip_available_devs++;
+	mutex_unlock(&zip_algs_lock);
+
+	return 0;
+
+unreg_zlib:
+	hisi_zip_unregister_zlib(qm);
+unlock:
+	mutex_unlock(&zip_algs_lock);
 	return ret;
 }
 
 void hisi_zip_unregister_from_crypto(struct hisi_qm *qm)
 {
+	mutex_lock(&zip_algs_lock);
+	if (--zip_available_devs)
+		goto unlock;
+
 	hisi_zip_unregister_zlib(qm);
 	hisi_zip_unregister_gzip(qm);
+
+unlock:
+	mutex_unlock(&zip_algs_lock);
 }
