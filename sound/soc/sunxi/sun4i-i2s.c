@@ -236,8 +236,33 @@ struct sun4i_i2s_clk_div {
 
 static int sun4i_i2s_read_channel_dins(struct device *dev, struct sun4i_i2s *i2s)
 {
+	struct device_node *np = dev->of_node;
+	int max_channels = ARRAY_SIZE(i2s->channel_dins);
+	int ret;
+
 	/* Use DIN pin 0 by default */
 	memset(i2s->channel_dins, 0, sizeof(i2s->channel_dins));
+
+	if (!np)
+		return 0;
+
+	ret = of_property_read_variable_u8_array(np, "channel-dins",
+						 i2s->channel_dins,
+						 1, max_channels);
+
+	if (ret == -EINVAL)
+		return 0;
+
+	if (ret < 0)
+		return ret;
+
+	for (int i = 0; i < ret; ++i) {
+		u8 din = i2s->channel_dins[i];
+
+		if (din >= i2s->variant->num_din_pins)
+			return -EINVAL;
+	}
+
 	return 0;
 }
 
