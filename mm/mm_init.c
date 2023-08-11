@@ -2378,6 +2378,7 @@ void __init page_alloc_init_late(void)
 	int nid;
 
 #ifdef CONFIG_DEFERRED_STRUCT_PAGE_INIT
+	init_completion(&pgdat_init_all_done_comp);
 
 	/* There will be num_node_state(N_MEMORY) threads */
 	atomic_set(&pgdat_init_n_undone, num_node_state(N_MEMORY));
