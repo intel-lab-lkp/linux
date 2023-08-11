@@ -271,6 +271,7 @@ static int sun4i_i2s_read_channel_slots(struct device *dev, struct sun4i_i2s *i2
 {
 	struct device_node *np = dev->of_node;
 	int max_channels = ARRAY_SIZE(i2s->channel_dins);
+	int slot_max;
 	int ret;
 
 	/* Use a 1:1 mapping by default */
@@ -289,6 +290,16 @@ static int sun4i_i2s_read_channel_slots(struct device *dev, struct sun4i_i2s *i2
 
 	if (ret < 0)
 		return ret;
+
+	for (int i = 0; i < ret; ++i) {
+		int slot = i2s->channel_slots[i];
+
+		if (slot_max < slot)
+			slot_max = slot;
+	}
+
+	/* Add 1 to be inclusive of slot 0 */
+	i2s->slots = slot_max + 1;
 
 	return 0;
 }
