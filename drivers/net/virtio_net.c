@@ -4257,13 +4257,6 @@ static int virtnet_probe(struct virtio_device *vdev)
 		dev->xdp_features |= NETDEV_XDP_ACT_RX_SG;
 	}
 
-	if (virtio_has_feature(vi->vdev, VIRTIO_NET_F_NOTF_COAL)) {
-		vi->intr_coal_rx.max_usecs = 0;
-		vi->intr_coal_tx.max_usecs = 0;
-		vi->intr_coal_tx.max_packets = 0;
-		vi->intr_coal_rx.max_packets = 0;
-	}
-
 	if (virtio_has_feature(vdev, VIRTIO_NET_F_HASH_REPORT))
 		vi->has_rss_hash_report = true;
 
@@ -4337,6 +4330,41 @@ static int virtnet_probe(struct virtio_device *vdev)
 	err = init_vqs(vi);
 	if (err)
 		goto free;
+
+	if (virtio_has_feature(vi->vdev, VIRTIO_NET_F_NOTF_COAL)) {
+		vi->intr_coal_rx.max_usecs = 0;
+		vi->intr_coal_tx.max_usecs = 0;
+		vi->intr_coal_rx.max_packets = 0;
+
+		/* Why is this needed?
+		 * If without this setting, consider that when VIRTIO_NET_F_NOTF_COAL is
+		 * negotiated and napi_tx is initially true: when the user sets non tx-frames
+		 * parameters, such as the following cmd or others,
+		 *		ethtool -C eth0 rx-usecs 10.
+		 * Then
+		 * 1. ethtool_set_coalesce() first calls virtnet_get_coalesce() to get
+		 *    the last parameters except rx-usecs. If tx-frames has never been set before,
+		 *    virtnet_get_coalesce() returns with tx-frames=0 in the parameters.
+		 * 2. virtnet_set_coalesce() is then called, according to 1:
+		 *    ec->tx_max_coalesced_frames=0. Now napi_tx switching condition is met.
+		 * 3. If the device is up, the user setting fails:
+		 *	       "netlink error: Device or resource busy"
+		 * This is not intuitive. Therefore, we keep napi_tx state consistent with
+		 * tx-frames when VIRTIO_NET_F_NOTF_COAL is negotiated. This behavior is
+		 * compatible with before.
+		 */
+		if (vi->sq[0].napi.weight)
+			vi->intr_coal_tx.max_packets = 1;
+		else
+			vi->intr_coal_tx.max_packets = 0;
+	}
+
+	if (virtio_has_feature(vi->vdev, VIRTIO_NET_F_VQ_NOTF_COAL)) {
+		/* The reason is the same as VIRTIO_NET_F_NOTF_COAL. */
+		for (i = 0; i < vi->max_queue_pairs; i++)
+			if (vi->sq[i].napi.weight)
+				vi->sq[i].intr_coal.max_packets = 1;
+	}
 
 #ifdef CONFIG_SYSFS
 	if (vi->mergeable_rx_bufs)
