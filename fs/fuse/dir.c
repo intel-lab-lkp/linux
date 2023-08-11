@@ -806,6 +806,24 @@ no_open:
 	return finish_no_open(file, res);
 }
 
+static struct dentry * fuse_atomic_open_alloc_dentry(struct dentry *entry,
+						     wait_queue_head_t *wq)
+{
+	struct dentry *new;
+	d_drop(entry);
+	new = d_alloc_parallel(entry->d_parent, &entry->d_name,
+			       wq);
+	if (unlikely(IS_ERR(new)))
+		return new;
+
+	/* XXX Can this happen at all and there a way to handle it? */
+	if (unlikely(!d_in_lookup(new))) {
+		dput(new);
+		new = ERR_PTR(-EIO);
+	}
+	return new;
+}
+
 /**
  * Revalidate inode hooked into dentry against freshly acquired
  * attributes. If inode is stale then allocate new dentry and
@@ -837,17 +855,9 @@ fuse_atomic_open_revalidate(struct fuse_conn *fc, struct dentry *entry,
 		struct dentry *new = NULL;
 
 		if (!switched && !d_in_lookup(entry)) {
-			d_drop(entry);
-			new = d_alloc_parallel(entry->d_parent, &entry->d_name,
-					       wq);
-			if (IS_ERR(new))
+			new = fuse_atomic_open_alloc_dentry(entry, wq);
+			if (unlikely(IS_ERR(new)))
 				return new;
-
-			if (unlikely(!d_in_lookup(new))) {
-				dput(new);
-				new = ERR_PTR(-EIO);
-				return new;
-			}
 		}
 
 		fuse_invalidate_entry(entry);
@@ -1001,26 +1011,14 @@ static int _fuse_atomic_open(struct inode *dir, struct dentry *entry,
 
 	/* prevent racing/parallel lookup */
 	if (!(flags & O_CREAT) && !d_in_lookup(entry)) {
-		d_drop(entry);
-		switched_entry = d_alloc_parallel(entry->d_parent,
-						   &entry->d_name, &wq);
-		if (IS_ERR(switched_entry)) {
-			err = PTR_ERR(switched_entry);
-			goto out_free_ff;
-		}
-
-		if (unlikely(!d_in_lookup(switched_entry))) {
-			/* fall back */
-			dput(switched_entry);
-			switched_entry = NULL;
-
+		switched_entry = fuse_atomic_open_alloc_dentry(entry, &wq);
+		if (unlikely(IS_ERR(switched_entry))) {
 			if (!inode) {
 				goto free_and_fallback;
 			} else {
-				/* XXX can this happen at all and is there a
-				 * better way to handle it?
-				 */
-				err = PTR_ERR(new);
+				/* XXX Is there a better way to handle it?
+				 * Especially !d_in_lookup?*/
+				err = PTR_ERR(switched_entry);
 				goto out_free_ff;
 			}
 		}
