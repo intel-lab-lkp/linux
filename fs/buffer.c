@@ -1038,6 +1038,7 @@ static sector_t folio_init_buffers(struct folio *folio,
  * Create the page-cache page that contains the requested block.
  *
  * This is used purely for blockdev mappings.
+ * Will not blocking by allocate folio if gfp is ~__GFP_DIRECT_RECLAIM.
  */
 static int
 grow_dev_page(struct block_device *bdev, sector_t block,
@@ -1050,18 +1051,27 @@ grow_dev_page(struct block_device *bdev, sector_t block,
 	int ret = 0;
 	gfp_t gfp_mask;
 
-	gfp_mask = mapping_gfp_constraint(inode->i_mapping, ~__GFP_FS) | gfp;
+	gfp_mask = mapping_gfp_constraint(inode->i_mapping, ~__GFP_FS);
+	if (gfp == ~__GFP_DIRECT_RECLAIM)
+		gfp_mask &= ~__GFP_DIRECT_RECLAIM;
+	else {
+		gfp_mask |= gfp;
 
-	/*
-	 * XXX: __getblk_slow() can not really deal with failure and
-	 * will endlessly loop on improvised global reclaim.  Prefer
-	 * looping in the allocator rather than here, at least that
-	 * code knows what it's doing.
-	 */
-	gfp_mask |= __GFP_NOFAIL;
+		/*
+		 * XXX: __getblk_slow() can not really deal with failure and
+		 * will endlessly loop on improvised global reclaim.  Prefer
+		 * looping in the allocator rather than here, at least that
+		 * code knows what it's doing.
+		 */
+		gfp_mask |= __GFP_NOFAIL;
+	}
 
 	folio = __filemap_get_folio(inode->i_mapping, index,
 			FGP_LOCK | FGP_ACCESSED | FGP_CREAT, gfp_mask);
+	if (IS_ERR(folio)) {
+		ret = PTR_ERR(folio);
+		goto out;
+	}
 
 	bh = folio_buffers(folio);
 	if (bh) {
@@ -1091,6 +1101,7 @@ done:
 failed:
 	folio_unlock(folio);
 	folio_put(folio);
+out:
 	return ret;
 }
 
