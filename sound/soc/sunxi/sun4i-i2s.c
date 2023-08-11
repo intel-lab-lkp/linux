@@ -217,6 +217,7 @@ struct sun4i_i2s {
 	unsigned int	slots;
 	unsigned int	slot_width;
 	u8	channel_dins[16];
+	u8	channel_slots[16];
 
 	struct snd_dmaengine_dai_dma_data	capture_dma_data;
 	struct snd_dmaengine_dai_dma_data	playback_dma_data;
@@ -262,6 +263,17 @@ static int sun4i_i2s_read_channel_dins(struct device *dev, struct sun4i_i2s *i2s
 		if (din >= i2s->variant->num_din_pins)
 			return -EINVAL;
 	}
+
+	return 0;
+}
+
+static int sun4i_i2s_read_channel_slots(struct device *dev, struct sun4i_i2s *i2s)
+{
+	int max_channels = ARRAY_SIZE(i2s->channel_dins);
+
+	/* Use a 1:1 mapping by default */
+	for (int i = 0; i < max_channels; ++i)
+		i2s->channel_slots[i] = i;
 
 	return 0;
 }
@@ -570,7 +582,7 @@ static void sun50i_h6_write_channel_map(const struct sun4i_i2s *i2s,
 	for (int i = 3; i >= 0; i--) {
 		int channel = channel_start + i;
 		u8 din = i2s->channel_dins[channel];
-		u8 slot = channel; /* Map slot to channel */
+		u8 slot = i2s->channel_slots[channel];
 
 		reg_value <<= 8;
 		reg_value |= (din << 4) | slot;
@@ -1613,6 +1625,11 @@ static int sun4i_i2s_probe(struct platform_device *pdev)
 
 	if (sun4i_i2s_read_channel_dins(&pdev->dev, i2s)) {
 		dev_err(&pdev->dev, "Invalid channel DINs\n");
+		return -EINVAL;
+	}
+
+	if (sun4i_i2s_read_channel_slots(&pdev->dev, i2s)) {
+		dev_err(&pdev->dev, "Invalid channel slots\n");
 		return -EINVAL;
 	}
 
