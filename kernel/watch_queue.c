@@ -33,6 +33,8 @@ MODULE_AUTHOR("Red Hat, Inc.");
 #define WATCH_QUEUE_NOTE_SIZE 128
 #define WATCH_QUEUE_NOTES_PER_PAGE (PAGE_SIZE / WATCH_QUEUE_NOTE_SIZE)
 
+static void put_watch(struct watch *watch);
+
 /*
  * This must be called under the RCU read-lock, which makes
  * sure that the wqueue still exists. It can then take the lock,
@@ -88,24 +90,40 @@ static const struct pipe_buf_operations watch_queue_pipe_buf_ops = {
 };
 
 /*
- * Post a notification to a watch queue.
- *
- * Must be called with the RCU lock for reading, and the
- * watch_queue lock held, which guarantees that the pipe
- * hasn't been released.
+ * Post a notification to a watch queue with RCU lock held.
  */
-static bool post_one_notification(struct watch_queue *wqueue,
+static bool post_one_notification(struct watch *watch,
 				  struct watch_notification *n)
 {
 	void *p;
-	struct pipe_inode_info *pipe = wqueue->pipe;
+	struct watch_queue *wqueue;
+	struct pipe_inode_info *pipe;
 	struct pipe_buffer *buf;
 	struct page *page;
 	unsigned int head, tail, mask, note, offset, len;
 	bool done = false;
+	u32 state;
 
-	if (!pipe)
+	if (!kref_get_unless_zero(&watch->usage))
 		return false;
+	wqueue = rcu_dereference(watch->queue);
+
+	pipe = wqueue->pipe;
+
+	if (!pipe) {
+		put_watch(watch);
+		return false;
+	}
+
+	do {
+		if (wqueue->defunct) {
+			put_watch(watch);
+			return false;
+		}
+		state = wqueue->state;
+	} while (cmpxchg(&wqueue->state, state, state + 1) != state);
+
+	rcu_read_unlock();
 
 	spin_lock_irq(&pipe->rd_wait.lock);
 
@@ -145,6 +163,12 @@ static bool post_one_notification(struct watch_queue *wqueue,
 
 out:
 	spin_unlock_irq(&pipe->rd_wait.lock);
+	do {
+		state = wqueue->state;
+	} while (cmpxchg(&wqueue->state, state, state - 1) != state);
+
+	rcu_read_lock();
+	put_watch(watch);
 	if (done)
 		kill_fasync(&pipe->fasync_readers, SIGIO, POLL_IN);
 	return done;
@@ -224,10 +248,7 @@ void __post_watch_notification(struct watch_list *wlist,
 		if (security_post_notification(watch->cred, cred, n) < 0)
 			continue;
 
-		if (lock_wqueue(wqueue)) {
-			post_one_notification(wqueue, n);
-			unlock_wqueue(wqueue);
-		}
+		post_one_notification(watch, n);
 	}
 
 	rcu_read_unlock();
@@ -560,8 +581,8 @@ found:
 
 	wqueue = rcu_dereference(watch->queue);
 
+	post_one_notification(watch, &n.watch);
 	if (lock_wqueue(wqueue)) {
-		post_one_notification(wqueue, &n.watch);
 
 		if (!hlist_unhashed(&watch->queue_node)) {
 			hlist_del_init_rcu(&watch->queue_node);

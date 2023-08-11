@@ -834,8 +834,11 @@ void free_pipe_info(struct pipe_inode_info *pipe)
 	unsigned int i;
 
 #ifdef CONFIG_WATCH_QUEUE
-	if (pipe->watch_queue)
+	if (pipe->watch_queue) {
 		watch_queue_clear(pipe->watch_queue);
+		smp_cond_load_relaxed(&pipe->watch_queue->state,
+				(VAL & WATCH_QUEUE_POST_CNT_MASK) == 0);
+	}
 #endif
 
 	(void) account_pipe_buffers(pipe->user, pipe->nr_accounted, 0);

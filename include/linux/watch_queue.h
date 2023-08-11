@@ -35,6 +35,7 @@ struct watch_filter {
 	struct watch_type_filter filters[];
 };
 
+#define WATCH_QUEUE_POST_CNT_MASK GENMASK(30, 0)
 struct watch_queue {
 	struct rcu_head		rcu;
 	struct watch_filter __rcu *filter;
@@ -46,7 +47,18 @@ struct watch_queue {
 	spinlock_t		lock;
 	unsigned int		nr_notes;	/* Number of notes */
 	unsigned int		nr_pages;	/* Number of pages in notes[] */
-	bool			defunct;	/* T when queues closed */
+	union {
+		struct {
+#ifdef __LITTLE_ENDIAN
+			u32	post_cnt:31;	/* How many threads are posting notification */
+			u32	defunct:1;	/* T when queues closed */
+#else
+			u32	defunct:1;	/* T when queues closed */
+			u32	post_cnt:31;	/* How many threads are posting notification */
+#endif
+		};
+		u32	state;
+	};
 };
 
 /*
