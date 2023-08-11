@@ -232,6 +232,11 @@ EXPORT_SYMBOL(hex_dump_to_buffer);
  * @level: kernel log level (e.g. KERN_DEBUG)
  * @prefix_str: string to prefix each line with;
  *  caller supplies trailing spaces for alignment if desired
+ *  OR
+ *  the custom format string of DUMP_PREFIX_CUSTOM;
+ *  Corresponding to three parameters in fixed order:
+ *  <string: level> <pointer: address> <string: converted data>
+ *  For example: "%s%04hx: %s\n", "%s%.8x: %s\n", "%s%px: %s\n"
  * @prefix_type: controls whether prefix of an offset, address, or none
  *  is printed (%DUMP_PREFIX_OFFSET, %DUMP_PREFIX_ADDRESS, %DUMP_PREFIX_NONE)
  * @rowsize: number of bytes to print per line; must be 16 or 32
@@ -257,6 +262,14 @@ EXPORT_SYMBOL(hex_dump_to_buffer);
  * 0009ab42: 40 41 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f  @ABCDEFGHIJKLMNO
  * Example output using %DUMP_PREFIX_ADDRESS and 4-byte mode:
  * ffffffff88089af0: 73727170 77767574 7b7a7978 7f7e7d7c  pqrstuvwxyz{|}~.
+ *
+ * E.g.:
+ *   print_hex_dump(KERN_DEBUG, "%s%04hx: %s\n", DUMP_PREFIX_CUSTOM,
+ *		    16, 1, frame->data, frame->len, false);
+ *   %04hx --> Only the lower 16 bits of the address are printed.
+ *
+ * Example output using %DUMP_PREFIX_CUSTOM and 1-byte mode:
+ * 3aa0: c0 3a 8d 80 00 80 ff ff d4 38 16 1d 94 a6 ff ff
  */
 void print_hex_dump(const char *level, const char *prefix_str, int prefix_type,
 		    int rowsize, int groupsize,
@@ -291,6 +304,9 @@ void print_hex_dump(const char *level, const char *prefix_str, int prefix_type,
 				} while (tmp);
 			}
 			printk("%s%s%0*x: %s\n", level, prefix_str, width, i, linebuf);
+			break;
+		case DUMP_PREFIX_CUSTOM:
+			printk(prefix_str, level, ptr + i, linebuf);
 			break;
 		default:
 			printk("%s%s%s\n", level, prefix_str, linebuf);
