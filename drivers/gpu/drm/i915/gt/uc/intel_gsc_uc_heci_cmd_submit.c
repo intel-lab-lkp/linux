@@ -186,6 +186,9 @@ out_rq:
 	i915_request_add(rq);
 
 	if (!err) {
+		if (wait_for(i915_request_started(rq), 200))
+			drm_dbg(&gsc_uc_to_gt(gsc)->i915->drm,
+				"Delay in gsc-heci-non-priv submission to gsccs-hw");
 		if (i915_request_wait(rq, I915_WAIT_INTERRUPTIBLE,
 				      msecs_to_jiffies(timeout_ms)) < 0)
 			err = -ETIME;
