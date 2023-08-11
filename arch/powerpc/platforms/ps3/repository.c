@@ -63,23 +63,6 @@ static void _dump_node(unsigned int lpar_id, u64 n1, u64 n2, u64 n3, u64 n4,
 }
 
 /**
- * make_first_field - Make the first field of a repository node name.
- * @text: Text portion of the field.
- * @index: Numeric index portion of the field.  Use zero for 'don't care'.
- *
- * This routine sets the vendor id to zero (non-vendor specific).
- * Returns field value.
- */
-
-static u64 make_first_field(const char *text, u64 index)
-{
-	u64 n = 0;
-
-	memcpy((char *)&n, text, strnlen(text, sizeof(n)));
-	return PS3_VENDOR_ID_NONE + (n >> 32) + index;
-}
-
-/**
  * make_field - Make subsequent fields of a repository node name.
  * @text: Text portion of the field.  Use "" for 'don't care'.
  * @index: Numeric index portion of the field.  Use zero for 'don't care'.
@@ -93,6 +76,20 @@ static u64 make_field(const char *text, u64 index)
 
 	memcpy((char *)&n, text, strnlen(text, sizeof(n)));
 	return n + index;
+}
+
+/**
+ * make_first_field - Make the first field of a repository node name.
+ * @text: Text portion of the field.
+ * @index: Numeric index portion of the field.  Use zero for 'don't care'.
+ *
+ * This routine sets the vendor id to zero (non-vendor specific).
+ * Returns field value.
+ */
+
+static u64 make_first_field(const char *text, u64 index)
+{
+	return PS3_VENDOR_ID_NONE + ((make_field(text, index) - index) >> 32) + index;
 }
 
 /**
