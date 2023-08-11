@@ -234,7 +234,7 @@ wait_queue_head_t *bh_waitq_head(struct buffer_head *bh);
 struct buffer_head *__find_get_block(struct block_device *bdev, sector_t block,
 			unsigned size);
 struct buffer_head *__getblk_gfp(struct block_device *bdev, sector_t block,
-				  unsigned size, gfp_t gfp);
+				  unsigned size, gfp_t gfp, bool noblocking);
 void __brelse(struct buffer_head *);
 void __bforget(struct buffer_head *);
 void __breadahead(struct block_device *, sector_t block, unsigned int size);
@@ -364,16 +364,23 @@ sb_breadahead(struct super_block *sb, sector_t block)
 }
 
 static inline struct buffer_head *
+sb_getblk_noblocking(struct super_block *sb, sector_t block)
+{
+	return __getblk_gfp(sb->s_bdev, block, sb->s_blocksize, 0, true);
+}
+
+static inline struct buffer_head *
 sb_getblk(struct super_block *sb, sector_t block)
 {
-	return __getblk_gfp(sb->s_bdev, block, sb->s_blocksize, __GFP_MOVABLE);
+	return __getblk_gfp(sb->s_bdev, block, sb->s_blocksize, __GFP_MOVABLE,
+			    false);
 }
 
 
 static inline struct buffer_head *
 sb_getblk_gfp(struct super_block *sb, sector_t block, gfp_t gfp)
 {
-	return __getblk_gfp(sb->s_bdev, block, sb->s_blocksize, gfp);
+	return __getblk_gfp(sb->s_bdev, block, sb->s_blocksize, gfp, false);
 }
 
 static inline struct buffer_head *
@@ -414,14 +421,14 @@ static inline struct buffer_head *getblk_unmovable(struct block_device *bdev,
 						   sector_t block,
 						   unsigned size)
 {
-	return __getblk_gfp(bdev, block, size, 0);
+	return __getblk_gfp(bdev, block, size, 0, false);
 }
 
 static inline struct buffer_head *__getblk(struct block_device *bdev,
 					   sector_t block,
 					   unsigned size)
 {
-	return __getblk_gfp(bdev, block, size, __GFP_MOVABLE);
+	return __getblk_gfp(bdev, block, size, __GFP_MOVABLE, false);
 }
 
 static inline void bh_readahead(struct buffer_head *bh, blk_opf_t op_flags)

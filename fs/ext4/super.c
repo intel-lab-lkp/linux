@@ -254,7 +254,7 @@ struct buffer_head *ext4_sb_bread_unmovable(struct super_block *sb,
 
 void ext4_sb_breadahead_unmovable(struct super_block *sb, sector_t block)
 {
-	struct buffer_head *bh = sb_getblk_gfp(sb, block, 0);
+	struct buffer_head *bh = sb_getblk_noblocking(sb, block);
 
 	if (likely(bh)) {
 		if (trylock_buffer(bh))

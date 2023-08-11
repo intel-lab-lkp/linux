@@ -1041,7 +1041,7 @@ static sector_t folio_init_buffers(struct folio *folio,
  */
 static int
 grow_dev_page(struct block_device *bdev, sector_t block,
-	      pgoff_t index, int size, int sizebits, gfp_t gfp)
+	      pgoff_t index, int size, int sizebits, gfp_t gfp, bool noblocking)
 {
 	struct inode *inode = bdev->bd_inode;
 	struct folio *folio;
@@ -1052,16 +1052,24 @@ grow_dev_page(struct block_device *bdev, sector_t block,
 
 	gfp_mask = mapping_gfp_constraint(inode->i_mapping, ~__GFP_FS) | gfp;
 
-	/*
-	 * XXX: __getblk_slow() can not really deal with failure and
-	 * will endlessly loop on improvised global reclaim.  Prefer
-	 * looping in the allocator rather than here, at least that
-	 * code knows what it's doing.
-	 */
-	gfp_mask |= __GFP_NOFAIL;
+	if (noblocking)
+		gfp_mask &= ~__GFP_DIRECT_RECLAIM;
+	else {
+		/*
+		 * XXX: __getblk_slow() can not really deal with failure and
+		 * will endlessly loop on improvised global reclaim.  Prefer
+		 * looping in the allocator rather than here, at least that
+		 * code knows what it's doing.
+		 */
+		gfp_mask |= __GFP_NOFAIL;
+	}
 
 	folio = __filemap_get_folio(inode->i_mapping, index,
 			FGP_LOCK | FGP_ACCESSED | FGP_CREAT, gfp_mask);
+	if (IS_ERR(folio)) {
+		ret = PTR_ERR(folio);
+		goto out;
+	}
 
 	bh = folio_buffers(folio);
 	if (bh) {
@@ -1091,6 +1099,7 @@ done:
 failed:
 	folio_unlock(folio);
 	folio_put(folio);
+out:
 	return ret;
 }
 
@@ -1099,7 +1108,8 @@ failed:
  * that page was dirty, the buffers are set dirty also.
  */
 static int
-grow_buffers(struct block_device *bdev, sector_t block, int size, gfp_t gfp)
+grow_buffers(struct block_device *bdev, sector_t block, int size, gfp_t gfp,
+	     bool noblocking)
 {
 	pgoff_t index;
 	int sizebits;
@@ -1120,12 +1130,13 @@ grow_buffers(struct block_device *bdev, sector_t block, int size, gfp_t gfp)
 	}
 
 	/* Create a page with the proper size buffers.. */
-	return grow_dev_page(bdev, block, index, size, sizebits, gfp);
+	return grow_dev_page(bdev, block, index, size, sizebits, gfp,
+			     noblocking);
 }
 
 static struct buffer_head *
 __getblk_slow(struct block_device *bdev, sector_t block,
-	     unsigned size, gfp_t gfp)
+	      unsigned size, gfp_t gfp, bool noblocking)
 {
 	/* Size must be multiple of hard sectorsize */
 	if (unlikely(size & (bdev_logical_block_size(bdev)-1) ||
@@ -1147,7 +1158,7 @@ __getblk_slow(struct block_device *bdev, sector_t block,
 		if (bh)
 			return bh;
 
-		ret = grow_buffers(bdev, block, size, gfp);
+		ret = grow_buffers(bdev, block, size, gfp, noblocking);
 		if (ret < 0)
 			return NULL;
 	}
@@ -1436,13 +1447,13 @@ EXPORT_SYMBOL(__find_get_block);
  */
 struct buffer_head *
 __getblk_gfp(struct block_device *bdev, sector_t block,
-	     unsigned size, gfp_t gfp)
+	     unsigned size, gfp_t gfp, bool noblocking)
 {
 	struct buffer_head *bh = __find_get_block(bdev, block, size);
 
 	might_sleep();
 	if (bh == NULL)
-		bh = __getblk_slow(bdev, block, size, gfp);
+		bh = __getblk_slow(bdev, block, size, gfp, noblocking);
 	return bh;
 }
 EXPORT_SYMBOL(__getblk_gfp);
@@ -1476,7 +1487,7 @@ struct buffer_head *
 __bread_gfp(struct block_device *bdev, sector_t block,
 		   unsigned size, gfp_t gfp)
 {
-	struct buffer_head *bh = __getblk_gfp(bdev, block, size, gfp);
+	struct buffer_head *bh = __getblk_gfp(bdev, block, size, gfp, false);
 
 	if (likely(bh) && !buffer_uptodate(bh))
 		bh = __bread_slow(bh);
