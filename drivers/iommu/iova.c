@@ -238,6 +238,7 @@ iova32_full:
 
 static struct kmem_cache *iova_cache;
 static unsigned int iova_cache_users;
+static unsigned int max_global_mags;
 static DEFINE_MUTEX(iova_cache_mutex);
 
 static struct iova *alloc_iova_mem(void)
@@ -625,7 +626,6 @@ EXPORT_SYMBOL_GPL(reserve_iova);
  * will be wasted.
  */
 #define IOVA_MAG_SIZE 127
-#define MAX_GLOBAL_MAGS 32	/* magazines per bin */
 
 struct iova_magazine {
 	unsigned long size;
@@ -641,7 +641,7 @@ struct iova_cpu_rcache {
 struct iova_rcache {
 	spinlock_t lock;
 	unsigned long depot_size;
-	struct iova_magazine *depot[MAX_GLOBAL_MAGS];
+	struct iova_magazine **depot;
 	struct iova_cpu_rcache __percpu *cpu_rcaches;
 };
 
@@ -722,6 +722,13 @@ int iova_domain_init_rcaches(struct iova_domain *iovad)
 	unsigned int cpu;
 	int i, ret;
 
+	/*
+	 * the size of max global mags should growth with the num of
+	 * cpus
+	 */
+	if (!max_global_mags)
+		max_global_mags = max_t(unsigned int, 32, num_possible_cpus());
+
 	iovad->rcaches = kcalloc(IOVA_RANGE_CACHE_MAX_SIZE,
 				 sizeof(struct iova_rcache),
 				 GFP_KERNEL);
@@ -733,6 +740,12 @@ int iova_domain_init_rcaches(struct iova_domain *iovad)
 		struct iova_rcache *rcache;
 
 		rcache = &iovad->rcaches[i];
+		rcache->depot = kcalloc(max_global_mags, sizeof(struct iova_magazine *),
+					GFP_KERNEL);
+		if (!rcache->depot) {
+			ret = -ENOMEM;
+			goto out_err;
+		}
 		spin_lock_init(&rcache->lock);
 		rcache->depot_size = 0;
 		rcache->cpu_rcaches = __alloc_percpu(sizeof(*cpu_rcache),
@@ -798,7 +811,7 @@ static bool __iova_rcache_insert(struct iova_domain *iovad,
 
 		if (new_mag) {
 			spin_lock(&rcache->lock);
-			if (rcache->depot_size < MAX_GLOBAL_MAGS) {
+			if (rcache->depot_size < max_global_mags) {
 				rcache->depot[rcache->depot_size++] =
 						cpu_rcache->loaded;
 			} else {
@@ -903,8 +916,12 @@ static void free_iova_rcaches(struct iova_domain *iovad)
 
 	for (i = 0; i < IOVA_RANGE_CACHE_MAX_SIZE; ++i) {
 		rcache = &iovad->rcaches[i];
-		if (!rcache->cpu_rcaches)
+		if (!rcache->depot)
 			break;
+		if (!rcache->cpu_rcaches) {
+			kfree(rcache->depot);
+			break;
+		}
 		for_each_possible_cpu(cpu) {
 			cpu_rcache = per_cpu_ptr(rcache->cpu_rcaches, cpu);
 			if (!cpu_rcache->loaded)
@@ -917,6 +934,7 @@ static void free_iova_rcaches(struct iova_domain *iovad)
 		free_percpu(rcache->cpu_rcaches);
 		for (j = 0; j < rcache->depot_size; ++j)
 			iova_magazine_free(rcache->depot[j]);
+		kfree(rcache->depot);
 	}
 
 	kfree(iovad->rcaches);
