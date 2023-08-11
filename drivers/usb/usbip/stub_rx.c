@@ -592,8 +592,11 @@ static void stub_recv_cmd_submit(struct stub_device *sdev,
 	if (usbip_recv_iso(ud, priv->urbs[0]) < 0)
 		return;
 
-	/* urb is now ready to submit */
-	for (i = 0; i < priv->num_urbs; i++) {
+	/*
+	 * URB(s) are now ready to submit.
+	 * Note: priv is freed after the last URB is (successfully) submitted.
+	 */
+	for (i = 0; i < num_urbs; i++) {
 		ret = usb_submit_urb(priv->urbs[i], GFP_KERNEL);
 
 		if (ret == 0)
