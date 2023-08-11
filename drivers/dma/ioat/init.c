@@ -536,8 +536,11 @@ err_out:
 
 static int ioat_register(struct ioatdma_device *ioat_dma)
 {
-	int err = dma_async_device_register(&ioat_dma->dma_dev);
+	int err;
 
+	ioat_dma->dma_dev.chancnt = 0;
+
+	err = dma_async_device_register(&ioat_dma->dma_dev);
 	if (err) {
 		ioat_disable_interrupts(ioat_dma);
 		dma_pool_destroy(ioat_dma->completion_pool);
