@@ -59,6 +59,13 @@ properties:
       channel. Pins are mapped to channels based on array index.
       Channel 0 is the first number, then channel 1, and so on.
 
+  channel-slots:
+    $ref: /schemas/types.yaml#/definitions/uint8-array
+    description:
+      This is a list of channel I2S TDM slot numbers. Slots are mapped
+      to channels based on array index.
+      Channel 0 is the first number, then channel 1, and so on.
+
   # Even though it only applies to subschemas under the conditionals,
   # not listing them here will trigger a warning because of the
   # additionalsProperties set to false.
@@ -164,6 +171,7 @@ examples:
             dmas = <&dma 3>, <&dma 3>;
             dma-names = "rx", "tx";
             channel-dins = /bits/ 8 <0 0 1 1 2 2>;
+            channel-slots = /bits/ 8 <0 1 0 1 0 1>;
     };
 
 ...
