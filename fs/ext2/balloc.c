@@ -1434,8 +1434,14 @@ out:
 ext2_fsblk_t ext2_new_block(struct inode *inode, unsigned long goal, int *errp)
 {
 	unsigned long count = 1;
+	struct ext2_inode_info *ei = EXT2_I(inode);
+	ext2_fsblk_t ret;
 
-	return ext2_new_blocks(inode, goal, &count, errp);
+	mutex_lock(&ei->truncate_mutex);
+	ret = ext2_new_blocks(inode, goal, &count, errp);
+	mutex_unlock(&ei->truncate_mutex);
+
+	return ret;
 }
 
 #ifdef EXT2FS_DEBUG
