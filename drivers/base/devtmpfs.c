@@ -462,6 +462,7 @@ int __init devtmpfs_init(void)
 		return err;
 	}
 
+	init_completion(&setup_done);
 	thread = kthread_run(devtmpfsd, &err, "kdevtmpfs");
 	if (!IS_ERR(thread)) {
 		wait_for_completion(&setup_done);
