@@ -19085,7 +19085,7 @@ void cfg80211_cqm_rssi_notify(struct net_device *dev,
 
 		cfg80211_cqm_rssi_update(rdev, dev);
 
-		if (rssi_level == 0)
+		if (rssi_level == 0 && wdev->cqm_config)
 			rssi_level = wdev->cqm_config->last_rssi_event_value;
 	}
 
