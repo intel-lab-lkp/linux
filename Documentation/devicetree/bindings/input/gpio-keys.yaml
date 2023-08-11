@@ -31,7 +31,17 @@ patternProperties:
         maxItems: 1
 
       interrupts:
-        maxItems: 1
+        description:
+          Optional interrupts if different from the gpio interrupt
+        maxItems: 2
+
+      interrupt-names:
+        description:
+	  Optional interrupt names, can be used to specify a separate
+	  dedicated wake-up interrupt
+        items:
+          -const: irq
+          -const: wakeup
 
       label:
         description: Descriptive name of the key.
@@ -130,6 +140,9 @@ examples:
             label = "GPIO Key UP";
             linux,code = <103>;
             gpios = <&gpio1 0 1>;
+            interrupts-extended = <&intc_wakeup 0 IRQ_TYPE_LEVEL_HIGH>;
+            interrupt-names = "wakeup";
+            wakeup-source;
         };
 
         key-down {
