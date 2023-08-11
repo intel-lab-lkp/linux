@@ -216,6 +216,7 @@ struct sun4i_i2s {
 	unsigned int	mclk_freq;
 	unsigned int	slots;
 	unsigned int	slot_width;
+	u8	channel_dins[16];
 
 	struct snd_dmaengine_dai_dma_data	capture_dma_data;
 	struct snd_dmaengine_dai_dma_data	playback_dma_data;
@@ -232,6 +233,13 @@ struct sun4i_i2s_clk_div {
 	u8	div;
 	u8	val;
 };
+
+static int sun4i_i2s_read_channel_dins(struct device *dev, struct sun4i_i2s *i2s)
+{
+	/* Use DIN pin 0 by default */
+	memset(i2s->channel_dins, 0, sizeof(i2s->channel_dins));
+	return 0;
+}
 
 static const struct sun4i_i2s_clk_div sun4i_i2s_bclk_div[] = {
 	{ .div = 2, .val = 0 },
@@ -527,6 +535,25 @@ static int sun8i_i2s_set_chan_cfg(const struct sun4i_i2s *i2s,
 	return 0;
 }
 
+static void sun50i_h6_write_channel_map(const struct sun4i_i2s *i2s,
+					unsigned int reg,
+					unsigned int channel_start)
+{
+	unsigned int reg_value = 0;
+
+	/* Loop backwards so we can shift values in */
+	for (int i = 3; i >= 0; i--) {
+		int channel = channel_start + i;
+		u8 din = i2s->channel_dins[channel];
+		u8 slot = channel; /* Map slot to channel */
+
+		reg_value <<= 8;
+		reg_value |= (din << 4) | slot;
+	}
+
+	regmap_write(i2s->regmap, reg, reg_value);
+}
+
 static int sun50i_h6_i2s_set_chan_cfg(const struct sun4i_i2s *i2s,
 				      unsigned int channels, unsigned int slots,
 				      unsigned int slot_width)
@@ -537,10 +564,10 @@ static int sun50i_h6_i2s_set_chan_cfg(const struct sun4i_i2s *i2s,
 	regmap_write(i2s->regmap, SUN50I_H6_I2S_TX_CHAN_MAP0_REG(0), 0xFEDCBA98);
 	regmap_write(i2s->regmap, SUN50I_H6_I2S_TX_CHAN_MAP1_REG(0), 0x76543210);
 	if (i2s->variant->num_din_pins > 1) {
-		regmap_write(i2s->regmap, SUN50I_R329_I2S_RX_CHAN_MAP0_REG, 0x0F0E0D0C);
-		regmap_write(i2s->regmap, SUN50I_R329_I2S_RX_CHAN_MAP1_REG, 0x0B0A0908);
-		regmap_write(i2s->regmap, SUN50I_R329_I2S_RX_CHAN_MAP2_REG, 0x07060504);
-		regmap_write(i2s->regmap, SUN50I_R329_I2S_RX_CHAN_MAP3_REG, 0x03020100);
+		sun50i_h6_write_channel_map(i2s, SUN50I_R329_I2S_RX_CHAN_MAP0_REG, 12);
+		sun50i_h6_write_channel_map(i2s, SUN50I_R329_I2S_RX_CHAN_MAP1_REG, 8);
+		sun50i_h6_write_channel_map(i2s, SUN50I_R329_I2S_RX_CHAN_MAP2_REG, 4);
+		sun50i_h6_write_channel_map(i2s, SUN50I_R329_I2S_RX_CHAN_MAP3_REG, 0);
 	} else {
 		regmap_write(i2s->regmap, SUN50I_H6_I2S_RX_CHAN_MAP0_REG, 0xFEDCBA98);
 		regmap_write(i2s->regmap, SUN50I_H6_I2S_RX_CHAN_MAP1_REG, 0x76543210);
@@ -1557,6 +1584,11 @@ static int sun4i_i2s_probe(struct platform_device *pdev)
 				"Failed to deassert the reset control\n");
 			return -EINVAL;
 		}
+	}
+
+	if (sun4i_i2s_read_channel_dins(&pdev->dev, i2s)) {
+		dev_err(&pdev->dev, "Invalid channel DINs\n");
+		return -EINVAL;
 	}
 
 	i2s->playback_dma_data.addr = res->start +
