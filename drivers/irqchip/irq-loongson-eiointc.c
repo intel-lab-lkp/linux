@@ -127,6 +127,48 @@ static int eiointc_set_irq_affinity(struct irq_data *d, const struct cpumask *af
 	return IRQ_SET_MASK_OK;
 }
 
+static int eiointc_single_set_irq_affinity(struct irq_data *d,
+				const struct cpumask *affinity, bool force)
+{
+	unsigned int cpu;
+	unsigned long flags;
+	uint32_t vector, regaddr, data, coremap;
+	struct cpumask mask;
+	struct eiointc_priv *priv = d->domain->host_data;
+
+	cpumask_and(&mask, affinity, cpu_online_mask);
+	cpumask_and(&mask, &mask, &priv->cpuspan_map);
+	if (cpumask_empty(&mask))
+		return -EINVAL;
+
+	cpu = cpumask_first(&mask);
+	vector = d->hwirq;
+	regaddr = EIOINTC_REG_ENABLE + ((vector >> 5) << 2);
+	data = ~BIT(vector & 0x1F);
+	coremap = BIT(cpu_logical_map(cpu) % CORES_PER_EIO_NODE);
+
+	/*
+	 * simplify for platform with only one eiointc node
+	 * access eiointc registers directly rather than
+	 * use any_send method here
+	 */
+	raw_spin_lock_irqsave(&affinity_lock, flags);
+	iocsr_write32(EIOINTC_ALL_ENABLE & data, regaddr);
+	/*
+	 * get irq route info for continuous 4 vectors
+	 * and set affinity for specified vector
+	 */
+	data = iocsr_read32(EIOINTC_REG_ROUTE + (vector & ~3));
+	data &=  ~(0xff << ((vector & 3) * 8));
+	data |= coremap << ((vector & 3) * 8);
+	iocsr_write32(data, EIOINTC_REG_ROUTE + (vector & ~3));
+	iocsr_write32(EIOINTC_ALL_ENABLE, regaddr);
+	raw_spin_unlock_irqrestore(&affinity_lock, flags);
+
+	irq_data_update_effective_affinity(d, cpumask_of(cpu));
+	return IRQ_SET_MASK_OK;
+}
+
 static int eiointc_index(int node)
 {
 	int i;
@@ -235,22 +277,39 @@ static struct irq_chip eiointc_irq_chip = {
 	.irq_set_affinity	= eiointc_set_irq_affinity,
 };
 
+static struct irq_chip eiointc_irq_chip_single = {
+	.name			= "EIOINTC-S",
+	.irq_ack		= eiointc_ack_irq,
+	.irq_mask		= eiointc_mask_irq,
+	.irq_unmask		= eiointc_unmask_irq,
+#ifdef CONFIG_SMP
+	.irq_set_affinity       = eiointc_single_set_irq_affinity,
+#endif
+};
+
 static int eiointc_domain_alloc(struct irq_domain *domain, unsigned int virq,
 				unsigned int nr_irqs, void *arg)
 {
 	int ret;
 	unsigned int i, type;
 	unsigned long hwirq = 0;
-	struct eiointc *priv = domain->host_data;
+	struct eiointc_priv *priv = domain->host_data;
+	struct irq_chip *chip;
 
 	ret = irq_domain_translate_onecell(domain, arg, &hwirq, &type);
 	if (ret)
 		return ret;
 
-	for (i = 0; i < nr_irqs; i++) {
-		irq_domain_set_info(domain, virq + i, hwirq + i, &eiointc_irq_chip,
+	/*
+	 * use simple irq routing method on single eiointc node
+	 */
+	if ((nr_pics == 1) && (nodes_weight(priv->node_map) == 1))
+		chip = &eiointc_irq_chip_single;
+	else
+		chip = &eiointc_irq_chip;
+	for (i = 0; i < nr_irqs; i++)
+		irq_domain_set_info(domain, virq + i, hwirq + i, chip,
 					priv, handle_edge_irq, NULL, NULL);
-	}
 
 	return 0;
 }
@@ -307,6 +366,7 @@ static void eiointc_resume(void)
 	int i, j;
 	struct irq_desc *desc;
 	struct irq_data *irq_data;
+	struct irq_chip *chip;
 
 	eiointc_router_init(0);
 
@@ -316,7 +376,8 @@ static void eiointc_resume(void)
 			if (desc && desc->handle_irq && desc->handle_irq != handle_bad_irq) {
 				raw_spin_lock(&desc->lock);
 				irq_data = irq_domain_get_irq_data(eiointc_priv[i]->eiointc_domain, irq_desc_get_irq(desc));
-				eiointc_set_irq_affinity(irq_data, irq_data->common->affinity, 0);
+				chip = irq_data_get_irq_chip(irq_data);
+				chip->irq_set_affinity(irq_data, irq_data->common->affinity, 0);
 				raw_spin_unlock(&desc->lock);
 			}
 		}
@@ -494,7 +555,14 @@ static int __init eiointc_of_init(struct device_node *of_node,
 	priv->node = 0;
 	priv->domain_handle = of_node_to_fwnode(of_node);
 
-	ret = eiointc_init(priv, parent_irq, 0);
+	/*
+	 * 2k0500 and 2k2000 has only one eiointc node
+	 * set nodemap as 1 for simple irq routing
+	 *
+	 * Fixme: what about future embedded boards with more than 4 cpus?
+	 * nodemap and node need be added in dts like acpi table
+	 */
+	ret = eiointc_init(priv, parent_irq, 1);
 	if (ret < 0)
 		goto out_free_priv;
 
