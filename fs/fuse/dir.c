@@ -380,7 +380,6 @@ int fuse_lookup_name(struct super_block *sb, u64 nodeid, const struct qstr *name
 	if (name->len > FUSE_NAME_MAX)
 		goto out;
 
-
 	forget = fuse_alloc_forget();
 	err = -ENOMEM;
 	if (!forget)
@@ -769,8 +768,8 @@ no_open:
 }
 
 static int _fuse_atomic_open(struct inode *dir, struct dentry *entry,
-			    struct file *file, unsigned flags,
-			    umode_t mode)
+			     struct file *file, unsigned flags,
+			     umode_t mode)
 {
 
 	int err;

@@ -1643,12 +1643,14 @@ static struct dentry *lookup_fast(struct nameidata *nd)
 			return ERR_PTR(-ECHILD);
 		if (status == -ECHILD)
 			/* we'd been told to redo it in non-rcu mode */
-			status = d_revalidate(dentry, nd->flags);
+			status = d_revalidate(dentry,
+					      nd->flags | LOOKUP_ATOMIC_REVALIDATE);
 	} else {
 		dentry = __d_lookup(parent, &nd->last);
 		if (unlikely(!dentry))
 			return NULL;
-		status = d_revalidate(dentry, nd->flags);
+		status = d_revalidate(dentry,
+				      nd->flags | LOOKUP_ATOMIC_REVALIDATE);
 	}
 	if (unlikely(status <= 0)) {
 		if (!status)
@@ -1656,6 +1658,12 @@ static struct dentry *lookup_fast(struct nameidata *nd)
 		dput(dentry);
 		return ERR_PTR(status);
 	}
+
+	if (unlikely(d_atomic_open(dentry))) {
+		dput(dentry);
+		return NULL;
+	}
+
 	return dentry;
 }
 
@@ -3421,7 +3429,8 @@ static struct dentry *lookup_open(struct nameidata *nd, struct file *file,
 		if (d_in_lookup(dentry))
 			break;
 
-		error = d_revalidate(dentry, nd->flags);
+		error = d_revalidate(dentry,
+				     nd->flags | LOOKUP_ATOMIC_REVALIDATE);
 		if (likely(error > 0))
 			break;
 		if (error)
@@ -3430,7 +3439,7 @@ static struct dentry *lookup_open(struct nameidata *nd, struct file *file,
 		dput(dentry);
 		dentry = NULL;
 	}
-	if (dentry->d_inode) {
+	if (dentry->d_inode && !d_atomic_open(dentry)) {
 		/* Cached positive dentry: will open in f_op->open */
 		return dentry;
 	}

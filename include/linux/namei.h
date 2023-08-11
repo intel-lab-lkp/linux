@@ -33,6 +33,7 @@ enum {LAST_NORM, LAST_ROOT, LAST_DOT, LAST_DOTDOT};
 #define LOOKUP_CREATE		0x0200	/* ... in object creation */
 #define LOOKUP_EXCL		0x0400	/* ... in exclusive creation */
 #define LOOKUP_RENAME_TARGET	0x0800	/* ... in destination of rename() */
+#define LOOKUP_ATOMIC_REVALIDATE  0x1000 /* atomic revalidate possible */
 
 /* internal use only */
 #define LOOKUP_PARENT		0x0010
