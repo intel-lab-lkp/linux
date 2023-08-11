@@ -10,6 +10,7 @@ scmi-transport-$(CONFIG_ARM_SCMI_TRANSPORT_SMC) += smc.o
 scmi-transport-$(CONFIG_ARM_SCMI_HAVE_MSG) += msg.o
 scmi-transport-$(CONFIG_ARM_SCMI_TRANSPORT_VIRTIO) += virtio.o
 scmi-transport-$(CONFIG_ARM_SCMI_TRANSPORT_OPTEE) += optee.o
+scmi-transport-$(CONFIG_ARM_SCMI_TRANSPORT_QCOM_HVC) += qcom_hvc.o
 scmi-protocols-y = base.o clock.o perf.o power.o reset.o sensors.o system.o voltage.o powercap.o
 scmi-module-objs := $(scmi-driver-y) $(scmi-protocols-y) $(scmi-transport-y)
 
@@ -24,4 +25,5 @@ ifeq ($(CONFIG_THUMB2_KERNEL)$(CONFIG_CC_IS_CLANG),yy)
 # pointer in Thumb2 mode, which is forcibly enabled by Clang when profiling
 # hooks are inserted via the -pg switch.
 CFLAGS_REMOVE_smc.o += $(CC_FLAGS_FTRACE)
+CFLAGS_REMOVE_qcom_hvc.o += $(CC_FLAGS_FTRACE)
 endif
