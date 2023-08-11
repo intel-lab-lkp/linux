@@ -754,6 +754,84 @@ done:
 	return err;
 }
 
+static int bcm5221_config_init(struct phy_device *phydev)
+{
+	int reg, err, err2, brcmtest;
+
+	/* Reset the PHY to bring it to a known state. */
+	err = phy_write(phydev, MII_BMCR, BMCR_RESET);
+	if (err < 0)
+		return err;
+
+	/* The datasheet indicates the PHY needs up to 1us to complete a reset,
+	 * build some slack here.
+	 */
+	usleep_range(1000, 2000);
+
+	/* The PHY requires 65 MDC clock cycles to complete a write operation
+	 * and turnaround the line properly.
+	 *
+	 * We ignore -EIO here as the MDIO controller (e.g.: mdio-bcm-unimac)
+	 * may flag the lack of turn-around as a read failure. This is
+	 * particularly true with this combination since the MDIO controller
+	 * only used 64 MDC cycles. This is not a critical failure in this
+	 * specific case and it has no functional impact otherwise, so we let
+	 * that one go through. If there is a genuine bus error, the next read
+	 * of MII_BRCM_FET_INTREG will error out.
+	 */
+	err = phy_read(phydev, MII_BMCR);
+	if (err < 0 && err != -EIO)
+		return err;
+
+	reg = phy_read(phydev, MII_BRCM_FET_INTREG);
+	if (reg < 0)
+		return reg;
+
+	/* Unmask events we are interested in and mask interrupts globally. */
+	reg = MII_BRCM_FET_IR_ENABLE |
+	      MII_BRCM_FET_IR_MASK;
+
+	err = phy_write(phydev, MII_BRCM_FET_INTREG, reg);
+	if (err < 0)
+		return err;
+
+	/* Enable auto MDIX */
+	err = phy_clear_bits(phydev, BCM5221_AEGSR, BCM5221_AEGSR_MDIX_DIS);
+	if (err < 0)
+		return err;
+
+	/* Enable shadow register access */
+	brcmtest = phy_read(phydev, MII_BRCM_FET_BRCMTEST);
+	if (brcmtest < 0)
+		return brcmtest;
+
+	reg = brcmtest | MII_BRCM_FET_BT_SRE;
+
+	err = phy_write(phydev, MII_BRCM_FET_BRCMTEST, reg);
+	if (err < 0)
+		return err;
+
+        /* Exit low power mode */
+	err = phy_clear_bits(phydev, MII_BRCM_FET_SHDW_AUXMODE4,
+			 BCM5221_SHDW_AM4_FORCE_LPM);
+	if (err < 0)
+		goto done;
+
+	if (phydev->dev_flags & PHY_BRCM_AUTO_PWRDWN_ENABLE) {
+		/* Enable auto power down */
+		err = phy_set_bits(phydev, MII_BRCM_FET_SHDW_AUXSTAT2,
+				   MII_BRCM_FET_SHDW_AS2_APDE);
+	}
+
+done:
+	/* Disable shadow register access */
+	err2 = phy_write(phydev, MII_BRCM_FET_BRCMTEST, brcmtest);
+	if (!err)
+		err = err2;
+
+	return err;
+}
+
 static int brcm_fet_ack_interrupt(struct phy_device *phydev)
 {
 	int reg;
@@ -880,6 +958,61 @@ static int bcm54xx_phy_set_wol(struct phy_device *phydev,
 		return ret;
 
 	return 0;
+}
+
+static int bcm5221_suspend(struct phy_device *phydev)
+{
+	int reg, err, err2, brcmtest;
+
+	/* Enable shadow register access */
+	brcmtest = phy_read(phydev, MII_BRCM_FET_BRCMTEST);
+	if (brcmtest < 0)
+		return brcmtest;
+
+	reg = brcmtest | MII_BRCM_FET_BT_SRE;
+
+	err = phy_write(phydev, MII_BRCM_FET_BRCMTEST, reg);
+	if (err < 0)
+		return err;
+
+	/* Force Low Power Mode with clock enabled */
+	err = phy_set_bits(phydev, MII_BRCM_FET_SHDW_AUXMODE4,
+			   BCM5221_SHDW_AM4_EN_CLK_LPM |
+			   BCM5221_SHDW_AM4_FORCE_LPM);
+
+	/* Disable shadow register access */
+	err2 = phy_write(phydev, MII_BRCM_FET_BRCMTEST, brcmtest);
+	if (!err)
+		err = err2;
+
+	return err;
+}
+
+static int bcm5221_resume(struct phy_device *phydev)
+{
+	int reg, err, err2, brcmtest;
+
+	/* Enable shadow register access */
+	brcmtest = phy_read(phydev, MII_BRCM_FET_BRCMTEST);
+	if (brcmtest < 0)
+		return brcmtest;
+
+	reg = brcmtest | MII_BRCM_FET_BT_SRE;
+
+	err = phy_write(phydev, MII_BRCM_FET_BRCMTEST, reg);
+	if (err < 0)
+		return err;
+
+	/* Exit Low Power Mode with clock enabled */
+	err = phy_clear_bits(phydev, MII_BRCM_FET_SHDW_AUXMODE4,
+			     BCM5221_SHDW_AM4_FORCE_LPM);
+
+	/* Disable shadow register access */
+	err2 = phy_write(phydev, MII_BRCM_FET_BRCMTEST, brcmtest);
+	if (!err)
+		err = err2;
+
+	return err;
 }
 
 static int bcm54xx_phy_probe(struct phy_device *phydev)
@@ -1209,6 +1342,16 @@ static struct phy_driver broadcom_drivers[] = {
 	.suspend	= brcm_fet_suspend,
 	.resume		= brcm_fet_config_init,
 }, {
+	.phy_id		= PHY_ID_BCM5221,
+	.phy_id_mask	= 0xfffffff0,
+	.name		= "Broadcom BCM5221",
+	/* PHY_BASIC_FEATURES */
+	.config_init	= bcm5221_config_init,
+	.config_intr	= brcm_fet_config_intr,
+	.handle_interrupt = brcm_fet_handle_interrupt,
+	.suspend	= bcm5221_suspend,
+	.resume		= bcm5221_resume,
+}, {
 	.phy_id		= PHY_ID_BCM5395,
 	.phy_id_mask	= 0xfffffff0,
 	.name		= "Broadcom BCM5395",
@@ -1288,6 +1431,7 @@ static struct mdio_device_id __maybe_unused broadcom_tbl[] = {
 	{ PHY_ID_BCM53125, 0xfffffff0 },
 	{ PHY_ID_BCM53128, 0xfffffff0 },
 	{ PHY_ID_BCM89610, 0xfffffff0 },
+	{ PHY_ID_BCM5221, 0xfffffff0 },
 	{ }
 };
 
