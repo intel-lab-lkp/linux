@@ -269,11 +269,26 @@ static int sun4i_i2s_read_channel_dins(struct device *dev, struct sun4i_i2s *i2s
 
 static int sun4i_i2s_read_channel_slots(struct device *dev, struct sun4i_i2s *i2s)
 {
+	struct device_node *np = dev->of_node;
 	int max_channels = ARRAY_SIZE(i2s->channel_dins);
+	int ret;
 
 	/* Use a 1:1 mapping by default */
 	for (int i = 0; i < max_channels; ++i)
 		i2s->channel_slots[i] = i;
+
+	if (!np)
+		return 0;
+
+	ret = of_property_read_variable_u8_array(np, "channel-slots",
+						 i2s->channel_slots,
+						 1, max_channels);
+
+	if (ret == -EINVAL)
+		return 0;
+
+	if (ret < 0)
+		return ret;
 
 	return 0;
 }
