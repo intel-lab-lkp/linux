@@ -80,6 +80,7 @@ Contents:
    netdevices
    netfilter-sysctl
    netif-msg
+   netlink-attrs-best-practices
    nexthop-group-resilient
    nf_conntrack-sysctl
    nf_flowtable
