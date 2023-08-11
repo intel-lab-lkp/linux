@@ -1335,7 +1335,7 @@ EXPORT_SYMBOL(bitmap_find_free_region);
  */
 void bitmap_release_region(unsigned long *bitmap, unsigned int pos, int order)
 {
-	__reg_op(bitmap, pos, order, REG_OP_RELEASE);
+	bitmap_clear(bitmap, pos, pos + BIT(order));
 }
 EXPORT_SYMBOL(bitmap_release_region);
 
