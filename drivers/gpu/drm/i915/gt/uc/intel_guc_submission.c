@@ -1359,7 +1359,16 @@ static void guc_enable_busyness_worker(struct intel_guc *guc)
 
 static void guc_cancel_busyness_worker(struct intel_guc *guc)
 {
-	cancel_delayed_work_sync(&guc->timestamp.work);
+	/*
+	 * When intel_gt_reset was called, task will hold a lock.
+	 * To cacel delayed work here, the _sync version will also acquire a lock, which might
+	 * trigger the possible cirular locking dependency warning.
+	 * Check the reset_in_progress flag, call async verion if reset is in progress.
+	 */
+	if (guc_to_gt(guc)->uc.reset_in_progress)
+		cancel_delayed_work(&guc->timestamp.work);
+	else
+		cancel_delayed_work_sync(&guc->timestamp.work);
 }
 
 static void __reset_guc_busyness_stats(struct intel_guc *guc)
