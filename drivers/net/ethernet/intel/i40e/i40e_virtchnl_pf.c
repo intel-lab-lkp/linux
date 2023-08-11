@@ -1512,6 +1512,10 @@ static void i40e_cleanup_reset_vf(struct i40e_vf *vf)
 		vf->num_vlan = 0;
 	}
 
+	/* clear mdd statistics */
+	memset(&vf->mdd_tx_events, 0, sizeof(vf->mdd_tx_events));
+	memset(&vf->mdd_rx_events, 0, sizeof(vf->mdd_rx_events));
+
 	/* Tell the VF driver the reset is done. This needs to be done only
 	 * after VF has been fully initialized, because the VF driver may
 	 * request resources immediately after setting this flag.
