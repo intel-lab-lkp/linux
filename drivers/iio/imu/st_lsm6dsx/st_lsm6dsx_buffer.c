@@ -61,6 +61,7 @@ struct st_lsm6dsx_decimator_entry {
 enum st_lsm6dsx_fifo_tag {
 	ST_LSM6DSX_GYRO_TAG = 0x01,
 	ST_LSM6DSX_ACC_TAG = 0x02,
+	ST_LSM6DSX_TEMP_TAG = 0x03,
 	ST_LSM6DSX_TS_TAG = 0x04,
 	ST_LSM6DSX_EXT0_TAG = 0x0f,
 	ST_LSM6DSX_EXT1_TAG = 0x10,
@@ -531,6 +532,9 @@ st_lsm6dsx_push_tagged_data(struct st_lsm6dsx_hw *hw, u8 tag,
 		break;
 	case ST_LSM6DSX_ACC_TAG:
 		iio_dev = hw->iio_devs[ST_LSM6DSX_ID_ACC];
+		break;
+	case ST_LSM6DSX_TEMP_TAG:
+		iio_dev = hw->iio_devs[ST_LSM6DSX_ID_TEMP];
 		break;
 	case ST_LSM6DSX_EXT0_TAG:
 		if (hw->enable_mask & BIT(ST_LSM6DSX_ID_EXT0))
