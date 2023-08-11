@@ -682,6 +682,8 @@ noinline void __ref __noreturn rest_init(void)
 	struct task_struct *tsk;
 	int pid;
 
+	init_completion(&kthreadd_done);
+
 	rcu_scheduler_starting();
 	/*
 	 * We need to spawn init first so that it obtains pid 1, however
