@@ -1441,11 +1441,11 @@ void igb_ptp_sdp_init(struct igb_adapter *adapter)
  */
 void igb_ptp_suspend(struct igb_adapter *adapter)
 {
-	if (!(adapter->ptp_flags & IGB_PTP_ENABLED))
-		return;
-
 	if (adapter->ptp_flags & IGB_PTP_OVERFLOW_CHECK)
 		cancel_delayed_work_sync(&adapter->ptp_overflow_work);
+
+	if (!(adapter->ptp_flags & IGB_PTP_ENABLED))
+		return;
 
 	cancel_work_sync(&adapter->ptp_tx_work);
 	if (adapter->ptp_tx_skb) {
