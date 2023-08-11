@@ -1354,7 +1354,7 @@ int bitmap_allocate_region(unsigned long *bitmap, unsigned int pos, int order)
 {
 	unsigned int nbits = pos + BIT(order);
 
-	if (!__reg_op(bitmap, pos, order, REG_OP_ISFREE))
+	if (find_next_bit(bitmap, pos, nbits) < nbits)
 		return -EBUSY;
 	bitmap_set(bitmap, pos, nbits);
 	return 0;
