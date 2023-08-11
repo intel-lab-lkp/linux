@@ -295,6 +295,8 @@ static int core_get_v1(struct venus_core *core)
 {
 	int ret;
 
+	legacy_binding = true;
+
 	ret = core_clks_get(core);
 	if (ret)
 		return ret;
@@ -349,6 +351,9 @@ static int vdec_get_v3(struct device *dev)
 {
 	struct venus_core *core = dev_get_drvdata(dev);
 
+	if (!legacy_binding)
+		return 0;
+
 	return vcodec_clks_get(core, dev, core->vcodec0_clks,
 			       core->res->vcodec0_clks);
 }
@@ -373,6 +378,9 @@ static int vdec_power_v3(struct device *dev, int on)
 static int venc_get_v3(struct device *dev)
 {
 	struct venus_core *core = dev_get_drvdata(dev);
+
+	if (!legacy_binding)
+		return 0;
 
 	return vcodec_clks_get(core, dev, core->vcodec1_clks,
 			       core->res->vcodec1_clks);
@@ -764,17 +772,6 @@ static int coreid_power_v4(struct venus_inst *inst, int on)
 	return ret;
 }
 
-static int vdec_get_v4(struct device *dev)
-{
-	struct venus_core *core = dev_get_drvdata(dev);
-
-	if (!legacy_binding)
-		return 0;
-
-	return vcodec_clks_get(core, dev, core->vcodec0_clks,
-			       core->res->vcodec0_clks);
-}
-
 static void vdec_put_v4(struct device *dev)
 {
 	struct venus_core *core = dev_get_drvdata(dev);
@@ -807,17 +804,6 @@ static int vdec_power_v4(struct device *dev, int on)
 	vcodec_control_v4(core, VIDC_CORE_ID_1, false);
 
 	return ret;
-}
-
-static int venc_get_v4(struct device *dev)
-{
-	struct venus_core *core = dev_get_drvdata(dev);
-
-	if (!legacy_binding)
-		return 0;
-
-	return vcodec_clks_get(core, dev, core->vcodec1_clks,
-			       core->res->vcodec1_clks);
 }
 
 static void venc_put_v4(struct device *dev)
@@ -1180,10 +1166,10 @@ static const struct venus_pm_ops pm_ops_v4 = {
 	.core_get = core_get_v4,
 	.core_put = core_put_v4,
 	.core_power = core_power_v4,
-	.vdec_get = vdec_get_v4,
+	.vdec_get = vdec_get_v3,
 	.vdec_put = vdec_put_v4,
 	.vdec_power = vdec_power_v4,
-	.venc_get = venc_get_v4,
+	.venc_get = venc_get_v3,
 	.venc_put = venc_put_v4,
 	.venc_power = venc_power_v4,
 	.coreid_power = coreid_power_v4,
