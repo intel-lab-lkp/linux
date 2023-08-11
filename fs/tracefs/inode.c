@@ -297,8 +297,7 @@ static int tracefs_apply_options(struct super_block *sb, bool remount)
 	 */
 
 	if (!remount || opts->opts & BIT(Opt_mode)) {
-		inode->i_mode &= ~S_IALLUGO;
-		inode->i_mode |= opts->mode;
+		inode->i_mode = (inode->i_mode & ~S_IALLUGO) | opts->mode;
 	}
 
 	if (!remount || opts->opts & BIT(Opt_uid))
