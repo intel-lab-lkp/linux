@@ -151,7 +151,6 @@ BFQ_BFQQ_FNS(just_created);
 BFQ_BFQQ_FNS(busy);
 BFQ_BFQQ_FNS(wait_request);
 BFQ_BFQQ_FNS(non_blocking_wait_rq);
-BFQ_BFQQ_FNS(fifo_expire);
 BFQ_BFQQ_FNS(has_short_ttime);
 BFQ_BFQQ_FNS(sync);
 BFQ_BFQQ_FNS(IO_bound);
@@ -996,16 +995,38 @@ reset_entity_pointer:
 static struct request *bfq_check_fifo(struct bfq_queue *bfqq,
 				      struct request *last)
 {
-	struct request *rq;
+	struct request *rq = NULL;
+	u64 ktime_ns = ktime_get_ns();
+	s64 time_diff = (~((u64)0))>>1;
+	int i;
 
-	if (bfq_bfqq_fifo_expire(bfqq))
-		return NULL;
+	for (i = 0; i < 2; i++) {
+		struct list_head *list_next;
+		struct request *next_rq = NULL;
 
-	bfq_mark_bfqq_fifo_expire(bfqq);
+		//get async and sync request other than last
+		if (!list_empty(&bfqq->fifo[i])) {
+			list_next = bfqq->fifo[i].next;
+			next_rq = rq_entry_fifo(list_next);
 
-	rq = rq_entry_fifo(bfqq->fifo.next);
+			if (next_rq == last) {
+				next_rq = NULL;
+				if (list_next->next != &(bfqq->fifo[i]))
+					next_rq = rq_entry_fifo(list_next->next);
+			}
+		}
 
-	if (rq == last || ktime_get_ns() < rq->fifo_time)
+		if (next_rq) {
+			s64 diff = next_rq->fifo_time - ktime_ns;
+
+			if (diff <= time_diff) {
+				rq = next_rq;
+				time_diff = diff;
+			}
+		}
+	}
+
+	if (!rq)
 		return NULL;
 
 	bfq_log_bfqq(bfqq->bfqd, bfqq, "check_fifo: returned %p", rq);
@@ -3304,8 +3325,6 @@ static void __bfq_set_in_service_queue(struct bfq_data *bfqd,
 				       struct bfq_queue *bfqq)
 {
 	if (bfqq) {
-		bfq_clear_bfqq_fifo_expire(bfqq);
-
 		bfqd->budgets_assigned = (bfqd->budgets_assigned * 7 + 256) / 8;
 
 		if (time_is_before_jiffies(bfqq->last_wr_start_finish) &&
@@ -5403,7 +5422,7 @@ void bfq_put_queue(struct bfq_queue *bfqq)
 	if (bfqq->bfqd->last_completed_rq_bfqq == bfqq)
 		bfqq->bfqd->last_completed_rq_bfqq = NULL;
 
-	WARN_ON_ONCE(!list_empty(&bfqq->fifo));
+	WARN_ON_ONCE(!list_empty(&bfqq->fifo[0]) && !list_empty(&bfqq->fifo[1]));
 	WARN_ON_ONCE(!RB_EMPTY_ROOT(&bfqq->sort_list));
 	WARN_ON_ONCE(bfqq->dispatched);
 
@@ -5595,7 +5614,8 @@ static void bfq_init_bfqq(struct bfq_data *bfqd, struct bfq_queue *bfqq,
 
 	bfqq->actuator_idx = act_idx;
 	RB_CLEAR_NODE(&bfqq->entity.rb_node);
-	INIT_LIST_HEAD(&bfqq->fifo);
+	INIT_LIST_HEAD(&bfqq->fifo[0]);
+	INIT_LIST_HEAD(&bfqq->fifo[1]);
 	INIT_HLIST_NODE(&bfqq->burst_list_node);
 	INIT_HLIST_NODE(&bfqq->woken_list_node);
 	INIT_HLIST_HEAD(&bfqq->woken_list);
@@ -6195,7 +6215,7 @@ static bool __bfq_insert_request(struct bfq_data *bfqd, struct request *rq)
 	idle_timer_disabled = waiting && !bfq_bfqq_wait_request(bfqq);
 
 	rq->fifo_time = ktime_get_ns() + bfqd->bfq_fifo_expire[rq_is_sync(rq)];
-	list_add_tail(&rq->queuelist, &bfqq->fifo);
+	list_add_tail(&rq->queuelist, &bfqq->fifo[rq_is_sync(rq)]);
 
 	bfq_rq_enqueued(bfqd, bfqq, rq);
 

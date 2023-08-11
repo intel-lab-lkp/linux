@@ -282,7 +282,7 @@ struct bfq_queue {
 	/* number of pending metadata requests */
 	int meta_pending;
 	/* fifo list of requests in sort_list */
-	struct list_head fifo;
+	struct list_head fifo[2];
 
 	/* entity representing this queue in the scheduler */
 	struct bfq_entity entity;
