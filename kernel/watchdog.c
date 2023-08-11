@@ -1017,5 +1017,6 @@ void __init lockup_detector_init(void)
 	else
 		allow_lockup_detector_init_retry = true;
 
+	INIT_WORK(&detector_work, lockup_detector_delay_init);
 	lockup_detector_setup();
 }
