@@ -867,7 +867,7 @@ static void mhi_ep_check_channel_interrupt(struct mhi_ep_cntrl *mhi_cntrl)
 		if (ch_int) {
 			mhi_ep_queue_channel_db(mhi_cntrl, ch_int, ch_idx);
 			mhi_ep_mmio_write(mhi_cntrl, MHI_CHDB_INT_CLEAR_n(i),
-							mhi_cntrl->chdb[i].status);
+							ch_int);
 		}
 	}
 }
