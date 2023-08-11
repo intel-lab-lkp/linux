@@ -1582,8 +1582,9 @@ EXPORT_SYMBOL_GPL(kill_pid_usb_asyncio);
 /*
  * kill_something_info() interprets pid in interesting ways just like kill(2).
  *
- * POSIX specifies that kill(-1,sig) is unspecified, but what we have
- * is probably wrong.  Should make it like BSD or SYSV.
+ * POSIX allows the error codes EPERM and ESRCH when kill(-1,sig) does
+ * not deliver a signal to any process.  For consistency use the same
+ * logic in kill_something_info and __kill_pgrp_info.
  */
 
 static int kill_something_info(int sig, struct kernel_siginfo *info, pid_t pid)
@@ -1602,7 +1603,8 @@ static int kill_something_info(int sig, struct kernel_siginfo *info, pid_t pid)
 		ret = __kill_pgrp_info(sig, info,
 				pid ? find_vpid(-pid) : task_pgrp(current));
 	} else {
-		int retval = 0, count = 0;
+		bool found = false, success = false;
+		int retval = 0;
 		struct task_struct * p;
 
 		for_each_process(p) {
@@ -1610,12 +1612,12 @@ static int kill_something_info(int sig, struct kernel_siginfo *info, pid_t pid)
 					!same_thread_group(p, current)) {
 				int err = group_send_sig_info(sig, info, p,
 							      PIDTYPE_MAX);
-				++count;
-				if (err != -EPERM)
-					retval = err;
+				found = true;
+				success |= !err;
+				retval = err;
 			}
 		}
-		ret = count ? retval : -ESRCH;
+		ret = success ? 0 : (found ? retval : -ESRCH);
 	}
 	read_unlock(&tasklist_lock);
 
