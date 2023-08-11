@@ -688,44 +688,10 @@ static int gve_unregister_qpls(struct gve_priv *priv)
 	return 0;
 }
 
-static int gve_create_xdp_rings(struct gve_priv *priv)
+static int gve_create_rx_rings(struct gve_priv *priv)
 {
-	int err;
-
-	err = gve_adminq_create_tx_queues(priv,
-					  gve_xdp_tx_start_queue_id(priv),
-					  priv->num_xdp_queues);
-	if (err) {
-		netif_err(priv, drv, priv->dev, "failed to create %d XDP tx queues\n",
-			  priv->num_xdp_queues);
-		/* This failure will trigger a reset - no need to clean
-		 * up
-		 */
-		return err;
-	}
-	netif_dbg(priv, drv, priv->dev, "created %d XDP tx queues\n",
-		  priv->num_xdp_queues);
-
-	return 0;
-}
-
-static int gve_create_rings(struct gve_priv *priv)
-{
-	int num_tx_queues = gve_num_tx_queues(priv);
 	int err;
 	int i;
-
-	err = gve_adminq_create_tx_queues(priv, 0, num_tx_queues);
-	if (err) {
-		netif_err(priv, drv, priv->dev, "failed to create %d tx queues\n",
-			  num_tx_queues);
-		/* This failure will trigger a reset - no need to clean
-		 * up
-		 */
-		return err;
-	}
-	netif_dbg(priv, drv, priv->dev, "created %d tx queues\n",
-		  num_tx_queues);
 
 	err = gve_adminq_create_rx_queues(priv, priv->rx_cfg.num_queues);
 	if (err) {
@@ -756,6 +722,50 @@ static int gve_create_rings(struct gve_priv *priv)
 	}
 
 	return 0;
+}
+
+static int gve_create_tx_rings(struct gve_priv *priv, int start_id, u32 num_tx_queues)
+{
+	int err;
+
+	err = gve_adminq_create_tx_queues(priv, start_id, num_tx_queues);
+	if (err) {
+		netif_err(priv, drv, priv->dev, "failed to create %d tx queues\n",
+			  num_tx_queues);
+		/* This failure will trigger a reset - no need to clean
+		 * up
+		 */
+		return err;
+	}
+	netif_dbg(priv, drv, priv->dev, "created %d tx queues\n",
+		  num_tx_queues);
+
+	return 0;
+}
+
+static int gve_create_xdp_rings(struct gve_priv *priv)
+{
+	int err;
+
+	err = gve_create_tx_rings(priv,
+				  gve_xdp_tx_start_queue_id(priv),
+				  priv->num_xdp_queues);
+
+	return err;
+}
+
+static int gve_create_rings(struct gve_priv *priv)
+{
+	int num_tx_queues = gve_num_tx_queues(priv);
+	int err;
+
+	err = gve_create_tx_rings(priv, 0, num_tx_queues);
+	if (err)
+		return err;
+
+	err = gve_create_rx_rings(priv);
+
+	return err;
 }
 
 static void add_napi_init_xdp_sync_stats(struct gve_priv *priv,
@@ -875,39 +885,10 @@ free_tx:
 	return err;
 }
 
-static int gve_destroy_xdp_rings(struct gve_priv *priv)
+static int gve_destroy_rx_rings(struct gve_priv *priv)
 {
-	int start_id;
 	int err;
 
-	start_id = gve_xdp_tx_start_queue_id(priv);
-	err = gve_adminq_destroy_tx_queues(priv,
-					   start_id,
-					   priv->num_xdp_queues);
-	if (err) {
-		netif_err(priv, drv, priv->dev,
-			  "failed to destroy XDP queues\n");
-		/* This failure will trigger a reset - no need to clean up */
-		return err;
-	}
-	netif_dbg(priv, drv, priv->dev, "destroyed XDP queues\n");
-
-	return 0;
-}
-
-static int gve_destroy_rings(struct gve_priv *priv)
-{
-	int num_tx_queues = gve_num_tx_queues(priv);
-	int err;
-
-	err = gve_adminq_destroy_tx_queues(priv, 0, num_tx_queues);
-	if (err) {
-		netif_err(priv, drv, priv->dev,
-			  "failed to destroy tx queues\n");
-		/* This failure will trigger a reset - no need to clean up */
-		return err;
-	}
-	netif_dbg(priv, drv, priv->dev, "destroyed tx queues\n");
 	err = gve_adminq_destroy_rx_queues(priv, priv->rx_cfg.num_queues);
 	if (err) {
 		netif_err(priv, drv, priv->dev,
@@ -916,6 +897,51 @@ static int gve_destroy_rings(struct gve_priv *priv)
 		return err;
 	}
 	netif_dbg(priv, drv, priv->dev, "destroyed rx queues\n");
+
+	return 0;
+}
+
+static int gve_destroy_tx_rings(struct gve_priv *priv, int start_id, u32 num_queues)
+{
+	int err;
+
+	err = gve_adminq_destroy_tx_queues(priv, start_id, num_queues);
+	if (err) {
+		netif_err(priv, drv, priv->dev,
+			  "failed to destroy tx queues\n");
+		/* This failure will trigger a reset - no need to clean up */
+		return err;
+	}
+	netif_dbg(priv, drv, priv->dev, "destroyed tx queues\n");
+
+	return 0;
+}
+
+static int gve_destroy_xdp_rings(struct gve_priv *priv)
+{
+	int start_id;
+	int err;
+
+	start_id = gve_xdp_tx_start_queue_id(priv);
+	err = gve_destroy_tx_rings(priv,
+				   start_id,
+				   priv->num_xdp_queues);
+
+	return err;
+}
+
+static int gve_destroy_rings(struct gve_priv *priv)
+{
+	int num_tx_queues = gve_num_tx_queues(priv);
+	int err;
+
+	err = gve_destroy_tx_rings(priv, 0, num_tx_queues);
+	if (err)
+		return err;
+
+	err = gve_destroy_rx_rings(priv);
+	if (err)
+		return err;
 	return 0;
 }
 
@@ -1306,12 +1332,6 @@ static int gve_open(struct net_device *dev)
 	if (err)
 		goto reset;
 
-	if (!gve_is_gqi(priv)) {
-		/* Hard code this for now. This may be tuned in the future for
-		 * performance.
-		 */
-		priv->data_buffer_size_dqo = GVE_RX_BUFFER_SIZE_DQO;
-	}
 	err = gve_create_rings(priv);
 	if (err)
 		goto reset;
@@ -1457,12 +1477,64 @@ static void gve_handle_link_status(struct gve_priv *priv, bool link_status)
 	}
 }
 
+static void gve_turnup_and_check_status(struct gve_priv *priv)
+{
+	u32 status;
+
+	gve_turnup(priv);
+	status = ioread32be(&priv->reg_bar0->device_status);
+	gve_handle_link_status(priv, GVE_DEVICE_STATUS_LINK_STATUS_MASK & status);
+}
+
+int gve_recreate_rx_rings(struct gve_priv *priv)
+{
+	int err;
+
+	/* Unregister queues with the device*/
+	err = gve_destroy_rx_rings(priv);
+	if (err)
+		return err;
+
+	/* Reset the RX state */
+	gve_rx_reset_rings_dqo(priv);
+
+	/* Register queues with the device */
+	return gve_create_rx_rings(priv);
+}
+
+int gve_reconfigure_rx_rings(struct gve_priv *priv,
+			     bool enable_hdr_split,
+			     int packet_buffer_size)
+{
+	int err = 0;
+
+	if (priv->queue_format != GVE_DQO_RDA_FORMAT)
+		return -EOPNOTSUPP;
+
+	gve_turndown(priv);
+
+	/* Allocate/free hdr resources */
+	if (enable_hdr_split != !!priv->header_buf_pool) {
+		err = gve_rx_handle_hdr_resources_dqo(priv, enable_hdr_split);
+		if (err)
+			goto err;
+	}
+
+	/* Apply new RX configuration changes */
+	priv->data_buffer_size_dqo = packet_buffer_size;
+
+	/* Reset RX state and re-register with the device */
+	err = gve_recreate_rx_rings(priv);
+err:
+	gve_turnup_and_check_status(priv);
+	return err;
+}
+
 static int gve_set_xdp(struct gve_priv *priv, struct bpf_prog *prog,
 		       struct netlink_ext_ack *extack)
 {
 	struct bpf_prog *old_prog;
 	int err = 0;
-	u32 status;
 
 	old_prog = READ_ONCE(priv->xdp_prog);
 	if (!netif_carrier_ok(priv->dev)) {
@@ -1491,9 +1563,7 @@ static int gve_set_xdp(struct gve_priv *priv, struct bpf_prog *prog,
 		bpf_prog_put(old_prog);
 
 out:
-	gve_turnup(priv);
-	status = ioread32be(&priv->reg_bar0->device_status);
-	gve_handle_link_status(priv, GVE_DEVICE_STATUS_LINK_STATUS_MASK & status);
+	gve_turnup_and_check_status(priv);
 	return err;
 }
 
@@ -2278,6 +2348,7 @@ static int gve_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	priv->service_task_flags = 0x0;
 	priv->state_flags = 0x0;
 	priv->ethtool_flags = 0x0;
+	priv->ethtool_defaults = 0x0;
 
 	gve_set_probe_in_progress(priv);
 	priv->gve_wq = alloc_ordered_workqueue("gve", 0);
