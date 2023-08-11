@@ -279,4 +279,7 @@
 /* Sunplus UART */
 #define PORT_SUNPLUS	123
 
+/* Broadcom 7271 UART */
+#define PORT_BCM7271    124
+
 #endif /* _UAPILINUX_SERIAL_CORE_H */
