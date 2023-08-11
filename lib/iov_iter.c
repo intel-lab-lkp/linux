@@ -14,186 +14,281 @@
 #include <linux/scatterlist.h>
 #include <linux/instrumented.h>
 
-/* covers ubuf and kbuf alike */
-#define iterate_buf(i, n, base, len, off, __p, STEP) {		\
-	size_t __maybe_unused off = 0;				\
-	len = n;						\
-	base = __p + i->iov_offset;				\
-	len -= (STEP);						\
-	i->iov_offset += len;					\
-	n = len;						\
-}
+typedef size_t (*iov_step_f)(void *iter_base, size_t progress, size_t len,
+			     void *priv, __wsum *csum);
+typedef size_t (*iov_ustep_f)(void __user *iter_base, size_t progress, size_t len,
+			      void *priv, __wsum *csum);
 
-/* covers iovec and kvec alike */
-#define iterate_iovec(i, n, base, len, off, __p, STEP) {	\
-	size_t off = 0;						\
-	size_t skip = i->iov_offset;				\
-	do {							\
-		len = min(n, __p->iov_len - skip);		\
-		if (likely(len)) {				\
-			base = __p->iov_base + skip;		\
-			len -= (STEP);				\
-			off += len;				\
-			skip += len;				\
-			n -= len;				\
-			if (skip < __p->iov_len)		\
-				break;				\
-		}						\
-		__p++;						\
-		skip = 0;					\
-	} while (n);						\
-	i->iov_offset = skip;					\
-	n = off;						\
-}
-
-#define iterate_bvec(i, n, base, len, off, p, STEP) {		\
-	size_t off = 0;						\
-	unsigned skip = i->iov_offset;				\
-	while (n) {						\
-		unsigned offset = p->bv_offset + skip;		\
-		unsigned left;					\
-		void *kaddr = kmap_local_page(p->bv_page +	\
-					offset / PAGE_SIZE);	\
-		base = kaddr + offset % PAGE_SIZE;		\
-		len = min(min(n, (size_t)(p->bv_len - skip)),	\
-		     (size_t)(PAGE_SIZE - offset % PAGE_SIZE));	\
-		left = (STEP);					\
-		kunmap_local(kaddr);				\
-		len -= left;					\
-		off += len;					\
-		skip += len;					\
-		if (skip == p->bv_len) {			\
-			skip = 0;				\
-			p++;					\
-		}						\
-		n -= len;					\
-		if (left)					\
-			break;					\
-	}							\
-	i->iov_offset = skip;					\
-	n = off;						\
-}
-
-#define iterate_xarray(i, n, base, len, __off, STEP) {		\
-	__label__ __out;					\
-	size_t __off = 0;					\
-	struct folio *folio;					\
-	loff_t start = i->xarray_start + i->iov_offset;		\
-	pgoff_t index = start / PAGE_SIZE;			\
-	XA_STATE(xas, i->xarray, index);			\
-								\
-	len = PAGE_SIZE - offset_in_page(start);		\
-	rcu_read_lock();					\
-	xas_for_each(&xas, folio, ULONG_MAX) {			\
-		unsigned left;					\
-		size_t offset;					\
-		if (xas_retry(&xas, folio))			\
-			continue;				\
-		if (WARN_ON(xa_is_value(folio)))		\
-			break;					\
-		if (WARN_ON(folio_test_hugetlb(folio)))		\
-			break;					\
-		offset = offset_in_folio(folio, start + __off);	\
-		while (offset < folio_size(folio)) {		\
-			base = kmap_local_folio(folio, offset);	\
-			len = min(n, len);			\
-			left = (STEP);				\
-			kunmap_local(base);			\
-			len -= left;				\
-			__off += len;				\
-			n -= len;				\
-			if (left || n == 0)			\
-				goto __out;			\
-			offset += len;				\
-			len = PAGE_SIZE;			\
-		}						\
-	}							\
-__out:								\
-	rcu_read_unlock();					\
-	i->iov_offset += __off;					\
-	n = __off;						\
-}
-
-#define __iterate_and_advance(i, n, base, len, off, I, K) {	\
-	if (unlikely(i->count < n))				\
-		n = i->count;					\
-	if (likely(n)) {					\
-		if (likely(iter_is_ubuf(i))) {			\
-			void __user *base;			\
-			size_t len;				\
-			iterate_buf(i, n, base, len, off,	\
-						i->ubuf, (I)) 	\
-		} else if (likely(iter_is_iovec(i))) {		\
-			const struct iovec *iov = iter_iov(i);	\
-			void __user *base;			\
-			size_t len;				\
-			iterate_iovec(i, n, base, len, off,	\
-						iov, (I))	\
-			i->nr_segs -= iov - iter_iov(i);	\
-			i->__iov = iov;				\
-		} else if (iov_iter_is_bvec(i)) {		\
-			const struct bio_vec *bvec = i->bvec;	\
-			void *base;				\
-			size_t len;				\
-			iterate_bvec(i, n, base, len, off,	\
-						bvec, (K))	\
-			i->nr_segs -= bvec - i->bvec;		\
-			i->bvec = bvec;				\
-		} else if (iov_iter_is_kvec(i)) {		\
-			const struct kvec *kvec = i->kvec;	\
-			void *base;				\
-			size_t len;				\
-			iterate_iovec(i, n, base, len, off,	\
-						kvec, (K))	\
-			i->nr_segs -= kvec - i->kvec;		\
-			i->kvec = kvec;				\
-		} else if (iov_iter_is_xarray(i)) {		\
-			void *base;				\
-			size_t len;				\
-			iterate_xarray(i, n, base, len, off,	\
-							(K))	\
-		}						\
-		i->count -= n;					\
-	}							\
-}
-#define iterate_and_advance(i, n, base, len, off, I, K) \
-	__iterate_and_advance(i, n, base, len, off, I, ((void)(K),0))
-
-static int copyout(void __user *to, const void *from, size_t n)
+static __always_inline
+size_t iterate_ubuf(struct iov_iter *iter, size_t len, void *priv, __wsum *csum,
+		    iov_ustep_f step)
 {
-	if (should_fail_usercopy())
-		return n;
-	if (access_ok(to, n)) {
-		instrument_copy_to_user(to, from, n);
-		n = raw_copy_to_user(to, from, n);
+	void __user *base = iter->ubuf;
+	size_t remain;
+
+	remain = step(base + iter->iov_offset, 0, len, priv, csum);
+	len -= remain;
+	iter->iov_offset += len;
+	iter->count -= len;
+	return len;
+}
+
+static __always_inline
+size_t iterate_iovec(struct iov_iter *iter, size_t len, void *priv, __wsum *csum,
+		     iov_ustep_f step)
+{
+	const struct iovec *p = iter->__iov;
+	size_t progress = 0, skip = iter->iov_offset;
+
+	do {
+		size_t remain, consumed;
+		size_t part = min(len, p->iov_len - skip);
+
+		if (likely(part)) {
+			remain = step(p->iov_base + skip, progress, part, priv, csum);
+			consumed = part - remain;
+			progress += consumed;
+			skip += consumed;
+			len -= consumed;
+			if (skip < p->iov_len)
+				break;
+		}
+		p++;
+		skip = 0;
+	} while (len);
+
+	iter->iov_offset = skip;
+	iter->nr_segs -= p - iter->__iov;
+	iter->__iov = p;
+	iter->count -= progress;
+	return progress;
+}
+
+static __always_inline
+size_t iterate_kvec(struct iov_iter *iter, size_t len, void *priv, __wsum *csum,
+		    iov_step_f step)
+{
+	const struct kvec *p = iter->kvec;
+	size_t progress = 0, skip = iter->iov_offset;
+
+	do {
+		size_t remain, consumed;
+		size_t part = min(len, p->iov_len - skip);
+
+		if (likely(part)) {
+			remain = step(p->iov_base + skip, progress, part, priv, csum);
+			consumed = part - remain;
+			progress += consumed;
+			skip += consumed;
+			len -= consumed;
+			if (skip < p->iov_len)
+				break;
+		}
+		p++;
+		skip = 0;
+	} while (len);
+
+	iter->iov_offset = skip;
+	iter->nr_segs -= p - iter->kvec;
+	iter->kvec = p;
+	iter->count -= progress;
+	return progress;
+}
+
+static __always_inline
+size_t iterate_bvec(struct iov_iter *iter, size_t len, void *priv, __wsum *csum,
+		    iov_step_f step)
+{
+	const struct bio_vec *p = iter->bvec;
+	size_t progress = 0, skip = iter->iov_offset;
+
+	do {
+		size_t remain, consumed;
+		size_t offset = p->bv_offset + skip, part;
+		void *kaddr = kmap_local_page(p->bv_page + offset / PAGE_SIZE);
+
+		part = min3(len,
+			   (size_t)(p->bv_len - skip),
+			   (size_t)(PAGE_SIZE - offset % PAGE_SIZE));
+		remain = step(kaddr + offset % PAGE_SIZE, progress, part, priv, csum);
+		kunmap_local(kaddr);
+		consumed = part - remain;
+		len -= consumed;
+		progress += consumed;
+		skip += consumed;
+		if (skip >= p->bv_len) {
+			skip = 0;
+			p++;
+		}
+		if (remain)
+			break;
+	} while (len);
+
+	iter->iov_offset = skip;
+	iter->nr_segs -= p - iter->bvec;
+	iter->bvec = p;
+	iter->count -= progress;
+	return progress;
+}
+
+static __always_inline
+size_t iterate_xarray(struct iov_iter *iter, size_t len, void *priv, __wsum *csum,
+		      iov_step_f step)
+{
+	struct folio *folio;
+	size_t progress = 0;
+	loff_t start = iter->xarray_start + iter->iov_offset;
+	pgoff_t index = start / PAGE_SIZE;
+	XA_STATE(xas, iter->xarray, index);
+
+	rcu_read_lock();
+	xas_for_each(&xas, folio, ULONG_MAX) {
+		size_t remain, consumed, offset, part, flen;
+
+		if (xas_retry(&xas, folio))
+			continue;
+		if (WARN_ON(xa_is_value(folio)))
+			break;
+		if (WARN_ON(folio_test_hugetlb(folio)))
+			break;
+
+		offset = offset_in_folio(folio, start);
+		flen = min(folio_size(folio) - offset, len);
+		start += flen;
+
+		while (flen) {
+			void *base = kmap_local_folio(folio, offset);
+
+			part = min(flen, PAGE_SIZE - offset_in_page(offset));
+			remain = step(base, progress, part, priv, csum);
+			kunmap_local(base);
+
+			consumed = part - remain;
+			progress += consumed;
+			len -= consumed;
+
+			if (remain || len == 0)
+				goto out;
+			flen -= consumed;
+			offset += consumed;
+		}
 	}
-	return n;
+
+out:
+	rcu_read_unlock();
+	iter->iov_offset += progress;
+	iter->count -= progress;
+	return progress;
 }
 
-static int copyout_nofault(void __user *to, const void *from, size_t n)
+static __always_inline
+size_t iterate_and_advance(struct iov_iter *iter, size_t len, void *priv,
+			   iov_ustep_f ustep, iov_step_f step)
 {
-	long res;
+	if (unlikely(iter->count < len))
+		len = iter->count;
+	if (unlikely(!len))
+		return 0;
 
-	if (should_fail_usercopy())
-		return n;
-
-	res = copy_to_user_nofault(to, from, n);
-
-	return res < 0 ? n : res;
+	switch (iov_iter_type(iter)) {
+	case ITER_UBUF:
+		return iterate_ubuf(iter, len, priv, NULL, ustep);
+	case ITER_IOVEC:
+		return iterate_iovec(iter, len, priv, NULL, ustep);
+	case ITER_KVEC:
+		return iterate_kvec(iter, len, priv, NULL, step);
+	case ITER_BVEC:
+		return iterate_bvec(iter, len, priv, NULL, step);
+	case ITER_XARRAY:
+		return iterate_xarray(iter, len, priv, NULL, step);
+	case ITER_DISCARD:
+		iter->count -= len;
+		return len;
+	}
+	return 0;
 }
 
-static int copyin(void *to, const void __user *from, size_t n)
+static __always_inline
+size_t iterate_and_advance_csum(struct iov_iter *iter, size_t len, void *priv,
+				__wsum *csum, iov_ustep_f ustep, iov_step_f step)
 {
-	size_t res = n;
+	if (unlikely(iter->count < len))
+		len = iter->count;
+	if (unlikely(!len))
+		return 0;
+
+	switch (iov_iter_type(iter)) {
+	case ITER_UBUF:
+		return iterate_ubuf(iter, len, priv, csum, ustep);
+	case ITER_IOVEC:
+		return iterate_iovec(iter, len, priv, csum, ustep);
+	case ITER_KVEC:
+		return iterate_kvec(iter, len, priv, csum, step);
+	case ITER_BVEC:
+		return iterate_bvec(iter, len, priv, csum, step);
+	case ITER_XARRAY:
+		return iterate_xarray(iter, len, priv, csum, step);
+	case ITER_DISCARD:
+		iter->count -= len;
+		return len;
+	}
+	return 0;
+}
+
+static size_t copy_to_user_iter(void __user *iter_to, size_t progress,
+				size_t len, void *from, __wsum *csum)
+{
+	if (should_fail_usercopy())
+		return len;
+	if (access_ok(iter_to, len)) {
+		from += progress;
+		instrument_copy_to_user(iter_to, from, len);
+		len = raw_copy_to_user(iter_to, from, len);
+	}
+	return len;
+}
+
+static size_t copy_to_user_iter_nofault(void __user *iter_to, size_t progress,
+					size_t len, void *from, __wsum *csum)
+{
+	ssize_t res;
 
 	if (should_fail_usercopy())
-		return n;
-	if (access_ok(from, n)) {
-		instrument_copy_from_user_before(to, from, n);
-		res = raw_copy_from_user(to, from, n);
-		instrument_copy_from_user_after(to, from, n, res);
+		return len;
+
+	from += progress;
+	res = copy_to_user_nofault(iter_to, from, len);
+	return res < 0 ? len : res;
+}
+
+static size_t copy_from_user_iter(void __user *iter_from, size_t progress,
+				  size_t len, void *to, __wsum *csum)
+{
+	size_t res = len;
+
+	if (should_fail_usercopy())
+		return len;
+	if (access_ok(iter_from, len)) {
+		to += progress;
+		instrument_copy_from_user_before(to, iter_from, len);
+		res = raw_copy_from_user(to, iter_from, len);
+		instrument_copy_from_user_after(to, iter_from, len, res);
 	}
 	return res;
+}
+
+static size_t memcpy_to_iter(void *iter_to, size_t progress,
+			     size_t len, void *from, __wsum *csum)
+{
+	memcpy(iter_to, from + progress, len);
+	return 0;
+}
+
+static size_t memcpy_from_iter(void *iter_from, size_t progress,
+			       size_t len, void *to, __wsum *csum)
+{
+	memcpy(to + progress, iter_from, len);
+	return 0;
 }
 
 /*
@@ -313,23 +408,27 @@ size_t _copy_to_iter(const void *addr, size_t bytes, struct iov_iter *i)
 		return 0;
 	if (user_backed_iter(i))
 		might_fault();
-	iterate_and_advance(i, bytes, base, len, off,
-		copyout(base, addr + off, len),
-		memcpy(base, addr + off, len)
-	)
-
-	return bytes;
+	return iterate_and_advance(i, bytes, (void *)addr,
+				   copy_to_user_iter, memcpy_to_iter);
 }
 EXPORT_SYMBOL(_copy_to_iter);
 
 #ifdef CONFIG_ARCH_HAS_COPY_MC
-static int copyout_mc(void __user *to, const void *from, size_t n)
+static size_t copy_to_user_iter_mc(void __user *iter_to, size_t progress,
+				   size_t len, void *from, __wsum *csum)
 {
-	if (access_ok(to, n)) {
-		instrument_copy_to_user(to, from, n);
-		n = copy_mc_to_user((__force void *) to, from, n);
+	if (access_ok(iter_to, len)) {
+		from += progress;
+		instrument_copy_to_user(iter_to, from, len);
+		len = copy_mc_to_user(iter_to, from, len);
 	}
-	return n;
+	return len;
+}
+
+static size_t memcpy_to_iter_mc(void *iter_to, size_t progress,
+				size_t len, void *from, __wsum *csum)
+{
+	return copy_mc_to_kernel(iter_to, from + progress, len);
 }
 
 /**
@@ -362,22 +461,16 @@ size_t _copy_mc_to_iter(const void *addr, size_t bytes, struct iov_iter *i)
 		return 0;
 	if (user_backed_iter(i))
 		might_fault();
-	__iterate_and_advance(i, bytes, base, len, off,
-		copyout_mc(base, addr + off, len),
-		copy_mc_to_kernel(base, addr + off, len)
-	)
-
-	return bytes;
+	return iterate_and_advance(i, bytes, (void *)addr,
+				   copy_to_user_iter_mc, memcpy_to_iter_mc);
 }
 EXPORT_SYMBOL_GPL(_copy_mc_to_iter);
 #endif /* CONFIG_ARCH_HAS_COPY_MC */
 
-static void *memcpy_from_iter(struct iov_iter *i, void *to, const void *from,
-				 size_t size)
+static size_t memcpy_from_iter_mc(void *iter_from, size_t progress,
+				  size_t len, void *to, __wsum *csum)
 {
-	if (iov_iter_is_copy_mc(i))
-		return (void *)copy_mc_to_kernel(to, from, size);
-	return memcpy(to, from, size);
+	return copy_mc_to_kernel(to + progress, iter_from, len);
 }
 
 size_t _copy_from_iter(void *addr, size_t bytes, struct iov_iter *i)
@@ -387,30 +480,37 @@ size_t _copy_from_iter(void *addr, size_t bytes, struct iov_iter *i)
 
 	if (user_backed_iter(i))
 		might_fault();
-	iterate_and_advance(i, bytes, base, len, off,
-		copyin(addr + off, base, len),
-		memcpy_from_iter(i, addr + off, base, len)
-	)
-
-	return bytes;
+	return iterate_and_advance(i, bytes, addr,
+				   copy_from_user_iter,
+				   iov_iter_is_copy_mc(i) ?
+				   memcpy_from_iter_mc : memcpy_from_iter);
 }
 EXPORT_SYMBOL(_copy_from_iter);
+
+static size_t copy_from_user_iter_nocache(void __user *iter_from, size_t progress,
+					  size_t len, void *to, __wsum *csum)
+{
+	return __copy_from_user_inatomic_nocache(to + progress, iter_from, len);
+}
 
 size_t _copy_from_iter_nocache(void *addr, size_t bytes, struct iov_iter *i)
 {
 	if (WARN_ON_ONCE(!i->data_source))
 		return 0;
 
-	iterate_and_advance(i, bytes, base, len, off,
-		__copy_from_user_inatomic_nocache(addr + off, base, len),
-		memcpy(addr + off, base, len)
-	)
-
-	return bytes;
+	return iterate_and_advance(i, bytes, addr,
+				   copy_from_user_iter_nocache,
+				   memcpy_from_iter);
 }
 EXPORT_SYMBOL(_copy_from_iter_nocache);
 
 #ifdef CONFIG_ARCH_HAS_UACCESS_FLUSHCACHE
+static size_t copy_from_user_iter_flushcache(void __user *iter_from, size_t progress,
+					     size_t len, void *to, __wsum *csum)
+{
+	return __copy_from_user_flushcache(to + progress, iter_from, len);
+}
+
 /**
  * _copy_from_iter_flushcache - write destination through cpu cache
  * @addr: destination kernel address
@@ -432,12 +532,9 @@ size_t _copy_from_iter_flushcache(void *addr, size_t bytes, struct iov_iter *i)
 	if (WARN_ON_ONCE(!i->data_source))
 		return 0;
 
-	iterate_and_advance(i, bytes, base, len, off,
-		__copy_from_user_flushcache(addr + off, base, len),
-		memcpy_flushcache(addr + off, base, len)
-	)
-
-	return bytes;
+	return iterate_and_advance(i, bytes, addr,
+				   copy_from_user_iter_flushcache,
+				   memcpy_from_iter);
 }
 EXPORT_SYMBOL_GPL(_copy_from_iter_flushcache);
 #endif
@@ -509,10 +606,9 @@ size_t copy_page_to_iter_nofault(struct page *page, unsigned offset, size_t byte
 		void *kaddr = kmap_local_page(page);
 		size_t n = min(bytes, (size_t)PAGE_SIZE - offset);
 
-		iterate_and_advance(i, n, base, len, off,
-			copyout_nofault(base, kaddr + offset + off, len),
-			memcpy(base, kaddr + offset + off, len)
-		)
+		n = iterate_and_advance(i, bytes, kaddr,
+					copy_to_user_iter_nofault,
+					memcpy_to_iter);
 		kunmap_local(kaddr);
 		res += n;
 		bytes -= n;
@@ -555,14 +651,23 @@ size_t copy_page_from_iter(struct page *page, size_t offset, size_t bytes,
 }
 EXPORT_SYMBOL(copy_page_from_iter);
 
+static size_t zero_to_user_iter(void __user *iter_to, size_t progress,
+				size_t len, void *from, __wsum *csum)
+{
+	return clear_user(iter_to, len);
+}
+
+static size_t zero_to_iter(void *iter_to, size_t progress,
+			   size_t len, void *from, __wsum *csum)
+{
+	memset(iter_to, 0, len);
+	return 0;
+}
+
 size_t iov_iter_zero(size_t bytes, struct iov_iter *i)
 {
-	iterate_and_advance(i, bytes, base, len, count,
-		clear_user(base, len),
-		memset(base, 0, len)
-	)
-
-	return bytes;
+	return iterate_and_advance(i, bytes, NULL,
+				   zero_to_user_iter, zero_to_iter);
 }
 EXPORT_SYMBOL(iov_iter_zero);
 
@@ -578,10 +683,11 @@ size_t copy_page_from_iter_atomic(struct page *page, unsigned offset, size_t byt
 		kunmap_atomic(kaddr);
 		return 0;
 	}
-	iterate_and_advance(i, bytes, base, len, off,
-		copyin(p + off, base, len),
-		memcpy_from_iter(i, p + off, base, len)
-	)
+
+	bytes = iterate_and_advance(i, bytes, p,
+				    copy_from_user_iter,
+				    iov_iter_is_copy_mc(i) ?
+				    memcpy_from_iter_mc : memcpy_from_iter);
 	kunmap_atomic(kaddr);
 	return bytes;
 }
@@ -1168,32 +1274,56 @@ ssize_t iov_iter_get_pages_alloc2(struct iov_iter *i,
 }
 EXPORT_SYMBOL(iov_iter_get_pages_alloc2);
 
+static size_t copy_from_user_iter_csum(void __user *iter_from, size_t progress,
+				       size_t len, void *to, __wsum *csum)
+{
+	__wsum next;
+
+	next = csum_and_copy_from_user(iter_from, to + progress, len);
+	*csum = csum_block_add(*csum, next, progress);
+	return next ? 0 : len;
+}
+
+static size_t memcpy_from_iter_csum(void *iter_from, size_t progress,
+				    size_t len, void *to, __wsum *csum)
+{
+	*csum = csum_and_memcpy(to + progress, iter_from, len, *csum, progress);
+	return 0;
+}
+
 size_t csum_and_copy_from_iter(void *addr, size_t bytes, __wsum *csum,
 			       struct iov_iter *i)
 {
-	__wsum sum, next;
-	sum = *csum;
 	if (WARN_ON_ONCE(!i->data_source))
 		return 0;
-
-	iterate_and_advance(i, bytes, base, len, off, ({
-		next = csum_and_copy_from_user(base, addr + off, len);
-		sum = csum_block_add(sum, next, off);
-		next ? 0 : len;
-	}), ({
-		sum = csum_and_memcpy(addr + off, base, len, sum, off);
-	})
-	)
-	*csum = sum;
-	return bytes;
+	return iterate_and_advance_csum(i, bytes, addr, csum,
+					copy_from_user_iter_csum,
+					memcpy_from_iter_csum);
 }
 EXPORT_SYMBOL(csum_and_copy_from_iter);
+
+static size_t copy_to_user_iter_csum(void __user *iter_to, size_t progress,
+				     size_t len, void *from, __wsum *csum)
+{
+	__wsum next;
+
+	next = csum_and_copy_to_user(from + progress, iter_to, len);
+	*csum = csum_block_add(*csum, next, progress);
+	return next ? 0 : len;
+}
+
+static size_t memcpy_to_iter_csum(void *iter_to, size_t progress,
+				  size_t len, void *from, __wsum *csum)
+{
+	*csum = csum_and_memcpy(iter_to, from + progress, len, *csum, progress);
+	return 0;
+}
 
 size_t csum_and_copy_to_iter(const void *addr, size_t bytes, void *_csstate,
 			     struct iov_iter *i)
 {
 	struct csum_state *csstate = _csstate;
-	__wsum sum, next;
+	__wsum sum;
 
 	if (WARN_ON_ONCE(i->data_source))
 		return 0;
@@ -1207,14 +1337,10 @@ size_t csum_and_copy_to_iter(const void *addr, size_t bytes, void *_csstate,
 	}
 
 	sum = csum_shift(csstate->csum, csstate->off);
-	iterate_and_advance(i, bytes, base, len, off, ({
-		next = csum_and_copy_to_user(addr + off, base, len);
-		sum = csum_block_add(sum, next, off);
-		next ? 0 : len;
-	}), ({
-		sum = csum_and_memcpy(base, addr + off, len, sum, off);
-	})
-	)
+	
+	bytes = iterate_and_advance_csum(i, bytes, (void *)addr, &sum,
+					 copy_to_user_iter_csum,
+					 memcpy_to_iter_csum);
 	csstate->csum = csum_shift(sum, csstate->off);
 	csstate->off += bytes;
 	return bytes;
