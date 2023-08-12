@@ -6,9 +6,6 @@ $schema: http://devicetree.org/meta-schemas/core.yaml#
 
 title: Realtek switches for unmanaged switches
 
-allOf:
-  - $ref: dsa.yaml#/$defs/ethernet-ports
-
 maintainers:
   - Linus Walleij <linus.walleij@linaro.org>
 
@@ -95,37 +92,38 @@ properties:
       - '#address-cells'
       - '#interrupt-cells'
 
-  mdio:
-    $ref: /schemas/net/mdio.yaml#
-    unevaluatedProperties: false
+allOf:
+  - $ref: dsa.yaml#/$defs/ethernet-ports
+  - if:
+      required: [ mdio ]
+    then:
+      properties:
+        mdio:
+          properties:
+            compatible:
+              const: realtek,smi-mdio
 
-    properties:
-      compatible:
-        const: realtek,smi-mdio
+  - if:
+      required:
+        - reg
+    then:
+      $ref: /schemas/spi/spi-peripheral-props.yaml#
+      not:
+        required:
+          - mdc-gpios
+          - mdio-gpios
+          - mdio
 
-if:
-  required:
-    - reg
-
-then:
-  $ref: /schemas/spi/spi-peripheral-props.yaml#
-  not:
-    required:
-      - mdc-gpios
-      - mdio-gpios
-      - mdio
-
-  properties:
-    mdc-gpios: false
-    mdio-gpios: false
-    mdio: false
-
-else:
-  required:
-    - mdc-gpios
-    - mdio-gpios
-    - mdio
-    - reset-gpios
+      properties:
+        mdc-gpios: false
+        mdio-gpios: false
+        mdio: false
+    else:
+      required:
+        - mdc-gpios
+        - mdio-gpios
+        - mdio
+        - reset-gpios
 
 required:
   - compatible
