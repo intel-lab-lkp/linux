@@ -666,6 +666,7 @@ struct pci_bus {
 	unsigned char	cur_bus_speed;	/* enum pci_bus_speed */
 #ifdef CONFIG_PCI_DOMAINS_GENERIC
 	int		domain_nr;
+	unsigned int	static_nr:1;
 #endif
 
 	char		name[48];

@@ -6886,16 +6886,18 @@ static void of_pci_reserve_static_domain_nr(void)
 	}
 }
 
-static int of_pci_bus_find_domain_nr(struct device *parent)
+static int of_pci_bus_find_domain_nr(struct pci_bus *bus, struct device *parent)
 {
 	static bool static_domains_reserved = false;
-	int domain_nr;
+	int domain_nr, ret;
 
 	/* On the first call scan device tree for static allocations. */
 	if (!static_domains_reserved) {
 		of_pci_reserve_static_domain_nr();
 		static_domains_reserved = true;
 	}
+
+	bus->static_nr = 0;
 
 	if (parent) {
 		/*
@@ -6904,10 +6906,14 @@ static int of_pci_bus_find_domain_nr(struct device *parent)
 		 * in DT.
 		 */
 		domain_nr = of_get_pci_domain_nr(parent->of_node);
-		if (domain_nr >= 0)
-			return ida_alloc_range(&pci_domain_nr_static_ida,
-					       domain_nr, domain_nr,
-					       GFP_KERNEL);
+		if (domain_nr >= 0) {
+			ret = ida_alloc_range(&pci_domain_nr_static_ida,
+					      domain_nr, domain_nr, GFP_KERNEL);
+			if (ret >= 0)
+				bus->static_nr = 1;
+
+			return ret;
+		}
 	}
 
 	/*
@@ -6925,7 +6931,7 @@ static void of_pci_bus_release_domain_nr(struct pci_bus *bus, struct device *par
 		return;
 
 	/* Release domain from IDA where it was allocated. */
-	if (of_get_pci_domain_nr(parent->of_node) == bus->domain_nr)
+	if (bus->static_nr)
 		ida_free(&pci_domain_nr_static_ida, bus->domain_nr);
 	else
 		ida_free(&pci_domain_nr_dynamic_ida, bus->domain_nr);
@@ -6933,7 +6939,7 @@ static void of_pci_bus_release_domain_nr(struct pci_bus *bus, struct device *par
 
 int pci_bus_find_domain_nr(struct pci_bus *bus, struct device *parent)
 {
-	return acpi_disabled ? of_pci_bus_find_domain_nr(parent) :
+	return acpi_disabled ? of_pci_bus_find_domain_nr(bus, parent) :
 			       acpi_pci_bus_find_domain_nr(bus);
 }
 
