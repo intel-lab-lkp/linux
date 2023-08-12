@@ -809,10 +809,8 @@ static int acpi_gpio_resource_lookup(struct acpi_gpio_lookup *lookup,
 				     struct acpi_gpio_info *info)
 {
 	struct acpi_device *adev = lookup->info.adev;
-	struct list_head res_list;
+	LIST_HEAD(res_list);
 	int ret;
-
-	INIT_LIST_HEAD(&res_list);
 
 	ret = acpi_dev_get_resources(adev, &res_list,
 				     acpi_populate_gpio_lookup,
@@ -1472,13 +1470,12 @@ int acpi_gpio_count(struct device *dev, const char *con_id)
 
 	/* Then from plain _CRS GPIOs */
 	if (count < 0) {
-		struct list_head resource_list;
+		LIST_HEAD(resource_list);
 		unsigned int crs_count = 0;
 
 		if (!acpi_can_fallback_to_crs(adev, con_id))
 			return count;
 
-		INIT_LIST_HEAD(&resource_list);
 		acpi_dev_get_resources(adev, &resource_list,
 				       acpi_find_gpio_count, &crs_count);
 		acpi_dev_free_resource_list(&resource_list);
