@@ -416,7 +416,8 @@ static int mptcp_setsockopt_v6(struct mptcp_sock *msk, int optname,
 			sk->sk_ipv6only = ssock->sk->sk_ipv6only;
 			break;
 		case IPV6_TRANSPARENT:
-			inet_sk(sk)->transparent = inet_sk(ssock->sk)->transparent;
+			inet_assign_bit(TRANSPARENT, sk,
+					inet_test_bit(TRANSPARENT, ssock->sk));
 			break;
 		case IPV6_FREEBIND:
 			inet_assign_bit(FREEBIND, sk,
@@ -685,7 +686,6 @@ static int mptcp_setsockopt_sol_ip_set_transparent(struct mptcp_sock *msk, int o
 						   sockptr_t optval, unsigned int optlen)
 {
 	struct sock *sk = (struct sock *)msk;
-	struct inet_sock *issk;
 	struct socket *ssock;
 	int err;
 
@@ -701,15 +701,14 @@ static int mptcp_setsockopt_sol_ip_set_transparent(struct mptcp_sock *msk, int o
 		return PTR_ERR(ssock);
 	}
 
-	issk = inet_sk(ssock->sk);
-
 	switch (optname) {
 	case IP_FREEBIND:
 		inet_assign_bit(FREEBIND, ssock->sk,
 				inet_test_bit(FREEBIND, sk));
 		break;
 	case IP_TRANSPARENT:
-		issk->transparent = inet_sk(sk)->transparent;
+		inet_assign_bit(TRANSPARENT, ssock->sk,
+				inet_test_bit(TRANSPARENT, sk));
 		break;
 	default:
 		release_sock(sk);
@@ -1443,7 +1442,7 @@ static void sync_socket_options(struct mptcp_sock *msk, struct sock *ssk)
 	__tcp_sock_set_cork(ssk, !!msk->cork);
 	__tcp_sock_set_nodelay(ssk, !!msk->nodelay);
 
-	inet_sk(ssk)->transparent = inet_sk(sk)->transparent;
+	inet_assign_bit(TRANSPARENT, ssk, inet_test_bit(TRANSPARENT, sk));
 	inet_assign_bit(FREEBIND, ssk, inet_test_bit(FREEBIND, sk));
 }
 
