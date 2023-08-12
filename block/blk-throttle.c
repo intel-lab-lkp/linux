@@ -821,6 +821,30 @@ static void tg_update_carryover(struct throtl_grp *tg)
 		   tg->carryover_ios[READ], tg->carryover_ios[WRITE]);
 }
 
+static void tg_charge_carryover(struct throtl_grp *tg, struct bio *bio)
+{
+	bool rw = bio_data_dir(bio);
+
+	if (unlikely(tg->carryover_bytes[rw])) {
+		unsigned int bio_size = throtl_bio_data_size(bio);
+		unsigned int carryout_size = abs(tg->carryover_bytes[rw]);
+
+		carryout_size = min(carryout_size, bio_size);
+
+		if (tg->carryover_bytes[rw] < 0)
+			tg->carryover_bytes[rw] += carryout_size;
+		else
+			tg->carryover_bytes[rw] -= carryout_size;
+	}
+
+	if (unlikely(tg->carryover_ios[rw])) {
+		if (tg->carryover_ios[rw] < 0)
+			tg->carryover_ios[rw] += 1;
+		else
+			tg->carryover_ios[rw] -= 1;
+	}
+}
+
 static unsigned long tg_within_iops_limit(struct throtl_grp *tg, struct bio *bio,
 				 u32 iops_limit)
 {
@@ -965,6 +989,8 @@ static void throtl_charge_bio(struct throtl_grp *tg, struct bio *bio)
 
 	tg->io_disp[rw]++;
 	tg->last_io_disp[rw]++;
+
+	tg_charge_carryover(tg, bio);
 }
 
 /**
