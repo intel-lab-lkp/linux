@@ -3213,6 +3213,27 @@ static inline bool dir_relax_shared(struct inode *inode)
 	return !IS_DEADDIR(inode);
 }
 
+/**
+ * dir_is_casefolded - Safely determine if filenames inside of a
+ * directory should be casefolded.
+ * @dir: The directory inode to be checked
+ *
+ * Filesystems should usually rely on this instead of checking the
+ * S_CASEFOLD flag directly when handling inodes, to avoid surprises
+ * with corrupted volumes.  Checking i_sb->s_encoding ensures the
+ * filesystem knows how to deal with case-insensitiveness.
+ *
+ * Return: if names will need casefolding
+ */
+static inline bool dir_is_casefolded(const struct inode *dir)
+{
+#if IS_ENABLED(CONFIG_UNICODE)
+	return IS_CASEFOLDED(dir) && dir->i_sb->s_encoding;
+#else
+	return false;
+#endif
+}
+
 extern bool path_noexec(const struct path *path);
 extern void inode_nohighmem(struct inode *inode);
 
