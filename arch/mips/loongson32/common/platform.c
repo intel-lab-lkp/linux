@@ -10,7 +10,6 @@
 #include <linux/sizes.h>
 #include <linux/phy.h>
 #include <linux/serial_8250.h>
-#include <linux/stmmac.h>
 #include <linux/usb/ehci_pdriver.h>
 
 #include <platform.h>
@@ -62,87 +61,7 @@ void __init ls1x_serial_set_uartclk(struct platform_device *pdev)
 }
 
 /* Synopsys Ethernet GMAC */
-static struct stmmac_mdio_bus_data ls1x_mdio_bus_data = {
-	.phy_mask	= 0,
-};
-
-static struct stmmac_dma_cfg ls1x_eth_dma_cfg = {
-	.pbl		= 1,
-};
-
-int ls1x_eth_mux_init(struct platform_device *pdev, void *priv)
-{
-	struct plat_stmmacenet_data *plat_dat = NULL;
-	u32 val;
-
-	val = __raw_readl(LS1X_MUX_CTRL1);
-
-#if defined(CONFIG_LOONGSON1_LS1B)
-	plat_dat = dev_get_platdata(&pdev->dev);
-	if (plat_dat->bus_id) {
-		__raw_writel(__raw_readl(LS1X_MUX_CTRL0) | GMAC1_USE_UART1 |
-			     GMAC1_USE_UART0, LS1X_MUX_CTRL0);
-		switch (plat_dat->phy_interface) {
-		case PHY_INTERFACE_MODE_RGMII:
-			val &= ~(GMAC1_USE_TXCLK | GMAC1_USE_PWM23);
-			break;
-		case PHY_INTERFACE_MODE_MII:
-			val |= (GMAC1_USE_TXCLK | GMAC1_USE_PWM23);
-			break;
-		default:
-			pr_err("unsupported mii mode %d\n",
-			       plat_dat->phy_interface);
-			return -ENOTSUPP;
-		}
-		val &= ~GMAC1_SHUT;
-	} else {
-		switch (plat_dat->phy_interface) {
-		case PHY_INTERFACE_MODE_RGMII:
-			val &= ~(GMAC0_USE_TXCLK | GMAC0_USE_PWM01);
-			break;
-		case PHY_INTERFACE_MODE_MII:
-			val |= (GMAC0_USE_TXCLK | GMAC0_USE_PWM01);
-			break;
-		default:
-			pr_err("unsupported mii mode %d\n",
-			       plat_dat->phy_interface);
-			return -ENOTSUPP;
-		}
-		val &= ~GMAC0_SHUT;
-	}
-	__raw_writel(val, LS1X_MUX_CTRL1);
-#elif defined(CONFIG_LOONGSON1_LS1C)
-	plat_dat = dev_get_platdata(&pdev->dev);
-
-	val &= ~PHY_INTF_SELI;
-	if (plat_dat->phy_interface == PHY_INTERFACE_MODE_RMII)
-		val |= 0x4 << PHY_INTF_SELI_SHIFT;
-	__raw_writel(val, LS1X_MUX_CTRL1);
-
-	val = __raw_readl(LS1X_MUX_CTRL0);
-	__raw_writel(val & (~GMAC_SHUT), LS1X_MUX_CTRL0);
-#endif
-
-	return 0;
-}
-
-static struct plat_stmmacenet_data ls1x_eth0_pdata = {
-	.bus_id			= 0,
-	.phy_addr		= -1,
-#if defined(CONFIG_LOONGSON1_LS1B)
-	.phy_interface		= PHY_INTERFACE_MODE_MII,
-#elif defined(CONFIG_LOONGSON1_LS1C)
-	.phy_interface		= PHY_INTERFACE_MODE_RMII,
-#endif
-	.mdio_bus_data		= &ls1x_mdio_bus_data,
-	.dma_cfg		= &ls1x_eth_dma_cfg,
-	.has_gmac		= 1,
-	.tx_coe			= 1,
-	.rx_queues_to_use	= 1,
-	.tx_queues_to_use	= 1,
-	.init			= ls1x_eth_mux_init,
-};
-
+#ifdef CONFIG_LOONGSON1_LS1B
 static struct resource ls1x_eth0_resources[] = {
 	[0] = {
 		.start	= LS1X_GMAC0_BASE,
@@ -157,27 +76,10 @@ static struct resource ls1x_eth0_resources[] = {
 };
 
 struct platform_device ls1x_eth0_pdev = {
-	.name		= "stmmaceth",
+	.name		= "loongson,ls1b-dwmac",
 	.id		= 0,
 	.num_resources	= ARRAY_SIZE(ls1x_eth0_resources),
 	.resource	= ls1x_eth0_resources,
-	.dev		= {
-		.platform_data = &ls1x_eth0_pdata,
-	},
-};
-
-#ifdef CONFIG_LOONGSON1_LS1B
-static struct plat_stmmacenet_data ls1x_eth1_pdata = {
-	.bus_id			= 1,
-	.phy_addr		= -1,
-	.phy_interface		= PHY_INTERFACE_MODE_MII,
-	.mdio_bus_data		= &ls1x_mdio_bus_data,
-	.dma_cfg		= &ls1x_eth_dma_cfg,
-	.has_gmac		= 1,
-	.tx_coe			= 1,
-	.rx_queues_to_use	= 1,
-	.tx_queues_to_use	= 1,
-	.init			= ls1x_eth_mux_init,
 };
 
 static struct resource ls1x_eth1_resources[] = {
@@ -194,15 +96,32 @@ static struct resource ls1x_eth1_resources[] = {
 };
 
 struct platform_device ls1x_eth1_pdev = {
-	.name		= "stmmaceth",
+	.name		= "loongson,ls1b-dwmac",
 	.id		= 1,
 	.num_resources	= ARRAY_SIZE(ls1x_eth1_resources),
 	.resource	= ls1x_eth1_resources,
-	.dev		= {
-		.platform_data = &ls1x_eth1_pdata,
+};
+#elif defined(CONFIG_LOONGSON1_LS1C)
+static struct resource ls1x_eth0_resources[] = {
+	[0] = {
+		.start	= LS1X_GMAC0_BASE,
+		.end	= LS1X_GMAC0_BASE + SZ_64K - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	[1] = {
+		.name	= "macirq",
+		.start	= LS1X_GMAC0_IRQ,
+		.flags	= IORESOURCE_IRQ,
 	},
 };
-#endif	/* CONFIG_LOONGSON1_LS1B */
+
+struct platform_device ls1x_eth0_pdev = {
+	.name		= "loongson,ls1c-dwmac",
+	.id		= 0,
+	.num_resources	= ARRAY_SIZE(ls1x_eth0_resources),
+	.resource	= ls1x_eth0_resources,
+};
+#endif
 
 /* GPIO */
 static struct resource ls1x_gpio0_resources[] = {
