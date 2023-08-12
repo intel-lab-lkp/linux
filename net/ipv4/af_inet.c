@@ -327,7 +327,7 @@ lookup_protocol:
 	inet = inet_sk(sk);
 	inet_assign_bit(IS_ICSK, sk, INET_PROTOSW_ICSK & answer_flags);
 
-	inet->nodefrag = 0;
+	inet_clear_bit(NODEFRAG, sk);
 
 	if (SOCK_RAW == sock->type) {
 		inet->inet_num = protocol;
