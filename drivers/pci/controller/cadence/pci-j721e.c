@@ -71,6 +71,7 @@ struct j721e_pcie_data {
 	unsigned int		quirk_disable_flr:1;
 	u32			linkdown_irq_regfield;
 	unsigned int		byte_access_allowed:1;
+	unsigned int		set_afs_bit:1;
 };
 
 static inline u32 j721e_pcie_user_readl(struct j721e_pcie *pcie, u32 offset)
@@ -290,6 +291,7 @@ static const struct j721e_pcie_data j721e_pcie_rc_data = {
 	.quirk_retrain_flag = true,
 	.byte_access_allowed = false,
 	.linkdown_irq_regfield = LINK_DOWN,
+	.set_afs_bit = true,
 };
 
 static const struct j721e_pcie_data j721e_pcie_ep_data = {
@@ -302,6 +304,7 @@ static const struct j721e_pcie_data j7200_pcie_rc_data = {
 	.quirk_detect_quiet_flag = true,
 	.linkdown_irq_regfield = J7200_LINK_DOWN,
 	.byte_access_allowed = true,
+	.set_afs_bit = true,
 };
 
 static const struct j721e_pcie_data j7200_pcie_ep_data = {
@@ -391,6 +394,7 @@ static int j721e_pcie_probe(struct platform_device *pdev)
 		rc = pci_host_bridge_priv(bridge);
 		rc->quirk_retrain_flag = data->quirk_retrain_flag;
 		rc->quirk_detect_quiet_flag = data->quirk_detect_quiet_flag;
+		rc->set_afs_bit = data->set_afs_bit;
 
 		cdns_pcie = &rc->pcie;
 		cdns_pcie->dev = dev;

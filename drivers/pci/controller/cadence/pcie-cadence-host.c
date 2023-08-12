@@ -507,6 +507,7 @@ int cdns_pcie_host_setup(struct cdns_pcie_rc *rc)
 	struct cdns_pcie *pcie;
 	struct resource *res;
 	int ret;
+	u32 pcie_cap2;
 
 	bridge = pci_host_bridge_from_priv(rc);
 	if (!bridge)
@@ -535,6 +536,12 @@ int cdns_pcie_host_setup(struct cdns_pcie_rc *rc)
 
 	if (rc->quirk_detect_quiet_flag)
 		cdns_pcie_detect_quiet_min_delay_set(&rc->pcie);
+
+	if (rc->set_afs_bit) {
+		pcie_cap2 = cdns_pcie_rp_readl(pcie, CDNS_PCIE_RP_CAP_OFFSET + PCI_EXP_DEVCAP2);
+		pcie_cap2 |= PCI_EXP_DEVCAP2_ARI;
+		cdns_pcie_rp_writel(pcie, CDNS_PCIE_RP_CAP_OFFSET + PCI_EXP_DEVCAP2, pcie_cap2);
+	}
 
 	cdns_pcie_host_enable_ptm_response(pcie);
 
