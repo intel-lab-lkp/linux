@@ -28,7 +28,8 @@
  * Returns 1 if valid, 0 otherwise.
  *
  */
-static int ecryptfs_d_revalidate(struct dentry *dentry, unsigned int flags)
+static int ecryptfs_d_revalidate(struct dentry *dentry,
+				 const struct qstr *name, unsigned int flags)
 {
 	struct dentry *lower_dentry = ecryptfs_dentry_to_lower(dentry);
 	int rc = 1;
@@ -37,7 +38,7 @@ static int ecryptfs_d_revalidate(struct dentry *dentry, unsigned int flags)
 		return -ECHILD;
 
 	if (lower_dentry->d_flags & DCACHE_OP_REVALIDATE)
-		rc = lower_dentry->d_op->d_revalidate(lower_dentry, flags);
+		rc = lower_dentry->d_op->d_revalidate(lower_dentry, name, flags);
 
 	if (d_really_is_positive(dentry)) {
 		struct inode *inode = d_inode(dentry);

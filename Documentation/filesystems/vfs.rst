@@ -1251,7 +1251,8 @@ defined:
 .. code-block:: c
 
 	struct dentry_operations {
-		int (*d_revalidate)(struct dentry *, unsigned int);
+		int (*d_revalidate)(struct dentry *, const struct qstr *,
+				    unsigned int);
 		int (*d_weak_revalidate)(struct dentry *, unsigned int);
 		int (*d_hash)(const struct dentry *, struct qstr *);
 		int (*d_compare)(const struct dentry *,
@@ -1283,6 +1284,14 @@ defined:
 	d_parent and d_inode should not be used without care (because
 	they can change and, in d_inode case, even become NULL under
 	us).
+
+	Filesystems shouldn't rely on the name under lookup, unless
+	there are particular filename encoding semantics to be handled
+	during revalidation.  Note the name under lookup can change from
+	under d_revalidate, so it must be protected with ->d_lock before
+	accessing.  The exception is when revalidating negative dentries
+	for creation, in which case the parent inode prevents it from
+	changing.
 
 	If a situation is encountered that rcu-walk cannot handle,
 	return
