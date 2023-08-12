@@ -147,6 +147,7 @@ struct platform_device *of_device_alloc(struct device_node *np,
 				  const char *bus_id,
 				  struct device *parent)
 {
+	struct fwnode_handle *fwnode = of_fwnode_handle(np);
 	struct platform_device *dev;
 	int rc, i, num_reg = 0;
 	struct resource *res;
@@ -175,7 +176,7 @@ struct platform_device *of_device_alloc(struct device_node *np,
 	}
 
 	/* setup generic device info */
-	device_set_node(&dev->dev, of_fwnode_handle(np));
+	device_set_node(&dev->dev, fwnode_handle_get(fwnode));
 	dev->dev.parent = parent ? : &platform_bus;
 
 	if (bus_id)
@@ -255,6 +256,7 @@ static struct amba_device *of_amba_device_create(struct device_node *node,
 						 void *platform_data,
 						 struct device *parent)
 {
+	struct fwnode_handle *fwnode = of_fwnode_handle(node);
 	struct amba_device *dev;
 	int ret;
 
@@ -273,7 +275,7 @@ static struct amba_device *of_amba_device_create(struct device_node *node,
 	dev->dev.dma_mask = &dev->dev.coherent_dma_mask;
 
 	/* setup generic device info */
-	device_set_node(&dev->dev, of_fwnode_handle(node));
+	device_set_node(&dev->dev, fwnode_handle_get(fwnode));
 	dev->dev.parent = parent ? : &platform_bus;
 	dev->dev.platform_data = platform_data;
 	if (bus_id)
