@@ -1783,6 +1783,13 @@ config GPIO_AGGREGATOR
 	      industrial control context, to be operated from userspace using
 	      the GPIO chardev interface.
 
+config GPIO_CONSUMER
+	tristate "GPIO Consumer Testing Module"
+	select CONFIGFS_FS
+	help
+	  This enables the configurable, configfs-based virtual GPIO consumer
+	  testing driver.
+
 config GPIO_LATCH
 	tristate "GPIO latch driver"
 	help
