@@ -56,6 +56,8 @@ struct pci_doe_mb {
 	wait_queue_head_t wq;
 	struct workqueue_struct *work_queue;
 	unsigned long flags;
+
+	struct device_attribute *sysfs_attrs;
 };
 
 struct pci_doe_protocol {
@@ -91,6 +93,114 @@ struct pci_doe_task {
 	struct work_struct work;
 	struct pci_doe_mb *doe_mb;
 };
+
+#ifdef CONFIG_SYSFS
+static struct attribute *pci_dev_doe_proto_attrs[] = {
+	NULL,
+};
+
+static const struct attribute_group pci_dev_doe_proto_group = {
+	.name	= "doe_protocols",
+	.attrs	= pci_dev_doe_proto_attrs,
+};
+
+static ssize_t pci_doe_sysfs_proto_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	return sysfs_emit(buf, "%s\n", attr->attr.name);
+}
+
+static int pci_doe_sysfs_proto_supports(struct pci_dev *pdev,
+					struct pci_doe_mb *doe_mb)
+{
+	struct device *dev = &pdev->dev;
+	struct device_attribute *attrs;
+	unsigned long num_protos = 0;
+	unsigned long vid, type;
+	unsigned long i;
+	void *entry;
+	int ret;
+
+	xa_for_each(&doe_mb->prots, i, entry)
+		num_protos++;
+
+	attrs = kcalloc(num_protos, sizeof(*attrs), GFP_KERNEL);
+	if (!attrs)
+		return -ENOMEM;
+
+	doe_mb->sysfs_attrs = attrs;
+	xa_for_each(&doe_mb->prots, i, entry) {
+		sysfs_attr_init(&attrs[i].attr);
+		vid = xa_to_value(entry) >> 8;
+		type = xa_to_value(entry) & 0xFF;
+		attrs[i].attr.name = kasprintf(GFP_KERNEL,
+					       "0x%04lX:%02lX", vid, type);
+		if (!attrs[i].attr.name) {
+			ret = -ENOMEM;
+			goto fail;
+		}
+
+		attrs[i].attr.mode = 0444;
+		attrs[i].show = pci_doe_sysfs_proto_show;
+
+		ret = sysfs_add_file_to_group(&dev->kobj, &attrs[i].attr,
+					      pci_dev_doe_proto_group.name);
+		if (ret)
+			goto fail;
+	}
+
+	return 0;
+
+fail:
+	doe_mb->sysfs_attrs = NULL;
+	xa_for_each(&doe_mb->prots, i, entry) {
+		if (attrs[i].show)
+			sysfs_remove_file_from_group(&dev->kobj, &attrs[i].attr,
+						     pci_dev_doe_proto_group.name);
+		kfree(attrs[i].attr.name);
+	}
+
+	kfree(attrs);
+
+	return ret;
+}
+
+int doe_sysfs_init(struct pci_dev *pdev)
+{
+	bool add_doe_group = false;
+	struct pci_doe_mb *doe_mb;
+	unsigned long index, j;
+	void *entry;
+	int ret;
+
+	xa_for_each(&pdev->doe_mbs, index, doe_mb) {
+		xa_for_each(&doe_mb->prots, j, entry) {
+			add_doe_group = true;
+			goto add_doe_group;
+		}
+	}
+
+	if (!add_doe_group)
+		return 0;
+
+add_doe_group:
+	ret = devm_device_add_group(&pdev->dev, &pci_dev_doe_proto_group);
+	if (ret) {
+		pci_err(pdev, "can't create DOE goup: %d\n", ret);
+		return ret;
+	}
+
+	xa_for_each(&pdev->doe_mbs, index, doe_mb) {
+		ret = pci_doe_sysfs_proto_supports(pdev, doe_mb);
+
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+#endif
 
 static int pci_doe_wait(struct pci_doe_mb *doe_mb, unsigned long timeout)
 {
