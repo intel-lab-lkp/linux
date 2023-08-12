@@ -1067,7 +1067,10 @@ check_boot:
 out:
 	if (err == -EINVAL && !bh->b_blocknr && dev_size > PAGE_SHIFT) {
 		u32 block_size = min_t(u32, sector_size, PAGE_SIZE);
-		u64 lbo = dev_size - sizeof(*boot);
+		u64 lbo;
+
+		dev_size = bdev_nr_bytes(sb->s_bdev);
+		lbo = dev_size - sizeof(*boot);
 
 		/*
 	 	 * Try alternative boot (last sector)
