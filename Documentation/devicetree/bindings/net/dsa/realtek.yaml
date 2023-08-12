@@ -103,6 +103,9 @@ allOf:
             compatible:
               const: realtek,smi-mdio
 
+          required:
+            - compatible
+
   - if:
       required:
         - reg
