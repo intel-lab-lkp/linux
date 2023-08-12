@@ -1452,9 +1452,66 @@ static int generic_ci_d_hash(const struct dentry *dentry, struct qstr *str)
 	return 0;
 }
 
+static int generic_ci_d_revalidate(struct dentry *dentry,
+				   const struct qstr *name,
+				   unsigned int flags)
+{
+	const struct dentry *parent;
+	const struct inode *dir;
+
+	if (!d_is_negative(dentry))
+		return 1;
+
+	parent = READ_ONCE(dentry->d_parent);
+	dir = READ_ONCE(parent->d_inode);
+
+	if (!dir || !dir_is_casefolded(dir))
+		return 1;
+
+	/*
+	 * Negative dentries created prior to turning the directory
+	 * case-insensitive cannot be trusted, since they don't ensure
+	 * any possible case version of the filename doesn't exist.
+	 */
+	if (!d_is_casefolded_name(dentry))
+		return 0;
+
+	/*
+	 * Filesystems will call into d_revalidate without setting
+	 * LOOKUP_ flags even for file creation (see lookup_one*
+	 * variants).  Reject negative dentries in this case, since we
+	 * can't know for sure it won't be used for creation.
+	 */
+	if (!flags)
+		return 0;
+
+	/*
+	 * If the lookup is for creation, then a negative dentry can
+	 * only be reused if it's a case-sensitive match, not just a
+	 * case-insensitive one.  This is needed to make the new file be
+	 * created with the name the user specified, preserving case.
+	 */
+	if (flags & (LOOKUP_CREATE | LOOKUP_RENAME_TARGET)) {
+		/*
+		 * ->d_name won't change from under us in the creation
+		 * path only, since d_revalidate during creation and
+		 * renames is always called with the parent inode
+		 * locked.  It isn't the case for all lookup callpaths,
+		 * so ->d_name must not be touched outside
+		 * (LOOKUP_CREATE|LOOKUP_RENAME_TARGET) context.
+		 */
+		if (dentry->d_name.len != name->len ||
+		    memcmp(dentry->d_name.name, name->name, name->len))
+			return 0;
+	}
+
+	return 1;
+}
+
 static const struct dentry_operations generic_ci_dentry_ops = {
 	.d_hash = generic_ci_d_hash,
 	.d_compare = generic_ci_d_compare,
+	.d_revalidate = generic_ci_d_revalidate,
 };
 #endif
 
