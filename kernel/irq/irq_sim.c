@@ -4,6 +4,7 @@
  * Copyright (C) 2020 Bartosz Golaszewski <bgolaszewski@baylibre.com>
  */
 
+#include <linux/list.h>
 #include <linux/irq.h>
 #include <linux/irq_sim.h>
 #include <linux/irq_work.h>
@@ -16,12 +17,14 @@ struct irq_sim_work_ctx {
 	unsigned int		irq_count;
 	unsigned long		*pending;
 	struct irq_domain	*domain;
+	struct list_head	irqs;
 };
 
 struct irq_sim_irq_ctx {
 	int			irqnum;
 	bool			enabled;
 	struct irq_sim_work_ctx	*work_ctx;
+	struct list_head	siblings;
 };
 
 static void irq_sim_irqmask(struct irq_data *data)
@@ -129,6 +132,8 @@ static int irq_sim_domain_map(struct irq_domain *domain,
 	irq_set_handler(virq, handle_simple_irq);
 	irq_modify_status(virq, IRQ_NOREQUEST | IRQ_NOAUTOEN, IRQ_NOPROBE);
 	irq_ctx->work_ctx = work_ctx;
+	irq_ctx->irqnum = virq;
+	list_add_tail(&irq_ctx->siblings, &work_ctx->irqs);
 
 	return 0;
 }
@@ -141,6 +146,7 @@ static void irq_sim_domain_unmap(struct irq_domain *domain, unsigned int virq)
 	irqd = irq_domain_get_irq_data(domain, virq);
 	irq_ctx = irq_data_get_irq_chip_data(irqd);
 
+	list_del(&irq_ctx->siblings);
 	irq_set_handler(virq, NULL);
 	irq_domain_reset_irq_data(irqd);
 	kfree(irq_ctx);
@@ -182,6 +188,7 @@ struct irq_domain *irq_domain_create_sim(struct fwnode_handle *fwnode,
 
 	work_ctx->irq_count = num_irqs;
 	work_ctx->work = IRQ_WORK_INIT_HARD(irq_sim_handle_irq);
+	INIT_LIST_HEAD(&work_ctx->irqs);
 
 	return work_ctx->domain;
 
@@ -203,8 +210,13 @@ EXPORT_SYMBOL_GPL(irq_domain_create_sim);
 void irq_domain_remove_sim(struct irq_domain *domain)
 {
 	struct irq_sim_work_ctx *work_ctx = domain->host_data;
+	struct irq_sim_irq_ctx *irq_ctx, *aux;
 
 	irq_work_sync(&work_ctx->work);
+
+	list_for_each_entry_safe(irq_ctx, aux, &work_ctx->irqs, siblings)
+		irq_dispose_mapping(irq_ctx->irqnum);
+
 	bitmap_free(work_ctx->pending);
 	kfree(work_ctx);
 
