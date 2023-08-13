@@ -1245,6 +1245,8 @@ int af_alg_get_rsgl(struct sock *sk, struct msghdr *msg, int flags,
 				return -ENOMEM;
 		}
 
+		rsgl->sgl.need_unpin = 0;
+
 		rsgl->sgl.sgt.sgl = rsgl->sgl.sgl;
 		rsgl->sgl.sgt.nents = 0;
 		rsgl->sgl.sgt.orig_nents = 0;
