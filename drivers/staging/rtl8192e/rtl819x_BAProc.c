@@ -532,13 +532,13 @@ void rtllib_tx_ba_inact_timeout(struct timer_list *t)
 
 void rtllib_rx_ba_inact_timeout(struct timer_list *t)
 {
-	struct rx_ts_record *pRxTs = from_timer(pRxTs, t,
+	struct rx_ts_record *rx_ts = from_timer(rx_ts, t,
 					      rx_admitted_ba_record.timer);
-	struct rtllib_device *ieee = container_of(pRxTs, struct rtllib_device,
-				     RxTsRecord[pRxTs->num]);
+	struct rtllib_device *ieee = container_of(rx_ts, struct rtllib_device,
+				     RxTsRecord[rx_ts->num]);
 
-	rx_ts_delete_ba(ieee, pRxTs);
-	rtllib_send_DELBA(ieee, pRxTs->ts_common_info.Addr,
-			  &pRxTs->rx_admitted_ba_record, RX_DIR,
+	rx_ts_delete_ba(ieee, rx_ts);
+	rtllib_send_DELBA(ieee, rx_ts->ts_common_info.Addr,
+			  &rx_ts->rx_admitted_ba_record, RX_DIR,
 			  DELBA_REASON_TIMEOUT);
 }
