@@ -295,6 +295,7 @@ struct cfg80211_beacon_registration {
 };
 
 struct cfg80211_cqm_config {
+	struct rcu_head rcu_head;
 	u32 rssi_hyst;
 	s32 last_rssi_event_value;
 	int n_rssi_thresholds;
@@ -565,8 +566,6 @@ cfg80211_bss_update(struct cfg80211_registered_device *rdev,
  */
 #define CFG80211_DEV_WARN_ON(cond)	({bool __r = (cond); __r; })
 #endif
-
-void cfg80211_cqm_config_free(struct wireless_dev *wdev);
 
 void cfg80211_release_pmsr(struct wireless_dev *wdev, u32 portid);
 void cfg80211_pmsr_wdev_down(struct wireless_dev *wdev);

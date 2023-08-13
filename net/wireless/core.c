@@ -1181,16 +1181,11 @@ void wiphy_rfkill_set_hw_state_reason(struct wiphy *wiphy, bool blocked,
 }
 EXPORT_SYMBOL(wiphy_rfkill_set_hw_state_reason);
 
-void cfg80211_cqm_config_free(struct wireless_dev *wdev)
-{
-	kfree(wdev->cqm_config);
-	wdev->cqm_config = NULL;
-}
-
 static void _cfg80211_unregister_wdev(struct wireless_dev *wdev,
 				      bool unregister_netdev)
 {
 	struct cfg80211_registered_device *rdev = wiphy_to_rdev(wdev->wiphy);
+	struct cfg80211_cqm_config *cqm_config;
 	unsigned int link_id;
 
 	ASSERT_RTNL();
@@ -1227,7 +1222,9 @@ static void _cfg80211_unregister_wdev(struct wireless_dev *wdev,
 	kfree_sensitive(wdev->wext.keys);
 	wdev->wext.keys = NULL;
 #endif
-	cfg80211_cqm_config_free(wdev);
+	/* deleted from the list, so can't be found from nl80211 any more */
+	cqm_config = rcu_access_pointer(wdev->cqm_config);
+	kfree_rcu(cqm_config, rcu_head);
 
 	/*
 	 * Ensure that all events have been processed and
