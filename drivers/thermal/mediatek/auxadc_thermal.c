@@ -1289,11 +1289,7 @@ static int mtk_thermal_probe(struct platform_device *pdev)
 	if (IS_ERR(tzdev))
 		return PTR_ERR(tzdev);
 
-	ret = devm_thermal_add_hwmon_sysfs(&pdev->dev, tzdev);
-	if (ret)
-		dev_warn(&pdev->dev, "error in thermal_add_hwmon_sysfs");
-
-	return 0;
+	return devm_thermal_add_hwmon_sysfs(&pdev->dev, tzdev);
 }
 
 static struct platform_driver mtk_thermal_driver = {
