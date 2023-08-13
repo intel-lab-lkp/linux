@@ -2859,7 +2859,7 @@ int cgroup_attach_task(struct cgroup *dst_cgrp, struct task_struct *leader,
 {
 	DEFINE_CGROUP_MGCTX(mgctx);
 	struct task_struct *task;
-	int ret = 0;
+	int ret;
 
 	/* look up all src csets */
 	spin_lock_irq(&css_set_lock);
@@ -3945,7 +3945,7 @@ static void cgroup_kill(struct cgroup *cgrp)
 static ssize_t cgroup_kill_write(struct kernfs_open_file *of, char *buf,
 				 size_t nbytes, loff_t off)
 {
-	ssize_t ret = 0;
+	ssize_t ret;
 	int kill;
 	struct cgroup *cgrp;
 
@@ -5083,7 +5083,7 @@ static int cgroup_attach_permissions(struct cgroup *src_cgrp,
 				     struct super_block *sb, bool threadgroup,
 				     struct cgroup_namespace *ns)
 {
-	int ret = 0;
+	int ret;
 
 	ret = cgroup_procs_write_permission(src_cgrp, dst_cgrp, sb, ns);
 	if (ret)
@@ -5921,7 +5921,7 @@ static int cgroup_destroy_locked(struct cgroup *cgrp)
 int cgroup_rmdir(struct kernfs_node *kn)
 {
 	struct cgroup *cgrp;
-	int ret = 0;
+	int ret;
 
 	cgrp = cgroup_kn_lock_live(kn, false);
 	if (!cgrp)
@@ -6995,7 +6995,7 @@ static ssize_t delegate_show(struct kobject *kobj, struct kobj_attribute *attr,
 {
 	struct cgroup_subsys *ss;
 	int ssid;
-	ssize_t ret = 0;
+	ssize_t ret;
 
 	ret = show_delegatable_files(cgroup_base_files, buf + ret,
 				     PAGE_SIZE - ret, NULL);
