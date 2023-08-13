@@ -1364,7 +1364,7 @@ static void cgroup_destroy_root(struct cgroup_root *root)
 static struct cgroup *
 current_cgns_cgroup_from_root(struct cgroup_root *root)
 {
-	struct cgroup *res = NULL;
+	struct cgroup *res;
 	struct css_set *cset;
 
 	lockdep_assert_held(&css_set_lock);
