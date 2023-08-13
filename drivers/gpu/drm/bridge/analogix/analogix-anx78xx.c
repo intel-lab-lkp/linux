@@ -1259,7 +1259,7 @@ static int anx78xx_i2c_probe(struct i2c_client *client)
 	}
 
 	/* Map slave addresses of ANX7814 */
-	i2c_addresses = device_get_match_data(&client->dev);
+	i2c_addresses = i2c_get_match_data(client);
 	for (i = 0; i < I2C_NUM_ADDRESSES; i++) {
 		struct i2c_client *i2c_dummy;
 
@@ -1368,7 +1368,7 @@ static void anx78xx_i2c_remove(struct i2c_client *client)
 }
 
 static const struct i2c_device_id anx78xx_id[] = {
-	{ "anx7814", 0 },
+	{ "anx7814", (kernel_ulong_t)anx781x_i2c_addresses },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(i2c, anx78xx_id);
