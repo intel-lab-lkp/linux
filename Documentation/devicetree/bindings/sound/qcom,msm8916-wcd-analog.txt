@@ -35,7 +35,7 @@ Optional Properties:
  - qcom,mbhc-vthreshold-low: Array of 5 threshold voltages in mV for 5 buttons
 			     detection on headset when the mbhc is powered up
 			     by internal current source, this is a low power.
- - qcom,mbhc-vthreshold-high: Array of 5 thresold voltages in mV for 5 buttons
+ - qcom,mbhc-vthreshold-high: Array of 5 threshold voltages in mV for 5 buttons
 			      detection on headset when mbhc is powered up
 			       from micbias.
 - qcom,micbias-lvl:  Voltage (mV) for Mic Bias

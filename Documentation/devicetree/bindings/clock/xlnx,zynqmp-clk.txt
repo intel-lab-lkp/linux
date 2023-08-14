@@ -15,7 +15,7 @@ Required properties:
 			clocks to the given clock controller. Please refer
 			the next section to find the input clocks for a
 			given controller.
- - clock-names:		List of clock names which are exteral input clocks
+ - clock-names:		List of clock names which are external input clocks
 			to the given clock controller. Please refer to the
 			clock bindings for more details.
 
