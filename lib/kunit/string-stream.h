@@ -23,14 +23,24 @@ struct string_stream {
 	struct list_head fragments;
 	/* length and fragments are protected by this lock */
 	spinlock_t lock;
+
+	/*
+	 * Pointer to kunit this stream is associated with, or NULL if
+	 * not associated with a kunit.
+	 */
 	struct kunit *test;
+
 	gfp_t gfp;
 	bool append_newlines;
 };
 
 struct kunit;
 
+struct string_stream *raw_alloc_string_stream(gfp_t gfp);
+void raw_free_string_stream(struct string_stream *stream);
+
 struct string_stream *alloc_string_stream(struct kunit *test, gfp_t gfp);
+void free_string_stream(struct kunit *test, struct string_stream *stream);
 
 int __printf(2, 3) string_stream_add(struct string_stream *stream,
 				     const char *fmt, ...);
@@ -47,7 +57,7 @@ int string_stream_append(struct string_stream *stream,
 
 bool string_stream_is_empty(struct string_stream *stream);
 
-void string_stream_destroy(struct string_stream *stream);
+void string_stream_clear(struct string_stream *stream);
 
 static inline void string_stream_set_append_newlines(struct string_stream *stream,
 						     bool append_newlines)

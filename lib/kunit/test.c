@@ -322,7 +322,7 @@ static void kunit_fail(struct kunit *test, const struct kunit_loc *loc,
 
 	kunit_print_string_stream(test, stream);
 
-	string_stream_destroy(stream);
+	free_string_stream(test, stream);
 }
 
 void __noreturn __kunit_abort(struct kunit *test)

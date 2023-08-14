@@ -200,7 +200,7 @@ static void string_stream_append_test(struct kunit *test)
 			   combined_content);
 
 	/* Append content of non-empty stream to empty stream */
-	string_stream_destroy(stream_1);
+	string_stream_clear(stream_1);
 
 	stream_1 = alloc_string_stream(test, GFP_KERNEL);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, stream_1);
