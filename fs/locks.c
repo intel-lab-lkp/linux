@@ -2255,21 +2255,21 @@ out:
  * To avoid blocking kernel daemons, such as lockd, that need to acquire POSIX
  * locks, the ->lock() interface may return asynchronously, before the lock has
  * been granted or denied by the underlying filesystem, if (and only if)
- * lm_grant is set. Callers expecting ->lock() to return asynchronously
- * will only use F_SETLK, not F_SETLKW; they will set FL_SLEEP if (and only if)
- * the request is for a blocking lock. When ->lock() does return asynchronously,
- * it must return FILE_LOCK_DEFERRED, and call ->lm_grant() when the lock
- * request completes.
- * If the request is for non-blocking lock the file system should return
- * FILE_LOCK_DEFERRED then try to get the lock and call the callback routine
- * with the result. If the request timed out the callback routine will return a
+ * lm_grant and FL_SLEEP in fl_flags is set. Callers expecting ->lock() to return
+ * asynchronously will only use F_SETLK, not F_SETLKW; When ->lock() does return
+ * asynchronously, it must return FILE_LOCK_DEFERRED, and call ->lm_grant() when
+ * the lock request completes. The lm_grant() callback must be called in a
+ * sleepable context.
+ *
+ * If the request timed out the ->lm_grant() callback routine will return a
  * nonzero return code and the file system should release the lock. The file
- * system is also responsible to keep a corresponding posix lock when it
- * grants a lock so the VFS can find out which locks are locally held and do
- * the correct lock cleanup when required.
- * The underlying filesystem must not drop the kernel lock or call
- * ->lm_grant() before returning to the caller with a FILE_LOCK_DEFERRED
- * return code.
+ * system is also responsible to keep a corresponding posix lock when it grants
+ * a lock so the VFS can find out which locks are locally held and do the correct
+ * lock cleanup when required.
+ *
+ * If the request is for non-blocking lock (when F_SETLK and FL_SLEEP in fl_flags is not set)
+ * the file system should return -EAGAIN if failed to acquire or zero if acquiring was
+ * successfully without calling the ->lm_grant() callback routine.
  */
 int vfs_lock_file(struct file *filp, unsigned int cmd, struct file_lock *fl, struct file_lock *conf)
 {
