@@ -72,6 +72,13 @@
 		enable-active-high;
 	};
 
+	reg_vddext_3v3: regulator-vddext-3v3 {
+		compatible = "regulator-fixed";
+		regulator-name = "VDDEXT_3V3";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+	};
+
 	backlight: backlight {
 		compatible = "pwm-backlight";
 		pwms = <&pwm1 0 5000000 0>;
