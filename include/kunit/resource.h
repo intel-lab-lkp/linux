@@ -479,4 +479,19 @@ void kunit_remove_action(struct kunit *test,
 void kunit_release_action(struct kunit *test,
 			  kunit_action_t *action,
 			  void *ctx);
+
+#define kunit_get_mock_pointer(name, actual) ({			\
+	typeof(*(actual)) *ptr = actual;			\
+	struct kunit_resource *resource;			\
+								\
+	if (kunit_get_current_test()) {				\
+		resource = kunit_find_named_resource(current->kunit_test, name); \
+		if (resource) {					\
+			ptr = resource->data;			\
+			kunit_put_resource(resource);		\
+		}						\
+	}							\
+	ptr;							\
+})
+
 #endif /* _KUNIT_RESOURCE_H */

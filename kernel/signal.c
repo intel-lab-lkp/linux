@@ -11,6 +11,14 @@
  *		to allow signals to be sent reliably.
  */
 
+#if IS_ENABLED(CONFIG_KUNIT)
+/* This must be defined before we include include/linux/sched/signal.h */
+#define __init_task_ptr kunit_get_mock_pointer("mock_init_task", &init_task)
+
+#include <kunit/resource.h>
+#include <kunit/test-bug.h>
+#endif
+
 #include <linux/slab.h>
 #include <linux/export.h>
 #include <linux/init.h>
@@ -4840,3 +4848,130 @@ void kdb_send_sig(struct task_struct *t, int sig)
 		kdb_printf("Signal %d is sent to process %d.\n", sig, t->pid);
 }
 #endif	/* CONFIG_KGDB_KDB */
+
+#if IS_ENABLED(CONFIG_KUNIT)
+static void test_empty_task_list(struct kunit *test)
+{
+	struct kunit_resource resource;
+	static struct task_struct empty_task_list = {
+			.tasks	= LIST_HEAD_INIT(empty_task_list.tasks),
+		};
+	struct task_struct *p;
+	int count = 0;
+
+	kunit_add_named_resource(test, NULL, NULL, &resource,
+				 "mock_init_task", &empty_task_list);
+
+	KUNIT_EXPECT_TRUE(test, tasklist_empty());
+
+	for_each_process(p)
+		count++;
+
+	/* System hangs without this... */
+	kunit_remove_resource(test, &resource);
+
+	KUNIT_EXPECT_EQ(test, count, 0);
+}
+
+static void test_for_each_process(struct kunit *test)
+{
+	struct kunit_resource resource;
+	static struct task_struct task1 = {
+			.pid = 1,
+			.tasks	= LIST_HEAD_INIT(task1.tasks),
+		};
+	static struct task_struct task2 = {
+			.pid = 2,
+		}, task3 = {
+			.pid = 3,
+		};
+	struct task_struct *p;
+	int count = 0;
+
+	list_add(&task2.tasks, &task1.tasks);
+	list_add(&task3.tasks, &task1.tasks);
+
+	kunit_add_named_resource(test, NULL, NULL, &resource,
+				 "mock_init_task", &task1);
+
+	/* Walk the process list backwards. */
+	for_each_process(p) {
+		KUNIT_EXPECT_EQ(test, 3 - count, p->pid);
+		count++;
+	}
+
+	/* System hangs without this... */
+	kunit_remove_resource(test, &resource);
+
+	/* init_task isn't counted... */
+	KUNIT_EXPECT_EQ(test, count, 2);
+}
+
+static void test_kill_something_info(struct kunit *test)
+{
+	struct kunit_resource resource;
+	static struct task_struct task1 = {
+			.pid = 1,
+			.tasks	= LIST_HEAD_INIT(task1.tasks),
+		};
+	static struct task_struct task2 = {
+			.pid = 2,
+		}, task3 = {
+			.pid = 3,
+		};
+	struct kernel_siginfo siginfo = {
+			.si_code = SI_KERNEL,
+		};
+	struct task_struct *p;
+	int count = 0;
+
+	list_add(&task2.tasks, &task1.tasks);
+	list_add(&task3.tasks, &task1.tasks);
+
+	kunit_add_named_resource(test, NULL, NULL, &resource,
+				 "mock_init_task", &task1);
+
+	/* Make sure we have a process list. */
+	for_each_process(p)
+		count++;
+	KUNIT_EXPECT_EQ(test, count, 2);
+
+	/* INT_MIN pid must return ESRCH */
+	KUNIT_EXPECT_EQ(test, -ESRCH,
+		kill_something_info(SIGHUP, SEND_SIG_NOINFO, INT_MIN));
+
+	/* Invalid signal: EINVAL */
+	KUNIT_EXPECT_EQ(test, -EINVAL,
+		kill_something_info(_NSIG + 1, SEND_SIG_NOINFO, 2));
+
+	/* Missing pid: ESRCH */
+	KUNIT_EXPECT_EQ(test, -ESRCH,
+		kill_something_info(SIGHUP, SEND_SIG_NOINFO, 42));
+
+	/* Bypass permission checks with SEND_SIG_NOINFO. */
+	KUNIT_EXPECT_EQ(test, 0,
+		kill_something_info(SIGHUP, SEND_SIG_NOINFO, 2));
+
+	/* XXX: Hm, I was expecting this to explode in cred deref... */
+	KUNIT_EXPECT_EQ(test, 0,
+		kill_something_info(SIGHUP, &siginfo, 3));
+
+	/* XXX more tests here, perhaps after mocking out group_send_sig_info() ... */
+
+	/* System hangs without this... */
+	kunit_remove_resource(test, &resource);
+}
+
+static struct kunit_case test_cases[] = {
+	KUNIT_CASE(test_empty_task_list),
+	KUNIT_CASE(test_for_each_process),
+	KUNIT_CASE(test_kill_something_info),
+	{}
+};
+
+static struct kunit_suite test_suite = {
+	.name = "signal",
+	.test_cases = test_cases,
+};
+kunit_test_suite(test_suite);
+#endif	/* CONFIG_KUNIT */

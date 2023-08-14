@@ -637,14 +637,19 @@ static inline unsigned long sigsp(unsigned long sp, struct ksignal *ksig)
 extern void __cleanup_sighand(struct sighand_struct *);
 extern void flush_itimer_signals(void);
 
+/* This is used for KUnit mocking. */
+#ifndef __init_task_ptr
+#define __init_task_ptr	(&init_task)
+#endif
+
 #define tasklist_empty() \
-	list_empty(&init_task.tasks)
+	list_empty(&__init_task_ptr->tasks)
 
 #define next_task(p) \
 	list_entry_rcu((p)->tasks.next, struct task_struct, tasks)
 
 #define for_each_process(p) \
-	for (p = &init_task ; (p = next_task(p)) != &init_task ; )
+	for (p = __init_task_ptr ; (p = next_task(p)) != __init_task_ptr ; )
 
 extern bool current_is_single_threaded(void);
 
@@ -653,7 +658,7 @@ extern bool current_is_single_threaded(void);
  *          'break' will not work as expected - use goto instead.
  */
 #define do_each_thread(g, t) \
-	for (g = t = &init_task ; (g = t = next_task(g)) != &init_task ; ) do
+	for (g = t = __init_task_ptr ; (g = t = next_task(g)) != __init_task_ptr ; ) do
 
 #define while_each_thread(g, t) \
 	while ((t = next_thread(t)) != g)
