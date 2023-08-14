@@ -415,7 +415,7 @@ bool hda_sdw_check_wakeen_irq_common(struct snd_sof_dev *sdev)
 static bool hda_sdw_check_wakeen_irq(struct snd_sof_dev *sdev)
 {
 	u32 interface_mask = hda_get_interface_mask(sdev);
-	const struct sof_intel_dsp_desc *chip;
+	const struct sof_intel_dsp_desc *chip = get_chip_info(sdev->pdata);
 
 	if (!(interface_mask & BIT(SOF_DAI_INTEL_ALH)))
 		return false;
