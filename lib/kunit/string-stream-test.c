@@ -23,6 +23,7 @@ static void string_stream_init_test(struct kunit *test)
 	KUNIT_EXPECT_TRUE(test, list_empty(&stream->fragments));
 	KUNIT_EXPECT_PTR_EQ(test, stream->test, test);
 	KUNIT_EXPECT_EQ(test, stream->gfp, GFP_KERNEL);
+	KUNIT_EXPECT_FALSE(test, stream->append_newlines);
 
 	KUNIT_EXPECT_TRUE(test, string_stream_is_empty(stream));
 }
@@ -226,12 +227,62 @@ static void string_stream_append_empty_string_test(struct kunit *test)
 	KUNIT_EXPECT_STREQ(test, string_stream_get_string(stream), "Add this line");
 }
 
+/* Adding strings without automatic newline appending */
+static void string_stream_no_auto_newline_test(struct kunit *test)
+{
+	struct string_stream *stream;
+
+	stream = alloc_string_stream(test, GFP_KERNEL);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, stream);
+
+	/*
+	 * Add some strings with and without newlines. All formatted
+	 * newlines should be preserved. No extra newlines should be
+	 * added.
+	 */
+	string_stream_add(stream, "One");
+	string_stream_add(stream, "Two\n");
+	string_stream_add(stream, "%s\n", "Three");
+	string_stream_add(stream, "Four");
+	KUNIT_EXPECT_STREQ(test, string_stream_get_string(stream),
+			   "OneTwo\nThree\nFour");
+}
+
+/* Adding strings with automatic newline appending */
+static void string_stream_auto_newline_test(struct kunit *test)
+{
+	struct string_stream *stream;
+
+	stream = alloc_string_stream(test, GFP_KERNEL);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, stream);
+
+	string_stream_set_append_newlines(stream, true);
+	KUNIT_EXPECT_TRUE(test, stream->append_newlines);
+
+	/*
+	 * Add some strings with and without newlines. Newlines should
+	 * be appended to lines that do not end with \n, but newlines
+	 * resulting from the formatting should not be changed.
+	 */
+	string_stream_add(stream, "One");
+	string_stream_add(stream, "Two\n");
+	string_stream_add(stream, "%s\n", "Three");
+	string_stream_add(stream, "%s", "Four\n");
+	string_stream_add(stream, "Five\n%s", "Six");
+	string_stream_add(stream, "Seven\n\n");
+	string_stream_add(stream, "Eight");
+	KUNIT_EXPECT_STREQ(test, string_stream_get_string(stream),
+			   "One\nTwo\nThree\nFour\nFive\nSix\nSeven\n\nEight\n");
+}
+
 static struct kunit_case string_stream_test_cases[] = {
 	KUNIT_CASE(string_stream_init_test),
 	KUNIT_CASE(string_stream_line_add_test),
 	KUNIT_CASE(string_stream_variable_length_line_test),
 	KUNIT_CASE(string_stream_append_test),
 	KUNIT_CASE(string_stream_append_empty_string_test),
+	KUNIT_CASE(string_stream_no_auto_newline_test),
+	KUNIT_CASE(string_stream_auto_newline_test),
 	{}
 };
 
