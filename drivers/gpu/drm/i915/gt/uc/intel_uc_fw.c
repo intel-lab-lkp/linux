@@ -850,7 +850,8 @@ int intel_uc_check_file_version(struct intel_uc_fw *uc_fw, bool *old_ver)
 	 * not working with newer ones. This is specific to MTL and we
 	 * don't expect it to extend to other platforms.
 	 */
-	if (IS_METEORLAKE(gt->i915) && uc_fw->type == INTEL_UC_FW_TYPE_HUC) {
+	if (MEDIA_VER_FULL(gt->i915) == IP_VER(13, 0) &&
+	    uc_fw->type == INTEL_UC_FW_TYPE_HUC) {
 		ret = check_mtl_huc_guc_compatibility(gt, selected);
 		if (ret)
 			return ret;
