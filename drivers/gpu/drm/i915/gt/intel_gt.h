@@ -26,6 +26,20 @@ struct drm_printer;
 	 GRAPHICS_VER_FULL((gt)->i915) <= (until)))
 
 /*
+ * Check that the GT is a media GT and has an IP version within the
+ * specified range (inclusive).
+ *
+ * Only usable on platforms with a standalone media design (i.e., IP version 13
+ * and higher).
+ */
+#define IS_MEDIA_GT_IP_RANGE(gt, from, until) ( \
+	BUILD_BUG_ON_ZERO((from) < IP_VER(13, 0)) + \
+	BUILD_BUG_ON_ZERO((until) < (from)) + \
+	((gt)->type == GT_MEDIA && \
+	 MEDIA_VER_FULL((gt)->i915) >= (from) && \
+	 MEDIA_VER_FULL((gt)->i915) <= (until)))
+
+/*
  * Check that the GT is a graphics GT with a specific IP version and has
  * a stepping in the range [begin, fixed).  The lower stepping bound is
  * inclusive, the upper bound is exclusive (corresponding to the first hardware
@@ -41,6 +55,22 @@ struct drm_printer;
 	BUILD_BUG_ON_ZERO((until) <= (from)) + \
 	(IS_GFX_GT_IP_RANGE((gt), (ipver), (ipver)) && \
 	 IS_GRAPHICS_STEP((gt)->i915, (from), (until))))
+
+/*
+ * Check that the GT is a media GT with a specific IP version and has
+ * a stepping in the range [begin, fixed).  The lower stepping bound is
+ * inclusive, the upper bound is exclusive (corresponding to the first hardware
+ * stepping at which the workaround is no longer needed).
+ * "STEP_FOREVER" can be passed as the upper stepping bound for workarounds
+ * that have no "fixed" version for the specified IP version.
+ *
+ * This macro may only be used to match on platforms that have a standalone
+ * media design (i.e., media version 13 or higher).
+ */
+#define IS_MEDIA_GT_IP_STEP(gt, ipver, from, until) ( \
+	BUILD_BUG_ON_ZERO((until) <= (from)) + \
+	(IS_MEDIA_GT_IP_RANGE((gt), (ipver), (ipver)) && \
+	 IS_MEDIA_STEP((gt)->i915, (from), (until))))
 
 #define GT_TRACE(gt, fmt, ...) do {					\
 	const struct intel_gt *gt__ __maybe_unused = (gt);		\
