@@ -597,9 +597,9 @@ static int mac80211_hwsim_vendor_cmd_test(struct wiphy *wiphy,
 	/* skb_put() or nla_put() will fill up data within
 	 * NL80211_ATTR_VENDOR_DATA
 	 */
-	nla_put_u32(skb, QCA_WLAN_VENDOR_ATTR_TEST, val + 2);
+	err = nla_put_u32(skb, QCA_WLAN_VENDOR_ATTR_TEST, val + 2);
 
-	return cfg80211_vendor_cmd_reply(skb);
+	return err ? err : cfg80211_vendor_cmd_reply(skb);
 }
 
 static struct wiphy_vendor_command mac80211_hwsim_vendor_commands[] = {
