@@ -383,19 +383,25 @@ struct task_group {
 #endif
 #endif
 
+	struct rcu_head		rcu;
+	struct list_head	list;
+
+	struct list_head	siblings;
+	struct list_head	children;
+
+	/*
+	 * load_avg can also cause cacheline bouncing with parent, rt_se
+	 * and rt_rq, current layout is optimized to make sure they are in
+	 * different cachelines.
+	 */
+	struct task_group	*parent;
+
 #ifdef CONFIG_RT_GROUP_SCHED
 	struct sched_rt_entity	**rt_se;
 	struct rt_rq		**rt_rq;
 
 	struct rt_bandwidth	rt_bandwidth;
 #endif
-
-	struct rcu_head		rcu;
-	struct list_head	list;
-
-	struct task_group	*parent;
-	struct list_head	siblings;
-	struct list_head	children;
 
 #ifdef CONFIG_SCHED_AUTOGROUP
 	struct autogroup	*autogroup;
