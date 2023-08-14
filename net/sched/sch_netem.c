@@ -154,6 +154,19 @@ struct netem_sched_data {
 	struct disttable *slot_dist;
 };
 
+/* netem_get_random_u32 - polls a new random 32-bits integer from
+ * the prng.
+ * Uses a deterministic seeded prng if p->deterministic_rng is true.
+ * Uses get_random_u32() underneath if p is NULL or if p->deterministic_rng
+ * is false.
+ */
+static u32 netem_get_random_u32(struct prng *p)
+{
+	if (p && p->deterministic_rng)
+		return prandom_u32_state(&p->prng_state);
+	return get_random_u32();
+}
+
 /* Time stamp put into socket buffer control block
  * Only valid when skbs are in our internal t(ime)fifo queue.
  *
@@ -207,7 +220,7 @@ static u32 get_crandom(struct crndstate *state)
 static bool loss_4state(struct netem_sched_data *q)
 {
 	struct clgstate *clg = &q->clg;
-	u32 rnd = get_random_u32();
+	u32 rnd = netem_get_random_u32(&q->prng);
 
 	/*
 	 * Makes a comparison between rnd and the transition
@@ -272,18 +285,19 @@ static bool loss_4state(struct netem_sched_data *q)
 static bool loss_gilb_ell(struct netem_sched_data *q)
 {
 	struct clgstate *clg = &q->clg;
+	struct prng *p = &q->prng;
 
 	switch (clg->state) {
 	case GOOD_STATE:
-		if (get_random_u32() < clg->a1)
+		if (netem_get_random_u32(p) < clg->a1)
 			clg->state = BAD_STATE;
-		if (get_random_u32() < clg->a4)
+		if (netem_get_random_u32(p) < clg->a4)
 			return true;
 		break;
 	case BAD_STATE:
-		if (get_random_u32() < clg->a2)
+		if (netem_get_random_u32(p) < clg->a2)
 			clg->state = GOOD_STATE;
-		if (get_random_u32() > clg->a3)
+		if (netem_get_random_u32(p) > clg->a3)
 			return true;
 	}
 
