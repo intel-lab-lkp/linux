@@ -1114,12 +1114,59 @@ static void dma_pte_list_pagetables(struct dmar_domain *domain,
 	} while (!first_pte_in_page(pte));
 }
 
-static void dma_pte_clear_level(struct dmar_domain *domain, int level,
-				struct dma_pte *pte, unsigned long pfn,
-				unsigned long start_pfn, unsigned long last_pfn,
-				struct list_head *freelist)
+static int switch_to_small_page(struct dmar_domain *domain, int level,
+				struct dma_pte *pte)
+{
+	u64 pteval, old_pteval, pfn;
+	void *new_pte = NULL;
+	u64 *ptep = NULL;
+	u64 attr;
+	int idx = 0;
+
+	/* Inherit attr from old pte */
+	attr = pte->val & VTD_ATTR_MASK;
+	if (level == 1)
+		attr &= ~DMA_PTE_LARGE_PAGE;
+
+	/* Get old pte entry in case pte change during switch */
+	old_pteval = pte->val;
+	pfn = dma_pte_addr(pte) >> VTD_PAGE_SHIFT;
+
+	new_pte = alloc_pgtable_page(domain->nid, GFP_ATOMIC);
+	if (unlikely(!new_pte))
+		return -ENOMEM;
+
+	ptep = (u64 *)new_pte;
+	for (idx = 0; idx < (1 << LEVEL_STRIDE); idx++) {
+		pteval = (pfn & level_mask(level)) << VTD_PAGE_SHIFT | attr;
+		ptep[idx] = pteval;
+		pfn += level_size(level);
+	}
+
+	pteval = ((unsigned long)virt_to_dma_pfn(new_pte) << VTD_PAGE_SHIFT);
+	/* Snoop bit in page directory entry should be zero (reserve field) */
+	pteval |= DMA_PTE_WRITE | DMA_PTE_READ;
+
+	if (cmpxchg64(&pte->val, old_pteval, pteval) != old_pteval) {
+		pr_err("%s: original pte changed by others, switch fail\n", __func__);
+		free_pgtable_page(new_pte);
+		return -EBUSY;
+	}
+
+	domain_flush_cache(domain, pte, sizeof(*pte));
+
+	pr_debug("%s: pte: %#llx->%#llx\n", __func__, old_pteval, pte->val);
+
+	return 0;
+}
+
+static int dma_pte_clear_level(struct dmar_domain *domain, int level,
+			       struct dma_pte *pte, unsigned long pfn,
+			       unsigned long start_pfn, unsigned long last_pfn,
+			       struct list_head *freelist)
 {
 	struct dma_pte *first_pte = NULL, *last_pte = NULL;
+	int ret;
 
 	pfn = max(start_pfn, pfn);
 	pte = &pte[pfn_level_offset(pfn, level)];
@@ -1143,6 +1190,17 @@ static void dma_pte_clear_level(struct dmar_domain *domain, int level,
 				first_pte = pte;
 			last_pte = pte;
 		} else if (level > 1) {
+			/* Switch to small page when unmap subrange */
+			if (dma_pte_superpage(pte) &&
+			    ((last_pfn - start_pfn + 1) < level_size(level))) {
+				ret = switch_to_small_page(domain, level - 1, pte);
+				if (ret) {
+					pr_err("%s: switch to smaller page fail, ret = %d",
+						__func__, ret);
+					return ret;
+				}
+			}
+
 			/* Recurse down into a level that isn't *entirely* obsolete */
 			dma_pte_clear_level(domain, level - 1,
 					    phys_to_virt(dma_pte_addr(pte)),
@@ -1156,21 +1214,27 @@ next:
 	if (first_pte)
 		domain_flush_cache(domain, first_pte,
 				   (void *)++last_pte - (void *)first_pte);
+
+	return 0;
 }
 
 /* We can't just free the pages because the IOMMU may still be walking
    the page tables, and may have cached the intermediate levels. The
    pages can only be freed after the IOTLB flush has been done. */
-static void domain_unmap(struct dmar_domain *domain, unsigned long start_pfn,
-			 unsigned long last_pfn, struct list_head *freelist)
+static int domain_unmap(struct dmar_domain *domain, unsigned long start_pfn,
+			unsigned long last_pfn, struct list_head *freelist)
 {
+	int ret;
+
 	if (WARN_ON(!domain_pfn_supported(domain, last_pfn)) ||
 	    WARN_ON(start_pfn > last_pfn))
-		return;
+		return -EINVAL;
 
 	/* we don't need lock here; nobody else touches the iova range */
-	dma_pte_clear_level(domain, agaw_to_level(domain->agaw),
-			    domain->pgd, 0, start_pfn, last_pfn, freelist);
+	ret = dma_pte_clear_level(domain, agaw_to_level(domain->agaw),
+				  domain->pgd, 0, start_pfn, last_pfn, freelist);
+	if (ret)
+		return ret;
 
 	/* free pgd */
 	if (start_pfn == 0 && last_pfn == DOMAIN_MAX_PFN(domain->gaw)) {
@@ -1178,6 +1242,8 @@ static void domain_unmap(struct dmar_domain *domain, unsigned long start_pfn,
 		list_add_tail(&pgd_page->lru, freelist);
 		domain->pgd = NULL;
 	}
+
+	return 0;
 }
 
 /* iommu handling */
@@ -4219,21 +4285,12 @@ static size_t intel_iommu_unmap(struct iommu_domain *domain,
 {
 	struct dmar_domain *dmar_domain = to_dmar_domain(domain);
 	unsigned long start_pfn, last_pfn;
-	int level = 0;
-
-	/* Cope with horrid API which requires us to unmap more than the
-	   size argument if it happens to be a large-page mapping. */
-	if (unlikely(!pfn_to_dma_pte(dmar_domain, iova >> VTD_PAGE_SHIFT,
-				     &level, GFP_ATOMIC)))
-		return 0;
-
-	if (size < VTD_PAGE_SIZE << level_to_offset_bits(level))
-		size = VTD_PAGE_SIZE << level_to_offset_bits(level);
 
 	start_pfn = iova >> VTD_PAGE_SHIFT;
 	last_pfn = (iova + size - 1) >> VTD_PAGE_SHIFT;
 
-	domain_unmap(dmar_domain, start_pfn, last_pfn, &gather->freelist);
+	if (domain_unmap(dmar_domain, start_pfn, last_pfn, &gather->freelist))
+		return 0;
 
 	if (dmar_domain->max_addr == iova + size)
 		dmar_domain->max_addr = iova;

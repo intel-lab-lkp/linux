@@ -33,6 +33,7 @@
 #define VTD_PAGE_SIZE		(1UL << VTD_PAGE_SHIFT)
 #define VTD_PAGE_MASK		(((u64)-1) << VTD_PAGE_SHIFT)
 #define VTD_PAGE_ALIGN(addr)	(((addr) + VTD_PAGE_SIZE - 1) & VTD_PAGE_MASK)
+#define VTD_ATTR_MASK		(~VTD_PAGE_MASK)
 
 #define VTD_STRIDE_SHIFT        (9)
 #define VTD_STRIDE_MASK         (((u64)-1) << VTD_STRIDE_SHIFT)
