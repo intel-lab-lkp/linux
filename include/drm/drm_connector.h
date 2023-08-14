@@ -2096,6 +2096,32 @@ struct drm_hdmi_connector_state {
 	 * selection value.
 	 */
 	enum drm_hdmi_broadcast_rgb broadcast_rgb;
+
+	/**
+	 * @infoframes: HDMI Infoframes matching that state
+	 */
+	struct {
+		/**
+		 * @avi: AVI Infoframes structure matching our state.
+		 */
+		struct hdmi_avi_infoframe avi;
+
+		/**
+		 * @drm: DRM Infoframes structure matching our state.
+		 */
+		struct hdmi_drm_infoframe drm;
+
+		/**
+		 * @spd: SPD Infoframes structure matching our state.
+		 */
+		struct hdmi_spd_infoframe spd;
+
+		/**
+		 * @vendor: Vendor Infoframes structure matching our
+		 * state.
+		 */
+		struct hdmi_vendor_infoframe vendor;
+	} infoframes;
 };
 
 #define connector_state_to_hdmi_connector_state(state) \
@@ -2127,6 +2153,11 @@ int drm_atomic_helper_hdmi_connector_atomic_check(struct drm_connector *connecto
 void drm_atomic_helper_hdmi_connector_print_state(struct drm_printer *p,
 						  const struct drm_connector_state *state);
 
+int drm_atomic_helper_hdmi_connector_update_infoframes(struct drm_hdmi_connector *hdmi_connector,
+						       struct drm_hdmi_connector_state *hdmi_state);
+int drm_atomic_helper_hdmi_connector_update_audio_infoframe(struct drm_hdmi_connector *hdmi_connector,
+							    struct hdmi_audio_infoframe *frame);
+
 bool
 drm_atomic_helper_hdmi_connector_is_full_range(const struct drm_hdmi_connector *hdmi_connector,
 					       const struct drm_hdmi_connector_state *hdmi_state);
@@ -2153,6 +2184,23 @@ struct drm_hdmi_connector_funcs {
 	(*tmds_char_rate_valid)(const struct drm_hdmi_connector *connector,
 				const struct drm_display_mode *mode,
 				unsigned long long tmds_rate);
+
+	/**
+	 * @write_infoframe:
+	 *
+	 * This callback is invoked through
+	 * @drm_atomic_helper_hdmi_connector_update_infoframes during a
+	 * commit to program the infoframes into the hardware. It will
+	 * be called multiple times, once for every infoframe type.
+	 *
+	 * The @write_infoframe callback is mandatory.
+	 *
+	 * Returns:
+	 * 0 on success, a negative error code otherwise
+	 */
+	int (*write_infoframe)(struct drm_hdmi_connector *connector,
+			       enum hdmi_infoframe_type type,
+			       const u8 *buffer, size_t len);
 };
 
 struct drm_hdmi_connector {
@@ -2160,6 +2208,16 @@ struct drm_hdmi_connector {
 	 * @base: Base Connector
 	 */
 	struct drm_connector base;
+
+	/**
+	 * @vendor: HDMI Controller Vendor Name
+	 */
+	char vendor[8];
+
+	/**
+	 * @product: HDMI Controller Product Name
+	 */
+	char product[16];
 
 	/**
 	 * @funcs: HDMI connector Control Functions
@@ -2176,6 +2234,47 @@ struct drm_hdmi_connector {
 	 * Broadcast RGB selection to output with.
 	 */
 	struct drm_property *broadcast_rgb_property;
+
+	/**
+	 * @infoframes: Current Infoframes output by the connector
+	 */
+	struct {
+		/**
+		 * @lock: Mutex protecting against concurrent access to
+		 * the infoframes, most notably between KMS and ALSA.
+		 */
+		struct mutex lock;
+
+		/**
+		 * @audio: Current Audio Infoframes structure. Protected
+		 * by @lock.
+		 */
+		struct hdmi_audio_infoframe audio;
+
+		/**
+		 * @avi: Current AVI Infoframes structure. Protected by
+		 * @lock.
+		 */
+		struct hdmi_avi_infoframe avi;
+
+		/**
+		 * @drm: Current DRM Infoframes structure. Protected by
+		 * @lock.
+		 */
+		struct hdmi_drm_infoframe drm;
+
+		/**
+		 * @spd: Current SPD Infoframes structure. Protected by
+		 * @lock.
+		 */
+		struct hdmi_spd_infoframe spd;
+
+		/**
+		 * @vendor: Current Vendor Infoframes structure.
+		 * Protected by @lock.
+		 */
+		struct hdmi_vendor_infoframe vendor;
+	} infoframes;
 };
 
 #define connector_to_hdmi_connector(connector) \
@@ -2188,6 +2287,7 @@ drm_hdmi_connector_compute_mode_clock(const struct drm_display_mode *mode,
 
 int drmm_hdmi_connector_init(struct drm_device *dev,
 			     struct drm_hdmi_connector *hdmi_connector,
+			     const char *vendor, const char *product,
 			     const struct drm_connector_funcs *funcs,
 			     const struct drm_hdmi_connector_funcs *hdmi_funcs,
 			     int connector_type,
