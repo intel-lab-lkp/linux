@@ -177,18 +177,18 @@ static const struct chip_desc chips[] = {
 };
 
 static const struct i2c_device_id pca954x_id[] = {
-	{ "pca9540", pca_9540 },
-	{ "pca9542", pca_9542 },
-	{ "pca9543", pca_9543 },
-	{ "pca9544", pca_9544 },
-	{ "pca9545", pca_9545 },
-	{ "pca9546", pca_9546 },
-	{ "pca9547", pca_9547 },
-	{ "pca9548", pca_9548 },
-	{ "pca9846", pca_9846 },
-	{ "pca9847", pca_9847 },
-	{ "pca9848", pca_9848 },
-	{ "pca9849", pca_9849 },
+	{ "pca9540", .data = &chips[pca_9540] },
+	{ "pca9542", .data = &chips[pca_9542] },
+	{ "pca9543", .data = &chips[pca_9543] },
+	{ "pca9544", .data = &chips[pca_9544] },
+	{ "pca9545", .data = &chips[pca_9545] },
+	{ "pca9546", .data = &chips[pca_9546] },
+	{ "pca9547", .data = &chips[pca_9547] },
+	{ "pca9548", .data = &chips[pca_9548] },
+	{ "pca9846", .data = &chips[pca_9846] },
+	{ "pca9847", .data = &chips[pca_9847] },
+	{ "pca9848", .data = &chips[pca_9848] },
+	{ "pca9849", .data = &chips[pca_9849] },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, pca954x_id);
@@ -206,7 +206,7 @@ static const struct of_device_id pca954x_of_match[] = {
 	{ .compatible = "nxp,pca9847", .data = &chips[pca_9847] },
 	{ .compatible = "nxp,pca9848", .data = &chips[pca_9848] },
 	{ .compatible = "nxp,pca9849", .data = &chips[pca_9849] },
-	{}
+	{ }
 };
 MODULE_DEVICE_TABLE(of, pca954x_of_match);
 
@@ -447,7 +447,7 @@ static int pca954x_probe(struct i2c_client *client)
 
 	data->chip = device_get_match_data(dev);
 	if (!data->chip)
-		data->chip = &chips[id->driver_data];
+		data->chip = id->data;
 
 	if (data->chip->id.manufacturer_id != I2C_DEVICE_ID_NONE) {
 		struct i2c_device_identity id;
