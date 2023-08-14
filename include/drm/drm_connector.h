@@ -2131,11 +2131,40 @@ bool
 drm_atomic_helper_hdmi_connector_is_full_range(const struct drm_hdmi_connector *hdmi_connector,
 					       const struct drm_hdmi_connector_state *hdmi_state);
 
+/**
+ * struct drm_hdmi_connector_funcs - drm_hdmi_connector control functions
+ */
+struct drm_hdmi_connector_funcs {
+	/**
+	 * @tmds_char_rate_valid:
+	 *
+	 * This callback is invoked at atomic_check time to figure out
+	 * whether a particular TMDS character rate is supported by the
+	 * driver.
+	 *
+	 * The @tmds_char_rate_valid callback is optional.
+	 *
+	 * Returns:
+	 *
+	 * Either &drm_mode_status.MODE_OK or one of the failure reasons
+	 * in &enum drm_mode_status.
+	 */
+	enum drm_mode_status
+	(*tmds_char_rate_valid)(const struct drm_hdmi_connector *connector,
+				const struct drm_display_mode *mode,
+				unsigned long long tmds_rate);
+};
+
 struct drm_hdmi_connector {
 	/**
 	 * @base: Base Connector
 	 */
 	struct drm_connector base;
+
+	/**
+	 * @funcs: HDMI connector Control Functions
+	 */
+	const struct drm_hdmi_connector_funcs *funcs;
 
 	/**
 	 * @max_bpc: Maximum bits per character the connector supports.
@@ -2160,6 +2189,7 @@ drm_hdmi_connector_compute_mode_clock(const struct drm_display_mode *mode,
 int drmm_hdmi_connector_init(struct drm_device *dev,
 			     struct drm_hdmi_connector *hdmi_connector,
 			     const struct drm_connector_funcs *funcs,
+			     const struct drm_hdmi_connector_funcs *hdmi_funcs,
 			     int connector_type,
 			     struct i2c_adapter *ddc,
 			     unsigned int max_bpc);

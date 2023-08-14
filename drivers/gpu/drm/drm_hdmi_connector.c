@@ -263,11 +263,15 @@ drm_hdmi_connector_clock_valid(const struct drm_hdmi_connector *hdmi_connector,
 			       const struct drm_display_mode *mode,
 			       unsigned long long clock)
 {
+	const struct drm_hdmi_connector_funcs *funcs = hdmi_connector->funcs;
 	const struct drm_connector *connector = &hdmi_connector->base;
 	const struct drm_display_info *info = &connector->display_info;
 
 	if (info->max_tmds_clock && clock > info->max_tmds_clock * 1000)
 		return MODE_CLOCK_HIGH;
+
+	if (funcs && funcs->tmds_char_rate_valid)
+		return funcs->tmds_char_rate_valid(hdmi_connector, mode, clock);
 
 	return MODE_OK;
 }
@@ -458,6 +462,7 @@ EXPORT_SYMBOL(drm_atomic_helper_hdmi_connector_print_state);
  * drmm_hdmi_connector_init - Init a preallocated HDMI connector
  * @dev: DRM device
  * @hdmi_connector: A pointer to the HDMI connector to init
+ * @funcs: callbacks for this connector
  * @connector_type: user visible type of the connector
  * @ddc: optional pointer to the associated ddc adapter
  * @max_bpc: Maximum bits per char the HDMI connector supports
@@ -476,6 +481,7 @@ EXPORT_SYMBOL(drm_atomic_helper_hdmi_connector_print_state);
 int drmm_hdmi_connector_init(struct drm_device *dev,
 			     struct drm_hdmi_connector *hdmi_connector,
 			     const struct drm_connector_funcs *funcs,
+			     const struct drm_hdmi_connector_funcs *hdmi_funcs,
 			     int connector_type,
 			     struct i2c_adapter *ddc,
 			     unsigned int max_bpc)
@@ -515,6 +521,8 @@ int drmm_hdmi_connector_init(struct drm_device *dev,
 		drm_connector_attach_max_bpc_property(connector, 8, max_bpc);
 		hdmi_connector->max_bpc = max_bpc;
 	}
+
+	hdmi_connector->funcs = hdmi_funcs;
 
 	return 0;
 }
