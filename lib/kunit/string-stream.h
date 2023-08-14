@@ -39,7 +39,8 @@ int __printf(2, 0) string_stream_vadd(struct string_stream *stream,
 				      const char *fmt,
 				      va_list args);
 
-char *string_stream_get_string(struct string_stream *stream);
+char *string_stream_get_string(struct kunit *test, struct string_stream *stream,
+			       gfp_t gfp);
 
 int string_stream_append(struct string_stream *stream,
 			 struct string_stream *other);

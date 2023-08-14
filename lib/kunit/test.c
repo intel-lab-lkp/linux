@@ -286,7 +286,7 @@ static void kunit_print_string_stream(struct kunit *test,
 	if (string_stream_is_empty(stream))
 		return;
 
-	buf = string_stream_get_string(stream);
+	buf = string_stream_get_string(test, stream, GFP_KERNEL);
 	if (!buf) {
 		kunit_err(test,
 			  "Could not allocate buffer, dumping stream:\n");

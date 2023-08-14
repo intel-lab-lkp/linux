@@ -117,13 +117,14 @@ static void string_stream_clear(struct string_stream *stream)
 	spin_unlock(&stream->lock);
 }
 
-char *string_stream_get_string(struct string_stream *stream)
+char *string_stream_get_string(struct kunit *test, struct string_stream *stream,
+			       gfp_t gfp)
 {
 	struct string_stream_fragment *frag_container;
 	size_t buf_len = stream->length + 1; /* +1 for null byte. */
 	char *buf;
 
-	buf = kunit_kzalloc(stream->test, buf_len, stream->gfp);
+	buf = kunit_kzalloc(test, buf_len, gfp);
 	if (!buf)
 		return NULL;
 
@@ -140,8 +141,7 @@ int string_stream_append(struct string_stream *stream,
 {
 	const char *other_content;
 
-	other_content = string_stream_get_string(other);
-
+	other_content = string_stream_get_string(other->test, other, other->gfp);
 	if (!other_content)
 		return -ENOMEM;
 

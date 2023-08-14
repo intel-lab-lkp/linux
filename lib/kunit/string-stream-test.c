@@ -57,7 +57,7 @@ static void string_stream_line_add_test(struct kunit *test)
 	}
 	num_lines = i;
 
-	concat_string = string_stream_get_string(stream);
+	concat_string = string_stream_get_string(test, stream, GFP_KERNEL);
 	KUNIT_EXPECT_NOT_ERR_OR_NULL(test, concat_string);
 	KUNIT_EXPECT_EQ(test, strlen(concat_string), total_len);
 
@@ -113,7 +113,7 @@ static void string_stream_variable_length_line_test(struct kunit *test)
 	}
 	num_lines = i;
 
-	concat_string = string_stream_get_string(stream);
+	concat_string = string_stream_get_string(test, stream, GFP_KERNEL);
 	KUNIT_EXPECT_NOT_ERR_OR_NULL(test, concat_string);
 	KUNIT_EXPECT_EQ(test, strlen(concat_string), total_len);
 
@@ -165,17 +165,18 @@ static void string_stream_append_test(struct kunit *test)
 
 	/* Append content of empty stream to empty stream */
 	string_stream_append(stream_1, stream_2);
-	KUNIT_EXPECT_EQ(test, strlen(string_stream_get_string(stream_1)), 0);
+	KUNIT_EXPECT_EQ(test, strlen(string_stream_get_string(test, stream_1, GFP_KERNEL)), 0);
 
 	/* Add some data to stream_1 */
 	for (i = 0; i < ARRAY_SIZE(strings_1); ++i)
 		string_stream_add(stream_1, "%s\n", strings_1[i]);
 
-	original_content = string_stream_get_string(stream_1);
+	original_content = string_stream_get_string(test, stream_1, GFP_KERNEL);
 
 	/* Append content of empty stream to non-empty stream */
 	string_stream_append(stream_1, stream_2);
-	KUNIT_EXPECT_STREQ(test, string_stream_get_string(stream_1), original_content);
+	KUNIT_EXPECT_STREQ(test, string_stream_get_string(test, stream_1, GFP_KERNEL),
+			   original_content);
 
 	/* Add some data to stream_2 */
 	for (i = 0; i < ARRAY_SIZE(strings_2); ++i)
@@ -188,14 +189,15 @@ static void string_stream_append_test(struct kunit *test)
 	 * End result should be the original content of stream_1 plus
 	 * the content of stream_2.
 	 */
-	stream_2_content = string_stream_get_string(stream_2);
+	stream_2_content = string_stream_get_string(test, stream_2, GFP_KERNEL);
 	combined_length = strlen(original_content) + strlen(stream_2_content);
 	combined_length++; /* for terminating \0 */
 	combined_content = kunit_kmalloc(test, combined_length, GFP_KERNEL);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, combined_content);
 	snprintf(combined_content, combined_length, "%s%s", original_content, stream_2_content);
 
-	KUNIT_EXPECT_STREQ(test, string_stream_get_string(stream_1), combined_content);
+	KUNIT_EXPECT_STREQ(test, string_stream_get_string(test, stream_1, GFP_KERNEL),
+			   combined_content);
 
 	/* Append content of non-empty stream to empty stream */
 	string_stream_destroy(stream_1);
@@ -204,7 +206,8 @@ static void string_stream_append_test(struct kunit *test)
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, stream_1);
 
 	string_stream_append(stream_1, stream_2);
-	KUNIT_EXPECT_STREQ(test, string_stream_get_string(stream_1), stream_2_content);
+	KUNIT_EXPECT_STREQ(test, string_stream_get_string(test, stream_1, GFP_KERNEL),
+			   stream_2_content);
 }
 
 /* Adding an empty string should not create a fragment. */
@@ -224,7 +227,8 @@ static void string_stream_append_empty_string_test(struct kunit *test)
 	string_stream_add(stream, "Add this line");
 	string_stream_add(stream, "%s", "");
 	KUNIT_EXPECT_EQ(test, list_count_nodes(&stream->fragments), 1);
-	KUNIT_EXPECT_STREQ(test, string_stream_get_string(stream), "Add this line");
+	KUNIT_EXPECT_STREQ(test, string_stream_get_string(test, stream, GFP_KERNEL),
+			   "Add this line");
 }
 
 /* Adding strings without automatic newline appending */
@@ -244,7 +248,7 @@ static void string_stream_no_auto_newline_test(struct kunit *test)
 	string_stream_add(stream, "Two\n");
 	string_stream_add(stream, "%s\n", "Three");
 	string_stream_add(stream, "Four");
-	KUNIT_EXPECT_STREQ(test, string_stream_get_string(stream),
+	KUNIT_EXPECT_STREQ(test, string_stream_get_string(test, stream, GFP_KERNEL),
 			   "OneTwo\nThree\nFour");
 }
 
@@ -271,7 +275,7 @@ static void string_stream_auto_newline_test(struct kunit *test)
 	string_stream_add(stream, "Five\n%s", "Six");
 	string_stream_add(stream, "Seven\n\n");
 	string_stream_add(stream, "Eight");
-	KUNIT_EXPECT_STREQ(test, string_stream_get_string(stream),
+	KUNIT_EXPECT_STREQ(test, string_stream_get_string(test, stream, GFP_KERNEL),
 			   "One\nTwo\nThree\nFour\nFive\nSix\nSeven\n\nEight\n");
 }
 
