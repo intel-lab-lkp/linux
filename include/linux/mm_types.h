@@ -322,11 +322,40 @@ struct folio {
 		};
 		struct page page;
 	};
+	/*
+	 * Some of the tail page fields may not be reused by the folio
+	 * object because they're already been used by the page struct.  On
+	 * 32bits there're at least 8 WORDs while on 64 bits there're at
+	 * least 7 WORDs:
+	 *
+	 * |--------+-------------+-------------------|
+	 * |  index | 32 bits     | 64 bits           |
+	 * |--------+-------------+-------------------|
+	 * |      0 | flags       | flags             |
+	 * |      1 | head        | head              |
+	 * |      2 | FREE        | FREE              |
+	 * |      3 | FREE [1]    | FREE [1]          |
+	 * |      4 | FREE        | FREE              |
+	 * |      5 | FREE        | private [2]       |
+	 * |      6 | mapcnt      | mapcnt+refcnt [3] |
+	 * |      7 | refcnt [3]  |                   |
+	 * |--------+-------------+-------------------|
+	 *
+	 * [1] "mapping" field.  It is free to use but needs to be with
+	 *     some caution due to poisoning, see TAIL_MAPPING_REUSED_MAX.
+	 *
+	 * [2] "private" field, used when THP_SWAP is on (but disabled on
+	 *     32 bits, so this index is FREE on 32bit or hugetlb folios).
+	 *     May need to be fixed finally.
+	 *
+	 * [3] "refcount" field must be zero for all tail pages.  See e.g.
+	 *     has_unmovable_pages() on page_ref_count() check and comment.
+	 */
 	union {
 		struct {
 			unsigned long _flags_1;
 			unsigned long _head_1;
-	/* public: */
+	/* public: WORD 2 */
 			unsigned char _folio_dtor;
 			unsigned char _folio_order;
 	/* private: 2 bytes can be reused later */
@@ -335,7 +364,7 @@ struct folio {
 	/* 4 bytes can be reused later (64 bits only) */
 			unsigned char _free_1_1[4];
 #endif
-	/* public: */
+	/* public: WORD 3 */
 			atomic_t _entire_mapcount;
 			atomic_t _nr_pages_mapped;
 			atomic_t _pincount;
@@ -350,20 +379,20 @@ struct folio {
 		struct page __page_1;
 	};
 	union {
-		struct {
+		struct {	/* hugetlb folios */
 			unsigned long _flags_2;
 			unsigned long _head_2;
-	/* public: */
+	/* public: WORD 2 */
 			void *_hugetlb_subpool;
 			void *_hugetlb_cgroup;
 			void *_hugetlb_cgroup_rsvd;
 			void *_hugetlb_hwpoison;
 	/* private: the union with struct page is transitional */
 		};
-		struct {
+		struct {	/* non-hugetlb folios */
 			unsigned long _flags_2a;
 			unsigned long _head_2a;
-	/* public: */
+	/* public: WORD 2-3 */
 			struct list_head _deferred_list;
 	/* private: 8 more free bytes for either 32/64 bits */
 			unsigned char _free_2_1[8];
