@@ -206,11 +206,32 @@ static void string_stream_append_test(struct kunit *test)
 	KUNIT_EXPECT_STREQ(test, string_stream_get_string(stream_1), stream_2_content);
 }
 
+/* Adding an empty string should not create a fragment. */
+static void string_stream_append_empty_string_test(struct kunit *test)
+{
+	struct string_stream *stream;
+
+	stream = alloc_string_stream(test, GFP_KERNEL);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, stream);
+
+	/* Formatted empty string */
+	string_stream_add(stream, "%s", "");
+	KUNIT_EXPECT_TRUE(test, string_stream_is_empty(stream));
+	KUNIT_EXPECT_TRUE(test, list_empty(&stream->fragments));
+
+	/* Adding an empty string to a non-empty stream */
+	string_stream_add(stream, "Add this line");
+	string_stream_add(stream, "%s", "");
+	KUNIT_EXPECT_EQ(test, list_count_nodes(&stream->fragments), 1);
+	KUNIT_EXPECT_STREQ(test, string_stream_get_string(stream), "Add this line");
+}
+
 static struct kunit_case string_stream_test_cases[] = {
 	KUNIT_CASE(string_stream_init_test),
 	KUNIT_CASE(string_stream_line_add_test),
 	KUNIT_CASE(string_stream_variable_length_line_test),
 	KUNIT_CASE(string_stream_append_test),
+	KUNIT_CASE(string_stream_append_empty_string_test),
 	{}
 };
 
