@@ -6,16 +6,27 @@
  * Author: Brendan Higgins <brendanhiggins@google.com>
  */
 
+#include <kunit/static_stub.h>
 #include <kunit/test.h>
 #include <linux/slab.h>
 
 #include "string-stream.h"
 
+struct string_stream_test_priv {
+	struct string_stream *raw_stream;
+
+	/* For testing resource-managed free */
+	struct string_stream *freed_stream;
+	bool stream_free_again;
+};
+
 /* string_stream object is initialized correctly. */
 static void string_stream_init_test(struct kunit *test)
 {
+	struct string_stream_test_priv *priv = test->priv;
 	struct string_stream *stream;
 
+	/* Resource-managed initialization */
 	stream = alloc_string_stream(test, GFP_KERNEL);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, stream);
 
@@ -26,6 +37,86 @@ static void string_stream_init_test(struct kunit *test)
 	KUNIT_EXPECT_FALSE(test, stream->append_newlines);
 
 	KUNIT_EXPECT_TRUE(test, string_stream_is_empty(stream));
+
+	free_string_stream(test, stream);
+
+	/*
+	 * Raw initialization. This allocation is not resource-managed
+	 * so store it in priv->raw_stream to be cleaned up by the
+	 * exit function.
+	 */
+	priv->raw_stream = raw_alloc_string_stream(GFP_KERNEL);
+	stream = priv->raw_stream;
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, stream);
+
+	KUNIT_EXPECT_EQ(test, stream->length, 0);
+	KUNIT_EXPECT_TRUE(test, list_empty(&stream->fragments));
+	KUNIT_EXPECT_PTR_EQ(test, stream->test, NULL);
+	KUNIT_EXPECT_EQ(test, stream->gfp, GFP_KERNEL);
+	KUNIT_EXPECT_FALSE(test, stream->append_newlines);
+
+	KUNIT_EXPECT_TRUE(test, string_stream_is_empty(stream));
+}
+
+static void string_stream_raw_free_string_stream_stub(struct string_stream *stream)
+{
+	struct kunit *fake_test = kunit_get_current_test();
+	struct string_stream_test_priv *priv = fake_test->priv;
+
+	if (priv->freed_stream)
+		priv->stream_free_again = true;
+
+	priv->freed_stream = stream;
+
+	/*
+	 * Avoid calling deactivate_static_stub() or changing
+	 * current->kunit_test during cleanup. Leave the stream to
+	 * be freed during the test exit.
+	 */
+}
+
+/* string_stream object is freed when test is cleaned up. */
+static void string_stream_resource_free_test(struct kunit *test)
+{
+	struct string_stream_test_priv *priv = test->priv;
+	struct kunit *fake_test;
+	struct string_stream *stream;
+
+	fake_test = kunit_kzalloc(test, sizeof(*fake_test), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, fake_test);
+
+	kunit_init_test(fake_test, "string_stream_fake_test", NULL);
+	fake_test->priv = priv;
+
+	/*
+	 * Activate stub before creating string_stream so the
+	 * string_stream will be cleaned up first.
+	 */
+	priv->freed_stream = NULL;
+	priv->stream_free_again = false;
+	kunit_activate_static_stub(fake_test,
+				   raw_free_string_stream,
+				   string_stream_raw_free_string_stream_stub);
+
+	stream = alloc_string_stream(fake_test, GFP_KERNEL);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, stream);
+
+	/*
+	 * Ensure the stream is freed when this test terminates.
+	 */
+	priv->raw_stream = stream;
+
+	/* Set current->kunit_test to fake_test so the static stub will be called. */
+	current->kunit_test = fake_test;
+
+	/* Cleanup test - the stub function should be called */
+	kunit_cleanup(fake_test);
+
+	/* Set current->kunit_test back to current test. */
+	current->kunit_test = test;
+
+	KUNIT_EXPECT_PTR_EQ(test, priv->freed_stream, stream);
+	KUNIT_EXPECT_FALSE(test, priv->stream_free_again);
 }
 
 /*
@@ -279,8 +370,30 @@ static void string_stream_auto_newline_test(struct kunit *test)
 			   "One\nTwo\nThree\nFour\nFive\nSix\nSeven\n\nEight\n");
 }
 
+static int string_stream_test_init(struct kunit *test)
+{
+	struct string_stream_test_priv *priv;
+
+	priv = kunit_kzalloc(test, sizeof(*priv), GFP_KERNEL);
+	if (!priv)
+		return -ENOMEM;
+
+	test->priv = priv;
+
+	return 0;
+}
+
+static void string_stream_test_exit(struct kunit *test)
+{
+	struct string_stream_test_priv *priv = test->priv;
+
+	if (priv && priv->raw_stream)
+		raw_free_string_stream(priv->raw_stream);
+}
+
 static struct kunit_case string_stream_test_cases[] = {
 	KUNIT_CASE(string_stream_init_test),
+	KUNIT_CASE(string_stream_resource_free_test),
 	KUNIT_CASE(string_stream_line_add_test),
 	KUNIT_CASE(string_stream_variable_length_line_test),
 	KUNIT_CASE(string_stream_append_test),
@@ -292,6 +405,8 @@ static struct kunit_case string_stream_test_cases[] = {
 
 static struct kunit_suite string_stream_test_suite = {
 	.name = "string-stream-test",
-	.test_cases = string_stream_test_cases
+	.test_cases = string_stream_test_cases,
+	.init = string_stream_test_init,
+	.exit = string_stream_test_exit,
 };
 kunit_test_suites(&string_stream_test_suite);

@@ -6,6 +6,7 @@
  * Author: Brendan Higgins <brendanhiggins@google.com>
  */
 
+#include <kunit/static_stub.h>
 #include <kunit/test.h>
 #include <linux/list.h>
 #include <linux/slab.h>
@@ -167,6 +168,8 @@ bool string_stream_is_empty(struct string_stream *stream)
 
 void raw_free_string_stream(struct string_stream *stream)
 {
+	KUNIT_STATIC_STUB_REDIRECT(raw_free_string_stream, stream);
+
 	string_stream_clear(stream);
 	kfree(stream);
 }
