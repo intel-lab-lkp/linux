@@ -88,6 +88,12 @@ static void mops_sigill(void)
 		     : "cc", "memory");
 }
 
+static void pmull_sigill(void)
+{
+	/* PMULL V0.1Q, V0.1D, V0.1D */
+	asm volatile(".inst 0x0ee0e000" : : : );
+}
+
 static void rng_sigill(void)
 {
 	asm volatile("mrs x0, S3_3_C2_C4_0" : : : "x0");
@@ -358,6 +364,13 @@ static const struct hwcap_data {
 		.hwcap_bit = HWCAP2_RNG,
 		.cpuinfo = "rng",
 		.sigill_fn = rng_sigill,
+	},
+	{
+		.name = "PMULL",
+		.at_hwcap = AT_HWCAP,
+		.hwcap_bit = HWCAP_PMULL,
+		.cpuinfo = "pmull",
+		.sigill_fn = pmull_sigill,
 	},
 	{
 		.name = "RPRFM",
