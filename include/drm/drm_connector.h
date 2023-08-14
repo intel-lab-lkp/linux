@@ -2042,6 +2042,32 @@ void drm_connector_attach_privacy_screen_provider(
 	struct drm_connector *connector, struct drm_privacy_screen *priv);
 void drm_connector_update_privacy_screen(const struct drm_connector_state *connector_state);
 
+struct drm_hdmi_connector_state {
+	/**
+	 * @base: Base Connector State
+	 */
+	struct drm_connector_state base;
+};
+
+#define connector_state_to_hdmi_connector_state(state) \
+	container_of_const(state, struct drm_hdmi_connector_state, base)
+
+struct drm_hdmi_connector;
+
+void __drm_atomic_helper_hdmi_connector_reset(struct drm_hdmi_connector *hdmi_connector,
+					      struct drm_hdmi_connector_state *new_hdmi_state);
+void drm_atomic_helper_hdmi_connector_reset(struct drm_connector *connector);
+void
+__drm_atomic_helper_hdmi_connector_duplicate_state(struct drm_hdmi_connector *hdmi_connector,
+						   struct drm_hdmi_connector_state *new_hdmi_state);
+struct drm_connector_state *
+drm_atomic_helper_hdmi_connector_duplicate_state(struct drm_connector *connector);
+void __drm_atomic_helper_hdmi_connector_destroy_state(struct drm_hdmi_connector_state *hdmi_state);
+void drm_atomic_helper_hdmi_connector_destroy_state(struct drm_connector *connector,
+						    struct drm_connector_state *state);
+void drm_atomic_helper_hdmi_connector_print_state(struct drm_printer *p,
+						  const struct drm_connector_state *state);
+
 struct drm_hdmi_connector {
 	/**
 	 * @base: Base Connector
