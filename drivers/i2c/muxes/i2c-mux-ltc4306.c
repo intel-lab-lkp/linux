@@ -192,8 +192,8 @@ static int ltc4306_deselect_mux(struct i2c_mux_core *muxc, u32 chan)
 }
 
 static const struct i2c_device_id ltc4306_id[] = {
-	{ "ltc4305", ltc_4305 },
-	{ "ltc4306", ltc_4306 },
+	{ "ltc4305", .data = &chips[ltc_4305] },
+	{ "ltc4306", .data = &chips[ltc_4306] },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, ltc4306_id);
@@ -217,9 +217,8 @@ static int ltc4306_probe(struct i2c_client *client)
 	int num, ret;
 
 	chip = of_device_get_match_data(&client->dev);
-
 	if (!chip)
-		chip = &chips[i2c_match_id(ltc4306_id, client)->driver_data];
+		chip = i2c_match_id(ltc4306_id, client)->data;
 
 	idle_disc = device_property_read_bool(&client->dev,
 					      "i2c-mux-idle-disconnect");
