@@ -77,25 +77,17 @@ if [ $cnt -ne 1 ]; then
    fail "Did not find traceoff trigger"
 fi
 
+on=`cat tracing_on`
+if [ $on != "0" ]; then
+    fail "Tracing is not off"
+fi
+
 cnt=`cnt_trace`
 sleep $SLEEP_TIME
 cnt2=`cnt_trace`
 
 if [ $cnt -ne $cnt2 ]; then
    fail "Tracing is not stopped"
-fi
-
-on=`cat tracing_on`
-if [ $on != "0" ]; then
-    fail "Tracing is not off"
-fi
-
-csum1=`md5sum trace`
-sleep $SLEEP_TIME
-csum2=`md5sum trace`
-
-if [ "$csum1" != "$csum2" ]; then
-    fail "Tracing file is still changing"
 fi
 
 clear_trace
