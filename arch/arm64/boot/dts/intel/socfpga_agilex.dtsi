@@ -92,21 +92,25 @@
 		cb_intosc_hs_div2_clk: cb-intosc-hs-div2-clk {
 			#clock-cells = <0>;
 			compatible = "fixed-clock";
+			clock-frequency = <0>;
 		};
 
 		cb_intosc_ls_clk: cb-intosc-ls-clk {
 			#clock-cells = <0>;
 			compatible = "fixed-clock";
+			clock-frequency = <0>;
 		};
 
 		f2s_free_clk: f2s-free-clk {
 			#clock-cells = <0>;
 			compatible = "fixed-clock";
+			clock-frequency = <0>;
 		};
 
 		osc1: osc1 {
 			#clock-cells = <0>;
 			compatible = "fixed-clock";
+			clock-frequency = <0>;
 		};
 
 		qspi_clk: qspi-clk {
