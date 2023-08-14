@@ -390,6 +390,15 @@ out_unlock:
 	mutex_unlock(&register_lock);
 }
 
+static void unregister_action_proc(struct irqaction *action)
+{
+	if (!action)
+		return;
+
+	unregister_action_proc(action->secondary);
+	unregister_handler_proc(action);
+}
+
 void unregister_irq_proc(unsigned int irq, struct irq_desc *desc)
 {
 	char name [MAX_NAMELEN];
@@ -407,6 +416,12 @@ void unregister_irq_proc(unsigned int irq, struct irq_desc *desc)
 # endif
 #endif
 	remove_proc_entry("spurious", desc->dir);
+
+	/*
+	 * If at this point, this irq desc is still requested, we need to
+	 * remove the proc handler entries or we'll leak them.
+	 */
+	unregister_action_proc(desc->action);
 
 	sprintf(name, "%u", irq);
 	remove_proc_entry(name, root_irq_dir);
