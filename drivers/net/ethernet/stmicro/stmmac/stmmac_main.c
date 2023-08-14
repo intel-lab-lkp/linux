@@ -3883,6 +3883,12 @@ static int __stmmac_open(struct net_device *dev,
 	netif_tx_start_all_queues(priv->dev);
 	stmmac_enable_all_dma_irq(priv);
 
+	if (priv->plat->rxmux_setup) {
+		ret = priv->plat->rxmux_setup(priv->plat->bsp_priv, true);
+		if (ret)
+			netdev_err(priv->dev, "Rxmux setup failed\n");
+	}
+
 	return 0;
 
 irq_error:
@@ -3936,7 +3942,13 @@ static void stmmac_fpe_stop_wq(struct stmmac_priv *priv)
 static int stmmac_release(struct net_device *dev)
 {
 	struct stmmac_priv *priv = netdev_priv(dev);
-	u32 chan;
+	u32 chan, ret;
+
+	if (priv->plat->rxmux_setup) {
+		ret = priv->plat->rxmux_setup(priv->plat->bsp_priv, false);
+		if (ret)
+			netdev_err(priv->dev, "Rxmux setup failed\n");
+	}
 
 	if (device_may_wakeup(priv->device))
 		phylink_speed_down(priv->phylink, false);
@@ -7630,10 +7642,16 @@ int stmmac_suspend(struct device *dev)
 {
 	struct net_device *ndev = dev_get_drvdata(dev);
 	struct stmmac_priv *priv = netdev_priv(ndev);
-	u32 chan;
+	u32 chan, ret;
 
 	if (!ndev || !netif_running(ndev))
 		return 0;
+
+	if (priv->plat->rxmux_setup) {
+		ret = priv->plat->rxmux_setup(priv->plat->bsp_priv, false);
+		if (ret)
+			netdev_err(priv->dev, "Rxmux setup failed\n");
+	}
 
 	mutex_lock(&priv->lock);
 
@@ -7798,6 +7816,12 @@ int stmmac_resume(struct device *dev)
 
 	mutex_unlock(&priv->lock);
 	rtnl_unlock();
+
+	if (priv->plat->rxmux_setup) {
+		ret = priv->plat->rxmux_setup(priv->plat->bsp_priv, true);
+		if (ret)
+			netdev_err(priv->dev, "Rxmux setup failed\n");
+	}
 
 	netif_device_attach(ndev);
 

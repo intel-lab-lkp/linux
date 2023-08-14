@@ -20,6 +20,7 @@
 #include <linux/platform_device.h>
 #include <linux/reset.h>
 #include <linux/stmmac.h>
+#include <linux/regmap.h>
 
 #include "stmmac_platform.h"
 #include "dwmac4.h"
@@ -35,6 +36,45 @@ struct tegra_eqos {
 	struct clk *clk_rx;
 
 	struct gpio_desc *reset;
+};
+
+enum fsd_rxmux_clk {
+	FSD_RXCLK_MUX = 7,
+	FSD_RXCLK_EXTERNAL,
+	FSD_RXCLK_INTERNAL
+};
+
+struct fsd_eqos_plat_data {
+	const struct fsd_eqos_variant *fsd_eqos_inst_var;
+	struct clk_bulk_data *clks;
+	struct device *dev;
+};
+
+struct fsd_eqos_variant {
+	const char * const *clk_list;
+	int num_clks;
+};
+
+static const char * const fsd_eqos_instance_0_clk[] = {
+	"ptp_ref", "master_bus", "slave_bus", "tx", "rx"
+};
+
+static const char * const fsd_eqos_instance_1_clk[] = {
+	"ptp_ref", "master_bus", "slave_bus", "tx", "rx", "master2_bus",
+	"slave2_bus", "eqos_rxclk_mux", "eqos_phyrxclk", "dout_peric_rgmii_clk"
+};
+
+static const int rx_clock_skew_val[] = {0x2, 0x0};
+
+static const struct fsd_eqos_variant fsd_eqos_clk_info[] = {
+	{
+		.clk_list = fsd_eqos_instance_0_clk,
+		.num_clks = ARRAY_SIZE(fsd_eqos_instance_0_clk)
+	},
+	{
+		.clk_list = fsd_eqos_instance_1_clk,
+		.num_clks = ARRAY_SIZE(fsd_eqos_instance_1_clk)
+	},
 };
 
 static int dwc_eth_dwmac_config_dt(struct platform_device *pdev,
@@ -265,6 +305,132 @@ static int tegra_eqos_init(struct platform_device *pdev, void *priv)
 	return 0;
 }
 
+static int dwc_eqos_rxmux_setup(void *priv, bool external)
+{
+	struct fsd_eqos_plat_data *plat = priv;
+
+	/* doesn't support RX clock mux */
+	if (!plat->clks[FSD_RXCLK_MUX].clk)
+		return 0;
+
+	if (external)
+		return clk_set_parent(plat->clks[FSD_RXCLK_MUX].clk,
+				      plat->clks[FSD_RXCLK_EXTERNAL].clk);
+	else
+		return clk_set_parent(plat->clks[FSD_RXCLK_MUX].clk,
+				      plat->clks[FSD_RXCLK_INTERNAL].clk);
+}
+
+static int dwc_eqos_setup_rxclock(struct platform_device *pdev, int ins_num)
+{
+	struct device_node *np = pdev->dev.of_node;
+	struct regmap *syscon;
+	unsigned int reg;
+
+	if (np && of_property_read_bool(np, "fsd-rx-clock-skew")) {
+		syscon = syscon_regmap_lookup_by_phandle_args(np,
+							      "fsd-rx-clock-skew",
+							      1, &reg);
+		if (IS_ERR(syscon)) {
+			dev_err(&pdev->dev,
+				"couldn't get the rx-clock-skew syscon!\n");
+			return PTR_ERR(syscon);
+		}
+
+		regmap_write(syscon, reg, rx_clock_skew_val[ins_num]);
+	}
+
+	return 0;
+}
+
+static int fsd_eqos_clk_init(struct fsd_eqos_plat_data *plat,
+			     struct plat_stmmacenet_data *data)
+{
+	int ret = 0, i;
+
+	const struct fsd_eqos_variant *fsd_eqos_v_data =
+						plat->fsd_eqos_inst_var;
+
+	plat->clks = devm_kcalloc(plat->dev, fsd_eqos_v_data->num_clks,
+				  sizeof(*plat->clks), GFP_KERNEL);
+	if (!plat->clks)
+		return -ENOMEM;
+
+	for (i = 0; i < fsd_eqos_v_data->num_clks; i++)
+		plat->clks[i].id = fsd_eqos_v_data->clk_list[i];
+
+	ret = devm_clk_bulk_get(plat->dev, fsd_eqos_v_data->num_clks,
+				plat->clks);
+
+	return ret;
+}
+
+static int fsd_clks_endisable(void *priv, bool enabled)
+{
+	int ret, num_clks;
+	struct fsd_eqos_plat_data *plat = priv;
+
+	num_clks = plat->fsd_eqos_inst_var->num_clks;
+
+	if (enabled) {
+		ret = clk_bulk_prepare_enable(num_clks, plat->clks);
+		if (ret) {
+			dev_err(plat->dev, "Clock enable failed, err = %d\n", ret);
+			return ret;
+		}
+	} else {
+		clk_bulk_disable_unprepare(num_clks, plat->clks);
+	}
+
+	return 0;
+}
+
+static int fsd_eqos_probe(struct platform_device *pdev,
+			  struct plat_stmmacenet_data *data,
+			  struct stmmac_resources *res)
+{
+	struct fsd_eqos_plat_data *priv_plat;
+	struct device_node *np = pdev->dev.of_node;
+	int ret = 0;
+
+	priv_plat = devm_kzalloc(&pdev->dev, sizeof(*priv_plat), GFP_KERNEL);
+	if (!priv_plat) {
+		ret = -ENOMEM;
+		goto error;
+	}
+
+	priv_plat->dev = &pdev->dev;
+	data->bus_id = of_alias_get_id(np, "eth");
+
+	priv_plat->fsd_eqos_inst_var = &fsd_eqos_clk_info[data->bus_id];
+
+	ret = fsd_eqos_clk_init(priv_plat, data);
+
+	data->bsp_priv = priv_plat;
+	data->clks_config = fsd_clks_endisable;
+	data->rxmux_setup = dwc_eqos_rxmux_setup;
+
+	ret = fsd_clks_endisable(priv_plat, true);
+	if (ret)
+		goto error;
+
+	ret = dwc_eqos_setup_rxclock(pdev, data->bus_id);
+	if (ret) {
+		fsd_clks_endisable(priv_plat, false);
+		dev_err_probe(&pdev->dev, ret, "Unable to setup rxclock\n");
+	}
+
+error:
+	return ret;
+}
+
+static void fsd_eqos_remove(struct platform_device *pdev)
+{
+	struct fsd_eqos_plat_data *priv_plat = get_stmmac_bsp_priv(&pdev->dev);
+
+	fsd_clks_endisable(priv_plat, false);
+}
+
 static int tegra_eqos_probe(struct platform_device *pdev,
 			    struct plat_stmmacenet_data *data,
 			    struct stmmac_resources *res)
@@ -411,6 +577,11 @@ static const struct dwc_eth_dwmac_data tegra_eqos_data = {
 	.remove = tegra_eqos_remove,
 };
 
+static const struct dwc_eth_dwmac_data fsd_eqos_data = {
+	.probe = fsd_eqos_probe,
+	.remove = fsd_eqos_remove,
+};
+
 static int dwc_eth_dwmac_probe(struct platform_device *pdev)
 {
 	const struct dwc_eth_dwmac_data *data;
@@ -482,6 +653,7 @@ static void dwc_eth_dwmac_remove(struct platform_device *pdev)
 static const struct of_device_id dwc_eth_dwmac_match[] = {
 	{ .compatible = "snps,dwc-qos-ethernet-4.10", .data = &dwc_qos_data },
 	{ .compatible = "nvidia,tegra186-eqos", .data = &tegra_eqos_data },
+	{ .compatible = "tesla,dwc-qos-ethernet-4.21", .data = &fsd_eqos_data },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, dwc_eth_dwmac_match);
