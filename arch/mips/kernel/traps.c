@@ -1986,7 +1986,7 @@ int register_nmi_notifier(struct notifier_block *nb)
 	return raw_notifier_chain_register(&nmi_chain, nb);
 }
 
-void __noreturn nmi_exception_handler(struct pt_regs *regs)
+void nmi_exception_handler(struct pt_regs *regs)
 {
 	char str[100];
 
