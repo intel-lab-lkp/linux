@@ -848,6 +848,9 @@ static void xfrm_policy_inexact_list_reinsert(struct net *net,
 	matched_d = 0;
 
 	list_for_each_entry_reverse(policy, &net->xfrm.policy_all, walk.all) {
+		if (policy->walk.dead)
+			continue;
+
 		struct hlist_node *newpos = NULL;
 		bool matches_s, matches_d;
 
@@ -1253,11 +1256,14 @@ static void xfrm_hash_rebuild(struct work_struct *work)
 	 * we start with destructive action.
 	 */
 	list_for_each_entry(policy, &net->xfrm.policy_all, walk.all) {
+		if (policy->walk.dead)
+			continue;
+
 		struct xfrm_pol_inexact_bin *bin;
 		u8 dbits, sbits;
 
 		dir = xfrm_policy_id2dir(policy->index);
-		if (policy->walk.dead || dir >= XFRM_POLICY_MAX)
+		if (dir >= XFRM_POLICY_MAX)
 			continue;
 
 		if ((dir & XFRM_POLICY_MASK) == XFRM_POLICY_OUT) {
@@ -1823,9 +1829,11 @@ int xfrm_policy_flush(struct net *net, u8 type, bool task_valid)
 
 again:
 	list_for_each_entry(pol, &net->xfrm.policy_all, walk.all) {
+		if (pol->walk.dead)
+			continue;
+
 		dir = xfrm_policy_id2dir(pol->index);
-		if (pol->walk.dead ||
-		    dir >= XFRM_POLICY_MAX ||
+		if (dir >= XFRM_POLICY_MAX ||
 		    pol->type != type)
 			continue;
 
@@ -1861,9 +1869,11 @@ int xfrm_dev_policy_flush(struct net *net, struct net_device *dev,
 
 again:
 	list_for_each_entry(pol, &net->xfrm.policy_all, walk.all) {
+		if (pol->walk.dead)
+			continue;
+
 		dir = xfrm_policy_id2dir(pol->index);
-		if (pol->walk.dead ||
-		    dir >= XFRM_POLICY_MAX ||
+		if (dir >= XFRM_POLICY_MAX ||
 		    pol->xdo.dev != dev)
 			continue;
 
