@@ -126,7 +126,7 @@ const void *i2c_get_match_data(const struct i2c_client *client)
 		if (!match)
 			return NULL;
 
-		data = (const void *)match->driver_data;
+		data = match->data ?: (const void *)match->driver_data;
 	}
 
 	return data;
