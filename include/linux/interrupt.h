@@ -590,9 +590,9 @@ asmlinkage void do_softirq(void);
 asmlinkage void __do_softirq(void);
 
 #ifdef CONFIG_PREEMPT_RT
-extern void do_softirq_post_smp_call_flush(unsigned int was_pending);
+extern void do_softirq_post_smp_call_flush(void);
 #else
-static inline void do_softirq_post_smp_call_flush(unsigned int unused)
+static inline void do_softirq_post_smp_call_flush(void)
 {
 	do_softirq();
 }
