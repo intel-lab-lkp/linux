@@ -6802,7 +6802,7 @@ nodefer:	__kfree_skb(skb);
 	 * if we are unlucky enough (this seems very unlikely).
 	 */
 	if (unlikely(kick) && !cmpxchg(&sd->defer_ipi_scheduled, 0, 1))
-		smp_call_function_single_async(cpu, &sd->defer_csd);
+		__napi_schedule(&sd->backlog);
 }
 
 static void skb_splice_csum_page(struct sk_buff *skb, struct page *page,

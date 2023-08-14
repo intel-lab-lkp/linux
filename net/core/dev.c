@@ -153,6 +153,7 @@
 #include <linux/prandom.h>
 #include <linux/once_lite.h>
 #include <net/netdev_rx_queue.h>
+#include <linux/smpboot.h>
 
 #include "dev.h"
 #include "net-sysfs.h"
@@ -4658,56 +4659,7 @@ bool rps_may_expire_flow(struct net_device *dev, u16 rxq_index,
 EXPORT_SYMBOL(rps_may_expire_flow);
 
 #endif /* CONFIG_RFS_ACCEL */
-
-/* Called from hardirq (IPI) context */
-static void rps_trigger_softirq(void *data)
-{
-	struct softnet_data *sd = data;
-
-	____napi_schedule(sd, &sd->backlog);
-	sd->received_rps++;
-}
-
 #endif /* CONFIG_RPS */
-
-/* Called from hardirq (IPI) context */
-static void trigger_rx_softirq(void *data)
-{
-	struct softnet_data *sd = data;
-
-	__raise_softirq_irqoff(NET_RX_SOFTIRQ);
-	smp_store_release(&sd->defer_ipi_scheduled, 0);
-}
-
-/*
- * After we queued a packet into sd->input_pkt_queue,
- * we need to make sure this queue is serviced soon.
- *
- * - If this is another cpu queue, link it to our rps_ipi_list,
- *   and make sure we will process rps_ipi_list from net_rx_action().
- *
- * - If this is our own queue, NAPI schedule our backlog.
- *   Note that this also raises NET_RX_SOFTIRQ.
- */
-static void napi_schedule_rps(struct softnet_data *sd)
-{
-	struct softnet_data *mysd = this_cpu_ptr(&softnet_data);
-
-#ifdef CONFIG_RPS
-	if (sd != mysd) {
-		sd->rps_ipi_next = mysd->rps_ipi_list;
-		mysd->rps_ipi_list = sd;
-
-		/* If not called from net_rx_action() or napi_threaded_poll()
-		 * we have to raise NET_RX_SOFTIRQ.
-		 */
-		if (!mysd->in_net_rx_action && !mysd->in_napi_threaded_poll)
-			__raise_softirq_irqoff(NET_RX_SOFTIRQ);
-		return;
-	}
-#endif /* CONFIG_RPS */
-	__napi_schedule_irqoff(&mysd->backlog);
-}
 
 #ifdef CONFIG_NET_FLOW_LIMIT
 int netdev_flow_limit_table_len __read_mostly = (1 << 12);
@@ -4781,7 +4733,7 @@ enqueue:
 		 * We can use non atomic operation since we own the queue lock
 		 */
 		if (!__test_and_set_bit(NAPI_STATE_SCHED, &sd->backlog.state))
-			napi_schedule_rps(sd);
+			__napi_schedule_irqoff(&sd->backlog);
 		goto enqueue;
 	}
 	reason = SKB_DROP_REASON_CPU_BACKLOG;
@@ -5896,62 +5848,11 @@ static void flush_all_backlogs(void)
 	cpus_read_unlock();
 }
 
-static void net_rps_send_ipi(struct softnet_data *remsd)
-{
-#ifdef CONFIG_RPS
-	while (remsd) {
-		struct softnet_data *next = remsd->rps_ipi_next;
-
-		if (cpu_online(remsd->cpu))
-			smp_call_function_single_async(remsd->cpu, &remsd->csd);
-		remsd = next;
-	}
-#endif
-}
-
-/*
- * net_rps_action_and_irq_enable sends any pending IPI's for rps.
- * Note: called with local irq disabled, but exits with local irq enabled.
- */
-static void net_rps_action_and_irq_enable(struct softnet_data *sd)
-{
-#ifdef CONFIG_RPS
-	struct softnet_data *remsd = sd->rps_ipi_list;
-
-	if (remsd) {
-		sd->rps_ipi_list = NULL;
-
-		local_irq_enable();
-
-		/* Send pending IPI's to kick RPS processing on remote cpus. */
-		net_rps_send_ipi(remsd);
-	} else
-#endif
-		local_irq_enable();
-}
-
-static bool sd_has_rps_ipi_waiting(struct softnet_data *sd)
-{
-#ifdef CONFIG_RPS
-	return sd->rps_ipi_list != NULL;
-#else
-	return false;
-#endif
-}
-
 static int process_backlog(struct napi_struct *napi, int quota)
 {
 	struct softnet_data *sd = container_of(napi, struct softnet_data, backlog);
 	bool again = true;
 	int work = 0;
-
-	/* Check if we have pending ipi, its better to send them now,
-	 * not waiting net_rx_action() end.
-	 */
-	if (sd_has_rps_ipi_waiting(sd)) {
-		local_irq_disable();
-		net_rps_action_and_irq_enable(sd);
-	}
 
 	napi->weight = READ_ONCE(dev_rx_weight);
 	while (again) {
@@ -5977,7 +5878,7 @@ static int process_backlog(struct napi_struct *napi, int quota)
 			 * We can use a plain write instead of clear_bit(),
 			 * and we dont need an smp_mb() memory barrier.
 			 */
-			napi->state = 0;
+			napi->state = BIT(NAPI_STATE_THREADED);
 			again = false;
 		} else {
 			skb_queue_splice_tail_init(&sd->input_pkt_queue,
@@ -6634,6 +6535,8 @@ static void skb_defer_free_flush(struct softnet_data *sd)
 	if (!READ_ONCE(sd->defer_list))
 		return;
 
+	smp_store_release(&sd->defer_ipi_scheduled, 0);
+
 	spin_lock(&sd->defer_lock);
 	skb = sd->defer_list;
 	sd->defer_list = NULL;
@@ -6647,39 +6550,42 @@ static void skb_defer_free_flush(struct softnet_data *sd)
 	}
 }
 
+static void napi_threaded_poll_loop(struct napi_struct *napi)
+{
+	struct softnet_data *sd;
+
+	for (;;) {
+		bool repoll = false;
+		void *have;
+
+		local_bh_disable();
+		sd = this_cpu_ptr(&softnet_data);
+		sd->in_napi_threaded_poll = true;
+
+		have = netpoll_poll_lock(napi);
+		__napi_poll(napi, &repoll);
+		netpoll_poll_unlock(have);
+
+		sd->in_napi_threaded_poll = false;
+		barrier();
+
+		skb_defer_free_flush(sd);
+		local_bh_enable();
+
+		if (!repoll)
+			break;
+
+		cond_resched();
+	}
+}
+
 static int napi_threaded_poll(void *data)
 {
 	struct napi_struct *napi = data;
-	struct softnet_data *sd;
-	void *have;
 
 	while (!napi_thread_wait(napi)) {
-		for (;;) {
-			bool repoll = false;
 
-			local_bh_disable();
-			sd = this_cpu_ptr(&softnet_data);
-			sd->in_napi_threaded_poll = true;
-
-			have = netpoll_poll_lock(napi);
-			__napi_poll(napi, &repoll);
-			netpoll_poll_unlock(have);
-
-			sd->in_napi_threaded_poll = false;
-			barrier();
-
-			if (sd_has_rps_ipi_waiting(sd)) {
-				local_irq_disable();
-				net_rps_action_and_irq_enable(sd);
-			}
-			skb_defer_free_flush(sd);
-			local_bh_enable();
-
-			if (!repoll)
-				break;
-
-			cond_resched();
-		}
+		napi_threaded_poll_loop(napi);
 	}
 	return 0;
 }
@@ -6714,8 +6620,6 @@ start:
 				 */
 				if (!list_empty(&sd->poll_list))
 					goto start;
-				if (!sd_has_rps_ipi_waiting(sd))
-					goto end;
 			}
 			break;
 		}
@@ -6744,8 +6648,7 @@ start:
 	else
 		sd->in_net_rx_action = false;
 
-	net_rps_action_and_irq_enable(sd);
-end:;
+	local_irq_enable();
 }
 
 struct netdev_adjacent {
@@ -11157,7 +11060,7 @@ static int dev_cpu_dead(unsigned int oldcpu)
 	struct sk_buff **list_skb;
 	struct sk_buff *skb;
 	unsigned int cpu;
-	struct softnet_data *sd, *oldsd, *remsd = NULL;
+	struct softnet_data *sd, *oldsd;
 
 	local_irq_disable();
 	cpu = smp_processor_id();
@@ -11189,21 +11092,12 @@ static int dev_cpu_dead(unsigned int oldcpu)
 							    poll_list);
 
 		list_del_init(&napi->poll_list);
-		if (napi->poll == process_backlog)
-			napi->state = 0;
-		else
+		if (!WARN_ON(napi->poll == process_backlog))
 			____napi_schedule(sd, napi);
 	}
 
 	raise_softirq_irqoff(NET_TX_SOFTIRQ);
 	local_irq_enable();
-
-#ifdef CONFIG_RPS
-	remsd = oldsd->rps_ipi_list;
-	oldsd->rps_ipi_list = NULL;
-#endif
-	/* send out pending IPI's on offline CPU */
-	net_rps_send_ipi(remsd);
 
 	/* Process offline CPU's input_pkt_queue */
 	while ((skb = __skb_dequeue(&oldsd->process_queue))) {
@@ -11457,6 +11351,43 @@ static struct pernet_operations __net_initdata default_device_ops = {
  *
  */
 
+static DEFINE_PER_CPU(struct task_struct *, backlog_napi);
+
+static int backlog_napi_should_run(unsigned int cpu)
+{
+	struct softnet_data *sd = per_cpu_ptr(&softnet_data, cpu);
+	struct napi_struct *napi = &sd->backlog;
+
+	if (READ_ONCE(sd->defer_list))
+		return 1;
+
+	return test_bit(NAPI_STATE_SCHED, &napi->state);
+}
+
+static void run_backlog_napi(unsigned int cpu)
+{
+	struct softnet_data *sd = per_cpu_ptr(&softnet_data, cpu);
+
+	napi_threaded_poll_loop(&sd->backlog);
+}
+
+static void backlog_napi_setup(unsigned int cpu)
+{
+	struct softnet_data *sd = per_cpu_ptr(&softnet_data, cpu);
+	struct napi_struct *napi = &sd->backlog;
+
+	napi->thread = this_cpu_read(backlog_napi);
+	set_bit(NAPI_STATE_THREADED, &napi->state);
+}
+
+static struct smp_hotplug_thread backlog_threads = {
+	.store                  = &backlog_napi,
+	.thread_should_run      = backlog_napi_should_run,
+	.thread_fn              = run_backlog_napi,
+	.thread_comm            = "backlog_napi/%u",
+	.setup			= backlog_napi_setup,
+};
+
 /*
  *       This is called single threaded during boot, so no need
  *       to take the rtnl semaphore.
@@ -11497,17 +11428,14 @@ static int __init net_dev_init(void)
 #endif
 		INIT_LIST_HEAD(&sd->poll_list);
 		sd->output_queue_tailp = &sd->output_queue;
-#ifdef CONFIG_RPS
-		INIT_CSD(&sd->csd, rps_trigger_softirq, sd);
-		sd->cpu = i;
-#endif
-		INIT_CSD(&sd->defer_csd, trigger_rx_softirq, sd);
 		spin_lock_init(&sd->defer_lock);
 
 		init_gro_hash(&sd->backlog);
 		sd->backlog.poll = process_backlog;
 		sd->backlog.weight = weight_p;
+		INIT_LIST_HEAD(&sd->backlog.poll_list);
 	}
+	smpboot_register_percpu_thread(&backlog_threads);
 
 	dev_boot_phase = 0;
 
