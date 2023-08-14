@@ -1124,6 +1124,8 @@ struct dwc3_scratchpad_array {
  * @num_ep_resized: carries the current number endpoints which have had its tx
  *		    fifo resized.
  * @debug_root: root debugfs directory for this device to put its files in.
+ * @runtime_suspend_on_usb_suspend: true if dwc3 runtime suspend is allowed
+ *			during bus suspend scenario.
  */
 struct dwc3 {
 	struct work_struct	drd_work;
@@ -1340,6 +1342,7 @@ struct dwc3 {
 	int			last_fifo_depth;
 	int			num_ep_resized;
 	struct dentry		*debug_root;
+	bool			runtime_suspend_on_usb_suspend;
 };
 
 #define INCRX_BURST_MODE 0
