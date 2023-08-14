@@ -201,6 +201,13 @@ struct virtio_net_hdr_mrg_rxbuf {
 	struct virtio_net_hdr hdr;
 	__virtio16 num_buffers;	/* Number of merged rx buffers */
 };
+
+struct virtio_net_common_hdr {
+	union {
+		struct virtio_net_hdr_mrg_rxbuf	mrg_hdr;
+		struct virtio_net_hdr_v1_hash hash_v1_hdr;
+	};
+};
 #endif /* ...VIRTIO_NET_NO_LEGACY */
 
 /*
