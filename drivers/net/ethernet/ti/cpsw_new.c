@@ -45,9 +45,20 @@
 #include <net/pkt_sched.h>
 
 static int debug_level;
+module_param(debug_level, int, 0);
+MODULE_PARM_DESC(debug_level, "cpsw debug level (NETIF_MSG bits)");
+
 static int ale_ageout = CPSW_ALE_AGEOUT_DEFAULT;
+module_param(ale_ageout, int, 0);
+MODULE_PARM_DESC(ale_ageout, "cpsw ale ageout interval (seconds)");
+
 static int rx_packet_max = CPSW_MAX_PACKET_SIZE;
+module_param(rx_packet_max, int, 0);
+MODULE_PARM_DESC(rx_packet_max, "maximum receive packet size (bytes)");
+
 static int descs_pool_size = CPSW_CPDMA_DESCS_POOL_SIZE_DEFAULT;
+module_param(descs_pool_size, int, 0444);
+MODULE_PARM_DESC(descs_pool_size, "Number of CPDMA CPPI descriptors in pool");
 
 struct cpsw_devlink {
 	struct cpsw_common *cpsw;
