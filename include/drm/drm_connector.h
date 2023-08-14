@@ -2042,11 +2042,44 @@ void drm_connector_attach_privacy_screen_provider(
 	struct drm_connector *connector, struct drm_privacy_screen *priv);
 void drm_connector_update_privacy_screen(const struct drm_connector_state *connector_state);
 
+/**
+ * enum drm_hdmi_broadcast_rgb - Broadcast RGB Selection for a @drm_hdmi_connector
+ *
+ * This enum is used to track broadcast RGB selection. There are no
+ * separate #defines for the uapi!
+ */
+enum drm_hdmi_broadcast_rgb {
+	/**
+	 * @DRM_HDMI_BROADCAST_RGB_AUTO: The RGB range is selected
+	 * automatically based on the mode.
+	 */
+	DRM_HDMI_BROADCAST_RGB_AUTO,
+
+	/**
+	 * @DRM_HDMI_BROADCAST_RGB_FULL: Full range RGB is forced.
+	 */
+	DRM_HDMI_BROADCAST_RGB_FULL,
+
+	/**
+	 * @DRM_HDMI_BROADCAST_RGB_FULL: Limited range RGB is forced.
+	 */
+	DRM_HDMI_BROADCAST_RGB_LIMITED,
+};
+
+const char *
+drm_hdmi_connector_get_broadcast_rgb_name(enum drm_hdmi_broadcast_rgb broadcast_rgb);
+
 struct drm_hdmi_connector_state {
 	/**
 	 * @base: Base Connector State
 	 */
 	struct drm_connector_state base;
+
+	/**
+	 * @broadcast_rgb: Connector property to pass the Broadcast RGB
+	 * selection value.
+	 */
+	enum drm_hdmi_broadcast_rgb broadcast_rgb;
 };
 
 #define connector_state_to_hdmi_connector_state(state) \
@@ -2065,6 +2098,16 @@ drm_atomic_helper_hdmi_connector_duplicate_state(struct drm_connector *connector
 void __drm_atomic_helper_hdmi_connector_destroy_state(struct drm_hdmi_connector_state *hdmi_state);
 void drm_atomic_helper_hdmi_connector_destroy_state(struct drm_connector *connector,
 						    struct drm_connector_state *state);
+int drm_atomic_helper_hdmi_connector_get_property(struct drm_connector *connector,
+						  const struct drm_connector_state *state,
+						  struct drm_property *property,
+						  uint64_t *val);
+int drm_atomic_helper_hdmi_connector_set_property(struct drm_connector *connector,
+						  struct drm_connector_state *state,
+						  struct drm_property *property,
+						  uint64_t val);
+int drm_atomic_helper_hdmi_connector_atomic_check(struct drm_connector *connector,
+						  struct drm_atomic_state *state);
 void drm_atomic_helper_hdmi_connector_print_state(struct drm_printer *p,
 						  const struct drm_connector_state *state);
 
@@ -2073,6 +2116,12 @@ struct drm_hdmi_connector {
 	 * @base: Base Connector
 	 */
 	struct drm_connector base;
+
+	/**
+	 * @broadcast_rgb_property: Connector property to set the
+	 * Broadcast RGB selection to output with.
+	 */
+	struct drm_property *broadcast_rgb_property;
 };
 
 #define connector_to_hdmi_connector(connector) \
