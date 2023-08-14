@@ -530,55 +530,6 @@ static struct kunit_suite kunit_resource_test_suite = {
 	.test_cases = kunit_resource_test_cases,
 };
 
-static void kunit_log_test(struct kunit *test)
-{
-	struct kunit_suite suite;
-
-	suite.log = kunit_kzalloc(test, KUNIT_LOG_SIZE, GFP_KERNEL);
-	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, suite.log);
-
-	kunit_log(KERN_INFO, test, "put this in log.");
-	kunit_log(KERN_INFO, test, "this too.");
-	kunit_log(KERN_INFO, &suite, "add to suite log.");
-	kunit_log(KERN_INFO, &suite, "along with this.");
-
-#ifdef CONFIG_KUNIT_DEBUGFS
-	KUNIT_EXPECT_NOT_ERR_OR_NULL(test,
-				     strstr(test->log, "put this in log."));
-	KUNIT_EXPECT_NOT_ERR_OR_NULL(test,
-				     strstr(test->log, "this too."));
-	KUNIT_EXPECT_NOT_ERR_OR_NULL(test,
-				     strstr(suite.log, "add to suite log."));
-	KUNIT_EXPECT_NOT_ERR_OR_NULL(test,
-				     strstr(suite.log, "along with this."));
-#else
-	KUNIT_EXPECT_NULL(test, test->log);
-#endif
-}
-
-static void kunit_log_newline_test(struct kunit *test)
-{
-	kunit_info(test, "Add newline\n");
-	if (test->log) {
-		KUNIT_ASSERT_NOT_NULL_MSG(test, strstr(test->log, "Add newline\n"),
-			"Missing log line, full log:\n%s", test->log);
-		KUNIT_EXPECT_NULL(test, strstr(test->log, "Add newline\n\n"));
-	} else {
-		kunit_skip(test, "only useful when debugfs is enabled");
-	}
-}
-
-static struct kunit_case kunit_log_test_cases[] = {
-	KUNIT_CASE(kunit_log_test),
-	KUNIT_CASE(kunit_log_newline_test),
-	{}
-};
-
-static struct kunit_suite kunit_log_test_suite = {
-	.name = "kunit-log-test",
-	.test_cases = kunit_log_test_cases,
-};
-
 static void kunit_status_set_failure_test(struct kunit *test)
 {
 	struct kunit fake;
@@ -658,7 +609,6 @@ static struct kunit_suite kunit_current_test_suite = {
 };
 
 kunit_test_suites(&kunit_try_catch_test_suite, &kunit_resource_test_suite,
-		  &kunit_log_test_suite, &kunit_status_test_suite,
-		  &kunit_current_test_suite);
+		  &kunit_status_test_suite, &kunit_current_test_suite);
 
 MODULE_LICENSE("GPL v2");
