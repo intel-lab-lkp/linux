@@ -1939,7 +1939,7 @@ static struct irqaction *__free_irq(struct irq_desc *desc, void *dev_id)
 	 */
 	chip_bus_sync_unlock(desc);
 
-	unregister_handler_proc(irq, action);
+	unregister_handler_proc(action);
 
 	/*
 	 * Make sure it's not being used on another CPU and if the chip
@@ -2058,7 +2058,7 @@ static const void *__cleanup_nmi(unsigned int irq, struct irq_desc *desc)
 	if (!WARN_ON(desc->action == NULL)) {
 		irq_pm_remove_action(desc, desc->action);
 		devname = desc->action->name;
-		unregister_handler_proc(irq, desc->action);
+		unregister_handler_proc(desc->action);
 
 		kfree(desc->action);
 		desc->action = NULL;
@@ -2489,7 +2489,7 @@ static struct irqaction *__free_percpu_irq(unsigned int irq, void __percpu *dev_
 
 	raw_spin_unlock_irqrestore(&desc->lock, flags);
 
-	unregister_handler_proc(irq, action);
+	unregister_handler_proc(action);
 
 	irq_chip_pm_put(&desc->irq_data);
 	module_put(desc->owner);

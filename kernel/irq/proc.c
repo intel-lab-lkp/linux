@@ -414,7 +414,7 @@ void unregister_irq_proc(unsigned int irq, struct irq_desc *desc)
 
 #undef MAX_NAMELEN
 
-void unregister_handler_proc(unsigned int irq, struct irqaction *action)
+void unregister_handler_proc(struct irqaction *action)
 {
 	proc_remove(action->dir);
 }
