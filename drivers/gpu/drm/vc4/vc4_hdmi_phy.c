@@ -128,7 +128,7 @@
 #define OSCILLATOR_FREQUENCY	54000000
 
 void vc4_hdmi_phy_init(struct vc4_hdmi *vc4_hdmi,
-		       struct vc4_hdmi_connector_state *conn_state)
+		       struct drm_hdmi_connector_state *conn_state)
 {
 	unsigned long flags;
 
@@ -361,7 +361,7 @@ static void vc5_hdmi_reset_phy(struct vc4_hdmi *vc4_hdmi)
 }
 
 void vc5_hdmi_phy_init(struct vc4_hdmi *vc4_hdmi,
-		       struct vc4_hdmi_connector_state *conn_state)
+		       struct drm_hdmi_connector_state *conn_state)
 {
 	const struct phy_lane_settings *chan0_settings, *chan1_settings, *chan2_settings, *clock_settings;
 	const struct vc4_hdmi_variant *variant = vc4_hdmi->variant;

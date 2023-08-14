@@ -76,7 +76,7 @@ struct vc4_hdmi_variant {
 
 	/* Callback to initialize the PHY according to the connector state */
 	void (*phy_init)(struct vc4_hdmi *vc4_hdmi,
-			 struct vc4_hdmi_connector_state *vc4_conn_state);
+			 struct drm_hdmi_connector_state *vc4_conn_state);
 
 	/* Callback to disable the PHY */
 	void (*phy_disable)(struct vc4_hdmi *vc4_hdmi);
@@ -117,12 +117,6 @@ enum vc4_hdmi_output_format {
 	VC4_HDMI_OUTPUT_YUV420,
 };
 
-enum vc4_hdmi_broadcast_rgb {
-	VC4_HDMI_BROADCAST_RGB_AUTO,
-	VC4_HDMI_BROADCAST_RGB_FULL,
-	VC4_HDMI_BROADCAST_RGB_LIMITED,
-};
-
 /* General HDMI hardware state. */
 struct vc4_hdmi {
 	struct vc4_hdmi_audio audio;
@@ -131,11 +125,9 @@ struct vc4_hdmi {
 	const struct vc4_hdmi_variant *variant;
 
 	struct vc4_encoder encoder;
-	struct drm_connector connector;
+	struct drm_hdmi_connector connector;
 
 	struct delayed_work scrambling_work;
-
-	struct drm_property *broadcast_rgb_property;
 
 	struct i2c_adapter *ddc;
 	void __iomem *hdmicore_regs;
@@ -218,8 +210,8 @@ struct vc4_hdmi {
 	bool scdc_enabled;
 
 	/**
-	 * @output_bpc: Copy of @vc4_connector_state.output_bpc for use
-	 * outside of KMS hooks. Protected by @mutex.
+	 * @output_bpc: Copy of @drm_hdmi_connector_state.output_bpc for
+	 * use outside of KMS hooks. Protected by @mutex.
 	 */
 	unsigned int output_bpc;
 
@@ -230,8 +222,12 @@ struct vc4_hdmi {
 	enum vc4_hdmi_output_format output_format;
 };
 
-#define connector_to_vc4_hdmi(_connector)				\
+#define hdmi_connector_to_vc4_hdmi(_connector)				\
 	container_of_const(_connector, struct vc4_hdmi, connector)
+
+#define connector_to_vc4_hdmi(_connector)				\
+	container_of_const(_connector, struct vc4_hdmi, connector.base)
+
 
 static inline struct vc4_hdmi *
 encoder_to_vc4_hdmi(struct drm_encoder *encoder)
@@ -240,25 +236,14 @@ encoder_to_vc4_hdmi(struct drm_encoder *encoder)
 	return container_of_const(_encoder, struct vc4_hdmi, encoder);
 }
 
-struct vc4_hdmi_connector_state {
-	struct drm_connector_state	base;
-	unsigned long long		tmds_char_rate;
-	unsigned int 			output_bpc;
-	enum vc4_hdmi_output_format	output_format;
-	enum vc4_hdmi_broadcast_rgb	broadcast_rgb;
-};
-
-#define conn_state_to_vc4_hdmi_conn_state(_state)			\
-	container_of_const(_state, struct vc4_hdmi_connector_state, base)
-
 void vc4_hdmi_phy_init(struct vc4_hdmi *vc4_hdmi,
-		       struct vc4_hdmi_connector_state *vc4_conn_state);
+		       struct drm_hdmi_connector_state *conn_state);
 void vc4_hdmi_phy_disable(struct vc4_hdmi *vc4_hdmi);
 void vc4_hdmi_phy_rng_enable(struct vc4_hdmi *vc4_hdmi);
 void vc4_hdmi_phy_rng_disable(struct vc4_hdmi *vc4_hdmi);
 
 void vc5_hdmi_phy_init(struct vc4_hdmi *vc4_hdmi,
-		       struct vc4_hdmi_connector_state *vc4_conn_state);
+		       struct drm_hdmi_connector_state *conn_state);
 void vc5_hdmi_phy_disable(struct vc4_hdmi *vc4_hdmi);
 void vc5_hdmi_phy_rng_enable(struct vc4_hdmi *vc4_hdmi);
 void vc5_hdmi_phy_rng_disable(struct vc4_hdmi *vc4_hdmi);
