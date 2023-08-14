@@ -140,7 +140,6 @@ int dlm_posix_lock(dlm_lockspace_t *lockspace, u64 number, struct file *file,
 	op->info.optype		= DLM_PLOCK_OP_LOCK;
 	op->info.pid		= fl->fl_pid;
 	op->info.ex		= (fl->fl_type == F_WRLCK);
-	op->info.wait		= IS_SETLKW(cmd);
 	op->info.fsid		= ls->ls_global_id;
 	op->info.number		= number;
 	op->info.start		= fl->fl_start;
@@ -148,24 +147,31 @@ int dlm_posix_lock(dlm_lockspace_t *lockspace, u64 number, struct file *file,
 	op->info.owner = (__u64)(long)fl->fl_owner;
 	/* async handling */
 	if (fl->fl_lmops && fl->fl_lmops->lm_grant) {
-		op_data = kzalloc(sizeof(*op_data), GFP_NOFS);
-		if (!op_data) {
-			dlm_release_plock_op(op);
-			rv = -ENOMEM;
+		if (fl->fl_flags & FL_SLEEP) {
+			op_data = kzalloc(sizeof(*op_data), GFP_NOFS);
+			if (!op_data) {
+				dlm_release_plock_op(op);
+				rv = -ENOMEM;
+				goto out;
+			}
+
+			op->info.wait = 1;
+			op_data->callback = fl->fl_lmops->lm_grant;
+			locks_init_lock(&op_data->flc);
+			locks_copy_lock(&op_data->flc, fl);
+			op_data->fl		= fl;
+			op_data->file	= file;
+
+			op->data = op_data;
+
+			send_op(op);
+			rv = FILE_LOCK_DEFERRED;
 			goto out;
+		} else {
+			op->info.wait = 0;
 		}
-
-		op_data->callback = fl->fl_lmops->lm_grant;
-		locks_init_lock(&op_data->flc);
-		locks_copy_lock(&op_data->flc, fl);
-		op_data->fl		= fl;
-		op_data->file	= file;
-
-		op->data = op_data;
-
-		send_op(op);
-		rv = FILE_LOCK_DEFERRED;
-		goto out;
+	} else {
+		op->info.wait = IS_SETLKW(cmd);
 	}
 
 	send_op(op);
