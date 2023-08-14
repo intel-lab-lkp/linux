@@ -61,18 +61,17 @@ the need to be explicit about the denied-by-default access rights.
             LANDLOCK_ACCESS_FS_MAKE_BLOCK |
             LANDLOCK_ACCESS_FS_MAKE_SYM |
             LANDLOCK_ACCESS_FS_REFER |
-            LANDLOCK_ACCESS_FS_TRUNCATE,
+            LANDLOCK_ACCESS_FS_TRUNCATE |
+            LANDLOCK_ACCESS_FS_IOCTL,
     };
 
 Because we may not know on which kernel version an application will be
 executed, it is safer to follow a best-effort security approach.  Indeed, we
 should try to protect users as much as possible whatever the kernel they are
-using.  To avoid binary enforcement (i.e. either all security features or
-none), we can leverage a dedicated Landlock command to get the current version
-of the Landlock ABI and adapt the handled accesses.  Let's check if we should
-remove the ``LANDLOCK_ACCESS_FS_REFER`` or ``LANDLOCK_ACCESS_FS_TRUNCATE``
-access rights, which are only supported starting with the second and third
-version of the ABI.
+using.
+
+To be compatible with older Linux versions, we detect the available Landlock ABI
+version, and only use the available subset of access rights:
 
 .. code-block:: c
 
@@ -92,6 +91,9 @@ version of the ABI.
     case 2:
         /* Removes LANDLOCK_ACCESS_FS_TRUNCATE for ABI < 3 */
         ruleset_attr.handled_access_fs &= ~LANDLOCK_ACCESS_FS_TRUNCATE;
+    case 3:
+        /* Removes LANDLOCK_ACCESS_FS_IOCTL for ABI < 4 */
+        ruleset_attr.handled_access_fs &= ~LANDLOCK_ACCESS_FS_IOCTL;
     }
 
 This enables to create an inclusive ruleset that will contain our rules.
@@ -190,6 +192,7 @@ access rights per directory enables to change the location of such directory
 without relying on the destination directory access rights (except those that
 are required for this operation, see ``LANDLOCK_ACCESS_FS_REFER``
 documentation).
+
 Having self-sufficient hierarchies also helps to tighten the required access
 rights to the minimal set of data.  This also helps avoid sinkhole directories,
 i.e.  directories where data can be linked to but not linked from.  However,
@@ -283,18 +286,24 @@ It should also be noted that truncating files does not require the
 system call, this can also be done through :manpage:`open(2)` with the flags
 ``O_RDONLY | O_TRUNC``.
 
-When opening a file, the availability of the ``LANDLOCK_ACCESS_FS_TRUNCATE``
-right is associated with the newly created file descriptor and will be used for
-subsequent truncation attempts using :manpage:`ftruncate(2)`.  The behavior is
-similar to opening a file for reading or writing, where permissions are checked
-during :manpage:`open(2)`, but not during the subsequent :manpage:`read(2)` and
+The truncate right is associated with the opened file (see below).
+
+Rights associated with file descriptors
+---------------------------------------
+
+When opening a file, the availability of the ``LANDLOCK_ACCESS_FS_TRUNCATE`` and
+``LANDLOCK_ACCESS_FS_IOCTL`` rights is associated with the newly created file
+descriptor and will be used for subsequent truncation and ioctl attempts using
+:manpage:`ftruncate(2)` and :manpage:`ioctl(2)`.  The behavior is similar to
+opening a file for reading or writing, where permissions are checked during
+:manpage:`open(2)`, but not during the subsequent :manpage:`read(2)` and
 :manpage:`write(2)` calls.
 
-As a consequence, it is possible to have multiple open file descriptors for the
-same file, where one grants the right to truncate the file and the other does
-not.  It is also possible to pass such file descriptors between processes,
-keeping their Landlock properties, even when these processes do not have an
-enforced Landlock ruleset.
+As a consequence, it is possible to have multiple open file descriptors
+referring to the same file, where one grants the truncate or ioctl right and the
+other does not.  It is also possible to pass such file descriptors between
+processes, keeping their Landlock properties, even when these processes do not
+have an enforced Landlock ruleset.
 
 Compatibility
 =============
@@ -422,6 +431,27 @@ Memory usage
 Kernel memory allocated to create rulesets is accounted and can be restricted
 by the Documentation/admin-guide/cgroup-v1/memory.rst.
 
+IOCTL support
+-------------
+
+The ``LANDLOCK_ACCESS_FS_IOCTL`` access right restricts the use of
+:manpage:`ioctl(2)`, but it only applies to newly opened files.  This means
+specifically that pre-existing file descriptors like STDIN, STDOUT and STDERR
+are unaffected.
+
+Users should be aware that TTY devices have traditionally permitted to control
+other processes on the same TTY through the ``TIOCSTI`` and ``TIOCLINUX`` IOCTL
+commands.  It is therefore recommended to close inherited TTY file descriptors.
+The :manpage:`isatty(3)` function checks whether a given file descriptor is a
+TTY.
+
+Landlock's IOCTL support is coarse-grained at the moment, but may become more
+fine-grained in the future.  Until then, users are advised to establish the
+guarantees that they need through the file hierarchy, by only permitting the
+``LANDLOCK_ACCESS_FS_IOCTL`` right on files where it is really harmless.  In
+cases where you can control the mounts, the ``nodev`` mount option can help to
+rule out that device files can be accessed.
+
 Previous limitations
 ====================
 
@@ -450,6 +480,16 @@ always allowed when using a kernel that only supports the first or second ABI.
 
 Starting with the Landlock ABI version 3, it is now possible to securely control
 truncation thanks to the new ``LANDLOCK_ACCESS_FS_TRUNCATE`` access right.
+
+Ioctl (ABI < 4)
+---------------
+
+IOCTL operations could not be denied before the fourth Landlock ABI, so
+:manpage:`ioctl(2)` is always allowed when using a kernel that only supports an
+earlier ABI.
+
+Starting with the Landlock ABI version 4, it is possible to restrict the use of
+:manpage:`ioctl(2)` using the new ``LANDLOCK_ACCESS_FS_IOCTL`` access right.
 
 .. _kernel_support:
 
