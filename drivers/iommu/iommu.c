@@ -3116,6 +3116,19 @@ static bool iommu_is_default_domain(struct iommu_group *group)
 	return false;
 }
 
+/*
+ * Assert no PASID DMA when claiming or releasing group's DMA ownership.
+ * The device pasid interfaces are only for device drivers that have
+ * claimed the DMA ownership. Return true if no pasid DMA setup, otherwise
+ * return false with a WARN().
+ */
+static bool assert_pasid_dma_ownership(struct iommu_group *group)
+{
+	lockdep_assert_held(&group->mutex);
+
+	return !WARN_ON(!xa_empty(&group->pasid_array));
+}
+
 /**
  * iommu_device_use_default_domain() - Device driver wants to handle device
  *                                     DMA through the kernel DMA API.
@@ -3136,7 +3149,7 @@ int iommu_device_use_default_domain(struct device *dev)
 	mutex_lock(&group->mutex);
 	if (group->owner_cnt) {
 		if (group->owner || !iommu_is_default_domain(group) ||
-		    !xa_empty(&group->pasid_array)) {
+		    !assert_pasid_dma_ownership(group)) {
 			ret = -EBUSY;
 			goto unlock_out;
 		}
@@ -3166,7 +3179,7 @@ void iommu_device_unuse_default_domain(struct device *dev)
 		return;
 
 	mutex_lock(&group->mutex);
-	if (!WARN_ON(!group->owner_cnt || !xa_empty(&group->pasid_array)))
+	if (!WARN_ON(!group->owner_cnt) && assert_pasid_dma_ownership(group))
 		group->owner_cnt--;
 
 	mutex_unlock(&group->mutex);
@@ -3200,7 +3213,7 @@ static int __iommu_take_dma_ownership(struct iommu_group *group, void *owner)
 	int ret;
 
 	if ((group->domain && group->domain != group->default_domain) ||
-	    !xa_empty(&group->pasid_array))
+	    !assert_pasid_dma_ownership(group))
 		return -EBUSY;
 
 	ret = __iommu_group_alloc_blocking_domain(group);
@@ -3285,8 +3298,8 @@ EXPORT_SYMBOL_GPL(iommu_device_claim_dma_owner);
 
 static void __iommu_release_dma_ownership(struct iommu_group *group)
 {
-	if (WARN_ON(!group->owner_cnt || !group->owner ||
-		    !xa_empty(&group->pasid_array)))
+	if (WARN_ON(!group->owner_cnt || !group->owner) ||
+	    !assert_pasid_dma_ownership(group))
 		return;
 
 	group->owner_cnt = 0;
