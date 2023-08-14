@@ -2081,6 +2081,11 @@ struct drm_hdmi_connector_state {
 	unsigned int output_bpc;
 
 	/**
+	 * @output_format: Pixel format to output in.
+	 */
+	enum hdmi_colorspace output_format;
+
+	/**
 	 * @broadcast_rgb: Connector property to pass the Broadcast RGB
 	 * selection value.
 	 */

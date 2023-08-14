@@ -29,6 +29,7 @@ void __drm_atomic_helper_hdmi_connector_reset(struct drm_hdmi_connector *hdmi_co
 	new_hdmi_state->base.max_bpc = 8;
 	new_hdmi_state->base.max_requested_bpc = 8;
 	new_hdmi_state->output_bpc = 8;
+	new_hdmi_state->output_format = HDMI_COLORSPACE_RGB;
 	new_hdmi_state->broadcast_rgb = DRM_HDMI_BROADCAST_RGB_AUTO;
 }
 EXPORT_SYMBOL(__drm_atomic_helper_hdmi_connector_reset);
@@ -82,6 +83,7 @@ __drm_atomic_helper_hdmi_connector_duplicate_state(struct drm_hdmi_connector *hd
 		connector_state_to_hdmi_connector_state(old_state);
 
 	new_hdmi_state->output_bpc = old_hdmi_state->output_bpc;
+	new_hdmi_state->output_format = old_hdmi_state->output_format;
 	new_hdmi_state->broadcast_rgb = old_hdmi_state->broadcast_rgb;
 	__drm_atomic_helper_connector_duplicate_state(connector, &new_hdmi_state->base);
 }
@@ -222,6 +224,30 @@ int drm_atomic_helper_hdmi_connector_set_property(struct drm_connector *connecto
 }
 EXPORT_SYMBOL(drm_atomic_helper_hdmi_connector_set_property);
 
+static const char * const output_format_str[] = {
+	[HDMI_COLORSPACE_RGB]		= "RGB",
+	[HDMI_COLORSPACE_YUV420]	= "YUV 4:2:0",
+	[HDMI_COLORSPACE_YUV422]	= "YUV 4:2:2",
+	[HDMI_COLORSPACE_YUV444]	= "YUV 4:4:4",
+};
+
+/*
+ * drm_hdmi_connector_get_output_format_name() - Return a string for HDMI connector output format
+ * @fmt: Output format to compute name of
+ *
+ * Returns: the name of the output format, or NULL if the type is not
+ * valid.
+ */
+const char *
+drm_hdmi_connector_get_output_format_name(enum hdmi_colorspace fmt)
+{
+	if (fmt >= ARRAY_SIZE(output_format_str))
+		return NULL;
+
+	return output_format_str[fmt];
+}
+EXPORT_SYMBOL(drm_hdmi_connector_get_output_format_name);
+
 static const struct drm_display_mode *
 connector_state_get_adjusted_mode(const struct drm_connector_state *state)
 {
@@ -259,6 +285,7 @@ int drm_atomic_helper_hdmi_connector_atomic_check(struct drm_connector *connecto
 		connector_state_to_hdmi_connector_state(new_state);
 
 	if (old_hdmi_state->broadcast_rgb != new_hdmi_state->broadcast_rgb ||
+	    old_hdmi_state->output_format != new_hdmi_state->output_format ||
 	    old_hdmi_state->output_bpc != new_hdmi_state->output_bpc) {
 		struct drm_crtc *crtc = new_state->crtc;
 		struct drm_crtc_state *crtc_state;
@@ -345,6 +372,8 @@ void drm_atomic_helper_hdmi_connector_print_state(struct drm_printer *p,
 	drm_printf(p, "\tbroadcast_rgb=%s\n",
 		   drm_hdmi_connector_get_broadcast_rgb_name(hdmi_state->broadcast_rgb));
 	drm_printf(p, "\toutput_bpc=%u\n", hdmi_state->output_bpc);
+	drm_printf(p, "\toutput_format=%s\n",
+		   drm_hdmi_connector_get_output_format_name(hdmi_state->output_format));
 }
 EXPORT_SYMBOL(drm_atomic_helper_hdmi_connector_print_state);
 
