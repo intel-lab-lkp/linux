@@ -848,6 +848,9 @@ static void xfrm_policy_inexact_list_reinsert(struct net *net,
 	matched_d = 0;
 
 	list_for_each_entry_reverse(policy, &net->xfrm.policy_all, walk.all) {
+		if (policy->walk.dead)
+			continue;
+
 		struct hlist_node *newpos = NULL;
 		bool matches_s, matches_d;
 
