@@ -441,31 +441,6 @@ static void nlmsvc_freegrantargs(struct nlm_rqst *call)
 }
 
 /*
- * Deferred lock request handling for non-blocking lock
- */
-static __be32
-nlmsvc_defer_lock_rqst(struct svc_rqst *rqstp, struct nlm_block *block)
-{
-	__be32 status = nlm_lck_denied_nolocks;
-
-	block->b_flags |= B_QUEUED;
-
-	nlmsvc_insert_block(block, NLM_TIMEOUT);
-
-	block->b_cache_req = &rqstp->rq_chandle;
-	if (rqstp->rq_chandle.defer) {
-		block->b_deferred_req =
-			rqstp->rq_chandle.defer(block->b_cache_req);
-		if (block->b_deferred_req != NULL)
-			status = nlm_drop_reply;
-	}
-	dprintk("lockd: nlmsvc_defer_lock_rqst block %p flags %d status %d\n",
-		block, block->b_flags, ntohl(status));
-
-	return status;
-}
-
-/*
  * Attempt to establish a lock, and if it can't be granted, block it
  * if required.
  */
@@ -569,14 +544,14 @@ pending_request:
 			ret = async_block ? nlm_lck_blocked : nlm_lck_denied;
 			goto out_cb_mutex;
 		case FILE_LOCK_DEFERRED:
-			block->b_flags |= B_PENDING_CALLBACK;
+			/* lock requests without waiters are handled in
+			 * a non async way. Let assert this to inform
+			 * the user about a API violation.
+			 */
+			WARN_ON_ONCE(!wait);
 
-			if (wait)
-				break;
-			/* Filesystem lock operation is in progress
-			   Add it to the queue waiting for callback */
-			ret = nlmsvc_defer_lock_rqst(rqstp, block);
-			goto out_cb_mutex;
+			block->b_flags |= B_PENDING_CALLBACK;
+			break;
 		case -EDEADLK:
 			nlmsvc_remove_block(block);
 			ret = nlm_deadlock;
