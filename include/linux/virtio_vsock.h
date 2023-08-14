@@ -160,6 +160,11 @@ struct virtio_transport {
 
 	/* Takes ownership of the packet */
 	int (*send_pkt)(struct sk_buff *skb);
+
+	/* Used in MSG_ZEROCOPY mode. Checks that provided data
+	 * could be transmitted with zerocopy mode.
+	 */
+	bool (*can_msgzerocopy)(int bufs_num);
 };
 
 ssize_t
