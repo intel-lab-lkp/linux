@@ -346,6 +346,8 @@ static int oom_evaluate_task(struct task_struct *task, void *arg)
 	get_task_struct(task);
 	oc->chosen = task;
 	oc->chosen_points = points;
+	if (points == LONG_MAX)
+		return 1;
 next:
 	return 0;
 abort:
