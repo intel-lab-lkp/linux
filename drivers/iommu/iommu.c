@@ -3397,6 +3397,11 @@ int iommu_attach_device_pasid(struct iommu_domain *domain,
 		return -ENODEV;
 
 	mutex_lock(&group->mutex);
+	if (list_count_nodes(&group->devices) != 1) {
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+
 	curr = xa_cmpxchg(&group->pasid_array, pasid, NULL, domain, GFP_KERNEL);
 	if (curr) {
 		ret = xa_err(curr) ? : -EBUSY;
