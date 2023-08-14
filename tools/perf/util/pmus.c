@@ -275,6 +275,50 @@ struct perf_pmu *perf_pmus__scan_core(struct perf_pmu *pmu)
 	return NULL;
 }
 
+static struct perf_pmu *perf_pmus__scan_skip_duplicates(struct perf_pmu *pmu)
+{
+	bool use_core_pmus = !pmu || pmu->is_core;
+	int last_pmu_name_len = 0;
+	unsigned long last_pmu_num = 0;
+	const char *last_pmu_name = (pmu && pmu->name) ? pmu->name : "";
+
+	if (!pmu) {
+		pmu_read_sysfs(/*core_only=*/false);
+		pmu = list_prepare_entry(pmu, &core_pmus, list);
+	} else
+		last_pmu_name_len = pmu_name_len_no_suffix(pmu->name ?: "", &last_pmu_num);
+
+	if (use_core_pmus) {
+		list_for_each_entry_continue(pmu, &core_pmus, list) {
+			unsigned long pmu_num = 0;
+			int pmu_name_len = pmu_name_len_no_suffix(pmu->name ?: "", &pmu_num);
+
+			if (last_pmu_name_len == pmu_name_len &&
+			    (last_pmu_num + 1 == pmu_num) &&
+			    !strncmp(last_pmu_name, pmu->name ?: "", pmu_name_len)) {
+				last_pmu_num++;
+				continue;
+			}
+			return pmu;
+		}
+		pmu = NULL;
+		pmu = list_prepare_entry(pmu, &other_pmus, list);
+	}
+	list_for_each_entry_continue(pmu, &other_pmus, list) {
+		unsigned long pmu_num = 0;
+		int pmu_name_len = pmu_name_len_no_suffix(pmu->name ?: "", &pmu_num);
+
+		if (last_pmu_name_len == pmu_name_len &&
+		    (last_pmu_num + 1 == pmu_num) &&
+		    !strncmp(last_pmu_name, pmu->name ?: "", pmu_name_len)) {
+			last_pmu_num++;
+			continue;
+		}
+		return pmu;
+	}
+	return NULL;
+}
+
 const struct perf_pmu *perf_pmus__pmu_for_pmu_filter(const char *str)
 {
 	struct perf_pmu *pmu = NULL;
@@ -429,10 +473,16 @@ void perf_pmus__print_pmu_events(const struct print_callbacks *print_cb, void *p
 	int printed = 0;
 	int len, j;
 	struct sevent *aliases;
+	struct perf_pmu *(*scan_fn)(struct perf_pmu *);
+
+	if (print_cb->skip_duplicate_pmus(print_state))
+		scan_fn = perf_pmus__scan_skip_duplicates;
+	else
+		scan_fn = perf_pmus__scan;
 
 	pmu = NULL;
 	len = 0;
-	while ((pmu = perf_pmus__scan(pmu)) != NULL) {
+	while ((pmu = scan_fn(pmu)) != NULL) {
 		list_for_each_entry(event, &pmu->aliases, list)
 			len++;
 		if (pmu->selectable)
@@ -445,7 +495,7 @@ void perf_pmus__print_pmu_events(const struct print_callbacks *print_cb, void *p
 	}
 	pmu = NULL;
 	j = 0;
-	while ((pmu = perf_pmus__scan(pmu)) != NULL) {
+	while ((pmu = scan_fn(pmu)) != NULL) {
 		bool is_cpu = pmu->is_core;
 
 		list_for_each_entry(event, &pmu->aliases, list) {
