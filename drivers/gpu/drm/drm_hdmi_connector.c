@@ -82,6 +82,7 @@ __drm_atomic_helper_hdmi_connector_duplicate_state(struct drm_hdmi_connector *hd
 	struct drm_hdmi_connector_state *old_hdmi_state =
 		connector_state_to_hdmi_connector_state(old_state);
 
+	new_hdmi_state->tmds_char_rate = old_hdmi_state->tmds_char_rate;
 	new_hdmi_state->output_bpc = old_hdmi_state->output_bpc;
 	new_hdmi_state->output_format = old_hdmi_state->output_format;
 	new_hdmi_state->broadcast_rgb = old_hdmi_state->broadcast_rgb;
@@ -257,6 +258,69 @@ connector_state_get_adjusted_mode(const struct drm_connector_state *state)
 	return &crtc_state->adjusted_mode;
 }
 
+static enum drm_mode_status
+drm_hdmi_connector_clock_valid(const struct drm_hdmi_connector *hdmi_connector,
+			       const struct drm_display_mode *mode,
+			       unsigned long long clock)
+{
+	const struct drm_connector *connector = &hdmi_connector->base;
+	const struct drm_display_info *info = &connector->display_info;
+
+	if (info->max_tmds_clock && clock > info->max_tmds_clock * 1000)
+		return MODE_CLOCK_HIGH;
+
+	return MODE_OK;
+}
+
+/**
+ * drm_hdmi_connector_compute_mode_clock() - Computes the TMDS Character Rate
+ * @mode: Display mode to compute the clock for
+ * @bpc: Bits per character
+ * @fmt: Output Pixel Format used
+ *
+ * Returns the TMDS Character Rate for a given mode, bpc count and output format.
+ *
+ * RETURNS:
+ * The TMDS Character Rate, in Hertz
+ */
+unsigned long long
+drm_hdmi_connector_compute_mode_clock(const struct drm_display_mode *mode,
+				      unsigned int bpc,
+				      enum hdmi_colorspace fmt)
+{
+	unsigned long long clock = mode->clock * 1000ULL;
+
+	if (mode->flags & DRM_MODE_FLAG_DBLCLK)
+		clock = clock * 2;
+
+	if (fmt == HDMI_COLORSPACE_YUV422)
+		bpc = 8;
+
+	clock = clock * bpc;
+	do_div(clock, 8);
+
+	return clock;
+}
+EXPORT_SYMBOL(drm_hdmi_connector_compute_mode_clock);
+
+static int
+drm_hdmi_connector_compute_clock(const struct drm_hdmi_connector *hdmi_connector,
+				 struct drm_hdmi_connector_state *hdmi_state,
+				 const struct drm_display_mode *mode,
+				 unsigned int bpc,
+				 enum hdmi_colorspace fmt)
+{
+	unsigned long long clock;
+
+	clock = drm_hdmi_connector_compute_mode_clock(mode, bpc, fmt);
+	if (!drm_hdmi_connector_clock_valid(hdmi_connector, mode, clock) != MODE_OK)
+		return -EINVAL;
+
+	hdmi_state->tmds_char_rate = clock;
+
+	return 0;
+}
+
 /**
  * drm_atomic_helper_hdmi_connector_atomic_check() - Helper to check HDMI connector atomic state
  * @connector: the parent connector this state refers to
@@ -275,6 +339,8 @@ connector_state_get_adjusted_mode(const struct drm_connector_state *state)
 int drm_atomic_helper_hdmi_connector_atomic_check(struct drm_connector *connector,
 						  struct drm_atomic_state *state)
 {
+	struct drm_hdmi_connector *hdmi_connector =
+		connector_to_hdmi_connector(connector);
 	struct drm_connector_state *old_state =
 		drm_atomic_get_old_connector_state(state, connector);
 	struct drm_hdmi_connector_state *old_hdmi_state =
@@ -283,6 +349,16 @@ int drm_atomic_helper_hdmi_connector_atomic_check(struct drm_connector *connecto
 		drm_atomic_get_new_connector_state(state, connector);
 	struct drm_hdmi_connector_state *new_hdmi_state =
 		connector_state_to_hdmi_connector_state(new_state);
+	const struct drm_display_mode *mode =
+		connector_state_get_adjusted_mode(new_state);
+	int ret;
+
+	ret = drm_hdmi_connector_compute_clock(hdmi_connector, new_hdmi_state,
+					       mode,
+					       new_hdmi_state->output_bpc,
+					       new_hdmi_state->output_format);
+	if (!ret)
+		return ret;
 
 	if (old_hdmi_state->broadcast_rgb != new_hdmi_state->broadcast_rgb ||
 	    old_hdmi_state->output_format != new_hdmi_state->output_format ||
@@ -374,6 +450,7 @@ void drm_atomic_helper_hdmi_connector_print_state(struct drm_printer *p,
 	drm_printf(p, "\toutput_bpc=%u\n", hdmi_state->output_bpc);
 	drm_printf(p, "\toutput_format=%s\n",
 		   drm_hdmi_connector_get_output_format_name(hdmi_state->output_format));
+	drm_printf(p, "\ttmds_char_rate=%llu\n", hdmi_state->tmds_char_rate);
 }
 EXPORT_SYMBOL(drm_atomic_helper_hdmi_connector_print_state);
 

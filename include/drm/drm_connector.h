@@ -38,6 +38,7 @@ struct drm_connector_helper_funcs;
 struct drm_modeset_acquire_ctx;
 struct drm_device;
 struct drm_crtc;
+struct drm_display_mode;
 struct drm_encoder;
 struct drm_panel;
 struct drm_property;
@@ -2086,6 +2087,11 @@ struct drm_hdmi_connector_state {
 	enum hdmi_colorspace output_format;
 
 	/**
+	 * @tmds_char_rate: TMDS Character Rate, in Hz.
+	 */
+	unsigned long long tmds_char_rate;
+
+	/**
 	 * @broadcast_rgb: Connector property to pass the Broadcast RGB
 	 * selection value.
 	 */
@@ -2145,6 +2151,11 @@ struct drm_hdmi_connector {
 
 #define connector_to_hdmi_connector(connector) \
 	container_of_const(connector, struct drm_hdmi_connector, base)
+
+unsigned long long
+drm_hdmi_connector_compute_mode_clock(const struct drm_display_mode *mode,
+				      unsigned int bpc,
+				      enum hdmi_colorspace fmt);
 
 int drmm_hdmi_connector_init(struct drm_device *dev,
 			     struct drm_hdmi_connector *hdmi_connector,
