@@ -62,7 +62,7 @@ struct eth_dev {
 	struct usb_gadget	*gadget;
 
 	spinlock_t		req_lock;	/* guard {rx,tx}_reqs */
-	struct list_head	tx_reqs, rx_reqs;
+	struct list_head	tx_reqs, rx_reqs, rx_queued_reqs;
 	atomic_t		tx_qlen;
 
 	struct sk_buff_head	rx_frames;
@@ -75,7 +75,7 @@ struct eth_dev {
 						struct sk_buff *skb,
 						struct sk_buff_head *list);
 
-	struct work_struct	work;
+	struct work_struct	work, wakeup_work;
 
 	unsigned long		todo;
 #define	WORK_RX_MEMORY		0
@@ -213,7 +213,7 @@ enomem:
 		if (skb)
 			dev_kfree_skb_any(skb);
 		spin_lock_irqsave(&dev->req_lock, flags);
-		list_add(&req->list, &dev->rx_reqs);
+		list_move_tail(&req->list, &dev->rx_reqs);
 		spin_unlock_irqrestore(&dev->req_lock, flags);
 	}
 	return retval;
@@ -303,7 +303,7 @@ quiesce:
 	if (!netif_running(dev->net)) {
 clean:
 		spin_lock(&dev->req_lock);
-		list_add(&req->list, &dev->rx_reqs);
+		list_move_tail(&req->list, &dev->rx_reqs);
 		spin_unlock(&dev->req_lock);
 		req = NULL;
 	}
@@ -378,7 +378,7 @@ static void rx_fill(struct eth_dev *dev, gfp_t gfp_flags)
 	spin_lock_irqsave(&dev->req_lock, flags);
 	while (!list_empty(&dev->rx_reqs)) {
 		req = list_first_entry(&dev->rx_reqs, struct usb_request, list);
-		list_del_init(&req->list);
+		list_move_tail(&req->list, &dev->rx_queued_reqs);
 		spin_unlock_irqrestore(&dev->req_lock, flags);
 
 		if (rx_submit(dev, req, gfp_flags) < 0) {
@@ -438,9 +438,11 @@ static inline int is_promisc(u16 cdc_filter)
 	return cdc_filter & USB_CDC_PACKET_TYPE_PROMISCUOUS;
 }
 
-static int ether_wakeup_host(struct gether *port)
+static void ether_wakeup_work(struct work_struct *w)
 {
 	int			ret;
+	struct eth_dev		*dev = container_of(w, struct eth_dev, wakeup_work);
+	struct gether		*port = dev->port_usb;
 	struct usb_function	*func = &port->func;
 	struct usb_gadget	*gadget = func->config->cdev->gadget;
 
@@ -449,7 +451,8 @@ static int ether_wakeup_host(struct gether *port)
 	else
 		ret = usb_gadget_wakeup(gadget);
 
-	return ret;
+	if (ret)
+		DBG(dev, "failed to trigger wakeup:%d\n", ret);
 }
 
 static netdev_tx_t eth_start_xmit(struct sk_buff *skb,
@@ -476,7 +479,7 @@ static netdev_tx_t eth_start_xmit(struct sk_buff *skb,
 		DBG(dev, "Port suspended. Triggering wakeup\n");
 		netif_stop_queue(net);
 		spin_unlock_irqrestore(&dev->lock, flags);
-		ether_wakeup_host(dev->port_usb);
+		schedule_work(&dev->wakeup_work);
 		return NETDEV_TX_BUSY;
 	}
 
@@ -754,8 +757,10 @@ struct eth_dev *gether_setup_name(struct usb_gadget *g,
 	spin_lock_init(&dev->lock);
 	spin_lock_init(&dev->req_lock);
 	INIT_WORK(&dev->work, eth_work);
+	INIT_WORK(&dev->wakeup_work, ether_wakeup_work);
 	INIT_LIST_HEAD(&dev->tx_reqs);
 	INIT_LIST_HEAD(&dev->rx_reqs);
+	INIT_LIST_HEAD(&dev->rx_queued_reqs);
 
 	skb_queue_head_init(&dev->rx_frames);
 
@@ -825,8 +830,10 @@ struct net_device *gether_setup_name_default(const char *netname)
 	spin_lock_init(&dev->lock);
 	spin_lock_init(&dev->req_lock);
 	INIT_WORK(&dev->work, eth_work);
+	INIT_WORK(&dev->wakeup_work, ether_wakeup_work);
 	INIT_LIST_HEAD(&dev->tx_reqs);
 	INIT_LIST_HEAD(&dev->rx_reqs);
+	INIT_LIST_HEAD(&dev->rx_queued_reqs);
 
 	skb_queue_head_init(&dev->rx_frames);
 
@@ -1043,6 +1050,7 @@ EXPORT_SYMBOL_GPL(gether_set_ifname);
 void gether_suspend(struct gether *link)
 {
 	struct eth_dev *dev = link->ioport;
+	struct usb_request *req;
 	unsigned long flags;
 
 	if (!dev)
@@ -1053,9 +1061,20 @@ void gether_suspend(struct gether *link)
 		 * There is a transfer in progress. So we trigger a remote
 		 * wakeup to inform the host.
 		 */
-		ether_wakeup_host(dev->port_usb);
+		schedule_work(&dev->wakeup_work);
 		return;
 	}
+	/* Dequeue the submitted requests. */
+	spin_lock(&dev->req_lock);
+	while (!list_empty(&dev->rx_queued_reqs)) {
+		req = list_last_entry(&dev->rx_queued_reqs, struct usb_request, list);
+		list_move_tail(&req->list, &dev->rx_reqs);
+		spin_unlock(&dev->req_lock);
+		usb_ep_dequeue(dev->port_usb->out_ep, req);
+		spin_lock(&dev->req_lock);
+	}
+	spin_unlock(&dev->req_lock);
+
 	spin_lock_irqsave(&dev->lock, flags);
 	link->is_suspend = true;
 	spin_unlock_irqrestore(&dev->lock, flags);
@@ -1070,6 +1089,7 @@ void gether_resume(struct gether *link)
 	if (!dev)
 		return;
 
+	defer_kevent(dev, WORK_RX_MEMORY);
 	if (netif_queue_stopped(dev->net))
 		netif_start_queue(dev->net);
 
@@ -1225,6 +1245,15 @@ void gether_disconnect(struct gether *link)
 	spin_lock(&dev->req_lock);
 	while (!list_empty(&dev->rx_reqs)) {
 		req = list_first_entry(&dev->rx_reqs, struct usb_request, list);
+		list_del(&req->list);
+
+		spin_unlock(&dev->req_lock);
+		usb_ep_free_request(link->out_ep, req);
+		spin_lock(&dev->req_lock);
+	}
+
+	while (!list_empty(&dev->rx_queued_reqs)) {
+		req = list_first_entry(&dev->rx_queued_reqs, struct usb_request, list);
 		list_del(&req->list);
 
 		spin_unlock(&dev->req_lock);
