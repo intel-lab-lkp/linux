@@ -888,8 +888,6 @@ struct mwifiex_adapter {
 	struct work_struct main_work;
 	struct workqueue_struct *rx_workqueue;
 	struct work_struct rx_work;
-	struct workqueue_struct *dfs_workqueue;
-	struct work_struct dfs_work;
 	bool rx_work_enabled;
 	bool rx_processing;
 	bool delay_main_work;
@@ -953,7 +951,6 @@ struct mwifiex_adapter {
 	u8 fw_bands;
 	u8 adhoc_start_band;
 	u8 config_bands;
-	struct mwifiex_chan_scan_param_set *scan_channels;
 	u8 tx_lock_flag;
 	struct mwifiex_sleep_params sleep_params;
 	struct mwifiex_sleep_period sleep_period;
