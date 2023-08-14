@@ -1555,9 +1555,10 @@ void coresight_release_platform_data(struct coresight_device *csdev,
 		conns[i]->dest_fwnode = NULL;
 		devm_kfree(dev, conns[i]);
 	}
-	devm_kfree(dev, pdata->out_conns);
-	devm_kfree(dev, pdata->in_conns);
-	devm_kfree(dev, pdata);
+	if (pdata->nr_outconns)
+		devm_kfree(dev, pdata->out_conns);
+	if (pdata->nr_inconns)
+		devm_kfree(dev, pdata->in_conns);
 	if (csdev)
 		coresight_remove_conns_sysfs_group(csdev);
 }
