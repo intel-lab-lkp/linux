@@ -144,6 +144,7 @@ int
 xdr_alloc_bvec(struct xdr_buf *buf, gfp_t gfp)
 {
 	size_t i, n = xdr_buf_pagecount(buf);
+	unsigned int offset = offset_in_page(buf->page_base);
 
 	if (n != 0 && buf->bvec == NULL) {
 		buf->bvec = kmalloc_array(n, sizeof(buf->bvec[0]), gfp);
@@ -151,7 +152,8 @@ xdr_alloc_bvec(struct xdr_buf *buf, gfp_t gfp)
 			return -ENOMEM;
 		for (i = 0; i < n; i++) {
 			bvec_set_page(&buf->bvec[i], buf->pages[i], PAGE_SIZE,
-				      0);
+				      offset);
+			offset = 0;
 		}
 	}
 	return 0;
