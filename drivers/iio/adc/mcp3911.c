@@ -51,8 +51,8 @@
 #define MCP3911_REG_GAINCAL_CH1		0x17
 #define MCP3911_REG_VREFCAL		0x1a
 
-#define MCP3911_CHANNEL(x)		(MCP3911_REG_CHANNEL0 + x * 3)
-#define MCP3911_OFFCAL(x)		(MCP3911_REG_OFFCAL_CH0 + x * 6)
+#define MCP3911_CHANNEL(ch)		(MCP3911_REG_CHANNEL0 + ch * 3)
+#define MCP3911_OFFCAL(ch)		(MCP3911_REG_OFFCAL_CH0 + ch * 6)
 
 /* Internal voltage reference in mV */
 #define MCP3911_INT_VREF_MV		1200
