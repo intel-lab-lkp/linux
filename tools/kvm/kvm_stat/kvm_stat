@@ -320,6 +320,8 @@ class Arch(object):
             return ArchA64()
         elif machine.startswith('s390'):
             return ArchS390()
+        elif machine.startswith('riscv'):
+            return ArchRISCV()
         else:
             # X86_64
             for line in open('/proc/cpuinfo'):
@@ -394,6 +396,18 @@ class ArchS390(Arch):
         """ Returns name of parent if 'field' is a child, None otherwise """
         if field.startswith('instruction_'):
             return 'exit_instruction'
+
+
+class ArchRISCV(Arch):
+    def __init__(self):
+        self.sc_perf_evt_open = 241
+        self.ioctl_numbers = IOCTL_NUMBERS
+        self.exit_reason_field = None
+        self.exit_reasons = None
+
+    def debugfs_is_child(self, field):
+        """ Returns name of parent if 'field' is a child, None otherwise """
+        return None
 
 
 ARCH = Arch.get_arch()
