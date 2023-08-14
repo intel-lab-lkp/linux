@@ -185,10 +185,12 @@ struct nlm_block {
 	struct nlm_file *	b_file;		/* file in question */
 	struct cache_req *	b_cache_req;	/* deferred request handling */
 	struct cache_deferred_req * b_deferred_req;
+	struct mutex		b_cb_mutex;	/* callback mutex */
 	unsigned int		b_flags;	/* block flags */
 #define B_QUEUED		1	/* lock queued */
 #define B_GOT_CALLBACK		2	/* got lock or conflicting lock */
 #define B_TIMED_OUT		4	/* filesystem too slow to respond */
+#define B_PENDING_CALLBACK	8	/* pending callback for lock request */
 };
 
 /*
