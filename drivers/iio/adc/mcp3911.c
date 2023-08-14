@@ -468,6 +468,7 @@ static int mcp3911_probe(struct spi_device *spi)
 {
 	struct iio_dev *indio_dev;
 	struct mcp3911 *adc;
+	struct device *dev = &spi->dev;
 	int ret;
 
 	indio_dev = devm_iio_device_alloc(&spi->dev, sizeof(*adc));
@@ -482,10 +483,7 @@ static int mcp3911_probe(struct spi_device *spi)
 		if (PTR_ERR(adc->vref) == -ENODEV) {
 			adc->vref = NULL;
 		} else {
-			dev_err(&adc->spi->dev,
-				"failed to get regulator (%ld)\n",
-				PTR_ERR(adc->vref));
-			return PTR_ERR(adc->vref);
+			return dev_err_probe(dev, PTR_ERR(adc->vref), "failed to get regulator\n");
 		}
 
 	} else {
@@ -504,10 +502,7 @@ static int mcp3911_probe(struct spi_device *spi)
 		if (PTR_ERR(adc->clki) == -ENOENT) {
 			adc->clki = NULL;
 		} else {
-			dev_err(&adc->spi->dev,
-				"failed to get adc clk (%ld)\n",
-				PTR_ERR(adc->clki));
-			return PTR_ERR(adc->clki);
+			return dev_err_probe(dev, PTR_ERR(adc->clki), "failed to get adc clk\n");
 		}
 	}
 
