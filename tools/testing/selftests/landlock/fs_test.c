@@ -3329,7 +3329,7 @@ TEST_F_FORK(layout1, truncate_unhandled)
 			      LANDLOCK_ACCESS_FS_WRITE_FILE;
 	int ruleset_fd;
 
-	/* Enable Landlock. */
+	/* Enables Landlock. */
 	ruleset_fd = create_ruleset(_metadata, handled, rules);
 
 	ASSERT_LE(0, ruleset_fd);
@@ -3412,7 +3412,7 @@ TEST_F_FORK(layout1, truncate)
 			      LANDLOCK_ACCESS_FS_TRUNCATE;
 	int ruleset_fd;
 
-	/* Enable Landlock. */
+	/* Enables Landlock. */
 	ruleset_fd = create_ruleset(_metadata, handled, rules);
 
 	ASSERT_LE(0, ruleset_fd);
@@ -3639,7 +3639,7 @@ TEST_F_FORK(ftruncate, open_and_ftruncate)
 	};
 	int fd, ruleset_fd;
 
-	/* Enable Landlock. */
+	/* Enables Landlock. */
 	ruleset_fd = create_ruleset(_metadata, variant->handled, rules);
 	ASSERT_LE(0, ruleset_fd);
 	enforce_ruleset(_metadata, ruleset_fd);
@@ -3728,6 +3728,96 @@ TEST(memfd_ftruncate)
 	 * created in ways other than open(2).
 	 */
 	EXPECT_EQ(0, test_ftruncate(fd));
+
+	ASSERT_EQ(0, close(fd));
+}
+
+/* Invokes the FIOQSIZE ioctl(2) and returns its errno or 0. */
+static int test_fioqsize_ioctl(int fd)
+{
+	loff_t size;
+
+	if (ioctl(fd, FIOQSIZE, &size) < 0)
+		return errno;
+	return 0;
+}
+
+/*
+ * Attempt ioctls on regular files, with file descriptors opened before and
+ * after landlocking.
+ */
+TEST_F_FORK(layout1, ioctl)
+{
+	const struct rule rules[] = {
+		{
+			.path = file1_s1d1,
+			.access = LANDLOCK_ACCESS_FS_IOCTL,
+		},
+		{
+			.path = dir_s2d1,
+			.access = LANDLOCK_ACCESS_FS_IOCTL,
+		},
+		{},
+	};
+	const __u64 handled = LANDLOCK_ACCESS_FS_IOCTL;
+	int ruleset_fd;
+	int dir_s1d1_fd, file1_s1d1_fd, dir_s2d1_fd;
+
+	/* Enables Landlock. */
+	ruleset_fd = create_ruleset(_metadata, handled, rules);
+	ASSERT_LE(0, ruleset_fd);
+	enforce_ruleset(_metadata, ruleset_fd);
+	ASSERT_EQ(0, close(ruleset_fd));
+
+	dir_s1d1_fd = open(dir_s1d1, O_RDONLY);
+	ASSERT_LE(0, dir_s1d1_fd);
+	file1_s1d1_fd = open(file1_s1d1, O_RDONLY);
+	ASSERT_LE(0, file1_s1d1_fd);
+	dir_s2d1_fd = open(dir_s2d1, O_RDONLY);
+	ASSERT_LE(0, dir_s2d1_fd);
+
+	/*
+	 * Checks that FIOQSIZE works on files where LANDLOCK_ACCESS_FS_IOCTL is
+	 * permitted.
+	 */
+	EXPECT_EQ(EACCES, test_fioqsize_ioctl(dir_s1d1_fd));
+	EXPECT_EQ(0, test_fioqsize_ioctl(file1_s1d1_fd));
+	EXPECT_EQ(0, test_fioqsize_ioctl(dir_s2d1_fd));
+
+	/* Closes all file descriptors. */
+	ASSERT_EQ(0, close(dir_s1d1_fd));
+	ASSERT_EQ(0, close(file1_s1d1_fd));
+	ASSERT_EQ(0, close(dir_s2d1_fd));
+}
+
+TEST_F_FORK(layout1, ioctl_always_allowed)
+{
+	struct landlock_ruleset_attr attr = {
+		.handled_access_fs = LANDLOCK_ACCESS_FS_IOCTL,
+	};
+	int ruleset_fd, fd;
+	int flag = 0;
+	int n;
+
+	/* Enables Landlock. */
+	ruleset_fd = landlock_create_ruleset(&attr, sizeof(attr), 0);
+	ASSERT_LE(0, ruleset_fd);
+	enforce_ruleset(_metadata, ruleset_fd);
+	ASSERT_EQ(0, close(ruleset_fd));
+
+	fd = open(file1_s1d1, O_RDONLY);
+	ASSERT_LE(0, fd);
+
+	/* Checks that the restrictable FIOQSIZE is restricted. */
+	EXPECT_EQ(EACCES, test_fioqsize_ioctl(fd));
+
+	/* Checks that unrestrictable commands are unrestricted. */
+	EXPECT_EQ(0, ioctl(fd, FIOCLEX));
+	EXPECT_EQ(0, ioctl(fd, FIONCLEX));
+	EXPECT_EQ(0, ioctl(fd, FIONBIO, &flag));
+	EXPECT_EQ(0, ioctl(fd, FIOASYNC, &flag));
+	EXPECT_EQ(0, ioctl(fd, FIONREAD, &n));
+	EXPECT_EQ(0, n);
 
 	ASSERT_EQ(0, close(fd));
 }
