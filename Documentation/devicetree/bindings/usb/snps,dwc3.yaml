@@ -403,6 +403,11 @@ properties:
     description:
       Enable USB remote wakeup.
 
+  snps,runtime-suspend-on-usb-suspend:
+    description:
+      If True then dwc3 runtime suspend is allowed during bus suspend
+      case even with the USB cable connected.
+
 unevaluatedProperties: false
 
 required:
