@@ -907,6 +907,130 @@ void drm_atomic_helper_hdmi_connector_print_state(struct drm_printer *p,
 }
 EXPORT_SYMBOL(drm_atomic_helper_hdmi_connector_print_state);
 
+struct debugfs_wrapper {
+	struct drm_hdmi_connector *hdmi_connector;
+	union hdmi_infoframe *frame;
+};
+
+static ssize_t
+infoframe_read(struct file *filp, char __user *ubuf, size_t count, loff_t *ppos)
+{
+	const struct debugfs_wrapper *wrapper = filp->private_data;
+	struct drm_hdmi_connector *hdmi_connector = wrapper->hdmi_connector;
+	union hdmi_infoframe *frame = wrapper->frame;
+	u8 buf[HDMI_MAX_INFOFRAME_SIZE];
+	ssize_t len;
+
+	len = hdmi_infoframe_pack(frame, buf, sizeof(buf));
+	if (len < 0)
+		return len;
+
+	mutex_lock(&hdmi_connector->infoframes.lock);
+	len = simple_read_from_buffer(ubuf, count, ppos, buf, len);
+	mutex_unlock(&hdmi_connector->infoframes.lock);
+
+	return len;
+}
+
+static const struct file_operations infoframe_fops = {
+	.owner   = THIS_MODULE,
+	.open    = simple_open,
+	.read    = infoframe_read,
+};
+
+static int create_debugfs_infoframe_file(struct drm_hdmi_connector *hdmi_connector,
+					 struct dentry *parent,
+					 const char *filename,
+					 union hdmi_infoframe *frame)
+{
+	struct drm_device *dev = hdmi_connector->base.dev;
+	struct debugfs_wrapper *wrapper;
+	struct dentry *file;
+
+	wrapper = drmm_kzalloc(dev, sizeof(*wrapper), GFP_KERNEL);
+	if (!wrapper)
+		return -ENOMEM;
+
+	wrapper->hdmi_connector = hdmi_connector;
+	wrapper->frame = frame;
+
+	file = debugfs_create_file(filename, 0400, parent, wrapper, &infoframe_fops);
+	if (IS_ERR(file))
+		return PTR_ERR(file);
+
+	return 0;
+}
+
+#define CREATE_INFOFRAME_FILE(c, p, i)		\
+	create_debugfs_infoframe_file(c, p, #i, (union hdmi_infoframe *)&(c)->infoframes.i)
+
+static int create_debugfs_infoframe_files(struct drm_hdmi_connector *hdmi_connector,
+					  struct dentry *parent)
+{
+	int ret;
+
+	ret = CREATE_INFOFRAME_FILE(hdmi_connector, parent, audio);
+	if (ret)
+		return ret;
+
+	ret = CREATE_INFOFRAME_FILE(hdmi_connector, parent, avi);
+	if (ret)
+		return ret;
+
+	ret = CREATE_INFOFRAME_FILE(hdmi_connector, parent, drm);
+	if (ret)
+		return ret;
+
+	ret = CREATE_INFOFRAME_FILE(hdmi_connector, parent, spd);
+	if (ret)
+		return ret;
+
+	ret = CREATE_INFOFRAME_FILE(hdmi_connector, parent, vendor);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+#undef CREATE_INFOFRAME_FILE
+
+static void remove_debugfs_dir(struct drm_device *dev, void *data)
+{
+	struct dentry *dir = data;
+
+	debugfs_remove_recursive(dir);
+}
+
+/**
+ * drm_helper_hdmi_connector_debugfs_init - DebugFS init for HDMI connectors
+ * @connector: Parent Connector
+ * @dentry: DebugFS root dentry
+ *
+ * Provides a default implementation for
+ * @drm_connector_helper_funcs.debugfs_init that will create all the
+ * files relevant for a @drm_hdmi_connector.
+ */
+void drm_helper_hdmi_connector_debugfs_init(struct drm_connector *connector,
+					    struct dentry *root)
+{
+	struct drm_hdmi_connector *hdmi_connector =
+		connector_to_hdmi_connector(connector);
+	struct drm_device *dev = hdmi_connector->base.dev;
+	struct dentry *dir;
+	int ret;
+
+	dir = debugfs_create_dir("infoframes", root);
+	if (IS_ERR(dir))
+		return;
+
+	ret = drmm_add_action_or_reset(dev, remove_debugfs_dir, dir);
+	if (ret)
+		return;
+
+	create_debugfs_infoframe_files(hdmi_connector, dir);
+}
+EXPORT_SYMBOL(drm_helper_hdmi_connector_debugfs_init);
+
 /**
  * drmm_hdmi_connector_init - Init a preallocated HDMI connector
  * @dev: DRM device

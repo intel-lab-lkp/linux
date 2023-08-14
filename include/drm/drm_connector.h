@@ -2294,6 +2294,10 @@ int drmm_hdmi_connector_init(struct drm_device *dev,
 			     struct i2c_adapter *ddc,
 			     unsigned int max_bpc);
 
+void drm_helper_hdmi_connector_debugfs_init(struct drm_connector *connector,
+					    struct dentry *root);
+
+
 /**
  * struct drm_tile_group - Tile group metadata
  * @refcount: reference count
