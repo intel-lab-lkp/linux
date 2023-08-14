@@ -1,0 +1,8 @@
+What:		/sys/class/iommu/<iommu>/arm-smmu-v3/tlbi_range_max_n_shift
+Date:		August 2023
+KernelVersion:	6.6
+Contact:	Nicolin Chen <nicolinc@nvidia.com>
+Description:
+		Max number of shift to set up a threshold for SMMU to replace
+		VA invalidation commands with a single per-asid invalidation.
+		Format: %u

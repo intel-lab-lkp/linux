@@ -665,6 +665,9 @@ struct arm_smmu_device {
 	unsigned long			oas; /* PA */
 	unsigned long			pgsize_bitmap;
 
+	/* Threshold to convert VA range TLBI to asid TLBI */
+	unsigned int			tlbi_range_max_n_shift;
+
 #define ARM_SMMU_MAX_ASIDS		(1 << 16)
 	unsigned int			asid_bits;
 

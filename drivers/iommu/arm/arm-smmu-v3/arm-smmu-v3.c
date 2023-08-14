@@ -1886,10 +1886,20 @@ static void __arm_smmu_tlb_inv_range(struct arm_smmu_cmdq_ent *cmd,
 	struct arm_smmu_device *smmu = smmu_domain->smmu;
 	unsigned long end = iova + size, num_pages = 0, tg = 0;
 	size_t inv_range = granule;
+	size_t max_size = 1UL << smmu->tlbi_range_max_n_shift;
 	struct arm_smmu_cmdq_batch cmds;
 
 	if (!size)
 		return;
+
+	/*
+	 * Convert a large range/number of VA invalidation(s) to one single ASID
+	 * invalidation, when the input size is greater than the threshold. This
+	 * simplifies the command building routine, espeicaly on an SMMU without
+	 * ARM_SMMU_FEAT_RANGE_INV.
+	 */
+	if (cmd->tlbi.asid && size >= max_size)
+		return arm_smmu_tlb_inv_asid(smmu, cmd->tlbi.asid);
 
 	if (smmu->features & ARM_SMMU_FEAT_RANGE_INV) {
 		/* Get the leaf page size */
@@ -3107,6 +3117,7 @@ static int arm_smmu_init_structures(struct arm_smmu_device *smmu)
 {
 	int ret;
 
+	smmu->tlbi_range_max_n_shift = VA_BITS;
 	mutex_init(&smmu->streams_mutex);
 	smmu->streams = RB_ROOT;
 
@@ -3808,6 +3819,47 @@ static void arm_smmu_rmr_install_bypass_ste(struct arm_smmu_device *smmu)
 	iort_put_rmr_sids(dev_fwnode(smmu->dev), &rmr_list);
 }
 
+static ssize_t tlbi_range_max_n_shift_show(struct device *dev,
+					   struct device_attribute *attr,
+					   char *buf)
+{
+	struct arm_smmu_device *smmu = dev_get_drvdata(dev->parent);
+
+	return sprintf(buf, "%u\n", smmu->tlbi_range_max_n_shift);
+}
+static ssize_t tlbi_range_max_n_shift_store(struct device *dev,
+					    struct device_attribute *attr,
+					    const char *buf, size_t size)
+{
+	struct arm_smmu_device *smmu = dev_get_drvdata(dev->parent);
+	unsigned int max_n_shift;
+	int ret;
+
+	ret = kstrtou32(buf, 0, &max_n_shift);
+	if (ret)
+		return ret;
+	if (max_n_shift > VA_BITS || max_n_shift < PAGE_SHIFT)
+		return -EINVAL;
+	smmu->tlbi_range_max_n_shift = max_n_shift;
+	return size;
+}
+static DEVICE_ATTR_RW(tlbi_range_max_n_shift);
+
+static struct attribute *arm_smmu_attrs[] = {
+	&dev_attr_tlbi_range_max_n_shift.attr,
+	NULL,
+};
+
+static struct attribute_group arm_smmu_group = {
+	.name = "arm-smmu-v3",
+	.attrs = arm_smmu_attrs,
+};
+
+static const struct attribute_group *arm_smmu_groups[] = {
+	&arm_smmu_group,
+	NULL,
+};
+
 static int arm_smmu_device_probe(struct platform_device *pdev)
 {
 	int irq, ret;
@@ -3900,7 +3952,7 @@ static int arm_smmu_device_probe(struct platform_device *pdev)
 		return ret;
 
 	/* And we're up. Go go go! */
-	ret = iommu_device_sysfs_add(&smmu->iommu, dev, NULL,
+	ret = iommu_device_sysfs_add(&smmu->iommu, dev, arm_smmu_groups,
 				     "smmu3.%pa", &ioaddr);
 	if (ret)
 		return ret;
