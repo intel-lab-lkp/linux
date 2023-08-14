@@ -22,6 +22,7 @@ properties:
       - fsl,imx6q-pcie-ep
       - fsl,imx6qp-pcie-ep
       - fsl,imx6sx-pcie-ep
+      - fsl,imx7d-pcie-ep
       - fsl,imx8mm-pcie-ep
       - fsl,imx8mq-pcie-ep
       - fsl,imx8mp-pcie-ep
@@ -101,6 +102,7 @@ allOf:
           enum:
             - fsl,imx6q-pcie-ep
             - fsl,imx6qp-pcie-ep
+            - fsl,imx7d-pcie-ep
     then:
       properties:
         clocks:
