@@ -2042,6 +2042,22 @@ void drm_connector_attach_privacy_screen_provider(
 	struct drm_connector *connector, struct drm_privacy_screen *priv);
 void drm_connector_update_privacy_screen(const struct drm_connector_state *connector_state);
 
+struct drm_hdmi_connector {
+	/**
+	 * @base: Base Connector
+	 */
+	struct drm_connector base;
+};
+
+#define connector_to_hdmi_connector(connector) \
+	container_of_const(connector, struct drm_hdmi_connector, base)
+
+int drmm_hdmi_connector_init(struct drm_device *dev,
+			     struct drm_hdmi_connector *hdmi_connector,
+			     const struct drm_connector_funcs *funcs,
+			     int connector_type,
+			     struct i2c_adapter *ddc);
+
 /**
  * struct drm_tile_group - Tile group metadata
  * @refcount: reference count

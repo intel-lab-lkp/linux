@@ -27,6 +27,7 @@ drm-y := \
 	drm_fourcc.o \
 	drm_framebuffer.o \
 	drm_gem.o \
+	drm_hdmi_connector.o \
 	drm_ioctl.o \
 	drm_lease.o \
 	drm_managed.o \
