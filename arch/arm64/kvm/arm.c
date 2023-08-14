@@ -799,6 +799,9 @@ static int check_vcpu_requests(struct kvm_vcpu *vcpu)
 			preempt_enable();
 		}
 
+		if (kvm_check_request(KVM_REQ_PMU_RESTORE_GUEST, vcpu))
+			kvm_vcpu_pmu_restore_guest(vcpu);
+
 		if (kvm_check_request(KVM_REQ_RELOAD_PMU, vcpu))
 			kvm_pmu_handle_pmcr(vcpu,
 					    __vcpu_sys_reg(vcpu, PMCR_EL0));
@@ -883,6 +886,21 @@ static int noinstr kvm_arm_vcpu_enter_exit(struct kvm_vcpu *vcpu)
 	guest_state_exit_irqoff();
 
 	return ret;
+}
+
+void arch_perf_mux(bool rotations)
+{
+	struct kvm_vcpu *vcpu;
+
+	if (!kvm_arm_support_pmu_v3() || !has_vhe())
+		return;
+
+	vcpu = kvm_get_running_vcpu();
+	if (!vcpu)
+		return;
+
+	if (rotations)
+		kvm_make_request(KVM_REQ_PMU_RESTORE_GUEST, vcpu);
 }
 
 /**

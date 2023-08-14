@@ -1059,6 +1059,10 @@ static void perf_cgroup_switch(struct task_struct *task)
 }
 #endif
 
+void __weak arch_perf_mux(bool rotations)
+{
+}
+
 /*
  * set default to be dependent on timer tick just
  * like original code
@@ -1076,6 +1080,7 @@ static enum hrtimer_restart perf_mux_hrtimer_handler(struct hrtimer *hr)
 
 	cpc = container_of(hr, struct perf_cpu_pmu_context, hrtimer);
 	rotations = perf_rotate_context(cpc);
+	arch_perf_mux(rotations);
 
 	raw_spin_lock(&cpc->hrtimer_lock);
 	if (rotations)
