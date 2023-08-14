@@ -5578,7 +5578,7 @@ static int rt5677_i2c_probe(struct i2c_client *i2c)
 
 		match_id = of_match_device(rt5677_of_match, &i2c->dev);
 		if (match_id)
-			rt5677->type = (enum rt5677_type)match_id->data;
+			rt5677->type = (uintptr_t)match_id->data;
 	} else if (ACPI_HANDLE(&i2c->dev)) {
 		const struct acpi_device_id *acpi_id;
 
