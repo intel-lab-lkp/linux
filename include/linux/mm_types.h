@@ -329,11 +329,21 @@ struct folio {
 	/* public: */
 			unsigned char _folio_dtor;
 			unsigned char _folio_order;
+	/* private: 2 bytes can be reused later */
+			unsigned char _free_1_0[2];
+#ifdef CONFIG_64BIT
+	/* 4 bytes can be reused later (64 bits only) */
+			unsigned char _free_1_1[4];
+#endif
+	/* public: */
 			atomic_t _entire_mapcount;
 			atomic_t _nr_pages_mapped;
 			atomic_t _pincount;
 #ifdef CONFIG_64BIT
 			unsigned int _folio_nr_pages;
+	/* private: 4 bytes can be reused later (64 bits only) */
+			unsigned char _free_1_2[4];
+	/* public: */
 #endif
 	/* private: the union with struct page is transitional */
 		};
@@ -355,6 +365,8 @@ struct folio {
 			unsigned long _head_2a;
 	/* public: */
 			struct list_head _deferred_list;
+	/* private: 8 more free bytes for either 32/64 bits */
+			unsigned char _free_2_1[8];
 	/* private: the union with struct page is transitional */
 		};
 		struct page __page_2;
