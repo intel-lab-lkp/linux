@@ -258,6 +258,91 @@ connector_state_get_adjusted_mode(const struct drm_connector_state *state)
 	return &crtc_state->adjusted_mode;
 }
 
+static bool
+sink_supports_format_bpc(const struct drm_hdmi_connector *hdmi_connector,
+			 const struct drm_display_info *info,
+			 const struct drm_display_mode *mode,
+			 unsigned int format, unsigned int bpc)
+{
+	const struct drm_connector *connector = &hdmi_connector->base;
+	struct drm_device *dev = connector->dev;
+	u8 vic = drm_match_cea_mode(mode);
+
+	if (vic == 1 && bpc != 8) {
+		drm_dbg(dev, "VIC1 requires a bpc of 8, got %u\n", bpc);
+		return false;
+	}
+
+	if (!info->is_hdmi &&
+	    (format != HDMI_COLORSPACE_RGB || bpc != 8)) {
+		drm_dbg(dev, "DVI Monitors require an RGB output at 8 bpc\n");
+		return false;
+	}
+
+	switch (format) {
+	case HDMI_COLORSPACE_RGB:
+		drm_dbg(dev, "RGB Format, checking the constraints.\n");
+
+		if (!(info->color_formats & DRM_COLOR_FORMAT_RGB444))
+			return false;
+
+		if (bpc == 10 && !(info->edid_hdmi_rgb444_dc_modes & DRM_EDID_HDMI_DC_30)) {
+			drm_dbg(dev, "10 BPC but sink doesn't support Deep Color 30.\n");
+			return false;
+		}
+
+		if (bpc == 12 && !(info->edid_hdmi_rgb444_dc_modes & DRM_EDID_HDMI_DC_36)) {
+			drm_dbg(dev, "12 BPC but sink doesn't support Deep Color 36.\n");
+			return false;
+		}
+
+		drm_dbg(dev, "RGB format supported in that configuration.\n");
+
+		return true;
+
+	case HDMI_COLORSPACE_YUV422:
+		drm_dbg(dev, "YUV422 format, checking the constraints.\n");
+
+		if (!(info->color_formats & DRM_COLOR_FORMAT_YCBCR422)) {
+			drm_dbg(dev, "Sink doesn't support YUV422.\n");
+			return false;
+		}
+
+		if (bpc != 12) {
+			drm_dbg(dev, "YUV422 only supports 12 bpc.\n");
+			return false;
+		}
+
+		drm_dbg(dev, "YUV422 format supported in that configuration.\n");
+
+		return true;
+
+	case HDMI_COLORSPACE_YUV444:
+		drm_dbg(dev, "YUV444 format, checking the constraints.\n");
+
+		if (!(info->color_formats & DRM_COLOR_FORMAT_YCBCR444)) {
+			drm_dbg(dev, "Sink doesn't support YUV444.\n");
+			return false;
+		}
+
+		if (bpc == 10 && !(info->edid_hdmi_ycbcr444_dc_modes & DRM_EDID_HDMI_DC_30)) {
+			drm_dbg(dev, "10 BPC but sink doesn't support Deep Color 30.\n");
+			return false;
+		}
+
+		if (bpc == 12 && !(info->edid_hdmi_ycbcr444_dc_modes & DRM_EDID_HDMI_DC_36)) {
+			drm_dbg(dev, "12 BPC but sink doesn't support Deep Color 36.\n");
+			return false;
+		}
+
+		drm_dbg(dev, "YUV444 format supported in that configuration.\n");
+
+		return true;
+	}
+
+	return false;
+}
+
 static enum drm_mode_status
 drm_hdmi_connector_clock_valid(const struct drm_hdmi_connector *hdmi_connector,
 			       const struct drm_display_mode *mode,
@@ -325,6 +410,95 @@ drm_hdmi_connector_compute_clock(const struct drm_hdmi_connector *hdmi_connector
 	return 0;
 }
 
+static bool
+drm_hdmi_connector_try_format_bpc(const struct drm_hdmi_connector *hdmi_connector,
+				  struct drm_hdmi_connector_state *hdmi_state,
+				  const struct drm_display_mode *mode,
+				  unsigned int bpc, enum hdmi_colorspace fmt)
+{
+	const struct drm_connector *connector = &hdmi_connector->base;
+	const struct drm_display_info *info = &connector->display_info;
+	struct drm_device *dev = connector->dev;
+	int ret;
+
+	drm_dbg(dev, "Trying output format %s\n",
+		drm_hdmi_connector_get_output_format_name(fmt));
+
+	if (!sink_supports_format_bpc(hdmi_connector, info, mode, fmt, bpc))
+		return false;
+
+	ret = drm_hdmi_connector_compute_clock(hdmi_connector, hdmi_state,
+					       mode, bpc, fmt);
+	if (ret)
+		return false;
+
+	return true;
+}
+
+static int
+drm_hdmi_connector_compute_format(const struct drm_hdmi_connector *hdmi_connector,
+				  struct drm_hdmi_connector_state *hdmi_state,
+				  const struct drm_display_mode *mode,
+				  unsigned int bpc)
+{
+	const struct drm_connector *connector = &hdmi_connector->base;
+	struct drm_device *dev = connector->dev;
+
+	if (drm_hdmi_connector_try_format_bpc(hdmi_connector, hdmi_state,
+					      mode, bpc, HDMI_COLORSPACE_RGB)) {
+		hdmi_state->output_format = HDMI_COLORSPACE_RGB;
+		return 0;
+	}
+
+	if (drm_hdmi_connector_try_format_bpc(hdmi_connector, hdmi_state,
+					      mode, bpc, HDMI_COLORSPACE_YUV422)) {
+		hdmi_state->output_format = HDMI_COLORSPACE_YUV422;
+		return 0;
+	}
+
+	drm_dbg(dev, "Failed. No Format Supported for that bpc count.\n");
+
+	return -EINVAL;
+}
+
+static int
+drm_hdmi_connector_compute_config(const struct drm_hdmi_connector *hdmi_connector,
+				  struct drm_hdmi_connector_state *hdmi_state,
+				  const struct drm_display_mode *mode)
+{
+	const struct drm_connector *connector = &hdmi_connector->base;
+	struct drm_connector_state *conn_state = &hdmi_state->base;
+	struct drm_device *dev = connector->dev;
+	unsigned int max_bpc = clamp_t(unsigned int,
+				       conn_state->max_bpc,
+				       8, hdmi_connector->max_bpc);
+	unsigned int bpc;
+	int ret;
+
+	for (bpc = max_bpc; bpc >= 8; bpc -= 2) {
+		drm_dbg(dev, "Trying with a %d bpc output\n", bpc);
+
+		ret = drm_hdmi_connector_compute_format(hdmi_connector,
+							hdmi_state,
+							mode, bpc);
+		if (ret)
+			continue;
+
+		hdmi_state->output_bpc = bpc;
+
+		drm_dbg(dev,
+			"Mode %ux%u @ %uHz: Found configuration: bpc: %u, fmt: %s, clock: %llu\n",
+			mode->hdisplay, mode->vdisplay, drm_mode_vrefresh(mode),
+			hdmi_state->output_bpc,
+			drm_hdmi_connector_get_output_format_name(hdmi_state->output_format),
+			hdmi_state->tmds_char_rate);
+
+		return 0;
+	}
+
+	return -EINVAL;
+}
+
 /**
  * drm_atomic_helper_hdmi_connector_atomic_check() - Helper to check HDMI connector atomic state
  * @connector: the parent connector this state refers to
@@ -357,11 +531,9 @@ int drm_atomic_helper_hdmi_connector_atomic_check(struct drm_connector *connecto
 		connector_state_get_adjusted_mode(new_state);
 	int ret;
 
-	ret = drm_hdmi_connector_compute_clock(hdmi_connector, new_hdmi_state,
-					       mode,
-					       new_hdmi_state->output_bpc,
-					       new_hdmi_state->output_format);
-	if (!ret)
+	ret = drm_hdmi_connector_compute_config(hdmi_connector, new_hdmi_state,
+						mode);
+	if (ret)
 		return ret;
 
 	if (old_hdmi_state->broadcast_rgb != new_hdmi_state->broadcast_rgb ||
