@@ -335,14 +335,12 @@ static int oom_evaluate_task(struct task_struct *task, void *arg)
 	 */
 	if (oom_task_origin(task)) {
 		points = LONG_MAX;
-		goto select;
+	} else {
+		points = oom_badness(task, oc->totalpages);
+		if (points == LONG_MIN || points < oc->chosen_points)
+			goto next;
 	}
 
-	points = oom_badness(task, oc->totalpages);
-	if (points == LONG_MIN || points < oc->chosen_points)
-		goto next;
-
-select:
 	if (oc->chosen)
 		put_task_struct(oc->chosen);
 	get_task_struct(task);
