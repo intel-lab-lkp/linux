@@ -51,7 +51,6 @@ struct iommu_group {
 	struct kobject kobj;
 	struct kobject *devices_kobj;
 	struct list_head devices;
-	struct xarray pasid_array;
 	struct mutex mutex;
 	void *iommu_data;
 	void (*iommu_data_release)(void *iommu_data);
@@ -309,6 +308,7 @@ static struct dev_iommu *dev_iommu_get(struct device *dev)
 		return NULL;
 
 	mutex_init(&param->lock);
+	xa_init(&param->pasid_array);
 	dev->iommu = param;
 	return param;
 }
@@ -909,7 +909,6 @@ struct iommu_group *iommu_group_alloc(void)
 	mutex_init(&group->mutex);
 	INIT_LIST_HEAD(&group->devices);
 	INIT_LIST_HEAD(&group->entry);
-	xa_init(&group->pasid_array);
 
 	ret = ida_alloc(&iommu_group_ida, GFP_KERNEL);
 	if (ret < 0) {
@@ -3124,9 +3123,15 @@ static bool iommu_is_default_domain(struct iommu_group *group)
  */
 static bool assert_pasid_dma_ownership(struct iommu_group *group)
 {
-	lockdep_assert_held(&group->mutex);
+	struct group_device *device;
 
-	return !WARN_ON(!xa_empty(&group->pasid_array));
+	lockdep_assert_held(&group->mutex);
+	for_each_group_device(group, device) {
+		if (WARN_ON(!xa_empty(&device->dev->iommu->pasid_array)))
+			return false;
+	}
+
+	return true;
 }
 
 /**
@@ -3360,33 +3365,6 @@ bool iommu_group_dma_owner_claimed(struct iommu_group *group)
 }
 EXPORT_SYMBOL_GPL(iommu_group_dma_owner_claimed);
 
-static int __iommu_set_group_pasid(struct iommu_domain *domain,
-				   struct iommu_group *group, ioasid_t pasid)
-{
-	struct group_device *device;
-	int ret = 0;
-
-	for_each_group_device(group, device) {
-		ret = domain->ops->set_dev_pasid(domain, device->dev, pasid);
-		if (ret)
-			break;
-	}
-
-	return ret;
-}
-
-static void __iommu_remove_group_pasid(struct iommu_group *group,
-				       ioasid_t pasid)
-{
-	struct group_device *device;
-	const struct iommu_ops *ops;
-
-	for_each_group_device(group, device) {
-		ops = dev_iommu_ops(device->dev);
-		ops->remove_dev_pasid(device->dev, pasid);
-	}
-}
-
 /*
  * iommu_attach_device_pasid() - Attach a domain to pasid of device
  * @domain: the iommu domain.
@@ -3400,6 +3378,7 @@ int iommu_attach_device_pasid(struct iommu_domain *domain,
 {
 	/* Caller must be a probed driver on dev */
 	struct iommu_group *group = dev->iommu_group;
+	struct dev_iommu *param = dev->iommu;
 	void *curr;
 	int ret;
 
@@ -3411,23 +3390,23 @@ int iommu_attach_device_pasid(struct iommu_domain *domain,
 
 	mutex_lock(&group->mutex);
 	if (list_count_nodes(&group->devices) != 1) {
-		ret = -EINVAL;
-		goto out_unlock;
+		mutex_unlock(&group->mutex);
+		return -EINVAL;
 	}
+	mutex_unlock(&group->mutex);
 
-	curr = xa_cmpxchg(&group->pasid_array, pasid, NULL, domain, GFP_KERNEL);
+	mutex_lock(&param->lock);
+	curr = xa_cmpxchg(&param->pasid_array, pasid, NULL, domain, GFP_KERNEL);
 	if (curr) {
 		ret = xa_err(curr) ? : -EBUSY;
 		goto out_unlock;
 	}
 
-	ret = __iommu_set_group_pasid(domain, group, pasid);
-	if (ret) {
-		__iommu_remove_group_pasid(group, pasid);
-		xa_erase(&group->pasid_array, pasid);
-	}
+	ret = domain->ops->set_dev_pasid(domain, dev, pasid);
+	if (ret)
+		xa_erase(&param->pasid_array, pasid);
 out_unlock:
-	mutex_unlock(&group->mutex);
+	mutex_unlock(&param->lock);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(iommu_attach_device_pasid);
@@ -3444,13 +3423,13 @@ EXPORT_SYMBOL_GPL(iommu_attach_device_pasid);
 void iommu_detach_device_pasid(struct iommu_domain *domain, struct device *dev,
 			       ioasid_t pasid)
 {
-	/* Caller must be a probed driver on dev */
-	struct iommu_group *group = dev->iommu_group;
+	const struct iommu_ops *ops = dev_iommu_ops(dev);
+	struct dev_iommu *param = dev->iommu;
 
-	mutex_lock(&group->mutex);
-	__iommu_remove_group_pasid(group, pasid);
-	WARN_ON(xa_erase(&group->pasid_array, pasid) != domain);
-	mutex_unlock(&group->mutex);
+	mutex_lock(&param->lock);
+	ops->remove_dev_pasid(dev, pasid);
+	WARN_ON(xa_erase(&param->pasid_array, pasid) != domain);
+	mutex_unlock(&param->lock);
 }
 EXPORT_SYMBOL_GPL(iommu_detach_device_pasid);
 
@@ -3472,18 +3451,13 @@ struct iommu_domain *iommu_get_domain_for_dev_pasid(struct device *dev,
 						    ioasid_t pasid,
 						    unsigned int type)
 {
-	/* Caller must be a probed driver on dev */
-	struct iommu_group *group = dev->iommu_group;
 	struct iommu_domain *domain;
 
-	if (!group)
-		return NULL;
-
-	xa_lock(&group->pasid_array);
-	domain = xa_load(&group->pasid_array, pasid);
+	xa_lock(&dev->iommu->pasid_array);
+	domain = xa_load(&dev->iommu->pasid_array, pasid);
 	if (type && domain && domain->type != type)
 		domain = ERR_PTR(-EBUSY);
-	xa_unlock(&group->pasid_array);
+	xa_unlock(&dev->iommu->pasid_array);
 
 	return domain;
 }

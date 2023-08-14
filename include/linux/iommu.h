@@ -408,6 +408,7 @@ struct iommu_fault_param {
  * @iopf_param:	 I/O Page Fault queue and data
  * @fwspec:	 IOMMU fwspec data
  * @iommu_dev:	 IOMMU device this device is linked to
+ * @pasid_array: pasid-indexed array of domains attached to pasid
  * @priv:	 IOMMU Driver private data
  * @max_pasids:  number of PASIDs this device can consume
  * @attach_deferred: the dma domain attachment is deferred
@@ -422,6 +423,7 @@ struct dev_iommu {
 	struct iopf_device_param	*iopf_param;
 	struct iommu_fwspec		*fwspec;
 	struct iommu_device		*iommu_dev;
+	struct xarray			pasid_array;
 	void				*priv;
 	u32				max_pasids;
 	u32				attach_deferred:1;
