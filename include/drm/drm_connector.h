@@ -2076,6 +2076,11 @@ struct drm_hdmi_connector_state {
 	struct drm_connector_state base;
 
 	/**
+	 * @output_bpc: Bits per character to output.
+	 */
+	unsigned int output_bpc;
+
+	/**
 	 * @broadcast_rgb: Connector property to pass the Broadcast RGB
 	 * selection value.
 	 */
@@ -2122,6 +2127,11 @@ struct drm_hdmi_connector {
 	struct drm_connector base;
 
 	/**
+	 * @max_bpc: Maximum bits per character the connector supports.
+	 */
+	unsigned int max_bpc;
+
+	/**
 	 * @broadcast_rgb_property: Connector property to set the
 	 * Broadcast RGB selection to output with.
 	 */
@@ -2135,7 +2145,8 @@ int drmm_hdmi_connector_init(struct drm_device *dev,
 			     struct drm_hdmi_connector *hdmi_connector,
 			     const struct drm_connector_funcs *funcs,
 			     int connector_type,
-			     struct i2c_adapter *ddc);
+			     struct i2c_adapter *ddc,
+			     unsigned int max_bpc);
 
 /**
  * struct drm_tile_group - Tile group metadata

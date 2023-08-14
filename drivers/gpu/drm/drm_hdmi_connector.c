@@ -26,6 +26,9 @@ void __drm_atomic_helper_hdmi_connector_reset(struct drm_hdmi_connector *hdmi_co
 
 	__drm_atomic_helper_connector_reset(connector, &new_hdmi_state->base);
 
+	new_hdmi_state->base.max_bpc = 8;
+	new_hdmi_state->base.max_requested_bpc = 8;
+	new_hdmi_state->output_bpc = 8;
 	new_hdmi_state->broadcast_rgb = DRM_HDMI_BROADCAST_RGB_AUTO;
 }
 EXPORT_SYMBOL(__drm_atomic_helper_hdmi_connector_reset);
@@ -78,6 +81,7 @@ __drm_atomic_helper_hdmi_connector_duplicate_state(struct drm_hdmi_connector *hd
 	struct drm_hdmi_connector_state *old_hdmi_state =
 		connector_state_to_hdmi_connector_state(old_state);
 
+	new_hdmi_state->output_bpc = old_hdmi_state->output_bpc;
 	new_hdmi_state->broadcast_rgb = old_hdmi_state->broadcast_rgb;
 	__drm_atomic_helper_connector_duplicate_state(connector, &new_hdmi_state->base);
 }
@@ -254,7 +258,8 @@ int drm_atomic_helper_hdmi_connector_atomic_check(struct drm_connector *connecto
 	struct drm_hdmi_connector_state *new_hdmi_state =
 		connector_state_to_hdmi_connector_state(new_state);
 
-	if (old_hdmi_state->broadcast_rgb != new_hdmi_state->broadcast_rgb) {
+	if (old_hdmi_state->broadcast_rgb != new_hdmi_state->broadcast_rgb ||
+	    old_hdmi_state->output_bpc != new_hdmi_state->output_bpc) {
 		struct drm_crtc *crtc = new_state->crtc;
 		struct drm_crtc_state *crtc_state;
 
@@ -339,6 +344,7 @@ void drm_atomic_helper_hdmi_connector_print_state(struct drm_printer *p,
 
 	drm_printf(p, "\tbroadcast_rgb=%s\n",
 		   drm_hdmi_connector_get_broadcast_rgb_name(hdmi_state->broadcast_rgb));
+	drm_printf(p, "\toutput_bpc=%u\n", hdmi_state->output_bpc);
 }
 EXPORT_SYMBOL(drm_atomic_helper_hdmi_connector_print_state);
 
@@ -348,6 +354,7 @@ EXPORT_SYMBOL(drm_atomic_helper_hdmi_connector_print_state);
  * @hdmi_connector: A pointer to the HDMI connector to init
  * @connector_type: user visible type of the connector
  * @ddc: optional pointer to the associated ddc adapter
+ * @max_bpc: Maximum bits per char the HDMI connector supports
  *
  * Initialises a preallocated HDMI connector. Connectors can be
  * subclassed as part of driver connector objects.
@@ -364,7 +371,8 @@ int drmm_hdmi_connector_init(struct drm_device *dev,
 			     struct drm_hdmi_connector *hdmi_connector,
 			     const struct drm_connector_funcs *funcs,
 			     int connector_type,
-			     struct i2c_adapter *ddc)
+			     struct i2c_adapter *ddc,
+			     unsigned int max_bpc)
 {
 	struct drm_connector *connector = &hdmi_connector->base;
 	struct drm_property *prop;
@@ -392,6 +400,15 @@ int drmm_hdmi_connector_init(struct drm_device *dev,
 
 	drm_object_attach_property(&connector->base, prop,
 				   DRM_HDMI_BROADCAST_RGB_AUTO);
+
+	if (max_bpc) {
+		if (!(max_bpc == 8 || max_bpc == 10 || max_bpc == 12))
+			return -EINVAL;
+
+		drm_connector_attach_hdr_output_metadata_property(connector);
+		drm_connector_attach_max_bpc_property(connector, 8, max_bpc);
+		hdmi_connector->max_bpc = max_bpc;
+	}
 
 	return 0;
 }
