@@ -1,0 +1,24 @@
+drm drm-fixes 2ccdd1b13c591d306f0401d98dedc4bdcd02b421
+	Linux 6.5-rc6
+drm-misc drm-misc-fixes 07dd476f6116966cb2006e25fdcf48f0715115ff
+	drm/shmem-helper: Reset vma->vm_ops before calling dma_buf_mmap()
+drm-intel drm-intel-fixes 3f68588270f47d06bbfd886fb7495a10dc9fa42b
+	drm/i915: fix display probe for IVB Q and IVB D GT2 server
+drm drm-next 2b9d7b6515220c30a596aba5633d675117f96500
+	Merge tag 'drm-intel-next-2023-08-10' of git://anongit.freedesktop.org/drm/drm-intel into drm-next
+drm-misc drm-misc-next-fixes 59bba51ec2a50e3dc5c3ee80f0a23207346303ff
+	drm/panel: Fine tune Starry-ili9882t panel HFP and HBP
+drm-intel drm-intel-next-fixes f6cf3883df471abbcf1553127681dc244c8ff8dd
+	drm/i915: use mock device info for creating mock device
+drm-misc drm-misc-next 4d49d87b3606369c6e29b9d051892ee1a6fc4e75
+	drm/rockchip: vop2: Add missing call to crtc reset helper
+drm-intel drm-intel-next 95c23e2085f28e2c763ca202fdc37a1392982c16
+	drm/i915/dp: Fix LT debug print in SDP CRC enable
+drm-intel drm-intel-gt-next 788568fad4015406fa84fc86cefbef7c470c7c1f
+	drm/i915/guc: Fix potential null pointer deref in GuC 'steal id' test
+drm-intel topic/core-for-CI c0ea2fa0491287dea97b384bec1b5a614408b8e3
+	drm/i915/gsc: define gsc fw
+drm-misc topic/i915-ttm 1e3944578b749449bd7fa6bf0bae4c3d3f5f1733
+	Merge tag 'amd-drm-next-5.16-2021-09-27' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm topic/nouveau-misc dfc4005f8c172eea359f9db08c3b2b0ff0153699
+	drm/nouveau/disp: move DAC load detection method
