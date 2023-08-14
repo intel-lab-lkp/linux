@@ -2111,6 +2111,10 @@ int drm_atomic_helper_hdmi_connector_atomic_check(struct drm_connector *connecto
 void drm_atomic_helper_hdmi_connector_print_state(struct drm_printer *p,
 						  const struct drm_connector_state *state);
 
+bool
+drm_atomic_helper_hdmi_connector_is_full_range(const struct drm_hdmi_connector *hdmi_connector,
+					       const struct drm_hdmi_connector_state *hdmi_state);
+
 struct drm_hdmi_connector {
 	/**
 	 * @base: Base Connector

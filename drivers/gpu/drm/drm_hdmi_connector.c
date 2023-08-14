@@ -4,6 +4,7 @@
 #include <drm/drm_atomic_state_helper.h>
 #include <drm/drm_connector.h>
 #include <drm/drm_crtc.h>
+#include <drm/drm_edid.h>
 #include <drm/drm_mode.h>
 #include <drm/drm_print.h>
 
@@ -217,6 +218,15 @@ int drm_atomic_helper_hdmi_connector_set_property(struct drm_connector *connecto
 }
 EXPORT_SYMBOL(drm_atomic_helper_hdmi_connector_set_property);
 
+static const struct drm_display_mode *
+connector_state_get_adjusted_mode(const struct drm_connector_state *state)
+{
+	struct drm_crtc *crtc = state->crtc;
+	struct drm_crtc_state *crtc_state = crtc->state;
+
+	return &crtc_state->adjusted_mode;
+}
+
 /**
  * drm_atomic_helper_hdmi_connector_atomic_check() - Helper to check HDMI connector atomic state
  * @connector: the parent connector this state refers to
@@ -258,6 +268,37 @@ int drm_atomic_helper_hdmi_connector_atomic_check(struct drm_connector *connecto
 	return 0;
 }
 EXPORT_SYMBOL(drm_atomic_helper_hdmi_connector_atomic_check);
+
+/**
+ * drm_atomic_helper_hdmi_connector_is_full_range() - Checks whether a state uses Full-Range RGB
+ * @hdmi_connector: the HDMI connector this state refers to
+ * @hdmi_state: the HDMI connector state to check
+ *
+ * RETURNS:
+ * True if @hdmi_state requires a Full range RGB output, False otherwise
+ */
+bool
+drm_atomic_helper_hdmi_connector_is_full_range(const struct drm_hdmi_connector *hdmi_connector,
+					       const struct drm_hdmi_connector_state *hdmi_state)
+{
+	const struct drm_connector *connector = &hdmi_connector->base;
+	const struct drm_connector_state *conn_state = &hdmi_state->base;
+	const struct drm_display_mode *mode =
+		connector_state_get_adjusted_mode(conn_state);
+	const struct drm_display_info *display = &connector->display_info;
+
+	if (hdmi_state->broadcast_rgb == DRM_HDMI_BROADCAST_RGB_FULL)
+		return true;
+
+	if (hdmi_state->broadcast_rgb == DRM_HDMI_BROADCAST_RGB_LIMITED)
+		return false;
+
+	if (!display->is_hdmi)
+		return true;
+
+	return drm_default_rgb_quant_range(mode);
+}
+EXPORT_SYMBOL(drm_atomic_helper_hdmi_connector_is_full_range);
 
 static const struct drm_prop_enum_list broadcast_rgb_names[] = {
 	{ DRM_HDMI_BROADCAST_RGB_AUTO, "Automatic" },
