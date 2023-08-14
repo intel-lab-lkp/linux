@@ -153,6 +153,7 @@ static void panic_on_rcu_stall(void)
  */
 void rcu_cpu_stall_reset(void)
 {
+	do_update_jiffies_64(ktime_get());
 	WRITE_ONCE(rcu_state.jiffies_stall,
 		   jiffies + rcu_jiffies_till_stall_check());
 }
