@@ -319,7 +319,7 @@ static int rvin_group_parse_of(struct rvin_dev *vin, unsigned int port,
 		return 0;
 
 	fwnode = fwnode_graph_get_remote_endpoint(ep);
-	ret = v4l2_fwnode_endpoint_parse(ep, &vep);
+	ret = v4l2_fwnode_endpoint_parse(vin->dev, ep, &vep);
 	fwnode_handle_put(ep);
 	if (ret) {
 		vin_err(vin, "Failed to parse %pOF\n", to_of_node(fwnode));
@@ -664,7 +664,7 @@ static int rvin_parallel_parse_of(struct rvin_dev *vin)
 		return 0;
 
 	fwnode = fwnode_graph_get_remote_endpoint(ep);
-	ret = v4l2_fwnode_endpoint_parse(ep, &vep);
+	ret = v4l2_fwnode_endpoint_parse(vin->dev, ep, &vep);
 	fwnode_handle_put(ep);
 	if (ret) {
 		vin_err(vin, "Failed to parse %pOF\n", to_of_node(fwnode));

@@ -1849,7 +1849,7 @@ static int ov8858_parse_of(struct ov8858 *ov8858)
 		return -EINVAL;
 	}
 
-	ret = v4l2_fwnode_endpoint_parse(endpoint, &vep);
+	ret = v4l2_fwnode_endpoint_parse(dev, endpoint, &vep);
 	if (ret) {
 		dev_err(dev, "Failed to parse endpoint: %d\n", ret);
 		fwnode_handle_put(endpoint);

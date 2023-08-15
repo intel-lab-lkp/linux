@@ -511,7 +511,7 @@ sun8i_a83t_mipi_csi2_bridge_source_setup(struct sun8i_a83t_mipi_csi2_device *csi
 
 	endpoint->bus_type = V4L2_MBUS_CSI2_DPHY;
 
-	ret = v4l2_fwnode_endpoint_parse(handle, endpoint);
+	ret = v4l2_fwnode_endpoint_parse(dev, handle, endpoint);
 	if (ret)
 		goto complete;
 

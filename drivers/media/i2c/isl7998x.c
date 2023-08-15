@@ -1493,7 +1493,7 @@ static int isl7998x_probe(struct i2c_client *client)
 	if (!ep)
 		return dev_err_probe(dev, -EINVAL, "Missing endpoint node\n");
 
-	ret = v4l2_fwnode_endpoint_parse(ep, &endpoint);
+	ret = v4l2_fwnode_endpoint_parse(dev, ep, &endpoint);
 	fwnode_handle_put(ep);
 	if (ret)
 		return dev_err_probe(dev, ret, "Failed to parse endpoint\n");

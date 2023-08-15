@@ -1105,7 +1105,7 @@ static int rcsi2_parse_dt(struct rcar_csi2 *priv)
 		return -EINVAL;
 	}
 
-	ret = v4l2_fwnode_endpoint_parse(ep, &v4l2_ep);
+	ret = v4l2_fwnode_endpoint_parse(priv->dev, ep, &v4l2_ep);
 	if (ret) {
 		dev_err(priv->dev, "Could not parse v4l2 endpoint\n");
 		fwnode_handle_put(ep);

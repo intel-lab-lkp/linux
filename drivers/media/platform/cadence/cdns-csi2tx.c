@@ -504,7 +504,8 @@ static int csi2tx_check_lanes(struct csi2tx_priv *csi2tx)
 	if (!ep)
 		return -EINVAL;
 
-	ret = v4l2_fwnode_endpoint_parse(of_fwnode_handle(ep), &v4l2_ep);
+	ret = v4l2_fwnode_endpoint_parse(csi2tx->dev, of_fwnode_handle(ep),
+					 &v4l2_ep);
 	if (ret) {
 		dev_err(csi2tx->dev, "Could not parse v4l2 endpoint\n");
 		goto out;

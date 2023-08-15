@@ -976,7 +976,7 @@ static int og01a1b_check_hwcfg(struct device *dev)
 	if (!ep)
 		return -ENXIO;
 
-	ret = v4l2_fwnode_endpoint_alloc_parse(ep, &bus_cfg);
+	ret = v4l2_fwnode_endpoint_alloc_parse(dev, ep, &bus_cfg);
 	fwnode_handle_put(ep);
 	if (ret)
 		return ret;

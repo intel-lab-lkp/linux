@@ -1086,7 +1086,7 @@ static int imx415_parse_hw_config(struct imx415 *sensor)
 	if (!ep)
 		return -ENXIO;
 
-	ret = v4l2_fwnode_endpoint_alloc_parse(ep, &bus_cfg);
+	ret = v4l2_fwnode_endpoint_alloc_parse(sensor->dev, ep, &bus_cfg);
 	fwnode_handle_put(ep);
 	if (ret)
 		return ret;

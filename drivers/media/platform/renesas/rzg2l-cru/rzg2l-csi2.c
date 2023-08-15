@@ -658,7 +658,7 @@ static int rzg2l_csi2_parse_dt(struct rzg2l_csi2 *csi2)
 		return -EINVAL;
 	}
 
-	ret = v4l2_fwnode_endpoint_parse(ep, &v4l2_ep);
+	ret = v4l2_fwnode_endpoint_parse(csi2->dev, ep, &v4l2_ep);
 	if (ret) {
 		dev_err(csi2->dev, "Could not parse v4l2 endpoint\n");
 		fwnode_handle_put(ep);

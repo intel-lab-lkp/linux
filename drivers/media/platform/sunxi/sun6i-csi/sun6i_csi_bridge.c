@@ -720,7 +720,7 @@ static int sun6i_csi_bridge_source_setup(struct sun6i_csi_device *csi_dev,
 	if (!handle)
 		return -ENODEV;
 
-	ret = v4l2_fwnode_endpoint_parse(handle, endpoint);
+	ret = v4l2_fwnode_endpoint_parse(dev, handle, endpoint);
 	if (ret)
 		goto complete;
 

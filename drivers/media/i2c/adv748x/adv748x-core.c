@@ -616,7 +616,7 @@ static int adv748x_parse_csi2_lanes(struct adv748x_state *state,
 	if (port != ADV748X_PORT_TXA && port != ADV748X_PORT_TXB)
 		return 0;
 
-	ret = v4l2_fwnode_endpoint_parse(of_fwnode_handle(ep), &vep);
+	ret = v4l2_fwnode_endpoint_parse(state->dev, of_fwnode_handle(ep), &vep);
 	if (ret)
 		return ret;
 

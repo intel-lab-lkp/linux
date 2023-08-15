@@ -3209,7 +3209,8 @@ static int adv76xx_parse_dt(struct adv76xx_state *state)
 	if (!endpoint)
 		return -EINVAL;
 
-	ret = v4l2_fwnode_endpoint_parse(of_fwnode_handle(endpoint), &bus_cfg);
+	ret = v4l2_fwnode_endpoint_parse(&state->i2c_clients[ADV76XX_PAGE_IO]->dev,
+					 of_fwnode_handle(endpoint), &bus_cfg);
 	of_node_put(endpoint);
 	if (ret)
 		return ret;

@@ -1957,7 +1957,7 @@ static int dcmi_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
-	ret = v4l2_fwnode_endpoint_parse(of_fwnode_handle(np), &ep);
+	ret = v4l2_fwnode_endpoint_parse(&pdev->dev, of_fwnode_handle(np), &ep);
 	of_node_put(np);
 	if (ret) {
 		dev_err(&pdev->dev, "Could not parse the endpoint\n");

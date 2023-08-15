@@ -2338,7 +2338,7 @@ vpfe_get_pdata(struct vpfe_device *vpfe)
 			sdinfo->vpfe_param.if_type = VPFE_RAW_BAYER;
 		}
 
-		err = v4l2_fwnode_endpoint_parse(of_fwnode_handle(endpoint),
+		err = v4l2_fwnode_endpoint_parse(dev, of_fwnode_handle(endpoint),
 						 &bus_cfg);
 		if (err) {
 			dev_err(dev, "Could not parse the endpoint\n");

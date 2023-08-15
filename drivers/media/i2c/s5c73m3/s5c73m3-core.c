@@ -1561,7 +1561,7 @@ static int s5c73m3_get_dt_data(struct s5c73m3 *state)
 		return 0;
 	}
 
-	ret = v4l2_fwnode_endpoint_parse(of_fwnode_handle(node_ep), &ep);
+	ret = v4l2_fwnode_endpoint_parse(dev, of_fwnode_handle(node_ep), &ep);
 	of_node_put(node_ep);
 	if (ret)
 		return ret;

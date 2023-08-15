@@ -807,7 +807,7 @@ static int imx335_parse_hw_config(struct imx335 *imx335)
 	if (!ep)
 		return -ENXIO;
 
-	ret = v4l2_fwnode_endpoint_alloc_parse(ep, &bus_cfg);
+	ret = v4l2_fwnode_endpoint_alloc_parse(imx335->dev, ep, &bus_cfg);
 	fwnode_handle_put(ep);
 	if (ret)
 		return ret;

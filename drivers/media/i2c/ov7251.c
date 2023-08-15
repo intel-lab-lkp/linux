@@ -1467,7 +1467,7 @@ static int ov7251_check_hwcfg(struct ov7251 *ov7251)
 	if (!endpoint)
 		return -EPROBE_DEFER; /* could be provided by cio2-bridge */
 
-	ret = v4l2_fwnode_endpoint_alloc_parse(endpoint, &bus_cfg);
+	ret = v4l2_fwnode_endpoint_alloc_parse(ov7251->dev, endpoint, &bus_cfg);
 	fwnode_handle_put(endpoint);
 	if (ret)
 		return dev_err_probe(ov7251->dev, ret,

@@ -2987,7 +2987,7 @@ static int ov8865_probe(struct i2c_client *client)
 
 	sensor->endpoint.bus_type = V4L2_MBUS_CSI2_DPHY;
 
-	ret = v4l2_fwnode_endpoint_alloc_parse(handle, &sensor->endpoint);
+	ret = v4l2_fwnode_endpoint_alloc_parse(dev, handle, &sensor->endpoint);
 	fwnode_handle_put(handle);
 	if (ret) {
 		dev_err(dev, "failed to parse endpoint node\n");

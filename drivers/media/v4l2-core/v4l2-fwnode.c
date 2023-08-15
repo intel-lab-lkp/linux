@@ -493,7 +493,7 @@ static int __v4l2_fwnode_endpoint_parse(struct fwnode_handle *fwnode,
 	return 0;
 }
 
-int v4l2_fwnode_endpoint_parse(struct fwnode_handle *fwnode,
+int v4l2_fwnode_endpoint_parse(struct device *dev, struct fwnode_handle *fwnode,
 			       struct v4l2_fwnode_endpoint *vep)
 {
 	int ret;
@@ -516,7 +516,8 @@ void v4l2_fwnode_endpoint_free(struct v4l2_fwnode_endpoint *vep)
 }
 EXPORT_SYMBOL_GPL(v4l2_fwnode_endpoint_free);
 
-int v4l2_fwnode_endpoint_alloc_parse(struct fwnode_handle *fwnode,
+int v4l2_fwnode_endpoint_alloc_parse(struct device *dev,
+				     struct fwnode_handle *fwnode,
 				     struct v4l2_fwnode_endpoint *vep)
 {
 	int rval;
@@ -822,7 +823,7 @@ v4l2_async_nf_fwnode_parse_endpoint(struct device *dev,
 		goto out_err;
 	}
 
-	ret = v4l2_fwnode_endpoint_alloc_parse(endpoint, &vep);
+	ret = v4l2_fwnode_endpoint_alloc_parse(dev, endpoint, &vep);
 	if (ret) {
 		dev_warn(dev, "unable to parse V4L2 fwnode endpoint (%d)\n",
 			 ret);

@@ -3856,7 +3856,7 @@ static int ov5640_probe(struct i2c_client *client)
 		return -EINVAL;
 	}
 
-	ret = v4l2_fwnode_endpoint_parse(endpoint, &sensor->ep);
+	ret = v4l2_fwnode_endpoint_parse(dev, endpoint, &sensor->ep);
 	fwnode_handle_put(endpoint);
 	if (ret) {
 		dev_err(dev, "Could not parse endpoint\n");

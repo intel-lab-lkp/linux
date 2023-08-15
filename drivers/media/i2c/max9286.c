@@ -1487,7 +1487,7 @@ static int max9286_parse_dt(struct max9286_priv *priv)
 			int ret;
 
 			ret = v4l2_fwnode_endpoint_parse(
-					of_fwnode_handle(node), &vep);
+					dev, of_fwnode_handle(node), &vep);
 			if (ret) {
 				of_node_put(node);
 				return ret;

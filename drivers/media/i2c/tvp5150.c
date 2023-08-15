@@ -2076,7 +2076,7 @@ static int tvp5150_parse_dt(struct tvp5150 *decoder, struct device_node *np)
 		dev_err(dev, "Error no output endpoint available\n");
 		goto err_free;
 	}
-	ret = v4l2_fwnode_endpoint_parse(of_fwnode_handle(ep_np), &bus_cfg);
+	ret = v4l2_fwnode_endpoint_parse(dev, of_fwnode_handle(ep_np), &bus_cfg);
 	of_node_put(ep_np);
 	if (ret)
 		goto err_free;

@@ -599,7 +599,7 @@ static int imx8mq_mipi_csi_async_register(struct csi_state *state)
 	if (!ep)
 		return -ENOTCONN;
 
-	ret = v4l2_fwnode_endpoint_parse(ep, &vep);
+	ret = v4l2_fwnode_endpoint_parse(state->dev, ep, &vep);
 	if (ret)
 		goto err_parse;
 

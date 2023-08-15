@@ -892,7 +892,8 @@ static int mipid02_parse_rx_ep(struct mipid02_dev *bridge)
 		goto error;
 	}
 
-	ret = v4l2_fwnode_endpoint_parse(of_fwnode_handle(ep_node), &ep);
+	ret = v4l2_fwnode_endpoint_parse(&client->dev, of_fwnode_handle(ep_node),
+					 &ep);
 	if (ret) {
 		dev_err(&client->dev, "Could not parse v4l2 endpoint %d\n",
 			ret);
@@ -953,7 +954,8 @@ static int mipid02_parse_tx_ep(struct mipid02_dev *bridge)
 		goto error;
 	}
 
-	ret = v4l2_fwnode_endpoint_parse(of_fwnode_handle(ep_node), &ep);
+	ret = v4l2_fwnode_endpoint_parse(&client->dev, of_fwnode_handle(ep_node),
+					 &ep);
 	if (ret) {
 		dev_err(&client->dev, "Could not parse v4l2 endpoint\n");
 		goto error_of_node_put;

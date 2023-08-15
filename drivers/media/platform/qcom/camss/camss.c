@@ -1039,7 +1039,7 @@ static int camss_of_parse_endpoint_node(struct device *dev,
 	struct v4l2_fwnode_endpoint vep = { { 0 } };
 	unsigned int i;
 
-	v4l2_fwnode_endpoint_parse(of_fwnode_handle(node), &vep);
+	v4l2_fwnode_endpoint_parse(dev, of_fwnode_handle(node), &vep);
 
 	csd->interface.csiphy_id = vep.base.port;
 

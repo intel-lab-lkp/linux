@@ -1391,11 +1391,12 @@ static int ov772x_parse_dt(struct i2c_client *client,
 	 * time. v4l2_fwnode_endpoint_alloc_parse() will not fail if
 	 * 'bus-type' is not specified.
 	 */
-	ret = v4l2_fwnode_endpoint_alloc_parse(ep, &bus_cfg);
+	ret = v4l2_fwnode_endpoint_alloc_parse(&client->dev, ep, &bus_cfg);
 	if (ret) {
 		bus_cfg = (struct v4l2_fwnode_endpoint)
 			  { .bus_type = V4L2_MBUS_BT656 };
-		ret = v4l2_fwnode_endpoint_alloc_parse(ep, &bus_cfg);
+		ret = v4l2_fwnode_endpoint_alloc_parse(&client->dev, ep,
+						       &bus_cfg);
 		if (ret)
 			goto error_fwnode_put;
 	}

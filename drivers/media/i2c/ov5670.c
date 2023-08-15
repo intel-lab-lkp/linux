@@ -2726,7 +2726,8 @@ static int ov5670_probe(struct i2c_client *client)
 	ov5670->endpoint.bus_type = V4L2_MBUS_CSI2_DPHY;
 	ov5670->endpoint.bus.mipi_csi2.num_data_lanes = 2;
 
-	ret = v4l2_fwnode_endpoint_alloc_parse(handle, &ov5670->endpoint);
+	ret = v4l2_fwnode_endpoint_alloc_parse(&client->dev, handle,
+					       &ov5670->endpoint);
 	fwnode_handle_put(handle);
 	if (ret)
 		return dev_err_probe(&client->dev, ret, "Endpoint parse failed\n");

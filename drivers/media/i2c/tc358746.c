@@ -1316,7 +1316,7 @@ tc358746_init_output_port(struct tc358746 *tc358746, unsigned long refclk)
 	/* Currently we only support 'parallel in' -> 'csi out' */
 	vep = &tc358746->csi_vep;
 	vep->bus_type = V4L2_MBUS_CSI2_DPHY;
-	err = v4l2_fwnode_endpoint_alloc_parse(ep, vep);
+	err = v4l2_fwnode_endpoint_alloc_parse(dev, ep, vep);
 	fwnode_handle_put(ep);
 	if (err) {
 		dev_err(dev, "Failed to parse source endpoint\n");
@@ -1454,7 +1454,7 @@ static int tc358746_async_register(struct tc358746 *tc358746)
 	if (!ep)
 		return -ENOTCONN;
 
-	err = v4l2_fwnode_endpoint_parse(ep, &vep);
+	err = v4l2_fwnode_endpoint_parse(tc358746->sd.dev, ep, &vep);
 	if (err) {
 		fwnode_handle_put(ep);
 		return err;

@@ -3206,7 +3206,7 @@ static int ccs_get_hwconfig(struct ccs_sensor *sensor, struct device *dev)
 	 * Note that we do need to rely on detecting the bus type between CSI-2
 	 * D-PHY and CCP2 as the old bindings did not require it.
 	 */
-	rval = v4l2_fwnode_endpoint_alloc_parse(ep, &bus_cfg);
+	rval = v4l2_fwnode_endpoint_alloc_parse(dev, ep, &bus_cfg);
 	if (rval)
 		goto out_err;
 

@@ -2003,7 +2003,7 @@ static int hi846_parse_dt(struct hi846 *hi846, struct device *dev)
 		return -ENXIO;
 	}
 
-	ret = v4l2_fwnode_endpoint_alloc_parse(ep, &bus_cfg);
+	ret = v4l2_fwnode_endpoint_alloc_parse(dev, ep, &bus_cfg);
 	fwnode_handle_put(ep);
 	if (ret) {
 		dev_err(dev, "failed to parse endpoint node: %d\n", ret);

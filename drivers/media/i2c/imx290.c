@@ -1535,7 +1535,7 @@ static int imx290_parse_dt(struct imx290 *imx290)
 		return -EINVAL;
 	}
 
-	ret = v4l2_fwnode_endpoint_alloc_parse(endpoint, &ep);
+	ret = v4l2_fwnode_endpoint_alloc_parse(imx290->dev, endpoint, &ep);
 	fwnode_handle_put(endpoint);
 	if (ret == -ENXIO) {
 		dev_err(imx290->dev, "Unsupported bus type, should be CSI2\n");

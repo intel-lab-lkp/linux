@@ -539,7 +539,8 @@ static int cal_camerarx_parse_dt(struct cal_camerarx *phy)
 	}
 
 	endpoint->bus_type = V4L2_MBUS_CSI2_DPHY;
-	ret = v4l2_fwnode_endpoint_parse(of_fwnode_handle(ep_node), endpoint);
+	ret = v4l2_fwnode_endpoint_parse(phy->cal->dev, of_fwnode_handle(ep_node),
+					 endpoint);
 	if (ret < 0) {
 		phy_err(phy, "Failed to parse endpoint\n");
 		goto done;

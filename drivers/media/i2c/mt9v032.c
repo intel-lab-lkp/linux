@@ -1011,7 +1011,8 @@ mt9v032_get_pdata(struct i2c_client *client)
 	if (!np)
 		return NULL;
 
-	if (v4l2_fwnode_endpoint_parse(of_fwnode_handle(np), &endpoint) < 0)
+	if (v4l2_fwnode_endpoint_parse(&client->dev, of_fwnode_handle(np),
+				       &endpoint) < 0)
 		goto done;
 
 	pdata = devm_kzalloc(&client->dev, sizeof(*pdata), GFP_KERNEL);

@@ -2311,7 +2311,8 @@ static int tda1997x_parse_dt(struct tda1997x_state *state)
 	if (!ep)
 		return -EINVAL;
 
-	ret = v4l2_fwnode_endpoint_parse(of_fwnode_handle(ep), &bus_cfg);
+	ret = v4l2_fwnode_endpoint_parse(&state->client->dev, of_fwnode_handle(ep),
+					 &bus_cfg);
 	if (ret) {
 		of_node_put(ep);
 		return ret;

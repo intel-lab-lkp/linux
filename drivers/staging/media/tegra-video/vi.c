@@ -1289,7 +1289,7 @@ static int tegra_vi_channels_alloc(struct tegra_vi *vi)
 
 		ep = of_graph_get_endpoint_by_regs(parent, 0, 0);
 		of_node_put(parent);
-		ret = v4l2_fwnode_endpoint_parse(of_fwnode_handle(ep),
+		ret = v4l2_fwnode_endpoint_parse(vi->dev, of_fwnode_handle(ep),
 						 &v4l2_ep);
 		of_node_put(ep);
 		if (ret)

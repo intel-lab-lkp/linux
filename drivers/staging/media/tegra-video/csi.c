@@ -548,7 +548,7 @@ static int tegra_csi_channels_alloc(struct tegra_csi *csi)
 			continue;
 
 		fwh = of_fwnode_handle(ep);
-		ret = v4l2_fwnode_endpoint_parse(fwh, &v4l2_ep);
+		ret = v4l2_fwnode_endpoint_parse(csi->dev, fwh, &v4l2_ep);
 		of_node_put(ep);
 		if (ret) {
 			dev_err(csi->dev,

@@ -1233,7 +1233,7 @@ static int mt9m111_probe_fw(struct i2c_client *client, struct mt9m111 *mt9m111)
 	if (!np)
 		return -EINVAL;
 
-	ret = v4l2_fwnode_endpoint_parse(np, &bus_cfg);
+	ret = v4l2_fwnode_endpoint_parse(&client->dev, np, &bus_cfg);
 	if (ret)
 		goto out_put_fw;
 

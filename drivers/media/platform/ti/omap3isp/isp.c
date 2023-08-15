@@ -2165,7 +2165,7 @@ static int isp_parse_of_endpoints(struct isp_device *isp)
 
 		dev_dbg(isp->dev, "parsing parallel interface\n");
 
-		ret = v4l2_fwnode_endpoint_parse(ep, &vep);
+		ret = v4l2_fwnode_endpoint_parse(isp->dev, ep, &vep);
 
 		if (!ret) {
 			isd = v4l2_async_nf_add_fwnode_remote(&isp->notifier,
@@ -2194,16 +2194,16 @@ static int isp_parse_of_endpoints(struct isp_device *isp)
 		dev_dbg(isp->dev, "parsing serial interface %u, node %pOF\n", i,
 			to_of_node(ep));
 
-		ret = v4l2_fwnode_endpoint_parse(ep, &vep);
+		ret = v4l2_fwnode_endpoint_parse(isp->dev, ep, &vep);
 		if (ret == -ENXIO) {
 			vep = (struct v4l2_fwnode_endpoint)
 				{ .bus_type = V4L2_MBUS_CSI1 };
-			ret = v4l2_fwnode_endpoint_parse(ep, &vep);
+			ret = v4l2_fwnode_endpoint_parse(isp->dev, ep, &vep);
 
 			if (ret == -ENXIO) {
 				vep = (struct v4l2_fwnode_endpoint)
 					{ .bus_type = V4L2_MBUS_CCP2 };
-				ret = v4l2_fwnode_endpoint_parse(ep, &vep);
+				ret = v4l2_fwnode_endpoint_parse(isp->dev, ep, &vep);
 			}
 		}
 

@@ -1842,7 +1842,7 @@ static int s5k5baf_parse_device_node(struct s5k5baf *state, struct device *dev)
 		return -EINVAL;
 	}
 
-	ret = v4l2_fwnode_endpoint_parse(of_fwnode_handle(node_ep), &ep);
+	ret = v4l2_fwnode_endpoint_parse(dev, of_fwnode_handle(node_ep), &ep);
 	of_node_put(node_ep);
 	if (ret)
 		return ret;

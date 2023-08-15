@@ -923,7 +923,7 @@ static int xcsi2rxss_parse_of(struct xcsi2rxss_state *xcsi2rxss)
 		return -EINVAL;
 	}
 
-	ret = v4l2_fwnode_endpoint_parse(ep, &vep);
+	ret = v4l2_fwnode_endpoint_parse(dev, ep, &vep);
 	fwnode_handle_put(ep);
 	if (ret) {
 		dev_err(dev, "error parsing sink port");

@@ -405,7 +405,8 @@ static int fimc_md_parse_one_endpoint(struct fimc_md *fmd,
 	struct v4l2_fwnode_endpoint endpoint = { .bus_type = 0 };
 	int ret;
 
-	ret = v4l2_fwnode_endpoint_parse(of_fwnode_handle(ep), &endpoint);
+	ret = v4l2_fwnode_endpoint_parse(&fmd->pdev->dev, of_fwnode_handle(ep),
+					 &endpoint);
 	if (ret) {
 		of_node_put(ep);
 		return ret;

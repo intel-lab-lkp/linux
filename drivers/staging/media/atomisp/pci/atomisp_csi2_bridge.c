@@ -840,7 +840,7 @@ int atomisp_csi2_bridge_parse_firmware(struct atomisp_device *isp)
 		if (!ep)
 			continue;
 
-		ret = v4l2_fwnode_endpoint_parse(ep, &vep);
+		ret = v4l2_fwnode_endpoint_parse(isp->dev, ep, &vep);
 		if (ret)
 			goto err_parse;
 

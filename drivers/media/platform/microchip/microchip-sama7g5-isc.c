@@ -353,7 +353,7 @@ static int xisc_parse_dt(struct device *dev, struct isc_device *isc)
 		if (!epn)
 			return 0;
 
-		ret = v4l2_fwnode_endpoint_parse(of_fwnode_handle(epn),
+		ret = v4l2_fwnode_endpoint_parse(dev, of_fwnode_handle(epn),
 						 &v4l2_epn);
 		if (ret) {
 			ret = -EINVAL;

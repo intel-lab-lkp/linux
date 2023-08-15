@@ -353,7 +353,7 @@ static int max96712_parse_dt(struct max96712_priv *priv)
 		return -EINVAL;
 	}
 
-	ret = v4l2_fwnode_endpoint_parse(ep, &v4l2_ep);
+	ret = v4l2_fwnode_endpoint_parse(&priv->client->dev, ep, &v4l2_ep);
 	fwnode_handle_put(ep);
 	if (ret) {
 		dev_err(&priv->client->dev, "Could not parse v4l2 endpoint\n");

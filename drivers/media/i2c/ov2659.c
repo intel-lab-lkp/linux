@@ -1402,7 +1402,8 @@ ov2659_get_pdata(struct i2c_client *client)
 	if (!endpoint)
 		return NULL;
 
-	ret = v4l2_fwnode_endpoint_alloc_parse(of_fwnode_handle(endpoint),
+	ret = v4l2_fwnode_endpoint_alloc_parse(&client->dev,
+					       of_fwnode_handle(endpoint),
 					       &bus_cfg);
 	if (ret) {
 		pdata = NULL;

@@ -1833,7 +1833,7 @@ static int ov7670_parse_dt(struct device *dev,
 	if (!ep)
 		return -EINVAL;
 
-	ret = v4l2_fwnode_endpoint_parse(ep, &bus_cfg);
+	ret = v4l2_fwnode_endpoint_parse(dev, ep, &bus_cfg);
 	fwnode_handle_put(ep);
 	if (ret)
 		return ret;

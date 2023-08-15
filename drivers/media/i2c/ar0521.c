@@ -1071,7 +1071,7 @@ static int ar0521_probe(struct i2c_client *client)
 		return -EINVAL;
 	}
 
-	ret = v4l2_fwnode_endpoint_parse(endpoint, &ep);
+	ret = v4l2_fwnode_endpoint_parse(dev, endpoint, &ep);
 	fwnode_handle_put(endpoint);
 	if (ret) {
 		dev_err(dev, "could not parse endpoint\n");

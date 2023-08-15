@@ -1504,7 +1504,7 @@ static int vgxy61_tx_from_ep(struct vgxy61_dev *sensor,
 	unsigned int p, l, i;
 	int ret;
 
-	ret = v4l2_fwnode_endpoint_alloc_parse(handle, &ep);
+	ret = v4l2_fwnode_endpoint_alloc_parse(&client->dev, handle, &ep);
 	if (ret)
 		return -EINVAL;
 

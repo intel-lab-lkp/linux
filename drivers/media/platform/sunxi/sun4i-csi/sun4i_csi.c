@@ -129,7 +129,7 @@ static int sun4i_csi_notifier_init(struct sun4i_csi *csi)
 	if (!ep)
 		return -EINVAL;
 
-	ret = v4l2_fwnode_endpoint_parse(ep, &vep);
+	ret = v4l2_fwnode_endpoint_parse(csi->dev, ep, &vep);
 	if (ret)
 		goto out;
 

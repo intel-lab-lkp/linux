@@ -375,7 +375,7 @@ static int csi2rx_parse_dt(struct csi2rx_priv *csi2rx)
 		return -EINVAL;
 
 	fwh = of_fwnode_handle(ep);
-	ret = v4l2_fwnode_endpoint_parse(fwh, &v4l2_ep);
+	ret = v4l2_fwnode_endpoint_parse(csi2rx->dev, fwh, &v4l2_ep);
 	if (ret) {
 		dev_err(csi2rx->dev, "Could not parse v4l2 endpoint\n");
 		of_node_put(ep);

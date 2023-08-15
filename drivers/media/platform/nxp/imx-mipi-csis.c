@@ -1259,7 +1259,7 @@ static int mipi_csis_async_register(struct mipi_csis_device *csis)
 	if (!ep)
 		return -ENOTCONN;
 
-	ret = v4l2_fwnode_endpoint_parse(ep, &vep);
+	ret = v4l2_fwnode_endpoint_parse(csis->dev, ep, &vep);
 	if (ret)
 		goto err_parse;
 

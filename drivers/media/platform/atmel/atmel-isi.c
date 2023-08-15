@@ -837,7 +837,7 @@ static int atmel_isi_parse_dt(struct atmel_isi *isi,
 		return -EINVAL;
 	}
 
-	err = v4l2_fwnode_endpoint_parse(of_fwnode_handle(np), &ep);
+	err = v4l2_fwnode_endpoint_parse(&pdev->dev, of_fwnode_handle(np), &ep);
 	of_node_put(np);
 	if (err) {
 		dev_err(&pdev->dev, "Could not parse the endpoint\n");

@@ -227,7 +227,7 @@ static int rkisp1_subdev_notifier_register(struct rkisp1_device *rkisp1)
 		}
 
 		/* Parse the endpoint and validate the bus type. */
-		ret = v4l2_fwnode_endpoint_parse(ep, &vep);
+		ret = v4l2_fwnode_endpoint_parse(rkisp1->dev, ep, &vep);
 		if (ret) {
 			dev_err(rkisp1->dev, "failed to parse endpoint %pfw\n",
 				ep);

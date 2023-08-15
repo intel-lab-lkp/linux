@@ -570,7 +570,8 @@ static int csi2dc_of_parse(struct csi2dc_device *csi2dc,
 		return -EINVAL;
 	}
 
-	ret = v4l2_fwnode_endpoint_parse(input_fwnode, &input_endpoint);
+	ret = v4l2_fwnode_endpoint_parse(csi2dc->dev, input_fwnode,
+					 &input_endpoint);
 	if (ret) {
 		dev_err(csi2dc->dev, "endpoint not defined at %pOF\n", of_node);
 		goto csi2dc_of_parse_err;
@@ -596,7 +597,7 @@ static int csi2dc_of_parse(struct csi2dc_device *csi2dc,
 				(of_fwnode_handle(of_node), input_fwnode);
 
 	if (output_fwnode)
-		ret = v4l2_fwnode_endpoint_parse(output_fwnode,
+		ret = v4l2_fwnode_endpoint_parse(csi2dc->dev, output_fwnode,
 						 &output_endpoint);
 
 	fwnode_handle_put(output_fwnode);

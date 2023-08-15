@@ -463,7 +463,7 @@ static int sun6i_isp_proc_source_setup(struct sun6i_isp_device *isp_dev,
 	if (!handle)
 		return -ENODEV;
 
-	ret = v4l2_fwnode_endpoint_parse(handle, endpoint);
+	ret = v4l2_fwnode_endpoint_parse(dev, handle, endpoint);
 	if (ret)
 		goto complete;
 

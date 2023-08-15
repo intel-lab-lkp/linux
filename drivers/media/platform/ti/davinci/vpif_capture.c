@@ -1546,7 +1546,8 @@ vpif_capture_get_pdata(struct platform_device *pdev)
 		chan->inputs[i].input.std = V4L2_STD_ALL;
 		chan->inputs[i].input.capabilities = V4L2_IN_CAP_STD;
 
-		err = v4l2_fwnode_endpoint_parse(of_fwnode_handle(endpoint),
+		err = v4l2_fwnode_endpoint_parse(&pdev->dev,
+						 of_fwnode_handle(endpoint),
 						 &bus_cfg);
 		if (err) {
 			dev_err(&pdev->dev, "Could not parse the endpoint\n");

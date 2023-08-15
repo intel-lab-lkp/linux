@@ -735,7 +735,8 @@ static int s5pcsis_parse_dt(struct platform_device *pdev,
 		return -EINVAL;
 	}
 	/* Get port node and validate MIPI-CSI channel id. */
-	ret = v4l2_fwnode_endpoint_parse(of_fwnode_handle(node), &endpoint);
+	ret = v4l2_fwnode_endpoint_parse(&pdev->dev, of_fwnode_handle(node),
+					 &endpoint);
 	if (ret)
 		goto err;
 

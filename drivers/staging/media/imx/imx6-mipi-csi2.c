@@ -687,7 +687,7 @@ static int csi2_async_register(struct csi2_dev *csi2)
 	if (!ep)
 		return -ENOTCONN;
 
-	ret = v4l2_fwnode_endpoint_parse(ep, &vep);
+	ret = v4l2_fwnode_endpoint_parse(csi2->dev, ep, &vep);
 	if (ret)
 		goto err_parse;
 

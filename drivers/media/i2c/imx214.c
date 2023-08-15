@@ -886,7 +886,7 @@ static int imx214_parse_fwnode(struct device *dev)
 		return -EINVAL;
 	}
 
-	ret = v4l2_fwnode_endpoint_alloc_parse(endpoint, &bus_cfg);
+	ret = v4l2_fwnode_endpoint_alloc_parse(dev, endpoint, &bus_cfg);
 	if (ret) {
 		dev_err(dev, "parsing endpoint node failed\n");
 		goto done;

@@ -147,7 +147,7 @@ static int rzg2l_cru_mc_parse_of(struct rzg2l_cru_dev *cru)
 		return 0;
 
 	fwnode = fwnode_graph_get_remote_endpoint(ep);
-	ret = v4l2_fwnode_endpoint_parse(ep, &vep);
+	ret = v4l2_fwnode_endpoint_parse(cru->dev, ep, &vep);
 	fwnode_handle_put(ep);
 	if (ret) {
 		dev_err(cru->dev, "Failed to parse %pOF\n", to_of_node(fwnode));

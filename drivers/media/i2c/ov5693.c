@@ -1363,7 +1363,7 @@ static int ov5693_check_hwcfg(struct ov5693_device *ov5693)
 	if (!endpoint)
 		return -EPROBE_DEFER; /* Could be provided by cio2-bridge */
 
-	ret = v4l2_fwnode_endpoint_alloc_parse(endpoint, &bus_cfg);
+	ret = v4l2_fwnode_endpoint_alloc_parse(ov5693->dev, endpoint, &bus_cfg);
 	fwnode_handle_put(endpoint);
 	if (ret)
 		return ret;

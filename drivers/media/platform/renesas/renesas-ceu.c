@@ -1559,7 +1559,8 @@ static int ceu_parse_dt(struct ceu_device *ceudev)
 			goto error_cleanup;
 		}
 
-		ret = v4l2_fwnode_endpoint_parse(of_fwnode_handle(ep), &fw_ep);
+		ret = v4l2_fwnode_endpoint_parse(ceudev->dev,
+						 of_fwnode_handle(ep), &fw_ep);
 		if (ret) {
 			dev_err(ceudev->dev,
 				"Unable to parse endpoint #%u: %d.\n", i, ret);

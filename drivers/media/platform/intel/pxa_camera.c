@@ -2213,7 +2213,7 @@ static int pxa_camera_pdata_from_dt(struct device *dev,
 		return -EINVAL;
 	}
 
-	err = v4l2_fwnode_endpoint_parse(of_fwnode_handle(np), &ep);
+	err = v4l2_fwnode_endpoint_parse(dev, of_fwnode_handle(np), &ep);
 	if (err) {
 		dev_err(dev, "could not parse endpoint\n");
 		goto out;

@@ -130,7 +130,7 @@ static int tegra_vip_channel_of_parse(struct tegra_vip *vip)
 	}
 
 	fwh = of_fwnode_handle(ep);
-	err = v4l2_fwnode_endpoint_parse(fwh, &v4l2_ep);
+	err = v4l2_fwnode_endpoint_parse(dev, fwh, &v4l2_ep);
 	of_node_put(ep);
 	if (err) {
 		dev_err_probe(dev, err, "%pOF: failed to parse v4l2 endpoint\n", np);

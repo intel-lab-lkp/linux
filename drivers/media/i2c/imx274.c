@@ -1971,7 +1971,7 @@ static int imx274_fwnode_parse(struct device *dev)
 		return -EINVAL;
 	}
 
-	ret = v4l2_fwnode_endpoint_parse(endpoint, &ep);
+	ret = v4l2_fwnode_endpoint_parse(dev, endpoint, &ep);
 	fwnode_handle_put(endpoint);
 	if (ret == -ENXIO) {
 		dev_err(dev, "Unsupported bus type, should be CSI2\n");

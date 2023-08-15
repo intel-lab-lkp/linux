@@ -186,6 +186,7 @@ enum v4l2_fwnode_bus_type {
 
 /**
  * v4l2_fwnode_endpoint_parse() - parse all fwnode node properties
+ * @dev: the device parsing the endpoint
  * @fwnode: pointer to the endpoint's fwnode handle
  * @vep: pointer to the V4L2 fwnode data structure
  *
@@ -216,6 +217,8 @@ enum v4l2_fwnode_bus_type {
  *
  * The function does not change the V4L2 fwnode endpoint state if it fails.
  *
+ * The @dev argument is used to provide context in kernel log message.
+ *
  * NOTE: This function does not parse "link-frequencies" property as its size is
  * not known in advance. Please use v4l2_fwnode_endpoint_alloc_parse() if you
  * need properties of variable size.
@@ -225,7 +228,8 @@ enum v4l2_fwnode_bus_type {
  *	   %-EINVAL on parsing failure
  *	   %-ENXIO on mismatching bus types
  */
-int v4l2_fwnode_endpoint_parse(struct fwnode_handle *fwnode,
+int v4l2_fwnode_endpoint_parse(struct device *dev,
+			       struct fwnode_handle *fwnode,
 			       struct v4l2_fwnode_endpoint *vep);
 
 /**
@@ -240,6 +244,7 @@ void v4l2_fwnode_endpoint_free(struct v4l2_fwnode_endpoint *vep);
 
 /**
  * v4l2_fwnode_endpoint_alloc_parse() - parse all fwnode node properties
+ * @dev: the device parsing the endpoint
  * @fwnode: pointer to the endpoint's fwnode handle
  * @vep: pointer to the V4L2 fwnode data structure
  *
@@ -270,6 +275,8 @@ void v4l2_fwnode_endpoint_free(struct v4l2_fwnode_endpoint *vep);
  *
  * The function does not change the V4L2 fwnode endpoint state if it fails.
  *
+ * The @dev argument is used to provide context in kernel log message.
+ *
  * v4l2_fwnode_endpoint_alloc_parse() has two important differences to
  * v4l2_fwnode_endpoint_parse():
  *
@@ -283,7 +290,8 @@ void v4l2_fwnode_endpoint_free(struct v4l2_fwnode_endpoint *vep);
  *	   %-EINVAL on parsing failure
  *	   %-ENXIO on mismatching bus types
  */
-int v4l2_fwnode_endpoint_alloc_parse(struct fwnode_handle *fwnode,
+int v4l2_fwnode_endpoint_alloc_parse(struct device *dev,
+				     struct fwnode_handle *fwnode,
 				     struct v4l2_fwnode_endpoint *vep);
 
 /**

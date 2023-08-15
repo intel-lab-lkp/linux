@@ -1470,7 +1470,7 @@ static int cio2_parse_firmware(struct cio2_device *cio2)
 		if (!ep)
 			continue;
 
-		ret = v4l2_fwnode_endpoint_parse(ep, &vep);
+		ret = v4l2_fwnode_endpoint_parse(dev, ep, &vep);
 		if (ret)
 			goto err_parse;
 

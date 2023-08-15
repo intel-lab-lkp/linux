@@ -1671,7 +1671,7 @@ static struct imx355_hwcfg *imx355_get_hwcfg(struct device *dev)
 	if (!ep)
 		return NULL;
 
-	ret = v4l2_fwnode_endpoint_alloc_parse(ep, &bus_cfg);
+	ret = v4l2_fwnode_endpoint_alloc_parse(dev, ep, &bus_cfg);
 	if (ret)
 		goto out_err;
 
