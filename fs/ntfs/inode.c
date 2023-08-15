@@ -1076,6 +1076,16 @@ skip_large_dir_stuff:
 					err = -EOPNOTSUPP;
 					goto unm_err_out;
 				}
+				if (NInoSparse(ni) && a->data.non_resident.compression_unit &&
+				a->data.non_resident.compression_unit !=
+				vol->sparse_compression_unit) {
+					ntfs_error(vi->i_sb,
+					"Found non-standard compression unit (%u instead of 0 or %d).  Cannot handle this.",
+					a->data.non_resident.compression_unit,
+					vol->sparse_compression_unit);
+					err = -EOPNOTSUPP;
+					goto unm_err_out;
+				}
 				if (a->data.non_resident.compression_unit) {
 					ni->itype.compressed.block_size = 1U <<
 							(a->data.non_resident.
