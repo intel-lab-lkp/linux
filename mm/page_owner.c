@@ -12,6 +12,7 @@
 #include <linux/seq_file.h>
 #include <linux/memcontrol.h>
 #include <linux/sched/clock.h>
+#include <linux/module.h>
 
 #include "internal.h"
 
@@ -32,6 +33,9 @@ struct page_owner {
 	char comm[TASK_COMM_LEN];
 	pid_t pid;
 	pid_t tgid;
+#ifdef CONFIG_MODULES
+	char module_name[MODULE_NAME_LEN];
+#endif
 };
 
 static bool page_owner_enabled __initdata;
@@ -134,6 +138,78 @@ static noinline depot_stack_handle_t save_stack(gfp_t flags)
 	return handle;
 }
 
+#ifdef CONFIG_MODULES
+static char *find_module_name(depot_stack_handle_t handle)
+{
+	int i;
+	struct module *mod = NULL;
+	unsigned long *entries;
+	unsigned int nr_entries;
+
+	nr_entries = stack_depot_fetch(handle, &entries);
+	for (i = 0; i < nr_entries; i++) {
+		if (core_kernel_text(entries[i]))
+			continue;
+
+		preempt_disable();
+		mod = __module_address(entries[i]);
+		preempt_enable();
+
+		if (!mod)
+			continue;
+
+		return mod->name;
+	}
+
+	return NULL;
+}
+
+static void set_module_name(struct page_owner *page_owner, char *mod_name)
+{
+	if (mod_name)
+		strscpy(page_owner->module_name, mod_name, MODULE_NAME_LEN);
+	else
+		memset(page_owner->module_name, 0, MODULE_NAME_LEN);
+}
+
+static int module_name_snprint(struct page_owner *page_owner,
+		char *kbuf, size_t size)
+{
+	if (strlen(page_owner->module_name) != 0)
+		return scnprintf(kbuf, size, "Page allocated by module %s\n",
+					page_owner->module_name);
+
+	return 0;
+}
+
+static inline void copy_module_name(struct page_owner *old_page_owner,
+		struct page_owner *new_page_owner)
+{
+	set_module_name(new_page_owner, old_page_owner->module_name);
+}
+#else
+static inline char *find_module_name(depot_stack_handle_t handle)
+{
+	return NULL;
+}
+
+static inline void set_module_name(struct page_owner *page_owner,
+		char *mod_name)
+{
+}
+
+static inline int module_name_snprint(struct page_owner *page_owner,
+		char *kbuf, size_t size)
+{
+	return 0;
+}
+
+static inline void copy_module_name(struct page_owner *old_page_owner,
+		struct page_owner *new_page_owner)
+{
+}
+#endif
+
 void __reset_page_owner(struct page *page, unsigned short order)
 {
 	int i;
@@ -141,17 +217,20 @@ void __reset_page_owner(struct page *page, unsigned short order)
 	depot_stack_handle_t handle;
 	struct page_owner *page_owner;
 	u64 free_ts_nsec = local_clock();
+	char *mod_name;
 
 	page_ext = page_ext_get(page);
 	if (unlikely(!page_ext))
 		return;
 
 	handle = save_stack(GFP_NOWAIT | __GFP_NOWARN);
+	mod_name = find_module_name(handle);
 	for (i = 0; i < (1 << order); i++) {
 		__clear_bit(PAGE_EXT_OWNER_ALLOCATED, &page_ext->flags);
 		page_owner = get_page_owner(page_ext);
 		page_owner->free_handle = handle;
 		page_owner->free_ts_nsec = free_ts_nsec;
+		set_module_name(page_owner, mod_name);
 		page_ext = page_ext_next(page_ext);
 	}
 	page_ext_put(page_ext);
@@ -164,6 +243,9 @@ static inline void __set_page_owner_handle(struct page_ext *page_ext,
 	struct page_owner *page_owner;
 	int i;
 	u64 ts_nsec = local_clock();
+	char *mod_name;
+
+	mod_name = find_module_name(handle);
 
 	for (i = 0; i < (1 << order); i++) {
 		page_owner = get_page_owner(page_ext);
@@ -176,6 +258,7 @@ static inline void __set_page_owner_handle(struct page_ext *page_ext,
 		page_owner->ts_nsec = ts_nsec;
 		strscpy(page_owner->comm, current->comm,
 			sizeof(page_owner->comm));
+		set_module_name(page_owner, mod_name);
 		__set_bit(PAGE_EXT_OWNER, &page_ext->flags);
 		__set_bit(PAGE_EXT_OWNER_ALLOCATED, &page_ext->flags);
 
@@ -256,6 +339,7 @@ void __folio_copy_owner(struct folio *newfolio, struct folio *old)
 	new_page_owner->ts_nsec = old_page_owner->ts_nsec;
 	new_page_owner->free_ts_nsec = old_page_owner->ts_nsec;
 	strcpy(new_page_owner->comm, old_page_owner->comm);
+	copy_module_name(new_page_owner, old_page_owner);
 
 	/*
 	 * We don't clear the bit on the old folio as it's going to be freed
@@ -424,6 +508,8 @@ print_page_owner(char __user *buf, size_t count, unsigned long pfn,
 			pfn >> pageblock_order,
 			migratetype_names[pageblock_mt],
 			&page->flags);
+
+	ret += module_name_snprint(page_owner, kbuf + ret, count - ret);
 
 	ret += stack_depot_snprint(handle, kbuf + ret, count - ret, 0);
 	if (ret >= count)
