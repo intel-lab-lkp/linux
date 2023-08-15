@@ -629,6 +629,11 @@ drm_atomic_helper_check_modeset(struct drm_device *dev,
 		WARN_ON(!drm_modeset_is_locked(&crtc->mutex));
 
 		if (!drm_mode_equal(&old_crtc_state->mode, &new_crtc_state->mode)) {
+			if (new_crtc_state->async_flip) {
+				drm_dbg_atomic(dev, "[CRTC:%d:%s] no mode changes allowed during async flip\n",
+					       crtc->base.id, crtc->name);
+				return -EINVAL;
+			}
 			drm_dbg_atomic(dev, "[CRTC:%d:%s] mode changed\n",
 				       crtc->base.id, crtc->name);
 			new_crtc_state->mode_changed = true;
