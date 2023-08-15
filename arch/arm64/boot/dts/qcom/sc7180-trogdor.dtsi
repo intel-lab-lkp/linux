@@ -435,6 +435,7 @@
 		spi-max-frequency = <37500000>;
 		spi-tx-bus-width = <2>;
 		spi-rx-bus-width = <2>;
+		disable-quad-mode;
 	};
 };
 
