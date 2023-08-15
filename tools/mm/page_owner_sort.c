@@ -27,6 +27,7 @@
 #define true 1
 #define false 0
 #define TASK_COMM_LEN 16
+#define MODULE_NAME_LEN (64 - sizeof(unsigned long))
 
 struct block_list {
 	char *txt;
@@ -40,12 +41,14 @@ struct block_list {
 	pid_t pid;
 	pid_t tgid;
 	int allocator;
+	char *module;
 };
 enum FILTER_BIT {
 	FILTER_UNRELEASE = 1<<1,
 	FILTER_PID = 1<<2,
 	FILTER_TGID = 1<<3,
-	FILTER_COMM = 1<<4
+	FILTER_COMM = 1<<4,
+	FILTER_MODULE = 1<<5
 };
 enum CULL_BIT {
 	CULL_UNRELEASE = 1<<1,
@@ -74,9 +77,11 @@ struct filter_condition {
 	pid_t *pids;
 	pid_t *tgids;
 	char **comms;
+	char **modules;
 	int pids_size;
 	int tgids_size;
 	int comms_size;
+	int modules_size;
 };
 struct sort_condition {
 	int (**cmps)(const void *, const void *);
@@ -91,6 +96,7 @@ static regex_t tgid_pattern;
 static regex_t comm_pattern;
 static regex_t ts_nsec_pattern;
 static regex_t free_ts_nsec_pattern;
+static regex_t module_pattern;
 static struct block_list *list;
 static int list_size;
 static int max_size;
@@ -100,16 +106,22 @@ static bool debug_on;
 
 static void set_single_cmp(int (*cmp)(const void *, const void *), int sign);
 
-int read_block(char *buf, char *ext_buf, int buf_size, FILE *fin)
+int read_block(char *buf, char *ext_buf, char *mod_buf, int buf_size, FILE *fin)
 {
 	char *curr = buf, *const buf_end = buf + buf_size;
+	char *mod_string = "Page allocated by module";
 
+	mod_buf[0] = '\0';
 	while (buf_end - curr > 1 && fgets(curr, buf_end - curr, fin)) {
 		if (*curr == '\n') { /* empty line */
 			return curr - buf;
 		}
 		if (!strncmp(curr, "PFN", 3)) {
 			strcpy(ext_buf, curr);
+			continue;
+		}
+		if (!strncmp(curr, mod_string, strlen(mod_string))) {
+			strcpy(mod_buf, curr);
 			continue;
 		}
 		curr += strlen(curr);
@@ -401,6 +413,16 @@ static char *get_comm(char *buf)
 	return comm_str;
 }
 
+static char *get_module(char *buf)
+{
+	char *mod = malloc(MODULE_NAME_LEN);
+
+	memset(mod, 0, MODULE_NAME_LEN);
+	search_pattern(&module_pattern, mod, buf);
+
+	return mod;
+}
+
 static int get_arg_type(const char *arg)
 {
 	if (!strcmp(arg, "pid") || !strcmp(arg, "p"))
@@ -469,7 +491,24 @@ static bool match_str_list(const char *str, char **list, int list_size)
 	return false;
 }
 
-static bool is_need(char *buf)
+static bool is_module_filtered(char *mod_buf)
+{
+	char *mod = get_module(mod_buf);
+	int ret = true;
+
+	if (!strlen(mod))
+		goto out;
+
+	if (fc.modules_size == 0 ||
+		match_str_list(mod, fc.modules, fc.modules_size))
+		ret = false;
+
+out:
+	free(mod);
+	return ret;
+}
+
+static bool is_need(char *buf, char *mod_buf)
 {
 	__u64 ts_nsec, free_ts_nsec;
 
@@ -484,6 +523,9 @@ static bool is_need(char *buf)
 		!match_num_list(get_tgid(buf), fc.tgids, fc.tgids_size))
 		return false;
 
+	if (filter & FILTER_MODULE && is_module_filtered(mod_buf))
+		return false;
+
 	char *comm = get_comm(buf);
 
 	if ((filter & FILTER_COMM) &&
@@ -495,7 +537,7 @@ static bool is_need(char *buf)
 	return true;
 }
 
-static bool add_list(char *buf, int len, char *ext_buf)
+static bool add_list(char *buf, int len, char *ext_buf, char *mod_buf)
 {
 	if (list_size != 0 &&
 		len == list[list_size-1].len &&
@@ -508,7 +550,7 @@ static bool add_list(char *buf, int len, char *ext_buf)
 		fprintf(stderr, "max_size too small??\n");
 		return false;
 	}
-	if (!is_need(buf))
+	if (!is_need(buf, mod_buf))
 		return true;
 	list[list_size].pid = get_pid(buf);
 	list[list_size].tgid = get_tgid(buf);
@@ -530,6 +572,7 @@ static bool add_list(char *buf, int len, char *ext_buf)
 	list[list_size].ts_nsec = get_ts_nsec(buf);
 	list[list_size].free_ts_nsec = get_free_ts_nsec(buf);
 	list[list_size].allocator = get_allocator(buf, ext_buf);
+	list[list_size].module = get_module(mod_buf);
 	list_size++;
 	if (list_size % 1000 == 0) {
 		printf("loaded %d\r", list_size);
@@ -681,19 +724,21 @@ static void usage(void)
 		"-a\t\tSort by memory allocate time.\n"
 		"-r\t\tSort by memory release time.\n"
 		"-f\t\tFilter out the information of blocks whose memory has been released.\n"
+		"-M\t\tFilter out the information of blocks whose memory isn't allocated by modules.\n"
 		"-d\t\tPrint debug information.\n"
 		"--pid <pidlist>\tSelect by pid. This selects the information of blocks whose process ID numbers appear in <pidlist>.\n"
 		"--tgid <tgidlist>\tSelect by tgid. This selects the information of blocks whose Thread Group ID numbers appear in <tgidlist>.\n"
 		"--name <cmdlist>\n\t\tSelect by command name. This selects the information of blocks whose command name appears in <cmdlist>.\n"
 		"--cull <rules>\tCull by user-defined rules.<rules> is a single argument in the form of a comma-separated list with some common fields predefined\n"
 		"--sort <order>\tSpecify sort order as: [+|-]key[,[+|-]key[,...]]\n"
+		"--module <modulelist>\tSelect by module. This selects the information of blocks whose memory is allocated by modules appear in <modulelist>.\n"
 	);
 }
 
 int main(int argc, char **argv)
 {
 	FILE *fin, *fout;
-	char *buf, *ext_buf;
+	char *buf, *ext_buf, *mod_buf;
 	int i, count;
 	struct stat st;
 	int opt;
@@ -703,10 +748,11 @@ int main(int argc, char **argv)
 		{ "name", required_argument, NULL, 3 },
 		{ "cull",  required_argument, NULL, 4 },
 		{ "sort",  required_argument, NULL, 5 },
+		{ "module", required_argument, NULL, 6 },
 		{ 0, 0, 0, 0},
 	};
 
-	while ((opt = getopt_long(argc, argv, "adfmnprstP", longopts, NULL)) != -1)
+	while ((opt = getopt_long(argc, argv, "adfmnprstPM", longopts, NULL)) != -1)
 		switch (opt) {
 		case 'a':
 			set_single_cmp(compare_ts, SORT_ASC);
@@ -737,6 +783,11 @@ int main(int argc, char **argv)
 			break;
 		case 'n':
 			set_single_cmp(compare_comm, SORT_ASC);
+			break;
+		case 'M':
+			filter = filter | FILTER_MODULE;
+			fc.modules_size = 0;
+			fc.modules = NULL;
 			break;
 		case 1:
 			filter = filter | FILTER_PID;
@@ -774,6 +825,10 @@ int main(int argc, char **argv)
 				exit(1);
 			}
 			break;
+		case 6:
+			filter = filter | FILTER_MODULE;
+			fc.modules = explode(',', optarg, &fc.modules_size);
+			break;
 		default:
 			usage();
 			exit(1);
@@ -804,6 +859,8 @@ int main(int argc, char **argv)
 		goto out_ts;
 	if (!check_regcomp(&free_ts_nsec_pattern, "free_ts\\s*([0-9]*)\\s*ns"))
 		goto out_free_ts;
+	if (!check_regcomp(&module_pattern, "Page allocated by module (.*)"))
+		goto out_module;
 
 	fstat(fileno(fin), &st);
 	max_size = st.st_size / 100; /* hack ... */
@@ -811,17 +868,18 @@ int main(int argc, char **argv)
 	list = malloc(max_size * sizeof(*list));
 	buf = malloc(BUF_SIZE);
 	ext_buf = malloc(BUF_SIZE);
-	if (!list || !buf || !ext_buf) {
+	mod_buf = malloc(BUF_SIZE);
+	if (!list || !buf || !ext_buf || !mod_buf) {
 		fprintf(stderr, "Out of memory\n");
 		goto out_free;
 	}
 
 	for ( ; ; ) {
-		int buf_len = read_block(buf, ext_buf, BUF_SIZE, fin);
+		int buf_len = read_block(buf, ext_buf, mod_buf, BUF_SIZE, fin);
 
 		if (buf_len < 0)
 			break;
-		if (!add_list(buf, buf_len, ext_buf))
+		if (!add_list(buf, buf_len, ext_buf, mod_buf))
 			goto out_free;
 	}
 
@@ -848,8 +906,10 @@ int main(int argc, char **argv)
 	for (i = 0; i < count; i++) {
 		if (cull == 0) {
 			fprintf(fout, "%d times, %d pages, ", list[i].num, list[i].page_num);
+			if (strlen(list[i].module) != 0)
+				fprintf(fout, "allocated by module %s, ", list[i].module);
 			print_allocator(fout, list[i].allocator);
-			fprintf(fout, ":\n%s\n", list[i].txt);
+			fprintf(fout, " :\n%s\n", list[i].txt);
 		}
 		else {
 			fprintf(fout, "%d times, %d pages",
@@ -880,6 +940,8 @@ out_free:
 		free(buf);
 	if (list)
 		free(list);
+out_module:
+	regfree(&module_pattern);
 out_free_ts:
 	regfree(&free_ts_nsec_pattern);
 out_ts:
