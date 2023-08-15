@@ -143,6 +143,7 @@ static unsigned long __init __mmu_mapin_ram(unsigned long base, unsigned long to
 {
 	int idx;
 
+	pr_info("%s:%d %lx %lx\n", __func__, __LINE__, base, top);
 	while ((idx = find_free_bat()) != -1 && base != top) {
 		unsigned int size = bat_block_size(base, top);
 
@@ -151,6 +152,7 @@ static unsigned long __init __mmu_mapin_ram(unsigned long base, unsigned long to
 		setbat(idx, PAGE_OFFSET + base, base, size, PAGE_KERNEL_X);
 		base += size;
 	}
+	pr_info("%s:%d %lx\n", __func__, __LINE__, base);
 
 	return base;
 }
@@ -164,6 +166,7 @@ unsigned long __init mmu_mapin_ram(unsigned long base, unsigned long top)
 	size = roundup_pow_of_two((unsigned long)_einittext - PAGE_OFFSET);
 	setibat(0, PAGE_OFFSET, 0, size, PAGE_KERNEL_X);
 
+	pr_info("%s:%d %lx %lx %lx %lx\n", __func__, __LINE__, base, top, border, size);
 	if (debug_pagealloc_enabled_or_kfence()) {
 		pr_debug_once("Read-Write memory mapped without BATs\n");
 		if (base >= border)

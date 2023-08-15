@@ -126,7 +126,9 @@ void __init btext_setup_display(int width, int height, int depth, int pitch,
 
 void __init btext_unmap(void)
 {
+	pr_info("%s:%d\n", __func__, __LINE__);
 	boot_text_mapped = 0;
+	pr_info("%s:%d\n", __func__, __LINE__);
 }
 
 /* Here's a small text engine to use during early boot

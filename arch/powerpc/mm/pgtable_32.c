@@ -104,6 +104,7 @@ static void __init __mapin_ram_chunk(unsigned long offset, unsigned long top)
 	phys_addr_t p;
 	bool ktext;
 
+	pr_info("%s:%d %lx %lx\n", __func__, __LINE__, offset, top);
 	s = offset;
 	v = PAGE_OFFSET + s;
 	p = memstart_addr + s;
@@ -113,6 +114,7 @@ static void __init __mapin_ram_chunk(unsigned long offset, unsigned long top)
 		v += PAGE_SIZE;
 		p += PAGE_SIZE;
 	}
+	pr_info("%s:%d\n", __func__, __LINE__);
 }
 
 void __init mapin_ram(void)
@@ -120,6 +122,7 @@ void __init mapin_ram(void)
 	phys_addr_t base, end;
 	u64 i;
 
+	pr_info("%s:%d\n", __func__, __LINE__);
 	for_each_mem_range(i, &base, &end) {
 		phys_addr_t top = min(end, total_lowmem);
 
@@ -128,6 +131,7 @@ void __init mapin_ram(void)
 		base = mmu_mapin_ram(base, top);
 		__mapin_ram_chunk(base, top);
 	}
+	pr_info("%s:%d\n", __func__, __LINE__);
 }
 
 void mark_initmem_nx(void)

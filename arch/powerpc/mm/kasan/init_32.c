@@ -126,12 +126,15 @@ void __init kasan_mmu_init(void)
 {
 	int ret;
 
+	pr_info("%s:%d\n", __func__, __LINE__);
 	if (early_mmu_has_feature(MMU_FTR_HPTE_TABLE)) {
 		ret = kasan_init_shadow_page_tables(KASAN_SHADOW_START, KASAN_SHADOW_END);
+		pr_info("%s:%d %d\n", __func__, __LINE__, ret);
 
 		if (ret)
 			panic("kasan: kasan_init_shadow_page_tables() failed");
 	}
+	pr_info("%s:%d\n", __func__, __LINE__);
 }
 
 void __init kasan_init(void)
