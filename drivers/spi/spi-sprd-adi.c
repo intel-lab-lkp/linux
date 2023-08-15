@@ -48,6 +48,7 @@
 #define RD_ADDR_MASK			GENMASK(30, 16)
 
 /* Bits definitions for register REG_ADI_ARM_FIFO_STS */
+#define BIT_ARM_WR_FREQ			BIT(31)
 #define BIT_FIFO_FULL			BIT(11)
 #define BIT_FIFO_EMPTY			BIT(10)
 
@@ -78,6 +79,7 @@
 
 #define ADI_FIFO_DRAIN_TIMEOUT		1000
 #define ADI_READ_TIMEOUT		2000
+#define ADI_WRITE_TIMEOUT		2000
 
 /*
  * Read back address from REG_ADI_RD_DATA bit[30:16] which maps to:
@@ -150,6 +152,7 @@
 struct sprd_adi_data {
 	u32 slave_offset;
 	u32 slave_addr_size;
+	int (*write_wait)(void __iomem *adi_base);
 	int (*read_check)(u32 val, u32 reg);
 	u32 rst_sts;
 	u32 swrst_base;
@@ -245,6 +248,22 @@ static int sprd_adi_read_check(u32 val, u32 addr)
 	}
 
 	return 0;
+}
+
+static int sprd_adi_write_wait(void __iomem *adi_base)
+{
+	unsigned int write_timeout = ADI_WRITE_TIMEOUT;
+	u32 val;
+
+	do {
+		val = readl_relaxed(adi_base + REG_ADI_ARM_FIFO_STS);
+		if (!(val & BIT_ARM_WR_FREQ))
+			return 0;
+		cpu_relax();
+	} while (--write_timeout);
+
+	pr_err("ADI write fail, sts = 0x%02x\n", val);
+	return -EBUSY;
 }
 
 static int sprd_adi_read_check_r2(u32 val, u32 reg)
@@ -365,7 +384,11 @@ static int sprd_adi_write(struct sprd_adi *sadi, u32 reg, u32 val)
 	if (timeout == 0) {
 		dev_err(sadi->dev, "write fifo is full\n");
 		ret = -EBUSY;
+		goto out;
 	}
+
+	if (sadi->data->write_wait)
+		ret = sadi->data->write_wait(sadi->base);
 
 out:
 	if (sadi->hwlock)
@@ -691,6 +714,7 @@ static struct sprd_adi_data ums512_data = {
 };
 
 static struct sprd_adi_data ums9620_data = {
+	.write_wait = sprd_adi_write_wait,
 	.slave_offset = ADI_15BIT_SLAVE_OFFSET,
 	.slave_addr_size = ADI_15BIT_SLAVE_ADDR_SIZE,
 	.rst_sts = UMP9620_RST_STATUS,
