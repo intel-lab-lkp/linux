@@ -3019,6 +3019,22 @@ ice_get_pca9575_handle(struct ice_hw *hw, u16 *pca9575_handle)
 }
 
 /**
+ * ice_is_clock_mux_present_e810t
+ * @hw: pointer to the hw struct
+ *
+ * Check if the Clock Multiplexer device is present in the netlist
+ */
+bool ice_is_clock_mux_present_e810t(struct ice_hw *hw)
+{
+	if (ice_find_netlist_node(hw, ICE_AQC_LINK_TOPO_NODE_TYPE_CLK_MUX,
+				  ICE_ACQ_GET_LINK_TOPO_NODE_NR_GEN_CLK_MUX,
+				  NULL))
+		return false;
+
+	return true;
+}
+
+/**
  * ice_read_sma_ctrl_e810t
  * @hw: pointer to the hw struct
  * @data: pointer to data to be read from the GPIO controller
