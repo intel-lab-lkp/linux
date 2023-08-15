@@ -184,6 +184,12 @@ struct mmc_host_ops {
 	/* Execute HS400 tuning depending host driver */
 	int	(*execute_hs400_tuning)(struct mmc_host *host, struct mmc_card *card);
 
+	/* Prepare HS tuning depending host driver */
+	int	(*prepare_hs_tuning)(struct mmc_host *host, struct mmc_card *card);
+
+	/* Execute HS tuning depending host driver */
+	int	(*execute_hs_tuning)(struct mmc_host *host, struct mmc_card *card);
+
 	/* Prepare switch to DDR during the HS400 init sequence */
 	int	(*hs400_prepare_ddr)(struct mmc_host *host);
 
