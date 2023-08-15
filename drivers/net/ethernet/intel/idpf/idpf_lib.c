@@ -3,6 +3,9 @@
 
 #include "idpf.h"
 
+static const struct net_device_ops idpf_netdev_ops_splitq;
+static const struct net_device_ops idpf_netdev_ops_singleq;
+
 const char * const idpf_vport_vc_state_str[] = {
 	IDPF_FOREACH_VPORT_VC_STATE(IDPF_GEN_STRING)
 };
@@ -491,6 +494,12 @@ static int idpf_cfg_netdev(struct idpf_vport *vport)
 		return err;
 	}
 
+	/* assign netdev_ops */
+	if (idpf_is_queue_model_split(vport->txq_model))
+		netdev->netdev_ops = &idpf_netdev_ops_splitq;
+	else
+		netdev->netdev_ops = &idpf_netdev_ops_singleq;
+
 	/* setup watchdog timeout value to be 5 second */
 	netdev->watchdog_timeo = 5 * HZ;
 
@@ -583,6 +592,48 @@ static int idpf_get_free_slot(struct idpf_adapter *adapter)
 }
 
 /**
+ * idpf_vport_stop - Disable a vport
+ * @vport: vport to disable
+ */
+static void idpf_vport_stop(struct idpf_vport *vport)
+{
+	if (vport->state <= __IDPF_VPORT_DOWN)
+		return;
+
+	mutex_lock(&vport->stop_mutex);
+
+	netif_carrier_off(vport->netdev);
+
+	idpf_vport_intr_rel(vport);
+	idpf_vport_queues_rel(vport);
+	vport->state = __IDPF_VPORT_DOWN;
+
+	mutex_unlock(&vport->stop_mutex);
+}
+
+/**
+ * idpf_stop - Disables a network interface
+ * @netdev: network interface device structure
+ *
+ * The stop entry point is called when an interface is de-activated by the OS,
+ * and the netdevice enters the DOWN state.  The hardware is still under the
+ * driver's control, but the netdev interface is disabled.
+ *
+ * Returns success only - not allowed to fail
+ */
+static int idpf_stop(struct net_device *netdev)
+{
+	struct idpf_vport *vport = idpf_netdev_to_vport(netdev);
+
+	if (!vport)
+		return 0;
+
+	idpf_vport_stop(vport);
+
+	return 0;
+}
+
+/**
  * idpf_decfg_netdev - Unregister the netdev
  * @vport: vport for which netdev to be unregistered
  */
@@ -621,6 +672,7 @@ static void idpf_vport_rel(struct idpf_vport *vport)
 		set_bit(i, vport->vc_state);
 	wake_up(&vport->vchnl_wq);
 
+	mutex_destroy(&vport->stop_mutex);
 	mutex_destroy(&vport->vc_buf_lock);
 
 	/* Clear all the bits */
@@ -766,6 +818,66 @@ void idpf_service_task(struct work_struct *work)
 }
 
 /**
+ * idpf_vport_open - Bring up a vport
+ * @vport: vport to bring up
+ * @alloc_res: allocate queue resources
+ */
+static int idpf_vport_open(struct idpf_vport *vport, bool alloc_res)
+{
+	struct idpf_adapter *adapter = vport->adapter;
+	int err;
+
+	if (vport->state != __IDPF_VPORT_DOWN)
+		return -EBUSY;
+
+	/* we do not allow interface up just yet */
+	netif_carrier_off(vport->netdev);
+
+	if (alloc_res) {
+		err = idpf_vport_queues_alloc(vport);
+		if (err)
+			return err;
+	}
+
+	err = idpf_vport_intr_alloc(vport);
+	if (err) {
+		dev_err(&adapter->pdev->dev, "Failed to allocate interrupts for vport %u: %d\n",
+			vport->vport_id, err);
+		goto queues_rel;
+	}
+
+	err = idpf_vport_queue_ids_init(vport);
+	if (err) {
+		dev_err(&adapter->pdev->dev, "Failed to initialize queue ids for vport %u: %d\n",
+			vport->vport_id, err);
+		goto intr_rel;
+	}
+
+	err = idpf_queue_reg_init(vport);
+	if (err) {
+		dev_err(&adapter->pdev->dev, "Failed to initialize queue registers for vport %u: %d\n",
+			vport->vport_id, err);
+		goto intr_rel;
+	}
+
+	err = idpf_send_config_tx_queues_msg(vport);
+	if (err) {
+		dev_err(&adapter->pdev->dev, "Failed to configure queues for vport %u, %d\n",
+			vport->vport_id, err);
+		goto intr_rel;
+	}
+
+	return 0;
+
+intr_rel:
+	idpf_vport_intr_rel(vport);
+queues_rel:
+	idpf_vport_queues_rel(vport);
+
+	return err;
+}
+
+/**
  * idpf_init_task - Delayed initialization task
  * @work: work_struct handle to our data
  *
@@ -843,6 +955,11 @@ void idpf_init_task(struct work_struct *work)
 	err = idpf_send_get_rx_ptype_msg(vport);
 	if (err)
 		goto handle_err;
+
+	/* Once state is put into DOWN, driver is ready for dev_open */
+	vport->state = __IDPF_VPORT_DOWN;
+	if (test_and_clear_bit(IDPF_VPORT_UP_REQUESTED, vport_config->flags))
+		idpf_vport_open(vport, true);
 
 	mutex_lock(&adapter->sw_mutex);
 
@@ -1054,6 +1171,28 @@ void idpf_vc_event_task(struct work_struct *work)
 }
 
 /**
+ * idpf_open - Called when a network interface becomes active
+ * @netdev: network interface device structure
+ *
+ * The open entry point is called when a network interface is made
+ * active by the system (IFF_UP).  At this point all resources needed
+ * for transmit and receive operations are allocated, the interrupt
+ * handler is registered with the OS, the netdev watchdog is enabled,
+ * and the stack is notified that the interface is ready.
+ *
+ * Returns 0 on success, negative value on failure
+ */
+static int idpf_open(struct net_device *netdev)
+{
+	struct idpf_vport *vport = idpf_netdev_to_vport(netdev);
+
+	if (!vport)
+		return -EINVAL;
+
+	return idpf_vport_open(vport, true);
+}
+
+/**
  * idpf_alloc_dma_mem - Allocate dma memory
  * @hw: pointer to hw struct
  * @mem: pointer to dma_mem struct
@@ -1086,3 +1225,13 @@ void idpf_free_dma_mem(struct idpf_hw *hw, struct idpf_dma_mem *mem)
 	mem->va = NULL;
 	mem->pa = 0;
 }
+
+static const struct net_device_ops idpf_netdev_ops_splitq = {
+	.ndo_open = idpf_open,
+	.ndo_stop = idpf_stop,
+};
+
+static const struct net_device_ops idpf_netdev_ops_singleq = {
+	.ndo_open = idpf_open,
+	.ndo_stop = idpf_stop,
+};
