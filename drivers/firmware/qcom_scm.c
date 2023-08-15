@@ -1491,6 +1491,12 @@ static int qcom_scm_probe(struct platform_device *pdev)
 	if (download_mode)
 		qcom_scm_set_download_mode(true);
 
+	/*
+	 * Disable SDI if indicated by DT.
+	 */
+	if (of_property_read_bool(pdev->dev.of_node, "qcom,sdi-disable"))
+		qcom_scm_disable_sdi();
+
 	return 0;
 }
 
