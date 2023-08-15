@@ -3,7 +3,7 @@ Kernel driver nct6683
 
 Supported chips:
 
-  * Nuvoton NCT6683D/NCT6687D
+  * Nuvoton NCT6683D/NCT6686D/NCT6687D
 
     Prefix: 'nct6683'
 
@@ -49,6 +49,8 @@ The driver has only been tested with the Intel firmware, and by default
 only instantiates on Intel boards. To enable it on non-Intel boards,
 set the 'force' module parameter to 1.
 
+Implement the watchdog functionality of the NCT6686D eSIO chip
+
 Tested Boards and Firmware Versions
 -----------------------------------
 
@@ -63,4 +65,5 @@ Intel DH87MC	NCT6683D EC firmware version 1.0 build 04/03/13
 Intel DB85FL	NCT6683D EC firmware version 1.0 build 04/03/13
 ASRock X570	NCT6683D EC firmware version 1.0 build 06/28/19
 MSI B550	NCT6687D EC firmware version 1.0 build 05/07/20
+LENOVO M90n-1	NCT6686D EC firmware version 9.0 build 04/21/21
 =============== ===============================================

@@ -24,15 +24,16 @@
 #include <linux/acpi.h>
 #include <linux/delay.h>
 #include <linux/err.h>
+#include <linux/hwmon.h>
+#include <linux/hwmon-sysfs.h>
 #include <linux/init.h>
 #include <linux/io.h>
 #include <linux/jiffies.h>
-#include <linux/hwmon.h>
-#include <linux/hwmon-sysfs.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
+#include <linux/watchdog.h>
 
 enum kinds { nct6683, nct6686, nct6687 };
 
@@ -72,6 +73,34 @@ static const char * const nct6683_chip_names[] = {
 #define SIO_NCT6686_ID		0xd440
 #define SIO_NCT6687_ID		0xd590
 #define SIO_ID_MASK		0xFFF0
+
+#define WDT_CFG			0x828    /* W/O Lock Watchdog Register */
+#define WDT_CNT			0x829    /* R/W Watchdog Timer Register */
+#define WDT_STS			0x82A    /* R/O Watchdog Status Register */
+#define WDT_STS_EVT_POS		(0)
+#define WDT_STS_EVT_MSK		(0x3 << WDT_STS_EVT_POS)
+#define WDT_SOFT_EN		0x87    /* Enable soft watchdog timer */
+#define WDT_SOFT_DIS		0xAA    /* Disable soft watchdog timer */
+
+#define WATCHDOG_TIMEOUT	60      /* 1 minute default timeout */
+
+/* The timeout range is 1-255 seconds */
+#define MIN_TIMEOUT		1
+#define MAX_TIMEOUT		255
+
+static int timeout;
+module_param(timeout, int, 0);
+MODULE_PARM_DESC(timeout, "Watchdog timeout in seconds. 1 <= timeout <= 255, default="
+		 __MODULE_STRING(WATCHDOG_TIMEOUT) ".");
+
+static bool nowayout = WATCHDOG_NOWAYOUT;
+module_param(nowayout, bool, 0);
+MODULE_PARM_DESC(nowayout, "Watchdog cannot be stopped once started (default="
+		 __MODULE_STRING(WATCHDOG_NOWAYOUT) ")");
+
+static int early_disable;
+module_param(early_disable, int, 0);
+MODULE_PARM_DESC(early_disable, "Disable watchdog at boot time (default=0)");
 
 static inline void
 superio_outb(int ioreg, int reg, int val)
@@ -171,10 +200,10 @@ superio_exit(int ioreg)
 
 #define NCT6683_REG_CUSTOMER_ID		0x602
 #define NCT6683_CUSTOMER_ID_INTEL	0x805
+#define NCT6683_CUSTOMER_ID_LENOVO	0x1101
 #define NCT6683_CUSTOMER_ID_MITAC	0xa0e
 #define NCT6683_CUSTOMER_ID_MSI		0x201
-#define NCT6683_CUSTOMER_ID_MSI2	0x200
-#define NCT6683_CUSTOMER_ID_ASROCK		0xe2c
+#define NCT6683_CUSTOMER_ID_ASROCK	0xe2c
 #define NCT6683_CUSTOMER_ID_ASROCK2	0xe1b
 
 #define NCT6683_REG_BUILD_YEAR		0x604
@@ -183,6 +212,9 @@ superio_exit(int ioreg)
 #define NCT6683_REG_SERIAL		0x607
 #define NCT6683_REG_VERSION_HI		0x608
 #define NCT6683_REG_VERSION_LO		0x609
+#define NCT6686_PAGE_REG_OFFSET		0
+#define NCT6686_ADDR_REG_OFFSET		1
+#define NCT6686_DATA_REG_OFFSET		2
 
 #define NCT6683_REG_CR_CASEOPEN		0xe8
 #define NCT6683_CR_CASEOPEN_MASK	(1 << 7)
@@ -304,6 +336,7 @@ struct nct6683_data {
 
 	struct device *hwmon_dev;
 	const struct attribute_group *groups[6];
+	struct watchdog_device wdt;
 
 	int temp_num;			/* number of temperature attributes */
 	u8 temp_index[NCT6683_NUM_REG_MON];
@@ -518,6 +551,39 @@ static void nct6683_write(struct nct6683_data *data, u16 reg, u16 value)
 	outb_p(value & 0xff, data->addr + EC_DATA_REG);
 }
 
+static inline void nct6686_wdt_set_bank(int base_addr, u16 reg)
+{
+	outb_p(0xFF, base_addr + NCT6686_PAGE_REG_OFFSET);
+	outb_p(reg >> 8, base_addr + NCT6686_PAGE_REG_OFFSET);
+}
+
+/* Not strictly necessary, but play it safe for now */
+static inline void nct6686_wdt_reset_bank(int base_addr, u16 reg)
+{
+	if (reg & 0xff00)
+		outb_p(0xFF, base_addr + NCT6686_PAGE_REG_OFFSET);
+}
+
+static u8 nct6686_read(struct nct6683_data *data, u16 reg)
+{
+	u8 res;
+
+	nct6686_wdt_set_bank(data->addr, reg);
+	outb_p(reg & 0xff, data->addr + NCT6686_ADDR_REG_OFFSET);
+	res = inb_p(data->addr + NCT6686_DATA_REG_OFFSET);
+
+	nct6686_wdt_reset_bank(data->addr, reg);
+	return res;
+}
+
+static void nct6686_write(struct nct6683_data *data, u16 reg, u8 value)
+{
+	nct6686_wdt_set_bank(data->addr, reg);
+	outb_p(reg & 0xff, data->addr + NCT6686_ADDR_REG_OFFSET);
+	outb_p(value & 0xff, data->addr + NCT6686_DATA_REG_OFFSET);
+	nct6686_wdt_reset_bank(data->addr, reg);
+}
+
 static int get_in_reg(struct nct6683_data *data, int nr, int index)
 {
 	int ch = data->in_index[index];
@@ -680,11 +746,12 @@ static umode_t nct6683_in_is_visible(struct kobject *kobj,
 	int nr = index % 4;	/* attribute */
 
 	/*
-	 * Voltage limits exist for Intel boards,
+	 * Voltage limits exist for Intel and Lenovo boards,
 	 * but register location and encoding is unknown
 	 */
 	if ((nr == 2 || nr == 3) &&
-	    data->customer_id == NCT6683_CUSTOMER_ID_INTEL)
+	    (data->customer_id == NCT6683_CUSTOMER_ID_INTEL ||
+	     data->customer_id == NCT6683_CUSTOMER_ID_LENOVO))
 		return 0;
 
 	return attr->mode;
@@ -1186,6 +1253,139 @@ static void nct6683_setup_sensors(struct nct6683_data *data)
 	}
 }
 
+/*
+ * Watchdog Functions
+ */
+static int nct6686_wdt_enable(struct watchdog_device *wdog, bool enable)
+{
+	struct nct6683_data *data = watchdog_get_drvdata(wdog);
+
+	u_char reg;
+
+	mutex_lock(&data->update_lock);
+	reg = nct6686_read(data, WDT_CFG);
+
+	if (enable) {
+		nct6686_write(data, WDT_CFG, reg | 0x3);
+		mutex_unlock(&data->update_lock);
+		return 0;
+	}
+
+	nct6686_write(data, WDT_CFG, reg & ~BIT(0));
+	mutex_unlock(&data->update_lock);
+
+	return 0;
+}
+
+static int nct6686_wdt_set_time(struct watchdog_device *wdog)
+{
+	struct nct6683_data *data = watchdog_get_drvdata(wdog);
+
+	mutex_lock(&data->update_lock);
+	nct6686_write(data, WDT_CNT, wdog->timeout);
+	mutex_unlock(&data->update_lock);
+
+	if (wdog->timeout) {
+		nct6686_wdt_enable(wdog, true);
+		return 0;
+	}
+
+	nct6686_wdt_enable(wdog, false);
+	return 0;
+}
+
+static int nct6686_wdt_start(struct watchdog_device *wdt)
+{
+	struct nct6683_data *data = watchdog_get_drvdata(wdt);
+	u_char reg;
+
+	nct6686_wdt_set_time(wdt);
+
+	/* Enable soft watchdog timer */
+	mutex_lock(&data->update_lock);
+	/* reset trigger status */
+	reg = nct6686_read(data, WDT_STS);
+	nct6686_write(data, WDT_STS, reg & ~WDT_STS_EVT_MSK);
+	mutex_unlock(&data->update_lock);
+	return 0;
+}
+
+static int nct6686_wdt_stop(struct watchdog_device *wdt)
+{
+	struct nct6683_data *data = watchdog_get_drvdata(wdt);
+
+	mutex_lock(&data->update_lock);
+	nct6686_write(data, WDT_CFG, WDT_SOFT_DIS);
+	mutex_unlock(&data->update_lock);
+	return 0;
+}
+
+static int nct6686_wdt_set_timeout(struct watchdog_device *wdt,
+				   unsigned int timeout)
+{
+	struct nct6683_data *data = watchdog_get_drvdata(wdt);
+
+	wdt->timeout = timeout;
+	mutex_lock(&data->update_lock);
+	nct6686_write(data, WDT_CNT, timeout);
+	mutex_unlock(&data->update_lock);
+	return 0;
+}
+
+static int nct6686_wdt_ping(struct watchdog_device *wdt)
+{
+	struct nct6683_data *data = watchdog_get_drvdata(wdt);
+	int timeout;
+
+	/*
+	 * Note:
+	 * NCT6686 does not support refreshing WDT_TIMER_REG register when
+	 * the watchdog is active. Please disable watchdog before feeding
+	 * the watchdog and enable it again.
+	 */
+	/* Disable soft watchdog timer */
+	nct6686_wdt_enable(wdt, false);
+
+	/* feed watchdog */
+	timeout = wdt->timeout;
+	mutex_lock(&data->update_lock);
+	nct6686_write(data, WDT_CNT, timeout);
+	mutex_unlock(&data->update_lock);
+
+	/* Enable soft watchdog timer */
+	nct6686_wdt_enable(wdt, true);
+	return 0;
+}
+
+static unsigned int nct6686_wdt_get_timeleft(struct watchdog_device *wdt)
+{
+	struct nct6683_data *data = watchdog_get_drvdata(wdt);
+	int ret;
+
+	mutex_lock(&data->update_lock);
+	ret = nct6686_read(data, WDT_CNT);
+	mutex_unlock(&data->update_lock);
+	if (ret < 0)
+		return 0;
+
+	return ret;
+}
+
+static const struct watchdog_info nct6686_wdt_info = {
+	.options        = WDIOF_SETTIMEOUT | WDIOF_KEEPALIVEPING |
+			  WDIOF_MAGICCLOSE,
+	.identity       = "nct6686 watchdog",
+};
+
+static const struct watchdog_ops nct6686_wdt_ops = {
+	.owner          = THIS_MODULE,
+	.start          = nct6686_wdt_start,
+	.stop           = nct6686_wdt_stop,
+	.ping           = nct6686_wdt_ping,
+	.set_timeout    = nct6686_wdt_set_timeout,
+	.get_timeleft   = nct6686_wdt_get_timeleft,
+};
+
 static int nct6683_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -1195,7 +1395,9 @@ static int nct6683_probe(struct platform_device *pdev)
 	struct device *hwmon_dev;
 	struct resource *res;
 	int groups = 0;
+	int ret;
 	char build[16];
+	u_char reg;
 
 	res = platform_get_resource(pdev, IORESOURCE_IO, 0);
 	if (!devm_request_region(dev, res->start, IOREGION_LENGTH, DRVNAME))
@@ -1215,13 +1417,13 @@ static int nct6683_probe(struct platform_device *pdev)
 
 	/* By default only instantiate driver if the customer ID is known */
 	switch (data->customer_id) {
+	case NCT6683_CUSTOMER_ID_LENOVO:
+		break;
 	case NCT6683_CUSTOMER_ID_INTEL:
 		break;
 	case NCT6683_CUSTOMER_ID_MITAC:
 		break;
 	case NCT6683_CUSTOMER_ID_MSI:
-		break;
-	case NCT6683_CUSTOMER_ID_MSI2:
 		break;
 	case NCT6683_CUSTOMER_ID_ASROCK:
 		break;
@@ -1294,7 +1496,34 @@ static int nct6683_probe(struct platform_device *pdev)
 
 	hwmon_dev = devm_hwmon_device_register_with_groups(dev,
 			nct6683_device_names[data->kind], data, data->groups);
-	return PTR_ERR_OR_ZERO(hwmon_dev);
+
+	ret = PTR_ERR_OR_ZERO(hwmon_dev);
+	if (ret)
+		return ret;
+
+	if (data->kind == nct6686 && data->customer_id == NCT6683_CUSTOMER_ID_LENOVO) {
+		/* Watchdog initialization */
+		data->wdt.ops = &nct6686_wdt_ops;
+		data->wdt.info = &nct6686_wdt_info;
+
+		data->wdt.timeout = WATCHDOG_TIMEOUT; /* Set default timeout */
+		data->wdt.min_timeout = MIN_TIMEOUT;
+		data->wdt.max_timeout = MAX_TIMEOUT;
+		data->wdt.parent = &pdev->dev;
+
+		watchdog_init_timeout(&data->wdt, timeout, &pdev->dev);
+		watchdog_set_nowayout(&data->wdt, nowayout);
+		watchdog_set_drvdata(&data->wdt, data);
+
+		/* reset trigger status */
+		reg = nct6686_read(data, WDT_STS);
+		nct6686_write(data, WDT_STS, reg & ~WDT_STS_EVT_MSK);
+
+		watchdog_stop_on_unregister(&data->wdt);
+
+		return devm_watchdog_register_device(dev, &data->wdt);
+	}
+	return ret;
 }
 
 #ifdef CONFIG_PM
