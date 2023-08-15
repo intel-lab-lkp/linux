@@ -183,6 +183,9 @@ enum pageflags {
 	/* Is a hugetlb page.  Stored in first tail page. */
 	PG_hugetlb = PG_writeback,
 
+	/* Has a deferred list (may be empty).  First tail page. */
+	PG_deferred_list = PG_reclaim,
+
 	/* non-lru isolated movable page */
 	PG_isolated = PG_reclaim,
 
@@ -809,6 +812,9 @@ static inline void ClearPageCompound(struct page *page)
 	BUG_ON(!PageHead(page));
 	ClearPageHead(page);
 }
+PAGEFLAG(DeferredList, deferred_list, PF_SECOND)
+#else
+TESTPAGEFLAG_FALSE(DeferredList, deferred_list)
 #endif
 
 #define PG_head_mask ((1UL << PG_head))

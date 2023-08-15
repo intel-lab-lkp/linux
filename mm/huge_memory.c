@@ -583,7 +583,7 @@ void prep_transhuge_page(struct page *page)
 
 	VM_BUG_ON_FOLIO(folio_order(folio) < 2, folio);
 	INIT_LIST_HEAD(&folio->_deferred_list);
-	folio_set_compound_dtor(folio, TRANSHUGE_PAGE_DTOR);
+	folio_set_deferred_list(folio);
 }
 
 static inline bool is_transparent_hugepage(struct page *page)
@@ -595,7 +595,7 @@ static inline bool is_transparent_hugepage(struct page *page)
 
 	folio = page_folio(page);
 	return is_huge_zero_page(&folio->page) ||
-	       folio->_folio_dtor == TRANSHUGE_PAGE_DTOR;
+		folio_test_deferred_list(folio);
 }
 
 static unsigned long __thp_get_unmapped_area(struct file *filp,
