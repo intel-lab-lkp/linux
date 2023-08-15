@@ -284,11 +284,6 @@ const char * const migratetype_names[MIGRATE_TYPES] = {
 #endif
 };
 
-static compound_page_dtor * const compound_page_dtors[NR_COMPOUND_DTORS] = {
-	[NULL_COMPOUND_DTOR] = NULL,
-	[COMPOUND_PAGE_DTOR] = free_compound_page,
-};
-
 int min_free_kbytes = 1024;
 int user_min_free_kbytes = -1;
 static int watermark_boost_factor __read_mostly = 15000;
@@ -577,17 +572,17 @@ static inline void free_the_page(struct page *page, unsigned int order)
  * The remaining PAGE_SIZE pages are called "tail pages". PageTail() is encoded
  * in bit 0 of page->compound_head. The rest of bits is pointer to head page.
  *
- * The first tail page's ->compound_dtor holds the offset in array of compound
- * page destructors. See compound_page_dtors.
+ * The first tail page's ->compound_dtor describes how to destroy the
+ * compound page.
  *
  * The first tail page's ->compound_order holds the order of allocation.
  * This usage means that zero-order pages may not be compound.
  */
 
-void free_compound_page(struct page *page)
+static void free_compound_page(struct folio *folio)
 {
-	mem_cgroup_uncharge(page_folio(page));
-	free_the_page(page, compound_order(page));
+	mem_cgroup_uncharge(folio);
+	free_the_page(&folio->page, folio_order(folio));
 }
 
 void prep_compound_page(struct page *page, unsigned int order)
@@ -611,13 +606,9 @@ void destroy_large_folio(struct folio *folio)
 		return;
 	}
 
-	if (folio_test_transhuge(folio) && dtor == TRANSHUGE_PAGE_DTOR) {
+	if (folio_test_transhuge(folio) && dtor == TRANSHUGE_PAGE_DTOR)
 		free_transhuge_folio(folio);
-		return;
-	}
-
-	VM_BUG_ON_FOLIO(dtor >= NR_COMPOUND_DTORS, folio);
-	compound_page_dtors[dtor](&folio->page);
+	free_compound_page(folio);
 }
 
 static inline void set_buddy_order(struct page *page, unsigned int order)

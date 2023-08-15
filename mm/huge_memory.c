@@ -2794,7 +2794,6 @@ void free_transhuge_folio(struct folio *folio)
 		}
 		spin_unlock_irqrestore(&ds_queue->split_queue_lock, flags);
 	}
-	free_compound_page(&folio->page);
 }
 
 void deferred_split_folio(struct folio *folio)
