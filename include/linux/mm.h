@@ -1283,13 +1283,9 @@ typedef void compound_page_dtor(struct page *);
 enum compound_dtor_id {
 	NULL_COMPOUND_DTOR,
 	COMPOUND_PAGE_DTOR,
-#ifdef CONFIG_HUGETLB_PAGE
 	HUGETLB_PAGE_DTOR,
-#endif
-#ifdef CONFIG_TRANSPARENT_HUGEPAGE
 	TRANSHUGE_PAGE_DTOR,
-#endif
-	NR_COMPOUND_DTORS,
+	NR_COMPOUND_DTORS
 };
 
 static inline void folio_set_compound_dtor(struct folio *folio,
