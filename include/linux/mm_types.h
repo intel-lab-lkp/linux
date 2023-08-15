@@ -327,6 +327,35 @@ struct folio {
 		};
 		struct page page;
 	};
+	/*
+	 * Some of the tail page fields may not be reused by the folio
+	 * object because they have already been used by the page struct.
+	 * On 32bits there are at least 8 WORDs while on 64 bits there're
+	 * at least 7 WORDs, all ending at _refcount field.
+	 *
+	 * |--------+-------------+-------------------|
+	 * |  index | 32 bits     | 64 bits           |
+	 * |--------+-------------+-------------------|
+	 * |      0 | flags       | flags             |
+	 * |      1 | head        | head              |
+	 * |      2 | FREE        | FREE              |
+	 * |      3 | FREE [1]    | FREE [1]          |
+	 * |      4 | FREE        | FREE              |
+	 * |      5 | FREE        | private [2]       |
+	 * |      6 | mapcnt      | mapcnt+refcnt [3] |
+	 * |      7 | refcnt [3]  |                   |
+	 * |--------+-------------+-------------------|
+	 *
+	 * [1] "mapping" field.  It is free to use but needs to be with
+	 *     some caution due to poisoning, see TAIL_MAPPING_REUSED_MAX.
+	 *
+	 * [2] "private" field, used when THP_SWAP is on (but disabled on
+	 *     32 bits, so this index is FREE on 32bit or hugetlb folios).
+	 *     May need to be fixed finally.
+	 *
+	 * [3] "refcount" field must be zero for all tail pages.  See e.g.
+	 *     has_unmovable_pages() on page_ref_count() check and comment.
+	 */
 	union {
 		struct {
 			unsigned long _flags_1;
@@ -334,18 +363,29 @@ struct folio {
 	/* public: */
 			unsigned char _folio_dtor;
 			unsigned char _folio_order;
+	/* private: 2 bytes can be reused later */
+			unsigned char _free_1_0[2];
+	/* public: */
 			atomic_t _entire_mapcount;
 			atomic_t _nr_pages_mapped;
 			atomic_t _pincount;
 #ifdef CONFIG_64BIT
 			unsigned int _folio_nr_pages;
+	/* private: 4 bytes can be reused later (64 bits only) */
+			unsigned char _free_1_1[4];
+	/* Currently used by THP_SWAP, to be fixed */
+			void *_private_1;
+	/* public: */
 #endif
+	/* private: */
+			atomic_t _mapcount_1;
+			atomic_t _refcount_1;
 	/* private: the union with struct page is transitional */
 		};
 		struct page __page_1;
 	};
 	union {
-		struct {
+		struct {	/* hugetlb folios */
 			unsigned long _flags_2;
 			unsigned long _head_2;
 	/* public: */
@@ -354,13 +394,22 @@ struct folio {
 			void *_hugetlb_cgroup_rsvd;
 			void *_hugetlb_hwpoison;
 	/* private: the union with struct page is transitional */
+			atomic_t _mapcount_2;
+			atomic_t _refcount_2;
 		};
-		struct {
+		struct {	/* non-hugetlb folios */
 			unsigned long _flags_2a;
 			unsigned long _head_2a;
 	/* public: */
 			struct list_head _deferred_list;
-	/* private: the union with struct page is transitional */
+	/* private: 8 more free bytes for either 32/64 bits */
+			unsigned char _free_2_2[8];
+#ifdef CONFIG_64BIT
+	/* currently used by THP_SWAP, to be fixed */
+			void *_private_2a;
+#endif
+			atomic_t _mapcount_2a;
+			atomic_t _refcount_2a;
 		};
 		struct page __page_2;
 	};
@@ -385,12 +434,26 @@ FOLIO_MATCH(memcg_data, memcg_data);
 			offsetof(struct page, pg) + sizeof(struct page))
 FOLIO_MATCH(flags, _flags_1);
 FOLIO_MATCH(compound_head, _head_1);
+#ifdef CONFIG_64BIT
+FOLIO_MATCH(private, _private_1);
+#endif
+FOLIO_MATCH(_mapcount, _mapcount_1);
+FOLIO_MATCH(_refcount, _refcount_1);
 #undef FOLIO_MATCH
 #define FOLIO_MATCH(pg, fl)						\
 	static_assert(offsetof(struct folio, fl) ==			\
 			offsetof(struct page, pg) + 2 * sizeof(struct page))
 FOLIO_MATCH(flags, _flags_2);
 FOLIO_MATCH(compound_head, _head_2);
+FOLIO_MATCH(_mapcount, _mapcount_2);
+FOLIO_MATCH(_refcount, _refcount_2);
+FOLIO_MATCH(flags, _flags_2a);
+FOLIO_MATCH(compound_head, _head_2a);
+FOLIO_MATCH(_mapcount, _mapcount_2a);
+FOLIO_MATCH(_refcount, _refcount_2a);
+#ifdef CONFIG_64BIT
+FOLIO_MATCH(private, _private_2a);
+#endif
 #undef FOLIO_MATCH
 
 /*
