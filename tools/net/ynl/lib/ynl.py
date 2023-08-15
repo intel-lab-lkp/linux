@@ -189,6 +189,7 @@ class NlMsg:
 
         self.error = 0
         self.done = 0
+        self.fixed_header_attrs = []
 
         extack_off = None
         if self.nl_type == Netlink.NLMSG_ERROR:
@@ -227,6 +228,19 @@ class NlMsg:
                         if 'doc' in spec:
                             desc += f" ({spec['doc']})"
                         self.extack['miss-type'] = desc
+
+    def decode_fixed_header(self, ynl, name):
+        fixed_header_members = ynl.consts[name].members
+        self.fixed_header_attrs = dict()
+        offset = 0
+        for m in fixed_header_members:
+            format = NlAttr.get_format(m.type, m.byte_order)
+            [ value ] = format.unpack_from(self.raw, offset)
+            offset += format.size
+            if m.enum:
+                value = ynl._decode_enum(value, m)
+            self.fixed_header_attrs[m.name] = value
+        self.raw = self.raw[offset:]
 
     def __repr__(self):
         msg = f"nl_len = {self.nl_len} ({len(self.raw)}) nl_flags = 0x{self.nl_flags:x} nl_type = {self.nl_type}\n"
@@ -317,23 +331,18 @@ def _genl_load_families():
 
 
 class GenlMsg:
-    def __init__(self, nl_msg, fixed_header_members=[]):
-        self.nl = nl_msg
+    def __init__(self, nl_msg, ynl=None):
+        self.genl_cmd, self.genl_version, _ = struct.unpack_from("BBH", nl_msg.raw, 0)
+        nl_msg.raw = nl_msg.raw[4:]
 
-        self.hdr = nl_msg.raw[0:4]
-        offset = 4
+        if ynl:
+            op = ynl.rsp_by_value[self.genl_cmd]
+            if op.fixed_header:
+                nl_msg.decode_fixed_header(ynl, op.fixed_header)
 
-        self.genl_cmd, self.genl_version, _ = struct.unpack("BBH", self.hdr)
-
-        self.fixed_header_attrs = dict()
-        for m in fixed_header_members:
-            format = NlAttr.get_format(m.type, m.byte_order)
-            decoded = format.unpack_from(nl_msg.raw, offset)
-            offset += format.size
-            self.fixed_header_attrs[m.name] = decoded[0]
-
-        self.raw = nl_msg.raw[offset:]
+        self.raw = nl_msg.raw
         self.raw_attrs = NlAttrs(self.raw)
+        self.fixed_header_attrs = nl_msg.fixed_header_attrs
 
     def __repr__(self):
         msg = repr(self.nl)
@@ -596,7 +605,7 @@ class YnlFamily(SpecFamily):
                     done = True
                     break
 
-                gm = GenlMsg(nl_msg, fixed_header_members)
+                gm = GenlMsg(nl_msg, self)
                 # Check if this is a reply to our request
                 if nl_msg.nl_seq != req_seq or gm.genl_cmd != op.rsp_value:
                     if gm.genl_cmd in self.async_msg_ids:
