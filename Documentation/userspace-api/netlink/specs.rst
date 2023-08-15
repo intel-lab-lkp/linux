@@ -490,3 +490,20 @@ struct data.
  - ``fixed-header`` - name of the struct definition to be used for the fixed
    header data. This can be specified as a default for all operations and on a
    per-operation basis.
+
+netlink-raw
+===========
+
+The netlink-raw schema extends the genetlink-legacy schema with properties that
+are needed to specify the protocol numbers and multicast IDs used by raw netlink
+families. See :ref:`classic_netlink` for more information.
+
+Globals
+-------
+
+ - ``protonum`` - Protocol number to use when opening a netlink socket.
+
+Multicast group properties
+--------------------------
+
+ - ``value`` - ID to use for multicast group registration.
