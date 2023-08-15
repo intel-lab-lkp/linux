@@ -15,8 +15,11 @@ struct idpf_vport_max_q;
 #include <linux/pci.h>
 
 #include "virtchnl2.h"
+#include "idpf_lan_txrx.h"
 #include "idpf_txrx.h"
 #include "idpf_controlq.h"
+
+#define GETMAXVAL(num_bits)		GENMASK((num_bits) - 1, 0)
 
 #define IDPF_NO_FREE_SLOT		0xffff
 
@@ -27,6 +30,8 @@ struct idpf_vport_max_q;
 #define IDPF_DFLT_MBX_ID		-1
 /* maximum number of times to try before resetting mailbox */
 #define IDPF_MB_MAX_ERR			20
+#define IDPF_NUM_CHUNKS_PER_MSG(struct_sz, chunk_sz)	\
+	((IDPF_CTLQ_MAX_BUF_LEN - (struct_sz)) / (chunk_sz))
 #define IDPF_WAIT_FOR_EVENT_TIMEO_MIN	2000
 #define IDPF_WAIT_FOR_EVENT_TIMEO	60000
 
@@ -181,6 +186,8 @@ struct idpf_dev_ops {
 	STATE(IDPF_VC_CREATE_VPORT_ERR)		\
 	STATE(IDPF_VC_DESTROY_VPORT)		\
 	STATE(IDPF_VC_DESTROY_VPORT_ERR)	\
+	STATE(IDPF_VC_CONFIG_TXQ)		\
+	STATE(IDPF_VC_CONFIG_TXQ_ERR)		\
 	STATE(IDPF_VC_ALLOC_VECTORS)		\
 	STATE(IDPF_VC_ALLOC_VECTORS_ERR)	\
 	STATE(IDPF_VC_DEALLOC_VECTORS)		\
@@ -233,7 +240,9 @@ enum idpf_vport_state {
  * @txq_desc_count: TX queue descriptor count
  * @complq_desc_count: Completion queue descriptor count
  * @num_txq_grp: Number of TX queue groups
+ * @txq_grps: Array of TX queue groups
  * @txq_model: Split queue or single queue queuing model
+ * @txqs: Used only in hotpath to get to the right queue very fast
  * @num_rxq: Number of allocated RX queues
  * @num_bufq: Number of allocated buffer queues
  * @rxq_desc_count: RX queue descriptor count. *MUST* have enough descriptors
@@ -254,6 +263,8 @@ enum idpf_vport_state {
  * @idx: Software index in adapter vports struct
  * @default_vport: Use this vport if one isn't specified
  * @base_rxd: True if the driver should use base descriptors instead of flex
+ * @num_q_vectors: Number of IRQ vectors allocated
+ * @q_vectors: Array of queue vectors
  * @max_mtu: device given max possible MTU
  * @default_mac_addr: device will give a default MAC to use
  * @vc_msg: Virtchnl message buffer
@@ -272,7 +283,10 @@ struct idpf_vport {
 	u32 txq_desc_count;
 	u32 complq_desc_count;
 	u16 num_txq_grp;
+	struct idpf_txq_group *txq_grps;
 	u32 txq_model;
+	struct idpf_queue **txqs;
+
 	u16 num_rxq;
 	u16 num_bufq;
 	u32 rxq_desc_count;
@@ -292,6 +306,8 @@ struct idpf_vport {
 	bool default_vport;
 	bool base_rxd;
 
+	u16 num_q_vectors;
+	struct idpf_q_vector *q_vectors;
 	u16 max_mtu;
 	u8 default_mac_addr[ETH_ALEN];
 
@@ -383,11 +399,13 @@ struct idpf_vector_lifo {
  * struct idpf_vport_config - Vport configuration data
  * @user_config: see struct idpf_vport_user_config_data
  * @max_q: Maximum possible queues
+ * @req_qs_chunks: Queue chunk data for requested queues
  * @flags: See enum idpf_vport_config_flags
  */
 struct idpf_vport_config {
 	struct idpf_vport_user_config_data user_config;
 	struct idpf_vport_max_q max_q;
+	void *req_qs_chunks;
 	DECLARE_BITMAP(flags, IDPF_VPORT_CONFIG_FLAGS_NBITS);
 };
 
@@ -589,6 +607,26 @@ static inline u16 idpf_get_max_vports(struct idpf_adapter *adapter)
 }
 
 /**
+ * idpf_get_max_tx_bufs - Get max scatter-gather buffers supported by the device
+ * @adapter: private data struct
+ */
+static inline unsigned int idpf_get_max_tx_bufs(struct idpf_adapter *adapter)
+{
+	return adapter->caps.max_sg_bufs_per_tx_pkt;
+}
+
+/**
+ * idpf_get_min_tx_pkt_len - Get min packet length supported by the device
+ * @adapter: private data struct
+ */
+static inline u8 idpf_get_min_tx_pkt_len(struct idpf_adapter *adapter)
+{
+	u8 pkt_len = adapter->caps.min_sso_packet_len;
+
+	return pkt_len ? pkt_len : IDPF_TX_MIN_PKT_LEN;
+}
+
+/**
  * idpf_get_reg_addr - Get BAR0 register address
  * @adapter: private data struct
  * @reg_offset: register offset value
@@ -629,6 +667,20 @@ static inline bool idpf_is_reset_in_prog(struct idpf_adapter *adapter)
 		test_bit(IDPF_HR_DRV_LOAD, adapter->flags));
 }
 
+/**
+ * idpf_netdev_to_vport - get a vport handle from a netdev
+ * @netdev: network interface device structure
+ *
+ * It's possible for the vport to be NULL. Caller must check for a valid
+ * pointer.
+ */
+static inline struct idpf_vport *idpf_netdev_to_vport(struct net_device *netdev)
+{
+	struct idpf_netdev_priv *np = netdev_priv(netdev);
+
+	return np->vport;
+}
+
 void idpf_init_task(struct work_struct *work);
 void idpf_service_task(struct work_struct *work);
 void idpf_mbx_task(struct work_struct *work);
@@ -660,6 +712,9 @@ void idpf_vport_dealloc_max_qs(struct idpf_adapter *adapter,
 int idpf_add_del_mac_filters(struct idpf_vport *vport, bool add, bool async);
 void idpf_vport_init(struct idpf_vport *vport, struct idpf_vport_max_q *max_q);
 u32 idpf_get_vport_id(struct idpf_vport *vport);
+int idpf_vport_queue_ids_init(struct idpf_vport *vport);
+int idpf_queue_reg_init(struct idpf_vport *vport);
+int idpf_send_config_tx_queues_msg(struct idpf_vport *vport);
 int idpf_send_create_vport_msg(struct idpf_adapter *adapter,
 			       struct idpf_vport_max_q *max_q);
 int idpf_check_supported_desc_ids(struct idpf_vport *vport);
