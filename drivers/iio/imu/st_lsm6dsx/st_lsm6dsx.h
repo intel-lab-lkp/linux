@@ -442,10 +442,9 @@ struct st_lsm6dsx_hw {
 	const struct st_lsm6dsx_settings *settings;
 
 	struct iio_mount_matrix orientation;
-	/* Ensure natural alignment of buffer elements */
 	struct {
 		__le16 channels[3];
-		s64 ts __aligned(8);
+		__aligned_s64 ts;
 	} scan[ST_LSM6DSX_ID_MAX];
 };
 
