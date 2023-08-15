@@ -2888,6 +2888,10 @@ static int load_module(struct load_info *info, const char __user *uargs,
 
 	init_param_lock(mod);
 
+#ifdef CONFIG_PAGE_OWNER
+	atomic_set(&mod->nr_pages_allocated, 0);
+#endif
+
 	/*
 	 * Now we've got everything in the final locations, we can
 	 * find optional sections.

@@ -139,7 +139,7 @@ static noinline depot_stack_handle_t save_stack(gfp_t flags)
 }
 
 #ifdef CONFIG_MODULES
-static char *find_module_name(depot_stack_handle_t handle)
+static char *find_module_name(depot_stack_handle_t handle, int nr_pages)
 {
 	int i;
 	struct module *mod = NULL;
@@ -158,6 +158,7 @@ static char *find_module_name(depot_stack_handle_t handle)
 		if (!mod)
 			continue;
 
+		atomic_add(nr_pages, &mod->nr_pages_allocated);
 		return mod->name;
 	}
 
@@ -187,8 +188,11 @@ static inline void copy_module_name(struct page_owner *old_page_owner,
 {
 	set_module_name(new_page_owner, old_page_owner->module_name);
 }
+
+void po_register_oom_notifier(void);
 #else
-static inline char *find_module_name(depot_stack_handle_t handle)
+static inline char *find_module_name(depot_stack_handle_t handle,
+		int nr_pages)
 {
 	return NULL;
 }
@@ -208,6 +212,10 @@ static inline void copy_module_name(struct page_owner *old_page_owner,
 		struct page_owner *new_page_owner)
 {
 }
+
+void po_register_oom_notifier(void)
+{
+}
 #endif
 
 void __reset_page_owner(struct page *page, unsigned short order)
@@ -224,7 +232,7 @@ void __reset_page_owner(struct page *page, unsigned short order)
 		return;
 
 	handle = save_stack(GFP_NOWAIT | __GFP_NOWARN);
-	mod_name = find_module_name(handle);
+	mod_name = find_module_name(handle, -(1 << order));
 	for (i = 0; i < (1 << order); i++) {
 		__clear_bit(PAGE_EXT_OWNER_ALLOCATED, &page_ext->flags);
 		page_owner = get_page_owner(page_ext);
@@ -245,7 +253,7 @@ static inline void __set_page_owner_handle(struct page_ext *page_ext,
 	u64 ts_nsec = local_clock();
 	char *mod_name;
 
-	mod_name = find_module_name(handle);
+	mod_name = find_module_name(handle, 1 << order);
 
 	for (i = 0; i < (1 << order); i++) {
 		page_owner = get_page_owner(page_ext);
@@ -808,6 +816,8 @@ static int __init pageowner_init(void)
 
 	debugfs_create_file("page_owner", 0400, NULL, NULL,
 			    &proc_page_owner_operations);
+
+	po_register_oom_notifier();
 
 	return 0;
 }
