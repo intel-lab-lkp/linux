@@ -1817,6 +1817,20 @@ static inline int ext4_test_mount_flag(struct super_block *sb, int bit)
 	return test_bit(bit, &EXT4_SB(sb)->s_mount_flags);
 }
 
+static inline void ext4_set_mount_state(struct super_block *sb, int state)
+{
+	EXT4_SB(sb)->s_mount_state |= state;
+}
+
+static inline void ext4_clear_mount_state(struct super_block *sb, int state)
+{
+	EXT4_SB(sb)->s_mount_state &= ~state;
+}
+
+static inline int ext4_test_mount_state(struct super_block *sb, int state)
+{
+	return EXT4_SB(sb)->s_mount_state & state;
+}
 
 /*
  * Simulate_fail codes

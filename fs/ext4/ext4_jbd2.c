@@ -106,7 +106,7 @@ handle_t *__ext4_journal_start_sb(struct inode *inode,
 		return ERR_PTR(err);
 
 	journal = EXT4_SB(sb)->s_journal;
-	if (!journal || (EXT4_SB(sb)->s_mount_state & EXT4_FC_REPLAY))
+	if (!journal || ext4_test_mount_state(sb, EXT4_FC_REPLAY))
 		return ext4_get_nojournal();
 	return jbd2__journal_start(journal, blocks, rsv_blocks, revoke_creds,
 				   GFP_NOFS, type, line);
