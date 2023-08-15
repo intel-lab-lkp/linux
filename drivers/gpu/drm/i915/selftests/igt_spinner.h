@@ -40,4 +40,13 @@ void igt_spinner_end(struct igt_spinner *spin);
 
 bool igt_wait_for_spinner(struct igt_spinner *spin, struct i915_request *rq);
 
+static inline u32
+hws_seqno(const struct igt_spinner *spin, const struct i915_request *rq)
+{
+	u32 *seqno = spin->seqno + offset_in_page(sizeof(u32) * rq->fence.context);
+
+	return READ_ONCE(*seqno);
+}
+
+
 #endif
