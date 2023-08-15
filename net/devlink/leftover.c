@@ -591,11 +591,12 @@ devlink_region_snapshot_get_by_id(struct devlink_region *region, u32 id)
 	return NULL;
 }
 
-static int devlink_nl_put_nested_handle(struct sk_buff *msg, struct devlink *devlink)
+static int devlink_nl_put_nested_handle(struct sk_buff *msg, struct devlink *devlink,
+					int attrtype)
 {
 	struct nlattr *nested_attr;
 
-	nested_attr = nla_nest_start(msg, DEVLINK_ATTR_NESTED_DEVLINK);
+	nested_attr = nla_nest_start(msg, attrtype);
 	if (!nested_attr)
 		return -EMSGSIZE;
 	if (devlink_nl_put_handle(msg, devlink))
@@ -884,6 +885,15 @@ devlink_nl_port_function_attrs_put(struct sk_buff *msg, struct devlink_port *por
 	if (err)
 		goto out;
 	err = devlink_port_fn_state_fill(port, msg, extack, &msg_updated);
+	if (err)
+		goto out;
+	if (port->fn_devlink) {
+		err = devlink_nl_put_nested_handle(msg, port->fn_devlink,
+						   DEVLINK_PORT_FN_ATTR_DEVLINK);
+		if (!err)
+			msg_updated = true;
+	}
+
 out:
 	if (err || !msg_updated)
 		nla_nest_cancel(msg, function_attr);
@@ -1785,7 +1795,8 @@ static int devlink_nl_linecard_fill(struct sk_buff *msg,
 	}
 
 	if (linecard->nested_devlink &&
-	    devlink_nl_put_nested_handle(msg, linecard->nested_devlink))
+	    devlink_nl_put_nested_handle(msg, linecard->nested_devlink,
+					 DEVLINK_ATTR_NESTED_DEVLINK))
 		goto nla_put_failure;
 
 	genlmsg_end(msg, hdr);
@@ -7132,6 +7143,34 @@ void devlink_port_attrs_pci_sf_set(struct devlink_port *devlink_port, u32 contro
 	attrs->pci_sf.external = external;
 }
 EXPORT_SYMBOL_GPL(devlink_port_attrs_pci_sf_set);
+
+/**
+ * devl_port_fn_devlink_set - Attach/detach peer devlink
+ *			      instance to port function.
+ * @devlink_port: devlink port
+ * @fn_devlink: devlink instance to attach or NULL to detach
+ */
+void devl_port_fn_devlink_set(struct devlink_port *devlink_port,
+			      struct devlink *fn_devlink)
+{
+	lockdep_assert_held(&devlink_port->devlink->lock);
+	ASSERT_DEVLINK_PORT_REGISTERED(devlink_port);
+
+	if (fn_devlink)
+		ASSERT_DEVLINK_REGISTERED(fn_devlink);
+	else if (WARN_ON(!devlink_port->fn_devlink))
+		return;
+	else
+		ASSERT_DEVLINK_REGISTERED(devlink_port->fn_devlink);
+
+	if (WARN_ON(devlink_port->attrs.flavour != DEVLINK_PORT_FLAVOUR_PCI_SF ||
+		    devlink_port->attrs.pci_sf.external))
+		return;
+
+	devlink_port->fn_devlink = fn_devlink;
+	devlink_port_notify(devlink_port, DEVLINK_CMD_PORT_NEW);
+}
+EXPORT_SYMBOL_GPL(devl_port_fn_devlink_set);
 
 /**
  * devl_rate_node_create - create devlink rate node

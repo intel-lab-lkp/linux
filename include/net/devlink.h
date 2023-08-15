@@ -150,6 +150,8 @@ struct devlink_port {
 
 	struct devlink_rate *devlink_rate;
 	struct devlink_linecard *linecard;
+
+	struct devlink *fn_devlink; /* Peer function devlink instance */
 };
 
 struct devlink_port_new_attrs {
@@ -1667,6 +1669,8 @@ void devlink_port_attrs_pci_vf_set(struct devlink_port *devlink_port, u32 contro
 void devlink_port_attrs_pci_sf_set(struct devlink_port *devlink_port,
 				   u32 controller, u16 pf, u32 sf,
 				   bool external);
+void devl_port_fn_devlink_set(struct devlink_port *devlink_port,
+			      struct devlink *fn_devlink);
 struct devlink_rate *
 devl_rate_node_create(struct devlink *devlink, void *priv, char *node_name,
 		      struct devlink_rate *parent);
