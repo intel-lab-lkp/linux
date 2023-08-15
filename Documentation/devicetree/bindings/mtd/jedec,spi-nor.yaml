@@ -72,6 +72,13 @@ properties:
       be used on such systems, to denote the absence of a reliable reset
       mechanism.
 
+  disable-quad-mode:
+    type: boolean
+    description:
+      Some flash devices enables QE bit after BFPT is parsed. However, some system
+      may required quad mode to be disabled to use write protection. This boolean
+      flag is to override the quad enable status parsed from BFPT.
+
   no-wp:
     type: boolean
     description:
