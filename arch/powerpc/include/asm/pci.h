@@ -45,6 +45,8 @@ static inline int pci_get_legacy_ide_irq(struct pci_dev *dev, int channel)
 	return channel ? 15 : 14;
 }
 
+void *zalloc_maybe_bootmem(size_t size, gfp_t mask);
+
 #ifdef CONFIG_PCI
 void __init set_pci_dma_ops(const struct dma_map_ops *dma_ops);
 #else	/* CONFIG_PCI */
