@@ -2170,16 +2170,17 @@ intel_dp_drrs_compute_config(struct intel_connector *connector,
 		pipe_config->dp_m2_n2.data_m *= pipe_config->splitter.link_count;
 }
 
-static bool intel_dp_has_audio(struct intel_encoder *encoder,
-			       const struct drm_connector_state *conn_state)
+bool intel_dp_has_audio(struct intel_encoder *encoder,
+			const struct drm_connector_state *conn_state,
+			struct intel_dp *intel_dp)
 {
 	struct drm_i915_private *i915 = to_i915(encoder->base.dev);
-	struct intel_dp *intel_dp = enc_to_intel_dp(encoder);
-	struct intel_connector *connector = intel_dp->attached_connector;
 	const struct intel_digital_connector_state *intel_conn_state =
 		to_intel_digital_connector_state(conn_state);
+	struct intel_connector *connector =
+		to_intel_connector(conn_state->connector);
 
-	if (!intel_dp_port_has_audio(i915, encoder->port))
+	if (!intel_dp->is_mst && !intel_dp_port_has_audio(i915, encoder->port))
 		return false;
 
 	if (intel_conn_state->force_audio == HDMI_AUDIO_AUTO)
@@ -2240,9 +2241,8 @@ intel_dp_audio_compute_config(struct intel_encoder *encoder,
 	struct drm_i915_private *i915 = to_i915(encoder->base.dev);
 	struct drm_connector *connector = conn_state->connector;
 
-	pipe_config->sdp_split_enable =
-		intel_dp_has_audio(encoder, conn_state) &&
-		intel_dp_is_uhbr(pipe_config);
+	pipe_config->sdp_split_enable = pipe_config->has_audio &&
+					intel_dp_is_uhbr(pipe_config);
 
 	drm_dbg_kms(&i915->drm, "[CONNECTOR:%d:%s] SDP split enable: %s\n",
 		    connector->base.id, connector->name,
@@ -2265,7 +2265,7 @@ intel_dp_compute_config(struct intel_encoder *encoder,
 		pipe_config->has_pch_encoder = true;
 
 	pipe_config->has_audio =
-		intel_dp_has_audio(encoder, conn_state) &&
+		intel_dp_has_audio(encoder, conn_state, intel_dp) &&
 		intel_audio_compute_config(encoder, pipe_config, conn_state);
 
 	fixed_mode = intel_panel_fixed_mode(connector, adjusted_mode);
