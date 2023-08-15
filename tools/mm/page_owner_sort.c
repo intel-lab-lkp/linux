@@ -56,7 +56,8 @@ enum CULL_BIT {
 	CULL_TGID = 1<<3,
 	CULL_COMM = 1<<4,
 	CULL_STACKTRACE = 1<<5,
-	CULL_ALLOCATOR = 1<<6
+	CULL_ALLOCATOR = 1<<6,
+	CULL_MODULE = 1 << 7
 };
 enum ALLOCATOR_BIT {
 	ALLOCATOR_CMA = 1<<1,
@@ -67,7 +68,7 @@ enum ALLOCATOR_BIT {
 enum ARG_TYPE {
 	ARG_TXT, ARG_COMM, ARG_STACKTRACE, ARG_ALLOC_TS, ARG_FREE_TS,
 	ARG_CULL_TIME, ARG_PAGE_NUM, ARG_PID, ARG_TGID, ARG_UNKNOWN, ARG_FREE,
-	ARG_ALLOCATOR
+	ARG_ALLOCATOR, ARG_MODULE
 };
 enum SORT_ORDER {
 	SORT_ASC = 1,
@@ -211,6 +212,13 @@ static int compare_release(const void *p1, const void *p2)
 	return l1->free_ts_nsec ? 1 : -1;
 }
 
+static int compare_module(const void *p1, const void *p2)
+{
+	const struct block_list *l1 = p1, *l2 = p2;
+
+	return strcmp(l1->module, l2->module);
+}
+
 static int compare_cull_condition(const void *p1, const void *p2)
 {
 	if (cull == 0)
@@ -227,6 +235,8 @@ static int compare_cull_condition(const void *p1, const void *p2)
 		return compare_release(p1, p2);
 	if ((cull & CULL_ALLOCATOR) && compare_allocator(p1, p2))
 		return compare_allocator(p1, p2);
+	if ((cull & CULL_MODULE) && compare_module(p1, p2))
+		return compare_module(p1, p2);
 	return 0;
 }
 
@@ -443,6 +453,8 @@ static int get_arg_type(const char *arg)
 		return ARG_ALLOC_TS;
 	else if (!strcmp(arg, "allocator") || !strcmp(arg, "ator"))
 		return ARG_ALLOCATOR;
+	else if (!strcmp(arg, "module") || !strcmp(arg, "mod"))
+		return ARG_MODULE;
 	else {
 		return ARG_UNKNOWN;
 	}
@@ -601,6 +613,8 @@ static bool parse_cull_args(const char *arg_str)
 			cull |= CULL_UNRELEASE;
 		else if (arg_type == ARG_ALLOCATOR)
 			cull |= CULL_ALLOCATOR;
+		else if (arg_type == ARG_MODULE)
+			cull |= CULL_MODULE;
 		else {
 			free_explode(args, size);
 			return false;
@@ -920,6 +934,8 @@ int main(int argc, char **argv)
 				fprintf(fout, ", TGID %d", list[i].tgid);
 			if (cull & CULL_COMM || filter & FILTER_COMM)
 				fprintf(fout, ", task_comm_name: %s", list[i].comm);
+			if (cull & CULL_MODULE || filter & FILTER_MODULE)
+				fprintf(fout, ", module: %s", list[i].module);
 			if (cull & CULL_ALLOCATOR) {
 				fprintf(fout, ", ");
 				print_allocator(fout, list[i].allocator);
