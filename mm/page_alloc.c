@@ -579,12 +579,6 @@ static inline void free_the_page(struct page *page, unsigned int order)
  * This usage means that zero-order pages may not be compound.
  */
 
-static void free_compound_page(struct folio *folio)
-{
-	mem_cgroup_uncharge(folio);
-	free_the_page(&folio->page, folio_order(folio));
-}
-
 void prep_compound_page(struct page *page, unsigned int order)
 {
 	int i;
@@ -608,7 +602,8 @@ void destroy_large_folio(struct folio *folio)
 
 	if (folio_test_transhuge(folio) && dtor == TRANSHUGE_PAGE_DTOR)
 		free_transhuge_folio(folio);
-	free_compound_page(folio);
+	mem_cgroup_uncharge(folio);
+	free_the_page(&folio->page, folio_order(folio));
 }
 
 static inline void set_buddy_order(struct page *page, unsigned int order)
