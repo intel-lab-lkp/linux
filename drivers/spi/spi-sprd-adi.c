@@ -111,6 +111,9 @@
 #define SC2730_CLK_EN			0x1810
 #define SC2730_WDG_BASE			0x40
 #define SC2730_RST_STATUS		0x1bac
+#define UMP9620_RST_STATUS		0x23ac
+#define UMP9620_SWRST_CTRL0             0x23f8
+#define UMP9620_SOFT_RST_HW             0x2024
 #define SC2730_SWRST_CTRL0              0x1bf8
 #define SC2730_SOFT_RST_HW              0x1824
 #define REG_RST_EN                      BIT(4)
@@ -687,6 +690,14 @@ static struct sprd_adi_data ums512_data = {
 	.softrst_base = SC2730_SOFT_RST_HW,
 };
 
+static struct sprd_adi_data ums9620_data = {
+	.slave_offset = ADI_15BIT_SLAVE_OFFSET,
+	.slave_addr_size = ADI_15BIT_SLAVE_ADDR_SIZE,
+	.rst_sts = UMP9620_RST_STATUS,
+	.swrst_base = UMP9620_SWRST_CTRL0,
+	.softrst_base = UMP9620_SOFT_RST_HW,
+};
+
 static const struct of_device_id sprd_adi_of_match[] = {
 	{
 		.compatible = "sprd,sc9860-adi",
@@ -699,6 +710,10 @@ static const struct of_device_id sprd_adi_of_match[] = {
 	{
 		.compatible = "sprd,ums512-adi",
 		.data = &ums512_data,
+	},
+	{
+		.compatible = "sprd,ums9620-adi",
+		.data = &ums9620_data,
 	},
 	{ },
 };
