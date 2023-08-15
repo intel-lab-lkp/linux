@@ -15,6 +15,7 @@ struct idpf_vport_max_q;
 #include <linux/pci.h>
 #include <linux/bitfield.h>
 #include <linux/sctp.h>
+#include <linux/ethtool.h>
 #include <net/gro.h>
 #include <linux/dim.h>
 
@@ -210,6 +211,10 @@ struct idpf_dev_ops {
 	STATE(IDPF_VC_MAP_IRQ_ERR)		\
 	STATE(IDPF_VC_UNMAP_IRQ)		\
 	STATE(IDPF_VC_UNMAP_IRQ_ERR)		\
+	STATE(IDPF_VC_ADD_QUEUES)		\
+	STATE(IDPF_VC_ADD_QUEUES_ERR)		\
+	STATE(IDPF_VC_DEL_QUEUES)		\
+	STATE(IDPF_VC_DEL_QUEUES_ERR)		\
 	STATE(IDPF_VC_ALLOC_VECTORS)		\
 	STATE(IDPF_VC_ALLOC_VECTORS_ERR)	\
 	STATE(IDPF_VC_DEALLOC_VECTORS)		\
@@ -240,7 +245,18 @@ enum idpf_vport_vc_state {
 extern const char * const idpf_vport_vc_state_str[];
 
 /**
+ * enum idpf_vport_reset_cause - Vport soft reset causes
+ * @IDPF_SR_Q_CHANGE: Soft reset queue change
+ * @IDPF_SR_Q_DESC_CHANGE: Soft reset descriptor change
+ */
+enum idpf_vport_reset_cause {
+	IDPF_SR_Q_CHANGE,
+	IDPF_SR_Q_DESC_CHANGE,
+};
+
+/**
  * enum idpf_vport_flags - Vport flags
+ * @IDPF_VPORT_DEL_QUEUES: To send delete queues message
  * @IDPF_VPORT_SW_MARKER: Indicate TX pipe drain software marker packets
  *			  processing is done
  * @IDPF_VPORT_ADD_MAC_REQ: Asynchronous add ether address in flight
@@ -248,10 +264,24 @@ extern const char * const idpf_vport_vc_state_str[];
  * @IDPF_VPORT_FLAGS_NBITS: Must be last
  */
 enum idpf_vport_flags {
+	IDPF_VPORT_DEL_QUEUES,
 	IDPF_VPORT_SW_MARKER,
 	IDPF_VPORT_ADD_MAC_REQ,
 	IDPF_VPORT_DEL_MAC_REQ,
 	IDPF_VPORT_FLAGS_NBITS,
+};
+
+struct idpf_port_stats {
+	struct u64_stats_sync stats_sync;
+	u64_stats_t rx_hw_csum_err;
+	u64_stats_t rx_hsplit;
+	u64_stats_t rx_hsplit_hbo;
+	u64_stats_t rx_bad_descs;
+	u64_stats_t tx_linearize;
+	u64_stats_t tx_busy;
+	u64_stats_t tx_drops;
+	u64_stats_t tx_dma_map_errs;
+	struct virtchnl2_vport_stats vport_stats;
 };
 
 /**
@@ -307,7 +337,9 @@ enum idpf_vport_state {
  * @default_mac_addr: device will give a default MAC to use
  * @rx_itr_profile: RX profiles for Dynamic Interrupt Moderation
  * @tx_itr_profile: TX profiles for Dynamic Interrupt Moderation
+ * @port_stats: per port csum, header split, and other offload stats
  * @link_up: True if link is up
+ * @link_speed_mbps: Link speed in mbps
  * @vc_msg: Virtchnl message buffer
  * @vc_state: Virtchnl message state
  * @state: See enum idpf_vport_state
@@ -316,6 +348,7 @@ enum idpf_vport_state {
  * @stop_mutex: Lock to protect against multiple stop threads, which can happen
  *		when the driver is in a namespace in a system that is being
  *		shutdown.
+ * @soft_reset_lock: Lock to protect soft reset flow
  * @vc_buf_lock: Lock to protect virtchnl buffer
  * @mac_filter_list_lock: Lock to protect mac filters
  */
@@ -358,8 +391,10 @@ struct idpf_vport {
 	u8 default_mac_addr[ETH_ALEN];
 	u16 rx_itr_profile[IDPF_DIM_PROFILE_SLOTS];
 	u16 tx_itr_profile[IDPF_DIM_PROFILE_SLOTS];
+	struct idpf_port_stats port_stats;
 
 	bool link_up;
+	u32 link_speed_mbps;
 
 	char vc_msg[IDPF_CTLQ_MAX_BUF_LEN];
 	DECLARE_BITMAP(vc_state, IDPF_VC_NBITS);
@@ -368,6 +403,7 @@ struct idpf_vport {
 	wait_queue_head_t vchnl_wq;
 	wait_queue_head_t sw_marker_wq;
 	struct mutex stop_mutex;
+	struct mutex soft_reset_lock;
 	struct mutex vc_buf_lock;
 
 	spinlock_t mac_filter_list_lock;
@@ -790,6 +826,7 @@ void idpf_mbx_task(struct work_struct *work);
 void idpf_vc_event_task(struct work_struct *work);
 void idpf_dev_ops_init(struct idpf_adapter *adapter);
 void idpf_vf_dev_ops_init(struct idpf_adapter *adapter);
+int idpf_vport_adjust_qs(struct idpf_vport *vport);
 int idpf_init_dflt_mbx(struct idpf_adapter *adapter);
 void idpf_deinit_dflt_mbx(struct idpf_adapter *adapter);
 int idpf_vc_core_init(struct idpf_adapter *adapter);
@@ -798,6 +835,11 @@ int idpf_intr_req(struct idpf_adapter *adapter);
 void idpf_intr_rel(struct idpf_adapter *adapter);
 int idpf_get_reg_intr_vecs(struct idpf_vport *vport,
 			   struct idpf_vec_regs *reg_vals);
+int idpf_send_delete_queues_msg(struct idpf_vport *vport);
+int idpf_send_add_queues_msg(const struct idpf_vport *vport, u16 num_tx_q,
+			     u16 num_complq, u16 num_rx_q, u16 num_rx_bufq);
+int idpf_initiate_soft_reset(struct idpf_vport *vport,
+			     enum idpf_vport_reset_cause reset_cause);
 int idpf_send_enable_vport_msg(struct idpf_vport *vport);
 int idpf_send_disable_vport_msg(struct idpf_vport *vport);
 int idpf_send_destroy_vport_msg(struct idpf_vport *vport);
@@ -810,6 +852,7 @@ void idpf_deinit_task(struct idpf_adapter *adapter);
 int idpf_req_rel_vector_indexes(struct idpf_adapter *adapter,
 				u16 *q_vector_idxs,
 				struct idpf_vector_info *vec_info);
+int idpf_vport_alloc_vec_indexes(struct idpf_vport *vport);
 int idpf_get_vec_ids(struct idpf_adapter *adapter,
 		     u16 *vecids, int num_vecids,
 		     struct virtchnl2_vector_chunks *chunks);
@@ -817,6 +860,7 @@ int idpf_recv_mb_msg(struct idpf_adapter *adapter, u32 op,
 		     void *msg, int msg_size);
 int idpf_send_mb_msg(struct idpf_adapter *adapter, u32 op,
 		     u16 msg_size, u8 *msg);
+void idpf_set_ethtool_ops(struct net_device *netdev);
 int idpf_vport_alloc_max_qs(struct idpf_adapter *adapter,
 			    struct idpf_vport_max_q *max_q);
 void idpf_vport_dealloc_max_qs(struct idpf_adapter *adapter,
@@ -832,6 +876,8 @@ int idpf_send_enable_queues_msg(struct idpf_vport *vport);
 int idpf_send_create_vport_msg(struct idpf_adapter *adapter,
 			       struct idpf_vport_max_q *max_q);
 int idpf_check_supported_desc_ids(struct idpf_vport *vport);
+void idpf_vport_intr_write_itr(struct idpf_q_vector *q_vector,
+			       u16 itr, bool tx);
 int idpf_send_map_unmap_queue_vector_msg(struct idpf_vport *vport, bool map);
 int idpf_send_set_sriov_vfs_msg(struct idpf_adapter *adapter, u16 num_vfs);
 int idpf_sriov_configure(struct pci_dev *pdev, int num_vfs);
