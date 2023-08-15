@@ -2776,9 +2776,8 @@ out:
 	return ret;
 }
 
-void free_transhuge_page(struct page *page)
+void free_transhuge_folio(struct folio *folio)
 {
-	struct folio *folio = (struct folio *)page;
 	struct deferred_split *ds_queue = get_deferred_split_queue(folio);
 	unsigned long flags;
 
@@ -2795,7 +2794,7 @@ void free_transhuge_page(struct page *page)
 		}
 		spin_unlock_irqrestore(&ds_queue->split_queue_lock, flags);
 	}
-	free_compound_page(page);
+	free_compound_page(&folio->page);
 }
 
 void deferred_split_folio(struct folio *folio)

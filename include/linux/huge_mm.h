@@ -141,7 +141,7 @@ unsigned long thp_get_unmapped_area(struct file *filp, unsigned long addr,
 		unsigned long len, unsigned long pgoff, unsigned long flags);
 
 void prep_transhuge_page(struct page *page);
-void free_transhuge_page(struct page *page);
+void free_transhuge_folio(struct folio *folio);
 
 bool can_split_folio(struct folio *folio, int *pextra_pins);
 int split_huge_page_to_list(struct page *page, struct list_head *list);
