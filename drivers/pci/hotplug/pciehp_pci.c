@@ -134,4 +134,7 @@ void pciehp_unconfigure_device(struct controller *ctrl, bool presence)
 	}
 
 	pci_unlock_rescan_remove();
+
+	pcie_capability_clear_word(ctrl->pcie->port, PCI_EXP_DEVCTL2,
+				   PCI_EXP_DEVCTL2_ATOMIC_REQ);
 }
