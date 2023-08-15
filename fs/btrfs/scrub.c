@@ -219,6 +219,14 @@ struct scrub_ctx {
 	 * doing the wakeup() call.
 	 */
 	refcount_t              refs;
+
+	/*
+	 * Indicate the next logical that is covered by an extent.
+	 *
+	 * This is for striped profiles to skip stripes which doesn't have
+	 * any extent.
+	 */
+	u64			found_next;
 };
 
 struct scrub_warning {
@@ -1361,7 +1369,8 @@ static int compare_extent_item_range(struct btrfs_path *path,
  */
 static int find_first_extent_item(struct btrfs_root *extent_root,
 				  struct btrfs_path *path,
-				  u64 search_start, u64 search_len)
+				  u64 search_start, u64 search_len,
+				  u64 *found_next_ret)
 {
 	struct btrfs_fs_info *fs_info = extent_root->fs_info;
 	struct btrfs_key key;
@@ -1397,8 +1406,11 @@ static int find_first_extent_item(struct btrfs_root *extent_root,
 search_forward:
 	while (true) {
 		btrfs_item_key_to_cpu(path->nodes[0], &key, path->slots[0]);
-		if (key.objectid >= search_start + search_len)
+		if (key.objectid >= search_start + search_len) {
+			if (found_next_ret)
+				*found_next_ret = key.objectid;
 			break;
+		}
 		if (key.type != BTRFS_METADATA_ITEM_KEY &&
 		    key.type != BTRFS_EXTENT_ITEM_KEY)
 			goto next;
@@ -1406,13 +1418,18 @@ search_forward:
 		ret = compare_extent_item_range(path, search_start, search_len);
 		if (ret == 0)
 			return ret;
-		if (ret > 0)
+		if (ret > 0) {
+			if (found_next_ret)
+				*found_next_ret = key.objectid;
 			break;
+		}
 next:
 		path->slots[0]++;
 		if (path->slots[0] >= btrfs_header_nritems(path->nodes[0])) {
 			ret = btrfs_next_leaf(extent_root, path);
 			if (ret) {
+				if (ret > 0 && found_next_ret)
+					*found_next_ret = U64_MAX;
 				/* Either no more item or fatal error */
 				btrfs_release_path(path);
 				return ret;
@@ -1514,7 +1531,8 @@ static int scrub_find_fill_first_stripe(struct btrfs_block_group *bg,
 					struct btrfs_device *dev, u64 physical,
 					int mirror_num, u64 logical_start,
 					u32 logical_len,
-					struct scrub_stripe *stripe)
+					struct scrub_stripe *stripe,
+					u64 *found_next_ret)
 {
 	struct btrfs_fs_info *fs_info = bg->fs_info;
 	struct btrfs_root *extent_root = btrfs_extent_root(fs_info, bg->start);
@@ -1536,7 +1554,7 @@ static int scrub_find_fill_first_stripe(struct btrfs_block_group *bg,
 	ASSERT(logical_start >= bg->start && logical_end <= bg->start + bg->length);
 
 	ret = find_first_extent_item(extent_root, extent_path, logical_start,
-				     logical_len);
+				     logical_len, found_next_ret);
 	/* Either error or not found. */
 	if (ret)
 		goto out;
@@ -1570,7 +1588,8 @@ static int scrub_find_fill_first_stripe(struct btrfs_block_group *bg,
 	/* Fill the extent info for the remaining sectors. */
 	while (cur_logical <= stripe_end) {
 		ret = find_first_extent_item(extent_root, extent_path, cur_logical,
-					     stripe_end - cur_logical + 1);
+					     stripe_end - cur_logical + 1,
+					     found_next_ret);
 		if (ret < 0)
 			goto out;
 		if (ret > 0) {
@@ -1805,7 +1824,7 @@ static int queue_scrub_stripe(struct scrub_ctx *sctx, struct btrfs_block_group *
 	scrub_reset_stripe(stripe);
 	ret = scrub_find_fill_first_stripe(bg, &sctx->extent_path,
 			&sctx->csum_path, dev, physical, mirror_num, logical,
-			length, stripe);
+			length, stripe, &sctx->found_next);
 	/* Either >0 as no more extents or <0 for error. */
 	if (ret)
 		return ret;
@@ -1877,7 +1896,7 @@ static int scrub_raid56_parity_stripe(struct scrub_ctx *sctx,
 		ret = scrub_find_fill_first_stripe(bg, &extent_path, &csum_path,
 				map->stripes[stripe_index].dev, physical, 1,
 				full_stripe_start + btrfs_stripe_nr_to_offset(i),
-				BTRFS_STRIPE_LEN, stripe);
+				BTRFS_STRIPE_LEN, stripe, NULL);
 		if (ret < 0)
 			goto out;
 		/*
@@ -2120,10 +2139,32 @@ static int scrub_simple_stripe(struct scrub_ctx *sctx,
 					  mirror_num);
 		if (ret)
 			return ret;
+
 		/* Skip to next stripe which belongs to the target device */
 		cur_logical += logical_increment;
 		/* For physical offset, we just go to next stripe */
 		cur_physical += BTRFS_STRIPE_LEN;
+
+		/* No more extent item. all done. */
+		if (sctx->found_next >= bg->start + bg->length) {
+			sctx->stat.last_physical = orig_physical +
+				div_u64(bg->length, map->num_stripes /
+					map->sub_stripes);
+			return 0;
+		}
+		/*
+		 * The next found extent is already beyond our stripe.
+		 * Skip to the next extent.
+		 */
+		if (sctx->found_next >= cur_logical) {
+			unsigned int stripes_skipped;
+
+			/* Advance to the next stripe covering sctx->found_next. */
+			stripes_skipped = div_u64(sctx->found_next - cur_logical,
+						  logical_increment);
+			cur_logical += logical_increment * stripes_skipped;
+			cur_physical += BTRFS_STRIPE_LEN * stripes_skipped;
+		}
 	}
 	return ret;
 }
@@ -2154,6 +2195,7 @@ static noinline_for_stack int scrub_stripe(struct scrub_ctx *sctx,
 
 	/* Extent_path should be probably released. */
 	ASSERT(sctx->extent_path.nodes[0] == NULL);
+	sctx->found_next = chunk_logical;
 
 	scrub_blocked_if_needed(fs_info);
 
@@ -2231,8 +2273,13 @@ static noinline_for_stack int scrub_stripe(struct scrub_ctx *sctx,
 	 * using their physical offset.
 	 */
 	while (physical < physical_end) {
+		u64 full_stripe_start;
+		u32 full_stripe_len = increment;
+
 		ret = get_raid56_logic_offset(physical, stripe_index, map,
 					      &logical, &stripe_logical);
+		full_stripe_start = rounddown(logical, full_stripe_len) +
+				    chunk_logical;
 		logical += chunk_logical;
 		if (ret) {
 			/* it is parity strip */
@@ -2259,6 +2306,25 @@ static noinline_for_stack int scrub_stripe(struct scrub_ctx *sctx,
 next:
 		logical += increment;
 		physical += BTRFS_STRIPE_LEN;
+		full_stripe_start += full_stripe_len;
+
+		/* No more extent in the block group. */
+		if (sctx->found_next >= bg->start + bg->length) {
+			spin_lock(&sctx->stat_lock);
+			sctx->stat.last_physical = physical_end;
+			spin_unlock(&sctx->stat_lock);
+			goto out;
+		}
+
+		if (sctx->found_next >= full_stripe_start) {
+			unsigned int stripes_skipped;
+
+			stripes_skipped = div_u64(sctx->found_next - full_stripe_start,
+						  full_stripe_len);
+			logical += increment * stripes_skipped;
+			physical += BTRFS_STRIPE_LEN * stripes_skipped;
+		}
+
 		spin_lock(&sctx->stat_lock);
 		if (stop_loop)
 			sctx->stat.last_physical =
