@@ -12,6 +12,7 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
+#include <linux/panic_notifier.h>
 #include <linux/platform_device.h>
 #include <linux/reboot.h>
 #include <linux/spi/spi.h>
@@ -128,6 +129,8 @@
 #define WDG_LOAD_MASK			GENMASK(15, 0)
 #define WDG_UNLOCK_KEY			0xe551
 
+#define PANIC_REASON_LEN_MAX		20
+
 struct sprd_adi_wdg {
 	u32 base;
 	u32 rst_sts;
@@ -154,6 +157,31 @@ struct sprd_adi {
 	struct notifier_block	restart_handler;
 	const struct sprd_adi_data *data;
 };
+
+static char *panic_reason;
+static int adi_panic_event(struct notifier_block *self, unsigned long val, void *reason)
+{
+	if (reason == NULL)
+		return 0;
+
+	if (strlen(reason) < PANIC_REASON_LEN_MAX)
+		memcpy(panic_reason, reason, strlen(reason));
+	else
+		memcpy(panic_reason, reason, PANIC_REASON_LEN_MAX);
+
+	return 0;
+}
+
+static struct notifier_block adi_panic_event_nb = {
+	.notifier_call  = adi_panic_event,
+	.priority       = INT_MAX,
+};
+
+static int adi_get_panic_reason_init(void)
+{
+	atomic_notifier_chain_register(&panic_notifier_list, &adi_panic_event_nb);
+	return 0;
+}
 
 static int sprd_adi_check_addr(struct sprd_adi *sadi, u32 reg)
 {
@@ -378,9 +406,15 @@ static int sprd_adi_restart(struct notifier_block *this, unsigned long mode,
 					     restart_handler);
 	u32 val, reboot_mode = 0;
 
-	if (!cmd)
-		reboot_mode = HWRST_STATUS_NORMAL;
-	else if (!strncmp(cmd, "recovery", 8))
+	if (!cmd) {
+		if (strlen(panic_reason)) {
+			reboot_mode = HWRST_STATUS_PANIC;
+			if (strstr(panic_reason, "tospanic"))
+				reboot_mode = HWRST_STATUS_SECURITY;
+		} else {
+			reboot_mode = HWRST_STATUS_NORMAL;
+		}
+	} else if (!strncmp(cmd, "recovery", 8))
 		reboot_mode = HWRST_STATUS_RECOVERY;
 	else if (!strncmp(cmd, "alarm", 5))
 		reboot_mode = HWRST_STATUS_ALARM;
@@ -520,6 +554,10 @@ static int sprd_adi_probe(struct platform_device *pdev)
 	u16 num_chipselect;
 	int ret;
 
+	panic_reason = devm_kzalloc(&pdev->dev, (sizeof(char))*PANIC_REASON_LEN_MAX, GFP_KERNEL);
+	if (!panic_reason)
+		return -ENOMEM;
+
 	if (!np) {
 		dev_err(&pdev->dev, "can not find the adi bus node\n");
 		return -ENODEV;
@@ -573,7 +611,7 @@ static int sprd_adi_probe(struct platform_device *pdev)
 	}
 
 	sprd_adi_hw_init(sadi);
-
+	adi_get_panic_reason_init();
 	if (sadi->data->wdg_rst)
 		sadi->data->wdg_rst(sadi);
 
