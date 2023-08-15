@@ -679,6 +679,8 @@ static bool parse_sort_args(const char *arg_str)
 			sc.cmps[i] = compare_txt;
 		else if (arg_type == ARG_ALLOCATOR)
 			sc.cmps[i] = compare_allocator;
+		else if (arg_type == ARG_MODULE)
+			sc.cmps[i] = compare_module;
 		else {
 			free_explode(args, size);
 			sc.size = 0;
