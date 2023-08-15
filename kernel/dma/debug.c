@@ -643,9 +643,9 @@ static void __dma_entry_alloc_check_leak(void)
 
 	/* Shout each time we tick over some multiple of the initial pool */
 	if (tmp < DMA_DEBUG_DYNAMIC_ENTRIES) {
-		pr_info("dma_debug_entry pool grown to %u (%u00%%)\n",
-			nr_total_entries,
-			(nr_total_entries / nr_prealloc_entries));
+		printk_deferred(KERN_INFO "dma_debug_entry pool grown to %u (%u00%%)\n",
+				nr_total_entries,
+				(nr_total_entries / nr_prealloc_entries));
 	}
 }
 
