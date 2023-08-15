@@ -2236,10 +2236,15 @@ intel_dp_compute_output_format(struct intel_encoder *encoder,
 static void
 intel_dp_audio_compute_config(struct intel_encoder *encoder,
 			      struct intel_crtc_state *pipe_config,
-			      struct drm_connector_state *conn_state)
+			      struct drm_connector_state *conn_state,
+			      struct intel_dp *intel_dp)
 {
 	struct drm_i915_private *i915 = to_i915(encoder->base.dev);
 	struct drm_connector *connector = conn_state->connector;
+
+	pipe_config->has_audio =
+		intel_dp_has_audio(encoder, conn_state, intel_dp) &&
+		intel_audio_compute_config(encoder, pipe_config, conn_state);
 
 	pipe_config->sdp_split_enable = pipe_config->has_audio &&
 					intel_dp_is_uhbr(pipe_config);
@@ -2263,10 +2268,6 @@ intel_dp_compute_config(struct intel_encoder *encoder,
 
 	if (HAS_PCH_SPLIT(dev_priv) && !HAS_DDI(dev_priv) && encoder->port != PORT_A)
 		pipe_config->has_pch_encoder = true;
-
-	pipe_config->has_audio =
-		intel_dp_has_audio(encoder, conn_state, intel_dp) &&
-		intel_audio_compute_config(encoder, pipe_config, conn_state);
 
 	fixed_mode = intel_panel_fixed_mode(connector, adjusted_mode);
 	if (intel_dp_is_edp(intel_dp) && fixed_mode) {
@@ -2334,7 +2335,7 @@ intel_dp_compute_config(struct intel_encoder *encoder,
 		adjusted_mode->crtc_clock /= n;
 	}
 
-	intel_dp_audio_compute_config(encoder, pipe_config, conn_state);
+	intel_dp_audio_compute_config(encoder, pipe_config, conn_state, intel_dp);
 
 	intel_link_compute_m_n(output_bpp,
 			       pipe_config->lane_count,
