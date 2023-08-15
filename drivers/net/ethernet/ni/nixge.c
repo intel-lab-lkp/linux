@@ -1270,7 +1270,7 @@ static int nixge_of_get_resources(struct platform_device *pdev)
 	if (!of_id)
 		return -ENODEV;
 
-	version = (enum nixge_version)of_id->data;
+	version = (uintptr_t)of_id->data;
 	if (version <= NIXGE_V2)
 		priv->dma_regs = devm_platform_get_and_ioremap_resource(pdev, 0, NULL);
 	else
