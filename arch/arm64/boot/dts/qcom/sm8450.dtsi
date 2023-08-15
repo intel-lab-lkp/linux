@@ -391,6 +391,49 @@
 		};
 	};
 
+	pcie0_opp_table: opp-table-pcie0 {
+		compatible = "operating-points-v2";
+
+		opp-2500000 {
+			opp-hz = /bits/ 64 <2500000>;
+			opp-level = <RPMH_REGULATOR_LEVEL_LOW_SVS>;
+		};
+
+		opp-5000000 {
+			opp-hz = /bits/ 64 <5000000>;
+			opp-level = <RPMH_REGULATOR_LEVEL_LOW_SVS>;
+		};
+
+		opp-8000000 {
+			opp-hz = /bits/ 64 <8000000>;
+			opp-level = <RPMH_REGULATOR_LEVEL_LOW_SVS>;
+		};
+	};
+
+	pcie1_opp_table: opp-table-pcie1 {
+		compatible = "operating-points-v2";
+
+		opp-2500000 {
+			opp-hz = /bits/ 64 <2500000>;
+			opp-level = <RPMH_REGULATOR_LEVEL_LOW_SVS>;
+		};
+
+		opp-5000000 {
+			opp-hz = /bits/ 64 <5000000>;
+			opp-level = <RPMH_REGULATOR_LEVEL_LOW_SVS>;
+		};
+
+		opp-8000000 {
+			opp-hz = /bits/ 64 <8000000>;
+			opp-level = <RPMH_REGULATOR_LEVEL_LOW_SVS>;
+		};
+
+		opp-16000000 {
+			opp-hz = /bits/ 64 <16000000>;
+			opp-level = <RPMH_REGULATOR_LEVEL_NOM>;
+		};
+	};
+
 	reserved_memory: reserved-memory {
 		#address-cells = <2>;
 		#size-cells = <2>;
@@ -1813,6 +1856,8 @@
 			pinctrl-names = "default";
 			pinctrl-0 = <&pcie0_default_state>;
 
+			operating-points-v2 = <&pcie0_opp_table>;
+
 			status = "disabled";
 		};
 
@@ -1924,6 +1969,8 @@
 
 			pinctrl-names = "default";
 			pinctrl-0 = <&pcie1_default_state>;
+
+			operating-points-v2 = <&pcie1_opp_table>;
 
 			status = "disabled";
 		};
