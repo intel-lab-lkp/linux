@@ -1274,9 +1274,7 @@ unsigned long nr_free_buffer_pages(void);
 
 /* Compound pages may have a special destructor */
 enum compound_dtor_id {
-	NULL_COMPOUND_DTOR,
 	COMPOUND_PAGE_DTOR,
-	HUGETLB_PAGE_DTOR,
 	TRANSHUGE_PAGE_DTOR,
 	NR_COMPOUND_DTORS
 };

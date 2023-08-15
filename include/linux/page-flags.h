@@ -180,6 +180,9 @@ enum pageflags {
 	PG_has_hwpoisoned = PG_error,
 #endif
 
+	/* Is a hugetlb page.  Stored in first tail page. */
+	PG_hugetlb = PG_writeback,
+
 	/* non-lru isolated movable page */
 	PG_isolated = PG_reclaim,
 
@@ -812,7 +815,23 @@ static inline void ClearPageCompound(struct page *page)
 
 #ifdef CONFIG_HUGETLB_PAGE
 int PageHuge(struct page *page);
-bool folio_test_hugetlb(struct folio *folio);
+SETPAGEFLAG(HugeTLB, hugetlb, PF_SECOND)
+CLEARPAGEFLAG(HugeTLB, hugetlb, PF_SECOND)
+
+/**
+ * folio_test_hugetlb - Determine if the folio belongs to hugetlbfs
+ * @folio: The folio to test.
+ *
+ * Context: Any context.  Caller should have a reference on the folio to
+ * prevent it from being turned into a tail page.
+ * Return: True for hugetlbfs folios, false for anon folios or folios
+ * belonging to other filesystems.
+ */
+static inline bool folio_test_hugetlb(struct folio *folio)
+{
+	return folio_test_large(folio) &&
+		test_bit(PG_hugetlb, folio_flags(folio, 1));
+}
 #else
 TESTPAGEFLAG_FALSE(Huge, hugetlb)
 #endif
