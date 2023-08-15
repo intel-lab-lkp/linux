@@ -443,3 +443,50 @@ nest
 
 Attribute containing other (nested) attributes.
 ``nested-attributes`` specifies which attribute set is used inside.
+
+genetlink-legacy
+================
+
+The genetlink-legacy schema extends the genetlink schema with some additional
+properties that are needed to support legacy genetlink families.
+
+Globals
+-------
+
+ - ``kernel-policy`` - Specify whether the kernel input policy is ``global``,
+   ``per-op`` or ``split``.
+
+Struct definitions
+------------------
+
+There is a new type of definition called ``struct`` which is used for declaring
+the C struct format of fixed headers and binary attributes.
+
+members
+~~~~~~~
+
+ - ``name`` - The attribute name of the struct member
+ - ``type`` - One of the scalar types ``u8``, ``u16``, ``u32``, ``u64``, ``s8``,
+   ``s16``, ``s32``, ``s64``, ``string`` or ``binary``.
+ - ``byte-order`` - ``big-endian`` or ``little-endian``
+ - ``doc``, ``enum``, ``enum-as-flags``, ``display-hint`` - Same as for
+   attribute definitions.
+
+Attributes
+----------
+
+The genetlink-legacy families can use binary attributes that contain C struct
+data. This is specified using a ``struct`` property containing the name of the
+struct definition.
+
+ - ``struct`` - Name of the struct definition to be used for the attribute.
+
+Operations
+----------
+
+The genetlink-legacy families can use a binary fixed header that contains C
+struct data.
+
+ - ``fixed-header`` - name of the struct definition to be used for the fixed
+   header data. This can be specified as a default for all operations and on a
+   per-operation basis.
