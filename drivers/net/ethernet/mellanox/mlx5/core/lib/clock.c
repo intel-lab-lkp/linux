@@ -39,7 +39,7 @@
 #include "clock.h"
 
 enum {
-	MLX5_CYCLES_SHIFT	= 31
+	MLX5_CYCLES_SHIFT	= 23
 };
 
 enum {
