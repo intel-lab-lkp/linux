@@ -215,13 +215,17 @@ static void sar_notify(acpi_handle handle, u32 event, void *data)
 
 static void sar_get_data(int reg, struct wwan_sar_context *context)
 {
-	union acpi_object *out, req;
+	union acpi_object *out, req, argv4;
 	u32 rev = 0;
 
-	req.type = ACPI_TYPE_INTEGER;
+	argv4.type = ACPI_TYPE_PACKAGE;
+	argv4.package.count = 1;
+	argv4.package.elements = &req;
+	req.integer.type = ACPI_TYPE_INTEGER;
 	req.integer.value = reg;
+
 	out = acpi_evaluate_dsm_typed(context->handle, &context->guid, rev,
-				      COMMAND_ID_CONFIG_TABLE, &req, ACPI_TYPE_PACKAGE);
+				      COMMAND_ID_CONFIG_TABLE, &argv4, ACPI_TYPE_PACKAGE);
 	if (!out)
 		return;
 	if (out->package.count >= 3 &&
