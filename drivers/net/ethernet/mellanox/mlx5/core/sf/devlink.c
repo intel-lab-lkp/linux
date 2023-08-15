@@ -18,6 +18,10 @@ struct mlx5_sf {
 	u16 id;
 	u16 hw_fn_id;
 	u16 hw_state;
+	struct mlx5_core_dev *dev;
+	struct work_struct peer_devlink_set_work;
+	bool peer_devlink_set_work_disabled;
+	struct devlink *peer_devlink;
 };
 
 struct mlx5_sf_table {
@@ -28,6 +32,7 @@ struct mlx5_sf_table {
 	struct mutex sf_state_lock; /* Serializes sf state among user cmds & vhca event handler. */
 	struct notifier_block esw_nb;
 	struct notifier_block vhca_nb;
+	struct notifier_block mdev_nb;
 };
 
 static struct mlx5_sf *
@@ -57,6 +62,36 @@ static int mlx5_sf_id_insert(struct mlx5_sf_table *table, struct mlx5_sf *sf)
 static void mlx5_sf_id_erase(struct mlx5_sf_table *table, struct mlx5_sf *sf)
 {
 	xa_erase(&table->port_indices, sf->port_index);
+}
+
+static void mlx5_sf_peer_devlink_set_work_flush(struct mlx5_sf *sf)
+{
+	flush_work(&sf->peer_devlink_set_work);
+}
+
+static void mlx5_sf_peer_devlink_set_work_queue(struct mlx5_sf *sf)
+{
+	if (sf->peer_devlink_set_work_disabled)
+		return;
+	mlx5_events_work_enqueue(sf->dev, &sf->peer_devlink_set_work);
+}
+
+static void mlx5_sf_peer_devlink_set_work_disable(struct mlx5_sf *sf)
+{
+	sf->peer_devlink_set_work_disabled = true;
+	cancel_work_sync(&sf->peer_devlink_set_work);
+}
+
+static void mlx5_sf_peer_devlink_set_work(struct work_struct *work)
+{
+	struct mlx5_sf *sf = container_of(work, struct mlx5_sf, peer_devlink_set_work);
+
+	if (!devl_trylock(sf->dl_port.devlink)) {
+		mlx5_sf_peer_devlink_set_work_queue(sf);
+		return;
+	}
+	devl_port_fn_devlink_set(&sf->dl_port, sf->peer_devlink);
+	devl_unlock(sf->dl_port.devlink);
 }
 
 static struct mlx5_sf *
@@ -92,6 +127,9 @@ mlx5_sf_alloc(struct mlx5_sf_table *table, struct mlx5_eswitch *esw,
 	sf->hw_fn_id = hw_fn_id;
 	sf->hw_state = MLX5_VHCA_STATE_ALLOCATED;
 	sf->controller = controller;
+
+	sf->dev = table->dev;
+	INIT_WORK(&sf->peer_devlink_set_work, &mlx5_sf_peer_devlink_set_work);
 
 	err = mlx5_sf_id_insert(table, sf);
 	if (err)
@@ -296,6 +334,7 @@ static int mlx5_sf_add(struct mlx5_core_dev *dev, struct mlx5_sf_table *table,
 						new_attr->controller, new_attr->sfnum);
 	if (err)
 		goto esw_err;
+
 	*dl_port = &sf->dl_port;
 	trace_mlx5_sf_add(dev, sf->port_index, sf->controller, sf->hw_fn_id, new_attr->sfnum);
 	return 0;
@@ -400,6 +439,7 @@ int mlx5_devlink_sf_port_del(struct devlink *devlink,
 		goto sf_err;
 	}
 
+	mlx5_sf_peer_devlink_set_work_disable(sf);
 	mlx5_esw_offloads_sf_vport_disable(esw, sf->hw_fn_id);
 	mlx5_sf_id_erase(table, sf);
 
@@ -472,6 +512,7 @@ static void mlx5_sf_deactivate_all(struct mlx5_sf_table *table)
 	 * arrive. It is safe to destroy all user created SFs.
 	 */
 	xa_for_each(&table->port_indices, index, sf) {
+		mlx5_sf_peer_devlink_set_work_disable(sf);
 		mlx5_esw_offloads_sf_vport_disable(esw, sf->hw_fn_id);
 		mlx5_sf_id_erase(table, sf);
 		mlx5_sf_dealloc(table, sf);
@@ -511,6 +552,36 @@ static int mlx5_sf_esw_event(struct notifier_block *nb, unsigned long event, voi
 	return 0;
 }
 
+static int mlx5_sf_mdev_event(struct notifier_block *nb, unsigned long event, void *data)
+{
+	struct mlx5_sf_table *table = container_of(nb, struct mlx5_sf_table, mdev_nb);
+	struct mlx5_sf_peer_devlink_event_info *event_info = data;
+	int ret = NOTIFY_DONE;
+	struct mlx5_sf *sf;
+
+	if (event != MLX5_DRIVER_EVENT_SF_PEER_DEVLINK)
+		return NOTIFY_DONE;
+
+	table = mlx5_sf_table_try_get(table->dev);
+	if (!table)
+		return NOTIFY_DONE;
+
+	mutex_lock(&table->sf_state_lock);
+	sf = mlx5_sf_lookup_by_function_id(table, event_info->fn_id);
+	if (!sf)
+		goto out;
+
+	mlx5_sf_peer_devlink_set_work_flush(sf);
+	sf->peer_devlink = event_info->devlink;
+	mlx5_sf_peer_devlink_set_work_queue(sf);
+
+	ret = NOTIFY_OK;
+out:
+	mutex_unlock(&table->sf_state_lock);
+	mlx5_sf_table_put(table);
+	return ret;
+}
+
 static bool mlx5_sf_table_supported(const struct mlx5_core_dev *dev)
 {
 	return dev->priv.eswitch && MLX5_ESWITCH_MANAGER(dev) &&
@@ -544,6 +615,9 @@ int mlx5_sf_table_init(struct mlx5_core_dev *dev)
 	if (err)
 		goto vhca_err;
 
+	table->mdev_nb.notifier_call = mlx5_sf_mdev_event;
+	mlx5_blocking_notifier_register(dev, &table->mdev_nb);
+
 	return 0;
 
 vhca_err:
@@ -562,6 +636,7 @@ void mlx5_sf_table_cleanup(struct mlx5_core_dev *dev)
 	if (!table)
 		return;
 
+	mlx5_blocking_notifier_unregister(dev, &table->mdev_nb);
 	mlx5_vhca_event_notifier_unregister(table->dev, &table->vhca_nb);
 	mlx5_esw_event_notifier_unregister(dev->priv.eswitch, &table->esw_nb);
 	WARN_ON(refcount_read(&table->refcount));
