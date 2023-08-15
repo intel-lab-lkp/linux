@@ -121,6 +121,8 @@ properties:
     description: GPIO controlled connection to WAKE# signal
     maxItems: 1
 
+  operating-points-v2: true
+
 required:
   - compatible
   - reg
