@@ -2343,9 +2343,10 @@ static int proc_ioctl(struct usb_dev_state *ps, struct usbdevfs_ioctl *ctl)
 		}
 	}
 
+	intf = usb_ifnum_to_if(ps->dev, ctl->ifno);
 	if (ps->dev->state != USB_STATE_CONFIGURED)
 		retval = -EHOSTUNREACH;
-	else if (!(intf = usb_ifnum_to_if(ps->dev, ctl->ifno)))
+	else if (!intf)
 		retval = -EINVAL;
 	else switch (ctl->ioctl_code) {
 
