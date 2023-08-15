@@ -925,6 +925,33 @@ static void sdebug_err_add(struct scsi_device *sdev, struct sdebug_err_inject *n
 	list_add_tail(&new->list, &devip->inject_err_list);
 }
 
+static int sdebug_err_remove(struct scsi_device *sdev, const char *buf, size_t count)
+{
+	struct sdebug_dev_info *devip = (struct sdebug_dev_info *)sdev->hostdata;
+	struct sdebug_err_inject *tmp, *err;
+	int type;
+	unsigned char cmd;
+
+	if (sscanf(buf, "- %d %hhx", &type, &cmd) != 2) {
+		kfree(buf);
+		return -EINVAL;
+	}
+
+	list_for_each_entry_safe(err, tmp, &devip->inject_err_list, list) {
+		if (err->type == type && err->cmd == cmd) {
+			sdev_printk(KERN_INFO, sdev, "Remove %d 0x%x\n",
+				err->type, err->cmd);
+			list_del(&err->list);
+			kfree(err);
+			kfree(buf);
+			return count;
+		}
+	}
+
+	kfree(buf);
+	return -EINVAL;
+}
+
 static int sdebug_error_show(struct seq_file *m, void *p)
 {
 	struct scsi_device *sdev = (struct scsi_device *)m->private;
@@ -979,6 +1006,9 @@ static ssize_t sdebug_error_write(struct file *file, const char __user *ubuf,
 		kfree(buf);
 		return -EFAULT;
 	}
+
+	if (buf[0] == '-')
+		return sdebug_err_remove(sdev, buf, count);
 
 	if (sscanf(buf, "%d", &inject_type) != 1) {
 		kfree(buf);
