@@ -33,6 +33,7 @@ static struct cfi_init_state initial_func_cfi;
 static struct cfi_state init_cfi;
 static struct cfi_state func_cfi;
 static struct cfi_state force_undefined_cfi;
+static unsigned long nr_rethunk_sites;
 
 struct instruction *find_insn(struct objtool_file *file,
 			      struct section *sec, unsigned long offset)
@@ -802,15 +803,12 @@ static int create_return_sites_sections(struct objtool_file *file)
 		return 0;
 	}
 
-	idx = 0;
-	list_for_each_entry(insn, &file->return_thunk_list, call_node)
-		idx++;
-
-	if (!idx)
+	if (!nr_rethunk_sites)
 		return 0;
 
 	sec = elf_create_section_pair(file->elf, ".return_sites",
-				      sizeof(int), idx, idx);
+				      sizeof(int), nr_rethunk_sites,
+				      nr_rethunk_sites);
 	if (!sec)
 		return -1;
 
@@ -1473,8 +1471,10 @@ static void add_return_call(struct objtool_file *file, struct instruction *insn,
 	insn->type = INSN_RETURN;
 	insn->retpoline_safe = true;
 
-	if (add)
+	if (add) {
 		list_add_tail(&insn->call_node, &file->return_thunk_list);
+		nr_rethunk_sites++;
+	}
 }
 
 static bool is_first_func_insn(struct objtool_file *file,
