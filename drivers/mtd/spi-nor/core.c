@@ -2847,6 +2847,11 @@ static void spi_nor_init_flags(struct spi_nor *nor)
 	if (of_property_read_bool(np, "no-wp"))
 		nor->flags |= SNOR_F_NO_WP;
 
+	if (of_property_read_bool(np, "disable-quad-mode")) {
+		nor->flags |= SNOR_F_DISABLE_QUAD;
+		nor->params->quad_enable = NULL;
+	}
+
 	if (flags & SPI_NOR_SWP_IS_VOLATILE)
 		nor->flags |= SNOR_F_SWP_IS_VOLATILE;
 
