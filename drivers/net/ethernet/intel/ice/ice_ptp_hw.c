@@ -3035,6 +3035,21 @@ bool ice_is_clock_mux_present_e810t(struct ice_hw *hw)
 }
 
 /**
+ * ice_is_gps_present_e810t
+ * @hw: pointer to the hw struct
+ *
+ * Check if the GPS generic device is present in the netlist
+ */
+bool ice_is_gps_present_e810t(struct ice_hw *hw)
+{
+	if (ice_find_netlist_node(hw, ICE_AQC_LINK_TOPO_NODE_TYPE_GPS,
+				  ICE_ACQ_GET_LINK_TOPO_NODE_NR_GEN_GPS, NULL))
+		return false;
+
+	return true;
+}
+
+/**
  * ice_read_sma_ctrl_e810t
  * @hw: pointer to the hw struct
  * @data: pointer to data to be read from the GPIO controller
