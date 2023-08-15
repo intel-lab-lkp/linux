@@ -524,12 +524,15 @@ acpi_get_dsd_graph(struct acpi_device *adev)
 		/* Skip the non-Graph _DSD packages */
 		if (!is_acpi_dsd_graph_guid(guid))
 			continue;
-		if (acpi_validate_dsd_graph(package))
+		if (acpi_validate_dsd_graph(package)) {
+			ACPI_FREE(buf.pointer);
 			return package;
+		}
 		/* Invalid graph format, continue */
 		dev_warn(&adev->dev, "Invalid Graph _DSD property\n");
 	}
 
+	ACPI_FREE(buf.pointer);
 	return NULL;
 }
 
