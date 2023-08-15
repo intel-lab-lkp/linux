@@ -99,13 +99,15 @@
  */
 enum pageflags {
 	PG_locked,		/* Page is locked. Don't touch. */
+	PG_writeback,		/* Page is under writeback */
 	PG_referenced,
 	PG_uptodate,
 	PG_dirty,
 	PG_lru,
+	PG_head,		/* Must be in bit 6 */
+	PG_waiters,		/* Page has waiters, check its waitqueue. Must be bit #7 and in the same byte as "PG_locked" */
 	PG_active,
 	PG_workingset,
-	PG_waiters,		/* Page has waiters, check its waitqueue. Must be bit #7 and in the same byte as "PG_locked" */
 	PG_error,
 	PG_slab,
 	PG_owner_priv_1,	/* Owner use. If pagecache, fs may use*/
@@ -113,8 +115,6 @@ enum pageflags {
 	PG_reserved,
 	PG_private,		/* If pagecache, has fs-private data */
 	PG_private_2,		/* If pagecache, has fs aux data */
-	PG_writeback,		/* Page is under writeback */
-	PG_head,		/* A head page */
 	PG_mappedtodisk,	/* Has blocks allocated on-disk */
 	PG_reclaim,		/* To be reclaimed asap */
 	PG_swapbacked,		/* Page is backed by RAM/swap */
@@ -171,20 +171,18 @@ enum pageflags {
 	/* Remapped by swiotlb-xen. */
 	PG_xen_remapped = PG_owner_priv_1,
 
-#ifdef CONFIG_MEMORY_FAILURE
 	/*
-	 * Compound pages. Stored in first tail page's flags.
-	 * Indicates that at least one subpage is hwpoisoned in the
-	 * THP.
+	 * Flags only valid for compound pages.  Stored in first tail page's
+	 * flags word.
 	 */
+
+	/* At least one page is hwpoisoned in the folio.  */
 	PG_has_hwpoisoned = PG_error,
-#endif
-
-	/* Is a hugetlb page.  Stored in first tail page. */
-	PG_hugetlb = PG_writeback,
-
-	/* Has a deferred list (may be empty).  First tail page. */
+	/* Belongs to hugetlb */
+	PG_hugetlb = PG_active,
+	/* Has a deferred list (does not indicate whether it is active) */
 	PG_deferred_list = PG_reclaim,
+
 
 	/* non-lru isolated movable page */
 	PG_isolated = PG_reclaim,
