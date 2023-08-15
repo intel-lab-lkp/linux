@@ -782,6 +782,57 @@ struct rx_msdu_end_qcn9274 {
 	__le32 info14;
 } __packed;
 
+struct rx_msdu_end_wcn7850 {
+	__le16 info0;
+	__le16 phy_ppdu_id;
+	__le16 ip_hdr_cksum;
+	__le16 info1;
+	__le16 info2;
+	__le16 cumulative_l3_checksum;
+	__le32 rule_indication0;
+	__le32 rule_indication1;
+	__le16 info3;
+	__le16 l3_type;
+	__le32 ipv6_options_crc;
+	__le32 tcp_seq_num;
+	__le32 tcp_ack_num;
+	__le16 info4;
+	__le16 window_size;
+	__le16 tcp_udp_chksum;
+	__le16 info5;
+	__le16 sa_idx;
+	__le16 da_idx_or_sw_peer_id;
+	__le32 info6;
+	__le32 fse_metadata;
+	__le16 cce_metadata;
+	__le16 sa_sw_peer_id;
+	__le16 info7;
+	__le16 rsvd0;
+	__le16 cumulative_l4_checksum;
+	__le16 cumulative_ip_length;
+	__le32 info9;
+	__le32 info10;
+	__le32 info11;
+	__le32 toeplitz_hash_2_or_4;
+	__le32 flow_id_toeplitz;
+	__le32 info12;
+	__le32 ppdu_start_timestamp_31_0;
+	__le32 ppdu_start_timestamp_63_32;
+	__le32 phy_meta_data;
+	__le16 vlan_ctag_ci;
+	__le16 vlan_stag_ci;
+	__le32 rsvd[3];
+	__le32 info13;
+	__le32 info14;
+} __packed;
+
+/* These macro definitions are only used for WCN7850 */
+#define RX_MSDU_END_INFO5_MSDU_LIMIT_ERR       BIT(2)
+#define RX_MSDU_END_INFO5_IDX_TIMOUT           BIT(3)
+#define RX_MSDU_END_INFO5_IDX_INVLID           BIT(4)
+#define RX_MSDU_END_INFO5_WIFI_PARSE_ERR       BIT(5)
+#define RX_MSDU_END_INFO5_AMSDU_PARSER_ERR     BIT(6)
+
 /* rx_msdu_end
  *
  * rxpcu_mpdu_filter_in_category
@@ -1410,7 +1461,7 @@ struct rx_pkt_hdr_tlv {
 
 struct hal_rx_desc_wcn7850 {
 	__le64 msdu_end_tag;
-	struct rx_msdu_end_qcn9274 msdu_end;
+	struct rx_msdu_end_wcn7850 msdu_end;
 	u8 rx_padding0[RX_BE_PADDING0_BYTES];
 	__le64 mpdu_start_tag;
 	struct rx_mpdu_start_qcn9274 mpdu_start;
