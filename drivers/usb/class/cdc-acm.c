@@ -204,7 +204,7 @@ static int acm_wb_is_avail(struct acm *acm)
 	n = ACM_NW;
 	spin_lock_irqsave(&acm->write_lock, flags);
 	for (i = 0; i < ACM_NW; i++)
-		if(acm->wb[i].use)
+		if (acm->wb[i].use)
 			n--;
 	spin_unlock_irqrestore(&acm->write_lock, flags);
 	return n;
@@ -1016,7 +1016,7 @@ static int wait_serial_change(struct acm *acm, unsigned long arg)
 		}
 	} while (!rv);
 
-	
+
 
 	return rv;
 }
@@ -1267,7 +1267,7 @@ static int acm_probe(struct usb_interface *intf,
 
 	if (control_interface == data_interface) {
 		/* some broken devices designed for windows work this way */
-		dev_warn(&intf->dev,"Control and data interfaces are not separated!\n");
+		dev_warn(&intf->dev, "Control and data interfaces are not separated!\n");
 		combined_interfaces = 1;
 		/* a popular other OS doesn't use it */
 		quirks |= NO_CAP_LINE;
@@ -1438,7 +1438,7 @@ made_compressed_probe:
 		goto err_free_write_urbs;
 
 	if (h.usb_cdc_country_functional_desc) { /* export the country data */
-		struct usb_cdc_country_functional_desc * cfd =
+		struct usb_cdc_country_functional_desc *cfd =
 					h.usb_cdc_country_functional_desc;
 
 		acm->country_codes = kmalloc(cfd->bLength - 4, GFP_KERNEL);
