@@ -3804,6 +3804,65 @@ int pci_rebar_set_size(struct pci_dev *pdev, int bar, int size)
 	return 0;
 }
 
+/*
+ * pci_configure_ten_bit_tag - enable or disable 10-bit Tag Requester
+ * @dev: the PCI device
+ */
+void pci_configure_ten_bit_tag(struct pci_dev *dev)
+{
+	struct pci_dev *bridge;
+	u32 cap;
+
+	if (!pci_is_pcie(dev))
+		return;
+
+	bridge = dev->bus->self;
+	if (!bridge)
+		return;
+
+	/*
+	 * According to PCIe r6.0 sec 7.5.3.16, the result is undefined if
+	 * the value of this bit is changed while the Function has outstanding
+	 * Non-Posted Requests.
+	 */
+	if (!pci_wait_for_pending_transaction(dev)) {
+		pci_info(dev, "Transaction in progress, 10-bit Tag not configured properly\n");
+		return;
+	}
+
+	/*
+	 * According to PCIe r6.0 sec 7.5.3.15, Requester Supported can only be
+	 * set if 10-Bit Tag Completer Supported bit is set.
+	 */
+	pcie_capability_read_dword(bridge, PCI_EXP_DEVCAP2, &cap);
+	if (!(cap & PCI_EXP_DEVCAP2_10BIT_TAG_COMP))
+		goto out;
+
+	if (cap & PCI_EXP_DEVCAP2_10BIT_TAG_REQ) {
+		pcie_capability_read_dword(dev, PCI_EXP_DEVCAP2, &cap);
+
+		if (!(cap & PCI_EXP_DEVCAP2_10BIT_TAG_COMP))
+			goto out;
+
+		pcie_capability_set_word(bridge, PCI_EXP_DEVCTL2,
+					 PCI_EXP_DEVCTL2_10BIT_TAG_REQ);
+
+		if (cap & PCI_EXP_DEVCAP2_10BIT_TAG_REQ)
+			pcie_capability_set_word(dev, PCI_EXP_DEVCTL2,
+						 PCI_EXP_DEVCTL2_10BIT_TAG_REQ);
+		else
+			pcie_capability_clear_word(dev, PCI_EXP_DEVCTL2,
+						   PCI_EXP_DEVCTL2_10BIT_TAG_REQ);
+		return;
+	}
+
+out:
+	pcie_capability_clear_word(bridge, PCI_EXP_DEVCTL2,
+				   PCI_EXP_DEVCTL2_10BIT_TAG_REQ);
+	pcie_capability_clear_word(dev, PCI_EXP_DEVCTL2,
+				   PCI_EXP_DEVCTL2_10BIT_TAG_REQ);
+}
+
 /**
  * pci_enable_atomic_ops_to_root - enable AtomicOp requests to root port
  * @dev: the PCI device

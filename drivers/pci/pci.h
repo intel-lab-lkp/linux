@@ -239,6 +239,7 @@ int pci_setup_device(struct pci_dev *dev);
 int __pci_read_base(struct pci_dev *dev, enum pci_bar_type type,
 		    struct resource *res, unsigned int reg);
 void pci_configure_ari(struct pci_dev *dev);
+void pci_configure_ten_bit_tag(struct pci_dev *dev);
 void __pci_bus_size_bridges(struct pci_bus *bus,
 			struct list_head *realloc_head);
 void __pci_bus_assign_resources(const struct pci_bus *bus,
