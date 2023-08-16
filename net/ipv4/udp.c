@@ -2681,6 +2681,17 @@ void udp_destroy_sock(struct sock *sk)
 	}
 }
 
+static void set_xfrm_gro_udp_encap_rcv(__u16 encap_type, unsigned short family,
+				       struct udp_sock *up)
+{
+#ifdef CONFIG_XFRM
+	if (up->gro_enabled && encap_type == UDP_ENCAP_ESPINUDP) {
+		if (family == AF_INET)
+			up->gro_receive = xfrm4_gro_udp_encap_rcv;
+	}
+#endif
+}
+
 /*
  *	Socket option code for UDP
  */
@@ -2730,6 +2741,8 @@ int udp_lib_setsockopt(struct sock *sk, int level, int optname,
 		case 0:
 #ifdef CONFIG_XFRM
 		case UDP_ENCAP_ESPINUDP:
+			set_xfrm_gro_udp_encap_rcv(val, sk->sk_family, up);
+			fallthrough;
 		case UDP_ENCAP_ESPINUDP_NON_IKE:
 #if IS_ENABLED(CONFIG_IPV6)
 			if (sk->sk_family == AF_INET6)
@@ -2773,6 +2786,7 @@ int udp_lib_setsockopt(struct sock *sk, int level, int optname,
 			udp_tunnel_encap_enable(sk->sk_socket);
 		up->gro_enabled = valbool;
 		up->accept_udp_l4 = valbool;
+		set_xfrm_gro_udp_encap_rcv(up->encap_type, sk->sk_family, up);
 		release_sock(sk);
 		break;
 
