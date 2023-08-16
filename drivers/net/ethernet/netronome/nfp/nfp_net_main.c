@@ -684,15 +684,108 @@ int nfp_net_refresh_eth_port(struct nfp_port *port)
 	return ret;
 }
 
+/**
+ * nfp_net_pre_init() - Some necessary check and configuration
+ * in firmware before fully utilizing it.
+ * @pf: NFP PF handler
+ * @stride: queue stride
+ *
+ * Return: 0 on success, a negative error code otherwise.
+ */
+static int nfp_net_pre_init(struct nfp_pf *pf, int *stride)
+{
+	struct nfp_net_fw_version fw_ver;
+	struct nfp_cpp_area *area;
+	u8 __iomem *ctrl_bar;
+	int err = 0;
+
+	ctrl_bar = nfp_pf_map_rtsym(pf, NULL, "_pf%d_net_bar0", NFP_PF_CSR_SLICE_SIZE, &area);
+	if (IS_ERR(ctrl_bar)) {
+		nfp_err(pf->cpp, "Failed to find data vNIC memory symbol\n");
+		return PTR_ERR(ctrl_bar);
+	}
+
+	nfp_net_get_fw_version(&fw_ver, ctrl_bar);
+	if (fw_ver.extend & NFP_NET_CFG_VERSION_RESERVED_MASK ||
+	    fw_ver.class != NFP_NET_CFG_VERSION_CLASS_GENERIC) {
+		nfp_err(pf->cpp, "Unknown Firmware ABI %d.%d.%d.%d\n",
+			fw_ver.extend, fw_ver.class,
+			fw_ver.major, fw_ver.minor);
+		err = -EINVAL;
+		goto end;
+	}
+
+	/* Determine stride */
+	if (nfp_net_fw_ver_eq(&fw_ver, 0, 0, 0, 1)) {
+		*stride = 2;
+		nfp_warn(pf->cpp, "OBSOLETE Firmware detected - VF isolation not available\n");
+	} else {
+		switch (fw_ver.major) {
+		case 1 ... 5:
+			*stride = 4;
+			break;
+		default:
+			nfp_err(pf->cpp, "Unsupported Firmware ABI %d.%d.%d.%d\n",
+				fw_ver.extend, fw_ver.class,
+				fw_ver.major, fw_ver.minor);
+			err = -EINVAL;
+			goto end;
+		}
+	}
+
+	if (!pf->multi_pf.en)
+		goto end;
+
+	/* Enable multi-PF. */
+	if (readl(ctrl_bar + NFP_NET_CFG_CAP_WORD1) & NFP_NET_CFG_CTRL_MULTI_PF) {
+		unsigned long long addr;
+		u32 cfg_q, cpp_id, ret;
+		unsigned long timeout;
+
+		writel(NFP_NET_CFG_CTRL_MULTI_PF, ctrl_bar + NFP_NET_CFG_CTRL_WORD1);
+		writel(NFP_NET_CFG_UPDATE_GEN, ctrl_bar + NFP_NET_CFG_UPDATE);
+
+		/* Config queue is next to txq. */
+		cfg_q = readl(ctrl_bar + NFP_NET_CFG_START_TXQ) + 1;
+		addr = nfp_qcp_queue_offset(pf->dev_info, cfg_q) + NFP_QCP_QUEUE_ADD_WPTR;
+		cpp_id = NFP_CPP_ISLAND_ID(0, NFP_CPP_ACTION_RW, 0, 0);
+		err = nfp_cpp_writel(pf->cpp, cpp_id, addr, 1);
+		if (err)
+			goto end;
+
+		timeout = jiffies + HZ * NFP_NET_POLL_TIMEOUT;
+		while ((ret = readl(ctrl_bar + NFP_NET_CFG_UPDATE))) {
+			if (ret & NFP_NET_CFG_UPDATE_ERR) {
+				nfp_err(pf->cpp, "Enable multi-PF failed\n");
+				err = -EIO;
+				break;
+			}
+
+			usleep_range(250, 500);
+			if (time_is_before_eq_jiffies(timeout)) {
+				nfp_err(pf->cpp, "Enable multi-PF timeout\n");
+				err = -ETIMEDOUT;
+				break;
+			}
+		};
+	} else {
+		nfp_err(pf->cpp, "Loaded firmware doesn't support multi-PF\n");
+		err = -EINVAL;
+	}
+
+end:
+	nfp_cpp_area_release_free(area);
+	return err;
+}
+
 /*
  * PCI device functions
  */
 int nfp_net_pci_probe(struct nfp_pf *pf)
 {
 	struct devlink *devlink = priv_to_devlink(pf);
-	struct nfp_net_fw_version fw_ver;
 	u8 __iomem *ctrl_bar, *qc_bar;
-	int stride;
+	int stride = 0;
 	int err;
 
 	INIT_WORK(&pf->port_refresh_work, nfp_net_refresh_vnics);
@@ -702,6 +795,10 @@ int nfp_net_pci_probe(struct nfp_pf *pf)
 			pf->fw_loaded ? "symbol table" : "firmware found");
 		return -EINVAL;
 	}
+
+	err = nfp_net_pre_init(pf, &stride);
+	if (err)
+		return err;
 
 	pf->max_data_vnics = nfp_net_pf_get_num_ports(pf);
 	if ((int)pf->max_data_vnics < 0)
@@ -721,34 +818,6 @@ int nfp_net_pci_probe(struct nfp_pf *pf)
 	if (!ctrl_bar || !qc_bar) {
 		err = -EIO;
 		goto err_unmap;
-	}
-
-	nfp_net_get_fw_version(&fw_ver, ctrl_bar);
-	if (fw_ver.extend & NFP_NET_CFG_VERSION_RESERVED_MASK ||
-	    fw_ver.class != NFP_NET_CFG_VERSION_CLASS_GENERIC) {
-		nfp_err(pf->cpp, "Unknown Firmware ABI %d.%d.%d.%d\n",
-			fw_ver.extend, fw_ver.class,
-			fw_ver.major, fw_ver.minor);
-		err = -EINVAL;
-		goto err_unmap;
-	}
-
-	/* Determine stride */
-	if (nfp_net_fw_ver_eq(&fw_ver, 0, 0, 0, 1)) {
-		stride = 2;
-		nfp_warn(pf->cpp, "OBSOLETE Firmware detected - VF isolation not available\n");
-	} else {
-		switch (fw_ver.major) {
-		case 1 ... 5:
-			stride = 4;
-			break;
-		default:
-			nfp_err(pf->cpp, "Unsupported Firmware ABI %d.%d.%d.%d\n",
-				fw_ver.extend, fw_ver.class,
-				fw_ver.major, fw_ver.minor);
-			err = -EINVAL;
-			goto err_unmap;
-		}
 	}
 
 	err = nfp_net_pf_app_init(pf, qc_bar, stride);
