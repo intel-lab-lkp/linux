@@ -33,6 +33,31 @@ static const struct spi_nor_fixups gd25q256_fixups = {
 	.post_bfpt = gd25q256_post_bfpt,
 };
 
+static int
+gd25lq64c_post_bfpt(struct spi_nor *nor,
+		    const struct sfdp_parameter_header *bfpt_header,
+		    const struct sfdp_bfpt *bfpt)
+{
+	struct device_node *np = spi_nor_get_flash_node(nor);
+	u32 value;
+
+	/*
+	 * Even if spi-{tx,rx}-bus-width is set to DUAL mode, due to the QER
+	 * flag parsed from BFPT is BFPT_DWORD15_QER_SR2_BIT1_BUGGY, so the
+	 * quad_enable will be set and QE bit set to 1.
+	 */
+	if (!of_property_read_u32(np, "spi-rx-bus-width", &value)) {
+		if (value <= 2)
+			nor->params->quad_enable = NULL;
+	}
+
+	return 0;
+}
+
+static struct spi_nor_fixups gd25lq64c_fixups = {
+	.post_bfpt = gd25lq64c_post_bfpt,
+};
+
 static const struct flash_info gigadevice_nor_parts[] = {
 	{ "gd25q16", INFO(0xc84015, 0, 64 * 1024,  32)
 		FLAGS(SPI_NOR_HAS_LOCK | SPI_NOR_HAS_TB)
@@ -53,7 +78,8 @@ static const struct flash_info gigadevice_nor_parts[] = {
 	{ "gd25lq64c", INFO(0xc86017, 0, 64 * 1024, 128)
 		FLAGS(SPI_NOR_HAS_LOCK | SPI_NOR_HAS_TB)
 		NO_SFDP_FLAGS(SECT_4K | SPI_NOR_DUAL_READ |
-			      SPI_NOR_QUAD_READ) },
+			      SPI_NOR_QUAD_READ)
+		.fixups = &gd25lq64c_fixups },
 	{ "gd25lq128d", INFO(0xc86018, 0, 64 * 1024, 256)
 		FLAGS(SPI_NOR_HAS_LOCK | SPI_NOR_HAS_TB)
 		NO_SFDP_FLAGS(SECT_4K | SPI_NOR_DUAL_READ |
