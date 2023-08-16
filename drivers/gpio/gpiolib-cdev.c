@@ -563,6 +563,7 @@ struct line {
  * @wait: wait queue that handles blocking reads of events
  * @event_buffer_size: the number of elements allocated in @events
  * @events: KFIFO for the GPIO events
+ * @nb: notifier block for receiving gpio_device notifications
  * @seqno: the sequence number for edge events generated on all lines in
  * this line request.  Note that this is not used when @num_lines is 1, as
  * the line_seqno is then the same and is cheaper to calculate.
@@ -577,10 +578,16 @@ struct linereq {
 	wait_queue_head_t wait;
 	u32 event_buffer_size;
 	DECLARE_KFIFO_PTR(events, struct gpio_v2_line_event);
+	struct notifier_block nb;
 	atomic_t seqno;
 	struct mutex config_mutex;
 	struct line lines[];
 };
+
+static struct linereq *to_linereq(struct notifier_block *nb)
+{
+	return container_of(nb, struct linereq, nb);
+}
 
 #define GPIO_V2_LINE_BIAS_FLAGS \
 	(GPIO_V2_LINE_FLAG_BIAS_PULL_UP | \
@@ -1573,6 +1580,10 @@ static void linereq_free(struct linereq *lr)
 {
 	unsigned int i;
 
+	if (lr->nb.notifier_call)
+		blocking_notifier_chain_unregister(&lr->gdev->notifier,
+						   &lr->nb);
+
 	for (i = 0; i < lr->num_lines; i++) {
 		if (lr->lines[i].desc) {
 			edge_detector_stop(&lr->lines[i]);
@@ -1622,6 +1633,22 @@ static const struct file_operations line_fileops = {
 	.show_fdinfo = linereq_show_fdinfo,
 #endif
 };
+
+static int linereq_notify(struct notifier_block *nb, unsigned long action,
+			  void *data)
+{
+	struct linereq *lr = to_linereq(nb);
+
+	switch (action) {
+	case GPIO_CDEV_UNREGISTERED:
+		wake_up_poll(&lr->wait, EPOLLIN | EPOLLERR);
+		break;
+	default:
+		return NOTIFY_DONE;
+	}
+
+	return NOTIFY_OK;
+}
 
 static int linereq_create(struct gpio_device *gdev, void __user *ip)
 {
@@ -1732,6 +1759,11 @@ static int linereq_create(struct gpio_device *gdev, void __user *ip)
 		dev_dbg(&gdev->dev, "registered chardev handle for line %d\n",
 			offset);
 	}
+
+	lr->nb.notifier_call = linereq_notify;
+	ret = blocking_notifier_chain_register(&gdev->notifier, &lr->nb);
+	if (ret)
+		goto out_free_linereq;
 
 	fd = get_unused_fd_flags(O_RDONLY | O_CLOEXEC);
 	if (fd < 0) {
