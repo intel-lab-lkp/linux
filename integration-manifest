@@ -1,0 +1,24 @@
+drm drm-fixes 2ccdd1b13c591d306f0401d98dedc4bdcd02b421
+	Linux 6.5-rc6
+drm-misc drm-misc-fixes 1b254b791d7b7dea6e8adc887fbbd51746d8bb27
+	drm/nouveau/disp: fix use-after-free in error handling of nouveau_connector_create
+drm-intel drm-intel-fixes 423ffe62c06ae241ad460f4629dddb9dcf55e060
+	drm/i915: fix display probe for IVB Q and IVB D GT2 server
+drm drm-next a8b273a8fd9c88cee038ffdae05b7eca063b9622
+	Merge tag 'amd-drm-next-6.6-2023-08-11' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm-misc drm-misc-next-fixes 438cf3271ca116253cffb8edce8aba0191327682
+	drm/panel: simple: Fix Innolux G156HCE-L01 LVDS clock
+drm-intel drm-intel-next-fixes f6cf3883df471abbcf1553127681dc244c8ff8dd
+	drm/i915: use mock device info for creating mock device
+drm-misc drm-misc-next 25205087df1ffe06ccea9302944ed1f77dc68c6f
+	drm/panel: Add driver for JDI LPM102A188A
+drm-intel drm-intel-next c0eeae21425ed8994f3ba5362c2f2faf5ed6d774
+	drm/i915/display: Remove unused POWER_DOMAIN_MASK
+drm-intel drm-intel-gt-next 2eb23c9409e07a27cedfbcb2a886e62228ac4355
+	drm/i915/selftests: Align igt_spinner_create_request with hangcheck
+drm-intel topic/core-for-CI c0ea2fa0491287dea97b384bec1b5a614408b8e3
+	drm/i915/gsc: define gsc fw
+drm-misc topic/i915-ttm 1e3944578b749449bd7fa6bf0bae4c3d3f5f1733
+	Merge tag 'amd-drm-next-5.16-2021-09-27' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm topic/nouveau-misc dfc4005f8c172eea359f9db08c3b2b0ff0153699
+	drm/nouveau/disp: move DAC load detection method
