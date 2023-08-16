@@ -604,6 +604,14 @@ static void option_instat_callback(struct urb *urb);
 /* TOZED LT70-C based on UNISOC SL8563 uses UNISOC's vendor ID */
 #define TOZED_PRODUCT_LT70C			0x4055
 
+/* Foxconn products */
+#define FOXCONN_VENDOR_ID			0x0489
+#define FOXCONN_PRODUCT_T77W968		0xe0b4
+#define FOXCONN_PRODUCT_T77W968_ESIM		0xe0b5
+#define FOXCONN_PRODUCT_T99W265		0xe0db
+#define FOXCONN_PRODUCT_T99W368		0xe0ee
+#define FOXCONN_PRODUCT_T99W373		0xe0f0
+
 /* Device flags */
 
 /* Highest interface number which can be used with NCTRL() and RSVD() */
@@ -2220,11 +2228,15 @@ static const struct usb_device_id option_ids[] = {
 	{ USB_DEVICE_AND_INTERFACE_INFO(0x03f0, 0xa31d, 0xff, 0x06, 0x13) },
 	{ USB_DEVICE_AND_INTERFACE_INFO(0x03f0, 0xa31d, 0xff, 0x06, 0x14) },
 	{ USB_DEVICE_AND_INTERFACE_INFO(0x03f0, 0xa31d, 0xff, 0x06, 0x1b) },
-	{ USB_DEVICE(0x0489, 0xe0b4),						/* Foxconn T77W968 */
+	{ USB_DEVICE(FOXCONN_VENDOR_ID, FOXCONN_PRODUCT_T77W968),					/* Foxconn T77W968 */
 	  .driver_info = RSVD(0) | RSVD(1) | RSVD(6) },
-	{ USB_DEVICE(0x0489, 0xe0b5),						/* Foxconn T77W968 ESIM */
+	{ USB_DEVICE(FOXCONN_VENDOR_ID, FOXCONN_PRODUCT_T77W968_ESIM),				/* Foxconn T77W968 ESIM */
 	  .driver_info = RSVD(0) | RSVD(1) | RSVD(6) },
-	{ USB_DEVICE_INTERFACE_CLASS(0x0489, 0xe0db, 0xff),			/* Foxconn T99W265 MBIM */
+	{ USB_DEVICE_INTERFACE_CLASS(FOXCONN_VENDOR_ID, FOXCONN_PRODUCT_T99W265, 0xff),		/* Foxconn T99W265 MBIM */
+	  .driver_info = RSVD(3) },
+	{ USB_DEVICE_INTERFACE_CLASS(FOXCONN_VENDOR_ID, FOXCONN_PRODUCT_T99W368, 0xff),		/* Foxconn T99W368 MBIM */
+	  .driver_info = RSVD(3) },
+	{ USB_DEVICE_INTERFACE_CLASS(FOXCONN_VENDOR_ID, FOXCONN_PRODUCT_T99W373, 0xff),		/* Foxconn T99W373 MBIM */
 	  .driver_info = RSVD(3) },
 	{ USB_DEVICE(0x1508, 0x1001),						/* Fibocom NL668 (IOT version) */
 	  .driver_info = RSVD(4) | RSVD(5) | RSVD(6) },
