@@ -220,7 +220,7 @@ static void cppc_cpufreq_cpu_fie_exit(struct cpufreq_policy *policy)
 	}
 }
 
-static void __init cppc_freq_invariance_init(void)
+static int __init cppc_freq_invariance_init(void)
 {
 	struct sched_attr attr = {
 		.size		= sizeof(struct sched_attr),
@@ -246,19 +246,23 @@ static void __init cppc_freq_invariance_init(void)
 	}
 
 	if (fie_disabled)
-		return;
+		return 0;
 
 	kworker_fie = kthread_create_worker(0, "cppc_fie");
-	if (IS_ERR(kworker_fie))
-		return;
+	if (IS_ERR(kworker_fie)) {
+		ret = PTR_ERR(kworker_fie);
+		kworker_fie = NULL;
+		return ret;
+	}
 
 	ret = sched_setattr_nocheck(kworker_fie->task, &attr);
 	if (ret) {
 		pr_warn("%s: failed to set SCHED_DEADLINE: %d\n", __func__,
 			ret);
 		kthread_destroy_worker(kworker_fie);
-		return;
+		kworker_fie = NULL;
 	}
+	return ret;
 }
 
 static void cppc_freq_invariance_exit(void)
@@ -279,8 +283,9 @@ static inline void cppc_cpufreq_cpu_fie_exit(struct cpufreq_policy *policy)
 {
 }
 
-static inline void cppc_freq_invariance_init(void)
+static inline int cppc_freq_invariance_init(void)
 {
+	return 0;
 }
 
 static inline void cppc_freq_invariance_exit(void)
@@ -969,7 +974,9 @@ static int __init cppc_cpufreq_init(void)
 		return -ENODEV;
 
 	cppc_check_hisi_workaround();
-	cppc_freq_invariance_init();
+	ret = cppc_freq_invariance_init();
+	if (ret < 0)
+		return ret;
 	populate_efficiency_class();
 
 	ret = cpufreq_register_driver(&cppc_cpufreq_driver);
