@@ -33,6 +33,12 @@
 #include "gpiolib-cdev.h"
 
 /*
+ * Let's use a higher value for gpio_device notifications to not conflict with
+ * UAPI defines that can also serve as notifier action arguments.
+ */
+#define GPIO_CDEV_UNREGISTERED	1000
+
+/*
  * Array sizes must ensure 64-bit alignment and not create holes in the
  * struct packing.
  */
@@ -2526,6 +2532,9 @@ static int gpio_chardev_notify(struct notifier_block *nb, unsigned long action,
 		else
 			pr_debug_ratelimited("lineinfo event FIFO is full - event dropped\n");
 		break;
+	case GPIO_CDEV_UNREGISTERED:
+		wake_up_poll(&cdev->wait, EPOLLIN | EPOLLERR);
+		break;
 	default:
 		return NOTIFY_DONE;
 	}
@@ -2761,4 +2770,6 @@ int gpiolib_cdev_register(struct gpio_device *gdev, dev_t devt)
 void gpiolib_cdev_unregister(struct gpio_device *gdev)
 {
 	cdev_device_del(&gdev->chrdev, &gdev->dev);
+	blocking_notifier_call_chain(&gdev->notifier,
+				     GPIO_CDEV_UNREGISTERED, NULL);
 }
