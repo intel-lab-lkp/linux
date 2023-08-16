@@ -1262,6 +1262,8 @@ static int pci_scan_bridge_extend(struct pci_bus *bus, struct pci_dev *dev,
 	bool fixed_buses;
 	u8 fixed_sec, fixed_sub;
 	int next_busnr;
+	int start = bus->busn_res.start;
+	int end = bus->busn_res.end;
 
 	/*
 	 * Make sure the bridge is powered on to be able to access config
@@ -1288,6 +1290,13 @@ static int pci_scan_bridge_extend(struct pci_bus *bus, struct pci_dev *dev,
 	     secondary > subordinate)) {
 		pci_info(dev, "bridge configuration invalid ([bus %02x-%02x]), reconfiguring\n",
 			 secondary, subordinate);
+		broken = 1;
+	}
+
+	/* Reconfigure, If maximum buses are not allocated */
+	if (!pass && start != 0 && end != 0xff && subordinate != end) {
+		pci_info(dev, "Bridge has subordinate 0x%x but max busn 0x%x, reconfiguring\n",
+			 subordinate, end);
 		broken = 1;
 	}
 
