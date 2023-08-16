@@ -166,7 +166,11 @@ static void lpi_device_get_constraints_amd(void)
 					continue;
 
 				acpi_handle_debug(lps0_device_handle,
-						  "Name:%s\n", dev_info.name);
+						  "Name:%s, Enabled: %d, States: %d, MinDstate: %d\n",
+						  dev_info.name,
+						  dev_info.enabled,
+						  dev_info.function_states,
+						  dev_info.min_dstate);
 
 				list->min_dstate = dev_info.min_dstate;
 
