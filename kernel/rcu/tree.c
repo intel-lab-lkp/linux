@@ -4637,6 +4637,30 @@ void rcutree_migrate_callbacks(int cpu)
 }
 #endif
 
+/*
+ * On non-huge systems, use expedited RCU grace periods to make suspend
+ * and hibernation run faster.
+ */
+static int rcu_pm_notify(struct notifier_block *self,
+			 unsigned long action, void *hcpu)
+{
+	switch (action) {
+	case PM_HIBERNATION_PREPARE:
+	case PM_SUSPEND_PREPARE:
+		rcu_async_hurry();
+		rcu_expedite_gp();
+		break;
+	case PM_POST_HIBERNATION:
+	case PM_POST_SUSPEND:
+		rcu_unexpedite_gp();
+		rcu_async_relax();
+		break;
+	default:
+		break;
+	}
+	return NOTIFY_OK;
+}
+
 #ifdef CONFIG_RCU_EXP_KTHREAD
 struct kthread_worker *rcu_exp_gp_kworker;
 struct kthread_worker *rcu_exp_par_gp_kworker;
@@ -5040,6 +5064,7 @@ void __init rcu_init(void)
 	 * this is called early in boot, before either interrupts
 	 * or the scheduler are operational.
 	 */
+	pm_notifier(rcu_pm_notify, 0);
 	WARN_ON(num_online_cpus() > 1); // Only one CPU this early in boot.
 	rcutree_prepare_cpu(cpu);
 	rcu_cpu_starting(cpu);
