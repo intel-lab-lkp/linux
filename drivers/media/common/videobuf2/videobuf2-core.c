@@ -938,6 +938,10 @@ int vb2_core_create_bufs(struct vb2_queue *q, enum vb2_memory memory,
 			dprintk(q, 1, "memory model mismatch\n");
 			return -EINVAL;
 		}
+		if (requested_planes != q->num_planes) {
+			dprintk(q, 1, "num_planes mismatch\n");
+			return -EINVAL;
+		}
 		if (!verify_coherency_flags(q, non_coherent_mem))
 			return -EINVAL;
 	}
@@ -1002,6 +1006,8 @@ int vb2_core_create_bufs(struct vb2_queue *q, enum vb2_memory memory,
 		mutex_unlock(&q->mmap_lock);
 		return -ENOMEM;
 	}
+	if (no_previous_buffers)
+		q->num_planes = num_planes;
 	mutex_unlock(&q->mmap_lock);
 
 	/*

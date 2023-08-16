@@ -558,6 +558,7 @@ struct vb2_buf_ops {
  * @dma_dir:	DMA mapping direction.
  * @bufs:	videobuf2 buffer structures
  * @num_buffers: number of allocated/used buffers
+ * @num_planes: number of planes in each buffer
  * @queued_list: list of buffers currently queued from userspace
  * @queued_count: number of buffers queued and ready for streaming.
  * @owned_by_drv_count: number of buffers owned by the driver
@@ -621,6 +622,7 @@ struct vb2_queue {
 	enum dma_data_direction		dma_dir;
 	struct vb2_buffer		*bufs[VB2_MAX_FRAME];
 	unsigned int			num_buffers;
+	unsigned int			num_planes;
 
 	struct list_head		queued_list;
 	unsigned int			queued_count;
