@@ -1891,6 +1891,14 @@ static void __arm_smmu_tlb_inv_range(struct arm_smmu_cmdq_ent *cmd,
 	if (!size)
 		return;
 
+	/*
+	 * Convert a large range/number of VA invalidation(s) to one single ASID
+	 * invalidation when the input size reaches the threshold. It simplifies
+	 * the command issuing, especially on SMMU w/o ARM_SMMU_FEAT_RANGE_INV.
+	 */
+	if (cmd->tlbi.asid && size >= smmu->tlb_invalidate_threshold)
+		return arm_smmu_tlb_inv_asid(smmu, cmd->tlbi.asid);
+
 	if (smmu->features & ARM_SMMU_FEAT_RANGE_INV) {
 		/* Get the leaf page size */
 		tg = __ffs(smmu_domain->domain.pgsize_bitmap);
@@ -3683,6 +3691,7 @@ static int arm_smmu_device_hw_probe(struct arm_smmu_device *smmu)
 			 "failed to set DMA mask for table walker\n");
 
 	smmu->ias = max(smmu->ias, smmu->oas);
+	smmu->tlb_invalidate_threshold = 1UL << smmu->ias;
 
 	if ((smmu->features & ARM_SMMU_FEAT_TRANS_S1) &&
 	    (smmu->features & ARM_SMMU_FEAT_TRANS_S2))
@@ -3808,6 +3817,49 @@ static void arm_smmu_rmr_install_bypass_ste(struct arm_smmu_device *smmu)
 	iort_put_rmr_sids(dev_fwnode(smmu->dev), &rmr_list);
 }
 
+static ssize_t tlb_invalidate_threshold_show(struct device *dev,
+					     struct device_attribute *attr,
+					     char *buf)
+{
+	struct arm_smmu_device *smmu = dev_get_drvdata(dev->parent);
+
+	return sysfs_emit(buf, "%llu\n", smmu->tlb_invalidate_threshold);
+}
+
+static ssize_t tlb_invalidate_threshold_store(struct device *dev,
+					      struct device_attribute *attr,
+					      const char *buf, size_t size)
+{
+	struct arm_smmu_device *smmu = dev_get_drvdata(dev->parent);
+	unsigned long long tlb_invalidate_threshold;
+	int ret;
+
+	ret = kstrtoull(buf, 0, &tlb_invalidate_threshold);
+	if (ret)
+		return ret;
+	if (tlb_invalidate_threshold > 1UL << smmu->ias ||
+	    tlb_invalidate_threshold < 1 << __ffs(smmu->pgsize_bitmap))
+		return -EINVAL;
+	smmu->tlb_invalidate_threshold = tlb_invalidate_threshold;
+	return size;
+}
+
+static DEVICE_ATTR_RW(tlb_invalidate_threshold);
+
+static struct attribute *arm_smmu_attrs[] = {
+	&dev_attr_tlb_invalidate_threshold.attr,
+	NULL,
+};
+
+static struct attribute_group arm_smmu_group = {
+	.attrs = arm_smmu_attrs,
+};
+
+static const struct attribute_group *arm_smmu_groups[] = {
+	&arm_smmu_group,
+	NULL,
+};
+
 static int arm_smmu_device_probe(struct platform_device *pdev)
 {
 	int irq, ret;
@@ -3900,7 +3952,7 @@ static int arm_smmu_device_probe(struct platform_device *pdev)
 		return ret;
 
 	/* And we're up. Go go go! */
-	ret = iommu_device_sysfs_add(&smmu->iommu, dev, NULL,
+	ret = iommu_device_sysfs_add(&smmu->iommu, dev, arm_smmu_groups,
 				     "smmu3.%pa", &ioaddr);
 	if (ret)
 		return ret;

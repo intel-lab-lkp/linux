@@ -1,0 +1,13 @@
+What:		/sys/class/iommu/<iommu>/tlb_invalidate_threshold
+Date:		August 2023
+KernelVersion:	6.6
+Contact:	Nicolin Chen <nicolinc@nvidia.com>
+Description:
+		Size threshold in bytes for SMMU to replace VA TLB-invalidation
+		commands with one single per-asid TLB-invalidation command. Its
+		default value is set next to the highest address that the SMMU
+		translates, so there will be no replacement of TLB-invalidation
+		commands by default. It is also the maximum value the threshold
+		can be set to. Its minimum value is the smallest page size SMMU
+		supports.
+		Format: %llu
