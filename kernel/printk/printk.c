@@ -229,7 +229,7 @@ int devkmsg_sysctl_set_loglvl(struct ctl_table *table, int write,
 		 * Do not accept an unknown string OR a known string with
 		 * trailing crap...
 		 */
-		if (err < 0 || (err + 1 != *lenp)) {
+		if (err != strlen(devkmsg_log_str)) {
 
 			/* ... and restore old setting. */
 			devkmsg_log = old;
