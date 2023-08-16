@@ -2688,6 +2688,8 @@ static void set_xfrm_gro_udp_encap_rcv(__u16 encap_type, unsigned short family,
 	if (up->gro_enabled && encap_type == UDP_ENCAP_ESPINUDP) {
 		if (family == AF_INET)
 			up->gro_receive = xfrm4_gro_udp_encap_rcv;
+		else if (IS_ENABLED(CONFIG_IPV6) && family == AF_INET6)
+			up->gro_receive = ipv6_stub->xfrm6_gro_udp_encap_rcv;
 	}
 #endif
 }
