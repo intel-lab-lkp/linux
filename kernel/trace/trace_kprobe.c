@@ -1699,13 +1699,42 @@ static int unregister_kprobe_event(struct trace_kprobe *tk)
 }
 
 #ifdef CONFIG_PERF_EVENTS
+
+struct address_array {
+	unsigned long *addrs;
+	size_t size;
+};
+
+static int add_addr(void *data, unsigned long addr)
+{
+	struct address_array *array = data;
+	unsigned long *p;
+
+	array->size++;
+	p = krealloc(array->addrs,
+				sizeof(*array->addrs) * array->size,
+				GFP_KERNEL);
+	if (!p) {
+		kfree(array->addrs);
+		return -ENOMEM;
+	}
+
+	array->addrs = p;
+	array->addrs[array->size - 1] = addr;
+
+	return 0;
+}
+
 /* create a trace_kprobe, but don't add it to global lists */
 struct trace_event_call *
 create_local_trace_kprobe(char *func, void *addr, unsigned long offs,
 			  bool is_return)
 {
 	enum probe_print_type ptype;
+	struct address_array array;
 	struct trace_kprobe *tk;
+	unsigned long func_addr;
+	unsigned int i;
 	int ret;
 	char *event;
 
@@ -1739,7 +1768,64 @@ create_local_trace_kprobe(char *func, void *addr, unsigned long offs,
 	if (ret < 0)
 		goto error;
 
+	array.addrs = NULL;
+	array.size = 0;
+	ret = kallsyms_on_each_match_symbol(add_addr, func, &array);
+	if (ret)
+		goto error_free;
+
+	if (array.size == 1)
+		goto end;
+
+	/*
+	 * Below loop allocates a trace_kprobe for each function with the same
+	 * name in kernel source code.
+	 * All this differente trace_kprobes will be linked together through
+	 * append_trace_kprobe().
+	 * NOTE append_trace_kprobe() is called in register_trace_kprobe() which
+	 * is called when a kprobe is added through sysfs.
+	 */
+	func_addr = kallsyms_lookup_name(func);
+	for (i = 0; i < array.size; i++) {
+		struct trace_kprobe *tk_same_name;
+		unsigned long address;
+
+		address = array.addrs[i];
+		/* Skip the function address as we already registered it. */
+		if (address == func_addr)
+			continue;
+
+		/*
+		 * alloc_trace_kprobe() first considers symbol name, so we set
+		 * this to NULL to allocate this kprobe on the given address.
+		 */
+		tk_same_name = alloc_trace_kprobe(KPROBE_EVENT_SYSTEM, event,
+						  (void *)address, NULL, offs,
+						  0 /* maxactive */,
+						  0 /* nargs */, is_return);
+
+		if (IS_ERR(tk_same_name)) {
+			ret = -ENOMEM;
+			goto error_free;
+		}
+
+		init_trace_event_call(tk_same_name);
+
+		if (traceprobe_set_print_fmt(&tk_same_name->tp, ptype) < 0) {
+			ret = -ENOMEM;
+			goto error_free;
+		}
+
+		ret = append_trace_kprobe(tk_same_name, tk);
+		if (ret)
+			goto error_free;
+	}
+
+end:
+	kfree(array.addrs);
 	return trace_probe_event_call(&tk->tp);
+error_free:
+	kfree(array.addrs);
 error:
 	free_trace_kprobe(tk);
 	return ERR_PTR(ret);
