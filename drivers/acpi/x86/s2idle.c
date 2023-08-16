@@ -16,6 +16,7 @@
  */
 
 #include <linux/acpi.h>
+#include <linux/pci.h>
 #include <linux/device.h>
 #include <linux/dmi.h>
 #include <linux/suspend.h>
@@ -300,28 +301,61 @@ free_acpi_buffer:
 	ACPI_FREE(out_obj);
 }
 
+static void lpi_check_pci_dev(struct lpi_constraints *entry, struct pci_dev *pdev)
+{
+	pci_power_t target = entry->enabled ? entry->min_dstate : PCI_D0;
+
+	if (pdev->current_state == target)
+		return;
+
+	/* constraint of ACPI D3hot means PCI D3hot _or_ D3cold */
+	if (target == ACPI_STATE_D3_HOT &&
+	    (pdev->current_state == PCI_D3hot ||
+	     pdev->current_state == PCI_D3cold))
+		return;
+
+	if (pm_debug_messages_on)
+		acpi_handle_info(entry->handle,
+				 "LPI: PCI device in %s, not in %s\n",
+				 acpi_power_state_string(pdev->current_state),
+				 acpi_power_state_string(target));
+
+	/* don't try with things that PCI core hasn't touched */
+	if (pdev->current_state == PCI_UNKNOWN) {
+		entry->handle = NULL;
+		return;
+	}
+
+	pci_set_power_state(pdev, target);
+}
+
 static void lpi_check_constraints(void)
 {
 	struct lpi_constraints *entry;
 
 	for_each_lpi_constraint(entry) {
 		struct acpi_device *adev = acpi_fetch_acpi_dev(entry->handle);
+		struct device *dev;
 
 		if (!adev)
 			continue;
 
+		/* Check and adjust PCI devices explicitly */
+		dev = acpi_get_first_physical_node(adev);
+		if (dev && dev_is_pci(dev)) {
+			lpi_check_pci_dev(entry, to_pci_dev(dev));
+			continue;
+		}
+		if (!entry->enabled)
+			continue;
 		acpi_handle_debug(entry->handle,
 			"LPI: required min power state:%s current power state:%s\n",
 			acpi_power_state_string(entry->min_dstate),
 			acpi_power_state_string(adev->power.state));
 
-		if (!adev->flags.power_manageable) {
-			acpi_handle_info(entry->handle, "LPI: Device not power manageable\n");
-			entry->handle = NULL;
-			continue;
-		}
-
-		if (adev->power.state < entry->min_dstate)
+		if (pm_debug_messages_on &&
+		    adev->flags.power_manageable &&
+		    adev->power.state < entry->min_dstate)
 			acpi_handle_info(entry->handle,
 				"LPI: Constraint not met; min power state:%s current power state:%s\n",
 				acpi_power_state_string(entry->min_dstate),
@@ -512,8 +546,7 @@ int acpi_s2idle_prepare_late(void)
 	if (!lps0_device_handle || sleep_no_lps0)
 		return 0;
 
-	if (pm_debug_messages_on)
-		lpi_check_constraints();
+	lpi_check_constraints();
 
 	/* Screen off */
 	if (lps0_dsm_func_mask > 0)
