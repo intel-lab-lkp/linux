@@ -473,9 +473,10 @@ static int nfp_net_pci_map_mem(struct nfp_pf *pf)
 		}
 	}
 
-	pf->vf_cfg_mem = nfp_pf_map_rtsym(pf, "net.vfcfg", "_pf%d_net_vf_bar",
-					  NFP_NET_CFG_BAR_SZ * pf->limit_vfs,
-					  &pf->vf_cfg_bar);
+	pf->vf_cfg_mem = nfp_pf_map_rtsym_offset(pf, "net.vfcfg", "_pf%d_net_vf_bar",
+						 NFP_NET_CFG_BAR_SZ * pf->multi_pf.vf_fid,
+						 NFP_NET_CFG_BAR_SZ * pf->limit_vfs,
+						 &pf->vf_cfg_bar);
 	if (IS_ERR(pf->vf_cfg_mem)) {
 		if (PTR_ERR(pf->vf_cfg_mem) != -ENOENT) {
 			err = PTR_ERR(pf->vf_cfg_mem);
@@ -484,7 +485,8 @@ static int nfp_net_pci_map_mem(struct nfp_pf *pf)
 		pf->vf_cfg_mem = NULL;
 	}
 
-	min_size = NFP_NET_VF_CFG_SZ * pf->limit_vfs + NFP_NET_VF_CFG_MB_SZ;
+	min_size = NFP_NET_VF_CFG_SZ * (pf->limit_vfs + pf->multi_pf.vf_fid) +
+		   NFP_NET_VF_CFG_MB_SZ;
 	pf->vfcfg_tbl2 = nfp_pf_map_rtsym(pf, "net.vfcfg_tbl2",
 					  "_pf%d_net_vf_cfg2",
 					  min_size, &pf->vfcfg_tbl2_area);

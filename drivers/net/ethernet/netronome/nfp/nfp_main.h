@@ -179,6 +179,10 @@ int nfp_pf_rtsym_read_optional(struct nfp_pf *pf, const char *format,
 			       unsigned int default_val);
 int nfp_net_pf_get_app_id(struct nfp_pf *pf);
 u8 __iomem *
+nfp_pf_map_rtsym_offset(struct nfp_pf *pf, const char *name, const char *sym_fmt,
+			unsigned int offset, unsigned int min_size,
+			struct nfp_cpp_area **area);
+u8 __iomem *
 nfp_pf_map_rtsym(struct nfp_pf *pf, const char *name, const char *sym_fmt,
 		 unsigned int min_size, struct nfp_cpp_area **area);
 int nfp_mbox_cmd(struct nfp_pf *pf, u32 cmd, void *in_data, u64 in_length,

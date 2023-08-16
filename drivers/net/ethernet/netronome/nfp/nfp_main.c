@@ -97,14 +97,22 @@ int nfp_pf_rtsym_read_optional(struct nfp_pf *pf, const char *format,
 }
 
 u8 __iomem *
-nfp_pf_map_rtsym(struct nfp_pf *pf, const char *name, const char *sym_fmt,
-		 unsigned int min_size, struct nfp_cpp_area **area)
+nfp_pf_map_rtsym_offset(struct nfp_pf *pf, const char *name, const char *sym_fmt,
+			unsigned int offset, unsigned int min_size,
+			struct nfp_cpp_area **area)
 {
 	char pf_symbol[256];
 
 	snprintf(pf_symbol, sizeof(pf_symbol), sym_fmt, nfp_get_pf_id(pf));
 
-	return nfp_rtsym_map(pf->rtbl, pf_symbol, name, min_size, area);
+	return nfp_rtsym_map_offset(pf->rtbl, pf_symbol, name, offset, min_size, area);
+}
+
+u8 __iomem *
+nfp_pf_map_rtsym(struct nfp_pf *pf, const char *name, const char *sym_fmt,
+		 unsigned int min_size, struct nfp_cpp_area **area)
+{
+	return nfp_pf_map_rtsym_offset(pf, name, sym_fmt, 0, min_size, area);
 }
 
 /* Callers should hold the devlink instance lock */
