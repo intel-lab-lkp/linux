@@ -374,7 +374,6 @@ static int pdsc_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	return 0;
 
 err_out_clear_master:
-	pci_clear_master(pdev);
 	pci_disable_device(pdev);
 err_out_free_ida:
 	ida_free(&pdsc_ida, pdsc->uid);
@@ -439,7 +438,6 @@ static void pdsc_remove(struct pci_dev *pdev)
 		pci_release_regions(pdev);
 	}
 
-	pci_clear_master(pdev);
 	pci_disable_device(pdev);
 
 	ida_free(&pdsc_ida, pdsc->uid);
