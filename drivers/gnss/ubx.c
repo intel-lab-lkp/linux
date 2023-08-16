@@ -7,6 +7,7 @@
 
 #include <linux/errno.h>
 #include <linux/gnss.h>
+#include <linux/gpio/consumer.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -18,6 +19,7 @@
 
 struct ubx_data {
 	struct regulator *vcc;
+	struct gpio_desc *reset_gpio;
 };
 
 static int ubx_set_active(struct gnss_serial *gserial)
@@ -29,6 +31,8 @@ static int ubx_set_active(struct gnss_serial *gserial)
 	if (ret)
 		return ret;
 
+	gpiod_set_value_cansleep(data->reset_gpio, 0);
+
 	return 0;
 }
 
@@ -36,6 +40,8 @@ static int ubx_set_standby(struct gnss_serial *gserial)
 {
 	struct ubx_data *data = gnss_serial_get_drvdata(gserial);
 	int ret;
+
+	gpiod_set_value_cansleep(data->reset_gpio, 1);
 
 	ret = regulator_disable(data->vcc);
 	if (ret)
@@ -89,6 +95,13 @@ static int ubx_probe(struct serdev_device *serdev)
 	ret = devm_regulator_get_enable_optional(&serdev->dev, "v-bckp");
 	if (ret < 0 && ret != -ENODEV)
 		goto err_free_gserial;
+
+	/* Start with reset asserted */
+	data->reset_gpio = devm_gpiod_get_optional(&serdev->dev, "reset", GPIOD_OUT_HIGH);
+	if (IS_ERR(data->reset_gpio)) {
+		ret = PTR_ERR(data->reset_gpio);
+		goto err_free_gserial;
+	}
 
 	ret = gnss_serial_register(gserial);
 	if (ret)
