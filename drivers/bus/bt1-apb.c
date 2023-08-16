@@ -92,7 +92,7 @@ static inline unsigned long bt1_apb_timeout_to_n_us(struct bt1_apb *apb,
 static irqreturn_t bt1_apb_isr(int irq, void *data)
 {
 	struct bt1_apb *apb = data;
-	u32 addr = 0;
+	unsigned int addr = 0;
 
 	regmap_read(apb->regs, APB_EHB_ADDR, &addr);
 
@@ -274,8 +274,8 @@ static ssize_t timeout_show(struct device *dev, struct device_attribute *attr,
 {
 	struct bt1_apb *apb = dev_get_drvdata(dev);
 	unsigned long timeout;
+	unsigned int n;
 	int ret;
-	u32 n;
 
 	ret = regmap_read(apb->regs, APB_EHB_TIMEOUT, &n);
 	if (ret)
