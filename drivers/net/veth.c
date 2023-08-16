@@ -62,6 +62,7 @@ struct veth_rq {
 	struct net_device	*dev;
 	struct bpf_prog __rcu	*xdp_prog;
 	struct xdp_mem_info	xdp_mem;
+	struct xdp_mem_info	xdp_mem_pp;
 	struct veth_rq_stats	stats;
 	bool			rx_notify_masked;
 	struct ptr_ring		xdp_ring;
@@ -728,7 +729,8 @@ static void veth_xdp_get(struct xdp_buff *xdp)
 
 static int veth_convert_skb_to_xdp_buff(struct veth_rq *rq,
 					struct xdp_buff *xdp,
-					struct sk_buff **pskb)
+					struct sk_buff **pskb,
+					bool *local_pp_alloc)
 {
 	struct sk_buff *skb = *pskb;
 	u32 frame_sz;
@@ -802,6 +804,7 @@ static int veth_convert_skb_to_xdp_buff(struct veth_rq *rq,
 
 		consume_skb(skb);
 		skb = nskb;
+		*local_pp_alloc = true;
 	}
 
 	/* SKB "head" area always have tailroom for skb_shared_info */
@@ -827,6 +830,37 @@ drop:
 	return -ENOMEM;
 }
 
+static void __skb2xdp_steal_data(struct sk_buff *skb,
+				 struct xdp_buff *xdp,
+				 struct veth_rq *rq,
+				 bool local_pp_alloc)
+{
+	if (local_pp_alloc) {
+		/* This is the most common case where the skb was reallocated locally in
+		 * veth_convert_skb_to_xdp_buff, and it's safe to use the xdp_mem_pp model.
+		 */
+		xdp->rxq->mem = rq->xdp_mem_pp;
+		kfree_skb_partial(skb, true);
+	} else if (!skb->pp_recycle) {
+		/* We can safely use kfree_skb_partial here because this cannot be an fclone
+		 * skb. Fclone skbs are allocated via __alloc_skb, with their head buffer
+		 * allocated by kmalloc_reserve (i.e. skb->head_frag = 0), satisfying the
+		 * skb_head_is_locked condition in veth_convert_skb_to_xdp_buff, and are
+		 * thus reallocated.
+		 */
+		xdp->rxq->mem = rq->xdp_mem;
+		kfree_skb_partial(skb, true);
+	} else {
+		/* skbs in this case may include page_pool pages from peer. We cannot use
+		 * rq->xdp_mem_pp as for the local_pp_alloc case, because they might already
+		 * be associated with different xdp_mem_info.
+		 */
+		veth_xdp_get(xdp);
+		consume_skb(skb);
+		xdp->rxq->mem = rq->xdp_mem;
+	}
+}
+
 static struct sk_buff *veth_xdp_rcv_skb(struct veth_rq *rq,
 					struct sk_buff *skb,
 					struct veth_xdp_tx_bq *bq,
@@ -836,6 +870,7 @@ static struct sk_buff *veth_xdp_rcv_skb(struct veth_rq *rq,
 	struct bpf_prog *xdp_prog;
 	struct veth_xdp_buff vxbuf;
 	struct xdp_buff *xdp = &vxbuf.xdp;
+	bool local_pp_alloc = false;
 	u32 act, metalen;
 	int off;
 
@@ -849,7 +884,7 @@ static struct sk_buff *veth_xdp_rcv_skb(struct veth_rq *rq,
 	}
 
 	__skb_push(skb, skb->data - skb_mac_header(skb));
-	if (veth_convert_skb_to_xdp_buff(rq, xdp, &skb))
+	if (veth_convert_skb_to_xdp_buff(rq, xdp, &skb, &local_pp_alloc))
 		goto drop;
 	vxbuf.skb = skb;
 
@@ -862,9 +897,8 @@ static struct sk_buff *veth_xdp_rcv_skb(struct veth_rq *rq,
 	case XDP_PASS:
 		break;
 	case XDP_TX:
-		veth_xdp_get(xdp);
-		consume_skb(skb);
-		xdp->rxq->mem = rq->xdp_mem;
+		__skb2xdp_steal_data(skb, xdp, rq, local_pp_alloc);
+
 		if (unlikely(veth_xdp_tx(rq, xdp, bq) < 0)) {
 			trace_xdp_exception(rq->dev, xdp_prog, act);
 			stats->rx_drops++;
@@ -874,9 +908,8 @@ static struct sk_buff *veth_xdp_rcv_skb(struct veth_rq *rq,
 		rcu_read_unlock();
 		goto xdp_xmit;
 	case XDP_REDIRECT:
-		veth_xdp_get(xdp);
-		consume_skb(skb);
-		xdp->rxq->mem = rq->xdp_mem;
+		__skb2xdp_steal_data(skb, xdp, rq, local_pp_alloc);
+
 		if (xdp_do_redirect(rq->dev, xdp, xdp_prog)) {
 			stats->rx_drops++;
 			goto err_xdp;
@@ -1062,6 +1095,14 @@ static int __veth_napi_enable_range(struct net_device *dev, int start, int end)
 	}
 
 	for (i = start; i < end; i++) {
+		err = xdp_reg_mem_model(&priv->rq[i].xdp_mem_pp,
+					MEM_TYPE_PAGE_POOL,
+					priv->rq[i].page_pool);
+		if (err)
+			goto err_reg_mem;
+	}
+
+	for (i = start; i < end; i++) {
 		struct veth_rq *rq = &priv->rq[i];
 
 		err = ptr_ring_init(&rq->xdp_ring, VETH_RING_SIZE, GFP_KERNEL);
@@ -1081,6 +1122,10 @@ static int __veth_napi_enable_range(struct net_device *dev, int start, int end)
 err_xdp_ring:
 	for (i--; i >= start; i--)
 		ptr_ring_cleanup(&priv->rq[i].xdp_ring, veth_ptr_free);
+	i = end;
+err_reg_mem:
+	for (i--; i >= start; i--)
+		xdp_unreg_mem_model(&priv->rq[i].xdp_mem_pp);
 	i = end;
 err_page_pool:
 	for (i--; i >= start; i--) {
@@ -1116,6 +1161,9 @@ static void veth_napi_del_range(struct net_device *dev, int start, int end)
 		rq->rx_notify_masked = false;
 		ptr_ring_cleanup(&rq->xdp_ring, veth_ptr_free);
 	}
+
+	for (i = start; i < end; i++)
+		xdp_unreg_mem_model(&priv->rq[i].xdp_mem_pp);
 
 	for (i = start; i < end; i++) {
 		page_pool_destroy(priv->rq[i].page_pool);
