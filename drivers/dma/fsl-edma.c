@@ -270,7 +270,6 @@ static int fsl_edma_probe(struct platform_device *pdev)
 	struct device_node *np = pdev->dev.of_node;
 	struct fsl_edma_engine *fsl_edma;
 	const struct fsl_edma_drvdata *drvdata = NULL;
-	struct fsl_edma_chan *fsl_chan;
 	struct edma_regs *regs;
 	int len, chans;
 	int ret, i;
@@ -288,7 +287,7 @@ static int fsl_edma_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	len = sizeof(*fsl_edma) + sizeof(*fsl_chan) * chans;
+	len = struct_size(fsl_edma, chans, chans);
 	fsl_edma = devm_kzalloc(&pdev->dev, len, GFP_KERNEL);
 	if (!fsl_edma)
 		return -ENOMEM;
