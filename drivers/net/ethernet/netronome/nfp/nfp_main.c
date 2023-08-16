@@ -469,6 +469,77 @@ nfp_get_fw_policy_value(struct pci_dev *pdev, struct nfp_nsp *nsp,
 	return err;
 }
 
+static void
+nfp_nsp_beat_timer(struct timer_list *t)
+{
+	struct nfp_pf *pf = from_timer(pf, t, multi_pf.beat_timer);
+	u8 __iomem *addr;
+
+	/* Each PF has corresponding qword to beat:
+	 * offset | usage
+	 *   0    | magic number
+	 *   8    | beat qword of pf0
+	 *   16   | beat qword of pf1
+	 */
+	addr = pf->multi_pf.beat_addr + ((pf->multi_pf.id + 1) << 3);
+	writeq(jiffies, addr);
+	/* Beat once per second. */
+	mod_timer(&pf->multi_pf.beat_timer, jiffies + HZ);
+}
+
+/**
+ * nfp_nsp_keepalive_start() - Start keepalive mechanism if needed
+ * @pf:		NFP PF Device structure
+ *
+ * Return 0 if no error, errno otherwise
+ */
+static int
+nfp_nsp_keepalive_start(struct nfp_pf *pf)
+{
+	struct nfp_resource *res;
+	u8 __iomem *base;
+	int err = 0;
+	u64 addr;
+	u32 cpp;
+
+	if (!pf->multi_pf.en)
+		return 0;
+
+	res = nfp_resource_acquire(pf->cpp, NFP_KEEPALIVE);
+	if (IS_ERR(res))
+		return PTR_ERR(res);
+
+	cpp = nfp_resource_cpp_id(res);
+	addr = nfp_resource_address(res);
+
+	/* Allocate a fixed area for keepalive. */
+	base = nfp_cpp_map_area(pf->cpp, "keepalive", cpp, addr,
+				nfp_resource_size(res), &pf->multi_pf.beat_area);
+	if (IS_ERR(base)) {
+		nfp_err(pf->cpp, "Failed to map area for keepalive\n");
+		err = PTR_ERR(base);
+		goto res_release;
+	}
+
+	pf->multi_pf.beat_addr = base;
+	timer_setup(&pf->multi_pf.beat_timer, nfp_nsp_beat_timer, 0);
+	mod_timer(&pf->multi_pf.beat_timer, jiffies);
+
+res_release:
+	nfp_resource_release(res);
+	return err;
+}
+
+static void
+nfp_nsp_keepalive_stop(struct nfp_pf *pf)
+{
+	if (!pf->multi_pf.beat_area)
+		return;
+
+	del_timer_sync(&pf->multi_pf.beat_timer);
+	nfp_cpp_area_release_free(pf->multi_pf.beat_area);
+}
+
 static bool
 nfp_skip_fw_load(struct nfp_pf *pf, struct nfp_nsp *nsp)
 {
@@ -550,6 +621,10 @@ nfp_fw_load(struct pci_dev *pdev, struct nfp_pf *pf, struct nfp_nsp *nsp)
 	if (err)
 		return err;
 
+	err = nfp_nsp_keepalive_start(pf);
+	if (err)
+		return err;
+
 	if (nfp_skip_fw_load(pf, nsp))
 		return 1;
 
@@ -620,6 +695,16 @@ exit_release_fw:
 	if (fw_loaded && ifcs == 1 && !pf->multi_pf.en)
 		pf->unload_fw_on_remove = true;
 
+	/* Only setting magic number when fw is freshly loaded here. NSP
+	 * won't unload fw when heartbeat stops if the magic number is not
+	 * correct. It's used when firmware is preloaded and shouldn't be
+	 * unloaded when driver exits.
+	 */
+	if (err < 0)
+		nfp_nsp_keepalive_stop(pf);
+	else if (fw_loaded && pf->multi_pf.en)
+		writeq(NFP_KEEPALIVE_MAGIC, pf->multi_pf.beat_addr);
+
 	return err < 0 ? err : fw_loaded;
 }
 
@@ -666,6 +751,7 @@ static int nfp_nsp_init(struct pci_dev *pdev, struct nfp_pf *pf)
 	}
 
 	pf->multi_pf.en = pdev->multifunction;
+	pf->multi_pf.id = PCI_FUNC(pdev->devfn);
 	dev_info(&pdev->dev, "%s-PF detected\n", pf->multi_pf.en ? "Multi" : "Single");
 
 	err = nfp_nsp_wait(nsp);
@@ -913,6 +999,7 @@ static int nfp_pci_probe(struct pci_dev *pdev,
 err_net_remove:
 	nfp_net_pci_remove(pf);
 err_fw_unload:
+	nfp_nsp_keepalive_stop(pf);
 	kfree(pf->rtbl);
 	nfp_mip_close(pf->mip);
 	if (pf->unload_fw_on_remove)
@@ -952,6 +1039,7 @@ static void __nfp_pci_shutdown(struct pci_dev *pdev, bool unload_fw)
 	nfp_net_pci_remove(pf);
 
 	vfree(pf->dumpspec);
+	nfp_nsp_keepalive_stop(pf);
 	kfree(pf->rtbl);
 	nfp_mip_close(pf->mip);
 	if (unload_fw && pf->unload_fw_on_remove)

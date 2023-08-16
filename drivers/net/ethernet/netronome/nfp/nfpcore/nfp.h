@@ -64,6 +64,10 @@ int nfp_nsp_read_sensors(struct nfp_nsp *state, unsigned int sensor_mask,
 /* MAC Statistics Accumulator */
 #define NFP_RESOURCE_MAC_STATISTICS	"mac.stat"
 
+/* Keepalive */
+#define NFP_KEEPALIVE			"nfp.beat"
+#define NFP_KEEPALIVE_MAGIC		0x6e66702e62656174ULL /* ASCII of "nfp.beat" */
+
 int nfp_resource_table_init(struct nfp_cpp *cpp);
 
 struct nfp_resource *

@@ -86,6 +86,10 @@ struct nfp_dumpspec {
  * @num_shared_bufs:	Number of elements in @shared_bufs
  * @multi_pf:		Used in multi-PF setup
  * @multi_pf.en:	True if it's a NIC with multiple PFs
+ * @multi_pf.id:	PF index
+ * @multi_pf.beat_timer:Timer for beat to keepalive
+ * @multi_pf.beat_area:	Pointer to CPP area for beat to keepalive
+ * @multi_pf.beat_addr:	Pointer to mapped beat address used for keepalive
  *
  * Fields which may change after proble are protected by devlink instance lock.
  */
@@ -146,6 +150,10 @@ struct nfp_pf {
 
 	struct {
 		bool en;
+		u8 id;
+		struct timer_list beat_timer;
+		struct nfp_cpp_area *beat_area;
+		u8 __iomem *beat_addr;
 	} multi_pf;
 };
 
