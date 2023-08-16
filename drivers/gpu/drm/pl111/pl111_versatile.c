@@ -484,7 +484,7 @@ int pl111_versatile_init(struct device *dev, struct pl111_drm_dev_private *priv)
 		return 0;
 	}
 
-	versatile_clcd_type = (enum versatile_clcd)clcd_id->data;
+	versatile_clcd_type = (enum versatile_clcd)(uintptr_t)clcd_id->data;
 
 	/* Versatile Express special handling */
 	if (versatile_clcd_type == VEXPRESS_CLCD_V2M) {
@@ -504,7 +504,7 @@ int pl111_versatile_init(struct device *dev, struct pl111_drm_dev_private *priv)
 		np = of_find_matching_node_and_match(NULL, impd1_clcd_of_match,
 						     &clcd_id);
 		if (np)
-			versatile_clcd_type = (enum versatile_clcd)clcd_id->data;
+			versatile_clcd_type = (enum versatile_clcd)(uintptr_t)clcd_id->data;
 	}
 
 	map = syscon_node_to_regmap(np);
