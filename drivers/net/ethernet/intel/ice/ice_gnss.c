@@ -69,7 +69,7 @@ ice_gnss_do_write(struct ice_pf *pf, const unsigned char *buf, unsigned int size
 	return size;
 
 err_out:
-	dev_err(ice_pf_to_dev(pf), "GNSS failed to write, offset=%u, size=%u, err=%d\n",
+	dev_err(ice_pf_to_dev(pf), "GNSS failed to write, offset=%u, size=%u, status=%d\n",
 		offset, size, err);
 
 	return err;
@@ -310,7 +310,7 @@ static int ice_gnss_register(struct ice_pf *pf)
 	gnss_set_drvdata(gdev, pf);
 	ret = gnss_register_device(gdev);
 	if (ret) {
-		dev_err(ice_pf_to_dev(pf), "gnss_register_device err=%d\n",
+		dev_err(ice_pf_to_dev(pf), "gnss_register_device failed, status=%d\n",
 			ret);
 		gnss_put_device(gdev);
 	} else {
