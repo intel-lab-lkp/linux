@@ -343,6 +343,7 @@ int nfp_cpp_mutex_reclaim(struct nfp_cpp *cpp, int target,
 {
 	const u32 mur = NFP_CPP_ID(target, 3, 0);	/* atomic_read */
 	const u32 muw = NFP_CPP_ID(target, 4, 0);	/* atomic_write */
+	unsigned long timeout = jiffies + 2 * HZ;
 	u16 interface = nfp_cpp_interface(cpp);
 	int err;
 	u32 tmp;
@@ -351,13 +352,21 @@ int nfp_cpp_mutex_reclaim(struct nfp_cpp *cpp, int target,
 	if (err)
 		return err;
 
-	/* Check lock */
-	err = nfp_cpp_readl(cpp, mur, address, &tmp);
-	if (err < 0)
-		return err;
+	/* Check lock. Note that PFs from the same controller use same interface ID.
+	 * So considering that the lock may be held by other PFs from the same
+	 * controller, we give it some time to release the lock, and only reclaim it
+	 * if timeout.
+	 */
+	while (time_is_after_jiffies(timeout)) {
+		err = nfp_cpp_readl(cpp, mur, address, &tmp);
+		if (err < 0)
+			return err;
 
-	if (nfp_mutex_is_unlocked(tmp) || nfp_mutex_owner(tmp) != interface)
-		return 0;
+		if (nfp_mutex_is_unlocked(tmp) || nfp_mutex_owner(tmp) != interface)
+			return 0;
+
+		msleep_interruptible(10);
+	}
 
 	/* Bust the lock */
 	err = nfp_cpp_writel(cpp, muw, address, nfp_mutex_unlocked(interface));
