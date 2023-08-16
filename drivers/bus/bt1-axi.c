@@ -58,7 +58,7 @@ struct bt1_axi {
 static irqreturn_t bt1_axi_isr(int irq, void *data)
 {
 	struct bt1_axi *axi = data;
-	u32 low = 0, high = 0;
+	unsigned int low = 0, high = 0;
 
 	regmap_read(axi->sys_regs, BT1_AXI_WERRL, &low);
 	regmap_read(axi->sys_regs, BT1_AXI_WERRH, &high);
