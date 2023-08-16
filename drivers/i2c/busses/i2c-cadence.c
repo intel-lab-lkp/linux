@@ -1299,6 +1299,7 @@ static int cdns_i2c_probe(struct platform_device *pdev)
 	if (IS_ERR(id->rinfo.pinctrl)) {
 		int err = PTR_ERR(id->rinfo.pinctrl);
 
+		id->rinfo.pinctrl = NULL;
 		dev_info(&pdev->dev, "can't get pinctrl, bus recovery not supported\n");
 		if (err != -ENODEV)
 			return err;
