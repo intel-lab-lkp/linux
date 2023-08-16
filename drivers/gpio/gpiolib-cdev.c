@@ -1830,8 +1830,14 @@ struct lineevent_state {
 	int irq;
 	wait_queue_head_t wait;
 	DECLARE_KFIFO(events, struct gpioevent_data, 16);
+	struct notifier_block nb;
 	u64 timestamp;
 };
+
+static struct lineevent_state *to_lineevent_state(struct notifier_block *nb)
+{
+	return container_of(nb, struct lineevent_state, nb);
+}
 
 #define GPIOEVENT_REQUEST_VALID_FLAGS \
 	(GPIOEVENT_REQUEST_RISING_EDGE | \
@@ -1947,6 +1953,9 @@ static ssize_t lineevent_read(struct file *file, char __user *buf,
 
 static void lineevent_free(struct lineevent_state *le)
 {
+	if (le->nb.notifier_call)
+		blocking_notifier_chain_unregister(&le->gdev->notifier,
+						   &le->nb);
 	if (le->irq)
 		free_irq(le->irq, le);
 	if (le->desc)
@@ -2084,6 +2093,22 @@ static irqreturn_t lineevent_irq_handler(int irq, void *p)
 	return IRQ_WAKE_THREAD;
 }
 
+static int lineevent_notify(struct notifier_block *nb, unsigned long action,
+			    void *data)
+{
+	struct lineevent_state *le = to_lineevent_state(nb);
+
+	switch (action) {
+	case GPIO_CDEV_UNREGISTERED:
+		wake_up_poll(&le->wait, EPOLLIN | EPOLLERR);
+		break;
+	default:
+		return NOTIFY_DONE;
+	}
+
+	return NOTIFY_OK;
+}
+
 static int lineevent_create(struct gpio_device *gdev, void __user *ip)
 {
 	struct gpioevent_request eventreq;
@@ -2174,6 +2199,11 @@ static int lineevent_create(struct gpio_device *gdev, void __user *ip)
 
 	INIT_KFIFO(le->events);
 	init_waitqueue_head(&le->wait);
+
+	le->nb.notifier_call = lineevent_notify;
+	ret = blocking_notifier_chain_register(&gdev->notifier, &le->nb);
+	if (ret)
+		goto out_free_le;
 
 	/* Request a thread to read the events */
 	ret = request_threaded_irq(irq,
