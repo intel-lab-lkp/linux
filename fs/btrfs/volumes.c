@@ -3507,7 +3507,15 @@ static int del_balance_item(struct btrfs_fs_info *fs_info)
 	if (!path)
 		return -ENOMEM;
 
-	trans = btrfs_start_transaction_fallback_global_rsv(root, 0);
+	do {
+		/*
+		 * The transaction starting here can be interrupted, but if we
+		 * just error out we would mark the fs read-only.
+		 * Thus here we try to start the transaction again if it's
+		 * interrupted.
+		 */
+		trans = btrfs_start_transaction_fallback_global_rsv(root, 0);
+	} while (IS_ERR(trans) && PTR_ERR(trans) == -EINTR);
 	if (IS_ERR(trans)) {
 		btrfs_free_path(path);
 		return PTR_ERR(trans);
@@ -3594,7 +3602,7 @@ static void reset_balance_state(struct btrfs_fs_info *fs_info)
 	kfree(bctl);
 	ret = del_balance_item(fs_info);
 	if (ret)
-		btrfs_handle_fs_error(fs_info, ret, NULL);
+		btrfs_handle_fs_error(fs_info, ret, "failed to delete balance item");
 }
 
 /*
