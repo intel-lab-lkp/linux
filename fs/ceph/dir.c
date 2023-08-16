@@ -1758,7 +1758,8 @@ static int dir_lease_is_valid(struct inode *dir, struct dentry *dentry,
 /*
  * Check if cached dentry can be trusted.
  */
-static int ceph_d_revalidate(struct dentry *dentry, unsigned int flags)
+static int ceph_d_revalidate(struct dentry *dentry, const struct qstr *name,
+			     unsigned int flags)
 {
 	int valid = 0;
 	struct dentry *parent;
