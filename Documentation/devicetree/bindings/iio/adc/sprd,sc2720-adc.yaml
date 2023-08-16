@@ -21,6 +21,7 @@ properties:
       - sprd,sc2730-adc
       - sprd,sc2731-adc
       - sprd,ump9620-adc
+      - sprd,ump518-adc
 
   reg:
     maxItems: 1
@@ -46,6 +47,7 @@ allOf:
             contains:
               enum:
                 - sprd,ump9620-adc
+                - sprd,ump518-adc
     then:
       properties:
         nvmem-cells:
