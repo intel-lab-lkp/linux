@@ -363,7 +363,7 @@ const char *__init mpc512x_select_psc_compat(void)
 	return NULL;
 }
 
-const char *__init mpc512x_select_reset_compat(void)
+static const char *__init mpc512x_select_reset_compat(void)
 {
 	if (of_machine_is_compatible("fsl,mpc5121"))
 		return "fsl,mpc5121-reset";
