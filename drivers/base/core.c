@@ -4720,6 +4720,187 @@ out:
 }
 EXPORT_SYMBOL_GPL(device_change_owner);
 
+static void shutdown_device(struct device *dev, struct device *parent)
+{
+	/* hold lock to avoid race with probe/release */
+	if (parent)
+		device_lock(parent);
+	device_lock(dev);
+
+	/* Don't allow any more runtime suspends */
+	pm_runtime_get_noresume(dev);
+	pm_runtime_barrier(dev);
+
+	if (dev->class && dev->class->shutdown_pre) {
+		if (initcall_debug)
+			dev_info(dev, "shutdown_pre\n");
+		dev->class->shutdown_pre(dev);
+	}
+	if (dev->bus && dev->bus->shutdown) {
+		if (initcall_debug)
+			dev_info(dev, "shutdown\n");
+		dev->bus->shutdown(dev);
+	} else if (dev->driver && dev->driver->shutdown) {
+		if (initcall_debug)
+			dev_info(dev, "shutdown\n");
+		dev->driver->shutdown(dev);
+	}
+
+	device_unlock(dev);
+	if (parent)
+		device_unlock(parent);
+}
+
+struct shutdown_work {
+	struct list_head node;
+	struct device *dev;
+	struct work_struct work;
+	struct completion complete;
+	struct list_head children;
+};
+
+void shutdown_dev_work(struct work_struct *work)
+{
+	struct shutdown_work *sd_work = container_of(work, struct shutdown_work, work);
+	struct shutdown_work *child_sd_work;
+	struct device *dev = sd_work->dev;
+
+	/*
+	 * wait for child devices to finish shutdown
+	 */
+	list_for_each_entry(child_sd_work, &sd_work->children, node) {
+		wait_for_completion(&child_sd_work->complete);
+	}
+
+	if (dev) {
+		/*
+		 * Make sure the device is off the kset list, in the
+		 * event that dev->*->shutdown() doesn't remove it.
+		 */
+		spin_lock(&devices_kset->list_lock);
+		list_del_init(&dev->kobj.entry);
+		spin_unlock(&devices_kset->list_lock);
+
+		shutdown_device(dev, dev->parent);
+	}
+
+	complete(&sd_work->complete);
+}
+
+static void schedule_shutdown_work(struct shutdown_work *dev_shutdown_work)
+{
+	struct shutdown_work *child;
+
+	/*
+	 * schedule children to be shutdown before parents
+	 */
+	list_for_each_entry(child, &dev_shutdown_work->children, node) {
+		schedule_shutdown_work(child);
+	}
+
+	schedule_work(&dev_shutdown_work->work);
+}
+
+static void free_shutdown_tree(struct shutdown_work *tree)
+{
+	struct shutdown_work *childitem, *tmp;
+
+	if (tree) {
+		list_for_each_entry_safe(childitem, tmp, &tree->children, node) {
+			put_device(childitem->dev);
+			list_del(&childitem->node);
+			free_shutdown_tree(childitem);
+		}
+		kfree(tree);
+	}
+}
+
+static struct shutdown_work *create_shutdown_tree(struct device *dev,
+						  struct shutdown_work *parent)
+{
+	struct klist_iter i;
+	struct shutdown_work *dev_sdwork;
+	int error = 0;
+
+	/*
+	 * alloc & init shutdown_work for this device
+	 */
+	dev_sdwork = kzalloc(sizeof(*dev_sdwork), GFP_KERNEL);
+	if (!dev_sdwork)
+		goto fail;
+
+	if (dev) {
+		dev_sdwork->dev = dev;
+		get_device(dev);
+	}
+	INIT_WORK(&dev_sdwork->work, shutdown_dev_work);
+	INIT_LIST_HEAD(&dev_sdwork->children);
+	INIT_LIST_HEAD(&dev_sdwork->node);
+	init_completion(&dev_sdwork->complete);
+
+	if (parent) {
+		/*
+		 * add shutdown_work for a device's children
+		 */
+		klist_iter_init(&dev_sdwork->dev->p->klist_children, &i);
+		while (!error && (dev = next_device(&i)))
+			error = !create_shutdown_tree(dev, dev_sdwork);
+		klist_iter_exit(&i);
+
+		if (error)
+			goto fail;
+
+		list_add_tail(&dev_sdwork->node, &parent->children);
+		return dev_sdwork;
+	}
+
+	/*
+	 * add shutdown_work for top level devices
+	 */
+	spin_lock(&devices_kset->list_lock);
+	list_for_each_entry(dev, &devices_kset->list, kobj.entry) {
+		if (!dev->parent)
+			error = !create_shutdown_tree(dev, dev_sdwork);
+		if (error)
+			break;
+	}
+	spin_unlock(&devices_kset->list_lock);
+
+	if (error)
+		goto fail;
+
+	return dev_sdwork;
+
+fail:
+	free_shutdown_tree(dev_sdwork);
+	return NULL;
+}
+
+/**
+ * device_shutdown_async - schedule ->shutdown() on each device to shutdown
+ * asynchronously, ensuring each device's children are shut down before
+ * shutting down the device
+ */
+static int device_shutdown_async(void)
+{
+	struct shutdown_work *shutdown_work_tree;
+
+	/*
+	 * build tree with devices to be shut down
+	 */
+	shutdown_work_tree = create_shutdown_tree(NULL, NULL);
+	if (!shutdown_work_tree)
+		return -ENOMEM;
+
+	/*
+	 * schedule the work to run & wait for it to finish
+	 */
+	schedule_shutdown_work(shutdown_work_tree);
+	wait_for_completion(&shutdown_work_tree->complete);
+	free_shutdown_tree(shutdown_work_tree);
+	return 0;
+}
+
 /**
  * device_shutdown - call ->shutdown() on each device to shutdown.
  */
@@ -4731,6 +4912,13 @@ void device_shutdown(void)
 	device_block_probing();
 
 	cpufreq_suspend();
+
+	if (initcall_debug)
+		pr_info("attempting asynchronous device shutdown\n");
+	if (!device_shutdown_async())
+		return;
+	if (initcall_debug)
+		pr_info("starting synchronous device shutdown\n");
 
 	spin_lock(&devices_kset->list_lock);
 	/*
@@ -4756,33 +4944,7 @@ void device_shutdown(void)
 		list_del_init(&dev->kobj.entry);
 		spin_unlock(&devices_kset->list_lock);
 
-		/* hold lock to avoid race with probe/release */
-		if (parent)
-			device_lock(parent);
-		device_lock(dev);
-
-		/* Don't allow any more runtime suspends */
-		pm_runtime_get_noresume(dev);
-		pm_runtime_barrier(dev);
-
-		if (dev->class && dev->class->shutdown_pre) {
-			if (initcall_debug)
-				dev_info(dev, "shutdown_pre\n");
-			dev->class->shutdown_pre(dev);
-		}
-		if (dev->bus && dev->bus->shutdown) {
-			if (initcall_debug)
-				dev_info(dev, "shutdown\n");
-			dev->bus->shutdown(dev);
-		} else if (dev->driver && dev->driver->shutdown) {
-			if (initcall_debug)
-				dev_info(dev, "shutdown\n");
-			dev->driver->shutdown(dev);
-		}
-
-		device_unlock(dev);
-		if (parent)
-			device_unlock(parent);
+		shutdown_device(dev, parent);
 
 		put_device(dev);
 		put_device(parent);
