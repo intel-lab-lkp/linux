@@ -254,6 +254,7 @@ static unsigned int nfp_pf_get_limit_vfs(struct nfp_pf *pf,
 	if (offset >= limit_vfs_rtsym)
 		return 0;
 
+	pf->multi_pf.vf_fid = offset;
 	if (offset + total > limit_vfs_rtsym)
 		return limit_vfs_rtsym - offset;
 
