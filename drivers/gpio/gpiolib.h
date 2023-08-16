@@ -39,8 +39,7 @@
  * or name of the IP component in a System on Chip.
  * @data: per-instance data assigned by the driver
  * @list: links gpio_device:s together for traversal
- * @notifier: used to notify subscribers about lines being requested, released
- *            or reconfigured
+ * @notifier: used to notify subscribers about gpio_device events
  * @sem: protects the structure from a NULL-pointer dereference of @chip by
  *       user-space operations when the device gets unregistered during
  *       a hot-unplug event

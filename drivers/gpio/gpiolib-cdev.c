@@ -2502,22 +2502,33 @@ static int lineinfo_changed_notify(struct notifier_block *nb,
 {
 	struct gpio_chardev_data *cdev = to_gpio_chardev_data(nb);
 	struct gpio_v2_line_info_changed chg;
-	struct gpio_desc *desc = data;
+	struct gpio_desc *desc;
 	int ret;
 
-	if (!test_bit(gpio_chip_hwgpio(desc), cdev->watched_lines))
+	switch (action) {
+	case GPIO_V2_LINE_CHANGED_REQUESTED:
+	case GPIO_V2_LINE_CHANGED_RELEASED:
+	case GPIO_V2_LINE_CHANGED_CONFIG:
+		desc = data;
+
+		if (!test_bit(gpio_chip_hwgpio(desc), cdev->watched_lines))
+			return NOTIFY_DONE;
+
+		memset(&chg, 0, sizeof(chg));
+		chg.event_type = action;
+		chg.timestamp_ns = ktime_get_ns();
+		gpio_desc_to_lineinfo(desc, &chg.info);
+
+		ret = kfifo_in_spinlocked(&cdev->events, &chg, 1,
+					  &cdev->wait.lock);
+		if (ret)
+			wake_up_poll(&cdev->wait, EPOLLIN);
+		else
+			pr_debug_ratelimited("lineinfo event FIFO is full - event dropped\n");
+		break;
+	default:
 		return NOTIFY_DONE;
-
-	memset(&chg, 0, sizeof(chg));
-	chg.event_type = action;
-	chg.timestamp_ns = ktime_get_ns();
-	gpio_desc_to_lineinfo(desc, &chg.info);
-
-	ret = kfifo_in_spinlocked(&cdev->events, &chg, 1, &cdev->wait.lock);
-	if (ret)
-		wake_up_poll(&cdev->wait, EPOLLIN);
-	else
-		pr_debug_ratelimited("lineinfo event FIFO is full - event dropped\n");
+	}
 
 	return NOTIFY_OK;
 }
