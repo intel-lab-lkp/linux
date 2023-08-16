@@ -84,6 +84,8 @@ struct nfp_dumpspec {
  * @port_refresh_work:	Work entry for taking netdevs out
  * @shared_bufs:	Array of shared buffer structures if FW has any SBs
  * @num_shared_bufs:	Number of elements in @shared_bufs
+ * @multi_pf:		Used in multi-PF setup
+ * @multi_pf.en:	True if it's a NIC with multiple PFs
  *
  * Fields which may change after proble are protected by devlink instance lock.
  */
@@ -141,6 +143,10 @@ struct nfp_pf {
 
 	struct nfp_shared_buf *shared_bufs;
 	unsigned int num_shared_bufs;
+
+	struct {
+		bool en;
+	} multi_pf;
 };
 
 extern struct pci_driver nfp_netvf_pci_driver;
