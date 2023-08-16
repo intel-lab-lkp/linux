@@ -451,7 +451,7 @@ static int nfp_abm_init(struct nfp_app *app)
 		nfp_err(pf->cpp, "ABM NIC requires ETH table\n");
 		return -EINVAL;
 	}
-	if (pf->max_data_vnics != pf->eth_tbl->count) {
+	if (pf->max_data_vnics != pf->eth_tbl->count && !pf->multi_pf.en) {
 		nfp_err(pf->cpp, "ETH entries don't match vNICs (%d vs %d)\n",
 			pf->max_data_vnics, pf->eth_tbl->count);
 		return -EINVAL;

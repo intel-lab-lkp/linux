@@ -210,4 +210,10 @@ unsigned int nfp_net_lr2speed(unsigned int linkrate);
 unsigned int nfp_net_speed2lr(unsigned int speed);
 
 u8 nfp_get_pf_id(struct nfp_pf *pf);
+
+static inline unsigned int nfp_net_get_id(const struct nfp_pf *pf, unsigned int id)
+{
+	return pf->multi_pf.en ? pf->multi_pf.id : id;
+}
+
 #endif /* NFP_MAIN_H */

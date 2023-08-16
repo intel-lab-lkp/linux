@@ -141,7 +141,7 @@ nfp_net_pf_init_vnic(struct nfp_pf *pf, struct nfp_net *nn, unsigned int id)
 {
 	int err;
 
-	nn->id = id;
+	nn->id = nfp_net_get_id(pf, id);
 
 	if (nn->port) {
 		err = nfp_devlink_port_register(pf->app, nn->port);
@@ -183,8 +183,8 @@ nfp_net_pf_alloc_vnics(struct nfp_pf *pf, void __iomem *ctrl_bar,
 	int err;
 
 	for (i = 0; i < pf->max_data_vnics; i++) {
-		nn = nfp_net_pf_alloc_vnic(pf, true, ctrl_bar, qc_bar,
-					   stride, i);
+		nn = nfp_net_pf_alloc_vnic(pf, true, ctrl_bar, qc_bar, stride,
+					   nfp_net_get_id(pf, i));
 		if (IS_ERR(nn)) {
 			err = PTR_ERR(nn);
 			goto err_free_prev;
@@ -706,6 +706,11 @@ int nfp_net_pci_probe(struct nfp_pf *pf)
 	pf->max_data_vnics = nfp_net_pf_get_num_ports(pf);
 	if ((int)pf->max_data_vnics < 0)
 		return pf->max_data_vnics;
+
+	if (pf->multi_pf.en && pf->max_data_vnics != 1) {
+		nfp_err(pf->cpp, "Only one data_vnic per PF is supported in multiple PF setup.\n");
+		return -EINVAL;
+	}
 
 	err = nfp_net_pci_map_mem(pf);
 	if (err)

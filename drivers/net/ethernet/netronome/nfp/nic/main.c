@@ -12,7 +12,8 @@ static int nfp_nic_init(struct nfp_app *app)
 {
 	struct nfp_pf *pf = app->pf;
 
-	if (pf->eth_tbl && pf->max_data_vnics != pf->eth_tbl->count) {
+	if (pf->eth_tbl && pf->max_data_vnics != pf->eth_tbl->count &&
+	    !pf->multi_pf.en) {
 		nfp_err(pf->cpp, "ETH entries don't match vNICs (%d vs %d)\n",
 			pf->max_data_vnics, pf->eth_tbl->count);
 		return -EINVAL;

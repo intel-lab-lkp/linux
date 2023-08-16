@@ -70,7 +70,7 @@ nfp_bpf_vnic_alloc(struct nfp_app *app, struct nfp_net *nn, unsigned int id)
 		nfp_err(pf->cpp, "No ETH table\n");
 		return -EINVAL;
 	}
-	if (pf->max_data_vnics != pf->eth_tbl->count) {
+	if (pf->max_data_vnics != pf->eth_tbl->count && !pf->multi_pf.en) {
 		nfp_err(pf->cpp, "ETH entries don't match vNICs (%d vs %d)\n",
 			pf->max_data_vnics, pf->eth_tbl->count);
 		return -EINVAL;
