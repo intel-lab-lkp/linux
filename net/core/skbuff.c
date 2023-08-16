@@ -1284,6 +1284,7 @@ void napi_skb_free_stolen_head(struct sk_buff *skb)
 	}
 	napi_skb_cache_put(skb);
 }
+EXPORT_SYMBOL(napi_skb_free_stolen_head);
 
 void napi_consume_skb(struct sk_buff *skb, int budget)
 {

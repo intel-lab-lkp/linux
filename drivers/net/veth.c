@@ -838,9 +838,12 @@ static void __skb2xdp_steal_data(struct sk_buff *skb,
 	if (local_pp_alloc) {
 		/* This is the most common case where the skb was reallocated locally in
 		 * veth_convert_skb_to_xdp_buff, and it's safe to use the xdp_mem_pp model.
+		 * Since the skb is "reallocated" in the NAPI context of veth, it is possible
+		 * to use the NAPI version of the "head stolen" function to optimize the
+		 * reuse of skb as well.
 		 */
 		xdp->rxq->mem = rq->xdp_mem_pp;
-		kfree_skb_partial(skb, true);
+		napi_skb_free_stolen_head(skb);
 	} else if (!skb->pp_recycle) {
 		/* We can safely use kfree_skb_partial here because this cannot be an fclone
 		 * skb. Fclone skbs are allocated via __alloc_skb, with their head buffer
