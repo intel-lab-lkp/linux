@@ -362,7 +362,7 @@ int nfp_abm_ctrl_find_addrs(struct nfp_abm *abm)
 	const struct nfp_rtsym *sym;
 	int res;
 
-	abm->pf_id = nfp_cppcore_pcie_unit(pf->cpp);
+	abm->pf_id = nfp_get_pf_id(pf);
 
 	/* Check if Qdisc offloads are supported */
 	res = nfp_pf_rtsym_read_optional(pf, NFP_RED_SUPPORT_SYM_NAME, 1);

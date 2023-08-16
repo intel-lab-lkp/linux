@@ -19,6 +19,7 @@ const struct nfp_dev_info nfp_dev_info[NFP_DEV_CNT] = {
 		.pcie_cfg_expbar_offset	= 0x0a00,
 		.pcie_expl_offset	= 0xd000,
 		.qc_area_sz		= 0x100000,
+		.pf_num_per_unit	= 4,
 	},
 	[NFP_DEV_NFP3800_VF] = {
 		.dma_mask		= DMA_BIT_MASK(48),
@@ -38,6 +39,7 @@ const struct nfp_dev_info nfp_dev_info[NFP_DEV_CNT] = {
 		.pcie_cfg_expbar_offset	= 0x0400,
 		.pcie_expl_offset	= 0x1000,
 		.qc_area_sz		= 0x80000,
+		.pf_num_per_unit	= 1,
 	},
 	[NFP_DEV_NFP6000_VF] = {
 		.dma_mask		= DMA_BIT_MASK(40),

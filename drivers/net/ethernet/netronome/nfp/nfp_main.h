@@ -208,4 +208,6 @@ void nfp_devlink_params_unregister(struct nfp_pf *pf);
 
 unsigned int nfp_net_lr2speed(unsigned int linkrate);
 unsigned int nfp_net_speed2lr(unsigned int speed);
+
+u8 nfp_get_pf_id(struct nfp_pf *pf);
 #endif /* NFP_MAIN_H */

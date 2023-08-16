@@ -35,6 +35,7 @@ struct nfp_dev_info {
 	u32 pcie_cfg_expbar_offset;
 	u32 pcie_expl_offset;
 	u32 qc_area_sz;
+	u8 pf_num_per_unit;
 };
 
 extern const struct nfp_dev_info nfp_dev_info[NFP_DEV_CNT];
