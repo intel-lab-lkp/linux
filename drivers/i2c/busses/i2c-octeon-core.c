@@ -130,6 +130,24 @@ static void octeon_i2c_hlc_disable(struct octeon_i2c *i2c)
 	octeon_i2c_ctl_write(i2c, TWSI_CTL_ENAB);
 }
 
+static void octeon_i2c_block_enable(struct octeon_i2c *i2c)
+{
+	if (i2c->block_enabled || !TWSI_BLOCK_CTL(i2c))
+		return;
+
+	i2c->block_enabled = true;
+	octeon_i2c_writeq_flush(TWSI_MODE_STRETCH
+		| TWSI_MODE_BLOCK_MODE, i2c->twsi_base + TWSI_MODE(i2c));
+}
+
+static void octeon_i2c_block_disable(struct octeon_i2c *i2c)
+{
+	if (!i2c->block_enabled || !TWSI_BLOCK_CTL(i2c))
+		return;
+
+	i2c->block_enabled = false;
+	octeon_i2c_writeq_flush(TWSI_MODE_STRETCH, i2c->twsi_base + TWSI_MODE(i2c));
+}
 /**
  * octeon_i2c_hlc_wait - wait for an HLC operation to complete
  * @i2c: The struct octeon_i2c
@@ -268,6 +286,7 @@ static int octeon_i2c_start(struct octeon_i2c *i2c)
 	u8 stat;
 
 	octeon_i2c_hlc_disable(i2c);
+	octeon_i2c_block_disable(i2c);
 
 	octeon_i2c_ctl_write(i2c, TWSI_CTL_ENAB | TWSI_CTL_STA);
 	ret = octeon_i2c_wait(i2c);
@@ -594,6 +613,128 @@ err:
 	return ret;
 }
 
+/* high-level-controller composite block write+read, m[0]len<=2, m[1]len<=1024 */
+static int octeon_i2c_hlc_block_comp_read(struct octeon_i2c *i2c, struct i2c_msg *msgs)
+{
+	int i, j, len, ret = 0;
+	u64 cmd, rd;
+
+	octeon_i2c_hlc_enable(i2c);
+	octeon_i2c_block_enable(i2c);
+
+	len = msgs[1].len - 1;
+	/* Prepare core command */
+	cmd = SW_TWSI_V | SW_TWSI_R | SW_TWSI_SOVR;
+	/* SIZE */
+	octeon_i2c_writeq_flush((u64)(len), i2c->twsi_base + TWSI_BLOCK_CTL(i2c));
+	/* ADDR */
+	cmd |= (u64)(msgs[0].addr & 0x7full) << SW_TWSI_ADDR_SHIFT;
+
+	if (msgs[0].flags & I2C_M_TEN)
+		cmd |= SW_TWSI_OP_10_IA;
+	else
+		cmd |= SW_TWSI_OP_7_IA;
+
+	if (msgs[0].len == 2) {
+		u64 ext = 0;
+
+		cmd |= SW_TWSI_EIA;
+		ext = (u64)msgs[0].buf[0] << SW_TWSI_IA_SHIFT;
+		cmd |= (u64)msgs[0].buf[1] << SW_TWSI_IA_SHIFT;
+		octeon_i2c_writeq_flush(ext, i2c->twsi_base + SW_TWSI_EXT(i2c));
+	} else {
+		cmd |= (u64)msgs[0].buf[0] << SW_TWSI_IA_SHIFT;
+	}
+
+	/* Send command to core (send data to FIFO) */
+	octeon_i2c_hlc_int_clear(i2c);
+	octeon_i2c_writeq_flush(cmd, i2c->twsi_base + SW_TWSI(i2c));
+
+	/* Wait for transaction to complete */
+	ret = octeon_i2c_hlc_wait(i2c);
+	if (ret)
+		goto err;
+
+	cmd = __raw_readq(i2c->twsi_base + SW_TWSI(i2c));
+	if ((cmd & SW_TWSI_R) == 0)
+		return octeon_i2c_check_status(i2c, false);
+
+	/* read data in FIFO */
+	octeon_i2c_writeq_flush(TWSI_BLOCK_STS_RESET_PTR, i2c->twsi_base + TWSI_BLOCK_STS(i2c));
+	for (i = 0; i < len; i += 8) {
+		rd = __raw_readq(i2c->twsi_base + TWSI_BLOCK_FIFO(i2c));
+		for (j = 7; j >= 0; j--)
+			msgs[1].buf[i + (7 - j)] = (rd >> (8 * j)) & 0xff;
+	}
+
+	octeon_i2c_block_disable(i2c);
+
+err:
+	return ret;
+}
+
+/* high-level-controller composite block write+write, m[0]len<=2, m[1]len<=1024 */
+static int octeon_i2c_hlc_block_comp_write(struct octeon_i2c *i2c, struct i2c_msg *msgs)
+{
+	bool set_ext = false;
+	int i, j, len, ret = 0;
+	u64 cmd, buf = 0, ext = 0;
+
+	octeon_i2c_hlc_enable(i2c);
+	octeon_i2c_block_enable(i2c);
+
+	len = msgs[1].len - 1;
+	/* Prepare core command */
+	cmd = SW_TWSI_V | SW_TWSI_SOVR;
+	/* SIZE */
+	octeon_i2c_writeq_flush((u64)(len), i2c->twsi_base + TWSI_BLOCK_CTL(i2c));
+	/* ADDR */
+	cmd |= (u64)(msgs[0].addr & 0x7full) << SW_TWSI_ADDR_SHIFT;
+
+	if (msgs[0].flags & I2C_M_TEN)
+		cmd |= SW_TWSI_OP_10_IA;
+	else
+		cmd |= SW_TWSI_OP_7_IA;
+
+	if (msgs[0].len == 2) {
+		cmd |= SW_TWSI_EIA;
+		ext |= (u64)msgs[0].buf[0] << SW_TWSI_IA_SHIFT;
+		set_ext = true;
+		cmd |= (u64)msgs[0].buf[1] << SW_TWSI_IA_SHIFT;
+	} else {
+		cmd |= (u64)msgs[0].buf[0] << SW_TWSI_IA_SHIFT;
+	}
+
+	/* Write msg into FIFO buffer */
+	octeon_i2c_writeq_flush(TWSI_BLOCK_STS_RESET_PTR, i2c->twsi_base + TWSI_BLOCK_STS(i2c));
+	for (i = 0; i < len; i += 8) {
+		buf = 0;
+		for (j = 7; j >= 0; j--)
+			buf |= (msgs[1].buf[i + (7 - j)] << (8 * j));
+		octeon_i2c_writeq_flush(buf, i2c->twsi_base + TWSI_BLOCK_FIFO(i2c));
+	}
+	if (set_ext)
+		octeon_i2c_writeq_flush(ext, i2c->twsi_base + SW_TWSI_EXT(i2c));
+
+	/* Send command to core (send data in FIFO) */
+	octeon_i2c_hlc_int_clear(i2c);
+	octeon_i2c_writeq_flush(cmd, i2c->twsi_base + SW_TWSI(i2c));
+
+	/* Wait for transaction to complete */
+	ret = octeon_i2c_hlc_wait(i2c);
+	if (ret)
+		goto err;
+
+	cmd = __raw_readq(i2c->twsi_base + SW_TWSI(i2c));
+	if ((cmd & SW_TWSI_R) == 0)
+		return octeon_i2c_check_status(i2c, false);
+
+	octeon_i2c_block_disable(i2c);
+
+err:
+	return ret;
+}
+
 /**
  * octeon_i2c_xfer - The driver's master_xfer function
  * @adap: Pointer to the i2c_adapter structure
@@ -619,13 +760,21 @@ int octeon_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
 		if ((msgs[0].flags & I2C_M_RD) == 0 &&
 		    (msgs[1].flags & I2C_M_RECV_LEN) == 0 &&
 		    msgs[0].len > 0 && msgs[0].len <= 2 &&
-		    msgs[1].len > 0 && msgs[1].len <= 8 &&
+		    msgs[1].len > 0 &&
 		    msgs[0].addr == msgs[1].addr) {
-			if (msgs[1].flags & I2C_M_RD)
-				ret = octeon_i2c_hlc_comp_read(i2c, msgs);
-			else
-				ret = octeon_i2c_hlc_comp_write(i2c, msgs);
-			goto out;
+			if (msgs[1].len <= 8) {
+				if (msgs[1].flags & I2C_M_RD)
+					ret = octeon_i2c_hlc_comp_read(i2c, msgs);
+				else
+					ret = octeon_i2c_hlc_comp_write(i2c, msgs);
+				goto out;
+			} else if (msgs[1].len <= 1024 && TWSI_BLOCK_CTL(i2c)) {
+				if (msgs[1].flags & I2C_M_RD)
+					ret = octeon_i2c_hlc_block_comp_read(i2c, msgs);
+				else
+					ret = octeon_i2c_hlc_block_comp_write(i2c, msgs);
+				goto out;
+			}
 		}
 	}
 
@@ -720,6 +869,7 @@ int octeon_i2c_init_lowlevel(struct octeon_i2c *i2c)
 	/* toggle twice to force both teardowns */
 	octeon_i2c_hlc_enable(i2c);
 	octeon_i2c_hlc_disable(i2c);
+
 	return 0;
 }
 
