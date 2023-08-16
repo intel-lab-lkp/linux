@@ -180,7 +180,6 @@ static int mcf_edma_probe(struct platform_device *pdev)
 {
 	struct mcf_edma_platform_data *pdata;
 	struct fsl_edma_engine *mcf_edma;
-	struct fsl_edma_chan *mcf_chan;
 	struct edma_regs *regs;
 	int ret, i, len, chans;
 
@@ -197,7 +196,7 @@ static int mcf_edma_probe(struct platform_device *pdev)
 		chans = pdata->dma_channels;
 	}
 
-	len = sizeof(*mcf_edma) + sizeof(*mcf_chan) * chans;
+	len = struct_size(mcf_edma, chans, chans);
 	mcf_edma = devm_kzalloc(&pdev->dev, len, GFP_KERNEL);
 	if (!mcf_edma)
 		return -ENOMEM;
