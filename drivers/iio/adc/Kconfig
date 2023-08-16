@@ -1375,6 +1375,16 @@ config TWL6030_GPADC
 	  This driver can also be built as a module. If so, the module will be
 	  called twl6030-gpadc.
 
+config SPRD_PMIC_ADC
+	tristate "Unisoc PMIC ADC"
+	depends on MFD_SC27XX_PMIC || COMPILE_TEST
+	help
+	  Say yes here to build support for the integrated ADC inside the
+	  Unisoc PMICs.
+
+	  This driver can also be built as a module. If so, the module
+	  will be called sprd_pmic_adc.
+
 config VF610_ADC
 	tristate "Freescale vf610 ADC driver"
 	depends on HAS_IOMEM
