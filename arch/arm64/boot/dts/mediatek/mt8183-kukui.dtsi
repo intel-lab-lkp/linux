@@ -877,6 +877,7 @@
 		compatible = "winbond,w25q64dw", "jedec,spi-nor";
 		reg = <0>;
 		spi-max-frequency = <25000000>;
+		spi-rx-bus-width = <2>;
 	};
 };
 
