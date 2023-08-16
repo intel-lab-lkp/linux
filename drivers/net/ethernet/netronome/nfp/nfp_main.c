@@ -224,11 +224,48 @@ static int nfp_pf_board_state_wait(struct nfp_pf *pf)
 	return 0;
 }
 
+static unsigned int nfp_pf_get_limit_vfs(struct nfp_pf *pf,
+					 unsigned int limit_vfs_rtsym)
+{
+	u16 pos, offset, total;
+
+	if (!pf->multi_pf.en || !limit_vfs_rtsym)
+		return limit_vfs_rtsym;
+
+	pos = pci_find_ext_capability(pf->pdev, PCI_EXT_CAP_ID_SRIOV);
+	if (!pos)
+		return 0;
+
+	/* Management firmware ensures that SR-IOV capability registers
+	 * are initialized correctly.
+	 */
+	pci_read_config_word(pf->pdev, pos + PCI_SRIOV_VF_OFFSET, &offset);
+	pci_read_config_word(pf->pdev, pos + PCI_SRIOV_TOTAL_VF, &total);
+	if (!total)
+		return 0;
+
+	/* Offset of first VF is relative to its PF. */
+	offset += pf->multi_pf.id;
+	if (offset < pf->dev_info->pf_num_per_unit)
+		return 0;
+
+	/* For multi-PF device, VF is numbered from max PF count. */
+	offset -= pf->dev_info->pf_num_per_unit;
+	if (offset >= limit_vfs_rtsym)
+		return 0;
+
+	if (offset + total > limit_vfs_rtsym)
+		return limit_vfs_rtsym - offset;
+
+	return total;
+}
+
 static int nfp_pcie_sriov_read_nfd_limit(struct nfp_pf *pf)
 {
+	unsigned int limit_vfs_rtsym;
 	int err;
 
-	pf->limit_vfs = nfp_rtsym_read_le(pf->rtbl, "nfd_vf_cfg_max_vfs", &err);
+	limit_vfs_rtsym = nfp_rtsym_read_le(pf->rtbl, "nfd_vf_cfg_max_vfs", &err);
 	if (err) {
 		/* For backwards compatibility if symbol not found allow all */
 		pf->limit_vfs = ~0;
@@ -239,9 +276,13 @@ static int nfp_pcie_sriov_read_nfd_limit(struct nfp_pf *pf)
 		return err;
 	}
 
-	err = pci_sriov_set_totalvfs(pf->pdev, pf->limit_vfs);
-	if (err)
-		nfp_warn(pf->cpp, "Failed to set VF count in sysfs: %d\n", err);
+	pf->limit_vfs = nfp_pf_get_limit_vfs(pf, limit_vfs_rtsym);
+	if (pci_sriov_get_totalvfs(pf->pdev) != pf->limit_vfs) {
+		err = pci_sriov_set_totalvfs(pf->pdev, pf->limit_vfs);
+		if (err)
+			nfp_warn(pf->cpp, "Failed to set VF count in sysfs: %d\n", err);
+	}
+
 	return 0;
 }
 
