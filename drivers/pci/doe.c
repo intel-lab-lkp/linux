@@ -95,8 +95,7 @@ struct pci_doe_task {
 };
 
 #ifdef CONFIG_SYSFS
-static umode_t pci_doe_sysfs_attr_is_visible(struct kobject *kobj,
-					     struct attribute *a, int n)
+static umode_t pci_doe_sysfs_group_is_visible(struct kobject *kobj)
 {
 	struct pci_dev *pdev = to_pci_dev(kobj_to_dev(kobj));
 	unsigned long total_features = 0;
@@ -112,7 +111,17 @@ static umode_t pci_doe_sysfs_attr_is_visible(struct kobject *kobj,
 	if (total_features == 0)
 		return 0;
 
-	return a->mode;
+	return S_IRWXU | S_IRUGO | S_IXUGO;
+}
+
+static umode_t pci_doe_sysfs_attr_is_visible(struct kobject *kobj,
+					     struct attribute *a, int n)
+{
+	if (pci_doe_sysfs_group_is_visible(kobj)) {
+		return a->mode;
+	}
+
+	return 0;
 }
 
 static struct attribute *pci_dev_doe_feature_attrs[] = {
@@ -122,6 +131,7 @@ static struct attribute *pci_dev_doe_feature_attrs[] = {
 const struct attribute_group pci_dev_doe_feature_group = {
 	.name	= "doe_features",
 	.attrs	= pci_dev_doe_feature_attrs,
+	.attr_is_visible = pci_doe_sysfs_group_is_visible,
 	.is_visible = pci_doe_sysfs_attr_is_visible,
 };
 
