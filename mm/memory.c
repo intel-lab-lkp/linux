@@ -4872,13 +4872,8 @@ static inline vm_fault_t create_huge_pmd(struct vm_fault *vmf)
 	struct vm_area_struct *vma = vmf->vma;
 	if (vma_is_anonymous(vma))
 		return do_huge_pmd_anonymous_page(vmf);
-	if (vma->vm_ops->huge_fault) {
-		if (vmf->flags & FAULT_FLAG_VMA_LOCK) {
-			vma_end_read(vma);
-			return VM_FAULT_RETRY;
-		}
-		return vma->vm_ops->huge_fault(vmf, PE_SIZE_PMD);
-	}
+	if (vma->vm_ops->huge_fault)
+		return vma->vm_ops->huge_fault(vmf, PMD_ORDER);
 	return VM_FAULT_FALLBACK;
 }
 
@@ -4898,11 +4893,7 @@ static inline vm_fault_t wp_huge_pmd(struct vm_fault *vmf)
 
 	if (vma->vm_flags & (VM_SHARED | VM_MAYSHARE)) {
 		if (vma->vm_ops->huge_fault) {
-			if (vmf->flags & FAULT_FLAG_VMA_LOCK) {
-				vma_end_read(vma);
-				return VM_FAULT_RETRY;
-			}
-			ret = vma->vm_ops->huge_fault(vmf, PE_SIZE_PMD);
+			ret = vma->vm_ops->huge_fault(vmf, PMD_ORDER);
 			if (!(ret & VM_FAULT_FALLBACK))
 				return ret;
 		}
@@ -4922,13 +4913,8 @@ static vm_fault_t create_huge_pud(struct vm_fault *vmf)
 	/* No support for anonymous transparent PUD pages yet */
 	if (vma_is_anonymous(vma))
 		return VM_FAULT_FALLBACK;
-	if (vma->vm_ops->huge_fault) {
-		if (vmf->flags & FAULT_FLAG_VMA_LOCK) {
-			vma_end_read(vma);
-			return VM_FAULT_RETRY;
-		}
-		return vma->vm_ops->huge_fault(vmf, PE_SIZE_PUD);
-	}
+	if (vma->vm_ops->huge_fault)
+		return vma->vm_ops->huge_fault(vmf, PUD_ORDER);
 #endif /* CONFIG_TRANSPARENT_HUGEPAGE */
 	return VM_FAULT_FALLBACK;
 }
@@ -4945,11 +4931,7 @@ static vm_fault_t wp_huge_pud(struct vm_fault *vmf, pud_t orig_pud)
 		goto split;
 	if (vma->vm_flags & (VM_SHARED | VM_MAYSHARE)) {
 		if (vma->vm_ops->huge_fault) {
-			if (vmf->flags & FAULT_FLAG_VMA_LOCK) {
-				vma_end_read(vma);
-				return VM_FAULT_RETRY;
-			}
-			ret = vma->vm_ops->huge_fault(vmf, PE_SIZE_PUD);
+			ret = vma->vm_ops->huge_fault(vmf, PUD_ORDER);
 			if (!(ret & VM_FAULT_FALLBACK))
 				return ret;
 		}
