@@ -269,6 +269,14 @@ static int read_object_code(u64 addr, size_t len, u8 cpumode,
 	if (addr + len > map__end(al.map))
 		len = map__end(al.map) - addr;
 
+	/* Check if the ip offset falls in stubs sections for kernel modules */
+	if (strstr(dso->long_name, ".ko")) {
+		if ((al.addr < map__end(al.map)) && (al.addr > dso->text_end)) {
+			pr_debug(" - skipping\n");
+			goto out;
+		}
+	}
+
 	/* Read the object code using perf */
 	ret_len = dso__data_read_offset(dso, maps__machine(thread__maps(thread)),
 					al.addr, buf1, len);
