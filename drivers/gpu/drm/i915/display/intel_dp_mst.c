@@ -347,7 +347,8 @@ static int intel_dp_mst_compute_config(struct intel_encoder *encoder,
 	const struct drm_display_mode *adjusted_mode =
 		&pipe_config->hw.adjusted_mode;
 	struct link_config_limits limits;
-	int ret;
+	bool dsc_needed;
+	int ret = 0;
 
 	if (adjusted_mode->flags & DRM_MODE_FLAG_DBLSCAN)
 		return -EINVAL;
@@ -362,15 +363,25 @@ static int intel_dp_mst_compute_config(struct intel_encoder *encoder,
 
 	intel_dp_mst_compute_config_limits(intel_dp, pipe_config, &limits);
 
-	ret = intel_dp_mst_compute_link_config(encoder, pipe_config,
-					       conn_state, &limits);
+	dsc_needed = intel_dp->force_dsc_en;
 
-	if (ret == -EDEADLK)
-		return ret;
+	if (!dsc_needed) {
+		ret = intel_dp_mst_compute_link_config(encoder, pipe_config,
+						       conn_state, &limits);
+
+		if (ret == -EDEADLK)
+			return ret;
+
+		if (ret)
+			dsc_needed = true;
+	}
 
 	/* enable compression if the mode doesn't fit available BW */
-	drm_dbg_kms(&dev_priv->drm, "Force DSC en = %d\n", intel_dp->force_dsc_en);
-	if (ret || intel_dp->force_dsc_en) {
+	if (dsc_needed) {
+		drm_dbg_kms(&dev_priv->drm, "Try DSC (fallback=%s, force=%s)\n",
+			    str_yes_no(ret),
+			    str_yes_no(intel_dp->force_dsc_en));
+
 		/*
 		 * Try to get at least some timeslots and then see, if
 		 * we can fit there with DSC.
