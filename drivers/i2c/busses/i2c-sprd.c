@@ -75,7 +75,14 @@
 #define SPRD_I2C_PM_TIMEOUT	1000
 /* timeout (ms) for transfer message */
 #define I2C_XFER_TIMEOUT	1000
+/* dynamic modify clk_freq flag  */
+#define	I2C_3M4_FLAG		0x0100
+#define	I2C_1M_FLAG		0x0080
+#define	I2C_400K_FLAG		0x0040
 
+#define	I2C_FREQ_400K		400000
+#define	I2C_FREQ_1M		1000000
+#define	I2C_FREQ_3_4M		3400000
 /* SPRD i2c data structure */
 struct sprd_i2c {
 	struct i2c_adapter adap;
@@ -93,6 +100,8 @@ struct sprd_i2c {
 	int irq;
 	int err;
 };
+
+static void sprd_i2c_set_clk(struct sprd_i2c *i2c_dev, u32 freq);
 
 static void sprd_i2c_set_count(struct sprd_i2c *i2c_dev, u32 count)
 {
@@ -269,6 +278,12 @@ static int sprd_i2c_handle_msg(struct i2c_adapter *i2c_adap,
 		sprd_i2c_send_stop(i2c_dev, !!is_last_msg);
 	}
 
+	if (msg->flags & I2C_400K_FLAG)
+		sprd_i2c_set_clk(i2c_dev, I2C_FREQ_400K);
+	else if (msg->flags & I2C_1M_FLAG)
+		sprd_i2c_set_clk(i2c_dev, I2C_FREQ_1M);
+	else if (msg->flags & I2C_3M4_FLAG)
+		sprd_i2c_set_clk(i2c_dev, I2C_FREQ_3_4M);
 	/*
 	 * We should enable rx fifo full interrupt to get data when receiving
 	 * full data.
