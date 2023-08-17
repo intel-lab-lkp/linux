@@ -6446,6 +6446,11 @@
 			See Documentation/admin-guide/mm/transhuge.rst
 			for more details.
 
+	transparent_hugepage_recommend_disable
+			[KNL,THP]
+			Can be used to disable transparent hugepage to actively modify
+			/proc/sys/vm/min_free_kbytes during enablement process.
+
 	trusted.source=	[KEYS]
 			Format: <string>
 			This parameter identifies the trust source as a backend

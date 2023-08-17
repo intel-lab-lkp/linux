@@ -88,6 +88,9 @@ static unsigned int khugepaged_max_ptes_none __read_mostly;
 static unsigned int khugepaged_max_ptes_swap __read_mostly;
 static unsigned int khugepaged_max_ptes_shared __read_mostly;
 
+/* default enable recommended */
+static unsigned int transparent_hugepage_recommend __read_mostly = 1;
+
 #define MM_SLOTS_HASH_BITS 10
 static DEFINE_READ_MOSTLY_HASHTABLE(mm_slots_hash, MM_SLOTS_HASH_BITS);
 
@@ -2560,6 +2563,11 @@ static void set_recommended_min_free_kbytes(void)
 		goto update_wmarks;
 	}
 
+	if (!transparent_hugepage_recommend) {
+		pr_info("do not allow to recommend modify min_free_kbytes\n");
+		return;
+	}
+
 	for_each_populated_zone(zone) {
 		/*
 		 * We don't need to worry about fragmentation of
@@ -2590,7 +2598,10 @@ static void set_recommended_min_free_kbytes(void)
 
 	if (recommended_min > min_free_kbytes) {
 		if (user_min_free_kbytes >= 0)
-			pr_info("raising min_free_kbytes from %d to %lu to help transparent hugepage allocations\n",
+			pr_info("raising user specified min_free_kbytes from %d to %lu to help transparent hugepage allocations\n",
+				min_free_kbytes, recommended_min);
+		else
+			pr_info("raising default min_free_kbytes from %d to %lu to help transparent hugepage allocations\n",
 				min_free_kbytes, recommended_min);
 
 		min_free_kbytes = recommended_min;
@@ -2599,6 +2610,13 @@ static void set_recommended_min_free_kbytes(void)
 update_wmarks:
 	setup_per_zone_wmarks();
 }
+
+static int __init setup_transparent_hugepage_recommend_disable(char *str)
+{
+	transparent_hugepage_recommend = 0;
+	return 1;
+}
+__setup("transparent_hugepage_recommend_disable", setup_transparent_hugepage_recommend_disable);
 
 int start_stop_khugepaged(void)
 {
