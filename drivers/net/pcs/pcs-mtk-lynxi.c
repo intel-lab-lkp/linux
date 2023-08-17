@@ -108,14 +108,18 @@ static int mtk_pcs_lynxi_config(struct phylink_pcs *pcs, unsigned int neg_mode,
 				bool permit_pause_to_mac)
 {
 	struct mtk_pcs_lynxi *mpcs = pcs_to_mtk_pcs_lynxi(pcs);
-	bool mode_changed = false, changed;
-	unsigned int rgc3, sgm_mode, bmcr;
+	bool mode_changed = false, changed, link;
+	unsigned int bm, rgc3, sgm_mode, bmcr;
 	int advertise, link_timer;
 
 	advertise = phylink_mii_c22_pcs_encode_advertisement(interface,
 							     advertising);
 	if (advertise < 0)
 		return advertise;
+
+	/* Check if link is currently up */
+	regmap_read(mpcs->regmap, SGMSYS_PCS_CONTROL_1, &bm);
+	link = !!(FIELD_GET(SGMII_BMSR, bm) & BMSR_LSTATUS);
 
 	/* Clearing IF_MODE_BIT0 switches the PCS to BASE-X mode, and
 	 * we assume that fixes it's speed at bitrate = line rate (in
@@ -137,7 +141,10 @@ static int mtk_pcs_lynxi_config(struct phylink_pcs *pcs, unsigned int neg_mode,
 		bmcr = 0;
 	}
 
-	if (mpcs->interface != interface) {
+	/* Do a full reconfiguration only if the link is down or the interface
+	 * mode has changed
+	 */
+	if (mpcs->interface != interface || !link) {
 		link_timer = phylink_get_link_timer_ns(interface);
 		if (link_timer < 0)
 			return link_timer;
