@@ -1454,15 +1454,21 @@ static void priority_reclaim_data_space(struct btrfs_fs_info *fs_info,
 
 static void wait_reserve_ticket(struct btrfs_fs_info *fs_info,
 				struct btrfs_space_info *space_info,
+				enum btrfs_reserve_flush_enum flush,
 				struct reserve_ticket *ticket)
 
 {
+	int state;
 	DEFINE_WAIT(wait);
 	int ret = 0;
 
+	if (flush == BTRFS_RESERVE_FLUSH_ALL_STEAL_UNINTERRUPTIBLE)
+		state = TASK_UNINTERRUPTIBLE;
+	else
+		state = TASK_KILLABLE;
 	spin_lock(&space_info->lock);
 	while (ticket->bytes > 0 && ticket->error == 0) {
-		ret = prepare_to_wait_event(&ticket->wait, &wait, TASK_KILLABLE);
+		ret = prepare_to_wait_event(&ticket->wait, &wait, state);
 		if (ret) {
 			/*
 			 * Delete us from the list. After we unlock the space
@@ -1511,7 +1517,8 @@ static int handle_reserve_ticket(struct btrfs_fs_info *fs_info,
 	case BTRFS_RESERVE_FLUSH_DATA:
 	case BTRFS_RESERVE_FLUSH_ALL:
 	case BTRFS_RESERVE_FLUSH_ALL_STEAL:
-		wait_reserve_ticket(fs_info, space_info, ticket);
+	case BTRFS_RESERVE_FLUSH_ALL_STEAL_UNINTERRUPTIBLE:
+		wait_reserve_ticket(fs_info, space_info, flush, ticket);
 		break;
 	case BTRFS_RESERVE_FLUSH_LIMIT:
 		priority_reclaim_metadata_space(fs_info, space_info, ticket,

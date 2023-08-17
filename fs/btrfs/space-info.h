@@ -51,6 +51,11 @@ enum btrfs_reserve_flush_enum {
 	BTRFS_RESERVE_FLUSH_ALL_STEAL,
 
 	/*
+	 * The same as BTRFS_RESERVE_FLUSH_ALL_STEAL, but won't be interrupred.
+	 */
+	BTRFS_RESERVE_FLUSH_ALL_STEAL_UNINTERRUPTIBLE,
+
+	/*
 	 * This is for btrfs_use_block_rsv only.  We have exhausted our block
 	 * rsv and our global block rsv.  This can happen for things like
 	 * delalloc where we are overwriting a lot of extents with a single

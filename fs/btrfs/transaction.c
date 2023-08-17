@@ -785,6 +785,15 @@ struct btrfs_trans_handle *btrfs_start_transaction_fallback_global_rsv(
 				 BTRFS_RESERVE_FLUSH_ALL_STEAL, false);
 }
 
+struct btrfs_trans_handle *btrfs_start_transaction_fallback_uninterruptible(
+					struct btrfs_root *root,
+					unsigned int num_items)
+{
+	return start_transaction(root, num_items, TRANS_START,
+				 BTRFS_RESERVE_FLUSH_ALL_STEAL_UNINTERRUPTIBLE,
+				 false);
+}
+
 struct btrfs_trans_handle *btrfs_join_transaction(struct btrfs_root *root)
 {
 	return start_transaction(root, 0, TRANS_JOIN, BTRFS_RESERVE_NO_FLUSH,
