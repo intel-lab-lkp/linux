@@ -1129,9 +1129,9 @@ struct intel_crtc_state {
 	/* Whether we should send NULL infoframes. Required for audio. */
 	bool has_hdmi_sink;
 
-	/* Audio enabled on this pipe. Only valid if either has_hdmi_sink or
-	 * has_dp_encoder is set. */
-	bool has_audio;
+	struct {
+		bool has_audio;
+	} audio;
 
 	/*
 	 * Enable dithering, used when the selected pipe bpp doesn't match the

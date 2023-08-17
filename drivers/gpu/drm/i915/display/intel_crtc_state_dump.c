@@ -265,7 +265,7 @@ void intel_crtc_state_dump(const struct intel_crtc_state *pipe_config,
 
 	drm_dbg_kms(&i915->drm,
 		    "audio: %i, infoframes: %i, infoframes enabled: 0x%x\n",
-		    pipe_config->has_audio, pipe_config->has_infoframe,
+		    pipe_config->audio.has_audio, pipe_config->has_infoframe,
 		    pipe_config->infoframes.enable);
 
 	if (pipe_config->infoframes.enable &
@@ -291,7 +291,7 @@ void intel_crtc_state_dump(const struct intel_crtc_state *pipe_config,
 	    intel_hdmi_infoframe_enable(DP_SDP_VSC))
 		intel_dump_dp_vsc_sdp(i915, &pipe_config->infoframes.vsc);
 
-	if (pipe_config->has_audio)
+	if (pipe_config->audio.has_audio)
 		intel_dump_buffer(i915, "ELD: ", pipe_config->eld,
 				  drm_eld_size(pipe_config->eld));
 

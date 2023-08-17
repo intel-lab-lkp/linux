@@ -3784,7 +3784,7 @@ static void intel_ddi_get_config(struct intel_encoder *encoder,
 
 	intel_ddi_mso_get_config(encoder, pipe_config);
 
-	pipe_config->has_audio =
+	pipe_config->audio.has_audio =
 		intel_ddi_is_audio_enabled(dev_priv, cpu_transcoder);
 
 	if (encoder->type == INTEL_OUTPUT_EDP)

@@ -815,7 +815,7 @@ void intel_audio_codec_enable(struct intel_encoder *encoder,
 	struct intel_audio_state *audio_state;
 	enum port port = encoder->port;
 
-	if (!crtc_state->has_audio)
+	if (!crtc_state->audio.has_audio)
 		return;
 
 	drm_dbg_kms(&i915->drm, "[CONNECTOR:%d:%s][ENCODER:%d:%s] Enable audio codec on [CRTC:%d:%s], %u bytes ELD\n",
@@ -874,7 +874,7 @@ void intel_audio_codec_disable(struct intel_encoder *encoder,
 	struct intel_audio_state *audio_state;
 	enum port port = encoder->port;
 
-	if (!old_crtc_state->has_audio)
+	if (!old_crtc_state->audio.has_audio)
 		return;
 
 	drm_dbg_kms(&i915->drm, "[CONNECTOR:%d:%s][ENCODER:%d:%s] Disable audio codec on [CRTC:%d:%s]\n",
@@ -930,7 +930,7 @@ void intel_audio_codec_get_config(struct intel_encoder *encoder,
 {
 	struct drm_i915_private *i915 = to_i915(encoder->base.dev);
 
-	if (!crtc_state->has_audio)
+	if (!crtc_state->audio.has_audio)
 		return;
 
 	if (i915->display.funcs.audio)
