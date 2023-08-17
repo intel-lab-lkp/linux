@@ -761,15 +761,6 @@ struct amdgpu_mqd {
 #define AMDGPU_PRODUCT_NAME_LEN 64
 struct amdgpu_reset_domain;
 
-#ifdef CONFIG_DEV_COREDUMP
-struct amdgpu_coredump_info {
-	struct amdgpu_device	*adev;
-	struct amdgpu_task_info reset_task_info;
-	struct timespec64	reset_time;
-	bool			reset_vram_lost;
-};
-#endif
-
 struct amdgpu_reset_info {
 	/* reset dump register */
 	u32 *reset_dump_reg_list;
