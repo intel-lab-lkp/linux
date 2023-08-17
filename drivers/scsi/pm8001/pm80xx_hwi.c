@@ -4457,7 +4457,7 @@ static int pm80xx_chip_sata_req(struct pm8001_hba_info *pm8001_ha,
 	u64 phys_addr, end_addr;
 	u32 end_addr_high, end_addr_low;
 	u32 ATAP = 0x0;
-	u32 dir;
+	u32 dir, retfis;
 	u32 opc = OPC_INB_SATA_HOST_OPSTART;
 	memset(&sata_cmd, 0, sizeof(sata_cmd));
 
@@ -4487,6 +4487,7 @@ static int pm80xx_chip_sata_req(struct pm8001_hba_info *pm8001_ha,
 	sata_cmd.tag = cpu_to_le32(tag);
 	sata_cmd.device_id = cpu_to_le32(pm8001_ha_dev->device_id);
 	sata_cmd.data_len = cpu_to_le32(task->total_xfer_len);
+	retfis = task->ata_task.return_fis_on_success;
 
 	sata_cmd.sata_fis = task->ata_task.fis;
 	if (likely(!task->ata_task.device_control_reg_update))
@@ -4502,8 +4503,8 @@ static int pm80xx_chip_sata_req(struct pm8001_hba_info *pm8001_ha,
 		opc = OPC_INB_SATA_DIF_ENC_IO;
 
 		/* set encryption bit */
-		sata_cmd.ncqtag_atap_dir_m_dad =
-			cpu_to_le32(((ncg_tag & 0xff)<<16)|
+		sata_cmd.retfis_ncqtag_atap_dir_m_dad =
+			cpu_to_le32((retfis << 24) | ((ncg_tag & 0xff) << 16) |
 				((ATAP & 0x3f) << 10) | 0x20 | dir);
 							/* dad (bit 0-1) is 0 */
 		/* fill in PRD (scatter/gather) table, if any */
@@ -4569,8 +4570,8 @@ static int pm80xx_chip_sata_req(struct pm8001_hba_info *pm8001_ha,
 			   "Sending Normal SATA command 0x%x inb %x\n",
 			   sata_cmd.sata_fis.command, q_index);
 		/* dad (bit 0-1) is 0 */
-		sata_cmd.ncqtag_atap_dir_m_dad =
-			cpu_to_le32(((ncg_tag & 0xff)<<16) |
+		sata_cmd.retfis_ncqtag_atap_dir_m_dad =
+			cpu_to_le32((retfis << 24) | ((ncg_tag & 0xff) << 16) |
 					((ATAP & 0x3f) << 10) | dir);
 
 		/* fill in PRD (scatter/gather) table, if any */
