@@ -86,6 +86,89 @@ static inline void super_unlock_read(struct super_block *sb)
 	super_unlock(sb, false);
 }
 
+static inline bool wait_born(struct super_block *sb)
+{
+	unsigned int flags;
+
+	/*
+	 * Pairs with smp_store_release() in super_wake() and ensure
+	 * that we see SB_BORN or SB_DYING after we're woken.
+	 */
+	flags = smp_load_acquire(&sb->s_flags);
+	return flags & (SB_BORN | SB_DYING);
+}
+
+/**
+ * super_wait - wait for superblock to become ready
+ * @sb: superblock to wait for
+ * @excl: whether exclusive access is required
+ *
+ * If the superblock has neither passed through vfs_get_tree() or
+ * generic_shutdown_super() yet wait for it to happen. Either superblock
+ * creation will succeed and SB_BORN is set by vfs_get_tree() or we're
+ * woken and we'll see SB_DYING.
+ *
+ * The caller must have acquired a temporary reference on @sb->s_count.
+ *
+ * Return: true if SB_BORN was set, false if SB_DYING was set.
+ */
+static bool super_wait(struct super_block *sb, bool excl)
+{
+
+	lockdep_assert_not_held(&sb->s_umount);
+
+relock:
+	super_lock(sb, excl);
+
+	/*
+	 * Has gone through generic_shutdown_super() in the meantime.
+	 * @sb->s_root is NULL and @sb->s_active is 0. No one needs to
+	 * grab a reference to this. Tell them so.
+	 */
+	if (sb->s_flags & SB_DYING)
+		return false;
+
+	/* Has called ->get_tree() successfully. */
+	if (sb->s_flags & SB_BORN)
+		return true;
+
+	super_unlock(sb, excl);
+
+	/* wait until the superblock is ready or dying */
+	wait_var_event(&sb->s_flags, wait_born(sb));
+
+	/*
+	 * Neither SB_BORN nor SB_DYING are ever unset so we never loop.
+	 * Just reacquire @sb->s_umount for the caller.
+	 */
+	goto relock;
+}
+
+/* wait and acquire read-side of @sb->s_umount */
+static inline bool super_wait_read(struct super_block *sb)
+{
+	return super_wait(sb, false);
+}
+
+/* wait and acquire write-side of @sb->s_umount */
+static inline bool super_wait_write(struct super_block *sb)
+{
+	return super_wait(sb, true);
+}
+
+/* wake waiters */
+static void super_wake(struct super_block *sb, unsigned int flag)
+{
+	unsigned int flags = sb->s_flags;
+
+	/*
+	 * Pairs with smp_load_acquire() in super_wait() and ensure that
+	 * we @flag is set before we wake anyone.
+	 */
+	smp_store_release(&sb->s_flags, flags | flag);
+	wake_up_var(&sb->s_flags);
+}
+
 /*
  * One thing we have to be careful of with a per-sb shrinker is that we don't
  * drop the last active reference to the superblock from within the shrinker.
@@ -415,10 +498,12 @@ EXPORT_SYMBOL(deactivate_super);
  */
 static int grab_super(struct super_block *s) __releases(sb_lock)
 {
+	bool born;
+
 	s->s_count++;
 	spin_unlock(&sb_lock);
-	super_lock_write(s);
-	if ((s->s_flags & SB_BORN) && atomic_inc_not_zero(&s->s_active)) {
+	born = super_wait_write(s);
+	if (born && atomic_inc_not_zero(&s->s_active)) {
 		put_super(s);
 		return 1;
 	}
@@ -557,6 +642,13 @@ void generic_shutdown_super(struct super_block *sb)
 	/* should be initialized for __put_super_and_need_restart() */
 	hlist_del_init(&sb->s_instances);
 	spin_unlock(&sb_lock);
+	/*
+	 * Broadcast to everyone that grabbed a temporary reference to this
+	 * superblock before we removed it from @fs_supers that the superblock
+	 * is dying. Every walker of @fs_supers outside of sget{_fc}() will now
+	 * discard this superblock and treat it as dead.
+	 */
+	super_wake(sb, SB_DYING);
 	super_unlock_write(sb);
 	if (sb->s_bdi != &noop_backing_dev_info) {
 		if (sb->s_iflags & SB_I_PERSB_BDI)
@@ -631,6 +723,11 @@ retry:
 	s->s_type = fc->fs_type;
 	s->s_iflags |= fc->s_iflags;
 	strscpy(s->s_id, s->s_type->name, sizeof(s->s_id));
+	/*
+	 * Make the superblock visible on @super_blocks and @fs_supers.
+	 * It's in a nascent state and users should wait on SB_BORN or
+	 * SB_DYING to be set.
+	 */
 	list_add_tail(&s->s_list, &super_blocks);
 	hlist_add_head(&s->s_instances, &s->s_type->fs_supers);
 	spin_unlock(&sb_lock);
@@ -770,13 +867,15 @@ void iterate_supers(void (*f)(struct super_block *, void *), void *arg)
 
 	spin_lock(&sb_lock);
 	list_for_each_entry(sb, &super_blocks, s_list) {
+		bool born;
+
 		if (hlist_unhashed(&sb->s_instances))
 			continue;
 		sb->s_count++;
 		spin_unlock(&sb_lock);
 
-		super_lock_read(sb);
-		if (sb->s_root && (sb->s_flags & SB_BORN))
+		born = super_wait_read(sb);
+		if (born && sb->s_root)
 			f(sb, arg);
 		super_unlock_read(sb);
 
@@ -806,11 +905,13 @@ void iterate_supers_type(struct file_system_type *type,
 
 	spin_lock(&sb_lock);
 	hlist_for_each_entry(sb, &type->fs_supers, s_instances) {
+		bool born;
+
 		sb->s_count++;
 		spin_unlock(&sb_lock);
 
-		super_lock_read(sb);
-		if (sb->s_root && (sb->s_flags & SB_BORN))
+		born = super_wait_read(sb);
+		if (born && sb->s_root)
 			f(sb, arg);
 		super_unlock_read(sb);
 
@@ -841,15 +942,14 @@ struct super_block *get_active_super(struct block_device *bdev)
 	if (!bdev)
 		return NULL;
 
-restart:
 	spin_lock(&sb_lock);
 	list_for_each_entry(sb, &super_blocks, s_list) {
 		if (hlist_unhashed(&sb->s_instances))
 			continue;
 		if (sb->s_bdev == bdev) {
 			if (!grab_super(sb))
-				goto restart;
-			super_unlock_write(sb);
+				return NULL;
+                        super_unlock_write(sb);
 			return sb;
 		}
 	}
@@ -862,22 +962,23 @@ struct super_block *user_get_super(dev_t dev, bool excl)
 	struct super_block *sb;
 
 	spin_lock(&sb_lock);
-rescan:
 	list_for_each_entry(sb, &super_blocks, s_list) {
 		if (hlist_unhashed(&sb->s_instances))
 			continue;
 		if (sb->s_dev ==  dev) {
+			bool born;
+
 			sb->s_count++;
 			spin_unlock(&sb_lock);
-			super_lock(sb, excl);
 			/* still alive? */
-			if (sb->s_root && (sb->s_flags & SB_BORN))
+			born = super_wait(sb, excl);
+			if (born && sb->s_root)
 				return sb;
 			super_unlock(sb, excl);
 			/* nope, got unmounted */
 			spin_lock(&sb_lock);
 			__put_super(sb);
-			goto rescan;
+			break;
 		}
 	}
 	spin_unlock(&sb_lock);
@@ -984,9 +1085,9 @@ cancel_readonly:
 
 static void do_emergency_remount_callback(struct super_block *sb)
 {
-	super_lock_write(sb);
-	if (sb->s_root && sb->s_bdev && (sb->s_flags & SB_BORN) &&
-	    !sb_rdonly(sb)) {
+	bool born = super_wait_write(sb);
+
+	if (born && sb->s_root && sb->s_bdev && !sb_rdonly(sb)) {
 		struct fs_context *fc;
 
 		fc = fs_context_for_reconfigure(sb->s_root,
@@ -1020,8 +1121,9 @@ void emergency_remount(void)
 
 static void do_thaw_all_callback(struct super_block *sb)
 {
-	super_lock_write(sb);
-	if (sb->s_root && sb->s_flags & SB_BORN) {
+	bool born = super_wait_write(sb);
+
+	if (born && sb->s_root) {
 		emergency_thaw_bdev(sb);
 		thaw_super_locked(sb);
 	} else {
@@ -1212,9 +1314,9 @@ EXPORT_SYMBOL(get_tree_keyed);
  */
 static bool lock_active_super(struct super_block *sb)
 {
-	super_lock_read(sb);
-	if (!sb->s_root ||
-	    (sb->s_flags & (SB_ACTIVE | SB_BORN)) != (SB_ACTIVE | SB_BORN)) {
+	bool born = super_wait_read(sb);
+
+	if (!born || !sb->s_root || !(sb->s_flags & SB_ACTIVE)) {
 		super_unlock_read(sb);
 		return false;
 	}
@@ -1572,7 +1674,7 @@ int vfs_get_tree(struct fs_context *fc)
 	 * flag.
 	 */
 	smp_wmb();
-	sb->s_flags |= SB_BORN;
+	super_wake(sb, SB_BORN);
 
 	error = security_sb_set_mnt_opts(sb, fc->security, 0, NULL);
 	if (unlikely(error)) {
