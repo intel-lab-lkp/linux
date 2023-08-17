@@ -20,6 +20,7 @@ struct intel_atomic_state;
 struct intel_connector;
 struct intel_crtc;
 struct intel_crtc_state;
+struct intel_link_bw_limits;
 
 int intel_digital_connector_atomic_get_property(struct drm_connector *connector,
 						const struct drm_connector_state *state,
@@ -51,5 +52,12 @@ void intel_atomic_state_clear(struct drm_atomic_state *state);
 struct intel_crtc_state *
 intel_atomic_get_crtc_state(struct drm_atomic_state *state,
 			    struct intel_crtc *crtc);
+
+int intel_atomic_reduce_link_bpp(struct intel_atomic_state *state,
+				 struct intel_link_bw_limits *limits,
+				 u8 pipe_mask,
+				 const char *reason);
+bool intel_atomic_compute_pipe_bpp(struct intel_crtc_state *crtc_state);
+int intel_atomic_check_config_and_link(struct intel_atomic_state *state);
 
 #endif /* __INTEL_ATOMIC_H__ */

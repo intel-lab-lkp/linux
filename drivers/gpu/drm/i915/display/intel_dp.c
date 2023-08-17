@@ -1833,7 +1833,8 @@ intel_dp_compute_config_link_bpp_limits(struct intel_dp *intel_dp,
 	const struct intel_encoder *encoder = &dp_to_dig_port(intel_dp)->base;
 	int max_link_bpp;
 
-	max_link_bpp = limits->pipe.max_bpp << 4;
+	max_link_bpp = min(crtc_state->max_link_bpp,
+			   limits->pipe.max_bpp << 4);
 
 	if (!dsc) {
 		max_link_bpp = rounddown(max_link_bpp, (2 * 3) << 4);
