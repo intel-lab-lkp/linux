@@ -32,7 +32,7 @@ static sector_t bio_discard_limit(struct block_device *bdev, sector_t sector)
 	 * Align the bio size to the discard granularity to make splitting the bio
 	 * at discard granularity boundaries easier in the driver if needed.
 	 */
-	return round_down(UINT_MAX, discard_granularity) >> SECTOR_SHIFT;
+	return round_down(ULONG_MAX, discard_granularity) >> SECTOR_SHIFT;
 }
 
 int __blkdev_issue_discard(struct block_device *bdev, sector_t sector,
