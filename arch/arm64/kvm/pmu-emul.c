@@ -896,6 +896,7 @@ int kvm_arm_set_vm_pmu(struct kvm *kvm, struct arm_pmu *arm_pmu)
 	 * while the latter does not.
 	 */
 	kvm->arch.pmcr_n = arm_pmu->num_events - 1;
+	kvm->arch.pmcr_n_limit = arm_pmu->num_events - 1;
 
 	return 0;
 }
