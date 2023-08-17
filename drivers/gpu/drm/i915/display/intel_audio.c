@@ -806,6 +806,111 @@ static void calc_audio_config_params(struct intel_crtc_state *pipe_config)
 	pipe_config->audio.max_channel_count = 0;
 }
 
+static void calibrate_audio_config_params(struct intel_crtc_state *pipe_config, int channel)
+{
+	struct drm_display_mode *adjusted_mode = &pipe_config->hw.adjusted_mode;
+	int channel_count;
+	int index, rate[] = { 192000, 176000, 96000, 88000, 48000, 44100, 32000 };
+	int audio_req_bandwidth, available_blank_bandwidth, vblank, hblank;
+
+	hblank = adjusted_mode->htotal - adjusted_mode->hdisplay;
+	vblank = adjusted_mode->vtotal - adjusted_mode->vdisplay;
+	available_blank_bandwidth = hblank * vblank *
+				    drm_mode_vrefresh(adjusted_mode) * pipe_config->pipe_bpp;
+
+	for (index = 0; index < ARRAY_SIZE(rate); index++) {
+		audio_req_bandwidth = calc_audio_bw(channel_count,
+						    rate[index]);
+		if (audio_req_bandwidth < available_blank_bandwidth) {
+			pipe_config->audio.max_rate = rate[index];
+			pipe_config->audio.max_channel_count = channel_count;
+			return;
+		}
+	}
+
+	pipe_config->audio.max_rate = 0;
+	pipe_config->audio.max_channel_count = 0;
+}
+
+static int sad_to_channels(const u8 *sad)
+{
+	return 1 + (sad[0] & 0x7);
+}
+
+static u8 *eld_to_sad(u8 *eld)
+{
+	int ver, mnl;
+
+	ver = (eld[DRM_ELD_VER] & DRM_ELD_VER_MASK) >> DRM_ELD_VER_SHIFT;
+	if (ver != 2 && ver != 31)
+		return NULL;
+
+	mnl = drm_eld_mnl(eld);
+	if (mnl > 16)
+		return NULL;
+
+	return eld + DRM_ELD_CEA_SAD(mnl, 0);
+}
+
+static int get_supported_freq_mask(struct intel_crtc_state *crtc_state)
+{
+	int rate[] = { 32000, 44100, 48000, 88000, 96000, 176000, 192000 };
+	int mask = 0, index;
+
+	for (index = 0; index < ARRAY_SIZE(rate); index++) {
+		if (rate[index] > crtc_state->audio.max_rate)
+			break;
+
+		mask |= 1 << index;
+
+		if (crtc_state->audio.max_rate != rate[index])
+			continue;
+	}
+
+	return mask;
+}
+
+static void intel_audio_compute_eld(struct intel_crtc_state *crtc_state)
+{
+	struct drm_i915_private *i915 = to_i915(crtc_state->uapi.crtc->dev);
+	u8 *eld, *sad;
+	int index, mask = 0;
+
+	eld = crtc_state->eld;
+	if (!eld)
+		return;
+
+	sad = eld_to_sad(eld);
+	if (!sad)
+		return;
+
+	calc_audio_config_params(crtc_state);
+
+	mask = get_supported_freq_mask(crtc_state);
+	for (index = 0; index < drm_eld_sad_count(eld); index++, sad += 3) {
+		/*
+		 * Respect source restricitions. Limit capabilities to a subset that is
+		 * supported both by the source and the sink.
+		 */
+		if (sad_to_channels(sad) >= crtc_state->audio.max_channel_count) {
+			sad[0] &= ~0x7;
+			sad[0] |= crtc_state->audio.max_channel_count - 1;
+			drm_dbg_kms(&i915->drm, "Channel count is limited to %d\n",
+				    crtc_state->audio.max_channel_count - 1);
+		} else {
+			/*
+			 * calibrate rate when, sink supported channel
+			 * count is slight less than max supported
+			 * channel count.
+			 */
+			calibrate_audio_config_params(crtc_state, sad_to_channels(sad));
+			mask = get_supported_freq_mask(crtc_state);
+		}
+
+		sad[1] &= mask;
+	}
+}
+
 bool intel_audio_compute_config(struct intel_encoder *encoder,
 				struct intel_crtc_state *crtc_state,
 				struct drm_connector_state *conn_state)
@@ -827,7 +932,7 @@ bool intel_audio_compute_config(struct intel_encoder *encoder,
 
 	crtc_state->eld[6] = drm_av_sync_delay(connector, adjusted_mode) / 2;
 
-	calc_audio_config_params(crtc_state);
+	intel_audio_compute_eld(crtc_state);
 
 	return true;
 }
