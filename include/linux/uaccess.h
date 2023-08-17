@@ -385,6 +385,11 @@ long strncpy_from_user_nofault(char *dst, const void __user *unsafe_addr,
 		long count);
 long strnlen_user_nofault(const void __user *unsafe_addr, long count);
 
+#define get_user_nofault(val, ptr) ({				\
+	const typeof(val) *__gk_ptr = (ptr);			\
+	copy_from_user_nofault(&(val), __gk_ptr, sizeof(val));\
+})
+
 #ifndef __get_kernel_nofault
 #define __get_kernel_nofault(dst, src, type, label)	\
 do {							\
