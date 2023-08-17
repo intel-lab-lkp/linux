@@ -206,6 +206,7 @@ static int kvm_vcpu_enable_ptrauth(struct kvm_vcpu *vcpu)
  */
 int kvm_reset_vcpu(struct kvm_vcpu *vcpu)
 {
+	struct kvm *kvm = vcpu->kvm;
 	struct vcpu_reset_state reset_state;
 	int ret;
 	bool loaded;
@@ -215,6 +216,18 @@ int kvm_reset_vcpu(struct kvm_vcpu *vcpu)
 	reset_state = vcpu->arch.reset_state;
 	vcpu->arch.reset_state.reset = false;
 	spin_unlock(&vcpu->arch.mp_state_lock);
+
+	/*
+	 * When the vCPU has a PMU, but no PMU is set for the guest
+	 * yet, set the default one.
+	 */
+	if (kvm_vcpu_has_pmu(vcpu) && unlikely(!kvm->arch.arm_pmu)) {
+		ret = -EINVAL;
+		if (kvm_arm_support_pmu_v3())
+			ret = kvm_arm_set_vm_pmu(kvm, NULL);
+		if (ret)
+			return ret;
+	}
 
 	/* Reset PMU outside of the non-preemptible section */
 	kvm_pmu_vcpu_reset(vcpu);
@@ -256,11 +269,6 @@ int kvm_reset_vcpu(struct kvm_vcpu *vcpu)
 			pstate = VCPU_RESET_PSTATE_EL2;
 		} else {
 			pstate = VCPU_RESET_PSTATE_EL1;
-		}
-
-		if (kvm_vcpu_has_pmu(vcpu) && !kvm_arm_support_pmu_v3()) {
-			ret = -EINVAL;
-			goto out;
 		}
 		break;
 	}
