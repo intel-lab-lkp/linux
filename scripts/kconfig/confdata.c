@@ -341,6 +341,61 @@ e_out:
 	return -1;
 }
 
+int conf_read_list_unknown(void)
+{
+	FILE *in = NULL;
+	size_t line_asize = 0;
+	char *line = NULL;
+	char *p, *p2;
+	struct symbol *sym;
+
+	conf_filename = conf_get_configname();
+	in = zconf_fopen(conf_filename);
+	if (!in)
+		return -1;
+
+	while (compat_getline(&line, &line_asize, in) != -1) {
+		conf_lineno++;
+		sym = NULL;
+		if (line[0] == '#') {
+			if (memcmp(line + 2, CONFIG_, strlen(CONFIG_)))
+				continue;
+			p = strchr(line + 2 + strlen(CONFIG_), ' ');
+			if (!p)
+				continue;
+			*p++ = 0;
+			sym = sym_find(line + 2 + strlen(CONFIG_));
+			if (!sym) {
+				conf_warning("unknown unset symbol: %s",
+					     line + 2 + strlen(CONFIG_));
+				continue;
+			}
+		} else if (memcmp(line, CONFIG_, strlen(CONFIG_)) == 0) {
+			p = strchr(line + strlen(CONFIG_), '=');
+			if (!p)
+				continue;
+			*p++ = 0;
+			p2 = strchr(p, '\n');
+			if (p2) {
+				*p2-- = 0;
+				if (*p2 == '\r')
+					*p2 = 0;
+			}
+
+			sym = sym_find(line + strlen(CONFIG_));
+			if (!sym) {
+				conf_warning("unknown symbol: %s",
+					     line + strlen(CONFIG_));
+				continue;
+			}
+		}
+	}
+
+	free(line);
+	fclose(in);
+	return conf_warnings;
+}
+
 int conf_read_simple(const char *name, int def)
 {
 	FILE *in = NULL;

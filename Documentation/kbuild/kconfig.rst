@@ -27,6 +27,14 @@ To see a list of new config symbols, use::
 
 and the config program will list any new symbols, one per line.
 
+To see a list of config symbols that are not recognized anymore (e.g.
+removed or renamed), use::
+
+	cp user/some/old.config .config
+	make listunknownconfig
+
+and the config program will list any unrecognized symbols, one per line.
+
 Alternatively, you can use the brute force method::
 
 	make oldconfig

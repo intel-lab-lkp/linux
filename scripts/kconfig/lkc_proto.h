@@ -5,6 +5,7 @@
 void conf_parse(const char *name);
 int conf_read(const char *name);
 int conf_read_simple(const char *name, int);
+int conf_read_list_unknown(void);
 int conf_write_defconfig(const char *name);
 int conf_write(const char *name);
 int conf_write_autoconf(int overwrite);

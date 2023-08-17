@@ -36,6 +36,7 @@ enum input_mode {
 	yes2modconfig,
 	mod2yesconfig,
 	mod2noconfig,
+	listunknownconfig,
 };
 static enum input_mode input_mode = oldaskconfig;
 static int input_mode_opt;
@@ -683,6 +684,7 @@ static const struct option long_opts[] = {
 	{"yes2modconfig", no_argument,       &input_mode_opt, yes2modconfig},
 	{"mod2yesconfig", no_argument,       &input_mode_opt, mod2yesconfig},
 	{"mod2noconfig",  no_argument,       &input_mode_opt, mod2noconfig},
+	{"listunknownconfig", no_argument,   &input_mode_opt, listunknownconfig},
 	{NULL, 0, NULL, 0}
 };
 
@@ -712,6 +714,7 @@ static void conf_usage(const char *progname)
 	printf("  --yes2modconfig         Change answers from yes to mod if possible\n");
 	printf("  --mod2yesconfig         Change answers from mod to yes if possible\n");
 	printf("  --mod2noconfig          Change answers from mod to no if possible\n");
+	printf("  --listunknownconfig     List config options that do not exist anymore\n");
 	printf("  (If none of the above is given, --oldaskconfig is the default)\n");
 }
 
@@ -822,6 +825,11 @@ int main(int ac, char **av)
 				name);
 			exit(1);
 		}
+		break;
+	case listunknownconfig:
+		if (conf_read_list_unknown())
+			exit(1);
+		exit(0);
 		break;
 	default:
 		break;
