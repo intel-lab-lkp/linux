@@ -240,9 +240,149 @@ struct qcom_pcie {
 	const struct qcom_pcie_cfg *cfg;
 	struct dentry *debugfs;
 	bool suspended;
+	bool l0s_supported;
 };
 
 #define to_qcom_pcie(x)		dev_get_drvdata((x)->dev)
+
+static void qcom_pcie_icc_update(struct qcom_pcie *pcie);
+static void qcom_pcie_opp_update(struct qcom_pcie *pcie);
+
+static int qcom_pcie_disable_l0s(struct pci_dev *pdev, void *userdata)
+{
+	int lnkctl;
+
+	pci_read_config_dword(pdev, pci_pcie_cap(pdev) + PCI_EXP_LNKCTL, &lnkctl);
+	lnkctl &= ~(PCI_EXP_LNKCTL_ASPM_L0S);
+	pci_write_config_word(pdev, pci_pcie_cap(pdev) + PCI_EXP_LNKCTL, lnkctl);
+
+	return 0;
+}
+
+static int qcom_pcie_check_l0s_support(struct pci_dev *pdev, void *userdata)
+{
+	struct pci_dev *parent = pdev->bus->self;
+	struct qcom_pcie *pcie = userdata;
+	struct dw_pcie *pci = pcie->pci;
+	int lnkcap;
+
+	 /* check parent supports L0s */
+	if (parent) {
+		dev_err(pci->dev, "parent\n");
+		pci_read_config_dword(parent, pci_pcie_cap(parent) + PCI_EXP_LNKCAP,
+				  &lnkcap);
+		if (!(lnkcap & PCI_EXP_LNKCAP_ASPM_L0S)) {
+			dev_info(pci->dev, "Parent does not support L0s\n");
+			pcie->l0s_supported = false;
+			return 0;
+		}
+	}
+
+	pci_read_config_dword(pdev, pci_pcie_cap(pdev) + PCI_EXP_LNKCAP,
+			  &lnkcap);
+	dev_err(pci->dev, "child %x\n", lnkcap);
+	if (!(lnkcap & PCI_EXP_LNKCAP_ASPM_L0S)) {
+		dev_info(pci->dev, "Device does not support L0s\n");
+		pcie->l0s_supported = false;
+		return 0;
+	}
+
+	return 0;
+}
+
+static int qcom_pcie_enable_l0s(struct pci_dev *pdev, void *userdata)
+{
+	int lnkctl;
+
+	pci_read_config_dword(pdev, pci_pcie_cap(pdev) + PCI_EXP_LNKCTL, &lnkctl);
+	lnkctl |= (PCI_EXP_LNKCTL_ASPM_L0S);
+	pci_write_config_word(pdev, pci_pcie_cap(pdev) + PCI_EXP_LNKCTL, lnkctl);
+
+	return 0;
+}
+
+static ssize_t qcom_pcie_speed_change_store(struct device *dev,
+			       struct device_attribute *attr,
+			       const char *buf,
+			       size_t count)
+{
+	unsigned int current_speed, target_speed, max_speed;
+	struct qcom_pcie *pcie = dev_get_drvdata(dev);
+	struct pci_bus *child, *root_bus = NULL;
+	struct dw_pcie_rp *pp = &pcie->pci->pp;
+	struct dw_pcie *pci = pcie->pci;
+	struct pci_dev *pdev;
+	u16 offset;
+	u32 val;
+	int ret;
+
+	list_for_each_entry(child, &pp->bridge->bus->children, node) {
+		if (child->parent == pp->bridge->bus) {
+			root_bus = child;
+			break;
+		}
+	}
+
+	pdev = root_bus->self;
+
+	offset = dw_pcie_find_capability(pci, PCI_CAP_ID_EXP);
+
+	val = readl(pci->dbi_base + offset + PCI_EXP_LNKCAP);
+	max_speed = FIELD_GET(PCI_EXP_LNKCAP_SLS, val);
+
+	val = readw(pci->dbi_base + offset + PCI_EXP_LNKSTA);
+	current_speed = FIELD_GET(PCI_EXP_LNKSTA_CLS, val);
+
+	ret = kstrtouint(buf, 10, &target_speed);
+	if (ret)
+		return ret;
+
+	if (target_speed > max_speed)
+		return -EINVAL;
+
+	if (current_speed == target_speed)
+		return count;
+
+	pci_walk_bus(pp->bridge->bus, qcom_pcie_disable_l0s, pcie);
+
+	/* Disable L1 */
+	val = dw_pcie_readl_dbi(pci, offset + PCI_EXP_LNKCTL);
+	val &= ~(PCI_EXP_LNKCTL_ASPM_L1);
+	dw_pcie_writel_dbi(pci, offset + PCI_EXP_LNKCTL, val);
+
+	/* Set target GEN speed */
+	val = dw_pcie_readl_dbi(pci, offset + PCI_EXP_LNKCTL2);
+	val &= ~PCI_EXP_LNKCTL2_TLS;
+	dw_pcie_writel_dbi(pci, offset + PCI_EXP_LNKCTL2, val | target_speed);
+
+	ret = pcie_retrain_link(pdev, true);
+	if (ret)
+		dev_err(dev, "Link retrain failed %d\n", ret);
+
+	/* Enable L1 */
+	val = dw_pcie_readl_dbi(pci, offset + PCI_EXP_LNKCTL);
+	val |= (PCI_EXP_LNKCTL_ASPM_L1);
+	dw_pcie_writel_dbi(pci, offset + PCI_EXP_LNKCTL, val);
+
+	pcie->l0s_supported = true;
+	pci_walk_bus(pp->bridge->bus, qcom_pcie_check_l0s_support, pcie);
+
+	if (pcie->l0s_supported)
+		pci_walk_bus(pp->bridge->bus, qcom_pcie_enable_l0s, pcie);
+
+	qcom_pcie_icc_update(pcie);
+
+	qcom_pcie_opp_update(pcie);
+
+	return count;
+}
+static DEVICE_ATTR_WO(qcom_pcie_speed_change);
+
+static struct attribute *qcom_pcie_attrs[] = {
+	&dev_attr_qcom_pcie_speed_change.attr,
+	NULL,
+};
+ATTRIBUTE_GROUPS(qcom_pcie);
 
 static void qcom_ep_reset_assert(struct qcom_pcie *pcie)
 {
@@ -1651,6 +1791,7 @@ static struct platform_driver qcom_pcie_driver = {
 		.of_match_table = qcom_pcie_match,
 		.pm = &qcom_pcie_pm_ops,
 		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
+		.dev_groups = qcom_pcie_groups,
 	},
 };
 builtin_platform_driver(qcom_pcie_driver);
