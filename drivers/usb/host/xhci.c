@@ -16,6 +16,7 @@
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/slab.h>
+#include <linux/suspend.h>
 #include <linux/dmi.h>
 #include <linux/dma-mapping.h>
 
@@ -789,7 +790,7 @@ static void xhci_disable_hub_port_wake(struct xhci_hcd *xhci,
 		t2 = t1;
 
 		/* clear wake bits if do_wake is not set */
-		if (!do_wakeup)
+		if (!do_wakeup || pm_suspend_target_state != PM_SUSPEND_ON)
 			t2 &= ~PORT_WAKE_BITS;
 
 		/* Don't touch csc bit if connected or connect change is set */
