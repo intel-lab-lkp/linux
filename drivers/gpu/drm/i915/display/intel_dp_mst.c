@@ -230,6 +230,9 @@ static int intel_dp_dsc_mst_compute_link_config(struct intel_encoder *encoder,
 	if (max_bpp > sink_max_bpp)
 		max_bpp = sink_max_bpp;
 
+	min_bpp = max(min_bpp, (limits->link.min_bpp + 0xf) >> 4);
+	max_bpp = min(max_bpp, limits->link.max_bpp >> 4);
+
 	slots = intel_dp_mst_find_vcpi_slots_for_bpp(encoder, crtc_state, max_bpp,
 						     min_bpp, limits,
 						     conn_state, 2 * 3, true);

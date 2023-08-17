@@ -1703,9 +1703,16 @@ int intel_dp_dsc_compute_config(struct intel_dp *intel_dp,
 	pipe_config->lane_count = limits->max_lane_count;
 
 	if (intel_dp_is_edp(intel_dp)) {
+		u16 dsc_max_output_bpp;
+
+		dsc_max_output_bpp =
+			min_t(u16, drm_edp_dsc_sink_output_bpp(intel_dp->dsc_dpcd),
+			      limits->link.max_bpp);
+
 		pipe_config->dsc.compressed_bpp =
-			min_t(u16, drm_edp_dsc_sink_output_bpp(intel_dp->dsc_dpcd) >> 4,
+			min_t(u16, dsc_max_output_bpp >> 4,
 			      pipe_config->pipe_bpp);
+
 		pipe_config->dsc.slice_count =
 			drm_dp_dsc_sink_max_slice_count(intel_dp->dsc_dpcd,
 							true);
@@ -1761,6 +1768,9 @@ int intel_dp_dsc_compute_config(struct intel_dp *intel_dp,
 		 * calculation procedure is bit different for MST case.
 		 */
 		if (compute_pipe_bpp) {
+			dsc_max_output_bpp = min_t(u16, dsc_max_output_bpp,
+						   limits->link.max_bpp);
+
 			pipe_config->dsc.compressed_bpp = min_t(u16,
 								dsc_max_output_bpp >> 4,
 								pipe_config->pipe_bpp);
