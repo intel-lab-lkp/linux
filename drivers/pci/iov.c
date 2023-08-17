@@ -288,13 +288,17 @@ const struct attribute_group sriov_vf_dev_attr_group = {
 
 int pci_iov_add_virtfn(struct pci_dev *dev, int id)
 {
-	int i;
+	int i, devfn;
 	int rc = -ENOMEM;
 	u64 size;
 	struct pci_dev *virtfn;
 	struct resource *res;
 	struct pci_sriov *iov = dev->sriov;
 	struct pci_bus *bus;
+
+	devfn = pci_iov_virtfn_devfn(dev, id);
+	if ((devfn > 7) && !pci_ari_enabled(dev->bus))
+		return -ENODEV;
 
 	bus = virtfn_add_bus(dev->bus, pci_iov_virtfn_bus(dev, id));
 	if (!bus)
@@ -304,7 +308,7 @@ int pci_iov_add_virtfn(struct pci_dev *dev, int id)
 	if (!virtfn)
 		goto failed0;
 
-	virtfn->devfn = pci_iov_virtfn_devfn(dev, id);
+	virtfn->devfn = devfn;
 	virtfn->vendor = dev->vendor;
 	virtfn->device = iov->vf_device;
 	virtfn->is_virtfn = 1;
