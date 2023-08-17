@@ -1341,9 +1341,9 @@ static acpi_status btintel_ppag_callback(acpi_handle handle, u32 lvl, void *data
 	ppag = (struct btintel_ppag *)data;
 
 	if (p->type != ACPI_TYPE_PACKAGE || p->package.count != 2) {
-		kfree(buffer.pointer);
 		bt_dev_warn(hdev, "PPAG-BT: Invalid object type: %d or package count: %d",
 			    p->type, p->package.count);
+		kfree(buffer.pointer);
 		ppag->status = AE_ERROR;
 		return AE_ERROR;
 	}
