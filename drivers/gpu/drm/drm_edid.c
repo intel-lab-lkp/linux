@@ -3437,6 +3437,7 @@ static struct drm_display_mode *drm_mode_detailed(struct drm_connector *connecto
 	const struct drm_display_info *info = &connector->display_info;
 	struct drm_device *dev = connector->dev;
 	struct drm_display_mode *mode;
+	const struct edid *edid = drm_edid->edid;
 	const struct detailed_pixel_timing *pt = &timing->data.pixel_data;
 	unsigned hactive = (pt->hactive_hblank_hi & 0xf0) << 4 | pt->hactive_lo;
 	unsigned vactive = (pt->vactive_vblank_hi & 0xf0) << 4 | pt->vactive_lo;
@@ -3455,10 +3456,6 @@ static struct drm_display_mode *drm_mode_detailed(struct drm_connector *connecto
 		drm_dbg_kms(dev, "[CONNECTOR:%d:%s] Stereo mode not supported\n",
 			    connector->base.id, connector->name);
 		return NULL;
-	}
-	if (!(pt->misc & DRM_EDID_PT_SEPARATE_SYNC)) {
-		drm_dbg_kms(dev, "[CONNECTOR:%d:%s] Composite sync not supported\n",
-			    connector->base.id, connector->name);
 	}
 
 	/* it is incorrect if hsync/vsync width is zero */
@@ -3505,11 +3502,68 @@ static struct drm_display_mode *drm_mode_detailed(struct drm_connector *connecto
 
 	if (info->quirks & EDID_QUIRK_DETAILED_SYNC_PP) {
 		mode->flags |= DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_PVSYNC;
+	} else if (edid->input & DRM_EDID_INPUT_DIGITAL) {
+		/* !info->quirks && edid->input == DIGITAL  */
+		switch (pt->misc & DRM_EDID_PT_SYNC_MASK) {
+		/* VESA Enhanced EDID Standard, Release A, Rev.2, Page 35
+		 *
+		 * CASE DRM_EDID_PT_ANALOG_CSYNC:
+		 *
+		 * (pt->misc & DRM_EDID_PT_SYNC_MASK == 0x00) means
+		 * "Analog Composite Sync" as described in VESA
+		 * Standard.  But many digital display panels without
+		 * composite sync are also using 0x00 here.
+		 *
+		 * Therefore use DEFAULT: as we are currently on an
+		 * digital video signal interface.
+		 */
+		case DRM_EDID_PT_DIGITAL_CSYNC:
+			drm_dbg_kms(dev,
+				"[CONNECTOR:%d:%s] Digital composite sync!\n",
+				connector->base.id, connector->name);
+			mode->flags |= DRM_MODE_FLAG_CSYNC;
+			mode->flags |= (pt->misc & DRM_EDID_PT_HSYNC_POSITIVE) ?
+				DRM_MODE_FLAG_PCSYNC : DRM_MODE_FLAG_NCSYNC;
+			break;
+		case DRM_EDID_PT_DIGITAL_SEPARATE_SYNC:
+			drm_dbg_kms(dev,
+				"[CONNECTOR:%d:%s] Digital seperate sync!\n",
+				connector->base.id, connector->name);
+			goto digital_default;
+			break; /* Missing BREAK throws a compiler warning  */
+		default:
+digital_default:
+			mode->flags |= (pt->misc & DRM_EDID_PT_HSYNC_POSITIVE) ?
+				DRM_MODE_FLAG_PHSYNC : DRM_MODE_FLAG_NHSYNC;
+			mode->flags |= (pt->misc & DRM_EDID_PT_VSYNC_POSITIVE) ?
+				DRM_MODE_FLAG_PVSYNC : DRM_MODE_FLAG_NVSYNC;
+			break;
+		}
 	} else {
-		mode->flags |= (pt->misc & DRM_EDID_PT_HSYNC_POSITIVE) ?
-			DRM_MODE_FLAG_PHSYNC : DRM_MODE_FLAG_NHSYNC;
-		mode->flags |= (pt->misc & DRM_EDID_PT_VSYNC_POSITIVE) ?
-			DRM_MODE_FLAG_PVSYNC : DRM_MODE_FLAG_NVSYNC;
+		/* !info->quirks && edid->input == ANALOG  */
+		switch (pt->misc & DRM_EDID_PT_SYNC_MASK) {
+		/* VESA Enhanced EDID Standard, Release A, Rev.2, Page 35
+		 *
+		 * CASE DRM_EDID_PT_ANALOG_CSYNC:
+		 *
+		 * (pt->misc & DRM_EDID_PT_SYNC_MASK == 0x00) for
+		 * "Analog Composite Sync" is possible here, as we are
+		 * currently on an analog video signal interface.
+		 */
+		case DRM_EDID_PT_ANALOG_CSYNC:
+		case DRM_EDID_PT_BIPOLAR_ANALOG_CSYNC:
+			drm_dbg_kms(dev,
+				"[CONNECTOR:%d:%s] Analog composite sync!\n",
+				connector->base.id, connector->name);
+			mode->flags |= DRM_MODE_FLAG_CSYNC | DRM_MODE_FLAG_NCSYNC;
+			break;
+		default:
+			mode->flags |= (pt->misc & DRM_EDID_PT_HSYNC_POSITIVE) ?
+				DRM_MODE_FLAG_PHSYNC : DRM_MODE_FLAG_NHSYNC;
+			mode->flags |= (pt->misc & DRM_EDID_PT_VSYNC_POSITIVE) ?
+				DRM_MODE_FLAG_PVSYNC : DRM_MODE_FLAG_NVSYNC;
+			break;
+		}
 	}
 
 set_size:
@@ -3522,8 +3576,8 @@ set_size:
 	}
 
 	if (info->quirks & EDID_QUIRK_DETAILED_USE_MAXIMUM_SIZE) {
-		mode->width_mm = drm_edid->edid->width_cm * 10;
-		mode->height_mm = drm_edid->edid->height_cm * 10;
+		mode->width_mm = edid->width_cm * 10;
+		mode->height_mm = edid->height_cm * 10;
 	}
 
 	mode->type = DRM_MODE_TYPE_DRIVER;
