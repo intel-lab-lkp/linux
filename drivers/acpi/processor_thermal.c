@@ -25,8 +25,20 @@
  * _any_ cpufreq driver and not only the acpi-cpufreq driver.
  */
 
-#define CPUFREQ_THERMAL_MIN_STEP 0
-#define CPUFREQ_THERMAL_MAX_STEP 3
+#define CPUFREQ_THERMAL_MIN_STEP	0
+#ifdef CONFIG_ACPI_CPU_FREQ_THERM_HAS_PARAMS
+#define CPUFREQ_THERMAL_PCTG		CONFIG_ACPI_CPU_FREQ_THERM_MIN_THROT_PCTG
+
+/* Derive the MAX_STEP from minimum throttle percentage so that the reduction
+ * percentage does end up becoming negative. Also cap the MAX_STEP so that
+ * the CPU performance doesn't become 0.
+ */
+#define CPUFREQ_THERMAL_MAX_STEP	((100 / CPUFREQ_THERMAL_PCTG) - 1)
+
+#else
+#define CPUFREQ_THERMAL_MAX_STEP	3
+#define CPUFREQ_THERMAL_PCTG		20
+#endif
 
 static DEFINE_PER_CPU(unsigned int, cpufreq_thermal_reduction_pctg);
 
@@ -113,7 +125,8 @@ static int cpufreq_set_cur_state(unsigned int cpu, int state)
 		if (!policy)
 			return -EINVAL;
 
-		max_freq = (policy->cpuinfo.max_freq * (100 - reduction_pctg(i) * 20)) / 100;
+		max_freq = (policy->cpuinfo.max_freq *
+			    (100 - reduction_pctg(i) * CPUFREQ_THERMAL_PCTG)) / 100;
 
 		cpufreq_cpu_put(policy);
 

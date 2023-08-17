@@ -254,6 +254,21 @@ config ACPI_DOCK
 config ACPI_CPU_FREQ_PSS
 	bool
 
+config ACPI_CPU_FREQ_THERM_HAS_PARAMS
+	bool "CPU frequency throttling control"
+	depends on ACPI_PROCESSOR
+
+config ACPI_CPU_FREQ_THERM_MIN_THROT_PCTG
+	int "Minimum throttle percentage for processor_thermal cooling device"
+	depends on ACPI_CPU_FREQ_THERM_HAS_PARAMS
+	default 20
+	help
+	  The processor_thermal driver uses this config to calculate the
+	  percentage amount by which cpu frequency must be reduced for each
+	  cooling state. The config is also used to calculate the maximum number
+	  of throttling steps or cooling states supported by the driver. Value
+	  must be an unsigned integer in the range [1, 50].
+
 config ACPI_PROCESSOR_CSTATE
 	def_bool y
 	depends on ACPI_PROCESSOR
