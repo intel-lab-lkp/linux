@@ -34,7 +34,6 @@
 #include "internal.h"
 
 static DEFINE_WW_CLASS(regulator_ww_class);
-static DEFINE_MUTEX(regulator_nesting_mutex);
 static DEFINE_MUTEX(regulator_list_mutex);
 static LIST_HEAD(regulator_map_list);
 static LIST_HEAD(regulator_ena_gpio_list);
@@ -141,32 +140,13 @@ static bool regulator_ops_is_valid(struct regulator_dev *rdev, int ops)
 static inline int regulator_lock_nested(struct regulator_dev *rdev,
 					struct ww_acquire_ctx *ww_ctx)
 {
-	bool lock = false;
 	int ret = 0;
 
-	mutex_lock(&regulator_nesting_mutex);
+	if (!ww_mutex_trylock(&rdev->mutex, ww_ctx))
+		ret = ww_mutex_lock(&rdev->mutex, ww_ctx);
 
-	if (!ww_mutex_trylock(&rdev->mutex, ww_ctx)) {
-		if (rdev->mutex_owner == current)
-			rdev->ref_cnt++;
-		else
-			lock = true;
-
-		if (lock) {
-			mutex_unlock(&regulator_nesting_mutex);
-			ret = ww_mutex_lock(&rdev->mutex, ww_ctx);
-			mutex_lock(&regulator_nesting_mutex);
-		}
-	} else {
-		lock = true;
-	}
-
-	if (lock && ret != -EDEADLK) {
+	if (ret != -EDEADLK)
 		rdev->ref_cnt++;
-		rdev->mutex_owner = current;
-	}
-
-	mutex_unlock(&regulator_nesting_mutex);
 
 	return ret;
 }
@@ -195,16 +175,11 @@ static void regulator_lock(struct regulator_dev *rdev)
  */
 static void regulator_unlock(struct regulator_dev *rdev)
 {
-	mutex_lock(&regulator_nesting_mutex);
+	if (WARN_ON_ONCE(rdev->ref_cnt <= 0))
+		return;
 
-	if (--rdev->ref_cnt == 0) {
-		rdev->mutex_owner = NULL;
+	if (--rdev->ref_cnt == 0)
 		ww_mutex_unlock(&rdev->mutex);
-	}
-
-	WARN_ON_ONCE(rdev->ref_cnt < 0);
-
-	mutex_unlock(&regulator_nesting_mutex);
 }
 
 /**
@@ -240,7 +215,6 @@ static void regulator_lock_two(struct regulator_dev *rdev1,
 
 		ww_mutex_lock_slow(&contended->mutex, ww_ctx);
 		contended->ref_cnt++;
-		contended->mutex_owner = current;
 		swap(held, contended);
 		ret = regulator_lock_nested(contended, ww_ctx);
 
@@ -399,7 +373,6 @@ static void regulator_lock_dependent(struct regulator_dev *rdev,
 			ww_mutex_lock_slow(&new_contended_rdev->mutex, ww_ctx);
 			old_contended_rdev = new_contended_rdev;
 			old_contended_rdev->ref_cnt++;
-			old_contended_rdev->mutex_owner = current;
 		}
 
 		err = regulator_lock_recursive(rdev,
@@ -6113,7 +6086,6 @@ static void regulator_summary_lock(struct ww_acquire_ctx *ww_ctx)
 			ww_mutex_lock_slow(&new_contended_rdev->mutex, ww_ctx);
 			old_contended_rdev = new_contended_rdev;
 			old_contended_rdev->ref_cnt++;
-			old_contended_rdev->mutex_owner = current;
 		}
 
 		err = regulator_summary_lock_all(ww_ctx,
