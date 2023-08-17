@@ -76,7 +76,7 @@
 /* timeout (ms) for pm runtime autosuspend */
 #define SPRD_I2C_PM_TIMEOUT	1000
 /* timeout (ms) for transfer message */
-#define I2C_XFER_TIMEOUT	1000
+#define I2C_XFER_TIMEOUT	10000
 /* dynamic modify clk_freq flag  */
 #define	I2C_3M4_FLAG		0x0100
 #define	I2C_1M_FLAG		0x0080
