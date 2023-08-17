@@ -156,8 +156,10 @@ static int intel_dp_mst_compute_link_config(struct intel_encoder *encoder,
 		&crtc_state->hw.adjusted_mode;
 	int slots = -EINVAL;
 
-	slots = intel_dp_mst_find_vcpi_slots_for_bpp(encoder, crtc_state, limits->max_bpp,
-						     limits->min_bpp, limits,
+	slots = intel_dp_mst_find_vcpi_slots_for_bpp(encoder, crtc_state,
+						     limits->link.max_bpp >> 4,
+						     limits->link.min_bpp >> 4,
+						     limits,
 						     conn_state, 2 * 3, false);
 
 	if (slots < 0)
@@ -200,8 +202,8 @@ static int intel_dp_dsc_mst_compute_link_config(struct intel_encoder *encoder,
 	else
 		dsc_max_bpc = min_t(u8, 10, conn_state->max_requested_bpc);
 
-	max_bpp = min_t(u8, dsc_max_bpc * 3, limits->max_bpp);
-	min_bpp = limits->min_bpp;
+	max_bpp = min_t(u8, dsc_max_bpc * 3, limits->pipe.max_bpp);
+	min_bpp = limits->pipe.min_bpp;
 
 	num_bpc = drm_dp_dsc_sink_supported_input_bpcs(intel_dp->dsc_dpcd,
 						       dsc_bpc);
@@ -318,7 +320,7 @@ intel_dp_mst_compute_config_limits(struct intel_dp *intel_dp,
 	limits->min_lane_count = limits->max_lane_count =
 		intel_dp_max_lane_count(intel_dp);
 
-	limits->min_bpp = intel_dp_min_bpp(crtc_state->output_format);
+	limits->pipe.min_bpp = intel_dp_min_bpp(crtc_state->output_format);
 	/*
 	 * FIXME: If all the streams can't fit into the link with
 	 * their current pipe_bpp we should reduce pipe_bpp across
@@ -327,9 +329,12 @@ intel_dp_mst_compute_config_limits(struct intel_dp *intel_dp,
 	 * MST streams previously. This hack should be removed once
 	 * we have the proper retry logic in place.
 	 */
-	limits->max_bpp = min(crtc_state->pipe_bpp, 24);
+	limits->pipe.max_bpp = min(crtc_state->pipe_bpp, 24);
 
 	intel_dp_adjust_compliance_config(intel_dp, crtc_state, limits);
+
+	limits->link.min_bpp = limits->pipe.min_bpp << 4;
+	limits->link.max_bpp = limits->pipe.max_bpp << 4;
 }
 
 static int intel_dp_mst_compute_config(struct intel_encoder *encoder,
