@@ -34,6 +34,8 @@
 #define J721E_PCIE_USER_LINKSTATUS	0x14
 #define LINK_STATUS			GENMASK(1, 0)
 
+#define PERST_INACTIVE_US (PCIE_TPVPERL_MS*USEC_PER_MSEC + PCIE_TPERST_CLK_US)
+
 enum link_status {
 	NO_RECEIVERS_DETECTED,
 	LINK_TRAINING_IN_PROGRESS,
@@ -359,7 +361,7 @@ static int j721e_pcie_probe(struct platform_device *pdev)
 	struct j721e_pcie *pcie;
 	struct cdns_pcie_rc *rc = NULL;
 	struct cdns_pcie_ep *ep = NULL;
-	struct gpio_desc *gpiod;
+	struct gpio_desc *perst_gpiod;
 	void __iomem *base;
 	struct clk *clk;
 	u32 num_lanes;
@@ -468,11 +470,10 @@ static int j721e_pcie_probe(struct platform_device *pdev)
 
 	switch (mode) {
 	case PCI_MODE_RC:
-		gpiod = devm_gpiod_get_optional(dev, "reset", GPIOD_OUT_LOW);
-		if (IS_ERR(gpiod)) {
-			ret = PTR_ERR(gpiod);
-			if (ret != -EPROBE_DEFER)
-				dev_err(dev, "Failed to get reset GPIO\n");
+		perst_gpiod = devm_gpiod_get(dev, "reset", GPIOD_OUT_LOW);
+		if (IS_ERR(perst_gpiod)) {
+			ret = PTR_ERR(perst_gpiod);
+			dev_err(dev, "Failed to get reset GPIO\n");
 			goto err_get_sync;
 		}
 
@@ -498,16 +499,15 @@ static int j721e_pcie_probe(struct platform_device *pdev)
 
 		/*
 		 * "Power Sequencing and Reset Signal Timings" table in
-		 * PCI EXPRESS CARD ELECTROMECHANICAL SPECIFICATION, REV. 3.0
-		 * indicates PERST# should be deasserted after minimum of 100us
-		 * once REFCLK is stable. The REFCLK to the connector in RC
-		 * mode is selected while enabling the PHY. So deassert PERST#
-		 * after 100 us.
+		 * PCI EXPRESS CARD ELECTROMECHANICAL SPECIFICATION, REV. 5.0
+		 * indicates PERST# should be deasserted after minimum of 100ms
+		 * after power rails achieve specified operating limits and
+		 * 100us after reference clock gets stable.
+		 * PERST_INACTIVE_US accounts for both delays.
 		 */
-		if (gpiod) {
-			usleep_range(100, 200);
-			gpiod_set_value_cansleep(gpiod, 1);
-		}
+
+		fsleep(PERST_INACTIVE_US);
+		gpiod_set_value_cansleep(perst_gpiod, 1);
 
 		ret = cdns_pcie_host_setup(rc);
 		if (ret < 0) {

@@ -13,6 +13,9 @@
 
 #define PCIE_LINK_RETRAIN_TIMEOUT_MS	1000
 
+#define PCIE_TPVPERL_MS		100	/* see PCIe CEM r5.0, sec 2.9.2 */
+#define PCIE_TPERST_CLK_US	100
+
 extern const unsigned char pcie_link_speed[];
 extern bool pci_early_dump;
 
