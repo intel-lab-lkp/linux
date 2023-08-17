@@ -111,6 +111,7 @@ static int internal_create_group(struct kobject *kobj, int update,
 	kuid_t uid;
 	kgid_t gid;
 	int error;
+	umode_t mode;
 
 	if (WARN_ON(!kobj || (!update && !kobj->sd)))
 		return -EINVAL;
@@ -125,6 +126,15 @@ static int internal_create_group(struct kobject *kobj, int update,
 		return 0;
 	}
 
+	if (grp->attr_is_visible) {
+		mode = grp->attr_is_visible(kobj);
+
+		if (mode == 0)
+			return 0;
+	} else {
+		mode = S_IRWXU | S_IRUGO | S_IXUGO;
+	}
+
 	kobject_get_ownership(kobj, &uid, &gid);
 	if (grp->name) {
 		if (update) {
@@ -136,7 +146,7 @@ static int internal_create_group(struct kobject *kobj, int update,
 			}
 		} else {
 			kn = kernfs_create_dir_ns(kobj->sd, grp->name,
-						  S_IRWXU | S_IRUGO | S_IXUGO,
+						  mode,
 						  uid, gid, kobj, NULL);
 			if (IS_ERR(kn)) {
 				if (PTR_ERR(kn) == -EEXIST)

@@ -63,6 +63,11 @@ do {							\
  * @name:	Optional: Attribute group name
  *		If specified, the attribute group will be created in
  *		a new subdirectory with this name.
+ * @attr_is_visible:	Optional: Function to return permissions
+ *		associated with the attribute group. Only read/write
+ *		permissions as well as SYSFS_PREALLOC are accepted. Must
+ *		return 0 if an attribute is not visible. The returned value
+ *		will replace static permissions defined in struct attribute.
  * @is_visible:	Optional: Function to return permissions associated with an
  *		attribute of the group. Will be called repeatedly for each
  *		non-binary attribute in the group. Only read/write
@@ -83,6 +88,7 @@ do {							\
  */
 struct attribute_group {
 	const char		*name;
+	umode_t			(*attr_is_visible)(struct kobject *);
 	umode_t			(*is_visible)(struct kobject *,
 					      struct attribute *, int);
 	umode_t			(*is_bin_visible)(struct kobject *,
