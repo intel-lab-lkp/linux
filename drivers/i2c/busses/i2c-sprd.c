@@ -347,6 +347,10 @@ static void sprd_i2c_set_clk(struct sprd_i2c *i2c_dev, u32 freq)
 		writel((6 * apb_clk) / 10000000, i2c_dev->base + ADDR_STA0_DVD);
 	else if (freq == I2C_MAX_STANDARD_MODE_FREQ)
 		writel((4 * apb_clk) / 1000000, i2c_dev->base + ADDR_STA0_DVD);
+	else if (freq == I2C_MAX_FAST_MODE_PLUS_FREQ)
+		writel((8 * apb_clk) / 10000000, i2c_dev->base + ADDR_STA0_DVD);
+	else if (freq == I2C_MAX_HIGH_SPEED_MODE_FREQ)
+		writel((8 * apb_clk) / 10000000, i2c_dev->base + ADDR_STA0_DVD);
 }
 
 static void sprd_i2c_enable(struct sprd_i2c *i2c_dev)
@@ -519,9 +523,11 @@ static int sprd_i2c_probe(struct platform_device *pdev)
 	if (!of_property_read_u32(dev->of_node, "clock-frequency", &prop))
 		i2c_dev->bus_freq = prop;
 
-	/* We only support 100k and 400k now, otherwise will return error. */
+	/* We only support 100k\400k\1m\3.4m now, otherwise will return error. */
 	if (i2c_dev->bus_freq != I2C_MAX_STANDARD_MODE_FREQ &&
-	    i2c_dev->bus_freq != I2C_MAX_FAST_MODE_FREQ)
+			i2c_dev->bus_freq != I2C_MAX_FAST_MODE_FREQ &&
+			i2c_dev->bus_freq != I2C_MAX_FAST_MODE_PLUS_FREQ &&
+			i2c_dev->bus_freq != I2C_MAX_HIGH_SPEED_MODE_FREQ)
 		return -EINVAL;
 
 	ret = sprd_i2c_clk_init(i2c_dev);
