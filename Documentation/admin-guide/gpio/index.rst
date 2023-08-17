@@ -8,6 +8,7 @@ gpio
     :maxdepth: 1
 
     gpio-aggregator
+    gpio-consumer
     sysfs
     gpio-mockup
     gpio-sim
