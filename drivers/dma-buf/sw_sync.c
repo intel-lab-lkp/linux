@@ -191,6 +191,7 @@ static const struct dma_fence_ops timeline_fence_ops = {
  */
 static void sync_timeline_signal(struct sync_timeline *obj, unsigned int inc)
 {
+	LIST_HEAD(signalled);
 	struct sync_pt *pt, *next;
 
 	trace_sync_timeline(obj);
@@ -203,8 +204,12 @@ static void sync_timeline_signal(struct sync_timeline *obj, unsigned int inc)
 		if (!timeline_fence_signaled(&pt->base))
 			break;
 
+		dma_fence_get(&pt->base);
+
 		list_del_init(&pt->link);
 		rb_erase(&pt->node, &obj->pt_tree);
+
+		list_add_tail(&pt->link, &signalled);
 
 		/*
 		 * A signal callback may release the last reference to this
@@ -218,6 +223,11 @@ static void sync_timeline_signal(struct sync_timeline *obj, unsigned int inc)
 	}
 
 	spin_unlock_irq(&obj->lock);
+
+	list_for_each_entry_safe(pt, next, &signalled, link) {
+		list_del(&pt->link);
+		dma_fence_put(&pt->base);
+	}
 }
 
 /**
