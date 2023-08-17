@@ -2206,7 +2206,7 @@ static int arm_smmu_domain_finalise(struct iommu_domain *domain,
 	/* Restrict the stage to what we can actually support */
 	if (!(smmu->features & ARM_SMMU_FEAT_TRANS_S1))
 		smmu_domain->stage = ARM_SMMU_DOMAIN_S2;
-	if (!(smmu->features & ARM_SMMU_FEAT_TRANS_S2))
+	else
 		smmu_domain->stage = ARM_SMMU_DOMAIN_S1;
 
 	switch (smmu_domain->stage) {
