@@ -138,6 +138,15 @@ struct macsec_cb {
 	bool has_sci;
 };
 
+static unsigned int macsec_net_id __read_mostly;
+
+struct macsec_net {
+#ifdef CONFIG_SYSCTL
+	struct ctl_table_header *ctl_hdr;
+#endif
+	u8 default_async;
+};
+
 static struct macsec_rx_sa *macsec_rxsa_get(struct macsec_rx_sa __rcu *ptr)
 {
 	struct macsec_rx_sa *sa = rcu_dereference_bh(ptr);
@@ -1325,14 +1334,14 @@ nosci:
 	return RX_HANDLER_PASS;
 }
 
-static struct crypto_aead *macsec_alloc_tfm(char *key, int key_len, int icv_len)
+static struct crypto_aead *macsec_alloc_tfm(const struct net *net,
+					    char *key, int key_len, int icv_len)
 {
+	struct macsec_net *macsec_net = net_generic(net, macsec_net_id);
 	struct crypto_aead *tfm;
 	int ret;
 
-	/* Pick a sync gcm(aes) cipher to ensure order is preserved. */
-	tfm = crypto_alloc_aead("gcm(aes)", 0, CRYPTO_ALG_ASYNC);
-
+	tfm = crypto_alloc_aead("gcm(aes)", 0, macsec_net->default_async ? 0 : CRYPTO_ALG_ASYNC);
 	if (IS_ERR(tfm))
 		return tfm;
 
@@ -1350,14 +1359,14 @@ fail:
 	return ERR_PTR(ret);
 }
 
-static int init_rx_sa(struct macsec_rx_sa *rx_sa, char *sak, int key_len,
-		      int icv_len)
+static int init_rx_sa(const struct net *net, struct macsec_rx_sa *rx_sa,
+		      char *sak, int key_len, int icv_len)
 {
 	rx_sa->stats = alloc_percpu(struct macsec_rx_sa_stats);
 	if (!rx_sa->stats)
 		return -ENOMEM;
 
-	rx_sa->key.tfm = macsec_alloc_tfm(sak, key_len, icv_len);
+	rx_sa->key.tfm = macsec_alloc_tfm(net, sak, key_len, icv_len);
 	if (IS_ERR(rx_sa->key.tfm)) {
 		free_percpu(rx_sa->stats);
 		return PTR_ERR(rx_sa->key.tfm);
@@ -1450,14 +1459,14 @@ static struct macsec_rx_sc *create_rx_sc(struct net_device *dev, sci_t sci,
 	return rx_sc;
 }
 
-static int init_tx_sa(struct macsec_tx_sa *tx_sa, char *sak, int key_len,
-		      int icv_len)
+static int init_tx_sa(const struct net *net, struct macsec_tx_sa *tx_sa,
+		      char *sak, int key_len, int icv_len)
 {
 	tx_sa->stats = alloc_percpu(struct macsec_tx_sa_stats);
 	if (!tx_sa->stats)
 		return -ENOMEM;
 
-	tx_sa->key.tfm = macsec_alloc_tfm(sak, key_len, icv_len);
+	tx_sa->key.tfm = macsec_alloc_tfm(net, sak, key_len, icv_len);
 	if (IS_ERR(tx_sa->key.tfm)) {
 		free_percpu(tx_sa->stats);
 		return PTR_ERR(tx_sa->key.tfm);
@@ -1795,7 +1804,7 @@ static int macsec_add_rxsa(struct sk_buff *skb, struct genl_info *info)
 		return -ENOMEM;
 	}
 
-	err = init_rx_sa(rx_sa, nla_data(tb_sa[MACSEC_SA_ATTR_KEY]),
+	err = init_rx_sa(dev_net(dev), rx_sa, nla_data(tb_sa[MACSEC_SA_ATTR_KEY]),
 			 secy->key_len, secy->icv_len);
 	if (err < 0) {
 		kfree(rx_sa);
@@ -2038,7 +2047,7 @@ static int macsec_add_txsa(struct sk_buff *skb, struct genl_info *info)
 		return -ENOMEM;
 	}
 
-	err = init_tx_sa(tx_sa, nla_data(tb_sa[MACSEC_SA_ATTR_KEY]),
+	err = init_tx_sa(dev_net(dev), tx_sa, nla_data(tb_sa[MACSEC_SA_ATTR_KEY]),
 			 secy->key_len, secy->icv_len);
 	if (err < 0) {
 		kfree(tx_sa);
@@ -4168,7 +4177,7 @@ static int macsec_validate_attr(struct nlattr *tb[], struct nlattr *data[],
 			char dummy_key[DEFAULT_SAK_LEN] = { 0 };
 			struct crypto_aead *dummy_tfm;
 
-			dummy_tfm = macsec_alloc_tfm(dummy_key,
+			dummy_tfm = macsec_alloc_tfm(&init_net, dummy_key,
 						     DEFAULT_SAK_LEN,
 						     icv_len);
 			if (IS_ERR(dummy_tfm))
@@ -4380,6 +4389,65 @@ static struct notifier_block macsec_notifier = {
 	.notifier_call = macsec_notify,
 };
 
+#ifdef CONFIG_SYSCTL
+static struct ctl_table macsec_table[] = {
+	{
+		.procname = "default_async_crypto",
+		.maxlen = sizeof(u8),
+		.mode = 0644,
+		.proc_handler = proc_dou8vec_minmax,
+		.extra1 = SYSCTL_ZERO,
+		.extra2 = SYSCTL_ONE,
+	},
+	{ },
+};
+
+static int __net_init macsec_init_net(struct net *net)
+{
+	struct ctl_table *table = macsec_table;
+	struct macsec_net *macsec_net;
+
+	if (!net_eq(net, &init_net)) {
+		table = kmemdup(table, sizeof(macsec_table), GFP_KERNEL);
+		if (!table)
+			return -ENOMEM;
+	}
+
+	macsec_net = net_generic(net, macsec_net_id);
+	table[0].data = &macsec_net->default_async;
+	macsec_net->default_async = 0;
+
+	macsec_net->ctl_hdr = register_net_sysctl(net, "net/macsec", table);
+	if (!macsec_net->ctl_hdr)
+		goto free;
+
+	return 0;
+
+free:
+	if (!net_eq(net, &init_net))
+		kfree(table);
+	return -ENOMEM;
+}
+
+static void __net_exit macsec_exit_net(struct net *net)
+{
+	struct macsec_net *macsec_net = net_generic(net, macsec_net_id);
+
+	unregister_net_sysctl_table(macsec_net->ctl_hdr);
+	if (!net_eq(net, &init_net))
+		kfree(macsec_net->ctl_hdr->ctl_table_arg);
+}
+#endif
+
+static struct pernet_operations macsec_net_ops __read_mostly = {
+#ifdef CONFIG_SYSCTL
+	.init = macsec_init_net,
+	.exit = macsec_exit_net,
+#endif
+	.id   = &macsec_net_id,
+	.size = sizeof(struct macsec_net),
+};
+
 static int __init macsec_init(void)
 {
 	int err;
@@ -4397,8 +4465,14 @@ static int __init macsec_init(void)
 	if (err)
 		goto rtnl;
 
+	err = register_pernet_subsys(&macsec_net_ops);
+	if (err)
+		goto genl;
+
 	return 0;
 
+genl:
+	genl_unregister_family(&macsec_fam);
 rtnl:
 	rtnl_link_unregister(&macsec_link_ops);
 notifier:
@@ -4408,6 +4482,7 @@ notifier:
 
 static void __exit macsec_exit(void)
 {
+	unregister_pernet_subsys(&macsec_net_ops);
 	genl_unregister_family(&macsec_fam);
 	rtnl_link_unregister(&macsec_link_ops);
 	unregister_netdevice_notifier(&macsec_notifier);

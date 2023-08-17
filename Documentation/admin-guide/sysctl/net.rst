@@ -34,14 +34,14 @@ Table : Subdirectories in /proc/sys/net
  ========= =================== = ========== ===================
  Directory Content               Directory  Content
  ========= =================== = ========== ===================
- 802       E802 protocol         mptcp      Multipath TCP
- appletalk Appletalk protocol    netfilter  Network Filter
- ax25      AX25                  netrom     NET/ROM
- bridge    Bridging              rose       X.25 PLP layer
- core      General parameter     tipc       TIPC
- ethernet  Ethernet protocol     unix       Unix domain sockets
- ipv4      IP version 4          x25        X.25 protocol
- ipv6      IP version 6
+ 802       E802 protocol         macsec     MACsec
+ appletalk Appletalk protocol    mptcp      Multipath TCP
+ ax25      AX25                  netfilter  Network Filter
+ bridge    Bridging              netrom     NET/ROM
+ core      General parameter     rose       X.25 PLP layer
+ ethernet  Ethernet protocol     tipc       TIPC
+ ipv4      IP version 4          unix       Unix domain sockets
+ ipv6      IP version 6          x25        X.25 protocol
  ========= =================== = ========== ===================
 
 1. /proc/sys/net/core - Network core options
@@ -503,3 +503,26 @@ originally may have been issued in the correct sequential order.
 If named_timeout is nonzero, failed topology updates will be placed on a defer
 queue until another event arrives that clears the error, or until the timeout
 expires. Value is in milliseconds.
+
+
+6. /proc/sys/net/macsec - Parameters for MACsec
+-----------------------------------------------
+
+default_async_crypto
+--------------------
+
+The software implementation of MACsec uses the kernel cryptography
+API, which provides both asynchronous and synchronous implementations
+of algorithms. The asynchronous implementations tend to provide better
+performance, but in some cases, can cause reordering of packets.
+
+This only affects newly created Security Associations. Existing SAs
+will be unchanged. Whether a MACsec device was created before or after
+this sysctl is set has no impact.
+
+Values:
+
+	- 0 - disable asynchronous cryptography
+	- 1 - allow asynchronous cryptography (if available)
+
+Default : 0 (only synchronous)
