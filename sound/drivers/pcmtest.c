@@ -669,8 +669,6 @@ static int init_debug_files(int buf_count)
 	char len_file_name[32];
 
 	driver_debug_dir = debugfs_create_dir("pcmtest", NULL);
-	if (IS_ERR(driver_debug_dir))
-		return PTR_ERR(driver_debug_dir);
 	debugfs_create_u8("pc_test", 0444, driver_debug_dir, &playback_capture_test);
 	debugfs_create_u8("ioctl_test", 0444, driver_debug_dir, &ioctl_reset_test);
 
