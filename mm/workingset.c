@@ -206,10 +206,11 @@ static void *pack_shadow(int memcgid, pg_data_t *pgdat, unsigned long eviction,
 	return xa_mk_value(eviction);
 }
 
-static void unpack_shadow(void *shadow, int *memcgidp, pg_data_t **pgdat,
-			  unsigned long *evictionp, bool *workingsetp)
+static void unpack_shadow(void *shadow, struct mem_cgroup **memcgp,
+			pg_data_t **pgdat, unsigned long *evictionp, bool *workingsetp)
 {
 	unsigned long entry = xa_to_value(shadow);
+	struct mem_cgroup *memcg;
 	int memcgid, nid;
 	bool workingset;
 
@@ -220,7 +221,24 @@ static void unpack_shadow(void *shadow, int *memcgidp, pg_data_t **pgdat,
 	memcgid = entry & ((1UL << MEM_CGROUP_ID_SHIFT) - 1);
 	entry >>= MEM_CGROUP_ID_SHIFT;
 
-	*memcgidp = memcgid;
+	/*
+	 * Look up the memcg associated with the stored ID. It might
+	 * have been deleted since the folio's eviction.
+	 *
+	 * Note that in rare events the ID could have been recycled
+	 * for a new cgroup that refaults a shared folio. This is
+	 * impossible to tell from the available data. However, this
+	 * should be a rare and limited disturbance, and activations
+	 * are always speculative anyway. Ultimately, it's the aging
+	 * algorithm's job to shake out the minimum access frequency
+	 * for the active cache.
+	 */
+	memcg = mem_cgroup_from_id(memcgid);
+	if (memcg && css_tryget(&memcg->css))
+		*memcgp = memcg;
+	else
+		*memcgp = NULL;
+
 	*pgdat = NODE_DATA(nid);
 	*evictionp = entry;
 	*workingsetp = workingset;
@@ -262,15 +280,16 @@ static void *lru_gen_eviction(struct folio *folio)
 static bool lru_gen_test_recent(void *shadow, bool file, struct lruvec **lruvec,
 				unsigned long *token, bool *workingset)
 {
-	int memcg_id;
 	unsigned long min_seq;
 	struct mem_cgroup *memcg;
 	struct pglist_data *pgdat;
 
-	unpack_shadow(shadow, &memcg_id, &pgdat, token, workingset);
+	unpack_shadow(shadow, &memcg, &pgdat, token, workingset);
+	if (!mem_cgroup_disabled() && !memcg)
+		return false;
 
-	memcg = mem_cgroup_from_id(memcg_id);
 	*lruvec = mem_cgroup_lruvec(memcg, pgdat);
+	mem_cgroup_put(memcg);
 
 	min_seq = READ_ONCE((*lruvec)->lrugen.min_seq[file]);
 	return (*token >> LRU_REFS_WIDTH) == (min_seq & (EVICTION_MASK >> LRU_REFS_WIDTH));
@@ -421,36 +440,29 @@ bool workingset_test_recent(void *shadow, bool file, bool *workingset)
 	unsigned long refault_distance;
 	unsigned long workingset_size;
 	unsigned long refault;
-	int memcgid;
 	struct pglist_data *pgdat;
 	unsigned long eviction;
 
 	if (lru_gen_enabled())
 		return lru_gen_test_recent(shadow, file, &eviction_lruvec, &eviction, workingset);
 
-	unpack_shadow(shadow, &memcgid, &pgdat, &eviction, workingset);
-	eviction <<= bucket_order;
-
+	unpack_shadow(shadow, &eviction_memcg, &pgdat, &eviction, workingset);
 	/*
-	 * Look up the memcg associated with the stored ID. It might
-	 * have been deleted since the folio's eviction.
+	 * When memcg is enabled, we only get !memcg here if the
+	 * eviction group has been deleted. In that case, ignore
+	 * the refault.
 	 *
-	 * Note that in rare events the ID could have been recycled
-	 * for a new cgroup that refaults a shared folio. This is
-	 * impossible to tell from the available data. However, this
-	 * should be a rare and limited disturbance, and activations
-	 * are always speculative anyway. Ultimately, it's the aging
-	 * algorithm's job to shake out the minimum access frequency
-	 * for the active cache.
+	 * When memcg is disabled, we always get NULL since there
+	 * is no root_mem_cgroup for !CONFIG_MEMCG. Continue; the
+	 * mem_cgroup_lruvec() will get us the global lruvec.
 	 *
-	 * XXX: On !CONFIG_MEMCG, this will always return NULL; it
-	 * would be better if the root_mem_cgroup existed in all
+	 * XXX: It would be better if the root_mem_cgroup existed in all
 	 * configurations instead.
 	 */
-	eviction_memcg = mem_cgroup_from_id(memcgid);
 	if (!mem_cgroup_disabled() && !eviction_memcg)
 		return false;
 
+	eviction <<= bucket_order;
 	eviction_lruvec = mem_cgroup_lruvec(eviction_memcg, pgdat);
 	refault = atomic_long_read(&eviction_lruvec->nonresident_age);
 
@@ -493,6 +505,7 @@ bool workingset_test_recent(void *shadow, bool file, bool *workingset)
 		}
 	}
 
+	mem_cgroup_put(eviction_memcg);
 	return refault_distance <= workingset_size;
 }
 
