@@ -128,7 +128,7 @@ void __bitmap_shift_right(unsigned long *dst, const unsigned long *src,
 		dst[k] = lower | upper;
 	}
 	if (off)
-		memset(&dst[lim - off], 0, off*sizeof(unsigned long));
+		bitmap_zero(&dst[lim - off], off);
 }
 EXPORT_SYMBOL(__bitmap_shift_right);
 
@@ -166,7 +166,7 @@ void __bitmap_shift_left(unsigned long *dst, const unsigned long *src,
 		dst[k + off] = lower | upper;
 	}
 	if (off)
-		memset(dst, 0, off*sizeof(unsigned long));
+		bitmap_zero(dst, off);
 }
 EXPORT_SYMBOL(__bitmap_shift_left);
 

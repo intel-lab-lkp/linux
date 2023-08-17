@@ -239,22 +239,30 @@ extern int bitmap_print_list_to_buf(char *buf, const unsigned long *maskp,
 
 static inline void bitmap_zero(unsigned long *dst, unsigned int nbits)
 {
-	unsigned int len = BITS_TO_LONGS(nbits) * sizeof(unsigned long);
+	unsigned int len = BITS_TO_LONGS(nbits);
 
 	if (small_const_nbits(nbits))
 		*dst = 0;
 	else
-		memset(dst, 0, len);
+#if BITS_PER_LONG == 64
+		memset64((uint64_t *)dst, 0, len);
+#else
+		memset32((uint32_t *)dst, 0, len);
+#endif
 }
 
 static inline void bitmap_fill(unsigned long *dst, unsigned int nbits)
 {
-	unsigned int len = BITS_TO_LONGS(nbits) * sizeof(unsigned long);
+	unsigned int len = BITS_TO_LONGS(nbits);
 
 	if (small_const_nbits(nbits))
 		*dst = ~0UL;
 	else
-		memset(dst, 0xff, len);
+#if BITS_PER_LONG == 64
+		memset64((uint64_t *)dst, GENMASK(63, 0), len);
+#else
+		memset32((uint32_t *)dst, GENMASK(31, 0), len);
+#endif
 }
 
 static inline void bitmap_copy(unsigned long *dst, const unsigned long *src,
