@@ -350,7 +350,7 @@ int fuse_valid_type(int m)
 		S_ISBLK(m) || S_ISFIFO(m) || S_ISSOCK(m);
 }
 
-bool fuse_valid_size(u64 size)
+static bool fuse_valid_size(u64 size)
 {
 	return size <= LLONG_MAX;
 }
