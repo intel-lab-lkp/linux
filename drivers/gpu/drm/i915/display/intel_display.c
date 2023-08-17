@@ -5420,8 +5420,8 @@ intel_verify_planes(struct intel_atomic_state *state)
 			     plane_state->uapi.visible);
 }
 
-int intel_modeset_all_pipes(struct intel_atomic_state *state,
-			    const char *reason)
+int intel_modeset_pipes_in_mask(struct intel_atomic_state *state,
+				const char *reason, u8 mask)
 {
 	struct drm_i915_private *dev_priv = to_i915(state->base.dev);
 	struct intel_crtc *crtc;
@@ -5430,7 +5430,7 @@ int intel_modeset_all_pipes(struct intel_atomic_state *state,
 	 * Add all pipes to the state, and force
 	 * a modeset on all the active ones.
 	 */
-	for_each_intel_crtc(&dev_priv->drm, crtc) {
+	for_each_intel_crtc_in_pipe_mask(&dev_priv->drm, crtc, mask) {
 		struct intel_crtc_state *crtc_state;
 		int ret;
 
@@ -5467,6 +5467,12 @@ int intel_modeset_all_pipes(struct intel_atomic_state *state,
 	}
 
 	return 0;
+}
+
+int intel_modeset_all_pipes(struct intel_atomic_state *state,
+			    const char *reason)
+{
+	return intel_modeset_pipes_in_mask(state, reason, -1);
 }
 
 /*
