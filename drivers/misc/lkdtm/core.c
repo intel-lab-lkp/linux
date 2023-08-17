@@ -242,7 +242,7 @@ static ssize_t lkdtm_debugfs_entry(struct file *f,
 	}
 	/* NULL-terminate and remove enter */
 	buf[count] = '\0';
-	strim(buf);
+	buf = strim(buf);
 
 	crashtype = find_crashtype(buf);
 	free_page((unsigned long)buf);
@@ -318,7 +318,7 @@ static ssize_t direct_entry(struct file *f, const char __user *user_buf,
 	}
 	/* NULL-terminate and remove enter */
 	buf[count] = '\0';
-	strim(buf);
+	buf = strim(buf);
 
 	crashtype = find_crashtype(buf);
 	free_page((unsigned long) buf);
