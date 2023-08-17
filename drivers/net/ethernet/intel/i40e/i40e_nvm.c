@@ -55,7 +55,7 @@ int i40e_init_nvm(struct i40e_hw *hw)
 int i40e_acquire_nvm(struct i40e_hw *hw,
 		     enum i40e_aq_resource_access_type access)
 {
-	u64 gtime, timeout;
+	u32 gtime, timeout;
 	u64 time_left = 0;
 	int ret_code = 0;
 
@@ -78,7 +78,7 @@ int i40e_acquire_nvm(struct i40e_hw *hw,
 	if (ret_code && time_left) {
 		/* Poll until the current NVM owner timeouts */
 		timeout = I40E_MS_TO_GTIME(I40E_MAX_NVM_TIMEOUT) + gtime;
-		while ((gtime < timeout) && time_left) {
+		while ((s32)(gtime - timeout) < 0 && time_left) {
 			usleep_range(10000, 20000);
 			gtime = rd32(hw, I40E_GLVFGEN_TIMER);
 			ret_code = i40e_aq_request_resource(hw,
@@ -1192,9 +1192,9 @@ retry:
 		u32 gtime;
 
 		gtime = rd32(hw, I40E_GLVFGEN_TIMER);
-		if (gtime >= hw->nvm.hw_semaphore_timeout) {
+		if ((s32)(gtime - hw->nvm.hw_semaphore_timeout) >= 0) {
 			i40e_debug(hw, I40E_DEBUG_ALL,
-				   "NVMUPD: write semaphore expired (%d >= %lld), retrying\n",
+				   "NVMUPD: write semaphore expired (%d >= %d), retrying\n",
 				   gtime, hw->nvm.hw_semaphore_timeout);
 			i40e_release_nvm(hw);
 			status = i40e_acquire_nvm(hw, I40E_RESOURCE_WRITE);
