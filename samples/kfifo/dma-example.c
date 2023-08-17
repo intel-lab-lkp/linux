@@ -80,7 +80,7 @@ static int __init example_init(void)
 			break;
 	}
 
-	/* put here your code to setup and exectute the dma operation */
+	/* put here your code to setup and execute the dma operation */
 	/* ... */
 
 	/* example: zero bytes received */
@@ -109,7 +109,7 @@ static int __init example_init(void)
 			break;
 	}
 
-	/* put here your code to setup and exectute the dma operation */
+	/* put here your code to setup and execute the dma operation */
 	/* ... */
 
 	/* example: 5 bytes transmitted */
