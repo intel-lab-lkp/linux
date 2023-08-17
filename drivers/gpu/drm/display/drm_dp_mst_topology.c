@@ -4712,12 +4712,9 @@ int drm_dp_calc_pbn_mode(int clock, int bpp, bool dsc)
 	 * factor in the numerator rather than the denominator to avoid
 	 * integer overflow
 	 */
+	u32 bpp_m = (dsc ? 64 / 16 : 64) * 1006 * bpp;
 
-	if (dsc)
-		return DIV_ROUND_UP_ULL(mul_u32_u32(clock * (bpp / 16), 64 * 1006),
-					8 * 54 * 1000 * 1000);
-
-	return DIV_ROUND_UP_ULL(mul_u32_u32(clock * bpp, 64 * 1006),
+	return DIV_ROUND_UP_ULL(mul_u32_u32(clock, bpp_m),
 				8 * 54 * 1000 * 1000);
 }
 EXPORT_SYMBOL(drm_dp_calc_pbn_mode);
