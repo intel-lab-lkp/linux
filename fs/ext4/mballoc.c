@@ -3849,15 +3849,6 @@ static void ext4_free_data_in_buddy(struct super_block *sb,
 	rb_erase(&entry->efd_node, &(db->bb_free_root));
 	mb_free_blocks(NULL, &e4b, entry->efd_start_cluster, entry->efd_count);
 
-	/*
-	 * Clear the trimmed flag for the group so that the next
-	 * ext4_trim_fs can trim it.
-	 * If the volume is mounted with -o discard, online discard
-	 * is supported and the free blocks will be trimmed online.
-	 */
-	if (!test_opt(sb, DISCARD))
-		EXT4_MB_GRP_CLEAR_TRIMMED(db);
-
 	if (!db->bb_free_root.rb_node) {
 		/* No more items in the per group rb tree
 		 * balance refcounts from ext4_mb_free_metadata()
@@ -6587,8 +6578,7 @@ do_more:
 					 " group:%u block:%d count:%lu failed"
 					 " with %d", block_group, bit, count,
 					 err);
-		} else
-			EXT4_MB_GRP_CLEAR_TRIMMED(e4b.bd_info);
+		}
 
 		ext4_lock_group(sb, block_group);
 		mb_clear_bits(bitmap_bh->b_data, bit, count_clusters);
@@ -6598,6 +6588,14 @@ do_more:
 	ret = ext4_free_group_clusters(sb, gdp) + count_clusters;
 	ext4_free_group_clusters_set(sb, gdp, ret);
 	ext4_block_bitmap_csum_set(sb, gdp, bitmap_bh);
+	/*
+	 * Clear the trimmed flag for the group so that the next
+	 * ext4_trim_fs can trim it.
+	 * If the volume is mounted with -o discard, online discard
+	 * is supported and the free blocks will be trimmed online.
+	 */
+	if (!test_opt(sb, DISCARD))
+		gdp->bg_flags &= cpu_to_le16(~EXT4_BG_TRIMMED);
 	ext4_group_desc_csum_set(sb, block_group, gdp);
 	ext4_unlock_group(sb, block_group);
 
@@ -6995,9 +6993,18 @@ ext4_trim_all_free(struct super_block *sb, ext4_group_t group,
 		   ext4_grpblk_t minblocks, bool set_trimmed)
 {
 	struct ext4_buddy e4b;
+	struct ext4_super_block *es = EXT4_SB(sb)->s_es;
+	struct ext4_group_desc *gdp;
+	struct buffer_head *gd_bh;
 	int ret;
 
 	trace_ext4_trim_all_free(sb, group, start, max);
+
+	gdp = ext4_get_group_desc(sb, group, &gd_bh);
+	if (!gdp) {
+		ret = -EIO;
+		return ret;
+	}
 
 	ret = ext4_mb_load_buddy(sb, group, &e4b);
 	if (ret) {
@@ -7008,11 +7015,10 @@ ext4_trim_all_free(struct super_block *sb, ext4_group_t group,
 
 	ext4_lock_group(sb, group);
 
-	if (!EXT4_MB_GRP_WAS_TRIMMED(e4b.bd_info) ||
+	if (!(es->s_flags & cpu_to_le32(EXT2_FLAGS_TRACK_TRIM) &&
+	      gdp->bg_flags & cpu_to_le16(EXT4_BG_TRIMMED)) ||
 	    minblocks < EXT4_SB(sb)->s_last_trim_minblks) {
 		ret = ext4_try_to_trim_range(sb, &e4b, start, max, minblocks);
-		if (ret >= 0 && set_trimmed)
-			EXT4_MB_GRP_SET_TRIMMED(e4b.bd_info);
 	} else {
 		ret = 0;
 	}
@@ -7020,6 +7026,35 @@ ext4_trim_all_free(struct super_block *sb, ext4_group_t group,
 	ext4_unlock_group(sb, group);
 	ext4_mb_unload_buddy(&e4b);
 
+	if (ret > 0 && set_trimmed &&
+	    es->s_flags & cpu_to_le32(EXT2_FLAGS_TRACK_TRIM)) {
+		int err;
+		handle_t *handle;
+
+		handle = ext4_journal_start_sb(sb, EXT4_HT_FS_TRIM, 1);
+		if (IS_ERR(handle)) {
+			ret = PTR_ERR(handle);
+			goto out_return;
+		}
+		err = ext4_journal_get_write_access(handle, sb, gd_bh,
+						    EXT4_JTR_NONE);
+		if (err) {
+			ret = err;
+			goto out_journal;
+		}
+		ext4_lock_group(sb, group);
+		gdp->bg_flags |= cpu_to_le16(EXT4_BG_TRIMMED);
+		ext4_group_desc_csum_set(sb, group, gdp);
+		ext4_unlock_group(sb, group);
+		err = ext4_handle_dirty_metadata(handle, NULL, gd_bh);
+		if (err)
+			ret = err;
+out_journal:
+		err = ext4_journal_stop(handle);
+		if (err)
+			ret = err;
+	}
+out_return:
 	ext4_debug("trimmed %d blocks in the group %d\n",
 		ret, group);
 
