@@ -236,6 +236,18 @@ static inline struct sockaddr *xs_addr(struct rpc_xprt *xprt)
 	return (struct sockaddr *) &xprt->addr;
 }
 
+static inline struct sockaddr *xs_m_addr(struct rpc_xprt *xprt)
+{
+    /* kernel_connect() may modify the address in contexts where NAT is
+     * performed by eBPF programs instead of iptables. Make a copy to ensure
+     * that our original address, xprt->addr, is not modified. Without this,
+     * NFS reconnects may fail if the endpoint address changes.
+     */
+	memcpy(&xprt->m_addr, &xprt->addr, xprt->addrlen);
+
+	return (struct sockaddr *) &xprt->m_addr;
+}
+
 static inline struct sockaddr_un *xs_addr_un(struct rpc_xprt *xprt)
 {
 	return (struct sockaddr_un *) &xprt->addr;
@@ -1954,7 +1966,7 @@ static int xs_local_finish_connecting(struct rpc_xprt *xprt,
 
 	xs_stream_start_connect(transport);
 
-	return kernel_connect(sock, xs_addr(xprt), xprt->addrlen, 0);
+	return kernel_connect(sock, xs_m_addr(xprt), xprt->addrlen, 0);
 }
 
 /**
@@ -2334,7 +2346,8 @@ static int xs_tcp_finish_connecting(struct rpc_xprt *xprt, struct socket *sock)
 
 	/* Tell the socket layer to start connecting... */
 	set_bit(XPRT_SOCK_CONNECTING, &transport->sock_state);
-	return kernel_connect(sock, xs_addr(xprt), xprt->addrlen, O_NONBLOCK);
+
+	return kernel_connect(sock, xs_m_addr(xprt), xprt->addrlen, O_NONBLOCK);
 }
 
 /**

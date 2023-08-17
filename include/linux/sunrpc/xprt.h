@@ -211,6 +211,7 @@ struct rpc_xprt {
 
 	const struct rpc_timeout *timeout;	/* timeout parms */
 	struct sockaddr_storage	addr;		/* server address */
+	struct sockaddr_storage m_addr;      /* mutable server address */
 	size_t			addrlen;	/* size of server address */
 	int			prot;		/* IP protocol */
 
