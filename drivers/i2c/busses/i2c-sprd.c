@@ -310,6 +310,8 @@ static int sprd_i2c_handle_msg(struct i2c_adapter *i2c_adap,
 	return i2c_dev->err;
 }
 
+static void sprd_i2c_enable(struct sprd_i2c *i2c_dev);
+
 static int sprd_i2c_master_xfer(struct i2c_adapter *i2c_adap,
 				struct i2c_msg *msgs, int num)
 {
@@ -319,6 +321,8 @@ static int sprd_i2c_master_xfer(struct i2c_adapter *i2c_adap,
 	ret = pm_runtime_resume_and_get(i2c_dev->dev);
 	if (ret < 0)
 		return ret;
+
+	sprd_i2c_enable(i2c_dev);
 
 	for (im = 0; im < num - 1; im++) {
 		ret = sprd_i2c_handle_msg(i2c_adap, &msgs[im], 0);
@@ -660,8 +664,6 @@ static int __maybe_unused sprd_i2c_runtime_resume(struct device *dev)
 	ret = clk_prepare_enable(i2c_dev->clk);
 	if (ret)
 		return ret;
-
-	sprd_i2c_enable(i2c_dev);
 
 	return 0;
 }
