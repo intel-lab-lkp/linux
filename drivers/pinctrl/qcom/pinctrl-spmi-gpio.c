@@ -1154,10 +1154,8 @@ static int pmic_gpio_probe(struct platform_device *pdev)
 	girq->child_irq_domain_ops.translate = pmic_gpio_domain_translate;
 
 	ret = gpiochip_add_data(&state->chip, state);
-	if (ret) {
-		dev_err(state->dev, "can't add gpio chip\n");
-		return ret;
-	}
+	if (ret)
+		return dev_err_probe(state->dev, ret, "can't add gpio chip\n");
 
 	/*
 	 * For DeviceTree-supported systems, the gpio core checks the
