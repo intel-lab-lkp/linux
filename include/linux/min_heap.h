@@ -26,8 +26,8 @@ struct min_heap {
  */
 struct min_heap_callbacks {
 	int elem_size;
-	bool (*less)(const void *lhs, const void *rhs);
-	void (*swp)(void *lhs, void *rhs);
+	cmp_func_t less;
+	swap_func_t swp;
 };
 
 /* Sift the element at pos down the heap. */
@@ -55,7 +55,7 @@ void min_heapify(struct min_heap *heap, int pos,
 		}
 		if (smallest == parent)
 			break;
-		func->swp(smallest, parent);
+		func->swp(smallest, parent, func->elem_size);
 		if (smallest == left)
 			pos = (pos * 2) + 1;
 		else
@@ -127,7 +127,7 @@ void min_heap_push(struct min_heap *heap, const void *element,
 		parent = data + ((pos - 1) / 2) * func->elem_size;
 		if (func->less(parent, child))
 			break;
-		func->swp(parent, child);
+		func->swp(parent, child, func->elem_size);
 	}
 }
 

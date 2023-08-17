@@ -11,17 +11,17 @@
 #include <linux/printk.h>
 #include <linux/random.h>
 
-static __init bool less_than(const void *lhs, const void *rhs)
+static __init int less_than(const void *lhs, const void *rhs)
 {
 	return *(int *)lhs < *(int *)rhs;
 }
 
-static __init bool greater_than(const void *lhs, const void *rhs)
+static __init int greater_than(const void *lhs, const void *rhs)
 {
 	return *(int *)lhs > *(int *)rhs;
 }
 
-static __init void swap_ints(void *lhs, void *rhs)
+static __init void swap_ints(void *lhs, void *rhs, int size)
 {
 	int temp = *(int *)lhs;
 
