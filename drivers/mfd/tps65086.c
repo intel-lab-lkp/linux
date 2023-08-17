@@ -64,7 +64,7 @@ MODULE_DEVICE_TABLE(of, tps65086_of_match_table);
 static int tps65086_probe(struct i2c_client *client)
 {
 	struct tps65086 *tps;
-	unsigned int version;
+	unsigned int version, id;
 	int ret;
 
 	tps = devm_kzalloc(&client->dev, sizeof(*tps), GFP_KERNEL);
@@ -81,16 +81,41 @@ static int tps65086_probe(struct i2c_client *client)
 		return PTR_ERR(tps->regmap);
 	}
 
-	ret = regmap_read(tps->regmap, TPS65086_DEVICEID, &version);
+	ret = regmap_read(tps->regmap, TPS65086_DEVICEID1, &id);
 	if (ret) {
-		dev_err(tps->dev, "Failed to read revision register\n");
+		dev_err(tps->dev, "Failed to read revision register 1\n");
+		return ret;
+	}
+
+	/* Store device ID to load regulator configuration that fit to IC variant */
+	switch (id) {
+	case TPS6508640_ID:
+		tps->chip_id = TPS6508640;
+		break;
+	case TPS65086401_ID:
+		tps->chip_id = TPS65086401;
+		break;
+	case TPS6508641_ID:
+		tps->chip_id = TPS6508641;
+		break;
+	case TPS65086470_ID:
+		tps->chip_id = TPS65086470;
+		break;
+	default:
+		dev_err(tps->dev, "Unknown device ID. Cannot determine regulator config.\n");
+		return -ENODEV;
+	}
+
+	ret = regmap_read(tps->regmap, TPS65086_DEVICEID2, &version);
+	if (ret) {
+		dev_err(tps->dev, "Failed to read revision register 2\n");
 		return ret;
 	}
 
 	dev_info(tps->dev, "Device: TPS65086%01lX, OTP: %c, Rev: %ld\n",
-		 (version & TPS65086_DEVICEID_PART_MASK),
-		 (char)((version & TPS65086_DEVICEID_OTP_MASK) >> 4) + 'A',
-		 (version & TPS65086_DEVICEID_REV_MASK) >> 6);
+		 (version & TPS65086_DEVICEID2_PART_MASK),
+		 (char)((version & TPS65086_DEVICEID2_OTP_MASK) >> 4) + 'A',
+		 (version & TPS65086_DEVICEID2_REV_MASK) >> 6);
 
 	if (tps->irq > 0) {
 		ret = regmap_add_irq_chip(tps->regmap, tps->irq, IRQF_ONESHOT, 0,
