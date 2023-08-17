@@ -474,7 +474,7 @@ void ext2_discard_reservation(struct inode *inode)
  * @block:		start physical block to free
  * @count:		number of blocks to free
  */
-void ext2_free_blocks (struct inode * inode, unsigned long block,
+void ext2_free_blocks (struct inode * inode, ext2_fsblk_t block,
 		       unsigned long count)
 {
 	struct buffer_head *bitmap_bh = NULL;
@@ -1431,7 +1431,7 @@ out:
 	return 0;
 }
 
-ext2_fsblk_t ext2_new_block(struct inode *inode, unsigned long goal, int *errp)
+ext2_fsblk_t ext2_new_block(struct inode *inode, ext2_fsblk_t goal, int *errp)
 {
 	unsigned long count = 1;
 
