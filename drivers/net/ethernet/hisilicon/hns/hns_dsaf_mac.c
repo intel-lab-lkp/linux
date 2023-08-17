@@ -705,8 +705,8 @@ hns_mac_register_phydev(struct mii_bus *mdio, struct hns_mac_cb *mac_cb,
 		return -ENODATA;
 
 	phy = get_phy_device(mdio, addr, is_c45);
-	if (!phy || IS_ERR(phy))
-		return -EIO;
+	if (IS_ERR(phy))
+		return PTR_ERR(phy);
 
 	phy->irq = mdio->irq[addr];
 
