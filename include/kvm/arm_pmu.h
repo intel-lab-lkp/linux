@@ -102,6 +102,7 @@ void kvm_vcpu_pmu_restore_host(struct kvm_vcpu *vcpu);
 u8 kvm_arm_pmu_get_pmuver_limit(void);
 int kvm_arm_set_vm_pmu(struct kvm *kvm, struct arm_pmu *arm_pmu);
 
+u64 kvm_vcpu_read_pmcr(struct kvm_vcpu *vcpu);
 #else
 struct kvm_pmu {
 };
@@ -176,6 +177,11 @@ static inline u8 kvm_arm_pmu_get_pmuver_limit(void)
 static inline int kvm_arm_set_vm_pmu(struct kvm *kvm, struct arm_pmu *arm_pmu)
 {
 	return -ENODEV;
+}
+
+static inline u64 kvm_vcpu_read_pmcr(struct kvm_vcpu *vcpu)
+{
+	return 0;
 }
 
 #endif
