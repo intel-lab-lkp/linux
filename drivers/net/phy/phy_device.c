@@ -1882,7 +1882,7 @@ int __phy_resume(struct phy_device *phydev)
 
 	lockdep_assert_held(&phydev->lock);
 
-	if (!phydrv || !phydrv->resume)
+	if (!phydrv || !phydrv->resume || !phydev->suspended)
 		return 0;
 
 	ret = phydrv->resume(phydev);
@@ -3274,6 +3274,8 @@ static int phy_probe(struct device *dev)
 
 	if (phydrv->flags & PHY_IS_INTERNAL)
 		phydev->is_internal = true;
+
+	phydev->suspended = true;
 
 	/* Deassert the reset signal */
 	phy_device_reset(phydev, 0);
