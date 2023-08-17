@@ -303,6 +303,35 @@ static bool intel_dp_mst_has_audio(const struct drm_connector_state *conn_state)
 		return intel_conn_state->force_audio == HDMI_AUDIO_ON;
 }
 
+static void
+intel_dp_mst_compute_config_limits(struct intel_dp *intel_dp,
+				   struct intel_crtc_state *crtc_state,
+				   struct link_config_limits *limits)
+{
+	/*
+	 * for MST we always configure max link bw - the spec doesn't
+	 * seem to suggest we should do otherwise.
+	 */
+	limits->min_rate = limits->max_rate =
+		intel_dp_max_link_rate(intel_dp);
+
+	limits->min_lane_count = limits->max_lane_count =
+		intel_dp_max_lane_count(intel_dp);
+
+	limits->min_bpp = intel_dp_min_bpp(crtc_state->output_format);
+	/*
+	 * FIXME: If all the streams can't fit into the link with
+	 * their current pipe_bpp we should reduce pipe_bpp across
+	 * the board until things start to fit. Until then we
+	 * limit to <= 8bpc since that's what was hardcoded for all
+	 * MST streams previously. This hack should be removed once
+	 * we have the proper retry logic in place.
+	 */
+	limits->max_bpp = min(crtc_state->pipe_bpp, 24);
+
+	intel_dp_adjust_compliance_config(intel_dp, crtc_state, limits);
+}
+
 static int intel_dp_mst_compute_config(struct intel_encoder *encoder,
 				       struct intel_crtc_state *pipe_config,
 				       struct drm_connector_state *conn_state)
@@ -326,28 +355,7 @@ static int intel_dp_mst_compute_config(struct intel_encoder *encoder,
 		intel_dp_mst_has_audio(conn_state) &&
 		intel_audio_compute_config(encoder, pipe_config, conn_state);
 
-	/*
-	 * for MST we always configure max link bw - the spec doesn't
-	 * seem to suggest we should do otherwise.
-	 */
-	limits.min_rate =
-	limits.max_rate = intel_dp_max_link_rate(intel_dp);
-
-	limits.min_lane_count =
-	limits.max_lane_count = intel_dp_max_lane_count(intel_dp);
-
-	limits.min_bpp = intel_dp_min_bpp(pipe_config->output_format);
-	/*
-	 * FIXME: If all the streams can't fit into the link with
-	 * their current pipe_bpp we should reduce pipe_bpp across
-	 * the board until things start to fit. Until then we
-	 * limit to <= 8bpc since that's what was hardcoded for all
-	 * MST streams previously. This hack should be removed once
-	 * we have the proper retry logic in place.
-	 */
-	limits.max_bpp = min(pipe_config->pipe_bpp, 24);
-
-	intel_dp_adjust_compliance_config(intel_dp, pipe_config, &limits);
+	intel_dp_mst_compute_config_limits(intel_dp, pipe_config, &limits);
 
 	ret = intel_dp_mst_compute_link_config(encoder, pipe_config,
 					       conn_state, &limits);
