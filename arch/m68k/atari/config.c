@@ -925,7 +925,7 @@ int __init atari_platform_init(void)
 #endif
 
 	if (ATARIHW_PRESENT(IDE)) {
-		pdev = platform_device_register_simple("atari-falcon-ide", -1,
+		pdev = platform_device_register_simple("atari-falcon-ide", 0,
 			atari_falconide_rsrc, ARRAY_SIZE(atari_falconide_rsrc));
 		if (IS_ERR(pdev))
 			rv = PTR_ERR(pdev);
