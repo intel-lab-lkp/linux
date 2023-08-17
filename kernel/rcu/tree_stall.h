@@ -153,8 +153,12 @@ static void panic_on_rcu_stall(void)
  */
 void rcu_cpu_stall_reset(void)
 {
+	unsigned long delta;
+
+	delta = nsecs_to_jiffies(ktime_get_ns() - ktime_get_coarse_ns());
+
 	WRITE_ONCE(rcu_state.jiffies_stall,
-		   jiffies + rcu_jiffies_till_stall_check());
+		   jiffies + delta + rcu_jiffies_till_stall_check());
 }
 
 //////////////////////////////////////////////////////////////////////////////
