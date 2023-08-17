@@ -1090,7 +1090,7 @@ static int xgbe_phy_find_phy_device(struct xgbe_prv_data *pdata)
 				(phy_data->phydev_mode == XGBE_MDIO_MODE_CL45));
 	if (IS_ERR(phydev)) {
 		netdev_err(pdata->netdev, "get_phy_device failed\n");
-		return -ENODEV;
+		return PTR_ERR(phydev);
 	}
 	netif_dbg(pdata, drv, pdata->netdev, "external PHY id is %#010x\n",
 		  phydev->phy_id);
