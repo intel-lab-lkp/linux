@@ -1131,6 +1131,12 @@ struct intel_crtc_state {
 
 	struct {
 		bool has_audio;
+
+		/* Audio rate in Hz */
+		int max_rate;
+
+		/* Number of audio channels */
+		int max_channel_count;
 	} audio;
 
 	/*

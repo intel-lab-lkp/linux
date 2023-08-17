@@ -64,6 +64,9 @@
  * struct &i915_audio_component_audio_ops @audio_ops is called from i915 driver.
  */
 
+#define AUDIO_SAMPLE_CONTAINER_SIZE	32
+#define MAX_CHANNEL_COUNT		8
+
 struct intel_audio_funcs {
 	void (*audio_codec_enable)(struct intel_encoder *encoder,
 				   const struct intel_crtc_state *crtc_state,
@@ -770,6 +773,39 @@ void intel_audio_sdp_split_update(struct intel_encoder *encoder,
 			     crtc_state->sdp_split_enable ? AUD_ENABLE_SDP_SPLIT : 0);
 }
 
+static int calc_audio_bw(int channel_count, int rate)
+{
+	int bandwidth = channel_count * rate * AUDIO_SAMPLE_CONTAINER_SIZE;
+	return bandwidth;
+}
+
+static void calc_audio_config_params(struct intel_crtc_state *pipe_config)
+{
+	struct drm_display_mode *adjusted_mode = &pipe_config->hw.adjusted_mode;
+	int channel_count;
+	int index, rate[] = { 192000, 176000, 96000, 88000, 48000, 44100, 32000 };
+	int audio_req_bandwidth, available_blank_bandwidth, vblank, hblank;
+
+	hblank = adjusted_mode->htotal - adjusted_mode->hdisplay;
+	vblank = adjusted_mode->vtotal - adjusted_mode->vdisplay;
+	available_blank_bandwidth = hblank * vblank *
+				    drm_mode_vrefresh(adjusted_mode) * pipe_config->pipe_bpp;
+	for (channel_count = MAX_CHANNEL_COUNT; channel_count > 0; channel_count--) {
+		for (index = 0; index < ARRAY_SIZE(rate); index++) {
+			audio_req_bandwidth = calc_audio_bw(channel_count,
+							    rate[index]);
+			if (audio_req_bandwidth < available_blank_bandwidth) {
+				pipe_config->audio.max_rate = rate[index];
+				pipe_config->audio.max_channel_count = channel_count;
+				return;
+			}
+		}
+	}
+
+	pipe_config->audio.max_rate = 0;
+	pipe_config->audio.max_channel_count = 0;
+}
+
 bool intel_audio_compute_config(struct intel_encoder *encoder,
 				struct intel_crtc_state *crtc_state,
 				struct drm_connector_state *conn_state)
@@ -790,6 +826,8 @@ bool intel_audio_compute_config(struct intel_encoder *encoder,
 	memcpy(crtc_state->eld, connector->eld, sizeof(crtc_state->eld));
 
 	crtc_state->eld[6] = drm_av_sync_delay(connector, adjusted_mode) / 2;
+
+	calc_audio_config_params(crtc_state);
 
 	return true;
 }
