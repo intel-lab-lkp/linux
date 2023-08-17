@@ -1062,6 +1062,11 @@ static inline bool ata_port_is_frozen(const struct ata_port *ap)
 	return ap->pflags & ATA_PFLAG_FROZEN;
 }
 
+static inline bool ata_qc_has_cdl(struct ata_queued_cmd *qc)
+{
+	return qc->flags & ATA_QCFLAG_HAS_CDL;
+}
+
 extern int ata_std_prereset(struct ata_link *link, unsigned long deadline);
 extern int ata_wait_after_reset(struct ata_link *link, unsigned long deadline,
 				int (*check_ready)(struct ata_link *link));
