@@ -918,15 +918,10 @@ static int zynq_gpio_probe(struct platform_device *pdev)
 	chip->ngpio = gpio->p_data->ngpio;
 
 	/* Retrieve GPIO clock */
-	gpio->clk = devm_clk_get(&pdev->dev, NULL);
+	gpio->clk = devm_clk_get_enabled(&pdev->dev, NULL);
 	if (IS_ERR(gpio->clk))
-		return dev_err_probe(&pdev->dev, PTR_ERR(gpio->clk), "input clock not found.\n");
-
-	ret = clk_prepare_enable(gpio->clk);
-	if (ret) {
-		dev_err(&pdev->dev, "Unable to enable clock.\n");
-		return ret;
-	}
+		return dev_err_probe(&pdev->dev, PTR_ERR(gpio->clk),
+				     "input clock not found or unable to enable clock.\n");
 
 	spin_lock_init(&gpio->dirlock);
 
@@ -977,7 +972,6 @@ err_pm_put:
 	pm_runtime_put(&pdev->dev);
 err_pm_dis:
 	pm_runtime_disable(&pdev->dev);
-	clk_disable_unprepare(gpio->clk);
 
 	return ret;
 }
@@ -997,7 +991,6 @@ static int zynq_gpio_remove(struct platform_device *pdev)
 	if (ret < 0)
 		dev_warn(&pdev->dev, "pm_runtime_get_sync() Failed\n");
 	gpiochip_remove(&gpio->chip);
-	clk_disable_unprepare(gpio->clk);
 	device_set_wakeup_capable(&pdev->dev, 0);
 	pm_runtime_disable(&pdev->dev);
 	return 0;
