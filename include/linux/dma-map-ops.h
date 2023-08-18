@@ -509,4 +509,10 @@ pci_p2pdma_map_segment(struct pci_p2pdma_map_state *state, struct device *dev,
 }
 #endif /* CONFIG_PCI_P2PDMA */
 
+#ifdef CONFIG_ARCH_HAS_DMA_SET_MASK
+void arch_dma_set_mask(struct device *dev, u64 mask);
+#else
+#define arch_dma_set_mask(dev, mask)	do { } while (0)
+#endif
+
 #endif /* _LINUX_DMA_MAP_OPS_H */
