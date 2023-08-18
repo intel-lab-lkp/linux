@@ -3306,6 +3306,14 @@ userspace_pm_rm_id_0_subflow_ns2()
 	wait_rm_sf $ns2 1
 }
 
+userspace_pm_rm_id_0_address_ns2()
+{
+	local tk=$(evts_get_info token "$evts_ns2")
+
+	ip netns exec $ns2 ./pm_nl_ctl rem token $tk id 0
+	wait_rm_addr $ns2 1
+}
+
 # $1: subflows in ns1 ; $2: subflows in ns2
 chk_subflows()
 {
@@ -3477,6 +3485,27 @@ userspace_tests()
 		chk_subflows 2 2
 		userspace_pm_rm_id_0_subflow_ns2
 		chk_rm_nr 0 1
+		chk_mptcp_info subflows 1 subflows 1
+		chk_subflows 1 1
+		kill_events_pids
+		wait $tests_pid
+	fi
+
+	# userspace pm remove id 0 address
+	if reset_with_events "userspace pm remove id 0 address" &&
+	   continue_if mptcp_lib_has_file '/proc/sys/net/mptcp/pm_type'; then
+		set_userspace_pm $ns2
+		pm_nl_set_limits $ns1 0 1
+		speed=10 \
+			run_tests $ns1 $ns2 10.0.1.1 &
+		local tests_pid=$!
+		wait_mpj $ns2
+		userspace_pm_add_sf 10.0.3.2 20
+		chk_join_nr 1 1 1
+		chk_mptcp_info subflows 1 subflows 1
+		chk_subflows 2 2
+		userspace_pm_rm_id_0_address_ns2
+		chk_rm_nr 1 0
 		chk_mptcp_info subflows 1 subflows 1
 		chk_subflows 1 1
 		kill_events_pids
