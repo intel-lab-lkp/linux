@@ -96,11 +96,11 @@ bool hugepage_vma_check(struct vm_area_struct *vma, unsigned long vm_flags,
 		return in_pf;
 
 	/*
-	 * Special VMA and hugetlb VMA.
+	 * khugepaged special VMA and hugetlb VMA.
 	 * Must be checked after dax since some dax mappings may have
 	 * VM_MIXEDMAP set.
 	 */
-	if (vm_flags & VM_NO_KHUGEPAGED)
+	if (!in_pf && !smaps && (vm_flags & VM_NO_KHUGEPAGED))
 		return false;
 
 	/*
@@ -128,12 +128,15 @@ bool hugepage_vma_check(struct vm_area_struct *vma, unsigned long vm_flags,
 					   !hugepage_flags_always())))
 		return false;
 
-	/* Only regular file is valid */
-	if (!in_pf && file_thp_enabled(vma))
-		return true;
-
 	if (!vma_is_anonymous(vma))
-		return false;
+		return in_pf ?
+			/*
+			 * Trust that ->huge_fault() handlers know
+			 * what they are doing in fault path.
+			 */
+			!!vma->vm_ops->huge_fault :
+			/* Only regular file is valid in collapse path */
+			file_thp_enabled(vma);
 
 	if (vma_is_temporary_stack(vma))
 		return false;
