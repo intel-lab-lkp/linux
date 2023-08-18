@@ -299,6 +299,27 @@ free_acpi_buffer:
 	ACPI_FREE(out_obj);
 }
 
+/**
+ * acpi_get_lps0_constraint - get the LPS0 constraint for a device
+ * @dev: device to get constraints for
+ *
+ * Returns:
+ *  - ACPI state value for constraint.
+ *  - Otherwise, ACPI_STATE_UNKNOWN.
+ */
+int acpi_get_lps0_constraint(struct acpi_device *adev)
+{
+	struct lpi_constraints *entry;
+
+	for_each_lpi_constraint(entry) {
+		if (adev->handle != entry->handle)
+			continue;
+		return entry->min_dstate;
+	}
+
+	return ACPI_STATE_UNKNOWN;
+}
+
 static void lpi_check_constraints(void)
 {
 	struct lpi_constraints *entry;
