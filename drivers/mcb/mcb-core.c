@@ -156,13 +156,18 @@ static const struct attribute_group *mcb_carrier_groups[] = {
 };
 
 
-static struct bus_type mcb_bus_type = {
+static struct bus_type mcb_device_type = {
 	.name = "mcb",
 	.match = mcb_match,
 	.uevent = mcb_uevent,
 	.probe = mcb_probe,
 	.remove = mcb_remove,
 	.shutdown = mcb_shutdown,
+};
+
+static struct bus_type mcb_bus_type = {
+	.name = "mcb-bus",
+	.dev_name = "mcb-bus",
 };
 
 static struct device_type mcb_carrier_device_type = {
@@ -186,7 +191,7 @@ int __mcb_register_driver(struct mcb_driver *drv, struct module *owner,
 		return -EINVAL;
 
 	drv->driver.owner = owner;
-	drv->driver.bus = &mcb_bus_type;
+	drv->driver.bus = &mcb_device_type;
 	drv->driver.mod_name = mod_name;
 
 	return driver_register(&drv->driver);
@@ -227,7 +232,7 @@ int mcb_device_register(struct mcb_bus *bus, struct mcb_device *dev)
 
 	device_initialize(&dev->dev);
 	mcb_bus_get(bus);
-	dev->dev.bus = &mcb_bus_type;
+	dev->dev.bus = &mcb_device_type;
 	dev->dev.parent = bus->dev.parent;
 	dev->dev.release = mcb_release_dev;
 	dev->dma_dev = bus->carrier;
@@ -250,6 +255,12 @@ out:
 	return ret;
 }
 EXPORT_SYMBOL_NS_GPL(mcb_device_register, MCB);
+
+
+static void mcb_bus_unregister(struct mcb_bus *bus)
+{
+	device_unregister(&bus->dev);
+}
 
 static void mcb_free_bus(struct device *dev)
 {
@@ -311,7 +322,7 @@ static int __mcb_devices_unregister(struct device *dev, void *data)
 
 static void mcb_devices_unregister(struct mcb_bus *bus)
 {
-	bus_for_each_dev(&mcb_bus_type, NULL, NULL, __mcb_devices_unregister);
+	bus_for_each_dev(&mcb_device_type, NULL, NULL, __mcb_devices_unregister);
 }
 /**
  * mcb_release_bus() - Free a @mcb_bus
@@ -322,6 +333,7 @@ static void mcb_devices_unregister(struct mcb_bus *bus)
 void mcb_release_bus(struct mcb_bus *bus)
 {
 	mcb_devices_unregister(bus);
+	mcb_bus_unregister(bus);
 }
 EXPORT_SYMBOL_NS_GPL(mcb_release_bus, MCB);
 
@@ -410,7 +422,7 @@ static int __mcb_bus_add_devices(struct device *dev, void *data)
  */
 void mcb_bus_add_devices(const struct mcb_bus *bus)
 {
-	bus_for_each_dev(&mcb_bus_type, NULL, NULL, __mcb_bus_add_devices);
+	bus_for_each_dev(&mcb_device_type, NULL, NULL, __mcb_bus_add_devices);
 }
 EXPORT_SYMBOL_NS_GPL(mcb_bus_add_devices, MCB);
 
@@ -499,12 +511,31 @@ EXPORT_SYMBOL_NS_GPL(mcb_get_irq, MCB);
 
 static int mcb_init(void)
 {
-	return bus_register(&mcb_bus_type);
+	int res;
+
+	res = bus_register(&mcb_bus_type);
+
+	if (res < 0)
+		goto mcb_bus_register_fail;
+
+	res = bus_register(&mcb_device_type);
+
+	if (res < 0)
+		goto mcb_device_register_fail;
+
+	return 0;
+
+mcb_device_register_fail:
+	bus_unregister(&mcb_bus_type);
+
+mcb_bus_register_fail:
+	return res;
 }
 
 static void mcb_exit(void)
 {
 	ida_destroy(&mcb_ida);
+	bus_unregister(&mcb_device_type);
 	bus_unregister(&mcb_bus_type);
 }
 
