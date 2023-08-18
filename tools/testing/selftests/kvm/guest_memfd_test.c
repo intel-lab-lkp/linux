@@ -68,7 +68,7 @@ static void test_fallocate(int fd, size_t page_size, size_t total_size)
 	TEST_ASSERT(ret, "fallocate beginning at total_size should fail");
 
 	ret = fallocate(fd, FALLOC_FL_KEEP_SIZE, total_size + page_size, page_size);
-	TEST_ASSERT(ret, "fallocate beginning at total_size should fail");
+	TEST_ASSERT(ret, "fallocate beginning after total_size should fail");
 
 	ret = fallocate(fd, FALLOC_FL_KEEP_SIZE | FALLOC_FL_PUNCH_HOLE,
 			total_size, page_size);
