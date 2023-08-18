@@ -875,6 +875,13 @@
 				bias-pull-up;
 			};
 
+			qup_i2c7_default: qup-i2c7-default-state {
+				pins = "gpio27", "gpio28";
+				function = "qup11_f1";
+				drive-strength = <2>;
+				bias-pull-up;
+			};
+
 			qup_i2c8_default: qup-i2c8-default-state {
 				pins = "gpio19", "gpio20";
 				/* TLMM, GCC and vendor DT all have different indices.. */
@@ -1220,6 +1227,8 @@
 				clock-names = "se";
 				clocks = <&gcc GCC_QUPV3_WRAP1_S1_CLK>;
 				interrupts = <GIC_SPI 508 IRQ_TYPE_LEVEL_HIGH>;
+				pinctrl-0 = <&qup_i2c7_default>;
+				pinctrl-names = "default";
 				dmas = <&gpi_dma1 0 1 QCOM_GPI_I2C>,
 				       <&gpi_dma1 1 1 QCOM_GPI_I2C>;
 				dma-names = "tx", "rx";
