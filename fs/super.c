@@ -93,6 +93,18 @@ static inline bool wait_born(struct super_block *sb)
 	return flags & (SB_BORN | SB_DYING);
 }
 
+static inline bool wait_dead(struct super_block *sb)
+{
+	unsigned int flags;
+
+	/*
+	 * Pairs with smp_store_release() in super_wake() and ensures
+	 * that we see SB_DEAD after we're woken.
+	 */
+	flags = smp_load_acquire(&sb->s_flags);
+	return flags & SB_DEAD;
+}
+
 /**
  * super_lock - wait for superblock to become ready
  * @sb: superblock to wait for
@@ -140,6 +152,33 @@ relock:
 	goto relock;
 }
 
+/**
+ * super_lock_dead - wait for superblock to become ready or fully dead
+ * @sb: superblock to wait for
+ *
+ * Wait for a superblock to be SB_BORN or to be SB_DEAD. In other words,
+ * don't just wait for the superblock to be shutdown in
+ * generic_shutdown_super() but actually wait until sb->kill_sb() has
+ * finished.
+ *
+ * The caller must have acquired a temporary reference on @sb->s_count.
+ *
+ * Return: This returns true if SB_BORN was set, false if SB_DEAD was
+ *         set. The function acquires s_umount and returns with it held.
+ */
+static bool super_lock_dead(struct super_block *sb)
+{
+	if (super_lock(sb, true))
+		return true;
+
+	lockdep_assert_held(&sb->s_umount);
+	super_unlock_excl(sb);
+	/* If superblock is dying, wait for everything to be shutdown. */
+	wait_var_event(&sb->s_flags, wait_dead(sb));
+	__super_lock_excl(sb);
+	return false;
+}
+
 /* wait and acquire read-side of @sb->s_umount */
 static inline bool super_lock_shared(struct super_block *sb)
 {
@@ -153,7 +192,7 @@ static inline bool super_lock_excl(struct super_block *sb)
 }
 
 /* wake waiters */
-#define SUPER_WAKE_FLAGS (SB_BORN | SB_DYING)
+#define SUPER_WAKE_FLAGS (SB_BORN | SB_DYING | SB_DEAD)
 static void super_wake(struct super_block *sb, unsigned int flag)
 {
 	unsigned int flags = sb->s_flags;
@@ -167,6 +206,35 @@ static void super_wake(struct super_block *sb, unsigned int flag)
 	 */
 	smp_store_release(&sb->s_flags, flags | flag);
 	wake_up_var(&sb->s_flags);
+}
+
+/**
+ * grab_super_dead - acquire an active reference to a superblock
+ * @sb: superblock to acquire
+ *
+ * Acquire a temporary reference on a superblock and try to trade it for
+ * an active reference. This is used in sget{_fc}() to wait for a
+ * superblock to either become SB_BORN or for it to pass through
+ * sb->kill() and be marked as SB_DEAD.
+ *
+ * Return: This returns true if an active reference could be acquired,
+ *         false if not. The function acquires s_umount and returns with
+ *         it held.
+ */
+static bool grab_super_dead(struct super_block *s) __releases(sb_lock)
+{
+	bool born;
+
+	s->s_count++;
+	spin_unlock(&sb_lock);
+	born = super_lock_dead(s);
+	if (born && atomic_inc_not_zero(&s->s_active)) {
+		put_super(s);
+		return true;
+	}
+	up_write(&s->s_umount);
+	put_super(s);
+	return false;
 }
 
 /*
@@ -456,6 +524,25 @@ void deactivate_locked_super(struct super_block *s)
 		list_lru_destroy(&s->s_dentry_lru);
 		list_lru_destroy(&s->s_inode_lru);
 
+		/*
+		 * Remove it from @fs_supers so it isn't found by new
+		 * sget{_fc}() walkers anymore. Any concurrent mounter still
+		 * managing to grab a temporary reference is guaranteed to
+		 * already see SB_DYING and will wait until we notify them about
+		 * SB_DEAD.
+		 */
+		spin_lock(&sb_lock);
+		hlist_del_init(&s->s_instances);
+		spin_unlock(&sb_lock);
+
+		/*
+		 * Let concurrent mounts know that this thing is really dead.
+		 * We don't need @sb->s_umount here as every concurrent caller
+		 * will see SB_DYING and either discard the superblock or wait
+		 * for SB_DEAD.
+		 */
+		super_wake(s, SB_DEAD);
+
 		put_filesystem(fs);
 		put_super(s);
 	} else {
@@ -638,15 +725,14 @@ void generic_shutdown_super(struct super_block *sb)
 			spin_unlock(&sb->s_inode_list_lock);
 		}
 	}
-	spin_lock(&sb_lock);
-	/* should be initialized for __put_super_and_need_restart() */
-	hlist_del_init(&sb->s_instances);
-	spin_unlock(&sb_lock);
 	/*
 	 * Broadcast to everyone that grabbed a temporary reference to this
 	 * superblock before we removed it from @fs_supers that the superblock
 	 * is dying. Every walker of @fs_supers outside of sget{_fc}() will now
 	 * discard this superblock and treat it as dead.
+	 *
+	 * We leave the superblock on @fs_supers so it can be found by
+	 * sget{_fc}() until we passed sb->kill_sb().
 	 */
 	super_wake(sb, SB_DYING);
 	super_unlock_excl(sb);
@@ -741,7 +827,7 @@ share_extant_sb:
 		destroy_unused_super(s);
 		return ERR_PTR(-EBUSY);
 	}
-	if (!grab_super(old))
+	if (!grab_super_dead(old))
 		goto retry;
 	destroy_unused_super(s);
 	return old;
@@ -785,7 +871,7 @@ retry:
 				destroy_unused_super(s);
 				return ERR_PTR(-EBUSY);
 			}
-			if (!grab_super(old))
+			if (!grab_super_dead(old))
 				goto retry;
 			destroy_unused_super(s);
 			return old;
