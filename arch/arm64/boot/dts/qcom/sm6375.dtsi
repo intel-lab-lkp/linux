@@ -885,7 +885,7 @@
 
 			qup_i2c10_default: qup-i2c10-default-state {
 				pins = "gpio4", "gpio5";
-				function = "qup10";
+				function = "qup14";
 				drive-strength = <2>;
 				bias-pull-up;
 			};
