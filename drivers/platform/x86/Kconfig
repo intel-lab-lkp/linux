@@ -189,6 +189,17 @@ config ACER_WMI
 	  If you have an ACPI-WMI compatible Acer/ Wistron laptop, say Y or M
 	  here.
 
+config SILICOM_PLATFORM
+	tristate "Silicom Edge Networking device support"
+	depends on DMI
+	select LEDS_CLASS_MULTICOLOR
+	select GPIOLIB
+	help
+	  This option enables support for the LEDs/GPIO/etc downstream of the
+	  embedded controller on Silicom "Cordoba" hardware and derivatives.
+
+	  If you have a Silicom network appliance, say Y or M here.
+
 source "drivers/platform/x86/amd/Kconfig"
 
 config ADV_SWBUTTON
