@@ -3474,7 +3474,7 @@ int intel_dbuf_init(struct drm_i915_private *i915)
  * Configure MBUS_CTL and all DBUF_CTL_S of each slice to join_mbus state before
  * update the request state of all DBUS slices.
  */
-static void update_mbus_pre_enable(struct intel_atomic_state *state)
+static void intel_dbuf_mbus_update(struct intel_atomic_state *state)
 {
 	struct drm_i915_private *i915 = to_i915(state->base.dev);
 	u32 mbus_ctl, dbuf_min_tracker_val;
@@ -3524,7 +3524,9 @@ void intel_dbuf_pre_plane_update(struct intel_atomic_state *state)
 
 	WARN_ON(!new_dbuf_state->base.changed);
 
-	update_mbus_pre_enable(state);
+	if (hweight8(new_dbuf_state->active_pipes) <= hweight8(old_dbuf_state->active_pipes))
+		intel_dbuf_mbus_update(state);
+
 	gen9_dbuf_slices_update(i915,
 				old_dbuf_state->enabled_slices |
 				new_dbuf_state->enabled_slices);
@@ -3544,6 +3546,9 @@ void intel_dbuf_post_plane_update(struct intel_atomic_state *state)
 		return;
 
 	WARN_ON(!new_dbuf_state->base.changed);
+
+	if (hweight8(new_dbuf_state->active_pipes) > hweight8(old_dbuf_state->active_pipes))
+		intel_dbuf_mbus_update(state);
 
 	gen9_dbuf_slices_update(i915,
 				new_dbuf_state->enabled_slices);
