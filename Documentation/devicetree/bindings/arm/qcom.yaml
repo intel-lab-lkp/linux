@@ -941,6 +941,7 @@ properties:
       - items:
           - enum:
               - sony,pdx225
+              - sony,pdx235
           - const: qcom,sm6375
 
       - items:
@@ -1086,6 +1087,7 @@ allOf:
               - qcom,sm6115
               - qcom,sm6125
               - qcom,sm6350
+              - qcom,sm6375
               - qcom,sm7225
               - qcom,sm8150
               - qcom,sm8250
