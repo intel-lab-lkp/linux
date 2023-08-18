@@ -3225,14 +3225,22 @@ fail_tests()
 	fi
 }
 
+# $1: info name ; $2: ns ; $3: type
+evts_get_info()
+{
+	local t=${3:-1}
+
+	grep "^type:$t," "${2}" |
+	sed -n 's/.*\('${1}':\)\([0-9a-f:.]*\).*$/\2/p;q'
+}
+
 userspace_pm_add_addr()
 {
 	local addr=$1
 	local id=$2
 	local tk
 
-	tk=$(grep "type:1," "$evts_ns1" |
-	     sed -n 's/.*\(token:\)\([[:digit:]]*\).*$/\2/p;q')
+	tk=$(evts_get_info token "$evts_ns1")
 	ip netns exec $ns1 ./pm_nl_ctl ann $addr token $tk id $id
 	sleep 1
 }
@@ -3243,14 +3251,10 @@ userspace_pm_rm_sf_addr_ns1()
 	local id=$2
 	local tk sp da dp
 
-	tk=$(grep "type:1," "$evts_ns1" |
-	     sed -n 's/.*\(token:\)\([[:digit:]]*\).*$/\2/p;q')
-	sp=$(grep "type:10" "$evts_ns1" |
-	     sed -n 's/.*\(sport:\)\([[:digit:]]*\).*$/\2/p;q')
-	da=$(grep "type:10" "$evts_ns1" |
-	     sed -n 's/.*\(daddr6:\)\([0-9a-f:.]*\).*$/\2/p;q')
-	dp=$(grep "type:10" "$evts_ns1" |
-	     sed -n 's/.*\(dport:\)\([[:digit:]]*\).*$/\2/p;q')
+	tk=$(evts_get_info token "$evts_ns1")
+	sp=$(evts_get_info sport "$evts_ns1" 10)
+	da=$(evts_get_info daddr6 "$evts_ns1" 10)
+	dp=$(evts_get_info dport "$evts_ns1" 10)
 	ip netns exec $ns1 ./pm_nl_ctl rem token $tk id $id
 	ip netns exec $ns1 ./pm_nl_ctl dsf lip "::ffff:$addr" \
 				lport $sp rip $da rport $dp token $tk
@@ -3264,9 +3268,9 @@ userspace_pm_add_sf()
 	local id=$2
 	local tk da dp
 
-	tk=$(sed -n 's/.*\(token:\)\([[:digit:]]*\).*$/\2/p;q' "$evts_ns2")
-	da=$(sed -n 's/.*\(daddr4:\)\([0-9.]*\).*$/\2/p;q' "$evts_ns2")
-	dp=$(sed -n 's/.*\(dport:\)\([[:digit:]]*\).*$/\2/p;q' "$evts_ns2")
+	tk=$(evts_get_info token "$evts_ns2")
+	da=$(evts_get_info daddr4 "$evts_ns2")
+	dp=$(evts_get_info dport "$evts_ns2")
 	ip netns exec $ns2 ./pm_nl_ctl csf lip $addr lid $id \
 				rip $da rport $dp token $tk
 	sleep 1
@@ -3278,11 +3282,10 @@ userspace_pm_rm_sf_addr_ns2()
 	local id=$2
 	local tk da dp sp
 
-	tk=$(sed -n 's/.*\(token:\)\([[:digit:]]*\).*$/\2/p;q' "$evts_ns2")
-	da=$(sed -n 's/.*\(daddr4:\)\([0-9.]*\).*$/\2/p;q' "$evts_ns2")
-	dp=$(sed -n 's/.*\(dport:\)\([[:digit:]]*\).*$/\2/p;q' "$evts_ns2")
-	sp=$(grep "type:10" "$evts_ns2" |
-	     sed -n 's/.*\(sport:\)\([[:digit:]]*\).*$/\2/p;q')
+	tk=$(evts_get_info token "$evts_ns2")
+	da=$(evts_get_info daddr4 "$evts_ns2")
+	dp=$(evts_get_info dport "$evts_ns2")
+	sp=$(evts_get_info sport "$evts_ns2" 10)
 	ip netns exec $ns2 ./pm_nl_ctl rem token $tk id $id
 	ip netns exec $ns2 ./pm_nl_ctl dsf lip $addr lport $sp \
 				rip $da rport $dp token $tk
