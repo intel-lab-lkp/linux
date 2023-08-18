@@ -3049,10 +3049,11 @@ bool pci_bridge_d3_possible(struct pci_dev *bridge)
 			return true;
 
 		/*
-		 * It is safe to put Intel PCIe ports from 2015 or newer
+		 * It is safe to put Intel PCIe ports from 2015 to 2024
 		 * to D3.
 		 */
 		if (bridge->vendor == PCI_VENDOR_ID_INTEL &&
+		    dmi_get_bios_year() <= 2024 &&
 		    dmi_get_bios_year() >= 2015)
 			return true;
 		break;
