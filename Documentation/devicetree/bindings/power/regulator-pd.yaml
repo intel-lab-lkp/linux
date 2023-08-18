@@ -1,0 +1,71 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/power/regulator-pd.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Regulator Power Domain
+
+maintainers:
+  - Shenwei Wang <shenwei.wang@nxp.com>
+
+description: |
+  This describes a power domain which manages a group of regulators.
+
+allOf:
+  - $ref: power-domain.yaml#
+
+properties:
+  compatible:
+    items:
+      - const: regulator-power-domain
+
+  '#power-domain-cells':
+    const: 1
+
+  regulator-number:
+    minimum: 1
+    maximum: 100
+    description: The count of regulator to be managed by this power domain
+
+patternProperties:
+  "regulator-[0-99]-supply$":
+    description: The regulator supply phandle to be managed by this power domain
+
+required:
+  - compatible
+  - '#power-domain-cells'
+  - regulator-number
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+
+    reg1: regulator-1 {
+    	compatible = "regulator-fixed";
+    	regulator-name = "REG1";
+    	regulator-min-microvolt = <3000000>;
+    	regulator-max-microvolt = <3000000>;
+    	gpio = <&lsio_gpio4 19 GPIO_ACTIVE_HIGH>;
+    	enable-active-high;
+    };
+
+    reg2: regulator-2 {
+    	compatible = "regulator-fixed";
+    	regulator-name = "REG2";
+    	regulator-min-microvolt = <3000000>;
+    	regulator-max-microvolt = <3000000>;
+    	gpio = <&lsio_gpio4 20 GPIO_ACTIVE_HIGH>;
+    	enable-active-high;
+    };
+
+    power-controller {
+        compatible = "regulator-power-domain";
+        #power-domain-cells = <1>;
+
+        regulator-number = <2>;
+        regulator-0-supply = <&reg1>;
+        regulator-1-supply = <&reg2>;
+    };
