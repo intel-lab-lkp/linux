@@ -359,6 +359,7 @@ static void mmc_setup_queue(struct mmc_queue *mq, struct mmc_card *card)
 		blk_queue_bounce_limit(mq->queue, BLK_BOUNCE_HIGH);
 	blk_queue_max_hw_sectors(mq->queue,
 		min(host->max_blk_count, host->max_req_size / 512));
+	blk_queue_io_opt(mq->queue, host->max_req_size);
 	if (host->can_dma_map_merge)
 		WARN(!blk_queue_can_use_dma_map_merging(mq->queue,
 							mmc_dev(host)),
