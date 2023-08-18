@@ -204,6 +204,11 @@ static int tegra_fuse_acpi_probe(struct platform_device *pdev)
 		fuse->soc = &tegra234_fuse_soc;
 		break;
 #endif
+#if defined(CONFIG_ARCH_TEGRA_241_SOC)
+	case TEGRA241:
+		fuse->soc = &tegra241_fuse_soc;
+		break;
+#endif
 	default:
 		dev_err(&pdev->dev, "Unsupported SoC: %02x\n", chip);
 		return -EINVAL;
