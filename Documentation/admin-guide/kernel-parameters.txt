@@ -7152,3 +7152,11 @@
 				xmon commands.
 			off	xmon is disabled.
 
+	wbrf=		[KNL]
+			Format: { on | auto (default) | off }
+			Controls if WBRF features should be forced on or off.
+			on	Force enable the WBRF features.
+			auto	Up to the system to do proper checks to
+				determine the WBRF features should be enabled
+				or not.
+			off	Force disable the WBRF features.
