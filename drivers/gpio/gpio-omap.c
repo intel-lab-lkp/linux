@@ -1450,13 +1450,11 @@ static int omap_gpio_probe(struct platform_device *pdev)
 	}
 
 	if (bank->dbck_flag) {
-		bank->dbck = devm_clk_get(dev, "dbclk");
+		bank->dbck = devm_clk_get_prepared(dev, "dbclk");
 		if (IS_ERR(bank->dbck)) {
 			dev_err(dev,
 				"Could not get gpio dbck. Disable debounce\n");
 			bank->dbck_flag = false;
-		} else {
-			clk_prepare(bank->dbck);
 		}
 	}
 
@@ -1474,8 +1472,6 @@ static int omap_gpio_probe(struct platform_device *pdev)
 	if (ret) {
 		pm_runtime_put_sync(dev);
 		pm_runtime_disable(dev);
-		if (bank->dbck_flag)
-			clk_unprepare(bank->dbck);
 		return ret;
 	}
 
@@ -1496,8 +1492,6 @@ static int omap_gpio_remove(struct platform_device *pdev)
 	cpu_pm_unregister_notifier(&bank->nb);
 	gpiochip_remove(&bank->chip);
 	pm_runtime_disable(&pdev->dev);
-	if (bank->dbck_flag)
-		clk_unprepare(bank->dbck);
 
 	return 0;
 }
