@@ -639,9 +639,9 @@ static kvm_mn_ret_t __kvm_handle_hva_range(struct kvm *kvm,
 		kvm_flush_remote_tlbs(kvm);
 
 	if (r.locked) {
-		KVM_MMU_UNLOCK(kvm);
 		if (!IS_KVM_NULL_FN(range->on_unlock))
 			range->on_unlock(kvm);
+		KVM_MMU_UNLOCK(kvm);
 	}
 
 	srcu_read_unlock(&kvm->srcu, idx);
@@ -824,6 +824,8 @@ static int kvm_mmu_notifier_invalidate_range_start(struct mmu_notifier *mn,
 
 void kvm_mmu_invalidate_end(struct kvm *kvm)
 {
+	lockdep_assert_held_write(&kvm->mmu_lock);
+
 	/*
 	 * This sequence increase will notify the kvm page fault that
 	 * the page that is going to be mapped in the spte could have
@@ -2444,9 +2446,9 @@ static __always_inline void kvm_handle_gfn_range(struct kvm *kvm,
 		kvm_flush_remote_tlbs(kvm);
 
 	if (r.locked) {
-		KVM_MMU_UNLOCK(kvm);
 		if (!IS_KVM_NULL_FN(range->on_unlock))
 			range->on_unlock(kvm);
+		KVM_MMU_UNLOCK(kvm);
 	}
 }
 
