@@ -707,6 +707,7 @@ void pci_set_acpi_fwnode(struct pci_dev *dev);
 int pci_dev_acpi_reset(struct pci_dev *dev, bool probe);
 bool acpi_pci_power_manageable(struct pci_dev *dev);
 bool acpi_pci_bridge_d3(struct pci_dev *dev);
+bool acpi_pci_check_d3_constraint(struct pci_dev *dev);
 int acpi_pci_set_power_state(struct pci_dev *dev, pci_power_t state);
 pci_power_t acpi_pci_get_power_state(struct pci_dev *dev);
 void acpi_pci_refresh_power_state(struct pci_dev *dev);
@@ -728,6 +729,10 @@ static inline bool acpi_pci_power_manageable(struct pci_dev *dev)
 	return false;
 }
 static inline bool acpi_pci_bridge_d3(struct pci_dev *dev)
+{
+	return false;
+}
+static inline bool acpi_pci_check_d3_constraint(struct pci_dev *dev)
 {
 	return false;
 }

@@ -1082,6 +1082,14 @@ static inline bool platform_pci_bridge_d3(struct pci_dev *dev)
 	return acpi_pci_bridge_d3(dev);
 }
 
+static inline bool platform_check_d3_constraint(struct pci_dev *dev)
+{
+	if (pci_use_mid_pm())
+		return false;
+
+	return acpi_pci_check_d3_constraint(dev);
+}
+
 /**
  * pci_update_current_state - Read power state of given device and cache it
  * @dev: PCI device to handle.
@@ -3035,6 +3043,10 @@ bool pci_bridge_d3_possible(struct pci_dev *bridge)
 
 		if (dmi_check_system(bridge_d3_blacklist))
 			return false;
+
+		/* the platform specifies in LPS0 constraints to use D3 */
+		if (platform_check_d3_constraint(bridge))
+			return true;
 
 		/*
 		 * It is safe to put Intel PCIe ports from 2015 or newer

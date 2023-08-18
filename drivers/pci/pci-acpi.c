@@ -1081,6 +1081,20 @@ bool acpi_pci_bridge_d3(struct pci_dev *dev)
 	return false;
 }
 
+/**
+ * acpi_pci_check_d3_constraint - Check if device specifies a D3 platform constraint
+ * @dev: PCI device to check
+ *
+ * This function checks if the platform specifies that a given PCI device should
+ * be put into D3 to satisfy a low power platform constraint
+ *
+ * Returns: TRUE if constraint for D3hot or deeper, FALSE otherwise.
+ */
+bool acpi_pci_check_d3_constraint(struct pci_dev *dev)
+{
+	return acpi_get_lps0_constraint(&dev->dev) >= ACPI_STATE_D3_HOT;
+}
+
 static void acpi_pci_config_space_access(struct pci_dev *dev, bool enable)
 {
 	int val = enable ? ACPI_REG_CONNECT : ACPI_REG_DISCONNECT;
