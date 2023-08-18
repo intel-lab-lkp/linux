@@ -3944,6 +3944,14 @@ out:
 	rcu_read_unlock();
 }
 
+bool cpus_share_l2c(int this_cpu, int that_cpu)
+{
+	if (this_cpu == that_cpu)
+		return true;
+
+	return per_cpu(sd_l2c_id, this_cpu) == per_cpu(sd_l2c_id, that_cpu);
+}
+
 bool cpus_share_llc(int this_cpu, int that_cpu)
 {
 	if (this_cpu == that_cpu)

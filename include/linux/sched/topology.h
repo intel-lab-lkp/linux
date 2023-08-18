@@ -178,6 +178,7 @@ extern void partition_sched_domains(int ndoms_new, cpumask_var_t doms_new[],
 cpumask_var_t *alloc_sched_domains(unsigned int ndoms);
 void free_sched_domains(cpumask_var_t doms[], unsigned int ndoms);
 
+bool cpus_share_l2c(int this_cpu, int that_cpu);
 bool cpus_share_llc(int this_cpu, int that_cpu);
 
 typedef const struct cpumask *(*sched_domain_mask_f)(int cpu);
@@ -225,6 +226,11 @@ static inline void
 partition_sched_domains(int ndoms_new, cpumask_var_t doms_new[],
 			struct sched_domain_attr *dattr_new)
 {
+}
+
+static inline bool cpus_share_l2c(int this_cpu, int that_cpu)
+{
+	return true;
 }
 
 static inline bool cpus_share_llc(int this_cpu, int that_cpu)

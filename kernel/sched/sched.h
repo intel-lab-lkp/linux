@@ -1816,6 +1816,8 @@ static inline struct sched_domain *lowest_flag_domain(int cpu, int flag)
 	return sd;
 }
 
+DECLARE_PER_CPU(int, sd_l2c_size);
+DECLARE_PER_CPU(int, sd_l2c_id);
 DECLARE_PER_CPU(struct sched_domain __rcu *, sd_llc);
 DECLARE_PER_CPU(int, sd_llc_size);
 DECLARE_PER_CPU(int, sd_llc_id);
