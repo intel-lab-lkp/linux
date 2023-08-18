@@ -40,12 +40,10 @@ typedef unsigned char  u8;
 typedef unsigned short u16;
 typedef unsigned int   u32;
 
-/* Minimal number of setup sectors */
-#define SETUP_SECT_MIN 5
-#define SETUP_SECT_MAX 64
+#define SETUP_SECT_NUM 32
 
 /* This must be large enough to hold the entire setup */
-u8 buf[SETUP_SECT_MAX*512];
+u8 buf[(SETUP_SECT_NUM+1)*512];
 
 #define PECOFF_RELOC_RESERVE 0x20
 
@@ -360,8 +358,9 @@ int main(int argc, char ** argv)
 
 	/* Pad unused space with zeros */
 	setup_sectors = (c + 511) / 512;
-	if (setup_sectors < SETUP_SECT_MIN)
-		setup_sectors = SETUP_SECT_MIN;
+	if (setup_sectors > SETUP_SECT_NUM)
+		die("setup size exceeds maximum");
+	setup_sectors = SETUP_SECT_NUM;
 	i = setup_sectors*512;
 	memset(buf+c, 0, i-c);
 
@@ -388,7 +387,6 @@ int main(int argc, char ** argv)
 #endif
 
 	/* Patch the setup code with the appropriate size parameters */
-	buf[0x1f1] = setup_sectors-1;
 	put_unaligned_le32(sys_size, &buf[0x1f4]);
 
 	update_pecoff_text(setup_sectors * 512, i + (sys_size * 16));
