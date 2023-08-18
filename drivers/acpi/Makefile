@@ -133,3 +133,5 @@ obj-$(CONFIG_ARM64)		+= arm64/
 obj-$(CONFIG_ACPI_VIOT)		+= viot.o
 
 obj-$(CONFIG_RISCV)		+= riscv/
+
+obj-$(CONFIG_WBRF_AMD_ACPI)	+= amd_wbrf.o
