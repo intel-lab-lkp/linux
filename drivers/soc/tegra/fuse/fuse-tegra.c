@@ -113,10 +113,44 @@ static void tegra_fuse_restore(void *base)
 	fuse->clk = NULL;
 }
 
+static int tegra_fuse_nvmem_register(struct tegra_fuse *fuse,
+				     struct device *dev)
+{
+	struct nvmem_config nvmem;
+	int err;
+
+	memset(&nvmem, 0, sizeof(nvmem));
+	nvmem.dev = dev;
+	nvmem.name = "fuse";
+	nvmem.id = -1;
+	nvmem.owner = THIS_MODULE;
+	nvmem.cells = fuse->soc->cells;
+	nvmem.ncells = fuse->soc->num_cells;
+	nvmem.keepout = fuse->soc->keepouts;
+	nvmem.nkeepout = fuse->soc->num_keepouts;
+	nvmem.type = NVMEM_TYPE_OTP;
+	nvmem.read_only = true;
+	nvmem.root_only = false;
+	nvmem.reg_read = tegra_fuse_read;
+	nvmem.size = fuse->soc->info->size;
+	nvmem.word_size = 4;
+	nvmem.stride = 4;
+	nvmem.priv = fuse;
+
+	fuse->nvmem = devm_nvmem_register(dev, &nvmem);
+	if (IS_ERR(fuse->nvmem)) {
+		err = PTR_ERR(fuse->nvmem);
+		dev_err(dev, "failed to register NVMEM device: %d\n",
+			err);
+		return err;
+	}
+
+	return 0;
+}
+
 static int tegra_fuse_probe(struct platform_device *pdev)
 {
 	void __iomem *base = fuse->base;
-	struct nvmem_config nvmem;
 	struct resource *res;
 	int err;
 
@@ -152,31 +186,9 @@ static int tegra_fuse_probe(struct platform_device *pdev)
 			return err;
 	}
 
-	memset(&nvmem, 0, sizeof(nvmem));
-	nvmem.dev = &pdev->dev;
-	nvmem.name = "fuse";
-	nvmem.id = -1;
-	nvmem.owner = THIS_MODULE;
-	nvmem.cells = fuse->soc->cells;
-	nvmem.ncells = fuse->soc->num_cells;
-	nvmem.keepout = fuse->soc->keepouts;
-	nvmem.nkeepout = fuse->soc->num_keepouts;
-	nvmem.type = NVMEM_TYPE_OTP;
-	nvmem.read_only = true;
-	nvmem.root_only = false;
-	nvmem.reg_read = tegra_fuse_read;
-	nvmem.size = fuse->soc->info->size;
-	nvmem.word_size = 4;
-	nvmem.stride = 4;
-	nvmem.priv = fuse;
-
-	fuse->nvmem = devm_nvmem_register(&pdev->dev, &nvmem);
-	if (IS_ERR(fuse->nvmem)) {
-		err = PTR_ERR(fuse->nvmem);
-		dev_err(&pdev->dev, "failed to register NVMEM device: %d\n",
-			err);
+	err = tegra_fuse_nvmem_register(fuse, &pdev->dev);
+	if (err)
 		return err;
-	}
 
 	fuse->rst = devm_reset_control_get_optional(&pdev->dev, "fuse");
 	if (IS_ERR(fuse->rst)) {
