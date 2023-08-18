@@ -661,7 +661,7 @@ static void destroy_sched_domains(struct sched_domain *sd)
  *
  * Also keep a unique ID per domain (we use the first CPU number in
  * the cpumask of the domain), this allows us to quickly tell if
- * two CPUs are in the same cache domain, see cpus_share_cache().
+ * two CPUs are in the same cache domain, see cpus_share_llc().
  */
 DEFINE_PER_CPU(struct sched_domain __rcu *, sd_llc);
 DEFINE_PER_CPU(int, sd_llc_size);

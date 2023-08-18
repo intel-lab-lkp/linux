@@ -3944,7 +3944,7 @@ out:
 	rcu_read_unlock();
 }
 
-bool cpus_share_cache(int this_cpu, int that_cpu)
+bool cpus_share_llc(int this_cpu, int that_cpu)
 {
 	if (this_cpu == that_cpu)
 		return true;
@@ -3969,7 +3969,7 @@ static inline bool ttwu_queue_cond(struct task_struct *p, int cpu)
 	 * If the CPU does not share cache, then queue the task on the
 	 * remote rqs wakelist to avoid accessing remote data.
 	 */
-	if (!cpus_share_cache(smp_processor_id(), cpu))
+	if (!cpus_share_llc(smp_processor_id(), cpu))
 		return true;
 
 	if (cpu == smp_processor_id())
