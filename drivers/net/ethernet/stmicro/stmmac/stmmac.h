@@ -210,12 +210,17 @@ struct stmmac_dma_conf {
 	unsigned int dma_tx_size;
 };
 
+#define STMMAC_PRIV_FLG_TXQ_COE_LIMIT	BIT(0)
+
 struct stmmac_priv {
 	/* Frequently used values are kept adjacent for cache effect */
 	u32 tx_coal_frames[MTL_MAX_TX_QUEUES];
 	u32 tx_coal_timer[MTL_MAX_TX_QUEUES];
 	u32 rx_coal_frames[MTL_MAX_TX_QUEUES];
 
+	u32 flags;
+
+	u32 tx_q_with_coe;
 	int hwts_tx_en;
 	bool tx_path_in_lpi_mode;
 	bool tso;
