@@ -2614,13 +2614,6 @@ skl_compute_ddb(struct intel_atomic_state *state)
 		if (ret)
 			return ret;
 
-		if (old_dbuf_state->joined_mbus != new_dbuf_state->joined_mbus) {
-			/* TODO: Implement vblank synchronized MBUS joining changes */
-			ret = intel_modeset_all_pipes(state, "MBUS joining change");
-			if (ret)
-				return ret;
-		}
-
 		drm_dbg_kms(&i915->drm,
 			    "Enabled dbuf slices 0x%x -> 0x%x (total dbuf slices 0x%x), mbus joined? %s->%s\n",
 			    old_dbuf_state->enabled_slices,
@@ -3524,8 +3517,15 @@ void intel_dbuf_pre_plane_update(struct intel_atomic_state *state)
 
 	WARN_ON(!new_dbuf_state->base.changed);
 
-	if (hweight8(new_dbuf_state->active_pipes) <= hweight8(old_dbuf_state->active_pipes))
+	/*
+	 * Switching from multiple to single display scenario.
+	 * Also we put here "<=" instead of "<" for suboptimal cases, when
+	 * we switch from single => single display, enabling mbus join.
+	 */
+	if (hweight8(new_dbuf_state->active_pipes) <= hweight8(old_dbuf_state->active_pipes)) {
 		intel_dbuf_mbus_update(state);
+		intel_mbus_dbox_update(state);
+	}
 
 	gen9_dbuf_slices_update(i915,
 				old_dbuf_state->enabled_slices |
@@ -3547,8 +3547,26 @@ void intel_dbuf_post_plane_update(struct intel_atomic_state *state)
 
 	WARN_ON(!new_dbuf_state->base.changed);
 
-	if (hweight8(new_dbuf_state->active_pipes) > hweight8(old_dbuf_state->active_pipes))
+	/*
+	 * Switching from single to multiple display scenario
+	 */
+	if (hweight8(new_dbuf_state->active_pipes) > hweight8(old_dbuf_state->active_pipes)) {
+		struct intel_crtc *crtc;
+		struct intel_crtc_state *old_crtc_state;
+		int i;
 		intel_dbuf_mbus_update(state);
+		intel_mbus_dbox_update(state);
+
+		for_each_old_intel_crtc_in_state(state, crtc, old_crtc_state, i) {
+			/*
+			 * According to BSpec we should wait vblank on previously single display
+			 */
+			if (!old_crtc_state->hw.active)
+				continue;
+
+			intel_crtc_wait_for_next_vblank(crtc);
+		}
+	}
 
 	gen9_dbuf_slices_update(i915,
 				new_dbuf_state->enabled_slices);
