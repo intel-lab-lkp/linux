@@ -3,6 +3,7 @@
  * Copyright (c) 2014-2023, NVIDIA CORPORATION.  All rights reserved.
  */
 
+#include <linux/acpi.h>
 #include <linux/export.h>
 #include <linux/io.h>
 #include <linux/kernel.h>
@@ -120,6 +121,11 @@ int tegra194_miscreg_mask_serror(void)
 }
 EXPORT_SYMBOL(tegra194_miscreg_mask_serror);
 
+static const struct acpi_device_id apbmisc_acpi_match[] = {
+	{ .id = "NVDA2010", 0 },
+	{ /* sentinel */ }
+};
+
 static const struct of_device_id apbmisc_match[] __initconst = {
 	{ .compatible = "nvidia,tegra20-apbmisc", },
 	{ .compatible = "nvidia,tegra186-misc", },
@@ -160,9 +166,28 @@ void __init tegra_init_revision(void)
 	tegra_sku_info.platform = tegra_get_platform();
 }
 
-void __init tegra_init_apbmisc(void)
+static void tegra_init_apbmisc_base(struct resource *apbmisc,
+				    struct resource *straps)
 {
 	void __iomem *strapping_base;
+
+	apbmisc_base = ioremap(apbmisc->start, resource_size(apbmisc));
+	if (!apbmisc_base)
+		pr_err("failed to map APBMISC registers\n");
+	else
+		chipid = readl_relaxed(apbmisc_base + 4);
+
+	strapping_base = ioremap(straps->start, resource_size(straps));
+	if (!strapping_base) {
+		pr_err("failed to map strapping options registers\n");
+	} else {
+		strapping = readl_relaxed(strapping_base);
+		iounmap(strapping_base);
+	}
+}
+
+void __init tegra_init_apbmisc(void)
+{
 	struct resource apbmisc, straps;
 	struct device_node *np;
 
@@ -219,23 +244,39 @@ void __init tegra_init_apbmisc(void)
 		}
 	}
 
-	apbmisc_base = ioremap(apbmisc.start, resource_size(&apbmisc));
-	if (!apbmisc_base) {
-		pr_err("failed to map APBMISC registers\n");
-	} else {
-		chipid = readl_relaxed(apbmisc_base + 4);
-	}
-
-	strapping_base = ioremap(straps.start, resource_size(&straps));
-	if (!strapping_base) {
-		pr_err("failed to map strapping options registers\n");
-	} else {
-		strapping = readl_relaxed(strapping_base);
-		iounmap(strapping_base);
-	}
-
+	tegra_init_apbmisc_base(&apbmisc, &straps);
 	long_ram_code = of_property_read_bool(np, "nvidia,long-ram-code");
 
 put:
 	of_node_put(np);
+}
+
+void tegra_acpi_init_apbmisc(void)
+{
+	struct acpi_device *adev = NULL;
+	struct resource *apbmisc, *straps;
+	struct list_head resource_list;
+	struct resource_entry *rentry;
+	int rcount;
+
+	adev = acpi_dev_get_first_match_dev(apbmisc_acpi_match[0].id, NULL, -1);
+	if (!adev)
+		return;
+
+	INIT_LIST_HEAD(&resource_list);
+
+	rcount = acpi_dev_get_memory_resources(adev, &resource_list);
+	if (rcount != 2) {
+		pr_err("failed to get APBMISC memory resources");
+		return;
+	}
+
+	rentry = list_first_entry(&resource_list, struct resource_entry, node);
+	apbmisc = rentry->res;
+	rentry = list_next_entry(rentry, node);
+	straps = rentry->res;
+
+	tegra_init_apbmisc_base(apbmisc, straps);
+	acpi_dev_free_resource_list(&resource_list);
+	acpi_dev_put(adev);
 }
