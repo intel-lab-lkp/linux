@@ -243,6 +243,15 @@ config FSL_RAID
 	  the capability to offload memcpy, xor and pq computation
 	  for raid5/6.
 
+config HISI_ASCEND_SDMA
+	tristate "HiSilicon Ascend SDMA Engine support"
+	depends on ARCH_HISI && ARM64
+	depends on IOMMU_API && OF
+	select DMA_ENGINE
+	select DMA_VIRTUAL_CHANNELS
+	help
+	  Enable support for HiSilicon Ascend SDMA engine.
+
 config HISI_DMA
 	tristate "HiSilicon DMA Engine support"
 	depends on ARCH_HISI || COMPILE_TEST
