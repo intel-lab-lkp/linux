@@ -136,7 +136,16 @@ bool hugepage_vma_check(struct vm_area_struct *vma, unsigned long vm_flags,
 			 */
 			!!vma->vm_ops->huge_fault :
 			/* Only regular file is valid in collapse path */
-			file_thp_enabled(vma);
+			file_thp_enabled(vma) ||
+			 /*
+			  * THPeligible bit of smaps should surface the
+			  * possibility of THP through fault if the filesystem
+			  * supports it.  We don't check this in fault path,
+			  * because we want to fallback to the actual ->fault()
+			  * handler to make the decision.
+			  */
+			 (smaps && vma->vm_file &&
+			 mapping_large_folio_support(vma->vm_file->f_mapping));
 
 	if (vma_is_temporary_stack(vma))
 		return false;
