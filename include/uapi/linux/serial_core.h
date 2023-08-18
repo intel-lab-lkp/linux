@@ -26,6 +26,7 @@
 /*
  * The type definitions.  These are from Ted Ts'o's serial.h
  */
+#define PORT_BCM7271	13	/* Broadcom BCM7271 UART */
 #define PORT_NS16550A	14
 #define PORT_XSCALE	15
 #define PORT_RM9000	16	/* PMC-Sierra RM9xxx internal UART */
