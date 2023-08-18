@@ -1,0 +1,75 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/dma/hisi,ascend-sdma.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: HISI Ascend System DMA (SDMA) controller
+
+description: |
+  The Ascend SDMA controller is used for transferring data
+  in system memory. It utilizes IOMMU SVA feature and accepts
+  virtual address from user process.
+
+maintainers:
+  - Guo Mengqi <guomengqi3@huawei.com>
+
+allOf:
+  - $ref: dma-controller.yaml#
+
+properties:
+  compatible:
+    enum:
+      - hisi,ascend310-sdma
+      - hisi,ascend910-sdma
+
+  reg:
+    maxItems: 1
+
+  '#dma-cells':
+    const: 1
+    description:
+      Clients specify a single cell with channel number.
+
+  hisi,ascend-sdma-channel-map:
+    description: |
+      bitmap, each bit stands for a channel that is allowed to
+      use by this system. Maximum 64 bits.
+    $ref: /schemas/types.yaml#/definitions/uint64
+
+  iommus:
+    maxItems: 1
+
+  pasid-num-bits:
+    description: |
+      sdma utilizes iommu sva feature to transfer user space data.
+      It acts as a basic dma controller if not bound to user space.
+    const: 0x10
+
+  dma-coherent: true
+
+  dma-can-stall: true
+
+required:
+  - compatible
+  - reg
+  - hisi,ascend-sdma-channel-map
+  - '#dma-cells'
+  - iommus
+
+additionalProperties: false
+
+examples:
+  - |
+    dma-controller@880e0000 {
+        compatible = "hisilicon,ascend310-sdma";
+        reg = <0x880e0000 0x10000>;
+        hisi,ascend-sdma-channel-map = <0x00000000 0x0000ff00>;
+        iommus = <&smmu 0x7f46>;
+        pasid-num-bits = <0x10>;
+        dma-coherent;
+        dma-can-stall;
+        #dma-cells = <1>;
+    };
+
+...
