@@ -292,7 +292,7 @@ void do_softirq_post_smp_call_flush(unsigned int was_pending)
 		invoke_softirq();
 }
 
-#else /* CONFIG_PREEMPT_RT */
+#else /* !CONFIG_PREEMPT_RT */
 
 /*
  * This one is for softirq.c-internal use, where hardirqs are disabled
