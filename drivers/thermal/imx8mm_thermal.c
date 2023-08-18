@@ -313,16 +313,10 @@ static int imx8mm_tmu_probe(struct platform_device *pdev)
 	if (IS_ERR(tmu->base))
 		return PTR_ERR(tmu->base);
 
-	tmu->clk = devm_clk_get(&pdev->dev, NULL);
+	tmu->clk = devm_clk_get_enabled(&pdev->dev, NULL);
 	if (IS_ERR(tmu->clk))
 		return dev_err_probe(&pdev->dev, PTR_ERR(tmu->clk),
-				     "failed to get tmu clock\n");
-
-	ret = clk_prepare_enable(tmu->clk);
-	if (ret) {
-		dev_err(&pdev->dev, "failed to enable tmu clock: %d\n", ret);
-		return ret;
-	}
+				     "failed to enable tmu clock\n");
 
 	/* disable the monitor during initialization */
 	imx8mm_tmu_enable(tmu, false);
@@ -338,7 +332,7 @@ static int imx8mm_tmu_probe(struct platform_device *pdev)
 			dev_err(&pdev->dev,
 				"failed to register thermal zone sensor[%d]: %d\n",
 				i, ret);
-			goto disable_clk;
+			return ret;
 		}
 		tmu->sensors[i].hw_id = i;
 
@@ -349,7 +343,7 @@ static int imx8mm_tmu_probe(struct platform_device *pdev)
 
 	ret = imx8mm_tmu_probe_set_calib(pdev, tmu);
 	if (ret)
-		goto disable_clk;
+		return ret;
 
 	/* enable all the probes for V2 TMU */
 	if (tmu->socdata->version == TMU_VER2)
@@ -359,10 +353,6 @@ static int imx8mm_tmu_probe(struct platform_device *pdev)
 	imx8mm_tmu_enable(tmu, true);
 
 	return 0;
-
-disable_clk:
-	clk_disable_unprepare(tmu->clk);
-	return ret;
 }
 
 static int imx8mm_tmu_remove(struct platform_device *pdev)
@@ -372,7 +362,6 @@ static int imx8mm_tmu_remove(struct platform_device *pdev)
 	/* disable TMU */
 	imx8mm_tmu_enable(tmu, false);
 
-	clk_disable_unprepare(tmu->clk);
 	platform_set_drvdata(pdev, NULL);
 
 	return 0;
