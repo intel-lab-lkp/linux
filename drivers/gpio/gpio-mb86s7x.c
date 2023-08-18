@@ -170,13 +170,9 @@ static int mb86s70_gpio_probe(struct platform_device *pdev)
 	if (IS_ERR(gchip->base))
 		return PTR_ERR(gchip->base);
 
-	gchip->clk = devm_clk_get_optional(&pdev->dev, NULL);
+	gchip->clk = devm_clk_get_optional_enabled(&pdev->dev, NULL);
 	if (IS_ERR(gchip->clk))
 		return PTR_ERR(gchip->clk);
-
-	ret = clk_prepare_enable(gchip->clk);
-	if (ret)
-		return ret;
 
 	spin_lock_init(&gchip->lock);
 
@@ -196,7 +192,6 @@ static int mb86s70_gpio_probe(struct platform_device *pdev)
 	ret = gpiochip_add_data(&gchip->gc, gchip);
 	if (ret) {
 		dev_err(&pdev->dev, "couldn't register gpio driver\n");
-		clk_disable_unprepare(gchip->clk);
 		return ret;
 	}
 
@@ -211,7 +206,6 @@ static int mb86s70_gpio_remove(struct platform_device *pdev)
 
 	acpi_gpiochip_free_interrupts(&gchip->gc);
 	gpiochip_remove(&gchip->gc);
-	clk_disable_unprepare(gchip->clk);
 
 	return 0;
 }
