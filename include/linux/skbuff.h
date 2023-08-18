@@ -3165,6 +3165,7 @@ static inline void __skb_queue_purge(struct sk_buff_head *list)
 void skb_queue_purge(struct sk_buff_head *list);
 
 unsigned int skb_rbtree_purge(struct rb_root *root);
+void skb_errqueue_purge(struct sk_buff_head *list);
 
 void *__netdev_alloc_frag_align(unsigned int fragsz, unsigned int align_mask);
 
