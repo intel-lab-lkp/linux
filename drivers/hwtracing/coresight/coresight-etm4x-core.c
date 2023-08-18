@@ -1131,6 +1131,39 @@ static void cpu_detect_trace_filtering(struct etmv4_drvdata *drvdata)
 	drvdata->trfcr = trfcr;
 }
 
+/*
+ * The following errata on applicable cpu ranges, affect the CCITMIN filed
+ * in TCRIDR3 register. Software read for the field returns 0x100 limiting
+ * the cycle threshold granularity, where as the right value should have
+ * been 0x4, which is well supported in the hardware.
+ */
+static struct midr_range etm_wrong_ccitmin_cpus[] = {
+	/* Erratum #1490853 - Cortex-A76 */
+	MIDR_RANGE(MIDR_CORTEX_A76, 0, 0, 4, 0),
+	/* Erratum #1490853 - Neoverse-N1 */
+	MIDR_RANGE(MIDR_NEOVERSE_N1, 0, 0, 4, 0),
+	/* Erratum #1491015 - Cortex-A77 */
+	MIDR_RANGE(MIDR_CORTEX_A77, 0, 0, 1, 0),
+	/* Erratum #1502854 - Cortex-X1 */
+	MIDR_REV(MIDR_CORTEX_X1, 0, 0),
+	/* Erratum #1619801 - Neoverse-V1 */
+	MIDR_REV(MIDR_NEOVERSE_V1, 0, 0),
+	{},
+};
+
+static bool etm4_core_reads_wrong_ccitmin(struct etmv4_drvdata *drvdata)
+{
+	/*
+	 * Erratum affected cpus will read 256 as the minimum
+	 * instruction trace cycle counting threshold where as
+	 * the correct value should be 4 instead. Override the
+	 * recorded value for 'drvdata->ccitmin' to workaround
+	 * this problem.
+	 */
+	return is_midr_in_range_list(read_cpuid_id(), etm_wrong_ccitmin_cpus) &&
+	       (drvdata->ccitmin == 256);
+}
+
 static void etm4_init_arch_data(void *info)
 {
 	u32 etmidr0;
@@ -1195,6 +1228,9 @@ static void etm4_init_arch_data(void *info)
 	etmidr3 = etm4x_relaxed_read32(csa, TRCIDR3);
 	/* CCITMIN, bits[11:0] minimum threshold value that can be programmed */
 	drvdata->ccitmin = FIELD_GET(TRCIDR3_CCITMIN_MASK, etmidr3);
+	if (etm4_core_reads_wrong_ccitmin(drvdata))
+		drvdata->ccitmin = 4;
+
 	/* EXLEVEL_S, bits[19:16] Secure state instruction tracing */
 	drvdata->s_ex_level = FIELD_GET(TRCIDR3_EXLEVEL_S_MASK, etmidr3);
 	drvdata->config.s_ex_level = drvdata->s_ex_level;
