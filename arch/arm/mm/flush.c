@@ -238,6 +238,7 @@ static void __flush_dcache_aliases(struct address_space *mapping, struct page *p
 {
 	struct mm_struct *mm = current->active_mm;
 	struct vm_area_struct *mpnt;
+	unsigned long flags;
 	pgoff_t pgoff;
 
 	/*
@@ -248,7 +249,7 @@ static void __flush_dcache_aliases(struct address_space *mapping, struct page *p
 	 */
 	pgoff = page->index;
 
-	flush_dcache_mmap_lock(mapping);
+	flush_dcache_mmap_lock_irqsave(mapping, flags);
 	vma_interval_tree_foreach(mpnt, &mapping->i_mmap, pgoff, pgoff) {
 		unsigned long offset;
 
@@ -262,7 +263,7 @@ static void __flush_dcache_aliases(struct address_space *mapping, struct page *p
 		offset = (pgoff - mpnt->vm_pgoff) << PAGE_SHIFT;
 		flush_cache_page(mpnt, mpnt->vm_start + offset, page_to_pfn(page));
 	}
-	flush_dcache_mmap_unlock(mapping);
+	flush_dcache_mmap_unlock_irqrestore(mapping, flags);
 }
 
 #if __LINUX_ARM_ARCH__ >= 6
