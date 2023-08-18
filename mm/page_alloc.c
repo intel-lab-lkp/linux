@@ -1209,11 +1209,9 @@ static void free_pcppages_bulk(struct zone *zone, int count,
 					int pindex)
 {
 	unsigned long flags;
-	int min_pindex = 0;
-	int max_pindex = NR_PCP_LISTS - 1;
 	unsigned int order;
 	bool isolated_pageblocks;
-	struct page *page;
+	int i;
 
 	/* Ensure requested pindex is drained first. */
 	pindex = pindex - 1;
@@ -1221,31 +1219,18 @@ static void free_pcppages_bulk(struct zone *zone, int count,
 	spin_lock_irqsave(&zone->lock, flags);
 	isolated_pageblocks = has_isolate_pageblock(zone);
 
-	while (count > 0) {
+	for (i = 0; i < NR_PCP_LISTS; i++, pindex++) {
 		struct list_head *list;
 		int nr_pages;
+		struct page *page, *next;
 
-		/* Remove pages from lists in a round-robin fashion. */
-		do {
-			if (++pindex > max_pindex)
-				pindex = min_pindex;
-			list = &pcp->lists[pindex];
-			if (!list_empty(list))
-				break;
-
-			if (pindex == max_pindex)
-				max_pindex--;
-			if (pindex == min_pindex)
-				min_pindex++;
-		} while (1);
-
+		if (pindex == NR_PCP_LISTS)
+			pindex = 0;
+		list = pcp->lists + pindex;
 		order = pindex_to_order(pindex);
 		nr_pages = 1 << order;
-		do {
-			int mt;
-
-			page = list_last_entry(list, struct page, pcp_list);
-			mt = get_pcppage_migratetype(page);
+		list_for_each_entry_safe_reverse(page, next, list, lru) {
+			int mt = get_pcppage_migratetype(page);
 
 			/* must delete to avoid corrupting pcp list */
 			list_del(&page->pcp_list);
@@ -1260,9 +1245,12 @@ static void free_pcppages_bulk(struct zone *zone, int count,
 
 			__free_one_page(page, page_to_pfn(page), zone, order, mt, FPI_NONE);
 			trace_mm_page_pcpu_drain(page, order, mt);
-		} while (count > 0 && pcp->count > 0 && !list_empty(list));
-	}
 
+			if (count <= 0 || pcp->count <= 0)
+				goto out;
+		}
+	}
+out:
 	spin_unlock_irqrestore(&zone->lock, flags);
 }
 
