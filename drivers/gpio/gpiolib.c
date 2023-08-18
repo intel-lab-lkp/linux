@@ -583,6 +583,7 @@ static void gpiodev_release(struct device *dev)
 	list_del(&gdev->list);
 	spin_unlock_irqrestore(&gpio_lock, flags);
 
+	module_put(gdev->owner);
 	ida_free(&gpio_ida, gdev->id);
 	kfree_const(gdev->label);
 	kfree(gdev->descs);
@@ -753,6 +754,10 @@ int gpiochip_add_data_with_key(struct gpio_chip *gc, void *data,
 	else
 		gdev->owner = THIS_MODULE;
 
+	ret = try_module_get(gdev->owner);
+	if (!ret)
+		goto err_free_dev_name;
+
 	/*
 	 * Try the device properties if the driver didn't supply the number
 	 * of GPIO lines.
@@ -769,7 +774,7 @@ int gpiochip_add_data_with_key(struct gpio_chip *gc, void *data,
 			 */
 			ngpios = 0;
 		else if (ret)
-			goto err_free_dev_name;
+			goto err_put_module;
 
 		gc->ngpio = ngpios;
 	}
@@ -777,7 +782,7 @@ int gpiochip_add_data_with_key(struct gpio_chip *gc, void *data,
 	if (gc->ngpio == 0) {
 		chip_err(gc, "tried to insert a GPIO chip with zero lines\n");
 		ret = -EINVAL;
-		goto err_free_dev_name;
+		goto err_put_module;
 	}
 
 	if (gc->ngpio > FASTPATH_NGPIO)
@@ -787,7 +792,7 @@ int gpiochip_add_data_with_key(struct gpio_chip *gc, void *data,
 	gdev->descs = kcalloc(gc->ngpio, sizeof(*gdev->descs), GFP_KERNEL);
 	if (!gdev->descs) {
 		ret = -ENOMEM;
-		goto err_free_dev_name;
+		goto err_put_module;
 	}
 
 	gdev->label = kstrdup_const(gc->label ?: "unknown", GFP_KERNEL);
@@ -937,6 +942,8 @@ err_free_label:
 	kfree_const(gdev->label);
 err_free_descs:
 	kfree(gdev->descs);
+err_put_module:
+	module_put(gdev->owner);
 err_free_dev_name:
 	kfree(dev_name(&gdev->dev));
 err_free_ida:
@@ -2101,20 +2108,16 @@ static int validate_desc(const struct gpio_desc *desc, const char *func)
 
 int gpiod_request(struct gpio_desc *desc, const char *label)
 {
-	int ret = -EPROBE_DEFER;
+	int ret;
 
 	VALIDATE_DESC(desc);
 
-	if (try_module_get(desc->gdev->owner)) {
-		ret = gpiod_request_commit(desc, label);
-		if (ret)
-			module_put(desc->gdev->owner);
-		else
-			gpio_device_get(desc->gdev);
-	}
-
+	ret = gpiod_request_commit(desc, label);
 	if (ret)
-		gpiod_dbg(desc, "%s: status %d\n", __func__, ret);
+		return ret;
+
+	gpio_device_get(desc->gdev);
+	gpiod_dbg(desc, "%s: status %d\n", __func__, ret);
 
 	return ret;
 }
@@ -2177,7 +2180,6 @@ void gpiod_free(struct gpio_desc *desc)
 	if (!gpiod_free_commit(desc))
 		WARN_ON(extra_checks);
 
-	module_put(desc->gdev->owner);
 	gpio_device_put(desc->gdev);
 }
 
