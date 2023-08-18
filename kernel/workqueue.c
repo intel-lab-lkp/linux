@@ -2595,7 +2595,7 @@ __acquires(&pool->lock)
 	 * workqueues), so hiding them isn't a problem.
 	 */
 	lockdep_invariant_state(true);
-	pwq->stats[PWQ_STAT_STARTED]++;
+	atomic_inc((atomic_t *) &pwq->stats[PWQ_STAT_STARTED]);
 	trace_workqueue_execute_start(work);
 	worker->current_func(work);
 	/*
