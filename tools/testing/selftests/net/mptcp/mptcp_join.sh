@@ -3293,6 +3293,43 @@ userspace_pm_rm_sf_addr_ns2()
 	wait_rm_sf $ns2 1
 }
 
+userspace_pm_rm_id_0_subflow_ns2()
+{
+	local tk da dp sp
+
+	tk=$(evts_get_info token "$evts_ns2")
+	da=$(evts_get_info daddr4 "$evts_ns2")
+	dp=$(evts_get_info dport "$evts_ns2")
+	sp=$(evts_get_info sport "$evts_ns2")
+	ip netns exec $ns2 ./pm_nl_ctl dsf lip 10.0.1.2 lport $sp \
+			rip $da rport $dp token $tk
+	wait_rm_sf $ns2 1
+}
+
+# $1: subflows in ns1 ; $2: subflows in ns2
+chk_subflows()
+{
+	local cnt1
+	local cnt2
+
+	print_check "subflows $1:$2"
+
+	cnt1=$(ss -N $ns1 -ti | grep -c tcp-ulp-mptcp)
+	cnt2=$(ss -N $ns2 -ti | grep -c tcp-ulp-mptcp)
+
+	if [ "$1" != "$cnt1" ] || [ "$2" != "$cnt2" ]; then
+		fail_test "got subflows $cnt1:$cnt2 expected $1:$2"
+		dump_stats=1
+	else
+		print_ok
+	fi
+
+	if [ "$dump_stats" = 1 ]; then
+		ss -N $ns1 -ti
+		ss -N $ns2 -ti
+	fi
+}
+
 userspace_tests()
 {
 	# userspace pm type prevents add_addr
@@ -3402,6 +3439,27 @@ userspace_tests()
 		userspace_pm_rm_sf_addr_ns2 10.0.3.2 20
 		chk_rm_nr 1 1
 		chk_mptcp_info subflows 0 subflows 0
+		kill_events_pids
+		wait $tests_pid
+	fi
+
+	# userspace pm remove id 0 subflow
+	if reset_with_events "userspace pm remove id 0 subflow" &&
+	   continue_if mptcp_lib_has_file '/proc/sys/net/mptcp/pm_type'; then
+		set_userspace_pm $ns2
+		pm_nl_set_limits $ns1 0 1
+		speed=10 \
+			run_tests $ns1 $ns2 10.0.1.1 &
+		local tests_pid=$!
+		wait_mpj $ns2
+		userspace_pm_add_sf 10.0.3.2 20
+		chk_join_nr 1 1 1
+		chk_mptcp_info subflows 1 subflows 1
+		chk_subflows 2 2
+		userspace_pm_rm_id_0_subflow_ns2
+		chk_rm_nr 0 1
+		chk_mptcp_info subflows 1 subflows 1
+		chk_subflows 1 1
 		kill_events_pids
 		wait $tests_pid
 	fi
