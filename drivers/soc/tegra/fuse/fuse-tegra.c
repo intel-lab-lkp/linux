@@ -3,6 +3,7 @@
  * Copyright (c) 2013-2023, NVIDIA CORPORATION.  All rights reserved.
  */
 
+#include <linux/acpi.h>
 #include <linux/clk.h>
 #include <linux/device.h>
 #include <linux/kobject.h>
@@ -94,6 +95,13 @@ static const struct of_device_id tegra_fuse_match[] = {
 	{ /* sentinel */ }
 };
 
+static const struct acpi_device_id tegra_fuse_acpi_match[] = {
+	{
+		.id = "NVDA200F",
+	},
+	{ /* sentinel */ },
+};
+
 static int tegra_fuse_read(void *priv, unsigned int offset, void *value,
 			   size_t bytes)
 {
@@ -176,11 +184,64 @@ static void tegra_fuse_pr_sku_info(struct tegra_sku_info *tegra_sku_info)
 		tegra_sku_info->cpu_speedo_id, tegra_sku_info->soc_speedo_id);
 }
 
+static int tegra_fuse_acpi_probe(struct platform_device *pdev)
+{
+	struct resource *res;
+	u8 chip;
+	int err;
+
+	tegra_acpi_init_apbmisc();
+
+	chip = tegra_get_chip_id();
+	switch (chip) {
+#if defined(CONFIG_ARCH_TEGRA_194_SOC)
+	case TEGRA194:
+		fuse->soc = &tegra194_fuse_soc;
+		break;
+#endif
+#if defined(CONFIG_ARCH_TEGRA_234_SOC)
+	case TEGRA234:
+		fuse->soc = &tegra234_fuse_soc;
+		break;
+#endif
+	default:
+		dev_err(&pdev->dev, "Unsupported SoC: %02x\n", chip);
+		return -EINVAL;
+	}
+
+	fuse->base = devm_platform_get_and_ioremap_resource(pdev, 0, &res);
+	if (IS_ERR(fuse->base))
+		return PTR_ERR(fuse->base);
+	fuse->phys = res->start;
+
+	platform_set_drvdata(pdev, fuse);
+	fuse->dev = &pdev->dev;
+
+	err = tegra_fuse_nvmem_register(fuse, &pdev->dev);
+	if (err)
+		return err;
+
+	fuse->soc->init(fuse);
+	tegra_soc_device_register();
+	tegra_fuse_pr_sku_info(&tegra_sku_info);
+
+	err = tegra_fuse_add_lookups(fuse);
+	if (err) {
+		dev_err(&pdev->dev, "failed to add FUSE lookups\n");
+		return err;
+	}
+
+	return 0;
+}
+
 static int tegra_fuse_probe(struct platform_device *pdev)
 {
 	void __iomem *base = fuse->base;
 	struct resource *res;
 	int err;
+
+	if (has_acpi_companion(&pdev->dev))
+		return tegra_fuse_acpi_probe(pdev);
 
 	err = devm_add_action(&pdev->dev, tegra_fuse_restore, (void __force *)base);
 	if (err)
@@ -306,6 +367,7 @@ static struct platform_driver tegra_fuse_driver = {
 	.driver = {
 		.name = "tegra-fuse",
 		.of_match_table = tegra_fuse_match,
+		.acpi_match_table = tegra_fuse_acpi_match,
 		.pm = &tegra_fuse_pm,
 		.suppress_bind_attrs = true,
 	},
@@ -327,7 +389,8 @@ u32 __init tegra_fuse_read_early(unsigned int offset)
 
 int tegra_fuse_readl(unsigned long offset, u32 *value)
 {
-	if (!fuse->read || !fuse->clk)
+	/* fuse->clk is not required when ACPI is used. */
+	if (!fuse->read || (!fuse->clk && !has_acpi_companion(fuse->dev)))
 		return -EPROBE_DEFER;
 
 	if (IS_ERR(fuse->clk))
@@ -410,7 +473,7 @@ const struct attribute_group tegra194_soc_attr_group = {
 };
 #endif
 
-struct device * __init tegra_soc_device_register(void)
+struct device *tegra_soc_device_register(void)
 {
 	struct soc_device_attribute *attr;
 	struct soc_device *dev;
