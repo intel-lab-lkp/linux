@@ -419,7 +419,14 @@ static u64 kvm_steal_clock(int cpu)
 
 static inline void __set_percpu_decrypted(void *ptr, unsigned long size)
 {
-	early_set_memory_decrypted((unsigned long) ptr, size);
+	/*
+	 * early_set_memory_decrypted() requires page aligned parameters, but
+	 * this function needs to handle ptrs offset into a page.
+	 */
+	unsigned long start = PAGE_ALIGN_DOWN((unsigned long) ptr);
+	unsigned long end = (unsigned long) ptr + size;
+
+	early_set_memory_decrypted(start, end - start);
 }
 
 /*
@@ -438,6 +445,11 @@ static void __init sev_map_percpu_data(void)
 		return;
 
 	for_each_possible_cpu(cpu) {
+		/*
+		 * Calling __set_percpu_decrypted() for each per-cpu variable is
+		 * inefficent, since it may decrypt the same page multiple times.
+		 * That said, it avoids the need for more complicated logic.
+		 */
 		__set_percpu_decrypted(&per_cpu(apf_reason, cpu), sizeof(apf_reason));
 		__set_percpu_decrypted(&per_cpu(steal_time, cpu), sizeof(steal_time));
 		__set_percpu_decrypted(&per_cpu(kvm_apic_eoi, cpu), sizeof(kvm_apic_eoi));
