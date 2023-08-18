@@ -20,6 +20,7 @@
 #include <linux/slab.h>
 #include <linux/tty.h>
 #include <linux/tty_flip.h>
+#include "../tty.h"
 
 /* device name */
 #define UART_NR_MAX		8
@@ -1231,7 +1232,10 @@ free_rx_buf:
 static int sprd_suspend(struct device *dev)
 {
 	struct sprd_uart_port *sup = dev_get_drvdata(dev);
+	struct uart_port *uport = &sup->port;
+	struct tty_port *tty = &uport->state->port;
 
+	tty_buffer_cancel_work(tty);
 	uart_suspend_port(&sprd_uart_driver, &sup->port);
 
 	return 0;
