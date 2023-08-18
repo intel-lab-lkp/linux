@@ -93,6 +93,7 @@
 #include "i915_memcpy.h"
 #include "i915_perf.h"
 #include "i915_query.h"
+#include "i915_reg.h"
 #include "i915_suspend.h"
 #include "i915_switcheroo.h"
 #include "i915_sysfs.h"
@@ -436,6 +437,32 @@ static int i915_pcode_init(struct drm_i915_private *i915)
 	return 0;
 }
 
+static int intel_pcode_probe(struct drm_i915_private *i915)
+{
+	struct intel_uncore *uncore;
+	int ret;
+
+	/*
+	 * The boot firmware initializes local memory and assesses its health.
+	 * If memory training fails, the punit will have been instructed to
+	 * keep the GT powered down; we won't be able to communicate with it
+	 * and we should not continue with driver initialization.
+	 */
+	if (IS_DGFX(i915) &&
+		!(__raw_uncore_read32(uncore, GU_CNTL) & LMEM_INIT)) {
+		drm_err(&i915->drm, "LMEM not initialized by firmware\n");
+		return -ENODEV;
+	}
+
+	/*
+	 * Driver handshakes with pcode via mailbox command to know that SoC
+	 * initialization is complete before proceeding further
+	 */
+	ret = i915_pcode_init(i915);
+
+	return ret;
+}
+
 /**
  * i915_driver_hw_probe - setup state requiring device access
  * @dev_priv: device private
@@ -547,10 +574,6 @@ static int i915_driver_hw_probe(struct drm_i915_private *dev_priv)
 
 	intel_opregion_setup(dev_priv);
 
-	ret = i915_pcode_init(dev_priv);
-	if (ret)
-		goto err_opregion;
-
 	/*
 	 * Fill the dram structure to get the system dram info. This will be
 	 * used for memory latency calculation.
@@ -561,8 +584,6 @@ static int i915_driver_hw_probe(struct drm_i915_private *dev_priv)
 
 	return 0;
 
-err_opregion:
-	intel_opregion_cleanup(dev_priv);
 err_msi:
 	if (pdev->msi_enabled)
 		pci_disable_msi(pdev);
@@ -777,6 +798,10 @@ int i915_driver_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	ret = intel_gt_probe_all(i915);
 	if (ret < 0)
 		goto out_runtime_pm_put;
+
+	ret = intel_pcode_probe(i915);
+	if (ret)
+		goto out_tiles_cleanup;
 
 	ret = i915_driver_mmio_probe(i915);
 	if (ret < 0)
