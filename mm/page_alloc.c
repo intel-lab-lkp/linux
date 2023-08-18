@@ -1215,12 +1215,6 @@ static void free_pcppages_bulk(struct zone *zone, int count,
 	bool isolated_pageblocks;
 	struct page *page;
 
-	/*
-	 * Ensure proper count is passed which otherwise would stuck in the
-	 * below while (list_empty(list)) loop.
-	 */
-	count = min(pcp->count, count);
-
 	/* Ensure requested pindex is drained first. */
 	pindex = pindex - 1;
 
@@ -1266,7 +1260,7 @@ static void free_pcppages_bulk(struct zone *zone, int count,
 
 			__free_one_page(page, page_to_pfn(page), zone, order, mt, FPI_NONE);
 			trace_mm_page_pcpu_drain(page, order, mt);
-		} while (count > 0 && !list_empty(list));
+		} while (count > 0 && pcp->count > 0 && !list_empty(list));
 	}
 
 	spin_unlock_irqrestore(&zone->lock, flags);
