@@ -429,7 +429,11 @@ static ssize_t usb_device_dump(char __user **buffer, size_t *nbytes,
 	case USB_SPEED_SUPER:
 		speed = "5000"; break;
 	case USB_SPEED_SUPER_PLUS:
-		speed = "10000"; break;
+		if (usbdev->ssp_rate == USB_SSP_GEN_2x2)
+			speed = "20000";
+		else
+			speed = "10000";
+		break;
 	default:
 		speed = "??";
 	}
