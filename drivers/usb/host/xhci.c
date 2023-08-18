@@ -449,6 +449,8 @@ static int xhci_init(struct usb_hcd *hcd)
 		compliance_mode_recovery_timer_init(xhci);
 	}
 
+	xhci->cmd_timer_delay = XHCI_CMD_DEFAULT_TIMEOUT;
+
 	return retval;
 }
 
@@ -5260,6 +5262,18 @@ static void xhci_clear_tt_buffer_complete(struct usb_hcd *hcd,
 	spin_unlock_irqrestore(&xhci->lock, flags);
 }
 
+static int xhci_set_cmd_delay(struct usb_hcd *hcd, int cmd_delay_ms)
+{
+	struct xhci_hcd *xhci = hcd_to_xhci(hcd);
+
+	if (cmd_delay_ms < 150 || cmd_delay_ms > 10000)
+		return -EINVAL;
+
+	xhci->cmd_timer_delay = cmd_delay_ms;
+
+	return 0;
+}
+
 static const struct hc_driver xhci_hc_driver = {
 	.description =		"xhci-hcd",
 	.product_desc =		"xHCI Host Controller",
@@ -5325,6 +5339,7 @@ static const struct hc_driver xhci_hc_driver = {
 	.disable_usb3_lpm_timeout =	xhci_disable_usb3_lpm_timeout,
 	.find_raw_port_number =	xhci_find_raw_port_number,
 	.clear_tt_buffer_complete = xhci_clear_tt_buffer_complete,
+	.set_cmd_timer_delay = xhci_set_cmd_delay,
 };
 
 void xhci_init_driver(struct hc_driver *drv,

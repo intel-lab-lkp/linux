@@ -403,6 +403,7 @@ struct hc_driver {
 #define EHSET_TEST_SINGLE_STEP_SET_FEATURE 0x06
 	int	(*submit_single_step_set_feature)(struct usb_hcd *,
 			struct urb *, int);
+	int	(*set_cmd_timer_delay)(struct usb_hcd *hcd, int delay);
 };
 
 static inline int hcd_giveback_urb_in_bh(struct usb_hcd *hcd)
@@ -464,6 +465,7 @@ extern void usb_remove_hcd(struct usb_hcd *hcd);
 extern int usb_hcd_find_raw_port_number(struct usb_hcd *hcd, int port1);
 int usb_hcd_setup_local_mem(struct usb_hcd *hcd, phys_addr_t phys_addr,
 			    dma_addr_t dma, size_t size);
+int usb_hcd_set_cmd_timer_delay(struct usb_hcd *hcd, int delay);
 
 struct platform_device;
 extern void usb_hcd_platform_shutdown(struct platform_device *dev);

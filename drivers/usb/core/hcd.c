@@ -3129,6 +3129,29 @@ int usb_hcd_setup_local_mem(struct usb_hcd *hcd, phys_addr_t phys_addr,
 }
 EXPORT_SYMBOL_GPL(usb_hcd_setup_local_mem);
 
+/**
+ * usb_hcd_set_cmd_timer_delay Set the delay of the command timer.
+ * @hcd - pointer to the HCD representing the controller
+ * @delay - Delay value to be used in command timer.
+ *
+ * wrapper function to call the set_cmd_timer_delay API of the host
+ * diver.
+ *
+ * return 0 on success; otherwise -ENODEV means the feature not
+ * supported by host driver.
+ */
+
+int usb_hcd_set_cmd_timer_delay(struct usb_hcd *hcd, int delay)
+{
+	int ret = -ENODEV;
+
+	if (hcd->driver->set_cmd_timer_delay)
+		ret = hcd->driver->set_cmd_timer_delay(hcd, delay);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(usb_hcd_set_cmd_timer_delay);
+
 /*-------------------------------------------------------------------------*/
 
 #if IS_ENABLED(CONFIG_USB_MON)
