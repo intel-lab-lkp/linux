@@ -25,7 +25,8 @@ SECTIONS
 	.text32		: { *(.text32) }
 
 	. = ALIGN(16);
-	.rodata		: { *(.rodata*) }
+	.rodata		: { *(.pecompat) *(.rodata*) }
+	PROVIDE(pecompat_fsize = setup_size - pecompat_fstart);
 
 	.videocards	: {
 		video_cards = .;
