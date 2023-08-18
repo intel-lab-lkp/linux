@@ -2433,6 +2433,9 @@ int gpiod_direction_input(struct gpio_desc *desc)
 	}
 	if (ret == 0) {
 		clear_bit(FLAG_IS_OUT, &desc->flags);
+		blocking_notifier_call_chain(&desc->gdev->notifier,
+					     GPIO_V2_LINE_CHANGED_CONFIG,
+					     desc);
 		ret = gpio_set_bias(desc);
 	}
 
@@ -2478,8 +2481,12 @@ static int gpiod_direction_output_raw_commit(struct gpio_desc *desc, int value)
 		gc->set(gc, gpio_chip_hwgpio(desc), val);
 	}
 
-	if (!ret)
+	if (!ret) {
 		set_bit(FLAG_IS_OUT, &desc->flags);
+		blocking_notifier_call_chain(&desc->gdev->notifier,
+					     GPIO_V2_LINE_CHANGED_CONFIG,
+					     desc);
+	}
 	trace_gpio_value(desc_to_gpio(desc), 0, val);
 	trace_gpio_direction(desc_to_gpio(desc), 0, ret);
 	return ret;
@@ -2666,9 +2673,15 @@ EXPORT_SYMBOL_GPL(gpiod_set_config);
 int gpiod_set_debounce(struct gpio_desc *desc, unsigned int debounce)
 {
 	unsigned long config;
+	int ret;
 
 	config = pinconf_to_config_packed(PIN_CONFIG_INPUT_DEBOUNCE, debounce);
-	return gpiod_set_config(desc, config);
+	ret = gpiod_set_config(desc, config);
+	if (!ret)
+		blocking_notifier_call_chain(&desc->gdev->notifier,
+					     GPIO_V2_LINE_CHANGED_CONFIG,
+					     desc);
+	return ret;
 }
 EXPORT_SYMBOL_GPL(gpiod_set_debounce);
 
@@ -2717,6 +2730,8 @@ void gpiod_toggle_active_low(struct gpio_desc *desc)
 {
 	VALIDATE_DESC_VOID(desc);
 	change_bit(FLAG_ACTIVE_LOW, &desc->flags);
+	blocking_notifier_call_chain(&desc->gdev->notifier,
+				     GPIO_V2_LINE_CHANGED_CONFIG, desc);
 }
 EXPORT_SYMBOL_GPL(gpiod_toggle_active_low);
 
@@ -3324,6 +3339,8 @@ int gpiod_set_consumer_name(struct gpio_desc *desc, const char *name)
 
 	kfree_const(desc->label);
 	desc_set_label(desc, name);
+	blocking_notifier_call_chain(&desc->gdev->notifier,
+				     GPIO_V2_LINE_CHANGED_CONFIG, desc);
 
 	return 0;
 }
