@@ -3974,10 +3974,10 @@ static inline bool ttwu_queue_cond(struct task_struct *p, int cpu)
 		return false;
 
 	/*
-	 * If the CPU does not share cache, then queue the task on the
+	 * If the CPU does not share L2 cache, then queue the task on the
 	 * remote rqs wakelist to avoid accessing remote data.
 	 */
-	if (!cpus_share_llc(smp_processor_id(), cpu))
+	if (!cpus_share_l2c(smp_processor_id(), cpu))
 		return true;
 
 	if (cpu == smp_processor_id())
