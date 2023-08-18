@@ -3970,6 +3970,8 @@ static void ov5640_remove(struct i2c_client *client)
 }
 
 static const struct dev_pm_ops ov5640_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend,
+				pm_runtime_force_resume)
 	SET_RUNTIME_PM_OPS(ov5640_sensor_suspend, ov5640_sensor_resume, NULL)
 };
 
