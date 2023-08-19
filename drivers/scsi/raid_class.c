@@ -248,11 +248,9 @@ int raid_component_add(struct raid_template *r,struct device *raid_dev,
 	return 0;
 
 err_out:
-	put_device(&rc->dev);
 	list_del(&rc->node);
 	rd->component_count--;
-	put_device(component_dev);
-	kfree(rc);
+	put_device(&rc->dev);
 	return err;
 }
 EXPORT_SYMBOL(raid_component_add);
