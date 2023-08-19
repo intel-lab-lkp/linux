@@ -1829,7 +1829,7 @@ int sk_getsockopt(struct sock *sk, int level, int optname,
 		if (lv < 0)
 			return -ENOTCONN;
 		if (lv < len)
-			return -EINVAL;
+			len = lv;
 		if (copy_to_sockptr(optval, address, len))
 			return -EFAULT;
 		goto lenout;
