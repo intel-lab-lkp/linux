@@ -145,18 +145,17 @@ static inline int regulator_lock_nested(struct regulator_dev *rdev,
 
 	mutex_lock(&regulator_nesting_mutex);
 
-	if (!ww_mutex_trylock(&rdev->mutex, ww_ctx)) {
-		if (rdev->mutex_owner != current) {
-			mutex_unlock(&regulator_nesting_mutex);
-			ret = ww_mutex_lock(&rdev->mutex, ww_ctx);
-			mutex_lock(&regulator_nesting_mutex);
-		}
+	if (!ww_mutex_trylock(&rdev->mutex, ww_ctx) &&
+	    rdev->mutex_owner != current) {
+		mutex_unlock(&regulator_nesting_mutex);
+		ret = ww_mutex_lock(&rdev->mutex, ww_ctx);
+		if (ret == -EDEADLK)
+			return ret;
+		mutex_lock(&regulator_nesting_mutex);
 	}
 
-	if (ret != -EDEADLK) {
-		rdev->ref_cnt++;
-		rdev->mutex_owner = current;
-	}
+	rdev->ref_cnt++;
+	rdev->mutex_owner = current;
 
 	mutex_unlock(&regulator_nesting_mutex);
 
