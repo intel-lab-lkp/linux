@@ -412,6 +412,9 @@ void die(const char *str, struct pt_regs *regs)
 
 	oops_exit();
 
+	if (ret == NOTIFY_STOP)
+		return;
+
 	if (in_interrupt())
 		panic("Fatal exception in interrupt");
 
@@ -421,8 +424,7 @@ void die(const char *str, struct pt_regs *regs)
 	if (regs && kexec_should_crash(current))
 		crash_kexec(regs);
 
-	if (ret != NOTIFY_STOP)
-		make_task_dead(SIGSEGV);
+	make_task_dead(SIGSEGV);
 }
 
 extern struct exception_table_entry __start___dbe_table[];
