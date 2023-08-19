@@ -32,6 +32,7 @@ place where this information is gathered.
    sysfs-platform_profile
    vduse
    futex2
+   perf_ring_buffer
 
 .. only::  subproject and html
 
