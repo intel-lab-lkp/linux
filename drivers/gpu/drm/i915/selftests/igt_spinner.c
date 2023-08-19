@@ -108,15 +108,10 @@ int igt_spinner_pin(struct igt_spinner *spin,
 	return 0;
 }
 
-static unsigned int seqno_offset(u64 fence)
-{
-	return offset_in_page(sizeof(u32) * fence);
-}
-
 static u64 hws_address(const struct i915_vma *hws,
 		       const struct i915_request *rq)
 {
-	return i915_vma_offset(hws) + seqno_offset(rq->fence.context);
+	return i915_vma_offset(hws) + offset_in_page(sizeof(u32) * rq->fence.context);
 }
 
 struct i915_request *
@@ -214,14 +209,6 @@ cancel_rq:
 		i915_request_add(rq);
 	}
 	return err ? ERR_PTR(err) : rq;
-}
-
-static u32
-hws_seqno(const struct igt_spinner *spin, const struct i915_request *rq)
-{
-	u32 *seqno = spin->seqno + seqno_offset(rq->fence.context);
-
-	return READ_ONCE(*seqno);
 }
 
 void igt_spinner_end(struct igt_spinner *spin)
