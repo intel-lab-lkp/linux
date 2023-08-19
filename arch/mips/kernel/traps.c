@@ -1998,6 +1998,7 @@ void __noreturn nmi_exception_handler(struct pt_regs *regs)
 	regs->cp0_epc = read_c0_errorepc();
 	die(str, regs);
 	nmi_exit();
+	BUG();
 }
 
 unsigned long ebase;
