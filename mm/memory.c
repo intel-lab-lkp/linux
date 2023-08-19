@@ -4780,7 +4780,7 @@ static vm_fault_t do_numa_page(struct vm_fault *vmf)
 	pte_t pte, old_pte;
 	int flags = 0;
 	pg_data_t *pgdat;
-	int isolated;
+	int isolated, nr_succeeded;
 	LIST_HEAD(migratepages);
 
 	/*
@@ -4861,7 +4861,8 @@ static vm_fault_t do_numa_page(struct vm_fault *vmf)
 
 	list_add(&page->lru, &migratepages);
 	/* Migrate to the requested node */
-	if (migrate_misplaced_page(&migratepages, vma, page_nid, target_nid)) {
+	nr_succeeded = migrate_misplaced_page(&migratepages, vma, page_nid, target_nid);
+	if (nr_succeeded) {
 		page_nid = target_nid;
 		flags |= TNF_MIGRATED;
 	} else {

@@ -2523,7 +2523,6 @@ int migrate_misplaced_page(struct list_head *migratepages, struct vm_area_struct
 			   int source_nid, int target_nid)
 {
 	pg_data_t *pgdat = NODE_DATA(target_nid);
-	int migrated = 1;
 	int nr_remaining;
 	unsigned int nr_succeeded;
 
@@ -2533,8 +2532,6 @@ int migrate_misplaced_page(struct list_head *migratepages, struct vm_area_struct
 	if (nr_remaining) {
 		if (!list_empty(migratepages))
 			putback_movable_pages(migratepages);
-
-		migrated = 0;
 	}
 	if (nr_succeeded) {
 		count_vm_numa_events(NUMA_PAGE_MIGRATE, nr_succeeded);
@@ -2543,7 +2540,7 @@ int migrate_misplaced_page(struct list_head *migratepages, struct vm_area_struct
 					    nr_succeeded);
 	}
 	BUG_ON(!list_empty(migratepages));
-	return migrated;
+	return nr_succeeded;
 }
 #endif /* CONFIG_NUMA_BALANCING */
 #endif /* CONFIG_NUMA */
