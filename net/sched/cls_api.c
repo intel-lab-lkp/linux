@@ -1011,12 +1011,13 @@ static struct tcf_block *tcf_block_create(struct net *net, struct Qdisc *q,
 	return block;
 }
 
-static struct tcf_block *tcf_block_lookup(struct net *net, u32 block_index)
+struct tcf_block *tcf_block_lookup(struct net *net, u32 block_index)
 {
 	struct tcf_net *tn = net_generic(net, tcf_net_id);
 
 	return idr_find(&tn->idr, block_index);
 }
+EXPORT_SYMBOL(tcf_block_lookup);
 
 static struct tcf_block *tcf_block_refcnt_get(struct net *net, u32 block_index)
 {
@@ -1737,8 +1738,12 @@ int tcf_classify(struct sk_buff *skb,
 		 const struct tcf_proto *tp,
 		 struct tcf_result *res, bool compat_mode)
 {
+	struct qdisc_skb_cb *qdisc_cb = qdisc_skb_cb(skb);
+
 #if !IS_ENABLED(CONFIG_NET_TC_SKB_EXT)
 	u32 last_executed_chain = 0;
+
+	qdisc_cb->block_index = block ? block->index : 0;
 
 	return __tcf_classify(skb, tp, tp, res, compat_mode, NULL, 0,
 			      &last_executed_chain);
@@ -1751,6 +1756,7 @@ int tcf_classify(struct sk_buff *skb,
 	int ret;
 
 	if (block) {
+		qdisc_cb->block_index = block->index;
 		ext = skb_ext_find(skb, TC_SKB_EXT);
 
 		if (ext && (ext->chain || ext->act_miss)) {
@@ -1778,6 +1784,8 @@ int tcf_classify(struct sk_buff *skb,
 			tp = rcu_dereference_bh(fchain->filter_chain);
 			last_executed_chain = fchain->index;
 		}
+	} else {
+		qdisc_cb->block_index = 0;
 	}
 
 	ret = __tcf_classify(skb, tp, orig_tp, res, compat_mode, n, act_index,

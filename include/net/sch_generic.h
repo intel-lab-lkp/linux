@@ -440,6 +440,8 @@ struct qdisc_skb_cb {
 	};
 #define QDISC_CB_PRIV_LEN 20
 	unsigned char		data[QDISC_CB_PRIV_LEN];
+	/* This should allow eBPF to continue to align */
+	u32                     block_index;
 };
 
 typedef void tcf_chain_head_change_t(struct tcf_proto *tp_head, void *priv);
@@ -487,6 +489,8 @@ struct tcf_block {
 	DECLARE_HASHTABLE(proto_destroy_ht, 7);
 	struct mutex proto_destroy_lock; /* Lock for proto_destroy hashtable. */
 };
+
+struct tcf_block *tcf_block_lookup(struct net *net, u32 block_index);
 
 static inline bool lockdep_tcf_chain_is_locked(struct tcf_chain *chain)
 {
