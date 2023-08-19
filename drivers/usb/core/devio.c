@@ -2782,6 +2782,9 @@ static long usbdev_do_ioctl(struct file *file, unsigned int cmd,
 		break;
 	case USBDEVFS_GET_SPEED:
 		ret = ps->dev->speed;
+		if (ret == USB_SPEED_SUPER_PLUS &&
+				ps->dev->ssp_rate == USB_SSP_GEN_2x2)
+			ret = USBDEVFS_SPEED_SUPER_PLUS_BY2;
 		break;
 	case USBDEVFS_FORBID_SUSPEND:
 		ret = proc_forbid_suspend(ps);

@@ -180,9 +180,13 @@ struct usbdevfs_streams {
 };
 
 /*
- * USB_SPEED_* values returned by USBDEVFS_GET_SPEED are defined in
- * linux/usb/ch9.h
+ * For USBDEVFS_GET_SPEED:
+ *
+ * When speed is USB_SPEED_SUPER_PLUS and ssp_rate is USB_SSP_GEN_2x2
+ * or higher, use below definitions to indicate actual connection speed.
+ * Otherwise, just return USB_SPEED_* values defined in linux/usb/ch9.h.
  */
+#define USBDEVFS_SPEED_SUPER_PLUS_BY2	7	/* USB_SSP_GEN_2x2, 20Gbps */
 
 #define USBDEVFS_CONTROL           _IOWR('U', 0, struct usbdevfs_ctrltransfer)
 #define USBDEVFS_CONTROL32           _IOWR('U', 0, struct usbdevfs_ctrltransfer32)

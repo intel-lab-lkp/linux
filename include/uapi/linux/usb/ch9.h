@@ -1185,6 +1185,14 @@ enum usb_device_speed {
 	USB_SPEED_SUPER_PLUS,			/* usb 3.1 */
 };
 
+/* USB 3.2 SuperSpeed Plus phy signaling rate generation and lane count */
+
+enum usb_ssp_rate {
+	USB_SSP_GEN_UNKNOWN = 0,
+	USB_SSP_GEN_2x1,
+	USB_SSP_GEN_1x2,
+	USB_SSP_GEN_2x2,
+};
 
 enum usb_device_state {
 	/* NOTATTACHED isn't in the USB spec, and this state acts
