@@ -1538,8 +1538,8 @@ enqueue_task_rt(struct rq *rq, struct task_struct *p, int flags)
 	enqueue_rt_entity(rt_se, flags);
 
 	/*
-	 * Current can't be pushed away. Selected is tied to current,
-	 * so don't push it either.
+	 * Current can't be pushed away. Proxy is tied to current, so don't
+	 * push it either.
 	 */
 	if (task_current(rq, p) || task_current_selected(rq, p))
 		return;
@@ -1547,6 +1547,9 @@ enqueue_task_rt(struct rq *rq, struct task_struct *p, int flags)
 	 * Pinned tasks can't be pushed.
 	 */
 	if (p->nr_cpus_allowed == 1)
+		return;
+
+	if (task_is_blocked(p))
 		return;
 
 	enqueue_pushable_task(rq, p);
@@ -1836,13 +1839,14 @@ static void put_prev_task_rt(struct rq *rq, struct task_struct *p)
 
 	update_rt_rq_load_avg(rq_clock_pelt(rq), rq, 1);
 
-	/* Avoid marking selected as pushable */
-	if (task_current_selected(rq, p))
+	if (task_current(rq, p) || task_current_selected(rq, p))
 		return;
 
+	if (task_is_blocked(p))
+		return;
 	/*
 	 * The previous task needs to be made eligible for pushing
-	 * if it is still active
+	 * if it is still active.
 	 */
 	if (on_rt_rq(&p->rt) && p->nr_cpus_allowed > 1)
 		enqueue_pushable_task(rq, p);
