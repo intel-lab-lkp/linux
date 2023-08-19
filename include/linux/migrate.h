@@ -144,11 +144,17 @@ const struct movable_operations *page_movable_ops(struct page *page)
 #ifdef CONFIG_NUMA_BALANCING
 int migrate_misplaced_page(struct page *page, struct vm_area_struct *vma,
 			   int node);
+int numamigrate_isolate_page(pg_data_t *pgdat, struct page *page);
 #else
 static inline int migrate_misplaced_page(struct page *page,
 					 struct vm_area_struct *vma, int node)
 {
 	return -EAGAIN; /* can't migrate now */
+}
+
+static inline int numamigrate_isolate_page(pg_data_t *pgdat, struct page *page)
+{
+	return -EAGAIN;
 }
 #endif /* CONFIG_NUMA_BALANCING */
 

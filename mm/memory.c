@@ -4779,6 +4779,8 @@ static vm_fault_t do_numa_page(struct vm_fault *vmf)
 	int target_nid;
 	pte_t pte, old_pte;
 	int flags = 0;
+	pg_data_t *pgdat;
+	int isolated;
 
 	/*
 	 * The "pte" at this point cannot be used safely without
@@ -4849,11 +4851,19 @@ static vm_fault_t do_numa_page(struct vm_fault *vmf)
 	pte_unmap_unlock(vmf->pte, vmf->ptl);
 	writable = false;
 
+	pgdat = NODE_DATA(target_nid);
+	isolated = numamigrate_isolate_page(pgdat, page);
+	if (!isolated) {
+		put_page(page);
+		goto isolate_fail;
+	}
+
 	/* Migrate to the requested node */
 	if (migrate_misplaced_page(page, vma, target_nid)) {
 		page_nid = target_nid;
 		flags |= TNF_MIGRATED;
 	} else {
+isolate_fail:
 		flags |= TNF_MIGRATE_FAIL;
 		vmf->pte = pte_offset_map_lock(vma->vm_mm, vmf->pmd,
 					       vmf->address, &vmf->ptl);
