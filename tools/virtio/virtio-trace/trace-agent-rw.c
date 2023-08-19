@@ -8,6 +8,7 @@
  */
 
 #define _GNU_SOURCE
+#include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -127,10 +128,10 @@ static void *rw_thread_main(void *thread_info)
 		rlen = splice(ts->in_fd, NULL, ts->read_pipe, NULL,
 				ts->pipe_size, SPLICE_F_MOVE | SPLICE_F_MORE);
 
-		if (rlen < 0) {
-			pr_err("Splice_read in rw-thread(%d)\n", ts->cpu_num);
+		if (rlen < 0 && errno != EAGAIN) {
+			pr_err("Splice_read error (%d) in rw-thread(%d)\n", errno, ts->cpu_num);
 			goto error;
-		} else if (rlen == 0) {
+		} else if (rlen == 0 || errno == EAGAIN) {
 			/*
 			 * If trace data do not exist or are unreadable not
 			 * for exceeding the page size, splice_read returns
