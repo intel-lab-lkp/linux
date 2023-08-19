@@ -19,6 +19,7 @@
 #include <linux/printk.h>
 #include <linux/string_helpers.h>
 #include <linux/uio.h>
+#include <linux/compat.h>
 
 #include <linux/uaccess.h>
 #include <asm/page.h>
@@ -759,11 +760,16 @@ void seq_put_hex_ll(struct seq_file *m, const char *delimiter,
 			seq_puts(m, delimiter);
 	}
 
+#ifdef CONFIG_64BIT
 	/* If x is 0, the result of __builtin_clzll is undefined */
-	if (v == 0)
+	if (v == 0 || is_compat_task())
 		len = 1;
 	else
 		len = (sizeof(v) * 8 - __builtin_clzll(v) + 3) / 4;
+#else
+	/* On 32-bit kernel always use provided width */
+	len = 1;
+#endif
 
 	if (len < width)
 		len = width;
