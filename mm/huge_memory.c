@@ -1498,6 +1498,7 @@ vm_fault_t do_huge_pmd_numa_page(struct vm_fault *vmf)
 	int flags = 0;
 	pg_data_t *pgdat;
 	int isolated;
+	LIST_HEAD(migratepages);
 
 	vmf->ptl = pmd_lock(vma->vm_mm, vmf->pmd);
 	if (unlikely(!pmd_same(oldpmd, *vmf->pmd))) {
@@ -1549,7 +1550,8 @@ vm_fault_t do_huge_pmd_numa_page(struct vm_fault *vmf)
 		goto isolate_fail;
 	}
 
-	migrated = migrate_misplaced_page(page, vma, target_nid);
+	list_add(&page->lru, &migratepages);
+	migrated = migrate_misplaced_page(&migratepages, vma, page_nid, target_nid);
 	if (migrated) {
 		flags |= TNF_MIGRATED;
 		page_nid = target_nid;

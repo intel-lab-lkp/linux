@@ -2519,36 +2519,30 @@ int numamigrate_isolate_page(pg_data_t *pgdat, struct page *page)
  * node. Caller is expected to have an elevated reference count on
  * the page that will be dropped by this function before returning.
  */
-int migrate_misplaced_page(struct page *page, struct vm_area_struct *vma,
-			   int node)
+int migrate_misplaced_page(struct list_head *migratepages, struct vm_area_struct *vma,
+			   int source_nid, int target_nid)
 {
-	pg_data_t *pgdat = NODE_DATA(node);
+	pg_data_t *pgdat = NODE_DATA(target_nid);
 	int migrated = 1;
 	int nr_remaining;
 	unsigned int nr_succeeded;
-	LIST_HEAD(migratepages);
-	int nr_pages = thp_nr_pages(page);
 
-	list_add(&page->lru, &migratepages);
-	nr_remaining = migrate_pages(&migratepages, alloc_misplaced_dst_folio,
-				     NULL, node, MIGRATE_ASYNC,
+	nr_remaining = migrate_pages(migratepages, alloc_misplaced_dst_folio,
+				     NULL, target_nid, MIGRATE_ASYNC,
 				     MR_NUMA_MISPLACED, &nr_succeeded);
 	if (nr_remaining) {
-		if (!list_empty(&migratepages)) {
-			list_del(&page->lru);
-			mod_node_page_state(page_pgdat(page), NR_ISOLATED_ANON +
-					page_is_file_lru(page), -nr_pages);
-			putback_lru_page(page);
-		}
+		if (!list_empty(migratepages))
+			putback_movable_pages(migratepages);
+
 		migrated = 0;
 	}
 	if (nr_succeeded) {
 		count_vm_numa_events(NUMA_PAGE_MIGRATE, nr_succeeded);
-		if (!node_is_toptier(page_to_nid(page)) && node_is_toptier(node))
+		if (!node_is_toptier(source_nid) && node_is_toptier(target_nid))
 			mod_node_page_state(pgdat, PGPROMOTE_SUCCESS,
 					    nr_succeeded);
 	}
-	BUG_ON(!list_empty(&migratepages));
+	BUG_ON(!list_empty(migratepages));
 	return migrated;
 }
 #endif /* CONFIG_NUMA_BALANCING */
