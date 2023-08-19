@@ -3840,18 +3840,20 @@ static int ttwu_runnable(struct task_struct *p, int wake_flags)
 	int ret = 0;
 
 	rq = __task_rq_lock(p, &rf);
-	if (task_on_rq_queued(p)) {
-		if (!task_on_cpu(rq, p)) {
-			/*
-			 * When on_rq && !on_cpu the task is preempted, see if
-			 * it should preempt the task that is current now.
-			 */
-			update_rq_clock(rq);
-			check_preempt_curr(rq, p, wake_flags);
-		}
-		ttwu_do_wakeup(p);
-		ret = 1;
+	if (!task_on_rq_queued(p))
+		goto out_unlock;
+
+	if (!task_on_cpu(rq, p)) {
+		/*
+		 * When on_rq && !on_cpu the task is preempted, see if
+		 * it should preempt the task that is current now.
+		 */
+		update_rq_clock(rq);
+		check_preempt_curr(rq, p, wake_flags);
 	}
+	ttwu_do_wakeup(p);
+	ret = 1;
+out_unlock:
 	__task_rq_unlock(rq, &rf);
 
 	return ret;
