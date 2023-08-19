@@ -888,6 +888,11 @@ static int igc_ethtool_get_coalesce(struct net_device *netdev,
 	return 0;
 }
 
+static int igc_ethtool_coalesce_to_itr_setting(u32 coalesce_usecs)
+{
+	return coalesce_usecs <= 3 ? coalesce_usecs : coalesce_usecs << 2;
+}
+
 static int igc_ethtool_set_coalesce(struct net_device *netdev,
 				    struct ethtool_coalesce *ec,
 				    struct kernel_ethtool_coalesce *kernel_coal,
@@ -914,19 +919,35 @@ static int igc_ethtool_set_coalesce(struct net_device *netdev,
 			adapter->flags &= ~IGC_FLAG_DMAC;
 	}
 
-	/* convert to rate of irq's per second */
-	if (ec->rx_coalesce_usecs && ec->rx_coalesce_usecs <= 3)
-		adapter->rx_itr_setting = ec->rx_coalesce_usecs;
-	else
-		adapter->rx_itr_setting = ec->rx_coalesce_usecs << 2;
+	if (adapter->flags & IGC_FLAG_QUEUE_PAIRS) {
+		u32 old_tx_itr, old_rx_itr;
 
-	/* convert to rate of irq's per second */
-	if (adapter->flags & IGC_FLAG_QUEUE_PAIRS)
-		adapter->tx_itr_setting = adapter->rx_itr_setting;
-	else if (ec->tx_coalesce_usecs && ec->tx_coalesce_usecs <= 3)
-		adapter->tx_itr_setting = ec->tx_coalesce_usecs;
-	else
-		adapter->tx_itr_setting = ec->tx_coalesce_usecs << 2;
+		/* This is to get back the original value before byte shifting */
+		old_tx_itr = (adapter->tx_itr_setting <= 3) ?
+			      adapter->tx_itr_setting : adapter->tx_itr_setting >> 2;
+
+		old_rx_itr = (adapter->rx_itr_setting <= 3) ?
+			      adapter->rx_itr_setting : adapter->rx_itr_setting >> 2;
+
+		/* convert to rate of irq's per second */
+		if (old_tx_itr != ec->tx_coalesce_usecs) {
+			adapter->tx_itr_setting =
+				igc_ethtool_coalesce_to_itr_setting(ec->tx_coalesce_usecs);
+			adapter->rx_itr_setting = adapter->tx_itr_setting;
+		} else if (old_rx_itr != ec->rx_coalesce_usecs) {
+			adapter->rx_itr_setting =
+				igc_ethtool_coalesce_to_itr_setting(ec->rx_coalesce_usecs);
+			adapter->tx_itr_setting = adapter->rx_itr_setting;
+		}
+	} else {
+		/* convert to rate of irq's per second */
+		adapter->rx_itr_setting =
+			igc_ethtool_coalesce_to_itr_setting(ec->rx_coalesce_usecs);
+
+		/* convert to rate of irq's per second */
+		adapter->tx_itr_setting =
+			igc_ethtool_coalesce_to_itr_setting(ec->tx_coalesce_usecs);
+	}
 
 	for (i = 0; i < adapter->num_q_vectors; i++) {
 		struct igc_q_vector *q_vector = adapter->q_vector[i];
