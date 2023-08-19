@@ -2417,9 +2417,8 @@ static const struct uvc_device_info uvc_quirk_force_y8 = {
 	.quirks = UVC_QUIRK_FORCE_Y8,
 };
 
-#define UVC_INFO_QUIRK(q) (kernel_ulong_t)&(struct uvc_device_info){.quirks = q}
-#define UVC_INFO_META(m) (kernel_ulong_t)&(struct uvc_device_info) \
-	{.meta_format = m}
+#define UVC_INFO_QUIRK(q) ((kernel_ulong_t)&(struct uvc_device_info){.quirks = q})
+#define UVC_INFO_META(m) ((kernel_ulong_t)&(struct uvc_device_info) {.meta_format = m})
 
 /*
  * The Logitech cameras listed below have their interface class set to
