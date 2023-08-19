@@ -913,6 +913,10 @@ static noinline void __sched __mutex_unlock_slowpath(struct mutex *lock, unsigne
 
 	mutex_release(&lock->dep_map, ip);
 
+#ifdef CONFIG_PROXY_EXEC
+	/* Always force HANDOFF for Proxy Exec for now. Revisit. */
+	owner = MUTEX_FLAG_HANDOFF;
+#else /* CONFIG_PROXY_EXEC */
 	/*
 	 * Release the lock before (potentially) taking the spinlock such that
 	 * other contenders can get on with things ASAP.
@@ -935,6 +939,7 @@ static noinline void __sched __mutex_unlock_slowpath(struct mutex *lock, unsigne
 			return;
 		}
 	}
+#endif /* CONFIG_PROXY_EXEC */
 
 	raw_spin_lock_irqsave(&lock->wait_lock, flags);
 	debug_mutex_unlock(lock);
