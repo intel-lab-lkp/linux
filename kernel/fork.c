@@ -2459,6 +2459,7 @@ __latent_entropy struct task_struct *copy_process(
 	lockdep_init_task(p);
 #endif
 
+	p->blocked_donor = NULL; /* nobody is boosting us yet */
 	p->blocked_on = NULL; /* not blocked yet */
 	p->blocked_on_waking = false; /* not blocked yet */
 
