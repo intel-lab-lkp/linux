@@ -4747,6 +4747,25 @@ int numa_migrate_prep(struct page *page, struct vm_area_struct *vma,
 		*flags |= TNF_FAULT_LOCAL;
 	}
 
+	/*
+	 * Don't migrate file pages that are mapped in multiple processes
+	 * with execute permissions as they are probably shared libraries.
+	 */
+	if (page_mapcount(page) != 1 && page_is_file_lru(page) &&
+	    (vma->vm_flags & VM_EXEC))
+		return NUMA_NO_NODE;
+
+	/*
+	 * Also do not migrate dirty pages as not all filesystems can move
+	 * dirty pages in MIGRATE_ASYNC mode which is a waste of cycles.
+	 */
+	if (page_is_file_lru(page) && PageDirty(page))
+		return NUMA_NO_NODE;
+
+	/* Do not migrate THP mapped by multiple processes */
+	if (PageTransHuge(page) && total_mapcount(page) > 1)
+		return NUMA_NO_NODE;
+
 	return mpol_misplaced(page, vma, addr);
 }
 

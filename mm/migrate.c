@@ -2485,10 +2485,6 @@ static int numamigrate_isolate_page(pg_data_t *pgdat, struct page *page)
 
 	VM_BUG_ON_PAGE(order && !PageTransHuge(page), page);
 
-	/* Do not migrate THP mapped by multiple processes */
-	if (PageTransHuge(page) && total_mapcount(page) > 1)
-		return 0;
-
 	/* Avoid migrating to a node that is nearly full */
 	if (!migrate_balanced_pgdat(pgdat, nr_pages)) {
 		int z;
@@ -2532,21 +2528,6 @@ int migrate_misplaced_page(struct page *page, struct vm_area_struct *vma,
 	unsigned int nr_succeeded;
 	LIST_HEAD(migratepages);
 	int nr_pages = thp_nr_pages(page);
-
-	/*
-	 * Don't migrate file pages that are mapped in multiple processes
-	 * with execute permissions as they are probably shared libraries.
-	 */
-	if (page_mapcount(page) != 1 && page_is_file_lru(page) &&
-	    (vma->vm_flags & VM_EXEC))
-		goto out;
-
-	/*
-	 * Also do not migrate dirty pages as not all filesystems can move
-	 * dirty pages in MIGRATE_ASYNC mode which is a waste of cycles.
-	 */
-	if (page_is_file_lru(page) && PageDirty(page))
-		goto out;
 
 	isolated = numamigrate_isolate_page(pgdat, page);
 	if (!isolated)
