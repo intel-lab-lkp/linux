@@ -119,21 +119,40 @@ static void do_encl_op_nop(void *_op)
 
 }
 
+/*
+ * Symbol placed at the start of the enclave image by the linker script.
+ * Declare this extern symbol with visibility "hidden" to ensure the
+ * compiler does not access it through the GOT.
+ */
+extern const uint8_t __attribute__((visibility("hidden"))) __encl_base;
+static const uint64_t encl_base = (uint64_t)&__encl_base;
+
+typedef void (*encl_op_t)(void *);
+const encl_op_t encl_op_array[ENCL_OP_MAX] = {
+	do_encl_op_put_to_buf,
+	do_encl_op_get_from_buf,
+	do_encl_op_put_to_addr,
+	do_encl_op_get_from_addr,
+	do_encl_op_nop,
+	do_encl_eaccept,
+	do_encl_emodpe,
+	do_encl_init_tcs_page,
+};
+
 void encl_body(void *rdi,  void *rsi)
 {
-	const void (*encl_op_array[ENCL_OP_MAX])(void *) = {
-		do_encl_op_put_to_buf,
-		do_encl_op_get_from_buf,
-		do_encl_op_put_to_addr,
-		do_encl_op_get_from_addr,
-		do_encl_op_nop,
-		do_encl_eaccept,
-		do_encl_emodpe,
-		do_encl_init_tcs_page,
-	};
+	struct encl_op_header *header = (struct encl_op_header *)rdi;
+	encl_op_t op;
 
-	struct encl_op_header *op = (struct encl_op_header *)rdi;
+	if (header->type >= ENCL_OP_MAX)
+		return;
 
-	if (op->type < ENCL_OP_MAX)
-		(*encl_op_array[op->type])(op);
+	/*
+	 * "encl_base" needs to be added, as this call site *cannot be*
+	 * made rip-relative by the compiler, or fixed up by any other
+	 * possible means.
+	 */
+	op = encl_base + encl_op_array[header->type];
+
+	(*op)(header);
 }
