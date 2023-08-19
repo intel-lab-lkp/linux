@@ -1258,7 +1258,9 @@ static long sock_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 		case SIOCSIFBR:
 		case SIOCBRADDBR:
 		case SIOCBRDELBR:
+			rtnl_lock();
 			err = br_ioctl_call(net, NULL, cmd, NULL, argp);
+			rtnl_unlock();
 			break;
 		case SIOCGIFVLAN:
 		case SIOCSIFVLAN:

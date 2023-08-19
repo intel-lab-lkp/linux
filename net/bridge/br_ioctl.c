@@ -399,8 +399,6 @@ int br_ioctl_stub(struct net *net, struct net_bridge *br, unsigned int cmd,
 {
 	int ret = -EOPNOTSUPP;
 
-	rtnl_lock();
-
 	switch (cmd) {
 	case SIOCGIFBR:
 	case SIOCSIFBR:
@@ -433,8 +431,6 @@ int br_ioctl_stub(struct net *net, struct net_bridge *br, unsigned int cmd,
 		ret = add_del_if(br, ifr->ifr_ifindex, cmd == SIOCBRADDIF);
 		break;
 	}
-
-	rtnl_unlock();
 
 	return ret;
 }
