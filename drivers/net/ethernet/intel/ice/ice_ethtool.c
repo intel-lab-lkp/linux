@@ -354,7 +354,6 @@ static struct ethtool_forced_speed_map ice_adv_lnk_speed_maps[] __ro_after_init 
 	ETHTOOL_FORCED_SPEED_MAP(25000),
 	ETHTOOL_FORCED_SPEED_MAP(40000),
 	ETHTOOL_FORCED_SPEED_MAP(50000),
-	ETHTOOL_FORCED_SPEED_MAP(100000),
 };
 
 void __init ice_adv_lnk_speed_maps_init(void)
