@@ -679,6 +679,8 @@ done:
 	} else if (fault & (VM_FAULT_HWPOISON_LARGE | VM_FAULT_HWPOISON)) {
 		unsigned int lsb;
 
+		pr_err("MCE: Killing %s:%d due to hardware memory corruption fault at %lx\n",
+		       current->comm, current->pid, far);
 		lsb = PAGE_SHIFT;
 		if (fault & VM_FAULT_HWPOISON_LARGE)
 			lsb = hstate_index_to_shift(VM_FAULT_GET_HINDEX(fault));
