@@ -2460,6 +2460,7 @@ __latent_entropy struct task_struct *copy_process(
 #endif
 
 	p->blocked_on = NULL; /* not blocked yet */
+	p->blocked_on_waking = false; /* not blocked yet */
 
 #ifdef CONFIG_BCACHE
 	p->sequential_io	= 0;
