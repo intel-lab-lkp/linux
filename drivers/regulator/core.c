@@ -2053,11 +2053,9 @@ static int regulator_resolve_supply(struct regulator_dev *rdev)
 
 	r = regulator_dev_lookup(dev, rdev->supply_name);
 	if (IS_ERR(r)) {
-		ret = PTR_ERR(r);
-
 		/* Did the lookup explicitly defer for us? */
-		if (ret == -EPROBE_DEFER)
-			goto out;
+		if (PTR_ERR(r) == -EPROBE_DEFER)
+			return -EPROBE_DEFER;
 
 		if (have_full_constraints()) {
 			r = dummy_regulator_rdev;
@@ -2065,18 +2063,15 @@ static int regulator_resolve_supply(struct regulator_dev *rdev)
 		} else {
 			dev_err(dev, "Failed to resolve %s-supply for %s\n",
 				rdev->supply_name, rdev->desc->name);
-			ret = -EPROBE_DEFER;
-			goto out;
+			return -EPROBE_DEFER;
 		}
 	}
 
 	if (r == rdev) {
 		dev_err(dev, "Supply for %s (%s) resolved to itself\n",
 			rdev->desc->name, rdev->supply_name);
-		if (!have_full_constraints()) {
-			ret = -EINVAL;
-			goto out;
-		}
+		if (!have_full_constraints())
+			return -EINVAL;
 		r = dummy_regulator_rdev;
 		get_device(&r->dev);
 	}
@@ -2090,8 +2085,7 @@ static int regulator_resolve_supply(struct regulator_dev *rdev)
 	if (r->dev.parent && r->dev.parent != rdev->dev.parent) {
 		if (!device_is_bound(r->dev.parent)) {
 			put_device(&r->dev);
-			ret = -EPROBE_DEFER;
-			goto out;
+			return -EPROBE_DEFER;
 		}
 	}
 
@@ -2099,7 +2093,7 @@ static int regulator_resolve_supply(struct regulator_dev *rdev)
 	ret = regulator_resolve_supply(r);
 	if (ret < 0) {
 		put_device(&r->dev);
-		goto out;
+		return ret;
 	}
 
 	/*
@@ -2113,14 +2107,14 @@ static int regulator_resolve_supply(struct regulator_dev *rdev)
 	if (rdev->supply) {
 		regulator_unlock_two(rdev, r, &ww_ctx);
 		put_device(&r->dev);
-		goto out;
+		return 0;
 	}
 
 	ret = set_supply(rdev, r);
 	if (ret < 0) {
 		regulator_unlock_two(rdev, r, &ww_ctx);
 		put_device(&r->dev);
-		goto out;
+		return ret;
 	}
 
 	regulator_unlock_two(rdev, r, &ww_ctx);
@@ -2135,12 +2129,11 @@ static int regulator_resolve_supply(struct regulator_dev *rdev)
 		if (ret < 0) {
 			_regulator_put(rdev->supply);
 			rdev->supply = NULL;
-			goto out;
+			return ret;
 		}
 	}
 
-out:
-	return ret;
+	return 0;
 }
 
 /* Internal regulator request function */
