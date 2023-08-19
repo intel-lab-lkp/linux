@@ -34,7 +34,6 @@
 #include "internal.h"
 
 static DEFINE_WW_CLASS(regulator_ww_class);
-static DEFINE_MUTEX(regulator_nesting_mutex);
 static DEFINE_MUTEX(regulator_list_mutex);
 static LIST_HEAD(regulator_map_list);
 static LIST_HEAD(regulator_ena_gpio_list);
@@ -143,23 +142,18 @@ static inline int regulator_lock_nested(struct regulator_dev *rdev,
 {
 	int ret = 0;
 
-	mutex_lock(&regulator_nesting_mutex);
-
 	if (!ww_mutex_trylock(&rdev->mutex, ww_ctx) &&
-	    rdev->mutex_owner != current) {
-		mutex_unlock(&regulator_nesting_mutex);
+	    READ_ONCE(rdev->mutex_owner) != current) {
 		ret = ww_mutex_lock(&rdev->mutex, ww_ctx);
+
 		if (ret == -EDEADLK)
 			return ret;
-		mutex_lock(&regulator_nesting_mutex);
 	}
 
 	rdev->ref_cnt++;
 	rdev->mutex_owner = current;
 
-	mutex_unlock(&regulator_nesting_mutex);
-
-	return ret;
+	return 0;
 }
 
 /**
@@ -186,16 +180,13 @@ static void regulator_lock(struct regulator_dev *rdev)
  */
 static void regulator_unlock(struct regulator_dev *rdev)
 {
-	mutex_lock(&regulator_nesting_mutex);
+	if (WARN_ON_ONCE(rdev->ref_cnt <= 0))
+		return;
 
 	if (--rdev->ref_cnt == 0) {
 		rdev->mutex_owner = NULL;
 		ww_mutex_unlock(&rdev->mutex);
 	}
-
-	WARN_ON_ONCE(rdev->ref_cnt < 0);
-
-	mutex_unlock(&regulator_nesting_mutex);
 }
 
 /**
