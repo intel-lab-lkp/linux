@@ -5,11 +5,13 @@ include debian/rules.vars
 
 srctree ?= .
 
+JOBS = $(if $(filter -j%,$(MAKEFLAGS)),,$(patsubst parallel=%,-j%,$(filter parallel=%,$(DEB_BUILD_OPTIONS))))
+
 .PHONY: binary binary-indep binary-arch
 binary: binary-arch binary-indep
 binary-indep: build-indep
 binary-arch: build-arch
-	$(MAKE) -f $(srctree)/Makefile ARCH=$(ARCH) \
+	$(MAKE) $(JOBS) -f $(srctree)/Makefile ARCH=$(ARCH) \
 	KERNELRELEASE=$(KERNELRELEASE) \
 	run-command KBUILD_RUN_COMMAND=+$(srctree)/scripts/package/builddeb
 
@@ -17,7 +19,7 @@ binary-arch: build-arch
 build: build-arch build-indep
 build-indep:
 build-arch:
-	$(MAKE) -f $(srctree)/Makefile ARCH=$(ARCH) \
+	$(MAKE) $(JOBS) -f $(srctree)/Makefile ARCH=$(ARCH) \
 	KERNELRELEASE=$(KERNELRELEASE) \
 	$(shell $(srctree)/scripts/package/deb-build-option) \
 	olddefconfig all
@@ -25,4 +27,4 @@ build-arch:
 .PHONY: clean
 clean:
 	rm -rf debian/files debian/linux-*
-	$(MAKE) -f $(srctree)/Makefile ARCH=$(ARCH) clean
+	$(MAKE) $(JOBS) -f $(srctree)/Makefile ARCH=$(ARCH) clean
