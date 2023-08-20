@@ -44,6 +44,7 @@
 #define INA2XX_BUS_VOLTAGE		0x02 /* readonly */
 #define INA2XX_POWER			0x03 /* readonly */
 #define INA2XX_CURRENT			0x04 /* readonly */
+#define INA2XX_CURRENT_ISHUNT		0x01 /* readonly */
 #define INA2XX_CALIBRATION		0x05
 
 /* INA226 register definitions */
@@ -54,18 +55,22 @@
 /* register count */
 #define INA219_REGISTERS		6
 #define INA226_REGISTERS		8
+#define INA260_REGISTERS		8
 
 #define INA2XX_MAX_REGISTERS		8
 
 /* settings - depend on use case */
 #define INA219_CONFIG_DEFAULT		0x399F	/* PGA=8 */
 #define INA226_CONFIG_DEFAULT		0x4527	/* averages=16 */
+#define INA260_CONFIG_DEFAULT		0x6127	/* default from datasheet */
 
 /* worst case is 68.10 ms (~14.6Hz, ina219) */
 #define INA2XX_CONVERSION_RATE		15
 #define INA2XX_MAX_DELAY		69 /* worst case delay in ms */
 
 #define INA2XX_RSHUNT_DEFAULT		10000
+#define INA2XX_CURRENT_LSB_uA_DEFAULT	1250
+#define INA2XX_POWER_LSB_uW_DEFAULT	10000
 
 /* bit mask for reading the averaging setting in the configuration register */
 #define INA226_AVG_RD_MASK		0x0E00
@@ -98,10 +103,11 @@ static struct regmap_config ina2xx_regmap_config = {
 	.val_bits = 16,
 };
 
-enum ina2xx_ids { ina219, ina226 };
+enum ina2xx_ids { ina219, ina226, ina260 };
 
 struct ina2xx_config {
 	u16 config_default;
+	u8 ishunt;				/* integrated shunt? */
 	int calibration_value;
 	int registers;
 	int shunt_div;
@@ -125,6 +131,7 @@ struct ina2xx_data {
 static const struct ina2xx_config ina2xx_config[] = {
 	[ina219] = {
 		.config_default = INA219_CONFIG_DEFAULT,
+		.ishunt = 0,
 		.calibration_value = 4096,
 		.registers = INA219_REGISTERS,
 		.shunt_div = 100,
@@ -134,12 +141,21 @@ static const struct ina2xx_config ina2xx_config[] = {
 	},
 	[ina226] = {
 		.config_default = INA226_CONFIG_DEFAULT,
+		.ishunt = 0,
 		.calibration_value = 2048,
 		.registers = INA226_REGISTERS,
 		.shunt_div = 400,
 		.bus_voltage_shift = 0,
 		.bus_voltage_lsb = 1250,
 		.power_lsb_factor = 25,
+	},
+	[ina260] = {
+		.config_default = INA260_CONFIG_DEFAULT,
+		.ishunt = 1,
+		.registers = INA260_REGISTERS,
+		.shunt_div = 1,
+		.bus_voltage_shift = 0,
+		.bus_voltage_lsb = 1250,
 	},
 };
 
@@ -200,7 +216,10 @@ static int ina2xx_init(struct ina2xx_data *data)
 	if (ret < 0)
 		return ret;
 
-	return ina2xx_calibrate(data);
+	if (!data->config->ishunt)
+		return ina2xx_calibrate(data);
+
+	return 0;
 }
 
 static int ina2xx_read_reg(struct device *dev, int reg, unsigned int *regval)
@@ -211,6 +230,10 @@ static int ina2xx_read_reg(struct device *dev, int reg, unsigned int *regval)
 	dev_dbg(dev, "Starting register %d read\n", reg);
 
 	for (retry = 5; retry; retry--) {
+
+		/* Shunt register is used for current register when using integrated shunt */
+		if (data->config->ishunt && reg == INA2XX_CURRENT)
+			reg = INA2XX_CURRENT_ISHUNT;
 
 		ret = regmap_read(data->regmap, reg, regval);
 		if (ret < 0)
@@ -226,7 +249,7 @@ static int ina2xx_read_reg(struct device *dev, int reg, unsigned int *regval)
 		 * We do that extra read of the calibration register if there
 		 * is some hint of a chip reset.
 		 */
-		if (*regval == 0) {
+		if (*regval == 0 && !data->config->ishunt) {
 			unsigned int cal;
 
 			ret = regmap_read(data->regmap, INA2XX_CALIBRATION,
@@ -593,6 +616,18 @@ static const struct attribute_group ina2xx_group = {
 	.attrs = ina2xx_attrs,
 };
 
+/* integrated shunt devices attributes */
+static struct attribute *ina2xx_ishunt_attrs[] = {
+	&sensor_dev_attr_in1_input.dev_attr.attr,
+	&sensor_dev_attr_curr1_input.dev_attr.attr,
+	&sensor_dev_attr_power1_input.dev_attr.attr,
+	NULL,
+};
+
+static const struct attribute_group ina2xx_ishunt_group = {
+	.attrs = ina2xx_ishunt_attrs,
+};
+
 static struct attribute *ina226_attrs[] = {
 	&sensor_dev_attr_in0_crit.dev_attr.attr,
 	&sensor_dev_attr_in0_lcrit.dev_attr.attr,
@@ -636,16 +671,19 @@ static int ina2xx_probe(struct i2c_client *client)
 	data->config = &ina2xx_config[chip];
 	mutex_init(&data->config_lock);
 
-	if (of_property_read_u32(dev->of_node, "shunt-resistor", &val) < 0) {
-		struct ina2xx_platform_data *pdata = dev_get_platdata(dev);
+	/* Devices with no integrated shunt */
+	if (!data->config->ishunt) {
+		if (of_property_read_u32(dev->of_node, "shunt-resistor", &val) < 0) {
+			struct ina2xx_platform_data *pdata = dev_get_platdata(dev);
 
-		if (pdata)
-			val = pdata->shunt_uohms;
-		else
-			val = INA2XX_RSHUNT_DEFAULT;
+			if (pdata)
+				val = pdata->shunt_uohms;
+			else
+				val = INA2XX_RSHUNT_DEFAULT;
+		}
+
+		ina2xx_set_shunt(data, val);
 	}
-
-	ina2xx_set_shunt(data, val);
 
 	ina2xx_regmap_config.max_register = data->config->registers;
 
@@ -665,9 +703,15 @@ static int ina2xx_probe(struct i2c_client *client)
 		return -ENODEV;
 	}
 
-	data->groups[group++] = &ina2xx_group;
-	if (chip == ina226)
-		data->groups[group++] = &ina226_group;
+	if (data->config->ishunt) {
+		data->groups[group++] = &ina2xx_ishunt_group;
+		data->current_lsb_uA = INA2XX_CURRENT_LSB_uA_DEFAULT;
+		data->power_lsb_uW = INA2XX_POWER_LSB_uW_DEFAULT;
+	} else {
+		data->groups[group++] = &ina2xx_group;
+		if (chip == ina226)
+			data->groups[group++] = &ina226_group;
+	}
 
 	hwmon_dev = devm_hwmon_device_register_with_groups(dev, client->name,
 							   data, data->groups);
@@ -686,6 +730,7 @@ static const struct i2c_device_id ina2xx_id[] = {
 	{ "ina226", ina226 },
 	{ "ina230", ina226 },
 	{ "ina231", ina226 },
+	{ "ina260", ina260 },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, ina2xx_id);
@@ -710,6 +755,10 @@ static const struct of_device_id __maybe_unused ina2xx_of_match[] = {
 	{
 		.compatible = "ti,ina231",
 		.data = (void *)ina226
+	},
+	{
+		.compatible = "ti,ina260",
+		.data = (void *)ina260
 	},
 	{ },
 };
