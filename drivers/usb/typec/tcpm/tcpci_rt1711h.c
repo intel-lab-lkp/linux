@@ -53,6 +53,7 @@
 
 struct rt1711h_chip_info {
 	u16 did;
+	u32 rxdz_sel;
 };
 
 struct rt1711h_chip {
@@ -204,10 +205,7 @@ static inline int rt1711h_init_cc_params(struct rt1711h_chip *chip, u8 status)
 	if ((cc1 >= TYPEC_CC_RP_1_5 && cc2 < TYPEC_CC_RP_DEF) ||
 	    (cc2 >= TYPEC_CC_RP_1_5 && cc1 < TYPEC_CC_RP_DEF)) {
 		rxdz_en = BMCIO_RXDZEN;
-		if (chip->info->did == RT1715_DID)
-			rxdz_sel = RT1711H_BMCIO_RXDZSEL;
-		else
-			rxdz_sel = 0;
+		rxdz_sel = chip->info->rxdz_sel;
 	} else {
 		rxdz_en = 0;
 		rxdz_sel = RT1711H_BMCIO_RXDZSEL;
@@ -397,10 +395,12 @@ static void rt1711h_remove(struct i2c_client *client)
 
 static const struct rt1711h_chip_info rt1711h = {
 	.did = RT1711H_DID,
+	.rxdz_sel = 0,
 };
 
 static const struct rt1711h_chip_info rt1715 = {
 	.did = RT1715_DID,
+	.rxdz_sel = RT1711H_BMCIO_RXDZSEL,
 };
 
 static const struct i2c_device_id rt1711h_id[] = {
