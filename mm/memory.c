@@ -5343,12 +5343,6 @@ EXPORT_SYMBOL_GPL(handle_mm_fault);
 
 static inline bool get_mmap_lock_carefully(struct mm_struct *mm, struct pt_regs *regs)
 {
-	/* Even if this succeeds, make it clear we *might* have slept */
-	if (likely(mmap_read_trylock(mm))) {
-		might_sleep();
-		return true;
-	}
-
 	if (regs && !user_mode(regs)) {
 		unsigned long ip = instruction_pointer(regs);
 		if (!search_exception_tables(ip))
