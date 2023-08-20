@@ -403,7 +403,7 @@ static int fill_object_idr(struct drm_device *dev,
 		}
 
 		if (!drm_mode_object_lease_required(objects[o]->type)) {
-			DRM_DEBUG_KMS("invalid object for lease\n");
+			drm_dbg_kms(dev, "invalid object for lease\n");
 			ret = -EINVAL;
 			goto out_free_objects;
 		}

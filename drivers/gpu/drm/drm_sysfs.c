@@ -209,10 +209,10 @@ static ssize_t status_store(struct device *device,
 		ret = -EINVAL;
 
 	if (old_force != connector->force || !connector->force) {
-		DRM_DEBUG_KMS("[CONNECTOR:%d:%s] force updated from %d to %d or reprobing\n",
-			      connector->base.id,
-			      connector->name,
-			      old_force, connector->force);
+		drm_dbg_kms(dev, "[CONNECTOR:%d:%s] force updated from %d to %d or reprobing\n",
+			    connector->base.id,
+			    connector->name,
+			    old_force, connector->force);
 
 		connector->funcs->fill_modes(connector,
 					     dev->mode_config.max_width,

@@ -181,13 +181,14 @@ static void drm_connector_get_cmdline_mode(struct drm_connector *connector)
 						    mode->panel_orientation);
 	}
 
-	DRM_DEBUG_KMS("cmdline mode for connector %s %s %dx%d@%dHz%s%s%s\n",
-		      connector->name, mode->name,
-		      mode->xres, mode->yres,
-		      mode->refresh_specified ? mode->refresh : 60,
-		      mode->rb ? " reduced blanking" : "",
-		      mode->margins ? " with margins" : "",
-		      mode->interlace ?  " interlaced" : "");
+	drm_dbg_kms(connector->dev,
+		    "cmdline mode for connector %s %s %dx%d@%dHz%s%s%s\n",
+		    connector->name, mode->name,
+		    mode->xres, mode->yres,
+		    mode->refresh_specified ? mode->refresh : 60,
+		    mode->rb ? " reduced blanking" : "",
+		    mode->margins ? " with margins" : "",
+		    mode->interlace ?  " interlaced" : "");
 }
 
 static void drm_connector_free(struct kref *kref)
@@ -247,9 +248,9 @@ static int __drm_connector_init(struct drm_device *dev,
 	/* connector index is used with 32bit bitmasks */
 	ret = ida_alloc_max(&config->connector_ida, 31, GFP_KERNEL);
 	if (ret < 0) {
-		DRM_DEBUG_KMS("Failed to allocate %s connector index: %d\n",
-			      drm_connector_enum_list[connector_type].name,
-			      ret);
+		drm_dbg_kms(dev, "Failed to allocate %s connector index: %d\n",
+			    drm_connector_enum_list[connector_type].name,
+			    ret);
 		goto out_put;
 	}
 	connector->index = ret;

@@ -31,8 +31,8 @@ validate_displayid(const u8 *displayid, int length, int idx)
 	if (IS_ERR(base))
 		return base;
 
-	DRM_DEBUG_KMS("base revision 0x%x, length %d, %d %d\n",
-		      base->rev, base->bytes, base->prod_id, base->ext_count);
+	drm_dbg_kms(NULL, "base revision 0x%x, length %d, %d %d\n",
+		    base->rev, base->bytes, base->prod_id, base->ext_count);
 
 	/* +1 for DispID checksum */
 	dispid_length = sizeof(*base) + base->bytes + 1;

@@ -1987,7 +1987,7 @@ bool drm_edid_block_valid(u8 *_block, int block_num, bool print_bad_edid,
 
 	status = edid_block_check(block, is_base_block);
 	if (status == EDID_BLOCK_HEADER_REPAIR) {
-		DRM_DEBUG_KMS("Fixing EDID header, your hardware may be failing\n");
+		drm_dbg_kms(NULL, "Fixing EDID header, your hardware may be failing\n");
 		edid_header_fix(block);
 
 		/* Retry with fixed header, update status if that worked. */
@@ -2173,8 +2173,9 @@ drm_do_probe_ddc_edid(void *data, u8 *buf, unsigned int block, size_t len)
 		ret = i2c_transfer(adapter, &msgs[3 - xfers], xfers);
 
 		if (ret == -ENXIO) {
-			DRM_DEBUG_KMS("drm: skipping non-existent adapter %s\n",
-					adapter->name);
+			drm_dbg_kms(NULL,
+				    "drm: skipping non-existent adapter %s\n",
+				    adapter->name);
 			break;
 		}
 	} while (ret != xfers && --retries);
@@ -5622,7 +5623,7 @@ static int _drm_edid_to_sad(const struct drm_edid *drm_edid,
 	}
 	cea_db_iter_end(&iter);
 
-	DRM_DEBUG_KMS("Found %d Short Audio Descriptors\n", count);
+	drm_dbg_kms(NULL, "Found %d Short Audio Descriptors\n", count);
 
 	return count;
 }
@@ -5667,7 +5668,7 @@ static int _drm_edid_to_speaker_allocation(const struct drm_edid *drm_edid,
 	}
 	cea_db_iter_end(&iter);
 
-	DRM_DEBUG_KMS("Found %d Speaker Allocation Data Blocks\n", count);
+	drm_dbg_kms(NULL, "Found %d Speaker Allocation Data Blocks\n", count);
 
 	return count;
 }
@@ -5794,7 +5795,7 @@ static bool _drm_detect_monitor_audio(const struct drm_edid *drm_edid)
 	drm_edid_iter_end(&edid_iter);
 
 	if (has_audio) {
-		DRM_DEBUG_KMS("Monitor has basic audio support\n");
+		drm_dbg_kms(NULL, "Monitor has basic audio support\n");
 		goto end;
 	}
 
@@ -5805,8 +5806,8 @@ static bool _drm_detect_monitor_audio(const struct drm_edid *drm_edid)
 			int i;
 
 			for (i = 0; i < cea_db_payload_len(db); i += 3)
-				DRM_DEBUG_KMS("CEA audio format %d\n",
-					      (data[i] >> 3) & 0xf);
+				drm_dbg_kms(NULL, "CEA audio format %d\n",
+					    (data[i] >> 3) & 0xf);
 			has_audio = true;
 			break;
 		}

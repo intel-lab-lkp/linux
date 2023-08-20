@@ -265,7 +265,8 @@ static void mipi_dbi_fb_dirty(struct iosys_map *src, struct drm_framebuffer *fb,
 
 	full = width == fb->width && height == fb->height;
 
-	DRM_DEBUG_KMS("Flushing [FB:%d] " DRM_RECT_FMT "\n", fb->base.id, DRM_RECT_ARG(rect));
+	drm_dbg_kms(fb->dev, "Flushing [FB:%d] " DRM_RECT_FMT "\n",
+		    fb->base.id, DRM_RECT_ARG(rect));
 
 	if (!dbi->dc || !full || swap ||
 	    fb->format->format == DRM_FORMAT_XRGB8888) {
@@ -408,7 +409,7 @@ void mipi_dbi_pipe_disable(struct drm_simple_display_pipe *pipe)
 {
 	struct mipi_dbi_dev *dbidev = drm_to_mipi_dbi_dev(pipe->crtc.dev);
 
-	DRM_DEBUG_KMS("\n");
+	drm_dbg_kms(&dbidev->drm, "\n");
 
 	if (dbidev->backlight)
 		backlight_disable(dbidev->backlight);
@@ -627,7 +628,7 @@ int mipi_dbi_dev_init_with_formats(struct mipi_dbi_dev *dbidev,
 	drm->mode_config.max_height = dbidev->mode.vdisplay;
 	dbidev->rotation = rotation;
 
-	DRM_DEBUG_KMS("rotation = %u\n", rotation);
+	drm_dbg_kms(drm, "rotation = %u\n", rotation);
 
 	return 0;
 }

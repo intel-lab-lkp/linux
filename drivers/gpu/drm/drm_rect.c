@@ -228,9 +228,9 @@ EXPORT_SYMBOL(drm_rect_calc_vscale);
 void drm_rect_debug_print(const char *prefix, const struct drm_rect *r, bool fixed_point)
 {
 	if (fixed_point)
-		DRM_DEBUG_KMS("%s" DRM_RECT_FP_FMT "\n", prefix, DRM_RECT_FP_ARG(r));
+		drm_dbg_kms(NULL, "%s" DRM_RECT_FP_FMT "\n", prefix, DRM_RECT_FP_ARG(r));
 	else
-		DRM_DEBUG_KMS("%s" DRM_RECT_FMT "\n", prefix, DRM_RECT_ARG(r));
+		drm_dbg_kms(NULL, "%s" DRM_RECT_FMT "\n", prefix, DRM_RECT_ARG(r));
 }
 EXPORT_SYMBOL(drm_rect_debug_print);
 

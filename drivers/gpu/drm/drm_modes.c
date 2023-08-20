@@ -53,11 +53,11 @@
  * drm_mode_debug_printmodeline - print a mode to dmesg
  * @mode: mode to print
  *
- * Describe @mode using DRM_DEBUG.
+ * Describe @mode using drm_dbg_kms().
  */
 void drm_mode_debug_printmodeline(const struct drm_display_mode *mode)
 {
-	DRM_DEBUG_KMS("Modeline " DRM_MODE_FMT "\n", DRM_MODE_ARG(mode));
+	drm_dbg_kms(NULL, "Modeline " DRM_MODE_FMT "\n", DRM_MODE_ARG(mode));
 }
 EXPORT_SYMBOL(drm_mode_debug_printmodeline);
 
@@ -1813,9 +1813,9 @@ void drm_mode_prune_invalid(struct drm_device *dev,
 			}
 			if (verbose) {
 				drm_mode_debug_printmodeline(mode);
-				DRM_DEBUG_KMS("Not using %s mode: %s\n",
-					      mode->name,
-					      drm_get_mode_status_name(mode->status));
+				drm_dbg_kms(dev, "Not using %s mode: %s\n",
+					    mode->name,
+					    drm_get_mode_status_name(mode->status));
 			}
 			drm_mode_destroy(dev, mode);
 		}

@@ -131,8 +131,9 @@ static ssize_t crc_control_write(struct file *file, const char __user *ubuf,
 		return 0;
 
 	if (len > PAGE_SIZE - 1) {
-		DRM_DEBUG_KMS("Expected < %lu bytes into crtc crc control\n",
-			      PAGE_SIZE);
+		drm_dbg_kms(crtc->dev,
+			    "Expected < %lu bytes into crtc crc control\n",
+			    PAGE_SIZE);
 		return -E2BIG;
 	}
 
