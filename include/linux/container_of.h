@@ -5,7 +5,9 @@
 #include <linux/build_bug.h>
 #include <linux/stddef.h>
 
-#define typeof_member(T, m)	typeof(((T*)0)->m)
+
+#define memberof(T, member)  ((T){}.member)
+#define typeof_member(T, m)  typeof(memberof(T, m))
 
 /**
  * container_of - cast a member of a structure out to the containing structure
