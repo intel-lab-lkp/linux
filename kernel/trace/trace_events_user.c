@@ -2153,7 +2153,7 @@ static int user_events_ref_add(struct user_event_file_info *info,
 {
 	struct user_event_group *group = info->group;
 	struct user_event_refs *refs, *new_refs;
-	int i, size, count = 0;
+	int i, count = 0;
 
 	refs = rcu_dereference_protected(info->refs,
 					 lockdep_is_held(&group->reg_mutex));
@@ -2166,10 +2166,8 @@ static int user_events_ref_add(struct user_event_file_info *info,
 				return i;
 	}
 
-	size = struct_size(refs, events, count + 1);
-
-	new_refs = kzalloc(size, GFP_KERNEL_ACCOUNT);
-
+	new_refs = kzalloc(struct_size(refs, events, count + 1),
+			   GFP_KERNEL_ACCOUNT);
 	if (!new_refs)
 		return -ENOMEM;
 
