@@ -201,6 +201,10 @@ static const enum power_supply_property string_properties[] = {
 
 #define NR_STRING_BUFFERS	ARRAY_SIZE(string_properties)
 
+struct sbs_data {
+	u32 flags;
+};
+
 struct sbs_info {
 	struct i2c_client		*client;
 	struct power_supply		*power_supply;
@@ -213,7 +217,7 @@ struct sbs_info {
 	u32				poll_retry_count;
 	struct delayed_work		work;
 	struct mutex			mode_lock;
-	u32				flags;
+	const struct sbs_data		*data;
 	int				technology;
 	char				strings[NR_STRING_BUFFERS][I2C_SMBUS_BLOCK_MAX + 1];
 };
@@ -579,7 +583,7 @@ static int sbs_get_battery_presence_and_health(
 	struct sbs_info *chip = i2c_get_clientdata(client);
 	int ret;
 
-	if (chip->flags & SBS_FLAGS_TI_BQ20ZX5)
+	if (chip->data->flags & SBS_FLAGS_TI_BQ20ZX5)
 		return sbs_get_ti_battery_presence_and_health(client, psp, val);
 
 	/* Dummy command; if it succeeds, battery is present. */
@@ -1135,7 +1139,7 @@ static int sbs_probe(struct i2c_client *client)
 	if (!chip)
 		return -ENOMEM;
 
-	chip->flags = (u32)(uintptr_t)device_get_match_data(&client->dev);
+	chip->data = i2c_get_match_data(client);
 	chip->client = client;
 	psy_cfg.of_node = client->dev.of_node;
 	psy_cfg.drv_data = chip;
@@ -1233,7 +1237,7 @@ static int sbs_suspend(struct device *dev)
 	if (chip->poll_time > 0)
 		cancel_delayed_work_sync(&chip->work);
 
-	if (chip->flags & SBS_FLAGS_TI_BQ20ZX5) {
+	if (chip->data->flags & SBS_FLAGS_TI_BQ20ZX5) {
 		/* Write to manufacturer access with sleep command. */
 		ret = sbs_write_word_data(client,
 					  sbs_data[REG_MANUFACTURER_DATA].addr,
@@ -1252,24 +1256,30 @@ static SIMPLE_DEV_PM_OPS(sbs_pm_ops, sbs_suspend, NULL);
 #define SBS_PM_OPS NULL
 #endif
 
+static const struct sbs_data bq20z65 = {
+	.flags = SBS_FLAGS_TI_BQ20ZX5,
+};
+
+static const struct sbs_data bq20z75 = {
+	.flags = SBS_FLAGS_TI_BQ20ZX5,
+};
+
+static const struct sbs_data sbs_battery = {
+	.flags = 0,
+};
+
 static const struct i2c_device_id sbs_id[] = {
-	{ "bq20z65", SBS_FLAGS_TI_BQ20ZX5 },
-	{ "bq20z75", SBS_FLAGS_TI_BQ20ZX5 },
-	{ "sbs-battery", 0 },
+	{ "bq20z65", (kernel_ulong_t)&bq20z65 },
+	{ "bq20z75", (kernel_ulong_t)&bq20z75 },
+	{ "sbs-battery", (kernel_ulong_t)&sbs_battery },
 	{}
 };
 MODULE_DEVICE_TABLE(i2c, sbs_id);
 
 static const struct of_device_id sbs_dt_ids[] = {
-	{ .compatible = "sbs,sbs-battery" },
-	{
-		.compatible = "ti,bq20z65",
-		.data = (void *)SBS_FLAGS_TI_BQ20ZX5,
-	},
-	{
-		.compatible = "ti,bq20z75",
-		.data = (void *)SBS_FLAGS_TI_BQ20ZX5,
-	},
+	{ .compatible = "sbs,sbs-battery", .data = &sbs_battery },
+	{ .compatible = "ti,bq20z65", .data = &bq20z65 },
+	{ .compatible = "ti,bq20z75", .data = &bq20z75 },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, sbs_dt_ids);
