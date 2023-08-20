@@ -54,6 +54,7 @@
 struct rt1711h_chip_info {
 	u16 did;
 	u32 rxdz_sel;
+	unsigned enable_pd30_extended_message:1;
 };
 
 struct rt1711h_chip {
@@ -110,7 +111,7 @@ static int rt1711h_init(struct tcpci *tcpci, struct tcpci_data *tdata)
 		return ret;
 
 	/* Enable PD30 extended message for RT1715 */
-	if (chip->info->did == RT1715_DID) {
+	if (chip->info->enable_pd30_extended_message) {
 		ret = regmap_update_bits(regmap, RT1711H_RTCTRL8,
 					 RT1711H_ENEXTMSG, RT1711H_ENEXTMSG);
 		if (ret < 0)
@@ -401,6 +402,7 @@ static const struct rt1711h_chip_info rt1711h = {
 static const struct rt1711h_chip_info rt1715 = {
 	.did = RT1715_DID,
 	.rxdz_sel = RT1711H_BMCIO_RXDZSEL,
+	.enable_pd30_extended_message = 1,
 };
 
 static const struct i2c_device_id rt1711h_id[] = {
