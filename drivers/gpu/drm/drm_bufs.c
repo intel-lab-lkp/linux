@@ -1470,15 +1470,15 @@ int drm_legacy_freebufs(struct drm_device *dev, void *data,
 		if (copy_from_user(&idx, &request->list[i], sizeof(idx)))
 			return -EFAULT;
 		if (idx < 0 || idx >= dma->buf_count) {
-			DRM_ERROR("Index %d (of %d max)\n",
-				  idx, dma->buf_count - 1);
+			drm_err(dev, "Index %d (of %d max)\n",
+				idx, dma->buf_count - 1);
 			return -EINVAL;
 		}
 		idx = array_index_nospec(idx, dma->buf_count);
 		buf = dma->buflist[idx];
 		if (buf->file_priv != file_priv) {
-			DRM_ERROR("Process %d freeing buffer not owned\n",
-				  task_pid_nr(current));
+			drm_err(dev, "Process %d freeing buffer not owned\n",
+				task_pid_nr(current));
 			return -EINVAL;
 		}
 		drm_legacy_free_buffer(dev, buf);

@@ -611,7 +611,7 @@ void drm_plane_force_disable(struct drm_plane *plane)
 	plane->old_fb = plane->fb;
 	ret = plane->funcs->disable_plane(plane, NULL);
 	if (ret) {
-		DRM_ERROR("failed to disable plane with busy fb\n");
+		drm_err(plane->dev, "failed to disable plane with busy fb\n");
 		plane->old_fb = NULL;
 		return;
 	}

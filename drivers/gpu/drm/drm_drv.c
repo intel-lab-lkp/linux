@@ -177,7 +177,7 @@ static int drm_minor_register(struct drm_device *dev, enum drm_minor_type type)
 	} else {
 		ret = drm_debugfs_init(minor, minor->index, drm_debugfs_root);
 		if (ret) {
-			DRM_ERROR("DRM: Failed to initialize /sys/kernel/debug/dri.\n");
+			drm_err(dev, "DRM: Failed to initialize /sys/kernel/debug/dri.\n");
 			goto err_debugfs;
 		}
 	}
@@ -425,7 +425,7 @@ void drm_put_dev(struct drm_device *dev)
 	DRM_DEBUG("\n");
 
 	if (!dev) {
-		DRM_ERROR("cleanup called no dev\n");
+		drm_err(NULL, "cleanup called no dev\n");
 		return;
 	}
 
@@ -540,7 +540,7 @@ static struct inode *drm_fs_inode_new(void)
 
 	r = simple_pin_fs(&drm_fs_type, &drm_fs_mnt, &drm_fs_cnt);
 	if (r < 0) {
-		DRM_ERROR("Cannot mount pseudo fs: %d\n", r);
+		drm_err(NULL, "Cannot mount pseudo fs: %d\n", r);
 		return ERR_PTR(r);
 	}
 
@@ -610,7 +610,7 @@ static int drm_dev_init(struct drm_device *dev,
 	int ret;
 
 	if (!drm_core_init_complete) {
-		DRM_ERROR("DRM core is not initialized\n");
+		drm_err(NULL, "DRM core is not initialized\n");
 		return -ENODEV;
 	}
 
@@ -630,7 +630,7 @@ static int drm_dev_init(struct drm_device *dev,
 	if (drm_core_check_feature(dev, DRIVER_COMPUTE_ACCEL) &&
 				(drm_core_check_feature(dev, DRIVER_RENDER) ||
 				drm_core_check_feature(dev, DRIVER_MODESET))) {
-		DRM_ERROR("DRM driver can't be both a compute acceleration and graphics driver\n");
+		drm_err(dev, "DRM driver can't be both a compute acceleration and graphics driver\n");
 		return -EINVAL;
 	}
 
@@ -655,7 +655,7 @@ static int drm_dev_init(struct drm_device *dev,
 	inode = drm_fs_inode_new();
 	if (IS_ERR(inode)) {
 		ret = PTR_ERR(inode);
-		DRM_ERROR("Cannot allocate anonymous inode: %d\n", ret);
+		drm_err(dev, "Cannot allocate anonymous inode: %d\n", ret);
 		goto err;
 	}
 
@@ -686,7 +686,7 @@ static int drm_dev_init(struct drm_device *dev,
 	if (drm_core_check_feature(dev, DRIVER_GEM)) {
 		ret = drm_gem_init(dev);
 		if (ret) {
-			DRM_ERROR("Cannot initialize graphics execution manager (GEM)\n");
+			drm_err(dev, "Cannot initialize graphics execution manager (GEM)\n");
 			goto err;
 		}
 	}
@@ -1081,7 +1081,7 @@ static int __init drm_core_init(void)
 
 	ret = drm_sysfs_init();
 	if (ret < 0) {
-		DRM_ERROR("Cannot create DRM class: %d\n", ret);
+		drm_err(NULL, "Cannot create DRM class: %d\n", ret);
 		goto error;
 	}
 

@@ -235,7 +235,7 @@ int drm_mode_config_helper_resume(struct drm_device *dev)
 
 	ret = drm_atomic_helper_resume(dev, dev->mode_config.suspend_state);
 	if (ret)
-		DRM_ERROR("Failed to resume (%d)\n", ret);
+		drm_err(dev, "Failed to resume (%d)\n", ret);
 	dev->mode_config.suspend_state = NULL;
 
 	drm_fb_helper_set_suspend_unlocked(dev->fb_helper, 0);

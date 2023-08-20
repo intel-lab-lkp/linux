@@ -603,7 +603,7 @@ int mipi_dbi_dev_init_with_formats(struct mipi_dbi_dev *dbidev,
 	drm_mode_copy(&dbidev->mode, mode);
 	ret = mipi_dbi_rotate_mode(&dbidev->mode, rotation);
 	if (ret) {
-		DRM_ERROR("Illegal rotation value %u\n", rotation);
+		drm_err(drm, "Illegal rotation value %u\n", rotation);
 		return -EINVAL;
 	}
 

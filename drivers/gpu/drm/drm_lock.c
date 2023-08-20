@@ -79,8 +79,8 @@ int drm_lock_take(struct drm_lock_data *lock_data,
 	if (_DRM_LOCKING_CONTEXT(old) == context) {
 		if (old & _DRM_LOCK_HELD) {
 			if (context != DRM_KERNEL_CONTEXT) {
-				DRM_ERROR("%d holds heavyweight lock\n",
-					  context);
+				drm_err(NULL, "%d holds heavyweight lock\n",
+					context);
 			}
 			return 0;
 		}
@@ -142,8 +142,8 @@ static int drm_legacy_lock_free(struct drm_lock_data *lock_data,
 	} while (prev != old);
 
 	if (_DRM_LOCK_IS_HELD(old) && _DRM_LOCKING_CONTEXT(old) != context) {
-		DRM_ERROR("%d freed heavyweight lock held by %d\n",
-			  context, _DRM_LOCKING_CONTEXT(old));
+		drm_err(NULL, "%d freed heavyweight lock held by %d\n",
+			context, _DRM_LOCKING_CONTEXT(old));
 		return 1;
 	}
 	wake_up_interruptible(&lock_data->lock_queue);
@@ -175,8 +175,8 @@ int drm_legacy_lock(struct drm_device *dev, void *data,
 	++file_priv->lock_count;
 
 	if (lock->context == DRM_KERNEL_CONTEXT) {
-		DRM_ERROR("Process %d using kernel context %d\n",
-			  task_pid_nr(current), lock->context);
+		drm_err(dev, "Process %d using kernel context %d\n",
+			task_pid_nr(current), lock->context);
 		return -EINVAL;
 	}
 
@@ -263,8 +263,8 @@ int drm_legacy_unlock(struct drm_device *dev, void *data, struct drm_file *file_
 		return -EOPNOTSUPP;
 
 	if (lock->context == DRM_KERNEL_CONTEXT) {
-		DRM_ERROR("Process %d using kernel context %d\n",
-			  task_pid_nr(current), lock->context);
+		drm_err(dev, "Process %d using kernel context %d\n",
+			task_pid_nr(current), lock->context);
 		return -EINVAL;
 	}
 

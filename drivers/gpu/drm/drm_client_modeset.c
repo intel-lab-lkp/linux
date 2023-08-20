@@ -808,7 +808,7 @@ int drm_client_modeset_probe(struct drm_client_dev *client, unsigned int width, 
 	offsets = kcalloc(connector_count, sizeof(*offsets), GFP_KERNEL);
 	enabled = kcalloc(connector_count, sizeof(bool), GFP_KERNEL);
 	if (!crtcs || !modes || !enabled || !offsets) {
-		DRM_ERROR("Memory allocation failed\n");
+		drm_err(client->dev, "Memory allocation failed\n");
 		ret = -ENOMEM;
 		goto out;
 	}
@@ -832,7 +832,7 @@ int drm_client_modeset_probe(struct drm_client_dev *client, unsigned int width, 
 					      offsets, enabled, width, height) &&
 		    !drm_client_target_preferred(connectors, connector_count, modes,
 						 offsets, enabled, width, height))
-			DRM_ERROR("Unable to find initial modes\n");
+			drm_err(client->dev, "Unable to find initial modes\n");
 
 		DRM_DEBUG_KMS("picking CRTCs for %dx%d config\n",
 			      width, height);

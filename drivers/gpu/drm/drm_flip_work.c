@@ -82,7 +82,7 @@ void drm_flip_work_queue(struct drm_flip_work *work, void *val)
 	if (task) {
 		drm_flip_work_queue_task(work, task);
 	} else {
-		DRM_ERROR("%s could not allocate task!\n", work->name);
+		drm_err(NULL, "%s could not allocate task!\n", work->name);
 		work->func(work, val);
 	}
 }

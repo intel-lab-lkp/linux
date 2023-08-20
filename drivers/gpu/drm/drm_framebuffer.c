@@ -1070,7 +1070,8 @@ static void legacy_remove_fb(struct drm_framebuffer *fb)
 
 			/* should turn off the crtc */
 			if (drm_crtc_force_disable(crtc))
-				DRM_ERROR("failed to reset crtc %p when fb was deleted\n", crtc);
+				drm_err(dev, "failed to reset crtc %p when fb was deleted\n",
+					crtc);
 		}
 	}
 

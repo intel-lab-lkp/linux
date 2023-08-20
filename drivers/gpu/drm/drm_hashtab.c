@@ -53,7 +53,7 @@ int drm_ht_create(struct drm_open_hash *ht, unsigned int order)
 	else
 		ht->table = vzalloc(array_size(size, sizeof(*ht->table)));
 	if (!ht->table) {
-		DRM_ERROR("Out of memory for hash table\n");
+		drm_err(NULL, "Out of memory for hash table\n");
 		return -ENOMEM;
 	}
 	return 0;
@@ -157,7 +157,7 @@ int drm_ht_just_insert_please(struct drm_open_hash *ht, struct drm_hash_item *it
 	} while(ret && (unshifted_key != first));
 
 	if (ret) {
-		DRM_ERROR("Available key bit space exhausted\n");
+		drm_err(NULL, "Available key bit space exhausted\n");
 		return -EINVAL;
 	}
 	return 0;

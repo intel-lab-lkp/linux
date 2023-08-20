@@ -170,9 +170,10 @@ int drm_legacy_sg_alloc(struct drm_device *dev, void *data,
 			     j++, tmp++) {
 				if (*tmp != 0xcafebabe && error == 0) {
 					error = 1;
-					DRM_ERROR("Scatter allocation error, "
-						  "pagelist does not match "
-						  "virtual mapping\n");
+					drm_err(dev,
+						"Scatter allocation error, "
+						"pagelist does not match "
+						"virtual mapping\n");
 				}
 			}
 			tmp = page_address(entry->pagelist[i]);
@@ -183,7 +184,7 @@ int drm_legacy_sg_alloc(struct drm_device *dev, void *data,
 			}
 		}
 		if (error == 0)
-			DRM_ERROR("Scatter allocation matches pagelist\n");
+			drm_err(dev, "Scatter allocation matches pagelist\n");
 	}
 #endif
 

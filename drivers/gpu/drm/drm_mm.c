@@ -126,14 +126,14 @@ static void show_leaks(struct drm_mm *mm)
 
 	list_for_each_entry(node, drm_mm_nodes(mm), node_list) {
 		if (!node->stack) {
-			DRM_ERROR("node [%08llx + %08llx]: unknown owner\n",
-				  node->start, node->size);
+			drm_err(NULL, "node [%08llx + %08llx]: unknown owner\n",
+				node->start, node->size);
 			continue;
 		}
 
 		stack_depot_snprint(node->stack, buf, BUFSZ, 0);
-		DRM_ERROR("node [%08llx + %08llx]: inserted at\n%s",
-			  node->start, node->size, buf);
+		drm_err(NULL, "node [%08llx + %08llx]: inserted at\n%s",
+			node->start, node->size, buf);
 	}
 
 	kfree(buf);

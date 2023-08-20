@@ -768,8 +768,8 @@ int drm_crtc_helper_set_config(struct drm_mode_set *set,
 			if (!drm_crtc_helper_set_mode(set->crtc, set->mode,
 						      set->x, set->y,
 						      save_set.fb)) {
-				DRM_ERROR("failed to set mode on [CRTC:%d:%s]\n",
-					  set->crtc->base.id, set->crtc->name);
+				drm_err(dev, "failed to set mode on [CRTC:%d:%s]\n",
+					set->crtc->base.id, set->crtc->name);
 				set->crtc->primary->fb = save_set.fb;
 				ret = -EINVAL;
 				goto fail;
@@ -826,7 +826,7 @@ fail:
 	if (mode_changed &&
 	    !drm_crtc_helper_set_mode(save_set.crtc, save_set.mode, save_set.x,
 				      save_set.y, save_set.fb))
-		DRM_ERROR("failed to restore config after modeset failure\n");
+		drm_err(dev, "failed to restore config after modeset failure\n");
 
 	kfree(save_connector_encoders);
 	kfree(save_encoder_crtcs);
@@ -996,7 +996,7 @@ void drm_helper_resume_force_mode(struct drm_device *dev)
 
 		/* Restoring the old config should never fail! */
 		if (ret == false)
-			DRM_ERROR("failed to set mode on crtc %p\n", crtc);
+			drm_err(dev, "failed to set mode on crtc %p\n", crtc);
 
 		/* Turn off outputs that were already powered off */
 		if (drm_helper_choose_crtc_dpms(crtc)) {

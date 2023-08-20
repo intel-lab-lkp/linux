@@ -547,7 +547,7 @@ static int drm_mmap_locked(struct file *filp, struct vm_area_struct *vma)
 		return drm_mmap_dma(filp, vma);
 
 	if (drm_ht_find_item(&dev->map_hash, vma->vm_pgoff, &hash)) {
-		DRM_ERROR("Could not find map\n");
+		drm_err(dev, "Could not find map\n");
 		return -EINVAL;
 	}
 
