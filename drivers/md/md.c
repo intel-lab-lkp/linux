@@ -9155,6 +9155,22 @@ void md_do_sync(struct md_thread *thread)
 }
 EXPORT_SYMBOL_GPL(md_do_sync);
 
+static bool rdev_removeable(struct md_rdev *rdev)
+{
+	if (rdev->raid_disk < 0 || test_bit(Blocked, &rdev->flags) ||
+	    atomic_read(&rdev->nr_pending))
+		return false;
+
+	if (test_bit(RemoveSynchronized, &rdev->flags))
+		return true;
+
+	if (test_bit(In_sync, &rdev->flags) ||
+	    test_bit(Journal, &rdev->flags))
+		return false;
+
+	return true;
+}
+
 static int remove_and_add_spares(struct mddev *mddev,
 				 struct md_rdev *this)
 {
@@ -9168,11 +9184,7 @@ static int remove_and_add_spares(struct mddev *mddev,
 		return 0;
 
 	rdev_for_each(rdev, mddev) {
-		if ((this == NULL || rdev == this) &&
-		    rdev->raid_disk >= 0 &&
-		    !test_bit(Blocked, &rdev->flags) &&
-		    test_bit(Faulty, &rdev->flags) &&
-		    atomic_read(&rdev->nr_pending)==0) {
+		if ((this == NULL || rdev == this) && rdev_removeable(rdev)) {
 			/* Faulty non-Blocked devices with nr_pending == 0
 			 * never get nr_pending incremented,
 			 * never get Faulty cleared, and never get Blocked set.
@@ -9187,19 +9199,12 @@ static int remove_and_add_spares(struct mddev *mddev,
 		synchronize_rcu();
 	rdev_for_each(rdev, mddev) {
 		if ((this == NULL || rdev == this) &&
-		    rdev->raid_disk >= 0 &&
-		    !test_bit(Blocked, &rdev->flags) &&
-		    ((test_bit(RemoveSynchronized, &rdev->flags) ||
-		     (!test_bit(In_sync, &rdev->flags) &&
-		      !test_bit(Journal, &rdev->flags))) &&
-		    atomic_read(&rdev->nr_pending)==0)) {
-			if (mddev->pers->hot_remove_disk(
-				    mddev, rdev) == 0) {
+		    rdev_removeable(rdev) &&
+		    mddev->pers->hot_remove_disk(mddev, rdev) == 0) {
 				sysfs_unlink_rdev(mddev, rdev);
 				rdev->saved_raid_disk = rdev->raid_disk;
 				rdev->raid_disk = -1;
 				removed++;
-			}
 		}
 		if (remove_some && test_bit(RemoveSynchronized, &rdev->flags))
 			clear_bit(RemoveSynchronized, &rdev->flags);
