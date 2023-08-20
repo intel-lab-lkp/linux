@@ -78,7 +78,7 @@ static int drm_legacy_irq_install(struct drm_device *dev, int irq)
 		return -EBUSY;
 	dev->irq_enabled = true;
 
-	DRM_DEBUG("irq=%d\n", irq);
+	drm_dbg_core(dev, "irq=%d\n", irq);
 
 	/* Before installing handler */
 	if (dev->driver->irq_preinstall)
@@ -146,7 +146,7 @@ int drm_legacy_irq_uninstall(struct drm_device *dev)
 	if (!irq_enabled)
 		return -EINVAL;
 
-	DRM_DEBUG("irq=%d\n", dev->irq);
+	drm_dbg_core(dev, "irq=%d\n", dev->irq);
 
 	if (drm_core_check_feature(dev, DRIVER_LEGACY))
 		vga_client_unregister(to_pci_dev(dev->dev));

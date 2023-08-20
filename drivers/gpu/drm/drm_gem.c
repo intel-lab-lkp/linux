@@ -718,7 +718,7 @@ int drm_gem_objects_lookup(struct drm_file *filp, void __user *bo_handles,
 
 	if (copy_from_user(handles, bo_handles, count * sizeof(u32))) {
 		ret = -EFAULT;
-		DRM_DEBUG("Failed to copy in GEM handles\n");
+		drm_dbg_core(filp->minor->dev, "Failed to copy in GEM handles\n");
 		goto out;
 	}
 
@@ -773,7 +773,8 @@ long drm_gem_dma_resv_wait(struct drm_file *filep, u32 handle,
 
 	obj = drm_gem_object_lookup(filep, handle);
 	if (!obj) {
-		DRM_DEBUG("Failed to look up GEM BO %d\n", handle);
+		drm_dbg_core(filep->minor->dev,
+			     "Failed to look up GEM BO %d\n", handle);
 		return -EINVAL;
 	}
 

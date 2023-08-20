@@ -180,10 +180,10 @@ int drm_legacy_lock(struct drm_device *dev, void *data,
 		return -EINVAL;
 	}
 
-	DRM_DEBUG("%d (pid %d) requests lock (0x%08x), flags = 0x%08x\n",
-		  lock->context, task_pid_nr(current),
-		  master->lock.hw_lock ? master->lock.hw_lock->lock : -1,
-		  lock->flags);
+	drm_dbg_core(dev, "%d (pid %d) requests lock (0x%08x), flags = 0x%08x\n",
+		     lock->context, task_pid_nr(current),
+		     master->lock.hw_lock ? master->lock.hw_lock->lock : -1,
+		     lock->flags);
 
 	add_wait_queue(&master->lock.lock_queue, &entry);
 	spin_lock_bh(&master->lock.spinlock);
@@ -219,8 +219,8 @@ int drm_legacy_lock(struct drm_device *dev, void *data,
 	__set_current_state(TASK_RUNNING);
 	remove_wait_queue(&master->lock.lock_queue, &entry);
 
-	DRM_DEBUG("%d %s\n", lock->context,
-		  ret ? "interrupted" : "has lock");
+	drm_dbg_core(dev, "%d %s\n", lock->context,
+		     ret ? "interrupted" : "has lock");
 	if (ret) return ret;
 
 	/* don't set the block all signals on the master process for now 
@@ -234,8 +234,8 @@ int drm_legacy_lock(struct drm_device *dev, void *data,
 	if (dev->driver->dma_quiescent && (lock->flags & _DRM_LOCK_QUIESCENT))
 	{
 		if (dev->driver->dma_quiescent(dev)) {
-			DRM_DEBUG("%d waiting for DMA quiescent\n",
-				  lock->context);
+			drm_dbg_core(dev, "%d waiting for DMA quiescent\n",
+				     lock->context);
 			return -EBUSY;
 		}
 	}
@@ -345,8 +345,8 @@ void drm_legacy_lock_release(struct drm_device *dev, struct file *filp)
 		return;
 
 	if (drm_legacy_i_have_hw_lock(dev, file_priv)) {
-		DRM_DEBUG("File %p released, freeing lock for context %d\n",
-			  filp, _DRM_LOCKING_CONTEXT(file_priv->master->lock.hw_lock->lock));
+		drm_dbg_core(dev, "File %p released, freeing lock for context %d\n",
+			     filp, _DRM_LOCKING_CONTEXT(file_priv->master->lock.hw_lock->lock));
 		drm_legacy_lock_free(&file_priv->master->lock,
 				     _DRM_LOCKING_CONTEXT(file_priv->master->lock.hw_lock->lock));
 	}

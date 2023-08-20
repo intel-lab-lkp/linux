@@ -383,8 +383,8 @@ int drm_sysfs_connector_add(struct drm_connector *connector)
 	if (r)
 		goto err_free;
 
-	DRM_DEBUG("adding \"%s\" to sysfs\n",
-		  connector->name);
+	drm_dbg_core(dev, "adding \"%s\" to sysfs\n",
+		     connector->name);
 
 	r = device_add(kdev);
 	if (r) {
@@ -422,8 +422,8 @@ void drm_sysfs_connector_remove(struct drm_connector *connector)
 	if (dev_fwnode(connector->kdev))
 		component_del(connector->kdev, &typec_connector_ops);
 
-	DRM_DEBUG("removing \"%s\" from sysfs\n",
-		  connector->name);
+	drm_dbg_core(connector->dev, "removing \"%s\" from sysfs\n",
+		     connector->name);
 
 	device_unregister(connector->kdev);
 	connector->kdev = NULL;
@@ -434,7 +434,7 @@ void drm_sysfs_lease_event(struct drm_device *dev)
 	char *event_string = "LEASE=1";
 	char *envp[] = { event_string, NULL };
 
-	DRM_DEBUG("generating lease event\n");
+	drm_dbg_core(dev, "generating lease event\n");
 
 	kobject_uevent_env(&dev->primary->kdev->kobj, KOBJ_CHANGE, envp);
 }
@@ -455,7 +455,7 @@ void drm_sysfs_hotplug_event(struct drm_device *dev)
 	char *event_string = "HOTPLUG=1";
 	char *envp[] = { event_string, NULL };
 
-	DRM_DEBUG("generating hotplug event\n");
+	drm_dbg_core(dev, "generating hotplug event\n");
 
 	kobject_uevent_env(&dev->primary->kdev->kobj, KOBJ_CHANGE, envp);
 }

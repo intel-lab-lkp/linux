@@ -274,7 +274,7 @@ static int drm_context_switch(struct drm_device * dev, int old, int new)
 		return -EBUSY;
 	}
 
-	DRM_DEBUG("Context switch from %d to %d\n", old, new);
+	drm_dbg_core(dev, "Context switch from %d to %d\n", old, new);
 
 	if (new == dev->last_context) {
 		clear_bit(0, &dev->context_flag);
@@ -371,9 +371,9 @@ int drm_legacy_addctx(struct drm_device *dev, void *data,
 		/* Skip kernel's context and get a new one. */
 		tmp_handle = drm_legacy_ctxbitmap_next(dev);
 	}
-	DRM_DEBUG("%d\n", tmp_handle);
+	drm_dbg_core(dev, "%d\n", tmp_handle);
 	if (tmp_handle < 0) {
-		DRM_DEBUG("Not enough free contexts.\n");
+		drm_dbg_core(dev, "Not enough free contexts.\n");
 		/* Should this return -EBUSY instead? */
 		return tmp_handle;
 	}
@@ -382,7 +382,7 @@ int drm_legacy_addctx(struct drm_device *dev, void *data,
 
 	ctx_entry = kmalloc(sizeof(*ctx_entry), GFP_KERNEL);
 	if (!ctx_entry) {
-		DRM_DEBUG("out of memory\n");
+		drm_dbg_core(dev, "out of memory\n");
 		return -ENOMEM;
 	}
 
@@ -439,7 +439,7 @@ int drm_legacy_switchctx(struct drm_device *dev, void *data,
 	if (!drm_core_check_feature(dev, DRIVER_LEGACY))
 		return -EOPNOTSUPP;
 
-	DRM_DEBUG("%d\n", ctx->handle);
+	drm_dbg_core(dev, "%d\n", ctx->handle);
 	return drm_context_switch(dev, dev->last_context, ctx->handle);
 }
 
@@ -462,7 +462,7 @@ int drm_legacy_newctx(struct drm_device *dev, void *data,
 	if (!drm_core_check_feature(dev, DRIVER_LEGACY))
 		return -EOPNOTSUPP;
 
-	DRM_DEBUG("%d\n", ctx->handle);
+	drm_dbg_core(dev, "%d\n", ctx->handle);
 	drm_context_switch_complete(dev, file_priv, ctx->handle);
 
 	return 0;
@@ -487,7 +487,7 @@ int drm_legacy_rmctx(struct drm_device *dev, void *data,
 	if (!drm_core_check_feature(dev, DRIVER_LEGACY))
 		return -EOPNOTSUPP;
 
-	DRM_DEBUG("%d\n", ctx->handle);
+	drm_dbg_core(dev, "%d\n", ctx->handle);
 	if (ctx->handle != DRM_KERNEL_CONTEXT) {
 		if (dev->driver->context_dtor)
 			dev->driver->context_dtor(dev, ctx->handle);

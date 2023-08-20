@@ -677,7 +677,7 @@ int drm_mode_get_lease_ioctl(struct drm_device *dev,
 		count++;
 	}
 
-	DRM_DEBUG("lease holds %d objects\n", count);
+	drm_dbg_core(dev, "lease holds %d objects\n", count);
 	if (ret == 0)
 		arg->count_objects = count;
 

@@ -70,7 +70,7 @@ int drm_legacy_setup(struct drm_device * dev)
 		return ret;
 
 
-	DRM_DEBUG("\n");
+	drm_dbg_core(dev, "\n");
 	return 0;
 }
 
@@ -95,7 +95,7 @@ void drm_legacy_dev_reinit(struct drm_device *dev)
 	dev->last_context = 0;
 	dev->if_version = 0;
 
-	DRM_DEBUG("lastclose completed\n");
+	drm_dbg_core(dev, "lastclose completed\n");
 }
 
 void drm_master_legacy_init(struct drm_master *master)

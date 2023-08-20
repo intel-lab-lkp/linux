@@ -94,11 +94,11 @@ void drm_legacy_dma_takedown(struct drm_device *dev)
 	/* Clear dma buffers */
 	for (i = 0; i <= DRM_MAX_ORDER; i++) {
 		if (dma->bufs[i].seg_count) {
-			DRM_DEBUG("order %d: buf_count = %d,"
-				  " seg_count = %d\n",
-				  i,
-				  dma->bufs[i].buf_count,
-				  dma->bufs[i].seg_count);
+			drm_dbg_core(dev, "order %d: buf_count = %d,"
+				     " seg_count = %d\n",
+				     i,
+				     dma->bufs[i].buf_count,
+				     dma->bufs[i].seg_count);
 			for (j = 0; j < dma->bufs[i].seg_count; j++) {
 				if (dma->bufs[i].seglist[j]) {
 					dmah = dma->bufs[i].seglist[j];

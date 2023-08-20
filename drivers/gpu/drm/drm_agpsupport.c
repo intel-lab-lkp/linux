@@ -315,8 +315,8 @@ int drm_legacy_agp_bind(struct drm_device *dev, struct drm_agp_binding *request)
 	if (retcode)
 		return retcode;
 	entry->bound = dev->agp->base + (page << PAGE_SHIFT);
-	DRM_DEBUG("base = 0x%lx entry->bound = 0x%lx\n",
-		  dev->agp->base, entry->bound);
+	drm_dbg_core(dev, "base = 0x%lx entry->bound = 0x%lx\n",
+		     dev->agp->base, entry->bound);
 	return 0;
 }
 EXPORT_SYMBOL(drm_legacy_agp_bind);
