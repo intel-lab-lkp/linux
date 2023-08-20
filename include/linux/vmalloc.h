@@ -6,6 +6,7 @@
 #include <linux/init.h>
 #include <linux/list.h>
 #include <linux/llist.h>
+#include <linux/numa.h>
 #include <asm/page.h>		/* pgprot_t */
 #include <linux/rbtree.h>
 #include <linux/overflow.h>
@@ -139,7 +140,7 @@ static inline unsigned long vmalloc_nr_pages(void) { return 0; }
 
 extern void *vmalloc(unsigned long size) __alloc_size(1);
 extern void *vzalloc(unsigned long size) __alloc_size(1);
-extern void *vmalloc_user(unsigned long size) __alloc_size(1);
+extern void *vmalloc_user_node(unsigned long size, int node) __alloc_size(1);
 extern void *vmalloc_node(unsigned long size, int node) __alloc_size(1);
 extern void *vzalloc_node(unsigned long size, int node) __alloc_size(1);
 extern void *vmalloc_32(unsigned long size) __alloc_size(1);
@@ -157,6 +158,20 @@ extern void *__vmalloc_array(size_t n, size_t size, gfp_t flags) __alloc_size(1,
 extern void *vmalloc_array(size_t n, size_t size) __alloc_size(1, 2);
 extern void *__vcalloc(size_t n, size_t size, gfp_t flags) __alloc_size(1, 2);
 extern void *vcalloc(size_t n, size_t size) __alloc_size(1, 2);
+
+/**
+ * vmalloc_user - allocate zeroed virtually contiguous memory for userspace
+ * @size: allocation size
+ *
+ * The resulting memory area is zeroed so it can be mapped to userspace
+ * without leaking data.
+ *
+ * Return: pointer to the allocated memory or %NULL on error
+ */
+static inline void *vmalloc_user(size_t size)
+{
+	return vmalloc_user_node(size, NUMA_NO_NODE);
+}
 
 extern void vfree(const void *addr);
 extern void vfree_atomic(const void *addr);
