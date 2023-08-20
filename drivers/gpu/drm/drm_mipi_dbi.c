@@ -70,11 +70,11 @@
 #define MIPI_DBI_DEBUG_COMMAND(cmd, data, len) \
 ({ \
 	if (!len) \
-		DRM_DEBUG_DRIVER("cmd=%02x\n", cmd); \
+		drm_dbg_driver(NULL, "cmd=%02x\n", cmd); \
 	else if (len <= 32) \
-		DRM_DEBUG_DRIVER("cmd=%02x, par=%*ph\n", cmd, (int)len, data);\
+		drm_dbg_driver(NULL, "cmd=%02x, par=%*ph\n", cmd, (int)len, data);\
 	else \
-		DRM_DEBUG_DRIVER("cmd=%02x, len=%zu\n", cmd, len); \
+		drm_dbg_driver(NULL, "cmd=%02x, len=%zu\n", cmd, len); \
 })
 
 static const u8 mipi_dbi_dcs_read_commands[] = {
@@ -708,7 +708,7 @@ bool mipi_dbi_display_is_on(struct mipi_dbi *dbi)
 	    DCS_POWER_MODE_DISPLAY_NORMAL_MODE | DCS_POWER_MODE_SLEEP_MODE))
 		return false;
 
-	DRM_DEBUG_DRIVER("Display is ON\n");
+	drm_dbg_driver(NULL, "Display is ON\n");
 
 	return true;
 }
@@ -1264,7 +1264,7 @@ int mipi_dbi_spi_init(struct spi_device *spi, struct mipi_dbi *dbi,
 
 	mutex_init(&dbi->cmdlock);
 
-	DRM_DEBUG_DRIVER("SPI speed: %uMHz\n", spi->max_speed_hz / 1000000);
+	drm_dbg_driver(NULL, "SPI speed: %uMHz\n", spi->max_speed_hz / 1000000);
 
 	return 0;
 }
