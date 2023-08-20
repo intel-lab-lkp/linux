@@ -392,8 +392,8 @@ static void rt1711h_remove(struct i2c_client *client)
 }
 
 static const struct i2c_device_id rt1711h_id[] = {
-	{ "rt1711h", 0 },
-	{ "rt1715", 0 },
+	{ "rt1711h", RT1711H_DID },
+	{ "rt1715", RT1715_DID },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, rt1711h_id);
