@@ -210,12 +210,6 @@ config DRM_TTM_KUNIT_TEST
 
           If in doubt, say "N".
 
-config DRM_EXEC
-	tristate
-	depends on DRM
-	help
-	  Execution context for command submissions
-
 config DRM_BUDDY
 	tristate
 	depends on DRM
