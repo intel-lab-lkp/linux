@@ -655,6 +655,7 @@ drm_gpuva_range_valid(struct drm_gpuva_manager *mgr,
 /**
  * drm_gpuva_manager_init() - initialize a &drm_gpuva_manager
  * @mgr: pointer to the &drm_gpuva_manager to initialize
+ * @drm: the drivers &drm_device
  * @name: the name of the GPU VA space
  * @start_offset: the start offset of the GPU VA space
  * @range: the size of the GPU VA space
@@ -669,6 +670,7 @@ drm_gpuva_range_valid(struct drm_gpuva_manager *mgr,
  */
 void
 drm_gpuva_manager_init(struct drm_gpuva_manager *mgr,
+		       struct drm_device *drm,
 		       const char *name,
 		       u64 start_offset, u64 range,
 		       u64 reserve_offset, u64 reserve_range,
@@ -676,6 +678,11 @@ drm_gpuva_manager_init(struct drm_gpuva_manager *mgr,
 {
 	mgr->rb.tree = RB_ROOT_CACHED;
 	INIT_LIST_HEAD(&mgr->rb.list);
+
+	mt_init(&mgr->mt_ext);
+
+	INIT_LIST_HEAD(&mgr->evict.list);
+	spin_lock_init(&mgr->evict.lock);
 
 	drm_gpuva_check_overflow(start_offset, range);
 	mgr->mm_start = start_offset;
@@ -694,6 +701,9 @@ drm_gpuva_manager_init(struct drm_gpuva_manager *mgr,
 						     reserve_range)))
 			__drm_gpuva_insert(mgr, &mgr->kernel_alloc_node);
 	}
+
+	drm_gem_private_object_init(drm, &mgr->d_obj, 0);
+	mgr->resv = mgr->d_obj.resv;
 }
 EXPORT_SYMBOL_GPL(drm_gpuva_manager_init);
 
@@ -713,9 +723,574 @@ drm_gpuva_manager_destroy(struct drm_gpuva_manager *mgr)
 		__drm_gpuva_remove(&mgr->kernel_alloc_node);
 
 	WARN(!RB_EMPTY_ROOT(&mgr->rb.tree.rb_root),
-	     "GPUVA tree is not empty, potentially leaking memory.");
+	     "GPUVA tree is not empty, potentially leaking memory.\n");
+
+	mtree_destroy(&mgr->mt_ext);
+	WARN(!list_empty(&mgr->evict.list), "Evict list should be empty.\n");
+
+	drm_gem_private_object_fini(&mgr->d_obj);
 }
 EXPORT_SYMBOL_GPL(drm_gpuva_manager_destroy);
+
+/**
+ * drm_gpuva_manager_prepare_objects() - prepare all assoiciated BOs
+ * @mgr: the &drm_gpuva_manager
+ * @num_fences: the amount of &dma_fences to reserve
+ *
+ * Calls drm_exec_prepare_obj() for all &drm_gem_objects the given
+ * &drm_gpuva_manager contains mappings of.
+ *
+ * Drivers can obtain the corresponding &drm_exec instance through
+ * DRM_GPUVA_EXEC(). It is the drivers responsibility to call drm_exec_init()
+ * and drm_exec_fini() accordingly.
+ *
+ * Returns: 0 on success, negative error code on failure.
+ */
+int
+drm_gpuva_manager_prepare_objects(struct drm_gpuva_manager *mgr,
+				  unsigned int num_fences)
+{
+	struct drm_exec *exec = DRM_GPUVA_EXEC(mgr);
+	MA_STATE(mas, &mgr->mt_ext, 0, 0);
+	union {
+		void *ptr;
+		uintptr_t cnt;
+	} ref;
+	int ret;
+
+	ret = drm_exec_prepare_obj(exec, &mgr->d_obj, num_fences);
+	if (ret)
+		goto out;
+
+	rcu_read_lock();
+	mas_for_each(&mas, ref.ptr, ULONG_MAX) {
+		struct drm_gem_object *obj;
+
+		mas_pause(&mas);
+		rcu_read_unlock();
+
+		obj = (struct drm_gem_object *)(uintptr_t)mas.index;
+		ret = drm_exec_prepare_obj(exec, obj, num_fences);
+		if (ret)
+			goto out;
+
+		rcu_read_lock();
+	}
+	rcu_read_unlock();
+
+out:
+	return ret;
+}
+EXPORT_SYMBOL_GPL(drm_gpuva_manager_prepare_objects);
+
+/**
+ * drm_gpuva_manager_lock_extra() - lock all dma-resv of all assoiciated BOs
+ * @mgr: the &drm_gpuva_manager
+ * @fn: callback received by the driver to lock additional dma-resv
+ * @priv: private driver data passed to @fn
+ * @num_fences: the amount of &dma_fences to reserve
+ * @interruptible: sleep interruptible if waiting
+ *
+ * Acquires all dma-resv locks of all &drm_gem_objects the given
+ * &drm_gpuva_manager contains mappings of.
+ *
+ * Addionally, when calling this function the driver receives the given @fn
+ * callback to lock additional dma-resv in the context of the
+ * &drm_gpuva_managers &drm_exec instance. Typically, drivers would call
+ * drm_exec_prepare_obj() from within this callback.
+ *
+ * Returns: 0 on success, negative error code on failure.
+ */
+int
+drm_gpuva_manager_lock_extra(struct drm_gpuva_manager *mgr,
+			     int (*fn)(struct drm_gpuva_manager *mgr,
+				       void *priv, unsigned int num_fences),
+			     void *priv,
+			     unsigned int num_fences,
+			     bool interruptible)
+{
+	struct drm_exec *exec = DRM_GPUVA_EXEC(mgr);
+	uint32_t flags;
+	int ret;
+
+	flags = interruptible ? DRM_EXEC_INTERRUPTIBLE_WAIT : 0 |
+		DRM_EXEC_IGNORE_DUPLICATES;
+
+	drm_exec_init(exec, flags);
+
+	drm_exec_until_all_locked(exec) {
+		ret = drm_gpuva_manager_prepare_objects(mgr, num_fences);
+		drm_exec_retry_on_contention(exec);
+		if (ret)
+			goto err;
+
+		if (fn) {
+			ret = fn(mgr, priv, num_fences);
+			drm_exec_retry_on_contention(exec);
+			if (ret)
+				goto err;
+		}
+	}
+
+	return 0;
+
+err:
+	drm_exec_fini(exec);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(drm_gpuva_manager_lock_extra);
+
+static int
+fn_lock_array(struct drm_gpuva_manager *mgr, void *priv,
+				unsigned int num_fences)
+{
+	struct {
+		struct drm_gem_object **objs;
+		unsigned int num_objs;
+	} *args = priv;
+
+	return drm_exec_prepare_array(DRM_GPUVA_EXEC(mgr), args->objs,
+				      args->num_objs, num_fences);
+}
+
+/**
+ * drm_gpuva_manager_lock_array() - lock all dma-resv of all assoiciated BOs
+ * @mgr: the &drm_gpuva_manager
+ * @objs: additional &drm_gem_objects to lock
+ * @num_objs: the number of additional &drm_gem_objects to lock
+ * @num_fences: the amount of &dma_fences to reserve
+ * @interruptible: sleep interruptible if waiting
+ *
+ * Acquires all dma-resv locks of all &drm_gem_objects the given
+ * &drm_gpuva_manager contains mappings of, plus the ones given through @objs.
+ *
+ * Returns: 0 on success, negative error code on failure.
+ */
+int
+drm_gpuva_manager_lock_array(struct drm_gpuva_manager *mgr,
+			     struct drm_gem_object **objs,
+			     unsigned int num_objs,
+			     unsigned int num_fences,
+			     bool interruptible)
+{
+	struct {
+		struct drm_gem_object **objs;
+		unsigned int num_objs;
+	} args;
+
+	args.objs = objs;
+	args.num_objs = num_objs;
+
+	return drm_gpuva_manager_lock_extra(mgr, fn_lock_array, &args,
+					    num_fences, interruptible);
+}
+EXPORT_SYMBOL_GPL(drm_gpuva_manager_lock_array);
+
+/**
+ * drm_gpuva_manager_validate() - validate all BOs marked as evicted
+ * @mgr: the &drm_gpuva_manager to validate evicted BOs
+ *
+ * Calls the &drm_gpuva_fn_ops.bo_validate callback for all evicted buffer
+ * objects being mapped in the given &drm_gpuva_manager.
+ *
+ * Returns: 0 on success, negative error code on failure.
+ */
+int
+drm_gpuva_manager_validate(struct drm_gpuva_manager *mgr)
+{
+	const struct drm_gpuva_fn_ops *ops = mgr->ops;
+	struct drm_gpuva_gem *vm_bo;
+	int ret;
+
+	if (unlikely(!ops || !ops->bo_validate))
+		return -ENOTSUPP;
+
+	/* At this point we should hold all dma-resv locks of all GEM objects
+	 * associated with this GPU-VM, hence it is safe to walk the list.
+	 */
+	list_for_each_entry(vm_bo, &mgr->evict.list, list.entry.evict) {
+		dma_resv_assert_held(vm_bo->obj->resv);
+
+		ret = ops->bo_validate(vm_bo->obj);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(drm_gpuva_manager_validate);
+
+/**
+ * drm_gpuva_manager_resv_add_fence - add fence to private and all extobj
+ * dma-resv
+ * @mgr: the &drm_gpuva_manager to add a fence to
+ * @fence: fence to add
+ * @private_usage: private dma-resv usage
+ * @extobj_usage: extobj dma-resv usage
+ */
+void
+drm_gpuva_manager_resv_add_fence(struct drm_gpuva_manager *mgr,
+				 struct dma_fence *fence,
+				 enum dma_resv_usage private_usage,
+				 enum dma_resv_usage extobj_usage)
+{
+	struct drm_exec *exec = DRM_GPUVA_EXEC(mgr);
+	struct drm_gem_object *obj;
+	unsigned long index;
+
+	drm_exec_for_each_locked_object(exec, index, obj) {
+			dma_resv_assert_held(obj->resv);
+			dma_resv_add_fence(obj->resv, fence,
+					   drm_gpuva_is_extobj(mgr, obj) ?
+					   private_usage : extobj_usage);
+	}
+}
+EXPORT_SYMBOL_GPL(drm_gpuva_manager_resv_add_fence);
+
+static struct drm_gpuva_gem *
+__drm_gpuva_gem_find(struct drm_gpuva_manager *mgr,
+		     struct drm_gem_object *obj)
+{
+	struct drm_gpuva_gem *vm_bo;
+
+	drm_gem_gpuva_assert_lock_held(obj);
+
+	drm_gem_for_each_gpuva_gem(vm_bo, obj)
+		if (vm_bo->mgr == mgr)
+			return vm_bo;
+
+	return NULL;
+}
+
+/**
+ * drm_gpuva_gem_create() - create a new instance of struct drm_gpuva_gem
+ * @mgr: The &drm_gpuva_manager the @obj is mapped in.
+ * @obj: The &drm_gem_object being mapped in the @mgr.
+ *
+ * If provided by the driver, this function uses the &drm_gpuva_fn_ops
+ * vm_bo_alloc() callback to allocate.
+ *
+ * Returns: a pointer to the &drm_gpuva_gem on success, NULL on failure
+ */
+struct drm_gpuva_gem *
+drm_gpuva_gem_create(struct drm_gpuva_manager *mgr,
+		     struct drm_gem_object *obj)
+{
+	const struct drm_gpuva_fn_ops *ops = mgr->ops;
+	struct drm_gpuva_gem *vm_bo;
+
+	if (ops && ops->vm_bo_alloc)
+		vm_bo = ops->vm_bo_alloc();
+	else
+		vm_bo = kzalloc(sizeof(*vm_bo), GFP_KERNEL);
+
+	if (unlikely(!vm_bo))
+		return NULL;
+
+	vm_bo->mgr = mgr;
+	vm_bo->obj = obj;
+
+	kref_init(&vm_bo->kref);
+	INIT_LIST_HEAD(&vm_bo->list.gpuva);
+	INIT_LIST_HEAD(&vm_bo->list.entry.gem);
+	INIT_LIST_HEAD(&vm_bo->list.entry.evict);
+
+	drm_gem_object_get(obj);
+
+	return vm_bo;
+}
+EXPORT_SYMBOL_GPL(drm_gpuva_gem_create);
+
+void
+drm_gpuva_gem_destroy(struct kref *kref)
+{
+	struct drm_gpuva_gem *vm_bo = container_of(kref, struct drm_gpuva_gem,
+						   kref);
+	const struct drm_gpuva_fn_ops *ops = vm_bo->mgr->ops;
+
+	drm_gem_object_put(vm_bo->obj);
+
+	if (ops && ops->vm_bo_free)
+		ops->vm_bo_free(vm_bo);
+	else
+		kfree(vm_bo);
+}
+EXPORT_SYMBOL_GPL(drm_gpuva_gem_destroy);
+
+/**
+ * drm_gpuva_gem_find() - find the &drm_gpuva_gem for the given
+ * &drm_gpuva_manager and &drm_gem_object
+ * @mgr: The &drm_gpuva_manager the @obj is mapped in.
+ * @obj: The &drm_gem_object being mapped in the @mgr.
+ *
+ * Find the &drm_gpuva_gem representing the combination of the given
+ * &drm_gpuva_manager and &drm_gem_object. If found, increases the reference
+ * count of the &drm_gpuva_gem accordingly.
+ *
+ * Returns: a pointer to the &drm_gpuva_gem on success, NULL on failure
+ */
+struct drm_gpuva_gem *
+drm_gpuva_gem_find(struct drm_gpuva_manager *mgr,
+		   struct drm_gem_object *obj)
+{
+	struct drm_gpuva_gem *vm_bo = __drm_gpuva_gem_find(mgr, obj);
+
+	return vm_bo ? drm_gpuva_gem_get(vm_bo) : NULL;
+}
+EXPORT_SYMBOL_GPL(drm_gpuva_gem_find);
+
+/**
+ * drm_gpuva_gem_obtain() - obtains and instance of the &drm_gpuva_gem for the
+ * given &drm_gpuva_manager and &drm_gem_object
+ * @mgr: The &drm_gpuva_manager the @obj is mapped in.
+ * @obj: The &drm_gem_object being mapped in the @mgr.
+ *
+ * Find the &drm_gpuva_gem representing the combination of the given
+ * &drm_gpuva_manager and &drm_gem_object. If found, increases the reference
+ * count of the &drm_gpuva_gem accordingly. If not found, allsocates a new
+ * &drm_gpuva_gem.
+ *
+ * Returns: a pointer to the &drm_gpuva_gem on success, an ERR_PTR on failure
+ */
+struct drm_gpuva_gem *
+drm_gpuva_gem_obtain(struct drm_gpuva_manager *mgr,
+		     struct drm_gem_object *obj)
+{
+	struct drm_gpuva_gem *vm_bo;
+
+	vm_bo = drm_gpuva_gem_find(mgr, obj);
+	if (vm_bo)
+		return vm_bo;
+
+	vm_bo = drm_gpuva_gem_create(mgr, obj);
+	if (!vm_bo)
+		return ERR_PTR(-ENOMEM);
+
+	return vm_bo;
+}
+EXPORT_SYMBOL_GPL(drm_gpuva_gem_obtain);
+
+/**
+ * drm_gpuva_gem_obtain_prealloc() - obtains and instance of the &drm_gpuva_gem
+ * for the given &drm_gpuva_manager and &drm_gem_object
+ * @mgr: The &drm_gpuva_manager the @obj is mapped in.
+ * @obj: The &drm_gem_object being mapped in the @mgr.
+ *
+ * Find the &drm_gpuva_gem representing the combination of the given
+ * &drm_gpuva_manager and &drm_gem_object. If found, increases the reference
+ * count of the found &drm_gpuva_gem accordingly, while the @__vm_bo reference
+ * count is decreased. If not found @__vm_bo is returned.
+ *
+ * Returns: a pointer to the found &drm_gpuva_gem or @__vm_bo if no existing
+ * &drm_gpuva_gem was found
+ */
+struct drm_gpuva_gem *
+drm_gpuva_gem_obtain_prealloc(struct drm_gpuva_manager *mgr,
+			      struct drm_gem_object *obj,
+			      struct drm_gpuva_gem *__vm_bo)
+{
+	struct drm_gpuva_gem *vm_bo;
+
+	vm_bo = drm_gpuva_gem_find(mgr, obj);
+	if (vm_bo) {
+		drm_gpuva_gem_put(__vm_bo);
+		return vm_bo;
+	}
+
+	return __vm_bo;
+}
+EXPORT_SYMBOL_GPL(drm_gpuva_gem_obtain_prealloc);
+
+static int
+__drm_gpuva_extobj_insert(struct drm_gpuva_manager *mgr,
+			  struct drm_gem_object *obj,
+			  gfp_t gfp)
+{
+	MA_STATE(mas, &mgr->mt_ext, 0, 0);
+	union {
+		struct drm_gem_object *obj;
+		uintptr_t index;
+	} gem;
+	union {
+		void *ptr;
+		uintptr_t cnt;
+	} ref;
+	int ret = 0;
+
+	gem.obj = obj;
+	mas_set(&mas, gem.index);
+
+	mas_lock(&mas);
+	ref.ptr = mas_walk(&mas);
+	if (ref.ptr) {
+		++ref.cnt;
+		mas_store(&mas, ref.ptr);
+	} else {
+		if (unlikely(!gfp)) {
+			ret = -EINVAL;
+			goto out;
+		}
+
+		mas_set(&mas, gem.index);
+		ref.cnt = 1;
+		ret = mas_store_gfp(&mas, ref.ptr, gfp);
+		if (likely(!ret))
+			drm_gem_object_get(obj);
+	}
+out:
+	mas_unlock(&mas);
+	return ret;
+}
+
+static void
+__drm_gpuva_extobj_remove(struct drm_gpuva_manager *mgr,
+			  struct drm_gem_object *obj)
+{
+	MA_STATE(mas, &mgr->mt_ext, 0, 0);
+	union {
+		struct drm_gem_object *obj;
+		uintptr_t index;
+	} gem;
+	union {
+		void *ptr;
+		uintptr_t cnt;
+	} ref;
+
+	gem.obj = obj;
+	mas_set(&mas, gem.index);
+
+	mas_lock(&mas);
+	if (unlikely(!(ref.ptr = mas_walk(&mas))))
+		goto out;
+
+	if (!--ref.cnt) {
+		mas_erase(&mas);
+		drm_gem_object_put(obj);
+	} else {
+		mas_store(&mas, ref.ptr);
+	}
+out:
+	mas_unlock(&mas);
+}
+
+/**
+ * drm_gpuva_extobj_insert - insert an external &drm_gem_object
+ * @mgr: the &drm_gpuva_manager to insert into
+ * @obj: the &drm_gem_object to insert as extobj
+ *
+ * Insert a &drm_gem_object into the &drm_gpuva_managers external object tree.
+ * If the &drm_gem_object already exists in the tree, the reference counter
+ * of this external object is increased by one.
+ *
+ * Drivers should insert the external &drm_gem_object before the dma-fence
+ * signalling critical section, e.g. when submitting the job, and before
+ * locking all &drm_gem_objects of a GPU-VM, e.g. with drm_gpuva_manager_lock()
+ * or its dervates.
+ *
+ * Returns: 0 on success, negative error code on failure.
+ */
+int
+drm_gpuva_extobj_insert(struct drm_gpuva_manager *mgr,
+			struct drm_gem_object *obj)
+{
+	return drm_gpuva_is_extobj(mgr, obj) ?
+		__drm_gpuva_extobj_insert(mgr, obj, GFP_KERNEL) : 0;
+
+}
+EXPORT_SYMBOL_GPL(drm_gpuva_extobj_insert);
+
+/**
+ * drm_gpuva_extobj_get - increase the referecne count of an external
+ * &drm_gem_object
+ * @mgr: the &drm_gpuva_manager storing the extobj
+ * @obj: the &drm_gem_object to representing the extobj
+ *
+ * Increases the reference count of the extobj represented by @obj.
+ *
+ * Drivers should call this for every &drm_gpuva backed by a &drm_gem_object
+ * being inserted.
+ *
+ * For &drm_gpuva_op_remap operations drivers should make sure to only take an
+ * additional reference if the re-map operation splits an existing &drm_gpuva
+ * into two separate ones.
+ *
+ * See also drm_gpuva_map_get() and drm_gpuva_remap_get().
+ *
+ * Returns: 0 on success, negative error code on failure.
+ */
+void
+drm_gpuva_extobj_get(struct drm_gpuva_manager *mgr,
+		     struct drm_gem_object *obj)
+{
+	if (drm_gpuva_is_extobj(mgr, obj))
+		WARN(__drm_gpuva_extobj_insert(mgr, obj, 0),
+		     "Can't increase ref-count of non-existent extobj.");
+}
+EXPORT_SYMBOL_GPL(drm_gpuva_extobj_get);
+
+/**
+ * drm_gpuva_extobj_put - decrease the referecne count of an external
+ * &drm_gem_object
+ * @mgr: the &drm_gpuva_manager storing the extobj
+ * @obj: the &drm_gem_object to representing the extobj
+ *
+ * Decreases the reference count of the extobj represented by @obj.
+ *
+ * Drivers should call this for every &drm_gpuva backed by a &drm_gem_object
+ * being removed from the GPU VA space.
+ *
+ * See also drm_gpuva_unmap_put().
+ *
+ * Returns: 0 on success, negative error code on failure.
+ */
+void
+drm_gpuva_extobj_put(struct drm_gpuva_manager *mgr,
+		     struct drm_gem_object *obj)
+{
+	if (drm_gpuva_is_extobj(mgr, obj))
+		__drm_gpuva_extobj_remove(mgr, obj);
+}
+EXPORT_SYMBOL_GPL(drm_gpuva_extobj_put);
+
+/**
+ * drm_gpuva_gem_evict() - add / remove a &drm_gem_object to / from a
+ * &drm_gpuva_managers evicted list
+ * @obj: the &drm_gem_object to add or remove
+ * @evict: indicates whether the object is evicted
+ *
+ * Adds a &drm_gem_object to or removes it from all &drm_gpuva_managers evicted
+ * list containing a mapping of this &drm_gem_object.
+ */
+void
+drm_gpuva_gem_evict(struct drm_gem_object *obj, bool evict)
+{
+	struct drm_gpuva_gem *vm_bo;
+
+	/* Required for iterating the GEMs GPUVA GEM list. If no driver specific
+	 * lock has been set, the list is protected with the GEMs dma-resv lock.
+	 */
+	drm_gem_gpuva_assert_lock_held(obj);
+
+	/* Required to protect the GPUVA managers evict list against concurrent
+	 * access through drm_gpuva_manager_validate(). Concurrent insertions to
+	 * the evict list through different GEM object evictions are protected
+	 * by the GPUVA managers evict lock.
+	 */
+	dma_resv_assert_held(obj->resv);
+
+	drm_gem_for_each_gpuva_gem(vm_bo, obj) {
+		struct drm_gpuva_manager *mgr = vm_bo->mgr;
+
+		spin_lock(&mgr->evict.lock);
+		if (evict)
+			list_add_tail(&vm_bo->list.entry.evict,
+				      &mgr->evict.list);
+		else
+			list_del_init(&vm_bo->list.entry.evict);
+		spin_unlock(&mgr->evict.lock);
+	}
+}
+EXPORT_SYMBOL_GPL(drm_gpuva_gem_evict);
 
 static int
 __drm_gpuva_insert(struct drm_gpuva_manager *mgr,
@@ -806,15 +1381,20 @@ EXPORT_SYMBOL_GPL(drm_gpuva_remove);
 /**
  * drm_gpuva_link() - link a &drm_gpuva
  * @va: the &drm_gpuva to link
+ * @vm_bo: the &drm_gpuva_gem to add the &drm_gpuva to
  *
- * This adds the given &va to the GPU VA list of the &drm_gem_object it is
- * associated with.
+ * This adds the given &va to the GPU VA list of the &drm_gpuva_gem and the
+ * &drm_gpuva_gem to the &drm_gem_object it is associated with.
+ *
+ * For every &drm_gpuva entry added to the &drm_gpuva_gem an additional
+ * reference of the latter is taken.
  *
  * This function expects the caller to protect the GEM's GPUVA list against
- * concurrent access using the GEMs dma_resv lock.
+ * concurrent access using either the GEMs dma_resv lock or a driver specific
+ * lock set through drm_gem_gpuva_set_lock().
  */
 void
-drm_gpuva_link(struct drm_gpuva *va)
+drm_gpuva_link(struct drm_gpuva *va, struct drm_gpuva_gem *vm_bo)
 {
 	struct drm_gem_object *obj = va->gem.obj;
 
@@ -823,7 +1403,10 @@ drm_gpuva_link(struct drm_gpuva *va)
 
 	drm_gem_gpuva_assert_lock_held(obj);
 
-	list_add_tail(&va->gem.entry, &obj->gpuva.list);
+	drm_gpuva_gem_get(vm_bo);
+	list_add_tail(&va->gem.entry, &vm_bo->list.gpuva);
+	if (list_empty(&vm_bo->list.entry.gem))
+		list_add_tail(&vm_bo->list.entry.gem, &obj->gpuva.list);
 }
 EXPORT_SYMBOL_GPL(drm_gpuva_link);
 
@@ -834,20 +1417,39 @@ EXPORT_SYMBOL_GPL(drm_gpuva_link);
  * This removes the given &va from the GPU VA list of the &drm_gem_object it is
  * associated with.
  *
+ * This removes the given &va from the GPU VA list of the &drm_gpuva_gem and
+ * the &drm_gpuva_gem from the &drm_gem_object it is associated with in case
+ * this call unlinks the last &drm_gpuva from the &drm_gpuva_gem.
+ *
+ * For every &drm_gpuva entry removed from the &drm_gpuva_gem a reference of
+ * the latter is dropped.
+ *
  * This function expects the caller to protect the GEM's GPUVA list against
- * concurrent access using the GEMs dma_resv lock.
+ * concurrent access using either the GEMs dma_resv lock or a driver specific
+ * lock set through drm_gem_gpuva_set_lock().
  */
 void
 drm_gpuva_unlink(struct drm_gpuva *va)
 {
 	struct drm_gem_object *obj = va->gem.obj;
+	struct drm_gpuva_gem *vm_bo;
 
 	if (unlikely(!obj))
 		return;
 
 	drm_gem_gpuva_assert_lock_held(obj);
 
+	vm_bo = __drm_gpuva_gem_find(va->mgr, obj);
+	if (WARN(!vm_bo, "GPUVA doesn't seem to be linked.\n"))
+		return;
+
 	list_del_init(&va->gem.entry);
+
+	if (list_empty(&vm_bo->list.gpuva)) {
+		list_del_init(&vm_bo->list.entry.gem);
+		list_del_init(&vm_bo->list.entry.evict);
+	}
+	drm_gpuva_gem_put(vm_bo);
 }
 EXPORT_SYMBOL_GPL(drm_gpuva_unlink);
 
@@ -978,6 +1580,26 @@ drm_gpuva_map(struct drm_gpuva_manager *mgr,
 EXPORT_SYMBOL_GPL(drm_gpuva_map);
 
 /**
+ * drm_gpuva_map_get() - helper to insert a &drm_gpuva according to a
+ * &drm_gpuva_op_map
+ * @mgr: the &drm_gpuva_manager
+ * @va: the &drm_gpuva to insert
+ * @op: the &drm_gpuva_op_map to initialize @va with
+ *
+ * Initializes the @va from the @op and inserts it into the given @mgr and
+ * increases the reference count of the corresponding extobj.
+ */
+void
+drm_gpuva_map_get(struct drm_gpuva_manager *mgr,
+		  struct drm_gpuva *va,
+		  struct drm_gpuva_op_map *op)
+{
+	drm_gpuva_map(mgr, va, op);
+	drm_gpuva_extobj_get(mgr, va->gem.obj);
+}
+EXPORT_SYMBOL_GPL(drm_gpuva_map_get);
+
+/**
  * drm_gpuva_remap() - helper to remap a &drm_gpuva according to a
  * &drm_gpuva_op_remap
  * @prev: the &drm_gpuva to remap when keeping the start of a mapping
@@ -992,10 +1614,10 @@ drm_gpuva_remap(struct drm_gpuva *prev,
 		struct drm_gpuva *next,
 		struct drm_gpuva_op_remap *op)
 {
-	struct drm_gpuva *curr = op->unmap->va;
-	struct drm_gpuva_manager *mgr = curr->mgr;
+	struct drm_gpuva *va = op->unmap->va;
+	struct drm_gpuva_manager *mgr = va->mgr;
 
-	drm_gpuva_remove(curr);
+	drm_gpuva_remove(va);
 
 	if (op->prev) {
 		drm_gpuva_init_from_op(prev, op->prev);
@@ -1010,6 +1632,31 @@ drm_gpuva_remap(struct drm_gpuva *prev,
 EXPORT_SYMBOL_GPL(drm_gpuva_remap);
 
 /**
+ * drm_gpuva_remap_get() - helper to remap a &drm_gpuva according to a
+ * &drm_gpuva_op_remap
+ * @prev: the &drm_gpuva to remap when keeping the start of a mapping
+ * @next: the &drm_gpuva to remap when keeping the end of a mapping
+ * @op: the &drm_gpuva_op_remap to initialize @prev and @next with
+ *
+ * Removes the currently mapped &drm_gpuva and remaps it using @prev and/or
+ * @next. Additionally, if the re-map splits the existing &drm_gpuva into two
+ * separate mappings, increases the reference count of the corresponding extobj.
+ */
+void
+drm_gpuva_remap_get(struct drm_gpuva *prev,
+		    struct drm_gpuva *next,
+		    struct drm_gpuva_op_remap *op)
+{
+	struct drm_gpuva *va = op->unmap->va;
+	struct drm_gpuva_manager *mgr = va->mgr;
+
+	drm_gpuva_remap(prev, next, op);
+	if (op->prev && op->next)
+		drm_gpuva_extobj_get(mgr, va->gem.obj);
+}
+EXPORT_SYMBOL_GPL(drm_gpuva_remap_get);
+
+/**
  * drm_gpuva_unmap() - helper to remove a &drm_gpuva according to a
  * &drm_gpuva_op_unmap
  * @op: the &drm_gpuva_op_unmap specifying the &drm_gpuva to remove
@@ -1022,6 +1669,24 @@ drm_gpuva_unmap(struct drm_gpuva_op_unmap *op)
 	drm_gpuva_remove(op->va);
 }
 EXPORT_SYMBOL_GPL(drm_gpuva_unmap);
+
+/**
+ * drm_gpuva_unmap_put() - helper to remove a &drm_gpuva according to a
+ * &drm_gpuva_op_unmap
+ * @op: the &drm_gpuva_op_unmap specifying the &drm_gpuva to remove
+ *
+ * Removes the &drm_gpuva associated with the &drm_gpuva_op_unmap and decreases
+ * the reference count of the corresponding extobj.
+ */
+void
+drm_gpuva_unmap_put(struct drm_gpuva_op_unmap *op)
+{
+	struct drm_gpuva *va = op->va;
+
+	drm_gpuva_unmap(op);
+	drm_gpuva_extobj_put(va->mgr, va->gem.obj);
+}
+EXPORT_SYMBOL_GPL(drm_gpuva_unmap_put);
 
 static int
 op_map_cb(const struct drm_gpuva_fn_ops *fn, void *priv,
@@ -1663,6 +2328,7 @@ drm_gpuva_gem_unmap_ops_create(struct drm_gpuva_manager *mgr,
 {
 	struct drm_gpuva_ops *ops;
 	struct drm_gpuva_op *op;
+	struct drm_gpuva_gem *vm_bo;
 	struct drm_gpuva *va;
 	int ret;
 
@@ -1674,7 +2340,7 @@ drm_gpuva_gem_unmap_ops_create(struct drm_gpuva_manager *mgr,
 
 	INIT_LIST_HEAD(&ops->list);
 
-	drm_gem_for_each_gpuva(va, obj) {
+	drm_gem_for_each_gpuva(va, vm_bo, mgr, obj) {
 		op = gpuva_op_alloc(mgr);
 		if (!op) {
 			ret = -ENOMEM;
