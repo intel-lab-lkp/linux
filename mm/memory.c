@@ -5345,7 +5345,7 @@ static inline bool get_mmap_lock_carefully(struct mm_struct *mm, struct pt_regs 
 {
 	/* Even if this succeeds, make it clear we *might* have slept */
 	if (likely(mmap_read_trylock(mm))) {
-		might_sleep();
+		__might_sleep(__FILE__, __LINE__);
 		return true;
 	}
 
