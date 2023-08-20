@@ -168,13 +168,14 @@ static void drm_connector_get_cmdline_mode(struct drm_connector *connector)
 		return;
 
 	if (mode->force) {
-		DRM_INFO("forcing %s connector %s\n", connector->name,
-			 drm_get_connector_force_name(mode->force));
+		drm_info(connector->dev, "forcing %s connector %s\n",
+			 connector->name, drm_get_connector_force_name(mode->force));
 		connector->force = mode->force;
 	}
 
 	if (mode->panel_orientation != DRM_MODE_PANEL_ORIENTATION_UNKNOWN) {
-		DRM_INFO("cmdline forces connector %s panel_orientation to %d\n",
+		drm_info(connector->dev,
+			 "cmdline forces connector %s panel_orientation to %d\n",
 			 connector->name, mode->panel_orientation);
 		drm_connector_set_panel_orientation(connector,
 						    mode->panel_orientation);

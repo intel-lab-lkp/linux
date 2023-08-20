@@ -262,7 +262,7 @@ void drm_legacy_pci_exit(const struct drm_driver *driver,
 		}
 		mutex_unlock(&legacy_dev_list_lock);
 	}
-	DRM_INFO("Module unloaded\n");
+	drm_info(NULL, "Module unloaded\n");
 }
 EXPORT_SYMBOL(drm_legacy_pci_exit);
 

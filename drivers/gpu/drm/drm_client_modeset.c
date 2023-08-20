@@ -331,7 +331,7 @@ static bool drm_client_target_cloned(struct drm_device *dev,
 		DRM_DEBUG_KMS("can clone using 1024x768\n");
 		return true;
 	}
-	DRM_INFO("kms: can't enable cloning when we probably wanted to.\n");
+	drm_info(dev, "kms: can't enable cloning when we probably wanted to.\n");
 	return false;
 }
 
