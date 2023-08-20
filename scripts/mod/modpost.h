@@ -11,7 +11,7 @@
 #include <unistd.h>
 #include <elf.h>
 
-#include "list.h"
+#include <list.h>
 #include "elfconfig.h"
 
 /* On BSD-alike OSes elf.h defines these according to host's word size */

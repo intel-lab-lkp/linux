@@ -12,10 +12,11 @@ extern "C" {
 
 #include <assert.h>
 #include <stdio.h>
-#include "list.h"
 #ifndef __cplusplus
 #include <stdbool.h>
 #endif
+
+#include <list.h>
 
 struct file {
 	struct file *next;
