@@ -2503,6 +2503,18 @@ struct netdev_queue *netdev_get_tx_queue(const struct net_device *dev,
 	return &dev->_tx[index];
 }
 
+static inline
+unsigned int get_netdev_queue_index(struct netdev_queue *queue)
+{
+	struct net_device *dev = queue->dev;
+	unsigned int i;
+
+	i = queue - dev->_tx;
+	DEBUG_NET_WARN_ON_ONCE(i >= dev->num_tx_queues);
+
+	return i;
+}
+
 static inline struct netdev_queue *skb_get_tx_queue(const struct net_device *dev,
 						    const struct sk_buff *skb)
 {

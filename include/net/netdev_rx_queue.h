@@ -42,15 +42,13 @@ __netif_get_rx_queue(struct net_device *dev, unsigned int rxq)
 	return dev->_rx + rxq;
 }
 
-#ifdef CONFIG_SYSFS
 static inline unsigned int
 get_netdev_rx_queue_index(struct netdev_rx_queue *queue)
 {
 	struct net_device *dev = queue->dev;
 	int index = queue - dev->_rx;
 
-	BUG_ON(index >= dev->num_rx_queues);
+	DEBUG_NET_WARN_ON_ONCE(index >= dev->num_rx_queues);
 	return index;
 }
-#endif
 #endif

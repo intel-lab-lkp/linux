@@ -1240,17 +1240,6 @@ static ssize_t tx_timeout_show(struct netdev_queue *queue, char *buf)
 	return sysfs_emit(buf, fmt_ulong, trans_timeout);
 }
 
-static unsigned int get_netdev_queue_index(struct netdev_queue *queue)
-{
-	struct net_device *dev = queue->dev;
-	unsigned int i;
-
-	i = queue - dev->_tx;
-	BUG_ON(i >= dev->num_tx_queues);
-
-	return i;
-}
-
 static ssize_t traffic_class_show(struct netdev_queue *queue,
 				  char *buf)
 {
