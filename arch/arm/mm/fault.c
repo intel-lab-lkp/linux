@@ -242,8 +242,11 @@ do_page_fault(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 	struct vm_area_struct *vma;
 	int sig, code;
 	vm_fault_t fault;
-	unsigned int flags = FAULT_FLAG_DEFAULT;
-	unsigned long vm_flags = VM_ACCESS_FLAGS;
+	struct vm_fault vmf = {
+		.real_address = addr,
+		.flags = FAULT_FLAG_DEFAULT,
+		.vm_flags = VM_ACCESS_FLAGS,
+	};
 
 	if (kprobe_page_fault(regs, fsr))
 		return 0;
@@ -261,15 +264,15 @@ do_page_fault(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 		goto no_context;
 
 	if (user_mode(regs))
-		flags |= FAULT_FLAG_USER;
+		vmf.flags |= FAULT_FLAG_USER;
 
 	if (is_write_fault(fsr)) {
-		flags |= FAULT_FLAG_WRITE;
-		vm_flags = VM_WRITE;
+		vmf.flags |= FAULT_FLAG_WRITE;
+		vmf.vm_flags = VM_WRITE;
 	}
 
 	if (fsr & FSR_LNX_PF) {
-		vm_flags = VM_EXEC;
+		vmf.vm_flags = VM_EXEC;
 
 		if (is_permission_fault(fsr) && !user_mode(regs))
 			die_kernel_fault("execution of memory",
@@ -277,6 +280,18 @@ do_page_fault(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 	}
 
 	perf_sw_event(PERF_COUNT_SW_PAGE_FAULTS, 1, regs, addr);
+
+	fault = try_vma_locked_page_fault(&vmf);
+	if (fault == VM_FAULT_NONE)
+		goto retry;
+	if (!(fault & VM_FAULT_RETRY))
+		goto done;
+
+	if (fault_signal_pending(fault, regs)) {
+		if (!user_mode(regs))
+			goto no_context;
+		return 0;
+	}
 
 retry:
 	vma = lock_mm_and_find_vma(mm, addr, regs);
@@ -289,10 +304,10 @@ retry:
 	 * ok, we have a good vm_area for this memory access, check the
 	 * permissions on the VMA allow for the fault which occurred.
 	 */
-	if (!(vma->vm_flags & vm_flags))
+	if (!(vma->vm_flags & vmf.vm_flags))
 		fault = VM_FAULT_BADACCESS;
 	else
-		fault = handle_mm_fault(vma, addr & PAGE_MASK, flags, regs);
+		fault = handle_mm_fault(vma, addr & PAGE_MASK, vmf.flags, regs);
 
 	/* If we need to retry but a fatal signal is pending, handle the
 	 * signal first. We do not need to release the mmap_lock because
@@ -310,13 +325,13 @@ retry:
 
 	if (!(fault & VM_FAULT_ERROR)) {
 		if (fault & VM_FAULT_RETRY) {
-			flags |= FAULT_FLAG_TRIED;
+			vmf.flags |= FAULT_FLAG_TRIED;
 			goto retry;
 		}
 	}
 
 	mmap_read_unlock(mm);
-
+done:
 	/*
 	 * Handle the "normal" case first - VM_FAULT_MAJOR
 	 */
