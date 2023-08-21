@@ -317,9 +317,8 @@ static void rxrpc_clean_up_connection(struct work_struct *work)
 	       !conn->channels[3].call);
 	ASSERT(list_empty(&conn->cache_link));
 
-	del_timer_sync(&conn->timer);
-	cancel_work_sync(&conn->processor); /* Processing may restart the timer */
-	del_timer_sync(&conn->timer);
+	timer_shutdown_sync(&conn->timer);
+	cancel_work_sync(&conn->processor);
 
 	write_lock(&rxnet->conn_lock);
 	list_del_init(&conn->proc_link);
