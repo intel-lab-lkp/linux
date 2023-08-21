@@ -619,6 +619,10 @@ int xtInsert(tid_t tid,		/* transaction id */
 			(nextindex - index) * sizeof(xad_t));
 
 	/* insert the new entry: mark the entry NEW */
+	if (index >= XTROOTMAXSLOT) {
+		rc = -EINVAL;
+		goto out;
+	}
 	xad = &p->xad[index];
 	XT_PUTENTRY(xad, xflag, xoff, xlen, xaddr);
 
