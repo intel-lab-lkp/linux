@@ -5510,6 +5510,45 @@ inval:
 	count_vm_vma_lock_event(VMA_LOCK_ABORT);
 	return NULL;
 }
+
+#ifdef CONFIG_PER_VMA_LOCK
+bool __weak arch_vma_access_error(struct vm_area_struct *vma, struct vm_fault *vmf)
+{
+	return (vma->vm_flags & vmf->vm_flags) == 0;
+}
+#endif
+
+vm_fault_t try_vma_locked_page_fault(struct vm_fault *vmf)
+{
+	vm_fault_t fault = VM_FAULT_NONE;
+	struct vm_area_struct *vma;
+
+	if (!(vmf->flags & FAULT_FLAG_USER))
+		return fault;
+
+	vma = lock_vma_under_rcu(current->mm, vmf->real_address);
+	if (!vma)
+		return fault;
+
+	if (arch_vma_access_error(vma, vmf)) {
+		vma_end_read(vma);
+		return fault;
+	}
+
+	fault = handle_mm_fault(vma, vmf->real_address,
+				vmf->flags | FAULT_FLAG_VMA_LOCK, vmf->regs);
+
+	if (!(fault & (VM_FAULT_RETRY | VM_FAULT_COMPLETED)))
+		vma_end_read(vma);
+
+	if (fault & VM_FAULT_RETRY)
+		count_vm_vma_lock_event(VMA_LOCK_RETRY);
+	else
+		count_vm_vma_lock_event(VMA_LOCK_SUCCESS);
+
+	return fault;
+}
+
 #endif /* CONFIG_PER_VMA_LOCK */
 
 #ifndef __PAGETABLE_P4D_FOLDED

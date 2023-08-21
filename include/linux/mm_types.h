@@ -1139,6 +1139,7 @@ typedef __bitwise unsigned int vm_fault_t;
  * fault. Used to decide whether a process gets delivered SIGBUS or
  * just gets major/minor fault counters bumped up.
  *
+ * @VM_FAULT_NONE:		Special case, not starting to handle fault
  * @VM_FAULT_OOM:		Out Of Memory
  * @VM_FAULT_SIGBUS:		Bad access
  * @VM_FAULT_MAJOR:		Page read from storage
@@ -1159,6 +1160,7 @@ typedef __bitwise unsigned int vm_fault_t;
  *
  */
 enum vm_fault_reason {
+	VM_FAULT_NONE		= (__force vm_fault_t)0x000000,
 	VM_FAULT_OOM            = (__force vm_fault_t)0x000001,
 	VM_FAULT_SIGBUS         = (__force vm_fault_t)0x000002,
 	VM_FAULT_MAJOR          = (__force vm_fault_t)0x000004,

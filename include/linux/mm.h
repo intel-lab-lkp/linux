@@ -512,9 +512,12 @@ struct vm_fault {
 		pgoff_t pgoff;			/* Logical page offset based on vma */
 		unsigned long address;		/* Faulting virtual address - masked */
 		unsigned long real_address;	/* Faulting virtual address - unmasked */
+		unsigned long fault_code;	/* Faulting error code during page fault */
+		struct pt_regs *regs;		/* The registers stored during page fault */
 	};
 	enum fault_flag flags;		/* FAULT_FLAG_xxx flags
 					 * XXX: should really be 'const' */
+	vm_flags_t vm_flags;		/* VMA flags to be used for access checking */
 	pmd_t *pmd;			/* Pointer to pmd entry matching
 					 * the 'address' */
 	pud_t *pud;			/* Pointer to pud entry matching
@@ -774,6 +777,9 @@ static inline void assert_fault_locked(struct vm_fault *vmf)
 struct vm_area_struct *lock_vma_under_rcu(struct mm_struct *mm,
 					  unsigned long address);
 
+bool arch_vma_access_error(struct vm_area_struct *vma, struct vm_fault *vmf);
+vm_fault_t try_vma_locked_page_fault(struct vm_fault *vmf);
+
 #else /* CONFIG_PER_VMA_LOCK */
 
 static inline bool vma_start_read(struct vm_area_struct *vma)
@@ -799,6 +805,17 @@ static inline void release_fault_lock(struct vm_fault *vmf)
 static inline void assert_fault_locked(struct vm_fault *vmf)
 {
 	mmap_assert_locked(vmf->vma->vm_mm);
+}
+
+static inline struct vm_area_struct *lock_vma_under_rcu(struct mm_struct *mm,
+		unsigned long address)
+{
+	return NULL;
+}
+
+static inline vm_fault_t try_vma_locked_page_fault(struct vm_fault *vmf)
+{
+	return VM_FAULT_NONE;
 }
 
 #endif /* CONFIG_PER_VMA_LOCK */
