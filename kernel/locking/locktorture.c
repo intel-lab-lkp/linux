@@ -47,8 +47,8 @@ torture_param(int, shuffle_interval, 3, "Number of jiffies between shuffles, 0=d
 torture_param(int, shutdown_secs, 0, "Shutdown time (j), <= zero to disable.");
 torture_param(int, stat_interval, 60, "Number of seconds between stats printk()s");
 torture_param(int, stutter, 5, "Number of jiffies to run/halt test, 0=disable");
-torture_param(int, writer_fifo, 0, "Run writers at sched_set_fifo() priority");
 torture_param(int, verbose, 1, "Enable verbose debugging printk()s");
+torture_param(int, writer_fifo, 0, "Run writers at sched_set_fifo() priority");
 /* Going much higher trips "BUG: MAX_LOCKDEP_CHAIN_HLOCKS too low!" errors */
 #define MAX_NESTED_LOCKS 8
 
@@ -1056,11 +1056,12 @@ lock_torture_print_module_parms(struct lock_torture_ops *cur_ops,
 
 	cpumask_setall(&cpumask_all);
 	pr_alert("%s" TORTURE_FLAG
-		 "--- %s%s: nwriters_stress=%d nreaders_stress=%d nested_locks=%d stat_interval=%d verbose=%d shuffle_interval=%d stutter=%d shutdown_secs=%d onoff_interval=%d onoff_holdoff=%d readers_bind=%*pbl writers_bind=%*pbl\n",
+		 "--- %s%s: acq_writer_lim=%d long_hold=%d nested_locks=%d nreaders_stress=%d nwriters_stress=%d onoff_holdoff=%d onoff_interval=%d rt_boost=%d rt_boost_factor=%d shuffle_interval=%d shutdown_secs=%d stat_interval=%d stutter=%d verbose=%d writer_fifo=%d readers_bind=%*pbl writers_bind=%*pbl\n",
 		 torture_type, tag, cxt.debug_lock ? " [debug]": "",
-		 cxt.nrealwriters_stress, cxt.nrealreaders_stress,
-		 nested_locks, stat_interval, verbose, shuffle_interval,
-		 stutter, shutdown_secs, onoff_interval, onoff_holdoff,
+		 acq_writer_lim, long_hold, nested_locks, cxt.nrealreaders_stress,
+		 cxt.nrealwriters_stress, onoff_holdoff, onoff_interval, rt_boost,
+		 rt_boost_factor, shuffle_interval, shutdown_secs, stat_interval, stutter,
+		 verbose, writer_fifo,
 		 cpumask_pr_args(rcmp), cpumask_pr_args(wcmp));
 }
 
