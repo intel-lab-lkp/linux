@@ -63,7 +63,6 @@ struct iso_pinfo {
 	__u8			bc_sid;
 	__u8			bc_num_bis;
 	__u8			bc_bis[ISO_MAX_NUM_BIS];
-	__u16			sync_handle;
 	unsigned long		flags;
 	struct bt_iso_qos	qos;
 	bool			qos_user_set;
@@ -792,7 +791,7 @@ static int iso_sock_bind_bc(struct socket *sock, struct sockaddr *addr,
 
 	bacpy(&iso_pi(sk)->dst, &sa->iso_bc->bc_bdaddr);
 	iso_pi(sk)->dst_type = sa->iso_bc->bc_bdaddr_type;
-	iso_pi(sk)->sync_handle = -1;
+	iso_pi(sk)->qos.bcast.sync_handle = -1;
 	iso_pi(sk)->bc_sid = sa->iso_bc->bc_sid;
 	iso_pi(sk)->bc_num_bis = sa->iso_bc->bc_num_bis;
 
@@ -1174,7 +1173,6 @@ static void iso_conn_big_sync(struct sock *sk)
 	if (!test_and_set_bit(BT_SK_BIG_SYNC, &iso_pi(sk)->flags)) {
 		err = hci_le_big_create_sync(hdev, iso_pi(sk)->conn->hcon,
 					     &iso_pi(sk)->qos,
-					     iso_pi(sk)->sync_handle,
 					     iso_pi(sk)->bc_num_bis,
 					     iso_pi(sk)->bc_bis);
 		if (err)
@@ -1643,11 +1641,10 @@ static void iso_conn_ready(struct iso_conn *conn)
 		if (!bacmp(&hcon->dst, BDADDR_ANY)) {
 			bacpy(&hcon->dst, &iso_pi(parent)->dst);
 			hcon->dst_type = iso_pi(parent)->dst_type;
-			hcon->sync_handle = iso_pi(parent)->sync_handle;
+			hcon->sync_handle = iso_pi(parent)->qos.bcast.sync_handle;
 		}
 
 		if (ev2 && !ev2->status) {
-			iso_pi(sk)->sync_handle = iso_pi(parent)->sync_handle;
 			iso_pi(sk)->qos = iso_pi(parent)->qos;
 			iso_pi(sk)->bc_num_bis = iso_pi(parent)->bc_num_bis;
 			memcpy(iso_pi(sk)->bc_bis, iso_pi(parent)->bc_bis, ISO_MAX_NUM_BIS);
@@ -1689,7 +1686,7 @@ static bool iso_match_sync_handle(struct sock *sk, void *data)
 {
 	struct hci_evt_le_big_info_adv_report *ev = data;
 
-	return le16_to_cpu(ev->sync_handle) == iso_pi(sk)->sync_handle;
+	return le16_to_cpu(ev->sync_handle) == iso_pi(sk)->qos.bcast.sync_handle;
 }
 
 /* ----- ISO interface with lower layer (HCI) ----- */
@@ -1708,7 +1705,7 @@ int iso_connect_ind(struct hci_dev *hdev, bdaddr_t *bdaddr, __u8 *flags)
 	 *
 	 * 1. HCI_EV_LE_PA_SYNC_ESTABLISHED: The socket may specify a specific
 	 * SID to listen to and once sync is estabilished its handle needs to
-	 * be stored in iso_pi(sk)->sync_handle so it can be matched once
+	 * be stored in iso_pi(sk)->qos.bcast.sync_handle so it can be matched once
 	 * receiving the BIG Info.
 	 * 2. HCI_EVT_LE_BIG_INFO_ADV_REPORT: When connect_ind is triggered by a
 	 * a BIG Info it attempts to check if there any listening socket with
@@ -1719,7 +1716,7 @@ int iso_connect_ind(struct hci_dev *hdev, bdaddr_t *bdaddr, __u8 *flags)
 		sk = iso_get_sock_listen(&hdev->bdaddr, bdaddr, iso_match_sid,
 					 ev1);
 		if (sk && !ev1->status)
-			iso_pi(sk)->sync_handle = le16_to_cpu(ev1->handle);
+			iso_pi(sk)->qos.bcast.sync_handle = le16_to_cpu(ev1->handle);
 
 		goto done;
 	}
@@ -1742,7 +1739,6 @@ int iso_connect_ind(struct hci_dev *hdev, bdaddr_t *bdaddr, __u8 *flags)
 			    !test_and_set_bit(BT_SK_BIG_SYNC, &iso_pi(sk)->flags)) {
 				err = hci_le_big_create_sync(hdev, NULL,
 							     &iso_pi(sk)->qos,
-							     iso_pi(sk)->sync_handle,
 							     iso_pi(sk)->bc_num_bis,
 							     iso_pi(sk)->bc_bis);
 				if (err) {

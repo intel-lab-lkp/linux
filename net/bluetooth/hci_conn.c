@@ -2105,8 +2105,7 @@ int hci_pa_create_sync(struct hci_dev *hdev, bdaddr_t *dst, __u8 dst_type,
 }
 
 int hci_le_big_create_sync(struct hci_dev *hdev, struct hci_conn *hcon,
-			   struct bt_iso_qos *qos,
-			   __u16 sync_handle, __u8 num_bis, __u8 bis[])
+			   struct bt_iso_qos *qos, __u8 num_bis, __u8 bis[])
 {
 	struct _packed {
 		struct hci_cp_le_big_create_sync cp;
@@ -2126,7 +2125,7 @@ int hci_le_big_create_sync(struct hci_dev *hdev, struct hci_conn *hcon,
 
 	memset(&pdu, 0, sizeof(pdu));
 	pdu.cp.handle = qos->bcast.big;
-	pdu.cp.sync_handle = cpu_to_le16(sync_handle);
+	pdu.cp.sync_handle = cpu_to_le16(qos->bcast.sync_handle);
 	pdu.cp.encryption = qos->bcast.encryption;
 	memcpy(pdu.cp.bcode, qos->bcast.bcode, sizeof(pdu.cp.bcode));
 	pdu.cp.mse = qos->bcast.mse;
