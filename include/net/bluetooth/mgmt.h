@@ -3,6 +3,7 @@
 
    Copyright (C) 2010  Nokia Corporation
    Copyright (C) 2011-2012  Intel Corporation
+   Copyright 2023  NXP
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License version 2 as
@@ -1176,4 +1177,21 @@ struct mgmt_ev_mesh_device_found {
 #define MGMT_EV_MESH_PACKET_CMPLT		0x0032
 struct mgmt_ev_mesh_pkt_cmplt {
 	__u8	handle;
+} __packed;
+
+#define MGMT_EV_LE_BIG_INFO_ADV_REPORT	0x0033
+struct mgmt_ev_le_big_info_adv_report {
+	__le16  sync_handle;
+	__u8    num_bis;
+	__u8    nse;
+	__le16  iso_interval;
+	__u8    bn;
+	__u8    pto;
+	__u8    irc;
+	__le16  max_pdu;
+	__u8    sdu_interval[3];
+	__le16  max_sdu;
+	__u8    phy;
+	__u8    framing;
+	__u8    encryption;
 } __packed;
