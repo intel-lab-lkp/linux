@@ -390,6 +390,7 @@ struct napi_struct {
 	struct hlist_node	napi_hash_node;
 	struct list_head	napi_rxq_list;
 	struct list_head	napi_txq_list;
+	int			irq;
 };
 
 enum {
@@ -2633,6 +2634,11 @@ static inline void *netdev_priv(const struct net_device *dev)
  * example Ethernet, Wireless LAN, Bluetooth, WiMAX etc.
  */
 #define SET_NETDEV_DEVTYPE(net, devtype)	((net)->dev.type = (devtype))
+
+static inline void napi_set_irq(struct napi_struct *napi, int irq)
+{
+	napi->irq = irq;
+}
 
 int netif_napi_add_queue(struct napi_struct *napi, unsigned int queue_index,
 			 enum q_type type);

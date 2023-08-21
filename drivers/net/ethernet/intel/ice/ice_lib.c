@@ -2972,6 +2972,9 @@ int ice_q_vector_add_napi_queues(struct ice_q_vector *q_vector)
 			return ret;
 	}
 
+	/* Also set the interrupt number for the NAPI */
+	napi_set_irq(&q_vector->napi, q_vector->irq.virq);
+
 	return ret;
 }
 

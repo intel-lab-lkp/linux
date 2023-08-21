@@ -6465,6 +6465,7 @@ void netif_napi_add_weight(struct net_device *dev, struct napi_struct *napi,
 
 	INIT_LIST_HEAD(&napi->napi_rxq_list);
 	INIT_LIST_HEAD(&napi->napi_txq_list);
+	napi->irq = -1;
 }
 EXPORT_SYMBOL(netif_napi_add_weight);
 
