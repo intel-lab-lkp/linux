@@ -360,6 +360,8 @@
 /* PERFINTRSTS_REG */
 #define DMA_PERFINTRSTS_PIS	((u32)1)
 
+#define RB_NODE_CMP(bus1, devfn1, bus2, devfn2) (s16)(PCI_DEVID(bus1, devfn1) - PCI_DEVID(bus2, devfn2))
+
 #define IOMMU_WAIT_OP(iommu, offset, op, cond, sts)			\
 do {									\
 	cycles_t start_time = get_cycles();				\
@@ -682,6 +684,9 @@ struct intel_iommu {
 	struct q_inval  *qi;            /* Queued invalidation info */
 	u32 *iommu_state; /* Store iommu states between suspend and resume.*/
 
+	struct rb_root iopf_device_rbtree;
+	struct rw_semaphore iopf_device_sem;
+
 #ifdef CONFIG_IRQ_REMAP
 	struct ir_table *ir_table;	/* Interrupt remapping info */
 	struct irq_domain *ir_domain;
@@ -715,6 +720,7 @@ struct device_domain_info {
 	struct intel_iommu *iommu; /* IOMMU used by this device */
 	struct dmar_domain *domain; /* pointer to domain */
 	struct pasid_table *pasid_table; /* pasid table */
+	struct rb_node node; /*device tracking node(lookup by (bus, devfn))*/
 };
 
 static inline void __iommu_flush_cache(
@@ -844,6 +850,8 @@ int intel_svm_page_response(struct device *dev, struct iommu_fault_event *evt,
 			    struct iommu_page_response *msg);
 struct iommu_domain *intel_svm_domain_alloc(void);
 void intel_svm_remove_dev_pasid(struct device *dev, ioasid_t pasid);
+struct device_domain_info *device_rbtree_find(struct intel_iommu *iommu,
+				u8 bus, u8 devfn);
 
 struct intel_svm_dev {
 	struct list_head list;

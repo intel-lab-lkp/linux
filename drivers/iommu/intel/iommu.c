@@ -235,6 +235,65 @@ clear_context_copied(struct intel_iommu *iommu, u8 bus, u8 devfn)
 	clear_bit(((long)bus << 8) | devfn, iommu->copied_tables);
 }
 
+
+struct device_domain_info *device_rbtree_find(struct intel_iommu *iommu, u8 bus, u8 devfn)
+{
+	struct device_domain_info *data = NULL;
+	struct rb_node *node;
+
+	down_read(&iommu->iopf_device_sem);
+
+	node = iommu->iopf_device_rbtree.rb_node;
+	while (node) {
+		data = container_of(node, struct device_domain_info, node);
+		s16 result = RB_NODE_CMP(bus, devfn, data->bus, data->devfn);
+
+		if (result < 0)
+			node = node->rb_left;
+		else if (result > 0)
+			node = node->rb_right;
+		else
+			break;
+	}
+	up_read(&iommu->iopf_device_sem);
+
+	return node ? data : NULL;
+}
+
+static int device_rbtree_insert(struct intel_iommu *iommu, struct device_domain_info *data)
+{
+	struct rb_node **new, *parent = NULL;
+
+	down_write(&iommu->iopf_device_sem);
+
+	new = &(iommu->iopf_device_rbtree.rb_node);
+	while (*new) {
+		struct device_domain_info *this = container_of(*new, struct device_domain_info, node);
+		s16 result = RB_NODE_CMP(data->bus, data->devfn, this->bus, this->devfn);
+
+		parent = *new;
+		if (result < 0)
+			new = &((*new)->rb_left);
+		else if (result > 0)
+			new = &((*new)->rb_right);
+		else
+			return -EEXIST;
+	}
+
+	rb_link_node(&data->node, parent, new);
+	rb_insert_color(&data->node, &iommu->iopf_device_rbtree);
+
+	up_write(&iommu->iopf_device_sem);
+	return 0;
+}
+
+static void device_rbtree_remove(struct intel_iommu *iommu, struct device_domain_info *data)
+{
+	down_write(&iommu->iopf_device_sem);
+	rb_erase(&data->node, &iommu->iopf_device_rbtree);
+	up_write(&iommu->iopf_device_sem);
+}
+
 /*
  * This domain is a statically identity mapping domain.
  *	1. This domain creats a static 1:1 mapping to all usable memory.
@@ -3920,6 +3979,9 @@ int __init intel_iommu_init(void)
 			iommu_enable_translation(iommu);
 
 		iommu_disable_protect_mem_regions(iommu);
+
+		iommu->iopf_device_rbtree = RB_ROOT;
+		init_rwsem(&iommu->iopf_device_sem);
 	}
 	up_read(&dmar_global_lock);
 
@@ -4601,6 +4663,11 @@ static int intel_iommu_enable_iopf(struct device *dev)
 	ret = pci_enable_pri(pdev, PRQ_DEPTH);
 	if (ret)
 		goto iopf_unregister_handler;
+
+	ret = device_rbtree_insert(iommu, info);
+	if(ret)
+		goto iopf_unregister_handler;
+
 	info->pri_enabled = 1;
 
 	return 0;
@@ -4620,6 +4687,7 @@ static int intel_iommu_disable_iopf(struct device *dev)
 
 	if (!info->pri_enabled)
 		return -EINVAL;
+	device_rbtree_remove(iommu, info);
 
 	/*
 	 * PCIe spec states that by clearing PRI enable bit, the Page
