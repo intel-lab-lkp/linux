@@ -2458,8 +2458,10 @@ static void __init srso_select_mitigation(void)
 		if (IS_ENABLED(CONFIG_CPU_SRSO)) {
 			/*
 			 * Enable the return thunk for generated code
-			 * like ftrace, static_call, etc.
+			 * like ftrace, static_call, etc.  These
+			 * ret-thunks need to call to their target.
 			 */
+			x86_return_thunk_use_call = true;
 			setup_force_cpu_cap(X86_FEATURE_RETHUNK);
 			setup_force_cpu_cap(X86_FEATURE_UNRET);
 

@@ -133,11 +133,11 @@ SYM_CODE_END(__x86_indirect_jump_thunk_array)
 #ifdef CONFIG_RETHUNK
 
 /*
- * srso_fam19_untrain_ret() and srso_fam19_safe_ret() are placed at
+ * srso_fam19_untrain_ret() and srso_fam19_return_thunk() are placed at
  * special addresses:
  *
  * - srso_fam19_untrain_ret() is 2M aligned
- * - srso_fam19_safe_ret() is also in the same 2M page but bits 2, 8, 14
+ * - srso_fam19_return_thunk() is also in the same 2M page but bits 2, 8, 14
  * and 20 in its virtual address are set (while those bits in the
  * srso_fam19_untrain_ret() function are cleared).
  *
@@ -145,7 +145,7 @@ SYM_CODE_END(__x86_indirect_jump_thunk_array)
  * target buffer of Zen3/4 generations, leading to any potential
  * poisoned entries at that BTB slot to get evicted.
  *
- * As a result, srso_fam19_safe_ret() becomes a safe return.
+ * As a result, srso_fam19_return_thunk() becomes a safe return.
  */
 #ifdef CONFIG_CPU_SRSO
 	.section .text..__x86.rethunk_untrain
@@ -155,7 +155,8 @@ SYM_START(srso_fam19_untrain_ret, SYM_L_GLOBAL, SYM_A_NONE)
 	ANNOTATE_NOENDBR
 	ASM_NOP2
 	lfence
-	jmp srso_fam19_return_thunk
+	call srso_fam19_return_thunk
+	ud2
 SYM_FUNC_END(srso_fam19_untrain_ret)
 __EXPORT_THUNK(srso_fam19_untrain_ret)
 
@@ -169,22 +170,16 @@ SYM_START(srso_fam19_untrain_ret, SYM_L_GLOBAL, SYM_A_NONE)
 SYM_FUNC_END(srso_fam19_untrain_ret)
 #endif
 
-SYM_START(srso_fam19_safe_ret, SYM_L_GLOBAL, SYM_A_NONE)
-	lea 8(%_ASM_SP), %_ASM_SP
+SYM_START(srso_fam19_return_thunk, SYM_L_GLOBAL, SYM_A_NONE)
 	UNWIND_HINT_FUNC
+	ANNOTATE_NOENDBR
+	lea 8(%_ASM_SP), %_ASM_SP
 	ANNOTATE_UNRET_SAFE
 	ret
 	int3
-SYM_FUNC_END(srso_fam19_safe_ret)
+SYM_FUNC_END(srso_fam19_return_thunk)
 
 	.section .text..__x86.return_thunk
-
-SYM_CODE_START(srso_fam19_return_thunk)
-	UNWIND_HINT_FUNC
-	ANNOTATE_NOENDBR
-	call srso_fam19_safe_ret
-	ud2
-SYM_CODE_END(srso_fam19_return_thunk)
 
 /*
  * Some generic notes on the untraining sequences:
@@ -194,13 +189,13 @@ SYM_CODE_END(srso_fam19_return_thunk)
  *
  * The SRSO Zen1/2 (MOVABS) untraining sequence is longer than the
  * Retbleed sequence because the return sequence done there
- * (srso_fam17_safe_ret()) is longer and the return sequence must fully nest
+ * (srso_fam17_return_thunk()) is longer and the return sequence must fully nest
  * (end before) the untraining sequence. Therefore, the untraining
  * sequence must fully overlap the return sequence.
  *
  * Regarding alignment - the instructions which need to be untrained,
  * must all start at a cacheline boundary for Zen1/2 generations. That
- * is, instruction sequences starting at srso_fam17_safe_ret() and
+ * is, instruction sequences starting at srso_fam17_return_thunk() and
  * the respective instruction sequences at retbleed_return_thunk()
  * must start at a cacheline boundary.
  */
@@ -272,12 +267,12 @@ __EXPORT_THUNK(retbleed_untrain_ret)
  *
  * movabs $0xccccc30824648d48,%rax
  *
- * and when the return thunk executes the inner label srso_fam17_safe_ret()
+ * and when the return thunk executes the inner label srso_fam17_return_thunk()
  * later, it is a stack manipulation and a RET which is mispredicted and
  * thus a "safe" one to use.
  */
 	.align 64
-	.skip 64 - (srso_fam17_safe_ret - srso_fam17_untrain_ret), 0xcc
+	.skip 64 - (srso_fam17_return_thunk - srso_fam17_untrain_ret), 0xcc
 SYM_START(srso_fam17_untrain_ret, SYM_L_GLOBAL, SYM_A_NONE)
 	ANNOTATE_NOENDBR
 	.byte 0x48, 0xb8
@@ -288,25 +283,21 @@ SYM_START(srso_fam17_untrain_ret, SYM_L_GLOBAL, SYM_A_NONE)
  * and execution will continue at the return site read from the top of
  * the stack.
  */
-SYM_INNER_LABEL(srso_fam17_safe_ret, SYM_L_GLOBAL)
+SYM_INNER_LABEL(srso_fam17_return_thunk, SYM_L_GLOBAL)
+	UNWIND_HINT_FUNC
+	ANNOTATE_NOENDBR
 	lea 8(%_ASM_SP), %_ASM_SP
+	ANNOTATE_UNRET_SAFE
 	ret
 	int3
 	int3
 	/* end of movabs */
 	lfence
-	call srso_fam17_safe_ret
-	ud2
-SYM_CODE_END(srso_fam17_safe_ret)
-SYM_FUNC_END(srso_fam17_untrain_ret)
-__EXPORT_THUNK(srso_fam17_untrain_ret)
-
-SYM_CODE_START(srso_fam17_return_thunk)
-	UNWIND_HINT_FUNC
-	ANNOTATE_NOENDBR
-	call srso_fam17_safe_ret
+	call srso_fam17_return_thunk
 	ud2
 SYM_CODE_END(srso_fam17_return_thunk)
+SYM_FUNC_END(srso_fam17_untrain_ret)
+__EXPORT_THUNK(srso_fam17_untrain_ret)
 
 SYM_FUNC_START(entry_untrain_ret)
 	ALTERNATIVE_2 "jmp retbleed_untrain_ret", \

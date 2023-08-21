@@ -522,7 +522,7 @@ INIT_PER_CPU(irq_stack_backing_store);
 
 #ifdef CONFIG_RETHUNK
 . = ASSERT((retbleed_return_thunk & 0x3f) == 0, "retbleed_return_thunk not cacheline-aligned");
-. = ASSERT((srso_fam17_safe_ret & 0x3f) == 0, "srso_fam17_safe_ret not cacheline-aligned");
+. = ASSERT((srso_fam17_return_thunk & 0x3f) == 0, "srso_fam17_return_thunk not cacheline-aligned");
 #endif
 
 #ifdef CONFIG_CPU_SRSO
@@ -536,8 +536,8 @@ INIT_PER_CPU(irq_stack_backing_store);
  * Instead do: (A | B) - (A & B) in order to compute the XOR
  * of the two function addresses:
  */
-. = ASSERT(((ABSOLUTE(srso_fam19_untrain_ret) | srso_fam19_safe_ret) -
-		(ABSOLUTE(srso_fam19_untrain_ret) & srso_fam19_safe_ret)) == ((1 << 2) | (1 << 8) | (1 << 14) | (1 << 20)),
+. = ASSERT(((ABSOLUTE(srso_fam19_untrain_ret) | srso_fam19_return_thunk) -
+		(ABSOLUTE(srso_fam19_untrain_ret) & srso_fam19_return_thunk)) == ((1 << 2) | (1 << 8) | (1 << 14) | (1 << 20)),
 		"SRSO function pair won't alias");
 #endif
 
