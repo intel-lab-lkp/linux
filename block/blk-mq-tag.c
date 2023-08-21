@@ -241,14 +241,6 @@ void blk_mq_put_tags(struct blk_mq_tags *tags, int *tag_array, int nr_tags)
 					tag_array, nr_tags);
 }
 
-struct bt_iter_data {
-	struct blk_mq_hw_ctx *hctx;
-	struct request_queue *q;
-	busy_tag_iter_fn *fn;
-	void *data;
-	bool reserved;
-};
-
 static struct request *blk_mq_find_and_get_req(struct blk_mq_tags *tags,
 		unsigned int bitnr)
 {
@@ -261,67 +253,6 @@ static struct request *blk_mq_find_and_get_req(struct blk_mq_tags *tags,
 		rq = NULL;
 	spin_unlock_irqrestore(&tags->lock, flags);
 	return rq;
-}
-
-static bool bt_iter(struct sbitmap *bitmap, unsigned int bitnr, void *data)
-{
-	struct bt_iter_data *iter_data = data;
-	struct blk_mq_hw_ctx *hctx = iter_data->hctx;
-	struct request_queue *q = iter_data->q;
-	struct blk_mq_tag_set *set = q->tag_set;
-	struct blk_mq_tags *tags;
-	struct request *rq;
-	bool ret = true;
-
-	if (blk_mq_is_shared_tags(set->flags))
-		tags = set->shared_tags;
-	else
-		tags = hctx->tags;
-
-	if (!iter_data->reserved)
-		bitnr += tags->nr_reserved_tags;
-	/*
-	 * We can hit rq == NULL here, because the tagging functions
-	 * test and set the bit before assigning ->rqs[].
-	 */
-	rq = blk_mq_find_and_get_req(tags, bitnr);
-	if (!rq)
-		return true;
-
-	if (rq->q == q && (!hctx || rq->mq_hctx == hctx))
-		ret = iter_data->fn(rq, iter_data->data);
-	blk_mq_put_rq_ref(rq);
-	return ret;
-}
-
-/**
- * bt_for_each - iterate over the requests associated with a hardware queue
- * @hctx:	Hardware queue to examine.
- * @q:		Request queue to examine.
- * @bt:		sbitmap to examine. This is either the breserved_tags member
- *		or the bitmap_tags member of struct blk_mq_tags.
- * @fn:		Pointer to the function that will be called for each request
- *		associated with @hctx that has been assigned a driver tag.
- *		@fn will be called as follows: @fn(@hctx, rq, @data, @reserved)
- *		where rq is a pointer to a request. Return true to continue
- *		iterating tags, false to stop.
- * @data:	Will be passed as third argument to @fn.
- * @reserved:	Indicates whether @bt is the breserved_tags member or the
- *		bitmap_tags member of struct blk_mq_tags.
- */
-static void bt_for_each(struct blk_mq_hw_ctx *hctx, struct request_queue *q,
-			struct sbitmap_queue *bt, busy_tag_iter_fn *fn,
-			void *data, bool reserved)
-{
-	struct bt_iter_data iter_data = {
-		.hctx = hctx,
-		.fn = fn,
-		.data = data,
-		.reserved = reserved,
-		.q = q,
-	};
-
-	sbitmap_for_each_set(&bt->sb, bt_iter, &iter_data);
 }
 
 struct bt_tags_iter_data {
@@ -519,35 +450,7 @@ void blk_mq_queue_tag_busy_iter(struct request_queue *q, busy_tag_iter_fn *fn,
 	if (!percpu_ref_tryget(&q->q_usage_counter))
 		return;
 
-	if (blk_mq_is_shared_tags(q->tag_set->flags)) {
-		struct blk_mq_tags *tags = q->tag_set->shared_tags;
-		struct sbitmap_queue *bresv = &tags->breserved_tags;
-		struct sbitmap_queue *btags = &tags->bitmap_tags;
-
-		if (tags->nr_reserved_tags)
-			bt_for_each(NULL, q, bresv, fn, priv, true);
-		bt_for_each(NULL, q, btags, fn, priv, false);
-	} else {
-		struct blk_mq_hw_ctx *hctx;
-		unsigned long i;
-
-		queue_for_each_hw_ctx(q, hctx, i) {
-			struct blk_mq_tags *tags = hctx->tags;
-			struct sbitmap_queue *bresv = &tags->breserved_tags;
-			struct sbitmap_queue *btags = &tags->bitmap_tags;
-
-			/*
-			 * If no software queues are currently mapped to this
-			 * hardware queue, there's nothing to check
-			 */
-			if (!blk_mq_hw_queue_mapped(hctx))
-				continue;
-
-			if (tags->nr_reserved_tags)
-				bt_for_each(hctx, q, bresv, fn, priv, true);
-			bt_for_each(hctx, q, btags, fn, priv, false);
-		}
-	}
+	__blk_mq_tagset_busy_iter(q->tag_set, fn, priv, q);
 	blk_queue_exit(q);
 }
 
