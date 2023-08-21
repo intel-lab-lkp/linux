@@ -64,6 +64,10 @@
  * struct &i915_audio_component_audio_ops @audio_ops is called from i915 driver.
  */
 
+#define AUDIO_SAMPLE_CONTAINER_SIZE	32
+#define MAX_CHANNEL_COUNT		8
+#define ELD_SAD_CHANNELS_MASK		0x7
+
 struct intel_audio_funcs {
 	void (*audio_codec_enable)(struct intel_encoder *encoder,
 				   const struct intel_crtc_state *crtc_state,
@@ -770,6 +774,127 @@ void intel_audio_sdp_split_update(struct intel_encoder *encoder,
 			     crtc_state->sdp_split_enable ? AUD_ENABLE_SDP_SPLIT : 0);
 }
 
+static int sad_to_channels(const u8 *sad)
+{
+	return 1 + (sad[0] & 0x7);
+}
+
+static int calc_audio_bw(int channel_count, int rate)
+{
+	int bandwidth = channel_count * rate * AUDIO_SAMPLE_CONTAINER_SIZE;
+	return bandwidth;
+}
+
+static void calc_and_calibrate_audio_config_params(struct intel_crtc_state *pipe_config,
+						   int channel, bool calibration_required)
+{
+	struct drm_display_mode *adjusted_mode = &pipe_config->hw.adjusted_mode;
+	int channel_count;
+	int index, rate[] = { 192000, 176400, 96000, 88200, 48000, 44100, 32000 };
+	int audio_req_bandwidth, available_blank_bandwidth, vblank, hblank;
+
+	hblank = adjusted_mode->htotal - adjusted_mode->hdisplay;
+	vblank = adjusted_mode->vtotal - adjusted_mode->vdisplay;
+	available_blank_bandwidth = hblank * vblank *
+		drm_mode_vrefresh(adjusted_mode) * pipe_config->pipe_bpp;
+
+	/*
+	 * Expected calibration of channels and respective rates,
+	 * based on MAX_CHANNEL_COUNT. First calculate channel and
+	 * rate based on Maximum that source can compute, letter
+	 * with respect to sink's maximum channel capacity, calibrate
+	 * supportive rates.
+	 */
+	if (calibration_required) {
+		channel_count = channel;
+		for (index = 0; index < ARRAY_SIZE(rate); index++) {
+			audio_req_bandwidth = calc_audio_bw(channel_count,
+							    rate[index]);
+			if (audio_req_bandwidth < available_blank_bandwidth) {
+				pipe_config->audio.max_rate = rate[index];
+				pipe_config->audio.max_channel_count = channel_count;
+				return;
+			}
+		}
+	} else {
+		for (channel_count = channel; channel_count > 0; channel_count--) {
+			for (index = 0; index < ARRAY_SIZE(rate); index++) {
+				audio_req_bandwidth = calc_audio_bw(channel_count, rate[index]);
+				if (audio_req_bandwidth < available_blank_bandwidth) {
+					pipe_config->audio.max_rate = rate[index];
+					pipe_config->audio.max_channel_count = channel_count;
+					return;
+				}
+			}
+		}
+	}
+
+	pipe_config->audio.max_rate = 0;
+	pipe_config->audio.max_channel_count = 0;
+}
+
+static int get_supported_freq_mask(struct intel_crtc_state *crtc_state)
+{
+	int rate[] = { 32000, 44100, 48000, 88200, 96000, 176400, 192000 };
+	int mask = 0, index;
+
+	for (index = 0; index < ARRAY_SIZE(rate); index++) {
+		if (rate[index] > crtc_state->audio.max_rate)
+			break;
+
+		mask |= 1 << index;
+
+		if (crtc_state->audio.max_rate != rate[index])
+			continue;
+	}
+
+	return mask;
+}
+
+static void intel_audio_compute_eld(struct intel_crtc_state *crtc_state)
+{
+	struct drm_i915_private *i915 = to_i915(crtc_state->uapi.crtc->dev);
+	u8 *eld, *sad;
+	int index, mask = 0;
+
+	eld = crtc_state->eld;
+	if (!eld)
+		return;
+
+	sad = drm_extract_sad_from_eld(eld);
+	if (!sad)
+		return;
+
+	calc_and_calibrate_audio_config_params(crtc_state, MAX_CHANNEL_COUNT,
+					       false);
+
+	mask = get_supported_freq_mask(crtc_state);
+	for (index = 0; index < drm_eld_sad_count(eld); index++, sad += 3) {
+		/*
+		 * Respect source restricitions. Limit capabilities to a subset that is
+		 * supported both by the source and the sink.
+		 */
+		if (sad_to_channels(sad) >= crtc_state->audio.max_channel_count) {
+			sad[0] &= ~ELD_SAD_CHANNELS_MASK;
+			sad[0] |= crtc_state->audio.max_channel_count - 1;
+			drm_dbg_kms(&i915->drm, "Channel count is limited to %d\n",
+				    crtc_state->audio.max_channel_count - 1);
+		} else {
+			/*
+			 * calibrate rate when, sink supported channel
+			 * count is slight less than max supported
+			 * channel count.
+			 */
+			calc_and_calibrate_audio_config_params(crtc_state,
+							       sad_to_channels(sad),
+							       true);
+			mask = get_supported_freq_mask(crtc_state);
+		}
+
+		sad[1] &= mask;
+	}
+}
+
 bool intel_audio_compute_config(struct intel_encoder *encoder,
 				struct intel_crtc_state *crtc_state,
 				struct drm_connector_state *conn_state)
@@ -790,6 +915,8 @@ bool intel_audio_compute_config(struct intel_encoder *encoder,
 	memcpy(crtc_state->eld, connector->eld, sizeof(crtc_state->eld));
 
 	crtc_state->eld[6] = drm_av_sync_delay(connector, adjusted_mode) / 2;
+
+	intel_audio_compute_eld(crtc_state);
 
 	return true;
 }
