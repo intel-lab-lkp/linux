@@ -546,24 +546,26 @@ static void kill_procs(struct list_head *to_kill, int forcekill, bool fail,
  * Find a dedicated thread which is supposed to handle SIGBUS(BUS_MCEERR_AO)
  * on behalf of the thread group. Return task_struct of the (first found)
  * dedicated thread if found, and return NULL otherwise.
- *
- * We already hold read_lock(&tasklist_lock) in the caller, so we don't
- * have to call rcu_read_lock/unlock() in this function.
  */
 static struct task_struct *find_early_kill_thread(struct task_struct *tsk)
 {
 	struct task_struct *t;
 
+	rcu_read_lock();
 	for_each_thread(tsk, t) {
 		if (t->flags & PF_MCE_PROCESS) {
 			if (t->flags & PF_MCE_EARLY)
-				return t;
+				goto found;
 		} else {
 			if (sysctl_memory_failure_early_kill)
-				return t;
+				goto found;
 		}
 	}
-	return NULL;
+
+	t = NULL;
+found:
+	rcu_read_unlock();
+	return t;
 }
 
 /*
@@ -609,7 +611,7 @@ static void collect_procs_anon(struct page *page, struct list_head *to_kill,
 		return;
 
 	pgoff = page_to_pgoff(page);
-	read_lock(&tasklist_lock);
+	rcu_read_lock();
 	for_each_process(tsk) {
 		struct anon_vma_chain *vmac;
 		struct task_struct *t = task_early_kill(tsk, force_early);
@@ -626,7 +628,7 @@ static void collect_procs_anon(struct page *page, struct list_head *to_kill,
 			add_to_kill_anon_file(t, page, vma, to_kill);
 		}
 	}
-	read_unlock(&tasklist_lock);
+	rcu_read_unlock();
 	anon_vma_unlock_read(av);
 }
 
@@ -642,7 +644,7 @@ static void collect_procs_file(struct page *page, struct list_head *to_kill,
 	pgoff_t pgoff;
 
 	i_mmap_lock_read(mapping);
-	read_lock(&tasklist_lock);
+	rcu_read_lock();
 	pgoff = page_to_pgoff(page);
 	for_each_process(tsk) {
 		struct task_struct *t = task_early_kill(tsk, force_early);
@@ -662,7 +664,7 @@ static void collect_procs_file(struct page *page, struct list_head *to_kill,
 				add_to_kill_anon_file(t, page, vma, to_kill);
 		}
 	}
-	read_unlock(&tasklist_lock);
+	rcu_read_unlock();
 	i_mmap_unlock_read(mapping);
 }
 
@@ -685,7 +687,7 @@ static void collect_procs_fsdax(struct page *page,
 	struct task_struct *tsk;
 
 	i_mmap_lock_read(mapping);
-	read_lock(&tasklist_lock);
+	rcu_read_lock();
 	for_each_process(tsk) {
 		struct task_struct *t = task_early_kill(tsk, true);
 
@@ -696,7 +698,7 @@ static void collect_procs_fsdax(struct page *page,
 				add_to_kill_fsdax(t, page, vma, to_kill, pgoff);
 		}
 	}
-	read_unlock(&tasklist_lock);
+	rcu_read_unlock();
 	i_mmap_unlock_read(mapping);
 }
 #endif /* CONFIG_FS_DAX */
