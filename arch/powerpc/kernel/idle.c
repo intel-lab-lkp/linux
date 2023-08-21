@@ -21,6 +21,7 @@
 #include <linux/cpu.h>
 #include <linux/sysctl.h>
 #include <linux/tick.h>
+#include <linux/cpu.h>
 
 #include <asm/processor.h>
 #include <asm/cputable.h>
@@ -35,6 +36,8 @@ EXPORT_SYMBOL(cpuidle_disable);
 
 static int __init powersave_off(char *arg)
 {
+	/* Use generic idle loop if thats available */
+	cpu_idle_poll_ctrl(true);
 	ppc_md.power_save = NULL;
 	cpuidle_disable = IDLE_POWERSAVE_OFF;
 	return 1;
