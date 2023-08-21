@@ -52,6 +52,15 @@ config ASPEED_SOCINFO
 	help
 	  Say yes to support decoding of ASPEED BMC information.
 
+config ASPEED_HOST_BMC_DEV
+	bool "ASPEED SoC Host BMC device driver"
+	default ARCH_ASPEED
+	select SOC_BUS
+	default ARCH_ASPEED
+	help
+	  Provides a driver to control the PCIe based VUARTs. This is a host
+	  side BMC device driver.
+
 endmenu
 
 endif
