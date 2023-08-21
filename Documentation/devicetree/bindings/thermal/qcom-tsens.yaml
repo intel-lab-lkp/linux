@@ -65,6 +65,7 @@ properties:
               - qcom,sm8350-tsens
               - qcom,sm8450-tsens
               - qcom,sm8550-tsens
+              - qcom,sa8775p-tsens
           - const: qcom,tsens-v2
 
       - description: v2 of TSENS with combined interrupt
