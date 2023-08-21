@@ -495,19 +495,19 @@ static int dwcmshc_probe(struct platform_device *pdev)
 	priv = sdhci_pltfm_priv(pltfm_host);
 
 	if (dev->of_node) {
-		pltfm_host->clk = devm_clk_get(dev, "core");
+		pltfm_host->clk = devm_clk_get_enabled(dev, "core");
 		if (IS_ERR(pltfm_host->clk)) {
 			err = PTR_ERR(pltfm_host->clk);
-			dev_err(dev, "failed to get core clk: %d\n", err);
+			dev_err(dev, "failed to get or enable core clk: %d\n", err);
 			goto free_pltfm;
 		}
-		err = clk_prepare_enable(pltfm_host->clk);
-		if (err)
-			goto free_pltfm;
 
-		priv->bus_clk = devm_clk_get(dev, "bus");
-		if (!IS_ERR(priv->bus_clk))
-			clk_prepare_enable(priv->bus_clk);
+		priv->bus_clk = devm_clk_get_enabled(dev, "bus");
+		if (!IS_ERR(priv->bus_clk)) {
+			err = PTR_ERR(priv->bus_clk);
+			dev_err(dev, "failed to get or enable bus clk: %d\n", err);
+			goto free_pltfm;
+		}
 	}
 
 	err = mmc_of_parse(host->mmc);
@@ -564,8 +564,6 @@ static int dwcmshc_probe(struct platform_device *pdev)
 err_setup_host:
 	sdhci_cleanup_host(host);
 err_clk:
-	clk_disable_unprepare(pltfm_host->clk);
-	clk_disable_unprepare(priv->bus_clk);
 	if (rk_priv)
 		clk_bulk_disable_unprepare(RK35xx_MAX_CLKS,
 					   rk_priv->rockchip_clks);
@@ -583,8 +581,6 @@ static int dwcmshc_remove(struct platform_device *pdev)
 
 	sdhci_remove_host(host, 0);
 
-	clk_disable_unprepare(pltfm_host->clk);
-	clk_disable_unprepare(priv->bus_clk);
 	if (rk_priv)
 		clk_bulk_disable_unprepare(RK35xx_MAX_CLKS,
 					   rk_priv->rockchip_clks);
