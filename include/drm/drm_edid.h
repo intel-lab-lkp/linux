@@ -418,11 +418,7 @@ static inline int drm_eld_mnl(const uint8_t *eld)
 	return (eld[DRM_ELD_CEA_EDID_VER_MNL] & DRM_ELD_MNL_MASK) >> DRM_ELD_MNL_SHIFT;
 }
 
-/**
- * drm_eld_sad - Get ELD SAD structures.
- * @eld: pointer to an eld memory structure with sad_count set
- */
-static inline const uint8_t *drm_eld_sad(const uint8_t *eld)
+static uint8_t *drm_extract_sad_from_eld(uint8_t *eld)
 {
 	unsigned int ver, mnl;
 
@@ -435,6 +431,15 @@ static inline const uint8_t *drm_eld_sad(const uint8_t *eld)
 		return NULL;
 
 	return eld + DRM_ELD_CEA_SAD(mnl, 0);
+}
+
+/**
+ * drm_eld_sad - Get ELD SAD structures.
+ * @eld: pointer to an eld memory structure with sad_count set
+ */
+static inline const uint8_t *drm_eld_sad(const uint8_t *eld)
+{
+	return drm_extract_sad_from_eld((uint8_t *)eld);
 }
 
 /**
