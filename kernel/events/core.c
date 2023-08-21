@@ -29,6 +29,7 @@
 #include <linux/vmalloc.h>
 #include <linux/hardirq.h>
 #include <linux/hugetlb.h>
+#include <linux/pagemap.h>
 #include <linux/rculist.h>
 #include <linux/uaccess.h>
 #include <linux/syscalls.h>
@@ -6083,6 +6084,7 @@ static vm_fault_t perf_mmap_fault(struct vm_fault *vmf)
 {
 	struct perf_event *event = vmf->vma->vm_file->private_data;
 	struct perf_buffer *rb;
+	struct folio *folio;
 	vm_fault_t ret = VM_FAULT_SIGBUS;
 
 	if (vmf->flags & FAULT_FLAG_MKWRITE) {
@@ -6102,12 +6104,15 @@ static vm_fault_t perf_mmap_fault(struct vm_fault *vmf)
 	vmf->page = perf_mmap_to_page(rb, vmf->pgoff);
 	if (!vmf->page)
 		goto unlock;
+	folio = page_folio(vmf->page);
 
-	get_page(vmf->page);
-	vmf->page->mapping = vmf->vma->vm_file->f_mapping;
-	vmf->page->index   = vmf->pgoff;
+	folio_get(folio);
+	rcu_read_unlock();
+	folio_lock(folio);
+	if (!folio->mapping)
+		folio->mapping = vmf->vma->vm_file->f_mapping;
 
-	ret = 0;
+	return VM_FAULT_LOCKED;
 unlock:
 	rcu_read_unlock();
 

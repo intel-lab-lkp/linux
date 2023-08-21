@@ -605,39 +605,28 @@ long perf_output_copy_aux(struct perf_output_handle *aux_handle,
 
 #define PERF_AUX_GFP	(GFP_KERNEL | __GFP_ZERO | __GFP_NOWARN | __GFP_NORETRY)
 
-static struct page *rb_alloc_aux_page(int node, int order)
+static struct folio *rb_alloc_aux_folio(int node, int order)
 {
-	struct page *page;
+	struct folio *folio;
 
 	if (order > MAX_ORDER)
 		order = MAX_ORDER;
 
 	do {
-		page = alloc_pages_node(node, PERF_AUX_GFP, order);
-	} while (!page && order--);
+		folio = __folio_alloc_node(PERF_AUX_GFP, order, node);
+	} while (!folio && order--);
 
-	if (page && order) {
-		/*
-		 * Communicate the allocation size to the driver:
-		 * if we managed to secure a high-order allocation,
-		 * set its first page's private to this order;
-		 * !PagePrivate(page) means it's just a normal page.
-		 */
-		split_page(page, order);
-		SetPagePrivate(page);
-		set_page_private(page, order);
-	}
-
-	return page;
+	if (order)
+		folio_ref_add(folio, (1 << order) - 1);
+	return folio;
 }
 
 static void rb_free_aux_page(struct perf_buffer *rb, int idx)
 {
-	struct page *page = virt_to_page(rb->aux_pages[idx]);
+	struct folio *folio = virt_to_folio(rb->aux_pages[idx]);
 
-	ClearPagePrivate(page);
-	page->mapping = NULL;
-	__free_page(page);
+	folio->mapping = NULL;
+	folio_put(folio);
 }
 
 static void __rb_free_aux(struct perf_buffer *rb)
@@ -671,7 +660,7 @@ int rb_alloc_aux(struct perf_buffer *rb, struct perf_event *event,
 		 pgoff_t pgoff, int nr_pages, long watermark, int flags)
 {
 	bool overwrite = !(flags & RING_BUFFER_WRITABLE);
-	int node = (event->cpu == -1) ? -1 : cpu_to_node(event->cpu);
+	int node = (event->cpu == -1) ? numa_mem_id() : cpu_to_node(event->cpu);
 	int ret = -ENOMEM, max_order;
 
 	if (!has_aux(event))
@@ -706,17 +695,21 @@ int rb_alloc_aux(struct perf_buffer *rb, struct perf_event *event,
 
 	rb->free_aux = event->pmu->free_aux;
 	for (rb->aux_nr_pages = 0; rb->aux_nr_pages < nr_pages;) {
-		struct page *page;
-		int last, order;
+		struct folio *folio;
+		unsigned int i, nr, order;
+		void *addr;
 
 		order = min(max_order, ilog2(nr_pages - rb->aux_nr_pages));
-		page = rb_alloc_aux_page(node, order);
-		if (!page)
+		folio = rb_alloc_aux_folio(node, order);
+		if (!folio)
 			goto out;
+		addr = folio_address(folio);
+		nr = folio_nr_pages(folio);
 
-		for (last = rb->aux_nr_pages + (1 << page_private(page));
-		     last > rb->aux_nr_pages; rb->aux_nr_pages++)
-			rb->aux_pages[rb->aux_nr_pages] = page_address(page++);
+		for (i = 0; i < nr; i++) {
+			rb->aux_pages[rb->aux_nr_pages++] = addr;
+			addr += PAGE_SIZE;
+		}
 	}
 
 	/*
