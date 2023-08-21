@@ -345,7 +345,7 @@ static void intel_dp_get_config(struct intel_encoder *encoder,
 
 	tmp = intel_de_read(dev_priv, intel_dp->output_reg);
 
-	pipe_config->has_audio = tmp & DP_AUDIO_OUTPUT_ENABLE && port != PORT_A;
+	pipe_config->audio.has_audio = tmp & DP_AUDIO_OUTPUT_ENABLE && port != PORT_A;
 
 	if (HAS_PCH_CPT(dev_priv) && port != PORT_A) {
 		u32 trans_dp = intel_de_read(dev_priv,
@@ -625,7 +625,7 @@ static void intel_dp_enable_port(struct intel_dp *intel_dp,
 	 * fail when the power sequencer is freshly used for this port.
 	 */
 	intel_dp->DP |= DP_PORT_EN;
-	if (crtc_state->has_audio)
+	if (crtc_state->audio.has_audio)
 		intel_dp->DP |= DP_AUDIO_OUTPUT_ENABLE;
 
 	intel_de_write(dev_priv, intel_dp->output_reg, intel_dp->DP);

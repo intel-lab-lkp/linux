@@ -178,7 +178,7 @@ static void intel_hdmi_get_config(struct intel_encoder *encoder,
 		pipe_config->has_infoframe = true;
 
 	if (tmp & HDMI_AUDIO_ENABLE)
-		pipe_config->has_audio = true;
+		pipe_config->audio.has_audio = true;
 
 	if (!HAS_PCH_SPLIT(dev_priv) &&
 	    tmp & HDMI_COLOR_RANGE_16_235)
@@ -224,7 +224,7 @@ static void g4x_hdmi_enable_port(struct intel_encoder *encoder,
 	temp = intel_de_read(dev_priv, intel_hdmi->hdmi_reg);
 
 	temp |= SDVO_ENABLE;
-	if (pipe_config->has_audio)
+	if (pipe_config->audio.has_audio)
 		temp |= HDMI_AUDIO_ENABLE;
 
 	intel_de_write(dev_priv, intel_hdmi->hdmi_reg, temp);
@@ -240,7 +240,7 @@ static void g4x_enable_hdmi(struct intel_atomic_state *state,
 
 	g4x_hdmi_enable_port(encoder, pipe_config);
 
-	drm_WARN_ON(&dev_priv->drm, pipe_config->has_audio &&
+	drm_WARN_ON(&dev_priv->drm, pipe_config->audio.has_audio &&
 		    !pipe_config->has_hdmi_sink);
 	intel_audio_codec_enable(encoder, pipe_config, conn_state);
 }
@@ -258,7 +258,7 @@ static void ibx_enable_hdmi(struct intel_atomic_state *state,
 	temp = intel_de_read(dev_priv, intel_hdmi->hdmi_reg);
 
 	temp |= SDVO_ENABLE;
-	if (pipe_config->has_audio)
+	if (pipe_config->audio.has_audio)
 		temp |= HDMI_AUDIO_ENABLE;
 
 	/*
@@ -293,7 +293,7 @@ static void ibx_enable_hdmi(struct intel_atomic_state *state,
 		intel_de_posting_read(dev_priv, intel_hdmi->hdmi_reg);
 	}
 
-	drm_WARN_ON(&dev_priv->drm, pipe_config->has_audio &&
+	drm_WARN_ON(&dev_priv->drm, pipe_config->audio.has_audio &&
 		    !pipe_config->has_hdmi_sink);
 	intel_audio_codec_enable(encoder, pipe_config, conn_state);
 }
@@ -313,7 +313,7 @@ static void cpt_enable_hdmi(struct intel_atomic_state *state,
 	temp = intel_de_read(dev_priv, intel_hdmi->hdmi_reg);
 
 	temp |= SDVO_ENABLE;
-	if (pipe_config->has_audio)
+	if (pipe_config->audio.has_audio)
 		temp |= HDMI_AUDIO_ENABLE;
 
 	/*
@@ -348,7 +348,7 @@ static void cpt_enable_hdmi(struct intel_atomic_state *state,
 			     TRANS_CHICKEN1_HDMIUNIT_GC_DISABLE, 0);
 	}
 
-	drm_WARN_ON(&dev_priv->drm, pipe_config->has_audio &&
+	drm_WARN_ON(&dev_priv->drm, pipe_config->audio.has_audio &&
 		    !pipe_config->has_hdmi_sink);
 	intel_audio_codec_enable(encoder, pipe_config, conn_state);
 }
@@ -360,7 +360,7 @@ static void vlv_enable_hdmi(struct intel_atomic_state *state,
 {
 	struct drm_i915_private *dev_priv = to_i915(encoder->base.dev);
 
-	drm_WARN_ON(&dev_priv->drm, pipe_config->has_audio &&
+	drm_WARN_ON(&dev_priv->drm, pipe_config->audio.has_audio &&
 		    !pipe_config->has_hdmi_sink);
 	intel_audio_codec_enable(encoder, pipe_config, conn_state);
 }

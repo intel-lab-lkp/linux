@@ -1191,7 +1191,7 @@ static void intel_sdvo_get_eld(struct intel_sdvo *intel_sdvo,
 	ssize_t len;
 	u8 val;
 
-	if (!crtc_state->has_audio)
+	if (!crtc_state->audio.has_audio)
 		return;
 
 	if (!intel_sdvo_get_value(intel_sdvo, SDVO_CMD_GET_AUDIO_STAT, &val, 1))
@@ -1406,7 +1406,7 @@ static int intel_sdvo_compute_config(struct intel_encoder *encoder,
 
 	pipe_config->has_hdmi_sink = intel_has_hdmi_sink(intel_sdvo_connector, conn_state);
 
-	pipe_config->has_audio =
+	pipe_config->audio.has_audio =
 		intel_sdvo_has_audio(encoder, pipe_config, conn_state) &&
 		intel_audio_compute_config(encoder, pipe_config, conn_state);
 
@@ -1760,7 +1760,7 @@ static void intel_sdvo_get_config(struct intel_encoder *encoder,
 	if (intel_sdvo_get_value(intel_sdvo, SDVO_CMD_GET_AUDIO_STAT,
 				 &val, 1)) {
 		if (val & SDVO_AUDIO_PRESENCE_DETECT)
-			pipe_config->has_audio = true;
+			pipe_config->audio.has_audio = true;
 	}
 
 	if (intel_sdvo_get_value(intel_sdvo, SDVO_CMD_GET_ENCODE,
@@ -1805,7 +1805,7 @@ static void intel_disable_sdvo(struct intel_atomic_state *state,
 	struct intel_crtc *crtc = to_intel_crtc(old_crtc_state->uapi.crtc);
 	u32 temp;
 
-	if (old_crtc_state->has_audio)
+	if (old_crtc_state->audio.has_audio)
 		intel_sdvo_disable_audio(intel_sdvo);
 
 	intel_sdvo_set_active_outputs(intel_sdvo, 0);
@@ -1898,7 +1898,7 @@ static void intel_enable_sdvo(struct intel_atomic_state *state,
 						   DRM_MODE_DPMS_ON);
 	intel_sdvo_set_active_outputs(intel_sdvo, intel_sdvo->attached_output);
 
-	if (pipe_config->has_audio)
+	if (pipe_config->audio.has_audio)
 		intel_sdvo_enable_audio(intel_sdvo, pipe_config, conn_state);
 }
 
