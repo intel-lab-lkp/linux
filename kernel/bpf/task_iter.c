@@ -7,7 +7,9 @@
 #include <linux/fs.h>
 #include <linux/fdtable.h>
 #include <linux/filter.h>
+#include <linux/bpf_mem_alloc.h>
 #include <linux/btf_ids.h>
+#include <linux/mm_types.h>
 #include "mmap_unlock_work.h"
 
 static const char * const iter_task_type_names[] = {
@@ -822,6 +824,83 @@ const struct bpf_func_proto bpf_find_vma_proto = {
 	.arg4_type	= ARG_PTR_TO_STACK_OR_NULL,
 	.arg5_type	= ARG_ANYTHING,
 };
+
+/* Non-opaque version of uapi bpf_iter_task_vma */
+struct bpf_iter_task_vma_kern {
+	struct task_struct *task;
+	struct mm_struct *mm;
+	struct mmap_unlock_irq_work *work;
+	struct vma_iterator *vmi;
+} __attribute__((aligned(8)));
+
+__bpf_kfunc int bpf_iter_task_vma_new(struct bpf_iter_task_vma *it,
+				      struct task_struct *task, u64 addr)
+{
+	struct bpf_iter_task_vma_kern *kit = (void *)it;
+	bool irq_work_busy = false;
+	int err;
+
+	BUILD_BUG_ON(sizeof(struct bpf_iter_task_vma_kern) != sizeof(struct bpf_iter_task_vma));
+	BUILD_BUG_ON(__alignof__(struct bpf_iter_task_vma_kern) != __alignof__(struct bpf_iter_task_vma));
+
+	/* NULL i->mm signals failed bpf_iter_task_vma initialization.
+	 * i->work == NULL is valid.
+	 */
+	kit->mm = NULL;
+	kit->task = NULL;
+	if (!task)
+		return -ENOENT;
+
+	kit->task = get_task_struct(task);
+	kit->mm = task->mm;
+	if (!kit->mm) {
+		err = -ENOENT;
+		goto err_put_task;
+	}
+
+	kit->vmi = bpf_mem_alloc(&bpf_global_ma, sizeof(struct vma_iterator));
+	if (!kit->vmi) {
+		err = -ENOMEM;
+		goto err_put_task;
+	}
+
+	irq_work_busy = bpf_mmap_unlock_get_irq_work(&kit->work);
+	if (irq_work_busy || !mmap_read_trylock(kit->mm)) {
+		err = -EBUSY;
+		goto err_put_task;
+	}
+
+	vma_iter_init(kit->vmi, kit->mm, addr);
+	return 0;
+
+err_put_task:
+	if (kit->task)
+		put_task_struct(kit->task);
+	if (kit->vmi)
+		bpf_mem_free(&bpf_global_ma, kit->vmi);
+	kit->mm = NULL;
+	return err;
+}
+
+__bpf_kfunc struct vm_area_struct *bpf_iter_task_vma_next(struct bpf_iter_task_vma *it)
+{
+	struct bpf_iter_task_vma_kern *kit = (void *)it;
+
+	if (!kit->mm) /* bpf_iter_task_vma_new failed */
+		return NULL;
+	return vma_next(kit->vmi);
+}
+
+__bpf_kfunc void bpf_iter_task_vma_destroy(struct bpf_iter_task_vma *it)
+{
+	struct bpf_iter_task_vma_kern *kit = (void *)it;
+
+	if (kit->mm) {
+		bpf_mmap_unlock_mm(kit->work, kit->mm);
+		put_task_struct(kit->task);
+		bpf_mem_free(&bpf_global_ma, kit->vmi);
+	}
+}
 
 DEFINE_PER_CPU(struct mmap_unlock_irq_work, mmap_unlock_work);
 
