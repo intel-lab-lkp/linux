@@ -1035,6 +1035,11 @@ int region_intersects(resource_size_t offset, size_t size, unsigned long flags,
 struct page *vmalloc_to_page(const void *addr);
 unsigned long vmalloc_to_pfn(const void *addr);
 
+static inline struct folio *vmalloc_to_folio(const void *addr)
+{
+	return page_folio(vmalloc_to_page(addr));
+}
+
 /*
  * Determine if an address is within the vmalloc range
  *

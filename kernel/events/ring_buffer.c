@@ -872,9 +872,9 @@ __perf_mmap_to_page(struct perf_buffer *rb, unsigned long pgoff)
 
 static void perf_mmap_unmark_page(void *addr)
 {
-	struct page *page = vmalloc_to_page(addr);
+	struct folio *folio = vmalloc_to_folio(addr);
 
-	page->mapping = NULL;
+	folio->mapping = NULL;
 }
 
 static void rb_free_work(struct work_struct *work)
