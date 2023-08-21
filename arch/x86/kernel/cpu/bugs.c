@@ -2427,7 +2427,7 @@ static void __init srso_select_mitigation(void)
 		if (has_microcode) {
 			pr_info("Retbleed IBPB mitigation enabled, using same for SRSO\n");
 			srso_mitigation = SRSO_MITIGATION_IBPB;
-			goto out;
+			goto out_print;
 		}
 	}
 
@@ -2487,7 +2487,8 @@ static void __init srso_select_mitigation(void)
 		break;
 	}
 
-	pr_info("%s%s\n", srso_strings[srso_mitigation], (has_microcode ? "" : ", no microcode"));
+out_print:
+	pr_info("%s%s\n", srso_strings[srso_mitigation], has_microcode ? "" : ", no microcode");
 
 out:
 	if (boot_cpu_has(X86_FEATURE_SBPB) && srso_mitigation == SRSO_MITIGATION_NONE)
