@@ -3398,22 +3398,23 @@ void *vzalloc(unsigned long size)
 EXPORT_SYMBOL(vzalloc);
 
 /**
- * vmalloc_user - allocate zeroed virtually contiguous memory for userspace
+ * vmalloc_user_node - allocate zeroed virtually contiguous memory for userspace
  * @size: allocation size
+ * @node: NUMA node
  *
  * The resulting memory area is zeroed so it can be mapped to userspace
  * without leaking data.
  *
  * Return: pointer to the allocated memory or %NULL on error
  */
-void *vmalloc_user(unsigned long size)
+void *vmalloc_user_node(unsigned long size, int node)
 {
 	return __vmalloc_node_range(size, SHMLBA,  VMALLOC_START, VMALLOC_END,
 				    GFP_KERNEL | __GFP_ZERO, PAGE_KERNEL,
-				    VM_USERMAP, NUMA_NO_NODE,
+				    VM_USERMAP, node,
 				    __builtin_return_address(0));
 }
-EXPORT_SYMBOL(vmalloc_user);
+EXPORT_SYMBOL(vmalloc_user_node);
 
 /**
  * vmalloc_node - allocate memory on a specific node

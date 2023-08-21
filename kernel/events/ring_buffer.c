@@ -917,7 +917,7 @@ struct perf_buffer *rb_alloc(int nr_pages, long watermark, int cpu, int flags)
 
 	INIT_WORK(&rb->work, rb_free_work);
 
-	all_buf = vmalloc_user((nr_pages + 1) * PAGE_SIZE);
+	all_buf = vmalloc_user_node((nr_pages + 1) * PAGE_SIZE, node);
 	if (!all_buf)
 		goto fail_all_buf;
 
