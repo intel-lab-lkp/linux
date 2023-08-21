@@ -14,13 +14,47 @@
 #include <linux/limits.h>
 #include <libelf.h>
 #include <gelf.h>
+#ifndef __must_check
+#define __must_check
+#endif
+#include "bpf/libbpf_internal.h"
 
 #define TRACEFS_PIPE	"/sys/kernel/tracing/trace_pipe"
 #define DEBUGFS_PIPE	"/sys/kernel/debug/tracing/trace_pipe"
 
-#define MAX_SYMS 400000
-static struct ksym syms[MAX_SYMS];
+static struct ksym *syms;
+static size_t sym_cap;
 static int sym_cnt;
+
+static int ksyms__add_symbol(const char *name, unsigned long addr)
+{
+	void *tmp;
+
+	tmp = strdup(name);
+	if (!tmp)
+		return -ENOMEM;
+	syms[sym_cnt].addr = addr;
+	syms[sym_cnt].name = tmp;
+
+	sym_cnt++;
+
+	return 0;
+}
+
+static void ksyms__free(void)
+{
+	unsigned int i;
+
+	if (!syms)
+		return;
+
+	for (i = 0; i < sym_cnt; i++)
+		free(syms[i].name);
+	free(syms);
+	syms = NULL;
+	sym_cnt = 0;
+	sym_cap = 0;
+}
 
 static int ksym_cmp(const void *p1, const void *p2)
 {
@@ -33,9 +67,7 @@ int load_kallsyms_refresh(void)
 	char func[256], buf[256];
 	char symbol;
 	void *addr;
-	int i = 0;
-
-	sym_cnt = 0;
+	int ret;
 
 	f = fopen("/proc/kallsyms", "r");
 	if (!f)
@@ -46,17 +78,22 @@ int load_kallsyms_refresh(void)
 			break;
 		if (!addr)
 			continue;
-		if (i >= MAX_SYMS)
-			return -EFBIG;
 
-		syms[i].addr = (long) addr;
-		syms[i].name = strdup(func);
-		i++;
+		ret = libbpf_ensure_mem((void **) &syms, &sym_cap,
+					sizeof(struct ksym), sym_cnt + 1);
+		if (ret)
+			goto error;
+		ret = ksyms__add_symbol(func, (unsigned long)addr);
+		if (ret)
+			goto error;
 	}
 	fclose(f);
-	sym_cnt = i;
 	qsort(syms, sym_cnt, sizeof(struct ksym), ksym_cmp);
 	return 0;
+
+error:
+	ksyms__free();
+	return ret;
 }
 
 int load_kallsyms(void)
