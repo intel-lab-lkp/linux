@@ -64,6 +64,7 @@ struct ynl_policy_attr netdev_napi_policy[NETDEV_A_NAPI_MAX + 1] = {
 	[NETDEV_A_NAPI_NAPI_ID] = { .name = "napi-id", .type = YNL_PT_U32, },
 	[NETDEV_A_NAPI_RX_QUEUES] = { .name = "rx-queues", .type = YNL_PT_U32, },
 	[NETDEV_A_NAPI_TX_QUEUES] = { .name = "tx-queues", .type = YNL_PT_U32, },
+	[NETDEV_A_NAPI_IRQ] = { .name = "irq", .type = YNL_PT_U32, },
 };
 
 struct ynl_policy_nest netdev_napi_nest = {
@@ -238,6 +239,11 @@ int netdev_napi_get_rsp_parse(const struct nlmsghdr *nlh, void *data)
 			n_rx_queues++;
 		} else if (type == NETDEV_A_NAPI_TX_QUEUES) {
 			n_tx_queues++;
+		} else if (type == NETDEV_A_NAPI_IRQ) {
+			if (ynl_attr_validate(yarg, attr))
+				return MNL_CB_ERROR;
+			dst->_present.irq = 1;
+			dst->irq = mnl_attr_get_u32(attr);
 		}
 	}
 

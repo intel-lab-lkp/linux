@@ -91,6 +91,10 @@ attribute-sets:
         doc: list of tx queues associated with a napi
         type: u32
         multi-attr: true
+      -
+        name: irq
+        doc: The associated interrupt vector number for the napi
+        type: u32
 
 operations:
   list:
@@ -138,6 +142,7 @@ operations:
             - ifindex
             - rx-queues
             - tx-queues
+            - irq
       dump:
         request:
           attributes:
