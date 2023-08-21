@@ -95,6 +95,10 @@ attribute-sets:
         name: irq
         doc: The associated interrupt vector number for the napi
         type: u32
+      -
+        name: pid
+        doc: PID of the napi thread
+        type: s32
 
 operations:
   list:
@@ -143,6 +147,7 @@ operations:
             - rx-queues
             - tx-queues
             - irq
+            - pid
       dump:
         request:
           attributes:
