@@ -296,8 +296,14 @@ struct rdtgroup {
  *	--> RFTYPE_BASE (Files common for both MON and CTRL groups)
  *	    Files: cpus, cpus_list, tasks
  *
+ *		--> RFTYPE_DEBUG (Files to help resctrl debugging)
+ *		    File: mon_hw_id
+ *
  *		--> RFTYPE_CTRL (Files only for CTRL group)
  *		    Files: mode, schemata, size
+ *
+ *			--> RFTYPE_DEBUG (Files to help resctrl debugging)
+ *			    File: ctrl_hw_id
  *
  */
 #define RFTYPE_INFO			BIT(0)
