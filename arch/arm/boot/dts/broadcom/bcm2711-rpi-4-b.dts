@@ -5,6 +5,7 @@
 #include "bcm283x-rpi-led-deprecated.dtsi"
 #include "bcm283x-rpi-usb-peripheral.dtsi"
 #include "bcm283x-rpi-wifi-bt.dtsi"
+#include <dt-bindings/leds/common.h>
 
 / {
 	compatible = "raspberrypi,4-model-b", "brcm,bcm2711";
@@ -197,6 +198,23 @@
 	phy1: ethernet-phy@1 {
 		/* No PHY interrupt */
 		reg = <0x1>;
+
+		leds {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			leds@0 {
+				color = <LED_COLOR_ID_GREEN>;
+				default-state = "keep";
+				reg = <0>;
+			};
+
+			leds@1 {
+				color = <LED_COLOR_ID_AMBER>;
+				default-state = "keep";
+				reg = <1>;
+			};
+		};
 	};
 };
 
