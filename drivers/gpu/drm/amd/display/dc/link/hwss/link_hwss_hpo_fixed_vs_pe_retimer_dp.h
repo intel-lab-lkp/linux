@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 Advanced Micro Devices, Inc.
+ * Copyright 2023 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -22,27 +22,12 @@
  * Authors: AMD
  *
  */
+#ifndef __LINK_HWSS_HPO_FIXED_VS_PE_RETIMER_DP_H__
+#define __LINK_HWSS_HPO_FIXED_VS_PE_RETIMER_DP_H__
 
-#ifndef __DCN32_CLK_MGR_SMU_MSG_H_
-#define __DCN32_CLK_MGR_SMU_MSG_H_
+#include "link.h"
 
-#include "core_types.h"
-#include "dcn30/dcn30_clk_mgr_smu_msg.h"
+bool requires_fixed_vs_pe_retimer_hpo_link_hwss(const struct dc_link *link);
+const struct link_hwss *get_hpo_fixed_vs_pe_retimer_dp_link_hwss(void);
 
-#define FCLK_PSTATE_NOTSUPPORTED       0x00
-#define FCLK_PSTATE_SUPPORTED          0x01
-
-/* TODO Remove this MSG ID define after it becomes available in dalsmc */
-#define DALSMC_MSG_SetCabForUclkPstate	0x12
-#define DALSMC_Result_OK				0x1
-
-void
-dcn32_smu_send_fclk_pstate_message(struct clk_mgr_internal *clk_mgr, bool enable);
-void dcn32_smu_transfer_wm_table_dram_2_smu(struct clk_mgr_internal *clk_mgr);
-void dcn32_smu_set_pme_workaround(struct clk_mgr_internal *clk_mgr);
-void dcn32_smu_send_cab_for_uclk_message(struct clk_mgr_internal *clk_mgr, unsigned int num_ways);
-void dcn32_smu_transfer_wm_table_dram_2_smu(struct clk_mgr_internal *clk_mgr);
-unsigned int dcn32_smu_set_hard_min_by_freq(struct clk_mgr_internal *clk_mgr, uint32_t clk, uint16_t freq_mhz);
-void dcn32_smu_wait_for_dmub_ack_mclk(struct clk_mgr_internal *clk_mgr, bool enable);
-
-#endif /* __DCN32_CLK_MGR_SMU_MSG_H_ */
+#endif /* __LINK_HWSS_HPO_FIXED_VS_PE_RETIMER_DP_H__ */
