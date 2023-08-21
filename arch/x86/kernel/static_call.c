@@ -81,9 +81,11 @@ static void __ref __static_call_transform(void *insn, enum insn_type type,
 		break;
 
 	case RET:
-		if (cpu_feature_enabled(X86_FEATURE_RETHUNK))
-			code = text_gen_insn(JMP32_INSN_OPCODE, insn, x86_return_thunk);
-		else
+		if (cpu_feature_enabled(X86_FEATURE_RETHUNK)) {
+			u8 op = x86_return_thunk_use_call ? CALL_INSN_OPCODE : JMP32_INSN_OPCODE;
+
+			code = text_gen_insn(op, insn, x86_return_thunk);
+		} else
 			code = &retinsn;
 		break;
 
@@ -91,7 +93,7 @@ static void __ref __static_call_transform(void *insn, enum insn_type type,
 		if (!func) {
 			func = __static_call_return;
 			if (cpu_feature_enabled(X86_FEATURE_RETHUNK))
-				func = x86_return_thunk;
+				func = x86_return_thunk; /* XXX */
 		}
 
 		buf[0] = 0x0f;

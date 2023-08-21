@@ -363,9 +363,11 @@ create_trampoline(struct ftrace_ops *ops, unsigned int *tramp_size)
 		goto fail;
 
 	ip = trampoline + size;
-	if (cpu_feature_enabled(X86_FEATURE_RETHUNK))
-		__text_gen_insn(ip, JMP32_INSN_OPCODE, ip, x86_return_thunk, JMP32_INSN_SIZE);
-	else
+	if (cpu_feature_enabled(X86_FEATURE_RETHUNK)) {
+		u8 op = x86_return_thunk_use_call ? CALL_INSN_OPCODE : JMP32_INSN_OPCODE;
+
+		__text_gen_insn(ip, op, ip, x86_return_thunk, JMP32_INSN_SIZE);
+	} else
 		memcpy(ip, retq, sizeof(retq));
 
 	/* No need to test direct calls on created trampolines */

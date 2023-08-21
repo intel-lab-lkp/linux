@@ -704,8 +704,10 @@ static int patch_return(void *addr, struct insn *insn, u8 *bytes)
 
 	/* Patch the custom return thunks... */
 	if (cpu_feature_enabled(X86_FEATURE_RETHUNK)) {
+		u8 op = x86_return_thunk_use_call ? CALL_INSN_OPCODE : JMP32_INSN_OPCODE;
+
 		i = JMP32_INSN_SIZE;
-		__text_gen_insn(bytes, JMP32_INSN_OPCODE, addr, x86_return_thunk, i);
+		__text_gen_insn(bytes, op, addr, x86_return_thunk, i);
 	} else {
 		/* ... or patch them out if not needed. */
 		bytes[i++] = RET_INSN_OPCODE;
