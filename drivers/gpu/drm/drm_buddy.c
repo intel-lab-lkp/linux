@@ -569,6 +569,197 @@ static int __drm_buddy_alloc_range(struct drm_buddy *mm,
 	return __alloc_range(mm, &dfs, start, size, blocks);
 }
 
+static int __alloc_contiguous_block_from_buddy(struct drm_buddy *mm,
+					       u64 size,
+					       u64 min_block_size,
+					       struct drm_buddy_block *block,
+					       struct list_head *blocks)
+{
+	struct drm_buddy_block *buddy, *parent = NULL;
+	u64 start, offset = 0;
+	LIST_HEAD(dfs);
+	int err;
+
+	if (!block)
+		return -EINVAL;
+
+	buddy = __get_buddy(block);
+	if (!buddy)
+		return -ENOSPC;
+
+	if (drm_buddy_block_is_allocated(buddy))
+		return -ENOSPC;
+
+	parent = block->parent;
+	if (!parent)
+		return -ENOSPC;
+
+	if (block->parent->right == block) {
+		u64 remaining;
+
+		/* Compute the leftover size for allocation */
+		remaining = max((size - drm_buddy_block_size(mm, buddy)),
+				min_block_size);
+		if (!IS_ALIGNED(remaining, min_block_size))
+			remaining = round_up(remaining, min_block_size);
+
+		/* Check if remaining size is greater than buddy block size */
+		if (drm_buddy_block_size(mm, buddy) < remaining)
+			return -ENOSPC;
+
+		offset = drm_buddy_block_size(mm, buddy) - remaining;
+	}
+
+	list_add(&parent->tmp_link, &dfs);
+	start = drm_buddy_block_offset(parent) + offset;
+
+	err = __alloc_range(mm, &dfs, start, size, blocks);
+	if (err)
+		return -ENOSPC;
+
+	return 0;
+}
+
+static int __alloc_contiguous_block_from_peer(struct drm_buddy *mm,
+					      u64 size,
+					      u64 min_block_size,
+					      struct drm_buddy_block *block,
+					      struct list_head *blocks)
+{
+	struct drm_buddy_block *first, *peer, *tmp;
+	struct drm_buddy_block *parent = NULL;
+	u64 start, offset = 0;
+	unsigned int order;
+	LIST_HEAD(dfs);
+	int err;
+
+	if (!block)
+		return -EINVAL;
+
+	order = drm_buddy_block_order(block);
+	/* Add freelist block to dfs list */
+	list_add(&block->tmp_link, &dfs);
+
+	tmp = block;
+	parent = block->parent;
+	while (parent) {
+		if (block->parent->left == block) {
+			if (parent->left != tmp) {
+				peer = parent->left;
+				break;
+			}
+		} else {
+			if (parent->right != tmp) {
+				peer = parent->right;
+				break;
+			}
+		}
+
+		tmp = parent;
+		parent = tmp->parent;
+	}
+
+	if (!parent)
+		return -ENOSPC;
+
+	do {
+		if (drm_buddy_block_is_allocated(peer))
+			return -ENOSPC;
+		/* Exit loop if peer block order is equal to block order */
+		if (drm_buddy_block_order(peer) == order)
+			break;
+
+		if (drm_buddy_block_is_split(peer)) {
+			/* Traverse down to the block order level */
+			if (block->parent->left == block)
+				peer = peer->right;
+			else
+				peer = peer->left;
+		} else {
+			break;
+		}
+	} while (1);
+
+	if (block->parent->left == block) {
+		u64 remaining;
+
+		/* Compute the leftover size for allocation */
+		remaining = max((size - drm_buddy_block_size(mm, block)),
+				min_block_size);
+		if (!IS_ALIGNED(remaining, min_block_size))
+			remaining = round_up(remaining, min_block_size);
+
+		/* Check if remaining size is greater than peer block size */
+		if (drm_buddy_block_size(mm, peer) < remaining)
+			return -ENOSPC;
+
+		offset = drm_buddy_block_size(mm, peer) - remaining;
+		/* Add left peer block to dfs list */
+		list_add(&peer->tmp_link, &dfs);
+	} else {
+		/* Add right peer block to dfs list */
+		list_add_tail(&peer->tmp_link, &dfs);
+	}
+
+	first = list_first_entry_or_null(&dfs,
+					 struct drm_buddy_block,
+					 tmp_link);
+	if (!first)
+		return -EINVAL;
+
+	start = drm_buddy_block_offset(first) + offset;
+	err = __alloc_range(mm, &dfs, start, size, blocks);
+	if (err)
+		return -ENOSPC;
+
+	return 0;
+}
+
+static int __drm_buddy_alloc_contiguous_blocks(struct drm_buddy *mm,
+					       u64 size,
+					       u64 min_block_size,
+					       struct list_head *blocks)
+{
+	struct drm_buddy_block *block;
+	struct list_head *list;
+	unsigned long pages;
+	unsigned int order;
+	u64 modify_size;
+	int err;
+
+	modify_size = rounddown_pow_of_two(size);
+	pages = modify_size >> ilog2(mm->chunk_size);
+	order = fls(pages) - 1;
+	if (order == 0)
+		return -ENOSPC;
+
+	list = &mm->free_list[order];
+	if (list_empty(list))
+		return -ENOSPC;
+
+	list_for_each_entry_reverse(block, list, link) {
+		/* Allocate contiguous blocks from the buddy */
+		err = __alloc_contiguous_block_from_buddy(mm,
+							  size,
+							  min_block_size,
+							  block,
+							  blocks);
+		if (!err)
+			return 0;
+
+		/* Allocate contiguous blocks from tree traversal method */
+		err = __alloc_contiguous_block_from_peer(mm,
+							 size,
+							 min_block_size,
+							 block,
+							 blocks);
+		if (!err)
+			return 0;
+	}
+
+	return -ENOSPC;
+}
+
 /**
  * drm_buddy_block_trim - free unused pages
  *
@@ -645,7 +836,7 @@ EXPORT_SYMBOL(drm_buddy_block_trim);
  * @start: start of the allowed range for this block
  * @end: end of the allowed range for this block
  * @size: size of the allocation
- * @min_page_size: alignment of the allocation
+ * @min_block_size: alignment of the allocation
  * @blocks: output list head to add allocated blocks
  * @flags: DRM_BUDDY_*_ALLOCATION flags
  *
@@ -660,23 +851,24 @@ EXPORT_SYMBOL(drm_buddy_block_trim);
  */
 int drm_buddy_alloc_blocks(struct drm_buddy *mm,
 			   u64 start, u64 end, u64 size,
-			   u64 min_page_size,
+			   u64 min_block_size,
 			   struct list_head *blocks,
 			   unsigned long flags)
 {
 	struct drm_buddy_block *block = NULL;
+	u64 original_size, original_min_size;
 	unsigned int min_order, order;
-	unsigned long pages;
 	LIST_HEAD(allocated);
+	unsigned long pages;
 	int err;
 
 	if (size < mm->chunk_size)
 		return -EINVAL;
 
-	if (min_page_size < mm->chunk_size)
+	if (min_block_size < mm->chunk_size)
 		return -EINVAL;
 
-	if (!is_power_of_2(min_page_size))
+	if (!is_power_of_2(min_block_size))
 		return -EINVAL;
 
 	if (!IS_ALIGNED(start | end | size, mm->chunk_size))
@@ -692,12 +884,21 @@ int drm_buddy_alloc_blocks(struct drm_buddy *mm,
 	if (start + size == end)
 		return __drm_buddy_alloc_range(mm, start, size, blocks);
 
-	if (!IS_ALIGNED(size, min_page_size))
-		return -EINVAL;
+	original_size = size;
+	original_min_size = min_block_size;
+
+	/* Roundup the size to power of 2 */
+	if (flags & DRM_BUDDY_CONTIGUOUS_ALLOCATION) {
+		size = roundup_pow_of_two(size);
+		min_block_size = size;
+	/* Align size value to min_block_size */
+	} else if (!IS_ALIGNED(size, min_block_size)) {
+		size = round_up(size, min_block_size);
+	}
 
 	pages = size >> ilog2(mm->chunk_size);
 	order = fls(pages) - 1;
-	min_order = ilog2(min_page_size) - ilog2(mm->chunk_size);
+	min_order = ilog2(min_block_size) - ilog2(mm->chunk_size);
 
 	do {
 		order = min(order, (unsigned int)fls(pages) - 1);
@@ -716,6 +917,17 @@ int drm_buddy_alloc_blocks(struct drm_buddy *mm,
 				break;
 
 			if (order-- == min_order) {
+				if (flags & DRM_BUDDY_CONTIGUOUS_ALLOCATION &&
+				    !(flags & DRM_BUDDY_RANGE_ALLOCATION))
+					/*
+					 * Try contiguous block allocation through
+					 * tree traversal method
+					 */
+					return __drm_buddy_alloc_contiguous_blocks(mm,
+										   original_size,
+										   original_min_size,
+										   blocks);
+
 				err = -ENOSPC;
 				goto err_free;
 			}
@@ -731,6 +943,31 @@ int drm_buddy_alloc_blocks(struct drm_buddy *mm,
 		if (!pages)
 			break;
 	} while (1);
+
+	/* Trim the allocated block to the required size */
+	if (original_size != size) {
+		struct list_head *trim_list;
+		LIST_HEAD(temp);
+		u64 trim_size;
+
+		trim_list = &allocated;
+		trim_size = original_size;
+
+		if (!list_is_singular(&allocated)) {
+			block = list_last_entry(&allocated, typeof(*block), link);
+			list_move(&block->link, &temp);
+			trim_list = &temp;
+			trim_size = drm_buddy_block_size(mm, block) -
+				(size - original_size);
+		}
+
+		drm_buddy_block_trim(mm,
+				     trim_size,
+				     trim_list);
+
+		if (!list_empty(&temp))
+			list_splice_tail(trim_list, &allocated);
+	}
 
 	list_splice_tail(&allocated, blocks);
 	return 0;
