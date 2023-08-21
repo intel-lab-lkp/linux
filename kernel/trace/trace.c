@@ -8462,6 +8462,8 @@ tracing_buffers_splice_read(struct file *file, loff_t *ppos,
 	/* did we read anything? */
 	if (!spd.nr_pages) {
 		long wait_index;
+		size_t nr_pages;
+		size_t full;
 
 		if (ret)
 			goto out;
@@ -8472,7 +8474,15 @@ tracing_buffers_splice_read(struct file *file, loff_t *ppos,
 
 		wait_index = READ_ONCE(iter->wait_index);
 
-		ret = wait_on_pipe(iter, iter->tr->buffer_percent);
+		/* For splice, we have to ensure at least 1 page is filled */
+		nr_pages = ring_buffer_nr_pages(iter->array_buffer->buffer, iter->cpu_file);
+		if (nr_pages * iter->tr->buffer_percent < 100) {
+			full = nr_pages + 99;
+			do_div(full, nr_pages);
+		} else
+			full = iter->tr->buffer_percent;
+
+		ret = wait_on_pipe(iter, full);
 		if (ret)
 			goto out;
 
