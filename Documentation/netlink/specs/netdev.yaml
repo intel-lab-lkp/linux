@@ -68,6 +68,29 @@ attribute-sets:
         type: u32
         checks:
           min: 1
+  -
+    name: napi
+    attributes:
+      -
+        name: ifindex
+        doc: netdev ifindex
+        type: u32
+        checks:
+          min: 1
+      -
+        name: napi-id
+        doc: napi id
+        type: u32
+      -
+        name: rx-queues
+        doc: list of rx queues associated with a napi
+        type: u32
+        multi-attr: true
+      -
+        name: tx-queues
+        doc: list of tx queues associated with a napi
+        type: u32
+        multi-attr: true
 
 operations:
   list:
@@ -101,6 +124,25 @@ operations:
       doc: Notification about device configuration being changed.
       notify: dev-get
       mcgrp: mgmt
+    -
+      name: napi-get
+      doc: napi information such as napi-id, napi queues etc.
+      attribute-set: napi
+      do:
+        request:
+          attributes:
+            - napi-id
+        reply: &napi-get-op
+          attributes:
+            - napi-id
+            - ifindex
+            - rx-queues
+            - tx-queues
+      dump:
+        request:
+          attributes:
+            - ifindex
+        reply: *napi-get-op
 
 mcast-groups:
   list:
