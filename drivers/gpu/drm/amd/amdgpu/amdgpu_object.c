@@ -1450,7 +1450,8 @@ void amdgpu_bo_fence(struct amdgpu_bo *bo, struct dma_fence *fence,
  *
  * @adev: amdgpu device pointer
  * @resv: reservation object to sync to
- * @sync_mode: synchronization mode
+ * @implicit_sync_mode: synchronization mode for usage <= DMA_RESV_USAGE_READ
+ * @explicit_sync_mode: synchronization mode for usage DMA_RESV_USAGE_BOOKKEEP
  * @owner: fence owner
  * @intr: Whether the wait is interruptible
  *
@@ -1460,14 +1461,15 @@ void amdgpu_bo_fence(struct amdgpu_bo *bo, struct dma_fence *fence,
  * 0 on success, errno otherwise.
  */
 int amdgpu_bo_sync_wait_resv(struct amdgpu_device *adev, struct dma_resv *resv,
-			     enum amdgpu_sync_mode sync_mode, void *owner,
+			     enum amdgpu_sync_mode implicit_sync_mode,
+			     enum amdgpu_sync_mode explicit_sync_mode, void *owner,
 			     bool intr)
 {
 	struct amdgpu_sync sync;
 	int r;
 
 	amdgpu_sync_create(&sync);
-	amdgpu_sync_resv(adev, &sync, resv, sync_mode, owner);
+	amdgpu_sync_resv(adev, &sync, resv, implicit_sync_mode, explicit_sync_mode, owner);
 	r = amdgpu_sync_wait(&sync, intr);
 	amdgpu_sync_free(&sync);
 	return r;
@@ -1488,7 +1490,8 @@ int amdgpu_bo_sync_wait(struct amdgpu_bo *bo, void *owner, bool intr)
 	struct amdgpu_device *adev = amdgpu_ttm_adev(bo->tbo.bdev);
 
 	return amdgpu_bo_sync_wait_resv(adev, bo->tbo.base.resv,
-					AMDGPU_SYNC_NE_OWNER, owner, intr);
+					AMDGPU_SYNC_NE_OWNER, AMDGPU_SYNC_EXPLICIT,
+					owner, intr);
 }
 
 /**
