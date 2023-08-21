@@ -1741,7 +1741,31 @@ static void check_preempt_curr_rt(struct rq *rq, struct task_struct *p, int flag
 }
 
 #ifdef CONFIG_NO_HZ_FULL
-static bool can_stop_tick_rt(struct rq *rq, int *stop_next)
+/*
+ * If the scheduler feature HZ_BW is enabled, we need to further
+ * check whether task @p is constrained by RT bandwidth to decide
+ * whether to stop tick.
+ */
+static inline bool rt_task_bw_constrained(struct task_struct *p)
+{
+	struct rt_rq *rt_rq;
+
+	if (!sched_feat(HZ_BW))
+		return false;
+
+	if (rt_bandwidth_enabled())
+		return true;
+
+	if (p->sched_class == &rt_sched_class && task_on_rq_queued(p)) {
+		rt_rq = rt_rq_of_se(&p->rt);
+		if (sched_rt_runtime(rt_rq) != RUNTIME_INF)
+			return true;
+	}
+
+	return false;
+}
+
+static bool __can_stop_tick_rt(struct rq *rq, struct task_struct *p, int *stop_next)
 {
 	int fifo_nr_running;
 
@@ -1751,7 +1775,7 @@ static bool can_stop_tick_rt(struct rq *rq, int *stop_next)
 	 */
 	if (rq->rt.rr_nr_running) {
 		*stop_next = 1;
-		if (rq->rt.rr_nr_running == 1)
+		if (rq->rt.rr_nr_running == 1 && !rt_task_bw_constrained(p))
 			return true;
 		else
 			return false;
@@ -1764,11 +1788,38 @@ static bool can_stop_tick_rt(struct rq *rq, int *stop_next)
 	fifo_nr_running = rq->rt.rt_nr_running - rq->rt.rr_nr_running;
 	if (fifo_nr_running) {
 		*stop_next = 1;
-		return true;
+		if (!rt_task_bw_constrained(p))
+			return true;
+		else
+			return false;
 	}
 
 	return true;
 }
+
+static bool can_stop_tick_rt(struct rq *rq, int *stop_next)
+{
+	bool ret;
+
+	ret = __can_stop_tick_rt(rq, rq->curr, stop_next);
+	if (stop_next)
+		return ret;
+
+	return true;
+}
+static void sched_rt_update_stop_tick(struct rq *rq, struct task_struct *p)
+{
+	int cpu = cpu_of(rq);
+	int unused;
+
+	if (!sched_feat(HZ_BW) || !tick_nohz_full_cpu(cpu))
+		return;
+
+	if (!__can_stop_tick_rt(rq, p, &unused))
+		tick_nohz_dep_set_cpu(cpu, TICK_DEP_BIT_SCHED);
+}
+#else /* CONFIG_NO_HZ_FULL */
+static inline void sched_rt_update_stop_tick(struct rq *rq, struct task_struct *p) {}
 #endif
 
 static inline void set_next_task_rt(struct rq *rq, struct task_struct *p, bool first)
@@ -1846,8 +1897,10 @@ static struct task_struct *pick_next_task_rt(struct rq *rq)
 {
 	struct task_struct *p = pick_task_rt(rq);
 
-	if (p)
+	if (p) {
+		sched_rt_update_stop_tick(rq, p);
 		set_next_task_rt(rq, p, true);
+	}
 
 	return p;
 }
