@@ -2593,7 +2593,6 @@ static int qcom_parse_instructions(struct nand_chip *chip,
 				    const struct nand_subop *subop,
 				    struct qcom_op *q_op)
 {
-	struct qcom_nand_controller *nandc = get_qcom_nand_controller(chip);
 	const struct nand_op_instr *instr = NULL;
 	unsigned int op_id;
 	int i, ret;
