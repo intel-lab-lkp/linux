@@ -240,6 +240,64 @@ struct rdtgroup {
 
 /*
  * Define the file type flags for base and info directories.
+ *
+ * RESCTRL filesystem has two main components
+ *	a. info
+ *	b. base
+ *
+ * /sys/fs/resctrl/
+ *	|
+ *	--> info (Top level directory named "info". Contains files that
+ *	|	  provide details on control and monitoring resources.)
+ *	|
+ *	--> base (Root directory associated with default resource group
+ *		  as well as directories created by user for MON and CTRL
+ *		  groups. Contains files to interact with MON and CTRL
+ *		  groups.)
+ *
+ *	Note: resctrl uses flags for files, not for directories.
+ *	      Directories are created based on the resource type. Added
+ *	      directories below for better understanding.
+ *
+ *	info directory structure
+ *	------------------------------------------------------------------
+ *	--> RFTYPE_INFO
+ *	    directory: info
+ *		--> RFTYPE_TOP (Files in top level of info directory)
+ *		    File: last_cmd_status
+ *
+ *		--> RFTYPE_MON (Files for all monitoring resources)
+ *		    Directory: L3_MON
+ *		        Files: mon_features, num_rmids
+ *
+ *			--> RFTYPE_RES_CACHE (Files for cache monitoring resources)
+ *			    Directory: L3_MON
+ *			        Files: max_threshold_occupancy,
+ *			               mbm_total_bytes_config,
+ *			               mbm_local_bytes_config
+ *
+ *		--> RFTYPE_CTRL (Files for all control resources)
+ *		    Directories: L2, L3, MB, SMBA
+ *		           File: num_closids
+ *
+ *			--> RFTYPE_RES_CACHE (Files for cache control resources)
+ *			    Directories: L2, L3
+ *			          Files: bit_usage, cbm_mask, min_cbm_bits,
+ *			                 shareable_bits
+ *
+ *			--> RFTYPE_RES_MB (Files for memory control resources)
+ *			    Directories: MB, SMBA
+ *			          Files: bandwidth_gran, delay_linear,
+ *			                 min_bandwidth, thread_throttle_mode
+ *
+ *	base directory structure
+ *	------------------------------------------------------------------
+ *	--> RFTYPE_BASE (Files common for both MON and CTRL groups)
+ *	    Files: cpus, cpus_list, tasks
+ *
+ *		--> RFTYPE_CTRL (Files only for CTRL group)
+ *		    Files: mode, schemata, size
+ *
  */
 #define RFTYPE_INFO			BIT(0)
 #define RFTYPE_BASE			BIT(1)
