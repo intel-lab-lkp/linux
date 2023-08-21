@@ -1235,17 +1235,7 @@ int siw_run_sq(void *data)
 			break;
 
 		active = llist_del_all(&tx_task->active);
-		/*
-		 * llist_del_all returns a list with newest entry first.
-		 * Re-order list for fairness among QP's.
-		 */
-		while (active) {
-			struct llist_node *tmp = active;
-
-			active = llist_next(active);
-			tmp->next = fifo_list;
-			fifo_list = tmp;
-		}
+		fifo_list = llist_reverse_order(active);
 		while (fifo_list) {
 			qp = container_of(fifo_list, struct siw_qp, tx_list);
 			fifo_list = llist_next(fifo_list);
