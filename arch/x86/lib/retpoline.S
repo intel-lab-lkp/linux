@@ -194,13 +194,13 @@ SYM_CODE_END(srso_fam19_return_thunk)
  *
  * The SRSO Zen1/2 (MOVABS) untraining sequence is longer than the
  * Retbleed sequence because the return sequence done there
- * (srso_safe_ret()) is longer and the return sequence must fully nest
+ * (srso_fam17_safe_ret()) is longer and the return sequence must fully nest
  * (end before) the untraining sequence. Therefore, the untraining
  * sequence must fully overlap the return sequence.
  *
  * Regarding alignment - the instructions which need to be untrained,
  * must all start at a cacheline boundary for Zen1/2 generations. That
- * is, instruction sequences starting at srso_safe_ret() and
+ * is, instruction sequences starting at srso_fam17_safe_ret() and
  * the respective instruction sequences at retbleed_return_thunk()
  * must start at a cacheline boundary.
  */
@@ -268,49 +268,49 @@ __EXPORT_THUNK(retbleed_untrain_ret)
 
 /*
  * SRSO untraining sequence for Zen1/2, similar to retbleed_untrain_ret()
- * above. On kernel entry, srso_untrain_ret() is executed which is a
+ * above. On kernel entry, srso_fam17_untrain_ret() is executed which is a
  *
  * movabs $0xccccc30824648d48,%rax
  *
- * and when the return thunk executes the inner label srso_safe_ret()
+ * and when the return thunk executes the inner label srso_fam17_safe_ret()
  * later, it is a stack manipulation and a RET which is mispredicted and
  * thus a "safe" one to use.
  */
 	.align 64
-	.skip 64 - (srso_safe_ret - srso_untrain_ret), 0xcc
-SYM_START(srso_untrain_ret, SYM_L_GLOBAL, SYM_A_NONE)
+	.skip 64 - (srso_fam17_safe_ret - srso_fam17_untrain_ret), 0xcc
+SYM_START(srso_fam17_untrain_ret, SYM_L_GLOBAL, SYM_A_NONE)
 	ANNOTATE_NOENDBR
 	.byte 0x48, 0xb8
 
 /*
  * This forces the function return instruction to speculate into a trap
- * (UD2 in srso_return_thunk() below).  This RET will then mispredict
+ * (UD2 in srso_fam17_return_thunk() below).  This RET will then mispredict
  * and execution will continue at the return site read from the top of
  * the stack.
  */
-SYM_INNER_LABEL(srso_safe_ret, SYM_L_GLOBAL)
+SYM_INNER_LABEL(srso_fam17_safe_ret, SYM_L_GLOBAL)
 	lea 8(%_ASM_SP), %_ASM_SP
 	ret
 	int3
 	int3
 	/* end of movabs */
 	lfence
-	call srso_safe_ret
+	call srso_fam17_safe_ret
 	ud2
-SYM_CODE_END(srso_safe_ret)
-SYM_FUNC_END(srso_untrain_ret)
-__EXPORT_THUNK(srso_untrain_ret)
+SYM_CODE_END(srso_fam17_safe_ret)
+SYM_FUNC_END(srso_fam17_untrain_ret)
+__EXPORT_THUNK(srso_fam17_untrain_ret)
 
-SYM_CODE_START(srso_return_thunk)
+SYM_CODE_START(srso_fam17_return_thunk)
 	UNWIND_HINT_FUNC
 	ANNOTATE_NOENDBR
-	call srso_safe_ret
+	call srso_fam17_safe_ret
 	ud2
-SYM_CODE_END(srso_return_thunk)
+SYM_CODE_END(srso_fam17_return_thunk)
 
 SYM_FUNC_START(entry_untrain_ret)
 	ALTERNATIVE_2 "jmp retbleed_untrain_ret", \
-		      "jmp srso_untrain_ret", X86_FEATURE_SRSO, \
+		      "jmp srso_fam17_untrain_ret", X86_FEATURE_SRSO, \
 		      "jmp srso_fam19_untrain_ret", X86_FEATURE_SRSO_ALIAS
 SYM_FUNC_END(entry_untrain_ret)
 __EXPORT_THUNK(entry_untrain_ret)

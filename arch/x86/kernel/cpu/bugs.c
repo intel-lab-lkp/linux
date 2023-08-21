@@ -2467,7 +2467,7 @@ static void __init srso_select_mitigation(void)
 				x86_return_thunk = srso_fam19_return_thunk;
 			} else {
 				setup_force_cpu_cap(X86_FEATURE_SRSO);
-				x86_return_thunk = srso_return_thunk;
+				x86_return_thunk = srso_fam17_return_thunk;
 			}
 			srso_mitigation = SRSO_MITIGATION_SAFE_RET;
 		} else {
