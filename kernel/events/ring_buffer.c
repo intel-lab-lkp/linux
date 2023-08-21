@@ -769,7 +769,7 @@ void rb_free_aux(struct perf_buffer *rb)
 #ifndef CONFIG_PERF_USE_VMALLOC
 
 /*
- * Back perf_mmap() with regular GFP_KERNEL-0 pages.
+ * Back perf_mmap() with regular GFP_KERNEL pages.
  */
 
 static struct page *
@@ -784,25 +784,23 @@ __perf_mmap_to_page(struct perf_buffer *rb, unsigned long pgoff)
 	return virt_to_page(rb->data_pages[pgoff - 1]);
 }
 
-static void *perf_mmap_alloc_page(int cpu)
+static void *perf_mmap_alloc_page(int node)
 {
-	struct page *page;
-	int node;
+	struct folio *folio;
 
-	node = (cpu == -1) ? cpu : cpu_to_node(cpu);
-	page = alloc_pages_node(node, GFP_KERNEL | __GFP_ZERO, 0);
-	if (!page)
+	folio = __folio_alloc_node(GFP_KERNEL | __GFP_ZERO, 0, node);
+	if (!folio)
 		return NULL;
 
-	return page_address(page);
+	return folio_address(folio);
 }
 
 static void perf_mmap_free_page(void *addr)
 {
-	struct page *page = virt_to_page(addr);
+	struct folio *folio = virt_to_folio(addr);
 
-	page->mapping = NULL;
-	__free_page(page);
+	folio->mapping = NULL;
+	folio_put(folio);
 }
 
 struct perf_buffer *rb_alloc(int nr_pages, long watermark, int cpu, int flags)
@@ -817,17 +815,17 @@ struct perf_buffer *rb_alloc(int nr_pages, long watermark, int cpu, int flags)
 	if (order_base_2(size) > PAGE_SHIFT+MAX_ORDER)
 		goto fail;
 
-	node = (cpu == -1) ? cpu : cpu_to_node(cpu);
+	node = (cpu == -1) ? numa_mem_id() : cpu_to_node(cpu);
 	rb = kzalloc_node(size, GFP_KERNEL, node);
 	if (!rb)
 		goto fail;
 
-	rb->user_page = perf_mmap_alloc_page(cpu);
+	rb->user_page = perf_mmap_alloc_page(node);
 	if (!rb->user_page)
 		goto fail_user_page;
 
 	for (i = 0; i < nr_pages; i++) {
-		rb->data_pages[i] = perf_mmap_alloc_page(cpu);
+		rb->data_pages[i] = perf_mmap_alloc_page(node);
 		if (!rb->data_pages[i])
 			goto fail_data_pages;
 	}
