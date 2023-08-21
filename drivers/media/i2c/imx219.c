@@ -160,6 +160,9 @@
 #define IMX219_PIXEL_ARRAY_HEIGHT	2480U
 #define IMX219_NATIVE_FORMAT		MEDIA_BUS_FMT_SRGGB10_1X10
 
+/* Embedded metadata stream height */
+#define IMX219_EMBEDDED_DATA_HEIGHT	2U
+
 /* Mode : resolution and related config&values */
 struct imx219_mode {
 	/* Frame width */
@@ -361,11 +364,13 @@ static const struct imx219_mode supported_modes[] = {
 enum imx219_pad_ids {
 	IMX219_PAD_SOURCE = 0,
 	IMX219_PAD_IMAGE,
+	IMX219_PAD_EDATA,
 	IMX219_NUM_PADS,
 };
 
 enum imx219_stream_ids {
 	IMX219_STREAM_IMAGE,
+	IMX219_STREAM_EDATA,
 };
 
 struct imx219 {
@@ -431,6 +436,25 @@ static u32 imx219_get_format_bpp(const struct v4l2_mbus_framefmt *format)
 	case MEDIA_BUS_FMT_SBGGR10_1X10:
 	default:
 		return 10;
+	}
+}
+
+static u32
+imx219_get_embedded_format_code(const struct v4l2_mbus_framefmt *format)
+{
+	switch (format->code) {
+	case MEDIA_BUS_FMT_SRGGB8_1X8:
+	case MEDIA_BUS_FMT_SGRBG8_1X8:
+	case MEDIA_BUS_FMT_SGBRG8_1X8:
+	case MEDIA_BUS_FMT_SBGGR8_1X8:
+		return MEDIA_BUS_FMT_META_8;
+
+	case MEDIA_BUS_FMT_SRGGB10_1X10:
+	case MEDIA_BUS_FMT_SGRBG10_1X10:
+	case MEDIA_BUS_FMT_SGBRG10_1X10:
+	case MEDIA_BUS_FMT_SBGGR10_1X10:
+	default:
+		return MEDIA_BUS_FMT_META_10;
 	}
 }
 
@@ -777,6 +801,9 @@ static int imx219_enable_streams(struct v4l2_subdev *sd,
 	struct i2c_client *client = v4l2_get_subdevdata(&imx219->sd);
 	int ret;
 
+	if (!(streams_mask & 1ULL))
+		return 0;
+
 	ret = pm_runtime_resume_and_get(&client->dev);
 	if (ret < 0)
 		return ret;
@@ -834,6 +861,9 @@ static int imx219_disable_streams(struct v4l2_subdev *sd,
 	struct i2c_client *client = v4l2_get_subdevdata(&imx219->sd);
 	int ret;
 
+	if (!(streams_mask & 1ULL))
+		return 0;
+
 	/* set stream off register */
 	ret = cci_write(imx219->regmap, IMX219_REG_MODE_SELECT,
 			IMX219_MODE_STANDBY, NULL);
@@ -854,17 +884,32 @@ static int imx219_enum_mbus_code(struct v4l2_subdev *sd,
 {
 	struct imx219 *imx219 = to_imx219(sd);
 
-	if (code->pad == IMX219_PAD_IMAGE) {
-		/* The internal image pad is hardwired to the native format. */
+	switch (code->pad) {
+	case IMX219_PAD_IMAGE:
 		if (code->index > 0)
 			return -EINVAL;
 
-		code->code = IMX219_NATIVE_FORMAT;
-	} else {
-		/*
-		 * On the source pad, the sensor supports multiple raw formats
-		 * with different bit depths.
-		 */
+		code->code = MEDIA_BUS_FMT_RAW_10;
+		return 0;
+
+	case IMX219_PAD_EDATA:
+		if (code->index > 0)
+			return -EINVAL;
+
+		code->code = MEDIA_BUS_FMT_META_8;
+		return 0;
+
+	case IMX219_PAD_SOURCE:
+	default:
+		break;
+	}
+
+	/*
+	 * On the source pad, the sensor supports multiple image raw formats
+	 * with different bit depths. The embedded data format bit depth
+	 * follows the image stream.
+	 */
+	if (code->stream == IMX219_STREAM_IMAGE) {
 		u32 format;
 
 		if (code->index >= ARRAY_SIZE(imx219_mbus_formats) / 4)
@@ -872,6 +917,15 @@ static int imx219_enum_mbus_code(struct v4l2_subdev *sd,
 
 		format = imx219_mbus_formats[code->index * 4];
 		code->code = imx219_get_format_code(imx219, format);
+	} else {
+		struct v4l2_mbus_framefmt *fmt;
+
+		if (code->index > 0)
+			return -EINVAL;
+
+		fmt = v4l2_subdev_state_get_format(state, IMX219_PAD_SOURCE,
+						   IMX219_STREAM_EDATA);
+		code->code = fmt->code;
 	}
 
 	return 0;
@@ -883,15 +937,33 @@ static int imx219_enum_frame_size(struct v4l2_subdev *sd,
 {
 	struct imx219 *imx219 = to_imx219(sd);
 
-	if (fse->pad == IMX219_PAD_IMAGE) {
+	switch (fse->pad) {
+	case IMX219_PAD_IMAGE:
 		if (fse->code != MEDIA_BUS_FMT_RAW_10 || fse->index > 0)
 			return -EINVAL;
 
-		fse->min_width = IMX219_PIXEL_ARRAY_WIDTH;
-		fse->max_width = IMX219_PIXEL_ARRAY_WIDTH;
-		fse->min_height = IMX219_PIXEL_ARRAY_HEIGHT;
-		fse->max_height = IMX219_PIXEL_ARRAY_HEIGHT;
-	} else {
+		fse->min_width = IMX219_ACTIVE_AREA_WIDTH;
+		fse->max_width = IMX219_ACTIVE_AREA_WIDTH;
+		fse->min_height = IMX219_ACTIVE_AREA_HEIGHT;
+		fse->max_height = IMX219_ACTIVE_AREA_HEIGHT;
+		return 0;
+
+	case IMX219_PAD_EDATA:
+		if (fse->code != MEDIA_BUS_FMT_META_8 || fse->index > 0)
+			return -EINVAL;
+
+		fse->min_width = IMX219_ACTIVE_AREA_WIDTH;
+		fse->max_width = IMX219_ACTIVE_AREA_WIDTH;
+		fse->min_height = IMX219_EMBEDDED_DATA_HEIGHT;
+		fse->max_height = IMX219_EMBEDDED_DATA_HEIGHT;
+		return 0;
+
+	case IMX219_PAD_SOURCE:
+	default:
+		break;
+	}
+
+	if (fse->stream == IMX219_STREAM_IMAGE) {
 		if (fse->code != imx219_get_format_code(imx219, fse->code) ||
 		    fse->index >= ARRAY_SIZE(supported_modes))
 			return -EINVAL;
@@ -900,6 +972,21 @@ static int imx219_enum_frame_size(struct v4l2_subdev *sd,
 		fse->max_width = fse->min_width;
 		fse->min_height = supported_modes[fse->index].height;
 		fse->max_height = fse->min_height;
+	} else {
+		struct v4l2_mbus_framefmt *fmt;
+
+		fmt = v4l2_subdev_state_get_format(state, IMX219_PAD_SOURCE,
+						   IMX219_STREAM_EDATA);
+		if (fse->code != fmt->code)
+			return -EINVAL;
+
+		if (fse->index > 0)
+			return -EINVAL;
+
+		fse->min_width = fmt->width;
+		fse->max_width = fmt->width;
+		fse->min_height = IMX219_EMBEDDED_DATA_HEIGHT;
+		fse->max_height = IMX219_EMBEDDED_DATA_HEIGHT;
 	}
 
 	return 0;
@@ -911,13 +998,16 @@ static int imx219_set_pad_format_compat(struct v4l2_subdev *sd,
 {
 	struct imx219 *imx219 = to_imx219(sd);
 	const struct imx219_mode *mode;
-	struct v4l2_mbus_framefmt *format;
+	struct v4l2_mbus_framefmt *format, *embedded_format;
 	struct v4l2_rect *crop;
 	u8 bin_h, bin_v, bin_hv;
 	int ret;
 
 	format = v4l2_subdev_state_get_format(state, IMX219_PAD_SOURCE,
 					      IMX219_STREAM_IMAGE);
+	embedded_format =
+		v4l2_subdev_state_get_format(state, IMX219_PAD_SOURCE,
+					     IMX219_STREAM_EDATA);
 
 	/*
 	 * Adjust the requested format to match the closest mode. The Bayer
@@ -938,6 +1028,8 @@ static int imx219_set_pad_format_compat(struct v4l2_subdev *sd,
 	fmt->format.xfer_func = V4L2_XFER_FUNC_NONE;
 
 	*format = fmt->format;
+
+	embedded_format->code = imx219_get_embedded_format_code(format);
 
 	/*
 	 * Use binning to maximize the crop rectangle size, and centre it in the
@@ -1031,7 +1123,7 @@ static int imx219_set_pad_format(struct v4l2_subdev *sd,
 	if (!(ci && ci->caps & V4L2_SUBDEV_CLIENT_CAP_COMMON_RAW_SENSOR))
 		return imx219_set_pad_format_compat(sd, state, fmt);
 
-	if (fmt->pad != IMX219_PAD_SOURCE)
+	if (fmt->pad != IMX219_PAD_SOURCE && fmt->stream != IMX219_STREAM_IMAGE)
 		return v4l2_subdev_get_fmt(sd, state, fmt);
 
 	format = v4l2_subdev_state_get_format(state, IMX219_PAD_SOURCE,
@@ -1082,7 +1174,11 @@ static int imx219_get_selection(struct v4l2_subdev *sd,
 		return -EINVAL;
 	}
 
-	if (sel->pad != IMX219_PAD_IMAGE)
+	/*
+	 * The embedded data stream doesn't support selection rectangles,
+	 * neither on the embedded data pad nor on the source pad.
+	 */
+	if (sel->pad != IMX219_PAD_IMAGE || sel->stream != IMX219_STREAM_IMAGE)
 		return -EINVAL;
 
 	switch (sel->target) {
@@ -1112,27 +1208,33 @@ static int imx219_get_selection(struct v4l2_subdev *sd,
 static int imx219_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
 				 struct v4l2_mbus_frame_desc *fd)
 {
-	const struct v4l2_mbus_framefmt *fmt;
 	struct v4l2_subdev_state *state;
-	u32 code;
+	u32 img_code;
+	u32 ed_code;
 
 	if (pad != IMX219_PAD_SOURCE)
 		return -EINVAL;
 
 	state = v4l2_subdev_lock_and_get_active_state(sd);
-	fmt = v4l2_subdev_state_get_format(state, IMX219_PAD_SOURCE,
-					   IMX219_STREAM_IMAGE);
-	code = fmt->code;
+	img_code = v4l2_subdev_state_get_format(state, IMX219_PAD_SOURCE,
+						IMX219_STREAM_IMAGE)->code;
+	ed_code = v4l2_subdev_state_get_format(state, IMX219_PAD_SOURCE,
+					       IMX219_STREAM_EDATA)->code;
 	v4l2_subdev_unlock_state(state);
 
 	fd->type = V4L2_MBUS_FRAME_DESC_TYPE_CSI2;
-	fd->num_entries = 1;
+	fd->num_entries = 2;
 
-	fd->entry[0].pixelcode = code;
+	fd->entry[0].pixelcode = img_code;
 	fd->entry[0].stream = IMX219_STREAM_IMAGE;
 	fd->entry[0].bus.csi2.vc = 0;
-	fd->entry[0].bus.csi2.dt = imx219_format_bpp(code) == 8 ?
+	fd->entry[0].bus.csi2.dt = imx219_format_bpp(img_code) == 8 ?
 		MIPI_CSI2_DT_RAW8 : MIPI_CSI2_DT_RAW10;
+
+	fd->entry[1].pixelcode = ed_code;
+	fd->entry[1].stream = IMX219_STREAM_EDATA;
+	fd->entry[1].bus.csi2.vc = 0;
+	fd->entry[1].bus.csi2.dt = MIPI_CSI2_DT_EMBEDDED_8B;
 
 	return 0;
 }
@@ -1140,12 +1242,20 @@ static int imx219_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
 static int imx219_init_state(struct v4l2_subdev *sd,
 			     struct v4l2_subdev_state *state)
 {
-	struct v4l2_subdev_route routes[1] = {
+	struct v4l2_subdev_route routes[] = {
 		{
 			.sink_pad = IMX219_PAD_IMAGE,
 			.sink_stream = 0,
 			.source_pad = IMX219_PAD_SOURCE,
 			.source_stream = IMX219_STREAM_IMAGE,
+			.flags = V4L2_SUBDEV_ROUTE_FL_ACTIVE |
+				 V4L2_SUBDEV_ROUTE_FL_IMMUTABLE |
+				 V4L2_SUBDEV_ROUTE_FL_STATIC,
+		}, {
+			.sink_pad = IMX219_PAD_EDATA,
+			.sink_stream = 0,
+			.source_pad = IMX219_PAD_SOURCE,
+			.source_stream = IMX219_STREAM_EDATA,
 			.flags = V4L2_SUBDEV_ROUTE_FL_ACTIVE |
 				 V4L2_SUBDEV_ROUTE_FL_IMMUTABLE |
 				 V4L2_SUBDEV_ROUTE_FL_STATIC,
@@ -1171,6 +1281,11 @@ static int imx219_init_state(struct v4l2_subdev *sd,
 	struct v4l2_mbus_framefmt *source_format =
 		v4l2_subdev_state_get_format(state, IMX219_PAD_SOURCE,
 					     IMX219_STREAM_IMAGE);
+	struct v4l2_mbus_framefmt *embedded_format =
+		v4l2_subdev_state_get_format(state, IMX219_PAD_EDATA);
+	struct v4l2_mbus_framefmt *embedded_source_format =
+		v4l2_subdev_state_get_format(state, IMX219_PAD_SOURCE,
+					     IMX219_STREAM_EDATA);
 
 	/* The image pad models the pixel array, and thus has a fixed format. */
 	pixel_array_format->code = MEDIA_BUS_FMT_RAW_10;
@@ -1194,6 +1309,13 @@ static int imx219_init_state(struct v4l2_subdev *sd,
 	source_format->code = IMX219_NATIVE_FORMAT;
 	source_format->width = compose->width;
 	source_format->height = compose->height;
+
+	embedded_format->code = imx219_get_embedded_format_code(source_format);
+	embedded_format->width = source_format->width;
+	embedded_format->height = IMX219_EMBEDDED_DATA_HEIGHT;
+	embedded_format->field = V4L2_FIELD_NONE;
+
+	*embedded_source_format = *embedded_format;
 
 	return 0;
 }
@@ -1469,6 +1591,8 @@ static int imx219_probe(struct i2c_client *client)
 
 	imx219->pads[IMX219_PAD_SOURCE].flags = MEDIA_PAD_FL_SOURCE;
 	imx219->pads[IMX219_PAD_IMAGE].flags = MEDIA_PAD_FL_SINK
+					     | MEDIA_PAD_FL_INTERNAL;
+	imx219->pads[IMX219_PAD_EDATA].flags = MEDIA_PAD_FL_SINK
 					     | MEDIA_PAD_FL_INTERNAL;
 
 	ret = media_entity_pads_init(&imx219->sd.entity,
