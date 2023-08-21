@@ -98,7 +98,8 @@ static int amdgpu_vm_sdma_prepare(struct amdgpu_vm_update_params *p,
 		return 0;
 
 	amdgpu_sync_create(&sync);
-	r = amdgpu_sync_resv(p->adev, &sync, resv, sync_mode, sync_mode, p->vm);
+	r = amdgpu_sync_resv(p->adev, &sync, resv, sync_mode,
+				AMDGPU_SYNC_EXPLICIT, p->vm);
 	if (!r)
 		r = amdgpu_sync_push_to_job(&sync, p->job);
 	amdgpu_sync_free(&sync);
