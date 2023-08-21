@@ -2715,6 +2715,19 @@ static int task_is_throttled_dl(struct task_struct *p, int cpu)
 }
 #endif
 
+#ifdef CONFIG_NO_HZ_FULL
+static bool can_stop_tick_dl(struct rq *rq, int *stop_next)
+{
+	/* Deadline tasks, even if single, need the tick */
+	if (rq->dl.dl_nr_running) {
+		*stop_next = 1;
+		return false;
+	}
+
+	return true;
+}
+#endif
+
 DEFINE_SCHED_CLASS(dl) = {
 
 	.enqueue_task		= enqueue_task_dl,
@@ -2749,6 +2762,9 @@ DEFINE_SCHED_CLASS(dl) = {
 	.update_curr		= update_curr_dl,
 #ifdef CONFIG_SCHED_CORE
 	.task_is_throttled	= task_is_throttled_dl,
+#endif
+#ifdef CONFIG_NO_HZ_FULL
+	.can_stop_tick		= can_stop_tick_dl,
 #endif
 };
 

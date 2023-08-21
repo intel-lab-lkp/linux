@@ -1740,6 +1740,37 @@ static void check_preempt_curr_rt(struct rq *rq, struct task_struct *p, int flag
 #endif
 }
 
+#ifdef CONFIG_NO_HZ_FULL
+static bool can_stop_tick_rt(struct rq *rq, int *stop_next)
+{
+	int fifo_nr_running;
+
+	/*
+	 * If there are more than one RR tasks, we need the tick to affect the
+	 * actual RR behaviour.
+	 */
+	if (rq->rt.rr_nr_running) {
+		*stop_next = 1;
+		if (rq->rt.rr_nr_running == 1)
+			return true;
+		else
+			return false;
+	}
+
+	/*
+	 * If there's no RR tasks, but FIFO tasks, we can skip the tick, no
+	 * forced preemption between FIFO tasks.
+	 */
+	fifo_nr_running = rq->rt.rt_nr_running - rq->rt.rr_nr_running;
+	if (fifo_nr_running) {
+		*stop_next = 1;
+		return true;
+	}
+
+	return true;
+}
+#endif
+
 static inline void set_next_task_rt(struct rq *rq, struct task_struct *p, bool first)
 {
 	struct sched_rt_entity *rt_se = &p->rt;
@@ -2731,6 +2762,9 @@ DEFINE_SCHED_CLASS(rt) = {
 
 #ifdef CONFIG_SCHED_CORE
 	.task_is_throttled	= task_is_throttled_rt,
+#endif
+#ifdef CONFIG_NO_HZ_FULL
+	.can_stop_tick		= can_stop_tick_rt,
 #endif
 
 #ifdef CONFIG_UCLAMP_TASK

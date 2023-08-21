@@ -1191,68 +1191,21 @@ static void nohz_csd_func(void *info)
 #endif /* CONFIG_NO_HZ_COMMON */
 
 #ifdef CONFIG_NO_HZ_FULL
-static inline bool __need_bw_check(struct rq *rq, struct task_struct *p)
-{
-	if (rq->nr_running != 1)
-		return false;
-
-	if (p->sched_class != &fair_sched_class)
-		return false;
-
-	if (!task_on_rq_queued(p))
-		return false;
-
-	return true;
-}
-
 bool sched_can_stop_tick(struct rq *rq)
 {
-	int fifo_nr_running;
+	const struct sched_class *class;
+	int stop_next = 0;
+	bool ret = true;
 
-	/* Deadline tasks, even if single, need the tick */
-	if (rq->dl.dl_nr_running)
-		return false;
-
-	/*
-	 * If there are more than one RR tasks, we need the tick to affect the
-	 * actual RR behaviour.
-	 */
-	if (rq->rt.rr_nr_running) {
-		if (rq->rt.rr_nr_running == 1)
-			return true;
-		else
-			return false;
+	for_each_class(class) {
+		if (class->can_stop_tick) {
+			ret = class->can_stop_tick(rq, &stop_next);
+			if (stop_next)
+				break;
+		}
 	}
 
-	/*
-	 * If there's no RR tasks, but FIFO tasks, we can skip the tick, no
-	 * forced preemption between FIFO tasks.
-	 */
-	fifo_nr_running = rq->rt.rt_nr_running - rq->rt.rr_nr_running;
-	if (fifo_nr_running)
-		return true;
-
-	/*
-	 * If there are no DL,RR/FIFO tasks, there must only be CFS tasks left;
-	 * if there's more than one we need the tick for involuntary
-	 * preemption.
-	 */
-	if (rq->nr_running > 1)
-		return false;
-
-	/*
-	 * If there is one task and it has CFS runtime bandwidth constraints
-	 * and it's on the cpu now we don't want to stop the tick.
-	 * This check prevents clearing the bit if a newly enqueued task here is
-	 * dequeued by migrating while the constrained task continues to run.
-	 * E.g. going from 2->1 without going through pick_next_task().
-	 */
-	if (sched_feat(HZ_BW) && __need_bw_check(rq, rq->curr)) {
-		if (cfs_task_bw_constrained(rq->curr))
-			return false;
-	}
-
-	return true;
+	return ret;
 }
 #endif /* CONFIG_NO_HZ_FULL */
 #endif /* CONFIG_SMP */

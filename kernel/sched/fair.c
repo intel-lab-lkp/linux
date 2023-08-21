@@ -6266,7 +6266,8 @@ static void __maybe_unused unthrottle_offline_cfs_rqs(struct rq *rq)
 	rq_clock_stop_loop_update(rq);
 }
 
-bool cfs_task_bw_constrained(struct task_struct *p)
+#ifdef CONFIG_NO_HZ_FULL
+static inline bool cfs_task_bw_constrained(struct task_struct *p)
 {
 	struct cfs_rq *cfs_rq = task_cfs_rq(p);
 
@@ -6280,7 +6281,6 @@ bool cfs_task_bw_constrained(struct task_struct *p)
 	return false;
 }
 
-#ifdef CONFIG_NO_HZ_FULL
 /* called from pick_next_task_fair() */
 static void sched_fair_update_stop_tick(struct rq *rq, struct task_struct *p)
 {
@@ -6303,6 +6303,44 @@ static void sched_fair_update_stop_tick(struct rq *rq, struct task_struct *p)
 	 */
 	if (cfs_task_bw_constrained(p))
 		tick_nohz_dep_set_cpu(cpu, TICK_DEP_BIT_SCHED);
+}
+
+static inline bool __need_bw_check(struct rq *rq, struct task_struct *p)
+{
+	if (rq->nr_running != 1)
+		return false;
+
+	if (p->sched_class != &fair_sched_class)
+		return false;
+
+	if (!task_on_rq_queued(p))
+		return false;
+
+	return true;
+}
+
+static bool can_stop_tick_fair(struct rq *rq, int *stop_next)
+{
+	if (rq->nr_running > 1) {
+		*stop_next = 1;
+		return false;
+	}
+
+	/*
+	 * If there is one task and it has CFS runtime bandwidth constraints
+	 * and it's on the cpu now we don't want to stop the tick.
+	 * This check prevents clearing the bit if a newly enqueued task here is
+	 * dequeued by migrating while the constrained task continues to run.
+	 * E.g. going from 2->1 without going through pick_next_task().
+	 */
+	if (sched_feat(HZ_BW) && __need_bw_check(rq, rq->curr)) {
+		if (cfs_task_bw_constrained(rq->curr)) {
+			*stop_next = 1;
+			return false;
+		}
+	}
+
+	return true;
 }
 #endif
 
@@ -6348,10 +6386,15 @@ static inline struct cfs_bandwidth *tg_cfs_bandwidth(struct task_group *tg)
 static inline void destroy_cfs_bandwidth(struct cfs_bandwidth *cfs_b) {}
 static inline void update_runtime_enabled(struct rq *rq) {}
 static inline void unthrottle_offline_cfs_rqs(struct rq *rq) {}
-#ifdef CONFIG_CGROUP_SCHED
-bool cfs_task_bw_constrained(struct task_struct *p)
+#ifdef CONFIG_NO_HZ_FULL
+static bool can_stop_tick_fair(struct rq *rq, int *stop_next)
 {
-	return false;
+	if (rq->nr_running > 1) {
+		*stop_next = 1;
+		return false;
+	}
+
+	return true;
 }
 #endif
 #endif /* CONFIG_CFS_BANDWIDTH */
@@ -12863,6 +12906,9 @@ DEFINE_SCHED_CLASS(fair) = {
 
 #ifdef CONFIG_SCHED_CORE
 	.task_is_throttled	= task_is_throttled_fair,
+#endif
+#ifdef CONFIG_NO_HZ_FULL
+	.can_stop_tick		= can_stop_tick_fair,
 #endif
 
 #ifdef CONFIG_UCLAMP_TASK
