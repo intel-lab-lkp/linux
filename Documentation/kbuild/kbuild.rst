@@ -296,7 +296,14 @@ KBUILD_BUILD_TIMESTAMP
 Setting this to a date string overrides the timestamp used in the
 UTS_VERSION definition (uname -v in the running kernel). The value has to
 be a string that can be passed to date -d. The default value
-is the output of the date command at one point during build.
+is the output of the date command at one point during build. E.g.::
+
+    $ make KBUILD_BUILD_TIMESTAMP="1991-08-25"
+
+By default, the value is interpreted as UTC. To override this, append
+the desired timezone. E.g.::
+
+    $ make KBUILD_BUILD_TIMESTAMP="1991-08-25 UTC+03:00"
 
 KBUILD_BUILD_USER, KBUILD_BUILD_HOST
 ------------------------------------
