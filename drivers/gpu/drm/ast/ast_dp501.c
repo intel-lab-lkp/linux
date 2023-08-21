@@ -224,8 +224,10 @@ static bool ast_launch_m68k(struct drm_device *dev)
 			    ast_load_dp501_microcode(dev) < 0)
 				return false;
 
-			fw_addr = (u8 *)ast->dp501_fw->data;
-			len = ast->dp501_fw->size;
+			if (ast->dp501_fw) {
+				fw_addr = (u8 *)ast->dp501_fw->data;
+				len = ast->dp501_fw->size;
+			}
 		}
 		/* Get BootAddress */
 		ast_moutdwm(ast, 0x1e6e2000, 0x1688a8a8);
