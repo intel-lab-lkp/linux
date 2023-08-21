@@ -3676,12 +3676,13 @@ int kvm_set_msr_common(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 		if (!msr_info->host_initiated && !guest_has_pred_cmd_msr(vcpu))
 			return 1;
 
-		if (!boot_cpu_has(X86_FEATURE_IBPB) || (data & ~PRED_CMD_IBPB))
+		if (boot_cpu_has(X86_FEATURE_IBPB) && data == PRED_CMD_IBPB)
+			wrmsrl(MSR_IA32_PRED_CMD, PRED_CMD_IBPB);
+		else if (boot_cpu_has(X86_FEATURE_SBPB) && data == PRED_CMD_SBPB)
+			wrmsrl(MSR_IA32_PRED_CMD, PRED_CMD_SBPB);
+		else if (data)
 			return 1;
-		if (!data)
-			break;
 
-		wrmsrl(MSR_IA32_PRED_CMD, PRED_CMD_IBPB);
 		break;
 	case MSR_IA32_FLUSH_CMD:
 		if (!msr_info->host_initiated &&
