@@ -11,11 +11,11 @@ maintainers:
 
 description: |
   This interrupt controller is found in the Loongson-3 family of chips and
-  Loongson-2K1000 chip, as the primary package interrupt controller which
+  Loongson-2K series chips, as the primary package interrupt controller which
   can route local I/O interrupt to interrupt lines of cores.
-
-allOf:
-  - $ref: /schemas/interrupt-controller.yaml#
+  In particular, the Loongson-2K1000/2K0500 has 64 interrupt sources that we
+  need to describe with two dts nodes. One for interrupt sources "0-31" and
+  the other for interrupt sources "32-63".
 
 properties:
   compatible:
@@ -24,15 +24,9 @@ properties:
       - loongson,liointc-1.0a
       - loongson,liointc-2.0
 
-  reg:
-    minItems: 1
-    maxItems: 3
+  reg: true
 
-  reg-names:
-    items:
-      - const: main
-      - const: isr0
-      - const: isr1
+  reg-names: true
 
   interrupt-controller: true
 
@@ -45,11 +39,9 @@ properties:
   interrupt-names:
     description: List of names for the parent interrupts.
     items:
-      - const: int0
-      - const: int1
-      - const: int2
-      - const: int3
+      pattern: int[0-3]
     minItems: 1
+    maxItems: 4
 
   '#interrupt-cells':
     const: 2
@@ -69,32 +61,41 @@ required:
   - compatible
   - reg
   - interrupts
+  - interrupt-names
   - interrupt-controller
   - '#interrupt-cells'
   - loongson,parent_int_map
 
-
 unevaluatedProperties: false
 
-if:
-  properties:
-    compatible:
-      contains:
-        enum:
-          - loongson,liointc-2.0
-
-then:
-  properties:
-    reg:
-      minItems: 3
-
-  required:
-    - reg-names
-
-else:
-  properties:
-    reg:
-      maxItems: 1
+allOf:
+  - $ref: /schemas/interrupt-controller.yaml#
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - loongson,liointc-2.0
+    then:
+      properties:
+        reg:
+          minItems: 2
+          items:
+            - description: Interrupt routing registers.
+            - description: Low/high 32-bit interrupt status routed to core0.
+            - description: Low/high 32-bit interrupt status routed to core1.
+        reg-names:
+          minItems: 2
+          items:
+            - const: main
+            - const: isr0
+            - const: isr1
+      required:
+        - reg-names
+    else:
+      properties:
+        reg:
+          maxItems: 1
 
 examples:
   - |
@@ -113,7 +114,6 @@ examples:
                                 <0x0f000000>, /* int1 */
                                 <0x00000000>, /* int2 */
                                 <0x00000000>; /* int3 */
-
     };
 
 ...
