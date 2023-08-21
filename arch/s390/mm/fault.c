@@ -357,16 +357,18 @@ static noinline void do_fault_error(struct pt_regs *regs, vm_fault_t fault)
 static inline vm_fault_t do_exception(struct pt_regs *regs, int access)
 {
 	struct gmap *gmap;
-	struct task_struct *tsk;
-	struct mm_struct *mm;
 	struct vm_area_struct *vma;
 	enum fault_type type;
-	unsigned long address;
-	unsigned int flags;
+	struct mm_struct *mm = current->mm;
+	unsigned long address = get_fault_address(regs);
 	vm_fault_t fault;
 	bool is_write;
+	struct vm_fault vmf = {
+		.real_address = address,
+		.flags = FAULT_FLAG_DEFAULT,
+		.vm_flags = access,
+	};
 
-	tsk = current;
 	/*
 	 * The instruction that caused the program check has
 	 * been nullified. Don't signal single step via SIGTRAP.
@@ -376,8 +378,6 @@ static inline vm_fault_t do_exception(struct pt_regs *regs, int access)
 	if (kprobe_page_fault(regs, 14))
 		return 0;
 
-	mm = tsk->mm;
-	address = get_fault_address(regs);
 	is_write = fault_is_write(regs);
 
 	/*
@@ -398,45 +398,33 @@ static inline vm_fault_t do_exception(struct pt_regs *regs, int access)
 	}
 
 	perf_sw_event(PERF_COUNT_SW_PAGE_FAULTS, 1, regs, address);
-	flags = FAULT_FLAG_DEFAULT;
 	if (user_mode(regs))
-		flags |= FAULT_FLAG_USER;
+		vmf.flags |= FAULT_FLAG_USER;
 	if (is_write)
-		access = VM_WRITE;
-	if (access == VM_WRITE)
-		flags |= FAULT_FLAG_WRITE;
-	if (!(flags & FAULT_FLAG_USER))
-		goto lock_mmap;
-	vma = lock_vma_under_rcu(mm, address);
-	if (!vma)
-		goto lock_mmap;
-	if (!(vma->vm_flags & access)) {
-		vma_end_read(vma);
-		goto lock_mmap;
-	}
-	fault = handle_mm_fault(vma, address, flags | FAULT_FLAG_VMA_LOCK, regs);
-	if (!(fault & (VM_FAULT_RETRY | VM_FAULT_COMPLETED)))
-		vma_end_read(vma);
-	if (!(fault & VM_FAULT_RETRY)) {
-		count_vm_vma_lock_event(VMA_LOCK_SUCCESS);
-		if (likely(!(fault & VM_FAULT_ERROR)))
-			fault = 0;
+		vmf.vm_flags = VM_WRITE;
+	if (vmf.vm_flags == VM_WRITE)
+		vmf.flags |= FAULT_FLAG_WRITE;
+
+	fault = try_vma_locked_page_fault(&vmf);
+	if (fault == VM_FAULT_NONE)
+		goto lock_mm;
+	if (!(fault & VM_FAULT_RETRY))
 		goto out;
-	}
-	count_vm_vma_lock_event(VMA_LOCK_RETRY);
+
 	/* Quick path to respond to signals */
 	if (fault_signal_pending(fault, regs)) {
 		fault = VM_FAULT_SIGNAL;
 		goto out;
 	}
-lock_mmap:
+
+lock_mm:
 	mmap_read_lock(mm);
 
 	gmap = NULL;
 	if (IS_ENABLED(CONFIG_PGSTE) && type == GMAP_FAULT) {
 		gmap = (struct gmap *) S390_lowcore.gmap;
 		current->thread.gmap_addr = address;
-		current->thread.gmap_write_flag = !!(flags & FAULT_FLAG_WRITE);
+		current->thread.gmap_write_flag = !!(vmf.flags & FAULT_FLAG_WRITE);
 		current->thread.gmap_int_code = regs->int_code & 0xffff;
 		address = __gmap_translate(gmap, address);
 		if (address == -EFAULT) {
@@ -444,7 +432,7 @@ lock_mmap:
 			goto out_up;
 		}
 		if (gmap->pfault_enabled)
-			flags |= FAULT_FLAG_RETRY_NOWAIT;
+			vmf.flags |= FAULT_FLAG_RETRY_NOWAIT;
 	}
 
 retry:
@@ -466,7 +454,7 @@ retry:
 	 * we can handle it..
 	 */
 	fault = VM_FAULT_BADACCESS;
-	if (unlikely(!(vma->vm_flags & access)))
+	if (unlikely(!(vma->vm_flags & vmf.vm_flags)))
 		goto out_up;
 
 	/*
@@ -474,10 +462,10 @@ retry:
 	 * make sure we exit gracefully rather than endlessly redo
 	 * the fault.
 	 */
-	fault = handle_mm_fault(vma, address, flags, regs);
+	fault = handle_mm_fault(vma, address, vmf.flags, regs);
 	if (fault_signal_pending(fault, regs)) {
 		fault = VM_FAULT_SIGNAL;
-		if (flags & FAULT_FLAG_RETRY_NOWAIT)
+		if (vmf.flags & FAULT_FLAG_RETRY_NOWAIT)
 			goto out_up;
 		goto out;
 	}
@@ -497,7 +485,7 @@ retry:
 
 	if (fault & VM_FAULT_RETRY) {
 		if (IS_ENABLED(CONFIG_PGSTE) && gmap &&
-			(flags & FAULT_FLAG_RETRY_NOWAIT)) {
+			(vmf.flags & FAULT_FLAG_RETRY_NOWAIT)) {
 			/*
 			 * FAULT_FLAG_RETRY_NOWAIT has been set, mmap_lock has
 			 * not been released
@@ -506,8 +494,8 @@ retry:
 			fault = VM_FAULT_PFAULT;
 			goto out_up;
 		}
-		flags &= ~FAULT_FLAG_RETRY_NOWAIT;
-		flags |= FAULT_FLAG_TRIED;
+		vmf.flags &= ~FAULT_FLAG_RETRY_NOWAIT;
+		vmf.flags |= FAULT_FLAG_TRIED;
 		mmap_read_lock(mm);
 		goto retry;
 	}
