@@ -19,7 +19,7 @@ properties:
 
   leds:
     description:
-      An aray of monochromatic leds
+      An array of monochromatic LEDs
     $ref: /schemas/types.yaml#/definitions/phandle-array
 
 required:

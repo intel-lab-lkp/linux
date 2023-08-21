@@ -155,7 +155,7 @@ properties:
       SOCTHERM hardware will assert the thermal trigger signal to the Power
       Management IC, which can be configured to reset or shutdown the device.
       It is an array of pairs where each pair represents a tsensor ID followed
-      by a temperature in milli Celcius. In the absence of this property the
+      by a temperature in milli Celsius. In the absence of this property the
       critical trip point will be used for thermtrip temperature.
 
       Note:
