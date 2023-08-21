@@ -350,11 +350,11 @@ static inline void __x86_return_thunk(void) {}
 
 extern void retbleed_return_thunk(void);
 extern void srso_return_thunk(void);
-extern void srso_alias_return_thunk(void);
+extern void srso_fam19_return_thunk(void);
 
 extern void retbleed_untrain_ret(void);
 extern void srso_untrain_ret(void);
-extern void srso_alias_untrain_ret(void);
+extern void srso_fam19_untrain_ret(void);
 
 extern void entry_untrain_ret(void);
 extern void entry_ibpb(void);
