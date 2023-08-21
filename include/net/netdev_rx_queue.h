@@ -21,6 +21,9 @@ struct netdev_rx_queue {
 #ifdef CONFIG_XDP_SOCKETS
 	struct xsk_buff_pool            *pool;
 #endif
+	struct list_head		q_list;
+	/* NAPI instance for the queue */
+	struct napi_struct		*napi;
 } ____cacheline_aligned_in_smp;
 
 /*

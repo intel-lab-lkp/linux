@@ -6391,6 +6391,42 @@ int dev_set_threaded(struct net_device *dev, bool threaded)
 }
 EXPORT_SYMBOL(dev_set_threaded);
 
+/**
+ * netif_napi_add_queue - Associate queue with the napi
+ * @napi: NAPI context
+ * @queue_index: Index of queue
+ * @type: queue type as RX or TX
+ *
+ * Add queue with its corresponding napi context
+ */
+int netif_napi_add_queue(struct napi_struct *napi, unsigned int queue_index,
+			 enum q_type type)
+{
+	struct net_device *dev = napi->dev;
+	struct netdev_rx_queue *rxq;
+	struct netdev_queue *txq;
+
+	if (!dev)
+		return -EINVAL;
+
+	switch (type) {
+	case QUEUE_RX:
+		rxq = __netif_get_rx_queue(dev, queue_index);
+		rxq->napi = napi;
+		list_add_rcu(&rxq->q_list, &napi->napi_rxq_list);
+		break;
+	case QUEUE_TX:
+		txq = netdev_get_tx_queue(dev, queue_index);
+		txq->napi = napi;
+		list_add_rcu(&txq->q_list, &napi->napi_txq_list);
+		break;
+	default:
+		return -EINVAL;
+	}
+	return 0;
+}
+EXPORT_SYMBOL(netif_napi_add_queue);
+
 void netif_napi_add_weight(struct net_device *dev, struct napi_struct *napi,
 			   int (*poll)(struct napi_struct *, int), int weight)
 {
@@ -6426,6 +6462,9 @@ void netif_napi_add_weight(struct net_device *dev, struct napi_struct *napi,
 	 */
 	if (dev->threaded && napi_kthread_create(napi))
 		dev->threaded = 0;
+
+	INIT_LIST_HEAD(&napi->napi_rxq_list);
+	INIT_LIST_HEAD(&napi->napi_txq_list);
 }
 EXPORT_SYMBOL(netif_napi_add_weight);
 
@@ -6487,6 +6526,18 @@ static void flush_gro_hash(struct napi_struct *napi)
 	}
 }
 
+static void napi_del_queues(struct napi_struct *napi)
+{
+	struct netdev_rx_queue *rx_queue, *rxq;
+	struct netdev_queue *tx_queue, *txq;
+
+	list_for_each_entry_safe(rx_queue, rxq, &napi->napi_rxq_list, q_list)
+		list_del_rcu(&rx_queue->q_list);
+
+	list_for_each_entry_safe(tx_queue, txq, &napi->napi_txq_list, q_list)
+		list_del_rcu(&tx_queue->q_list);
+}
+
 /* Must be called in process context */
 void __netif_napi_del(struct napi_struct *napi)
 {
@@ -6504,6 +6555,7 @@ void __netif_napi_del(struct napi_struct *napi)
 		kthread_stop(napi->thread);
 		napi->thread = NULL;
 	}
+	napi_del_queues(napi);
 }
 EXPORT_SYMBOL(__netif_napi_del);
 

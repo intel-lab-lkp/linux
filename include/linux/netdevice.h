@@ -347,6 +347,14 @@ struct gro_list {
 #define GRO_HASH_BUCKETS	8
 
 /*
+ * napi queue container type
+ */
+enum q_type {
+	QUEUE_RX,
+	QUEUE_TX,
+};
+
+/*
  * Structure for NAPI scheduling similar to tasklet but with weighting
  */
 struct napi_struct {
@@ -380,6 +388,8 @@ struct napi_struct {
 	/* control-path-only fields follow */
 	struct list_head	dev_list;
 	struct hlist_node	napi_hash_node;
+	struct list_head	napi_rxq_list;
+	struct list_head	napi_txq_list;
 };
 
 enum {
@@ -655,6 +665,9 @@ struct netdev_queue {
 
 	unsigned long		state;
 
+	/* NAPI instance for the queue */
+	struct napi_struct      *napi;
+	struct list_head        q_list;
 #ifdef CONFIG_BQL
 	struct dql		dql;
 #endif
@@ -2608,6 +2621,9 @@ static inline void *netdev_priv(const struct net_device *dev)
  * example Ethernet, Wireless LAN, Bluetooth, WiMAX etc.
  */
 #define SET_NETDEV_DEVTYPE(net, devtype)	((net)->dev.type = (devtype))
+
+int netif_napi_add_queue(struct napi_struct *napi, unsigned int queue_index,
+			 enum q_type type);
 
 /* Default NAPI poll() weight
  * Device drivers are strongly advised to not use bigger value
