@@ -1676,6 +1676,29 @@ static u64 kvm_get_arch_capabilities(void)
 	return data;
 }
 
+
+static u64 kvm_get_msr_platform_info(void)
+{
+	u64 msr_platform_info = 0;
+
+	rdmsrl_safe(MSR_PLATFORM_INFO, &msr_platform_info);
+	/*
+	 * MSR_PLATFORM_INFO bits:
+	 * bit 15:8, Maximum Non-Turbo Ratio (MAX_NON_TURBO_LIM_RATIO)
+	 * bit 31, CPUID Faulting Enabled (CPUID_FAULTING_EN)
+	 * bit 47:40, Maximum Efficiency Ratio (MAX_EFFICIENCY_RATIO)
+	 *
+	 * Emulate part msr bits, expose above msr info to guest,
+	 * to make sure guest can get correct turbo frequency info.
+	 */
+
+	msr_platform_info &= (MSR_PLATFORM_INFO_MAX_NON_TURBO_LIM_RATIO |
+			MSR_PLATFORM_INFO_MAX_EFFICIENCY_RATIO);
+	msr_platform_info |= MSR_PLATFORM_INFO_CPUID_FAULT;
+
+	return msr_platform_info;
+}
+
 static int kvm_get_msr_feature(struct kvm_msr_entry *msr)
 {
 	switch (msr->index) {
@@ -11916,7 +11939,7 @@ int kvm_arch_vcpu_create(struct kvm_vcpu *vcpu)
 		goto free_guest_fpu;
 
 	vcpu->arch.arch_capabilities = kvm_get_arch_capabilities();
-	vcpu->arch.msr_platform_info = MSR_PLATFORM_INFO_CPUID_FAULT;
+	vcpu->arch.msr_platform_info = kvm_get_msr_platform_info();
 	kvm_xen_init_vcpu(vcpu);
 	kvm_vcpu_mtrr_init(vcpu);
 	vcpu_load(vcpu);
