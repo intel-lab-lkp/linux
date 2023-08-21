@@ -1,0 +1,24 @@
+drm drm-fixes 706a741595047797872e669b3101429ab8d378ef
+	Linux 6.5-rc7
+drm-misc drm-misc-fixes f19df6e4de64b7fc6d71f192aa9ff3b701e4bade
+	drm/panfrost: Skip speed binning on EOPNOTSUPP
+drm-intel drm-intel-fixes 706a741595047797872e669b3101429ab8d378ef
+	Linux 6.5-rc7
+drm drm-next cacaeb27ade4b793c456179bb6eda4592d206cd8
+	Merge tag 'amd-drm-next-6.6-2023-08-18' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm-misc drm-misc-next-fixes ff065eaf5502384c0d0a3bd3a9459eb5eb0811e1
+	drm/ttm/tests: Require MMU when testing
+drm-intel drm-intel-next-fixes cacaeb27ade4b793c456179bb6eda4592d206cd8
+	Merge tag 'amd-drm-next-6.6-2023-08-18' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm-misc drm-misc-next d7a407bc9ba30628eb699170e21d50c701c0e872
+	drm/panfrost: Do not check for 0 return after calling platform_get_irq_byname()
+drm-intel drm-intel-next 7adfec8c3374faa6b31da34220bd885b3b970903
+	drm/i915/dp: Check if force_dsc_output_format is possible
+drm-intel drm-intel-gt-next c9517783060ad09968cef884e712907c70d7a658
+	drm/i915/dg2: Drop Wa_16011777198
+drm-intel topic/core-for-CI c0ea2fa0491287dea97b384bec1b5a614408b8e3
+	drm/i915/gsc: define gsc fw
+drm-misc topic/i915-ttm 1e3944578b749449bd7fa6bf0bae4c3d3f5f1733
+	Merge tag 'amd-drm-next-5.16-2021-09-27' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm topic/nouveau-misc dfc4005f8c172eea359f9db08c3b2b0ff0153699
+	drm/nouveau/disp: move DAC load detection method
