@@ -2407,7 +2407,7 @@ static void __init srso_select_mitigation(void)
 	bool has_microcode = boot_cpu_has(X86_FEATURE_IBPB_BRTYPE);
 
 	if (!boot_cpu_has_bug(X86_BUG_SRSO) || cpu_mitigations_off())
-		goto pred_cmd;
+		goto out;
 
 	if (!has_microcode) {
 		pr_warn("IBPB-extending microcode not applied!\n");
@@ -2419,7 +2419,7 @@ static void __init srso_select_mitigation(void)
 		 */
 		if (boot_cpu_data.x86 < 0x19 && !cpu_smt_possible()) {
 			setup_force_cpu_cap(X86_FEATURE_SRSO_NO);
-			return;
+			goto out;
 		}
 	}
 
@@ -2427,13 +2427,13 @@ static void __init srso_select_mitigation(void)
 		if (has_microcode) {
 			pr_info("Retbleed IBPB mitigation enabled, using same for SRSO\n");
 			srso_mitigation = SRSO_MITIGATION_IBPB;
-			goto pred_cmd;
+			goto out;
 		}
 	}
 
 	switch (srso_cmd) {
 	case SRSO_CMD_OFF:
-		goto pred_cmd;
+		goto out;
 
 	case SRSO_CMD_MICROCODE:
 		if (has_microcode) {
@@ -2489,7 +2489,7 @@ static void __init srso_select_mitigation(void)
 
 	pr_info("%s%s\n", srso_strings[srso_mitigation], (has_microcode ? "" : ", no microcode"));
 
-pred_cmd:
+out:
 	if (boot_cpu_has(X86_FEATURE_SBPB) && srso_mitigation == SRSO_MITIGATION_NONE)
 		x86_pred_cmd = PRED_CMD_SBPB;
 }
