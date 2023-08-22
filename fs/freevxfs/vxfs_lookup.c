@@ -177,12 +177,11 @@ vxfs_lookup(struct inode *dip, struct dentry *dp, unsigned int flags)
 /**
  * vxfs_readdir - read a directory
  * @fp:		the directory to read
- * @retp:	return buffer
- * @filler:	filldir callback
+ * @ctx:	Dir context
  *
  * Description:
- *   vxfs_readdir fills @retp with directory entries from @fp
- *   using the VFS supplied callback @filler.
+ *   vxfs_readdir emits directory entries from @fp using the
+ *   VFS supplied @ctx.
  *
  * Returns:
  *   Zero.
