@@ -609,13 +609,17 @@ static inline bool can_reclaim_anon_pages(struct mem_cgroup *memcg,
 	if (memcg == NULL) {
 		/*
 		 * For non-memcg reclaim, is there
-		 * space in any swap device?
+		 * space in any swap device or swapcache pages?
 		 */
-		if (get_nr_swap_pages() > 0)
+		if (get_nr_swap_pages() + total_swapcache_pages() > 0)
 			return true;
 	} else {
-		/* Is the memcg below its swap limit? */
-		if (mem_cgroup_get_nr_swap_pages(memcg) > 0)
+		/*
+		 * Is the memcg below its swap limit or is there swapcache
+		 * pages can be freed?
+		 */
+		if (mem_cgroup_get_nr_swap_pages(memcg) +
+		    mem_cgroup_get_nr_swapcache_pages(memcg) > 0)
 			return true;
 	}
 
