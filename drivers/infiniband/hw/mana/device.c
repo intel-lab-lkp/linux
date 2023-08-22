@@ -78,22 +78,34 @@ static int mana_ib_probe(struct auxiliary_device *adev,
 	mib_dev->ib_dev.num_comp_vectors = 1;
 	mib_dev->ib_dev.dev.parent = mdev->gdma_context->dev;
 
+	ret = mana_gd_register_device(&mib_dev->gc->mana_ib);
+	if (ret) {
+		ibdev_err(&mib_dev->ib_dev, "Failed to register device, ret %d",
+			  ret);
+		goto free_ib_device;
+	}
+
 	ret = ib_register_device(&mib_dev->ib_dev, "mana_%d",
 				 mdev->gdma_context->dev);
-	if (ret) {
-		ib_dealloc_device(&mib_dev->ib_dev);
-		return ret;
-	}
+	if (ret)
+		goto deregister_device;
 
 	dev_set_drvdata(&adev->dev, mib_dev);
 
 	return 0;
+
+deregister_device:
+	mana_gd_deregister_device(&mib_dev->gc->mana_ib);
+free_ib_device:
+	ib_dealloc_device(&mib_dev->ib_dev);
+	return ret;
 }
 
 static void mana_ib_remove(struct auxiliary_device *adev)
 {
 	struct mana_ib_dev *mib_dev = dev_get_drvdata(&adev->dev);
 
+	mana_gd_deregister_device(&mib_dev->gc->mana_ib);
 	ib_unregister_device(&mib_dev->ib_dev);
 	ib_dealloc_device(&mib_dev->ib_dev);
 }
