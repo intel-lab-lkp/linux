@@ -103,8 +103,8 @@ void controller_handler(const double xk, double *yk)
 	/* compute output */
 	*yk += p_term + i_term + d_term;
 	/* update sample data */
-	xk_1 = xk;
 	xk_2 = xk_1;
+	xk_1 = xk;
 
 	/* clamp output adjustment range */
 	if (*yk < -LIMIT_HIGH)
