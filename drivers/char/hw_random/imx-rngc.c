@@ -17,6 +17,7 @@
 #include <linux/hw_random.h>
 #include <linux/completion.h>
 #include <linux/io.h>
+#include <linux/iopoll.h>
 #include <linux/bitfield.h>
 
 #define RNGC_VER_ID			0x0000
@@ -101,21 +102,19 @@ static inline void imx_rngc_irq_unmask(struct imx_rngc *rngc)
 
 static int imx_rngc_self_test(struct imx_rngc *rngc)
 {
-	u32 cmd;
+	u32 cmd, status;
 	int ret;
-
-	imx_rngc_irq_unmask(rngc);
 
 	/* run self test */
 	cmd = readl(rngc->base + RNGC_COMMAND);
 	writel(cmd | RNGC_CMD_SELF_TEST, rngc->base + RNGC_COMMAND);
 
-	ret = wait_for_completion_timeout(&rngc->rng_op_done, msecs_to_jiffies(RNGC_TIMEOUT));
-	imx_rngc_irq_mask_clear(rngc);
-	if (!ret)
-		return -ETIMEDOUT;
+	ret = readl_poll_timeout(rngc->base + RNGC_STATUS, status,
+				 status & RNGC_STATUS_ST_DONE, 1000, RNGC_TIMEOUT * 1000);
+	if (ret < 0)
+		return ret;
 
-	return rngc->err_reg ? -EIO : 0;
+	return readl(rngc->base + RNGC_ERROR) ? -EIO : 0;
 }
 
 static int imx_rngc_read(struct hwrng *rng, void *data, size_t max, bool wait)
