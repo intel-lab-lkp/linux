@@ -219,6 +219,7 @@ struct xcan_devtype_data {
  * @transceiver:		Optional pointer to associated CAN transceiver
  * @rstc:			Pointer to reset control
  * @ecc_enable:			ECC enable flag
+ * @stats_lock:			Lock for synchronizing hardware stats
  * @ecc_2bit_rxfifo_cnt:	RXFIFO 2bit ECC count
  * @ecc_1bit_rxfifo_cnt:	RXFIFO 1bit ECC count
  * @ecc_2bit_txolfifo_cnt:	TXOLFIFO 2bit ECC count
@@ -245,6 +246,7 @@ struct xcan_priv {
 	struct phy *transceiver;
 	struct reset_control *rstc;
 	bool ecc_enable;
+	spinlock_t stats_lock; /* Lock for synchronizing hardware stats */
 	u64 ecc_2bit_rxfifo_cnt;
 	u64 ecc_1bit_rxfifo_cnt;
 	u64 ecc_2bit_txolfifo_cnt;
@@ -1164,6 +1166,9 @@ static void xcan_err_interrupt(struct net_device *ndev, u32 isr)
 
 	if (priv->ecc_enable) {
 		u32 reg_ecc;
+		unsigned long flags;
+
+		spin_lock_irqsave(&priv->stats_lock, flags);
 
 		reg_ecc = priv->read_reg(priv, XCAN_RXFIFO_ECC_OFFSET);
 		if (isr & XCAN_IXR_E2BERX_MASK) {
@@ -1212,6 +1217,8 @@ static void xcan_err_interrupt(struct net_device *ndev, u32 isr)
 		 */
 		priv->write_reg(priv, XCAN_ECC_CFG_OFFSET, XCAN_ECC_CFG_REECRX_MASK |
 				XCAN_ECC_CFG_REECTXOL_MASK | XCAN_ECC_CFG_REECTXTL_MASK);
+
+		spin_unlock_irqrestore(&priv->stats_lock, flags);
 	}
 
 	if (cf.can_id) {
@@ -1639,6 +1646,23 @@ static int xcan_get_auto_tdcv(const struct net_device *ndev, u32 *tdcv)
 	return 0;
 }
 
+static void ethtool_get_ethtool_stats(struct net_device *ndev,
+				      struct ethtool_stats *stats, u64 *data)
+{
+	struct xcan_priv *priv = netdev_priv(ndev);
+	unsigned long flags;
+	int i = 0;
+
+	spin_lock_irqsave(&priv->stats_lock, flags);
+	data[i++] = priv->ecc_2bit_rxfifo_cnt;
+	data[i++] = priv->ecc_1bit_rxfifo_cnt;
+	data[i++] = priv->ecc_2bit_txolfifo_cnt;
+	data[i++] = priv->ecc_1bit_txolfifo_cnt;
+	data[i++] = priv->ecc_2bit_txtlfifo_cnt;
+	data[i++] = priv->ecc_1bit_txtlfifo_cnt;
+	spin_unlock_irqrestore(&priv->stats_lock, flags);
+}
+
 static const struct net_device_ops xcan_netdev_ops = {
 	.ndo_open	= xcan_open,
 	.ndo_stop	= xcan_close,
@@ -1648,6 +1672,7 @@ static const struct net_device_ops xcan_netdev_ops = {
 
 static const struct ethtool_ops xcan_ethtool_ops = {
 	.get_ts_info = ethtool_op_get_ts_info,
+	.get_ethtool_stats = ethtool_get_ethtool_stats,
 };
 
 /**
