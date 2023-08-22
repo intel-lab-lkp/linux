@@ -57,6 +57,10 @@ enum gdma_eqe_type {
 	GDMA_EQE_HWC_INIT_EQ_ID_DB	= 129,
 	GDMA_EQE_HWC_INIT_DATA		= 130,
 	GDMA_EQE_HWC_INIT_DONE		= 131,
+
+	/* IB NiC  Events start at 176*/
+	GDMA_EQE_SOC_EVENT_NOTIFICATION = 176,
+	GDMA_EQE_SOC_EVENT_TEST,
 };
 
 enum {
@@ -291,6 +295,7 @@ struct gdma_queue {
 
 	u32 head;
 	u32 tail;
+	struct list_head entry;
 
 	/* Extra fields specific to EQ/CQ. */
 	union {
@@ -318,6 +323,8 @@ struct gdma_queue_spec {
 	enum gdma_queue_type type;
 	bool monitor_avl_buf;
 	unsigned int queue_size;
+	u32 doorbell;
+	u32 pdid;
 
 	/* Extra fields specific to EQ/CQ. */
 	union {
@@ -326,6 +333,8 @@ struct gdma_queue_spec {
 			void *context;
 
 			unsigned long log2_throttle_limit;
+			bool msix_allocated;
+			unsigned int msix_index;
 		} eq;
 
 		struct {
@@ -341,8 +350,8 @@ struct gdma_queue_spec {
 #define MANA_IRQ_NAME_SZ 32
 
 struct gdma_irq_context {
-	void (*handler)(void *arg);
-	void *arg;
+	void (*handler)(struct list_head *arg);
+	struct list_head eq_list;
 	char name[MANA_IRQ_NAME_SZ];
 };
 

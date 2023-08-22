@@ -68,7 +68,7 @@ static int mana_ib_probe(struct auxiliary_device *adev,
 	ibdev_dbg(&mib_dev->ib_dev, "mdev=%p id=%d num_ports=%d\n", mdev,
 		  mdev->dev_id.as_uint32, mib_dev->ib_dev.phys_port_cnt);
 
-	mib_dev->gdma_dev = mdev;
+	mib_dev->gc = mdev->gdma_context;
 	mib_dev->ib_dev.node_type = RDMA_NODE_IB_CA;
 
 	/*
@@ -85,15 +85,31 @@ static int mana_ib_probe(struct auxiliary_device *adev,
 		goto free_ib_device;
 	}
 
+	ret = mana_ib_create_error_eq(mib_dev);
+	if (ret) {
+		ibdev_err(&mib_dev->ib_dev, "Failed to allocate err eq");
+		goto deregister_device;
+	}
+
+	ret = mana_ib_create_adapter(mib_dev);
+	if (ret) {
+		ibdev_err(&mib_dev->ib_dev, "Failed to create adapter");
+		goto free_error_eq;
+	}
+
 	ret = ib_register_device(&mib_dev->ib_dev, "mana_%d",
 				 mdev->gdma_context->dev);
 	if (ret)
-		goto deregister_device;
+		goto destroy_adapter;
 
 	dev_set_drvdata(&adev->dev, mib_dev);
 
 	return 0;
 
+destroy_adapter:
+	mana_ib_destroy_adapter(mib_dev);
+free_error_eq:
+	mana_gd_destroy_queue(mib_dev->gc, mib_dev->fatal_err_eq);
 deregister_device:
 	mana_gd_deregister_device(&mib_dev->gc->mana_ib);
 free_ib_device:
@@ -105,6 +121,8 @@ static void mana_ib_remove(struct auxiliary_device *adev)
 {
 	struct mana_ib_dev *mib_dev = dev_get_drvdata(&adev->dev);
 
+	mana_gd_destroy_queue(mib_dev->gc, mib_dev->fatal_err_eq);
+	mana_ib_destroy_adapter(mib_dev);
 	mana_gd_deregister_device(&mib_dev->gc->mana_ib);
 	ib_unregister_device(&mib_dev->ib_dev);
 	ib_dealloc_device(&mib_dev->ib_dev);
