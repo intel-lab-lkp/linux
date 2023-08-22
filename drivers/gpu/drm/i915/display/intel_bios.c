@@ -3385,7 +3385,7 @@ static void fill_dsc(struct intel_crtc_state *crtc_state,
 	crtc_state->pipe_bpp = bpc * 3;
 
 	crtc_state->dsc.compressed_bpp = min(crtc_state->pipe_bpp,
-					     VBT_DSC_MAX_BPP(dsc->max_bpp));
+					     VBT_DSC_MAX_BPP(dsc->max_bpp)) << 4;
 
 	/*
 	 * FIXME: This is ugly, and slice count should take DSC engine

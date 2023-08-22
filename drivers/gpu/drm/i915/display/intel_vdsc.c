@@ -248,7 +248,7 @@ int intel_dsc_compute_params(struct intel_crtc_state *pipe_config)
 	struct intel_crtc *crtc = to_intel_crtc(pipe_config->uapi.crtc);
 	struct drm_i915_private *dev_priv = to_i915(crtc->base.dev);
 	struct drm_dsc_config *vdsc_cfg = &pipe_config->dsc.config;
-	u16 compressed_bpp = pipe_config->dsc.compressed_bpp;
+	u16 compressed_bpp = dsc_integral_compressed_bpp(pipe_config->dsc.compressed_bpp);
 	int err;
 	int ret;
 
@@ -1040,7 +1040,7 @@ void intel_dsc_get_config(struct intel_crtc_state *crtc_state)
 	if (pps0 & DSC_NATIVE_420_ENABLE)
 		vdsc_cfg->bits_per_pixel >>= 1;
 
-	crtc_state->dsc.compressed_bpp = vdsc_cfg->bits_per_pixel >> 4;
+	crtc_state->dsc.compressed_bpp = vdsc_cfg->bits_per_pixel;
 out:
 	intel_display_power_put(dev_priv, power_domain, wakeref);
 }
