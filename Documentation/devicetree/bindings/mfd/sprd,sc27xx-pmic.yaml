@@ -1,0 +1,84 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/mfd/sprd,sc27xx-pmic.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: |
+  Spreadtrum SC27xx and UMP96xx Power Management Integrated Circuit (PMIC)
+
+maintainers:
+  - Orson Zhai <orsonzhai@gmail.com>
+  - Baolin Wang <baolin.wang7@gmail.com>
+  - Chunyan Zhang <zhang.lyra@gmail.com>
+
+description: |
+  The Spreadtrum SC27xx series PMICs contain SC2720, SC2721, SC2723, SC2730, SC2731
+  and UMP96xx series PMICs contain ump9620, ump962 and ump9622. The Spreadtrum PMIC
+  belonging to SC27xx series and ump962x series integrates all mobile handset power
+  management, audio codec, battery management and user interface support function in
+  a single chip. It has 6 major functional.
+
+blocks:
+  - DCDCs to support CPU, memory.
+  - LDOs to support both internal and external requirement.
+  - Battery management system, such as charger, fuel gauge.
+  - Audio codec.
+  - User interface function, such as indicator, flash LED and so on.
+  - IC level interface, such as power on/off control, RTC and typec and so on.
+
+allOf:
+  - $ref: /schemas/spi/sprd,spi-adi.yaml#
+
+properties:
+  compatible:
+    enum:
+      - sprd,sc2720
+      - sprd,sc2721
+      - sprd,sc2723
+      - sprd,sc2730
+      - sprd,sc2731
+      - sprd,ump9620
+      - sprd,ump9621
+      - sprd,ump9622
+
+  reg:
+    maxItems: 7
+    description: The address of the device chip select
+
+  spi-max-frequency:
+    default: 26000000
+
+  interrupts: true
+
+  interrupt-controller:
+    description: Marks the device node as an interrupt controller.
+
+  interrupt-cells:
+    const: 2
+    description: The number of cells to describe an PMIC IRQ, must be 2.
+
+required:
+  - compatible
+  - reg
+  - spi-max-frequency
+  - '#address-cells' # Child device offset number of cells, must be 1.
+  - '#size-cells' # Child device size number of cells, must be 0.
+
+unevaluatedProperties: false
+
+Example:
+  - |
+    adi_bus {
+        pmic@0 {
+            compatible = "sprd,sc2731";
+            reg = <0>;
+            spi-max-frequency = <26000000>;
+            interrupts = <GIC_SPI 31 IRQ_TYPE_LEVEL_HIGH>;
+            interrupt-controller;
+            #interrupt-cells = <2>;
+            #address-cells = <1>;
+            #size-cells = <0>;
+        };
+    };
+...
