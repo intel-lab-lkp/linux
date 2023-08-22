@@ -57,6 +57,20 @@ static SPINAND_OP_VARIANTS(x1_write_cache_variants,
 static SPINAND_OP_VARIANTS(x1_update_cache_variants,
 			   SPINAND_PROG_LOAD(false, 0, NULL, 0));
 
+/*
+ * OOB spare area map (128 and 256 bytes)
+ *
+ *           +-----+-----------------+-------------------+---------------------+
+ *           | BBM |     Non ECC     |   ECC protected   |      ECC Area       |
+ *           |     | protected Area  |       Area        |                     |
+ * ----------+-----+-----------------+-------------------+---------------------+
+ *  oobsize  | 0:3 | 4:31 (28 bytes) | 32:63 (32 bytes)  | 64:127 (64 bytes)   |
+ * 128 bytes |     |                 |                   |                     |
+ * ----------+-----+-----------------+-------------------+---------------------+
+ *  oobsize  | 0:3 | 4:63 (60 bytes) | 64:127 (64 bytes) | 127:255 (128 bytes) |
+ * 256 bytes |     |                 |                   |                     |
+ * ----------+-----+-----------------+-------------------+---------------------+
+ */
 static int micron_8_ooblayout_ecc(struct mtd_info *mtd, int section,
 				  struct mtd_oob_region *region)
 {
@@ -75,9 +89,9 @@ static int micron_8_ooblayout_free(struct mtd_info *mtd, int section,
 	if (section)
 		return -ERANGE;
 
-	/* Reserve 2 bytes for the BBM. */
-	region->offset = 2;
-	region->length = (mtd->oobsize / 2) - 2;
+	/* Reserve 4 bytes for the BBM. */
+	region->offset = 4;
+	region->length = (mtd->oobsize / 2) - 4;
 
 	return 0;
 }
