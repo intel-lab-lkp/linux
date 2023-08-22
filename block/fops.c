@@ -665,6 +665,11 @@ static ssize_t blkdev_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	if ((iocb->ki_flags & (IOCB_NOWAIT | IOCB_DIRECT)) == IOCB_NOWAIT)
 		return -EOPNOTSUPP;
 
+	if (bdev->bd_super)
+		pr_warn_once("warn:try write bdev %s, which already mount with %s!!\n",
+				bdev->bd_disk->disk_name,
+				bdev->bd_super->s_type->name);
+
 	size -= iocb->ki_pos;
 	if (iov_iter_count(from) > size) {
 		shorted = iov_iter_count(from) - size;
