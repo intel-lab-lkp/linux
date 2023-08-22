@@ -18,6 +18,7 @@
 #define TPDM_DSB_XPMR(n)	(0x7E8 + (n * 4))
 #define TPDM_DSB_EDCR(n)	(0x808 + (n * 4))
 #define TPDM_DSB_EDCMR(n)	(0x848 + (n * 4))
+#define TPDM_DSB_MSR(n)		(0x980 + (n * 4))
 
 /* Enable bit for DSB subunit */
 #define TPDM_DSB_CR_ENA		BIT(0)
@@ -90,6 +91,8 @@
 #define TPDM_DSB_MAX_EDCMR	8
 /* MAX number of DSB pattern */
 #define TPDM_DSB_MAX_PATT	8
+/* MAX number of DSB MSR */
+#define TPDM_DSB_MAX_MSR 32
 
 #define tpdm_simple_dataset_ro(name, mem, idx, max)			\
 	(&((struct tpdm_dataset_attribute[]) {			\
@@ -136,16 +139,22 @@
 		tpdm_simple_dataset_rw(tpmr##nr,		\
 		DSB_PATT_MASK, nr, TPDM_DSB_MAX_PATT)
 
+#define DSB_MSR_ATTR(nr)						\
+		tpdm_simple_dataset_rw(msr##nr,			\
+		DSB_MSR, nr, TPDM_DSB_MAX_MSR)
+
 /**
  * struct dsb_dataset - specifics associated to dsb dataset
  * @mode:             DSB programming mode
  * @edge_ctrl_idx     Index number of the edge control
+ * @msr_num           Number of MSR supported by DSB TPDM
  * @edge_ctrl:        Save value for edge control
  * @edge_ctrl_mask:   Save value for edge control mask
  * @patt_val:         Save value for pattern
  * @patt_mask:        Save value for pattern mask
  * @trig_patt:        Save value for trigger pattern
  * @trig_patt_mask:   Save value for trigger pattern mask
+ * @msr               Save value for MSR
  * @patt_ts:          Enable/Disable pattern timestamp
  * @patt_type:        Set pattern type
  * @trig_ts:          Enable/Disable trigger timestamp.
@@ -154,12 +163,14 @@
 struct dsb_dataset {
 	u32				mode;
 	u32				edge_ctrl_idx;
+	u32				msr_num;
 	u32				edge_ctrl[TPDM_DSB_MAX_EDCR];
 	u32				edge_ctrl_mask[TPDM_DSB_MAX_EDCMR];
 	u32				patt_val[TPDM_DSB_MAX_PATT];
 	u32				patt_mask[TPDM_DSB_MAX_PATT];
 	u32				trig_patt[TPDM_DSB_MAX_PATT];
 	u32				trig_patt_mask[TPDM_DSB_MAX_PATT];
+	u32				msr[TPDM_DSB_MAX_MSR];
 	bool			patt_ts;
 	bool			patt_type;
 	bool			trig_ts;
@@ -195,6 +206,7 @@ enum dataset_mem {
 	DSB_TRIG_PATT_MASK,
 	DSB_PATT,
 	DSB_PATT_MASK,
+	DSB_MSR,
 };
 
 /**
