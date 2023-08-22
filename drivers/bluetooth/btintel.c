@@ -2769,6 +2769,8 @@ static int btintel_setup_combined(struct hci_dev *hdev)
 		case 0x11:      /* JfP */
 		case 0x12:      /* ThP */
 		case 0x13:      /* HrP */
+			set_bit(HCI_QUIRK_BROKEN_LE_CODED, &hdev->quirks);
+			fallthrough;
 		case 0x14:      /* CcP */
 			set_bit(HCI_QUIRK_VALID_LE_STATES, &hdev->quirks);
 			fallthrough;
