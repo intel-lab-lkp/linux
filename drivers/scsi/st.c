@@ -416,6 +416,9 @@ static int st_chk_result(struct scsi_tape *STp, struct st_request * SRpnt)
 		STp->cleaning_req = 1; /* ASC and ASCQ => cleaning requested */
 	if (cmdstatp->have_sense && scode == UNIT_ATTENTION && cmdstatp->sense_hdr.asc == 0x29)
 		STp->pos_unknown = 1; /* ASC => power on / reset */
+	if (cmdstatp->have_sense && cmdstatp->sense_hdr.asc == 0
+			&& cmdstatp->sense_hdr.ascq == 0x1a)
+		STp->pos_unknown = 1; /* ASCQ => rewind in progress */
 
 	STp->pos_unknown |= STp->device->was_reset;
 
