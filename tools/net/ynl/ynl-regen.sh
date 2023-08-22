@@ -5,11 +5,13 @@ TOOL=$(dirname $(realpath $0))/ynl-gen-c.py
 
 force=
 search=
+spec=
 
 while [ ! -z "$1" ]; do
   case "$1" in
     -f ) force=yes; shift ;;
     -p ) search=$2; shift 2 ;;
+    -s ) spec=$2; shift 2 ;;
     * )  echo "Unrecognized option '$1'"; exit 1 ;;
   esac
 done
@@ -23,6 +25,10 @@ for f in $files; do
     #         $YAML YNL-GEN kernel $mode
     params=( $(git grep -B1 -h '/\* YNL-GEN' $f | sed 's@/\*\(.*\)\*/@\1@') )
     args=$(sed -n 's@/\* YNL-ARG \(.*\) \*/@\1@p' $f)
+
+    if [ ! -z "$spec" -a "$spec" != "${params[0]}" ]; then
+	continue
+    fi
 
     if [ $f -nt ${params[0]} -a -z "$force" ]; then
 	echo -e "\tSKIP $f"
