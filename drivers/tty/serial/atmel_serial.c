@@ -32,6 +32,7 @@
 #include <linux/suspend.h>
 #include <linux/mm.h>
 #include <linux/io.h>
+#include <linux/nospec.h>
 
 #include <asm/div64.h>
 #include <asm/ioctls.h>
@@ -2661,12 +2662,22 @@ static void __init atmel_console_get_options(struct uart_port *port, int *baud,
 
 static int __init atmel_console_setup(struct console *co, char *options)
 {
-	struct uart_port *port = &atmel_ports[co->index].uart;
-	struct atmel_uart_port *atmel_port = to_atmel_uart_port(port);
+	struct uart_port *port;
+	struct atmel_uart_port *atmel_port;
 	int baud = 115200;
 	int bits = 8;
 	int parity = 'n';
 	int flow = 'n';
+
+	if (unlikely(co->index < 0 || co->index >= ATMEL_MAX_UART))
+		return -ENODEV;
+
+	co->index = array_index_nospec(co->index, ATMEL_MAX_UART);
+	port = &atmel_ports[co->index].uart;
+	if (!port)
+		return -ENODEV;
+
+	atmel_port = to_atmel_uart_port(port);
 
 	if (port->membase == NULL) {
 		/* Port not initialized yet - delay setup */
