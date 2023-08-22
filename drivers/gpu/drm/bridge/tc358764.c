@@ -319,10 +319,7 @@ static int tc358764_parse_dt(struct tc358764 *ctx)
 	}
 
 	ctx->next_bridge = devm_drm_of_get_bridge(dev, dev->of_node, 1, 0);
-	if (IS_ERR(ctx->next_bridge))
-		return PTR_ERR(ctx->next_bridge);
-
-	return 0;
+	return PTR_ERR_OR_ZERO(ctx->next_bridge);
 }
 
 static int tc358764_configure_regulators(struct tc358764 *ctx)

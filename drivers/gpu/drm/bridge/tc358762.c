@@ -240,19 +240,13 @@ static int tc358762_parse_dt(struct tc358762 *ctx)
 
 	/* Reset GPIO is optional */
 	ctx->reset_gpio = devm_gpiod_get_optional(dev, "reset", GPIOD_OUT_LOW);
-	if (IS_ERR(ctx->reset_gpio))
-		return PTR_ERR(ctx->reset_gpio);
-
-	return 0;
+	return PTR_ERR_OR_ZERO(ctx->reset_gpio);
 }
 
 static int tc358762_configure_regulators(struct tc358762 *ctx)
 {
 	ctx->regulator = devm_regulator_get(ctx->dev, "vddc");
-	if (IS_ERR(ctx->regulator))
-		return PTR_ERR(ctx->regulator);
-
-	return 0;
+	return PTR_ERR_OR_ZERO(ctx->regulator);
 }
 
 static int tc358762_probe(struct mipi_dsi_device *dsi)
