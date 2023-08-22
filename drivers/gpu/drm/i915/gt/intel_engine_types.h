@@ -415,6 +415,9 @@ struct intel_engine_cs {
 	struct llist_head barrier_tasks;
 
 	struct intel_context *kernel_context; /* pinned */
+	struct intel_context *blitter_context; /* pinned, only for BCS0 */
+	/* mark the blitter engine's availability status */
+	atomic_t blitter_context_ready;
 
 	/**
 	 * pinned_contexts_list: List of pinned contexts. This list is only

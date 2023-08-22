@@ -170,6 +170,8 @@ intel_write_status_page(struct intel_engine_cs *engine, int reg, u32 value)
 #define I915_GEM_HWS_SEQNO		0x40
 #define I915_GEM_HWS_SEQNO_ADDR		(I915_GEM_HWS_SEQNO * sizeof(u32))
 #define I915_GEM_HWS_MIGRATE		(0x42 * sizeof(u32))
+#define I915_GEM_HWS_GGTT_BLIT		0x46
+#define I915_GEM_HWS_GGTT_BLIT_ADDR	(I915_GEM_HWS_GGTT_BLIT * sizeof(u32))
 #define I915_GEM_HWS_PXP		0x60
 #define I915_GEM_HWS_PXP_ADDR		(I915_GEM_HWS_PXP * sizeof(u32))
 #define I915_GEM_HWS_GSC		0x62
@@ -356,4 +358,6 @@ u64 intel_clamp_preempt_timeout_ms(struct intel_engine_cs *engine, u64 value);
 u64 intel_clamp_stop_timeout_ms(struct intel_engine_cs *engine, u64 value);
 u64 intel_clamp_timeslice_duration_ms(struct intel_engine_cs *engine, u64 value);
 
+void intel_engine_blitter_context_set_ready(struct intel_gt *gt, bool ready);
+bool intel_engine_blitter_context_ready(struct intel_gt *gt);
 #endif /* _INTEL_RINGBUFFER_H_ */
