@@ -78,7 +78,7 @@ static struct erst_erange {
  * It is used to provide exclusive accessing for ERST Error Log
  * Address Range too.
  */
-static DEFINE_RAW_SPINLOCK(erst_lock);
+static DEFINE_SPINLOCK(erst_lock);
 
 static inline int erst_errno(int command_status)
 {
@@ -413,9 +413,9 @@ ssize_t erst_get_record_count(void)
 	if (erst_disable)
 		return -ENODEV;
 
-	raw_spin_lock_irqsave(&erst_lock, flags);
+	spin_lock_irqsave(&erst_lock, flags);
 	count = __erst_get_record_count();
-	raw_spin_unlock_irqrestore(&erst_lock, flags);
+	spin_unlock_irqrestore(&erst_lock, flags);
 
 	return count;
 }
@@ -480,9 +480,9 @@ static int __erst_record_id_cache_add_one(void)
 
 	id = prev_id = first_id = APEI_ERST_INVALID_RECORD_ID;
 retry:
-	raw_spin_lock_irqsave(&erst_lock, flags);
+	spin_lock_irqsave(&erst_lock, flags);
 	rc = __erst_get_next_record_id(&id);
-	raw_spin_unlock_irqrestore(&erst_lock, flags);
+	spin_unlock_irqrestore(&erst_lock, flags);
 	if (rc == -ENOENT)
 		return 0;
 	if (rc)
@@ -777,17 +777,17 @@ int erst_write(const struct cper_record_header *record)
 		return -EINVAL;
 
 	if (erst_erange.attr & ERST_RANGE_NVRAM) {
-		if (!raw_spin_trylock_irqsave(&erst_lock, flags))
+		if (!spin_trylock_irqsave(&erst_lock, flags))
 			return -EBUSY;
 		rc = __erst_write_to_nvram(record);
-		raw_spin_unlock_irqrestore(&erst_lock, flags);
+		spin_unlock_irqrestore(&erst_lock, flags);
 		return rc;
 	}
 
 	if (record->record_length > erst_erange.size)
 		return -EINVAL;
 
-	if (!raw_spin_trylock_irqsave(&erst_lock, flags))
+	if (!spin_trylock_irqsave(&erst_lock, flags))
 		return -EBUSY;
 	memcpy(erst_erange.vaddr, record, record->record_length);
 	rcd_erange = erst_erange.vaddr;
@@ -795,7 +795,7 @@ int erst_write(const struct cper_record_header *record)
 	memcpy(&rcd_erange->persistence_information, "ER", 2);
 
 	rc = __erst_write_to_storage(0);
-	raw_spin_unlock_irqrestore(&erst_lock, flags);
+	spin_unlock_irqrestore(&erst_lock, flags);
 
 	return rc;
 }
@@ -849,9 +849,9 @@ ssize_t erst_read(u64 record_id, struct cper_record_header *record,
 	if (erst_disable)
 		return -ENODEV;
 
-	raw_spin_lock_irqsave(&erst_lock, flags);
+	spin_lock_irqsave(&erst_lock, flags);
 	len = __erst_read(record_id, record, buflen);
-	raw_spin_unlock_irqrestore(&erst_lock, flags);
+	spin_unlock_irqrestore(&erst_lock, flags);
 	return len;
 }
 EXPORT_SYMBOL_GPL(erst_read);
@@ -936,12 +936,12 @@ int erst_clear(u64 record_id)
 	rc = mutex_lock_interruptible(&erst_record_id_cache.lock);
 	if (rc)
 		return rc;
-	raw_spin_lock_irqsave(&erst_lock, flags);
+	spin_lock_irqsave(&erst_lock, flags);
 	if (erst_erange.attr & ERST_RANGE_NVRAM)
 		rc = __erst_clear_from_nvram(record_id);
 	else
 		rc = __erst_clear_from_storage(record_id);
-	raw_spin_unlock_irqrestore(&erst_lock, flags);
+	spin_unlock_irqrestore(&erst_lock, flags);
 	if (rc)
 		goto out;
 	entries = erst_record_id_cache.entries;
