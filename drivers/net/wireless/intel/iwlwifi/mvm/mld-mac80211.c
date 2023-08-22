@@ -731,6 +731,8 @@ static void iwl_mvm_mld_vif_cfg_changed_station(struct iwl_mvm *mvm,
 
 	mvmvif->associated = vif->cfg.assoc;
 
+	iwl_mvm_bss_info_changed_station_common(mvm, vif, &vif->bss_conf,
+						changes);
 	if (!(changes & BSS_CHANGED_ASSOC))
 		return;
 
