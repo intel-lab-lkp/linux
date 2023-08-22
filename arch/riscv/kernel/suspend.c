@@ -4,9 +4,14 @@
  * Copyright (c) 2022 Ventana Micro Systems Inc.
  */
 
+#include <linux/cpu_pm.h>
 #include <linux/ftrace.h>
+#include <linux/thread_info.h>
+#include <linux/syscore_ops.h>
 #include <asm/csr.h>
 #include <asm/suspend.h>
+#include <asm/switch_to.h>
+#include <asm/vector.h>
 
 void suspend_save_csrs(struct suspend_context *context)
 {
@@ -85,3 +90,43 @@ int cpu_suspend(unsigned long arg,
 
 	return rc;
 }
+
+static int riscv_cpu_suspend(void)
+{
+	struct task_struct *cur_task = get_current();
+	struct pt_regs *regs = task_pt_regs(cur_task);
+
+	if (has_fpu()) {
+		if (unlikely(regs->status & SR_SD))
+			fstate_save(cur_task, regs);
+	}
+	if (has_vector()) {
+		if (unlikely(regs->status & SR_SD))
+			riscv_v_vstate_save(cur_task, regs);
+	}
+
+	return 0;
+}
+
+static void riscv_cpu_resume(void)
+{
+	struct task_struct *cur_task = get_current();
+	struct pt_regs *regs = task_pt_regs(cur_task);
+
+	if (has_fpu())
+		fstate_restore(cur_task, regs);
+	if (has_vector())
+		riscv_v_vstate_restore(cur_task, regs);
+}
+
+static struct syscore_ops riscv_cpu_syscore_ops = {
+	.suspend	= riscv_cpu_suspend,
+	.resume		= riscv_cpu_resume,
+};
+
+static int __init riscv_cpu_suspend_init(void)
+{
+	register_syscore_ops(&riscv_cpu_syscore_ops);
+	return 0;
+}
+arch_initcall(riscv_cpu_suspend_init);
