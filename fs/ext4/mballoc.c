@@ -6874,70 +6874,61 @@ error_return:
 	return err;
 }
 
-/**
- * ext4_trim_extent -- function to TRIM one single free extent in the group
- * @sb:		super block for the file system
- * @start:	starting block of the free extent in the alloc. group
- * @count:	number of blocks to TRIM
- * @e4b:	ext4 buddy for the group
- *
- * Trim "count" blocks starting at "start" in the "group". To assure that no
- * one will allocate those blocks, mark it as used in buddy bitmap. This must
- * be called with under the group lock.
- */
-static int ext4_trim_extent(struct super_block *sb,
-		int start, int count, struct ext4_buddy *e4b)
-__releases(bitlock)
-__acquires(bitlock)
-{
-	struct ext4_free_extent ex;
-	ext4_group_t group = e4b->bd_group;
-	int ret = 0;
-
-	trace_ext4_trim_extent(sb, group, start, count);
-
-	assert_spin_locked(ext4_group_lock_ptr(sb, group));
-
-	ex.fe_start = start;
-	ex.fe_group = group;
-	ex.fe_len = count;
-
-	/*
-	 * Mark blocks used, so no one can reuse them while
-	 * being trimmed.
-	 */
-	mb_mark_used(e4b, &ex);
-	ext4_unlock_group(sb, group);
-	ret = ext4_issue_discard(sb, group, start, count, NULL);
-	ext4_lock_group(sb, group);
-	mb_free_blocks(NULL, e4b, start, ex.fe_len);
-	return ret;
-}
-
 static int ext4_try_to_trim_range(struct super_block *sb,
 		struct ext4_buddy *e4b, ext4_grpblk_t start,
 		ext4_grpblk_t max, ext4_grpblk_t minblocks)
 __acquires(ext4_group_lock_ptr(sb, e4b->bd_group))
 __releases(ext4_group_lock_ptr(sb, e4b->bd_group))
 {
-	ext4_grpblk_t next, count, free_count;
+	ext4_grpblk_t next, count, free_count, bak;
 	void *bitmap;
+	struct ext4_free_data *entry = NULL, *fd, *nfd;
+	struct list_head discard_data_list;
+	struct bio *discard_bio = NULL;
+	struct blk_plug plug;
+	ext4_group_t group = e4b->bd_group;
+	struct ext4_free_extent ex;
+	bool noalloc = false;
+	int ret = 0;
+
+	INIT_LIST_HEAD(&discard_data_list);
 
 	bitmap = e4b->bd_bitmap;
 	start = max(e4b->bd_info->bb_first_free, start);
 	count = 0;
 	free_count = 0;
 
+	blk_start_plug(&plug);
 	while (start <= max) {
 		start = mb_find_next_zero_bit(bitmap, max + 1, start);
 		if (start > max)
 			break;
+		bak = start;
 		next = mb_find_next_bit(bitmap, max + 1, start);
+		/* when only one segment, there is no need to alloc entry */
+		noalloc = (free_count == 0) && (next >= max);
 
 		if ((next - start) >= minblocks) {
-			int ret = ext4_trim_extent(sb, start, next - start, e4b);
-
-			if (ret && ret != -EOPNOTSUPP)
+			trace_ext4_trim_extent(sb, group, start, next - start);
+			ex.fe_start = start;
+			ex.fe_group = group;
+			ex.fe_len = next - start;
+			/*
+			 * Mark blocks used, so no one can reuse them while
+			 * being trimmed.
+			 */
+			mb_mark_used(e4b, &ex);
+			ext4_unlock_group(sb, group);
+			ret = ext4_issue_discard(sb, group, start, next - start, &discard_bio);
+			if (!noalloc) {
+				entry = kmem_cache_alloc(ext4_free_data_cachep,
+							GFP_NOFS|__GFP_NOFAIL);
+				entry->efd_start_cluster = start;
+				entry->efd_count = next - start;
+				list_add_tail(&entry->efd_list, &discard_data_list);
+			}
+			ext4_lock_group(sb, group);
+			if (ret < 0)
 				break;
 			count += next - start;
 		}
@@ -6957,6 +6948,22 @@ __releases(ext4_group_lock_ptr(sb, e4b->bd_group))
 
 		if ((e4b->bd_info->bb_free - free_count) < minblocks)
 			break;
+	}
+
+	if (discard_bio) {
+		ext4_unlock_group(sb, e4b->bd_group);
+		submit_bio_wait(discard_bio);
+		bio_put(discard_bio);
+		ext4_lock_group(sb, e4b->bd_group);
+	}
+	blk_finish_plug(&plug);
+
+	if (noalloc)
+		mb_free_blocks(NULL, e4b, bak, free_count);
+
+	list_for_each_entry_safe(fd, nfd, &discard_data_list, efd_list) {
+		mb_free_blocks(NULL, e4b, fd->efd_start_cluster, fd->efd_count);
+		kmem_cache_free(ext4_free_data_cachep, fd);
 	}
 
 	return count;
