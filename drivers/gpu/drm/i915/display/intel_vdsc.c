@@ -77,8 +77,9 @@ intel_vdsc_set_min_max_qp(struct drm_dsc_config *vdsc_cfg, int buf,
 static void
 calculate_rc_params(struct drm_dsc_config *vdsc_cfg)
 {
+	int fractional_bits = dsc_fractional_compressed_bpp(vdsc_cfg->bits_per_pixel);
+	int bpp = dsc_integral_compressed_bpp(vdsc_cfg->bits_per_pixel);
 	int bpc = vdsc_cfg->bits_per_component;
-	int bpp = vdsc_cfg->bits_per_pixel >> 4;
 	int qp_bpc_modifier = (bpc - 8) * 2;
 	int uncompressed_bpg_rate;
 	int first_line_bpg_offset;
@@ -148,7 +149,13 @@ calculate_rc_params(struct drm_dsc_config *vdsc_cfg)
 		static const s8 ofs_und8[] = {
 			10, 8, 6, 4, 2, 0, -2, -4, -6, -8, -10, -10, -12, -12, -12
 		};
-
+	/*
+	 * For 420 format since bits_per_pixel (bpp) is set to target bpp * 2,
+	 * QP table values for target bpp 4.0 to 4.4375 (rounded to 4.0) are
+	 * actually for bpp 8 to 8.875 (rounded to 4.0 * 2 i.e 8).
+	 * Similarly values for target bpp 4.5 to 4.8375 (rounded to 4.5)
+	 * are for bpp 9 to 9.875 (rounded to 4.5 * 2 i.e 9), and so on.
+	 */
 		bpp_i  = bpp - 8;
 		for (buf_i = 0; buf_i < DSC_NUM_BUF_RANGES; buf_i++) {
 			u8 range_bpg_offset;
@@ -191,7 +198,14 @@ calculate_rc_params(struct drm_dsc_config *vdsc_cfg)
 			10, 8, 6, 4, 2, 0, -2, -4, -6, -8, -10, -10, -12, -12, -12
 		};
 
-		bpp_i  = (2 * (bpp - 6));
+		/*
+		 * QP table rows have values in increment of 0.5.
+		 * So 6.0 bpp to 6.4375 will have index 0, 6.5 to 6.9375 will have index 1,
+		 * and so on.
+		 * 0.5 represented as 0x8 in U6.4 format.
+		 */
+		bpp_i  = ((bpp - 6) + (fractional_bits < 0x8 ? 0 : 1));
+
 		for (buf_i = 0; buf_i < DSC_NUM_BUF_RANGES; buf_i++) {
 			u8 range_bpg_offset;
 
@@ -279,8 +293,7 @@ int intel_dsc_compute_params(struct intel_crtc_state *pipe_config)
 	/* Gen 11 does not support VBR */
 	vdsc_cfg->vbr_enable = false;
 
-	/* Gen 11 only supports integral values of bpp */
-	vdsc_cfg->bits_per_pixel = compressed_bpp << 4;
+	vdsc_cfg->bits_per_pixel = pipe_config->dsc.compressed_bpp;
 
 	/*
 	 * According to DSC 1.2 specs in Section 4.1 if native_420 is set
