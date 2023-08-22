@@ -526,11 +526,11 @@ int kvm_pmu_rdpmc(struct kvm_vcpu *vcpu, unsigned idx, u64 *data)
 	struct kvm_pmc *pmc;
 	u64 mask = fast_mode ? ~0u : ~0ull;
 
-	if (!pmu->version)
-		return 1;
-
 	if (is_vmware_backdoor_pmc(idx))
 		return kvm_pmu_rdpmc_vmware(vcpu, idx, data);
+
+	if (!pmu->version)
+		return 1;
 
 	pmc = static_call(kvm_x86_pmu_rdpmc_ecx_to_pmc)(vcpu, idx, &mask);
 	if (!pmc)
