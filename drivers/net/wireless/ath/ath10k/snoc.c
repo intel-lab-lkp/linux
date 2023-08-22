@@ -939,20 +939,12 @@ static int ath10k_snoc_hif_start(struct ath10k *ar)
 	return 0;
 }
 
-static int ath10k_snoc_init_pipes(struct ath10k *ar)
+static void ath10k_snoc_init_pipes(struct ath10k *ar)
 {
-	int i, ret;
+	int i;
 
-	for (i = 0; i < CE_COUNT; i++) {
-		ret = ath10k_ce_init_pipe(ar, i, &host_ce_config_wlan[i]);
-		if (ret) {
-			ath10k_err(ar, "failed to initialize copy engine pipe %d: %d\n",
-				   i, ret);
-			return ret;
-		}
-	}
-
-	return 0;
+	for (i = 0; i < CE_COUNT; i++)
+		ath10k_ce_init_pipe(ar, i, &host_ce_config_wlan[i]);
 }
 
 static int ath10k_snoc_wlan_enable(struct ath10k *ar,
@@ -1084,11 +1076,7 @@ static int ath10k_snoc_hif_power_up(struct ath10k *ar,
 
 	ath10k_ce_alloc_rri(ar);
 
-	ret = ath10k_snoc_init_pipes(ar);
-	if (ret) {
-		ath10k_err(ar, "failed to initialize CE: %d\n", ret);
-		goto err_free_rri;
-	}
+	ath10k_snoc_init_pipes(ar);
 
 	return 0;
 
