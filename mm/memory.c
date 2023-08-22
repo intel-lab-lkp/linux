@@ -4770,6 +4770,7 @@ static vm_fault_t do_numa_page(struct vm_fault *vmf)
 	pte_t pte, old_pte;
 	int flags = 0;
 	pg_data_t *pgdat;
+	LIST_HEAD(migratepages);
 
 	/*
 	 * The "pte" at this point cannot be used safely without
@@ -4851,8 +4852,9 @@ static vm_fault_t do_numa_page(struct vm_fault *vmf)
 		goto migrate_fail;
 	}
 
+	list_add(&page->lru, &migratepages);
 	/* Migrate to the requested node */
-	if (migrate_misplaced_page(page, vma, target_nid)) {
+	if (migrate_misplaced_page(&migratepages, vma, page_nid, target_nid)) {
 		page_nid = target_nid;
 		flags |= TNF_MIGRATED;
 	} else {
