@@ -1476,7 +1476,7 @@ int collapse_pte_mapped_thp(struct mm_struct *mm, unsigned long addr,
 	struct page *hpage;
 	pte_t *start_pte, *pte;
 	pmd_t *pmd, pgt_pmd;
-	spinlock_t *pml, *ptl;
+	spinlock_t *pml = NULL, *ptl;
 	int nr_ptes = 0, result = SCAN_FAIL;
 	int i;
 
@@ -1572,9 +1572,10 @@ int collapse_pte_mapped_thp(struct mm_struct *mm, unsigned long addr,
 				haddr, haddr + HPAGE_PMD_SIZE);
 	mmu_notifier_invalidate_range_start(&range);
 	notified = true;
-	start_pte = pte_offset_map_lock(mm, pmd, haddr, &ptl);
-	if (!start_pte)		/* mmap_lock + page lock should prevent this */
-		goto abort;
+	spin_lock(ptl);
+recheck:
+	start_pte = pte_offset_map(pmd, haddr);
+	VM_BUG_ON(!start_pte);	/* mmap_lock + page lock should prevent this */
 
 	/* step 2: clear page table and adjust rmap */
 	for (i = 0, addr = haddr, pte = start_pte;
@@ -1608,20 +1609,36 @@ int collapse_pte_mapped_thp(struct mm_struct *mm, unsigned long addr,
 		nr_ptes++;
 	}
 
-	pte_unmap_unlock(start_pte, ptl);
+	pte_unmap(start_pte);
 
 	/* step 3: set proper refcount and mm_counters. */
 	if (nr_ptes) {
 		page_ref_sub(hpage, nr_ptes);
 		add_mm_counter(mm, mm_counter_file(hpage), -nr_ptes);
+		nr_ptes = 0;
 	}
 
-	/* step 4: remove page table */
+	/* step 4: remove empty page table */
+	if (!pml) {
+		pml = pmd_lockptr(mm, pmd);
+		if (pml != ptl && !spin_trylock(pml)) {
+			spin_unlock(ptl);
+			spin_lock(pml);
+			spin_lock_nested(ptl, SINGLE_DEPTH_NESTING);
+	/*
+	 * pmd_lock covers a wider range than ptl, and (if split from mm's
+	 * page_table_lock) ptl nests inside pml. The less time we hold pml,
+	 * the better; but userfaultfd's mfill_atomic_pte() on a private VMA
+	 * inserts a valid as-if-COWed PTE without even looking up page cache.
+	 * So page lock of hpage does not protect from it, so we must not drop
+	 * ptl before pgt_pmd is removed, so uffd private needs rechecking.
+	 */
+			if (userfaultfd_armed(vma) &&
+			    !(vma->vm_flags & VM_SHARED))
+				goto recheck;
+		}
+	}
 
-	/* Huge page lock is still held, so page table must remain empty */
-	pml = pmd_lock(mm, pmd);
-	if (ptl != pml)
-		spin_lock_nested(ptl, SINGLE_DEPTH_NESTING);
 	pgt_pmd = pmdp_collapse_flush(vma, haddr, pmd);
 	pmdp_get_lockless_sync();
 	if (ptl != pml)
@@ -1648,6 +1665,8 @@ abort:
 	}
 	if (start_pte)
 		pte_unmap_unlock(start_pte, ptl);
+	if (pml && pml != ptl)
+		spin_unlock(pml);
 	if (notified)
 		mmu_notifier_invalidate_range_end(&range);
 drop_hpage:
