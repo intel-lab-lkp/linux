@@ -30,19 +30,15 @@
 u16
 qcafrm_create_header(u8 *buf, u16 length)
 {
-	__le16 len;
-
 	if (!buf)
 		return 0;
-
-	len = cpu_to_le16(length);
 
 	buf[0] = 0xAA;
 	buf[1] = 0xAA;
 	buf[2] = 0xAA;
 	buf[3] = 0xAA;
-	buf[4] = len & 0xff;
-	buf[5] = (len >> 8) & 0xff;
+	buf[4] = length & 0xff;
+	buf[5] = (length >> 8) & 0xff;
 	buf[6] = 0;
 	buf[7] = 0;
 
