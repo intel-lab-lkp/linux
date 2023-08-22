@@ -164,8 +164,10 @@ nouveau_exec_job_run(struct nouveau_job *job)
 	}
 
 	for (i = 0; i < exec_job->push.count; i++) {
-		nv50_dma_push(chan, exec_job->push.s[i].va,
-			      exec_job->push.s[i].va_len);
+		struct drm_nouveau_exec_push *p = &exec_job->push.s[i];
+		bool prefetch = !(p->flags & DRM_NOUVEAU_EXEC_PUSH_NO_PREFETCH);
+
+		nv50_dma_push(chan, p->va, p->va_len, prefetch);
 	}
 
 	ret = nouveau_fence_emit(fence, chan);
@@ -223,7 +225,14 @@ nouveau_exec_job_init(struct nouveau_exec_job **pjob,
 {
 	struct nouveau_exec_job *job;
 	struct nouveau_job_args args = {};
-	int ret;
+	int i, ret;
+
+	for (i = 0; i < __args->push.count; i++) {
+		struct drm_nouveau_exec_push *p = &__args->push.s[i];
+
+		if (p->va_len > NV50_DMA_PUSH_MAX_LENGTH)
+			return -EINVAL;
+	}
 
 	job = *pjob = kzalloc(sizeof(*job), GFP_KERNEL);
 	if (!job)
