@@ -1914,9 +1914,7 @@ static int a6xx_gmu_pm_resume(struct msm_gpu *gpu)
 
 	trace_msm_gpu_resume(0);
 
-	mutex_lock(&a6xx_gpu->gmu.lock);
 	ret = a6xx_gmu_resume(a6xx_gpu);
-	mutex_unlock(&a6xx_gpu->gmu.lock);
 	if (ret)
 		return ret;
 
@@ -1940,12 +1938,9 @@ static int a6xx_pm_resume(struct msm_gpu *gpu)
 
 	trace_msm_gpu_resume(0);
 
-	mutex_lock(&a6xx_gpu->gmu.lock);
-
 	opp = dev_pm_opp_find_freq_ceil(&gpu->pdev->dev, &freq);
 	if (IS_ERR(opp)) {
-		ret = PTR_ERR(opp);
-		goto err_set_opp;
+		return PTR_ERR(opp);
 	}
 	dev_pm_opp_put(opp);
 
@@ -1969,8 +1964,6 @@ err_bulk_clk:
 		pm_runtime_put(gmu->dev);
 		dev_pm_opp_set_opp(&gpu->pdev->dev, NULL);
 	}
-err_set_opp:
-	mutex_unlock(&a6xx_gpu->gmu.lock);
 
 	if (!ret)
 		msm_devfreq_resume(gpu);
@@ -1990,9 +1983,7 @@ static int a6xx_gmu_pm_suspend(struct msm_gpu *gpu)
 
 	msm_devfreq_suspend(gpu);
 
-	mutex_lock(&a6xx_gpu->gmu.lock);
 	ret = a6xx_gmu_stop(a6xx_gpu);
-	mutex_unlock(&a6xx_gpu->gmu.lock);
 	if (ret)
 		return ret;
 
@@ -2016,8 +2007,6 @@ static int a6xx_pm_suspend(struct msm_gpu *gpu)
 
 	msm_devfreq_suspend(gpu);
 
-	mutex_lock(&a6xx_gpu->gmu.lock);
-
 	/* Drain the outstanding traffic on memory buses */
 	a6xx_bus_clear_pending_transactions(adreno_gpu, true);
 
@@ -2029,8 +2018,6 @@ static int a6xx_pm_suspend(struct msm_gpu *gpu)
 	pm_runtime_put_sync(gmu->gxpd);
 	dev_pm_opp_set_opp(&gpu->pdev->dev, NULL);
 	pm_runtime_put_sync(gmu->dev);
-
-	mutex_unlock(&a6xx_gpu->gmu.lock);
 
 	if (a6xx_gpu->shadow_bo)
 		for (i = 0; i < gpu->nr_rings; i++)
