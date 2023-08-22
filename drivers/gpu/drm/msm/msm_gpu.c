@@ -751,8 +751,6 @@ void msm_gpu_submit(struct msm_gpu *gpu, struct msm_gem_submit *submit)
 
 	WARN_ON(!mutex_is_locked(&gpu->lock));
 
-	pm_runtime_get_sync(&gpu->pdev->dev);
-
 	msm_gpu_hw_init(gpu);
 
 	submit->seqno = submit->hw_fence->seqno;

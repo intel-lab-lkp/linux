@@ -950,6 +950,8 @@ int msm_ioctl_gem_submit(struct drm_device *dev, void *data,
 
 	msm_rd_dump_submit(priv->rd, submit, NULL);
 
+	pm_runtime_get_sync(&gpu->pdev->dev);
+
 	drm_sched_entity_push_job(&submit->base);
 
 	args->fence = submit->fence_id;
