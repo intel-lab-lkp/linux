@@ -29,7 +29,7 @@ vxfs_typdump(struct vxfs_typed *typ)
 /**
  * vxfs_bmap_ext4 - do bmap for ext4 extents
  * @ip:		pointer to the inode we do bmap for
- * @iblock:	logical block.
+ * @bn:	logical block.
  *
  * Description:
  *   vxfs_bmap_ext4 performs the bmap operation for inodes with
