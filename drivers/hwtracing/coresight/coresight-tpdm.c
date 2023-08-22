@@ -39,9 +39,46 @@ static ssize_t tpdm_simple_dataset_show(struct device *dev,
 	case DSB_EDGE_CTRL_MASK:
 		return sysfs_emit(buf, "0x%x\n",
 				drvdata->dsb->edge_ctrl_mask[tpdm_attr->idx]);
+	case DSB_TRIG_PATT:
+		return sysfs_emit(buf, "0x%x\n",
+				drvdata->dsb->trig_patt[tpdm_attr->idx]);
+	case DSB_TRIG_PATT_MASK:
+		return sysfs_emit(buf, "0x%x\n",
+				drvdata->dsb->trig_patt_mask[tpdm_attr->idx]);
 	default:
 		return -EINVAL;
 	}
+}
+
+/* Write dataset array member with the index number */
+static ssize_t tpdm_simple_dataset_store(struct device *dev,
+					  struct device_attribute *attr,
+					  const char *buf,
+					  size_t size)
+{
+	unsigned long val;
+	struct tpdm_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	struct tpdm_dataset_attribute *tpdm_attr =
+		container_of(attr, struct tpdm_dataset_attribute, attr);
+
+	if (kstrtoul(buf, 0, &val) || (tpdm_attr->idx >= tpdm_attr->max))
+		return -EINVAL;
+
+	spin_lock(&drvdata->spinlock);
+	switch (tpdm_attr->mem) {
+	case DSB_TRIG_PATT:
+		drvdata->dsb->trig_patt[tpdm_attr->idx] = val;
+		break;
+	case DSB_TRIG_PATT_MASK:
+		drvdata->dsb->trig_patt_mask[tpdm_attr->idx] = val;
+		break;
+	default:
+		spin_unlock(&drvdata->spinlock);
+		return -EINVAL;
+	}
+	spin_unlock(&drvdata->spinlock);
+
+	return size;
 }
 
 static bool tpdm_has_dsb_dataset(struct tpdm_drvdata *drvdata)
@@ -102,7 +139,12 @@ static void tpdm_enable_dsb(struct tpdm_drvdata *drvdata)
 	for (i = 0; i < TPDM_DSB_MAX_EDCMR; i++)
 		writel_relaxed(drvdata->dsb->edge_ctrl_mask[i],
 			   drvdata->base + TPDM_DSB_EDCMR(i));
-
+	for (i = 0; i < TPDM_DSB_MAX_PATT; i++) {
+		writel_relaxed(drvdata->dsb->trig_patt[i],
+			    drvdata->base + TPDM_DSB_XPR(i));
+		writel_relaxed(drvdata->dsb->trig_patt_mask[i],
+			    drvdata->base + TPDM_DSB_XPMR(i));
+	}
 	val = readl_relaxed(drvdata->base + TPDM_DSB_TIER);
 	/* Set trigger timestamp */
 	if (drvdata->dsb->trig_ts)
@@ -531,6 +573,26 @@ static struct attribute *tpdm_dsb_edge_attrs[] = {
 	NULL,
 };
 
+static struct attribute *tpdm_dsb_trig_patt_attrs[] = {
+	DSB_TRIG_PATT_ATTR(0),
+	DSB_TRIG_PATT_ATTR(1),
+	DSB_TRIG_PATT_ATTR(2),
+	DSB_TRIG_PATT_ATTR(3),
+	DSB_TRIG_PATT_ATTR(4),
+	DSB_TRIG_PATT_ATTR(5),
+	DSB_TRIG_PATT_ATTR(6),
+	DSB_TRIG_PATT_ATTR(7),
+	DSB_TRIG_PATT_MASK_ATTR(0),
+	DSB_TRIG_PATT_MASK_ATTR(1),
+	DSB_TRIG_PATT_MASK_ATTR(2),
+	DSB_TRIG_PATT_MASK_ATTR(3),
+	DSB_TRIG_PATT_MASK_ATTR(4),
+	DSB_TRIG_PATT_MASK_ATTR(5),
+	DSB_TRIG_PATT_MASK_ATTR(6),
+	DSB_TRIG_PATT_MASK_ATTR(7),
+	NULL,
+};
+
 static struct attribute *tpdm_dsb_attrs[] = {
 	&dev_attr_dsb_mode.attr,
 	&dev_attr_dsb_trig_ts.attr,
@@ -549,10 +611,17 @@ static struct attribute_group tpdm_dsb_edge_grp = {
 	.name = "dsb_edge",
 };
 
+static struct attribute_group tpdm_dsb_trig_patt_grp = {
+	.attrs = tpdm_dsb_trig_patt_attrs,
+	.is_visible = tpdm_dsb_is_visible,
+	.name = "dsb_trig_patt",
+};
+
 static const struct attribute_group *tpdm_attr_grps[] = {
 	&tpdm_attr_grp,
 	&tpdm_dsb_attrs_grp,
 	&tpdm_dsb_edge_grp,
+	&tpdm_dsb_trig_patt_grp,
 	NULL,
 };
 
