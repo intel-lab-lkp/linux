@@ -2478,7 +2478,7 @@ static struct folio *alloc_misplaced_dst_folio(struct folio *src,
 	return __folio_alloc_node(gfp, order, nid);
 }
 
-static int numamigrate_isolate_page(pg_data_t *pgdat, struct page *page)
+bool numamigrate_isolate_page(pg_data_t *pgdat, struct page *page)
 {
 	int nr_pages = thp_nr_pages(page);
 	int order = compound_order(page);
@@ -2496,11 +2496,11 @@ static int numamigrate_isolate_page(pg_data_t *pgdat, struct page *page)
 				break;
 		}
 		wakeup_kswapd(pgdat->node_zones + z, 0, order, ZONE_MOVABLE);
-		return 0;
+		return false;
 	}
 
 	if (!isolate_lru_page(page))
-		return 0;
+		return false;
 
 	mod_node_page_state(page_pgdat(page), NR_ISOLATED_ANON + page_is_file_lru(page),
 			    nr_pages);
@@ -2511,7 +2511,7 @@ static int numamigrate_isolate_page(pg_data_t *pgdat, struct page *page)
 	 * disappearing underneath us during migration.
 	 */
 	put_page(page);
-	return 1;
+	return true;
 }
 
 /*
@@ -2523,15 +2523,11 @@ int migrate_misplaced_page(struct page *page, struct vm_area_struct *vma,
 			   int node)
 {
 	pg_data_t *pgdat = NODE_DATA(node);
-	int isolated;
+	int migrated = 1;
 	int nr_remaining;
 	unsigned int nr_succeeded;
 	LIST_HEAD(migratepages);
 	int nr_pages = thp_nr_pages(page);
-
-	isolated = numamigrate_isolate_page(pgdat, page);
-	if (!isolated)
-		goto out;
 
 	list_add(&page->lru, &migratepages);
 	nr_remaining = migrate_pages(&migratepages, alloc_misplaced_dst_folio,
@@ -2544,7 +2540,7 @@ int migrate_misplaced_page(struct page *page, struct vm_area_struct *vma,
 					page_is_file_lru(page), -nr_pages);
 			putback_lru_page(page);
 		}
-		isolated = 0;
+		migrated = 0;
 	}
 	if (nr_succeeded) {
 		count_vm_numa_events(NUMA_PAGE_MIGRATE, nr_succeeded);
@@ -2553,11 +2549,7 @@ int migrate_misplaced_page(struct page *page, struct vm_area_struct *vma,
 					    nr_succeeded);
 	}
 	BUG_ON(!list_empty(&migratepages));
-	return isolated;
-
-out:
-	put_page(page);
-	return 0;
+	return migrated;
 }
 #endif /* CONFIG_NUMA_BALANCING */
 #endif /* CONFIG_NUMA */

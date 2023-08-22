@@ -1496,6 +1496,7 @@ vm_fault_t do_huge_pmd_numa_page(struct vm_fault *vmf)
 	int target_nid, last_cpupid = (-1 & LAST_CPUPID_MASK);
 	bool migrated = false, writable = false;
 	int flags = 0;
+	pg_data_t *pgdat;
 
 	vmf->ptl = pmd_lock(vma->vm_mm, vmf->pmd);
 	if (unlikely(!pmd_same(oldpmd, *vmf->pmd))) {
@@ -1541,6 +1542,12 @@ vm_fault_t do_huge_pmd_numa_page(struct vm_fault *vmf)
 	writable = false;
 
 	if (!numa_page_can_migrate(vma, page)) {
+		put_page(page);
+		goto migrate_fail;
+	}
+
+	pgdat = NODE_DATA(target_nid);
+	if (!numamigrate_isolate_page(pgdat, page)) {
 		put_page(page);
 		goto migrate_fail;
 	}

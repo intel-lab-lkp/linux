@@ -4769,6 +4769,7 @@ static vm_fault_t do_numa_page(struct vm_fault *vmf)
 	int target_nid;
 	pte_t pte, old_pte;
 	int flags = 0;
+	pg_data_t *pgdat;
 
 	/*
 	 * The "pte" at this point cannot be used safely without
@@ -4840,6 +4841,12 @@ static vm_fault_t do_numa_page(struct vm_fault *vmf)
 	writable = false;
 
 	if (!numa_page_can_migrate(vma, page)) {
+		put_page(page);
+		goto migrate_fail;
+	}
+
+	pgdat = NODE_DATA(target_nid);
+	if (!numamigrate_isolate_page(pgdat, page)) {
 		put_page(page);
 		goto migrate_fail;
 	}
