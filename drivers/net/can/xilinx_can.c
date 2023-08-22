@@ -53,18 +53,23 @@ enum xcan_reg {
 	XCAN_AFR_OFFSET		= 0x60, /* Acceptance Filter */
 
 	/* only on CAN FD cores */
-	XCAN_F_BRPR_OFFSET	= 0x088, /* Data Phase Baud Rate
-					  * Prescaler
-					  */
-	XCAN_F_BTR_OFFSET	= 0x08C, /* Data Phase Bit Timing */
-	XCAN_TRR_OFFSET		= 0x0090, /* TX Buffer Ready Request */
-	XCAN_AFR_EXT_OFFSET	= 0x00E0, /* Acceptance Filter */
-	XCAN_FSR_OFFSET		= 0x00E8, /* RX FIFO Status */
-	XCAN_TXMSG_BASE_OFFSET	= 0x0100, /* TX Message Space */
+	XCAN_F_BRPR_OFFSET	= 0x88, /* Data Phase Baud Rate Prescaler */
+	XCAN_F_BTR_OFFSET	= 0x8C, /* Data Phase Bit Timing */
+	XCAN_TRR_OFFSET		= 0x90, /* TX Buffer Ready Request */
+
+	/* only on AXI CAN cores */
+	XCAN_ECC_CFG_OFFSET     = 0xC8, /* ECC Configuration */
+	XCAN_TXTLFIFO_ECC_OFFSET        = 0xCC, /* TXTL FIFO ECC error counter */
+	XCAN_TXOLFIFO_ECC_OFFSET        = 0xD0, /* TXOL FIFO ECC error counter */
+	XCAN_RXFIFO_ECC_OFFSET          = 0xD4, /* RX FIFO ECC error counter */
+
+	XCAN_AFR_EXT_OFFSET	= 0xE0, /* Acceptance Filter */
+	XCAN_FSR_OFFSET		= 0xE8, /* RX FIFO Status */
+	XCAN_TXMSG_BASE_OFFSET	= 0x100, /* TX Message Space */
+	XCAN_AFR_2_MASK_OFFSET  = 0xA00, /* Acceptance Filter MASK */
+	XCAN_AFR_2_ID_OFFSET    = 0xA04, /* Acceptance Filter ID */
 	XCAN_RXMSG_BASE_OFFSET	= 0x1100, /* RX Message Space */
 	XCAN_RXMSG_2_BASE_OFFSET	= 0x2100, /* RX Message Space */
-	XCAN_AFR_2_MASK_OFFSET	= 0x0A00, /* Acceptance Filter MASK */
-	XCAN_AFR_2_ID_OFFSET	= 0x0A04, /* Acceptance Filter ID */
 };
 
 #define XCAN_FRAME_ID_OFFSET(frame_base)	((frame_base) + 0x00)
@@ -124,6 +129,12 @@ enum xcan_reg {
 #define XCAN_IXR_TXFLL_MASK		0x00000004 /* Tx FIFO Full intr */
 #define XCAN_IXR_TXOK_MASK		0x00000002 /* TX successful intr */
 #define XCAN_IXR_ARBLST_MASK		0x00000001 /* Arbitration lost intr */
+#define XCAN_IXR_E2BERX_MASK            BIT(23) /* RX FIFO two bit ECC error */
+#define XCAN_IXR_E1BERX_MASK            BIT(22) /* RX FIFO one bit ECC error */
+#define XCAN_IXR_E2BETXOL_MASK          BIT(21) /* TXOL FIFO two bit ECC error */
+#define XCAN_IXR_E1BETXOL_MASK          BIT(20) /* TXOL FIFO One bit ECC error */
+#define XCAN_IXR_E2BETXTL_MASK          BIT(19) /* TXTL FIFO Two bit ECC error */
+#define XCAN_IXR_E1BETXTL_MASK          BIT(18) /* TXTL FIFO One bit ECC error */
 #define XCAN_IDR_ID1_MASK		0xFFE00000 /* Standard msg identifier */
 #define XCAN_IDR_SRR_MASK		0x00100000 /* Substitute remote TXreq */
 #define XCAN_IDR_IDE_MASK		0x00080000 /* Identifier extension */
@@ -137,6 +148,11 @@ enum xcan_reg {
 #define XCAN_2_FSR_RI_MASK		0x0000003F /* RX Read Index */
 #define XCAN_DLCR_EDL_MASK		0x08000000 /* EDL Mask in DLC */
 #define XCAN_DLCR_BRS_MASK		0x04000000 /* BRS Mask in DLC */
+#define XCAN_ECC_CFG_REECRX_MASK	BIT(2) /* Reset RX FIFO ECC error counters */
+#define XCAN_ECC_CFG_REECTXOL_MASK	BIT(1) /* Reset TXOL FIFO ECC error counters */
+#define XCAN_ECC_CFG_REECTXTL_MASK	BIT(0) /* Reset TXTL FIFO ECC error counters */
+#define XCAN_ECC_1BIT_CNT_MASK		GENMASK(15, 0) /* FIFO ECC 1bit count mask */
+#define XCAN_ECC_2BIT_CNT_MASK		GENMASK(31, 16) /* FIFO ECC 2bit count mask */
 
 /* CAN register bit shift - XCAN_<REG>_<BIT>_SHIFT */
 #define XCAN_BRPR_TDC_ENABLE		BIT(16) /* Transmitter Delay Compensation (TDC) Enable */
@@ -202,6 +218,13 @@ struct xcan_devtype_data {
  * @devtype:			Device type specific constants
  * @transceiver:		Optional pointer to associated CAN transceiver
  * @rstc:			Pointer to reset control
+ * @ecc_enable:			ECC enable flag
+ * @ecc_2bit_rxfifo_cnt:	RXFIFO 2bit ECC count
+ * @ecc_1bit_rxfifo_cnt:	RXFIFO 1bit ECC count
+ * @ecc_2bit_txolfifo_cnt:	TXOLFIFO 2bit ECC count
+ * @ecc_1bit_txolfifo_cnt:	TXOLFIFO 1bit ECC count
+ * @ecc_2bit_txtlfifo_cnt:	TXTLFIFO 2bit ECC count
+ * @ecc_1bit_txtlfifo_cnt:	TXTLFIFO 1bit ECC count
  */
 struct xcan_priv {
 	struct can_priv can;
@@ -221,6 +244,13 @@ struct xcan_priv {
 	struct xcan_devtype_data devtype;
 	struct phy *transceiver;
 	struct reset_control *rstc;
+	bool ecc_enable;
+	u64 ecc_2bit_rxfifo_cnt;
+	u64 ecc_1bit_rxfifo_cnt;
+	u64 ecc_2bit_txolfifo_cnt;
+	u64 ecc_1bit_txolfifo_cnt;
+	u64 ecc_2bit_txtlfifo_cnt;
+	u64 ecc_1bit_txtlfifo_cnt;
 };
 
 /* CAN Bittiming constants as per Xilinx CAN specs */
@@ -522,6 +552,11 @@ static int xcan_chip_start(struct net_device *ndev)
 		XCAN_IXR_WKUP_MASK | XCAN_IXR_SLP_MASK |
 		XCAN_IXR_ERROR_MASK | XCAN_IXR_RXOFLW_MASK |
 		XCAN_IXR_ARBLST_MASK | xcan_rx_int_mask(priv);
+
+	if (priv->ecc_enable)
+		ier |= XCAN_IXR_E2BERX_MASK | XCAN_IXR_E1BERX_MASK |
+			XCAN_IXR_E2BETXOL_MASK | XCAN_IXR_E1BETXOL_MASK |
+			XCAN_IXR_E2BETXTL_MASK | XCAN_IXR_E1BETXTL_MASK;
 
 	if (priv->devtype.flags & XCAN_FLAG_RXMNF)
 		ier |= XCAN_IXR_RXMNF_MASK;
@@ -1127,6 +1162,58 @@ static void xcan_err_interrupt(struct net_device *ndev, u32 isr)
 		priv->can.can_stats.bus_error++;
 	}
 
+	if (priv->ecc_enable) {
+		u32 reg_ecc;
+
+		reg_ecc = priv->read_reg(priv, XCAN_RXFIFO_ECC_OFFSET);
+		if (isr & XCAN_IXR_E2BERX_MASK) {
+			priv->ecc_2bit_rxfifo_cnt +=
+				FIELD_GET(XCAN_ECC_2BIT_CNT_MASK, reg_ecc);
+			netdev_dbg(ndev, "%s: RX FIFO 2bit ECC error count %lld\n",
+				   __func__, priv->ecc_2bit_rxfifo_cnt);
+		}
+		if (isr & XCAN_IXR_E1BERX_MASK) {
+			priv->ecc_1bit_rxfifo_cnt +=
+				FIELD_GET(XCAN_ECC_1BIT_CNT_MASK, reg_ecc);
+			netdev_dbg(ndev, "%s: RX FIFO 1bit ECC error count %lld\n",
+				   __func__, priv->ecc_1bit_rxfifo_cnt);
+		}
+
+		reg_ecc = priv->read_reg(priv, XCAN_TXOLFIFO_ECC_OFFSET);
+		if (isr & XCAN_IXR_E2BETXOL_MASK) {
+			priv->ecc_2bit_txolfifo_cnt +=
+				FIELD_GET(XCAN_ECC_2BIT_CNT_MASK, reg_ecc);
+			netdev_dbg(ndev, "%s: TXOL FIFO 2bit ECC error count %lld\n",
+				   __func__, priv->ecc_2bit_txolfifo_cnt);
+		}
+		if (isr & XCAN_IXR_E1BETXOL_MASK) {
+			priv->ecc_1bit_txolfifo_cnt +=
+				FIELD_GET(XCAN_ECC_1BIT_CNT_MASK, reg_ecc);
+			netdev_dbg(ndev, "%s: TXOL FIFO 1bit ECC error count %lld\n",
+				   __func__, priv->ecc_1bit_txolfifo_cnt);
+		}
+
+		reg_ecc = priv->read_reg(priv, XCAN_TXTLFIFO_ECC_OFFSET);
+		if (isr & XCAN_IXR_E2BETXTL_MASK) {
+			priv->ecc_2bit_txtlfifo_cnt +=
+				FIELD_GET(XCAN_ECC_2BIT_CNT_MASK, reg_ecc);
+			netdev_dbg(ndev, "%s: TXTL FIFO 2bit ECC error count %lld\n",
+				   __func__, priv->ecc_2bit_txtlfifo_cnt);
+		}
+		if (isr & XCAN_IXR_E1BETXTL_MASK) {
+			priv->ecc_1bit_txtlfifo_cnt +=
+				FIELD_GET(XCAN_ECC_1BIT_CNT_MASK, reg_ecc);
+			netdev_dbg(ndev, "%s: TXTL FIFO 1bit ECC error count %lld\n",
+				   __func__, priv->ecc_1bit_txtlfifo_cnt);
+		}
+
+		/* The counter reaches its maximum at 0xffff and does not overflow.
+		 * Accept the small race window between reading and resetting ECC counters.
+		 */
+		priv->write_reg(priv, XCAN_ECC_CFG_OFFSET, XCAN_ECC_CFG_REECRX_MASK |
+				XCAN_ECC_CFG_REECTXOL_MASK | XCAN_ECC_CFG_REECTXTL_MASK);
+	}
+
 	if (cf.can_id) {
 		struct can_frame *skb_cf;
 		struct sk_buff *skb = alloc_can_err_skb(ndev, &skb_cf);
@@ -1354,9 +1441,8 @@ static irqreturn_t xcan_interrupt(int irq, void *dev_id)
 {
 	struct net_device *ndev = (struct net_device *)dev_id;
 	struct xcan_priv *priv = netdev_priv(ndev);
-	u32 isr, ier;
-	u32 isr_errors;
 	u32 rx_int_mask = xcan_rx_int_mask(priv);
+	u32 isr, ier, isr_errors, mask;
 
 	/* Get the interrupt status from Xilinx CAN */
 	isr = priv->read_reg(priv, XCAN_ISR_OFFSET);
@@ -1374,10 +1460,17 @@ static irqreturn_t xcan_interrupt(int irq, void *dev_id)
 	if (isr & XCAN_IXR_TXOK_MASK)
 		xcan_tx_interrupt(ndev, isr);
 
+	mask = XCAN_IXR_ERROR_MASK | XCAN_IXR_RXOFLW_MASK |
+		XCAN_IXR_BSOFF_MASK | XCAN_IXR_ARBLST_MASK |
+		XCAN_IXR_RXMNF_MASK;
+
+	if (priv->ecc_enable)
+		mask |= XCAN_IXR_E2BERX_MASK | XCAN_IXR_E1BERX_MASK |
+			XCAN_IXR_E2BETXOL_MASK | XCAN_IXR_E1BETXOL_MASK |
+			XCAN_IXR_E2BETXTL_MASK | XCAN_IXR_E1BETXTL_MASK;
+
 	/* Check for the type of error interrupt and Processing it */
-	isr_errors = isr & (XCAN_IXR_ERROR_MASK | XCAN_IXR_RXOFLW_MASK |
-			    XCAN_IXR_BSOFF_MASK | XCAN_IXR_ARBLST_MASK |
-			    XCAN_IXR_RXMNF_MASK);
+	isr_errors = isr & mask;
 	if (isr_errors) {
 		priv->write_reg(priv, XCAN_ICR_OFFSET, isr_errors);
 		xcan_err_interrupt(ndev, isr);
@@ -1796,6 +1889,7 @@ static int xcan_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	priv = netdev_priv(ndev);
+	priv->ecc_enable = of_property_read_bool(pdev->dev.of_node, "xlnx,has-ecc");
 	priv->dev = &pdev->dev;
 	priv->can.bittiming_const = devtype->bittiming_const;
 	priv->can.do_set_mode = xcan_do_set_mode;
@@ -1912,6 +2006,11 @@ static int xcan_probe(struct platform_device *pdev)
 		   priv->reg_base, ndev->irq, priv->can.clock.freq,
 		   hw_tx_max, priv->tx_max);
 
+	if (priv->ecc_enable) {
+		/* Reset FIFO ECC counters */
+		priv->write_reg(priv, XCAN_ECC_CFG_OFFSET, XCAN_ECC_CFG_REECRX_MASK |
+			XCAN_ECC_CFG_REECTXOL_MASK | XCAN_ECC_CFG_REECTXTL_MASK);
+	}
 	return 0;
 
 err_disableclks:
