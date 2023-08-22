@@ -2535,7 +2535,7 @@ static int icl_set_topdown_event_period(struct perf_event *event)
 		hwc->saved_metric = 0;
 	}
 
-	if ((hwc->saved_slots) && is_slots_event(event)) {
+	if (is_slots_event(event)) {
 		wrmsrl(MSR_CORE_PERF_FIXED_CTR3, hwc->saved_slots);
 		wrmsrl(MSR_PERF_METRICS, hwc->saved_metric);
 	}
@@ -2608,6 +2608,15 @@ static void __icl_update_topdown_event(struct perf_event *event,
 	}
 }
 
+static inline void __icl_update_vmetrics_event(struct perf_event *event, u64 metrics)
+{
+	/*
+	 * For the guest metrics event, the count would be used to save
+	 * the raw data of PERF_METRICS MSR.
+	 */
+	local64_set(&event->count, metrics);
+}
+
 static void update_saved_topdown_regs(struct perf_event *event, u64 slots,
 				      u64 metrics, int metric_end)
 {
@@ -2625,6 +2634,17 @@ static void update_saved_topdown_regs(struct perf_event *event, u64 slots,
 		other->hw.saved_slots = slots;
 		other->hw.saved_metric = metrics;
 	}
+}
+
+static inline void _intel_update_topdown_event(struct perf_event *event,
+					       u64 slots, u64 metrics,
+					       u64 last_slots, u64 last_metrics)
+{
+	if (is_vmetrics_event(event))
+		__icl_update_vmetrics_event(event, metrics);
+	else
+		__icl_update_topdown_event(event, slots, metrics,
+					   last_slots, last_metrics);
 }
 
 /*
@@ -2654,9 +2674,9 @@ static u64 intel_update_topdown_event(struct perf_event *event, int metric_end)
 		if (!is_topdown_idx(idx))
 			continue;
 		other = cpuc->events[idx];
-		__icl_update_topdown_event(other, slots, metrics,
-					   event ? event->hw.saved_slots : 0,
-					   event ? event->hw.saved_metric : 0);
+		_intel_update_topdown_event(other, slots, metrics,
+					    event ? event->hw.saved_slots : 0,
+					    event ? event->hw.saved_metric : 0);
 	}
 
 	/*
@@ -2664,9 +2684,9 @@ static u64 intel_update_topdown_event(struct perf_event *event, int metric_end)
 	 * in active_mask e.g. x86_pmu_stop()
 	 */
 	if (event && !test_bit(event->hw.idx, cpuc->active_mask)) {
-		__icl_update_topdown_event(event, slots, metrics,
-					   event->hw.saved_slots,
-					   event->hw.saved_metric);
+		_intel_update_topdown_event(event, slots, metrics,
+					    event->hw.saved_slots,
+					    event->hw.saved_metric);
 
 		/*
 		 * In x86_pmu_stop(), the event is cleared in active_mask first,
@@ -3847,8 +3867,9 @@ static int core_pmu_hw_config(struct perf_event *event)
 
 static bool is_available_metric_event(struct perf_event *event)
 {
-	return is_metric_event(event) &&
-		event->attr.config <= INTEL_TD_METRIC_AVAILABLE_MAX;
+	return (is_metric_event(event) &&
+		event->attr.config <= INTEL_TD_METRIC_AVAILABLE_MAX) ||
+			is_vmetrics_event(event);
 }
 
 static inline bool is_mem_loads_event(struct perf_event *event)
