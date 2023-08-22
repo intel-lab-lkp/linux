@@ -1813,7 +1813,28 @@
 			pinctrl-names = "default";
 			pinctrl-0 = <&pcie0_default_state>;
 
+			operating-points-v2 = <&pcie0_opp_table>;
+
 			status = "disabled";
+
+			pcie0_opp_table: opp-table {
+				compatible = "operating-points-v2";
+
+				opp-1 {
+					opp-level = <1>;
+					required-opps = <&rpmhpd_opp_low_svs>;
+				};
+
+				opp-2 {
+					opp-level = <2>;
+					required-opps = <&rpmhpd_opp_low_svs>;
+				};
+
+				opp-3 {
+					opp-level = <3>;
+					required-opps = <&rpmhpd_opp_nom>;
+				};
+			};
 		};
 
 		pcie0_phy: phy@1c06000 {
@@ -1925,7 +1946,33 @@
 			pinctrl-names = "default";
 			pinctrl-0 = <&pcie1_default_state>;
 
+			operating-points-v2 = <&pcie1_opp_table>;
+
 			status = "disabled";
+
+			pcie1_opp_table: opp-table {
+				compatible = "operating-points-v2";
+
+				opp-1 {
+					opp-level = <1>;
+					required-opps = <&rpmhpd_opp_low_svs>;
+				};
+
+				opp-2 {
+					opp-level = <2>;
+					required-opps = <&rpmhpd_opp_low_svs>;
+				};
+
+				opp-3 {
+					opp-level = <3>;
+					required-opps = <&rpmhpd_opp_low_svs>;
+				};
+
+				opp-4 {
+					opp-level = <4>;
+					required-opps = <&rpmhpd_opp_nom>;
+				};
+			};
 		};
 
 		pcie1_phy: phy@1c0f000 {
