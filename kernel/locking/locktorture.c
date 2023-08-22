@@ -29,6 +29,7 @@
 #include <linux/slab.h>
 #include <linux/torture.h>
 #include <linux/reboot.h>
+#include <linux/rcu_notifier.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Paul E. McKenney <paulmck@linux.ibm.com>");
@@ -144,6 +145,7 @@ struct lock_torture_ops {
 	int (*readlock)(int tid);
 	void (*read_delay)(struct torture_random_state *trsp);
 	void (*readunlock)(int tid);
+	int (*lockdump)(struct notifier_block *nb, unsigned long v, void *ptr);
 
 	unsigned long flags; /* for irq spinlocks */
 	const char *name;
@@ -270,6 +272,12 @@ __releases(torture_spinlock)
 	spin_unlock(&torture_spinlock);
 }
 
+static int torture_spin_lock_dump(struct notifier_block *nb, unsigned long v, void *ptr)
+{
+	pr_alert("%s invoked: v=%lu, duration=%lu.\n", __func__, v, (unsigned long)ptr);
+	return NOTIFY_OK;
+}
+
 static struct lock_torture_ops spin_lock_ops = {
 	.writelock	= torture_spin_lock_write_lock,
 	.write_delay	= torture_spin_lock_write_delay,
@@ -278,6 +286,7 @@ static struct lock_torture_ops spin_lock_ops = {
 	.readlock       = NULL,
 	.read_delay     = NULL,
 	.readunlock     = NULL,
+	.lockdump	= torture_spin_lock_dump,
 	.name		= "spin_lock"
 };
 
@@ -1098,9 +1107,12 @@ static void call_rcu_chain_cleanup(void)
 	call_rcu_chain_list = NULL;
 }
 
+static struct notifier_block lock_torture_stall_block;
+
 static void lock_torture_cleanup(void)
 {
 	int i;
+	int ret;
 
 	if (torture_cleanup_begin())
 		return;
@@ -1114,6 +1126,13 @@ static void lock_torture_cleanup(void)
 	 */
 	if (!cxt.lwsa && !cxt.lrsa)
 		goto end;
+
+	if (lock_torture_stall_block.notifier_call) {
+		ret = rcu_stall_chain_notifier_unregister(&lock_torture_stall_block);
+		if (ret)
+			pr_info("%s: rcu_stall_chain_notifier_unregister() returned %d.\n",
+				__func__, ret);
+	}
 
 	if (writer_tasks) {
 		for (i = 0; i < cxt.nrealwriters_stress; i++)
@@ -1163,6 +1182,7 @@ static int __init lock_torture_init(void)
 {
 	int i, j;
 	int firsterr = 0;
+	int ret;
 	static struct lock_torture_ops *torture_ops[] = {
 		&lock_busted_ops,
 		&spin_lock_ops, &spin_lock_irq_ops,
@@ -1282,6 +1302,16 @@ static int __init lock_torture_init(void)
 	firsterr = call_rcu_chain_init();
 	if (torture_init_error(firsterr))
 		goto unwind;
+
+	if (cxt.cur_ops->lockdump) {
+		lock_torture_stall_block.notifier_call = cxt.cur_ops->lockdump;
+		ret = rcu_stall_chain_notifier_register(&lock_torture_stall_block);
+		if (ret) {
+			lock_torture_stall_block.notifier_call = NULL;
+			pr_info("%s: rcu_stall_chain_notifier_register() error %d, %sexpected.\n",
+				__func__, ret, !IS_ENABLED(CONFIG_RCU_STALL_COMMON) ? "un" : "");
+		}
+	}
 
 	lock_torture_print_module_parms(cxt.cur_ops, "Start of test");
 
