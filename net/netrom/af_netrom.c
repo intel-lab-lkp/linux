@@ -732,23 +732,18 @@ static int nr_connect(struct socket *sock, struct sockaddr *uaddr,
 	 * closed.
 	 */
 	if (sk->sk_state == TCP_SYN_SENT) {
-		DEFINE_WAIT(wait);
-
 		for (;;) {
-			prepare_to_wait(sk_sleep(sk), &wait,
-					TASK_INTERRUPTIBLE);
 			if (sk->sk_state != TCP_SYN_SENT)
 				break;
 			if (!signal_pending(current)) {
 				release_sock(sk);
-				schedule();
+				schedule_timeout_interruptible(HZ);
 				lock_sock(sk);
 				continue;
 			}
 			err = -ERESTARTSYS;
 			break;
 		}
-		finish_wait(sk_sleep(sk), &wait);
 		if (err)
 			goto out_release;
 	}
@@ -772,7 +767,6 @@ static int nr_accept(struct socket *sock, struct socket *newsock, int flags,
 {
 	struct sk_buff *skb;
 	struct sock *newsk;
-	DEFINE_WAIT(wait);
 	struct sock *sk;
 	int err = 0;
 
@@ -795,7 +789,6 @@ static int nr_accept(struct socket *sock, struct socket *newsock, int flags,
 	 *	hooked into the SABM we saved
 	 */
 	for (;;) {
-		prepare_to_wait(sk_sleep(sk), &wait, TASK_INTERRUPTIBLE);
 		skb = skb_dequeue(&sk->sk_receive_queue);
 		if (skb)
 			break;
@@ -806,14 +799,13 @@ static int nr_accept(struct socket *sock, struct socket *newsock, int flags,
 		}
 		if (!signal_pending(current)) {
 			release_sock(sk);
-			schedule();
+			schedule_timeout_uninterruptible(HZ);
 			lock_sock(sk);
 			continue;
 		}
 		err = -ERESTARTSYS;
 		break;
 	}
-	finish_wait(sk_sleep(sk), &wait);
 	if (err)
 		goto out_release;
 
