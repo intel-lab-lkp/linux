@@ -361,7 +361,8 @@ static int rt5033_charger_set_otg(struct rt5033_charger *charger)
 			0x37 << RT5033_CHGCTRL2_CV_SHIFT);
 	if (ret) {
 		dev_err(charger->dev, "Failed set OTG boost v_out\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto out_unlock;
 	}
 
 	/* Set operation mode to OTG */
@@ -369,7 +370,8 @@ static int rt5033_charger_set_otg(struct rt5033_charger *charger)
 			RT5033_CHGCTRL1_MODE_MASK, RT5033_BOOST_MODE);
 	if (ret) {
 		dev_err(charger->dev, "Failed to update OTG mode.\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto out_unlock;
 	}
 
 	/* In case someone switched from charging to OTG directly */
@@ -378,9 +380,10 @@ static int rt5033_charger_set_otg(struct rt5033_charger *charger)
 
 	charger->otg = true;
 
+out_unlock:
 	mutex_unlock(&charger->lock);
 
-	return 0;
+	return ret;
 }
 
 static int rt5033_charger_unset_otg(struct rt5033_charger *charger)
@@ -420,8 +423,10 @@ static int rt5033_charger_set_charging(struct rt5033_charger *charger)
 	/* In case someone switched from OTG to charging directly */
 	if (charger->otg) {
 		ret = rt5033_charger_unset_otg(charger);
-		if (ret)
+		if (ret) {
+			mutex_unlock(&charger->lock);
 			return -EINVAL;
+		}
 	}
 
 	charger->online = true;
@@ -448,6 +453,7 @@ static int rt5033_charger_set_mivr(struct rt5033_charger *charger)
 			RT5033_CHGCTRL4_MIVR_MASK, RT5033_CHARGER_MIVR_4600MV);
 	if (ret) {
 		dev_err(charger->dev, "Failed to set MIVR level.\n");
+		mutex_unlock(&charger->lock);
 		return -EINVAL;
 	}
 
@@ -463,7 +469,7 @@ static int rt5033_charger_set_mivr(struct rt5033_charger *charger)
 
 static int rt5033_charger_set_disconnect(struct rt5033_charger *charger)
 {
-	int ret;
+	int ret = 0;
 
 	mutex_lock(&charger->lock);
 
@@ -475,7 +481,8 @@ static int rt5033_charger_set_disconnect(struct rt5033_charger *charger)
 				RT5033_CHARGER_MIVR_DISABLE);
 		if (ret) {
 			dev_err(charger->dev, "Failed to disable MIVR.\n");
-			return -EINVAL;
+			ret = -EINVAL;
+			goto out_unlock;
 		}
 
 		charger->mivr_enabled = false;
@@ -483,16 +490,19 @@ static int rt5033_charger_set_disconnect(struct rt5033_charger *charger)
 
 	if (charger->otg) {
 		ret = rt5033_charger_unset_otg(charger);
-		if (ret)
-			return -EINVAL;
+		if (ret) {
+			ret = -EINVAL;
+			goto out_unlock;
+		}
 	}
 
 	if (charger->online)
 		charger->online = false;
 
+out_unlock:
 	mutex_unlock(&charger->lock);
 
-	return 0;
+	return ret;
 }
 
 static enum power_supply_property rt5033_charger_props[] = {
