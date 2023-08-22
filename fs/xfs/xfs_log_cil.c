@@ -124,7 +124,7 @@ xlog_cil_push_pcp_aggregate(
 	struct xlog_cil_pcp	*cilpcp;
 	int			cpu;
 
-	for_each_online_cpu(cpu) {
+	for_each_cpu(cpu, &cil->xc_pcpmask) {
 		cilpcp = per_cpu_ptr(cil->xc_pcp, cpu);
 
 		ctx->ticket->t_curr_res += cilpcp->space_reserved;
@@ -165,7 +165,14 @@ xlog_cil_insert_pcp_aggregate(
 	if (!test_and_clear_bit(XLOG_CIL_PCP_SPACE, &cil->xc_flags))
 		return;
 
-	for_each_online_cpu(cpu) {
+	/*
+	 * We don't hold xc_push_lock here, so we can race with other cpus
+	 * setting xc_pcpmask.  However, we've atomically cleared PCP_SPACE
+	 * which forces other threads to add to the global space used count.
+	 * xc_pcpmask is a superset of cilpcp structures that could have a
+	 * nonzero space_used.
+	 */
+	for_each_cpu(cpu, &cil->xc_pcpmask) {
 		int	old, prev;
 
 		cilpcp = per_cpu_ptr(cil->xc_pcp, cpu);
@@ -186,6 +193,7 @@ xlog_cil_ctx_switch(
 	xlog_cil_set_iclog_hdr_count(cil);
 	set_bit(XLOG_CIL_EMPTY, &cil->xc_flags);
 	set_bit(XLOG_CIL_PCP_SPACE, &cil->xc_flags);
+	cpumask_clear(&cil->xc_pcpmask);
 	ctx->sequence = ++cil->xc_current_sequence;
 	ctx->cil = cil;
 	cil->xc_ctx = ctx;
@@ -554,6 +562,7 @@ xlog_cil_insert_items(
 	int			iovhdr_res = 0, split_res = 0, ctx_res = 0;
 	int			space_used;
 	int			order;
+	unsigned int		cpu_nr;
 	struct xlog_cil_pcp	*cilpcp;
 
 	ASSERT(tp);
@@ -578,6 +587,18 @@ xlog_cil_insert_items(
 	 * are done without outside locking to serialise them.
 	 */
 	cilpcp = get_cpu_ptr(cil->xc_pcp);
+
+	/*
+	 * Add this cpu to the mask of cpus that could have touched xc_pcp.
+	 * The push aggregation function is called with the push lock held,
+	 * so take it here if we have to update the mask.
+	 */
+	cpu_nr = current_cpu();
+	if (!cpumask_test_cpu(cpu_nr, &cil->xc_pcpmask)) {
+		spin_lock(&cil->xc_push_lock);
+		cpumask_set_cpu(cpu_nr, &cil->xc_pcpmask);
+		spin_unlock(&cil->xc_push_lock);
+	}
 
 	/*
 	 * We need to take the CIL checkpoint unit reservation on the first
@@ -1791,38 +1812,6 @@ out_shutdown:
 }
 
 /*
- * Move dead percpu state to the relevant CIL context structures.
- *
- * We have to lock the CIL context here to ensure that nothing is modifying
- * the percpu state, either addition or removal. Both of these are done under
- * the CIL context lock, so grabbing that exclusively here will ensure we can
- * safely drain the cilpcp for the CPU that is dying.
- */
-void
-xlog_cil_pcp_dead(
-	struct xlog		*log,
-	unsigned int		cpu)
-{
-	struct xfs_cil		*cil = log->l_cilp;
-	struct xlog_cil_pcp	*cilpcp = per_cpu_ptr(cil->xc_pcp, cpu);
-	struct xfs_cil_ctx	*ctx;
-
-	down_write(&cil->xc_ctx_lock);
-	ctx = cil->xc_ctx;
-	if (ctx->ticket)
-		ctx->ticket->t_curr_res += cilpcp->space_reserved;
-	cilpcp->space_reserved = 0;
-
-	if (!list_empty(&cilpcp->log_items))
-		list_splice_init(&cilpcp->log_items, &ctx->log_items);
-	if (!list_empty(&cilpcp->busy_extents))
-		list_splice_init(&cilpcp->busy_extents, &ctx->busy_extents);
-	atomic_add(cilpcp->space_used, &ctx->space_used);
-	cilpcp->space_used = 0;
-	up_write(&cil->xc_ctx_lock);
-}
-
-/*
  * Perform initial CIL structure initialisation.
  */
 int
@@ -1857,6 +1846,7 @@ xlog_cil_init(
 		INIT_LIST_HEAD(&cilpcp->busy_extents);
 		INIT_LIST_HEAD(&cilpcp->log_items);
 	}
+	cpumask_clear(&cil->xc_pcpmask);
 
 	INIT_LIST_HEAD(&cil->xc_committing);
 	spin_lock_init(&cil->xc_push_lock);

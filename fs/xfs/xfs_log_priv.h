@@ -278,9 +278,13 @@ struct xfs_cil {
 	wait_queue_head_t	xc_push_wait;	/* background push throttle */
 
 	void __percpu		*xc_pcp;	/* percpu CIL structures */
-#ifdef CONFIG_HOTPLUG_CPU
-	struct list_head	xc_pcp_list;
-#endif
+
+	/*
+	 * Cpus that have could have written xc_pcp.  Accesss to the mask is
+	 * (mostly) synchronized via xc_push_lock, which is held when CIL
+	 * contexts are aggregated and switched.
+	 */
+	struct cpumask		xc_pcpmask;
 } ____cacheline_aligned_in_smp;
 
 /* xc_flags bit values */
@@ -704,10 +708,5 @@ xlog_kvmalloc(
 
 	return p;
 }
-
-/*
- * CIL CPU dead notifier
- */
-void xlog_cil_pcp_dead(struct xlog *log, unsigned int cpu);
 
 #endif	/* __XFS_LOG_PRIV_H__ */
