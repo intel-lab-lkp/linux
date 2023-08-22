@@ -109,8 +109,10 @@ static int atmel_hlcdc_pwm_apply(struct pwm_chip *chip, struct pwm_device *pwm,
 						 ATMEL_HLCDC_CFG(0),
 						 ATMEL_HLCDC_CLKPWMSEL,
 						 gencfg);
-			if (ret)
+			if (ret) {
+				clk_disable_unprepare(new_clk);
 				return ret;
+			}
 		}
 
 		do_div(pwmcval, state->period);
@@ -134,20 +136,27 @@ static int atmel_hlcdc_pwm_apply(struct pwm_chip *chip, struct pwm_device *pwm,
 					 ATMEL_HLCDC_PWMPS_MASK |
 					 ATMEL_HLCDC_PWMPOL,
 					 pwmcfg);
-		if (ret)
+		if (ret) {
+			clk_disable_unprepare(new_clk);
 			return ret;
+		}
 
 		ret = regmap_write(hlcdc->regmap, ATMEL_HLCDC_EN,
 				   ATMEL_HLCDC_PWM);
-		if (ret)
+		if (ret) {
+			clk_disable_unprepare(new_clk);
 			return ret;
+		}
 
 		ret = regmap_read_poll_timeout(hlcdc->regmap, ATMEL_HLCDC_SR,
 					       status,
 					       status & ATMEL_HLCDC_PWM,
 					       10, 0);
-		if (ret)
+		if (ret) {
+			clk_disable_unprepare(new_clk);
 			return ret;
+		}
+
 	} else {
 		ret = regmap_write(hlcdc->regmap, ATMEL_HLCDC_DIS,
 				   ATMEL_HLCDC_PWM);
