@@ -440,7 +440,7 @@ void phylink_limit_mac_speed(struct phylink_config *config, u32 max_speed)
 
 	for (i = 0; i < ARRAY_SIZE(phylink_caps_params) &&
 		    phylink_caps_params[i].speed > max_speed; i++)
-		config->mac_speed &= ~phylink_caps_params.mask;
+		config->mac_capabilities &= ~phylink_caps_params[i].mask;
 }
 EXPORT_SYMBOL_GPL(phylink_limit_mac_speed);
 
