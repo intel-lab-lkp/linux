@@ -24,6 +24,10 @@
 #define SPRD_SC2731_IRQ_BASE		0x140
 #define SPRD_SC2731_IRQ_NUMS		16
 #define SPRD_SC2731_CHG_DET		0xedc
+#define SPRD_UMP9620_IRQ_BASE           0x80
+#define SPRD_UMP9620_IRQ_NUMS           11
+#define SPRD_UMP9621_SLAVE_ID           0x8000
+#define SPRD_UMP9622_SLAVE_ID           0xc000
 
 /* PMIC charger detection definition */
 #define SPRD_PMIC_CHG_DET_DELAY_US	200000
@@ -45,6 +49,7 @@ struct sprd_pmic {
 };
 
 struct sprd_pmic_data {
+	u32 slave_id;
 	u32 irq_base;
 	u32 num_irqs;
 	u32 charger_det;
@@ -65,6 +70,19 @@ static const struct sprd_pmic_data sc2731_data = {
 	.irq_base = SPRD_SC2731_IRQ_BASE,
 	.num_irqs = SPRD_SC2731_IRQ_NUMS,
 	.charger_det = SPRD_SC2731_CHG_DET,
+};
+
+static const struct sprd_pmic_data ump9620_data = {
+	.irq_base = SPRD_UMP9620_IRQ_BASE,
+	.num_irqs = SPRD_UMP9620_IRQ_NUMS,
+};
+
+static const struct sprd_pmic_data ump9621_data = {
+	.slave_id = SPRD_UMP9621_SLAVE_ID,
+};
+
+static const struct sprd_pmic_data ump9622_data = {
+	.slave_id = SPRD_UMP9622_SLAVE_ID,
 };
 
 enum usb_charger_type sprd_pmic_detect_charger_type(struct device *dev)
@@ -108,8 +126,27 @@ static int sprd_pmic_spi_write(void *context, const void *data, size_t count)
 {
 	struct device *dev = context;
 	struct spi_device *spi = to_spi_device(dev);
+	const struct sprd_pmic_data *pdata;
+	int ret;
+	u32 *pmdata;
 
-	return spi_write(spi, data, count);
+	if (!pdata->slave_id) {
+		ret = spi_write(spi, data, count);
+	} else {
+		pdata = ((struct sprd_pmic *)spi_get_drvdata(spi))->pdata;
+
+		pmdata = kzalloc(count, GFP_KERNEL);
+		if (!pmdata)
+			return -ENOMEM;
+		memcpy(pmdata, data, count);
+		*pmdata += pdata->slave_id;
+		ret = spi_write(spi, (const void *)pmdata, count);
+		kfree(pmdata);
+	}
+	if (ret)
+		pr_err("pmic mfd write failed!\n");
+
+	return ret;
 }
 
 static int sprd_pmic_spi_read(void *context,
@@ -118,6 +155,7 @@ static int sprd_pmic_spi_read(void *context,
 {
 	struct device *dev = context;
 	struct spi_device *spi = to_spi_device(dev);
+	const struct sprd_pmic_data *pdata;
 	u32 rx_buf[2] = { 0 };
 	int ret;
 
@@ -125,11 +163,16 @@ static int sprd_pmic_spi_read(void *context,
 	if (reg_size != sizeof(u32) || val_size != sizeof(u32))
 		return -EINVAL;
 
+	pdata = ((struct sprd_pmic *)spi_get_drvdata(spi))->pdata;
 	/* Copy address to read from into first element of SPI buffer. */
 	memcpy(rx_buf, reg, sizeof(u32));
+	if (!pdata->slave_id)
+		rx_buf[0] += pdata->slave_id;
 	ret = spi_read(spi, rx_buf, 1);
-	if (ret < 0)
+	if (ret < 0) {
+		pr_err("pmic mfd read failed!\n");
 		return ret;
+	}
 
 	memcpy(val, rx_buf, val_size);
 	return 0;
@@ -175,33 +218,34 @@ static int sprd_pmic_probe(struct spi_device *spi)
 
 	spi_set_drvdata(spi, ddata);
 	ddata->dev = &spi->dev;
-	ddata->irq = spi->irq;
 	ddata->pdata = pdata;
 
-	ddata->irq_chip.name = dev_name(&spi->dev);
-	ddata->irq_chip.status_base =
-		pdata->irq_base + SPRD_PMIC_INT_MASK_STATUS;
-	ddata->irq_chip.unmask_base = pdata->irq_base + SPRD_PMIC_INT_EN;
-	ddata->irq_chip.ack_base = 0;
-	ddata->irq_chip.num_regs = 1;
-	ddata->irq_chip.num_irqs = pdata->num_irqs;
+	if (spi->irq) {
+		ddata->irq = spi->irq;
+		ddata->irq_chip.name = dev_name(&spi->dev);
+		ddata->irq_chip.status_base = pdata->irq_base + SPRD_PMIC_INT_MASK_STATUS;
+		ddata->irq_chip.unmask_base = pdata->irq_base + SPRD_PMIC_INT_EN;
+		ddata->irq_chip.ack_base = 0;
+		ddata->irq_chip.num_regs = 1;
+		ddata->irq_chip.num_irqs = pdata->num_irqs;
 
-	ddata->irqs = devm_kcalloc(&spi->dev,
-				   pdata->num_irqs, sizeof(struct regmap_irq),
-				   GFP_KERNEL);
-	if (!ddata->irqs)
-		return -ENOMEM;
+		ddata->irqs = devm_kcalloc(&spi->dev,
+					   pdata->num_irqs, sizeof(struct regmap_irq),
+					   GFP_KERNEL);
+		if (!ddata->irqs)
+			return -ENOMEM;
 
-	ddata->irq_chip.irqs = ddata->irqs;
-	for (i = 0; i < pdata->num_irqs; i++)
-		ddata->irqs[i].mask = BIT(i);
+		ddata->irq_chip.irqs = ddata->irqs;
+		for (i = 0; i < pdata->num_irqs; i++)
+			ddata->irqs[i].mask = BIT(i);
 
-	ret = devm_regmap_add_irq_chip(&spi->dev, ddata->regmap, ddata->irq,
-				       IRQF_ONESHOT, 0,
-				       &ddata->irq_chip, &ddata->irq_data);
-	if (ret) {
-		dev_err(&spi->dev, "Failed to add PMIC irq chip %d\n", ret);
-		return ret;
+		ret = devm_regmap_add_irq_chip(&spi->dev, ddata->regmap, ddata->irq,
+					       IRQF_ONESHOT, 0,
+					       &ddata->irq_chip, &ddata->irq_data);
+		if (ret) {
+			dev_err(&spi->dev, "Failed to add PMIC irq chip %d\n", ret);
+			return ret;
+		}
 	}
 
 	ret = devm_of_platform_populate(&spi->dev);
@@ -240,6 +284,9 @@ static DEFINE_SIMPLE_DEV_PM_OPS(sprd_pmic_pm_ops,
 static const struct of_device_id sprd_pmic_match[] = {
 	{ .compatible = "sprd,sc2730", .data = &sc2730_data },
 	{ .compatible = "sprd,sc2731", .data = &sc2731_data },
+	{ .compatible = "sprd,ump9620", .data = &ump9620_data },
+	{ .compatible = "sprd,ump9621", .data = &ump9621_data },
+	{ .compatible = "sprd,ump9622", .data = &ump9622_data },
 	{},
 };
 MODULE_DEVICE_TABLE(of, sprd_pmic_match);
@@ -247,6 +294,9 @@ MODULE_DEVICE_TABLE(of, sprd_pmic_match);
 static const struct spi_device_id sprd_pmic_spi_ids[] = {
 	{ .name = "sc2730", .driver_data = (unsigned long)&sc2730_data },
 	{ .name = "sc2731", .driver_data = (unsigned long)&sc2731_data },
+	{ .name = "ump9620", .driver_data = (unsigned long)&ump9620_data },
+	{ .name = "ump9621", .driver_data = (unsigned long)&ump9621_data },
+	{ .name = "ump9622", .driver_data = (unsigned long)&ump9622_data },
 	{},
 };
 MODULE_DEVICE_TABLE(spi, sprd_pmic_spi_ids);
