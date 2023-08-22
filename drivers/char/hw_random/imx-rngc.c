@@ -63,12 +63,6 @@ struct imx_rngc {
 	struct clk		*clk;
 	void __iomem		*base;
 	struct hwrng		rng;
-	struct completion	rng_op_done;
-	/*
-	 * err_reg is written only by the irq handler and read only
-	 * when interrupts are masked, we need no spinlock
-	 */
-	u32			err_reg;
 };
 
 
@@ -89,15 +83,6 @@ static inline void imx_rngc_irq_mask_clear(struct imx_rngc *rngc)
 	cmd = readl(rngc->base + RNGC_COMMAND);
 	cmd |= RNGC_CMD_CLR_INT | RNGC_CMD_CLR_ERR;
 	writel(cmd, rngc->base + RNGC_COMMAND);
-}
-
-static inline void imx_rngc_irq_unmask(struct imx_rngc *rngc)
-{
-	u32 ctrl;
-
-	ctrl = readl(rngc->base + RNGC_CONTROL);
-	ctrl &= ~(RNGC_CTRL_MASK_DONE | RNGC_CTRL_MASK_ERROR);
-	writel(ctrl, rngc->base + RNGC_CONTROL);
 }
 
 static int imx_rngc_self_test(struct imx_rngc *rngc)
@@ -143,37 +128,15 @@ static int imx_rngc_read(struct hwrng *rng, void *data, size_t max, bool wait)
 	return retval ? retval : -EIO;
 }
 
-static irqreturn_t imx_rngc_irq(int irq, void *priv)
-{
-	struct imx_rngc *rngc = (struct imx_rngc *)priv;
-	u32 status;
-
-	/*
-	 * clearing the interrupt will also clear the error register
-	 * read error and status before clearing
-	 */
-	status = readl(rngc->base + RNGC_STATUS);
-	rngc->err_reg = readl(rngc->base + RNGC_ERROR);
-
-	imx_rngc_irq_mask_clear(rngc);
-
-	if (status & (RNGC_STATUS_SEED_DONE | RNGC_STATUS_ST_DONE))
-		complete(&rngc->rng_op_done);
-
-	return IRQ_HANDLED;
-}
-
 static int imx_rngc_init(struct hwrng *rng)
 {
 	struct imx_rngc *rngc = container_of(rng, struct imx_rngc, rng);
-	u32 cmd, ctrl;
+	u32 cmd, ctrl, status, err_reg;
 	int ret;
 
 	/* clear error */
 	cmd = readl(rngc->base + RNGC_COMMAND);
 	writel(cmd | RNGC_CMD_CLR_ERR, rngc->base + RNGC_COMMAND);
-
-	imx_rngc_irq_unmask(rngc);
 
 	/* create seed, repeat while there is some statistical error */
 	do {
@@ -181,18 +144,16 @@ static int imx_rngc_init(struct hwrng *rng)
 		cmd = readl(rngc->base + RNGC_COMMAND);
 		writel(cmd | RNGC_CMD_SEED, rngc->base + RNGC_COMMAND);
 
-		ret = wait_for_completion_timeout(&rngc->rng_op_done, msecs_to_jiffies(RNGC_TIMEOUT));
-		if (!ret) {
-			ret = -ETIMEDOUT;
-			goto err;
-		}
+		ret = readl_poll_timeout(rngc->base + RNGC_STATUS, status,
+					 status & RNGC_STATUS_SEED_DONE, 1000, RNGC_TIMEOUT * 1000);
+		if (ret < 0)
+			return ret;
 
-	} while (rngc->err_reg == RNGC_ERROR_STATUS_STAT_ERR);
+		err_reg = readl(rngc->base + RNGC_ERROR);
+	} while (err_reg == RNGC_ERROR_STATUS_STAT_ERR);
 
-	if (rngc->err_reg) {
-		ret = -EIO;
-		goto err;
-	}
+	if (err_reg)
+		return -EIO;
 
 	/*
 	 * enable automatic seeding, the rngc creates a new seed automatically
@@ -202,23 +163,7 @@ static int imx_rngc_init(struct hwrng *rng)
 	ctrl |= RNGC_CTRL_AUTO_SEED;
 	writel(ctrl, rngc->base + RNGC_CONTROL);
 
-	/*
-	 * if initialisation was successful, we keep the interrupt
-	 * unmasked until imx_rngc_cleanup is called
-	 * we mask the interrupt ourselves if we return an error
-	 */
 	return 0;
-
-err:
-	imx_rngc_irq_mask_clear(rngc);
-	return ret;
-}
-
-static void imx_rngc_cleanup(struct hwrng *rng)
-{
-	struct imx_rngc *rngc = container_of(rng, struct imx_rngc, rng);
-
-	imx_rngc_irq_mask_clear(rngc);
 }
 
 static int __init imx_rngc_probe(struct platform_device *pdev)
@@ -254,23 +199,15 @@ static int __init imx_rngc_probe(struct platform_device *pdev)
 	if (rng_type != RNGC_TYPE_RNGC && rng_type != RNGC_TYPE_RNGB)
 		return -ENODEV;
 
-	init_completion(&rngc->rng_op_done);
-
 	rngc->rng.name = pdev->name;
 	rngc->rng.init = imx_rngc_init;
 	rngc->rng.read = imx_rngc_read;
-	rngc->rng.cleanup = imx_rngc_cleanup;
 	rngc->rng.quality = 19;
 
 	rngc->dev = &pdev->dev;
 	platform_set_drvdata(pdev, rngc);
 
 	imx_rngc_irq_mask_clear(rngc);
-
-	ret = devm_request_irq(&pdev->dev,
-			irq, imx_rngc_irq, 0, pdev->name, (void *)rngc);
-	if (ret)
-		return dev_err_probe(&pdev->dev, ret, "Can't get interrupt working.\n");
 
 	if (self_test) {
 		ret = imx_rngc_self_test(rngc);
