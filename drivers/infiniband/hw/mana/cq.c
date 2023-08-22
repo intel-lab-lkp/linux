@@ -11,10 +11,10 @@ int mana_ib_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
 	struct mana_ib_cq *cq = container_of(ibcq, struct mana_ib_cq, ibcq);
 	struct ib_device *ibdev = ibcq->device;
 	struct mana_ib_create_cq ucmd = {};
-	struct mana_ib_dev *mdev;
+	struct mana_ib_dev *mib_dev;
 	int err;
 
-	mdev = container_of(ibdev, struct mana_ib_dev, ib_dev);
+	mib_dev = container_of(ibdev, struct mana_ib_dev, ib_dev);
 
 	if (udata->inlen < sizeof(ucmd))
 		return -EINVAL;
@@ -41,7 +41,7 @@ int mana_ib_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
 		return err;
 	}
 
-	err = mana_ib_gd_create_dma_region(mdev, cq->umem, &cq->gdma_region);
+	err = mana_ib_gd_create_dma_region(mib_dev, cq->umem, &cq->gdma_region);
 	if (err) {
 		ibdev_dbg(ibdev,
 			  "Failed to create dma region for create cq, %d\n",
@@ -68,11 +68,11 @@ int mana_ib_destroy_cq(struct ib_cq *ibcq, struct ib_udata *udata)
 {
 	struct mana_ib_cq *cq = container_of(ibcq, struct mana_ib_cq, ibcq);
 	struct ib_device *ibdev = ibcq->device;
-	struct mana_ib_dev *mdev;
+	struct mana_ib_dev *mib_dev;
 
-	mdev = container_of(ibdev, struct mana_ib_dev, ib_dev);
+	mib_dev = container_of(ibdev, struct mana_ib_dev, ib_dev);
 
-	mana_ib_gd_destroy_dma_region(mdev, cq->gdma_region);
+	mana_ib_gd_destroy_dma_region(mib_dev, cq->gdma_region);
 	ib_umem_release(cq->umem);
 
 	return 0;

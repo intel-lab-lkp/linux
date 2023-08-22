@@ -5,7 +5,7 @@
 
 #include "mana_ib.h"
 
-static int mana_ib_cfg_vport_steering(struct mana_ib_dev *dev,
+static int mana_ib_cfg_vport_steering(struct mana_ib_dev *mib_dev,
 				      struct net_device *ndev,
 				      mana_handle_t default_rxobj,
 				      mana_handle_t ind_table[],
@@ -21,7 +21,7 @@ static int mana_ib_cfg_vport_steering(struct mana_ib_dev *dev,
 	u32 req_buf_size;
 	int i, err;
 
-	mdev = dev->gdma_dev;
+	mdev = mib_dev->gdma_dev;
 	gc = mdev->gdma_context;
 
 	req_buf_size =
@@ -55,10 +55,10 @@ static int mana_ib_cfg_vport_steering(struct mana_ib_dev *dev,
 	 * MANA_INDIRECT_TABLE_SIZE entries. Adjust the verb
 	 * ind_table to MANA_INDIRECT_TABLE_SIZE if required
 	 */
-	ibdev_dbg(&dev->ib_dev, "ind table size %u\n", 1 << log_ind_tbl_size);
+	ibdev_dbg(&mib_dev->ib_dev, "ind table size %u\n", 1 << log_ind_tbl_size);
 	for (i = 0; i < MANA_INDIRECT_TABLE_SIZE; i++) {
 		req_indir_tab[i] = ind_table[i % (1 << log_ind_tbl_size)];
-		ibdev_dbg(&dev->ib_dev, "index %u handle 0x%llx\n", i,
+		ibdev_dbg(&mib_dev->ib_dev, "index %u handle 0x%llx\n", i,
 			  req_indir_tab[i]);
 	}
 
@@ -68,7 +68,7 @@ static int mana_ib_cfg_vport_steering(struct mana_ib_dev *dev,
 	else
 		netdev_rss_key_fill(req->hashkey, MANA_HASH_KEY_SIZE);
 
-	ibdev_dbg(&dev->ib_dev, "vport handle %llu default_rxobj 0x%llx\n",
+	ibdev_dbg(&mib_dev->ib_dev, "vport handle %llu default_rxobj 0x%llx\n",
 		  req->vport, default_rxobj);
 
 	err = mana_gd_send_request(gc, req_buf_size, req, sizeof(resp), &resp);
@@ -97,19 +97,19 @@ static int mana_ib_create_qp_rss(struct ib_qp *ibqp, struct ib_pd *pd,
 				 struct ib_udata *udata)
 {
 	struct mana_ib_qp *qp = container_of(ibqp, struct mana_ib_qp, ibqp);
-	struct mana_ib_dev *mdev =
+	struct mana_ib_dev *mib_dev =
 		container_of(pd->device, struct mana_ib_dev, ib_dev);
 	struct ib_rwq_ind_table *ind_tbl = attr->rwq_ind_tbl;
 	struct mana_ib_create_qp_rss_resp resp = {};
+	struct gdma_dev *gd = mib_dev->gdma_dev;
 	struct mana_ib_create_qp_rss ucmd = {};
-	struct gdma_dev *gd = mdev->gdma_dev;
 	mana_handle_t *mana_ind_table;
 	struct mana_port_context *mpc;
+	unsigned int ind_tbl_size;
 	struct mana_context *mc;
 	struct net_device *ndev;
 	struct mana_ib_cq *cq;
 	struct mana_ib_wq *wq;
-	unsigned int ind_tbl_size;
 	struct ib_cq *ibcq;
 	struct ib_wq *ibwq;
 	int i = 0;
@@ -123,21 +123,21 @@ static int mana_ib_create_qp_rss(struct ib_qp *ibqp, struct ib_pd *pd,
 
 	ret = ib_copy_from_udata(&ucmd, udata, min(sizeof(ucmd), udata->inlen));
 	if (ret) {
-		ibdev_dbg(&mdev->ib_dev,
+		ibdev_dbg(&mib_dev->ib_dev,
 			  "Failed copy from udata for create rss-qp, err %d\n",
 			  ret);
 		return ret;
 	}
 
 	if (attr->cap.max_recv_wr > MAX_SEND_BUFFERS_PER_QUEUE) {
-		ibdev_dbg(&mdev->ib_dev,
+		ibdev_dbg(&mib_dev->ib_dev,
 			  "Requested max_recv_wr %d exceeding limit\n",
 			  attr->cap.max_recv_wr);
 		return -EINVAL;
 	}
 
 	if (attr->cap.max_recv_sge > MAX_RX_WQE_SGL_ENTRIES) {
-		ibdev_dbg(&mdev->ib_dev,
+		ibdev_dbg(&mib_dev->ib_dev,
 			  "Requested max_recv_sge %d exceeding limit\n",
 			  attr->cap.max_recv_sge);
 		return -EINVAL;
@@ -145,14 +145,14 @@ static int mana_ib_create_qp_rss(struct ib_qp *ibqp, struct ib_pd *pd,
 
 	ind_tbl_size = 1 << ind_tbl->log_ind_tbl_size;
 	if (ind_tbl_size > MANA_INDIRECT_TABLE_SIZE) {
-		ibdev_dbg(&mdev->ib_dev,
+		ibdev_dbg(&mib_dev->ib_dev,
 			  "Indirect table size %d exceeding limit\n",
 			  ind_tbl_size);
 		return -EINVAL;
 	}
 
 	if (ucmd.rx_hash_function != MANA_IB_RX_HASH_FUNC_TOEPLITZ) {
-		ibdev_dbg(&mdev->ib_dev,
+		ibdev_dbg(&mib_dev->ib_dev,
 			  "RX Hash function is not supported, %d\n",
 			  ucmd.rx_hash_function);
 		return -EINVAL;
@@ -161,14 +161,14 @@ static int mana_ib_create_qp_rss(struct ib_qp *ibqp, struct ib_pd *pd,
 	/* IB ports start with 1, MANA start with 0 */
 	port = ucmd.port;
 	if (port < 1 || port > mc->num_ports) {
-		ibdev_dbg(&mdev->ib_dev, "Invalid port %u in creating qp\n",
+		ibdev_dbg(&mib_dev->ib_dev, "Invalid port %u in creating qp\n",
 			  port);
 		return -EINVAL;
 	}
 	ndev = mc->ports[port - 1];
 	mpc = netdev_priv(ndev);
 
-	ibdev_dbg(&mdev->ib_dev, "rx_hash_function %d port %d\n",
+	ibdev_dbg(&mib_dev->ib_dev, "rx_hash_function %d port %d\n",
 		  ucmd.rx_hash_function, port);
 
 	mana_ind_table = kcalloc(ind_tbl_size, sizeof(mana_handle_t),
@@ -210,7 +210,7 @@ static int mana_ib_create_qp_rss(struct ib_qp *ibqp, struct ib_pd *pd,
 		wq->id = wq_spec.queue_index;
 		cq->id = cq_spec.queue_index;
 
-		ibdev_dbg(&mdev->ib_dev,
+		ibdev_dbg(&mib_dev->ib_dev,
 			  "ret %d rx_object 0x%llx wq id %llu cq id %llu\n",
 			  ret, wq->rx_object, wq->id, cq->id);
 
@@ -221,7 +221,7 @@ static int mana_ib_create_qp_rss(struct ib_qp *ibqp, struct ib_pd *pd,
 	}
 	resp.num_entries = i;
 
-	ret = mana_ib_cfg_vport_steering(mdev, ndev, wq->rx_object,
+	ret = mana_ib_cfg_vport_steering(mib_dev, ndev, wq->rx_object,
 					 mana_ind_table,
 					 ind_tbl->log_ind_tbl_size,
 					 ucmd.rx_hash_key_len,
@@ -231,7 +231,7 @@ static int mana_ib_create_qp_rss(struct ib_qp *ibqp, struct ib_pd *pd,
 
 	ret = ib_copy_to_udata(udata, &resp, sizeof(resp));
 	if (ret) {
-		ibdev_dbg(&mdev->ib_dev,
+		ibdev_dbg(&mib_dev->ib_dev,
 			  "Failed to copy to udata create rss-qp, %d\n",
 			  ret);
 		goto fail;
@@ -259,7 +259,7 @@ static int mana_ib_create_qp_raw(struct ib_qp *ibqp, struct ib_pd *ibpd,
 {
 	struct mana_ib_pd *pd = container_of(ibpd, struct mana_ib_pd, ibpd);
 	struct mana_ib_qp *qp = container_of(ibqp, struct mana_ib_qp, ibqp);
-	struct mana_ib_dev *mdev =
+	struct mana_ib_dev *mib_dev =
 		container_of(ibpd->device, struct mana_ib_dev, ib_dev);
 	struct mana_ib_cq *send_cq =
 		container_of(attr->send_cq, struct mana_ib_cq, ibcq);
@@ -267,7 +267,7 @@ static int mana_ib_create_qp_raw(struct ib_qp *ibqp, struct ib_pd *ibpd,
 		rdma_udata_to_drv_context(udata, struct mana_ib_ucontext,
 					  ibucontext);
 	struct mana_ib_create_qp_resp resp = {};
-	struct gdma_dev *gd = mdev->gdma_dev;
+	struct gdma_dev *gd = mib_dev->gdma_dev;
 	struct mana_ib_create_qp ucmd = {};
 	struct mana_obj_spec wq_spec = {};
 	struct mana_obj_spec cq_spec = {};
@@ -285,7 +285,7 @@ static int mana_ib_create_qp_raw(struct ib_qp *ibqp, struct ib_pd *ibpd,
 
 	err = ib_copy_from_udata(&ucmd, udata, min(sizeof(ucmd), udata->inlen));
 	if (err) {
-		ibdev_dbg(&mdev->ib_dev,
+		ibdev_dbg(&mib_dev->ib_dev,
 			  "Failed to copy from udata create qp-raw, %d\n", err);
 		return err;
 	}
@@ -296,14 +296,14 @@ static int mana_ib_create_qp_raw(struct ib_qp *ibqp, struct ib_pd *ibpd,
 		return -EINVAL;
 
 	if (attr->cap.max_send_wr > MAX_SEND_BUFFERS_PER_QUEUE) {
-		ibdev_dbg(&mdev->ib_dev,
+		ibdev_dbg(&mib_dev->ib_dev,
 			  "Requested max_send_wr %d exceeding limit\n",
 			  attr->cap.max_send_wr);
 		return -EINVAL;
 	}
 
 	if (attr->cap.max_send_sge > MAX_TX_WQE_SGL_ENTRIES) {
-		ibdev_dbg(&mdev->ib_dev,
+		ibdev_dbg(&mib_dev->ib_dev,
 			  "Requested max_send_sge %d exceeding limit\n",
 			  attr->cap.max_send_sge);
 		return -EINVAL;
@@ -311,38 +311,38 @@ static int mana_ib_create_qp_raw(struct ib_qp *ibqp, struct ib_pd *ibpd,
 
 	ndev = mc->ports[port - 1];
 	mpc = netdev_priv(ndev);
-	ibdev_dbg(&mdev->ib_dev, "port %u ndev %p mpc %p\n", port, ndev, mpc);
+	ibdev_dbg(&mib_dev->ib_dev, "port %u ndev %p mpc %p\n", port, ndev, mpc);
 
-	err = mana_ib_cfg_vport(mdev, port - 1, pd, mana_ucontext->doorbell);
+	err = mana_ib_cfg_vport(mib_dev, port - 1, pd, mana_ucontext->doorbell);
 	if (err)
 		return -ENODEV;
 
 	qp->port = port;
 
-	ibdev_dbg(&mdev->ib_dev, "ucmd sq_buf_addr 0x%llx port %u\n",
+	ibdev_dbg(&mib_dev->ib_dev, "ucmd sq_buf_addr 0x%llx port %u\n",
 		  ucmd.sq_buf_addr, ucmd.port);
 
 	umem = ib_umem_get(ibpd->device, ucmd.sq_buf_addr, ucmd.sq_buf_size,
 			   IB_ACCESS_LOCAL_WRITE);
 	if (IS_ERR(umem)) {
 		err = PTR_ERR(umem);
-		ibdev_dbg(&mdev->ib_dev,
+		ibdev_dbg(&mib_dev->ib_dev,
 			  "Failed to get umem for create qp-raw, err %d\n",
 			  err);
 		goto err_free_vport;
 	}
 	qp->sq_umem = umem;
 
-	err = mana_ib_gd_create_dma_region(mdev, qp->sq_umem,
+	err = mana_ib_gd_create_dma_region(mib_dev, qp->sq_umem,
 					   &qp->sq_gdma_region);
 	if (err) {
-		ibdev_dbg(&mdev->ib_dev,
+		ibdev_dbg(&mib_dev->ib_dev,
 			  "Failed to create dma region for create qp-raw, %d\n",
 			  err);
 		goto err_release_umem;
 	}
 
-	ibdev_dbg(&mdev->ib_dev,
+	ibdev_dbg(&mib_dev->ib_dev,
 		  "mana_ib_gd_create_dma_region ret %d gdma_region 0x%llx\n",
 		  err, qp->sq_gdma_region);
 
@@ -358,7 +358,7 @@ static int mana_ib_create_qp_raw(struct ib_qp *ibqp, struct ib_pd *ibpd,
 	err = mana_create_wq_obj(mpc, mpc->port_handle, GDMA_SQ, &wq_spec,
 				 &cq_spec, &qp->tx_object);
 	if (err) {
-		ibdev_dbg(&mdev->ib_dev,
+		ibdev_dbg(&mib_dev->ib_dev,
 			  "Failed to create wq for create raw-qp, err %d\n",
 			  err);
 		goto err_destroy_dma_region;
@@ -371,7 +371,7 @@ static int mana_ib_create_qp_raw(struct ib_qp *ibqp, struct ib_pd *ibpd,
 	qp->sq_id = wq_spec.queue_index;
 	send_cq->id = cq_spec.queue_index;
 
-	ibdev_dbg(&mdev->ib_dev,
+	ibdev_dbg(&mib_dev->ib_dev,
 		  "ret %d qp->tx_object 0x%llx sq id %llu cq id %llu\n", err,
 		  qp->tx_object, qp->sq_id, send_cq->id);
 
@@ -381,7 +381,7 @@ static int mana_ib_create_qp_raw(struct ib_qp *ibqp, struct ib_pd *ibpd,
 
 	err = ib_copy_to_udata(udata, &resp, sizeof(resp));
 	if (err) {
-		ibdev_dbg(&mdev->ib_dev,
+		ibdev_dbg(&mib_dev->ib_dev,
 			  "Failed copy udata for create qp-raw, %d\n",
 			  err);
 		goto err_destroy_wq_obj;
@@ -393,13 +393,13 @@ err_destroy_wq_obj:
 	mana_destroy_wq_obj(mpc, GDMA_SQ, qp->tx_object);
 
 err_destroy_dma_region:
-	mana_ib_gd_destroy_dma_region(mdev, qp->sq_gdma_region);
+	mana_ib_gd_destroy_dma_region(mib_dev, qp->sq_gdma_region);
 
 err_release_umem:
 	ib_umem_release(umem);
 
 err_free_vport:
-	mana_ib_uncfg_vport(mdev, pd, port - 1);
+	mana_ib_uncfg_vport(mib_dev, pd, port - 1);
 
 	return err;
 }
@@ -435,9 +435,9 @@ static int mana_ib_destroy_qp_rss(struct mana_ib_qp *qp,
 				  struct ib_rwq_ind_table *ind_tbl,
 				  struct ib_udata *udata)
 {
-	struct mana_ib_dev *mdev =
+	struct mana_ib_dev *mib_dev =
 		container_of(qp->ibqp.device, struct mana_ib_dev, ib_dev);
-	struct gdma_dev *gd = mdev->gdma_dev;
+	struct gdma_dev *gd = mib_dev->gdma_dev;
 	struct mana_port_context *mpc;
 	struct mana_context *mc;
 	struct net_device *ndev;
@@ -452,7 +452,7 @@ static int mana_ib_destroy_qp_rss(struct mana_ib_qp *qp,
 	for (i = 0; i < (1 << ind_tbl->log_ind_tbl_size); i++) {
 		ibwq = ind_tbl->ind_tbl[i];
 		wq = container_of(ibwq, struct mana_ib_wq, ibwq);
-		ibdev_dbg(&mdev->ib_dev, "destroying wq->rx_object %llu\n",
+		ibdev_dbg(&mib_dev->ib_dev, "destroying wq->rx_object %llu\n",
 			  wq->rx_object);
 		mana_destroy_wq_obj(mpc, GDMA_RQ, wq->rx_object);
 	}
@@ -462,9 +462,9 @@ static int mana_ib_destroy_qp_rss(struct mana_ib_qp *qp,
 
 static int mana_ib_destroy_qp_raw(struct mana_ib_qp *qp, struct ib_udata *udata)
 {
-	struct mana_ib_dev *mdev =
+	struct mana_ib_dev *mib_dev =
 		container_of(qp->ibqp.device, struct mana_ib_dev, ib_dev);
-	struct gdma_dev *gd = mdev->gdma_dev;
+	struct gdma_dev *gd = mib_dev->gdma_dev;
 	struct ib_pd *ibpd = qp->ibqp.pd;
 	struct mana_port_context *mpc;
 	struct mana_context *mc;
@@ -479,11 +479,11 @@ static int mana_ib_destroy_qp_raw(struct mana_ib_qp *qp, struct ib_udata *udata)
 	mana_destroy_wq_obj(mpc, GDMA_SQ, qp->tx_object);
 
 	if (qp->sq_umem) {
-		mana_ib_gd_destroy_dma_region(mdev, qp->sq_gdma_region);
+		mana_ib_gd_destroy_dma_region(mib_dev, qp->sq_gdma_region);
 		ib_umem_release(qp->sq_umem);
 	}
 
-	mana_ib_uncfg_vport(mdev, pd, qp->port - 1);
+	mana_ib_uncfg_vport(mib_dev, pd, qp->port - 1);
 
 	return 0;
 }

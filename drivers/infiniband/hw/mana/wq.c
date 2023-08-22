@@ -9,7 +9,7 @@ struct ib_wq *mana_ib_create_wq(struct ib_pd *pd,
 				struct ib_wq_init_attr *init_attr,
 				struct ib_udata *udata)
 {
-	struct mana_ib_dev *mdev =
+	struct mana_ib_dev *mib_dev =
 		container_of(pd->device, struct mana_ib_dev, ib_dev);
 	struct mana_ib_create_wq ucmd = {};
 	struct mana_ib_wq *wq;
@@ -21,7 +21,7 @@ struct ib_wq *mana_ib_create_wq(struct ib_pd *pd,
 
 	err = ib_copy_from_udata(&ucmd, udata, min(sizeof(ucmd), udata->inlen));
 	if (err) {
-		ibdev_dbg(&mdev->ib_dev,
+		ibdev_dbg(&mib_dev->ib_dev,
 			  "Failed to copy from udata for create wq, %d\n", err);
 		return ERR_PTR(err);
 	}
@@ -30,13 +30,14 @@ struct ib_wq *mana_ib_create_wq(struct ib_pd *pd,
 	if (!wq)
 		return ERR_PTR(-ENOMEM);
 
-	ibdev_dbg(&mdev->ib_dev, "ucmd wq_buf_addr 0x%llx\n", ucmd.wq_buf_addr);
+	ibdev_dbg(&mib_dev->ib_dev, "ucmd wq_buf_addr 0x%llx\n",
+		  ucmd.wq_buf_addr);
 
 	umem = ib_umem_get(pd->device, ucmd.wq_buf_addr, ucmd.wq_buf_size,
 			   IB_ACCESS_LOCAL_WRITE);
 	if (IS_ERR(umem)) {
 		err = PTR_ERR(umem);
-		ibdev_dbg(&mdev->ib_dev,
+		ibdev_dbg(&mib_dev->ib_dev,
 			  "Failed to get umem for create wq, err %d\n", err);
 		goto err_free_wq;
 	}
@@ -46,15 +47,15 @@ struct ib_wq *mana_ib_create_wq(struct ib_pd *pd,
 	wq->wq_buf_size = ucmd.wq_buf_size;
 	wq->rx_object = INVALID_MANA_HANDLE;
 
-	err = mana_ib_gd_create_dma_region(mdev, wq->umem, &wq->gdma_region);
+	err = mana_ib_gd_create_dma_region(mib_dev, wq->umem, &wq->gdma_region);
 	if (err) {
-		ibdev_dbg(&mdev->ib_dev,
+		ibdev_dbg(&mib_dev->ib_dev,
 			  "Failed to create dma region for create wq, %d\n",
 			  err);
 		goto err_release_umem;
 	}
 
-	ibdev_dbg(&mdev->ib_dev,
+	ibdev_dbg(&mib_dev->ib_dev,
 		  "mana_ib_gd_create_dma_region ret %d gdma_region 0x%llx\n",
 		  err, wq->gdma_region);
 
@@ -82,11 +83,11 @@ int mana_ib_destroy_wq(struct ib_wq *ibwq, struct ib_udata *udata)
 {
 	struct mana_ib_wq *wq = container_of(ibwq, struct mana_ib_wq, ibwq);
 	struct ib_device *ib_dev = ibwq->device;
-	struct mana_ib_dev *mdev;
+	struct mana_ib_dev *mib_dev;
 
-	mdev = container_of(ib_dev, struct mana_ib_dev, ib_dev);
+	mib_dev = container_of(ib_dev, struct mana_ib_dev, ib_dev);
 
-	mana_ib_gd_destroy_dma_region(mdev, wq->gdma_region);
+	mana_ib_gd_destroy_dma_region(mib_dev, wq->gdma_region);
 	ib_umem_release(wq->umem);
 
 	kfree(wq);
