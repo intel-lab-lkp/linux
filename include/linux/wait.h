@@ -284,6 +284,7 @@ static inline void wake_up_pollfree(struct wait_queue_head *wq_head)
 	 (state & (TASK_INTERRUPTIBLE | TASK_WAKEKILL)))
 
 extern void init_wait_entry(struct wait_queue_entry *wq_entry, int flags);
+bool freezing_wait(struct wait_queue_entry *wq_entry, int state);
 
 /*
  * The below macro ___wait_event() has an explicit shadow of the __ret
@@ -311,8 +312,12 @@ extern void init_wait_entry(struct wait_queue_entry *wq_entry, int flags);
 			break;							\
 										\
 		if (___wait_is_interruptible(state) && __int) {			\
-			__ret = __int;						\
-			goto __out;						\
+			if (unlikely(freezing_wait(&__wq_entry, state))) {	\
+				clear_thread_flag(TIF_SIGPENDING);		\
+			} else {						\
+				__ret = __int;					\
+				goto __out;					\
+			}							\
 		}								\
 										\
 		cmd;								\

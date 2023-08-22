@@ -5,6 +5,8 @@
  * (C) 2004 Nadia Yvette Chambers, Oracle
  */
 
+#include <linux/freezer.h>
+
 void __init_waitqueue_head(struct wait_queue_head *wq_head, const char *name, struct lock_class_key *key)
 {
 	spin_lock_init(&wq_head->lock);
@@ -479,3 +481,15 @@ int woken_wake_function(struct wait_queue_entry *wq_entry, unsigned mode, int sy
 	return default_wake_function(wq_entry, mode, sync, key);
 }
 EXPORT_SYMBOL(woken_wake_function);
+
+bool freezing_wait(struct wait_queue_entry *wq_entry, int state)
+{
+	if (!(state & TASK_FREEZABLE))
+		return false;
+	if (fatal_signal_pending(wq_entry->private))
+		return false;
+	if (unlikely(freezing(wq_entry->private)))
+		return true;
+	return false;
+}
+EXPORT_SYMBOL(freezing_wait);
