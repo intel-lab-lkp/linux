@@ -1897,7 +1897,14 @@ static void __arm_smmu_tlb_inv_range(struct arm_smmu_cmdq_ent *cmd,
 	if (!size)
 		return;
 
-	if (smmu->features & ARM_SMMU_FEAT_RANGE_INV) {
+	if (!(smmu->features & ARM_SMMU_FEAT_RANGE_INV)) {
+		/*
+		 * When the size reaches a threshold, replace per-granule TLBI
+		 * commands with one single per-asid or per-vmid TLBI command.
+		 */
+		if (size >= granule * smmu_domain->max_tlbi_ops)
+			return arm_smmu_tlb_inv_domain(smmu_domain);
+	} else {
 		/* Get the leaf page size */
 		tg = __ffs(smmu_domain->domain.pgsize_bitmap);
 
@@ -2258,6 +2265,7 @@ static int arm_smmu_domain_finalise(struct iommu_domain *domain,
 	}
 
 	smmu_domain->pgtbl_ops = pgtbl_ops;
+	smmu_domain->max_tlbi_ops = pgtbl_cfg.nents_per_pgtable;
 	return 0;
 }
 

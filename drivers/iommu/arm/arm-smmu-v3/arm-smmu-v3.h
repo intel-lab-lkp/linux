@@ -721,6 +721,7 @@ struct arm_smmu_domain {
 	struct io_pgtable_ops		*pgtbl_ops;
 	bool				stall_enabled;
 	atomic_t			nr_ats_masters;
+	unsigned long			max_tlbi_ops;
 
 	enum arm_smmu_domain_stage	stage;
 	union {
