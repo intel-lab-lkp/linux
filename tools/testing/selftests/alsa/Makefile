@@ -2,13 +2,13 @@
 #
 
 CFLAGS += $(shell pkg-config --cflags alsa)
-LDLIBS += $(shell pkg-config --libs alsa)
-ifeq ($(LDLIBS),)
-LDLIBS += -lasound
+VAR_LDLIBS += $(shell pkg-config --libs alsa)
+ifeq ($(VAR_LDLIBS),)
+VAR_LDLIBS += -lasound
 endif
 CFLAGS += -L$(OUTPUT) -Wl,-rpath=./
 
-LDLIBS+=-lpthread
+VAR_LDLIBS+=-lpthread
 
 OVERRIDE_TARGETS = 1
 
@@ -21,7 +21,7 @@ TEST_FILES := conf.d pcm-test.conf
 include ../lib.mk
 
 $(OUTPUT)/libatest.so: conf.c alsa-local.h
-	$(CC) $(CFLAGS) -shared -fPIC $< $(LDLIBS) -o $@
+	$(CC) $(CFLAGS) -shared -fPIC $< $(VAR_LDLIBS) -o $@
 
 $(OUTPUT)/%: %.c $(TEST_GEN_PROGS_EXTENDED) alsa-local.h
-	$(CC) $(CFLAGS) $< $(LDLIBS) -latest -o $@
+	$(CC) $(CFLAGS) $< $(VAR_LDLIBS) -latest -o $@
