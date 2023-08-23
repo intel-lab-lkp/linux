@@ -25,6 +25,13 @@
 #define OVL_FME_CPL_INT					BIT(1)
 #define DISP_REG_OVL_INTSTA			0x0008
 #define DISP_REG_OVL_EN				0x000c
+#define OVL_EN						BIT(0)
+#define OVL_OP_8BIT_MODE				BIT(4)
+#define OVL_HG_FOVL_CK_ON				BIT(8)
+#define OVL_HF_FOVL_CK_ON				BIT(10)
+#define DISP_REG_OVL_TRIG			0x0010
+#define OVL_CRC_EN					BIT(8)
+#define OVL_CRC_CLR					BIT(9)
 #define DISP_REG_OVL_RST			0x0014
 #define DISP_REG_OVL_ROI_SIZE			0x0020
 #define DISP_REG_OVL_DATAPATH_CON		0x0024
@@ -44,6 +51,8 @@
 #define DISP_REG_OVL_RDMA_CTRL(n)		(0x00c0 + 0x20 * (n))
 #define DISP_REG_OVL_RDMA_GMC(n)		(0x00c8 + 0x20 * (n))
 #define DISP_REG_OVL_ADDR_MT2701		0x0040
+#define DISP_REG_OVL_CRC			0x0270
+#define OVL_CRC_OUT_MASK				GENMASK(30, 0)
 #define DISP_REG_OVL_CLRFMT_EXT			0x02D0
 #define DISP_REG_OVL_CLRFMT_EXT1		0x02D8
 #define OVL_CLRFMT_EXT1_CSC_EN(n)			(1 << ((n) * 4 + 1))
@@ -151,6 +160,10 @@ static const u32 mt8195_formats[] = {
 	DRM_FORMAT_YUYV,
 };
 
+static const u32 mt8195_ovl_crcs[] = {
+	DISP_REG_OVL_CRC,
+};
+
 struct mtk_disp_ovl_data {
 	unsigned int addr;
 	unsigned int gmc_bits;
@@ -161,6 +174,8 @@ struct mtk_disp_ovl_data {
 	const u32 *formats;
 	size_t num_formats;
 	bool supports_clrfmt_ext;
+	const u32 *crcs;
+	size_t crc_cnt;
 };
 
 /*
@@ -176,7 +191,81 @@ struct mtk_disp_ovl {
 	const struct mtk_disp_ovl_data	*data;
 	void				(*vblank_cb)(void *data);
 	void				*vblank_cb_data;
+	struct cmdq_client		*cmdq_client;
+	struct cmdq_pkt			*cmdq_pkt;
+	u32				cmdq_event;
 };
+
+u32 mtk_ovl_crc_cnt(struct device *dev)
+{
+	struct mtk_disp_ovl *ovl = dev_get_drvdata(dev);
+
+	return (u32)ovl->data->crc_cnt;
+}
+
+static void mtk_ovl_crc_loop_start(struct device *dev)
+{
+	int i;
+	struct mtk_disp_ovl *ovl = dev_get_drvdata(dev);
+	struct mtk_drm_crtc *mtk_crtc = container_of(ovl->crtc,
+						struct mtk_drm_crtc, base);
+
+	if (!ovl->cmdq_event || ovl->cmdq_client)
+		return;
+
+	ovl->cmdq_client = cmdq_mbox_create(dev, 0);
+	if (IS_ERR(ovl->cmdq_client)) {
+		pr_err("failed to create mailbox client\n");
+		return;
+	}
+
+	ovl->cmdq_pkt = cmdq_pkt_create(ovl->cmdq_client, PAGE_SIZE);
+	if (!ovl->cmdq_pkt) {
+		pr_err("failed to create cmdq packet\n");
+		return;
+	}
+
+	cmdq_pkt_wfe(ovl->cmdq_pkt, ovl->cmdq_event, true);
+
+	for (i = 0; i < ovl->data->crc_cnt; i++) {
+		/* put crc to spr1 register */
+		cmdq_pkt_read_s(ovl->cmdq_pkt, ovl->cmdq_reg.subsys,
+				ovl->data->crcs[i], CMDQ_THR_SPR_IDX1);
+		cmdq_pkt_assign(ovl->cmdq_pkt, CMDQ_THR_SPR_IDX0,
+				CMDQ_ADDR_HIGH(mtk_crtc->crc.pa + i * sizeof(u32)));
+
+		/* copy spr1 register to crc.pa */
+		cmdq_pkt_write_s(ovl->cmdq_pkt, CMDQ_THR_SPR_IDX0,
+				 CMDQ_ADDR_LOW(mtk_crtc->crc.pa + i * sizeof(u32)),
+				 CMDQ_THR_SPR_IDX1);
+	}
+
+	/* reset crc */
+	mtk_ddp_write_mask(ovl->cmdq_pkt, ~0, &ovl->cmdq_reg, ovl->regs,
+			   DISP_REG_OVL_TRIG, OVL_CRC_CLR);
+	/* clear reset bit */
+	mtk_ddp_write_mask(ovl->cmdq_pkt, 0, &ovl->cmdq_reg, ovl->regs,
+			   DISP_REG_OVL_TRIG, OVL_CRC_CLR);
+
+	cmdq_pkt_finalize_loop(ovl->cmdq_pkt);
+	cmdq_pkt_flush_async(ovl->cmdq_pkt);
+}
+
+static void mtk_ovl_crc_loop_stop(struct device *dev)
+{
+	struct mtk_disp_ovl *ovl = dev_get_drvdata(dev);
+
+	if (ovl->cmdq_pkt) {
+		cmdq_pkt_destroy(ovl->cmdq_pkt);
+		ovl->cmdq_pkt = NULL;
+	}
+
+	if (ovl->cmdq_client) {
+		mbox_flush(ovl->cmdq_client->chan, 2000);
+		cmdq_mbox_destroy(ovl->cmdq_client);
+		ovl->cmdq_client = NULL;
+	}
+}
 
 static irqreturn_t mtk_disp_ovl_irq_handler(int irq, void *dev_id)
 {
@@ -201,6 +290,7 @@ void mtk_ovl_register_vblank_cb(struct device *dev,
 
 	ovl->vblank_cb = vblank_cb;
 	ovl->vblank_cb_data = vblank_cb_data;
+	ovl->crtc = (struct drm_crtc *)vblank_cb_data;
 }
 
 void mtk_ovl_unregister_vblank_cb(struct device *dev)
@@ -216,14 +306,14 @@ void mtk_ovl_enable_vblank(struct device *dev)
 	struct mtk_disp_ovl *ovl = dev_get_drvdata(dev);
 
 	writel(0x0, ovl->regs + DISP_REG_OVL_INTSTA);
-	writel_relaxed(OVL_FME_CPL_INT, ovl->regs + DISP_REG_OVL_INTEN);
+	writel(OVL_FME_CPL_INT, ovl->regs + DISP_REG_OVL_INTEN);
 }
 
 void mtk_ovl_disable_vblank(struct device *dev)
 {
 	struct mtk_disp_ovl *ovl = dev_get_drvdata(dev);
 
-	writel_relaxed(0x0, ovl->regs + DISP_REG_OVL_INTEN);
+	writel(0x0, ovl->regs + DISP_REG_OVL_INTEN);
 }
 
 const u32 *mtk_ovl_get_formats(struct device *dev)
@@ -258,6 +348,7 @@ void mtk_ovl_start(struct device *dev)
 {
 	struct mtk_disp_ovl *ovl = dev_get_drvdata(dev);
 	unsigned int reg = 0;
+	unsigned int val = OVL_EN;
 
 	if (ovl->data->smi_id_en) {
 		reg = readl(ovl->regs + DISP_REG_OVL_DATAPATH_CON);
@@ -265,12 +356,21 @@ void mtk_ovl_start(struct device *dev)
 	}
 	reg |= OVL_OUTPUT_CLAMP;
 	writel_relaxed(reg, ovl->regs + DISP_REG_OVL_DATAPATH_CON);
-	writel_relaxed(0x1, ovl->regs + DISP_REG_OVL_EN);
+
+	if (ovl->data->crcs)
+		val |= OVL_OP_8BIT_MODE | OVL_HG_FOVL_CK_ON | OVL_HF_FOVL_CK_ON;
+
+	writel_relaxed(val, ovl->regs + DISP_REG_OVL_EN);
+	writel_relaxed(OVL_CRC_EN, ovl->regs + DISP_REG_OVL_TRIG);
+
+	mtk_ovl_crc_loop_start(dev);
 }
 
 void mtk_ovl_stop(struct device *dev)
 {
 	struct mtk_disp_ovl *ovl = dev_get_drvdata(dev);
+
+	mtk_ovl_crc_loop_stop(dev);
 
 	writel_relaxed(0x0, ovl->regs + DISP_REG_OVL_EN);
 	if (ovl->data->smi_id_en) {
@@ -321,7 +421,8 @@ void mtk_ovl_config(struct device *dev, unsigned int w,
 	if (w != 0 && h != 0)
 		mtk_ddp_write_relaxed(cmdq_pkt, h << 16 | w, &ovl->cmdq_reg, ovl->regs,
 				      DISP_REG_OVL_ROI_SIZE);
-	mtk_ddp_write_relaxed(cmdq_pkt, 0x0, &ovl->cmdq_reg, ovl->regs, DISP_REG_OVL_ROI_BGCLR);
+	mtk_ddp_write_relaxed(cmdq_pkt, 0xff000000, &ovl->cmdq_reg, ovl->regs,
+			      DISP_REG_OVL_ROI_BGCLR);
 
 	mtk_ddp_write(cmdq_pkt, 0x1, &ovl->cmdq_reg, ovl->regs, DISP_REG_OVL_RST);
 	mtk_ddp_write(cmdq_pkt, 0x0, &ovl->cmdq_reg, ovl->regs, DISP_REG_OVL_RST);
@@ -677,6 +778,16 @@ static int mtk_disp_ovl_probe(struct platform_device *pdev)
 #endif
 
 	priv->data = of_device_get_match_data(dev);
+
+	if (priv->data->crcs) {
+		if (of_property_read_u32_index(dev->of_node,
+					       "mediatek,gce-events", 0,
+					       &priv->cmdq_event)) {
+			dev_err(dev, "failed to get gce-events\n");
+			return -ENOPARAM;
+		}
+	}
+
 	platform_set_drvdata(pdev, priv);
 
 	ret = devm_request_irq(dev, irq, mtk_disp_ovl_irq_handler,
@@ -771,6 +882,8 @@ static const struct mtk_disp_ovl_data mt8195_ovl_driver_data = {
 	.formats = mt8195_formats,
 	.num_formats = ARRAY_SIZE(mt8195_formats),
 	.supports_clrfmt_ext = true,
+	.crcs = mt8195_ovl_crcs,
+	.crc_cnt = ARRAY_SIZE(mt8195_ovl_crcs),
 };
 
 static const struct of_device_id mtk_disp_ovl_driver_dt_match[] = {
