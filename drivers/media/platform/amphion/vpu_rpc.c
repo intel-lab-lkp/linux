@@ -144,7 +144,7 @@ static int vpu_rpc_receive_msg_buf(struct vpu_shared_addr *shared, struct vpu_rp
 	msg->hdr.num = (msgword >> 16) & 0xff;
 	msg->hdr.id = msgword & 0x3fff;
 
-	if (msg->hdr.num > ARRAY_SIZE(msg->data))
+	if (msg->hdr.num >= ARRAY_SIZE(msg->data))
 		return -EINVAL;
 
 	for (i = 0; i < msg->hdr.num; i++) {
@@ -156,6 +156,7 @@ static int vpu_rpc_receive_msg_buf(struct vpu_shared_addr *shared, struct vpu_rp
 			data = shared->msg_mem_vir;
 		}
 	}
+	msg->data[msg->hdr.num] = 0;
 
 	/*update rptr after data is read*/
 	mb();
