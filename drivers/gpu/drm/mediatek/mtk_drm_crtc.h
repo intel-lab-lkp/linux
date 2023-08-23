@@ -15,6 +15,23 @@
 #define MTK_MIN_BPC	3
 
 /*
+ * struct mtk_drm_crc - CRC info of the CRTC
+ * @cnt: how many CRCs the CRTC supports
+ * @va: virtual address for CPU to read the CRCs
+ * @pa: physical address for GCE to stored the CRCs
+ *
+ * Hardware components could generate more than one CRC,
+ * for example, one for odd lines, another for even lines of the frame buffer,
+ * and each CRC takes 4 bytes in memory, here we record how many CRC the
+ * generator supports, and access them as an array from the specified address.
+ */
+struct mtk_drm_crc {
+	u32 cnt;
+	void *va;
+	dma_addr_t pa;
+};
+
+/*
  * struct mtk_drm_crtc - MediaTek specific crtc structure.
  * @base: crtc object.
  * @enabled: records whether crtc_enable succeeded
@@ -24,6 +41,7 @@
  * @mutex: handle to one of the ten disp_mutex streams
  * @ddp_comp_nr: number of components in ddp_comp
  * @ddp_comp: array of pointers the mtk_ddp_comp structures used by this crtc
+ * @crc: CRC info of the CRTC
  *
  * TODO: Needs update: this header is missing a bunch of member descriptions.
  */
@@ -56,6 +74,8 @@ struct mtk_drm_crtc {
 	/* lock for display hardware access */
 	struct mutex			hw_lock;
 	bool				config_updating;
+
+	struct mtk_drm_crc		crc;
 };
 
 void mtk_drm_crtc_commit(struct drm_crtc *crtc);

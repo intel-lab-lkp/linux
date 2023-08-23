@@ -45,6 +45,10 @@ enum mtk_ddp_comp_type {
 
 struct mtk_ddp_comp;
 struct cmdq_pkt;
+
+/* struct mtk_ddp_comp_funcs - function pointers of the ddp components
+ * @crc_cnt: how many CRCs the component supports
+ */
 struct mtk_ddp_comp_funcs {
 	int (*clk_enable)(struct device *dev);
 	void (*clk_disable)(struct device *dev);
@@ -80,6 +84,7 @@ struct mtk_ddp_comp_funcs {
 	void (*disconnect)(struct device *dev, struct device *mmsys_dev, unsigned int next);
 	void (*add)(struct device *dev, struct mtk_mutex *mutex);
 	void (*remove)(struct device *dev, struct mtk_mutex *mutex);
+	u32 (*crc_cnt)(struct device *dev);
 };
 
 struct mtk_ddp_comp {

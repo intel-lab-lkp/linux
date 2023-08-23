@@ -573,6 +573,17 @@ static void mtk_crtc_ddp_irq(void *data)
 	struct drm_crtc *crtc = data;
 	struct mtk_drm_crtc *mtk_crtc = to_mtk_crtc(crtc);
 	struct mtk_drm_private *priv = crtc->dev->dev_private;
+	static int skip;
+
+	if (mtk_crtc->crc.cnt && crtc->crc.opened) {
+		if (++skip > 1) {
+			drm_crtc_add_crc_entry(crtc, true,
+					       drm_crtc_vblank_count(crtc),
+					       (u32 *)mtk_crtc->crc.va);
+		}
+	} else {
+		skip = 0;
+	}
 
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
 	if (!priv->data->shadow_register && !mtk_crtc->cmdq_client.chan)
@@ -603,6 +614,34 @@ static void mtk_drm_crtc_disable_vblank(struct drm_crtc *crtc)
 	struct mtk_ddp_comp *comp = mtk_crtc->ddp_comp[0];
 
 	mtk_ddp_comp_disable_vblank(comp);
+}
+
+static int mtk_drm_crtc_set_crc_source(struct drm_crtc *crtc, const char *src)
+{
+	if (src && strcmp(src, "auto") != 0) {
+		DRM_DEBUG_DRIVER("%s(crtc-%d): unknown source '%s'\n",
+				 __func__, drm_crtc_index(crtc), src);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int mtk_drm_crtc_verify_crc_source(struct drm_crtc *crtc,
+					  const char *src,
+					  size_t *cnt)
+{
+	struct mtk_drm_crtc *mtk_crtc = to_mtk_crtc(crtc);
+
+	if (src && strcmp(src, "auto") != 0) {
+		DRM_DEBUG_DRIVER("%s(crtc-%d): unknown source '%s'\n",
+				 __func__, drm_crtc_index(crtc), src);
+		return -EINVAL;
+	}
+
+	*cnt = (size_t)mtk_crtc->crc.cnt;
+
+	return 0;
 }
 
 int mtk_drm_crtc_plane_check(struct drm_crtc *crtc, struct drm_plane *plane,
@@ -737,6 +776,8 @@ static const struct drm_crtc_funcs mtk_crtc_funcs = {
 	.atomic_destroy_state	= mtk_drm_crtc_destroy_state,
 	.enable_vblank		= mtk_drm_crtc_enable_vblank,
 	.disable_vblank		= mtk_drm_crtc_disable_vblank,
+	.set_crc_source		= mtk_drm_crtc_set_crc_source,
+	.verify_crc_source	= mtk_drm_crtc_verify_crc_source,
 };
 
 static const struct drm_crtc_helper_funcs mtk_crtc_helper_funcs = {
@@ -919,6 +960,18 @@ int mtk_drm_crtc_create(struct drm_device *drm_dev,
 
 			if (comp->funcs->ctm_set)
 				has_ctm = true;
+
+			if (comp->funcs->crc_cnt) {
+				mtk_crtc->crc.cnt = comp->funcs->crc_cnt(comp->dev);
+				mtk_crtc->crc.va = dma_alloc_coherent(dev,
+								      mtk_crtc->crc.cnt * 4,
+								      &mtk_crtc->crc.pa,
+								      GFP_KERNEL);
+				if (!mtk_crtc->crc.va || !mtk_crtc->crc.pa) {
+					dev_err(dev, "failed to allocate CRC\n");
+					return -ENOMEM;
+				}
+			}
 		}
 
 		mtk_ddp_comp_register_vblank_cb(comp, mtk_crtc_ddp_irq,
