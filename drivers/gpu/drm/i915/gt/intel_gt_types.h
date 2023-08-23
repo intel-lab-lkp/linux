@@ -307,6 +307,9 @@ enum intel_gt_scratch_field {
 
 	/* 8 bytes */
 	INTEL_GT_SCRATCH_FIELD_COHERENTL3_WA = 256,
+
+	/* 8 bytes */
+	INTEL_GT_SCRATCH_FIELD_DUMMY_BLIT = 384,
 };
 
 #define intel_gt_support_legacy_fencing(gt) ((gt)->ggtt->num_fences > 0)
