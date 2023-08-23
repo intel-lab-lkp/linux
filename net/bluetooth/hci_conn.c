@@ -2886,6 +2886,10 @@ int hci_abort_conn(struct hci_conn *conn, u8 reason)
 		} else if (conn->type == ACL_LINK) {
 			if (conn->hdev->hci_ver < BLUETOOTH_VER_1_2)
 				break;
+			if (conn->state == HCI_CONN_HANDLE_UNSET) {
+				hci_conn_cleanup(conn);
+				break;
+			}
 			r = hci_send_cmd(conn->hdev,
 					 HCI_OP_CREATE_CONN_CANCEL,
 					 6, &conn->dst);
