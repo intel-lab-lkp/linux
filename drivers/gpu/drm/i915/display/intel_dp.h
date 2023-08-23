@@ -119,6 +119,8 @@ u8 intel_dp_dsc_get_slice_count(struct intel_dp *intel_dp,
 				bool bigjoiner);
 bool intel_dp_need_bigjoiner(struct intel_dp *intel_dp,
 			     int hdisplay, int clock);
+int intel_dp_mode_clock(const struct intel_crtc_state *crtc_state,
+			const struct drm_connector_state *conn_state);
 
 static inline unsigned int intel_dp_unused_lane_mask(int lane_count)
 {

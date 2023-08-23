@@ -1509,8 +1509,8 @@ static bool has_seamless_m_n(struct intel_connector *connector)
 		intel_panel_drrs_type(connector) == DRRS_TYPE_SEAMLESS;
 }
 
-static int intel_dp_mode_clock(const struct intel_crtc_state *crtc_state,
-			       const struct drm_connector_state *conn_state)
+int intel_dp_mode_clock(const struct intel_crtc_state *crtc_state,
+			const struct drm_connector_state *conn_state)
 {
 	struct intel_connector *connector = to_intel_connector(conn_state->connector);
 	const struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;

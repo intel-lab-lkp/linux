@@ -8,6 +8,7 @@
 #include "i915_reg.h"
 #include "intel_de.h"
 #include "intel_display_types.h"
+#include "intel_dp.h"
 #include "intel_vrr.h"
 
 bool intel_vrr_is_capable(struct intel_connector *connector)
@@ -106,7 +107,7 @@ intel_vrr_compute_config(struct intel_crtc_state *crtc_state,
 		to_intel_connector(conn_state->connector);
 	struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
 	const struct drm_display_info *info = &connector->base.display_info;
-	int vmin, vmax;
+	int vmin, vmax, clock = intel_dp_mode_clock(crtc_state, conn_state);
 
 	if (!intel_vrr_is_capable(connector))
 		return;
@@ -114,9 +115,9 @@ intel_vrr_compute_config(struct intel_crtc_state *crtc_state,
 	if (adjusted_mode->flags & DRM_MODE_FLAG_INTERLACE)
 		return;
 
-	vmin = DIV_ROUND_UP(adjusted_mode->crtc_clock * 1000,
+	vmin = DIV_ROUND_UP(clock * 1000,
 			    adjusted_mode->crtc_htotal * info->monitor_range.max_vfreq);
-	vmax = adjusted_mode->crtc_clock * 1000 /
+	vmax = clock * 1000 /
 		(adjusted_mode->crtc_htotal * info->monitor_range.min_vfreq);
 
 	vmin = max_t(int, vmin, adjusted_mode->crtc_vtotal);
