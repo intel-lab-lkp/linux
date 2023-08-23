@@ -9,6 +9,13 @@ __modinst:
 include include/config/auto.conf
 include $(srctree)/scripts/Kbuild.include
 
+install-y :=
+
+PHONY += prepare
+
+prepare:
+	$(Q)mkdir -p $(sort $(dir $(install-y)))
+
 modules := $(call read-file, $(MODORDER))
 
 ifeq ($(KBUILD_EXTMOD),)
@@ -27,6 +34,7 @@ suffix-$(CONFIG_MODULE_COMPRESS_XZ)	:= .xz
 suffix-$(CONFIG_MODULE_COMPRESS_ZSTD)	:= .zst
 
 modules := $(patsubst $(extmod_prefix)%.o, $(dst)/%.ko$(suffix-y), $(modules))
+install-y += $(modules)
 
 __modinst: $(modules)
 	@:
@@ -35,7 +43,7 @@ __modinst: $(modules)
 # Installation
 #
 quiet_cmd_install = INSTALL $@
-      cmd_install = mkdir -p $(dir $@); cp $< $@
+      cmd_install = cp $< $@
 
 # Strip
 #
@@ -94,6 +102,8 @@ depmod: $(modules)
 
 quiet_cmd_depmod = DEPMOD  $(MODLIB)
       cmd_depmod = $(srctree)/scripts/depmod.sh $(KERNELRELEASE)
+
+$(install-y): prepare
 
 else
 
