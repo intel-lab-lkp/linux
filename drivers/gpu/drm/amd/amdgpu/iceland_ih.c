@@ -433,8 +433,7 @@ static void iceland_ih_set_interrupt_funcs(struct amdgpu_device *adev)
 	adev->irq.ih_funcs = &iceland_ih_funcs;
 }
 
-const struct amdgpu_ip_block_version iceland_ih_ip_block =
-{
+const struct amdgpu_ip_block_version iceland_ih_ip_block = {
 	.type = AMD_IP_BLOCK_TYPE_IH,
 	.major = 2,
 	.minor = 4,
