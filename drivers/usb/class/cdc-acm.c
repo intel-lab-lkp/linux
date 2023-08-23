@@ -954,42 +954,57 @@ static int acm_tty_tiocmset(struct tty_struct *tty,
 	return acm_set_control(acm, acm->ctrlout = newctrl);
 }
 
-static int get_serial_info(struct tty_struct *tty, struct serial_struct *ss)
+static void acm_read_serial_info(struct acm *acm, struct serial_struct *ss)
 {
-	struct acm *acm = tty->driver_data;
-
 	ss->line = acm->minor;
 	ss->close_delay	= jiffies_to_msecs(acm->port.close_delay) / 10;
 	ss->closing_wait = acm->port.closing_wait == ASYNC_CLOSING_WAIT_NONE ?
 				ASYNC_CLOSING_WAIT_NONE :
 				jiffies_to_msecs(acm->port.closing_wait) / 10;
-	return 0;
 }
 
-static int set_serial_info(struct tty_struct *tty, struct serial_struct *ss)
+static int acm_write_serial_info(struct acm *acm, struct serial_struct *ss,
+	bool admin)
 {
-	struct acm *acm = tty->driver_data;
 	unsigned int closing_wait, close_delay;
-	int retval = 0;
+	int ret = 0;
 
 	close_delay = msecs_to_jiffies(ss->close_delay * 10);
 	closing_wait = ss->closing_wait == ASYNC_CLOSING_WAIT_NONE ?
 			ASYNC_CLOSING_WAIT_NONE :
 			msecs_to_jiffies(ss->closing_wait * 10);
 
-	mutex_lock(&acm->port.mutex);
-
-	if (!capable(CAP_SYS_ADMIN)) {
+	if (!admin) {
 		if ((close_delay != acm->port.close_delay) ||
 		    (closing_wait != acm->port.closing_wait))
-			retval = -EPERM;
+			ret = -EPERM;
 	} else {
 		acm->port.close_delay  = close_delay;
 		acm->port.closing_wait = closing_wait;
 	}
 
+	return ret;
+}
+
+static int get_serial_info(struct tty_struct *tty, struct serial_struct *ss)
+{
+	struct acm *acm = tty->driver_data;
+
+	mutex_lock(&acm->port.mutex);
+	acm_read_serial_info(acm, ss);
 	mutex_unlock(&acm->port.mutex);
-	return retval;
+	return 0;
+}
+
+static int set_serial_info(struct tty_struct *tty, struct serial_struct *ss)
+{
+	struct acm *acm = tty->driver_data;
+	int ret = 0;
+
+	mutex_lock(&acm->port.mutex);
+	ret = acm_write_serial_info(acm, ss, capable(CAP_SYS_ADMIN));
+	mutex_unlock(&acm->port.mutex);
+	return ret;
 }
 
 static int wait_serial_change(struct acm *acm, unsigned long arg)
@@ -1162,6 +1177,102 @@ static int acm_write_buffers_alloc(struct acm *acm)
 	}
 	return 0;
 }
+
+static ssize_t close_delay_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct acm *acm = dev_get_drvdata(dev);
+	struct serial_struct ss;
+
+	mutex_lock(&acm->port.mutex);
+	acm_read_serial_info(acm, &ss);
+	mutex_unlock(&acm->port.mutex);
+
+	return snprintf(buf, PAGE_SIZE, "%u\n", ss.close_delay);
+}
+
+static ssize_t close_delay_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct acm *acm = dev_get_drvdata(dev);
+	struct serial_struct ss;
+	u16 close_delay;
+	int ret;
+
+	ret = kstrtou16(buf, 0, &close_delay);
+	if (ret)
+		return ret;
+
+	mutex_lock(&acm->port.mutex);
+	acm_read_serial_info(acm, &ss);
+	ss.close_delay = close_delay;
+	ret = acm_write_serial_info(acm, &ss, true);
+	mutex_unlock(&acm->port.mutex);
+
+	return ret ? ret : count;
+}
+
+static ssize_t closing_wait_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct acm *acm = dev_get_drvdata(dev);
+	struct serial_struct ss;
+	s32 value;
+
+	mutex_lock(&acm->port.mutex);
+	acm_read_serial_info(acm, &ss);
+	mutex_unlock(&acm->port.mutex);
+
+	if (ss.closing_wait == ASYNC_CLOSING_WAIT_NONE)
+		value = 0;
+	else if (ss.closing_wait == ASYNC_CLOSING_WAIT_INF)
+		value = -1;
+	else
+		value = ss.closing_wait;
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", value);
+}
+
+static ssize_t closing_wait_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct acm *acm = dev_get_drvdata(dev);
+	struct serial_struct ss;
+	s32 closing_wait;
+	int ret;
+
+	ret = kstrtos32(buf, 0, &closing_wait);
+	if (ret)
+		return ret;
+
+	if (closing_wait == 0) {
+		closing_wait = ASYNC_CLOSING_WAIT_NONE;
+	} else if (closing_wait == -1) {
+		closing_wait = ASYNC_CLOSING_WAIT_INF;
+	} else if (closing_wait == ASYNC_CLOSING_WAIT_NONE
+			|| closing_wait == ASYNC_CLOSING_WAIT_INF /* redundant (0) */
+			|| closing_wait < -1 || closing_wait > U16_MAX) {
+		return -ERANGE;
+	}
+
+	mutex_lock(&acm->port.mutex);
+	acm_read_serial_info(acm, &ss);
+	ss.closing_wait = closing_wait;
+	ret = acm_write_serial_info(acm, &ss, true);
+	mutex_unlock(&acm->port.mutex);
+
+	return ret ? ret : count;
+}
+
+static DEVICE_ATTR_RW(close_delay);
+static DEVICE_ATTR_RW(closing_wait);
+
+static struct attribute *tty_dev_attrs[] = {
+	&dev_attr_close_delay.attr,
+	&dev_attr_closing_wait.attr,
+	NULL,
+};
+ATTRIBUTE_GROUPS(tty_dev);
 
 static int acm_probe(struct usb_interface *intf,
 		     const struct usb_device_id *id)
@@ -1504,8 +1615,8 @@ skip_countries:
 			goto err_remove_files;
 	}
 
-	tty_dev = tty_port_register_device(&acm->port, acm_tty_driver, minor,
-			&control_interface->dev);
+	tty_dev = tty_port_register_device_attr(&acm->port, acm_tty_driver,
+			minor, &control_interface->dev, acm, tty_dev_groups);
 	if (IS_ERR(tty_dev)) {
 		rv = PTR_ERR(tty_dev);
 		goto err_release_data_interface;
