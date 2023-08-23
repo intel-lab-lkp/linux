@@ -498,7 +498,7 @@ static int jpeg_v3_0_set_powergating_state(void *handle,
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 	int ret;
 
-	if(state == adev->jpeg.cur_state)
+	if (state == adev->jpeg.cur_state)
 		return 0;
 
 	if (state == AMD_PG_STATE_GATE)
@@ -506,7 +506,7 @@ static int jpeg_v3_0_set_powergating_state(void *handle,
 	else
 		ret = jpeg_v3_0_start(adev);
 
-	if(!ret)
+	if (!ret)
 		adev->jpeg.cur_state = state;
 
 	return ret;
@@ -605,8 +605,7 @@ static void jpeg_v3_0_set_irq_funcs(struct amdgpu_device *adev)
 	adev->jpeg.inst->irq.funcs = &jpeg_v3_0_irq_funcs;
 }
 
-const struct amdgpu_ip_block_version jpeg_v3_0_ip_block =
-{
+const struct amdgpu_ip_block_version jpeg_v3_0_ip_block = {
 	.type = AMD_IP_BLOCK_TYPE_JPEG,
 	.major = 3,
 	.minor = 0,
