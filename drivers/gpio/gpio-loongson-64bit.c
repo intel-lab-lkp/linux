@@ -23,9 +23,10 @@ enum loongson_gpio_mode {
 struct loongson_gpio_chip_data {
 	const char		*label;
 	enum loongson_gpio_mode	mode;
-	unsigned int		conf_offset;
-	unsigned int		out_offset;
-	unsigned int		in_offset;
+	u32			conf_offset;
+	u32			out_offset;
+	u32			in_offset;
+	u32			inten_offset;
 };
 
 struct loongson_gpio_chip {
@@ -117,7 +118,17 @@ static void loongson_gpio_set(struct gpio_chip *chip, unsigned int pin, int valu
 
 static int loongson_gpio_to_irq(struct gpio_chip *chip, unsigned int offset)
 {
+	unsigned int u;
 	struct platform_device *pdev = to_platform_device(chip->parent);
+	struct loongson_gpio_chip *lgpio = to_loongson_gpio_chip(chip);
+
+	if (lgpio->chip_data->mode == BIT_CTRL_MODE) {
+		u = readl(lgpio->reg_base + lgpio->chip_data->inten_offset + offset / 32 * 4);
+		u |= BIT(offset % 32);
+		writel(u, lgpio->reg_base + lgpio->chip_data->inten_offset + offset / 32 * 4);
+	} else {
+		writeb(1, lgpio->reg_base + lgpio->chip_data->inten_offset + offset);
+	}
 
 	return platform_get_irq(pdev, offset);
 }
@@ -127,11 +138,30 @@ static int loongson_gpio_init(struct device *dev, struct loongson_gpio_chip *lgp
 {
 	int ret;
 	u32 ngpios;
+	unsigned int io_width;
 
 	lgpio->reg_base = reg_base;
+	if (device_property_read_u32(dev, "ngpios", &ngpios) || !ngpios)
+		return -EINVAL;
+
+	ret = DIV_ROUND_UP(ngpios, 8);
+	switch (ret) {
+	case 1 ... 2:
+		io_width = ret;
+		break;
+	case 3 ... 4:
+		io_width = 0x4;
+		break;
+	case 5 ... 8:
+		io_width = 0x8;
+		break;
+	default:
+		dev_err(dev, "unsupported io width\n");
+		return -EINVAL;
+	}
 
 	if (lgpio->chip_data->mode == BIT_CTRL_MODE) {
-		ret = bgpio_init(&lgpio->chip, dev, 8,
+		ret = bgpio_init(&lgpio->chip, dev, io_width,
 				lgpio->reg_base + lgpio->chip_data->in_offset,
 				lgpio->reg_base + lgpio->chip_data->out_offset,
 				NULL, NULL,
@@ -151,12 +181,11 @@ static int loongson_gpio_init(struct device *dev, struct loongson_gpio_chip *lgp
 		spin_lock_init(&lgpio->lock);
 	}
 
-	device_property_read_u32(dev, "ngpios", &ngpios);
-
-	lgpio->chip.can_sleep = 0;
 	lgpio->chip.ngpio = ngpios;
 	lgpio->chip.label = lgpio->chip_data->label;
-	lgpio->chip.to_irq = loongson_gpio_to_irq;
+	lgpio->chip.can_sleep = 0;
+	if (lgpio->chip_data->inten_offset)
+		lgpio->chip.to_irq = loongson_gpio_to_irq;
 
 	return devm_gpiochip_add_data(dev, &lgpio->chip, lgpio);
 }
@@ -187,6 +216,57 @@ static const struct loongson_gpio_chip_data loongson_gpio_ls2k_data = {
 	.conf_offset = 0x0,
 	.in_offset = 0x20,
 	.out_offset = 0x10,
+	.inten_offset = 0x30,
+};
+
+static const struct loongson_gpio_chip_data loongson_gpio_ls2k0500_data0 = {
+	.label = "ls2k0500_gpio",
+	.mode = BIT_CTRL_MODE,
+	.conf_offset = 0x0,
+	.in_offset = 0x8,
+	.out_offset = 0x10,
+	.inten_offset = 0xb0,
+};
+
+static const struct loongson_gpio_chip_data loongson_gpio_ls2k0500_data1 = {
+	.label = "ls2k0500_gpio",
+	.mode = BIT_CTRL_MODE,
+	.conf_offset = 0x0,
+	.in_offset = 0x8,
+	.out_offset = 0x10,
+	.inten_offset = 0x98,
+};
+
+static const struct loongson_gpio_chip_data loongson_gpio_ls2k2000_data0 = {
+	.label = "ls2k2000_gpio",
+	.mode = BIT_CTRL_MODE,
+	.conf_offset = 0x0,
+	.in_offset = 0xc,
+	.out_offset = 0x8,
+};
+
+static const struct loongson_gpio_chip_data loongson_gpio_ls2k2000_data1 = {
+	.label = "ls2k2000_gpio",
+	.mode = BIT_CTRL_MODE,
+	.conf_offset = 0x0,
+	.in_offset = 0x20,
+	.out_offset = 0x10,
+};
+
+static const struct loongson_gpio_chip_data loongson_gpio_ls2k2000_data2 = {
+	.label = "ls2k2000_gpio",
+	.mode = BIT_CTRL_MODE,
+	.conf_offset = 0x84,
+	.in_offset = 0x88,
+	.out_offset = 0x80,
+};
+
+static const struct loongson_gpio_chip_data loongson_gpio_ls3a5000_data = {
+	.label = "ls3a5000_gpio",
+	.mode = BIT_CTRL_MODE,
+	.conf_offset = 0x0,
+	.in_offset = 0xc,
+	.out_offset = 0x8,
 };
 
 static const struct loongson_gpio_chip_data loongson_gpio_ls7a_data = {
@@ -203,6 +283,30 @@ static const struct of_device_id loongson_gpio_of_match[] = {
 		.data = &loongson_gpio_ls2k_data,
 	},
 	{
+		.compatible = "loongson,ls2k0500-gpio0",
+		.data = &loongson_gpio_ls2k0500_data0,
+	},
+	{
+		.compatible = "loongson,ls2k0500-gpio1",
+		.data = &loongson_gpio_ls2k0500_data1,
+	},
+	{
+		.compatible = "loongson,ls2k2000-gpio0",
+		.data = &loongson_gpio_ls2k2000_data0,
+	},
+	{
+		.compatible = "loongson,ls2k2000-gpio1",
+		.data = &loongson_gpio_ls2k2000_data1,
+	},
+	{
+		.compatible = "loongson,ls2k2000-gpio2",
+		.data = &loongson_gpio_ls2k2000_data2,
+	},
+	{
+		.compatible = "loongson,ls3a5000-gpio",
+		.data = &loongson_gpio_ls3a5000_data,
+	},
+	{
 		.compatible = "loongson,ls7a-gpio",
 		.data = &loongson_gpio_ls7a_data,
 	},
@@ -214,6 +318,22 @@ static const struct acpi_device_id loongson_gpio_acpi_match[] = {
 	{
 		.id = "LOON0002",
 		.driver_data = (kernel_ulong_t)&loongson_gpio_ls7a_data,
+	},
+	{
+		.id = "LOON0007",
+		.driver_data = (kernel_ulong_t)&loongson_gpio_ls3a5000_data,
+	},
+	{
+		.id = "LOON000A",
+		.driver_data = (kernel_ulong_t)&loongson_gpio_ls2k2000_data0,
+	},
+	{
+		.id = "LOON000B",
+		.driver_data = (kernel_ulong_t)&loongson_gpio_ls2k2000_data1,
+	},
+	{
+		.id = "LOON000C",
+		.driver_data = (kernel_ulong_t)&loongson_gpio_ls2k2000_data2,
 	},
 	{}
 };
