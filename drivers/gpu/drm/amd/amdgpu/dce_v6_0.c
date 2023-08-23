@@ -56,8 +56,7 @@
 static void dce_v6_0_set_display_funcs(struct amdgpu_device *adev);
 static void dce_v6_0_set_irq_funcs(struct amdgpu_device *adev);
 
-static const u32 crtc_offsets[6] =
-{
+static const u32 crtc_offsets[6] = {
 	SI_CRTC0_REGISTER_OFFSET,
 	SI_CRTC1_REGISTER_OFFSET,
 	SI_CRTC2_REGISTER_OFFSET,
@@ -66,8 +65,7 @@ static const u32 crtc_offsets[6] =
 	SI_CRTC5_REGISTER_OFFSET
 };
 
-static const u32 hpd_offsets[] =
-{
+static const u32 hpd_offsets[] = {
 	mmDC_HPD1_INT_STATUS - mmDC_HPD1_INT_STATUS,
 	mmDC_HPD2_INT_STATUS - mmDC_HPD1_INT_STATUS,
 	mmDC_HPD3_INT_STATUS - mmDC_HPD1_INT_STATUS,
@@ -1328,8 +1326,7 @@ static void dce_v6_0_audio_enable(struct amdgpu_device *adev,
 			enable ? AZALIA_F0_CODEC_PIN_CONTROL_HOT_PLUG_CONTROL__AUDIO_ENABLED_MASK : 0);
 }
 
-static const u32 pin_offsets[7] =
-{
+static const u32 pin_offsets[7] = {
 	(0x1780 - 0x1780),
 	(0x1786 - 0x1780),
 	(0x178c - 0x1780),
@@ -1776,8 +1773,7 @@ static void dce_v6_0_afmt_fini(struct amdgpu_device *adev)
 	}
 }
 
-static const u32 vga_control_regs[6] =
-{
+static const u32 vga_control_regs[6] = {
 	mmD1VGA_CONTROL,
 	mmD2VGA_CONTROL,
 	mmD3VGA_CONTROL,
@@ -3059,7 +3055,7 @@ static int dce_v6_0_pageflip_irq(struct amdgpu_device *adev,
 
 	spin_lock_irqsave(&adev_to_drm(adev)->event_lock, flags);
 	works = amdgpu_crtc->pflip_works;
-	if (amdgpu_crtc->pflip_status != AMDGPU_FLIP_SUBMITTED){
+	if (amdgpu_crtc->pflip_status != AMDGPU_FLIP_SUBMITTED) {
 		DRM_DEBUG_DRIVER("amdgpu_crtc->pflip_status = %d != "
 						"AMDGPU_FLIP_SUBMITTED(%d)\n",
 						amdgpu_crtc->pflip_status,
@@ -3465,8 +3461,7 @@ static void dce_v6_0_set_irq_funcs(struct amdgpu_device *adev)
 	adev->hpd_irq.funcs = &dce_v6_0_hpd_irq_funcs;
 }
 
-const struct amdgpu_ip_block_version dce_v6_0_ip_block =
-{
+const struct amdgpu_ip_block_version dce_v6_0_ip_block = {
 	.type = AMD_IP_BLOCK_TYPE_DCE,
 	.major = 6,
 	.minor = 0,
@@ -3474,8 +3469,7 @@ const struct amdgpu_ip_block_version dce_v6_0_ip_block =
 	.funcs = &dce_v6_0_ip_funcs,
 };
 
-const struct amdgpu_ip_block_version dce_v6_4_ip_block =
-{
+const struct amdgpu_ip_block_version dce_v6_4_ip_block = {
 	.type = AMD_IP_BLOCK_TYPE_DCE,
 	.major = 6,
 	.minor = 4,
