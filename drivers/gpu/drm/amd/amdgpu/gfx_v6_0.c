@@ -86,8 +86,7 @@ static void gfx_v6_0_init_pg(struct amdgpu_device *adev);
 #define MACRO_TILE_ASPECT(x)				((x) << 18)
 #define NUM_BANKS(x)					((x) << 20)
 
-static const u32 verde_rlc_save_restore_register_list[] =
-{
+static const u32 verde_rlc_save_restore_register_list[] = {
 	(0x8000 << 16) | (0x98f4 >> 2),
 	0x00000000,
 	(0x8040 << 16) | (0x98f4 >> 2),
@@ -334,7 +333,8 @@ static int gfx_v6_0_init_microcode(struct amdgpu_device *adev)
 	case CHIP_HAINAN:
 		chip_name = "hainan";
 		break;
-	default: BUG();
+	default:
+		BUG();
 	}
 
 	snprintf(fw_name, sizeof(fw_name), "amdgpu/%s_pfp.bin", chip_name);
@@ -3222,7 +3222,7 @@ static void gfx_v6_0_set_compute_eop_interrupt_state(struct amdgpu_device *adev,
 						     enum amdgpu_interrupt_state state)
 {
 	u32 cp_int_cntl;
-	switch (state){
+	switch (state) {
 	case AMDGPU_IRQ_STATE_DISABLE:
 		if (ring == 0) {
 			cp_int_cntl = RREG32(mmCP_INT_CNTL_RING1);
@@ -3583,7 +3583,7 @@ static void gfx_v6_0_get_cu_info(struct amdgpu_device *adev)
 				if (bitmap & mask) {
 					if (counter < ao_cu_num)
 						ao_bitmap |= mask;
-					counter ++;
+					counter++;
 				}
 				mask <<= 1;
 			}
@@ -3601,8 +3601,7 @@ static void gfx_v6_0_get_cu_info(struct amdgpu_device *adev)
 	cu_info->ao_cu_mask = ao_cu_mask;
 }
 
-const struct amdgpu_ip_block_version gfx_v6_0_ip_block =
-{
+const struct amdgpu_ip_block_version gfx_v6_0_ip_block = {
 	.type = AMD_IP_BLOCK_TYPE_GFX,
 	.major = 6,
 	.minor = 0,
