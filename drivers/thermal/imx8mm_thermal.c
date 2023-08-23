@@ -15,6 +15,7 @@
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/thermal.h>
+#include <linux/reboot.h>
 
 #include "thermal_hwmon.h"
 
@@ -91,6 +92,7 @@ struct imx8mm_tmu {
 	void __iomem *base;
 	struct clk *clk;
 	const struct thermal_soc_data *socdata;
+	bool reboot;
 	struct tmu_sensor sensors[];
 };
 
@@ -146,8 +148,23 @@ static int tmu_get_temp(struct thermal_zone_device *tz, int *temp)
 	return tmu->socdata->get_temp(sensor, temp);
 }
 
+static void tmu_critical(struct thermal_zone_device *tz)
+{
+	struct tmu_sensor *sensor = thermal_zone_device_priv(tz);
+	struct imx8mm_tmu *tmu = sensor->priv;
+
+	if (tmu->reboot) {
+		dev_emerg(thermal_zone_device(tz), "%s: critical temperature reached\n",
+			  thermal_zone_device_type(tz));
+		kernel_restart(NULL);
+	} else {
+		thermal_zone_device_critical(tz);
+	}
+}
+
 static const struct thermal_zone_device_ops tmu_tz_ops = {
 	.get_temp = tmu_get_temp,
+	.critical = tmu_critical,
 };
 
 static void imx8mm_tmu_enable(struct imx8mm_tmu *tmu, bool enable)
@@ -312,6 +329,8 @@ static int imx8mm_tmu_probe(struct platform_device *pdev)
 	tmu->base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(tmu->base))
 		return PTR_ERR(tmu->base);
+
+	tmu->reboot = of_property_present(pdev->dev.of_node, "nxp,reboot-on-critical");
 
 	tmu->clk = devm_clk_get(&pdev->dev, NULL);
 	if (IS_ERR(tmu->clk))
