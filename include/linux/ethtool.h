@@ -60,10 +60,11 @@ enum {
 	ETH_RSS_HASH_TOP_BIT, /* Configurable RSS hash function - Toeplitz */
 	ETH_RSS_HASH_XOR_BIT, /* Configurable RSS hash function - Xor */
 	ETH_RSS_HASH_CRC32_BIT, /* Configurable RSS hash function - Crc32 */
+	ETH_RSS_HASH_SYM_TOP_BIT, /* Configurable RSS hash function - Symmetric Toeplitz */
 
 	/*
 	 * Add your fresh new hash function bits above and remember to update
-	 * rss_hash_func_strings[] in ethtool.c
+	 * rss_hash_func_strings[] in ethtool/common.c
 	 */
 	ETH_RSS_HASH_FUNCS_COUNT
 };
@@ -108,6 +109,7 @@ enum ethtool_supported_ring_param {
 #define __ETH_RSS_HASH(name)	__ETH_RSS_HASH_BIT(ETH_RSS_HASH_##name##_BIT)
 
 #define ETH_RSS_HASH_TOP	__ETH_RSS_HASH(TOP)
+#define ETH_RSS_HASH_SYM_TOP	__ETH_RSS_HASH(SYM_TOP)
 #define ETH_RSS_HASH_XOR	__ETH_RSS_HASH(XOR)
 #define ETH_RSS_HASH_CRC32	__ETH_RSS_HASH(CRC32)
 
