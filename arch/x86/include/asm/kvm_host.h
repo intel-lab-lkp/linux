@@ -39,7 +39,7 @@
 
 #define __KVM_HAVE_ARCH_VCPU_DEBUGFS
 
-#define KVM_MAX_VCPUS 1024
+#define KVM_MAX_VCPUS CONFIG_KVM_MAX_NR_VCPUS
 
 /*
  * In x86, the VCPU ID corresponds to the APIC ID, and APIC IDs
