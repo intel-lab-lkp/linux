@@ -13,12 +13,29 @@
 #include <linux/virtio_rng.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/random.h>
 
 static DEFINE_IDA(rng_index_ida);
+
+struct virtrng_leak_queue {
+	/* The underlying virtqueue of this leak queue */
+	struct virtqueue *vq;
+	/* The next epoch value the device should write through this leak queue */
+	struct rand_epoch_data next_epoch;
+};
+
+struct virtrng_leak_queue;
 
 struct virtrng_info {
 	struct hwrng hwrng;
 	struct virtqueue *vq;
+
+	/* Leak queues */
+	bool has_leakqs;
+	struct virtrng_leak_queue leakq[2];
+	int active_leakq;
+	struct rng_epoch_notifier epoch_notifier;
+
 	char name[25];
 	int index;
 	bool hwrng_register_done;
@@ -30,10 +47,117 @@ struct virtrng_info {
 	/* minimal size returned by rng_buffer_size() */
 #if SMP_CACHE_BYTES < 32
 	u8 data[32];
+	u8 leak_data[32];
 #else
 	u8 data[SMP_CACHE_BYTES];
+	u8 leak_data[SMP_CACHE_BYTES];
 #endif
 };
+
+static struct virtrng_leak_queue *vq_to_leakq(struct virtrng_info *vi,
+		struct virtqueue *vq)
+{
+	return &vi->leakq[vq->index - 1];
+}
+
+/*
+ * Swaps the queues and returns the new active leak queue.
+ * It assumes that the leak queues' lock is being held
+ */
+static void swap_leakqs(struct virtrng_info *vi)
+{
+	vi->active_leakq = 1 - vi->active_leakq;
+}
+
+static struct virtrng_leak_queue *get_active_leakq(struct virtrng_info *vi)
+{
+	return &vi->leakq[vi->active_leakq];
+}
+
+/*
+ * Create the next epoch value that we will write through the leak queue.
+ *
+ * Subsequent epoch values will be written through alternate leak queues,
+ * so the next epoch value for each queue will be:
+ *
+ * *-------------*----------------------------------------------*
+ * | notifier_id | (current_epoch + 2) & RNG_EPOCH_COUNTER_MASK |
+ * *-------------*----------------------------------------------*
+ */
+static void prepare_next_epoch(struct virtrng_info *vi, struct virtrng_leak_queue *leakq)
+{
+	leakq->next_epoch.data = ((leakq->next_epoch.data + 2) & RNG_EPOCH_COUNTER_MASK) |
+		 (vi->epoch_notifier.id << RNG_EPOCH_ID_SHIFT);
+}
+
+static int do_fill_on_leak_request(struct virtrng_info *vi, struct virtqueue *vq, void *data,
+				    size_t len)
+{
+	struct scatterlist sg;
+
+	sg_init_one(&sg, data, len);
+	return virtqueue_add_inbuf(vq, &sg, 1, data, GFP_KERNEL);
+}
+
+static int do_copy_on_leak_request(struct virtrng_info *vi, struct virtqueue *vq,
+				   void *to, void *from, size_t len)
+{
+	struct scatterlist out, in, *sgs[2];
+
+	sg_init_one(&out, from, len);
+	sgs[0] = &out;
+	sg_init_one(&in, to, len);
+	sgs[1] = &in;
+
+	return virtqueue_add_sgs(vq, sgs, 1, 1, to, GFP_KERNEL);
+}
+
+static int add_entropy_leak_requests(struct virtrng_info *vi, struct virtrng_leak_queue *leakq)
+{
+	do_fill_on_leak_request(vi, leakq->vq, &vi->leak_data, sizeof(vi->leak_data));
+	/* Make sure the device writes the next valid epoch value */
+	do_copy_on_leak_request(vi, leakq->vq, vi->epoch_notifier.epoch, &leakq->next_epoch,
+			sizeof(u32));
+
+	return 0;
+}
+
+static void entropy_leak_detected(struct virtqueue *vq)
+{
+	struct virtrng_info *vi = vq->vdev->priv;
+	struct virtrng_leak_queue *activeq = get_active_leakq(vi);
+	struct virtrng_leak_queue *leakq = vq_to_leakq(vi, vq);
+	unsigned int len;
+	void *buffer;
+
+	/*
+	 * The first time we see a used buffer in the active leak queue we swap queues
+	 * so that new commands are added in the new active leak queue.
+	 */
+	if (vq == activeq->vq) {
+		pr_info("%s: entropy leak detected!", vi->name);
+		swap_leakqs(vi);
+	}
+
+	/* Drain all the used buffers from the queue */
+	while ((buffer = virtqueue_get_buf(vq, &len)) != NULL) {
+		if (buffer == vi->leak_data) {
+			add_device_randomness(vi->leak_data, sizeof(vi->leak_data));
+
+			/*
+			 * Ensure we always have a pending request for random bytes on entropy
+			 * leak. Do it here, after we have swapped leak queues, so it gets handled
+			 * with the next entropy leak event.
+			 */
+			do_fill_on_leak_request(vi, vq, &vi->leak_data, sizeof(vi->leak_data));
+		} else if (buffer == &vi->epoch_notifier.epoch->data) {
+			/* Also, ensure we always have a pending request for bumping the epoch */
+			prepare_next_epoch(vi, leakq);
+			do_copy_on_leak_request(vi, vq, &vi->epoch_notifier.epoch->data,
+					&leakq->next_epoch, sizeof(leakq->next_epoch));
+		}
+	}
+}
 
 static void random_recv_done(struct virtqueue *vq)
 {
@@ -126,6 +250,51 @@ static void virtio_cleanup(struct hwrng *rng)
 	complete(&vi->have_data);
 }
 
+static int init_virtqueues(struct virtrng_info *vi, struct virtio_device *vdev)
+{
+	int ret, vqs_nr = 1;
+	struct virtqueue *vqs[3];
+	const char *names[3];
+	vq_callback_t *callbacks[3];
+
+	callbacks[0] = random_recv_done;
+	names[0] = "input";
+
+	if (vi->has_leakqs) {
+		vqs_nr = 3;
+		vi->active_leakq = 0;
+
+		/* Register with random.c to get epoch info */
+		ret = rng_register_epoch_notifier(&vi->epoch_notifier);
+		if (ret)
+			goto err_register_epoch;
+
+		callbacks[1] = entropy_leak_detected;
+		names[1] = "leakq.1";
+		callbacks[2] = entropy_leak_detected;
+		names[2] = "leakq.2";
+	}
+
+	ret = virtio_find_vqs(vdev, vqs_nr, vqs, callbacks, names, NULL);
+	if (ret)
+		goto err_find_vqs;
+
+	vi->vq = vqs[0];
+	if (vi->has_leakqs) {
+		vi->leakq[0].vq = vqs[1];
+		vi->leakq[0].next_epoch.data = 1;
+		vi->leakq[1].vq = vqs[2];
+		vi->leakq[1].next_epoch.data = 2;
+	}
+
+	return 0;
+
+err_find_vqs:
+	rng_unregister_epoch_notifier(&vi->epoch_notifier);
+err_register_epoch:
+	return ret;
+}
+
 static int probe_common(struct virtio_device *vdev)
 {
 	int err, index;
@@ -151,17 +320,21 @@ static int probe_common(struct virtio_device *vdev)
 	};
 	vdev->priv = vi;
 
-	/* We expect a single virtqueue. */
-	vi->vq = virtio_find_single_vq(vdev, random_recv_done, "input");
-	if (IS_ERR(vi->vq)) {
-		err = PTR_ERR(vi->vq);
+	vi->has_leakqs = virtio_has_feature(vdev, VIRTIO_RNG_F_LEAK);
+	err = init_virtqueues(vi, vdev);
+	if (err)
 		goto err_find;
-	}
 
 	virtio_device_ready(vdev);
 
 	/* we always have a pending entropy request */
 	request_entropy(vi);
+
+	if (vi->has_leakqs) {
+		/* we always have entropy-leak requests pending */
+		add_entropy_leak_requests(vi, &vi->leakq[0]);
+		add_entropy_leak_requests(vi, &vi->leakq[1]);
+	}
 
 	return 0;
 
@@ -245,7 +418,13 @@ static const struct virtio_device_id id_table[] = {
 	{ 0 },
 };
 
+static unsigned int features[] = {
+	VIRTIO_RNG_F_LEAK,
+};
+
 static struct virtio_driver virtio_rng_driver = {
+	.feature_table = features,
+	.feature_table_size = ARRAY_SIZE(features),
 	.driver.name =	KBUILD_MODNAME,
 	.driver.owner =	THIS_MODULE,
 	.id_table =	id_table,
