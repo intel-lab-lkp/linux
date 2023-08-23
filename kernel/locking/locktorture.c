@@ -30,6 +30,7 @@
 #include <linux/torture.h>
 #include <linux/reboot.h>
 #include <linux/rcu_notifier.h>
+#include <linux/sched/debug.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Paul E. McKenney <paulmck@linux.ibm.com>");
@@ -112,7 +113,7 @@ static struct task_struct *stats_task;
 static struct task_struct **writer_tasks;
 static struct task_struct **reader_tasks;
 
-static bool lock_is_write_held;
+static struct task_struct *lock_is_write_held;
 static atomic_t lock_is_read_held;
 static unsigned long last_lock_release;
 
@@ -283,7 +284,16 @@ void __weak spinlock_dump(spinlock_t *sp, bool full)
 
 static int torture_spin_lock_dump(struct notifier_block *nb, unsigned long v, void *ptr)
 {
+	struct task_struct *t = READ_ONCE(lock_is_write_held);
+
 	pr_alert("%s invoked: v=%lu, duration=%lu.\n", __func__, v, (unsigned long)ptr);
+	if (t) {
+		pr_alert("%s No task holding lock.\n", __func__);
+	} else {
+		pr_alert("%s Lock held by task %ps %d %*s\n",
+			 __func__, t, t->pid, TASK_COMM_LEN, t->comm);
+		sched_show_task(t);
+	}
 	spinlock_dump(&torture_spinlock, true);
 	return NOTIFY_OK;
 }
@@ -911,9 +921,9 @@ static int lock_torture_writer(void *arg)
 			if (acq_writer_lim > 0)
 				j = jiffies;
 			cxt.cur_ops->writelock(tid);
-			if (WARN_ON_ONCE(lock_is_write_held))
+			if (WARN_ON_ONCE(READ_ONCE(lock_is_write_held)))
 				lwsp->n_lock_fail++;
-			lock_is_write_held = true;
+			WRITE_ONCE(lock_is_write_held, current);
 			if (WARN_ON_ONCE(atomic_read(&lock_is_read_held)))
 				lwsp->n_lock_fail++; /* rare, but... */
 			if (acq_writer_lim > 0) {
@@ -926,7 +936,7 @@ static int lock_torture_writer(void *arg)
 
 			cxt.cur_ops->write_delay(&rand);
 
-			lock_is_write_held = false;
+			WRITE_ONCE(lock_is_write_held, NULL);
 			WRITE_ONCE(last_lock_release, jiffies);
 			cxt.cur_ops->writeunlock(tid);
 		}
@@ -960,7 +970,7 @@ static int lock_torture_reader(void *arg)
 
 		cxt.cur_ops->readlock(tid);
 		atomic_inc(&lock_is_read_held);
-		if (WARN_ON_ONCE(lock_is_write_held))
+		if (WARN_ON_ONCE(READ_ONCE(lock_is_write_held)))
 			lrsp->n_lock_fail++; /* rare, but... */
 
 		lrsp->n_lock_acquired++;
@@ -1275,7 +1285,7 @@ static int __init lock_torture_init(void)
 
 	/* Initialize the statistics so that each run gets its own numbers. */
 	if (nwriters_stress) {
-		lock_is_write_held = false;
+		lock_is_write_held = NULL;
 		cxt.lwsa = kmalloc_array(cxt.nrealwriters_stress,
 					 sizeof(*cxt.lwsa),
 					 GFP_KERNEL);
