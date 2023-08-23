@@ -24,6 +24,9 @@
 #define MIX_FME_CPL_INTEN			BIT(1)
 #define MIX_INTSTA			0x8
 #define MIX_EN				0xc
+#define MIX_TRIG			0x10
+#define MIX_TRIG_CRC_EN				BIT(8)
+#define MIX_TRIG_CRC_RST			BIT(9)
 #define MIX_RST				0x14
 #define MIX_ROI_SIZE			0x18
 #define MIX_DATAPATH_CON		0x1c
@@ -39,6 +42,11 @@
 #define PREMULTI_SOURCE				(3 << 12)
 #define MIX_L_SRC_SIZE(n)		(0x30 + 0x18 * (n))
 #define MIX_L_SRC_OFFSET(n)		(0x34 + 0x18 * (n))
+
+/* CRC register offsets for odd and even lines */
+#define MIX_CRC_O			0x110
+#define MIX_CRC_E			0x114
+
 #define MIX_FUNC_DCM0			0x120
 #define MIX_FUNC_DCM1			0x124
 #define MIX_FUNC_DCM_ENABLE			0xffffffff
@@ -70,6 +78,9 @@ struct mtk_ethdr_comp {
 	struct device		*dev;
 	void __iomem		*regs;
 	struct cmdq_client_reg	cmdq_base;
+	struct cmdq_client *cmdq_client;
+	struct cmdq_pkt *cmdq_pkt;
+	u32 cmdq_event;
 };
 
 struct mtk_ethdr {
@@ -80,6 +91,9 @@ struct mtk_ethdr {
 	void			*vblank_cb_data;
 	int			irq;
 	struct reset_control	*reset_ctl;
+	struct drm_crtc		*crtc;
+	const u32		*crcs;
+	size_t			crc_cnt;
 };
 
 static const char * const ethdr_clk_str[] = {
@@ -97,6 +111,95 @@ static const char * const ethdr_clk_str[] = {
 	"gfx_fe1_async",
 	"vdo_be_async",
 };
+
+static const u32 ethdr_crcs[] = {
+	MIX_CRC_O,
+	MIX_CRC_E,
+};
+
+u32 mtk_ethdr_crc_cnt(struct device *dev)
+{
+	struct mtk_ethdr *priv = dev_get_drvdata(dev);
+
+	return (u32)priv->crc_cnt;
+}
+
+void mtk_ethdr_register_crtc(struct device *dev, struct drm_crtc *crtc)
+{
+	struct mtk_ethdr *priv = dev_get_drvdata(dev);
+
+	priv->crtc = crtc;
+}
+
+static void mtk_ethdr_crc_loop_start(struct device *dev)
+{
+	int i;
+	struct mtk_ethdr *priv;
+	struct mtk_ethdr_comp *mixer;
+	struct mtk_drm_crtc *mtk_crtc;
+
+	priv = dev_get_drvdata(dev);
+	mixer = &priv->ethdr_comp[ETHDR_MIXER];
+	mtk_crtc = container_of(priv->crtc, struct mtk_drm_crtc, base);
+
+	if (!mixer->cmdq_event || mixer->cmdq_client)
+		return;
+
+	mixer->cmdq_client = cmdq_mbox_create(dev, 0);
+	if (IS_ERR(mixer->cmdq_client)) {
+		pr_err("failed to create mailbox client\n");
+		return;
+	}
+	mixer->cmdq_pkt = cmdq_pkt_create(mixer->cmdq_client, PAGE_SIZE);
+	if (!mixer->cmdq_pkt) {
+		pr_err("failed to create cmdq packet\n");
+		return;
+	}
+
+	cmdq_pkt_wfe(mixer->cmdq_pkt, mixer->cmdq_event, true);
+
+	for (i = 0; i < priv->crc_cnt; i++) {
+		/* put crc to spr1 register */
+		cmdq_pkt_read_s(mixer->cmdq_pkt, mixer->cmdq_base.subsys,
+				mixer->cmdq_base.offset + priv->crcs[i],
+				CMDQ_THR_SPR_IDX1);
+		cmdq_pkt_assign(mixer->cmdq_pkt, CMDQ_THR_SPR_IDX0,
+				CMDQ_ADDR_HIGH(mtk_crtc->crc.pa + i * sizeof(u32)));
+
+		/* copy spr1 register to crc.pa */
+		cmdq_pkt_write_s(mixer->cmdq_pkt, CMDQ_THR_SPR_IDX0,
+				 CMDQ_ADDR_LOW(mtk_crtc->crc.pa + i * sizeof(u32)),
+				 CMDQ_THR_SPR_IDX1);
+	}
+
+	/* reset crc */
+	mtk_ddp_write_mask(mixer->cmdq_pkt, ~0, &mixer->cmdq_base,
+			   mixer->regs, MIX_TRIG, MIX_TRIG_CRC_RST);
+
+	/* clear reset bit */
+	mtk_ddp_write_mask(mixer->cmdq_pkt, 0, &mixer->cmdq_base,
+			   mixer->regs, MIX_TRIG, MIX_TRIG_CRC_RST);
+
+	cmdq_pkt_finalize_loop(mixer->cmdq_pkt);
+	cmdq_pkt_flush_async(mixer->cmdq_pkt);
+}
+
+static void mtk_ethdr_crc_loop_stop(struct device *dev)
+{
+	struct mtk_ethdr *priv = dev_get_drvdata(dev);
+	struct mtk_ethdr_comp *mixer = &priv->ethdr_comp[ETHDR_MIXER];
+
+	if (mixer->cmdq_pkt) {
+		cmdq_pkt_destroy(mixer->cmdq_pkt);
+		mixer->cmdq_pkt = NULL;
+	}
+
+	if (mixer->cmdq_client) {
+		mbox_flush(mixer->cmdq_client->chan, 2000);
+		cmdq_mbox_destroy(mixer->cmdq_client);
+		mixer->cmdq_client = NULL;
+	}
+}
 
 void mtk_ethdr_register_vblank_cb(struct device *dev,
 				  void (*vblank_cb)(void *),
@@ -265,12 +368,17 @@ void mtk_ethdr_start(struct device *dev)
 	struct mtk_ethdr_comp *mixer = &priv->ethdr_comp[ETHDR_MIXER];
 
 	writel(1, mixer->regs + MIX_EN);
+	writel(MIX_TRIG_CRC_EN | MIX_TRIG_CRC_RST, mixer->regs + MIX_TRIG);
+
+	mtk_ethdr_crc_loop_start(dev);
 }
 
 void mtk_ethdr_stop(struct device *dev)
 {
 	struct mtk_ethdr *priv = dev_get_drvdata(dev);
 	struct mtk_ethdr_comp *mixer = &priv->ethdr_comp[ETHDR_MIXER];
+
+	mtk_ethdr_crc_loop_stop(dev);
 
 	writel(0, mixer->regs + MIX_EN);
 	writel(1, mixer->regs + MIX_RST);
@@ -334,6 +442,15 @@ static int mtk_ethdr_probe(struct platform_device *pdev)
 					      &priv->ethdr_comp[i].cmdq_base, i);
 		if (ret)
 			dev_dbg(dev, "get mediatek,gce-client-reg fail!\n");
+
+		if (i == ETHDR_MIXER) {
+			if (of_property_read_u32_index(dev->of_node,
+						       "mediatek,gce-events", 0,
+						       &priv->ethdr_comp[i].cmdq_event)) {
+				dev_err(dev, "gce-events not defined\n");
+				return -ENOPARAM;
+			}
+		}
 #endif
 		dev_dbg(dev, "[DRM]regs:0x%p, node:%d\n", priv->ethdr_comp[i].regs, i);
 	}
@@ -362,6 +479,9 @@ static int mtk_ethdr_probe(struct platform_device *pdev)
 		dev_err_probe(dev, PTR_ERR(priv->reset_ctl), "cannot get ethdr reset control\n");
 		return PTR_ERR(priv->reset_ctl);
 	}
+
+	priv->crcs = ethdr_crcs;
+	priv->crc_cnt = ARRAY_SIZE(ethdr_crcs);
 
 	platform_set_drvdata(pdev, priv);
 

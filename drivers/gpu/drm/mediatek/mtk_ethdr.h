@@ -22,4 +22,8 @@ void mtk_ethdr_register_vblank_cb(struct device *dev,
 void mtk_ethdr_unregister_vblank_cb(struct device *dev);
 void mtk_ethdr_enable_vblank(struct device *dev);
 void mtk_ethdr_disable_vblank(struct device *dev);
+
+u32 mtk_ethdr_crc_cnt(struct device *dev);
+void mtk_ethdr_register_crtc(struct device *dev, struct drm_crtc *crtc);
+
 #endif
