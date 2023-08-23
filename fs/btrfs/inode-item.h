@@ -4,6 +4,7 @@
 #define BTRFS_INODE_ITEM_H
 
 #include <linux/types.h>
+#include <linux/crc32c.h>
 
 struct btrfs_trans_handle;
 struct btrfs_root;
