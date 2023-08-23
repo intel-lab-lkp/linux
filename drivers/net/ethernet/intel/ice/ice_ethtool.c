@@ -3148,7 +3148,7 @@ ice_get_rxfh_context(struct net_device *netdev, u32 *indir,
 	}
 
 	if (hfunc)
-		*hfunc = ETH_RSS_HASH_TOP;
+		*hfunc = vsi->rss_hfunc;
 
 	if (!indir)
 		return 0;
@@ -3215,7 +3215,8 @@ ice_set_rxfh(struct net_device *netdev, const u32 *indir, const u8 *key,
 	int err;
 
 	dev = ice_pf_to_dev(pf);
-	if (hfunc != ETH_RSS_HASH_NO_CHANGE && hfunc != ETH_RSS_HASH_TOP)
+	if (hfunc != ETH_RSS_HASH_NO_CHANGE &&
+	    hfunc != ETH_RSS_HASH_TOP && hfunc != ETH_RSS_HASH_SYM_TOP)
 		return -EOPNOTSUPP;
 
 	if (!test_bit(ICE_FLAG_RSS_ENA, pf->flags)) {
@@ -3227,6 +3228,12 @@ ice_set_rxfh(struct net_device *netdev, const u32 *indir, const u8 *key,
 	if (ice_is_adq_active(pf)) {
 		netdev_err(netdev, "Cannot change RSS params with ADQ configured.\n");
 		return -EOPNOTSUPP;
+	}
+
+	if (hfunc != ETH_RSS_HASH_NO_CHANGE) {
+		err = ice_set_rss_hfunc(vsi, hfunc);
+		if (err)
+			return err;
 	}
 
 	if (key) {
