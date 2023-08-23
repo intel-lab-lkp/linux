@@ -161,3 +161,24 @@ Contact:	Andy Shevchenko <andriy.shevchenko@linux.intel.com>
 Description:
 		 Allows user to detach or attach back the given device as
 		 kernel console. It shows and accepts a boolean variable.
+
+What:		/sys/class/tty/ttyACM0/close_delay
+Date:		August 2023
+Contact:	linux-usb@vger.kernel.org
+Description:
+		Set the closing delay time for this port in ms.
+
+		These sysfs values expose the TIOCGSERIAL interface via
+		sysfs rather than via ioctls.
+
+What:		/sys/class/tty/ttyACM0/closing_wait
+Date:		August 2023
+Contact:	linux-usb@vger.kernel.org
+Description:
+		Set the close wait time for this port in ms.
+
+		These sysfs values expose the TIOCGSERIAL interface via
+		sysfs rather than via ioctls.
+
+		Unlike the ioctl interface, waiting forever is represented as
+		-1 and zero is used to disable waiting on close.
