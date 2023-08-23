@@ -486,6 +486,22 @@ static int cgroup_pidlist_show(struct seq_file *s, void *v)
 	return 0;
 }
 
+static int cgroup1_procs_show(struct seq_file *s, void *v)
+{
+	pid_t pid;
+
+	/* Print PID both for `tasks` file (threads) and `cgroup.procs`
+	 * (processes), the latter iterates with CSS_TASK_ITER_PROCS hence we
+	 * get PIDs of thread group leaders, i.e. tgids.
+	 */
+	pid = task_pid_vnr(v);
+	if (!pid)
+		return SEQ_SKIP;
+
+	seq_printf(s, "%d\n", pid);
+	return 0;
+}
+
 static ssize_t __cgroup1_procs_write(struct kernfs_open_file *of,
 				     char *buf, size_t nbytes, loff_t off,
 				     bool threadgroup)
@@ -623,11 +639,11 @@ static int cgroup_clone_children_write(struct cgroup_subsys_state *css,
 struct cftype cgroup1_base_files[] = {
 	{
 		.name = "cgroup.procs",
-		.seq_start = cgroup_pidlist_start,
-		.seq_next = cgroup_pidlist_next,
-		.seq_stop = cgroup_pidlist_stop,
-		.seq_show = cgroup_pidlist_show,
 		.private = CGROUP_FILE_PROCS,
+		.release = cgroup_procs_release,
+		.seq_start = cgroup_procs_start,
+		.seq_next = cgroup_procs_next,
+		.seq_show = cgroup1_procs_show,
 		.write = cgroup1_procs_write,
 	},
 	{
@@ -642,11 +658,11 @@ struct cftype cgroup1_base_files[] = {
 	},
 	{
 		.name = "tasks",
-		.seq_start = cgroup_pidlist_start,
-		.seq_next = cgroup_pidlist_next,
-		.seq_stop = cgroup_pidlist_stop,
-		.seq_show = cgroup_pidlist_show,
 		.private = CGROUP_FILE_TASKS,
+		.release = cgroup_procs_release,
+		.seq_start = cgroup_threads_start,
+		.seq_next = cgroup_procs_next,
+		.seq_show = cgroup1_procs_show,
 		.write = cgroup1_tasks_write,
 	},
 	{

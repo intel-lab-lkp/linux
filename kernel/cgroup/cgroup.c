@@ -4963,7 +4963,7 @@ void css_task_iter_end(struct css_task_iter *it)
 		put_task_struct(it->cur_task);
 }
 
-static void cgroup_procs_release(struct kernfs_open_file *of)
+void cgroup_procs_release(struct kernfs_open_file *of)
 {
 	struct cgroup_file_ctx *ctx = of->priv;
 
@@ -4971,7 +4971,7 @@ static void cgroup_procs_release(struct kernfs_open_file *of)
 		css_task_iter_end(&ctx->procs.iter);
 }
 
-static void *cgroup_procs_next(struct seq_file *s, void *v, loff_t *pos)
+void *cgroup_procs_next(struct seq_file *s, void *v, loff_t *pos)
 {
 	struct kernfs_open_file *of = s->private;
 	struct cgroup_file_ctx *ctx = of->priv;
@@ -5008,7 +5008,7 @@ static void *__cgroup_procs_start(struct seq_file *s, loff_t *pos,
 	return cgroup_procs_next(s, NULL, NULL);
 }
 
-static void *cgroup_procs_start(struct seq_file *s, loff_t *pos)
+void *cgroup_procs_start(struct seq_file *s, loff_t *pos)
 {
 	struct cgroup *cgrp = seq_css(s)->cgroup;
 
@@ -5152,7 +5152,7 @@ static ssize_t cgroup_procs_write(struct kernfs_open_file *of,
 	return __cgroup_procs_write(of, buf, true) ?: nbytes;
 }
 
-static void *cgroup_threads_start(struct seq_file *s, loff_t *pos)
+void *cgroup_threads_start(struct seq_file *s, loff_t *pos)
 {
 	return __cgroup_procs_start(s, pos, 0);
 }

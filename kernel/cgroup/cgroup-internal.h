@@ -264,6 +264,11 @@ int cgroup_show_path(struct seq_file *sf, struct kernfs_node *kf_node,
 int __cgroup_task_count(const struct cgroup *cgrp);
 int cgroup_task_count(const struct cgroup *cgrp);
 
+void cgroup_procs_release(struct kernfs_open_file *of);
+void *cgroup_procs_next(struct seq_file *s, void *v, loff_t *pos);
+void *cgroup_procs_start(struct seq_file *s, loff_t *pos);
+void *cgroup_threads_start(struct seq_file *s, loff_t *pos);
+
 /*
  * rstat.c
  */
