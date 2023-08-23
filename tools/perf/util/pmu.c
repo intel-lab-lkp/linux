@@ -276,7 +276,7 @@ out:
 	return ret;
 }
 
-static int perf_pmu__parse_scale(struct perf_pmu_alias *alias, int dirfd, char *name)
+static int perf_pmu__parse_scale(struct perf_pmu_alias *alias, int dirfd, const char *name)
 {
 	struct stat st;
 	ssize_t sret;
@@ -308,7 +308,7 @@ error:
 	return ret;
 }
 
-static int perf_pmu__parse_unit(struct perf_pmu_alias *alias, int dirfd, char *name)
+static int perf_pmu__parse_unit(struct perf_pmu_alias *alias, int dirfd, const char *name)
 {
 	char path[PATH_MAX];
 	ssize_t sret;
@@ -339,7 +339,7 @@ error:
 }
 
 static int
-perf_pmu__parse_per_pkg(struct perf_pmu_alias *alias, int dirfd, char *name)
+perf_pmu__parse_per_pkg(struct perf_pmu_alias *alias, int dirfd, const char *name)
 {
 	char path[PATH_MAX];
 	int fd;
@@ -357,7 +357,7 @@ perf_pmu__parse_per_pkg(struct perf_pmu_alias *alias, int dirfd, char *name)
 }
 
 static int perf_pmu__parse_snapshot(struct perf_pmu_alias *alias,
-				    int dirfd, char *name)
+				    int dirfd, const char *name)
 {
 	char path[PATH_MAX];
 	int fd;
@@ -450,8 +450,9 @@ static bool perf_pmu_merge_alias(struct perf_pmu_alias *newalias,
 	return false;
 }
 
-static int __perf_pmu__new_alias(struct list_head *list, int dirfd, char *name,
-				 char *desc, char *val, const struct pmu_event *pe)
+static int perf_pmu__new_alias(struct list_head *list, int dirfd, const char *name,
+				const char *desc, const char *val, FILE *val_fd,
+				const struct pmu_event *pe)
 {
 	struct parse_events_term *term;
 	struct perf_pmu_alias *alias;
@@ -480,7 +481,7 @@ static int __perf_pmu__new_alias(struct list_head *list, int dirfd, char *name,
 	alias->snapshot = false;
 	alias->deprecated = deprecated;
 
-	ret = parse_events_terms(&alias->terms, val);
+	ret = parse_events_terms(&alias->terms, val, val_fd);
 	if (ret) {
 		pr_err("Cannot parse alias %s: %d\n", val, ret);
 		free(alias);
@@ -535,23 +536,6 @@ static int __perf_pmu__new_alias(struct list_head *list, int dirfd, char *name,
 		list_add_tail(&alias->list, list);
 
 	return 0;
-}
-
-static int perf_pmu__new_alias(struct list_head *list, int dirfd, char *name, FILE *file)
-{
-	char buf[256];
-	int ret;
-
-	ret = fread(buf, 1, sizeof(buf), file);
-	if (ret == 0)
-		return -EINVAL;
-
-	buf[ret] = 0;
-
-	/* Remove trailing newline from sysfs file */
-	strim(buf);
-
-	return __perf_pmu__new_alias(list, dirfd, name, NULL, buf, NULL);
 }
 
 static inline bool pmu_alias_info_file(char *name)
@@ -609,7 +593,8 @@ static int pmu_aliases_parse(int dirfd, struct list_head *head)
 			continue;
 		}
 
-		if (perf_pmu__new_alias(head, dirfd, name, file) < 0)
+		if (perf_pmu__new_alias(head, dirfd, name, /*desc=*/ NULL,
+					/*val=*/ NULL, file, /*pe=*/ NULL) < 0)
 			pr_debug("Cannot set up %s\n", name);
 		fclose(file);
 	}
@@ -862,7 +847,7 @@ static int pmu_add_cpu_aliases_map_callback(const struct pmu_event *pe,
 	struct list_head *head = vdata;
 
 	/* need type casts to override 'const' */
-	__perf_pmu__new_alias(head, -1, (char *)pe->name, (char *)pe->desc, (char *)pe->event, pe);
+	perf_pmu__new_alias(head, -1, pe->name, pe->desc, pe->event, /*val_fd=*/ NULL, pe);
 	return 0;
 }
 
@@ -903,11 +888,12 @@ static int pmu_add_sys_aliases_iter_fn(const struct pmu_event *pe,
 
 	if (!strcmp(pmu->id, pe->compat) &&
 	    pmu_uncore_alias_match(pe->pmu, pmu->name)) {
-		__perf_pmu__new_alias(idata->head, -1,
-				      (char *)pe->name,
-				      (char *)pe->desc,
-				      (char *)pe->event,
-				      pe);
+		perf_pmu__new_alias(idata->head, -1,
+				pe->name,
+				pe->desc,
+				pe->event,
+				/*val_fd=*/ NULL,
+				pe);
 	}
 
 	return 0;
