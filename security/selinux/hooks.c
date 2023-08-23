@@ -2677,7 +2677,7 @@ static int selinux_sb_mnt_opts_compat(struct super_block *sb, void *mnt_opts)
 	return 0;
 }
 
-static int selinux_sb_remount(struct super_block *sb, void *mnt_opts)
+static int selinux_sb_remount(const struct super_block *sb, void *mnt_opts)
 {
 	struct selinux_mnt_opts *opts = mnt_opts;
 	struct superblock_security_struct *sbsec = selinux_superblock(sb);

@@ -1074,7 +1074,7 @@ static int hook_sb_umount(struct vfsmount *const mnt, const int flags)
 	return -EPERM;
 }
 
-static int hook_sb_remount(struct super_block *const sb, void *const mnt_opts)
+static int hook_sb_remount(const struct super_block *const sb, void *const mnt_opts)
 {
 	if (!landlock_get_current_domain())
 		return 0;

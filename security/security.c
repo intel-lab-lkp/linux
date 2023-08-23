@@ -1289,7 +1289,7 @@ EXPORT_SYMBOL(security_sb_mnt_opts_compat);
  *
  * Return: Returns 0 if permission is granted.
  */
-int security_sb_remount(struct super_block *sb,
+int security_sb_remount(const struct super_block *sb,
 			void *mnt_opts)
 {
 	return call_int_hook(sb_remount, 0, sb, mnt_opts);
