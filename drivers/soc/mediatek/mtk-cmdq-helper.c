@@ -430,6 +430,9 @@ int cmdq_pkt_flush_async(struct cmdq_pkt *pkt)
 	int err;
 	struct cmdq_client *client = (struct cmdq_client *)pkt->cl;
 
+	dma_sync_single_for_device(client->chan->mbox->dev, pkt->pa_base,
+				   pkt->cmd_buf_size, DMA_TO_DEVICE);
+
 	err = mbox_send_message(client->chan, pkt);
 	if (err < 0)
 		return err;
@@ -439,5 +442,32 @@ int cmdq_pkt_flush_async(struct cmdq_pkt *pkt)
 	return 0;
 }
 EXPORT_SYMBOL(cmdq_pkt_flush_async);
+
+int cmdq_pkt_finalize_loop(struct cmdq_pkt *pkt)
+{
+	struct cmdq_instruction inst = { {0} };
+	int err;
+	u8 shift_pa = 0;
+
+	shift_pa = cmdq_get_shift_pa(((struct cmdq_client *)pkt->cl)->chan);
+
+	/* insert EOC and generate IRQ for command iteration */
+	inst.op = CMDQ_CODE_EOC;
+	inst.value = CMDQ_EOC_IRQ_EN;
+	err = cmdq_pkt_append_command(pkt, inst);
+	if (err < 0)
+		return err;
+
+	/* jump to head of the packet */
+	inst.op = CMDQ_CODE_JUMP;
+	inst.offset = CMDQ_JUMP_RELATIVE;
+	inst.value = pkt->pa_base >> shift_pa;
+	err = cmdq_pkt_append_command(pkt, inst);
+
+	pkt->loop = true;
+
+	return err;
+}
+EXPORT_SYMBOL(cmdq_pkt_finalize_loop);
 
 MODULE_LICENSE("GPL v2");
