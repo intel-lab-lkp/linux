@@ -813,4 +813,9 @@ IS_SUBPLATFORM(const struct drm_i915_private *i915,
 #define HAS_LMEMBAR_SMEM_STOLEN(i915) (!HAS_LMEM(i915) && \
 				       GRAPHICS_VER_FULL(i915) >= IP_VER(12, 70))
 
+#define NEEDS_FASTCOLOR_BLT_WABB(i915)	(GRAPHICS_VER_FULL(i915) == IP_VER(12, 70) || \
+					 GRAPHICS_VER_FULL(i915) == IP_VER(12, 71) || \
+					 IS_PONTEVECCHIO(i915) || \
+					 IS_DG2(i915))
+
 #endif
