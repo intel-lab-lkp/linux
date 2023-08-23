@@ -75,7 +75,8 @@ static int xgpu_ai_mailbox_rcv_msg(struct amdgpu_device *adev,
 	return 0;
 }
 
-static uint8_t xgpu_ai_peek_ack(struct amdgpu_device *adev) {
+static uint8_t xgpu_ai_peek_ack(struct amdgpu_device *adev)
+{
 	return RREG8(AI_MAIBOX_CONTROL_TRN_OFFSET_BYTE) & 2;
 }
 
@@ -117,7 +118,8 @@ static int xgpu_ai_poll_msg(struct amdgpu_device *adev, enum idh_event event)
 }
 
 static void xgpu_ai_mailbox_trans_msg (struct amdgpu_device *adev,
-	      enum idh_request req, u32 data1, u32 data2, u32 data3) {
+	      enum idh_request req, u32 data1, u32 data2, u32 data3)
+{
 	u32 reg;
 	int r;
 	uint8_t trn;
@@ -135,7 +137,7 @@ static void xgpu_ai_mailbox_trans_msg (struct amdgpu_device *adev,
 			pr_err("trn=%x ACK should not assert! wait again !\n", trn);
 			msleep(1);
 		}
-	} while(trn);
+	} while (trn);
 
 	reg = RREG32_NO_KIQ(SOC15_REG_OFFSET(NBIO, 0,
 					     mmBIF_BX_PF0_MAILBOX_MSGBUF_TRN_DW0));
@@ -182,11 +184,11 @@ static int xgpu_ai_send_access_requests(struct amdgpu_device *adev,
 				RREG32_NO_KIQ(SOC15_REG_OFFSET(NBIO, 0,
 					mmBIF_BX_PF0_MAILBOX_MSGBUF_RCV_DW2));
 		}
-	} else if (req == IDH_REQ_GPU_INIT_DATA){
+	} else if (req == IDH_REQ_GPU_INIT_DATA) {
 		/* Dummy REQ_GPU_INIT_DATA handling */
 		r = xgpu_ai_poll_msg(adev, IDH_REQ_GPU_INIT_DATA_READY);
 		/* version set to 0 since dummy */
-		adev->virt.req_init_data_ver = 0;	
+		adev->virt.req_init_data_ver = 0;
 	}
 
 	return 0;
@@ -316,14 +318,14 @@ static int xgpu_ai_mailbox_rcv_irq(struct amdgpu_device *adev,
 	enum idh_event event = xgpu_ai_mailbox_peek_msg(adev);
 
 	switch (event) {
-		case IDH_FLR_NOTIFICATION:
+	case IDH_FLR_NOTIFICATION:
 		if (amdgpu_sriov_runtime(adev) && !amdgpu_in_reset(adev))
 			WARN_ONCE(!amdgpu_reset_domain_schedule(adev->reset_domain,
 								&adev->virt.flr_work),
 				  "Failed to queue work! at %s",
 				  __func__);
 		break;
-		case IDH_QUERY_ALIVE:
+	case IDH_QUERY_ALIVE:
 			xgpu_ai_mailbox_send_ack(adev);
 			break;
 		/* READY_TO_ACCESS_GPU is fetched by kernel polling, IRQ can ignore
@@ -333,7 +335,7 @@ static int xgpu_ai_mailbox_rcv_irq(struct amdgpu_device *adev,
 		case IDH_CLR_MSG_BUF:
 		case IDH_FLR_NOTIFICATION_CMPL:
 		case IDH_READY_TO_ACCESS_GPU:
-		default:
+	default:
 		break;
 	}
 
