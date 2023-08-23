@@ -3,12 +3,14 @@
 #
 # A depmod wrapper used by the toplevel Makefile
 
-if test $# -ne 2; then
-	echo "Usage: $0 /sbin/depmod <kernelrelease>" >&2
+if test $# -ne 1; then
+	echo "Usage: $0 <kernelrelease>" >&2
 	exit 1
 fi
-DEPMOD=$1
-KERNELRELEASE=$2
+
+KERNELRELEASE=$1
+
+: ${DEPMOD:=depmod}
 
 if ! test -r System.map ; then
 	echo "Warning: modules_install: missing 'System.map' file. Skipping depmod." >&2
