@@ -2088,7 +2088,7 @@ static int uvc_ctrl_fill_xu_info(struct uvc_device *dev,
 	u8 *data;
 	int ret;
 
-	data = kmalloc(2, GFP_KERNEL);
+	data = kzalloc(2, GFP_KERNEL);
 	if (data == NULL)
 		return -ENOMEM;
 
