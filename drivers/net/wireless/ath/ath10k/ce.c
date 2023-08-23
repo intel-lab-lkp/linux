@@ -1352,9 +1352,9 @@ void ath10k_ce_enable_interrupts(struct ath10k *ar)
 }
 EXPORT_SYMBOL(ath10k_ce_enable_interrupts);
 
-static int ath10k_ce_init_src_ring(struct ath10k *ar,
-				   unsigned int ce_id,
-				   const struct ce_attr *attr)
+static void ath10k_ce_init_src_ring(struct ath10k *ar,
+				    unsigned int ce_id,
+				    const struct ce_attr *attr)
 {
 	struct ath10k_ce *ce = ath10k_ce_priv(ar);
 	struct ath10k_ce_pipe *ce_state = &ce->ce_states[ce_id];
@@ -1389,13 +1389,11 @@ static int ath10k_ce_init_src_ring(struct ath10k *ar,
 	ath10k_dbg(ar, ATH10K_DBG_BOOT,
 		   "boot init ce src ring id %d entries %d base_addr %pK\n",
 		   ce_id, nentries, src_ring->base_addr_owner_space);
-
-	return 0;
 }
 
-static int ath10k_ce_init_dest_ring(struct ath10k *ar,
-				    unsigned int ce_id,
-				    const struct ce_attr *attr)
+static void ath10k_ce_init_dest_ring(struct ath10k *ar,
+				     unsigned int ce_id,
+				     const struct ce_attr *attr)
 {
 	struct ath10k_ce *ce = ath10k_ce_priv(ar);
 	struct ath10k_ce_pipe *ce_state = &ce->ce_states[ce_id];
@@ -1427,8 +1425,6 @@ static int ath10k_ce_init_dest_ring(struct ath10k *ar,
 	ath10k_dbg(ar, ATH10K_DBG_BOOT,
 		   "boot ce dest ring id %d entries %d base_addr %pK\n",
 		   ce_id, nentries, dest_ring->base_addr_owner_space);
-
-	return 0;
 }
 
 static int ath10k_ce_alloc_shadow_base(struct ath10k *ar,
@@ -1659,30 +1655,14 @@ ath10k_ce_alloc_dest_ring_64(struct ath10k *ar, unsigned int ce_id,
  * initialization. It may be that only one side or the other is
  * initialized by software/firmware.
  */
-int ath10k_ce_init_pipe(struct ath10k *ar, unsigned int ce_id,
-			const struct ce_attr *attr)
+void ath10k_ce_init_pipe(struct ath10k *ar, unsigned int ce_id,
+			 const struct ce_attr *attr)
 {
-	int ret;
+	if (attr->src_nentries)
+		ath10k_ce_init_src_ring(ar, ce_id, attr);
 
-	if (attr->src_nentries) {
-		ret = ath10k_ce_init_src_ring(ar, ce_id, attr);
-		if (ret) {
-			ath10k_err(ar, "Failed to initialize CE src ring for ID: %d (%d)\n",
-				   ce_id, ret);
-			return ret;
-		}
-	}
-
-	if (attr->dest_nentries) {
-		ret = ath10k_ce_init_dest_ring(ar, ce_id, attr);
-		if (ret) {
-			ath10k_err(ar, "Failed to initialize CE dest ring for ID: %d (%d)\n",
-				   ce_id, ret);
-			return ret;
-		}
-	}
-
-	return 0;
+	if (attr->dest_nentries)
+		ath10k_ce_init_dest_ring(ar, ce_id, attr);
 }
 EXPORT_SYMBOL(ath10k_ce_init_pipe);
 
@@ -1926,7 +1906,7 @@ int ath10k_ce_alloc_pipe(struct ath10k *ar, int ce_id,
 }
 EXPORT_SYMBOL(ath10k_ce_alloc_pipe);
 
-void ath10k_ce_alloc_rri(struct ath10k *ar)
+int ath10k_ce_alloc_rri(struct ath10k *ar)
 {
 	int i;
 	u32 value;
@@ -1939,7 +1919,7 @@ void ath10k_ce_alloc_rri(struct ath10k *ar)
 					   &ce->paddr_rri, GFP_KERNEL);
 
 	if (!ce->vaddr_rri)
-		return;
+		return -ENOMEM;
 
 	ath10k_ce_write32(ar, ar->hw_ce_regs->ce_rri_low,
 			  lower_32_bits(ce->paddr_rri));
@@ -1954,6 +1934,8 @@ void ath10k_ce_alloc_rri(struct ath10k *ar)
 		value |= ar->hw_ce_regs->upd->mask;
 		ath10k_ce_write32(ar, ce_base_addr + ctrl1_regs, value);
 	}
+
+	return 0;
 }
 EXPORT_SYMBOL(ath10k_ce_alloc_rri);
 

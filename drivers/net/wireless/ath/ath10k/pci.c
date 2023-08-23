@@ -2524,21 +2524,13 @@ void ath10k_pci_free_pipes(struct ath10k *ar)
 		ath10k_ce_free_pipe(ar, i);
 }
 
-int ath10k_pci_init_pipes(struct ath10k *ar)
+void ath10k_pci_init_pipes(struct ath10k *ar)
 {
 	struct ath10k_pci *ar_pci = ath10k_pci_priv(ar);
-	int i, ret;
+	int i;
 
-	for (i = 0; i < CE_COUNT; i++) {
-		ret = ath10k_ce_init_pipe(ar, i, &ar_pci->attr[i]);
-		if (ret) {
-			ath10k_err(ar, "failed to initialize copy engine pipe %d: %d\n",
-				   i, ret);
-			return ret;
-		}
-	}
-
-	return 0;
+	for (i = 0; i < CE_COUNT; i++)
+		ath10k_ce_init_pipe(ar, i, &ar_pci->attr[i]);
 }
 
 static bool ath10k_pci_has_fw_crashed(struct ath10k *ar)
@@ -2703,12 +2695,7 @@ static int ath10k_pci_qca988x_chip_reset(struct ath10k *ar)
 		 * sufficient to verify if device is capable of booting
 		 * firmware blob.
 		 */
-		ret = ath10k_pci_init_pipes(ar);
-		if (ret) {
-			ath10k_warn(ar, "failed to init copy engine: %d\n",
-				    ret);
-			continue;
-		}
+		ath10k_pci_init_pipes(ar);
 
 		ret = ath10k_pci_diag_read32(ar, QCA988X_HOST_INTEREST_ADDRESS,
 					     &val);
@@ -2846,11 +2833,7 @@ static int ath10k_pci_hif_power_up(struct ath10k *ar,
 		goto err_sleep;
 	}
 
-	ret = ath10k_pci_init_pipes(ar);
-	if (ret) {
-		ath10k_err(ar, "failed to initialize CE: %d\n", ret);
-		goto err_sleep;
-	}
+	ath10k_pci_init_pipes(ar);
 
 	ret = ath10k_pci_init_config(ar);
 	if (ret) {
