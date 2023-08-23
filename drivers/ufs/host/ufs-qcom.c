@@ -95,7 +95,8 @@ static struct ufs_qcom_host *ufs_qcom_hosts[MAX_UFS_QCOM_HOSTS];
 static void ufs_qcom_get_default_testbus_cfg(struct ufs_qcom_host *host);
 static int ufs_qcom_set_core_clk_ctrl(struct ufs_hba *hba,
 					u32 clk_cycles,
-					u32 clk_40ns_cycles);
+					u32 clk_40ns_cycles,
+					bool scale_up);
 
 static struct ufs_qcom_host *rcdev_to_ufs_host(struct reset_controller_dev *rcd)
 {
@@ -700,19 +701,19 @@ static int ufs_qcom_cfg_core_clk_ctrl(struct ufs_hba *hba)
 
 	switch (max_freq) {
 	case MHZ_403:
-		err = ufs_qcom_set_core_clk_ctrl(hba, 403, 16);
+		err = ufs_qcom_set_core_clk_ctrl(hba, 403, 16, true);
 		break;
 	case MHZ_300:
-		err = ufs_qcom_set_core_clk_ctrl(hba, 300, 12);
+		err = ufs_qcom_set_core_clk_ctrl(hba, 300, 12, true);
 		break;
 	case MHZ_201_5:
-		err = ufs_qcom_set_core_clk_ctrl(hba, 202, 8);
+		err = ufs_qcom_set_core_clk_ctrl(hba, 202, 8, true);
 		break;
 	case MHZ_150:
-		err = ufs_qcom_set_core_clk_ctrl(hba, 150, 6);
+		err = ufs_qcom_set_core_clk_ctrl(hba, 150, 6, true);
 		break;
 	case MHZ_100:
-		err = ufs_qcom_set_core_clk_ctrl(hba, 100, 4);
+		err = ufs_qcom_set_core_clk_ctrl(hba, 100, 4, true);
 		break;
 	default:
 		dev_err(hba->dev, "unipro max_freq=%u entry missing\n", max_freq);
@@ -1352,7 +1353,8 @@ static void ufs_qcom_exit(struct ufs_hba *hba)
 
 static int ufs_qcom_set_core_clk_ctrl(struct ufs_hba *hba,
 					u32 clk_1us_cycles,
-					u32 clk_40ns_cycles)
+					u32 clk_40ns_cycles,
+					bool scale_up)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 	u32 mask = DME_VS_CORE_CLK_CTRL_MAX_CORE_CLK_1US_CYCLES_MASK;
@@ -1378,18 +1380,20 @@ static int ufs_qcom_set_core_clk_ctrl(struct ufs_hba *hba,
 	core_clk_ctrl_reg &= ~(mask << offset);
 	core_clk_ctrl_reg |= clk_1us_cycles << offset;
 
-	/* Clear CORE_CLK_DIV_EN */
-	core_clk_ctrl_reg &= ~DME_VS_CORE_CLK_CTRL_CORE_CLK_DIV_EN_BIT;
+	if (scale_up)
+		core_clk_ctrl_reg |= CORE_CLK_DIV_EN_BIT;
 
 	err = ufshcd_dme_set(hba,
-			    UIC_ARG_MIB(DME_VS_CORE_CLK_CTRL),
-			    core_clk_ctrl_reg);
+			     UIC_ARG_MIB(DME_VS_CORE_CLK_CTRL),
+			     core_clk_ctrl_reg);
+	if (err)
+		return err;
 	/*
 	 * UFS host controller V4.0.0 onwards needs to program
 	 * PA_VS_CORE_CLK_40NS_CYCLES attribute per programmed
 	 * frequency of unipro core clk of UFS host controller.
 	 */
-	if (!err && (host->hw_ver.major >= 4)) {
+	if (host->hw_ver.major >= 4) {
 		if (clk_40ns_cycles > PA_VS_CORE_CLK_40NS_CYCLES_MASK)
 			return -EINVAL;
 
@@ -1442,22 +1446,21 @@ static int ufs_qcom_clk_scale_down_pre_change(struct ufs_hba *hba)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 	int err;
-	u32 core_clk_ctrl_reg;
+	u32 reg;
 
 	if (!ufs_qcom_cap_qunipro(host))
 		return 0;
 
-	err = ufshcd_dme_get(hba,
-			    UIC_ARG_MIB(DME_VS_CORE_CLK_CTRL),
-			    &core_clk_ctrl_reg);
+	err = ufshcd_dme_get(hba, UIC_ARG_MIB(DME_VS_CORE_CLK_CTRL), &reg);
+	if (err)
+		return err;
 
 	/* make sure CORE_CLK_DIV_EN is cleared */
-	if (!err &&
-	    (core_clk_ctrl_reg & DME_VS_CORE_CLK_CTRL_CORE_CLK_DIV_EN_BIT)) {
-		core_clk_ctrl_reg &= ~DME_VS_CORE_CLK_CTRL_CORE_CLK_DIV_EN_BIT;
+	if (reg & CORE_CLK_DIV_EN_BIT) {
+		reg &= ~CORE_CLK_DIV_EN_BIT;
 		err = ufshcd_dme_set(hba,
 				    UIC_ARG_MIB(DME_VS_CORE_CLK_CTRL),
-				    core_clk_ctrl_reg);
+				    reg);
 	}
 
 	return err;
@@ -1488,13 +1491,13 @@ static int ufs_qcom_clk_scale_down_post_change(struct ufs_hba *hba)
 	}
 	switch (curr_freq) {
 	case MHZ_37_5:
-		err = ufs_qcom_set_core_clk_ctrl(hba, 38, 2);
+		err = ufs_qcom_set_core_clk_ctrl(hba, 38, 2, false);
 		break;
 	case MHZ_75:
-		err = ufs_qcom_set_core_clk_ctrl(hba, 75, 3);
+		err = ufs_qcom_set_core_clk_ctrl(hba, 75, 3, false);
 		break;
 	case MHZ_100:
-		err = ufs_qcom_set_core_clk_ctrl(hba, 100, 4);
+		err = ufs_qcom_set_core_clk_ctrl(hba, 100, 4, false);
 		break;
 	default:
 		err = -EINVAL;
