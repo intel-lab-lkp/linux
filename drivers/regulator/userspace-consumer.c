@@ -32,7 +32,7 @@ struct userspace_consumer_data {
 
 	struct kobject *kobj;
 	struct notifier_block nb;
-	unsigned long events;
+	atomic_long_t events;
 };
 
 static ssize_t name_show(struct device *dev,
@@ -99,12 +99,7 @@ static ssize_t events_show(struct device *dev,
 			   struct device_attribute *attr, char *buf)
 {
 	struct userspace_consumer_data *data = dev_get_drvdata(dev);
-	unsigned long e;
-
-	mutex_lock(&events_lock);
-	e = data->events;
-	data->events = 0;
-	mutex_unlock(&events_lock);
+	unsigned long e = atomic_long_xchg(&data->events, 0);
 
 	return sprintf(buf, "0x%lx\n", e);
 }
@@ -144,9 +139,7 @@ static int regulator_userspace_notify(struct notifier_block *nb,
 	struct userspace_consumer_data *data =
 		container_of(nb, struct userspace_consumer_data, nb);
 
-	mutex_lock(&events_lock);
-	data->events |= event;
-	mutex_unlock(&events_lock);
+	atomic_long_or(event, &data->events);
 
 	sysfs_notify(data->kobj, NULL, dev_attr_events.attr.name);
 
