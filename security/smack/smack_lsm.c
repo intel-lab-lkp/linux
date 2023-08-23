@@ -557,7 +557,7 @@ struct smack_mnt_opts {
 	const char *fstransmute;
 };
 
-static void smack_free_mnt_opts(void *mnt_opts)
+static void smack_free_mnt_opts(const void *mnt_opts)
 {
 	kfree(mnt_opts);
 }

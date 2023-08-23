@@ -1238,7 +1238,7 @@ void security_sb_free(struct super_block *sb)
  *
  * Free memory associated with @mnt_ops.
  */
-void security_free_mnt_opts(void **mnt_opts)
+void security_free_mnt_opts(const void **mnt_opts)
 {
 	if (!*mnt_opts)
 		return;

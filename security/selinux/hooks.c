@@ -367,7 +367,7 @@ struct selinux_mnt_opts {
 	u32 defcontext_sid;
 };
 
-static void selinux_free_mnt_opts(void *mnt_opts)
+static void selinux_free_mnt_opts(const void *mnt_opts)
 {
 	kfree(mnt_opts);
 }
