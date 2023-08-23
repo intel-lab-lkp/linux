@@ -133,6 +133,8 @@ enum {
 #define MAX_CORE_CLK_1US_CYCLES_OFFSET_V4	0x10
 #define DME_VS_CORE_CLK_CTRL_CORE_CLK_DIV_EN_BIT		BIT(8)
 #define DME_VS_CORE_CLK_CTRL_MAX_CORE_CLK_1US_CYCLES_MASK	0xFF
+#define PA_VS_CORE_CLK_40NS_CYCLES	0x9007
+#define PA_VS_CORE_CLK_40NS_CYCLES_MASK	0x3F
 
 static inline void
 ufs_qcom_get_controller_revision(struct ufs_hba *hba,
