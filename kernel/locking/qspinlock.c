@@ -656,6 +656,71 @@ release:
 }
 EXPORT_SYMBOL(queued_spin_lock_slowpath);
 
+/* Dump out queued spinlock state. */
+static __pure int tail_to_cpu(u32 tail)
+{
+	return (tail >> (_Q_TAIL_CPU_OFFSET - _Q_TAIL_OFFSET)) - 1;
+}
+
+static __pure int tail_to_idx(u32 tail)
+{
+	return (tail & _Q_TAIL_IDX_MASK) >> (_Q_TAIL_IDX_OFFSET - _Q_TAIL_OFFSET);
+}
+
+static struct mcs_spinlock *next_to_prev(struct mcs_spinlock *msp, int *cpup, int *idxp)
+{
+	int cpu;
+	int idx;
+
+	for_each_possible_cpu(cpu) {
+		struct qnode *qnp = per_cpu_ptr(&qnodes[0], cpu);
+
+		for (idx = 0; idx < MAX_NODES; idx++) {
+			if (qnp[idx].mcs.next == msp) {
+				*cpup = cpu;
+				*idxp = idx;
+				return &qnp[idx].mcs;
+			}
+		}
+	}
+	*cpup = -1;
+	*idxp = -1;
+	return NULL;
+}
+
+void spinlock_dump(spinlock_t *sp, bool full)
+{
+	int cpu;
+	int i = 0;
+	int idx;
+	struct mcs_spinlock *msp;
+	struct qspinlock qval = sp->rlock.raw_lock;
+
+	cpu = tail_to_cpu(qval.tail);
+	idx = tail_to_idx(qval.tail);
+	pr_alert("%s: %ps %#x (%c%c%c%c %#x: %d[%d]\n",
+		 __func__, sp, (unsigned int)atomic_read(&qval.val),
+		 ".L"[!!qval.locked],
+		 ".P"[!!qval.pending],
+		 ".Q"[cpu >= 0 && idx >= 0],
+		 ".F"[!!full],
+		 (unsigned int)qval.tail, cpu, idx);
+	pr_alert("%s: _Q_TAIL_CPU_OFFSET=%d _Q_TAIL_IDX_MASK=%d _Q_TAIL_IDX_OFFSET=%d _Q_LOCKED_VAL=%d _Q_TAIL_OFFSET=%d sizeof(->tail)=%lu\n",
+		__func__, _Q_TAIL_CPU_OFFSET, _Q_TAIL_IDX_MASK, _Q_TAIL_IDX_OFFSET, _Q_LOCKED_VAL, _Q_TAIL_OFFSET, (unsigned long)sizeof(qval.tail));
+	if (!full || cpu < 0 || idx < 0)
+		return;
+	msp = per_cpu_ptr(&qnodes[idx].mcs, cpu);
+	while (i++ < nr_cpu_ids && (msp = next_to_prev(msp, &cpu, &idx))) {
+		pr_alert("%s: Q%d CPU %d[%d] %c%d\n", __func__, i, cpu, idx,
+			 ".L"[!!msp->locked], msp->count);
+	}
+	if (i >= nr_cpu_ids && cpu >= 0 && idx >= 0)
+		pr_alert("%s: Queue output truncated.\n", __func__);
+	else
+		pr_alert("%s: End of queue.\n", __func__);
+}
+EXPORT_SYMBOL(spinlock_dump);
+
 /*
  * Generate the paravirt code for queued_spin_unlock_slowpath().
  */
@@ -673,6 +738,11 @@ EXPORT_SYMBOL(queued_spin_lock_slowpath);
 #undef  queued_spin_lock_slowpath
 #define queued_spin_lock_slowpath	__pv_queued_spin_lock_slowpath
 #define queued_spin_lock_slowpath_diags	__pv_queued_spin_lock_slowpath_diags
+#define spinlock_dump	__pv_spinlock_dump
+#define tail_to_cpu	__pv_tail_to_cpu
+#define tail_to_idx	__pv_tail_to_idx
+#define next_to_prev	__pv_next_to_prev
+#define next_to_cpu_idx	__pv_next_to_cpu_idx
 
 #include "qspinlock_paravirt.h"
 #include "qspinlock.c"
