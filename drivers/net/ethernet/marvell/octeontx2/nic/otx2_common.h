@@ -30,6 +30,8 @@
 #include <rvu_trace.h>
 #include "qos.h"
 
+#define OTX2_PAGE_POOL_SZ 2048
+
 /* IPv4 flag more fragment bit */
 #define IPV4_FLAG_MORE				0x20
 
