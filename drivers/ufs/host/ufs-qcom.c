@@ -1297,12 +1297,21 @@ static void ufs_qcom_exit(struct ufs_hba *hba)
 }
 
 static int ufs_qcom_set_dme_vs_core_clk_ctrl_clear_div(struct ufs_hba *hba,
-						       u32 clk_cycles)
+						       u32 clk_1us_cycles)
 {
-	int err;
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+	u32 mask = DME_VS_CORE_CLK_CTRL_MAX_CORE_CLK_1US_CYCLES_MASK;
 	u32 core_clk_ctrl_reg;
+	u32 offset = 0;
+	int err;
 
-	if (clk_cycles > DME_VS_CORE_CLK_CTRL_MAX_CORE_CLK_1US_CYCLES_MASK)
+	/* Bit mask and offset changed on UFS host controller V4.0.0 onwards */
+	if (host->hw_ver.major >= 4) {
+		mask = MAX_CORE_CLK_1US_CYCLES_MASK_V4;
+		offset = MAX_CORE_CLK_1US_CYCLES_OFFSET_V4;
+	}
+
+	if (clk_1us_cycles > mask)
 		return -EINVAL;
 
 	err = ufshcd_dme_get(hba,
@@ -1311,8 +1320,8 @@ static int ufs_qcom_set_dme_vs_core_clk_ctrl_clear_div(struct ufs_hba *hba,
 	if (err)
 		return err;
 
-	core_clk_ctrl_reg &= ~DME_VS_CORE_CLK_CTRL_MAX_CORE_CLK_1US_CYCLES_MASK;
-	core_clk_ctrl_reg |= clk_cycles;
+	core_clk_ctrl_reg &= ~(mask << offset);
+	core_clk_ctrl_reg |= clk_1us_cycles << offset;
 
 	/* Clear CORE_CLK_DIV_EN */
 	core_clk_ctrl_reg &= ~DME_VS_CORE_CLK_CTRL_CORE_CLK_DIV_EN_BIT;
