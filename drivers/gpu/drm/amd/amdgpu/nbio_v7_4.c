@@ -234,7 +234,7 @@ static void nbio_v7_4_enable_doorbell_selfring_aperture(struct amdgpu_device *ad
 static void nbio_v7_4_ih_doorbell_range(struct amdgpu_device *adev,
 					bool use_doorbell, int doorbell_index)
 {
-	u32 ih_doorbell_range = RREG32_SOC15(NBIO, 0 , mmBIF_IH_DOORBELL_RANGE);
+	u32 ih_doorbell_range = RREG32_SOC15(NBIO, 0, mmBIF_IH_DOORBELL_RANGE);
 
 	if (use_doorbell) {
 		ih_doorbell_range = REG_SET_FIELD(ih_doorbell_range, BIF_IH_DOORBELL_RANGE, OFFSET, doorbell_index);
@@ -620,8 +620,7 @@ static void nbio_v7_4_query_ras_error_count(struct amdgpu_device *adev,
 		else
 			WREG32_PCIE(smnRAS_GLOBAL_STATUS_LO, global_sts);
 
-		if (fatal)
-		{
+		if (fatal) {
 			/* clear parity fatal error indication field */
 			if (adev->asic_type == CHIP_ALDEBARAN)
 				WREG32_PCIE(smnPARITY_ERROR_STATUS_UNCORR_GRP2_ALDE, parity_sts);
