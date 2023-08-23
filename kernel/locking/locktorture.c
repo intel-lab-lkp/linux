@@ -272,9 +272,15 @@ __releases(torture_spinlock)
 	spin_unlock(&torture_spinlock);
 }
 
+void __weak spinlock_dump(spinlock_t *sp, bool full)
+{
+	pr_alert("%s __weak stub invoked.\n", __func__);
+}
+
 static int torture_spin_lock_dump(struct notifier_block *nb, unsigned long v, void *ptr)
 {
 	pr_alert("%s invoked: v=%lu, duration=%lu.\n", __func__, v, (unsigned long)ptr);
+	spinlock_dump(&torture_spinlock, true);
 	return NOTIFY_OK;
 }
 
