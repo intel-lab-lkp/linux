@@ -64,8 +64,6 @@ static inline struct cgroup_fs_context *cgroup_fc2context(struct fs_context *fc)
 	return container_of(kfc, struct cgroup_fs_context, kfc);
 }
 
-struct cgroup_pidlist;
-
 struct cgroup_file_ctx {
 	struct cgroup_namespace	*ns;
 
@@ -77,10 +75,6 @@ struct cgroup_file_ctx {
 		bool			started;
 		struct css_task_iter	iter;
 	} procs;
-
-	struct {
-		struct cgroup_pidlist	*pidlist;
-	} procs1;
 };
 
 /*
@@ -291,7 +285,6 @@ extern const struct fs_parameter_spec cgroup1_fs_parameters[];
 
 int proc_cgroupstats_show(struct seq_file *m, void *v);
 bool cgroup1_ssid_disabled(int ssid);
-void cgroup1_pidlist_destroy_all(struct cgroup *cgrp);
 void cgroup1_release_agent(struct work_struct *work);
 void cgroup1_check_for_release(struct cgroup *cgrp);
 int cgroup1_parse_param(struct fs_context *fc, struct fs_parameter *param);

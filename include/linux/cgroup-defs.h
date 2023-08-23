@@ -482,13 +482,6 @@ struct cgroup {
 	struct cgroup_base_stat bstat;
 	struct prev_cputime prev_cputime;	/* for printing out cputime */
 
-	/*
-	 * list of pidlists, up to two for each namespace (one for procs, one
-	 * for tasks); created on demand.
-	 */
-	struct list_head pidlists;
-	struct mutex pidlist_mutex;
-
 	/* used to wait for offlining of csses */
 	wait_queue_head_t offline_waitq;
 
