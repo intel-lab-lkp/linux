@@ -518,10 +518,10 @@ static int perf_pmu__new_alias(struct perf_pmu *pmu, int dirfd, const char *name
 	}
 	if (!pe) {
 		/* Update an event from sysfs with json data. */
-		const struct pmu_events_table *table = perf_pmu__find_events_table(pmu);
-
-		if (table)
-			pmu_events_table__find_event(table, pmu, name, update_alias, alias);
+		if (pmu->events_table) {
+			pmu_events_table__find_event(pmu->events_table, pmu, name,
+						     update_alias, alias);
+		}
 	}
 
 	/* Scan event and remove leading zeroes, spaces, newlines, some
@@ -871,13 +871,10 @@ void pmu_add_cpu_aliases_table(struct perf_pmu *pmu, const struct pmu_events_tab
 
 static void pmu_add_cpu_aliases(struct perf_pmu *pmu)
 {
-	const struct pmu_events_table *table;
-
-	table = perf_pmu__find_events_table(pmu);
-	if (!table)
+	if (!pmu->events_table)
 		return;
 
-	pmu_add_cpu_aliases_table(pmu, table);
+	pmu_add_cpu_aliases_table(pmu, pmu->events_table);
 }
 
 static int pmu_add_sys_aliases_iter_fn(const struct pmu_event *pe,
@@ -988,6 +985,7 @@ struct perf_pmu *perf_pmu__lookup(struct list_head *pmus, int dirfd, const char 
 	if (pmu->is_uncore)
 		pmu->id = pmu_id(name);
 	pmu->max_precise = pmu_max_precise(dirfd, pmu);
+	pmu->events_table = perf_pmu__find_events_table(pmu);
 	pmu_add_cpu_aliases(pmu);
 	pmu_add_sys_aliases(pmu);
 	list_add_tail(&pmu->list, pmus);
@@ -1000,6 +998,7 @@ err:
 	free(pmu);
 	return NULL;
 }
+
 
 /* Creates the PMU when sysfs scanning fails. */
 struct perf_pmu *perf_pmu__create_placeholder_core_pmu(struct list_head *core_pmus)
