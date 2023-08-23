@@ -38,6 +38,9 @@
 /* Reseed CRNG.  (Superuser only.) */
 #define RNDRESEEDCRNG	_IO( 'R', 0x07 )
 
+/* Get a file descriptor for the RNG generation page. */
+#define RNDEPOCH	_IO('R', 0x08)
+
 struct rand_pool_info {
 	int	entropy_count;
 	int	buf_size;
@@ -54,5 +57,13 @@ struct rand_pool_info {
 #define GRND_NONBLOCK	0x0001
 #define GRND_RANDOM	0x0002
 #define GRND_INSECURE	0x0004
+
+/*
+ * The epoch type exposed through /dev/(u)random to notify user-space
+ * PRNGs that need to re-seed
+ */
+struct rand_epoch_data {
+	__u32 data;
+};
 
 #endif /* _UAPI_LINUX_RANDOM_H */

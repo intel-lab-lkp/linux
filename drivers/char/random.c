@@ -54,6 +54,8 @@
 #include <linux/suspend.h>
 #include <linux/siphash.h>
 #include <linux/sched/isolation.h>
+#include "linux/anon_inodes.h"
+#include "linux/bitmap.h"
 #include <crypto/chacha.h>
 #include <crypto/blake2s.h>
 #include <asm/archrandom.h>
@@ -206,6 +208,7 @@ enum {
 static struct {
 	u8 key[CHACHA_KEY_SIZE] __aligned(__alignof__(long));
 	unsigned long generation;
+	u32 cached_epoch;
 	spinlock_t lock;
 } base_crng = {
 	.lock = __SPIN_LOCK_UNLOCKED(base_crng.lock)
@@ -241,6 +244,138 @@ static unsigned int crng_reseed_interval(void)
 	}
 	return CRNG_RESEED_INTERVAL;
 }
+
+/*
+ * Tracking moments in time that PRNGs (ours and user-space) need to reseed
+ * due to an "entropy leak".
+ *
+ * We call the time period between two "entropy leak" events an "epoch".
+ * Epoch is a 32-bit unsigned value that lives in a dedicated global page.
+ * Systems that want to report entropy leaks will get an 1-byte notifier id
+ * (up to 256 notifiers) and the address of the epoch.
+ *
+ * Each notifier will write epochs in the form:
+ *
+ *      1 byte                  3 bytes
+ * +---------------+-------------------------------+
+ * |  notifier id  |    next epoch counter value   |
+ * +---------------+-------------------------------+
+ *
+ * This way, epochs are namespaced per notifier, so no two different
+ * notifiers will ever write the same epoch value.
+ */
+
+static struct {
+	struct rand_epoch_data *epoch;
+	DECLARE_BITMAP(notifiers, RNG_EPOCH_NOTIFIER_NR_BITS);
+	spinlock_t lock;
+} epoch_data = {
+	.lock = __SPIN_LOCK_UNLOCKED(epoch_data.lock),
+};
+
+static int epoch_mmap(struct file *filep, struct vm_area_struct *vma)
+{
+	if (vma->vm_pgoff || vma_pages(vma) > 1)
+		return -EINVAL;
+
+	if (vma->vm_flags & VM_WRITE)
+		return -EPERM;
+
+	/* Don't allow growing the region with mremap(). */
+	vm_flags_set(vma, VM_DONTEXPAND);
+	/* Don't allow mprotect() to make this writeable in the future */
+	vm_flags_clear(vma, VM_MAYWRITE);
+
+	return vm_insert_page(vma, vma->vm_start, virt_to_page(epoch_data.epoch));
+}
+
+static const struct file_operations rng_epoch_fops = {
+	.mmap = epoch_mmap,
+	.llseek = noop_llseek,
+};
+
+static int create_epoch_fd(void)
+{
+	unsigned long flags;
+	int ret = -ENOTTY;
+
+	spin_lock_irqsave(&epoch_data.lock, flags);
+	if (bitmap_empty(epoch_data.notifiers, RNG_EPOCH_NOTIFIER_NR_BITS))
+		goto out;
+	spin_unlock_irqrestore(&epoch_data.lock, flags);
+
+	return anon_inode_getfd("rand:epoch", &rng_epoch_fops, &epoch_data, O_RDONLY | O_CLOEXEC);
+out:
+	spin_unlock_irqrestore(&epoch_data.lock, flags);
+	return ret;
+}
+
+/*
+ * Get the current epoch. If nobody has subscribed, this will always return 0.
+ */
+static unsigned long get_epoch(void)
+{
+	u32 epoch = 0;
+
+	if (likely(epoch_data.epoch))
+		epoch = epoch_data.epoch->data;
+
+	return epoch;
+}
+
+/*
+ * Register an epoch notifier
+ *
+ * Allocate a notifier ID and provide the address to the epoch. If the address
+ * has not being allocated yet (this is the first call to register a notifier)
+ * this will allocate the page holding the epoch. If we have reached the limit
+ * of notifiers it will fail.
+ */
+int rng_register_epoch_notifier(struct rng_epoch_notifier *notifier)
+{
+	unsigned long flags;
+	u8 new_id;
+
+	if (!notifier)
+		return -EINVAL;
+
+	spin_lock_irqsave(&epoch_data.lock, flags);
+	new_id = bitmap_find_free_region(epoch_data.notifiers, RNG_EPOCH_NOTIFIER_NR_BITS, 0);
+	if (new_id < 0)
+		goto err_no_id;
+	spin_unlock_irqrestore(&epoch_data.lock, flags);
+
+	notifier->id = new_id;
+	notifier->epoch = epoch_data.epoch;
+	return 0;
+
+err_no_id:
+	spin_unlock_irqrestore(&epoch_data.lock, flags);
+	return -ENOMEM;
+}
+EXPORT_SYMBOL_GPL(rng_register_epoch_notifier);
+
+/*
+ * Unregister an epoch notifier
+ *
+ * This will release the notifier ID previously allocated through
+ * `rng_register_epoch_notifier`.
+ */
+int rng_unregister_epoch_notifier(struct rng_epoch_notifier *notifier)
+{
+	unsigned long flags;
+
+	if (!notifier)
+		return -EINVAL;
+
+	spin_lock_irqsave(&epoch_data.lock, flags);
+	bitmap_clear(epoch_data.notifiers, notifier->id, 1);
+	spin_unlock_irqrestore(&epoch_data.lock, flags);
+
+	notifier->epoch = NULL;
+	return 0;
+}
+EXPORT_SYMBOL_GPL(rng_unregister_epoch_notifier);
 
 /* Used by crng_reseed() and crng_make_state() to extract a new seed from the input pool. */
 static void extract_entropy(void *buf, size_t len);
@@ -342,6 +477,14 @@ static void crng_make_state(u32 chacha_state[CHACHA_STATE_WORDS],
 		spin_unlock_irqrestore(&base_crng.lock, flags);
 		if (!ready)
 			return;
+	}
+
+	/*
+	 * If the epoch has changed we reseed.
+	 */
+	if (unlikely(READ_ONCE(base_crng.cached_epoch) != get_epoch())) {
+		WRITE_ONCE(base_crng.cached_epoch, get_epoch());
+		crng_reseed(NULL);
 	}
 
 	local_lock_irqsave(&crngs.lock, flags);
@@ -887,6 +1030,8 @@ void __init random_init(void)
 	_mix_pool_bytes(&now, sizeof(now));
 	_mix_pool_bytes(&entropy, sizeof(entropy));
 	add_latent_entropy();
+
+	epoch_data.epoch = (struct rand_epoch_data *)get_zeroed_page(GFP_KERNEL);
 
 	/*
 	 * If we were initialized by the cpu or bootloader before jump labels
@@ -1528,6 +1673,8 @@ static long random_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
 			return -ENODATA;
 		crng_reseed(NULL);
 		return 0;
+	case RNDEPOCH:
+		return create_epoch_fd();
 	default:
 		return -EINVAL;
 	}

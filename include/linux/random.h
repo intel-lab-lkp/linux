@@ -161,4 +161,32 @@ int random_online_cpu(unsigned int cpu);
 extern const struct file_operations random_fops, urandom_fops;
 #endif
 
+
+/*
+ * Constants that define the format of the epoch value.
+ *
+ * Currently we use a 8/24 split for epoch values. The lower 24 bits are used
+ * for the epoch counter and the 8 remaining are used for the notifier ID.
+ */
+#define RNG_EPOCH_NOTIFIER_NR_BITS 8
+#define RNG_EPOCH_COUNTER_SHIFT 0
+#define RNG_EPOCH_COUNTER_MASK GENMASK(23, 0)
+#define RNG_EPOCH_ID_SHIFT 24
+#define RNG_EPOCH_ID_MASK GENMASK(31, 24)
+
+/*
+ * An epoch notifier is a system that can report entropy leak events.
+ * Notifiers receive a unique identifier and the address where they will write
+ * a new epoch when an entropy leak happens.
+ */
+struct rng_epoch_notifier {
+	/* unique ID of the notifier */
+	u8 id;
+	/* pointer to epoch data */
+	struct rand_epoch_data *epoch;
+};
+
+int rng_register_epoch_notifier(struct rng_epoch_notifier *notifier);
+int rng_unregister_epoch_notifier(struct rng_epoch_notifier *notifier);
+
 #endif /* _LINUX_RANDOM_H */
