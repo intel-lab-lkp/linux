@@ -1400,18 +1400,17 @@ static int ufs_qcom_set_core_clk_ctrl(struct ufs_hba *hba,
 
 static int ufs_qcom_clk_scale_up_pre_change(struct ufs_hba *hba)
 {
-	/* nothing to do as of now */
-	return 0;
-}
-
-static int ufs_qcom_clk_scale_up_post_change(struct ufs_hba *hba)
-{
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 
 	if (!ufs_qcom_cap_qunipro(host))
 		return 0;
 
 	return ufs_qcom_cfg_core_clk_ctrl(hba);
+}
+
+static int ufs_qcom_clk_scale_up_post_change(struct ufs_hba *hba)
+{
+	return 0;
 }
 
 static int ufs_qcom_clk_scale_down_pre_change(struct ufs_hba *hba)
