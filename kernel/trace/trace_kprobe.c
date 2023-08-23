@@ -1699,6 +1699,16 @@ static int unregister_kprobe_event(struct trace_kprobe *tk)
 }
 
 #ifdef CONFIG_PERF_EVENTS
+
+static int count_symbols(void *data, unsigned long unused)
+{
+	unsigned int *count = data;
+
+	(*count)++;
+
+	return 0;
+}
+
 /* create a trace_kprobe, but don't add it to global lists */
 struct trace_event_call *
 create_local_trace_kprobe(char *func, void *addr, unsigned long offs,
@@ -1708,6 +1718,22 @@ create_local_trace_kprobe(char *func, void *addr, unsigned long offs,
 	struct trace_kprobe *tk;
 	int ret;
 	char *event;
+
+	/*
+	 * If user specifies func, we check that the function name does not
+	 * correspond to several symbols.
+	 * If this is the case, we return with error code ENAMESVRLSYMS to
+	 * indicate the user he/she should use addr and offs rather than func to
+	 * remove the ambiguity.
+	 */
+	if (func) {
+		unsigned int count;
+
+		count = 0;
+		kallsyms_on_each_match_symbol(count_symbols, func, &count);
+		if (count > 1)
+			return ERR_PTR(-ENAMESVRLSYMS);
+	}
 
 	/*
 	 * local trace_kprobes are not added to dyn_event, so they are never

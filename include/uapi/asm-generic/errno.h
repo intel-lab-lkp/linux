@@ -120,4 +120,6 @@
 
 #define EHWPOISON	133	/* Memory page has hardware error */
 
+#define ENAMESVRLSYMS	134	/* Name correspond to several symbols */
+
 #endif

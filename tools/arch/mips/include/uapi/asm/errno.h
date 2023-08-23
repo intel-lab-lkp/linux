@@ -124,6 +124,8 @@
 
 #define EHWPOISON	168	/* Memory page has hardware error */
 
+#define ENAMESVRLSYMS	169	/* Name correspond to several symbols */
+
 #define EDQUOT		1133	/* Quota exceeded */
 
 
