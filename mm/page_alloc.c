@@ -730,7 +730,7 @@ buddy_merge_likely(unsigned long pfn, unsigned long buddy_pfn,
 		return false;
 
 	higher_page_pfn = buddy_pfn & pfn;
-	higher_page = page + (higher_page_pfn - pfn);
+	higher_page = nth_page(page, (higher_page_pfn - pfn));
 
 	return find_buddy_page_pfn(higher_page, higher_page_pfn, order + 1,
 			NULL) != NULL;
@@ -816,7 +816,7 @@ static inline void __free_one_page(struct page *page,
 		else
 			del_page_from_free_list(buddy, zone, order);
 		combined_pfn = buddy_pfn & pfn;
-		page = page + (combined_pfn - pfn);
+		page = nth_page(page, (combined_pfn - pfn));
 		pfn = combined_pfn;
 		order++;
 	}
@@ -968,7 +968,7 @@ static inline bool is_check_pages_enabled(void)
 static int free_tail_page_prepare(struct page *head_page, struct page *page)
 {
 	struct folio *folio = (struct folio *)head_page;
-	int ret = 1, index = page - head_page;
+	int ret = 1, index = folio_page_idx(folio, page);
 
 	/*
 	 * We rely page->lru.next never has bit 0 set, unless the page
@@ -1062,7 +1062,7 @@ static void kernel_init_pages(struct page *page, int numpages)
 	/* s390's use of memset() could override KASAN redzones. */
 	kasan_disable_current();
 	for (i = 0; i < numpages; i++)
-		clear_highpage_kasan_tagged(page + i);
+		clear_highpage_kasan_tagged(nth_page(page, i));
 	kasan_enable_current();
 }
 
@@ -1104,14 +1104,14 @@ static __always_inline bool free_pages_prepare(struct page *page,
 			page[1].flags &= ~PAGE_FLAGS_SECOND;
 		for (i = 1; i < (1 << order); i++) {
 			if (compound)
-				bad += free_tail_page_prepare(page, page + i);
+				bad += free_tail_page_prepare(page, nth_page(page, i));
 			if (is_check_pages_enabled()) {
-				if (free_page_is_bad(page + i)) {
+				if (free_page_is_bad(nth_page(page, i))) {
 					bad++;
 					continue;
 				}
 			}
-			(page + i)->flags &= ~PAGE_FLAGS_CHECK_AT_PREP;
+			nth_page(page, i)->flags &= ~PAGE_FLAGS_CHECK_AT_PREP;
 		}
 	}
 	if (PageMappingFlags(page))
@@ -1433,7 +1433,7 @@ static inline bool check_new_pages(struct page *page, unsigned int order)
 {
 	if (is_check_pages_enabled()) {
 		for (int i = 0; i < (1 << order); i++) {
-			struct page *p = page + i;
+			struct page *p = nth_page(page,  i);
 
 			if (check_new_page(p))
 				return true;
@@ -1505,7 +1505,7 @@ inline void post_alloc_hook(struct page *page, unsigned int order,
 	if (zero_tags) {
 		/* Initialize both memory and memory tags. */
 		for (i = 0; i != 1 << order; ++i)
-			tag_clear_highpage(page + i);
+			tag_clear_highpage(nth_page(page, i));
 
 		/* Take note that memory was initialized by the loop above. */
 		init = false;
@@ -1521,7 +1521,7 @@ inline void post_alloc_hook(struct page *page, unsigned int order,
 		 * tags to ensure page_address() dereferencing does not fault.
 		 */
 		for (i = 0; i != 1 << order; ++i)
-			page_kasan_tag_reset(page + i);
+			page_kasan_tag_reset(nth_page(page, i));
 	}
 	/* If memory is still not initialized, initialize it now. */
 	if (init)
@@ -1676,7 +1676,7 @@ static void change_pageblock_range(struct page *pageblock_page,
 
 	while (nr_pageblocks--) {
 		set_pageblock_migratetype(pageblock_page, migratetype);
-		pageblock_page += pageblock_nr_pages;
+		pageblock_page = nth_page(pageblock_page, pageblock_nr_pages);
 	}
 }
 
@@ -2564,7 +2564,7 @@ void split_page(struct page *page, unsigned int order)
 	VM_BUG_ON_PAGE(!page_count(page), page);
 
 	for (i = 1; i < (1 << order); i++)
-		set_page_refcounted(page + i);
+		set_page_refcounted(nth_page(page, i));
 	split_page_owner(page, 1 << order);
 	split_page_memcg(page, 1 << order);
 }
@@ -2597,8 +2597,8 @@ int __isolate_free_page(struct page *page, unsigned int order)
 	 * pageblock
 	 */
 	if (order >= pageblock_order - 1) {
-		struct page *endpage = page + (1 << order) - 1;
-		for (; page < endpage; page += pageblock_nr_pages) {
+		struct page *endpage = nth_page(page, (1 << order) - 1);
+		for (; page < endpage; page = nth_page(page, pageblock_nr_pages)) {
 			int mt = get_pageblock_migratetype(page);
 			/*
 			 * Only change normal pageblocks (i.e., they can merge
@@ -4559,7 +4559,7 @@ void __free_pages(struct page *page, unsigned int order)
 		free_the_page(page, order);
 	else if (!head)
 		while (order-- > 0)
-			free_the_page(page + (1 << order), order);
+			free_the_page(nth_page(page, (1 << order)), order);
 }
 EXPORT_SYMBOL(__free_pages);
 
@@ -4705,15 +4705,15 @@ static void *make_alloc_exact(unsigned long addr, unsigned int order,
 	if (addr) {
 		unsigned long nr = DIV_ROUND_UP(size, PAGE_SIZE);
 		struct page *page = virt_to_page((void *)addr);
-		struct page *last = page + nr;
+		struct page *last = nth_page(page, nr);
 
 		split_page_owner(page, 1 << order);
 		split_page_memcg(page, 1 << order);
 		while (page < --last)
 			set_page_refcounted(last);
 
-		last = page + (1UL << order);
-		for (page += nr; page < last; page++)
+		last = nth_page(page, (1UL << order));
+		for (page = nth_page(page, nr); page < last; page = nth_page(page, 1))
 			__free_pages_ok(page, 0, FPI_TO_TAIL);
 	}
 	return (void *)addr;
@@ -6511,12 +6511,12 @@ static void break_down_buddy_pages(struct zone *zone, struct page *page,
 		high--;
 		size >>= 1;
 
-		if (target >= &page[size]) {
-			next_page = page + size;
+		if (target >= nth_page(page, size)) {
+			next_page = nth_page(page, size);
 			current_buddy = page;
 		} else {
 			next_page = page;
-			current_buddy = page + size;
+			current_buddy = nth_page(page, size);
 		}
 
 		if (set_page_guard(zone, current_buddy, high, migratetype))

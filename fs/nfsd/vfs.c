@@ -953,8 +953,8 @@ nfsd_splice_actor(struct pipe_inode_info *pipe, struct pipe_buffer *buf,
 	unsigned offset = buf->offset;
 	struct page *last_page;
 
-	last_page = page + (offset + sd->len - 1) / PAGE_SIZE;
-	for (page += offset / PAGE_SIZE; page <= last_page; page++) {
+	last_page = nth_page(page, (offset + sd->len - 1) / PAGE_SIZE);
+	for (page = nth_page(page, offset / PAGE_SIZE); page <= last_page; page = nth_page(page, 1)) {
 		/*
 		 * Skip page replacement when extending the contents
 		 * of the current page.

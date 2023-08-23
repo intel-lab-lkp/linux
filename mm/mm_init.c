@@ -1974,7 +1974,7 @@ static void __init deferred_free_range(unsigned long pfn,
 	/* Free a large naturally-aligned chunk if possible */
 	if (nr_pages == MAX_ORDER_NR_PAGES && IS_MAX_ORDER_ALIGNED(pfn)) {
 		for (i = 0; i < nr_pages; i += pageblock_nr_pages)
-			set_pageblock_migratetype(page + i, MIGRATE_MOVABLE);
+			set_pageblock_migratetype(nth_page(page, i), MIGRATE_MOVABLE);
 		__free_pages_core(page, MAX_ORDER);
 		return;
 	}
@@ -1982,7 +1982,7 @@ static void __init deferred_free_range(unsigned long pfn,
 	/* Accept chunks smaller than MAX_ORDER upfront */
 	accept_memory(PFN_PHYS(pfn), PFN_PHYS(pfn + nr_pages));
 
-	for (i = 0; i < nr_pages; i++, page++, pfn++) {
+	for (i = 0; i < nr_pages; i++, page = nth_page(page, 1), pfn++) {
 		if (pageblock_aligned(pfn))
 			set_pageblock_migratetype(page, MIGRATE_MOVABLE);
 		__free_pages_core(page, 0);

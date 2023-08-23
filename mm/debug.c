@@ -67,7 +67,7 @@ static void __dump_page(struct page *page)
 	int mapcount;
 	char *type = "";
 
-	if (page < head || (page >= head + MAX_ORDER_NR_PAGES)) {
+	if (page < head || (page >= nth_page(head, MAX_ORDER_NR_PAGES))) {
 		/*
 		 * Corrupt page, so we cannot call page_mapping. Instead, do a
 		 * safe subset of the steps that page_mapping() does. Caution:

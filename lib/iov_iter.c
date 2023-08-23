@@ -52,8 +52,9 @@
 	while (n) {						\
 		unsigned offset = p->bv_offset + skip;		\
 		unsigned left;					\
-		void *kaddr = kmap_local_page(p->bv_page +	\
-					offset / PAGE_SIZE);	\
+		void *kaddr = kmap_local_page(			\
+					nth_page(p->bv_page, 	\
+					offset / PAGE_SIZE));	\
 		base = kaddr + offset % PAGE_SIZE;		\
 		len = min(min(n, (size_t)(p->bv_len - skip)),	\
 		     (size_t)(PAGE_SIZE - offset % PAGE_SIZE));	\
@@ -473,7 +474,7 @@ size_t copy_page_to_iter(struct page *page, size_t offset, size_t bytes,
 		return 0;
 	if (WARN_ON_ONCE(i->data_source))
 		return 0;
-	page += offset / PAGE_SIZE; // first subpage
+	page = nth_page(page, offset / PAGE_SIZE); // first subpage
 	offset %= PAGE_SIZE;
 	while (1) {
 		void *kaddr = kmap_local_page(page);
@@ -486,7 +487,7 @@ size_t copy_page_to_iter(struct page *page, size_t offset, size_t bytes,
 			break;
 		offset += n;
 		if (offset == PAGE_SIZE) {
-			page++;
+			page = nth_page(page, 1);
 			offset = 0;
 		}
 	}
@@ -503,7 +504,7 @@ size_t copy_page_to_iter_nofault(struct page *page, unsigned offset, size_t byte
 		return 0;
 	if (WARN_ON_ONCE(i->data_source))
 		return 0;
-	page += offset / PAGE_SIZE; // first subpage
+	page = nth_page(page, offset / PAGE_SIZE); // first subpage
 	offset %= PAGE_SIZE;
 	while (1) {
 		void *kaddr = kmap_local_page(page);
@@ -520,7 +521,7 @@ size_t copy_page_to_iter_nofault(struct page *page, unsigned offset, size_t byte
 			break;
 		offset += n;
 		if (offset == PAGE_SIZE) {
-			page++;
+			page = nth_page(page, 1);
 			offset = 0;
 		}
 	}
@@ -534,7 +535,7 @@ size_t copy_page_from_iter(struct page *page, size_t offset, size_t bytes,
 	size_t res = 0;
 	if (!page_copy_sane(page, offset, bytes))
 		return 0;
-	page += offset / PAGE_SIZE; // first subpage
+	page = nth_page(page, offset / PAGE_SIZE); // first subpage
 	offset %= PAGE_SIZE;
 	while (1) {
 		void *kaddr = kmap_local_page(page);
@@ -547,7 +548,7 @@ size_t copy_page_from_iter(struct page *page, size_t offset, size_t bytes,
 			break;
 		offset += n;
 		if (offset == PAGE_SIZE) {
-			page++;
+			page = nth_page(page, 1);
 			offset = 0;
 		}
 	}
@@ -1125,7 +1126,7 @@ static ssize_t __iov_iter_get_pages_alloc(struct iov_iter *i,
 			return -ENOMEM;
 		p = *pages;
 		for (int k = 0; k < n; k++)
-			get_page(p[k] = page + k);
+			get_page(p[k] = nth_page(page, k));
 		maxsize = min_t(size_t, maxsize, n * PAGE_SIZE - *start);
 		i->count -= maxsize;
 		i->iov_offset += maxsize;
@@ -1665,7 +1666,7 @@ static ssize_t iov_iter_extract_bvec_pages(struct iov_iter *i,
 		return -ENOMEM;
 	p = *pages;
 	for (k = 0; k < maxpages; k++)
-		p[k] = page + k;
+		p[k] = nth_page(page, k);
 
 	maxsize = min_t(size_t, maxsize, maxpages * PAGE_SIZE - offset);
 	iov_iter_advance(i, maxsize);

@@ -1563,7 +1563,7 @@ int collapse_pte_mapped_thp(struct mm_struct *mm, unsigned long addr,
 		 * Note that uprobe, debugger, or MAP_PRIVATE may change the
 		 * page table, but the new page will not be a subpage of hpage.
 		 */
-		if (hpage + i != page)
+		if (nth_page(hpage, i) != page)
 			goto abort;
 	}
 
@@ -1595,7 +1595,7 @@ int collapse_pte_mapped_thp(struct mm_struct *mm, unsigned long addr,
 			goto abort;
 		}
 		page = vm_normal_page(vma, addr, ptent);
-		if (hpage + i != page)
+		if (nth_page(hpage, i) != page)
 			goto abort;
 
 		/*
@@ -2026,17 +2026,17 @@ xa_unlocked:
 	index = start;
 	list_for_each_entry(page, &pagelist, lru) {
 		while (index < page->index) {
-			clear_highpage(hpage + (index % HPAGE_PMD_NR));
+			clear_highpage(nth_page(hpage, (index % HPAGE_PMD_NR)));
 			index++;
 		}
-		if (copy_mc_highpage(hpage + (page->index % HPAGE_PMD_NR), page) > 0) {
+		if (copy_mc_highpage(nth_page(hpage, (page->index % HPAGE_PMD_NR)), page) > 0) {
 			result = SCAN_COPY_MC;
 			goto rollback;
 		}
 		index++;
 	}
 	while (index < end) {
-		clear_highpage(hpage + (index % HPAGE_PMD_NR));
+		clear_highpage(nth_page(hpage, (index % HPAGE_PMD_NR)));
 		index++;
 	}
 

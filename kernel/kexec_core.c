@@ -338,7 +338,7 @@ static void kimage_free_pages(struct page *page)
 	arch_kexec_pre_free_pages(page_address(page), count);
 
 	for (i = 0; i < count; i++)
-		ClearPageReserved(page + i);
+		ClearPageReserved(nth_page(page, i));
 	__free_pages(page, order);
 }
 

@@ -923,7 +923,7 @@ static inline bool page_is_mergeable(const struct bio_vec *bv,
 		return true;
 	else if (IS_ENABLED(CONFIG_KMSAN))
 		return false;
-	return (bv->bv_page + bv_end / PAGE_SIZE) == (page + off / PAGE_SIZE);
+	return nth_page(bv->bv_page, bv_end / PAGE_SIZE) == nth_page(page, off / PAGE_SIZE);
 }
 
 /**

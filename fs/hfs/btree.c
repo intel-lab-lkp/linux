@@ -270,7 +270,7 @@ struct hfs_bnode *hfs_bmap_alloc(struct hfs_btree *tree)
 	off = off16;
 
 	off += node->page_offset;
-	pagep = node->page + (off >> PAGE_SHIFT);
+	pagep = nth_page(node->page, (off >> PAGE_SHIFT));
 	data = kmap_local_page(*pagep);
 	off &= ~PAGE_MASK;
 	idx = 0;
@@ -294,7 +294,8 @@ struct hfs_bnode *hfs_bmap_alloc(struct hfs_btree *tree)
 			}
 			if (++off >= PAGE_SIZE) {
 				kunmap_local(data);
-				data = kmap_local_page(*++pagep);
+				data = kmap_local_page(nth_page(*pagep, 1));
+				*pagep = nth_page(*pagep, 1);
 				off = 0;
 			}
 			idx += 8;
@@ -315,7 +316,7 @@ struct hfs_bnode *hfs_bmap_alloc(struct hfs_btree *tree)
 		len = hfs_brec_lenoff(node, 0, &off16);
 		off = off16;
 		off += node->page_offset;
-		pagep = node->page + (off >> PAGE_SHIFT);
+		pagep = nth_page(node->page, (off >> PAGE_SHIFT));
 		data = kmap_local_page(*pagep);
 		off &= ~PAGE_MASK;
 	}

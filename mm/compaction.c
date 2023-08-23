@@ -362,7 +362,7 @@ __reset_isolation_pfn(struct zone *zone, unsigned long pfn, bool check_source,
 			return true;
 		}
 
-		page += (1 << PAGE_ALLOC_COSTLY_ORDER);
+		page = nth_page(page, (1 << PAGE_ALLOC_COSTLY_ORDER));
 	} while (page <= end_page);
 
 	return false;
@@ -602,7 +602,7 @@ static unsigned long isolate_freepages_block(struct compact_control *cc,
 	page = pfn_to_page(blockpfn);
 
 	/* Isolate free pages. */
-	for (; blockpfn < end_pfn; blockpfn += stride, page += stride) {
+	for (; blockpfn < end_pfn; blockpfn += stride, page = nth_page(page, stride)) {
 		int isolated;
 
 		/*
@@ -628,7 +628,7 @@ static unsigned long isolate_freepages_block(struct compact_control *cc,
 
 			if (likely(order <= MAX_ORDER)) {
 				blockpfn += (1UL << order) - 1;
-				page += (1UL << order) - 1;
+				page = nth_page(page, (1UL << order) - 1);
 				nr_scanned += (1UL << order) - 1;
 			}
 			goto isolate_fail;
@@ -665,7 +665,7 @@ static unsigned long isolate_freepages_block(struct compact_control *cc,
 		}
 		/* Advance to the end of split page */
 		blockpfn += isolated - 1;
-		page += isolated - 1;
+		page = nth_page(page, isolated - 1);
 		continue;
 
 isolate_fail:

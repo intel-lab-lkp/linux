@@ -480,7 +480,7 @@ static unsigned blk_bvec_map_sg(struct request_queue *q,
 		 * the block layer, but the code below should be removed once
 		 * these offenders (mostly MMC/SD drivers) are fixed.
 		 */
-		page += (offset >> PAGE_SHIFT);
+		page = nth_page(page, (offset >> PAGE_SHIFT));
 		offset &= ~PAGE_MASK;
 
 		*sg = blk_next_sg(sg, sglist);

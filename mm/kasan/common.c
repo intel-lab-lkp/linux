@@ -110,7 +110,7 @@ bool __kasan_unpoison_pages(struct page *page, unsigned int order, bool init)
 	kasan_unpoison(set_tag(page_address(page), tag),
 		       PAGE_SIZE << order, init);
 	for (i = 0; i < (1 << order); i++)
-		page_kasan_tag_set(page + i, tag);
+		page_kasan_tag_set(nth_page(page, i), tag);
 
 	return true;
 }
@@ -128,7 +128,7 @@ void __kasan_poison_slab(struct slab *slab)
 	unsigned long i;
 
 	for (i = 0; i < compound_nr(page); i++)
-		page_kasan_tag_reset(page + i);
+		page_kasan_tag_reset(nth_page(page, i));
 	kasan_poison(page_address(page), page_size(page),
 		     KASAN_SLAB_REDZONE, false);
 }

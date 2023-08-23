@@ -3484,7 +3484,7 @@ static vm_fault_t filemap_map_folio_range(struct vm_fault *vmf,
 	pte_t *old_ptep = vmf->pte;
 
 	do {
-		if (PageHWPoison(page + count))
+		if (PageHWPoison(nth_page(page, count)))
 			goto skip;
 
 		if (mmap_miss > 0)
@@ -3509,7 +3509,7 @@ skip:
 		}
 
 		count++;
-		page += count;
+		page = nth_page(page, count);
 		vmf->pte += count;
 		addr += count * PAGE_SIZE;
 		count = 0;

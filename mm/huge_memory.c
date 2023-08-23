@@ -1478,7 +1478,7 @@ struct page *follow_trans_huge_pmd(struct vm_area_struct *vma,
 	if (flags & FOLL_TOUCH)
 		touch_pmd(vma, addr, pmd, flags & FOLL_WRITE);
 
-	page += (addr & ~HPAGE_PMD_MASK) >> PAGE_SHIFT;
+	page = nth_page(page, (addr & ~HPAGE_PMD_MASK) >> PAGE_SHIFT);
 	VM_BUG_ON_PAGE(!PageCompound(page) && !is_zone_device_page(page), page);
 
 	return page;
@@ -2214,13 +2214,13 @@ static void __split_huge_pmd_locked(struct vm_area_struct *vma, pmd_t *pmd,
 			swp_entry_t swp_entry;
 			if (write)
 				swp_entry = make_writable_migration_entry(
-							page_to_pfn(page + i));
+							page_to_pfn(page) + i);
 			else if (anon_exclusive)
 				swp_entry = make_readable_exclusive_migration_entry(
-							page_to_pfn(page + i));
+							page_to_pfn(page) + i);
 			else
 				swp_entry = make_readable_migration_entry(
-							page_to_pfn(page + i));
+							page_to_pfn(page) + i);
 			if (young)
 				swp_entry = make_migration_entry_young(swp_entry);
 			if (dirty)
@@ -2231,11 +2231,11 @@ static void __split_huge_pmd_locked(struct vm_area_struct *vma, pmd_t *pmd,
 			if (uffd_wp)
 				entry = pte_swp_mkuffd_wp(entry);
 		} else {
-			entry = mk_pte(page + i, READ_ONCE(vma->vm_page_prot));
+			entry = mk_pte(nth_page(page, i), READ_ONCE(vma->vm_page_prot));
 			if (write)
 				entry = pte_mkwrite(entry);
 			if (anon_exclusive)
-				SetPageAnonExclusive(page + i);
+				SetPageAnonExclusive(nth_page(page, i));
 			if (!young)
 				entry = pte_mkold(entry);
 			/* NOTE: this may set soft-dirty too on some archs */
@@ -2245,7 +2245,7 @@ static void __split_huge_pmd_locked(struct vm_area_struct *vma, pmd_t *pmd,
 				entry = pte_mksoft_dirty(entry);
 			if (uffd_wp)
 				entry = pte_mkuffd_wp(entry);
-			page_add_anon_rmap(page + i, vma, addr, RMAP_NONE);
+			page_add_anon_rmap(nth_page(page, i), vma, addr, RMAP_NONE);
 		}
 		VM_BUG_ON(!pte_none(ptep_get(pte)));
 		set_pte_at(mm, addr, pte, entry);
@@ -2405,7 +2405,7 @@ static void __split_huge_page_tail(struct folio *folio, int tail,
 		struct lruvec *lruvec, struct list_head *list)
 {
 	struct page *head = &folio->page;
-	struct page *page_tail = head + tail;
+	struct page *page_tail = nth_page(head, tail);
 	/*
 	 * Careful: new_folio is not a "real" folio before we cleared PageTail.
 	 * Don't pass it around before clear_compound_head().
@@ -2520,8 +2520,8 @@ static void __split_huge_page(struct page *page, struct list_head *list,
 	for (i = nr - 1; i >= 1; i--) {
 		__split_huge_page_tail(folio, i, lruvec, list);
 		/* Some pages can be beyond EOF: drop them from page cache */
-		if (head[i].index >= end) {
-			struct folio *tail = page_folio(head + i);
+		if (nth_page(head, i)->index >= end) {
+			struct folio *tail = page_folio(nth_page(head, i));
 
 			if (shmem_mapping(head->mapping))
 				shmem_uncharge(head->mapping->host, 1);
@@ -2531,11 +2531,11 @@ static void __split_huge_page(struct page *page, struct list_head *list,
 			__filemap_remove_folio(tail, NULL);
 			folio_put(tail);
 		} else if (!PageAnon(page)) {
-			__xa_store(&head->mapping->i_pages, head[i].index,
-					head + i, 0);
+			__xa_store(&head->mapping->i_pages, nth_page(head, i)->index,
+					nth_page(head, i), 0);
 		} else if (swap_cache) {
 			__xa_store(&swap_cache->i_pages, offset + i,
-					head + i, 0);
+					nth_page(head, i), 0);
 		}
 	}
 
@@ -2567,7 +2567,7 @@ static void __split_huge_page(struct page *page, struct list_head *list,
 		split_swap_cluster(folio->swap);
 
 	for (i = 0; i < nr; i++) {
-		struct page *subpage = head + i;
+		struct page *subpage = nth_page(head, i);
 		if (subpage == page)
 			continue;
 		unlock_page(subpage);

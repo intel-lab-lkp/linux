@@ -363,7 +363,7 @@ static inline struct page *find_buddy_page_pfn(struct page *page,
 	unsigned long __buddy_pfn = __find_buddy_pfn(pfn, order);
 	struct page *buddy;
 
-	buddy = page + (__buddy_pfn - pfn);
+	buddy = nth_page(page, (__buddy_pfn - pfn));
 	if (buddy_pfn)
 		*buddy_pfn = __buddy_pfn;
 
@@ -427,7 +427,7 @@ static inline void prep_compound_head(struct page *page, unsigned int order)
 
 static inline void prep_compound_tail(struct page *head, int tail_idx)
 {
-	struct page *p = head + tail_idx;
+	struct page *p = nth_page(head, tail_idx);
 
 	if (tail_idx > TAIL_MAPPING_REUSED_MAX)
 		p->mapping = TAIL_MAPPING;

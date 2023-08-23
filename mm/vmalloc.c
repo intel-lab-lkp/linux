@@ -3089,7 +3089,7 @@ vm_area_alloc_pages(gfp_t gfp, int nid,
 		 * vm_struct APIs independent of the physical/mapped size.
 		 */
 		for (i = 0; i < (1U << order); i++)
-			pages[nr_allocated + i] = page + i;
+			pages[nr_allocated + i] = nth_page(page, i);
 
 		cond_resched();
 		nr_allocated += 1U << order;

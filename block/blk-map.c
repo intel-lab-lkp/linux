@@ -178,7 +178,7 @@ static int bio_copy_user_iov(struct request *rq, struct rq_map_data *map_data,
 			}
 
 			page = map_data->pages[i / nr_pages];
-			page += (i % nr_pages);
+			page = nth_page(page, (i % nr_pages));
 
 			i++;
 		} else {

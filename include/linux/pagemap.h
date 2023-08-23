@@ -763,7 +763,7 @@ static inline struct page *find_subpage(struct page *head, pgoff_t index)
 	if (PageHuge(head))
 		return head;
 
-	return head + (index & (thp_nr_pages(head) - 1));
+	return nth_page(head, (index & (thp_nr_pages(head) - 1)));
 }
 
 unsigned filemap_get_folios(struct address_space *mapping, pgoff_t *start,
