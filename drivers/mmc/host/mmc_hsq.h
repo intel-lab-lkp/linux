@@ -10,6 +10,8 @@
  * flight to avoid a long latency.
  */
 #define HSQ_NORMAL_DEPTH	2
+#define HSQ_PERFORMANCE_DEPTH	5
+#define HSQ_DATA_IS_4K	8
 
 struct hsq_slot {
 	struct mmc_request *mrq;
