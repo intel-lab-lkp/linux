@@ -2182,7 +2182,7 @@ static int selinux_syslog(int type)
  * Do not audit the selinux permission check, as this is applied to all
  * processes that allocate mappings.
  */
-static int selinux_vm_enough_memory(struct mm_struct *mm, long pages)
+static int selinux_vm_enough_memory(const struct mm_struct *mm, long pages)
 {
 	int rc, cap_sys_admin = 0;
 

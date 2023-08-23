@@ -1017,7 +1017,7 @@ int security_settime64(const struct timespec64 *ts, const struct timezone *tz)
  * Return: Returns 0 if permission is granted by the LSM infrastructure to the
  *         caller.
  */
-int security_vm_enough_memory_mm(struct mm_struct *mm, long pages)
+int security_vm_enough_memory_mm(const struct mm_struct *mm, long pages)
 {
 	struct security_hook_list *hp;
 	int cap_sys_admin = 1;

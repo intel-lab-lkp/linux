@@ -169,7 +169,7 @@ extern int cap_task_prctl(int option, unsigned long arg2, unsigned long arg3,
 extern int cap_task_setscheduler(struct task_struct *p);
 extern int cap_task_setioprio(struct task_struct *p, int ioprio);
 extern int cap_task_setnice(struct task_struct *p, int nice);
-extern int cap_vm_enough_memory(struct mm_struct *mm, long pages);
+extern int cap_vm_enough_memory(const struct mm_struct *mm, long pages);
 
 struct msghdr;
 struct sk_buff;
@@ -287,7 +287,7 @@ int security_quotactl(int cmds, int type, int id, struct super_block *sb);
 int security_quota_on(struct dentry *dentry);
 int security_syslog(int type);
 int security_settime64(const struct timespec64 *ts, const struct timezone *tz);
-int security_vm_enough_memory_mm(struct mm_struct *mm, long pages);
+int security_vm_enough_memory_mm(const struct mm_struct *mm, long pages);
 int security_bprm_creds_for_exec(struct linux_binprm *bprm);
 int security_bprm_creds_from_file(struct linux_binprm *bprm, struct file *file);
 int security_bprm_check(struct linux_binprm *bprm);
@@ -600,7 +600,7 @@ static inline int security_settime64(const struct timespec64 *ts,
 	return cap_settime(ts, tz);
 }
 
-static inline int security_vm_enough_memory_mm(struct mm_struct *mm, long pages)
+static inline int security_vm_enough_memory_mm(const struct mm_struct *mm, long pages)
 {
 	return __vm_enough_memory(mm, pages, cap_vm_enough_memory(mm, pages));
 }

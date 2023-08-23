@@ -1397,7 +1397,7 @@ int cap_task_prctl(int option, unsigned long arg2, unsigned long arg3,
  *
  * Return: 1 if permission is granted, 0 if not.
  */
-int cap_vm_enough_memory(struct mm_struct *mm, long pages)
+int cap_vm_enough_memory(const struct mm_struct *mm, long pages)
 {
 	int cap_sys_admin = 0;
 
