@@ -102,7 +102,7 @@ static int amdgpu_umc_do_page_retirement(struct amdgpu_device *adev,
 			/* still call query_ras_error_address to clear error status
 			 * even NOMEM error is encountered
 			 */
-			if(!err_data->err_addr)
+			if (!err_data->err_addr)
 				dev_warn(adev->dev, "Failed to alloc memory for "
 						"umc error address record!\n");
 
@@ -126,7 +126,7 @@ static int amdgpu_umc_do_page_retirement(struct amdgpu_device *adev,
 			/* still call query_ras_error_address to clear error status
 			 * even NOMEM error is encountered
 			 */
-			if(!err_data->err_addr)
+			if (!err_data->err_addr)
 				dev_warn(adev->dev, "Failed to alloc memory for "
 						"umc error address record!\n");
 
