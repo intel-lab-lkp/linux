@@ -10,12 +10,12 @@
 #include "queueing.h"
 #include "peerlookup.h"
 
+#include <crypto/utils.h>
 #include <linux/rcupdate.h>
 #include <linux/slab.h>
 #include <linux/bitmap.h>
 #include <linux/scatterlist.h>
 #include <linux/highmem.h>
-#include <crypto/algapi.h>
 
 /* This implements Noise_IKpsk2:
  *

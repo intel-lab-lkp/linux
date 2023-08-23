@@ -12,10 +12,10 @@
 
 #include <uapi/linux/wireguard.h>
 
+#include <crypto/utils.h>
 #include <linux/if.h>
 #include <net/genetlink.h>
 #include <net/sock.h>
-#include <crypto/algapi.h>
 
 static struct genl_family genl_family;
 
