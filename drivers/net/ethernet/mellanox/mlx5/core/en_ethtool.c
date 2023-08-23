@@ -513,31 +513,53 @@ static int mlx5e_set_channels(struct net_device *dev,
 	return mlx5e_ethtool_set_channels(priv, ch);
 }
 
-int mlx5e_ethtool_get_coalesce(struct mlx5e_priv *priv,
-			       struct ethtool_coalesce *coal,
-			       struct kernel_ethtool_coalesce *kernel_coal)
+static int mlx5e_ethtool_get_per_queue_coalesce(struct mlx5e_priv *priv,
+						int queue,
+						struct ethtool_coalesce *coal,
+						struct kernel_ethtool_coalesce *kernel_coal)
 {
 	struct dim_cq_moder *rx_moder, *tx_moder;
+	struct mlx5e_params *params;
 
 	if (!MLX5_CAP_GEN(priv->mdev, cq_moderation))
 		return -EOPNOTSUPP;
 
-	rx_moder = &priv->channels.params.rx_cq_moderation;
+	if (queue != -1 && queue >= priv->channels.num) {
+		netdev_err(priv->netdev, "%s: Invalid queue ID [%d]",
+			   __func__, queue);
+		return -EINVAL;
+	}
+
+	if (queue == -1)
+		params = &priv->channels.params;
+	else
+		params = &priv->channels.c[queue]->params;
+
+	rx_moder = &params->rx_cq_moderation;
 	coal->rx_coalesce_usecs		= rx_moder->usec;
 	coal->rx_max_coalesced_frames	= rx_moder->pkts;
-	coal->use_adaptive_rx_coalesce	= priv->channels.params.rx_dim_enabled;
+	coal->use_adaptive_rx_coalesce	= params->rx_dim_enabled;
 
-	tx_moder = &priv->channels.params.tx_cq_moderation;
+	tx_moder = &params->tx_cq_moderation;
 	coal->tx_coalesce_usecs		= tx_moder->usec;
 	coal->tx_max_coalesced_frames	= tx_moder->pkts;
-	coal->use_adaptive_tx_coalesce	= priv->channels.params.tx_dim_enabled;
+	coal->use_adaptive_tx_coalesce	= params->tx_dim_enabled;
 
-	kernel_coal->use_cqe_mode_rx =
-		MLX5E_GET_PFLAG(&priv->channels.params, MLX5E_PFLAG_RX_CQE_BASED_MODER);
-	kernel_coal->use_cqe_mode_tx =
-		MLX5E_GET_PFLAG(&priv->channels.params, MLX5E_PFLAG_TX_CQE_BASED_MODER);
+	if (kernel_coal) {
+		kernel_coal->use_cqe_mode_rx =
+			MLX5E_GET_PFLAG(&priv->channels.params, MLX5E_PFLAG_RX_CQE_BASED_MODER);
+		kernel_coal->use_cqe_mode_tx =
+			MLX5E_GET_PFLAG(&priv->channels.params, MLX5E_PFLAG_TX_CQE_BASED_MODER);
+	}
 
 	return 0;
+}
+
+int mlx5e_ethtool_get_coalesce(struct mlx5e_priv *priv,
+			       struct ethtool_coalesce *coal,
+			       struct kernel_ethtool_coalesce *kernel_coal)
+{
+	return mlx5e_ethtool_get_per_queue_coalesce(priv, -1, coal, kernel_coal);
 }
 
 static int mlx5e_get_coalesce(struct net_device *netdev,
@@ -550,36 +572,76 @@ static int mlx5e_get_coalesce(struct net_device *netdev,
 	return mlx5e_ethtool_get_coalesce(priv, coal, kernel_coal);
 }
 
+/**
+ * mlx5e_get_per_queue_coalesce - gets coalesce settings for particular queue
+ * @netdev: netdev structure
+ * @coal: ethtool's coalesce settings
+ * @queue: the particular queue to read
+ *
+ * Reads a specific queue's coalesce settings
+ **/
+static int mlx5e_get_per_queue_coalesce(struct net_device *netdev,
+					u32 queue,
+					struct ethtool_coalesce *coal)
+{
+	struct mlx5e_priv *priv = netdev_priv(netdev);
+
+	return mlx5e_ethtool_get_per_queue_coalesce(priv, queue, coal, NULL);
+}
+
 #define MLX5E_MAX_COAL_TIME		MLX5_MAX_CQ_PERIOD
 #define MLX5E_MAX_COAL_FRAMES		MLX5_MAX_CQ_COUNT
 
 static void
-mlx5e_set_priv_channels_tx_coalesce(struct mlx5e_priv *priv, struct ethtool_coalesce *coal)
+mlx5e_set_priv_channels_tx_coalesce(struct mlx5e_priv *priv,
+				    int queue,
+				    struct ethtool_coalesce *coal)
 {
 	struct mlx5_core_dev *mdev = priv->mdev;
 	int tc;
 	int i;
 
-	for (i = 0; i < priv->channels.num; ++i) {
-		struct mlx5e_channel *c = priv->channels.c[i];
+	if (queue == -1) {
+		for (i = 0; i < priv->channels.num; ++i) {
+			struct mlx5e_channel *c = priv->channels.c[i];
+
+			for (tc = 0; tc < c->num_tc; tc++) {
+				mlx5_core_modify_cq_moderation(mdev,
+							       &c->sq[tc].cq.mcq,
+							       coal->tx_coalesce_usecs,
+							       coal->tx_max_coalesced_frames);
+			}
+		}
+	} else {
+		struct mlx5e_channel *c = priv->channels.c[queue];
 
 		for (tc = 0; tc < c->num_tc; tc++) {
 			mlx5_core_modify_cq_moderation(mdev,
-						&c->sq[tc].cq.mcq,
-						coal->tx_coalesce_usecs,
-						coal->tx_max_coalesced_frames);
+						       &c->sq[tc].cq.mcq,
+						       coal->tx_coalesce_usecs,
+						       coal->tx_max_coalesced_frames);
 		}
 	}
 }
 
 static void
-mlx5e_set_priv_channels_rx_coalesce(struct mlx5e_priv *priv, struct ethtool_coalesce *coal)
+mlx5e_set_priv_channels_rx_coalesce(struct mlx5e_priv *priv,
+				    int queue,
+				    struct ethtool_coalesce *coal)
 {
 	struct mlx5_core_dev *mdev = priv->mdev;
 	int i;
 
-	for (i = 0; i < priv->channels.num; ++i) {
-		struct mlx5e_channel *c = priv->channels.c[i];
+	if (queue == -1) {
+		for (i = 0; i < priv->channels.num; ++i) {
+			struct mlx5e_channel *c = priv->channels.c[i];
+
+			mlx5_core_modify_cq_moderation(mdev, &c->rq.cq.mcq,
+						       coal->rx_coalesce_usecs,
+						       coal->rx_max_coalesced_frames);
+		}
+	} else {
+		struct mlx5e_channel *c = priv->channels.c[queue];
 
 		mlx5_core_modify_cq_moderation(mdev, &c->rq.cq.mcq,
 					       coal->rx_coalesce_usecs,
@@ -596,15 +658,17 @@ static int cqe_mode_to_period_mode(bool val)
 	return val ? MLX5_CQ_PERIOD_MODE_START_FROM_CQE : MLX5_CQ_PERIOD_MODE_START_FROM_EQE;
 }
 
-int mlx5e_ethtool_set_coalesce(struct mlx5e_priv *priv,
-			       struct ethtool_coalesce *coal,
-			       struct kernel_ethtool_coalesce *kernel_coal,
-			       struct netlink_ext_ack *extack)
+static int mlx5e_ethtool_set_per_queue_coalesce(struct mlx5e_priv *priv,
+						int queue,
+						struct ethtool_coalesce *coal,
+						struct kernel_ethtool_coalesce *kernel_coal,
+						struct netlink_ext_ack *extack)
 {
 	struct dim_cq_moder *rx_moder, *tx_moder;
 	struct mlx5_core_dev *mdev = priv->mdev;
-	struct mlx5e_params new_params;
-	bool reset_rx, reset_tx;
+	bool reset_rx = false, reset_tx = false;
+	struct mlx5e_params new_params = {0};
+	struct mlx5e_params *old_params;
 	bool reset = true;
 	u8 cq_period_mode;
 	int err = 0;
@@ -626,14 +690,29 @@ int mlx5e_ethtool_set_coalesce(struct mlx5e_priv *priv,
 		return -ERANGE;
 	}
 
-	if ((kernel_coal->use_cqe_mode_rx || kernel_coal->use_cqe_mode_tx) &&
-	    !MLX5_CAP_GEN(priv->mdev, cq_period_start_from_cqe)) {
-		NL_SET_ERR_MSG_MOD(extack, "cqe_mode_rx/tx is not supported on this device");
-		return -EOPNOTSUPP;
+	if (kernel_coal) {
+		if ((kernel_coal->use_cqe_mode_rx || kernel_coal->use_cqe_mode_tx) &&
+		    !MLX5_CAP_GEN(priv->mdev, cq_period_start_from_cqe)) {
+			NL_SET_ERR_MSG_MOD(extack,
+					   "cqe_mode_rx/tx is not supported on this device");
+			return -EOPNOTSUPP;
+		}
+	}
+
+	if (queue != -1 && queue >= priv->channels.num) {
+		netdev_err(priv->netdev, "%s: Invalid queue ID [%d]",
+			   __func__, queue);
+		return -EINVAL;
 	}
 
 	mutex_lock(&priv->state_lock);
-	new_params = priv->channels.params;
+
+	if (queue == -1)
+		old_params = &priv->channels.params;
+	else
+		old_params = &priv->channels.c[queue]->params;
+
+	new_params = *old_params;
 
 	rx_moder          = &new_params.rx_cq_moderation;
 	rx_moder->usec    = coal->rx_coalesce_usecs;
@@ -645,19 +724,21 @@ int mlx5e_ethtool_set_coalesce(struct mlx5e_priv *priv,
 	tx_moder->pkts    = coal->tx_max_coalesced_frames;
 	new_params.tx_dim_enabled = !!coal->use_adaptive_tx_coalesce;
 
-	reset_rx = !!coal->use_adaptive_rx_coalesce != priv->channels.params.rx_dim_enabled;
-	reset_tx = !!coal->use_adaptive_tx_coalesce != priv->channels.params.tx_dim_enabled;
+	reset_rx = !!coal->use_adaptive_rx_coalesce != old_params->rx_dim_enabled;
+	reset_tx = !!coal->use_adaptive_tx_coalesce != old_params->tx_dim_enabled;
 
-	cq_period_mode = cqe_mode_to_period_mode(kernel_coal->use_cqe_mode_rx);
-	if (cq_period_mode != rx_moder->cq_period_mode) {
-		mlx5e_set_rx_cq_mode_params(&new_params, cq_period_mode);
-		reset_rx = true;
-	}
+	if (kernel_coal) {
+		cq_period_mode = cqe_mode_to_period_mode(kernel_coal->use_cqe_mode_rx);
+		if (cq_period_mode != rx_moder->cq_period_mode) {
+			mlx5e_set_rx_cq_mode_params(&new_params, cq_period_mode);
+			reset_rx = true;
+		}
 
-	cq_period_mode = cqe_mode_to_period_mode(kernel_coal->use_cqe_mode_tx);
-	if (cq_period_mode != tx_moder->cq_period_mode) {
-		mlx5e_set_tx_cq_mode_params(&new_params, cq_period_mode);
-		reset_tx = true;
+		cq_period_mode = cqe_mode_to_period_mode(kernel_coal->use_cqe_mode_tx);
+		if (cq_period_mode != tx_moder->cq_period_mode) {
+			mlx5e_set_tx_cq_mode_params(&new_params, cq_period_mode);
+			reset_tx = true;
+		}
 	}
 
 	if (reset_rx) {
@@ -678,16 +759,38 @@ int mlx5e_ethtool_set_coalesce(struct mlx5e_priv *priv,
 	 */
 	if (!reset_rx && !reset_tx && test_bit(MLX5E_STATE_OPENED, &priv->state)) {
 		if (!coal->use_adaptive_rx_coalesce)
-			mlx5e_set_priv_channels_rx_coalesce(priv, coal);
+			mlx5e_set_priv_channels_rx_coalesce(priv, queue, coal);
 		if (!coal->use_adaptive_tx_coalesce)
-			mlx5e_set_priv_channels_tx_coalesce(priv, coal);
+			mlx5e_set_priv_channels_tx_coalesce(priv, queue, coal);
 		reset = false;
 	}
 
-	err = mlx5e_safe_switch_params(priv, &new_params, NULL, NULL, reset);
+	if (queue == -1) {
+		err = mlx5e_safe_switch_params(priv, &new_params, NULL, NULL, reset);
+	} else {
+		if (reset) {
+			netdev_err(priv->netdev, "%s: Per-queue adaptive-rx / adaptive-tx operations are not supported",
+				   __func__);
+			err = -EOPNOTSUPP;
+		} else {
+			/* Since preactivate is NULL and we are not doing reset we just copy the
+			 * params here instead of calling mlx5e_safe_switch_params() to avoid
+			 * having to pass the queue to it.
+			 */
+			priv->channels.c[queue]->params = new_params;
+		}
+	}
 
 	mutex_unlock(&priv->state_lock);
 	return err;
+}
+
+int mlx5e_ethtool_set_coalesce(struct mlx5e_priv *priv,
+			       struct ethtool_coalesce *coal,
+			       struct kernel_ethtool_coalesce *kernel_coal,
+			       struct netlink_ext_ack *extack)
+{
+	return mlx5e_ethtool_set_per_queue_coalesce(priv, -1, coal, kernel_coal, extack);
 }
 
 static int mlx5e_set_coalesce(struct net_device *netdev,
@@ -698,6 +801,23 @@ static int mlx5e_set_coalesce(struct net_device *netdev,
 	struct mlx5e_priv *priv = netdev_priv(netdev);
 
 	return mlx5e_ethtool_set_coalesce(priv, coal, kernel_coal, extack);
+}
+
+/**
+ * mlx5e_set_per_queue_coalesce - set specific queue's coalesce settings
+ * @netdev: the netdev to change
+ * @coal: ethtool's coalesce settings
+ * @queue: the queue to change
+ *
+ * Sets the specified queue's coalesce settings.
+ **/
+static int mlx5e_set_per_queue_coalesce(struct net_device *netdev,
+					u32 queue,
+					struct ethtool_coalesce *coal)
+{
+	struct mlx5e_priv *priv = netdev_priv(netdev);
+
+	return mlx5e_ethtool_set_per_queue_coalesce(priv, queue, coal, NULL, NULL);
 }
 
 static void ptys2ethtool_supported_link(struct mlx5_core_dev *mdev,
@@ -2434,6 +2554,8 @@ const struct ethtool_ops mlx5e_ethtool_ops = {
 	.flash_device      = mlx5e_flash_device,
 	.get_priv_flags    = mlx5e_get_priv_flags,
 	.set_priv_flags    = mlx5e_set_priv_flags,
+	.get_per_queue_coalesce	= mlx5e_get_per_queue_coalesce,
+	.set_per_queue_coalesce	= mlx5e_set_per_queue_coalesce,
 	.self_test         = mlx5e_self_test,
 	.get_fec_stats     = mlx5e_get_fec_stats,
 	.get_fecparam      = mlx5e_get_fecparam,

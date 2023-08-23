@@ -783,6 +783,7 @@ struct mlx5e_channel {
 	DECLARE_BITMAP(state, MLX5E_CHANNEL_NUM_STATES);
 	int                        ix;
 	int                        cpu;
+	struct mlx5e_params        params; /* channel specific params */
 	/* Sync between icosq recovery and XSK enable/disable. */
 	struct mutex               icosq_recovery_lock;
 };
@@ -793,7 +794,7 @@ struct mlx5e_channels {
 	struct mlx5e_channel **c;
 	struct mlx5e_ptp      *ptp;
 	unsigned int           num;
-	struct mlx5e_params    params;
+	struct mlx5e_params    params; /* global params */
 };
 
 struct mlx5e_channel_stats {

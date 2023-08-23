@@ -3043,6 +3043,7 @@ int mlx5e_safe_switch_params(struct mlx5e_priv *priv,
 {
 	struct mlx5e_channels *new_chs;
 	int err;
+	int i;
 
 	reset &= test_bit(MLX5E_STATE_OPENED, &priv->state);
 	if (!reset)
@@ -3058,6 +3059,9 @@ int mlx5e_safe_switch_params(struct mlx5e_priv *priv,
 	err = mlx5e_open_channels(priv, new_chs);
 	if (err)
 		goto err_cancel_selq;
+
+	for (i = 0; i < new_chs->num; ++i)
+		new_chs->c[i]->params = *params;
 
 	err = mlx5e_switch_priv_channels(priv, new_chs, preactivate, context);
 	if (err)
