@@ -76,6 +76,8 @@
 #define BTF_TYPE_TYPE_TAG_ENC(value, type) \
 	BTF_TYPE_ENC(value, BTF_INFO_ENC(BTF_KIND_TYPE_TAG, 0, 0), type)
 
+int btf_sanity_check(const struct btf *btf);
+
 #ifndef likely
 #define likely(x) __builtin_expect(!!(x), 1)
 #endif

@@ -2833,6 +2833,13 @@ static int bpf_object__init_btf(struct bpf_object *obj,
 			pr_warn("Error loading ELF section %s: %d.\n", BTF_ELF_SEC, err);
 			goto out;
 		}
+		err = btf_sanity_check(obj->btf);
+		if (err) {
+			pr_warn("elf: .BTF data is corrupted, discarding it...\n");
+			btf__free(obj->btf);
+			obj->btf = NULL;
+			goto out;
+		}
 		/* enforce 8-byte pointers for BPF-targeted BTFs */
 		btf__set_pointer_size(obj->btf, 8);
 	}
