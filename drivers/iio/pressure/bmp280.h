@@ -418,7 +418,8 @@ struct bmp280_data {
 
 struct bmp280_chip_info {
 	unsigned int id_reg;
-	uint8_t chip_id;
+	const uint8_t *chip_id;
+	int num_chip_id;
 
 	const struct regmap_config *regmap_config;
 
