@@ -8535,10 +8535,7 @@ static void do_sched_yield(void)
 
 	schedstat_inc(rq->yld_count);
 	current->sched_class->yield_task(rq);
-
-	preempt_disable();
 	rq_unlock_irq(rq, &rf);
-	sched_preempt_enable_no_resched();
 
 	schedule();
 }
