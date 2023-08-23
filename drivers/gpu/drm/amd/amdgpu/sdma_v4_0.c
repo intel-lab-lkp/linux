@@ -152,8 +152,7 @@ static const struct soc15_reg_golden golden_settings_sdma0_4_2_init[] = {
 	SOC15_REG_GOLDEN_VALUE(SDMA0, 0, mmSDMA0_RLC0_RB_WPTR_POLL_CNTL, 0xfffffff0, 0x00403000),
 };
 
-static const struct soc15_reg_golden golden_settings_sdma0_4_2[] =
-{
+static const struct soc15_reg_golden golden_settings_sdma0_4_2[] = {
 	SOC15_REG_GOLDEN_VALUE(SDMA0, 0, mmSDMA0_CHICKEN_BITS, 0xfe931f07, 0x02831f07),
 	SOC15_REG_GOLDEN_VALUE(SDMA0, 0, mmSDMA0_CLK_CTRL, 0xffffffff, 0x3f000100),
 	SOC15_REG_GOLDEN_VALUE(SDMA0, 0, mmSDMA0_GB_ADDR_CONFIG, 0x0000773f, 0x00004002),
@@ -213,20 +212,17 @@ static const struct soc15_reg_golden golden_settings_sdma1_4_2[] = {
 	SOC15_REG_GOLDEN_VALUE(SDMA1, 0, mmSDMA1_UTCL1_TIMEOUT, 0xffffffff, 0x00010001),
 };
 
-static const struct soc15_reg_golden golden_settings_sdma_rv1[] =
-{
+static const struct soc15_reg_golden golden_settings_sdma_rv1[] = {
 	SOC15_REG_GOLDEN_VALUE(SDMA0, 0, mmSDMA0_GB_ADDR_CONFIG, 0x0018773f, 0x00000002),
 	SOC15_REG_GOLDEN_VALUE(SDMA0, 0, mmSDMA0_GB_ADDR_CONFIG_READ, 0x0018773f, 0x00000002)
 };
 
-static const struct soc15_reg_golden golden_settings_sdma_rv2[] =
-{
+static const struct soc15_reg_golden golden_settings_sdma_rv2[] = {
 	SOC15_REG_GOLDEN_VALUE(SDMA0, 0, mmSDMA0_GB_ADDR_CONFIG, 0x0018773f, 0x00003001),
 	SOC15_REG_GOLDEN_VALUE(SDMA0, 0, mmSDMA0_GB_ADDR_CONFIG_READ, 0x0018773f, 0x00003001)
 };
 
-static const struct soc15_reg_golden golden_settings_sdma_arct[] =
-{
+static const struct soc15_reg_golden golden_settings_sdma_arct[] = {
 	SOC15_REG_GOLDEN_VALUE(SDMA0, 0, mmSDMA0_CHICKEN_BITS, 0xfe931f07, 0x02831f07),
 	SOC15_REG_GOLDEN_VALUE(SDMA0, 0, mmSDMA0_GB_ADDR_CONFIG, 0x0000773f, 0x00004002),
 	SOC15_REG_GOLDEN_VALUE(SDMA0, 0, mmSDMA0_GB_ADDR_CONFIG_READ, 0x0000773f, 0x00004002),
@@ -1100,7 +1096,7 @@ static void sdma_v4_0_gfx_resume(struct amdgpu_device *adev, unsigned int i)
 	wptr_poll_cntl = RREG32_SDMA(i, mmSDMA0_GFX_RB_WPTR_POLL_CNTL);
 	wptr_poll_cntl = REG_SET_FIELD(wptr_poll_cntl,
 				       SDMA0_GFX_RB_WPTR_POLL_CNTL,
-				       F32_POLL_ENABLE, amdgpu_sriov_vf(adev)? 1 : 0);
+				       F32_POLL_ENABLE, amdgpu_sriov_vf(adev) ? 1 : 0);
 	WREG32_SDMA(i, mmSDMA0_GFX_RB_WPTR_POLL_CNTL, wptr_poll_cntl);
 
 	/* enable DMA RB */
@@ -1186,7 +1182,7 @@ static void sdma_v4_0_page_resume(struct amdgpu_device *adev, unsigned int i)
 	wptr_poll_cntl = RREG32_SDMA(i, mmSDMA0_PAGE_RB_WPTR_POLL_CNTL);
 	wptr_poll_cntl = REG_SET_FIELD(wptr_poll_cntl,
 				       SDMA0_PAGE_RB_WPTR_POLL_CNTL,
-				       F32_POLL_ENABLE, amdgpu_sriov_vf(adev)? 1 : 0);
+				       F32_POLL_ENABLE, amdgpu_sriov_vf(adev) ? 1 : 0);
 	WREG32_SDMA(i, mmSDMA0_PAGE_RB_WPTR_POLL_CNTL, wptr_poll_cntl);
 
 	/* enable DMA RB */
@@ -1246,7 +1242,7 @@ static void sdma_v4_1_init_power_gating(struct amdgpu_device *adev)
 	/* Configure switch time for hysteresis purpose. Use default right now */
 	data &= ~SDMA0_POWER_CNTL__ON_OFF_STATUS_DURATION_TIME_MASK;
 	data |= (mmSDMA0_POWER_CNTL_DEFAULT & SDMA0_POWER_CNTL__ON_OFF_STATUS_DURATION_TIME_MASK);
-	if(data != def)
+	if (data != def)
 		WREG32(SOC15_REG_OFFSET(SDMA0, 0, mmSDMA0_POWER_CNTL), data);
 }
 
