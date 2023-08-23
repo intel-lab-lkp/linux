@@ -305,6 +305,9 @@ int mtk_plane_init(struct drm_device *dev, struct drm_plane *plane,
 		   size_t num_formats)
 {
 	int err;
+	u32 blend_mode = BIT(DRM_MODE_BLEND_PIXEL_NONE) |
+			 BIT(DRM_MODE_BLEND_PREMULTI)   |
+			 BIT(DRM_MODE_BLEND_COVERAGE);
 
 	if (!formats || !num_formats) {
 		DRM_ERROR("no formats for plane\n");
@@ -326,6 +329,14 @@ int mtk_plane_init(struct drm_device *dev, struct drm_plane *plane,
 		if (err)
 			DRM_INFO("Create rotation property failed\n");
 	}
+
+	err = drm_plane_create_alpha_property(plane);
+	if (err)
+		DRM_ERROR("failed to create property: alpha\n");
+
+	err = drm_plane_create_blend_mode_property(plane, blend_mode);
+	if (err)
+		DRM_ERROR("failed to create property: blend_mode\n");
 
 	drm_plane_helper_add(plane, &mtk_plane_helper_funcs);
 
