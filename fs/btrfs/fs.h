@@ -139,6 +139,13 @@ enum {
 	 */
 	BTRFS_FS_FEATURE_CHANGED,
 
+	/*
+	 * Indicate if we have tree block which is only aligned to sectorsize,
+	 * but not to nodesize.
+	 * This should be rare nowadays.
+	 */
+	BTRFS_FS_UNALIGNED_TREE_BLOCK,
+
 #if BITS_PER_LONG == 32
 	/* Indicate if we have error/warn message printed on 32bit systems */
 	BTRFS_FS_32BIT_ERROR,
