@@ -38,6 +38,7 @@ struct panfrost_gem_object {
 
 	bool noexec		:1;
 	bool is_heap		:1;
+	bool is_purgable	:1;
 };
 
 struct panfrost_gem_mapping {

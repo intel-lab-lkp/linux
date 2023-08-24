@@ -440,11 +440,14 @@ static int panfrost_ioctl_madvise(struct drm_device *dev, void *data,
 	args->retained = drm_gem_shmem_madvise(&bo->base, args->madv);
 
 	if (args->retained) {
-		if (args->madv == PANFROST_MADV_DONTNEED)
+		if (args->madv == PANFROST_MADV_DONTNEED) {
 			list_move_tail(&bo->base.madv_list,
 				       &pfdev->shrinker_list);
-		else if (args->madv == PANFROST_MADV_WILLNEED)
+			bo->is_purgable = true;
+		} else if (args->madv == PANFROST_MADV_WILLNEED) {
 			list_del_init(&bo->base.madv_list);
+			bo->is_purgable = false;
+		}
 	}
 
 out_unlock_mappings:
@@ -559,6 +562,8 @@ static void panfrost_show_fdinfo(struct drm_printer *p, struct drm_file *file)
 	struct panfrost_device *pfdev = dev->dev_private;
 
 	panfrost_gpu_show_fdinfo(pfdev, file->driver_priv, p);
+
+	drm_show_memory_stats(p, file);
 }
 
 static const struct file_operations panfrost_drm_driver_fops = {
