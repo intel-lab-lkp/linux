@@ -1606,6 +1606,8 @@ static void ext4_print_free_blocks(struct inode *inode)
 	ext4_msg(sb, KERN_CRIT, "Block reservation details");
 	ext4_msg(sb, KERN_CRIT, "i_reserved_data_blocks=%u",
 		 ei->i_reserved_data_blocks);
+	ext4_msg(sb, KERN_CRIT, "i_reserved_ext_blocks=%u",
+		 ei->i_reserved_ext_blocks);
 	return;
 }
 

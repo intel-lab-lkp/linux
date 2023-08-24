@@ -1224,6 +1224,7 @@ TRACE_EVENT(ext4_da_update_reserve_space,
 		__field(	__u64,	i_blocks		)
 		__field(	int,	used_blocks		)
 		__field(	int,	reserved_data_blocks	)
+		__field(	int,	reserved_ext_blocks	)
 		__field(	int,	quota_claim		)
 		__field(	__u16,	mode			)
 	),
@@ -1233,18 +1234,19 @@ TRACE_EVENT(ext4_da_update_reserve_space,
 		__entry->ino	= inode->i_ino;
 		__entry->i_blocks = inode->i_blocks;
 		__entry->used_blocks = used_blocks;
-		__entry->reserved_data_blocks =
-				EXT4_I(inode)->i_reserved_data_blocks;
+		__entry->reserved_data_blocks = EXT4_I(inode)->i_reserved_data_blocks;
+		__entry->reserved_ext_blocks = EXT4_I(inode)->i_reserved_ext_blocks;
 		__entry->quota_claim = quota_claim;
 		__entry->mode	= inode->i_mode;
 	),
 
 	TP_printk("dev %d,%d ino %lu mode 0%o i_blocks %llu used_blocks %d "
-		  "reserved_data_blocks %d quota_claim %d",
+		  "reserved_data_blocks %d reserved_ext_blocks %d quota_claim %d",
 		  MAJOR(__entry->dev), MINOR(__entry->dev),
 		  (unsigned long) __entry->ino,
 		  __entry->mode, __entry->i_blocks,
-		  __entry->used_blocks, __entry->reserved_data_blocks,
+		  __entry->used_blocks,
+		  __entry->reserved_data_blocks, __entry->reserved_ext_blocks,
 		  __entry->quota_claim)
 );
 
@@ -1258,6 +1260,7 @@ TRACE_EVENT(ext4_da_reserve_space,
 		__field(	ino_t,	ino			)
 		__field(	__u64,	i_blocks		)
 		__field(	int,	reserved_data_blocks	)
+		__field(	int,	reserved_ext_blocks	)
 		__field(	__u16,  mode			)
 	),
 
@@ -1266,15 +1269,17 @@ TRACE_EVENT(ext4_da_reserve_space,
 		__entry->ino	= inode->i_ino;
 		__entry->i_blocks = inode->i_blocks;
 		__entry->reserved_data_blocks = EXT4_I(inode)->i_reserved_data_blocks;
+		__entry->reserved_ext_blocks = EXT4_I(inode)->i_reserved_ext_blocks;
 		__entry->mode	= inode->i_mode;
 	),
 
 	TP_printk("dev %d,%d ino %lu mode 0%o i_blocks %llu "
-		  "reserved_data_blocks %d",
+		  "reserved_data_blocks %d reserved_ext_blocks %d",
 		  MAJOR(__entry->dev), MINOR(__entry->dev),
 		  (unsigned long) __entry->ino,
 		  __entry->mode, __entry->i_blocks,
-		  __entry->reserved_data_blocks)
+		  __entry->reserved_data_blocks,
+		  __entry->reserved_ext_blocks)
 );
 
 TRACE_EVENT(ext4_da_release_space,
@@ -1288,6 +1293,7 @@ TRACE_EVENT(ext4_da_release_space,
 		__field(	__u64,	i_blocks		)
 		__field(	int,	freed_blocks		)
 		__field(	int,	reserved_data_blocks	)
+		__field(	int,	reserved_ext_blocks	)
 		__field(	__u16,  mode			)
 	),
 
@@ -1297,15 +1303,18 @@ TRACE_EVENT(ext4_da_release_space,
 		__entry->i_blocks = inode->i_blocks;
 		__entry->freed_blocks = freed_blocks;
 		__entry->reserved_data_blocks = EXT4_I(inode)->i_reserved_data_blocks;
+		__entry->reserved_ext_blocks = EXT4_I(inode)->i_reserved_ext_blocks;
 		__entry->mode	= inode->i_mode;
 	),
 
 	TP_printk("dev %d,%d ino %lu mode 0%o i_blocks %llu freed_blocks %d "
-		  "reserved_data_blocks %d",
+		  "reserved_data_blocks %d reserved_ext_blocks %d",
 		  MAJOR(__entry->dev), MINOR(__entry->dev),
 		  (unsigned long) __entry->ino,
 		  __entry->mode, __entry->i_blocks,
-		  __entry->freed_blocks, __entry->reserved_data_blocks)
+		  __entry->freed_blocks,
+		  __entry->reserved_data_blocks,
+		  __entry->reserved_ext_blocks)
 );
 
 DECLARE_EVENT_CLASS(ext4__bitmap_load,

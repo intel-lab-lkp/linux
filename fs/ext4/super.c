@@ -1436,6 +1436,7 @@ static struct inode *ext4_alloc_inode(struct super_block *sb)
 	ei->i_es_shk_nr = 0;
 	ei->i_es_shrink_lblk = 0;
 	ei->i_reserved_data_blocks = 0;
+	ei->i_reserved_ext_blocks = 0;
 	spin_lock_init(&(ei->i_block_reservation_lock));
 	ext4_init_pending_tree(&ei->i_pending_tree);
 #ifdef CONFIG_QUOTA
@@ -1487,11 +1488,14 @@ static void ext4_destroy_inode(struct inode *inode)
 		dump_stack();
 	}
 
-	if (EXT4_I(inode)->i_reserved_data_blocks)
+	if (EXT4_I(inode)->i_reserved_data_blocks ||
+	    EXT4_I(inode)->i_reserved_ext_blocks)
 		ext4_msg(inode->i_sb, KERN_ERR,
-			 "Inode %lu (%p): i_reserved_data_blocks (%u) not cleared!",
+			 "Inode %lu (%p): i_reserved_data_blocks (%u) or "
+			 "i_reserved_ext_blocks (%u) not cleared!",
 			 inode->i_ino, EXT4_I(inode),
-			 EXT4_I(inode)->i_reserved_data_blocks);
+			 EXT4_I(inode)->i_reserved_data_blocks,
+			 EXT4_I(inode)->i_reserved_ext_blocks);
 }
 
 static void ext4_shutdown(struct super_block *sb)
