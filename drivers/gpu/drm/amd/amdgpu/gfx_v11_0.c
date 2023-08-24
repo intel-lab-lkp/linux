@@ -83,8 +83,7 @@ MODULE_FIRMWARE("amdgpu/gc_11_0_4_me.bin");
 MODULE_FIRMWARE("amdgpu/gc_11_0_4_mec.bin");
 MODULE_FIRMWARE("amdgpu/gc_11_0_4_rlc.bin");
 
-static const struct soc15_reg_golden golden_settings_gc_11_0_1[] =
-{
+static const struct soc15_reg_golden golden_settings_gc_11_0_1[] = {
 	SOC15_REG_GOLDEN_VALUE(GC, 0, regCGTT_GS_NGG_CLK_CTRL, 0x9fff8fff, 0x00000010),
 	SOC15_REG_GOLDEN_VALUE(GC, 0, regCGTT_WD_CLK_CTRL, 0xffff8fff, 0x00000010),
 	SOC15_REG_GOLDEN_VALUE(GC, 0, regCPF_GCR_CNTL, 0x0007ffff, 0x0000c200),
@@ -1226,7 +1225,7 @@ static void gfx_v11_0_rlc_backdoor_autoload_copy_mes_ucode(struct amdgpu_device 
 	int pipe, ucode_id, data_id;
 
 	for (pipe = 0; pipe < 2; pipe++) {
-		if (pipe==0) {
+		if (pipe == 0) {
 			ucode_id = SOC21_FIRMWARE_ID_RS64_MES_P0;
 			data_id  = SOC21_FIRMWARE_ID_RS64_MES_P0_STACK;
 		} else {
@@ -2320,7 +2319,7 @@ static int gfx_v11_0_config_me_cache_rs64(struct amdgpu_device *adev, uint64_t a
 		soc21_grbm_select(adev, 0, pipe_id, 0, 0);
 		WREG32_SOC15(GC, 0, regCP_ME_PRGRM_CNTR_START,
 			(me_hdr->ucode_start_addr_hi << 30) |
-			(me_hdr->ucode_start_addr_lo >> 2) );
+			(me_hdr->ucode_start_addr_lo >> 2));
 		WREG32_SOC15(GC, 0, regCP_ME_PRGRM_CNTR_START_HI,
 			me_hdr->ucode_start_addr_hi>>2);
 
@@ -2504,7 +2503,7 @@ static void gfx_v11_0_config_gfx_rs64(struct amdgpu_device *adev)
 		soc21_grbm_select(adev, 0, pipe_id, 0, 0);
 		WREG32_SOC15(GC, 0, regCP_ME_PRGRM_CNTR_START,
 			(me_hdr->ucode_start_addr_hi << 30) |
-			(me_hdr->ucode_start_addr_lo >> 2) );
+			(me_hdr->ucode_start_addr_lo >> 2));
 		WREG32_SOC15(GC, 0, regCP_ME_PRGRM_CNTR_START_HI,
 			me_hdr->ucode_start_addr_hi>>2);
 	}
@@ -2802,7 +2801,7 @@ static int gfx_v11_0_cp_gfx_load_pfp_microcode_rs64(struct amdgpu_device *adev)
 		soc21_grbm_select(adev, 0, pipe_id, 0, 0);
 		WREG32_SOC15(GC, 0, regCP_PFP_PRGRM_CNTR_START,
 			(pfp_hdr->ucode_start_addr_hi << 30) |
-			(pfp_hdr->ucode_start_addr_lo >> 2) );
+			(pfp_hdr->ucode_start_addr_lo >> 2));
 		WREG32_SOC15(GC, 0, regCP_PFP_PRGRM_CNTR_START_HI,
 			pfp_hdr->ucode_start_addr_hi>>2);
 
@@ -3021,7 +3020,7 @@ static int gfx_v11_0_cp_gfx_load_me_microcode_rs64(struct amdgpu_device *adev)
 		soc21_grbm_select(adev, 0, pipe_id, 0, 0);
 		WREG32_SOC15(GC, 0, regCP_ME_PRGRM_CNTR_START,
 			(me_hdr->ucode_start_addr_hi << 30) |
-			(me_hdr->ucode_start_addr_lo >> 2) );
+			(me_hdr->ucode_start_addr_lo >> 2));
 		WREG32_SOC15(GC, 0, regCP_ME_PRGRM_CNTR_START_HI,
 			me_hdr->ucode_start_addr_hi>>2);
 
@@ -4198,7 +4197,7 @@ static void gfx_v11_0_select_cp_fw_arch(struct amdgpu_device *adev)
 		msleep(100);
 }
 
-static int get_gb_addr_config(struct amdgpu_device * adev)
+static int get_gb_addr_config(struct amdgpu_device *adev)
 {
 	u32 gb_addr_config;
 
@@ -4289,7 +4288,7 @@ static int gfx_v11_0_hw_init(void *handle)
 
 	adev->gfx.is_poweron = true;
 
-	if(get_gb_addr_config(adev))
+	if (get_gb_addr_config(adev))
 		DRM_WARN("Invalid gb_addr_config !\n");
 
 	if (adev->firmware.load_type == AMDGPU_FW_LOAD_PSP &&
