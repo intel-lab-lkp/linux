@@ -1434,9 +1434,9 @@ static int sst_fill_widget_module_info(struct snd_soc_dapm_widget *w,
 	struct snd_card *card = component->card->snd_card;
 	char *idx;
 
-	down_read(&card->controls_rwsem);
+	down_read(&card->ctl->controls_rwsem);
 
-	list_for_each_entry(kctl, &card->controls, list) {
+	list_for_each_entry(kctl, &card->ctl->controls, list) {
 		idx = strchr(kctl->id.name, ' ');
 		if (idx == NULL)
 			continue;
@@ -1469,12 +1469,12 @@ static int sst_fill_widget_module_info(struct snd_soc_dapm_widget *w,
 		}
 
 		if (ret < 0) {
-			up_read(&card->controls_rwsem);
+			up_read(&card->ctl->controls_rwsem);
 			return ret;
 		}
 	}
 
-	up_read(&card->controls_rwsem);
+	up_read(&card->ctl->controls_rwsem);
 	return 0;
 }
 
