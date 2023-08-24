@@ -1451,8 +1451,7 @@ static void dce_v11_0_audio_enable(struct amdgpu_device *adev,
 			   enable ? AZALIA_F0_CODEC_PIN_CONTROL_HOT_PLUG_CONTROL__AUDIO_ENABLED_MASK : 0);
 }
 
-static const u32 pin_offsets[] =
-{
+static const u32 pin_offsets[] = {
 	AUD0_REGISTER_OFFSET,
 	AUD1_REGISTER_OFFSET,
 	AUD2_REGISTER_OFFSET,
@@ -1853,8 +1852,7 @@ static void dce_v11_0_afmt_fini(struct amdgpu_device *adev)
 	}
 }
 
-static const u32 vga_control_regs[6] =
-{
+static const u32 vga_control_regs[6] = {
 	mmD1VGA_CONTROL,
 	mmD2VGA_CONTROL,
 	mmD3VGA_CONTROL,
@@ -3240,7 +3238,7 @@ static int dce_v11_0_set_crtc_irq_state(struct amdgpu_device *adev,
 	case AMDGPU_CRTC_IRQ_VLINE5:
 		dce_v11_0_set_crtc_vline_interrupt_state(adev, 4, state);
 		break;
-	 case AMDGPU_CRTC_IRQ_VLINE6:
+	case AMDGPU_CRTC_IRQ_VLINE6:
 		dce_v11_0_set_crtc_vline_interrupt_state(adev, 5, state);
 		break;
 	default:
@@ -3295,12 +3293,12 @@ static int dce_v11_0_pageflip_irq(struct amdgpu_device *adev,
 		       GRPH_INTERRUPT_STATUS__GRPH_PFLIP_INT_CLEAR_MASK);
 
 	/* IRQ could occur when in initial stage */
-	if(amdgpu_crtc == NULL)
+	if (amdgpu_crtc == NULL)
 		return 0;
 
 	spin_lock_irqsave(&adev_to_drm(adev)->event_lock, flags);
 	works = amdgpu_crtc->pflip_works;
-	if (amdgpu_crtc->pflip_status != AMDGPU_FLIP_SUBMITTED){
+	if (amdgpu_crtc->pflip_status != AMDGPU_FLIP_SUBMITTED) {
 		DRM_DEBUG_DRIVER("amdgpu_crtc->pflip_status = %d != "
 						 "AMDGPU_FLIP_SUBMITTED(%d)\n",
 						 amdgpu_crtc->pflip_status,
@@ -3314,7 +3312,7 @@ static int dce_v11_0_pageflip_irq(struct amdgpu_device *adev,
 	amdgpu_crtc->pflip_works = NULL;
 
 	/* wakeup usersapce */
-	if(works->event)
+	if (works->event)
 		drm_crtc_send_vblank_event(&amdgpu_crtc->base, works->event);
 
 	spin_unlock_irqrestore(&adev_to_drm(adev)->event_lock, flags);
@@ -3780,8 +3778,7 @@ static void dce_v11_0_set_irq_funcs(struct amdgpu_device *adev)
 	adev->hpd_irq.funcs = &dce_v11_0_hpd_irq_funcs;
 }
 
-const struct amdgpu_ip_block_version dce_v11_0_ip_block =
-{
+const struct amdgpu_ip_block_version dce_v11_0_ip_block = {
 	.type = AMD_IP_BLOCK_TYPE_DCE,
 	.major = 11,
 	.minor = 0,
@@ -3789,8 +3786,7 @@ const struct amdgpu_ip_block_version dce_v11_0_ip_block =
 	.funcs = &dce_v11_0_ip_funcs,
 };
 
-const struct amdgpu_ip_block_version dce_v11_2_ip_block =
-{
+const struct amdgpu_ip_block_version dce_v11_2_ip_block = {
 	.type = AMD_IP_BLOCK_TYPE_DCE,
 	.major = 11,
 	.minor = 2,
