@@ -751,6 +751,22 @@ int vb2_prepare_buf(struct vb2_queue *q, struct media_device *mdev,
 }
 EXPORT_SYMBOL_GPL(vb2_prepare_buf);
 
+int vb2_delete_bufs(struct vb2_queue *q, struct v4l2_delete_buffers *d)
+{
+	unsigned int index;
+	int ret = 0;
+
+	for (index = d->index; index < d->index + d->count; index++) {
+		ret = vb2_core_delete_buf(q, index);
+		if (ret)
+			break;
+	}
+
+	d->index = index;
+	return ret;
+}
+EXPORT_SYMBOL_GPL(vb2_delete_bufs);
+
 int vb2_create_bufs(struct vb2_queue *q, struct v4l2_create_buffers *create)
 {
 	unsigned requested_planes = 1;
