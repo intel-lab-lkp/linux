@@ -548,8 +548,13 @@ static void intel_pmu_refresh(struct kvm_vcpu *vcpu)
 		setup_fixed_pmc_eventsel(pmu);
 	}
 
-	for (i = 0; i < pmu->nr_arch_fixed_counters; i++)
-		pmu->fixed_ctr_ctrl_mask &= ~(0xbull << (i * 4));
+	for (i = 0; i < pmu->nr_arch_fixed_counters; i++) {
+		pmu->fixed_ctr_ctrl_mask &=
+			 ~intel_fixed_bits_by_idx(i,
+						  INTEL_FIXED_0_KERNEL |
+						  INTEL_FIXED_0_USER |
+						  INTEL_FIXED_0_ENABLE_PMI);
+	}
 	counter_mask = ~(((1ull << pmu->nr_arch_gp_counters) - 1) |
 		(((1ull << pmu->nr_arch_fixed_counters) - 1) << INTEL_PMC_IDX_FIXED));
 	pmu->global_ctrl_mask = counter_mask;
@@ -595,7 +600,7 @@ static void intel_pmu_refresh(struct kvm_vcpu *vcpu)
 			pmu->reserved_bits &= ~ICL_EVENTSEL_ADAPTIVE;
 			for (i = 0; i < pmu->nr_arch_fixed_counters; i++) {
 				pmu->fixed_ctr_ctrl_mask &=
-					~(1ULL << (INTEL_PMC_IDX_FIXED + i * 4));
+					~intel_fixed_bits_by_idx(i, ICL_FIXED_0_ADAPTIVE);
 			}
 			pmu->pebs_data_cfg_mask = ~0xff00000full;
 		} else {
