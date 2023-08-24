@@ -325,6 +325,27 @@ qsize_t *ext4_get_reserved_space(struct inode *inode)
 }
 #endif
 
+static void __ext4_da_update_reserve_space(const char *where,
+					   struct inode *inode,
+					   int data_len)
+{
+	struct ext4_sb_info *sbi = EXT4_SB(inode->i_sb);
+	struct ext4_inode_info *ei = EXT4_I(inode);
+
+	if (unlikely(data_len > ei->i_reserved_data_blocks)) {
+		ext4_warning(inode->i_sb, "%s: ino %lu, clear %d "
+			     "with only %d reserved data blocks",
+			     where, inode->i_ino, data_len,
+			     ei->i_reserved_data_blocks);
+		WARN_ON(1);
+		data_len = ei->i_reserved_data_blocks;
+	}
+
+	/* Update per-inode reservations */
+	ei->i_reserved_data_blocks -= data_len;
+	percpu_counter_sub(&sbi->s_dirtyclusters_counter, data_len);
+}
+
 /*
  * Called with i_data_sem down, which is important since we can call
  * ext4_discard_preallocations() from here.
@@ -340,19 +361,7 @@ void ext4_da_update_reserve_space(struct inode *inode,
 
 	spin_lock(&ei->i_block_reservation_lock);
 	trace_ext4_da_update_reserve_space(inode, used, quota_claim);
-	if (unlikely(used > ei->i_reserved_data_blocks)) {
-		ext4_warning(inode->i_sb, "%s: ino %lu, used %d "
-			 "with only %d reserved data blocks",
-			 __func__, inode->i_ino, used,
-			 ei->i_reserved_data_blocks);
-		WARN_ON(1);
-		used = ei->i_reserved_data_blocks;
-	}
-
-	/* Update per-inode reservations */
-	ei->i_reserved_data_blocks -= used;
-	percpu_counter_sub(&sbi->s_dirtyclusters_counter, used);
-
+	__ext4_da_update_reserve_space(__func__, inode, used);
 	spin_unlock(&ei->i_block_reservation_lock);
 
 	/* Update quota subsystem for data blocks */
@@ -1483,29 +1492,10 @@ void ext4_da_release_space(struct inode *inode, int to_free)
 	if (!to_free)
 		return;		/* Nothing to release, exit */
 
-	spin_lock(&EXT4_I(inode)->i_block_reservation_lock);
-
+	spin_lock(&ei->i_block_reservation_lock);
 	trace_ext4_da_release_space(inode, to_free);
-	if (unlikely(to_free > ei->i_reserved_data_blocks)) {
-		/*
-		 * if there aren't enough reserved blocks, then the
-		 * counter is messed up somewhere.  Since this
-		 * function is called from invalidate page, it's
-		 * harmless to return without any action.
-		 */
-		ext4_warning(inode->i_sb, "ext4_da_release_space: "
-			 "ino %lu, to_free %d with only %d reserved "
-			 "data blocks", inode->i_ino, to_free,
-			 ei->i_reserved_data_blocks);
-		WARN_ON(1);
-		to_free = ei->i_reserved_data_blocks;
-	}
-	ei->i_reserved_data_blocks -= to_free;
-
-	/* update fs dirty data blocks counter */
-	percpu_counter_sub(&sbi->s_dirtyclusters_counter, to_free);
-
-	spin_unlock(&EXT4_I(inode)->i_block_reservation_lock);
+	__ext4_da_update_reserve_space(__func__, inode, to_free);
+	spin_unlock(&ei->i_block_reservation_lock);
 
 	dquot_release_reservation_block(inode, EXT4_C2B(sbi, to_free));
 }
