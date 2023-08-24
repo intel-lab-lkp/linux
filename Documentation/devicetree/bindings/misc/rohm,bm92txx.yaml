@@ -1,0 +1,67 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+# Copyright (C) 2023 Emmanuel Gil Peyrot
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/misc/rohm,bm92txx.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: BM92Txx USB-C Power Delivery Controller
+
+maintainers:
+  - Emmanuel Gil Peyrot <linkmauve@linkmauve.fr>
+
+properties:
+  compatible:
+    enum:
+      - rohm,bm92t10
+      - rohm,bm92t20
+      - rohm,bm92t30
+      - rohm,bm92t36
+      - rohm,bm92t50
+
+  reg:
+    maxItems: 1
+
+  rohm,dp-signal-toggle-on-resume:
+    type: boolean
+    description: |
+      Do a toggle on resume instead of disable in suspend and enable in resume,
+      because this also disables the LED effects.
+
+  rohm,led-static-on-suspend:
+    type: boolean
+    description: Dim or breathing dock LED.
+
+  rohm,dock-power-limit-disable:
+    type: boolean
+    description: Disable the power limit in dock mode.
+
+  rohm,dp-alerts-enable:
+    type: boolean
+    description: Enable DisplayPort alerts.
+
+  rohm,pd-5v-current-limit-ma:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    default: 2000
+    description: Current limit in mA when voltage is 5V.
+
+  rohm,pd-9v-current-limit-ma:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    default: 2000
+    description: Current limit in mA when voltage is 9V.
+
+  rohm,pd-12v-current-limit-ma:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    default: 1500
+    description: Current limit in mA when voltage is 12V.
+
+  rohm,pd-15v-current-limit-ma:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    default: 1200
+    description: Current limit in mA when voltage is 15V.
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false

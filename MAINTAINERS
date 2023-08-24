@@ -18463,6 +18463,11 @@ F:	include/linux/mfd/rohm-bd957x.h
 F:	include/linux/mfd/rohm-generic.h
 F:	include/linux/mfd/rohm-shared.h
 
+ROHM USB-C POWER DELIVERY CONTROLLERS
+M:	Emmanuel Gil Peyrot <linkmauve@linkmauve.fr>
+S:	Supported
+F:	Documentation/devicetree/bindings/misc/rohm,bm92txx.yaml
+
 ROSE NETWORK LAYER
 M:	Ralf Baechle <ralf@linux-mips.org>
 L:	linux-hams@vger.kernel.org
