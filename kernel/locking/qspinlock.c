@@ -688,6 +688,27 @@ static struct mcs_spinlock *next_to_prev(struct mcs_spinlock *msp, int *cpup, in
 	return NULL;
 }
 
+static struct mcs_spinlock *next_to_cpu_idx(struct mcs_spinlock *msp, int *cpup, int *idxp)
+{
+	int cpu;
+	int idx;
+
+	for_each_possible_cpu(cpu) {
+		struct qnode *qnp = per_cpu_ptr(&qnodes[0], cpu);
+
+		for (idx = 0; idx < MAX_NODES; idx++) {
+			if (&qnp[idx].mcs == msp) {
+				*cpup = cpu;
+				*idxp = idx;
+				return &qnp[idx].mcs;
+			}
+		}
+	}
+	*cpup = -1;
+	*idxp = -1;
+	return NULL;
+}
+
 void spinlock_dump(spinlock_t *sp, bool full)
 {
 	int cpu;
@@ -718,6 +739,23 @@ void spinlock_dump(spinlock_t *sp, bool full)
 		pr_alert("%s: Queue output truncated.\n", __func__);
 	else
 		pr_alert("%s: End of queue.\n", __func__);
+	pr_alert("%s: Full qnodes dump:\n", __func__);
+	for_each_possible_cpu(cpu) {
+		int cpu_next;
+		int idx_next;
+		struct qnode *qnp = per_cpu_ptr(&qnodes[0], cpu);
+
+		pr_alert("\t CPU %d", cpu);
+		for (idx = 0; idx < MAX_NODES; idx++) {
+			if (!qnp[idx].mcs.next) {
+				pr_cont(" --[--]");
+				continue;
+			}
+			msp = next_to_cpu_idx(qnp[idx].mcs.next, &cpu_next, &idx_next);
+			pr_cont(" %2d[%02d]", cpu_next, idx_next);
+		}
+		pr_cont("\n");
+	}
 }
 EXPORT_SYMBOL(spinlock_dump);
 
