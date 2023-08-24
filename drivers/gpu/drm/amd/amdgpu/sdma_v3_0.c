@@ -71,14 +71,12 @@ MODULE_FIRMWARE("amdgpu/vegam_sdma.bin");
 MODULE_FIRMWARE("amdgpu/vegam_sdma1.bin");
 
 
-static const u32 sdma_offsets[SDMA_MAX_INSTANCE] =
-{
+static const u32 sdma_offsets[SDMA_MAX_INSTANCE] = {
 	SDMA0_REGISTER_OFFSET,
 	SDMA1_REGISTER_OFFSET
 };
 
-static const u32 golden_settings_tonga_a11[] =
-{
+static const u32 golden_settings_tonga_a11[] = {
 	mmSDMA0_CHICKEN_BITS, 0xfc910007, 0x00810007,
 	mmSDMA0_CLK_CTRL, 0xff000fff, 0x00000000,
 	mmSDMA0_GFX_IB_CNTL, 0x800f0111, 0x00000100,
@@ -91,14 +89,12 @@ static const u32 golden_settings_tonga_a11[] =
 	mmSDMA1_RLC1_IB_CNTL, 0x800f0111, 0x00000100,
 };
 
-static const u32 tonga_mgcg_cgcg_init[] =
-{
+static const u32 tonga_mgcg_cgcg_init[] = {
 	mmSDMA0_CLK_CTRL, 0xff000ff0, 0x00000100,
 	mmSDMA1_CLK_CTRL, 0xff000ff0, 0x00000100
 };
 
-static const u32 golden_settings_fiji_a10[] =
-{
+static const u32 golden_settings_fiji_a10[] = {
 	mmSDMA0_CHICKEN_BITS, 0xfc910007, 0x00810007,
 	mmSDMA0_GFX_IB_CNTL, 0x800f0111, 0x00000100,
 	mmSDMA0_RLC0_IB_CNTL, 0x800f0111, 0x00000100,
@@ -109,14 +105,12 @@ static const u32 golden_settings_fiji_a10[] =
 	mmSDMA1_RLC1_IB_CNTL, 0x800f0111, 0x00000100,
 };
 
-static const u32 fiji_mgcg_cgcg_init[] =
-{
+static const u32 fiji_mgcg_cgcg_init[] = {
 	mmSDMA0_CLK_CTRL, 0xff000ff0, 0x00000100,
 	mmSDMA1_CLK_CTRL, 0xff000ff0, 0x00000100
 };
 
-static const u32 golden_settings_polaris11_a11[] =
-{
+static const u32 golden_settings_polaris11_a11[] = {
 	mmSDMA0_CHICKEN_BITS, 0xfc910007, 0x00810007,
 	mmSDMA0_CLK_CTRL, 0xff000fff, 0x00000000,
 	mmSDMA0_GFX_IB_CNTL, 0x800f0111, 0x00000100,
@@ -129,8 +123,7 @@ static const u32 golden_settings_polaris11_a11[] =
 	mmSDMA1_RLC1_IB_CNTL, 0x800f0111, 0x00000100,
 };
 
-static const u32 golden_settings_polaris10_a11[] =
-{
+static const u32 golden_settings_polaris10_a11[] = {
 	mmSDMA0_CHICKEN_BITS, 0xfc910007, 0x00810007,
 	mmSDMA0_CLK_CTRL, 0xff000fff, 0x00000000,
 	mmSDMA0_GFX_IB_CNTL, 0x800f0111, 0x00000100,
@@ -143,8 +136,7 @@ static const u32 golden_settings_polaris10_a11[] =
 	mmSDMA1_RLC1_IB_CNTL, 0x800f0111, 0x00000100,
 };
 
-static const u32 cz_golden_settings_a11[] =
-{
+static const u32 cz_golden_settings_a11[] = {
 	mmSDMA0_CHICKEN_BITS, 0xfc910007, 0x00810007,
 	mmSDMA0_CLK_CTRL, 0xff000fff, 0x00000000,
 	mmSDMA0_GFX_IB_CNTL, 0x00000100, 0x00000100,
@@ -159,22 +151,19 @@ static const u32 cz_golden_settings_a11[] =
 	mmSDMA1_RLC1_IB_CNTL, 0x00000100, 0x00000100,
 };
 
-static const u32 cz_mgcg_cgcg_init[] =
-{
+static const u32 cz_mgcg_cgcg_init[] = {
 	mmSDMA0_CLK_CTRL, 0xff000ff0, 0x00000100,
 	mmSDMA1_CLK_CTRL, 0xff000ff0, 0x00000100
 };
 
-static const u32 stoney_golden_settings_a11[] =
-{
+static const u32 stoney_golden_settings_a11[] = {
 	mmSDMA0_GFX_IB_CNTL, 0x00000100, 0x00000100,
 	mmSDMA0_POWER_CNTL, 0x00000800, 0x0003c800,
 	mmSDMA0_RLC0_IB_CNTL, 0x00000100, 0x00000100,
 	mmSDMA0_RLC1_IB_CNTL, 0x00000100, 0x00000100,
 };
 
-static const u32 stoney_mgcg_cgcg_init[] =
-{
+static const u32 stoney_mgcg_cgcg_init[] = {
 	mmSDMA0_CLK_CTRL, 0xffffffff, 0x00000100,
 };
 
@@ -300,7 +289,8 @@ static int sdma_v3_0_init_microcode(struct amdgpu_device *adev)
 	case CHIP_STONEY:
 		chip_name = "stoney";
 		break;
-	default: BUG();
+	default:
+		BUG();
 	}
 
 	for (i = 0; i < adev->sdma.num_instances; i++) {
@@ -1702,8 +1692,7 @@ static void sdma_v3_0_set_vm_pte_funcs(struct amdgpu_device *adev)
 	adev->vm_manager.vm_pte_num_scheds = adev->sdma.num_instances;
 }
 
-const struct amdgpu_ip_block_version sdma_v3_0_ip_block =
-{
+const struct amdgpu_ip_block_version sdma_v3_0_ip_block = {
 	.type = AMD_IP_BLOCK_TYPE_SDMA,
 	.major = 3,
 	.minor = 0,
@@ -1711,8 +1700,7 @@ const struct amdgpu_ip_block_version sdma_v3_0_ip_block =
 	.funcs = &sdma_v3_0_ip_funcs,
 };
 
-const struct amdgpu_ip_block_version sdma_v3_1_ip_block =
-{
+const struct amdgpu_ip_block_version sdma_v3_1_ip_block = {
 	.type = AMD_IP_BLOCK_TYPE_SDMA,
 	.major = 3,
 	.minor = 1,
