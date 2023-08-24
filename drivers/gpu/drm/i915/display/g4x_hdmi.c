@@ -133,8 +133,11 @@ static int g4x_hdmi_compute_config(struct intel_encoder *encoder,
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
 	struct drm_i915_private *i915 = to_i915(encoder->base.dev);
 
-	if (HAS_PCH_SPLIT(i915))
+	if (HAS_PCH_SPLIT(i915)) {
 		crtc_state->has_pch_encoder = true;
+		if (!intel_atomic_compute_pipe_bpp(crtc_state))
+			return -EINVAL;
+	}
 
 	if (IS_G4X(i915))
 		crtc_state->has_hdmi_sink = g4x_compute_has_hdmi_sink(state, crtc);

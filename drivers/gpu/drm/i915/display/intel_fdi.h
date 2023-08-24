@@ -8,14 +8,19 @@
 
 enum pipe;
 struct drm_i915_private;
+struct intel_atomic_state;
 struct intel_crtc;
 struct intel_crtc_state;
 struct intel_encoder;
+struct intel_link_bw_limits;
 
+int intel_fdi_add_affected_crtcs(struct intel_atomic_state *state);
 int intel_fdi_link_freq(struct drm_i915_private *i915,
 			const struct intel_crtc_state *pipe_config);
 int ilk_fdi_compute_config(struct intel_crtc *intel_crtc,
 			   struct intel_crtc_state *pipe_config);
+int intel_fdi_atomic_check_link(struct intel_atomic_state *state,
+				struct intel_link_bw_limits *limits);
 void intel_fdi_normal_train(struct intel_crtc *crtc);
 void ilk_fdi_disable(struct intel_crtc *crtc);
 void ilk_fdi_pll_disable(struct intel_crtc *intel_crtc);

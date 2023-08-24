@@ -425,6 +425,12 @@ static int intel_lvds_compute_config(struct intel_encoder *encoder,
 		return -EINVAL;
 	}
 
+	if (HAS_PCH_SPLIT(i915)) {
+		crtc_state->has_pch_encoder = true;
+		if (!intel_atomic_compute_pipe_bpp(crtc_state))
+			return -EINVAL;
+	}
+
 	if (lvds_encoder->a3_power == LVDS_A3_POWER_UP)
 		lvds_bpp = 8*3;
 	else
@@ -452,9 +458,6 @@ static int intel_lvds_compute_config(struct intel_encoder *encoder,
 
 	if (adjusted_mode->flags & DRM_MODE_FLAG_DBLSCAN)
 		return -EINVAL;
-
-	if (HAS_PCH_SPLIT(i915))
-		crtc_state->has_pch_encoder = true;
 
 	ret = intel_panel_fitting(crtc_state, conn_state);
 	if (ret)

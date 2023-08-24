@@ -55,6 +55,7 @@ struct intel_digital_port;
 struct intel_dp;
 struct intel_encoder;
 struct intel_initial_plane_config;
+struct intel_link_bw_limits;
 struct intel_link_m_n;
 struct intel_plane;
 struct intel_plane_state;
@@ -391,6 +392,9 @@ enum phy_fia {
 			     (new_connector_state) = to_intel_digital_connector_state((__state)->base.connectors[__i].new_state), 1))
 
 int intel_atomic_check(struct drm_device *dev, struct drm_atomic_state *state);
+int intel_atomic_check_config(struct intel_atomic_state *state,
+			      struct intel_link_bw_limits *limits,
+			      enum pipe *failed_pipe);
 int intel_atomic_add_affected_planes(struct intel_atomic_state *state,
 				     struct intel_crtc *crtc);
 u8 intel_calc_active_pipes(struct intel_atomic_state *state,

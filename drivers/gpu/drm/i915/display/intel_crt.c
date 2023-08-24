@@ -36,6 +36,7 @@
 #include "i915_drv.h"
 #include "i915_irq.h"
 #include "i915_reg.h"
+#include "intel_atomic.h"
 #include "intel_connector.h"
 #include "intel_crt.h"
 #include "intel_crtc.h"
@@ -413,6 +414,9 @@ static int pch_crt_compute_config(struct intel_encoder *encoder,
 		return -EINVAL;
 
 	pipe_config->has_pch_encoder = true;
+	if (!intel_atomic_compute_pipe_bpp(pipe_config))
+		return -EINVAL;
+
 	pipe_config->output_format = INTEL_OUTPUT_FORMAT_RGB;
 
 	return 0;
@@ -435,6 +439,9 @@ static int hsw_crt_compute_config(struct intel_encoder *encoder,
 		return -EINVAL;
 
 	pipe_config->has_pch_encoder = true;
+	if (!intel_atomic_compute_pipe_bpp(pipe_config))
+		return -EINVAL;
+
 	pipe_config->output_format = INTEL_OUTPUT_FORMAT_RGB;
 
 	/* LPT FDI RX only supports 8bpc. */
