@@ -15,6 +15,7 @@
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/thermal.h>
+#include <linux/reboot.h>
 
 #include "thermal_hwmon.h"
 
@@ -91,6 +92,7 @@ struct imx8mm_tmu {
 	void __iomem *base;
 	struct clk *clk;
 	const struct thermal_soc_data *socdata;
+	bool reboot;
 	struct tmu_sensor sensors[];
 };
 
@@ -146,8 +148,58 @@ static int tmu_get_temp(struct thermal_zone_device *tz, int *temp)
 	return tmu->socdata->get_temp(sensor, temp);
 }
 
+static ssize_t reboot_on_crit_show(struct device *dev,
+				   struct device_attribute *attr, char *buf)
+{
+	struct imx8mm_tmu *tmu = dev_get_drvdata(dev);
+
+	return sysfs_emit(buf, "%d\n", tmu->reboot);
+}
+
+static ssize_t reboot_on_crit_store(struct device *dev,
+				    struct device_attribute *attr,
+				    const char *buf, size_t size)
+{
+	struct imx8mm_tmu *tmu = dev_get_drvdata(dev);
+	int ret, reboot;
+
+	ret = kstrtoint(buf, 0, &reboot);
+	if (ret < 0)
+		return ret;
+
+	tmu->reboot = reboot;
+
+	return size;
+}
+
+static DEVICE_ATTR_RW(reboot_on_crit);
+
+static struct attribute *reboot_on_crit_attrs[] = {
+	&dev_attr_reboot_on_crit.attr,
+	NULL
+};
+
+static const struct attribute_group reboot_attribute_group = {
+	.attrs = reboot_on_crit_attrs,
+};
+
+static void tmu_critical(struct thermal_zone_device *tz)
+{
+	struct tmu_sensor *sensor = thermal_zone_device_priv(tz);
+	struct imx8mm_tmu *tmu = sensor->priv;
+
+	if (tmu->reboot) {
+		dev_emerg(thermal_zone_device(tz), "%s: critical temperature reached\n",
+			  thermal_zone_device_type(tz));
+		kernel_restart(NULL);
+	} else {
+		thermal_zone_device_critical(tz);
+	}
+}
+
 static const struct thermal_zone_device_ops tmu_tz_ops = {
 	.get_temp = tmu_get_temp,
+	.critical = tmu_critical,
 };
 
 static void imx8mm_tmu_enable(struct imx8mm_tmu *tmu, bool enable)
@@ -355,6 +407,10 @@ static int imx8mm_tmu_probe(struct platform_device *pdev)
 	if (tmu->socdata->version == TMU_VER2)
 		imx8mm_tmu_probe_sel_all(tmu);
 
+	ret = sysfs_create_group(&pdev->dev.kobj, &reboot_attribute_group);
+	if (ret)
+		goto disable_clk;
+
 	/* enable the monitor */
 	imx8mm_tmu_enable(tmu, true);
 
@@ -372,6 +428,7 @@ static int imx8mm_tmu_remove(struct platform_device *pdev)
 	/* disable TMU */
 	imx8mm_tmu_enable(tmu, false);
 
+	sysfs_remove_group(&pdev->dev.kobj, &reboot_attribute_group);
 	clk_disable_unprepare(tmu->clk);
 	platform_set_drvdata(pdev, NULL);
 
