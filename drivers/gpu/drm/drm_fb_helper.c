@@ -1130,7 +1130,7 @@ static void drm_fb_helper_fill_pixel_fmt(struct fb_var_screeninfo *var,
 {
 	u8 depth = format->depth;
 
-	if (format->is_color_indexed) {
+	if (format->format == DRM_FORMAT_R1 || format->is_color_indexed) {
 		var->red.offset = 0;
 		var->green.offset = 0;
 		var->blue.offset = 0;
@@ -1236,6 +1236,7 @@ int drm_fb_helper_check_var(struct fb_var_screeninfo *var,
 	case DRM_FORMAT_C1:
 	case DRM_FORMAT_C2:
 	case DRM_FORMAT_C4:
+	case DRM_FORMAT_R1:
 		/* supported format with sub-byte pixels */
 		break;
 
@@ -1439,12 +1440,24 @@ unlock:
 }
 EXPORT_SYMBOL(drm_fb_helper_pan_display);
 
+static bool is_supported_format(uint32_t format, const uint32_t *formats,
+				size_t format_count)
+{
+	size_t i;
+
+	for (i = 0; i < format_count; ++i) {
+		if (formats[i] == format)
+			return true;
+	}
+
+	return false;
+}
+
 static uint32_t drm_fb_helper_find_format(struct drm_fb_helper *fb_helper, const uint32_t *formats,
 					  size_t format_count, uint32_t bpp, uint32_t depth)
 {
 	struct drm_device *dev = fb_helper->dev;
 	uint32_t format;
-	size_t i;
 
 	/*
 	 * Do not consider YUV or other complicated formats
@@ -1457,10 +1470,12 @@ static uint32_t drm_fb_helper_find_format(struct drm_fb_helper *fb_helper, const
 	if (!format)
 		goto err;
 
-	for (i = 0; i < format_count; ++i) {
-		if (formats[i] == format)
-			return format;
-	}
+	if (is_supported_format(format, formats, format_count))
+		return format;
+
+	if (format == DRM_FORMAT_C1 &&
+	    is_supported_format(DRM_FORMAT_R1, formats, format_count))
+		return DRM_FORMAT_R1;
 
 err:
 	/* We found nothing. */
@@ -1680,11 +1695,15 @@ static int drm_fb_helper_single_fb_probe(struct drm_fb_helper *fb_helper)
 }
 
 static void drm_fb_helper_fill_fix(struct fb_info *info, uint32_t pitch,
-				   bool is_color_indexed)
+				   const struct drm_format_info *format)
 {
 	info->fix.type = FB_TYPE_PACKED_PIXELS;
-	info->fix.visual = is_color_indexed ? FB_VISUAL_PSEUDOCOLOR
-					    : FB_VISUAL_TRUECOLOR;
+	if (format->format == DRM_FORMAT_R1)
+		info->fix.visual = FB_VISUAL_MONO10;
+	else if (format->is_color_indexed)
+		info->fix.visual = FB_VISUAL_PSEUDOCOLOR;
+	else
+		info->fix.visual = FB_VISUAL_TRUECOLOR;
 	info->fix.mmio_start = 0;
 	info->fix.mmio_len = 0;
 	info->fix.type_aux = 0;
@@ -1707,6 +1726,7 @@ static void drm_fb_helper_fill_var(struct fb_info *info,
 	case DRM_FORMAT_C1:
 	case DRM_FORMAT_C2:
 	case DRM_FORMAT_C4:
+	case DRM_FORMAT_R1:
 		/* supported format with sub-byte pixels */
 		break;
 
@@ -1747,8 +1767,7 @@ void drm_fb_helper_fill_info(struct fb_info *info,
 {
 	struct drm_framebuffer *fb = fb_helper->fb;
 
-	drm_fb_helper_fill_fix(info, fb->pitches[0],
-			       fb->format->is_color_indexed);
+	drm_fb_helper_fill_fix(info, fb->pitches[0], fb->format);
 	drm_fb_helper_fill_var(info, fb_helper,
 			       sizes->fb_width, sizes->fb_height);
 
