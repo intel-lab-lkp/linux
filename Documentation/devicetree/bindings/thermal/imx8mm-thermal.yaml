@@ -32,6 +32,12 @@ properties:
   clocks:
     maxItems: 1
 
+  nxp,reboot-on-critical:
+    description: Property to indicate that the system will go through a reboot
+      after the critical temperature is reached. If absent, the system will
+      go through shutdown after the critical temperature is reached.
+    type: boolean
+
   nvmem-cells:
     maxItems: 1
     description: Phandle to the calibration data provided by ocotp
