@@ -1439,31 +1439,37 @@ static int ext4_journalled_write_end(struct file *file,
 }
 
 /*
- * Reserve space for a single cluster
+ * Reserve space for a 'rsv_dlen' data blocks/clusters and 'rsv_extlen'
+ * extent metadata blocks.
  */
-static int ext4_da_reserve_space(struct inode *inode)
+static int ext4_da_reserve_space(struct inode *inode, unsigned int rsv_dlen,
+				 unsigned int rsv_extlen)
 {
 	struct ext4_sb_info *sbi = EXT4_SB(inode->i_sb);
 	struct ext4_inode_info *ei = EXT4_I(inode);
 	int ret;
+
+	if (!rsv_dlen && !rsv_extlen)
+		return 0;
 
 	/*
 	 * We will charge metadata quota at writeout time; this saves
 	 * us from metadata over-estimation, though we may go over by
 	 * a small amount in the end.  Here we just reserve for data.
 	 */
-	ret = dquot_reserve_block(inode, EXT4_C2B(sbi, 1));
+	ret = dquot_reserve_block(inode, EXT4_C2B(sbi, rsv_dlen));
 	if (ret)
 		return ret;
 
 	spin_lock(&ei->i_block_reservation_lock);
-	if (ext4_claim_free_clusters(sbi, 1, 0)) {
+	if (ext4_claim_free_clusters(sbi, rsv_dlen + rsv_extlen, 0)) {
 		spin_unlock(&ei->i_block_reservation_lock);
-		dquot_release_reservation_block(inode, EXT4_C2B(sbi, 1));
+		dquot_release_reservation_block(inode, EXT4_C2B(sbi, rsv_dlen));
 		return -ENOSPC;
 	}
-	ei->i_reserved_data_blocks++;
-	trace_ext4_da_reserve_space(inode);
+	ei->i_reserved_data_blocks += rsv_dlen;
+	ei->i_reserved_ext_blocks += rsv_extlen;
+	trace_ext4_da_reserve_space(inode, rsv_dlen, rsv_extlen);
 	spin_unlock(&ei->i_block_reservation_lock);
 
 	return 0;       /* success */
@@ -1659,11 +1665,9 @@ static int ext4_insert_delayed_block(struct inode *inode, ext4_lblk_t lblk)
 		}
 	}
 
-	if (rsv_dlen > 0) {
-		ret = ext4_da_reserve_space(inode);
-		if (ret)   /* ENOSPC */
-			return ret;
-	}
+	ret = ext4_da_reserve_space(inode, rsv_dlen, 0);
+	if (ret)   /* ENOSPC */
+		return ret;
 
 	ext4_es_insert_delayed_block(inode, lblk, allocated);
 	return 0;
