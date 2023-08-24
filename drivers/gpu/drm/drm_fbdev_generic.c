@@ -77,16 +77,15 @@ static int drm_fbdev_generic_helper_fb_probe(struct drm_fb_helper *fb_helper,
 	struct fb_info *info;
 	size_t screen_size;
 	void *screen_buffer;
-	u32 format;
 	int ret;
 
-	drm_dbg_kms(dev, "surface width(%d), height(%d) and bpp(%d)\n",
+	drm_dbg_kms(dev, "surface width(%d), height(%d), bpp(%d) and format(%p4cc)\n",
 		    sizes->surface_width, sizes->surface_height,
-		    sizes->surface_bpp);
+		    sizes->surface_bpp, &sizes->surface_format);
 
-	format = drm_mode_legacy_fb_format(sizes->surface_bpp, sizes->surface_depth);
 	buffer = drm_client_framebuffer_create(client, sizes->surface_width,
-					       sizes->surface_height, format);
+					       sizes->surface_height,
+					       sizes->surface_format);
 	if (IS_ERR(buffer))
 		return PTR_ERR(buffer);
 
