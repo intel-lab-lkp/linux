@@ -71,10 +71,11 @@ int drm_mode_create_dumb(struct drm_device *dev,
 	/* overflow checks for 32bit size calculations */
 	if (args->bpp > U32_MAX - 8)
 		return -EINVAL;
+	/* Incorrect (especially if bpp < 8), but doesn't hurt much */
 	cpp = DIV_ROUND_UP(args->bpp, 8);
 	if (cpp > U32_MAX / args->width)
 		return -EINVAL;
-	stride = cpp * args->width;
+	stride = DIV_ROUND_UP(args->bpp * args->width, 8);
 	if (args->height > U32_MAX / stride)
 		return -EINVAL;
 
