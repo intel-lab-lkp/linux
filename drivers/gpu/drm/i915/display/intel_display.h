@@ -515,6 +515,9 @@ void intel_update_watermarks(struct drm_i915_private *i915);
 /* modesetting */
 int intel_modeset_all_pipes(struct intel_atomic_state *state,
 			    const char *reason);
+int intel_modeset_pipes_in_mask(struct intel_atomic_state *state,
+				const char *reason, u8 pipe_mask,
+				bool update_active_planes);
 void intel_modeset_get_crtc_power_domains(struct intel_crtc_state *crtc_state,
 					  struct intel_power_domain_mask *old_domains);
 void intel_modeset_put_crtc_power_domains(struct intel_crtc *crtc,

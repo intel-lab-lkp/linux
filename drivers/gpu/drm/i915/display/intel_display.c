@@ -5420,8 +5420,24 @@ intel_verify_planes(struct intel_atomic_state *state)
 			     plane_state->uapi.visible);
 }
 
-int intel_modeset_all_pipes(struct intel_atomic_state *state,
-			    const char *reason)
+/**
+ * intel_modeset_pipes_in_mask - force a full modeset on a set of pipes
+ * @state: intel atomic state
+ * @reason: the reason for the full modeset
+ * @mask: mask of pipes to modeset
+ * @update_active_planes: force updating all active planes
+ *
+ * Force a full modeset on CRTCs in @mask due to the description in @reason.
+ * Also force updating all active planes in each modeset CRTC if
+ * @update_active_planes is %true. This flag must be set to %true if the
+ * function is called after new plane states are computed already and
+ * set to %false otherwise.
+ *
+ * Returns 0 in case of success, negative error code otherwise.
+ */
+int intel_modeset_pipes_in_mask(struct intel_atomic_state *state,
+				const char *reason, u8 mask,
+				bool update_active_planes)
 {
 	struct drm_i915_private *dev_priv = to_i915(state->base.dev);
 	struct intel_crtc *crtc;
@@ -5430,7 +5446,7 @@ int intel_modeset_all_pipes(struct intel_atomic_state *state,
 	 * Add all pipes to the state, and force
 	 * a modeset on all the active ones.
 	 */
-	for_each_intel_crtc(&dev_priv->drm, crtc) {
+	for_each_intel_crtc_in_pipe_mask(&dev_priv->drm, crtc, mask) {
 		struct intel_crtc_state *crtc_state;
 		int ret;
 
@@ -5461,12 +5477,31 @@ int intel_modeset_all_pipes(struct intel_atomic_state *state,
 		if (ret)
 			return ret;
 
-		crtc_state->update_planes |= crtc_state->active_planes;
+		if (update_active_planes)
+			crtc_state->update_planes |= crtc_state->active_planes;
+
 		crtc_state->async_flip_planes = 0;
 		crtc_state->do_async_flip = false;
 	}
 
 	return 0;
+}
+
+/**
+ * intel_modeset_all_pipes - force a full modeset on all pipes
+ * @state: intel atomic state
+ * @reason: the reason for the full modeset
+ *
+ * Force a full modeset on all CRTCs due to the description in @reason.
+ * This function can be called only after new plane states are computed
+ * already.
+ *
+ * Returns 0 in case of success, negative error code otherwise.
+ */
+int intel_modeset_all_pipes(struct intel_atomic_state *state,
+			    const char *reason)
+{
+	return intel_modeset_pipes_in_mask(state, reason, -1, true);
 }
 
 /*
