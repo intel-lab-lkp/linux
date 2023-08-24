@@ -1,0 +1,52 @@
+# SPDX-License-Identifier: GPL-2.0
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/iio/adc/lltc,ltc2309.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Linear Technology / Analog Devices LTC2309 ADC
+
+maintainers:
+  - Liam Beguin <liambeguin@gmail.com>
+
+properties:
+  compatible:
+    enum:
+      - lltc,ltc2309
+
+  refcomp-supply:
+    description: Power supply for the reference voltage
+
+  reg:
+    enum:
+      - 0x08
+      - 0x09
+      - 0x0a
+      - 0x0b
+      - 0x18
+      - 0x19
+      - 0x1a
+      - 0x1b
+      - 0x28
+
+  "#io-channel-cells":
+    const: 1
+
+required:
+  - compatible
+  - reg
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        adc@28 {
+            #io-channel-cells = <1>;
+            compatible = "lltc,ltc2309";
+            reg = <0x28>;
+        };
+    };
