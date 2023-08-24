@@ -2113,6 +2113,11 @@ static inline int to_bpp_int(int bpp_x16)
 	return bpp_x16 >> 4;
 }
 
+static inline int to_bpp_frac_dec(int bpp_x16)
+{
+	return (bpp_x16 & 0xf) * 625;
+}
+
 static inline int to_bpp_x16(int bpp)
 {
 	return bpp << 4;

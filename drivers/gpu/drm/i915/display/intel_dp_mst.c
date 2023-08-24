@@ -308,9 +308,10 @@ static bool intel_dp_mst_has_audio(const struct drm_connector_state *conn_state)
 		return intel_conn_state->force_audio == HDMI_AUDIO_ON;
 }
 
-static void
+static bool
 intel_dp_mst_compute_config_limits(struct intel_dp *intel_dp,
 				   struct intel_crtc_state *crtc_state,
+				   bool dsc,
 				   struct link_config_limits *limits)
 {
 	/*
@@ -336,8 +337,10 @@ intel_dp_mst_compute_config_limits(struct intel_dp *intel_dp,
 
 	intel_dp_adjust_compliance_config(intel_dp, crtc_state, limits);
 
-	limits->link.min_bpp_x16 = to_bpp_x16(limits->pipe.min_bpp);
-	limits->link.max_bpp_x16 = to_bpp_x16(limits->pipe.max_bpp);
+	return intel_dp_compute_config_link_bpp_limits(intel_dp,
+						       crtc_state,
+						       dsc,
+						       limits);
 }
 
 static int intel_dp_mst_compute_config(struct intel_encoder *encoder,
@@ -364,9 +367,11 @@ static int intel_dp_mst_compute_config(struct intel_encoder *encoder,
 		intel_dp_mst_has_audio(conn_state) &&
 		intel_audio_compute_config(encoder, pipe_config, conn_state);
 
-	intel_dp_mst_compute_config_limits(intel_dp, pipe_config, &limits);
-
-	dsc_needed = intel_dp->force_dsc_en;
+	dsc_needed = intel_dp->force_dsc_en ||
+		     !intel_dp_mst_compute_config_limits(intel_dp,
+							 pipe_config,
+							 false,
+							 &limits);
 
 	if (!dsc_needed) {
 		ret = intel_dp_mst_compute_link_config(encoder, pipe_config,
@@ -384,6 +389,12 @@ static int intel_dp_mst_compute_config(struct intel_encoder *encoder,
 		drm_dbg_kms(&dev_priv->drm, "Try DSC (fallback=%s, force=%s)\n",
 			    str_yes_no(ret),
 			    str_yes_no(intel_dp->force_dsc_en));
+
+		if (!intel_dp_mst_compute_config_limits(intel_dp,
+							pipe_config,
+							true,
+							&limits))
+			return -EINVAL;
 
 		/*
 		 * FIXME: As bpc is hardcoded to 8, as mentioned above,
