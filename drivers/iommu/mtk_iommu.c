@@ -748,9 +748,7 @@ static int mtk_iommu_probe(struct platform_device *pdev)
 	iommu_device_set_ops(&data->iommu, &mtk_iommu_ops);
 	iommu_device_set_fwnode(&data->iommu, &pdev->dev.of_node->fwnode);
 
-	ret = iommu_device_register(&data->iommu);
-	if (ret)
-		return ret;
+	iommu_device_register(&data->iommu);
 
 	spin_lock_init(&data->tlb_lock);
 	list_add_tail(&data->list, &m4ulist);
