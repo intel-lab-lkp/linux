@@ -55,6 +55,30 @@
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 #endif
 
+#ifndef is_signed_type
+#define is_signed_type(var)       (!!(((__typeof__(var))(-1)) < (__typeof__(var))1))
+#endif
+
+#ifndef min
+#define min(x, y) ({ \
+	_Static_assert(is_signed_type(typeof(x)) == is_signed_type(typeof(y)), \
+	       "min: signedness mismatch"); \
+	typeof(x) _x = (x); \
+	typeof(y) _y = (y); \
+	_x < _y ? _x : _y; \
+})
+#endif
+
+#ifndef max
+#define max(x, y) ({ \
+	_Static_assert(is_signed_type(typeof(x)) == is_signed_type(typeof(y)), \
+	       "max: signedness mismatch"); \
+	typeof(x) _x = (x); \
+	typeof(y) _y = (y); \
+	_x > _y ? _x : _y; \
+})
+#endif
+
 /*
  * gcc cpuid.h provides __cpuid_count() since v4.4.
  * Clang/LLVM cpuid.h provides  __cpuid_count() since v3.4.0.
