@@ -17,7 +17,6 @@
 #include "super.h"
 #include "crypto.h"
 #include "mds_client.h"
-#include "crypto.h"
 
 #include <linux/ceph/ceph_features.h>
 #include <linux/ceph/messenger.h>
