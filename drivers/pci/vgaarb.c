@@ -51,7 +51,6 @@ struct vga_device {
 	unsigned int io_norm_cnt;	/* normal IO count */
 	unsigned int mem_norm_cnt;	/* normal MEM count */
 	bool bridge_has_one_vga;
-	bool is_firmware_default;	/* device selected by firmware */
 	unsigned int (*set_decode)(struct pci_dev *pdev, bool decode);
 };
 
@@ -544,41 +543,6 @@ bail:
 }
 EXPORT_SYMBOL(vga_put);
 
-static bool vga_is_firmware_default(struct pci_dev *pdev)
-{
-#if defined(CONFIG_X86) || defined(CONFIG_IA64)
-	u64 base = screen_info.lfb_base;
-	u64 size = screen_info.lfb_size;
-	struct resource *r;
-	u64 limit;
-
-	/* Select the device owning the boot framebuffer if there is one */
-
-	if (screen_info.capabilities & VIDEO_CAPABILITY_64BIT_BASE)
-		base |= (u64)screen_info.ext_lfb_base << 32;
-
-	limit = base + size;
-
-	/* Does firmware framebuffer belong to us? */
-	pci_dev_for_each_resource(pdev, r) {
-		if (resource_type(r) != IORESOURCE_MEM)
-			continue;
-
-		if (!r->start || !r->end)
-			continue;
-
-		if (base < r->start || limit >= r->end)
-			continue;
-
-		return true;
-	}
-#else
-	if (pdev_boot_vga && pdev_boot_vga == pdev)
-		return true;
-#endif
-	return false;
-}
-
 static bool vga_arb_integrated_gpu(struct device *dev)
 {
 #if defined(CONFIG_ACPI)
@@ -610,14 +574,10 @@ static bool vga_is_boot_device(struct vga_device *vgadev)
 	 */
 
 	/*
-	 * We always prefer a firmware default device, so if we've already
-	 * found one, there's no need to consider vgadev.
+	 * We always prefer a firmware default device.
 	 */
-	if (boot_vga && boot_vga->is_firmware_default)
-		return false;
-
-	if (vga_is_firmware_default(pdev)) {
-		vgadev->is_firmware_default = true;
+	if (pdev == pdev_boot_vga) {
+		vgaarb_dbg(&pdev->dev, "Boot VGA selected by firmware\n");
 		return true;
 	}
 
