@@ -789,17 +789,20 @@ static inline void ext4_es_insert_extent_check(struct inode *inode,
 #endif
 
 /*
- * Update total delay allocated extent length.
+ * Update and return total delay allocated extent length.
  */
-static inline void ext4_es_update_da_block(struct inode *inode, long es_len)
+static inline unsigned int ext4_es_update_da_block(struct inode *inode,
+						   long es_len)
 {
 	struct ext4_es_tree *tree = &EXT4_I(inode)->i_es_tree;
 
 	if (!es_len)
-		return;
+		goto out;
 
 	tree->da_es_len += es_len;
 	es_debug("update da blocks %ld, to %u\n", es_len, tree->da_es_len);
+out:
+	return tree->da_es_len;
 }
 
 static int __es_insert_extent(struct inode *inode, struct extent_status *newes,
@@ -870,6 +873,7 @@ void ext4_es_insert_extent(struct inode *inode, ext4_lblk_t lblk,
 {
 	struct extent_status newes;
 	ext4_lblk_t end = lblk + len - 1;
+	ext4_lblk_t da_blocks = 0;
 	int err1 = 0, err2 = 0, err3 = 0;
 	struct rsvd_info rinfo;
 	int pending = 0;
@@ -930,7 +934,7 @@ retry:
 			__es_free_extent(es1);
 		es1 = NULL;
 	}
-	ext4_es_update_da_block(inode, -rinfo.ndelonly_blk);
+	da_blocks = ext4_es_update_da_block(inode, -rinfo.ndelonly_blk);
 
 	err2 = __es_insert_extent(inode, &newes, es2);
 	if (err2 == -ENOMEM && !ext4_es_must_keep(&newes))
@@ -975,6 +979,7 @@ error:
 	 * for any previously delayed allocated clusters.
 	 */
 	ext4_da_update_reserve_space(inode, rinfo.ndelonly_clu + pending,
+				     da_blocks, -rinfo.ndelonly_blk,
 				     !delayed && rinfo.ndelonly_blk);
 	if (err1 || err2 || err3 < 0)
 		goto retry;
@@ -1554,6 +1559,7 @@ void ext4_es_remove_extent(struct inode *inode, ext4_lblk_t lblk,
 			   ext4_lblk_t len)
 {
 	ext4_lblk_t end;
+	ext4_lblk_t da_blocks = 0;
 	struct rsvd_info rinfo;
 	int err = 0;
 	struct extent_status *es = NULL;
@@ -1587,13 +1593,14 @@ retry:
 			__es_free_extent(es);
 		es = NULL;
 	}
-	ext4_es_update_da_block(inode, -rinfo.ndelonly_blk);
+	da_blocks = ext4_es_update_da_block(inode, -rinfo.ndelonly_blk);
 	write_unlock(&EXT4_I(inode)->i_es_lock);
 	if (err)
 		goto retry;
 
 	ext4_es_print_tree(inode);
-	ext4_da_release_space(inode, rinfo.ndelonly_clu);
+	ext4_da_release_space(inode, rinfo.ndelonly_clu, da_blocks,
+			      -rinfo.ndelonly_blk);
 	return;
 }
 
@@ -2122,6 +2129,7 @@ void ext4_es_insert_delayed_block(struct inode *inode, ext4_lblk_t lblk,
 				  bool allocated)
 {
 	struct extent_status newes;
+	ext4_lblk_t da_blocks;
 	int err1 = 0, err2 = 0, err3 = 0;
 	struct extent_status *es1 = NULL;
 	struct extent_status *es2 = NULL;
@@ -2179,12 +2187,19 @@ retry:
 		}
 	}
 
-	ext4_es_update_da_block(inode, newes.es_len);
+	da_blocks = ext4_es_update_da_block(inode, newes.es_len);
 error:
 	write_unlock(&EXT4_I(inode)->i_es_lock);
 	if (err1 || err2 || err3 < 0)
 		goto retry;
 
+	/*
+	 * New reserved meta space has been claimed for a single newly added
+	 * delayed block in ext4_da_reserve_space(), but most of the reserved
+	 * count of meta blocks could be merged, so recalculate it according
+	 * to latest total delayed blocks.
+	 */
+	ext4_da_update_reserve_space(inode, 0, da_blocks, newes.es_len, 0);
 	ext4_es_print_tree(inode);
 	ext4_print_pending_tree(inode);
 	return;

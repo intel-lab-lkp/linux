@@ -332,6 +332,9 @@ static void __ext4_da_update_reserve_space(const char *where,
 	struct ext4_sb_info *sbi = EXT4_SB(inode->i_sb);
 	struct ext4_inode_info *ei = EXT4_I(inode);
 
+	if (!data_len && !ext_len)
+		return;
+
 	if (unlikely(data_len > ei->i_reserved_data_blocks ||
 		     ext_len > (long)ei->i_reserved_ext_blocks)) {
 		ext4_warning(inode->i_sb, "%s: ino %lu, clear %d,%d "
@@ -355,20 +358,29 @@ static void __ext4_da_update_reserve_space(const char *where,
  * ext4_discard_preallocations() from here.
  */
 void ext4_da_update_reserve_space(struct inode *inode, unsigned int data_len,
+				  unsigned int total_da_len, long da_len,
 				  int quota_claim)
 {
 	struct ext4_sb_info *sbi = EXT4_SB(inode->i_sb);
 	struct ext4_inode_info *ei = EXT4_I(inode);
-	int ext_len = 0;
+	unsigned int new_ext_len;
+	int ext_len;
+
+	if (!data_len && !da_len)
+		return;
+
+	if (da_len)
+		new_ext_len = ext4_map_worst_ext_blocks(inode, total_da_len);
+
+	spin_lock(&ei->i_block_reservation_lock);
+	ext_len = da_len ? ei->i_reserved_ext_blocks - new_ext_len : 0;
+	trace_ext4_da_update_reserve_space(inode, data_len, total_da_len,
+					   ext_len, quota_claim);
+	__ext4_da_update_reserve_space(__func__, inode, data_len, ext_len);
+	spin_unlock(&ei->i_block_reservation_lock);
 
 	if (!data_len)
 		return;
-
-	spin_lock(&ei->i_block_reservation_lock);
-	trace_ext4_da_update_reserve_space(inode, data_len, ext_len,
-					   quota_claim);
-	__ext4_da_update_reserve_space(__func__, inode, data_len, ext_len);
-	spin_unlock(&ei->i_block_reservation_lock);
 
 	/* Update quota subsystem for data blocks */
 	if (quota_claim)
@@ -1490,21 +1502,28 @@ static int ext4_da_reserve_space(struct inode *inode, unsigned int rsv_dlen,
 	return 0;       /* success */
 }
 
-void ext4_da_release_space(struct inode *inode, unsigned int data_len)
+void ext4_da_release_space(struct inode *inode, unsigned int data_len,
+			   unsigned int total_da_len, long da_len)
 {
 	struct ext4_sb_info *sbi = EXT4_SB(inode->i_sb);
 	struct ext4_inode_info *ei = EXT4_I(inode);
-	int ext_len = 0;
+	unsigned int new_ext_len;
+	int ext_len;
 
-	if (!data_len)
+	if (!data_len && !da_len)
 		return;		/* Nothing to release, exit */
 
+	if (da_len)
+		new_ext_len = ext4_map_worst_ext_blocks(inode, total_da_len);
+
 	spin_lock(&ei->i_block_reservation_lock);
-	trace_ext4_da_release_space(inode, data_len, ext_len);
+	ext_len = da_len ? (ei->i_reserved_ext_blocks - new_ext_len) : 0;
+	trace_ext4_da_release_space(inode, data_len, total_da_len, ext_len);
 	__ext4_da_update_reserve_space(__func__, inode, data_len, ext_len);
 	spin_unlock(&ei->i_block_reservation_lock);
 
-	dquot_release_reservation_block(inode, EXT4_C2B(sbi, data_len));
+	if (data_len)
+		dquot_release_reservation_block(inode, EXT4_C2B(sbi, data_len));
 }
 
 /*
@@ -1629,6 +1648,7 @@ static int ext4_insert_delayed_block(struct inode *inode, ext4_lblk_t lblk)
 {
 	struct ext4_sb_info *sbi = EXT4_SB(inode->i_sb);
 	unsigned int rsv_dlen = 1;
+	unsigned int rsv_extlen;
 	bool allocated = false;
 	int ret;
 
@@ -1662,7 +1682,8 @@ static int ext4_insert_delayed_block(struct inode *inode, ext4_lblk_t lblk)
 		}
 	}
 
-	ret = ext4_da_reserve_space(inode, rsv_dlen, 0);
+	rsv_extlen = ext4_map_worst_ext_blocks(inode, 1);
+	ret = ext4_da_reserve_space(inode, rsv_dlen, rsv_extlen);
 	if (ret)   /* ENOSPC */
 		return ret;
 
