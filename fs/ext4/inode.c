@@ -330,10 +330,13 @@ qsize_t *ext4_get_reserved_space(struct inode *inode)
  * ext4_discard_preallocations() from here.
  */
 void ext4_da_update_reserve_space(struct inode *inode,
-					int used, int quota_claim)
+				  int used, int quota_claim)
 {
 	struct ext4_sb_info *sbi = EXT4_SB(inode->i_sb);
 	struct ext4_inode_info *ei = EXT4_I(inode);
+
+	if (!used)
+		return;
 
 	spin_lock(&ei->i_block_reservation_lock);
 	trace_ext4_da_update_reserve_space(inode, used, quota_claim);

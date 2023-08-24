@@ -856,11 +856,14 @@ void ext4_es_insert_extent(struct inode *inode, ext4_lblk_t lblk,
 	struct extent_status newes;
 	ext4_lblk_t end = lblk + len - 1;
 	int err1 = 0, err2 = 0, err3 = 0;
+	struct rsvd_info rinfo;
+	int pending = 0;
 	struct ext4_sb_info *sbi = EXT4_SB(inode->i_sb);
 	struct extent_status *es1 = NULL;
 	struct extent_status *es2 = NULL;
 	struct pending_reservation *pr = NULL;
 	bool revise_pending = false;
+	bool delayed = false;
 
 	if (EXT4_SB(inode->i_sb)->s_mount_state & EXT4_FC_REPLAY)
 		return;
@@ -878,6 +881,7 @@ void ext4_es_insert_extent(struct inode *inode, ext4_lblk_t lblk,
 	 * data lose, and the extent has been written, it's safe to remove
 	 * the delayed flag even it's still delayed.
 	 */
+	delayed = status & EXTENT_STATUS_DELAYED;
 	if ((status & EXTENT_STATUS_DELAYED) &&
 	    (status & EXTENT_STATUS_WRITTEN))
 		status &= ~EXTENT_STATUS_DELAYED;
@@ -902,7 +906,7 @@ retry:
 		pr = __alloc_pending(true);
 	write_lock(&EXT4_I(inode)->i_es_lock);
 
-	err1 = __es_remove_extent(inode, lblk, end, NULL, es1);
+	err1 = __es_remove_extent(inode, lblk, end, &rinfo, es1);
 	if (err1 != 0)
 		goto error;
 	/* Free preallocated extent if it didn't get used. */
@@ -932,9 +936,30 @@ retry:
 			__free_pending(pr);
 			pr = NULL;
 		}
+		/*
+		 * In the first partial allocating some delayed extents of
+		 * one cluster, we also need to count the data cluster when
+		 * allocating delay only extent entries.
+		 */
+		pending = err3;
 	}
 error:
 	write_unlock(&EXT4_I(inode)->i_es_lock);
+	/*
+	 * If EXTENT_STATUS_DELAYED is not set and delayed only blocks is
+	 * not zero, we are allocating delayed allocated clusters, simply
+	 * reduce the reserved cluster count and claim quota.
+	 *
+	 * Otherwise, we aren't allocating delayed allocated clusters
+	 * (from fallocate, filemap, DIO, or clusters allocated when
+	 * delalloc has been disabled by ext4_nonda_switch()), reduce the
+	 * reserved cluster count by the number of allocated clusters that
+	 * have previously been delayed allocated. Quota has been claimed
+	 * by ext4_mb_new_blocks(), so release the quota reservations made
+	 * for any previously delayed allocated clusters.
+	 */
+	ext4_da_update_reserve_space(inode, rinfo.ndelonly_clu + pending,
+				     !delayed && rinfo.ndelonly_blk);
 	if (err1 || err2 || err3 < 0)
 		goto retry;
 
@@ -2144,94 +2169,6 @@ error:
 	ext4_es_print_tree(inode);
 	ext4_print_pending_tree(inode);
 	return;
-}
-
-/*
- * __es_delayed_clu - count number of clusters containing blocks that
- *                    are delayed only
- *
- * @inode - file containing block range
- * @start - logical block defining start of range
- * @end - logical block defining end of range
- *
- * Returns the number of clusters containing only delayed (not delayed
- * and unwritten) blocks in the range specified by @start and @end.  Any
- * cluster or part of a cluster within the range and containing a delayed
- * and not unwritten block within the range is counted as a whole cluster.
- */
-static unsigned int __es_delayed_clu(struct inode *inode, ext4_lblk_t start,
-				     ext4_lblk_t end)
-{
-	struct ext4_es_tree *tree = &EXT4_I(inode)->i_es_tree;
-	struct extent_status *es;
-	struct ext4_sb_info *sbi = EXT4_SB(inode->i_sb);
-	struct rb_node *node;
-	ext4_lblk_t first_lclu, last_lclu;
-	unsigned long long last_counted_lclu;
-	unsigned int n = 0;
-
-	/* guaranteed to be unequal to any ext4_lblk_t value */
-	last_counted_lclu = ~0ULL;
-
-	es = __es_tree_search(&tree->root, start);
-
-	while (es && (es->es_lblk <= end)) {
-		if (ext4_es_is_delonly(es)) {
-			if (es->es_lblk <= start)
-				first_lclu = EXT4_B2C(sbi, start);
-			else
-				first_lclu = EXT4_B2C(sbi, es->es_lblk);
-
-			if (ext4_es_end(es) >= end)
-				last_lclu = EXT4_B2C(sbi, end);
-			else
-				last_lclu = EXT4_B2C(sbi, ext4_es_end(es));
-
-			if (first_lclu == last_counted_lclu)
-				n += last_lclu - first_lclu;
-			else
-				n += last_lclu - first_lclu + 1;
-			last_counted_lclu = last_lclu;
-		}
-		node = rb_next(&es->rb_node);
-		if (!node)
-			break;
-		es = rb_entry(node, struct extent_status, rb_node);
-	}
-
-	return n;
-}
-
-/*
- * ext4_es_delayed_clu - count number of clusters containing blocks that
- *                       are both delayed and unwritten
- *
- * @inode - file containing block range
- * @lblk - logical block defining start of range
- * @len - number of blocks in range
- *
- * Locking for external use of __es_delayed_clu().
- */
-unsigned int ext4_es_delayed_clu(struct inode *inode, ext4_lblk_t lblk,
-				 ext4_lblk_t len)
-{
-	struct ext4_inode_info *ei = EXT4_I(inode);
-	ext4_lblk_t end;
-	unsigned int n;
-
-	if (len == 0)
-		return 0;
-
-	end = lblk + len - 1;
-	WARN_ON(end < lblk);
-
-	read_lock(&ei->i_es_lock);
-
-	n = __es_delayed_clu(inode, lblk, end);
-
-	read_unlock(&ei->i_es_lock);
-
-	return n;
 }
 
 /*
