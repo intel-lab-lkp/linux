@@ -873,13 +873,15 @@ void drm_send_event(struct drm_device *dev, struct drm_pending_event *e)
 EXPORT_SYMBOL(drm_send_event);
 
 static void print_size(struct drm_printer *p, const char *stat,
-		       const char *region, u64 sz)
+		       const char *region, u64 sz, unsigned int unit)
 {
 	const char *units[] = {"", " KiB", " MiB"};
 	unsigned u;
 
 	for (u = 0; u < ARRAY_SIZE(units) - 1; u++) {
 		if (sz < SZ_1K)
+			break;
+		if (unit > 0 && unit == u)
 			break;
 		sz = div_u64(sz, SZ_1K);
 	}
@@ -898,17 +900,18 @@ static void print_size(struct drm_printer *p, const char *stat,
 void drm_print_memory_stats(struct drm_printer *p,
 			    const struct drm_memory_stats *stats,
 			    enum drm_gem_object_status supported_status,
-			    const char *region)
+			    const char *region,
+			    unsigned int unit)
 {
-	print_size(p, "total", region, stats->private + stats->shared);
-	print_size(p, "shared", region, stats->shared);
-	print_size(p, "active", region, stats->active);
+	print_size(p, "total", region, stats->private + stats->shared, unit);
+	print_size(p, "shared", region, stats->shared, unit);
+	print_size(p, "active", region, stats->active, unit);
 
 	if (supported_status & DRM_GEM_OBJECT_RESIDENT)
-		print_size(p, "resident", region, stats->resident);
+		print_size(p, "resident", region, stats->resident, unit);
 
 	if (supported_status & DRM_GEM_OBJECT_PURGEABLE)
-		print_size(p, "purgeable", region, stats->purgeable);
+		print_size(p, "purgeable", region, stats->purgeable, unit);
 }
 EXPORT_SYMBOL(drm_print_memory_stats);
 
@@ -916,11 +919,12 @@ EXPORT_SYMBOL(drm_print_memory_stats);
  * drm_show_memory_stats - Helper to collect and show standard fdinfo memory stats
  * @p: the printer to print output to
  * @file: the DRM file
+ * @unit: multipliyer of power of two exponent of desired unit
  *
  * Helper to iterate over GEM objects with a handle allocated in the specified
  * file.
  */
-void drm_show_memory_stats(struct drm_printer *p, struct drm_file *file)
+void drm_show_memory_stats(struct drm_printer *p, struct drm_file *file, unsigned int unit)
 {
 	struct drm_gem_object *obj;
 	struct drm_memory_stats status = {};
@@ -967,7 +971,7 @@ void drm_show_memory_stats(struct drm_printer *p, struct drm_file *file)
 	}
 	spin_unlock(&file->table_lock);
 
-	drm_print_memory_stats(p, &status, supported_status, "memory");
+	drm_print_memory_stats(p, &status, supported_status, "memory", unit);
 }
 EXPORT_SYMBOL(drm_show_memory_stats);
 
