@@ -121,15 +121,8 @@ static int intel_dp_mst_find_vcpi_slots_for_bpp(struct intel_encoder *encoder,
 		if (slots == -EDEADLK)
 			return slots;
 
-		if (slots >= 0) {
-			ret = drm_dp_mst_atomic_check(state);
-			/*
-			 * If we got slots >= 0 and we can fit those based on check
-			 * then we can exit the loop. Otherwise keep trying.
-			 */
-			if (!ret)
-				break;
-		}
+		if (slots >= 0)
+			break;
 	}
 
 	/* We failed to find a proper bpp/timeslots, return error */
