@@ -14,6 +14,7 @@
 #include <linux/pagevec.h>
 #include <linux/prefetch.h>
 #include <linux/fsverity.h>
+#include <linux/vmalloc.h>
 #include "misc.h"
 #include "extent_io.h"
 #include "extent-io-tree.h"
@@ -3186,6 +3187,8 @@ static void btrfs_release_extent_buffer_pages(struct extent_buffer *eb)
 	ASSERT(!extent_buffer_under_io(eb));
 
 	num_pages = num_extent_pages(eb);
+	if (eb->vaddr)
+		vm_unmap_ram(eb->vaddr, num_pages);
 	for (i = 0; i < num_pages; i++) {
 		struct page *page = eb->pages[i];
 
@@ -3235,6 +3238,7 @@ struct extent_buffer *btrfs_clone_extent_buffer(const struct extent_buffer *src)
 {
 	int i;
 	struct extent_buffer *new;
+	bool pages_contig = true;
 	int num_pages = num_extent_pages(src);
 	int ret;
 
@@ -3259,12 +3263,32 @@ struct extent_buffer *btrfs_clone_extent_buffer(const struct extent_buffer *src)
 		int ret;
 		struct page *p = new->pages[i];
 
+		if (i && p != new->pages[i - 1] + 1)
+			pages_contig = false;
+
 		ret = attach_extent_buffer_page(new, p, NULL);
 		if (ret < 0) {
 			btrfs_release_extent_buffer(new);
 			return NULL;
 		}
 		WARN_ON(PageDirty(p));
+	}
+	if (!pages_contig) {
+		unsigned int nofs_flag;
+		int retried = 0;
+
+		nofs_flag = memalloc_nofs_save();
+		do {
+			new->vaddr = vm_map_ram(new->pages, num_pages, -1);
+			if (new->vaddr)
+				break;
+			vm_unmap_aliases();
+		} while ((retried++) <= 1);
+		memalloc_nofs_restore(nofs_flag);
+		if (!new->vaddr) {
+			btrfs_release_extent_buffer(new);
+			return NULL;
+		}
 	}
 	copy_extent_buffer_full(new, src);
 	set_extent_buffer_uptodate(new);
@@ -3276,6 +3300,7 @@ struct extent_buffer *__alloc_dummy_extent_buffer(struct btrfs_fs_info *fs_info,
 						  u64 start, unsigned long len)
 {
 	struct extent_buffer *eb;
+	bool pages_contig = true;
 	int num_pages;
 	int i;
 	int ret;
@@ -3292,11 +3317,29 @@ struct extent_buffer *__alloc_dummy_extent_buffer(struct btrfs_fs_info *fs_info,
 	for (i = 0; i < num_pages; i++) {
 		struct page *p = eb->pages[i];
 
+		if (i && p != eb->pages[i - 1] + 1)
+			pages_contig = false;
+
 		ret = attach_extent_buffer_page(eb, p, NULL);
 		if (ret < 0)
 			goto err;
 	}
 
+	if (!pages_contig) {
+		unsigned int nofs_flag;
+		int retried = 0;
+
+		nofs_flag = memalloc_nofs_save();
+		do {
+			eb->vaddr = vm_map_ram(eb->pages, num_pages, -1);
+			if (eb->vaddr)
+				break;
+			vm_unmap_aliases();
+		} while ((retried++) <= 1);
+		memalloc_nofs_restore(nofs_flag);
+		if (!eb->vaddr)
+			goto err;
+	}
 	set_extent_buffer_uptodate(eb);
 	btrfs_set_header_nritems(eb, 0);
 	set_bit(EXTENT_BUFFER_UNMAPPED, &eb->bflags);
@@ -3519,6 +3562,7 @@ struct extent_buffer *alloc_extent_buffer(struct btrfs_fs_info *fs_info,
 	struct address_space *mapping = fs_info->btree_inode->i_mapping;
 	struct btrfs_subpage *prealloc = NULL;
 	u64 lockdep_owner = owner_root;
+	bool pages_contig = true;
 	int uptodate = 1;
 	int ret;
 
@@ -3591,6 +3635,10 @@ struct extent_buffer *alloc_extent_buffer(struct btrfs_fs_info *fs_info,
 		/* Should not fail, as we have preallocated the memory */
 		ret = attach_extent_buffer_page(eb, p, prealloc);
 		ASSERT(!ret);
+
+		if (i && p != eb->pages[i - 1] + 1)
+			pages_contig = false;
+
 		/*
 		 * To inform we have extra eb under allocation, so that
 		 * detach_extent_buffer_page() won't release the page private
@@ -3615,6 +3663,28 @@ struct extent_buffer *alloc_extent_buffer(struct btrfs_fs_info *fs_info,
 		 * while we are still filling in all pages for the buffer and
 		 * we could crash.
 		 */
+	}
+
+	/*
+	 * If pages are not continuous, here we map it into a continuous virtual
+	 * range to make later access easier.
+	 */
+	if (!pages_contig) {
+		unsigned int nofs_flag;
+		int retried = 0;
+
+		nofs_flag = memalloc_nofs_save();
+		do {
+			eb->vaddr = vm_map_ram(eb->pages, num_pages, -1);
+			if (eb->vaddr)
+				break;
+			vm_unmap_aliases();
+		} while ((retried++) <= 1);
+		memalloc_nofs_restore(nofs_flag);
+		if (!eb->vaddr) {
+			exists = ERR_PTR(-ENOMEM);
+			goto free_eb;
+		}
 	}
 	if (uptodate)
 		set_bit(EXTENT_BUFFER_UPTODATE, &eb->bflags);
