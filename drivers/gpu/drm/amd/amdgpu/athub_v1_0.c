@@ -58,7 +58,7 @@ static void athub_update_medium_grain_light_sleep(struct amdgpu_device *adev,
 	else
 		data &= ~ATHUB_MISC_CNTL__CG_MEM_LS_ENABLE_MASK;
 
-	if(def != data)
+	if (def != data)
 		WREG32_SOC15(ATHUB, 0, mmATHUB_MISC_CNTL, data);
 }
 
