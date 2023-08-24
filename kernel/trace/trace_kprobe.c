@@ -705,6 +705,25 @@ static struct notifier_block trace_kprobe_module_nb = {
 	.priority = 1	/* Invoked after kprobe module callback */
 };
 
+static int count_symbols(void *data, unsigned long unused)
+{
+	unsigned int *count = data;
+
+	(*count)++;
+
+	return 0;
+}
+
+static unsigned int func_name_several_symbols(char *func_name)
+{
+	unsigned int count;
+
+	count = 0;
+	kallsyms_on_each_match_symbol(count_symbols, func_name, &count);
+
+	return count > 1;
+}
+
 static int __trace_kprobe_create(int argc, const char *argv[])
 {
 	/*
@@ -834,6 +853,18 @@ static int __trace_kprobe_create(int argc, const char *argv[])
 			trace_probe_log_err(0, BAD_RETPROBE);
 			goto parse_error;
 		}
+	}
+
+	/*
+	 * If user specifies KSYM, we check it does not correspond to several
+	 * symbols.
+	 * If this is the case, we return EADDRNOTAVAIL to indicate the user
+	 * he/she should use ADDR rather than KSYM to remove the ambiguity.
+	 */
+	if (symbol && func_name_several_symbols(symbol)) {
+		ret = -EADDRNOTAVAIL;
+
+		goto error;
 	}
 
 	trace_probe_log_set_index(0);
@@ -1699,6 +1730,7 @@ static int unregister_kprobe_event(struct trace_kprobe *tk)
 }
 
 #ifdef CONFIG_PERF_EVENTS
+
 /* create a trace_kprobe, but don't add it to global lists */
 struct trace_event_call *
 create_local_trace_kprobe(char *func, void *addr, unsigned long offs,
@@ -1708,6 +1740,16 @@ create_local_trace_kprobe(char *func, void *addr, unsigned long offs,
 	struct trace_kprobe *tk;
 	int ret;
 	char *event;
+
+	/*
+	 * If user specifies func, we check that function name does not
+	 * correspond to several symbols.
+	 * If this is the case, we return EADDRNOTAVAIL to indicate the user
+	 * he/she should use addr and offs rather than func to remove the
+	 * ambiguity.
+	 */
+	if (func && func_name_several_symbols(func))
+		return ERR_PTR(-EADDRNOTAVAIL);
 
 	/*
 	 * local trace_kprobes are not added to dyn_event, so they are never
