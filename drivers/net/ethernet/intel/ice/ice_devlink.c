@@ -592,6 +592,33 @@ err:
 }
 
 /**
+ * ice_devlink_aq_clear_cmpo - clear Cage Max Power override
+ * @hw: pointer to the HW struct
+ *
+ * Clear Cage Max Power override enable bit for each of the cages
+ */
+static int
+ice_devlink_aq_clear_cmpo(struct ice_hw *hw)
+{
+	struct ice_aqc_nvm_cmpo data;
+	int ret, i;
+
+	/* Read Cage Max Power override NVM module */
+	ret = ice_aq_read_nvm(hw, ICE_AQC_NVM_CMPO_MOD_ID, 0, sizeof(data),
+			      &data, true, false, NULL);
+	if (ret)
+		return ret;
+
+	for (i = 0; i < ICE_NUM_OF_CAGES; i++)
+		data.cages_cfg[i] &= ~cpu_to_le16(ICE_AQC_NVM_CMPO_ENABLE);
+
+	/* Do not update the length word since it is not permitted */
+	return ice_aq_update_nvm(hw, ICE_AQC_NVM_CMPO_MOD_ID, 2,
+				 sizeof(data.cages_cfg), data.cages_cfg,
+				 false, 0, NULL);
+}
+
+/**
  * ice_devlink_aq_set_port_option - Send set port option admin queue command
  * @pf: the PF to print split port options
  * @option_idx: selected port option
@@ -622,6 +649,11 @@ ice_devlink_aq_set_port_option(struct ice_pf *pf, u8 option_idx,
 		NL_SET_ERR_MSG_MOD(extack, "Failed to acquire NVM semaphore");
 		return -EIO;
 	}
+
+	status = ice_devlink_aq_clear_cmpo(&pf->hw);
+	if (status)
+		dev_dbg(dev, "Failed to clear Cage Max Power override, err %d aq_err %d\n",
+			status, pf->hw.adminq.sq_last_status);
 
 	status = ice_nvm_write_activate(&pf->hw, ICE_AQC_NVM_ACTIV_REQ_EMPR, NULL);
 	if (status) {
