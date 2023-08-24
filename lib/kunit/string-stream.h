@@ -42,6 +42,8 @@ int __printf(2, 0) string_stream_vadd(struct string_stream *stream,
 				      const char *fmt,
 				      va_list args);
 
+void string_stream_clear(struct string_stream *stream);
+
 char *string_stream_get_string(struct string_stream *stream);
 
 int string_stream_append(struct string_stream *stream,
