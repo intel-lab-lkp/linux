@@ -1314,9 +1314,10 @@ static bool fuse_dio_wr_exclusive_lock(struct kiocb *iocb, struct iov_iter *from
 	struct file *file = iocb->ki_filp;
 	struct fuse_file *ff = file->private_data;
 
-	return  !(ff->open_flags & FOPEN_PARALLEL_DIRECT_WRITES) ||
-		iocb->ki_flags & IOCB_APPEND ||
-		fuse_direct_write_extending_i_size(iocb, from);
+	return ((!(iocb->ki_flags & IOCB_DIRECT)) ||
+		(!(ff->open_flags & FOPEN_PARALLEL_DIRECT_WRITES)) ||
+		 iocb->ki_flags & IOCB_APPEND ||
+		 fuse_direct_write_extending_i_size(iocb, from));
 }
 
 static ssize_t fuse_cache_write_iter(struct kiocb *iocb, struct iov_iter *from)
@@ -1327,6 +1328,7 @@ static ssize_t fuse_cache_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	struct inode *inode = mapping->host;
 	ssize_t err;
 	struct fuse_conn *fc = get_fuse_conn(inode);
+	bool excl_lock = fuse_dio_wr_exclusive_lock(iocb, from);
 
 	if (fc->writeback_cache && !(iocb->ki_flags & IOCB_DIRECT)) {
 		/* Update size (EOF optimization) and mode (SUID clearing) */
@@ -1345,7 +1347,10 @@ static ssize_t fuse_cache_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	}
 
 writethrough:
-	inode_lock(inode);
+	if (excl_lock)
+		inode_lock(inode);
+	else
+		inode_lock_shared(inode);
 
 	err = generic_write_checks(iocb, from);
 	if (err <= 0)
@@ -1360,6 +1365,9 @@ writethrough:
 		goto out;
 
 	if (iocb->ki_flags & IOCB_DIRECT) {
+		/* file extending writes will trigger i_size_write - exclusive
+		 * lock is needed
+		 */
 		written = generic_file_direct_write(iocb, from);
 		if (written < 0 || !iov_iter_count(from))
 			goto out;
@@ -1369,7 +1377,10 @@ writethrough:
 		written = fuse_perform_write(iocb, from);
 	}
 out:
-	inode_unlock(inode);
+	if (excl_lock)
+		inode_unlock(inode);
+	else
+		inode_unlock_shared(inode);
 	if (written > 0)
 		written = generic_write_sync(iocb, written);
 
