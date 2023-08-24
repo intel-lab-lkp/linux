@@ -45,6 +45,7 @@ struct drm_fb_helper;
  * @surface_height: scanout buffer height
  * @surface_bpp: scanout buffer bpp
  * @surface_depth: scanout buffer depth
+ * @surface_format: scanout buffer format (optional)
  *
  * Note that the scanout surface width/height may be larger than the fbdev
  * width/height.  In case of multiple displays, the scanout surface is sized
@@ -61,6 +62,7 @@ struct drm_fb_helper_surface_size {
 	u32 surface_height;
 	u32 surface_bpp;
 	u32 surface_depth;
+	u32 surface_format;
 };
 
 /**
