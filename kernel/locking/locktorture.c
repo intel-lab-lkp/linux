@@ -280,6 +280,7 @@ void __weak spinlock_dump(spinlock_t *sp, bool full)
 
 static int torture_spin_lock_dump(struct notifier_block *nb, unsigned long v, void *ptr)
 {
+	int cpu;
 	struct task_struct *t = READ_ONCE(lock_is_write_held);
 
 	pr_alert("%s invoked: v=%lu, duration=%lu.\n", __func__, v, (unsigned long)ptr);
@@ -291,6 +292,8 @@ static int torture_spin_lock_dump(struct notifier_block *nb, unsigned long v, vo
 		sched_show_task(t);
 	}
 	spinlock_dump(&torture_spinlock, true);
+	for_each_cpu(cpu, bind_writers)
+		dump_cpu_task(cpu);
 	return NOTIFY_OK;
 }
 
