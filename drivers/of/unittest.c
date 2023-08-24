@@ -3805,7 +3805,7 @@ static inline __init void of_unittest_overlay_high_level(void) {}
 
 #endif
 
-#ifdef CONFIG_PCI_DYNAMIC_OF_NODES
+#if defined(CONFIG_PCI_DYNAMIC_OF_NODES) && defined(CONFIG_OF_OVERLAY)
 
 static int of_unittest_pci_dev_num;
 static int of_unittest_pci_child_num;
