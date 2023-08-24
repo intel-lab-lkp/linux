@@ -10,9 +10,11 @@
 #include <linux/err.h>
 #include <linux/io.h>
 #include <linux/module.h>
+#include <linux/moduleparam.h>
 #include <linux/nvmem-consumer.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/reboot.h>
 #include <linux/slab.h>
 #include <linux/thermal.h>
 
@@ -74,6 +76,11 @@
 
 #define TMU_VER1		0x1
 #define TMU_VER2		0x2
+
+static bool reboot_on_critical;
+module_param(reboot_on_critical, bool, 0444);
+MODULE_PARM_DESC(reboot_on_critical,
+		 "Reboot the system after the critical temperature is reached.");
 
 struct thermal_soc_data {
 	u32 num_sensors;
@@ -146,8 +153,20 @@ static int tmu_get_temp(struct thermal_zone_device *tz, int *temp)
 	return tmu->socdata->get_temp(sensor, temp);
 }
 
+static void tmu_critical(struct thermal_zone_device *tz)
+{
+	if (reboot_on_critical) {
+		dev_emerg(thermal_zone_device(tz), "%s: critical temperature reached\n",
+			  thermal_zone_device_type(tz));
+		kernel_restart(NULL);
+	} else {
+		thermal_zone_device_critical(tz);
+	}
+}
+
 static const struct thermal_zone_device_ops tmu_tz_ops = {
 	.get_temp = tmu_get_temp,
+	.critical = tmu_critical,
 };
 
 static void imx8mm_tmu_enable(struct imx8mm_tmu *tmu, bool enable)
