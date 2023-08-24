@@ -873,13 +873,14 @@ void ext4_es_insert_extent(struct inode *inode, ext4_lblk_t lblk,
 
 	BUG_ON(end < lblk);
 
+	/*
+	 * Insert extent as delayed and written which can potentially cause
+	 * data lose, and the extent has been written, it's safe to remove
+	 * the delayed flag even it's still delayed.
+	 */
 	if ((status & EXTENT_STATUS_DELAYED) &&
-	    (status & EXTENT_STATUS_WRITTEN)) {
-		ext4_warning(inode->i_sb, "Inserting extent [%u/%u] as "
-				" delayed and written which can potentially "
-				" cause data loss.", lblk, len);
-		WARN_ON(1);
-	}
+	    (status & EXTENT_STATUS_WRITTEN))
+		status &= ~EXTENT_STATUS_DELAYED;
 
 	newes.es_lblk = lblk;
 	newes.es_len = len;
