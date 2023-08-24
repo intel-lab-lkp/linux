@@ -114,7 +114,7 @@ static int imx_rngc_self_test(struct imx_rngc *rngc)
 	if (ret < 0)
 		return ret;
 
-	return readl(rngc->base + RNGC_ERROR) ? -EIO : 0;
+	return (status & RNGC_STATUS_ERROR) ? -EIO : 0;
 }
 
 static int imx_rngc_read(struct hwrng *rng, void *data, size_t max, bool wait)
