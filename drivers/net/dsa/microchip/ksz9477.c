@@ -1128,6 +1128,44 @@ int ksz9477_enable_stp_addr(struct ksz_device *dev)
 	return 0;
 }
 
+static int ksz9477_errata(struct dsa_switch *ds)
+{
+	struct ksz_device *dev = ds->priv;
+	u16 val;
+	int p;
+
+	/* KSZ9477 Errata DS80000754C
+	 *
+	 * Module 4: Energy Efficient Ethernet (EEE) feature select must be
+	 * manually disabled
+	 *   The EEE feature is enabled by default, but it is not fully
+	 *   operational. It must be manually disabled through register
+	 *   controls. If not disabled, the PHY ports can auto-negotiate
+	 *   to enable EEE, and this feature can cause link drops when linked
+	 *   to another device supporting EEE.
+	 *
+	 *   Only PHY ports (dsa user) [0-4] need to have the EEE advertisement
+	 *   bits cleared.
+	 */
+
+	for (p = 0; p < ds->num_ports; p++) {
+		if (!dsa_is_user_port(ds, p))
+			continue;
+
+		ksz9477_port_mmd_read(dev, p, MMD_DEVICE_ID_EEE_ADV,
+				      MMD_EEE_ADV, &val, 1);
+
+		pr_err("%s: PORT: %d val: 0x%x pc: %d\n", __func__, p, val,
+		       ds->num_ports);
+
+		val &= ~(EEE_ADV_100MBIT | EEE_ADV_1GBIT);
+		ksz9477_port_mmd_write(dev, p, MMD_DEVICE_ID_EEE_ADV,
+				       MMD_EEE_ADV, &val, 1);
+	}
+
+	return 0;
+}
+
 int ksz9477_setup(struct dsa_switch *ds)
 {
 	struct ksz_device *dev = ds->priv;
@@ -1157,7 +1195,7 @@ int ksz9477_setup(struct dsa_switch *ds)
 	/* enable global MIB counter freeze function */
 	ksz_cfg(dev, REG_SW_MAC_CTRL_6, SW_MIB_COUNTER_FREEZE, true);
 
-	return 0;
+	return ksz9477_errata(ds);
 }
 
 u32 ksz9477_get_port_addr(int port, int offset)
