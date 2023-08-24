@@ -240,3 +240,181 @@ The .BTF/.BTF.ext sections has R_BPF_64_NODYLD32 relocations::
       Offset             Info             Type               Symbol's Value  Symbol's Name
   000000000000002c  0000000200000004 R_BPF_64_NODYLD32      0000000000000000 .text
   0000000000000040  0000000200000004 R_BPF_64_NODYLD32      0000000000000000 .text
+
+.. _btf-co-re-relocations:
+
+=================
+CO-RE Relocations
+=================
+
+From object file point of view CO-RE mechanism is implemented as a set
+of CO-RE specific relocation records. These relocation records are not
+related to ELF relocations and are encoded in .BTF.ext section.
+See :ref:`Documentation/bpf/btf <BTF_Ext_Section>` for more
+information on .BTF.ext structure.
+
+
+CO-RE relocations are applied to BPF instructions to update immediate
+or offset fields of the instruction at load time with information
+relevant for target kernel.
+
+Relocation kinds
+================
+
+There are several kinds of CO-RE relocations that could be split in
+three groups:
+
+* Field-based - patch instruction with field related information, e.g.
+  change offset field of the BPF_LD instruction to reflect offset
+  of a specific structure field in the target kernel.
+
+* Type-based - patch instruction with type related information, e.g.
+  change immediate field of the BPF_MOV instruction to 0 or 1 to
+  reflect if specific type is present in the target kernel.
+
+* Enum-based - patch instruction with enum related information, e.g.
+  change immediate field of the BPF_MOV instruction to reflect value
+  of a specific enum literal in the target kernel.
+
+The complete list of relocation kinds is represented by the following enum:
+
+.. code-block:: c
+
+ enum bpf_core_relo_kind {
+	BPF_CORE_FIELD_BYTE_OFFSET = 0,  /* field byte offset */
+	BPF_CORE_FIELD_BYTE_SIZE   = 1,  /* field size in bytes */
+	BPF_CORE_FIELD_EXISTS      = 2,  /* field existence in target kernel */
+	BPF_CORE_FIELD_SIGNED      = 3,  /* field signedness (0 - unsigned, 1 - signed) */
+	BPF_CORE_FIELD_LSHIFT_U64  = 4,  /* bitfield-specific left bitshift */
+	BPF_CORE_FIELD_RSHIFT_U64  = 5,  /* bitfield-specific right bitshift */
+	BPF_CORE_TYPE_ID_LOCAL     = 6,  /* type ID in local BPF object */
+	BPF_CORE_TYPE_ID_TARGET    = 7,  /* type ID in target kernel */
+	BPF_CORE_TYPE_EXISTS       = 8,  /* type existence in target kernel */
+	BPF_CORE_TYPE_SIZE         = 9,  /* type size in bytes */
+	BPF_CORE_ENUMVAL_EXISTS    = 10, /* enum value existence in target kernel */
+	BPF_CORE_ENUMVAL_VALUE     = 11, /* enum value integer value */
+	BPF_CORE_TYPE_MATCHES      = 12, /* type match in target kernel */
+ };
+
+CO-RE Relocation Record
+=======================
+
+Relocation record is encoded as the following structure:
+
+.. code-block:: c
+
+ struct bpf_core_relo {
+	__u32 insn_off;
+	__u32 type_id;
+	__u32 access_str_off;
+	enum bpf_core_relo_kind kind;
+ };
+
+* ``insn_off`` - instruction offset (in bytes) within a code section
+  associated with this relocation;
+
+* ``type_id`` - BTF type ID of the "root" (containing) entity of a
+  relocatable type or field;
+
+* ``access_str_off`` - offset into corresponding .BTF string section.
+  String interpretation depends on specific relocation kind:
+
+  * for field-based relocations, string encodes an accessed field using
+    a sequence of field and array indices, separated by colon (:). It's
+    conceptually very close to LLVM's `getelementptr <GEP_>`_ instruction's
+    arguments for identifying offset to a field. For example, consider the
+    following C code:
+
+    .. code-block:: c
+
+       struct sample {
+           int a;
+           int b;
+           struct { int c[10]; };
+       } __attribute__((preserve_access_index));
+       struct sample *s;
+
+    * Access to ``s[0].a`` would be encoded as ``0:0``:
+
+      * ``0``: first element of ``s`` (as if ``s`` is an array);
+      * ``0``: index of field ``a`` in ``struct sample``.
+
+    * Access to ``s->a`` would be encoded as ``0:0`` as well.
+    * Access to ``s->b`` would be encoded as ``0:1``:
+
+      * ``0``: first element of ``s``;
+      * ``1``: index of field ``b`` in ``struct sample``.
+
+    * Access to ``s[1].c[5]`` would be encoded as ``1:2:0:5``:
+
+      * ``1``: second element of ``s``;
+      * ``2``: index of anonymous structure field in ``struct sample``;
+      * ``0``: index of field ``b`` in anonymous structure;
+      * ``5``: access to array element #5.
+
+  * for type-based relocations, string is expected to be just "0";
+
+  * for enum value-based relocations, string contains an index of enum
+     value within its enum type;
+
+* ``kind`` - one of ``enum bpf_core_relo_kind``.
+
+.. _GEP: https://llvm.org/docs/LangRef.html#getelementptr-instruction
+
+.. _btf_co_re_relocation_examples:
+
+CO-RE Relocation Examples
+=========================
+
+For the following C code:
+
+.. code-block:: c
+
+ struct foo {
+     int a;
+     int b;
+ } __attribute__((preserve_access_index));
+
+ enum bar { U, V };
+
+ void buz(struct foo *s, volatile unsigned long *g) {
+   s->a = 1;
+   *g = __builtin_preserve_field_info(s->b, 1);
+   *g = __builtin_preserve_type_info(*s, 1);
+   *g = __builtin_preserve_enum_value(*(enum bar *)V, 1);
+ }
+
+With the following BTF definititions:
+
+.. code-block::
+
+ ...
+ [2] STRUCT 'foo' size=8 vlen=2
+ 	'a' type_id=3 bits_offset=0
+ 	'b' type_id=3 bits_offset=32
+ [3] INT 'int' size=4 bits_offset=0 nr_bits=32 encoding=SIGNED
+ ...
+ [9] ENUM 'bar' encoding=UNSIGNED size=4 vlen=2
+ 	'U' val=0
+ 	'V' val=1
+
+The following relocation entries would be generated:
+
+.. code-block:: c
+
+   <buz>:
+       0:	*(u32 *)(r1 + 0x0) = 0x1
+		00:  CO-RE <byte_off> [2] struct foo::a (0:0)
+       1:	r1 = 0x4
+		08:  CO-RE <byte_sz> [2] struct foo::b (0:1)
+       2:	*(u64 *)(r2 + 0x0) = r1
+       3:	r1 = 0x8
+		18:  CO-RE <type_size> [2] struct foo
+       4:	*(u64 *)(r2 + 0x0) = r1
+       5:	r1 = 0x1 ll
+		28:  CO-RE <enumval_value> [9] enum bar::V = 1
+       7:	*(u64 *)(r2 + 0x0) = r1
+       8:	exit
+
+Note: modifications for llvm-objdump to show these relocation entries
+are currently work in progress.
