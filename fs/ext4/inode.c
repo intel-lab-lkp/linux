@@ -1623,8 +1623,9 @@ static void ext4_print_free_blocks(struct inode *inode)
 static int ext4_insert_delayed_block(struct inode *inode, ext4_lblk_t lblk)
 {
 	struct ext4_sb_info *sbi = EXT4_SB(inode->i_sb);
-	int ret;
+	unsigned int rsv_dlen = 1;
 	bool allocated = false;
+	int ret;
 
 	/*
 	 * If the cluster containing lblk is shared with a delayed,
@@ -1637,11 +1638,8 @@ static int ext4_insert_delayed_block(struct inode *inode, ext4_lblk_t lblk)
 	 * it's necessary to examine the extent tree if a search of the
 	 * extents status tree doesn't get a match.
 	 */
-	if (sbi->s_cluster_ratio == 1) {
-		ret = ext4_da_reserve_space(inode);
-		if (ret != 0)   /* ENOSPC */
-			return ret;
-	} else {   /* bigalloc */
+	if (sbi->s_cluster_ratio > 1) {
+		rsv_dlen = 0;
 		if (!ext4_es_scan_clu(inode, &ext4_es_is_delonly, lblk)) {
 			if (!ext4_es_scan_clu(inode,
 					      &ext4_es_is_mapped, lblk)) {
@@ -1649,17 +1647,20 @@ static int ext4_insert_delayed_block(struct inode *inode, ext4_lblk_t lblk)
 						      EXT4_B2C(sbi, lblk));
 				if (ret < 0)
 					return ret;
-				if (ret == 0) {
-					ret = ext4_da_reserve_space(inode);
-					if (ret != 0)   /* ENOSPC */
-						return ret;
-				} else {
+				if (ret == 0)
+					rsv_dlen = 1;
+				else
 					allocated = true;
-				}
 			} else {
 				allocated = true;
 			}
 		}
+	}
+
+	if (rsv_dlen > 0) {
+		ret = ext4_da_reserve_space(inode);
+		if (ret)   /* ENOSPC */
+			return ret;
 	}
 
 	ext4_es_insert_delayed_block(inode, lblk, allocated);
