@@ -449,15 +449,14 @@ static int ssd130x_init(struct ssd130x_device *ssd130x)
 
 static int ssd130x_update_rect(struct ssd130x_device *ssd130x,
 			       struct ssd130x_plane_state *ssd130x_state,
+			       u8 *buf, unsigned int pitch,
 			       struct drm_rect *rect)
 {
 	unsigned int x = rect->x1;
 	unsigned int y = rect->y1;
-	u8 *buf = ssd130x_state->buffer;
 	u8 *data_array = ssd130x_state->data_array;
 	unsigned int width = drm_rect_width(rect);
 	unsigned int height = drm_rect_height(rect);
-	unsigned int line_length = DIV_ROUND_UP(width, 8);
 	unsigned int page_height = ssd130x->device_info->page_height;
 	unsigned int pages = DIV_ROUND_UP(height, page_height);
 	struct drm_device *drm = &ssd130x->drm;
@@ -516,7 +515,7 @@ static int ssd130x_update_rect(struct ssd130x_device *ssd130x,
 			u8 data = 0;
 
 			for (k = 0; k < m; k++) {
-				u8 byte = buf[(8 * i + k) * line_length + j / 8];
+				u8 byte = buf[(8 * i + k) * pitch + j / 8];
 				u8 bit = (byte >> (j % 8)) & 1;
 
 				data |= bit << k;
@@ -602,27 +601,51 @@ static int ssd130x_fb_blit_rect(struct drm_plane_state *state,
 	struct ssd130x_device *ssd130x = drm_to_ssd130x(fb->dev);
 	unsigned int page_height = ssd130x->device_info->page_height;
 	struct ssd130x_plane_state *ssd130x_state = to_ssd130x_plane_state(state);
-	u8 *buf = ssd130x_state->buffer;
 	struct iosys_map dst;
 	unsigned int dst_pitch;
 	int ret = 0;
+	u8 *buf;
 
 	/* Align y to display page boundaries */
 	rect->y1 = round_down(rect->y1, page_height);
 	rect->y2 = min_t(unsigned int, round_up(rect->y2, page_height), ssd130x->height);
 
-	dst_pitch = DIV_ROUND_UP(drm_rect_width(rect), 8);
+	switch (fb->format->format) {
+	case DRM_FORMAT_R1:
+		/* Align x to byte boundaries */
+		rect->x1 = round_down(rect->x1, 8);
+		rect->x2 = round_up(rect->x2, 8);
 
-	ret = drm_gem_fb_begin_cpu_access(fb, DMA_FROM_DEVICE);
-	if (ret)
-		return ret;
+		ret = drm_gem_fb_begin_cpu_access(fb, DMA_FROM_DEVICE);
+		if (ret)
+			return ret;
 
-	iosys_map_set_vaddr(&dst, buf);
-	drm_fb_xrgb8888_to_mono(&dst, &dst_pitch, vmap, fb, rect);
+		dst_pitch = fb->pitches[0];
+		buf = vmap[0].vaddr + rect->y1 * dst_pitch + rect->x1 / 8;
 
-	drm_gem_fb_end_cpu_access(fb, DMA_FROM_DEVICE);
+		ssd130x_update_rect(ssd130x, ssd130x_state, buf, dst_pitch,
+				    rect);
 
-	ssd130x_update_rect(ssd130x, ssd130x_state, rect);
+		drm_gem_fb_end_cpu_access(fb, DMA_FROM_DEVICE);
+		break;
+
+	case DRM_FORMAT_XRGB8888:
+		dst_pitch = DIV_ROUND_UP(drm_rect_width(rect), 8);
+		buf = ssd130x_state->buffer;
+
+		ret = drm_gem_fb_begin_cpu_access(fb, DMA_FROM_DEVICE);
+		if (ret)
+			return ret;
+
+		iosys_map_set_vaddr(&dst, buf);
+		drm_fb_xrgb8888_to_mono(&dst, &dst_pitch, vmap, fb, rect);
+
+		drm_gem_fb_end_cpu_access(fb, DMA_FROM_DEVICE);
+
+		ssd130x_update_rect(ssd130x, ssd130x_state, buf, dst_pitch,
+				    rect);
+		break;
+	}
 
 	return ret;
 }
@@ -644,22 +667,24 @@ static int ssd130x_primary_plane_helper_atomic_check(struct drm_plane *plane,
 	if (ret)
 		return ret;
 
-	fi = drm_format_info(DRM_FORMAT_R1);
-	if (!fi)
-		return -EINVAL;
-
-	pitch = drm_format_info_min_pitch(fi, 0, ssd130x->width);
-
-	ssd130x_state->buffer = kcalloc(pitch, ssd130x->height, GFP_KERNEL);
-	if (!ssd130x_state->buffer)
-		return -ENOMEM;
-
 	ssd130x_state->data_array = kcalloc(ssd130x->width, pages, GFP_KERNEL);
-	if (!ssd130x_state->data_array) {
-		kfree(ssd130x_state->buffer);
-		/* Set to prevent a double free in .atomic_destroy_state() */
-		ssd130x_state->buffer = NULL;
+	if (!ssd130x_state->data_array)
 		return -ENOMEM;
+
+	if (plane_state->fb->format->format != DRM_FORMAT_R1) {
+		fi = drm_format_info(DRM_FORMAT_R1);
+		if (!fi)
+			return -EINVAL;
+
+		pitch = drm_format_info_min_pitch(fi, 0, ssd130x->width);
+
+		ssd130x_state->buffer = kcalloc(pitch, ssd130x->height, GFP_KERNEL);
+		if (!ssd130x_state->buffer) {
+			kfree(ssd130x_state->data_array);
+			/* Set to prevent a double free in .atomic_destroy_state() */
+			ssd130x_state->data_array = NULL;
+			return -ENOMEM;
+		}
 	}
 
 	return 0;
@@ -898,6 +923,7 @@ static const struct drm_mode_config_funcs ssd130x_mode_config_funcs = {
 };
 
 static const uint32_t ssd130x_formats[] = {
+	DRM_FORMAT_R1,
 	DRM_FORMAT_XRGB8888,
 };
 
