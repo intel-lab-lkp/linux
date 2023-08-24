@@ -507,9 +507,6 @@ intel_dp_mst_atomic_master_trans_check(struct intel_connector *connector,
 	struct intel_connector *connector_iter;
 	int ret = 0;
 
-	if (DISPLAY_VER(dev_priv) < 12)
-		return  0;
-
 	if (!intel_connector_needs_modeset(state, &connector->base))
 		return 0;
 
