@@ -1152,8 +1152,7 @@ static void vce_v4_0_set_irq_funcs(struct amdgpu_device *adev)
 	adev->vce.irq.funcs = &vce_v4_0_irq_funcs;
 };
 
-const struct amdgpu_ip_block_version vce_v4_0_ip_block =
-{
+const struct amdgpu_ip_block_version vce_v4_0_ip_block = {
 	.type = AMD_IP_BLOCK_TYPE_VCE,
 	.major = 4,
 	.minor = 0,
