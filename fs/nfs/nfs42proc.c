@@ -70,7 +70,7 @@ static int _nfs42_proc_fallocate(struct rpc_message *msg, struct file *filep,
 	}
 
 	nfs4_bitmask_set(bitmask, server->cache_consistency_bitmask, inode,
-			 NFS_INO_INVALID_BLOCKS);
+			NFS_INO_INVALID_BLOCKS | NFS_INO_INVALID_MODE);
 
 	res.falloc_fattr = nfs_alloc_fattr();
 	if (!res.falloc_fattr)
