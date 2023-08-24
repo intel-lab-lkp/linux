@@ -971,11 +971,10 @@ error:
 	 * reduce the reserved cluster count and claim quota.
 	 *
 	 * Otherwise, we aren't allocating delayed allocated clusters
-	 * (from fallocate, filemap, DIO, or clusters allocated when
-	 * delalloc has been disabled by ext4_nonda_switch()), reduce the
-	 * reserved cluster count by the number of allocated clusters that
-	 * have previously been delayed allocated. Quota has been claimed
-	 * by ext4_mb_new_blocks(), so release the quota reservations made
+	 * (from fallocate, filemap, DIO), reduce the reserved cluster
+	 * count by the number of allocated clusters that have previously
+	 * been delayed allocated. Quota has been claimed by
+	 * ext4_mb_new_blocks(), so release the quota reservations made
 	 * for any previously delayed allocated clusters.
 	 */
 	ext4_da_update_reserve_space(inode, rinfo.ndelonly_clu + pending,
