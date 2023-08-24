@@ -859,7 +859,7 @@ int stmmac_init_tstamp_counter(struct stmmac_priv *priv, u32 systime_flags)
 	 * where, freq_div_ratio = 1e9ns/sub_second_inc
 	 */
 	temp = div_u64(NSEC_PER_SEC, sub_second_inc);
-	temp = (u64)(temp << 32);
+	temp = temp << 32;
 	priv->default_addend = div_u64(temp, priv->plat->clk_ptp_rate);
 	stmmac_config_addend(priv, priv->ptpaddr, priv->default_addend);
 
