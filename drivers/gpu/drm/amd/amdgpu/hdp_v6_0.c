@@ -48,7 +48,7 @@ static void hdp_v6_0_update_clock_gating(struct amdgpu_device *adev,
 				AMD_CG_SUPPORT_HDP_SD)))
 		return;
 
-	hdp_clk_cntl = hdp_clk_cntl1 = RREG32_SOC15(HDP, 0,regHDP_CLK_CNTL);
+	hdp_clk_cntl = hdp_clk_cntl1 = RREG32_SOC15(HDP, 0, regHDP_CLK_CNTL);
 	hdp_mem_pwr_cntl = RREG32_SOC15(HDP, 0, regHDP_MEM_POWER_CTRL);
 
 	/* Before doing clock/power mode switch,
