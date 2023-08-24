@@ -4000,6 +4000,52 @@ static bool suitable_to_scan(int total, int young)
 	return young * n >= total;
 }
 
+static bool lru_gen_folio_status_check(pte_t *pte, struct vm_area_struct *vma,
+				       struct pglist_data *pgdat,
+				       unsigned long addr, int new_gen, int *old_count,
+				       struct lru_gen_mm_walk *walk, struct mem_cgroup *memcg)
+{
+	struct folio *folio;
+	int old_gen;
+	unsigned long pfn;
+	pte_t ptent = ptep_get(pte);
+
+	pfn = get_pte_pfn(ptent, vma, addr);
+	if (pfn == -1)
+		return false;
+
+	if (!pte_young(ptent)) {
+		(*old_count)++;
+		return false;
+	}
+
+	folio = get_pfn_folio(pfn, memcg, pgdat, !walk || walk->can_swap);
+	if (!folio)
+		return false;
+
+	if (!ptep_test_and_clear_young(vma, addr, pte))
+		VM_WARN_ON_ONCE(true);
+
+	if (pte_dirty(ptent) && !folio_test_dirty(folio) &&
+	    !(folio_test_anon(folio) && folio_test_swapbacked(folio) &&
+	      !folio_test_swapcache(folio)))
+		folio_mark_dirty(folio);
+
+	if (walk) {
+		old_gen = folio_update_gen(folio, new_gen);
+		if (old_gen >= 0 && old_gen != new_gen)
+			update_batch_size(walk, folio, old_gen, new_gen);
+		return true;
+	} else {
+		old_gen = folio_lru_gen(folio);
+		if (old_gen < 0)
+			folio_set_referenced(folio);
+		else if (old_gen != new_gen)
+			folio_activate(folio);
+	}
+	return false;
+}
+
 static bool walk_pte_range(pmd_t *pmd, unsigned long start, unsigned long end,
 			   struct mm_walk *args)
 {
@@ -4012,7 +4058,8 @@ static bool walk_pte_range(pmd_t *pmd, unsigned long start, unsigned long end,
 	struct lru_gen_mm_walk *walk = args->private;
 	struct mem_cgroup *memcg = lruvec_memcg(walk->lruvec);
 	struct pglist_data *pgdat = lruvec_pgdat(walk->lruvec);
-	int old_gen, new_gen = lru_gen_from_seq(walk->max_seq);
+	int new_gen = lru_gen_from_seq(walk->max_seq);
+	int old_count = 0;
 
 	pte = pte_offset_map_nolock(args->mm, pmd, start & PMD_MASK, &ptl);
 	if (!pte)
@@ -4025,41 +4072,15 @@ static bool walk_pte_range(pmd_t *pmd, unsigned long start, unsigned long end,
 	arch_enter_lazy_mmu_mode();
 restart:
 	for (i = pte_index(start), addr = start; addr != end; i++, addr += PAGE_SIZE) {
-		unsigned long pfn;
-		struct folio *folio;
-		pte_t ptent = ptep_get(pte + i);
-
 		total++;
-		walk->mm_stats[MM_LEAF_TOTAL]++;
-
-		pfn = get_pte_pfn(ptent, args->vma, addr);
-		if (pfn == -1)
+		if (!lru_gen_folio_status_check(pte + i, args->vma, pgdat,
+						addr, new_gen, &old_count, walk, memcg))
 			continue;
-
-		if (!pte_young(ptent)) {
-			walk->mm_stats[MM_LEAF_OLD]++;
-			continue;
-		}
-
-		folio = get_pfn_folio(pfn, memcg, pgdat, walk->can_swap);
-		if (!folio)
-			continue;
-
-		if (!ptep_test_and_clear_young(args->vma, addr, pte + i))
-			VM_WARN_ON_ONCE(true);
-
 		young++;
-		walk->mm_stats[MM_LEAF_YOUNG]++;
-
-		if (pte_dirty(ptent) && !folio_test_dirty(folio) &&
-		    !(folio_test_anon(folio) && folio_test_swapbacked(folio) &&
-		      !folio_test_swapcache(folio)))
-			folio_mark_dirty(folio);
-
-		old_gen = folio_update_gen(folio, new_gen);
-		if (old_gen >= 0 && old_gen != new_gen)
-			update_batch_size(walk, folio, old_gen, new_gen);
 	}
+	walk->mm_stats[MM_LEAF_TOTAL] += total;
+	walk->mm_stats[MM_LEAF_YOUNG] += young;
+	walk->mm_stats[MM_LEAF_OLD] += old_count;
 
 	if (i < PTRS_PER_PTE && get_next_vma(PMD_MASK, PAGE_SIZE, args, &start, &end))
 		goto restart;
@@ -4662,7 +4683,8 @@ void lru_gen_look_around(struct page_vma_mapped_walk *pvmw)
 	struct pglist_data *pgdat = folio_pgdat(folio);
 	struct lruvec *lruvec = mem_cgroup_lruvec(memcg, pgdat);
 	DEFINE_MAX_SEQ(lruvec);
-	int old_gen, new_gen = lru_gen_from_seq(max_seq);
+	int new_gen = lru_gen_from_seq(max_seq);
+	int old_count = 0;
 
 	lockdep_assert_held(pvmw->ptl);
 	VM_WARN_ON_ONCE_FOLIO(folio_test_lru(folio), folio);
@@ -4696,43 +4718,10 @@ void lru_gen_look_around(struct page_vma_mapped_walk *pvmw)
 	pte -= (addr - start) / PAGE_SIZE;
 
 	for (i = 0, addr = start; addr != end; i++, addr += PAGE_SIZE) {
-		unsigned long pfn;
-		pte_t ptent = ptep_get(pte + i);
-
-		pfn = get_pte_pfn(ptent, pvmw->vma, addr);
-		if (pfn == -1)
+		if (!lru_gen_folio_status_check(pte + i, pvmw->vma, pgdat,
+						addr, new_gen, &old_count, walk, memcg))
 			continue;
-
-		if (!pte_young(ptent))
-			continue;
-
-		folio = get_pfn_folio(pfn, memcg, pgdat, can_swap);
-		if (!folio)
-			continue;
-
-		if (!ptep_test_and_clear_young(pvmw->vma, addr, pte + i))
-			VM_WARN_ON_ONCE(true);
-
 		young++;
-
-		if (pte_dirty(ptent) && !folio_test_dirty(folio) &&
-		    !(folio_test_anon(folio) && folio_test_swapbacked(folio) &&
-		      !folio_test_swapcache(folio)))
-			folio_mark_dirty(folio);
-
-		if (walk) {
-			old_gen = folio_update_gen(folio, new_gen);
-			if (old_gen >= 0 && old_gen != new_gen)
-				update_batch_size(walk, folio, old_gen, new_gen);
-
-			continue;
-		}
-
-		old_gen = folio_lru_gen(folio);
-		if (old_gen < 0)
-			folio_set_referenced(folio);
-		else if (old_gen != new_gen)
-			folio_activate(folio);
 	}
 
 	arch_leave_lazy_mmu_mode();
