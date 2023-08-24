@@ -3,6 +3,7 @@
 
    Copyright (C) 2010  Nokia Corporation
    Copyright (C) 2011-2012 Intel Corporation
+   Copyright 2023 NXP
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License version 2 as
@@ -10521,6 +10522,13 @@ void mgmt_resuming(struct hci_dev *hdev, u8 reason, bdaddr_t *bdaddr,
 	}
 
 	mgmt_event(MGMT_EV_CONTROLLER_RESUME, hdev, &ev, sizeof(ev), NULL);
+}
+
+int mgmt_le_big_info_adv_report(struct hci_dev *hdev,
+				struct hci_evt_le_big_info_adv_report *ev)
+{
+	return mgmt_event(MGMT_EV_LE_BIG_INFO_ADV_REPORT, hdev,
+			(struct mgmt_ev_le_big_info_adv_report *)ev, sizeof(*ev), NULL);
 }
 
 static struct hci_mgmt_chan chan = {

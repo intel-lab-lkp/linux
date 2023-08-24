@@ -2230,6 +2230,8 @@ void mgmt_discovering(struct hci_dev *hdev, u8 discovering);
 void mgmt_suspending(struct hci_dev *hdev, u8 state);
 void mgmt_resuming(struct hci_dev *hdev, u8 reason, bdaddr_t *bdaddr,
 		   u8 addr_type);
+int mgmt_le_big_info_adv_report(struct hci_dev *hdev,
+				struct hci_evt_le_big_info_adv_report *ev);
 bool mgmt_powering_down(struct hci_dev *hdev);
 void mgmt_new_ltk(struct hci_dev *hdev, struct smp_ltk *key, bool persistent);
 void mgmt_new_irk(struct hci_dev *hdev, struct smp_irk *irk, bool persistent);
