@@ -654,7 +654,7 @@ static int imx_ldb_probe(struct platform_device *pdev)
 	 * Map them all to di0_sel...di3_sel.
 	 */
 	for (i = 0; i < 4; i++) {
-		char clkname[16];
+		char clkname[18];
 
 		sprintf(clkname, "di%d_sel", i);
 		imx_ldb->clk_sel[i] = devm_clk_get(imx_ldb->dev, clkname);
