@@ -967,7 +967,7 @@ nv50_msto_atomic_check(struct drm_encoder *encoder,
 
 		asyh->or.bpc = connector->display_info.bpc;
 		asyh->dp.pbn = drm_dp_calc_pbn_mode(clock, asyh->or.bpc * 3,
-						    false);
+						    false, false);
 	}
 
 	mst_state = drm_atomic_get_mst_topology_state(state, &mstm->mgr);

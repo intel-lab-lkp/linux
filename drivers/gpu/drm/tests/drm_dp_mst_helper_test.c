@@ -16,6 +16,7 @@ struct drm_dp_mst_calc_pbn_mode_test {
 	const int clock;
 	const int bpp;
 	const bool dsc;
+	const bool fec;
 	const int expected;
 };
 
@@ -24,31 +25,50 @@ static const struct drm_dp_mst_calc_pbn_mode_test drm_dp_mst_calc_pbn_mode_cases
 		.clock = 154000,
 		.bpp = 30,
 		.dsc = false,
+		.fec = false,
 		.expected = 689
 	},
 	{
 		.clock = 234000,
 		.bpp = 30,
 		.dsc = false,
+		.fec = false,
 		.expected = 1047
 	},
 	{
 		.clock = 297000,
 		.bpp = 24,
 		.dsc = false,
+		.fec = false,
 		.expected = 1063
 	},
 	{
 		.clock = 332880,
 		.bpp = 24 << 4,
 		.dsc = true,
+		.fec = false,
 		.expected = 1191
 	},
 	{
 		.clock = 324540,
 		.bpp = 24 << 4,
 		.dsc = true,
+		.fec = false,
 		.expected = 1161
+	},
+	{
+		.clock = 324540,
+		.bpp = 24 << 4,
+		.dsc = true,
+		.fec = true,
+		.expected = 1189
+	},
+	{
+		.clock = 324540,
+		.bpp = 24,
+		.dsc = false,
+		.fec = true,
+		.expected = 1189
 	},
 };
 
@@ -56,7 +76,8 @@ static void drm_test_dp_mst_calc_pbn_mode(struct kunit *test)
 {
 	const struct drm_dp_mst_calc_pbn_mode_test *params = test->param_value;
 
-	KUNIT_EXPECT_EQ(test, drm_dp_calc_pbn_mode(params->clock, params->bpp, params->dsc),
+	KUNIT_EXPECT_EQ(test, drm_dp_calc_pbn_mode(params->clock, params->bpp,
+						   params->dsc, params->fec),
 			params->expected);
 }
 
