@@ -22,6 +22,7 @@
 #include <linux/pm_qos.h>
 #include <linux/slab.h>
 #include <linux/types.h>
+#include <linux/input/touch-overlay.h>
 
 #define ST1232_TS_NAME	"st1232-ts"
 #define ST1633_TS_NAME	"st1633-ts"
@@ -56,6 +57,8 @@ struct st1232_ts_data {
 	struct touchscreen_properties prop;
 	struct dev_pm_qos_request low_latency_req;
 	struct gpio_desc *reset_gpio;
+	struct input_dev *overlay_keypad;
+	struct touch_overlay_map *overlay_map;
 	const struct st_chip_info *chip_info;
 	int read_buf_len;
 	u8 *read_buf;
@@ -130,6 +133,7 @@ static int st1232_ts_read_resolution(struct st1232_ts_data *ts, u16 *max_x,
 static int st1232_ts_parse_and_report(struct st1232_ts_data *ts)
 {
 	struct input_dev *input = ts->input_dev;
+	struct input_dev *keypad = ts->overlay_keypad;
 	struct input_mt_pos pos[ST_TS_MAX_FINGERS];
 	u8 z[ST_TS_MAX_FINGERS];
 	int slots[ST_TS_MAX_FINGERS];
@@ -138,14 +142,20 @@ static int st1232_ts_parse_and_report(struct st1232_ts_data *ts)
 
 	for (i = 0; i < ts->chip_info->max_fingers; i++) {
 		u8 *buf = &ts->read_buf[i * 4];
+		bool contact = buf[0] & BIT(7);
+		unsigned int x, y;
 
-		if (buf[0] & BIT(7)) {
-			unsigned int x = ((buf[0] & 0x70) << 4) | buf[1];
-			unsigned int y = ((buf[0] & 0x07) << 8) | buf[2];
+		if (contact) {
+			x = ((buf[0] & 0x70) << 4) | buf[1];
+			y = ((buf[0] & 0x07) << 8) | buf[2];
+		}
+		if (touch_overlay_process_event(ts->overlay_map, keypad,
+						contact ? &x : NULL,
+						contact ? &y : NULL, i))
+			continue;
 
-			touchscreen_set_mt_pos(&pos[n_contacts],
-					       &ts->prop, x, y);
-
+		if (contact) {
+			touchscreen_set_mt_pos(&pos[n_contacts], &ts->prop, x, y);
 			/* st1232 includes a z-axis / touch strength */
 			if (ts->chip_info->have_z)
 				z[n_contacts] = ts->read_buf[i + 6];
@@ -226,6 +236,7 @@ static int st1232_ts_probe(struct i2c_client *client)
 	const struct st_chip_info *match;
 	struct st1232_ts_data *ts;
 	struct input_dev *input_dev;
+	struct input_dev *overlay_keypad;
 	u16 max_x, max_y;
 	int error;
 
@@ -263,8 +274,13 @@ static int st1232_ts_probe(struct i2c_client *client)
 	if (!input_dev)
 		return -ENOMEM;
 
+	overlay_keypad = devm_input_allocate_device(&client->dev);
+	if (!overlay_keypad)
+		return -ENOMEM;
+
 	ts->client = client;
 	ts->input_dev = input_dev;
+	ts->overlay_keypad = overlay_keypad;
 
 	ts->reset_gpio = devm_gpiod_get_optional(&client->dev, NULL,
 						 GPIOD_OUT_HIGH);
@@ -286,23 +302,36 @@ static int st1232_ts_probe(struct i2c_client *client)
 
 	input_dev->name = "st1232-touchscreen";
 	input_dev->id.bustype = BUS_I2C;
+	overlay_keypad->name = "st1232-keypad";
+	overlay_keypad->id.bustype = BUS_I2C;
 
 	/* Wait until device is ready */
 	error = st1232_ts_wait_ready(ts);
 	if (error)
 		return error;
 
-	/* Read resolution from the chip */
-	error = st1232_ts_read_resolution(ts, &max_x, &max_y);
-	if (error) {
-		dev_err(&client->dev,
-			"Failed to read resolution: %d\n", error);
-		return error;
-	}
-
 	if (ts->chip_info->have_z)
 		input_set_abs_params(input_dev, ABS_MT_TOUCH_MAJOR, 0,
 				     ts->chip_info->max_area, 0, 0);
+
+	/* map overlay objects if defined in the device tree */
+	ts->overlay_map = touch_overlay_map_overlay(ts->overlay_keypad);
+	if (IS_ERR(ts->overlay_map))
+		return PTR_ERR(ts->overlay_map);
+
+	if (touch_overlay_mapped_touchscreen(ts->overlay_map)) {
+		/* Read resolution from the overlay touchscreen if defined */
+		touch_overlay_get_touchscreen_abs(ts->overlay_map,
+						  &max_x, &max_y);
+	} else {
+		/* Read resolution from the chip */
+		error = st1232_ts_read_resolution(ts, &max_x, &max_y);
+		if (error) {
+			dev_err(&client->dev,
+				"Failed to read resolution: %d\n", error);
+			return error;
+		}
+	}
 
 	input_set_abs_params(input_dev, ABS_MT_POSITION_X,
 			     0, max_x, 0, 0);
@@ -333,6 +362,19 @@ static int st1232_ts_probe(struct i2c_client *client)
 		dev_err(&client->dev, "Unable to register %s input device\n",
 			input_dev->name);
 		return error;
+	}
+
+	/* Register keypad input device if overlay buttons were defined */
+	if (touch_overlay_mapped_buttons(ts->overlay_map)) {
+		error = input_register_device(ts->overlay_keypad);
+		if (error) {
+			dev_err(&client->dev,
+				"Unable to register %s input device\n",
+				overlay_keypad->name);
+			return error;
+		}
+	} else {
+		input_free_device(ts->overlay_keypad);
 	}
 
 	i2c_set_clientdata(client, ts);
