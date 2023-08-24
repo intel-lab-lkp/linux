@@ -43,6 +43,37 @@ static void ksz9477_port_cfg32(struct ksz_device *dev, int port, int offset,
 			   bits, set ? bits : 0);
 }
 
+static void ksz9477_port_mmd_setup(struct ksz_device *dev, uint port, u16 devid,
+				   u16 reg, u16 len)
+{
+	u16 ctrl = PORT_MMD_OP_DATA_NO_INCR;
+
+	if (len > 1)
+		ctrl = PORT_MMD_OP_DATA_INCR_RW;
+
+	ksz_pwrite16(dev, port, REG_PORT_PHY_MMD_SETUP,
+		     MMD_SETUP(PORT_MMD_OP_INDEX, devid));
+	ksz_pwrite16(dev, port, REG_PORT_PHY_MMD_INDEX_DATA, reg);
+	ksz_pwrite16(dev, port, REG_PORT_PHY_MMD_SETUP,
+		     MMD_SETUP(ctrl, devid));
+}
+
+static void ksz9477_port_mmd_read(struct ksz_device *dev, uint port, u16 devid,
+				  u16 reg, u16 *buf, u16 len)
+{
+	ksz9477_port_mmd_setup(dev, port, devid, reg, len);
+	for (; len; buf++, len--)
+		ksz_pread16(dev, port, REG_PORT_PHY_MMD_INDEX_DATA, buf);
+}
+
+static void ksz9477_port_mmd_write(struct ksz_device *dev, uint port, u16 devid,
+				   u16 reg, u16 *buf, u16 len)
+{
+	ksz9477_port_mmd_setup(dev, port, devid, reg, len);
+	for (; len; buf++, len--)
+		ksz_pwrite16(dev, port, REG_PORT_PHY_MMD_INDEX_DATA, *buf);
+}
+
 int ksz9477_change_mtu(struct ksz_device *dev, int port, int mtu)
 {
 	u16 frame_size;
