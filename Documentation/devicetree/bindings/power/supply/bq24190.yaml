@@ -18,6 +18,7 @@ properties:
     enum:
       - ti,bq24190
       - ti,bq24192
+      - ti,bq24193
       - ti,bq24192i
       - ti,bq24196
 
