@@ -178,6 +178,7 @@ void ext4_es_init_tree(struct ext4_es_tree *tree)
 {
 	tree->root = RB_ROOT;
 	tree->cache_es = NULL;
+	tree->da_es_len = 0;
 }
 
 #ifdef ES_DEBUG__
@@ -787,6 +788,20 @@ static inline void ext4_es_insert_extent_check(struct inode *inode,
 }
 #endif
 
+/*
+ * Update total delay allocated extent length.
+ */
+static inline void ext4_es_update_da_block(struct inode *inode, long es_len)
+{
+	struct ext4_es_tree *tree = &EXT4_I(inode)->i_es_tree;
+
+	if (!es_len)
+		return;
+
+	tree->da_es_len += es_len;
+	es_debug("update da blocks %ld, to %u\n", es_len, tree->da_es_len);
+}
+
 static int __es_insert_extent(struct inode *inode, struct extent_status *newes,
 			      struct extent_status *prealloc)
 {
@@ -915,6 +930,7 @@ retry:
 			__es_free_extent(es1);
 		es1 = NULL;
 	}
+	ext4_es_update_da_block(inode, -rinfo.ndelonly_blk);
 
 	err2 = __es_insert_extent(inode, &newes, es2);
 	if (err2 == -ENOMEM && !ext4_es_must_keep(&newes))
@@ -1571,6 +1587,7 @@ retry:
 			__es_free_extent(es);
 		es = NULL;
 	}
+	ext4_es_update_da_block(inode, -rinfo.ndelonly_blk);
 	write_unlock(&EXT4_I(inode)->i_es_lock);
 	if (err)
 		goto retry;
@@ -2161,6 +2178,8 @@ retry:
 			pr = NULL;
 		}
 	}
+
+	ext4_es_update_da_block(inode, newes.es_len);
 error:
 	write_unlock(&EXT4_I(inode)->i_es_lock);
 	if (err1 || err2 || err3 < 0)

@@ -66,6 +66,7 @@ struct extent_status {
 struct ext4_es_tree {
 	struct rb_root root;
 	struct extent_status *cache_es;	/* recently accessed extent */
+	ext4_lblk_t da_es_len;	/* total delalloc len */
 };
 
 struct ext4_es_stats {
