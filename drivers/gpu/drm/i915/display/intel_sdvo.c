@@ -57,14 +57,13 @@
 #define SDVO_LVDS_MASK (SDVO_OUTPUT_LVDS0 | SDVO_OUTPUT_LVDS1)
 #define SDVO_TV_MASK   (SDVO_OUTPUT_CVBS0 | SDVO_OUTPUT_SVID0 | SDVO_OUTPUT_YPRPB0)
 
-#define SDVO_OUTPUT_MASK (SDVO_TMDS_MASK | SDVO_RGB_MASK | SDVO_LVDS_MASK |\
-			SDVO_TV_MASK)
+#define SDVO_OUTPUT_MASK (SDVO_TMDS_MASK | SDVO_RGB_MASK | SDVO_LVDS_MASK | SDVO_TV_MASK)
 
-#define IS_TV(c)	(c->output_flag & SDVO_TV_MASK)
-#define IS_TMDS(c)	(c->output_flag & SDVO_TMDS_MASK)
-#define IS_LVDS(c)	(c->output_flag & SDVO_LVDS_MASK)
-#define IS_TV_OR_LVDS(c) (c->output_flag & (SDVO_TV_MASK | SDVO_LVDS_MASK))
-#define IS_DIGITAL(c) (c->output_flag & (SDVO_TMDS_MASK | SDVO_LVDS_MASK))
+#define IS_TV(c)		((c)->output_flag & SDVO_TV_MASK)
+#define IS_TMDS(c)		((c)->output_flag & SDVO_TMDS_MASK)
+#define IS_LVDS(c)		((c)->output_flag & SDVO_LVDS_MASK)
+#define IS_TV_OR_LVDS(c)	((c)->output_flag & (SDVO_TV_MASK | SDVO_LVDS_MASK))
+#define IS_DIGITAL(c)		((c)->output_flag & (SDVO_TMDS_MASK | SDVO_LVDS_MASK))
 
 
 static const char * const tv_format_names[] = {
@@ -1270,10 +1269,10 @@ intel_sdvo_get_preferred_input_mode(struct intel_sdvo *intel_sdvo,
 	return true;
 }
 
-static void i9xx_adjust_sdvo_tv_clock(struct intel_crtc_state *pipe_config)
+static int i9xx_adjust_sdvo_tv_clock(struct intel_crtc_state *pipe_config)
 {
 	struct drm_i915_private *dev_priv = to_i915(pipe_config->uapi.crtc->dev);
-	unsigned dotclock = pipe_config->port_clock;
+	unsigned int dotclock = pipe_config->hw.adjusted_mode.crtc_clock;
 	struct dpll *clock = &pipe_config->dpll;
 
 	/*
@@ -1293,11 +1292,14 @@ static void i9xx_adjust_sdvo_tv_clock(struct intel_crtc_state *pipe_config)
 		clock->m1 = 12;
 		clock->m2 = 8;
 	} else {
-		drm_WARN(&dev_priv->drm, 1,
-			 "SDVO TV clock out of range: %i\n", dotclock);
+		drm_dbg_kms(&dev_priv->drm,
+			    "SDVO TV clock out of range: %i\n", dotclock);
+		return -EINVAL;
 	}
 
 	pipe_config->clock_set = true;
+
+	return 0;
 }
 
 static bool intel_has_hdmi_sink(struct intel_sdvo_connector *intel_sdvo_connector,
@@ -1415,8 +1417,13 @@ static int intel_sdvo_compute_config(struct intel_encoder *encoder,
 					       conn_state);
 
 	/* Clock computation needs to happen after pixel multiplier. */
-	if (IS_TV(intel_sdvo_connector))
-		i9xx_adjust_sdvo_tv_clock(pipe_config);
+	if (IS_TV(intel_sdvo_connector)) {
+		int ret;
+
+		ret = i9xx_adjust_sdvo_tv_clock(pipe_config);
+		if (ret)
+			return ret;
+	}
 
 	if (conn_state->picture_aspect_ratio)
 		adjusted_mode->picture_aspect_ratio =
@@ -1956,7 +1963,7 @@ static bool intel_sdvo_get_capabilities(struct intel_sdvo *intel_sdvo, struct in
 		      "  device_rev_id: %d\n"
 		      "  sdvo_version_major: %d\n"
 		      "  sdvo_version_minor: %d\n"
-		      "  sdvo_inputs_mask: %d\n"
+		      "  sdvo_num_inputs: %d\n"
 		      "  smooth_scaling: %d\n"
 		      "  sharp_scaling: %d\n"
 		      "  up_scaling: %d\n"
@@ -1968,7 +1975,7 @@ static bool intel_sdvo_get_capabilities(struct intel_sdvo *intel_sdvo, struct in
 		      caps->device_rev_id,
 		      caps->sdvo_version_major,
 		      caps->sdvo_version_minor,
-		      caps->sdvo_inputs_mask,
+		      caps->sdvo_num_inputs,
 		      caps->smooth_scaling,
 		      caps->sharp_scaling,
 		      caps->up_scaling,
@@ -2134,6 +2141,10 @@ intel_sdvo_detect(struct drm_connector *connector, bool force)
 
 	if (!INTEL_DISPLAY_ENABLED(i915))
 		return connector_status_disconnected;
+
+	if (!intel_sdvo_set_target_output(intel_sdvo,
+					  intel_sdvo_connector->output_flag))
+		return connector_status_unknown;
 
 	if (!intel_sdvo_get_value(intel_sdvo,
 				  SDVO_CMD_GET_ATTACHED_DISPLAYS,
@@ -3433,15 +3444,14 @@ bool intel_sdvo_init(struct drm_i915_private *dev_priv,
 
 	drm_dbg_kms(&dev_priv->drm, "%s device VID/DID: %02X:%02X.%02X, "
 			"clock range %dMHz - %dMHz, "
-			"input 1: %c, input 2: %c, "
+			"num inputs: %d, "
 			"output 1: %c, output 2: %c\n",
 			SDVO_NAME(intel_sdvo),
 			intel_sdvo->caps.vendor_id, intel_sdvo->caps.device_id,
 			intel_sdvo->caps.device_rev_id,
 			intel_sdvo->pixel_clock_min / 1000,
 			intel_sdvo->pixel_clock_max / 1000,
-			(intel_sdvo->caps.sdvo_inputs_mask & 0x1) ? 'Y' : 'N',
-			(intel_sdvo->caps.sdvo_inputs_mask & 0x2) ? 'Y' : 'N',
+			intel_sdvo->caps.sdvo_num_inputs,
 			/* check currently supported outputs */
 			intel_sdvo->caps.output_flags &
 			(SDVO_OUTPUT_TMDS0 | SDVO_OUTPUT_RGB0 |
