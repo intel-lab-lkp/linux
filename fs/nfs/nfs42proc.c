@@ -57,6 +57,9 @@ static int _nfs42_proc_fallocate(struct rpc_message *msg, struct file *filep,
 		.falloc_server	= server,
 	};
 	int status;
+	struct super_block *sb = inode->i_sb;
+	u64 fattr_supported = NFS_SB(sb)->fattr_valid;
+	unsigned long mask = NFS_INO_INVALID_BLOCKS;
 
 	msg->rpc_argp = &args;
 	msg->rpc_resp = &res;
@@ -69,8 +72,10 @@ static int _nfs42_proc_fallocate(struct rpc_message *msg, struct file *filep,
 		return status;
 	}
 
+	if (fattr_supported & NFS_ATTR_FATTR_MODE)
+		mask |= NFS_INO_INVALID_MODE;
 	nfs4_bitmask_set(bitmask, server->cache_consistency_bitmask, inode,
-			 NFS_INO_INVALID_BLOCKS);
+				mask);
 
 	res.falloc_fattr = nfs_alloc_fattr();
 	if (!res.falloc_fattr)
