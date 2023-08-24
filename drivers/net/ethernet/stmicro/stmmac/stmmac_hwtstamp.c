@@ -36,12 +36,12 @@ static void config_sub_second_increment(void __iomem *ioaddr,
 	 * to mid-range = 2^31 when the remainder of this division is zero,
 	 * which will make the accumulator overflow once every 2 ptp_clock
 	 * cycles, adding twice the number of nanoseconds of a clock cycle :
-	 * 2000000000ULL / ptp_clock.
+	 * 2 * NSEC_PER_SEC / ptp_clock.
 	 */
 	if (value & PTP_TCR_TSCFUPDT)
-		data = (2000000000ULL / ptp_clock);
+		data = (2 * NSEC_PER_SEC / ptp_clock);
 	else
-		data = (1000000000ULL / ptp_clock);
+		data = (NSEC_PER_SEC / ptp_clock);
 
 	/* 0.465ns accuracy */
 	if (!(value & PTP_TCR_TSCTRLSSR))
