@@ -195,7 +195,7 @@ static ssize_t amdgpu_mem_info_vram_vendor(struct device *dev,
 static DEVICE_ATTR(mem_info_vram_total, S_IRUGO,
 		   amdgpu_mem_info_vram_total_show, NULL);
 static DEVICE_ATTR(mem_info_vis_vram_total, S_IRUGO,
-		   amdgpu_mem_info_vis_vram_total_show,NULL);
+		   amdgpu_mem_info_vis_vram_total_show, NULL);
 static DEVICE_ATTR(mem_info_vram_used, S_IRUGO,
 		   amdgpu_mem_info_vram_used_show, NULL);
 static DEVICE_ATTR(mem_info_vis_vram_used, S_IRUGO,
