@@ -163,6 +163,7 @@ uint amdgpu_force_long_training;
 int amdgpu_lbpw = -1;
 int amdgpu_compute_multipipe = -1;
 int amdgpu_gpu_recovery = -1; /* auto */
+bool amdgpu_soft_recovery = true;
 int amdgpu_emu_mode;
 uint amdgpu_smu_memory_pool_size;
 int amdgpu_smu_pptable_id = -1;
@@ -2931,6 +2932,11 @@ static void amdgpu_init_debug_options(void)
 	if (amdgpu_debug_mask & DEBUG_LARGEBAR) {
 		pr_info("debug: enabled simulating large-bar capability on non-large bar system\n");
 		debug_largebar = true;
+	}
+
+	if (amdgpu_debug_mask & DEBUG_DISABLE_GPU_SOFT_RECOVERY) {
+		pr_info("debug: soft reset for GPU recovery disabled\n");
+		amdgpu_soft_recovery = false;
 	}
 }
 

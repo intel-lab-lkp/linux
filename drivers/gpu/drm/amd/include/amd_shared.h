@@ -261,6 +261,7 @@ enum AMDGPU_DEBUG_MASK {
 	DEBUG_VERBOSE_EVICTIONS = (1 << 0),		// 0x1
 	DEBUG_VM = (1 << 1),				// 0x2
 	DEBUG_LARGEBAR = (1 << 2),			// 0x4
+	DEBUG_DISABLE_GPU_SOFT_RECOVERY = (1 << 3),	// 0x8
 };
 
 /**
