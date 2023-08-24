@@ -5798,6 +5798,34 @@ out:
 }
 
 /*
+ * Calculate the worst case of extents blocks needed while mapping 'len'
+ * data blocks.
+ */
+unsigned int ext4_map_worst_ext_blocks(struct inode *inode, unsigned int len)
+{
+	unsigned int ext_blocks = 0;
+	int max_entries;
+	int depth, max_depth;
+
+	if (!len)
+		return 0;
+
+	max_entries = ext4_ext_space_block(inode, 0);
+	max_depth = EXT4_MAX_EXTENT_DEPTH;
+
+	for (depth = 0; depth < max_depth; depth++) {
+		len = DIV_ROUND_UP(len, max_entries);
+		ext_blocks += len;
+		if (len == 1)
+			break;
+		if (depth == 0)
+			max_entries = ext4_ext_space_block_idx(inode, 0);
+	}
+
+	return ext_blocks + max_depth - depth - 1;
+}
+
+/*
  * Updates physical block address and unwritten status of extent
  * starting at lblk start and of len. If such an extent doesn't exist,
  * this function splits the extent tree appropriately to create an
