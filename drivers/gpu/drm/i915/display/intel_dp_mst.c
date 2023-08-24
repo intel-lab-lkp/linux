@@ -111,7 +111,8 @@ static int intel_dp_mst_find_vcpi_slots_for_bpp(struct intel_encoder *encoder,
 		crtc_state->pbn = drm_dp_calc_pbn_mode(adjusted_mode->crtc_clock,
 						       dsc ? bpp << 4 : bpp,
 						       dsc,
-						       false);
+						       (dsc || crtc_state->fec_enable) &&
+							!intel_dp_is_uhbr(crtc_state));
 
 		slots = drm_dp_atomic_find_time_slots(state, &intel_dp->mst_mgr,
 						      connector->port,
