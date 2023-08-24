@@ -403,7 +403,7 @@ static int mei_ace_setup_dev_link(struct mei_ace *ace)
 	snprintf(name, sizeof(name), "%s-%pUl", dev_name(dev->parent), &uuid);
 
 	csi_dev = device_find_child_by_name(dev->parent, name);
-	if (!csi_dev) {
+	if (!csi_dev || !dev_fwnode(csi_dev)) {
 		ret = -EPROBE_DEFER;
 		goto err;
 	}
