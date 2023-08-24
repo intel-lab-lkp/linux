@@ -206,6 +206,17 @@ static enum drm_gem_object_status panfrost_gem_status(struct drm_gem_object *obj
 
 	return res;
 }
+
+size_t panfrost_gem_rss(struct drm_gem_object *obj)
+{
+	struct panfrost_gem_object *bo = to_panfrost_bo(obj);
+
+	if (!bo->base.pages)
+		return 0;
+
+	return bo->rss_size;
+}
+
 static const struct drm_gem_object_funcs panfrost_gem_funcs = {
 	.free = panfrost_gem_free_object,
 	.open = panfrost_gem_open,
@@ -218,6 +229,7 @@ static const struct drm_gem_object_funcs panfrost_gem_funcs = {
 	.vunmap = drm_gem_shmem_object_vunmap,
 	.mmap = drm_gem_shmem_object_mmap,
 	.status = panfrost_gem_status,
+	.rss = panfrost_gem_rss,
 	.vm_ops = &drm_gem_shmem_vm_ops,
 };
 
@@ -274,13 +286,23 @@ panfrost_gem_prime_import_sg_table(struct drm_device *dev,
 {
 	struct drm_gem_object *obj;
 	struct panfrost_gem_object *bo;
+	struct scatterlist *sgl;
+	unsigned int count;
+	size_t total = 0;
 
 	obj = drm_gem_shmem_prime_import_sg_table(dev, attach, sgt);
 	if (IS_ERR(obj))
 		return ERR_CAST(obj);
 
+	for_each_sgtable_dma_sg(sgt, sgl, count) {
+		size_t len = sg_dma_len(sgl);
+
+		total += len;
+	}
+
 	bo = to_panfrost_bo(obj);
 	bo->noexec = true;
+	bo->rss_size = total;
 
 	return obj;
 }
