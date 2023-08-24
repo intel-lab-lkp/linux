@@ -1,0 +1,26 @@
+drm drm-fixes 706a741595047797872e669b3101429ab8d378ef
+	Linux 6.5-rc7
+drm-misc drm-misc-fixes 0c3b063ef4136191312a88ea7a670a6a2a2dae5a
+	drm/drm_connector: Provide short description of param 'supported_colorspaces'
+drm-intel drm-intel-fixes 1dcc437427bbcebc8381226352f7ade08a271191
+	drm/i915: Fix HPD polling, reenabling the output poll work as needed
+drm drm-next 38f88732b2928a831d794737b499c6db8da9b9ac
+	Merge tag 'drm-msm-next-2023-08-20' of https://gitlab.freedesktop.org/drm/msm into drm-next
+drm-misc drm-misc-next-fixes cdf4100eaa1f4107fcf7c95b5eccca96cca6c777
+	drm/gpuva_mgr: remove unused prev pointer in __drm_gpuva_sm_map()
+drm-intel drm-intel-next-fixes cfd48ad8c4a9137b0fde7f0ecf463d44b01875dc
+	drm/i915: Fix HPD polling, reenabling the output poll work as needed
+drm-misc drm-misc-next b715dcd3db4a9a57b3fbe7820db37cae930f0867
+	drm/nouveau: uapi: don't pass NO_PREFETCH flag implicitly
+drm-intel drm-intel-next e83d12e0923116c11ed54891745edb8003a64854
+	drm/i915/sdvo: Fail gracefully if the TV dotclock is out of range
+drm-intel drm-intel-gt-next 8940da9fe5f278ac6ecb4cafa55c784f524cb3b2
+	drm/i915/mtl: Adding DeviceID for Arrowlake-S under MTL
+drm-intel topic/core-for-CI c0ea2fa0491287dea97b384bec1b5a614408b8e3
+	drm/i915/gsc: define gsc fw
+drm-misc topic/i915-ttm 1e3944578b749449bd7fa6bf0bae4c3d3f5f1733
+	Merge tag 'amd-drm-next-5.16-2021-09-27' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm topic/nouveau-misc dfc4005f8c172eea359f9db08c3b2b0ff0153699
+	drm/nouveau/disp: move DAC load detection method
+drm topic/drm-ci 7eba34e03988202a6aa5450db0f55f380eb9ee83
+	drm: Add initial ci/ subdirectory
