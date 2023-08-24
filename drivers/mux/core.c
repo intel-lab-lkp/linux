@@ -43,6 +43,16 @@ struct mux_state {
 	unsigned int state;
 };
 
+/**
+ * struct mux_state_array - Represents an array of mux states
+ * @num: number of mux state
+ * @mstate: array of mux states
+ */
+struct mux_state_array {
+	unsigned int num;
+	struct mux_state *mstate[];
+};
+
 static struct class mux_class = {
 	.name = "mux",
 };
@@ -409,6 +419,44 @@ int mux_state_select_delay(struct mux_state *mstate, unsigned int delay_us)
 EXPORT_SYMBOL_GPL(mux_state_select_delay);
 
 /**
+ * mux_state_array_select() - Select the given multiplexer state.
+ * @mstates: The mux-state-array which contains multiple mux-state to select.
+ *
+ * On successfully selecting all the mux-states, their mux-control will be
+ * locked until there is a call to mux_state_array_deselect().
+ * If a mux-controls is already selected when mux_state_array_select() is
+ * called, then caller will be blocked.
+ *
+ * Therefore, make sure to call mux_state_array_deselect() when the operation
+ * is complete and the mux-state-array is free for others to use, but do not
+ * call mux_state_array_deselect() if mux_state_array_select() fails.
+ * If a mux_state_array_select() fails inbetween the already selected
+ * mux-states in the array are deselected.
+ *
+ * Return: 0 when the mux-state has been selected or a negative
+ * errno on error.
+ */
+int mux_state_array_select(struct mux_state_array *mstates)
+{
+	int ret, i;
+
+	for (i = 0; i < mstates->num; ++i) {
+		ret = mux_state_select(mstates->mstate[i]);
+		if (ret < 0)
+			goto err_mstates;
+	}
+
+	return 0;
+
+err_mstates:
+	while (--i >= 0)
+		mux_state_deselect(mstates->mstate[i]);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(mux_state_array_select);
+
+/**
  * mux_control_try_select_delay() - Try to select the given multiplexer state.
  * @mux: The mux-control to request a change of state from.
  * @state: The new requested state.
@@ -508,6 +556,29 @@ int mux_state_deselect(struct mux_state *mstate)
 }
 EXPORT_SYMBOL_GPL(mux_state_deselect);
 
+/**
+ * mux_state_array_deselect() - Deselect the previously selected multiplexer state.
+ * @mstates: Array of mux-states to deselect.
+ *
+ * It is required that a single call is made to mux_state_array_deselect() for
+ * each and every successful call made to either of mux_state_array_select().
+ *
+ * Return: 0 on success and a negative errno on error.
+ */
+int mux_state_array_deselect(struct mux_state_array *mstates)
+{
+	int ret, i;
+
+	for (i = 0; i < mstates->num; ++i) {
+		ret = mux_state_deselect(mstates->mstate[i]);
+		if (ret < 0)
+			return ret;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(mux_state_array_deselect);
+
 /* Note this function returns a reference to the mux_chip dev. */
 static struct mux_chip *of_find_mux_chip_by_node(struct device_node *np)
 {
@@ -522,19 +593,19 @@ static struct mux_chip *of_find_mux_chip_by_node(struct device_node *np)
  * mux_get() - Get the mux-control for a device.
  * @dev: The device that needs a mux-control.
  * @mux_name: The name identifying the mux-control.
+ * @index: Index to identify mux-control if mux-name is NULL.
  * @state: Pointer to where the requested state is returned, or NULL when
  *         the required multiplexer states are handled by other means.
  *
  * Return: A pointer to the mux-control, or an ERR_PTR with a negative errno.
  */
 static struct mux_control *mux_get(struct device *dev, const char *mux_name,
-				   unsigned int *state)
+				   int index, unsigned int *state)
 {
 	struct device_node *np = dev->of_node;
 	struct of_phandle_args args;
 	struct mux_chip *mux_chip;
 	unsigned int controller;
-	int index = 0;
 	int ret;
 
 	if (mux_name) {
@@ -619,7 +690,7 @@ static struct mux_control *mux_get(struct device *dev, const char *mux_name,
  */
 struct mux_control *mux_control_get(struct device *dev, const char *mux_name)
 {
-	return mux_get(dev, mux_name, NULL);
+	return mux_get(dev, mux_name, 0, NULL);
 }
 EXPORT_SYMBOL_GPL(mux_control_get);
 
@@ -676,10 +747,12 @@ EXPORT_SYMBOL_GPL(devm_mux_control_get);
  * mux_state_get() - Get the mux-state for a device.
  * @dev: The device that needs a mux-state.
  * @mux_name: The name identifying the mux-state.
+ * @index: Index of the mux-state, to be used when mux-name is NULL
  *
  * Return: A pointer to the mux-state, or an ERR_PTR with a negative errno.
  */
-static struct mux_state *mux_state_get(struct device *dev, const char *mux_name)
+static struct mux_state *mux_state_get(struct device *dev, const char *mux_name,
+				       int index)
 {
 	struct mux_state *mstate;
 
@@ -687,7 +760,7 @@ static struct mux_state *mux_state_get(struct device *dev, const char *mux_name)
 	if (!mstate)
 		return ERR_PTR(-ENOMEM);
 
-	mstate->mux = mux_get(dev, mux_name, &mstate->state);
+	mstate->mux = mux_get(dev, mux_name, index, &mstate->state);
 	if (IS_ERR(mstate->mux)) {
 		int err = PTR_ERR(mstate->mux);
 
@@ -734,7 +807,7 @@ struct mux_state *devm_mux_state_get(struct device *dev,
 	if (!ptr)
 		return ERR_PTR(-ENOMEM);
 
-	mstate = mux_state_get(dev, mux_name);
+	mstate = mux_state_get(dev, mux_name, 0);
 	if (IS_ERR(mstate)) {
 		devres_free(ptr);
 		return mstate;
@@ -746,6 +819,82 @@ struct mux_state *devm_mux_state_get(struct device *dev,
 	return mstate;
 }
 EXPORT_SYMBOL_GPL(devm_mux_state_get);
+
+/*
+ * mux_state_array_get() - Get the all the mux-states for a device.
+ * @dev: The device that needs a mux-state.
+ *
+ * Return: A pointer to the mux-state, or an ERR_PTR with a negative errno.
+ */
+static struct mux_state_array *mux_state_array_get(struct device *dev)
+{
+	struct mux_state_array *mstates;
+	struct mux_state *mstate;
+	int num, i;
+
+	num = of_count_phandle_with_args(dev->of_node, "mux-states", "#mux-state-cells");
+	if (num < 0)
+		return ERR_PTR(num);
+
+	mstates = kzalloc(struct_size(mstates, mstate, num), GFP_KERNEL);
+	if (!mstates)
+		return ERR_PTR(-ENOMEM);
+
+	for (i = 0; i < num; i++) {
+		mstate = mux_state_get(dev, NULL, i);
+		if (IS_ERR(mstate))
+			goto err_mstates;
+		mstates->mstate[i] = mstate;
+	}
+	mstates->num = num;
+
+	return mstates;
+
+err_mstates:
+	while (--i >= 0)
+		mux_state_put(mstates->mstate[i]);
+	kfree(mstates);
+
+	return ERR_PTR(PTR_ERR(mstate));
+}
+
+static void devm_mux_state_array_release(struct device *dev, void *res)
+{
+	int i;
+	struct mux_state_array *mstates = *(struct mux_state_array **)res;
+
+	for (i = 0; i < mstates->num; i++)
+		mux_state_put(mstates->mstate[i]);
+	kfree(mstates);
+}
+
+/**
+ * devm_mux_state_array_get() - Get the all the mux-states for a device, with
+ * resource management.
+ * @dev: The device that needs a mux-control.
+ *
+ * Return: Pointer to the mux-state-array, or an ERR_PTR with a negative errno.
+ */
+struct mux_state_array *devm_mux_state_array_get(struct device *dev)
+{
+	struct mux_state_array **ptr, *mstates;
+
+	ptr = devres_alloc(devm_mux_state_array_release, sizeof(*ptr), GFP_KERNEL);
+	if (!ptr)
+		return ERR_PTR(-ENOMEM);
+
+	mstates = mux_state_array_get(dev);
+	if (IS_ERR(mstates)) {
+		devres_free(ptr);
+		return mstates;
+	}
+
+	*ptr = mstates;
+	devres_add(dev, ptr);
+
+	return mstates;
+}
+EXPORT_SYMBOL_GPL(devm_mux_state_array_get);
 
 /*
  * Using subsys_initcall instead of module_init here to try to ensure - for

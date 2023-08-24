@@ -15,6 +15,7 @@
 struct device;
 struct mux_control;
 struct mux_state;
+struct mux_state_array;
 
 unsigned int mux_control_states(struct mux_control *mux);
 int __must_check mux_control_select_delay(struct mux_control *mux,
@@ -39,6 +40,8 @@ static inline int __must_check mux_state_select(struct mux_state *mstate)
 	return mux_state_select_delay(mstate, 0);
 }
 
+int mux_state_array_select(struct mux_state_array *mstates);
+
 static inline int __must_check mux_control_try_select(struct mux_control *mux,
 						      unsigned int state)
 {
@@ -53,6 +56,8 @@ static inline int __must_check mux_state_try_select(struct mux_state *mstate)
 int mux_control_deselect(struct mux_control *mux);
 int mux_state_deselect(struct mux_state *mstate);
 
+int mux_state_array_deselect(struct mux_state_array *mstates);
+
 struct mux_control *mux_control_get(struct device *dev, const char *mux_name);
 void mux_control_put(struct mux_control *mux);
 
@@ -60,5 +65,7 @@ struct mux_control *devm_mux_control_get(struct device *dev,
 					 const char *mux_name);
 struct mux_state *devm_mux_state_get(struct device *dev,
 				     const char *mux_name);
+
+struct mux_state_array *devm_mux_state_array_get(struct device *dev);
 
 #endif /* _LINUX_MUX_CONSUMER_H */
