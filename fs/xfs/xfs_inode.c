@@ -919,6 +919,15 @@ xfs_droplink(
 	xfs_trans_t *tp,
 	xfs_inode_t *ip)
 {
+	xfs_mount_t     *mp;
+
+	if (VFS_I(ip)->i_nlink == 0) {
+		mp = ip->i_mount;
+		xfs_warn(mp, "%s: Deleting inode %llu with no links.",
+			 __func__, ip->i_ino);
+		return 0;
+	}
+
 	xfs_trans_ichgtime(tp, ip, XFS_ICHGTIME_CHG);
 
 	drop_nlink(VFS_I(ip));
@@ -2442,7 +2451,12 @@ xfs_remove(
 	 */
 	if (is_dir) {
 		ASSERT(VFS_I(ip)->i_nlink >= 2);
-		if (VFS_I(ip)->i_nlink != 2) {
+		if (VFS_I(ip)->i_nlink < 2) {
+			xfs_warn(ip->i_mount,
+			"%s: Remove dir (inode %llu) with invalid links.",
+				 __func__, ip->i_ino);
+		}
+		if (VFS_I(ip)->i_nlink > 2) {
 			error = -ENOTEMPTY;
 			goto out_trans_cancel;
 		}
