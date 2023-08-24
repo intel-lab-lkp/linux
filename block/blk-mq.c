@@ -1258,6 +1258,8 @@ void blk_mq_start_request(struct request *rq)
 	WARN_ON_ONCE(blk_mq_rq_state(rq) != MQ_RQ_IDLE);
 
 	blk_add_timer(rq);
+	/* Pair with smp_rmb in blk_mq_req_expired(). */
+	smp_wmb();
 	WRITE_ONCE(rq->state, MQ_RQ_IN_FLIGHT);
 	rq->mq_hctx->tags->rqs[rq->tag] = rq;
 
@@ -1567,6 +1569,12 @@ static bool blk_mq_req_expired(struct request *rq, struct blk_expired_data *expi
 		return false;
 	if (rq->rq_flags & RQF_TIMED_OUT)
 		return false;
+
+	/*
+	 * Order LOADs of rq->state and rq->deadline, pair with
+	 * smp_wmb in blk_mq_start_request().
+	 */
+	smp_rmb();
 
 	deadline = READ_ONCE(rq->deadline);
 	if (time_after_eq(expired->timeout_start, deadline))
