@@ -3382,8 +3382,7 @@ EXPORT_SYMBOL(drm_dp_remove_payload_part1);
  * drm_dp_remove_payload_part2() - Remove an MST payload locally
  * @mgr: Manager to use.
  * @mst_state: The MST atomic state
- * @old_payload: The payload with its old state
- * @new_payload: The payload with its latest state
+ * @payload: The payload with its latest state
  *
  * Updates the starting time slots of all other payloads which would have been shifted towards
  * the start of the payload ID table as a result of removing a payload. Driver should call this
@@ -3392,25 +3391,36 @@ EXPORT_SYMBOL(drm_dp_remove_payload_part1);
  */
 void drm_dp_remove_payload_part2(struct drm_dp_mst_topology_mgr *mgr,
 				 struct drm_dp_mst_topology_state *mst_state,
-				 const struct drm_dp_mst_atomic_payload *old_payload,
-				 struct drm_dp_mst_atomic_payload *new_payload)
+				 struct drm_dp_mst_atomic_payload *payload)
 {
 	struct drm_dp_mst_atomic_payload *pos;
+	u8 time_slots_to_remove;
+	u8 next_payload_vc_start = mgr->next_start_slot;
+
+	/* Find the current allocated time slot number of the payload */
+	list_for_each_entry(pos, &mst_state->payloads, next) {
+		if (pos != payload &&
+		    pos->vc_start_slot > payload->vc_start_slot &&
+		    pos->vc_start_slot < next_payload_vc_start)
+			next_payload_vc_start = pos->vc_start_slot;
+	}
+
+	time_slots_to_remove = next_payload_vc_start - payload->vc_start_slot;
 
 	/* Remove local payload allocation */
 	list_for_each_entry(pos, &mst_state->payloads, next) {
-		if (pos != new_payload && pos->vc_start_slot > new_payload->vc_start_slot)
-			pos->vc_start_slot -= old_payload->time_slots;
+		if (pos != payload && pos->vc_start_slot > payload->vc_start_slot)
+			pos->vc_start_slot -= time_slots_to_remove;
 	}
-	new_payload->vc_start_slot = -1;
+	payload->vc_start_slot = -1;
 
 	mgr->payload_count--;
-	mgr->next_start_slot -= old_payload->time_slots;
+	mgr->next_start_slot -= time_slots_to_remove;
 
-	if (new_payload->delete)
-		drm_dp_mst_put_port_malloc(new_payload->port);
+	if (payload->delete)
+		drm_dp_mst_put_port_malloc(payload->port);
 
-	new_payload->payload_allocation_status = DRM_DP_MST_PAYLOAD_ALLOCATION_NONE;
+	payload->payload_allocation_status = DRM_DP_MST_PAYLOAD_ALLOCATION_NONE;
 }
 EXPORT_SYMBOL(drm_dp_remove_payload_part2);
 /**
