@@ -349,6 +349,27 @@ intel_dp_mst_compute_config_limits(struct intel_dp *intel_dp,
 						       limits);
 }
 
+static bool intel_dp_mst_port_supports_dsc(struct intel_dp *intel_dp,
+					   struct intel_crtc_state *crtc_state,
+					   struct drm_connector_state *conn_state)
+{
+	struct drm_i915_private *i915 = dp_to_i915(intel_dp);
+	struct intel_connector *connector =
+		to_intel_connector(conn_state->connector);
+	struct intel_crtc *crtc =
+		to_intel_crtc(crtc_state->uapi.crtc);
+
+	if (connector->port->parent != intel_dp->mst_mgr.mst_primary) {
+		drm_dbg_kms(&i915->drm,
+			    "[CRTC:%d:%s] DSC only allowed on sink ports of the first branch device\n",
+			    crtc->base.base.id, crtc->base.name);
+
+		return false;
+	}
+
+	return true;
+}
+
 static int intel_dp_mst_compute_config(struct intel_encoder *encoder,
 				       struct intel_crtc_state *pipe_config,
 				       struct drm_connector_state *conn_state)
@@ -395,6 +416,11 @@ static int intel_dp_mst_compute_config(struct intel_encoder *encoder,
 		drm_dbg_kms(&dev_priv->drm, "Try DSC (fallback=%s, force=%s)\n",
 			    str_yes_no(ret),
 			    str_yes_no(intel_dp->force_dsc_en));
+
+		if (!intel_dp_mst_port_supports_dsc(intel_dp,
+						    pipe_config,
+						    conn_state))
+			return -EINVAL;
 
 		if (!intel_dp_mst_compute_config_limits(intel_dp,
 							pipe_config,
