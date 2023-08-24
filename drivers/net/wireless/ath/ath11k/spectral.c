@@ -470,10 +470,10 @@ static const struct file_operations fops_scan_bins = {
 	.llseek = default_llseek,
 };
 
-static int ath11k_spectral_pull_summary(struct ath11k *ar,
-					struct wmi_dma_buf_release_meta_data *meta,
-					struct spectral_summary_fft_report *summary,
-					struct ath11k_spectral_summary_report *report)
+static void ath11k_spectral_pull_summary(struct ath11k *ar,
+					 struct wmi_dma_buf_release_meta_data *meta,
+					 struct spectral_summary_fft_report *summary,
+					 struct ath11k_spectral_summary_report *report)
 {
 	report->timestamp = __le32_to_cpu(summary->timestamp);
 	report->agc_total_gain = FIELD_GET(SPECTRAL_SUMMARY_INFO0_AGC_TOTAL_GAIN,
@@ -500,13 +500,11 @@ static int ath11k_spectral_pull_summary(struct ath11k *ar,
 					__le32_to_cpu(summary->info2));
 
 	memcpy(&report->meta, meta, sizeof(*meta));
-
-	return 0;
 }
 
-static int ath11k_spectral_pull_search(struct ath11k *ar,
-				       struct spectral_search_fft_report *search,
-				       struct ath11k_spectral_search_report *report)
+static void ath11k_spectral_pull_search(struct ath11k *ar,
+					struct spectral_search_fft_report *search,
+					struct ath11k_spectral_search_report *report)
 {
 	report->timestamp = __le32_to_cpu(search->timestamp);
 	report->detector_id = FIELD_GET(SPECTRAL_FFT_REPORT_INFO0_DETECTOR_ID,
@@ -531,8 +529,6 @@ static int ath11k_spectral_pull_search(struct ath11k *ar,
 				       __le32_to_cpu(search->info2));
 	report->rel_pwr_db = FIELD_GET(SPECTRAL_FFT_REPORT_INFO2_REL_PWR_DB,
 				       __le32_to_cpu(search->info2));
-
-	return 0;
 }
 
 static u8 ath11k_spectral_get_max_exp(s8 max_index, u8 max_magnitude,
@@ -629,11 +625,7 @@ int ath11k_spectral_process_fft(struct ath11k *ar,
 		return ret;
 	}
 
-	ret = ath11k_spectral_pull_search(ar, data, &search);
-	if (ret) {
-		ath11k_warn(ab, "failed to pull search report %d\n", ret);
-		return ret;
-	}
+	ath11k_spectral_pull_search(ar, data, &search);
 
 	chan_width_mhz = summary->meta.ch_width;
 
