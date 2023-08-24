@@ -63,12 +63,6 @@ struct imx_rngc {
 	struct clk		*clk;
 	void __iomem		*base;
 	struct hwrng		rng;
-	struct completion	rng_op_done;
-	/*
-	 * err_reg is written only by the irq handler and read only
-	 * when interrupts are masked, we need no spinlock
-	 */
-	u32			err_reg;
 };
 
 
@@ -89,15 +83,6 @@ static inline void imx_rngc_irq_mask_clear(struct imx_rngc *rngc)
 	cmd = readl(rngc->base + RNGC_COMMAND);
 	cmd |= RNGC_CMD_CLR_INT | RNGC_CMD_CLR_ERR;
 	writel(cmd, rngc->base + RNGC_COMMAND);
-}
-
-static inline void imx_rngc_irq_unmask(struct imx_rngc *rngc)
-{
-	u32 ctrl;
-
-	ctrl = readl(rngc->base + RNGC_CONTROL);
-	ctrl &= ~(RNGC_CTRL_MASK_DONE | RNGC_CTRL_MASK_ERROR);
-	writel(ctrl, rngc->base + RNGC_CONTROL);
 }
 
 static int imx_rngc_self_test(struct imx_rngc *rngc)
@@ -143,26 +128,6 @@ static int imx_rngc_read(struct hwrng *rng, void *data, size_t max, bool wait)
 	return retval ? retval : -EIO;
 }
 
-static irqreturn_t imx_rngc_irq(int irq, void *priv)
-{
-	struct imx_rngc *rngc = (struct imx_rngc *)priv;
-	u32 status;
-
-	/*
-	 * clearing the interrupt will also clear the error register
-	 * read error and status before clearing
-	 */
-	status = readl(rngc->base + RNGC_STATUS);
-	rngc->err_reg = readl(rngc->base + RNGC_ERROR);
-
-	imx_rngc_irq_mask_clear(rngc);
-
-	if (status & (RNGC_STATUS_SEED_DONE | RNGC_STATUS_ST_DONE))
-		complete(&rngc->rng_op_done);
-
-	return IRQ_HANDLED;
-}
-
 static int imx_rngc_init(struct hwrng *rng)
 {
 	struct imx_rngc *rngc = container_of(rng, struct imx_rngc, rng);
@@ -198,19 +163,7 @@ static int imx_rngc_init(struct hwrng *rng)
 	ctrl |= RNGC_CTRL_AUTO_SEED;
 	writel(ctrl, rngc->base + RNGC_CONTROL);
 
-	/*
-	 * if initialisation was successful, we keep the interrupt
-	 * unmasked until imx_rngc_cleanup is called
-	 * we mask the interrupt ourselves if we return an error
-	 */
 	return 0;
-}
-
-static void imx_rngc_cleanup(struct hwrng *rng)
-{
-	struct imx_rngc *rngc = container_of(rng, struct imx_rngc, rng);
-
-	imx_rngc_irq_mask_clear(rngc);
 }
 
 static int __init imx_rngc_probe(struct platform_device *pdev)
@@ -246,23 +199,15 @@ static int __init imx_rngc_probe(struct platform_device *pdev)
 	if (rng_type != RNGC_TYPE_RNGC && rng_type != RNGC_TYPE_RNGB)
 		return -ENODEV;
 
-	init_completion(&rngc->rng_op_done);
-
 	rngc->rng.name = pdev->name;
 	rngc->rng.init = imx_rngc_init;
 	rngc->rng.read = imx_rngc_read;
-	rngc->rng.cleanup = imx_rngc_cleanup;
 	rngc->rng.quality = 19;
 
 	rngc->dev = &pdev->dev;
 	platform_set_drvdata(pdev, rngc);
 
 	imx_rngc_irq_mask_clear(rngc);
-
-	ret = devm_request_irq(&pdev->dev,
-			irq, imx_rngc_irq, 0, pdev->name, (void *)rngc);
-	if (ret)
-		return dev_err_probe(&pdev->dev, ret, "Can't get interrupt working.\n");
 
 	if (self_test) {
 		ret = imx_rngc_self_test(rngc);
