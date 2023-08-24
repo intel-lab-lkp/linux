@@ -198,6 +198,7 @@ struct bt_iso_bcast_qos {
 	__u8  sync_cte_type;
 	__u8  mse;
 	__u16 timeout;
+	__u16 sync_handle;
 };
 
 struct bt_iso_qos {
