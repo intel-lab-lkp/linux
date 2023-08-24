@@ -379,6 +379,9 @@ int mux_control_select_delay(struct mux_control *mux, unsigned int state,
 {
 	int ret;
 
+	if (!mux)
+		return 0;
+
 	ret = down_killable(&mux->lock);
 	if (ret < 0)
 		return ret;
@@ -414,6 +417,9 @@ EXPORT_SYMBOL_GPL(mux_control_select_delay);
  */
 int mux_state_select_delay(struct mux_state *mstate, unsigned int delay_us)
 {
+	if (!mstate)
+		return 0;
+
 	return mux_control_select_delay(mstate->mux, mstate->state, delay_us);
 }
 EXPORT_SYMBOL_GPL(mux_state_select_delay);
@@ -439,6 +445,9 @@ EXPORT_SYMBOL_GPL(mux_state_select_delay);
 int mux_state_array_select(struct mux_state_array *mstates)
 {
 	int ret, i;
+
+	if (!mstates)
+		return 0;
 
 	for (i = 0; i < mstates->num; ++i) {
 		ret = mux_state_select(mstates->mstate[i]);
@@ -477,6 +486,9 @@ int mux_control_try_select_delay(struct mux_control *mux, unsigned int state,
 {
 	int ret;
 
+	if (!mux)
+		return 0;
+
 	if (down_trylock(&mux->lock))
 		return -EBUSY;
 
@@ -508,6 +520,9 @@ EXPORT_SYMBOL_GPL(mux_control_try_select_delay);
  */
 int mux_state_try_select_delay(struct mux_state *mstate, unsigned int delay_us)
 {
+	if (!mstate)
+		return 0;
+
 	return mux_control_try_select_delay(mstate->mux, mstate->state, delay_us);
 }
 EXPORT_SYMBOL_GPL(mux_state_try_select_delay);
@@ -527,6 +542,9 @@ EXPORT_SYMBOL_GPL(mux_state_try_select_delay);
 int mux_control_deselect(struct mux_control *mux)
 {
 	int ret = 0;
+
+	if (!mux)
+		return 0;
 
 	if (mux->idle_state != MUX_IDLE_AS_IS &&
 	    mux->idle_state != mux->cached_state)
@@ -552,6 +570,9 @@ EXPORT_SYMBOL_GPL(mux_control_deselect);
  */
 int mux_state_deselect(struct mux_state *mstate)
 {
+	if (!mstate)
+		return 0;
+
 	return mux_control_deselect(mstate->mux);
 }
 EXPORT_SYMBOL_GPL(mux_state_deselect);
@@ -568,6 +589,9 @@ EXPORT_SYMBOL_GPL(mux_state_deselect);
 int mux_state_array_deselect(struct mux_state_array *mstates)
 {
 	int ret, i;
+
+	if (!mstates)
+		return 0;
 
 	for (i = 0; i < mstates->num; ++i) {
 		ret = mux_state_deselect(mstates->mstate[i]);

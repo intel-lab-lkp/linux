@@ -63,9 +63,31 @@ void mux_control_put(struct mux_control *mux);
 
 struct mux_control *devm_mux_control_get(struct device *dev,
 					 const char *mux_name);
+static inline struct mux_control *
+devm_mux_control_get_optional(struct device *dev, const char *mux_name)
+{
+	struct mux_control *mux = devm_mux_control_get(dev, mux_name);
+
+	return (PTR_ERR(mux) == -ENOENT) ? NULL : mux;
+}
+
 struct mux_state *devm_mux_state_get(struct device *dev,
 				     const char *mux_name);
+static inline struct mux_state *
+devm_mux_state_get_optional(struct device *dev, const char *mux_name)
+{
+	struct mux_state *mstate = devm_mux_state_get(dev, mux_name);
+
+	return (PTR_ERR(mstate) == -ENOENT) ? NULL : mstate;
+}
 
 struct mux_state_array *devm_mux_state_array_get(struct device *dev);
+static inline struct mux_state_array *
+devm_mux_state_array_get_optional(struct device *dev)
+{
+	struct mux_state_array *mstates = devm_mux_state_array_get(dev);
+
+	return (PTR_ERR(mstates) == -ENOENT) ? NULL : mstates;
+}
 
 #endif /* _LINUX_MUX_CONSUMER_H */
