@@ -1213,7 +1213,7 @@ static int mmhub_v1_7_get_ras_error_count(struct amdgpu_device *adev,
 	uint32_t sec_cnt, ded_cnt;
 
 	for (i = 0; i < ARRAY_SIZE(mmhub_v1_7_ras_fields); i++) {
-		if(mmhub_v1_7_ras_fields[i].reg_offset != reg->reg_offset)
+		if (mmhub_v1_7_ras_fields[i].reg_offset != reg->reg_offset)
 			continue;
 
 		sec_cnt = (value &
