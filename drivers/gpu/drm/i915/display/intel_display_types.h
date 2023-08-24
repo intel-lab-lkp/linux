@@ -620,9 +620,6 @@ struct intel_connector {
 
 	struct intel_dp *mst_port;
 
-	/* Work struct to schedule a uevent on link train failure */
-	struct work_struct modeset_retry_work;
-
 	struct intel_hdcp hdcp;
 };
 
@@ -1778,6 +1775,9 @@ struct intel_dp {
 
 	/* Displayport compliance testing */
 	struct intel_dp_compliance compliance;
+
+	/* Work struct to schedule a uevent on link train failure */
+	struct work_struct modeset_retry_work;
 
 	/* Downstream facing port caps */
 	struct {
