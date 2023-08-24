@@ -158,8 +158,7 @@ static const struct iio_info ltc2309_info = {
 	.read_raw = ltc2309_read_raw,
 };
 
-static int ltc2309_probe(struct i2c_client *client,
-			 const struct i2c_device_id *id)
+static int ltc2309_probe(struct i2c_client *client)
 {
 	struct iio_dev *indio_dev;
 	struct ltc2309 *ltc2309;
