@@ -853,10 +853,12 @@ int stmmac_init_tstamp_counter(struct stmmac_priv *priv, u32 systime_flags)
 	/* Store sub second increment for later use */
 	priv->sub_second_inc = sub_second_inc;
 
-	/* calculate default addend value:
-	 * formula is :
-	 * addend = (2^32)/freq_div_ratio;
-	 * where, freq_div_ratio = 1e9ns/sub_second_inc
+	/* Calculate default addend so the accumulator overflows (2^32) in
+	 * sub_second_inc (ns). The addend is added to the accumulator
+	 * every clk_ptp cycle.
+	 *
+	 * addend = (2^32) / freq_div_ratio
+	 * where, freq_div_ratio = (1e9ns / sub_second_inc) / clk_ptp_rate
 	 */
 	temp = div_u64(NSEC_PER_SEC, sub_second_inc);
 	temp = temp << 32;
