@@ -166,14 +166,12 @@ static irqreturn_t imx_rngc_irq(int irq, void *priv)
 static int imx_rngc_init(struct hwrng *rng)
 {
 	struct imx_rngc *rngc = container_of(rng, struct imx_rngc, rng);
-	u32 cmd, ctrl;
+	u32 cmd, ctrl, status, err_reg;
 	int ret;
 
 	/* clear error */
 	cmd = readl(rngc->base + RNGC_COMMAND);
 	writel(cmd | RNGC_CMD_CLR_ERR, rngc->base + RNGC_COMMAND);
-
-	imx_rngc_irq_unmask(rngc);
 
 	/* create seed, repeat while there is some statistical error */
 	do {
@@ -181,19 +179,16 @@ static int imx_rngc_init(struct hwrng *rng)
 		cmd = readl(rngc->base + RNGC_COMMAND);
 		writel(cmd | RNGC_CMD_SEED, rngc->base + RNGC_COMMAND);
 
-		ret = wait_for_completion_timeout(&rngc->rng_op_done,
-						  usecs_to_jiffies(RNGC_SEED_TIMEOUT));
-		if (!ret) {
-			ret = -ETIMEDOUT;
-			goto err;
-		}
+		ret = readl_poll_timeout(rngc->base + RNGC_STATUS, status,
+					 status & RNGC_STATUS_SEED_DONE, 20000, RNGC_SEED_TIMEOUT);
+		if (ret < 0)
+			return ret;
 
-	} while (rngc->err_reg == RNGC_ERROR_STATUS_STAT_ERR);
+		err_reg = readl(rngc->base + RNGC_ERROR);
+	} while (err_reg == RNGC_ERROR_STATUS_STAT_ERR);
 
-	if (rngc->err_reg) {
-		ret = -EIO;
-		goto err;
-	}
+	if (err_reg)
+		return -EIO;
 
 	/*
 	 * enable automatic seeding, the rngc creates a new seed automatically
@@ -209,10 +204,6 @@ static int imx_rngc_init(struct hwrng *rng)
 	 * we mask the interrupt ourselves if we return an error
 	 */
 	return 0;
-
-err:
-	imx_rngc_irq_mask_clear(rngc);
-	return ret;
 }
 
 static void imx_rngc_cleanup(struct hwrng *rng)
