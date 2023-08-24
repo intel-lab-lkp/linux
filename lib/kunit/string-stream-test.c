@@ -16,6 +16,7 @@ static char *get_concatenated_string(struct kunit *test, struct string_stream *s
 	char *str = string_stream_get_string(stream);
 
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, str);
+	kunit_add_action(test, (kunit_action_t *)kfree, (void *)str);
 
 	return str;
 }
@@ -30,7 +31,6 @@ static void string_stream_init_test(struct kunit *test)
 
 	KUNIT_EXPECT_EQ(test, stream->length, 0);
 	KUNIT_EXPECT_TRUE(test, list_empty(&stream->fragments));
-	KUNIT_EXPECT_PTR_EQ(test, stream->test, test);
 	KUNIT_EXPECT_EQ(test, stream->gfp, GFP_KERNEL);
 	KUNIT_EXPECT_FALSE(test, stream->append_newlines);
 
