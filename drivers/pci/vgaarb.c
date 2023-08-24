@@ -60,7 +60,8 @@ static int vga_count, vga_decode_count;
 static bool vga_arbiter_used;
 static DEFINE_SPINLOCK(vga_lock);
 static DECLARE_WAIT_QUEUE_HEAD(vga_wait_queue);
-
+/* The PCI(e) device who owns the firmware framebuffer */
+static struct pci_dev *pdev_boot_vga;
 
 static const char *vga_iostate_to_str(unsigned int iostate)
 {
@@ -571,6 +572,9 @@ static bool vga_is_firmware_default(struct pci_dev *pdev)
 
 		return true;
 	}
+#else
+	if (pdev_boot_vga && pdev_boot_vga == pdev)
+		return true;
 #endif
 	return false;
 }
@@ -1555,3 +1559,73 @@ static int __init vga_arb_device_init(void)
 	return rc;
 }
 subsys_initcall_sync(vga_arb_device_init);
+
+/*
+ * Get the physical address range that the firmware framebuffer occupies.
+ *
+ * Note that the global screen_info is arch-specific, thus CONFIG_SYSFB is
+ * chosen as compile-time conditional to suppress linkage problems on non-x86
+ * architectures.
+ *
+ * Returns true on success, otherwise return false.
+ */
+static bool vga_arb_get_firmware_fb_range(u64 *start, u64 *end)
+{
+	u64 fb_start = 0;
+	u64 fb_size = 0;
+	u64 fb_end;
+
+#if defined(CONFIG_X86) || defined(CONFIG_IA64) || defined(CONFIG_SYSFB)
+	fb_start = screen_info.lfb_base;
+	if (screen_info.capabilities & VIDEO_CAPABILITY_64BIT_BASE)
+		fb_start |= (u64)screen_info.ext_lfb_base << 32;
+
+	fb_size = screen_info.lfb_size;
+#endif
+
+	/* No firmware framebuffer support */
+	if (!fb_start || !fb_size)
+		return false;
+
+	fb_end = fb_start + fb_size - 1;
+
+	*start = fb_start;
+	*end = fb_end;
+
+	return true;
+}
+
+/*
+ * Identify the PCI VGA device that contains the firmware framebuffer
+ */
+static void pci_boot_vga_capturer(struct pci_dev *pdev)
+{
+	u64 fb_start, fb_end;
+	struct resource *res;
+	unsigned int i;
+
+	if (pdev_boot_vga)
+		return;
+
+	if (!vga_arb_get_firmware_fb_range(&fb_start, &fb_end))
+		return;
+
+	pci_dev_for_each_resource(pdev, res, i) {
+		if (resource_type(res) != IORESOURCE_MEM)
+			continue;
+
+		if (!res->start || !res->end)
+			continue;
+
+		if (res->start <= fb_start && fb_end <= res->end) {
+			pdev_boot_vga = pdev;
+
+			vgaarb_info(&pdev->dev,
+				    "BAR %u: %pR contains firmware FB [0x%llx-0x%llx]\n",
+				    i, res, fb_start, fb_end);
+			break;
+		}
+	}
+}
+DECLARE_PCI_FIXUP_CLASS_HEADER(PCI_ANY_ID, PCI_ANY_ID, PCI_CLASS_DISPLAY_VGA,
+			       8, pci_boot_vga_capturer);
