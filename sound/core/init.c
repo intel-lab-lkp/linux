@@ -132,15 +132,28 @@ int snd_device_alloc(struct device **dev_p, struct snd_card *card)
 	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 	if (!dev)
 		return -ENOMEM;
+	snd_device_init(dev, card);
+	*dev_p = dev;
+	return 0;
+}
+EXPORT_SYMBOL_GPL(snd_device_alloc);
+
+/**
+ * snd_device_init - Initialize struct device for sound devices
+ * @dev_p: pointer to store the allocated device
+ * @card: card to assign, optional
+ *
+ * For releasing the allocated device, call put_device().
+ */
+void snd_device_init(struct device *dev, struct snd_card *card)
+{
 	device_initialize(dev);
 	if (card)
 		dev->parent = &card->card_dev;
 	dev->class = &sound_class;
 	dev->release = default_release_alloc;
-	*dev_p = dev;
-	return 0;
 }
-EXPORT_SYMBOL_GPL(snd_device_alloc);
+EXPORT_SYMBOL_GPL(snd_device_init);
 
 static int snd_card_init(struct snd_card *card, struct device *parent,
 			 int idx, const char *xid, struct module *module,
