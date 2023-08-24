@@ -1172,7 +1172,6 @@ err_ctrlh_free:
 err_me_cleanup:
 	media_entity_cleanup(&vfd->entity);
 err_vd_rel:
-	video_device_release(vfd);
 	return ret;
 }
 
