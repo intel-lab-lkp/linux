@@ -40,15 +40,15 @@ static const struct drm_dp_mst_calc_pbn_mode_test drm_dp_mst_calc_pbn_mode_cases
 	},
 	{
 		.clock = 332880,
-		.bpp = 24,
+		.bpp = 24 << 4,
 		.dsc = true,
-		.expected = 50
+		.expected = 1191
 	},
 	{
 		.clock = 324540,
-		.bpp = 24,
+		.bpp = 24 << 4,
 		.dsc = true,
-		.expected = 49
+		.expected = 1161
 	},
 };
 
