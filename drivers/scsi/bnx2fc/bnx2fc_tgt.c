@@ -671,12 +671,18 @@ static int bnx2fc_alloc_session_resc(struct bnx2fc_hba *hba,
 	tgt->sq_mem_size = (tgt->sq_mem_size + (CNIC_PAGE_SIZE - 1)) &
 			   CNIC_PAGE_MASK;
 
-	tgt->sq = dma_alloc_coherent(&hba->pcidev->dev, tgt->sq_mem_size,
-				     &tgt->sq_dma, GFP_KERNEL);
+	tgt->sq = kzalloc(tgt->sq_mem_size, GFP_KERNEL);
 	if (!tgt->sq) {
 		printk(KERN_ERR PFX "unable to allocate SQ memory %d\n",
 			tgt->sq_mem_size);
-		goto mem_alloc_failure;
+		goto sq_alloc_failure;
+	}
+
+	tgt->sq_dma = dma_map_single(&hba->pcidev->dev, tgt->sq,
+				     tgt->sq_mem_size, DMA_BIDIRECTIONAL);
+	if (unlikely(dma_mapping_error(&hba->pcidev->dev, tgt->sq_dma))) {
+		pr_err(PFX "unable to map SQ memory %d\n", tgt->sq_mem_size);
+		goto sq_map_failure;
 	}
 
 	/* Allocate and map CQ */
@@ -684,12 +690,18 @@ static int bnx2fc_alloc_session_resc(struct bnx2fc_hba *hba,
 	tgt->cq_mem_size = (tgt->cq_mem_size + (CNIC_PAGE_SIZE - 1)) &
 			   CNIC_PAGE_MASK;
 
-	tgt->cq = dma_alloc_coherent(&hba->pcidev->dev, tgt->cq_mem_size,
-				     &tgt->cq_dma, GFP_KERNEL);
+	tgt->cq = kzalloc(tgt->cq_mem_size, GFP_KERNEL);
 	if (!tgt->cq) {
-		printk(KERN_ERR PFX "unable to allocate CQ memory %d\n",
-			tgt->cq_mem_size);
-		goto mem_alloc_failure;
+		pr_err(PFX "unable to allocate CQ memory %d\n",
+		       tgt->cq_mem_size);
+		goto cq_alloc_failure;
+	}
+
+	tgt->cq_dma = dma_map_single(&hba->pcidev->dev, tgt->cq,
+				     tgt->cq_mem_size, DMA_BIDIRECTIONAL);
+	if (unlikely(dma_mapping_error(&hba->pcidev->dev, tgt->cq_dma))) {
+		pr_err(PFX "unable to map CQ memory %d\n", tgt->cq_mem_size);
+		goto cq_map_failure;
 	}
 
 	/* Allocate and map RQ and RQ PBL */
@@ -697,24 +709,36 @@ static int bnx2fc_alloc_session_resc(struct bnx2fc_hba *hba,
 	tgt->rq_mem_size = (tgt->rq_mem_size + (CNIC_PAGE_SIZE - 1)) &
 			   CNIC_PAGE_MASK;
 
-	tgt->rq = dma_alloc_coherent(&hba->pcidev->dev, tgt->rq_mem_size,
-				     &tgt->rq_dma, GFP_KERNEL);
+	tgt->rq = kzalloc(tgt->rq_mem_size, GFP_KERNEL);
 	if (!tgt->rq) {
-		printk(KERN_ERR PFX "unable to allocate RQ memory %d\n",
-			tgt->rq_mem_size);
-		goto mem_alloc_failure;
+		pr_err(PFX "unable to allocate RQ memory %d\n",
+		       tgt->rq_mem_size);
+		goto rq_alloc_failure;
+	}
+
+	tgt->rq_dma = dma_map_single(&hba->pcidev->dev, tgt->rq,
+				     tgt->rq_mem_size, DMA_BIDIRECTIONAL);
+	if (unlikely(dma_mapping_error(&hba->pcidev->dev, tgt->rq_dma))) {
+		pr_err(PFX "unable to map RQ memory %d\n", tgt->rq_mem_size);
+		goto rq_map_failure;
 	}
 
 	tgt->rq_pbl_size = (tgt->rq_mem_size / CNIC_PAGE_SIZE) * sizeof(void *);
 	tgt->rq_pbl_size = (tgt->rq_pbl_size + (CNIC_PAGE_SIZE - 1)) &
 			   CNIC_PAGE_MASK;
 
-	tgt->rq_pbl = dma_alloc_coherent(&hba->pcidev->dev, tgt->rq_pbl_size,
-					 &tgt->rq_pbl_dma, GFP_KERNEL);
+	tgt->rq_pbl = kzalloc(tgt->rq_pbl_size, GFP_KERNEL);
 	if (!tgt->rq_pbl) {
-		printk(KERN_ERR PFX "unable to allocate RQ PBL %d\n",
-			tgt->rq_pbl_size);
-		goto mem_alloc_failure;
+		pr_err(PFX "unable to allocate RQ PBL %d\n", tgt->rq_pbl_size);
+		goto rq_pbl_alloc_failure;
+	}
+
+	tgt->rq_pbl_dma = dma_map_single(&hba->pcidev->dev, tgt->rq_pbl,
+					 tgt->rq_pbl_size, DMA_BIDIRECTIONAL);
+	if (unlikely(dma_mapping_error(&hba->pcidev->dev, tgt->rq_pbl_dma))) {
+		pr_err(PFX "unable to map RQ PBL memory %d\n",
+		       tgt->rq_pbl_size);
+		goto rq_pbl_map_failure;
 	}
 
 	num_pages = tgt->rq_mem_size / CNIC_PAGE_SIZE;
@@ -734,13 +758,19 @@ static int bnx2fc_alloc_session_resc(struct bnx2fc_hba *hba,
 	tgt->xferq_mem_size = (tgt->xferq_mem_size + (CNIC_PAGE_SIZE - 1)) &
 			       CNIC_PAGE_MASK;
 
-	tgt->xferq = dma_alloc_coherent(&hba->pcidev->dev,
-					tgt->xferq_mem_size, &tgt->xferq_dma,
-					GFP_KERNEL);
+	tgt->xferq = kzalloc(tgt->xferq_mem_size, GFP_KERNEL);
 	if (!tgt->xferq) {
 		printk(KERN_ERR PFX "unable to allocate XFERQ %d\n",
 			tgt->xferq_mem_size);
-		goto mem_alloc_failure;
+		goto xferq_alloc_failure;
+	}
+
+	tgt->xferq_dma = dma_map_single(&hba->pcidev->dev, tgt->xferq,
+					tgt->xferq_mem_size, DMA_BIDIRECTIONAL);
+	if (unlikely(dma_mapping_error(&hba->pcidev->dev, tgt->xferq_dma))) {
+		pr_err(PFX "unable to map XFERQ memory %d\n",
+		       tgt->xferq_mem_size);
+		goto xferq_map_failure;
 	}
 
 	/* Allocate and map CONFQ & CONFQ PBL */
@@ -748,13 +778,19 @@ static int bnx2fc_alloc_session_resc(struct bnx2fc_hba *hba,
 	tgt->confq_mem_size = (tgt->confq_mem_size + (CNIC_PAGE_SIZE - 1)) &
 			       CNIC_PAGE_MASK;
 
-	tgt->confq = dma_alloc_coherent(&hba->pcidev->dev,
-					tgt->confq_mem_size, &tgt->confq_dma,
-					GFP_KERNEL);
+	tgt->confq = kzalloc(tgt->confq_mem_size, GFP_KERNEL);
 	if (!tgt->confq) {
-		printk(KERN_ERR PFX "unable to allocate CONFQ %d\n",
-			tgt->confq_mem_size);
-		goto mem_alloc_failure;
+		pr_err(PFX "unable to allocate CONFQ %d\n",
+		       tgt->confq_mem_size);
+		goto confq_alloc_failure;
+	}
+
+	tgt->confq_dma = dma_map_single(&hba->pcidev->dev, tgt->confq,
+					tgt->confq_mem_size, DMA_BIDIRECTIONAL);
+	if (unlikely(dma_mapping_error(&hba->pcidev->dev, tgt->confq_dma))) {
+		pr_err(PFX "unable to map CONFQ memory %d\n",
+		       tgt->confq_mem_size);
+		goto confq_map_failure;
 	}
 
 	tgt->confq_pbl_size =
@@ -762,13 +798,19 @@ static int bnx2fc_alloc_session_resc(struct bnx2fc_hba *hba,
 	tgt->confq_pbl_size =
 		(tgt->confq_pbl_size + (CNIC_PAGE_SIZE - 1)) & CNIC_PAGE_MASK;
 
-	tgt->confq_pbl = dma_alloc_coherent(&hba->pcidev->dev,
-					    tgt->confq_pbl_size,
-					    &tgt->confq_pbl_dma, GFP_KERNEL);
+	tgt->confq_pbl = kzalloc(tgt->confq_pbl_size, GFP_KERNEL);
 	if (!tgt->confq_pbl) {
-		printk(KERN_ERR PFX "unable to allocate CONFQ PBL %d\n",
-			tgt->confq_pbl_size);
-		goto mem_alloc_failure;
+		pr_err(PFX "unable to allocate CONFQ PBL %d\n",
+		       tgt->confq_pbl_size);
+		goto confq_pbl_alloc_failure;
+	}
+
+	tgt->confq_pbl_dma = dma_map_single(&hba->pcidev->dev, tgt->confq_pbl,
+					    tgt->confq_pbl_size, DMA_BIDIRECTIONAL);
+	if (unlikely(dma_mapping_error(&hba->pcidev->dev, tgt->confq_pbl_dma))) {
+		pr_err(PFX "unable to map CONFQ PBL memory %d\n",
+		       tgt->confq_pbl_size);
+		goto confq_pbl_map_failure;
 	}
 
 	num_pages = tgt->confq_mem_size / CNIC_PAGE_SIZE;
@@ -786,35 +828,88 @@ static int bnx2fc_alloc_session_resc(struct bnx2fc_hba *hba,
 	/* Allocate and map ConnDB */
 	tgt->conn_db_mem_size = sizeof(struct fcoe_conn_db);
 
-	tgt->conn_db = dma_alloc_coherent(&hba->pcidev->dev,
-					  tgt->conn_db_mem_size,
-					  &tgt->conn_db_dma, GFP_KERNEL);
+	tgt->conn_db = kzalloc(tgt->conn_db_mem_size, GFP_KERNEL);
 	if (!tgt->conn_db) {
 		printk(KERN_ERR PFX "unable to allocate conn_db %d\n",
-						tgt->conn_db_mem_size);
-		goto mem_alloc_failure;
+		       tgt->conn_db_mem_size);
+		goto conn_db_alloc_failure;
 	}
 
+	tgt->conn_db_dma = dma_map_single(&hba->pcidev->dev, tgt->conn_db,
+					  tgt->conn_db_mem_size, DMA_BIDIRECTIONAL);
+	if (unlikely(dma_mapping_error(&hba->pcidev->dev, tgt->conn_db_dma))) {
+		pr_err(PFX "unable to map conn db memory %d\n",
+		       tgt->conn_db_mem_size);
+		goto conn_db_map_failure;
+	}
 
 	/* Allocate and map LCQ */
 	tgt->lcq_mem_size = (tgt->max_sqes + 8) * BNX2FC_SQ_WQE_SIZE;
 	tgt->lcq_mem_size = (tgt->lcq_mem_size + (CNIC_PAGE_SIZE - 1)) &
 			     CNIC_PAGE_MASK;
 
-	tgt->lcq = dma_alloc_coherent(&hba->pcidev->dev, tgt->lcq_mem_size,
-				      &tgt->lcq_dma, GFP_KERNEL);
-
+	tgt->lcq = kzalloc(tgt->lcq_mem_size, GFP_KERNEL);
 	if (!tgt->lcq) {
 		printk(KERN_ERR PFX "unable to allocate lcq %d\n",
 		       tgt->lcq_mem_size);
-		goto mem_alloc_failure;
+		goto lcq_alloc_failure;
+	}
+
+	tgt->lcq_dma = dma_map_single(&hba->pcidev->dev, tgt->lcq,
+				      tgt->lcq_mem_size, DMA_BIDIRECTIONAL);
+	if (unlikely(dma_mapping_error(&hba->pcidev->dev, tgt->lcq_dma))) {
+		pr_err(PFX "unable to map lcq memory %d\n",
+		       tgt->lcq_mem_size);
+		goto lcq_map_failure;
 	}
 
 	tgt->conn_db->rq_prod = 0x8000;
 
 	return 0;
 
-mem_alloc_failure:
+lcq_map_failure:
+	kfree(tgt->lcq);
+lcq_alloc_failure:
+	dma_unmap_single(&hba->pcidev->dev, tgt->conn_db_dma,
+			 tgt->conn_db_mem_size, DMA_BIDIRECTIONAL);
+conn_db_map_failure:
+	kfree(tgt->conn_db);
+conn_db_alloc_failure:
+	dma_unmap_single(&hba->pcidev->dev, tgt->confq_pbl_dma,
+			 tgt->confq_pbl_size, DMA_BIDIRECTIONAL);
+confq_pbl_map_failure:
+	kfree(tgt->confq_pbl);
+confq_pbl_alloc_failure:
+	dma_unmap_single(&hba->pcidev->dev, tgt->confq_dma,
+			 tgt->confq_mem_size, DMA_BIDIRECTIONAL);
+confq_map_failure:
+	kfree(tgt->confq);
+confq_alloc_failure:
+	dma_unmap_single(&hba->pcidev->dev, tgt->xferq_dma,
+			 tgt->xferq_mem_size, DMA_BIDIRECTIONAL);
+xferq_map_failure:
+	kfree(tgt->xferq);
+xferq_alloc_failure:
+	dma_unmap_single(&hba->pcidev->dev, tgt->rq_pbl_dma,
+			 tgt->rq_pbl_size, DMA_BIDIRECTIONAL);
+rq_pbl_map_failure:
+	kfree(tgt->rq_pbl);
+rq_pbl_alloc_failure:
+	dma_unmap_single(&hba->pcidev->dev, tgt->rq_dma, tgt->rq_mem_size,
+			 DMA_BIDIRECTIONAL);
+rq_map_failure:
+	kfree(tgt->rq);
+rq_alloc_failure:
+	dma_unmap_single(&hba->pcidev->dev, tgt->cq_dma, tgt->cq_mem_size,
+			 DMA_BIDIRECTIONAL);
+cq_map_failure:
+	kfree(tgt->cq);
+cq_alloc_failure:
+	dma_unmap_single(&hba->pcidev->dev, tgt->sq_dma, tgt->sq_mem_size,
+			 DMA_BIDIRECTIONAL);
+sq_map_failure:
+	kfree(tgt->sq);
+sq_alloc_failure:
 	return -ENOMEM;
 }
 
@@ -839,54 +934,63 @@ static void bnx2fc_free_session_resc(struct bnx2fc_hba *hba,
 
 	/* Free LCQ */
 	if (tgt->lcq) {
-		dma_free_coherent(&hba->pcidev->dev, tgt->lcq_mem_size,
-				    tgt->lcq, tgt->lcq_dma);
+		dma_unmap_single(&hba->pcidev->dev, tgt->lcq_dma,
+				 tgt->lcq_mem_size, DMA_BIDIRECTIONAL);
+		kfree(tgt->lcq);
 		tgt->lcq = NULL;
 	}
 	/* Free connDB */
 	if (tgt->conn_db) {
-		dma_free_coherent(&hba->pcidev->dev, tgt->conn_db_mem_size,
-				    tgt->conn_db, tgt->conn_db_dma);
+		dma_unmap_single(&hba->pcidev->dev, tgt->conn_db_dma,
+				 tgt->conn_db_mem_size, DMA_BIDIRECTIONAL);
+		kfree(tgt->conn_db);
 		tgt->conn_db = NULL;
 	}
 	/* Free confq  and confq pbl */
 	if (tgt->confq_pbl) {
-		dma_free_coherent(&hba->pcidev->dev, tgt->confq_pbl_size,
-				    tgt->confq_pbl, tgt->confq_pbl_dma);
+		dma_unmap_single(&hba->pcidev->dev, tgt->confq_pbl_dma,
+				 tgt->confq_pbl_size, DMA_BIDIRECTIONAL);
+		kfree(tgt->confq_pbl);
 		tgt->confq_pbl = NULL;
 	}
 	if (tgt->confq) {
-		dma_free_coherent(&hba->pcidev->dev, tgt->confq_mem_size,
-				    tgt->confq, tgt->confq_dma);
+		dma_unmap_single(&hba->pcidev->dev, tgt->confq_dma,
+				 tgt->confq_mem_size, DMA_BIDIRECTIONAL);
+		kfree(tgt->confq);
 		tgt->confq = NULL;
 	}
 	/* Free XFERQ */
 	if (tgt->xferq) {
-		dma_free_coherent(&hba->pcidev->dev, tgt->xferq_mem_size,
-				    tgt->xferq, tgt->xferq_dma);
+		dma_unmap_single(&hba->pcidev->dev, tgt->xferq_dma,
+				 tgt->xferq_mem_size, DMA_BIDIRECTIONAL);
+		kfree(tgt->xferq);
 		tgt->xferq = NULL;
 	}
 	/* Free RQ PBL and RQ */
 	if (tgt->rq_pbl) {
-		dma_free_coherent(&hba->pcidev->dev, tgt->rq_pbl_size,
-				    tgt->rq_pbl, tgt->rq_pbl_dma);
+		dma_unmap_single(&hba->pcidev->dev, tgt->rq_pbl_dma,
+				 tgt->rq_pbl_size, DMA_BIDIRECTIONAL);
+		kfree(tgt->rq_pbl);
 		tgt->rq_pbl = NULL;
 	}
 	if (tgt->rq) {
-		dma_free_coherent(&hba->pcidev->dev, tgt->rq_mem_size,
-				    tgt->rq, tgt->rq_dma);
+		dma_unmap_single(&hba->pcidev->dev, tgt->rq_dma,
+				 tgt->rq_mem_size, DMA_BIDIRECTIONAL);
+		kfree(tgt->rq);
 		tgt->rq = NULL;
 	}
 	/* Free CQ */
 	if (tgt->cq) {
-		dma_free_coherent(&hba->pcidev->dev, tgt->cq_mem_size,
-				    tgt->cq, tgt->cq_dma);
+		dma_unmap_single(&hba->pcidev->dev, tgt->cq_dma,
+				 tgt->cq_mem_size, DMA_BIDIRECTIONAL);
+		kfree(tgt->cq);
 		tgt->cq = NULL;
 	}
 	/* Free SQ */
 	if (tgt->sq) {
-		dma_free_coherent(&hba->pcidev->dev, tgt->sq_mem_size,
-				    tgt->sq, tgt->sq_dma);
+		dma_unmap_single(&hba->pcidev->dev, tgt->sq_dma,
+				 tgt->sq_mem_size, DMA_BIDIRECTIONAL);
+		kfree(tgt->sq);
 		tgt->sq = NULL;
 	}
 	spin_unlock_bh(&tgt->cq_lock);
