@@ -24,7 +24,7 @@ static void config_hw_tstamping(void __iomem *ioaddr, u32 data)
 }
 
 static void config_sub_second_increment(void __iomem *ioaddr,
-		u32 ptp_clock, int gmac4, u32 *sub_second_inc)
+		u32 clk_ptp_rate, int gmac4, u32 *sub_second_inc)
 {
 	u32 value = readl(ioaddr + PTP_TCR);
 	unsigned long data;
@@ -34,14 +34,14 @@ static void config_sub_second_increment(void __iomem *ioaddr,
 	 * increment to twice the number of nanoseconds of a clock cycle.
 	 * The calculation of the default_addend value by the caller will set it
 	 * to mid-range = 2^31 when the remainder of this division is zero,
-	 * which will make the accumulator overflow once every 2 ptp_clock
+	 * which will make the accumulator overflow once every 2 clk_ptp_rate
 	 * cycles, adding twice the number of nanoseconds of a clock cycle :
-	 * 2 * NSEC_PER_SEC / ptp_clock.
+	 * 2 * NSEC_PER_SEC / clk_ptp_rate.
 	 */
 	if (value & PTP_TCR_TSCFUPDT)
-		data = (2 * NSEC_PER_SEC / ptp_clock);
+		data = (2 * NSEC_PER_SEC / clk_ptp_rate);
 	else
-		data = (NSEC_PER_SEC / ptp_clock);
+		data = (NSEC_PER_SEC / clk_ptp_rate);
 
 	/* 0.465ns accuracy */
 	if (!(value & PTP_TCR_TSCTRLSSR))
