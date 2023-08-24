@@ -426,7 +426,7 @@ struct task_group {
  *  limitation from this.)
  */
 #define MIN_SHARES		(1UL <<  1)
-#define MAX_SHARES		(1UL << 18)
+#define MAX_SHARES		(1UL << 20)
 #endif
 
 typedef int (*tg_visitor)(struct task_group *, void *);
