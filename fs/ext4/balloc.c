@@ -667,6 +667,30 @@ int ext4_claim_free_clusters(struct ext4_sb_info *sbi,
 		return -ENOSPC;
 }
 
+void ext4_writeback_da_blocks(struct work_struct *work)
+{
+	struct ext4_sb_info *sbi = container_of(work, struct ext4_sb_info,
+						s_da_flush_work);
+
+	try_to_writeback_inodes_sb(sbi->s_sb, WB_REASON_FS_FREE_SPACE);
+}
+
+/*
+ * Writeback delallocated blocks and try to free unused reserved extent
+ * blocks, return 0 if no delalloc blocks need to writeback, 1 otherwise.
+ */
+static int ext4_flush_da_blocks(struct ext4_sb_info *sbi)
+{
+	if (!percpu_counter_read_positive(&sbi->s_dirtyclusters_counter) &&
+	    !percpu_counter_sum(&sbi->s_dirtyclusters_counter))
+		return 0;
+
+	if (!work_busy(&sbi->s_da_flush_work))
+		queue_work(sbi->s_da_flush_wq, &sbi->s_da_flush_work);
+	flush_work(&sbi->s_da_flush_work);
+	return 1;
+}
+
 /**
  * ext4_should_retry_alloc() - check if a block allocation should be retried
  * @sb:			superblock
@@ -681,15 +705,22 @@ int ext4_claim_free_clusters(struct ext4_sb_info *sbi,
 int ext4_should_retry_alloc(struct super_block *sb, int *retries)
 {
 	struct ext4_sb_info *sbi = EXT4_SB(sb);
-
-	if (!sbi->s_journal)
-		return 0;
+	int result = 0;
 
 	if (++(*retries) > 3) {
 		percpu_counter_inc(&sbi->s_sra_exceeded_retry_limit);
 		return 0;
 	}
 
+	/*
+	 * Flush allocated delalloc blocks and try to free unused
+	 * reserved extent blocks.
+	 */
+	if (test_opt(sb, DELALLOC))
+		result += ext4_flush_da_blocks(sbi);
+
+	if (!sbi->s_journal)
+		goto out;
 	/*
 	 * if there's no indication that blocks are about to be freed it's
 	 * possible we just missed a transaction commit that did so
@@ -701,16 +732,20 @@ int ext4_should_retry_alloc(struct super_block *sb, int *retries)
 			flush_work(&sbi->s_discard_work);
 			atomic_dec(&sbi->s_retry_alloc_pending);
 		}
-		return ext4_has_free_clusters(sbi, 1, 0);
+		result += ext4_has_free_clusters(sbi, 1, 0);
+		goto out;
 	}
 
 	/*
 	 * it's possible we've just missed a transaction commit here,
 	 * so ignore the returned status
 	 */
-	ext4_debug("%s: retrying operation after ENOSPC\n", sb->s_id);
+	result += 1;
 	(void) jbd2_journal_force_commit_nested(sbi->s_journal);
-	return 1;
+out:
+	if (result)
+		ext4_debug("%s: retrying operation after ENOSPC\n", sb->s_id);
+	return result;
 }
 
 /*

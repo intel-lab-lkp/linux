@@ -1627,6 +1627,10 @@ struct ext4_sb_info {
 	/* workqueue for reserved extent conversions (buffered io) */
 	struct workqueue_struct *rsv_conversion_wq;
 
+	/* workqueue for delalloc buffer IO flushing */
+	struct workqueue_struct *s_da_flush_wq;
+	struct work_struct s_da_flush_work;
+
 	/* timer for periodic error stats printing */
 	struct timer_list s_err_report;
 
@@ -2716,6 +2720,7 @@ extern int ext4_wait_block_bitmap(struct super_block *sb,
 				  struct buffer_head *bh);
 extern struct buffer_head *ext4_read_block_bitmap(struct super_block *sb,
 						  ext4_group_t block_group);
+extern void ext4_writeback_da_blocks(struct work_struct *work);
 extern unsigned ext4_free_clusters_after_init(struct super_block *sb,
 					      ext4_group_t block_group,
 					      struct ext4_group_desc *gdp);

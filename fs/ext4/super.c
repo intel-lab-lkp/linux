@@ -1335,6 +1335,8 @@ static void ext4_put_super(struct super_block *sb)
 
 	flush_work(&sbi->s_sb_upd_work);
 	destroy_workqueue(sbi->rsv_conversion_wq);
+	flush_work(&sbi->s_da_flush_work);
+	destroy_workqueue(sbi->s_da_flush_wq);
 	ext4_release_orphan_info(sb);
 
 	if (sbi->s_journal) {
@@ -5491,6 +5493,14 @@ static int __ext4_fill_super(struct fs_context *fc, struct super_block *sb)
 		goto failed_mount4;
 	}
 
+	INIT_WORK(&sbi->s_da_flush_work, ext4_writeback_da_blocks);
+	sbi->s_da_flush_wq = alloc_workqueue("ext4_delalloc_flush", WQ_UNBOUND, 1);
+	if (!sbi->s_da_flush_wq) {
+		printk(KERN_ERR "EXT4-fs: failed to create workqueue\n");
+		err = -ENOMEM;
+		goto failed_mount4;
+	}
+
 	/*
 	 * The jbd2_journal_load will have done any necessary log recovery,
 	 * so we can safely mount the rest of the filesystem now.
@@ -5660,6 +5670,8 @@ failed_mount4a:
 	sb->s_root = NULL;
 failed_mount4:
 	ext4_msg(sb, KERN_ERR, "mount failed");
+	if (sbi->s_da_flush_wq)
+		destroy_workqueue(sbi->s_da_flush_wq);
 	if (EXT4_SB(sb)->rsv_conversion_wq)
 		destroy_workqueue(EXT4_SB(sb)->rsv_conversion_wq);
 failed_mount_wq:
