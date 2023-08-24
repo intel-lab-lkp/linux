@@ -195,6 +195,7 @@ int amdgpu_use_xgmi_p2p = 1;
 int amdgpu_vcnfw_log;
 int amdgpu_sg_display = -1; /* auto */
 int amdgpu_user_partt_mode = AMDGPU_AUTO_COMPUTE_PARTITION_MODE;
+uint amdgpu_debug_mask;
 
 static void amdgpu_drv_delayed_reset_work_handler(struct work_struct *work);
 
@@ -980,6 +981,9 @@ module_param_named(user_partt_mode, amdgpu_user_partt_mode, uint, 0444);
  */
 module_param(enforce_isolation, bool, 0444);
 MODULE_PARM_DESC(enforce_isolation, "enforce process isolation between graphics and compute . enforce_isolation = on");
+
+MODULE_PARM_DESC(debug_mask, "debug options for amdgpu, disabled by default");
+module_param_named(debug_mask, amdgpu_debug_mask, uint, 0444);
 
 /* These devices are not supported by amdgpu.
  * They are supported by the mach64, r128, radeon drivers
@@ -2912,6 +2916,24 @@ static struct pci_driver amdgpu_kms_pci_driver = {
 	.dev_groups = amdgpu_sysfs_groups,
 };
 
+static void amdgpu_init_debug_options(void)
+{
+	if (amdgpu_debug_mask & DEBUG_VERBOSE_EVICTIONS) {
+		pr_info("debug: eviction debug messages enabled\n");
+		debug_evictions = true;
+	}
+
+	if (amdgpu_debug_mask & DEBUG_VM) {
+		pr_info("debug: VM handling debug enabled\n");
+		amdgpu_vm_debug = true;
+	}
+
+	if (amdgpu_debug_mask & DEBUG_LARGEBAR) {
+		pr_info("debug: enabled simulating large-bar capability on non-large bar system\n");
+		debug_largebar = true;
+	}
+}
+
 static int __init amdgpu_init(void)
 {
 	int r;
@@ -2933,6 +2955,8 @@ static int __init amdgpu_init(void)
 
 	/* Ignore KFD init failures. Normal when CONFIG_HSA_AMD is not set. */
 	amdgpu_amdkfd_init();
+
+	amdgpu_init_debug_options();
 
 	/* let modprobe override vga console setting */
 	return pci_register_driver(&amdgpu_kms_pci_driver);

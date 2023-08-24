@@ -254,6 +254,15 @@ enum DC_DEBUG_MASK {
 
 enum amd_dpm_forced_level;
 
+/*
+ * amdgpu.debug module options. Are all disabled by default
+ */
+enum AMDGPU_DEBUG_MASK {
+	DEBUG_VERBOSE_EVICTIONS = (1 << 0),		// 0x1
+	DEBUG_VM = (1 << 1),				// 0x2
+	DEBUG_LARGEBAR = (1 << 2),			// 0x4
+};
+
 /**
  * struct amd_ip_funcs - general hooks for managing amdgpu IP Blocks
  * @name: Name of IP block
