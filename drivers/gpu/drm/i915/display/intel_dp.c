@@ -2907,7 +2907,13 @@ void intel_dp_sink_set_decompression_state(struct intel_dp *intel_dp,
 	struct drm_i915_private *i915 = dp_to_i915(intel_dp);
 	int ret;
 
-	if (!crtc_state->dsc.compression_enable)
+	/*
+	 * In case of MST any stream can be compressed not just the first. If
+	 * any stream is compressed FEC will be enabled in all streams, so toggle
+	 * decompression whenever FEC is enabled.
+	 */
+	if (!crtc_state->dsc.compression_enable &&
+	    !crtc_state->fec_enable)
 		return;
 
 	ret = drm_dp_dpcd_writeb(&intel_dp->aux, DP_DSC_ENABLE,
