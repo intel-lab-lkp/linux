@@ -24,6 +24,7 @@ struct panfrost_perfcnt;
 
 #define NUM_JOB_SLOTS 3
 #define MAX_PM_DOMAINS 5
+#define MAX_SLOT_NAME_LEN 10
 
 struct panfrost_features {
 	u16 id;
@@ -135,12 +136,24 @@ struct panfrost_mmu {
 	struct list_head list;
 };
 
+struct drm_info_gpu {
+	unsigned int maxfreq;
+
+	struct engine_info {
+		unsigned long long elapsed_ns;
+		unsigned long long cycles;
+		char name[MAX_SLOT_NAME_LEN];
+	} engines[NUM_JOB_SLOTS];
+};
+
 struct panfrost_file_priv {
 	struct panfrost_device *pfdev;
 
 	struct drm_sched_entity sched_entity[NUM_JOB_SLOTS];
 
 	struct panfrost_mmu *mmu;
+
+	struct drm_info_gpu fdinfo;
 };
 
 static inline struct panfrost_device *to_panfrost_device(struct drm_device *ddev)

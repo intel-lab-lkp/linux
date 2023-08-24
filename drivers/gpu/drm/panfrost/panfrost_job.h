@@ -32,6 +32,10 @@ struct panfrost_job {
 
 	/* Fence to be signaled by drm-sched once its done with the job */
 	struct dma_fence *render_done_fence;
+
+	struct panfrost_file_priv *priv;
+	ktime_t start_time;
+	u64 start_cycles;
 };
 
 int panfrost_job_init(struct panfrost_device *pfdev);

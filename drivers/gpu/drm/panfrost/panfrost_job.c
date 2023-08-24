@@ -153,10 +153,31 @@ panfrost_get_job_chain_flag(const struct panfrost_job *job)
 	return (f->seqno & 1) ? JS_CONFIG_JOB_CHAIN_FLAG : 0;
 }
 
+static inline unsigned long long read_cycles(struct panfrost_device *pfdev)
+{
+	u64 address = (u64) gpu_read(pfdev, GPU_CYCLE_COUNT_HI) << 32;
+
+	address |= gpu_read(pfdev, GPU_CYCLE_COUNT_LO);
+
+	return address;
+}
+
 static struct panfrost_job *
 panfrost_dequeue_job(struct panfrost_device *pfdev, int slot)
 {
 	struct panfrost_job *job = pfdev->jobs[slot][0];
+	struct engine_info *engine_info = &job->priv->fdinfo.engines[slot];
+
+	engine_info->elapsed_ns +=
+		ktime_to_ns(ktime_sub(ktime_get(), job->start_time));
+	engine_info->cycles +=
+		read_cycles(pfdev) - job->start_cycles;
+
+	/* Reset in case the job has to be requeued */
+	job->start_time = 0;
+	/* A GPU reset puts the Cycle Counter register back to 0 */
+	job->start_cycles = atomic_read(&pfdev->reset.pending) ?
+		0 : read_cycles(pfdev);
 
 	WARN_ON(!job);
 	pfdev->jobs[slot][0] = pfdev->jobs[slot][1];
@@ -233,6 +254,9 @@ static void panfrost_job_hw_submit(struct panfrost_job *job, int js)
 	subslot = panfrost_enqueue_job(pfdev, js, job);
 	/* Don't queue the job if a reset is in progress */
 	if (!atomic_read(&pfdev->reset.pending)) {
+		job->start_time = ktime_get();
+		job->start_cycles = read_cycles(pfdev);
+
 		job_write(pfdev, JS_COMMAND_NEXT(js), JS_COMMAND_START);
 		dev_dbg(pfdev->dev,
 			"JS: Submitting atom %p to js[%d][%d] with head=0x%llx AS %d",
@@ -297,6 +321,9 @@ int panfrost_job_push(struct panfrost_job *job)
 
 	kref_get(&job->refcount); /* put by scheduler job completion */
 
+	if (panfrost_job_is_idle(pfdev))
+		gpu_write(pfdev, GPU_CMD, GPU_CMD_CYCLE_COUNT_START);
+
 	drm_sched_entity_push_job(&job->base);
 
 	mutex_unlock(&pfdev->sched_lock);
@@ -350,6 +377,9 @@ static void panfrost_job_free(struct drm_sched_job *sched_job)
 	struct panfrost_job *job = to_panfrost_job(sched_job);
 
 	drm_sched_job_cleanup(sched_job);
+
+	if (panfrost_job_is_idle(job->pfdev))
+		gpu_write(job->pfdev, GPU_CMD, GPU_CMD_CYCLE_COUNT_STOP);
 
 	panfrost_job_put(job);
 }

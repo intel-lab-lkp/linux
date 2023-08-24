@@ -267,6 +267,7 @@ static int panfrost_ioctl_submit(struct drm_device *dev, void *data,
 	job->requirements = args->requirements;
 	job->flush_id = panfrost_gpu_get_latest_flush_id(pfdev);
 	job->mmu = file_priv->mmu;
+	job->priv = file_priv;
 
 	slot = panfrost_job_get_slot(job);
 
@@ -483,6 +484,14 @@ panfrost_open(struct drm_device *dev, struct drm_file *file)
 		goto err_free;
 	}
 
+	snprintf(panfrost_priv->fdinfo.engines[0].name, MAX_SLOT_NAME_LEN, "frg");
+	snprintf(panfrost_priv->fdinfo.engines[1].name, MAX_SLOT_NAME_LEN, "vtx");
+#if 0
+	/* Add compute engine in the future */
+	snprintf(panfrost_priv->fdinfo.engines[2].name, MAX_SLOT_NAME_LEN, "cmp");
+#endif
+	panfrost_priv->fdinfo.maxfreq = pfdev->pfdevfreq.fast_rate;
+
 	ret = panfrost_job_open(panfrost_priv);
 	if (ret)
 		goto err_job;
@@ -523,7 +532,40 @@ static const struct drm_ioctl_desc panfrost_drm_driver_ioctls[] = {
 	PANFROST_IOCTL(MADVISE,		madvise,	DRM_RENDER_ALLOW),
 };
 
-DEFINE_DRM_GEM_FOPS(panfrost_drm_driver_fops);
+
+static void panfrost_gpu_show_fdinfo(struct panfrost_device *pfdev,
+				     struct panfrost_file_priv *panfrost_priv,
+				     struct drm_printer *p)
+{
+	int i;
+
+	for (i = 0; i < NUM_JOB_SLOTS - 1; i++) {
+		struct engine_info *ei = &panfrost_priv->fdinfo.engines[i];
+
+		drm_printf(p, "drm-engine-%s:\t%llu ns\n",
+			   ei->name, ei->elapsed_ns);
+		drm_printf(p, "drm-cycles-%s:\t%llu\n",
+			   ei->name, ei->cycles);
+		drm_printf(p, "drm-maxfreq-%s:\t%u Hz\n",
+			   ei->name, panfrost_priv->fdinfo.maxfreq);
+		drm_printf(p, "drm-curfreq-%s:\t%u Hz\n",
+			   ei->name, pfdev->pfdevfreq.current_frequency);
+	}
+}
+
+static void panfrost_show_fdinfo(struct drm_printer *p, struct drm_file *file)
+{
+	struct drm_device *dev = file->minor->dev;
+	struct panfrost_device *pfdev = dev->dev_private;
+
+	panfrost_gpu_show_fdinfo(pfdev, file->driver_priv, p);
+}
+
+static const struct file_operations panfrost_drm_driver_fops = {
+	.owner = THIS_MODULE,
+	DRM_GEM_FOPS,
+	.show_fdinfo = drm_show_fdinfo,
+};
 
 /*
  * Panfrost driver version:
@@ -535,6 +577,7 @@ static const struct drm_driver panfrost_drm_driver = {
 	.driver_features	= DRIVER_RENDER | DRIVER_GEM | DRIVER_SYNCOBJ,
 	.open			= panfrost_open,
 	.postclose		= panfrost_postclose,
+	.show_fdinfo		= panfrost_show_fdinfo,
 	.ioctls			= panfrost_drm_driver_ioctls,
 	.num_ioctls		= ARRAY_SIZE(panfrost_drm_driver_ioctls),
 	.fops			= &panfrost_drm_driver_fops,
