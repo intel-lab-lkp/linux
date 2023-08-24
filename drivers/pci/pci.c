@@ -6505,6 +6505,22 @@ bool pci_pr3_present(struct pci_dev *pdev)
 		acpi_has_method(adev->handle, "_PR3");
 }
 EXPORT_SYMBOL_GPL(pci_pr3_present);
+
+bool pci_ancestor_pr3_present(struct pci_dev *pdev)
+{
+	struct pci_dev *parent = pdev;
+
+	if (acpi_disabled)
+		return false;
+
+	while ((parent = pci_upstream_bridge(parent))) {
+		if (pci_pr3_present(pdev))
+			return true;
+	}
+
+	return false;
+}
+EXPORT_SYMBOL_GPL(pci_ancestor_pr3_present);
 #endif
 
 /**
