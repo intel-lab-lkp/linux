@@ -18467,6 +18467,7 @@ ROHM USB-C POWER DELIVERY CONTROLLERS
 M:	Emmanuel Gil Peyrot <linkmauve@linkmauve.fr>
 S:	Supported
 F:	Documentation/devicetree/bindings/misc/rohm,bm92txx.yaml
+F:	drivers/misc/bm92txx.c
 
 ROSE NETWORK LAYER
 M:	Ralf Baechle <ralf@linux-mips.org>
