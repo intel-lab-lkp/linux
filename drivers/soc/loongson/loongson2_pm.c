@@ -99,7 +99,7 @@ static int loongson2_power_button_init(struct device *dev, int irq)
 	struct input_dev *button;
 
 	button = input_allocate_device();
-	if (!dev)
+	if (!button)
 		return -ENOMEM;
 
 	button->name = "Power Button";
