@@ -67,6 +67,7 @@ struct intel_tc_port;
  */
 
 struct intel_link_bw_limits {
+	u8 force_fec_pipes;
 	u8 min_bpp_pipes;
 	/* in 1/16 bpp units */
 	int max_bpp_x16[I915_MAX_PIPES];

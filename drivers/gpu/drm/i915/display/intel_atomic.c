@@ -38,6 +38,7 @@
 #include "intel_atomic.h"
 #include "intel_cdclk.h"
 #include "intel_display_types.h"
+#include "intel_dp_mst.h"
 #include "intel_fdi.h"
 #include "intel_global_state.h"
 #include "intel_hdcp.h"
@@ -458,7 +459,7 @@ static int intel_atomic_check_link(struct intel_atomic_state *state,
 	if (ret)
 		return ret;
 
-	return 0;
+	return intel_dp_mst_atomic_check_link(state, limits);
 }
 
 static bool
@@ -468,6 +469,12 @@ assert_link_limit_change_valid(struct drm_i915_private *i915,
 {
 	bool bpps_changed = false;
 	enum pipe pipe;
+
+	/* FEC can't be forced off after it was forced on. */
+	if (drm_WARN_ON(&i915->drm,
+			(old_limits->force_fec_pipes & new_limits->force_fec_pipes) !=
+			old_limits->force_fec_pipes))
+		return false;
 
 	for_each_pipe(i915, pipe) {
 		/* The bpp limit can only decrease. */
@@ -481,8 +488,11 @@ assert_link_limit_change_valid(struct drm_i915_private *i915,
 			bpps_changed = true;
 	}
 
+	/* At least one limit must change. */
 	if (drm_WARN_ON(&i915->drm,
-			!bpps_changed))
+			!bpps_changed &&
+			new_limits->force_fec_pipes ==
+			old_limits->force_fec_pipes))
 		return false;
 
 	return true;
