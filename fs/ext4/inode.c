@@ -327,53 +327,59 @@ qsize_t *ext4_get_reserved_space(struct inode *inode)
 
 static void __ext4_da_update_reserve_space(const char *where,
 					   struct inode *inode,
-					   int data_len)
+					   unsigned int data_len, int ext_len)
 {
 	struct ext4_sb_info *sbi = EXT4_SB(inode->i_sb);
 	struct ext4_inode_info *ei = EXT4_I(inode);
 
-	if (unlikely(data_len > ei->i_reserved_data_blocks)) {
-		ext4_warning(inode->i_sb, "%s: ino %lu, clear %d "
-			     "with only %d reserved data blocks",
-			     where, inode->i_ino, data_len,
-			     ei->i_reserved_data_blocks);
+	if (unlikely(data_len > ei->i_reserved_data_blocks ||
+		     ext_len > (long)ei->i_reserved_ext_blocks)) {
+		ext4_warning(inode->i_sb, "%s: ino %lu, clear %d,%d "
+			     "with only %d,%d reserved data blocks",
+			     where, inode->i_ino, data_len, ext_len,
+			     ei->i_reserved_data_blocks,
+			     ei->i_reserved_ext_blocks);
 		WARN_ON(1);
-		data_len = ei->i_reserved_data_blocks;
+		data_len = min(data_len, ei->i_reserved_data_blocks);
+		ext_len = min_t(unsigned int, ext_len, ei->i_reserved_ext_blocks);
 	}
 
 	/* Update per-inode reservations */
 	ei->i_reserved_data_blocks -= data_len;
-	percpu_counter_sub(&sbi->s_dirtyclusters_counter, data_len);
+	ei->i_reserved_ext_blocks -= ext_len;
+	percpu_counter_sub(&sbi->s_dirtyclusters_counter, (s64)data_len + ext_len);
 }
 
 /*
  * Called with i_data_sem down, which is important since we can call
  * ext4_discard_preallocations() from here.
  */
-void ext4_da_update_reserve_space(struct inode *inode,
-				  int used, int quota_claim)
+void ext4_da_update_reserve_space(struct inode *inode, unsigned int data_len,
+				  int quota_claim)
 {
 	struct ext4_sb_info *sbi = EXT4_SB(inode->i_sb);
 	struct ext4_inode_info *ei = EXT4_I(inode);
+	int ext_len = 0;
 
-	if (!used)
+	if (!data_len)
 		return;
 
 	spin_lock(&ei->i_block_reservation_lock);
-	trace_ext4_da_update_reserve_space(inode, used, quota_claim);
-	__ext4_da_update_reserve_space(__func__, inode, used);
+	trace_ext4_da_update_reserve_space(inode, data_len, ext_len,
+					   quota_claim);
+	__ext4_da_update_reserve_space(__func__, inode, data_len, ext_len);
 	spin_unlock(&ei->i_block_reservation_lock);
 
 	/* Update quota subsystem for data blocks */
 	if (quota_claim)
-		dquot_claim_block(inode, EXT4_C2B(sbi, used));
+		dquot_claim_block(inode, EXT4_C2B(sbi, data_len));
 	else {
 		/*
 		 * We did fallocate with an offset that is already delayed
 		 * allocated. So on delayed allocated writeback we should
 		 * not re-claim the quota for fallocated blocks.
 		 */
-		dquot_release_reservation_block(inode, EXT4_C2B(sbi, used));
+		dquot_release_reservation_block(inode, EXT4_C2B(sbi, data_len));
 	}
 
 	/*
@@ -1484,20 +1490,21 @@ static int ext4_da_reserve_space(struct inode *inode, unsigned int rsv_dlen,
 	return 0;       /* success */
 }
 
-void ext4_da_release_space(struct inode *inode, int to_free)
+void ext4_da_release_space(struct inode *inode, unsigned int data_len)
 {
 	struct ext4_sb_info *sbi = EXT4_SB(inode->i_sb);
 	struct ext4_inode_info *ei = EXT4_I(inode);
+	int ext_len = 0;
 
-	if (!to_free)
+	if (!data_len)
 		return;		/* Nothing to release, exit */
 
 	spin_lock(&ei->i_block_reservation_lock);
-	trace_ext4_da_release_space(inode, to_free);
-	__ext4_da_update_reserve_space(__func__, inode, to_free);
+	trace_ext4_da_release_space(inode, data_len, ext_len);
+	__ext4_da_update_reserve_space(__func__, inode, data_len, ext_len);
 	spin_unlock(&ei->i_block_reservation_lock);
 
-	dquot_release_reservation_block(inode, EXT4_C2B(sbi, to_free));
+	dquot_release_reservation_block(inode, EXT4_C2B(sbi, data_len));
 }
 
 /*

@@ -2998,9 +2998,9 @@ extern int ext4_zero_partial_blocks(handle_t *handle, struct inode *inode,
 extern vm_fault_t ext4_page_mkwrite(struct vm_fault *vmf);
 extern qsize_t *ext4_get_reserved_space(struct inode *inode);
 extern int ext4_get_projid(struct inode *inode, kprojid_t *projid);
-extern void ext4_da_release_space(struct inode *inode, int to_free);
+extern void ext4_da_release_space(struct inode *inode, unsigned int data_len);
 extern void ext4_da_update_reserve_space(struct inode *inode,
-					int used, int quota_claim);
+					unsigned int data_len, int quota_claim);
 extern int ext4_issue_zeroout(struct inode *inode, ext4_lblk_t lblk,
 			      ext4_fsblk_t pblk, ext4_lblk_t len);
 
