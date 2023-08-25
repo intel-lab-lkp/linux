@@ -274,9 +274,11 @@ void cxl_probe_component_regs(struct device *dev, void __iomem *base,
 void cxl_probe_device_regs(struct device *dev, void __iomem *base,
 			   struct cxl_device_reg_map *map);
 int cxl_map_component_regs(const struct cxl_register_map *map,
+			   struct device *dev,
 			   struct cxl_component_regs *regs,
 			   unsigned long map_mask);
 int cxl_map_device_regs(const struct cxl_register_map *map,
+			struct device *dev,
 			struct cxl_device_regs *regs);
 int cxl_map_pmu_regs(struct pci_dev *pdev, struct cxl_pmu_regs *regs,
 		     struct cxl_register_map *map);
