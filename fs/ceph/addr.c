@@ -514,9 +514,9 @@ const struct netfs_request_ops ceph_netfs_ops = {
 };
 
 #ifdef CONFIG_CEPH_FSCACHE
-static void ceph_set_page_fscache(struct page *page)
+static void ceph_folio_start_fscache(struct folio *folio)
 {
-	set_page_fscache(page);
+	folio_start_fscache(folio);
 }
 
 static void ceph_fscache_write_terminated(void *priv, ssize_t error, bool was_async)
@@ -536,7 +536,7 @@ static void ceph_fscache_write_to_cache(struct inode *inode, u64 off, u64 len, b
 			       ceph_fscache_write_terminated, inode, caching);
 }
 #else
-static inline void ceph_set_page_fscache(struct page *page)
+static inline void ceph_folio_start_fscache(struct folio *folio)
 {
 }
 
@@ -727,7 +727,7 @@ static int writepage_nounlock(struct folio *folio, struct writeback_control *wbc
 
 	folio_start_writeback(folio);
 	if (caching)
-		ceph_set_page_fscache(&folio->page);
+		ceph_folio_start_fscache(folio);
 	ceph_fscache_write_to_cache(inode, page_off, len, caching);
 
 	if (IS_ENCRYPTED(inode)) {
@@ -1242,7 +1242,7 @@ new_request:
 
 			folio_start_writeback(folio);
 			if (caching)
-				ceph_set_page_fscache(pages[i]);
+				ceph_folio_start_fscache(folio);
 			len += folio_size(folio);
 		}
 		ceph_fscache_write_to_cache(inode, offset, len, caching);
