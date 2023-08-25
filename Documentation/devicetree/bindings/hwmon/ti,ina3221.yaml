@@ -55,6 +55,24 @@ patternProperties:
       shunt-resistor-micro-ohms:
         description: shunt resistor value in micro-Ohm
 
+      summation-bypass:
+        description: |
+          The INA3221 has a critical alert pin that can be controlled by the
+          summation control function. This function adds the single
+          shunt-voltage conversions for the desired channels in order to
+          compare the combined sum to the programmed limit. The Shunt-Voltage
+          Sum Limit register contains the programmed value that is compared
+          to the value in the Shunt-Voltage Sum register in order to
+          determine if the total summed limit is exceeded. If the
+          shunt-voltage sum limit value is exceeded, the critical alert pin
+          pulls low.
+
+          For the summation limit to have a meaningful value, it is necessary
+          to use the same shunt-resistor value on all included channels. If
+          this is not the case for specific channels, then the
+          'summation-bypass' can be populated for a specific channel to
+          exclude from the summation control function.
+
     additionalProperties: false
 
     required:
