@@ -787,6 +787,11 @@ link_stats_tx_packets_get()
 	link_stats_get $1 tx packets
 }
 
+link_stats_rx_packets_get()
+{
+	link_stats_get $1 rx packets
+}
+
 link_stats_rx_errors_get()
 {
 	link_stats_get $1 rx errors
