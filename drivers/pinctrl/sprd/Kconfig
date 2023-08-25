@@ -19,3 +19,15 @@ config PINCTRL_SPRD_SC9860
 	select PINCTRL_SPRD
 	help
 	  Say Y here to enable Spreadtrum SC9860 pinctrl driver
+
+config PINCTRL_SPRD_UMS512
+	tristate "Spreadtrum ums512 pinctrl driver"
+	depends on OF
+	depends on ARCH_SPRD || COMPILE_TEST
+	select PINCTRL_SPRD
+	help
+	  Say Y here to enable Spreadtrum ums512 pinctrl driver
+	  Support pin function switching
+	  Support pin drive capability configuration
+	  Support pin pull-up and pull-down configuration
+	  Support pin pull-up and pull-down configuration during sleep
