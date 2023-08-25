@@ -1902,7 +1902,7 @@ static long seccomp_set_mode_filter(unsigned int flags,
 				    const char __user *filter)
 {
 	const unsigned long seccomp_mode = SECCOMP_MODE_FILTER;
-	struct seccomp_filter *prepared = NULL;
+	struct seccomp_filter *prepared;
 	long ret = -EINVAL;
 	int listener = -1;
 	struct file *listener_f = NULL;
