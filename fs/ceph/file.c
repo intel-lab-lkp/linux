@@ -2091,7 +2091,7 @@ again:
 				return -ENOMEM;
 		}
 
-		statret = __ceph_do_getattr(inode, &folio->page,
+		statret = __ceph_do_getattr(inode, folio,
 					    CEPH_STAT_CAP_INLINE_DATA, !!folio);
 		if (statret < 0) {
 			if (folio)
