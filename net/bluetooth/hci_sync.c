@@ -5375,6 +5375,8 @@ int hci_abort_conn_sync(struct hci_dev *hdev, struct hci_conn *conn, u8 reason)
 	u16 handle = conn->handle;
 	struct hci_conn *c;
 
+	WARN_ON(!reason);
+
 	switch (conn->state) {
 	case BT_CONNECTED:
 	case BT_CONFIG:

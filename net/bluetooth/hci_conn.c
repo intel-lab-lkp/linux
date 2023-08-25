@@ -2886,12 +2886,25 @@ static int abort_conn_sync(struct hci_dev *hdev, void *data)
 {
 	struct hci_conn *conn;
 	u16 handle = PTR_UINT(data);
+	u8 reason;
+	int err;
+
+	rcu_read_lock();
 
 	conn = hci_conn_hash_lookup_handle(hdev, handle);
+	if (conn) {
+		reason = READ_ONCE(conn->abort_reason);
+		conn = reason ? hci_conn_get(conn) : NULL;
+	}
+
+	rcu_read_unlock();
+
 	if (!conn)
 		return 0;
 
-	return hci_abort_conn_sync(hdev, conn, conn->abort_reason);
+	err = hci_abort_conn_sync(hdev, conn, reason);
+	hci_conn_put(conn);
+	return err;
 }
 
 int hci_abort_conn(struct hci_conn *conn, u8 reason)
@@ -2903,6 +2916,8 @@ int hci_abort_conn(struct hci_conn *conn, u8 reason)
 	 */
 	if (conn->abort_reason)
 		return 0;
+	if (WARN_ON(!reason))
+		reason = HCI_ERROR_UNSPECIFIED;
 
 	bt_dev_dbg(hdev, "handle 0x%2.2x reason 0x%2.2x", conn->handle, reason);
 
