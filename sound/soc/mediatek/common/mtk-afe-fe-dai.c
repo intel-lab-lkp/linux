@@ -143,15 +143,10 @@ int mtk_afe_fe_hw_params(struct snd_pcm_substream *substream,
 		  substream->runtime->dma_bytes);
 
 	/* set addr */
-	ret = mtk_memif_set_addr(afe, id,
+	mtk_memif_set_addr(afe, id,
 				 substream->runtime->dma_area,
 				 substream->runtime->dma_addr,
 				 substream->runtime->dma_bytes);
-	if (ret) {
-		dev_err(afe->dev, "%s(), error, id %d, set addr, ret %d\n",
-			__func__, id, ret);
-		return ret;
-	}
 
 	/* set channel */
 	ret = mtk_memif_set_channel(afe, id, channels);
@@ -170,12 +165,7 @@ int mtk_afe_fe_hw_params(struct snd_pcm_substream *substream,
 	}
 
 	/* set format */
-	ret = mtk_memif_set_format(afe, id, format);
-	if (ret) {
-		dev_err(afe->dev, "%s(), error, id %d, set format %d, ret %d\n",
-			__func__, id, format, ret);
-		return ret;
-	}
+	mtk_memif_set_format(afe, id, format);
 
 	return 0;
 }
