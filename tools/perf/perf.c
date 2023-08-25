@@ -48,6 +48,7 @@ struct cmd_struct {
 
 static struct cmd_struct commands[] = {
 	{ "archive",	NULL,	0 },
+	{ "build", cmd_build, 0 },
 	{ "buildid-cache", cmd_buildid_cache, 0 },
 	{ "buildid-list", cmd_buildid_list, 0 },
 	{ "config",	cmd_config,	0 },
