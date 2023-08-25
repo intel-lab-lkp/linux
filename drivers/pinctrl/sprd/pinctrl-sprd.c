@@ -68,8 +68,9 @@
 #define SLEEP_PULL_UP_MASK		0x3
 #define SLEEP_PULL_UP_SHIFT		2
 
-#define PULL_UP_4_7K			(BIT(12) | BIT(7))
-#define PULL_UP_20K			BIT(7)
+#define PULL_UP_WPUSP			(BIT(12) | BIT(7))
+#define PULL_UP_WPUS			BIT(12)
+#define PULL_UP_WPU			BIT(7)
 #define PULL_UP_MASK			0x43
 #define PULL_UP_SHIFT			6
 
@@ -496,7 +497,7 @@ static int sprd_pinconf_get(struct pinctrl_dev *pctldev, unsigned int pin_id,
 			break;
 		case PIN_CONFIG_BIAS_DISABLE:
 			if ((reg & (SLEEP_PULL_DOWN | SLEEP_PULL_UP)) ||
-			    (reg & (PULL_DOWN | PULL_UP_4_7K | PULL_UP_20K)))
+			    (reg & (PULL_DOWN | PULL_UP_WPUSP)))
 				return -EINVAL;
 
 			arg = 1;
@@ -689,15 +690,17 @@ static int sprd_pinconf_set(struct pinctrl_dev *pctldev, unsigned int pin_id,
 				shift = INPUT_SCHMITT_SHIFT;
 				break;
 			case PIN_CONFIG_BIAS_PULL_UP:
-				if (is_sleep_config) {
+				if (is_sleep_config == true) {
 					val |= SLEEP_PULL_UP;
 					mask = SLEEP_PULL_UP_MASK;
 					shift = SLEEP_PULL_UP_SHIFT;
 				} else {
-					if (arg == 20000)
-						val |= PULL_UP_20K;
-					else if (arg == 4700)
-						val |= PULL_UP_4_7K;
+					if (arg == 3)
+						val |= PULL_UP_WPUSP;
+					else if (arg == 2)
+						val |= PULL_UP_WPUS;
+					else if (arg == 1)
+						val |= PULL_UP_WPU;
 
 					mask = PULL_UP_MASK;
 					shift = PULL_UP_SHIFT;
@@ -709,8 +712,7 @@ static int sprd_pinconf_set(struct pinctrl_dev *pctldev, unsigned int pin_id,
 					mask = SLEEP_PULL_DOWN | SLEEP_PULL_UP;
 				} else {
 					val = shift = 0;
-					mask = PULL_DOWN | PULL_UP_20K |
-						PULL_UP_4_7K;
+					mask = PULL_DOWN | PULL_UP_WPUSP;
 				}
 				break;
 			case PIN_CONFIG_SLEEP_HARDWARE_STATE:
