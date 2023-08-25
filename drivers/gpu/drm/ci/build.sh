@@ -70,6 +70,10 @@ if [ -z "$CI_MERGE_REQUEST_PROJECT_PATH" ]; then
     fi
 fi
 
+# Force db410c to host mode to fix network issue which results in failure to mount root fs via NFS.
+# See https://gitlab.freedesktop.org/gfx-ci/linux/-/commit/cb72a629b8c15c80a54dda510743cefd1c4b65b8
+sed -i '/&usb {/,/status = "okay";/s/status = "okay";/&\n\tdr_mode = "host";/' arch/arm64/boot/dts/qcom/apq8016-sbc.dts
+
 for opt in $ENABLE_KCONFIGS; do
   echo CONFIG_$opt=y >> drivers/gpu/drm/ci/${KERNEL_ARCH}.config
 done
