@@ -1000,12 +1000,13 @@ void folios_put(struct folio_batch *folios)
 		if (!folio_put_testzero(folio))
 			continue;
 
-		if (folio_test_large(folio)) {
+		/* hugetlb has its own memcg */
+		if (folio_test_hugetlb(folio)) {
 			if (lruvec) {
 				unlock_page_lruvec_irqrestore(lruvec, flags);
 				lruvec = NULL;
 			}
-			__folio_put_large(folio);
+			free_huge_folio(folio);
 			continue;
 		}
 
