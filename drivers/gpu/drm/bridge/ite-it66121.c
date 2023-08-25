@@ -1446,6 +1446,11 @@ static int it66121_audio_get_eld(struct device *dev, void *data,
 {
 	struct it66121_ctx *ctx = dev_get_drvdata(dev);
 
+	if (!ctx->connector) {
+		dev_dbg(dev, "No connector present, cannot provide EDID data");
+		return -EINVAL;
+	}
+
 	mutex_lock(&ctx->lock);
 
 	memcpy(buf, ctx->connector->eld,
