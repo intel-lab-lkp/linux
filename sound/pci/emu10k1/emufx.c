@@ -1279,7 +1279,8 @@ static int _snd_emu10k1_das_init_efx(struct snd_emu10k1 *emu)
 {
 	enum {
 		ENUM_GPR(bit_shifter16, 1),
-		ENUM_GPR(tmp, 1),
+		ENUM_GPR(lowword_mask, 1),
+		ENUM_GPR(tmp, 2),
 		num_static_gprs
 	};
 	int gpr = num_static_gprs;
@@ -1310,10 +1311,14 @@ static int _snd_emu10k1_das_init_efx(struct snd_emu10k1 *emu)
 
 	gpr_map = icode->gpr_map;
 	gpr_map[bit_shifter16] = 0x00008000;
+	gpr_map[lowword_mask] = 0x0000ffff;
 
 	if (emu->card_capabilities->ca0108_chip) {
-		for (int z = 0; z < 16; z++)
-			A_OP(icode, &ptr, iMACINT0, A3_EMU32OUT(z), A_C_00000000, A_FXBUS(z), A_C_00000002);
+		for (int z = 0; z < 16; z++) {
+			A_OP(icode, &ptr, iMAC0, A_GPR(tmp), A_C_00000000, A_FXBUS(z * 2), A_C_00010000); // >> 15
+			A_OP(icode, &ptr, iMACINT0, A_GPR(tmp + 1), A_C_00000000, A_FXBUS(z * 2 + 1), A_C_00000002); // << 1
+			A_OP(icode, &ptr, iANDXOR, A3_EMU32OUT(z), A_GPR(tmp), A_GPR(lowword_mask), A_GPR(tmp + 1));
+		}
 
 		snd_emu10k1_audigy_dsp_convert_32_to_2x16(
 			icode, &ptr, tmp, bit_shifter16, A3_EMU32IN(0), A_EXTOUT(0));
@@ -1326,8 +1331,11 @@ static int _snd_emu10k1_das_init_efx(struct snd_emu10k1 *emu)
 			gpr_map[gpr++] = 0x00000000;
 		}
 	} else {
-		for (int z = 0; z < 16; z++)
-			A_OP(icode, &ptr, iMACINT0, A_EMU32OUTL(z), A_C_00000000, A_FXBUS(z), A_C_00000002);
+		for (int z = 0; z < 16; z++) {
+			A_OP(icode, &ptr, iMAC0, A_GPR(tmp), A_C_00000000, A_FXBUS(z * 2), A_C_00010000); // >> 15
+			A_OP(icode, &ptr, iMACINT0, A_GPR(tmp + 1), A_C_00000000, A_FXBUS(z * 2 + 1), A_C_00000002); // << 1
+			A_OP(icode, &ptr, iANDXOR, A_EMU32OUTL(z), A_GPR(tmp), A_GPR(lowword_mask), A_GPR(tmp + 1));
+		}
 
 		/* Note that the Alice2 DSPs have 6 I2S inputs which we don't use. */
 		snd_emu10k1_audigy_dsp_convert_32_to_2x16(
