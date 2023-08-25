@@ -26,6 +26,7 @@
  * @reuse_addr:		the virtual address of the @reuse_page page.
  * @vmemmap_pages:	the list head of the vmemmap pages that can be freed
  *			or is mapped from.
+ * @flags		used to modify behavior in bulk operations
  */
 struct vmemmap_remap_walk {
 	void			(*remap_pte)(pte_t *pte, unsigned long addr,
@@ -34,9 +35,11 @@ struct vmemmap_remap_walk {
 	struct page		*reuse_page;
 	unsigned long		reuse_addr;
 	struct list_head	*vmemmap_pages;
+#define VMEMMAP_REMAP_ONLY_SPLIT	BIT(0)
+	unsigned long		flags;
 };
 
-static int split_vmemmap_huge_pmd(pmd_t *pmd, unsigned long start)
+static int split_vmemmap_huge_pmd(pmd_t *pmd, unsigned long start, bool bulk)
 {
 	pmd_t __pmd;
 	int i;
@@ -79,7 +82,8 @@ static int split_vmemmap_huge_pmd(pmd_t *pmd, unsigned long start)
 		/* Make pte visible before pmd. See comment in pmd_install(). */
 		smp_wmb();
 		pmd_populate_kernel(&init_mm, pmd, pgtable);
-		flush_tlb_kernel_range(start, start + PMD_SIZE);
+		if (!bulk)
+			flush_tlb_kernel_range(start, start + PMD_SIZE);
 	} else {
 		pte_free_kernel(&init_mm, pgtable);
 	}
@@ -119,18 +123,28 @@ static int vmemmap_pmd_range(pud_t *pud, unsigned long addr,
 			     unsigned long end,
 			     struct vmemmap_remap_walk *walk)
 {
+	bool bulk;
 	pmd_t *pmd;
 	unsigned long next;
 
+	bulk = walk->flags & VMEMMAP_REMAP_ONLY_SPLIT;
 	pmd = pmd_offset(pud, addr);
 	do {
 		int ret;
 
-		ret = split_vmemmap_huge_pmd(pmd, addr & PMD_MASK);
+		ret = split_vmemmap_huge_pmd(pmd, addr & PMD_MASK, bulk);
 		if (ret)
 			return ret;
 
 		next = pmd_addr_end(addr, end);
+
+		/*
+		 * We are only splitting, not remapping the hugetlb vmemmap
+		 * pages.
+		 */
+		if (bulk)
+			continue;
+
 		vmemmap_pte_range(pmd, addr, next, walk);
 	} while (pmd++, addr = next, addr != end);
 
@@ -197,7 +211,8 @@ static int vmemmap_remap_range(unsigned long start, unsigned long end,
 			return ret;
 	} while (pgd++, addr = next, addr != end);
 
-	flush_tlb_kernel_range(start, end);
+	if (!(walk->flags & VMEMMAP_REMAP_ONLY_SPLIT))
+		flush_tlb_kernel_range(start, end);
 
 	return 0;
 }
@@ -297,6 +312,48 @@ static void vmemmap_restore_pte(pte_t *pte, unsigned long addr,
 }
 
 /**
+ * vmemmap_remap_split - split the vmemmap virtual address range [@start, @end)
+ *                      backing PMDs of the directmap into PTEs
+ * @start:     start address of the vmemmap virtual address range that we want
+ *             to remap.
+ * @end:       end address of the vmemmap virtual address range that we want to
+ *             remap.
+ * @reuse:     reuse address.
+ *
+ * Return: %0 on success, negative error code otherwise.
+ */
+static int vmemmap_remap_split(unsigned long start, unsigned long end,
+				unsigned long reuse)
+{
+	int ret;
+	LIST_HEAD(vmemmap_pages);
+	struct vmemmap_remap_walk walk = {
+		.flags = VMEMMAP_REMAP_ONLY_SPLIT,
+	};
+
+	/*
+	 * In order to make remapping routine most efficient for the huge pages,
+	 * the routine of vmemmap page table walking has the following rules
+	 * (see more details from the vmemmap_pte_range()):
+	 *
+	 * - The range [@start, @end) and the range [@reuse, @reuse + PAGE_SIZE)
+	 *   should be continuous.
+	 * - The @reuse address is part of the range [@reuse, @end) that we are
+	 *   walking which is passed to vmemmap_remap_range().
+	 * - The @reuse address is the first in the complete range.
+	 *
+	 * So we need to make sure that @start and @reuse meet the above rules.
+	 */
+	BUG_ON(start - reuse != PAGE_SIZE);
+
+	mmap_read_lock(&init_mm);
+	ret = vmemmap_remap_range(reuse, end, &walk);
+	mmap_read_unlock(&init_mm);
+
+	return ret;
+}
+
+/**
  * vmemmap_remap_free - remap the vmemmap virtual address range [@start, @end)
  *			to the page which @reuse is mapped to, then free vmemmap
  *			which the range are mapped to.
@@ -320,6 +377,7 @@ static int vmemmap_remap_free(unsigned long start, unsigned long end,
 		.remap_pte	= vmemmap_remap_pte,
 		.reuse_addr	= reuse,
 		.vmemmap_pages	= &vmemmap_pages,
+		.flags		= 0,
 	};
 	int nid = page_to_nid((struct page *)start);
 	gfp_t gfp_mask = GFP_KERNEL | __GFP_THISNODE | __GFP_NORETRY |
@@ -606,10 +664,38 @@ void hugetlb_vmemmap_optimize_bulk(const struct hstate *h, struct page *head,
 	__hugetlb_vmemmap_optimize(h, head, bulk_pages);
 }
 
+void hugetlb_vmemmap_split(const struct hstate *h, struct page *head)
+{
+	unsigned long vmemmap_start = (unsigned long)head, vmemmap_end;
+	unsigned long vmemmap_reuse;
+
+	if (!vmemmap_should_optimize(h, head))
+		return;
+
+	static_branch_inc(&hugetlb_optimize_vmemmap_key);
+
+	vmemmap_end     = vmemmap_start + hugetlb_vmemmap_size(h);
+	vmemmap_reuse   = vmemmap_start;
+	vmemmap_start   += HUGETLB_VMEMMAP_RESERVE_SIZE;
+
+	/*
+	 * Remap the vmemmap virtual address range [@vmemmap_start, @vmemmap_end)
+	 * to the page which @vmemmap_reuse is mapped to, then free the pages
+	 * which the range [@vmemmap_start, @vmemmap_end] is mapped to.
+	 */
+	if (vmemmap_remap_split(vmemmap_start, vmemmap_end, vmemmap_reuse))
+		static_branch_dec(&hugetlb_optimize_vmemmap_key);
+}
+
 void hugetlb_vmemmap_optimize_folios(struct hstate *h, struct list_head *folio_list)
 {
 	struct folio *folio;
 	LIST_HEAD(vmemmap_pages);
+
+	list_for_each_entry(folio, folio_list, lru)
+		hugetlb_vmemmap_split(h, &folio->page);
+
+	flush_tlb_kernel_range(0, TLB_FLUSH_ALL);
 
 	list_for_each_entry(folio, folio_list, lru)
 		hugetlb_vmemmap_optimize_bulk(h, &folio->page, &vmemmap_pages);
