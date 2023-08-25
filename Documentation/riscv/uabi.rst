@@ -42,6 +42,18 @@ An example string following the order is::
 
    rv64imadc_zifoo_zigoo_zafoo_sbar_scar_zxmbaz_xqux_xrux
 
+"isa" vs "hart isa" lines in /proc/cpuinfo
+------------------------------------------
+
+The "isa" line in /proc/cpuinfo describes the lowest common denominator of
+RISC-V ISA extensions recognized by the kernel and implemented on all harts. The
+"hart isa" line, in contrast, describes the set of extensions recognized by the
+kernel on the particular hart being described, even if those extensions may not
+be present on all harts in the system. In both cases, the presence of a feature
+in these lines guarantees only that the hardware has the described capability.
+Additional kernel support or policy control changes may be required before a
+feature is fully usable by userspace programs.
+
 Misaligned accesses
 -------------------
 
