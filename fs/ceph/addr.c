@@ -806,7 +806,6 @@ static void writepages_finish(struct ceph_osd_request *req)
 	struct inode *inode = req->r_inode;
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_osd_data *osd_data;
-	struct page *page;
 	int num_pages, total_pages = 0;
 	int i, j;
 	int rc = req->r_result;
@@ -850,29 +849,28 @@ static void writepages_finish(struct ceph_osd_request *req)
 					   (u64)osd_data->length);
 		total_pages += num_pages;
 		for (j = 0; j < num_pages; j++) {
-			page = osd_data->pages[j];
-			if (fscrypt_is_bounce_page(page)) {
-				page = fscrypt_pagecache_page(page);
+			struct folio *folio = page_folio(osd_data->pages[j]);
+			if (fscrypt_is_bounce_folio(folio)) {
+				folio = fscrypt_pagecache_folio(folio);
 				fscrypt_free_bounce_page(osd_data->pages[j]);
-				osd_data->pages[j] = page;
+				osd_data->pages[j] = &folio->page;
 			}
-			BUG_ON(!page);
-			WARN_ON(!PageUptodate(page));
+			WARN_ON(!folio_test_uptodate(folio));
 
 			if (atomic_long_dec_return(&fsc->writeback_count) <
 			     CONGESTION_OFF_THRESH(
 					fsc->mount_options->congestion_kb))
 				fsc->write_congested = false;
 
-			ceph_put_snap_context(detach_page_private(page));
-			end_page_writeback(page);
-			dout("unlocking %p\n", page);
+			ceph_put_snap_context(folio_detach_private(folio));
+			folio_end_writeback(folio);
+			dout("unlocking %lu\n", folio->index);
 
 			if (remove_page)
 				generic_error_remove_page(inode->i_mapping,
-							  page);
+							  &folio->page);
 
-			unlock_page(page);
+			folio_unlock(folio);
 		}
 		dout("writepages_finish %p wrote %llu bytes cleaned %d pages\n",
 		     inode, osd_data->length, rc >= 0 ? num_pages : 0);
