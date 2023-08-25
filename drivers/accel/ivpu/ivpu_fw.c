@@ -78,7 +78,7 @@ static int ivpu_fw_request(struct ivpu_device *vdev)
 		}
 	}
 
-	ivpu_err(vdev, "Failed to request firmware: %d\n", ret);
+	ivpu_err(vdev, "Failed to load firmware: %d\n", ret);
 	return ret;
 }
 
