@@ -36,6 +36,7 @@ struct vmemmap_remap_walk {
 	unsigned long		reuse_addr;
 	struct list_head	*vmemmap_pages;
 #define VMEMMAP_REMAP_ONLY_SPLIT	BIT(0)
+#define	VMEMMAP_REMAP_BULK_PAGES	BIT(1)
 	unsigned long		flags;
 };
 
@@ -211,7 +212,8 @@ static int vmemmap_remap_range(unsigned long start, unsigned long end,
 			return ret;
 	} while (pgd++, addr = next, addr != end);
 
-	if (!(walk->flags & VMEMMAP_REMAP_ONLY_SPLIT))
+	if (!(walk->flags &
+	      (VMEMMAP_REMAP_ONLY_SPLIT | VMEMMAP_REMAP_BULK_PAGES)))
 		flush_tlb_kernel_range(start, end);
 
 	return 0;
@@ -377,7 +379,7 @@ static int vmemmap_remap_free(unsigned long start, unsigned long end,
 		.remap_pte	= vmemmap_remap_pte,
 		.reuse_addr	= reuse,
 		.vmemmap_pages	= &vmemmap_pages,
-		.flags		= 0,
+		.flags		= !bulk_pages ? 0 : VMEMMAP_REMAP_BULK_PAGES,
 	};
 	int nid = page_to_nid((struct page *)start);
 	gfp_t gfp_mask = GFP_KERNEL | __GFP_THISNODE | __GFP_NORETRY |
@@ -427,6 +429,7 @@ static int vmemmap_remap_free(unsigned long start, unsigned long end,
 			.remap_pte	= vmemmap_restore_pte,
 			.reuse_addr	= reuse,
 			.vmemmap_pages	= &vmemmap_pages,
+			.flags		= 0,
 		};
 
 		vmemmap_remap_range(reuse, end, &walk);
@@ -699,6 +702,8 @@ void hugetlb_vmemmap_optimize_folios(struct hstate *h, struct list_head *folio_l
 
 	list_for_each_entry(folio, folio_list, lru)
 		hugetlb_vmemmap_optimize_bulk(h, &folio->page, &vmemmap_pages);
+
+	flush_tlb_kernel_range(0, TLB_FLUSH_ALL);
 
 	free_vmemmap_page_list(&vmemmap_pages);
 }
