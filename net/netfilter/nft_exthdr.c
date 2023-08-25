@@ -254,13 +254,12 @@ static void nft_exthdr_tcp_set_eval(const struct nft_expr *expr,
 			goto err;
 
 		if (skb_ensure_writable(pkt->skb,
-					nft_thoff(pkt) + i + priv->len))
+					nft_thoff(pkt) + i + priv->offset +
+					priv->len))
 			goto err;
 
-		tcph = nft_tcp_header_pointer(pkt, sizeof(buff), buff,
-					      &tcphdr_len);
-		if (!tcph)
-			goto err;
+		tcph = (struct tcphdr *)(pkt->skb->data + nft_thoff(pkt));
+		opt = (u8 *)tcph;
 
 		offset = i + priv->offset;
 
@@ -325,9 +324,9 @@ static void nft_exthdr_tcp_strip_eval(const struct nft_expr *expr,
 	if (skb_ensure_writable(pkt->skb, nft_thoff(pkt) + tcphdr_len))
 		goto drop;
 
-	opt = (u8 *)nft_tcp_header_pointer(pkt, sizeof(buff), buff, &tcphdr_len);
-	if (!opt)
-		goto err;
+	tcph = (struct tcphdr *)(pkt->skb->data + nft_thoff(pkt));
+	opt = (u8 *)tcph;
+
 	for (i = sizeof(*tcph); i < tcphdr_len - 1; i += optl) {
 		unsigned int j;
 
