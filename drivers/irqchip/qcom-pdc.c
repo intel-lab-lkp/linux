@@ -324,6 +324,7 @@ static int pdc_setup_pin_mapping(struct device_node *np)
 static int qcom_pdc_init(struct device_node *node, struct device_node *parent)
 {
 	struct irq_domain *parent_domain, *pdc_domain;
+	struct resource res;
 	int ret;
 
 	pdc_base = of_iomap(node, 0);
@@ -332,7 +333,14 @@ static int qcom_pdc_init(struct device_node *node, struct device_node *parent)
 		return -ENXIO;
 	}
 
-	pdc_version = pdc_reg_read(PDC_VERSION, 0);
+	if (of_address_to_resource(node, 0, &res))
+		return -EINVAL;
+
+	/* compat with old sm8150 DT which had very small region for PDC */
+	if (resource_size(&res) > PDC_VERSION)
+		pdc_version = pdc_reg_read(PDC_VERSION, 0);
+	else
+		pdc_version = 0;
 
 	parent_domain = irq_find_host(parent);
 	if (!parent_domain) {
