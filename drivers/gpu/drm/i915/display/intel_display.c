@@ -925,6 +925,16 @@ static bool vrr_disabling(const struct intel_crtc_state *old_crtc_state,
 	return is_disabling(vrr.enable, old_crtc_state, new_crtc_state);
 }
 
+static bool vrr_params_changed(const struct intel_crtc_state *old_crtc_state,
+			       const struct intel_crtc_state *new_crtc_state)
+{
+	return (old_crtc_state->vrr.flipline != new_crtc_state->vrr.flipline ||
+		old_crtc_state->vrr.vmin != new_crtc_state->vrr.vmin ||
+		old_crtc_state->vrr.vmax != new_crtc_state->vrr.vmax ||
+		old_crtc_state->vrr.guardband != new_crtc_state->vrr.guardband ||
+		old_crtc_state->vrr.pipeline_full != new_crtc_state->vrr.pipeline_full);
+}
+
 #undef is_disabling
 #undef is_enabling
 
@@ -6525,6 +6535,7 @@ static void intel_update_crtc(struct intel_atomic_state *state,
 	struct intel_crtc_state *new_crtc_state =
 		intel_atomic_get_new_crtc_state(state, crtc);
 	bool modeset = intel_crtc_needs_modeset(new_crtc_state);
+	bool vrr_update_in_seamless_m_n;
 
 	if (old_crtc_state->inherited ||
 	    intel_crtc_needs_modeset(new_crtc_state)) {
@@ -6532,7 +6543,14 @@ static void intel_update_crtc(struct intel_atomic_state *state,
 			intel_dpt_configure(crtc);
 	}
 
-	if (vrr_enabling(old_crtc_state, new_crtc_state)) {
+	if (!modeset && new_crtc_state->seamless_m_n &&
+	    vrr_params_changed(old_crtc_state, new_crtc_state)) {
+		intel_vrr_set_transcoder_timings(new_crtc_state);
+		vrr_update_in_seamless_m_n = true;
+	}
+
+	if (vrr_enabling(old_crtc_state, new_crtc_state) ||
+	    vrr_update_in_seamless_m_n) {
 		intel_vrr_enable(new_crtc_state);
 		intel_crtc_update_active_timings(new_crtc_state,
 						 new_crtc_state->vrr.enable);
