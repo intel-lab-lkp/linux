@@ -25,6 +25,7 @@ MODULE_LICENSE("GPL");
 static int index[SNDRV_CARDS] = SNDRV_DEFAULT_IDX;	/* Index 0-MAX */
 static char *id[SNDRV_CARDS] = SNDRV_DEFAULT_STR;	/* ID for this card */
 static bool enable[SNDRV_CARDS] = SNDRV_DEFAULT_ENABLE_PNP;	/* Enable this card */
+static bool emu_das[SNDRV_CARDS];
 static int extin[SNDRV_CARDS];
 static int extout[SNDRV_CARDS];
 static int seq_ports[SNDRV_CARDS] = {[0 ... (SNDRV_CARDS - 1)] = 4};
@@ -39,6 +40,8 @@ module_param_array(id, charp, NULL, 0444);
 MODULE_PARM_DESC(id, "ID string for the EMU10K1 soundcard.");
 module_param_array(enable, bool, NULL, 0444);
 MODULE_PARM_DESC(enable, "Enable the EMU10K1 soundcard.");
+module_param_array(emu_das, bool, NULL, 0444);
+MODULE_PARM_DESC(emu_das, "Use alternative E-MU Digital Audio System mode.");
 module_param_array(extin, int, NULL, 0444);
 MODULE_PARM_DESC(extin, "Available external inputs for FX8010. Zero=default.");
 module_param_array(extout, int, NULL, 0444);
@@ -93,12 +96,15 @@ static int snd_card_emu10k1_probe(struct pci_dev *pci,
 		max_buffer_size[dev] = 32;
 	else if (max_buffer_size[dev] > 1024)
 		max_buffer_size[dev] = 1024;
-	err = snd_emu10k1_create(card, pci, extin[dev], extout[dev],
+	err = snd_emu10k1_create(card, pci, emu_das[dev], extin[dev], extout[dev],
 				 (long)max_buffer_size[dev] * 1024 * 1024,
 				 enable_ir[dev], subsystem[dev]);
 	if (err < 0)
 		return err;
-	err = snd_emu10k1_pcm(emu, 0);
+	if (emu->das_mode)
+		err = snd_emu10k1_pcm_das(emu, 0);
+	else
+		err = snd_emu10k1_pcm(emu, 0);
 	if (err < 0)
 		return err;
 	if (emu->card_capabilities->ac97_chip) {
@@ -106,9 +112,11 @@ static int snd_card_emu10k1_probe(struct pci_dev *pci,
 		if (err < 0)
 			return err;
 	}
-	err = snd_emu10k1_pcm_efx(emu, 2);
-	if (err < 0)
-		return err;
+	if (!emu->das_mode) {
+		err = snd_emu10k1_pcm_efx(emu, 2);
+		if (err < 0)
+			return err;
+	}
 	/* This stores the periods table. */
 	if (emu->card_capabilities->ca0151_chip) { /* P16V */	
 		emu->p16v_buffer =
@@ -125,9 +133,11 @@ static int snd_card_emu10k1_probe(struct pci_dev *pci,
 	if (err < 0)
 		return err;
 
-	err = snd_emu10k1_pcm_multi(emu, 3);
-	if (err < 0)
-		return err;
+	if (!emu->das_mode) {
+		err = snd_emu10k1_pcm_multi(emu, 3);
+		if (err < 0)
+			return err;
+	}
 	if (emu->card_capabilities->ca0151_chip) { /* P16V */
 		err = snd_p16v_pcm(emu, 4);
 		if (err < 0)
@@ -146,7 +156,8 @@ static int snd_card_emu10k1_probe(struct pci_dev *pci,
 	if (err < 0)
 		return err;
 #ifdef ENABLE_SYNTH
-	if (snd_seq_device_new(card, 1, SNDRV_SEQ_DEV_ID_EMU10K1_SYNTH,
+	if (emu->das_mode) {
+	} else if (snd_seq_device_new(card, 1, SNDRV_SEQ_DEV_ID_EMU10K1_SYNTH,
 			       sizeof(struct snd_emu10k1_synth_arg), &wave) < 0 ||
 	    wave == NULL) {
 		dev_warn(emu->card->dev,

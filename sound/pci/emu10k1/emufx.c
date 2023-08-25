@@ -1272,6 +1272,96 @@ static void snd_emu10k1_audigy_dsp_convert_32_to_2x16(
 #define ENUM_GPR(name, size) name, name ## _dummy = name + (size) - 1
 
 /*
+ * initial DSP configuration for E-MU Digital Audio System
+ */
+
+static int _snd_emu10k1_das_init_efx(struct snd_emu10k1 *emu)
+{
+	enum {
+		ENUM_GPR(bit_shifter16, 1),
+		ENUM_GPR(tmp, 1),
+		num_static_gprs
+	};
+	int gpr = num_static_gprs;
+	u32 *gpr_map;
+	u32 ptr = 0;
+
+	int err = -ENOMEM;
+	struct snd_emu10k1_fx8010_code *icode = kzalloc(sizeof(*icode), GFP_KERNEL);
+	if (!icode)
+		return err;
+
+	icode->gpr_map = kcalloc(512 + 256 + 256 + 2 * 1024,
+				 sizeof(u_int32_t), GFP_KERNEL);
+	if (!icode->gpr_map)
+		goto __err_gpr;
+
+	icode->tram_data_map = icode->gpr_map + 512;
+	icode->tram_addr_map = icode->tram_data_map + 256;
+	icode->code = icode->tram_addr_map + 256;
+
+	/* clear free GPRs */
+	memset(icode->gpr_valid, 0xff, sizeof(icode->gpr_valid));
+
+	/* clear TRAM data & address lines */
+	memset(icode->tram_valid, 0xff, sizeof(icode->tram_valid));
+
+	strcpy(icode->name, "E-MU DSP code for ALSA");
+
+	gpr_map = icode->gpr_map;
+	gpr_map[bit_shifter16] = 0x00008000;
+
+	if (emu->card_capabilities->ca0108_chip) {
+		for (int z = 0; z < 16; z++)
+			A_OP(icode, &ptr, iMACINT0, A3_EMU32OUT(z), A_C_00000000, A_FXBUS(z), A_C_00000002);
+
+		snd_emu10k1_audigy_dsp_convert_32_to_2x16(
+			icode, &ptr, tmp, bit_shifter16, A3_EMU32IN(0), A_EXTOUT(0));
+		// A3_EMU32IN(0) is delayed by one sample, so all other A3_EMU32IN channels
+		// need to be delayed as well; we use an auxiliary register for that.
+		for (int z = 1; z < 16; z++) {
+			snd_emu10k1_audigy_dsp_convert_32_to_2x16(
+				icode, &ptr, tmp, bit_shifter16, A_GPR(gpr), A_EXTOUT(z * 2));
+			A_OP(icode, &ptr, iACC3, A_GPR(gpr), A3_EMU32IN(z), A_C_00000000, A_C_00000000);
+			gpr_map[gpr++] = 0x00000000;
+		}
+	} else {
+		for (int z = 0; z < 16; z++)
+			A_OP(icode, &ptr, iMACINT0, A_EMU32OUTL(z), A_C_00000000, A_FXBUS(z), A_C_00000002);
+
+		/* Note that the Alice2 DSPs have 6 I2S inputs which we don't use. */
+		snd_emu10k1_audigy_dsp_convert_32_to_2x16(
+			icode, &ptr, tmp, bit_shifter16, A_P16VIN(0), A_EXTOUT(0));
+		// A_P16VIN(0) is delayed by one sample, so all other A_P16VIN channels
+		// need to be delayed as well; we use an auxiliary register for that.
+		for (int z = 1; z < 16; z++) {
+			snd_emu10k1_audigy_dsp_convert_32_to_2x16(
+				icode, &ptr, tmp, bit_shifter16, A_GPR(gpr), A_EXTOUT(z * 2));
+			A_OP(icode, &ptr, iACC3, A_GPR(gpr), A_P16VIN(z), A_C_00000000, A_C_00000000);
+			gpr_map[gpr++] = 0x00000000;
+		}
+	}
+
+	if (gpr > 512) {
+		snd_BUG();
+		err = -EIO;
+		goto __err;
+	}
+
+	/* clear remaining instruction memory */
+	while (ptr < 0x400)
+		A_OP(icode, &ptr, 0x0f, 0xc0, 0xc0, 0xcf, 0xc0);
+
+	err = snd_emu10k1_icode_poke(emu, icode, true);
+
+__err:
+	kfree(icode->gpr_map);
+__err_gpr:
+	kfree(icode);
+	return err;
+}
+
+/*
  * initial DSP configuration for Audigy
  */
 
@@ -2365,7 +2455,9 @@ int snd_emu10k1_init_efx(struct snd_emu10k1 *emu)
 {
 	spin_lock_init(&emu->fx8010.irq_lock);
 	INIT_LIST_HEAD(&emu->fx8010.gpr_ctl);
-	if (emu->audigy)
+	if (emu->das_mode)
+		return _snd_emu10k1_das_init_efx(emu);
+	else if (emu->audigy)
 		return _snd_emu10k1_audigy_init_efx(emu);
 	else
 		return _snd_emu10k1_init_efx(emu);

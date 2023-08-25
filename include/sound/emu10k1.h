@@ -1706,6 +1706,7 @@ struct snd_emu10k1 {
 	unsigned int address_mode;		/* address mode */
 	unsigned long dma_mask;			/* PCI DMA mask */
 	bool iommu_workaround;			/* IOMMU workaround needed */
+	bool das_mode;				/* Alternative E-MU Digital Audio System mode */
 	int max_cache_pages;			/* max memory size / PAGE_SIZE */
 	struct snd_dma_buffer silent_page;	/* silent page */
 	struct snd_dma_buffer ptb_pages;	/* page table pages */
@@ -1735,6 +1736,7 @@ struct snd_emu10k1 {
 	struct snd_pcm *pcm_mic;
 	struct snd_pcm *pcm_efx;
 	struct snd_pcm *pcm_multi;
+	struct snd_pcm *pcm_das;
 	struct snd_pcm *pcm_p16v;
 
 	spinlock_t synth_lock;
@@ -1801,6 +1803,7 @@ struct snd_emu10k1 {
 
 int snd_emu10k1_create(struct snd_card *card,
 		       struct pci_dev *pci,
+		       bool emu_das,
 		       unsigned short extin_mask,
 		       unsigned short extout_mask,
 		       long max_cache_bytes,
@@ -1812,6 +1815,7 @@ int snd_emu10k1_pcm_mic(struct snd_emu10k1 *emu, int device);
 int snd_emu10k1_pcm_efx(struct snd_emu10k1 *emu, int device);
 int snd_p16v_pcm(struct snd_emu10k1 *emu, int device);
 int snd_p16v_mixer(struct snd_emu10k1 * emu);
+int snd_emu10k1_pcm_das(struct snd_emu10k1 *emu, int device);
 int snd_emu10k1_pcm_multi(struct snd_emu10k1 *emu, int device);
 int snd_emu10k1_fx8010_pcm(struct snd_emu10k1 *emu, int device);
 int snd_emu10k1_mixer(struct snd_emu10k1 * emu, int pcm_device, int multi_device);

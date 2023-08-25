@@ -80,6 +80,11 @@ static void snd_emu10k1_proc_read(struct snd_info_entry *entry,
 	snd_iprintf(buffer, "Internal TRAM (words) : 0x%x\n", emu->fx8010.itram_size);
 	snd_iprintf(buffer, "External TRAM (words) : 0x%x\n", (int)emu->fx8010.etram_pages.bytes / 2);
 
+	// The following are internal details in D.A.S. mode,
+	// so there is no use in displaying them to the user.
+	if (emu->das_mode)
+		return;
+
 	snd_iprintf(buffer, "\nEffect Send Routing & Amounts:\n");
 	for (idx = 0; idx < NUM_G; idx++) {
 		ptrx = snd_emu10k1_ptr_read(emu, PTRX, idx);

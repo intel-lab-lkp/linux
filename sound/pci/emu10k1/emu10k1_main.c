@@ -1505,6 +1505,7 @@ static void snd_emu10k1_detect_iommu(struct snd_emu10k1 *emu)
 
 int snd_emu10k1_create(struct snd_card *card,
 		       struct pci_dev *pci,
+		       bool emu_das,
 		       unsigned short extin_mask,
 		       unsigned short extout_mask,
 		       long max_cache_bytes,
@@ -1584,8 +1585,19 @@ int snd_emu10k1_create(struct snd_card *card,
 			c->name, pci->vendor, pci->device,
 			emu->serial);
 
-	if (!*card->id && c->id)
+	if (c->emu_model) {
+		if (emu_das)
+			emu->das_mode = 1;
+		else
+			dev_notice(card->dev,
+				"You may want to use emu_das=1 with your %s\n", c->name);
+	}
+
+	if (!*card->id && c->id) {
 		strscpy(card->id, c->id, sizeof(card->id));
+		if (emu->das_mode)
+			strlcat(card->id, "das", sizeof(card->id));
+	}
 
 	is_audigy = emu->audigy = c->emu10k2_chip;
 

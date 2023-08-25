@@ -2213,51 +2213,56 @@ int snd_emu10k1_mixer(struct snd_emu10k1 *emu,
 		rename_ctl(card, "Aux2 Capture Volume", "Line3 Capture Volume");
 		rename_ctl(card, "Mic Capture Volume", "Unknown1 Capture Volume");
 	}
-	kctl = emu->ctl_send_routing = snd_ctl_new1(&snd_emu10k1_send_routing_control, emu);
-	if (!kctl)
-		return -ENOMEM;
-	kctl->id.device = pcm_device;
-	err = snd_ctl_add(card, kctl);
-	if (err)
-		return err;
-	kctl = emu->ctl_send_volume = snd_ctl_new1(&snd_emu10k1_send_volume_control, emu);
-	if (!kctl)
-		return -ENOMEM;
-	kctl->id.device = pcm_device;
-	err = snd_ctl_add(card, kctl);
-	if (err)
-		return err;
-	kctl = emu->ctl_attn = snd_ctl_new1(&snd_emu10k1_attn_control, emu);
-	if (!kctl)
-		return -ENOMEM;
-	kctl->id.device = pcm_device;
-	err = snd_ctl_add(card, kctl);
-	if (err)
-		return err;
 
-	kctl = emu->ctl_efx_send_routing = snd_ctl_new1(&snd_emu10k1_efx_send_routing_control, emu);
-	if (!kctl)
-		return -ENOMEM;
-	kctl->id.device = multi_device;
-	err = snd_ctl_add(card, kctl);
-	if (err)
-		return err;
-	
-	kctl = emu->ctl_efx_send_volume = snd_ctl_new1(&snd_emu10k1_efx_send_volume_control, emu);
-	if (!kctl)
-		return -ENOMEM;
-	kctl->id.device = multi_device;
-	err = snd_ctl_add(card, kctl);
-	if (err)
-		return err;
-	
-	kctl = emu->ctl_efx_attn = snd_ctl_new1(&snd_emu10k1_efx_attn_control, emu);
-	if (!kctl)
-		return -ENOMEM;
-	kctl->id.device = multi_device;
-	err = snd_ctl_add(card, kctl);
-	if (err)
-		return err;
+	if (!emu->das_mode) {
+		kctl = emu->ctl_send_routing = snd_ctl_new1(&snd_emu10k1_send_routing_control, emu);
+		if (!kctl)
+			return -ENOMEM;
+		kctl->id.device = pcm_device;
+		err = snd_ctl_add(card, kctl);
+		if (err)
+			return err;
+
+		kctl = emu->ctl_send_volume = snd_ctl_new1(&snd_emu10k1_send_volume_control, emu);
+		if (!kctl)
+			return -ENOMEM;
+		kctl->id.device = pcm_device;
+		err = snd_ctl_add(card, kctl);
+		if (err)
+			return err;
+
+		kctl = emu->ctl_attn = snd_ctl_new1(&snd_emu10k1_attn_control, emu);
+		if (!kctl)
+			return -ENOMEM;
+		kctl->id.device = pcm_device;
+		err = snd_ctl_add(card, kctl);
+		if (err)
+			return err;
+
+		kctl = emu->ctl_efx_send_routing = snd_ctl_new1(&snd_emu10k1_efx_send_routing_control, emu);
+		if (!kctl)
+			return -ENOMEM;
+		kctl->id.device = multi_device;
+		err = snd_ctl_add(card, kctl);
+		if (err)
+			return err;
+
+		kctl = emu->ctl_efx_send_volume = snd_ctl_new1(&snd_emu10k1_efx_send_volume_control, emu);
+		if (!kctl)
+			return -ENOMEM;
+		kctl->id.device = multi_device;
+		err = snd_ctl_add(card, kctl);
+		if (err)
+			return err;
+
+		kctl = emu->ctl_efx_attn = snd_ctl_new1(&snd_emu10k1_efx_attn_control, emu);
+		if (!kctl)
+			return -ENOMEM;
+		kctl->id.device = multi_device;
+		err = snd_ctl_add(card, kctl);
+		if (err)
+			return err;
+	}
 
 	if (!emu->card_capabilities->ecard && !emu->card_capabilities->emu_model) {
 		/* sb live! and audigy */
