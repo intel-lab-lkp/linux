@@ -89,24 +89,9 @@ static inline int folio_wait_fscache_killable(struct folio *folio)
 	return folio_wait_private_2_killable(folio);
 }
 
-static inline void set_page_fscache(struct page *page)
-{
-	folio_start_fscache(page_folio(page));
-}
-
 static inline void end_page_fscache(struct page *page)
 {
 	folio_end_private_2(page_folio(page));
-}
-
-static inline void wait_on_page_fscache(struct page *page)
-{
-	folio_wait_private_2(page_folio(page));
-}
-
-static inline int wait_on_page_fscache_killable(struct page *page)
-{
-	return folio_wait_private_2_killable(page_folio(page));
 }
 
 enum netfs_io_source {

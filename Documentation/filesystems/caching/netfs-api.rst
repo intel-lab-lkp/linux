@@ -374,7 +374,7 @@ Caching of Local Modifications
 ==============================
 
 If a network filesystem has locally modified data that it wants to write to the
-cache, it needs to mark the pages to indicate that a write is in progress, and
+cache, it needs to mark the folios to indicate that a write is in progress, and
 if the mark is already present, it needs to wait for it to be removed first
 (presumably due to an already in-progress operation).  This prevents multiple
 competing DIO writes to the same storage in the cache.
@@ -384,14 +384,14 @@ like::
 
 	bool caching = fscache_cookie_enabled(cookie);
 
-If caching is to be attempted, pages should be waited for and then marked using
+If caching is to be attempted, folios should be waited for and then marked using
 the following functions provided by the netfs helper library::
 
-	void set_page_fscache(struct page *page);
-	void wait_on_page_fscache(struct page *page);
-	int wait_on_page_fscache_killable(struct page *page);
+	void folio_start_fscache(struct folio *folio);
+	void folio_wait_fscache(struct folio *folio);
+	int folio_wait_fscache_killable(struct folio *folio);
 
-Once all the pages in the span are marked, the netfs can ask fscache to
+Once all the folios in the span are marked, the netfs can ask fscache to
 schedule a write of that region::
 
 	void fscache_write_to_cache(struct fscache_cookie *cookie,
@@ -408,7 +408,7 @@ by calling::
 				     loff_t start, size_t len,
 				     bool caching)
 
-In these functions, a pointer to the mapping to which the source pages are
+In these functions, a pointer to the mapping to which the source folios are
 attached is passed in and start and len indicate the size of the region that's
 going to be written (it doesn't have to align to page boundaries necessarily,
 but it does have to align to DIO boundaries on the backing filesystem).  The
@@ -421,29 +421,29 @@ and term_func indicates an optional completion function, to which
 term_func_priv will be passed, along with the error or amount written.
 
 Note that the write function will always run asynchronously and will unmark all
-the pages upon completion before calling term_func.
+the folios upon completion before calling term_func.
 
 
-Page Release and Invalidation
-=============================
+Folio Release and Invalidation
+===================================
 
 Fscache keeps track of whether we have any data in the cache yet for a cache
 object we've just created.  It knows it doesn't have to do any reading until it
-has done a write and then the page it wrote from has been released by the VM,
+has done a write and then the folio it wrote from has been released by the VM,
 after which it *has* to look in the cache.
 
-To inform fscache that a page might now be in the cache, the following function
+To inform fscache that a folio might now be in the cache, the following function
 should be called from the ``release_folio`` address space op::
 
 	void fscache_note_page_release(struct fscache_cookie *cookie);
 
 if the page has been released (ie. release_folio returned true).
 
-Page release and page invalidation should also wait for any mark left on the
+Folio release and folio invalidation should also wait for any mark left on the
 page to say that a DIO write is underway from that page::
 
-	void wait_on_page_fscache(struct page *page);
-	int wait_on_page_fscache_killable(struct page *page);
+	void folio_wait_fscache(struct folio *folio);
+	int folio_wait_fscache_killable(struct folio *folio);
 
 
 API Function Reference
