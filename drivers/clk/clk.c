@@ -2245,6 +2245,9 @@ static struct clk_core *clk_calc_new_rates(struct clk_core *core,
 	    best_parent_rate != parent->rate)
 		top = clk_calc_new_rates(parent, best_parent_rate);
 
+	if ((core->flags & CLK_KEEP_RATE))
+		core->req_rate = new_rate;
+
 out:
 	clk_calc_subtree(core, new_rate, parent, p_index);
 
@@ -2343,9 +2346,51 @@ static void clk_change_rate(struct clk_core *core)
 		clk_core_prepare_enable(parent);
 
 	trace_clk_set_rate(core, core->new_rate);
+	if (!skip_set_rate && core->ops->set_rate) {
+		if (core->flags & CLK_KEEP_RATE && clk_core_can_round(core)) {
+			struct clk_rate_request req;
+			unsigned long flags;
+			int ret;
 
-	if (!skip_set_rate && core->ops->set_rate)
+			clk_core_init_rate_req(core, &req, core->req_rate);
+
+			/*
+			 * Re-determine the new rate for the clock based on the requested rate.
+			 *
+			 * In this stage, the clock must not set a new parent rate or try a
+			 * different parent, so temporarily prevent that from happening.
+			 */
+			flags = core->flags;
+			core->flags &= ~(CLK_SET_RATE_PARENT);
+			core->flags |= CLK_SET_RATE_NO_REPARENT;
+			ret = clk_core_determine_round_nolock(core, &req);
+			core->flags = flags;
+
+			/*
+			 * If necessary, store the new rate and propagate to the subtree.
+			 *
+			 * The previously calculated rates (new_rate) of this core's subtree are no
+			 * longer correct, because this clock will be set to a rate that differs
+			 * from the rate that was used to calculate the subtree.
+			 *
+			 * FIXME: This means that the rate also differs from the new_rate that was
+			 *        announced in the PRE_RATE_CHANGE notification. Be careful when
+			 *        applying this flag, that the subtree does not depend on the
+			 *        correct new rate being propagated.
+			 */
+			if (ret >= 0 && req.rate != core->new_rate) {
+				core->new_rate = req.rate;
+				pr_debug("%s: clk %s: keeping rate %lu as %lu\n",
+				       __func__, core->name, core->req_rate, core->new_rate);
+
+				hlist_for_each_entry(child, &core->children, child_node) {
+					child->new_rate = clk_recalc(child, core->new_rate);
+					clk_calc_subtree(child, child->new_rate, NULL, 0);
+				}
+			}
+		}
 		core->ops->set_rate(core->hw, core->new_rate, best_parent_rate);
+	}
 
 	trace_clk_set_rate_complete(core, core->new_rate);
 
@@ -3388,6 +3433,7 @@ static const struct {
 	ENTRY(CLK_IS_CRITICAL),
 	ENTRY(CLK_OPS_PARENT_ENABLE),
 	ENTRY(CLK_DUTY_CYCLE_PARENT),
+	ENTRY(CLK_KEEP_RATE),
 #undef ENTRY
 };
 
