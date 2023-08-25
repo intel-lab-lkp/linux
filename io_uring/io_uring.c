@@ -3237,6 +3237,23 @@ static __cold bool io_uring_try_cancel_iowq(struct io_ring_ctx *ctx)
 	return ret;
 }
 
+static bool iopoll_reap_events(struct io_ring_ctx *ctx, bool reap_all)
+{
+	bool reapped = false;
+
+	/* SQPOLL thread does its own polling */
+	if ((!(ctx->flags & IORING_SETUP_SQPOLL) && reap_all) ||
+	    (ctx->sq_data && ctx->sq_data->thread == current)) {
+		while (!wq_list_empty(&ctx->iopoll_list)) {
+			io_iopoll_try_reap_events(ctx);
+			reapped = true;
+			cond_resched();
+		}
+	}
+
+	return reapped;
+}
+
 static __cold bool io_uring_try_cancel_requests(struct io_ring_ctx *ctx,
 						struct task_struct *task,
 						bool cancel_all)
@@ -3268,15 +3285,7 @@ static __cold bool io_uring_try_cancel_requests(struct io_ring_ctx *ctx,
 		ret |= (cret != IO_WQ_CANCEL_NOTFOUND);
 	}
 
-	/* SQPOLL thread does its own polling */
-	if ((!(ctx->flags & IORING_SETUP_SQPOLL) && cancel_all) ||
-	    (ctx->sq_data && ctx->sq_data->thread == current)) {
-		while (!wq_list_empty(&ctx->iopoll_list)) {
-			io_iopoll_try_reap_events(ctx);
-			ret = true;
-			cond_resched();
-		}
-	}
+	ret = iopoll_reap_events(ctx, cancel_all);
 
 	if ((ctx->flags & IORING_SETUP_DEFER_TASKRUN) &&
 	    io_allowed_defer_tw_run(ctx))
