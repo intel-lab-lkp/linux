@@ -218,7 +218,8 @@ out:
 	return tz;
 }
 
-static int thermal_of_monitor_init(struct device_node *np, int *delay, int *pdelay)
+static int thermal_of_monitor_init(struct device_node *np, int *delay,
+				   int *pdelay, int *critical_action)
 {
 	int ret;
 
@@ -233,6 +234,14 @@ static int thermal_of_monitor_init(struct device_node *np, int *delay, int *pdel
 		pr_err("%pOFn: missing polling-delay property\n", np);
 		return ret;
 	}
+
+	/*
+	 * If the "critical-action" property is not found, fall back to
+	 * the shutdown action to keep the existing behavior.
+	 */
+	ret = of_property_read_u32(np, "critical-action", critical_action);
+	if (ret < 0)
+		*critical_action = THERMAL_CRITICAL_ACTION_SHUTDOWN;
 
 	return 0;
 }
@@ -471,7 +480,7 @@ static struct thermal_zone_device *thermal_of_zone_register(struct device_node *
 	struct thermal_zone_params tzp = {};
 	struct thermal_zone_device_ops *of_ops;
 	struct device_node *np;
-	int delay, pdelay;
+	int delay, pdelay, critical_action;
 	int ntrips, mask;
 	int ret;
 
@@ -494,7 +503,7 @@ static struct thermal_zone_device *thermal_of_zone_register(struct device_node *
 		goto out_kfree_of_ops;
 	}
 
-	ret = thermal_of_monitor_init(np, &delay, &pdelay);
+	ret = thermal_of_monitor_init(np, &delay, &pdelay, &critical_action);
 	if (ret) {
 		pr_err("Failed to initialize monitoring delays from %pOFn\n", np);
 		goto out_kfree_trips;
@@ -515,6 +524,8 @@ static struct thermal_zone_device *thermal_of_zone_register(struct device_node *
 		pr_err("Failed to register thermal zone %pOFn: %d\n", np, ret);
 		goto out_kfree_trips;
 	}
+
+	tz->action = critical_action;
 
 	ret = thermal_zone_device_enable(tz);
 	if (ret) {
