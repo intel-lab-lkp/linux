@@ -92,16 +92,10 @@ unsigned int zynqmp_dpsub_get_audio_clk_rate(struct zynqmp_dpsub *dpsub)
 
 static int zynqmp_dpsub_init_clocks(struct zynqmp_dpsub *dpsub)
 {
-	int ret;
-
-	dpsub->apb_clk = devm_clk_get(dpsub->dev, "dp_apb_clk");
-	if (IS_ERR(dpsub->apb_clk))
-		return PTR_ERR(dpsub->apb_clk);
-
-	ret = clk_prepare_enable(dpsub->apb_clk);
-	if (ret) {
+	dpsub->apb_clk = devm_clk_get_enabled(dpsub->dev, "dp_apb_clk");
+	if (IS_ERR(dpsub->apb_clk)) {
 		dev_err(dpsub->dev, "failed to enable the APB clock\n");
-		return ret;
+		return PTR_ERR(dpsub->apb_clk);
 	}
 
 	/*
@@ -274,7 +268,6 @@ err_dp:
 	zynqmp_dp_remove(dpsub);
 err_pm:
 	pm_runtime_disable(&pdev->dev);
-	clk_disable_unprepare(dpsub->apb_clk);
 err_mem:
 	of_reserved_mem_device_release(&pdev->dev);
 	if (!dpsub->drm)
@@ -295,7 +288,6 @@ static void zynqmp_dpsub_remove(struct platform_device *pdev)
 	zynqmp_dp_remove(dpsub);
 
 	pm_runtime_disable(&pdev->dev);
-	clk_disable_unprepare(dpsub->apb_clk);
 	of_reserved_mem_device_release(&pdev->dev);
 
 	if (!dpsub->drm)
