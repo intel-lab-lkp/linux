@@ -1748,47 +1748,43 @@ out_free:
 	return ret;
 }
 
-void ceph_fill_inline_data(struct inode *inode, struct page *locked_page,
+void ceph_fill_inline_data(struct inode *inode, struct folio *locked_folio,
 			   char	*data, size_t len)
 {
 	struct address_space *mapping = inode->i_mapping;
-	struct page *page;
+	struct folio *folio;
 
-	if (locked_page) {
-		page = locked_page;
+	if (locked_folio) {
+		folio = locked_folio;
 	} else {
 		if (i_size_read(inode) == 0)
 			return;
-		page = find_or_create_page(mapping, 0,
-					   mapping_gfp_constraint(mapping,
-					   ~__GFP_FS));
-		if (!page)
+		folio = __filemap_get_folio(mapping, 0,
+				FGP_LOCK | FGP_ACCESSED | FGP_CREAT,
+				mapping_gfp_constraint(mapping, ~__GFP_FS));
+		if (IS_ERR(folio))
 			return;
-		if (PageUptodate(page)) {
-			unlock_page(page);
-			put_page(page);
+		if (folio_test_uptodate(folio)) {
+			folio_unlock(folio);
+			folio_put(folio);
 			return;
 		}
 	}
 
-	dout("fill_inline_data %p %llx.%llx len %zu locked_page %p\n",
-	     inode, ceph_vinop(inode), len, locked_page);
+	dout("fill_inline_data %p %llx.%llx len %zu locked_folio %lu\n",
+	     inode, ceph_vinop(inode), len, locked_folio->index);
 
-	if (len > 0) {
-		void *kaddr = kmap_atomic(page);
-		memcpy(kaddr, data, len);
-		kunmap_atomic(kaddr);
-	}
+	memcpy_to_folio(folio, 0, data, len);
 
-	if (page != locked_page) {
+	if (folio != locked_folio) {
 		if (len < PAGE_SIZE)
-			zero_user_segment(page, len, PAGE_SIZE);
+			folio_zero_segment(folio, len, PAGE_SIZE);
 		else
-			flush_dcache_page(page);
+			flush_dcache_folio(folio);
 
-		SetPageUptodate(page);
-		unlock_page(page);
-		put_page(page);
+		folio_mark_uptodate(folio);
+		folio_unlock(folio);
+		folio_put(folio);
 	}
 }
 
