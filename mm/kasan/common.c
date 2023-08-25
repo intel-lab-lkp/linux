@@ -191,6 +191,13 @@ void * __must_check __kasan_init_slab_obj(struct kmem_cache *cache,
 	if (kasan_requires_meta())
 		kasan_init_object_meta(cache, object);
 
+#ifdef CONFIG_SLUB_RCU_DEBUG
+	if (cache->flags & SLAB_TYPESAFE_BY_RCU) {
+		kasan_unpoison(object + cache->debug_rcu_head_offset,
+			       sizeof(struct rcu_head), false);
+	}
+#endif /* CONFIG_SLUB_RCU_DEBUG */
+
 	/* Tag is ignored in set_tag() without CONFIG_KASAN_SW/HW_TAGS */
 	object = set_tag(object, assign_tag(cache, object, true));
 
@@ -218,7 +225,8 @@ static inline bool ____kasan_slab_free(struct kmem_cache *cache, void *object,
 	}
 
 	/* RCU slabs could be legally used after free within the RCU period */
-	if (unlikely(cache->flags & SLAB_TYPESAFE_BY_RCU))
+	if (unlikely(cache->flags & SLAB_TYPESAFE_BY_RCU) &&
+	    !IS_ENABLED(CONFIG_SLUB_RCU_DEBUG))
 		return false;
 
 	if (!kasan_byte_accessible(tagged_object)) {
@@ -449,4 +457,9 @@ bool __kasan_check_byte(const void *address, unsigned long ip)
 		return false;
 	}
 	return true;
+}
+
+size_t kasan_align(size_t size)
+{
+	return round_up(size, KASAN_GRANULE_SIZE);
 }

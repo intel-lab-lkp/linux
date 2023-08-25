@@ -229,6 +229,8 @@ static __always_inline bool kasan_check_byte(const void *addr)
 	return true;
 }
 
+size_t kasan_align(size_t size);
+
 #else /* CONFIG_KASAN */
 
 static inline void kasan_unpoison_range(const void *address, size_t size) {}
@@ -277,6 +279,10 @@ static inline void *kasan_krealloc(const void *object, size_t new_size,
 static inline bool kasan_check_byte(const void *address)
 {
 	return true;
+}
+static inline size_t kasan_align(size_t size)
+{
+	return size;
 }
 
 #endif /* CONFIG_KASAN */
