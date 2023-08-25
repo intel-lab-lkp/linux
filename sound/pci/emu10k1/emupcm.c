@@ -230,6 +230,16 @@ static void snd_emu1010_constrain_efx_rate(struct snd_emu10k1 *emu,
 	runtime->hw.rates = snd_pcm_rate_to_rate_bit(rate);
 }
 
+static void snd_emu1010_constrain_efx_capture_rate(struct snd_emu10k1 *emu,
+						   struct snd_pcm_runtime *runtime)
+{
+	int rate;
+
+	rate = emu->emu1010.word_clock << emu->emu1010.clock_shift;
+	runtime->hw.rate_min = runtime->hw.rate_max = rate;
+	runtime->hw.rates = snd_pcm_rate_to_rate_bit(rate);
+}
+
 static unsigned int emu10k1_calc_pitch_target(unsigned int rate)
 {
 	unsigned int pitch_target;
@@ -564,8 +574,22 @@ static int snd_emu10k1_capture_prepare(struct snd_pcm_substream *substream)
 		if (emu->card_capabilities->emu_model) {
 			unsigned mask = 0xffffffff >> (32 - runtime->channels * 2);
 			if (emu->das_mode) {
+				unsigned shift = emu->emu1010.clock_shift;
+				if (shift) {
+					if (emu->card_capabilities->emu_in_32) {
+						if (shift == 2)
+							mask |= mask << 16;
+						epcm->capture_cr_val2 = mask;
+					} else {
+						if (shift == 2)
+							mask |= mask << 8;
+						mask |= mask << 16;
+						epcm->capture_cr_val2 = 0;
+					}
+				} else {
+					epcm->capture_cr_val2 = 0;
+				}
 				epcm->capture_cr_val = mask;
-				epcm->capture_cr_val2 = 0;
 			} else {
 				// The upper 32 16-bit capture voices, two for each of the 16 32-bit channels.
 				// The lower voices are occupied by A_EXTOUT_*_CAP*.
@@ -1440,7 +1464,7 @@ static int snd_emu10k1_capture_efx_open(struct snd_pcm_substream *substream)
 	substream->runtime->private_free = snd_emu10k1_pcm_free_substream;
 	runtime->hw = snd_emu10k1_capture_efx;
 	if (emu->card_capabilities->emu_model) {
-		snd_emu1010_constrain_efx_rate(emu, runtime);
+		snd_emu1010_constrain_efx_capture_rate(emu, runtime);
 		/*
 		 * There are 32 mono channels of 16bits each.
 		 * 24bit Audio uses 2x channels over 16bit,
@@ -1452,14 +1476,10 @@ static int snd_emu10k1_capture_efx_open(struct snd_pcm_substream *substream)
 		 * 1010rev2 and 1616(m) cards have double that,
 		 * but we don't exceed 16 channels anyway.
 		 */
-#if 0
-		/* For 96kHz */
-		runtime->hw.channels_min = runtime->hw.channels_max = 4;
-#endif
-#if 0
-		/* For 192kHz */
-		runtime->hw.channels_min = runtime->hw.channels_max = 2;
-#endif
+		if (emu->das_mode)
+			runtime->hw.channels_max =
+				min(16, 32 >> (emu->emu1010.clock_shift +
+					       !emu->card_capabilities->emu_in_32));
 		runtime->hw.formats = SNDRV_PCM_FMTBIT_S32_LE;
 	} else {
 		spin_lock_irq(&emu->reg_lock);

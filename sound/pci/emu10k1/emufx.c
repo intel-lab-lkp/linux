@@ -1314,6 +1314,8 @@ static int _snd_emu10k1_das_init_efx(struct snd_emu10k1 *emu)
 	gpr_map[lowword_mask] = 0x0000ffff;
 
 	if (emu->card_capabilities->ca0108_chip) {
+		int num_cap = emu->card_capabilities->emu_in_32 ? 32 : 16;
+
 		for (int z = 0; z < 16; z++) {
 			A_OP(icode, &ptr, iMAC0, A_GPR(tmp), A_C_00000000, A_FXBUS(z * 2), A_C_00010000); // >> 15
 			A_OP(icode, &ptr, iMACINT0, A_GPR(tmp + 1), A_C_00000000, A_FXBUS(z * 2 + 1), A_C_00000002); // << 1
@@ -1324,7 +1326,7 @@ static int _snd_emu10k1_das_init_efx(struct snd_emu10k1 *emu)
 			icode, &ptr, tmp, bit_shifter16, A3_EMU32IN(0), A_EXTOUT(0));
 		// A3_EMU32IN(0) is delayed by one sample, so all other A3_EMU32IN channels
 		// need to be delayed as well; we use an auxiliary register for that.
-		for (int z = 1; z < 16; z++) {
+		for (int z = 1; z < num_cap; z++) {
 			snd_emu10k1_audigy_dsp_convert_32_to_2x16(
 				icode, &ptr, tmp, bit_shifter16, A_GPR(gpr), A_EXTOUT(z * 2));
 			A_OP(icode, &ptr, iACC3, A_GPR(gpr), A3_EMU32IN(z), A_C_00000000, A_C_00000000);

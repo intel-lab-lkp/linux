@@ -1292,6 +1292,9 @@ SUB_REG_NC(A_EHC, A_I2S_CAPTURE_RATE, 0x00000e00)  /* This sets the capture PCM 
 #define EMU_DST_HAMOA_DAC_RIGHT4	0x0307	/* Hamoa DAC Right, 4th or 192kHz */
 // In S/MUX mode, the samples of one channel are adjacent.
 #define EMU_DST_HANA_ADAT	0x0400	/* Hana ADAT 8 channel out +0 to +7 */
+/* FIXME: It is not clear whether these are actually enumerated like that. */
+#define EMU_DST_TINA2_EMU32B	0x0400	/* 16 EMU32 channels to Tina2 +0 to +0xf */
+#define EMU_DST_TINA_EMU32B	0x0500	/* 16 EMU32 channels to Tina +0 to +0xf */
 #define EMU_DST_ALICE_I2S0_LEFT		0x0500	/* Alice2 I2S0 Left */
 #define EMU_DST_ALICE_I2S0_RIGHT	0x0501	/* Alice2 I2S0 Right */
 #define EMU_DST_ALICE_I2S1_LEFT		0x0600	/* Alice2 I2S1 Left */
@@ -1654,6 +1657,7 @@ struct snd_emu_chip_details {
 	unsigned int ca0108_chip:1;	/* Audigy 2 Value */
 	unsigned int ca_cardbus_chip:1;	/* Audigy 2 ZS Notebook */
 	unsigned int ca0151_chip:1;	/* P16V */
+	unsigned int emu_in_32:1;	/* EMU32 input has 32 (connected) channels */
 	unsigned int spk20:1;		/* Stereo only */
 	unsigned int spk71:1;		/* Has 7.1 speakers */
 	unsigned int no_adat:1;		/* Has no ADAT, only SPDIF */
