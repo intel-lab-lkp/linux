@@ -594,6 +594,23 @@ config ACPI_PRMT
 	  substantially increase computational overhead related to the
 	  initialization of some server systems.
 
+config WBRF_AMD_ACPI
+	bool "ACPI based WBRF mechanism introduced by AMD"
+	depends on ACPI
+	default n
+	help
+	  Wifi band RFI mitigation mechanism allows multiple drivers from
+	  different domains to notify the frequencies in use so that hardware
+	  can be reconfigured to avoid harmonic conflicts.
+
+	  AMD has introduced an ACPI based mechanism to support WBRF for some
+	  platforms with AMD dGPU and WLAN. This needs support from BIOS equipped
+	  with necessary AML implementations and dGPU firmwares.
+
+	  Before enabling this ACPI based mechanism, it is suggested to confirm
+	  with the hardware designer/provider first whether your platform
+	  equipped with necessary BIOS and firmwares.
+
 endif	# ACPI
 
 config X86_PM_TIMER
