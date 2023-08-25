@@ -104,6 +104,7 @@ struct ina3221_input {
 	const char *label;
 	int shunt_resistor;
 	bool disconnected;
+	bool summation_bypass;
 };
 
 /**
@@ -125,6 +126,7 @@ struct ina3221_data {
 	struct mutex lock;
 	u32 reg_config;
 	int summation_shunt_resistor;
+	u32 summation_channel_control;
 
 	bool single_shot;
 };
@@ -154,7 +156,8 @@ static inline int ina3221_summation_shunt_resistor(struct ina3221_data *ina)
 	int i, shunt_resistor = 0;
 
 	for (i = 0; i < INA3221_NUM_CHANNELS; i++) {
-		if (input[i].disconnected || !input[i].shunt_resistor)
+		if (input[i].disconnected || !input[i].shunt_resistor ||
+		    input[i].summation_bypass)
 			continue;
 		if (!shunt_resistor) {
 			/* Found the reference shunt resistor value */
@@ -731,10 +734,29 @@ static SENSOR_DEVICE_ATTR_RW(shunt1_resistor, ina3221_shunt, INA3221_CHANNEL1);
 static SENSOR_DEVICE_ATTR_RW(shunt2_resistor, ina3221_shunt, INA3221_CHANNEL2);
 static SENSOR_DEVICE_ATTR_RW(shunt3_resistor, ina3221_shunt, INA3221_CHANNEL3);
 
+static ssize_t ina3221_summation_bypass_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct sensor_device_attribute *sd_attr = to_sensor_dev_attr(attr);
+	struct ina3221_data *ina = dev_get_drvdata(dev);
+	unsigned int channel = sd_attr->index;
+	struct ina3221_input *input = &ina->inputs[channel];
+
+	return sysfs_emit(buf, "%d\n", input->summation_bypass);
+}
+
+/* summation bypass */
+static SENSOR_DEVICE_ATTR_RO(in1_sum_bypass, ina3221_summation_bypass, INA3221_CHANNEL1);
+static SENSOR_DEVICE_ATTR_RO(in2_sum_bypass, ina3221_summation_bypass, INA3221_CHANNEL2);
+static SENSOR_DEVICE_ATTR_RO(in3_sum_bypass, ina3221_summation_bypass, INA3221_CHANNEL3);
+
 static struct attribute *ina3221_attrs[] = {
 	&sensor_dev_attr_shunt1_resistor.dev_attr.attr,
 	&sensor_dev_attr_shunt2_resistor.dev_attr.attr,
 	&sensor_dev_attr_shunt3_resistor.dev_attr.attr,
+	&sensor_dev_attr_in1_sum_bypass.dev_attr.attr,
+	&sensor_dev_attr_in2_sum_bypass.dev_attr.attr,
+	&sensor_dev_attr_in3_sum_bypass.dev_attr.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(ina3221);
@@ -785,6 +807,9 @@ static int ina3221_probe_child_from_dt(struct device *dev,
 
 	/* Save the connected input label if available */
 	of_property_read_string(child, "label", &input->label);
+
+	/* summation channel control */
+	input->summation_bypass = of_property_read_bool(child, "summation-bypass");
 
 	/* Overwrite default shunt resistor value optionally */
 	if (!of_property_read_u32(child, "shunt-resistor-micro-ohms", &val)) {
@@ -873,6 +898,10 @@ static int ina3221_probe(struct i2c_client *client)
 
 	/* Initialize summation_shunt_resistor for summation channel control */
 	ina->summation_shunt_resistor = ina3221_summation_shunt_resistor(ina);
+	for (i = 0; i < INA3221_NUM_CHANNELS; i++) {
+		if (!ina->inputs[i].summation_bypass)
+			ina->summation_channel_control |= (BIT(14 - i));
+	}
 
 	ina->pm_dev = dev;
 	mutex_init(&ina->lock);
@@ -978,13 +1007,13 @@ static int ina3221_resume(struct device *dev)
 	/* Initialize summation channel control */
 	if (ina->summation_shunt_resistor) {
 		/*
-		 * Take all three channels into summation by default
-		 * Shunt measurements of disconnected channels should
-		 * be 0, so it does not matter for summation.
+		 * Sum only channels that are not 'bypassed' for summation
+		 * by default. Shunt measurements of disconnected channels
+		 * should be 0, so it does not matter for summation.
 		 */
 		ret = regmap_update_bits(ina->regmap, INA3221_MASK_ENABLE,
 					 INA3221_MASK_ENABLE_SCC_MASK,
-					 INA3221_MASK_ENABLE_SCC_MASK);
+					 ina->summation_channel_control);
 		if (ret) {
 			dev_err(dev, "Unable to control summation channel\n");
 			return ret;
