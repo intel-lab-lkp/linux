@@ -1953,7 +1953,6 @@ static void __prep_account_new_huge_page(struct hstate *h, int nid)
 
 static void __prep_new_hugetlb_folio(struct hstate *h, struct folio *folio)
 {
-	hugetlb_vmemmap_optimize(h, &folio->page);
 	INIT_LIST_HEAD(&folio->lru);
 	folio_set_compound_dtor(folio, HUGETLB_PAGE_DTOR);
 	hugetlb_set_folio_subpool(folio, NULL);
@@ -2225,6 +2224,7 @@ retry:
 			return NULL;
 		}
 	}
+	hugetlb_vmemmap_optimize(h, &folio->page);
 	prep_new_hugetlb_folio(h, folio, folio_nid(folio));
 
 	return folio;
@@ -2943,6 +2943,7 @@ static int alloc_and_dissolve_hugetlb_folio(struct hstate *h,
 	new_folio = alloc_buddy_hugetlb_folio(h, gfp_mask, nid, NULL, NULL);
 	if (!new_folio)
 		return -ENOMEM;
+	hugetlb_vmemmap_optimize(h, &new_folio->page);
 	__prep_new_hugetlb_folio(h, new_folio);
 
 retry:
@@ -3206,11 +3207,41 @@ int __alloc_bootmem_huge_page(struct hstate *h, int nid)
 	}
 
 found:
+
+	/*
+	 * Only initialize the head struct page in memmap_init_reserved_pages,
+	 * rest of the struct pages will be initialized by the HugeTLB subsystem itself.
+	 * The head struct page is used to get folio information by the HugeTLB
+	 * subsystem like zone id and node id.
+	 */
+	memblock_reserved_mark_noinit_vmemmap(virt_to_phys((void *)m + PAGE_SIZE),
+		huge_page_size(h) - PAGE_SIZE);
 	/* Put them into a private list first because mem_map is not up yet */
 	INIT_LIST_HEAD(&m->list);
 	list_add(&m->list, &huge_boot_pages);
 	m->hstate = h;
 	return 1;
+}
+
+static void __init hugetlb_folio_init_vmemmap(struct hstate *h, struct folio *folio,
+					       unsigned long nr_pages)
+{
+	enum zone_type zone = zone_idx(folio_zone(folio));
+	int nid = folio_nid(folio);
+	unsigned long head_pfn = folio_pfn(folio);
+	unsigned long pfn, end_pfn = head_pfn + nr_pages;
+
+	__folio_clear_reserved(folio);
+	__folio_set_head(folio);
+
+	for (pfn = head_pfn + 1; pfn < end_pfn; pfn++) {
+		struct page *page = pfn_to_page(pfn);
+
+		__init_single_page(page, pfn, zone, nid);
+		prep_compound_tail((struct page *)folio, pfn - head_pfn);
+		set_page_count(page, 0);
+	}
+	prep_compound_head((struct page *)folio, huge_page_order(h));
 }
 
 /*
@@ -3223,19 +3254,19 @@ static void __init gather_bootmem_prealloc(void)
 
 	list_for_each_entry(m, &huge_boot_pages, list) {
 		struct page *page = virt_to_page(m);
-		struct folio *folio = page_folio(page);
+		struct folio *folio = (void *)page;
 		struct hstate *h = m->hstate;
+		unsigned long nr_pages = pages_per_huge_page(h);
 
 		VM_BUG_ON(!hstate_is_gigantic(h));
 		WARN_ON(folio_ref_count(folio) != 1);
-		if (prep_compound_gigantic_folio(folio, huge_page_order(h))) {
-			WARN_ON(folio_test_reserved(folio));
-			prep_new_hugetlb_folio(h, folio, folio_nid(folio));
-			free_huge_page(page); /* add to the hugepage allocator */
-		} else {
-			/* VERY unlikely inflated ref count on a tail page */
-			free_gigantic_folio(folio, huge_page_order(h));
-		}
+
+		hugetlb_vmemmap_optimize(h, &folio->page);
+		if (HPageVmemmapOptimized(&folio->page))
+			nr_pages = HUGETLB_VMEMMAP_RESERVE_SIZE / sizeof(struct page);
+		hugetlb_folio_init_vmemmap(h, folio, nr_pages);
+		prep_new_hugetlb_folio(h, folio, folio_nid(folio));
+		free_huge_page(page); /* add to the hugepage allocator */
 
 		/*
 		 * We need to restore the 'stolen' pages to totalram_pages
@@ -3656,6 +3687,7 @@ static int demote_free_hugetlb_folio(struct hstate *h, struct folio *folio)
 		else
 			prep_compound_page(subpage, target_hstate->order);
 		folio_change_private(inner_folio, NULL);
+		hugetlb_vmemmap_optimize(h, &folio->page);
 		prep_new_hugetlb_folio(target_hstate, inner_folio, nid);
 		free_huge_page(subpage);
 	}
