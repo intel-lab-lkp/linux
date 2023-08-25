@@ -628,10 +628,12 @@ int f2fs_add_inline_entry(struct inode *dir, const struct f2fs_filename *fname,
 	if (IS_ERR(ipage))
 		return PTR_ERR(ipage);
 
+	f2fs_down_read(&F2FS_I(dir)->i_xattr_sem);
 	inline_dentry = inline_data_addr(dir, ipage);
 	make_dentry_ptr_inline(dir, &d, inline_dentry);
 
 	bit_pos = f2fs_room_for_filename(d.bitmap, slots, d.max);
+	f2fs_up_read(&F2FS_I(dir)->i_xattr_sem);
 	if (bit_pos >= d.max) {
 		err = do_convert_inline_dir(dir, ipage, inline_dentry);
 		if (err)

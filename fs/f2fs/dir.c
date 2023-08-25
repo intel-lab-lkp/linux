@@ -736,12 +736,12 @@ add_dentry:
 	f2fs_wait_on_page_writeback(dentry_page, DATA, true, true);
 
 	if (inode) {
-		f2fs_down_write(&F2FS_I(inode)->i_sem);
 		page = f2fs_init_inode_metadata(inode, dir, fname, NULL);
 		if (IS_ERR(page)) {
 			err = PTR_ERR(page);
 			goto fail;
 		}
+		f2fs_down_write(&F2FS_I(inode)->i_sem);
 	}
 
 	make_dentry_ptr_block(NULL, &d, dentry_blk);
@@ -780,9 +780,7 @@ int f2fs_add_dentry(struct inode *dir, const struct f2fs_filename *fname,
 		 * Should get i_xattr_sem to keep the lock order:
 		 * i_xattr_sem -> inode_page lock used by f2fs_setxattr.
 		 */
-		f2fs_down_read(&F2FS_I(dir)->i_xattr_sem);
 		err = f2fs_add_inline_entry(dir, fname, inode, ino, mode);
-		f2fs_up_read(&F2FS_I(dir)->i_xattr_sem);
 	}
 	if (err == -EAGAIN)
 		err = f2fs_add_regular_entry(dir, fname, inode, ino, mode);
