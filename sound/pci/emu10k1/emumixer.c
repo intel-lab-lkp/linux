@@ -120,13 +120,14 @@ static int snd_emu10k1_spdif_get_mask(struct snd_kcontrol *kcontrol,
 	"DSP 16", "DSP 17", "DSP 18", "DSP 19", "DSP 20", "DSP 21", "DSP 22", "DSP 23", \
 	"DSP 24", "DSP 25", "DSP 26", "DSP 27", "DSP 28", "DSP 29", "DSP 30", "DSP 31"
 
-#define PB_TEXTS \
+#define PB_4x_TEXTS \
 	"PbChn 00", "PbChn 01", "PbChn 02", "PbChn 03", \
-	"PbChn 04", "PbChn 05", "PbChn 06", "PbChn 07", \
+	"PbChn 04", "PbChn 05", "PbChn 06", "PbChn 07"
+
+#define PB_TEXTS \
+	PB_4x_TEXTS, \
 	"PbChn 08", "PbChn 09", "PbChn 10", "PbChn 11", \
 	"PbChn 12", "PbChn 13", "PbChn 14", "PbChn 15"
-
-#define PB_4x_TEXTS PB_TEXTS  // Only 1x playback for now
 
 #define PAIR_TEXTS(base, one, two) PAIR_PS(base, one, two, "")
 #define LR_TEXTS(base) LR_PS(base, "")
@@ -171,26 +172,33 @@ static int snd_emu10k1_spdif_get_mask(struct snd_kcontrol *kcontrol,
 	EMU_SRC_ALICE_EMU32B+0xe, \
 	EMU_SRC_ALICE_EMU32B+0xf
 
-// Only 1x playback for now
 #define EMU32_2x_SRC_REGS \
-	{ EMU_SRC_ALICE_EMU32A }, \
-	{ EMU_SRC_ALICE_EMU32A+1 }, \
-	{ EMU_SRC_ALICE_EMU32A+2 }, \
-	{ EMU_SRC_ALICE_EMU32A+3 }, \
-	{ EMU_SRC_ALICE_EMU32A+4 }, \
-	{ EMU_SRC_ALICE_EMU32A+5 }, \
-	{ EMU_SRC_ALICE_EMU32A+6 }, \
-	{ EMU_SRC_ALICE_EMU32A+7 }, \
-	{ EMU_SRC_ALICE_EMU32A+8 }, \
-	{ EMU_SRC_ALICE_EMU32A+9 }, \
-	{ EMU_SRC_ALICE_EMU32A+0xa }, \
-	{ EMU_SRC_ALICE_EMU32A+0xb }, \
-	{ EMU_SRC_ALICE_EMU32A+0xc }, \
-	{ EMU_SRC_ALICE_EMU32A+0xd }, \
-	{ EMU_SRC_ALICE_EMU32A+0xe }, \
-	{ EMU_SRC_ALICE_EMU32A+0xf }
+	{ EMU_SRC_ALICE_EMU32A+0x0, EMU_SRC_ALICE_EMU32A+0x1 }, \
+	{ EMU_SRC_ALICE_EMU32A+0x2, EMU_SRC_ALICE_EMU32A+0x3 }, \
+	{ EMU_SRC_ALICE_EMU32A+0x4, EMU_SRC_ALICE_EMU32A+0x5 }, \
+	{ EMU_SRC_ALICE_EMU32A+0x6, EMU_SRC_ALICE_EMU32A+0x7 }, \
+	{ EMU_SRC_ALICE_EMU32A+0x8, EMU_SRC_ALICE_EMU32A+0x9 }, \
+	{ EMU_SRC_ALICE_EMU32A+0xa, EMU_SRC_ALICE_EMU32A+0xb }, \
+	{ EMU_SRC_ALICE_EMU32A+0xc, EMU_SRC_ALICE_EMU32A+0xd }, \
+	{ EMU_SRC_ALICE_EMU32A+0xe, EMU_SRC_ALICE_EMU32A+0xf }, \
+	{ EMU_SRC_ALICE_EMU32B+0x0, EMU_SRC_ALICE_EMU32B+0x1 }, \
+	{ EMU_SRC_ALICE_EMU32B+0x2, EMU_SRC_ALICE_EMU32B+0x3 }, \
+	{ EMU_SRC_ALICE_EMU32B+0x4, EMU_SRC_ALICE_EMU32B+0x5 }, \
+	{ EMU_SRC_ALICE_EMU32B+0x6, EMU_SRC_ALICE_EMU32B+0x7 }, \
+	{ EMU_SRC_ALICE_EMU32B+0x8, EMU_SRC_ALICE_EMU32B+0x9 }, \
+	{ EMU_SRC_ALICE_EMU32B+0xa, EMU_SRC_ALICE_EMU32B+0xb }, \
+	{ EMU_SRC_ALICE_EMU32B+0xc, EMU_SRC_ALICE_EMU32B+0xd }, \
+	{ EMU_SRC_ALICE_EMU32B+0xe, EMU_SRC_ALICE_EMU32B+0xf }
 
-#define EMU32_4x_SRC_REGS EMU32_2x_SRC_REGS
+#define EMU32_4x_SRC_REGS \
+	{ EMU_SRC_ALICE_EMU32A+0x0, EMU_SRC_ALICE_EMU32A+0x1, EMU_SRC_ALICE_EMU32A+0x2, EMU_SRC_ALICE_EMU32A+0x3 }, \
+	{ EMU_SRC_ALICE_EMU32A+0x4, EMU_SRC_ALICE_EMU32A+0x5, EMU_SRC_ALICE_EMU32A+0x6, EMU_SRC_ALICE_EMU32A+0x7 }, \
+	{ EMU_SRC_ALICE_EMU32A+0x8, EMU_SRC_ALICE_EMU32A+0x9, EMU_SRC_ALICE_EMU32A+0xa, EMU_SRC_ALICE_EMU32A+0xb }, \
+	{ EMU_SRC_ALICE_EMU32A+0xc, EMU_SRC_ALICE_EMU32A+0xd, EMU_SRC_ALICE_EMU32A+0xe, EMU_SRC_ALICE_EMU32A+0xf }, \
+	{ EMU_SRC_ALICE_EMU32B+0x0, EMU_SRC_ALICE_EMU32B+0x1, EMU_SRC_ALICE_EMU32B+0x2, EMU_SRC_ALICE_EMU32B+0x3 }, \
+	{ EMU_SRC_ALICE_EMU32B+0x4, EMU_SRC_ALICE_EMU32B+0x5, EMU_SRC_ALICE_EMU32B+0x6, EMU_SRC_ALICE_EMU32B+0x7 }, \
+	{ EMU_SRC_ALICE_EMU32B+0x8, EMU_SRC_ALICE_EMU32B+0x9, EMU_SRC_ALICE_EMU32B+0xa, EMU_SRC_ALICE_EMU32B+0xb }, \
+	{ EMU_SRC_ALICE_EMU32B+0xc, EMU_SRC_ALICE_EMU32B+0xd, EMU_SRC_ALICE_EMU32B+0xe, EMU_SRC_ALICE_EMU32B+0xf }
 
 /* 1010 rev1 */
 
@@ -1080,13 +1088,6 @@ static void snd_emu1010_source_apply(struct snd_emu10k1 *emu, unsigned shift,
 				     const unsigned short *regs,
 				     const unsigned short *vals)
 {
-	unsigned short avals[4];
-
-	if ((vals[0] & 0x700) == 0x300) {  // EMU32x
-		// Only 1x playback for now
-		avals[0] = avals[1] = avals[2] = avals[3] = vals[0];
-		vals = avals;
-	}
 	switch (shift) {
 	case 2:
 		snd_emu1010_fpga_link_dst_src_write(emu, regs[3], vals[3]);

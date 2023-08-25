@@ -39,6 +39,12 @@ static int voice_alloc(struct snd_emu10k1 *emu, int type, int number,
 			continue;
 		}
 
+		// The voices must be consecutive without wrap-around
+		if (i + number > NUM_G) {
+			skip = NUM_G - i;
+			continue;
+		}
+
 		for (k = 0; k < number; k++) {
 			voice = &emu->voices[i + k];
 			if (voice->use) {

@@ -225,16 +225,6 @@ static void snd_emu1010_constrain_efx_rate(struct snd_emu10k1 *emu,
 {
 	int rate;
 
-	rate = emu->emu1010.word_clock;
-	runtime->hw.rate_min = runtime->hw.rate_max = rate;
-	runtime->hw.rates = snd_pcm_rate_to_rate_bit(rate);
-}
-
-static void snd_emu1010_constrain_efx_capture_rate(struct snd_emu10k1 *emu,
-						   struct snd_pcm_runtime *runtime)
-{
-	int rate;
-
 	rate = emu->emu1010.word_clock << emu->emu1010.clock_shift;
 	runtime->hw.rate_min = runtime->hw.rate_max = rate;
 	runtime->hw.rates = snd_pcm_rate_to_rate_bit(rate);
@@ -413,7 +403,7 @@ static int snd_emu10k1_playback_hw_params(struct snd_pcm_substream *substream,
 	} else {
 		type = EMU10K1_EFX;
 		channels = params_channels(hw_params);
-		count = 1 + emu->das_mode;
+		count = (1 + emu->das_mode) << emu->emu1010.clock_shift;
 	}
 	err = snd_emu10k1_pcm_channel_alloc(epcm, type, count, channels);
 	if (err < 0)
@@ -502,28 +492,32 @@ static int snd_emu10k1_efx_playback_prepare(struct snd_pcm_substream *substream)
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct snd_emu10k1_pcm *epcm = runtime->private_data;
 	bool das_mode = emu->das_mode;
+	unsigned int shift = emu->emu1010.clock_shift;
 	unsigned int start_addr;
 	unsigned int extra_size, channel_size;
-	unsigned int i;
+	unsigned int i, j;
 
 	epcm->pitch_target = PITCH_48000;
 
 	start_addr = epcm->start_addr >> 1;  // 16-bit voices
 
-	extra_size = runtime->period_size;
-	channel_size = runtime->buffer_size;
+	extra_size = runtime->period_size >> shift;
+	channel_size = runtime->buffer_size >> shift;
 
 	snd_emu10k1_pcm_init_extra_voice(emu, epcm->extra, true,
 					 start_addr, start_addr + extra_size);
 
 	if (das_mode) {
+		unsigned count = 1 << shift;
 		start_addr >>= 1;
 		epcm->ccca_start_addr = start_addr;
 		for (i = 0; i < runtime->channels; i++) {
-			snd_emu10k1_pcm_init_das_voices(emu, epcm->voices[i],
-							start_addr, start_addr + channel_size,
-							i * 2);
-			start_addr += channel_size;
+			for (j = 0; j < count; j++) {
+				snd_emu10k1_pcm_init_das_voices(emu, epcm->voices[i] + j * 2,
+								start_addr, start_addr + channel_size,
+								(i * count + j) * 2);
+				start_addr += channel_size;
+			}
 		}
 	} else {
 		epcm->ccca_start_addr = start_addr;
@@ -663,15 +657,16 @@ static void snd_emu10k1_playback_fill_cache(struct snd_emu10k1 *emu,
 static void snd_emu10k1_playback_prepare_voices(struct snd_emu10k1 *emu,
 						struct snd_emu10k1_pcm *epcm,
 						bool w_16, bool stereo,
-						int channels)
+						int shift, int channels)
 {
 	struct snd_pcm_substream *substream = epcm->substream;
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	unsigned eloop_start = epcm->start_addr >> w_16;
 	unsigned loop_start = eloop_start >> stereo;
-	unsigned eloop_size = runtime->period_size;
-	unsigned loop_size = runtime->buffer_size;
+	unsigned eloop_size = runtime->period_size >> shift;
+	unsigned loop_size = runtime->buffer_size >> shift;
 	u32 sample = w_16 ? 0 : 0x80808080;
+	int count = 1 << shift;
 
 	// To make the playback actually start at the 1st frame,
 	// we need to compensate for two circumstances:
@@ -680,9 +675,11 @@ static void snd_emu10k1_playback_prepare_voices(struct snd_emu10k1 *emu,
 	loop_start += (epcm->resume_pos + 64 - 3) % loop_size;
 	for (int i = 0; i < channels; i++) {
 		unsigned voice = epcm->voices[i]->number;
-		snd_emu10k1_ptr_write(emu, CCCA_CURRADDR, voice, loop_start);
-		loop_start += loop_size;
-		snd_emu10k1_playback_fill_cache(emu, voice, sample, stereo);
+		for (int j = 0; j < count; j++, voice += 2) {
+			snd_emu10k1_ptr_write(emu, CCCA_CURRADDR, voice, loop_start);
+			loop_start += loop_size;
+			snd_emu10k1_playback_fill_cache(emu, voice, sample, stereo);
+		}
 	}
 
 	// The interrupt is triggered when CCCA_CURRADDR (CA) wraps around,
@@ -825,7 +822,7 @@ static int snd_emu10k1_playback_trigger(struct snd_pcm_substream *substream,
 	spin_lock(&emu->reg_lock);
 	switch (cmd) {
 	case SNDRV_PCM_TRIGGER_START:
-		snd_emu10k1_playback_prepare_voices(emu, epcm, w_16, stereo, 1);
+		snd_emu10k1_playback_prepare_voices(emu, epcm, w_16, stereo, 0, 1);
 		fallthrough;
 	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
 	case SNDRV_PCM_TRIGGER_RESUME:
@@ -929,6 +926,7 @@ static snd_pcm_uframes_t snd_emu10k1_playback_pointer(struct snd_pcm_substream *
 	struct snd_emu10k1 *emu = snd_pcm_substream_chip(substream);
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct snd_emu10k1_pcm *epcm = runtime->private_data;
+	int shift = emu->emu1010.clock_shift;
 	int ptr;
 
 	if (!epcm->running)
@@ -948,7 +946,7 @@ static snd_pcm_uframes_t snd_emu10k1_playback_pointer(struct snd_pcm_substream *
 	//
 	ptr -= 64 - 3;
 	if (ptr < 0)
-		ptr += runtime->buffer_size;
+		ptr += runtime->buffer_size >> shift;
 
 	/*
 	dev_dbg(emu->card->dev,
@@ -956,14 +954,15 @@ static snd_pcm_uframes_t snd_emu10k1_playback_pointer(struct snd_pcm_substream *
 	       (long)ptr, (long)runtime->buffer_size,
 	       (long)runtime->period_size);
 	*/
-	return ptr;
+
+	return ptr << shift;
 }
 
 static u64 snd_emu10k1_efx_playback_voice_mask(struct snd_emu10k1_pcm *epcm,
-					       bool stereo, int channels)
+					       bool stereo, int count, int channels)
 {
 	u64 mask = 0;
-	u64 mask0 = (1 << (1 << stereo)) - 1;
+	u64 mask0 = (1 << (count << stereo)) - 1;
 
 	for (int i = 0; i < channels; i++) {
 		int voice = epcm->voices[i]->number;
@@ -974,16 +973,18 @@ static u64 snd_emu10k1_efx_playback_voice_mask(struct snd_emu10k1_pcm *epcm,
 
 static void snd_emu10k1_efx_playback_freeze_voices(struct snd_emu10k1 *emu,
 						   struct snd_emu10k1_pcm *epcm,
-						   bool stereo, int channels)
+						   bool stereo, int count, int channels)
 {
 	for (int i = 0; i < channels; i++) {
 		int voice = epcm->voices[i]->number;
-		snd_emu10k1_ptr_write(emu, CPF_STOP, voice, 1);
-		if (stereo) {
-			// Weirdly enough, the stereo slave needs to be stopped separately
-			snd_emu10k1_ptr_write(emu, CPF_STOP, voice + 1, 1);
+		for (int j = 0; j < count; j++, voice += 2) {
+			snd_emu10k1_ptr_write(emu, CPF_STOP, voice, 1);
+			if (stereo) {
+				// Weirdly enough, the stereo slave needs to be stopped separately
+				snd_emu10k1_ptr_write(emu, CPF_STOP, voice + 1, 1);
+			}
+			snd_emu10k1_playback_commit_pitch(emu, voice, PITCH_48000 << 16);
 		}
-		snd_emu10k1_playback_commit_pitch(emu, voice, PITCH_48000 << 16);
 	}
 }
 
@@ -998,22 +999,26 @@ static void snd_emu10k1_efx_playback_unmute_voices(struct snd_emu10k1 *emu,
 
 static void snd_emu10k1_efx_playback_unmute_das_voices(struct snd_emu10k1 *emu,
 						       struct snd_emu10k1_pcm *epcm,
-						       int channels)
+						       int count, int channels)
 {
 	for (int i = 0; i < channels; i++)
-		snd_emu10k1_playback_unmute_das_voices(emu, epcm->voices[i]);
+		for (int j = 0; j < count; j++)
+			snd_emu10k1_playback_unmute_das_voices(emu, epcm->voices[i] + j * 2);
 }
 
 static void snd_emu10k1_efx_playback_stop_voices(struct snd_emu10k1 *emu,
 						 struct snd_emu10k1_pcm *epcm,
-						 bool stereo, int channels)
+						 bool stereo, int count, int channels)
 {
 	for (int i = 0; i < channels; i++)
-		snd_emu10k1_playback_stop_voice(emu, epcm->voices[i]);
+		for (int j = 0; j < count; j++)
+			snd_emu10k1_playback_stop_voice(emu, epcm->voices[i] + j * 2);
 	snd_emu10k1_playback_set_stopped(emu, epcm);
 
 	for (int i = 0; i < channels; i++)
-		snd_emu10k1_playback_mute_voices(emu, epcm->voices[i], stereo);
+		for (int j = 0; j < count; j++)
+			snd_emu10k1_playback_mute_voices(
+						emu, epcm->voices[i] + j * 2, stereo);
 }
 
 static int snd_emu10k1_efx_playback_trigger(struct snd_pcm_substream *substream,
@@ -1022,6 +1027,8 @@ static int snd_emu10k1_efx_playback_trigger(struct snd_pcm_substream *substream,
 	struct snd_emu10k1 *emu = snd_pcm_substream_chip(substream);
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct snd_emu10k1_pcm *epcm = runtime->private_data;
+	unsigned shift = emu->emu1010.clock_shift;
+	unsigned count = 1U << shift;
 	bool das_mode = emu->das_mode;
 	u64 mask;
 	int result = 0;
@@ -1032,15 +1039,15 @@ static int snd_emu10k1_efx_playback_trigger(struct snd_pcm_substream *substream,
 	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
 	case SNDRV_PCM_TRIGGER_RESUME:
 		mask = snd_emu10k1_efx_playback_voice_mask(
-				epcm, das_mode, runtime->channels);
+				epcm, das_mode, count, runtime->channels);
 		for (int i = 0; i < 10; i++) {
 			// Note that the freeze is not interruptible, so we make no
 			// effort to reset the bits outside the error handling here.
 			snd_emu10k1_voice_set_loop_stop_multiple(emu, mask);
 			snd_emu10k1_efx_playback_freeze_voices(
-					emu, epcm, das_mode, runtime->channels);
+					emu, epcm, das_mode, count, runtime->channels);
 			snd_emu10k1_playback_prepare_voices(
-					emu, epcm, true, das_mode, runtime->channels);
+					emu, epcm, true, das_mode, shift, runtime->channels);
 
 			// It might seem to make more sense to unmute the voices only after
 			// they have been started, to potentially avoid torturing the speakers
@@ -1048,7 +1055,7 @@ static int snd_emu10k1_efx_playback_trigger(struct snd_pcm_substream *substream,
 			// which means that we'd get some mild artifacts in the regular case.
 			if (das_mode)
 				snd_emu10k1_efx_playback_unmute_das_voices(
-						emu, epcm, runtime->channels);
+						emu, epcm, count, runtime->channels);
 			else
 				snd_emu10k1_efx_playback_unmute_voices(
 						emu, epcm, runtime->channels);
@@ -1062,7 +1069,7 @@ static int snd_emu10k1_efx_playback_trigger(struct snd_pcm_substream *substream,
 			}
 
 			snd_emu10k1_efx_playback_stop_voices(
-					emu, epcm, das_mode, runtime->channels);
+					emu, epcm, das_mode, count, runtime->channels);
 
 			if (result != -EAGAIN)
 				break;
@@ -1075,7 +1082,7 @@ static int snd_emu10k1_efx_playback_trigger(struct snd_pcm_substream *substream,
 	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
 		snd_emu10k1_playback_stop_voice(emu, epcm->extra);
 		snd_emu10k1_efx_playback_stop_voices(
-				emu, epcm, das_mode, runtime->channels);
+				emu, epcm, das_mode, count, runtime->channels);
 
 		epcm->resume_pos = snd_emu10k1_playback_pointer(substream);
 		break;
@@ -1088,6 +1095,113 @@ leave:
 	return result;
 }
 
+static void *get_dma_ptr(struct snd_pcm_runtime *runtime,
+			 int channel, unsigned long hwoff)
+{
+	return runtime->dma_area + hwoff +
+		channel * (runtime->dma_bytes / runtime->channels);
+}
+
+static void *get_dma_ptr_x(struct snd_pcm_runtime *runtime,
+			   int shift, int channel, int subch, unsigned long hwoff)
+{
+	return runtime->dma_area + hwoff +
+		((channel << shift) + subch) *
+			(runtime->dma_bytes / (runtime->channels << shift));
+}
+
+static int snd_emu10k1_efx_playback_silence(struct snd_pcm_substream *substream,
+					    int channel, unsigned long hwoff,
+					    unsigned long bytes)
+{
+	struct snd_emu10k1 *emu = snd_pcm_substream_chip(substream);
+	struct snd_pcm_runtime *runtime = substream->runtime;
+	unsigned shift = emu->emu1010.clock_shift;
+	unsigned i, j, channels, subchans, voices;
+
+	if (!shift) {
+		// Non-interleaved buffer is assumed
+		memset(get_dma_ptr(runtime, channel, hwoff), 0, bytes);
+	} else {
+		// Interleaved buffer is assumed, which isn't actually the case
+		channels = runtime->channels;
+		subchans = 1 << shift;
+		voices = channels << shift;
+		hwoff /= voices;
+		if (bytes % (voices << 2))  // See *_copy_user() below.
+			return -EIO;
+		bytes /= voices;
+		for (i = 0; i < channels; i++)
+			for (j = 0; j < subchans; j++)
+				memset(get_dma_ptr_x(runtime, shift, i, j, hwoff), 0, bytes);
+	}
+	return 0;
+}
+
+static int snd_emu10k1_efx_playback_copy(struct snd_pcm_substream *substream,
+					 int channel, unsigned long hwoff,
+					 struct iov_iter *iter, unsigned long bytes)
+{
+	struct snd_emu10k1 *emu = snd_pcm_substream_chip(substream);
+	struct snd_pcm_runtime *runtime = substream->runtime;
+	unsigned shift = emu->emu1010.clock_shift;
+	unsigned i, j, k, channels, subchans, voices, frame_size, frames;
+
+	if (!shift) {
+		// Non-interleaved source
+		if (copy_from_iter(get_dma_ptr(runtime, channel, hwoff), bytes, iter) != bytes)
+			return -EFAULT;
+	} else {
+		// Interleaved source
+		if (snd_BUG_ON(iter->nr_segs != 1))  // We don't support generalized iovec's.
+			return -EIO;
+		channels = runtime->channels;
+		subchans = 1 << shift;
+		voices = channels << shift;
+		frame_size = voices << 2;
+		// It is recommended that writes are period-sized, and it appears
+		// unlikely that someone would actually use a period size which
+		// is not divisible by four, so don't bother making it work.
+		// This check should also prevent that hwoff becomes unaligned.
+		// Ideally, snd_pcm_sw_params.xfer_align would handle this ...
+		if (snd_BUG_ON(bytes % frame_size))
+			return -EIO;
+		frames = bytes / frame_size;
+		hwoff /= voices;
+		if (iter_is_ubuf(iter)) {
+			void __user *buf = iter->ubuf;
+			if (!user_access_begin(buf, bytes))
+				return -EFAULT;
+			for (i = 0; i < channels; i++) {
+				for (j = 0; j < subchans; j++) {
+					u32 *dst = get_dma_ptr_x(runtime, shift, i, j, hwoff);
+					u32 __user *src = (u32 __user *)buf + j * channels + i;
+					for (k = 0; k < frames; k++, dst++, src += voices)
+						unsafe_get_user(*dst, src, faulted);
+				}
+			}
+			user_access_end();
+		} else if (iov_iter_is_kvec(iter)) {
+			void *buf = iter->kvec->iov_base;
+			for (i = 0; i < channels; i++) {
+				for (j = 0; j < subchans; j++) {
+					u32 *dst = get_dma_ptr_x(runtime, shift, i, j, hwoff);
+					u32 *src = (u32 *)buf + j * channels + i;
+					for (k = 0; k < frames; k++, dst++, src += voices)
+						*dst = *src;
+				}
+			}
+		} else {
+			snd_BUG();
+			return -EIO;
+		}
+	}
+	return 0;
+
+faulted:
+	user_access_end();
+	return -EFAULT;
+}
 
 static snd_pcm_uframes_t snd_emu10k1_capture_pointer(struct snd_pcm_substream *substream)
 {
@@ -1250,7 +1364,8 @@ static int snd_emu10k1_efx_playback_close(struct snd_pcm_substream *substream)
 	return 0;
 }
 
-static int snd_emu10k1_playback_set_constraints(struct snd_pcm_runtime *runtime)
+static int snd_emu10k1_playback_set_constraints(struct snd_emu10k1 *emu,
+						struct snd_pcm_runtime *runtime)
 {
 	int err;
 
@@ -1262,7 +1377,8 @@ static int snd_emu10k1_playback_set_constraints(struct snd_pcm_runtime *runtime)
 	// The hardware is typically the cache's size of 64 frames ahead.
 	// Leave enough time for actually filling up the buffer.
 	err = snd_pcm_hw_constraint_minmax(
-			runtime, SNDRV_PCM_HW_PARAM_PERIOD_SIZE, 128, UINT_MAX);
+			runtime, SNDRV_PCM_HW_PARAM_PERIOD_SIZE,
+			128 << emu->emu1010.clock_shift, UINT_MAX);
 	return err;
 }
 
@@ -1286,10 +1402,28 @@ static int snd_emu10k1_efx_playback_open(struct snd_pcm_substream *substream)
 	runtime->hw = snd_emu10k1_efx_playback;
 	if (emu->card_capabilities->emu_model) {
 		snd_emu1010_constrain_efx_rate(emu, runtime);
-		if (emu->das_mode)
+		if (emu->das_mode) {
+			unsigned shift = emu->emu1010.clock_shift;
+			if (shift) {
+				runtime->hw.info =
+					// No SNDRV_PCM_INFO_MMAP; doable without SNDRV_PCM_INFO_MMAP_VALID
+					SNDRV_PCM_INFO_INTERLEAVED |  // Unlike in 1x mode
+					SNDRV_PCM_INFO_BLOCK_TRANSFER |
+					SNDRV_PCM_INFO_RESUME |
+					SNDRV_PCM_INFO_PAUSE;
+				if (shift == 2)
+					runtime->hw.channels_max = 7;  // FIXME: should be 8, but extra voice ...
+				err = snd_pcm_hw_constraint_step(
+						runtime, 0, SNDRV_PCM_HW_PARAM_PERIOD_SIZE, 1 << shift);
+				if (err < 0) {
+					kfree(epcm);
+					return err;
+				}
+			}
 			runtime->hw.formats = SNDRV_PCM_FMTBIT_S32_LE;
+		}
 	}
-	err = snd_emu10k1_playback_set_constraints(runtime);
+	err = snd_emu10k1_playback_set_constraints(emu, runtime);
 	if (err < 0) {
 		kfree(epcm);
 		return err;
@@ -1330,7 +1464,7 @@ static int snd_emu10k1_playback_open(struct snd_pcm_substream *substream)
 	runtime->private_data = epcm;
 	runtime->private_free = snd_emu10k1_pcm_free_substream;
 	runtime->hw = snd_emu10k1_playback;
-	err = snd_emu10k1_playback_set_constraints(runtime);
+	err = snd_emu10k1_playback_set_constraints(emu, runtime);
 	if (err < 0) {
 		kfree(epcm);
 		return err;
@@ -1464,7 +1598,7 @@ static int snd_emu10k1_capture_efx_open(struct snd_pcm_substream *substream)
 	substream->runtime->private_free = snd_emu10k1_pcm_free_substream;
 	runtime->hw = snd_emu10k1_capture_efx;
 	if (emu->card_capabilities->emu_model) {
-		snd_emu1010_constrain_efx_capture_rate(emu, runtime);
+		snd_emu1010_constrain_efx_rate(emu, runtime);
 		/*
 		 * There are 32 mono channels of 16bits each.
 		 * 24bit Audio uses 2x channels over 16bit,
@@ -1554,6 +1688,8 @@ static const struct snd_pcm_ops snd_emu10k1_efx_playback_ops = {
 	.prepare =		snd_emu10k1_efx_playback_prepare,
 	.trigger =		snd_emu10k1_efx_playback_trigger,
 	.pointer =		snd_emu10k1_playback_pointer,
+	.copy =			snd_emu10k1_efx_playback_copy,
+	.fill_silence =		snd_emu10k1_efx_playback_silence,
 };
 
 int snd_emu10k1_pcm(struct snd_emu10k1 *emu, int device)

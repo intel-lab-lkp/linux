@@ -1316,7 +1316,7 @@ static int _snd_emu10k1_das_init_efx(struct snd_emu10k1 *emu)
 	if (emu->card_capabilities->ca0108_chip) {
 		int num_cap = emu->card_capabilities->emu_in_32 ? 32 : 16;
 
-		for (int z = 0; z < 16; z++) {
+		for (int z = 0; z < 32; z++) {
 			A_OP(icode, &ptr, iMAC0, A_GPR(tmp), A_C_00000000, A_FXBUS(z * 2), A_C_00010000); // >> 15
 			A_OP(icode, &ptr, iMACINT0, A_GPR(tmp + 1), A_C_00000000, A_FXBUS(z * 2 + 1), A_C_00000002); // << 1
 			A_OP(icode, &ptr, iANDXOR, A3_EMU32OUT(z), A_GPR(tmp), A_GPR(lowword_mask), A_GPR(tmp + 1));
@@ -1337,6 +1337,11 @@ static int _snd_emu10k1_das_init_efx(struct snd_emu10k1 *emu)
 			A_OP(icode, &ptr, iMAC0, A_GPR(tmp), A_C_00000000, A_FXBUS(z * 2), A_C_00010000); // >> 15
 			A_OP(icode, &ptr, iMACINT0, A_GPR(tmp + 1), A_C_00000000, A_FXBUS(z * 2 + 1), A_C_00000002); // << 1
 			A_OP(icode, &ptr, iANDXOR, A_EMU32OUTL(z), A_GPR(tmp), A_GPR(lowword_mask), A_GPR(tmp + 1));
+		}
+		for (int z = 0; z < 16; z++) {
+			A_OP(icode, &ptr, iMAC0, A_GPR(tmp), A_C_00000000, A_FXBUS(z * 2 + 32), A_C_00010000); // >> 15
+			A_OP(icode, &ptr, iMACINT0, A_GPR(tmp + 1), A_C_00000000, A_FXBUS(z * 2 + 33), A_C_00000002); // << 1
+			A_OP(icode, &ptr, iANDXOR, A_EMU32OUTH(z), A_GPR(tmp), A_GPR(lowword_mask), A_GPR(tmp + 1));
 		}
 
 		/* Note that the Alice2 DSPs have 6 I2S inputs which we don't use. */
