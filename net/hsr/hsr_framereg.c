@@ -286,9 +286,24 @@ void hsr_handle_sup_frame(struct hsr_frame_info *frame)
 
 	ethhdr = (struct ethhdr *)skb_mac_header(skb);
 
-	/* And leave the HSR tag. */
+	 * And leave the HSR tag.
+	 *
+	 * The HSRv1 supervisory frame encapsulates the v0 frame
+	 * with EtherType of 0x88FB
+	 */
 	if (ethhdr->h_proto == htons(ETH_P_HSR)) {
-		pull_size = sizeof(struct ethhdr);
+		if (hsr->prot_version == HSR_V1)
+			/* In the above step the DA, SA and EtherType
+			 * (0x892F - HSRv1) bytes has been removed.
+			 *
+			 * As the HSRv1 has the HSR header added, one need
+			 * to remove path_and_LSDU_size and sequence_nr fields.
+			 *
+			 */
+			pull_size = 4;
+		else
+			pull_size = sizeof(struct hsr_tag);
+
 		skb_pull(skb, pull_size);
 		total_pull_size += pull_size;
 	}
@@ -299,6 +314,19 @@ void hsr_handle_sup_frame(struct hsr_frame_info *frame)
 	total_pull_size += pull_size;
 
 	/* get HSR sup payload */
+	if (hsr->prot_version == HSR_V1) {
+		/* In the HSRv1 supervisor frame, when
+		 * one with EtherType = 0x88FB is extracted, the Node A
+		 * MAC address is preceded with type and length elements of TLV
+		 * data field.
+		 *
+		 * It needs to be removed to get the remote peer MAC address.
+		 */
+		pull_size = sizeof(struct hsr_sup_tlv);
+		skb_pull(skb, pull_size);
+		total_pull_size += pull_size;
+	}
+
 	hsr_sp = (struct hsr_sup_payload *)skb->data;
 
 	/* Merge node_curr (registered on macaddress_B) into node_real */
