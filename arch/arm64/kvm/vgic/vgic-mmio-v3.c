@@ -1013,44 +1013,64 @@ int vgic_v3_has_attr_regs(struct kvm_device *dev, struct kvm_device_attr *attr)
 
 	return 0;
 }
+
 /*
- * Compare a given affinity (level 1-3 and a level 0 mask, from the SGI
- * generation register ICC_SGI1R_EL1) with a given VCPU.
- * If the VCPU's MPIDR matches, return the level0 affinity, otherwise
- * return -1.
+ * Get affinity routing index from ICC_SGI_* register
+ * format:
+ *     aff3       aff2       aff1	aff0
+ * |- 8 bits -|- 8 bits -|- 8 bits -|- 4 bits -|
  */
-static int match_mpidr(u64 sgi_aff, u16 sgi_cpu_mask, struct kvm_vcpu *vcpu)
+static unsigned long sgi_to_affinity(unsigned long reg)
 {
-	unsigned long affinity;
-	int level0;
+	u64 aff;
 
-	/*
-	 * Split the current VCPU's MPIDR into affinity level 0 and the
-	 * rest as this is what we have to compare against.
-	 */
-	affinity = kvm_vcpu_get_mpidr_aff(vcpu);
-	level0 = MPIDR_AFFINITY_LEVEL(affinity, 0);
-	affinity &= ~MPIDR_LEVEL_MASK;
+	/* aff3 - aff1 */
+	aff = (((reg) & ICC_SGI1R_AFFINITY_3_MASK) >> ICC_SGI1R_AFFINITY_3_SHIFT) << 16 |
+		(((reg) & ICC_SGI1R_AFFINITY_2_MASK) >> ICC_SGI1R_AFFINITY_2_SHIFT) << 8 |
+		(((reg) & ICC_SGI1R_AFFINITY_1_MASK) >> ICC_SGI1R_AFFINITY_1_SHIFT);
 
-	/* bail out if the upper three levels don't match */
-	if (sgi_aff != affinity)
-		return -1;
+	/* aff0, the length of targetlist in sgi register is 16, which is 4bit  */
+	aff <<= 4;
 
-	/* Is this VCPU's bit set in the mask ? */
-	if (!(sgi_cpu_mask & BIT(level0)))
-		return -1;
-
-	return level0;
+	return aff;
 }
 
 /*
- * The ICC_SGI* registers encode the affinity differently from the MPIDR,
- * so provide a wrapper to use the existing defines to isolate a certain
- * affinity level.
+ * inject a vsgi to vcpu
  */
-#define SGI_AFFINITY_LEVEL(reg, level) \
-	((((reg) & ICC_SGI1R_AFFINITY_## level ##_MASK) \
-	>> ICC_SGI1R_AFFINITY_## level ##_SHIFT) << MPIDR_LEVEL_SHIFT(level))
+static inline void vgic_v3_inject_sgi(struct kvm_vcpu *vcpu, int sgi, bool allow_group1)
+{
+	struct vgic_irq *irq;
+	unsigned long flags;
+
+	irq = vgic_get_irq(vcpu->kvm, vcpu, sgi);
+
+	raw_spin_lock_irqsave(&irq->irq_lock, flags);
+
+	/*
+	 * An access targeting Group0 SGIs can only generate
+	 * those, while an access targeting Group1 SGIs can
+	 * generate interrupts of either group.
+	 */
+	if (!irq->group || allow_group1) {
+		if (!irq->hw) {
+			irq->pending_latch = true;
+			vgic_queue_irq_unlock(vcpu->kvm, irq, flags);
+		} else {
+			/* HW SGI? Ask the GIC to inject it */
+			int err;
+			err = irq_set_irqchip_state(irq->host_irq,
+						    IRQCHIP_STATE_PENDING,
+						     true);
+			WARN_RATELIMIT(err, "IRQ %d", irq->host_irq);
+			raw_spin_unlock_irqrestore(&irq->irq_lock, flags);
+		}
+	} else {
+		raw_spin_unlock_irqrestore(&irq->irq_lock, flags);
+	}
+
+	vgic_put_irq(vcpu->kvm, irq);
+}
 
 /**
  * vgic_v3_dispatch_sgi - handle SGI requests from VCPUs
@@ -1071,74 +1091,48 @@ void vgic_v3_dispatch_sgi(struct kvm_vcpu *vcpu, u64 reg, bool allow_group1)
 	struct kvm *kvm = vcpu->kvm;
 	struct kvm_vcpu *c_vcpu;
 	u16 target_cpus;
-	u64 mpidr;
 	int sgi;
 	int vcpu_id = vcpu->vcpu_id;
 	bool broadcast;
-	unsigned long c, flags;
+	unsigned long c, aff_index;
 
 	sgi = (reg & ICC_SGI1R_SGI_ID_MASK) >> ICC_SGI1R_SGI_ID_SHIFT;
 	broadcast = reg & BIT_ULL(ICC_SGI1R_IRQ_ROUTING_MODE_BIT);
 	target_cpus = (reg & ICC_SGI1R_TARGET_LIST_MASK) >> ICC_SGI1R_TARGET_LIST_SHIFT;
-	mpidr = SGI_AFFINITY_LEVEL(reg, 3);
-	mpidr |= SGI_AFFINITY_LEVEL(reg, 2);
-	mpidr |= SGI_AFFINITY_LEVEL(reg, 1);
 
 	/*
-	 * We iterate over all VCPUs to find the MPIDRs matching the request.
-	 * If we have handled one CPU, we clear its bit to detect early
-	 * if we are already finished. This avoids iterating through all
-	 * VCPUs when most of the times we just signal a single VCPU.
+	 * Writing IRM bit is not a frequent behavior, so separate SGI injection into two parts.
+	 * If it is not broadcast, compute the affinity routing index first,
+	 * then iterate targetlist to find the target VCPU.
+	 * Or, inject sgi to all VCPUs but the calling one.
 	 */
-	kvm_for_each_vcpu(c, c_vcpu, kvm) {
-		struct vgic_irq *irq;
+	if (likely(!broadcast)) {
+		/* compute affinity routing index */
+		aff_index = sgi_to_affinity(reg);
 
-		/* Exit early if we have dealt with all requested CPUs */
-		if (!broadcast && target_cpus == 0)
-			break;
+		/* exit if meet a wrong affinity value */
+		if (aff_index >= atomic_read(&kvm->online_vcpus))
+			return;
 
-		/* Don't signal the calling VCPU */
-		if (broadcast && c == vcpu_id)
-			continue;
-
-		if (!broadcast) {
-			int level0;
-
-			level0 = match_mpidr(mpidr, target_cpus, c_vcpu);
-			if (level0 == -1)
+		/* Iterate target list */
+		kvm_for_each_target_list(c, target_cpus) {
+			if (!(target_cpus & (1 << c)))
 				continue;
 
-			/* remove this matching VCPU from the mask */
-			target_cpus &= ~BIT(level0);
+			c_vcpu = kvm_get_vcpu_by_id(kvm, aff_index+c);
+			if (!c_vcpu)
+				break;
+
+			vgic_v3_inject_sgi(c_vcpu, sgi, allow_group1);
 		}
+	} else {
+		kvm_for_each_vcpu(c, c_vcpu, kvm) {
+			/* don't signal the calling vcpu  */
+			if (c_vcpu->vcpu_id == vcpu_id)
+				continue;
 
-		irq = vgic_get_irq(vcpu->kvm, c_vcpu, sgi);
-
-		raw_spin_lock_irqsave(&irq->irq_lock, flags);
-
-		/*
-		 * An access targeting Group0 SGIs can only generate
-		 * those, while an access targeting Group1 SGIs can
-		 * generate interrupts of either group.
-		 */
-		if (!irq->group || allow_group1) {
-			if (!irq->hw) {
-				irq->pending_latch = true;
-				vgic_queue_irq_unlock(vcpu->kvm, irq, flags);
-			} else {
-				/* HW SGI? Ask the GIC to inject it */
-				int err;
-				err = irq_set_irqchip_state(irq->host_irq,
-							    IRQCHIP_STATE_PENDING,
-							    true);
-				WARN_RATELIMIT(err, "IRQ %d", irq->host_irq);
-				raw_spin_unlock_irqrestore(&irq->irq_lock, flags);
-			}
-		} else {
-			raw_spin_unlock_irqrestore(&irq->irq_lock, flags);
+			vgic_v3_inject_sgi(c_vcpu, sgi, allow_group1);
 		}
-
-		vgic_put_irq(vcpu->kvm, irq);
 	}
 }
 

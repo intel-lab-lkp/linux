@@ -910,6 +910,11 @@ static inline struct kvm_vcpu *kvm_get_vcpu(struct kvm *kvm, int i)
 	xa_for_each_range(&kvm->vcpu_array, idx, vcpup, 0, \
 			  (atomic_read(&kvm->online_vcpus) - 1))
 
+#define kvm_for_each_target_list(idx, target_cpus) \
+	for (idx = target_cpus & 0xff ? 0 : (ICC_SGI1R_AFFINITY_1_SHIFT>>1); \
+		(1 << idx) <= target_cpus; \
+		idx++)
+
 static inline struct kvm_vcpu *kvm_get_vcpu_by_id(struct kvm *kvm, int id)
 {
 	struct kvm_vcpu *vcpu = NULL;
