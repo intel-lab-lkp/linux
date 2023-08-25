@@ -1182,6 +1182,26 @@ static void snd_emu10k1_pcm_efx_mixer_notify(struct snd_emu10k1 *emu, int idx, i
 	snd_emu10k1_pcm_mixer_notify1(emu, emu->ctl_efx_attn, idx, activate);
 }
 
+static void snd_emu10k1_pcm_clock_mutiplier_notify(struct snd_emu10k1 *emu)
+{
+	struct snd_kcontrol *kctl = emu->ctl_clock_shift;
+	struct snd_ctl_elem_id id;
+
+	// Modifying the clock multiplier during playback/capture
+	// would make a mess, so we lock it.
+	if (emu->emu1010.clock_users) {
+		if (!(kctl->vd[0].access & SNDRV_CTL_ELEM_ACCESS_WRITE))
+			return;
+		kctl->vd[0].access &= ~SNDRV_CTL_ELEM_ACCESS_WRITE;
+	} else {
+		if (kctl->vd[0].access & SNDRV_CTL_ELEM_ACCESS_WRITE)
+			return;
+		kctl->vd[0].access |= SNDRV_CTL_ELEM_ACCESS_WRITE;
+	}
+	snd_ctl_build_ioff(&id, kctl, 0);
+	snd_ctl_notify(emu->card, SNDRV_CTL_EVENT_MASK_INFO, &id);
+}
+
 static void snd_emu10k1_pcm_free_substream(struct snd_pcm_runtime *runtime)
 {
 	kfree(runtime->private_data);
@@ -1193,8 +1213,11 @@ static int snd_emu10k1_efx_playback_close(struct snd_pcm_substream *substream)
 	struct snd_emu10k1_pcm_mixer *mix;
 	int i;
 
-	if (emu->das_mode)
+	if (emu->das_mode) {
+		emu->emu1010.clock_users--;
+		snd_emu10k1_pcm_clock_mutiplier_notify(emu);
 		return 0;
+	}
 	for (i = 0; i < NUM_EFX_PLAYBACK; i++) {
 		mix = &emu->efx_pcm_mixer[i];
 		mix->epcm = NULL;
@@ -1248,8 +1271,11 @@ static int snd_emu10k1_efx_playback_open(struct snd_pcm_substream *substream)
 		return err;
 	}
 
-	if (emu->das_mode)
+	if (emu->das_mode) {
+		emu->emu1010.clock_users++;
+		snd_emu10k1_pcm_clock_mutiplier_notify(emu);
 		return 0;
+	}
 	for (i = 0; i < NUM_EFX_PLAYBACK; i++) {
 		mix = &emu->efx_pcm_mixer[i];
 		for (j = 0; j < 8; j++)
@@ -1458,12 +1484,23 @@ static int snd_emu10k1_capture_efx_open(struct snd_pcm_substream *substream)
 				   &hw_constraints_capture_buffer_sizes);
 	emu->capture_efx_interrupt = snd_emu10k1_pcm_efx_interrupt;
 	emu->pcm_capture_efx_substream = substream;
+
+	if (emu->das_mode) {
+		emu->emu1010.clock_users++;
+		snd_emu10k1_pcm_clock_mutiplier_notify(emu);
+	}
+
 	return 0;
 }
 
 static int snd_emu10k1_capture_efx_close(struct snd_pcm_substream *substream)
 {
 	struct snd_emu10k1 *emu = snd_pcm_substream_chip(substream);
+
+	if (emu->das_mode) {
+		emu->emu1010.clock_users--;
+		snd_emu10k1_pcm_clock_mutiplier_notify(emu);
+	}
 
 	emu->capture_efx_interrupt = NULL;
 	emu->pcm_capture_efx_substream = NULL;

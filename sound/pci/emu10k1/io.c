@@ -404,6 +404,22 @@ void snd_emu1010_update_clock(struct snd_emu10k1 *emu)
 		clock = 48000;
 		leds = EMU_HANA_DOCK_LEDS_2_48K;
 		break;
+	case EMU_HANA_WCLOCK_INT_44_1K | EMU_HANA_WCLOCK_2X:
+		clock = 44100;
+		leds = 0;
+		break;
+	case EMU_HANA_WCLOCK_INT_48K | EMU_HANA_WCLOCK_2X:
+		clock = 48000;
+		leds = EMU_HANA_DOCK_LEDS_2_96K;
+		break;
+	case EMU_HANA_WCLOCK_INT_44_1K | EMU_HANA_WCLOCK_4X:
+		clock = 44100;
+		leds = 0;
+		break;
+	case EMU_HANA_WCLOCK_INT_48K | EMU_HANA_WCLOCK_4X:
+		clock = 48000;
+		leds = EMU_HANA_DOCK_LEDS_2_192K;
+		break;
 	default:
 		clock = snd_emu1010_get_raw_rate(
 				emu, emu->emu1010.wclock & EMU_HANA_WCLOCK_SRC_MASK);
@@ -414,9 +430,21 @@ void snd_emu1010_update_clock(struct snd_emu10k1 *emu)
 		if (clock < 46000) {
 			clock = 44100;
 			leds = EMU_HANA_DOCK_LEDS_2_EXT | EMU_HANA_DOCK_LEDS_2_44K;
-		} else {
+		} else if (clock < 75000) {
 			clock = 48000;
 			leds = EMU_HANA_DOCK_LEDS_2_EXT | EMU_HANA_DOCK_LEDS_2_48K;
+		} else if (clock < 92000) {
+			clock = 44100;
+			leds = EMU_HANA_DOCK_LEDS_2_EXT;
+		} else if (clock < 150000) {
+			clock = 48000;
+			leds = EMU_HANA_DOCK_LEDS_2_EXT | EMU_HANA_DOCK_LEDS_2_96K;
+		} else if (clock < 184000) {
+			clock = 44100;
+			leds = EMU_HANA_DOCK_LEDS_2_EXT;
+		} else {
+			clock = 48000;
+			leds = EMU_HANA_DOCK_LEDS_2_EXT | EMU_HANA_DOCK_LEDS_2_192K;
 		}
 		break;
 	}

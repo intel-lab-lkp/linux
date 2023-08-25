@@ -1682,6 +1682,8 @@ struct snd_emu1010 {
 	unsigned int word_clock;  /* Cached effective value */
 	unsigned int clock_source;
 	unsigned int clock_fallback;
+	unsigned int clock_shift;  /* EMU_HANA_WCLOCK_MULT_MASK >> 3 */
+	unsigned int clock_users;
 	unsigned int optical_in; /* 0:SPDIF, 1:ADAT */
 	unsigned int optical_out; /* 0:SPDIF, 1:ADAT */
 	struct work_struct firmware_work;
@@ -1763,6 +1765,7 @@ struct snd_emu10k1 {
 	struct snd_kcontrol *ctl_efx_send_volume;
 	struct snd_kcontrol *ctl_efx_attn;
 	struct snd_kcontrol *ctl_clock_source;
+	struct snd_kcontrol *ctl_clock_shift;
 
 	void (*hwvol_interrupt)(struct snd_emu10k1 *emu, unsigned int status);
 	void (*capture_interrupt)(struct snd_emu10k1 *emu, unsigned int status);
