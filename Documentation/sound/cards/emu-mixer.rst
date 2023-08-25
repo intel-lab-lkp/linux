@@ -30,15 +30,16 @@ but are otherwise identical) may be less problematic.
 Driver capabilities
 ===================
 
-This driver supports only 16-bit 44.1/48 kHz operation. The multi-channel
-device (see emu10k1-jack.rst) additionally supports 24-bit capture.
+This driver can operate in two modes: Sound Blaster mode (the default)
+and Digital Audio System mode (enabled by the emu_das=1 module option).
 
-A patchset to enhance the driver is available from `a GitHub repository
-<https://github.com/ossilator/linux/tree/ossis-emu10k1>`_.
-Its multi-channel device supports 24-bit for both playback and capture,
-and also supports full 88.2/96/176.4/192 kHz operation.
-It is not going to be upstreamed due to a fundamental disagreement about
-what constitutes a good user experience.
+In Sound Blaster mode, only 16-bit 44.1/48 kHz operation is supported.
+The multi-channel device (see emu10k1-jack.rst) additionally supports
+24-bit capture.
+
+In D.A.S. mode, only the multi-channel device is available (as device 0,
+unlike in SB mode). It supports 24-bit for both playback and capture,
+and full 88.2/96/176.4/192 kHz operation.
 
 
 Digital mixer controls
@@ -64,10 +65,14 @@ FX-bus
 	Each of the synthesizer voices can feed its output to these accumulators
 	and the DSP microcontroller can operate with the resulting sum.
 
+SB and D.A.S. modes
+~~~~~~~~~~~~~~~~~~~
+
 name='Clock Source',index=0
 ---------------------------
 This control allows switching the word clock between interally generated
-44.1 or 48 kHz, or a number of external sources.
+44.1 or 48 kHz (which are subjected to the clock multiplier), or a number
+of external sources (which must be compatible with the clock multiplier).
 
 Note: the sources for the 1616 CardBus card are unclear. Please report your
 findings.
@@ -75,7 +80,8 @@ findings.
 name='Clock Fallback',index=0
 -----------------------------
 This control determines the internal clock which the card switches to when
-the selected external clock source is/becomes invalid.
+the selected external clock source is/becomes invalid or incompatible with
+the clock multiplier.
 
 name='DAC1 0202 14dB PAD',index=0, etc.
 ---------------------------------------
@@ -94,6 +100,38 @@ name='Optical Input Mode',index=0
 ---------------------------------
 Switches the TOSLINK input port between S/PDIF and ADAT.
 Not available on 0404 cards (fixed to S/PDIF).
+
+D.A.S. mode
+~~~~~~~~~~~
+
+In this mode, no attenuation controls are available. It is assumed that these
+are realized in software by the sound server, if necessary.
+
+name='Clock Multiplier',index=0
+-------------------------------
+This control switches the card between 44.1/48 kHz, 88.2/96 kHz, and
+176.4/192 kHz mode by setting the multiplier for the base word clock to
+1x, 2x, and 4x, respectively.
+Changing it also changes the available audio ports, which causes the mixer to
+be reconfigured. This may crash poorly programmed mixer applications running
+at that time (this is the reason why D.A.S. mode support is not going to be
+upstreamed - judge for yourself whether that is a wise trade-off).
+
+name='DAC Left',index=0, etc.
+-----------------------------
+Select the source for the given physical audio output. These may be physical
+inputs, playback channels (PbChn xx), or silence.
+
+name='CpChn xx',index=0
+-----------------------
+Select the source for the given capture channel. Same options as for the
+physical audio outputs.
+
+Note that not all combinations may work due to over-allocation of the
+internal buses; refer to the card's official documentation.
+
+SB mode
+~~~~~~~
 
 name='PCM Front Playback Volume',index=0
 ----------------------------------------
@@ -218,6 +256,7 @@ PCM stream related controls
 ===========================
 
 These controls are described in audigy-mixer.rst.
+They are available only in Sound Blaster mode.
 
 
 MANUALS/PATENTS
