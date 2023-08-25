@@ -566,7 +566,9 @@ static void __hugetlb_vmemmap_optimize(const struct hstate *h,
 	if (!vmemmap_should_optimize(h, head))
 		return;
 
+	/* Optimistically assume success */
 	static_branch_inc(&hugetlb_optimize_vmemmap_key);
+	SetHPageVmemmapOptimized(head);
 
 	vmemmap_end	= vmemmap_start + hugetlb_vmemmap_size(h);
 	vmemmap_reuse	= vmemmap_start;
@@ -577,10 +579,10 @@ static void __hugetlb_vmemmap_optimize(const struct hstate *h,
 	 * to the page which @vmemmap_reuse is mapped to, then free the pages
 	 * which the range [@vmemmap_start, @vmemmap_end] is mapped to.
 	 */
-	if (vmemmap_remap_free(vmemmap_start, vmemmap_end, vmemmap_reuse, bulk_pages))
+	if (vmemmap_remap_free(vmemmap_start, vmemmap_end, vmemmap_reuse, bulk_pages)) {
 		static_branch_dec(&hugetlb_optimize_vmemmap_key);
-	else
-		SetHPageVmemmapOptimized(head);
+		ClearHPageVmemmapOptimized(head);
+	}
 }
 
 /**
