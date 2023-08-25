@@ -214,9 +214,7 @@ wait_for_space(struct intel_ring *ring,
 	if (GEM_WARN_ON(&target->link == &tl->requests))
 		return -ENOSPC;
 
-	timeout = i915_request_wait(target,
-				    I915_WAIT_INTERRUPTIBLE,
-				    MAX_SCHEDULE_TIMEOUT);
+	timeout = i915_request_wait(target, 0, MAX_SCHEDULE_TIMEOUT);
 	if (timeout < 0)
 		return timeout;
 
