@@ -297,10 +297,10 @@ int ivpu_pm_init(struct ivpu_device *vdev)
 
 	if (ivpu_disable_recovery)
 		pm_runtime_set_autosuspend_delay(dev, -1);
-	else if (ivpu_is_silicon(vdev))
-		pm_runtime_set_autosuspend_delay(dev, 100);
 	else
-		pm_runtime_set_autosuspend_delay(dev, 60000);
+		pm_runtime_set_autosuspend_delay(dev, vdev->timeout.autosuspend);
+
+	ivpu_dbg(vdev, PM, "Autosuspend delay = %d\n", dev->power.autosuspend_delay);
 
 	return 0;
 }
