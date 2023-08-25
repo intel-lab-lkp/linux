@@ -57,21 +57,21 @@
 #define DRIVE_STRENGTH_SHIFT		19
 
 #define SLEEP_PULL_DOWN			BIT(2)
-#define SLEEP_PULL_DOWN_MASK		0x1
+#define SLEEP_PULL_DOWN_MASK		0x3
 #define SLEEP_PULL_DOWN_SHIFT		2
 
 #define PULL_DOWN			BIT(6)
-#define PULL_DOWN_MASK			0x1
+#define PULL_DOWN_MASK			0x3
 #define PULL_DOWN_SHIFT			6
 
 #define SLEEP_PULL_UP			BIT(3)
-#define SLEEP_PULL_UP_MASK		0x1
-#define SLEEP_PULL_UP_SHIFT		3
+#define SLEEP_PULL_UP_MASK		0x3
+#define SLEEP_PULL_UP_SHIFT		2
 
 #define PULL_UP_4_7K			(BIT(12) | BIT(7))
 #define PULL_UP_20K			BIT(7)
-#define PULL_UP_MASK			0x21
-#define PULL_UP_SHIFT			7
+#define PULL_UP_MASK			0x43
+#define PULL_UP_SHIFT			6
 
 #define INPUT_SCHMITT			BIT(11)
 #define INPUT_SCHMITT_MASK		0x1
