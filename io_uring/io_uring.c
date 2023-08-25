@@ -3237,7 +3237,7 @@ static __cold bool io_uring_try_cancel_iowq(struct io_ring_ctx *ctx)
 	return ret;
 }
 
-static bool iopoll_reap_events(struct io_ring_ctx *ctx, bool reap_all)
+bool iopoll_reap_events(struct io_ring_ctx *ctx, bool reap_all)
 {
 	bool reapped = false;
 

@@ -6,6 +6,7 @@
 #include <linux/slab.h>
 #include <linux/nospec.h>
 #include <linux/io_uring.h>
+#include <linux/delay.h>
 
 #include <uapi/linux/io_uring.h>
 
@@ -175,24 +176,67 @@ __cold void io_uring_del_tctx_node(unsigned long index)
 	kfree(node);
 }
 
+struct wq_exit_work {
+	struct work_struct work;
+	struct io_wq *wq;
+	bool done;
+};
+
+static void io_uring_wq_exit_work(struct work_struct *work)
+{
+	struct wq_exit_work *wq_work =
+                  container_of(work, struct wq_exit_work, work);
+	struct io_wq *wq = wq_work->wq;
+
+	/*
+	 * Must be after io_uring_del_tctx_node() (removes nodes under
+	 * uring_lock) to avoid race with io_uring_try_cancel_iowq().
+	 */
+	io_wq_put_and_exit(wq);
+	wq_work->done = true;
+}
+
 __cold void io_uring_clean_tctx(struct io_uring_task *tctx)
 {
 	struct io_wq *wq = tctx->io_wq;
+	struct wq_exit_work work = {
+		.wq = wq,
+		.done = true,
+	};
 	struct io_tctx_node *node;
 	unsigned long index;
+
+	/*
+	 * io_wq may depend on reaping iopoll events because pending
+	 * requests in io_wq may share resource with polled requests,
+	 * meantime new polled IO may be submitted from io_wq after
+	 * getting resource.
+	 *
+	 * So io_wq has to be exited from workqueue context for avoiding
+	 * IO hang.
+	 */
+	if (wq) {
+		work.done = false;
+		INIT_WORK(&work.work, io_uring_wq_exit_work);
+		queue_work(system_unbound_wq, &work.work);
+	}
+
+	while (!work.done) {
+		xa_for_each(&tctx->xa, index, node)
+			iopoll_reap_events(node->ctx, true);
+
+		/*
+		 * Wait a little while and reap again since new polled
+		 * IO may get resource from io_wq and be submitted.
+		 */
+		msleep(10);
+	}
 
 	xa_for_each(&tctx->xa, index, node) {
 		io_uring_del_tctx_node(index);
 		cond_resched();
 	}
-	if (wq) {
-		/*
-		 * Must be after io_uring_del_tctx_node() (removes nodes under
-		 * uring_lock) to avoid race with io_uring_try_cancel_iowq().
-		 */
-		io_wq_put_and_exit(wq);
-		tctx->io_wq = NULL;
-	}
+	tctx->io_wq = NULL;
 }
 
 void io_uring_unreg_ringfd(void)
