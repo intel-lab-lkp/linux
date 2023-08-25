@@ -1576,7 +1576,9 @@ int perf_pmu__find_event(struct perf_pmu *pmu, const char *event, void *state, p
 		.cb = cb,
 	};
 
-	return perf_pmu__for_each_event(pmu, &args, find_event_callback);
+	/* Sub-optimal, but function is only used by tests. */
+	return perf_pmu__for_each_event(pmu, /*skip_duplicate_pmus=*/ false,
+					&args, find_event_callback);
 }
 
 static void perf_pmu__del_formats(struct list_head *formats)
@@ -1650,10 +1652,13 @@ static int sub_non_neg(int a, int b)
 }
 
 static char *format_alias(char *buf, int len, const struct perf_pmu *pmu,
-			  const struct perf_pmu_alias *alias)
+			  const struct perf_pmu_alias *alias, bool skip_duplicate_pmus)
 {
 	struct parse_events_term *term;
-	int used = snprintf(buf, len, "%s/%s", pmu->name, alias->name);
+	int pmu_name_len = skip_duplicate_pmus
+		? pmu_name_len_no_suffix(pmu->name, /*num=*/NULL)
+		: (int)strlen(pmu->name);
+	int used = snprintf(buf, len, "%.*s/%s", pmu_name_len, pmu->name, alias->name);
 
 	list_for_each_entry(term, &alias->terms, list) {
 		if (term->type_val == PARSE_EVENTS__TERM_TYPE_STR)
@@ -1675,7 +1680,8 @@ static char *format_alias(char *buf, int len, const struct perf_pmu *pmu,
 	return buf;
 }
 
-int perf_pmu__for_each_event(struct perf_pmu *pmu, void *state, pmu_event_callback cb)
+int perf_pmu__for_each_event(struct perf_pmu *pmu, bool skip_duplicate_pmus,
+			     void *state, pmu_event_callback cb)
 {
 	char buf[1024];
 	struct perf_pmu_alias *event;
@@ -1694,7 +1700,8 @@ int perf_pmu__for_each_event(struct perf_pmu *pmu, void *state, pmu_event_callba
 			info.name = event->name;
 			buf_used = 0;
 		} else {
-			info.name = format_alias(buf, sizeof(buf), pmu, event);
+			info.name = format_alias(buf, sizeof(buf), pmu, event,
+						 skip_duplicate_pmus);
 			if (pmu->is_core) {
 				info.alias = info.name;
 				info.name = event->name;
