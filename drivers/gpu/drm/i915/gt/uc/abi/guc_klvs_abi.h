@@ -29,8 +29,8 @@
  */
 
 #define GUC_KLV_LEN_MIN				1u
-#define GUC_KLV_0_KEY				(0xffff << 16)
-#define GUC_KLV_0_LEN				(0xffff << 0)
+#define GUC_KLV_0_KEY				GENMASK(31, 16)
+#define GUC_KLV_0_LEN				GENMASK(15, 0)
 #define GUC_KLV_n_VALUE				(0xffffffff << 0)
 
 /**
