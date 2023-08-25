@@ -2223,6 +2223,14 @@ static void prep_and_add_allocated_folios(struct hstate *h,
 {
 	struct folio *folio, *tmp_f;
 
+	/*
+	 * Send list for bulk vmemmap optimization processing.
+	 * prep_new_hugetlb_folio (called from prep_and_add_pool_folio)
+	 * will also attempt to perform vmemmap optimization, but this
+	 * is a NOOP if already done.
+	 */
+	hugetlb_vmemmap_optimize_folios(h, folio_list);
+
 	list_for_each_entry_safe(folio, tmp_f, folio_list, lru)
 		prep_and_add_pool_folio(h, folio);
 
