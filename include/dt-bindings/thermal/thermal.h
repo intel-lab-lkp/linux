@@ -12,5 +12,9 @@
 /* On cooling devices upper and lower limits */
 #define THERMAL_NO_LIMIT		(~0)
 
+/* Possible values for the 'critical-action' property */
+#define THERMAL_CRITICAL_ACTION_SHUTDOWN	0
+#define THERMAL_CRITICAL_ACTION_REBOOT		1
+
 #endif
 
