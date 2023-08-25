@@ -39,9 +39,6 @@ static LIST_HEAD(snd_control_compat_ioctls);
 #endif
 static struct snd_ctl_layer_ops *snd_ctl_layer;
 
-static int snd_ctl_remove_locked(struct snd_card *card,
-				 struct snd_kcontrol *kcontrol);
-
 static int snd_ctl_open(struct inode *inode, struct file *file)
 {
 	unsigned long flags;
@@ -509,6 +506,27 @@ static int __snd_ctl_add_replace(struct snd_card *card,
 	return 0;
 }
 
+static int snd_ctl_add_replace_locked(struct snd_card *card,
+				      struct snd_kcontrol *kcontrol,
+				      enum snd_ctl_add_mode mode)
+{
+	int err = -EINVAL;
+
+	if (! kcontrol)
+		return err;
+	if (snd_BUG_ON(!card || !kcontrol->info))
+		goto error;
+
+	err = __snd_ctl_add_replace(card, kcontrol, mode);
+	if (err < 0)
+		goto error;
+	return 0;
+
+ error:
+	snd_ctl_free_one(kcontrol);
+	return err;
+}
+
 static int snd_ctl_add_replace(struct snd_card *card,
 			       struct snd_kcontrol *kcontrol,
 			       enum snd_ctl_add_mode mode)
@@ -531,6 +549,16 @@ static int snd_ctl_add_replace(struct snd_card *card,
 	snd_ctl_free_one(kcontrol);
 	return err;
 }
+
+/**
+ * snd_ctl_add_locked - same as snd_ctl_add(), but card->controls_rwsem
+ * is expected to be already locked if necessary.
+ */
+int snd_ctl_add_locked(struct snd_card *card, struct snd_kcontrol *kcontrol)
+{
+	return snd_ctl_add_replace_locked(card, kcontrol, CTL_ADD_EXCLUSIVE);
+}
+EXPORT_SYMBOL_GPL(snd_ctl_add_locked);
 
 /**
  * snd_ctl_add - add the control instance to the card
@@ -596,11 +624,16 @@ static int __snd_ctl_remove(struct snd_card *card,
 	return 0;
 }
 
-static inline int snd_ctl_remove_locked(struct snd_card *card,
-					struct snd_kcontrol *kcontrol)
+/**
+ * snd_ctl_remove_locked - same as snd_ctl_remove(), but card->controls_rwsem
+ * is expected to be already locked if necessary.
+ */
+int snd_ctl_remove_locked(struct snd_card *card,
+			  struct snd_kcontrol *kcontrol)
 {
 	return __snd_ctl_remove(card, kcontrol, true);
 }
+EXPORT_SYMBOL_GPL(snd_ctl_remove_locked);
 
 /**
  * snd_ctl_remove - remove the control from the card and release it
