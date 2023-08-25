@@ -140,6 +140,30 @@
  *     DRM_FORMAT_MOD_LINEAR. Before linux kernel release v5.1 there have been
  *     various bugs in this area with inconsistencies between the capability
  *     flag and per-plane properties.
+ *
+ *     All drivers should support XRGB8888, even if the hardware cannot support
+ *     it. This has become the de-facto standard and a lot of user-space assume
+ *     it will be present. If XRGB8888 is not natively supported, then it
+ *     shouldn't be the default for preferred depth or fbdev emulation.
+ *
+ *     DRM drivers should not do software color conversion, and
+ *     only advertise the formats they support in hardware. This is for
+ *     performance reason, and to avoid multiple conversions in userspace and
+ *     kernel space. KMS page flips are generally expected to be very cheap
+ *     operations.
+ *
+ *     But there are two exceptions only for dumb buffers:
+ *     * To support XRGB8888 if it's not supported by the hardware.
+ *     * Any driver is free to modify its internal representation of the format,
+ *       as long as it doesn't alter the visible content in any way, and doesn't
+ *       modify the user-provided buffer. An example would be to drop the
+ *       padding component from a format to save some memory bandwidth.
+ *     On most hardware, VRAM read access are slow, so when doing the software
+ *     conversion, the dumb buffer should be allocated in system RAM in order to
+ *     have decent performance.
+ *     Extra care should be taken when doing software conversion with
+ *     DRM_CAP_DUMB_PREFER_SHADOW, there are more detailed explanations here:
+ *     https://lore.kernel.org/dri-devel/20230818162415.2185f8e3@eldfell/
  */
 
 static unsigned int drm_num_planes(struct drm_device *dev)
