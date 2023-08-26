@@ -167,7 +167,8 @@ void __attribute__((weak, noreturn, optimize("Os", "omit-frame-pointer"))) __no_
 	__asm__ volatile (
 		"xor  %ebp, %ebp\n"       /* zero the stack frame                                */
 		"mov  %esp, %eax\n"       /* save stack pointer to %eax, as arg1 of _start_c     */
-		"and  $-16, %esp\n"       /* last pushed argument must be 16-byte aligned        */
+		"and  $-16, %esp\n"       /* align stack to 16 bytes                             */
+		"sub  $12, %esp\n"        /* last pushed argument must be 16-byte aligned        */
 		"push %eax\n"             /* push arg1 on stack to support plain stack modes too */
 		"call _start_c\n"         /* transfer to c runtime                               */
 		"hlt\n"                   /* ensure it does not return                           */
