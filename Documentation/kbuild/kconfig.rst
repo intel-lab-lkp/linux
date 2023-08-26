@@ -54,6 +54,17 @@ KCONFIG_OVERWRITECONFIG
 If you set KCONFIG_OVERWRITECONFIG in the environment, Kconfig will not
 break symlinks when .config is a symlink to somewhere else.
 
+KCONFIG_WARN_UNKNOWN_SYMBOLS
+----------------------------
+This environment variable makes Kconfig warn about all unrecognized
+symbols in the .config file.
+
+KCONFIG_WERROR
+--------------
+If set, Kconfig will treat `KCONFIG_WARN_UNKNOWN_SYMBOLS` warnings as
+errors.
+
+
 `CONFIG_`
 ---------
 If you set `CONFIG_` in the environment, Kconfig will prefix all symbols
