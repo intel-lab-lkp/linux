@@ -484,6 +484,7 @@ struct sony_sc {
 	spinlock_t lock;
 	struct list_head list_node;
 	struct hid_device *hdev;
+	struct input_dev *gamepad;
 	struct input_dev *touchpad;
 	struct input_dev *sensor_dev;
 	struct led_classdev *leds[MAX_LEDS];
@@ -711,22 +712,37 @@ static int sixaxis_mapping(struct hid_device *hdev, struct hid_input *hi,
 	} else if (usage->hid == HID_GD_POINTER) {
 		/* The DS3 provides analog values for most buttons and even
 		 * for HAT axes through GD Pointer. L2 and R2 are reported
-		 * among these as well instead of as GD Z / RZ. Remap L2
-		 * and R2 and ignore other analog 'button axes' as there is
-		 * no good way for reporting them.
+		 * among these as well instead of as GD Z / RZ.
 		 */
+		__u16 c;
+
 		switch (usage->usage_index) {
+		case 10: /* L1 */
+			c = ABS_HAT1Y;
+			break;
+		case 11: /* R1 */
+			c = ABS_HAT1X;
+			break;
+		case 12: /* NORTH */
+		case 13: /* EAST */
+		case 14: /* SOUTH */
+		case 15: /* WEST */
+			c = sixaxis_keymap[usage->usage_index + 1]
+				- BTN_GAMEPAD + ABS_MISC;
+			break;
 		case 8: /* L2 */
 			usage->hid = HID_GD_Z;
+			c = ABS_Z;
 			break;
 		case 9: /* R2 */
 			usage->hid = HID_GD_RZ;
+			c = ABS_RZ;
 			break;
 		default:
 			return -1;
 		}
 
-		hid_map_usage_clear(hi, usage, bit, max, EV_ABS, usage->hid & 0xf);
+		hid_map_usage_clear(hi, usage, bit, max, EV_ABS, c);
 		return 1;
 	} else if ((usage->hid & HID_USAGE_PAGE) == HID_UP_GENDESK) {
 		unsigned int abs = usage->hid & HID_USAGE;
@@ -836,6 +852,17 @@ static void sixaxis_parse_report(struct sony_sc *sc, u8 *rd, int size)
 
 		val = 511 - ((rd[offset+3] << 8) | rd[offset+2]);
 		input_report_abs(sc->sensor_dev, ABS_Z, val);
+
+		/* Report analog D-pad */
+		if (rd[17] > rd[15])  /* left */
+			input_report_abs(sc->gamepad, ABS_HAT0X, 0 - rd[17]);
+		else  /* right */
+			input_report_abs(sc->gamepad, ABS_HAT0X, rd[15]);
+
+		if (rd[14] > rd[16]) /* up */
+			input_report_abs(sc->gamepad, ABS_HAT0Y, 0 - rd[14]);
+		else /* down */
+			input_report_abs(sc->gamepad, ABS_HAT0Y, rd[16]);
 
 		input_sync(sc->sensor_dev);
 	}
@@ -1597,18 +1624,8 @@ static int sony_play_effect(struct input_dev *dev, void *data,
 
 static int sony_init_ff(struct sony_sc *sc)
 {
-	struct hid_input *hidinput;
-	struct input_dev *input_dev;
-
-	if (list_empty(&sc->hdev->inputs)) {
-		hid_err(sc->hdev, "no inputs found\n");
-		return -ENODEV;
-	}
-	hidinput = list_entry(sc->hdev->inputs.next, struct hid_input, list);
-	input_dev = hidinput->input;
-
-	input_set_capability(input_dev, EV_FF, FF_RUMBLE);
-	return input_ff_create_memless(input_dev, NULL, sony_play_effect);
+	input_set_capability(sc->gamepad, EV_FF, FF_RUMBLE);
+	return input_ff_create_memless(sc->gamepad, NULL, sony_play_effect);
 }
 
 #else
@@ -2037,6 +2054,23 @@ static int sony_input_configured(struct hid_device *hdev,
 			hid_err(hdev, "hw open failed\n");
 			goto err_stop;
 		}
+	}
+
+	if (sc->quirks & (SONY_FF_SUPPORT | SIXAXIS_CONTROLLER)) {
+		struct hid_input *hidinput;
+
+		if (list_empty(&sc->hdev->inputs)) {
+			hid_err(sc->hdev, "no inputs found\n");
+			return -ENODEV;
+		}
+		hidinput = list_entry(sc->hdev->inputs.next, struct hid_input, list);
+		sc->gamepad = hidinput->input;
+	}
+
+	if (sc->quirks & SIXAXIS_CONTROLLER) {
+		/* Register axes for analog buttons */
+		input_set_abs_params(sc->gamepad, ABS_HAT0X, -255, 255, 0, 0);
+		input_set_abs_params(sc->gamepad, ABS_HAT0Y, -255, 255, 0, 0);
 	}
 
 	if (sc->quirks & SONY_FF_SUPPORT) {
