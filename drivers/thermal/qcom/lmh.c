@@ -198,7 +198,11 @@ static int lmh_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	lmh_data->irq = platform_get_irq(pdev, 0);
+	ret = platform_get_irq(pdev, 0);
+	if (ret < 0)
+		return ret;
+
+	lmh_data->irq = ret;
 	lmh_data->domain = irq_domain_add_linear(np, 1, &lmh_irq_ops, lmh_data);
 	if (!lmh_data->domain) {
 		dev_err(dev, "Error adding irq_domain\n");
