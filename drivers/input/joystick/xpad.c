@@ -420,6 +420,14 @@ static const signed short xpad_abs_triggers[] = {
 	-1
 };
 
+/* used for analog face buttons mapped to axes */
+static const signed short xpad_abs_analog_face_buttons[] = {
+	ABS_MISC + 0, ABS_MISC + 1, /* A, B */
+	ABS_MISC + 3, ABS_MISC + 4, /* X, Y */
+	ABS_MISC + 2, ABS_MISC + 5, /* C, Z */
+	-1
+};
+
 /* used when the controller has extra paddle buttons */
 static const signed short xpad_btn_paddles[] = {
 	BTN_TRIGGER_HAPPY5, BTN_TRIGGER_HAPPY6, /* paddle upper right, lower right */
@@ -784,6 +792,15 @@ static void xpad_process_packet(struct usb_xpad *xpad, u16 cmd, unsigned char *d
 	input_report_key(dev, BTN_C, data[8]);
 	input_report_key(dev, BTN_Z, data[9]);
 
+	/* analog buttons A, B, X, Y as axes */
+	input_report_abs(dev, xpad_abs_analog_face_buttons[0], data[4]); /* A */
+	input_report_abs(dev, xpad_abs_analog_face_buttons[1], data[5]); /* B */
+	input_report_abs(dev, xpad_abs_analog_face_buttons[2], data[6]); /* X */
+	input_report_abs(dev, xpad_abs_analog_face_buttons[3], data[7]); /* Y */
+
+	/* analog buttons black, white (C, Z) as axes */
+	input_report_abs(dev, xpad_abs_analog_face_buttons[4], data[8]); /* C */
+	input_report_abs(dev, xpad_abs_analog_face_buttons[5], data[9]); /* Z */
 
 	input_sync(dev);
 }
@@ -1827,6 +1844,14 @@ static void xpad_set_up_abs(struct input_dev *input_dev, signed short abs)
 	case ABS_HAT0Y:	/* the d-pad (only if dpad is mapped to axes */
 		input_set_abs_params(input_dev, abs, -1, 1, 0, 0);
 		break;
+	case ABS_MISC + 0:
+	case ABS_MISC + 1:
+	case ABS_MISC + 2:
+	case ABS_MISC + 3:
+	case ABS_MISC + 4:
+	case ABS_MISC + 5:
+		input_set_abs_params(input_dev, abs, 0, 255, 0, 0);
+		break;
 	case ABS_PROFILE: /* 4 value profile button (such as on XAC) */
 		input_set_abs_params(input_dev, abs, 0, 4, 0, 0);
 		break;
@@ -1927,6 +1952,10 @@ static int xpad_init_input(struct usb_xpad *xpad)
 		for (i = 0; xpad_abs_triggers[i] >= 0; i++)
 			xpad_set_up_abs(input_dev, xpad_abs_triggers[i]);
 	}
+
+	if (xpad->xtype == XTYPE_XBOX)
+		for (i = 0; xpad_abs_analog_face_buttons[i] >= 0; i++)
+			xpad_set_up_abs(input_dev, xpad_abs_analog_face_buttons[i]);
 
 	/* setup profile button as an axis with 4 possible values */
 	if (xpad->mapping & MAP_PROFILE_BUTTON)
