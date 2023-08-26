@@ -1074,9 +1074,11 @@ static int shield_probe(struct hid_device *hdev, const struct hid_device_id *id)
 err_stop:
 	hid_hw_stop(hdev);
 err_haptics:
+	power_supply_unregister(ts->base.battery_dev.psy);
 	if (ts->haptics_dev)
 		input_unregister_device(ts->haptics_dev);
 	led_classdev_unregister(&ts->led_dev);
+	ida_free(&thunderstrike_ida, ts->id);
 	return ret;
 }
 
