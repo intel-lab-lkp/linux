@@ -439,6 +439,13 @@ static int st7701_prepare(struct drm_panel *panel)
 	gpiod_set_value(st7701->reset, 1);
 	msleep(150);
 
+	return 0;
+}
+
+static int st7701_enable(struct drm_panel *panel)
+{
+	struct st7701 *st7701 = panel_to_st7701(panel);
+
 	st7701_init_sequence(st7701);
 
 	if (st7701->desc->gip_sequence)
@@ -446,13 +453,6 @@ static int st7701_prepare(struct drm_panel *panel)
 
 	/* Disable Command2 */
 	st7701_switch_cmd_bkx(st7701, false, 0);
-
-	return 0;
-}
-
-static int st7701_enable(struct drm_panel *panel)
-{
-	struct st7701 *st7701 = panel_to_st7701(panel);
 
 	ST7701_DSI(st7701, MIPI_DCS_SET_DISPLAY_ON, 0x00);
 
