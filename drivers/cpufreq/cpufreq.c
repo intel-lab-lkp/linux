@@ -455,8 +455,8 @@ void cpufreq_freq_transition_end(struct cpufreq_policy *policy,
 			    policy->cur,
 			    policy->cpuinfo.max_freq);
 
-	policy->transition_ongoing = false;
 	policy->transition_task = NULL;
+	policy->transition_ongoing = false;
 
 	wake_up(&policy->transition_wait);
 }
