@@ -200,6 +200,19 @@ static void gup_put_folio(struct folio *folio, int refs, unsigned int flags)
 
 	if (!put_devmap_managed_page_refs(&folio->page, refs))
 		folio_put_refs(folio, refs);
+
+	if (folio_test_unevictable(folio) && folio_evictable(folio)) {
+		struct lruvec *lruvec = folio_lruvec_lock_irq(folio);
+
+		lruvec_del_folio(lruvec, folio);
+		folio_clear_unevictable(folio);
+		lruvec_add_folio(lruvec, folio);
+		folio_set_lru(folio);
+		__count_vm_events(UNEVICTABLE_PGRESCUED,
+			folio_nr_pages(folio));
+
+		unlock_page_lruvec_irq(lruvec);
+	}
 }
 
 /**
