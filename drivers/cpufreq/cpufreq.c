@@ -2010,7 +2010,7 @@ EXPORT_SYMBOL_GPL(cpufreq_get_driver_data);
  *
  * Add a notifier to one of two lists: either a list of notifiers that run on
  * clock rate changes (once before and once after every transition), or a list
- * of notifiers that ron on cpufreq policy changes.
+ * of notifiers that run on cpufreq policy changes.
  *
  * This function may sleep and it has the same return values as
  * blocking_notifier_chain_register().
