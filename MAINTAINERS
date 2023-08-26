@@ -8722,6 +8722,11 @@ M:	Joe Perches <joe@perches.com>
 S:	Maintained
 F:	scripts/get_maintainer.pl
 
+ADD MAINTAINER SCRIPT
+M:	Guru Das Srinagesh <quic_gurus@quicinc.com>
+S:	Maintained
+F:	scripts/add-maintainer.py
+
 GFS2 FILE SYSTEM
 M:	Bob Peterson <rpeterso@redhat.com>
 M:	Andreas Gruenbacher <agruenba@redhat.com>
