@@ -438,8 +438,10 @@ int cpufreq_dbs_governor_init(struct cpufreq_policy *policy)
 	gov_attr_set_init(&dbs_data->attr_set, &policy_dbs->list);
 
 	ret = gov->init(dbs_data);
-	if (ret)
+	if (ret) {
+		kfree(dbs_data);
 		goto free_policy_dbs_info;
+	}
 
 	/*
 	 * The sampling interval should not be less than the transition latency
