@@ -14,6 +14,7 @@
 #include <linux/printk.h>
 #include <linux/clk.h>
 #include <linux/reset.h>
+#include <linux/delay.h>
 
 #define RNG_CTRL	0x0
 #define RNG_STATUS	0x4
@@ -71,7 +72,7 @@ static int bcm2835_rng_read(struct hwrng *rng, void *buf, size_t max,
 	while ((rng_readl(priv, RNG_STATUS) >> 24) == 0) {
 		if (!wait)
 			return 0;
-		hwrng_msleep(rng, 1000);
+		usleep_range(100, 200);
 	}
 
 	num_words = rng_readl(priv, RNG_STATUS) >> 24;
