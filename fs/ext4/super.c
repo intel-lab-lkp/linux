@@ -5637,7 +5637,7 @@ static int __ext4_fill_super(struct fs_context *fc, struct super_block *sb)
 
 failed_mount10:
 	ext4_quotas_off(sb, EXT4_MAXQUOTAS);
-failed_mount9: __maybe_unused
+failed_mount9: __maybe_unused;
 	ext4_release_orphan_info(sb);
 failed_mount8:
 	ext4_unregister_sysfs(sb);
