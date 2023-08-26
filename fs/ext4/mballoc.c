@@ -17,6 +17,7 @@
 #include <linux/nospec.h>
 #include <linux/backing-dev.h>
 #include <trace/events/ext4.h>
+#include <kunit/static_stub.h>
 
 /*
  * MUSTDO:
@@ -3989,6 +3990,9 @@ ext4_mb_mark_context(struct ext4_mark_context *mc, ext4_group_t group,
 	struct buffer_head *gdp_bh;
 	int err;
 	unsigned int i, already, changed = len;
+
+	KUNIT_STATIC_STUB_REDIRECT(ext4_mb_mark_context,
+				   mc, group, blkoff, len, flags);
 
 	mc->changed = 0;
 	bitmap_bh = ext4_read_block_bitmap(sb, group);
