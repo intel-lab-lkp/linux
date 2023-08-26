@@ -836,10 +836,14 @@ static int linflex_probe(struct platform_device *pdev)
 	if (IS_ERR(sport->membase))
 		return PTR_ERR(sport->membase);
 
+	ret = platform_get_irq(pdev, 0);
+	if (ret < 0)
+		return ret;
+
 	sport->dev = &pdev->dev;
 	sport->type = PORT_LINFLEXUART;
 	sport->iotype = UPIO_MEM;
-	sport->irq = platform_get_irq(pdev, 0);
+	sport->irq = ret;
 	sport->ops = &linflex_pops;
 	sport->flags = UPF_BOOT_AUTOCONF;
 	sport->has_sysrq = IS_ENABLED(CONFIG_SERIAL_FSL_LINFLEXUART_CONSOLE);
