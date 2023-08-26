@@ -739,20 +739,10 @@ isolate_freepages_range(struct compact_control *cc,
 	block_end_pfn = pageblock_end_pfn(pfn);
 
 	for (; pfn < end_pfn; pfn += isolated,
-				block_start_pfn = block_end_pfn,
-				block_end_pfn += pageblock_nr_pages) {
+				block_start_pfn = pfn,
+				block_end_pfn = pfn + pageblock_nr_pages) {
 		/* Protect pfn from changing by isolate_freepages_block */
 		unsigned long isolate_start_pfn = pfn;
-
-		/*
-		 * pfn could pass the block_end_pfn if isolated freepage
-		 * is more than pageblock order. In this case, we adjust
-		 * scanning range to right one.
-		 */
-		if (pfn >= block_end_pfn) {
-			block_start_pfn = pageblock_start_pfn(pfn);
-			block_end_pfn = pageblock_end_pfn(pfn);
-		}
 
 		block_end_pfn = min(block_end_pfn, end_pfn);
 
