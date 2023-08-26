@@ -908,10 +908,44 @@ static int record__config_off_cpu(struct record *rec)
 	return off_cpu_prepare(rec->evlist, &rec->opts.target, &rec->opts);
 }
 
+static bool record__tracking_system_wide(struct record *rec)
+{
+	struct record_opts *opts = &rec->opts;
+	struct evlist *evlist = rec->evlist;
+	struct evsel *evsel;
+
+	/*
+	 * If all (non-dummy) evsel have exclude_user,
+	 * system_wide is not needed.
+	 *
+	 * all_kernel and all_user will overwrite exclude_kernel and
+	 * exclude_user of attr in evsel__config(), here need to check
+	 * all the three items.
+	 *
+	 * Sideband system wide if one of the following conditions is met:
+	 *
+	 *   - all_user is set, and there is a non-dummy event
+	 *   - all_user and all_kernel are not set, and there is
+	 *     a non-dummy event without exclude_user
+	 */
+	if (opts->all_kernel)
+		return false;
+
+	evlist__for_each_entry(evlist, evsel) {
+		if (!evsel__is_dummy_event(evsel)) {
+			if (opts->all_user || !evsel->core.attr.exclude_user)
+				return true;
+		}
+	}
+
+	return false;
+}
+
 static int record__config_tracking_events(struct record *rec)
 {
 	struct record_opts *opts = &rec->opts;
 	struct evlist *evlist = rec->evlist;
+	bool system_wide = false;
 	struct evsel *evsel;
 
 	/*
@@ -921,7 +955,15 @@ static int record__config_tracking_events(struct record *rec)
 	 */
 	if (opts->target.initial_delay || target__has_cpu(&opts->target) ||
 	    perf_pmus__num_core_pmus() > 1) {
-		evsel = evlist__findnew_tracking_event(evlist, false);
+
+		/*
+		 * User space tasks can migrate between CPUs, so when tracing
+		 * selected CPUs, sideband for all CPUs is still needed.
+		 */
+		if (!!opts->target.cpu_list && record__tracking_system_wide(rec))
+			system_wide = true;
+
+		evsel = evlist__findnew_tracking_event(evlist, system_wide);
 		if (!evsel)
 			return -ENOMEM;
 
