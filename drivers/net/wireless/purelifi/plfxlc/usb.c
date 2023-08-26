@@ -861,26 +861,6 @@ static struct usb_driver driver = {
 	.disable_hub_initiated_lpm = 1,
 };
 
-static int __init usb_init(void)
-{
-	int r;
-
-	r = usb_register(&driver);
-	if (r) {
-		pr_err("%s usb_register() failed %d\n", driver.name, r);
-		return r;
-	}
-
-	pr_debug("Driver initialized :%s\n", driver.name);
-	return 0;
-}
-
-static void __exit usb_exit(void)
-{
-	usb_deregister(&driver);
-	pr_debug("%s %s\n", driver.name, __func__);
-}
-
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("USB driver for pureLiFi devices");
 MODULE_AUTHOR("pureLiFi");
@@ -888,5 +868,4 @@ MODULE_VERSION("1.0");
 MODULE_FIRMWARE("plfxlc/lifi-x.bin");
 MODULE_DEVICE_TABLE(usb, usb_ids);
 
-module_init(usb_init);
-module_exit(usb_exit);
+module_usb_driver(driver);
