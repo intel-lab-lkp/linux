@@ -16,8 +16,10 @@ int main(int ac, char **argv)
 	int map_fd, i, j = 0;
 	char filename[256];
 	struct ksym *sym;
+	struct ksyms *ksyms;
 
-	if (load_kallsyms()) {
+	ksyms = load_kallsyms();
+	if (!ksyms) {
 		printf("failed to process /proc/kallsyms\n");
 		return 2;
 	}
@@ -58,7 +60,7 @@ int main(int ac, char **argv)
 		while (bpf_map_get_next_key(map_fd, &key, &next_key) == 0) {
 			bpf_map_lookup_elem(map_fd, &next_key, &value);
 			assert(next_key == value);
-			sym = ksym_search(value);
+			sym = ksym_search(ksyms, value);
 			key = next_key;
 			if (!sym) {
 				printf("ksym not found. Is kallsyms loaded?\n");
@@ -80,5 +82,6 @@ cleanup:
 		bpf_link__destroy(links[j]);
 
 	bpf_object__close(obj);
+	free_kallsyms(ksyms);
 	return 0;
 }

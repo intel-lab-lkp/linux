@@ -16,6 +16,7 @@
 
 /* counts, stackmap */
 static int map_fd[2];
+struct ksyms *ksyms;
 
 static void print_ksym(__u64 addr)
 {
@@ -23,7 +24,7 @@ static void print_ksym(__u64 addr)
 
 	if (!addr)
 		return;
-	sym = ksym_search(addr);
+	sym = ksym_search(ksyms, addr);
 	if (!sym) {
 		printf("ksym not found. Is kallsyms loaded?\n");
 		return;
@@ -100,7 +101,8 @@ int main(int argc, char **argv)
 	int delay = 1, i = 0;
 	char filename[256];
 
-	if (load_kallsyms()) {
+	ksyms = load_kallsyms();
+	if (!ksyms) {
 		printf("failed to process /proc/kallsyms\n");
 		return 2;
 	}
@@ -149,5 +151,6 @@ cleanup:
 		bpf_link__destroy(links[i]);
 
 	bpf_object__close(obj);
+	free_kallsyms(ksyms);
 	return 0;
 }

@@ -6,6 +6,8 @@
 #include "bpf/libbpf_internal.h"
 #include "bpf/hashmap.h"
 
+static struct ksyms *ksyms;
+
 static void kprobe_multi_test_run(struct kprobe_multi *skel, bool test_return)
 {
 	LIBBPF_OPTS(bpf_test_run_opts, topts);
@@ -89,7 +91,7 @@ cleanup:
 }
 
 #define GET_ADDR(__sym, __addr) ({					\
-	__addr = ksym_get_addr(__sym);					\
+	__addr = ksym_get_addr(ksyms, __sym);					\
 	if (!ASSERT_NEQ(__addr, 0, "kallsyms load failed for " #__sym))	\
 		return;							\
 })
@@ -222,8 +224,8 @@ static void test_attach_api_fails(void)
 	};
 	__u64 cookies[2];
 
-	addrs[0] = ksym_get_addr("bpf_fentry_test1");
-	addrs[1] = ksym_get_addr("bpf_fentry_test2");
+	addrs[0] = ksym_get_addr(ksyms, "bpf_fentry_test1");
+	addrs[1] = ksym_get_addr(ksyms, "bpf_fentry_test2");
 
 	if (!ASSERT_FALSE(!addrs[0] || !addrs[1], "ksym_get_addr"))
 		goto cleanup;
@@ -463,7 +465,8 @@ void serial_test_kprobe_multi_bench_attach(void)
 
 void test_kprobe_multi_test(void)
 {
-	if (!ASSERT_OK(load_kallsyms(), "load_kallsyms"))
+	ksyms = load_kallsyms();
+	if (!ASSERT_OK(ksyms != NULL, "load_kallsyms"))
 		return;
 
 	if (test__start_subtest("skel_api"))
@@ -480,4 +483,6 @@ void test_kprobe_multi_test(void)
 		test_attach_api_syms();
 	if (test__start_subtest("attach_api_fails"))
 		test_attach_api_fails();
+
+	free_kallsyms(ksyms);
 }

@@ -315,8 +315,10 @@ int main(int argc, char **argv)
 	struct bpf_program *prog;
 	struct bpf_object *obj;
 	int i = 0, err = -1;
+	struct ksyms *ksyms;
 
-	if (load_kallsyms()) {
+	ksyms = load_kallsyms();
+	if (!ksyms) {
 		printf("failed to process /proc/kallsyms\n");
 		return err;
 	}
@@ -368,22 +370,22 @@ int main(int argc, char **argv)
 					     BPF_FD_TYPE_KRETPROBE,
 					     buf, sizeof(buf)));
 	CHECK_AND_RET(test_nondebug_fs_probe("kprobe", NULL, 0x0,
-					     ksym_get_addr("bpf_check"), false,
+					     ksym_get_addr(ksyms, "bpf_check"), false,
 					     BPF_FD_TYPE_KPROBE,
 					     BPF_FD_TYPE_KRETPROBE,
 					     buf, sizeof(buf)));
 	CHECK_AND_RET(test_nondebug_fs_probe("kprobe", NULL, 0x0,
-					     ksym_get_addr("bpf_check"), false,
+					     ksym_get_addr(ksyms, "bpf_check"), false,
 					     BPF_FD_TYPE_KPROBE,
 					     BPF_FD_TYPE_KRETPROBE,
 					     NULL, 0));
 	CHECK_AND_RET(test_nondebug_fs_probe("kprobe", NULL, 0x0,
-					     ksym_get_addr("bpf_check"), true,
+					     ksym_get_addr(ksyms, "bpf_check"), true,
 					     BPF_FD_TYPE_KPROBE,
 					     BPF_FD_TYPE_KRETPROBE,
 					     buf, sizeof(buf)));
 	CHECK_AND_RET(test_nondebug_fs_probe("kprobe", NULL, 0x0,
-					     ksym_get_addr("bpf_check"), true,
+					     ksym_get_addr(ksyms, "bpf_check"), true,
 					     BPF_FD_TYPE_KPROBE,
 					     BPF_FD_TYPE_KRETPROBE,
 					     0, 0));
@@ -419,5 +421,6 @@ cleanup:
 		bpf_link__destroy(links[i]);
 
 	bpf_object__close(obj);
+	free_kallsyms(ksyms);
 	return err;
 }

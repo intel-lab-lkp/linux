@@ -25,6 +25,7 @@
 static int map_fd;
 static int nr_cpus;
 static long _text_addr;
+struct ksyms *ksyms;
 
 static void usage(void)
 {
@@ -109,7 +110,7 @@ static void print_ip_map(int fd)
 	qsort(counts, max, sizeof(struct ipcount), count_cmp);
 	for (i = 0; i < max; i++) {
 		if (counts[i].ip > _text_addr) {
-			sym = ksym_search(counts[i].ip);
+			sym = ksym_search(ksyms, counts[i].ip);
 			if (!sym) {
 				printf("ksym not found. Is kallsyms loaded?\n");
 				continue;
@@ -164,13 +165,14 @@ int main(int argc, char **argv)
 	}
 
 	/* initialize kernel symbol translation */
-	if (load_kallsyms()) {
+	ksyms = load_kallsyms();
+	if (!ksyms) {
 		fprintf(stderr, "ERROR: loading /proc/kallsyms\n");
 		return 2;
 	}
 
 	/* used to determine whether the address is kernel space */
-	_text_addr = ksym_get_addr("_text");
+	_text_addr = ksym_get_addr(ksyms, "_text");
 	if (!_text_addr) {
 		fprintf(stderr, "ERROR: no '_text' in /proc/kallsyms\n");
 		return 3;
@@ -230,5 +232,6 @@ cleanup:
 
 	free(links);
 	bpf_object__close(obj);
+	free_kallsyms(ksyms);
 	return error;
 }

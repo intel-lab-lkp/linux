@@ -23,6 +23,7 @@ static int pid;
 static int map_fd[2];
 struct bpf_program *prog;
 static bool sys_read_seen, sys_write_seen;
+struct ksyms *ksyms;
 
 static void print_ksym(__u64 addr)
 {
@@ -30,7 +31,7 @@ static void print_ksym(__u64 addr)
 
 	if (!addr)
 		return;
-	sym = ksym_search(addr);
+	sym = ksym_search(ksyms, addr);
 	if (!sym) {
 		printf("ksym not found. Is kallsyms loaded?\n");
 		return;
@@ -303,7 +304,8 @@ int main(int argc, char **argv)
 	signal(SIGINT, err_exit);
 	signal(SIGTERM, err_exit);
 
-	if (load_kallsyms()) {
+	ksyms = load_kallsyms();
+	if (!ksyms) {
 		printf("failed to process /proc/kallsyms\n");
 		goto cleanup;
 	}
@@ -348,5 +350,6 @@ int main(int argc, char **argv)
 
 cleanup:
 	bpf_object__close(obj);
+	free_kallsyms(ksyms);
 	err_exit(error);
 }

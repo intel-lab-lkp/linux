@@ -9,6 +9,7 @@
 #define MAX_STACK_RAWTP	100
 
 static int duration = 0;
+static struct ksyms *ksyms;
 
 struct get_stack_trace_t {
 	int pid;
@@ -48,7 +49,7 @@ static void get_stack_print_output(void *ctx, int cpu, void *data, __u32 size)
 			found = num_stack > 0;
 		} else {
 			for (i = 0; i < num_stack; i++) {
-				ks = ksym_search(raw_data[i]);
+				ks = ksym_search(ksyms, raw_data[i]);
 				if (ks && (strcmp(ks->name, nonjit_func) == 0)) {
 					found = true;
 					break;
@@ -65,7 +66,7 @@ static void get_stack_print_output(void *ctx, int cpu, void *data, __u32 size)
 			good_kern_stack = num_stack > 0;
 		} else {
 			for (i = 0; i < num_stack; i++) {
-				ks = ksym_search(e.kern_stack[i]);
+				ks = ksym_search(ksyms, e.kern_stack[i]);
 				if (ks && (strcmp(ks->name, nonjit_func) == 0)) {
 					good_kern_stack = true;
 					break;
@@ -112,8 +113,8 @@ void test_get_stack_raw_tp(void)
 	if (CHECK(!map, "bpf_find_map", "not found\n"))
 		goto close_prog;
 
-	err = load_kallsyms();
-	if (CHECK(err < 0, "load_kallsyms", "err %d errno %d\n", err, errno))
+	ksyms = load_kallsyms();
+	if (CHECK(!ksyms, "load_kallsyms", "err %d errno %d\n", err, errno))
 		goto close_prog;
 
 	CPU_ZERO(&cpu_set);
@@ -146,4 +147,5 @@ close_prog:
 	bpf_link__destroy(link);
 	perf_buffer__free(pb);
 	bpf_object__close(obj);
+	free_kallsyms(ksyms);
 }

@@ -11,12 +11,14 @@ struct ksym {
 	long addr;
 	char *name;
 };
+struct ksyms;
 
-int load_kallsyms(void);
-int load_kallsyms_refresh(void);
+struct ksyms *load_kallsyms(void);
+struct ksyms *load_kallsyms_refresh(struct ksyms *ksyms);
+void free_kallsyms(struct ksyms *ksyms);
 
-struct ksym *ksym_search(long key);
-long ksym_get_addr(const char *name);
+struct ksym *ksym_search(struct ksyms *ksyms, long key);
+long ksym_get_addr(struct ksyms *ksyms, const char *name);
 
 /* open kallsyms and find addresses on the fly, faster than load + search. */
 int kallsyms_find(const char *sym, unsigned long long *addr);
