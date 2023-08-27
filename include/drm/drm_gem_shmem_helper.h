@@ -81,7 +81,7 @@ struct drm_gem_shmem_object {
 	 * Reference count on the virtual address.
 	 * The address are un-mapped when the count reaches zero.
 	 */
-	unsigned int vmap_use_count;
+	struct kref vmap_use_count;
 
 	/**
 	 * @got_sgt:
