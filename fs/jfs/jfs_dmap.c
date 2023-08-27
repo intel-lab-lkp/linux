@@ -473,6 +473,10 @@ dbUpdatePMap(struct inode *ipbmap,
 	lastlblkno = 0;
 	for (rem = nblocks; rem > 0; rem -= nblks, blkno += nblks) {
 		/* get the buffer for the current dmap. */
+
+		if (bmp->db_l2nbperpage > L2BPERDMAP)
+			return -EIO;
+
 		lblkno = BLKTODMAP(blkno, bmp->db_l2nbperpage);
 		if (lblkno != lastlblkno) {
 			if (mp) {
