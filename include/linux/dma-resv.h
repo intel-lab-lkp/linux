@@ -41,6 +41,7 @@
 
 #include <linux/ww_mutex.h>
 #include <linux/dma-fence.h>
+#include <linux/kref.h>
 #include <linux/slab.h>
 #include <linux/seqlock.h>
 #include <linux/rcupdate.h>
@@ -462,6 +463,14 @@ static inline void dma_resv_unlock(struct dma_resv *obj)
 {
 	dma_resv_reset_max_fences(obj);
 	ww_mutex_unlock(&obj->lock);
+}
+
+static inline int kref_put_dma_resv(struct kref *kref,
+				    void (*release)(struct kref *kref),
+				    struct dma_resv *resv,
+				    struct ww_acquire_ctx *ctx)
+{
+	return kref_put_ww_mutex(kref, release, &resv->lock, ctx);
 }
 
 void dma_resv_init(struct dma_resv *obj);
