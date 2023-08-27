@@ -15,18 +15,11 @@
 
 #if !defined(__ASSEMBLY__)
 
-#include <linux/crash_core.h>
 #include <asm/io.h>
 #include <linux/range.h>
 
 #include <uapi/linux/kexec.h>
 #include <linux/verification.h>
-
-/* Location of a reserved region to hold the crash kernel.
- */
-extern struct resource crashk_res;
-extern struct resource crashk_low_res;
-extern note_buf_t __percpu *crash_notes;
 
 #ifdef CONFIG_KEXEC_CORE
 #include <linux/list.h>
@@ -34,6 +27,13 @@ extern note_buf_t __percpu *crash_notes;
 #include <linux/ioport.h>
 #include <linux/module.h>
 #include <asm/kexec.h>
+#include <linux/crash_core.h>
+
+/* Location of a reserved region to hold the crash kernel.
+ */
+extern struct resource crashk_res;
+extern struct resource crashk_low_res;
+extern note_buf_t __percpu *crash_notes;
 
 /* Verify architecture specific macros are defined */
 
