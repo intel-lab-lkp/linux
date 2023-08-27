@@ -1754,6 +1754,9 @@ static int i801_probe(struct pci_dev *dev, const struct pci_device_id *id)
 		"SMBus I801 adapter at %04lx", priv->smba);
 	err = i2c_add_adapter(&priv->adapter);
 	if (err) {
+		platform_device_unregister(priv->tco_pdev);
+		outb_p(priv->original_hstcnt, SMBHSTCNT(priv));
+		pci_write_config_byte(dev, SMBHSTCFG, priv->original_hstcfg);
 		i801_acpi_remove(priv);
 		return err;
 	}
@@ -1779,14 +1782,13 @@ static void i801_remove(struct pci_dev *dev)
 {
 	struct i801_priv *priv = pci_get_drvdata(dev);
 
-	outb_p(priv->original_hstcnt, SMBHSTCNT(priv));
-	i801_disable_host_notify(priv);
 	i801_del_mux(priv);
+	i801_disable_host_notify(priv);
 	i2c_del_adapter(&priv->adapter);
-	i801_acpi_remove(priv);
-	pci_write_config_byte(dev, SMBHSTCFG, priv->original_hstcfg);
-
 	platform_device_unregister(priv->tco_pdev);
+	outb_p(priv->original_hstcnt, SMBHSTCNT(priv));
+	pci_write_config_byte(dev, SMBHSTCFG, priv->original_hstcfg);
+	i801_acpi_remove(priv);
 
 	/* if acpi_reserved is set then usage_count is incremented already */
 	if (!priv->acpi_reserved)
@@ -1803,8 +1805,8 @@ static void i801_shutdown(struct pci_dev *dev)
 	struct i801_priv *priv = pci_get_drvdata(dev);
 
 	/* Restore config registers to avoid hard hang on some systems */
-	outb_p(priv->original_hstcnt, SMBHSTCNT(priv));
 	i801_disable_host_notify(priv);
+	outb_p(priv->original_hstcnt, SMBHSTCNT(priv));
 	pci_write_config_byte(dev, SMBHSTCFG, priv->original_hstcfg);
 }
 
