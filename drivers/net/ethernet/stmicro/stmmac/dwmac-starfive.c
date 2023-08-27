@@ -111,18 +111,24 @@ static int starfive_dwmac_probe(struct platform_device *pdev)
 				     "dt configuration failed\n");
 
 	dwmac = devm_kzalloc(&pdev->dev, sizeof(*dwmac), GFP_KERNEL);
-	if (!dwmac)
-		return -ENOMEM;
+	if (!dwmac) {
+		err = -ENOMEM;
+		goto err_remove_config_dt;
+	}
 
 	dwmac->clk_tx = devm_clk_get_enabled(&pdev->dev, "tx");
-	if (IS_ERR(dwmac->clk_tx))
-		return dev_err_probe(&pdev->dev, PTR_ERR(dwmac->clk_tx),
-				     "error getting tx clock\n");
+	if (IS_ERR(dwmac->clk_tx)) {
+		err = dev_err_probe(&pdev->dev, PTR_ERR(dwmac->clk_tx),
+				    "error getting tx clock\n");
+		goto err_remove_config_dt;
+	}
 
 	clk_gtx = devm_clk_get_enabled(&pdev->dev, "gtx");
-	if (IS_ERR(clk_gtx))
-		return dev_err_probe(&pdev->dev, PTR_ERR(clk_gtx),
-				     "error getting gtx clock\n");
+	if (IS_ERR(clk_gtx)) {
+		err = dev_err_probe(&pdev->dev, PTR_ERR(clk_gtx),
+				    "error getting gtx clock\n");
+		goto err_remove_config_dt;
+	}
 
 	/* Generally, the rgmii_tx clock is provided by the internal clock,
 	 * which needs to match the corresponding clock frequency according
@@ -139,15 +145,17 @@ static int starfive_dwmac_probe(struct platform_device *pdev)
 
 	err = starfive_dwmac_set_mode(plat_dat);
 	if (err)
-		return err;
+		goto err_remove_config_dt;
 
 	err = stmmac_dvr_probe(&pdev->dev, plat_dat, &stmmac_res);
-	if (err) {
-		stmmac_remove_config_dt(pdev, plat_dat);
-		return err;
-	}
+	if (err)
+		goto err_remove_config_dt;
 
 	return 0;
+
+err_remove_config_dt:
+	stmmac_remove_config_dt(pdev, plat_dat);
+	return err;
 }
 
 static const struct of_device_id starfive_dwmac_match[] = {
