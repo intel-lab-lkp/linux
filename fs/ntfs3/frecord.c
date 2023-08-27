@@ -2095,7 +2095,7 @@ int ni_readpage_cmpr(struct ntfs_inode *ni, struct page *page)
 	struct page **pages = NULL; /* Array of at most 16 pages. stack? */
 	u8 frame_bits;
 	CLST frame;
-	u32 i, idx, frame_size, pages_per_frame;
+	u32 i, idx, frame_size, pages_per_frame, pages_created = 0;
 	gfp_t gfp_mask;
 	struct page *pg;
 
@@ -2138,6 +2138,7 @@ int ni_readpage_cmpr(struct ntfs_inode *ni, struct page *page)
 			goto out1;
 		}
 		pages[i] = pg;
+		pages_created++;
 	}
 
 	err = ni_read_frame(ni, frame_vbo, pages, pages_per_frame);
@@ -2146,7 +2147,7 @@ out1:
 	if (err)
 		SetPageError(page);
 
-	for (i = 0; i < pages_per_frame; i++) {
+	for (i = 0; i < pages_created; i++) {
 		pg = pages[i];
 		if (i == idx)
 			continue;
