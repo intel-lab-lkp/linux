@@ -234,14 +234,22 @@ static int drm_gem_shmem_pin_locked(struct drm_gem_shmem_object *shmem)
 
 	dma_resv_assert_held(shmem->base.resv);
 
+	if (kref_get_unless_zero(&shmem->pages_pin_count))
+		return 0;
+
 	ret = drm_gem_shmem_get_pages_locked(shmem);
+	if (!ret)
+		kref_init(&shmem->pages_pin_count);
 
 	return ret;
 }
 
-static void drm_gem_shmem_unpin_locked(struct drm_gem_shmem_object *shmem)
+static void drm_gem_shmem_kref_unpin_pages(struct kref *kref)
 {
-	dma_resv_assert_held(shmem->base.resv);
+	struct drm_gem_shmem_object *shmem;
+
+	shmem = container_of(kref, struct drm_gem_shmem_object,
+			     pages_pin_count);
 
 	drm_gem_shmem_put_pages_locked(shmem);
 }
@@ -262,6 +270,9 @@ int drm_gem_shmem_pin(struct drm_gem_shmem_object *shmem)
 	int ret;
 
 	drm_WARN_ON(obj->dev, obj->import_attach);
+
+	if (kref_get_unless_zero(&shmem->pages_pin_count))
+		return 0;
 
 	ret = dma_resv_lock_interruptible(shmem->base.resv, NULL);
 	if (ret)
@@ -286,9 +297,10 @@ void drm_gem_shmem_unpin(struct drm_gem_shmem_object *shmem)
 
 	drm_WARN_ON(obj->dev, obj->import_attach);
 
-	dma_resv_lock(shmem->base.resv, NULL);
-	drm_gem_shmem_unpin_locked(shmem);
-	dma_resv_unlock(shmem->base.resv);
+	if (kref_put_dma_resv(&shmem->pages_pin_count,
+			      drm_gem_shmem_kref_unpin_pages,
+			      obj->resv, NULL))
+		dma_resv_unlock(obj->resv);
 }
 EXPORT_SYMBOL_GPL(drm_gem_shmem_unpin);
 
