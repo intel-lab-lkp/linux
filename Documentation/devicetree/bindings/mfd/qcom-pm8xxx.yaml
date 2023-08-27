@@ -37,6 +37,9 @@ properties:
   interrupts:
     maxItems: 1
 
+  interrupts-extended:
+    maxItems: 1
+
   '#interrupt-cells':
     const: 2
 
@@ -75,11 +78,16 @@ patternProperties:
     type: object
     $ref: /schemas/iio/adc/qcom,pm8018-adc.yaml#
 
+oneOf:
+  - required:
+      - interrupts
+  - required:
+      - interrupts-extended
+
 required:
   - compatible
   - '#address-cells'
   - '#size-cells'
-  - interrupts
   - '#interrupt-cells'
   - interrupt-controller
 
