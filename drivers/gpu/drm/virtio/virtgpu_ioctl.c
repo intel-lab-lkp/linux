@@ -246,6 +246,10 @@ static int virtio_gpu_transfer_from_host_ioctl(struct drm_device *dev,
 	if (ret != 0)
 		goto err_put_free;
 
+	ret = virtio_gpu_array_prepare(vgdev, objs);
+	if (ret)
+		goto err_unlock;
+
 	fence = virtio_gpu_fence_alloc(vgdev, vgdev->fence_drv.context, 0);
 	if (!fence) {
 		ret = -ENOMEM;
@@ -288,11 +292,25 @@ static int virtio_gpu_transfer_to_host_ioctl(struct drm_device *dev, void *data,
 		goto err_put_free;
 	}
 
+	ret = virtio_gpu_array_lock_resv(objs);
+	if (ret != 0)
+		goto err_put_free;
+
+	ret = virtio_gpu_array_prepare(vgdev, objs);
+	if (ret)
+		goto err_unlock;
+
+	fence = virtio_gpu_fence_alloc(vgdev, vgdev->fence_drv.context, 0);
+	if (!fence) {
+		ret = -ENOMEM;
+		goto err_unlock;
+	}
+
 	if (!vgdev->has_virgl_3d) {
 		virtio_gpu_cmd_transfer_to_host_2d
 			(vgdev, offset,
 			 args->box.w, args->box.h, args->box.x, args->box.y,
-			 objs, NULL);
+			 objs, fence);
 	} else {
 		virtio_gpu_create_context(dev, file);
 
@@ -301,23 +319,13 @@ static int virtio_gpu_transfer_to_host_ioctl(struct drm_device *dev, void *data,
 			goto err_put_free;
 		}
 
-		ret = virtio_gpu_array_lock_resv(objs);
-		if (ret != 0)
-			goto err_put_free;
-
-		ret = -ENOMEM;
-		fence = virtio_gpu_fence_alloc(vgdev, vgdev->fence_drv.context,
-					       0);
-		if (!fence)
-			goto err_unlock;
-
 		virtio_gpu_cmd_transfer_to_host_3d
 			(vgdev,
 			 vfpriv ? vfpriv->ctx_id : 0, offset, args->level,
 			 args->stride, args->layer_stride, &args->box, objs,
 			 fence);
-		dma_fence_put(&fence->f);
 	}
+	dma_fence_put(&fence->f);
 	virtio_gpu_notify(vgdev);
 	return 0;
 
