@@ -132,4 +132,9 @@ extern int load_other_segments(struct kimage *image,
 
 #endif /* __ASSEMBLY__ */
 
+/* Current arm64 boot protocol requires 2MB alignment */
+#define CRASH_ALIGN                     SZ_2M
+
+#define CRASH_ADDR_LOW_MAX              arm64_dma_phys_limit
+#define CRASH_ADDR_HIGH_MAX             (PHYS_MASK + 1)
 #endif
