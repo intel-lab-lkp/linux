@@ -141,7 +141,7 @@ void drm_gem_shmem_free(struct drm_gem_shmem_object *shmem)
 
 	if (obj->import_attach) {
 		drm_prime_gem_destroy(obj, shmem->sgt);
-	} else {
+	} else if (!shmem->imported_sgt) {
 		dma_resv_lock(shmem->base.resv, NULL);
 
 		drm_WARN_ON(obj->dev, shmem->vmap_use_count);
@@ -764,6 +764,7 @@ drm_gem_shmem_prime_import_sg_table(struct drm_device *dev,
 		return ERR_CAST(shmem);
 
 	shmem->sgt = sgt;
+	shmem->imported_sgt = true;
 
 	drm_dbg_prime(dev, "size = %zu\n", size);
 

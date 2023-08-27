@@ -74,6 +74,13 @@ struct drm_gem_shmem_object {
 	unsigned int vmap_use_count;
 
 	/**
+	 * @imported_sgt:
+	 *
+	 * True if SG table belongs to imported dma-buf.
+	 */
+	bool imported_sgt : 1;
+
+	/**
 	 * @pages_mark_dirty_on_put:
 	 *
 	 * Mark pages as dirty when they are put.
