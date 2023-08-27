@@ -47,7 +47,7 @@ int lima_heap_alloc(struct lima_bo *bo, struct lima_vm *vm)
 		}
 
 		bo->base.pages = pages;
-		bo->base.pages_use_count = 1;
+		kref_init(&bo->base.pages_use_count);
 
 		mapping_set_unevictable(mapping);
 	}
