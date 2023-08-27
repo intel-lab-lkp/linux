@@ -30,8 +30,6 @@ static void starfive_dwmac_fix_mac_speed(void *priv, unsigned int speed, unsigne
 	unsigned long rate;
 	int err;
 
-	rate = clk_get_rate(dwmac->clk_tx);
-
 	switch (speed) {
 	case SPEED_1000:
 		rate = 125000000;
@@ -44,7 +42,7 @@ static void starfive_dwmac_fix_mac_speed(void *priv, unsigned int speed, unsigne
 		break;
 	default:
 		dev_err(dwmac->dev, "invalid speed %u\n", speed);
-		break;
+		return;
 	}
 
 	err = clk_set_rate(dwmac->clk_tx, rate);
