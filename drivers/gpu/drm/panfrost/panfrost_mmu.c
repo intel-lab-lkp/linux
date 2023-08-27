@@ -535,7 +535,7 @@ out:
 err_map:
 	sg_free_table(sgt);
 err_pages:
-	drm_gem_shmem_put_pages(&bo->base);
+	drm_gem_shmem_put_pages_locked(&bo->base);
 err_unlock:
 	dma_resv_unlock(obj->resv);
 err_bo:
