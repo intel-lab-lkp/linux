@@ -6,6 +6,7 @@
 #include <linux/mutex.h>
 #include <linux/refcount.h>
 #include <linux/spinlock.h>
+#include <linux/ww_mutex.h>
 #include <linux/bug.h>
 
 #define REFCOUNT_WARN(str)	WARN_ONCE(1, "refcount_t: " str ".\n")
@@ -184,3 +185,36 @@ bool refcount_dec_and_lock_irqsave(refcount_t *r, spinlock_t *lock,
 	return true;
 }
 EXPORT_SYMBOL(refcount_dec_and_lock_irqsave);
+
+/**
+ * refcount_dec_and_ww_mutex_lock - return holding ww-mutex if able to
+ *                                  decrement refcount to 0
+ * @r: the refcount
+ * @lock: the ww-mutex to be locked
+ * @ctx: wait-wound context
+ *
+ * Similar to atomic_dec_and_lock(), it will WARN on underflow and fail to
+ * decrement when saturated at REFCOUNT_SATURATED.
+ *
+ * Provides release memory ordering, such that prior loads and stores are done
+ * before, and provides a control dependency such that free() must come after.
+ * See the comment on top.
+ *
+ * Return: true and hold ww-mutex lock if able to decrement refcount to 0,
+ *         false otherwise
+ */
+bool refcount_dec_and_ww_mutex_lock(refcount_t *r, struct ww_mutex *lock,
+				    struct ww_acquire_ctx *ctx)
+{
+	if (refcount_dec_not_one(r))
+		return false;
+
+	ww_mutex_lock(lock, ctx);
+	if (!refcount_dec_and_test(r)) {
+		ww_mutex_unlock(lock);
+		return false;
+	}
+
+	return true;
+}
+EXPORT_SYMBOL(refcount_dec_and_ww_mutex_lock);

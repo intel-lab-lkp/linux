@@ -99,6 +99,8 @@
 #include <linux/spinlock_types.h>
 
 struct mutex;
+struct ww_mutex;
+struct ww_acquire_ctx;
 
 /**
  * typedef refcount_t - variant of atomic_t specialized for reference counts
@@ -366,4 +368,7 @@ extern __must_check bool refcount_dec_and_lock(refcount_t *r, spinlock_t *lock) 
 extern __must_check bool refcount_dec_and_lock_irqsave(refcount_t *r,
 						       spinlock_t *lock,
 						       unsigned long *flags) __cond_acquires(lock);
+extern __must_check bool refcount_dec_and_ww_mutex_lock(refcount_t *r,
+							struct ww_mutex *lock,
+							struct ww_acquire_ctx *ctx) __cond_acquires(&lock->base);
 #endif /* _LINUX_REFCOUNT_H */
