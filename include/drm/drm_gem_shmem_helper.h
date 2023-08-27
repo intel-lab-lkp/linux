@@ -74,6 +74,13 @@ struct drm_gem_shmem_object {
 	unsigned int vmap_use_count;
 
 	/**
+	 * @got_sgt:
+	 *
+	 * True if SG table was retrieved using drm_gem_shmem_get_pages_sgt()
+	 */
+	bool got_sgt : 1;
+
+	/**
 	 * @imported_sgt:
 	 *
 	 * True if SG table belongs to imported dma-buf.
