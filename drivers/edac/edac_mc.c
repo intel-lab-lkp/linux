@@ -428,13 +428,10 @@ EXPORT_SYMBOL_GPL(edac_has_mcs);
 static struct mem_ctl_info *__find_mci_by_dev(struct device *dev)
 {
 	struct mem_ctl_info *mci;
-	struct list_head *item;
 
 	edac_dbg(3, "\n");
 
-	list_for_each(item, &mc_devices) {
-		mci = list_entry(item, struct mem_ctl_info, link);
-
+	list_for_each_entry(mci, &mc_devices, link) {
 		if (mci->pdev == dev)
 			return mci;
 	}
@@ -495,20 +492,15 @@ static void edac_mc_workq_function(struct work_struct *work_req)
 void edac_mc_reset_delay_period(unsigned long value)
 {
 	struct mem_ctl_info *mci;
-	struct list_head *item;
 
 	mutex_lock(&mem_ctls_mutex);
 
-	list_for_each(item, &mc_devices) {
-		mci = list_entry(item, struct mem_ctl_info, link);
-
+	list_for_each_entry(mci, &mc_devices, link) {
 		if (mci->op_state == OP_RUNNING_POLL)
 			edac_mod_work(&mci->work, value);
 	}
 	mutex_unlock(&mem_ctls_mutex);
 }
-
-
 
 /* Return 0 on success, 1 on failure.
  * Before calling this function, caller must
@@ -573,12 +565,10 @@ static int del_mc_from_global_list(struct mem_ctl_info *mci)
 struct mem_ctl_info *edac_mc_find(int idx)
 {
 	struct mem_ctl_info *mci;
-	struct list_head *item;
 
 	mutex_lock(&mem_ctls_mutex);
 
-	list_for_each(item, &mc_devices) {
-		mci = list_entry(item, struct mem_ctl_info, link);
+	list_for_each_entry(mci, &mc_devices, link) {
 		if (mci->mc_idx == idx)
 			goto unlock;
 	}

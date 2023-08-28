@@ -71,13 +71,10 @@ EXPORT_SYMBOL_GPL(edac_pci_free_ctl_info);
 static struct edac_pci_ctl_info *find_edac_pci_by_dev(struct device *dev)
 {
 	struct edac_pci_ctl_info *pci;
-	struct list_head *item;
 
 	edac_dbg(1, "\n");
 
-	list_for_each(item, &edac_pci_list) {
-		pci = list_entry(item, struct edac_pci_ctl_info, link);
-
+	list_for_each_entry(pci, &edac_pci_list, link) {
 		if (pci->dev == dev)
 			return pci;
 	}
