@@ -2918,11 +2918,7 @@ static int add_bound_rdev(struct md_rdev *rdev)
 		 */
 		super_types[mddev->major_version].
 			validate_super(mddev, rdev);
-		if (add_journal)
-			mddev_suspend(mddev);
 		err = mddev->pers->hot_add_disk(mddev, rdev);
-		if (add_journal)
-			mddev_resume(mddev);
 		if (err) {
 			md_kick_rdev_from_array(rdev);
 			return err;
@@ -3675,6 +3671,7 @@ rdev_attr_store(struct kobject *kobj, struct attribute *attr,
 	struct rdev_sysfs_entry *entry = container_of(attr, struct rdev_sysfs_entry, attr);
 	struct md_rdev *rdev = container_of(kobj, struct md_rdev, kobj);
 	struct kernfs_node *kn = NULL;
+	bool suspended = false;
 	ssize_t rv;
 	struct mddev *mddev = rdev->mddev;
 
@@ -3683,8 +3680,14 @@ rdev_attr_store(struct kobject *kobj, struct attribute *attr,
 	if (!capable(CAP_SYS_ADMIN))
 		return -EACCES;
 
-	if (entry->store == state_store && cmd_match(page, "remove"))
-		kn = sysfs_break_active_protection(kobj, attr);
+	if (entry->store == state_store) {
+		if (cmd_match(page, "remove"))
+			kn = sysfs_break_active_protection(kobj, attr);
+		if (cmd_match(page, "remove") || cmd_match(page, "re-add")) {
+			__mddev_suspend(mddev);
+			suspended = true;
+		}
+	}
 
 	rv = mddev ? mddev_lock(mddev) : -ENODEV;
 	if (!rv) {
@@ -3693,6 +3696,9 @@ rdev_attr_store(struct kobject *kobj, struct attribute *attr,
 		else
 			rv = entry->store(rdev, page, length);
 		mddev_unlock(mddev);
+
+		if (suspended)
+			__mddev_resume(mddev);
 	}
 
 	if (kn)
