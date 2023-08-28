@@ -93,6 +93,29 @@
 		#size-cells = <1>;
 		ranges = <0 0 0 0xffffffff>;
 
+		qfprom_nvmem: qfprom_nvmem@a0000 {
+			#address-cells = <1>;
+			#size-cells = <1>;
+			compatible = "qcom,ipq5018-qfprom", "qcom,qfprom";
+			reg = <0xa0000 0x1000>;
+
+			tsens_calib: calib@248 {
+				reg = <0x248 0x10>;
+			};
+		};
+
+		tsens: thermal-sensor@4a9000 {
+			compatible = "qcom,ipq5018-tsens", "qcom,tsens-v1";
+			reg = <0x4a9000 0x1000>, /* TM */
+			      <0x4a8000 0x1000>; /* SORT */
+			nvmem-cells = <&tsens_calib>;
+			nvmem-cell-names = "calib";
+			interrupts = <GIC_SPI 184 IRQ_TYPE_EDGE_RISING>;
+			interrupt-names = "uplow";
+			#qcom,sensors = <5>;
+			#thermal-sensor-cells = <1>;
+		};
+
 		tlmm: pinctrl@1000000 {
 			compatible = "qcom,ipq5018-tlmm";
 			reg = <0x01000000 0x300000>;
