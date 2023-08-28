@@ -320,11 +320,17 @@ void thermal_zone_device_critical(struct thermal_zone_device *tz)
 	 * Its a must for forced_emergency_poweroff_work to be scheduled.
 	 */
 	int poweroff_delay_ms = CONFIG_THERMAL_EMERGENCY_POWEROFF_DELAY_MS;
+	void (*hw_protection_action)(const char *reason, int ms_until_forced);
 
 	dev_emerg(&tz->device, "%s: critical temperature reached, "
 		  "shutting down\n", tz->type);
 
-	hw_protection_shutdown("Temperature too high", poweroff_delay_ms);
+	hw_protection_action = hw_protection_shutdown;
+
+	if (tz->action == THERMAL_CRITICAL_ACTION_REBOOT)
+		hw_protection_action = hw_protection_reboot;
+
+	hw_protection_action("Temperature too high", poweroff_delay_ms);
 }
 EXPORT_SYMBOL(thermal_zone_device_critical);
 
