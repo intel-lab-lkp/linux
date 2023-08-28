@@ -1758,7 +1758,9 @@ static int intel_fbc_debugfs_status_show(struct seq_file *m, void *unused)
 	mutex_lock(&fbc->lock);
 
 	if (fbc->active) {
-		seq_puts(m, "FBC enabled\n");
+		seq_printf(m, "FBC enabled: [PLANE:%d:%s]\n",
+			   fbc->state.plane->base.base.id,
+			   fbc->state.plane->base.name);
 		seq_printf(m, "Compressing: %s\n",
 			   str_yes_no(intel_fbc_is_compressing(fbc)));
 	} else {
@@ -1831,10 +1833,16 @@ static void intel_fbc_debugfs_add(struct intel_fbc *fbc,
 
 void intel_fbc_crtc_debugfs_add(struct intel_crtc *crtc)
 {
-	struct intel_plane *plane = to_intel_plane(crtc->base.primary);
+	struct drm_i915_private *i915 = to_i915(crtc->base.dev);
+	struct intel_plane *plane;
 
-	if (plane->fbc)
+	for_each_intel_plane(&i915->drm, plane) {
+		if (!plane->fbc || plane->pipe != crtc->pipe)
+			continue;
+
 		intel_fbc_debugfs_add(plane->fbc, crtc->base.debugfs_entry);
+		break;
+	}
 }
 
 /* FIXME: remove this once igt is on board with per-crtc stuff */
