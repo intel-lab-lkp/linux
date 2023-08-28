@@ -262,16 +262,15 @@ static void of_gpio_set_polarity_by_property(const struct device_node *np,
 	unsigned int i;
 	bool active_high;
 
-#if IS_ENABLED(CONFIG_MMC_ATMELMCI)
 	/*
 	 * The Atmel HSMCI has compatible property in the parent node and
 	 * gpio property in a child node
 	 */
-	if (of_device_is_compatible(np->parent, "atmel,hsmci")) {
+	if (IS_ENABLED(CONFIG_MMC_ATMELMCI) &&
+	    of_device_is_compatible(np->parent, "atmel,hsmci")) {
 		np_compat = np->parent;
 		np_propname = np;
 	}
-#endif
 
 	for (i = 0; i < ARRAY_SIZE(gpios); i++) {
 		if (of_device_is_compatible(np_compat, gpios[i].compatible) &&
