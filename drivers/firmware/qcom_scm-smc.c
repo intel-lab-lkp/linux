@@ -11,6 +11,7 @@
 #include <linux/firmware/qcom/qcom_scm.h>
 #include <linux/arm-smccc.h>
 #include <linux/dma-mapping.h>
+#include <linux/firmware/qcom/shm-bridge.h>
 
 #include "qcom_scm.h"
 
@@ -161,6 +162,7 @@ int __scm_smc_call(struct device *dev, const struct qcom_scm_desc *desc,
 				    ARM_SMCCC_SMC_32 : ARM_SMCCC_SMC_64;
 	struct arm_smccc_res smc_res;
 	struct arm_smccc_args smc = {0};
+	bool using_shm_bridge = qcom_scm_shm_bridge_available();
 
 	smc.args[0] = ARM_SMCCC_CALL_VAL(
 		smccc_call_type,
@@ -173,8 +175,12 @@ int __scm_smc_call(struct device *dev, const struct qcom_scm_desc *desc,
 
 	if (unlikely(arglen > SCM_SMC_N_REG_ARGS)) {
 		alloc_len = SCM_SMC_N_EXT_ARGS * sizeof(u64);
-		args_virt = kzalloc(PAGE_ALIGN(alloc_len), flag);
-
+		if (using_shm_bridge)
+			args_virt = qcom_shm_bridge_alloc(NULL,
+							  PAGE_ALIGN(alloc_len),
+							  flag);
+		else
+			args_virt = kzalloc(PAGE_ALIGN(alloc_len), flag);
 		if (!args_virt)
 			return -ENOMEM;
 
@@ -196,7 +202,10 @@ int __scm_smc_call(struct device *dev, const struct qcom_scm_desc *desc,
 					   DMA_TO_DEVICE);
 
 		if (dma_mapping_error(dev, args_phys)) {
-			kfree(args_virt);
+			if (using_shm_bridge)
+				qcom_shm_bridge_free(args_virt);
+			else
+				kfree(args_virt);
 			return -ENOMEM;
 		}
 
@@ -208,7 +217,10 @@ int __scm_smc_call(struct device *dev, const struct qcom_scm_desc *desc,
 
 	if (args_virt) {
 		dma_unmap_single(dev, args_phys, alloc_len, DMA_TO_DEVICE);
-		kfree(args_virt);
+		if (using_shm_bridge)
+			qcom_shm_bridge_free(args_virt);
+		else
+			kfree(args_virt);
 	}
 
 	if (ret)
