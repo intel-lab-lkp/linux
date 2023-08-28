@@ -31,6 +31,8 @@ module_param(download_mode, bool, 0);
 #define SCM_HAS_IFACE_CLK	BIT(1)
 #define SCM_HAS_BUS_CLK		BIT(2)
 
+#define SCM_SHM_BRIDGE_NOTSUPP	4
+
 struct qcom_scm {
 	struct device *dev;
 	struct clk *core_clk;
@@ -45,6 +47,8 @@ struct qcom_scm {
 	int scm_vote_count;
 
 	u64 dload_mode_addr;
+
+	bool shm_bridge_enabled;
 };
 
 struct qcom_scm_current_perm_info {
@@ -1247,6 +1251,85 @@ bool qcom_scm_lmh_dcvsh_available(void)
 	return __qcom_scm_is_call_available(__scm->dev, QCOM_SCM_SVC_LMH, QCOM_SCM_LMH_LIMIT_DCVSH);
 }
 EXPORT_SYMBOL(qcom_scm_lmh_dcvsh_available);
+
+bool qcom_scm_shm_bridge_available(void)
+{
+	if (!qcom_scm_is_available())
+		return false;
+
+	return READ_ONCE(__scm->shm_bridge_enabled);
+}
+EXPORT_SYMBOL_GPL(qcom_scm_shm_bridge_available);
+
+/*
+ * Must not be called unless qcom_scm_shm_bridge_available() returned true
+ * first.
+ */
+int qcom_scm_enable_shm_bridge(void)
+{
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_MP,
+		.cmd = QCOM_SCM_MP_SHM_BRIDGE_ENABLE,
+		.owner = ARM_SMCCC_OWNER_SIP
+	};
+
+	struct qcom_scm_res res;
+	int ret;
+
+	ret = qcom_scm_call(__scm->dev, &desc, &res);
+	if (!ret && !res.result[0])
+		WRITE_ONCE(__scm->shm_bridge_enabled, true);
+
+	if (res.result[0] == SCM_SHM_BRIDGE_NOTSUPP)
+		ret = -EOPNOTSUPP;
+
+	return ret ?: res.result[0];
+}
+EXPORT_SYMBOL_GPL(qcom_scm_enable_shm_bridge);
+
+int qcom_scm_create_shm_bridge(struct device *dev, u64 pfn_and_ns_perm_flags,
+			       u64 ipfn_and_s_perm_flags, u64 size_and_flags,
+			       u64 ns_vmids, u64 *handle)
+{
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_MP,
+		.cmd = QCOM_SCM_MP_SHM_BRDIGE_CREATE,
+		.owner = ARM_SMCCC_OWNER_SIP
+	};
+
+	struct qcom_scm_res res;
+	int ret;
+
+	desc.args[0] = pfn_and_ns_perm_flags;
+	desc.args[1] = ipfn_and_s_perm_flags;
+	desc.args[2] = size_and_flags;
+	desc.args[3] = ns_vmids;
+
+	desc.arginfo = QCOM_SCM_ARGS(4, QCOM_SCM_VAL, QCOM_SCM_VAL,
+				     QCOM_SCM_VAL, QCOM_SCM_VAL);
+
+	ret = qcom_scm_call(dev ?: __scm->dev, &desc, &res);
+
+	if (handle && !ret)
+		*handle = res.result[1];
+
+	return ret ?: res.result[0];
+}
+EXPORT_SYMBOL_GPL(qcom_scm_create_shm_bridge);
+
+int qcom_scm_delete_shm_bridge(struct device *dev, u64 handle)
+{
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_MP,
+		.cmd = QCOM_SCM_MP_SHM_BRIDGE_DELETE,
+		.owner = ARM_SMCCC_OWNER_SIP,
+		.args[0] = handle,
+		.arginfo = QCOM_SCM_ARGS(1, QCOM_SCM_VAL),
+	};
+
+	return qcom_scm_call(dev ?: __scm->dev, &desc, NULL);
+}
+EXPORT_SYMBOL_GPL(qcom_scm_delete_shm_bridge);
 
 int qcom_scm_lmh_profile_change(u32 profile_id)
 {

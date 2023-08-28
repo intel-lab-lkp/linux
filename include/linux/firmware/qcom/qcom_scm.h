@@ -5,6 +5,7 @@
 #ifndef __QCOM_SCM_H
 #define __QCOM_SCM_H
 
+#include <linux/device.h>
 #include <linux/err.h>
 #include <linux/types.h>
 #include <linux/cpumask.h>
@@ -116,5 +117,12 @@ int qcom_scm_lmh_dcvsh(u32 payload_fn, u32 payload_reg, u32 payload_val,
 		       u64 limit_node, u32 node_id, u64 version);
 int qcom_scm_lmh_profile_change(u32 profile_id);
 bool qcom_scm_lmh_dcvsh_available(void);
+
+bool qcom_scm_shm_bridge_available(void);
+int qcom_scm_enable_shm_bridge(void);
+int qcom_scm_create_shm_bridge(struct device *dev, u64 pfn_and_ns_perm_flags,
+			       u64 ipfn_and_s_perm_flags, u64 size_and_flags,
+			       u64 ns_vmids, u64 *handle);
+int qcom_scm_delete_shm_bridge(struct device *dev, u64 handle);
 
 #endif
