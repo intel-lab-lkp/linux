@@ -731,7 +731,7 @@ static int uhdlc_open(struct net_device *dev)
 		napi_enable(&priv->napi);
 		netdev_reset_queue(dev);
 		netif_start_queue(dev);
-		hdlc_open(dev);
+		return hdlc_open(dev);
 	}
 
 	return 0;
