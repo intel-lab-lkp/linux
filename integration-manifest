@@ -1,0 +1,26 @@
+drm drm-fixes 2dde18cd1d8fac735875f2e4987f11817cc0bc2c
+	Linux 6.5
+drm-misc drm-misc-fixes 0c3b063ef4136191312a88ea7a670a6a2a2dae5a
+	drm/drm_connector: Provide short description of param 'supported_colorspaces'
+drm-intel drm-intel-fixes 1dcc437427bbcebc8381226352f7ade08a271191
+	drm/i915: Fix HPD polling, reenabling the output poll work as needed
+drm drm-next 3698a75f5a98d0a6599e2878ab25d30a82dd836a
+	Merge tag 'drm-intel-next-fixes-2023-08-24' of git://anongit.freedesktop.org/drm/drm-intel into drm-next
+drm-misc drm-misc-next-fixes 4b2fd81f2af7147e844ecec0c5c07a16bca6b86e
+	accel/ivpu: refactor deprecated strncpy
+drm-intel drm-intel-next-fixes cfd48ad8c4a9137b0fde7f0ecf463d44b01875dc
+	drm/i915: Fix HPD polling, reenabling the output poll work as needed
+drm-misc drm-misc-next bb7f98db31b3d4aac30d8b5d1a8f81f738664add
+	drm/tests: Add KUnit tests for drm_fb_memcpy()
+drm-intel drm-intel-next 9af09dfcdfa15490a2ad71acd8c5888f06261ebb
+	drm/i915/color: move pre-SKL gamma and CSC enable read to intel_color
+drm-intel drm-intel-gt-next 8940da9fe5f278ac6ecb4cafa55c784f524cb3b2
+	drm/i915/mtl: Adding DeviceID for Arrowlake-S under MTL
+drm-intel topic/core-for-CI c0ea2fa0491287dea97b384bec1b5a614408b8e3
+	drm/i915/gsc: define gsc fw
+drm-misc topic/i915-ttm 1e3944578b749449bd7fa6bf0bae4c3d3f5f1733
+	Merge tag 'amd-drm-next-5.16-2021-09-27' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm topic/nouveau-misc dfc4005f8c172eea359f9db08c3b2b0ff0153699
+	drm/nouveau/disp: move DAC load detection method
+drm topic/drm-ci 7eba34e03988202a6aa5450db0f55f380eb9ee83
+	drm: Add initial ci/ subdirectory
