@@ -584,7 +584,7 @@ static inline bool md_is_rdwr(struct mddev *mddev)
 
 static inline bool is_md_suspended(struct mddev *mddev)
 {
-	return percpu_ref_is_dying(&mddev->active_io);
+	return READ_ONCE(mddev->suspended);
 }
 
 static inline int __must_check mddev_lock(struct mddev *mddev)

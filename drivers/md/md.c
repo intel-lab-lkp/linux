@@ -355,7 +355,7 @@ static DEFINE_SPINLOCK(all_mddevs_lock);
  */
 static bool is_suspended(struct mddev *mddev, struct bio *bio)
 {
-	if (is_md_suspended(mddev))
+	if (is_md_suspended(mddev) || percpu_ref_is_dying(&mddev->active_io))
 		return true;
 	if (bio_data_dir(bio) != WRITE)
 		return false;
