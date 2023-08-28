@@ -580,6 +580,21 @@ static void skl_fbc_program_cfb_stride(struct intel_fbc *fbc)
 		     CHICKEN_FBC_STRIDE_MASK, val);
 }
 
+static u32 lnl_plane_binding(struct intel_fbc *fbc)
+{
+	switch (fbc->state.plane->id) {
+	default:
+		MISSING_CASE(fbc->state.plane->id);
+		fallthrough;
+	case 0:
+		return DPFC_CTL_PLANE_BINDING_1;
+	case 1:
+		return DPFC_CTL_PLANE_BINDING_2;
+	case 2:
+		return DPFC_CTL_PLANE_BINDING_3;
+	}
+}
+
 static u32 ivb_dpfc_ctl(struct intel_fbc *fbc)
 {
 	const struct intel_fbc_state *fbc_state = &fbc->state;
@@ -590,6 +605,9 @@ static u32 ivb_dpfc_ctl(struct intel_fbc *fbc)
 
 	if (IS_IVYBRIDGE(i915))
 		dpfc_ctl |= DPFC_CTL_PLANE_IVB(fbc_state->plane->i9xx_plane);
+
+	if (DISPLAY_VER(i915) >= 20)
+		dpfc_ctl |= lnl_plane_binding(fbc);
 
 	if (fbc_state->fence_id >= 0)
 		dpfc_ctl |= DPFC_CTL_FENCE_EN_IVB;
@@ -1169,6 +1187,17 @@ static int intel_fbc_check_plane(struct intel_atomic_state *state,
 			plane_state->no_fbc_reason = "pixel rate too high";
 			return 0;
 		}
+	}
+
+	/*
+	 * From LNL, FBC can be assigned on any plane. Until a provision is
+	 * provided for the userspace to select a plane for FBC, lets select
+	 * the first visible plane that is FBC capable.
+	 */
+	if (DISPLAY_VER(i915) >= 20 && fbc->state.plane &&
+	    fbc->state.plane != plane) {
+		plane_state->no_fbc_reason = "fbc enabled on another plane";
+		return 0;
 	}
 
 	plane_state->no_fbc_reason = NULL;

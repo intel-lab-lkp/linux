@@ -1948,7 +1948,10 @@ static bool skl_plane_has_fbc(struct drm_i915_private *dev_priv,
 	if ((DISPLAY_RUNTIME_INFO(dev_priv)->fbc_mask & BIT(fbc_id)) == 0)
 		return false;
 
-	return plane_id == PLANE_PRIMARY;
+	if (DISPLAY_VER(dev_priv) >= 20)
+		return plane_id <= PLANE_SPRITE1;
+	else
+		return plane_id == PLANE_PRIMARY;
 }
 
 static struct intel_fbc *skl_plane_fbc(struct drm_i915_private *dev_priv,
