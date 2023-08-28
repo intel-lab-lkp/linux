@@ -296,6 +296,7 @@ static inline struct bonding *bond_get_bond_by_slave(struct slave *slave)
 static inline bool bond_should_override_tx_queue(struct bonding *bond)
 {
 	return BOND_MODE(bond) == BOND_MODE_ACTIVEBACKUP ||
+	       BOND_MODE(bond) == BOND_MODE_XOR          ||
 	       BOND_MODE(bond) == BOND_MODE_ROUNDROBIN;
 }
 
