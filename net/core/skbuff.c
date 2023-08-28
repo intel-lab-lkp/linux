@@ -4567,6 +4567,8 @@ normal:
 		if (skb_orphan_frags(frag_skb, GFP_ATOMIC) ||
 		    skb_zerocopy_clone(nskb, frag_skb, GFP_ATOMIC))
 			goto err;
+		/* Update nfrags in case skb_copy_ubufs() updates nr_frags */
+		nfrags = skb_shinfo(frag_skb)->nr_frags;
 
 		while (pos < offset + len) {
 			if (i >= nfrags) {
@@ -4587,6 +4589,8 @@ normal:
 				    skb_zerocopy_clone(nskb, frag_skb,
 						       GFP_ATOMIC))
 					goto err;
+				/* Update nfrags in case skb_copy_ubufs() updates nr_frags */
+				nfrags = skb_shinfo(frag_skb)->nr_frags;
 
 				list_skb = list_skb->next;
 			}
