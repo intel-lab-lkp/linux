@@ -1161,14 +1161,12 @@ static void esas2r_disc_fix_curr_requests(struct esas2r_adapter *a)
 	unsigned long flags;
 	struct esas2r_target *t;
 	struct esas2r_request *rq;
-	struct list_head *element;
 
 	/* update virt_targ_id in any outstanding esas2r_requests  */
 
 	spin_lock_irqsave(&a->queue_lock, flags);
 
-	list_for_each(element, &a->defer_list) {
-		rq = list_entry(element, struct esas2r_request, req_list);
+	list_for_each_entry(rq, &a->defer_list, req_list) {
 		if (rq->vrq->scsi.function == VDA_FUNC_SCSI) {
 			t = a->targetdb + rq->target_id;
 
