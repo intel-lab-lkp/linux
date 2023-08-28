@@ -31,6 +31,7 @@
 
 #include <linux/usb/gadgetfs.h>
 #include <linux/usb/gadget.h>
+#include <linux/usb/composite.h>
 
 
 /*
@@ -241,6 +242,7 @@ static DEFINE_MUTEX(sb_mutex);		/* Serialize superblock operations */
 #define xprintk(d,level,fmt,args...) \
 	printk(level "%s: " fmt , shortname , ## args)
 
+#undef DBG
 #ifdef DEBUG
 #define DBG(dev,fmt,args...) \
 	xprintk(dev , KERN_DEBUG , fmt , ## args)
@@ -256,8 +258,10 @@ static DEFINE_MUTEX(sb_mutex);		/* Serialize superblock operations */
 	do { } while (0)
 #endif /* DEBUG */
 
+#undef ERROR
 #define ERROR(dev,fmt,args...) \
 	xprintk(dev , KERN_ERR , fmt , ## args)
+#undef INFO
 #define INFO(dev,fmt,args...) \
 	xprintk(dev , KERN_INFO , fmt , ## args)
 
@@ -1511,7 +1515,16 @@ delegate:
 			event->u.setup = *ctrl;
 			ep0_readable (dev);
 			spin_unlock (&dev->lock);
-			return 0;
+			/*
+			 * Return USB_GADGET_DELAYED_STATUS as a workaround to
+			 * stop some UDC drivers (e.g. dwc3) from automatically
+			 * proceeding with the status stage for 0-length
+			 * transfers.
+			 * Should be removed once all UDC drivers are fixed to
+			 * always delay the status stage until a response is
+			 * queued to EP0.
+			 */
+			return w_length == 0 ? USB_GADGET_DELAYED_STATUS : 0;
 		}
 	}
 
