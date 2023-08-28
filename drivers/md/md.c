@@ -5268,15 +5268,10 @@ suspend_lo_store(struct mddev *mddev, const char *buf, size_t len)
 	if (new != (sector_t)new)
 		return -EINVAL;
 
-	err = mddev_lock(mddev);
-	if (err)
-		return err;
-
-	mddev_suspend(mddev);
+	__mddev_suspend(mddev);
 	WRITE_ONCE(mddev->suspend_lo, new);
-	mddev_resume(mddev);
+	__mddev_resume(mddev);
 
-	mddev_unlock(mddev);
 	return len;
 }
 static struct md_sysfs_entry md_suspend_lo =
@@ -5301,15 +5296,10 @@ suspend_hi_store(struct mddev *mddev, const char *buf, size_t len)
 	if (new != (sector_t)new)
 		return -EINVAL;
 
-	err = mddev_lock(mddev);
-	if (err)
-		return err;
-
-	mddev_suspend(mddev);
+	__mddev_suspend(mddev);
 	WRITE_ONCE(mddev->suspend_hi, new);
-	mddev_resume(mddev);
+	__mddev_resume(mddev);
 
-	mddev_unlock(mddev);
 	return len;
 }
 static struct md_sysfs_entry md_suspend_hi =
