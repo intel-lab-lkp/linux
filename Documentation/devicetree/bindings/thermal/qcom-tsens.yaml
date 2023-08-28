@@ -42,6 +42,7 @@ properties:
               - qcom,msm8956-tsens
               - qcom,msm8976-tsens
               - qcom,qcs404-tsens
+              - qcom,ipq5018-tsens
           - const: qcom,tsens-v1
 
       - description: v2 of TSENS
@@ -407,6 +408,24 @@ examples:
            interrupt-names = "combined";
 
            #qcom,sensors = <16>;
+           #thermal-sensor-cells = <1>;
+    };
+
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    // Example 5 (for any IPQ5018 based SoC-s):
+    tsens5: thermal-sensor@4a9000 {
+           compatible = "qcom,ipq5018-tsens", "qcom,tsens-v1";
+           reg = <0x4a9000 0x1000>, /* TM */
+                 <0x4a8000 0x1000>; /* SORT */
+
+           nvmem-cells = <&tsens_calib>;
+           nvmem-cell-names = "calib";
+
+           interrupts = <GIC_SPI 184 IRQ_TYPE_LEVEL_HIGH>;
+           interrupt-names = "uplow";
+
+           #qcom,sensors = <5>;
            #thermal-sensor-cells = <1>;
     };
 ...
