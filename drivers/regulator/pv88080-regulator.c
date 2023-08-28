@@ -5,6 +5,7 @@
 
 #include <linux/err.h>
 #include <linux/i2c.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/init.h>
@@ -513,7 +514,6 @@ static int pv88080_i2c_probe(struct i2c_client *i2c)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id pv88080_dt_ids[] = {
 	{ .compatible = "pvs,pv88080",    .data = &pv88080_aa_regs },
 	{ .compatible = "pvs,pv88080-aa", .data = &pv88080_aa_regs  },
@@ -521,7 +521,6 @@ static const struct of_device_id pv88080_dt_ids[] = {
 	{}
 };
 MODULE_DEVICE_TABLE(of, pv88080_dt_ids);
-#endif
 
 static const struct i2c_device_id pv88080_i2c_id[] = {
 	{ "pv88080",    (kernel_ulong_t)&pv88080_aa_regs },
@@ -535,7 +534,7 @@ static struct i2c_driver pv88080_regulator_driver = {
 	.driver = {
 		.name = "pv88080",
 		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
-		.of_match_table = of_match_ptr(pv88080_dt_ids),
+		.of_match_table = pv88080_dt_ids,
 	},
 	.probe = pv88080_i2c_probe,
 	.id_table = pv88080_i2c_id,
