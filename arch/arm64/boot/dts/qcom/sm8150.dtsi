@@ -607,6 +607,10 @@
 			compatible = "qcom,scm-sm8150", "qcom,scm";
 			#reset-cells = <1>;
 		};
+
+		shm-bridge {
+			compatible = "qcom,shm-bridge-sm8150", "qcom,shm-bridge";
+		};
 	};
 
 	memory@80000000 {
