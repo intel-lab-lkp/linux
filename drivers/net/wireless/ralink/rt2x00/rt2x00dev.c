@@ -669,7 +669,7 @@ static void rt2x00lib_rxdone_check_ps(struct rt2x00_dev *rt2x00dev,
 	if (!tim)
 		return;
 
-	if (tim[1] < sizeof(*tim_ie))
+	if (tim[1] <= sizeof(*tim_ie))
 		return;
 
 	tim_len = tim[1];

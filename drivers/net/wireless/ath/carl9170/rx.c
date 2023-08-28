@@ -542,7 +542,7 @@ static void carl9170_ps_beacon(struct ar9170 *ar, void *data, unsigned int len)
 	if (!tim)
 		return;
 
-	if (tim[1] < sizeof(*tim_ie))
+	if (tim[1] <= sizeof(*tim_ie))
 		return;
 
 	tim_len = tim[1];
