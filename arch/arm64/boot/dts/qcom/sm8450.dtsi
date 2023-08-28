@@ -289,6 +289,10 @@
 			interconnects = <&aggre2_noc MASTER_CRYPTO 0 &mc_virt SLAVE_EBI1 0>;
 			#reset-cells = <1>;
 		};
+
+		shm-bridge {
+			compatible = "qcom,shm-bridge-sm8450", "qcom,shm-bridge";
+		};
 	};
 
 	clk_virt: interconnect-0 {
