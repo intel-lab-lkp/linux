@@ -209,6 +209,10 @@
 		scm {
 			compatible = "qcom,scm-sa8775p", "qcom,scm";
 		};
+
+		shm-bridge {
+			compatible = "qcom,shm-bridge-sa8775p", "qcom,shm-bridge";
+		};
 	};
 
 	aggre1_noc: interconnect-aggre1-noc {
