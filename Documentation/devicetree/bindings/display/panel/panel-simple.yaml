@@ -67,6 +67,8 @@ properties:
       - auo,g121ean01
         # AU Optronics Corporation 13.3" FHD (1920x1080) TFT LCD panel
       - auo,g133han01
+        # AU Optronics Corporation 15.6" FHD (1920x1080) TFT LCD panel
+      - auo,g156han04
         # AU Optronics Corporation 15.6" (1366x768) TFT LCD panel
       - auo,g156xtn01
         # AU Optronics Corporation 18.5" FHD (1920x1080) TFT LCD panel
