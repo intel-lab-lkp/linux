@@ -8,6 +8,9 @@
 #include <linux/atomic.h>
 #include <uapi/linux/mman.h>
 
+/* Default gap for stack mapping is 256 pages */
+#define DEFAULT_STACK_GUARD_GAP (256UL << PAGE_SHIFT)
+
 /*
  * Arrange for legacy / undefined architecture specific flags to be
  * ignored by mmap handling code.

@@ -2119,7 +2119,7 @@ int expand_downwards(struct vm_area_struct *vma, unsigned long address)
 }
 
 /* enforced gap between the expanding stack and other mappings. */
-unsigned long stack_guard_gap = 256UL<<PAGE_SHIFT;
+unsigned long stack_guard_gap = DEFAULT_STACK_GUARD_GAP;
 
 static int __init cmdline_parse_stack_guard_gap(char *p)
 {
