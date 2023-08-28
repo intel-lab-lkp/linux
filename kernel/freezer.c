@@ -71,7 +71,11 @@ bool __refrigerator(bool check_kthr_stop)
 	for (;;) {
 		bool freeze;
 
+		raw_spin_lock_irq(&current->pi_lock);
 		set_current_state(TASK_FROZEN);
+		/* unstale saved_state so that __thaw_task() will wake us up */
+		current->saved_state = TASK_RUNNING;
+		raw_spin_unlock_irq(&current->pi_lock);
 
 		spin_lock_irq(&freezer_lock);
 		freeze = freezing(current) && !(check_kthr_stop && kthread_should_stop());
@@ -129,6 +133,7 @@ static int __set_task_frozen(struct task_struct *p, void *arg)
 		WARN_ON_ONCE(debug_locks && p->lockdep_depth);
 #endif
 
+	p->saved_state = p->__state;
 	WRITE_ONCE(p->__state, TASK_FROZEN);
 	return TASK_FROZEN;
 }
@@ -174,10 +179,16 @@ bool freeze_task(struct task_struct *p)
  * state in p->jobctl. If either of them got a wakeup that was missed because
  * TASK_FROZEN, then their canonical state reflects that and the below will
  * refuse to restore the special state and instead issue the wakeup.
+ *
+ * Otherwise, restore the saved_state before the task entered freezer. For
+ * typical tasks in the __refrigerator(), saved_state == 0 so nothing happens
+ * here. For tasks which were TASK_NORMAL | TASK_FREEZABLE, their initial state
+ * is returned unless they got an expected wakeup. Then they will be woken up as
+ * TASK_FROZEN back in __thaw_task().
  */
 static int __set_task_special(struct task_struct *p, void *arg)
 {
-	unsigned int state = 0;
+	unsigned int state = p->saved_state;
 
 	if (p->jobctl & JOBCTL_TRACED)
 		state = TASK_TRACED;
@@ -188,7 +199,7 @@ static int __set_task_special(struct task_struct *p, void *arg)
 	if (state)
 		WRITE_ONCE(p->__state, state);
 
-	return state;
+	return state & ~TASK_FROZEN;
 }
 
 void __thaw_task(struct task_struct *p)

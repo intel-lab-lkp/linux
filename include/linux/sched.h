@@ -746,8 +746,8 @@ struct task_struct {
 #endif
 	unsigned int			__state;
 
-#ifdef CONFIG_PREEMPT_RT
-	/* saved state for "spinlock sleepers" */
+#if IS_ENABLED(CONFIG_PREEMPT_RT) || IS_ENABLED(CONFIG_FREEZER)
+	/* saved state for "spinlock sleepers" and freezer */
 	unsigned int			saved_state;
 #endif
 
