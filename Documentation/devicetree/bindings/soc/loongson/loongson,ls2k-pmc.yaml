@@ -15,6 +15,7 @@ properties:
       - enum:
           - loongson,ls2k0500-pmc
           - loongson,ls2k1000-pmc
+          - loongson,ls2k2000-pmc
       - const: syscon
 
   reg:
