@@ -988,7 +988,7 @@ static void sysrq_handle_dbg(u8 key)
 
 static const struct sysrq_key_op sysrq_dbg_op = {
 	.handler	= sysrq_handle_dbg,
-	.help_msg	= "debug(g)",
+	.help_msg	= "debug : g",
 	.action_msg	= "DEBUG",
 };
 #endif

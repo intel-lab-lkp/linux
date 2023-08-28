@@ -308,7 +308,7 @@ static void drm_fb_helper_sysrq(u8 dummy1)
 
 static const struct sysrq_key_op sysrq_drm_fb_helper_restore_op = {
 	.handler = drm_fb_helper_sysrq,
-	.help_msg = "force-fb(v)",
+	.help_msg = "force-fb : v",
 	.action_msg = "Restore framebuffer console",
 };
 #else

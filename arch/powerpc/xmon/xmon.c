@@ -4007,7 +4007,7 @@ static void sysrq_handle_xmon(u8 key)
 
 static const struct sysrq_key_op sysrq_xmon_op = {
 	.handler =	sysrq_handle_xmon,
-	.help_msg =	"xmon(x)",
+	.help_msg =	"xmon : x",
 	.action_msg =	"Entering xmon",
 };
 

@@ -1042,7 +1042,7 @@ static void sysrq_show_rcu(u8 key)
 
 static const struct sysrq_key_op sysrq_rcudump_op = {
 	.handler = sysrq_show_rcu,
-	.help_msg = "show-rcu(y)",
+	.help_msg = "show-rcu : y",
 	.action_msg = "Show RCU tree",
 	.enable_mask = SYSRQ_ENABLE_DUMP,
 };

@@ -53,7 +53,7 @@ static void sysrq_handle_tlbdump(u8 key)
 
 static struct sysrq_key_op sysrq_tlbdump_op = {
 	.handler        = sysrq_handle_tlbdump,
-	.help_msg       = "show-tlbs(x)",
+	.help_msg       = "show-tlbs : x",
 	.action_msg     = "Show TLB entries",
 	.enable_mask	= SYSRQ_ENABLE_DUMP,
 };

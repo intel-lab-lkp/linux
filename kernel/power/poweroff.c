@@ -31,7 +31,7 @@ static void handle_poweroff(u8 key)
 
 static const struct sysrq_key_op	sysrq_poweroff_op = {
 	.handler        = handle_poweroff,
-	.help_msg       = "poweroff(o)",
+	.help_msg       = "poweroff : o",
 	.action_msg     = "Power Off",
 	.enable_mask	= SYSRQ_ENABLE_BOOT,
 };

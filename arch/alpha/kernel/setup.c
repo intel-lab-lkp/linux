@@ -428,7 +428,7 @@ static void sysrq_reboot_handler(u8 unused)
 
 static const struct sysrq_key_op srm_sysrq_reboot_op = {
 	.handler	= sysrq_reboot_handler,
-	.help_msg       = "reboot(b)",
+	.help_msg       = "reboot : b",
 	.action_msg     = "Resetting",
 	.enable_mask    = SYSRQ_ENABLE_BOOT,
 };

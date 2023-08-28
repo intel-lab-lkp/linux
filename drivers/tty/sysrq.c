@@ -108,7 +108,7 @@ static void sysrq_handle_loglevel(u8 key)
 }
 static const struct sysrq_key_op sysrq_loglevel_op = {
 	.handler	= sysrq_handle_loglevel,
-	.help_msg	= "loglevel(0-9)",
+	.help_msg	= "loglevel : 0-9",
 	.action_msg	= "Changing Loglevel",
 	.enable_mask	= SYSRQ_ENABLE_LOG,
 };
@@ -122,7 +122,7 @@ static void sysrq_handle_SAK(u8 key)
 }
 static const struct sysrq_key_op sysrq_SAK_op = {
 	.handler	= sysrq_handle_SAK,
-	.help_msg	= "sak(k)",
+	.help_msg	= "sak : k",
 	.action_msg	= "SAK",
 	.enable_mask	= SYSRQ_ENABLE_KEYBOARD,
 };
@@ -138,7 +138,7 @@ static void sysrq_handle_unraw(u8 key)
 
 static const struct sysrq_key_op sysrq_unraw_op = {
 	.handler	= sysrq_handle_unraw,
-	.help_msg	= "unraw(r)",
+	.help_msg	= "unraw : r",
 	.action_msg	= "Keyboard mode set to system default",
 	.enable_mask	= SYSRQ_ENABLE_KEYBOARD,
 };
@@ -155,7 +155,7 @@ static void sysrq_handle_crash(u8 key)
 }
 static const struct sysrq_key_op sysrq_crash_op = {
 	.handler	= sysrq_handle_crash,
-	.help_msg	= "crash(c)",
+	.help_msg	= "crash : c",
 	.action_msg	= "Trigger a crash",
 	.enable_mask	= SYSRQ_ENABLE_DUMP,
 };
@@ -168,7 +168,7 @@ static void sysrq_handle_reboot(u8 key)
 }
 static const struct sysrq_key_op sysrq_reboot_op = {
 	.handler	= sysrq_handle_reboot,
-	.help_msg	= "reboot(b)",
+	.help_msg	= "reboot : b",
 	.action_msg	= "Resetting",
 	.enable_mask	= SYSRQ_ENABLE_BOOT,
 };
@@ -181,7 +181,7 @@ static void sysrq_handle_sync(u8 key)
 }
 static const struct sysrq_key_op sysrq_sync_op = {
 	.handler	= sysrq_handle_sync,
-	.help_msg	= "sync(s)",
+	.help_msg	= "sync : s",
 	.action_msg	= "Emergency Sync",
 	.enable_mask	= SYSRQ_ENABLE_SYNC,
 };
@@ -193,7 +193,7 @@ static void sysrq_handle_show_timers(u8 key)
 
 static const struct sysrq_key_op sysrq_show_timers_op = {
 	.handler	= sysrq_handle_show_timers,
-	.help_msg	= "show-all-timers(q)",
+	.help_msg	= "show-all-timers : q",
 	.action_msg	= "Show clockevent devices & pending hrtimers (no others)",
 };
 
@@ -203,7 +203,7 @@ static void sysrq_handle_mountro(u8 key)
 }
 static const struct sysrq_key_op sysrq_mountro_op = {
 	.handler	= sysrq_handle_mountro,
-	.help_msg	= "unmount(u)",
+	.help_msg	= "unmount : u",
 	.action_msg	= "Emergency Remount R/O",
 	.enable_mask	= SYSRQ_ENABLE_REMOUNT,
 };
@@ -216,7 +216,7 @@ static void sysrq_handle_showlocks(u8 key)
 
 static const struct sysrq_key_op sysrq_showlocks_op = {
 	.handler	= sysrq_handle_showlocks,
-	.help_msg	= "show-all-locks(d)",
+	.help_msg	= "show-all-locks : d",
 	.action_msg	= "Show Locks Held",
 };
 #else
@@ -274,7 +274,7 @@ static void sysrq_handle_showallcpus(u8 key)
 
 static const struct sysrq_key_op sysrq_showallcpus_op = {
 	.handler	= sysrq_handle_showallcpus,
-	.help_msg	= "show-backtrace-all-active-cpus(l)",
+	.help_msg	= "show-backtrace-all-active-cpus : l",
 	.action_msg	= "Show backtrace of all active CPUs",
 	.enable_mask	= SYSRQ_ENABLE_DUMP,
 };
@@ -294,7 +294,7 @@ static void sysrq_handle_showregs(u8 key)
 }
 static const struct sysrq_key_op sysrq_showregs_op = {
 	.handler	= sysrq_handle_showregs,
-	.help_msg	= "show-registers(p)",
+	.help_msg	= "show-registers : p",
 	.action_msg	= "Show Regs",
 	.enable_mask	= SYSRQ_ENABLE_DUMP,
 };
@@ -306,7 +306,7 @@ static void sysrq_handle_showstate(u8 key)
 }
 static const struct sysrq_key_op sysrq_showstate_op = {
 	.handler	= sysrq_handle_showstate,
-	.help_msg	= "show-task-states(t)",
+	.help_msg	= "show-task-states : t",
 	.action_msg	= "Show State",
 	.enable_mask	= SYSRQ_ENABLE_DUMP,
 };
@@ -317,7 +317,7 @@ static void sysrq_handle_showstate_blocked(u8 key)
 }
 static const struct sysrq_key_op sysrq_showstate_blocked_op = {
 	.handler	= sysrq_handle_showstate_blocked,
-	.help_msg	= "show-blocked-tasks(w)",
+	.help_msg	= "show-blocked-tasks : w",
 	.action_msg	= "Show Blocked State",
 	.enable_mask	= SYSRQ_ENABLE_DUMP,
 };
@@ -331,7 +331,7 @@ static void sysrq_ftrace_dump(u8 key)
 }
 static const struct sysrq_key_op sysrq_ftrace_dump_op = {
 	.handler	= sysrq_ftrace_dump,
-	.help_msg	= "dump-ftrace-buffer(z)",
+	.help_msg	= "dump-ftrace-buffer : z",
 	.action_msg	= "Dump ftrace buffer",
 	.enable_mask	= SYSRQ_ENABLE_DUMP,
 };
@@ -345,7 +345,7 @@ static void sysrq_handle_showmem(u8 key)
 }
 static const struct sysrq_key_op sysrq_showmem_op = {
 	.handler	= sysrq_handle_showmem,
-	.help_msg	= "show-memory-usage(m)",
+	.help_msg	= "show-memory-usage : m",
 	.action_msg	= "Show Memory",
 	.enable_mask	= SYSRQ_ENABLE_DUMP,
 };
@@ -376,7 +376,7 @@ static void sysrq_handle_term(u8 key)
 }
 static const struct sysrq_key_op sysrq_term_op = {
 	.handler	= sysrq_handle_term,
-	.help_msg	= "terminate-all-tasks(e)",
+	.help_msg	= "terminate-all-tasks : e",
 	.action_msg	= "Terminate All Tasks",
 	.enable_mask	= SYSRQ_ENABLE_SIGNAL,
 };
@@ -406,7 +406,7 @@ static void sysrq_handle_moom(u8 key)
 }
 static const struct sysrq_key_op sysrq_moom_op = {
 	.handler	= sysrq_handle_moom,
-	.help_msg	= "memory-full-oom-kill(f)",
+	.help_msg	= "memory-full-oom-kill : f",
 	.action_msg	= "Manual OOM execution",
 	.enable_mask	= SYSRQ_ENABLE_SIGNAL,
 };
@@ -418,7 +418,7 @@ static void sysrq_handle_thaw(u8 key)
 }
 static const struct sysrq_key_op sysrq_thaw_op = {
 	.handler	= sysrq_handle_thaw,
-	.help_msg	= "thaw-filesystems(j)",
+	.help_msg	= "thaw-filesystems : j",
 	.action_msg	= "Emergency Thaw of all frozen filesystems",
 	.enable_mask	= SYSRQ_ENABLE_SIGNAL,
 };
@@ -433,7 +433,7 @@ static void sysrq_handle_kill(u8 key)
 }
 static const struct sysrq_key_op sysrq_kill_op = {
 	.handler	= sysrq_handle_kill,
-	.help_msg	= "kill-all-tasks(i)",
+	.help_msg	= "kill-all-tasks : i",
 	.action_msg	= "Kill All Tasks",
 	.enable_mask	= SYSRQ_ENABLE_SIGNAL,
 };
@@ -444,7 +444,7 @@ static void sysrq_handle_unrt(u8 key)
 }
 static const struct sysrq_key_op sysrq_unrt_op = {
 	.handler	= sysrq_handle_unrt,
-	.help_msg	= "nice-all-RT-tasks(n)",
+	.help_msg	= "nice-all-RT-tasks : n",
 	.action_msg	= "Nice All RT Tasks",
 	.enable_mask	= SYSRQ_ENABLE_RTNICE,
 };
@@ -603,7 +603,7 @@ void __handle_sysrq(u8 key, bool check_mask)
 			console_loglevel = orig_log_level;
 		}
 	} else {
-		pr_info("HELP : ");
+		pr_info("HELP : \n");
 		/* Only print the help msg once per handler */
 		for (i = 0; i < ARRAY_SIZE(sysrq_key_table); i++) {
 			if (sysrq_key_table[i]) {
@@ -615,9 +615,9 @@ void __handle_sysrq(u8 key, bool check_mask)
 				if (j != i)
 					continue;
 				pr_cont("%s ", sysrq_key_table[i]->help_msg);
+				pr_cont("\n");
 			}
 		}
-		pr_cont("\n");
 		console_loglevel = orig_log_level;
 	}
 	rcu_read_unlock();
