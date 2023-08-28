@@ -29,6 +29,7 @@
 #include <linux/sched/signal.h>
 #include <linux/spinlock.h>
 #include <linux/wait.h>
+#include <linux/workqueue.h>
 
 __noreturn void rust_helper_BUG(void)
 {
@@ -136,6 +137,18 @@ void rust_helper_put_task_struct(struct task_struct *t)
 	put_task_struct(t);
 }
 EXPORT_SYMBOL_GPL(rust_helper_put_task_struct);
+
+void rust_helper_init_work_with_key(struct work_struct *work, work_func_t func,
+				    bool onstack, const char *name,
+				    struct lock_class_key *key)
+{
+	__init_work(work, onstack);
+	work->data = (atomic_long_t)WORK_DATA_INIT();
+	lockdep_init_map(&work->lockdep_map, name, key, 0);
+	INIT_LIST_HEAD(&work->entry);
+	work->func = func;
+}
+EXPORT_SYMBOL_GPL(rust_helper_init_work_with_key);
 
 /*
  * `bindgen` binds the C `size_t` type as the Rust `usize` type, so we can
