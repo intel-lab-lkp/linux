@@ -1331,7 +1331,7 @@ static int qcom_scm_find_dload_address(struct device *dev, u64 *addr)
  */
 bool qcom_scm_is_available(void)
 {
-	return !!__scm;
+	return !!READ_ONCE(__scm);
 }
 EXPORT_SYMBOL(qcom_scm_is_available);
 
@@ -1477,8 +1477,8 @@ static int qcom_scm_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	__scm = scm;
-	__scm->dev = &pdev->dev;
+	scm->dev = &pdev->dev;
+	WRITE_ONCE(__scm, scm);
 
 	init_completion(&__scm->waitq_comp);
 
