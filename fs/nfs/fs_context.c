@@ -92,6 +92,7 @@ enum nfs_param {
 	Opt_wsize,
 	Opt_write,
 	Opt_xprtsec,
+	Opt_fasc,
 };
 
 enum {
@@ -199,6 +200,7 @@ static const struct fs_parameter_spec nfs_fs_parameters[] = {
 	fsparam_enum  ("write",		Opt_write, nfs_param_enums_write),
 	fsparam_u32   ("wsize",		Opt_wsize),
 	fsparam_string("xprtsec",	Opt_xprtsec),
+	fsparam_flag  ("fasc",		Opt_fasc),
 	{}
 };
 
@@ -924,6 +926,9 @@ static int nfs_fs_context_parse_param(struct fs_context *fc,
 		 */
 	case Opt_sloppy:
 		ctx->sloppy = true;
+		break;
+	case Opt_fasc:
+		ctx->flags |= NFS_MOUNT_FASC;
 		break;
 	}
 
