@@ -32,6 +32,7 @@
 #include <linux/sched/task.h>
 #include <linux/scs.h>
 #include <linux/mm.h>
+#include <linux/sched_clock.h>
 
 #include <asm/acpi.h>
 #include <asm/fixmap.h>
@@ -53,6 +54,9 @@
 #include <asm/efi.h>
 #include <asm/xen/hypervisor.h>
 #include <asm/mmu_context.h>
+#include <asm/arch_timer.h>
+
+#include <clocksource/arm_arch_timer.h>
 
 static int num_standard_resources;
 static struct resource *standard_resources;
@@ -290,8 +294,23 @@ u64 cpu_logical_map(unsigned int cpu)
 	return __cpu_logical_map[cpu];
 }
 
+static void __init early_sched_clock(void)
+{
+	u64 min_cycles;
+	u64 min_rollover_secs = 40ULL * 365 * 24 * 3600;
+	u32 rate;
+	int width;
+
+	rate = arch_timer_get_cntfrq();
+	min_cycles = min_rollover_secs * rate;
+	width = clamp_val(ilog2(min_cycles - 1) + 1, 56, 64);
+	sched_clock_register(__arch_counter_get_cntvct, width, rate);
+}
+
 void __init __no_sanitize_address setup_arch(char **cmdline_p)
 {
+	early_sched_clock();
+
 	setup_initial_init_mm(_stext, _etext, _edata, _end);
 
 	*cmdline_p = boot_command_line;
