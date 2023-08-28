@@ -615,6 +615,9 @@ void __handle_sysrq(u8 key, bool check_mask)
 				if (j != i)
 					continue;
 				pr_cont("%s ", sysrq_key_table[i]->help_msg);
+				if (!check_mask || (check_mask &&
+					!sysrq_on_mask(sysrq_key_table[i]->enable_mask)))
+					pr_cont("(disabled)");
 				pr_cont("\n");
 			}
 		}
