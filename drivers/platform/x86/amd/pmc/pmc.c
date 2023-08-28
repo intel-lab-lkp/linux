@@ -741,6 +741,21 @@ static int amd_pmc_czn_wa_irq1(struct amd_pmc_dev *pdev)
 	return 0;
 }
 
+static int amd_pmc_rp_wa(struct amd_pmc_dev *pdev)
+{
+	struct pci_dev *pci_dev = NULL;
+
+	while ((pci_dev = pci_get_device(PCI_VENDOR_ID_AMD, PCI_ANY_ID, pci_dev))) {
+		if (!pci_is_pcie(pci_dev) ||
+		    !(pci_pcie_type(pci_dev) == PCI_EXP_TYPE_ROOT_PORT))
+			continue;
+		pci_dev->bridge_d3 = 0;
+		dev_info_once(pdev->dev, "Disabling D3 for PCIe root ports\n");
+	}
+
+	return 0;
+}
+
 static int amd_pmc_verify_czn_rtc(struct amd_pmc_dev *pdev, u32 *arg)
 {
 	struct rtc_device *rtc_device;
@@ -892,6 +907,10 @@ static int amd_pmc_suspend_handler(struct device *dev)
 	switch (pdev->cpu_id) {
 	case AMD_CPU_ID_CZN:
 		rc = amd_pmc_czn_wa_irq1(pdev);
+		break;
+	case AMD_CPU_ID_YC:
+	case AMD_CPU_ID_PS:
+		rc = amd_pmc_rp_wa(pdev);
 		break;
 	default:
 		break;
