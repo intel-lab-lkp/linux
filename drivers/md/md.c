@@ -9609,6 +9609,21 @@ void md_check_recovery(struct mddev *mddev)
 
 		if (mddev_is_clustered(mddev)) {
 			struct md_rdev *rdev, *tmp;
+			bool suspended = false;
+
+			/*
+			 * md-cluster is used for raid1/raid10, and they both
+			 * implement quiesce() callback that is safe to be
+			 * called from daemon thread.
+			 */
+			rdev_for_each(rdev, mddev)
+				if (test_bit(ClusterRemove, &rdev->flags) &&
+				    rdev->raid_disk < 0) {
+					mddev->pers->quiesce(mddev, true);
+					suspended = true;
+					break;
+				}
+
 			/* kick the device if another node issued a
 			 * remove disk.
 			 */
@@ -9617,6 +9632,9 @@ void md_check_recovery(struct mddev *mddev)
 						rdev->raid_disk < 0)
 					md_kick_rdev_from_array(rdev);
 			}
+
+			if (suspended)
+				mddev->pers->quiesce(mddev, false);
 		}
 
 		if (try_set_sync && !mddev->external && !mddev->in_sync) {
@@ -9904,6 +9922,7 @@ static void check_sb_changes(struct mddev *mddev, struct md_rdev *rdev)
 {
 	struct mdp_superblock_1 *sb = page_address(rdev->sb_page);
 	struct md_rdev *rdev2, *tmp;
+	bool suspended = false;
 	int role, ret;
 
 	/*
@@ -9916,6 +9935,22 @@ static void check_sb_changes(struct mddev *mddev, struct md_rdev *rdev)
 			pr_info("md-cluster: resize failed\n");
 		else
 			md_bitmap_update_sb(mddev->bitmap);
+	}
+
+	/*
+	 * md-cluster is used for raid1/raid10, and they both
+	 * implement quiesce() callback.
+	 */
+	rdev_for_each(rdev2, mddev) {
+		if (test_bit(Faulty, &rdev2->flags))
+			continue;
+		role = le16_to_cpu(sb->dev_roles[rdev2->desc_nr]);
+		if (test_bit(Candidate, &rdev2->flags) &&
+		    role == MD_DISK_ROLE_FAULTY) {
+			mddev->pers->quiesce(mddev, true);
+			suspended = true;
+			break;
+		}
 	}
 
 	/* Check for change of roles in the active devices */
@@ -9965,6 +10000,9 @@ static void check_sb_changes(struct mddev *mddev, struct md_rdev *rdev)
 			}
 		}
 	}
+
+	if (suspended)
+		mddev->pers->quiesce(mddev, false);
 
 	if (mddev->raid_disks != le32_to_cpu(sb->raid_disks)) {
 		ret = update_raid_disks(mddev, le32_to_cpu(sb->raid_disks));
