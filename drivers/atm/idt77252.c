@@ -2296,13 +2296,7 @@ idt77252_init_tx(struct idt77252_dev *card, struct vc_map *vc,
 			break;
 
 		case SCHED_UBR:
-			error = idt77252_init_ubr(card, vc, vcc, qos);
-			if (error) {
-				card->scd2vc[vc->scd_index] = NULL;
-				free_scq(card, vc->scq);
-				return error;
-			}
-
+			idt77252_init_ubr(card, vc, vcc, qos);
 			set_bit(VCF_IDLE, &vc->flags);
 			break;
 	}
@@ -2586,9 +2580,7 @@ idt77252_change_qos(struct atm_vcc *vcc, struct atm_qos *qos, int flags)
 				break;
 
 			case ATM_UBR:
-				error = idt77252_init_ubr(card, vc, vcc, qos);
-				if (error)
-					goto out;
+				idt77252_init_ubr(card, vc, vcc, qos);
 
 				if (!test_bit(VCF_IDLE, &vc->flags)) {
 					writel(TCMDQ_LACR | (vc->lacr << 16) |
