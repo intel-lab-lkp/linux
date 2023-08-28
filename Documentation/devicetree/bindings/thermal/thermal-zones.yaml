@@ -75,6 +75,16 @@ patternProperties:
           framework and assumes that the thermal sensors in this zone
           support interrupts.
 
+      critical-action:
+        $ref: /schemas/types.yaml#/definitions/string
+        description:
+          The action that happens after the critical temperature is reached.
+          Possible values are "shutdown" and "reboot".
+
+        enum:
+          - shutdown    # Trigger a shutdown after the critical temperature is reached
+          - reboot      # Trigger a reboot after the critical temperature is reached
+
       thermal-sensors:
         $ref: /schemas/types.yaml#/definitions/phandle-array
         maxItems: 1
