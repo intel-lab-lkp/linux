@@ -487,6 +487,8 @@ static int imx8qxp_ldb_parse_dt_companion(struct imx8qxp_ldb *imx8qxp_ldb)
 	 * string.
 	 */
 	match = of_match_device(dev->driver->of_match_table, dev);
+	if (!match)
+		return -ENODEV;
 	if (!of_device_is_compatible(companion, match->compatible)) {
 		DRM_DEV_ERROR(dev, "companion LDB is incompatible\n");
 		ret = -ENXIO;
