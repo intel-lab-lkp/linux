@@ -226,6 +226,14 @@ config QCOM_SCM_DOWNLOAD_MODE_DEFAULT
 
 	  Say Y here to enable "download mode" by default.
 
+config QCOM_SHM_BRIDGE
+	bool "Qualcomm SHM bridge driver"
+	depends on QCOM_SCM
+	help
+	  Say yes here to enable support for Qualcomm TEE Shared Memory Bridge.
+	  This module exposes interfaces that allow kernel users to allocate
+	  blocks of memory shared with the trustzone.
+
 config SYSFB
 	bool
 	select BOOT_VESA_SUPPORT
