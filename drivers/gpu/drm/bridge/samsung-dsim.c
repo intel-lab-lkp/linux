@@ -611,10 +611,21 @@ static unsigned long samsung_dsim_set_pll(struct samsung_dsim *dsi,
 	u16 m;
 	u32 reg;
 
-	if (dsi->pll_clk)
+	if (dsi->pll_clk) {
+		/*
+		 * Ensure that the reference clock is generated with a power of
+		 * two divider from its parent, but close to the PLLs upper
+		 * limit of the valid range of 2 MHz to 30 MHz.
+		 */
+		fin = clk_get_rate(clk_get_parent(dsi->pll_clk));
+		while (fin > 30 * MHZ)
+			fin = fin / 2;
+		clk_set_rate(dsi->pll_clk, fin);
+
 		fin = clk_get_rate(dsi->pll_clk);
-	else
+	} else {
 		fin = dsi->pll_clk_rate;
+	}
 	dev_dbg(dsi->dev, "PLL ref clock freq %lu\n", fin);
 
 	fout = samsung_dsim_pll_find_pms(dsi, fin, freq, &p, &m, &s);
