@@ -404,6 +404,92 @@ drm_atomic_replace_property_blob_from_id(struct drm_device *dev,
 	return 0;
 }
 
+/*
+ * Helper to replace individual color blobs for a plane. The function
+ * changes all the color blobs sent by userspace agnostic of the color
+ * pipeline chosen. Since, the information about color pipeline is
+ * available at driver level, the driver should check for
+ * the sanity of the userspace data.
+ */
+static
+int drm_plane_replace_color_op_blobs(struct drm_plane *plane,
+				     struct drm_plane_state *state,
+				     uint64_t color_pipeline_blob_id,
+				     bool *replaced)
+{
+	struct drm_device *dev = plane->dev;
+	struct drm_property_blob *new_blob;
+	struct drm_color_pipeline *color_pipeline;
+	struct drm_color_op_data *color_op;
+	int ret = 0, i;
+	bool blob_replaced = false;
+	bool temp_replaced = false;
+
+	new_blob = drm_property_lookup_blob(dev, color_pipeline_blob_id);
+
+	if (!new_blob) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	color_pipeline = new_blob->data;
+	color_op = kzalloc(color_pipeline->size, GFP_KERNEL);
+	if (!color_op) {
+		ret = -ENOMEM;
+		goto mem_fail;
+	}
+
+	if (copy_from_user(color_op, color_pipeline->data, color_pipeline->size)) {
+		ret = -EFAULT;
+		goto copy_fail;
+	}
+
+	for (i = 0; i < color_pipeline->size / sizeof(struct drm_color_op_data); i++) {
+		if (color_op[i].name == DRM_CB_CSC) {
+			ret = drm_atomic_replace_property_blob_from_id(dev,
+							&state->color.ctm,
+							color_op[i].blob_id,
+							-1, sizeof(struct drm_color_ctm),
+							&blob_replaced);
+		} else if (color_op[i].name ==  DRM_CB_PRE_CSC) {
+			ret = drm_atomic_replace_property_blob_from_id(dev,
+							&state->color.pre_csc_lut,
+							color_op[i].blob_id,
+							-1, sizeof(struct drm_color_lut_ext),
+							&blob_replaced);
+		} else if (color_op[i].name == DRM_CB_POST_CSC) {
+			ret = drm_atomic_replace_property_blob_from_id(dev,
+							&state->color.post_csc_lut,
+							color_op[i].blob_id,
+							-1, sizeof(struct drm_color_lut_ext),
+							&blob_replaced);
+		} else if (color_op[i].name == DRM_CB_PRIVATE) {
+			ret = drm_atomic_replace_property_blob_from_id(dev,
+							&state->color.private_color_op_data,
+							color_op[i].blob_id,
+							-1, -1,
+							&blob_replaced);
+		} else {
+			ret = -EINVAL;
+			goto copy_fail;
+		}
+
+		if (ret)
+			goto copy_fail;
+
+		temp_replaced |= blob_replaced;
+	}
+
+copy_fail:
+	kfree(color_op);
+mem_fail:
+	drm_property_blob_put(new_blob);
+out:
+	if (!ret)
+		*replaced |= temp_replaced;
+	return ret;
+}
+
 static int drm_atomic_crtc_set_property(struct drm_crtc *crtc,
 		struct drm_crtc_state *state, struct drm_property *property,
 		uint64_t val)
@@ -597,6 +683,17 @@ static int drm_atomic_plane_set_property(struct drm_plane *plane,
 					-1,
 					sizeof(struct drm_color_pipeline),
 					&replaced);
+		if (replaced) {
+			/* Consider actual color parameter change only when
+			 * individual color blobs are replaced. Hence, reset
+			 * the replaced boolean.
+			 */
+			replaced = false;
+			ret = drm_plane_replace_color_op_blobs(plane, state,
+							       val,
+							       &replaced);
+		}
+
 		state->color_mgmt_changed |= replaced;
 		return ret;
 	} else if (plane->funcs->atomic_set_property) {
