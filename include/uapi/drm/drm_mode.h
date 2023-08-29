@@ -1016,6 +1016,36 @@ struct drm_color_op {
 };
 
 /**
+ * struct drm_color_op_data
+ *
+ * Structure for userspace to send data to a particular color operation
+ * block.
+ *
+ * @name: Name of the color block for which the data is being sent
+ * @blob_id: Id pointing to blob with data for the color operation block
+ */
+struct drm_color_op_data {
+	enum color_op_block name;
+	__u32 blob_id;
+};
+
+/**
+ * struct drm_color_pipeline
+ *
+ * This structure represents the aggregate pipeline to be set
+ *
+ * @num: pipeline number to be selected
+ * @size: size of the data to be passed onto the driver
+ * @data: array of struct drm_color_op_data with data for the
+ *       hardware block/s that user space wants to set values for
+ */
+struct drm_color_pipeline {
+	int num;
+	int size;
+	struct drm_color_op_data *data;
+};
+
+/**
  * DRM_MODE_PAGE_FLIP_EVENT
  *
  * Request that the kernel sends back a vblank event (see
