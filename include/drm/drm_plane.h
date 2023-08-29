@@ -748,6 +748,12 @@ struct drm_plane {
 	 * scaling.
 	 */
 	struct drm_property *scaling_filter_property;
+
+	/**
+	 *  @get_color_pipeline_prop: Optional Plane property to get the color pipelines
+	 *  that the plane supports
+	 */
+	struct drm_property *get_color_pipeline_prop;
 };
 
 #define obj_to_plane(x) container_of(x, struct drm_plane, base)
@@ -945,5 +951,9 @@ drm_plane_get_damage_clips(const struct drm_plane_state *state);
 
 int drm_plane_create_scaling_filter_property(struct drm_plane *plane,
 					     unsigned int supported_filters);
+int drm_plane_create_get_color_pipeline_property(struct drm_device *dev,
+						 struct drm_plane *plane,
+						 int num_val);
+void drm_plane_attach_get_color_pipeline_property(struct drm_plane *plane);
 
 #endif

@@ -589,6 +589,52 @@ int drm_plane_create_color_properties(struct drm_plane *plane,
 EXPORT_SYMBOL(drm_plane_create_color_properties);
 
 /**
+ * drm_plane_create_get_color_pipeline_property - create property to expose color pipelines
+ * @dev: DRM device
+ * @plane: plane object
+ * @num_val: number of color pipelines supported
+ *
+ * create enum property to expose color pipelines to userspace. This enum
+ * property has blob id's as values. With each blob id representing
+ * a distinct color pipeline based on underlying HW capabilities and
+ * their respective combinations.
+ */
+int drm_plane_create_get_color_pipeline_property(struct drm_device *dev,
+						 struct drm_plane *plane,
+						 int num_val)
+{
+	struct drm_property *prop;
+
+	prop = drm_property_create(dev, DRM_MODE_PROP_ENUM |
+				   DRM_MODE_PROP_IMMUTABLE,
+				   "GET_COLOR_PIPELINE", num_val);
+	if (!prop)
+		return -ENOMEM;
+
+	plane->get_color_pipeline_prop = prop;
+
+	return 0;
+}
+EXPORT_SYMBOL(drm_plane_create_get_color_pipeline_property);
+
+/**
+ * drm_plane_attach_get_color_pipeline_property - attach get color pipeline property to a plane
+ * @plane: plane object
+ *
+ * Attach "GET_COLOR_PIPELINE" property to a plane. The property will be visible to
+ * the userspace once we attach the property.
+ */
+void drm_plane_attach_get_color_pipeline_property(struct drm_plane *plane)
+{
+	if (!plane->get_color_pipeline_prop)
+		return;
+
+	drm_object_attach_property(&plane->base,
+				   plane->get_color_pipeline_prop, 0);
+}
+EXPORT_SYMBOL(drm_plane_attach_get_color_pipeline_property);
+
+/**
  * drm_color_lut_check - check validity of lookup table
  * @lut: property blob containing LUT to check
  * @tests: bitmask of tests to run
