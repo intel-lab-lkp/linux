@@ -425,8 +425,8 @@ struct rdt_domain *rdt_find_ctrldomain(struct list_head *h, int id,
 	return __rdt_find_domain(h, id, pos);
 }
 
-struct rdt_domain *rdt_find_mondomain(struct list_head *h, int id,
-				      struct list_head **pos)
+struct rdt_mondomain *rdt_find_mondomain(struct list_head *h, int id,
+					 struct list_head **pos)
 {
 	return __rdt_find_domain(h, id, pos);
 }
@@ -451,7 +451,7 @@ static void domain_free(struct rdt_hw_domain *hw_dom)
 	kfree(hw_dom);
 }
 
-static void mondomain_free(struct rdt_hw_domain *hw_dom)
+static void mondomain_free(struct rdt_hw_mondomain *hw_dom)
 {
 	kfree(hw_dom->arch_mbm_total);
 	kfree(hw_dom->arch_mbm_local);
@@ -484,7 +484,7 @@ static int domain_setup_ctrlval(struct rdt_resource *r, struct rdt_domain *d)
  * @num_rmid:	The size of the MBM counter array
  * @hw_dom:	The domain that owns the allocated arrays
  */
-static int arch_domain_mbm_alloc(u32 num_rmid, struct rdt_hw_domain *hw_dom)
+static int arch_domain_mbm_alloc(u32 num_rmid, struct rdt_hw_mondomain *hw_dom)
 {
 	size_t tsize;
 
@@ -570,9 +570,9 @@ static void domain_add_cpu_ctrl(int cpu, struct rdt_resource *r)
 static void domain_add_cpu_mon(int cpu, struct rdt_resource *r)
 {
 	int id = get_domain_id_from_scope(cpu, r->mon_scope);
-	struct rdt_hw_domain *hw_mondom;
+	struct rdt_hw_mondomain *hw_mondom;
 	struct list_head *add_pos = NULL;
-	struct rdt_domain *d;
+	struct rdt_mondomain *d;
 	int err;
 
 	d = rdt_find_mondomain(&r->mondomains, id, &add_pos);
@@ -663,15 +663,15 @@ static void domain_remove_cpu_ctrl(int cpu, struct rdt_resource *r)
 static void domain_remove_cpu_mon(int cpu, struct rdt_resource *r)
 {
 	int id = get_domain_id_from_scope(cpu, r->mon_scope);
-	struct rdt_hw_domain *hw_mondom;
-	struct rdt_domain *d;
+	struct rdt_hw_mondomain *hw_mondom;
+	struct rdt_mondomain *d;
 
 	d = rdt_find_mondomain(&r->mondomains, id, NULL);
 	if (IS_ERR_OR_NULL(d)) {
 		pr_warn("Couldn't find scope id=%d for CPU %d\n", id, cpu);
 		return;
 	}
-	hw_mondom = resctrl_to_arch_dom(d);
+	hw_mondom = resctrl_to_arch_mondom(d);
 
 	cpumask_clear_cpu(cpu, &d->cpu_mask);
 	if (cpumask_empty(&d->cpu_mask)) {

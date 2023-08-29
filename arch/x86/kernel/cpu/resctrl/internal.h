@@ -106,7 +106,7 @@ union mon_data_bits {
 struct rmid_read {
 	struct rdtgroup		*rgrp;
 	struct rdt_resource	*r;
-	struct rdt_domain	*d;
+	struct rdt_mondomain	*d;
 	enum resctrl_event_id	evtid;
 	bool			first;
 	int			err;
@@ -320,17 +320,28 @@ struct arch_mbm_state {
 
 /**
  * struct rdt_hw_domain - Arch private attributes of a set of CPUs that share
- *			  a resource
+ *			  a control resource
  * @d_resctrl:	Properties exposed to the resctrl file system
  * @ctrl_val:	array of cache or mem ctrl values (indexed by CLOSID)
- * @arch_mbm_total:	arch private state for MBM total bandwidth
- * @arch_mbm_local:	arch private state for MBM local bandwidth
  *
  * Members of this structure are accessed via helpers that provide abstraction.
  */
 struct rdt_hw_domain {
 	struct rdt_domain		d_resctrl;
 	u32				*ctrl_val;
+};
+
+/**
+ * struct rdt_hw_mondomain - Arch private attributes of a set of CPUs that share
+ *			  a monitor resource
+ * @d_resctrl:	Properties exposed to the resctrl file system
+ * @arch_mbm_total:	arch private state for MBM total bandwidth
+ * @arch_mbm_local:	arch private state for MBM local bandwidth
+ *
+ * Members of this structure are accessed via helpers that provide abstraction.
+ */
+struct rdt_hw_mondomain {
+	struct rdt_mondomain		d_resctrl;
 	struct arch_mbm_state		*arch_mbm_total;
 	struct arch_mbm_state		*arch_mbm_local;
 };
@@ -338,6 +349,11 @@ struct rdt_hw_domain {
 static inline struct rdt_hw_domain *resctrl_to_arch_dom(struct rdt_domain *r)
 {
 	return container_of(r, struct rdt_hw_domain, d_resctrl);
+}
+
+static inline struct rdt_hw_mondomain *resctrl_to_arch_mondom(struct rdt_mondomain *r)
+{
+	return container_of(r, struct rdt_hw_mondomain, d_resctrl);
 }
 
 /**
@@ -513,8 +529,8 @@ int rdtgroup_kn_mode_restore(struct rdtgroup *r, const char *name,
 			     umode_t mask);
 struct rdt_domain *rdt_find_ctrldomain(struct list_head *h, int id,
 				       struct list_head **pos);
-struct rdt_domain *rdt_find_mondomain(struct list_head *h, int id,
-				      struct list_head **pos);
+struct rdt_mondomain *rdt_find_mondomain(struct list_head *h, int id,
+					 struct list_head **pos);
 ssize_t rdtgroup_schemata_write(struct kernfs_open_file *of,
 				char *buf, size_t nbytes, loff_t off);
 int rdtgroup_schemata_show(struct kernfs_open_file *of,
@@ -543,17 +559,17 @@ bool __init rdt_cpu_has(int flag);
 void mon_event_count(void *info);
 int rdtgroup_mondata_show(struct seq_file *m, void *arg);
 void mon_event_read(struct rmid_read *rr, struct rdt_resource *r,
-		    struct rdt_domain *d, struct rdtgroup *rdtgrp,
+		    struct rdt_mondomain *d, struct rdtgroup *rdtgrp,
 		    int evtid, int first);
-void mbm_setup_overflow_handler(struct rdt_domain *dom,
+void mbm_setup_overflow_handler(struct rdt_mondomain *dom,
 				unsigned long delay_ms);
 void mbm_handle_overflow(struct work_struct *work);
 void __init intel_rdt_mbm_apply_quirk(void);
 bool is_mba_sc(struct rdt_resource *r);
-void cqm_setup_limbo_handler(struct rdt_domain *dom, unsigned long delay_ms);
+void cqm_setup_limbo_handler(struct rdt_mondomain *dom, unsigned long delay_ms);
 void cqm_handle_limbo(struct work_struct *work);
-bool has_busy_rmid(struct rdt_resource *r, struct rdt_domain *d);
-void __check_limbo(struct rdt_domain *d, bool force_free);
+bool has_busy_rmid(struct rdt_resource *r, struct rdt_mondomain *d);
+void __check_limbo(struct rdt_mondomain *d, bool force_free);
 void rdt_domain_reconfigure_cdp(struct rdt_resource *r);
 void __init thread_throttle_mode_init(void);
 void __init mbm_config_rftype_init(const char *config);
