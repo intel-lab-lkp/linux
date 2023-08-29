@@ -28,6 +28,7 @@
 #include "intel_de.h"
 #include "intel_display_types.h"
 #include "intel_dsb.h"
+#include "skl_universal_plane.h"
 
 struct intel_color_funcs {
 	int (*color_check)(struct intel_crtc_state *crtc_state);
@@ -3974,6 +3975,52 @@ struct drm_color_op color_pipeline_hdr[] = {
 		.type = CURVE_1D,
 		.blob_id = 0,
 	},
+};
+
+__maybe_unused
+static int intel_prepare_plane_color_pipeline(struct drm_plane *plane)
+{
+	struct drm_i915_private *i915 = to_i915(plane->dev);
+	struct drm_property_blob *blob[2] = {NULL};
+	int ret = 0, i = 0;
+
+	if (icl_is_hdr_plane(i915, to_intel_plane(plane)->id)) {
+		blob[i] = drm_property_create_blob(plane->dev,
+						   sizeof(xelpd_pre_csc_hdr),
+						   xelpd_pre_csc_hdr);
+		if (IS_ERR(blob[i])) {
+			ret = PTR_ERR(blob[i]);
+			goto out;
+		}
+
+		/*
+		 * In HDR color pipeline PRE-CSC and POST-CSC are positioned
+		 * at 0th and 2nd index/position
+		 */
+		color_pipeline_hdr[0].blob_id =
+			blob[i++]->base.id;
+
+		blob[i] = drm_property_create_blob(plane->dev,
+						   sizeof(xelpd_post_csc_hdr),
+						   xelpd_post_csc_hdr);
+		if (IS_ERR(blob[i])) {
+			ret = PTR_ERR(blob[i]);
+			goto out;
+		}
+
+		color_pipeline_hdr[2].blob_id =
+			blob[i++]->base.id;
+	}
+
+out:
+	if (ret) {
+		for (int j = 0; j < i; j++) {
+			if (blob[j])
+				drm_property_blob_put(blob[j]);
+		}
+	}
+
+	return ret;
 };
 
 void intel_color_crtc_init(struct intel_crtc *crtc)
