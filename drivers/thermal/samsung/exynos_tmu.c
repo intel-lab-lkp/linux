@@ -275,7 +275,6 @@ static int exynos_tmu_initialize(struct platform_device *pdev)
 	}
 
 	mutex_lock(&data->lock);
-	clk_enable(data->clk);
 	if (!IS_ERR(data->clk_sec))
 		clk_enable(data->clk_sec);
 
@@ -305,7 +304,6 @@ static int exynos_tmu_initialize(struct platform_device *pdev)
 		data->tmu_clear_irqs(data);
 	}
 err:
-	clk_disable(data->clk);
 	mutex_unlock(&data->lock);
 	if (!IS_ERR(data->clk_sec))
 		clk_disable(data->clk_sec);
@@ -336,10 +334,8 @@ static void exynos_tmu_control(struct platform_device *pdev, bool on)
 	struct exynos_tmu_data *data = platform_get_drvdata(pdev);
 
 	mutex_lock(&data->lock);
-	clk_enable(data->clk);
 	data->tmu_control(pdev, on);
 	data->enabled = on;
-	clk_disable(data->clk);
 	mutex_unlock(&data->lock);
 }
 
@@ -654,7 +650,6 @@ static int exynos_get_temp(struct thermal_zone_device *tz, int *temp)
 		return -EAGAIN;
 
 	mutex_lock(&data->lock);
-	clk_enable(data->clk);
 
 	value = data->tmu_read(data);
 	if (value < 0)
@@ -662,7 +657,6 @@ static int exynos_get_temp(struct thermal_zone_device *tz, int *temp)
 	else
 		*temp = code_to_temp(data, value) * MCELSIUS;
 
-	clk_disable(data->clk);
 	mutex_unlock(&data->lock);
 
 	return ret;
@@ -729,9 +723,7 @@ static int exynos_tmu_set_emulation(struct thermal_zone_device *tz, int temp)
 		goto out;
 
 	mutex_lock(&data->lock);
-	clk_enable(data->clk);
 	data->tmu_set_emulation(data, temp);
-	clk_disable(data->clk);
 	mutex_unlock(&data->lock);
 	return 0;
 out:
@@ -769,12 +761,10 @@ static irqreturn_t exynos_tmu_threaded_irq(int irq, void *id)
 	thermal_zone_device_update(data->tzd, THERMAL_EVENT_UNSPECIFIED);
 
 	mutex_lock(&data->lock);
-	clk_enable(data->clk);
 
 	/* TODO: take action based on particular interrupt */
 	data->tmu_clear_irqs(data);
 
-	clk_disable(data->clk);
 	mutex_unlock(&data->lock);
 
 	return IRQ_HANDLED;
@@ -1012,7 +1002,7 @@ static int exynos_tmu_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_sensor;
 
-	data->clk = devm_clk_get(&pdev->dev, "tmu_apbif");
+	data->clk = devm_clk_get_enabled(&pdev->dev, "tmu_apbif");
 	if (IS_ERR(data->clk)) {
 		dev_err(&pdev->dev, "Failed to get clock\n");
 		ret = PTR_ERR(data->clk);
@@ -1034,12 +1024,6 @@ static int exynos_tmu_probe(struct platform_device *pdev)
 		}
 	}
 
-	ret = clk_prepare(data->clk);
-	if (ret) {
-		dev_err(&pdev->dev, "Failed to get clock\n");
-		goto err_clk_sec;
-	}
-
 	switch (data->soc) {
 	case SOC_ARCH_EXYNOS5433:
 	case SOC_ARCH_EXYNOS7:
@@ -1047,12 +1031,12 @@ static int exynos_tmu_probe(struct platform_device *pdev)
 		if (IS_ERR(data->sclk)) {
 			dev_err(&pdev->dev, "Failed to get sclk\n");
 			ret = PTR_ERR(data->sclk);
-			goto err_clk;
+			goto err_clk_sec;
 		} else {
 			ret = clk_prepare_enable(data->sclk);
 			if (ret) {
 				dev_err(&pdev->dev, "Failed to enable sclk\n");
-				goto err_clk;
+				goto err_clk_sec;
 			}
 		}
 		break;
@@ -1094,8 +1078,6 @@ static int exynos_tmu_probe(struct platform_device *pdev)
 
 err_sclk:
 	clk_disable_unprepare(data->sclk);
-err_clk:
-	clk_unprepare(data->clk);
 err_clk_sec:
 	if (!IS_ERR(data->clk_sec))
 		clk_unprepare(data->clk_sec);
@@ -1113,7 +1095,6 @@ static int exynos_tmu_remove(struct platform_device *pdev)
 	exynos_tmu_control(pdev, false);
 
 	clk_disable_unprepare(data->sclk);
-	clk_unprepare(data->clk);
 	if (!IS_ERR(data->clk_sec))
 		clk_unprepare(data->clk_sec);
 
