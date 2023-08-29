@@ -11,6 +11,7 @@
 #include "i915_drv.h"
 #include "i915_reg.h"
 #include "intel_atomic_plane.h"
+#include "intel_color.h"
 #include "intel_de.h"
 #include "intel_display_irq.h"
 #include "intel_display_types.h"
@@ -1267,6 +1268,9 @@ icl_plane_update_noarm(struct intel_plane *plane,
 	 */
 	if (plane_state->force_black)
 		icl_plane_csc_load_black(plane);
+
+	if (plane_state->uapi.color_mgmt_changed)
+		intel_color_load_plane_luts(&plane_state->uapi);
 
 	intel_psr2_program_plane_sel_fetch_noarm(plane, crtc_state, plane_state, color_plane);
 }
