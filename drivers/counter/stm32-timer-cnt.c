@@ -283,7 +283,7 @@ static struct counter_signal stm32_signals[] = {
 	},
 	{
 		.id = 1,
-		.name = "Channel 1 Quadrature B"
+		.name = "Channel 2 Quadrature B"
 	}
 };
 
