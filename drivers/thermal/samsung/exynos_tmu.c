@@ -1027,17 +1027,11 @@ static int exynos_tmu_probe(struct platform_device *pdev)
 	switch (data->soc) {
 	case SOC_ARCH_EXYNOS5433:
 	case SOC_ARCH_EXYNOS7:
-		data->sclk = devm_clk_get(&pdev->dev, "tmu_sclk");
+		data->sclk = devm_clk_get_enabled(&pdev->dev, "tmu_sclk");
 		if (IS_ERR(data->sclk)) {
 			dev_err(&pdev->dev, "Failed to get sclk\n");
 			ret = PTR_ERR(data->sclk);
 			goto err_clk_sec;
-		} else {
-			ret = clk_prepare_enable(data->sclk);
-			if (ret) {
-				dev_err(&pdev->dev, "Failed to enable sclk\n");
-				goto err_clk_sec;
-			}
 		}
 		break;
 	default:
@@ -1055,13 +1049,13 @@ static int exynos_tmu_probe(struct platform_device *pdev)
 		if (ret != -EPROBE_DEFER)
 			dev_err(&pdev->dev, "Failed to register sensor: %d\n",
 				ret);
-		goto err_sclk;
+		goto err_clk_sec;
 	}
 
 	ret = exynos_tmu_initialize(pdev);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to initialize TMU\n");
-		goto err_sclk;
+		goto err_clk_sec;
 	}
 
 	ret = devm_request_threaded_irq(
@@ -1070,14 +1064,12 @@ static int exynos_tmu_probe(struct platform_device *pdev)
 		dev_name(&pdev->dev), data);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to request irq: %d\n", data->irq);
-		goto err_sclk;
+		goto err_clk_sec;
 	}
 
 	exynos_tmu_control(pdev, true);
 	return 0;
 
-err_sclk:
-	clk_disable_unprepare(data->sclk);
 err_clk_sec:
 	if (!IS_ERR(data->clk_sec))
 		clk_unprepare(data->clk_sec);
@@ -1094,7 +1086,6 @@ static int exynos_tmu_remove(struct platform_device *pdev)
 
 	exynos_tmu_control(pdev, false);
 
-	clk_disable_unprepare(data->sclk);
 	if (!IS_ERR(data->clk_sec))
 		clk_unprepare(data->clk_sec);
 
