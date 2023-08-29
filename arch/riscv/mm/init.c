@@ -1326,7 +1326,7 @@ static void __init reserve_crashkernel(void)
 	}
 
 	ret = parse_crashkernel(boot_command_line, memblock_phys_mem_size(),
-				&crash_size, &crash_base);
+				&crash_size, &crash_base, NULL, NULL);
 	if (ret || !crash_size)
 		return;
 
