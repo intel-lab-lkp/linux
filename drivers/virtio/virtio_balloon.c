@@ -386,6 +386,17 @@ static void stats_handle_request(struct virtio_balloon *vb)
 	virtqueue_kick(vq);
 }
 
+static inline s64 align_pages_up(s64 diff)
+{
+	if (diff == 0)
+		return diff;
+
+	if (diff > 0)
+		return ALIGN(diff, VIRTIO_BALLOON_PAGES_PER_PAGE);
+
+	return -ALIGN(-diff, VIRTIO_BALLOON_PAGES_PER_PAGE);
+}
+
 static inline s64 towards_target(struct virtio_balloon *vb)
 {
 	s64 target;
@@ -396,7 +407,7 @@ static inline s64 towards_target(struct virtio_balloon *vb)
 			&num_pages);
 
 	target = num_pages;
-	return target - vb->num_pages;
+	return align_pages_up(target - vb->num_pages);
 }
 
 /* Gives back @num_to_return blocks of free pages to mm. */
