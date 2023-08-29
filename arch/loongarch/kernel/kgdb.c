@@ -150,7 +150,8 @@ char *dbg_get_reg(int regno, void *mem, struct pt_regs *regs)
 	}
 
 	/* Handle LBT registers */
-	if ((regs->csr_euen & CSR_EUEN_LBTEN)) {
+	if (IS_ENABLED(CONFIG_CPU_HAS_LBT) &&
+	    (regs->csr_euen & CSR_EUEN_LBTEN)) {
 		_save_lbt(&current->thread.lbt);
 
 		switch (regno) {
@@ -211,7 +212,8 @@ int dbg_set_reg(int regno, void *mem, struct pt_regs *regs)
 	}
 
 	/* Handle LBT registers */
-	if ((regs->csr_euen & CSR_EUEN_LBTEN)) {
+	if (IS_ENABLED(CONFIG_CPU_HAS_LBT) &&
+	    (regs->csr_euen & CSR_EUEN_LBTEN)) {
 		switch (regno) {
 		case DBG_FTOP:				/* Process the ftop */
 			memcpy((char *)&current->thread.fpu.ftop, mem, reg_size);
