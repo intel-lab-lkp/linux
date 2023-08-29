@@ -369,6 +369,7 @@ struct nfs4_client {
 #define NFSD4_CLIENT_CB_FLAG_MASK	(1 << NFSD4_CLIENT_CB_UPDATE | \
 					 1 << NFSD4_CLIENT_CB_KILL)
 #define NFSD4_CLIENT_CB_RECALL_ANY	(6)
+#define NFSD4_CLIENT_CL_REVOKED (7)
 	unsigned long		cl_flags;
 	const struct cred	*cl_cb_cred;
 	struct rpc_clnt		*cl_cb_client;

@@ -2830,18 +2830,28 @@ static ssize_t client_ctl_write(struct file *file, const char __user *buf,
 {
 	char *data;
 	struct nfs4_client *clp;
+	ssize_t rc = size;
 
 	data = simple_transaction_get(file, buf, size);
 	if (IS_ERR(data))
 		return PTR_ERR(data);
-	if (size != 7 || 0 != memcmp(data, "expire\n", 7))
+
+	if (size != 7)
 		return -EINVAL;
+
 	clp = get_nfsdfs_clp(file_inode(file));
 	if (!clp)
 		return -ENXIO;
-	force_expire_client(clp);
+
+	if (!memcmp(data, "revoke\n", 7))
+		set_bit(NFSD4_CLIENT_CL_REVOKED, &clp->cl_flags);
+	else if (!memcmp(data, "expire\n", 7))
+		force_expire_client(clp);
+	else
+		rc = -EINVAL;
+
 	drop_client(clp);
-	return 7;
+	return rc;
 }
 
 static const struct file_operations client_ctl_fops = {
@@ -4042,7 +4052,8 @@ out:
 	default:
 		seq->status_flags = 0;
 	}
-	if (!list_empty(&clp->cl_revoked))
+	if (!list_empty(&clp->cl_revoked) ||
+			test_and_clear_bit(NFSD4_CLIENT_CL_REVOKED, &clp->cl_flags))
 		seq->status_flags |= SEQ4_STATUS_RECALLABLE_STATE_REVOKED;
 out_no_session:
 	if (conn)
