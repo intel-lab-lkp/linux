@@ -3182,6 +3182,19 @@ static inline bool vma_accessed_recent(struct vm_area_struct *vma)
 	return (bitmap_weight(pids, BITS_PER_LONG) >= 1);
 }
 
+#define SHARED_VMA_THRESH	3
+
+static inline bool vma_shared_access(struct vm_area_struct *vma)
+{
+	int i;
+	unsigned long pids = 0;
+
+	for (i = 0; i < NR_ACCESS_PID_HIST; i++)
+		pids  |= vma->numab_state->access_pids[i];
+
+	return (bitmap_weight(&pids, BITS_PER_LONG) >= SHARED_VMA_THRESH);
+}
+
 static bool vma_is_accessed(struct vm_area_struct *vma)
 {
 	/* Check at least one task had accessed VMA recently. */
@@ -3192,7 +3205,8 @@ static bool vma_is_accessed(struct vm_area_struct *vma)
 	if (vma_test_access_pid_history(vma))
 		return true;
 
-	return false;
+	/* Check if VMA is shared by many tasks. */
+	return vma_shared_access(vma);
 }
 
 #define VMA_PID_RESET_PERIOD (4 * sysctl_numa_balancing_scan_delay)
