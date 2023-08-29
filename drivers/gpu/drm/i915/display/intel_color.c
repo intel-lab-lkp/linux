@@ -3941,6 +3941,24 @@ static const struct drm_color_lut_range xelpd_post_csc_hdr[] = {
 	},
 };
 
+struct drm_color_op color_pipeline_hdr[] = {
+	{
+		.name = DRM_CB_PRE_CSC,
+		.type = CURVE_1D,
+		.blob_id = 0, /* To be updated during plane initialization */
+	},
+	{
+		.name = DRM_CB_CSC,
+		.type = MATRIX,
+		.blob_id = 0,
+	},
+	{
+		.name = DRM_CB_POST_CSC,
+		.type = CURVE_1D,
+		.blob_id = 0,
+	},
+};
+
 void intel_color_crtc_init(struct intel_crtc *crtc)
 {
 	struct drm_i915_private *i915 = to_i915(crtc->base.dev);
