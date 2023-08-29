@@ -526,21 +526,34 @@ unsigned int mtk_drm_find_possible_crtc_by_comp(struct drm_device *drm,
 						struct device *dev)
 {
 	struct mtk_drm_private *private = drm->dev_private;
-	unsigned int ret = 0;
+	int i = 0;
 
-	if (mtk_drm_find_comp_in_ddp(dev, private->data->main_path, private->data->main_len,
-				     private->ddp_comp))
-		ret = BIT(0);
-	else if (mtk_drm_find_comp_in_ddp(dev, private->data->ext_path,
-					  private->data->ext_len, private->ddp_comp))
-		ret = BIT(1);
-	else if (mtk_drm_find_comp_in_ddp(dev, private->data->third_path,
-					  private->data->third_len, private->ddp_comp))
-		ret = BIT(2);
-	else
-		DRM_INFO("Failed to find comp in ddp table\n");
+	if (private->data->main_path) {
+		if (mtk_drm_find_comp_in_ddp(dev, private->data->main_path,
+					     private->data->main_len,
+					     private->ddp_comp))
+			return BIT(i);
+		i++;
+	}
 
-	return ret;
+	if (private->data->ext_path) {
+		if (mtk_drm_find_comp_in_ddp(dev, private->data->ext_path,
+					     private->data->ext_len,
+					     private->ddp_comp))
+			return BIT(i);
+		i++;
+	}
+
+	if (private->data->third_path) {
+		if (mtk_drm_find_comp_in_ddp(dev, private->data->third_path,
+					     private->data->third_len,
+					     private->ddp_comp))
+			return BIT(i);
+		i++;
+	}
+
+	DRM_INFO("Failed to find comp in ddp table\n");
+	return 0;
 }
 
 int mtk_ddp_comp_init(struct device_node *node, struct mtk_ddp_comp *comp,
