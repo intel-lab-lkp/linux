@@ -362,6 +362,38 @@ static s32 __user *get_out_fence_for_connector(struct drm_atomic_state *state,
 	return fence_ptr;
 }
 
+static
+bool color_pipeline_change_requested(struct drm_device *dev,
+				     struct drm_property_blob *plane_cp_set_blob,
+				     uint64_t blob_id)
+{
+	bool is_change_requested = false;
+	struct drm_property_blob *new_blob = NULL;
+	struct drm_color_pipeline *old_cp, *new_cp;
+
+	/*
+	 * User is setting the pipeline for the first time
+	 */
+	if (!plane_cp_set_blob)
+		goto out;
+
+	old_cp = plane_cp_set_blob->data;
+
+	if (blob_id != 0) {
+		new_blob = drm_property_lookup_blob(dev, blob_id);
+		if (!new_blob)
+			goto out;
+
+		new_cp = new_blob->data;
+
+		if (old_cp->num != new_cp->num)
+			is_change_requested = true;
+	}
+	drm_property_blob_put(new_blob);
+out:
+	return is_change_requested;
+}
+
 static int
 drm_atomic_replace_property_blob_from_id(struct drm_device *dev,
 					 struct drm_property_blob **blob,
@@ -727,6 +759,12 @@ static int drm_atomic_plane_set_property(struct drm_plane *plane,
 	} else if (property == plane->scaling_filter_property) {
 		state->scaling_filter = val;
 	} else if (property == plane->set_color_pipeline_prop) {
+		bool cp_change_requested;
+
+		cp_change_requested = color_pipeline_change_requested(dev,
+						state->set_color_pipeline_data,
+						val);
+
 		ret = drm_atomic_replace_property_blob_from_id(dev,
 					&state->set_color_pipeline_data,
 					val,
@@ -736,12 +774,18 @@ static int drm_atomic_plane_set_property(struct drm_plane *plane,
 		if (replaced) {
 			/* Consider actual color parameter change only when
 			 * individual color blobs are replaced. Hence, reset
-			 * the replaced boolean.
+			 * the replaced boolean but first reset all color
+			 * blobs if color pipeline change is requested.
 			 */
+			if (val && cp_change_requested)
+				ret = drm_plane_reset_color_op_blobs(plane,
+								state, &replaced);
 			replaced = false;
-			ret = drm_plane_replace_color_op_blobs(plane, state,
-							       val,
-							       &replaced);
+			if (!ret) {
+				ret = drm_plane_replace_color_op_blobs(plane, state,
+								       val,
+								       &replaced);
+			}
 		}
 
 		state->color_mgmt_changed |= replaced;
