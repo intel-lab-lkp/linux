@@ -8,6 +8,7 @@
  *
  */
 
+#include <linux/dmi.h>
 #include <linux/err.h>
 #include <linux/bug.h>
 #include <linux/kernel.h>
@@ -40,6 +41,27 @@ static int powerbtn = -1;
 module_param(powerbtn, int, 0444);
 MODULE_PARM_DESC(powerbtn,
 		 "Power button debouncing: 0=traditional, 1=windows, -1=auto");
+
+struct pinctrl_amd_dmi_quirk {
+	int powerbtn;
+};
+
+static const struct dmi_system_id pinctrl_amd_dmi_quirks[] __initconst = {
+	{
+		/*
+		 * Lenovo Ideapad 5
+		 * Power button GPIO not cleared until touchpad movement
+		 * https://bugzilla.kernel.org/show_bug.cgi?id=217833
+		 */
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "82LM"),
+		},
+		.driver_data = &(struct pinctrl_amd_dmi_quirk) {
+			.powerbtn = 0,
+		},
+	}
+};
 
 static int amd_gpio_get_direction(struct gpio_chip *gc, unsigned offset)
 {
@@ -1084,8 +1106,16 @@ static void handle_powerbtn(struct amd_gpio *gpio_dev)
 {
 	u32 pin_reg;
 
-	if (powerbtn == -1)
-		return;
+	if (powerbtn == -1) {
+		const struct pinctrl_amd_dmi_quirk *quirk = NULL;
+		const struct dmi_system_id *id;
+
+		id = dmi_first_match(pinctrl_amd_dmi_quirks);
+		if (!id)
+			return;
+		quirk = id->driver_data;
+		powerbtn = quirk->powerbtn;
+	}
 
 	pin_reg = readl(gpio_dev->base + WAKE_INT_MASTER_REG);
 	switch (powerbtn) {
