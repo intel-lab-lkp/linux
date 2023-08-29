@@ -796,6 +796,9 @@ struct vmap_node {
 	atomic_t fill_in_progress;
 };
 
+#define MAX_NODES U8_MAX
+#define MAX_NODE_SIZE SZ_4M
+
 static struct vmap_node *nodes, snode;
 static __read_mostly unsigned int nr_nodes = 1;
 static __read_mostly unsigned int node_size = 1;
@@ -4807,11 +4810,24 @@ static void vmap_init_free_space(void)
 	}
 }
 
+static unsigned int calculate_nr_nodes(void)
+{
+	unsigned int nr_cpus;
+
+	nr_cpus = num_present_cpus();
+	if (nr_cpus <= 1)
+		nr_cpus = num_possible_cpus();
+
+	/* Density factor. Two users per a node. */
+	return clamp_t(unsigned int, nr_cpus >> 1, 1, MAX_NODES);
+}
+
 static void vmap_init_nodes(void)
 {
 	struct vmap_node *vn;
 	int i;
 
+	nr_nodes = calculate_nr_nodes();
 	nodes = &snode;
 
 	if (nr_nodes > 1) {
@@ -4834,6 +4850,16 @@ static void vmap_init_nodes(void)
 		INIT_LIST_HEAD(&vn->free.head);
 		spin_lock_init(&vn->free.lock);
 	}
+
+	/*
+	 * Scale a node size to number of CPUs. Each power of two
+	 * value doubles a node size. A high-threshold limit is set
+	 * to 4M.
+	 */
+#if BITS_PER_LONG == 64
+	if (nr_nodes > 1)
+		node_size = min(SZ_64K << fls(num_possible_cpus()), SZ_4M);
+#endif
 }
 
 void __init vmalloc_init(void)
