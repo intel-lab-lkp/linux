@@ -591,7 +591,7 @@ static long mdpy_ioctl(struct vfio_device *vdev, unsigned int cmd,
 
 	case VFIO_DEVICE_QUERY_GFX_PLANE:
 	{
-		struct vfio_device_gfx_plane_info plane;
+		struct vfio_device_gfx_plane_info plane = {};
 
 		minsz = offsetofend(struct vfio_device_gfx_plane_info,
 				    region_index);
@@ -601,6 +601,8 @@ static long mdpy_ioctl(struct vfio_device *vdev, unsigned int cmd,
 
 		if (plane.argsz < minsz)
 			return -EINVAL;
+
+		minsz = min_t(unsigned long, plane.argsz, sizeof(plane));
 
 		ret = mdpy_query_gfx_plane(mdev_state, &plane);
 		if (ret)

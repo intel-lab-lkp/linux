@@ -1379,7 +1379,7 @@ static long intel_vgpu_ioctl(struct vfio_device *vfio_dev, unsigned int cmd,
 		intel_gvt_reset_vgpu(vgpu);
 		return 0;
 	} else if (cmd == VFIO_DEVICE_QUERY_GFX_PLANE) {
-		struct vfio_device_gfx_plane_info dmabuf;
+		struct vfio_device_gfx_plane_info dmabuf = {};
 		int ret = 0;
 
 		minsz = offsetofend(struct vfio_device_gfx_plane_info,
@@ -1388,6 +1388,8 @@ static long intel_vgpu_ioctl(struct vfio_device *vfio_dev, unsigned int cmd,
 			return -EFAULT;
 		if (dmabuf.argsz < minsz)
 			return -EINVAL;
+
+		minsz = min(dmabuf.argsz, sizeof(dmabuf));
 
 		ret = intel_vgpu_query_plane(vgpu, &dmabuf);
 		if (ret != 0)
