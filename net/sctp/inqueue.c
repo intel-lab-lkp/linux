@@ -197,6 +197,7 @@ new_skb:
 		}
 	}
 
+	ch->length = htons(sizeof(*ch));
 	chunk->chunk_hdr = ch;
 	chunk->chunk_end = ((__u8 *)ch) + SCTP_PAD4(ntohs(ch->length));
 	skb_pull(chunk->skb, sizeof(*ch));
