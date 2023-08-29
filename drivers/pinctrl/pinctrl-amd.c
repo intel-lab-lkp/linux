@@ -590,6 +590,7 @@ static const struct irq_chip amd_gpio_irqchip = {
 	GPIOCHIP_IRQ_RESOURCE_HELPERS,
 };
 
+#define GPIO0_LESS_TIME	(BIT(GPIO0_LESS_2_OFF) | BIT(GPIO0_LESS_10_OFF))
 #define PIN_IRQ_PENDING	(BIT(INTERRUPT_STS_OFF) | BIT(WAKE_STS_OFF))
 
 static bool do_amd_gpio_irq_handler(int irq, void *dev_id)
@@ -609,6 +610,14 @@ static bool do_amd_gpio_irq_handler(int irq, void *dev_id)
 	status <<= 32;
 	status |= readl(gpio_dev->base + WAKE_INT_STATUS_REG0);
 	raw_spin_unlock_irqrestore(&gpio_dev->lock, flags);
+
+	/* check GPIO0 specifically for Less2 and Less10 */
+	regval = readl(gpio_dev->base);
+	if (regval & GPIO0_LESS_TIME) {
+		pm_pr_dbg("GPIO0 was pressed for less than %d seconds\n",
+			  regval & BIT(GPIO0_LESS_10_OFF) ? 10 : 2);
+		writel(regval | BIT(INTERRUPT_STS_OFF), gpio_dev->base);
+	}
 
 	/* Bit 0-45 contain the relevant status bits */
 	status &= (1ULL << 46) - 1;

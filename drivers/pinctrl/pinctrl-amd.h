@@ -45,6 +45,8 @@
 #define WAKECNTRL_Z_OFF			27
 #define INTERRUPT_STS_OFF		28
 #define WAKE_STS_OFF			29
+#define GPIO0_LESS_2_OFF		30
+#define GPIO0_LESS_10_OFF		31
 
 #define DB_TMR_OUT_MASK	0xFUL
 #define DB_CNTRl_MASK	0x3UL
