@@ -3941,6 +3941,23 @@ static const struct drm_color_lut_range xelpd_post_csc_hdr[] = {
 	},
 };
 
+struct drm_color_op color_pipeline_sdr[] = {
+	{
+		.name = DRM_CB_PRE_CSC,
+		.type = CURVE_1D,
+		.blob_id = 0, /* To be updated during plane initialization */
+	},
+	/*
+	 * SDR planes have fixed function CSC capabilities.
+	 * TODO: Add support for it
+	 */
+	{
+		.name = DRM_CB_POST_CSC,
+		.type = CURVE_1D,
+		.blob_id = 0,
+	},
+};
+
 struct drm_color_op color_pipeline_hdr[] = {
 	{
 		.name = DRM_CB_PRE_CSC,
