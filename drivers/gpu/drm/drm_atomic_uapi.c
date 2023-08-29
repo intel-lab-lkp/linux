@@ -484,6 +484,15 @@ int drm_plane_reset_color_op_blobs(struct drm_plane *plane,
 
 	if (ret)
 		goto out;
+
+	ret = drm_atomic_replace_property_blob_from_id(dev,
+						       &state->color.lut_3d,
+						       0, -1, -1,
+						       &blob_replaced);
+	temp_replaced |= blob_replaced;
+
+	if (ret)
+		goto out;
 out:
 	if (!ret)
 		*replaced |= temp_replaced;
@@ -550,6 +559,12 @@ int drm_plane_replace_color_op_blobs(struct drm_plane *plane,
 							&state->color.private_color_op_data,
 							color_op[i].blob_id,
 							-1, -1,
+							&blob_replaced);
+		} else if (color_op[i].name == DRM_CB_3D_LUT) {
+			ret = drm_atomic_replace_property_blob_from_id(dev,
+							&state->color.lut_3d,
+							color_op[i].blob_id,
+							-1, sizeof(struct drm_color_lut_ext),
 							&blob_replaced);
 		} else {
 			ret = -EINVAL;

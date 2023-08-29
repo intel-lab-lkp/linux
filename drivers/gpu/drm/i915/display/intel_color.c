@@ -4265,6 +4265,19 @@ static const struct drm_color_lut_range xelpd_post_csc_hdr[] = {
 	},
 };
 
+static const struct drm_color_lut_range dummy_3d_lut_range[] = {
+	{
+		.flags = (DRM_MODE_LUT_POST_CSC |
+			  DRM_MODE_LUT_REFLECT_NEGATIVE |
+			  DRM_MODE_LUT_INTERPOLATE |
+			  DRM_MODE_LUT_NON_DECREASING),
+		.count = 32,
+		.input_bpc = 24, .output_bpc = 16,
+		.start = 0, .end = (1 << 24) - 1,
+		.min = 0, .max = (1 << 24) - 1,
+	},
+};
+
 struct drm_color_op color_pipeline_sdr[] = {
 	{
 		.name = DRM_CB_PRE_CSC,
@@ -4300,10 +4313,17 @@ struct drm_color_op color_pipeline_hdr[] = {
 	},
 };
 
+struct drm_color_op color_pipeline_3dlut[] = {
+	{
+		.name = DRM_CB_3D_LUT,
+		.type = CURVE_3D,
+	},
+};
+
 static int intel_prepare_plane_color_pipeline(struct drm_plane *plane)
 {
 	struct drm_i915_private *i915 = to_i915(plane->dev);
-	struct drm_property_blob *blob[2] = {NULL};
+	struct drm_property_blob *blob[3] = {NULL};
 	int ret = 0, i = 0;
 
 	if (icl_is_hdr_plane(i915, to_intel_plane(plane)->id)) {
@@ -4350,6 +4370,17 @@ static int intel_prepare_plane_color_pipeline(struct drm_plane *plane)
 			color_pipeline_sdr[1].blob_id = blob[i++]->base.id;
 	}
 
+	blob[i] = drm_property_create_blob(plane->dev,
+					   sizeof(dummy_3d_lut_range),
+					   dummy_3d_lut_range);
+
+	if (IS_ERR(blob[i])) {
+		ret = PTR_ERR(blob[i]);
+		goto out;
+	}
+
+	color_pipeline_3dlut[0].blob_id = blob[i++]->base.id;
+
 out:
 	if (ret) {
 		for (int j = 0; j < i; j++) {
@@ -4368,7 +4399,7 @@ void intel_color_plane_init(struct drm_plane *plane)
 	if (DISPLAY_VER(i915) < 13)
 		return;
 
-	drm_plane_create_get_color_pipeline_property(plane->dev, plane, 2);
+	drm_plane_create_get_color_pipeline_property(plane->dev, plane, 3);
 
 	intel_prepare_plane_color_pipeline(plane);
 
@@ -4387,6 +4418,8 @@ void intel_color_plane_init(struct drm_plane *plane)
 					     color_pipeline_sdr,
 					     sizeof(color_pipeline_sdr));
 
+	drm_plane_add_color_pipeline(plane, "color pipeline 3dlut", color_pipeline_3dlut,
+				     sizeof(color_pipeline_3dlut));
 	drm_plane_attach_get_color_pipeline_property(plane);
 
 	drm_plane_create_set_color_pipeline_property(plane->dev, plane);

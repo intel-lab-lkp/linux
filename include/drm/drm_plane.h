@@ -284,6 +284,12 @@ struct drm_plane_state {
 		 * For example: Parameterized/non-parameterized fixed function operations
 		 */
 		struct drm_property_blob *private_color_op_data;
+
+		/* @lut_3d:
+		 *
+		 * Three dimensional luts
+		 */
+		struct drm_property_blob *lut_3d;
 	} color;
 
 	/**
