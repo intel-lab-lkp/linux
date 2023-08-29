@@ -297,7 +297,7 @@ static int pseudo_lock_region_init(struct pseudo_lock_region *plr)
 
 	plr->size = rdtgroup_cbm_to_size(plr->s->res, plr->d, plr->cbm);
 
-	switch (plr->s->res->scope) {
+	switch (plr->s->res->ctrl_scope) {
 	case RESCTRL_L3_CACHE:
 		cache_level = 3;
 		break;
