@@ -944,6 +944,78 @@ struct hdr_output_metadata {
 };
 
 /**
+ * enum color_op_block
+ *
+ * Enums to identify hardware color blocks.
+ *
+ * @DRM_CB_PRE_CSC: LUT before the CTM unit
+ * @DRM_CB_CSC: CTM hardware supporting 3x3 matrix
+ * @DRM_CB_POST_CSC: LUT after the CTM unit
+ * @DRM_CB_3D_LUT: LUT hardware with coefficients for all
+ *                 color components
+ * @DRM_CB_PRIVATE: Vendor specific hardware unit. Vendor
+ *                  can expose a custom hardware by defining a
+ *                  color operation block with this name as
+ *                  identifier
+ */
+enum color_op_block {
+	DRM_CB_INVAL = -1,
+
+	DRM_CB_PRE_CSC = 0,
+	DRM_CB_CSC,
+	DRM_CB_POST_CSC,
+	DRM_CB_3D_LUT,
+
+	/* Any new generic hardware block can be updated here */
+
+	/*
+	 * PRIVATE is kept at 255 to make it future proof and leave
+	 * scope for any new addition
+	 */
+	DRM_CB_PRIVATE = 255,
+	DRM_CB_MAX = DRM_CB_PRIVATE,
+};
+
+/**
+ * enum color_op_type
+ *
+ * These enums are to identify the mathematical operation that
+ * a hardware block is capable of.
+ * @CURVE_1D: It represents a one dimensional lookup table
+ * @CURVE_3D: Represents lut value for each color component for 3d lut capable hardware
+ * @MATRIX: It represents co-efficients for a CSC/CTM matrix hardware
+ * @FIXED_FUNCTION: To enable and program any custom fixed function hardware unit
+ */
+enum color_op_type {
+	CURVE_1D,
+	CURVE_3D,
+	MATRIX,
+	FIXED_FUNCTION,
+};
+
+/**
+ * @struct drm_color_op
+ *
+ * This structure is used to represent the capability of
+ * individual color hardware blocks.
+ *
+ * @name: a standardized enum to identify the color hardware block
+ * @type: The type of mathematical operation it can perform
+ * @blob_id: Id pointing to a blob containing information about
+ *          the hardware block which advertizes its capabilities
+ *          to the userspace. It can be an optional field depending
+ *          on the members "name" and "type".
+ * @private_flags: This can be used to provide vendor specific hints
+ *                 to user space
+ */
+struct drm_color_op {
+	enum color_op_block name;
+	enum color_op_type type;
+	__u32 blob_id;
+	__u32 private_flags;
+};
+
+/**
  * DRM_MODE_PAGE_FLIP_EVENT
  *
  * Request that the kernel sends back a vblank event (see
