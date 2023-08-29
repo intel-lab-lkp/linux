@@ -3269,14 +3269,7 @@ static void task_numa_work(struct callback_head *work)
 						vma->numab_state->next_scan))
 			continue;
 
-		/* Do not scan the VMA if task has not accessed */
-		if (!vma_is_accessed(vma))
-			continue;
-
-		/*
-		 * RESET access PIDs regularly for old VMAs. Resetting after checking
-		 * vma for recent access to avoid clearing PID info before access..
-		 */
+		/* RESET access PIDs regularly for old VMAs. */
 		if (mm->numa_scan_seq &&
 				time_after(jiffies, vma->numab_state->next_pid_reset)) {
 			vma->numab_state->next_pid_reset = vma->numab_state->next_pid_reset +
@@ -3284,6 +3277,10 @@ static void task_numa_work(struct callback_head *work)
 			vma->numab_state->access_pids[0] = READ_ONCE(vma->numab_state->access_pids[1]);
 			vma->numab_state->access_pids[1] = 0;
 		}
+
+		/* Do not scan the VMA if task has not accessed */
+		if (!vma_is_accessed(vma))
+			continue;
 
 		do {
 			start = max(start, vma->vm_start);
