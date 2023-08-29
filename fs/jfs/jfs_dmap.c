@@ -2949,6 +2949,10 @@ static int dbFindLeaf(dmtree_t * tp, int l2nb, int *leafidx)
 			/* sufficient free space found.  move to the next
 			 * level (or quit if this is the last level).
 			 */
+
+			if (x + n > TREESIZE)
+				return -ENOSPC;
+
 			if (l2nb <= tp->dmt_stree[x + n])
 				break;
 		}
