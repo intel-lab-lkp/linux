@@ -635,6 +635,48 @@ void drm_plane_attach_get_color_pipeline_property(struct drm_plane *plane)
 EXPORT_SYMBOL(drm_plane_attach_get_color_pipeline_property);
 
 /**
+ * drm_plane_add_color_pipeline - helper to add a color pipeline
+ * @plane: plane object
+ * @name: name of the color pipeline
+ * @color_pipeline: an array of 'struct drm_color_op' to represent a color pipeline
+ * @len: size of the color pipeline
+ *
+ * This helper can be used to add a distinct color pipeline to a plane. A driver
+ * can provide a meaningful name to the pipeline as it desires.
+ */
+int drm_plane_add_color_pipeline(struct drm_plane *plane, char *name,
+				 struct drm_color_op *color_pipeline,
+				 size_t len)
+{
+	int ret;
+	struct drm_property *prop;
+	struct drm_property_blob *blob;
+	u32 id = 0;
+
+	prop = plane->get_color_pipeline_prop;
+
+	if (color_pipeline && !len)
+		return -EINVAL;
+
+	if (color_pipeline) {
+		blob = drm_property_create_blob(plane->dev, len, color_pipeline);
+		if (IS_ERR(blob))
+			return PTR_ERR(blob);
+
+		id = blob->base.id;
+	};
+
+	ret = drm_property_add_enum(prop, id, name);
+	if (ret) {
+		if (blob)
+			drm_property_blob_put(blob);
+		return ret;
+	}
+	return 0;
+}
+EXPORT_SYMBOL(drm_plane_add_color_pipeline);
+
+/**
  * drm_color_lut_check - check validity of lookup table
  * @lut: property blob containing LUT to check
  * @tests: bitmask of tests to run

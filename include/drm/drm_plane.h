@@ -955,5 +955,8 @@ int drm_plane_create_get_color_pipeline_property(struct drm_device *dev,
 						 struct drm_plane *plane,
 						 int num_val);
 void drm_plane_attach_get_color_pipeline_property(struct drm_plane *plane);
+int drm_plane_add_color_pipeline(struct drm_plane *plane, char *name,
+				 struct drm_color_op *color_pipeline,
+				 size_t len);
 
 #endif
