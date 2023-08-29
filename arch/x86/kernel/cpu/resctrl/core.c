@@ -514,6 +514,8 @@ static int get_domain_id_from_scope(int cpu, enum resctrl_scope scope)
 		return get_cpu_cacheinfo_id(cpu, 3);
 	case RESCTRL_L2_CACHE:
 		return get_cpu_cacheinfo_id(cpu, 2);
+	case RESCTRL_NODE:
+		return cpu_to_node(cpu);
 	default:
 		WARN_ON_ONCE(1);
 		break;

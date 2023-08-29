@@ -163,6 +163,7 @@ struct resctrl_schema;
 enum resctrl_scope {
 	RESCTRL_L3_CACHE,
 	RESCTRL_L2_CACHE,
+	RESCTRL_NODE,
 };
 
 /**
