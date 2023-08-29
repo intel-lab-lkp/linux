@@ -3007,7 +3007,7 @@ static void insert_wq_barrier(struct pool_workqueue *pwq,
 			      struct wq_barrier *barr,
 			      struct work_struct *target, struct worker *worker)
 {
-	unsigned int work_flags = 0;
+	unsigned int work_flags;
 	unsigned int work_color;
 	struct list_head *head;
 
@@ -3025,7 +3025,7 @@ static void insert_wq_barrier(struct pool_workqueue *pwq,
 	barr->task = current;
 
 	/* The barrier work item does not participate in pwq->nr_active. */
-	work_flags |= WORK_STRUCT_INACTIVE;
+	work_flags = WORK_STRUCT_INACTIVE;
 
 	/*
 	 * If @target is currently being executed, schedule the
