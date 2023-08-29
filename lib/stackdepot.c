@@ -58,6 +58,7 @@ union handle_parts {
 
 struct stack_record {
 	struct stack_record *next;	/* Link in hash table or freelist */
+	struct stack_record *prev;	/* Link in hash table */
 	u32 hash;			/* Hash in hash table */
 	u32 size;			/* Number of stored frames */
 	union handle_parts handle;
@@ -493,6 +494,9 @@ depot_stack_handle_t __stack_depot_save(unsigned long *entries,
 
 		if (new) {
 			new->next = *bucket;
+			new->prev = NULL;
+			if (*bucket)
+				(*bucket)->prev = new;
 			*bucket = new;
 			found = new;
 		}
