@@ -884,17 +884,20 @@ static struct acpi_s2idle_dev_ops amd_pmc_s2idle_dev_ops = {
 static int amd_pmc_suspend_handler(struct device *dev)
 {
 	struct amd_pmc_dev *pdev = dev_get_drvdata(dev);
+	int rc = 0;
 
-	if (pdev->cpu_id == AMD_CPU_ID_CZN && !disable_workarounds) {
-		int rc = amd_pmc_czn_wa_irq1(pdev);
+	if (disable_workarounds)
+		return 0;
 
-		if (rc) {
-			dev_err(pdev->dev, "failed to adjust keyboard wakeup: %d\n", rc);
-			return rc;
-		}
+	switch (pdev->cpu_id) {
+	case AMD_CPU_ID_CZN:
+		rc = amd_pmc_czn_wa_irq1(pdev);
+		break;
+	default:
+		break;
 	}
 
-	return 0;
+	return rc;
 }
 
 static DEFINE_SIMPLE_DEV_PM_OPS(amd_pmc_pm, amd_pmc_suspend_handler, NULL);
