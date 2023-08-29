@@ -2984,13 +2984,8 @@ static void prepare_scan_count(pg_data_t *pgdat, struct scan_control *sc)
 	 * anon pages.  Try to detect this based on file LRU size.
 	 */
 	if (!cgroup_reclaim(sc)) {
-		unsigned long total_high_wmark = 0;
 		unsigned long free, anon;
 		int z;
-
-		free = sum_zone_node_page_state(pgdat->node_id, NR_FREE_PAGES);
-		file = node_page_state(pgdat, NR_ACTIVE_FILE) +
-			   node_page_state(pgdat, NR_INACTIVE_FILE);
 
 		for (z = 0; z < MAX_NR_ZONES; z++) {
 			struct zone *zone = &pgdat->node_zones[z];
@@ -2998,7 +2993,14 @@ static void prepare_scan_count(pg_data_t *pgdat, struct scan_control *sc)
 			if (!managed_zone(zone))
 				continue;
 
-			total_high_wmark += high_wmark_pages(zone);
+			free = zone_page_state(zone, NR_FREE_PAGES);
+			file = zone_page_state(zone, NR_ZONE_ACTIVE_FILE) +
+				zone_page_state(zone, NR_ZONE_INACTIVE_FILE);
+
+			if (file + free <= high_wmark_pages(zone)) {
+				sc->file_is_tiny = true;
+				break;
+			}
 		}
 
 		/*
@@ -3008,8 +3010,7 @@ static void prepare_scan_count(pg_data_t *pgdat, struct scan_control *sc)
 		 */
 		anon = node_page_state(pgdat, NR_INACTIVE_ANON);
 
-		sc->file_is_tiny =
-			file + free <= total_high_wmark &&
+		sc->file_is_tiny = sc->file_is_tiny &&
 			!(sc->may_deactivate & DEACTIVATE_ANON) &&
 			anon >> sc->priority;
 	}
