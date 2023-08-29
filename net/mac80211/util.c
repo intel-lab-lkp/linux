@@ -1123,7 +1123,7 @@ _ieee802_11_parse_elems_full(struct ieee80211_elems_parse_params *params,
 				elem_parse_failed = true;
 			break;
 		case WLAN_EID_TIM:
-			if (elen >= sizeof(struct ieee80211_tim_ie)) {
+			if (elen > sizeof(struct ieee80211_tim_ie)) {
 				elems->tim = (void *)pos;
 				elems->tim_len = elen;
 			} else

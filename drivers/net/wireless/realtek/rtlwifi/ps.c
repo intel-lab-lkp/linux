@@ -506,7 +506,7 @@ void rtl_swlps_beacon(struct ieee80211_hw *hw, void *data, unsigned int len)
 	if (!tim)
 		return;
 
-	if (tim[1] < sizeof(*tim_ie))
+	if (tim[1] <= sizeof(*tim_ie))
 		return;
 
 	tim_len = tim[1];

@@ -520,7 +520,7 @@ static bool ath_beacon_dtim_pending_cab(struct sk_buff *skb)
 			break;
 
 		if (id == WLAN_EID_TIM) {
-			if (elen < sizeof(*tim))
+			if (elen <= sizeof(*tim))
 				break;
 			tim = (struct ieee80211_tim_ie *) pos;
 			if (tim->dtim_count != 0)

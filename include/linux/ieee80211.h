@@ -961,7 +961,7 @@ struct ieee80211_tim_ie {
 	u8 dtim_period;
 	u8 bitmap_ctrl;
 	/* variable size: 1 - 251 bytes */
-	u8 virtual_map[1];
+	u8 virtual_map[];
 } __packed;
 
 /**
@@ -4405,7 +4405,7 @@ static inline bool ieee80211_check_tim(const struct ieee80211_tim_ie *tim,
 	u8 mask;
 	u8 index, indexn1, indexn2;
 
-	if (unlikely(!tim || tim_len < sizeof(*tim)))
+	if (unlikely(!tim || tim_len <= sizeof(*tim)))
 		return false;
 
 	aid &= 0x3fff;
