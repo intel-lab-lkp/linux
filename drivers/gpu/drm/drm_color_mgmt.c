@@ -635,6 +635,48 @@ void drm_plane_attach_get_color_pipeline_property(struct drm_plane *plane)
 EXPORT_SYMBOL(drm_plane_attach_get_color_pipeline_property);
 
 /**
+ * drm_plane_create_set_color_pipeline_property - create property to set color pipeline
+ * @dev: DRM device
+ * @plane: plane object
+ *
+ * create blob property using which the user space can set up a plane color pipeline.
+ * Userspace can send data for one or multiple hardware blocks in the pipeline.
+ */
+int drm_plane_create_set_color_pipeline_property(struct drm_device *dev,
+						 struct drm_plane *plane)
+{
+	struct drm_property *prop;
+
+	prop = drm_property_create(dev, DRM_MODE_PROP_BLOB,
+				   "SET_COLOR_PIPELINE", 0);
+	if (!prop)
+		return -ENOMEM;
+
+	plane->set_color_pipeline_prop = prop;
+
+	return 0;
+}
+EXPORT_SYMBOL(drm_plane_create_set_color_pipeline_property);
+
+/**
+ * drm_plane_attach_set_color_pipeline_property - attach set color pipeline property to a plane
+ * @plane: plane object
+ *
+ * Attach "SET_COLOR_PIPELINE" property to a plane. The property will be visible to
+ * the userspace once we attach the property. The default value is set to 0 indicating
+ * no colorpipeline which essentially disables all the color HW blocks in the pipeline.
+ */
+void drm_plane_attach_set_color_pipeline_property(struct drm_plane *plane)
+{
+	if (!plane->set_color_pipeline_prop)
+		return;
+
+	drm_object_attach_property(&plane->base,
+				   plane->set_color_pipeline_prop, 0);
+}
+EXPORT_SYMBOL(drm_plane_attach_set_color_pipeline_property);
+
+/**
  * drm_plane_add_color_pipeline - helper to add a color pipeline
  * @plane: plane object
  * @name: name of the color pipeline

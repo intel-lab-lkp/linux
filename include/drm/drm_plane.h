@@ -237,6 +237,20 @@ struct drm_plane_state {
 
 	/** @state: backpointer to global drm_atomic_state */
 	struct drm_atomic_state *state;
+
+	/**
+	 * @set_color_pipeline_data:
+	 *
+	 * Stores information about the current selected color pipeline
+	 */
+	struct drm_property_blob *set_color_pipeline_data;
+
+	/**
+	 * @color_mgmt_changed: Plane color pipeline state has changed
+	 * Used by the atomic helpers and
+	 * drivers to steer the atomic commit control flow.
+	 */
+	u8 color_mgmt_changed : 1;
 };
 
 static inline struct drm_rect
@@ -754,6 +768,11 @@ struct drm_plane {
 	 *  that the plane supports
 	 */
 	struct drm_property *get_color_pipeline_prop;
+
+	/**
+	 *  @set_color_pipeline_prop: Optional Plane property to set the color pipeline
+	 */
+	struct drm_property *set_color_pipeline_prop;
 };
 
 #define obj_to_plane(x) container_of(x, struct drm_plane, base)
@@ -955,6 +974,9 @@ int drm_plane_create_get_color_pipeline_property(struct drm_device *dev,
 						 struct drm_plane *plane,
 						 int num_val);
 void drm_plane_attach_get_color_pipeline_property(struct drm_plane *plane);
+int drm_plane_create_set_color_pipeline_property(struct drm_device *dev,
+						 struct drm_plane *plane);
+void drm_plane_attach_set_color_pipeline_property(struct drm_plane *plane);
 int drm_plane_add_color_pipeline(struct drm_plane *plane, char *name,
 				 struct drm_color_op *color_pipeline,
 				 size_t len);

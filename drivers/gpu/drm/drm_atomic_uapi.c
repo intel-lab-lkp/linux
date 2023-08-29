@@ -590,6 +590,15 @@ static int drm_atomic_plane_set_property(struct drm_plane *plane,
 		return ret;
 	} else if (property == plane->scaling_filter_property) {
 		state->scaling_filter = val;
+	} else if (property == plane->set_color_pipeline_prop) {
+		ret = drm_atomic_replace_property_blob_from_id(dev,
+					&state->set_color_pipeline_data,
+					val,
+					-1,
+					sizeof(struct drm_color_pipeline),
+					&replaced);
+		state->color_mgmt_changed |= replaced;
+		return ret;
 	} else if (plane->funcs->atomic_set_property) {
 		return plane->funcs->atomic_set_property(plane, state,
 				property, val);
@@ -651,6 +660,9 @@ drm_atomic_plane_get_property(struct drm_plane *plane,
 			state->fb_damage_clips->base.id : 0;
 	} else if (property == plane->scaling_filter_property) {
 		*val = state->scaling_filter;
+	} else if (property == plane->set_color_pipeline_prop) {
+		*val = (state->set_color_pipeline_data) ?
+			state->set_color_pipeline_data->base.id : 0;
 	} else if (plane->funcs->atomic_get_property) {
 		return plane->funcs->atomic_get_property(plane, state, property, val);
 	} else {
