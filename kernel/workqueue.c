@@ -3772,7 +3772,7 @@ static void wqattrs_clear_for_pool(struct workqueue_attrs *attrs)
 /* hash value of the content of @attr */
 static u32 wqattrs_hash(const struct workqueue_attrs *attrs)
 {
-	u32 hash = 0;
+	u32 hash;
 
 	hash = jhash_1word(attrs->nice, hash);
 	hash = jhash(cpumask_bits(attrs->cpumask),
