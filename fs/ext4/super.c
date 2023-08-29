@@ -7347,61 +7347,61 @@ static int __init ext4_init_fs(void)
 
 	err = ext4_init_pending();
 	if (err)
-		goto out7;
+		goto out_es;
 
 	err = ext4_init_post_read_processing();
 	if (err)
-		goto out6;
+		goto out_pending;
 
 	err = ext4_init_pageio();
 	if (err)
-		goto out5;
+		goto out_post_read_processing;
 
 	err = ext4_init_system_zone();
 	if (err)
-		goto out4;
+		goto out_pageio;
 
 	err = ext4_init_sysfs();
 	if (err)
-		goto out3;
+		goto out_system_zone;
 
 	err = ext4_init_mballoc();
 	if (err)
-		goto out2;
+		goto out_sysfs;
 	err = init_inodecache();
 	if (err)
-		goto out1;
+		goto out_mballoc;
 
 	err = ext4_fc_init_dentry_cache();
 	if (err)
-		goto out05;
+		goto out_inodecache;
 
 	register_as_ext3();
 	register_as_ext2();
 	err = register_filesystem(&ext4_fs_type);
 	if (err)
-		goto out;
+		goto out_unregister_ext23_and_dentry_cache;
 
 	return 0;
-out:
+out_unregister_ext23_and_dentry_cache:
 	unregister_as_ext2();
 	unregister_as_ext3();
 	ext4_fc_destroy_dentry_cache();
-out05:
+out_inodecache:
 	destroy_inodecache();
-out1:
+out_mballoc:
 	ext4_exit_mballoc();
-out2:
+out_sysfs:
 	ext4_exit_sysfs();
-out3:
+out_system_zone:
 	ext4_exit_system_zone();
-out4:
+out_pageio:
 	ext4_exit_pageio();
-out5:
+out_post_read_processing:
 	ext4_exit_post_read_processing();
-out6:
+out_pending:
 	ext4_exit_pending();
-out7:
+out_es:
 	ext4_exit_es();
 
 	return err;
