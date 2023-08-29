@@ -1283,6 +1283,7 @@ icl_plane_update_noarm(struct intel_plane *plane,
 	if (plane_state->uapi.color_mgmt_changed) {
 		intel_color_load_plane_luts(&plane_state->uapi);
 		intel_color_load_plane_csc_matrix(&plane_state->uapi);
+		intel_color_load_private(&plane_state->uapi);
 	}
 
 	intel_psr2_program_plane_sel_fetch_noarm(plane, crtc_state, plane_state, color_plane);

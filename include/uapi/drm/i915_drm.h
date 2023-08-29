@@ -3841,6 +3841,31 @@ struct drm_i915_gem_create_ext_set_pat {
 /* ID of the protected content session managed by i915 when PXP is active */
 #define I915_PROTECTED_CONTENT_DEFAULT_SESSION 0xf
 
+/* I915 specific color operation */
+#define I915_COLOR_OP_FIXED_FUNC_CSC (1 << 0)
+
+/**
+ * enum i915_csc_operation
+ *
+ * Color conversion operations which can be performed by a fixed function h/w
+ * of type I915_COLOR_OP_FIXED_FUNC_CSC
+ */
+enum i915_csc_operation {
+	I915_CSC_YUV601_TO_RGB601,
+	I915_CSC_YUV709_TO_RGB709,
+	I915_CSC_YUV2020_TO_RGB2020,
+	I915_CSC_RGB709_TO_RGB2020,
+	I915_CSC_MAX,
+};
+
+struct i915_color_op_data {
+	__u32 flag; /* to identify i915 specific color operation */
+	union {
+		enum i915_csc_operation csc_type;
+		/* Add more structures here */
+	};
+};
+
 #if defined(__cplusplus)
 }
 #endif

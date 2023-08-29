@@ -21,6 +21,7 @@
  * DEALINGS IN THE SOFTWARE.
  *
  */
+#include <uapi/drm/i915_drm.h>
 
 #include "i915_reg.h"
 #include "intel_color.h"
@@ -87,6 +88,7 @@ struct intel_color_funcs {
 	 */
 	void (*load_plane_csc_matrix)(const struct drm_plane_state *plane_state);
 	void (*load_plane_luts)(const struct drm_plane_state *plane_state);
+	void (*load_private)(const struct drm_plane_state *plane_state);
 };
 
 #define CTM_COEFF_SIGN	(1ULL << 63)
@@ -2145,6 +2147,25 @@ static void xelpd_load_plane_csc_matrix(const struct drm_plane_state *state)
 	intel_de_write_fw(dev_priv, PLANE_CSC_POSTOFF(pipe, plane, 2), postoff);
 }
 
+static void xelpd_load_private(const struct drm_plane_state *state)
+{
+	struct drm_i915_private *i915 = to_i915(state->plane->dev);
+	struct i915_color_op_data *op_data;
+	enum plane_id plane = to_intel_plane(state->plane)->id;
+	int i, num;
+
+	if (icl_is_hdr_plane(i915, plane) || !state->color.private_color_op_data)
+		return;
+
+	op_data = state->color.private_color_op_data->data;
+	num = state->color.private_color_op_data->length / sizeof(struct i915_color_op_data);
+
+	for (i = 0; i < num; i++) {
+		if (op_data[i].flag == I915_COLOR_OP_FIXED_FUNC_CSC)
+			DRM_DEBUG_KMS("CSC OP [%d]", op_data[i].csc_type);
+	}
+}
+
 void intel_color_load_luts(const struct intel_crtc_state *crtc_state)
 {
 	struct drm_i915_private *i915 = to_i915(crtc_state->uapi.crtc->dev);
@@ -2166,6 +2187,14 @@ void intel_color_load_plane_csc_matrix(const struct drm_plane_state *plane_state
 
 	if (i915->display.funcs.color->load_plane_csc_matrix)
 		i915->display.funcs.color->load_plane_csc_matrix(plane_state);
+}
+
+void intel_color_load_private(const struct drm_plane_state *plane_state)
+{
+	struct drm_i915_private *i915 = to_i915(plane_state->plane->dev);
+
+	if (i915->display.funcs.color->load_private)
+		i915->display.funcs.color->load_private(plane_state);
 }
 
 void intel_color_commit_noarm(const struct intel_crtc_state *crtc_state)
@@ -4011,6 +4040,7 @@ static const struct intel_color_funcs xelpd_color_funcs = {
 	.read_csc = icl_read_csc,
 	.load_plane_luts = xelpd_plane_load_luts,
 	.load_plane_csc_matrix = xelpd_load_plane_csc_matrix,
+	.load_private = xelpd_load_private,
 };
 
 static const struct intel_color_funcs tgl_color_funcs = {
@@ -4284,10 +4314,12 @@ struct drm_color_op color_pipeline_sdr[] = {
 		.type = CURVE_1D,
 		.blob_id = 0, /* To be updated during plane initialization */
 	},
-	/*
-	 * SDR planes have fixed function CSC capabilities.
-	 * TODO: Add support for it
-	 */
+	{
+		.name = DRM_CB_PRIVATE,
+		.type = FIXED_FUNCTION,
+		.blob_id = 0,
+		.private_flags = I915_COLOR_OP_FIXED_FUNC_CSC,
+	},
 	{
 		.name = DRM_CB_POST_CSC,
 		.type = CURVE_1D,
@@ -4367,7 +4399,7 @@ static int intel_prepare_plane_color_pipeline(struct drm_plane *plane)
 		 * LUT ranges for SDR planes are similar for pre and post-csc blocks
 		 */
 		color_pipeline_sdr[0].blob_id =
-			color_pipeline_sdr[1].blob_id = blob[i++]->base.id;
+			color_pipeline_sdr[2].blob_id = blob[i++]->base.id;
 	}
 
 	blob[i] = drm_property_create_blob(plane->dev,
