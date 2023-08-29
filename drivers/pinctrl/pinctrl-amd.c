@@ -36,6 +36,11 @@
 #include "pinctrl-utils.h"
 #include "pinctrl-amd.h"
 
+static int powerbtn = -1;
+module_param(powerbtn, int, 0444);
+MODULE_PARM_DESC(powerbtn,
+		 "Power button debouncing: 0=traditional, 1=windows, -1=auto");
+
 static int amd_gpio_get_direction(struct gpio_chip *gc, unsigned offset)
 {
 	unsigned long flags;
@@ -1075,6 +1080,30 @@ out_no_pinmux:
 	desc->pmxops = NULL;
 }
 
+static void handle_powerbtn(struct amd_gpio *gpio_dev)
+{
+	u32 pin_reg;
+
+	if (powerbtn == -1)
+		return;
+
+	pin_reg = readl(gpio_dev->base + WAKE_INT_MASTER_REG);
+	switch (powerbtn) {
+	case 0:
+		pin_reg &= ~INTERNAL_GPIO0_DEBOUNCE;
+		break;
+	case 1:
+		pin_reg |= INTERNAL_GPIO0_DEBOUNCE;
+		break;
+	default:
+		dev_err(&gpio_dev->pdev->dev, "Invalid module parameter %d\n",
+			powerbtn);
+		return;
+	}
+
+	writel(pin_reg, gpio_dev->base + WAKE_INT_MASTER_REG);
+}
+
 static int amd_gpio_probe(struct platform_device *pdev)
 {
 	int ret = 0;
@@ -1094,6 +1123,8 @@ static int amd_gpio_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Failed to get gpio io resource.\n");
 		return PTR_ERR(gpio_dev->base);
 	}
+
+	handle_powerbtn(gpio_dev);
 
 	gpio_dev->irq = platform_get_irq(pdev, 0);
 	if (gpio_dev->irq < 0)
