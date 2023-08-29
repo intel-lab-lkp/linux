@@ -55,8 +55,8 @@ static inline void __assign_req_name(char *name, struct nvmet_req *req)
 		return;
 	}
 
-	strncpy(name, req->ns->device_path,
-		min_t(size_t, DISK_NAME_LEN, strlen(req->ns->device_path)));
+	strscpy(name, req->ns->device_path,
+		min_t(size_t, DISK_NAME_LEN, strlen(req->ns->device_path) + 1));
 }
 #endif
 
