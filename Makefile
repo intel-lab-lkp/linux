@@ -1643,12 +1643,12 @@ help:
 	@echo  ''
 	@$(if $(boards), \
 		$(foreach b, $(boards), \
-		printf "  %-27s - Build for %s\\n" $(b) $(subst _defconfig,,$(b));) \
+		printf '  %-27s - Build for %s\n' $(b) $(subst _defconfig,,$(b));) \
 		echo '')
 	@$(if $(board-dirs), \
 		$(foreach b, $(board-dirs), \
-		printf "  %-16s - Show %s-specific targets\\n" help-$(b) $(b);) \
-		printf "  %-16s - Show all of the above\\n" help-boards; \
+		printf '  %-16s - Show %s-specific targets\n' help-$(b) $(b);) \
+		printf '  %-16s - Show all of the above\n' help-boards; \
 		echo '')
 
 	@echo  '  make V=n   [targets] 1: verbose build'
@@ -1684,7 +1684,7 @@ $(help-board-dirs): help-%:
 	@echo  'Architecture specific targets ($(SRCARCH) $*):'
 	@$(if $(boards-per-dir), \
 		$(foreach b, $(boards-per-dir), \
-		printf "  %-24s - Build for %s\\n" $*/$(b) $(subst _defconfig,,$(b));) \
+		printf '  %-24s - Build for %s\n' $*/$(b) $(subst _defconfig,,$(b));) \
 		echo '')
 
 

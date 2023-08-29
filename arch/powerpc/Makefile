@@ -353,7 +353,7 @@ define archhelp
   echo '  (minus the .dts extension).'
   echo
   $(foreach cfg,$(generated_configs),
-    printf "  %-27s - Build for %s\\n" $(cfg) $(subst _defconfig,,$(cfg));)
+    printf '  %-27s - Build for %s\n' $(cfg) $(subst _defconfig,,$(cfg));)
 endef
 
 PHONY += install
