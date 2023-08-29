@@ -13,6 +13,7 @@
 #include <linux/sched.h>
 #include <linux/smp.h>
 
+#include <asm/cacheflush.h>
 #include <asm/fpu.h>
 #include <asm/lbt.h>
 #include <asm/hw_breakpoint.h>
