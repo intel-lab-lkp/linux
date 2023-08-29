@@ -100,6 +100,11 @@ static const struct iio_chan_spec st_lsm6ds0_gyro_channels[] = {
 	IIO_CHAN_SOFT_TIMESTAMP(3),
 };
 
+static const struct iio_chan_spec st_lsm6dsx_temp_channels[] = {
+	ST_LSM6DSX_TEMP(IIO_TEMP, 0x20, 0),
+	IIO_CHAN_SOFT_TIMESTAMP(1),
+};
+
 static const struct st_lsm6dsx_settings st_lsm6dsx_sensor_settings[] = {
 	{
 		.reset = {
@@ -835,6 +840,10 @@ static const struct st_lsm6dsx_settings st_lsm6dsx_sensor_settings[] = {
 				.chan = st_lsm6dsx_gyro_channels,
 				.len = ARRAY_SIZE(st_lsm6dsx_gyro_channels),
 			},
+			[ST_LSM6DSX_ID_TEMP] = {
+				.chan = st_lsm6dsx_temp_channels,
+				.len = ARRAY_SIZE(st_lsm6dsx_temp_channels),
+			},
 		},
 		.drdy_mask = {
 			.addr = 0x13,
@@ -868,6 +877,17 @@ static const struct st_lsm6dsx_settings st_lsm6dsx_sensor_settings[] = {
 				.odr_avl[5] = { 416000, 0x06 },
 				.odr_avl[6] = { 833000, 0x07 },
 				.odr_len = 7,
+			},
+			[ST_LSM6DSX_ID_TEMP] = {
+				/*
+				 * NOTE: this ODR will be capped and controllerd by the
+				 * gyro and accelerometer don't have any reg to configure
+				 * this ODR.
+				 */
+				.odr_avl[0] = {  12500, 0x01 },
+				.odr_avl[1] = {  26000, 0x02 },
+				.odr_avl[2] = {  52000, 0x03 },
+				.odr_len = 3,
 			},
 		},
 		.fs_table = {
@@ -936,6 +956,10 @@ static const struct st_lsm6dsx_settings st_lsm6dsx_sensor_settings[] = {
 			[ST_LSM6DSX_ID_GYRO] = {
 				.addr = 0x09,
 				.mask = GENMASK(7, 4),
+			},
+			[ST_LSM6DSX_ID_TEMP] = {
+				.addr = 0x0A,
+				.mask = GENMASK(5, 4),
 			},
 		},
 		.fifo_ops = {
@@ -1618,8 +1642,8 @@ int st_lsm6dsx_check_odr(struct st_lsm6dsx_sensor *sensor, u32 odr, u8 *val)
 	odr_table = &sensor->hw->settings->odr_table[sensor->id];
 	for (i = 0; i < odr_table->odr_len; i++) {
 		/*
-		 * ext devices can run at different odr respect to
-		 * accel sensor
+		 * ext devices and temp sensor can run at different odr
+		 * respect to accel sensor
 		 */
 		if (odr_table->odr_avl[i].milli_hz >= odr)
 			break;
@@ -1661,6 +1685,21 @@ st_lsm6dsx_set_odr(struct st_lsm6dsx_sensor *sensor, u32 req_odr)
 	switch (sensor->id) {
 	case ST_LSM6DSX_ID_GYRO:
 		break;
+	case ST_LSM6DSX_ID_TEMP:
+		/*
+		 * According to the application note AN5398 Rev 3
+		 * for ISM330DHCX, section 10, page 109
+		 * the ODR for the temperature sensor is equal to the
+		 * accelerometer ODR if the gyroscope is powered-down,
+		 * up to 52 Hz, but constant 52 Hz if the gyroscope
+		 * is powered on. It never goes above 52 Hz.
+		 */
+		ref_sensor = iio_priv(hw->iio_devs[ST_LSM6DSX_ID_GYRO]);
+		if ((req_odr > 0) && (hw->enable_mask |= BIT(ref_sensor->id)))
+			/* Gyro is on! ODR fixed to 52 Hz */
+			return 0;
+		/* We fall through and activate accelerometer if need be */
+		fallthrough;
 	case ST_LSM6DSX_ID_EXT0:
 	case ST_LSM6DSX_ID_EXT1:
 	case ST_LSM6DSX_ID_EXT2:
@@ -1799,6 +1838,10 @@ static int st_lsm6dsx_read_raw(struct iio_dev *iio_dev,
 		*val = 0;
 		*val2 = sensor->gain;
 		ret = IIO_VAL_INT_PLUS_NANO;
+		break;
+	case IIO_CHAN_INFO_OFFSET:
+		*val = sensor->offset;
+		ret = IIO_VAL_INT;
 		break;
 	default:
 		ret = -EINVAL;
@@ -2106,6 +2149,22 @@ static const struct iio_info st_lsm6dsx_gyro_info = {
 	.write_raw_get_fmt = st_lsm6dsx_write_raw_get_fmt,
 };
 
+static struct attribute *st_lsm6dsx_temp_attributes[] = {
+	&iio_dev_attr_sampling_frequency_available.dev_attr.attr,
+	NULL,
+};
+
+static const struct attribute_group st_lsm6dsx_temp_attribute_group = {
+	.attrs = st_lsm6dsx_temp_attributes,
+};
+
+static const struct iio_info st_lsm6dsx_temp_info = {
+	.attrs = &st_lsm6dsx_temp_attribute_group,
+	.read_raw = st_lsm6dsx_read_raw,
+	.write_raw = st_lsm6dsx_write_raw,
+	.hwfifo_set_watermark = st_lsm6dsx_set_watermark,
+};
+
 static int st_lsm6dsx_get_drdy_pin(struct st_lsm6dsx_hw *hw, int *drdy_pin)
 {
 	struct device *dev = hw->dev;
@@ -2379,7 +2438,16 @@ static struct iio_dev *st_lsm6dsx_alloc_iiodev(struct st_lsm6dsx_hw *hw,
 	sensor->id = id;
 	sensor->hw = hw;
 	sensor->odr = hw->settings->odr_table[id].odr_avl[0].milli_hz;
-	sensor->gain = hw->settings->fs_table[id].fs_avl[0].gain;
+	if (id == ST_LSM6DSX_ID_TEMP) {
+		/*
+		 * The temperature sensor has a fixed scale and offset such
+		 * that: temp_C = (raw / 256) + 25
+		 */
+		sensor->gain = 3906;
+		sensor->offset = 25;
+	} else {
+		sensor->gain = hw->settings->fs_table[id].fs_avl[0].gain;
+	}
 	sensor->watermark = 1;
 
 	switch (id) {
@@ -2391,6 +2459,11 @@ static struct iio_dev *st_lsm6dsx_alloc_iiodev(struct st_lsm6dsx_hw *hw,
 	case ST_LSM6DSX_ID_GYRO:
 		iio_dev->info = &st_lsm6dsx_gyro_info;
 		scnprintf(sensor->name, sizeof(sensor->name), "%s_gyro",
+			  name);
+		break;
+	case ST_LSM6DSX_ID_TEMP:
+		iio_dev->info = &st_lsm6dsx_temp_info;
+		scnprintf(sensor->name, sizeof(sensor->name), "%s_temp",
 			  name);
 		break;
 	default:

@@ -118,6 +118,23 @@ enum st_lsm6dsx_hw_id {
 	.ext_info = st_lsm6dsx_ext_info,				\
 }
 
+#define ST_LSM6DSX_TEMP(chan_type, addr, scan_idx)			\
+{									\
+	.type = chan_type,						\
+	.address = addr,						\
+	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW) |			\
+				BIT(IIO_CHAN_INFO_SCALE) |		\
+				BIT(IIO_CHAN_INFO_OFFSET),		\
+	.info_mask_shared_by_all = BIT(IIO_CHAN_INFO_SAMP_FREQ),	\
+	.scan_index = scan_idx,						\
+	.scan_type = {							\
+		.sign = 's',						\
+		.realbits = 16,						\
+		.storagebits = 16,					\
+		.endianness = IIO_LE,					\
+	},								\
+}
+
 struct st_lsm6dsx_reg {
 	u8 addr;
 	u8 mask;
@@ -320,7 +337,7 @@ struct st_lsm6dsx_settings {
 	struct {
 		const struct iio_chan_spec *chan;
 		int len;
-	} channels[2];
+	} channels[3];
 	struct {
 		struct st_lsm6dsx_reg irq1;
 		struct st_lsm6dsx_reg irq2;
@@ -332,7 +349,7 @@ struct st_lsm6dsx_settings {
 		struct st_lsm6dsx_reg od;
 	} irq_config;
 	struct st_lsm6dsx_reg drdy_mask;
-	struct st_lsm6dsx_odr_table_entry odr_table[2];
+	struct st_lsm6dsx_odr_table_entry odr_table[3];
 	struct st_lsm6dsx_samples_to_discard samples_to_discard[2];
 	struct st_lsm6dsx_fs_table_entry fs_table[2];
 	struct st_lsm6dsx_reg decimator[ST_LSM6DSX_MAX_ID];
@@ -346,6 +363,7 @@ struct st_lsm6dsx_settings {
 enum st_lsm6dsx_sensor_id {
 	ST_LSM6DSX_ID_GYRO,
 	ST_LSM6DSX_ID_ACC,
+	ST_LSM6DSX_ID_TEMP,
 	ST_LSM6DSX_ID_EXT0,
 	ST_LSM6DSX_ID_EXT1,
 	ST_LSM6DSX_ID_EXT2,
@@ -364,6 +382,7 @@ enum st_lsm6dsx_fifo_mode {
  * @hw: Pointer to instance of struct st_lsm6dsx_hw.
  * @gain: Configured sensor sensitivity.
  * @odr: Output data rate of the sensor [Hz].
+ * @offset: Constant offset of the sensor
  * @samples_to_discard: Number of samples to discard for filters settling time.
  * @watermark: Sensor watermark level.
  * @decimator: Sensor decimation factor.
@@ -378,6 +397,7 @@ struct st_lsm6dsx_sensor {
 
 	u32 gain;
 	u32 odr;
+	u32 offset;
 
 	u16 samples_to_discard;
 	u16 watermark;
