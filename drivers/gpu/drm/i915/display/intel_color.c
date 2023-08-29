@@ -4361,7 +4361,6 @@ out:
 	return ret;
 };
 
-__maybe_unused
 void intel_color_plane_init(struct drm_plane *plane)
 {
 	struct drm_i915_private *i915 = to_i915(plane->dev);

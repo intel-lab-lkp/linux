@@ -2389,6 +2389,7 @@ skl_universal_plane_create(struct drm_i915_private *dev_priv,
 						BIT(DRM_SCALING_FILTER_NEAREST_NEIGHBOR));
 
 	intel_plane_helper_add(plane);
+	intel_color_plane_init(&plane->base);
 
 	return plane;
 
