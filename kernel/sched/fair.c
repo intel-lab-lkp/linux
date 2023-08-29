@@ -3162,14 +3162,6 @@ static bool task_disjoint_vma_select(struct vm_area_struct *vma)
 static bool vma_is_accessed(struct vm_area_struct *vma)
 {
 	unsigned long pids;
-	/*
-	 * Allow unconditional access first two times, so that all the (pages)
-	 * of VMAs get prot_none fault introduced irrespective of accesses.
-	 * This is also done to avoid any side effect of task scanning
-	 * amplifying the unfairness of disjoint set of VMAs' access.
-	 */
-	if (READ_ONCE(current->mm->numa_scan_seq) < 2)
-		return true;
 
 	pids = vma->numab_state->access_pids[0] | vma->numab_state->access_pids[1];
 	return test_bit(hash_32(current->pid, ilog2(BITS_PER_LONG)), &pids);
