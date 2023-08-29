@@ -230,6 +230,7 @@ static int mailbox_chan_free(int id, void *p, void *data)
 		smbox->chan = NULL;
 		smbox->chan_receiver = NULL;
 		smbox->cinfo = NULL;
+		shmem_clear_channel(smbox->shmem);
 	}
 
 	return 0;
@@ -284,7 +285,8 @@ static void mailbox_clear_channel(struct scmi_chan_info *cinfo)
 {
 	struct scmi_mailbox *smbox = cinfo->transport_info;
 
-	shmem_clear_channel(smbox->shmem);
+	if (smbox)
+		shmem_clear_channel(smbox->shmem);
 }
 
 static bool
