@@ -3704,6 +3704,16 @@ static const struct intel_color_funcs i9xx_color_funcs = {
 	.get_config = i9xx_get_config,
 };
 
+static const struct intel_color_funcs xelpd_color_funcs = {
+	.color_check = icl_color_check,
+	.color_commit_noarm = icl_color_commit_noarm,
+	.color_commit_arm = icl_color_commit_arm,
+	.load_luts = icl_load_luts,
+	.read_luts = icl_read_luts,
+	.lut_equal = icl_lut_equal,
+	.read_csc = icl_read_csc,
+};
+
 static const struct intel_color_funcs tgl_color_funcs = {
 	.color_check = icl_color_check,
 	.color_commit_noarm = icl_color_commit_noarm,
@@ -4141,7 +4151,9 @@ void intel_color_init_hooks(struct drm_i915_private *i915)
 		else
 			i915->display.funcs.color = &i9xx_color_funcs;
 	} else {
-		if (DISPLAY_VER(i915) >= 12)
+		if (DISPLAY_VER(i915) >= 13)
+			i915->display.funcs.color = &xelpd_color_funcs;
+		else if (DISPLAY_VER(i915) == 12)
 			i915->display.funcs.color = &tgl_color_funcs;
 		else if (DISPLAY_VER(i915) == 11)
 			i915->display.funcs.color = &icl_color_funcs;
