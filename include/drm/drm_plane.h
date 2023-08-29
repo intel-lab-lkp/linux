@@ -246,6 +246,47 @@ struct drm_plane_state {
 	struct drm_property_blob *set_color_pipeline_data;
 
 	/**
+	 * @drm_plane_color:
+	 *
+	 * Encapsulates all color states.
+	 */
+	struct drm_plane_color {
+		/**
+		 * @pre_csc_lut:
+		 *
+		 * Lookup table for converting framebuffer pixel data before apply the
+		 * color conversion matrix @ctm. See drm_plane_enable_color_mgmt(). The
+		 * blob (if not NULL) is an array of &struct drm_color_lut_ext.
+		 */
+		struct drm_property_blob *pre_csc_lut;
+
+		/**
+		 * @ctm:
+		 *
+		 * Color transformation matrix. See drm_plane_enable_color_mgmt(). The
+		 * blob (if not NULL) is a &struct drm_color_ctm.
+		 */
+		struct drm_property_blob *ctm;
+
+		/**
+		 * @post_csc_lut:
+		 *
+		 * Lookup table for converting framebuffer pixel data after applying the
+		 * color conversion matrix @ctm. See drm_plane_enable_color_mgmt(). The
+		 * blob (if not NULL) is an array of &struct drm_color_lut_ext.
+		 */
+		struct drm_property_blob *post_csc_lut;
+
+		/**
+		 * @private_color_op_data:
+		 *
+		 * This blob is intended for drivers to implement driver private color operations.
+		 * For example: Parameterized/non-parameterized fixed function operations
+		 */
+		struct drm_property_blob *private_color_op_data;
+	} color;
+
+	/**
 	 * @color_mgmt_changed: Plane color pipeline state has changed
 	 * Used by the atomic helpers and
 	 * drivers to steer the atomic commit control flow.
