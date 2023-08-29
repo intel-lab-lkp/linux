@@ -273,8 +273,6 @@ static int exynos_tmu_initialize(struct platform_device *pdev)
 	}
 
 	mutex_lock(&data->lock);
-	if (!IS_ERR(data->clk_sec))
-		clk_enable(data->clk_sec);
 
 	status = readb(data->base + EXYNOS_TMU_REG_STATUS);
 	if (!status) {
@@ -303,8 +301,6 @@ static int exynos_tmu_initialize(struct platform_device *pdev)
 	}
 err:
 	mutex_unlock(&data->lock);
-	if (!IS_ERR(data->clk_sec))
-		clk_disable(data->clk_sec);
 out:
 	return ret;
 }
@@ -1000,28 +996,21 @@ static int exynos_tmu_probe(struct platform_device *pdev)
 		return PTR_ERR(data->clk);
 	}
 
-	data->clk_sec = devm_clk_get(&pdev->dev, "tmu_triminfo_apbif");
-	if (IS_ERR(data->clk_sec)) {
-		if (data->soc == SOC_ARCH_EXYNOS5420_TRIMINFO) {
-			dev_err(&pdev->dev, "Failed to get triminfo clock\n");
-			return PTR_ERR(data->clk_sec);
-		}
-	} else {
-		ret = clk_prepare(data->clk_sec);
-		if (ret) {
-			dev_err(&pdev->dev, "Failed to get clock\n");
-			return ret;
-		}
-	}
-
 	switch (data->soc) {
 	case SOC_ARCH_EXYNOS5433:
 	case SOC_ARCH_EXYNOS7:
 		data->sclk = devm_clk_get_enabled(&pdev->dev, "tmu_sclk");
 		if (IS_ERR(data->sclk)) {
 			dev_err(&pdev->dev, "Failed to get sclk\n");
-			ret = PTR_ERR(data->sclk);
-			goto err_clk_sec;
+			return PTR_ERR(data->sclk);
+		}
+		break;
+	case SOC_ARCH_EXYNOS5420_TRIMINFO:
+		data->clk_sec =
+			devm_clk_get_enabled(&pdev->dev, "tmu_triminfo_apbif");
+		if (IS_ERR(data->clk_sec)) {
+			dev_err(&pdev->dev, "Failed to get triminfo clock\n");
+			return PTR_ERR(data->clk_sec);
 		}
 		break;
 	default:
@@ -1039,13 +1028,13 @@ static int exynos_tmu_probe(struct platform_device *pdev)
 		if (ret != -EPROBE_DEFER)
 			dev_err(&pdev->dev, "Failed to register sensor: %d\n",
 				ret);
-		goto err_clk_sec;
+		return ret;
 	}
 
 	ret = exynos_tmu_initialize(pdev);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to initialize TMU\n");
-		goto err_clk_sec;
+		return ret;
 	}
 
 	ret = devm_request_threaded_irq(
@@ -1054,26 +1043,16 @@ static int exynos_tmu_probe(struct platform_device *pdev)
 		dev_name(&pdev->dev), data);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to request irq: %d\n", data->irq);
-		goto err_clk_sec;
+		return ret;
 	}
 
 	exynos_tmu_control(pdev, true);
 	return 0;
-
-err_clk_sec:
-	if (!IS_ERR(data->clk_sec))
-		clk_unprepare(data->clk_sec);
-	return ret;
 }
 
 static int exynos_tmu_remove(struct platform_device *pdev)
 {
-	struct exynos_tmu_data *data = platform_get_drvdata(pdev);
-
 	exynos_tmu_control(pdev, false);
-
-	if (!IS_ERR(data->clk_sec))
-		clk_unprepare(data->clk_sec);
 
 	return 0;
 }
