@@ -3129,6 +3129,36 @@ static void reset_ptenuma_scan(struct task_struct *p)
 	p->mm->numa_scan_offset = 0;
 }
 
+#define VMA_4M	(1U << 22)
+#define VMA_RATELIMIT_SCALEDOWN_F	7
+
+static inline unsigned int vma_scan_ratelimit(struct vm_area_struct *vma)
+{
+	unsigned int vma_size, ratelimit = 0;
+
+	/*
+	 * Rate limit the scanning of VMA based on the size.
+	 * vma_size > 4M allow 1 in 2 times.
+	 * vma_size = 4k allow 1 in 9 times.
+	 * 4k < vma_size < 4M scale between 2 and 9
+	 */
+	vma_size = (vma->vm_end - vma->vm_start);
+	if (vma_size)
+		ratelimit  = (VMA_4M / vma_size) >> VMA_RATELIMIT_SCALEDOWN_F;
+	return 1 + ratelimit;
+}
+
+static bool task_disjoint_vma_select(struct vm_area_struct *vma)
+{
+	if (vma->numab_state->vma_scan_select > 0) {
+		vma->numab_state->vma_scan_select--;
+		return false;
+	} else
+		vma->numab_state->vma_scan_select = vma_scan_ratelimit(vma);
+
+	return true;
+}
+
 static bool vma_is_accessed(struct vm_area_struct *vma)
 {
 	unsigned long pids;
@@ -3259,6 +3289,8 @@ static void task_numa_work(struct callback_head *work)
 			/* Reset happens after 4 times scan delay of scan start */
 			vma->numab_state->next_pid_reset =  vma->numab_state->next_scan +
 				msecs_to_jiffies(VMA_PID_RESET_PERIOD);
+
+			vma->numab_state->vma_scan_select = 0;
 		}
 
 		/*
@@ -3278,8 +3310,11 @@ static void task_numa_work(struct callback_head *work)
 			vma->numab_state->access_pids[1] = 0;
 		}
 
-		/* Do not scan the VMA if task has not accessed */
-		if (!vma_is_accessed(vma))
+		/*
+		 * Do not scan the VMA if task has not accessed OR it is still
+		   an unlucky disjoint vma.
+		 */
+		if (!(vma_is_accessed(vma) || task_disjoint_vma_select(vma)))
 			continue;
 
 		do {
