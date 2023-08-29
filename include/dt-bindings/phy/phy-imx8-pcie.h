@@ -11,4 +11,11 @@
 #define IMX8_PCIE_REFCLK_PAD_INPUT	1
 #define IMX8_PCIE_REFCLK_PAD_OUTPUT	2
 
+/*
+ * Different usecases of i.MX8QM HSIO(High Speed IO) module.
+ */
+#define	PCIEAX2SATA		1
+#define	PCIEAX1PCIEBX1SATA	2
+#define	PCIEAX2PCIEBX1		3
+
 #endif /* _DT_BINDINGS_IMX8_PCIE_H */
