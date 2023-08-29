@@ -198,12 +198,13 @@ struct svc_rdma_send_ctxt *svc_rdma_send_ctxt_get(struct svcxprt_rdma *rdma)
 	struct svc_rdma_send_ctxt *ctxt;
 	struct llist_node *node;
 
-	spin_lock(&rdma->sc_send_lock);
+	spin_lock_bh(&rdma->sc_send_lock);
 	node = llist_del_first(&rdma->sc_send_ctxts);
+	spin_unlock_bh(&rdma->sc_send_lock);
 	if (!node)
 		goto out_empty;
+
 	ctxt = llist_entry(node, struct svc_rdma_send_ctxt, sc_node);
-	spin_unlock(&rdma->sc_send_lock);
 
 out:
 	rpcrdma_set_xdrlen(&ctxt->sc_hdrbuf, 0);
@@ -216,7 +217,6 @@ out:
 	return ctxt;
 
 out_empty:
-	spin_unlock(&rdma->sc_send_lock);
 	ctxt = svc_rdma_send_ctxt_alloc(rdma);
 	if (!ctxt)
 		return NULL;

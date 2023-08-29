@@ -56,9 +56,9 @@ svc_rdma_get_rw_ctxt(struct svcxprt_rdma *rdma, unsigned int sges)
 	struct svc_rdma_rw_ctxt *ctxt;
 	struct llist_node *node;
 
-	spin_lock(&rdma->sc_rw_ctxt_lock);
+	spin_lock_bh(&rdma->sc_rw_ctxt_lock);
 	node = llist_del_first(&rdma->sc_rw_ctxts);
-	spin_unlock(&rdma->sc_rw_ctxt_lock);
+	spin_unlock_bh(&rdma->sc_rw_ctxt_lock);
 	if (node) {
 		ctxt = llist_entry(node, struct svc_rdma_rw_ctxt, rw_node);
 	} else {
