@@ -412,6 +412,53 @@ drm_atomic_replace_property_blob_from_id(struct drm_device *dev,
  * the sanity of the userspace data.
  */
 static
+int drm_plane_reset_color_op_blobs(struct drm_plane *plane,
+				   struct drm_plane_state *state,
+				   bool *replaced)
+{
+	struct drm_device *dev = plane->dev;
+	int ret;
+	bool blob_replaced = false;
+	bool temp_replaced = false;
+
+	ret = drm_atomic_replace_property_blob_from_id(dev,
+						       &state->color.ctm,
+						       0, -1, -1,
+						       &blob_replaced);
+	temp_replaced |= blob_replaced;
+	if (ret)
+		goto out;
+
+	ret = drm_atomic_replace_property_blob_from_id(dev,
+						       &state->color.pre_csc_lut,
+						       0, -1, -1,
+						       &blob_replaced);
+	temp_replaced |= blob_replaced;
+
+	if (ret)
+		goto out;
+
+	ret = drm_atomic_replace_property_blob_from_id(dev,
+						       &state->color.post_csc_lut,
+						       0, -1, -1,
+						       &blob_replaced);
+	temp_replaced |= blob_replaced;
+
+	ret = drm_atomic_replace_property_blob_from_id(dev,
+						       &state->color.private_color_op_data,
+						       0, -1, -1,
+						       &blob_replaced);
+	temp_replaced |= blob_replaced;
+
+	if (ret)
+		goto out;
+out:
+	if (!ret)
+		*replaced |= temp_replaced;
+	return ret;
+}
+
+static
 int drm_plane_replace_color_op_blobs(struct drm_plane *plane,
 				     struct drm_plane_state *state,
 				     uint64_t color_pipeline_blob_id,
@@ -424,6 +471,9 @@ int drm_plane_replace_color_op_blobs(struct drm_plane *plane,
 	int ret = 0, i;
 	bool blob_replaced = false;
 	bool temp_replaced = false;
+
+	if (!color_pipeline_blob_id)
+		return drm_plane_reset_color_op_blobs(plane, state, replaced);
 
 	new_blob = drm_property_lookup_blob(dev, color_pipeline_blob_id);
 
