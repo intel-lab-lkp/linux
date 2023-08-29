@@ -1091,6 +1091,83 @@ struct drm_color_pipeline {
 				  DRM_MODE_PAGE_FLIP_ASYNC | \
 				  DRM_MODE_PAGE_FLIP_TARGET)
 
+/**
+ * DRM_MODE_LUT_POST_CSC
+ *
+ * LUT is for post csc (after CTM)
+ */
+#define DRM_MODE_LUT_POST_CSC BIT(0)
+
+/**
+ * DRM_MODE_LUT_PRE_CSC
+ *
+ * LUT is for pre csc (before CTM)
+ */
+#define DRM_MODE_LUT_PRE_CSC BIT(1)
+
+/**
+ * DRM_MODE_LUT_INTERPOLATE
+ *
+ * linearly interpolate between the points
+ */
+#define DRM_MODE_LUT_INTERPOLATE BIT(2)
+
+/**
+ * DRM_MODE_LUT_REUSE_LAST
+ *
+ * the last value of the previous range is the
+ * first value of the current range.
+ */
+#define DRM_MODE_LUT_REUSE_LAST BIT(3)
+
+/**
+ * DRM_MODE_LUT_NON_DECREASING
+ *
+ * the curve must be non-decreasing
+ */
+#define DRM_MODE_LUT_NON_DECREASING BIT(4)
+
+/**
+ * DRM_MODE_LUT_REFLECT_NEGATIVE
+ *
+ *  the curve is reflected across origin for negative inputs
+ */
+#define DRM_MODE_LUT_REFLECT_NEGATIVE BIT(5)
+
+/**
+ * DRM_MODE_LUT_SINGLE_CHANNEL
+ *
+ * the same curve (red) is used for blue and green channels as well
+ */
+#define DRM_MODE_LUT_SINGLE_CHANNEL BIT(6)
+
+/**
+ * struct drm_color_lut_range
+ *
+ * structure to advertise capability of a color hardware
+ * block that accepts LUT values.  It can represent LUTs with
+ * varied number of entries and distributions
+ * (Multi segmented, Logarithmic etc).
+ */
+
+struct drm_color_lut_range {
+	/* DRM_MODE_LUT_* */
+	__u32 flags;
+	/* number of points on the curve */
+	__u16 count;
+	/* input/output bits per component */
+	__u8 input_bpc, output_bpc;
+	/* input start/end values */
+	__s32 start, end;
+	/* output min/max values */
+	__s32 min, max;
+};
+
+enum lut_type {
+	LUT_TYPE_PRE_CSC = 0,
+	LUT_TYPE_POST_CSC = 1,
+};
+
 /*
  * Request a page flip on the specified crtc.
  *
