@@ -4010,6 +4010,22 @@ static int intel_prepare_plane_color_pipeline(struct drm_plane *plane)
 
 		color_pipeline_hdr[2].blob_id =
 			blob[i++]->base.id;
+	} else {
+		blob[i] = drm_property_create_blob(plane->dev,
+						   sizeof(xelpd_pre_post_csc_sdr),
+						   xelpd_pre_post_csc_sdr);
+		if (IS_ERR(blob[i])) {
+			ret =  PTR_ERR(blob[i]);
+			goto out;
+		}
+
+		/*
+		 * In SDR color pipeline PRE-CSC and POST-CSC blocks are positioned
+		 * at 0th and 1st index/postion.
+		 * LUT ranges for SDR planes are similar for pre and post-csc blocks
+		 */
+		color_pipeline_sdr[0].blob_id =
+			color_pipeline_sdr[1].blob_id = blob[i++]->base.id;
 	}
 
 out:
