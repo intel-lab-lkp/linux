@@ -474,15 +474,19 @@ static int __init fb_console_setup(char *this_opt)
 
 		if (!strncmp(options, "logo-pos:", 9)) {
 			options += 9;
+#ifdef CONFIG_LOGO
 			if (!strcmp(options, "center"))
 				fb_center_logo = true;
+#endif
 			continue;
 		}
 
 		if (!strncmp(options, "logo-count:", 11)) {
 			options += 11;
+#ifdef CONFIG_LOGO
 			if (*options)
 				fb_logo_count = simple_strtol(options, &options, 0);
+#endif
 			continue;
 		}
 	}

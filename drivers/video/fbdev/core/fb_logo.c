@@ -7,7 +7,6 @@
 bool fb_center_logo __read_mostly;
 int fb_logo_count __read_mostly = -1;
 
-#ifdef CONFIG_LOGO
 static inline unsigned int safe_shift(unsigned int d, int n)
 {
 	return n < 0 ? d >> -n : d << n;
@@ -518,16 +517,3 @@ int fb_show_logo(struct fb_info *info, int rotate)
 	return y;
 }
 EXPORT_SYMBOL(fb_show_logo);
-#else
-int fb_prepare_logo(struct fb_info *info, int rotate)
-{
-	return 0;
-}
-EXPORT_SYMBOL(fb_prepare_logo);
-
-int fb_show_logo(struct fb_info *info, int rotate)
-{
-	return 0;
-}
-EXPORT_SYMBOL(fb_show_logo);
-#endif /* CONFIG_LOGO */
