@@ -122,6 +122,17 @@ unsigned int stack_depot_fetch(depot_stack_handle_t handle,
 			       unsigned long **entries);
 
 /**
+ * stack_depot_evict - Drop a reference to a stack trace from stack depot
+ *
+ * @handle:	Stack depot handle returned from stack_depot_save()
+ *
+ * The stack trace gets fully removed from stack depot once all references
+ * to it has been dropped (once the number of stack_depot_evict calls matches
+ * the number of stack_depot_save calls for this stack trace).
+ */
+void stack_depot_evict(depot_stack_handle_t handle);
+
+/**
  * stack_depot_print - Print a stack trace from stack depot
  *
  * @stack:	Stack depot handle returned from stack_depot_save()

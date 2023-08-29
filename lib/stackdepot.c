@@ -384,6 +384,13 @@ static struct stack_record *depot_fetch_stack(depot_stack_handle_t handle)
 	return stack;
 }
 
+/* Frees stack into the freelist. */
+static void depot_free_stack(struct stack_record *stack)
+{
+	stack->next = next_stack;
+	next_stack = stack;
+}
+
 /* Calculates the hash for a stack. */
 static inline u32 hash_stack(unsigned long *entries, unsigned int size)
 {
@@ -554,6 +561,42 @@ unsigned int stack_depot_fetch(depot_stack_handle_t handle,
 	return stack->size;
 }
 EXPORT_SYMBOL_GPL(stack_depot_fetch);
+
+void stack_depot_evict(depot_stack_handle_t handle)
+{
+	struct stack_record *stack, **bucket;
+	unsigned long flags;
+
+	if (!handle || stack_depot_disabled)
+		return;
+
+	write_lock_irqsave(&pool_rwlock, flags);
+
+	stack = depot_fetch_stack(handle);
+	if (WARN_ON(!stack))
+		goto out;
+
+	if (refcount_dec_and_test(&stack->count)) {
+		/* Drop stack from the hash table. */
+		if (stack->next)
+			stack->next->prev = stack->prev;
+		if (stack->prev)
+			stack->prev->next = stack->next;
+		else {
+			bucket = &stack_table[stack->hash & stack_hash_mask];
+			*bucket = stack->next;
+		}
+		stack->next = NULL;
+		stack->prev = NULL;
+
+		/* Free stack. */
+		depot_free_stack(stack);
+	}
+
+out:
+	write_unlock_irqrestore(&pool_rwlock, flags);
+}
+EXPORT_SYMBOL_GPL(stack_depot_evict);
 
 void stack_depot_print(depot_stack_handle_t stack)
 {
