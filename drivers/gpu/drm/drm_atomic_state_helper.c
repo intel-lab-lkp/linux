@@ -338,6 +338,19 @@ void __drm_atomic_helper_plane_duplicate_state(struct drm_plane *plane,
 	state->fence = NULL;
 	state->commit = NULL;
 	state->fb_damage_clips = NULL;
+
+	if (state->set_color_pipeline_data)
+		drm_property_blob_get(state->set_color_pipeline_data);
+	if (state->color.pre_csc_lut)
+		drm_property_blob_get(state->color.pre_csc_lut);
+	if (state->color.ctm)
+		drm_property_blob_get(state->color.ctm);
+	if (state->color.post_csc_lut)
+		drm_property_blob_get(state->color.post_csc_lut);
+	if (state->color.private_color_op_data)
+		drm_property_blob_get(state->color.private_color_op_data);
+
+	state->color_mgmt_changed = false;
 }
 EXPORT_SYMBOL(__drm_atomic_helper_plane_duplicate_state);
 
@@ -384,6 +397,11 @@ void __drm_atomic_helper_plane_destroy_state(struct drm_plane_state *state)
 		drm_crtc_commit_put(state->commit);
 
 	drm_property_blob_put(state->fb_damage_clips);
+	drm_property_blob_put(state->set_color_pipeline_data);
+	drm_property_blob_put(state->color.pre_csc_lut);
+	drm_property_blob_put(state->color.ctm);
+	drm_property_blob_put(state->color.post_csc_lut);
+	drm_property_blob_put(state->color.private_color_op_data);
 }
 EXPORT_SYMBOL(__drm_atomic_helper_plane_destroy_state);
 
