@@ -1343,12 +1343,25 @@ unsigned int rdtgroup_cbm_to_size(struct rdt_resource *r,
 {
 	struct cpu_cacheinfo *ci;
 	unsigned int size = 0;
+	int cache_level;
 	int num_b, i;
+
+	switch (r->scope) {
+	case RESCTRL_L3_CACHE:
+		cache_level = 3;
+		break;
+	case RESCTRL_L2_CACHE:
+		cache_level = 2;
+		break;
+	default:
+		WARN_ON_ONCE(1);
+		return size;
+	}
 
 	num_b = bitmap_weight(&cbm, r->cache.cbm_len);
 	ci = get_cpu_cacheinfo(cpumask_any(&d->cpu_mask));
 	for (i = 0; i < ci->num_leaves; i++) {
-		if (ci->info_list[i].level == r->cache_level) {
+		if (ci->info_list[i].level == cache_level) {
 			size = ci->info_list[i].size / r->cache.cbm_len * num_b;
 			break;
 		}
