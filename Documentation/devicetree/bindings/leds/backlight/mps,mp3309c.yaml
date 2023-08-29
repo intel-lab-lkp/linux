@@ -1,0 +1,202 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/leds/backlight/mps,mp3309c.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: MPS MP3309C backlight
+
+maintainers:
+  - Flavio Suligoi <f.suligoi@asem.it>
+
+description: |
+  The Monolithic Power (MPS) MP3309C is a WLED step-up converter, featuring a
+  programmable switching frequency to optimize efficiency.
+  It supports both analog (via I2C commands) and PWM dimming mode.
+
+  The datasheet is available at:
+  https://www.monolithicpower.com/en/mp3309c.html
+
+properties:
+  compatible:
+    const: mps,mp3309c-backlight
+
+  reg:
+    maxItems: 1
+
+  mps,dimming-mode:
+    description: The dimming mode (PWM or analog by I2C commands).
+    $ref: '/schemas/types.yaml#/definitions/string'
+    enum:
+      - pwm
+      - analog-i2c
+
+  pinctrl-names:
+    items:
+      - const: default
+
+  pinctrl-0: true
+
+  pwms:
+    description: PWM channel used for controlling the backlight in "pwm" dimming
+      mode.
+    maxItems: 1
+
+  default-brightness:
+    minimum: 0
+
+  max-brightness:
+    minimum: 1
+
+  enable-gpios:
+    description: GPIO used to enable the backlight in "analog-i2c" dimming mode.
+    maxItems: 1
+
+  mps,switch-on-delay-ms:
+    description: delay (in ms) before switch on the backlight, to wait for image
+      stabilization.
+    default: 10
+
+  mps,switch-off-delay-ms:
+    description: delay (in ms) after the switch off command to the backlight.
+    default: 0
+
+  mps,overvoltage-protection-13v:
+    description: overvoltage protection set to 13.5V.
+    type: boolean
+  mps,overvoltage-protection-24v:
+    description: overvoltage protection set to 24V.
+    type: boolean
+  mps,overvoltage-protection-35v:
+    description: overvoltage protection set to 35.5V.
+    type: boolean
+
+  mps,reset-gpios:
+    description: optional GPIO to reset an external device (LCD panel, FPGA,
+      etc.) when the backlight is switched on.
+    maxItems: 1
+
+  mps,reset-on-delay-ms:
+    description: delay (in s) before generating the reset-gpios.
+    default: 10
+
+  mps,reset-on-length-ms:
+    description: pulse length (in ms) for reset-gpios.
+    default: 10
+
+oneOf:
+  - required:
+      - mps,overvoltage-protection-13v
+  - required:
+      - mps,overvoltage-protection-24v
+  - required:
+      - mps,overvoltage-protection-35.5v
+
+allOf:
+  - $ref: common.yaml#
+  - if:
+      properties:
+        mps,dimming-mode:
+          contains:
+            enum:
+              - pwm
+    then:
+      required:
+        - pwms
+      not:
+        required:
+          - enable-gpios
+
+  - if:
+      properties:
+        mps,dimming-mode:
+          contains:
+            enum:
+              - analog-i2c
+    then:
+      required:
+        - enable-gpios
+      not:
+        required:
+          - pwms
+
+required:
+  - compatible
+  - reg
+  - mps,dimming-mode
+  - max-brightness
+  - default-brightness
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+    i2c3 {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        clock-frequency = <100000>;
+        pinctrl-names = "default";
+        pinctrl-0 = <&pinctrl_i2c3>;
+        status = "okay";
+
+        /* Backlight with PWM control */
+        backlight_pwm: backlight@17 {
+            compatible = "mps,mp3309c-backlight";
+            reg = <0x17>;
+            mps,dimming-mode = "pwm";
+            pinctrl-names = "default";
+            pinctrl-0 = <&pinctrl_fpga_reset>;
+            pwms = <&pwm1 0 3333333 0>; /* 300 Hz --> (1/f) * 1*10^9 */
+            max-brightness = <100>;
+            default-brightness = <80>;
+            mps,switch-on-delay-ms = <800>;
+            mps,switch-off-delay-ms = <10>;
+            mps,overvoltage-protection-24v;
+
+            /*
+             * Enable an FPGA reset pulse when MIPI data are stable,
+             * before switch on the backlight
+             */
+            mps,reset-gpios = <&gpio4 20 GPIO_ACTIVE_HIGH>;
+            mps,reset-on-delay-ms = <100>;
+            mps,reset-on-length-ms = <10>;
+        };
+    };
+
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+    /* Backlight with analog control via I2C bus */
+    i2c3 {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        clock-frequency = <100000>;
+        pinctrl-names = "default";
+        pinctrl-0 = <&pinctrl_i2c3>;
+        status = "okay";
+
+        backlight_analog_i2c: backlight@18 {
+            compatible = "mps,mp3309c-backlight";
+            reg = <0x17>;
+            mps,dimming-mode = "analog-i2c";
+            pinctrl-names = "default";
+            pinctrl-0 = <&pinctrl_reg_pwm_backlight_fixed>,
+                        <&pinctrl_fpga_reset>;
+            enable-gpios = <&gpio5 5 GPIO_ACTIVE_HIGH>;
+            max-brightness = <100>;
+            default-brightness = <80>;
+            mps,switch-on-delay-ms = <800>;
+            mps,switch-off-delay-ms = <10>;
+            mps,overvoltage-protection-24v;
+
+            /*
+            * Enable an FPGA reset pulse when MIPI data are stable,
+            * before switch on the backlight
+            */
+            mps,reset-gpios = <&gpio4 20 GPIO_ACTIVE_HIGH>;
+            mps,reset-on-delay-ms = <100>;
+            mps,reset-on-length-ms = <10>;
+        };
+    };
