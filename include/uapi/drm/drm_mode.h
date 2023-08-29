@@ -944,6 +944,23 @@ struct hdr_output_metadata {
 };
 
 /**
+ * struct drm_color_lut_ext - Represents high precision lut values
+ *
+ * Creating 64 bit palette entries for better data
+ * precision. This will be required for HDR and
+ * similar color processing usecases.
+ */
+struct drm_color_lut_ext {
+	/*
+	 * Data is U32.32 fixed point format.
+	 */
+	__u64 red;
+	__u64 green;
+	__u64 blue;
+	__u64 reserved;
+};
+
+/**
  * enum color_op_block
  *
  * Enums to identify hardware color blocks.
