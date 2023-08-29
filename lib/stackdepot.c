@@ -42,6 +42,7 @@
 #define DEPOT_MAX_POOLS \
 	(((1LL << (DEPOT_POOL_INDEX_BITS)) < DEPOT_POOLS_CAP) ? \
 	 (1LL << (DEPOT_POOL_INDEX_BITS)) : DEPOT_POOLS_CAP)
+#define DEPOT_STACK_MAX_FRAMES 32
 
 /* Compact structure that stores a reference to a stack. */
 union handle_parts {
@@ -58,8 +59,11 @@ struct stack_record {
 	u32 hash;			/* Hash in the hash table */
 	u32 size;			/* Number of stored frames */
 	union handle_parts handle;
-	unsigned long entries[];	/* Variable-sized array of frames */
+	unsigned long entries[DEPOT_STACK_MAX_FRAMES];	/* Frames */
 };
+
+#define DEPOT_STACK_RECORD_SIZE \
+		ALIGN(sizeof(struct stack_record), 1 << DEPOT_STACK_ALIGN)
 
 static bool stack_depot_disabled;
 static bool __stack_depot_early_init_requested __initdata = IS_ENABLED(CONFIG_STACKDEPOT_ALWAYS_INIT);
@@ -258,9 +262,7 @@ static struct stack_record *
 depot_alloc_stack(unsigned long *entries, int size, u32 hash, void **prealloc)
 {
 	struct stack_record *stack;
-	size_t required_size = struct_size(stack, entries, size);
-
-	required_size = ALIGN(required_size, 1 << DEPOT_STACK_ALIGN);
+	size_t required_size = DEPOT_STACK_RECORD_SIZE;
 
 	/* Check if there is not enough space in the current pool. */
 	if (unlikely(pool_offset + required_size > DEPOT_POOL_SIZE)) {
@@ -294,6 +296,10 @@ depot_alloc_stack(unsigned long *entries, int size, u32 hash, void **prealloc)
 	/* Check if we have a pool to save the stack trace. */
 	if (stack_pools[pool_index] == NULL)
 		return NULL;
+
+	/* Limit number of saved frames to DEPOT_STACK_MAX_FRAMES. */
+	if (size > DEPOT_STACK_MAX_FRAMES)
+		size = DEPOT_STACK_MAX_FRAMES;
 
 	/* Save the stack trace. */
 	stack = stack_pools[pool_index] + pool_offset;
