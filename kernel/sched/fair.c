@@ -3172,8 +3172,22 @@ static inline bool vma_test_access_pid_history(struct vm_area_struct *vma)
 	return test_bit(pid_bit, &pids);
 }
 
+static inline bool vma_accessed_recent(struct vm_area_struct *vma)
+{
+	unsigned long *pids, pid_idx;
+
+	pid_idx = vma->numab_state->access_pid_idx;
+	pids = vma->numab_state->access_pids + pid_idx;
+
+	return (bitmap_weight(pids, BITS_PER_LONG) >= 1);
+}
+
 static bool vma_is_accessed(struct vm_area_struct *vma)
 {
+	/* Check at least one task had accessed VMA recently. */
+	if (vma_accessed_recent(vma))
+		return true;
+
 	/* Check if the current task had historically accessed VMA. */
 	if (vma_test_access_pid_history(vma))
 		return true;
