@@ -20,6 +20,12 @@ static inline void fb_unregister_chrdev(void)
 { }
 #endif
 
+/* fb_logo.c */
+extern bool fb_center_logo;
+extern int fb_logo_count;
+int fb_prepare_logo(struct fb_info *fb_info, int rotate);
+int fb_show_logo(struct fb_info *fb_info, int rotate);
+
 /* fbmem.c */
 extern struct class *fb_class;
 extern struct mutex registration_lock;
