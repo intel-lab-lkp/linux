@@ -3977,7 +3977,6 @@ struct drm_color_op color_pipeline_hdr[] = {
 	},
 };
 
-__maybe_unused
 static int intel_prepare_plane_color_pipeline(struct drm_plane *plane)
 {
 	struct drm_i915_private *i915 = to_i915(plane->dev);
@@ -4038,6 +4037,36 @@ out:
 
 	return ret;
 };
+
+__maybe_unused
+void intel_color_plane_init(struct drm_plane *plane)
+{
+	struct drm_i915_private *i915 = to_i915(plane->dev);
+
+	if (DISPLAY_VER(i915) < 13)
+		return;
+
+	drm_plane_create_get_color_pipeline_property(plane->dev, plane, 2);
+
+	intel_prepare_plane_color_pipeline(plane);
+
+	/*
+	 * default pipeline is set as 0 or "no color pipeline". All color h/w
+	 * blocks are disabled at this stage.
+	 */
+	drm_plane_add_color_pipeline(plane, "no color pipeline", NULL, 0);
+
+	if (icl_is_hdr_plane(i915, to_intel_plane(plane)->id))
+		drm_plane_add_color_pipeline(plane, "color pipeline hdr",
+					     color_pipeline_hdr,
+					     sizeof(color_pipeline_hdr));
+	else
+		drm_plane_add_color_pipeline(plane, "color pipeline sdr",
+					     color_pipeline_sdr,
+					     sizeof(color_pipeline_sdr));
+
+	drm_plane_attach_get_color_pipeline_property(plane);
+}
 
 void intel_color_crtc_init(struct intel_crtc *crtc)
 {
