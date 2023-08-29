@@ -985,6 +985,13 @@ static ssize_t current_value_store(struct kobject *kobj,
 	if (!tlmi_priv.can_set_bios_settings)
 		return -EOPNOTSUPP;
 
+	/*
+	 * If we are using bulk saves a reboot should be done once save has
+	 * been called
+	 */
+	if (tlmi_priv.save_mode == TLMI_SAVE_BULK && tlmi_priv.reboot_required)
+		return -EPERM;
+
 	new_setting = kstrdup(buf, GFP_KERNEL);
 	if (!new_setting)
 		return -ENOMEM;
@@ -1011,10 +1018,11 @@ static ssize_t current_value_store(struct kobject *kobj,
 		ret = tlmi_simple_call(LENOVO_SET_BIOS_SETTING_CERT_GUID, set_str);
 		if (ret)
 			goto out;
-		ret = tlmi_simple_call(LENOVO_SAVE_BIOS_SETTING_CERT_GUID,
-				tlmi_priv.pwd_admin->save_signature);
-		if (ret)
-			goto out;
+		if (tlmi_priv.save_mode == TLMI_SAVE_BULK)
+			tlmi_priv.save_required = true;
+		else
+			ret = tlmi_simple_call(LENOVO_SAVE_BIOS_SETTING_CERT_GUID,
+					       tlmi_priv.pwd_admin->save_signature);
 	} else if (tlmi_priv.opcode_support) {
 		/*
 		 * If opcode support is present use that interface.
@@ -1033,14 +1041,17 @@ static ssize_t current_value_store(struct kobject *kobj,
 		if (ret)
 			goto out;
 
-		if (tlmi_priv.pwd_admin->valid && tlmi_priv.pwd_admin->password[0]) {
-			ret = tlmi_opcode_setting("WmiOpcodePasswordAdmin",
-						  tlmi_priv.pwd_admin->password);
-			if (ret)
-				goto out;
+		if (tlmi_priv.save_mode == TLMI_SAVE_BULK) {
+			tlmi_priv.save_required = true;
+		} else {
+			if (tlmi_priv.pwd_admin->valid && tlmi_priv.pwd_admin->password[0]) {
+				ret = tlmi_opcode_setting("WmiOpcodePasswordAdmin",
+							  tlmi_priv.pwd_admin->password);
+				if (ret)
+					goto out;
+			}
+			ret = tlmi_save_bios_settings("");
 		}
-
-		ret = tlmi_save_bios_settings("");
 	} else { /* old non-opcode based authentication method (deprecated) */
 		if (tlmi_priv.pwd_admin->valid && tlmi_priv.pwd_admin->password[0]) {
 			auth_str = kasprintf(GFP_KERNEL, "%s,%s,%s;",
@@ -1068,10 +1079,14 @@ static ssize_t current_value_store(struct kobject *kobj,
 		if (ret)
 			goto out;
 
-		if (auth_str)
-			ret = tlmi_save_bios_settings(auth_str);
-		else
-			ret = tlmi_save_bios_settings("");
+		if (tlmi_priv.save_mode == TLMI_SAVE_BULK) {
+			tlmi_priv.save_required = true;
+		} else {
+			if (auth_str)
+				ret = tlmi_save_bios_settings(auth_str);
+			else
+				ret = tlmi_save_bios_settings("");
+		}
 	}
 	if (!ret && !tlmi_priv.pending_changes) {
 		tlmi_priv.pending_changes = true;
@@ -1152,6 +1167,89 @@ static ssize_t pending_reboot_show(struct kobject *kobj, struct kobj_attribute *
 
 static struct kobj_attribute pending_reboot = __ATTR_RO(pending_reboot);
 
+static ssize_t save_settings_show(struct kobject *kobj, struct kobj_attribute *attr,
+				  char *buf)
+{
+	return sprintf(buf, "%s\n", tlmi_priv.save_mode == TLMI_SAVE_SINGLE ? "single" : "bulk");
+}
+
+static ssize_t save_settings_store(struct kobject *kobj, struct kobj_attribute *attr,
+				   const char *buf, size_t count)
+{
+	char *auth_str = NULL;
+	int ret;
+
+	/* Check if user is trying to change the save mode */
+	if (!strncmp(buf, "bulk", 4) || !strncmp(buf, "single", 6)) {
+		tlmi_priv.save_mode = strncmp(buf, "bulk", 4) ? TLMI_SAVE_SINGLE : TLMI_SAVE_BULK;
+		return count;
+	}
+	if (strncmp(buf, "save", 4))
+		return -EINVAL;
+
+	/* Otherwise assume the user is triggering a save - if supported*/
+	if (!tlmi_priv.can_set_bios_settings ||
+	    tlmi_priv.save_mode == TLMI_SAVE_SINGLE)
+		return -EOPNOTSUPP;
+
+	/* Check there is actually something to save */
+	if (!tlmi_priv.save_required)
+		return -ENOENT;
+
+	/* Use lock in case multiple WMI operations needed */
+	mutex_lock(&tlmi_mutex);
+
+	/* Check if certificate authentication is enabled and active */
+	if (tlmi_priv.certificate_support && tlmi_priv.pwd_admin->cert_installed) {
+		if (!tlmi_priv.pwd_admin->signature || !tlmi_priv.pwd_admin->save_signature) {
+			ret = -EINVAL;
+			goto out;
+		}
+		ret = tlmi_simple_call(LENOVO_SAVE_BIOS_SETTING_CERT_GUID,
+				       tlmi_priv.pwd_admin->save_signature);
+		if (ret)
+			goto out;
+	} else if (tlmi_priv.opcode_support) {
+		if (tlmi_priv.pwd_admin->valid && tlmi_priv.pwd_admin->password[0]) {
+			ret = tlmi_opcode_setting("WmiOpcodePasswordAdmin",
+						  tlmi_priv.pwd_admin->password);
+			if (ret)
+				goto out;
+		}
+		ret = tlmi_save_bios_settings("");
+	} else { /* old non-opcode based authentication method (deprecated) */
+		if (tlmi_priv.pwd_admin->valid && tlmi_priv.pwd_admin->password[0]) {
+			auth_str = kasprintf(GFP_KERNEL, "%s,%s,%s;",
+					     tlmi_priv.pwd_admin->password,
+					     encoding_options[tlmi_priv.pwd_admin->encoding],
+					     tlmi_priv.pwd_admin->kbdlang);
+			if (!auth_str) {
+				ret = -ENOMEM;
+				goto out;
+			}
+		}
+
+		if (auth_str)
+			ret = tlmi_save_bios_settings(auth_str);
+		else
+			ret = tlmi_save_bios_settings("");
+	}
+	tlmi_priv.save_required = false;
+	tlmi_priv.reboot_required = true;
+
+	if (!ret && !tlmi_priv.pending_changes) {
+		tlmi_priv.pending_changes = true;
+		/* let userland know it may need to check reboot pending again */
+		kobject_uevent(&tlmi_priv.class_dev->kobj, KOBJ_CHANGE);
+	}
+out:
+	mutex_unlock(&tlmi_mutex);
+	kfree(auth_str);
+	return ret ?: count;
+}
+
+static struct kobj_attribute save_settings = __ATTR_RW(save_settings);
+
 /* ---- Debug interface--------------------------------------------------------- */
 static ssize_t debug_cmd_store(struct kobject *kobj, struct kobj_attribute *attr,
 				const char *buf, size_t count)
@@ -1221,6 +1319,8 @@ static void tlmi_release_attr(void)
 		}
 	}
 	sysfs_remove_file(&tlmi_priv.attribute_kset->kobj, &pending_reboot.attr);
+	sysfs_remove_file(&tlmi_priv.attribute_kset->kobj, &save_settings.attr);
+
 	if (tlmi_priv.can_debug_cmd && debug_support)
 		sysfs_remove_file(&tlmi_priv.attribute_kset->kobj, &debug_cmd.attr);
 
@@ -1299,6 +1399,10 @@ static int tlmi_sysfs_init(void)
 	}
 
 	ret = sysfs_create_file(&tlmi_priv.attribute_kset->kobj, &pending_reboot.attr);
+	if (ret)
+		goto fail_create_attr;
+
+	ret = sysfs_create_file(&tlmi_priv.attribute_kset->kobj, &save_settings.attr);
 	if (ret)
 		goto fail_create_attr;
 
