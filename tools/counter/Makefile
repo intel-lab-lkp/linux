@@ -14,7 +14,7 @@ MAKEFLAGS += -r
 
 override CFLAGS += -O2 -Wall -g -D_GNU_SOURCE -I$(OUTPUT)include
 
-ALL_TARGETS := counter_example
+ALL_TARGETS := counter_example counter_watch_events
 ALL_PROGRAMS := $(patsubst %,$(OUTPUT)%,$(ALL_TARGETS))
 
 all: $(ALL_PROGRAMS)
@@ -30,6 +30,12 @@ $(OUTPUT)include/linux/counter.h: ../../include/uapi/linux/counter.h
 	ln -sf $(CURDIR)/../../include/uapi/linux/counter.h $@
 
 prepare: $(OUTPUT)include/linux/counter.h
+
+COUNTER_WATCH_EVENTS := $(OUTPUT)counter_watch_events.o
+$(COUNTER_WATCH_EVENTS): prepare FORCE
+	$(Q)$(MAKE) $(build)=counter_watch_events
+$(OUTPUT)counter_watch_events: $(COUNTER_WATCH_EVENTS)
+	$(QUIET_LINK)$(CC) $(CFLAGS) $(LDFLAGS) $< -o $@
 
 COUNTER_EXAMPLE := $(OUTPUT)counter_example.o
 $(COUNTER_EXAMPLE): prepare FORCE
