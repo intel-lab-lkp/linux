@@ -1672,10 +1672,14 @@ static inline int xchg_page_access_time(struct page *page, int time)
 static inline void vma_set_access_pid_bit(struct vm_area_struct *vma)
 {
 	unsigned int pid_bit;
+	unsigned long *pids, pid_idx;
 
-	pid_bit = hash_32(current->pid, ilog2(BITS_PER_LONG));
-	if (vma->numab_state && !test_bit(pid_bit, &vma->numab_state->access_pids[1])) {
-		__set_bit(pid_bit, &vma->numab_state->access_pids[1]);
+	if (vma->numab_state) {
+		pid_bit = hash_32(current->pid, ilog2(BITS_PER_LONG));
+		pid_idx = READ_ONCE(vma->numab_state->access_pid_idx);
+		pids = vma->numab_state->access_pids + pid_idx;
+		if (!test_bit(pid_bit, pids))
+			__set_bit(pid_bit, pids);
 	}
 }
 #else /* !CONFIG_NUMA_BALANCING */

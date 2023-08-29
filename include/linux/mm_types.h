@@ -475,10 +475,12 @@ struct vma_lock {
 	struct rw_semaphore lock;
 };
 
+#define NR_ACCESS_PID_HIST	4
 struct vma_numab_state {
 	unsigned long next_scan;
 	unsigned long next_pid_reset;
-	unsigned long access_pids[2];
+	unsigned long access_pids[NR_ACCESS_PID_HIST];
+	unsigned long access_pid_idx;
 	unsigned long vma_scan_select;
 };
 

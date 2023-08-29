@@ -3159,12 +3159,26 @@ static bool task_disjoint_vma_select(struct vm_area_struct *vma)
 	return true;
 }
 
+static inline bool vma_test_access_pid_history(struct vm_area_struct *vma)
+{
+	unsigned int i, pid_bit;
+	unsigned long pids = 0;
+
+	pid_bit = hash_32(current->pid, ilog2(BITS_PER_LONG));
+
+	for (i = 0; i < NR_ACCESS_PID_HIST; i++)
+		pids  |= vma->numab_state->access_pids[i];
+
+	return test_bit(pid_bit, &pids);
+}
+
 static bool vma_is_accessed(struct vm_area_struct *vma)
 {
-	unsigned long pids;
+	/* Check if the current task had historically accessed VMA. */
+	if (vma_test_access_pid_history(vma))
+		return true;
 
-	pids = vma->numab_state->access_pids[0] | vma->numab_state->access_pids[1];
-	return test_bit(hash_32(current->pid, ilog2(BITS_PER_LONG)), &pids);
+	return false;
 }
 
 #define VMA_PID_RESET_PERIOD (4 * sysctl_numa_balancing_scan_delay)
@@ -3184,6 +3198,7 @@ static void task_numa_work(struct callback_head *work)
 	unsigned long nr_pte_updates = 0;
 	long pages, virtpages;
 	struct vma_iterator vmi;
+	unsigned long pid_idx;
 
 	SCHED_WARN_ON(p != container_of(work, struct task_struct, numa_work));
 
@@ -3298,8 +3313,12 @@ static void task_numa_work(struct callback_head *work)
 				time_after(jiffies, vma->numab_state->next_pid_reset)) {
 			vma->numab_state->next_pid_reset = vma->numab_state->next_pid_reset +
 				msecs_to_jiffies(VMA_PID_RESET_PERIOD);
-			vma->numab_state->access_pids[0] = READ_ONCE(vma->numab_state->access_pids[1]);
-			vma->numab_state->access_pids[1] = 0;
+
+			pid_idx = vma->numab_state->access_pid_idx;
+			pid_idx = (pid_idx + 1) % NR_ACCESS_PID_HIST;
+
+			vma->numab_state->access_pid_idx = pid_idx;
+			vma->numab_state->access_pids[pid_idx] = 0;
 		}
 
 		/*
