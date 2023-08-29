@@ -1435,12 +1435,12 @@ static int set_bdev_super(struct super_block *s, void *data)
 	return 0;
 }
 
-static int set_bdev_super_fc(struct super_block *s, struct fs_context *fc)
+static int super_s_dev_set(struct super_block *s, struct fs_context *fc)
 {
 	return set_bdev_super(s, fc->sget_key);
 }
 
-static int test_bdev_super_fc(struct super_block *s, struct fs_context *fc)
+static int super_s_dev_test(struct super_block *s, struct fs_context *fc)
 {
 	return !(s->s_iflags & SB_I_RETIRED) &&
 		s->s_dev == *(dev_t *)fc->sget_key;
@@ -1500,6 +1500,13 @@ int setup_bdev_super(struct super_block *sb, int sb_flags,
 }
 EXPORT_SYMBOL_GPL(setup_bdev_super);
 
+struct super_block *sget_dev(struct fs_context *fc, dev_t dev)
+{
+	fc->sget_key = &dev;
+	return sget_fc(fc, super_s_dev_set, super_s_dev_test);
+}
+EXPORT_SYMBOL(sget_dev);
+
 /**
  * get_tree_bdev - Get a superblock based on a single block device
  * @fc: The filesystem context holding the parameters
@@ -1523,8 +1530,7 @@ int get_tree_bdev(struct fs_context *fc,
 	}
 
 	fc->sb_flags |= SB_NOSEC;
-	fc->sget_key = &dev;
-	s = sget_fc(fc, test_bdev_super_fc, set_bdev_super_fc);
+	s = sget_dev(fc, dev);
 	if (IS_ERR(s))
 		return PTR_ERR(s);
 
