@@ -104,8 +104,10 @@ static void kprobe_multi_link_api_subtest(void)
 	LIBBPF_OPTS(bpf_link_create_opts, opts);
 	unsigned long long addrs[8];
 	__u64 cookies[8];
+	struct ksyms *ksyms;
 
-	if (!ASSERT_OK(load_kallsyms(), "load_kallsyms"))
+	ksyms = load_kallsyms_local();
+	if (!ASSERT_OK(ksyms != NULL, "load_kallsyms_local"))
 		goto cleanup;
 
 	skel = kprobe_multi__open_and_load();
@@ -116,8 +118,8 @@ static void kprobe_multi_link_api_subtest(void)
 	skel->bss->test_cookie = true;
 
 #define GET_ADDR(__sym, __addr) ({				\
-	__addr = ksym_get_addr(__sym);				\
-	if (!ASSERT_NEQ(__addr, 0, "ksym_get_addr " #__sym))	\
+	__addr = ksym_get_addr_local(ksyms, __sym);		\
+	if (!ASSERT_NEQ(__addr, 0, "ksym_get_addr_local " #__sym))	\
 		goto cleanup;					\
 })
 
@@ -171,6 +173,7 @@ static void kprobe_multi_link_api_subtest(void)
 cleanup:
 	close(link1_fd);
 	close(link2_fd);
+	free_kallsyms_local(ksyms);
 	kprobe_multi__destroy(skel);
 }
 
