@@ -4066,6 +4066,9 @@ void intel_color_plane_init(struct drm_plane *plane)
 					     sizeof(color_pipeline_sdr));
 
 	drm_plane_attach_get_color_pipeline_property(plane);
+
+	drm_plane_create_set_color_pipeline_property(plane->dev, plane);
+	drm_plane_attach_set_color_pipeline_property(plane);
 }
 
 void intel_color_crtc_init(struct intel_crtc *crtc)
