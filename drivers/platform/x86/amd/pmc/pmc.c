@@ -741,6 +741,41 @@ static int amd_pmc_czn_wa_irq1(struct amd_pmc_dev *pdev)
 	return 0;
 }
 
+/* only allow PCIe root ports with a LPS0 constraint configured to go to D3 */
+static int amd_pmc_rp_wa(struct amd_pmc_dev *pdev)
+{
+	struct pci_dev *pci_dev = NULL;
+
+	while ((pci_dev = pci_get_device(PCI_VENDOR_ID_AMD, PCI_ANY_ID, pci_dev))) {
+		struct acpi_device *adev;
+		int constraint;
+
+		if (!pci_is_pcie(pci_dev) ||
+		    !(pci_pcie_type(pci_dev) == PCI_EXP_TYPE_ROOT_PORT))
+			continue;
+
+		if (pci_dev->current_state == PCI_D3hot ||
+		    pci_dev->current_state == PCI_D3cold)
+			continue;
+
+		adev = ACPI_COMPANION(&pci_dev->dev);
+		if (!adev)
+			continue;
+
+		constraint = acpi_get_lps0_constraint(adev);
+		if (constraint != ACPI_STATE_UNKNOWN &&
+		    constraint >= ACPI_STATE_S3)
+			continue;
+
+		if (pci_dev->bridge_d3 == 0)
+			continue;
+		pci_dev->bridge_d3 = 0;
+		dev_info(&pci_dev->dev, "Disabling D3 on PCIe root port due lack of constraint\n");
+	}
+
+	return 0;
+}
+
 static int amd_pmc_verify_czn_rtc(struct amd_pmc_dev *pdev, u32 *arg)
 {
 	struct rtc_device *rtc_device;
@@ -892,6 +927,10 @@ static int amd_pmc_suspend_handler(struct device *dev)
 	switch (pdev->cpu_id) {
 	case AMD_CPU_ID_CZN:
 		rc = amd_pmc_czn_wa_irq1(pdev);
+		break;
+	case AMD_CPU_ID_YC:
+	case AMD_CPU_ID_PS:
+		rc = amd_pmc_rp_wa(pdev);
 		break;
 	default:
 		break;
