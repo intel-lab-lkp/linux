@@ -57,6 +57,21 @@
 
 #define PCA954X_IRQ_OFFSET 4
 
+/*
+ * MAX7357 exposes 7 registers on POR which allow to configure additional
+ * features. The configuration register holds the following settings:
+ */
+#define MAX7357_CONF_INT_ENABLE			BIT(0)
+#define MAX7357_CONF_FLUSH_OUT			BIT(1)
+#define MAX7357_CONF_RELEASE_INT		BIT(2)
+#define MAX7357_CONF_LOCK_UP_CLEAR		BIT(3)
+#define MAX7357_CONF_DISCON_SINGLE_CHAN		BIT(4)
+#define MAX7357_CONF_BUS_LOCKUP_DETECT_DIS	BIT(5)
+#define MAX7357_CONF_ENABLE_BASIC_MODE		BIT(6)
+#define MAX7357_CONF_PRECONNECT_TEST		BIT(7)
+
+#define MAX7357_POR_DEFAULT_CONF		BIT(0)
+
 enum pca_type {
 	max_7356,
 	max_7357,
@@ -477,6 +492,41 @@ static int pca954x_init(struct i2c_client *client, struct pca954x *data)
 	return ret;
 }
 
+static int max7357_init(struct i2c_client *client, struct pca954x *data)
+{
+	struct i2c_adapter *adap = client->adapter;
+	u8 conf = MAX7357_POR_DEFAULT_CONF;
+	int ret;
+
+	if (!i2c_check_functionality(adap, I2C_FUNC_SMBUS_WRITE_BYTE_DATA))
+		return pca954x_init(client, data);
+
+	if (data->idle_state >= 0)
+		data->last_chan = pca954x_regval(data, data->idle_state);
+	else
+		data->last_chan = 0; /* Disconnect multiplexer */
+
+	/*
+	 * The interrupt signals downstream channels that are stuck, but
+	 * there's nothing to do and it prevents using the shared pin as reset.
+	 */
+	conf &= MAX7357_CONF_INT_ENABLE;
+
+	/*
+	 * On bus lock-up isolate the failing channel and try to clear the
+	 * fault by sending the flush-out sequence.
+	 */
+	if (device_property_read_bool(&client->dev, "maxim,bus-lockup-fix"))
+		conf |= MAX7357_CONF_DISCON_SINGLE_CHAN |
+			MAX7357_CONF_FLUSH_OUT;
+
+	ret = i2c_smbus_write_byte_data(client, data->last_chan, conf);
+	if (ret < 0)
+		data->last_chan = 0;
+
+	return ret;
+}
+
 /*
  * I2C init/probing/exit functions
  */
@@ -560,7 +610,11 @@ static int pca954x_probe(struct i2c_client *client)
 	 * initializes the mux to a channel
 	 * or disconnected state.
 	 */
-	ret = pca954x_init(client, data);
+	if ((dev->of_node && of_device_is_compatible(dev->of_node, "maxim,max7357")) ||
+	    id->driver_data == max_7357)
+		ret = max7357_init(client, data);
+	else
+		ret = pca954x_init(client, data);
 	if (ret < 0) {
 		dev_warn(dev, "probe failed\n");
 		ret = -ENODEV;
