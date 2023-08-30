@@ -209,11 +209,12 @@ static void regulator_unlock(struct regulator_dev *rdev)
  * @rdev2:		second regulator
  * @ww_ctx:		w/w mutex acquire context
  *
- * Locks both rdevs using the regulator_ww_class.
+ * Locks both rdevs using the regulator_ww_class. Returns error if an
+ * unexpected error has been detected during a locking sequence.
  */
-static void regulator_lock_two(struct regulator_dev *rdev1,
-			       struct regulator_dev *rdev2,
-			       struct ww_acquire_ctx *ww_ctx)
+static int regulator_lock_two(struct regulator_dev *rdev1,
+			      struct regulator_dev *rdev2,
+			      struct ww_acquire_ctx *ww_ctx)
 {
 	struct regulator_dev *held, *contended;
 	int ret;
@@ -222,10 +223,13 @@ static void regulator_lock_two(struct regulator_dev *rdev1,
 
 	/* Try to just grab both of them */
 	ret = regulator_lock_nested(rdev1, ww_ctx);
-	WARN_ON(ret);
+	if (WARN_ON(ret))
+		goto exit;
 	ret = regulator_lock_nested(rdev2, ww_ctx);
-	if (ret != -EDEADLOCK) {
-		WARN_ON(ret);
+	if (!ret)
+		goto exit;
+	if (WARN_ON(ret != -EDEADLOCK)) {
+		regulator_unlock(rdev1);
 		goto exit;
 	}
 
@@ -239,13 +243,15 @@ static void regulator_lock_two(struct regulator_dev *rdev1,
 		ret = regulator_lock_nested(contended, ww_ctx);
 
 		if (ret != -EDEADLOCK) {
-			WARN_ON(ret);
+			if (WARN_ON(ret))
+				regulator_unlock(held);
 			break;
 		}
 	}
 
 exit:
 	ww_acquire_done(ww_ctx);
+	return ret;
 }
 
 /**
@@ -2113,7 +2119,11 @@ static int regulator_resolve_supply(struct regulator_dev *rdev)
 	 * between rdev->supply null check and setting rdev->supply in
 	 * set_supply() from concurrent tasks.
 	 */
-	regulator_lock_two(rdev, r, &ww_ctx);
+	ret = regulator_lock_two(rdev, r, &ww_ctx);
+	if (ret < 0) {
+		put_device(&r->dev);
+		return ret;
+	}
 
 	/* Supply just resolved by a concurrent task? */
 	if (rdev->supply) {
