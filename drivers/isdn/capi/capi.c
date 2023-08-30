@@ -1326,11 +1326,9 @@ static inline void capinc_tty_exit(void) { }
 static int __maybe_unused capi20_proc_show(struct seq_file *m, void *v)
 {
 	struct capidev *cdev;
-	struct list_head *l;
 
 	mutex_lock(&capidev_list_lock);
-	list_for_each(l, &capidev_list) {
-		cdev = list_entry(l, struct capidev, list);
+	list_for_each_entry(cdev, &capidev_list, list) {
 		seq_printf(m, "0 %d %lu %lu %lu %lu\n",
 			   cdev->ap.applid,
 			   cdev->ap.nrecvctlpkt,
