@@ -243,6 +243,8 @@ static void psb_gtt_init_ranges(struct drm_psb_private *dev_priv)
 		gtt_mem = &pdev->resource[PSB_GATT_RESOURCE];
 	}
 
+	drm_info(dev, "Phys start of GTT: 0x%llx\n", (u64)gtt_phys_start);
+
 	pg->gtt_phys_start = gtt_phys_start;
 	pg->mmu_gatt_start = mmu_gatt_start;
 	pg->gtt_start = gtt_start;
