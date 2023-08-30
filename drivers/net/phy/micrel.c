@@ -1418,6 +1418,35 @@ static int ksz9131_get_features(struct phy_device *phydev)
 	return 0;
 }
 
+static int ksz9477_get_features(struct phy_device *phydev)
+{
+	__ETHTOOL_DECLARE_LINK_MODE_MASK(zero) = { 0, };
+	int ret;
+
+	ret = genphy_read_abilities(phydev);
+	if (ret)
+		return ret;
+
+	/* KSZ9477 Errata DS80000754C
+	 *
+	 * Module 4: Energy Efficient Ethernet (EEE) feature select must be
+	 * manually disabled
+	 *   The EEE feature is enabled by default, but it is not fully
+	 *   operational. It must be manually disabled through register
+	 *   controls. If not disabled, the PHY ports can auto-negotiate
+	 *   to enable EEE, and this feature can cause link drops when linked
+	 *   to another device supporting EEE.
+	 *
+	 *   Although, the KSZ9477 MMD register
+	 *   (MMD_DEVICE_ID_EEE_ADV.MMD_EEE_ADV) advertise that EEE is
+	 *   operational one needs to manualy clear them to follow the chip
+	 *   errata.
+	 */
+	linkmode_and(phydev->supported_eee, phydev->supported, zero);
+
+	return 0;
+}
+
 #define KSZ8873MLL_GLOBAL_CONTROL_4	0x06
 #define KSZ8873MLL_GLOBAL_CONTROL_4_DUPLEX	BIT(6)
 #define KSZ8873MLL_GLOBAL_CONTROL_4_SPEED	BIT(4)
@@ -4871,7 +4900,7 @@ static struct phy_driver ksphy_driver[] = {
 	.handle_interrupt = kszphy_handle_interrupt,
 	.suspend	= genphy_suspend,
 	.resume		= genphy_resume,
-	.get_features	= ksz9131_get_features,
+	.get_features	= ksz9477_get_features,
 } };
 
 module_phy_driver(ksphy_driver);
