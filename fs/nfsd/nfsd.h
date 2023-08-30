@@ -511,10 +511,16 @@ extern void nfsd4_ssc_init_umount_work(struct nfsd_net *nn);
 
 extern void nfsd4_init_leases_net(struct nfsd_net *nn);
 
+const char *nfsd4_op_name(unsigned int opnum);
 #else /* CONFIG_NFSD_V4 */
 static inline int nfsd4_is_junction(struct dentry *dentry)
 {
 	return 0;
+}
+
+static inline const char *nfsd4_op_name(unsigned int opnum)
+{
+	return "unknown_operation";
 }
 
 static inline void nfsd4_init_leases_net(struct nfsd_net *nn) { };
