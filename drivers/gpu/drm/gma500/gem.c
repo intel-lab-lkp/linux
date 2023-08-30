@@ -340,7 +340,11 @@ int psb_gem_mm_init(struct drm_device *dev)
 	pg = &dev_priv->gtt;
 
 	pci_read_config_dword(pdev, PSB_BSM, &dev_priv->stolen_base);
-	vram_stolen_size = pg->gtt_phys_start - dev_priv->stolen_base - PAGE_SIZE;
+
+	if (pg->gtt_phys_start)
+		vram_stolen_size = pg->gtt_phys_start - dev_priv->stolen_base - PAGE_SIZE;
+	else
+		vram_stolen_size = 8 * 1024 * 1024;
 
 	stolen_size = vram_stolen_size;
 
