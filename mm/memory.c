@@ -5871,24 +5871,14 @@ static void clear_gigantic_page(struct page *page,
 	}
 }
 
-static int clear_subpage(unsigned long addr, int idx, void *arg)
-{
-	struct page *page = arg;
-
-	clear_user_highpage(page + idx, addr);
-	return 0;
-}
-
 /*
  * Clear subpages of the specified huge page. The target subpage will be
  * processed last to keep its cache lines hot.
  */
-static int __clear_huge_page(
-	unsigned long addr_hint, unsigned int pages_per_huge_page,
-	int (*process_subpage)(unsigned long addr, int idx, void *arg),
-	void *arg)
+static void __clear_huge_page(struct page *page,
+	unsigned long addr_hint, unsigned int pages_per_huge_page)
 {
-	int i, n, base, l, ret;
+	int i, n, base, l;
 	unsigned long addr = addr_hint &
 		~(((unsigned long)pages_per_huge_page << PAGE_SHIFT) - 1);
 
@@ -5902,9 +5892,7 @@ static int __clear_huge_page(
 		/* Process subpages at the end of huge page */
 		for (i = pages_per_huge_page - 1; i >= 2 * n; i--) {
 			cond_resched();
-			ret = process_subpage(addr + i * PAGE_SIZE, i, arg);
-			if (ret)
-				return ret;
+			clear_user_highpage(page + i, addr + i * PAGE_SIZE);
 		}
 	} else {
 		/* If target subpage in second half of huge page */
@@ -5913,9 +5901,7 @@ static int __clear_huge_page(
 		/* Process subpages at the begin of huge page */
 		for (i = 0; i < base; i++) {
 			cond_resched();
-			ret = process_subpage(addr + i * PAGE_SIZE, i, arg);
-			if (ret)
-				return ret;
+			clear_user_highpage(page + i, addr + i * PAGE_SIZE);
 		}
 	}
 	/*
@@ -5927,15 +5913,11 @@ static int __clear_huge_page(
 		int right_idx = base + 2 * l - 1 - i;
 
 		cond_resched();
-		ret = process_subpage(addr + left_idx * PAGE_SIZE, left_idx, arg);
-		if (ret)
-			return ret;
+		clear_user_highpage(page + left_idx, addr + left_idx * PAGE_SIZE);
+
 		cond_resched();
-		ret = process_subpage(addr + right_idx * PAGE_SIZE, right_idx, arg);
-		if (ret)
-			return ret;
+		clear_user_highpage(page + right_idx, addr + right_idx * PAGE_SIZE);
 	}
-	return 0;
 }
 
 __weak void clear_huge_page(struct page *page,
@@ -5950,7 +5932,7 @@ __weak void clear_huge_page(struct page *page,
 		return;
 	}
 
-	__clear_huge_page(addr_hint, pages_per_huge_page, clear_subpage, page);
+	__clear_huge_page(page, addr_hint, pages_per_huge_page);
 }
 
 static int copy_user_gigantic_page(struct folio *dst, struct folio *src,
@@ -5982,12 +5964,10 @@ struct copy_subpage_arg {
 	struct vm_area_struct *vma;
 };
 
-static int copy_subpage(unsigned long addr, int idx, void *arg)
+static int copy_subpage(struct copy_subpage_arg *copy_arg, unsigned long addr, int idx)
 {
-	struct copy_subpage_arg *copy_arg = arg;
-
 	if (copy_mc_user_highpage(copy_arg->dst + idx, copy_arg->src + idx,
-				  addr, copy_arg->vma)) {
+				  addr + idx * PAGE_SIZE, copy_arg->vma)) {
 		memory_failure_queue(page_to_pfn(copy_arg->src + idx), 0);
 		return -EHWPOISON;
 	}
@@ -5998,10 +5978,8 @@ static int copy_subpage(unsigned long addr, int idx, void *arg)
  * Copy subpages of the specified huge page. The target subpage will be
  * processed last to keep its cache lines hot.
  */
-static int __copy_huge_page(
-	unsigned long addr_hint, unsigned int pages_per_huge_page,
-	int (*process_subpage)(unsigned long addr, int idx, void *arg),
-	void *arg)
+static int __copy_huge_page(struct copy_subpage_arg *arg,
+	unsigned long addr_hint, unsigned int pages_per_huge_page)
 {
 	int i, n, base, l, ret;
 	unsigned long addr = addr_hint &
@@ -6017,7 +5995,7 @@ static int __copy_huge_page(
 		/* Process subpages at the end of huge page */
 		for (i = pages_per_huge_page - 1; i >= 2 * n; i--) {
 			cond_resched();
-			ret = process_subpage(addr + i * PAGE_SIZE, i, arg);
+			ret = copy_subpage(arg, addr, i);
 			if (ret)
 				return ret;
 		}
@@ -6028,7 +6006,7 @@ static int __copy_huge_page(
 		/* Process subpages at the begin of huge page */
 		for (i = 0; i < base; i++) {
 			cond_resched();
-			ret = process_subpage(addr + i * PAGE_SIZE, i, arg);
+			ret = copy_subpage(arg, addr, i);
 			if (ret)
 				return ret;
 		}
@@ -6042,11 +6020,11 @@ static int __copy_huge_page(
 		int right_idx = base + 2 * l - 1 - i;
 
 		cond_resched();
-		ret = process_subpage(addr + left_idx * PAGE_SIZE, left_idx, arg);
+		ret = copy_subpage(arg, addr, left_idx);
 		if (ret)
 			return ret;
 		cond_resched();
-		ret = process_subpage(addr + right_idx * PAGE_SIZE, right_idx, arg);
+		ret = copy_subpage(arg, addr, right_idx);
 		if (ret)
 			return ret;
 	}
@@ -6069,7 +6047,7 @@ int copy_user_large_folio(struct folio *dst, struct folio *src,
 		return copy_user_gigantic_page(dst, src, addr, vma,
 					       pages_per_huge_page);
 
-	return __copy_huge_page(addr_hint, pages_per_huge_page, copy_subpage, &arg);
+	return __copy_huge_page(&arg, addr_hint, pages_per_huge_page);
 }
 
 long copy_folio_from_user(struct folio *dst_folio,
