@@ -141,27 +141,19 @@ static bool regulator_ops_is_valid(struct regulator_dev *rdev, int ops)
 static inline int regulator_lock_nested(struct regulator_dev *rdev,
 					struct ww_acquire_ctx *ww_ctx)
 {
-	bool lock = false;
 	int ret = 0;
 
 	mutex_lock(&regulator_nesting_mutex);
 
 	if (!ww_mutex_trylock(&rdev->mutex, ww_ctx)) {
-		if (rdev->mutex_owner == current)
-			rdev->ref_cnt++;
-		else
-			lock = true;
-
-		if (lock) {
+		if (rdev->mutex_owner != current) {
 			mutex_unlock(&regulator_nesting_mutex);
 			ret = ww_mutex_lock(&rdev->mutex, ww_ctx);
 			mutex_lock(&regulator_nesting_mutex);
 		}
-	} else {
-		lock = true;
 	}
 
-	if (lock && ret != -EDEADLK) {
+	if (ret != -EDEADLK) {
 		rdev->ref_cnt++;
 		rdev->mutex_owner = current;
 	}
