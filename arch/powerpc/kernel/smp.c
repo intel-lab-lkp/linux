@@ -1006,7 +1006,12 @@ static int powerpc_smt_flags(void)
  */
 static int powerpc_shared_cache_flags(void)
 {
-	return SD_SHARE_PKG_RESOURCES;
+	return SD_SHARE_PKG_RESOURCES | asym_pack_flag;
+}
+
+static int powerpc_shared_proc_flags(void)
+{
+	return asym_pack_flag;
 }
 
 /*
@@ -1045,8 +1050,8 @@ static struct sched_domain_topology_level powerpc_topology[] = {
 	{ cpu_smt_mask, powerpc_smt_flags, SD_INIT_NAME(SMT) },
 #endif
 	{ shared_cache_mask, powerpc_shared_cache_flags, SD_INIT_NAME(CACHE) },
-	{ cpu_mc_mask, SD_INIT_NAME(MC) },
-	{ cpu_cpu_mask, SD_INIT_NAME(DIE) },
+	{ cpu_mc_mask, powerpc_shared_proc_flags, SD_INIT_NAME(MC) },
+	{ cpu_cpu_mask, powerpc_shared_proc_flags, SD_INIT_NAME(DIE) },
 	{ NULL, },
 };
 
@@ -1681,7 +1686,9 @@ static void __init fixup_topology(void)
 {
 	int i;
 
-	if (cpu_has_feature(CPU_FTR_ASYM_SMT)) {
+	if (is_shared_processor()) {
+		asym_pack_flag = SD_ASYM_PACKING;
+	} else if (cpu_has_feature(CPU_FTR_ASYM_SMT)) {
 		printk_once(KERN_INFO "Enabling Asymmetric SMT scheduling\n");
 		asym_pack_flag = SD_ASYM_PACKING;
 	}
