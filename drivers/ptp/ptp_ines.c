@@ -237,11 +237,9 @@ static struct ines_port *ines_find_port(struct device_node *node, u32 index)
 {
 	struct ines_port *port = NULL;
 	struct ines_clock *clock;
-	struct list_head *this;
 
 	mutex_lock(&ines_clocks_lock);
-	list_for_each(this, &ines_clocks) {
-		clock = list_entry(this, struct ines_clock, list);
+	list_for_each_entry(clock, &ines_clocks, list) {
 		if (clock->node == node) {
 			port = &clock->port[index];
 			break;
