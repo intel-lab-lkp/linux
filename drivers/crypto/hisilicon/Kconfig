@@ -49,17 +49,6 @@ config CRYPTO_DEV_HISI_QM
 	  HiSilicon accelerator engines use a common queue management
 	  interface. Specific engine driver may use this module.
 
-config CRYPTO_DEV_HISI_ZIP
-	tristate "Support for HiSilicon ZIP accelerator"
-	depends on PCI_MSI
-	depends on ARM64 || (COMPILE_TEST && 64BIT)
-	depends on !CPU_BIG_ENDIAN || COMPILE_TEST
-	depends on UACCE || UACCE=n
-	depends on ACPI
-	select CRYPTO_DEV_HISI_QM
-	help
-	  Support for HiSilicon ZIP Driver
-
 config CRYPTO_DEV_HISI_HPRE
 	tristate "Support for HISI HPRE accelerator"
 	depends on PCI_MSI
