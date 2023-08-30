@@ -1398,7 +1398,7 @@ static int ksz9131_config_aneg(struct phy_device *phydev)
 	return genphy_config_aneg(phydev);
 }
 
-static int ksz9477_get_features(struct phy_device *phydev)
+static int ksz9131_get_features(struct phy_device *phydev)
 {
 	int ret;
 
@@ -4829,7 +4829,7 @@ static struct phy_driver ksphy_driver[] = {
 	.resume		= kszphy_resume,
 	.cable_test_start	= ksz9x31_cable_test_start,
 	.cable_test_get_status	= ksz9x31_cable_test_get_status,
-	.get_features	= ksz9477_get_features,
+	.get_features	= ksz9131_get_features,
 }, {
 	.phy_id		= PHY_ID_KSZ8873MLL,
 	.phy_id_mask	= MICREL_PHY_ID_MASK,
@@ -4871,7 +4871,7 @@ static struct phy_driver ksphy_driver[] = {
 	.handle_interrupt = kszphy_handle_interrupt,
 	.suspend	= genphy_suspend,
 	.resume		= genphy_resume,
-	.get_features	= ksz9477_get_features,
+	.get_features	= ksz9131_get_features,
 } };
 
 module_phy_driver(ksphy_driver);
