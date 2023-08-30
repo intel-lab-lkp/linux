@@ -1405,6 +1405,7 @@ static unsigned long zap_pte_range(struct mmu_gather *tlb,
 	swp_entry_t entry;
 
 	tlb_change_page_size(tlb, PAGE_SIZE);
+	tlb_discard_rmaps(tlb);
 	init_rss_vec(rss);
 	start_pte = pte = pte_offset_map_lock(mm, pmd, addr, &ptl);
 	if (!pte)
@@ -1423,7 +1424,7 @@ static unsigned long zap_pte_range(struct mmu_gather *tlb,
 			break;
 
 		if (pte_present(ptent)) {
-			unsigned int delay_rmap;
+			unsigned int batch_rmap;
 
 			page = vm_normal_page(vma, addr, ptent);
 			if (unlikely(!should_zap_page(details, page)))
@@ -1438,12 +1439,15 @@ static unsigned long zap_pte_range(struct mmu_gather *tlb,
 				continue;
 			}
 
-			delay_rmap = 0;
+			batch_rmap = tlb_batch_rmap(tlb);
 			if (!PageAnon(page)) {
 				if (pte_dirty(ptent)) {
 					set_page_dirty(page);
-					if (tlb_delay_rmap(tlb)) {
-						delay_rmap = 1;
+					if (batch_rmap) {
+						/*
+						 * Ensure tlb flush happens
+						 * before rmap remove.
+						 */
 						force_flush = 1;
 					}
 				}
@@ -1451,12 +1455,12 @@ static unsigned long zap_pte_range(struct mmu_gather *tlb,
 					mark_page_accessed(page);
 			}
 			rss[mm_counter(page)]--;
-			if (!delay_rmap) {
+			if (!batch_rmap) {
 				page_remove_rmap(page, vma, false);
 				if (unlikely(page_mapcount(page) < 0))
 					print_bad_pte(vma, addr, ptent, page);
 			}
-			if (unlikely(__tlb_remove_page(tlb, page, delay_rmap))) {
+			if (unlikely(__tlb_remove_page(tlb, page, 0))) {
 				force_flush = 1;
 				addr += PAGE_SIZE;
 				break;
@@ -1517,10 +1521,12 @@ static unsigned long zap_pte_range(struct mmu_gather *tlb,
 	arch_leave_lazy_mmu_mode();
 
 	/* Do the actual TLB flush before dropping ptl */
-	if (force_flush) {
+	if (force_flush)
 		tlb_flush_mmu_tlbonly(tlb);
-		tlb_flush_rmaps(tlb, vma);
-	}
+
+	/* Rmap removal must always happen before dropping ptl */
+	tlb_flush_rmaps(tlb, vma);
+
 	pte_unmap_unlock(start_pte, ptl);
 
 	/*

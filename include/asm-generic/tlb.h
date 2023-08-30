@@ -266,25 +266,30 @@ extern bool __tlb_remove_page_size(struct mmu_gather *tlb,
 
 #ifdef CONFIG_SMP
 /*
- * This both sets 'delayed_rmap', and returns true. It would be an inline
- * function, except we define it before the 'struct mmu_gather'.
+ * For configurations that support batching the rmap removal, the removal is
+ * triggered by calling tlb_flush_rmaps(), which must be called after the pte(s)
+ * are cleared and the page has been added to the mmu_gather, and before the ptl
+ * lock that was held for clearing the pte is released.
  */
-#define tlb_delay_rmap(tlb) (((tlb)->delayed_rmap = 1), true)
+#define tlb_batch_rmap(tlb) (true)
 extern void tlb_flush_rmaps(struct mmu_gather *tlb, struct vm_area_struct *vma);
+extern void tlb_discard_rmaps(struct mmu_gather *tlb);
 #endif
 
 #endif
 
 /*
- * We have a no-op version of the rmap removal that doesn't
- * delay anything. That is used on S390, which flushes remote
- * TLBs synchronously, and on UP, which doesn't have any
- * remote TLBs to flush and is not preemptible due to this
- * all happening under the page table lock.
+ * We have a no-op version of the rmap removal that doesn't do anything. That is
+ * used on S390, which flushes remote TLBs synchronously, and on UP, which
+ * doesn't have any remote TLBs to flush and is not preemptible due to this all
+ * happening under the page table lock. Here, the caller must manage each rmap
+ * removal separately.
  */
-#ifndef tlb_delay_rmap
-#define tlb_delay_rmap(tlb) (false)
-static inline void tlb_flush_rmaps(struct mmu_gather *tlb, struct vm_area_struct *vma) { }
+#ifndef tlb_batch_rmap
+#define tlb_batch_rmap(tlb) (false)
+static inline void tlb_flush_rmaps(struct mmu_gather *tlb,
+				   struct vm_area_struct *vma) { }
+static inline void tlb_discard_rmaps(struct mmu_gather *tlb) { }
 #endif
 
 /*
@@ -318,11 +323,6 @@ struct mmu_gather {
 	unsigned int		freed_tables : 1;
 
 	/*
-	 * Do we have pending delayed rmap removals?
-	 */
-	unsigned int		delayed_rmap : 1;
-
-	/*
 	 * at which levels have we cleared entries?
 	 */
 	unsigned int		cleared_ptes : 1;
@@ -343,6 +343,8 @@ struct mmu_gather {
 	struct mmu_gather_batch *active;
 	struct mmu_gather_batch	local;
 	struct page		*__pages[MMU_GATHER_BUNDLE];
+	struct mmu_gather_batch *rmap_pend;
+	unsigned int		rmap_pend_first;
 
 #ifdef CONFIG_MMU_GATHER_PAGE_SIZE
 	unsigned int page_size;
