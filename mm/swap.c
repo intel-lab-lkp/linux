@@ -1038,6 +1038,32 @@ static void __folios_put_refs_do_one(struct folios_put_refs_ctx *ctx,
 }
 
 /**
+ * folios_put_refs - batched folio_put_refs()
+ * @folios: array of `struct pfn_range`s to release
+ * @nr: number of folio ranges
+ *
+ * Each `struct pfn_range` describes the start and end pfn of a range within a
+ * single folio. The folio reference count is decremented once for each pfn in
+ * the range. If it fell to zero, remove the page from the LRU and free it.
+ */
+void folios_put_refs(struct pfn_range *folios, int nr)
+{
+	int i;
+	struct folios_put_refs_ctx ctx;
+
+	__folios_put_refs_init(&ctx);
+
+	for (i = 0; i < nr; i++) {
+		struct folio *folio = pfn_folio(folios[i].start);
+		int refs = folios[i].end - folios[i].start;
+
+		__folios_put_refs_do_one(&ctx, folio, refs);
+	}
+
+	__folios_put_refs_complete(&ctx);
+}
+
+/**
  * release_pages - batched put_page()
  * @arg: array of pages to release
  * @nr: number of pages

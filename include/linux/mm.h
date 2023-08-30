@@ -1476,6 +1476,13 @@ static inline void folio_put_refs(struct folio *folio, int refs)
 		__folio_put(folio);
 }
 
+struct pfn_range {
+	unsigned long start;
+	unsigned long end;
+};
+
+void folios_put_refs(struct pfn_range *folios, int nr);
+
 /*
  * union release_pages_arg - an array of pages or folios
  *
