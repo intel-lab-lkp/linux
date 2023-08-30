@@ -43,9 +43,9 @@ void clear_pages_orig(void *page, unsigned int length);
 void clear_pages_rep(void *page, unsigned int length);
 void clear_pages_erms(void *page, unsigned int length);
 
-static inline void clear_page(void *page)
+static inline void clear_pages(void *page, unsigned int nsubpages)
 {
-	unsigned int length = PAGE_SIZE;
+	unsigned int length = nsubpages * PAGE_SIZE;
 	/*
 	 * Clean up KMSAN metadata for the pages being cleared. The assembly call
 	 * below clobbers @page, so we perform unpoisoning before it.
@@ -58,6 +58,11 @@ static inline void clear_page(void *page)
 			   "=D" (page),
 			   "0" (page), "S" (length)
 			   : "cc", "memory", "rax", "rcx");
+}
+
+static inline void clear_page(void *page)
+{
+	clear_pages(page, 1);
 }
 
 void copy_page(void *to, void *from);
