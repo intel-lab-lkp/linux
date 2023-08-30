@@ -2458,6 +2458,14 @@ void free_unref_page(struct page *page, unsigned int order)
 		free_unref_page_commit(zone, pcp, page, migratetype, order);
 		pcp_spin_unlock(pcp);
 	} else {
+#ifdef CONFIG_CMA
+		/*
+		 * CMA must be back to its freelist. Otherwise CMA pageblock may
+		 * be stolen by fallback flow while getting free page.
+		 */
+		if (get_pcppage_migratetype(page) == MIGRATE_CMA)
+			migratetype = MIGRATE_CMA;
+#endif
 		free_one_page(zone, page, pfn, order, migratetype, FPI_NONE);
 	}
 	pcp_trylock_finish(UP_flags);
