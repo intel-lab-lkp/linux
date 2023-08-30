@@ -415,10 +415,23 @@ irqentry_state_t noinstr irqentry_enter(struct pt_regs *regs);
  * Conditional reschedule with additional sanity checks.
  */
 void raw_irqentry_exit_cond_resched(void);
+
+/**
+ * irqentry_exit_allow_resched - Conditionally reschedule on return from interrupt
+ * for tasks that are explicitly marked TIF_ALLOW_RESCHED.
+ *
+ * Enabled for both preempt_model_none() and preempt_model_voluntary().
+ */
+void irqentry_exit_allow_resched(void);
+
 #ifdef CONFIG_PREEMPT_DYNAMIC
 #if defined(CONFIG_HAVE_PREEMPT_DYNAMIC_CALL)
 #define irqentry_exit_cond_resched_dynamic_enabled	raw_irqentry_exit_cond_resched
+#ifdef TIF_RESCHED_ALLOW
+#define irqentry_exit_cond_resched_dynamic_disabled	irqentry_exit_allow_resched
+#else
 #define irqentry_exit_cond_resched_dynamic_disabled	NULL
+#endif
 DECLARE_STATIC_CALL(irqentry_exit_cond_resched, raw_irqentry_exit_cond_resched);
 #define irqentry_exit_cond_resched()	static_call(irqentry_exit_cond_resched)()
 #elif defined(CONFIG_HAVE_PREEMPT_DYNAMIC_KEY)

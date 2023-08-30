@@ -6585,6 +6585,8 @@ pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
  *          - explicit schedule() call
  *          - return from syscall or exception to user-space
  *          - return from interrupt-handler to user-space
+ *          - return from interrupt-handler for a task marked
+ *            with allow_resched()
  *
  * WARNING: must be called with preemption disabled!
  */
@@ -8694,25 +8696,25 @@ EXPORT_SYMBOL(__cond_resched_rwlock_write);
  *
  *
  * NONE:
- *   cond_resched               <- __cond_resched
- *   might_resched              <- RET0
- *   preempt_schedule           <- NOP
- *   preempt_schedule_notrace   <- NOP
- *   irqentry_exit_cond_resched <- NOP
+ *   cond_resched                <- __cond_resched
+ *   might_resched               <- RET0
+ *   preempt_schedule            <- NOP
+ *   preempt_schedule_notrace    <- NOP
+ *   irqentry_exit_cond_resched  <- irqentry_exit_allow_resched
  *
  * VOLUNTARY:
- *   cond_resched               <- __cond_resched
- *   might_resched              <- __cond_resched
- *   preempt_schedule           <- NOP
- *   preempt_schedule_notrace   <- NOP
- *   irqentry_exit_cond_resched <- NOP
+ *   cond_resched                <- __cond_resched
+ *   might_resched               <- __cond_resched
+ *   preempt_schedule            <- NOP
+ *   preempt_schedule_notrace    <- NOP
+ *   irqentry_exit_cond_resched  <- irqentry_exit_allow_resched
  *
  * FULL:
- *   cond_resched               <- RET0
- *   might_resched              <- RET0
- *   preempt_schedule           <- preempt_schedule
- *   preempt_schedule_notrace   <- preempt_schedule_notrace
- *   irqentry_exit_cond_resched <- irqentry_exit_cond_resched
+ *   cond_resched                <- RET0
+ *   might_resched               <- RET0
+ *   preempt_schedule            <- preempt_schedule
+ *   preempt_schedule_notrace    <- preempt_schedule_notrace
+ *   irqentry_exit_cond_resched  <- irqentry_exit_cond_resched
  */
 
 enum {
