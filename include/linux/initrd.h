@@ -34,4 +34,6 @@ extern unsigned long __initramfs_size;
 
 void console_on_rootfs(void);
 
+extern const char *envp_init[];
+
 #endif /* __LINUX_INITRD_H */
