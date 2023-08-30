@@ -20,7 +20,7 @@ struct tegra_bpmp_ops {
 	int (*post_response)(struct tegra_bpmp_channel *channel);
 	int (*post_request)(struct tegra_bpmp_channel *channel);
 	int (*ring_doorbell)(struct tegra_bpmp *bpmp);
-	int (*resume)(struct tegra_bpmp *bpmp);
+	int (*reset)(struct tegra_bpmp *bpmp);
 };
 
 #if IS_ENABLED(CONFIG_ARCH_TEGRA_186_SOC) || \

@@ -366,7 +366,7 @@ static void tegra186_bpmp_deinit(struct tegra_bpmp *bpmp)
 	tegra186_bpmp_teardown_channels(bpmp);
 }
 
-static int tegra186_bpmp_resume(struct tegra_bpmp *bpmp)
+static int tegra186_bpmp_reset(struct tegra_bpmp *bpmp)
 {
 	tegra186_bpmp_reset_channels(bpmp);
 
@@ -385,5 +385,5 @@ const struct tegra_bpmp_ops tegra186_bpmp_ops = {
 	.post_response = tegra186_bpmp_post_message,
 	.post_request = tegra186_bpmp_post_message,
 	.ring_doorbell = tegra186_bpmp_ring_doorbell,
-	.resume = tegra186_bpmp_resume,
+	.reset = tegra186_bpmp_reset,
 };

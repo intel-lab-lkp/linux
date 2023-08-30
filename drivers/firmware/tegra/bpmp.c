@@ -314,6 +314,14 @@ static ssize_t tegra_bpmp_channel_write(struct tegra_bpmp_channel *channel,
 	return __tegra_bpmp_channel_write(channel, mrq, flags, data, size);
 }
 
+static int tegra_bpmp_reset(struct tegra_bpmp *bpmp)
+{
+	if (bpmp->soc->ops->reset)
+		return bpmp->soc->ops->reset(bpmp);
+
+	return 0;
+}
+
 int tegra_bpmp_transfer_atomic(struct tegra_bpmp *bpmp,
 			       struct tegra_bpmp_message *msg)
 {
@@ -325,6 +333,15 @@ int tegra_bpmp_transfer_atomic(struct tegra_bpmp *bpmp,
 
 	if (!tegra_bpmp_message_valid(msg))
 		return -EINVAL;
+
+	if (bpmp->needs_reset) {
+		err = tegra_bpmp_reset(bpmp);
+		if (err < 0) {
+			dev_err(bpmp->dev, "Failed to reset the BPMP!\n");
+			return err;
+		}
+		bpmp->needs_reset = false;
+	}
 
 	channel = bpmp->tx_channel;
 
@@ -364,6 +381,15 @@ int tegra_bpmp_transfer(struct tegra_bpmp *bpmp,
 
 	if (!tegra_bpmp_message_valid(msg))
 		return -EINVAL;
+
+	if (bpmp->needs_reset) {
+		err = tegra_bpmp_reset(bpmp);
+		if (err < 0) {
+			dev_err(bpmp->dev, "Failed to reset the BPMP!\n");
+			return err;
+		}
+		bpmp->needs_reset = false;
+	}
 
 	channel = tegra_bpmp_write_threaded(bpmp, msg->mrq, msg->tx.data,
 					    msg->tx.size);
@@ -741,6 +767,8 @@ static int tegra_bpmp_probe(struct platform_device *pdev)
 	if (err < 0)
 		return err;
 
+	bpmp->needs_reset = false;
+
 	err = tegra_bpmp_request_mrq(bpmp, MRQ_PING,
 				     tegra_bpmp_mrq_handle_ping, bpmp);
 	if (err < 0)
@@ -797,18 +825,23 @@ deinit:
 	return err;
 }
 
-static int __maybe_unused tegra_bpmp_resume(struct device *dev)
+static int __maybe_unused tegra_bpmp_suspend(struct device *dev)
 {
 	struct tegra_bpmp *bpmp = dev_get_drvdata(dev);
 
-	if (bpmp->soc->ops->resume)
-		return bpmp->soc->ops->resume(bpmp);
-	else
-		return 0;
+	/*
+	 * If the BPMP has a reset handler then mark as
+	 * not ready until on entry to suspend. This flag
+	 * is used to trigger the reset after resume.
+	 */
+	if (bpmp->soc->ops->reset)
+		bpmp->needs_reset = true;
+
+	return 0;
 }
 
 static const struct dev_pm_ops tegra_bpmp_pm_ops = {
-	.resume_noirq = tegra_bpmp_resume,
+	.suspend_noirq = tegra_bpmp_suspend,
 };
 
 #if IS_ENABLED(CONFIG_ARCH_TEGRA_186_SOC) || \

@@ -102,6 +102,8 @@ struct tegra_bpmp {
 #ifdef CONFIG_DEBUG_FS
 	struct dentry *debugfs_mirror;
 #endif
+
+	bool needs_reset;
 };
 
 struct tegra_bpmp_message {
