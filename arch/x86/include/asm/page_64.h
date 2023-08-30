@@ -39,22 +39,24 @@ extern unsigned long __phys_addr_symbol(unsigned long);
 
 #define __phys_reloc_hide(x)	(x)
 
-void clear_page_orig(void *page);
-void clear_page_rep(void *page);
-void clear_page_erms(void *page);
+void clear_pages_orig(void *page, unsigned int length);
+void clear_pages_rep(void *page, unsigned int length);
+void clear_pages_erms(void *page, unsigned int length);
 
 static inline void clear_page(void *page)
 {
+	unsigned int length = PAGE_SIZE;
 	/*
-	 * Clean up KMSAN metadata for the page being cleared. The assembly call
+	 * Clean up KMSAN metadata for the pages being cleared. The assembly call
 	 * below clobbers @page, so we perform unpoisoning before it.
 	 */
-	kmsan_unpoison_memory(page, PAGE_SIZE);
-	alternative_call_2(clear_page_orig,
-			   clear_page_rep, X86_FEATURE_REP_GOOD,
-			   clear_page_erms, X86_FEATURE_ERMS,
+	kmsan_unpoison_memory(page, length);
+
+	alternative_call_2(clear_pages_orig,
+			   clear_pages_rep, X86_FEATURE_REP_GOOD,
+			   clear_pages_erms, X86_FEATURE_ERMS,
 			   "=D" (page),
-			   "0" (page)
+			   "0" (page), "S" (length)
 			   : "cc", "memory", "rax", "rcx");
 }
 
