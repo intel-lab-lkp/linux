@@ -70,6 +70,7 @@ static bool nf_osf_match_one(const struct sk_buff *skb,
 	unsigned int check_WSS = 0;
 	int fmatch = FMATCH_WRONG;
 	int foptsize, optnum;
+	int opt_num = min_t(__u16, f->opt_num, ARRAY_SIZE(f->opt));
 	u16 mss = 0;
 
 	if (ctx->totlen != f->ss || !nf_osf_ttl(skb, ttl_check, f->ttl))
@@ -84,7 +85,7 @@ static bool nf_osf_match_one(const struct sk_buff *skb,
 	/* Check options */
 
 	foptsize = 0;
-	for (optnum = 0; optnum < f->opt_num; ++optnum)
+	for (optnum = 0; optnum < opt_num; ++optnum)
 		foptsize += f->opt[optnum].length;
 
 	if (foptsize > MAX_IPOPTLEN ||
@@ -94,7 +95,7 @@ static bool nf_osf_match_one(const struct sk_buff *skb,
 
 	check_WSS = f->wss.wc;
 
-	for (optnum = 0; optnum < f->opt_num; ++optnum) {
+	for (optnum = 0; optnum < opt_num; ++optnum) {
 		if (f->opt[optnum].kind == *ctx->optp) {
 			__u32 len = f->opt[optnum].length;
 			const __u8 *optend = ctx->optp + len;
