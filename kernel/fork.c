@@ -650,7 +650,6 @@ static __latent_entropy int dup_mmap(struct mm_struct *mm,
 	int retval;
 	unsigned long charge = 0;
 	LIST_HEAD(uf);
-	VMA_ITERATOR(old_vmi, oldmm, 0);
 	VMA_ITERATOR(vmi, mm, 0);
 
 	uprobe_start_dup_mmap();
@@ -678,17 +677,39 @@ static __latent_entropy int dup_mmap(struct mm_struct *mm,
 		goto out;
 	khugepaged_fork(mm, oldmm);
 
-	retval = vma_iter_bulk_alloc(&vmi, oldmm->map_count);
-	if (retval)
+	/* Use __mt_dup() to efficiently build an identical maple tree. */
+	retval = __mt_dup(&oldmm->mm_mt, &mm->mm_mt, GFP_NOWAIT | __GFP_NOWARN);
+	if (unlikely(retval))
 		goto out;
 
 	mt_clear_in_rcu(vmi.mas.tree);
-	for_each_vma(old_vmi, mpnt) {
+	for_each_vma(vmi, mpnt) {
 		struct file *file;
 
 		vma_start_write(mpnt);
 		if (mpnt->vm_flags & VM_DONTCOPY) {
 			vm_stat_account(mm, mpnt->vm_flags, -vma_pages(mpnt));
+
+			/*
+			 * Since the new tree is exactly the same as the old one,
+			 * we need to remove the unneeded VMAs.
+			 */
+			mas_store(&vmi.mas, NULL);
+
+			/*
+			 * Even removing an entry may require memory allocation,
+			 * and if removal fails, we use XA_ZERO_ENTRY to mark
+			 * from which VMA it failed. The case of encountering
+			 * XA_ZERO_ENTRY will be handled in exit_mmap().
+			 */
+			if (unlikely(mas_is_err(&vmi.mas))) {
+				retval = xa_err(vmi.mas.node);
+				mas_reset(&vmi.mas);
+				if (mas_find(&vmi.mas, ULONG_MAX))
+					mas_store(&vmi.mas, XA_ZERO_ENTRY);
+				goto loop_out;
+			}
+
 			continue;
 		}
 		charge = 0;
@@ -750,8 +771,7 @@ static __latent_entropy int dup_mmap(struct mm_struct *mm,
 			hugetlb_dup_vma_private(tmp);
 
 		/* Link the vma into the MT */
-		if (vma_iter_bulk_store(&vmi, tmp))
-			goto fail_nomem_vmi_store;
+		mas_store(&vmi.mas, tmp);
 
 		mm->map_count++;
 		if (!(tmp->vm_flags & VM_WIPEONFORK))
@@ -778,8 +798,6 @@ fail_uprobe_end:
 	uprobe_end_dup_mmap();
 	return retval;
 
-fail_nomem_vmi_store:
-	unlink_anon_vmas(tmp);
 fail_nomem_anon_vma_fork:
 	mpol_put(vma_policy(tmp));
 fail_nomem_policy:
