@@ -67,6 +67,18 @@
 	};
 };
 
+&usbphy0 {
+	status = "okay";
+};
+
+&usb {
+	status = "okay";
+};
+
+&usb2_0_dwc {
+	dr_mode = "host";
+};
+
 &xo_board_clk {
 	clock-frequency = <24000000>;
 };
