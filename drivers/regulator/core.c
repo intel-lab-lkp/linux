@@ -155,6 +155,22 @@ static inline int regulator_lock_nested(struct regulator_dev *rdev,
 }
 
 /**
+ * regulator_lock_contended - retry locking a regulator
+ * @rdev:		regulator source
+ * @ww_ctx:		w/w mutex acquire context
+ *
+ * Locks a regulator after a failed locking sequence (aborted
+ * with -EDEADLK).
+ */
+static inline void regulator_lock_contended(struct regulator_dev *rdev,
+					    struct ww_acquire_ctx *ww_ctx)
+{
+	ww_mutex_lock_slow(&rdev->mutex, ww_ctx);
+	rdev->ref_cnt++;
+	rdev->mutex_owner = current;
+}
+
+/**
  * regulator_lock - lock a single regulator
  * @rdev:		regulator source
  *
@@ -218,9 +234,7 @@ static void regulator_lock_two(struct regulator_dev *rdev1,
 	while (true) {
 		regulator_unlock(held);
 
-		ww_mutex_lock_slow(&contended->mutex, ww_ctx);
-		contended->ref_cnt++;
-		contended->mutex_owner = current;
+		regulator_lock_contended(contended, ww_ctx);
 		swap(held, contended);
 		ret = regulator_lock_nested(contended, ww_ctx);
 
@@ -376,10 +390,8 @@ static void regulator_lock_dependent(struct regulator_dev *rdev,
 
 	do {
 		if (new_contended_rdev) {
-			ww_mutex_lock_slow(&new_contended_rdev->mutex, ww_ctx);
+			regulator_lock_contended(new_contended_rdev, ww_ctx);
 			old_contended_rdev = new_contended_rdev;
-			old_contended_rdev->ref_cnt++;
-			old_contended_rdev->mutex_owner = current;
 		}
 
 		err = regulator_lock_recursive(rdev,
@@ -6085,10 +6097,8 @@ static void regulator_summary_lock(struct ww_acquire_ctx *ww_ctx)
 
 	do {
 		if (new_contended_rdev) {
-			ww_mutex_lock_slow(&new_contended_rdev->mutex, ww_ctx);
+			regulator_lock_contended(new_contended_rdev, ww_ctx);
 			old_contended_rdev = new_contended_rdev;
-			old_contended_rdev->ref_cnt++;
-			old_contended_rdev->mutex_owner = current;
 		}
 
 		err = regulator_summary_lock_all(ww_ctx,
