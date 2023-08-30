@@ -945,6 +945,98 @@ void lru_cache_disable(void)
 #endif
 }
 
+struct folios_put_refs_ctx {
+	struct list_head pages_to_free;
+	struct lruvec *lruvec;
+	unsigned long flags;
+	unsigned int lock_batch;
+};
+
+static void __folios_put_refs_init(struct folios_put_refs_ctx *ctx)
+{
+	*ctx = (struct folios_put_refs_ctx) {
+		.pages_to_free = LIST_HEAD_INIT(ctx->pages_to_free),
+		.lruvec = NULL,
+		.flags = 0,
+	};
+}
+
+static void __folios_put_refs_complete(struct folios_put_refs_ctx *ctx)
+{
+	if (ctx->lruvec)
+		unlock_page_lruvec_irqrestore(ctx->lruvec, ctx->flags);
+
+	mem_cgroup_uncharge_list(&ctx->pages_to_free);
+	free_unref_page_list(&ctx->pages_to_free);
+}
+
+static void __folios_put_refs_do_one(struct folios_put_refs_ctx *ctx,
+					struct folio *folio, int refs)
+{
+	/*
+	 * Make sure the IRQ-safe lock-holding time does not get
+	 * excessive with a continuous string of pages from the
+	 * same lruvec. The lock is held only if lruvec != NULL.
+	 */
+	if (ctx->lruvec && ++ctx->lock_batch == SWAP_CLUSTER_MAX) {
+		unlock_page_lruvec_irqrestore(ctx->lruvec, ctx->flags);
+		ctx->lruvec = NULL;
+	}
+
+	if (is_huge_zero_page(&folio->page))
+		return;
+
+	if (folio_is_zone_device(folio)) {
+		if (ctx->lruvec) {
+			unlock_page_lruvec_irqrestore(ctx->lruvec, ctx->flags);
+			ctx->lruvec = NULL;
+		}
+		if (put_devmap_managed_page_refs(&folio->page, refs))
+			return;
+		if (folio_ref_sub_and_test(folio, refs))
+			free_zone_device_page(&folio->page);
+		return;
+	}
+
+	if (!folio_ref_sub_and_test(folio, refs))
+		return;
+
+	if (folio_test_large(folio)) {
+		if (ctx->lruvec) {
+			unlock_page_lruvec_irqrestore(ctx->lruvec, ctx->flags);
+			ctx->lruvec = NULL;
+		}
+		__folio_put_large(folio);
+		return;
+	}
+
+	if (folio_test_lru(folio)) {
+		struct lruvec *prev_lruvec = ctx->lruvec;
+
+		ctx->lruvec = folio_lruvec_relock_irqsave(folio, ctx->lruvec,
+								&ctx->flags);
+		if (prev_lruvec != ctx->lruvec)
+			ctx->lock_batch = 0;
+
+		lruvec_del_folio(ctx->lruvec, folio);
+		__folio_clear_lru_flags(folio);
+	}
+
+	/*
+	 * In rare cases, when truncation or holepunching raced with
+	 * munlock after VM_LOCKED was cleared, Mlocked may still be
+	 * found set here.  This does not indicate a problem, unless
+	 * "unevictable_pgs_cleared" appears worryingly large.
+	 */
+	if (unlikely(folio_test_mlocked(folio))) {
+		__folio_clear_mlocked(folio);
+		zone_stat_sub_folio(folio, NR_MLOCK);
+		count_vm_event(UNEVICTABLE_PGCLEARED);
+	}
+
+	list_add(&folio->lru, &ctx->pages_to_free);
+}
+
 /**
  * release_pages - batched put_page()
  * @arg: array of pages to release
@@ -959,10 +1051,9 @@ void release_pages(release_pages_arg arg, int nr)
 {
 	int i;
 	struct page **pages = arg.pages;
-	LIST_HEAD(pages_to_free);
-	struct lruvec *lruvec = NULL;
-	unsigned long flags = 0;
-	unsigned int lock_batch;
+	struct folios_put_refs_ctx ctx;
+
+	__folios_put_refs_init(&ctx);
 
 	for (i = 0; i < nr; i++) {
 		struct folio *folio;
@@ -970,74 +1061,10 @@ void release_pages(release_pages_arg arg, int nr)
 		/* Turn any of the argument types into a folio */
 		folio = page_folio(pages[i]);
 
-		/*
-		 * Make sure the IRQ-safe lock-holding time does not get
-		 * excessive with a continuous string of pages from the
-		 * same lruvec. The lock is held only if lruvec != NULL.
-		 */
-		if (lruvec && ++lock_batch == SWAP_CLUSTER_MAX) {
-			unlock_page_lruvec_irqrestore(lruvec, flags);
-			lruvec = NULL;
-		}
-
-		if (is_huge_zero_page(&folio->page))
-			continue;
-
-		if (folio_is_zone_device(folio)) {
-			if (lruvec) {
-				unlock_page_lruvec_irqrestore(lruvec, flags);
-				lruvec = NULL;
-			}
-			if (put_devmap_managed_page(&folio->page))
-				continue;
-			if (folio_put_testzero(folio))
-				free_zone_device_page(&folio->page);
-			continue;
-		}
-
-		if (!folio_put_testzero(folio))
-			continue;
-
-		if (folio_test_large(folio)) {
-			if (lruvec) {
-				unlock_page_lruvec_irqrestore(lruvec, flags);
-				lruvec = NULL;
-			}
-			__folio_put_large(folio);
-			continue;
-		}
-
-		if (folio_test_lru(folio)) {
-			struct lruvec *prev_lruvec = lruvec;
-
-			lruvec = folio_lruvec_relock_irqsave(folio, lruvec,
-									&flags);
-			if (prev_lruvec != lruvec)
-				lock_batch = 0;
-
-			lruvec_del_folio(lruvec, folio);
-			__folio_clear_lru_flags(folio);
-		}
-
-		/*
-		 * In rare cases, when truncation or holepunching raced with
-		 * munlock after VM_LOCKED was cleared, Mlocked may still be
-		 * found set here.  This does not indicate a problem, unless
-		 * "unevictable_pgs_cleared" appears worryingly large.
-		 */
-		if (unlikely(folio_test_mlocked(folio))) {
-			__folio_clear_mlocked(folio);
-			zone_stat_sub_folio(folio, NR_MLOCK);
-			count_vm_event(UNEVICTABLE_PGCLEARED);
-		}
-
-		list_add(&folio->lru, &pages_to_free);
+		__folios_put_refs_do_one(&ctx, folio, 1);
 	}
-	if (lruvec)
-		unlock_page_lruvec_irqrestore(lruvec, flags);
 
-	mem_cgroup_uncharge_list(&pages_to_free);
-	free_unref_page_list(&pages_to_free);
+	__folios_put_refs_complete(&ctx);
 }
 EXPORT_SYMBOL(release_pages);
 
