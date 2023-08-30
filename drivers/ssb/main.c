@@ -905,13 +905,21 @@ u32 ssb_calc_clock_rate(u32 plltype, u32 n, u32 m)
 		case SSB_CHIPCO_CLK_MC_BYPASS:
 			return clock;
 		case SSB_CHIPCO_CLK_MC_M1:
-			return (clock / m1);
+			if (m1 != 0)
+				return (clock / m1);
+			break;
 		case SSB_CHIPCO_CLK_MC_M1M2:
-			return (clock / (m1 * m2));
+			if ((m1 * m2) != 0)
+				return (clock / (m1 * m2));
+			break;
 		case SSB_CHIPCO_CLK_MC_M1M2M3:
-			return (clock / (m1 * m2 * m3));
+			if ((m1 * m2 * m3) != 0)
+				return (clock / (m1 * m2 * m3));
+			break;
 		case SSB_CHIPCO_CLK_MC_M1M3:
-			return (clock / (m1 * m3));
+			if ((m1 * m3) != 0)
+				return (clock / (m1 * m3));
+			break;
 		}
 		return 0;
 	case SSB_PLLTYPE_2:
