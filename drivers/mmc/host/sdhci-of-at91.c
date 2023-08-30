@@ -53,10 +53,15 @@ struct sdhci_at91_priv {
 static void sdhci_at91_set_force_card_detect(struct sdhci_host *host)
 {
 	u8 mc1r;
+	u8 ctrl;
 
 	mc1r = readb(host->ioaddr + SDMMC_MC1R);
 	mc1r |= SDMMC_MC1R_FCD;
 	writeb(mc1r, host->ioaddr + SDMMC_MC1R);
+
+	ctrl = readb(host->ioaddr + SDHCI_HOST_CONTROL);
+	ctrl |= SDHCI_CTRL_CDTEST_INS | SDHCI_CTRL_CDTEST_EN;
+	writeb(ctrl, host->ioaddr + SDHCI_HOST_CONTROL);
 }
 
 static void sdhci_at91_set_clock(struct sdhci_host *host, unsigned int clock)
