@@ -36,26 +36,12 @@ properties:
   interrupts:
     maxItems: 1
 
-  starfive,sysreg:
-    $ref: /schemas/types.yaml#/definitions/phandle-array
-    items:
-      - items:
-          - description: phandle to System Register Controller syscon node
-          - description: offset of SYS_SYSCONSAIF__SYSCFG register for MMC controller
-          - description: shift of SYS_SYSCONSAIF__SYSCFG register for MMC controller
-          - description: mask of SYS_SYSCONSAIF__SYSCFG register for MMC controller
-    description:
-      Should be four parameters, the phandle to System Register Controller
-      syscon node and the offset/shift/mask of SYS_SYSCONSAIF__SYSCFG register
-      for MMC controller.
-
 required:
   - compatible
   - reg
   - clocks
   - clock-names
   - interrupts
-  - starfive,sysreg
 
 unevaluatedProperties: false
 
@@ -73,5 +59,4 @@ examples:
         fifo-depth = <32>;
         fifo-watermark-aligned;
         data-addr = <0>;
-        starfive,sysreg = <&sys_syscon 0x14 0x1a 0x7c000000>;
     };
