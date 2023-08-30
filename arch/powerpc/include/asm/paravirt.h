@@ -15,13 +15,6 @@
 #include <asm/kvm_guest.h>
 #include <asm/cputhreads.h>
 
-DECLARE_STATIC_KEY_FALSE(shared_processor);
-
-static inline bool is_shared_processor(void)
-{
-	return static_branch_unlikely(&shared_processor);
-}
-
 #ifdef CONFIG_PARAVIRT_TIME_ACCOUNTING
 extern struct static_key paravirt_steal_enabled;
 extern struct static_key paravirt_steal_rq_enabled;
@@ -72,11 +65,6 @@ static inline void yield_to_any(void)
 	plpar_hcall_norets_notrace(H_CONFER, -1, 0);
 }
 #else
-static inline bool is_shared_processor(void)
-{
-	return false;
-}
-
 static inline u32 yield_count_of(int cpu)
 {
 	return 0;
