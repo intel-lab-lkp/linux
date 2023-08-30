@@ -1107,7 +1107,7 @@ void btrfs_check_nocow_unlock(struct btrfs_inode *inode)
 }
 
 static int btrfs_write_check(struct kiocb *iocb, struct iov_iter *from,
-			     size_t count)
+			     size_t count, unsigned int *ilock_flags)
 {
 	struct file *file = iocb->ki_filp;
 	struct inode *inode = file_inode(file);
@@ -1127,9 +1127,17 @@ static int btrfs_write_check(struct kiocb *iocb, struct iov_iter *from,
 	    !(BTRFS_I(inode)->flags & (BTRFS_INODE_NODATACOW | BTRFS_INODE_PREALLOC)))
 		return -EAGAIN;
 
-	ret = file_remove_privs(file);
-	if (ret)
-		return ret;
+	ret = file_needs_remove_privs(file);
+	if (ret) {
+		if (ilock_flags && *ilock_flags & BTRFS_ILOCK_SHARED) {
+			*ilock_flags &= ~BTRFS_ILOCK_SHARED;
+			return -EAGAIN;
+		}
+
+		ret = file_remove_privs(file);
+		if (ret)
+			return ret;
+	}
 
 	/*
 	 * We reserve space for updating the inode when we reserve space for the
@@ -1189,7 +1197,7 @@ static noinline ssize_t btrfs_buffered_write(struct kiocb *iocb,
 	if (ret <= 0)
 		goto out;
 
-	ret = btrfs_write_check(iocb, i, ret);
+	ret = btrfs_write_check(iocb, i, ret, NULL);
 	if (ret < 0)
 		goto out;
 
@@ -1447,13 +1455,16 @@ static ssize_t btrfs_direct_write(struct kiocb *iocb, struct iov_iter *from)
 	ssize_t err;
 	unsigned int ilock_flags = 0;
 	struct iomap_dio *dio;
+	bool has_shared_lock;
 
 	if (iocb->ki_flags & IOCB_NOWAIT)
 		ilock_flags |= BTRFS_ILOCK_TRY;
 
 	/* If the write DIO is within EOF, use a shared lock */
-	if (iocb->ki_pos + iov_iter_count(from) <= i_size_read(inode))
+	if (iocb->ki_pos + iov_iter_count(from) <= i_size_read(inode)) {
 		ilock_flags |= BTRFS_ILOCK_SHARED;
+		has_shared_lock = true;
+	}
 
 relock:
 	err = btrfs_inode_lock(BTRFS_I(inode), ilock_flags);
@@ -1466,8 +1477,17 @@ relock:
 		return err;
 	}
 
-	err = btrfs_write_check(iocb, from, err);
+	/* might uset BTRFS_ILOCK_SHARED */
+	err = btrfs_write_check(iocb, from, err, &ilock_flags);
 	if (err < 0) {
+		if (err == -EAGAIN && has_shared_lock &&
+		    !(ilock_flags & BTRFS_ILOCK_SHARED)) {
+			btrfs_inode_unlock(BTRFS_I(inode),
+					   ilock_flags | BTRFS_ILOCK_SHARED);
+			has_shared_lock = false;
+			goto relock;
+		}
+
 		btrfs_inode_unlock(BTRFS_I(inode), ilock_flags);
 		goto out;
 	}
@@ -1481,6 +1501,7 @@ relock:
 	    pos + iov_iter_count(from) > i_size_read(inode)) {
 		btrfs_inode_unlock(BTRFS_I(inode), ilock_flags);
 		ilock_flags &= ~BTRFS_ILOCK_SHARED;
+		has_shared_lock = false;
 		goto relock;
 	}
 
@@ -1617,7 +1638,7 @@ static ssize_t btrfs_encoded_write(struct kiocb *iocb, struct iov_iter *from,
 	if (ret || encoded->len == 0)
 		goto out;
 
-	ret = btrfs_write_check(iocb, from, encoded->len);
+	ret = btrfs_write_check(iocb, from, encoded->len, NULL);
 	if (ret < 0)
 		goto out;
 
