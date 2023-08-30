@@ -493,11 +493,6 @@ __ww_mutex_add_waiter(struct MUTEX_WAITER *waiter,
 	struct MUTEX_WAITER *cur, *pos = NULL;
 	bool is_wait_die;
 
-	if (!ww_ctx) {
-		__ww_waiter_add(lock, waiter, NULL);
-		return 0;
-	}
-
 	is_wait_die = ww_ctx->is_wait_die;
 
 	/*
