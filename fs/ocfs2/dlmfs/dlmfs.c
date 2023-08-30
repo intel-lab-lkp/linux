@@ -83,8 +83,11 @@ static int param_get_dlmfs_capabilities(char *buffer,
 	return strlcpy(buffer, DLMFS_CAPABILITIES,
 		       strlen(DLMFS_CAPABILITIES) + 1);
 }
-module_param_call(capabilities, param_set_dlmfs_capabilities,
-		  param_get_dlmfs_capabilities, NULL, 0444);
+static const struct kernel_param_ops dlmfs_capabilities_ops = {
+	.set = param_set_dlmfs_capabilities,
+	.get = param_get_dlmfs_capabilities,
+};
+module_param_cb(capabilities, &dlmfs_capabilities_ops, NULL, 0444);
 MODULE_PARM_DESC(capabilities, DLMFS_CAPABILITIES);
 
 
