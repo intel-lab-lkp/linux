@@ -5939,8 +5939,9 @@ static int clear_subpage(unsigned long addr, int idx, void *arg)
 	return 0;
 }
 
-void clear_huge_page(struct page *page,
-		     unsigned long addr_hint, unsigned int pages_per_huge_page)
+__weak void clear_huge_page(struct page *page,
+			    unsigned long addr_hint,
+			    unsigned int pages_per_huge_page)
 {
 	unsigned long addr = addr_hint &
 		~(((unsigned long)pages_per_huge_page << PAGE_SHIFT) - 1);
