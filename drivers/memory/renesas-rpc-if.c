@@ -190,6 +190,7 @@ struct rpcif_priv {
 	u32 enable;		/* DRENR or SMENR */
 	u32 dummy;		/* DRDMCR or SMDMCR */
 	u32 ddr;		/* DRDRENR or SMDRENR */
+	u32 io3_fv;
 };
 
 static const struct rpcif_info rpcif_info_r8a7796 = {
@@ -368,7 +369,8 @@ int rpcif_hw_init(struct device *dev, bool hyperflash)
 		regmap_update_bits(rpc->regmap, RPCIF_CMNCR,
 				   RPCIF_CMNCR_MOIIO(3) | RPCIF_CMNCR_IOFV(3) |
 				   RPCIF_CMNCR_BSZ(3),
-				   RPCIF_CMNCR_MOIIO(1) | RPCIF_CMNCR_IOFV(2) |
+				   RPCIF_CMNCR_MOIIO(1) | RPCIF_CMNCR_IO0FV(2) |
+				   RPCIF_CMNCR_IO2FV(3) | rpc->io3_fv |
 				   RPCIF_CMNCR_BSZ(hyperflash ? 1 : 0));
 	else
 		regmap_update_bits(rpc->regmap, RPCIF_CMNCR,
@@ -774,6 +776,12 @@ static int rpcif_probe(struct platform_device *pdev)
 		platform_device_put(vdev);
 		return ret;
 	}
+
+	if (rpc->info->type == RPCIF_RZ_G2L &&
+	    of_device_is_compatible(flash, "micron,mt25qu512a"))
+		rpc->io3_fv = RPCIF_CMNCR_IO3FV(1);
+	else
+		rpc->io3_fv = RPCIF_CMNCR_IO3FV(3);
 
 	return 0;
 }
