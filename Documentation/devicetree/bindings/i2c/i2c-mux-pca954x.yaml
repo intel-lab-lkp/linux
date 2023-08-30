@@ -71,6 +71,11 @@ properties:
     description: A voltage regulator supplying power to the chip. On PCA9846
       the regulator supplies power to VDD2 (core logic) and optionally to VDD1.
 
+  maxim,bus-lockup-fix:
+    type: boolean
+    description: Isolates only the stuck channel and generates a flush-out sequence
+      to attempt to clear the bus lock-up.
+
 required:
   - compatible
   - reg
@@ -94,6 +99,16 @@ allOf:
         interrupts: false
         "#interrupt-cells": false
         interrupt-controller: false
+
+  - if:
+      not:
+        properties:
+          compatible:
+            contains:
+              const: maxim,max7357
+    then:
+      properties:
+        maxim,bus-lockup-fix: false
 
 unevaluatedProperties: false
 
