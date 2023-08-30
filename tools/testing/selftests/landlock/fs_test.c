@@ -124,13 +124,17 @@ static bool supports_filesystem(const char *const filesystem)
 		return true;
 
 	/* filesystem can be null for bind mounts. */
-	if (!filesystem)
+	if (!filesystem) {
+		fclose(inf);
 		return true;
+	}
 
 	len = snprintf(str, sizeof(str), "nodev\t%s\n", filesystem);
-	if (len >= sizeof(str))
+	if (len >= sizeof(str)) {
+		fclose(inf);
 		/* Ignores too-long filesystem names. */
 		return true;
+	}
 
 	res = fgrep(inf, str);
 	fclose(inf);
