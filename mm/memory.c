@@ -5856,12 +5856,34 @@ EXPORT_SYMBOL(__might_fault);
 #endif
 
 #if defined(CONFIG_TRANSPARENT_HUGEPAGE) || defined(CONFIG_HUGETLBFS)
+static void clear_gigantic_page(struct page *page,
+				unsigned long addr,
+				unsigned int pages_per_huge_page)
+{
+	int i;
+	struct page *p;
+
+	might_sleep();
+	for (i = 0; i < pages_per_huge_page; i++) {
+		p = nth_page(page, i);
+		cond_resched();
+		clear_user_highpage(p, addr + i * PAGE_SIZE);
+	}
+}
+
+static int clear_subpage(unsigned long addr, int idx, void *arg)
+{
+	struct page *page = arg;
+
+	clear_user_highpage(page + idx, addr);
+	return 0;
+}
+
 /*
- * Process all subpages of the specified huge page with the specified
- * operation.  The target subpage will be processed last to keep its
- * cache lines hot.
+ * Clear subpages of the specified huge page. The target subpage will be
+ * processed last to keep its cache lines hot.
  */
-static inline int process_huge_page(
+static int __clear_huge_page(
 	unsigned long addr_hint, unsigned int pages_per_huge_page,
 	int (*process_subpage)(unsigned long addr, int idx, void *arg),
 	void *arg)
@@ -5916,29 +5938,6 @@ static inline int process_huge_page(
 	return 0;
 }
 
-static void clear_gigantic_page(struct page *page,
-				unsigned long addr,
-				unsigned int pages_per_huge_page)
-{
-	int i;
-	struct page *p;
-
-	might_sleep();
-	for (i = 0; i < pages_per_huge_page; i++) {
-		p = nth_page(page, i);
-		cond_resched();
-		clear_user_highpage(p, addr + i * PAGE_SIZE);
-	}
-}
-
-static int clear_subpage(unsigned long addr, int idx, void *arg)
-{
-	struct page *page = arg;
-
-	clear_user_highpage(page + idx, addr);
-	return 0;
-}
-
 __weak void clear_huge_page(struct page *page,
 			    unsigned long addr_hint,
 			    unsigned int pages_per_huge_page)
@@ -5951,7 +5950,7 @@ __weak void clear_huge_page(struct page *page,
 		return;
 	}
 
-	process_huge_page(addr_hint, pages_per_huge_page, clear_subpage, page);
+	__clear_huge_page(addr_hint, pages_per_huge_page, clear_subpage, page);
 }
 
 static int copy_user_gigantic_page(struct folio *dst, struct folio *src,
@@ -5995,6 +5994,65 @@ static int copy_subpage(unsigned long addr, int idx, void *arg)
 	return 0;
 }
 
+/*
+ * Copy subpages of the specified huge page. The target subpage will be
+ * processed last to keep its cache lines hot.
+ */
+static int __copy_huge_page(
+	unsigned long addr_hint, unsigned int pages_per_huge_page,
+	int (*process_subpage)(unsigned long addr, int idx, void *arg),
+	void *arg)
+{
+	int i, n, base, l, ret;
+	unsigned long addr = addr_hint &
+		~(((unsigned long)pages_per_huge_page << PAGE_SHIFT) - 1);
+
+	/* Process target subpage last to keep its cache lines hot */
+	might_sleep();
+	n = (addr_hint - addr) / PAGE_SIZE;
+	if (2 * n <= pages_per_huge_page) {
+		/* If target subpage in first half of huge page */
+		base = 0;
+		l = n;
+		/* Process subpages at the end of huge page */
+		for (i = pages_per_huge_page - 1; i >= 2 * n; i--) {
+			cond_resched();
+			ret = process_subpage(addr + i * PAGE_SIZE, i, arg);
+			if (ret)
+				return ret;
+		}
+	} else {
+		/* If target subpage in second half of huge page */
+		base = pages_per_huge_page - 2 * (pages_per_huge_page - n);
+		l = pages_per_huge_page - n;
+		/* Process subpages at the begin of huge page */
+		for (i = 0; i < base; i++) {
+			cond_resched();
+			ret = process_subpage(addr + i * PAGE_SIZE, i, arg);
+			if (ret)
+				return ret;
+		}
+	}
+	/*
+	 * Process remaining subpages in left-right-left-right pattern
+	 * towards the target subpage
+	 */
+	for (i = 0; i < l; i++) {
+		int left_idx = base + i;
+		int right_idx = base + 2 * l - 1 - i;
+
+		cond_resched();
+		ret = process_subpage(addr + left_idx * PAGE_SIZE, left_idx, arg);
+		if (ret)
+			return ret;
+		cond_resched();
+		ret = process_subpage(addr + right_idx * PAGE_SIZE, right_idx, arg);
+		if (ret)
+			return ret;
+	}
+	return 0;
+}
+
 int copy_user_large_folio(struct folio *dst, struct folio *src,
 			  unsigned long addr_hint, struct vm_area_struct *vma)
 {
@@ -6011,7 +6069,7 @@ int copy_user_large_folio(struct folio *dst, struct folio *src,
 		return copy_user_gigantic_page(dst, src, addr, vma,
 					       pages_per_huge_page);
 
-	return process_huge_page(addr_hint, pages_per_huge_page, copy_subpage, &arg);
+	return __copy_huge_page(addr_hint, pages_per_huge_page, copy_subpage, &arg);
 }
 
 long copy_folio_from_user(struct folio *dst_folio,
