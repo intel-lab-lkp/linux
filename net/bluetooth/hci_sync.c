@@ -1317,7 +1317,7 @@ int hci_start_ext_adv_sync(struct hci_dev *hdev, u8 instance)
 	return hci_enable_ext_advertising_sync(hdev, instance);
 }
 
-static int hci_disable_per_advertising_sync(struct hci_dev *hdev, u8 instance)
+int hci_disable_per_advertising_sync(struct hci_dev *hdev, u8 instance)
 {
 	struct hci_cp_le_set_per_adv_enable cp;
 	struct adv_info *adv = NULL;
@@ -5378,6 +5378,12 @@ int hci_abort_conn_sync(struct hci_dev *hdev, struct hci_conn *conn, u8 reason)
 	switch (conn->state) {
 	case BT_CONNECTED:
 	case BT_CONFIG:
+		if (test_bit(HCI_CONN_BIG_CREATED, &conn->flags)) {
+			/* This is a BIS connection, hci_conn_del will
+			 * do the necessary cleanup.
+			 */
+			goto conn_del;
+		}
 		err = hci_disconnect_sync(hdev, conn, reason);
 		break;
 	case BT_CONNECT:
@@ -5387,26 +5393,19 @@ int hci_abort_conn_sync(struct hci_dev *hdev, struct hci_conn *conn, u8 reason)
 		err = hci_reject_conn_sync(hdev, conn, reason);
 		break;
 	case BT_OPEN:
-		hci_dev_lock(hdev);
-
-		/* Cleanup bis or pa sync connections */
-		if (test_and_clear_bit(HCI_CONN_BIG_SYNC_FAILED, &conn->flags) ||
-		    test_and_clear_bit(HCI_CONN_PA_SYNC_FAILED, &conn->flags)) {
-			hci_conn_failed(conn, reason);
-		} else if (test_bit(HCI_CONN_PA_SYNC, &conn->flags) ||
-			   test_bit(HCI_CONN_BIG_SYNC, &conn->flags)) {
-			conn->state = BT_CLOSED;
-			hci_disconn_cfm(conn, reason);
-			hci_conn_del(conn);
-		}
-
-		hci_dev_unlock(hdev);
-		return 0;
 	case BT_BOUND:
+		if (test_bit(HCI_CONN_PA_SYNC, &conn->flags) ||
+		    test_bit(HCI_CONN_BIG_SYNC, &conn->flags))
+			goto conn_del;
+
+		test_and_clear_bit(HCI_CONN_BIG_SYNC_FAILED, &conn->flags);
+		test_and_clear_bit(HCI_CONN_PA_SYNC_FAILED, &conn->flags);
+
 		hci_dev_lock(hdev);
 		hci_conn_failed(conn, reason);
 		hci_dev_unlock(hdev);
 		return 0;
+conn_del:
 	default:
 		hci_dev_lock(hdev);
 		conn->state = BT_CLOSED;
