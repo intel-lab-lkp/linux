@@ -152,7 +152,12 @@ get_unmapped_area:
 #ifndef CONFIG_HIGHMEM
 static void clear_contig_region(struct page *page, unsigned int npages)
 {
+	/*
+	 * We might be clearing a large region. Allow rescheduling.
+	 */
+	allow_resched();
 	clear_pages(page_address(page), npages);
+	disallow_resched();
 }
 
 /*
