@@ -62,6 +62,25 @@ struct readdir_cd {
 	__be32			err;	/* 0, nfserr, or nfserr_eof */
 };
 
+enum nfsd_genl_internal_flag {
+	NFSD_FLAG_NEED_REF_COUNT = BIT(0),
+};
+
+/* Maximum number of operations per session compound */
+#define NFSD_MAX_OPS_PER_COMPOUND	50
+
+struct nfsd_genl_rqstp {
+	struct sockaddr daddr;
+	struct sockaddr saddr;
+	unsigned long rq_flags;
+	const char *pc_name;
+	ktime_t rq_stime;
+	__be32 rq_xid;
+	u32 rq_vers;
+	/* NFSv4 compund */
+	u32 opnum[NFSD_MAX_OPS_PER_COMPOUND];
+	u16 opcnt;
+};
 
 extern struct svc_program	nfsd_program;
 extern const struct svc_version	nfsd_version2, nfsd_version3, nfsd_version4;

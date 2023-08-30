@@ -17,6 +17,9 @@
 #include <linux/sunrpc/rpc_pipe_fs.h>
 #include <linux/module.h>
 #include <linux/fsnotify.h>
+#include <net/genetlink.h>
+#include <net/ip.h>
+#include <net/ipv6.h>
 
 #include "idmap.h"
 #include "nfsd.h"
@@ -1495,6 +1498,273 @@ static int create_proc_exports_entry(void)
 
 unsigned int nfsd_net_id;
 
+/* the netlink family */
+static struct genl_family nfsd_genl;
+
+static const struct nla_policy
+nfsd_rpc_status_compound_policy[NFS_ATTR_RPC_STATUS_COMPOUND_MAX + 1] = {
+	[NFS_ATTR_RPC_STATUS_COMPOUND_OP] = { .type = NLA_STRING },
+};
+
+static const struct nla_policy
+nfsd_rpc_status_policy[NFS_ATTR_RPC_STATUS_MAX + 1] = {
+	[NFS_ATTR_RPC_STATUS_XID] = { .type = NLA_U32 },
+	[NFS_ATTR_RPC_STATUS_FLAGS] = { .type = NLA_U32 },
+	[NFS_ATTR_RPC_STATUS_PC_NAME] = { .type = NLA_STRING },
+	[NFS_ATTR_RPC_STATUS_VERSION] = { .type = NLA_U8 },
+	[NFS_ATTR_RPC_STATUS_STIME] = { .type = NLA_S64 },
+	[NFS_ATTR_RPC_STATUS_SADDR4] = { .len = sizeof_field(struct iphdr, saddr) },
+	[NFS_ATTR_RPC_STATUS_DADDR4] = { .len = sizeof_field(struct iphdr, daddr) },
+	[NFS_ATTR_RPC_STATUS_SADDR6] = { .len = sizeof_field(struct ipv6hdr, saddr) },
+	[NFS_ATTR_RPC_STATUS_DADDR6] = { .len = sizeof_field(struct ipv6hdr, daddr) },
+	[NFS_ATTR_RPC_STATUS_SPORT] = { .type = NLA_U16 },
+	[NFS_ATTR_RPC_STATUS_DPORT] = { .type = NLA_U16 },
+	[NFS_ATTR_RPC_STATUS_COMPOUND] =
+		NLA_POLICY_NESTED_ARRAY(nfsd_rpc_status_compound_policy),
+};
+
+static const struct nla_policy
+nfsd_genl_policy[NFS_ATTR_MAX + 1] = {
+	[NFS_ATTR_RPC_STATUS] = NLA_POLICY_NESTED_ARRAY(nfsd_rpc_status_policy),
+};
+
+static int nfsd_genl_rpc_status_compose_msg(struct sk_buff *skb, int index,
+					    struct nfsd_genl_rqstp *rqstp)
+{
+	struct nlattr *rq_attr, *comp_attr;
+	int i;
+
+	rq_attr = nla_nest_start(skb, index);
+	if (!rq_attr)
+		return -ENOBUFS;
+
+	if (nla_put_be32(skb, NFS_ATTR_RPC_STATUS_XID, rqstp->rq_xid) ||
+	    nla_put_u32(skb, NFS_ATTR_RPC_STATUS_FLAGS, rqstp->rq_flags) ||
+	    nla_put_string(skb, NFS_ATTR_RPC_STATUS_PC_NAME, rqstp->pc_name) ||
+	    nla_put_u8(skb, NFS_ATTR_RPC_STATUS_VERSION, rqstp->rq_vers) ||
+	    nla_put_s64(skb, NFS_ATTR_RPC_STATUS_STIME,
+			ktime_to_us(rqstp->rq_stime), NFS_ATTR_RPC_STATUS_PAD))
+		return -ENOBUFS;
+
+	switch (rqstp->saddr.sa_family) {
+	case AF_INET: {
+		const struct sockaddr_in *s_in, *d_in;
+
+		s_in = (const struct sockaddr_in *)&rqstp->saddr;
+		d_in = (const struct sockaddr_in *)&rqstp->daddr;
+		if (nla_put_in_addr(skb, NFS_ATTR_RPC_STATUS_SADDR4,
+				    s_in->sin_addr.s_addr) ||
+		    nla_put_in_addr(skb, NFS_ATTR_RPC_STATUS_DADDR4,
+				    d_in->sin_addr.s_addr) ||
+		    nla_put_be16(skb, NFS_ATTR_RPC_STATUS_SPORT,
+				 s_in->sin_port) ||
+		    nla_put_be16(skb, NFS_ATTR_RPC_STATUS_DPORT,
+				 d_in->sin_port))
+			return -ENOBUFS;
+		break;
+	}
+	case AF_INET6: {
+		const struct sockaddr_in6 *s_in, *d_in;
+
+		s_in = (const struct sockaddr_in6 *)&rqstp->saddr;
+		d_in = (const struct sockaddr_in6 *)&rqstp->daddr;
+		if (nla_put_in6_addr(skb, NFS_ATTR_RPC_STATUS_SADDR6,
+				     &s_in->sin6_addr) ||
+		    nla_put_in6_addr(skb, NFS_ATTR_RPC_STATUS_DADDR6,
+				     &d_in->sin6_addr) ||
+		    nla_put_be16(skb, NFS_ATTR_RPC_STATUS_SPORT,
+				 s_in->sin6_port) ||
+		    nla_put_be16(skb, NFS_ATTR_RPC_STATUS_DPORT,
+				 d_in->sin6_port))
+			return -ENOBUFS;
+		break;
+	}
+	default:
+		break;
+	}
+
+	comp_attr = nla_nest_start(skb, NFS_ATTR_RPC_STATUS_COMPOUND);
+	if (!comp_attr)
+		return -ENOBUFS;
+
+	for (i = 0; i < rqstp->opcnt; i++) {
+		struct nlattr *op_attr;
+
+		op_attr = nla_nest_start(skb, i);
+		if (!op_attr)
+			return -ENOBUFS;
+
+		if (nla_put_string(skb, NFS_ATTR_RPC_STATUS_COMPOUND_OP,
+				   nfsd4_op_name(rqstp->opnum[i])))
+			return -ENOBUFS;
+
+		nla_nest_end(skb, op_attr);
+	}
+
+	nla_nest_end(skb, comp_attr);
+	nla_nest_end(skb, rq_attr);
+
+	return 0;
+}
+
+static int nfsd_genl_get_rpc_status(struct sk_buff *skb, struct genl_info *info)
+{
+	struct nfsd_net *nn = net_generic(genl_info_net(info), nfsd_net_id);
+	struct nlattr *rpc_attr;
+	int i, rqstp_index = 0;
+	struct sk_buff *msg;
+	void *hdr;
+
+	msg = nlmsg_new(NLMSG_DEFAULT_SIZE, GFP_KERNEL);
+	if (!msg)
+		return -ENOMEM;
+
+	hdr = genlmsg_put(msg, info->snd_portid, info->snd_seq, &nfsd_genl,
+			  0, NFS_CMD_NEW_RPC_STATUS);
+	if (!hdr) {
+		nlmsg_free(msg);
+		return -ENOBUFS;
+	}
+
+	rpc_attr = nla_nest_start(msg, NFS_ATTR_RPC_STATUS);
+	if (!rpc_attr)
+		goto nla_put_failure;
+
+	rcu_read_lock();
+
+	for (i = 0; i < nn->nfsd_serv->sv_nrpools; i++) {
+		struct svc_rqst *rqstp;
+
+		list_for_each_entry_rcu(rqstp,
+				&nn->nfsd_serv->sv_pools[i].sp_all_threads,
+				rq_all) {
+			struct nfsd_genl_rqstp genl_rqstp;
+			unsigned int status_counter;
+
+			/*
+			 * Acquire rq_status_counter before parsing the rqst
+			 * fields. rq_status_counter is set to an odd value in
+			 * order to notify the consumers the rqstp fields are
+			 * meaningful.
+			 */
+			status_counter =
+				smp_load_acquire(&rqstp->rq_status_counter);
+			if (!(status_counter & 1))
+				continue;
+
+			genl_rqstp.rq_xid = rqstp->rq_xid;
+			genl_rqstp.rq_flags = rqstp->rq_flags;
+			genl_rqstp.rq_vers = rqstp->rq_vers;
+			genl_rqstp.pc_name = svc_proc_name(rqstp);
+			genl_rqstp.rq_stime = rqstp->rq_stime;
+			genl_rqstp.opcnt = 0;
+			memcpy(&genl_rqstp.daddr, svc_daddr(rqstp),
+			       sizeof(struct sockaddr));
+			memcpy(&genl_rqstp.saddr, svc_addr(rqstp),
+			       sizeof(struct sockaddr));
+
+#ifdef CONFIG_NFSD_V4
+			if (rqstp->rq_vers == NFS4_VERSION &&
+			    rqstp->rq_proc == NFSPROC4_COMPOUND) {
+				/* NFSv4 compund */
+				struct nfsd4_compoundargs *args;
+				int j;
+
+				args = rqstp->rq_argp;
+				genl_rqstp.opcnt = args->opcnt;
+				for (j = 0; j < genl_rqstp.opcnt; j++)
+					genl_rqstp.opnum[j] =
+						args->ops[j].opnum;
+			}
+#endif /* CONFIG_NFSD_V4 */
+
+			/*
+			 * Acquire rq_status_counter before reporting the rqst
+			 * fields to the user.
+			 */
+			if (smp_load_acquire(&rqstp->rq_status_counter) !=
+			    status_counter)
+				continue;
+
+			if (nfsd_genl_rpc_status_compose_msg(msg,
+							     rqstp_index++,
+							     &genl_rqstp))
+				goto nla_put_failure_rcu;
+		}
+	}
+
+	rcu_read_unlock();
+
+	nla_nest_end(msg, rpc_attr);
+	genlmsg_end(msg, hdr);
+
+	return genlmsg_reply(msg, info);
+
+nla_put_failure_rcu:
+	rcu_read_unlock();
+nla_put_failure:
+	genlmsg_cancel(msg, hdr);
+	nlmsg_free(msg);
+
+	return -EMSGSIZE;
+}
+
+static int nfsd_genl_pre_doit(const struct genl_split_ops *ops,
+			      struct sk_buff *skb, struct genl_info *info)
+{
+	struct nfsd_net *nn = net_generic(genl_info_net(info), nfsd_net_id);
+
+	if (ops->internal_flags & NFSD_FLAG_NEED_REF_COUNT) {
+		int ret = -ENODEV;
+
+		mutex_lock(&nfsd_mutex);
+		if (nn->nfsd_serv) {
+			svc_get(nn->nfsd_serv);
+			ret = 0;
+		}
+		mutex_unlock(&nfsd_mutex);
+
+		return ret;
+	}
+
+	return 0;
+}
+
+static void nfsd_genl_post_doit(const struct genl_split_ops *ops,
+				struct sk_buff *skb, struct genl_info *info)
+{
+	if (ops->internal_flags & NFSD_FLAG_NEED_REF_COUNT) {
+		mutex_lock(&nfsd_mutex);
+		nfsd_put(genl_info_net(info));
+		mutex_unlock(&nfsd_mutex);
+	}
+}
+
+static struct genl_small_ops nfsd_genl_ops[] = {
+	{
+		.cmd = NFS_CMD_GET_RPC_STATUS,
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
+		.doit = nfsd_genl_get_rpc_status,
+		.internal_flags = NFSD_FLAG_NEED_REF_COUNT,
+	},
+};
+
+static struct genl_family nfsd_genl __ro_after_init = {
+	.name = "nfsd_server",
+	.version = 1,
+	.maxattr = NFS_ATTR_MAX,
+	.module = THIS_MODULE,
+	.netnsok = true,
+	.parallel_ops = true,
+	.hdrsize = 0,
+	.pre_doit = nfsd_genl_pre_doit,
+	.post_doit = nfsd_genl_post_doit,
+	.policy = nfsd_genl_policy,
+	.small_ops = nfsd_genl_ops,
+	.n_small_ops = ARRAY_SIZE(nfsd_genl_ops),
+	.resv_start_op = NFS_CMD_NEW_RPC_STATUS + 1,
+};
+
 /**
  * nfsd_net_init - Prepare the nfsd_net portion of a new net namespace
  * @net: a freshly-created network namespace
@@ -1589,6 +1859,10 @@ static int __init init_nfsd(void)
 	retval = register_filesystem(&nfsd_fs_type);
 	if (retval)
 		goto out_free_all;
+	retval = genl_register_family(&nfsd_genl);
+	if (retval)
+		goto out_free_all;
+
 	return 0;
 out_free_all:
 	nfsd4_destroy_laundry_wq();
@@ -1613,6 +1887,7 @@ out_free_slabs:
 
 static void __exit exit_nfsd(void)
 {
+	genl_unregister_family(&nfsd_genl);
 	unregister_filesystem(&nfsd_fs_type);
 	nfsd4_destroy_laundry_wq();
 	unregister_cld_notifier();
