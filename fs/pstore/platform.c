@@ -98,7 +98,14 @@ MODULE_PARM_DESC(kmsg_bytes, "amount of kernel log to snapshot (in bytes)");
 
 static void *compress_workspace;
 
+/*
+ * Compression is only used for dmesg output, which consists of low-entropy
+ * ASCII text, and so we can assume a 2x compression factor is achievable.
+ */
+#define DMESG_COMP_FACTOR	2
+
 static char *big_oops_buf;
+static size_t max_uncompressed_size;
 
 void pstore_set_kmsg_bytes(int bytes)
 {
@@ -216,7 +223,7 @@ static void allocate_buf_for_compression(void)
 	 * uncompressed record size, since any record that would be expanded by
 	 * compression is just stored uncompressed.
 	 */
-	buf = kvzalloc(psinfo->bufsize, GFP_KERNEL);
+	buf = kvzalloc(DMESG_COMP_FACTOR * psinfo->bufsize, GFP_KERNEL);
 	if (!buf) {
 		pr_err("Failed %zu byte compression buffer allocation for: %s\n",
 		       psinfo->bufsize, compress);
@@ -233,6 +240,7 @@ static void allocate_buf_for_compression(void)
 
 	/* A non-NULL big_oops_buf indicates compression is available. */
 	big_oops_buf = buf;
+	max_uncompressed_size = DMESG_COMP_FACTOR * psinfo->bufsize;
 
 	pr_info("Using crash dump compression: %s\n", compress);
 }
@@ -246,6 +254,7 @@ static void free_buf_for_compression(void)
 
 	kvfree(big_oops_buf);
 	big_oops_buf = NULL;
+	max_uncompressed_size = 0;
 }
 
 void pstore_record_init(struct pstore_record *record,
@@ -305,7 +314,7 @@ static void pstore_dump(struct kmsg_dumper *dumper,
 		record.buf = psinfo->buf;
 
 		dst = big_oops_buf ?: psinfo->buf;
-		dst_size = psinfo->bufsize;
+		dst_size = max_uncompressed_size ?: psinfo->bufsize;
 
 		/* Write dump header. */
 		header_size = snprintf(dst, dst_size, "%s#%d Part%u\n", why,
@@ -326,8 +335,15 @@ static void pstore_dump(struct kmsg_dumper *dumper,
 				record.compressed = true;
 				record.size = zipped_len;
 			} else {
-				record.size = header_size + dump_size;
-				memcpy(psinfo->buf, dst, record.size);
+				/*
+				 * Compression failed, so the buffer is most
+				 * likely filled with binary data that does not
+				 * compress as well as ASCII text. Copy as much
+				 * of the uncompressed data as possible into
+				 * the pstore record, and discard the rest.
+				 */
+				record.size = psinfo->bufsize;
+				memcpy(psinfo->buf, dst, psinfo->bufsize);
 			}
 		} else {
 			record.size = header_size + dump_size;
@@ -583,7 +599,7 @@ static void decompress_record(struct pstore_record *record,
 	}
 
 	/* Allocate enough space to hold max decompression and ECC. */
-	workspace = kvzalloc(psinfo->bufsize + record->ecc_notice_size,
+	workspace = kvzalloc(max_uncompressed_size + record->ecc_notice_size,
 			     GFP_KERNEL);
 	if (!workspace)
 		return;
@@ -591,11 +607,11 @@ static void decompress_record(struct pstore_record *record,
 	zstream->next_in	= record->buf;
 	zstream->avail_in	= record->size;
 	zstream->next_out	= workspace;
-	zstream->avail_out	= psinfo->bufsize;
+	zstream->avail_out	= max_uncompressed_size;
 
 	ret = zlib_inflate(zstream, Z_FINISH);
 	if (ret != Z_STREAM_END) {
-		pr_err("zlib_inflate() failed, ret = %d!\n", ret);
+		pr_err_ratelimited("zlib_inflate() failed, ret = %d!\n", ret);
 		kvfree(workspace);
 		return;
 	}
