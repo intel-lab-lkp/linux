@@ -2836,6 +2836,14 @@ static int ufshcd_queuecommand(struct Scsi_Host *host, struct scsi_cmnd *cmd)
 		 * being issued in that case.
 		 */
 		if (ufshcd_eh_in_progress(hba)) {
+			/* Same as UFSHCD_STATE_EH_SCHEDULED_FATAL */
+			if (hba->pm_op_in_progress) {
+				hba->force_reset = true;
+				set_host_byte(cmd, DID_BAD_TARGET);
+				scsi_done(cmd);
+				goto out;
+			}
+
 			err = SCSI_MLQUEUE_HOST_BUSY;
 			goto out;
 		}
@@ -9712,6 +9720,9 @@ static int __ufshcd_wl_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 
 	if (!ufshcd_is_ufs_dev_active(hba)) {
 		ret = ufshcd_set_dev_pwr_mode(hba, UFS_ACTIVE_PWR_MODE);
+		/* Try prevent return error, else IO hang */
+		if (ret)
+			ret = ufshcd_link_recovery(hba);
 		if (ret)
 			goto set_old_link_state;
 		ufshcd_set_timestamp_attr(hba);
