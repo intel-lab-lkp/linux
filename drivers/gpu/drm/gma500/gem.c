@@ -344,8 +344,8 @@ int psb_gem_mm_init(struct drm_device *dev)
 
 	stolen_size = vram_stolen_size;
 
-	dev_dbg(dev->dev, "Stolen memory base 0x%x, size %luK\n",
-		dev_priv->stolen_base, vram_stolen_size / 1024);
+	drm_info(dev, "Stolen memory base 0x%x, size %luKiB\n",
+		 dev_priv->stolen_base, vram_stolen_size / 1024);
 
 	pg->stolen_size = stolen_size;
 	dev_priv->vram_stolen_size = vram_stolen_size;
