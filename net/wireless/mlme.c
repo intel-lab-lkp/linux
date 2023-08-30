@@ -239,12 +239,11 @@ void cfg80211_michael_mic_failure(struct net_device *dev, const u8 *addr,
 	char *buf = kmalloc(128, gfp);
 
 	if (buf) {
-		sprintf(buf, "MLME-MICHAELMICFAILURE.indication("
-			"keyid=%d %scast addr=%pM)", key_id,
+		memset(&wrqu, 0, sizeof(wrqu));
+		wrqu.data.length = sprintf(buf, "MLME-MICHAELMICFAILURE."
+			"indication(keyid=%d %scast addr=%pM)", key_id,
 			key_type == NL80211_KEYTYPE_GROUP ? "broad" : "uni",
 			addr);
-		memset(&wrqu, 0, sizeof(wrqu));
-		wrqu.data.length = strlen(buf);
 		wireless_send_event(dev, IWEVCUSTOM, &wrqu, buf);
 		kfree(buf);
 	}
