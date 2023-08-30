@@ -2240,6 +2240,36 @@ static __always_inline bool need_resched(void)
 	return unlikely(tif_need_resched());
 }
 
+#ifdef TIF_RESCHED_ALLOW
+/*
+ * allow_resched() .. disallow_resched() demarcate a preemptible section.
+ *
+ * Used around primitives where it might not be convenient to periodically
+ * call cond_resched().
+ */
+static inline void allow_resched(void)
+{
+	might_sleep();
+	set_tsk_thread_flag(current, TIF_RESCHED_ALLOW);
+}
+
+static inline void disallow_resched(void)
+{
+	clear_tsk_thread_flag(current, TIF_RESCHED_ALLOW);
+}
+
+static __always_inline bool resched_allowed(void)
+{
+	return unlikely(test_tsk_thread_flag(current, TIF_RESCHED_ALLOW));
+}
+
+#else
+static __always_inline bool resched_allowed(void)
+{
+	return false;
+}
+#endif /* TIF_RESCHED_ALLOW */
+
 /*
  * Wrappers for p->thread_info->cpu access. No-op on UP.
  */
