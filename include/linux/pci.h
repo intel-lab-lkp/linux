@@ -713,6 +713,33 @@ static inline bool pci_is_bridge(struct pci_dev *dev)
 		dev->hdr_type == PCI_HEADER_TYPE_CARDBUS;
 }
 
+/**
+ * The PCI code and ID assignment specification defined four types of
+ * display controllers for the display base class(03h), and the devices
+ * with 0x00h sub-class code are VGA devices. VGA devices with programming
+ * interface 0x00 is VGA-compatible, VGA devices with programming interface
+ * 0x01 are 8514-compatible controllers. Besides, PCI_CLASS_NOT_DEFINED_VGA
+ * is defined to provide backward compatibility for devices that were built
+ * before the class code field was defined. This means that it belong to the
+ * VGA devices category also.
+ *
+ * Returns:
+ * true if the PCI device is a VGA device, false otherwise.
+ */
+static inline bool pci_is_vga(struct pci_dev *pdev)
+{
+	if (!pdev)
+		return false;
+
+	if ((pdev->class >> 8) == PCI_CLASS_DISPLAY_VGA)
+		return true;
+
+	if ((pdev->class >> 8) == PCI_CLASS_NOT_DEFINED_VGA)
+		return true;
+
+	return false;
+}
+
 #define for_each_pci_bridge(dev, bus)				\
 	list_for_each_entry(dev, &bus->devices, bus_list)	\
 		if (!pci_is_bridge(dev)) {} else
