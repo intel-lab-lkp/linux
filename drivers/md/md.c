@@ -399,6 +399,9 @@ check_suspended:
 static void md_array_exit(struct mddev *mddev)
 {
 	percpu_ref_put(&mddev->active_io);
+	if (percpu_ref_is_zero(&mddev->active_io) &&
+	    wq_has_sleeper(&mddev->sb_wait))
+		wake_up(&mddev->sb_wait);
 }
 
 void md_handle_request(struct mddev *mddev, struct bio *bio)
