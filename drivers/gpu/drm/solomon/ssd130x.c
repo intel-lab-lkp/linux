@@ -650,46 +650,6 @@ static int ssd130x_fb_blit_rect(struct drm_plane_state *state,
 	return ret;
 }
 
-static int ssd130x_primary_plane_helper_atomic_check(struct drm_plane *plane,
-						     struct drm_atomic_state *state)
-{
-	struct drm_device *drm = plane->dev;
-	struct ssd130x_device *ssd130x = drm_to_ssd130x(drm);
-	struct drm_plane_state *plane_state = drm_atomic_get_new_plane_state(state, plane);
-	struct ssd130x_plane_state *ssd130x_state = to_ssd130x_plane_state(plane_state);
-	unsigned int page_height = ssd130x->device_info->page_height;
-	unsigned int pages = DIV_ROUND_UP(ssd130x->height, page_height);
-	const struct drm_format_info *fi;
-	unsigned int pitch;
-	int ret;
-
-	ret = drm_plane_helper_atomic_check(plane, state);
-	if (ret)
-		return ret;
-
-	ssd130x_state->data_array = kcalloc(ssd130x->width, pages, GFP_KERNEL);
-	if (!ssd130x_state->data_array)
-		return -ENOMEM;
-
-	if (plane_state->fb->format->format != DRM_FORMAT_R1) {
-		fi = drm_format_info(DRM_FORMAT_R1);
-		if (!fi)
-			return -EINVAL;
-
-		pitch = drm_format_info_min_pitch(fi, 0, ssd130x->width);
-
-		ssd130x_state->buffer = kcalloc(pitch, ssd130x->height, GFP_KERNEL);
-		if (!ssd130x_state->buffer) {
-			kfree(ssd130x_state->data_array);
-			/* Set to prevent a double free in .atomic_destroy_state() */
-			ssd130x_state->data_array = NULL;
-			return -ENOMEM;
-		}
-	}
-
-	return 0;
-}
-
 static void ssd130x_primary_plane_helper_atomic_update(struct drm_plane *plane,
 						       struct drm_atomic_state *state)
 {
@@ -762,10 +722,6 @@ static struct drm_plane_state *ssd130x_primary_plane_duplicate_state(struct drm_
 	if (!ssd130x_state)
 		return NULL;
 
-	/* The buffers are not duplicated and are allocated in .atomic_check */
-	ssd130x_state->buffer = NULL;
-	ssd130x_state->data_array = NULL;
-
 	new_shadow_plane_state = &ssd130x_state->base;
 
 	__drm_gem_duplicate_shadow_plane_state(plane, new_shadow_plane_state);
@@ -778,9 +734,6 @@ static void ssd130x_primary_plane_destroy_state(struct drm_plane *plane,
 {
 	struct ssd130x_plane_state *ssd130x_state = to_ssd130x_plane_state(state);
 
-	kfree(ssd130x_state->data_array);
-	kfree(ssd130x_state->buffer);
-
 	__drm_gem_destroy_shadow_plane_state(&ssd130x_state->base);
 
 	kfree(ssd130x_state);
@@ -788,7 +741,7 @@ static void ssd130x_primary_plane_destroy_state(struct drm_plane *plane,
 
 static const struct drm_plane_helper_funcs ssd130x_primary_plane_helper_funcs = {
 	DRM_GEM_SHADOW_PLANE_HELPER_FUNCS,
-	.atomic_check = ssd130x_primary_plane_helper_atomic_check,
+	.atomic_check = drm_plane_helper_atomic_check,
 	.atomic_update = ssd130x_primary_plane_helper_atomic_update,
 	.atomic_disable = ssd130x_primary_plane_helper_atomic_disable,
 };
@@ -818,6 +771,59 @@ static enum drm_mode_status ssd130x_crtc_helper_mode_valid(struct drm_crtc *crtc
 	return MODE_OK;
 }
 
+int ssd130x_crtc_helper_atomic_check(struct drm_crtc *crtc, struct drm_atomic_state *state)
+{
+	struct drm_device *drm = crtc->dev;
+	struct ssd130x_device *ssd130x = drm_to_ssd130x(drm);
+	struct drm_plane *plane = crtc->primary;
+	struct drm_plane_state *plane_state = drm_atomic_get_new_plane_state(state, plane);
+	struct ssd130x_plane_state *ssd130x_state = to_ssd130x_plane_state(plane_state);
+	unsigned int page_height = ssd130x->device_info->page_height;
+	unsigned int pages = DIV_ROUND_UP(ssd130x->height, page_height);
+	const struct drm_format_info *fi;
+	unsigned int pitch;
+	int ret;
+
+	ret = drm_crtc_helper_atomic_check(crtc, state);
+	if (ret)
+		return ret;
+
+	ssd130x_state->data_array = kcalloc(ssd130x->width, pages, GFP_KERNEL);
+	if (!ssd130x_state->data_array)
+		return -ENOMEM;
+
+	if (plane_state->fb->format->format != DRM_FORMAT_R1) {
+		fi = drm_format_info(DRM_FORMAT_R1);
+		if (!fi)
+			return -EINVAL;
+
+		pitch = drm_format_info_min_pitch(fi, 0, ssd130x->width);
+
+		ssd130x_state->buffer = kcalloc(pitch, ssd130x->height, GFP_KERNEL);
+		if (!ssd130x_state->buffer) {
+			kfree(ssd130x_state->data_array);
+			/* Set to prevent a double free in .atomic_destroy_state() */
+			ssd130x_state->data_array = NULL;
+			return -ENOMEM;
+		}
+	}
+
+	return 0;
+}
+
+static void ssd130x_crtc_destroy_state(struct drm_crtc *crtc,
+				       struct drm_crtc_state *state)
+{
+	struct drm_plane *plane = crtc->primary;
+	struct drm_plane_state *plane_state = drm_atomic_get_new_plane_state(state->state, plane);
+	struct ssd130x_plane_state *ssd130x_state = to_ssd130x_plane_state(plane_state);
+
+	drm_atomic_helper_crtc_destroy_state(crtc, state);
+
+	kfree(ssd130x_state->data_array);
+	kfree(ssd130x_state->buffer);
+}
+
 /*
  * The CRTC is always enabled. Screen updates are performed by
  * the primary plane's atomic_update function. Disabling clears
@@ -825,7 +831,7 @@ static enum drm_mode_status ssd130x_crtc_helper_mode_valid(struct drm_crtc *crtc
  */
 static const struct drm_crtc_helper_funcs ssd130x_crtc_helper_funcs = {
 	.mode_valid = ssd130x_crtc_helper_mode_valid,
-	.atomic_check = drm_crtc_helper_atomic_check,
+	.atomic_check = ssd130x_crtc_helper_atomic_check,
 };
 
 static const struct drm_crtc_funcs ssd130x_crtc_funcs = {
@@ -834,7 +840,7 @@ static const struct drm_crtc_funcs ssd130x_crtc_funcs = {
 	.set_config = drm_atomic_helper_set_config,
 	.page_flip = drm_atomic_helper_page_flip,
 	.atomic_duplicate_state = drm_atomic_helper_crtc_duplicate_state,
-	.atomic_destroy_state = drm_atomic_helper_crtc_destroy_state,
+	.atomic_destroy_state = ssd130x_crtc_destroy_state,
 };
 
 static void ssd130x_encoder_helper_atomic_enable(struct drm_encoder *encoder,
