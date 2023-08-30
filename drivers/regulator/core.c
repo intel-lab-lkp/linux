@@ -216,37 +216,29 @@ static int regulator_lock_two(struct regulator_dev *rdev1,
 			      struct regulator_dev *rdev2,
 			      struct ww_acquire_ctx *ww_ctx)
 {
-	struct regulator_dev *held, *contended;
 	int ret;
 
 	ww_acquire_init(ww_ctx, &regulator_ww_class);
 
-	/* Try to just grab both of them */
 	ret = regulator_lock_nested(rdev1, ww_ctx);
 	if (WARN_ON(ret))
 		goto exit;
-	ret = regulator_lock_nested(rdev2, ww_ctx);
-	if (!ret)
-		goto exit;
-	if (WARN_ON(ret != -EDEADLOCK)) {
-		regulator_unlock(rdev1);
-		goto exit;
-	}
 
-	held = rdev1;
-	contended = rdev2;
 	while (true) {
-		regulator_unlock(held);
-
-		regulator_lock_contended(contended, ww_ctx);
-		swap(held, contended);
-		ret = regulator_lock_nested(contended, ww_ctx);
-
-		if (ret != -EDEADLOCK) {
-			if (WARN_ON(ret))
-				regulator_unlock(held);
+		ret = regulator_lock_nested(rdev2, ww_ctx);
+		if (!ret)
 			break;
-		}
+
+		regulator_unlock(rdev1);
+
+		if (WARN_ON(ret != -EDEADLOCK))
+			break;
+
+		/* Swap the locking order and retry. */
+
+		swap(rdev1, rdev2);
+
+		regulator_lock_contended(rdev1, ww_ctx);
 	}
 
 exit:
