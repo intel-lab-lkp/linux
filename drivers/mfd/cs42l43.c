@@ -1073,7 +1073,7 @@ void cs42l43_dev_remove(struct cs42l43 *cs42l43)
 }
 EXPORT_SYMBOL_NS_GPL(cs42l43_dev_remove, MFD_CS42L43);
 
-static int cs42l43_suspend(struct device *dev)
+static int __maybe_unused cs42l43_suspend(struct device *dev)
 {
 	struct cs42l43 *cs42l43 = dev_get_drvdata(dev);
 	int ret;
@@ -1103,7 +1103,7 @@ static int cs42l43_suspend(struct device *dev)
 	return 0;
 }
 
-static int cs42l43_resume(struct device *dev)
+static int __maybe_unused cs42l43_resume(struct device *dev)
 {
 	struct cs42l43 *cs42l43 = dev_get_drvdata(dev);
 	int ret;
@@ -1121,7 +1121,7 @@ static int cs42l43_resume(struct device *dev)
 	return 0;
 }
 
-static int cs42l43_runtime_suspend(struct device *dev)
+static int __maybe_unused cs42l43_runtime_suspend(struct device *dev)
 {
 	struct cs42l43 *cs42l43 = dev_get_drvdata(dev);
 
@@ -1135,7 +1135,7 @@ static int cs42l43_runtime_suspend(struct device *dev)
 	return 0;
 }
 
-static int cs42l43_runtime_resume(struct device *dev)
+static int __maybe_unused cs42l43_runtime_resume(struct device *dev)
 {
 	struct cs42l43 *cs42l43 = dev_get_drvdata(dev);
 	unsigned int reset_canary;
