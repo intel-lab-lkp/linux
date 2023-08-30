@@ -368,16 +368,18 @@ static bool is_suspended(struct mddev *mddev, struct bio *bio)
 	return true;
 }
 
-void md_handle_request(struct mddev *mddev, struct bio *bio)
+static bool md_array_enter(struct mddev *mddev, struct bio *bio)
 {
 check_suspended:
 	if (is_suspended(mddev, bio)) {
 		DEFINE_WAIT(__wait);
+
 		/* Bail out if REQ_NOWAIT is set for the bio */
 		if (bio->bi_opf & REQ_NOWAIT) {
 			bio_wouldblock_error(bio);
-			return;
+			return false;
 		}
+
 		for (;;) {
 			prepare_to_wait(&mddev->sb_wait, &__wait,
 					TASK_UNINTERRUPTIBLE);
@@ -387,15 +389,34 @@ check_suspended:
 		}
 		finish_wait(&mddev->sb_wait, &__wait);
 	}
+
 	if (!percpu_ref_tryget_live(&mddev->active_io))
 		goto check_suspended;
 
+	return true;
+}
+
+static void md_array_exit(struct mddev *mddev)
+{
+	percpu_ref_put(&mddev->active_io);
+}
+
+void md_handle_request(struct mddev *mddev, struct bio *bio)
+{
+retry:
+	if (!md_array_enter(mddev, bio))
+		return;
+
 	if (!mddev->pers->make_request(mddev, bio)) {
-		percpu_ref_put(&mddev->active_io);
-		goto check_suspended;
+		md_array_exit(mddev);
+		goto retry;
 	}
 
-	percpu_ref_put(&mddev->active_io);
+	/*
+	 * pers->make_request() will grab additional reference until bio is
+	 * done.
+	 */
+	md_array_exit(mddev);
 }
 EXPORT_SYMBOL(md_handle_request);
 
@@ -8683,7 +8704,7 @@ static void md_end_clone_io(struct bio *bio)
 
 	bio_put(bio);
 	bio_endio(orig_bio);
-	percpu_ref_put(&mddev->active_io);
+	md_array_exit(mddev);
 }
 
 static void md_clone_bio(struct mddev *mddev, struct bio **bio)
