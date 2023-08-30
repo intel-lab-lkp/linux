@@ -10,10 +10,13 @@
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/timekeeping.h>
-
+#include <linux/cdev.h>
+#include <linux/fs.h>
 #include <linux/nospec.h>
 
 #include "ptp_private.h"
+
+#define DMTSC_NOT -1
 
 static int ptp_disable_pinfunc(struct ptp_clock_info *ops,
 			       enum ptp_pin_function func, unsigned int chan)
@@ -443,15 +446,23 @@ __poll_t ptp_poll(struct posix_clock *pc, struct file *fp, poll_table *wait)
 
 #define EXTTS_BUFSIZE (PTP_BUF_TIMESTAMPS * sizeof(struct ptp_extts_event))
 
-ssize_t ptp_read(struct posix_clock *pc,
-		 uint rdflags, char __user *buf, size_t cnt)
+ssize_t ptp_queue_read(struct ptp_clock *ptp, char __user *buf, size_t cnt,
+		       int dmtsc)
 {
-	struct ptp_clock *ptp = container_of(pc, struct ptp_clock, clock);
-	struct timestamp_event_queue *queue = &ptp->tsevq;
+	struct timestamp_event_queue *queue;
+	struct mutex *tsevq_mux;
 	struct ptp_extts_event *event;
 	unsigned long flags;
 	size_t qcnt, i;
 	int result;
+
+	if (dmtsc < 0) {
+		queue = &ptp->tsevq;
+		tsevq_mux = &ptp->tsevq_mux;
+	} else {
+		queue = &ptp->dmtsc_devs.cdev_info[dmtsc].tsevq;
+		tsevq_mux = &ptp->dmtsc_devs.cdev_info[dmtsc].tsevq_mux;
+	}
 
 	if (cnt % sizeof(struct ptp_extts_event) != 0)
 		return -EINVAL;
@@ -461,23 +472,23 @@ ssize_t ptp_read(struct posix_clock *pc,
 
 	cnt = cnt / sizeof(struct ptp_extts_event);
 
-	if (mutex_lock_interruptible(&ptp->tsevq_mux))
+	if (mutex_lock_interruptible(tsevq_mux))
 		return -ERESTARTSYS;
 
 	if (wait_event_interruptible(ptp->tsev_wq,
 				     ptp->defunct || queue_cnt(queue))) {
-		mutex_unlock(&ptp->tsevq_mux);
+		mutex_unlock(tsevq_mux);
 		return -ERESTARTSYS;
 	}
 
 	if (ptp->defunct) {
-		mutex_unlock(&ptp->tsevq_mux);
+		mutex_unlock(tsevq_mux);
 		return -ENODEV;
 	}
 
 	event = kmalloc(EXTTS_BUFSIZE, GFP_KERNEL);
 	if (!event) {
-		mutex_unlock(&ptp->tsevq_mux);
+		mutex_unlock(tsevq_mux);
 		return -ENOMEM;
 	}
 
@@ -497,7 +508,7 @@ ssize_t ptp_read(struct posix_clock *pc,
 
 	cnt = cnt * sizeof(struct ptp_extts_event);
 
-	mutex_unlock(&ptp->tsevq_mux);
+	mutex_unlock(tsevq_mux);
 
 	result = cnt;
 	if (copy_to_user(buf, event, cnt))
@@ -505,4 +516,140 @@ ssize_t ptp_read(struct posix_clock *pc,
 
 	kfree(event);
 	return result;
+}
+
+ssize_t ptp_read(struct posix_clock *pc, uint rdflags, char __user *buf,
+		 size_t cnt)
+{
+	struct ptp_clock *ptp = container_of(pc, struct ptp_clock, clock);
+
+	return ptp_queue_read(ptp, buf, cnt, DMTSC_NOT);
+}
+
+static int ptp_dmtsc_open(struct inode *inode, struct file *file)
+{
+	struct ptp_dmtsc_cdev_info *cdev = container_of(
+		inode->i_cdev, struct ptp_dmtsc_cdev_info, dmtsc_cdev);
+
+	file->private_data = cdev;
+
+	if (mutex_lock_interruptible(&cdev->pclock->dmtsc_en_mux))
+		return -ERESTARTSYS;
+	cdev->pclock->dmtsc_en_flags |= (0x1 << (cdev->minor));
+	mutex_unlock(&cdev->pclock->dmtsc_en_mux);
+
+	return stream_open(inode, file);
+}
+
+int ptp_dmtsc_release(struct inode *inode, struct file *file)
+{
+	struct ptp_dmtsc_cdev_info *cdev = file->private_data;
+
+	if (mutex_lock_interruptible(&cdev->pclock->dmtsc_en_mux))
+		return -ERESTARTSYS;
+	cdev->pclock->dmtsc_en_flags &= ~(0x1 << (cdev->minor));
+	mutex_unlock(&cdev->pclock->dmtsc_en_mux);
+
+	return 0;
+}
+
+ssize_t ptp_dmtsc_read(struct file *file, char __user *buf, size_t cnt,
+		       loff_t *offset)
+{
+	struct ptp_dmtsc_cdev_info *cdev = file->private_data;
+
+	return ptp_queue_read(cdev->pclock, buf, cnt, cdev->minor);
+}
+
+static const struct file_operations fops = {
+						.owner = THIS_MODULE,
+						.open = ptp_dmtsc_open,
+						.read = ptp_dmtsc_read,
+						.release = ptp_dmtsc_release
+						};
+
+void ptp_dmtsc_cdev_clean(struct ptp_clock *ptp)
+{
+	int idx, major;
+	dev_t device;
+
+	major = MAJOR(ptp->dmtsc_devs.devid);
+	for (idx = 0; idx < ptp->info->n_ext_ts; idx++) {
+		if (ptp->dmtsc_devs.cdev_info[idx].minor >= 0) {
+			device = MKDEV(major, idx);
+			device_destroy(ptp->dmtsc_devs.dmtsc_class, device);
+			cdev_del(&ptp->dmtsc_devs.cdev_info[idx].dmtsc_cdev);
+			ptp->dmtsc_devs.cdev_info[idx].minor = -1;
+		}
+	}
+	class_destroy(ptp->dmtsc_devs.dmtsc_class);
+	unregister_chrdev_region(ptp->dmtsc_devs.devid, ptp->info->n_ext_ts);
+	mutex_destroy(&ptp->dmtsc_devs.cdev_info[idx].tsevq_mux);
+}
+
+int ptp_dmtsc_dev_register(struct ptp_clock *ptp)
+{
+	int err, idx, major;
+	dev_t device;
+	struct device *dev;
+
+	/* Allocate memory for demuxed device management */
+	ptp->dmtsc_devs.cdev_info = kcalloc(ptp->info->n_ext_ts,
+					    sizeof(*ptp->dmtsc_devs.cdev_info),
+					    GFP_KERNEL);
+	if (!ptp->dmtsc_devs.cdev_info) {
+		err = -ENODEV;
+		goto err;
+	}
+	for (idx = 0; idx < ptp->info->n_ext_ts; idx++)
+		ptp->dmtsc_devs.cdev_info[idx].minor = -1;
+	/* Create devices for all channels. The mask will control which of them get fed */
+	err = alloc_chrdev_region(&ptp->dmtsc_devs.devid, 0,
+				  ptp->info->n_ext_ts, "ptptsevqch");
+	if (!err) {
+		major = MAJOR(ptp->dmtsc_devs.devid);
+		ptp->dmtsc_devs.dmtsc_class =
+			class_create(THIS_MODULE, "ptptsevqch_class");
+		for (idx = 0; idx < ptp->info->n_ext_ts; idx++) {
+			mutex_init(&ptp->dmtsc_devs.cdev_info[idx].tsevq_mux);
+			device = MKDEV(major, idx);
+			ptp->dmtsc_devs.cdev_info[idx].pclock = ptp;
+			cdev_init(&ptp->dmtsc_devs.cdev_info[idx].dmtsc_cdev,
+				  &fops);
+			err = cdev_add(
+				&ptp->dmtsc_devs.cdev_info[idx].dmtsc_cdev,
+				device, 1);
+			if (err) {
+				goto cdev_clean;
+			} else {
+				ptp->dmtsc_devs.cdev_info[idx].minor = idx;
+				dev = device_create(ptp->dmtsc_devs.dmtsc_class,
+						    &ptp->dev, device, NULL,
+						    "ptp%dch%d", ptp->index,
+						    idx);
+				if (IS_ERR(dev)) {
+					err = PTR_ERR(dev);
+					goto cdev_clean;
+				}
+			}
+		}
+	} else {
+		goto dev_clean;
+	}
+	return 0;
+
+cdev_clean:
+	ptp_dmtsc_cdev_clean(ptp);
+dev_clean:
+	kfree(ptp->dmtsc_devs.cdev_info);
+	ptp->dmtsc_devs.cdev_info = NULL;
+err:
+	return err;
+}
+
+void ptp_dmtsc_dev_uregister(struct ptp_clock *ptp)
+{
+	ptp_dmtsc_cdev_clean(ptp);
+	kfree(ptp->dmtsc_devs.cdev_info);
+	ptp->dmtsc_devs.cdev_info = NULL;
 }

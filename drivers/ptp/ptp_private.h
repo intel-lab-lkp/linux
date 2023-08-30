@@ -27,6 +27,20 @@ struct timestamp_event_queue {
 	spinlock_t lock;
 };
 
+struct ptp_dmtsc_cdev_info {
+	struct cdev dmtsc_cdev; /* Demuxed event device chardev */
+	int minor; /* Demuxed event queue chardev device minor */
+	struct ptp_clock *pclock; /* Direct access to parent clock device */
+	struct mutex tsevq_mux; /* Protect access to device management */
+	struct timestamp_event_queue tsevq; /* simple fifo for time stamps */
+};
+
+struct ptp_dmtsc_dev_info {
+	dev_t devid;
+	struct class *dmtsc_class;
+	struct ptp_dmtsc_cdev_info *cdev_info;
+};
+
 struct ptp_clock {
 	struct posix_clock clock;
 	struct device dev;
@@ -36,6 +50,11 @@ struct ptp_clock {
 	struct pps_device *pps_source;
 	long dialed_frequency; /* remembers the frequency adjustment */
 	struct timestamp_event_queue tsevq; /* simple fifo for time stamps */
+	u32 dmtsc_en_flags; /* Demultiplexed timestamp channels enable flags */
+	struct mutex
+		dmtsc_en_mux; /* Demultiplexed timestamp channels sysfs mutex */
+	struct ptp_dmtsc_dev_info
+		dmtsc_devs; /* Demultiplexed timestamp channel access character devices */
 	struct mutex tsevq_mux; /* one process at a time reading the fifo */
 	struct mutex pincfg_mux; /* protect concurrent info->pin_config access */
 	wait_queue_head_t tsev_wq;
@@ -139,4 +158,7 @@ void ptp_cleanup_pin_groups(struct ptp_clock *ptp);
 
 struct ptp_vclock *ptp_vclock_register(struct ptp_clock *pclock);
 void ptp_vclock_unregister(struct ptp_vclock *vclock);
+
+int ptp_dmtsc_dev_register(struct ptp_clock *ptp);
+void ptp_dmtsc_dev_uregister(struct ptp_clock *ptp);
 #endif

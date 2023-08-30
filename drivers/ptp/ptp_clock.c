@@ -172,6 +172,7 @@ static void ptp_clock_release(struct device *dev)
 
 	ptp_cleanup_pin_groups(ptp);
 	kfree(ptp->vclock_index);
+	mutex_destroy(&ptp->dmtsc_en_mux);
 	mutex_destroy(&ptp->tsevq_mux);
 	mutex_destroy(&ptp->pincfg_mux);
 	mutex_destroy(&ptp->n_vclocks_mux);
@@ -232,7 +233,9 @@ struct ptp_clock *ptp_clock_register(struct ptp_clock_info *info,
 	mutex_init(&ptp->tsevq_mux);
 	mutex_init(&ptp->pincfg_mux);
 	mutex_init(&ptp->n_vclocks_mux);
+	mutex_init(&ptp->dmtsc_en_mux);
 	init_waitqueue_head(&ptp->tsev_wq);
+	ptp->dmtsc_en_flags = 0x0;
 
 	if (ptp->info->getcycles64 || ptp->info->getcyclesx64) {
 		ptp->has_cycles = true;
@@ -307,21 +310,27 @@ struct ptp_clock *ptp_clock_register(struct ptp_clock_info *info,
 
 	/* Create a posix clock and link it to the device. */
 	err = posix_clock_register(&ptp->clock, &ptp->dev);
-	if (err) {
-		if (ptp->pps_source)
-			pps_unregister_source(ptp->pps_source);
+	if (err)
+		goto reg_err;
 
-		if (ptp->kworker)
-			kthread_destroy_worker(ptp->kworker);
-
-		put_device(&ptp->dev);
-
-		pr_err("failed to create posix clock\n");
-		return ERR_PTR(err);
-	}
+	/* Create chardevs for demuxed external timestamp channels */
+	if (ptp_dmtsc_dev_register(ptp))
+		goto reg_err;
 
 	return ptp;
 
+reg_err:
+	ptp_dmtsc_dev_uregister(ptp);
+	if (ptp->pps_source)
+		pps_unregister_source(ptp->pps_source);
+
+	if (ptp->kworker)
+		kthread_destroy_worker(ptp->kworker);
+
+	put_device(&ptp->dev);
+
+	pr_err("failed to create posix clock\n");
+	return ERR_PTR(err);
 no_pps:
 	ptp_cleanup_pin_groups(ptp);
 no_pin_groups:
@@ -330,6 +339,7 @@ no_mem_for_vclocks:
 	if (ptp->kworker)
 		kthread_destroy_worker(ptp->kworker);
 kworker_err:
+	mutex_destroy(&ptp->dmtsc_en_mux);
 	mutex_destroy(&ptp->tsevq_mux);
 	mutex_destroy(&ptp->pincfg_mux);
 	mutex_destroy(&ptp->n_vclocks_mux);
@@ -367,6 +377,8 @@ int ptp_clock_unregister(struct ptp_clock *ptp)
 	if (ptp->pps_source)
 		pps_unregister_source(ptp->pps_source);
 
+	ptp_dmtsc_dev_uregister(ptp);
+
 	posix_clock_unregister(&ptp->clock);
 
 	return 0;
@@ -378,12 +390,19 @@ void ptp_clock_event(struct ptp_clock *ptp, struct ptp_clock_event *event)
 	struct pps_event_time evt;
 
 	switch (event->type) {
-
 	case PTP_CLOCK_ALARM:
 		break;
 
 	case PTP_CLOCK_EXTTS:
-		enqueue_external_timestamp(&ptp->tsevq, event);
+		/* If event index demuxed queue mask is enabled send to dedicated fifo */
+		if (ptp->dmtsc_en_flags & (0x1 << event->index)) {
+			enqueue_external_timestamp(
+				&ptp->dmtsc_devs.cdev_info[event->index].tsevq,
+				event);
+		} else {
+			enqueue_external_timestamp(&ptp->tsevq, event);
+		}
+
 		wake_up_interruptible(&ptp->tsev_wq);
 		break;
 
