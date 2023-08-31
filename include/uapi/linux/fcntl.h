@@ -57,6 +57,15 @@
 #define F_SET_FILE_RW_HINT	(F_LINUX_SPECIFIC_BASE + 14)
 
 /*
+ * Check if the fd points to the memfd's original open fd (the one created by
+ * memfd_create). Returns 1 if yes, 0 if no.
+ * If the fd doesn't point to a memfd, the value should not be interpreted.
+ * Useful because only the original open fd can be both writable and
+ * executable.
+ */
+#define F_CHECK_ORIGINAL_MEMFD	(F_LINUX_SPECIFIC_BASE + 15)
+
+/*
  * Valid hint values for F_{GET,SET}_RW_HINT. 0 is "not set", or can be
  * used to clear any hints previously set.
  */

@@ -418,6 +418,9 @@ static long do_fcntl(int fd, unsigned int cmd, unsigned long arg,
 	case F_SET_RW_HINT:
 		err = fcntl_rw_hint(filp, cmd, arg);
 		break;
+	case F_CHECK_ORIGINAL_MEMFD:
+		err = !(filp->f_mode & FMODE_WRITER);
+		break;
 	default:
 		break;
 	}
