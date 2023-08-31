@@ -325,6 +325,7 @@ enum smu_table_id
 	SMU_TABLE_PACE,
 	SMU_TABLE_ECCINFO,
 	SMU_TABLE_COMBO_PPTABLE,
+	SMU_TABLE_WIFIBAND,
 	SMU_TABLE_COUNT,
 };
 
@@ -1500,6 +1501,8 @@ enum smu_baco_seq {
 			 (u8 *)(src) + __src_offset,			   \
 			 __dst_size);					   \
 })
+
+#define HZ_IN_MHZ		1000000U
 
 #if !defined(SWSMU_CODE_LAYER_L2) && !defined(SWSMU_CODE_LAYER_L3) && !defined(SWSMU_CODE_LAYER_L4)
 int smu_get_power_limit(void *handle,
