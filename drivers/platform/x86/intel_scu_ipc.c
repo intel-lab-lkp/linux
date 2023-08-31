@@ -266,6 +266,19 @@ static int intel_scu_ipc_check_status(struct intel_scu_ipc_dev *scu)
 	return scu->irq > 0 ? ipc_wait_for_interrupt(scu) : busy_loop(scu);
 }
 
+static bool intel_scu_ipc_busy(struct intel_scu_ipc_dev *scu)
+{
+	u8 status;
+
+	status = ipc_read_status(scu);
+	if (status & IPC_STATUS_BUSY) {
+		dev_err(&scu->dev, "device is busy\n");
+		return true;
+	}
+
+	return false;
+}
+
 /* Read/Write power control(PMIC in Langwell, MSIC in PenWell) registers */
 static int pwr_reg_rdwr(struct intel_scu_ipc_dev *scu, u16 *addr, u8 *data,
 			u32 count, u32 op, u32 id)
@@ -284,6 +297,10 @@ static int pwr_reg_rdwr(struct intel_scu_ipc_dev *scu, u16 *addr, u8 *data,
 	if (!scu) {
 		mutex_unlock(&ipclock);
 		return -ENODEV;
+	}
+	if (intel_scu_ipc_busy(scu)) {
+		mutex_unlock(&ipclock);
+		return -EBUSY;
 	}
 
 	for (nc = 0; nc < count; nc++, offset += 2) {
@@ -445,6 +462,10 @@ int intel_scu_ipc_dev_simple_command(struct intel_scu_ipc_dev *scu, int cmd,
 		return -ENODEV;
 	}
 	scu = ipcdev;
+	if (intel_scu_ipc_busy(scu)) {
+		mutex_unlock(&ipclock);
+		return -EBUSY;
+	}
 	cmdval = sub << 12 | cmd;
 	ipc_command(scu, cmdval);
 	err = intel_scu_ipc_check_status(scu);
@@ -489,6 +510,10 @@ int intel_scu_ipc_dev_command_with_size(struct intel_scu_ipc_dev *scu, int cmd,
 	if (!scu) {
 		mutex_unlock(&ipclock);
 		return -ENODEV;
+	}
+	if (intel_scu_ipc_busy(scu)) {
+		mutex_unlock(&ipclock);
+		return -EBUSY;
 	}
 
 	memcpy(inbuf, in, inlen);
