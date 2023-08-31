@@ -18,6 +18,7 @@
 #include <crypto/hash.h>
 #include <linux/key.h>
 #include <linux/audit.h>
+#include <linux/lsm_hooks.h>
 
 /* iint action cache flags */
 #define IMA_MEASURE		0x00000001
@@ -190,6 +191,14 @@ int integrity_kernel_read(struct file *file, loff_t offset,
 extern struct dentry *integrity_dir;
 
 struct modsig;
+
+#ifdef CONFIG_IMA
+void __init init_ima_lsm(void);
+#else
+static inline void __init init_ima_lsm(void)
+{
+}
+#endif
 
 #ifdef CONFIG_INTEGRITY_SIGNATURE
 
