@@ -301,3 +301,51 @@ unsigned int hex(char c)
 		return c - 'a' + 10;
 	return c - 'A' + 10;
 }
+
+
+/*
+ * Replace all occurrences of character 'find' in string s with string 'replace'
+ *
+ * The new string could be longer so a new string is returned which must
+ * be freed.
+ */
+char *strreplace_chars(char find, const char *s, const char *replace)
+{
+	int replace_len = strlen(replace);
+	char *new_s, *to;
+	const char *loc = strchr(s, find);
+	const char *from = s;
+	int num = 0;
+
+	/* Count occurrences */
+	while (loc) {
+		loc = strchr(loc + 1, find);
+		num++;
+	}
+
+	/* Allocate enough space for replacements and reset first location */
+	new_s = malloc(strlen(s) + (num * (replace_len - 1) + 1));
+	if (!new_s)
+		return NULL;
+	loc = strchr(s, find);
+	to = new_s;
+
+	while (loc) {
+		/* Copy original string up to found char and update positions */
+		memcpy(to, from, 1 + loc - from);
+		to += loc - from;
+		from = loc + 1;
+
+		/* Copy replacement string and update positions */
+		memcpy(to, replace, replace_len);
+		to += replace_len;
+
+		/* Find next occurrence or end of string */
+		loc = strchr(from, find);
+	}
+
+	/* Copy any remaining chars + null */
+	strcpy(to, from);
+
+	return new_s;
+}
