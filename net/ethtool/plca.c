@@ -21,13 +21,23 @@ struct plca_reply_data {
 #define PLCA_REPDATA(__reply_base) \
 	container_of(__reply_base, struct plca_reply_data, base)
 
-static void plca_update_sint(int *dst, const struct nlattr *attr,
-			     bool *mod)
+static void plca_update_sint_from_u32(int *dst, const struct nlattr *attr,
+				      bool *mod)
 {
 	if (!attr)
 		return;
 
 	*dst = nla_get_u32(attr);
+	*mod = true;
+}
+
+static void plca_update_sint_from_u8(int *dst, const struct nlattr *attr,
+				     bool *mod)
+{
+	if (!attr)
+		return;
+
+	*dst = nla_get_u8(attr);
 	*mod = true;
 }
 
@@ -144,14 +154,18 @@ ethnl_set_plca(struct ethnl_req_info *req_info, struct genl_info *info)
 		return -EOPNOTSUPP;
 
 	memset(&plca_cfg, 0xff, sizeof(plca_cfg));
-	plca_update_sint(&plca_cfg.enabled, tb[ETHTOOL_A_PLCA_ENABLED], &mod);
-	plca_update_sint(&plca_cfg.node_id, tb[ETHTOOL_A_PLCA_NODE_ID], &mod);
-	plca_update_sint(&plca_cfg.node_cnt, tb[ETHTOOL_A_PLCA_NODE_CNT], &mod);
-	plca_update_sint(&plca_cfg.to_tmr, tb[ETHTOOL_A_PLCA_TO_TMR], &mod);
-	plca_update_sint(&plca_cfg.burst_cnt, tb[ETHTOOL_A_PLCA_BURST_CNT],
-			 &mod);
-	plca_update_sint(&plca_cfg.burst_tmr, tb[ETHTOOL_A_PLCA_BURST_TMR],
-			 &mod);
+	plca_update_sint_from_u8(&plca_cfg.enabled, tb[ETHTOOL_A_PLCA_ENABLED],
+				 &mod);
+	plca_update_sint_from_u32(&plca_cfg.node_id, tb[ETHTOOL_A_PLCA_NODE_ID],
+				  &mod);
+	plca_update_sint_from_u32(&plca_cfg.node_cnt,
+				  tb[ETHTOOL_A_PLCA_NODE_CNT], &mod);
+	plca_update_sint_from_u32(&plca_cfg.to_tmr, tb[ETHTOOL_A_PLCA_TO_TMR],
+				  &mod);
+	plca_update_sint_from_u32(&plca_cfg.burst_cnt,
+				  tb[ETHTOOL_A_PLCA_BURST_CNT], &mod);
+	plca_update_sint_from_u32(&plca_cfg.burst_tmr,
+				  tb[ETHTOOL_A_PLCA_BURST_TMR], &mod);
 	if (!mod)
 		return 0;
 
