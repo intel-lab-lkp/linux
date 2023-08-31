@@ -229,16 +229,16 @@ kunit_filter_suites(const struct kunit_suite_set *suite_set,
 	filtered.end = copy;
 
 err:
-	if (*err)
-		kfree(copy);
+	if (filter_count)
+		kfree(parsed_filters);
 
 	if (filter_glob) {
 		kfree(parsed_glob.suite_glob);
 		kfree(parsed_glob.test_glob);
 	}
 
-	if (filter_count)
-		kfree(parsed_filters);
+	if (*err)
+		kfree(copy);
 
 	return filtered;
 }
