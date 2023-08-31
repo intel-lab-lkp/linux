@@ -620,9 +620,9 @@ static int pca954x_resume(struct device *dev)
 	struct pca954x *data = i2c_mux_priv(muxc);
 	int ret;
 
-	ret = pca954x_init(client, data);
+	ret = i2c_smbus_write_byte(client, data->last_chan);
 	if (ret < 0)
-		dev_err(&client->dev, "failed to verify mux presence\n");
+		dev_err(&client->dev, "failed to restore mux state\n");
 
 	return ret;
 }
