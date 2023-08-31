@@ -176,10 +176,8 @@ kunit_filter_suites(const struct kunit_suite_set *suite_set,
 	if (filters) {
 		filter_count = kunit_get_filter_count(filters);
 		parsed_filters = kcalloc(filter_count, sizeof(*parsed_filters), GFP_KERNEL);
-		if (!parsed_filters) {
-			kfree(copy);
-			return filtered;
-		}
+		if (!parsed_filters)
+			goto err;
 		for (j = 0; j < filter_count; j++)
 			parsed_filters[j] = kunit_next_attr_filter(&filters, err);
 		if (*err)
