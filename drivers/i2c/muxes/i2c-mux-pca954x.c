@@ -627,12 +627,14 @@ static int pca954x_resume(struct device *dev)
 	return ret;
 }
 
-static DEFINE_SIMPLE_DEV_PM_OPS(pca954x_pm, NULL, pca954x_resume);
+static const struct dev_pm_ops pca954x_pm = {
+	.resume_early = pca954x_resume,
+};
 
 static struct i2c_driver pca954x_driver = {
 	.driver		= {
 		.name	= "pca954x",
-		.pm	= pm_sleep_ptr(&pca954x_pm),
+		.pm	= &pca954x_pm,
 		.of_match_table = pca954x_of_match,
 	},
 	.probe		= pca954x_probe,
