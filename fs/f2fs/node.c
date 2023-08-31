@@ -2126,8 +2126,7 @@ static int f2fs_write_node_pages(struct address_space *mapping,
 		atomic_inc(&sbi->wb_sync_req[NODE]);
 	else if (atomic_read(&sbi->wb_sync_req[NODE])) {
 		/* to avoid potential deadlock */
-		if (current->plug)
-			blk_finish_plug(current->plug);
+		blk_flush_plug(current->plug, false);
 		goto skip_write;
 	}
 
