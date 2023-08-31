@@ -45,6 +45,10 @@ __weak void perf_callchain_user(struct perf_callchain_entry_ctx *entry,
 {
 }
 
+__weak void perf_callchain_guest(struct perf_callchain_entry_ctx *entry)
+{
+}
+
 static void release_callchain_buffers_rcu(struct rcu_head *head)
 {
 	struct callchain_cpus_entries *entries;
@@ -183,6 +187,7 @@ get_perf_callchain(struct pt_regs *regs, u32 init_nr, bool kernel, bool user,
 	struct perf_callchain_entry *entry;
 	struct perf_callchain_entry_ctx ctx;
 	int rctx;
+	unsigned int guest_state;
 
 	entry = get_callchain_entry(&rctx);
 	if (!entry)
@@ -193,6 +198,26 @@ get_perf_callchain(struct pt_regs *regs, u32 init_nr, bool kernel, bool user,
 	ctx.nr	      = entry->nr = init_nr;
 	ctx.contexts       = 0;
 	ctx.contexts_maxed = false;
+
+	guest_state = perf_guest_state();
+	if (guest_state) {
+		if (add_mark) {
+			if (guest_state & PERF_GUEST_USER)
+				/*
+				 * TODO: Change this to PERF_CONTEXT_GUEST_USER,
+				 * which is currently not recognized by perf utils.
+				 */
+				perf_callchain_store_context(&ctx, PERF_CONTEXT_KERNEL);
+			else
+				/*
+				 * TODO: Change this to PERF_CONTEXT_GUEST_KERNEL,
+				 * which is currently not recognized by perf utils.
+				 */
+				perf_callchain_store_context(&ctx, PERF_CONTEXT_KERNEL);
+		}
+		perf_callchain_guest(&ctx);
+		goto exit_put;
+	}
 
 	if (kernel && !user_mode(regs)) {
 		if (add_mark)
