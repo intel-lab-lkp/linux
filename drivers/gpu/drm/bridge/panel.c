@@ -498,7 +498,6 @@ struct drm_connector *drm_panel_bridge_connector(struct drm_bridge *bridge)
 }
 EXPORT_SYMBOL(drm_panel_bridge_connector);
 
-#ifdef CONFIG_OF
 /**
  * devm_drm_of_get_bridge - Return next bridge in the chain
  * @dev: device to tie the bridge lifetime to
@@ -566,5 +565,3 @@ struct drm_bridge *drmm_of_get_bridge(struct drm_device *drm,
 	return bridge;
 }
 EXPORT_SYMBOL(drmm_of_get_bridge);
-
-#endif
