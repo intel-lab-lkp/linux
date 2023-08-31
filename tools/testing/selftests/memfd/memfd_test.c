@@ -38,6 +38,10 @@
 
 #define MFD_NOEXEC_SEAL	0x0008U
 
+#ifndef F_CHECK_ORIGINAL_MEMFD
+#define F_CHECK_ORIGINAL_MEMFD	(1024 + 15)
+#endif
+
 /*
  * Default is not to test hugetlbfs
  */
@@ -1365,6 +1369,32 @@ static void test_share_fork(char *banner, char *b_suffix)
 	close(fd);
 }
 
+static void test_fcntl_check_original(void)
+{
+	int fd, fd2;
+	char path[128];
+
+	printf("%s FCNTL-CHECK-ORIGINAL\n", memfd_str);
+	fd = sys_memfd_create("kern_memfd_exec_reopen", 0);
+	if (fd < 0) {
+		printf("memfd_create failed: %m\n");
+		abort();
+	}
+	if (fcntl(fd, F_CHECK_ORIGINAL_MEMFD) != 1) {
+		printf("fcntl(F_CHECK_ORIGINAL_MEMFD) failed\n");
+		abort();
+	}
+
+	fd2 = mfd_assert_reopen_fd(fd);
+	if (fcntl(fd2, F_CHECK_ORIGINAL_MEMFD) != 0) {
+		printf("fcntl(F_CHECK_ORIGINAL_MEMFD) failed\n");
+		abort();
+	}
+
+	close(fd);
+	close(fd2);
+}
+
 int main(int argc, char **argv)
 {
 	pid_t pid;
@@ -1403,6 +1433,8 @@ int main(int argc, char **argv)
 	test_share_mmap("SHARE-MMAP", "");
 	test_share_open("SHARE-OPEN", "");
 	test_share_fork("SHARE-FORK", "");
+
+	test_fcntl_check_original();
 
 	/* Run test-suite in a multi-threaded environment with a shared
 	 * file-table. */
