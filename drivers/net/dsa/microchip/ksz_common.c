@@ -3407,6 +3407,18 @@ static int ksz_setup_tc(struct dsa_switch *ds, int port,
 	}
 }
 
+u16 ksz_hsr_get_ports(struct dsa_switch *ds)
+{
+	struct ksz_device *dev = ds->priv;
+
+	switch (dev->chip_id) {
+	case KSZ9477_CHIP_ID:
+		return dev->hsr_ports;
+	}
+
+	return 0;
+}
+
 static const struct dsa_switch_ops ksz_switch_ops = {
 	.get_tag_protocol	= ksz_get_tag_protocol,
 	.connect_tag_protocol   = ksz_connect_tag_protocol,

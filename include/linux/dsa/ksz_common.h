@@ -50,4 +50,5 @@ ksz_tagger_data(struct dsa_switch *ds)
 	return ds->tagger_data;
 }
 
+u16 ksz_hsr_get_ports(struct dsa_switch *ds);
 #endif /* _NET_DSA_KSZ_COMMON_H_ */
