@@ -32,7 +32,8 @@ extern int ima_read_file(struct file *file, enum kernel_read_file_id id,
 extern int ima_post_read_file(struct file *file, void *buf, loff_t size,
 			      enum kernel_read_file_id id);
 extern void ima_post_path_mknod(struct mnt_idmap *idmap,
-				struct dentry *dentry);
+				const struct path *dir, struct dentry *dentry,
+				umode_t mode, unsigned int dev);
 extern int ima_file_hash(struct file *file, char *buf, size_t buf_size);
 extern int ima_inode_hash(struct inode *inode, char *buf, size_t buf_size);
 extern void ima_kexec_cmdline(int kernel_fd, const void *buf, int size);
@@ -114,7 +115,9 @@ static inline int ima_post_read_file(struct file *file, void *buf, loff_t size,
 }
 
 static inline void ima_post_path_mknod(struct mnt_idmap *idmap,
-				       struct dentry *dentry)
+				       const struct path *dir,
+				       struct dentry *dentry,
+				       umode_t mode, unsigned int dev)
 {
 	return;
 }

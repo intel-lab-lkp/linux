@@ -4027,6 +4027,7 @@ static int do_mknodat(int dfd, struct filename *name, umode_t mode,
 	struct path path;
 	int error;
 	unsigned int lookup_flags = 0;
+	umode_t mode_stripped;
 
 	error = may_mknod(mode);
 	if (error)
@@ -4037,8 +4038,9 @@ retry:
 	if (IS_ERR(dentry))
 		goto out1;
 
-	error = security_path_mknod(&path, dentry,
-			mode_strip_umask(path.dentry->d_inode, mode), dev);
+	mode_stripped = mode_strip_umask(path.dentry->d_inode, mode);
+
+	error = security_path_mknod(&path, dentry, mode_stripped, dev);
 	if (error)
 		goto out2;
 
@@ -4048,7 +4050,8 @@ retry:
 			error = vfs_create(idmap, path.dentry->d_inode,
 					   dentry, mode, true);
 			if (!error)
-				ima_post_path_mknod(idmap, dentry);
+				ima_post_path_mknod(idmap, &path, dentry,
+						    mode_stripped, dev);
 			break;
 		case S_IFCHR: case S_IFBLK:
 			error = vfs_mknod(idmap, path.dentry->d_inode,
