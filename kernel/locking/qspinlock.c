@@ -776,6 +776,10 @@ EXPORT_SYMBOL(spinlock_dump);
 #undef  queued_spin_lock_slowpath
 #define queued_spin_lock_slowpath	__pv_queued_spin_lock_slowpath
 #define queued_spin_lock_slowpath_diags	__pv_queued_spin_lock_slowpath_diags
+#define spinlock_dump	__pv_spinlock_dump
+#define tail_to_cpu	__pv_tail_to_cpu
+#define tail_to_idx	__pv_tail_to_idx
+#define next_to_prev	__pv_next_to_prev
 
 #include "qspinlock_paravirt.h"
 #include "qspinlock.c"
