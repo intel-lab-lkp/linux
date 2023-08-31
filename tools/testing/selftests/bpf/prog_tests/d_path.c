@@ -90,7 +90,11 @@ static int trigger_fstat_events(pid_t pid)
 	fstat(indicatorfd, &fileStat);
 
 out_close:
-	/* triggers filp_close */
+	/* sys_close no longer triggers filp_close, but we can
+	 * call sys_close_range instead which still does
+	 */
+#define close(fd) close_range(fd, fd, 0)
+
 	close(pipefd[0]);
 	close(pipefd[1]);
 	close(sockfd);
@@ -98,6 +102,8 @@ out_close:
 	close(devfd);
 	close(localfd);
 	close(indicatorfd);
+
+#undef close
 	return ret;
 }
 
