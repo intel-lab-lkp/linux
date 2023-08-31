@@ -2871,6 +2871,23 @@ int security_file_open(struct file *file)
 }
 
 /**
+ * security_file_post_open() - Recheck access to a file after it has been opened
+ * @file: the file
+ * @mask: access mask
+ *
+ * Recheck access with mask after the file has been opened. The hook is useful
+ * for LSMs that require the file content to be available in order to make
+ * decisions.
+ *
+ * Return: Returns 0 if permission is granted.
+ */
+int security_file_post_open(struct file *file, int mask)
+{
+	return call_int_hook(file_post_open, 0, file, mask);
+}
+EXPORT_SYMBOL_GPL(security_file_post_open);
+
+/**
  * security_file_truncate() - Check if truncating a file is allowed
  * @file: file
  *
