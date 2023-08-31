@@ -727,7 +727,7 @@ void spinlock_dump(spinlock_t *sp, bool full)
 		 ".F"[!!full],
 		 (unsigned int)qval.tail, cpu, idx);
 	pr_alert("%s: _Q_TAIL_CPU_OFFSET=%d _Q_TAIL_IDX_MASK=%d _Q_TAIL_IDX_OFFSET=%d _Q_LOCKED_VAL=%d _Q_TAIL_OFFSET=%d sizeof(->tail)=%lu\n",
-		__func__, _Q_TAIL_CPU_OFFSET, _Q_TAIL_IDX_MASK, _Q_TAIL_IDX_OFFSET, _Q_LOCKED_VAL, _Q_TAIL_OFFSET, sizeof(qval.tail));
+		__func__, _Q_TAIL_CPU_OFFSET, _Q_TAIL_IDX_MASK, _Q_TAIL_IDX_OFFSET, _Q_LOCKED_VAL, _Q_TAIL_OFFSET, (unsigned long)sizeof(qval.tail));
 	if (!full)
 		return;
 	msp = per_cpu_ptr(&qnodes[idx].mcs, cpu);
