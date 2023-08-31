@@ -6,12 +6,14 @@
  * test source files.
  */
 #include "lkdtm.h"
+#include <linux/cpu.h>
 #include <linux/list.h>
 #include <linux/sched.h>
 #include <linux/sched/signal.h>
 #include <linux/sched/task_stack.h>
-#include <linux/uaccess.h>
 #include <linux/slab.h>
+#include <linux/stop_machine.h>
+#include <linux/uaccess.h>
 
 #if IS_ENABLED(CONFIG_X86_32) && !IS_ENABLED(CONFIG_UML)
 #include <asm/desc.h>
@@ -71,6 +73,30 @@ void __init lkdtm_bugs_init(int *recur_param)
 static void lkdtm_PANIC(void)
 {
 	panic("dumptest");
+}
+
+static int panic_stop_irqoff_fn(void *arg)
+{
+	atomic_t *v = arg;
+
+	/*
+	 * Trigger the panic after all other CPUs have entered this function,
+	 * so that they are guaranteed to have IRQs disabled.
+	 */
+	if (atomic_inc_return(v) == num_online_cpus())
+		panic("panic stop irqoff test");
+
+	for (;;)
+		cpu_relax();
+}
+
+static void lkdtm_PANIC_STOP_IRQOFF(void)
+{
+	atomic_t v = ATOMIC_INIT(0);
+
+	cpus_read_lock();
+	stop_machine(panic_stop_irqoff_fn, &v, cpu_online_mask);
+	cpus_read_unlock();
 }
 
 static void lkdtm_BUG(void)
@@ -598,6 +624,7 @@ static noinline void lkdtm_CORRUPT_PAC(void)
 
 static struct crashtype crashtypes[] = {
 	CRASHTYPE(PANIC),
+	CRASHTYPE(PANIC_STOP_IRQOFF),
 	CRASHTYPE(BUG),
 	CRASHTYPE(WARNING),
 	CRASHTYPE(WARNING_MESSAGE),
