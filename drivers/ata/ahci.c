@@ -95,6 +95,8 @@ static int ahci_p5wdh_hardreset(struct ata_link *link, unsigned int *class,
 #ifdef CONFIG_PM
 static int ahci_pci_device_runtime_suspend(struct device *dev);
 static int ahci_pci_device_runtime_resume(struct device *dev);
+static int ahci_intel_port_suspend(struct ata_port *ap, pm_message_t mesg);
+static int ahci_intel_port_resume(struct ata_port *ap);
 #ifdef CONFIG_PM_SLEEP
 static int ahci_pci_device_suspend(struct device *dev);
 static int ahci_pci_device_resume(struct device *dev);
@@ -1025,6 +1027,30 @@ static void ahci_p5wdh_workaround(struct ata_host *host)
 		ap->link.flags |= ATA_LFLAG_NO_SRST | ATA_LFLAG_ASSUME_ATA;
 	}
 }
+/*
+ * Intel TGL/ADL workaround, when suspending, put port into LPM,
+ * recover to max power after resuming.
+ */
+static void ahci_intel_ahci_workaround(struct ata_host *host)
+{
+	struct pci_dev *pdev = to_pci_dev(host->dev);
+	int i;
+	static const struct pci_device_id ids[] = {
+		{ PCI_VDEVICE(INTEL, 0xa0d3)}, /* Tiger Lake UP{3,4} AHCI */
+		{ PCI_VDEVICE(INTEL, 0x7ae2)}, /* Alder Lake AHCI*/
+		{}
+	};
+
+	dev_info(&pdev->dev, "enabling Intel AHCI workaround\n");
+
+	if (pci_match_id(ids, pdev)) {
+		for (i = 0; i < host->n_ports; i++) {
+			struct ata_port *ap = host->ports[i];
+
+			ap->flags |= ATA_LFLAG_NO_LPM_RECOVER;
+		}
+	}
+}
 
 /*
  * Macbook7,1 firmware forcibly disables MCP89 AHCI and changes PCI ID when
@@ -1904,6 +1930,9 @@ static int ahci_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	/* apply workaround for ASUS P5W DH Deluxe mainboard */
 	ahci_p5wdh_workaround(host);
+
+	/* apply workaround for Intel AHCI */
+	ahci_intel_ahci_workaround(host);
 
 	/* apply gtf filter quirk */
 	ahci_gtf_filter_workaround(host);
