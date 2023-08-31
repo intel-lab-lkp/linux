@@ -246,16 +246,19 @@ static inline int busy_loop(struct intel_scu_ipc_dev *scu)
 /* Wait till ipc ioc interrupt is received or timeout in 10 HZ */
 static inline int ipc_wait_for_interrupt(struct intel_scu_ipc_dev *scu)
 {
-	int status;
+	unsigned long time_left;
+	u8 status;
+	int err = 0;
 
-	if (!wait_for_completion_timeout(&scu->cmd_complete, IPC_TIMEOUT))
-		return -ETIMEDOUT;
+	time_left = wait_for_completion_timeout(&scu->cmd_complete, IPC_TIMEOUT);
+	if (!time_left)
+		err = -ETIMEDOUT;
 
 	status = ipc_read_status(scu);
-	if (status & IPC_STATUS_ERR)
-		return -EIO;
+	if (!(status & IPC_STATUS_BUSY))
+		err = (status & IPC_STATUS_ERR) ? -EIO : 0;
 
-	return 0;
+	return err;
 }
 
 static int intel_scu_ipc_check_status(struct intel_scu_ipc_dev *scu)
