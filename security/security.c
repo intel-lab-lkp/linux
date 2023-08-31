@@ -2338,6 +2338,23 @@ int security_inode_remove_acl(struct mnt_idmap *idmap,
 }
 
 /**
+ * security_inode_post_remove_acl() - Update inode sec after remove_acl op
+ * @idmap: idmap of the mount
+ * @dentry: file
+ * @acl_name: acl name
+ *
+ * Update inode security field after successful remove_acl operation on @dentry
+ * in @idmap. The posix acls are identified by @acl_name.
+ */
+void security_inode_post_remove_acl(struct mnt_idmap *idmap,
+				    struct dentry *dentry, const char *acl_name)
+{
+	if (unlikely(IS_PRIVATE(d_backing_inode(dentry))))
+		return;
+	call_void_hook(inode_post_remove_acl, idmap, dentry, acl_name);
+}
+
+/**
  * security_inode_post_setxattr() - Update the inode after a setxattr operation
  * @dentry: file
  * @name: xattr name
