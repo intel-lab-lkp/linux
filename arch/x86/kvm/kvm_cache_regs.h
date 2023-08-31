@@ -133,6 +133,11 @@ static inline void kvm_rsp_write(struct kvm_vcpu *vcpu, unsigned long val)
 	kvm_register_write_raw(vcpu, VCPU_REGS_RSP, val);
 }
 
+static inline unsigned long kvm_fp_read(struct kvm_vcpu *vcpu)
+{
+	return kvm_register_read_raw(vcpu, VCPU_REGS_RBP);
+}
+
 static inline u64 kvm_pdptr_read(struct kvm_vcpu *vcpu, int index)
 {
 	might_sleep();  /* on svm */
