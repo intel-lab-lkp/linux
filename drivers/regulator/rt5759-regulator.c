@@ -70,7 +70,7 @@ static int rt5759_set_mode(struct regulator_dev *rdev, unsigned int mode)
 		return -EINVAL;
 	}
 
-	return regmap_update_bits(regmap, RT5759_REG_STATUS, RT5759_FPWM_MASK,
+	return regmap_update_bits(regmap, RT5759_REG_DCDCCTRL, RT5759_FPWM_MASK,
 				  mode_val);
 }
 
