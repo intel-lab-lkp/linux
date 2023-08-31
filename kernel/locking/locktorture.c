@@ -909,6 +909,8 @@ static int lock_torture_writer(void *arg)
 			if (WARN_ON_ONCE(READ_ONCE(lock_is_write_held)))
 				lwsp->n_lock_fail++;
 			WRITE_ONCE(lock_is_write_held, t);
+
+			barrier();
 			if (WARN_ON_ONCE(atomic_read(&lock_is_read_held)))
 				lwsp->n_lock_fail++; /* rare, but... */
 			if (acq_writer_lim > 0) {
@@ -920,6 +922,7 @@ static int lock_torture_writer(void *arg)
 			lwsp->n_lock_acquired++;
 
 			cxt.cur_ops->write_delay(&rand);
+			barrier();
 
 			WRITE_ONCE(lock_is_write_held, NULL);
 			WRITE_ONCE(last_lock_release, jiffies);
