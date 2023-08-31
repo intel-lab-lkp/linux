@@ -333,7 +333,182 @@ static const struct file_operations sched_debug_fops = {
 	.release	= seq_release,
 };
 
+static ssize_t
+sched_fair_server_runtime_write(struct file *filp, const char __user *ubuf,
+				size_t cnt, loff_t *ppos)
+{
+	long cpu = (long) ((struct seq_file *) filp->private_data)->private;
+	struct rq *rq = cpu_rq(cpu);
+	unsigned long flags;
+	u64 runtime;
+	int err;
+
+	err = kstrtoull_from_user(ubuf, cnt, 10, &runtime);
+	if (err)
+		return err;
+
+	raw_spin_rq_lock_irqsave(rq, flags);
+	if (runtime > rq->fair_server.dl_period)
+		err = -EINVAL;
+	else
+		rq->fair_server.dl_runtime = runtime;
+	raw_spin_rq_unlock_irqrestore(rq, flags);
+
+	if (err)
+		return err;
+
+	*ppos += cnt;
+	return cnt;
+}
+
+static int sched_fair_server_runtime_show(struct seq_file *m, void *v)
+{
+	unsigned long cpu = (unsigned long) m->private;
+	struct rq *rq = cpu_rq(cpu);
+
+	seq_printf(m, "%llu\n", rq->fair_server.dl_runtime);
+	return 0;
+}
+
+static int sched_fair_server_runtime_open(struct inode *inode, struct file *filp)
+{
+	return single_open(filp, sched_fair_server_runtime_show, inode->i_private);
+}
+
+static const struct file_operations fair_server_runtime_fops = {
+	.open		= sched_fair_server_runtime_open,
+	.write		= sched_fair_server_runtime_write,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= single_release,
+};
+
+static unsigned int fair_server_period_max = (1 << 22) * NSEC_PER_USEC; /* ~4 seconds */
+static unsigned int fair_server_period_min = (100) * NSEC_PER_USEC;     /* 100 us */
+
+static ssize_t
+sched_fair_server_period_write(struct file *filp, const char __user *ubuf,
+			       size_t cnt, loff_t *ppos)
+{
+	long cpu = (long) ((struct seq_file *) filp->private_data)->private;
+	struct rq *rq = cpu_rq(cpu);
+	unsigned long flags;
+	u64 period;
+	int err;
+
+	err = kstrtoull_from_user(ubuf, cnt, 10, &period);
+	if (err)
+		return err;
+
+	if (period < fair_server_period_min || period > fair_server_period_max)
+		return -EINVAL;
+
+	raw_spin_rq_lock_irqsave(rq, flags);
+	if (period < rq->fair_server.dl_runtime)
+		err = -EINVAL;
+	else
+		rq->fair_server.dl_period = period;
+	raw_spin_rq_unlock_irqrestore(rq, flags);
+
+	if (err)
+		return err;
+
+	*ppos += cnt;
+	return cnt;
+}
+
+static int sched_fair_server_period_show(struct seq_file *m, void *v)
+{
+	unsigned long cpu = (unsigned long) m->private;
+	struct rq *rq = cpu_rq(cpu);
+
+	seq_printf(m, "%llu\n", rq->fair_server.dl_period);
+	return 0;
+}
+
+static int sched_fair_server_period_open(struct inode *inode, struct file *filp)
+{
+	return single_open(filp, sched_fair_server_period_show, inode->i_private);
+}
+
+static const struct file_operations fair_server_period_fops = {
+	.open		= sched_fair_server_period_open,
+	.write		= sched_fair_server_period_write,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= single_release,
+};
+
+static ssize_t
+sched_fair_server_defer_write(struct file *filp, const char __user *ubuf,
+			      size_t cnt, loff_t *ppos)
+{
+	long cpu = (long) ((struct seq_file *) filp->private_data)->private;
+	struct rq *rq = cpu_rq(cpu);
+	unsigned long flags;
+	u64 defer;
+	int err;
+
+	err = kstrtoull_from_user(ubuf, cnt, 10, &defer);
+	if (err)
+		return err;
+
+	if (defer < 0 || defer > 1)
+		return -EINVAL;
+
+	raw_spin_rq_lock_irqsave(rq, flags);
+	rq->fair_server_defer = defer;
+	raw_spin_rq_unlock_irqrestore(rq, flags);
+
+	*ppos += cnt;
+	return cnt;
+}
+
+static int sched_fair_server_defer_show(struct seq_file *m, void *v)
+{
+	unsigned long cpu = (unsigned long) m->private;
+	struct rq *rq = cpu_rq(cpu);
+
+	seq_printf(m, "%d\n", rq->fair_server_defer);
+	return 0;
+}
+
+static int sched_fair_server_defer_open(struct inode *inode, struct file *filp)
+{
+	return single_open(filp, sched_fair_server_defer_show, inode->i_private);
+}
+
+static const struct file_operations fair_server_defer_fops = {
+	.open		= sched_fair_server_defer_open,
+	.write		= sched_fair_server_defer_write,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= single_release,
+};
+
 static struct dentry *debugfs_sched;
+
+void debugfs_fair_server_init(void)
+{
+	long cpu;
+	struct dentry *rq_dentry;
+
+	rq_dentry = debugfs_create_dir("rq", debugfs_sched);
+	if (!rq_dentry)
+		return;
+
+	for_each_possible_cpu(cpu) {
+		struct dentry *d_cpu;
+		char buf[32];
+
+		snprintf(buf, sizeof(buf), "cpu%ld", cpu);
+		d_cpu = debugfs_create_dir(buf, rq_dentry);
+
+		debugfs_create_file("fair_server_runtime", 0644, d_cpu, (void *) cpu, &fair_server_runtime_fops);
+		debugfs_create_file("fair_server_period", 0644, d_cpu, (void *) cpu, &fair_server_period_fops);
+		debugfs_create_file("fair_server_defer", 0644, d_cpu, (void *) cpu, &fair_server_defer_fops);
+	}
+}
 
 static __init int sched_init_debug(void)
 {
@@ -373,6 +548,8 @@ static __init int sched_init_debug(void)
 #endif
 
 	debugfs_create_file("debug", 0444, debugfs_sched, NULL, &sched_debug_fops);
+
+	debugfs_fair_server_init();
 
 	return 0;
 }
