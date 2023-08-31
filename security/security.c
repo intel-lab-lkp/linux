@@ -2641,6 +2641,17 @@ int security_file_alloc(struct file *file)
 }
 
 /**
+ * security_file_pre_free() - Perform actions before freeing a file's LSM blob
+ * @file: the file
+ *
+ * Perform actions before the file descriptor is freed.
+ */
+void security_file_pre_free(struct file *file)
+{
+	call_void_hook(file_pre_free_security, file);
+}
+
+/**
  * security_file_free() - Free a file's LSM blob
  * @file: the file
  *
