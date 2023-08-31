@@ -270,7 +270,59 @@ out:
 	return count;
 }
 
+static ssize_t
+v4_readdir_attrs_show(struct kobject *kobj, struct kobj_attribute *attr,
+				char *buf)
+{
+	struct nfs_server *server;
+	server = container_of(kobj, struct nfs_server, kobj);
+
+	return sysfs_emit(buf, "0x%x 0x%x 0x%x\n",
+			server->readdir_attrs[0],
+			server->readdir_attrs[1],
+			server->readdir_attrs[2]);
+}
+
+static ssize_t
+v4_readdir_attrs_store(struct kobject *kobj, struct kobj_attribute *attr,
+				const char *buf, size_t count)
+{
+	struct nfs_server *server;
+	u32 attrs[3];
+	char p[24], *v;
+	size_t token = 0;
+	int i;
+
+	if (count > 24)
+		return -EINVAL;
+
+	v = strncpy(p, buf, count);
+
+	for (i = 0; i < 3; i++) {
+		token += strcspn(v, " ") + 1;
+		if (token > 22)
+			return -EINVAL;
+
+		p[token - 1] = '\0';
+		if (kstrtoint(v, 0, &attrs[i]))
+			return -EINVAL;
+		v = &p[token];
+	}
+
+	server = container_of(kobj, struct nfs_server, kobj);
+
+	if (attrs[0])
+		server->readdir_attrs[0] = attrs[0];
+	if (attrs[1])
+		server->readdir_attrs[1] = attrs[1];
+	if (attrs[2])
+		server->readdir_attrs[2] = attrs[2];
+
+	return count;
+}
+
 static struct kobj_attribute nfs_sysfs_attr_shutdown = __ATTR_RW(shutdown);
+static struct kobj_attribute nfs_sysfs_attr_v4_readdir_attrs = __ATTR_RW(v4_readdir_attrs);
 
 #define RPC_CLIENT_NAME_SIZE 64
 
@@ -321,6 +373,12 @@ void nfs_sysfs_add_server(struct nfs_server *server)
 		return;
 	}
 	ret = sysfs_create_file_ns(&server->kobj, &nfs_sysfs_attr_shutdown.attr,
+				nfs_netns_server_namespace(&server->kobj));
+	if (ret < 0)
+		pr_warn("NFS: sysfs_create_file_ns for server-%d failed (%d)\n",
+			server->s_sysfs_id, ret);
+
+	ret = sysfs_create_file_ns(&server->kobj, &nfs_sysfs_attr_v4_readdir_attrs.attr,
 				nfs_netns_server_namespace(&server->kobj));
 	if (ret < 0)
 		pr_warn("NFS: sysfs_create_file_ns for server-%d failed (%d)\n",
