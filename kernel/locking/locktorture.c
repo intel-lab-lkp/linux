@@ -284,7 +284,7 @@ static int torture_spin_lock_dump(struct notifier_block *nb, unsigned long v, vo
 	struct task_struct *t = READ_ONCE(lock_is_write_held);
 
 	pr_alert("%s invoked: v=%lu, duration=%lu.\n", __func__, v, (unsigned long)ptr);
-	if (t) {
+	if (!t) {
 		pr_alert("%s No task holding lock.\n", __func__);
 	} else {
 		pr_alert("%s Lock held by task %ps %d %*s\n",
