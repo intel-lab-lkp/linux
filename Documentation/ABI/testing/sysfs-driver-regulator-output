@@ -1,0 +1,11 @@
+What:		/sys/bus/platform/drivers/regulator-output/*/events
+Date:		August 2023
+Description:	Provided regulator events.
+
+		Read provides various events the regulator associated with the
+		driver has encountered. All REGULATOR_EVENT_* are
+		defined in include/uapi/linux/regulator.h
+
+		e.g.
+		cat /sys/bus/platform/drivers/regulator-output/ssb_rssd32/events
+		0x0
