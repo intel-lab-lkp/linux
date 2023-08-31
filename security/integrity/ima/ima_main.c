@@ -1141,6 +1141,7 @@ static struct security_hook_list ima_hooks[] __ro_after_init = {
 void __init init_ima_lsm(void)
 {
 	security_add_hooks(ima_hooks, ARRAY_SIZE(ima_hooks), "integrity");
+	init_ima_appraise_lsm();
 }
 
 late_initcall(init_ima);	/* Start IMA after the TPM is available */
