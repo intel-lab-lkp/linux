@@ -422,7 +422,7 @@ static void task_non_contending(struct sched_dl_entity *dl_se)
 	if (dl_entity_is_special(dl_se))
 		return;
 
-	WARN_ON(dl_se->dl_non_contending);
+	WARN_ON_ONCE(dl_se->dl_non_contending);
 
 	zerolag_time = dl_se->deadline -
 		 div64_long((dl_se->runtime * dl_se->dl_period),
@@ -1155,6 +1155,7 @@ static enum hrtimer_restart dl_task_timer(struct hrtimer *timer)
 		struct rq_flags rf;
 
 		rq_lock(rq, &rf);
+
 		if (dl_se->dl_throttled) {
 			sched_clock_tick();
 			update_rq_clock(rq);
@@ -1165,9 +1166,12 @@ static enum hrtimer_restart dl_task_timer(struct hrtimer *timer)
 				__push_dl_task(rq, &rf);
 			} else {
 				replenish_dl_entity(dl_se);
+				task_non_contending(dl_se);
 			}
 
 		}
+
+		dl_se->server_state = DL_SERVER_RUNNING;
 		rq_unlock(rq, &rf);
 
 		return HRTIMER_NORESTART;
@@ -1441,18 +1445,65 @@ void dl_server_update(struct sched_dl_entity *dl_se, s64 delta_exec)
 	update_curr_dl_se(dl_se->rq, dl_se, delta_exec);
 }
 
-void dl_server_start(struct sched_dl_entity *dl_se)
+void dl_server_start(struct sched_dl_entity *dl_se, int defer)
 {
+	if (dl_se->server_state != DL_SERVER_STOPPED) {
+		WARN_ON_ONCE(!(on_dl_rq(dl_se) || dl_se->dl_throttled));
+		return;
+	}
+
+	if (defer) {
+		/*
+		 * Postpone the replenishment to the (next period - the execution time)
+		 *
+		 * With this in place, we have two cases:
+		 *
+		 * On the absence of DL tasks:
+		 *	The server will start at the replenishment time, getting
+		 *	its runtime before now + period. This is the expected
+		 *	throttling behavior.
+		 *
+		 * In the presense of DL tasks:
+		 *	The server will be replenished, and then it will be
+		 *	schedule according to EDF, not breaking SCHED_DEADLINE.
+		 *
+		 *	In the first cycle the server will be postponed at most
+		 *	at period + period - runtime at most. But then the
+		 *	server will receive its runtime/period.
+		 *
+		 *	The server will, however, run on top of any RT task, which
+		 *	is the expected throttling behavior.
+		 */
+		dl_se->deadline = rq_clock(dl_se->rq) + dl_se->dl_period - dl_se->dl_runtime;
+		/* Zero the runtime */
+		dl_se->runtime = 0;
+		/* throttle the server */
+		dl_se->dl_throttled = 1;
+
+		dl_se->server_state = DL_SERVER_DEFER;
+		start_dl_timer(dl_se);
+		return;
+	}
+
 	if (!dl_server(dl_se)) {
 		dl_se->dl_server = 1;
 		setup_new_dl_entity(dl_se);
 	}
+
+	dl_se->server_state = DL_SERVER_RUNNING;
 	enqueue_dl_entity(dl_se, ENQUEUE_WAKEUP);
 }
 
 void dl_server_stop(struct sched_dl_entity *dl_se)
 {
+	if (dl_se->server_state == DL_SERVER_STOPPED)
+		return;
+
+	hrtimer_try_to_cancel(&dl_se->dl_timer);
 	dequeue_dl_entity(dl_se, DEQUEUE_SLEEP);
+
+	dl_se->dl_throttled = 0;
+	dl_se->server_state = DL_SERVER_STOPPED;
 }
 
 void dl_server_init(struct sched_dl_entity *dl_se, struct rq *rq,
@@ -1462,6 +1513,8 @@ void dl_server_init(struct sched_dl_entity *dl_se, struct rq *rq,
 	dl_se->rq = rq;
 	dl_se->server_has_tasks = has_tasks;
 	dl_se->server_pick = pick;
+	dl_se->server_state = DL_SERVER_STOPPED;
+	dl_se->dl_server = 1;
 }
 
 /*
@@ -1817,8 +1870,9 @@ static void dequeue_dl_entity(struct sched_dl_entity *dl_se, int flags)
 	 * (the task moves from "active contending" to "active non contending"
 	 * or "inactive")
 	 */
-	if (flags & DEQUEUE_SLEEP)
+	if (flags & DEQUEUE_SLEEP && !dl_server(dl_se))
 		task_non_contending(dl_se);
+
 }
 
 static void enqueue_task_dl(struct rq *rq, struct task_struct *p, int flags)
@@ -1874,7 +1928,6 @@ static void enqueue_task_dl(struct rq *rq, struct task_struct *p, int flags)
 	if (!task_current(rq, p) && !p->dl.dl_throttled && p->nr_cpus_allowed > 1)
 		enqueue_pushable_dl_task(rq, p);
 }
-
 
 static void dequeue_task_dl(struct rq *rq, struct task_struct *p, int flags)
 {

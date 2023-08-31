@@ -609,6 +609,12 @@ struct sched_rt_entity {
 typedef bool (*dl_server_has_tasks_f)(struct sched_dl_entity *);
 typedef struct task_struct *(*dl_server_pick_f)(struct sched_dl_entity *);
 
+enum dl_server_state {
+	DL_SERVER_STOPPED = 0,
+	DL_SERVER_DEFER,
+	DL_SERVER_RUNNING
+};
+
 struct sched_dl_entity {
 	struct rb_node			rb_node;
 
@@ -685,6 +691,7 @@ struct sched_dl_entity {
 	struct rq			*rq;
 	dl_server_has_tasks_f		server_has_tasks;
 	dl_server_pick_f		server_pick;
+	enum dl_server_state			server_state;
 
 #ifdef CONFIG_RT_MUTEXES
 	/*

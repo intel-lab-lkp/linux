@@ -345,7 +345,7 @@ extern int  dl_bw_check_overflow(int cpu);
  *   dl_server_init() -- initializes the server.
  */
 extern void dl_server_update(struct sched_dl_entity *dl_se, s64 delta_exec);
-extern void dl_server_start(struct sched_dl_entity *dl_se);
+extern void dl_server_start(struct sched_dl_entity *dl_se, int defer);
 extern void dl_server_stop(struct sched_dl_entity *dl_se);
 extern void dl_server_init(struct sched_dl_entity *dl_se, struct rq *rq,
 		    dl_server_has_tasks_f has_tasks,
@@ -1027,6 +1027,7 @@ struct rq {
 	struct dl_rq		dl;
 
 	struct sched_dl_entity	fair_server;
+	int			fair_server_defer;
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
 	/* list of leaf cfs_rq on this CPU: */
@@ -2390,6 +2391,15 @@ static inline bool sched_rt_runnable(struct rq *rq)
 static inline bool sched_fair_runnable(struct rq *rq)
 {
 	return rq->cfs.nr_running > 0;
+}
+
+static inline bool sched_fair_server_needed(struct rq *rq)
+{
+	/*
+	 * The fair server will activate anytime a fair task can starve
+	 * because real-time tasks.
+	 */
+	return (sched_rt_runnable(rq) && sched_fair_runnable(rq));
 }
 
 extern struct task_struct *pick_next_task_fair(struct rq *rq, struct task_struct *prev, struct rq_flags *rf);

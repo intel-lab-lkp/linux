@@ -6499,9 +6499,6 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	 */
 	util_est_enqueue(&rq->cfs, p);
 
-	if (!rq->cfs.h_nr_running)
-		dl_server_start(&rq->fair_server);
-
 	/*
 	 * If in_iowait is set, the code below may not trigger any cpufreq
 	 * utilization updates, so do it here explicitly with the IOWAIT flag
@@ -6568,6 +6565,9 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 		update_overutilized_status(rq);
 
 enqueue_throttle:
+	if (sched_fair_server_needed(rq))
+		dl_server_start(&rq->fair_server, rq->fair_server_defer);
+
 	assert_list_leaf_cfs_rq(rq);
 
 	hrtick_update(rq);
@@ -6646,7 +6646,7 @@ static void dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 		rq->next_balance = jiffies;
 
 dequeue_throttle:
-	if (!rq->cfs.h_nr_running)
+	if (!sched_fair_server_needed(rq))
 		dl_server_stop(&rq->fair_server);
 
 	util_est_update(&rq->cfs, p, task_sleep);
@@ -8312,6 +8312,8 @@ void fair_server_init(struct rq *rq)
 	dl_se->dl_runtime = 50 * NSEC_PER_MSEC;
 	dl_se->dl_deadline = 1000 * NSEC_PER_MSEC;
 	dl_se->dl_period = 1000 * NSEC_PER_MSEC;
+
+	rq->fair_server_defer = 1;
 
 	dl_server_init(dl_se, rq, fair_server_has_tasks, fair_server_pick);
 }

@@ -1537,6 +1537,9 @@ enqueue_task_rt(struct rq *rq, struct task_struct *p, int flags)
 
 	if (!task_current(rq, p) && p->nr_cpus_allowed > 1)
 		enqueue_pushable_task(rq, p);
+
+	if (sched_fair_server_needed(rq))
+		dl_server_start(&rq->fair_server, rq->fair_server_defer);
 }
 
 static void dequeue_task_rt(struct rq *rq, struct task_struct *p, int flags)
@@ -1547,6 +1550,9 @@ static void dequeue_task_rt(struct rq *rq, struct task_struct *p, int flags)
 	dequeue_rt_entity(rt_se, flags);
 
 	dequeue_pushable_task(rq, p);
+
+	if (!sched_fair_server_needed(rq))
+		dl_server_stop(&rq->fair_server);
 }
 
 /*
