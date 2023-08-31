@@ -229,6 +229,9 @@ struct btrfs_qgroup {
 	 * And should be reset to empty after the iteration is finished.
 	 */
 	struct list_head iterator;
+
+	/* For nested iterator usage. */
+	struct list_head iterator2;
 	struct rb_node node;	  /* tree of qgroups */
 
 	/*
