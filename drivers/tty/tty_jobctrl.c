@@ -43,12 +43,12 @@ static int __tty_check_change_locked(struct tty_struct *tty, int sig,
 	if (current->signal->tty != tty)
 		return 0;
 
-	rcu_read_lock();
-	pgrp = task_pgrp(current);
-
 	if (!ctrl_lock)
 		spin_lock_irqsave(&tty->ctrl.lock, flags);
 	tty_pgrp = tty->ctrl.pgrp;
+
+	rcu_read_lock();
+	pgrp = task_pgrp(current);
 
 	if (tty_pgrp && pgrp != tty_pgrp) {
 		if (is_ignored(sig)) {
@@ -62,9 +62,9 @@ static int __tty_check_change_locked(struct tty_struct *tty, int sig,
 			ret = -ERESTARTSYS;
 		}
 	}
+	rcu_read_unlock();
 	if (!ctrl_lock)
 		spin_unlock_irqrestore(&tty->ctrl.lock, flags);
-	rcu_read_unlock();
 
 	if (!tty_pgrp)
 		tty_warn(tty, "sig=%d, tty->pgrp == NULL!\n", sig);
