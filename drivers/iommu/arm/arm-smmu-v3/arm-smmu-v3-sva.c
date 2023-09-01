@@ -201,9 +201,14 @@ static void arm_smmu_mm_invalidate_range(struct mmu_notifier *mn,
 	 */
 	size = end - start;
 
-	if (!(smmu_domain->smmu->features & ARM_SMMU_FEAT_BTM))
-		arm_smmu_tlb_inv_range_asid(start, size, smmu_mn->cd->asid,
-					    PAGE_SIZE, false, smmu_domain);
+	if (!(smmu_domain->smmu->features & ARM_SMMU_FEAT_BTM)) {
+		if (!(smmu_domain->smmu->features & ARM_SMMU_FEAT_RANGE_INV) &&
+		    size >= CMDQ_MAX_TLBI_OPS * PAGE_SIZE)
+			arm_smmu_tlb_inv_asid(smmu_domain->smmu, smmu_mn->cd->asid);
+		else
+			arm_smmu_tlb_inv_range_asid(start, size, smmu_mn->cd->asid,
+						    PAGE_SIZE, false, smmu_domain);
+	}
 	arm_smmu_atc_inv_domain(smmu_domain, mm->pasid, start, size);
 }
 
