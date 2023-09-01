@@ -23,7 +23,7 @@
 };
 
 &blsp1_uart1 {
-	pinctrl-0 = <&uart1_pins>;
+	pinctrl-0 = <&uart1_pins_a>;
 	pinctrl-names = "default";
 	status = "okay";
 };
