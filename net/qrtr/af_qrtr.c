@@ -3,6 +3,7 @@
  * Copyright (c) 2015, Sony Mobile Communications Inc.
  * Copyright (c) 2013, The Linux Foundation. All rights reserved.
  */
+#include <linux/kthread.h>
 #include <linux/module.h>
 #include <linux/netlink.h>
 #include <linux/qrtr.h>
@@ -122,6 +123,9 @@ static DEFINE_XARRAY_ALLOC(qrtr_ports);
  * @qrtr_tx_lock: lock for qrtr_tx_flow inserts
  * @rx_queue: receive queue
  * @item: list item for broadcast list
+ * @kworker: worker thread for recv work
+ * @task: task to run the worker thread
+ * @read_data: scheduled work for recv work
  */
 struct qrtr_node {
 	struct mutex ep_lock;
@@ -134,6 +138,9 @@ struct qrtr_node {
 
 	struct sk_buff_head rx_queue;
 	struct list_head item;
+	struct kthread_worker kworker;
+	struct task_struct *task;
+	struct kthread_work read_data;
 };
 
 /**
@@ -185,6 +192,9 @@ static void __qrtr_node_release(struct kref *kref)
 
 	list_del(&node->item);
 	mutex_unlock(&qrtr_node_lock);
+
+	kthread_flush_worker(&node->kworker);
+	kthread_stop(node->task);
 
 	skb_queue_purge(&node->rx_queue);
 
@@ -526,6 +536,9 @@ int qrtr_endpoint_post(struct qrtr_endpoint *ep, const void *data, size_t len)
 
 	if (cb->type == QRTR_TYPE_RESUME_TX) {
 		qrtr_tx_resume(node, skb);
+	} else if (cb->type == QRTR_TYPE_DEL_PROC) {
+		skb_queue_tail(&node->rx_queue, skb);
+		kthread_queue_work(&node->kworker, &node->read_data);
 	} else {
 		ipc = qrtr_port_lookup(cb->dst_port);
 		if (!ipc)
@@ -574,6 +587,50 @@ static struct sk_buff *qrtr_alloc_ctrl_packet(struct qrtr_ctrl_pkt **pkt,
 	return skb;
 }
 
+/* Handle DEL_PROC control message */
+static void qrtr_node_rx_work(struct kthread_work *work)
+{
+	struct qrtr_node *node = container_of(work, struct qrtr_node,
+					      read_data);
+	struct qrtr_ctrl_pkt *pkt;
+	void __rcu **slot;
+	struct radix_tree_iter iter;
+	struct qrtr_tx_flow *flow;
+	struct sk_buff *skb;
+	struct qrtr_sock *ipc;
+
+	while ((skb = skb_dequeue(&node->rx_queue)) != NULL) {
+		struct qrtr_cb *cb = (struct qrtr_cb *)skb->cb;
+
+		ipc = qrtr_port_lookup(cb->dst_port);
+		if (!ipc) {
+			kfree_skb(skb);
+			continue;
+		}
+
+		if (cb->type == QRTR_TYPE_DEL_PROC) {
+			/* Free tx flow counters */
+			mutex_lock(&node->qrtr_tx_lock);
+			radix_tree_for_each_slot(slot, &node->qrtr_tx_flow, &iter, 0) {
+				flow = *slot;
+				wake_up_interruptible_all(&flow->resume_tx);
+			}
+			mutex_unlock(&node->qrtr_tx_lock);
+
+			/* Translate DEL_PROC to BYE for local enqueue */
+			cb->type = QRTR_TYPE_BYE;
+			pkt = (struct qrtr_ctrl_pkt *)skb->data;
+			memset(pkt, 0, sizeof(*pkt));
+			pkt->cmd = cpu_to_le32(QRTR_TYPE_BYE);
+
+			if (sock_queue_rcv_skb(&ipc->sk, skb))
+				kfree_skb(skb);
+
+			qrtr_port_put(ipc);
+		}
+	}
+}
+
 /**
  * qrtr_endpoint_register() - register a new endpoint
  * @ep: endpoint to register
@@ -598,6 +655,14 @@ int qrtr_endpoint_register(struct qrtr_endpoint *ep, unsigned int nid)
 	skb_queue_head_init(&node->rx_queue);
 	node->nid = QRTR_EP_NID_AUTO;
 	node->ep = ep;
+
+	kthread_init_work(&node->read_data, qrtr_node_rx_work);
+	kthread_init_worker(&node->kworker);
+	node->task = kthread_run(kthread_worker_fn, &node->kworker, "qrtr_rx");
+	if (IS_ERR(node->task)) {
+		kfree(node);
+		return -ENOMEM;
+	}
 
 	INIT_RADIX_TREE(&node->qrtr_tx_flow, GFP_KERNEL);
 	mutex_init(&node->qrtr_tx_lock);

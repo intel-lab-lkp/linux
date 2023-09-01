@@ -26,6 +26,7 @@ enum qrtr_pkt_type {
 	QRTR_TYPE_PING          = 9,
 	QRTR_TYPE_NEW_LOOKUP	= 10,
 	QRTR_TYPE_DEL_LOOKUP	= 11,
+	QRTR_TYPE_DEL_PROC	= 13,
 };
 
 struct qrtr_ctrl_pkt {
