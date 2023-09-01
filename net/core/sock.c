@@ -3041,6 +3041,7 @@ EXPORT_SYMBOL(sk_wait_data);
 int __sk_mem_raise_allocated(struct sock *sk, int size, int amt, int kind)
 {
 	struct mem_cgroup *memcg = mem_cgroup_sockets_enabled ? sk->sk_memcg : NULL;
+	bool under_memcg_pressure = false;
 	struct proto *prot = sk->sk_prot;
 	bool charged = false;
 	long allocated;
@@ -3051,13 +3052,25 @@ int __sk_mem_raise_allocated(struct sock *sk, int size, int amt, int kind)
 	if (memcg) {
 		if (!mem_cgroup_charge_skmem(memcg, amt, gfp_memcg_charge()))
 			goto suppress_allocation;
+
+		/* Get pressure info from net-memcg. But consider the memcg
+		 * to be under pressure for incoming traffic iff at 'critical'
+		 * level, see commit 720ca52bcef22 ("net-memcg: avoid stalls
+		 * when under memory pressure").
+		 */
+		if (sk_has_memory_pressure(sk) &&
+		    mem_cgroup_under_socket_pressure(memcg, &under_memcg_pressure) &&
+		    !in_softirq())
+			under_memcg_pressure = true;
+
 		charged = true;
 	}
 
 	/* Under limit. */
 	if (allocated <= sk_prot_mem_limits(sk, 0)) {
 		sk_leave_memory_pressure(sk);
-		return 1;
+		if (!under_memcg_pressure)
+			return 1;
 	}
 
 	/* Under pressure. */
@@ -3087,8 +3100,20 @@ int __sk_mem_raise_allocated(struct sock *sk, int size, int amt, int kind)
 	if (sk_has_memory_pressure(sk)) {
 		u64 alloc;
 
-		if (!sk_under_memory_pressure(sk))
+		/* Be more conservative if the socket's memcg (or its
+		 * parents) is under reclaim pressure, try to possibly
+		 * avoid further memstall.
+		 */
+		if (under_memcg_pressure)
+			goto suppress_allocation;
+
+		if (!sk_under_global_memory_pressure(sk))
 			return 1;
+
+		/* Trying to be fair among all the sockets of same
+		 * protocal under global memory pressure, by allowing
+		 * the ones that under average usage to raise.
+		 */
 		alloc = sk_sockets_allocated_read_positive(sk);
 		if (sk_prot_mem_limits(sk, 2) > alloc *
 		    sk_mem_pages(sk->sk_wmem_queued +
