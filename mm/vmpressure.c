@@ -308,6 +308,13 @@ void vmpressure(gfp_t gfp, struct mem_cgroup *memcg, bool tree,
 		level = vmpressure_calc_level(scanned, reclaimed);
 
 		if (level > VMPRESSURE_LOW) {
+			unsigned long expire = jiffies + HZ;
+
+			if (level == VMPRESSURE_CRITICAL)
+				expire |=  1UL;
+			else
+				expire &= ~1UL;
+
 			/*
 			 * Let the socket buffer allocator know that
 			 * we are having trouble reclaiming LRU pages.
@@ -316,7 +323,7 @@ void vmpressure(gfp_t gfp, struct mem_cgroup *memcg, bool tree,
 			 * asserted for a second in which subsequent
 			 * pressure events can occur.
 			 */
-			WRITE_ONCE(memcg->socket_pressure, jiffies + HZ);
+			WRITE_ONCE(memcg->socket_pressure, expire);
 		}
 	}
 }

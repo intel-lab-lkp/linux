@@ -288,6 +288,9 @@ struct mem_cgroup {
 	 * Hint of reclaim pressure for socket memroy management. Note
 	 * that this indicator should NOT be used in legacy cgroup mode
 	 * where socket memory is accounted/charged separately.
+	 *
+	 * The least significant bit is used for indicating the level of
+	 * pressure, 1 for 'critical' and 0 otherwise.
 	 */
 	unsigned long		socket_pressure;
 
@@ -1730,15 +1733,40 @@ extern struct static_key_false memcg_sockets_enabled_key;
 #define mem_cgroup_sockets_enabled static_branch_unlikely(&memcg_sockets_enabled_key)
 void mem_cgroup_sk_alloc(struct sock *sk);
 void mem_cgroup_sk_free(struct sock *sk);
-static inline bool mem_cgroup_under_socket_pressure(struct mem_cgroup *memcg)
+
+static inline bool mem_cgroup_under_socket_pressure(struct mem_cgroup *memcg,
+						    bool *critical)
 {
+	bool under_pressure = false;
+
+	/*
+	 * When cgroup is in legacy mode where tcpmem is separately
+	 * charged, we have no idea about memcg reclaim pressure from
+	 * here and actually no need to, so just ignore the pressure
+	 * level info.
+	 */
 	if (!cgroup_subsys_on_dfl(memory_cgrp_subsys))
 		return !!memcg->tcpmem_pressure;
+
+	if (critical)
+		*critical = false;
+
 	do {
-		if (time_before(jiffies, READ_ONCE(memcg->socket_pressure)))
-			return true;
+		unsigned long expire = READ_ONCE(memcg->socket_pressure);
+
+		if (time_before(jiffies, expire)) {
+			if (!under_pressure)
+				under_pressure = true;
+			if (!critical)
+				break;
+			if (expire & 1) {
+				*critical = true;
+				break;
+			}
+		}
 	} while ((memcg = parent_mem_cgroup(memcg)));
-	return false;
+
+	return under_pressure;
 }
 
 int alloc_shrinker_info(struct mem_cgroup *memcg);
@@ -1749,7 +1777,8 @@ void reparent_shrinker_deferred(struct mem_cgroup *memcg);
 #define mem_cgroup_sockets_enabled 0
 static inline void mem_cgroup_sk_alloc(struct sock *sk) { };
 static inline void mem_cgroup_sk_free(struct sock *sk) { };
-static inline bool mem_cgroup_under_socket_pressure(struct mem_cgroup *memcg)
+static inline bool mem_cgroup_under_socket_pressure(struct mem_cgroup *memcg,
+						    bool *critical)
 {
 	return false;
 }
