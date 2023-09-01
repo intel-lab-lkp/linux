@@ -171,7 +171,7 @@ static int scom_debug_init_one(struct dentry *root, struct device_node *dn,
 	if (IS_ERR(dir)) {
 		kfree(ent->path.data);
 		kfree(ent);
-		return -1;
+		return -EPERM;
 	}
 
 	debugfs_create_blob("devspec", 0400, dir, &ent->path);
@@ -191,7 +191,7 @@ static int scom_debug_init(void)
 
 	root = debugfs_create_dir("scom", arch_debugfs_dir);
 	if (IS_ERR(root))
-		return -1;
+		return -EPERM;
 
 	rc = 0;
 	for_each_node_with_property(dn, "scom-controller") {
