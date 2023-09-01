@@ -9,6 +9,7 @@
 #include <linux/reset.h>
 #include <soc/qcom/ice.h>
 #include <ufs/ufshcd.h>
+#include <linux/math.h>
 
 #define MAX_UFS_QCOM_HOSTS	1
 #define MAX_U32                 (~(u32)0)
@@ -78,6 +79,15 @@ enum {
 enum {
 	UFS_MEM_CQIS_VS		= 0x8,
 };
+
+/* QCOM UFS host controller core clk frequencies */
+#define UNIPRO_CORE_CLK_FREQ_37_5_MHZ		38
+#define UNIPRO_CORE_CLK_FREQ_75_MHZ		75
+#define UNIPRO_CORE_CLK_FREQ_100_MHZ		100
+#define UNIPRO_CORE_CLK_FREQ_150_MHZ		150
+#define UNIPRO_CORE_CLK_FREQ_300_MHZ		300
+#define UNIPRO_CORE_CLK_FREQ_201_5_MHZ		202
+#define UNIPRO_CORE_CLK_FREQ_403_MHZ		403
 
 #define UFS_CNTLR_2_x_x_VEN_REGS_OFFSET(x)	(0x000 + x)
 #define UFS_CNTLR_3_x_x_VEN_REGS_OFFSET(x)	(0x400 + x)
