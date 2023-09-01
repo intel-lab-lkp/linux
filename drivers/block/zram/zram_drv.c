@@ -45,6 +45,8 @@ static const char *default_compressor = CONFIG_ZRAM_DEF_COMP;
 
 /* Module params (documentation at end) */
 static unsigned int num_devices = 1;
+
+static int node_id = NUMA_NO_NODE;
 /*
  * Pages that compress to sizes equals or greater than this are stored
  * uncompressed in memory.
@@ -52,6 +54,28 @@ static unsigned int num_devices = 1;
 static size_t huge_class_size;
 
 static const struct block_device_operations zram_devops;
+
+static int zram_node_id_store(const char *val,
+		const struct kernel_param *kp)
+{
+	int ret, nid;
+
+	ret = kstrtoint(val, 10, &nid);
+	if (ret)
+		return ret;
+	if (nid != NUMA_NO_NODE && !node_online(nid))
+		return -EINVAL;
+	node_id = nid;
+	return 0;
+}
+
+static const struct kernel_param_ops node_id_param_ops = {
+	.set = zram_node_id_store,
+	.get = param_get_int,
+};
+
+module_param_cb(node_id, &node_id_param_ops, &node_id, 0600);
+MODULE_PARM_DESC(node_id, "The node of pre-created zram devices memory alloc");
 
 static void zram_free_page(struct zram *zram, size_t index);
 static int zram_read_page(struct zram *zram, struct page *page, u32 index,
@@ -1233,7 +1257,7 @@ static bool zram_meta_alloc(struct zram *zram, u64 disksize)
 	size_t num_pages;
 
 	num_pages = disksize >> PAGE_SHIFT;
-	zram->table = vzalloc(array_size(num_pages, sizeof(*zram->table)));
+	zram->table = vzalloc_node(array_size(num_pages, sizeof(*zram->table)), node_id);
 	if (!zram->table)
 		return false;
 
