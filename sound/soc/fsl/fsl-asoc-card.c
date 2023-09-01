@@ -575,7 +575,11 @@ static int fsl_asoc_card_probe(struct platform_device *pdev)
 		goto fail;
 	}
 
-	codec_np = of_parse_phandle(np, "audio-codec", 0);
+	if (of_device_is_compatible(np, "fsl,imx-audio-dummy-codec"))
+		codec_np = NULL;
+	else
+		codec_np = of_parse_phandle(np, "audio-codec", 0);
+
 	if (codec_np) {
 		struct platform_device *codec_pdev;
 		struct i2c_client *codec_i2c;
@@ -705,6 +709,8 @@ static int fsl_asoc_card_probe(struct platform_device *pdev)
 		priv->dai_fmt |= SND_SOC_DAIFMT_CBM_CFM;
 		if (codec_dev)
 			priv->codec_priv.mclk = devm_clk_get(codec_dev, NULL);
+	} else if (of_device_is_compatible(np, "fsl,imx-audio-dummy-codec")) {
+		codec_dai_name = "snd-soc-dummy-dai";
 	} else {
 		dev_err(&pdev->dev, "unknown Device Tree compatible\n");
 		ret = -EINVAL;
@@ -806,7 +812,9 @@ static int fsl_asoc_card_probe(struct platform_device *pdev)
 	priv->dai_link[0].cpus->of_node = cpu_np;
 	priv->dai_link[0].codecs->dai_name = codec_dai_name;
 
-	if (!fsl_asoc_card_is_ac97(priv))
+	if (of_device_is_compatible(np, "fsl,imx-audio-dummy-codec"))
+		priv->dai_link[0].codecs->name = "snd-soc-dummy";
+	else if (!fsl_asoc_card_is_ac97(priv))
 		priv->dai_link[0].codecs->of_node = codec_np;
 	else {
 		u32 idx;
@@ -931,6 +939,7 @@ static const struct of_device_id fsl_asoc_card_dt_ids[] = {
 	{ .compatible = "fsl,imx-audio-si476x", },
 	{ .compatible = "fsl,imx-audio-wm8958", },
 	{ .compatible = "fsl,imx-audio-nau8822", },
+	{ .compatible = "fsl,imx-audio-dummy-codec", },
 	{}
 };
 MODULE_DEVICE_TABLE(of, fsl_asoc_card_dt_ids);
