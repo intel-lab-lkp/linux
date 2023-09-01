@@ -680,6 +680,8 @@ int es58x_rx_err_msg(struct net_device *netdev, enum es58x_err error,
 	}
 
 	skb = alloc_can_err_skb(netdev, &cf);
+	if (!skb)
+		return -ENOMEM;
 
 	switch (error) {
 	case ES58X_ERR_OK:	/* 0: No error */
