@@ -503,6 +503,7 @@ struct wpan_dev {
 	struct mutex association_lock;
 	struct ieee802154_pan_device *parent;
 	struct list_head children;
+	unsigned int association_generation;
 };
 
 #define to_phy(_dev)	container_of(_dev, struct wpan_phy, dev)
