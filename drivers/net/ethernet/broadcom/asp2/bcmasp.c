@@ -1231,8 +1231,8 @@ static int bcmasp_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	priv->irq = platform_get_irq(pdev, 0);
-	if (priv->irq <= 0)
-		return -EINVAL;
+	if (priv->irq < 0)
+		return priv->irq;
 
 	priv->clk = devm_clk_get_optional_enabled(dev, "sw_asp");
 	if (IS_ERR(priv->clk))
