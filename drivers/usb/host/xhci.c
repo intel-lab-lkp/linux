@@ -805,6 +805,24 @@ static void xhci_disable_hub_port_wake(struct xhci_hcd *xhci,
 	spin_unlock_irqrestore(&xhci->lock, flags);
 }
 
+static bool xhci_usb3_dev_connected(struct xhci_hcd *xhci)
+{
+	struct xhci_port	**ports;
+	int			port_index;
+	u32			portsc;
+
+	port_index = xhci->usb3_rhub.num_ports;
+	ports = xhci->usb3_rhub.ports;
+
+	while (port_index--) {
+		portsc = readl(ports[port_index]->addr);
+		if (portsc & (portsc & PORT_CONNECT))
+			return true;
+	}
+
+	return false;
+}
+
 static bool xhci_pending_portevent(struct xhci_hcd *xhci)
 {
 	struct xhci_port	**ports;
@@ -968,6 +986,7 @@ int xhci_resume(struct xhci_hcd *xhci, pm_message_t msg)
 	int			retval = 0;
 	bool			comp_timer_running = false;
 	bool			pending_portevent = false;
+	bool			usb3_connected = false;
 	bool			reinit_xhc = false;
 
 	if (!hcd->state)
@@ -1116,9 +1135,14 @@ int xhci_resume(struct xhci_hcd *xhci, pm_message_t msg)
 		 * Resume roothubs only if there are pending events.
 		 * USB 3 devices resend U3 LFPS wake after a 100ms delay if
 		 * the first wake signalling failed, give it that chance.
+		 * Avoid this check if there are no devices connected to
+		 * the SS root hub (i.e. HS device connected or no device
+		 * connected)
 		 */
 		pending_portevent = xhci_pending_portevent(xhci);
-		if (!pending_portevent && msg.event == PM_EVENT_AUTO_RESUME) {
+		usb3_connected = xhci_usb3_dev_connected(xhci);
+		if (!pending_portevent && usb3_connected &&
+		     msg.event == PM_EVENT_AUTO_RESUME) {
 			msleep(120);
 			pending_portevent = xhci_pending_portevent(xhci);
 		}
