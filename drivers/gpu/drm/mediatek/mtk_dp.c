@@ -2597,8 +2597,7 @@ static int mtk_dp_probe(struct platform_device *pdev)
 	if (mtk_dp->data->bridge_type != DRM_MODE_CONNECTOR_eDP) {
 		mtk_dp->irq = platform_get_irq(pdev, 0);
 		if (mtk_dp->irq < 0)
-			return dev_err_probe(dev, mtk_dp->irq,
-					     "failed to request dp irq resource\n");
+			return mtk_dp->irq;
 
 		spin_lock_init(&mtk_dp->irq_thread_lock);
 
