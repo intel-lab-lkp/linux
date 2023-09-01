@@ -4273,7 +4273,7 @@ static void ice_deinit_fdir(struct ice_pf *pf)
 {
 	struct ice_vsi *vsi = ice_get_ctrl_vsi(pf);
 
-	if (!vsi)
+	if (!vsi || test_bit(ICE_RESET_FAILED, pf->state))
 		return;
 
 	ice_vsi_manage_fdir(vsi, false);
@@ -4840,7 +4840,7 @@ static void ice_deinit_pf_sw(struct ice_pf *pf)
 {
 	struct ice_vsi *vsi = ice_get_main_vsi(pf);
 
-	if (!vsi)
+	if (!vsi || test_bit(ICE_RESET_FAILED, pf->state))
 		return;
 
 	ice_vsi_release(vsi);
