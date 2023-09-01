@@ -712,6 +712,8 @@ static int fsl_asoc_card_probe(struct platform_device *pdev)
 	} else if (of_device_is_compatible(np, "fsl,imx-audio-dummy-codec")) {
 		codec_dai_name = "snd-soc-dummy-dai";
 		priv->dai_fmt |= SND_SOC_DAIFMT_CBC_CFC;
+		priv->card.dapm_routes = NULL;
+		priv->card.num_dapm_routes = 0;
 	} else {
 		dev_err(&pdev->dev, "unknown Device Tree compatible\n");
 		ret = -EINVAL;
