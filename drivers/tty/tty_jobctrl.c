@@ -30,11 +30,15 @@ static int is_ignored(int sig)
  *
  *	Locking: ctrl.lock
  */
-int __tty_check_change(struct tty_struct *tty, int sig)
+static int __tty_check_change_locked(struct tty_struct *tty, int sig,
+				     spinlock_t *ctrl_lock)
 {
 	unsigned long flags;
 	struct pid *pgrp, *tty_pgrp;
 	int ret = 0;
+
+	BUG_ON(ctrl_lock && (
+	       ctrl_lock != &tty->ctrl.lock || !spin_is_locked(ctrl_lock)));
 
 	if (current->signal->tty != tty)
 		return 0;
@@ -42,7 +46,8 @@ int __tty_check_change(struct tty_struct *tty, int sig)
 	rcu_read_lock();
 	pgrp = task_pgrp(current);
 
-	spin_lock_irqsave(&tty->ctrl.lock, flags);
+	if (!ctrl_lock)
+		spin_lock_irqsave(&tty->ctrl.lock, flags);
 	tty_pgrp = tty->ctrl.pgrp;
 
 	if (tty_pgrp && pgrp != tty_pgrp) {
@@ -57,7 +62,8 @@ int __tty_check_change(struct tty_struct *tty, int sig)
 			ret = -ERESTARTSYS;
 		}
 	}
-	spin_unlock_irqrestore(&tty->ctrl.lock, flags);
+	if (!ctrl_lock)
+		spin_unlock_irqrestore(&tty->ctrl.lock, flags);
 	rcu_read_unlock();
 
 	if (!tty_pgrp)
@@ -66,9 +72,19 @@ int __tty_check_change(struct tty_struct *tty, int sig)
 	return ret;
 }
 
+static int tty_check_change_locked(struct tty_struct *tty, spinlock_t *locked)
+{
+	return __tty_check_change_locked(tty, SIGTTOU, locked);
+}
+
+int __tty_check_change(struct tty_struct *tty, int sig)
+{
+	return __tty_check_change_locked(tty, sig, 0);
+}
+
 int tty_check_change(struct tty_struct *tty)
 {
-	return __tty_check_change(tty, SIGTTOU);
+	return tty_check_change_locked(tty, 0);
 }
 EXPORT_SYMBOL(tty_check_change);
 
@@ -489,12 +505,7 @@ static int tiocspgrp(struct tty_struct *tty, struct tty_struct *real_tty, pid_t 
 {
 	struct pid *pgrp;
 	pid_t pgrp_nr;
-	int retval = tty_check_change(real_tty);
-
-	if (retval == -EIO)
-		return -ENOTTY;
-	if (retval)
-		return retval;
+	int retval;
 
 	if (get_user(pgrp_nr, p))
 		return -EFAULT;
@@ -502,6 +513,15 @@ static int tiocspgrp(struct tty_struct *tty, struct tty_struct *real_tty, pid_t 
 		return -EINVAL;
 
 	spin_lock_irq(&real_tty->ctrl.lock);
+	retval = tty_check_change_locked(real_tty, &real_tty->ctrl.lock);
+
+	if (retval == -EIO) {
+		retval = -ENOTTY;
+		goto out_unlock_ctrl;
+        }
+	if (retval)
+		goto out_unlock_ctrl;
+
 	if (!current->signal->tty ||
 	    (current->signal->tty != real_tty) ||
 	    (real_tty->ctrl.session != task_session(current))) {
