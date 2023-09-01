@@ -385,7 +385,7 @@ static int vb2_queue_or_prepare_buf(struct vb2_queue *q, struct media_device *md
 
 	vb = vb2_get_buffer(q, b->index);
 	if (!vb) {
-		dprintk(q, 1, "%s: buffer is NULL\n", opname);
+		dprintk(q, 1, "%s: buffer %u was deleted\n", opname, b->index);
 		return -EINVAL;
 	}
 
@@ -756,6 +756,42 @@ int vb2_prepare_buf(struct vb2_queue *q, struct media_device *mdev,
 	return ret ? ret : vb2_core_prepare_buf(q, vb, b);
 }
 EXPORT_SYMBOL_GPL(vb2_prepare_buf);
+
+int vb2_delete_bufs(struct vb2_queue *q, struct v4l2_delete_buffers *d)
+{
+	struct vb2_buffer *vb;
+	unsigned int index;
+	int ret = 0;
+
+	if (d->index > q->num_buffers ||
+	    d->count > q->num_buffers ||
+	    (d->index + d->count) > q->num_buffers) {
+		return -EINVAL;
+	}
+
+	for (index = d->index; index < d->index + d->count; index++) {
+		vb = vb2_get_buffer(q, index);
+		if (!vb) {
+			dprintk(q, 1, "can't find the requested buffer\n");
+			ret = -EINVAL;
+			goto error;
+		}
+		if (vb->state != VB2_BUF_STATE_DEQUEUED) {
+			dprintk(q, 1, "can't delete non dequeued buffer index %d\n", vb->index);
+			ret = -EINVAL;
+			goto error;
+		}
+
+		ret = vb2_core_delete_buf(q, vb);
+		if (ret)
+			break;
+	}
+
+error:
+	d->index = index;
+	return ret;
+}
+EXPORT_SYMBOL_GPL(vb2_delete_bufs);
 
 int vb2_create_bufs(struct vb2_queue *q, struct v4l2_create_buffers *create)
 {

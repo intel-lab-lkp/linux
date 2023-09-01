@@ -844,6 +844,15 @@ int vb2_core_create_bufs(struct vb2_queue *q, enum vb2_memory memory,
 int vb2_core_prepare_buf(struct vb2_queue *q, struct vb2_buffer *vb, void *pb);
 
 /**
+ * vb2_core_delete_buf() -
+ * @q: pointer to &struct vb2_queue with videobuf2 queue.
+ * @vb:		pointer to struct &vb2_buffer.
+ *
+ *  Return: returns zero on success; an error code otherwise.
+ */
+int vb2_core_delete_buf(struct vb2_queue *q, struct vb2_buffer *vb);
+
+/**
  * vb2_core_qbuf() - Queue a buffer from userspace
  *
  * @q:		pointer to &struct vb2_queue with videobuf2 queue.

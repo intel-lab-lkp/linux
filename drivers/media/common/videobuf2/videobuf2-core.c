@@ -1633,6 +1633,30 @@ int vb2_core_prepare_buf(struct vb2_queue *q, struct vb2_buffer *vb, void *pb)
 }
 EXPORT_SYMBOL_GPL(vb2_core_prepare_buf);
 
+int vb2_core_delete_buf(struct vb2_queue *q, struct vb2_buffer *vb)
+{
+	mutex_lock(&q->mmap_lock);
+	if (vb->planes[0].mem_priv)
+		call_void_vb_qop(vb, buf_cleanup, vb);
+
+	/* Free MMAP buffers or release USERPTR buffers */
+	if (q->memory == VB2_MEMORY_MMAP)
+		__vb2_buf_mem_free(vb);
+	else if (q->memory == VB2_MEMORY_DMABUF)
+		__vb2_buf_dmabuf_put(vb);
+	else
+		__vb2_buf_userptr_put(vb);
+
+	vb2_queue_remove_buffer(q, vb);
+	mutex_unlock(&q->mmap_lock);
+
+	dprintk(q, 2, "buffer %d deleted\n", vb->index);
+	kfree(vb);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(vb2_core_delete_buf);
+
 /*
  * vb2_start_streaming() - Attempt to start streaming.
  * @q:		videobuf2 queue
