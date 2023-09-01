@@ -4026,6 +4026,12 @@ static void ata_eh_handle_port_suspend(struct ata_port *ap)
 	int rc = 0;
 	struct ata_device *dev;
 
+	if (!!(ap->flags & ATA_LFLAG_NO_LPM_RECOVER))
+		ata_for_each_dev(dev, &ap->link, ENABLED) {
+			ata_eh_set_lpm(&ap->link, ATA_LPM_MED_POWER_WITH_DIPM, &dev);
+		}
+
+
 	/* are we suspending? */
 	spin_lock_irqsave(ap->lock, flags);
 	if (!(ap->pflags & ATA_PFLAG_PM_PENDING) ||
@@ -4113,6 +4119,10 @@ static void ata_eh_handle_port_resume(struct ata_port *ap)
 	if (ap->ops->port_resume)
 		ap->ops->port_resume(ap);
 
+	if (!!(ap->flags & ATA_LFLAG_NO_LPM_RECOVER))
+		ata_for_each_dev(dev, &ap->link, ENABLED) {
+			ata_eh_set_lpm(&ap->link, ap->target_lpm_policy, &dev);
+		}
 	/* tell ACPI that we're resuming */
 	ata_acpi_on_resume(ap);
 
