@@ -772,7 +772,9 @@ static int i2c_hid_parse(struct hid_device *hid)
 		}
 	}
 
-	i2c_hid_dbg(ihid, "Report Descriptor: %*ph\n", rsize, rdesc);
+	i2c_hid_dbg(ihid, "Report Descriptor size: %#x\n", rsize);
+	print_hex_dump_debug("Report Descriptor: ", DUMP_PREFIX_OFFSET, 16, 1,
+			rdesc, rsize, false);
 
 	ret = hid_parse_report(hid, rdesc, rsize);
 	if (!use_override)
