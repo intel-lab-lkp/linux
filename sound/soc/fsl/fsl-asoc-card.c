@@ -148,6 +148,13 @@ static const struct snd_soc_dapm_route audio_map_rx[] = {
 	{"ASRC-Capture",  NULL, "CPU-Capture"},
 };
 
+
+static const struct snd_soc_dapm_route audio_map_asrc[] = {
+	{"CPU-Playback",  NULL, "ASRC-Playback"},
+	{"ASRC-Capture",  NULL, "CPU-Capture"},
+};
+
+
 /* Add all possible widgets into here without being redundant */
 static const struct snd_soc_dapm_widget fsl_asoc_card_dapm_widgets[] = {
 	SND_SOC_DAPM_LINE("Line Out Jack", NULL),
@@ -803,6 +810,11 @@ static int fsl_asoc_card_probe(struct platform_device *pdev)
 	/* Drop the second half of DAPM routes -- ASRC */
 	if (!asrc_pdev)
 		priv->card.num_dapm_routes /= 2;
+	else if (of_device_is_compatible(np, "fsl,imx-audio-dummy-codec")) {
+		/* Dummy codec doesn't provide Playback and Capture widgets */
+		priv->card.dapm_routes = audio_map_asrc;
+		priv->card.num_dapm_routes = 2;
+	}
 
 	if (of_property_read_bool(np, "audio-routing")) {
 		ret = snd_soc_of_parse_audio_routing(&priv->card, "audio-routing");
