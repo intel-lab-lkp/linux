@@ -748,7 +748,8 @@ static int fsl_asoc_card_probe(struct platform_device *pdev)
 	of_node_put(bitclkprovider);
 	of_node_put(frameprovider);
 
-	if (!fsl_asoc_card_is_ac97(priv) && !codec_dev) {
+	if (!fsl_asoc_card_is_ac97(priv) && !codec_dev
+	  && !of_device_is_compatible(np, "fsl,imx-audio-dummy-codec")) {
 		dev_dbg(&pdev->dev, "failed to find codec device\n");
 		ret = -EPROBE_DEFER;
 		goto asrc_fail;
