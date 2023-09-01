@@ -576,7 +576,9 @@ void ath_chanctx_event(struct ath_softc *sc, struct ieee80211_vif *vif,
 		if (sc->sched.state != ATH_CHANCTX_STATE_WAIT_FOR_BEACON)
 			break;
 
-		ath_dbg(common, CHAN_CTX, "Preparing beacon for vif: %pM\n", vif->addr);
+		if (vif)
+			ath_dbg(common, CHAN_CTX,
+				"Preparing beacon for vif: %pM\n", vif->addr);
 
 		sc->sched.beacon_pending = true;
 		sc->sched.next_tbtt = REG_READ(ah, AR_NEXT_TBTT_TIMER);
