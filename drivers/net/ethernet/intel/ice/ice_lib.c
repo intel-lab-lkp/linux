@@ -321,6 +321,9 @@ static void ice_vsi_free_arrays(struct ice_vsi *vsi)
 
 	dev = ice_pf_to_dev(pf);
 
+	vsi->num_txq = 0;
+	vsi->num_rxq = 0;
+
 	bitmap_free(vsi->af_xdp_zc_qps);
 	vsi->af_xdp_zc_qps = NULL;
 	/* free the ring and vector containers */
@@ -3188,6 +3191,7 @@ err_vsi_cfg_tc_lan:
 	ice_vsi_decfg(vsi);
 err_vsi_cfg:
 	kfree(coalesce);
+	set_bit(ICE_RESET_FAILED, pf->state);
 	return ret;
 }
 
