@@ -739,12 +739,12 @@ u64 vt6655_get_current_tsf(struct vnt_private *priv)
 	u32 low, high;
 
 	vt6655_mac_reg_bits_on(iobase, MAC_REG_TFTCTL, TFTCTL_TSFCNTRRD);
-	for (ww = 0; ww < W_MAX_TIMEOUT; ww++) {
+	for (ww = 0; ww < MAX_TIMEOUT; ww++) {
 		data = ioread8(iobase + MAC_REG_TFTCTL);
 		if (!(data & TFTCTL_TSFCNTRRD))
 			break;
 	}
-	if (ww == W_MAX_TIMEOUT)
+	if (ww == MAX_TIMEOUT)
 		return 0;
 	low = ioread32(iobase + MAC_REG_TSFCNTR);
 	high = ioread32(iobase + MAC_REG_TSFCNTR + 4);

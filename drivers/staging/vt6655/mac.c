@@ -270,11 +270,11 @@ bool MACbSoftwareReset(struct vnt_private *priv)
 	/* turn on HOSTCR_SOFTRST, just write 0x01 to reset */
 	iowrite8(0x01, io_base + MAC_REG_HOSTCR);
 
-	for (ww = 0; ww < W_MAX_TIMEOUT; ww++) {
+	for (ww = 0; ww < MAX_TIMEOUT; ww++) {
 		if (!(ioread8(io_base + MAC_REG_HOSTCR) & HOSTCR_SOFTRST))
 			break;
 	}
-	if (ww == W_MAX_TIMEOUT)
+	if (ww == MAX_TIMEOUT)
 		return false;
 	return true;
 }
@@ -332,31 +332,31 @@ static bool vt6655_mac_safe_rx_off(struct vnt_private *priv)
 	/* Clear RX DMA0,1 */
 	iowrite32(DMACTL_CLRRUN, io_base + MAC_REG_RXDMACTL0);
 	iowrite32(DMACTL_CLRRUN, io_base + MAC_REG_RXDMACTL1);
-	for (ww = 0; ww < W_MAX_TIMEOUT; ww++) {
+	for (ww = 0; ww < MAX_TIMEOUT; ww++) {
 		if (!(ioread32(io_base + MAC_REG_RXDMACTL0) & DMACTL_RUN))
 			break;
 	}
-	if (ww == W_MAX_TIMEOUT) {
+	if (ww == MAX_TIMEOUT) {
 		pr_debug(" DBG_PORT80(0x10)\n");
 		return false;
 	}
-	for (ww = 0; ww < W_MAX_TIMEOUT; ww++) {
+	for (ww = 0; ww < MAX_TIMEOUT; ww++) {
 		if (!(ioread32(io_base + MAC_REG_RXDMACTL1) & DMACTL_RUN))
 			break;
 	}
-	if (ww == W_MAX_TIMEOUT) {
+	if (ww == MAX_TIMEOUT) {
 		pr_debug(" DBG_PORT80(0x11)\n");
 		return false;
 	}
 
 	/* try to safe shutdown RX */
 	vt6655_mac_reg_bits_off(io_base, MAC_REG_HOSTCR, HOSTCR_RXON);
-	/* W_MAX_TIMEOUT is the timeout period */
-	for (ww = 0; ww < W_MAX_TIMEOUT; ww++) {
+	/* MAX_TIMEOUT is the timeout period */
+	for (ww = 0; ww < MAX_TIMEOUT; ww++) {
 		if (!(ioread8(io_base + MAC_REG_HOSTCR) & HOSTCR_RXONST))
 			break;
 	}
-	if (ww == W_MAX_TIMEOUT) {
+	if (ww == MAX_TIMEOUT) {
 		pr_debug(" DBG_PORT80(0x12)\n");
 		return false;
 	}
@@ -387,19 +387,19 @@ static bool vt6655_mac_safe_tx_off(struct vnt_private *priv)
 	/* AC0 */
 	iowrite32(DMACTL_CLRRUN, io_base + MAC_REG_AC0DMACTL);
 
-	for (ww = 0; ww < W_MAX_TIMEOUT; ww++) {
+	for (ww = 0; ww < MAX_TIMEOUT; ww++) {
 		if (!(ioread32(io_base + MAC_REG_TXDMACTL0) & DMACTL_RUN))
 			break;
 	}
-	if (ww == W_MAX_TIMEOUT) {
+	if (ww == MAX_TIMEOUT) {
 		pr_debug(" DBG_PORT80(0x20)\n");
 		return false;
 	}
-	for (ww = 0; ww < W_MAX_TIMEOUT; ww++) {
+	for (ww = 0; ww < MAX_TIMEOUT; ww++) {
 		if (!(ioread32(io_base + MAC_REG_AC0DMACTL) & DMACTL_RUN))
 			break;
 	}
-	if (ww == W_MAX_TIMEOUT) {
+	if (ww == MAX_TIMEOUT) {
 		pr_debug(" DBG_PORT80(0x21)\n");
 		return false;
 	}
@@ -407,12 +407,12 @@ static bool vt6655_mac_safe_tx_off(struct vnt_private *priv)
 	/* try to safe shutdown TX */
 	vt6655_mac_reg_bits_off(io_base, MAC_REG_HOSTCR, HOSTCR_TXON);
 
-	/* W_MAX_TIMEOUT is the timeout period */
-	for (ww = 0; ww < W_MAX_TIMEOUT; ww++) {
+	/* MAX_TIMEOUT is the timeout period */
+	for (ww = 0; ww < MAX_TIMEOUT; ww++) {
 		if (!(ioread8(io_base + MAC_REG_HOSTCR) & HOSTCR_TXONST))
 			break;
 	}
-	if (ww == W_MAX_TIMEOUT) {
+	if (ww == MAX_TIMEOUT) {
 		pr_debug(" DBG_PORT80(0x24)\n");
 		return false;
 	}
@@ -537,7 +537,7 @@ void vt6655_mac_set_curr_rx_0_desc_addr(struct vnt_private *priv, u32 curr_desc_
 	if (org_dma_ctl & DMACTL_RUN)
 		iowrite8(DMACTL_RUN, io_base + MAC_REG_RXDMACTL0 + 2);
 
-	for (ww = 0; ww < W_MAX_TIMEOUT; ww++) {
+	for (ww = 0; ww < MAX_TIMEOUT; ww++) {
 		if (!(ioread8(io_base + MAC_REG_RXDMACTL0) & DMACTL_RUN))
 			break;
 	}
@@ -571,7 +571,7 @@ void vt6655_mac_set_curr_rx_1_desc_addr(struct vnt_private *priv, u32 curr_desc_
 	if (org_dma_ctl & DMACTL_RUN)
 		iowrite8(DMACTL_RUN, io_base + MAC_REG_RXDMACTL1 + 2);
 
-	for (ww = 0; ww < W_MAX_TIMEOUT; ww++) {
+	for (ww = 0; ww < MAX_TIMEOUT; ww++) {
 		if (!(ioread8(io_base + MAC_REG_RXDMACTL1) & DMACTL_RUN))
 			break;
 	}
@@ -605,7 +605,7 @@ static void vt6655_mac_set_curr_tx_0_desc_addr_ex(struct vnt_private *priv, u32 
 	if (org_dma_ctl & DMACTL_RUN)
 		iowrite8(DMACTL_RUN, io_base + MAC_REG_TXDMACTL0 + 2);
 
-	for (ww = 0; ww < W_MAX_TIMEOUT; ww++) {
+	for (ww = 0; ww < MAX_TIMEOUT; ww++) {
 		if (!(ioread8(io_base + MAC_REG_TXDMACTL0) & DMACTL_RUN))
 			break;
 	}
@@ -640,11 +640,11 @@ static void vt6655_mac_set_curr_ac_0_desc_addr_ex(struct vnt_private *priv, u32 
 	if (org_dma_ctl & DMACTL_RUN)
 		iowrite8(DMACTL_RUN, io_base + MAC_REG_AC0DMACTL + 2);
 
-	for (ww = 0; ww < W_MAX_TIMEOUT; ww++) {
+	for (ww = 0; ww < MAX_TIMEOUT; ww++) {
 		if (!(ioread8(io_base + MAC_REG_AC0DMACTL) & DMACTL_RUN))
 			break;
 	}
-	if (ww == W_MAX_TIMEOUT)
+	if (ww == MAX_TIMEOUT)
 		pr_debug(" DBG_PORT80(0x26)\n");
 	iowrite32(curr_desc_addr, io_base + MAC_REG_AC0DMAPTR);
 	if (org_dma_ctl & DMACTL_RUN)
@@ -743,11 +743,11 @@ bool MACbPSWakeup(struct vnt_private *priv)
 	vt6655_mac_reg_bits_off(io_base, MAC_REG_PSCTL, PSCTL_PSEN);
 
 	/* Check if SyncFlushOK */
-	for (ww = 0; ww < W_MAX_TIMEOUT; ww++) {
+	for (ww = 0; ww < MAX_TIMEOUT; ww++) {
 		if (ioread8(io_base + MAC_REG_PSCTL) & PSCTL_WAKEDONE)
 			break;
 	}
-	if (ww == W_MAX_TIMEOUT) {
+	if (ww == MAX_TIMEOUT) {
 		pr_debug(" DBG_PORT80(0x33)\n");
 		return false;
 	}

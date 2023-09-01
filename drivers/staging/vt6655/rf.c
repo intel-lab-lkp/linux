@@ -173,14 +173,14 @@ bool IFRFbWriteEmbedded(struct vnt_private *priv, unsigned long dwData)
 
 	iowrite32((u32)dwData, iobase + MAC_REG_IFREGCTL);
 
-	/* W_MAX_TIMEOUT is the timeout period */
-	for (ww = 0; ww < W_MAX_TIMEOUT; ww++) {
+	/* MAX_TIMEOUT is the timeout period */
+	for (ww = 0; ww < MAX_TIMEOUT; ww++) {
 		dwValue = ioread32(iobase + MAC_REG_IFREGCTL);
 		if (dwValue & IFREGCTL_DONE)
 			break;
 	}
 
-	if (ww == W_MAX_TIMEOUT)
+	if (ww == MAX_TIMEOUT)
 		return false;
 
 	return true;

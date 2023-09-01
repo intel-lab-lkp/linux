@@ -522,7 +522,7 @@
 			    IMR_TXDMA0)
 
 /* max time out delay time */
-#define W_MAX_TIMEOUT       0xFFF0U
+#define MAX_TIMEOUT       0xFFF0U
 
 /* wait time within loop */
 #define CB_DELAY_LOOP_WAIT  10 /* 10ms */

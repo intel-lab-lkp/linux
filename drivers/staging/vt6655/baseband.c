@@ -1913,8 +1913,8 @@ bool bb_read_embedded(struct vnt_private *priv, unsigned char by_bb_addr,
 
 	/* turn on REGR */
 	vt6655_mac_reg_bits_on(iobase, MAC_REG_BBREGCTL, BBREGCTL_REGR);
-	/* W_MAX_TIMEOUT is the timeout period */
-	for (ww = 0; ww < W_MAX_TIMEOUT; ww++) {
+	/* MAX_TIMEOUT is the timeout period */
+	for (ww = 0; ww < MAX_TIMEOUT; ww++) {
 		by_value = ioread8(iobase + MAC_REG_BBREGCTL);
 		if (by_value & BBREGCTL_DONE)
 			break;
@@ -1923,7 +1923,7 @@ bool bb_read_embedded(struct vnt_private *priv, unsigned char by_bb_addr,
 	/* get BB data */
 	*pby_data = ioread8(iobase + MAC_REG_BBREGDATA);
 
-	if (ww == W_MAX_TIMEOUT) {
+	if (ww == MAX_TIMEOUT) {
 		pr_debug(" DBG_PORT80(0x30)\n");
 		return false;
 	}
@@ -1958,14 +1958,14 @@ bool bb_write_embedded(struct vnt_private *priv, unsigned char by_bb_addr,
 
 	/* turn on BBREGCTL_REGW */
 	vt6655_mac_reg_bits_on(iobase, MAC_REG_BBREGCTL, BBREGCTL_REGW);
-	/* W_MAX_TIMEOUT is the timeout period */
-	for (ww = 0; ww < W_MAX_TIMEOUT; ww++) {
+	/* MAX_TIMEOUT is the timeout period */
+	for (ww = 0; ww < MAX_TIMEOUT; ww++) {
 		by_value = ioread8(iobase + MAC_REG_BBREGCTL);
 		if (by_value & BBREGCTL_DONE)
 			break;
 	}
 
-	if (ww == W_MAX_TIMEOUT) {
+	if (ww == MAX_TIMEOUT) {
 		pr_debug(" DBG_PORT80(0x31)\n");
 		return false;
 	}
