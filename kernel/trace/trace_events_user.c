@@ -50,18 +50,6 @@
 #define EVENT_STATUS_OTHER BIT(7)
 
 /*
- * User register flags are not allowed yet, keep them here until we are
- * ready to expose them out to the user ABI.
- */
-enum user_reg_flag {
-	/* Event will not delete upon last reference closing */
-	USER_EVENT_REG_PERSIST		= 1U << 0,
-
-	/* This value or above is currently non-ABI */
-	USER_EVENT_REG_MAX		= 1U << 1,
-};
-
-/*
  * Stores the system name, tables, and locks for a group of events. This
  * allows isolation for events by various means.
  */
@@ -1888,9 +1876,15 @@ static int user_event_parse(struct user_event_group *group, char *name,
 	int argc = 0;
 	char **argv;
 
-	/* User register flags are not ready yet */
-	if (reg_flags != 0 || flags != NULL)
+	/* Currently don't support any text based flags */
+	if (flags != NULL)
 		return -EINVAL;
+
+	/* Persistent events require CAP_PERFMON / CAP_SYS_ADMIN */
+	if (reg_flags & USER_EVENT_REG_PERSIST) {
+		if (!perfmon_capable())
+			return -EPERM;
+	}
 
 	/* Prevent dyn_event from racing */
 	mutex_lock(&event_mutex);
@@ -2023,6 +2017,12 @@ static int delete_user_event(struct user_event_group *group, char *name)
 
 	if (!user_event_last_ref(user))
 		return -EBUSY;
+
+	/* Persistent events require CAP_PERFMON / CAP_SYS_ADMIN */
+	if (user->reg_flags & USER_EVENT_REG_PERSIST) {
+		if (!perfmon_capable())
+			return -EPERM;
+	}
 
 	return destroy_user_event(user);
 }
