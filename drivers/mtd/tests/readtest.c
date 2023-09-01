@@ -162,8 +162,6 @@ static int __init mtd_readtest_init(void)
 	if (!bbt)
 		goto out;
 	err = mtdtest_scan_for_bad_eraseblocks(mtd, bbt, 0, ebcnt);
-	if (err)
-		goto out;
 
 	/* Read all eraseblocks 1 page at a time */
 	pr_info("testing page read\n");

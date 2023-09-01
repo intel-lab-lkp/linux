@@ -319,8 +319,6 @@ static int __init mtd_subpagetest_init(void)
 		goto out;
 
 	err = mtdtest_scan_for_bad_eraseblocks(mtd, bbt, 0, ebcnt);
-	if (err)
-		goto out;
 
 	err = mtdtest_erase_good_eraseblocks(mtd, bbt, 0, ebcnt);
 	if (err)

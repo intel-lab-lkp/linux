@@ -243,8 +243,6 @@ static int __init tort_init(void)
 	}
 
 	err = mtdtest_scan_for_bad_eraseblocks(mtd, bad_ebs, eb, ebcnt);
-	if (err)
-		goto out;
 
 	start_timing();
 	while (1) {

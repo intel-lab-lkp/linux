@@ -229,8 +229,7 @@ static int __init mtd_speedtest_init(void)
 	if (!bbt)
 		goto out;
 	err = mtdtest_scan_for_bad_eraseblocks(mtd, bbt, 0, ebcnt);
-	if (err)
-		goto out;
+
 	for (i = 0; i < ebcnt; i++) {
 		if (!bbt[i])
 			goodebcnt++;

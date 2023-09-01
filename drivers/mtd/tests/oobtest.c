@@ -399,8 +399,6 @@ static int __init mtd_oobtest_init(void)
 	pr_info("test 1 of 5\n");
 
 	err = mtdtest_erase_good_eraseblocks(mtd, bbt, 0, ebcnt);
-	if (err)
-		goto out;
 
 	prandom_seed_state(&rnd_state, 1);
 	err = write_whole_device();
