@@ -721,6 +721,7 @@ static int fsl_asoc_card_probe(struct platform_device *pdev)
 		priv->dai_fmt |= SND_SOC_DAIFMT_CBC_CFC;
 		priv->card.dapm_routes = NULL;
 		priv->card.num_dapm_routes = 0;
+		of_property_read_u32(np, "cpu-slot-width", &priv->cpu_priv.slot_width);
 	} else {
 		dev_err(&pdev->dev, "unknown Device Tree compatible\n");
 		ret = -EINVAL;
