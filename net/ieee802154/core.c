@@ -212,6 +212,7 @@ static void cfg802154_free_peer_structures(struct wpan_dev *wpan_dev)
 		kfree(child);
 	}
 
+	wpan_dev->nchildren = 0;
 	wpan_dev->association_generation++;
 
 	mutex_unlock(&wpan_dev->association_lock);

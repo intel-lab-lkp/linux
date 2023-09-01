@@ -508,6 +508,7 @@ struct wpan_dev {
 	struct list_head children;
 	unsigned int association_generation;
 	unsigned int max_associations;
+	unsigned int nchildren;
 };
 
 #define to_phy(_dev)	container_of(_dev, struct wpan_phy, dev)
