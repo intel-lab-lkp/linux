@@ -2743,6 +2743,8 @@ int kvm_apic_local_deliver(struct kvm_lapic *apic, int lvt_type)
 		vector = reg & APIC_VECTOR_MASK;
 		mode = reg & APIC_MODE_MASK;
 		trig_mode = reg & APIC_LVT_LEVEL_TRIGGER;
+		if (lvt_type == APIC_LVTPC)
+			kvm_lapic_set_reg(apic, lvt_type, reg | APIC_LVT_MASKED);
 		return __apic_accept_irq(apic, mode, vector, 1, trig_mode,
 					NULL);
 	}
