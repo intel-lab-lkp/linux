@@ -7066,6 +7066,7 @@ static void r8153_init(struct r8152 *tp)
 	switch (tp->udev->speed) {
 	case USB_SPEED_SUPER:
 	case USB_SPEED_SUPER_PLUS:
+	case USB_SPEED_SUPER_PLUS_BY2:
 		tp->coalesce = COALESCE_SUPER;
 		break;
 	case USB_SPEED_HIGH:

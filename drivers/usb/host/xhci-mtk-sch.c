@@ -89,6 +89,7 @@ static u32 get_bw_boundary(enum usb_device_speed speed)
 	u32 boundary;
 
 	switch (speed) {
+	case USB_SPEED_SUPER_PLUS_BY2:
 	case USB_SPEED_SUPER_PLUS:
 		boundary = SSP_BW_BOUNDARY;
 		break;

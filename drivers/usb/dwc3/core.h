@@ -1194,8 +1194,8 @@ struct dwc3 {
 	u32			u1u2;
 	u32			maximum_speed;
 	u32			gadget_max_speed;
-	enum usb_ssp_rate	max_ssp_rate;
-	enum usb_ssp_rate	gadget_ssp_rate;
+	enum usb_ssp_gen	max_ssp_gen;
+	enum usb_ssp_gen	gadget_ssp_gen;
 
 	u32			ip;
 

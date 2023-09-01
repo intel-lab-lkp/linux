@@ -459,7 +459,7 @@ int usb_submit_urb(struct urb *urb, gfp_t mem_flags)
 			max *= mult;
 		}
 
-		if (dev->speed == USB_SPEED_SUPER_PLUS &&
+		if (dev->speed >= USB_SPEED_SUPER_PLUS &&
 		    USB_SS_SSP_ISOC_COMP(ep->ss_ep_comp.bmAttributes)) {
 			struct usb_ssp_isoc_ep_comp_descriptor *isoc_ep_comp;
 
@@ -544,6 +544,7 @@ int usb_submit_urb(struct urb *urb, gfp_t mem_flags)
 
 		/* too big? */
 		switch (dev->speed) {
+		case USB_SPEED_SUPER_PLUS_BY2:
 		case USB_SPEED_SUPER_PLUS:
 		case USB_SPEED_SUPER:	/* units are 125us */
 			/* Handle up to 2^(16-1) microframes */

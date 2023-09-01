@@ -736,6 +736,7 @@ int cdnsp_setup_addressable_priv_dev(struct cdnsp_device *pdev)
 	slot_ctx->dev_info |= cpu_to_le32(LAST_CTX(1));
 
 	switch (pdev->gadget.speed) {
+	case USB_SPEED_SUPER_PLUS_BY2:
 	case USB_SPEED_SUPER_PLUS:
 		slot_ctx->dev_info |= cpu_to_le32(SLOT_SPEED_SSP);
 		max_packets = MAX_PACKET(512);
@@ -833,8 +834,9 @@ static unsigned int cdnsp_get_endpoint_interval(struct usb_gadget *g,
 
 	switch (g->speed) {
 	case USB_SPEED_HIGH:
-	case USB_SPEED_SUPER_PLUS:
 	case USB_SPEED_SUPER:
+	case USB_SPEED_SUPER_PLUS:
+	case USB_SPEED_SUPER_PLUS_BY2:
 		if (usb_endpoint_xfer_int(pep->endpoint.desc) ||
 		    usb_endpoint_xfer_isoc(pep->endpoint.desc))
 			interval = cdnsp_parse_exponent_interval(g, pep);

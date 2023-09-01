@@ -395,7 +395,8 @@ static ssize_t usb_device_dump(char __user **buffer, size_t *nbytes,
 	int chix;
 	int ret, cnt = 0;
 	int parent_devnum = 0;
-	char *pages_start, *data_end, *speed;
+	char *pages_start, *data_end;
+	const char *speed;
 	unsigned int length;
 	ssize_t total_written = 0;
 	struct usb_device *childdev = NULL;
@@ -419,19 +420,16 @@ static ssize_t usb_device_dump(char __user **buffer, size_t *nbytes,
 	 * plugged into the root hub has a parent of 0.
 	 */
 	switch (usbdev->speed) {
-	case USB_SPEED_LOW:
-		speed = "1.5"; break;
 	case USB_SPEED_UNKNOWN:		/* usb 1.1 root hub code */
-	case USB_SPEED_FULL:
 		speed = "12"; break;
+	case USB_SPEED_LOW:
+	case USB_SPEED_FULL:
 	case USB_SPEED_HIGH:
-		speed = "480"; break;
 	case USB_SPEED_SUPER:
-		speed = "5000"; break;
 	case USB_SPEED_SUPER_PLUS:
-		speed = "10000"; break;
+	case USB_SPEED_SUPER_PLUS_BY2:
 	default:
-		speed = "??";
+		speed = usb_speed_value(usbdev->speed); break;
 	}
 	data_end = pages_start + sprintf(pages_start, format_topo,
 			bus->busnum, level, parent_devnum,

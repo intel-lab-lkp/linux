@@ -1408,7 +1408,7 @@ static void dwc3_get_properties(struct dwc3 *dwc)
 	tx_fifo_resize_max_num = 6;
 
 	dwc->maximum_speed = usb_get_maximum_speed(dev);
-	dwc->max_ssp_rate = usb_get_maximum_ssp_rate(dev);
+	dwc->max_ssp_gen = usb_get_maximum_ssp_gen(dev);
 	dwc->dr_mode = usb_get_dr_mode(dev);
 	dwc->hsphy_mode = of_usb_get_phy_mode(dev->of_node);
 
@@ -1575,6 +1575,7 @@ static void dwc3_check_params(struct dwc3 *dwc)
 			dev_warn(dev, "UDC doesn't support Gen 1\n");
 		break;
 	case USB_SPEED_SUPER_PLUS:
+	case USB_SPEED_SUPER_PLUS_BY2:
 		if ((DWC3_IP_IS(DWC32) &&
 		     hwparam_gen == DWC3_GHWPARAMS3_SSPHY_IFC_DIS) ||
 		    (!DWC3_IP_IS(DWC32) &&
@@ -1613,8 +1614,8 @@ static void dwc3_check_params(struct dwc3 *dwc)
 	 * set the default to support dual-lane for DWC_usb32 and single-lane
 	 * for DWC_usb31 for super-speed-plus.
 	 */
-	if (dwc->maximum_speed == USB_SPEED_SUPER_PLUS) {
-		switch (dwc->max_ssp_rate) {
+	if (dwc->maximum_speed >= USB_SPEED_SUPER_PLUS) {
+		switch (dwc->max_ssp_gen) {
 		case USB_SSP_GEN_2x1:
 			if (hwparam_gen == DWC3_GHWPARAMS3_SSPHY_IFC_GEN1)
 				dev_warn(dev, "UDC only supports Gen 1\n");
@@ -1628,14 +1629,15 @@ static void dwc3_check_params(struct dwc3 *dwc)
 		default:
 			switch (hwparam_gen) {
 			case DWC3_GHWPARAMS3_SSPHY_IFC_GEN2:
-				if (DWC3_IP_IS(DWC32))
-					dwc->max_ssp_rate = USB_SSP_GEN_2x2;
-				else
-					dwc->max_ssp_rate = USB_SSP_GEN_2x1;
+				if (DWC3_IP_IS(DWC32)) {
+					dwc->max_ssp_gen = USB_SSP_GEN_2x2;
+					dwc->maximum_speed = USB_SPEED_SUPER_PLUS_BY2;
+				} else
+					dwc->max_ssp_gen = USB_SSP_GEN_2x1;
 				break;
 			case DWC3_GHWPARAMS3_SSPHY_IFC_GEN1:
 				if (DWC3_IP_IS(DWC32))
-					dwc->max_ssp_rate = USB_SSP_GEN_1x2;
+					dwc->max_ssp_gen = USB_SSP_GEN_1x2;
 				break;
 			}
 			break;

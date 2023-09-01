@@ -657,7 +657,7 @@ struct usb_device {
 	enum usb_device_speed	speed;
 	unsigned int		rx_lanes;
 	unsigned int		tx_lanes;
-	enum usb_ssp_rate	ssp_rate;
+	enum usb_ssp_gen	ssp_gen;
 
 	struct usb_tt	*tt;
 	int		ttport;

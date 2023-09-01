@@ -1791,6 +1791,7 @@ u16 uvc_endpoint_max_bpi(struct usb_device *dev, struct usb_host_endpoint *ep)
 	switch (dev->speed) {
 	case USB_SPEED_SUPER:
 	case USB_SPEED_SUPER_PLUS:
+	case USB_SPEED_SUPER_PLUS_BY2:
 		return le16_to_cpu(ep->ss_ep_comp.wBytesPerInterval);
 	default:
 		psize = usb_endpoint_maxp(&ep->desc);

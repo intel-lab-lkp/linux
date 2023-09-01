@@ -2192,6 +2192,7 @@ static unsigned int xhci_get_block_size(struct usb_device *udev)
 		return HS_BLOCK;
 	case USB_SPEED_SUPER:
 	case USB_SPEED_SUPER_PLUS:
+	case USB_SPEED_SUPER_PLUS_BY2:
 		return SS_BLOCK;
 	case USB_SPEED_UNKNOWN:
 	default:
@@ -5102,15 +5103,15 @@ static void xhci_hcd_init_usb3_data(struct xhci_hcd *xhci, struct usb_hcd *hcd)
 	switch (minor_rev) {
 	case 2:
 		hcd->speed = HCD_USB32;
-		hcd->self.root_hub->speed = USB_SPEED_SUPER_PLUS;
+		hcd->self.root_hub->speed = USB_SPEED_SUPER_PLUS_BY2;
 		hcd->self.root_hub->rx_lanes = 2;
 		hcd->self.root_hub->tx_lanes = 2;
-		hcd->self.root_hub->ssp_rate = USB_SSP_GEN_2x2;
+		hcd->self.root_hub->ssp_gen = USB_SSP_GEN_2x2;
 		break;
 	case 1:
 		hcd->speed = HCD_USB31;
 		hcd->self.root_hub->speed = USB_SPEED_SUPER_PLUS;
-		hcd->self.root_hub->ssp_rate = USB_SSP_GEN_2x1;
+		hcd->self.root_hub->ssp_gen = USB_SSP_GEN_2x1;
 		break;
 	}
 	xhci_info(xhci, "Host supports USB 3.%x %sSuperSpeed\n",

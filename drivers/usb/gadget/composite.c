@@ -71,6 +71,7 @@ function_descriptors(struct usb_function *f,
 	 */
 
 	switch (speed) {
+	case USB_SPEED_SUPER_PLUS_BY2:
 	case USB_SPEED_SUPER_PLUS:
 		descriptors = f->ssp_descriptors;
 		if (descriptors)
@@ -169,6 +170,7 @@ int config_ep_by_speed_and_alt(struct usb_gadget *g,
 
 	/* select desired speed */
 	switch (g->speed) {
+	case USB_SPEED_SUPER_PLUS_BY2:
 	case USB_SPEED_SUPER_PLUS:
 		if (f->ssp_descriptors) {
 			speed_desc = f->ssp_descriptors;
@@ -650,6 +652,7 @@ static int config_desc(struct usb_composite_dev *cdev, unsigned w_value)
 check_config:
 		/* ignore configs that won't work at this speed */
 		switch (speed) {
+		case USB_SPEED_SUPER_PLUS_BY2:
 		case USB_SPEED_SUPER_PLUS:
 			if (!c->superspeed_plus)
 				continue;
@@ -688,8 +691,9 @@ static int count_configs(struct usb_composite_dev *cdev, unsigned type)
 			hs = 1;
 		if (gadget->speed == USB_SPEED_SUPER)
 			ss = 1;
-		if (gadget->speed == USB_SPEED_SUPER_PLUS)
+		if (gadget->speed >= USB_SPEED_SUPER_PLUS)
 			ssp = 1;
+
 		if (type == USB_DT_DEVICE_QUALIFIER)
 			hs = !hs;
 	}
@@ -803,7 +807,7 @@ static int bos_desc(struct usb_composite_dev *cdev)
 		u8 ssic;
 		int i;
 
-		if (cdev->gadget->max_ssp_rate == USB_SSP_GEN_2x2)
+		if (cdev->gadget->max_ssp_gen == USB_SSP_GEN_2x2)
 			ssac = 3;
 
 		/*
@@ -850,8 +854,8 @@ static int bos_desc(struct usb_composite_dev *cdev)
 
 			ssid = i >> 1;
 
-			if (cdev->gadget->max_ssp_rate == USB_SSP_GEN_2x1 ||
-			    cdev->gadget->max_ssp_rate == USB_SSP_GEN_UNKNOWN)
+			if (cdev->gadget->max_ssp_gen == USB_SSP_GEN_2x1 ||
+			    cdev->gadget->max_ssp_gen == USB_SSP_GEN_UNKNOWN)
 				mantissa = 10;
 			else
 				mantissa = 5 << ssid;

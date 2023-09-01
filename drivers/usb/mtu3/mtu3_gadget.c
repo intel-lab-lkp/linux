@@ -74,6 +74,7 @@ static int mtu3_ep_enable(struct mtu3_ep *mep)
 	switch (mtu->g.speed) {
 	case USB_SPEED_SUPER:
 	case USB_SPEED_SUPER_PLUS:
+	case USB_SPEED_SUPER_PLUS_BY2:
 		if (usb_endpoint_xfer_int(desc) ||
 				usb_endpoint_xfer_isoc(desc)) {
 			interval = desc->bInterval;

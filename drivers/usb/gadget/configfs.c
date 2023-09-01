@@ -327,18 +327,18 @@ static ssize_t gadget_dev_desc_max_speed_store(struct config_item *item,
 	if (gi->composite.gadget_driver.udc_name)
 		goto err;
 
-	if (strncmp(page, "super-speed-plus", 16) == 0)
-		gi->composite.max_speed = USB_SPEED_SUPER_PLUS;
-	else if (strncmp(page, "super-speed", 11) == 0)
-		gi->composite.max_speed = USB_SPEED_SUPER;
-	else if (strncmp(page, "high-speed", 10) == 0)
-		gi->composite.max_speed = USB_SPEED_HIGH;
-	else if (strncmp(page, "full-speed", 10) == 0)
-		gi->composite.max_speed = USB_SPEED_FULL;
-	else if (strncmp(page, "low-speed", 9) == 0)
-		gi->composite.max_speed = USB_SPEED_LOW;
-	else
+	gi->composite.max_speed = usb_speed_from_name(page);
+	switch (gi->composite.max_speed) {
+	case USB_SPEED_SUPER_PLUS_BY2:
+	case USB_SPEED_SUPER_PLUS:
+	case USB_SPEED_SUPER:
+	case USB_SPEED_HIGH:
+	case USB_SPEED_FULL:
+	case USB_SPEED_LOW:
+		break;
+	default:
 		goto err;
+	}
 
 	gi->composite.gadget_driver.max_speed = gi->composite.max_speed;
 

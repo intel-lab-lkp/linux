@@ -1087,25 +1087,31 @@ int xhci_setup_addressable_virt_dev(struct xhci_hcd *xhci, struct usb_device *ud
 	/* 3) Only the control endpoint is valid - one endpoint context */
 	slot_ctx->dev_info |= cpu_to_le32(LAST_CTX(1) | udev->route);
 	switch (udev->speed) {
+	case USB_SPEED_SUPER_PLUS_BY2:
 	case USB_SPEED_SUPER_PLUS:
-		slot_ctx->dev_info |= cpu_to_le32(SLOT_SPEED_SSP);
+		slot_ctx->dev_info |= (xhci->hci_version < 0x120) ?
+					cpu_to_le32(SLOT_SPEED_SSP) : 0;
 		max_packets = MAX_PACKET(512);
 		break;
 	case USB_SPEED_SUPER:
-		slot_ctx->dev_info |= cpu_to_le32(SLOT_SPEED_SS);
+		slot_ctx->dev_info |= (xhci->hci_version < 0x120) ?
+					cpu_to_le32(SLOT_SPEED_SS) : 0;
 		max_packets = MAX_PACKET(512);
 		break;
 	case USB_SPEED_HIGH:
-		slot_ctx->dev_info |= cpu_to_le32(SLOT_SPEED_HS);
+		slot_ctx->dev_info |= (xhci->hci_version < 0x120) ?
+					cpu_to_le32(SLOT_SPEED_HS) : 0;
 		max_packets = MAX_PACKET(64);
 		break;
 	/* USB core guesses at a 64-byte max packet first for FS devices */
 	case USB_SPEED_FULL:
-		slot_ctx->dev_info |= cpu_to_le32(SLOT_SPEED_FS);
+		slot_ctx->dev_info |= (xhci->hci_version < 0x120) ?
+					cpu_to_le32(SLOT_SPEED_FS) : 0;
 		max_packets = MAX_PACKET(64);
 		break;
 	case USB_SPEED_LOW:
-		slot_ctx->dev_info |= cpu_to_le32(SLOT_SPEED_LS);
+		slot_ctx->dev_info |= (xhci->hci_version < 0x120) ?
+					cpu_to_le32(SLOT_SPEED_LS) : 0;
 		max_packets = MAX_PACKET(8);
 		break;
 	default:
@@ -1276,6 +1282,7 @@ static unsigned int xhci_get_endpoint_interval(struct usb_device *udev,
 		}
 		fallthrough;	/* SS and HS isoc/int have same decoding */
 
+	case USB_SPEED_SUPER_PLUS_BY2:
 	case USB_SPEED_SUPER_PLUS:
 	case USB_SPEED_SUPER:
 		if (usb_endpoint_xfer_int(&ep->desc) ||

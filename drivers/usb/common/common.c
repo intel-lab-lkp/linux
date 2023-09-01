@@ -67,20 +67,33 @@ const char *usb_otg_state_string(enum usb_otg_state state)
 EXPORT_SYMBOL_GPL(usb_otg_state_string);
 
 static const char *const speed_names[] = {
-	[USB_SPEED_UNKNOWN] = "UNKNOWN",
+	[USB_SPEED_UNKNOWN] = "unknown-speed",
 	[USB_SPEED_LOW] = "low-speed",
 	[USB_SPEED_FULL] = "full-speed",
 	[USB_SPEED_HIGH] = "high-speed",
 	[USB_SPEED_WIRELESS] = "wireless",
 	[USB_SPEED_SUPER] = "super-speed",
 	[USB_SPEED_SUPER_PLUS] = "super-speed-plus",
+	[USB_SPEED_SUPER_PLUS_BY2] = "super-speed-plus-by2",
 };
 
-static const char *const ssp_rate[] = {
-	[USB_SSP_GEN_UNKNOWN] = "UNKNOWN",
+static const char *const ssp_gen_names[] = {
+	[USB_SSP_GEN_UNKNOWN] = "super-speed-plus-gen-unknown",
 	[USB_SSP_GEN_2x1] = "super-speed-plus-gen2x1",
 	[USB_SSP_GEN_1x2] = "super-speed-plus-gen1x2",
 	[USB_SSP_GEN_2x2] = "super-speed-plus-gen2x2",
+};
+
+/* Mbps */
+static const char *const speed_values[] = {
+	[USB_SPEED_UNKNOWN] = "unknown-value",
+	[USB_SPEED_LOW] = "1.5",
+	[USB_SPEED_FULL] = "12",
+	[USB_SPEED_HIGH] = "480",
+	[USB_SPEED_WIRELESS] = "480",
+	[USB_SPEED_SUPER] = "5000",
+	[USB_SPEED_SUPER_PLUS] = "10000",
+	[USB_SPEED_SUPER_PLUS_BY2] = "20000",
 };
 
 /**
@@ -96,6 +109,56 @@ const char *usb_speed_string(enum usb_device_speed speed)
 	return speed_names[speed];
 }
 EXPORT_SYMBOL_GPL(usb_speed_string);
+
+/**
+ * usb_speed_value() - Returns human readable speed value.
+ * @speed: The speed to return human-readable value for. If it's not
+ *   any of the speeds defined in usb_device_speed enum, value for
+ *   USB_SPEED_UNKNOWN will be returned.
+ */
+const char *usb_speed_value(enum usb_device_speed speed)
+{
+	if (speed < 0 || speed >= ARRAY_SIZE(speed_values))
+		speed = USB_SPEED_UNKNOWN;
+	return speed_values[speed];
+}
+EXPORT_SYMBOL_GPL(usb_speed_value);
+
+/**
+ * usb_ssp_gen_name() - Returns human readable-name of ssp generation.
+ * @gen: The ssp generation to return human-readable name for. If it's
+ *   not any of the values defined in usb_ssp_gen enum, name for
+ *   USB_SSP_GEN_UNKNOWN will be returned.
+ */
+const char *usb_ssp_gen_name(enum usb_ssp_gen gen)
+{
+	if (gen < 0 || gen >= ARRAY_SIZE(ssp_gen_names))
+		gen = USB_SSP_GEN_UNKNOWN;
+	return ssp_gen_names[gen];
+}
+EXPORT_SYMBOL_GPL(usb_ssp_gen_name);
+
+/**
+ * usb_speed_from_name() - Returns usb_device_speed enum from human
+ * readable name.
+ * @speed_name: The speed name to return usb_device_speed enum for,
+ *   which can be defined in speed_names or ssp_gen_names. USB_SPEED_UNKNOWN
+ *   will be returned if the name can't be recognized.
+ */
+enum usb_device_speed usb_speed_from_name(const char *speed_name)
+{
+	int ret;
+
+	ret = match_string(ssp_gen_names, ARRAY_SIZE(ssp_gen_names), speed_name);
+	if (ret == USB_SSP_GEN_2x2)
+		return USB_SPEED_SUPER_PLUS_BY2;
+	else if (ret > 0)
+		return USB_SPEED_SUPER_PLUS;
+
+	ret = match_string(speed_names, ARRAY_SIZE(speed_names), speed_name);
+	return (ret < 0) ? USB_SPEED_UNKNOWN : ret;
+}
+EXPORT_SYMBOL_GPL(usb_speed_from_name);
 
 /**
  * usb_get_maximum_speed - Get maximum requested speed for a given USB
@@ -114,25 +177,21 @@ enum usb_device_speed usb_get_maximum_speed(struct device *dev)
 	if (ret < 0)
 		return USB_SPEED_UNKNOWN;
 
-	ret = match_string(ssp_rate, ARRAY_SIZE(ssp_rate), maximum_speed);
-	if (ret > 0)
-		return USB_SPEED_SUPER_PLUS;
+	return usb_speed_from_name(maximum_speed);
 
-	ret = match_string(speed_names, ARRAY_SIZE(speed_names), maximum_speed);
-	return (ret < 0) ? USB_SPEED_UNKNOWN : ret;
 }
 EXPORT_SYMBOL_GPL(usb_get_maximum_speed);
 
 /**
- * usb_get_maximum_ssp_rate - Get the signaling rate generation and lane count
+ * usb_get_maximum_ssp_gen - Get the SSP signaling generation and lane count
  *	of a SuperSpeed Plus capable device.
  * @dev: Pointer to the given USB controller device
  *
  * If the string from "maximum-speed" property is super-speed-plus-genXxY where
  * 'X' is the generation number and 'Y' is the number of lanes, then this
- * function returns the corresponding enum usb_ssp_rate.
+ * function returns the corresponding enum usb_ssp_gen.
  */
-enum usb_ssp_rate usb_get_maximum_ssp_rate(struct device *dev)
+enum usb_ssp_gen usb_get_maximum_ssp_gen(struct device *dev)
 {
 	const char *maximum_speed;
 	int ret;
@@ -141,10 +200,10 @@ enum usb_ssp_rate usb_get_maximum_ssp_rate(struct device *dev)
 	if (ret < 0)
 		return USB_SSP_GEN_UNKNOWN;
 
-	ret = match_string(ssp_rate, ARRAY_SIZE(ssp_rate), maximum_speed);
+	ret = match_string(ssp_gen_names, ARRAY_SIZE(ssp_gen_names), maximum_speed);
 	return (ret < 0) ? USB_SSP_GEN_UNKNOWN : ret;
 }
-EXPORT_SYMBOL_GPL(usb_get_maximum_ssp_rate);
+EXPORT_SYMBOL_GPL(usb_get_maximum_ssp_gen);
 
 /**
  * usb_state_string - Returns human readable name for the state.

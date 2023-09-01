@@ -571,19 +571,15 @@ static void usb_audio_make_longname(struct usb_device *dev,
 
 	switch (snd_usb_get_speed(dev)) {
 	case USB_SPEED_LOW:
-		strlcat(card->longname, ", low speed", sizeof(card->longname));
-		break;
 	case USB_SPEED_FULL:
-		strlcat(card->longname, ", full speed", sizeof(card->longname));
-		break;
 	case USB_SPEED_HIGH:
-		strlcat(card->longname, ", high speed", sizeof(card->longname));
-		break;
 	case USB_SPEED_SUPER:
-		strlcat(card->longname, ", super speed", sizeof(card->longname));
-		break;
 	case USB_SPEED_SUPER_PLUS:
-		strlcat(card->longname, ", super speed plus", sizeof(card->longname));
+	case USB_SPEED_SUPER_PLUS_BY2:
+		strlcat(card->longname, ", ", sizeof(card->longname));
+		strlcat(card->longname,
+			usb_speed_string(snd_usb_get_speed(dev)),
+			sizeof(card->longname));
 		break;
 	default:
 		break;
@@ -612,6 +608,7 @@ static int snd_usb_audio_create(struct usb_interface *intf,
 	case USB_SPEED_HIGH:
 	case USB_SPEED_SUPER:
 	case USB_SPEED_SUPER_PLUS:
+	case USB_SPEED_SUPER_PLUS_BY2:
 		break;
 	default:
 		dev_err(&dev->dev, "unknown device speed %d\n", snd_usb_get_speed(dev));

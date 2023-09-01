@@ -146,32 +146,21 @@ static ssize_t speed_show(struct device *dev, struct device_attribute *attr,
 			  char *buf)
 {
 	struct usb_device *udev;
-	char *speed;
+	const char *speed;
 
 	udev = to_usb_device(dev);
 
 	switch (udev->speed) {
-	case USB_SPEED_LOW:
-		speed = "1.5";
-		break;
 	case USB_SPEED_UNKNOWN:
+		speed = "12"; break;
+	case USB_SPEED_LOW:
 	case USB_SPEED_FULL:
-		speed = "12";
-		break;
 	case USB_SPEED_HIGH:
-		speed = "480";
-		break;
 	case USB_SPEED_SUPER:
-		speed = "5000";
-		break;
 	case USB_SPEED_SUPER_PLUS:
-		if (udev->ssp_rate == USB_SSP_GEN_2x2)
-			speed = "20000";
-		else
-			speed = "10000";
-		break;
+	case USB_SPEED_SUPER_PLUS_BY2:
 	default:
-		speed = "unknown";
+		speed = usb_speed_value(udev->speed); break;
 	}
 	return sysfs_emit(buf, "%s\n", speed);
 }
@@ -656,8 +645,7 @@ static int add_power_attributes(struct device *dev)
 		if (udev->usb2_hw_lpm_capable == 1)
 			rc = sysfs_merge_group(&dev->kobj,
 					&usb2_hardware_lpm_attr_group);
-		if ((udev->speed == USB_SPEED_SUPER ||
-		     udev->speed == USB_SPEED_SUPER_PLUS) &&
+		if (udev->speed >= USB_SPEED_SUPER &&
 				udev->lpm_capable == 1)
 			rc = sysfs_merge_group(&dev->kobj,
 					&usb3_hardware_lpm_attr_group);

@@ -323,6 +323,7 @@ static int usb_parse_endpoint(struct device *ddev, int cfgno,
 	if (usb_endpoint_xfer_int(d)) {
 		i = 1;
 		switch (udev->speed) {
+		case USB_SPEED_SUPER_PLUS_BY2:
 		case USB_SPEED_SUPER_PLUS:
 		case USB_SPEED_SUPER:
 		case USB_SPEED_HIGH:
@@ -433,6 +434,7 @@ static int usb_parse_endpoint(struct device *ddev, int cfgno,
 		break;
 	case USB_SPEED_SUPER:
 	case USB_SPEED_SUPER_PLUS:
+	case USB_SPEED_SUPER_PLUS_BY2:
 		maxpacket_maxes = super_speed_maxpacket_maxes;
 		break;
 	}

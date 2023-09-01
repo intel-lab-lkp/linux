@@ -1250,6 +1250,7 @@ static int cdnsp_run(struct cdnsp_device *pdev,
 	temp = readl(&pdev->port3x_regs->mode_addr);
 
 	switch (speed) {
+	case USB_SPEED_SUPER_PLUS_BY2:
 	case USB_SPEED_SUPER_PLUS:
 		temp |= CFG_3XPORT_SSP_SUPPORT;
 		break;
@@ -1745,6 +1746,7 @@ void cdnsp_irq_reset(struct cdnsp_device *pdev)
 	spin_lock(&pdev->lock);
 
 	switch (pdev->gadget.speed) {
+	case USB_SPEED_SUPER_PLUS_BY2:
 	case USB_SPEED_SUPER_PLUS:
 	case USB_SPEED_SUPER:
 		cdnsp_gadget_ep0_desc.wMaxPacketSize = cpu_to_le16(512);
@@ -1873,6 +1875,7 @@ static int __cdnsp_gadget_init(struct cdns *cdns)
 	case USB_SPEED_HIGH:
 	case USB_SPEED_SUPER:
 	case USB_SPEED_SUPER_PLUS:
+	case USB_SPEED_SUPER_PLUS_BY2:
 		break;
 	default:
 		dev_err(cdns->dev, "invalid speed parameter %d\n", max_speed);

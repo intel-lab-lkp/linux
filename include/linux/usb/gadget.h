@@ -324,8 +324,8 @@ struct usb_gadget_ops {
 			struct usb_gadget_driver *);
 	int	(*udc_stop)(struct usb_gadget *);
 	void	(*udc_set_speed)(struct usb_gadget *, enum usb_device_speed);
-	void	(*udc_set_ssp_rate)(struct usb_gadget *gadget,
-			enum usb_ssp_rate rate);
+	void	(*udc_set_ssp_gen)(struct usb_gadget *gadget,
+			enum usb_ssp_gen gen);
 	void	(*udc_async_callbacks)(struct usb_gadget *gadget, bool enable);
 	struct usb_ep *(*match_ep)(struct usb_gadget *,
 			struct usb_endpoint_descriptor *,
@@ -420,8 +420,8 @@ struct usb_gadget {
 	enum usb_device_speed		max_speed;
 
 	/* USB SuperSpeed Plus only */
-	enum usb_ssp_rate		ssp_rate;
-	enum usb_ssp_rate		max_ssp_rate;
+	enum usb_ssp_gen		ssp_gen;
+	enum usb_ssp_gen		max_ssp_gen;
 
 	enum usb_device_state		state;
 	const char			*name;

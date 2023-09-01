@@ -2498,23 +2498,23 @@ static void dwc3_stop_active_transfers(struct dwc3 *dwc)
 
 static void __dwc3_gadget_set_ssp_rate(struct dwc3 *dwc)
 {
-	enum usb_ssp_rate	ssp_rate = dwc->gadget_ssp_rate;
+	enum usb_ssp_gen	ssp_gen = dwc->gadget_ssp_gen;
 	u32			reg;
 
-	if (ssp_rate == USB_SSP_GEN_UNKNOWN)
-		ssp_rate = dwc->max_ssp_rate;
+	if (ssp_gen == USB_SSP_GEN_UNKNOWN)
+		ssp_gen = dwc->max_ssp_gen;
 
 	reg = dwc3_readl(dwc->regs, DWC3_DCFG);
 	reg &= ~DWC3_DCFG_SPEED_MASK;
 	reg &= ~DWC3_DCFG_NUMLANES(~0);
 
-	if (ssp_rate == USB_SSP_GEN_1x2)
+	if (ssp_gen == USB_SSP_GEN_1x2)
 		reg |= DWC3_DCFG_SUPERSPEED;
-	else if (dwc->max_ssp_rate != USB_SSP_GEN_1x2)
+	else if (dwc->max_ssp_gen != USB_SSP_GEN_1x2)
 		reg |= DWC3_DCFG_SUPERSPEED_PLUS;
 
-	if (ssp_rate != USB_SSP_GEN_2x1 &&
-	    dwc->max_ssp_rate != USB_SSP_GEN_2x1)
+	if (ssp_gen != USB_SSP_GEN_2x1 &&
+	    dwc->max_ssp_gen != USB_SSP_GEN_2x1)
 		reg |= DWC3_DCFG_NUMLANES(1);
 
 	dwc3_writel(dwc->regs, DWC3_DCFG, reg);
@@ -2529,7 +2529,7 @@ static void __dwc3_gadget_set_speed(struct dwc3 *dwc)
 	if (speed == USB_SPEED_UNKNOWN || speed > dwc->maximum_speed)
 		speed = dwc->maximum_speed;
 
-	if (speed == USB_SPEED_SUPER_PLUS &&
+	if (speed >= USB_SPEED_SUPER_PLUS &&
 	    DWC3_IP_IS(DWC32)) {
 		__dwc3_gadget_set_ssp_rate(dwc);
 		return;
@@ -2566,6 +2566,7 @@ static void __dwc3_gadget_set_speed(struct dwc3 *dwc)
 			reg |= DWC3_DCFG_SUPERSPEED;
 			break;
 		case USB_SPEED_SUPER_PLUS:
+		case USB_SPEED_SUPER_PLUS_BY2:
 			if (DWC3_IP_IS(DWC3))
 				reg |= DWC3_DCFG_SUPERSPEED;
 			else
@@ -3028,15 +3029,22 @@ static void dwc3_gadget_set_speed(struct usb_gadget *g,
 	spin_unlock_irqrestore(&dwc->lock, flags);
 }
 
-static void dwc3_gadget_set_ssp_rate(struct usb_gadget *g,
-				     enum usb_ssp_rate rate)
+static void dwc3_gadget_set_ssp_gen(struct usb_gadget *g,
+				    enum usb_ssp_gen gen)
 {
 	struct dwc3		*dwc = gadget_to_dwc(g);
 	unsigned long		flags;
 
 	spin_lock_irqsave(&dwc->lock, flags);
-	dwc->gadget_max_speed = USB_SPEED_SUPER_PLUS;
-	dwc->gadget_ssp_rate = rate;
+	switch (gen) {
+	case USB_SSP_GEN_2x2:
+		dwc->gadget_max_speed = USB_SPEED_SUPER_PLUS_BY2;
+		break;
+	default:
+		dwc->gadget_max_speed = USB_SPEED_SUPER_PLUS;
+		break;
+	}
+	dwc->gadget_ssp_gen = gen;
 	spin_unlock_irqrestore(&dwc->lock, flags);
 }
 
@@ -3123,7 +3131,7 @@ static const struct usb_gadget_ops dwc3_gadget_ops = {
 	.udc_start		= dwc3_gadget_start,
 	.udc_stop		= dwc3_gadget_stop,
 	.udc_set_speed		= dwc3_gadget_set_speed,
-	.udc_set_ssp_rate	= dwc3_gadget_set_ssp_rate,
+	.udc_set_ssp_gen	= dwc3_gadget_set_ssp_gen,
 	.get_config_params	= dwc3_gadget_config_params,
 	.vbus_draw		= dwc3_gadget_vbus_draw,
 	.check_config		= dwc3_gadget_check_config,
@@ -4071,7 +4079,7 @@ static void dwc3_gadget_conndone_interrupt(struct dwc3 *dwc)
 	if (DWC3_IP_IS(DWC32))
 		lanes = DWC3_DSTS_CONNLANES(reg) + 1;
 
-	dwc->gadget->ssp_rate = USB_SSP_GEN_UNKNOWN;
+	dwc->gadget->ssp_gen = USB_SSP_GEN_UNKNOWN;
 
 	/*
 	 * RAMClkSel is reset to 0 after USB reset, so it must be reprogrammed
@@ -4086,12 +4094,14 @@ static void dwc3_gadget_conndone_interrupt(struct dwc3 *dwc)
 	case DWC3_DSTS_SUPERSPEED_PLUS:
 		dwc3_gadget_ep0_desc.wMaxPacketSize = cpu_to_le16(512);
 		dwc->gadget->ep0->maxpacket = 512;
-		dwc->gadget->speed = USB_SPEED_SUPER_PLUS;
 
-		if (lanes > 1)
-			dwc->gadget->ssp_rate = USB_SSP_GEN_2x2;
-		else
-			dwc->gadget->ssp_rate = USB_SSP_GEN_2x1;
+		if (lanes > 1) {
+			dwc->gadget->ssp_gen = USB_SSP_GEN_2x2;
+			dwc->gadget->speed = USB_SPEED_SUPER_PLUS_BY2;
+		} else {
+			dwc->gadget->ssp_gen = USB_SSP_GEN_2x1;
+			dwc->gadget->speed = USB_SPEED_SUPER_PLUS;
+		}
 		break;
 	case DWC3_DSTS_SUPERSPEED:
 		/*
@@ -4116,7 +4126,7 @@ static void dwc3_gadget_conndone_interrupt(struct dwc3 *dwc)
 
 		if (lanes > 1) {
 			dwc->gadget->speed = USB_SPEED_SUPER_PLUS;
-			dwc->gadget->ssp_rate = USB_SSP_GEN_1x2;
+			dwc->gadget->ssp_gen = USB_SSP_GEN_1x2;
 		}
 		break;
 	case DWC3_DSTS_HIGHSPEED:
@@ -4592,7 +4602,7 @@ int dwc3_gadget_init(struct dwc3 *dwc)
 	dev->platform_data		= dwc;
 	dwc->gadget->ops		= &dwc3_gadget_ops;
 	dwc->gadget->speed		= USB_SPEED_UNKNOWN;
-	dwc->gadget->ssp_rate		= USB_SSP_GEN_UNKNOWN;
+	dwc->gadget->ssp_gen		= USB_SSP_GEN_UNKNOWN;
 	dwc->gadget->sg_supported	= true;
 	dwc->gadget->name		= "dwc3-gadget";
 	dwc->gadget->lpm_capable	= !dwc->usb2_gadget_lpm_disable;
@@ -4620,7 +4630,7 @@ int dwc3_gadget_init(struct dwc3 *dwc)
 				dwc->revision);
 
 	dwc->gadget->max_speed		= dwc->maximum_speed;
-	dwc->gadget->max_ssp_rate	= dwc->max_ssp_rate;
+	dwc->gadget->max_ssp_gen	= dwc->max_ssp_gen;
 
 	/*
 	 * REVISIT: Here we should clear all pending IRQs to be
@@ -4637,8 +4647,8 @@ int dwc3_gadget_init(struct dwc3 *dwc)
 		goto err5;
 	}
 
-	if (DWC3_IP_IS(DWC32) && dwc->maximum_speed == USB_SPEED_SUPER_PLUS)
-		dwc3_gadget_set_ssp_rate(dwc->gadget, dwc->max_ssp_rate);
+	if (DWC3_IP_IS(DWC32) && dwc->maximum_speed >= USB_SPEED_SUPER_PLUS)
+		dwc3_gadget_set_ssp_gen(dwc->gadget, dwc->max_ssp_gen);
 	else
 		dwc3_gadget_set_speed(dwc->gadget, dwc->maximum_speed);
 

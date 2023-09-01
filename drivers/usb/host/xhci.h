@@ -345,7 +345,10 @@ struct xhci_op_regs {
 #define DEV_SUPERSPEED_ANY(p)	(((p) & DEV_SPEED_MASK) >= XDEV_SS)
 #define DEV_PORT_SPEED(p)	(((p) >> 10) & 0x0f)
 
-/* Bits 20:23 in the Slot Context are the speed for the device */
+/* Bits 20:23 in the Slot Context are the speed for the device.
+ * This field has been deprecated since xHCI spec revision 1.2
+ * and shall be reserved.
+ */
 #define	SLOT_SPEED_FS		(XDEV_FS << 10)
 #define	SLOT_SPEED_LS		(XDEV_LS << 10)
 #define	SLOT_SPEED_HS		(XDEV_HS << 10)

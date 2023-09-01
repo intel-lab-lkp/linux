@@ -1181,10 +1181,19 @@ enum usb_device_speed {
 	USB_SPEED_LOW, USB_SPEED_FULL,		/* usb 1.1 */
 	USB_SPEED_HIGH,				/* usb 2.0 */
 	USB_SPEED_WIRELESS,			/* wireless (usb 2.5) */
-	USB_SPEED_SUPER,			/* usb 3.0 */
-	USB_SPEED_SUPER_PLUS,			/* usb 3.1 */
+	USB_SPEED_SUPER,			/* usb 3.0 5Gbps */
+	USB_SPEED_SUPER_PLUS,			/* usb 3.1 10Gbps */
+	USB_SPEED_SUPER_PLUS_BY2,		/* usb 3.2 20Gbps */
 };
 
+/* USB 3.2 SuperSpeed Plus phy signaling generation and lane count */
+
+enum usb_ssp_gen {
+	USB_SSP_GEN_UNKNOWN = 0,
+	USB_SSP_GEN_2x1,
+	USB_SSP_GEN_1x2,
+	USB_SSP_GEN_2x2,
+};
 
 enum usb_device_state {
 	/* NOTATTACHED isn't in the USB spec, and this state acts

@@ -1266,8 +1266,8 @@ static inline void usb_gadget_udc_set_speed(struct usb_udc *udc,
 	else
 		s = min(speed, gadget->max_speed);
 
-	if (s == USB_SPEED_SUPER_PLUS && gadget->ops->udc_set_ssp_rate)
-		gadget->ops->udc_set_ssp_rate(gadget, gadget->max_ssp_rate);
+	if (s >= USB_SPEED_SUPER_PLUS && gadget->ops->udc_set_ssp_gen)
+		gadget->ops->udc_set_ssp_gen(gadget, gadget->max_ssp_gen);
 	else if (gadget->ops->udc_set_speed)
 		gadget->ops->udc_set_speed(gadget, s);
 }

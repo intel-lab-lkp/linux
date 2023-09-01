@@ -1298,6 +1298,7 @@ static int btusb_submit_intr_urb(struct hci_dev *hdev, gfp_t mem_flags)
 	 * force_poll_sync changes.
 	 */
 	switch (urb->dev->speed) {
+	case USB_SPEED_SUPER_PLUS_BY2:
 	case USB_SPEED_SUPER_PLUS:
 	case USB_SPEED_SUPER:	/* units are 125us */
 		data->intr_interval = usecs_to_jiffies(urb->interval * 125);

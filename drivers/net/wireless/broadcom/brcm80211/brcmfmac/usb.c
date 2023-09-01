@@ -1427,14 +1427,19 @@ brcmf_usb_probe(struct usb_interface *intf, const struct usb_device_id *id)
 
 	devinfo->ifnum = desc->bInterfaceNumber;
 
-	if (usb->speed == USB_SPEED_SUPER_PLUS)
-		brcmf_dbg(USB, "Broadcom super speed plus USB WLAN interface detected\n");
-	else if (usb->speed == USB_SPEED_SUPER)
-		brcmf_dbg(USB, "Broadcom super speed USB WLAN interface detected\n");
-	else if (usb->speed == USB_SPEED_HIGH)
-		brcmf_dbg(USB, "Broadcom high speed USB WLAN interface detected\n");
-	else
-		brcmf_dbg(USB, "Broadcom full speed USB WLAN interface detected\n");
+	switch (usb->speed) {
+	case USB_SPEED_SUPER_PLUS_BY2:
+	case USB_SPEED_SUPER_PLUS:
+	case USB_SPEED_SUPER:
+	case USB_SPEED_HIGH:
+		brcmf_dbg(USB, "Broadcom %s USB WLAN interface detected\n",
+			  usb_speed_string(usb->speed));
+		break;
+	default:
+		brcmf_dbg(USB, "Broadcom %s USB WLAN interface detected\n",
+			  usb_speed_string(USB_SPEED_FULL));
+		break;
+	}
 
 	ret = brcmf_usb_probe_cb(devinfo, id->driver_info);
 	if (ret)

@@ -977,7 +977,7 @@ static int tegra_xusb_usb3_port_parse_dt(struct tegra_xusb_usb3_port *usb3)
 		maximum_speed =  usb_get_maximum_speed(&port->dev);
 		if (maximum_speed == USB_SPEED_SUPER)
 			usb3->disable_gen2 = true;
-		else if (maximum_speed == USB_SPEED_SUPER_PLUS)
+		else if (maximum_speed >= USB_SPEED_SUPER_PLUS)
 			usb3->disable_gen2 = false;
 		else
 			return -EINVAL;
