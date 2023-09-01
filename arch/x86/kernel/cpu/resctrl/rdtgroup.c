@@ -895,6 +895,17 @@ static int rdt_shareable_bits_show(struct kernfs_open_file *of,
 	return 0;
 }
 
+static int rdt_has_sparse_bitmaps_show(struct kernfs_open_file *of,
+				       struct seq_file *seq, void *v)
+{
+	struct resctrl_schema *s = of->kn->parent->priv;
+	struct rdt_resource *r = s->res;
+
+	seq_printf(seq, "%u\n", r->cache.arch_has_sparse_bitmaps);
+
+	return 0;
+}
+
 /**
  * rdt_bit_usage_show - Display current usage of resources
  *
@@ -1838,6 +1849,13 @@ static struct rftype res_common_files[] = {
 		.kf_ops		= &rdtgroup_kf_single_ops,
 		.seq_show	= rdtgroup_size_show,
 		.fflags		= RF_CTRL_BASE,
+	},
+	{
+		.name		= "sparse_bitmaps",
+		.mode		= 0444,
+		.kf_ops		= &rdtgroup_kf_single_ops,
+		.seq_show	= rdt_has_sparse_bitmaps_show,
+		.fflags		= RF_CTRL_INFO | RFTYPE_RES_CACHE,
 	},
 
 };
