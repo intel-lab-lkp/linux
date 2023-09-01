@@ -284,6 +284,29 @@ amd_cpuid4(int leaf, union _cpuid4_leaf_eax *eax,
 	case 3:
 		if (!l3.val)
 			return;
+
+		/*
+		 * AMD's "AMD64 Architecture Programmer's Manual Volume 3" states in
+		 * "Appendix E.4.5 Function 8000_0006h - L2 Cache and L3 Cache Information"
+		 * under Table E-4 "L2/L3 Cache and TLB Associativity Field Encoding"
+		 *
+		 * that a magic value of "9" means:
+		 * "Value for all fields should be determined from Fn8000_001D."
+		 * (this means that the cpuid(0x8000001d) should be used instead).
+		 */
+		if (l3.assoc == 9) {
+			/*
+			 * As a result, stop any further processing since the values
+			 * could be wrong/misleading/missing.
+			 *
+			 */
+
+			pr_warn("Falling back to recommended L3 Cache Information values.");
+			cpuid_count(0x8000001d, leaf, &eax->full, &ebx->full, &ecx->full, &dummy);
+
+			return;
+		}
+
 		assoc = assocs[l3.assoc];
 		line_size = l3.line_size;
 		lines_per_tag = l3.lines_per_tag;
