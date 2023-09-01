@@ -44,7 +44,6 @@ int __tty_check_change(struct tty_struct *tty, int sig)
 
 	spin_lock_irqsave(&tty->ctrl.lock, flags);
 	tty_pgrp = tty->ctrl.pgrp;
-	spin_unlock_irqrestore(&tty->ctrl.lock, flags);
 
 	if (tty_pgrp && pgrp != tty_pgrp) {
 		if (is_ignored(sig)) {
@@ -58,6 +57,7 @@ int __tty_check_change(struct tty_struct *tty, int sig)
 			ret = -ERESTARTSYS;
 		}
 	}
+	spin_unlock_irqrestore(&tty->ctrl.lock, flags);
 	rcu_read_unlock();
 
 	if (!tty_pgrp)
