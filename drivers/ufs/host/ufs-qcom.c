@@ -1389,18 +1389,21 @@ static int ufs_qcom_set_core_clk_ctrl(struct ufs_hba *hba,
 		core_clk_ctrl_reg |= FIELD_PREP(CLK_1US_CYCLES_MASK, cycles_in_1us);
 	}
 
-	/* Clear CORE_CLK_DIV_EN */
-	core_clk_ctrl_reg &= ~DME_VS_CORE_CLK_CTRL_CORE_CLK_DIV_EN_BIT;
+	/* Enable CORE_CLK_DIV_EN for scale up condition */
+	if (is_max_freq)
+		core_clk_ctrl_reg |= CORE_CLK_DIV_EN_BIT;
 
 	ret = ufshcd_dme_set(hba,
 			    UIC_ARG_MIB(DME_VS_CORE_CLK_CTRL),
 			    core_clk_ctrl_reg);
+	if (ret)
+		return ret;
 	/*
 	 * UFS host controller V4.0.0 onwards needs to program
 	 * PA_VS_CORE_CLK_40NS_CYCLES attribute per programmed
 	 * frequency of unipro core clk of UFS host controller.
 	 */
-	if (!ret && (host->hw_ver.major >= 4)) {
+	if (host->hw_ver.major >= 4) {
 		if (cycles_in_40ns > PA_VS_CORE_CLK_40NS_CYCLES_MASK)
 			return -EINVAL;
 
@@ -1451,26 +1454,26 @@ static int ufs_qcom_clk_scale_up_post_change(struct ufs_hba *hba)
 static int ufs_qcom_clk_scale_down_pre_change(struct ufs_hba *hba)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
-	int err;
-	u32 core_clk_ctrl_reg;
+	int ret;
+	u32 reg;
 
 	if (!ufs_qcom_cap_qunipro(host))
 		return 0;
 
-	err = ufshcd_dme_get(hba,
+	ret = ufshcd_dme_get(hba,
 			    UIC_ARG_MIB(DME_VS_CORE_CLK_CTRL),
-			    &core_clk_ctrl_reg);
+			    &reg);
+	if (ret)
+		return ret;
 
 	/* make sure CORE_CLK_DIV_EN is cleared */
-	if (!err &&
-	    (core_clk_ctrl_reg & DME_VS_CORE_CLK_CTRL_CORE_CLK_DIV_EN_BIT)) {
-		core_clk_ctrl_reg &= ~DME_VS_CORE_CLK_CTRL_CORE_CLK_DIV_EN_BIT;
-		err = ufshcd_dme_set(hba,
+	if (reg & CORE_CLK_DIV_EN_BIT) {
+		reg &= ~CORE_CLK_DIV_EN_BIT;
+		ret = ufshcd_dme_set(hba,
 				    UIC_ARG_MIB(DME_VS_CORE_CLK_CTRL),
-				    core_clk_ctrl_reg);
+				    reg);
 	}
-
-	return err;
+	return ret;
 }
 
 static int ufs_qcom_clk_scale_down_post_change(struct ufs_hba *hba)
