@@ -1249,7 +1249,7 @@ static void zram_meta_free(struct zram *zram, u64 disksize)
 		zram_free_page(zram, index);
 
 	zs_destroy_pool(zram->mem_pool);
-	vfree(zram->table);
+	kvfree(zram->table);
 }
 
 static bool zram_meta_alloc(struct zram *zram, u64 disksize)
@@ -1257,13 +1257,14 @@ static bool zram_meta_alloc(struct zram *zram, u64 disksize)
 	size_t num_pages;
 
 	num_pages = disksize >> PAGE_SHIFT;
-	zram->table = vzalloc_node(array_size(num_pages, sizeof(*zram->table)), node_id);
+	zram->table = kvzalloc_node(array_size(num_pages, sizeof(*zram->table)),
+				    GFP_KERNEL, node_id);
 	if (!zram->table)
 		return false;
 
 	zram->mem_pool = zs_create_pool(zram->disk->disk_name);
 	if (!zram->mem_pool) {
-		vfree(zram->table);
+		kvfree(zram->table);
 		return false;
 	}
 
