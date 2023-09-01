@@ -515,62 +515,12 @@ static void btree_invalidate_folio(struct folio *folio, size_t offset,
 	}
 }
 
-#ifdef DEBUG
-static bool btree_dirty_folio(struct address_space *mapping,
-		struct folio *folio)
-{
-	struct btrfs_fs_info *fs_info = btrfs_sb(mapping->host->i_sb);
-	struct btrfs_subpage *subpage;
-	struct extent_buffer *eb;
-	int cur_bit = 0;
-	u64 page_start = folio_pos(folio);
-
-	if (fs_info->sectorsize == PAGE_SIZE) {
-		eb = folio_get_private(folio);
-		BUG_ON(!eb);
-		BUG_ON(!test_bit(EXTENT_BUFFER_DIRTY, &eb->bflags));
-		BUG_ON(!atomic_read(&eb->refs));
-		btrfs_assert_tree_write_locked(eb);
-		return filemap_dirty_folio(mapping, folio);
-	}
-	subpage = folio_get_private(folio);
-
-	ASSERT(subpage->dirty_bitmap);
-	while (cur_bit < BTRFS_SUBPAGE_BITMAP_SIZE) {
-		unsigned long flags;
-		u64 cur;
-		u16 tmp = (1 << cur_bit);
-
-		spin_lock_irqsave(&subpage->lock, flags);
-		if (!(tmp & subpage->dirty_bitmap)) {
-			spin_unlock_irqrestore(&subpage->lock, flags);
-			cur_bit++;
-			continue;
-		}
-		spin_unlock_irqrestore(&subpage->lock, flags);
-		cur = page_start + cur_bit * fs_info->sectorsize;
-
-		eb = find_extent_buffer(fs_info, cur);
-		ASSERT(eb);
-		ASSERT(test_bit(EXTENT_BUFFER_DIRTY, &eb->bflags));
-		ASSERT(atomic_read(&eb->refs));
-		btrfs_assert_tree_write_locked(eb);
-		free_extent_buffer(eb);
-
-		cur_bit += (fs_info->nodesize >> fs_info->sectorsize_bits);
-	}
-	return filemap_dirty_folio(mapping, folio);
-}
-#else
-#define btree_dirty_folio filemap_dirty_folio
-#endif
-
 static const struct address_space_operations btree_aops = {
 	.writepages	= btree_writepages,
 	.release_folio	= btree_release_folio,
 	.invalidate_folio = btree_invalidate_folio,
 	.migrate_folio	= btree_migrate_folio,
-	.dirty_folio	= btree_dirty_folio,
+	.dirty_folio	= filemap_dirty_folio,
 };
 
 struct extent_buffer *btrfs_find_create_tree_block(
