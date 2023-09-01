@@ -774,7 +774,7 @@ void intel_hpd_poll_enable(struct drm_i915_private *dev_priv)
 	 * As well, there's no issue if we race here since we always reschedule
 	 * this worker anyway
 	 */
-	queue_work(dev_priv->unordered_wq,
+	queue_work(system_unbound_wq,
 		   &dev_priv->display.hotplug.poll_init_work);
 }
 
@@ -803,7 +803,7 @@ void intel_hpd_poll_disable(struct drm_i915_private *dev_priv)
 		return;
 
 	WRITE_ONCE(dev_priv->display.hotplug.poll_enabled, false);
-	queue_work(dev_priv->unordered_wq,
+	queue_work(system_unbound_wq,
 		   &dev_priv->display.hotplug.poll_init_work);
 }
 
