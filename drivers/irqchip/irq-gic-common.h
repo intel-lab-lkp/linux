@@ -19,10 +19,8 @@ struct gic_quirk {
 	u32 mask;
 };
 
-int gic_configure_irq(unsigned int irq, unsigned int type,
-                       void __iomem *base, void (*sync_access)(void));
-void gic_dist_config(void __iomem *base, int gic_irqs,
-		     void (*sync_access)(void));
+int gic_configure_irq(unsigned int irq, unsigned int type, void __iomem *base);
+void gic_dist_config(void __iomem *base, int gic_irqs);
 void gic_cpu_config(void __iomem *base, int nr, void (*sync_access)(void));
 void gic_enable_quirks(u32 iidr, const struct gic_quirk *quirks,
 		void *data);
