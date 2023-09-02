@@ -34,7 +34,7 @@ struct cs35l41_private {
 	int irq;
 	/* GPIO for /RST */
 	struct gpio_desc *reset_gpio;
-	struct completion pll_lock;
+	struct completion pll_lock_done;
 	struct work_struct mdsync_up_work;
 };
 

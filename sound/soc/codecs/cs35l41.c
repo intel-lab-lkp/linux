@@ -459,7 +459,7 @@ static irqreturn_t cs35l41_irq(int irq, void *data)
 
 	if (status[2] & CS35L41_PLL_LOCK) {
 		regmap_write(cs35l41->regmap, CS35L41_IRQ1_STATUS3, CS35L41_PLL_LOCK);
-		complete(&cs35l41->pll_lock);
+		complete(&cs35l41->pll_lock_done);
 		ret = IRQ_HANDLED;
 	}
 
@@ -804,7 +804,7 @@ static int cs35l41_pcm_startup(struct snd_pcm_substream *substream,
 {
 	struct cs35l41_private *cs35l41 = snd_soc_component_get_drvdata(dai->component);
 
-	reinit_completion(&cs35l41->pll_lock);
+	reinit_completion(&cs35l41->pll_lock_done);
 
 	if (substream->runtime)
 		return snd_pcm_hw_constraint_list(substream->runtime, 0,
@@ -1160,7 +1160,7 @@ static void cs35l41_mdsync_up_work(struct work_struct *work)
 	struct cs35l41_private *cs35l41 = container_of(work,
 						       struct cs35l41_private,
 						       mdsync_up_work);
-	int ret = wait_for_completion_timeout(&cs35l41->pll_lock,
+	int ret = wait_for_completion_timeout(&cs35l41->pll_lock_done,
 					      msecs_to_jiffies(100));
 	if (ret == 0) {
 		dev_err(cs35l41->dev, "Timed out waiting for pll_lock signal\n");
@@ -1303,7 +1303,7 @@ int cs35l41_probe(struct cs35l41_private *cs35l41, const struct cs35l41_hw_cfg *
 		regmap_update_bits(cs35l41->regmap, CS35L41_IRQ1_MASK3, CS35L41_INT3_PLL_LOCK_MASK,
 				   0 << CS35L41_INT3_PLL_LOCK_SHIFT);
 
-	init_completion(&cs35l41->pll_lock);
+	init_completion(&cs35l41->pll_lock_done);
 
 	ret = devm_request_threaded_irq(cs35l41->dev, cs35l41->irq, NULL, cs35l41_irq,
 					IRQF_ONESHOT | IRQF_SHARED | irq_pol,
