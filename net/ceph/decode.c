@@ -50,7 +50,7 @@ static int
 ceph_decode_entity_addr_legacy(void **p, void *end,
 			       struct ceph_entity_addr *addr)
 {
-	int ret = -EINVAL;
+	int ret = 0;
 
 	/* Skip rest of type field */
 	ceph_decode_skip_n(p, end, 3, bad);
@@ -66,8 +66,7 @@ ceph_decode_entity_addr_legacy(void **p, void *end,
 			      sizeof(addr->in_addr), bad);
 	addr->in_addr.ss_family =
 			be16_to_cpu((__force __be16)addr->in_addr.ss_family);
-	ret = 0;
-bad:
+
 	return ret;
 }
 
