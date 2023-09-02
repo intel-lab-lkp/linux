@@ -3270,6 +3270,8 @@ sub process {
 					# filename then :
 		      $line =~ /^\s*(?:Fixes:|$link_tags_search|$signature_tags)/i ||
 					# A Fixes:, link or signature tag line
+		      $line =~ /^\s*\[\d+\]\s+[a-z][\w\.\+\-]*:\/\/\S+/i ||
+					# reference with URL
 		      $commit_log_possible_stack_dump)) {
 			WARN("COMMIT_LOG_LONG_LINE",
 			     "Prefer a maximum 75 chars per line (possible unwrapped commit description?)\n" . $herecurr);
