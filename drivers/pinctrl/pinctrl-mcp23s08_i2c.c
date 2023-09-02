@@ -10,9 +10,8 @@
 
 static int mcp230xx_probe(struct i2c_client *client)
 {
-	const struct i2c_device_id *id = i2c_client_get_device_id(client);
 	struct device *dev = &client->dev;
-	unsigned int type = id->driver_data;
+	unsigned int type;
 	struct mcp23s08 *mcp;
 	int ret;
 
@@ -20,6 +19,7 @@ static int mcp230xx_probe(struct i2c_client *client)
 	if (!mcp)
 		return -ENOMEM;
 
+	type = (uintptr_t)i2c_get_match_data(client);
 	switch (type) {
 	case MCP_TYPE_008:
 		mcp->regmap = devm_regmap_init_i2c(client, &mcp23x08_regmap);
