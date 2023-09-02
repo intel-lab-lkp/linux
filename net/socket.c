@@ -570,12 +570,12 @@ static ssize_t sockfs_listxattr(struct dentry *dentry, char *buffer,
 				size_t size)
 {
 	ssize_t len;
-	ssize_t used = 0;
+	ssize_t used;
 
 	len = security_inode_listsecurity(d_inode(dentry), buffer, size);
 	if (len < 0)
 		return len;
-	used += len;
+	used = len;
 	if (buffer) {
 		if (size < used)
 			return -ERANGE;
