@@ -865,7 +865,7 @@ EXPORT_SYMBOL(ceph_wait_for_latest_osdmap);
 
 static int __init init_ceph_lib(void)
 {
-	int ret = 0;
+	int ret;
 
 	ceph_debugfs_init();
 
