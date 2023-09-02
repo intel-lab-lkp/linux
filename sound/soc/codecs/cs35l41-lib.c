@@ -1192,8 +1192,56 @@ bool cs35l41_safe_reset(struct regmap *regmap, enum cs35l41_boost_type b_type)
 }
 EXPORT_SYMBOL_GPL(cs35l41_safe_reset);
 
+int cs35l41_mdsync_up(struct regmap *regmap)
+{
+	struct reg_sequence cs35l41_mdsync_up_seq[] = {
+		{CS35L41_PWR_CTRL3, 0},
+		{CS35L41_PWR_CTRL1, 0x00000000, 3000},
+		{CS35L41_PWR_CTRL1, 0x00000001, 3000},
+	};
+	unsigned int pwr_ctrl3, int_status;
+	int ret;
+
+	regmap_read(regmap, CS35L41_PWR_CTRL3, &pwr_ctrl3);
+	pwr_ctrl3 |= CS35L41_SYNC_EN_MASK;
+	cs35l41_mdsync_up_seq[0].def = pwr_ctrl3;
+
+	ret = regmap_multi_reg_write(regmap, cs35l41_mdsync_up_seq,
+				     ARRAY_SIZE(cs35l41_mdsync_up_seq));
+	if (ret < 0)
+		return ret;
+
+	ret = regmap_read_poll_timeout(regmap, CS35L41_IRQ1_STATUS1, int_status,
+				       int_status & CS35L41_PUP_DONE_MASK,
+				       1000, 100000);
+
+	/* Clear PUP/PDN status */
+	regmap_write(regmap, CS35L41_IRQ1_STATUS1, CS35L41_PUP_DONE_MASK);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(cs35l41_mdsync_up);
+
+/*
+ * NOTE: Enabling the CS35L41_SHD_BOOST_ACTV and CS35L41_SHD_BOOST_PASS shared
+ * boosts involves writing the MDSYNC UP reg sequence, which must be performed
+ * only after getting the PLL lock signal. This signal seems to be triggered
+ * soon after snd_pcm_start() is executed and SNDRV_PCM_TRIGGER_START command
+ * is processed, which happens (long) after the SND_SOC_DAPM_PRE_PMU event
+ * handler is invoked as part of snd_pcm_prepare().
+ *
+ * The event handler is where cs35l41_global_enable() should be normally called
+ * from, but waiting for the PLL lock signal here will time out. Increasing the
+ * wait duration will not help, as the only consequence of that would be to add
+ * an unnecessary delay in the invocation of snd_pcm_start().
+ *
+ * Trying to move the wait in the SNDRV_PCM_TRIGGER_START callback is not a
+ * solution either, as the trigger is executed in an IRQ-off atomic context,
+ * hence the current approach is to defer the processing to a workqueue task.
+ * This allows to properly wait for the signal and then safely write the
+ * necessary MDSYNC sequence by calling cs35l41_mdsync_up() above.
+ */
 int cs35l41_global_enable(struct device *dev, struct regmap *regmap, enum cs35l41_boost_type b_type,
-			  int enable, struct completion *pll_lock, bool firmware_running)
+			  int enable, struct work_struct *mdsync_up_work, bool firmware_running)
 {
 	int ret;
 	unsigned int gpio1_func, pad_control, pwr_ctrl1, pwr_ctrl3, int_status, pup_pdn_mask;
@@ -1202,11 +1250,6 @@ int cs35l41_global_enable(struct device *dev, struct regmap *regmap, enum cs35l4
 		{CS35L41_PWR_CTRL3,		0},
 		{CS35L41_GPIO_PAD_CONTROL,	0},
 		{CS35L41_PWR_CTRL1,		0, 3000},
-	};
-	struct reg_sequence cs35l41_mdsync_up_seq[] = {
-		{CS35L41_PWR_CTRL3,	0},
-		{CS35L41_PWR_CTRL1,	0x00000000, 3000},
-		{CS35L41_PWR_CTRL1,	0x00000001, 3000},
 	};
 
 	pup_pdn_mask = enable ? CS35L41_PUP_DONE_MASK : CS35L41_PDN_DONE_MASK;
@@ -1226,6 +1269,9 @@ int cs35l41_global_enable(struct device *dev, struct regmap *regmap, enum cs35l4
 	switch (b_type) {
 	case CS35L41_SHD_BOOST_ACTV:
 	case CS35L41_SHD_BOOST_PASS:
+		if (mdsync_up_work)
+			cancel_work_sync(mdsync_up_work);
+
 		regmap_read(regmap, CS35L41_PWR_CTRL3, &pwr_ctrl3);
 		regmap_read(regmap, CS35L41_GPIO_PAD_CONTROL, &pad_control);
 
@@ -1243,25 +1289,19 @@ int cs35l41_global_enable(struct device *dev, struct regmap *regmap, enum cs35l4
 		cs35l41_mdsync_down_seq[2].def = pwr_ctrl1;
 		ret = regmap_multi_reg_write(regmap, cs35l41_mdsync_down_seq,
 					     ARRAY_SIZE(cs35l41_mdsync_down_seq));
-		if (ret || !enable)
+		if (ret)
 			break;
 
-		if (!pll_lock)
-			return -EINVAL;
-
-		ret = wait_for_completion_timeout(pll_lock, msecs_to_jiffies(1000));
-		if (ret == 0) {
-			dev_err(dev, "Timed out waiting for pll_lock\n");
-			return -ETIMEDOUT;
+		if (enable) {
+			if (mdsync_up_work) {
+				/* Call cs35l41_mdsync_up() after receiving PLL lock signal */
+				schedule_work(mdsync_up_work);
+			} else {
+				dev_err(dev, "MDSYNC UP work not provided\n");
+				ret = -EINVAL;
+			}
+			break;
 		}
-
-		regmap_read(regmap, CS35L41_PWR_CTRL3, &pwr_ctrl3);
-		pwr_ctrl3 |= CS35L41_SYNC_EN_MASK;
-		cs35l41_mdsync_up_seq[0].def = pwr_ctrl3;
-		ret = regmap_multi_reg_write(regmap, cs35l41_mdsync_up_seq,
-					     ARRAY_SIZE(cs35l41_mdsync_up_seq));
-		if (ret)
-			return ret;
 
 		ret = regmap_read_poll_timeout(regmap, CS35L41_IRQ1_STATUS1,
 					int_status, int_status & pup_pdn_mask,
@@ -1269,7 +1309,7 @@ int cs35l41_global_enable(struct device *dev, struct regmap *regmap, enum cs35l4
 		if (ret)
 			dev_err(dev, "Enable(%d) failed: %d\n", enable, ret);
 
-		// Clear PUP/PDN status
+		/* Clear PUP/PDN status */
 		regmap_write(regmap, CS35L41_IRQ1_STATUS1, pup_pdn_mask);
 		break;
 	case CS35L41_INT_BOOST:

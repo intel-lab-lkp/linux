@@ -13,6 +13,7 @@
 #include <linux/gpio/consumer.h>
 #include <linux/regulator/consumer.h>
 #include <linux/firmware.h>
+#include <linux/completion.h>
 #include <sound/core.h>
 #include <sound/cs35l41.h>
 
@@ -34,6 +35,7 @@ struct cs35l41_private {
 	/* GPIO for /RST */
 	struct gpio_desc *reset_gpio;
 	struct completion pll_lock;
+	struct work_struct mdsync_up_work;
 };
 
 int cs35l41_probe(struct cs35l41_private *cs35l41, const struct cs35l41_hw_cfg *hw_cfg);

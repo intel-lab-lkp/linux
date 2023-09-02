@@ -500,11 +500,11 @@ static int cs35l41_main_amp_event(struct snd_soc_dapm_widget *w,
 						ARRAY_SIZE(cs35l41_pup_patch));
 
 		ret = cs35l41_global_enable(cs35l41->dev, cs35l41->regmap, cs35l41->hw_cfg.bst_type,
-					    1, &cs35l41->pll_lock, cs35l41->dsp.cs_dsp.running);
+					    1, &cs35l41->mdsync_up_work, cs35l41->dsp.cs_dsp.running);
 		break;
 	case SND_SOC_DAPM_POST_PMD:
 		ret = cs35l41_global_enable(cs35l41->dev, cs35l41->regmap, cs35l41->hw_cfg.bst_type,
-					    0, &cs35l41->pll_lock, cs35l41->dsp.cs_dsp.running);
+					    0, &cs35l41->mdsync_up_work, cs35l41->dsp.cs_dsp.running);
 
 		regmap_multi_reg_write_bypassed(cs35l41->regmap,
 						cs35l41_pdn_patch,
@@ -1155,6 +1155,36 @@ static int cs35l41_acpi_get_name(struct cs35l41_private *cs35l41)
 	return 0;
 }
 
+static void cs35l41_mdsync_up_work(struct work_struct *work)
+{
+	struct cs35l41_private *cs35l41 = container_of(work,
+						       struct cs35l41_private,
+						       mdsync_up_work);
+	int ret = wait_for_completion_timeout(&cs35l41->pll_lock,
+					      msecs_to_jiffies(100));
+	if (ret == 0) {
+		dev_err(cs35l41->dev, "Timed out waiting for pll_lock signal\n");
+		return;
+	}
+
+	dev_dbg(cs35l41->dev, "Received pll_lock signal\n");
+
+	ret = pm_runtime_resume_and_get(cs35l41->dev);
+	if (ret < 0) {
+		dev_err(cs35l41->dev,
+			"pm_runtime_resume_and_get failed in %s: %d\n",
+			__func__, ret);
+		return;
+	}
+
+	ret = cs35l41_mdsync_up(cs35l41->regmap);
+	if (ret < 0)
+		dev_err(cs35l41->dev, "MDSYNC UP failed: %d\n", ret);
+
+	pm_runtime_mark_last_busy(cs35l41->dev);
+	pm_runtime_put_autosuspend(cs35l41->dev);
+}
+
 int cs35l41_probe(struct cs35l41_private *cs35l41, const struct cs35l41_hw_cfg *hw_cfg)
 {
 	u32 regid, reg_revid, i, mtl_revid, int_status, chipid_match;
@@ -1297,6 +1327,8 @@ int cs35l41_probe(struct cs35l41_private *cs35l41, const struct cs35l41_hw_cfg *
 	if (ret < 0)
 		goto err;
 
+	INIT_WORK(&cs35l41->mdsync_up_work, cs35l41_mdsync_up_work);
+
 	pm_runtime_set_autosuspend_delay(cs35l41->dev, 3000);
 	pm_runtime_use_autosuspend(cs35l41->dev);
 	pm_runtime_mark_last_busy(cs35l41->dev);
@@ -1335,6 +1367,8 @@ EXPORT_SYMBOL_GPL(cs35l41_probe);
 
 void cs35l41_remove(struct cs35l41_private *cs35l41)
 {
+	cancel_work_sync(&cs35l41->mdsync_up_work);
+
 	pm_runtime_get_sync(cs35l41->dev);
 	pm_runtime_disable(cs35l41->dev);
 

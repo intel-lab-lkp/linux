@@ -11,7 +11,7 @@
 #define __CS35L41_H
 
 #include <linux/regmap.h>
-#include <linux/completion.h>
+#include <linux/workqueue.h>
 #include <linux/firmware/cirrus/cs_dsp.h>
 
 #define CS35L41_FIRSTREG		0x00000000
@@ -902,7 +902,8 @@ int cs35l41_exit_hibernate(struct device *dev, struct regmap *regmap);
 int cs35l41_init_boost(struct device *dev, struct regmap *regmap,
 		       struct cs35l41_hw_cfg *hw_cfg);
 bool cs35l41_safe_reset(struct regmap *regmap, enum cs35l41_boost_type b_type);
+int cs35l41_mdsync_up(struct regmap *regmap);
 int cs35l41_global_enable(struct device *dev, struct regmap *regmap, enum cs35l41_boost_type b_type,
-			  int enable, struct completion *pll_lock, bool firmware_running);
+			  int enable, struct work_struct *mdsync_up_work, bool firmware_running);
 
 #endif /* __CS35L41_H */
