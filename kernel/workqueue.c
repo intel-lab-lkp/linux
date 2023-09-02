@@ -4609,6 +4609,10 @@ enomem:
 		free_percpu(wq->cpu_pwq);
 		wq->cpu_pwq = NULL;
 	}
+	wq_unregister_lockdep(wq);
+	wq_free_lockdep(wq);
+	free_workqueue_attrs(wq->unbound_attrs);
+	kfree(wq);
 	return -ENOMEM;
 }
 
@@ -4712,7 +4716,7 @@ struct workqueue_struct *alloc_workqueue(const char *fmt,
 	INIT_LIST_HEAD(&wq->list);
 
 	if (alloc_and_link_pwqs(wq) < 0)
-		goto err_unreg_lockdep;
+		return NULL;
 
 	if (wq_online && init_rescuer(wq) < 0)
 		goto err_destroy;
@@ -4738,11 +4742,7 @@ struct workqueue_struct *alloc_workqueue(const char *fmt,
 
 	return wq;
 
-err_unreg_lockdep:
-	wq_unregister_lockdep(wq);
-	wq_free_lockdep(wq);
 err_free_wq:
-	free_workqueue_attrs(wq->unbound_attrs);
 	kfree(wq);
 	return NULL;
 err_destroy:
