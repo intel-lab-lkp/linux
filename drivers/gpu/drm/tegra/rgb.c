@@ -244,7 +244,7 @@ int tegra_dc_rgb_probe(struct tegra_dc *dc)
 		if (IS_ERR(rgb->pll_d2_out0)) {
 			err = PTR_ERR(rgb->pll_d2_out0);
 			dev_err(dc->dev, "failed to get pll_d2_out0: %d\n", err);
-			goto tegra_remove;
+			goto put_pll_d_out0;
 		}
 	}
 
@@ -252,6 +252,8 @@ int tegra_dc_rgb_probe(struct tegra_dc *dc)
 
 	return 0;
 
+put_pll_d_out0:
+	clk_put(rgb->pll_d_out0);
 tegra_remove:
 	tegra_output_remove(&rgb->output);
 	return err;
