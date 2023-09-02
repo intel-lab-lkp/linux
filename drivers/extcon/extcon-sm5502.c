@@ -689,7 +689,7 @@ static int sm5022_muic_i2c_probe(struct i2c_client *i2c)
 	info->dev = &i2c->dev;
 	info->i2c = i2c;
 	info->irq = i2c->irq;
-	info->type = device_get_match_data(info->dev);
+	info->type = i2c_get_match_data(i2c);
 	if (!info->type)
 		return -EINVAL;
 	if (!info->type->parse_irq) {
