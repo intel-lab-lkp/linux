@@ -44,7 +44,7 @@ static int atmel_hlcdc_pwm_apply(struct pwm_chip *c, struct pwm_device *pwm,
 	struct atmel_hlcdc_pwm *chip = to_atmel_hlcdc_pwm(c);
 	struct atmel_hlcdc *hlcdc = chip->hlcdc;
 	unsigned int status;
-	int ret;
+	int ret = 0;
 
 	if (state->enabled) {
 		struct clk *new_clk = hlcdc->slow_clk;
@@ -109,7 +109,7 @@ static int atmel_hlcdc_pwm_apply(struct pwm_chip *c, struct pwm_device *pwm,
 						 ATMEL_HLCDC_CLKPWMSEL,
 						 gencfg);
 			if (ret)
-				return ret;
+				goto disable_new_clk;
 		}
 
 		do_div(pwmcval, state->period);
@@ -134,18 +134,20 @@ static int atmel_hlcdc_pwm_apply(struct pwm_chip *c, struct pwm_device *pwm,
 					 ATMEL_HLCDC_PWMPOL,
 					 pwmcfg);
 		if (ret)
-			return ret;
+			goto disable_new_clk;
 
 		ret = regmap_write(hlcdc->regmap, ATMEL_HLCDC_EN,
 				   ATMEL_HLCDC_PWM);
 		if (ret)
-			return ret;
+			goto disable_new_clk;
 
 		ret = regmap_read_poll_timeout(hlcdc->regmap, ATMEL_HLCDC_SR,
 					       status,
 					       status & ATMEL_HLCDC_PWM,
 					       10, 0);
-		if (ret)
+disable_new_clk:
+			clk_disable_unprepare(new_clk);
+			chip->cur_clk = NULL;
 			return ret;
 	} else {
 		ret = regmap_write(hlcdc->regmap, ATMEL_HLCDC_DIS,
