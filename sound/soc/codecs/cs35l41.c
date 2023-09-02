@@ -1340,7 +1340,12 @@ int cs35l41_probe(struct cs35l41_private *cs35l41, const struct cs35l41_hw_cfg *
 	pm_runtime_mark_last_busy(cs35l41->dev);
 	pm_runtime_set_active(cs35l41->dev);
 	pm_runtime_get_noresume(cs35l41->dev);
-	pm_runtime_enable(cs35l41->dev);
+
+	ret = devm_pm_runtime_enable(cs35l41->dev);
+	if (ret < 0) {
+		dev_err_probe(cs35l41->dev, ret, "Failed to enable PM runtime\n");
+		goto err_pm;
+	}
 
 	ret = devm_snd_soc_register_component(cs35l41->dev,
 					      &soc_component_dev_cs35l41,
@@ -1358,9 +1363,7 @@ int cs35l41_probe(struct cs35l41_private *cs35l41, const struct cs35l41_hw_cfg *
 	return 0;
 
 err_pm:
-	pm_runtime_disable(cs35l41->dev);
 	pm_runtime_put_noidle(cs35l41->dev);
-
 	wm_adsp2_remove(&cs35l41->dsp);
 err:
 	cs35l41_safe_reset(cs35l41->regmap, cs35l41->hw_cfg.bst_type);
@@ -1376,7 +1379,6 @@ void cs35l41_remove(struct cs35l41_private *cs35l41)
 	cancel_work_sync(&cs35l41->mdsync_up_work);
 
 	pm_runtime_get_sync(cs35l41->dev);
-	pm_runtime_disable(cs35l41->dev);
 
 	regmap_write(cs35l41->regmap, CS35L41_IRQ1_MASK1, 0xFFFFFFFF);
 	if (cs35l41->hw_cfg.bst_type == CS35L41_SHD_BOOST_PASS ||
