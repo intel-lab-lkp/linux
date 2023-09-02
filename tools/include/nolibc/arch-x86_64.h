@@ -173,4 +173,39 @@ void __attribute__((weak, noreturn, optimize("Os", "omit-frame-pointer"))) __no_
 	__builtin_unreachable();
 }
 
+#define NOLIBC_ARCH_HAS_MEMMOVE
+void *memmove(void *dst, const void *src, size_t len);
+
+#define NOLIBC_ARCH_HAS_MEMCPY
+void *memcpy(void *dst, const void *src, size_t len);
+
+__asm__ (
+".section .text.nolibc_memmove\n"
+".weak memmove\n"
+"memmove:\n"
+	"movq %rdx, %rcx\n"
+	"movq %rdi, %rdx\n"
+	"movq %rdi, %rax\n"
+	"subq %rsi, %rdx\n"
+	"cmpq %rcx, %rdx\n"
+	"jnb  .Lforward_copy\n"
+	"leaq -1(%rdi, %rcx, 1), %rdi\n"
+	"leaq -1(%rsi, %rcx, 1), %rsi\n"
+	"std\n"
+	"rep movsb\n"
+	"cld\n"
+	"retq\n"
+".Lforward_copy:\n"
+	"rep movsb\n"
+	"retq\n"
+
+".section .text.nolibc_memcpy\n"
+".weak memcpy\n"
+"memcpy:\n"
+	"movq %rdi, %rax\n"
+	"movq %rdx, %rcx\n"
+	"rep movsb\n"
+	"retq\n"
+);
+
 #endif /* _NOLIBC_ARCH_X86_64_H */
