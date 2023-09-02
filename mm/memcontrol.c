@@ -4060,6 +4060,9 @@ static const unsigned int memcg1_stats[] = {
 	WORKINGSET_REFAULT_ANON,
 	WORKINGSET_REFAULT_FILE,
 	MEMCG_SWAP,
+#ifdef CONFIG_SWAP
+	NR_SWAPCACHE,
+#endif
 };
 
 static const char *const memcg1_stat_names[] = {
@@ -4075,6 +4078,9 @@ static const char *const memcg1_stat_names[] = {
 	"workingset_refault_anon",
 	"workingset_refault_file",
 	"swap",
+#ifdef CONFIG_SWAP
+	"swapcached",
+#endif
 };
 
 /* Universal VM events cgroup1 shows, original sort order */
