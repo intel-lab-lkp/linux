@@ -129,6 +129,10 @@ static struct khugepaged_scan khugepaged_scan = {
 	.mm_head = LIST_HEAD_INIT(khugepaged_scan.mm_head),
 };
 
+/* khugepaged should scan or not, trying to be thp, default as false */
+static unsigned int khugepaged_thp_scan_state;
+static void set_recommended_min_free_kbytes(void);
+
 #ifdef CONFIG_SYSFS
 static ssize_t scan_sleep_millisecs_show(struct kobject *kobj,
 					 struct kobj_attribute *attr,
@@ -2548,6 +2552,33 @@ static void khugepaged_wait_work(void)
 		wait_event_freezable(khugepaged_wait, khugepaged_wait_event());
 }
 
+static int khugepaged_threshold(void)
+{
+	/* thp size threshold check */
+	if ((PAGE_SIZE << HPAGE_PMD_ORDER) >= SZ_512M)
+		return true;
+	return false;
+}
+
+static void khugepaged_update_wmarks(void)
+{
+	if (!khugepaged_threshold())
+		return;
+
+	/* __khugepaged_enter push khugepaged to work, raise watermark */
+	if (khugepaged_has_work()) {
+		/* Once set, do not repeat distrub watermark */
+		if (!khugepaged_thp_scan_state) {
+			khugepaged_thp_scan_state = true;
+			mutex_lock(&khugepaged_mutex);
+			set_recommended_min_free_kbytes();
+			mutex_unlock(&khugepaged_mutex);
+		}
+	} else {
+		khugepaged_thp_scan_state = false;
+	}
+}
+
 static int khugepaged(void *none)
 {
 	struct khugepaged_mm_slot *mm_slot;
@@ -2558,6 +2589,7 @@ static int khugepaged(void *none)
 	while (!kthread_should_stop()) {
 		khugepaged_do_scan(&khugepaged_collapse_control);
 		khugepaged_wait_work();
+		khugepaged_update_wmarks();
 	}
 
 	spin_lock(&khugepaged_mm_lock);
@@ -2575,7 +2607,9 @@ static void set_recommended_min_free_kbytes(void)
 	int nr_zones = 0;
 	unsigned long recommended_min;
 
-	if (!hugepage_flags_enabled()) {
+	if (!hugepage_flags_enabled() ||
+		(khugepaged_threshold() &&
+		 !khugepaged_thp_scan_state)) {
 		calculate_min_free_kbytes();
 		goto update_wmarks;
 	}
