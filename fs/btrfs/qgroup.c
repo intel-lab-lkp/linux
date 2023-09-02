@@ -3204,10 +3204,8 @@ void btrfs_qgroup_free_refroot(struct btrfs_fs_info *fs_info,
 			       u64 ref_root, u64 num_bytes,
 			       enum btrfs_qgroup_rsv_type type)
 {
-	struct btrfs_qgroup *qgroup;
-	struct ulist_node *unode;
-	struct ulist_iterator uiter;
-	int ret = 0;
+	struct btrfs_qgroup *cur;
+	LIST_HEAD(qgroup_list);
 
 	if (!is_fstree(ref_root))
 		return;
@@ -3224,8 +3222,8 @@ void btrfs_qgroup_free_refroot(struct btrfs_fs_info *fs_info,
 	if (!fs_info->quota_root)
 		goto out;
 
-	qgroup = find_qgroup_rb(fs_info, ref_root);
-	if (!qgroup)
+	cur = find_qgroup_rb(fs_info, ref_root);
+	if (!cur)
 		goto out;
 
 	if (num_bytes == (u64)-1)
@@ -3233,32 +3231,19 @@ void btrfs_qgroup_free_refroot(struct btrfs_fs_info *fs_info,
 		 * We're freeing all pertrans rsv, get reserved value from
 		 * level 0 qgroup as real num_bytes to free.
 		 */
-		num_bytes = qgroup->rsv.values[type];
+		num_bytes = cur->rsv.values[type];
 
-	ulist_reinit(fs_info->qgroup_ulist);
-	ret = ulist_add(fs_info->qgroup_ulist, qgroup->qgroupid,
-			qgroup_to_aux(qgroup), GFP_ATOMIC);
-	if (ret < 0)
-		goto out;
-	ULIST_ITER_INIT(&uiter);
-	while ((unode = ulist_next(fs_info->qgroup_ulist, &uiter))) {
-		struct btrfs_qgroup *qg;
+	qgroup_iterator_add(&qgroup_list, cur);
+	list_for_each_entry(cur, &qgroup_list, iterator) {
 		struct btrfs_qgroup_list *glist;
 
-		qg = unode_aux_to_qgroup(unode);
-
-		qgroup_rsv_release(fs_info, qg, num_bytes, type);
-
-		list_for_each_entry(glist, &qg->groups, next_group) {
-			ret = ulist_add(fs_info->qgroup_ulist,
-					glist->group->qgroupid,
-					qgroup_to_aux(glist->group), GFP_ATOMIC);
-			if (ret < 0)
-				goto out;
+		qgroup_rsv_release(fs_info, cur, num_bytes, type);
+		list_for_each_entry(glist, &cur->groups, next_group) {
+			qgroup_iterator_add(&qgroup_list, glist->group);
 		}
 	}
-
 out:
+	qgroup_iterator_clean(&qgroup_list);
 	spin_unlock(&fs_info->qgroup_lock);
 }
 
