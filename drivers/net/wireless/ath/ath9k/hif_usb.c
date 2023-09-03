@@ -1502,8 +1502,8 @@ static int ath9k_hif_usb_resume(struct usb_interface *interface)
 		if (ret)
 			goto fail_resume;
 	} else {
-		ath9k_hif_usb_dealloc_urbs(hif_dev);
-		return -EIO;
+		ret = -EIO;
+		goto fail_resume;
 	}
 
 	mdelay(100);
