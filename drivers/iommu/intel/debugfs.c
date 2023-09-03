@@ -333,9 +333,52 @@ static void pgtable_walk_level(struct seq_file *m, struct dma_pte *pde,
 		path[level] = pde->val;
 		if (dma_pte_superpage(pde) || level == 1)
 			dump_page_info(m, start, path);
-		else
-			pgtable_walk_level(m, phys_to_virt(dma_pte_addr(pde)),
+		else {
+			/*
+			 * The entry references a Page-Directory Table
+			 * or a Page Table.
+			 */
+			struct page *pg;
+			u64 pte_addr;
+
+retry:
+			pte_addr = dma_pte_addr(pde);
+			pg = pfn_to_page(PFN_DOWN(pte_addr));
+			if (!get_page_unless_zero(pg))
+				/*
+				 * If this page has a refcount of zero,
+				 * it has been freed, or will be freed.
+				 */
+				continue;
+
+			/*
+			 * Check if the page that pointed to by the PDE is
+			 * stale. Bit 3 of the PDE is ignored by hardware.
+			 * If the page is stale, bit 3 is already set to 1
+			 * in the unmap path.
+			 */
+			if (pde->val & BIT_ULL(3)) {
+				put_page(pg);
+				continue;
+			}
+
+			/* Check if the value of this entry is changed. */
+			if (pde->val != path[level]) {
+				put_page(pg);
+
+				if (!dma_pte_present(pde))
+					/* This entry is invalid. Skip it. */
+					continue;
+
+				/* The entry has been updated. */
+				path[level] = pde->val;
+				goto retry;
+			}
+
+			pgtable_walk_level(m, phys_to_virt(pte_addr),
 					   level - 1, start, path);
+			put_page(pg);
+		}
 		path[level] = 0;
 	}
 }

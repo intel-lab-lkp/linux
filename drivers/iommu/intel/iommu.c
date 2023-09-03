@@ -1103,6 +1103,22 @@ static void dma_pte_list_pagetables(struct dmar_domain *domain,
 	pg = pfn_to_page(dma_pte_addr(pte) >> PAGE_SHIFT);
 	list_add_tail(&pg->lru, freelist);
 
+	/*
+	 * When the page pointed to by a PDPE/PDE is unlinked from its parent,
+	 * it's not freed immediately. It will be freed as soon as the IOTLB
+	 * is flushed. Before the page is freed, another process context (e.g.
+	 * debugfs) may still traverse it. But the content of the page is no
+	 * longer valid.
+	 * According the VT-d specification, bit 3 of the PDPE/PTE pointing to
+	 * a page directory/table is ignored by the hardware. The driver sets
+	 * it to 0 by default. To avoid the unnecessary page walks, set bit 3
+	 * to 1 to indicate that the page pointed to by the PDPE/PDE is stale.
+	 * Then in another process context, bit 3 of the PDPE/PDE is checked
+	 * before traversing the page pointed to by the PDPE/PDE. Traversal
+	 * stops if bit 3 is 1.
+	 */
+	pte->val |= BIT_ULL(3);
+
 	if (level == 1)
 		return;
 
