@@ -5,6 +5,7 @@
 #include <linux/kernel.h>
 #include <linux/console.h>
 #include <linux/delay.h>
+#include <linux/slab.h>
 #include "internal.h"
 /*
  * Printk console printing implementation for consoles that do not depend on
@@ -20,6 +21,9 @@
  * region and aborts the operation if it detects a takeover.
  *
  * In case of panic the nesting context can take over the console forcefully.
+ * If the interrupted context touches the assigned record buffer after
+ * takeover, it does not cause harm because the interrupting single panic
+ * context is assigned its own panic record buffer.
  *
  * A concurrent writer on a different CPU with a higher priority can directly
  * take over if the console is not in an unsafe state by carefully writing
@@ -406,6 +410,8 @@ static void nbcon_context_acquire_hostile(struct nbcon_context *ctxt,
 	cur->atom = new.atom;
 }
 
+static struct printk_buffers panic_nbcon_pbufs;
+
 /**
  * nbcon_context_try_acquire - Try to acquire nbcon console
  * @ctxt:	The context of the caller
@@ -420,7 +426,6 @@ static void nbcon_context_acquire_hostile(struct nbcon_context *ctxt,
 __maybe_unused
 static bool nbcon_context_try_acquire(struct nbcon_context *ctxt)
 {
-	__maybe_unused
 	unsigned int cpu = smp_processor_id();
 	struct console *con = ctxt->console;
 	struct nbcon_state cur;
@@ -452,6 +457,12 @@ static bool nbcon_context_try_acquire(struct nbcon_context *ctxt)
 
 	nbcon_context_acquire_hostile(ctxt, &cur);
 success:
+	/* Assign the appropriate buffer for this context. */
+	if (atomic_read(&panic_cpu) == cpu)
+		ctxt->pbufs = &panic_nbcon_pbufs;
+	else
+		ctxt->pbufs = con->pbufs;
+
 	return true;
 }
 
@@ -491,7 +502,7 @@ static void nbcon_context_release(struct nbcon_context *ctxt)
 
 	do {
 		if (!nbcon_owner_matches(&cur, cpu, ctxt->prio))
-			return;
+			break;
 
 		new.atom = cur.atom;
 		new.prio = NBCON_PRIO_NONE;
@@ -503,6 +514,30 @@ static void nbcon_context_release(struct nbcon_context *ctxt)
 		new.unsafe |= cur.unsafe_takeover;
 
 	} while (!nbcon_state_try_cmpxchg(con, &cur, &new));
+
+	ctxt->pbufs = NULL;
+}
+
+/**
+ * nbcon_alloc - Allocate buffers needed by the nbcon console
+ * @con:	Console to initialize
+ *
+ * Return:	True on success. False otherwise and the console cannot
+ *		be used.
+ *
+ * This is not part of nbcon_init() because buffer allocation must
+ * be performed earlier in the console registration process.
+ */
+bool nbcon_alloc(struct console *con)
+{
+
+	con->pbufs = kmalloc(sizeof(*con->pbufs), GFP_KERNEL);
+	if (!con->pbufs) {
+		con_printk(KERN_ERR, con, "failed to allocate printing buffer\n");
+		return false;
+	}
+
+	return true;
 }
 
 /**
@@ -512,6 +547,9 @@ static void nbcon_context_release(struct nbcon_context *ctxt)
 void nbcon_init(struct console *con)
 {
 	struct nbcon_state state = { };
+
+	/* nbcon_alloc() must have been called and successful! */
+	BUG_ON(!con->pbufs);
 
 	nbcon_state_set(con, &state);
 }
@@ -525,4 +563,6 @@ void nbcon_cleanup(struct console *con)
 	struct nbcon_state state = { };
 
 	nbcon_state_set(con, &state);
+	kfree(con->pbufs);
+	con->pbufs = NULL;
 }
