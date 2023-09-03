@@ -199,8 +199,11 @@ static int tasdevice_info_programs(struct snd_kcontrol *kcontrol,
 
 	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
 	uinfo->count = 1;
+	/* 0:			dsp mode
+	 * non-zero:	bypass mode
+	 */
 	uinfo->value.integer.min = 0;
-	uinfo->value.integer.max = tas_fw->nr_programs - 1;
+	uinfo->value.integer.max = tas_fw->nr_programs;
 
 	return 0;
 }
@@ -238,7 +241,10 @@ static int tasdevice_program_put(struct snd_kcontrol *kcontrol,
 	int max = tas_fw->nr_programs - 1;
 	int val, ret = 0;
 
-	val = clamp(nr_program, 0, max);
+	/* 0:			dsp mode
+	 * non-zero:	bypass mode
+	 */
+	val = (nr_program) ? max : 0;
 
 	if (tas_priv->cur_prog != val) {
 		tas_priv->cur_prog = val;
@@ -647,7 +653,9 @@ static int tas2781_hda_i2c_probe(struct i2c_client *clt)
 	const char *device_name;
 	int ret;
 
-	if (strstr(dev_name(&clt->dev), "TIAS2781"))
+	if (strstr(dev_name(&clt->dev), "TXNW2781"))
+		device_name = "TXNW2781";
+	else if (strstr(dev_name(&clt->dev), "TIAS2781"))
 		device_name = "TIAS2781";
 	else
 		return -ENODEV;
@@ -824,6 +832,7 @@ static const struct i2c_device_id tas2781_hda_i2c_id[] = {
 
 static const struct acpi_device_id tas2781_acpi_hda_match[] = {
 	{"TIAS2781", 0 },
+	{"TXNW2781", 1 },
 	{}
 };
 MODULE_DEVICE_TABLE(acpi, tas2781_acpi_hda_match);
