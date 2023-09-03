@@ -244,6 +244,6 @@ err_free_entry:
 err_put_id:
 	virtio_gpu_resource_id_put(vgdev, bo->hw_res_handle);
 err_free_gem:
-	drm_gem_shmem_free(shmem_obj);
+	drm_gem_object_put(&bo->base.base);
 	return ret;
 }
