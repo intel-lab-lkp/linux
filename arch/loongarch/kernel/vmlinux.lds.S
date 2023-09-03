@@ -99,9 +99,7 @@ SECTIONS
 		EXIT_DATA
 	}
 
-#ifdef CONFIG_SMP
 	PERCPU_SECTION(1 << CONFIG_L1_CACHE_SHIFT)
-#endif
 
 	.init.bss : {
 		*(.init.bss)
