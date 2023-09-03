@@ -141,7 +141,7 @@ void drm_gem_shmem_free(struct drm_gem_shmem_object *shmem)
 
 	if (obj->import_attach) {
 		drm_prime_gem_destroy(obj, shmem->sgt);
-	} else {
+	} else if (!shmem->imported_sgt) {
 		dma_resv_lock(shmem->base.resv, NULL);
 
 		drm_WARN_ON(obj->dev, shmem->vmap_use_count);
@@ -764,6 +764,17 @@ drm_gem_shmem_prime_import_sg_table(struct drm_device *dev,
 		return ERR_CAST(shmem);
 
 	shmem->sgt = sgt;
+
+	/*
+	 * drm_gem_shmem_prime_import_sg_table() can be called from a
+	 * driver specific ->import_sg_table() implementations that
+	 * may fail, in that case drm_gem_shmem_free() will be invoked
+	 * without assigned drm_gem_object::import_attach.
+	 *
+	 * This flag lets drm_gem_shmem_free() differentiate whether
+	 * SGT belongs to dmabuf and shall not be freed by drm-shmem.
+	 */
+	shmem->imported_sgt = true;
 
 	drm_dbg_prime(dev, "size = %zu\n", size);
 
