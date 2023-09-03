@@ -200,7 +200,7 @@ static void rcar_du_group_setup(struct rcar_du_group *rgrp)
  *
  * This function must be called with the DRM mode_config lock held.
  *
- * Return 0 in case of success or a negative error code otherwise.
+ * Always return 0.
  */
 int rcar_du_group_get(struct rcar_du_group *rgrp)
 {
