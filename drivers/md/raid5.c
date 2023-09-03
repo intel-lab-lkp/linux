@@ -1035,11 +1035,7 @@ static int cmp_stripe(void *priv, const struct list_head *a,
 				struct r5pending_data, sibling);
 	const struct r5pending_data *db = list_entry(b,
 				struct r5pending_data, sibling);
-	if (da->sector > db->sector)
-		return 1;
-	if (da->sector < db->sector)
-		return -1;
-	return 0;
+	return (da->sector > db->sector) - (da->sector < db->sector);
 }
 
 static void dispatch_defer_bios(struct r5conf *conf, int target,
