@@ -468,11 +468,10 @@ static irqreturn_t gpio_keys_irq_isr(int irq, void *dev_id)
 {
 	struct gpio_button_data *bdata = dev_id;
 	struct input_dev *input = bdata->input;
-	unsigned long flags;
 
 	BUG_ON(irq != bdata->irq);
 
-	spin_lock_irqsave(&bdata->lock, flags);
+	spin_lock(&bdata->lock);
 
 	if (!bdata->key_pressed) {
 		if (bdata->button->wakeup)
@@ -495,7 +494,7 @@ static irqreturn_t gpio_keys_irq_isr(int irq, void *dev_id)
 			      ms_to_ktime(bdata->release_delay),
 			      HRTIMER_MODE_REL_HARD);
 out:
-	spin_unlock_irqrestore(&bdata->lock, flags);
+	spin_unlock(&bdata->lock);
 	return IRQ_HANDLED;
 }
 
