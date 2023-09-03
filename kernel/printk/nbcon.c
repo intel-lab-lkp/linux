@@ -176,7 +176,6 @@ void nbcon_seq_force(struct console *con, u64 seq)
  * current context no longer owns the console. In the later case, it will
  * stop printing anyway.
  */
-__maybe_unused
 static void nbcon_seq_try_update(struct nbcon_context *ctxt, u64 new_seq)
 {
 	unsigned long nbcon_seq = __seq_to_nbcon_seq(ctxt->seq);
@@ -685,6 +684,32 @@ static bool nbcon_context_can_proceed(struct nbcon_context *ctxt, struct nbcon_s
 }
 
 /**
+ * nbcon_can_proceed - Check whether ownership can proceed
+ * @wctxt:	The write context that was handed to the write function
+ *
+ * Return:	True if this context still owns the console. False if
+ *		ownership was handed over or taken.
+ *
+ * Must be invoked at appropriate safe places in the driver.
+ *
+ * When this function returns false then the calling context no longer owns
+ * the console and is no longer allowed to go forward. In this case it must
+ * back out immediately and carefully. The buffer content is also no longer
+ * trusted since it no longer belongs to the calling context.
+ */
+bool nbcon_can_proceed(struct nbcon_write_context *wctxt)
+{
+	struct nbcon_context *ctxt = &ACCESS_PRIVATE(wctxt, ctxt);
+	struct console *con = ctxt->console;
+	struct nbcon_state cur;
+
+	nbcon_state_read(con, &cur);
+
+	return nbcon_context_can_proceed(ctxt, &cur);
+}
+EXPORT_SYMBOL_GPL(nbcon_can_proceed);
+
+/**
  * nbcon_context_update_unsafe - Update the unsafe bit in @con->nbcon_state
  * @ctxt:	The nbcon context from nbcon_context_try_acquire()
  * @unsafe:	The new value for the unsafe bit
@@ -703,7 +728,6 @@ static bool nbcon_context_can_proceed(struct nbcon_context *ctxt, struct nbcon_s
  *
  * Internal helper to avoid duplicated code.
  */
-__maybe_unused
 static bool nbcon_context_update_unsafe(struct nbcon_context *ctxt, bool unsafe)
 {
 	struct console *con = ctxt->console;
@@ -730,6 +754,102 @@ static bool nbcon_context_update_unsafe(struct nbcon_context *ctxt, bool unsafe)
 	cur.atom = new.atom;
 out:
 	return nbcon_context_can_proceed(ctxt, &cur);
+}
+
+/**
+ * nbcon_emit_next_record - Emit a record in the acquired context
+ * @wctxt:	The write context that will be handed to the write function
+ *
+ * Return:	True if this context still owns the console. False if
+ *		ownership was handed over or taken.
+ *
+ * When this function returns false then the calling context no longer owns
+ * the console and is no longer allowed to go forward. In this case it must
+ * back out immediately and carefully. The buffer content is also no longer
+ * trusted since it no longer belongs to the calling context. If the caller
+ * wants to do more it must reacquire the console first.
+ *
+ * When true is returned, @wctxt->ctxt.backlog indicates whether there are
+ * still records pending in the ringbuffer,
+ */
+__maybe_unused
+static bool nbcon_emit_next_record(struct nbcon_write_context *wctxt)
+{
+	struct nbcon_context *ctxt = &ACCESS_PRIVATE(wctxt, ctxt);
+	struct console *con = ctxt->console;
+	bool is_extended = console_srcu_read_flags(con) & CON_EXTENDED;
+	struct printk_message pmsg = {
+		.pbufs = ctxt->pbufs,
+	};
+	unsigned long con_dropped;
+	struct nbcon_state cur;
+	unsigned long dropped;
+	bool done;
+
+	ctxt->backlog = printk_get_next_message(&pmsg, ctxt->seq, is_extended, true);
+	if (!ctxt->backlog)
+		return true;
+
+	/*
+	 * @con->dropped is not protected in case of an unsafe hostile
+	 * takeover. In that situation the update can be racy so
+	 * annotate it accordingly.
+	 */
+	con_dropped = data_race(READ_ONCE(con->dropped));
+
+	dropped = con_dropped + pmsg.dropped;
+	if (dropped && !is_extended)
+		console_prepend_dropped(&pmsg, dropped);
+
+	/* Safety point. Do not touch state in case of takeover. */
+	nbcon_state_read(con, &cur);
+	if (!nbcon_context_can_proceed(ctxt, &cur))
+		return false;
+
+	/* For skipped records just update seq/dropped in @con. */
+	if (pmsg.outbuf_len == 0)
+		goto update_con;
+
+	/* Set the write context before calling write callback. */
+	wctxt->outbuf = &pmsg.pbufs->outbuf[0];
+	wctxt->len = pmsg.outbuf_len;
+	wctxt->unsafe_takeover = cur.unsafe_takeover;
+
+	if (con->write_atomic) {
+		done = con->write_atomic(con, wctxt);
+	} else {
+		nbcon_context_release(ctxt);
+		WARN_ON_ONCE(1);
+		done = false;
+	}
+
+	/* If not done, the emit was aborted. */
+	if (!done)
+		return false;
+
+	/*
+	 * Since any dropped message was successfully output, reset the
+	 * dropped count for the console.
+	 */
+	dropped = 0;
+update_con:
+	/*
+	 * The dropped count and the sequence number are updated within an
+	 * unsafe section. This limits update races to the panic context and
+	 * allows the panic context to win.
+	 */
+
+	if (!nbcon_context_update_unsafe(ctxt, true))
+		return false;
+
+	if (dropped != con_dropped) {
+		/* Counterpart to the READ_ONCE() above. */
+		WRITE_ONCE(con->dropped, dropped);
+	}
+
+	nbcon_seq_try_update(ctxt, pmsg.seq + 1);
+
+	return nbcon_context_update_unsafe(ctxt, false);
 }
 
 /**

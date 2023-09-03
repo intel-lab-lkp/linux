@@ -248,6 +248,7 @@ struct printk_buffers;
  *				be used only with NBCON_PRIO_PANIC @prio. It
  *				might cause a system freeze when the console
  *				is used later.
+ * @backlog:			Ringbuffer has pending records
  * @pbufs:			Pointer to the text buffer for this context
  * @seq:			The sequence number to print for this context
  */
@@ -258,9 +259,26 @@ struct nbcon_context {
 	enum nbcon_prio		prio;
 	unsigned int		allow_unsafe_takeover	: 1;
 
+	/* members set by emit */
+	unsigned int		backlog			: 1;
+
 	/* members set by acquire */
 	struct printk_buffers	*pbufs;
 	u64			seq;
+};
+
+/**
+ * struct nbcon_write_context - Context handed to the nbcon write callbacks
+ * @ctxt:		The core console context
+ * @outbuf:		Pointer to the text buffer for output
+ * @len:		Length to write
+ * @unsafe_takeover:	If a hostile takeover in an unsafe state has occurred
+ */
+struct nbcon_write_context {
+	struct nbcon_context	__private ctxt;
+	char			*outbuf;
+	unsigned int		len;
+	bool			unsafe_takeover;
 };
 
 /**
@@ -283,6 +301,7 @@ struct nbcon_context {
  * @data:		Driver private data
  * @node:		hlist node for the console list
  *
+ * @write_atomic:	Write callback for atomic context
  * @nbcon_state:	State for nbcon consoles
  * @nbcon_seq:		Sequence number of the next record for nbcon to print
  * @pbufs:		Pointer to nbcon private buffer
@@ -307,6 +326,8 @@ struct console {
 	struct hlist_node	node;
 
 	/* nbcon console specific members */
+	bool			(*write_atomic)(struct console *con,
+						struct nbcon_write_context *wctxt);
 	atomic_t		__private nbcon_state;
 	atomic_long_t		__private nbcon_seq;
 	struct printk_buffers	*pbufs;
@@ -435,6 +456,12 @@ static inline bool console_is_registered(const struct console *con)
 #define for_each_console(con)						\
 	lockdep_assert_console_list_lock_held();			\
 	hlist_for_each_entry(con, &console_list, node)
+
+#ifdef CONFIG_PRINTK
+extern bool nbcon_can_proceed(struct nbcon_write_context *wctxt);
+#else
+static inline bool nbcon_can_proceed(struct nbcon_write_context *wctxt) { return false; }
+#endif
 
 extern int console_set_on_cmdline;
 extern struct console *early_console;
