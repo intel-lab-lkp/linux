@@ -302,7 +302,8 @@ static int alloc_midi_urbs(struct snd_usb_midi2_endpoint *ep)
 		ctx->urb = usb_alloc_urb(0, GFP_KERNEL);
 		if (!ctx->urb) {
 			dev_err(&ep->dev->dev, "URB alloc failed\n");
-			return -ENOMEM;
+			err = -ENOMEM;
+			goto err_free_all;
 		}
 		ctx->ep = ep;
 		buffer = usb_alloc_coherent(ep->dev, len, GFP_KERNEL,
@@ -310,7 +311,8 @@ static int alloc_midi_urbs(struct snd_usb_midi2_endpoint *ep)
 		if (!buffer) {
 			dev_err(&ep->dev->dev,
 				"URB buffer alloc failed (size %d)\n", len);
-			return -ENOMEM;
+			err = -ENOMEM;
+			goto err_free_cur_urb;
 		}
 		if (ep->interval)
 			usb_fill_int_urb(ctx->urb, ep->dev, ep->pipe,
@@ -322,13 +324,22 @@ static int alloc_midi_urbs(struct snd_usb_midi2_endpoint *ep)
 		if (err < 0) {
 			dev_err(&ep->dev->dev, "invalid MIDI EP %x\n",
 				endpoint);
-			return err;
+			goto err_free_cur_dma;
 		}
 		ctx->urb->transfer_flags = URB_NO_TRANSFER_DMA_MAP;
 		ep->num_urbs++;
 	}
 	ep->urb_free = ep->urb_free_mask = GENMASK(ep->num_urbs - 1, 0);
 	return 0;
+
+err_free_cur_dma:
+	usb_free_coherent(ep->dev, len, buffer, ctx->urb->transfer_dma);
+err_free_cur_urb:
+	usb_free_urb(ctx->urb);
+	ctx->urb = NULL;
+err_free_all:
+	free_midi_urbs(ep);
+	return err;
 }
 
 static struct snd_usb_midi2_endpoint *
