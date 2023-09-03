@@ -780,6 +780,7 @@ EXPORT_SYMBOL(spinlock_dump);
 #define tail_to_cpu	__pv_tail_to_cpu
 #define tail_to_idx	__pv_tail_to_idx
 #define next_to_prev	__pv_next_to_prev
+#define next_to_cpu_idx	__pv_next_to_cpu_idx
 
 #include "qspinlock_paravirt.h"
 #include "qspinlock.c"
