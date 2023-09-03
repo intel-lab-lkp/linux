@@ -152,8 +152,10 @@ void drm_gem_shmem_free(struct drm_gem_shmem_object *shmem)
 			sg_free_table(shmem->sgt);
 			kfree(shmem->sgt);
 		}
-		if (shmem->pages)
+		if (shmem->pages) {
 			drm_gem_shmem_put_pages(shmem);
+			drm_WARN_ON(obj->dev, !shmem->got_pages_sgt);
+		}
 
 		drm_WARN_ON(obj->dev, shmem->pages_use_count);
 
@@ -692,6 +694,13 @@ static struct sg_table *drm_gem_shmem_get_pages_sgt_locked(struct drm_gem_shmem_
 	ret = dma_map_sgtable(obj->dev->dev, sgt, DMA_BIDIRECTIONAL, 0);
 	if (ret)
 		goto err_free_sgt;
+
+	/*
+	 * This flag prevents imbalanced pages_use_count during
+	 * drm_gem_shmem_free(), where pages_use_count=1 only if
+	 * drm_gem_shmem_get_pages_sgt() was used by a driver.
+	 */
+	shmem->got_pages_sgt = true;
 
 	shmem->sgt = sgt;
 
