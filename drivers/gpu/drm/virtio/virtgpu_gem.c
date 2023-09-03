@@ -295,6 +295,26 @@ void virtio_gpu_array_put_free_work(struct work_struct *work)
 	spin_unlock(&vgdev->obj_free_lock);
 }
 
+int virtio_gpu_array_prepare(struct virtio_gpu_device *vgdev,
+			     struct virtio_gpu_object_array *objs)
+{
+	struct virtio_gpu_object *bo;
+	int ret = 0;
+	u32 i;
+
+	for (i = 0; i < objs->nents; i++) {
+		bo = gem_to_virtio_gpu_obj(objs->objs[i]);
+
+		if (virtio_gpu_is_shmem(bo) && bo->detached) {
+			ret = virtio_gpu_reattach_shmem_object_locked(bo);
+			if (ret)
+				break;
+		}
+	}
+
+	return ret;
+}
+
 int virtio_gpu_gem_pin(struct virtio_gpu_object *bo)
 {
 	int err;
@@ -303,6 +323,12 @@ int virtio_gpu_gem_pin(struct virtio_gpu_object *bo)
 		err = drm_gem_shmem_pin(&bo->base);
 		if (err)
 			return err;
+
+		err = virtio_gpu_reattach_shmem_object(bo);
+		if (err) {
+			drm_gem_shmem_unpin(&bo->base);
+			return err;
+		}
 	}
 
 	return 0;
