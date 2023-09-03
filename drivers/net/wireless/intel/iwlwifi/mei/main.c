@@ -1894,9 +1894,6 @@ static void iwl_mei_dbgfs_register(struct iwl_mei *mei)
 {
 	mei->dbgfs_dir = debugfs_create_dir(KBUILD_MODNAME, NULL);
 
-	if (!mei->dbgfs_dir)
-		return;
-
 	debugfs_create_ulong("status", S_IRUSR,
 			     mei->dbgfs_dir, &iwl_mei_status);
 	debugfs_create_file("send_start_message", S_IWUSR, mei->dbgfs_dir,
