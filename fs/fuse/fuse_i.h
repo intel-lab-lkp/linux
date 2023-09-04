@@ -312,7 +312,6 @@ struct fuse_io_priv {
  * FR_ISREPLY:		set if the request has reply
  * FR_FORCE:		force sending of the request even if interrupted
  * FR_BACKGROUND:	request is sent in the background
- * FR_WAITING:		request is counted as "waiting"
  * FR_ABORTED:		the request was aborted
  * FR_INTERRUPTED:	the request has been interrupted
  * FR_LOCKED:		data is being copied to/from the request
@@ -326,7 +325,6 @@ enum fuse_req_flag {
 	FR_ISREPLY,
 	FR_FORCE,
 	FR_BACKGROUND,
-	FR_WAITING,
 	FR_ABORTED,
 	FR_INTERRUPTED,
 	FR_LOCKED,
