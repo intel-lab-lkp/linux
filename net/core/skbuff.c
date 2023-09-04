@@ -642,7 +642,7 @@ struct sk_buff *__alloc_skb(unsigned int size, gfp_t gfp_mask,
 	 * Both skb->head and skb_shared_info are cache line aligned.
 	 */
 	data = kmalloc_reserve(&size, gfp_mask, node, &pfmemalloc);
-	if (unlikely(!data))
+	if (unlikely(ZERO_OR_NULL_PTR(data)))
 		goto nodata;
 	/* kmalloc_size_roundup() might give us more room than requested.
 	 * Put skb_shared_info exactly at the end of allocated zone,
