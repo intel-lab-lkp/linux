@@ -158,6 +158,9 @@ struct ksz_device {
 	bool synclko_125;
 	bool synclko_disable;
 
+	/* Bitmask indicating ports supporting HSR */
+	u16 hsr_ports;
+
 	struct vlan_table *vlan_cache;
 
 	struct ksz_port *ports;
