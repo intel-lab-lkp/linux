@@ -317,12 +317,14 @@ static int rcar_i2c_clock_calculate(struct rcar_i2c_priv *priv)
 	for (scgd = 0; scgd < 0x40; scgd++) {
 		scl = ick / (20 + (scgd * 8) + round);
 		if (scl <= t.bus_freq_hz)
-			goto scgd_find;
+			break;
 	}
-	dev_err(dev, "it is impossible to calculate best SCL\n");
-	return -EIO;
 
-scgd_find:
+	if (scgd == 0x40) {
+		dev_err(dev, "it is impossible to calculate best SCL\n");
+		return -EIO;
+	}
+
 	dev_dbg(dev, "clk %d/%d(%lu), round %u, CDF:0x%x, SCGD: 0x%x\n",
 		scl, t.bus_freq_hz, rate, round, cdf, scgd);
 
