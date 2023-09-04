@@ -1482,8 +1482,17 @@ void kvm_apic_send_ipi(struct kvm_lapic *apic, u32 icr_low, u32 icr_high)
 {
 	struct kvm_lapic_irq irq;
 
-	/* KVM has no delay and should always clear the BUSY/PENDING flag. */
-	WARN_ON_ONCE(icr_low & APIC_ICR_BUSY);
+	/*
+	 * In non-x2apic mode, KVM has no delay and should always clear the
+	 * BUSY/PENDING flag. In x2apic mode, KVM should clear the unused bit12
+	 * of ICR since hardware will also clear this bit. Although
+	 * APIC_ICR_BUSY and X2APIC_ICR_UNUSED_12 are same, they mean different
+	 * things in different modes.
+	 */
+	if (!apic_x2apic_mode(apic))
+		WARN_ON_ONCE(icr_low & APIC_ICR_BUSY);
+	else
+		WARN_ON_ONCE(icr_low & X2APIC_ICR_UNUSED_12);
 
 	irq.vector = icr_low & APIC_VECTOR_MASK;
 	irq.delivery_mode = icr_low & APIC_MODE_MASK;
@@ -2429,13 +2438,12 @@ void kvm_apic_write_nodecode(struct kvm_vcpu *vcpu, u32 offset)
 	 * ICR is a single 64-bit register when x2APIC is enabled.  For legacy
 	 * xAPIC, ICR writes need to go down the common (slightly slower) path
 	 * to get the upper half from ICR2.
+	 *
+	 * TODO: optimize to just emulate side effect w/o one more write
 	 */
 	if (apic_x2apic_mode(apic) && offset == APIC_ICR) {
-		val = kvm_lapic_get_reg64(apic, APIC_ICR);
-		kvm_apic_send_ipi(apic, (u32)val, (u32)(val >> 32));
-		trace_kvm_apic_write(APIC_ICR, val);
+		kvm_x2apic_icr_write(apic, val);
 	} else {
-		/* TODO: optimize to just emulate side effect w/o one more write */
 		val = kvm_lapic_get_reg(apic, offset);
 		kvm_lapic_reg_write(apic, offset, (u32)val);
 	}
@@ -3122,7 +3130,12 @@ int kvm_lapic_set_vapic_addr(struct kvm_vcpu *vcpu, gpa_t vapic_addr)
 
 int kvm_x2apic_icr_write(struct kvm_lapic *apic, u64 data)
 {
-	data &= ~APIC_ICR_BUSY;
+	/*
+	 * The Delivery Status Bit(bit 12) is removed in x2apic mode, but this
+	 * bit is also cleared by hardware, so keep consistent with hardware
+	 * behavior to clear this bit.
+	 */
+	data &= ~X2APIC_ICR_UNUSED_12;
 
 	kvm_apic_send_ipi(apic, (u32)data, (u32)(data >> 32));
 	kvm_lapic_set_reg64(apic, APIC_ICR, data);
