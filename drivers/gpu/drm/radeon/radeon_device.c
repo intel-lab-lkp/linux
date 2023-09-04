@@ -1263,6 +1263,14 @@ static const struct vga_switcheroo_client_ops radeon_switcheroo_ops = {
 	.can_switch = radeon_switcheroo_can_switch,
 };
 
+static bool radeon_want_to_be_primary(struct pci_dev *pdev)
+{
+	if (radeon_modeset == 10)
+		return true;
+
+	return false;
+}
+
 /**
  * radeon_device_init - initialize the driver
  *
@@ -1425,7 +1433,7 @@ int radeon_device_init(struct radeon_device *rdev,
 	/* if we have > 1 VGA cards, then disable the radeon VGA resources */
 	/* this will fail for cards that aren't VGA class devices, just
 	 * ignore it */
-	vga_client_register(rdev->pdev, radeon_vga_set_decode, NULL);
+	vga_client_register(rdev->pdev, radeon_vga_set_decode, radeon_want_to_be_primary);
 
 	if (rdev->flags & RADEON_IS_PX)
 		runtime = true;
