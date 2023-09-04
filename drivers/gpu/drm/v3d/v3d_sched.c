@@ -262,7 +262,11 @@ v3d_cpu_job_run(struct drm_sched_job *sched_job)
 		return NULL;
 	}
 
+	trace_v3d_cpu_job_begin(&v3d->drm, job->job_type);
+
 	v3d_cpu_job_fn[job->job_type](job);
+
+	trace_v3d_cpu_job_end(&v3d->drm, job->job_type);
 
 	return NULL;
 }
