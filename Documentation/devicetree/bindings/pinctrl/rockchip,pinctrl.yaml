@@ -62,6 +62,11 @@ properties:
       Required for at least rk3188 and rk3288. On the rk3368 this should
       point to the PMUGRF syscon.
 
+  rockchip,io-domains:
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+    description:
+      Phandles to io domains
+
   "#address-cells":
     enum: [1, 2]
 
@@ -137,7 +142,13 @@ additionalProperties:
             - description:
                 The phandle of a node contains the generic pinconfig options
                 to use as described in pinctrl-bindings.txt.
-
+      rockchip,io-domain-boot-on:
+        type: boolean
+        description:
+          If true assume that the io domain needed for this pin group has been
+          configured correctly by the bootloader. This is needed to break cyclic
+          dependencies introduced when a io domain needs a regulator that can be
+          accessed through pins configured here.
 examples:
   - |
     #include <dt-bindings/interrupt-controller/arm-gic.h>
