@@ -273,10 +273,8 @@ int drm_debugfs_init(struct drm_minor *minor, int minor_id,
 
 	drm_debugfs_add_files(minor->dev, drm_debugfs_list, DRM_DEBUGFS_ENTRIES);
 
-	if (drm_drv_uses_atomic_modeset(dev)) {
+	if (drm_drv_uses_atomic_modeset(dev))
 		drm_atomic_debugfs_init(minor);
-		drm_bridge_debugfs_init(minor);
-	}
 
 	if (drm_core_check_feature(dev, DRIVER_MODESET)) {
 		drm_framebuffer_debugfs_init(minor);
@@ -603,6 +601,37 @@ void drm_debugfs_crtc_remove(struct drm_crtc *crtc)
 	crtc->debugfs_entry = NULL;
 }
 
+static int bridges_show(struct seq_file *m, void *data)
+{
+	struct drm_encoder *encoder = m->private;
+	struct drm_bridge *bridge;
+	unsigned int idx = 0;
+
+	drm_for_each_bridge_in_chain(encoder, bridge) {
+		seq_printf(m, "bridge[%d]: %ps\n", idx++, bridge->funcs);
+		seq_printf(m, "\ttype: [%d] %s\n",
+			   bridge->type,
+			   drm_get_connector_type_name(bridge->type));
+#ifdef CONFIG_OF
+		if (bridge->of_node)
+			seq_printf(m, "\tOF: %pOFfc\n", bridge->of_node);
+#endif
+		seq_printf(m, "\tops: [0x%x]", bridge->ops);
+		if (bridge->ops & DRM_BRIDGE_OP_DETECT)
+			seq_puts(m, " detect");
+		if (bridge->ops & DRM_BRIDGE_OP_EDID)
+			seq_puts(m, " edid");
+		if (bridge->ops & DRM_BRIDGE_OP_HPD)
+			seq_puts(m, " hpd");
+		if (bridge->ops & DRM_BRIDGE_OP_MODES)
+			seq_puts(m, " modes");
+		seq_puts(m, "\n");
+	}
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(bridges);
+
 void drm_debugfs_encoder_add(struct drm_encoder *encoder)
 {
 	struct drm_minor *minor = encoder->dev->primary;
@@ -617,6 +646,10 @@ void drm_debugfs_encoder_add(struct drm_encoder *encoder)
 	kfree(name);
 
 	encoder->debugfs_entry = root;
+
+	/* bridges list */
+	debugfs_create_file("bridges", 0444, root, encoder,
+			    &bridges_fops);
 
 	if (encoder->funcs->debugfs_init)
 		encoder->funcs->debugfs_init(encoder, root);
