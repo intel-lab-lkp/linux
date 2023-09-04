@@ -19,7 +19,7 @@ struct reset_control;
 
 #define GMP_GRANULARITY (128 * 1024)
 
-#define V3D_MAX_QUEUES (V3D_CACHE_CLEAN + 1)
+#define V3D_MAX_QUEUES (V3D_CPU + 1)
 
 struct v3d_queue_state {
 	struct drm_gpu_scheduler sched;
@@ -106,6 +106,7 @@ struct v3d_dev {
 	struct v3d_render_job *render_job;
 	struct v3d_tfu_job *tfu_job;
 	struct v3d_csd_job *csd_job;
+	struct v3d_cpu_job *cpu_job;
 
 	struct v3d_queue_state queue[V3D_MAX_QUEUES];
 
@@ -285,6 +286,14 @@ struct v3d_csd_job {
 	struct drm_v3d_submit_csd args;
 };
 
+enum v3d_cpu_job_type {};
+
+struct v3d_cpu_job {
+	struct v3d_job base;
+
+	enum v3d_cpu_job_type job_type;
+};
+
 struct v3d_submit_outsync {
 	struct drm_syncobj *syncobj;
 };
@@ -386,6 +395,8 @@ int v3d_submit_cl_ioctl(struct drm_device *dev, void *data,
 int v3d_submit_tfu_ioctl(struct drm_device *dev, void *data,
 			 struct drm_file *file_priv);
 int v3d_submit_csd_ioctl(struct drm_device *dev, void *data,
+			 struct drm_file *file_priv);
+int v3d_submit_cpu_ioctl(struct drm_device *dev, void *data,
 			 struct drm_file *file_priv);
 
 /* v3d_irq.c */

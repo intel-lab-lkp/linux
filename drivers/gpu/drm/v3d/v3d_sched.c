@@ -54,6 +54,12 @@ to_csd_job(struct drm_sched_job *sched_job)
 	return container_of(sched_job, struct v3d_csd_job, base.base);
 }
 
+static struct v3d_cpu_job *
+to_cpu_job(struct drm_sched_job *sched_job)
+{
+	return container_of(sched_job, struct v3d_cpu_job, base.base);
+}
+
 static void
 v3d_sched_job_free(struct drm_sched_job *sched_job)
 {
@@ -242,6 +248,26 @@ v3d_csd_job_run(struct drm_sched_job *sched_job)
 }
 
 static struct dma_fence *
+v3d_cpu_job_run(struct drm_sched_job *sched_job)
+{
+	struct v3d_cpu_job *job = to_cpu_job(sched_job);
+	struct v3d_dev *v3d = job->base.v3d;
+
+	void (*v3d_cpu_job_fn[])(struct v3d_cpu_job *job) = { };
+
+	v3d->cpu_job = job;
+
+	if (job->job_type >= ARRAY_SIZE(v3d_cpu_job_fn)) {
+		DRM_DEBUG_DRIVER("Unknown CPU job: %d\n", job->job_type);
+		return NULL;
+	}
+
+	v3d_cpu_job_fn[job->job_type](job);
+
+	return NULL;
+}
+
+static struct dma_fence *
 v3d_cache_clean_job_run(struct drm_sched_job *sched_job)
 {
 	struct v3d_job *job = to_v3d_job(sched_job);
@@ -379,6 +405,12 @@ static const struct drm_sched_backend_ops v3d_cache_clean_sched_ops = {
 	.free_job = v3d_sched_job_free
 };
 
+static const struct drm_sched_backend_ops v3d_cpu_sched_ops = {
+	.run_job = v3d_cpu_job_run,
+	.timedout_job = v3d_generic_job_timedout,
+	.free_job = v3d_sched_job_free
+};
+
 int
 v3d_sched_init(struct v3d_dev *v3d)
 {
@@ -428,6 +460,14 @@ v3d_sched_init(struct v3d_dev *v3d)
 		if (ret)
 			goto fail;
 	}
+
+	ret = drm_sched_init(&v3d->queue[V3D_CPU].sched,
+			     &v3d_cpu_sched_ops,
+			     1, job_hang_limit,
+			     msecs_to_jiffies(hang_limit_ms), NULL,
+			     NULL, "v3d_cpu", v3d->drm.dev);
+	if (ret)
+		goto fail;
 
 	return 0;
 
