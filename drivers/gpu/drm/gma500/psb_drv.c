@@ -14,7 +14,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/spinlock.h>
 #include <linux/delay.h>
-
+#include <linux/vgaarb.h>
 #include <asm/set_memory.h>
 
 #include <acpi/video.h>
@@ -35,6 +35,11 @@
 #include "psb_intel_reg.h"
 #include "psb_irq.h"
 #include "psb_reg.h"
+
+static int gma500_modeset = -1;
+
+MODULE_PARM_DESC(modeset, "Disable/Enable modesetting");
+module_param_named(modeset, gma500_modeset, int, 0400);
 
 static const struct drm_driver driver;
 static int psb_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent);
@@ -446,6 +451,49 @@ static int gma_remove_conflicting_framebuffers(struct pci_dev *pdev,
 	return __aperture_remove_legacy_vga_devices(pdev);
 }
 
+static bool gma_contain_firmware_fb(u64 ap_start, u64 ap_end)
+{
+	u64 fb_start;
+	u64 fb_size;
+	u64 fb_end;
+
+	if (screen_info.capabilities & VIDEO_CAPABILITY_64BIT_BASE)
+		fb_start = (u64)screen_info.ext_lfb_base << 32 | screen_info.lfb_base;
+	else
+		fb_start = screen_info.lfb_base;
+
+	fb_size = screen_info.lfb_size;
+	fb_end = fb_start + fb_size - 1;
+
+	/* No firmware framebuffer support */
+	if (!fb_start || !fb_size)
+		return false;
+
+	if (fb_start >= ap_start && fb_end <= ap_end)
+		return true;
+
+	return false;
+}
+
+static bool gma_want_to_be_primary(struct pci_dev *pdev)
+{
+	struct drm_device *drm = pci_get_drvdata(pdev);
+	struct drm_psb_private *priv = to_drm_psb_private(drm);
+	u64 vram_base = priv->stolen_base;
+	u64 vram_size = priv->vram_stolen_size;
+
+	if (gma500_modeset == 10)
+		return true;
+
+	/* Stolen memory are not going to be moved */
+	if (gma_contain_firmware_fb(vram_base, vram_base + vram_size)) {
+		drm_dbg(drm, "Contains firmware FB in the stolen memory\n");
+		return true;
+	}
+
+	return false;
+}
+
 static int psb_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
 	struct drm_psb_private *dev_priv;
@@ -474,6 +522,8 @@ static int psb_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	ret = drm_dev_register(dev, ent->driver_data);
 	if (ret)
 		return ret;
+
+	vga_client_register(pdev, NULL, gma_want_to_be_primary);
 
 	psb_fbdev_setup(dev_priv);
 
@@ -526,7 +576,10 @@ static struct pci_driver psb_pci_driver = {
 
 static int __init psb_init(void)
 {
-	if (drm_firmware_drivers_only())
+	if (drm_firmware_drivers_only() && (gma500_modeset == -1))
+		return -ENODEV;
+
+	if (!gma500_modeset)
 		return -ENODEV;
 
 	return pci_register_driver(&psb_pci_driver);
