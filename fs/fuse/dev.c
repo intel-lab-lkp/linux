@@ -101,7 +101,26 @@ static void fuse_drop_waiting(struct fuse_conn *fc)
 	}
 }
 
-static void fuse_put_request(struct fuse_req *req);
+static void fuse_put_request(struct fuse_req *req)
+{
+	struct fuse_conn *fc = req->fm->fc;
+
+	if (refcount_dec_and_test(&req->count)) {
+		if (test_bit(FR_BACKGROUND, &req->flags)) {
+			/*
+			 * We get here in the unlikely case that a background
+			 * request was allocated but not sent
+			 */
+			spin_lock(&fc->bg_lock);
+			if (!fc->blocked)
+				wake_up(&fc->blocked_waitq);
+			spin_unlock(&fc->bg_lock);
+		}
+
+		fuse_drop_waiting(fc);
+		fuse_request_free(req);
+	}
+}
 
 static struct fuse_req *fuse_get_req(struct fuse_mount *fm, bool for_background)
 {
@@ -152,27 +171,6 @@ static struct fuse_req *fuse_get_req(struct fuse_mount *fm, bool for_background)
  out:
 	fuse_drop_waiting(fc);
 	return ERR_PTR(err);
-}
-
-static void fuse_put_request(struct fuse_req *req)
-{
-	struct fuse_conn *fc = req->fm->fc;
-
-	if (refcount_dec_and_test(&req->count)) {
-		if (test_bit(FR_BACKGROUND, &req->flags)) {
-			/*
-			 * We get here in the unlikely case that a background
-			 * request was allocated but not sent
-			 */
-			spin_lock(&fc->bg_lock);
-			if (!fc->blocked)
-				wake_up(&fc->blocked_waitq);
-			spin_unlock(&fc->bg_lock);
-		}
-
-		fuse_drop_waiting(fc);
-		fuse_request_free(req);
-	}
 }
 
 unsigned int fuse_len_args(unsigned int numargs, struct fuse_arg *args)
