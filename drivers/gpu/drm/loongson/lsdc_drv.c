@@ -289,7 +289,7 @@ static int lsdc_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	pci_set_drvdata(pdev, ddev);
 
-	vga_client_register(pdev, lsdc_vga_set_decode);
+	vga_client_register(pdev, lsdc_vga_set_decode, NULL);
 
 	drm_kms_helper_poll_init(ddev);
 

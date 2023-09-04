@@ -53,6 +53,7 @@ struct vga_device {
 	bool bridge_has_one_vga;
 	bool is_firmware_default;	/* device selected by firmware */
 	unsigned int (*set_decode)(struct pci_dev *pdev, bool decode);
+	bool (*be_primary)(struct pci_dev *pdev);
 };
 
 static LIST_HEAD(vga_list);
@@ -956,6 +957,10 @@ EXPORT_SYMBOL(vga_set_legacy_decoding);
  * @set_decode callback: If a client can disable its GPU VGA resource, it
  * will get a callback from this to set the encode/decode state.
  *
+ * @be_primary callback: Callback to the device driver, query if a device
+ * want to be the primary display. This callback is optional, device drivers
+ * who have no special needs can simply pass a NULL.
+ *
  * Rationale: we cannot disable VGA decode resources unconditionally some single
  * GPU laptops seem to require ACPI or BIOS access to the VGA registers to
  * control things like backlights etc.  Hopefully newer multi-GPU laptops do
@@ -971,7 +976,8 @@ EXPORT_SYMBOL(vga_set_legacy_decoding);
  * Returns: 0 on success, -1 on failure
  */
 int vga_client_register(struct pci_dev *pdev,
-		unsigned int (*set_decode)(struct pci_dev *pdev, bool decode))
+		unsigned int (*set_decode)(struct pci_dev *pdev, bool decode),
+		bool (*be_primary)(struct pci_dev *pdev))
 {
 	int ret = -ENODEV;
 	struct vga_device *vgadev;
@@ -983,6 +989,7 @@ int vga_client_register(struct pci_dev *pdev,
 		goto bail;
 
 	vgadev->set_decode = set_decode;
+	vgadev->be_primary = be_primary;
 	ret = 0;
 
 bail:
@@ -1493,6 +1500,21 @@ static void vga_arbiter_notify_clients(void)
 	spin_unlock_irqrestore(&vga_lock, flags);
 }
 
+static void vga_arbiter_do_arbitration(struct pci_dev *pdev)
+{
+	struct vga_device *vgadev;
+
+	if (pdev == vga_default_device())
+		return;
+
+	vgadev = vgadev_find(pdev);
+	if (vgadev && vgadev->be_primary && vgadev->be_primary(pdev)) {
+		vga_set_default_device(pdev);
+
+		vgaarb_info(&pdev->dev, "Override as primary by driver\n");
+	}
+}
+
 static int pci_notify(struct notifier_block *nb, unsigned long action,
 		      void *data)
 {
@@ -1505,13 +1527,24 @@ static int pci_notify(struct notifier_block *nb, unsigned long action,
 	/* For now we're only intereted in devices added and removed. I didn't
 	 * test this thing here, so someone needs to double check for the
 	 * cases of hotplugable vga cards. */
-	if (action == BUS_NOTIFY_ADD_DEVICE)
+	switch (action) {
+	case BUS_NOTIFY_ADD_DEVICE:
 		notify = vga_arbiter_add_pci_device(pdev);
-	else if (action == BUS_NOTIFY_DEL_DEVICE)
+		if (notify)
+			vga_arbiter_notify_clients();
+		break;
+	case BUS_NOTIFY_DEL_DEVICE:
 		notify = vga_arbiter_del_pci_device(pdev);
+		if (notify)
+			vga_arbiter_notify_clients();
+		break;
+	case BUS_NOTIFY_BOUND_DRIVER:
+		vga_arbiter_do_arbitration(pdev);
+		break;
+	default:
+		break;
+	}
 
-	if (notify)
-		vga_arbiter_notify_clients();
 	return 0;
 }
 
