@@ -14,9 +14,9 @@ static void bt_link_release(struct device *dev)
 {
 	struct hci_conn *conn = to_hci_conn(dev);
 
-	BT_DBG("kfree(conn %p)", conn);
+	BT_DBG("dev %p conn %p", dev, conn);
 
-	kfree(conn);
+	hci_conn_free(conn);
 }
 
 static const struct device_type bt_link = {

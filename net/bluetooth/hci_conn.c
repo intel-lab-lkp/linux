@@ -1134,6 +1134,13 @@ static void hci_conn_unlink(struct hci_conn *conn)
 	conn->link = NULL;
 }
 
+void hci_conn_free(struct hci_conn *conn)
+{
+	BT_DBG("kfree(conn %p)", conn);
+
+	kfree(conn);
+}
+
 void hci_conn_del(struct hci_conn *conn)
 {
 	struct hci_dev *hdev = conn->hdev;
