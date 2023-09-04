@@ -143,6 +143,8 @@ static void hci_conn_cleanup(struct hci_conn *conn)
 {
 	struct hci_dev *hdev = conn->hdev;
 
+	BT_DBG("%s hcon %p", hdev->name, conn);
+
 	if (test_bit(HCI_CONN_PARAM_REMOVAL_PEND, &conn->flags))
 		hci_conn_params_del(conn->hdev, &conn->dst, conn->dst_type);
 
@@ -993,6 +995,8 @@ struct hci_conn *hci_conn_add(struct hci_dev *hdev, int type, bdaddr_t *dst,
 	conn = kzalloc(sizeof(*conn), GFP_KERNEL);
 	if (!conn)
 		return NULL;
+
+	BT_DBG("hcon %p=kzalloc()", conn);
 
 	bacpy(&conn->dst, dst);
 	bacpy(&conn->src, &hdev->bdaddr);

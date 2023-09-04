@@ -1393,18 +1393,20 @@ void hci_conn_failed(struct hci_conn *conn, u8 status);
 
 static inline struct hci_conn *hci_conn_get(struct hci_conn *conn)
 {
+	BT_DBG("hcon %p orig kobj.refcount %d", conn, kref_read(&conn->dev.kobj.kref));
 	get_device(&conn->dev);
 	return conn;
 }
 
 static inline void hci_conn_put(struct hci_conn *conn)
 {
+	BT_DBG("hcon %p orig kobj.refcount %d", conn, kref_read(&conn->dev.kobj.kref));
 	put_device(&conn->dev);
 }
 
 static inline struct hci_conn *hci_conn_hold(struct hci_conn *conn)
 {
-	BT_DBG("hcon %p orig refcnt %d", conn, atomic_read(&conn->refcnt));
+	BT_DBG("hcon %p orig conn->refcnt %d", conn, atomic_read(&conn->refcnt));
 
 	atomic_inc(&conn->refcnt);
 	cancel_delayed_work(&conn->disc_work);
@@ -1414,7 +1416,7 @@ static inline struct hci_conn *hci_conn_hold(struct hci_conn *conn)
 
 static inline void hci_conn_drop(struct hci_conn *conn)
 {
-	BT_DBG("hcon %p orig refcnt %d", conn, atomic_read(&conn->refcnt));
+	BT_DBG("hcon %p orig conn->refcnt %d", conn, atomic_read(&conn->refcnt));
 
 	if (atomic_dec_and_test(&conn->refcnt)) {
 		unsigned long timeo;

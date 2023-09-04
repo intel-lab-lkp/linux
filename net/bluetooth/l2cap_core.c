@@ -1945,12 +1945,16 @@ static void l2cap_conn_free(struct kref *ref)
 {
 	struct l2cap_conn *conn = container_of(ref, struct l2cap_conn, ref);
 
+	BT_DBG("kfree(conn) %p", conn);
+
 	hci_conn_put(conn->hcon);
 	kfree(conn);
 }
 
 struct l2cap_conn *l2cap_conn_get(struct l2cap_conn *conn)
 {
+	BT_DBG("conn %p, refcount %d", conn, kref_read(&conn->ref));
+
 	kref_get(&conn->ref);
 	return conn;
 }
@@ -1958,6 +1962,8 @@ EXPORT_SYMBOL(l2cap_conn_get);
 
 void l2cap_conn_put(struct l2cap_conn *conn)
 {
+	BT_DBG("conn %p, refcount %d", conn, kref_read(&conn->ref));
+
 	kref_put(&conn->ref, l2cap_conn_free);
 }
 EXPORT_SYMBOL(l2cap_conn_put);
@@ -7835,8 +7841,10 @@ static struct l2cap_conn *l2cap_conn_add(struct hci_conn *hcon)
 	struct l2cap_conn *conn = hcon->l2cap_data;
 	struct hci_chan *hchan;
 
-	if (conn)
+	if (conn) {
+		BT_DBG("hcon %p reuse conn %p", hcon, conn);
 		return conn;
+	}
 
 	hchan = hci_chan_create(hcon);
 	if (!hchan)
@@ -7853,7 +7861,7 @@ static struct l2cap_conn *l2cap_conn_add(struct hci_conn *hcon)
 	conn->hcon = hci_conn_get(hcon);
 	conn->hchan = hchan;
 
-	BT_DBG("hcon %p conn %p hchan %p", hcon, conn, hchan);
+	BT_DBG("hcon %p conn %p=kzalloc() hchan %p", hcon, conn, hchan);
 
 	switch (hcon->type) {
 	case LE_LINK:

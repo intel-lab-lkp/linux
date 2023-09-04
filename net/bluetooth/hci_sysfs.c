@@ -13,6 +13,9 @@ static const struct class bt_class = {
 static void bt_link_release(struct device *dev)
 {
 	struct hci_conn *conn = to_hci_conn(dev);
+
+	BT_DBG("kfree(conn %p)", conn);
+
 	kfree(conn);
 }
 
@@ -67,6 +70,8 @@ void hci_conn_del_sysfs(struct hci_conn *conn)
 {
 	struct hci_dev *hdev = conn->hdev;
 
+	BT_DBG("conn %p", conn);
+
 	if (!device_is_registered(&conn->dev))
 		return;
 
@@ -80,6 +85,7 @@ void hci_conn_del_sysfs(struct hci_conn *conn)
 		put_device(dev);
 	}
 
+	BT_DBG("calling device_del %p", conn);
 	device_del(&conn->dev);
 
 	hci_dev_put(hdev);
