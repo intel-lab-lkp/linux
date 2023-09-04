@@ -1902,7 +1902,7 @@ int otx2_stop(struct net_device *netdev)
 	struct otx2_cq_poll *cq_poll = NULL;
 	struct otx2_qset *qset = &pf->qset;
 	struct otx2_rss_info *rss;
-	int qidx, vec, wrk;
+	int qidx, vec;
 
 	/* If the DOWN flag is set resources are already freed */
 	if (pf->flags & OTX2_FLAG_INTF_DOWN)
@@ -1950,9 +1950,6 @@ int otx2_stop(struct net_device *netdev)
 	for (qidx = 0; qidx < netdev->num_tx_queues; qidx++)
 		netdev_tx_reset_queue(netdev_get_tx_queue(netdev, qidx));
 
-	for (wrk = 0; wrk < pf->qset.cq_cnt; wrk++)
-		cancel_delayed_work_sync(&pf->refill_wrk[wrk].pool_refill_work);
-	devm_kfree(pf->dev, pf->refill_wrk);
 
 	kfree(qset->sq);
 	kfree(qset->cq);

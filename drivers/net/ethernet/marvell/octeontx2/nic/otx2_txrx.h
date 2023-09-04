@@ -128,7 +128,6 @@ struct otx2_cq_queue {
 	u8			cq_idx;
 	u8			cq_type;
 	u8			cint_idx; /* CQ interrupt id */
-	u8			refill_task_sched;
 	u16			cqe_size;
 	u16			pool_ptrs;
 	u32			cqe_cnt;
@@ -170,6 +169,6 @@ void cn10k_sqe_flush(void *dev, struct otx2_snd_queue *sq,
 		     int size, int qidx);
 void otx2_sqe_flush(void *dev, struct otx2_snd_queue *sq,
 		    int size, int qidx);
-void otx2_refill_pool_ptrs(void *dev, struct otx2_cq_queue *cq);
-void cn10k_refill_pool_ptrs(void *dev, struct otx2_cq_queue *cq);
+int otx2_refill_pool_ptrs(void *dev, struct otx2_cq_queue *cq);
+int cn10k_refill_pool_ptrs(void *dev, struct otx2_cq_queue *cq);
 #endif /* OTX2_TXRX_H */

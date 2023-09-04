@@ -370,7 +370,7 @@ struct dev_hw_ops {
 	int	(*sq_aq_init)(void *dev, u16 qidx, u16 sqb_aura);
 	void	(*sqe_flush)(void *dev, struct otx2_snd_queue *sq,
 			     int size, int qidx);
-	void	(*refill_pool_ptrs)(void *dev, struct otx2_cq_queue *cq);
+	int	(*refill_pool_ptrs)(void *dev, struct otx2_cq_queue *cq);
 	void	(*aura_freeptr)(void *dev, int aura, u64 buf);
 };
 
@@ -493,7 +493,6 @@ struct otx2_nic {
 	struct work_struct	reset_task;
 	struct workqueue_struct	*flr_wq;
 	struct flr_work		*flr_wrk;
-	struct refill_work	*refill_wrk;
 	struct workqueue_struct	*otx2_wq;
 	struct work_struct	rx_mode_work;
 
