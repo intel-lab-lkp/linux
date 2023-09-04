@@ -1673,10 +1673,12 @@ void mlx5e_macsec_offload_handle_rx_skb(struct net_device *netdev,
 
 	rcu_read_lock();
 	sc_xarray_element = xa_load(&macsec->sc_xarray, fs_id);
-	rx_sc = sc_xarray_element->rx_sc;
-	if (rx_sc) {
-		dst_hold(&rx_sc->md_dst->dst);
-		skb_dst_set(skb, &rx_sc->md_dst->dst);
+	if (sc_xarray_element) {
+		rx_sc = sc_xarray_element->rx_sc;
+		if (rx_sc) {
+			dst_hold(&rx_sc->md_dst->dst);
+			skb_dst_set(skb, &rx_sc->md_dst->dst);
+		}
 	}
 
 	rcu_read_unlock();
