@@ -149,7 +149,8 @@ struct kvm_pgtable_mm_ops {
 	void*		(*phys_to_virt)(phys_addr_t phys);
 	phys_addr_t	(*virt_to_phys)(void *addr);
 	void		(*dcache_clean_inval_poc)(void *addr, size_t size);
-	void		(*icache_inval_pou)(void *addr, size_t size);
+	int		(*icache_inval_pou)(struct kvm_s2_mmu *mmu,
+					    void *addr, u64 ipa, size_t size);
 };
 
 /**

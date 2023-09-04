@@ -875,6 +875,7 @@ static int stage2_map_walker_try_leaf(const struct kvm_pgtable_visit_ctx *ctx,
 	u64 granule = kvm_granule_size(ctx->level);
 	struct kvm_pgtable *pgt = data->mmu->pgt;
 	struct kvm_pgtable_mm_ops *mm_ops = ctx->mm_ops;
+	int ret;
 
 	if (!stage2_leaf_mapping_allowed(ctx, data))
 		return -E2BIG;
@@ -903,8 +904,14 @@ static int stage2_map_walker_try_leaf(const struct kvm_pgtable_visit_ctx *ctx,
 					       granule);
 
 	if (!kvm_pgtable_walk_skip_cmo(ctx) && mm_ops->icache_inval_pou &&
-	    stage2_pte_executable(new))
-		mm_ops->icache_inval_pou(kvm_pte_follow(new, mm_ops), granule);
+	    stage2_pte_executable(new)) {
+		ret = mm_ops->icache_inval_pou(data->mmu,
+					       kvm_pte_follow(new, mm_ops),
+					       ALIGN_DOWN(ctx->addr, granule),
+					       granule);
+		if (ret)
+			return ret;
+	}
 
 	stage2_make_pte(ctx, new);
 
@@ -1101,6 +1108,7 @@ int kvm_pgtable_stage2_unmap(struct kvm_pgtable *pgt, u64 addr, u64 size)
 }
 
 struct stage2_attr_data {
+	struct kvm_s2_mmu		*mmu;
 	kvm_pte_t			attr_set;
 	kvm_pte_t			attr_clr;
 	kvm_pte_t			pte;
@@ -1113,6 +1121,8 @@ static int stage2_attr_walker(const struct kvm_pgtable_visit_ctx *ctx,
 	kvm_pte_t pte = ctx->old;
 	struct stage2_attr_data *data = ctx->arg;
 	struct kvm_pgtable_mm_ops *mm_ops = ctx->mm_ops;
+	u64 granule = kvm_granule_size(ctx->level);
+	int ret;
 
 	if (!kvm_pte_valid(ctx->old))
 		return -EAGAIN;
@@ -1133,9 +1143,13 @@ static int stage2_attr_walker(const struct kvm_pgtable_visit_ctx *ctx,
 		 * stage-2 PTE if we are going to add executable permission.
 		 */
 		if (mm_ops->icache_inval_pou &&
-		    stage2_pte_executable(pte) && !stage2_pte_executable(ctx->old))
-			mm_ops->icache_inval_pou(kvm_pte_follow(pte, mm_ops),
-						  kvm_granule_size(ctx->level));
+		    stage2_pte_executable(pte) && !stage2_pte_executable(ctx->old)) {
+			ret = mm_ops->icache_inval_pou(data->mmu,
+					kvm_pte_follow(pte, mm_ops),
+					ALIGN_DOWN(ctx->addr, granule), granule);
+			if (ret)
+				return ret;
+		}
 
 		if (!stage2_try_set_pte(ctx, pte))
 			return -EAGAIN;
@@ -1152,6 +1166,7 @@ static int stage2_update_leaf_attrs(struct kvm_pgtable *pgt, u64 addr,
 	int ret;
 	kvm_pte_t attr_mask = KVM_PTE_LEAF_ATTR_LO | KVM_PTE_LEAF_ATTR_HI;
 	struct stage2_attr_data data = {
+		.mmu		= pgt->mmu,
 		.attr_set	= attr_set & attr_mask,
 		.attr_clr	= attr_clr & attr_mask,
 	};

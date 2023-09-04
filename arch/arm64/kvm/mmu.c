@@ -267,9 +267,58 @@ static void clean_dcache_guest_page(void *va, size_t size)
 	__clean_dcache_guest_page(va, size);
 }
 
-static void invalidate_icache_guest_page(void *va, size_t size)
+static struct interval_tree_node *add_fault_range(struct kvm_s2_mmu *mmu,
+						  u64 ipa, size_t size)
 {
+	struct interval_tree_node *node;
+	unsigned long start = ipa, end = start + size - 1; /* inclusive */
+
+	mutex_lock(&mmu->fault_ranges_mutex);
+
+	node = interval_tree_iter_first(&mmu->fault_ranges, start, end);
+	if (node) {
+		node = NULL;
+		goto unlock;
+	}
+
+	node = kzalloc(sizeof(*node), GFP_KERNEL_ACCOUNT);
+	if (!node)
+		goto unlock;
+
+	node->start = start;
+	node->last = end;
+	interval_tree_insert(node, &mmu->fault_ranges);
+
+unlock:
+	mutex_unlock(&mmu->fault_ranges_mutex);
+	return node;
+}
+
+static void remove_fault_range(struct kvm_s2_mmu *mmu,
+			       struct interval_tree_node *node)
+{
+	mutex_lock(&mmu->fault_ranges_mutex);
+
+	interval_tree_remove(node, &mmu->fault_ranges);
+	kfree(node);
+
+	mutex_unlock(&mmu->fault_ranges_mutex);
+}
+
+
+static int invalidate_icache_guest_page(struct kvm_s2_mmu *mmu,
+					void *va, u64 ipa, size_t size)
+{
+	struct interval_tree_node *node;
+
+	node = add_fault_range(mmu, ipa, size);
+	if (!node)
+		return -EAGAIN;
+
 	__invalidate_icache_guest_page(va, size);
+	remove_fault_range(mmu, node);
+
+	return 0;
 }
 
 /*
@@ -858,6 +907,10 @@ int kvm_init_stage2_mmu(struct kvm *kvm, struct kvm_s2_mmu *mmu, unsigned long t
 	 /* The eager page splitting is disabled by default */
 	mmu->split_page_chunk_size = KVM_ARM_EAGER_SPLIT_CHUNK_SIZE_DEFAULT;
 	mmu->split_page_cache.gfp_zero = __GFP_ZERO;
+
+	/* Initialize the page fault ranges */
+	mutex_init(&mmu->fault_ranges_mutex);
+	mmu->fault_ranges = RB_ROOT_CACHED;
 
 	mmu->pgt = pgt;
 	mmu->pgd_phys = __pa(pgt->pgd);

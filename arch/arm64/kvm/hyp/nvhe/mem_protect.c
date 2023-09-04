@@ -223,10 +223,12 @@ static void clean_dcache_guest_page(void *va, size_t size)
 	hyp_fixmap_unmap();
 }
 
-static void invalidate_icache_guest_page(void *va, size_t size)
+static int invalidate_icache_guest_page(struct kvm_s2_mmu *mmu,
+					void *va, u64 ipa, size_t size)
 {
 	__invalidate_icache_guest_page(hyp_fixmap_map(__hyp_pa(va)), size);
 	hyp_fixmap_unmap();
+	return 0;
 }
 
 int kvm_guest_prepare_stage2(struct pkvm_hyp_vm *vm, void *pgd)
