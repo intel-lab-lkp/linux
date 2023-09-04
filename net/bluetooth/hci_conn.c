@@ -1136,7 +1136,14 @@ static void hci_conn_unlink(struct hci_conn *conn)
 
 void hci_conn_free(struct hci_conn *conn)
 {
+	struct l2cap_conn *lcon = conn->l2cap_data;
+
 	BT_DBG("kfree(conn %p)", conn);
+
+	if (lcon && lcon->hcon == conn) {
+		BT_DBG("conn %p conn->l2cap_data->hcon = NULL", conn);
+		lcon->hcon = NULL;
+	}
 
 	kfree(conn);
 }

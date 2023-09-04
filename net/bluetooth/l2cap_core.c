@@ -1949,6 +1949,11 @@ static void l2cap_conn_free(struct kref *ref)
 
 	BT_DBG("kfree(conn) %p", conn);
 
+	if (conn->hcon && conn->hcon->l2cap_data == conn) {
+		BT_DBG("conn %p conn->hcon->l2cap_data = NULL", conn);
+		conn->hcon->l2cap_data = NULL;
+	}
+
 	hci_conn_put(conn->hcon);
 	kfree(conn);
 }
