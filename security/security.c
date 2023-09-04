@@ -2275,6 +2275,23 @@ int security_inode_set_acl(struct mnt_idmap *idmap,
 }
 
 /**
+ * security_inode_post_set_acl() - Update inode security after set_acl()
+ * @dentry: file
+ * @acl_name: acl name
+ * @kacl: acl struct
+ *
+ * Update inode security field after successful set_acl operation on @dentry.
+ * The posix acls in @kacl are identified by @acl_name.
+ */
+void security_inode_post_set_acl(struct dentry *dentry, const char *acl_name,
+				 struct posix_acl *kacl)
+{
+	if (unlikely(IS_PRIVATE(d_backing_inode(dentry))))
+		return;
+	call_void_hook(inode_post_set_acl, dentry, acl_name, kacl);
+}
+
+/**
  * security_inode_get_acl() - Check if reading posix acls is allowed
  * @idmap: idmap of the mount
  * @dentry: file
