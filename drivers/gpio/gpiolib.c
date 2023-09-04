@@ -237,7 +237,7 @@ int gpiod_get_direction(struct gpio_desc *desc)
 	int ret;
 
 	gc = gpiod_to_chip(desc);
-	offset = gpio_chip_hwgpio(desc);
+	offset = gpiod_get_hwgpio(desc);
 
 	/*
 	 * Open drain emulation using input mode may incorrectly report
@@ -2052,7 +2052,7 @@ static int gpiod_request_commit(struct gpio_desc *desc, const char *label)
 	if (gc->request) {
 		/* gc->request may sleep */
 		spin_unlock_irqrestore(&gpio_lock, flags);
-		offset = gpio_chip_hwgpio(desc);
+		offset = gpiod_get_hwgpio(desc);
 		if (gpiochip_line_is_valid(gc, offset))
 			ret = gc->request(gc, offset);
 		else
@@ -2153,7 +2153,7 @@ static bool gpiod_free_commit(struct gpio_desc *desc)
 		if (gc->free) {
 			spin_unlock_irqrestore(&gpio_lock, flags);
 			might_sleep_if(gc->can_sleep);
-			gc->free(gc, gpio_chip_hwgpio(desc));
+			gc->free(gc, gpiod_get_hwgpio(desc));
 			spin_lock_irqsave(&gpio_lock, flags);
 		}
 		kfree_const(desc->label);
@@ -2311,7 +2311,7 @@ static int gpio_set_config_with_argument(struct gpio_desc *desc,
 	unsigned long config;
 
 	config = pinconf_to_config_packed(mode, argument);
-	return gpio_do_set_config(gc, gpio_chip_hwgpio(desc), config);
+	return gpio_do_set_config(gc, gpiod_get_hwgpio(desc), config);
 }
 
 static int gpio_set_config_with_argument_optional(struct gpio_desc *desc,
@@ -2319,7 +2319,7 @@ static int gpio_set_config_with_argument_optional(struct gpio_desc *desc,
 						  u32 argument)
 {
 	struct device *dev = &desc->gdev->dev;
-	int gpio = gpio_chip_hwgpio(desc);
+	int gpio = gpiod_get_hwgpio(desc);
 	int ret;
 
 	ret = gpio_set_config_with_argument(desc, mode, argument);
@@ -2423,9 +2423,9 @@ int gpiod_direction_input(struct gpio_desc *desc)
 	 * assume we are in input mode after this.
 	 */
 	if (gc->direction_input) {
-		ret = gc->direction_input(gc, gpio_chip_hwgpio(desc));
+		ret = gc->direction_input(gc, gpiod_get_hwgpio(desc));
 	} else if (gc->get_direction &&
-		  (gc->get_direction(gc, gpio_chip_hwgpio(desc)) != 1)) {
+		  (gc->get_direction(gc, gpiod_get_hwgpio(desc)) != 1)) {
 		gpiod_warn(desc,
 			   "%s: missing direction_input() operation and line is output\n",
 			   __func__);
@@ -2461,11 +2461,11 @@ static int gpiod_direction_output_raw_commit(struct gpio_desc *desc, int value)
 	}
 
 	if (gc->direction_output) {
-		ret = gc->direction_output(gc, gpio_chip_hwgpio(desc), val);
+		ret = gc->direction_output(gc, gpiod_get_hwgpio(desc), val);
 	} else {
 		/* Check that we are in output mode if we can */
 		if (gc->get_direction &&
-		    gc->get_direction(gc, gpio_chip_hwgpio(desc))) {
+		    gc->get_direction(gc, gpiod_get_hwgpio(desc))) {
 			gpiod_warn(desc,
 				"%s: missing direction_output() operation\n",
 				__func__);
@@ -2475,7 +2475,7 @@ static int gpiod_direction_output_raw_commit(struct gpio_desc *desc, int value)
 		 * If we can't actively set the direction, we are some
 		 * output-only chip, so just drive the output as desired.
 		 */
-		gc->set(gc, gpio_chip_hwgpio(desc), val);
+		gc->set(gc, gpiod_get_hwgpio(desc), val);
 	}
 
 	if (!ret)
@@ -2597,7 +2597,7 @@ int gpiod_enable_hw_timestamp_ns(struct gpio_desc *desc, unsigned long flags)
 		return -ENOTSUPP;
 	}
 
-	ret = gc->en_hw_timestamp(gc, gpio_chip_hwgpio(desc), flags);
+	ret = gc->en_hw_timestamp(gc, gpiod_get_hwgpio(desc), flags);
 	if (ret)
 		gpiod_warn(desc, "%s: hw ts request failed\n", __func__);
 
@@ -2626,7 +2626,7 @@ int gpiod_disable_hw_timestamp_ns(struct gpio_desc *desc, unsigned long flags)
 		return -ENOTSUPP;
 	}
 
-	ret = gc->dis_hw_timestamp(gc, gpio_chip_hwgpio(desc), flags);
+	ret = gc->dis_hw_timestamp(gc, gpiod_get_hwgpio(desc), flags);
 	if (ret)
 		gpiod_warn(desc, "%s: hw ts release failed\n", __func__);
 
@@ -2650,7 +2650,7 @@ int gpiod_set_config(struct gpio_desc *desc, unsigned long config)
 	VALIDATE_DESC(desc);
 	gc = desc->gdev->chip;
 
-	return gpio_do_set_config(gc, gpio_chip_hwgpio(desc), config);
+	return gpio_do_set_config(gc, gpiod_get_hwgpio(desc), config);
 }
 EXPORT_SYMBOL_GPL(gpiod_set_config);
 
@@ -2722,7 +2722,7 @@ EXPORT_SYMBOL_GPL(gpiod_toggle_active_low);
 
 static int gpio_chip_get_value(struct gpio_chip *gc, const struct gpio_desc *desc)
 {
-	return gc->get ? gc->get(gc, gpio_chip_hwgpio(desc)) : -EIO;
+	return gc->get ? gc->get(gc, gpiod_get_hwgpio(desc)) : -EIO;
 }
 
 /* I/O calls are only valid after configuration completed; the relevant
@@ -2847,7 +2847,7 @@ int gpiod_get_array_value_complex(bool raw, bool can_sleep,
 		first = i;
 		do {
 			const struct gpio_desc *desc = desc_array[i];
-			int hwgpio = gpio_chip_hwgpio(desc);
+			int hwgpio = gpiod_get_hwgpio(desc);
 
 			__set_bit(hwgpio, mask);
 			i++;
@@ -2869,7 +2869,7 @@ int gpiod_get_array_value_complex(bool raw, bool can_sleep,
 
 		for (j = first; j < i; ) {
 			const struct gpio_desc *desc = desc_array[j];
-			int hwgpio = gpio_chip_hwgpio(desc);
+			int hwgpio = gpiod_get_hwgpio(desc);
 			int value = test_bit(hwgpio, bits);
 
 			if (!raw && test_bit(FLAG_ACTIVE_LOW, &desc->flags))
@@ -3001,7 +3001,7 @@ static void gpio_set_open_drain_value_commit(struct gpio_desc *desc, bool value)
 {
 	int ret = 0;
 	struct gpio_chip *gc = desc->gdev->chip;
-	int offset = gpio_chip_hwgpio(desc);
+	int offset = gpiod_get_hwgpio(desc);
 
 	if (value) {
 		ret = gc->direction_input(gc, offset);
@@ -3026,7 +3026,7 @@ static void gpio_set_open_source_value_commit(struct gpio_desc *desc, bool value
 {
 	int ret = 0;
 	struct gpio_chip *gc = desc->gdev->chip;
-	int offset = gpio_chip_hwgpio(desc);
+	int offset = gpiod_get_hwgpio(desc);
 
 	if (value) {
 		ret = gc->direction_output(gc, offset, 1);
@@ -3048,7 +3048,7 @@ static void gpiod_set_raw_value_commit(struct gpio_desc *desc, bool value)
 
 	gc = desc->gdev->chip;
 	trace_gpio_value(desc_to_gpio(desc), 0, value);
-	gc->set(gc, gpio_chip_hwgpio(desc), value);
+	gc->set(gc, gpiod_get_hwgpio(desc), value);
 }
 
 /*
@@ -3139,7 +3139,7 @@ int gpiod_set_array_value_complex(bool raw, bool can_sleep,
 
 		do {
 			struct gpio_desc *desc = desc_array[i];
-			int hwgpio = gpio_chip_hwgpio(desc);
+			int hwgpio = gpiod_get_hwgpio(desc);
 			int value = test_bit(i, value_bitmap);
 
 			/*
@@ -3350,7 +3350,7 @@ int gpiod_to_irq(const struct gpio_desc *desc)
 		return -EINVAL;
 
 	gc = desc->gdev->chip;
-	offset = gpio_chip_hwgpio(desc);
+	offset = gpiod_get_hwgpio(desc);
 	if (gc->to_irq) {
 		int retirq = gc->to_irq(gc, offset);
 
@@ -4253,7 +4253,7 @@ int gpiod_hog(struct gpio_desc *desc, const char *name,
 	int ret;
 
 	gc = gpiod_to_chip(desc);
-	hwnum = gpio_chip_hwgpio(desc);
+	hwnum = gpiod_get_hwgpio(desc);
 
 	local_desc = gpiochip_request_own_desc(gc, hwnum, name,
 					       lflags, dflags);
@@ -4333,7 +4333,7 @@ struct gpio_descs *__must_check gpiod_get_array(struct device *dev,
 		 * If pin hardware number of array member 0 is also 0, select
 		 * its chip as a candidate for fast bitmap processing path.
 		 */
-		if (descs->ndescs == 0 && gpio_chip_hwgpio(desc) == 0) {
+		if (descs->ndescs == 0 && gpiod_get_hwgpio(desc) == 0) {
 			struct gpio_descs *array;
 
 			bitmap_size = BITS_TO_LONGS(gc->ngpio > count ?
@@ -4378,7 +4378,7 @@ struct gpio_descs *__must_check gpiod_get_array(struct device *dev,
 		 * Detect array members which belong to the 'fast' chip
 		 * but their pins are not in hardware order.
 		 */
-		else if (gpio_chip_hwgpio(desc) != descs->ndescs) {
+		else if (gpiod_get_hwgpio(desc) != descs->ndescs) {
 			/*
 			 * Don't use fast path if all array members processed so
 			 * far belong to the same chip as this one but its pin

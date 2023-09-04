@@ -194,7 +194,7 @@ static int gpio_sysfs_request_irq(struct device *dev, unsigned char flags)
 	 *        Remove this redundant call (along with the corresponding
 	 *        unlock) when those drivers have been fixed.
 	 */
-	ret = gpiochip_lock_as_irq(desc->gdev->chip, gpio_chip_hwgpio(desc));
+	ret = gpiochip_lock_as_irq(desc->gdev->chip, gpiod_get_hwgpio(desc));
 	if (ret < 0)
 		goto err_put_kn;
 
@@ -208,7 +208,7 @@ static int gpio_sysfs_request_irq(struct device *dev, unsigned char flags)
 	return 0;
 
 err_unlock:
-	gpiochip_unlock_as_irq(desc->gdev->chip, gpio_chip_hwgpio(desc));
+	gpiochip_unlock_as_irq(desc->gdev->chip, gpiod_get_hwgpio(desc));
 err_put_kn:
 	sysfs_put(data->value_kn);
 
@@ -226,7 +226,7 @@ static void gpio_sysfs_free_irq(struct device *dev)
 
 	data->irq_flags = 0;
 	free_irq(data->irq, data);
-	gpiochip_unlock_as_irq(desc->gdev->chip, gpio_chip_hwgpio(desc));
+	gpiochip_unlock_as_irq(desc->gdev->chip, gpiod_get_hwgpio(desc));
 	sysfs_put(data->value_kn);
 }
 
@@ -458,7 +458,7 @@ static ssize_t export_store(const struct class *class,
 		return -EINVAL;
 	}
 	gc = desc->gdev->chip;
-	offset = gpio_chip_hwgpio(desc);
+	offset = gpiod_get_hwgpio(desc);
 	if (!gpiochip_line_is_valid(gc, offset)) {
 		pr_warn("%s: GPIO %ld masked\n", __func__, gpio);
 		return -EINVAL;
@@ -612,7 +612,7 @@ int gpiod_export(struct gpio_desc *desc, bool direction_may_change)
 	else
 		data->direction_can_change = false;
 
-	offset = gpio_chip_hwgpio(desc);
+	offset = gpiod_get_hwgpio(desc);
 	if (chip->names && chip->names[offset])
 		ioname = chip->names[offset];
 
