@@ -1,0 +1,13 @@
+/dts-v1/;
+/plugin/;
+
+/ {
+    fragment@0 {
+        target-path = "/soc@0";
+        __overlay__ {
+            usb@78d9000 {
+                dr_mode = "host";
+            };
+        };
+    };
+};
