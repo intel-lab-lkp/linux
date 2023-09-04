@@ -8080,7 +8080,7 @@ int l2cap_chan_connect(struct l2cap_chan *chan, __le16 psm, u16 cid,
 		if (data.count > L2CAP_ECRED_CONN_SCID_MAX) {
 			hci_conn_drop(hcon);
 			err = -EPROTO;
-			goto done;
+			goto release_conn;
 		}
 	}
 
@@ -8126,6 +8126,18 @@ int l2cap_chan_connect(struct l2cap_chan *chan, __le16 psm, u16 cid,
 chan_unlock:
 	l2cap_chan_unlock(chan);
 	mutex_unlock(&conn->chan_lock);
+
+release_conn:
+	/* Transfer the "conn" ownership to "chan->conn".
+	 * l2cap_conn_add() above has created "conn" with a
+	 * ref-counter at 1. "__l2cap_chan_add()" stored a "conn"
+	 * reference in "chan->conn" and incremented the ref-counter.
+	 * Before "conn" goes out of scope, decrement here the "conn"
+	 * ref-counter, so that when "l2cap_chan_del()" will
+	 * eventually decrement the ref-counter, the "conn" will be
+	 * freed.
+	 */
+	l2cap_conn_put(conn);
 done:
 	hci_dev_unlock(hdev);
 	hci_dev_put(hdev);
