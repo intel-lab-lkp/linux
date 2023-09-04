@@ -435,6 +435,7 @@ struct rockchip_pin_group {
 	unsigned int			npins;
 	unsigned int			*pins;
 	struct rockchip_pin_config	*data;
+	bool				io_domain_skip;
 };
 
 /**
@@ -462,6 +463,8 @@ struct rockchip_pinctrl {
 	unsigned int			ngroups;
 	struct rockchip_pmx_func	*functions;
 	unsigned int			nfunctions;
+	struct device_node		**io_domains;
+	int				num_io_domains;
 };
 
 #endif

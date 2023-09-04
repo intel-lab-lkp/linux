@@ -24,6 +24,8 @@
 #include <linux/of_address.h>
 #include <linux/of_device.h>
 #include <linux/of_irq.h>
+#include <linux/of_platform.h>
+#include <linux/platform_device.h>
 #include <linux/pinctrl/machine.h>
 #include <linux/pinctrl/pinconf.h>
 #include <linux/pinctrl/pinctrl.h>
@@ -2678,6 +2680,43 @@ static int rockchip_pmx_get_groups(struct pinctrl_dev *pctldev,
 	return 0;
 }
 
+static int rockchip_pmx_check_io_domain(struct rockchip_pinctrl *info, unsigned group)
+{
+	struct platform_device *pdev;
+	int i;
+
+	if (!info->io_domains)
+		return 0;
+
+	if (info->groups[group].io_domain_skip)
+		return 0;
+
+	for (i = 0; i < info->num_io_domains; i++) {
+		if (!info->io_domains[i])
+			continue;
+
+		pdev = of_find_device_by_node(info->io_domains[i]);
+		if (!pdev) {
+			dev_err(info->dev, "couldn't find IO domain device\n");
+			return -ENODEV;
+		}
+
+		if (!platform_get_drvdata(pdev)) {
+			dev_err(info->dev, "IO domain device is not probed yet, deferring...(%s)",
+				info->groups[group].name);
+			return -EPROBE_DEFER;
+		}
+
+		of_node_put(info->io_domains[i]);
+		info->io_domains[i] = NULL;
+	}
+
+	devm_kfree(info->dev, info->io_domains);
+	info->io_domains = NULL;
+
+	return 0;
+}
+
 static int rockchip_pmx_set(struct pinctrl_dev *pctldev, unsigned selector,
 			    unsigned group)
 {
@@ -2690,6 +2729,10 @@ static int rockchip_pmx_set(struct pinctrl_dev *pctldev, unsigned selector,
 
 	dev_dbg(dev, "enable function %s group %s\n",
 		info->functions[selector].name, info->groups[group].name);
+
+	ret = rockchip_pmx_check_io_domain(info, group);
+	if (ret)
+		return ret;
 
 	/*
 	 * for each pin in the pin group selected, program the corresponding
@@ -3018,6 +3061,8 @@ static int rockchip_pinctrl_parse_groups(struct device_node *np,
 	size /= sizeof(*list);
 	if (!size || size % 4)
 		return dev_err_probe(dev, -EINVAL, "wrong pins number or pins and configs should be by 4\n");
+
+	grp->io_domain_skip = of_property_read_bool(np, "rockchip,io-domain-boot-on");
 
 	grp->npins = size / 4;
 
@@ -3417,6 +3462,22 @@ static int rockchip_pinctrl_probe(struct platform_device *pdev)
 			return PTR_ERR(info->regmap_pmu);
 	}
 
+	info->num_io_domains = of_property_count_u32_elems(np, "rockchip,io-domains");
+	if (info->num_io_domains) {
+		int i;
+
+		info->io_domains = devm_kmalloc_array(dev, info->num_io_domains,
+						      sizeof(*info->io_domains), GFP_KERNEL);
+		if (!info->io_domains)
+			return -ENOMEM;
+
+		for (i = 0; i < info->num_io_domains; i++) {
+			info->io_domains[i] = of_parse_phandle(np, "rockchip,io-domains", 0);
+			if (!info->io_domains[i])
+				return -EINVAL;
+		}
+	}
+
 	ret = rockchip_pinctrl_register(pdev, info);
 	if (ret)
 		return ret;
@@ -3438,6 +3499,9 @@ static int rockchip_pinctrl_remove(struct platform_device *pdev)
 	int i;
 
 	of_platform_depopulate(&pdev->dev);
+
+	for (i = 0; i < info->num_io_domains; i++)
+		of_node_put(info->io_domains[i]);
 
 	for (i = 0; i < info->ctrl->nr_banks; i++) {
 		bank = &info->ctrl->pin_banks[i];
