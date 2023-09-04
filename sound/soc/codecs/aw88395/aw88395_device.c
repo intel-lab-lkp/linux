@@ -290,30 +290,6 @@ void aw88395_dev_set_volume(struct aw_device *aw_dev, unsigned short set_vol)
 }
 EXPORT_SYMBOL_GPL(aw88395_dev_set_volume);
 
-static void aw_dev_fade_in(struct aw_device *aw_dev)
-{
-	struct aw_volume_desc *desc = &aw_dev->volume_desc;
-	u16 fade_in_vol = desc->ctl_volume;
-	int fade_step = aw_dev->fade_step;
-	int i;
-
-	if (!aw_dev->fade_en)
-		return;
-
-	if (fade_step == 0 || aw_dev->fade_in_time == 0) {
-		aw_dev_set_volume(aw_dev, fade_in_vol);
-		return;
-	}
-
-	for (i = AW88395_MUTE_VOL; i >= fade_in_vol; i -= fade_step) {
-		aw_dev_set_volume(aw_dev, i);
-		usleep_range(aw_dev->fade_in_time, aw_dev->fade_in_time + 10);
-	}
-
-	if (i != fade_in_vol)
-		aw_dev_set_volume(aw_dev, fade_in_vol);
-}
-
 static void aw_dev_fade_out(struct aw_device *aw_dev)
 {
 	struct aw_volume_desc *desc = &aw_dev->volume_desc;
@@ -567,7 +543,6 @@ void aw88395_dev_mute(struct aw_device *aw_dev, bool is_mute)
 	} else {
 		ret = regmap_update_bits(aw_dev->regmap, AW88395_SYSCTRL_REG,
 				~AW88395_HMUTE_MASK, AW88395_HMUTE_DISABLE_VALUE);
-		aw_dev_fade_in(aw_dev);
 	}
 
 	if (ret)
@@ -1607,24 +1582,6 @@ static void aw88395_parse_channel_dt(struct aw_device *aw_dev)
 	aw_dev->channel = channel_value;
 }
 
-static void aw88395_parse_fade_enable_dt(struct aw_device *aw_dev)
-{
-	struct device_node *np = aw_dev->dev->of_node;
-	u32 fade_en;
-	int ret;
-
-	ret = of_property_read_u32(np, "fade-enable", &fade_en);
-	if (ret) {
-		dev_dbg(aw_dev->dev,
-			"read fade-enable failed, close fade_in_out");
-		fade_en = AW88395_FADE_IN_OUT_DEFAULT;
-	}
-
-	dev_dbg(aw_dev->dev, "read fade-enable value is: %d", fade_en);
-
-	aw_dev->fade_en = fade_en;
-}
-
 static int aw_dev_init(struct aw_device *aw_dev)
 {
 	aw_dev->chip_id = AW88395_CHIP_ID;
@@ -1639,7 +1596,6 @@ static int aw_dev_init(struct aw_device *aw_dev)
 	aw_dev->fade_step = AW88395_VOLUME_STEP_DB;
 	aw_dev->volume_desc.ctl_volume = AW88395_VOL_DEFAULT_VALUE;
 	aw88395_parse_channel_dt(aw_dev);
-	aw88395_parse_fade_enable_dt(aw_dev);
 
 	return 0;
 }
