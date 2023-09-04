@@ -143,7 +143,6 @@ struct aw_device {
 	unsigned char dsp_crc_st;
 	u16 chip_id;
 
-	unsigned int channel;
 	unsigned int fade_step;
 
 	struct i2c_client *i2c;

@@ -79,7 +79,6 @@ struct aw_cfg_hdr {
 	char version[CFG_VERSION_MAX];
 	u32 author_id;
 	u32 ddt_size;
-	u32 ddt_num;
 	u32 hdr_offset;
 	u32 hdr_version;
 	u32 reserved[3];

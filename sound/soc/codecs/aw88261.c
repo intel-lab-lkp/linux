@@ -1171,17 +1171,6 @@ static void aw88261_hw_reset(struct aw88261 *aw88261)
 	usleep_range(AW88261_1000_US, AW88261_1000_US + 10);
 }
 
-static void aw88261_parse_channel_dt(struct aw88261 *aw88261)
-{
-	struct aw_device *aw_dev = aw88261->aw_pa;
-	struct device_node *np = aw_dev->dev->of_node;
-	u32 channel_value = AW88261_DEV_DEFAULT_CH;
-
-	of_property_read_u32(np, "sound-channel", &channel_value);
-
-	aw_dev->channel = channel_value;
-}
-
 static int aw88261_init(struct aw88261 **aw88261, struct i2c_client *i2c, struct regmap *regmap)
 {
 	struct aw_device *aw_dev;
@@ -1214,12 +1203,10 @@ static int aw88261_init(struct aw88261 **aw88261, struct i2c_client *i2c, struct
 	aw_dev->prof_info.prof_desc = NULL;
 	aw_dev->prof_info.count = 0;
 	aw_dev->prof_info.prof_type = AW88395_DEV_NONE_TYPE_ID;
-	aw_dev->channel = 0;
 	aw_dev->fw_status = AW88261_DEV_FW_FAILED;
 	aw_dev->fade_step = AW88261_VOLUME_STEP_DB;
 	aw_dev->volume_desc.ctl_volume = AW88261_VOL_DEFAULT_VALUE;
 	aw_dev->volume_desc.mute_volume = AW88261_MUTE_VOL;
-	aw88261_parse_channel_dt(*aw88261);
 
 	return ret;
 }

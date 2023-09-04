@@ -1563,25 +1563,6 @@ int aw88395_dev_init(struct aw_device *aw_dev, struct aw_container *aw_cfg)
 }
 EXPORT_SYMBOL_GPL(aw88395_dev_init);
 
-static void aw88395_parse_channel_dt(struct aw_device *aw_dev)
-{
-	struct device_node *np = aw_dev->dev->of_node;
-	u32 channel_value;
-	int ret;
-
-	ret = of_property_read_u32(np, "sound-channel", &channel_value);
-	if (ret) {
-		dev_dbg(aw_dev->dev,
-			"read sound-channel failed,use default 0");
-		aw_dev->channel = AW88395_DEV_DEFAULT_CH;
-		return;
-	}
-
-	dev_dbg(aw_dev->dev, "read sound-channel value is: %d",
-			channel_value);
-	aw_dev->channel = channel_value;
-}
-
 static int aw_dev_init(struct aw_device *aw_dev)
 {
 	aw_dev->chip_id = AW88395_CHIP_ID;
@@ -1590,12 +1571,10 @@ static int aw_dev_init(struct aw_device *aw_dev)
 	aw_dev->prof_info.prof_desc = NULL;
 	aw_dev->prof_info.count = 0;
 	aw_dev->prof_info.prof_type = AW88395_DEV_NONE_TYPE_ID;
-	aw_dev->channel = 0;
 	aw_dev->fw_status = AW88395_DEV_FW_FAILED;
 
 	aw_dev->fade_step = AW88395_VOLUME_STEP_DB;
 	aw_dev->volume_desc.ctl_volume = AW88395_VOL_DEFAULT_VALUE;
-	aw88395_parse_channel_dt(aw_dev);
 
 	return 0;
 }
