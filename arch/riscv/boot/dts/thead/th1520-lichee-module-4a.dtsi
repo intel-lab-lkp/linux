@@ -36,3 +36,7 @@
 &dmac0 {
 	status = "okay";
 };
+
+&rst {
+	status = "okay";
+};
