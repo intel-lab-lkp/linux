@@ -8,13 +8,15 @@
 #include <linux/in6.h>
 
 /* Responses from hook functions. */
-#define NF_DROP 0
-#define NF_ACCEPT 1
-#define NF_STOLEN 2
-#define NF_QUEUE 3
-#define NF_REPEAT 4
-#define NF_STOP 5	/* Deprecated, for userspace nf_queue compatibility. */
-#define NF_MAX_VERDICT NF_STOP
+enum {
+	NF_DROP        = 0,
+	NF_ACCEPT      = 1,
+	NF_STOLEN      = 2,
+	NF_QUEUE       = 3,
+	NF_REPEAT      = 4,
+	NF_STOP        = 5,	/* Deprecated, for userspace nf_queue compatibility. */
+	NF_MAX_VERDICT = NF_STOP,
+};
 
 /* we overload the higher bits for encoding auxiliary data such as the queue
  * number or errno values. Not nice, but better than additional function
