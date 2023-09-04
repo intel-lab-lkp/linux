@@ -13,6 +13,7 @@
 
 #include <linux/module.h>
 #include <linux/pci.h>
+#include <linux/vgaarb.h>
 
 #include <drm/drm_aperture.h>
 #include <drm/drm_atomic_helper.h>
@@ -26,6 +27,10 @@
 
 #include "hibmc_drm_drv.h"
 #include "hibmc_drm_regs.h"
+
+static int hibmc_modeset = -1;
+MODULE_PARM_DESC(modeset, "Disable/Enable modesetting");
+module_param_named(modeset, hibmc_modeset, int, 0400);
 
 DEFINE_DRM_GEM_FOPS(hibmc_fops);
 
@@ -299,6 +304,14 @@ err:
 	return ret;
 }
 
+static bool hibmc_want_to_be_primary(struct pci_dev *pdev)
+{
+	if (hibmc_modeset == 10)
+		return true;
+
+	return false;
+}
+
 static int hibmc_pci_probe(struct pci_dev *pdev,
 			   const struct pci_device_id *ent)
 {
@@ -338,6 +351,8 @@ static int hibmc_pci_probe(struct pci_dev *pdev,
 			  ret);
 		goto err_unload;
 	}
+
+	vga_client_register(pdev, NULL, hibmc_want_to_be_primary);
 
 	drm_fbdev_generic_setup(dev, 32);
 
