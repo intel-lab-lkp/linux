@@ -14,4 +14,6 @@ struct intel_plane *
 intel_cursor_plane_create(struct drm_i915_private *dev_priv,
 			  enum pipe pipe);
 
+void intel_cursor_wait_unpin_works(struct intel_plane *plane);
+
 #endif
