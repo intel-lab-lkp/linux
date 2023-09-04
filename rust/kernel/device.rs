@@ -4,11 +4,24 @@
 //!
 //! C header: [`include/linux/device.h`](../../../../include/linux/device.h)
 
+use macros::pin_data;
+
 use crate::{
+    alloc::flags::*,
     bindings,
+    error::Result,
+    init::InPlaceInit,
+    init::PinInit,
+    pin_init,
+    str::CStr,
+    sync::{LockClassKey, RevocableMutex, RevocableMutexGuard, UniqueArc},
     types::{ARef, Opaque},
 };
-use core::ptr;
+use core::{
+    ops::{Deref, DerefMut},
+    pin::Pin,
+    ptr,
+};
 
 /// A ref-counted device.
 ///
@@ -74,3 +87,91 @@ unsafe impl Send for Device {}
 // SAFETY: `Device` only holds a pointer to a C device, references to which are safe to be used
 // from any thread.
 unsafe impl Sync for Device {}
+
+/// Device data.
+///
+/// When a device is unbound (for whatever reason, for example, because the device was unplugged or
+/// because the user decided to unbind the driver), the driver is given a chance to clean up its
+/// state.
+///
+/// The device data is reference-counted because other subsystems may hold pointers to it; some
+/// device state must be freed and not used anymore, while others must remain accessible.
+///
+/// This struct separates the device data into two categories:
+///   1. Registrations: are destroyed when the device is removed.
+///   2. General data: remain available as long as the reference count is nonzero.
+///
+/// This struct implements the `DeviceRemoval` trait such that `registrations` can be revoked when
+/// the device is unbound.
+#[pin_data]
+pub struct Data<T, U> {
+    #[pin]
+    registrations: RevocableMutex<T>,
+    #[pin]
+    general: U,
+}
+
+/// Safely creates an new reference-counted instance of [`Data`].
+#[doc(hidden)]
+#[macro_export]
+macro_rules! new_device_data {
+    ($reg:expr, $gen:expr, $name:literal) => {{
+        static CLASS1: $crate::sync::LockClassKey = $crate::sync::LockClassKey::new();
+        let regs = $reg;
+        let gen = $gen;
+        let name = $crate::c_str!($name);
+        $crate::device::Data::try_new(regs, gen, name, &CLASS1)
+    }};
+}
+
+impl<T, U> Data<T, U> {
+    /// Creates a new instance of `Data`.
+    ///
+    /// It is recommended that the [`new_device_data`] macro be used as it automatically creates
+    /// the lock classes.
+    pub fn try_new(
+        registrations: T,
+        general: impl PinInit<U>,
+        name: &'static CStr,
+        key1: &'static LockClassKey,
+    ) -> Result<Pin<UniqueArc<Self>>> {
+        let ret = UniqueArc::pin_init(
+            pin_init!(Self {
+                registrations <- RevocableMutex::new(
+                    registrations,
+                    name,
+                    key1,
+                ),
+                general <- general,
+            }),
+            GFP_KERNEL,
+        )?;
+
+        Ok(ret)
+    }
+
+    /// Returns the locked registrations if they're still available.
+    pub fn registrations(&self) -> Option<RevocableMutexGuard<'_, T>> {
+        self.registrations.try_write()
+    }
+}
+
+impl<T, U> crate::driver::DeviceRemoval for Data<T, U> {
+    fn device_remove(&self) {
+        self.registrations.revoke();
+    }
+}
+
+impl<T, U> Deref for Data<T, U> {
+    type Target = U;
+
+    fn deref(&self) -> &U {
+        &self.general
+    }
+}
+
+impl<T, U> DerefMut for Data<T, U> {
+    fn deref_mut(&mut self) -> &mut U {
+        &mut self.general
+    }
+}
