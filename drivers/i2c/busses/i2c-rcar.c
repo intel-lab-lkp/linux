@@ -114,6 +114,7 @@ enum rcar_i2c_type {
 	I2C_RCAR_GEN1,
 	I2C_RCAR_GEN2,
 	I2C_RCAR_GEN3,
+	I2C_RCAR_GEN4,
 };
 
 struct rcar_i2c_priv {
@@ -218,7 +219,7 @@ static void rcar_i2c_init(struct rcar_i2c_priv *priv)
 	/* start clock */
 	rcar_i2c_write(priv, ICCCR, priv->icccr);
 
-	if (priv->devtype == I2C_RCAR_GEN3)
+	if (priv->devtype >= I2C_RCAR_GEN3)
 		rcar_i2c_write(priv, ICFBSCR, TCYC17);
 
 }
@@ -251,21 +252,10 @@ static int rcar_i2c_clock_calculate(struct rcar_i2c_priv *priv)
 		.scl_int_delay_ns	= 50,
 	};
 
+	cdf_width = (priv->devtype == I2C_RCAR_GEN1) ? 2 : 3;
+
 	/* Fall back to previously used values if not supplied */
 	i2c_parse_fw_timings(dev, &t, false);
-
-	switch (priv->devtype) {
-	case I2C_RCAR_GEN1:
-		cdf_width = 2;
-		break;
-	case I2C_RCAR_GEN2:
-	case I2C_RCAR_GEN3:
-		cdf_width = 3;
-		break;
-	default:
-		dev_err(dev, "device type error\n");
-		return -EIO;
-	}
 
 	/*
 	 * calculate SCL clock
@@ -1031,10 +1021,12 @@ static const struct of_device_id rcar_i2c_dt_ids[] = {
 	{ .compatible = "renesas,i2c-r8a7794", .data = (void *)I2C_RCAR_GEN2 },
 	{ .compatible = "renesas,i2c-r8a7795", .data = (void *)I2C_RCAR_GEN3 },
 	{ .compatible = "renesas,i2c-r8a7796", .data = (void *)I2C_RCAR_GEN3 },
+	/* S4 has no FM+ bit */
+	{ .compatible = "renesas,i2c-r8a779f0", .data = (void *)I2C_RCAR_GEN3 },
 	{ .compatible = "renesas,rcar-gen1-i2c", .data = (void *)I2C_RCAR_GEN1 },
 	{ .compatible = "renesas,rcar-gen2-i2c", .data = (void *)I2C_RCAR_GEN2 },
 	{ .compatible = "renesas,rcar-gen3-i2c", .data = (void *)I2C_RCAR_GEN3 },
-	{ .compatible = "renesas,rcar-gen4-i2c", .data = (void *)I2C_RCAR_GEN3 },
+	{ .compatible = "renesas,rcar-gen4-i2c", .data = (void *)I2C_RCAR_GEN4 },
 	{},
 };
 MODULE_DEVICE_TABLE(of, rcar_i2c_dt_ids);
@@ -1101,6 +1093,7 @@ static int rcar_i2c_probe(struct platform_device *pdev)
 		irqhandler = rcar_i2c_gen2_irq;
 	}
 
+	/* Gen3 needs reset for RXDMA */
 	if (priv->devtype == I2C_RCAR_GEN3) {
 		priv->rstc = devm_reset_control_get_exclusive(&pdev->dev, NULL);
 		if (!IS_ERR(priv->rstc)) {
