@@ -528,10 +528,6 @@ static bool fuse_request_queue_background(struct fuse_req *req)
 	bool queued = false;
 
 	WARN_ON(!test_bit(FR_BACKGROUND, &req->flags));
-	if (!test_bit(FR_WAITING, &req->flags)) {
-		__set_bit(FR_WAITING, &req->flags);
-		atomic_inc(&fc->num_waiting);
-	}
 	__set_bit(FR_ISREPLY, &req->flags);
 	spin_lock(&fc->bg_lock);
 	if (likely(fc->connected)) {
@@ -553,10 +549,14 @@ int fuse_simple_background(struct fuse_mount *fm, struct fuse_args *args,
 	struct fuse_req *req;
 
 	if (args->force) {
+		struct fuse_conn *fc = fm->fc;
+
 		WARN_ON(!args->nocreds);
 		req = fuse_request_alloc(fm, gfp_flags);
 		if (!req)
 			return -ENOMEM;
+		atomic_inc(&fc->num_waiting);
+		__set_bit(FR_WAITING, &req->flags);
 		__set_bit(FR_BACKGROUND, &req->flags);
 	} else {
 		WARN_ON(args->nocreds);
