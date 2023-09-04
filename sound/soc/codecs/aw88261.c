@@ -633,28 +633,17 @@ static int aw88261_dev_stop(struct aw_device *aw_dev)
 	return 0;
 }
 
-static int aw88261_reg_update(struct aw88261 *aw88261, bool force)
+static int aw88261_reg_update(struct aw88261 *aw88261)
 {
 	struct aw_device *aw_dev = aw88261->aw_pa;
 	int ret;
 
-	if (force) {
-		ret = regmap_write(aw_dev->regmap,
-					AW88261_ID_REG, AW88261_SOFT_RESET_VALUE);
-		if (ret)
-			return ret;
-
+	if (aw_dev->prof_cur != aw_dev->prof_index) {
 		ret = aw88261_dev_fw_update(aw88261);
 		if (ret)
 			return ret;
 	} else {
-		if (aw_dev->prof_cur != aw_dev->prof_index) {
-			ret = aw88261_dev_fw_update(aw88261);
-			if (ret)
-				return ret;
-		} else {
-			ret = 0;
-		}
+		ret = 0;
 	}
 
 	aw_dev->prof_cur = aw_dev->prof_index;
@@ -667,7 +656,7 @@ static void aw88261_start_pa(struct aw88261 *aw88261)
 	int ret, i;
 
 	for (i = 0; i < AW88261_START_RETRIES; i++) {
-		ret = aw88261_reg_update(aw88261, aw88261->phase_sync);
+		ret = aw88261_reg_update(aw88261);
 		if (ret) {
 			dev_err(aw88261->aw_pa->dev, "fw update failed, cnt:%d\n", i);
 			continue;
@@ -1187,13 +1176,10 @@ static void aw88261_parse_channel_dt(struct aw88261 *aw88261)
 	struct aw_device *aw_dev = aw88261->aw_pa;
 	struct device_node *np = aw_dev->dev->of_node;
 	u32 channel_value = AW88261_DEV_DEFAULT_CH;
-	u32 sync_enable = false;
 
 	of_property_read_u32(np, "sound-channel", &channel_value);
-	of_property_read_u32(np, "sync-flag", &sync_enable);
 
 	aw_dev->channel = channel_value;
-	aw88261->phase_sync = sync_enable;
 }
 
 static int aw88261_init(struct aw88261 **aw88261, struct i2c_client *i2c, struct regmap *regmap)

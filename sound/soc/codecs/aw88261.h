@@ -452,8 +452,6 @@ struct aw88261 {
 	int frcset_en;
 	unsigned int mute_st;
 	unsigned int amppd_st;
-
-	unsigned char phase_sync;
 };
 
 #endif
