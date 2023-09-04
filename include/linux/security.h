@@ -1849,6 +1849,9 @@ int security_path_mkdir(const struct path *dir, struct dentry *dentry, umode_t m
 int security_path_rmdir(const struct path *dir, struct dentry *dentry);
 int security_path_mknod(const struct path *dir, struct dentry *dentry, umode_t mode,
 			unsigned int dev);
+void security_path_post_mknod(struct mnt_idmap *idmap, const struct path *dir,
+			      struct dentry *dentry, umode_t mode,
+			      unsigned int dev);
 int security_path_truncate(const struct path *path);
 int security_path_symlink(const struct path *dir, struct dentry *dentry,
 			  const char *old_name);
@@ -1882,6 +1885,12 @@ static inline int security_path_mknod(const struct path *dir, struct dentry *den
 {
 	return 0;
 }
+
+static inline void security_path_post_mknod(struct mnt_idmap *idmap,
+					    const struct path *dir,
+					    struct dentry *dentry, umode_t mode,
+					    unsigned int dev)
+{ }
 
 static inline int security_path_truncate(const struct path *path)
 {
