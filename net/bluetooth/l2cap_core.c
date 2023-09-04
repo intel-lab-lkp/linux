@@ -7844,8 +7844,8 @@ static struct l2cap_conn *l2cap_conn_add(struct hci_conn *hcon)
 	struct hci_chan *hchan;
 
 	if (conn) {
-		BT_DBG("hcon %p reuse conn %p", hcon, conn);
-		return conn;
+		BT_DBG("hcon %p reuse conn %p with l2cap_conn_get()", hcon, conn);
+		return l2cap_conn_get(conn);
 	}
 
 	hchan = hci_chan_create(hcon);
