@@ -22,7 +22,6 @@ properties:
       - items:
           - enum:
               - qcom,apq8084-tcsr-mutex
-              - qcom,ipq6018-tcsr-mutex
               - qcom,msm8226-tcsr-mutex
               - qcom,msm8994-tcsr-mutex
           - const: qcom,tcsr-mutex
