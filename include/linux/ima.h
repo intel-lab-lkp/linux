@@ -19,7 +19,8 @@ extern enum hash_algo ima_get_current_hash_algo(void);
 extern int ima_bprm_check(struct linux_binprm *bprm);
 extern int ima_file_check(struct file *file, int mask);
 extern void ima_post_create_tmpfile(struct mnt_idmap *idmap,
-				    struct inode *inode);
+				    struct inode *dir, struct file *file,
+				    umode_t mode);
 extern void ima_file_free(struct file *file);
 extern int ima_file_mmap(struct file *file, unsigned long reqprot,
 			 unsigned long prot, unsigned long flags);
@@ -69,7 +70,9 @@ static inline int ima_file_check(struct file *file, int mask)
 }
 
 static inline void ima_post_create_tmpfile(struct mnt_idmap *idmap,
-					   struct inode *inode)
+					   struct inode *dir,
+					   struct file *file,
+					   umode_t mode)
 {
 }
 

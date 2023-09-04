@@ -663,16 +663,20 @@ EXPORT_SYMBOL_GPL(ima_inode_hash);
 /**
  * ima_post_create_tmpfile - mark newly created tmpfile as new
  * @idmap: idmap of the mount the inode was found from
- * @inode: inode of the newly created tmpfile
+ * @dir: inode structure of the parent of the new file
+ * @file: file descriptor of the new file
+ * @mode: mode of the new file
  *
  * No measuring, appraising or auditing of newly created tmpfiles is needed.
  * Skip calling process_measurement(), but indicate which newly, created
  * tmpfiles are in policy.
  */
 void ima_post_create_tmpfile(struct mnt_idmap *idmap,
-			     struct inode *inode)
+			     struct inode *dir, struct file *file,
+			     umode_t mode)
 {
 	struct integrity_iint_cache *iint;
+	struct inode *inode = file_inode(file);
 	int must_appraise;
 
 	if (!ima_policy_flag || !S_ISREG(inode->i_mode))
