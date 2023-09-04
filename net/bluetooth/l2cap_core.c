@@ -587,7 +587,7 @@ void __l2cap_chan_add(struct l2cap_conn *conn, struct l2cap_chan *chan)
 
 	conn->disc_reason = HCI_ERROR_REMOTE_USER_TERM;
 
-	chan->conn = conn;
+	chan->conn = l2cap_conn_get(conn);
 
 	switch (chan->chan_type) {
 	case L2CAP_CHAN_CONN_ORIENTED:
@@ -669,6 +669,8 @@ void l2cap_chan_del(struct l2cap_chan *chan, int err)
 
 		if (mgr && mgr->bredr_chan == chan)
 			mgr->bredr_chan = NULL;
+
+		l2cap_conn_put(conn);
 	}
 
 	if (chan->hs_hchan) {
