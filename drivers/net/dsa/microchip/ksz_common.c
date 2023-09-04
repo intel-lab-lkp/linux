@@ -16,6 +16,7 @@
 #include <linux/etherdevice.h>
 #include <linux/if_bridge.h>
 #include <linux/if_vlan.h>
+#include <linux/if_hsr.h>
 #include <linux/irq.h>
 #include <linux/irqdomain.h>
 #include <linux/of_mdio.h>
@@ -3419,6 +3420,72 @@ u16 ksz_hsr_get_ports(struct dsa_switch *ds)
 	return 0;
 }
 
+static int ksz_hsr_join(struct dsa_switch *ds, int port, struct net_device *hsr)
+{
+	struct dsa_port *partner = NULL, *dp;
+	struct ksz_device *dev = ds->priv;
+	enum hsr_version ver;
+	int ret;
+
+	ret = hsr_get_version(hsr, &ver);
+	if (ret)
+		return ret;
+
+	switch (dev->chip_id) {
+	case KSZ9477_CHIP_ID:
+		if (!(ver == HSR_V0 || ver == HSR_V1))
+			return -EOPNOTSUPP;
+	}
+
+	/* We can't enable redundancy on the switch until both
+	 * redundant ports have signed up.
+	 */
+	dsa_hsr_foreach_port(dp, ds, hsr) {
+		if (dp->index != port) {
+			partner = dp;
+			break;
+		}
+	}
+
+	if (!partner)
+		return 0;
+
+	switch (dev->chip_id) {
+	case KSZ9477_CHIP_ID:
+		return ksz9477_hsr_join(ds, port, hsr, partner);
+	default:
+		return -EOPNOTSUPP;
+	}
+
+	return 0;
+}
+
+static int ksz_hsr_leave(struct dsa_switch *ds, int port,
+			 struct net_device *hsr)
+{
+	struct dsa_port *partner = NULL, *dp;
+	struct ksz_device *dev = ds->priv;
+
+	dsa_hsr_foreach_port(dp, ds, hsr) {
+		if (dp->index != port) {
+			partner = dp;
+			break;
+		}
+	}
+
+	if (!partner)
+		return 0;
+
+	switch (dev->chip_id) {
+	case KSZ9477_CHIP_ID:
+		return ksz9477_hsr_leave(ds, port, hsr, partner);
+	default:
+		return -EOPNOTSUPP;
+	}
+
+	return 0;
+}
+
 static const struct dsa_switch_ops ksz_switch_ops = {
 	.get_tag_protocol	= ksz_get_tag_protocol,
 	.connect_tag_protocol   = ksz_connect_tag_protocol,
@@ -3438,6 +3505,8 @@ static const struct dsa_switch_ops ksz_switch_ops = {
 	.get_sset_count		= ksz_sset_count,
 	.port_bridge_join	= ksz_port_bridge_join,
 	.port_bridge_leave	= ksz_port_bridge_leave,
+	.port_hsr_join		= ksz_hsr_join,
+	.port_hsr_leave		= ksz_hsr_leave,
 	.port_stp_state_set	= ksz_port_stp_state_set,
 	.port_pre_bridge_flags	= ksz_port_pre_bridge_flags,
 	.port_bridge_flags	= ksz_port_bridge_flags,
