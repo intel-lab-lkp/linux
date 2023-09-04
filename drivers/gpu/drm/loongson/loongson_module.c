@@ -9,7 +9,7 @@
 
 #include "loongson_module.h"
 
-static int loongson_modeset = -1;
+int loongson_modeset = -1;
 MODULE_PARM_DESC(modeset, "Disable/Enable modesetting");
 module_param_named(modeset, loongson_modeset, int, 0400);
 
