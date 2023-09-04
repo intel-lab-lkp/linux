@@ -3507,6 +3507,14 @@ static void amdgpu_device_set_mcbp(struct amdgpu_device *adev)
 		DRM_INFO("MCBP is enabled\n");
 }
 
+static bool amdgpu_want_to_be_primary(struct pci_dev *pdev)
+{
+	if (amdgpu_modeset == 10)
+		return true;
+
+	return false;
+}
+
 /**
  * amdgpu_device_init - initialize the driver
  *
@@ -3916,7 +3924,8 @@ fence_driver_init:
 	 * ignore it
 	 */
 	if ((adev->pdev->class >> 8) == PCI_CLASS_DISPLAY_VGA)
-		vga_client_register(adev->pdev, amdgpu_device_vga_set_decode, NULL);
+		vga_client_register(adev->pdev, amdgpu_device_vga_set_decode,
+				    amdgpu_want_to_be_primary);
 
 	px = amdgpu_device_supports_px(ddev);
 
