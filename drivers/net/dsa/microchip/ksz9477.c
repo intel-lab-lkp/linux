@@ -1141,6 +1141,109 @@ int ksz9477_tc_cbs_set_cinc(struct ksz_device *dev, int port, u32 val)
 	return ksz_pwrite16(dev, port, REG_PORT_MTI_CREDIT_INCREMENT, val);
 }
 
+/* The KSZ9477 provides following HW features to accelerate
+ * HSR frames handling:
+ *
+ * 1. TX PACKET DUPLICATION FROM HOST TO SWITCH
+ * 2. RX PACKET DUPLICATION DISCARDING
+ * 3. PREVENTING PACKET LOOP IN THE RING BY SELF-ADDRESS FILTERING
+ *
+ * Only one from point 1. has the NETIF_F* flag available.
+ *
+ * Ones from point 2 and 3 are "best effort" - i.e. those will
+ * work correctly most of the time, but it may happen that some
+ * frames will not be caught. Hence, the SW needs to handle those
+ * special cases. However, the speed up gain is considerable when
+ * above features are used.
+ *
+ * Moreover, the NETIF_F_HW_HSR_FWD feature is also enabled, as HSR frames
+ * can be forwarded in the switch fabric between HSR ports.
+ */
+#define KSZ9477_SUPPORTED_HSR_FEATURES (NETIF_F_HW_HSR_DUP | NETIF_F_HW_HSR_FWD)
+
+int ksz9477_hsr_join(struct dsa_switch *ds, int port, struct net_device *hsr,
+		     struct dsa_port *partner)
+{
+	struct ksz_device *dev = ds->priv;
+	struct net_device *slave;
+	u8 i, data;
+	int ret;
+
+	/* Program which ports shall support HSR */
+	dev->hsr_ports = BIT(port) | BIT(partner->index);
+	ksz_write32(dev, REG_HSR_PORT_MAP__4, dev->hsr_ports);
+
+	/* Forward frames between HSR ports (i.e. bridge together HSR ports) */
+	ksz_prmw32(dev, port, REG_PORT_VLAN_MEMBERSHIP__4, dev->hsr_ports,
+		   dev->hsr_ports);
+	ksz_prmw32(dev, partner->index, REG_PORT_VLAN_MEMBERSHIP__4,
+		   dev->hsr_ports, dev->hsr_ports);
+
+	/* Enable discarding of received HSR frames */
+	ksz_read8(dev, REG_HSR_ALU_CTRL_0__1, &data);
+	data |= HSR_DUPLICATE_DISCARD;
+	data &= ~HSR_NODE_UNICAST;
+	ksz_write8(dev, REG_HSR_ALU_CTRL_0__1, data);
+
+	/* Self MAC address filtering for HSR frames to avoid
+	 * traverse of the HSR ring more than once.
+	 *
+	 * The HSR port (i.e. hsr0) MAC address is used.
+	 */
+	for (i = 0; i < ETH_ALEN; i++) {
+		ret = ksz_write8(dev, REG_SW_MAC_ADDR_0 + i, hsr->dev_addr[i]);
+		if (ret)
+			return ret;
+	}
+
+	/* Enable global self-address filtering if not yet done during switch
+	 * start
+	 */
+	ksz_read8(dev, REG_SW_LUE_CTRL_1, &data);
+	if (!(data & SW_SRC_ADDR_FILTER)) {
+		data |= SW_SRC_ADDR_FILTER;
+		ksz_write8(dev, REG_SW_LUE_CTRL_1, data);
+	}
+
+	/* Enable per port self-address filtering */
+	ksz_port_cfg(dev, port, REG_PORT_LUE_CTRL, PORT_SRC_ADDR_FILTER, true);
+	ksz_port_cfg(dev, partner->index, REG_PORT_LUE_CTRL,
+		     PORT_SRC_ADDR_FILTER, true);
+
+	/* Setup HW supported features for lan HSR ports */
+	slave = dsa_to_port(ds, port)->slave;
+	slave->features |= KSZ9477_SUPPORTED_HSR_FEATURES;
+
+	slave = dsa_to_port(ds, partner->index)->slave;
+	slave->features |= KSZ9477_SUPPORTED_HSR_FEATURES;
+
+	pr_debug("%s: HSR join port: %d partner: %d port_map: 0x%x\n", __func__,
+		 port, partner->index, dev->hsr_ports);
+
+	return 0;
+}
+
+int ksz9477_hsr_leave(struct dsa_switch *ds, int port, struct net_device *hsr,
+		      struct dsa_port *partner)
+{
+	struct ksz_device *dev = ds->priv;
+
+	/* Clear ports HSR support */
+	ksz_write32(dev, REG_HSR_PORT_MAP__4, 0);
+
+	/* Disable forwarding frames between HSR ports */
+	ksz_prmw32(dev, port, REG_PORT_VLAN_MEMBERSHIP__4, dev->hsr_ports, 0);
+	ksz_prmw32(dev, partner->index, REG_PORT_VLAN_MEMBERSHIP__4,
+		   dev->hsr_ports, 0);
+
+	/* Disable per port self-address filtering */
+	ksz_port_cfg(dev, port, REG_PORT_LUE_CTRL, PORT_SRC_ADDR_FILTER, false);
+	ksz_port_cfg(dev, partner->index, REG_PORT_LUE_CTRL,
+		     PORT_SRC_ADDR_FILTER, false);
+
+	return 0;
+}
+
 int ksz9477_switch_init(struct ksz_device *dev)
 {
 	u8 data8;
