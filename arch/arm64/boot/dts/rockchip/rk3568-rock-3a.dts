@@ -300,6 +300,14 @@
 	status = "okay";
 };
 
+&i2c0_xfer {
+	rockchip,io-domain-boot-on;
+};
+
+&i2s1m0_mclk {
+	rockchip,io-domain-boot-on;
+};
+
 &i2c0 {
 	status = "okay";
 
@@ -615,6 +623,8 @@
 };
 
 &pinctrl {
+	rockchip,io-domains = <&pmu_io_domains>;
+
 	cam {
 		vcc_cam_en: vcc_cam_en {
 			rockchip,pins = <1 RK_PB1 RK_FUNC_GPIO &pcfg_pull_none>;
@@ -659,6 +669,7 @@
 		pmic_int: pmic_int {
 			rockchip,pins =
 				<0 RK_PA3 RK_FUNC_GPIO &pcfg_pull_up>;
+		rockchip,io-domain-boot-on;
 		};
 	};
 
