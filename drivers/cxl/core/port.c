@@ -875,6 +875,14 @@ struct cxl_port *find_cxl_root(struct cxl_port *port)
 }
 EXPORT_SYMBOL_NS_GPL(find_cxl_root, CXL);
 
+static struct cxl_port *cxl_root;
+
+void set_cxl_root(struct cxl_port *root_port)
+{
+	cxl_root = root_port;
+}
+EXPORT_SYMBOL_NS_GPL(set_cxl_root, CXL);
+
 static struct cxl_dport *find_dport(struct cxl_port *port, int id)
 {
 	struct cxl_dport *dport;
@@ -930,10 +938,29 @@ static void cond_cxl_root_unlock(struct cxl_port *port)
 		device_unlock(&port->dev);
 }
 
+static ssize_t cxl_rcrb_addr_show(struct device *dev,
+				  struct device_attribute *attr, char *buf)
+{
+	struct cxl_dport *dport;
+
+	if (!cxl_root)
+		return -ENODEV;
+
+	dport = cxl_find_dport_by_dev(cxl_root, dev);
+	if (!dport)
+		return -ENODEV;
+
+	return sysfs_emit(buf, "0x%llx\n", dport->rcrb.base);
+}
+DEVICE_ATTR_RO(cxl_rcrb_addr);
+
 static void cxl_dport_remove(void *data)
 {
 	struct cxl_dport *dport = data;
 	struct cxl_port *port = dport->port;
+
+	if (dport->rch)
+		device_remove_file(dport->dport_dev, &dev_attr_cxl_rcrb_addr);
 
 	xa_erase(&port->dports, (unsigned long) dport->dport_dev);
 	put_device(dport->dport_dev);
@@ -1020,6 +1047,12 @@ __devm_cxl_add_dport(struct cxl_port *port, struct device *dport_dev,
 	rc = devm_add_action_or_reset(host, cxl_dport_unlink, dport);
 	if (rc)
 		return ERR_PTR(rc);
+
+	if (dport->rch && dport->rcrb.base != CXL_RESOURCE_NONE) {
+		rc = device_create_file(dport_dev, &dev_attr_cxl_rcrb_addr);
+		if (rc)
+			return ERR_PTR(rc);
+	}
 
 	return dport;
 }
