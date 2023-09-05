@@ -87,7 +87,7 @@ static void __init handle_initrd(char *root_device_name)
 {
 	struct subprocess_info *info;
 	static char *argv[] = { "linuxrc", NULL, };
-	extern char *envp_init[];
+	static char *envp[] = { "HOME=/", "TERM=linux", NULL, };
 	int error;
 
 	pr_warn("using deprecated initrd support, will be removed in 2021.\n");
@@ -100,7 +100,7 @@ static void __init handle_initrd(char *root_device_name)
 	init_mkdir("/old", 0700);
 	init_chdir("/old");
 
-	info = call_usermodehelper_setup("/linuxrc", argv, envp_init,
+	info = call_usermodehelper_setup("/linuxrc", argv, envp,
 					 GFP_KERNEL, init_linuxrc, NULL, NULL);
 	if (!info)
 		return;
