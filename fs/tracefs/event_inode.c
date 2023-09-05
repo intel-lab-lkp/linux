@@ -185,17 +185,27 @@ static struct dentry *create_dir(const char *name, struct dentry *parent, void *
 
 /**
  * eventfs_set_ef_status_free - set the ef->status to free
+ * @ti: the tracefs_inode of the dentry
  * @dentry: dentry who's status to be freed
  *
  * eventfs_set_ef_status_free will be called if no more
  * references remain
  */
-void eventfs_set_ef_status_free(struct dentry *dentry)
+void eventfs_set_ef_status_free(struct tracefs_inode *ti, struct dentry *dentry)
 {
 	struct tracefs_inode *ti_parent;
+	struct eventfs_inode *ei;
 	struct eventfs_file *ef;
 
 	mutex_lock(&eventfs_mutex);
+
+	/* The top level events directory may be freed by this */
+	if (unlikely(ti->flags & TRACEFS_EVENT_TOP_INODE)) {
+		ei = ti->private;
+		kfree(ei);
+		goto out;
+	}
+
 	ti_parent = get_tracefs(dentry->d_parent->d_inode);
 	if (!ti_parent || !(ti_parent->flags & TRACEFS_EVENT_INODE))
 		goto out;
@@ -507,7 +517,7 @@ struct dentry *eventfs_create_events_dir(const char *name,
 	INIT_LIST_HEAD(&ei->e_top_files);
 
 	ti = get_tracefs(inode);
-	ti->flags |= TRACEFS_EVENT_INODE;
+	ti->flags |= TRACEFS_EVENT_INODE | TRACEFS_EVENT_TOP_INODE;
 	ti->private = ei;
 
 	inode->i_mode = S_IFDIR | S_IRWXU | S_IRUGO | S_IXUGO;
@@ -803,5 +813,4 @@ void eventfs_remove_events_dir(struct dentry *dentry)
 	ei = ti->private;
 	d_invalidate(dentry);
 	dput(dentry);
-	kfree(ei);
 }
