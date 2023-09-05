@@ -265,8 +265,12 @@ static void nvdimm_pmu_free_hotplug_memory(struct nvdimm_pmu *nd_pmu)
 	cpuhp_state_remove_instance_nocalls(nd_pmu->cpuhp_state, &nd_pmu->node);
 	cpuhp_remove_multi_state(nd_pmu->cpuhp_state);
 
-	if (nd_pmu->pmu.attr_groups[NVDIMM_PMU_CPUMASK_ATTR])
+	if (nd_pmu->pmu.attr_groups[NVDIMM_PMU_CPUMASK_ATTR]) {
+		if (nd_pmu->pmu.attr_groups[NVDIMM_PMU_CPUMASK_ATTR]->attrs)
+			kfree(nd_pmu->pmu.attr_groups[NVDIMM_PMU_CPUMASK_ATTR]->attrs[0]);
+
 		kfree(nd_pmu->pmu.attr_groups[NVDIMM_PMU_CPUMASK_ATTR]->attrs);
+	}
 	kfree(nd_pmu->pmu.attr_groups[NVDIMM_PMU_CPUMASK_ATTR]);
 }
 
