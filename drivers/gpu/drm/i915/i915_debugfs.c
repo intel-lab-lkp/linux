@@ -703,11 +703,25 @@ i915_drop_caches_get(void *data, u64 *val)
 	return 0;
 }
 
+static int gt_idle(struct intel_gt *gt, u64 val)
+{
+	if (val & (DROP_RETIRE | DROP_IDLE))
+		intel_gt_retire_requests(gt);
+
+	if (val & DROP_IDLE) {
+		int ret;
+
+		ret = intel_gt_pm_wait_for_idle(gt);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
 static int
 gt_drop_caches(struct intel_gt *gt, u64 val)
 {
-	int ret;
-
 	if (val & DROP_RESET_ACTIVE &&
 	    wait_for(intel_engines_are_idle(gt), 200))
 		intel_gt_set_wedged(gt);
@@ -716,13 +730,9 @@ gt_drop_caches(struct intel_gt *gt, u64 val)
 		intel_gt_retire_requests(gt);
 
 	if (val & (DROP_IDLE | DROP_ACTIVE)) {
-		ret = intel_gt_wait_for_idle(gt, MAX_SCHEDULE_TIMEOUT);
-		if (ret)
-			return ret;
-	}
+		int ret;
 
-	if (val & DROP_IDLE) {
-		ret = intel_gt_pm_wait_for_idle(gt);
+		ret = intel_gt_wait_for_idle(gt, MAX_SCHEDULE_TIMEOUT);
 		if (ret)
 			return ret;
 	}
@@ -746,7 +756,13 @@ i915_drop_caches_set(void *data, u64 val)
 	drm_dbg(&i915->drm, "Dropping caches: 0x%08llx [0x%08llx]\n",
 		val, val & DROP_ALL);
 
+	/* Flush all the active requests across both GT ... */
 	ret = gt_drop_caches(to_gt(i915), val);
+	if (ret)
+		return ret;
+
+	/* ... then wait for idle as there may be cross-gt wakerefs. */
+	ret = gt_idle(to_gt(i915), val);
 	if (ret)
 		return ret;
 
