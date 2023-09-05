@@ -19,6 +19,30 @@
 #include "ksz_common.h"
 #include "ksz9477.h"
 
+/**
+ * struct ksz9477_drive_strength - drive strength mapping
+ * @reg_val:	register value
+ * @milliamp:	milliamp value
+ */
+struct ksz9477_drive_strength {
+	u32 reg_val;
+	u32 milliamp;
+};
+
+/* Drive strength mapping.
+ * This values are not documented and taken from vendor's reference driver.
+ */
+static const struct ksz9477_drive_strength ksz9477_drive_strengths[] = {
+	{ SW_DRIVE_STRENGTH_2MA,  2000 },
+	{ SW_DRIVE_STRENGTH_4MA,  4000 },
+	{ SW_DRIVE_STRENGTH_8MA,  8000 },
+	{ SW_DRIVE_STRENGTH_12MA, 12000 },
+	{ SW_DRIVE_STRENGTH_16MA, 16000 },
+	{ SW_DRIVE_STRENGTH_20MA, 20000 },
+	{ SW_DRIVE_STRENGTH_24MA, 24000 },
+	{ SW_DRIVE_STRENGTH_28MA, 28000 },
+};
+
 static void ksz_cfg(struct ksz_device *dev, u32 addr, u8 bits, bool set)
 {
 	regmap_update_bits(ksz_regmap_8(dev), addr, bits, set ? bits : 0);
@@ -1097,10 +1121,106 @@ int ksz9477_enable_stp_addr(struct ksz_device *dev)
 	return 0;
 }
 
+/**
+ * ksz9477_drive_strength_to_reg() - convert milliamp value to register value
+ * @milliamp:	milliamp value
+ *
+ * Return: register value
+ */
+static u32 ksz9477_drive_strength_to_reg(u32 milliamp)
+{
+	size_t array_size = ARRAY_SIZE(ksz9477_drive_strengths);
+	int i;
+
+	for (i = 0; i < array_size; i++) {
+		if (ksz9477_drive_strengths[i].milliamp >= milliamp)
+			return ksz9477_drive_strengths[i].reg_val;
+	}
+
+	/* return the highest value if the requested value is too high */
+	return ksz9477_drive_strengths[array_size - 1].reg_val;
+}
+
+/**
+ * ksz9477_parse_drive_strength() - parse drive strength from device tree
+ * @dev:	ksz device
+ *
+ * Return: 0 on success, error code otherwise
+ */
+static int ksz9477_parse_drive_strength(struct ksz_device *dev)
+{
+	struct of_prop {
+		const char *name;
+		int offset;
+		int value;
+	} of_props[] = {
+		{
+			"microchip,hi-drive-strength-microamp",
+			SW_HI_SPEED_DRIVE_STRENGTH_S,
+			-1
+		},
+		{
+			"microchip,lo-drive-strength-microamp",
+			SW_LO_SPEED_DRIVE_STRENGTH_S,
+			-1
+		},
+	};
+	struct device_node *np = dev->dev->of_node;
+	bool found = false;
+	int ret;
+	u8 val;
+
+	if (!np)
+		return 0;
+
+	for (int i = 0; i < ARRAY_SIZE(of_props); i++) {
+		ret = of_property_read_u32(np, of_props[i].name,
+					   &of_props[i].value);
+		if (ret && ret != -EINVAL)
+			dev_warn(dev->dev, "Failed to read %s\n",
+				 of_props[i].name);
+		if (ret)
+			continue;
+
+		if (of_props[i].value > 28000 || of_props[i].value < 2000) {
+			dev_warn(dev->dev, "Drive strength value is out of range: %d. Supported values are (2000 - 28000)\n",
+				 of_props[i].value);
+			continue;
+		}
+
+		found = true;
+	}
+
+	if (!found)
+		return 0;
+
+	ret = ksz_read8(dev, REG_SW_IO_STRENGTH__1, &val);
+	if (ret)
+		return ret;
+
+	for (int i = 0; i < ARRAY_SIZE(of_props); i++) {
+		int strength_val;
+
+		if (of_props[i].value == -1)
+			continue;
+
+		strength_val = ksz9477_drive_strength_to_reg(of_props[i].value);
+
+		val &= ~(SW_DRIVE_STRENGTH_M << of_props[i].offset);
+		val |= strength_val << of_props[i].offset;
+	}
+
+	return ksz_write8(dev, REG_SW_IO_STRENGTH__1, val);
+}
+
 int ksz9477_setup(struct dsa_switch *ds)
 {
 	struct ksz_device *dev = ds->priv;
 	int ret = 0;
+
+	ret = ksz9477_parse_drive_strength(dev);
+	if (ret)
+		return ret;
 
 	ds->mtu_enforcement_ingress = true;
 
