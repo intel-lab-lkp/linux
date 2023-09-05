@@ -750,21 +750,27 @@ static int
 i915_drop_caches_set(void *data, u64 val)
 {
 	struct drm_i915_private *i915 = data;
+	struct intel_gt *gt;
 	unsigned int flags;
+	unsigned int i;
 	int ret;
 
 	drm_dbg(&i915->drm, "Dropping caches: 0x%08llx [0x%08llx]\n",
 		val, val & DROP_ALL);
 
 	/* Flush all the active requests across both GT ... */
-	ret = gt_drop_caches(to_gt(i915), val);
-	if (ret)
-		return ret;
+	for_each_gt(gt, i915, i) {
+		ret = gt_drop_caches(gt, val);
+		if (ret)
+			return ret;
+	}
 
 	/* ... then wait for idle as there may be cross-gt wakerefs. */
-	ret = gt_idle(to_gt(i915), val);
-	if (ret)
-		return ret;
+	for_each_gt(gt, i915, i) {
+		ret = gt_idle(gt, val);
+		if (ret)
+			return ret;
+	}
 
 	fs_reclaim_acquire(GFP_KERNEL);
 	flags = memalloc_noreclaim_save();
