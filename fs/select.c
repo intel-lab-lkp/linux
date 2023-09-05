@@ -117,7 +117,7 @@ struct poll_table_page {
  * poll table.
  */
 static void __pollwait(struct file *filp, wait_queue_head_t *wait_address,
-		       poll_table *p);
+		       poll_table *p, poll_flags flags);
 
 void poll_initwait(struct poll_wqueues *pwq)
 {
@@ -220,7 +220,7 @@ static int pollwake(wait_queue_entry_t *wait, unsigned mode, int sync, void *key
 
 /* Add a new entry */
 static void __pollwait(struct file *filp, wait_queue_head_t *wait_address,
-				poll_table *p)
+		       poll_table *p, poll_flags flags)
 {
 	struct poll_wqueues *pwq = container_of(p, struct poll_wqueues, pt);
 	struct poll_table_entry *entry = poll_get_entry(pwq);

@@ -1823,7 +1823,7 @@ struct aio_poll_table {
 
 static void
 aio_poll_queue_proc(struct file *file, struct wait_queue_head *head,
-		struct poll_table_struct *p)
+		    struct poll_table_struct *p, poll_flags flags)
 {
 	struct aio_poll_table *pt = container_of(p, struct aio_poll_table, pt);
 

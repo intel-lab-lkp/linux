@@ -1270,7 +1270,7 @@ out_unlock:
  * target file wakeup lists.
  */
 static void ep_ptable_queue_proc(struct file *file, wait_queue_head_t *whead,
-				 poll_table *pt)
+				 poll_table *pt, poll_flags flags)
 {
 	struct ep_pqueue *epq = container_of(pt, struct ep_pqueue, pt);
 	struct epitem *epi = epq->epi;

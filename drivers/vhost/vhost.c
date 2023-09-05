@@ -162,7 +162,7 @@ static void vhost_poll_func(struct file *file, wait_queue_head_t *wqh,
 }
 
 static int vhost_poll_wakeup(wait_queue_entry_t *wait, unsigned mode, int sync,
-			     void *key)
+			     void *key, poll_flags flags)
 {
 	struct vhost_poll *poll = container_of(wait, struct vhost_poll, wait);
 	struct vhost_work *work = &poll->work;
