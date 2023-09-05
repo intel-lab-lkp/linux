@@ -439,8 +439,8 @@ static struct svc_xprt *svc_rdma_accept(struct svc_xprt *xprt)
 					    IB_POLL_WORKQUEUE);
 	if (IS_ERR(newxprt->sc_sq_cq))
 		goto errout;
-	newxprt->sc_rq_cq =
-		ib_alloc_cq_any(dev, newxprt, rq_depth, IB_POLL_WORKQUEUE);
+	newxprt->sc_rq_cq = ib_alloc_cq_any(dev, newxprt, rq_depth,
+					    IB_POLL_SOFTIRQ);
 	if (IS_ERR(newxprt->sc_rq_cq))
 		goto errout;
 
