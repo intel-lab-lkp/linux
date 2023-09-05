@@ -288,6 +288,18 @@ static struct mssr_mod_clk r8a7795_mod_clks[] __initdata = {
 	DEF_MOD("scu-src0",		1031,	MOD_CLK_ID(1017)),
 };
 
+static const unsigned int r8a7795_ignore_unused_mod_clks[] __initconst = {
+	MOD_CLK_ID(206),	/* SCIF1 */
+	MOD_CLK_ID(303),	/* CMT0 */
+	MOD_CLK_ID(310),	/* SCIF2 */
+	MOD_CLK_ID(523),	/* PWM */
+	MOD_CLK_ID(906),	/* GPIO6 */
+	MOD_CLK_ID(907),	/* GPIO5 */
+	MOD_CLK_ID(916),	/* CAN0 */
+	MOD_CLK_ID(929),	/* I2C2 */
+	MOD_CLK_ID(927),	/* I2C4 */
+};
+
 static const unsigned int r8a7795_crit_mod_clks[] __initconst = {
 	MOD_CLK_ID(402),	/* RWDT */
 	MOD_CLK_ID(408),	/* INTC-AP (GIC) */
@@ -387,6 +399,10 @@ const struct cpg_mssr_info r8a7795_cpg_mssr_info __initconst = {
 	.mod_clks = r8a7795_mod_clks,
 	.num_mod_clks = ARRAY_SIZE(r8a7795_mod_clks),
 	.num_hw_mod_clks = 12 * 32,
+
+	/* Ignore Unused Module Clocks */
+	.ignore_unused_mod_clks = r8a7795_ignore_unused_mod_clks,
+	.num_ignore_unused_mod_clks = ARRAY_SIZE(r8a7795_ignore_unused_mod_clks),
 
 	/* Critical Module Clocks */
 	.crit_mod_clks = r8a7795_crit_mod_clks,

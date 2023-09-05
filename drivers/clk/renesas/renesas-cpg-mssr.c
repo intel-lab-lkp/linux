@@ -445,6 +445,15 @@ static void __init cpg_mssr_register_mod_clk(const struct mssr_mod_clk *mod,
 	clock->priv = priv;
 	clock->hw.init = &init;
 
+	for (i = 0; i < info->num_ignore_unused_mod_clks; i++) {
+		if (id == info->ignore_unused_mod_clks[i]) {
+			dev_dbg(dev, "MSTP %s setting CLK_IGNORE_UNUSED\n",
+				    mod->name);
+			init.flags |= CLK_IGNORE_UNUSED;
+			break;
+		}
+	}
+
 	for (i = 0; i < info->num_crit_mod_clks; i++)
 		if (id == info->crit_mod_clks[i] &&
 		    cpg_mstp_clock_is_enabled(&clock->hw)) {

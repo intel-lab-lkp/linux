@@ -140,6 +140,10 @@ struct cpg_mssr_info {
 	unsigned int num_mod_clks;
 	unsigned int num_hw_mod_clks;
 
+	/* Module Clocks that should not be gated */
+	const unsigned int *ignore_unused_mod_clks;
+	unsigned int num_ignore_unused_mod_clks;
+
 	/* Critical Module Clocks that should not be disabled */
 	const unsigned int *crit_mod_clks;
 	unsigned int num_crit_mod_clks;

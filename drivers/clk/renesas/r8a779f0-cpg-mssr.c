@@ -168,6 +168,12 @@ static const struct mssr_mod_clk r8a779f0_mod_clks[] __initconst = {
 	DEF_MOD("ufs",		1514,	R8A779F0_CLK_S0D4_HSC),
 };
 
+static const unsigned int r8a779f0_ignore_unused_mod_clks[] __initconst = {
+	MOD_CLK_ID(702),	/* SCIF0 */
+	MOD_CLK_ID(704),	/* SCIF3 */
+	MOD_CLK_ID(915),	/* PFC0 */
+};
+
 static const unsigned int r8a779f0_crit_mod_clks[] __initconst = {
 	MOD_CLK_ID(907),	/* WDT */
 };
@@ -225,6 +231,10 @@ const struct cpg_mssr_info r8a779f0_cpg_mssr_info __initconst = {
 	.mod_clks = r8a779f0_mod_clks,
 	.num_mod_clks = ARRAY_SIZE(r8a779f0_mod_clks),
 	.num_hw_mod_clks = 28 * 32,
+
+	/* Ignore Unused Module Clocks */
+	.ignore_unused_mod_clks = r8a779f0_ignore_unused_mod_clks,
+	.num_ignore_unused_mod_clks = ARRAY_SIZE(r8a779f0_ignore_unused_mod_clks),
 
 	/* Critical Module Clocks */
 	.crit_mod_clks = r8a779f0_crit_mod_clks,
