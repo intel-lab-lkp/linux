@@ -1632,8 +1632,10 @@ static int build_insn(const struct bpf_insn *insn, struct jit_ctx *ctx)
 	/* dst = htobe(dst) */
 	case BPF_ALU | BPF_END | BPF_FROM_LE:
 	case BPF_ALU | BPF_END | BPF_FROM_BE:
+	/* dst = bswap(dst) */
+	case BPF_ALU64 | BPF_END | BPF_TO_LE:
 		rd = arm_bpf_get_reg64(dst, tmp, ctx);
-		if (BPF_SRC(code) == BPF_FROM_LE)
+		if (BPF_SRC(code) == BPF_FROM_LE && BPF_CLASS(code) != BPF_ALU64)
 			goto emit_bswap_uxt;
 		switch (imm) {
 		case 16:
