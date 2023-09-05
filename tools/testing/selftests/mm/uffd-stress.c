@@ -125,23 +125,6 @@ static int copy_page_retry(int ufd, unsigned long offset)
 	return __copy_page(ufd, offset, true, test_uffdio_wp);
 }
 
-static void *uffd_read_thread(void *arg)
-{
-	struct uffd_args *args = (struct uffd_args *)arg;
-	struct uffd_msg msg;
-
-	sem_post(&uffd_read_sem);
-	/* from here cancellation is ok */
-
-	for (;;) {
-		if (uffd_read_msg(uffd, &msg))
-			continue;
-		uffd_handle_page_fault(&msg, args);
-	}
-
-	return NULL;
-}
-
 static void *background_thread(void *arg)
 {
 	unsigned long cpu = (unsigned long) arg;
@@ -186,16 +169,10 @@ static int stress(struct uffd_args *args)
 		if (pthread_create(&locking_threads[cpu], &attr,
 				   locking_thread, (void *)cpu))
 			return 1;
-		if (bounces & BOUNCE_POLL) {
-			if (pthread_create(&uffd_threads[cpu], &attr, uffd_poll_thread, &args[cpu]))
-				err("uffd_poll_thread create");
-		} else {
-			if (pthread_create(&uffd_threads[cpu], &attr,
-					   uffd_read_thread,
-					   (void *)&args[cpu]))
-				return 1;
-			sem_wait(&uffd_read_sem);
-		}
+
+		uffd_fault_thread_create(&uffd_threads[cpu], &attr,
+					 &args[cpu], bounces & BOUNCE_POLL);
+
 		if (pthread_create(&background_threads[cpu], &attr,
 				   background_thread, (void *)cpu))
 			return 1;
@@ -220,21 +197,9 @@ static int stress(struct uffd_args *args)
 		if (pthread_join(locking_threads[cpu], NULL))
 			return 1;
 
-	for (cpu = 0; cpu < nr_cpus; cpu++) {
-		char c;
-		if (bounces & BOUNCE_POLL) {
-			if (write(pipefd[cpu*2+1], &c, 1) != 1)
-				err("pipefd write error");
-			if (pthread_join(uffd_threads[cpu],
-					 (void *)&args[cpu]))
-				return 1;
-		} else {
-			if (pthread_cancel(uffd_threads[cpu]))
-				return 1;
-			if (pthread_join(uffd_threads[cpu], NULL))
-				return 1;
-		}
-	}
+	for (cpu = 0; cpu < nr_cpus; cpu++)
+		uffd_fault_thread_join(uffd_threads[cpu], cpu,
+				       bounces & BOUNCE_POLL);
 
 	return 0;
 }

@@ -555,6 +555,52 @@ void *uffd_poll_thread(void *arg)
 	return NULL;
 }
 
+void *uffd_read_thread(void *arg)
+{
+	struct uffd_args *args = (struct uffd_args *)arg;
+	struct uffd_msg msg;
+
+	sem_post(&uffd_read_sem);
+	/* from here cancellation is ok */
+
+	for (;;) {
+		if (uffd_read_msg(uffd, &msg))
+			continue;
+		uffd_handle_page_fault(&msg, args);
+	}
+
+	return NULL;
+}
+
+void uffd_fault_thread_create(pthread_t *thread, pthread_attr_t *attr,
+			      struct uffd_args *args, bool poll)
+{
+	if (poll) {
+		if (pthread_create(thread, attr, uffd_poll_thread, args))
+			err("uffd_poll_thread create");
+	} else {
+		if (pthread_create(thread, attr, uffd_read_thread, args))
+			err("uffd_read_thread create");
+		sem_wait(&uffd_read_sem);
+	}
+}
+
+void uffd_fault_thread_join(pthread_t thread, int cpu, bool poll)
+{
+	char c = 1;
+
+	if (poll) {
+		if (write(pipefd[cpu*2+1], &c, 1) != 1)
+			err("pipefd write error");
+	} else {
+		if (pthread_cancel(thread))
+			err("pthread_cancel()");
+	}
+
+	if (pthread_join(thread, NULL))
+		err("pthread_join()");
+}
+
 static void retry_copy_page(int ufd, struct uffdio_copy *uffdio_copy,
 			    unsigned long offset)
 {
