@@ -170,6 +170,52 @@ static void test_prepare_array(struct kunit *test)
 	drm_gem_private_object_fini(&gobj2);
 }
 
+static const struct drm_gem_object_funcs put_funcs = {
+	.free = (void *)kfree,
+};
+
+/*
+ * Check that freeing objects from within drm_exec_fini()
+ * behaves as expected.
+ */
+static void test_early_put(struct kunit *test)
+{
+	struct drm_exec_priv *priv = test->priv;
+	struct drm_gem_object *gobj1;
+	struct drm_gem_object *gobj2;
+	struct drm_gem_object *array[2];
+	struct drm_exec exec;
+	int ret;
+
+	gobj1 = kzalloc(sizeof(*gobj1), GFP_KERNEL);
+	KUNIT_EXPECT_NOT_ERR_OR_NULL(test, gobj1);
+	if (!gobj1)
+		return;
+
+	gobj2 = kzalloc(sizeof(*gobj2), GFP_KERNEL);
+	KUNIT_EXPECT_NOT_ERR_OR_NULL(test, gobj2);
+	if (!gobj2) {
+		kfree(gobj1);
+		return;
+	}
+
+	gobj1->funcs = &put_funcs;
+	gobj2->funcs = &put_funcs;
+	array[0] = gobj1;
+	array[1] = gobj2;
+	drm_gem_private_object_init(priv->drm, gobj1, PAGE_SIZE);
+	drm_gem_private_object_init(priv->drm, gobj2, PAGE_SIZE);
+
+	drm_exec_init(&exec, DRM_EXEC_INTERRUPTIBLE_WAIT);
+	drm_exec_until_all_locked(&exec)
+		ret = drm_exec_prepare_array(&exec, array, ARRAY_SIZE(array),
+					     1);
+	KUNIT_EXPECT_EQ(test, ret, 0);
+	drm_gem_object_put(gobj1);
+	drm_gem_object_put(gobj2);
+	drm_exec_fini(&exec);
+}
+
 static void test_multiple_loops(struct kunit *test)
 {
 	struct drm_exec exec;
@@ -198,6 +244,7 @@ static struct kunit_case drm_exec_tests[] = {
 	KUNIT_CASE(test_prepare),
 	KUNIT_CASE(test_prepare_array),
 	KUNIT_CASE(test_multiple_loops),
+	KUNIT_CASE(test_early_put),
 	{}
 };
 
