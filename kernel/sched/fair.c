@@ -9579,7 +9579,7 @@ static inline long sibling_imbalance(struct lb_env *env,
 	imbalance /= ncores_local + ncores_busiest;
 
 	/* Take advantage of resource in an empty sched group */
-	if (imbalance == 0 && local->sum_nr_running == 0 &&
+	if (imbalance <= 1 && local->sum_nr_running == 0 &&
 	    busiest->sum_nr_running > 1)
 		imbalance = 2;
 
@@ -9767,6 +9767,19 @@ static bool update_sd_pick_busiest(struct lb_env *env,
 		break;
 
 	case group_smt_balance:
+		/* no idle cpus on both groups handled by group_fully_busy below */
+		if (sgs->idle_cpus != 0 || busiest->idle_cpus != 0) {
+			if (sgs->idle_cpus > busiest->idle_cpus)
+				return false;
+			if (sgs->idle_cpus < busiest->idle_cpus)
+				return true;
+			if (sgs->sum_nr_running <= busiest->sum_nr_running)
+				return false;
+			else
+				return true;
+		}
+		goto fully_busy;
+
 	case group_fully_busy:
 		/*
 		 * Select the fully busy group with highest avg_load. In
@@ -9779,7 +9792,7 @@ static bool update_sd_pick_busiest(struct lb_env *env,
 		 * select the 1st one, except if @sg is composed of SMT
 		 * siblings.
 		 */
-
+fully_busy:
 		if (sgs->avg_load < busiest->avg_load)
 			return false;
 
