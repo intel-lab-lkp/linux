@@ -2716,6 +2716,9 @@ struct page *__rmqueue_pcplist(struct zone *zone, unsigned int order,
 			int batch = READ_ONCE(pcp->batch);
 			int alloced;
 
+			if (alloc_flags & ALLOC_HIGHATOMIC)
+				goto out;
+
 			/*
 			 * Scale batch relative to order if batch implies
 			 * free pages can be stored on the PCP. Batch can
@@ -2730,6 +2733,7 @@ struct page *__rmqueue_pcplist(struct zone *zone, unsigned int order,
 					migratetype, alloc_flags);
 
 			pcp->count += alloced << order;
+out:
 			if (unlikely(list_empty(list)))
 				return NULL;
 		}
@@ -2792,7 +2796,7 @@ __no_sanitize_memory
 static inline
 struct page *rmqueue(struct zone *preferred_zone,
 			struct zone *zone, unsigned int order,
-			gfp_t gfp_flags, unsigned int alloc_flags,
+			gfp_t gfp_flags, unsigned int *alloc_flags,
 			int migratetype)
 {
 	struct page *page;
@@ -2805,17 +2809,19 @@ struct page *rmqueue(struct zone *preferred_zone,
 
 	if (likely(pcp_allowed_order(order))) {
 		page = rmqueue_pcplist(preferred_zone, zone, order,
-				       migratetype, alloc_flags);
-		if (likely(page))
+				       migratetype, *alloc_flags);
+		if (likely(page)) {
+			*alloc_flags |= ALLOC_PCPLIST;
 			goto out;
+		}
 	}
 
-	page = rmqueue_buddy(preferred_zone, zone, order, alloc_flags,
+	page = rmqueue_buddy(preferred_zone, zone, order, *alloc_flags,
 							migratetype);
 
 out:
 	/* Separate test+clear to avoid unnecessary atomics */
-	if ((alloc_flags & ALLOC_KSWAPD) &&
+	if ((*alloc_flags & ALLOC_KSWAPD) &&
 	    unlikely(test_bit(ZONE_BOOSTED_WATERMARK, &zone->flags))) {
 		clear_bit(ZONE_BOOSTED_WATERMARK, &zone->flags);
 		wakeup_kswapd(zone, 0, 0, zone_idx(zone));
@@ -3195,7 +3201,7 @@ retry:
 
 try_this_zone:
 		page = rmqueue(ac->preferred_zoneref->zone, zone, order,
-				gfp_mask, alloc_flags, ac->migratetype);
+				gfp_mask, &alloc_flags, ac->migratetype);
 		if (page) {
 			prep_new_page(page, order, gfp_mask, alloc_flags);
 
@@ -3203,7 +3209,8 @@ try_this_zone:
 			 * If this is a high-order atomic allocation then check
 			 * if the pageblock should be reserved for the future
 			 */
-			if (unlikely(alloc_flags & ALLOC_HIGHATOMIC))
+			if (unlikely(alloc_flags & ALLOC_HIGHATOMIC)
+				&& unlikely(!(alloc_flags & ALLOC_PCPLIST)))
 				reserve_highatomic_pageblock(page, zone);
 
 			return page;
