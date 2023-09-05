@@ -123,6 +123,7 @@ int uffd_open_dev(unsigned int flags);
 int uffd_open_sys(unsigned int flags);
 int uffd_open(unsigned int flags);
 int uffd_get_features(uint64_t *features);
+uint64_t get_usec(void);
 
 #define TEST_ANON	1
 #define TEST_HUGETLB	2

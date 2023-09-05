@@ -725,3 +725,21 @@ int uffd_get_features(uint64_t *features)
 
 	return 0;
 }
+
+uint64_t get_usec(void)
+{
+    uint64_t val = 0;
+    struct timespec t;
+    int ret = clock_gettime(CLOCK_MONOTONIC, &t);
+
+    if (ret == -1) {
+        perror("clock_gettime() failed");
+        /* should never happen */
+        exit(-1);
+    }
+
+    val = t.tv_nsec / 1000;     /* ns -> us */
+    val += t.tv_sec * 1000000;  /* s -> us */
+
+    return val;
+}
