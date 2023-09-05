@@ -351,7 +351,7 @@ static int prism2_scan(struct wiphy *wiphy,
 		msg2->bssindex.data = i;
 
 		result = p80211req_dorequest(wlandev, (u8 *)&msg2);
-		if ((result != 0) ||
+		if (result != 0 ||
 		    (msg2->resultcode.data != P80211ENUM_resultcode_success)) {
 			break;
 		}
