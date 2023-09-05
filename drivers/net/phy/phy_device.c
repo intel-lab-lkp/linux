@@ -1850,7 +1850,6 @@ EXPORT_SYMBOL(phy_detach);
 
 int phy_suspend(struct phy_device *phydev)
 {
-	struct ethtool_wolinfo wol = { .cmd = ETHTOOL_GWOL };
 	struct net_device *netdev = phydev->attached_dev;
 	struct phy_driver *phydrv = phydev->drv;
 	int ret;
@@ -1858,8 +1857,9 @@ int phy_suspend(struct phy_device *phydev)
 	if (phydev->suspended)
 		return 0;
 
-	phy_ethtool_get_wol(phydev, &wol);
-	phydev->wol_enabled = wol.wolopts || (netdev && netdev->wol_enabled);
+	phydev->wol_enabled = phydev->phy_wol_enabled ||
+			      (netdev && netdev->wol_enabled);
+
 	/* If the device has WOL enabled, we cannot suspend the PHY */
 	if (phydev->wol_enabled && !(phydrv->flags & PHY_ALWAYS_CALL_SUSPEND))
 		return -EBUSY;
@@ -3251,6 +3251,14 @@ struct fwnode_handle *fwnode_get_phy_node(const struct fwnode_handle *fwnode)
 }
 EXPORT_SYMBOL_GPL(fwnode_get_phy_node);
 
+static void phy_update_wol_state(struct phy_device *phydev)
+{
+	struct ethtool_wolinfo wol = { .cmd = ETHTOOL_GWOL };
+
+	phy_ethtool_get_wol(phydev, &wol);
+	phydev->phy_wol_enabled = wol.wolopts;
+}
+
 /**
  * phy_probe - probe and init a PHY device
  * @dev: device to probe and init
@@ -3363,6 +3371,9 @@ static int phy_probe(struct device *dev)
 
 	/* Set the state to READY by default */
 	phydev->state = PHY_READY;
+
+	/* Initialise phydev->wol_enabled state */
+	phy_update_wol_state(phydev);
 
 	/* Get the LEDs from the device tree, and instantiate standard
 	 * LEDs for them.

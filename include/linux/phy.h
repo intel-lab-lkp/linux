@@ -557,6 +557,7 @@ struct macsec_ops;
  * @downshifted_rate: Set true if link speed has been downshifted.
  * @is_on_sfp_module: Set true if PHY is located on an SFP module.
  * @mac_managed_pm: Set true if MAC driver takes of suspending/resuming PHY
+ * @phy_wol_enabled: Set to true if the PHY has Wake-on-Lan enabled.
  * @wol_enabled: Set to true if the PHY or the attached MAC have Wake-on-LAN
  * 		 enabled.
  * @state: State of the PHY for management purposes
@@ -655,6 +656,7 @@ struct phy_device {
 	unsigned downshifted_rate:1;
 	unsigned is_on_sfp_module:1;
 	unsigned mac_managed_pm:1;
+	unsigned phy_wol_enabled:1;
 	unsigned wol_enabled:1;
 
 	unsigned autoneg:1;

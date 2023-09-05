@@ -1231,9 +1231,7 @@ static void phy_error_precise(struct phy_device *phydev,
 			      const void *func, int err)
 {
 	WARN(1, "%pS: returned: %d\n", func, err);
-	mutex_lock(&phydev->lock);
 	phy_process_error(phydev);
-	mutex_unlock(&phydev->lock);
 }
 
 /**
@@ -1491,18 +1489,20 @@ void phy_state_machine(struct work_struct *work)
 		break;
 	}
 
+	if (needs_aneg) {
+		err = _phy_start_aneg(phydev);
+		func = &_phy_start_aneg;
+	}
+
 	mutex_unlock(&phydev->lock);
 
-	if (needs_aneg) {
-		err = phy_start_aneg(phydev);
-		func = &phy_start_aneg;
-	} else if (do_suspend) {
+	if (do_suspend)
 		phy_suspend(phydev);
-	}
 
 	if (err == -ENODEV)
 		return;
 
+	mutex_lock(&phydev->lock);
 	if (err < 0)
 		phy_error_precise(phydev, func, err);
 
@@ -1516,7 +1516,6 @@ void phy_state_machine(struct work_struct *work)
 	 * state machine would be pointless and possibly error prone when
 	 * called from phy_disconnect() synchronously.
 	 */
-	mutex_lock(&phydev->lock);
 	if (phy_polling_mode(phydev) && phy_is_started(phydev))
 		phy_queue_state_machine(phydev, PHY_STATE_TIME);
 	mutex_unlock(&phydev->lock);
@@ -1645,11 +1644,21 @@ EXPORT_SYMBOL(phy_ethtool_set_eee);
  */
 int phy_ethtool_set_wol(struct phy_device *phydev, struct ethtool_wolinfo *wol)
 {
+	struct ethtool_wolinfo w = { .cmd = ETHTOOL_GWOL };
 	int ret;
 
 	if (phydev->drv && phydev->drv->set_wol) {
 		mutex_lock(&phydev->lock);
 		ret = phydev->drv->set_wol(phydev, wol);
+
+		/* Read back the WoL enabled state for the PHY and update
+		 * our saved state.
+		 */
+		if (phydev->drv->get_wol) {
+			phydev->drv->get_wol(phydev, &w);
+			phydev->phy_wol_enabled = w.wolopts;
+		}
+
 		mutex_unlock(&phydev->lock);
 
 		return ret;
