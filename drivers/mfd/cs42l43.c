@@ -1073,6 +1073,7 @@ void cs42l43_dev_remove(struct cs42l43 *cs42l43)
 }
 EXPORT_SYMBOL_NS_GPL(cs42l43_dev_remove, MFD_CS42L43);
 
+#ifdef CONFIG_PM_SLEEP
 static int cs42l43_suspend(struct device *dev)
 {
 	struct cs42l43 *cs42l43 = dev_get_drvdata(dev);
@@ -1120,7 +1121,9 @@ static int cs42l43_resume(struct device *dev)
 
 	return 0;
 }
+#endif
 
+#ifdef CONFIG_PM
 static int cs42l43_runtime_suspend(struct device *dev)
 {
 	struct cs42l43 *cs42l43 = dev_get_drvdata(dev);
@@ -1176,6 +1179,7 @@ err:
 
 	return ret;
 }
+#endif
 
 EXPORT_NS_GPL_DEV_PM_OPS(cs42l43_pm_ops, MFD_CS42L43) = {
 	SET_SYSTEM_SLEEP_PM_OPS(cs42l43_suspend, cs42l43_resume)
