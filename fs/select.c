@@ -231,7 +231,10 @@ static void __pollwait(struct file *filp, wait_queue_head_t *wait_address,
 	entry->key = p->_key;
 	init_waitqueue_func_entry(&entry->wait, pollwake);
 	entry->wait.private = pwq;
-	add_wait_queue(wait_address, &entry->wait);
+	if (flags & POLL_ENQUEUE_EXCLUSIVE)
+		add_wait_queue_exclusive(wait_address, &entry->wait);
+	else
+		add_wait_queue(wait_address, &entry->wait);
 }
 
 static int poll_schedule_timeout(struct poll_wqueues *pwq, int state,

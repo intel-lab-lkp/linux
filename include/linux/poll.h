@@ -29,6 +29,8 @@
 
 typedef unsigned int poll_flags;
 
+#define POLL_ENQUEUE_EXCLUSIVE  BIT(0)
+
 struct poll_table_struct;
 
 /* 
@@ -46,10 +48,24 @@ typedef struct poll_table_struct {
 	__poll_t _key;
 } poll_table;
 
-static inline void poll_wait(struct file * filp, wait_queue_head_t * wait_address, poll_table *p)
+static inline void __poll_wait(struct file *filp, wait_queue_head_t *wait_address,
+			       poll_table *p, poll_flags flags)
 {
 	if (p && p->_qproc && wait_address)
-		p->_qproc(filp, wait_address, p, 0);
+		p->_qproc(filp, wait_address, p, flags);
+}
+
+static inline void poll_wait(struct file *filp, wait_queue_head_t *wait_address,
+			     poll_table *p)
+{
+	__poll_wait(filp, wait_address, p, 0);
+}
+
+static inline void poll_wait_exclusive(struct file *filp,
+				       wait_queue_head_t *wait_address,
+				       poll_table *p)
+{
+	__poll_wait(filp, wait_address, p, POLL_ENQUEUE_EXCLUSIVE);
 }
 
 /*
