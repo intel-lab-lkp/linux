@@ -116,8 +116,14 @@ pmd_t mk_pmd(struct page *page, pgprot_t prot)
 void set_pmd_at(struct mm_struct *mm, unsigned long addr,
 		pmd_t *pmdp, pmd_t pmd)
 {
+	/*
+	 * The similar with function set_huge_pte_at
+	 * Need flush invalid normal page pte if hw ptw is not supported
+	 */
+	if (!cpu_has_ptw && pmd_none(*pmdp))
+		flush_tlb_mm(mm);
+
 	*pmdp = pmd;
-	flush_tlb_all();
 }
 
 void __init pagetable_init(void)
