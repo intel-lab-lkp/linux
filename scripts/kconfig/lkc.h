@@ -38,10 +38,17 @@ void zconf_initscan(const char *name);
 void zconf_nextfile(const char *name);
 int zconf_lineno(void);
 const char *zconf_curname(void);
+extern const char *verbose;
+enum error_type {
+	DIR_DEP,
+	REV_DEP,
+	RANGE
+};
 
 /* confdata.c */
 const char *conf_get_configname(void);
 void set_all_choice_values(struct symbol *csym);
+void conf_error_log(enum error_type type, struct symbol *sym, char *log, ...);
 
 /* confdata.c and expr.c */
 static inline void xfwrite(const void *str, size_t len, size_t count, FILE *out)

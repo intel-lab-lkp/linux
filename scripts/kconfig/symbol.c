@@ -600,7 +600,7 @@ bool sym_string_valid(struct symbol *sym, const char *str)
 bool sym_string_within_range(struct symbol *sym, const char *str)
 {
 	struct property *prop;
-	long long val;
+	long long val, left, right;
 
 	switch (sym->type) {
 	case S_STRING:
@@ -612,8 +612,15 @@ bool sym_string_within_range(struct symbol *sym, const char *str)
 		if (!prop)
 			return true;
 		val = strtoll(str, NULL, 10);
-		return val >= sym_get_range_val(prop->expr->left.sym, 10) &&
-		       val <= sym_get_range_val(prop->expr->right.sym, 10);
+		left = sym_get_range_val(prop->expr->left.sym, 10);
+		right = sym_get_range_val(prop->expr->right.sym, 10);
+		if (val >= left && val <= right)
+			return true;
+		if (verbose)
+			conf_error_log(RANGE, sym,
+				"  symbol value is %lld, the range is (%lld %lld)\n",
+				val, left, right);
+		return false;
 	case S_HEX:
 		if (!sym_string_valid(sym, str))
 			return false;
@@ -621,8 +628,15 @@ bool sym_string_within_range(struct symbol *sym, const char *str)
 		if (!prop)
 			return true;
 		val = strtoll(str, NULL, 16);
-		return val >= sym_get_range_val(prop->expr->left.sym, 16) &&
-		       val <= sym_get_range_val(prop->expr->right.sym, 16);
+		left = sym_get_range_val(prop->expr->left.sym, 16);
+		right = sym_get_range_val(prop->expr->right.sym, 16);
+		if (val >= left && val <= right)
+			return true;
+		if (verbose)
+			conf_error_log(RANGE, sym,
+				"  symbol value is 0x%llx, the range is (0x%llx 0x%llx)\n",
+				val, left, right);
+		return false;
 	case S_BOOLEAN:
 	case S_TRISTATE:
 		switch (str[0]) {

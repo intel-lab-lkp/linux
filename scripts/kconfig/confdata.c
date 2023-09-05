@@ -154,6 +154,56 @@ static void conf_message(const char *fmt, ...)
 
 static const char *conf_filename;
 static int conf_lineno, conf_warnings;
+const char *verbose;
+
+void conf_error_log(enum error_type type, struct symbol *sym, char *log, ...)
+{
+	static char *const tristate2str[3] = {"n", "m", "y"};
+	struct gstr gs = str_new();
+	char s[100];
+	char *oldval = NULL;
+	va_list args;
+
+	va_start(args, log);
+	vsnprintf(s, sizeof(s), log, args);
+	va_end(args);
+
+	switch (sym->type) {
+	case S_BOOLEAN:
+	case S_TRISTATE:
+		oldval = tristate2str[sym->def[S_DEF_USER].tri];
+		break;
+	case S_INT:
+	case S_HEX:
+	case S_STRING:
+		oldval = sym->def[S_DEF_USER].val;
+	default:
+		break;
+	}
+
+	str_printf(&gs,
+		"\nWARNING : %s [%s] value is invalid\n",
+		sym->name, oldval);
+	str_printf(&gs, s);
+	switch (type) {
+	case DIR_DEP:
+		str_printf(&gs,
+			"  Depends on [%c]: ",
+			sym->dir_dep.tri == mod ? 'm' : 'n');
+		expr_gstr_print(sym->dir_dep.expr, &gs);
+		str_printf(&gs, "\n");
+		break;
+	case REV_DEP:
+		expr_gstr_print_revdep(sym->rev_dep.expr, &gs, yes,
+					"  Selected by [y]:\n");
+		expr_gstr_print_revdep(sym->rev_dep.expr, &gs, mod,
+					"  Selected by [m]:\n");
+		break;
+	default:
+		break;
+	}
+	fputs(str_get(&gs), stderr);
+}
 
 static void conf_warning(const char *fmt, ...)
 {
@@ -226,11 +276,14 @@ static const char *conf_get_rustccfg_name(void)
 static int conf_set_sym_val(struct symbol *sym, int def, int def_flags, char *p)
 {
 	char *p2;
+	static const char * const type[] = {"unknown", "bool", "tristate", "int", "hex", "string"};
 
 	switch (sym->type) {
 	case S_TRISTATE:
 		if (p[0] == 'm') {
 			sym->def[def].tri = mod;
+
+
 			sym->flags |= def_flags;
 			break;
 		}
@@ -246,9 +299,14 @@ static int conf_set_sym_val(struct symbol *sym, int def, int def_flags, char *p)
 			sym->flags |= def_flags;
 			break;
 		}
-		if (def != S_DEF_AUTO)
-			conf_warning("symbol value '%s' invalid for %s",
+		if (def != S_DEF_AUTO) {
+			if (verbose)
+				conf_warning("symbol value '%s' invalid for %s\n due to its type is %s",
+				     p, sym->name, type[sym->type]);
+			else
+				conf_warning("symbol value '%s' invalid for %s",
 				     p, sym->name);
+		}
 		return 1;
 	case S_STRING:
 		/* No escaping for S_DEF_AUTO (include/config/auto.conf) */
@@ -274,9 +332,14 @@ static int conf_set_sym_val(struct symbol *sym, int def, int def_flags, char *p)
 			sym->def[def].val = xstrdup(p);
 			sym->flags |= def_flags;
 		} else {
-			if (def != S_DEF_AUTO)
-				conf_warning("symbol value '%s' invalid for %s",
-					     p, sym->name);
+			if (def != S_DEF_AUTO) {
+				if (verbose)
+					conf_warning("symbol value '%s' invalid for %s\n due to its type is %s",
+						p, sym->name, type[sym->type]);
+				else
+					conf_warning("symbol value '%s' invalid for %s",
+						p, sym->name);
+			}
 			return 1;
 		}
 		break;
@@ -545,6 +608,7 @@ int conf_read(const char *name)
 	int conf_unsaved = 0;
 	int i;
 
+	verbose = getenv("KCONFIG_VERBOSE");
 	conf_set_changed(false);
 
 	if (conf_read_simple(name, S_DEF_USER)) {
@@ -576,6 +640,32 @@ int conf_read(const char *name)
 			continue;
 		conf_unsaved++;
 		/* maybe print value in verbose mode... */
+		if (verbose) {
+			switch (sym->type) {
+			case S_BOOLEAN:
+			case S_TRISTATE:
+				if (sym->def[S_DEF_USER].tri != sym->curr.tri) {
+					if (sym->dir_dep.tri < sym->def[S_DEF_USER].tri)
+						conf_error_log(DIR_DEP, sym,
+							"  due to unmet direct dependencies\n",
+							NULL);
+					if (sym->rev_dep.tri > sym->def[S_DEF_USER].tri)
+						conf_error_log(REV_DEP, sym,
+							"  due to it is selected\n", NULL);
+				}
+				break;
+			case S_INT:
+			case S_HEX:
+			case S_STRING:
+				if (sym->dir_dep.tri == no &&
+					strcmp((char *)(sym->def[S_DEF_USER].val), "") != 0)
+					conf_error_log(DIR_DEP, sym,
+						"  due to unmet direct dependencies\n", NULL);
+				break;
+			default:
+				break;
+			}
+		}
 	}
 
 	for_all_symbols(i, sym) {
