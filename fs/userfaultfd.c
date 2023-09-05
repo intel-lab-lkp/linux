@@ -994,7 +994,7 @@ static __poll_t userfaultfd_poll(struct file *file, poll_table *wait)
 	struct userfaultfd_ctx *ctx = file->private_data;
 	__poll_t ret;
 
-	poll_wait(file, &ctx->fd_wqh, wait);
+	poll_wait_exclusive(file, &ctx->fd_wqh, wait);
 
 	if (!userfaultfd_is_initialized(ctx))
 		return EPOLLERR;
