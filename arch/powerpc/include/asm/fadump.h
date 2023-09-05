@@ -15,13 +15,13 @@ extern int crashing_cpu;
 
 extern int is_fadump_memory_area(u64 addr, ulong size);
 extern int setup_fadump(void);
-extern int is_fadump_active(void);
+extern bool is_fadump_active(void);
 extern int should_fadump_crash(void);
 extern void crash_fadump(struct pt_regs *, const char *);
 extern void fadump_cleanup(void);
 
 #else	/* CONFIG_FA_DUMP */
-static inline int is_fadump_active(void) { return 0; }
+static inline bool is_fadump_active(void) { return false; }
 static inline int should_fadump_crash(void) { return 0; }
 static inline void crash_fadump(struct pt_regs *regs, const char *str) { }
 static inline void fadump_cleanup(void) { }

@@ -187,9 +187,9 @@ int should_fadump_crash(void)
 	return 1;
 }
 
-int is_fadump_active(void)
+bool is_fadump_active(void)
 {
-	return fw_dump.dump_active;
+	return !!fw_dump.dump_active;
 }
 
 /*
