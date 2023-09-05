@@ -831,6 +831,9 @@ done_merging:
 	else
 		to_tail = buddy_merge_likely(pfn, buddy_pfn, page, order);
 
+	if (unlikely(!order && is_migrate_highatomic(migratetype)))
+		migratetype = MIGRATE_MOVABLE;
+
 	if (to_tail)
 		add_to_free_list_tail(page, zone, order, migratetype);
 	else
@@ -1639,9 +1642,13 @@ static int move_freepages(struct zone *zone,
 		VM_BUG_ON_PAGE(page_zone(page) != zone, page);
 
 		order = buddy_order(page);
-		move_to_free_list(page, zone, order, migratetype);
+		if (unlikely(!order && is_migrate_highatomic(migratetype)))
+			move_to_free_list(page, zone, order, MIGRATE_MOVABLE);
+		else {
+			move_to_free_list(page, zone, order, migratetype);
+			pages_moved += 1 << order;
+		}
 		pfn += 1 << order;
-		pages_moved += 1 << order;
 	}
 
 	return pages_moved;
