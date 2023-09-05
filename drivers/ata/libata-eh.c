@@ -735,6 +735,12 @@ void ata_scsi_port_error_handler(struct Scsi_Host *host, struct ata_port *ap)
 	 */
 	ap->ops->end_eh(ap);
 
+	if (!ap->scsi_host->host_eh_scheduled) {
+		/* make sure nr_active_links is zero after EH */
+		WARN_ON(ap->nr_active_links);
+		ap->nr_active_links = 0;
+	}
+
 	spin_unlock_irqrestore(ap->lock, flags);
 	ata_eh_release(ap);
 
@@ -948,7 +954,7 @@ void ata_std_end_eh(struct ata_port *ap)
 {
 	struct Scsi_Host *host = ap->scsi_host;
 
-	host->host_eh_scheduled = 0;
+	host->host_eh_scheduled--;
 }
 EXPORT_SYMBOL(ata_std_end_eh);
 
@@ -3922,10 +3928,6 @@ void ata_eh_finish(struct ata_port *ap)
 			}
 		}
 	}
-
-	/* make sure nr_active_links is zero after EH */
-	WARN_ON(ap->nr_active_links);
-	ap->nr_active_links = 0;
 }
 
 /**
