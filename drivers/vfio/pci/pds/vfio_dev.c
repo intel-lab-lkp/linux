@@ -160,10 +160,13 @@ static int pds_vfio_init_device(struct vfio_device *vdev)
 	vdev->log_ops = &pds_vfio_log_ops;
 
 	pci_id = PCI_DEVID(pdev->bus->number, pdev->devfn);
+
+#ifdef CONFIG_PCI_ATS
 	dev_dbg(&pdev->dev,
 		"%s: PF %#04x VF %#04x vf_id %d domain %d pds_vfio %p\n",
 		__func__, pci_dev_id(pdev->physfn), pci_id, vf_id,
 		pci_domain_nr(pdev->bus), pds_vfio);
+#endif
 
 	return 0;
 }
