@@ -765,6 +765,10 @@ static int _ext4_get_block(struct inode *inode, sector_t iblock,
 	if (ret > 0) {
 		map_bh(bh, inode->i_sb, map.m_pblk);
 		ext4_update_bh_state(bh, map.m_flags);
+
+		if (buffer_unwritten(bh))
+			set_buffer_new(bh);
+
 		bh->b_size = inode->i_sb->s_blocksize * map.m_len;
 		ret = 0;
 	} else if (ret == 0) {
