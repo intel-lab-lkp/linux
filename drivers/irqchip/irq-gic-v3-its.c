@@ -5056,7 +5056,8 @@ static int __init its_compute_its_list_map(struct resource *res,
 }
 
 static int __init its_probe_one(struct resource *res,
-				struct fwnode_handle *handle, int numa_node)
+				struct fwnode_handle *handle, int numa_node,
+				bool non_coherent)
 {
 	struct its_node *its;
 	void __iomem *its_base;
@@ -5148,7 +5149,7 @@ static int __init its_probe_one(struct resource *res,
 	gits_write_cbaser(baser, its->base + GITS_CBASER);
 	tmp = gits_read_cbaser(its->base + GITS_CBASER);
 
-	if (its->flags & ITS_FLAGS_FORCE_NON_SHAREABLE)
+	if (its->flags & ITS_FLAGS_FORCE_NON_SHAREABLE || non_coherent)
 		tmp &= ~GITS_CBASER_SHAREABILITY_MASK;
 
 	if ((tmp ^ baser) & GITS_CBASER_SHAREABILITY_MASK) {
@@ -5356,10 +5357,18 @@ static const struct of_device_id its_device_id[] = {
 	{},
 };
 
+static void of_check_rdists_coherent(struct device_node *node)
+{
+	if (of_property_read_bool(node, "dma-noncoherent"))
+		gic_rdists->flags |= RDIST_FLAGS_FORCE_NON_SHAREABLE;
+}
+
 static int __init its_of_probe(struct device_node *node)
 {
 	struct device_node *np;
 	struct resource res;
+
+	of_check_rdists_coherent(node);
 
 	/*
 	 * Make sure *all* the ITS are reset before we probe any, as
@@ -5396,7 +5405,8 @@ static int __init its_of_probe(struct device_node *node)
 			continue;
 		}
 
-		its_probe_one(&res, &np->fwnode, of_node_to_nid(np));
+		its_probe_one(&res, &np->fwnode, of_node_to_nid(np),
+			      of_property_read_bool(np, "dma-noncoherent"));
 	}
 	return 0;
 }
@@ -5533,7 +5543,8 @@ static int __init gic_acpi_parse_madt_its(union acpi_subtable_headers *header,
 	}
 
 	err = its_probe_one(&res, dom_handle,
-			acpi_get_its_numa_node(its_entry->translation_id));
+			acpi_get_its_numa_node(its_entry->translation_id),
+			false);
 	if (!err)
 		return 0;
 
