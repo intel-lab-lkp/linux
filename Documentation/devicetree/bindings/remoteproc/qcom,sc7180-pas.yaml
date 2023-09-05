@@ -16,6 +16,7 @@ description:
 properties:
   compatible:
     enum:
+      - qcom,sc7180-adsp-pas
       - qcom,sc7180-mpss-pas
       - qcom,sc7280-mpss-pas
 
@@ -88,6 +89,17 @@ allOf:
           maxItems: 2
         power-domain-names:
           maxItems: 2
+  - if:
+      properties:
+        compatible:
+          enum:
+            - qcom,sc7180-adsp-pas
+    then:
+      properties:
+        interrupts:
+          minItems: 5
+        interrupt-names:
+          minItems: 5
 
 unevaluatedProperties: false
 
