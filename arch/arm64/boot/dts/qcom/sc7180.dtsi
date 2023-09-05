@@ -2033,6 +2033,11 @@
 				function = "mi2s_1";
 			};
 
+			ter_mi2s_active: ter-mi2s-active-state {
+				pins = "gpio63", "gpio64", "gpio65", "gpio66";
+				function = "mi2s_2";
+			};
+
 			pri_mi2s_active: pri-mi2s-active-state {
 				pins = "gpio53", "gpio54", "gpio55", "gpio56";
 				function = "mi2s_0";
