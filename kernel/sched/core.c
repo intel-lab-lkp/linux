@@ -4486,6 +4486,8 @@ static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
 	p->se.vlag			= 0;
 	p->se.slice			= sysctl_sched_base_slice;
 	p->se.next_migration_time	= 0;
+	p->se.nr_migrations_per_window	= 0;
+	p->se.quota_migrations_per_window = SCHED_MIGRATION_QUOTA;
 	INIT_LIST_HEAD(&p->se.group_node);
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
