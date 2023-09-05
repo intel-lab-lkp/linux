@@ -35,14 +35,8 @@
 #include <asm/pgalloc.h>
 #include <asm/tlb.h>
 
-/*
- * We have up to 8 empty zeroed pages so we can map one of the right colour
- * when needed.	 Since page is never written to after the initialization we
- * don't have to care about aliases on other CPUs.
- */
-unsigned long empty_zero_page, zero_page_mask;
+unsigned long empty_zero_page;
 EXPORT_SYMBOL(empty_zero_page);
-EXPORT_SYMBOL(zero_page_mask);
 
 void setup_zero_pages(void)
 {
@@ -60,7 +54,6 @@ void setup_zero_pages(void)
 	for (i = 0; i < (1 << order); i++, page++)
 		mark_page_reserved(page);
 
-	zero_page_mask = ((PAGE_SIZE << order) - 1) & PAGE_MASK;
 }
 
 void copy_user_highpage(struct page *to, struct page *from,
