@@ -355,14 +355,13 @@ static void __inet_del_ifa(struct in_device *in_dev,
 {
 	struct in_ifaddr *promote = NULL;
 	struct in_ifaddr *ifa, *ifa1;
-	struct in_ifaddr *last_prim;
+	struct in_ifaddr *last_prim = NULL;
 	struct in_ifaddr *prev_prom = NULL;
 	int do_promote = IN_DEV_PROMOTE_SECONDARIES(in_dev);
 
 	ASSERT_RTNL();
 
 	ifa1 = rtnl_dereference(*ifap);
-	last_prim = rtnl_dereference(in_dev->ifa_list);
 	if (in_dev->dead)
 		goto no_promotions;
 
@@ -371,7 +370,16 @@ static void __inet_del_ifa(struct in_device *in_dev,
 	 **/
 
 	if (!(ifa1->ifa_flags & IFA_F_SECONDARY)) {
-		struct in_ifaddr __rcu **ifap1 = &ifa1->ifa_next;
+		struct in_ifaddr __rcu **ifap1 = &in_dev->ifa_list;
+
+		while ((ifa = rtnl_dereference(*ifap1)) != NULL) {
+			if (ifa1 == ifa)
+				break;
+			last_prim = ifa;
+			ifap1 = &ifa->ifa_next;
+		}
+
+		ifap1 = &ifa1->ifa_next;
 
 		while ((ifa = rtnl_dereference(*ifap1)) != NULL) {
 			if (!(ifa->ifa_flags & IFA_F_SECONDARY) &&
@@ -440,9 +448,15 @@ no_promotions:
 
 			rcu_assign_pointer(prev_prom->ifa_next, next_sec);
 
-			last_sec = rtnl_dereference(last_prim->ifa_next);
-			rcu_assign_pointer(promote->ifa_next, last_sec);
-			rcu_assign_pointer(last_prim->ifa_next, promote);
+			if (last_prim) {
+				last_sec = rtnl_dereference(last_prim->ifa_next);
+				rcu_assign_pointer(promote->ifa_next, last_sec);
+				rcu_assign_pointer(last_prim->ifa_next, promote);
+			} else {
+				rcu_assign_pointer(promote->ifa_next,
+						   rtnl_dereference(in_dev->ifa_list));
+				rcu_assign_pointer(in_dev->ifa_list, promote);
+			}
 		}
 
 		promote->ifa_flags &= ~IFA_F_SECONDARY;
