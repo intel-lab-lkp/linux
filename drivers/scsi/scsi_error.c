@@ -2663,3 +2663,7 @@ bool scsi_get_sense_info_fld(const u8 *sense_buffer, int sb_len,
 	}
 }
 EXPORT_SYMBOL(scsi_get_sense_info_fld);
+
+#ifdef CONFIG_SCSI_KUNIT_TEST
+#include "scsi_error_test.c"
+#endif
