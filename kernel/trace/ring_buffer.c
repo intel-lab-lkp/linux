@@ -200,6 +200,8 @@ rb_event_length(struct ring_buffer_event *event)
 		if (rb_null_event(event))
 			/* undefined */
 			return -1;
+		if (((unsigned long)event & 0xfffUL) >= PAGE_SIZE - 4)
+			return -1;
 		return  event->array[0] + RB_EVNT_HDR_SIZE;
 
 	case RINGBUF_TYPE_TIME_EXTEND:
@@ -209,6 +211,8 @@ rb_event_length(struct ring_buffer_event *event)
 		return RB_LEN_TIME_STAMP;
 
 	case RINGBUF_TYPE_DATA:
+		if ((((unsigned long)event & 0xfffUL) >= PAGE_SIZE - 4) && !event->type_len)
+			return -1;
 		return rb_event_data_length(event);
 	default:
 		WARN_ON_ONCE(1);
