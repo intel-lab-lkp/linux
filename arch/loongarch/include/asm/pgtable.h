@@ -70,10 +70,8 @@ struct vm_area_struct;
  * for zero-mapped memory areas etc..
  */
 
-extern unsigned long empty_zero_page;
-
-#define ZERO_PAGE(vaddr) \
-	(virt_to_page((void *)(empty_zero_page)))
+extern unsigned long empty_zero_page[PAGE_SIZE / sizeof(unsigned long)];
+#define ZERO_PAGE(vaddr)	((void)(vaddr), virt_to_page(empty_zero_page))
 
 /*
  * TLB refill handlers may also map the vmalloc area into xkvrange.
