@@ -50,7 +50,7 @@ xfs_rtany_summary(
 	int		high,		/* high log2 extent size */
 	xfs_rtblock_t	bbno,		/* bitmap block number */
 	struct xfs_rtbuf_cache *rtbufc,	/* in/out: cache of realtime blocks */
-	int		*stat)		/* out: any good extents here? */
+	int		*maxlog)	/* out: maximum log2 extent size free */
 {
 	int		error;		/* error value */
 	int		log;		/* loop counter, log2 of ext. size */
@@ -60,7 +60,7 @@ xfs_rtany_summary(
 	if (mp->m_rsum_cache) {
 		high = min(high, mp->m_rsum_cache[bbno] - 1);
 		if (low > high) {
-			*stat = 0;
+			*maxlog = -1;
 			return 0;
 		}
 	}
@@ -80,14 +80,14 @@ xfs_rtany_summary(
 		 * If there are any, return success.
 		 */
 		if (sum) {
-			*stat = 1;
+			*maxlog = log;
 			goto out;
 		}
 	}
 	/*
 	 * Found nothing, return failure.
 	 */
-	*stat = 0;
+	*maxlog = -1;
 out:
 	/* There were no extents at levels > log. */
 	if (mp->m_rsum_cache && log + 1 < mp->m_rsum_cache[bbno])
@@ -430,7 +430,7 @@ xfs_rtallocate_extent_near(
 	xfs_extlen_t	prod,		/* extent product factor */
 	xfs_rtblock_t	*rtblock)	/* out: start block allocated */
 {
-	int		any;		/* any useful extents from summary */
+	int		maxlog;		/* maximum useful extent from summary */
 	xfs_rtblock_t	bbno;		/* bitmap block number */
 	int		error;		/* error value */
 	int		i;		/* bitmap block offset (loop control) */
@@ -482,7 +482,7 @@ xfs_rtallocate_extent_near(
 		 * starting in this bitmap block.
 		 */
 		error = xfs_rtany_summary(mp, tp, log2len, mp->m_rsumlevels - 1,
-			bbno + i, rtbufc, &any);
+			bbno + i, rtbufc, &maxlog);
 		if (error) {
 			return error;
 		}
@@ -490,7 +490,7 @@ xfs_rtallocate_extent_near(
 		 * If there are any useful extents starting here, try
 		 * allocating one.
 		 */
-		if (any) {
+		if (maxlog >= 0) {
 			/*
 			 * On the positive side of the starting location.
 			 */
@@ -530,7 +530,7 @@ xfs_rtallocate_extent_near(
 					 */
 					error = xfs_rtany_summary(mp, tp,
 						log2len, mp->m_rsumlevels - 1,
-						bbno + j, rtbufc, &any);
+						bbno + j, rtbufc, &maxlog);
 					if (error) {
 						return error;
 					}
@@ -542,7 +542,7 @@ xfs_rtallocate_extent_near(
 					 * extent given, we've already tried
 					 * that allocation, don't do it again.
 					 */
-					if (any)
+					if (maxlog >= 0)
 						continue;
 					error = xfs_rtallocate_extent_block(mp,
 						tp, bbno + j, minlen, maxlen,
