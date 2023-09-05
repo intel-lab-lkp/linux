@@ -101,29 +101,40 @@ xfs_growfs_rt(
 /*
  * From xfs_rtbitmap.c
  */
+struct xfs_rtbuf_cache {
+	struct xfs_buf *bbuf;	/* bitmap block buffer */
+	xfs_fileoff_t bblock;	/* bitmap block number */
+	struct xfs_buf *sbuf;	/* summary block buffer */
+	xfs_fileoff_t sblock;	/* summary block number */
+};
+
+void xfs_rtbuf_cache_relse(struct xfs_trans *tp, struct xfs_rtbuf_cache *cache);
 int xfs_rtbuf_get(struct xfs_mount *mp, struct xfs_trans *tp,
-		  xfs_rtblock_t block, int issum, struct xfs_buf **bpp);
+		  xfs_rtblock_t block, int issum, struct xfs_rtbuf_cache *cache,
+		  struct xfs_buf **bpp);
 int xfs_rtcheck_range(struct xfs_mount *mp, struct xfs_trans *tp,
 		      xfs_rtblock_t start, xfs_extlen_t len, int val,
-		      xfs_rtblock_t *new, int *stat);
+		      struct xfs_rtbuf_cache *rtbufc, xfs_rtblock_t *new,
+		      int *stat);
 int xfs_rtfind_back(struct xfs_mount *mp, struct xfs_trans *tp,
 		    xfs_rtblock_t start, xfs_rtblock_t limit,
-		    xfs_rtblock_t *rtblock);
+		    struct xfs_rtbuf_cache *rtbufc, xfs_rtblock_t *rtblock);
 int xfs_rtfind_forw(struct xfs_mount *mp, struct xfs_trans *tp,
 		    xfs_rtblock_t start, xfs_rtblock_t limit,
-		    xfs_rtblock_t *rtblock);
+		    struct xfs_rtbuf_cache *rtbufc, xfs_rtblock_t *rtblock);
 int xfs_rtmodify_range(struct xfs_mount *mp, struct xfs_trans *tp,
-		       xfs_rtblock_t start, xfs_extlen_t len, int val);
+		       xfs_rtblock_t start, xfs_extlen_t len, int val,
+		       struct xfs_rtbuf_cache *rtbufc);
 int xfs_rtmodify_summary_int(struct xfs_mount *mp, struct xfs_trans *tp,
 			     int log, xfs_rtblock_t bbno, int delta,
-			     struct xfs_buf **rbpp, xfs_fsblock_t *rsb,
+			     struct xfs_rtbuf_cache *rtbufc,
 			     xfs_suminfo_t *sum);
 int xfs_rtmodify_summary(struct xfs_mount *mp, struct xfs_trans *tp, int log,
-			 xfs_rtblock_t bbno, int delta, struct xfs_buf **rbpp,
-			 xfs_fsblock_t *rsb);
+			 xfs_rtblock_t bbno, int delta,
+			 struct xfs_rtbuf_cache *rtbufc);
 int xfs_rtfree_range(struct xfs_mount *mp, struct xfs_trans *tp,
 		     xfs_rtblock_t start, xfs_extlen_t len,
-		     struct xfs_buf **rbpp, xfs_fsblock_t *rsb);
+		     struct xfs_rtbuf_cache *rtbufc);
 int xfs_rtalloc_query_range(struct xfs_mount *mp, struct xfs_trans *tp,
 		const struct xfs_rtalloc_rec *low_rec,
 		const struct xfs_rtalloc_rec *high_rec,
@@ -143,6 +154,7 @@ int xfs_rtalloc_reinit_frextents(struct xfs_mount *mp);
 # define xfs_growfs_rt(mp,in)                           (ENOSYS)
 # define xfs_rtalloc_query_range(t,l,h,f,p)             (ENOSYS)
 # define xfs_rtalloc_query_all(m,t,f,p)                 (ENOSYS)
+# define xfs_rtbuf_cache_relse(t,c)                     (ENOSYS)
 # define xfs_rtbuf_get(m,t,b,i,p)                       (ENOSYS)
 # define xfs_verify_rtbno(m, r)			(false)
 # define xfs_rtalloc_extent_is_free(m,t,s,l,i)          (ENOSYS)
