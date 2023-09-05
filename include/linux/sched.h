@@ -565,6 +565,8 @@ struct sched_entity {
 	u64				nr_migrations;
 
 	u64				next_migration_time;
+	int				nr_migrations_per_window;
+	int				quota_migrations_per_window;
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
 	int				depth;
