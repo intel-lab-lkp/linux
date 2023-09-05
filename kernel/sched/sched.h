@@ -104,6 +104,8 @@ struct cpuidle_state;
 #define TASK_ON_RQ_QUEUED	1
 #define TASK_ON_RQ_MIGRATING	2
 
+#define SCHED_MIGRATION_RATELIMIT_WINDOW	2000000		/* 2 ms */
+
 extern __read_mostly int scheduler_running;
 
 extern unsigned long calc_load_update;
