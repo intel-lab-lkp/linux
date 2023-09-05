@@ -385,8 +385,13 @@ static int alloc_vmemmap_page_list(unsigned long start, unsigned long end,
 	unsigned long nr_pages = (end - start) >> PAGE_SHIFT;
 	int nid = page_to_nid((struct page *)start);
 	struct page *page, *next;
+	unsigned long nr_alloced;
 
-	while (nr_pages--) {
+	nr_alloced = alloc_pages_bulk_list_node(gfp_mask, nid, nr_pages, list);
+	if (!nr_alloced)
+		return -ENOMEM;
+
+	while (nr_alloced < nr_pages) {
 		page = alloc_pages_node(nid, gfp_mask, 0);
 		if (!page)
 			goto out;
