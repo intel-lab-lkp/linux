@@ -1896,6 +1896,7 @@ static int ahci_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 			ap->em_message_type = hpriv->em_msg_type;
 
 		ahci_update_initial_lpm_policy(ap, hpriv);
+		ata_port_desc(ap, "lpm-pol %d", ap->target_lpm_policy);
 
 		/* disabled/not-implemented port */
 		if (!(hpriv->port_map & (1 << i)))
