@@ -213,12 +213,23 @@ enum criteria {
 #define EXT4_MB_USE_RESERVED		0x2000
 /* Do strict check for free blocks while retrying block allocation */
 #define EXT4_MB_STRICT_CHECK		0x4000
-/* Large fragment size list lookup succeeded at least once for cr = 0 */
+/*
+ * Large fragment size list lookup succeeded at least once for
+ * CR_POWER2_ALIGNED
+ */
 #define EXT4_MB_CR_POWER2_ALIGNED_OPTIMIZED		0x8000
-/* Avg fragment size rb tree lookup succeeded at least once for cr = 1 */
+/*
+ * Avg fragment size rb tree lookup succeeded at least once for
+ * CR_GOAL_LEN_FAST
+ */
 #define EXT4_MB_CR_GOAL_LEN_FAST_OPTIMIZED		0x00010000
-/* Avg fragment size rb tree lookup succeeded at least once for cr = 1.5 */
+/*
+ * Avg fragment size rb tree lookup succeeded at least once for
+ * CR_BEST_AVAIL_LEN
+ */
 #define EXT4_MB_CR_BEST_AVAIL_LEN_OPTIMIZED		0x00020000
+/* Freelist lookup succeeded at least once for CR_GOAL_LEN_SLOW */
+#define EXT4_MB_CR_GOAL_LEN_SLOW_OPTIMIZED 	0x00040000
 
 struct ext4_allocation_request {
 	/* target inode for block we're allocating */
@@ -1567,6 +1578,8 @@ struct ext4_sb_info {
 	rwlock_t *s_mb_avg_fragment_size_locks;
 	struct list_head *s_mb_largest_free_orders;
 	rwlock_t *s_mb_largest_free_orders_locks;
+	struct list_head *s_mb_freelist;
+	rwlock_t *s_mb_freelist_locks;
 
 	/* tunables */
 	unsigned long s_stripe;
@@ -1599,6 +1612,7 @@ struct ext4_sb_info {
 	atomic_t s_bal_p2_aligned_bad_suggestions;
 	atomic_t s_bal_goal_fast_bad_suggestions;
 	atomic_t s_bal_best_avail_bad_suggestions;
+	atomic_t s_bal_goal_slow_bad_suggestions;
 	atomic64_t s_bal_cX_groups_considered[EXT4_MB_NUM_CRS];
 	atomic64_t s_bal_cX_hits[EXT4_MB_NUM_CRS];
 	atomic64_t s_bal_cX_failed[EXT4_MB_NUM_CRS];		/* cX loop didn't find blocks */
@@ -3397,6 +3411,10 @@ struct ext4_group_info {
 	int		bb_avg_fragment_size_order;	/* order of average
 							   fragment in BG */
 	ext4_grpblk_t	bb_largest_free_order;/* order of largest frag in BG */
+	/*
+	 * Determines which freelist will this group be added to
+	 */
+	ext4_grpblk_t 	bb_freelist_order;
 	ext4_group_t	bb_group;	/* Group number */
 	struct          list_head bb_prealloc_list;
 #ifdef DOUBLE_CHECK
@@ -3405,6 +3423,7 @@ struct ext4_group_info {
 	struct rw_semaphore alloc_sem;
 	struct list_head bb_avg_fragment_size_node;
 	struct list_head bb_largest_free_order_node;
+	struct list_head bb_freelist_node;
 	ext4_grpblk_t	bb_counters[];	/* Nr of free power-of-two-block
 					 * regions, index is order.
 					 * bb_counters[3] = 5 means

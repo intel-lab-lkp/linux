@@ -97,6 +97,11 @@
  */
 #define MB_NUM_ORDERS(sb)		((sb)->s_blocksize_bits + 2)
 
+/*
+ * Number of valid freelist orders. One extra order for 0 blocks.
+ */
+#define MB_FREELIST_NUM_ORDERS(sb) (fls(EXT4_CLUSTERS_PER_GROUP(sb)) + 1)
+
 struct ext4_free_data {
 	/* this links the free block information from sb_info */
 	struct list_head		efd_list;

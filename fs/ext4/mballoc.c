@@ -866,6 +866,31 @@ mb_update_avg_fragment_size(struct super_block *sb, struct ext4_group_info *grp)
 					grp->bb_avg_fragment_size_order]);
 }
 
+static void mb_update_freelist(struct super_block *sb,
+			       struct ext4_group_info *grp)
+{
+	struct ext4_sb_info *sbi = EXT4_SB(sb);
+	int new_order, prev_order;
+
+	if (!test_opt2(sb, MB_OPTIMIZE_SCAN))
+		return;
+
+	new_order = fls(grp->bb_free);
+	prev_order = grp->bb_freelist_order;
+	if (new_order == prev_order)
+		return;
+
+	if (prev_order != -1) {
+		write_lock(&sbi->s_mb_freelist_locks[prev_order]);
+		list_del(&grp->bb_freelist_node);
+		write_unlock(&sbi->s_mb_freelist_locks[prev_order]);
+	}
+	write_lock(&sbi->s_mb_freelist_locks[new_order]);
+	grp->bb_freelist_order = new_order;
+	list_add_tail(&grp->bb_freelist_node, &sbi->s_mb_freelist[new_order]);
+	write_unlock(&sbi->s_mb_freelist_locks[new_order]);
+}
+
 /*
  * Choose next group by traversing largest_free_order lists. Updates *new_cr if
  * cr level needs an update.
@@ -1065,11 +1090,63 @@ static void ext4_mb_choose_next_group_best_avail(struct ext4_allocation_context 
 	*new_cr = CR_GOAL_LEN_SLOW;
 }
 
+static void ext4_mb_choose_next_group_goal_slow(struct ext4_allocation_context *ac,
+					  enum criteria *new_cr,
+					  ext4_group_t *group,
+					  ext4_group_t ngroups)
+{
+	struct ext4_sb_info *sbi = EXT4_SB(ac->ac_sb);
+	struct ext4_group_info *iter, *grp = NULL;
+	int i, order;
+	unsigned freelist_max_order = MB_FREELIST_NUM_ORDERS(ac->ac_sb);
+
+	if (unlikely(ac->ac_flags & EXT4_MB_CR_GOAL_LEN_SLOW_OPTIMIZED)) {
+		if (sbi->s_mb_stats)
+			atomic_inc(&sbi->s_bal_goal_slow_bad_suggestions);
+	}
+
+	order = fls(ac->ac_g_ex.fe_len);
+	for (i = order; i < freelist_max_order; i++) {
+		if (list_empty(&sbi->s_mb_freelist[i]))
+			continue;
+
+		read_lock(&sbi->s_mb_freelist_locks[i]);
+		if (list_empty(&sbi->s_mb_freelist[i])) {
+			read_unlock(&sbi->s_mb_freelist_locks[i]);
+			continue;
+		}
+		grp = NULL;
+		list_for_each_entry(iter, &sbi->s_mb_freelist[i],
+				    bb_freelist_node) {
+			if (sbi->s_mb_stats)
+				atomic64_inc(&sbi->s_bal_cX_groups_considered
+						      [CR_GOAL_LEN_SLOW]);
+
+			if (likely(ext4_mb_good_group(ac, iter->bb_group,
+						      CR_GOAL_LEN_SLOW))) {
+				grp = iter;
+				break;
+			}
+		}
+		read_unlock(&sbi->s_mb_freelist_locks[i]);
+
+		if (grp)
+			break;
+	}
+
+	if (grp) {
+		*group = grp->bb_group;
+		ac->ac_flags |= EXT4_MB_CR_GOAL_LEN_SLOW_OPTIMIZED;
+	} else {
+		*new_cr = CR_ANY_FREE;
+	}
+}
+
 static inline int should_optimize_scan(struct ext4_allocation_context *ac)
 {
 	if (unlikely(!test_opt2(ac->ac_sb, MB_OPTIMIZE_SCAN)))
 		return 0;
-	if (ac->ac_criteria >= CR_GOAL_LEN_SLOW)
+	if (ac->ac_criteria >= CR_ANY_FREE)
 		return 0;
 	if (!ext4_test_inode_flag(ac->ac_inode, EXT4_INODE_EXTENTS))
 		return 0;
@@ -1130,10 +1207,13 @@ static void ext4_mb_choose_next_group(struct ext4_allocation_context *ac,
 		ext4_mb_choose_next_group_goal_fast(ac, new_cr, group, ngroups);
 	} else if (*new_cr == CR_BEST_AVAIL_LEN) {
 		ext4_mb_choose_next_group_best_avail(ac, new_cr, group, ngroups);
+	} else if (*new_cr == CR_GOAL_LEN_SLOW) {
+		ext4_mb_choose_next_group_goal_slow(ac, new_cr, group, ngroups);
 	} else {
 		/*
-		 * TODO: For CR=2, we can arrange groups in an rb tree sorted by
-		 * bb_free. But until that happens, we should never come here.
+		 * We should never reach this point since should_opitimize_scan()
+		 * will make sure we don't use mb_optimize_scan for the remaining
+		 * CR_ANY_FREE criteria.
 		 */
 		WARN_ON(1);
 	}
@@ -1952,6 +2032,7 @@ static void mb_free_blocks(struct inode *inode, struct ext4_buddy *e4b,
 done:
 	mb_set_largest_free_order(sb, e4b->bd_info);
 	mb_update_avg_fragment_size(sb, e4b->bd_info);
+	mb_update_freelist(e4b->bd_sb, e4b->bd_info);
 	mb_check_buddy(e4b);
 }
 
@@ -2096,6 +2177,7 @@ static int mb_mark_used(struct ext4_buddy *e4b, struct ext4_free_extent *ex)
 	mb_set_largest_free_order(e4b->bd_sb, e4b->bd_info);
 
 	mb_update_avg_fragment_size(e4b->bd_sb, e4b->bd_info);
+	mb_update_freelist(e4b->bd_sb, e4b->bd_info);
 	mb_set_bits(e4b->bd_bitmap, ex->fe_start, len0);
 	mb_check_buddy(e4b);
 
@@ -3125,6 +3207,8 @@ int ext4_seq_mb_stats_show(struct seq_file *seq, void *offset)
 		   atomic_read(&sbi->s_bal_cX_ex_scanned[CR_GOAL_LEN_SLOW]));
 	seq_printf(seq, "\t\tuseless_loops: %llu\n",
 		   atomic64_read(&sbi->s_bal_cX_failed[CR_GOAL_LEN_SLOW]));
+	seq_printf(seq, "\t\tbad_suggestions: %u\n",
+		   atomic_read(&sbi->s_bal_goal_slow_bad_suggestions));
 
 	/* CR_ANY_FREE stats */
 	seq_puts(seq, "\tcr_any_free_stats:\n");
@@ -3164,7 +3248,8 @@ __acquires(&EXT4_SB(sb)->s_mb_rb_lock)
 	struct super_block *sb = pde_data(file_inode(seq->file));
 	unsigned long position;
 
-	if (*pos < 0 || *pos >= 2*MB_NUM_ORDERS(sb))
+	if (*pos < 0 ||
+	    *pos >= 2 * MB_NUM_ORDERS(sb) + fls(EXT4_CLUSTERS_PER_GROUP(sb)))
 		return NULL;
 	position = *pos + 1;
 	return (void *) ((unsigned long) position);
@@ -3176,7 +3261,8 @@ static void *ext4_mb_seq_structs_summary_next(struct seq_file *seq, void *v, lof
 	unsigned long position;
 
 	++*pos;
-	if (*pos < 0 || *pos >= 2*MB_NUM_ORDERS(sb))
+	if (*pos < 0 ||
+	    *pos >= 2 * MB_NUM_ORDERS(sb) + fls(EXT4_CLUSTERS_PER_GROUP(sb)))
 		return NULL;
 	position = *pos + 1;
 	return (void *) ((unsigned long) position);
@@ -3191,6 +3277,23 @@ static int ext4_mb_seq_structs_summary_show(struct seq_file *seq, void *v)
 	unsigned int count;
 
 	position--;
+
+	if (position >= 2*MB_NUM_ORDERS(sb)) {
+		position -= 2*MB_NUM_ORDERS(sb);
+		if (position == 0)
+			seq_puts(seq, "freelists:\n");
+
+		count = 0;
+		read_lock(&sbi->s_mb_freelist_locks[position]);
+		list_for_each_entry(grp, &sbi->s_mb_freelist[position],
+				    bb_freelist_node)
+			count++;
+		read_unlock(&sbi->s_mb_freelist_locks[position]);
+		seq_printf(seq, "\tfreelist_order_%u_groups: %u\n",
+			   (unsigned int)position, count);
+		return 0;
+	}
+
 	if (position >= MB_NUM_ORDERS(sb)) {
 		position -= MB_NUM_ORDERS(sb);
 		if (position == 0)
@@ -3334,6 +3437,7 @@ int ext4_mb_add_groupinfo(struct super_block *sb, ext4_group_t group,
 			ext4_free_group_clusters(sb, desc);
 	}
 
+	INIT_LIST_HEAD(&meta_group_info[i]->bb_freelist_node);
 	INIT_LIST_HEAD(&meta_group_info[i]->bb_prealloc_list);
 	init_rwsem(&meta_group_info[i]->alloc_sem);
 	meta_group_info[i]->bb_free_root = RB_ROOT;
@@ -3341,8 +3445,10 @@ int ext4_mb_add_groupinfo(struct super_block *sb, ext4_group_t group,
 	INIT_LIST_HEAD(&meta_group_info[i]->bb_avg_fragment_size_node);
 	meta_group_info[i]->bb_largest_free_order = -1;  /* uninit */
 	meta_group_info[i]->bb_avg_fragment_size_order = -1;  /* uninit */
+	meta_group_info[i]->bb_freelist_order = -1; /* uninit */
 	meta_group_info[i]->bb_group = group;
 
+	mb_update_freelist(sb, meta_group_info[i]);
 	mb_group_bb_bitmap_alloc(sb, meta_group_info[i], group);
 	return 0;
 
@@ -3553,6 +3659,7 @@ int ext4_mb_init(struct super_block *sb)
 	unsigned i, j;
 	unsigned offset, offset_incr;
 	unsigned max;
+	unsigned freelist_max_order = MB_FREELIST_NUM_ORDERS(sb);
 	int ret;
 
 	i = MB_NUM_ORDERS(sb) * sizeof(*sbi->s_mb_offsets);
@@ -3626,6 +3733,23 @@ int ext4_mb_init(struct super_block *sb)
 	for (i = 0; i < MB_NUM_ORDERS(sb); i++) {
 		INIT_LIST_HEAD(&sbi->s_mb_largest_free_orders[i]);
 		rwlock_init(&sbi->s_mb_largest_free_orders_locks[i]);
+	}
+	/* Empty block groups get an order of 0 */
+	freelist_max_order = MB_FREELIST_NUM_ORDERS(sb);
+	sbi->s_mb_freelist = kmalloc_array(freelist_max_order, sizeof(struct list_head), GFP_KERNEL);
+	if (!sbi->s_mb_freelist) {
+		ret = -ENOMEM;
+		goto out;
+	}
+	sbi->s_mb_freelist_locks =
+		kmalloc_array(freelist_max_order, sizeof(rwlock_t), GFP_KERNEL);
+	if (!sbi->s_mb_freelist_locks) {
+		ret = -ENOMEM;
+		goto out;
+	}
+	for (i = 0; i < freelist_max_order; i++) {
+		INIT_LIST_HEAD(&sbi->s_mb_freelist[i]);
+		rwlock_init(&sbi->s_mb_freelist_locks[i]);
 	}
 
 	spin_lock_init(&sbi->s_md_lock);
