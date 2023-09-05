@@ -2532,3 +2532,7 @@ EndSysreg
 Sysreg	TRFCR_EL2	3	4	1	2	1
 Fields	TRFCR_EL2
 EndSysreg
+
+Sysreg TRFCR_EL12	3	5	1	2	1
+Fields	TRFCR_ELx
+EndSysreg
