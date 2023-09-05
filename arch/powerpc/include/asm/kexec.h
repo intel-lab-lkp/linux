@@ -101,6 +101,8 @@ void relocate_new_kernel(unsigned long indirection_page, unsigned long reboot_co
 void kexec_copy_flush(struct kimage *image);
 
 #if defined(CONFIG_CRASH_DUMP)
+bool is_kdump_kernel(void);
+#define is_kdump_kernel			is_kdump_kernel
 #define is_fadump_active		is_fadump_active
 #if defined(CONFIG_PPC_RTAS)
 void crash_free_reserved_phys_range(unsigned long begin, unsigned long end);
