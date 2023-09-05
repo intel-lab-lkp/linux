@@ -17,6 +17,7 @@ bool map_shared;
 bool test_uffdio_wp = true;
 unsigned long long *count_verify;
 uffd_test_ops_t *uffd_test_ops;
+sem_t uffd_read_sem;
 
 static int uffd_mem_fd_create(off_t mem_size, bool hugetlb)
 {

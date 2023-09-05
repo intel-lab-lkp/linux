@@ -125,14 +125,12 @@ static int copy_page_retry(int ufd, unsigned long offset)
 	return __copy_page(ufd, offset, true, test_uffdio_wp);
 }
 
-pthread_mutex_t uffd_read_mutex = PTHREAD_MUTEX_INITIALIZER;
-
 static void *uffd_read_thread(void *arg)
 {
 	struct uffd_args *args = (struct uffd_args *)arg;
 	struct uffd_msg msg;
 
-	pthread_mutex_unlock(&uffd_read_mutex);
+	sem_post(&uffd_read_sem);
 	/* from here cancellation is ok */
 
 	for (;;) {
@@ -196,7 +194,7 @@ static int stress(struct uffd_args *args)
 					   uffd_read_thread,
 					   (void *)&args[cpu]))
 				return 1;
-			pthread_mutex_lock(&uffd_read_mutex);
+			sem_wait(&uffd_read_sem);
 		}
 		if (pthread_create(&background_threads[cpu], &attr,
 				   background_thread, (void *)cpu))
@@ -258,7 +256,7 @@ static int userfaultfd_stress(void)
 	zeropage = area;
 	bzero(zeropage, page_size);
 
-	pthread_mutex_lock(&uffd_read_mutex);
+	sem_init(&uffd_read_sem, 0, 0);
 
 	pthread_attr_init(&attr);
 	pthread_attr_setstacksize(&attr, 16*1024*1024);
