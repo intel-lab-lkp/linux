@@ -481,6 +481,19 @@ int hugetlb_vmemmap_restore(const struct hstate *h, struct page *head)
 	return ret;
 }
 
+/*
+ * This function will attempt to resore vmemmap for a list of folios.  There
+ * is no guarantee that restoration will be successful for all or any folios.
+ * This is used in bulk operations, and no feedback is given to the caller.
+ */
+void hugetlb_vmemmap_restore_folios(const struct hstate *h, struct list_head *folio_list)
+{
+	struct folio *folio;
+
+	list_for_each_entry(folio, folio_list, lru)
+		(void)hugetlb_vmemmap_restore(h, &folio->page);
+}
+
 /* Return true iff a HugeTLB whose vmemmap should and can be optimized. */
 static bool vmemmap_should_optimize(const struct hstate *h, const struct page *head)
 {
