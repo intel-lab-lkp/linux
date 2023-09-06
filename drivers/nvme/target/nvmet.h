@@ -393,6 +393,10 @@ struct nvmet_req {
 	struct device		*p2p_client;
 	u16			error_loc;
 	u64			error_slba;
+	off_t			copy_dst;
+	off_t			copy_src;
+	size_t			copy_len;
+	size_t			copied;
 };
 
 #define NVMET_MAX_MPOOL_BVEC		16
