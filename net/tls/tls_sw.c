@@ -2116,6 +2116,9 @@ recv_end:
 		ret = 0;
 		if (pending)
 			ret = crypto_wait_req(-EINPROGRESS, &ctx->async_wait);
+		/* Crypto completion could have run before us, check sk_err */
+		if (ret == 0)
+			ret = -sk->sk_err;
 		__skb_queue_purge(&ctx->async_hold);
 
 		if (ret) {
