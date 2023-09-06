@@ -150,6 +150,15 @@ config RTAS_FLASH
 	tristate "Firmware flash interface"
 	depends on PPC64 && RTAS_PROC
 
+config RTAS_SYSCALL
+	bool "Legacy syscall interface to RTAS"
+	depends on PPC_RTAS
+	default y
+	help
+	  Enables support for the legacy sys_rtas interface. Calls that need to
+	  pass data buffers use /dev/mem directly which is not compatible with
+	  lockdown. For now some tools still need this interface to work.
+
 config MMIO_NVRAM
 	bool
 
