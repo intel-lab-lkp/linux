@@ -1863,8 +1863,7 @@ static bool smcd_lgr_match(struct smc_link_group *lgr,
 	return lgr->peer_gid == peer_gid && lgr->smcd == smcismdev;
 }
 
-/* create a new SMC connection (and a new link group if necessary) */
-int smc_conn_create(struct smc_sock *smc, struct smc_init_info *ini)
+static int __smc_conn_create(struct smc_sock *smc, struct smc_init_info *ini, bool create_lgr)
 {
 	struct smc_connection *conn = &smc->conn;
 	struct net *net = sock_net(&smc->sk);
@@ -1927,6 +1926,8 @@ int smc_conn_create(struct smc_sock *smc, struct smc_init_info *ini)
 
 create:
 	if (ini->first_contact_local) {
+		if (!create_lgr)
+			return SMC_CLC_DECL_REQLGR;
 		rc = smc_lgr_create(smc, ini);
 		if (rc)
 			goto out;
@@ -1960,6 +1961,29 @@ create:
 
 out:
 	return rc;
+}
+
+/* create a new SMC connection (and a new link group if necessary) */
+int smc_conn_create(struct smc_sock *smc, struct smc_init_info *ini)
+{
+	int rc;
+
+	/* make no impact on SMCD */
+	if (ini->is_smcd)
+		goto locked;
+
+	/* try create conn without create lgr first */
+	rc = __smc_conn_create(smc, ini, /* disallow create lgr */ false);
+	if (!rc) {
+		/* not rely on new lgr, unlock lgr pending lock in advance. */
+		smc_lgr_pending_unlock(ini, ini->mutex);
+		return 0;
+	} else if (rc != SMC_CLC_DECL_REQLGR) {
+		/* that's unexcepted error */
+		return rc;
+	}
+locked:
+	return __smc_conn_create(smc, ini, /* create lgr if needed */ true);
 }
 
 #define SMCD_DMBE_SIZES		6 /* 0 -> 16KB, 1 -> 32KB, .. 6 -> 1MB */
