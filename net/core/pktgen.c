@@ -423,6 +423,7 @@ struct pktgen_dev {
 	__u32 skb_priority;	/* skb priority field */
 	unsigned int burst;	/* number of duplicated packets to burst */
 	int node;               /* Memory node */
+	int skb_single_user;	/* allow single user skb for transmission */
 
 #ifdef CONFIG_XFRM
 	__u8	ipsmode;		/* IPSEC mode (config) */
@@ -1802,6 +1803,17 @@ static ssize_t pktgen_if_write(struct file *file,
 		pkt_dev->skb_priority = value;
 		sprintf(pg_result, "OK: skb_priority=%i",
 			pkt_dev->skb_priority);
+		return count;
+	}
+
+	if (!strcmp(name, "skb_single_user")) {
+		len = num_arg(&user_buffer[i], 1, &value);
+		if (len < 0)
+			return len;
+
+		i += len;
+		pkt_dev->skb_single_user = value;
+		sprintf(pg_result, "OK: skb_single_user=%u", pkt_dev->skb_single_user);
 		return count;
 	}
 
@@ -3460,6 +3472,14 @@ static void pktgen_xmit(struct pktgen_dev *pkt_dev)
 		return;
 	}
 
+	/* If clone_skb, burst, or count parameters are configured,
+	 * it implies the need for skb reuse, hence single user skb
+	 * transmission is not allowed.
+	 */
+	if (pkt_dev->skb_single_user && (pkt_dev->clone_skb ||
+					 burst > 1 || pkt_dev->count))
+		pkt_dev->skb_single_user = 0;
+
 	/* If no skb or clone count exhausted then get new one */
 	if (!pkt_dev->skb || (pkt_dev->last_ok &&
 			      ++pkt_dev->clone_count >= pkt_dev->clone_skb)) {
@@ -3483,7 +3503,8 @@ static void pktgen_xmit(struct pktgen_dev *pkt_dev)
 	if (pkt_dev->xmit_mode == M_NETIF_RECEIVE) {
 		skb = pkt_dev->skb;
 		skb->protocol = eth_type_trans(skb, skb->dev);
-		refcount_add(burst, &skb->users);
+		if (!pkt_dev->skb_single_user)
+			refcount_add(burst, &skb->users);
 		local_bh_disable();
 		do {
 			ret = netif_receive_skb(skb);
@@ -3491,6 +3512,12 @@ static void pktgen_xmit(struct pktgen_dev *pkt_dev)
 				pkt_dev->errors++;
 			pkt_dev->sofar++;
 			pkt_dev->seq_num++;
+
+			if (pkt_dev->skb_single_user) {
+				pkt_dev->skb = NULL;
+				break;
+			}
+
 			if (refcount_read(&skb->users) != burst) {
 				/* skb was queued by rps/rfs or taps,
 				 * so cannot reuse this skb
@@ -3509,7 +3536,8 @@ static void pktgen_xmit(struct pktgen_dev *pkt_dev)
 		goto out; /* Skips xmit_mode M_START_XMIT */
 	} else if (pkt_dev->xmit_mode == M_QUEUE_XMIT) {
 		local_bh_disable();
-		refcount_inc(&pkt_dev->skb->users);
+		if (!pkt_dev->skb_single_user)
+			refcount_inc(&pkt_dev->skb->users);
 
 		ret = dev_queue_xmit(pkt_dev->skb);
 		switch (ret) {
@@ -3517,6 +3545,8 @@ static void pktgen_xmit(struct pktgen_dev *pkt_dev)
 			pkt_dev->sofar++;
 			pkt_dev->seq_num++;
 			pkt_dev->tx_bytes += pkt_dev->last_pkt_size;
+			if (pkt_dev->skb_single_user)
+				pkt_dev->skb = NULL;
 			break;
 		case NET_XMIT_DROP:
 		case NET_XMIT_CN:
@@ -3549,7 +3579,8 @@ static void pktgen_xmit(struct pktgen_dev *pkt_dev)
 		pkt_dev->last_ok = 0;
 		goto unlock;
 	}
-	refcount_add(burst, &pkt_dev->skb->users);
+	if (!pkt_dev->skb_single_user)
+		refcount_add(burst, &pkt_dev->skb->users);
 
 xmit_more:
 	ret = netdev_start_xmit(pkt_dev->skb, odev, txq, --burst > 0);
@@ -3560,6 +3591,8 @@ xmit_more:
 		pkt_dev->sofar++;
 		pkt_dev->seq_num++;
 		pkt_dev->tx_bytes += pkt_dev->last_pkt_size;
+		if (pkt_dev->skb_single_user)
+			pkt_dev->skb = NULL;
 		if (burst > 0 && !netif_xmit_frozen_or_drv_stopped(txq))
 			goto xmit_more;
 		break;
