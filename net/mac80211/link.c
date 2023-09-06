@@ -146,6 +146,7 @@ static void ieee80211_set_vif_links_bitmaps(struct ieee80211_sub_if_data *sdata,
 {
 	sdata->vif.valid_links = valid_links;
 	sdata->vif.dormant_links = dormant_links;
+	u16 active_links;
 
 	if (!valid_links ||
 	    WARN((~valid_links & dormant_links) ||
@@ -166,6 +167,13 @@ static void ieee80211_set_vif_links_bitmaps(struct ieee80211_sub_if_data *sdata,
 		WARN_ON(dormant_links);
 		break;
 	case NL80211_IFTYPE_STATION:
+		active_links = drv_calculate_active_links(sdata->local, sdata,
+							  valid_links & ~dormant_links);
+		if (active_links) {
+			sdata->vif.active_links = active_links;
+			break;
+		}
+
 		if (sdata->vif.active_links)
 			break;
 		sdata->vif.active_links = valid_links & ~dormant_links;

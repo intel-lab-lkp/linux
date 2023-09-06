@@ -3732,6 +3732,14 @@ struct ieee80211_prep_tx_info {
  *	Note: this callback is called if @vif_cfg_changed or @link_info_changed
  *	are not implemented.
  *
+ * @calculate_active_links: Prepare for bit maps of links to active.
+ *	This callback is optional. The @new_links parameter is all links bit map
+ *	that mac80211 has capability to activate. Returns non-zero if driver handled
+ *	the @new_links, and the returned non-zero value is the bit map of the links
+ *	that driver allows to active. The bitmap of returned non-zero value may be
+ *	a subset of the @new_links. Return zero if driver not handled this.
+ *	This callback can sleep.
+ *
  * @vif_cfg_changed: Handler for configuration requests related to interface
  *	(MLD) parameters from &struct ieee80211_vif_cfg that vary during the
  *	lifetime of the interface (e.g. assoc status, IP addresses, etc.)
@@ -4295,6 +4303,8 @@ struct ieee80211_ops {
 				 struct ieee80211_vif *vif,
 				 struct ieee80211_bss_conf *info,
 				 u64 changed);
+	u16 (*calculate_active_links)(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
+			    u16 new_links);
 	void (*vif_cfg_changed)(struct ieee80211_hw *hw,
 				struct ieee80211_vif *vif,
 				u64 changed);

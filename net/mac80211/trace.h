@@ -652,6 +652,29 @@ TRACE_EVENT(drv_set_key,
 	)
 );
 
+TRACE_EVENT(drv_calculate_active_links,
+	TP_PROTO(struct ieee80211_local *local,
+		 struct ieee80211_sub_if_data *sdata,
+		 u16 new_links),
+
+	TP_ARGS(local, sdata, new_links),
+
+	TP_STRUCT__entry(
+		LOCAL_ENTRY
+		VIF_ENTRY
+		__field(unsigned int, new_links)
+	),
+
+	TP_fast_assign(
+		LOCAL_ASSIGN;
+		VIF_ASSIGN;
+		__entry->new_links = new_links;
+	),
+
+	TP_printk(LOCAL_PR_FMT ", " VIF_PR_FMT ", new_links: %u",
+		  LOCAL_PR_ARG, VIF_PR_ARG, __entry->new_links)
+);
+
 TRACE_EVENT(drv_update_tkip_key,
 	TP_PROTO(struct ieee80211_local *local,
 		 struct ieee80211_sub_if_data *sdata,

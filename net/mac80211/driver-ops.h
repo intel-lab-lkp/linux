@@ -950,6 +950,27 @@ static inline void drv_verify_link_exists(struct ieee80211_sub_if_data *sdata,
 		sdata_assert_lock(sdata);
 }
 
+static inline u16 drv_calculate_active_links(struct ieee80211_local *local,
+				   struct ieee80211_sub_if_data *sdata,
+				   u16 new_links)
+{
+	u16 active_links = 0;
+
+	might_sleep();
+
+	if (!check_sdata_in_driver(sdata))
+		return active_links;
+
+	trace_drv_calculate_active_links(local, sdata, new_links);
+	if (local->ops->calculate_active_links)
+		active_links = local->ops->calculate_active_links(&local->hw,
+								  &sdata->vif,
+								  new_links);
+
+	trace_drv_return_int(local, active_links);
+	return active_links;
+}
+
 int drv_assign_vif_chanctx(struct ieee80211_local *local,
 			   struct ieee80211_sub_if_data *sdata,
 			   struct ieee80211_bss_conf *link_conf,
