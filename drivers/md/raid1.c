@@ -3140,19 +3140,16 @@ static int raid1_run(struct mddev *mddev)
 	if (mddev->queue)
 		blk_queue_max_write_zeroes_sectors(mddev->queue, 0);
 
-	rdev_for_each(rdev, mddev) {
-		if (!mddev->gendisk)
-			continue;
-		disk_stack_limits(mddev->gendisk, rdev->bdev,
-				  rdev->data_offset << 9);
-	}
-
 	mddev->degraded = 0;
-	for (i = 0; i < conf->raid_disks; i++)
-		if (conf->mirrors[i].rdev == NULL ||
-		    !test_bit(In_sync, &conf->mirrors[i].rdev->flags) ||
-		    test_bit(Faulty, &conf->mirrors[i].rdev->flags))
+	for (i = 0; i < conf->raid_disks; i++) {
+		rdev = conf->mirrors[i].rdev;
+		if (rdev && mddev->gendisk)
+			disk_stack_limits(mddev->gendisk, rdev->bdev,
+					  rdev->data_offset << 9);
+		if (!rdev || !test_bit(In_sync, &rdev->flags) ||
+		    test_bit(Faulty, &rdev->flags))
 			mddev->degraded++;
+	}
 	/*
 	 * RAID1 needs at least one disk in active
 	 */
