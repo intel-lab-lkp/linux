@@ -1342,6 +1342,8 @@ static long do_mbind(unsigned long start, unsigned long len,
 	vma_iter_init(&vmi, mm, start);
 	prev = vma_prev(&vmi);
 	for_each_vma_range(vmi, vma, end) {
+		if (!vma || start < vma->vm_start)
+			continue;
 		err = mbind_range(&vmi, vma, &prev, start, end, new);
 		if (err)
 			break;
