@@ -1,8 +1,18 @@
 # SPDX-License-Identifier: GPL-2.0-only
-menu "NVME Support"
+menuconfig NVME_SUPPORT
+	bool "NVME Support"
+	default y
+	help
+	  Support for Non-Volatile Memory Express.
+
+	  The answer to this question will not directly affect the
+	  kernel: saying N will just cause the configurator to skip all
+	  the questions about NVME.
+
+if NVME_SUPPORT
 
 source "drivers/nvme/common/Kconfig"
 source "drivers/nvme/host/Kconfig"
 source "drivers/nvme/target/Kconfig"
 
-endmenu
+endif
