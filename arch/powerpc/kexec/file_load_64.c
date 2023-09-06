@@ -1028,7 +1028,7 @@ unsigned int kexec_extra_fdt_size_ppc64(struct kimage *image)
  *
  * Returns 0 on success, negative errno on error.
  */
-static int add_node_props(void *fdt, int node_offset, const struct device_node *dn)
+int add_node_props(void *fdt, int node_offset, const struct device_node *dn)
 {
 	int ret = 0;
 	struct property *pp;

@@ -322,6 +322,9 @@ static void __init check_cpu_feature_properties(unsigned long node)
 	}
 }
 
+/* align addr on a size boundary - adjust address up */
+#define _ALIGN_UP(addr, size)   (((addr)+((size)-1))&(~((typeof(addr))(size)-1)))
+
 static int __init early_init_dt_scan_cpus(unsigned long node,
 					  const char *uname, int depth,
 					  void *data)
@@ -347,6 +350,16 @@ static int __init early_init_dt_scan_cpus(unsigned long node,
 		intserv = of_get_flat_dt_prop(node, "reg", &len);
 
 	nthreads = len / sizeof(int);
+
+	/*
+	 * Align nr_cpu_ids to correct SMT value. This will help us to allocate
+	 * pacas correctly to accomodate boot_cpu != 0 scenario e.g. in kdump
+	 * kernel the boot cpu can be any cpu between 0 through nthreads.
+	 */
+	if (nr_cpu_ids % nthreads) {
+		nr_cpu_ids = _ALIGN_UP(nr_cpu_ids, nthreads);
+		pr_info("Aligned nr_cpus to SMT=%d, nr_cpu_ids = %d\n", nthreads, nr_cpu_ids);
+	}
 
 	/*
 	 * Now see if any of these threads match our boot cpu.

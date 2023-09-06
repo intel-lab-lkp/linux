@@ -17,6 +17,7 @@
 #include <linux/cpu.h>
 #include <linux/hardirq.h>
 #include <linux/of.h>
+#include <linux/libfdt.h>
 
 #include <asm/page.h>
 #include <asm/current.h>
@@ -298,6 +299,119 @@ extern void kexec_sequence(void *newstack, unsigned long start,
 			   void (*clear_all)(void),
 			   bool copy_with_mmu_off) __noreturn;
 
+/*
+ * Move the crashing cpus FDT node as the first node under '/cpus' node.
+ *
+ * - Get the FDT segment from the crash image segments.
+ * - Locate the crashing CPUs fdt subnode 'A' under '/cpus' node.
+ * - Now locate the crashing cpu device node 'B' from of_root device tree.
+ * - Delete the crashing cpu FDT node 'A' from kexec FDT segment.
+ * - Insert the crashing cpu device node 'B' into kexec FDT segment as first
+ *   subnode under '/cpus' node.
+ */
+static void move_crashing_cpu(struct kimage *image)
+{
+	void *fdt, *ptr;
+	const char *pathp = NULL;
+	unsigned long mem;
+	const __be32 *intserv;
+	struct device_node *dn;
+	bool first_node = true;
+	int cpus_offset, offset, fdt_index = -1;
+	int initial_depth, depth, len, i, ret, nthreads;
+
+	/* Find the FDT segment index in kexec segment array. */
+	for (i = 0; i < image->nr_segments; i++) {
+		mem = image->segment[i].mem;
+		ptr = __va(mem);
+		if (ptr && fdt_magic(ptr) == FDT_MAGIC) {
+			fdt_index = i;
+			break;
+		}
+	}
+	if (fdt_index < 0) {
+		pr_err("Unable to locate FDT segment.\n");
+		return;
+	}
+
+	fdt = __va((void *)image->segment[fdt_index].mem);
+
+	offset = cpus_offset = fdt_path_offset(fdt, "/cpus");
+	if (cpus_offset < 0) {
+		if (cpus_offset != -FDT_ERR_NOTFOUND)
+			pr_err("Malformed device tree: error reading /cpus node: %s\n",
+				fdt_strerror(cpus_offset));
+		return;
+	}
+
+	/* Locate crashing cpus fdt node */
+        initial_depth = depth = 0;
+	for (offset = fdt_next_node(fdt, offset, &depth);
+		offset >= 0 && depth > initial_depth;
+		offset = fdt_next_node(fdt, offset, &depth)) {
+
+
+		intserv = fdt_getprop(fdt, offset, "ibm,ppc-interrupt-server#s", &len);
+		if (!intserv) {
+			pr_err("Unable to fetch ibm,ppc-interrupt-server#s property\n");
+			return;
+		}
+
+		/* Find the match for crashing cpus phys id. */
+		nthreads = len / sizeof(int);
+		for (i = 0; i < nthreads; i++) {
+			if (be32_to_cpu(intserv[i]) == get_paca()->hw_cpu_id)
+				break;
+		}
+		if (i < nthreads) {
+			/* Found the match */
+			pathp = fdt_get_name(fdt, offset, NULL);
+			break;
+		}
+
+		first_node = false;
+	}
+
+	/*
+	 * Nothing to be done if crashing cpu's fdt node is already at first
+	 * position OR crashing cpu's fdt node isn't present in kexec FDT
+	 * segment, which is not possible unless kexec FDT segment hasn't been
+	 * refreshed after DLPAR.
+	 */
+	if (first_node || offset < 0)
+		return;
+
+	/* Locate the device node of crashing cpu from of_root */
+	for_each_node_by_type(dn, "cpu") {
+		if (!strcmp(dn->full_name, pathp))
+			break;
+	}
+	if (!dn) {
+		pr_err("Could not locate device node of crashing cpu: %s\n", pathp);
+		return;
+	}
+
+	/* Delete the crashing cpu FDT node from kexec FDT segment */
+	ret = fdt_del_node(fdt, offset);
+	if (ret < 0) {
+		pr_err("Error deleting node /cpus/%s: %s\n", pathp, fdt_strerror(ret));
+		return;
+	}
+
+	/* Add it as first subnode under /cpus node. */
+	offset = fdt_add_subnode(fdt, cpus_offset, dn->full_name);
+	if (offset < 0) {
+		pr_err("Unable to add %s subnode: %s\n", dn->full_name,
+			fdt_strerror(offset));
+		return;
+	}
+
+	/* Copy rest of the properties of crashing cpus */
+	add_node_props(fdt, offset, dn);
+
+	return;
+}
+
 /* too late to fail here */
 void default_machine_kexec(struct kimage *image)
 {
@@ -340,6 +454,20 @@ void default_machine_kexec(struct kimage *image)
 		uv_unshare_all_pages();
 		printk("kexec: Unshared all shared pages.\n");
 	}
+
+	/*
+	 * Move the crashing cpus FDT node as the first node under /cpus node.
+	 * This will make the core (where crashing cpu belongs) to
+	 * automatically become first core to show up in kdump kernel and
+	 * crashing cpu as boot cpu within first n threads of that core.
+	 *
+	 * Currently this will work with kexec_file_load only.
+	 *
+	 * XXX: For kexec_load, change is required in kexec tool to exclude FDT
+	 * segment from purgatory checksum check.
+	 */
+	if (image->type == KEXEC_TYPE_CRASH && image->file_mode)
+		move_crashing_cpu(image);
 
 	paca_ptrs[kexec_paca.paca_index] = &kexec_paca;
 
