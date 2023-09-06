@@ -122,6 +122,11 @@ static acpi_status
 acpi_processor_eval_pdc(acpi_handle handle, struct acpi_object_list *pdc_in)
 {
 	acpi_status status = AE_OK;
+	union acpi_object *obj;
+	u32 *buffer = NULL;
+
+	obj = pdc_in->pointer;
+	buffer = (u32 *)(obj->buffer.pointer);
 
 	if (boot_option_idle_override == IDLE_NOMWAIT) {
 		/*
@@ -129,14 +134,19 @@ acpi_processor_eval_pdc(acpi_handle handle, struct acpi_object_list *pdc_in)
 		 * mode will be disabled in the parameter of _PDC object.
 		 * Of course C1_FFH access mode will also be disabled.
 		 */
-		union acpi_object *obj;
-		u32 *buffer = NULL;
-
-		obj = pdc_in->pointer;
-		buffer = (u32 *)(obj->buffer.pointer);
 		buffer[2] &= ~(ACPI_PDC_C_C2C3_FFH | ACPI_PDC_C_C1_FFH);
-
 	}
+
+	if (xen_initial_domain()) {
+		/*
+		 * When Linux is running as Xen dom0, the hypervisor is the
+		 * entity in charge of the processor power management, and so
+		 * Xen needs to check the OS capabilities reported in the _PDC
+		 * buffer matches what the hypervisor driver supports.
+		 */
+		xen_sanitize_pdc(buffer);
+	}
+
 	status = acpi_evaluate_object(handle, "_PDC", pdc_in, NULL);
 
 	if (ACPI_FAILURE(status))
