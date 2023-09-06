@@ -28,6 +28,7 @@ struct timestamp_event_queue {
 	spinlock_t lock;
 	struct list_head qlist; /* Link to other queues */
 	pid_t reader_pid;
+	int mask;
 };
 
 struct ptp_clock {
