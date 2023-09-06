@@ -90,6 +90,15 @@ config SECONDARY_TRUSTED_KEYRING
 	  those keys are not blacklisted and are vouched for by a key built
 	  into the kernel or already in the secondary trusted keyring.
 
+config SECONDARY_TRUSTED_KEYRING_FOR_CA_CERTIFICATES_ONLY
+	bool "Allow only CA certificates to be added to the secondary trusted keyring"
+	depends on SECONDARY_TRUSTED_KEYRING
+	help
+	  If set, only CA certificates can be added to the secondary trusted keyring.
+	  An acceptable CA certificate must include the `keyCertSign` value in
+	  the `keyUsage` field. CA certificates that include the `digitalSignature`
+	  value in the `keyUsage` field will not be accepted.
+
 config SYSTEM_BLACKLIST_KEYRING
 	bool "Provide system-wide ring of blacklisted keys"
 	depends on KEYS

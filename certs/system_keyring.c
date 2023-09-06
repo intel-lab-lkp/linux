@@ -90,6 +90,10 @@ int restrict_link_by_builtin_and_secondary_trusted(
 	const union key_payload *payload,
 	struct key *restrict_key)
 {
+#ifdef CONFIG_SECONDARY_TRUSTED_KEYRING_FOR_CA_CERTIFICATES_ONLY
+	struct public_key *pub;
+#endif
+
 	/* If we have a secondary trusted keyring, then that contains a link
 	 * through to the builtin keyring and the search will follow that link.
 	 */
@@ -98,6 +102,23 @@ int restrict_link_by_builtin_and_secondary_trusted(
 	    payload == &builtin_trusted_keys->payload)
 		/* Allow the builtin keyring to be added to the secondary */
 		return 0;
+
+#ifdef CONFIG_SECONDARY_TRUSTED_KEYRING_FOR_CA_CERTIFICATES_ONLY
+	if (dest_keyring == secondary_trusted_keys) {
+		if (type != &key_type_asymmetric)
+			return -EOPNOTSUPP;
+
+		pub = payload->data[asym_crypto];
+		if (!pub)
+			return -ENOPKG;
+		if (!test_bit(KEY_EFLAG_CA, &pub->key_eflags))
+			return -EPERM;
+		if (!test_bit(KEY_EFLAG_KEYCERTSIGN, &pub->key_eflags))
+			return -EPERM;
+		if (test_bit(KEY_EFLAG_DIGITALSIG, &pub->key_eflags))
+			return -EPERM;
+	}
+#endif
 
 	return restrict_link_by_signature(dest_keyring, type, payload,
 					  secondary_trusted_keys);
