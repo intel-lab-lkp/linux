@@ -1358,7 +1358,8 @@ int btrfs_forget_devices(dev_t devt)
  * and we are not allowed to call set_blocksize during the scan. The superblock
  * is read via pagecache
  */
-struct btrfs_device *btrfs_scan_one_device(const char *path, blk_mode_t flags)
+struct btrfs_device *btrfs_scan_one_device(const char *path, blk_mode_t flags,
+					   bool mount_arg_dev)
 {
 	struct btrfs_super_block *disk_super;
 	bool new_device_added = false;
@@ -1403,10 +1404,19 @@ struct btrfs_device *btrfs_scan_one_device(const char *path, blk_mode_t flags)
 		goto error_bdev_put;
 	}
 
+	if (!mount_arg_dev && btrfs_super_num_devices(disk_super) == 1 &&
+	    !(btrfs_super_flags(disk_super) & BTRFS_SUPER_FLAG_SEEDING)) {
+		pr_info("skip registering single non seed device path %s\n",
+			path);
+		device = NULL;
+		goto free_disk_super;
+	}
+
 	device = device_list_add(path, disk_super, &new_device_added);
 	if (!IS_ERR(device) && new_device_added)
 		btrfs_free_stale_devices(device->devt, device);
 
+free_disk_super:
 	btrfs_release_disk_super(disk_super);
 
 error_bdev_put:
