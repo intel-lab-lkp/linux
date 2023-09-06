@@ -4,15 +4,18 @@
 
 #include <linux/io.h>
 
+#include <asm/page.h>
+
 struct fb_info;
-struct file;
-struct vm_area_struct;
 
 #ifdef CONFIG_SPARC32
-static inline void fb_pgprotect(struct file *file, struct vm_area_struct *vma,
-				unsigned long off)
-{ }
-#define fb_pgprotect fb_pgprotect
+static inline pgprot_t fb_pgprot_device(pgprot_t prot,
+					unsigned long vm_start, unsigned long vm_end,
+					unsigned long offset)
+{
+	return prot;
+}
+#define fb_pgprot_device fb_pgprot_device
 #endif
 
 int fb_is_primary_device(struct fb_info *info);
