@@ -184,8 +184,6 @@ static int get_pl_prim(struct rapl_domain *rd, int pl, enum pl_prims prim)
 	case POWER_LIMIT4:
 		if (prim == PL_LIMIT)
 			return POWER_LIMIT4;
-		if (prim == PL_ENABLE)
-			return PL4_ENABLE;
 		/* PL4 would be around two times PL2, use same prim as PL2. */
 		if (prim == PL_MAX_POWER)
 			return MAX_POWER;
@@ -1033,17 +1031,13 @@ static void package_power_limit_irq_restore(struct rapl_package *rp)
 
 static void set_floor_freq_default(struct rapl_domain *rd, bool mode)
 {
-	int i;
-
 	/* always enable clamp such that p-state can go below OS requested
 	 * range. power capping priority over guranteed frequency.
 	 */
 	rapl_write_pl_data(rd, POWER_LIMIT1, PL_CLAMP, mode);
 
-	for (i = POWER_LIMIT2; i < NR_POWER_LIMITS; i++) {
-		rapl_write_pl_data(rd, i, PL_ENABLE, mode);
-		rapl_write_pl_data(rd, i, PL_CLAMP, mode);
-	}
+	rapl_write_pl_data(rd, POWER_LIMIT2, PL_ENABLE, mode);
+	rapl_write_pl_data(rd, POWER_LIMIT2, PL_CLAMP, mode);
 }
 
 static void set_floor_freq_atom(struct rapl_domain *rd, bool enable)
@@ -1458,7 +1452,7 @@ static void rapl_detect_powerlimit(struct rapl_domain *rd)
 			}
 		}
 
-		if (rapl_read_pl_data(rd, i, PL_ENABLE, false, &val64))
+		if (i != POWER_LIMIT4 && rapl_read_pl_data(rd, i, PL_ENABLE, false, &val64))
 			rd->rpl[i].name = NULL;
 	}
 }
@@ -1510,7 +1504,7 @@ void rapl_remove_package(struct rapl_package *rp)
 	for (rd = rp->domains; rd < rp->domains + rp->nr_domains; rd++) {
 		int i;
 
-		for (i = POWER_LIMIT1; i < NR_POWER_LIMITS; i++) {
+		for (i = POWER_LIMIT1; i <= POWER_LIMIT2; i++) {
 			rapl_write_pl_data(rd, i, PL_ENABLE, 0);
 			rapl_write_pl_data(rd, i, PL_CLAMP, 0);
 		}
