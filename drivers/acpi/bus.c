@@ -1391,6 +1391,7 @@ static int __init acpi_init(void)
 	int result;
 
 	if (acpi_disabled) {
+		acpi_ghes_init();
 		pr_info("Interpreter disabled.\n");
 		return -ENODEV;
 	}

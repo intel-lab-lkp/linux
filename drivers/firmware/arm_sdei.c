@@ -1081,6 +1081,10 @@ void __init sdei_init(void)
 	}
 }
 
+#ifndef CONFIG_ACPI
+subsys_initcall_sync(sdei_init);
+#endif
+
 int sdei_event_handler(struct pt_regs *regs,
 		       struct sdei_registered_event *arg)
 {
