@@ -63,6 +63,7 @@ struct tls_decrypt_ctx {
 	u8 iv[MAX_IV_SIZE];
 	u8 aad[TLS_MAX_AAD_SIZE];
 	u8 tail;
+	bool put_outsg;
 	struct scatterlist sg[];
 };
 
@@ -221,7 +222,8 @@ static void tls_decrypt_done(void *data, int err)
 		for_each_sg(sg_next(sgout), sg, UINT_MAX, pages) {
 			if (!sg)
 				break;
-			put_page(sg_page(sg));
+			if (dctx->put_outsg)
+				put_page(sg_page(sg));
 		}
 	}
 
@@ -1549,6 +1551,8 @@ static int tls_decrypt_sg(struct sock *sk, struct iov_iter *out_iov,
 	if (err < 0)
 		goto exit_free;
 
+	dctx->put_outsg = false;
+
 	if (clear_skb) {
 		sg_init_table(sgout, n_sgout);
 		sg_set_buf(&sgout[0], dctx->aad, prot->aad_size);
@@ -1558,6 +1562,8 @@ static int tls_decrypt_sg(struct sock *sk, struct iov_iter *out_iov,
 		if (err < 0)
 			goto exit_free;
 	} else if (out_iov) {
+		dctx->put_outsg = true;
+
 		sg_init_table(sgout, n_sgout);
 		sg_set_buf(&sgout[0], dctx->aad, prot->aad_size);
 
