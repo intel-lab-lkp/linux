@@ -1723,3 +1723,6 @@ drm_gpuva_ops_free(struct drm_gpuva_manager *mgr,
 	kfree(ops);
 }
 EXPORT_SYMBOL_GPL(drm_gpuva_ops_free);
+
+MODULE_DESCRIPTION("DRM GPUVA Manager");
+MODULE_LICENSE("GPL");
