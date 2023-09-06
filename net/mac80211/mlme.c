@@ -4354,6 +4354,8 @@ static bool ieee80211_assoc_config_link(struct ieee80211_link_data *link,
 	bss_conf->assoc_capability = capab_info;
 
 	ret = true;
+
+	ieee80211_sta_set_rx_nss(link_sta);
 out:
 	kfree(elems);
 	kfree(bss_ies);
