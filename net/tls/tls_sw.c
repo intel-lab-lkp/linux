@@ -2010,6 +2010,9 @@ int tls_sw_recvmsg(struct sock *sk,
 		else
 			darg.async = false;
 
+		if (ctx->async_capable && control && tlm->control != control)
+			goto recv_end;
+
 		err = tls_rx_one_record(sk, msg, &darg);
 		if (err < 0) {
 			tls_err_abort(sk, -EBADMSG);
