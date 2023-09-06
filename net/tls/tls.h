@@ -304,8 +304,7 @@ static inline void
 tls_advance_record_sn(struct sock *sk, struct tls_prot_info *prot,
 		      struct cipher_context *ctx)
 {
-	if (tls_bigint_increment(ctx->rec_seq, prot->rec_seq_size))
-		tls_err_abort(sk, -EBADMSG);
+	tls_bigint_increment(ctx->rec_seq, prot->rec_seq_size);
 
 	if (prot->version != TLS_1_3_VERSION &&
 	    prot->cipher_type != TLS_CIPHER_CHACHA20_POLY1305)
