@@ -2386,10 +2386,11 @@ int hci_conn_security(struct hci_conn *conn, __u8 sec_level, __u8 auth_type,
 		goto encrypt;
 
 	/* An authenticated combination key has sufficient security for
-	   security level 3. */
+	 * security level 3 or lower.
+	 */
 	if ((conn->key_type == HCI_LK_AUTH_COMBINATION_P192 ||
 	     conn->key_type == HCI_LK_AUTH_COMBINATION_P256) &&
-	    sec_level == BT_SECURITY_HIGH)
+	    sec_level <= BT_SECURITY_HIGH)
 		goto encrypt;
 
 	/* An unauthenticated combination key has sufficient security for
