@@ -35,6 +35,7 @@
 #include <linux/module.h>
 #include <linux/preempt.h>
 #include <asm/simd.h>
+#include "internal.h"
 
 /* skcipher support */
 
@@ -69,7 +70,7 @@ static int simd_skcipher_encrypt(struct skcipher_request *req)
 	subreq = skcipher_request_ctx(req);
 	*subreq = *req;
 
-	if (!crypto_simd_usable() ||
+	if (crypto_simd_force_async() || !crypto_simd_usable() ||
 	    (in_atomic() && cryptd_skcipher_queued(ctx->cryptd_tfm)))
 		child = &ctx->cryptd_tfm->base;
 	else
@@ -90,7 +91,7 @@ static int simd_skcipher_decrypt(struct skcipher_request *req)
 	subreq = skcipher_request_ctx(req);
 	*subreq = *req;
 
-	if (!crypto_simd_usable() ||
+	if (crypto_simd_force_async() || !crypto_simd_usable() ||
 	    (in_atomic() && cryptd_skcipher_queued(ctx->cryptd_tfm)))
 		child = &ctx->cryptd_tfm->base;
 	else
@@ -317,7 +318,7 @@ static int simd_aead_encrypt(struct aead_request *req)
 	subreq = aead_request_ctx(req);
 	*subreq = *req;
 
-	if (!crypto_simd_usable() ||
+	if (crypto_simd_force_async() || !crypto_simd_usable() ||
 	    (in_atomic() && cryptd_aead_queued(ctx->cryptd_tfm)))
 		child = &ctx->cryptd_tfm->base;
 	else
@@ -338,7 +339,7 @@ static int simd_aead_decrypt(struct aead_request *req)
 	subreq = aead_request_ctx(req);
 	*subreq = *req;
 
-	if (!crypto_simd_usable() ||
+	if (crypto_simd_force_async() || !crypto_simd_usable() ||
 	    (in_atomic() && cryptd_aead_queued(ctx->cryptd_tfm)))
 		child = &ctx->cryptd_tfm->base;
 	else

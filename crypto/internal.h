@@ -96,6 +96,25 @@ static inline void crypto_exit_proc(void)
 { }
 #endif
 
+#if IS_ENABLED(CONFIG_DEBUG_CRYPTO)
+void __init crypto_init_debugfs(void);
+void __exit crypto_exit_debugfs(void);
+
+bool crypto_simd_force_async(void);
+void crypto_cryptd_delay(void);
+#else
+static inline void crypto_init_debugfs(void)
+{ }
+static inline void crypto_exit_debugfs(void)
+{ }
+static inline bool crypto_simd_force_async(void)
+{
+	return false;
+}
+static inline void crypto_cryptd_delay(void)
+{ }
+#endif
+
 static inline unsigned int crypto_cipher_ctxsize(struct crypto_alg *alg)
 {
 	return alg->cra_ctxsize;

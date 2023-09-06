@@ -684,6 +684,12 @@ source "net/Kconfig.debug"
 
 endmenu # "Networking Debugging"
 
+config DEBUG_CRYPTO
+	bool "Cryptographic API Debugging"
+	depends on DEBUG_KERNEL && CRYPTO && DEBUG_FS
+	help
+	  Enable debugging options in the core Cryptographic API.
+
 menu "Memory Debugging"
 
 source "mm/Kconfig.debug"

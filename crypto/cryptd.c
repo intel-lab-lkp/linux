@@ -26,6 +26,7 @@
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/workqueue.h>
+#include "internal.h"
 
 static unsigned int cryptd_max_cpu_qlen = 1000;
 module_param(cryptd_max_cpu_qlen, uint, 0);
@@ -175,6 +176,8 @@ static void cryptd_queue_worker(struct work_struct *work)
 
 	if (!req)
 		return;
+
+	crypto_cryptd_delay();
 
 	if (backlog)
 		crypto_request_complete(backlog, -EINPROGRESS);

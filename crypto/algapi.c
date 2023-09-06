@@ -1098,11 +1098,13 @@ static int __init crypto_algapi_init(void)
 {
 	crypto_init_proc();
 	crypto_start_tests();
+	crypto_init_debugfs();
 	return 0;
 }
 
 static void __exit crypto_algapi_exit(void)
 {
+	crypto_exit_debugfs();
 	crypto_exit_proc();
 }
 
