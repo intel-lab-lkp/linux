@@ -147,7 +147,8 @@ static ssize_t read_mem(struct file *file, char __user *buf,
 			goto failed;
 
 		err = -EFAULT;
-		if (allowed == 2) {
+		if (allowed == 2 ||
+		    range_contains_unaccepted_memory(p, p + sz)) {
 			/* Show zeros for restricted memory. */
 			remaining = clear_user(buf, sz);
 		} else {
@@ -226,7 +227,8 @@ static ssize_t write_mem(struct file *file, const char __user *buf,
 			return -EPERM;
 
 		/* Skip actual writing when a page is marked as restricted. */
-		if (allowed == 1) {
+		if (allowed == 1 &&
+		    !range_contains_unaccepted_memory(p, p + sz)) {
 			/*
 			 * On ia64 if a page has been mapped somewhere as
 			 * uncached, then it must also be accessed uncached
@@ -376,6 +378,9 @@ static int mmap_mem(struct file *file, struct vm_area_struct *vma)
 
 	if (!phys_mem_access_prot_allowed(file, vma->vm_pgoff, size,
 						&vma->vm_page_prot))
+		return -EINVAL;
+
+	if (range_contains_unaccepted_memory(offset, offset + size))
 		return -EINVAL;
 
 	vma->vm_page_prot = phys_mem_access_prot(file, vma->vm_pgoff,
