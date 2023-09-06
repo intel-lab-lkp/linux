@@ -2484,10 +2484,6 @@ static int rx_bottom(struct r8152 *tp, int budget)
 			unsigned int pkt_len, rx_frag_head_sz;
 			struct sk_buff *skb;
 
-			/* limit the skb numbers for rx_queue */
-			if (unlikely(skb_queue_len(&tp->rx_queue) >= 1000))
-				break;
-
 			pkt_len = le32_to_cpu(rx_desc->opts1) & RX_LEN_MASK;
 			if (pkt_len < ETH_ZLEN)
 				break;
@@ -2556,9 +2552,14 @@ find_next_rx:
 		}
 
 submit:
-		if (!ret) {
+		if (!ret && likely(skb_queue_len(&tp->rx_queue) < 256)) {
 			ret = r8152_submit_rx(tp, agg, GFP_ATOMIC);
 		} else {
+			WARN_ON_ONCE(skb_queue_len(&tp->rx_queue) >= 1000);
+			if (net_ratelimit())
+				netif_dbg(tp, rx_err, tp->netdev,
+					  "submit_rx=%d, rx_queue=%u\n",
+					  ret, skb_queue_len(&tp->rx_queue));
 			urb->actual_length = 0;
 			list_add_tail(&agg->list, next);
 		}
