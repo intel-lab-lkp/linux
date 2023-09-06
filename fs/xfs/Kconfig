@@ -22,9 +22,10 @@ config XFS_FS
 	  system of your root partition is compiled as a module, you'll need
 	  to use an initial ramdisk (initrd) to boot.
 
+if XFS_FS
+
 config XFS_SUPPORT_V4
 	bool "Support deprecated V4 (crc=0) format"
-	depends on XFS_FS
 	default y
 	help
 	  The V4 filesystem format lacks certain features that are supported
@@ -49,7 +50,6 @@ config XFS_SUPPORT_V4
 
 config XFS_SUPPORT_ASCII_CI
 	bool "Support deprecated case-insensitive ascii (ascii-ci=1) format"
-	depends on XFS_FS
 	default y
 	help
 	  The ASCII case insensitivity filesystem feature only works correctly
@@ -76,7 +76,6 @@ config XFS_SUPPORT_ASCII_CI
 
 config XFS_QUOTA
 	bool "XFS Quota support"
-	depends on XFS_FS
 	select QUOTACTL
 	help
 	  If you say Y here, you will be able to set limits for disk usage on
@@ -94,7 +93,6 @@ config XFS_QUOTA
 
 config XFS_POSIX_ACL
 	bool "XFS POSIX ACL support"
-	depends on XFS_FS
 	select FS_POSIX_ACL
 	help
 	  POSIX Access Control Lists (ACLs) support permissions for users and
@@ -104,7 +102,6 @@ config XFS_POSIX_ACL
 
 config XFS_RT
 	bool "XFS Realtime subvolume support"
-	depends on XFS_FS
 	help
 	  If you say Y here you will be able to mount and use XFS filesystems
 	  which contain a realtime subvolume.  The realtime subvolume is a
@@ -127,7 +124,6 @@ config XFS_DRAIN_INTENTS
 config XFS_ONLINE_SCRUB
 	bool "XFS online metadata check support"
 	default n
-	depends on XFS_FS
 	depends on TMPFS && SHMEM
 	select XFS_DRAIN_INTENTS
 	help
@@ -163,7 +159,7 @@ config XFS_ONLINE_SCRUB_STATS
 config XFS_ONLINE_REPAIR
 	bool "XFS online metadata repair support"
 	default n
-	depends on XFS_FS && XFS_ONLINE_SCRUB
+	depends on XFS_ONLINE_SCRUB
 	help
 	  If you say Y here you will be able to repair metadata on a
 	  mounted XFS filesystem.  This feature is intended to reduce
@@ -180,7 +176,7 @@ config XFS_ONLINE_REPAIR
 
 config XFS_WARN
 	bool "XFS Verbose Warnings"
-	depends on XFS_FS && !XFS_DEBUG
+	depends on !XFS_DEBUG
 	help
 	  Say Y here to get an XFS build with many additional warnings.
 	  It converts ASSERT checks to WARN, so will log any out-of-bounds
@@ -193,7 +189,6 @@ config XFS_WARN
 
 config XFS_DEBUG
 	bool "XFS Debugging support"
-	depends on XFS_FS
 	help
 	  Say Y here to get an XFS build with many debugging features,
 	  including ASSERT checks, function wrappers around macros,
@@ -207,7 +202,7 @@ config XFS_DEBUG
 config XFS_ASSERT_FATAL
 	bool "XFS fatal asserts"
 	default y
-	depends on XFS_FS && XFS_DEBUG
+	depends on XFS_DEBUG
 	help
 	  Set the default DEBUG mode ASSERT failure behavior.
 
@@ -216,3 +211,5 @@ config XFS_ASSERT_FATAL
 	  result in warnings.
 
 	  This behavior can be modified at runtime via sysfs.
+
+endif # XFS_FS
