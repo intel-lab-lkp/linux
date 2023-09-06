@@ -135,8 +135,13 @@ static void nft_immediate_chain_deactivate(const struct nft_ctx *ctx,
 	chain_ctx = *ctx;
 	chain_ctx.chain = chain;
 
-	list_for_each_entry(rule, &chain->rules, list)
+	list_for_each_entry(rule, &chain->rules, list) {
+		if (!nft_is_active_next(ctx->net, rule))
+			continue;
+
+		nft_deactivate_next(ctx->net, rule);
 		nft_rule_expr_deactivate(&chain_ctx, rule, phase);
+	}
 }
 
 static void nft_immediate_deactivate(const struct nft_ctx *ctx,
