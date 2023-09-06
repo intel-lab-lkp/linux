@@ -480,6 +480,52 @@ static const struct hwmon_chip_info max31790_chip_info = {
 	.info = max31790_info,
 };
 
+static int max31790_config_pwm_as_tach(struct device *dev,
+				       struct i2c_client *client)
+{
+	struct device_node *np = dev->of_node;
+	int i, ret = 0, size, channel;
+	u8 pwm_index[NR_CHANNEL] = { 0 };
+	u8 fan_config;
+
+	size = of_property_count_u8_elems(np, "pwm-as-tach");
+
+	if ((size > 0) && (size <= NR_CHANNEL)) {
+		ret = of_property_read_u8_array(np, "pwm-as-tach", pwm_index,
+						size);
+		if (ret) {
+			dev_err(dev,
+				"Property 'pwm-as-tach' cannot be read.\n");
+			return ret;
+		}
+
+		for (i = 0; i < size; i++) {
+			if ((pwm_index[i] == 0) ||
+			    (pwm_index[i] > NR_CHANNEL)) {
+				continue;
+			}
+
+			channel = pwm_index[i] - 1;
+			fan_config = i2c_smbus_read_byte_data(
+				client, MAX31790_REG_FAN_CONFIG(channel));
+			if (fan_config < 0) {
+				dev_err(dev,
+					"Read fan config for channel %d failed.\n",
+					channel);
+				return fan_config;
+			}
+
+			fan_config |= (MAX31790_FAN_CFG_CTRL_MON |
+				       MAX31790_FAN_CFG_TACH_INPUT);
+			i2c_smbus_write_byte_data(
+				client, MAX31790_REG_FAN_CONFIG(channel),
+				fan_config);
+		}
+	}
+
+	return 0;
+}
+
 static int max31790_init_client(struct i2c_client *client,
 				struct max31790_data *data)
 {
@@ -520,6 +566,10 @@ static int max31790_probe(struct i2c_client *client)
 
 	data->client = client;
 	mutex_init(&data->update_lock);
+
+	err = max31790_config_pwm_as_tach(dev, client);
+	if (err)
+		dev_crit(dev, "Config PWM as TACH failed.\n");
 
 	/*
 	 * Initialize the max31790 chip
