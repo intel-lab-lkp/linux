@@ -196,6 +196,9 @@ static void tls_decrypt_done(void *data, int err)
 	struct sock *sk;
 	int aead_size;
 
+	if (err == -EINPROGRESS)
+		return;
+
 	aead_size = sizeof(*aead_req) + crypto_aead_reqsize(aead);
 	aead_size = ALIGN(aead_size, __alignof__(*dctx));
 	dctx = (void *)((u8 *)aead_req + aead_size);
@@ -261,7 +264,7 @@ static int tls_do_decryption(struct sock *sk,
 	}
 
 	ret = crypto_aead_decrypt(aead_req);
-	if (ret == -EINPROGRESS) {
+	if (ret == -EINPROGRESS || ret == -EBUSY) {
 		if (darg->async)
 			return 0;
 
@@ -443,6 +446,9 @@ static void tls_encrypt_done(void *data, int err)
 	struct sock *sk;
 	int pending;
 
+	if (err == -EINPROGRESS)
+		return;
+
 	msg_en = &rec->msg_encrypted;
 
 	sk = rec->sk;
@@ -544,7 +550,7 @@ static int tls_do_encryption(struct sock *sk,
 	atomic_inc(&ctx->encrypt_pending);
 
 	rc = crypto_aead_encrypt(aead_req);
-	if (!rc || rc != -EINPROGRESS) {
+	if (!rc || (rc != -EINPROGRESS && rc != -EBUSY)) {
 		atomic_dec(&ctx->encrypt_pending);
 		sge->offset -= prot->prepend_size;
 		sge->length += prot->prepend_size;
@@ -552,7 +558,7 @@ static int tls_do_encryption(struct sock *sk,
 
 	if (!rc) {
 		WRITE_ONCE(rec->tx_ready, true);
-	} else if (rc != -EINPROGRESS) {
+	} else if (rc != -EINPROGRESS && rc != -EBUSY) {
 		list_del(&rec->list);
 		return rc;
 	}
@@ -779,7 +785,7 @@ static int tls_push_record(struct sock *sk, int flags,
 	rc = tls_do_encryption(sk, tls_ctx, ctx, req,
 			       msg_pl->sg.size + prot->tail_size, i);
 	if (rc < 0) {
-		if (rc != -EINPROGRESS) {
+		if (rc != -EINPROGRESS && rc != -EBUSY) {
 			tls_err_abort(sk, -EBADMSG);
 			if (split) {
 				tls_ctx->pending_open_record_frags = true;
@@ -990,7 +996,7 @@ static int tls_sw_sendmsg_locked(struct sock *sk, struct msghdr *msg,
 	if (unlikely(msg->msg_controllen)) {
 		ret = tls_process_cmsg(sk, msg, &record_type);
 		if (ret) {
-			if (ret == -EINPROGRESS)
+			if (ret == -EINPROGRESS || ret == -EBUSY)
 				num_async++;
 			else if (ret != -EAGAIN)
 				goto send_end;
@@ -1071,7 +1077,7 @@ alloc_encrypted:
 						  record_type, &copied,
 						  msg->msg_flags);
 			if (ret) {
-				if (ret == -EINPROGRESS)
+				if (ret == -EINPROGRESS || ret == -EBUSY)
 					num_async++;
 				else if (ret == -ENOMEM)
 					goto wait_for_memory;
@@ -1125,7 +1131,7 @@ copied:
 						  record_type, &copied,
 						  msg->msg_flags);
 			if (ret) {
-				if (ret == -EINPROGRESS)
+				if (ret == -EINPROGRESS || ret == -EBUSY)
 					num_async++;
 				else if (ret == -ENOMEM)
 					goto wait_for_memory;
@@ -1248,6 +1254,7 @@ retry:
 			goto unlock;
 		retrying = true;
 		goto retry;
+	case -EBUSY:
 	case -EINPROGRESS:
 		break;
 	default:
@@ -2106,7 +2113,7 @@ recv_end:
 		__skb_queue_purge(&ctx->async_hold);
 
 		if (ret) {
-			if (err >= 0 || err == -EINPROGRESS)
+			if (err >= 0 || err == -EINPROGRESS || err == -EBUSY)
 				err = ret;
 			decrypted = 0;
 			goto end;
