@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/rtc/maxim,mcp795.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Maxim MCP795 SPI Serial Real Time Clock
+
+allOf:
+  - $ref: rtc.yaml#
+
+maintainers:
+  - Josef Gajdusek <atx@atx.name>
+
+properties:
+  compatible:
+    enum:
+      - maxim,mcp795
+
+  reg:
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    rtc@0 {
+        compatible = "maxim,mcp795";
+        reg = <0>;
+    };
+...
