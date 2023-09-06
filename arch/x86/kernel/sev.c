@@ -270,9 +270,15 @@ static __always_inline void sev_es_wr_ghcb_msr(u64 val)
 }
 
 static int vc_fetch_insn_kernel(struct es_em_ctxt *ctxt,
-				unsigned char *buffer)
+				unsigned char *buffer, bool is_early)
 {
-	return copy_from_kernel_nofault(buffer, (unsigned char *)ctxt->regs->ip, MAX_INSN_SIZE);
+	if (is_early) {
+		memcpy(buffer, (unsigned char *)ctxt->regs->ip, MAX_INSN_SIZE);
+		return 0;
+	} else {
+		return copy_from_kernel_nofault(buffer, (unsigned char *)ctxt->regs->ip,
+			MAX_INSN_SIZE);
+	}
 }
 
 static enum es_result __vc_decode_user_insn(struct es_em_ctxt *ctxt)
@@ -304,12 +310,12 @@ static enum es_result __vc_decode_user_insn(struct es_em_ctxt *ctxt)
 		return ES_DECODE_FAILED;
 }
 
-static enum es_result __vc_decode_kern_insn(struct es_em_ctxt *ctxt)
+static enum es_result __vc_decode_kern_insn(struct es_em_ctxt *ctxt, bool is_early)
 {
 	char buffer[MAX_INSN_SIZE];
 	int res, ret;
 
-	res = vc_fetch_insn_kernel(ctxt, buffer);
+	res = vc_fetch_insn_kernel(ctxt, buffer, is_early);
 	if (res) {
 		ctxt->fi.vector     = X86_TRAP_PF;
 		ctxt->fi.error_code = X86_PF_INSTR;
@@ -324,12 +330,12 @@ static enum es_result __vc_decode_kern_insn(struct es_em_ctxt *ctxt)
 		return ES_OK;
 }
 
-static enum es_result vc_decode_insn(struct es_em_ctxt *ctxt)
+static enum es_result vc_decode_insn(struct es_em_ctxt *ctxt, bool is_early)
 {
 	if (user_mode(ctxt->regs))
 		return __vc_decode_user_insn(ctxt);
 	else
-		return __vc_decode_kern_insn(ctxt);
+		return __vc_decode_kern_insn(ctxt, is_early);
 }
 
 static enum es_result vc_write_mem(struct es_em_ctxt *ctxt,
@@ -1835,7 +1841,7 @@ static bool vc_raw_handle_exception(struct pt_regs *regs, unsigned long error_co
 	ghcb = __sev_get_ghcb(&state);
 
 	vc_ghcb_invalidate(ghcb);
-	result = vc_init_em_ctxt(&ctxt, regs, error_code);
+	result = vc_init_em_ctxt(&ctxt, regs, error_code, false);
 
 	if (result == ES_OK)
 		result = vc_handle_exitcode(&ctxt, ghcb, error_code);
@@ -1975,7 +1981,7 @@ bool __init handle_vc_boot_ghcb(struct pt_regs *regs)
 
 	vc_ghcb_invalidate(boot_ghcb);
 
-	result = vc_init_em_ctxt(&ctxt, regs, exit_code);
+	result = vc_init_em_ctxt(&ctxt, regs, exit_code, true);
 	if (result == ES_OK)
 		result = vc_handle_exitcode(&ctxt, boot_ghcb, exit_code);
 

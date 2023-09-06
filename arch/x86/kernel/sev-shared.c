@@ -176,7 +176,7 @@ static bool vc_decoding_needed(unsigned long exit_code)
 
 static enum es_result vc_init_em_ctxt(struct es_em_ctxt *ctxt,
 				      struct pt_regs *regs,
-				      unsigned long exit_code)
+				      unsigned long exit_code, bool is_early)
 {
 	enum es_result ret = ES_OK;
 
@@ -184,7 +184,7 @@ static enum es_result vc_init_em_ctxt(struct es_em_ctxt *ctxt,
 	ctxt->regs = regs;
 
 	if (vc_decoding_needed(exit_code))
-		ret = vc_decode_insn(ctxt);
+		ret = vc_decode_insn(ctxt, is_early);
 
 	return ret;
 }

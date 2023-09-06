@@ -73,7 +73,7 @@ static inline void sev_es_wr_ghcb_msr(u64 val)
 	boot_wrmsr(MSR_AMD64_SEV_ES_GHCB, &m);
 }
 
-static enum es_result vc_decode_insn(struct es_em_ctxt *ctxt)
+static enum es_result vc_decode_insn(struct es_em_ctxt *ctxt, bool is_early)
 {
 	char buffer[MAX_INSN_SIZE];
 	int ret;
@@ -290,7 +290,7 @@ void do_boot_stage2_vc(struct pt_regs *regs, unsigned long exit_code)
 		sev_es_terminate(SEV_TERM_SET_GEN, GHCB_SEV_ES_GEN_REQ);
 
 	vc_ghcb_invalidate(boot_ghcb);
-	result = vc_init_em_ctxt(&ctxt, regs, exit_code);
+	result = vc_init_em_ctxt(&ctxt, regs, exit_code, true);
 	if (result != ES_OK)
 		goto finish;
 
