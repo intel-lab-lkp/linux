@@ -103,7 +103,37 @@ int ptp_set_pinfunc(struct ptp_clock *ptp, unsigned int pin,
 
 int ptp_open(struct posix_clock *pc, fmode_t fmode)
 {
+	struct ptp_clock *ptp = container_of(pc, struct ptp_clock, clock);
+	struct timestamp_event_queue *queue;
+
+	queue = kzalloc(sizeof(struct timestamp_event_queue), GFP_KERNEL);
+	if (queue == NULL)
+		return -EINVAL;
+	queue->reader_pid = task_pid_nr(current);
+	list_add_tail(&queue->qlist, &ptp->tsevqs);
+
 	return 0;
+}
+
+int ptp_release(struct posix_clock *pc)
+{
+	struct ptp_clock *ptp = container_of(pc, struct ptp_clock, clock);
+	struct list_head *pos, *n;
+	struct timestamp_event_queue *element;
+	int found = -1;
+	pid_t reader_pid = task_pid_nr(current);
+
+	list_for_each_safe(pos, n, &ptp->tsevqs) {
+		element = list_entry(pos, struct timestamp_event_queue, qlist);
+		if (element->reader_pid == reader_pid) {
+			list_del(pos);
+			kfree(element);
+			found = 0;
+			return found;
+		}
+	}
+
+	return found;
 }
 
 long ptp_ioctl(struct posix_clock *pc, unsigned int cmd, unsigned long arg)
@@ -436,14 +466,25 @@ __poll_t ptp_poll(struct posix_clock *pc, struct file *fp, poll_table *wait)
 {
 	struct ptp_clock *ptp = container_of(pc, struct ptp_clock, clock);
 	struct timestamp_event_queue *queue;
+	struct list_head *pos, *n;
+	bool found = false;
+	pid_t reader_pid = task_pid_nr(current);
 
 	poll_wait(fp, &ptp->tsev_wq, wait);
 
 	/*
-	 * Extract only the first element in the queue list
-	 * TODO: Identify the relevant queue
+	 * Extract only the desired element in the queue list
 	 */
-	queue = list_entry(&ptp->tsevqs, struct timestamp_event_queue, qlist);
+	list_for_each_safe(pos, n, &ptp->tsevqs) {
+		queue = list_entry(pos, struct timestamp_event_queue, qlist);
+		if (queue->reader_pid == reader_pid) {
+			found = true;
+			break;
+		}
+	}
+
+	if (!found)
+		return -EINVAL;
 
 	return queue_cnt(queue) ? EPOLLIN : 0;
 }
@@ -459,40 +500,50 @@ ssize_t ptp_read(struct posix_clock *pc,
 	unsigned long flags;
 	size_t qcnt, i;
 	int result;
+	struct list_head *pos, *n;
+	bool found = false;
+	pid_t reader_pid = task_pid_nr(current);
 
 	/*
-	 * Extract only the first element in the queue list
-	 * TODO: Identify the relevant queue
+	 * Extract only the desired element in the queue list
 	 */
-	queue = list_first_entry(&ptp->tsevqs, struct timestamp_event_queue,
-				 qlist);
+	list_for_each_safe(pos, n, &ptp->tsevqs) {
+		queue = list_entry(pos, struct timestamp_event_queue, qlist);
+		if (queue->reader_pid == reader_pid) {
+			found = true;
+			break;
+		}
+	}
 
-	if (cnt % sizeof(struct ptp_extts_event) != 0)
-		return -EINVAL;
+	if (!found) {
+		result = -EINVAL;
+		goto exit;
+	}
+
+	if (cnt % sizeof(struct ptp_extts_event) != 0) {
+		result = -EINVAL;
+		goto exit;
+	}
 
 	if (cnt > EXTTS_BUFSIZE)
 		cnt = EXTTS_BUFSIZE;
 
 	cnt = cnt / sizeof(struct ptp_extts_event);
 
-	if (mutex_lock_interruptible(&ptp->tsevq_mux))
-		return -ERESTARTSYS;
-
 	if (wait_event_interruptible(ptp->tsev_wq,
 				     ptp->defunct || queue_cnt(queue))) {
-		mutex_unlock(&ptp->tsevq_mux);
 		return -ERESTARTSYS;
 	}
 
 	if (ptp->defunct) {
-		mutex_unlock(&ptp->tsevq_mux);
-		return -ENODEV;
+		result = -ENODEV;
+		goto exit;
 	}
 
 	event = kmalloc(EXTTS_BUFSIZE, GFP_KERNEL);
 	if (!event) {
-		mutex_unlock(&ptp->tsevq_mux);
-		return -ENOMEM;
+		result = -ENOMEM;
+		goto exit;
 	}
 
 	spin_lock_irqsave(&queue->lock, flags);
@@ -511,12 +562,16 @@ ssize_t ptp_read(struct posix_clock *pc,
 
 	cnt = cnt * sizeof(struct ptp_extts_event);
 
-	mutex_unlock(&ptp->tsevq_mux);
-
 	result = cnt;
-	if (copy_to_user(buf, event, cnt))
+	if (copy_to_user(buf, event, cnt)) {
 		result = -EFAULT;
+		goto free_event;
+	}
 
+free_event:
 	kfree(event);
+exit:
+	if (result < 0)
+		ptp_release(pc);
 	return result;
 }
