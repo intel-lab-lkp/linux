@@ -118,6 +118,13 @@ static bool pfn_is_ram(unsigned long pfn)
 	return ret;
 }
 
+static bool pfn_is_unaccepted_memory(unsigned long pfn)
+{
+	phys_addr_t paddr = pfn << PAGE_SHIFT;
+
+	return range_contains_unaccepted_memory(paddr, paddr + PAGE_SIZE);
+}
+
 static int open_vmcore(struct inode *inode, struct file *file)
 {
 	spin_lock(&vmcore_cb_lock);
@@ -150,7 +157,7 @@ ssize_t read_from_oldmem(struct iov_iter *iter, size_t count,
 			nr_bytes = count;
 
 		/* If pfn is not ram, return zeros for sparse dump files */
-		if (!pfn_is_ram(pfn)) {
+		if (!pfn_is_ram(pfn) || pfn_is_unaccepted_memory(pfn)) {
 			tmp = iov_iter_zero(nr_bytes, iter);
 		} else {
 			if (encrypted)
@@ -511,7 +518,7 @@ static int remap_oldmem_pfn_checked(struct vm_area_struct *vma,
 	pos_end = pfn + (size >> PAGE_SHIFT);
 
 	for (pos = pos_start; pos < pos_end; ++pos) {
-		if (!pfn_is_ram(pos)) {
+		if (!pfn_is_ram(pos) || pfn_is_unaccepted_memory(pos)) {
 			/*
 			 * We hit a page which is not ram. Remap the continuous
 			 * region between pos_start and pos-1 and replace
@@ -552,6 +559,7 @@ static int vmcore_remap_oldmem_pfn(struct vm_area_struct *vma,
 			    unsigned long from, unsigned long pfn,
 			    unsigned long size, pgprot_t prot)
 {
+	phys_addr_t paddr = pfn << PAGE_SHIFT;
 	int ret, idx;
 
 	/*
@@ -559,7 +567,8 @@ static int vmcore_remap_oldmem_pfn(struct vm_area_struct *vma,
 	 * pages without a reason.
 	 */
 	idx = srcu_read_lock(&vmcore_cb_srcu);
-	if (!list_empty(&vmcore_cb_list))
+	if (!list_empty(&vmcore_cb_list) ||
+	    range_contains_unaccepted_memory(paddr, paddr + size))
 		ret = remap_oldmem_pfn_checked(vma, from, pfn, size, prot);
 	else
 		ret = remap_oldmem_pfn_range(vma, from, pfn, size, prot);
