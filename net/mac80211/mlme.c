@@ -6852,6 +6852,7 @@ void ieee80211_mgd_setup_link(struct ieee80211_link_data *link)
 	struct ieee80211_sub_if_data *sdata = link->sdata;
 	struct ieee80211_local *local = sdata->local;
 	unsigned int link_id = link->link_id;
+	int ret;
 
 	link->u.mgd.p2p_noa_index = -1;
 	link->u.mgd.conn_flags = 0;
@@ -6867,11 +6868,15 @@ void ieee80211_mgd_setup_link(struct ieee80211_link_data *link)
 	wiphy_delayed_work_init(&link->u.mgd.chswitch_work,
 				ieee80211_chswitch_work);
 
-	if (sdata->u.mgd.assoc_data)
+	if (sdata->u.mgd.assoc_data) {
 		ether_addr_copy(link->conf->addr,
 				sdata->u.mgd.assoc_data->link[link_id].addr);
-	else if (!is_valid_ether_addr(link->conf->addr))
-		eth_random_addr(link->conf->addr);
+	} else if (!is_valid_ether_addr(link->conf->addr)) {
+		ret = drv_generate_link_addr(sdata->local, sdata,
+					     link_id, link->conf->addr);
+		if (ret)
+			eth_random_addr(link->conf->addr);
+	}
 }
 
 /* scan finished notification */
@@ -7448,11 +7453,18 @@ int ieee80211_mgd_assoc(struct ieee80211_sub_if_data *sdata,
 			if (!req->links[i].bss)
 				continue;
 			link = sdata_dereference(sdata->link[i], sdata);
-			if (link)
+			if (link) {
 				ether_addr_copy(assoc_data->link[i].addr,
 						link->conf->addr);
-			else
-				eth_random_addr(assoc_data->link[i].addr);
+			} else {
+				u8 *link_addr = assoc_data->link[i].addr;
+				int ret;
+
+				ret = drv_generate_link_addr(sdata->local, sdata,
+							     i, link_addr);
+				if (ret)
+					eth_random_addr(link_addr);
+			}
 		}
 	} else {
 		memcpy(assoc_data->link[0].addr, sdata->vif.addr, ETH_ALEN);

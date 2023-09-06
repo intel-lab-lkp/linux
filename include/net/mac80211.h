@@ -3746,6 +3746,11 @@ struct ieee80211_prep_tx_info {
  *	non-MLO connections.
  *	The callback can sleep.
  *
+ * @generate_link_addr: Generate mac address of link.
+ *	This callback is optional. Returns zero if mac address is generated successfully
+ *	for the link.
+ *	This callback can sleep.
+ *
  * @prepare_multicast: Prepare for multicast filter configuration.
  *	This callback is optional, and its return value is passed
  *	to configure_filter(). This callback must be atomic.
@@ -4298,6 +4303,8 @@ struct ieee80211_ops {
 				  struct ieee80211_bss_conf *info,
 				  u64 changed);
 
+	int (*generate_link_addr)(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
+				  unsigned int link_id, u8 *link_local_addr);
 	int (*start_ap)(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 			struct ieee80211_bss_conf *link_conf);
 	void (*stop_ap)(struct ieee80211_hw *hw, struct ieee80211_vif *vif,

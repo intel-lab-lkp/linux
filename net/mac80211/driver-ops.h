@@ -962,6 +962,27 @@ int drv_switch_vif_chanctx(struct ieee80211_local *local,
 			   struct ieee80211_vif_chanctx_switch *vifs,
 			   int n_vifs, enum ieee80211_chanctx_switch_mode mode);
 
+static inline int drv_generate_link_addr(struct ieee80211_local *local,
+					 struct ieee80211_sub_if_data *sdata,
+					 unsigned int link_id, u8 *link_local_addr)
+{
+	int ret = -EOPNOTSUPP;
+
+	might_sleep();
+
+	if (!check_sdata_in_driver(sdata))
+		return -EIO;
+
+	if (local->ops->generate_link_addr) {
+		ret = local->ops->generate_link_addr(&local->hw, &sdata->vif,
+						     link_id, link_local_addr);
+		trace_drv_generate_link_addr(local, sdata, link_local_addr, link_id);
+	}
+
+	trace_drv_return_int(local, ret);
+	return ret;
+}
+
 static inline int drv_start_ap(struct ieee80211_local *local,
 			       struct ieee80211_sub_if_data *sdata,
 			       struct ieee80211_bss_conf *link_conf)

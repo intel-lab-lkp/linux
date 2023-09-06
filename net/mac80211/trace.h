@@ -727,6 +727,33 @@ TRACE_EVENT(drv_sw_scan_start,
 		  LOCAL_PR_ARG, VIF_PR_ARG, __entry->mac_addr)
 );
 
+TRACE_EVENT(drv_generate_link_addr,
+	TP_PROTO(struct ieee80211_local *local,
+		 struct ieee80211_sub_if_data *sdata,
+		 const u8 *mac_addr,
+		 unsigned int link_id),
+
+	TP_ARGS(local, sdata, mac_addr, link_id),
+
+	TP_STRUCT__entry(
+		LOCAL_ENTRY
+		VIF_ENTRY
+		__array(char, mac_addr, ETH_ALEN)
+		__field(unsigned int, link_id)
+	),
+
+	TP_fast_assign(
+		LOCAL_ASSIGN;
+		VIF_ASSIGN;
+		memcpy(__entry->mac_addr, mac_addr, ETH_ALEN);
+		__entry->link_id = link_id;
+	),
+
+	TP_printk(LOCAL_PR_FMT ", " VIF_PR_FMT ", link addr: %pM link id: %#x",
+		  LOCAL_PR_ARG, VIF_PR_ARG, __entry->mac_addr,
+		  __entry->link_id)
+);
+
 DEFINE_EVENT(local_sdata_evt, drv_sw_scan_complete,
 	TP_PROTO(struct ieee80211_local *local,
 		 struct ieee80211_sub_if_data *sdata),
