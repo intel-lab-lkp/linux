@@ -31,8 +31,8 @@
 
 #include <drm/drm_gem.h>
 
-struct drm_gpuva_manager;
-struct drm_gpuva_fn_ops;
+struct drm_gpuvm;
+struct drm_gpuvm_ops;
 
 /**
  * enum drm_gpuva_flags - flags for struct drm_gpuva
@@ -62,15 +62,15 @@ enum drm_gpuva_flags {
  * struct drm_gpuva - structure to track a GPU VA mapping
  *
  * This structure represents a GPU VA mapping and is associated with a
- * &drm_gpuva_manager.
+ * &drm_gpuvm.
  *
  * Typically, this structure is embedded in bigger driver structures.
  */
 struct drm_gpuva {
 	/**
-	 * @mgr: the &drm_gpuva_manager this object is associated with
+	 * @gpuvm: the &drm_gpuvm this object is associated with
 	 */
-	struct drm_gpuva_manager *mgr;
+	struct drm_gpuvm *vm;
 
 	/**
 	 * @flags: the &drm_gpuva_flags for this mapping
@@ -137,20 +137,20 @@ struct drm_gpuva {
 	} rb;
 };
 
-int drm_gpuva_insert(struct drm_gpuva_manager *mgr, struct drm_gpuva *va);
+int drm_gpuva_insert(struct drm_gpuvm *gpuvm, struct drm_gpuva *va);
 void drm_gpuva_remove(struct drm_gpuva *va);
 
 void drm_gpuva_link(struct drm_gpuva *va);
 void drm_gpuva_unlink(struct drm_gpuva *va);
 
-struct drm_gpuva *drm_gpuva_find(struct drm_gpuva_manager *mgr,
+struct drm_gpuva *drm_gpuva_find(struct drm_gpuvm *gpuvm,
 				 u64 addr, u64 range);
-struct drm_gpuva *drm_gpuva_find_first(struct drm_gpuva_manager *mgr,
+struct drm_gpuva *drm_gpuva_find_first(struct drm_gpuvm *gpuvm,
 				       u64 addr, u64 range);
-struct drm_gpuva *drm_gpuva_find_prev(struct drm_gpuva_manager *mgr, u64 start);
-struct drm_gpuva *drm_gpuva_find_next(struct drm_gpuva_manager *mgr, u64 end);
+struct drm_gpuva *drm_gpuva_find_prev(struct drm_gpuvm *gpuvm, u64 start);
+struct drm_gpuva *drm_gpuva_find_next(struct drm_gpuvm *gpuvm, u64 end);
 
-bool drm_gpuva_interval_empty(struct drm_gpuva_manager *mgr, u64 addr, u64 range);
+bool drm_gpuva_interval_empty(struct drm_gpuvm *gpuvm, u64 addr, u64 range);
 
 static inline void drm_gpuva_init(struct drm_gpuva *va, u64 addr, u64 range,
 				  struct drm_gem_object *obj, u64 offset)
@@ -186,7 +186,7 @@ static inline bool drm_gpuva_invalidated(struct drm_gpuva *va)
 }
 
 /**
- * struct drm_gpuva_manager - DRM GPU VA Manager
+ * struct drm_gpuvm - DRM GPU VA Manager
  *
  * The DRM GPU VA Manager keeps track of a GPU's virtual address space by using
  * &maple_tree structures. Typically, this structure is embedded in bigger
@@ -197,7 +197,7 @@ static inline bool drm_gpuva_invalidated(struct drm_gpuva *va)
  *
  * There should be one manager instance per GPU virtual address space.
  */
-struct drm_gpuva_manager {
+struct drm_gpuvm {
 	/**
 	 * @name: the name of the DRM GPU VA space
 	 */
@@ -237,100 +237,99 @@ struct drm_gpuva_manager {
 	struct drm_gpuva kernel_alloc_node;
 
 	/**
-	 * @ops: &drm_gpuva_fn_ops providing the split/merge steps to drivers
+	 * @ops: &drm_gpuvm_ops providing the split/merge steps to drivers
 	 */
-	const struct drm_gpuva_fn_ops *ops;
+	const struct drm_gpuvm_ops *ops;
 };
 
-void drm_gpuva_manager_init(struct drm_gpuva_manager *mgr,
-			    const char *name,
-			    u64 start_offset, u64 range,
-			    u64 reserve_offset, u64 reserve_range,
-			    const struct drm_gpuva_fn_ops *ops);
-void drm_gpuva_manager_destroy(struct drm_gpuva_manager *mgr);
+void drm_gpuvm_init(struct drm_gpuvm *gpuvm, const char *name,
+		    u64 start_offset, u64 range,
+		    u64 reserve_offset, u64 reserve_range,
+		    const struct drm_gpuvm_ops *ops);
+void drm_gpuvm_destroy(struct drm_gpuvm *gpuvm);
 
 static inline struct drm_gpuva *
 __drm_gpuva_next(struct drm_gpuva *va)
 {
-	if (va && !list_is_last(&va->rb.entry, &va->mgr->rb.list))
+	if (va && !list_is_last(&va->rb.entry, &va->vm->rb.list))
 		return list_next_entry(va, rb.entry);
 
 	return NULL;
 }
 
 /**
- * drm_gpuva_for_each_va_range() - iterate over a range of &drm_gpuvas
+ * drm_gpuvm_for_each_va_range() - iterate over a range of &drm_gpuvas
  * @va__: &drm_gpuva structure to assign to in each iteration step
- * @mgr__: &drm_gpuva_manager to walk over
+ * @gpuvm__: &drm_gpuvm to walk over
  * @start__: starting offset, the first gpuva will overlap this
  * @end__: ending offset, the last gpuva will start before this (but may
  * overlap)
  *
- * This iterator walks over all &drm_gpuvas in the &drm_gpuva_manager that lie
+ * This iterator walks over all &drm_gpuvas in the &drm_gpuvm that lie
  * between @start__ and @end__. It is implemented similarly to list_for_each(),
- * but is using the &drm_gpuva_manager's internal interval tree to accelerate
+ * but is using the &drm_gpuvm's internal interval tree to accelerate
  * the search for the starting &drm_gpuva, and hence isn't safe against removal
  * of elements. It assumes that @end__ is within (or is the upper limit of) the
- * &drm_gpuva_manager. This iterator does not skip over the &drm_gpuva_manager's
+ * &drm_gpuvm. This iterator does not skip over the &drm_gpuvm's
  * @kernel_alloc_node.
  */
-#define drm_gpuva_for_each_va_range(va__, mgr__, start__, end__) \
-	for (va__ = drm_gpuva_find_first((mgr__), (start__), (end__) - (start__)); \
+#define drm_gpuvm_for_each_va_range(va__, gpuvm__, start__, end__) \
+	for (va__ = drm_gpuva_find_first((gpuvm__), (start__), (end__) - (start__)); \
 	     va__ && (va__->va.addr < (end__)); \
 	     va__ = __drm_gpuva_next(va__))
 
 /**
- * drm_gpuva_for_each_va_range_safe() - safely iterate over a range of
+ * drm_gpuvm_for_each_va_range_safe() - safely iterate over a range of
  * &drm_gpuvas
  * @va__: &drm_gpuva to assign to in each iteration step
  * @next__: another &drm_gpuva to use as temporary storage
- * @mgr__: &drm_gpuva_manager to walk over
+ * @gpuvm__: &drm_gpuvm to walk over
  * @start__: starting offset, the first gpuva will overlap this
  * @end__: ending offset, the last gpuva will start before this (but may
  * overlap)
  *
- * This iterator walks over all &drm_gpuvas in the &drm_gpuva_manager that lie
+ * This iterator walks over all &drm_gpuvas in the &drm_gpuvm that lie
  * between @start__ and @end__. It is implemented similarly to
- * list_for_each_safe(), but is using the &drm_gpuva_manager's internal interval
+ * list_for_each_safe(), but is using the &drm_gpuvm's internal interval
  * tree to accelerate the search for the starting &drm_gpuva, and hence is safe
  * against removal of elements. It assumes that @end__ is within (or is the
- * upper limit of) the &drm_gpuva_manager. This iterator does not skip over the
- * &drm_gpuva_manager's @kernel_alloc_node.
+ * upper limit of) the &drm_gpuvm. This iterator does not skip over the
+ * &drm_gpuvm's @kernel_alloc_node.
  */
-#define drm_gpuva_for_each_va_range_safe(va__, next__, mgr__, start__, end__) \
-	for (va__ = drm_gpuva_find_first((mgr__), (start__), (end__) - (start__)), \
+#define drm_gpuvm_for_each_va_range_safe(va__, next__, gpuvm__, start__, end__) \
+	for (va__ = drm_gpuva_find_first((gpuvm__), (start__), (end__) - (start__)), \
 	     next__ = __drm_gpuva_next(va__); \
 	     va__ && (va__->va.addr < (end__)); \
 	     va__ = next__, next__ = __drm_gpuva_next(va__))
 
 /**
- * drm_gpuva_for_each_va() - iterate over all &drm_gpuvas
+ * drm_gpuvm_for_each_va() - iterate over all &drm_gpuvas
  * @va__: &drm_gpuva to assign to in each iteration step
- * @mgr__: &drm_gpuva_manager to walk over
+ * @gpuvm__: &drm_gpuvm to walk over
  *
  * This iterator walks over all &drm_gpuva structures associated with the given
- * &drm_gpuva_manager.
+ * &drm_gpuvm.
  */
-#define drm_gpuva_for_each_va(va__, mgr__) \
-	list_for_each_entry(va__, &(mgr__)->rb.list, rb.entry)
+#define drm_gpuvm_for_each_va(va__, gpuvm__) \
+	list_for_each_entry(va__, &(gpuvm__)->rb.list, rb.entry)
 
 /**
- * drm_gpuva_for_each_va_safe() - safely iterate over all &drm_gpuvas
+ * drm_gpuvm_for_each_va_safe() - safely iterate over all &drm_gpuvas
  * @va__: &drm_gpuva to assign to in each iteration step
  * @next__: another &drm_gpuva to use as temporary storage
- * @mgr__: &drm_gpuva_manager to walk over
+ * @gpuvm__: &drm_gpuvm to walk over
  *
  * This iterator walks over all &drm_gpuva structures associated with the given
- * &drm_gpuva_manager. It is implemented with list_for_each_entry_safe(), and
+ * &drm_gpuvm. It is implemented with list_for_each_entry_safe(), and
  * hence safe against the removal of elements.
  */
-#define drm_gpuva_for_each_va_safe(va__, next__, mgr__) \
-	list_for_each_entry_safe(va__, next__, &(mgr__)->rb.list, rb.entry)
+#define drm_gpuvm_for_each_va_safe(va__, next__, gpuvm__) \
+	list_for_each_entry_safe(va__, next__, &(gpuvm__)->rb.list, rb.entry)
 
 /**
  * enum drm_gpuva_op_type - GPU VA operation type
  *
- * Operations to alter the GPU VA mappings tracked by the &drm_gpuva_manager.
+ * Operations to alter the GPU VA mappings tracked by the &drm_gpuvm.
  */
 enum drm_gpuva_op_type {
 	/**
@@ -413,7 +412,7 @@ struct drm_gpuva_op_unmap {
 	 *
 	 * Optionally, if &keep is set, drivers may keep the actual page table
 	 * mappings for this &drm_gpuva, adding the missing page table entries
-	 * only and update the &drm_gpuva_manager accordingly.
+	 * only and update the &drm_gpuvm accordingly.
 	 */
 	bool keep;
 };
@@ -584,22 +583,22 @@ struct drm_gpuva_ops {
 #define drm_gpuva_next_op(op) list_next_entry(op, entry)
 
 struct drm_gpuva_ops *
-drm_gpuva_sm_map_ops_create(struct drm_gpuva_manager *mgr,
+drm_gpuva_sm_map_ops_create(struct drm_gpuvm *gpuvm,
 			    u64 addr, u64 range,
 			    struct drm_gem_object *obj, u64 offset);
 struct drm_gpuva_ops *
-drm_gpuva_sm_unmap_ops_create(struct drm_gpuva_manager *mgr,
+drm_gpuva_sm_unmap_ops_create(struct drm_gpuvm *gpuvm,
 			      u64 addr, u64 range);
 
 struct drm_gpuva_ops *
-drm_gpuva_prefetch_ops_create(struct drm_gpuva_manager *mgr,
+drm_gpuva_prefetch_ops_create(struct drm_gpuvm *gpuvm,
 				 u64 addr, u64 range);
 
 struct drm_gpuva_ops *
-drm_gpuva_gem_unmap_ops_create(struct drm_gpuva_manager *mgr,
+drm_gpuva_gem_unmap_ops_create(struct drm_gpuvm *gpuvm,
 			       struct drm_gem_object *obj);
 
-void drm_gpuva_ops_free(struct drm_gpuva_manager *mgr,
+void drm_gpuva_ops_free(struct drm_gpuvm *gpuvm,
 			struct drm_gpuva_ops *ops);
 
 static inline void drm_gpuva_init_from_op(struct drm_gpuva *va,
@@ -610,15 +609,15 @@ static inline void drm_gpuva_init_from_op(struct drm_gpuva *va,
 }
 
 /**
- * struct drm_gpuva_fn_ops - callbacks for split/merge steps
+ * struct drm_gpuvm_ops - callbacks for split/merge steps
  *
  * This structure defines the callbacks used by &drm_gpuva_sm_map and
  * &drm_gpuva_sm_unmap to provide the split/merge steps for map and unmap
  * operations to drivers.
  */
-struct drm_gpuva_fn_ops {
+struct drm_gpuvm_ops {
 	/**
-	 * @op_alloc: called when the &drm_gpuva_manager allocates
+	 * @op_alloc: called when the &drm_gpuvm allocates
 	 * a struct drm_gpuva_op
 	 *
 	 * Some drivers may want to embed struct drm_gpuva_op into driver
@@ -630,7 +629,7 @@ struct drm_gpuva_fn_ops {
 	struct drm_gpuva_op *(*op_alloc)(void);
 
 	/**
-	 * @op_free: called when the &drm_gpuva_manager frees a
+	 * @op_free: called when the &drm_gpuvm frees a
 	 * struct drm_gpuva_op
 	 *
 	 * Some drivers may want to embed struct drm_gpuva_op into driver
@@ -686,14 +685,14 @@ struct drm_gpuva_fn_ops {
 	int (*sm_step_unmap)(struct drm_gpuva_op *op, void *priv);
 };
 
-int drm_gpuva_sm_map(struct drm_gpuva_manager *mgr, void *priv,
+int drm_gpuva_sm_map(struct drm_gpuvm *gpuvm, void *priv,
 		     u64 addr, u64 range,
 		     struct drm_gem_object *obj, u64 offset);
 
-int drm_gpuva_sm_unmap(struct drm_gpuva_manager *mgr, void *priv,
+int drm_gpuva_sm_unmap(struct drm_gpuvm *gpuvm, void *priv,
 		       u64 addr, u64 range);
 
-void drm_gpuva_map(struct drm_gpuva_manager *mgr,
+void drm_gpuva_map(struct drm_gpuvm *gpuvm,
 		   struct drm_gpuva *va,
 		   struct drm_gpuva_op_map *op);
 
