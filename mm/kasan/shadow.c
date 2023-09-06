@@ -317,6 +317,8 @@ static int kasan_populate_vmalloc_pte(pte_t *ptep, unsigned long addr,
 	unsigned long page;
 	pte_t pte;
 
+	cond_resched();
+
 	if (likely(!pte_none(ptep_get(ptep))))
 		return 0;
 
