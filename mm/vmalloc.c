@@ -1768,7 +1768,8 @@ static bool __purge_vmap_area_lazy(unsigned long start, unsigned long end)
 
 		if (is_vmalloc_or_module_addr((void *)orig_start))
 			kasan_release_vmalloc(orig_start, orig_end,
-					      va->va_start, va->va_end);
+					      va->va_start, va->va_end,
+					      &free_vmap_area_lock);
 
 		atomic_long_sub(nr, &vmap_lazy_nr);
 		num_purged_areas++;
@@ -4198,7 +4199,7 @@ recovery:
 				&free_vmap_area_list);
 		if (va)
 			kasan_release_vmalloc(orig_start, orig_end,
-				va->va_start, va->va_end);
+				va->va_start, va->va_end, NULL);
 		vas[area] = NULL;
 	}
 
@@ -4248,7 +4249,7 @@ err_free_shadow:
 				&free_vmap_area_list);
 		if (va)
 			kasan_release_vmalloc(orig_start, orig_end,
-				va->va_start, va->va_end);
+				va->va_start, va->va_end, &free_vmap_area_lock);
 		vas[area] = NULL;
 		kfree(vms[area]);
 	}

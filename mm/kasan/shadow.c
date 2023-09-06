@@ -416,11 +416,13 @@ int kasan_populate_vmalloc(unsigned long addr, unsigned long size)
 }
 
 static int kasan_depopulate_vmalloc_pte(pte_t *ptep, unsigned long addr,
-					void *unused)
+					void *lock)
 {
 	unsigned long page;
 
 	page = (unsigned long)__va(pte_pfn(ptep_get(ptep)) << PAGE_SHIFT);
+
+	cond_resched_lock(lock);
 
 	spin_lock(&init_mm.page_table_lock);
 	if (likely(!pte_none(ptep_get(ptep))))
@@ -511,7 +513,8 @@ static int kasan_depopulate_vmalloc_pte(pte_t *ptep, unsigned long addr,
  */
 void kasan_release_vmalloc(unsigned long start, unsigned long end,
 			   unsigned long free_region_start,
-			   unsigned long free_region_end)
+			   unsigned long free_region_end,
+			   void *lock)
 {
 	void *shadow_start, *shadow_end;
 	unsigned long region_start, region_end;
@@ -547,7 +550,7 @@ void kasan_release_vmalloc(unsigned long start, unsigned long end,
 		apply_to_existing_page_range(&init_mm,
 					     (unsigned long)shadow_start,
 					     size, kasan_depopulate_vmalloc_pte,
-					     NULL);
+					     lock);
 		flush_tlb_kernel_range((unsigned long)shadow_start,
 				       (unsigned long)shadow_end);
 	}
