@@ -8,12 +8,7 @@ static inline pgprot_t fb_pgprot_device(pgprot_t prot,
 					unsigned long vm_start, unsigned long vm_end,
 					unsigned long offset)
 {
-	/*
-	 * PowerPC's implementation of phys_mem_access_prot() does
-	 * not use the file argument. Set it to NULL in preparation
-	 * of later updates to the interface.
-	 */
-	return phys_mem_access_prot(NULL, PHYS_PFN(offset), vm_end - vm_start, prot);
+	return __phys_mem_access_prot(PHYS_PFN(offset), vm_end - vm_start, prot);
 }
 #define fb_pgprot_device fb_pgprot_device
 
