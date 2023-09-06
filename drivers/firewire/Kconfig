@@ -1,8 +1,18 @@
 # SPDX-License-Identifier: GPL-2.0-only
-menu "IEEE 1394 (FireWire) support"
+menuconfig FIREWIRE_SUPPORT
+	bool "IEEE 1394 (FireWire) support"
+	default y
 	depends on PCI || COMPILE_TEST
 	# firewire-core does not depend on PCI but is
 	# not useful without PCI controller driver
+	help
+	  Support for FireWire.
+
+	  The answer to this question will not directly affect the
+	  kernel: saying N will just cause the configurator to skip all
+	  the questions about FireWire.
+
+if FIREWIRE_SUPPORT
 
 config FIREWIRE
 	tristate "FireWire driver stack"
@@ -96,4 +106,4 @@ config FIREWIRE_NOSY
 
 	  If unsure, say N.
 
-endmenu
+endif # FIREWIRE_SUPPORT
