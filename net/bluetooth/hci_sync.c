@@ -286,13 +286,13 @@ static void hci_cmd_sync_work(struct work_struct *work)
 	while (1) {
 		struct hci_cmd_sync_work_entry *entry;
 
-		mutex_lock(&hdev->cmd_sync_work_lock);
+		spin_lock(&hdev->cmd_sync_work_lock);
 		entry = list_first_entry_or_null(&hdev->cmd_sync_work_list,
 						 struct hci_cmd_sync_work_entry,
 						 list);
 		if (entry)
 			list_del(&entry->list);
-		mutex_unlock(&hdev->cmd_sync_work_lock);
+		spin_unlock(&hdev->cmd_sync_work_lock);
 
 		if (!entry)
 			break;
@@ -629,8 +629,8 @@ void hci_cmd_sync_init(struct hci_dev *hdev)
 {
 	INIT_WORK(&hdev->cmd_sync_work, hci_cmd_sync_work);
 	INIT_LIST_HEAD(&hdev->cmd_sync_work_list);
-	mutex_init(&hdev->cmd_sync_work_lock);
-	mutex_init(&hdev->unregister_lock);
+	spin_lock_init(&hdev->cmd_sync_work_lock);
+	spin_lock_init(&hdev->unregister_lock);
 
 	INIT_WORK(&hdev->cmd_sync_cancel_work, hci_cmd_sync_cancel_work);
 	INIT_WORK(&hdev->reenable_adv_work, reenable_adv);
@@ -646,15 +646,17 @@ void hci_cmd_sync_clear(struct hci_dev *hdev)
 	cancel_work_sync(&hdev->cmd_sync_work);
 	cancel_work_sync(&hdev->reenable_adv_work);
 
-	mutex_lock(&hdev->cmd_sync_work_lock);
+	spin_lock(&hdev->cmd_sync_work_lock);
 	list_for_each_entry_safe(entry, tmp, &hdev->cmd_sync_work_list, list) {
+		list_del(&entry->list);
+		spin_unlock(&hdev->cmd_sync_work_lock);
+
 		if (entry->destroy)
 			entry->destroy(hdev, entry->data, -ECANCELED);
-
-		list_del(&entry->list);
 		kfree(entry);
+		spin_lock(&hdev->cmd_sync_work_lock);
 	}
-	mutex_unlock(&hdev->cmd_sync_work_lock);
+	spin_unlock(&hdev->cmd_sync_work_lock);
 }
 
 void __hci_cmd_sync_cancel(struct hci_dev *hdev, int err)
@@ -696,13 +698,13 @@ int hci_cmd_sync_submit(struct hci_dev *hdev, hci_cmd_sync_work_func_t func,
 	struct hci_cmd_sync_work_entry *entry;
 	int err = 0;
 
-	mutex_lock(&hdev->unregister_lock);
+	spin_lock(&hdev->unregister_lock);
 	if (hci_dev_test_flag(hdev, HCI_UNREGISTER)) {
 		err = -ENODEV;
 		goto unlock;
 	}
 
-	entry = kmalloc(sizeof(*entry), GFP_KERNEL);
+	entry = kmalloc(sizeof(*entry), GFP_ATOMIC);
 	if (!entry) {
 		err = -ENOMEM;
 		goto unlock;
@@ -711,14 +713,14 @@ int hci_cmd_sync_submit(struct hci_dev *hdev, hci_cmd_sync_work_func_t func,
 	entry->data = data;
 	entry->destroy = destroy;
 
-	mutex_lock(&hdev->cmd_sync_work_lock);
+	spin_lock(&hdev->cmd_sync_work_lock);
 	list_add_tail(&entry->list, &hdev->cmd_sync_work_list);
-	mutex_unlock(&hdev->cmd_sync_work_lock);
+	spin_unlock(&hdev->cmd_sync_work_lock);
 
 	queue_work(hdev->req_workqueue, &hdev->cmd_sync_work);
 
 unlock:
-	mutex_unlock(&hdev->unregister_lock);
+	spin_unlock(&hdev->unregister_lock);
 	return err;
 }
 EXPORT_SYMBOL(hci_cmd_sync_submit);
