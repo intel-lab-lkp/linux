@@ -334,29 +334,6 @@ xfs_ilock_demote(
 }
 
 #if defined(DEBUG) || defined(XFS_WARN)
-static inline bool
-__xfs_rwsem_islocked(
-	struct rw_semaphore	*rwsem,
-	bool			shared)
-{
-	if (!debug_locks) {
-		if (!shared)
-			return rwsem_is_write_locked(rwsem);
-		return rwsem_is_locked(rwsem);
-	}
-
-	if (!shared)
-		return lockdep_is_held_type(rwsem, 0);
-
-	/*
-	 * We are checking that the lock is held at least in shared
-	 * mode but don't care that it might be held exclusively
-	 * (i.e. shared | excl). Hence we check if the lock is held
-	 * in any mode rather than an explicit shared mode.
-	 */
-	return lockdep_is_held_type(rwsem, -1);
-}
-
 bool
 xfs_isilocked(
 	struct xfs_inode	*ip,
@@ -366,15 +343,14 @@ xfs_isilocked(
 		return rwsem_is_locked(&ip->i_lock);
 	if (lock_flags & XFS_ILOCK_EXCL)
 		return rwsem_is_write_locked(&ip->i_lock);
-	if (lock_flags & (XFS_MMAPLOCK_EXCL|XFS_MMAPLOCK_SHARED)) {
-		return __xfs_rwsem_islocked(&VFS_I(ip)->i_mapping->invalidate_lock,
-				(lock_flags & XFS_MMAPLOCK_SHARED));
-	}
-
-	if (lock_flags & (XFS_IOLOCK_EXCL | XFS_IOLOCK_SHARED)) {
-		return __xfs_rwsem_islocked(&VFS_I(ip)->i_rwsem,
-				(lock_flags & XFS_IOLOCK_SHARED));
-	}
+	if (lock_flags & XFS_MMAPLOCK_SHARED)
+		return rwsem_is_locked(&VFS_I(ip)->i_mapping->invalidate_lock);
+	if (lock_flags & XFS_MMAPLOCK_EXCL)
+		return rwsem_is_write_locked(&VFS_I(ip)->i_mapping->invalidate_lock);
+	if (lock_flags & XFS_IOLOCK_SHARED)
+		return rwsem_is_locked(&VFS_I(ip)->i_rwsem);
+	if (lock_flags & XFS_IOLOCK_EXCL)
+		return rwsem_is_write_locked(&VFS_I(ip)->i_rwsem);
 
 	ASSERT(0);
 	return false;
