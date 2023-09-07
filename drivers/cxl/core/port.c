@@ -1122,6 +1122,25 @@ struct cxl_dport *devm_cxl_add_rch_dport(struct cxl_port *port,
 }
 EXPORT_SYMBOL_NS_GPL(devm_cxl_add_rch_dport, CXL);
 
+#if IS_ENABLED(CONFIG_CXL_ACPI)
+struct cxl_dport *cxl_find_rch_dport_by_rcrb(resource_size_t rcrb_base)
+{
+	struct cxl_dport *dport;
+	unsigned long index;
+
+	if (!cxl_root)
+		return ERR_PTR(-ENODEV);
+
+	xa_for_each(&cxl_root->dports, index, dport)
+		if ((dport->rch && dport->rcrb.base != CXL_RESOURCE_NONE)
+		    && dport->rcrb.base == rcrb_base)
+			return dport;
+
+	return NULL;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_find_rch_dport_by_rcrb, CXL);
+#endif
+
 static int add_ep(struct cxl_ep *new)
 {
 	struct cxl_port *port = new->dport->port;
