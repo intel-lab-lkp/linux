@@ -48,6 +48,7 @@ struct pcm512x_priv {
 	int mute;
 	struct mutex mutex;
 	unsigned int bclk_ratio;
+	int tas_device;
 };
 
 /*
@@ -927,6 +928,20 @@ static int pcm512x_set_dividers(struct snd_soc_dai *dai,
 		bclk_div = DIV_ROUND_CLOSEST(sck_rate, bclk_rate);
 
 		mck_rate = sck_rate;
+		if (pcm512x->tas_device) {
+			/* set necessary PLL coeffs for amp
+			 * according to spec only 2x and 4x MCLKs
+			 * possible
+			 */
+			ret = regmap_write(pcm512x->regmap,
+					   PCM512x_PLL_COEFF_0, 0x01);
+			if (mck_rate > 25000000UL)
+				ret = regmap_write(pcm512x->regmap,
+						   PCM512x_PLL_COEFF_1, 0x02);
+			else
+				ret = regmap_write(pcm512x->regmap,
+						   PCM512x_PLL_COEFF_1, 0x04);
+		}
 	} else {
 		ret = snd_soc_params_to_bclk(params);
 		if (ret < 0) {
@@ -1258,10 +1273,18 @@ static int pcm512x_hw_params(struct snd_pcm_substream *substream,
 			return ret;
 		}
 
-		ret = regmap_update_bits(pcm512x->regmap, PCM512x_PLL_EN,
-					 PCM512x_PLLE, 0);
+		if (!pcm512x->tas_device) {
+			ret = regmap_update_bits(pcm512x->regmap,
+						 PCM512x_PLL_EN, PCM512x_PLLE, 0);
+		} else {
+			/* leave PLL enabled for amp clocking */
+			ret = regmap_write(pcm512x->regmap,
+					   PCM512x_PLL_EN, 0x01);
+			dev_dbg(component->dev, "Enabling PLL for TAS575x\n");
+		}
+
 		if (ret != 0) {
-			dev_err(component->dev, "Failed to disable pll: %d\n", ret);
+			dev_err(component->dev, "Failed to set pll mode: %d\n", ret);
 			return ret;
 		}
 	}
@@ -1659,6 +1682,11 @@ int pcm512x_probe(struct device *dev, struct regmap *regmap)
 			ret = -EINVAL;
 			goto err_pm;
 		}
+
+		if (!strcmp(np->name, "tas5756") ||
+		    !strcmp(np->name, "tas5754"))
+			pcm512x->tas_device = 1;
+		dev_dbg(dev, "Device ID: %s\n", np->name);
 	}
 #endif
 
