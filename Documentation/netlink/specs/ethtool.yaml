@@ -955,6 +955,25 @@ attribute-sets:
       -
         name: phy-indices
         type: binary
+  -
+    name: phy
+    attributes:
+      -
+        name: header
+        type: nest
+        nested-attributes: header
+      -
+        name: phy-index
+        type: u32
+      -
+        name: drvname
+        type: string
+      -
+        name: phy-upstream-type
+        type: u8
+      -
+        name: phy-id
+        type: u32
 
 operations:
   enum-model: directional
@@ -1720,3 +1739,21 @@ operations:
             - header
             - phy-count
             - phy-indices
+    -
+      name: phy-get
+      doc: Get a PHY's information
+
+      attribute-set: phy
+
+      do: &phy-get-op
+        request:
+          attributes:
+            - header
+            - phy-index
+        reply:
+          attributes:
+            - header
+            - phy-index
+            - drvname
+            - phy-upstream-type
+            - phy-id
