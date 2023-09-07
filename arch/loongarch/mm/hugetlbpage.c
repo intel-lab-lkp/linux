@@ -85,3 +85,21 @@ uint64_t pmd_to_entrylo(unsigned long pmd_val)
 
 	return val;
 }
+
+void set_huge_pte_at(struct mm_struct *mm, unsigned long addr,
+		pte_t *ptep, pte_t pte)
+{
+	/*
+	 * If huge pte entry is none, tlb entry with normal page size is filled
+	 * for machines which does not support hardware page walking.
+	 *
+	 * Thread maybe migrates to other CPUs after page fault happends and
+	 * migrates back again after hugepage pte is set, tlbs with normal page
+	 * about invalid_pte_table need be flushed
+	 */
+	if (!cpu_has_ptw && huge_pte_none(*ptep))
+		flush_tlb_mm(mm);
+
+	set_pte_at(mm, addr, ptep, pte);
+}
+
