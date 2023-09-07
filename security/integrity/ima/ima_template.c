@@ -489,8 +489,10 @@ int ima_restore_measurement_list(loff_t size, void *buf)
 		template_desc = lookup_template_desc(template_name);
 		if (!template_desc) {
 			template_desc = restore_template_fmt(template_name);
-			if (!template_desc)
+			if (!template_desc) {
+				ret = -ENOMEM;
 				break;
+			}
 		}
 
 		/*
