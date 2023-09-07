@@ -52,6 +52,23 @@ config MFD_ACT8945A
 	  linear regulators, along with a complete ActivePath battery
 	  charger.
 
+ config MFD_EIOIS200
+	tristate "Advantech EIO-IS200 Embedded Controller core driver"
+	depends on X86
+	depends on m
+	default m
+	select MFD_CORE
+	select REGMAP_MMIO
+	help
+	  This driver provides support for the Advantech EIO-IS200 EC and
+	  activate its sub-drivers, including GPIO, watchdog, hardware
+	  monitor, I2C, and thermal.
+
+	  This driver option only has two states: M and N. It cannot be
+	  built-in. To compile this driver as a module, choose M here; the
+	  module will be called eiois200_core. The system will force it to
+	  M if any one of its sub-drivers is chosen.
+
 config MFD_SUN4I_GPADC
 	tristate "Allwinner sunxi platforms' GPADC MFD driver"
 	select MFD_CORE
