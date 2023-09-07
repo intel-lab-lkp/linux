@@ -18,6 +18,7 @@
 
 static const struct usb_device_id gnss_usb_id_table[] = {
 	{ USB_DEVICE(0x1199, 0xb000) },		/* Sierra Wireless XM1210 */
+	{ USB_DEVICE(0x1546, 0x01a8) },         /* U-blox 8/M8 GNSS Receiver */
 	{ }
 };
 MODULE_DEVICE_TABLE(usb, gnss_usb_id_table);
