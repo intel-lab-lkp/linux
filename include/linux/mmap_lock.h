@@ -69,7 +69,7 @@ static inline void mmap_assert_locked(struct mm_struct *mm)
 static inline void mmap_assert_write_locked(struct mm_struct *mm)
 {
 	lockdep_assert_held_write(&mm->mmap_lock);
-	VM_BUG_ON_MM(!rwsem_is_locked(&mm->mmap_lock), mm);
+	VM_BUG_ON_MM(!rwsem_is_write_locked(&mm->mmap_lock), mm);
 }
 
 #ifdef CONFIG_PER_VMA_LOCK
