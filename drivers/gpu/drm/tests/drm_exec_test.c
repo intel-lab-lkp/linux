@@ -21,6 +21,9 @@
 struct drm_exec_priv {
 	struct device *dev;
 	struct drm_device *drm;
+#ifdef CONFIG_DEBUG_LOCK_ALLOC
+	struct drm_exec *exec;
+#endif
 };
 
 static int drm_exec_test_init(struct kunit *test)
@@ -170,6 +173,82 @@ static void test_prepare_array(struct kunit *test)
 	drm_gem_private_object_fini(&gobj2);
 }
 
+#ifdef CONFIG_DEBUG_LOCK_ALLOC
+static void drm_exec_test_obj_free(struct drm_gem_object *gem)
+{
+	struct kunit *test = current->kunit_test;
+	struct drm_exec_priv *priv = test->priv;
+	bool resv_class_held;
+	bool first_object_locked;
+
+	/*
+	 * The lock alloc tracking code may warn if the dma_resv lock
+	 * class is still held, and we're freeing the first object we
+	 * locked.
+	 */
+	resv_class_held = (lockdep_is_held(&gem->resv->lock.base) ==
+			   LOCK_STATE_HELD);
+	first_object_locked = (gem == priv->exec->objects[0]);
+	KUNIT_EXPECT_FALSE(current->kunit_test,
+			   resv_class_held && first_object_locked);
+
+	dma_resv_fini(gem->resv);
+	kfree(gem);
+}
+
+static const struct drm_gem_object_funcs put_funcs = {
+	.free = drm_exec_test_obj_free,
+};
+
+/*
+ * Check that freeing objects from within drm_exec_fini()
+ * doesn't trigger a false lock alloc warning due to
+ * the dma_resv lock *class* still being held and we're
+ * freeing the first object locked, which *might* be
+ * registered as the address of the held lock of that
+ * lock class.
+ */
+static void test_early_put(struct kunit *test)
+{
+	struct drm_exec_priv *priv = test->priv;
+	struct drm_gem_object *gobj1;
+	struct drm_gem_object *gobj2;
+	struct drm_gem_object *array[2];
+	struct drm_exec exec;
+	int ret;
+
+	priv->exec = &exec;
+
+	gobj1 = kzalloc(sizeof(*gobj1), GFP_KERNEL);
+	KUNIT_EXPECT_NOT_NULL(test, gobj1);
+	if (!gobj1)
+		return;
+
+	gobj2 = kzalloc(sizeof(*gobj2), GFP_KERNEL);
+	KUNIT_EXPECT_NOT_NULL(test, gobj2);
+	if (!gobj2) {
+		kfree(gobj1);
+		return;
+	}
+
+	gobj1->funcs = &put_funcs;
+	gobj2->funcs = &put_funcs;
+	drm_gem_private_object_init(priv->drm, gobj1, PAGE_SIZE);
+	drm_gem_private_object_init(priv->drm, gobj2, PAGE_SIZE);
+	array[0] = gobj1;
+	array[1] = gobj2;
+
+	drm_exec_init(&exec, DRM_EXEC_INTERRUPTIBLE_WAIT);
+	drm_exec_until_all_locked(&exec)
+		ret = drm_exec_prepare_array(&exec, array, ARRAY_SIZE(array),
+					     1);
+	KUNIT_EXPECT_EQ(test, ret, 0);
+	drm_gem_object_put(gobj1);
+	drm_gem_object_put(gobj2);
+	drm_exec_fini(&exec);
+}
+#endif
+
 static void test_multiple_loops(struct kunit *test)
 {
 	struct drm_exec exec;
@@ -198,6 +277,9 @@ static struct kunit_case drm_exec_tests[] = {
 	KUNIT_CASE(test_prepare),
 	KUNIT_CASE(test_prepare_array),
 	KUNIT_CASE(test_multiple_loops),
+#ifdef CONFIG_DEBUG_LOCK_ALLOC
+	KUNIT_CASE(test_early_put),
+#endif
 	{}
 };
 
