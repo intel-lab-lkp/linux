@@ -720,6 +720,13 @@ enum ufshcd_caps {
 	 * WriteBooster when scaling the clock down.
 	 */
 	UFSHCD_CAP_WB_WITH_CLK_SCALING			= 1 << 12,
+
+	/*
+	 * This capability allows the host controller driver to
+	 * resize (increase or decrease) WriteBooster Buffer,
+	 * if the underlying device supports it and is provisioned to be used.
+	 */
+	UFSHCD_CAP_WB_BUF_RESIZE			= 1 << 13,
 };
 
 struct ufs_hba_variant_params {
@@ -1191,6 +1198,11 @@ static inline bool ufshcd_is_auto_hibern8_enabled(struct ufs_hba *hba)
 static inline bool ufshcd_is_wb_allowed(struct ufs_hba *hba)
 {
 	return hba->caps & UFSHCD_CAP_WB_EN;
+}
+
+static inline bool ufshcd_is_wb_buf_resize_allowed(struct ufs_hba *hba)
+{
+	return hba->caps & UFSHCD_CAP_WB_BUF_RESIZE;
 }
 
 static inline bool ufshcd_enable_wb_if_scaling_up(struct ufs_hba *hba)
