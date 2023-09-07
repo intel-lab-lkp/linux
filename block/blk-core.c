@@ -953,8 +953,13 @@ again:
 unsigned long bdev_start_io_acct(struct block_device *bdev, enum req_op op,
 				 unsigned long start_time)
 {
+	bool delta = false;
+
 	part_stat_lock();
-	update_io_ticks(bdev, start_time, false);
+	if (bdev->bd_queue->nr_hw_queues == 1) {
+		delta = !!part_in_flight(bdev);
+	}
+	update_io_ticks(bdev, start_time, delta);
 	part_stat_local_inc(bdev, in_flight[op_is_write(op)]);
 	part_stat_unlock();
 

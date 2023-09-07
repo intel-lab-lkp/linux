@@ -1000,6 +1000,8 @@ static inline void blk_account_io_done(struct request *req, u64 now)
 
 static inline void blk_account_io_start(struct request *req)
 {
+	bool delta = false;
+
 	trace_block_io_start(req);
 
 	if (blk_do_io_stat(req)) {
@@ -1015,7 +1017,10 @@ static inline void blk_account_io_start(struct request *req)
 			req->part = req->q->disk->part0;
 
 		part_stat_lock();
-		update_io_ticks(req->part, jiffies, false);
+		if (req->q->nr_hw_queues == 1) {
+			delta = !!part_in_flight(req->part);
+		}
+		update_io_ticks(req->part, jiffies, delta);
 		part_stat_unlock();
 	}
 }
