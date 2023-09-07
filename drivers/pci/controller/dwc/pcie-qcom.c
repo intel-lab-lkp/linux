@@ -22,6 +22,7 @@
 #include <linux/of.h>
 #include <linux/of_gpio.h>
 #include <linux/pci.h>
+#include <linux/pm_opp.h>
 #include <linux/pm_runtime.h>
 #include <linux/platform_device.h>
 #include <linux/phy/pcie.h>
@@ -240,6 +241,7 @@ struct qcom_pcie {
 	const struct qcom_pcie_cfg *cfg;
 	struct dentry *debugfs;
 	bool suspended;
+	bool opp_supported;
 };
 
 #define to_qcom_pcie(x)		dev_get_drvdata((x)->dev)
@@ -1357,14 +1359,13 @@ static int qcom_pcie_icc_init(struct qcom_pcie *pcie)
 	return 0;
 }
 
-static int qcom_pcie_icc_update(struct qcom_pcie *pcie)
+static int qcom_pcie_icc_opp_update(struct qcom_pcie *pcie)
 {
 	struct dw_pcie *pci = pcie->pci;
+	struct dev_pm_opp *opp;
 	u32 offset, status, bw;
 	int speed, width;
-
-	if (!pcie->icc_mem)
-		return 0;
+	int ret;
 
 	offset = dw_pcie_find_capability(pci, PCI_CAP_ID_EXP);
 	status = readw(pci->dbi_base + offset + PCI_EXP_LNKSTA);
@@ -1391,7 +1392,21 @@ static int qcom_pcie_icc_update(struct qcom_pcie *pcie)
 		break;
 	}
 
-	return icc_set_bw(pcie->icc_mem, 0, width * bw);
+	if (pcie->opp_supported) {
+		opp = dev_pm_opp_find_level_exact(pci->dev, speed);
+		if (!IS_ERR(opp)) {
+			ret = dev_pm_opp_set_opp(pci->dev, opp);
+			if (ret)
+				dev_err(pci->dev, "Failed to set opp: level %d ret %d\n",
+					dev_pm_opp_get_level(opp), ret);
+			dev_pm_opp_put(opp);
+		}
+	}
+
+	if (pcie->icc_mem)
+		ret = icc_set_bw(pcie->icc_mem, 0, width * bw);
+
+	return ret;
 }
 
 static int qcom_pcie_link_transition_count(struct seq_file *s, void *data)
@@ -1434,8 +1449,10 @@ static void qcom_pcie_init_debugfs(struct qcom_pcie *pcie)
 static int qcom_pcie_probe(struct platform_device *pdev)
 {
 	const struct qcom_pcie_cfg *pcie_cfg;
+	unsigned long max_level = INT_MAX;
 	struct device *dev = &pdev->dev;
 	struct qcom_pcie *pcie;
+	struct dev_pm_opp *opp;
 	struct dw_pcie_rp *pp;
 	struct resource *res;
 	struct dw_pcie *pci;
@@ -1506,6 +1523,27 @@ static int qcom_pcie_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_pm_runtime_put;
 
+	/* OPP table is optional */
+	ret = devm_pm_opp_of_add_table(dev);
+	if (ret && ret != -ENODEV) {
+		dev_err_probe(dev, ret, "Failed to add OPP table\n");
+		goto err_pm_runtime_put;
+	}
+
+	/* vote for max level in the opp table if opp table is present */
+	if (ret != -ENODEV) {
+		opp = dev_pm_opp_find_level_floor(dev, &max_level);
+		if (!IS_ERR(opp)) {
+			ret = dev_pm_opp_set_opp(dev, opp);
+			if (ret)
+				dev_err_probe(pci->dev, ret,
+					      "Failed to set opp: level %d\n",
+					      dev_pm_opp_get_level(opp));
+			dev_pm_opp_put(opp);
+		}
+		pcie->opp_supported = true;
+	}
+
 	ret = pcie->cfg->ops->get_resources(pcie);
 	if (ret)
 		goto err_pm_runtime_put;
@@ -1524,9 +1562,9 @@ static int qcom_pcie_probe(struct platform_device *pdev)
 		goto err_phy_exit;
 	}
 
-	ret = qcom_pcie_icc_update(pcie);
+	ret = qcom_pcie_icc_opp_update(pcie);
 	if (ret)
-		dev_err(dev, "failed to update interconnect bandwidth: %d\n",
+		dev_err(dev, "failed to update interconnect bandwidth/opp: %d\n",
 			ret);
 
 	if (pcie->mhi)
@@ -1575,6 +1613,8 @@ static int qcom_pcie_suspend_noirq(struct device *dev)
 	 */
 	if (!dw_pcie_link_up(pcie->pci)) {
 		qcom_pcie_host_deinit(&pcie->pci->pp);
+		if (pcie->opp_supported)
+			dev_pm_opp_set_opp(dev, NULL);
 		pcie->suspended = true;
 	}
 
@@ -1594,9 +1634,9 @@ static int qcom_pcie_resume_noirq(struct device *dev)
 		pcie->suspended = false;
 	}
 
-	ret = qcom_pcie_icc_update(pcie);
+	ret = qcom_pcie_icc_opp_update(pcie);
 	if (ret)
-		dev_err(dev, "failed to update interconnect bandwidth: %d\n",
+		dev_err(dev, "failed to update interconnect bandwidth/opp: %d\n",
 			ret);
 
 	return 0;
