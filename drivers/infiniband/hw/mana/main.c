@@ -504,3 +504,100 @@ int mana_ib_query_gid(struct ib_device *ibdev, u32 port, int index,
 void mana_ib_disassociate_ucontext(struct ib_ucontext *ibcontext)
 {
 }
+
+int mana_ib_destroy_adapter(struct mana_ib_dev *mib_dev)
+{
+	struct mana_ib_destroy_adapter_resp resp = {};
+	struct mana_ib_destroy_adapter_req req = {};
+	struct gdma_context *gc;
+	int err;
+
+	gc = mib_dev->gc;
+
+	mana_gd_init_req_hdr(&req.hdr, MANA_IB_DESTROY_ADAPTER, sizeof(req),
+			     sizeof(resp));
+	req.adapter = mib_dev->adapter_handle;
+	req.hdr.dev_id = gc->mana_ib.dev_id;
+
+	err = mana_gd_send_request(gc, sizeof(req), &req, sizeof(resp), &resp);
+
+	if (err) {
+		ibdev_err(&mib_dev->ib_dev, "Failed to destroy adapter err %d", err);
+		return err;
+	}
+
+	return 0;
+}
+
+int mana_ib_create_adapter(struct mana_ib_dev *mib_dev)
+{
+	struct mana_ib_create_adapter_resp resp = {};
+	struct mana_ib_create_adapter_req req = {};
+	struct gdma_context *gc;
+	int err;
+
+	gc = mib_dev->gc;
+
+	mana_gd_init_req_hdr(&req.hdr, MANA_IB_CREATE_ADAPTER, sizeof(req),
+			     sizeof(resp));
+	req.notify_eq_id = mib_dev->fatal_err_eq->id;
+	req.hdr.dev_id = gc->mana_ib.dev_id;
+
+	err = mana_gd_send_request(gc, sizeof(req), &req, sizeof(resp), &resp);
+
+	if (err) {
+		ibdev_err(&mib_dev->ib_dev, "Failed to create adapter err %d",
+			  err);
+		return err;
+	}
+
+	mib_dev->adapter_handle = resp.adapter;
+
+	return 0;
+}
+
+static void mana_ib_critical_event_handler(void *ctx, struct gdma_queue *queue,
+				      struct gdma_event *event)
+{
+	struct mana_ib_dev *mib_dev = (struct mana_ib_dev *)ctx;
+	struct ib_event mib_event;
+	switch (event->type) {
+	case GDMA_EQE_SOC_EVENT_NOTIFICATION:
+		mib_event.event = IB_EVENT_QP_FATAL;
+		mib_event.device = &mib_dev->ib_dev;
+		mib_event.element.qp =
+				(struct ib_qp*)(event->details[0] & 0xFFFFFF);
+		ib_dispatch_event(&mib_event);
+		ibdev_dbg(&mib_dev->ib_dev, "Received critical notification");
+		break;
+	default:
+		ibdev_dbg(&mib_dev->ib_dev, "Received unsolicited evt %d",
+			  event->type);
+	}
+}
+
+int mana_ib_create_error_eq(struct mana_ib_dev *mib_dev)
+{
+	struct gdma_queue_spec spec = {};
+	int err;
+
+	spec.type = GDMA_EQ;
+	spec.monitor_avl_buf = false;
+	spec.queue_size = EQ_SIZE;
+	spec.eq.callback = mana_ib_critical_event_handler;
+	spec.eq.context = mib_dev;
+	spec.eq.log2_throttle_limit = LOG2_EQ_THROTTLE;
+	spec.eq.msix_allocated = true;
+	spec.eq.msix_index = 0;
+	spec.doorbell = mib_dev->gc->mana_ib.doorbell;
+	spec.pdid = mib_dev->gc->mana_ib.pdid;
+
+	err = mana_gd_create_mana_eq(&mib_dev->gc->mana_ib, &spec,
+				     &mib_dev->fatal_err_eq);
+	if (err)
+		return err;
+
+	mib_dev->fatal_err_eq->eq.disable_needed = true;
+
+	return 0;
+}
