@@ -2161,6 +2161,101 @@ static int move_pages_and_store_status(int node,
 	return store_status(status, start, node, i - start);
 }
 
+struct rmap_page_ctxt {
+	bool found;
+	bool migratable;
+	bool node_allowed;
+	int node;
+};
+
+/*
+ * Walks each vma mapping a given page and determines if those
+ * vma's are both migratable, and that the target node is within
+ * the allowed cpuset of the owning task.
+ */
+static bool phys_page_migratable(struct folio *folio,
+				 struct vm_area_struct *vma,
+				 unsigned long address,
+				 void *arg)
+{
+	struct rmap_page_ctxt *ctxt = (struct rmap_page_ctxt *)arg;
+	struct task_struct *owner = vma->vm_mm->owner;
+	nodemask_t task_nodes = cpuset_mems_allowed(owner);
+
+	ctxt->found |= true;
+	ctxt->migratable &= vma_migratable(vma);
+	ctxt->node_allowed &= node_isset(ctxt->node, task_nodes);
+
+	return ctxt->migratable && ctxt->node_allowed;
+}
+
+static struct folio *phys_migrate_get_folio(struct page *page)
+{
+	struct folio *folio;
+
+	folio = page_folio(page);
+	if (!folio_test_lru(folio) || !folio_try_get(folio))
+		return NULL;
+	if (unlikely(page_folio(page) != folio || !folio_test_lru(folio))) {
+		folio_put(folio);
+		folio = NULL;
+	}
+	return folio;
+}
+
+/*
+ * Validates the physical address is online and migratable.  Walks the folio
+ * containing the page to validate the vma is migratable and the cpuset node
+ * restrictions.  Then calls add_page_for_migration to isolate it from the
+ * LRU and place it into the given pagelist.
+ * Returns:
+ *     errno - if the page is not online, migratable, or can't be isolated
+ *     0 - when it doesn't have to be migrated because it is already on the
+ *         target node
+ *     1 - when it has been queued
+ */
+static int add_phys_page_for_migration(const void __user *p, int node,
+				       struct list_head *pagelist,
+				       bool migrate_all)
+{
+	unsigned long pfn;
+	struct page *page;
+	struct folio *folio;
+	int err;
+	struct rmap_page_ctxt rmctxt = {
+		.found = false,
+		.migratable = true,
+		.node_allowed = true,
+		.node = node
+	};
+	struct rmap_walk_control rwc = {
+		.rmap_one = phys_page_migratable,
+		.arg = &rmctxt
+	};
+
+	pfn = ((unsigned long)p) >> PAGE_SHIFT;
+	page = pfn_to_online_page(pfn);
+	if (!page || PageTail(page))
+		return -ENOENT;
+
+	folio = phys_migrate_get_folio(page);
+	if (folio) {
+		rmap_walk(folio, &rwc);
+		folio_put(folio);
+	}
+
+	if (!rmctxt.found)
+		err = -ENOENT;
+	else if (!rmctxt.migratable)
+		err = -EFAULT;
+	else if (!rmctxt.node_allowed)
+		err = -EACCES;
+	else
+		err = add_page_for_migration(page, node, pagelist, migrate_all);
+
+	return err;
+}
+
 /*
  * Migrate an array of page address onto an array of nodes and fill
  * the corresponding array of status.
@@ -2214,8 +2309,13 @@ static int do_pages_move(struct mm_struct *mm, nodemask_t task_nodes,
 		 * Errors in the page lookup or isolation are not fatal and we simply
 		 * report them via status
 		 */
-		err = add_virt_page_for_migration(mm, p, current_node, &pagelist,
-					     flags & MPOL_MF_MOVE_ALL);
+		if (mm)
+			err = add_virt_page_for_migration(mm, p, current_node, &pagelist,
+						     flags & MPOL_MF_MOVE_ALL);
+		else
+			err = add_phys_page_for_migration(p, current_node, &pagelist,
+					flags & MPOL_MF_MOVE_ALL);
+
 
 		if (err > 0) {
 			/* The page is successfully queued for migration */
@@ -2303,6 +2403,36 @@ set_status:
 	mmap_read_unlock(mm);
 }
 
+/*
+ * Determine the nodes of an array of pages and store it in an array of status.
+ */
+static void do_phys_pages_stat_array(unsigned long nr_pages,
+				     const void __user **pages, int *status)
+{
+	unsigned long i;
+
+	for (i = 0; i < nr_pages; i++) {
+		unsigned long pfn = (unsigned long)(*pages) >> PAGE_SHIFT;
+		struct page *page = pfn_to_online_page(pfn);
+		int err = -ENOENT;
+
+		if (!page)
+			goto set_status;
+
+		get_page(page);
+
+		if (!is_zone_device_page(page))
+			err = page_to_nid(page);
+
+		put_page(page);
+set_status:
+		*status = err;
+
+		pages++;
+		status++;
+	}
+}
+
 static int get_compat_pages_array(const void __user *chunk_pages[],
 				  const void __user * __user *pages,
 				  unsigned long chunk_nr)
@@ -2345,7 +2475,10 @@ static int do_pages_stat(struct mm_struct *mm, unsigned long nr_pages,
 				break;
 		}
 
-		do_pages_stat_array(mm, chunk_nr, chunk_pages, chunk_status);
+		if (mm)
+			do_pages_stat_array(mm, chunk_nr, chunk_pages, chunk_status);
+		else
+			do_phys_pages_stat_array(chunk_nr, chunk_pages, chunk_status);
 
 		if (copy_to_user(status, chunk_status, chunk_nr * sizeof(*status)))
 			break;
@@ -2445,6 +2578,45 @@ SYSCALL_DEFINE6(move_pages, pid_t, pid, unsigned long, nr_pages,
 {
 	return kernel_move_pages(pid, nr_pages, pages, nodes, status, flags);
 }
+
+/*
+ * Move a list of pages in the address space of the currently executing
+ * process.
+ */
+static int kernel_move_phys_pages(unsigned long nr_pages,
+				  const void __user * __user *pages,
+				  const int __user *nodes,
+				  int __user *status, int flags)
+{
+	int err;
+	nodemask_t target_nodes;
+
+	/* Check flags */
+	if (flags & ~(MPOL_MF_MOVE|MPOL_MF_MOVE_ALL))
+		return -EINVAL;
+
+	if ((flags & MPOL_MF_MOVE_ALL) && !capable(CAP_SYS_NICE))
+		return -EPERM;
+
+	/* All tasks mapping each page is checked in phys_page_migratable */
+	nodes_setall(target_nodes);
+	if (nodes)
+		err = do_pages_move(NULL, target_nodes, nr_pages, pages,
+			nodes, status, flags);
+	else
+		err = do_pages_stat(NULL, nr_pages, pages, status);
+
+	return err;
+}
+
+SYSCALL_DEFINE5(move_phys_pages, unsigned long, nr_pages,
+		const void __user * __user *, pages,
+		const int __user *, nodes,
+		int __user *, status, int, flags)
+{
+	return kernel_move_phys_pages(nr_pages, pages, nodes, status, flags);
+}
+
 
 #ifdef CONFIG_NUMA_BALANCING
 /*
