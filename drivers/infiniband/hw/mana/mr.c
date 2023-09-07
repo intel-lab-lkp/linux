@@ -29,13 +29,10 @@ static int mana_ib_gd_create_mr(struct mana_ib_dev *mib_dev,
 				struct mana_ib_mr *mr,
 				struct gdma_create_mr_params *mr_params)
 {
-	struct gdma_dev *mdev = mib_dev->gdma_dev;
 	struct gdma_create_mr_response resp = {};
 	struct gdma_create_mr_request req = {};
-	struct gdma_context *gc;
 	int err;
 
-	gc = mdev->gdma_context;
 
 	mana_gd_init_req_hdr(&req.hdr, GDMA_CREATE_MR, sizeof(req),
 			     sizeof(resp));
@@ -56,7 +53,8 @@ static int mana_ib_gd_create_mr(struct mana_ib_dev *mib_dev,
 		return -EINVAL;
 	}
 
-	err = mana_gd_send_request(gc, sizeof(req), &req, sizeof(resp), &resp);
+	err = mana_gd_send_request(mib_dev->gc, sizeof(req), &req,
+				   sizeof(resp), &resp);
 
 	if (err || resp.hdr.status) {
 		ibdev_dbg(&mib_dev->ib_dev, "Failed to create mr %d, %u", err,
@@ -77,22 +75,19 @@ static int mana_ib_gd_create_mr(struct mana_ib_dev *mib_dev,
 static int mana_ib_gd_destroy_mr(struct mana_ib_dev *mib_dev, u64 mr_handle)
 {
 	struct gdma_destroy_mr_response resp = {};
-	struct gdma_dev *mdev = mib_dev->gdma_dev;
 	struct gdma_destroy_mr_request req = {};
-	struct gdma_context *gc;
 	int err;
-
-	gc = mdev->gdma_context;
 
 	mana_gd_init_req_hdr(&req.hdr, GDMA_DESTROY_MR, sizeof(req),
 			     sizeof(resp));
 
 	req.mr_handle = mr_handle;
 
-	err = mana_gd_send_request(gc, sizeof(req), &req, sizeof(resp), &resp);
+	err = mana_gd_send_request(mib_dev->gc, sizeof(req), &req,
+				   sizeof(resp), &resp);
 	if (err || resp.hdr.status) {
-		dev_err(gc->dev, "Failed to destroy MR: %d, 0x%x\n", err,
-			resp.hdr.status);
+		dev_err(mib_dev->gc->dev, "Failed to destroy MR: %d, 0x%x\n",
+			err, resp.hdr.status);
 		if (!err)
 			err = -EPROTO;
 		return err;

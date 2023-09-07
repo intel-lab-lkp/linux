@@ -30,6 +30,7 @@
 struct mana_ib_dev {
 	struct ib_device ib_dev;
 	struct gdma_dev *gdma_dev;
+	struct gdma_context *gc;
 };
 
 struct mana_ib_wq {
