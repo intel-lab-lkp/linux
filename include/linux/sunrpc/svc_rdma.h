@@ -168,6 +168,10 @@ extern void svc_rdma_handle_bc_reply(struct svc_rqst *rqstp,
 				     struct svc_rdma_recv_ctxt *rctxt);
 
 /* svc_rdma_recvfrom.c */
+extern struct svc_rdma_recv_ctxt *
+		svc_rdma_recv_ctxt_alloc(struct svcxprt_rdma *rdma);
+extern void svc_rdma_recv_ctxt_destroy(struct svcxprt_rdma *rdma,
+				       struct svc_rdma_recv_ctxt *ctxt);
 extern void svc_rdma_recv_ctxts_destroy(struct svcxprt_rdma *rdma);
 extern bool svc_rdma_post_recvs(struct svcxprt_rdma *rdma);
 extern struct svc_rdma_recv_ctxt *

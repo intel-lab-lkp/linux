@@ -122,7 +122,13 @@ static void svc_rdma_recv_cid_init(struct svcxprt_rdma *rdma,
 	cid->ci_completion_id = atomic_inc_return(&rdma->sc_completion_ids);
 }
 
-static struct svc_rdma_recv_ctxt *
+/**
+ * svc_rdma_recv_ctxt_alloc - Allocate an svc_rdma_recv_ctxt
+ * @rdma: controlling transport
+ *
+ * Returns an initialized svc_rdma_recv_ctxt object or NULL.
+ */
+struct svc_rdma_recv_ctxt *
 svc_rdma_recv_ctxt_alloc(struct svcxprt_rdma *rdma)
 {
 	struct ib_device *device = rdma->sc_cm_id->device;
@@ -167,8 +173,13 @@ fail0:
 	return NULL;
 }
 
-static void svc_rdma_recv_ctxt_destroy(struct svcxprt_rdma *rdma,
-				       struct svc_rdma_recv_ctxt *ctxt)
+/**
+ * svc_rdma_recv_ctxt_destroy - Free an svc_rdma_recv_ctxt
+ * @rdma: controlling transport
+ * @ctxt: object to release
+ */
+void svc_rdma_recv_ctxt_destroy(struct svcxprt_rdma *rdma,
+				struct svc_rdma_recv_ctxt *ctxt)
 {
 	ib_dma_unmap_single(rdma->sc_cm_id->device, ctxt->rc_recv_sge.addr,
 			    ctxt->rc_recv_sge.length, DMA_FROM_DEVICE);
@@ -179,7 +190,6 @@ static void svc_rdma_recv_ctxt_destroy(struct svcxprt_rdma *rdma,
 /**
  * svc_rdma_recv_ctxts_destroy - Release all recv_ctxt's for an xprt
  * @rdma: svcxprt_rdma being torn down
- *
  */
 void svc_rdma_recv_ctxts_destroy(struct svcxprt_rdma *rdma)
 {
@@ -194,7 +204,9 @@ void svc_rdma_recv_ctxts_destroy(struct svcxprt_rdma *rdma)
 
 /**
  * svc_rdma_recv_ctxt_get - Allocate a recv_ctxt
- * @rdma: controlling svcxprt_rdma
+ * @rdma: controlling transport
+ *
+ * Caller serializes.
  *
  * Returns a recv_ctxt or (rarely) NULL if none are available.
  */

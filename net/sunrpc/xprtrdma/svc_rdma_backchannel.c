@@ -79,12 +79,12 @@ static int svc_rdma_bc_sendto(struct svcxprt_rdma *rdma,
 	struct svc_rdma_recv_ctxt *rctxt;
 	int ret;
 
-	rctxt = svc_rdma_recv_ctxt_get(rdma);
+	rctxt = svc_rdma_recv_ctxt_alloc(rdma);
 	if (!rctxt)
 		return -EIO;
 
 	ret = svc_rdma_map_reply_msg(rdma, sctxt, rctxt, &rqst->rq_snd_buf);
-	svc_rdma_recv_ctxt_put(rdma, rctxt);
+	svc_rdma_recv_ctxt_destroy(rdma, rctxt);
 	if (ret < 0)
 		return -EIO;
 
