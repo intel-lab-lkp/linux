@@ -1719,24 +1719,38 @@ static const struct file_operations proc_pid_set_comm_operations = {
 	.release	= single_release,
 };
 
-static int proc_exe_link(struct dentry *dentry, struct path *exe_path)
+static struct file *proc_get_task_exe_file(struct task_struct *task)
 {
-	struct task_struct *task;
-	struct file *exe_file;
-
-	task = get_proc_task(d_inode(dentry));
-	if (!task)
-		return -ENOENT;
-	exe_file = get_task_exe_file(task, true);
-	put_task_struct(task);
-	if (exe_file) {
-		*exe_path = exe_file->f_path;
-		path_get(&exe_file->f_path);
-		fput(exe_file);
-		return 0;
-	} else
-		return -ENOENT;
+	return get_task_exe_file(task, true);
 }
+
+static struct file *proc_get_task_interpreter_file(struct task_struct *task)
+{
+	return get_task_interpreter_file(task);
+}
+
+/* Definition of proc_exe_link and proc_interpreter_link. */
+#define PROC_GET_LINK_FUNC(type) \
+static int proc_##type##_link(struct dentry *dentry, struct path *path)	\
+{									\
+	struct task_struct *task;					\
+	struct file *file;						\
+									\
+	task = get_proc_task(d_inode(dentry));				\
+	if (!task)							\
+		return -ENOENT;						\
+	file = proc_get_task_##type##_file(task);			\
+	put_task_struct(task);						\
+	if (file) {							\
+		*path = file->f_path;					\
+		path_get(&file->f_path);				\
+		fput(file);						\
+		return 0;						\
+	} else								\
+		return -ENOENT;						\
+}
+PROC_GET_LINK_FUNC(exe);
+PROC_GET_LINK_FUNC(interpreter);
 
 static const char *proc_pid_get_link(struct dentry *dentry,
 				     struct inode *inode,
@@ -3276,6 +3290,7 @@ static const struct pid_entry tgid_base_stuff[] = {
 	LNK("cwd",        proc_cwd_link),
 	LNK("root",       proc_root_link),
 	LNK("exe",        proc_exe_link),
+	LNK("interpreter", proc_interpreter_link),
 	REG("mounts",     S_IRUGO, proc_mounts_operations),
 	REG("mountinfo",  S_IRUGO, proc_mountinfo_operations),
 	REG("mountstats", S_IRUSR, proc_mountstats_operations),
@@ -3626,6 +3641,7 @@ static const struct pid_entry tid_base_stuff[] = {
 	LNK("cwd",       proc_cwd_link),
 	LNK("root",      proc_root_link),
 	LNK("exe",       proc_exe_link),
+	LNK("interpreter", proc_interpreter_link),
 	REG("mounts",    S_IRUGO, proc_mounts_operations),
 	REG("mountinfo",  S_IRUGO, proc_mountinfo_operations),
 #ifdef CONFIG_PROC_PAGE_MONITOR

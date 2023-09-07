@@ -1283,6 +1283,13 @@ int begin_new_exec(struct linux_binprm * bprm)
 	if (retval)
 		goto out;
 
+	/*
+	 * In case we're in an interpreted scenario (like binfmt_misc,
+	 * for example), flag it on mm_struct in order to expose such
+	 * interpreter as the symlink /proc/self/interpreter.
+	 */
+	bprm->mm->has_interpreter = bprm->has_interpreter;
+
 	/* If the binary is not readable then enforce mm->dumpable=0 */
 	would_dump(bprm, bprm->file);
 	if (bprm->have_execfd)
@@ -1794,6 +1801,7 @@ static int exec_binprm(struct linux_binprm *bprm)
 
 		exec = bprm->file;
 		bprm->file = bprm->interpreter;
+		bprm->has_interpreter = true;
 		bprm->interpreter = NULL;
 
 		allow_write_access(exec);

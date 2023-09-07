@@ -1569,6 +1569,32 @@ struct file *get_task_exe_file(struct task_struct *task,
 }
 
 /**
+ * get_task_interpreter_file - acquire a reference to the task's *interpreter*
+ * executable (which is in fact the exe_file on mm_struct!). This is used in
+ * order to expose /proc/self/interpreter, if we're under an interpreted
+ * scenario (like binfmt_misc).
+ *
+ * Returns %NULL if exe_file is not an interpreter (i.e., it is the truly
+ * running binary indeed).
+ */
+struct file *get_task_interpreter_file(struct task_struct *task)
+{
+	struct file *interpreter_file = NULL;
+	struct mm_struct *mm;
+
+	task_lock(task);
+
+	mm = task->mm;
+	if (mm && mm->has_interpreter) {
+		if (!(task->flags & PF_KTHREAD))
+			interpreter_file = get_mm_exe_file(mm);
+	}
+
+	task_unlock(task);
+	return interpreter_file;
+}
+
+/**
  * get_task_mm - acquire a reference to the task's mm
  *
  * Returns %NULL if the task has no mm.  Checks PF_KTHREAD (meaning

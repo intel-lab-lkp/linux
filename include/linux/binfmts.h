@@ -46,6 +46,7 @@ struct linux_binprm {
 	struct file *executable; /* Executable to pass to the interpreter */
 	struct file *interpreter;
 	struct file *interpreted_file; /* only for binfmt_misc with flag I */
+	bool has_interpreter; /* In order to expose /proc/self/interpreter */
 	struct file *file;
 	struct cred *cred;	/* new credentials */
 	int unsafe;		/* how unsafe this exec is (mask of LSM_UNSAFE_*) */

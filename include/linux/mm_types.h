@@ -854,6 +854,7 @@ struct mm_struct {
 		/* store ref to file /proc/<pid>/exe symlink points to */
 		struct file __rcu *exe_file;
 		struct file __rcu *interpreted_file; /* see binfmt_misc flag I */
+		bool has_interpreter; /* exposes (or not) /proc/self/interpreter */
 #ifdef CONFIG_MMU_NOTIFIER
 		struct mmu_notifier_subscriptions *notifier_subscriptions;
 #endif
