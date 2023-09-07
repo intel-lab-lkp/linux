@@ -1357,22 +1357,21 @@ static int qcom_pcie_icc_init(struct qcom_pcie *pcie)
 	return 0;
 }
 
-static void qcom_pcie_icc_update(struct qcom_pcie *pcie)
+static int qcom_pcie_icc_update(struct qcom_pcie *pcie)
 {
 	struct dw_pcie *pci = pcie->pci;
 	u32 offset, status, bw;
 	int speed, width;
-	int ret;
 
 	if (!pcie->icc_mem)
-		return;
+		return 0;
 
 	offset = dw_pcie_find_capability(pci, PCI_CAP_ID_EXP);
 	status = readw(pci->dbi_base + offset + PCI_EXP_LNKSTA);
 
 	/* Only update constraints if link is up. */
 	if (!(status & PCI_EXP_LNKSTA_DLLLA))
-		return;
+		return -ENODEV;
 
 	speed = FIELD_GET(PCI_EXP_LNKSTA_CLS, status);
 	width = FIELD_GET(PCI_EXP_LNKSTA_NLW, status);
@@ -1392,11 +1391,7 @@ static void qcom_pcie_icc_update(struct qcom_pcie *pcie)
 		break;
 	}
 
-	ret = icc_set_bw(pcie->icc_mem, 0, width * bw);
-	if (ret) {
-		dev_err(pci->dev, "failed to set interconnect bandwidth: %d\n",
-			ret);
-	}
+	return icc_set_bw(pcie->icc_mem, 0, width * bw);
 }
 
 static int qcom_pcie_link_transition_count(struct seq_file *s, void *data)
@@ -1529,7 +1524,10 @@ static int qcom_pcie_probe(struct platform_device *pdev)
 		goto err_phy_exit;
 	}
 
-	qcom_pcie_icc_update(pcie);
+	ret = qcom_pcie_icc_update(pcie);
+	if (ret)
+		dev_err(dev, "failed to update interconnect bandwidth: %d\n",
+			ret);
 
 	if (pcie->mhi)
 		qcom_pcie_init_debugfs(pcie);
@@ -1596,7 +1594,10 @@ static int qcom_pcie_resume_noirq(struct device *dev)
 		pcie->suspended = false;
 	}
 
-	qcom_pcie_icc_update(pcie);
+	ret = qcom_pcie_icc_update(pcie);
+	if (ret)
+		dev_err(dev, "failed to update interconnect bandwidth: %d\n",
+			ret);
 
 	return 0;
 }
