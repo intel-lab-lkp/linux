@@ -146,13 +146,11 @@ void __init config_apollo(void)
 
 irqreturn_t dn_timer_int(int irq, void *dev_id)
 {
-	volatile unsigned char x;
-
 	legacy_timer_tick(1);
 	timer_heartbeat();
 
-	x = *(volatile unsigned char *)(apollo_timer + 3);
-	x = *(volatile unsigned char *)(apollo_timer + 5);
+	READ_ONCE(*(volatile unsigned char *)(apollo_timer + 3));
+	READ_ONCE(*(volatile unsigned char *)(apollo_timer + 5));
 
 	return IRQ_HANDLED;
 }
