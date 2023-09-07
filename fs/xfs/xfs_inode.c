@@ -339,8 +339,11 @@ __xfs_rwsem_islocked(
 	struct rw_semaphore	*rwsem,
 	bool			shared)
 {
-	if (!debug_locks)
+	if (!debug_locks) {
+		if (!shared)
+			return rwsem_is_write_locked(rwsem);
 		return rwsem_is_locked(rwsem);
+	}
 
 	if (!shared)
 		return lockdep_is_held_type(rwsem, 0);
@@ -359,12 +362,10 @@ xfs_isilocked(
 	struct xfs_inode	*ip,
 	uint			lock_flags)
 {
-	if (lock_flags & (XFS_ILOCK_EXCL|XFS_ILOCK_SHARED)) {
-		if (!(lock_flags & XFS_ILOCK_SHARED))
-			return !!ip->i_lock.mr_writer;
+	if (lock_flags & XFS_ILOCK_SHARED)
 		return rwsem_is_locked(&ip->i_lock.mr_lock);
-	}
-
+	if (lock_flags & XFS_ILOCK_EXCL)
+		return rwsem_is_write_locked(&ip->i_lock.mr_lock);
 	if (lock_flags & (XFS_MMAPLOCK_EXCL|XFS_MMAPLOCK_SHARED)) {
 		return __xfs_rwsem_islocked(&VFS_I(ip)->i_mapping->invalidate_lock,
 				(lock_flags & XFS_MMAPLOCK_SHARED));
