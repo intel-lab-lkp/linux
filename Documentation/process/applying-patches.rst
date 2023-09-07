@@ -6,6 +6,13 @@ Applying Patches To The Linux Kernel
 Original by:
 	Jesper Juhl, August 2005
 
+
+.. applying patch by Git::
+
+    You can use the below syntax to patch in git repository
+    git-apply --whitespace=error-all <patchfile>
+
+
 .. note::
 
    This document is obsolete.  In most cases, rather than using ``patch``
