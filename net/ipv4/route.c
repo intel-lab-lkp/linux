@@ -1230,7 +1230,7 @@ static void ipv4_send_dest_unreach(struct sk_buff *skb)
 		opt.optlen = ip_hdr(skb)->ihl * 4 - sizeof(struct iphdr);
 
 		rcu_read_lock();
-		res = __ip_options_compile(dev_net(skb->dev), &opt, skb, NULL);
+		res = __ip_options_compile(NULL, &opt, skb, NULL);
 		rcu_read_unlock();
 
 		if (res)
