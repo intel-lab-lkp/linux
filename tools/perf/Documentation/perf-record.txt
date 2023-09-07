@@ -292,6 +292,17 @@ OPTIONS
 	Also, by adding a comma, the number of mmap pages for AUX
 	area tracing can be specified.
 
+	The maximum AUX area is limited by the maximum physically contiguous
+	memory allocated from slab/slub. It can be calculated with following
+	formula:
+
+	  PAGE_SIZE << MAX_ORDER
+	( ---------------------- ) * PAGE_SIZE
+	   sizeof(page_pointer)
+
+	For example with 4K pages and MAX_ORDER=10 configured, the maximum AUX
+	area is 2GiB.
+
 -g::
 	Enables call-graph (stack chain/backtrace) recording for both
 	kernel space and user space.
