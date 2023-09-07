@@ -341,6 +341,17 @@ config RAVE_SP_WATCHDOG
 	help
 	  Support for the watchdog on RAVE SP device.
 
+config NCT6686_WDT
+	tristate "NCT6686 Watchdog Timer"
+	depends on I2C
+	select WATCHDOG_CORE
+	help
+	  Watchdog driver for the Nuvoton 6686 Watchdog
+	  Processor.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called nct6686_wdt.
+
 config MLX_WDT
 	tristate "Mellanox Watchdog"
 	depends on MELLANOX_PLATFORM || COMPILE_TEST
