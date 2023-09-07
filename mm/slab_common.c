@@ -747,22 +747,22 @@ size_t kmalloc_size_roundup(size_t size)
 {
 	struct kmem_cache *c;
 
-	/* Short-circuit the 0 size case. */
-	if (unlikely(size == 0))
-		return 0;
-	/* Short-circuit saturated "too-large" case. */
-	if (unlikely(size == SIZE_MAX))
-		return SIZE_MAX;
+	if (size && size <= KMALLOC_MAX_CACHE_SIZE) {
+		/*
+		 * The flags don't matter since size_index is common to all.
+		 * Neither does the caller for just getting ->object_size.
+		 */
+		c = kmalloc_slab(size, GFP_KERNEL, 0);
+		return likely(c) ? c->object_size : size;
+	}
+
 	/* Above the smaller buckets, size is a multiple of page size. */
-	if (size > KMALLOC_MAX_CACHE_SIZE)
+	if (size && size <= KMALLOC_MAX_SIZE)
 		return PAGE_SIZE << get_order(size);
 
-	/*
-	 * The flags don't matter since size_index is common to all.
-	 * Neither does the caller for just getting ->object_size.
-	 */
-	c = kmalloc_slab(size, GFP_KERNEL, 0);
-	return c ? c->object_size : 0;
+	/* Return 'size' for 0 and very large - kmalloc() may fail. */
+	return size;
+
 }
 EXPORT_SYMBOL(kmalloc_size_roundup);
 
