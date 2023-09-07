@@ -25,12 +25,13 @@ mana_ib_verbs_to_gdma_access_flags(int access_flags)
 	return flags;
 }
 
-static int mana_ib_gd_create_mr(struct mana_ib_dev *dev, struct mana_ib_mr *mr,
+static int mana_ib_gd_create_mr(struct mana_ib_dev *mib_dev,
+				struct mana_ib_mr *mr,
 				struct gdma_create_mr_params *mr_params)
 {
+	struct gdma_dev *mdev = mib_dev->gdma_dev;
 	struct gdma_create_mr_response resp = {};
 	struct gdma_create_mr_request req = {};
-	struct gdma_dev *mdev = dev->gdma_dev;
 	struct gdma_context *gc;
 	int err;
 
@@ -49,7 +50,7 @@ static int mana_ib_gd_create_mr(struct mana_ib_dev *dev, struct mana_ib_mr *mr,
 		break;
 
 	default:
-		ibdev_dbg(&dev->ib_dev,
+		ibdev_dbg(&mib_dev->ib_dev,
 			  "invalid param (GDMA_MR_TYPE) passed, type %d\n",
 			  req.mr_type);
 		return -EINVAL;
@@ -58,7 +59,7 @@ static int mana_ib_gd_create_mr(struct mana_ib_dev *dev, struct mana_ib_mr *mr,
 	err = mana_gd_send_request(gc, sizeof(req), &req, sizeof(resp), &resp);
 
 	if (err || resp.hdr.status) {
-		ibdev_dbg(&dev->ib_dev, "Failed to create mr %d, %u", err,
+		ibdev_dbg(&mib_dev->ib_dev, "Failed to create mr %d, %u", err,
 			  resp.hdr.status);
 		if (!err)
 			err = -EPROTO;
@@ -73,11 +74,11 @@ static int mana_ib_gd_create_mr(struct mana_ib_dev *dev, struct mana_ib_mr *mr,
 	return 0;
 }
 
-static int mana_ib_gd_destroy_mr(struct mana_ib_dev *dev, u64 mr_handle)
+static int mana_ib_gd_destroy_mr(struct mana_ib_dev *mib_dev, u64 mr_handle)
 {
 	struct gdma_destroy_mr_response resp = {};
+	struct gdma_dev *mdev = mib_dev->gdma_dev;
 	struct gdma_destroy_mr_request req = {};
-	struct gdma_dev *mdev = dev->gdma_dev;
 	struct gdma_context *gc;
 	int err;
 
@@ -107,12 +108,12 @@ struct ib_mr *mana_ib_reg_user_mr(struct ib_pd *ibpd, u64 start, u64 length,
 	struct mana_ib_pd *pd = container_of(ibpd, struct mana_ib_pd, ibpd);
 	struct gdma_create_mr_params mr_params = {};
 	struct ib_device *ibdev = ibpd->device;
-	struct mana_ib_dev *dev;
+	struct mana_ib_dev *mib_dev;
 	struct mana_ib_mr *mr;
 	u64 dma_region_handle;
 	int err;
 
-	dev = container_of(ibdev, struct mana_ib_dev, ib_dev);
+	mib_dev = container_of(ibdev, struct mana_ib_dev, ib_dev);
 
 	ibdev_dbg(ibdev,
 		  "start 0x%llx, iova 0x%llx length 0x%llx access_flags 0x%x",
@@ -133,7 +134,7 @@ struct ib_mr *mana_ib_reg_user_mr(struct ib_pd *ibpd, u64 start, u64 length,
 		goto err_free;
 	}
 
-	err = mana_ib_gd_create_dma_region(dev, mr->umem, &dma_region_handle);
+	err = mana_ib_gd_create_dma_region(mib_dev, mr->umem, &dma_region_handle);
 	if (err) {
 		ibdev_dbg(ibdev, "Failed create dma region for user-mr, %d\n",
 			  err);
@@ -151,7 +152,7 @@ struct ib_mr *mana_ib_reg_user_mr(struct ib_pd *ibpd, u64 start, u64 length,
 	mr_params.gva.access_flags =
 		mana_ib_verbs_to_gdma_access_flags(access_flags);
 
-	err = mana_ib_gd_create_mr(dev, mr, &mr_params);
+	err = mana_ib_gd_create_mr(mib_dev, mr, &mr_params);
 	if (err)
 		goto err_dma_region;
 
@@ -164,7 +165,7 @@ struct ib_mr *mana_ib_reg_user_mr(struct ib_pd *ibpd, u64 start, u64 length,
 	return &mr->ibmr;
 
 err_dma_region:
-	mana_gd_destroy_dma_region(dev->gdma_dev->gdma_context,
+	mana_gd_destroy_dma_region(mib_dev->gdma_dev->gdma_context,
 				   dma_region_handle);
 
 err_umem:
@@ -179,12 +180,12 @@ int mana_ib_dereg_mr(struct ib_mr *ibmr, struct ib_udata *udata)
 {
 	struct mana_ib_mr *mr = container_of(ibmr, struct mana_ib_mr, ibmr);
 	struct ib_device *ibdev = ibmr->device;
-	struct mana_ib_dev *dev;
+	struct mana_ib_dev *mib_dev;
 	int err;
 
-	dev = container_of(ibdev, struct mana_ib_dev, ib_dev);
+	mib_dev = container_of(ibdev, struct mana_ib_dev, ib_dev);
 
-	err = mana_ib_gd_destroy_mr(dev, mr->mr_handle);
+	err = mana_ib_gd_destroy_mr(mib_dev, mr->mr_handle);
 	if (err)
 		return err;
 
