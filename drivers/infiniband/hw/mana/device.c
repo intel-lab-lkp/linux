@@ -101,6 +101,14 @@ static int mana_ib_probe(struct auxiliary_device *adev,
 	if (ret)
 		ibdev_dbg(&mib_dev->ib_dev, "Failed to get caps, use defaults");
 
+	mib_dev->rq_to_qp_lookup_table = kzalloc(sizeof(struct mana_ib_qp*) *
+					  mib_dev->adapter_caps.max_qp_count,
+					  GFP_KERNEL);
+	if (!mib_dev->rq_to_qp_lookup_table) {
+		ibdev_err(&mib_dev->ib_dev, "Failed to allocate rq lookup table");
+		goto free_error_eq;
+	}
+
 	ret = ib_register_device(&mib_dev->ib_dev, "mana_%d",
 				 mdev->gdma_context->dev);
 	if (ret)
@@ -112,6 +120,7 @@ static int mana_ib_probe(struct auxiliary_device *adev,
 
 destroy_adapter:
 	mana_ib_destroy_adapter(mib_dev);
+	kfree(mib_dev->rq_to_qp_lookup_table);
 free_error_eq:
 	mana_gd_destroy_queue(mib_dev->gc, mib_dev->fatal_err_eq);
 deregister_device:
