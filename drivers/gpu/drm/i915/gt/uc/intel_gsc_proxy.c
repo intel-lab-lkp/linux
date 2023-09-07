@@ -321,6 +321,7 @@ static int i915_gsc_proxy_component_bind(struct device *i915_kdev,
 	mutex_lock(&gsc->proxy.mutex);
 	gsc->proxy.component = data;
 	gsc->proxy.component->mei_dev = mei_kdev;
+	gt_dbg(gt, "GSC proxy mei component bound\n");
 	mutex_unlock(&gsc->proxy.mutex);
 
 	return 0;
@@ -342,6 +343,7 @@ static void i915_gsc_proxy_component_unbind(struct device *i915_kdev,
 	with_intel_runtime_pm(&i915->runtime_pm, wakeref)
 		intel_uncore_rmw(gt->uncore, HECI_H_CSR(MTL_GSC_HECI2_BASE),
 				 HECI_H_CSR_IE | HECI_H_CSR_RST, 0);
+	gt_dbg(gt, "GSC proxy mei component unbound\n");
 }
 
 static const struct component_ops i915_gsc_proxy_component_ops = {
