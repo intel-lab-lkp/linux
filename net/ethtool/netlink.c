@@ -306,6 +306,7 @@ ethnl_default_requests[__ETHTOOL_MSG_USER_CNT] = {
 	[ETHTOOL_MSG_PLCA_GET_STATUS]	= &ethnl_plca_status_request_ops,
 	[ETHTOOL_MSG_MM_GET]		= &ethnl_mm_request_ops,
 	[ETHTOOL_MSG_MM_SET]		= &ethnl_mm_request_ops,
+	[ETHTOOL_MSG_PHY_LIST_GET]	= &ethnl_phy_list_request_ops,
 };
 
 static struct ethnl_dump_ctx *ethnl_dump_context(struct netlink_callback *cb)
@@ -1127,6 +1128,15 @@ static const struct genl_ops ethtool_genl_ops[] = {
 		.doit	= ethnl_default_set_doit,
 		.policy = ethnl_mm_set_policy,
 		.maxattr = ARRAY_SIZE(ethnl_mm_set_policy) - 1,
+	},
+	{
+		.cmd	= ETHTOOL_MSG_PHY_LIST_GET,
+		.doit	= ethnl_default_doit,
+		.start	= ethnl_default_start,
+		.dumpit	= ethnl_default_dumpit,
+		.done	= ethnl_default_done,
+		.policy = ethnl_phy_list_get_policy,
+		.maxattr = ARRAY_SIZE(ethnl_phy_list_get_policy) - 1,
 	},
 };
 
