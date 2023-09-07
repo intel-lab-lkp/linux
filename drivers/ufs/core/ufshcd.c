@@ -306,6 +306,8 @@ static inline void ufshcd_disable_irq(struct ufs_hba *hba)
 
 static void ufshcd_configure_wb(struct ufs_hba *hba)
 {
+	u16 mask = 0;
+
 	if (!ufshcd_is_wb_allowed(hba))
 		return;
 
@@ -315,6 +317,14 @@ static void ufshcd_configure_wb(struct ufs_hba *hba)
 
 	if (ufshcd_is_wb_buf_flush_allowed(hba))
 		ufshcd_wb_toggle_buf_flush(hba, true);
+
+	/* Enable the WRITEBOOSTER_RESIZE_HINT exception mechanism. */
+	if (hba->dev_info->wspecversion >= 0x410
+	    && hba->dev_info->b_presrv_uspc_en
+	    && ufshcd_is_wb_buf_resize_allowed(hba)) {
+		mask |= MASK_EE_WRITEBOOSTER_RESIZE_HINT;
+		ufshcd_enable_ee(hba, mask);
+	}
 }
 
 static void ufshcd_scsi_unblock_requests(struct ufs_hba *hba)
@@ -5868,6 +5878,34 @@ static void ufshcd_temp_exception_event_handler(struct ufs_hba *hba, u16 status)
 	 */
 }
 
+static void ufshcd_wb_resize_exception_event_handler(struct ufs_hba *hba, u16 status)
+{
+	u32 value;
+	int err;
+
+	if (!(status | MASK_EE_WRITEBOOSTER_RESIZE_HINT))
+		return;
+
+	if (ufshcd_query_attr_retry(hba, UPIU_QUERY_OPCODE_READ_ATTR,
+				QUERY_ATTR_IDN_WB_BUF_RESIZE_HINT, 0, 0, &value))
+		return;
+
+	dev_info(hba->dev, "WB Buffer Resize Hint info %u\n", value);
+	if (value != 0x01 && value != 0x02)
+		return;
+
+	if (ufshcd_wait_for_doorbell_clr(hba, 1 * USEC_PER_SEC))
+		return;
+
+	err = ufshcd_query_attr_retry(hba, UPIU_QUERY_OPCODE_WRITE_ATTR,
+		QUERY_ATTR_IDN_WB_BUF_RESIZE_EN, 0, 0, &value);
+
+	if (err) {
+		dev_err(hba->dev, "Issue %s WB buffer size cmd failed\n",
+				value == 0x01 ? "Decrease" : "Increase");
+	}
+}
+
 static int __ufshcd_wb_toggle(struct ufs_hba *hba, bool set, enum flag_idn idn)
 {
 	u8 index;
@@ -6090,6 +6128,9 @@ static void ufshcd_exception_event_handler(struct work_struct *work)
 
 	if (status & hba->ee_drv_mask & MASK_EE_URGENT_TEMP)
 		ufshcd_temp_exception_event_handler(hba, status);
+
+	if (status & hba->ee_drv_mask & MASK_EE_WRITEBOOSTER_RESIZE_HINT)
+		ufshcd_wb_resize_exception_event_handler(hba, status);
 
 	ufs_debugfs_exception_event(hba, status);
 out:
