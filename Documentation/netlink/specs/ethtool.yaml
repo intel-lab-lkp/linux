@@ -942,6 +942,19 @@ attribute-sets:
       -
         name: burst-tmr
         type: u32
+  -
+    name: phy-list
+    attributes:
+      -
+        name: header
+        type: nest
+        nested-attributes: header
+      -
+        name: phy-count
+        type: u8
+      -
+        name: phy-indices
+        type: binary
 
 operations:
   enum-model: directional
@@ -1692,3 +1705,18 @@ operations:
       name: mm-ntf
       doc: Notification for change in MAC Merge configuration.
       notify: mm-get
+    -
+      name: phy-list-get
+      doc: Get list of PHY devices attached to an interface
+
+      attribute-set: phy-list
+
+      do: &phy-list-get-op
+        request:
+          attributes:
+            - header
+        reply:
+          attributes:
+            - header
+            - phy-count
+            - phy-indices
