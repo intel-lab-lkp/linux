@@ -72,6 +72,11 @@ static inline int rwsem_is_locked(struct rw_semaphore *sem)
 	return atomic_long_read(&sem->count) != 0;
 }
 
+static inline int rwsem_is_write_locked(struct rw_semaphore *sem)
+{
+	return atomic_long_read(&sem->count) & 1 /* RWSEM_WRITER_LOCKED */;
+}
+
 #define RWSEM_UNLOCKED_VALUE		0L
 #define __RWSEM_COUNT_INIT(name)	.count = ATOMIC_LONG_INIT(RWSEM_UNLOCKED_VALUE)
 
@@ -155,6 +160,11 @@ do {								\
 static __always_inline int rwsem_is_locked(struct rw_semaphore *sem)
 {
 	return rw_base_is_locked(&sem->rwbase);
+}
+
+static __always_inline int rwsem_is_write_locked(struct rw_semaphore *sem)
+{
+	return rw_base_is_write_locked(&sem->rwbase);
 }
 
 static __always_inline int rwsem_is_contended(struct rw_semaphore *sem)

@@ -31,6 +31,11 @@ static __always_inline bool rw_base_is_locked(struct rwbase_rt *rwb)
 	return atomic_read(&rwb->readers) != READER_BIAS;
 }
 
+static __always_inline bool rw_base_is_write_locked(struct rwbase_rt *rwb)
+{
+	return atomic_read(&rwb->readers) == WRITER_BIAS;
+}
+
 static __always_inline bool rw_base_is_contended(struct rwbase_rt *rwb)
 {
 	return atomic_read(&rwb->readers) > 0;
