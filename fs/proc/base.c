@@ -1727,7 +1727,7 @@ static int proc_exe_link(struct dentry *dentry, struct path *exe_path)
 	task = get_proc_task(d_inode(dentry));
 	if (!task)
 		return -ENOENT;
-	exe_file = get_task_exe_file(task);
+	exe_file = get_task_exe_file(task, true);
 	put_task_struct(task);
 	if (exe_file) {
 		*exe_path = exe_file->f_path;

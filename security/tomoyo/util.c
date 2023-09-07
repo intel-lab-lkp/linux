@@ -971,6 +971,11 @@ const char *tomoyo_get_exe(void)
 
 	if (!mm)
 		return NULL;
+	/*
+	 * FIXME (BINPRM_FLAGS_EXPOSE_INTERP): observe that if using binfmt_misc
+	 * with flag 'I' set, this tomoyo functionality will diverge from the
+	 * /proc/self/exe symlink with regards of what executable is running.
+	 */
 	exe_file = get_mm_exe_file(mm);
 	if (!exe_file)
 		return NULL;

@@ -48,6 +48,7 @@ enum {Enabled, Magic};
 #define MISC_FMT_OPEN_BINARY (1UL << 30)
 #define MISC_FMT_CREDENTIALS (1UL << 29)
 #define MISC_FMT_OPEN_FILE (1UL << 28)
+#define MISC_FMT_EXPOSE_INTERPRETED (1UL << 27)
 
 typedef struct {
 	struct list_head list;
@@ -181,6 +182,9 @@ static int load_misc_binary(struct linux_binprm *bprm)
 	if (retval < 0)
 		goto ret;
 
+	if (fmt->flags & MISC_FMT_EXPOSE_INTERPRETED)
+		bprm->interp_flags |= BINPRM_FLAGS_EXPOSE_INTERP;
+
 	if (fmt->flags & MISC_FMT_OPEN_FILE) {
 		interp_file = file_clone_open(fmt->interp_file);
 		if (!IS_ERR(interp_file))
@@ -257,6 +261,11 @@ static char *check_special_flags(char *sfs, Node *e)
 			pr_debug("register: flag: F: open interpreter file now\n");
 			p++;
 			e->flags |= MISC_FMT_OPEN_FILE;
+			break;
+		case 'I':
+			pr_debug("register: flag: I: (expose interpreted binary)\n");
+			p++;
+			e->flags |= MISC_FMT_EXPOSE_INTERPRETED;
 			break;
 		default:
 			cont = 0;
@@ -524,6 +533,8 @@ static void entry_status(Node *e, char *page)
 		*dp++ = 'C';
 	if (e->flags & MISC_FMT_OPEN_FILE)
 		*dp++ = 'F';
+	if (e->flags & MISC_FMT_EXPOSE_INTERPRETED)
+		*dp++ = 'I';
 	*dp++ = '\n';
 
 	if (!test_bit(Magic, &e->flags)) {

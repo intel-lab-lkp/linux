@@ -157,7 +157,12 @@ static void send_cpu_listeners(struct sk_buff *skb,
 static void exe_add_tsk(struct taskstats *stats, struct task_struct *tsk)
 {
 	/* No idea if I'm allowed to access that here, now. */
-	struct file *exe_file = get_task_exe_file(tsk);
+	struct file *exe_file = get_task_exe_file(tsk, false);
+	/*
+	 * FIXME (BINPRM_FLAGS_EXPOSE_INTERP): if using the binfmt_misc flag 'I', we diverge
+	 * here from proc_exe_link(), exposing the true exe_file (instead of the interpreted
+	 * binary as proc). Should we expose here the same exe_file as proc's one *always*?
+	 */
 
 	if (exe_file) {
 		/* Following cp_new_stat64() in stat.c . */

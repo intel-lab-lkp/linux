@@ -88,6 +88,17 @@ Here is what the fields mean:
 	    emulation is installed and uses the opened image to spawn the
 	    emulator, meaning it is always available once installed,
 	    regardless of how the environment changes.
+      ``I`` - expose the interpreted file in the /proc/self/exe symlink
+            By default, binfmt_misc executing binaries expose their interpreter
+            as the /proc/self/exe file, which makes sense given that the actual
+            executable running is the interpreter indeed. But there are some
+            cases in which we want to change that behavior - imagine an emulator
+            of Linux binaries (of different architecture, for example) which
+            needs to deal with the different behaviors when running native - the
+            binary's symlink (/proc/self/exe) points to the binary itself - vs
+            the emulated case, whereas the link points to the interpreter. This
+            flag allows to change the default behavior and have the proc symlink
+            pointing to the **interpreted** file, not the interpreter.
 
 
 There are some restrictions:

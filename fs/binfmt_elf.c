@@ -1162,6 +1162,13 @@ out_free_interp:
 			}
 		}
 
+		/*
+		 * FIXME (BINPRM_FLAGS_EXPOSE_INTERP): here is one of our problems - bprm->file is
+		 * elf_mapped(), whereas our saved bprm->interpreted_file isn't. Now, why not just
+		 * map it, right? Because we're not sure how to (or if it's indeed necessary).
+		 * What if the interpreted file is not ELF? Could be anything that its interpreter
+		 * is able to read and execute...
+		 */
 		error = elf_map(bprm->file, load_bias + vaddr, elf_ppnt,
 				elf_prot, elf_flags, total_size);
 		if (BAD_ADDR(error)) {

@@ -1278,7 +1278,8 @@ int begin_new_exec(struct linux_binprm * bprm)
 	 * not visible until then. Doing it here also ensures
 	 * we don't race against replace_mm_exe_file().
 	 */
-	retval = set_mm_exe_file(bprm->mm, bprm->file);
+	retval = set_mm_exe_file(bprm->mm, bprm->file,
+				 bprm->interpreted_file);
 	if (retval)
 		goto out;
 
@@ -1403,6 +1404,13 @@ int begin_new_exec(struct linux_binprm * bprm)
 		fd_install(retval, bprm->executable);
 		bprm->executable = NULL;
 		bprm->execfd = retval;
+		/*
+		 * Since bprm->interpreted_file points to bprm->executable and
+		 * fd_install() consumes its refcount, we need to bump the refcount
+		 * here to avoid warnings as "file count is 0" on kernel log.
+		 */
+		if (unlikely(bprm->interp_flags & BINPRM_FLAGS_EXPOSE_INTERP))
+			get_file(bprm->interpreted_file);
 	}
 	return 0;
 
@@ -1498,6 +1506,8 @@ static void free_bprm(struct linux_binprm *bprm)
 		allow_write_access(bprm->file);
 		fput(bprm->file);
 	}
+	if (bprm->interpreted_file)
+		fput(bprm->interpreted_file);
 	if (bprm->executable)
 		fput(bprm->executable);
 	/* If a binfmt changed the interp, free it. */
@@ -1787,6 +1797,9 @@ static int exec_binprm(struct linux_binprm *bprm)
 		bprm->interpreter = NULL;
 
 		allow_write_access(exec);
+		if (unlikely(bprm->interp_flags & BINPRM_FLAGS_EXPOSE_INTERP))
+			bprm->interpreted_file = exec;
+
 		if (unlikely(bprm->have_execfd)) {
 			if (bprm->executable) {
 				fput(exec);
@@ -1794,7 +1807,8 @@ static int exec_binprm(struct linux_binprm *bprm)
 			}
 			bprm->executable = exec;
 		} else
-			fput(exec);
+			if (!(bprm->interp_flags & BINPRM_FLAGS_EXPOSE_INTERP))
+				fput(exec);
 	}
 
 	audit_bprm(bprm);

@@ -45,6 +45,7 @@ struct linux_binprm {
 		point_of_no_return:1;
 	struct file *executable; /* Executable to pass to the interpreter */
 	struct file *interpreter;
+	struct file *interpreted_file; /* only for binfmt_misc with flag I */
 	struct file *file;
 	struct cred *cred;	/* new credentials */
 	int unsafe;		/* how unsafe this exec is (mask of LSM_UNSAFE_*) */
@@ -75,6 +76,8 @@ struct linux_binprm {
 #define BINPRM_FLAGS_PRESERVE_ARGV0_BIT 3
 #define BINPRM_FLAGS_PRESERVE_ARGV0 (1 << BINPRM_FLAGS_PRESERVE_ARGV0_BIT)
 
+#define BINPRM_FLAGS_EXPOSE_INTERP_BIT 4
+#define BINPRM_FLAGS_EXPOSE_INTERP (1 << BINPRM_FLAGS_EXPOSE_INTERP_BIT)
 /*
  * This structure defines the functions that are used to load the binary formats that
  * linux accepts.

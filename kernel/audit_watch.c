@@ -527,7 +527,12 @@ int audit_exe_compare(struct task_struct *tsk, struct audit_fsnotify_mark *mark)
 	unsigned long ino;
 	dev_t dev;
 
-	exe_file = get_task_exe_file(tsk);
+	/*
+	 * FIXME (BINPRM_FLAGS_EXPOSE_INTERP): if using the binfmt_misc flag 'I', we diverge
+	 * here from proc_exe_link(), exposing the true exe_file (instead of the interpreted
+	 * binary as proc). Should we expose here the same exe_file as proc's one *always*?
+	 */
+	exe_file = get_task_exe_file(tsk, false);
 	if (!exe_file)
 		return 0;
 	ino = file_inode(exe_file)->i_ino;

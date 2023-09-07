@@ -1263,7 +1263,12 @@ static void print_fatal_signal(int signr)
 	struct pt_regs *regs = task_pt_regs(current);
 	struct file *exe_file;
 
-	exe_file = get_task_exe_file(current);
+	/*
+	 * FIXME (BINPRM_FLAGS_EXPOSE_INTERP): if using the binfmt_misc flag 'I', we diverge
+	 * here from proc_exe_link(), exposing the true exe_file (instead of the interpreted
+	 * binary as proc). Should we expose here the same exe_file as proc's one *always*?
+	 */
+	exe_file = get_task_exe_file(current, false);
 	if (exe_file) {
 		pr_info("%pD: %s: potentially unexpected fatal signal %d.\n",
 			exe_file, current->comm, signr);

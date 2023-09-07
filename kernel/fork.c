@@ -628,12 +628,47 @@ void free_task(struct task_struct *tsk)
 }
 EXPORT_SYMBOL(free_task);
 
-static void dup_mm_exe_file(struct mm_struct *mm, struct mm_struct *oldmm)
+/**
+ * __get_mm_exe_or_interp_file - helper that acquires a reference to the mm's
+ * executable file, or if prefer_interp is set, go with mm->interpreted_file
+ * instead.
+ *
+ * Returns %NULL if mm has no associated executable/interpreted file.
+ * User must release file via fput().
+ */
+static inline struct file *__get_mm_exe_or_interp_file(struct mm_struct *mm,
+						       bool prefer_interp)
 {
 	struct file *exe_file;
 
+	rcu_read_lock();
+
+	if (unlikely(prefer_interp))
+		exe_file = rcu_dereference(mm->interpreted_file);
+	else
+		exe_file = rcu_dereference(mm->exe_file);
+
+	if (exe_file && !get_file_rcu(exe_file))
+		exe_file = NULL;
+	rcu_read_unlock();
+	return exe_file;
+}
+
+struct file *get_mm_exe_file(struct mm_struct *mm)
+{
+	return __get_mm_exe_or_interp_file(mm, false);
+}
+
+static void dup_mm_exe_file(struct mm_struct *mm, struct mm_struct *oldmm)
+{
+	struct file *exe_file, *interp_file;
+
 	exe_file = get_mm_exe_file(oldmm);
 	RCU_INIT_POINTER(mm->exe_file, exe_file);
+
+	interp_file = __get_mm_exe_or_interp_file(oldmm, true);
+	RCU_INIT_POINTER(mm->interpreted_file, interp_file);
+
 	/*
 	 * We depend on the oldmm having properly denied write access to the
 	 * exe_file already.
@@ -1279,6 +1314,7 @@ static struct mm_struct *mm_init(struct mm_struct *mm, struct task_struct *p,
 	mm_init_owner(mm, p);
 	mm_pasid_init(mm);
 	RCU_INIT_POINTER(mm->exe_file, NULL);
+	RCU_INIT_POINTER(mm->interpreted_file, NULL);
 	mmu_notifier_subscriptions_init(mm);
 	init_tlb_flush_pending(mm);
 #if defined(CONFIG_TRANSPARENT_HUGEPAGE) && !USE_SPLIT_PMD_PTLOCKS
@@ -1348,7 +1384,7 @@ static inline void __mmput(struct mm_struct *mm)
 	khugepaged_exit(mm); /* must run before exit_mmap */
 	exit_mmap(mm);
 	mm_put_huge_zero_page(mm);
-	set_mm_exe_file(mm, NULL);
+	set_mm_exe_file(mm, NULL, NULL);
 	if (!list_empty(&mm->mmlist)) {
 		spin_lock(&mmlist_lock);
 		list_del(&mm->mmlist);
@@ -1394,7 +1430,9 @@ EXPORT_SYMBOL_GPL(mmput_async);
 /**
  * set_mm_exe_file - change a reference to the mm's executable file
  *
- * This changes mm's executable file (shown as symlink /proc/[pid]/exe).
+ * This changes mm's executable file (shown as symlink /proc/[pid]/exe),
+ * and if new_interpreted_file != NULL, also sets this field (check the
+ * binfmt_misc documentation, flag 'I', for details about this).
  *
  * Main users are mmput() and sys_execve(). Callers prevent concurrent
  * invocations: in mmput() nobody alive left, in execve it happens before
@@ -1402,16 +1440,19 @@ EXPORT_SYMBOL_GPL(mmput_async);
  *
  * Can only fail if new_exe_file != NULL.
  */
-int set_mm_exe_file(struct mm_struct *mm, struct file *new_exe_file)
+int set_mm_exe_file(struct mm_struct *mm, struct file *new_exe_file,
+		    struct file *new_interpreted_file)
 {
 	struct file *old_exe_file;
+	struct file *old_interpreted_file;
 
 	/*
-	 * It is safe to dereference the exe_file without RCU as
-	 * this function is only called if nobody else can access
-	 * this mm -- see comment above for justification.
+	 * It is safe to dereference exe_file / interpreted_file
+	 * without RCU as this function is only called if nobody else
+	 * can access this mm -- see comment above for justification.
 	 */
 	old_exe_file = rcu_dereference_raw(mm->exe_file);
+	old_interpreted_file = rcu_dereference_raw(mm->interpreted_file);
 
 	if (new_exe_file) {
 		/*
@@ -1423,10 +1464,20 @@ int set_mm_exe_file(struct mm_struct *mm, struct file *new_exe_file)
 		get_file(new_exe_file);
 	}
 	rcu_assign_pointer(mm->exe_file, new_exe_file);
+
+	/* For this one we don't care about write access... */
+	if (new_interpreted_file)
+		get_file(new_interpreted_file);
+	rcu_assign_pointer(mm->interpreted_file, new_interpreted_file);
+
 	if (old_exe_file) {
 		allow_write_access(old_exe_file);
 		fput(old_exe_file);
 	}
+
+	if (old_interpreted_file)
+		fput(old_interpreted_file);
+
 	return 0;
 }
 
@@ -1436,6 +1487,12 @@ int set_mm_exe_file(struct mm_struct *mm, struct file *new_exe_file)
  * This changes mm's executable file (shown as symlink /proc/[pid]/exe).
  *
  * Main user is sys_prctl(PR_SET_MM_MAP/EXE_FILE).
+ *
+ * FIXME (BINPRM_FLAGS_EXPOSE_INTERP): imagine user performs the sys_prctl()
+ * aiming to change /proc/self/exe symlink - suppose user is interested
+ * in the executable path itself. With binfmt_misc flag 'I', this change
+ * **won't reflect** since procfs make use of interpreted_file. What to do
+ * in this case? Do we care?
  */
 int replace_mm_exe_file(struct mm_struct *mm, struct file *new_exe_file)
 {
@@ -1482,31 +1539,15 @@ int replace_mm_exe_file(struct mm_struct *mm, struct file *new_exe_file)
 }
 
 /**
- * get_mm_exe_file - acquire a reference to the mm's executable file
- *
- * Returns %NULL if mm has no associated executable file.
- * User must release file via fput().
- */
-struct file *get_mm_exe_file(struct mm_struct *mm)
-{
-	struct file *exe_file;
-
-	rcu_read_lock();
-	exe_file = rcu_dereference(mm->exe_file);
-	if (exe_file && !get_file_rcu(exe_file))
-		exe_file = NULL;
-	rcu_read_unlock();
-	return exe_file;
-}
-
-/**
- * get_task_exe_file - acquire a reference to the task's executable file
+ * get_task_exe_file - acquire a reference to the task's executable or
+ * interpreted file (only for procfs, when under binfmt_misc with flag 'I').
  *
  * Returns %NULL if task's mm (if any) has no associated executable file or
  * this is a kernel thread with borrowed mm (see the comment above get_task_mm).
  * User must release file via fput().
  */
-struct file *get_task_exe_file(struct task_struct *task)
+struct file *get_task_exe_file(struct task_struct *task,
+			       bool prefer_interpreted)
 {
 	struct file *exe_file = NULL;
 	struct mm_struct *mm;
@@ -1514,8 +1555,14 @@ struct file *get_task_exe_file(struct task_struct *task)
 	task_lock(task);
 	mm = task->mm;
 	if (mm) {
-		if (!(task->flags & PF_KTHREAD))
-			exe_file = get_mm_exe_file(mm);
+		if (!(task->flags & PF_KTHREAD)) {
+			if (unlikely(prefer_interpreted)) {
+				exe_file = __get_mm_exe_or_interp_file(mm, true);
+				if (!exe_file)
+					exe_file = get_mm_exe_file(mm);
+			} else
+				exe_file = get_mm_exe_file(mm);
+		}
 	}
 	task_unlock(task);
 	return exe_file;

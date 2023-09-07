@@ -62,6 +62,11 @@ static void print_task_path_n_nm(struct task_struct *tsk)
 	if (!mm)
 		goto done;
 
+	/*
+	 * FIXME (BINPRM_FLAGS_EXPOSE_INTERP): observe that if using binfmt_misc
+	 * with flag 'I' set, this functionality will diverge from the
+	 * /proc/self/exe symlink with regards of what executable is running.
+	 */
 	exe_file = get_mm_exe_file(mm);
 	mmput(mm);
 

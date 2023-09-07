@@ -1912,6 +1912,11 @@ static int prctl_set_mm_exe_file(struct mm_struct *mm, unsigned int fd)
 	if (err)
 		goto exit;
 
+	/*
+	 * FIXME (BINPRM_FLAGS_EXPOSE_INTERP): please read the comment
+	 * on replace_mm_exe_file() to ponder about the divergence when
+	 * using binfmt_misc with flag 'I'.
+	 */
 	err = replace_mm_exe_file(mm, exe.file);
 exit:
 	fdput(exe);
