@@ -1675,6 +1675,7 @@ static void __init early_paging_init(const struct machine_desc *mdesc)
 	/* Run the patch stub to update the constants */
 	fixup_pv_table(&__pv_table_begin,
 		(&__pv_table_end - &__pv_table_begin) << 2);
+	flush_cache_all();
 
 	/*
 	 * We changing not only the virtual to physical mapping, but also
@@ -1690,7 +1691,6 @@ static void __init early_paging_init(const struct machine_desc *mdesc)
 	asm("mrc p15, 0, %0, c2, c0, 2" : "=r" (ttbcr));
 	asm volatile("mcr p15, 0, %0, c2, c0, 2"
 		: : "r" (ttbcr & ~(3 << 8 | 3 << 10)));
-	flush_cache_all();
 
 	/*
 	 * Fixup the page tables - this must be in the idmap region as
