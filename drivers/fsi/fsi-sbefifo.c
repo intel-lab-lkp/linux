@@ -113,7 +113,6 @@ enum sbe_state
 #define SBEFIFO_TIMEOUT_IN_RSP		1000
 
 /* Other constants */
-#define SBEFIFO_MAX_USER_CMD_LEN	(0x100000 + PAGE_SIZE)
 #define SBEFIFO_RESET_MAGIC		0x52534554 /* "RSET" */
 
 struct sbefifo {
@@ -875,8 +874,6 @@ static ssize_t sbefifo_user_write(struct file *file, const char __user *buf,
 	if (!user)
 		return -EINVAL;
 	sbefifo = user->sbefifo;
-	if (len > SBEFIFO_MAX_USER_CMD_LEN)
-		return -EINVAL;
 	if (len & 3)
 		return -EINVAL;
 
