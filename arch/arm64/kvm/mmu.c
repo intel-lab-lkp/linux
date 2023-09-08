@@ -1408,6 +1408,7 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 	long vma_pagesize, fault_granule;
 	enum kvm_pgtable_prot prot = KVM_PGTABLE_PROT_R;
 	struct kvm_pgtable *pgt;
+	uint64_t memory_fault_flags;
 
 	fault_granule = 1UL << ARM64_HW_PGTABLE_LEVEL_SHIFT(fault_level);
 	write_fault = kvm_is_write_fault(vcpu);
@@ -1507,8 +1508,18 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 		kvm_send_hwpoison_signal(hva, vma_shift);
 		return 0;
 	}
-	if (is_error_noslot_pfn(pfn))
+	if (is_error_noslot_pfn(pfn)) {
+		memory_fault_flags = 0;
+		if (write_fault)
+			memory_fault_flags = KVM_MEMORY_FAULT_FLAG_EXEC;
+		else if (exec_fault)
+			memory_fault_flags = KVM_MEMORY_FAULT_FLAG_EXEC;
+		else
+			memory_fault_flags = KVM_MEMORY_FAULT_FLAG_READ;
+		kvm_handle_guest_uaccess_fault(vcpu, round_down(gfn * PAGE_SIZE, vma_pagesize),
+					       vma_pagesize, memory_fault_flags);
 		return -EFAULT;
+	}
 
 	if (kvm_is_device_pfn(pfn)) {
 		/*
