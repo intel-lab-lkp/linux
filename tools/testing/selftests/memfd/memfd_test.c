@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
@@ -38,6 +39,10 @@
 		    F_SEAL_EXEC)
 
 #define MFD_NOEXEC_SEAL	0x0008U
+
+#ifndef MEMFD_CHECK_IF_ORIGINAL
+#define MEMFD_CHECK_IF_ORIGINAL _IOR(0xB8, 0, int)
+#endif
 
 /*
  * Default is not to test hugetlbfs
@@ -1567,6 +1572,31 @@ static void test_share_fork(char *banner, char *b_suffix)
 	close(fd);
 }
 
+static void test_ioctl_check_original(void)
+{
+	int fd, fd2;
+
+	printf("%s IOCTL-CHECK-ORIGINAL\n", memfd_str);
+	fd = sys_memfd_create("kern_memfd_check_original", 0);
+	if (fd < 0) {
+		printf("memfd_create failed: %m\n");
+		abort();
+	}
+	if (ioctl(fd, MEMFD_CHECK_IF_ORIGINAL) != 1) {
+		printf("ioctl(MEMFD_CHECK_IF_ORIGINAL) failed\n");
+		abort();
+	}
+
+	fd2 = mfd_assert_reopen_fd(fd);
+	if (ioctl(fd2, MEMFD_CHECK_IF_ORIGINAL) != 0) {
+		printf("ioctl(MEMFD_CHECK_IF_ORIGINAL) failed\n");
+		abort();
+	}
+
+	close(fd);
+	close(fd2);
+}
+
 int main(int argc, char **argv)
 {
 	pid_t pid;
@@ -1608,6 +1638,8 @@ int main(int argc, char **argv)
 	test_share_mmap("SHARE-MMAP", "");
 	test_share_open("SHARE-OPEN", "");
 	test_share_fork("SHARE-FORK", "");
+
+	test_ioctl_check_original();
 
 	/* Run test-suite in a multi-threaded environment with a shared
 	 * file-table. */
