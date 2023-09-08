@@ -356,7 +356,7 @@ struct inc_thread_test_data {
 };
 
 struct percpu_list_node {
-	intptr_t data;
+	_Atomic intptr_t data;
 	struct percpu_list_node *next;
 };
 
@@ -1212,8 +1212,8 @@ static int set_signal_handler(void)
 /* Test MEMBARRIER_CMD_PRIVATE_RESTART_RSEQ_ON_CPU membarrier command. */
 #ifdef TEST_MEMBARRIER
 struct test_membarrier_thread_args {
-	int stop;
-	intptr_t percpu_list_ptr;
+	_Atomic int stop;
+	_Atomic intptr_t percpu_list_ptr;
 };
 
 /* Worker threads modify data in their "active" percpu lists. */
@@ -1240,7 +1240,7 @@ void *test_membarrier_worker_thread(void *arg)
 			int cpu = get_current_cpu_id();
 
 			ret = rseq_offset_deref_addv(RSEQ_MO_RELAXED, RSEQ_PERCPU,
-				&args->percpu_list_ptr,
+				(intptr_t*)&args->percpu_list_ptr,
 				sizeof(struct percpu_list_entry) * cpu, 1, cpu);
 		} while (rseq_unlikely(ret));
 	}
