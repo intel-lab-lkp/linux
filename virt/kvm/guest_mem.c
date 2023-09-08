@@ -390,7 +390,7 @@ static int __kvm_gmem_create(struct kvm *kvm, loff_t size, u64 flags,
 	inode->i_size = size;
 	mapping_set_gfp_mask(inode->i_mapping, GFP_HIGHUSER);
 	mapping_set_large_folios(inode->i_mapping);
-	mapping_set_unevictable(inode->i_mapping);
+	/* this also sets the mapping as unevictable */
 	mapping_set_unmovable(inode->i_mapping);
 
 	fd = get_unused_fd_flags(0);
