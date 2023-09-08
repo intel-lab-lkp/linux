@@ -471,4 +471,3 @@ const struct blk_integrity_profile ext_pi_type3_crc64 = {
 EXPORT_SYMBOL_GPL(ext_pi_type3_crc64);
 
 MODULE_LICENSE("GPL");
-MODULE_LICENSE("GPL");
