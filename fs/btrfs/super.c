@@ -889,7 +889,7 @@ static int btrfs_parse_device_options(const char *options, blk_mode_t flags)
 				error = -ENOMEM;
 				goto out;
 			}
-			device = btrfs_scan_one_device(device_name, flags);
+			device = btrfs_scan_one_device(device_name, flags, false);
 			kfree(device_name);
 			if (IS_ERR(device)) {
 				error = PTR_ERR(device);
@@ -1484,7 +1484,12 @@ static struct dentry *btrfs_mount_root(struct file_system_type *fs_type,
 		goto error_fs_info;
 	}
 
-	device = btrfs_scan_one_device(device_name, mode);
+	device = btrfs_scan_one_device(device_name, mode, true);
+	/*
+	 * As we passed 'true' in 3rd the argument, we need proper error code,
+	 * not null.
+	 */
+	ASSERT(device != NULL);
 	if (IS_ERR(device)) {
 		mutex_unlock(&uuid_mutex);
 		error = PTR_ERR(device);
@@ -2196,7 +2201,8 @@ static long btrfs_control_ioctl(struct file *file, unsigned int cmd,
 	switch (cmd) {
 	case BTRFS_IOC_SCAN_DEV:
 		mutex_lock(&uuid_mutex);
-		device = btrfs_scan_one_device(vol->name, BLK_OPEN_READ);
+		device = btrfs_scan_one_device(vol->name, BLK_OPEN_READ, false);
+		/* Return success i.e. 0 for device == NULL */
 		ret = PTR_ERR_OR_ZERO(device);
 		mutex_unlock(&uuid_mutex);
 		break;
@@ -2210,9 +2216,10 @@ static long btrfs_control_ioctl(struct file *file, unsigned int cmd,
 		break;
 	case BTRFS_IOC_DEVICES_READY:
 		mutex_lock(&uuid_mutex);
-		device = btrfs_scan_one_device(vol->name, BLK_OPEN_READ);
-		if (IS_ERR(device)) {
+		device = btrfs_scan_one_device(vol->name, BLK_OPEN_READ, false);
+		if (IS_ERR_OR_NULL(device)) {
 			mutex_unlock(&uuid_mutex);
+			/* Return success i.e. 0 for device == NULL */
 			ret = PTR_ERR(device);
 			break;
 		}
