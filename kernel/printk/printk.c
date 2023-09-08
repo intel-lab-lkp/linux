@@ -3329,12 +3329,6 @@ static void try_enable_default_console(struct console *newcon)
 		newcon->flags |= CON_CONSDEV;
 }
 
-#define con_printk(lvl, con, fmt, ...)				\
-	printk(lvl pr_fmt("%s%sconsole [%s%d] " fmt),		\
-	       (con->flags & CON_NBCON) ? "" : "legacy ",	\
-	       (con->flags & CON_BOOT) ? "boot" : "",		\
-	       con->name, con->index, ##__VA_ARGS__)
-
 static void console_init_seq(struct console *newcon, bool bootcon_registered)
 {
 	struct console *con;
@@ -3446,6 +3440,15 @@ void register_console(struct console *newcon)
 		pr_info("Too late to register bootconsole %s%d\n",
 			newcon->name, newcon->index);
 		goto unlock;
+	}
+
+	if (newcon->flags & CON_NBCON) {
+		/*
+		 * Ensure the nbcon console buffers can be allocated
+		 * before modifying any global data.
+		 */
+		if (!nbcon_alloc(newcon))
+			goto unlock;
 	}
 
 	/*
@@ -3587,7 +3590,7 @@ static int unregister_console_locked(struct console *console)
 	synchronize_srcu(&console_srcu);
 
 	if (console->flags & CON_NBCON)
-		nbcon_cleanup(console);
+		nbcon_free(console);
 
 	console_sysfs_notify();
 

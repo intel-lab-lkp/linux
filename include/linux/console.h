@@ -234,6 +234,7 @@ enum nbcon_prio {
 };
 
 struct console;
+struct printk_buffers;
 
 /**
  * struct nbcon_context - Context for console acquire/release
@@ -244,6 +245,7 @@ struct console;
  *				be used only with NBCON_PRIO_PANIC @prio. It
  *				might cause a system freeze when the console
  *				is used later.
+ * @pbufs:			Pointer to the text buffer for this context
  */
 struct nbcon_context {
 	/* members set by caller */
@@ -251,6 +253,9 @@ struct nbcon_context {
 	unsigned int		spinwait_max_us;
 	enum nbcon_prio		prio;
 	unsigned int		allow_unsafe_takeover	: 1;
+
+	/* members set by acquire */
+	struct printk_buffers	*pbufs;
 };
 
 /**
@@ -274,6 +279,7 @@ struct nbcon_context {
  * @node:		hlist node for the console list
  *
  * @nbcon_state:	State for nbcon consoles
+ * @pbufs:		Pointer to nbcon private buffer
  */
 struct console {
 	char			name[16];
@@ -296,6 +302,7 @@ struct console {
 
 	/* nbcon console specific members */
 	atomic_t		__private nbcon_state;
+	struct printk_buffers	*pbufs;
 };
 
 #ifdef CONFIG_LOCKDEP
