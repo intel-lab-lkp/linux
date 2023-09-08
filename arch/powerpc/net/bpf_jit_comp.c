@@ -26,28 +26,6 @@ static void bpf_jit_fill_ill_insns(void *area, unsigned int size)
 	memset32(area, BREAKPOINT_INSTRUCTION, size / 4);
 }
 
-/*
- * Patch 'len' bytes of instructions from opcode to addr, one instruction
- * at a time. Returns addr on success. ERR_PTR(-EINVAL), otherwise.
- */
-static void *bpf_patch_instructions(void *addr, void *opcode, size_t len, bool fill_insn)
-{
-	while (len > 0) {
-		ppc_inst_t insn = ppc_inst_read(opcode);
-		int ilen = ppc_inst_len(insn);
-
-		if (patch_instruction(addr, insn))
-			return ERR_PTR(-EINVAL);
-
-		len -= ilen;
-		addr = addr + ilen;
-		if (!fill_insn)
-			opcode = opcode + ilen;
-	}
-
-	return addr;
-}
-
 int bpf_jit_emit_exit_insn(u32 *image, struct codegen_context *ctx, int tmp_reg, long exit_addr)
 {
 	if (!exit_addr || is_offset_in_branch_range(exit_addr - (ctx->idx * 4))) {
@@ -330,31 +308,31 @@ int bpf_add_extable_entry(struct bpf_prog *fp, u32 *image, u32 *fimage, int pass
 
 void *bpf_arch_text_copy(void *dst, void *src, size_t len)
 {
-	void *ret;
+	int err;
 
 	if (WARN_ON_ONCE(core_kernel_text((unsigned long)dst)))
 		return ERR_PTR(-EINVAL);
 
 	mutex_lock(&text_mutex);
-	ret = bpf_patch_instructions(dst, src, len, false);
+	err = patch_instructions(dst, src, len, false);
 	mutex_unlock(&text_mutex);
 
-	return ret;
+	return err ? ERR_PTR(err) : dst;
 }
 
 int bpf_arch_text_invalidate(void *dst, size_t len)
 {
 	u32 insn = BREAKPOINT_INSTRUCTION;
-	void *ret;
+	int ret;
 
 	if (WARN_ON_ONCE(core_kernel_text((unsigned long)dst)))
 		return -EINVAL;
 
 	mutex_lock(&text_mutex);
-	ret = bpf_patch_instructions(dst, &insn, len, true);
+	ret = patch_instructions(dst, &insn, len, true);
 	mutex_unlock(&text_mutex);
 
-	return IS_ERR(ret) ? PTR_ERR(ret) : 0;
+	return ret;
 }
 
 void bpf_jit_free(struct bpf_prog *fp)
