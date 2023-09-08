@@ -3043,8 +3043,12 @@ int kvm_vcpu_read_guest_page(struct kvm_vcpu *vcpu, gfn_t gfn, void *data,
 			     int offset, int len)
 {
 	struct kvm_memory_slot *slot = kvm_vcpu_gfn_to_memslot(vcpu, gfn);
+	int r = __kvm_read_guest_page(slot, gfn, data, offset, len);
 
-	return __kvm_read_guest_page(slot, gfn, data, offset, len);
+	if (r)
+		kvm_handle_guest_uaccess_fault(vcpu, gfn * PAGE_SIZE + offset,
+					       len, KVM_MEMORY_FAULT_FLAG_READ);
+	return r;
 }
 EXPORT_SYMBOL_GPL(kvm_vcpu_read_guest_page);
 
@@ -3149,8 +3153,12 @@ int kvm_vcpu_write_guest_page(struct kvm_vcpu *vcpu, gfn_t gfn,
 			      const void *data, int offset, int len)
 {
 	struct kvm_memory_slot *slot = kvm_vcpu_gfn_to_memslot(vcpu, gfn);
+	int r = __kvm_write_guest_page(vcpu->kvm, slot, gfn, data, offset, len);
 
-	return __kvm_write_guest_page(vcpu->kvm, slot, gfn, data, offset, len);
+	if (r)
+		kvm_handle_guest_uaccess_fault(vcpu, gfn * PAGE_SIZE + offset,
+					       len, KVM_MEMORY_FAULT_FLAG_WRITE);
+	return r;
 }
 EXPORT_SYMBOL_GPL(kvm_vcpu_write_guest_page);
 
