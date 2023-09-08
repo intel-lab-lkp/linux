@@ -617,7 +617,7 @@ static inline bool can_reclaim_anon_pages(struct mem_cgroup *memcg,
 		if (get_nr_swap_pages() > 0)
 			return true;
 		/* Is there any swapcache pages to reclaim? */
-		if (total_swapcache_pages() > 0) {
+		if (sc && total_swapcache_pages() > 0) {
 			sc->swapcache_only = 1;
 			return true;
 		}
@@ -626,7 +626,7 @@ static inline bool can_reclaim_anon_pages(struct mem_cgroup *memcg,
 		if (mem_cgroup_get_nr_swap_pages(memcg) > 0)
 			return true;
 		/* Is there any swapcache pages in memcg to reclaim? */
-		if (mem_cgroup_get_nr_swapcache_pages(memcg) > 0) {
+		if (sc && mem_cgroup_get_nr_swapcache_pages(memcg) > 0) {
 			sc->swapcache_only = 1;
 			return true;
 		}
