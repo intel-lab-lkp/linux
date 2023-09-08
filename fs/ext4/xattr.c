@@ -376,6 +376,8 @@ static void ext4_xattr_inode_set_hash(struct inode *ea_inode, u32 hash)
 	ea_inode->i_atime.tv_sec = hash;
 }
 
+#define MAX_BHS_SIZE 8
+
 /*
  * Read the EA value from an inode.
  */
@@ -384,11 +386,11 @@ static int ext4_xattr_inode_read(struct inode *ea_inode, void *buf, size_t size)
 	int blocksize = 1 << ea_inode->i_blkbits;
 	int bh_count = (size + blocksize - 1) >> ea_inode->i_blkbits;
 	int tail_size = (size % blocksize) ?: blocksize;
-	struct buffer_head *bhs_inline[8];
+	struct buffer_head *bhs_inline[MAX_BHS_SIZE];
 	struct buffer_head **bhs = bhs_inline;
 	int i, ret;
 
-	if (bh_count > ARRAY_SIZE(bhs_inline)) {
+	if (bh_count > MAX_BHS_SIZE) {
 		bhs = kmalloc_array(bh_count, sizeof(*bhs), GFP_NOFS);
 		if (!bhs)
 			return -ENOMEM;
@@ -3093,9 +3095,8 @@ ext4_xattr_cmp(struct ext4_xattr_header *header1,
 		entry1 = EXT4_XATTR_NEXT(entry1);
 		entry2 = EXT4_XATTR_NEXT(entry2);
 	}
-	if (!IS_LAST_ENTRY(entry2))
-		return 1;
-	return 0;
+
+	return (IS_LAST_ENTRY(entry2)) ? 0 : 1;
 }
 
 /*
