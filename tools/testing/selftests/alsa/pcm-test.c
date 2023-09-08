@@ -161,8 +161,11 @@ static void find_pcms(void)
 	snd_pcm_info_alloca(&pcm_info);
 
 	card = -1;
-	if (snd_card_next(&card) < 0 || card < 0)
-		return;
+	err = snd_card_next(&card);
+	if (err < 0)
+		ksft_exit_skip("Couldn't open first soundcard. rc=%d\n", err);
+	if (card < 0)
+		ksft_exit_skip("No soundcard available\n");
 
 	config = get_alsalib_config();
 
