@@ -7,30 +7,32 @@
 #ifndef __PINCTRL_SPRD_H__
 #define __PINCTRL_SPRD_H__
 
+#include <linux/bits.h>
+
 struct platform_device;
 
-#define NUM_OFFSET	(20)
-#define TYPE_OFFSET	(16)
-#define BIT_OFFSET	(8)
-#define WIDTH_OFFSET	(4)
+#define NUM_OFFSET	22
+#define TYPE_OFFSET	18
+#define BIT_OFFSET	10
+#define WIDTH_OFFSET	6
 
 #define SPRD_PIN_INFO(num, type, offset, width, reg)	\
-		(((num) & 0xFFF) << NUM_OFFSET |	\
-		 ((type) & 0xF) << TYPE_OFFSET |	\
-		 ((offset) & 0xFF) << BIT_OFFSET |	\
-		 ((width) & 0xF) << WIDTH_OFFSET |	\
-		 ((reg) & 0xF))
+		(((num) & GENMASK(10, 0)) << NUM_OFFSET |	\
+		 ((type) & GENMASK(3, 0)) << TYPE_OFFSET |	\
+		 ((offset) & GENMASK(7, 0)) << BIT_OFFSET |	\
+		 ((width) & GENMASK(3, 0)) << WIDTH_OFFSET |	\
+		 ((reg) & GENMASK(5, 0)))
 
 #define SPRD_PINCTRL_PIN(pin)	SPRD_PINCTRL_PIN_DATA(pin, #pin)
 
 #define SPRD_PINCTRL_PIN_DATA(a, b)				\
 	{							\
 		.name = b,					\
-		.num = (((a) >> NUM_OFFSET) & 0xfff),		\
-		.type = (((a) >> TYPE_OFFSET) & 0xf),		\
-		.bit_offset = (((a) >> BIT_OFFSET) & 0xff),	\
-		.bit_width = ((a) >> WIDTH_OFFSET & 0xf),	\
-		.reg = ((a) & 0xf)				\
+		.num = (((a) & GENMASK(31, 22)) >> NUM_OFFSET),	\
+		.type = (((a) & GENMASK(21, 18)) >> TYPE_OFFSET),	\
+		.bit_offset = (((a) & GENMASK(17, 10)) >> BIT_OFFSET),	\
+		.bit_width = (((a) & GENMASK(9, 6)) >> WIDTH_OFFSET),	\
+		.reg = ((a) & GENMASK(5, 0))				\
 	}
 
 enum pin_type {
