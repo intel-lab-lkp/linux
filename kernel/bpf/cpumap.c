@@ -248,11 +248,11 @@ static int cpu_map_bpf_prog_run(struct bpf_cpu_map_entry *rcpu, void **frames,
 
 	nframes = cpu_map_bpf_prog_run_xdp(rcpu, frames, xdp_n, stats);
 
-	if (stats->redirect)
-		xdp_do_flush();
-
 	if (unlikely(!list_empty(list)))
 		cpu_map_bpf_prog_run_skb(rcpu, list, stats);
+
+	if (stats->redirect)
+		xdp_do_flush();
 
 	rcu_read_unlock_bh(); /* resched point, may call do_softirq() */
 
