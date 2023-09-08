@@ -3481,9 +3481,6 @@ cont_skip:
 		(*idx)++;
 	}
 
-	if (reset && *idx)
-		audit_log_rule_reset(table, cb->seq, *idx);
-
 	return 0;
 }
 
@@ -3494,11 +3491,12 @@ static int nf_tables_dump_rules(struct sk_buff *skb,
 	const struct nft_rule_dump_ctx *ctx = cb->data;
 	struct nft_table *table;
 	const struct nft_chain *chain;
-	unsigned int idx = 0;
+	unsigned int idx = 0, s_idx;
 	struct net *net = sock_net(skb->sk);
 	int family = nfmsg->nfgen_family;
 	struct nftables_pernet *nft_net;
 	bool reset = false;
+	int ret;
 
 	if (NFNL_MSG_TYPE(cb->nlh->nlmsg_type) == NFT_MSG_GETRULE_RESET)
 		reset = true;
@@ -3529,16 +3527,23 @@ static int nf_tables_dump_rules(struct sk_buff *skb,
 						       cb, table, chain, reset);
 				break;
 			}
+			if (reset && idx > cb->args[0])
+				audit_log_rule_reset(table, cb->seq,
+						     idx - cb->args[0]);
 			goto done;
 		}
 
+		s_idx = max_t(long, idx, cb->args[0]);
 		list_for_each_entry_rcu(chain, &table->chains, list) {
-			if (__nf_tables_dump_rules(skb, &idx,
-						   cb, table, chain, reset))
-				goto done;
+			ret = __nf_tables_dump_rules(skb, &idx,
+						     cb, table, chain, reset);
+			if (ret)
+				break;
 		}
+		if (reset && idx > s_idx)
+			audit_log_rule_reset(table, cb->seq, idx - s_idx);
 
-		if (ctx && ctx->table)
+		if ((ctx && ctx->table) || ret)
 			break;
 	}
 done:
