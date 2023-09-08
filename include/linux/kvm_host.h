@@ -2353,4 +2353,13 @@ static inline void kvm_handle_guest_uaccess_fault(struct kvm_vcpu *vcpu,
 	vcpu->run->memory_fault.flags = flags;
 }
 
+/*
+ * Whether non-atomic accesses to the userspace mapping of the memslot should
+ * be upgraded when possible.
+ */
+static inline bool kvm_is_slot_userfault_on_missing(const struct kvm_memory_slot *slot)
+{
+	return slot && slot->flags & KVM_MEM_USERFAULT_ON_MISSING;
+}
+
 #endif

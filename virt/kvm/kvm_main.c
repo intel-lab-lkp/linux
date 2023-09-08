@@ -1553,6 +1553,9 @@ static int check_memory_region_flags(const struct kvm_userspace_memory_region *m
 	valid_flags |= KVM_MEM_READONLY;
 #endif
 
+	if (IS_ENABLED(CONFIG_HAVE_KVM_USERFAULT_ON_MISSING))
+		valid_flags |= KVM_MEM_USERFAULT_ON_MISSING;
+
 	if (mem->flags & ~valid_flags)
 		return -EINVAL;
 
@@ -4588,6 +4591,8 @@ static int kvm_vm_ioctl_check_extension_generic(struct kvm *kvm, long arg)
 	case KVM_CAP_BINARY_STATS_FD:
 	case KVM_CAP_SYSTEM_EVENT_DATA:
 		return 1;
+	case KVM_CAP_USERFAULT_ON_MISSING:
+		return IS_ENABLED(CONFIG_HAVE_KVM_USERFAULT_ON_MISSING);
 	default:
 		break;
 	}
