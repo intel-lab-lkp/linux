@@ -1930,6 +1930,10 @@ fail:
 		}
 	}
 
+	/* It is fragile to block POLLED IO, so switch to NON_BLOCK */
+	if ((req->ctx->flags & IORING_SETUP_IOPOLL) && def->iopoll_queue)
+		issue_flags |= IO_URING_F_NONBLOCK;
+
 	do {
 		ret = io_issue_sqe(req, issue_flags);
 		if (ret != -EAGAIN)
@@ -3361,6 +3365,12 @@ end_wait:
 		finish_wait(&tctx->wait, &wait);
 	} while (1);
 
+	/*
+	 * Reap events from each ctx, otherwise these requests may take
+	 * resources and prevent other contexts from being moved on.
+	 */
+	xa_for_each(&tctx->xa, index, node)
+		io_iopoll_try_reap_events(node->ctx);
 	io_uring_clean_tctx(tctx);
 	if (cancel_all) {
 		/*
