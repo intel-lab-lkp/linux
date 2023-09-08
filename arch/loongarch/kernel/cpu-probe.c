@@ -88,7 +88,7 @@ static void set_isa(struct cpuinfo_loongarch *c, unsigned int isa)
 
 static void cpu_probe_common(struct cpuinfo_loongarch *c)
 {
-	unsigned int config;
+	unsigned int config, stlbsets, stlbways, mtlbs;
 	unsigned long asid_mask;
 
 	c->options = LOONGARCH_CPU_CPUCFG | LOONGARCH_CPU_CSR |
@@ -173,28 +173,35 @@ static void cpu_probe_common(struct cpuinfo_loongarch *c)
 	c->ksave_mask &= ~(EXC_KSAVE_MASK | PERCPU_KSAVE_MASK | KVM_KSAVE_MASK);
 
 	config = read_csr_prcfg3();
+	stlbsets = 0;
+	c->tlbsize = 0;
 	switch (config & CSR_CONF3_TLBTYPE) {
 	case 0:
-		c->tlbsizemtlb = 0;
-		c->tlbsizestlbsets = 0;
-		c->tlbsizestlbways = 0;
+		mtlbs = 0;
+		stlbsets = 0;
+		stlbways = 0;
 		c->tlbsize = 0;
 		break;
 	case 1:
-		c->tlbsizemtlb = ((config & CSR_CONF3_MTLBSIZE) >> CSR_CONF3_MTLBSIZE_SHIFT) + 1;
-		c->tlbsizestlbsets = 0;
-		c->tlbsizestlbways = 0;
-		c->tlbsize = c->tlbsizemtlb + c->tlbsizestlbsets * c->tlbsizestlbways;
+		mtlbs = ((config & CSR_CONF3_MTLBSIZE) >> CSR_CONF3_MTLBSIZE_SHIFT) + 1;
+		stlbsets = 0;
+		stlbways = 0;
+		c->tlbsize = mtlbs + stlbsets * stlbways;
 		break;
 	case 2:
-		c->tlbsizemtlb = ((config & CSR_CONF3_MTLBSIZE) >> CSR_CONF3_MTLBSIZE_SHIFT) + 1;
-		c->tlbsizestlbsets = 1 << ((config & CSR_CONF3_STLBIDX) >> CSR_CONF3_STLBIDX_SHIFT);
-		c->tlbsizestlbways = ((config & CSR_CONF3_STLBWAYS) >> CSR_CONF3_STLBWAYS_SHIFT) + 1;
-		c->tlbsize = c->tlbsizemtlb + c->tlbsizestlbsets * c->tlbsizestlbways;
+		mtlbs = ((config & CSR_CONF3_MTLBSIZE) >> CSR_CONF3_MTLBSIZE_SHIFT) + 1;
+		stlbsets = 1 << ((config & CSR_CONF3_STLBIDX) >> CSR_CONF3_STLBIDX_SHIFT);
+		stlbways = ((config & CSR_CONF3_STLBWAYS) >> CSR_CONF3_STLBWAYS_SHIFT) + 1;
+		c->tlbsize = mtlbs + stlbsets * stlbways;
 		break;
 	default:
 		pr_warn("Warning: unknown TLB type\n");
 	}
+
+	if (stlbsets)
+		c->tlb_flush_threshold = c->tlbsize / 8;
+	else
+		c->tlb_flush_threshold = c->tlbsize / 2;
 }
 
 #define MAX_NAME_LEN	32

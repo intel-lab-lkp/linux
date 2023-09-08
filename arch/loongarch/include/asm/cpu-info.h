@@ -47,9 +47,7 @@ struct cpuinfo_loongarch {
 	unsigned int		cputype;
 	int			isa_level;
 	int			tlbsize;
-	int			tlbsizemtlb;
-	int			tlbsizestlbsets;
-	int			tlbsizestlbways;
+	int			tlb_flush_threshold;
 	int			cache_leaves_present; /* number of cache_leaves[] elements */
 	struct cache_desc	cache_leaves[CACHE_LEAVES_MAX];
 	int			core;   /* physical core number in package */

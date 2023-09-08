@@ -66,9 +66,7 @@ void local_flush_tlb_range(struct vm_area_struct *vma, unsigned long start,
 		start = round_down(start, PAGE_SIZE << 1);
 		end = round_up(end, PAGE_SIZE << 1);
 		size = (end - start) >> (PAGE_SHIFT + 1);
-		if (size <= (current_cpu_data.tlbsizestlbsets ?
-			     current_cpu_data.tlbsize / 8 :
-			     current_cpu_data.tlbsize / 2)) {
+		if (size <= current_cpu_data.tlb_flush_threshold) {
 			int asid = cpu_asid(cpu, mm);
 
 			while (start < end) {
@@ -91,10 +89,7 @@ void local_flush_tlb_kernel_range(unsigned long start, unsigned long end)
 	local_irq_save(flags);
 	size = (end - start + (PAGE_SIZE - 1)) >> PAGE_SHIFT;
 	size = (size + 1) >> 1;
-	if (size <= (current_cpu_data.tlbsizestlbsets ?
-		     current_cpu_data.tlbsize / 8 :
-		     current_cpu_data.tlbsize / 2)) {
-
+	if (size <= current_cpu_data.tlb_flush_threshold) {
 		start &= (PAGE_MASK << 1);
 		end += ((PAGE_SIZE << 1) - 1);
 		end &= (PAGE_MASK << 1);
@@ -136,7 +131,7 @@ void local_flush_tlb_one(unsigned long page)
 
 static void __update_hugetlb(struct vm_area_struct *vma, unsigned long address, pte_t *ptep)
 {
-#ifdef CONFIG_HUGETLB_PAGE
+#if defined(CONFIG_HUGETLB_PAGE) || defined(CONFIG_TRANSPARENT_HUGEPAGE)
 	int idx;
 	unsigned long lo;
 	unsigned long flags;
