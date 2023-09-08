@@ -464,7 +464,6 @@ static bool nbcon_owner_matches(struct nbcon_state *cur, int expected_cpu,
  * nbcon_context_release - Release the console
  * @ctxt:	The nbcon context from nbcon_context_try_acquire()
  */
-__maybe_unused
 static void nbcon_context_release(struct nbcon_context *ctxt)
 {
 	unsigned int cpu = smp_processor_id();
@@ -490,6 +489,115 @@ static void nbcon_context_release(struct nbcon_context *ctxt)
 	} while (!nbcon_state_try_cmpxchg(con, &cur, &new));
 
 	ctxt->pbufs = NULL;
+}
+
+/**
+ * nbcon_context_can_proceed - Check whether ownership can proceed
+ * @ctxt:	The nbcon context from nbcon_context_try_acquire()
+ * @cur:	The current console state
+ *
+ * Return:	True if this context still owns the console. False if
+ *		ownership was handed over or taken.
+ *
+ * Must be invoked after the record was dumped into the assigned buffer
+ * and at appropriate safe places in the driver.
+ *
+ * When this function returns false then the calling context no longer owns
+ * the console and is no longer allowed to go forward. In this case it must
+ * back out immediately and carefully. The buffer content is also no longer
+ * trusted since it no longer belongs to the calling context.
+ */
+static bool nbcon_context_can_proceed(struct nbcon_context *ctxt, struct nbcon_state *cur)
+{
+	unsigned int cpu = smp_processor_id();
+
+	/* Make sure this context still owns the console. */
+	if (!nbcon_owner_matches(cur, cpu, ctxt->prio))
+		return false;
+
+	/* The console owner can proceed if there is no waiter. */
+	if (cur->req_prio == NBCON_PRIO_NONE)
+		return true;
+
+	/*
+	 * A console owner within an unsafe region is always allowed to
+	 * proceed, even if there are waiters. It can perform a handover
+	 * when exiting the unsafe region. Otherwise the waiter will
+	 * need to perform an unsafe hostile takeover.
+	 */
+	if (cur->unsafe)
+		return true;
+
+	/* Waiters always have higher priorities than owners. */
+	WARN_ON_ONCE(cur->req_prio <= cur->prio);
+
+	/*
+	 * Having a safe point for take over and eventually a few
+	 * duplicated characters or a full line is way better than a
+	 * hostile takeover. Post processing can take care of the garbage.
+	 * Release and hand over.
+	 */
+	nbcon_context_release(ctxt);
+
+	/*
+	 * It is not known whether the handover succeeded. The outermost
+	 * callsite has to make the final decision whether printing
+	 * should proceed or not (via reacquire, possibly hostile). The
+	 * console is now unlocked so go back all the way instead of
+	 * trying to implement heuristics in tons of places.
+	 */
+	return false;
+}
+
+#define nbcon_context_enter_unsafe(c)	__nbcon_context_update_unsafe(c, true)
+#define nbcon_context_exit_unsafe(c)	__nbcon_context_update_unsafe(c, false)
+
+/**
+ * __nbcon_context_update_unsafe - Update the unsafe bit in @con->nbcon_state
+ * @ctxt:	The nbcon context from nbcon_context_try_acquire()
+ * @unsafe:	The new value for the unsafe bit
+ *
+ * Return:	True if the unsafe state was updated and this context still
+ *		owns the console. Otherwise false if ownership was handed
+ *		over or taken.
+ *
+ * This function allows console owners to modify the unsafe status of the
+ * console.
+ *
+ * When this function returns false then the calling context no longer owns
+ * the console and is no longer allowed to go forward. In this case it must
+ * back out immediately and carefully. The buffer content is also no longer
+ * trusted since it no longer belongs to the calling context.
+ *
+ * Internal helper to avoid duplicated code.
+ */
+__maybe_unused
+static bool __nbcon_context_update_unsafe(struct nbcon_context *ctxt, bool unsafe)
+{
+	struct console *con = ctxt->console;
+	struct nbcon_state cur;
+	struct nbcon_state new;
+
+	nbcon_state_read(con, &cur);
+
+	do {
+		/*
+		 * The unsafe bit must not be cleared if an
+		 * unsafe hostile takeover has occurred.
+		 */
+		if (!unsafe && cur.unsafe_takeover)
+			goto out;
+
+		if (!nbcon_context_can_proceed(ctxt, &cur))
+			return false;
+
+		new.atom = cur.atom;
+		new.unsafe = unsafe;
+	} while (!nbcon_state_try_cmpxchg(con, &cur, &new));
+
+	cur.atom = new.atom;
+out:
+	return nbcon_context_can_proceed(ctxt, &cur);
 }
 
 /**
