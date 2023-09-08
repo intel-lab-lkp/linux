@@ -278,6 +278,9 @@ struct kvm_xen_exit {
 /* Flags that describe what fields in emulation_failure hold valid data. */
 #define KVM_INTERNAL_ERROR_EMULATION_FLAG_INSTRUCTION_BYTES (1ULL << 0)
 
+/* KVM_CAP_MEMORY_FAULT_INFO flag for kvm_run.flags */
+#define KVM_RUN_MEMORY_FAULT_FILLED (1 << 8)
+
 /* for KVM_RUN, returned by mmap(vcpu_fd, offset=0) */
 struct kvm_run {
 	/* in */
@@ -531,6 +534,27 @@ struct kvm_run {
 		struct kvm_sync_regs regs;
 		char padding[SYNC_REGS_SIZE_BYTES];
 	} s;
+
+	/*
+	 * This second exit union holds structs for exits which may be triggered
+	 * after KVM has already initiated a different exit, and/or may be
+	 * filled speculatively by KVM.
+	 *
+	 * For instance, because of limitations in KVM's uAPI, a memory fault
+	 * may be encounterd after an MMIO exit is initiated and exit_reason and
+	 * kvm_run.mmio are filled: isolating the speculative exits here ensures
+	 * that KVM won't clobber information for the original exit.
+	 */
+	union {
+		/* KVM_RUN_MEMORY_FAULT_FILLED + EFAULT */
+		struct {
+			__u64 flags;
+			__u64 gpa;
+			__u64 len;
+		} memory_fault;
+		/* Fix the size of the union. */
+		char speculative_exit_padding[256];
+	};
 };
 
 /* for KVM_REGISTER_COALESCED_MMIO / KVM_UNREGISTER_COALESCED_MMIO */

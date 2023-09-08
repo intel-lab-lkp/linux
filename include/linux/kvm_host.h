@@ -392,6 +392,12 @@ struct kvm_vcpu {
 	 */
 	struct kvm_memory_slot *last_used_slot;
 	u64 last_used_slot_gen;
+
+	/*
+	 * KVM_RUN initializes this value to KVM_SPEC_EXIT_UNUSED on entry and
+	 * sets it to something else when it fills the speculative_exit struct.
+	 */
+	u8 speculative_exit_canary;
 };
 
 /*
@@ -2317,5 +2323,34 @@ static inline void kvm_account_pgtable_pages(void *virt, int nr)
 
 /* Max number of entries allowed for each kvm dirty ring */
 #define  KVM_DIRTY_RING_MAX_ENTRIES  65536
+
+/*
+ * Attempts to set the run struct's exit reason to KVM_EXIT_MEMORY_FAULT and
+ * populate the memory_fault field with the given information.
+ *
+ * WARNs and does nothing if the speculative exit canary has already been set
+ * or if 'vcpu' is not the current running vcpu.
+ */
+static inline void kvm_handle_guest_uaccess_fault(struct kvm_vcpu *vcpu,
+						  uint64_t gpa, uint64_t len, uint64_t flags)
+{
+	/*
+	 * Ensure that an unloaded vCPU's run struct isn't being modified
+	 */
+	if (WARN_ON_ONCE(vcpu != kvm_get_running_vcpu()))
+		return;
+
+	/*
+	 * Warn when overwriting an already-populated run struct.
+	 */
+	WARN_ON_ONCE(vcpu->speculative_exit_canary != KVM_SPEC_EXIT_UNUSED);
+
+	vcpu->speculative_exit_canary = KVM_SPEC_EXIT_MEMORY_FAULT;
+
+	vcpu->run->flags |= KVM_RUN_MEMORY_FAULT_FILLED;
+	vcpu->run->memory_fault.gpa = gpa;
+	vcpu->run->memory_fault.len = len;
+	vcpu->run->memory_fault.flags = flags;
+}
 
 #endif

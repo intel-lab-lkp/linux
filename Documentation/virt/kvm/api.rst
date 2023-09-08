@@ -6130,8 +6130,10 @@ local APIC is not used.
 
 	__u16 flags;
 
-More architecture-specific flags detailing state of the VCPU that may
-affect the device's behavior. Current defined flags::
+Flags detailing state of the VCPU. The lower/upper bytes encode archiecture
+specific/agnostic bytes respectively. Current defined flags
+
+::
 
   /* x86, set if the VCPU is in system management mode */
   #define KVM_RUN_X86_SMM     (1 << 0)
@@ -6139,6 +6141,9 @@ affect the device's behavior. Current defined flags::
   #define KVM_RUN_BUS_LOCK    (1 << 1)
   /* arm64, set for KVM_EXIT_DEBUG */
   #define KVM_DEBUG_ARCH_HSR_HIGH_VALID  (1 << 0)
+
+  /* Arch-agnostic, see KVM_CAP_MEMORY_FAULT_INFO */
+  #define KVM_RUN_MEMORY_FAULT_FILLED (1 << 8)
 
 ::
 
@@ -6749,6 +6754,18 @@ Userspace can query the validity of the structure by checking
 kvm_valid_regs for specific bits. These bits are architecture specific
 and usually define the validity of a groups of registers. (e.g. one bit
 for general purpose registers)
+
+::
+	union {
+		/* KVM_SPEC_EXIT_MEMORY_FAULT */
+		struct {
+			__u64 flags;
+			__u64 gpa;
+			__u64 len; /* in bytes */
+		} memory_fault;
+
+Indicates a memory fault on the guest physical address range
+[gpa, gpa + len). See KVM_CAP_MEMORY_FAULT_INFO for more details.
 
 Please note that the kernel is allowed to use the kvm_run structure as the
 primary storage for certain register types. Therefore, the kernel may use the
@@ -7735,6 +7752,34 @@ KVM would exit to userspace for handling.
 This capability is aimed to mitigate the threat that malicious VMs can
 cause CPU stuck (due to event windows don't open up) and make the CPU
 unavailable to host or other VMs.
+
+7.34 KVM_CAP_MEMORY_FAULT_INFO
+------------------------------
+
+:Architectures: x86, arm64
+:Returns: Informational only, -EINVAL on direct KVM_ENABLE_CAP.
+
+The presence of this capability indicates that KVM_RUN may fill
+kvm_run.memory_fault in response to failed guest memory accesses in a vCPU
+context.
+
+When KVM_RUN returns an error with errno=EFAULT, (kvm_run.flags |
+KVM_RUN_MEMORY_FAULT_FILLED) indicates that the kvm_run.memory_fault field is
+valid. This capability is only partially implemented in that not all EFAULTs
+from KVM_RUN may be annotated in this way: these "bare" EFAULTs should be
+considered bugs and reported to the maintainers.
+
+The 'gpa' and 'len' (in bytes) fields of kvm_run.memory_fault describe the range
+of guest physical memory to which access failed, i.e. [gpa, gpa + len). 'flags'
+is a bitfield indicating the nature of the access: valid masks are
+
+  - KVM_MEMORY_FAULT_FLAG_READ:      The failed access was a read.
+  - KVM_MEMORY_FAULT_FLAG_WRITE:     The failed access was a write.
+  - KVM_MEMORY_FAULT_FLAG_EXEC:      The failed access was an exec.
+
+Note: Userspaces which attempt to resolve memory faults so that they can retry
+KVM_RUN are encouraged to guard against repeatedly receiving the same
+error/annotated fault.
 
 8. Other capabilities.
 ======================

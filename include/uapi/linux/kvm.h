@@ -265,6 +265,9 @@ struct kvm_xen_exit {
 #define KVM_EXIT_RISCV_CSR        36
 #define KVM_EXIT_NOTIFY           37
 
+#define KVM_SPEC_EXIT_UNUSED           0
+#define KVM_SPEC_EXIT_MEMORY_FAULT     1
+
 /* For KVM_EXIT_INTERNAL_ERROR */
 /* Emulate instruction failed. */
 #define KVM_INTERNAL_ERROR_EMULATION	1
@@ -277,6 +280,9 @@ struct kvm_xen_exit {
 
 /* Flags that describe what fields in emulation_failure hold valid data. */
 #define KVM_INTERNAL_ERROR_EMULATION_FLAG_INSTRUCTION_BYTES (1ULL << 0)
+
+/* KVM_CAP_MEMORY_FAULT_INFO flag for kvm_run.flags */
+#define KVM_RUN_MEMORY_FAULT_FILLED (1 << 8)
 
 /* for KVM_RUN, returned by mmap(vcpu_fd, offset=0) */
 struct kvm_run {
@@ -531,6 +537,27 @@ struct kvm_run {
 		struct kvm_sync_regs regs;
 		char padding[SYNC_REGS_SIZE_BYTES];
 	} s;
+
+	/*
+	 * This second exit union holds structs for exits which may be triggered
+	 * after KVM has already initiated a different exit, and/or may be
+	 * filled speculatively by KVM.
+	 *
+	 * For instance, because of limitations in KVM's uAPI, a memory fault
+	 * may be encounterd after an MMIO exit is initiated and exit_reason and
+	 * kvm_run.mmio are filled: isolating the speculative exits here ensures
+	 * that KVM won't clobber information for the original exit.
+	 */
+	union {
+		/* KVM_SPEC_EXIT_MEMORY_FAULT */
+		struct {
+			__u64 flags;
+			__u64 gpa;
+			__u64 len;
+		} memory_fault;
+		/* Fix the size of the union. */
+		char speculative_exit_padding[256];
+	};
 };
 
 /* for KVM_REGISTER_COALESCED_MMIO / KVM_UNREGISTER_COALESCED_MMIO */
@@ -1192,6 +1219,7 @@ struct kvm_ppc_resize_hpt {
 #define KVM_CAP_COUNTER_OFFSET 227
 #define KVM_CAP_ARM_EAGER_SPLIT_CHUNK_SIZE 228
 #define KVM_CAP_ARM_SUPPORTED_BLOCK_SIZES 229
+#define KVM_CAP_MEMORY_FAULT_INFO 230
 
 #ifdef KVM_CAP_IRQ_ROUTING
 
@@ -2248,5 +2276,11 @@ struct kvm_s390_zpci_op {
 
 /* flags for kvm_s390_zpci_op->u.reg_aen.flags */
 #define KVM_S390_ZPCIOP_REGAEN_HOST    (1 << 0)
+
+/* flags for KVM_CAP_MEMORY_FAULT_INFO */
+
+#define KVM_MEMORY_FAULT_FLAG_READ     (1 << 0)
+#define KVM_MEMORY_FAULT_FLAG_WRITE    (1 << 1)
+#define KVM_MEMORY_FAULT_FLAG_EXEC     (1 << 2)
 
 #endif /* __LINUX_KVM_H */
