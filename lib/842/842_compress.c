@@ -15,9 +15,9 @@
 #include "842.h"
 #include "842_debugfs.h"
 
-#define SW842_HASHTABLE8_BITS	(10)
-#define SW842_HASHTABLE4_BITS	(11)
-#define SW842_HASHTABLE2_BITS	(10)
+#define SW842_HASHTABLE8_BITS (10)
+#define SW842_HASHTABLE4_BITS (11)
+#define SW842_HASHTABLE2_BITS (10)
 
 /* By default, we allow compressing input buffers of any length, but we must
  * use the non-standard "short data" template so the decompressor can correctly
@@ -35,7 +35,8 @@
 static bool sw842_strict;
 module_param_named(strict, sw842_strict, bool, 0644);
 
-static u8 comp_ops[OPS_MAX][5] = { /* params size in bits */
+static u8 comp_ops[OPS_MAX][5] = {
+	/* params size in bits */
 	{ I8, N0, N0, N0, 0x19 }, /* 8 */
 	{ I4, I4, N0, N0, 0x18 }, /* 18 */
 	{ I4, I2, I2, N0, 0x17 }, /* 25 */
@@ -64,26 +65,19 @@ static u8 comp_ops[OPS_MAX][5] = { /* params size in bits */
 	{ D8, N0, N0, N0, 0x00 }, /* 64 */
 };
 
-struct sw842_hlist_node8 {
-	struct hlist_node node;
-	u64 data;
-	u8 index;
-};
+#define DECLARE_SW842_HLIST_NODE(type, data_type, index_type) \
+	struct sw842_hlist_node##type {                       \
+		struct hlist_node node;                       \
+		data_type data;                               \
+		index_type index;                             \
+	}
 
-struct sw842_hlist_node4 {
-	struct hlist_node node;
-	u32 data;
-	u16 index;
-};
+DECLARE_SW842_HLIST_NODE(8, u64, u8);
+DECLARE_SW842_HLIST_NODE(4, u32, u16);
+DECLARE_SW842_HLIST_NODE(2, u16, u8);
 
-struct sw842_hlist_node2 {
-	struct hlist_node node;
-	u16 data;
-	u8 index;
-};
-
-#define INDEX_NOT_FOUND		(-1)
-#define INDEX_NOT_CHECKED	(-2)
+#define INDEX_NOT_FOUND (-1)
+#define INDEX_NOT_CHECKED (-2)
 
 struct sw842_param {
 	u8 *in;
@@ -106,46 +100,49 @@ struct sw842_param {
 	struct sw842_hlist_node2 node2[1 << I2_BITS];
 };
 
-#define get_input_data(p, o, b)						\
+#define get_input_data(p, o, b) \
 	be##b##_to_cpu(get_unaligned((__be##b *)((p)->in + (o))))
 
-#define init_hashtable_nodes(p, b)	do {			\
-	int _i;							\
-	hash_init((p)->htable##b);				\
-	for (_i = 0; _i < ARRAY_SIZE((p)->node##b); _i++) {	\
-		(p)->node##b[_i].index = _i;			\
-		(p)->node##b[_i].data = 0;			\
-		INIT_HLIST_NODE(&(p)->node##b[_i].node);	\
-	}							\
-} while (0)
+#define init_hashtable_nodes(p, b)                                  \
+	do {                                                        \
+		int _i;                                             \
+		hash_init((p)->htable##b);                          \
+		for (_i = 0; _i < ARRAY_SIZE((p)->node##b); _i++) { \
+			(p)->node##b[_i].index = _i;                \
+			(p)->node##b[_i].data = 0;                  \
+			INIT_HLIST_NODE(&(p)->node##b[_i].node);    \
+		}                                                   \
+	} while (0)
 
-#define find_index(p, b, n)	({					\
-	struct sw842_hlist_node##b *_n;					\
-	p->index##b[n] = INDEX_NOT_FOUND;				\
-	hash_for_each_possible(p->htable##b, _n, node, p->data##b[n]) {	\
-		if (p->data##b[n] == _n->data) {			\
-			p->index##b[n] = _n->index;			\
-			break;						\
-		}							\
-	}								\
-	p->index##b[n] >= 0;						\
-})
+#define find_index(p, b, n)                                    \
+	({                                                     \
+		struct sw842_hlist_node##b *_n;                \
+		p->index##b[n] = INDEX_NOT_FOUND;              \
+		hash_for_each_possible(p->htable##b, _n, node, \
+				       p->data##b[n]) {        \
+			if (p->data##b[n] == _n->data) {       \
+				p->index##b[n] = _n->index;    \
+				break;                         \
+			}                                      \
+		}                                              \
+		p->index##b[n] >= 0;                           \
+	})
 
-#define check_index(p, b, n)			\
-	((p)->index##b[n] == INDEX_NOT_CHECKED	\
-	 ? find_index(p, b, n)			\
-	 : (p)->index##b[n] >= 0)
+#define check_index(p, b, n)                                           \
+	((p)->index##b[n] == INDEX_NOT_CHECKED ? find_index(p, b, n) : \
+						 (p)->index##b[n] >= 0)
 
-#define replace_hash(p, b, i, d)	do {				\
-	struct sw842_hlist_node##b *_n = &(p)->node##b[(i)+(d)];	\
-	hash_del(&_n->node);						\
-	_n->data = (p)->data##b[d];					\
-	pr_debug("add hash index%x %x pos %x data %lx\n", b,		\
-		 (unsigned int)_n->index,				\
-		 (unsigned int)((p)->in - (p)->instart),		\
-		 (unsigned long)_n->data);				\
-	hash_add((p)->htable##b, &_n->node, _n->data);			\
-} while (0)
+#define replace_hash(p, b, i, d)                                           \
+	do {                                                               \
+		struct sw842_hlist_node##b *_n = &(p)->node##b[(i) + (d)]; \
+		hash_del(&_n->node);                                       \
+		_n->data = (p)->data##b[d];                                \
+		pr_debug("add hash index%x %x pos %x data %lx\n", b,       \
+			 (unsigned int)_n->index,                          \
+			 (unsigned int)((p)->in - (p)->instart),           \
+			 (unsigned long)_n->data);                         \
+		hash_add((p)->htable##b, &_n->node, _n->data);             \
+	} while (0)
 
 static u8 bmask[8] = { 0x00, 0x80, 0xc0, 0xe0, 0xf0, 0xf8, 0xfc, 0xfe };
 
@@ -282,8 +279,8 @@ static int add_template(struct sw842_param *p, u8 c)
 			return ret;
 
 		if (inv) {
-			pr_err("Invalid templ %x op %d : %x %x %x %x\n",
-			       c, i, t[0], t[1], t[2], t[3]);
+			pr_err("Invalid templ %x op %d : %x %x %x %x\n", c, i,
+			       t[0], t[1], t[2], t[3]);
 			return -EINVAL;
 		}
 
@@ -291,8 +288,8 @@ static int add_template(struct sw842_param *p, u8 c)
 	}
 
 	if (b != 8) {
-		pr_err("Invalid template %x len %x : %x %x %x %x\n",
-		       c, b, t[0], t[1], t[2], t[3]);
+		pr_err("Invalid template %x len %x : %x %x %x %x\n", c, b, t[0],
+		       t[1], t[2], t[3]);
 		return -EINVAL;
 	}
 
@@ -474,8 +471,8 @@ static int process_next(struct sw842_param *p)
  * will contain the number of output bytes written on success, or
  * 0 on error.
  */
-int sw842_compress(const u8 *in, unsigned int ilen,
-		   u8 *out, unsigned int *olen, void *wmem)
+int sw842_compress(const u8 *in, unsigned int ilen, u8 *out, unsigned int *olen,
+		   void *wmem)
 {
 	struct sw842_param *p = (struct sw842_param *)wmem;
 	int ret;
