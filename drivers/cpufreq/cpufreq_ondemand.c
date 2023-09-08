@@ -71,7 +71,8 @@ static unsigned int generic_powersave_bias_target(struct cpufreq_policy *policy,
 	struct od_dbs_tuners *od_tuners = dbs_data->tuners;
 	struct cpufreq_frequency_table *freq_table = policy->freq_table;
 
-	if (!freq_table) {
+	if (!freq_table ||
+	    WARN_ON_ONCE(policy->freq_table_sorted == CPUFREQ_TABLE_UNSORTED)) {
 		dbs_info->freq_lo = 0;
 		dbs_info->freq_lo_delay_us = 0;
 		return freq_next;
