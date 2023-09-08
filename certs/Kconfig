@@ -134,7 +134,7 @@ config SYSTEM_BLACKLIST_AUTH_UPDATE
 	depends on SYSTEM_DATA_VERIFICATION
 	help
 	  If set, provide the ability to load new blacklist keys at run time if
-	  they are signed and vouched by a certificate from the builtin trusted
+	  they are signed and vouched by a certificate from the secondary trusted
 	  keyring.  The PKCS#7 signature of the description is set in the key
 	  payload.  Blacklist keys cannot be removed.
 

@@ -102,12 +102,12 @@ static int blacklist_key_instantiate(struct key *key,
 
 #ifdef CONFIG_SYSTEM_BLACKLIST_AUTH_UPDATE
 	/*
-	 * Verifies the description's PKCS#7 signature against the builtin
+	 * Verifies the description's PKCS#7 signature against the secondary
 	 * trusted keyring.
 	 */
 	err = verify_pkcs7_signature(key->description,
 			strlen(key->description), prep->data, prep->datalen,
-			NULL, VERIFYING_UNSPECIFIED_SIGNATURE, NULL, NULL);
+			VERIFY_USE_SECONDARY_KEYRING, VERIFYING_UNSPECIFIED_SIGNATURE, NULL, NULL);
 	if (err)
 		return err;
 #else
