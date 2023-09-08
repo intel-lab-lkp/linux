@@ -19,6 +19,7 @@
 #include <linux/random.h>
 #include <linux/slab.h>
 #include <linux/types.h>
+#include <linux/string.h>
 
 #define RNG_SEED_SIZE		128
 
@@ -264,6 +265,14 @@ static inline int setup_ima_buffer(const struct kimage *image, void *fdt,
 }
 #endif /* CONFIG_IMA_KEXEC */
 
+static bool is_nokaslr_cmdline(const char *cmdline)
+{
+	char *str;
+
+	str = strstr(cmdline, "nokaslr");
+	return str == cmdline || (str > cmdline && *(str - 1) == ' ');
+}
+
 /*
  * of_kexec_alloc_and_setup_fdt - Alloc and setup a new Flattened Device Tree
  *
@@ -430,15 +439,15 @@ void *of_kexec_alloc_and_setup_fdt(const struct kimage *image,
 	else if (ret)
 		goto out;
 
-	if (rng_is_initialized()) {
+	if (!is_nokaslr_cmdline(cmdline) && rng_is_initialized()) {
 		u64 seed = get_random_u64();
 
 		ret = fdt_setprop_u64(fdt, chosen_node, "kaslr-seed", seed);
 		if (ret)
 			goto out;
 	} else {
-		pr_notice("RNG is not initialised: omitting \"%s\" property\n",
-			  "kaslr-seed");
+		pr_notice("RNG is not initialised or Kexec with nokaslr:"
+			  " omitting \"%s\" property\n", "kaslr-seed");
 	}
 
 	/* add rng-seed */
