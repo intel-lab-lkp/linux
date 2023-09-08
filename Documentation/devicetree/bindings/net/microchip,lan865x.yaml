@@ -1,0 +1,54 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/net/microchip,lan865x.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Microchip LAN8650/1 10BASE-T1S MACPHY Ethernet Controllers
+
+maintainers:
+  - Parthiban Veerasooran <parthiban.veerasooran@microchip.com>
+
+description: |
+  Device tree properties for LAN8650/1 10BASE-T1S MACPHY Ethernet
+  controller.
+
+allOf:
+  - $ref: ethernet-controller.yaml#
+
+properties:
+  compatible:
+    items:
+      - enum:
+          - microchip,lan865x
+  reg:
+    maxItems: 1
+
+  local-mac-address: true
+  oa-chunk-size: true
+  oa-tx-cut-through: true
+  oa-rx-cut-through: true
+  oa-protected: true
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    spi {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        ethernet@1{
+            compatible = "microchip,lan865x";
+            reg = <1>; /* CE0 */
+            local-mac-address = [04 05 06 01 02 03];
+            oa-chunk-size = <64>;
+            oa-tx-cut-through;
+            oa-rx-cut-through;
+            oa-protected;
+       };
+    };
