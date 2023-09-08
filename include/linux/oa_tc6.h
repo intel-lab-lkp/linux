@@ -17,15 +17,29 @@
 #define CTRL_HDR_LEN	GENMASK(7, 1)	/* Length */
 #define CTRL_HDR_P	BIT(0)		/* Parity Bit */
 
+/* Open Alliance TC6 Standard Control and Status Registers */
+#define OA_TC6_RESET	0x0003		/* Reset Control and Status Register */
+#define OA_TC6_STS0	0x0008		/* Status Register #0 */
+
+/* RESET register field */
+#define SW_RESET	BIT(0)		/* Software Reset */
+
+/* STATUS0 register field */
+#define RESETC		BIT(6)		/* Reset Complete */
+
 #define TC6_HDR_SIZE	4		/* Ctrl command header size as per OA */
 #define TC6_FTR_SIZE	4		/* Ctrl command footer size ss per OA */
 
 struct oa_tc6 {
 	struct spi_device *spi;
 	bool ctrl_prot;
+	struct task_struct *tc6_task;
+	wait_queue_head_t tc6_wq;
+	bool int_flag;
+	struct completion rst_complete;
 };
 
 struct oa_tc6 *oa_tc6_init(struct spi_device *spi);
-void oa_tc6_deinit(struct oa_tc6 *tc6);
+int oa_tc6_deinit(struct oa_tc6 *tc6);
 int oa_tc6_write_register(struct oa_tc6 *tc6, u32 addr, u32 value[], u8 len);
 int oa_tc6_read_register(struct oa_tc6 *tc6, u32 addr, u32 value[], u8 len);

@@ -6,6 +6,7 @@
  */
 
 #include <linux/bitfield.h>
+#include <linux/interrupt.h>
 #include <linux/oa_tc6.h>
 
 static int oa_tc6_spi_transfer(struct spi_device *spi, u8 *ptx, u8 *prx,
@@ -160,10 +161,16 @@ int oa_tc6_perform_ctrl(struct oa_tc6 *tc6, u32 addr, u32 val[], u8 len,
 	if (ret)
 		goto err_ctrl;
 
-	/* Check echoed/received control reply */
-	ret = oa_tc6_check_control(tc6, tx_buf, rx_buf, len, wnr, ctrl_prot);
-	if (ret)
-		goto err_ctrl;
+	/* In case of reset write, the echoed control command doesn't have any
+	 * valid data. So no need to check for error.
+	 */
+	if (addr != OA_TC6_RESET) {
+		/* Check echoed/received control reply */
+		ret = oa_tc6_check_control(tc6, tx_buf, rx_buf, len, wnr,
+					   ctrl_prot);
+		if (ret)
+			goto err_ctrl;
+	}
 
 	if (!wnr) {
 		/* Copy read data from the rx data in case of ctrl read */
@@ -186,6 +193,88 @@ err_rx_buf_kzalloc:
 	return ret;
 }
 
+static int oa_tc6_handler(void *data)
+{
+	struct oa_tc6 *tc6 = data;
+	u32 regval;
+	int ret;
+
+	while (likely(!kthread_should_stop())) {
+		wait_event_interruptible(tc6->tc6_wq, tc6->int_flag ||
+					 kthread_should_stop());
+		if (tc6->int_flag) {
+			tc6->int_flag = false;
+			ret = oa_tc6_perform_ctrl(tc6, OA_TC6_STS0, &regval, 1,
+						  false, false);
+			if (ret) {
+				dev_err(&tc6->spi->dev, "Failed to read STS0\n");
+				continue;
+			}
+			/* Check for reset complete interrupt status */
+			if (regval & RESETC) {
+				regval = RESETC;
+				/* SPI host should write RESETC bit with one to
+				 * clear the reset interrupt status.
+				 */
+				ret = oa_tc6_perform_ctrl(tc6, OA_TC6_STS0,
+							  &regval, 1, true,
+							  false);
+				if (ret) {
+					dev_err(&tc6->spi->dev,
+						"Failed to write STS0\n");
+					continue;
+				}
+				complete(&tc6->rst_complete);
+			}
+		}
+	}
+	return 0;
+}
+
+static irqreturn_t macphy_irq(int irq, void *dev_id)
+{
+	struct oa_tc6 *tc6 = dev_id;
+
+	/* Wake tc6 task to perform interrupt action */
+	tc6->int_flag = true;
+	wake_up_interruptible(&tc6->tc6_wq);
+
+	return IRQ_HANDLED;
+}
+
+static int oa_tc6_sw_reset(struct oa_tc6 *tc6)
+{
+	long timeleft;
+	u32 regval;
+	int ret;
+
+	/* Perform software reset with both protected and unprotected control
+	 * commands because the driver doesn't know the current status of the
+	 * MAC-PHY.
+	 */
+	regval = SW_RESET;
+	reinit_completion(&tc6->rst_complete);
+	ret = oa_tc6_perform_ctrl(tc6, OA_TC6_RESET, &regval, 1, true, false);
+	if (ret) {
+		dev_err(&tc6->spi->dev, "RESET register write failed\n");
+		return ret;
+	}
+
+	ret = oa_tc6_perform_ctrl(tc6, OA_TC6_RESET, &regval, 1, true, true);
+	if (ret) {
+		dev_err(&tc6->spi->dev, "RESET register write failed\n");
+		return ret;
+	}
+	timeleft = wait_for_completion_interruptible_timeout(&tc6->rst_complete,
+							     msecs_to_jiffies(1));
+	if (timeleft <= 0) {
+		dev_err(&tc6->spi->dev, "MAC-PHY reset failed\n");
+		return -ENODEV;
+	}
+
+	return 0;
+}
+
 int oa_tc6_write_register(struct oa_tc6 *tc6, u32 addr, u32 val[], u8 len)
 {
 	return oa_tc6_perform_ctrl(tc6, addr, val, len, true, tc6->ctrl_prot);
@@ -201,6 +290,7 @@ EXPORT_SYMBOL_GPL(oa_tc6_read_register);
 struct oa_tc6 *oa_tc6_init(struct spi_device *spi)
 {
 	struct oa_tc6 *tc6;
+	int ret;
 
 	if (!spi)
 		return NULL;
@@ -211,12 +301,51 @@ struct oa_tc6 *oa_tc6_init(struct spi_device *spi)
 
 	tc6->spi = spi;
 
+	/* Used for triggering the OA TC6 task */
+	init_waitqueue_head(&tc6->tc6_wq);
+
+	init_completion(&tc6->rst_complete);
+
+	/* This task performs the SPI transfer */
+	tc6->tc6_task = kthread_run(oa_tc6_handler, tc6, "OA TC6 Task");
+	if (IS_ERR(tc6->tc6_task))
+		goto err_tc6_task;
+
+	/* Set the highest priority to the tc6 task as it is time critical */
+	sched_set_fifo(tc6->tc6_task);
+
+	/* Register MAC-PHY interrupt service routine */
+	ret = devm_request_irq(&spi->dev, spi->irq, macphy_irq, 0, "macphy int",
+			       tc6);
+	if ((ret != -ENOTCONN) && ret < 0) {
+		dev_err(&spi->dev, "Error attaching macphy irq %d\n", ret);
+		goto err_macphy_irq;
+	}
+
+	/* Perform MAC-PHY software reset */
+	if (oa_tc6_sw_reset(tc6))
+		goto err_macphy_reset;
+
 	return tc6;
+
+err_macphy_reset:
+	devm_free_irq(&tc6->spi->dev, tc6->spi->irq, tc6);
+err_macphy_irq:
+	kthread_stop(tc6->tc6_task);
+err_tc6_task:
+	kfree(tc6);
+	return NULL;
 }
 EXPORT_SYMBOL_GPL(oa_tc6_init);
 
-void oa_tc6_deinit(struct oa_tc6 *tc6)
+int oa_tc6_deinit(struct oa_tc6 *tc6)
 {
-	kfree(tc6);
+	int ret;
+
+	devm_free_irq(&tc6->spi->dev, tc6->spi->irq, tc6);
+	ret = kthread_stop(tc6->tc6_task);
+	if (!ret)
+		kfree(tc6);
+	return ret;
 }
 EXPORT_SYMBOL_GPL(oa_tc6_deinit);
