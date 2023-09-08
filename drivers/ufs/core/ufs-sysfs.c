@@ -329,6 +329,71 @@ static ssize_t wb_flush_threshold_store(struct device *dev,
 	return count;
 }
 
+static ssize_t wb_buf_resize_hint_show(struct device *dev,
+					 struct device_attribute *attr,
+					 char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	u32 value;
+	u8 index = ufshcd_wb_get_query_index(hba);
+
+	if (ufshcd_query_attr_retry(hba, UPIU_QUERY_OPCODE_READ_ATTR,
+			QUERY_ATTR_IDN_WB_BUF_RESIZE_HINT, index, 0, &value)) {
+		dev_err(hba->dev, "Read WB Buffer Resize Hint info failed\n");
+		return  -EINVAL;
+	}
+
+	return sysfs_emit(buf, "%u\n", value);
+}
+
+static ssize_t enable_wb_buf_resize_store(struct device *dev,
+					  struct device_attribute *attr,
+					  const char *buf, size_t count)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	unsigned int wb_buf_resize_op;
+
+	if (!ufshcd_is_wb_allowed(hba) || !hba->dev_info.wb_enabled) {
+		dev_err(dev, "The WB is not allowed or disabled!\n");
+		return -EINVAL;
+	}
+
+	if (hba->dev_info.wspecversion < 0x410 ||
+	    !hba->dev_info.b_presrv_uspc_en) {
+		dev_err(dev, "The WB buf resize is not allowed!\n");
+		return -EINVAL;
+	}
+
+	if (kstrtouint(buf, 0, &wb_buf_resize_op))
+		return -EINVAL;
+
+	if (wb_buf_resize_op != 0x01 && wb_buf_resize_op != 0x02) {
+		dev_err(dev, "The operation %u is invalid!\n", wb_buf_resize_op);
+		return -EINVAL;
+	}
+
+	ufshcd_wb_buf_resize(hba, wb_buf_resize_op);
+
+	return count;
+}
+
+static ssize_t wb_buf_resize_status_show(struct device *dev,
+					 struct device_attribute *attr,
+					 char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	u32 value;
+	u8 index = ufshcd_wb_get_query_index(hba);
+
+	if (ufshcd_query_attr_retry(hba, UPIU_QUERY_OPCODE_READ_ATTR,
+			QUERY_ATTR_IDN_WB_BUF_RESIZE_STATUS, index, 0, &value)) {
+		dev_err(hba->dev, "Read WB Buffer Resize Status info failed\n");
+		return -EINVAL;
+	}
+
+	return sysfs_emit(buf, "%u\n", value);
+}
+
 static DEVICE_ATTR_RW(rpm_lvl);
 static DEVICE_ATTR_RO(rpm_target_dev_state);
 static DEVICE_ATTR_RO(rpm_target_link_state);
@@ -339,6 +404,9 @@ static DEVICE_ATTR_RW(auto_hibern8);
 static DEVICE_ATTR_RW(wb_on);
 static DEVICE_ATTR_RW(enable_wb_buf_flush);
 static DEVICE_ATTR_RW(wb_flush_threshold);
+static DEVICE_ATTR_RO(wb_buf_resize_hint);
+static DEVICE_ATTR_WO(enable_wb_buf_resize);
+static DEVICE_ATTR_RO(wb_buf_resize_status);
 
 static struct attribute *ufs_sysfs_ufshcd_attrs[] = {
 	&dev_attr_rpm_lvl.attr,
@@ -351,6 +419,9 @@ static struct attribute *ufs_sysfs_ufshcd_attrs[] = {
 	&dev_attr_wb_on.attr,
 	&dev_attr_enable_wb_buf_flush.attr,
 	&dev_attr_wb_flush_threshold.attr,
+	&dev_attr_wb_buf_resize_hint.attr,
+	&dev_attr_enable_wb_buf_resize.attr,
+	&dev_attr_wb_buf_resize_status.attr,
 	NULL
 };
 
