@@ -64,8 +64,7 @@ static blk_status_t t10_pi_verify(struct blk_integrity_iter *iter,
 		struct t10_pi_tuple *pi = iter->prot_buf;
 		__be16 csum;
 
-		if (type == T10_PI_TYPE1_PROTECTION ||
-		    type == T10_PI_TYPE2_PROTECTION) {
+		if (type == T10_PI_TYPE1_PROTECTION) {
 			if (pi->app_tag == T10_PI_APP_ESCAPE)
 				goto next;
 
