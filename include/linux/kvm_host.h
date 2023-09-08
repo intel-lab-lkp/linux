@@ -1188,8 +1188,20 @@ kvm_pfn_t gfn_to_pfn_prot(struct kvm *kvm, gfn_t gfn, bool write_fault,
 		      bool *writable);
 kvm_pfn_t gfn_to_pfn_memslot(const struct kvm_memory_slot *slot, gfn_t gfn);
 kvm_pfn_t gfn_to_pfn_memslot_atomic(const struct kvm_memory_slot *slot, gfn_t gfn);
+enum memslot_access_atomicity {
+	/* Force atomic access */
+	MEMSLOT_ACCESS_ATOMIC,
+	/*
+	 * Ask for non-atomic access, but allow upgrading to atomic depending
+	 * on the memslot
+	 */
+	MEMSLOT_ACCESS_NONATOMIC_MAY_UPGRADE,
+	/* Force non-atomic access */
+	MEMSLOT_ACCESS_FORCE_ALLOW_NONATOMIC
+};
 kvm_pfn_t __gfn_to_pfn_memslot(const struct kvm_memory_slot *slot, gfn_t gfn,
-			       bool atomic, bool interruptible, bool *async,
+			       enum memslot_access_atomicity atomicity,
+			       bool interruptible, bool *async,
 			       bool write_fault, bool *writable, hva_t *hva);
 
 void kvm_release_pfn_clean(kvm_pfn_t pfn);

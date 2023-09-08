@@ -2735,9 +2735,11 @@ exit:
 }
 
 kvm_pfn_t __gfn_to_pfn_memslot(const struct kvm_memory_slot *slot, gfn_t gfn,
-			       bool atomic, bool interruptible, bool *async,
+			       enum memslot_access_atomicity atomicity,
+			       bool interruptible, bool *async,
 			       bool write_fault, bool *writable, hva_t *hva)
 {
+	bool atomic;
 	unsigned long addr = __gfn_to_hva_many(slot, gfn, NULL, write_fault);
 
 	if (hva)
@@ -2759,6 +2761,23 @@ kvm_pfn_t __gfn_to_pfn_memslot(const struct kvm_memory_slot *slot, gfn_t gfn,
 		writable = NULL;
 	}
 
+	if (atomicity == MEMSLOT_ACCESS_ATOMIC) {
+		atomic = true;
+	} else if (atomicity == MEMSLOT_ACCESS_NONATOMIC_MAY_UPGRADE) {
+		atomic = false;
+		if (kvm_is_slot_userfault_on_missing(slot)) {
+			atomic = true;
+			if (async) {
+				*async = false;
+				async = NULL;
+			}
+		}
+	} else if (atomicity == MEMSLOT_ACCESS_FORCE_ALLOW_NONATOMIC) {
+		atomic = false;
+	} else {
+		BUG();
+	}
+
 	return hva_to_pfn(addr, atomic, interruptible, async, write_fault,
 			  writable);
 }
@@ -2767,22 +2786,23 @@ EXPORT_SYMBOL_GPL(__gfn_to_pfn_memslot);
 kvm_pfn_t gfn_to_pfn_prot(struct kvm *kvm, gfn_t gfn, bool write_fault,
 		      bool *writable)
 {
-	return __gfn_to_pfn_memslot(gfn_to_memslot(kvm, gfn), gfn, false, false,
-				    NULL, write_fault, writable, NULL);
+	return __gfn_to_pfn_memslot(gfn_to_memslot(kvm, gfn), gfn,
+				    MEMSLOT_ACCESS_FORCE_ALLOW_NONATOMIC,
+				    false, NULL, write_fault, writable, NULL);
 }
 EXPORT_SYMBOL_GPL(gfn_to_pfn_prot);
 
 kvm_pfn_t gfn_to_pfn_memslot(const struct kvm_memory_slot *slot, gfn_t gfn)
 {
-	return __gfn_to_pfn_memslot(slot, gfn, false, false, NULL, true,
-				    NULL, NULL);
+	return __gfn_to_pfn_memslot(slot, gfn, MEMSLOT_ACCESS_NONATOMIC_MAY_UPGRADE,
+				    false, NULL, true, NULL, NULL);
 }
 EXPORT_SYMBOL_GPL(gfn_to_pfn_memslot);
 
 kvm_pfn_t gfn_to_pfn_memslot_atomic(const struct kvm_memory_slot *slot, gfn_t gfn)
 {
-	return __gfn_to_pfn_memslot(slot, gfn, true, false, NULL, true,
-				    NULL, NULL);
+	return __gfn_to_pfn_memslot(slot, gfn, MEMSLOT_ACCESS_ATOMIC,
+				    false, NULL, true, NULL, NULL);
 }
 EXPORT_SYMBOL_GPL(gfn_to_pfn_memslot_atomic);
 
@@ -2862,7 +2882,9 @@ int kvm_vcpu_map(struct kvm_vcpu *vcpu, gfn_t gfn, struct kvm_host_map *map)
 	if (!map)
 		return -EINVAL;
 
-	pfn = gfn_to_pfn(vcpu->kvm, gfn);
+	pfn = __gfn_to_pfn_memslot(gfn_to_memslot(vcpu->kvm, gfn), gfn,
+				   MEMSLOT_ACCESS_FORCE_ALLOW_NONATOMIC,
+				   false, NULL, true, NULL, NULL);
 	if (is_error_noslot_pfn(pfn))
 		return -EINVAL;
 
