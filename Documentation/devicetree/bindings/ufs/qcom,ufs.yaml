@@ -103,6 +103,10 @@ properties:
     description:
       GPIO connected to the RESET pin of the UFS memory device.
 
+  qcom,esi-affinity-mask:
+    description:
+       UFS MCQ ESI affinity mask. Affine ESI on registration according to this CPU mask.
+
 required:
   - compatible
   - reg
