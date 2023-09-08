@@ -11,6 +11,7 @@
 #include <asm/desc.h>
 #include <asm/i8259.h>
 #include <asm/mshyperv.h>
+#include <asm/hypervisor.h>
 #include <asm/realmode.h>
 
 extern struct boot_params boot_params;
@@ -217,6 +218,9 @@ static int hv_vtl_wakeup_secondary_cpu(int apicid, unsigned long start_eip)
 
 static int __init hv_vtl_early_init(void)
 {
+	if (!hypervisor_is_type(X86_HYPER_MS_HYPERV))
+		return 0;
+
 	/*
 	 * `boot_cpu_has` returns the runtime feature support,
 	 * and here is the earliest it can be used.
