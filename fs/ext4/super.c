@@ -4907,6 +4907,14 @@ static int ext4_load_and_init_journal(struct super_block *sb,
 	if (err)
 		return err;
 
+	err = errseq_check_and_advance(&sb->s_bdev->bd_inode->i_mapping->wb_err,
+				       &sbi->s_bdev_wb_err);
+	if (err) {
+		ext4_msg(sb, KERN_ERR, "Background error %d when loading journal",
+			 err);
+		goto out;
+	}
+
 	if (ext4_has_feature_64bit(sb) &&
 	    !jbd2_journal_set_features(EXT4_SB(sb)->s_journal, 0, 0,
 				       JBD2_FEATURE_INCOMPAT_64BIT)) {
@@ -5365,6 +5373,13 @@ static int __ext4_fill_super(struct fs_context *fc, struct super_block *sb)
 			goto failed_mount3a;
 	}
 
+	/*
+	 * Save the original bdev mapping's wb_err value which could be
+	 * used to detect the metadata async write error.
+	 */
+	spin_lock_init(&sbi->s_bdev_wb_lock);
+	errseq_check_and_advance(&sb->s_bdev->bd_inode->i_mapping->wb_err,
+				 &sbi->s_bdev_wb_err);
 	err = -EINVAL;
 	/*
 	 * The first inode we look at is the journal inode.  Don't try
@@ -5571,13 +5586,6 @@ static int __ext4_fill_super(struct fs_context *fc, struct super_block *sb)
 	}
 #endif  /* CONFIG_QUOTA */
 
-	/*
-	 * Save the original bdev mapping's wb_err value which could be
-	 * used to detect the metadata async write error.
-	 */
-	spin_lock_init(&sbi->s_bdev_wb_lock);
-	errseq_check_and_advance(&sb->s_bdev->bd_inode->i_mapping->wb_err,
-				 &sbi->s_bdev_wb_err);
 	EXT4_SB(sb)->s_mount_state |= EXT4_ORPHAN_FS;
 	ext4_orphan_cleanup(sb, es);
 	EXT4_SB(sb)->s_mount_state &= ~EXT4_ORPHAN_FS;
