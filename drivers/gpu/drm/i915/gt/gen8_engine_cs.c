@@ -271,6 +271,11 @@ int gen12_emit_flush_rcs(struct i915_request *rq, u32 mode)
 		if (GRAPHICS_VER_FULL(rq->i915) >= IP_VER(12, 70))
 			bit_group_0 |= PIPE_CONTROL_CCS_FLUSH;
 
+		/* Wa_18022495364 */
+		if (GRAPHICS_VER_FULL(rq->i915) >= IP_VER(12, 70) ||
+		    IS_DG2(rq->i915))
+			bit_group_1 |= PIPE_CONTROL_CONST_CACHE_INVALIDATE;
+
 		bit_group_1 |= PIPE_CONTROL_TILE_CACHE_FLUSH;
 		bit_group_1 |= PIPE_CONTROL_FLUSH_L3;
 		bit_group_1 |= PIPE_CONTROL_RENDER_TARGET_CACHE_FLUSH;
