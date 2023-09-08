@@ -268,3 +268,46 @@ need_fault:
 
 	return err;
 }
+
+int rxe_odp_mr_atomic_op(struct rxe_mr *mr, u64 iova, int opcode,
+			 u64 compare, u64 swap_add, u64 *orig_val)
+{
+	int err;
+	int retry = 0;
+	struct ib_umem_odp *umem_odp = to_ib_umem_odp(mr->umem);
+
+	mutex_lock(&umem_odp->umem_mutex);
+
+	/* Atomic operations manipulate a single char. */
+	if (rxe_odp_check_pages(mr, iova, sizeof(char), 0))
+		goto need_fault;
+
+	err = rxe_mr_do_atomic_op(mr, iova, opcode, compare,
+				  swap_add, orig_val);
+
+	mutex_unlock(&umem_odp->umem_mutex);
+
+	return err;
+
+need_fault:
+	/* allow max 3 tries for pagefault */
+	do {
+		mutex_unlock(&umem_odp->umem_mutex);
+
+		if (retry > 2)
+			return -EFAULT;
+
+		/* umem_mutex is locked on success */
+		err = rxe_odp_do_pagefault_and_lock(mr, iova, sizeof(char), 0);
+		if (err < 0)
+			return err;
+		retry++;
+	} while (rxe_odp_check_pages(mr, iova, sizeof(char), 0));
+
+	err = rxe_mr_do_atomic_op(mr, iova, opcode, compare,
+				  swap_add, orig_val);
+
+	mutex_unlock(&umem_odp->umem_mutex);
+
+	return err;
+}
