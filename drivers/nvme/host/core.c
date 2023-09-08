@@ -2255,11 +2255,17 @@ int nvme_enable_ctrl(struct nvme_ctrl *ctrl)
 			return ret;
 		}
 
-		if (ctrl->cap & NVME_CAP_CRMS_CRIMS) {
-			ctrl->ctrl_config |= NVME_CC_CRIME;
-			timeout = NVME_CRTO_CRIMT(crto);
+		if (crto == 0) {
+			timeout = NVME_CAP_TIMEOUT(ctrl->cap);
+			dev_warn(ctrl->device, "Ignoring bogus CRTO (0), falling back to NVME_CAP_TIMEOUT (%u)\n",
+				timeout);
 		} else {
-			timeout = NVME_CRTO_CRWMT(crto);
+			if (ctrl->cap & NVME_CAP_CRMS_CRIMS) {
+				ctrl->ctrl_config |= NVME_CC_CRIME;
+				timeout = NVME_CRTO_CRIMT(crto);
+			} else {
+				timeout = NVME_CRTO_CRWMT(crto);
+			}
 		}
 	} else {
 		timeout = NVME_CAP_TIMEOUT(ctrl->cap);
