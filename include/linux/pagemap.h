@@ -276,6 +276,12 @@ static inline int mapping_use_writeback_tags(struct address_space *mapping)
 
 static inline void mapping_set_unmovable(struct address_space *mapping)
 {
+	/*
+	 * It's expected unmovable mappings are also unevictable. Compaction
+	 * migrate scanner (isolate_migratepages_block()) relies on this to
+	 * reduce page locking.
+	 */
+	set_bit(AS_UNEVICTABLE, &mapping->flags);
 	set_bit(AS_UNMOVABLE, &mapping->flags);
 }
 
