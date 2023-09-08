@@ -707,8 +707,14 @@ int usb_hub_create_port_device(struct usb_hub *hub, int port1)
 	port_dev->dev.driver = &usb_port_driver;
 	if (hub_is_superspeed(hub->hdev))
 		port_dev->is_superspeed = 1;
-	dev_set_name(&port_dev->dev, "%s-port%d", dev_name(&hub->hdev->dev),
-			port1);
+
+	retval = dev_set_name(&port_dev->dev, "%s-port%d", 
+			dev_name(&hub->hdev->dev), port1);
+	if (retval < 0) {
+		kfree(port_dev->req);
+		kfree(port_dev);
+		return retval;
+	}
 	mutex_init(&port_dev->status_lock);
 	retval = device_register(&port_dev->dev);
 	if (retval) {
