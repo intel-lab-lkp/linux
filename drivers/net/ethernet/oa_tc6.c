@@ -287,6 +287,45 @@ int oa_tc6_read_register(struct oa_tc6 *tc6, u32 addr, u32 val[], u8 len)
 }
 EXPORT_SYMBOL_GPL(oa_tc6_read_register);
 
+int oa_tc6_configure(struct oa_tc6 *tc6, u8 cps, bool ctrl_prot, bool tx_cut_thr,
+		     bool rx_cut_thr)
+{
+	u32 regval;
+	int ret;
+
+	/* Read and configure the IMASK0 register for unmasking the interrupts */
+	ret = oa_tc6_read_register(tc6, OA_TC6_IMASK0, &regval, 1);
+	if (ret)
+		return ret;
+
+	regval &= TXPEM & TXBOEM & TXBUEM & RXBOEM & LOFEM & HDREM;
+	ret = oa_tc6_write_register(tc6, OA_TC6_IMASK0, &regval, 1);
+	if (ret)
+		return ret;
+
+	/* Configure the CONFIG0 register with the required configurations */
+	regval = SYNC;
+	if (ctrl_prot)
+		regval |= PROTE;
+	if (tx_cut_thr)
+		regval |= TXCTE;
+	if (rx_cut_thr)
+		regval |= RXCTE;
+	regval |= FIELD_PREP(CPS, ilog2(cps) / ilog2(2));
+
+	ret = oa_tc6_write_register(tc6, OA_TC6_CONFIG0, &regval, 1);
+	if (ret)
+		return ret;
+
+	tc6->cps = cps;
+	tc6->ctrl_prot = ctrl_prot;
+	tc6->tx_cut_thr = tx_cut_thr;
+	tc6->rx_cut_thr = rx_cut_thr;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(oa_tc6_configure);
+
 struct oa_tc6 *oa_tc6_init(struct spi_device *spi)
 {
 	struct oa_tc6 *tc6;
