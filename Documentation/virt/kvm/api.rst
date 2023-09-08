@@ -7788,7 +7788,7 @@ error/annotated fault.
 7.35 KVM_CAP_USERFAULT_ON_MISSING
 ---------------------------------
 
-:Architectures: None
+:Architectures: x86
 :Returns: Informational only, -EINVAL on direct KVM_ENABLE_CAP.
 
 The presence of this capability indicates that userspace may set the
