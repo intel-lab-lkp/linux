@@ -29,8 +29,6 @@
 #include "pinctrl-sprd.h"
 
 #define PINCTRL_BIT_MASK(width)		(~(~0UL << (width)))
-#define PINCTRL_REG_OFFSET		0x20
-#define PINCTRL_REG_MISC_OFFSET		0x4020
 #define PINCTRL_REG_LEN			0x4
 
 #define PIN_FUNC_MASK			(BIT(4) | BIT(5))
@@ -147,12 +145,16 @@ struct sprd_pinctrl_soc_info {
  * @pctl: pointer to the pinctrl handle
  * @base: base address of the controller
  * @info: pointer to SoC's pins description information
+ * @common_pin_offset: offset value of common register
+ * @misc_pin_offset: offset value of misc register
  */
 struct sprd_pinctrl {
 	struct device *dev;
 	struct pinctrl_dev *pctl;
 	void __iomem *base;
 	struct sprd_pinctrl_soc_info *info;
+	u32 common_pin_offset;
+	u32 misc_pin_offset;
 };
 
 #define SPRD_PIN_CONFIG_CONTROL		(PIN_CONFIG_END + 1)
@@ -1022,12 +1024,12 @@ static int sprd_pinctrl_add_pins(struct sprd_pinctrl *sprd_pctl,
 			ctrl_pin++;
 		} else if (pin->type == COMMON_PIN) {
 			pin->reg = (unsigned long)sprd_pctl->base +
-				PINCTRL_REG_OFFSET + PINCTRL_REG_LEN *
+				sprd_pctl->common_pin_offset + PINCTRL_REG_LEN *
 				(i - ctrl_pin);
 			com_pin++;
 		} else if (pin->type == MISC_PIN) {
 			pin->reg = (unsigned long)sprd_pctl->base +
-				PINCTRL_REG_MISC_OFFSET + PINCTRL_REG_LEN *
+				sprd_pctl->misc_pin_offset + PINCTRL_REG_LEN *
 				(i - ctrl_pin - com_pin);
 		}
 	}
@@ -1044,7 +1046,9 @@ static int sprd_pinctrl_add_pins(struct sprd_pinctrl *sprd_pctl,
 
 int sprd_pinctrl_core_probe(struct platform_device *pdev,
 			    struct sprd_pins_info *sprd_soc_pin_info,
-			    int pins_cnt)
+			    int pins_cnt,
+			    u32 common_pin_offset,
+			    u32 misc_pin_offset)
 {
 	struct sprd_pinctrl *sprd_pctl;
 	struct sprd_pinctrl_soc_info *pinctrl_info;
@@ -1068,17 +1072,13 @@ int sprd_pinctrl_core_probe(struct platform_device *pdev,
 
 	sprd_pctl->info = pinctrl_info;
 	sprd_pctl->dev = &pdev->dev;
+	sprd_pctl->common_pin_offset = common_pin_offset;
+	sprd_pctl->misc_pin_offset = misc_pin_offset;
 	platform_set_drvdata(pdev, sprd_pctl);
 
 	ret = sprd_pinctrl_add_pins(sprd_pctl, sprd_soc_pin_info, pins_cnt);
 	if (ret) {
 		dev_err(&pdev->dev, "fail to add pins information\n");
-		return ret;
-	}
-
-	ret = sprd_pinctrl_parse_dt(sprd_pctl);
-	if (ret) {
-		dev_err(&pdev->dev, "fail to parse dt properties\n");
 		return ret;
 	}
 
@@ -1099,6 +1099,11 @@ int sprd_pinctrl_core_probe(struct platform_device *pdev,
 	sprd_pinctrl_desc.name = dev_name(&pdev->dev);
 	sprd_pinctrl_desc.npins = pinctrl_info->npins;
 
+	ret = sprd_pinctrl_parse_dt(sprd_pctl);
+	if (ret) {
+		dev_err(&pdev->dev, "fail to parse dt properties\n");
+		return ret;
+	}
 	sprd_pctl->pctl = pinctrl_register(&sprd_pinctrl_desc,
 					   &pdev->dev, (void *)sprd_pctl);
 	if (IS_ERR(sprd_pctl->pctl)) {
