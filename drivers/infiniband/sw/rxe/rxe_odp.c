@@ -184,3 +184,87 @@ int rxe_odp_mr_init_user(struct rxe_dev *rxe, u64 start, u64 length,
 
 	return err;
 }
+
+static inline bool rxe_odp_check_pages(struct rxe_mr *mr, u64 iova,
+				       int length, u32 flags)
+{
+	unsigned long lower, upper, idx;
+	unsigned long hmm_flags = HMM_PFN_VALID;
+	struct ib_umem_odp *umem_odp = to_ib_umem_odp(mr->umem);
+	struct page *page;
+	bool need_fault = false;
+
+	lower = rxe_mr_iova_to_index(mr, iova);
+	upper = rxe_mr_iova_to_index(mr, iova + length - 1);
+
+	if (!(flags & RXE_PAGEFAULT_RDONLY))
+		hmm_flags |= HMM_PFN_WRITE;
+
+	/* xarray is protected by umem_mutex */
+	for (idx = lower; idx <= upper; idx++) {
+		page = xa_load(&mr->page_list, idx);
+
+		if (!page || !(umem_odp->pfn_list[idx] & hmm_flags)) {
+			need_fault = true;
+			break;
+		}
+	}
+
+	return need_fault;
+}
+
+int rxe_odp_mr_copy(struct rxe_mr *mr, u64 iova, void *addr, int length,
+		    enum rxe_mr_copy_dir dir)
+{
+	struct ib_umem_odp *umem_odp = to_ib_umem_odp(mr->umem);
+	u32 flags = 0;
+	int retry = 0;
+	int err;
+
+	if (unlikely(!mr->umem->is_odp))
+		return -EOPNOTSUPP;
+
+	switch (dir) {
+	case RXE_TO_MR_OBJ:
+		break;
+
+	case RXE_FROM_MR_OBJ:
+		flags = RXE_PAGEFAULT_RDONLY;
+		break;
+
+	default:
+		return -EINVAL;
+	}
+
+	mutex_lock(&umem_odp->umem_mutex);
+
+	if (rxe_odp_check_pages(mr, iova, length, flags))
+		goto need_fault;
+
+	err =  rxe_mr_copy_xarray(mr, iova, addr, length, dir);
+
+	mutex_unlock(&umem_odp->umem_mutex);
+
+	return err;
+
+need_fault:
+	/* allow max 3 tries for pagefault */
+	do {
+		mutex_unlock(&umem_odp->umem_mutex);
+
+		if (retry > 2)
+			return -EFAULT;
+
+		/* umem_mutex is locked on success */
+		err = rxe_odp_do_pagefault_and_lock(mr, iova, length, flags);
+		if (err < 0)
+			return err;
+		retry++;
+	} while (rxe_odp_check_pages(mr, iova, length, flags));
+
+	err =  rxe_mr_copy_xarray(mr, iova, addr, length, dir);
+
+	mutex_unlock(&umem_odp->umem_mutex);
+
+	return err;
+}
