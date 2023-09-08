@@ -321,13 +321,16 @@ static int handle_cpuid(struct pt_regs *regs, struct ve_info *ve)
 	};
 
 	/*
-	 * Only allow VMM to control range reserved for hypervisor
-	 * communication.
+	 * Only emulate CPUID in 2 cases:
+	 * - CPUID is in the range reserved for hypervisor communication.
+	 * - CPUID is an extended topology leaf which is not emulated natively
+	 *   by the TDX module.
 	 *
-	 * Return all-zeros for any CPUID outside the range. It matches CPU
-	 * behaviour for non-supported leaf.
+	 * Return all-zeros for any other CPUID. It matches CPU behaviour for
+	 * non-supported leaf.
 	 */
-	if (regs->ax < 0x40000000 || regs->ax > 0x4FFFFFFF) {
+	if ((regs->ax < 0x40000000 || regs->ax > 0x4FFFFFFF) &&
+	    regs->ax != 0x0b && regs->ax != 0x1f) {
 		regs->ax = regs->bx = regs->cx = regs->dx = 0;
 		return ve_instr_len(ve);
 	}
