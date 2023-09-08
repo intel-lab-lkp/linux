@@ -321,6 +321,9 @@ static void ice_vsi_free_arrays(struct ice_vsi *vsi)
 
 	dev = ice_pf_to_dev(pf);
 
+	vsi->num_txq = 0;
+	vsi->num_rxq = 0;
+
 	bitmap_free(vsi->af_xdp_zc_qps);
 	vsi->af_xdp_zc_qps = NULL;
 	/* free the ring and vector containers */
@@ -3139,6 +3142,7 @@ int ice_vsi_rebuild(struct ice_vsi *vsi, u32 vsi_flags)
 	struct ice_coalesce_stored *coalesce;
 	int ret, prev_txq, prev_rxq;
 	int prev_num_q_vectors = 0;
+	struct device *dev;
 	struct ice_pf *pf;
 
 	if (!vsi)
@@ -3148,6 +3152,7 @@ int ice_vsi_rebuild(struct ice_vsi *vsi, u32 vsi_flags)
 	params.flags = vsi_flags;
 
 	pf = vsi->back;
+	dev = ice_pf_to_dev(pf);
 	if (WARN_ON(vsi->type == ICE_VSI_VF && !vsi->vf))
 		return -EINVAL;
 
@@ -3188,6 +3193,8 @@ err_vsi_cfg_tc_lan:
 	ice_vsi_decfg(vsi);
 err_vsi_cfg:
 	kfree(coalesce);
+	set_bit(ICE_RESET_FAILED, pf->state);
+	dev_err(dev, "Rebuild failed, unload and reload driver\n");
 	return ret;
 }
 
