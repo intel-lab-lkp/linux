@@ -313,3 +313,18 @@ void *bpf_arch_text_copy(void *dst, void *src, size_t len)
 
 	return ret;
 }
+
+int bpf_arch_text_invalidate(void *dst, size_t len)
+{
+	u32 insn = BREAKPOINT_INSTRUCTION;
+	void *ret;
+
+	if (WARN_ON_ONCE(core_kernel_text((unsigned long)dst)))
+		return -EINVAL;
+
+	mutex_lock(&text_mutex);
+	ret = bpf_patch_instructions(dst, &insn, len, true);
+	mutex_unlock(&text_mutex);
+
+	return IS_ERR(ret) ? PTR_ERR(ret) : 0;
+}
