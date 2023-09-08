@@ -1531,6 +1531,33 @@ ip_proto_again:
 		fdret = FLOW_DISSECT_RET_IPPROTO_AGAIN;
 		break;
 	}
+	case NEXTHDR_MOBILITY: {
+		struct flow_dissector_ipv6_mh *key_ipv6mh;
+		u8 _opthdr[3], *opthdr;
+
+		if (proto != htons(ETH_P_IPV6))
+			break;
+
+		opthdr = __skb_header_pointer(skb, nhoff, sizeof(_opthdr),
+					      data, hlen, &_opthdr);
+		if (!opthdr) {
+			fdret = FLOW_DISSECT_RET_OUT_BAD;
+			break;
+		}
+
+		if (!dissector_uses_key(flow_dissector, FLOW_DISSECTOR_KEY_IPV6MH))
+			break;
+
+		key_ipv6mh = skb_flow_dissector_target(flow_dissector,
+						       FLOW_DISSECTOR_KEY_IPV6MH,
+						       target_container);
+		ip_proto = opthdr[0];
+		nhoff += (opthdr[1] + 1) << 3;
+		key_ipv6mh->mh_type = opthdr[2];
+
+		fdret = FLOW_DISSECT_RET_OUT_GOOD;
+		break;
+	}
 	case NEXTHDR_FRAGMENT: {
 		struct frag_hdr _fh, *fh;
 
