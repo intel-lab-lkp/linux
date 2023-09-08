@@ -35,6 +35,7 @@
 #include <linux/magic.h>
 #include <linux/migrate.h>
 #include <linux/uio.h>
+#include <linux/memfd.h>
 
 #include <linux/uaccess.h>
 #include <linux/sched/mm.h>
@@ -1324,6 +1325,12 @@ static void init_once(void *foo)
 	inode_init_once(&ei->vfs_inode);
 }
 
+static long hugetlbfs_file_ioctl(struct file *file, unsigned int cmd,
+				 unsigned long arg)
+{
+	return memfd_ioctl(file, cmd, arg);
+}
+
 const struct file_operations hugetlbfs_file_operations = {
 	.read_iter		= hugetlbfs_read_iter,
 	.mmap			= hugetlbfs_file_mmap,
@@ -1331,6 +1338,8 @@ const struct file_operations hugetlbfs_file_operations = {
 	.get_unmapped_area	= hugetlb_get_unmapped_area,
 	.llseek			= default_llseek,
 	.fallocate		= hugetlbfs_fallocate,
+	.unlocked_ioctl		= hugetlbfs_file_ioctl,
+	.compat_ioctl		= hugetlbfs_file_ioctl,
 };
 
 static const struct inode_operations hugetlbfs_dir_inode_operations = {

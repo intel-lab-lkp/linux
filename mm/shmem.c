@@ -79,6 +79,7 @@ static struct vfsmount *shm_mnt;
 #include <linux/rmap.h>
 #include <linux/uuid.h>
 #include <linux/quotaops.h>
+#include <linux/memfd.h>
 
 #include <linux/uaccess.h>
 
@@ -4476,6 +4477,12 @@ const struct address_space_operations shmem_aops = {
 };
 EXPORT_SYMBOL(shmem_aops);
 
+static long shmem_file_ioctl(struct file *file, unsigned int cmd,
+			     unsigned long arg)
+{
+	return memfd_ioctl(file, cmd, arg);
+}
+
 static const struct file_operations shmem_file_operations = {
 	.mmap		= shmem_mmap,
 	.open		= shmem_file_open,
@@ -4488,6 +4495,8 @@ static const struct file_operations shmem_file_operations = {
 	.splice_read	= shmem_file_splice_read,
 	.splice_write	= iter_file_splice_write,
 	.fallocate	= shmem_fallocate,
+	.unlocked_ioctl = shmem_file_ioctl,
+	.compat_ioctl   = shmem_file_ioctl,
 #endif
 };
 

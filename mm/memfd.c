@@ -262,6 +262,15 @@ long memfd_fcntl(struct file *file, unsigned int cmd, unsigned int arg)
 	return error;
 }
 
+long memfd_ioctl(struct file *file, unsigned int cmd, unsigned int arg)
+{
+	if (cmd == MEMFD_CHECK_IF_ORIGINAL)
+		return (file->f_mode & FMODE_WRITE) &&
+		       !(file->f_mode & FMODE_WRITER);
+
+	return -EINVAL;
+}
+
 #define MFD_NAME_PREFIX "memfd:"
 #define MFD_NAME_PREFIX_LEN (sizeof(MFD_NAME_PREFIX) - 1)
 #define MFD_NAME_MAX_LEN (NAME_MAX - MFD_NAME_PREFIX_LEN)
