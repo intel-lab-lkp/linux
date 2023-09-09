@@ -752,6 +752,8 @@ static const unsigned int memcg_vm_event_stat[] = {
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 	THP_FAULT_ALLOC,
 	THP_COLLAPSE_ALLOC,
+	THP_SWPOUT,
+	THP_SWPOUT_FALLBACK,
 #endif
 };
 
@@ -4131,6 +4133,10 @@ static const unsigned int memcg1_events[] = {
 	PGPGOUT,
 	PGFAULT,
 	PGMAJFAULT,
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE
+	THP_SWPOUT,
+	THP_SWPOUT_FALLBACK,
+#endif
 };
 
 static void memcg1_stat_format(struct mem_cgroup *memcg, struct seq_buf *s)
