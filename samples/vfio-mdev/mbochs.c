@@ -1430,7 +1430,9 @@ static int __init mbochs_dev_init(void)
 	}
 	mbochs_dev.class = mbochs_class;
 	mbochs_dev.release = mbochs_device_release;
-	dev_set_name(&mbochs_dev, "%s", MBOCHS_NAME);
+	ret = dev_set_name(&mbochs_dev, "%s", MBOCHS_NAME);
+	if (ret)
+		goto err_put;
 
 	ret = device_register(&mbochs_dev);
 	if (ret)
