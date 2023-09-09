@@ -941,7 +941,7 @@ const char *ext4_decode_error(struct super_block *sb, int errno,
 		 * NULL. */
 		if (nbuf) {
 			/* Check for truncated error codes... */
-			if (snprintf(nbuf, 16, "error %d", -errno) >= 0)
+			if (snprintf(nbuf, 16, "error %d", -errno) < 16)
 				errstr = nbuf;
 		}
 		break;
