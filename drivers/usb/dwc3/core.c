@@ -2185,9 +2185,11 @@ static int dwc3_resume(struct device *dev)
 
 	pinctrl_pm_select_default_state(dev);
 
-	ret = dwc3_resume_common(dwc, PMSG_RESUME);
-	if (ret)
-		return ret;
+	if (!pm_runtime_suspended(dwc->dev)) {
+		ret = dwc3_resume_common(dwc, PMSG_RESUME);
+		if (ret)
+			return ret;
+	}
 
 	pm_runtime_disable(dev);
 	pm_runtime_set_active(dev);
