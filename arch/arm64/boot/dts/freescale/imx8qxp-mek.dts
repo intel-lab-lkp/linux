@@ -36,6 +36,7 @@
 		pinctrl-0 = <&pinctrl_typec_mux>;
 		select-gpios = <&lsio_gpio5 9 GPIO_ACTIVE_HIGH>;
 		enable-gpios = <&pca9557_a 7 GPIO_ACTIVE_LOW>;
+		mode-switch;
 		orientation-switch;
 
 		port {
