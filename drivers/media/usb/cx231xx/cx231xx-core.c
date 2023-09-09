@@ -751,12 +751,12 @@ int cx231xx_ep5_bulkout(struct cx231xx *dev, u8 *firmware, u16 size)
 	int ret = -ENOMEM;
 	u32 *buffer;
 
-	buffer = kmemdup(firmware, 4096, GFP_KERNEL);
+	buffer = kmemdup(firmware, EP5_BUF_SIZE, GFP_KERNEL);
 	if (buffer == NULL)
 		return -ENOMEM;
 
 	ret = usb_bulk_msg(dev->udev, usb_sndbulkpipe(dev->udev, 5),
-			buffer, 4096, &actlen, 2000);
+			buffer, EP5_BUF_SIZE, &actlen, EP5_TIMEOUT_MS);
 
 	if (ret)
 		dev_err(dev->dev,
@@ -993,7 +993,7 @@ int cx231xx_init_isoc(struct cx231xx *dev, int max_packets,
 	/* De-allocates all pending stuff */
 	cx231xx_uninit_isoc(dev);
 
-	dma_q->p_left_data = kzalloc(4096, GFP_KERNEL);
+	dma_q->p_left_data = kzalloc(EP5_BUF_SIZE, GFP_KERNEL);
 	if (dma_q->p_left_data == NULL)
 		return -ENOMEM;
 
