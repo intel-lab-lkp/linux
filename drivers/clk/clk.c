@@ -3187,7 +3187,8 @@ static struct hlist_head *orphan_list[] = {
 static void clk_summary_show_one(struct seq_file *s, struct clk_core *c,
 				 int level)
 {
-	int phase;
+	int phase, next_line = 0;
+	struct clk *clk_user;
 
 	seq_printf(s, "%*s%-*s %7d %8d %8d %11lu %10lu ",
 		   level * 3 + 1, "",
@@ -3205,11 +3206,25 @@ static void clk_summary_show_one(struct seq_file *s, struct clk_core *c,
 	seq_printf(s, " %6d", clk_core_get_scaled_duty_cycle(c, 100000));
 
 	if (c->ops->is_enabled)
-		seq_printf(s, " %9c\n", clk_core_is_enabled(c) ? 'Y' : 'N');
+		seq_printf(s, " %9c", clk_core_is_enabled(c) ? 'Y' : 'N');
 	else if (!c->ops->enable)
-		seq_printf(s, " %9c\n", 'Y');
+		seq_printf(s, " %9c", 'Y');
 	else
-		seq_printf(s, " %9c\n", '?');
+		seq_printf(s, " %9c", '?');
+
+	hlist_for_each_entry(clk_user, &c->clks, clks_node) {
+		if (!clk_user->dev_id && !clk_user->con_id)
+			continue;
+
+		seq_printf(s, "%*s%-25s  %10s\n",
+			   2 + 103 * next_line, "",
+			   clk_user->dev_id, clk_user->con_id);
+
+		next_line = 1;
+	}
+
+	if (!next_line)
+		seq_puts(s, "\n");
 }
 
 static void clk_summary_show_subtree(struct seq_file *s, struct clk_core *c,
@@ -3230,9 +3245,9 @@ static int clk_summary_show(struct seq_file *s, void *data)
 	struct clk_core *c;
 	struct hlist_head **lists = s->private;
 
-	seq_puts(s, "                                 enable  prepare  protect                                duty  hardware\n");
-	seq_puts(s, "   clock                          count    count    count        rate   accuracy phase  cycle    enable\n");
-	seq_puts(s, "-------------------------------------------------------------------------------------------------------\n");
+	seq_puts(s, "                                 enable  prepare  protect                                duty  hardware  consumer                   connection\n");
+	seq_puts(s, "   clock                          count    count    count        rate   accuracy phase  cycle    enable    device                           id\n");
+	seq_puts(s, "----------------------------------------------------------------------------------------------------------------------------------------------\n");
 
 	clk_prepare_lock();
 
