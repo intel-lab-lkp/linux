@@ -98,6 +98,7 @@ void relocate_new_kernel(unsigned long indirection_page, unsigned long reboot_co
 			 unsigned long start_address) __noreturn;
 
 void kexec_copy_flush(struct kimage *image);
+int add_node_props(void *fdt, int node_offset, const struct device_node *dn);
 
 #if defined(CONFIG_CRASH_DUMP) && defined(CONFIG_PPC_RTAS)
 void crash_free_reserved_phys_range(unsigned long begin, unsigned long end);
