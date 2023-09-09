@@ -717,7 +717,9 @@ static int __init mdpy_dev_init(void)
 	}
 	mdpy_dev.class = mdpy_class;
 	mdpy_dev.release = mdpy_device_release;
-	dev_set_name(&mdpy_dev, "%s", MDPY_NAME);
+	ret = dev_set_name(&mdpy_dev, "%s", MDPY_NAME);
+	if (ret)
+		goto err_put;
 
 	ret = device_register(&mdpy_dev);
 	if (ret)
