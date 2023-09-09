@@ -3032,12 +3032,12 @@ static void gen12_oa_enable(struct i915_perf_stream *stream)
 	u32 val;
 
 	/*
-	 * If we don't want OA reports from the OA buffer, then we don't even
-	 * need to program the OAG unit.
+	 * BSpec: 46822
+	 * Correct values for OAR counters are still dependent on enabling the
+	 * GEN12_OAG_OACONTROL_OA_COUNTER_ENABLE in OAG_OACONTROL. Enabling this
+	 * bit means OAG unit will write reports to the OAG buffer, so
+	 * initialize the OAG buffer correctly.
 	 */
-	if (!(stream->sample_flags & SAMPLE_OA_REPORT))
-		return;
-
 	gen12_init_oa_buffer(stream);
 
 	regs = __oa_regs(stream);
