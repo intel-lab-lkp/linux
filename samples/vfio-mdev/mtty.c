@@ -1330,7 +1330,9 @@ static int __init mtty_dev_init(void)
 
 	mtty_dev.dev.class = mtty_dev.vd_class;
 	mtty_dev.dev.release = mtty_device_release;
-	dev_set_name(&mtty_dev.dev, "%s", MTTY_NAME);
+	ret = dev_set_name(&mtty_dev.dev, "%s", MTTY_NAME);
+	if (ret)
+		goto err_put;
 
 	ret = device_register(&mtty_dev.dev);
 	if (ret)
