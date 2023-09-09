@@ -188,8 +188,8 @@ out_free_pin:
 	}
 out:
 	if (status)
-		dev_err(pctldev->dev, "pin-%d (%s) status %d\n",
-			pin, owner, status);
+		dev_err_probe(pctldev->dev, status, "pin-%d (%s)\n",
+			      pin, owner);
 
 	return status;
 }
