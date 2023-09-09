@@ -31,6 +31,7 @@
 #include <linux/swapops.h>
 #include <linux/shmem_fs.h>
 #include <linux/mmu_notifier.h>
+#include <linux/swap.h>
 
 #include <asm/tlb.h>
 
@@ -353,6 +354,7 @@ static int madvise_cold_or_pageout_pte_range(pmd_t *pmd,
 	struct folio *folio = NULL;
 	LIST_HEAD(folio_list);
 	bool pageout_anon_only_filter;
+	unsigned int batch_count = 0;
 
 	if (fatal_signal_pending(current))
 		return -EINTR;
@@ -441,6 +443,13 @@ regular_folio:
 	arch_enter_lazy_mmu_mode();
 	for (; addr < end; pte++, addr += PAGE_SIZE) {
 		ptent = ptep_get(pte);
+		
+		if (++batch_count == SWAP_CLUSTER_MAX) {
+			pte_unmap_unlock(start_pte, ptl);
+		 	cond_resched();
+		 	start_pte = pte_offset_map_lock(mm, pmd, addr, &ptl);
+		 	batch_count = 0;
+		}
 
 		if (pte_none(ptent))
 			continue;
