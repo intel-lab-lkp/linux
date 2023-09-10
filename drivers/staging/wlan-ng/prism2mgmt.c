@@ -1227,9 +1227,9 @@ int prism2mgmt_wlansniff(struct wlandevice *wlandev, void *msgp)
 				     word, result);
 				goto failed;
 			}
-			if ((msg->keepwepflags.status ==
-			     P80211ENUM_msgitem_status_data_ok) &&
-			    (msg->keepwepflags.data != P80211ENUM_truth_true)) {
+			if (msg->keepwepflags.status ==
+			     P80211ENUM_msgitem_status_data_ok &&
+			    msg->keepwepflags.data != P80211ENUM_truth_true) {
 				/* Set the wepflags for no decryption */
 				word = HFA384x_WEPFLAGS_DISABLE_TXCRYPT |
 				    HFA384x_WEPFLAGS_DISABLE_RXCRYPT;
@@ -1249,9 +1249,9 @@ int prism2mgmt_wlansniff(struct wlandevice *wlandev, void *msgp)
 		}
 
 		/* Do we want to strip the FCS in monitor mode? */
-		if ((msg->stripfcs.status ==
-		     P80211ENUM_msgitem_status_data_ok) &&
-		    (msg->stripfcs.data == P80211ENUM_truth_true)) {
+		if (msg->stripfcs.status ==
+		     P80211ENUM_msgitem_status_data_ok &&
+		    msg->stripfcs.data == P80211ENUM_truth_true) {
 			hw->sniff_fcs = 0;
 		} else {
 			hw->sniff_fcs = 1;
@@ -1288,9 +1288,9 @@ int prism2mgmt_wlansniff(struct wlandevice *wlandev, void *msgp)
 
 		/* Set the driver state */
 		/* Do we want the prism2 header? */
-		if ((msg->prismheader.status ==
-		     P80211ENUM_msgitem_status_data_ok) &&
-		    (msg->prismheader.data == P80211ENUM_truth_true)) {
+		if (msg->prismheader.status ==
+		     P80211ENUM_msgitem_status_data_ok &&
+		    msg->prismheader.data == P80211ENUM_truth_true) {
 			hw->sniffhdr = 0;
 			wlandev->netdev->type = ARPHRD_IEEE80211_PRISM;
 		} else if ((msg->wlanheader.status ==
