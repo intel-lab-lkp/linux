@@ -244,7 +244,8 @@ properties:
           - enum:
               - mediatek,mt8183-pumpkin
           - const: mediatek,mt8183
-      - items:
+      - description: MediaTek Genio 350 Boards (Genio 350 EVK)
+        items:
           - enum:
               - mediatek,mt8365-evk
           - const: mediatek,mt8365
