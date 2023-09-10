@@ -264,6 +264,10 @@ static const struct usb_device_id usb_quirk_list[] = {
 	/* Logitech Harmony 700-series */
 	{ USB_DEVICE(0x046d, 0xc122), .driver_info = USB_QUIRK_DELAY_INIT },
 
+	/* Logitech lightspeed receiver (0xc547) */
+	{ USB_DEVICE(0x046d, 0xc547), .driver_info =
+			USB_QUIRK_IGNORE_REMOTE_WAKEUP },
+
 	/* Philips PSC805 audio device */
 	{ USB_DEVICE(0x0471, 0x0155), .driver_info = USB_QUIRK_RESET_RESUME },
 
