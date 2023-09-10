@@ -3117,7 +3117,7 @@ EXPORT_SYMBOL(unlock_rename);
  */
 static inline umode_t mode_strip_umask(const struct inode *dir, umode_t mode)
 {
-	if (!IS_POSIXACL(dir))
+	if (!IS_NOUMASK(dir))
 		mode &= ~current_umask();
 	return mode;
 }
