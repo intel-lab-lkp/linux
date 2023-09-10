@@ -275,16 +275,6 @@ static int max20086_i2c_probe(struct i2c_client *i2c)
 	return 0;
 }
 
-static const struct i2c_device_id max20086_i2c_id[] = {
-	{ "max20086" },
-	{ "max20087" },
-	{ "max20088" },
-	{ "max20089" },
-	{ /* Sentinel */ },
-};
-
-MODULE_DEVICE_TABLE(i2c, max20086_i2c_id);
-
 static const struct of_device_id max20086_dt_ids[] __maybe_unused = {
 	{
 		.compatible = "maxim,max20086",
@@ -311,9 +301,8 @@ static const struct of_device_id max20086_dt_ids[] __maybe_unused = {
 			.num_outputs = 2,
 		}
 	},
-	{ /* Sentinel */ },
+	{ /* Sentinel */ }
 };
-
 MODULE_DEVICE_TABLE(of, max20086_dt_ids);
 
 static struct i2c_driver max20086_regulator_driver = {
@@ -323,7 +312,6 @@ static struct i2c_driver max20086_regulator_driver = {
 		.of_match_table = of_match_ptr(max20086_dt_ids),
 	},
 	.probe = max20086_i2c_probe,
-	.id_table = max20086_i2c_id,
 };
 
 module_i2c_driver(max20086_regulator_driver);
