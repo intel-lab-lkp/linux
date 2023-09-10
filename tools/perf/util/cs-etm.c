@@ -410,6 +410,17 @@ void cs_etm__etmq_set_traceid_queue_timestamp(struct cs_etm_queue *etmq,
 	etmq->pending_timestamp_chan_id = trace_chan_id;
 }
 
+static u64 cs_etm__resolve_time(struct cs_etm_queue *etmq,
+				struct cs_etm_packet_queue *packet_queue)
+{
+	struct cs_etm_auxtrace *etm = etmq->etm;
+
+	if (!etm->timeless_decoding && etm->has_virtual_ts)
+		return packet_queue->cs_timestamp;
+	else
+		return etm->latest_kernel_timestamp;
+}
+
 static u64 cs_etm__etmq_get_timestamp(struct cs_etm_queue *etmq,
 				      u8 *trace_chan_id)
 {
@@ -429,8 +440,7 @@ static u64 cs_etm__etmq_get_timestamp(struct cs_etm_queue *etmq,
 	/* Acknowledge pending status */
 	etmq->pending_timestamp_chan_id = 0;
 
-	/* See function cs_etm_decoder__do_{hard|soft}_timestamp() */
-	return packet_queue->cs_timestamp;
+	return cs_etm__resolve_time(etmq, packet_queue);
 }
 
 static void cs_etm__clear_packet_queue(struct cs_etm_packet_queue *queue)
@@ -1444,18 +1454,6 @@ u64 cs_etm__convert_sample_time(struct cs_etm_queue *etmq, u64 cs_timestamp)
 		return cs_timestamp;
 }
 
-static inline u64 cs_etm__resolve_sample_time(struct cs_etm_queue *etmq,
-					       struct cs_etm_traceid_queue *tidq)
-{
-	struct cs_etm_auxtrace *etm = etmq->etm;
-	struct cs_etm_packet_queue *packet_queue = &tidq->packet_queue;
-
-	if (!etm->timeless_decoding && etm->has_virtual_ts)
-		return packet_queue->cs_timestamp;
-	else
-		return etm->latest_kernel_timestamp;
-}
-
 static int cs_etm__synth_instruction_sample(struct cs_etm_queue *etmq,
 					    struct cs_etm_traceid_queue *tidq,
 					    u64 addr, u64 period)
@@ -1464,13 +1462,14 @@ static int cs_etm__synth_instruction_sample(struct cs_etm_queue *etmq,
 	struct cs_etm_auxtrace *etm = etmq->etm;
 	union perf_event *event = tidq->event_buf;
 	struct perf_sample sample = {.ip = 0,};
+	struct cs_etm_packet_queue *packet_queue = &tidq->packet_queue;
 
 	event->sample.header.type = PERF_RECORD_SAMPLE;
 	event->sample.header.misc = cs_etm__cpu_mode(etmq, addr, tidq->el);
 	event->sample.header.size = sizeof(struct perf_event_header);
 
 	/* Set time field based on etm auxtrace config. */
-	sample.time = cs_etm__resolve_sample_time(etmq, tidq);
+	sample.time = cs_etm__resolve_time(etmq, packet_queue);
 
 	sample.ip = addr;
 	sample.pid = thread__pid(tidq->thread);
@@ -1515,6 +1514,7 @@ static int cs_etm__synth_branch_sample(struct cs_etm_queue *etmq,
 	struct cs_etm_auxtrace *etm = etmq->etm;
 	struct perf_sample sample = {.ip = 0,};
 	union perf_event *event = tidq->event_buf;
+	struct cs_etm_packet_queue *packet_queue = &tidq->packet_queue;
 	struct dummy_branch_stack {
 		u64			nr;
 		u64			hw_idx;
@@ -1530,7 +1530,7 @@ static int cs_etm__synth_branch_sample(struct cs_etm_queue *etmq,
 	event->sample.header.size = sizeof(struct perf_event_header);
 
 	/* Set time field based on etm auxtrace config. */
-	sample.time = cs_etm__resolve_sample_time(etmq, tidq);
+	sample.time = cs_etm__resolve_time(etmq, packet_queue);
 
 	sample.ip = ip;
 	sample.pid = thread__pid(tidq->prev_packet_thread);
