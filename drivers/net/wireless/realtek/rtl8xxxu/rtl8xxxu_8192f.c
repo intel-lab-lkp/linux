@@ -2014,26 +2014,22 @@ static int rtl8192fu_led_brightness_set(struct led_classdev *led_cdev,
 	struct rtl8xxxu_priv *priv = container_of(led_cdev,
 						  struct rtl8xxxu_priv,
 						  led_cdev);
-	u16 ledcfg;
+	u32 ledcfg;
 
 	/* Values obtained by observing the USB traffic from the Windows driver. */
 	rtl8xxxu_write32(priv, REG_SW_GPIO_SHARE_CTRL_0, 0x20080);
 	rtl8xxxu_write32(priv, REG_SW_GPIO_SHARE_CTRL_1, 0x1b0000);
 
-	ledcfg = rtl8xxxu_read16(priv, REG_LEDCFG0);
+	/* Enable LED0 GPIO and turn LED0/LED1 off. */
+	ledcfg = (rtl8xxxu_read32(priv, REG_LEDCFG0) | BIT(21)) & ~0xffff;
 
-	if (brightness == LED_OFF) {
-		/* Value obtained like above. */
-		ledcfg = BIT(1) | BIT(7);
-	} else if (brightness == LED_ON) {
-		/* Value obtained like above. */
-		ledcfg = BIT(1) | BIT(7) | BIT(11);
-	} else if (brightness == RTL8XXXU_HW_LED_CONTROL) {
-		/* Value obtained by brute force. */
-		ledcfg = BIT(8) | BIT(9);
-	}
+	/* Values obtained by brute force. */
+	if (brightness == LED_ON)
+		ledcfg |= BIT(3) | BIT(11);
+	else if (brightness == RTL8XXXU_HW_LED_CONTROL)
+		ledcfg |= BIT(0) | BIT(1) | BIT(8) | BIT(9);
 
-	rtl8xxxu_write16(priv, REG_LEDCFG0, ledcfg);
+	rtl8xxxu_write32(priv, REG_LEDCFG0, ledcfg);
 
 	return 0;
 }
