@@ -6770,24 +6770,35 @@ static int comp_match_cs35l41_dev_name(struct device *dev, void *data)
 	return !strcmp(d + n, tmp);
 }
 
+/* TIAS2781 is the unofficial ACPI id, but widely used in current devices.
+ * TXNW2781 is the official ACPI id, and will be used in the new devices.
+ * Check TIAS2781 or TXNW2781
+ */
 static int comp_match_tas2781_dev_name(struct device *dev,
 	void *data)
 {
-	struct scodec_dev_name *p = data;
+	const char c[][10] = { "TXNW2781", "TIAS2781" };
 	const char *d = dev_name(dev);
-	int n = strlen(p->bus);
+	const char *bus = data;
+	int n = strlen(bus), i;
 	char tmp[32];
 
 	/* check the bus name */
-	if (strncmp(d, p->bus, n))
+	if (strncmp(d, bus, n))
 		return 0;
 	/* skip the bus number */
 	if (isdigit(d[n]))
 		n++;
-	/* the rest must be exact matching */
-	snprintf(tmp, sizeof(tmp), "-%s:00", p->hid);
 
-	return !strcmp(d + n, tmp);
+	for (i = 0; i < ARRAY_SIZE(c); i++) {
+		/* the rest must be exact matching */
+		snprintf(tmp, sizeof(tmp), "-%s:00", c[i]);
+
+		if (!strcmp(d + n, tmp))
+			return 1;
+	}
+
+	return 0;
 }
 
 static void cs35l41_generic_fixup(struct hda_codec *cdc, int action, const char *bus,
@@ -6824,24 +6835,17 @@ static void cs35l41_generic_fixup(struct hda_codec *cdc, int action, const char 
 }
 
 static void tas2781_generic_fixup(struct hda_codec *cdc, int action,
-	const char *bus, const char *hid)
+	const char *bus)
 {
 	struct device *dev = hda_codec_dev(cdc);
 	struct alc_spec *spec = cdc->spec;
-	struct scodec_dev_name *rec;
 	int ret;
 
 	switch (action) {
 	case HDA_FIXUP_ACT_PRE_PROBE:
-		rec = devm_kmalloc(dev, sizeof(*rec), GFP_KERNEL);
-		if (!rec)
-			return;
-		rec->bus = bus;
-		rec->hid = hid;
-		rec->index = 0;
 		spec->comps[0].codec = cdc;
 		component_match_add(dev, &spec->match,
-			comp_match_tas2781_dev_name, rec);
+			comp_match_tas2781_dev_name, (void *)bus);
 		ret = component_master_add_with_match(dev, &comp_master_ops,
 			spec->match);
 		if (ret)
@@ -6888,7 +6892,7 @@ static void alc287_fixup_legion_16ithg6_speakers(struct hda_codec *cdc, const st
 static void tas2781_fixup_i2c(struct hda_codec *cdc,
 	const struct hda_fixup *fix, int action)
 {
-	 tas2781_generic_fixup(cdc, action, "i2c", "TIAS2781");
+	 tas2781_generic_fixup(cdc, action, "i2c");
 }
 
 /* for alc295_fixup_hp_top_speakers */

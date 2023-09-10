@@ -65,6 +65,16 @@ enum calib_data {
 	CALIB_MAX
 };
 
+/* TIAS2781 is the unofficial ACPI id, but widely used in current devices.
+ * TXNW2781 is the official ACPI id, and will be used in the new devices.
+ */
+static const struct acpi_device_id tas2781_acpi_hda_match[] = {
+	{"TIAS2781", 0 },
+	{"TXNW2781", 1 },
+	{}
+};
+MODULE_DEVICE_TABLE(acpi, tas2781_acpi_hda_match);
+
 static int tas2781_get_i2c_res(struct acpi_resource *ares, void *data)
 {
 	struct tasdevice_priv *tas_priv = data;
@@ -644,20 +654,23 @@ static void tas2781_hda_remove(struct device *dev)
 static int tas2781_hda_i2c_probe(struct i2c_client *clt)
 {
 	struct tasdevice_priv *tas_priv;
-	const char *device_name;
-	int ret;
+	int ret, i;
 
-	if (strstr(dev_name(&clt->dev), "TIAS2781"))
-		device_name = "TIAS2781";
-	else
-		return -ENODEV;
+	/* Check TIAS2781 or TXNW2781 */
+	for (i = 0; i < ARRAY_SIZE(tas2781_acpi_hda_match); i++)
+		if (strstr(dev_name(&clt->dev), tas2781_acpi_hda_match[i].id))
+			break;
+
+	if (i == ARRAY_SIZE(tas2781_acpi_hda_match))
+		return dev_err_probe(tas_priv->dev, -ENODEV,
+			"Device not available\n");
 
 	tas_priv = tasdevice_kzalloc(clt);
 	if (!tas_priv)
 		return -ENOMEM;
 
 	tas_priv->irq_info.irq = clt->irq;
-	ret = tas2781_read_acpi(tas_priv, device_name);
+	ret = tas2781_read_acpi(tas_priv, tas2781_acpi_hda_match[i].id);
 	if (ret)
 		return dev_err_probe(tas_priv->dev, ret,
 			"Platform not supported\n");
@@ -821,12 +834,6 @@ static const struct i2c_device_id tas2781_hda_i2c_id[] = {
 	{ "tas2781-hda", 0 },
 	{}
 };
-
-static const struct acpi_device_id tas2781_acpi_hda_match[] = {
-	{"TIAS2781", 0 },
-	{}
-};
-MODULE_DEVICE_TABLE(acpi, tas2781_acpi_hda_match);
 
 static struct i2c_driver tas2781_hda_i2c_driver = {
 	.driver = {
