@@ -29,13 +29,8 @@ static int efivarfs_statfs(struct dentry *dentry, struct kstatfs *buf)
 	const u32 attr = EFI_VARIABLE_NON_VOLATILE |
 			 EFI_VARIABLE_BOOTSERVICE_ACCESS |
 			 EFI_VARIABLE_RUNTIME_ACCESS;
-	u64 storage_space, remaining_space, max_variable_size;
+	u64 storage_space, remaining_space = 0, max_variable_size;
 	efi_status_t status;
-
-	status = efivar_query_variable_info(attr, &storage_space, &remaining_space,
-					    &max_variable_size);
-	if (status != EFI_SUCCESS)
-		return efi_status_to_err(status);
 
 	/*
 	 * This is not a normal filesystem, so no point in pretending it has a block
@@ -44,9 +39,18 @@ static int efivarfs_statfs(struct dentry *dentry, struct kstatfs *buf)
 	 */
 	buf->f_bsize	= 1;
 	buf->f_namelen	= NAME_MAX;
-	buf->f_blocks	= storage_space;
-	buf->f_bfree	= remaining_space;
 	buf->f_type	= dentry->d_sb->s_magic;
+
+	/* Some UEFI firmware does not implement QueryVariable() */
+	if (efi_rt_services_supported(EFI_RT_SUPPORTED_QUERY_VARIABLE_INFO)) {
+		status = efivar_query_variable_info(attr, &storage_space,
+						    &remaining_space,
+						    &max_variable_size);
+		if (status == EFI_SUCCESS) {
+			buf->f_blocks	= storage_space;
+			buf->f_bfree	= remaining_space;
+		}
+	}
 
 	/*
 	 * In f_bavail we declare the free space that the kernel will allow writing
