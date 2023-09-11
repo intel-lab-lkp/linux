@@ -2351,6 +2351,7 @@ static const struct of_device_id etm4_sysreg_match[] = {
 #ifdef CONFIG_ACPI
 static const struct acpi_device_id etm4x_acpi_ids[] = {
 	{"ARMHC500", 0}, /* ARM CoreSight ETM4x */
+	{"BABA6000", 0 }, /* THEAD CoreSight ETE */
 	{}
 };
 MODULE_DEVICE_TABLE(acpi, etm4x_acpi_ids);
