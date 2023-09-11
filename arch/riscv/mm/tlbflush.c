@@ -3,6 +3,7 @@
 #include <linux/mm.h>
 #include <linux/smp.h>
 #include <linux/sched.h>
+#include <linux/hugetlb.h>
 #include <asm/sbi.h>
 #include <asm/mmu_context.h>
 
@@ -147,7 +148,43 @@ void flush_tlb_page(struct vm_area_struct *vma, unsigned long addr)
 void flush_tlb_range(struct vm_area_struct *vma, unsigned long start,
 		     unsigned long end)
 {
-	__flush_tlb_range(vma->vm_mm, start, end - start, PAGE_SIZE);
+	unsigned long stride_size;
+
+	stride_size = is_vm_hugetlb_page(vma) ?
+				huge_page_size(hstate_vma(vma)) :
+				PAGE_SIZE;
+
+#ifdef CONFIG_RISCV_ISA_SVNAPOT
+	/*
+	 * As stated in the privileged specification, every PTE in a NAPOT
+	 * region must be invalidated, so reset the stride in that case.
+	 */
+	if (has_svnapot()) {
+		unsigned long order, napot_size;
+
+		for_each_napot_order(order) {
+			napot_size = napot_cont_size(order);
+
+			if (stride_size != napot_size)
+				continue;
+
+			if (napot_size >= PGDIR_SIZE)
+				stride_size = PGDIR_SIZE;
+			else if (napot_size >= P4D_SIZE)
+				stride_size = P4D_SIZE;
+			else if (napot_size >= PUD_SIZE)
+				stride_size = PUD_SIZE;
+			else if (napot_size >= PMD_SIZE)
+				stride_size = PMD_SIZE;
+			else
+				stride_size = PAGE_SIZE;
+
+			break;
+		}
+	}
+#endif
+
+	__flush_tlb_range(vma->vm_mm, start, end - start, stride_size);
 }
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 void flush_pmd_tlb_range(struct vm_area_struct *vma, unsigned long start,
