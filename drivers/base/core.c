@@ -1630,6 +1630,10 @@ static void device_links_purge(struct device *dev)
 		__device_link_del(&link->kref);
 	}
 
+	/* Clear flags in fwnode. Give a chance to create fwnode link again */
+	if (dev->fwnode)
+		dev->fwnode->flags &= ~FWNODE_FLAG_LINKS_ADDED;
+
 	device_links_write_unlock();
 }
 
