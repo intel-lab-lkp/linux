@@ -75,7 +75,6 @@ struct venus_resources {
 	const char * const vcodec_pmdomains[VIDC_PMDOMAINS_NUM_MAX];
 	const unsigned int vcodec_pmdomains_num;
 	const char * const * const opp_pmdomain;
-	const unsigned int vcodec_num;
 	const char * const resets[VIDC_RESETS_NUM_MAX];
 	const unsigned int resets_num;
 	const enum hfi_version hfi_version;
