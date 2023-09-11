@@ -1976,6 +1976,7 @@ static int gr_ep_init(struct gr_udc *dev, int num, int is_in, u32 maxplimit)
 	ep->num = num;
 	ep->is_in = is_in;
 	ep->dev = dev;
+	ep->ep.epnum = num;
 	ep->ep.ops = &gr_ep_ops;
 	INIT_LIST_HEAD(&ep->queue);
 

@@ -1373,6 +1373,7 @@ net2272_usb_reinit(struct net2272 *dev)
 		struct net2272_ep *ep = &dev->ep[i];
 
 		ep->ep.name = ep_name[i];
+		ep->ep.epnum = i;
 		ep->dev = dev;
 		ep->num = i;
 		ep->not_empty = 0;

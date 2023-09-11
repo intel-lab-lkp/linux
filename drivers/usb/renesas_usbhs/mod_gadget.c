@@ -1139,6 +1139,7 @@ int usbhs_mod_gadget_probe(struct usbhs_priv *priv)
 		uep->pipe	= NULL;
 		snprintf(uep->ep_name, EP_NAME_SIZE, "ep%d", i);
 
+		uep->ep.epnum = i;
 		uep->ep.name		= uep->ep_name;
 		uep->ep.ops		= &usbhsg_ep_ops;
 		INIT_LIST_HEAD(&uep->ep.ep_list);

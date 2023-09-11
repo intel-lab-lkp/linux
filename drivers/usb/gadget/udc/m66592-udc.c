@@ -1622,6 +1622,7 @@ static int m66592_probe(struct platform_device *pdev)
 		}
 		ep->m66592 = m66592;
 		INIT_LIST_HEAD(&ep->queue);
+		ep->ep.epnum = i;
 		ep->ep.name = m66592_ep_name[i];
 		ep->ep.ops = &m66592_ep_ops;
 		usb_ep_set_maxpacket_limit(&ep->ep, 512);

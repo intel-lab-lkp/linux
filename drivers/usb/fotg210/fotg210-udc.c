@@ -1238,6 +1238,7 @@ int fotg210_udc_probe(struct platform_device *pdev, struct fotg210 *fotg)
 		ep->fotg210 = fotg210;
 		INIT_LIST_HEAD(&ep->queue);
 		ep->ep.name = fotg210_ep_name[i];
+		ep->ep.epnum = i;
 		ep->ep.ops = &fotg210_ep_ops;
 		usb_ep_set_maxpacket_limit(&ep->ep, (unsigned short) ~0);
 

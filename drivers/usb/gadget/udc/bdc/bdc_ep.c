@@ -1977,6 +1977,7 @@ static int init_ep(struct bdc *bdc, u32 epnum, u32 dir)
 		snprintf(ep->name, sizeof(ep->name), "ep%d%s", epnum - 1,
 			 dir & 1 ? "in" : "out");
 
+		ep->usb_ep.epnum = epnum - 1;
 		usb_ep_set_maxpacket_limit(&ep->usb_ep, 1024);
 		ep->usb_ep.caps.type_iso = true;
 		ep->usb_ep.caps.type_bulk = true;

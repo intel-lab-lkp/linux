@@ -1819,6 +1819,7 @@ static int at91udc_probe(struct platform_device *pdev)
 
 	for (i = 0; i < NUM_ENDPOINTS; i++) {
 		ep = &udc->ep[i];
+		ep->ep.epnum = i;
 		ep->ep.name = ep_info[i].name;
 		ep->ep.caps = ep_info[i].caps;
 		ep->ep.ops = &at91_ep_ops;

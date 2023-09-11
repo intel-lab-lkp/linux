@@ -2331,6 +2331,7 @@ static int struct_ep_setup(struct fsl_udc *udc, unsigned char index,
 	else
 		ep->ep.caps.dir_out = true;
 
+	ep->ep.epnum = index / 2;
 	/* for ep0: maxP defined in desc
 	 * for other eps, maxP is set by epautoconfig() called by gadget layer
 	 */

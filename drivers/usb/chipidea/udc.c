@@ -1857,6 +1857,7 @@ static int init_eps(struct ci_hdrc *ci)
 			hwep->lock         = &ci->lock;
 			hwep->td_pool      = ci->td_pool;
 
+			hwep->ep.epnum     = i;
 			hwep->ep.name      = hwep->name;
 			hwep->ep.ops       = &usb_ep_ops;
 

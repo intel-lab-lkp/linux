@@ -1266,6 +1266,7 @@ static void udc_reinit (struct goku_udc *dev)
 		struct goku_ep	*ep = &dev->ep[i];
 
 		ep->num = i;
+		ep->ep.epnum = i;
 		ep->ep.name = names[i];
 		ep->reg_fifo = &dev->regs->ep_fifo [i];
 		ep->reg_status = &dev->regs->ep_status [i];

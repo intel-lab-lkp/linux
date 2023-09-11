@@ -3109,6 +3109,7 @@ static int cdns3_init_eps(struct cdns3_device *priv_dev)
 		priv_ep->num = ep_number;
 		priv_ep->dir = ep_dir ? USB_DIR_IN : USB_DIR_OUT;
 
+		priv_ep->endpoint.epnum = ep_number;
 		if (!ep_number) {
 			ret = cdns3_init_ep0(priv_dev, priv_ep);
 			if (ret) {

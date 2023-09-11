@@ -1709,6 +1709,7 @@ init_peripheral_ep(struct musb *musb, struct musb_ep *ep, u8 epnum, int is_in)
 			(!epnum || hw_ep->is_shared_fifo) ? "" : (
 				is_in ? "in" : "out"));
 	ep->end_point.name = ep->name;
+	ep->end_point.epnum = epnum;
 	INIT_LIST_HEAD(&ep->end_point.ep_list);
 	if (!epnum) {
 		usb_ep_set_maxpacket_limit(&ep->end_point, 64);

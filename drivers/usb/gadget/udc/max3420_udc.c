@@ -1162,6 +1162,7 @@ static void max3420_eps_init(struct max3420_udc *udc)
 		ep->id = idx;
 		ep->halted = 0;
 		ep->maxpacket = 0;
+		ep->ep_usb.epnum = idx;
 		ep->ep_usb.name = ep->name;
 		ep->ep_usb.ops = &max3420_ep_ops;
 		usb_ep_set_maxpacket_limit(&ep->ep_usb, MAX3420_EP_MAX_PACKET);

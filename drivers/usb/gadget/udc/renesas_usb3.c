@@ -2700,6 +2700,7 @@ static int renesas_usb3_init_ep(struct renesas_usb3 *usb3, struct device *dev,
 		snprintf(usb3_ep->ep_name, sizeof(usb3_ep->ep_name), "ep%d", i);
 		usb3_ep->usb3 = usb3;
 		usb3_ep->num = i;
+		usb3_ep->ep.epnum = i;
 		usb3_ep->ep.name = usb3_ep->ep_name;
 		usb3_ep->ep.ops = &renesas_usb3_ep_ops;
 		INIT_LIST_HEAD(&usb3_ep->queue);

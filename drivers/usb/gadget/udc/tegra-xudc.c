@@ -3173,6 +3173,7 @@ static int tegra_xudc_alloc_ep(struct tegra_xudc *xudc, unsigned int index)
 	if (index) {
 		snprintf(ep->name, sizeof(ep->name), "ep%u%s", index / 2,
 			 (index % 2 == 0) ? "out" : "in");
+		ep->usb_ep.epnum = index / 2;
 		ep->usb_ep.name = ep->name;
 		usb_ep_set_maxpacket_limit(&ep->usb_ep, 1024);
 		ep->usb_ep.max_streams = 16;
@@ -3186,6 +3187,7 @@ static int tegra_xudc_alloc_ep(struct tegra_xudc *xudc, unsigned int index)
 		list_add_tail(&ep->usb_ep.ep_list, &xudc->gadget.ep_list);
 	} else {
 		strscpy(ep->name, "ep0", 3);
+		ep->usb_ep.epnum = 0;
 		ep->usb_ep.name = ep->name;
 		usb_ep_set_maxpacket_limit(&ep->usb_ep, 512);
 		ep->usb_ep.ops = &tegra_xudc_ep0_ops;

@@ -952,6 +952,7 @@ static int bcm63xx_init_udc_hw(struct bcm63xx_udc *udc)
 	for (i = 0; i < BCM63XX_NUM_EP; i++) {
 		struct bcm63xx_ep *bep = &udc->bep[i];
 
+		bep->ep.epnum = i;
 		bep->ep.name = bcm63xx_ep_info[i].name;
 		bep->ep.caps = bcm63xx_ep_info[i].caps;
 		bep->ep_num = i;

@@ -1912,6 +1912,7 @@ static int r8a66597_probe(struct platform_device *pdev)
 		}
 		ep->r8a66597 = r8a66597;
 		INIT_LIST_HEAD(&ep->queue);
+		ep->ep.epnum = i;
 		ep->ep.name = r8a66597_ep_name[i];
 		ep->ep.ops = &r8a66597_ep_ops;
 		usb_ep_set_maxpacket_limit(&ep->ep, 512);
