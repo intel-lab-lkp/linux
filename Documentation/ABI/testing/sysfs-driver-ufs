@@ -1437,6 +1437,23 @@ Description:
 		If avail_wb_buff < wb_flush_threshold, it indicates that WriteBooster buffer needs to
 		be flushed, otherwise it is not necessary.
 
+What:		/sys/bus/platform/drivers/ufshcd/*/wb_buf_resize_control
+What:		/sys/bus/platform/devices/*.ufs/wb_buf_resize_control
+Date:		Sept 2023
+Contact:	Lu Hongfei <luhongfei@vivo.com>
+Description:
+		The host can decrease or increase the WriteBooster Buffer size by setting
+		this file.
+
+		======  ======================================
+		   00h  Idle (There is no resize operation)
+		   01h  Decrease WriteBooster Buffer Size
+		   02h  Increase WriteBooster Buffer Size
+		Others  Reserved
+		======  ======================================
+
+		The file is write only.
+
 Contact:	Daniil Lunev <dlunev@chromium.org>
 What:		/sys/bus/platform/drivers/ufshcd/*/capabilities/
 What:		/sys/bus/platform/devices/*.ufs/capabilities/
