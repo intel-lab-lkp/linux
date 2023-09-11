@@ -465,22 +465,38 @@ static irqreturn_t mtk_iommu_isr(int irq, void *dev_id)
 	struct mtk_iommu_data *data = bank->parent_data;
 	struct mtk_iommu_domain *dom = bank->m4u_dom;
 	unsigned int fault_larb = MTK_INVALID_LARBID, fault_port = 0, sub_comm = 0;
-	u32 int_state, regval, va34_32, pa34_32;
 	const struct mtk_iommu_plat_data *plat_data = data->plat_data;
+	u32 int_state = ~0, regval = 0, va34_32, pa34_32;
+	u64 fault_iova = ~0ULL, fault_pa = ~0ULL;
 	void __iomem *base = bank->base;
-	u64 fault_iova, fault_pa;
+	struct arm_smccc_res res;
 	bool layer, write;
 
-	/* Read error info from registers */
-	int_state = readl_relaxed(base + REG_MMU_FAULT_ST1);
-	if (int_state & F_REG_MMU0_FAULT_MASK) {
-		regval = readl_relaxed(base + REG_MMU0_INT_ID);
-		fault_iova = readl_relaxed(base + REG_MMU0_FAULT_VA);
-		fault_pa = readl_relaxed(base + REG_MMU0_INVLD_PA);
+	if (bank->is_secure) {
+		/* Enter to secure world to Read fault status if it is secure bank. */
+		arm_smccc_smc(MTK_SIP_KERNEL_IOMMU_CONTROL,
+			      IOMMU_ATF_CMD_GET_SECURE_IOMMU_STATUS,
+			      bank->sec_bank_base, 0, 0, 0, 0, 0, &res);
+		if (res.a0 == 0) {
+			fault_iova = res.a1;
+			fault_pa = res.a2;
+			regval = res.a3;
+		} else {
+			dev_err_ratelimited(bank->parent_dev, "secure bank fault\n");
+			goto tlb_flush_all;
+		}
 	} else {
-		regval = readl_relaxed(base + REG_MMU1_INT_ID);
-		fault_iova = readl_relaxed(base + REG_MMU1_FAULT_VA);
-		fault_pa = readl_relaxed(base + REG_MMU1_INVLD_PA);
+		/* Read error info from registers */
+		int_state = readl_relaxed(base + REG_MMU_FAULT_ST1);
+		if (int_state & F_REG_MMU0_FAULT_MASK) {
+			regval = readl_relaxed(base + REG_MMU0_INT_ID);
+			fault_iova = readl_relaxed(base + REG_MMU0_FAULT_VA);
+			fault_pa = readl_relaxed(base + REG_MMU0_INVLD_PA);
+		} else {
+			regval = readl_relaxed(base + REG_MMU1_INT_ID);
+			fault_iova = readl_relaxed(base + REG_MMU1_FAULT_VA);
+			fault_pa = readl_relaxed(base + REG_MMU1_INVLD_PA);
+		}
 	}
 	layer = fault_iova & F_MMU_FAULT_VA_LAYER_BIT;
 	write = fault_iova & F_MMU_FAULT_VA_WRITE_BIT;
@@ -515,16 +531,19 @@ static irqreturn_t mtk_iommu_isr(int irq, void *dev_id)
 			       write ? IOMMU_FAULT_WRITE : IOMMU_FAULT_READ)) {
 		dev_err_ratelimited(
 			bank->parent_dev,
-			"fault type=0x%x iova=0x%llx pa=0x%llx master=0x%x(larb=%d port=%d) layer=%d %s\n",
-			int_state, fault_iova, fault_pa, regval, fault_larb, fault_port,
+			"bank(%u) fault type=0x%x iova=0x%llx pa=0x%llx master=0x%x(larb=%d port=%d) layer=%d %s\n",
+			bank->id, int_state, fault_iova, fault_pa, regval, fault_larb, fault_port,
 			layer, write ? "write" : "read");
 	}
 
 	/* Interrupt clear */
-	regval = readl_relaxed(base + REG_MMU_INT_CONTROL0);
-	regval |= F_INT_CLR_BIT;
-	writel_relaxed(regval, base + REG_MMU_INT_CONTROL0);
+	if (!bank->is_secure) {
+		regval = readl_relaxed(base + REG_MMU_INT_CONTROL0);
+		regval |= F_INT_CLR_BIT;
+		writel_relaxed(regval, base + REG_MMU_INT_CONTROL0);
+	}
 
+tlb_flush_all:
 	mtk_iommu_tlb_flush_all(data);
 
 	return IRQ_HANDLED;
@@ -1333,6 +1352,14 @@ static int mtk_iommu_probe(struct platform_device *pdev)
 		bank->parent_dev = dev;
 		bank->parent_data = data;
 		spin_lock_init(&bank->tlb_lock);
+
+		/* Secure bank is initialised in secure world. Only need register irq here */
+		if (!bank->is_secure)
+			continue;
+		ret = devm_request_irq(bank->parent_dev, bank->irq, mtk_iommu_isr,
+				       0, dev_name(bank->parent_dev), (void *)bank);
+		if (ret)
+			return ret;
 	} while (++i < banks_num);
 
 	if (MTK_IOMMU_HAS_FLAG(data->plat_data, HAS_BCLK)) {
@@ -1426,7 +1453,7 @@ static void mtk_iommu_remove(struct platform_device *pdev)
 	pm_runtime_disable(&pdev->dev);
 	for (i = 0; i < data->plat_data->banks_num; i++) {
 		bank = &data->bank[i];
-		if (!bank->m4u_dom)
+		if (!bank->m4u_dom && !data->bank[i].is_secure)
 			continue;
 		devm_free_irq(&pdev->dev, bank->irq, bank);
 	}
