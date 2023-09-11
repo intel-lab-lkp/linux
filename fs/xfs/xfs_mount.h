@@ -463,6 +463,7 @@ void xfs_do_force_shutdown(struct xfs_mount *mp, uint32_t flags, char *fname,
 #define SHUTDOWN_CORRUPT_INCORE	(1u << 3) /* corrupt in-memory structures */
 #define SHUTDOWN_CORRUPT_ONDISK	(1u << 4)  /* corrupt metadata on device */
 #define SHUTDOWN_DEVICE_REMOVED	(1u << 5) /* device removed underneath us */
+#define SHUTDOWN_CORRRUPT_ABN	(1u << 6) /* shutdown from abnormal conditions */
 
 #define XFS_SHUTDOWN_STRINGS \
 	{ SHUTDOWN_META_IO_ERROR,	"metadata_io" }, \
