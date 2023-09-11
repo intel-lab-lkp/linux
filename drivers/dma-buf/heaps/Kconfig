@@ -15,7 +15,7 @@ config DMABUF_HEAPS_CMA
 
 config DMABUF_HEAPS_MTK_SECURE
 	bool "DMA-BUF MediaTek Secure Heap"
-	depends on DMABUF_HEAPS && TEE
+	depends on DMABUF_HEAPS && TEE && CMA
 	help
 	  Choose this option to enable dma-buf MediaTek secure heap for Secure
 	  Video Path. This heap is backed by TEE client interfaces. If in

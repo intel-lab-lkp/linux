@@ -4,11 +4,12 @@
  *
  * Copyright (C) 2023 MediaTek Inc.
  */
-
+#include <linux/cma.h>
 #include <linux/dma-buf.h>
 #include <linux/dma-heap.h>
 #include <linux/err.h>
 #include <linux/module.h>
+#include <linux/of_reserved_mem.h>
 #include <linux/scatterlist.h>
 #include <linux/slab.h>
 #include <linux/tee_drv.h>
@@ -25,9 +26,11 @@
  * MediaTek secure (chunk) memory type
  *
  * @KREE_MEM_SEC_CM_TZ: static chunk memory carved out for trustzone.
+ * @KREE_MEM_SEC_CM_CMA: dynamic chunk memory carved out from CMA.
  */
 enum kree_mem_type {
 	KREE_MEM_SEC_CM_TZ = 1,
+	KREE_MEM_SEC_CM_CMA,
 };
 
 struct mtk_secure_heap_buffer {
@@ -42,6 +45,13 @@ struct mtk_secure_heap {
 	const enum kree_mem_type mem_type;
 	u32			 mem_session;
 	struct tee_context	*tee_ctx;
+
+	struct cma		*cma;
+	struct page		*cma_page;
+	unsigned long		cma_paddr;
+	unsigned long		cma_size;
+	unsigned long		cma_used_size;
+	struct mutex		lock; /* lock for cma_used_size */
 };
 
 struct mtk_secure_heap_attachment {
@@ -90,6 +100,42 @@ close_context:
 	return ret;
 }
 
+static int mtk_sec_mem_cma_allocate(struct mtk_secure_heap *sec_heap, size_t size)
+{
+	/*
+	 * Allocate CMA only when allocating buffer for the first time, and just
+	 * increase cma_used_size at the other times.
+	 */
+	mutex_lock(&sec_heap->lock);
+	if (sec_heap->cma_used_size)
+		goto add_size;
+
+	mutex_unlock(&sec_heap->lock);
+	sec_heap->cma_page = cma_alloc(sec_heap->cma, sec_heap->cma_size >> PAGE_SHIFT,
+				       get_order(PAGE_SIZE), false);
+	if (!sec_heap->cma_page)
+		return -ENOMEM;
+
+	mutex_lock(&sec_heap->lock);
+add_size:
+	sec_heap->cma_used_size += size;
+	mutex_unlock(&sec_heap->lock);
+	return sec_heap->cma_used_size;
+}
+
+static void mtk_sec_mem_cma_free(struct mtk_secure_heap *sec_heap, size_t size)
+{
+	bool cma_is_empty;
+
+	mutex_lock(&sec_heap->lock);
+	sec_heap->cma_used_size -= size;
+	cma_is_empty = !sec_heap->cma_used_size;
+	mutex_unlock(&sec_heap->lock);
+
+	if (cma_is_empty)
+		cma_release(sec_heap->cma, sec_heap->cma_page, sec_heap->cma_size >> PAGE_SHIFT);
+}
+
 static int
 mtk_sec_mem_tee_service_call(struct tee_context *tee_ctx, u32 session,
 			     unsigned int command, struct tee_param *params)
@@ -114,7 +160,20 @@ static int mtk_sec_mem_allocate(struct mtk_secure_heap *sec_heap,
 {
 	struct tee_param params[MTK_TEE_PARAM_NUM] = {0};
 	u32 mem_session = sec_heap->mem_session;
+	bool cma_frst_alloc = false;
 	int ret;
+
+	if (sec_heap->cma) {
+		ret = mtk_sec_mem_cma_allocate(sec_heap, sec_buf->size);
+		if (ret < 0)
+			return ret;
+		/*
+		 * When CMA allocates for the first time, pass the CMA range to TEE
+		 * to protect it. It's the first allocating if the cma_used_size is equal
+		 * to this required buffer size.
+		 */
+		cma_frst_alloc = (ret == sec_buf->size);
+	}
 
 	params[0].attr = TEE_IOCTL_PARAM_ATTR_TYPE_VALUE_INPUT;
 	params[0].u.value.a = SZ_4K;			/* alignment */
@@ -122,15 +181,26 @@ static int mtk_sec_mem_allocate(struct mtk_secure_heap *sec_heap,
 	params[1].attr = TEE_IOCTL_PARAM_ATTR_TYPE_VALUE_INPUT;
 	params[1].u.value.a = sec_buf->size;
 	params[2].attr = TEE_IOCTL_PARAM_ATTR_TYPE_VALUE_INOUT;
+	if (sec_heap->cma && cma_frst_alloc) {
+		params[2].u.value.a = sec_heap->cma_paddr;
+		params[2].u.value.b = sec_heap->cma_size;
+	}
 
 	/* Always request zeroed buffer */
 	ret = mtk_sec_mem_tee_service_call(sec_heap->tee_ctx, mem_session,
 					   TZCMD_MEM_SECURECM_ZALLOC, params);
-	if (ret)
-		return -ENOMEM;
+	if (ret) {
+		ret = -ENOMEM;
+		goto free_cma;
+	}
 
 	sec_buf->sec_handle = params[2].u.value.a;
 	return 0;
+
+free_cma:
+	if (sec_heap->cma)
+		mtk_sec_mem_cma_free(sec_heap, sec_buf->size);
+	return ret;
 }
 
 static void mtk_sec_mem_release(struct mtk_secure_heap *sec_heap,
@@ -145,6 +215,9 @@ static void mtk_sec_mem_release(struct mtk_secure_heap *sec_heap,
 
 	mtk_sec_mem_tee_service_call(sec_heap->tee_ctx, mem_session,
 				     TZCMD_MEM_SECURECM_UNREF, params);
+
+	if (sec_heap->cma)
+		mtk_sec_mem_cma_free(sec_heap, sec_buf->size);
 }
 
 static int mtk_sec_heap_attach(struct dma_buf *dmabuf, struct dma_buf_attachment *attachment)
@@ -317,7 +390,40 @@ static struct mtk_secure_heap mtk_sec_heap[] = {
 		.name		= "mtk_svp",
 		.mem_type	= KREE_MEM_SEC_CM_TZ,
 	},
+	{
+		.name		= "mtk_svp_cma",
+		.mem_type	= KREE_MEM_SEC_CM_CMA,
+	},
 };
+
+static int __init mtk_secure_cma_init(struct reserved_mem *rmem)
+{
+	struct mtk_secure_heap *sec_heap = NULL;
+	int ret, i;
+
+	for (i = 0; i < ARRAY_SIZE(mtk_sec_heap); i++) {
+		if (mtk_sec_heap[i].mem_type != KREE_MEM_SEC_CM_CMA)
+			continue;
+		sec_heap = &mtk_sec_heap[i];
+		break;
+	}
+	if (!sec_heap)
+		return -ENOENT;
+
+	ret = cma_init_reserved_mem(rmem->base, rmem->size, 0, sec_heap->name,
+				    &sec_heap->cma);
+	if (ret) {
+		pr_err("%s: %s set up CMA fail\n", __func__, rmem->name);
+		return ret;
+	}
+	sec_heap->cma_paddr = rmem->base;
+	sec_heap->cma_size = rmem->size;
+
+	return 0;
+}
+
+RESERVEDMEM_OF_DECLARE(mtk_secure_cma, "mediatek,secure_cma_chunkmem",
+		       mtk_secure_cma_init);
 
 static int mtk_sec_heap_init(void)
 {
@@ -330,6 +436,15 @@ static int mtk_sec_heap_init(void)
 		exp_info.name = sec_heap->name;
 		exp_info.ops = &mtk_sec_heap_ops;
 		exp_info.priv = (void *)sec_heap;
+
+		if (sec_heap->mem_type == KREE_MEM_SEC_CM_CMA) {
+			if (!sec_heap->cma) {
+				pr_err("CMA is not ready for %s.\n", sec_heap->name);
+				continue;
+			} else {
+				mutex_init(&sec_heap->lock);
+			}
+		}
 
 		heap = dma_heap_add(&exp_info);
 		if (IS_ERR(heap))
