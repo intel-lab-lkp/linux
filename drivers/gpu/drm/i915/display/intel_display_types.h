@@ -1353,7 +1353,8 @@ struct intel_crtc_state {
 	struct {
 		bool compression_enable;
 		bool dsc_split;
-		u16 compressed_bpp;
+		/* Compressed Bpp in U6.4 format (first 4 bits for fractional part) */
+		u16 compressed_bpp_x16;
 		u8 slice_count;
 		struct drm_dsc_config config;
 	} dsc;
@@ -2106,6 +2107,21 @@ static inline struct intel_frontbuffer *
 to_intel_frontbuffer(struct drm_framebuffer *fb)
 {
 	return fb ? to_intel_framebuffer(fb)->frontbuffer : NULL;
+}
+
+static inline int to_bpp_int(int bpp_x16)
+{
+	return bpp_x16 >> 4;
+}
+
+static inline int to_bpp_frac_dec(int bpp_x16)
+{
+	return (bpp_x16 & 0xf) * 625;
+}
+
+static inline int to_bpp_x16(int bpp)
+{
+	return bpp << 4;
 }
 
 #endif /*  __INTEL_DISPLAY_TYPES_H__ */

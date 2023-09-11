@@ -140,7 +140,7 @@ static int intel_dp_mst_find_vcpi_slots_for_bpp(struct intel_encoder *encoder,
 		if (!dsc)
 			crtc_state->pipe_bpp = bpp;
 		else
-			crtc_state->dsc.compressed_bpp = bpp;
+			crtc_state->dsc.compressed_bpp_x16 = to_bpp_x16(bpp);
 		drm_dbg_kms(&i915->drm, "Got %d slots for pipe bpp %d dsc %d\n", slots, bpp, dsc);
 	}
 
@@ -238,13 +238,13 @@ static int intel_dp_dsc_mst_compute_link_config(struct intel_encoder *encoder,
 	if (slots < 0)
 		return slots;
 
-	last_compressed_bpp = crtc_state->dsc.compressed_bpp;
+	last_compressed_bpp = to_bpp_int(crtc_state->dsc.compressed_bpp_x16);
 
-	crtc_state->dsc.compressed_bpp = intel_dp_dsc_nearest_valid_bpp(i915,
-									last_compressed_bpp,
-									crtc_state->pipe_bpp);
+	crtc_state->dsc.compressed_bpp_x16 =
+				to_bpp_x16(intel_dp_dsc_nearest_valid_bpp(i915, last_compressed_bpp,
+									  crtc_state->pipe_bpp));
 
-	if (crtc_state->dsc.compressed_bpp != last_compressed_bpp)
+	if (crtc_state->dsc.compressed_bpp_x16 != to_bpp_x16(last_compressed_bpp))
 		need_timeslot_recalc = true;
 
 	/*
@@ -253,14 +253,14 @@ static int intel_dp_dsc_mst_compute_link_config(struct intel_encoder *encoder,
 	 */
 	if (need_timeslot_recalc) {
 		slots = intel_dp_mst_find_vcpi_slots_for_bpp(encoder, crtc_state,
-							     crtc_state->dsc.compressed_bpp,
-							     crtc_state->dsc.compressed_bpp,
+							     to_bpp_int(crtc_state->dsc.compressed_bpp_x16),
+							     to_bpp_int(crtc_state->dsc.compressed_bpp_x16),
 							     limits, conn_state, 2 * 3, true);
 		if (slots < 0)
 			return slots;
 	}
 
-	intel_link_compute_m_n(crtc_state->dsc.compressed_bpp,
+	intel_link_compute_m_n(to_bpp_int(crtc_state->dsc.compressed_bpp_x16),
 			       crtc_state->lane_count,
 			       adjusted_mode->crtc_clock,
 			       crtc_state->port_clock,
