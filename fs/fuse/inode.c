@@ -1464,7 +1464,13 @@ static int fuse_fill_super_submount(struct super_block *sb,
 	struct fuse_mount *fm = get_fuse_mount_super(sb);
 	struct super_block *parent_sb = parent_fi->inode.i_sb;
 	struct fuse_attr root_attr;
+	struct fuse_inode *fi;
 	struct inode *root;
+	struct inode *parent;
+	struct dentry *pdent;
+	struct fuse_entry_out outarg;
+	bool lookedup = false;
+	int ret;
 
 	fuse_sb_defaults(sb);
 	fm->sb = sb;
@@ -1480,14 +1486,39 @@ static int fuse_fill_super_submount(struct super_block *sb,
 	if (parent_sb->s_subtype && !sb->s_subtype)
 		return -ENOMEM;
 
+	/*
+	 * It is necessary to lookup the parent_if->nodeid in case the dentry
+	 * that triggered the automount of the submount is later evicted.
+	 * If this dentry is evicted without the lookup count getting increased
+	 * on the submount root, then the server can subsequently forget this
+	 * nodeid which leads to errors when trying to access the root of the
+	 * submount.
+	 */
+	parent = &parent_fi->inode;
+	pdent = d_find_alias(parent);
+	if (!pdent)
+		return -EINVAL;
+
+	ret = fuse_dentry_revalidate_lookup(fm, pdent, parent, &outarg,
+	    &lookedup);
+	dput(pdent);
+	/*
+	 * The new root owns this nlookup on success, and it is incremented by
+	 * fuse_iget().  In the case the lookup succeeded but revalidate fails,
+	 * ensure that the lookup count is tracked by the parent.
+	 */
+	if (ret <= 0) {
+		if (lookedup) {
+			fi = get_fuse_inode(parent);
+			spin_lock(&fi->lock);
+			fi->nlookup++;
+			spin_unlock(&fi->lock);
+		}
+		return ret ? ret : -EINVAL;
+	}
+
 	fuse_fill_attr_from_inode(&root_attr, parent_fi);
 	root = fuse_iget(sb, parent_fi->nodeid, 0, &root_attr, 0, 0);
-	/*
-	 * This inode is just a duplicate, so it is not looked up and
-	 * its nlookup should not be incremented.  fuse_iget() does
-	 * that, though, so undo it here.
-	 */
-	get_fuse_inode(root)->nlookup--;
 	sb->s_d_op = &fuse_dentry_operations;
 	sb->s_root = d_make_root(root);
 	if (!sb->s_root)
