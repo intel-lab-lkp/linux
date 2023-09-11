@@ -635,14 +635,78 @@ skip:
 	return ret;
 }
 
+static int writeback_flush_to_bdev(struct zram *zram, unsigned long index,
+				   struct page *page, unsigned long *blk_idx)
+{
+	struct bio bio;
+	struct bio_vec bio_vec;
+	int ret;
+
+	bio_init(&bio, zram->bdev, &bio_vec, 1, REQ_OP_WRITE | REQ_SYNC);
+	bio.bi_iter.bi_sector = *blk_idx * (PAGE_SIZE >> 9);
+	__bio_add_page(&bio, page, PAGE_SIZE, 0);
+
+	/*
+	 * XXX: A single page IO would be inefficient for write
+	 * but it would be not bad as starter.
+	 */
+	ret = submit_bio_wait(&bio);
+	if (ret) {
+		zram_slot_lock(zram, index);
+		zram_clear_flag(zram, index, ZRAM_UNDER_WB);
+		zram_clear_flag(zram, index, ZRAM_IDLE);
+		zram_slot_unlock(zram, index);
+		/*
+		 * BIO errors are not fatal, we continue and simply
+		 * attempt to writeback the remaining objects (pages).
+		 * At the same time we need to signal user-space that
+		 * some writes (at least one, but also could be all of
+		 * them) were not successful and we do so by returning
+		 * the most recent BIO error.
+		 */
+		return ret;
+	}
+
+	atomic64_inc(&zram->stats.bd_writes);
+	/*
+	 * We released zram_slot_lock so need to check if the slot was
+	 * changed. If there is freeing for the slot, we can catch it
+	 * easily by zram_allocated.
+	 * A subtle case is the slot is freed/reallocated/marked as
+	 * ZRAM_IDLE again. To close the race, idle_store doesn't
+	 * mark ZRAM_IDLE once it found the slot was ZRAM_UNDER_WB.
+	 * Thus, we could close the race by checking ZRAM_IDLE bit.
+	 */
+	zram_slot_lock(zram, index);
+	if (!zram_allocated(zram, index) ||
+	    !zram_test_flag(zram, index, ZRAM_IDLE)) {
+		zram_clear_flag(zram, index, ZRAM_UNDER_WB);
+		zram_clear_flag(zram, index, ZRAM_IDLE);
+		goto skip;
+	}
+
+	zram_free_page(zram, index);
+	zram_clear_flag(zram, index, ZRAM_UNDER_WB);
+	zram_set_flag(zram, index, ZRAM_WB);
+	zram_set_element(zram, index, *blk_idx);
+	atomic64_inc(&zram->stats.pages_stored);
+	*blk_idx = 0;
+
+	spin_lock(&zram->wb_limit_lock);
+	if (zram->wb_limit_enable && zram->bd_wb_limit > 0)
+		zram->bd_wb_limit -= 1UL << (PAGE_SHIFT - 12);
+	spin_unlock(&zram->wb_limit_lock);
+skip:
+	zram_slot_unlock(zram, index);
+	return 0;
+}
+
 static ssize_t writeback_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t len)
 {
 	struct zram *zram = dev_to_zram(dev);
 	unsigned long nr_pages = zram->disksize >> PAGE_SHIFT;
 	unsigned long index = 0;
-	struct bio bio;
-	struct bio_vec bio_vec;
 	struct page *page;
 	ssize_t ret = len;
 	int mode, err;
@@ -713,63 +777,10 @@ static ssize_t writeback_store(struct device *dev,
 			continue;
 		}
 
-		bio_init(&bio, zram->bdev, &bio_vec, 1,
-			 REQ_OP_WRITE | REQ_SYNC);
-		bio.bi_iter.bi_sector = blk_idx * (PAGE_SIZE >> 9);
-		__bio_add_page(&bio, page, PAGE_SIZE, 0);
+		err = writeback_flush_to_bdev(zram, index, page, &blk_idx);
 
-		/*
-		 * XXX: A single page IO would be inefficient for write
-		 * but it would be not bad as starter.
-		 */
-		err = submit_bio_wait(&bio);
-		if (err) {
-			zram_slot_lock(zram, index);
-			zram_clear_flag(zram, index, ZRAM_UNDER_WB);
-			zram_clear_flag(zram, index, ZRAM_IDLE);
-			zram_slot_unlock(zram, index);
-			/*
-			 * BIO errors are not fatal, we continue and simply
-			 * attempt to writeback the remaining objects (pages).
-			 * At the same time we need to signal user-space that
-			 * some writes (at least one, but also could be all of
-			 * them) were not successful and we do so by returning
-			 * the most recent BIO error.
-			 */
+		if (err)
 			ret = err;
-			continue;
-		}
-
-		atomic64_inc(&zram->stats.bd_writes);
-		/*
-		 * We released zram_slot_lock so need to check if the slot was
-		 * changed. If there is freeing for the slot, we can catch it
-		 * easily by zram_allocated.
-		 * A subtle case is the slot is freed/reallocated/marked as
-		 * ZRAM_IDLE again. To close the race, idle_store doesn't
-		 * mark ZRAM_IDLE once it found the slot was ZRAM_UNDER_WB.
-		 * Thus, we could close the race by checking ZRAM_IDLE bit.
-		 */
-		zram_slot_lock(zram, index);
-		if (!zram_allocated(zram, index) ||
-			  !zram_test_flag(zram, index, ZRAM_IDLE)) {
-			zram_clear_flag(zram, index, ZRAM_UNDER_WB);
-			zram_clear_flag(zram, index, ZRAM_IDLE);
-			goto next;
-		}
-
-		zram_free_page(zram, index);
-		zram_clear_flag(zram, index, ZRAM_UNDER_WB);
-		zram_set_flag(zram, index, ZRAM_WB);
-		zram_set_element(zram, index, blk_idx);
-		blk_idx = 0;
-		atomic64_inc(&zram->stats.pages_stored);
-		spin_lock(&zram->wb_limit_lock);
-		if (zram->wb_limit_enable && zram->bd_wb_limit > 0)
-			zram->bd_wb_limit -=  1UL << (PAGE_SHIFT - 12);
-		spin_unlock(&zram->wb_limit_lock);
-next:
-		zram_slot_unlock(zram, index);
 	}
 
 	if (blk_idx)
