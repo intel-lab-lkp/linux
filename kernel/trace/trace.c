@@ -4409,8 +4409,8 @@ print_trace_header(struct seq_file *m, struct trace_iterator *iter)
 		   buf->cpu,
 		   preempt_model_none()      ? "server" :
 		   preempt_model_voluntary() ? "desktop" :
-		   preempt_model_full()      ? "preempt" :
-		   preempt_model_rt()        ? "preempt_rt" :
+		   preempt_model_low_latency() ? "preempt" :
+		   preempt_model_fully()     ? "preempt_rt" :
 		   "unknown",
 		   /* These are reserved for later use */
 		   0, 0, 0, 0);

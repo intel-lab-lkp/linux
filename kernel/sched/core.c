@@ -8706,7 +8706,7 @@ EXPORT_SYMBOL(__cond_resched_rwlock_write);
  *   preempt_schedule_notrace   <- NOP
  *   irqentry_exit_cond_resched <- NOP
  *
- * FULL:
+ * LOW_LATENCY:
  *   cond_resched               <- RET0
  *   might_resched              <- RET0
  *   preempt_schedule           <- preempt_schedule
@@ -8718,21 +8718,25 @@ enum {
 	preempt_dynamic_undefined = -1,
 	preempt_dynamic_none,
 	preempt_dynamic_voluntary,
-	preempt_dynamic_full,
+	preempt_dynamic_low_latency,
 };
-
 int preempt_dynamic_mode = preempt_dynamic_undefined;
+
+const char *preempt_modes[] = {
+	[preempt_dynamic_none]        = "none",
+	[preempt_dynamic_voluntary]   = "voluntary",
+	[preempt_dynamic_low_latency] = "low_latency",
+};
+int preempt_modes_size = ARRAY_SIZE(preempt_modes);
 
 int sched_dynamic_mode(const char *str)
 {
-	if (!strcmp(str, "none"))
-		return preempt_dynamic_none;
+	int i;
 
-	if (!strcmp(str, "voluntary"))
-		return preempt_dynamic_voluntary;
-
-	if (!strcmp(str, "full"))
-		return preempt_dynamic_full;
+	for (i = 0; i < preempt_modes_size; i++) {
+		if (!strcmp(str, preempt_modes[i]))
+			return i;
+	}
 
 	return -EINVAL;
 }
@@ -8753,7 +8757,7 @@ static bool klp_override;
 static void __sched_dynamic_update(int mode)
 {
 	/*
-	 * Avoid {NONE,VOLUNTARY} -> FULL transitions from ever ending up in
+	 * Avoid {NONE,VOLUNTARY} -> LOW_LATENCY transitions from ever ending up in
 	 * the ZERO state, which is invalid.
 	 */
 	if (!klp_override)
@@ -8771,8 +8775,6 @@ static void __sched_dynamic_update(int mode)
 		preempt_dynamic_disable(preempt_schedule);
 		preempt_dynamic_disable(preempt_schedule_notrace);
 		preempt_dynamic_disable(irqentry_exit_cond_resched);
-		if (mode != preempt_dynamic_mode)
-			pr_info("Dynamic Preempt: none\n");
 		break;
 
 	case preempt_dynamic_voluntary:
@@ -8782,21 +8784,20 @@ static void __sched_dynamic_update(int mode)
 		preempt_dynamic_disable(preempt_schedule);
 		preempt_dynamic_disable(preempt_schedule_notrace);
 		preempt_dynamic_disable(irqentry_exit_cond_resched);
-		if (mode != preempt_dynamic_mode)
-			pr_info("Dynamic Preempt: voluntary\n");
 		break;
 
-	case preempt_dynamic_full:
+	case preempt_dynamic_low_latency:
 		if (!klp_override)
 			preempt_dynamic_disable(cond_resched);
 		preempt_dynamic_disable(might_resched);
 		preempt_dynamic_enable(preempt_schedule);
 		preempt_dynamic_enable(preempt_schedule_notrace);
 		preempt_dynamic_enable(irqentry_exit_cond_resched);
-		if (mode != preempt_dynamic_mode)
-			pr_info("Dynamic Preempt: full\n");
 		break;
 	}
+
+	if (mode != preempt_dynamic_mode)
+		pr_info("Dynamic Preempt: %s\n", preempt_modes[mode]);
 
 	preempt_dynamic_mode = mode;
 }
@@ -8861,8 +8862,8 @@ static void __init preempt_dynamic_init(void)
 		} else {
 			/* Default static call setting, nothing to do */
 			WARN_ON_ONCE(!IS_ENABLED(CONFIG_PREEMPT));
-			preempt_dynamic_mode = preempt_dynamic_full;
-			pr_info("Dynamic Preempt: full\n");
+			preempt_dynamic_mode = preempt_dynamic_low_latency;
+			pr_info("Dynamic Preempt: %s\n", preempt_modes[preempt_dynamic_mode]);
 		}
 	}
 }
@@ -8877,7 +8878,7 @@ static void __init preempt_dynamic_init(void)
 
 PREEMPT_MODEL_ACCESSOR(none);
 PREEMPT_MODEL_ACCESSOR(voluntary);
-PREEMPT_MODEL_ACCESSOR(full);
+PREEMPT_MODEL_ACCESSOR(low_latency);
 
 #else /* !CONFIG_PREEMPT_DYNAMIC */
 

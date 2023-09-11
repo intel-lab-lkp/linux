@@ -3271,6 +3271,8 @@ extern void __prepare_to_swait(struct swait_queue_head *q, struct swait_queue *w
 
 #ifdef CONFIG_PREEMPT_DYNAMIC
 extern int preempt_dynamic_mode;
+extern const char *preempt_modes[];
+extern int preempt_modes_size;
 extern int sched_dynamic_mode(const char *str);
 extern void sched_dynamic_update(int mode);
 #endif

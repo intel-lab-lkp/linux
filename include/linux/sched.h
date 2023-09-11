@@ -2172,7 +2172,7 @@ static inline void cond_resched_rcu(void)
 
 extern bool preempt_model_none(void);
 extern bool preempt_model_voluntary(void);
-extern bool preempt_model_full(void);
+extern bool preempt_model_low_latency(void);
 
 #else
 
@@ -2184,14 +2184,14 @@ static inline bool preempt_model_voluntary(void)
 {
 	return IS_ENABLED(CONFIG_PREEMPT_VOLUNTARY);
 }
-static inline bool preempt_model_full(void)
+static inline bool preempt_model_low_latency(void)
 {
 	return IS_ENABLED(CONFIG_PREEMPT);
 }
 
 #endif
 
-static inline bool preempt_model_rt(void)
+static inline bool preempt_model_fully(void)
 {
 	return IS_ENABLED(CONFIG_PREEMPT_RT);
 }
@@ -2206,7 +2206,7 @@ static inline bool preempt_model_rt(void)
  */
 static inline bool preempt_model_preemptible(void)
 {
-	return preempt_model_full() || preempt_model_rt();
+	return preempt_model_low_latency() || preempt_model_fully();
 }
 
 /*
