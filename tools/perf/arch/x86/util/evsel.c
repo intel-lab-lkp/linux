@@ -9,6 +9,7 @@
 #include "evsel.h"
 #include "util/debug.h"
 #include "env.h"
+#include "../../../util/evlist.h"
 
 #define IBS_FETCH_L3MISSONLY   (1ULL << 59)
 #define IBS_OP_L3MISSONLY      (1ULL << 16)
@@ -79,8 +80,22 @@ void arch__post_evsel_config(struct evsel *evsel, struct perf_event_attr *attr)
 	struct perf_pmu *evsel_pmu, *ibs_fetch_pmu, *ibs_op_pmu;
 	static int warned_once;
 
-	if (warned_once || !x86__is_amd_cpu())
+	if (warned_once)
 		return;
+
+	if (!x86__is_amd_cpu()) {
+		if (evsel__has_branch_evt_cntrs(evsel)) {
+			struct evsel *cur, *leader = evsel__leader(evsel);
+
+			/* The extra space is required for the LBR event group */
+			evlist__for_each_entry(evsel->evlist, cur) {
+				if (leader == evsel__leader(cur))
+					cur->core.attr.branch_sample_type |= PERF_SAMPLE_BRANCH_EXTRA;
+			}
+		}
+
+		return;
+	}
 
 	evsel_pmu = evsel__find_pmu(evsel);
 	if (!evsel_pmu)
