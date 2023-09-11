@@ -17,6 +17,9 @@
 
 #define MTK_TEE_PARAM_NUM		4
 
+#define TZCMD_MEM_SECURECM_UNREF	7
+#define TZCMD_MEM_SECURECM_ZALLOC	15
+
 /*
  * MediaTek secure (chunk) memory type
  *
@@ -29,6 +32,8 @@ enum kree_mem_type {
 struct mtk_secure_heap_buffer {
 	struct dma_heap		*heap;
 	size_t			size;
+
+	u32			sec_handle;
 };
 
 struct mtk_secure_heap {
@@ -80,6 +85,63 @@ close_context:
 	return ret;
 }
 
+static int
+mtk_sec_mem_tee_service_call(struct tee_context *tee_ctx, u32 session,
+			     unsigned int command, struct tee_param *params)
+{
+	struct tee_ioctl_invoke_arg arg = {0};
+	int ret;
+
+	arg.num_params = MTK_TEE_PARAM_NUM;
+	arg.session = session;
+	arg.func = command;
+
+	ret = tee_client_invoke_func(tee_ctx, &arg, params);
+	if (ret < 0 || arg.ret) {
+		pr_err("%s: cmd %d ret %d:%x.\n", __func__, command, ret, arg.ret);
+		ret = -EOPNOTSUPP;
+	}
+	return ret;
+}
+
+static int mtk_sec_mem_allocate(struct mtk_secure_heap *sec_heap,
+				struct mtk_secure_heap_buffer *sec_buf)
+{
+	struct tee_param params[MTK_TEE_PARAM_NUM] = {0};
+	u32 mem_session = sec_heap->mem_session;
+	int ret;
+
+	params[0].attr = TEE_IOCTL_PARAM_ATTR_TYPE_VALUE_INPUT;
+	params[0].u.value.a = SZ_4K;			/* alignment */
+	params[0].u.value.b = sec_heap->mem_type;	/* memory type */
+	params[1].attr = TEE_IOCTL_PARAM_ATTR_TYPE_VALUE_INPUT;
+	params[1].u.value.a = sec_buf->size;
+	params[2].attr = TEE_IOCTL_PARAM_ATTR_TYPE_VALUE_INOUT;
+
+	/* Always request zeroed buffer */
+	ret = mtk_sec_mem_tee_service_call(sec_heap->tee_ctx, mem_session,
+					   TZCMD_MEM_SECURECM_ZALLOC, params);
+	if (ret)
+		return -ENOMEM;
+
+	sec_buf->sec_handle = params[2].u.value.a;
+	return 0;
+}
+
+static void mtk_sec_mem_release(struct mtk_secure_heap *sec_heap,
+				struct mtk_secure_heap_buffer *sec_buf)
+{
+	struct tee_param params[MTK_TEE_PARAM_NUM] = {0};
+	u32 mem_session = sec_heap->mem_session;
+
+	params[0].attr = TEE_IOCTL_PARAM_ATTR_TYPE_VALUE_INPUT;
+	params[0].u.value.a = sec_buf->sec_handle;
+	params[1].attr = TEE_IOCTL_PARAM_ATTR_TYPE_VALUE_OUTPUT;
+
+	mtk_sec_mem_tee_service_call(sec_heap->tee_ctx, mem_session,
+				     TZCMD_MEM_SECURECM_UNREF, params);
+}
+
 static struct dma_buf *
 mtk_sec_heap_allocate(struct dma_heap *heap, size_t size,
 		      unsigned long fd_flags, unsigned long heap_flags)
@@ -107,6 +169,9 @@ mtk_sec_heap_allocate(struct dma_heap *heap, size_t size,
 	sec_buf->size = size;
 	sec_buf->heap = heap;
 
+	ret = mtk_sec_mem_allocate(sec_heap, sec_buf);
+	if (ret)
+		goto err_free_buf;
 	exp_info.exp_name = dma_heap_get_name(heap);
 	exp_info.size = sec_buf->size;
 	exp_info.flags = fd_flags;
@@ -115,11 +180,13 @@ mtk_sec_heap_allocate(struct dma_heap *heap, size_t size,
 	dmabuf = dma_buf_export(&exp_info);
 	if (IS_ERR(dmabuf)) {
 		ret = PTR_ERR(dmabuf);
-		goto err_free_buf;
+		goto err_free_sec_mem;
 	}
 
 	return dmabuf;
 
+err_free_sec_mem:
+	mtk_sec_mem_release(sec_heap, sec_buf);
 err_free_buf:
 	kfree(sec_buf);
 	return ERR_PTR(ret);
