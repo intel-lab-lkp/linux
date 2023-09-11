@@ -10,6 +10,12 @@
 #include <linux/err.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/tee_drv.h>
+#include <linux/uuid.h>
+
+#define TZ_TA_MEM_UUID		"4477588a-8476-11e2-ad15-e41f1390d676"
+
+#define MTK_TEE_PARAM_NUM		4
 
 /*
  * MediaTek secure (chunk) memory type
@@ -28,16 +34,71 @@ struct mtk_secure_heap_buffer {
 struct mtk_secure_heap {
 	const char		*name;
 	const enum kree_mem_type mem_type;
+	u32			 mem_session;
+	struct tee_context	*tee_ctx;
 };
+
+static int mtk_optee_ctx_match(struct tee_ioctl_version_data *ver, const void *data)
+{
+	return ver->impl_id == TEE_IMPL_ID_OPTEE;
+}
+
+static int mtk_kree_secure_session_init(struct mtk_secure_heap *sec_heap)
+{
+	struct tee_param t_param[MTK_TEE_PARAM_NUM] = {0};
+	struct tee_ioctl_open_session_arg arg = {0};
+	uuid_t ta_mem_uuid;
+	int ret;
+
+	sec_heap->tee_ctx = tee_client_open_context(NULL, mtk_optee_ctx_match,
+						    NULL, NULL);
+	if (IS_ERR(sec_heap->tee_ctx)) {
+		pr_err("%s: open context failed, ret=%ld\n", sec_heap->name,
+		       PTR_ERR(sec_heap->tee_ctx));
+		return -ENODEV;
+	}
+
+	arg.num_params = MTK_TEE_PARAM_NUM;
+	arg.clnt_login = TEE_IOCTL_LOGIN_PUBLIC;
+	ret = uuid_parse(TZ_TA_MEM_UUID, &ta_mem_uuid);
+	if (ret)
+		goto close_context;
+	memcpy(&arg.uuid, &ta_mem_uuid.b, sizeof(ta_mem_uuid));
+
+	ret = tee_client_open_session(sec_heap->tee_ctx, &arg, t_param);
+	if (ret < 0 || arg.ret) {
+		pr_err("%s: open session failed, ret=%d:%d\n",
+		       sec_heap->name, ret, arg.ret);
+		ret = -EINVAL;
+		goto close_context;
+	}
+	sec_heap->mem_session = arg.session;
+	return 0;
+
+close_context:
+	tee_client_close_context(sec_heap->tee_ctx);
+	return ret;
+}
 
 static struct dma_buf *
 mtk_sec_heap_allocate(struct dma_heap *heap, size_t size,
 		      unsigned long fd_flags, unsigned long heap_flags)
 {
+	struct mtk_secure_heap *sec_heap = dma_heap_get_drvdata(heap);
 	struct mtk_secure_heap_buffer *sec_buf;
 	DEFINE_DMA_BUF_EXPORT_INFO(exp_info);
 	struct dma_buf *dmabuf;
 	int ret;
+
+	/*
+	 * TEE probe may be late. Initialise the secure session in the first
+	 * allocating secure buffer.
+	 */
+	if (!sec_heap->mem_session) {
+		ret = mtk_kree_secure_session_init(sec_heap);
+		if (ret)
+			return ERR_PTR(ret);
+	}
 
 	sec_buf = kzalloc(sizeof(*sec_buf), GFP_KERNEL);
 	if (!sec_buf)
