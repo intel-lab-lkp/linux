@@ -1,0 +1,26 @@
+drm drm-fixes 0bb80ecc33a8fb5a682236443c1e740d5c917d1d
+	Linux 6.6-rc1
+drm-misc drm-misc-fixes dcbad727513d277144aee482b2ffbcd2255c37aa
+	drm/radeon: make fence wait in suballocator uninterrruptable
+drm-intel drm-intel-fixes 2dde18cd1d8fac735875f2e4987f11817cc0bc2c
+	Linux 6.5
+drm drm-next 0bb80ecc33a8fb5a682236443c1e740d5c917d1d
+	Linux 6.6-rc1
+drm-misc drm-misc-next-fixes d20b484c674d2eae816978a98fa38b4054aeca3b
+	drm/drm_exec: Work around a WW mutex lockdep oddity
+drm-intel drm-intel-next-fixes 5eefc5307c983b59344a4cb89009819f580c84fa
+	drm/i915: mark requests for GuC virtual engines to avoid use-after-free
+drm-misc drm-misc-next 15d30b46573d75f5cb58cfacded8ebab9c76a2b0
+	drm/ssd130x: Use bool for ssd130x_deviceinfo flags
+drm-intel drm-intel-next da1bc5cc3b55af2d785c6dd02c3b461f89f51adf
+	drm/i915/display: Apply workarounds during display init
+drm-intel drm-intel-gt-next c795d2f40a29f3aa9a4ed811f7787bf2f78111f4
+	drm/i915: Run relevant bits of debugfs drop_caches per GT
+drm-intel topic/core-for-CI 4dfdf656708ee83de89dfb6289c290012212e4c6
+	PCI/ASPM: pci_enable_link_state: Add argument to acquire bus lock
+drm-misc topic/i915-ttm 1e3944578b749449bd7fa6bf0bae4c3d3f5f1733
+	Merge tag 'amd-drm-next-5.16-2021-09-27' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm topic/nouveau-misc dfc4005f8c172eea359f9db08c3b2b0ff0153699
+	drm/nouveau/disp: move DAC load detection method
+drm topic/drm-ci ad6bfe1b66a5c146ec236847eca7af4c8806d666
+	drm: ci: docs: fix build warning - add missing escape
