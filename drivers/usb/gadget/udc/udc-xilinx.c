@@ -1324,6 +1324,7 @@ static void xudc_eps_init(struct xusb_udc *udc)
 			ep->ep_usb.caps.type_control = true;
 		}
 
+		ep->ep_usb.epnum = ep_number;
 		ep->ep_usb.caps.dir_in = true;
 		ep->ep_usb.caps.dir_out = true;
 

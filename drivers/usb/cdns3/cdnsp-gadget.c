@@ -1622,6 +1622,7 @@ static int cdnsp_gadget_init_endpoints(struct cdnsp_device *pdev)
 		pep->number = epnum;
 		pep->direction = direction; /* 0 for OUT, 1 for IN. */
 
+		pep->endpoint.epnum = epnum;
 		/*
 		 * Ep0 is bidirectional, so ep0in and ep0out are represented by
 		 * pdev->eps[0]

@@ -2788,6 +2788,7 @@ static void pch_udc_pcd_reinit(struct pch_udc_dev *dev)
 		ep->halted = 1;
 		ep->num = i / 2;
 		ep->in = ~i & 1;
+		ep->ep.epnum = i / 2;
 		ep->ep.name = ep_string[i];
 		ep->ep.ops = &pch_udc_ep_ops;
 		if (ep->in) {

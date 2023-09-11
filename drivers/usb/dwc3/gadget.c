@@ -3267,6 +3267,7 @@ static int dwc3_gadget_init_endpoint(struct dwc3 *dwc, u8 epnum)
 
 	dep->endpoint.name = dep->name;
 
+	dep->endpoint.epnum = num;
 	if (!(dep->number > 1)) {
 		dep->endpoint.desc = &dwc3_gadget_ep0_desc;
 		dep->endpoint.comp_desc = NULL;

@@ -1538,6 +1538,7 @@ static void udc_setup_endpoints(struct udc *dev)
 	for (tmp = 0; tmp < UDC_EP_NUM; tmp++) {
 		ep = &dev->ep[tmp];
 		ep->dev = dev;
+		ep->ep.epnum = tmp;
 		ep->ep.name = ep_info[tmp].name;
 		ep->ep.caps = ep_info[tmp].caps;
 		ep->num = tmp;

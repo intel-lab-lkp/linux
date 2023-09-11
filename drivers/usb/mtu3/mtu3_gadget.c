@@ -655,6 +655,7 @@ static void init_hw_ep(struct mtu3 *mtu, struct mtu3_ep *mep,
 	sprintf(mep->name, "ep%d%s", epnum,
 		!epnum ? "" : (is_in ? "in" : "out"));
 
+	mep->ep.epnum = epnum;
 	mep->ep.name = mep->name;
 	INIT_LIST_HEAD(&mep->ep.ep_list);
 

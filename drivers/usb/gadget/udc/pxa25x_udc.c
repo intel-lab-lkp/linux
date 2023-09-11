@@ -1392,6 +1392,7 @@ static void udc_reinit(struct pxa25x_udc *dev)
 		if (i != 0)
 			list_add_tail (&ep->ep.ep_list, &dev->gadget.ep_list);
 
+		ep->ep.epnum = i;
 		ep->ep.desc = NULL;
 		ep->stopped = 0;
 		INIT_LIST_HEAD (&ep->queue);

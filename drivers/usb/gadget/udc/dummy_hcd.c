@@ -1049,6 +1049,7 @@ static void init_dummy_udc_hw(struct dummy *dum)
 
 		if (!ep_info[i].name)
 			break;
+		ep->ep.epnum = i;
 		ep->ep.name = ep_info[i].name;
 		ep->ep.caps = ep_info[i].caps;
 		ep->ep.ops = &dummy_ep_ops;

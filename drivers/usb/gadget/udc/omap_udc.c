@@ -2582,6 +2582,7 @@ omap_ep_setup(char *name, u8 addr, u8 type,
 	else
 		ep->ep.caps.dir_out = true;
 
+	ep->ep.epnum = addr & 0xf;
 	ep->ep.name = ep->name;
 	ep->ep.ops = &omap_ep_ops;
 	ep->maxpacket = maxp;

@@ -1445,6 +1445,7 @@ static int fusb300_probe(struct platform_device *pdev)
 		}
 		ep->fusb300 = fusb300;
 		INIT_LIST_HEAD(&ep->queue);
+		ep->ep.epnum = i;
 		ep->ep.name = fusb300_ep_name[i];
 		ep->ep.ops = &fusb300_ep_ops;
 		usb_ep_set_maxpacket_limit(&ep->ep, HS_BULK_MAX_PACKET_SIZE);

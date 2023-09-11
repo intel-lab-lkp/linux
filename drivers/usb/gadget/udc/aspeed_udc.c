@@ -1355,6 +1355,7 @@ static void ast_udc_init_ep(struct ast_udc_dev *udc)
 
 	for (i = 0; i < AST_UDC_NUM_ENDPOINTS; i++) {
 		ep = &udc->ep[i];
+		ep->ep.epnum = i;
 		ep->ep.name = ast_ep_name[i];
 		if (i == 0) {
 			ep->ep.caps.type_control = true;

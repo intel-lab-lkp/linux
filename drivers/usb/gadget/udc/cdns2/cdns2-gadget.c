@@ -2213,7 +2213,7 @@ static int cdns2_init_eps(struct cdns2_device *pdev)
 		} else {
 			snprintf(pep->name, sizeof(pep->name), "ep%d%s",
 				 epnum, !!direction ? "in" : "out");
-			pep->endpoint.name = pep->name;
+			pep->endpoint.epnum = epnum;
 
 			usb_ep_set_maxpacket_limit(&pep->endpoint, 1024);
 			pep->endpoint.ops = &cdns2_gadget_ep_ops;

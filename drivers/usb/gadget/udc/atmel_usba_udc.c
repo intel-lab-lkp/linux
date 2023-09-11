@@ -2217,6 +2217,7 @@ static struct usba_ep * atmel_udc_of_init(struct platform_device *pdev,
 		ep->can_dma = ep_cfg->can_dma;
 		ep->can_isoc = ep_cfg->can_isoc;
 
+		ep->ep.epnum = ep->index;
 		sprintf(ep->name, "ep%d", ep->index);
 		ep->ep.name = ep->name;
 

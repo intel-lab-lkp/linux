@@ -1385,6 +1385,7 @@ static void udc_reinit(struct lpc32xx_udc *udc)
 
 		if (i != 0)
 			list_add_tail(&ep->ep.ep_list, &udc->gadget.ep_list);
+		ep->ep.epnum = i;
 		usb_ep_set_maxpacket_limit(&ep->ep, ep->maxpacket);
 		INIT_LIST_HEAD(&ep->queue);
 		ep->req_pending = 0;

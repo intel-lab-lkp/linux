@@ -1466,6 +1466,7 @@ static void isp1760_udc_init_eps(struct isp1760_udc *udc)
 		ep->ep.ops = &isp1760_ep_ops;
 		ep->ep.name = ep->name;
 
+		ep->ep.epnum = ep_num;
 		/*
 		 * Hardcode the maximum packet sizes for now, to 64 bytes for
 		 * the control endpoint and 512 bytes for all other endpoints.

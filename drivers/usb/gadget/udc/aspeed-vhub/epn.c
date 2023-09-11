@@ -825,6 +825,7 @@ struct ast_vhub_ep *ast_vhub_alloc_epn(struct ast_vhub_dev *d, u8 addr)
 	ep->d_idx = addr;
 	ep->vhub = vhub;
 	ep->ep.ops = &ast_vhub_epn_ops;
+	ep->ep.epnum = addr;
 	ep->ep.name = kasprintf(GFP_KERNEL, "ep%d", addr);
 	d->epns[addr-1] = ep;
 	ep->epn.g_idx = i;

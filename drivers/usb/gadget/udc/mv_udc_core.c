@@ -1244,6 +1244,7 @@ static int eps_init(struct mv_udc *udc)
 	ep = &udc->eps[0];
 	ep->udc = udc;
 	strncpy(ep->name, "ep0", sizeof(ep->name));
+	ep->ep.epnum = 0;
 	ep->ep.name = ep->name;
 	ep->ep.ops = &mv_ep_ops;
 	ep->wedge = 0;
@@ -1273,6 +1274,7 @@ static int eps_init(struct mv_udc *udc)
 		ep->udc = udc;
 		strncpy(ep->name, name, sizeof(ep->name));
 		ep->ep.name = ep->name;
+		ep->ep.epnum = i / 2;
 
 		ep->ep.caps.type_iso = true;
 		ep->ep.caps.type_bulk = true;

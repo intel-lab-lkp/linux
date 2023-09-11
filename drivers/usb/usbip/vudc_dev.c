@@ -535,6 +535,7 @@ static int init_vudc_hw(struct vudc *udc)
 			i ? (is_out ? "out" : "in") : "");
 		ep->ep.name = ep->name;
 
+		ep->ep.epnum = num;
 		ep->ep.ops = &vep_ops;
 
 		usb_ep_set_maxpacket_limit(&ep->ep, ~0);

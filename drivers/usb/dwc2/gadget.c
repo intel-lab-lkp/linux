@@ -4805,7 +4805,7 @@ static void dwc2_hsotg_initep(struct dwc2_hsotg *hsotg,
 
 	INIT_LIST_HEAD(&hs_ep->queue);
 	INIT_LIST_HEAD(&hs_ep->ep.ep_list);
-
+	hs_ep->ep.epnum = epnum;
 	/* add to the list of endpoints known by the gadget driver */
 	if (epnum)
 		list_add_tail(&hs_ep->ep.ep_list, &hsotg->gadget.ep_list);

@@ -3308,6 +3308,7 @@ static int usbf_probe(struct platform_device *pdev)
 		ep->id = i;
 		ep->disabled = 1;
 		ep->udc = udc;
+		ep->ep.epnum = i;
 		ep->ep.ops = &usbf_ep_ops;
 		ep->ep.name = usbf_ep_info[i].name;
 		ep->ep.caps = usbf_ep_info[i].caps;

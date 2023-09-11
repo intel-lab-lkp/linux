@@ -2158,6 +2158,7 @@ static void usb_reinit_228x(struct net2280 *dev)
 
 		ep->ep.name = ep_info_dft[tmp].name;
 		ep->ep.caps = ep_info_dft[tmp].caps;
+		ep->ep.epnum = tmp;
 		ep->dev = dev;
 		ep->num = tmp;
 
@@ -2201,6 +2202,7 @@ static void usb_reinit_338x(struct net2280 *dev)
 						   ep_info_dft[i].name;
 		ep->ep.caps = dev->enhanced_mode ? ep_info_adv[i].caps :
 						   ep_info_dft[i].caps;
+		ep->ep.epnum = i;
 		ep->dev = dev;
 		ep->num = i;
 
