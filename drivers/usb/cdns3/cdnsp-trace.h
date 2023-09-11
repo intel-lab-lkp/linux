@@ -38,7 +38,7 @@ DECLARE_EVENT_CLASS(cdnsp_log_ep,
 	TP_PROTO(struct cdnsp_ep *pep, u32 stream_id),
 	TP_ARGS(pep, stream_id),
 	TP_STRUCT__entry(
-		__string(name, pep->name)
+		__field(u32, edw3)
 		__field(unsigned int, state)
 		__field(u32, stream_id)
 		__field(u8, enabled)
@@ -48,7 +48,7 @@ DECLARE_EVENT_CLASS(cdnsp_log_ep,
 		__field(u8, drbls_count)
 	),
 	TP_fast_assign(
-		__assign_str(name, pep->name);
+		__entry->edw3 = pep->endpoint.dw3;
 		__entry->state = pep->ep_state;
 		__entry->stream_id = stream_id;
 		__entry->enabled = pep->ep_state & EP_HAS_STREAMS;
@@ -59,7 +59,7 @@ DECLARE_EVENT_CLASS(cdnsp_log_ep,
 	),
 	TP_printk("%s: SID: %08x, ep state: %x, stream: enabled: %d num %d "
 		  "tds %d, first prime: %d drbls %d",
-		  __get_str(name), __entry->stream_id, __entry->state,
+		  USB_EP_NAME(__entry->edw3), __entry->stream_id, __entry->state,
 		  __entry->enabled, __entry->num_streams, __entry->td_count,
 		  __entry->first_prime_det, __entry->drbls_count)
 );
@@ -296,21 +296,21 @@ DECLARE_EVENT_CLASS(cdnsp_log_bounce,
 		 dma_addr_t dma, unsigned int unalign),
 	TP_ARGS(preq, new_buf_len, offset, dma, unalign),
 	TP_STRUCT__entry(
-		__string(name, preq->pep->name)
+		__field(u32, edw3)
 		__field(u32, new_buf_len)
 		__field(u32, offset)
 		__field(dma_addr_t, dma)
 		__field(unsigned int, unalign)
 	),
 	TP_fast_assign(
-		__assign_str(name, preq->pep->name);
+		__entry->edw3 = preq->pep->endpoint.dw3;
 		__entry->new_buf_len = new_buf_len;
 		__entry->offset = offset;
 		__entry->dma = dma;
 		__entry->unalign = unalign;
 	),
 	TP_printk("%s buf len %d, offset %d, dma %pad, unalign %d",
-		  __get_str(name), __entry->new_buf_len,
+		  USB_EP_NAME(__entry->edw3), __entry->new_buf_len,
 		  __entry->offset, &__entry->dma, __entry->unalign
 	)
 );
@@ -452,7 +452,7 @@ DECLARE_EVENT_CLASS(cdnsp_log_request,
 	TP_PROTO(struct cdnsp_request *req),
 	TP_ARGS(req),
 	TP_STRUCT__entry(
-		__string(name, req->pep->name)
+		__field(u32, edw3)
 		__field(struct usb_request *, request)
 		__field(struct cdnsp_request *, preq)
 		__field(void *, buf)
@@ -460,17 +460,14 @@ DECLARE_EVENT_CLASS(cdnsp_log_request,
 		__field(unsigned int, length)
 		__field(int, status)
 		__field(dma_addr_t, dma)
-		__field(unsigned int, stream_id)
-		__field(unsigned int, zero)
-		__field(unsigned int, short_not_ok)
-		__field(unsigned int, no_interrupt)
+		__field(u32, rdw1)
 		__field(struct scatterlist*, sg)
 		__field(unsigned int, num_sgs)
 		__field(unsigned int, num_mapped_sgs)
 
 	),
 	TP_fast_assign(
-		__assign_str(name, req->pep->name);
+		__entry->edw3 = req->pep->endpoint.dw3;
 		__entry->request = &req->request;
 		__entry->preq = req;
 		__entry->buf = req->request.buf;
@@ -478,10 +475,7 @@ DECLARE_EVENT_CLASS(cdnsp_log_request,
 		__entry->length = req->request.length;
 		__entry->status = req->request.status;
 		__entry->dma = req->request.dma;
-		__entry->stream_id = req->request.stream_id;
-		__entry->zero = req->request.zero;
-		__entry->short_not_ok = req->request.short_not_ok;
-		__entry->no_interrupt = req->request.no_interrupt;
+		__entry->rdw1 = req->request.dw1;
 		__entry->sg = req->request.sg;
 		__entry->num_sgs = req->request.num_sgs;
 		__entry->num_mapped_sgs = req->request.num_mapped_sgs;
@@ -489,12 +483,12 @@ DECLARE_EVENT_CLASS(cdnsp_log_request,
 	TP_printk("%s; req U:%p/P:%p, req buf %p, length %u/%u, status %d, "
 		  "buf dma (%pad), SID %u, %s%s%s, sg %p, num_sg %d,"
 		  " num_m_sg %d",
-		  __get_str(name), __entry->request, __entry->preq,
+		  USB_EP_NAME(__entry->edw3), __entry->request, __entry->preq,
 		  __entry->buf, __entry->actual, __entry->length,
 		  __entry->status, &__entry->dma,
-		  __entry->stream_id, __entry->zero ? "Z" : "z",
-		  __entry->short_not_ok ? "S" : "s",
-		  __entry->no_interrupt ? "I" : "i",
+		  USB_REQ_STREAM_ID(__entry->rdw1), USB_REQ_ZERO(__entry->rdw1) ? "Z" : "z",
+		  USB_REQ_SHORT_NOT_OK(__entry->rdw1) ? "S" : "s",
+		  USB_REQ_NO_INTERRUPT(__entry->rdw1) ? "I" : "i",
 		  __entry->sg, __entry->num_sgs, __entry->num_mapped_sgs
 		)
 );
@@ -666,7 +660,7 @@ DECLARE_EVENT_CLASS(cdnsp_log_td_info,
 	TP_PROTO(struct cdnsp_request *preq),
 	TP_ARGS(preq),
 	TP_STRUCT__entry(
-		__string(name, preq->pep->name)
+		__field(u32, edw3)
 		__field(struct usb_request *, request)
 		__field(struct cdnsp_request *, preq)
 		__field(union cdnsp_trb *, first_trb)
@@ -674,7 +668,7 @@ DECLARE_EVENT_CLASS(cdnsp_log_td_info,
 		__field(dma_addr_t, trb_dma)
 	),
 	TP_fast_assign(
-		__assign_str(name, preq->pep->name);
+		__entry->edw3 = preq->pep->endpoint.dw3;
 		__entry->request = &preq->request;
 		__entry->preq = preq;
 		__entry->first_trb = preq->td.first_trb;
@@ -683,7 +677,7 @@ DECLARE_EVENT_CLASS(cdnsp_log_td_info,
 							 preq->td.first_trb)
 	),
 	TP_printk("%s req/preq:  %p/%p, first trb %p[vir]/%pad(dma), last trb %p",
-		  __get_str(name), __entry->request, __entry->preq,
+		  USB_EP_NAME(__entry->edw3), __entry->request, __entry->preq,
 		  __entry->first_trb, &__entry->trb_dma,
 		  __entry->last_trb
 		)
@@ -800,16 +794,17 @@ TRACE_EVENT(cdnsp_stream_number,
 	TP_PROTO(struct cdnsp_ep *pep, int num_stream_ctxs, int num_streams),
 	TP_ARGS(pep, num_stream_ctxs, num_streams),
 	TP_STRUCT__entry(
-		__string(name, pep->name)
+		__field(u32, edw3)
 		__field(int, num_stream_ctxs)
 		__field(int, num_streams)
 	),
 	TP_fast_assign(
+		__entry->edw3 = pep->endpoint.dw3;
 		__entry->num_stream_ctxs = num_stream_ctxs;
 		__entry->num_streams = num_streams;
 	),
 	TP_printk("%s Need %u stream ctx entries for %u stream IDs.",
-		  __get_str(name), __entry->num_stream_ctxs,
+		  USB_EP_NAME(__entry->edw3), __entry->num_stream_ctxs,
 		  __entry->num_streams)
 );
 
