@@ -41,6 +41,7 @@ struct usb_ep;
  * @num_sgs: number of SG entries
  * @num_mapped_sgs: number of SG entries mapped to DMA (internal)
  * @length: Length of that data
+ * @dw1: trace event purpose
  * @stream_id: The stream id, when USB3.0 bulk streams are being used
  * @is_last: Indicates if this is the last request of a stream_id before
  *	switching to a different stream (required for DWC3 controllers).
@@ -105,12 +106,23 @@ struct usb_request {
 	unsigned		num_sgs;
 	unsigned		num_mapped_sgs;
 
-	unsigned		stream_id:16;
-	unsigned		is_last:1;
-	unsigned		no_interrupt:1;
-	unsigned		zero:1;
-	unsigned		short_not_ok:1;
-	unsigned		dma_mapped:1;
+	union {
+		struct {
+			u32	stream_id:16;
+			u32	is_last:1;
+			u32	no_interrupt:1;
+			u32	zero:1;
+			u32	short_not_ok:1;
+			u32	dma_mapped:1;
+		} __packed;
+		u32		dw1;
+#define		USB_REQ_STREAM_ID(n)	((n) & 0xffff)
+#define		USB_REQ_IS_LAST(n)	(((n) >> 16) & 1)
+#define		USB_REQ_NO_INTERRUPT(n)	(((n) >> 17) & 1)
+#define		USB_REQ_ZERO(n)		(((n) >> 18) & 1)
+#define		USB_REQ_SHORT_NOT_OK(n)	(((n) >> 19) & 1)
+#define		USB_REQ_DMA_MAPPED(n)	(((n) >> 20) & 1)
+	};
 
 	void			(*complete)(struct usb_ep *ep,
 					struct usb_request *req);
