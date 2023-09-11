@@ -40,6 +40,7 @@
 #include <linux/mount.h>
 #include <linux/pagemap.h>
 #include <linux/proc_fs.h>
+#include <linux/debugfs.h>
 #include <linux/rcupdate.h>
 #include <linux/sched.h>
 #include <linux/sched/task.h>
@@ -7072,3 +7073,103 @@ static int __init cgroup_sysfs_init(void)
 subsys_initcall(cgroup_sysfs_init);
 
 #endif /* CONFIG_SYSFS */
+
+#ifdef CONFIG_DEBUG_FS
+void *css_debugfs_seqfile_start(struct seq_file *m, loff_t *pos)
+{
+	struct cgroup_subsys *ss = m->private;
+	struct cgroup_subsys_state *css;
+	int id = *pos;
+
+	rcu_read_lock();
+	css = idr_get_next(&ss->css_idr, &id);
+	*pos = id;
+	return css;
+}
+
+void *css_debugfs_seqfile_next(struct seq_file *m, void *v, loff_t *pos)
+{
+	struct cgroup_subsys *ss = m->private;
+	struct cgroup_subsys_state *css;
+	int id = *pos + 1;
+
+	css = idr_get_next(&ss->css_idr, &id);
+	*pos = id;
+	return css;
+}
+
+void css_debugfs_seqfile_stop(struct seq_file *m, void *v)
+{
+	rcu_read_unlock();
+}
+
+int css_debugfs_seqfile_show(struct seq_file *m, void *v)
+{
+	struct cgroup_subsys *ss = m->private;
+	struct cgroup_subsys_state *css = v;
+	/* data is NULL for root cgroup_subsys_state */
+	struct percpu_ref_data *data = css->refcnt.data;
+	size_t buflen;
+	char *buf;
+	int len;
+
+	seq_printf(m, "css=%pK cgroup=%pK id=%d ino=%lu flags=%#x refcnt=%lu path=",
+		   css, css->cgroup, css->id, cgroup_ino(css->cgroup),
+		   css->flags, data ? atomic_long_read(&data->count) : 0);
+
+	buflen = seq_get_buf(m, &buf);
+	if (buf) {
+		len = cgroup_path(css->cgroup, buf, buflen);
+		seq_commit(m, len < buflen ? len : -1);
+	}
+
+	if (ss->css_dump) {
+		seq_puts(m, " -- ");
+		ss->css_dump(css, m);
+	}
+
+	seq_putc(m, '\n');
+	return 0;
+}
+
+static const struct seq_operations css_debug_seq_ops = {
+	.start = css_debugfs_seqfile_start,
+	.next = css_debugfs_seqfile_next,
+	.stop = css_debugfs_seqfile_stop,
+	.show = css_debugfs_seqfile_show,
+};
+
+static int css_debugfs_open(struct inode *inode, struct file *file)
+{
+	int ret = seq_open(file, &css_debug_seq_ops);
+	struct seq_file *m = file->private_data;
+
+	if (!ret)
+		m->private = inode->i_private;
+	return ret;
+}
+
+static const struct file_operations css_debugfs_fops = {
+	.open = css_debugfs_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = seq_release,
+};
+
+static int __init css_debugfs_init(void)
+{
+	struct cgroup_subsys *ss;
+	struct dentry *dir;
+	int ssid;
+
+	dir = debugfs_create_dir("cgroup", NULL);
+	if (dir) {
+		for_each_subsys(ss, ssid)
+			debugfs_create_file(ss->name, 0644, dir, ss,
+					    &css_debugfs_fops);
+	}
+
+	return 0;
+}
+late_initcall(css_debugfs_init);
+#endif /* CONFIG_DEBUG_FS */

@@ -689,6 +689,7 @@ struct cgroup_subsys {
 	void (*exit)(struct task_struct *task);
 	void (*release)(struct task_struct *task);
 	void (*bind)(struct cgroup_subsys_state *root_css);
+	void (*css_dump)(struct cgroup_subsys_state *css, struct seq_file *m);
 
 	bool early_init:1;
 

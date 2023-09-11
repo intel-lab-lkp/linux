@@ -5666,6 +5666,20 @@ static void mem_cgroup_css_rstat_flush(struct cgroup_subsys_state *css, int cpu)
 	}
 }
 
+static void mem_cgroup_css_dump(struct cgroup_subsys_state *css,
+				struct seq_file *m)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
+
+	seq_printf(m, "mem_id=%u memory=%lu memsw=%lu kmem=%lu tcpmem=%lu shmem=%lu",
+		   mem_cgroup_id(memcg),
+		   page_counter_read(&memcg->memory),
+		   page_counter_read(&memcg->memsw),
+		   page_counter_read(&memcg->kmem),
+		   page_counter_read(&memcg->tcpmem),
+		   memcg_page_state(memcg, NR_SHMEM));
+}
+
 #ifdef CONFIG_MMU
 /* Handlers for move charge at task migration. */
 static int mem_cgroup_do_precharge(unsigned long count)
