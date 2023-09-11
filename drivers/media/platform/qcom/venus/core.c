@@ -323,11 +323,16 @@ static int venus_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	for (i = 0; i < core->res->resets_num; i++) {
-		core->resets[i] = devm_reset_control_get_exclusive(dev, core->res->resets[i]);
-		if (IS_ERR(core->resets[i]))
-			return PTR_ERR(core->resets[i]);
-	}
+	core->resets = devm_kcalloc(dev, core->res->resets_num, sizeof(*core->resets), GFP_KERNEL);
+	if (core->res->resets_num && !core->resets)
+		return -ENOMEM;
+
+	for (i = 0; i < core->res->resets_num; i++)
+		core->resets[i].id = core->res->resets[i];
+
+	ret = devm_reset_control_bulk_get_exclusive(dev, core->res->resets_num, core->resets);
+	if (ret)
+		return ret;
 
 	if (core->pm_ops->core_get) {
 		ret = core->pm_ops->core_get(core);
