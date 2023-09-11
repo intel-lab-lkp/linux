@@ -50,6 +50,9 @@
  * @func_id: smc/hvc call function id
  * @param_page: 4K page number of the shmem channel
  * @param_offset: Offset within the 4K page of the shmem channel
+ * @cap_id: hvc doorbell's capability id to be used on Qualcomm virtual
+ *	    platforms
+ * @qcom_xport: Flag to indicate the transport on Qualcomm virtual platforms
  */
 
 struct scmi_smc {
@@ -63,6 +66,8 @@ struct scmi_smc {
 	u32 func_id;
 	u32 param_page;
 	u32 param_offset;
+	u64 cap_id;
+	bool qcom_xport;
 };
 
 static irqreturn_t smc_msg_done_isr(int irq, void *data)
@@ -129,6 +134,7 @@ static int smc_chan_setup(struct scmi_chan_info *cinfo, struct device *dev,
 	struct resource res;
 	struct device_node *np;
 	u32 func_id;
+	u64 cap_id;
 	int ret;
 
 	if (!tx)
@@ -158,9 +164,34 @@ static int smc_chan_setup(struct scmi_chan_info *cinfo, struct device *dev,
 		return -EADDRNOTAVAIL;
 	}
 
-	ret = of_property_read_u32(dev->of_node, "arm,smc-id", &func_id);
-	if (ret < 0)
-		return ret;
+	if (of_device_is_compatible(dev->of_node, "qcom,scmi-hvc-shmem")) {
+		scmi_info->qcom_xport = true;
+
+		/* The func-id & capability-id are kept in last 16 bytes of shmem.
+		 *     +-------+
+		 *     |       |
+		 *     | shmem |
+		 *     |       |
+		 *     |       |
+		 *     +-------+ <-- (size - 16)
+		 *     | funcId|
+		 *     +-------+ <-- (size - 8)
+		 *     | capId |
+		 *     +-------+ <-- size
+		 */
+
+		func_id = readl((void __iomem *)(scmi_info->shmem) + size - 16);
+#ifdef CONFIG_ARM64
+		cap_id = readq((void __iomem *)(scmi_info->shmem) + size - 8);
+#else
+		/* capability-id is 32 bit wide on 32bit machines */
+		cap_id = readl((void __iomem *)(scmi_info->shmem) + size - 8);
+#endif
+	} else {
+		ret = of_property_read_u32(dev->of_node, "arm,smc-id", &func_id);
+		if (ret < 0)
+			return ret;
+	}
 
 	if (of_device_is_compatible(dev->of_node, "arm,scmi-smc-param")) {
 		scmi_info->param_page = SHMEM_PAGE(res.start);
@@ -184,6 +215,7 @@ static int smc_chan_setup(struct scmi_chan_info *cinfo, struct device *dev,
 	}
 
 	scmi_info->func_id = func_id;
+	scmi_info->cap_id = cap_id;
 	scmi_info->cinfo = cinfo;
 	smc_channel_lock_init(scmi_info);
 	cinfo->transport_info = scmi_info;
@@ -213,6 +245,7 @@ static int smc_send_message(struct scmi_chan_info *cinfo,
 	struct arm_smccc_res res;
 	unsigned long page = scmi_info->param_page;
 	unsigned long offset = scmi_info->param_offset;
+	unsigned long cap_id = (unsigned long)scmi_info->cap_id;
 
 	/*
 	 * Channel will be released only once response has been
@@ -222,8 +255,12 @@ static int smc_send_message(struct scmi_chan_info *cinfo,
 
 	shmem_tx_prepare(scmi_info->shmem, xfer, cinfo);
 
-	arm_smccc_1_1_invoke(scmi_info->func_id, page, offset, 0, 0, 0, 0, 0,
-			     &res);
+	if (scmi_info->qcom_xport)
+		arm_smccc_1_1_hvc(scmi_info->func_id, cap_id, 0, 0, 0, 0, 0, 0,
+				  &res);
+	else
+		arm_smccc_1_1_invoke(scmi_info->func_id, page, offset, 0, 0, 0,
+				     0, 0, &res);
 
 	/* Only SMCCC_RET_NOT_SUPPORTED is valid error code */
 	if (res.a0) {
