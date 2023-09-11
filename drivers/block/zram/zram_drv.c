@@ -747,6 +747,7 @@ static ssize_t writeback_store(struct device *dev,
 	ssize_t ret = len;
 	int mode, err;
 	unsigned long blk_idx = 0;
+	bool blk_allocated = false;
 	unsigned int io_pages;
 	u64 bd_wb_limit_pages = ULONG_MAX;
 	struct index_mapping map = {};
@@ -803,7 +804,7 @@ static ssize_t writeback_store(struct device *dev,
 		}
 		spin_unlock(&zram->wb_limit_lock);
 
-		if (!blk_idx) {
+		if (!blk_allocated) {
 			io_pages = min(1UL << order, nr_pages);
 			io_pages = min_t(u64, bd_wb_limit_pages, io_pages);
 
@@ -812,6 +813,7 @@ static ssize_t writeback_store(struct device *dev,
 				ret = -ENOSPC;
 				break;
 			}
+			blk_allocated = true;
 		}
 
 		if (!writeback_prep_or_skip_index(zram, mode, index)) {
@@ -850,12 +852,12 @@ next:
 		 * the unused blocks after looping through all indices.
 		 */
 		if (map.nr_of_entries == io_pages) {
-			blk_idx = 0;
+			blk_allocated = false;
 			map.nr_of_entries = 0;
 		}
 	}
 
-	if (blk_idx)
+	if (blk_allocated)
 		free_block_bdev_range(zram, blk_idx + map.nr_of_entries,
 				      io_pages - map.nr_of_entries);
 	folio_put(folio);
