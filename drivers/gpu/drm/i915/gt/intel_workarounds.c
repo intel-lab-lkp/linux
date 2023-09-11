@@ -712,6 +712,10 @@ static void gen12_ctx_workarounds_init(struct intel_engine_cs *engine,
 			    GEN9_PREEMPT_GPGPU_LEVEL_MASK,
 			    GEN9_PREEMPT_GPGPU_THREAD_GROUP_LEVEL);
 
+	/* Wa_18022495364 */
+	wa_masked_en(wal, GEN12_CS_DEBUG_MODE2,
+		     INSTRUCTION_STATE_CACHE_INVALIDATE);
+
 	/*
 	 * Wa_16011163337 - GS_TIMER
 	 *
