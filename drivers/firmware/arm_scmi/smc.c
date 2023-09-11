@@ -250,6 +250,16 @@ static void smc_mark_txdone(struct scmi_chan_info *cinfo, int ret,
 	smc_channel_lock_release(scmi_info);
 }
 
+#ifdef CONFIG_ARM_SCMI_TRANSPORT_SMC_POLL_COMPLETION
+static bool
+smc_poll_done(struct scmi_chan_info *cinfo, struct scmi_xfer *xfer)
+{
+	struct scmi_smc *scmi_info = cinfo->transport_info;
+
+	return shmem_poll_done(scmi_info->shmem, xfer);
+}
+#endif
+
 static const struct scmi_transport_ops scmi_smc_ops = {
 	.chan_available = smc_chan_available,
 	.chan_setup = smc_chan_setup,
@@ -257,6 +267,9 @@ static const struct scmi_transport_ops scmi_smc_ops = {
 	.send_message = smc_send_message,
 	.mark_txdone = smc_mark_txdone,
 	.fetch_response = smc_fetch_response,
+#ifdef CONFIG_ARM_SCMI_TRANSPORT_SMC_POLL_COMPLETION
+	.poll_done = smc_poll_done,
+#endif
 };
 
 const struct scmi_desc scmi_smc_desc = {
@@ -272,6 +285,6 @@ const struct scmi_desc scmi_smc_desc = {
 	 * for the issued command will be immmediately ready to be fetched
 	 * from the shared memory area.
 	 */
-	.sync_cmds_completed_on_ret = true,
+	.sync_cmds_completed_on_ret = !IS_ENABLED(CONFIG_ARM_SCMI_TRANSPORT_SMC_POLL_COMPLETION),
 	.atomic_enabled = IS_ENABLED(CONFIG_ARM_SCMI_TRANSPORT_SMC_ATOMIC_ENABLE),
 };

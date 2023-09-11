@@ -125,6 +125,20 @@ config ARM_SCMI_TRANSPORT_SMC_ATOMIC_ENABLE
 	  in atomic context too, at the price of using a number of busy-waiting
 	  primitives all over instead. If unsure say N.
 
+config ARM_SCMI_TRANSPORT_SMC_POLL_COMPLETION
+	bool "Enable polling support for SCMI SMC transport"
+	depends on ARM_SCMI_TRANSPORT_SMC
+	help
+	  Enable completion polling support for SCMI SMC based transport.
+
+	  If you want the SCMI SMC based transport to poll for the completion,
+	  answer Y.
+	  Enabling completion polling might be desired in the absence of the a2p
+	  irq when the return from smc/hvc call doesn't indicate the completion
+	  of the SCMI requests. This might be useful for instances used in
+	  virtual platforms.
+	  If unsure say N.
+
 config ARM_SCMI_TRANSPORT_VIRTIO
 	bool "SCMI transport based on VirtIO"
 	depends on VIRTIO=y || VIRTIO=ARM_SCMI_PROTOCOL
