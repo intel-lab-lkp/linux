@@ -379,6 +379,9 @@ static void kunit_run_case_internal(struct kunit *test,
 				    struct kunit_suite *suite,
 				    struct kunit_case *test_case)
 {
+	struct timespec64 start, end;
+	struct timespec64 duration;
+
 	if (suite->init) {
 		int ret;
 
@@ -390,7 +393,20 @@ static void kunit_run_case_internal(struct kunit *test,
 		}
 	}
 
+	ktime_get_ts64(&start);
+
 	test_case->run_case(test);
+
+	ktime_get_ts64(&end);
+
+	duration = timespec64_sub(end, start);
+
+	if (duration.tv_sec >= 1 &&
+	    (test_case->attr.speed == KUNIT_SPEED_UNSET ||
+	     test_case->attr.speed >= KUNIT_SPEED_NORMAL))
+		kunit_warn(test,
+			   "Test should be marked slow (runtime: %lld.%09lds)",
+			   duration.tv_sec, duration.tv_nsec);
 }
 
 static void kunit_case_internal_cleanup(struct kunit *test)
