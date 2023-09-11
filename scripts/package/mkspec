@@ -18,6 +18,7 @@ fi
 cat<<EOF
 %define ARCH ${ARCH}
 %define KERNELRELEASE ${KERNELRELEASE}
+%define MODLIB ${MODLIB}
 %define pkg_release $("${srctree}/init/build-version")
 EOF
 
