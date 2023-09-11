@@ -359,6 +359,40 @@ static ssize_t wb_buf_resize_control_store(struct device *dev,
 	return count;
 }
 
+static ssize_t wb_buf_resize_hint_show(struct device *dev,
+					 struct device_attribute *attr,
+					 char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	u32 value;
+	u8 index = ufshcd_wb_get_query_index(hba);
+
+	if (ufshcd_query_attr_retry(hba, UPIU_QUERY_OPCODE_READ_ATTR,
+			QUERY_ATTR_IDN_WB_BUF_RESIZE_HINT, index, 0, &value)) {
+		dev_err(hba->dev, "Read WB Buffer Resize Hint info failed\n");
+		return  -EINVAL;
+	}
+
+	return sysfs_emit(buf, "%u\n", value);
+}
+
+static ssize_t wb_buf_resize_status_show(struct device *dev,
+					 struct device_attribute *attr,
+					 char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	u32 value;
+	u8 index = ufshcd_wb_get_query_index(hba);
+
+	if (ufshcd_query_attr_retry(hba, UPIU_QUERY_OPCODE_READ_ATTR,
+			QUERY_ATTR_IDN_WB_BUF_RESIZE_STATUS, index, 0, &value)) {
+		dev_err(hba->dev, "Read WB Buffer Resize Status info failed\n");
+		return -EINVAL;
+	}
+
+	return sysfs_emit(buf, "%u\n", value);
+}
+
 static DEVICE_ATTR_RW(rpm_lvl);
 static DEVICE_ATTR_RO(rpm_target_dev_state);
 static DEVICE_ATTR_RO(rpm_target_link_state);
@@ -370,6 +404,8 @@ static DEVICE_ATTR_RW(wb_on);
 static DEVICE_ATTR_RW(enable_wb_buf_flush);
 static DEVICE_ATTR_RW(wb_flush_threshold);
 static DEVICE_ATTR_WO(wb_buf_resize_control);
+static DEVICE_ATTR_RO(wb_buf_resize_hint);
+static DEVICE_ATTR_RO(wb_buf_resize_status);
 
 static struct attribute *ufs_sysfs_ufshcd_attrs[] = {
 	&dev_attr_rpm_lvl.attr,
@@ -383,6 +419,8 @@ static struct attribute *ufs_sysfs_ufshcd_attrs[] = {
 	&dev_attr_enable_wb_buf_flush.attr,
 	&dev_attr_wb_flush_threshold.attr,
 	&dev_attr_wb_buf_resize_control.attr,
+	&dev_attr_wb_buf_resize_hint.attr,
+	&dev_attr_wb_buf_resize_status.attr,
 	NULL
 };
 
