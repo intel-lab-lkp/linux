@@ -79,9 +79,20 @@
 #define S10_TLP_FMTTYPE_CFGWR0		0x45
 #define S10_TLP_FMTTYPE_CFGWR1		0x44
 
+#define AGLX_RP_CFG_ADDR(pcie, reg)     \
+	(((pcie)->hip_base) + (reg))
+#define AGLX_RP_SECONDARY(pcie)         \
+	readb(AGLX_RP_CFG_ADDR(pcie, PCI_SECONDARY_BUS))
+
+#define AGLX_BDF_REG			0x00002004
+#define AGLX_ROOT_PORT_IRQ_STATUS	0x14c
+#define AGLX_ROOT_PORT_IRQ_ENABLE	0x150
+#define AGLX_CFG_AER			(1<<4)
+
 enum altera_pcie_version {
 	ALTERA_PCIE_V1 = 0,
 	ALTERA_PCIE_V2,
+	ALTERA_PCIE_V3, /* AGILEX p-tile, f-tile */
 };
 
 struct altera_pcie {
@@ -93,6 +104,8 @@ struct altera_pcie {
 	struct irq_domain	*irq_domain;
 	struct resource		bus_range;
 	const struct altera_pcie_data	*pcie_data;
+	void __iomem		*cs_base;
+	u32			port_conf_off;
 };
 
 struct altera_pcie_ops {
@@ -138,6 +151,39 @@ static inline u32 cra_readl(struct altera_pcie *pcie, const u32 reg)
 	return readl_relaxed(pcie->cra_base + reg);
 }
 
+static inline void cs_writel(struct altera_pcie *pcie, const u32 value,
+				const u32 reg)
+{
+	writel_relaxed(value, pcie->cs_base + reg);
+}
+
+static inline void cs_writew(struct altera_pcie *pcie, const u32 value,
+				const u32 reg)
+{
+	writew_relaxed(value, pcie->cs_base + reg);
+}
+
+static inline void cs_writeb(struct altera_pcie *pcie, const u32 value,
+				const u32 reg)
+{
+	writeb_relaxed(value, pcie->cs_base + reg);
+}
+
+static inline u32 cs_readl(struct altera_pcie *pcie, const u32 reg)
+{
+	return readl_relaxed(pcie->cs_base + reg);
+}
+
+static inline u32 cs_readw(struct altera_pcie *pcie, const u32 reg)
+{
+	return readw_relaxed(pcie->cs_base + reg);
+}
+
+static inline u32 cs_readb(struct altera_pcie *pcie, const u32 reg)
+{
+	return readb_relaxed(pcie->cs_base + reg);
+}
+
 static bool altera_pcie_link_up(struct altera_pcie *pcie)
 {
 	return !!((cra_readl(pcie, RP_LTSSM) & RP_LTSSM_MASK) == LTSSM_L0);
@@ -148,6 +194,14 @@ static bool s10_altera_pcie_link_up(struct altera_pcie *pcie)
 	void __iomem *addr = S10_RP_CFG_ADDR(pcie,
 				   pcie->pcie_data->cap_offset +
 				   PCI_EXP_LNKSTA);
+
+	return !!(readw(addr) & PCI_EXP_LNKSTA_DLLLA);
+}
+
+static bool aglx_altera_pcie_link_up(struct altera_pcie *pcie)
+{
+	void __iomem *addr = AGLX_RP_CFG_ADDR(pcie,
+		pcie->pcie_data->cap_offset + PCI_EXP_LNKSTA);
 
 	return !!(readw(addr) & PCI_EXP_LNKSTA_DLLLA);
 }
@@ -432,6 +486,101 @@ static int s10_rp_write_cfg(struct altera_pcie *pcie, u8 busno, u32 devfn,
 	return PCIBIOS_SUCCESSFUL;
 }
 
+static int aglx_rp_read_cfg(struct altera_pcie *pcie, u8 busno, u32 devfn,
+			int where, int size, u32 *value)
+{
+	void __iomem *addr = AGLX_RP_CFG_ADDR(pcie, where);
+
+	switch (size) {
+	case 1:
+		*value = readb(addr);
+		break;
+	case 2:
+		*value = readw(addr);
+		break;
+	default:
+		*value = readl(addr);
+		break;
+	}
+
+	/* interrupt pin not programmed in hardware, set to INTA*/
+	if (where == PCI_INTERRUPT_PIN && size == 1)
+		*value = 0x01;
+	else if (where == PCI_INTERRUPT_LINE)
+		*value |= 0x0100;
+
+	return PCIBIOS_SUCCESSFUL;
+}
+
+static int aglx_rp_write_cfg(struct altera_pcie *pcie, u8 busno, u32 devfn,
+			int where, int size, u32 value)
+{
+	void __iomem *addr = AGLX_RP_CFG_ADDR(pcie, where);
+
+	switch (size) {
+	case 1:
+		writeb(value, addr);
+		break;
+	case 2:
+		writew(value, addr);
+		break;
+	default:
+		writel(value, addr);
+		break;
+	}
+
+	/*
+	 * Monitor changes to PCI_PRIMARY_BUS register on root port
+	 * and update local copy of root bus number accordingly.
+	 */
+	if (busno == pcie->root_bus_nr && where == PCI_PRIMARY_BUS)
+		pcie->root_bus_nr = value & 0xff;
+
+	return PCIBIOS_SUCCESSFUL;
+}
+
+static int aglx_nonrp_write_cfg(struct altera_pcie *pcie, u8 busno,
+		unsigned int devfn, int where, int size, u32 value)
+{
+	cs_writel(pcie, ((busno<<8) | devfn), AGLX_BDF_REG);
+	if (busno > AGLX_RP_SECONDARY(pcie))
+		where |= (1<<12); /* type 1 */
+
+	switch (size) {
+	case 1:
+		cs_writeb(pcie, value, where);
+		break;
+	case 2:
+		cs_writew(pcie, value, where);
+		break;
+	default:
+		cs_writel(pcie, value, where);
+		break;
+	}
+	return PCIBIOS_SUCCESSFUL;
+}
+
+static int aglx_nonrp_read_cfg(struct altera_pcie *pcie, u8 busno,
+		unsigned int devfn, int where, int size, u32 *value)
+{
+	cs_writel(pcie, ((busno<<8) | devfn), AGLX_BDF_REG);
+	if (busno > AGLX_RP_SECONDARY(pcie))
+		where |= (1<<12); /* type 1 */
+
+	switch (size) {
+	case 1:
+		*value = cs_readb(pcie, where);
+		break;
+	case 2:
+		*value = cs_readw(pcie, where);
+		break;
+	default:
+		*value = cs_readl(pcie, where);
+		break;
+	}
+	return PCIBIOS_SUCCESSFUL;
+}
+
 static int arr_read_cfg(struct altera_pcie *pcie, u8 busno, u32 devfn,
 		int where, int size, u32 *value)
 {
@@ -688,6 +837,30 @@ static void altera_pcie_isr(struct irq_desc *desc)
 	chained_irq_exit(chip, desc);
 }
 
+static void aglx_isr(struct irq_desc *desc)
+{
+	struct irq_chip *chip = irq_desc_get_chip(desc);
+	struct altera_pcie *pcie;
+	struct device *dev;
+	u32 status;
+	int ret;
+
+	chained_irq_enter(chip, desc);
+	pcie = irq_desc_get_handler_data(desc);
+	dev = &pcie->pdev->dev;
+
+	status = readl((pcie->hip_base + pcie->port_conf_off
+		+ AGLX_ROOT_PORT_IRQ_STATUS));
+	if (status & AGLX_CFG_AER) {
+		ret = generic_handle_domain_irq(pcie->irq_domain, 0);
+		if (ret)
+			dev_err_ratelimited(dev, "unexpected IRQ\n");
+	}
+	writel(AGLX_CFG_AER, (pcie->hip_base + pcie->port_conf_off
+		+ AGLX_ROOT_PORT_IRQ_STATUS));
+	chained_irq_exit(chip, desc);
+}
+
 static int altera_pcie_init_irq_domain(struct altera_pcie *pcie)
 {
 	struct device *dev = &pcie->pdev->dev;
@@ -723,11 +896,23 @@ static int altera_pcie_parse_dt(struct altera_pcie *pcie)
 			return PTR_ERR(pcie->cra_base);
 	}
 
-	if (pcie->pcie_data->version == ALTERA_PCIE_V2) {
+	if ((pcie->pcie_data->version == ALTERA_PCIE_V2) ||
+		(pcie->pcie_data->version == ALTERA_PCIE_V3)) {
 		pcie->hip_base =
 			devm_platform_ioremap_resource_byname(pdev, "Hip");
 		if (IS_ERR(pcie->hip_base))
 			return PTR_ERR(pcie->hip_base);
+	}
+
+	if (pcie->pcie_data->version == ALTERA_PCIE_V3) {
+		pcie->cs_base =
+			devm_platform_ioremap_resource_byname(pdev, "Cs");
+		if (IS_ERR(pcie->cs_base))
+			return PTR_ERR(pcie->cs_base);
+		of_property_read_u32(pcie->pdev->dev.of_node, "port_conf_stat",
+			&pcie->port_conf_off);
+		dev_dbg(&pcie->pdev->dev, "port_conf_stat_off =%#x\n",
+				pcie->port_conf_off);
 	}
 
 	/* setup IRQ */
@@ -767,6 +952,15 @@ static const struct altera_pcie_ops altera_pcie_ops_2_0 = {
 	.rp_isr = altera_pcie_isr,
 };
 
+static const struct altera_pcie_ops altera_pcie_ops_3_0 = {
+	.rp_read_cfg = aglx_rp_read_cfg,
+	.rp_write_cfg = aglx_rp_write_cfg,
+	.get_link_status = aglx_altera_pcie_link_up,
+	.nonrp_read_cfg = aglx_nonrp_read_cfg,
+	.nonrp_write_cfg = aglx_nonrp_write_cfg,
+	.rp_isr = aglx_isr,
+};
+
 static const struct altera_pcie_data altera_pcie_1_0_data = {
 	.ops = &altera_pcie_ops_1_0,
 	.cap_offset = 0x80,
@@ -787,11 +981,19 @@ static const struct altera_pcie_data altera_pcie_2_0_data = {
 	.cfgwr1 = S10_TLP_FMTTYPE_CFGWR1,
 };
 
+static const struct altera_pcie_data altera_pcie_3_0_data = {
+	.ops = &altera_pcie_ops_3_0,
+	.version = ALTERA_PCIE_V3,
+	.cap_offset = 0x70,
+};
+
 static const struct of_device_id altera_pcie_of_match[] = {
 	{.compatible = "altr,pcie-root-port-1.0",
 	 .data = &altera_pcie_1_0_data },
 	{.compatible = "altr,pcie-root-port-2.0",
 	 .data = &altera_pcie_2_0_data },
+	{.compatible = "altr,pcie-root-port-3.0",
+	.data = &altera_pcie_3_0_data },
 	{},
 };
 
@@ -836,6 +1038,9 @@ static int altera_pcie_probe(struct platform_device *pdev)
 		/* enable all interrupts */
 		cra_writel(pcie, P2A_INT_ENA_ALL, P2A_INT_ENABLE);
 		altera_pcie_host_init(pcie);
+	} else if (pcie->pcie_data->version == ALTERA_PCIE_V3) {
+		writel(AGLX_CFG_AER, (pcie->hip_base + pcie->port_conf_off
+			+ AGLX_ROOT_PORT_IRQ_ENABLE));
 	}
 
 	bridge->sysdata = pcie;
