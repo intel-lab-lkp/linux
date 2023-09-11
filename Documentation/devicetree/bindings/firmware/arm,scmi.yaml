@@ -45,6 +45,9 @@ properties:
       - description: SCMI compliant firmware with OP-TEE transport
         items:
           - const: linaro,scmi-optee
+      - description: SCMI compliant firmware with Qualcomm hvc/shmem transport
+        items:
+          - const: qcom,scmi-hvc-shmem
 
   interrupts:
     description:
@@ -319,6 +322,15 @@ allOf:
     then:
       required:
         - linaro,optee-channel-id
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: qcom,scmi-hvc-shmem
+    then:
+      required:
+        - shmem
 
 examples:
   - |
