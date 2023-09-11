@@ -1473,7 +1473,7 @@ static int __maybe_unused mtk_iommu_runtime_suspend(struct device *dev)
 	reg->ctrl_reg = readl_relaxed(base + REG_MMU_CTRL_REG);
 	reg->vld_pa_rng = readl_relaxed(base + REG_MMU_VLD_PA_RNG);
 	do {
-		if (!data->plat_data->banks_enable[i])
+		if (!data->plat_data->banks_enable[i] || data->bank[i].is_secure)
 			continue;
 		base = data->bank[i].base;
 		reg->int_control[i] = readl_relaxed(base + REG_MMU_INT_CONTROL0);
