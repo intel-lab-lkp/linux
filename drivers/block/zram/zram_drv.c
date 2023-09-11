@@ -576,6 +576,39 @@ static void free_block_bdev(struct zram *zram, unsigned long blk_idx)
 	atomic64_dec(&zram->stats.bd_count);
 }
 
+static unsigned long alloc_block_bdev_range(struct zram *zram,
+					    unsigned int *nr_of_blocksp)
+{
+	unsigned long blk_idx;
+	unsigned int nr_of_blocks = *nr_of_blocksp;
+retry:
+	/* skip 0 bit to confuse zram.handle = 0 */
+	blk_idx = 1;
+	blk_idx = bitmap_find_next_zero_area(zram->bitmap, zram->nr_pages,
+					     blk_idx, nr_of_blocks, 0);
+
+	if ((blk_idx + nr_of_blocks) > zram->nr_pages) {
+		if (nr_of_blocks == 1)
+			return 0;
+
+		nr_of_blocks = nr_of_blocks / 2;
+		goto retry;
+	}
+
+	bitmap_set(zram->bitmap, blk_idx, nr_of_blocks);
+	atomic64_add(nr_of_blocks, &zram->stats.bd_count);
+	*nr_of_blocksp = nr_of_blocks;
+
+	return blk_idx;
+}
+
+static void free_block_bdev_range(struct zram *zram, unsigned long blk_idx,
+				  unsigned int nr_of_blocks)
+{
+	for (unsigned int i = 0; i < nr_of_blocks; i++)
+		free_block_bdev(zram, blk_idx + i);
+}
+
 static void read_from_bdev_async(struct zram *zram, struct page *page,
 			unsigned long entry, struct bio *parent)
 {
