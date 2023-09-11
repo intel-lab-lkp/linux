@@ -882,6 +882,12 @@ static ssize_t sbefifo_user_write(struct file *file, const char __user *buf,
 
 	mutex_lock(&user->file_lock);
 
+	/* Previous write is still in progress */
+	if (user->pending_cmd) {
+		mutex_unlock(&user->file_lock);
+		return -EALREADY;
+	}
+
 	/* Can we use the pre-allocate buffer ? If not, allocate */
 	if (len <= PAGE_SIZE)
 		user->pending_cmd = user->cmd_page;
