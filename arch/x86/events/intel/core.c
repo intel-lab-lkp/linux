@@ -2792,6 +2792,7 @@ static void intel_pmu_enable_fixed(struct perf_event *event)
 
 static void intel_pmu_enable_event(struct perf_event *event)
 {
+	u64 enable_mask = ARCH_PERFMON_EVENTSEL_ENABLE;
 	struct hw_perf_event *hwc = &event->hw;
 	int idx = hwc->idx;
 
@@ -2800,8 +2801,10 @@ static void intel_pmu_enable_event(struct perf_event *event)
 
 	switch (idx) {
 	case 0 ... INTEL_PMC_IDX_FIXED - 1:
+		if (branch_sample_evt_cntrs(event))
+			enable_mask |= ARCH_PERFMON_EVENTSEL_LBR_LOG;
 		intel_set_masks(event, idx);
-		__x86_pmu_enable_event(hwc, ARCH_PERFMON_EVENTSEL_ENABLE);
+		__x86_pmu_enable_event(hwc, enable_mask);
 		break;
 	case INTEL_PMC_IDX_FIXED ... INTEL_PMC_IDX_FIXED_BTS - 1:
 	case INTEL_PMC_IDX_METRIC_BASE ... INTEL_PMC_IDX_METRIC_END:
@@ -3052,7 +3055,7 @@ static int handle_pmi_common(struct pt_regs *regs, u64 status)
 		perf_sample_data_init(&data, 0, event->hw.last_period);
 
 		if (has_branch_stack(event))
-			perf_sample_save_brstack(&data, event, &cpuc->lbr_stack, NULL);
+			intel_pmu_lbr_save_brstack(&data, cpuc, event);
 
 		if (perf_event_overflow(event, &data, regs))
 			x86_pmu_stop(event, 0);
@@ -3617,6 +3620,13 @@ intel_get_event_constraints(struct cpu_hw_events *cpuc, int idx,
 	if (cpuc->excl_cntrs)
 		return intel_get_excl_constraints(cpuc, event, idx, c2);
 
+	/* The LBR event logging may not be available for all counters. */
+	if (branch_sample_evt_cntrs(event)) {
+		c2 = dyn_constraint(cpuc, c2, idx);
+		c2->idxmsk64 &= x86_pmu.lbr_events;
+		c2->weight = hweight64(c2->idxmsk64);
+	}
+
 	return c2;
 }
 
@@ -3904,6 +3914,44 @@ static int intel_pmu_hw_config(struct perf_event *event)
 
 	if (needs_branch_stack(event) && is_sampling_event(event))
 		event->hw.flags  |= PERF_X86_EVENT_NEEDS_BRANCH_STACK;
+
+	if (branch_sample_evt_cntrs(event) || branch_sample_extra(event)) {
+		struct perf_event *leader, *sibling;
+
+		if (!(x86_pmu.flags & PMU_FL_LBR_EVENT) ||
+		    (event->attr.config & ~INTEL_ARCH_EVENT_MASK))
+			return -EINVAL;
+
+		/*
+		 * The event logging is not supported in the call stack mode
+		 * yet, since we cannot simply flush the LBR during e.g.,
+		 * multiplexing. Also, there is no obvious usage with the call
+		 * stack mode. Simply forbids it for now.
+		 *
+		 * If any events in the group enable the LBR event logging
+		 * feature, the group is treated as a LBR event logging group,
+		 * which requires the extra space.
+		 */
+		leader = event->group_leader;
+		if (branch_sample_call_stack(leader) || !branch_sample_extra(leader))
+			return -EINVAL;
+
+		for_each_sibling_event(sibling, leader) {
+			if (branch_sample_call_stack(sibling) || !branch_sample_extra(leader))
+				return -EINVAL;
+		}
+
+		/*
+		 * Only applying the PERF_SAMPLE_BRANCH_EVT_CNTRS or the
+		 * PERF_SAMPLE_BRANCH_EXTRA doesn't require any branch stack setup.
+		 * Clear the bit to avoid unnecessary branch stack setup.
+		 */
+		if (0 == (event->attr.branch_sample_type &
+			  ~(PERF_SAMPLE_BRANCH_PLM_ALL |
+			    PERF_SAMPLE_BRANCH_EVT_CNTRS |
+			    PERF_SAMPLE_BRANCH_EXTRA)))
+			event->hw.flags  &= ~PERF_X86_EVENT_NEEDS_BRANCH_STACK;
+	}
 
 	if (intel_pmu_needs_branch_stack(event)) {
 		ret = intel_pmu_setup_lbr_filter(event);
@@ -4383,8 +4431,12 @@ cmt_get_event_constraints(struct cpu_hw_events *cpuc, int idx,
 	 */
 	if (event->attr.precise_ip == 3) {
 		/* Force instruction:ppp on PMC0, 1 and Fixed counter 0 */
-		if (constraint_match(&fixed0_constraint, event->hw.config))
-			return &fixed0_counter0_1_constraint;
+		if (constraint_match(&fixed0_constraint, event->hw.config)) {
+			if (branch_sample_evt_cntrs(event))
+				return &counter0_1_constraint;
+			else
+				return &fixed0_counter0_1_constraint;
+		}
 
 		switch (c->idxmsk64 & 0x3ull) {
 		case 0x1:
@@ -4563,7 +4615,7 @@ int intel_cpuc_prepare(struct cpu_hw_events *cpuc, int cpu)
 			goto err;
 	}
 
-	if (x86_pmu.flags & (PMU_FL_EXCL_CNTRS | PMU_FL_TFA)) {
+	if (x86_pmu.flags & (PMU_FL_EXCL_CNTRS | PMU_FL_TFA | PMU_FL_LBR_EVENT)) {
 		size_t sz = X86_PMC_IDX_MAX * sizeof(struct event_constraint);
 
 		cpuc->constraint_list = kzalloc_node(sz, GFP_KERNEL, cpu_to_node(cpu));
