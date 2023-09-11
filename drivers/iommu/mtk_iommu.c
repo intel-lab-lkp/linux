@@ -1667,11 +1667,11 @@ static const struct mtk_iommu_plat_data mt8188_data_vdo = {
 	.m4u_plat       = M4U_MT8188,
 	.flags          = HAS_BCLK | HAS_SUB_COMM_3BITS | OUT_ORDER_WR_EN |
 			  WR_THROT_EN | IOVA_34_EN | SHARE_PGTABLE |
-			  PGTABLE_PA_35_EN | MTK_IOMMU_TYPE_MM,
+			  PGTABLE_PA_35_EN | MTK_IOMMU_TYPE_MM | SECURE_BANK_ENABLE,
 	.hw_list        = &m4ulist,
 	.inv_sel_reg    = REG_MMU_INV_SEL_GEN2,
-	.banks_num      = 1,
-	.banks_enable   = {true},
+	.banks_num      = 5,
+	.banks_enable   = {true, false, false, false, true},
 	.iova_region    = mt8192_multi_dom,
 	.iova_region_nr = ARRAY_SIZE(mt8192_multi_dom),
 	.iova_region_larb_msk = mt8188_larb_region_msk,
@@ -1684,11 +1684,11 @@ static const struct mtk_iommu_plat_data mt8188_data_vpp = {
 	.m4u_plat       = M4U_MT8188,
 	.flags          = HAS_BCLK | HAS_SUB_COMM_3BITS | OUT_ORDER_WR_EN |
 			  WR_THROT_EN | IOVA_34_EN | SHARE_PGTABLE |
-			  PGTABLE_PA_35_EN | MTK_IOMMU_TYPE_MM,
+			  PGTABLE_PA_35_EN | MTK_IOMMU_TYPE_MM | SECURE_BANK_ENABLE,
 	.hw_list        = &m4ulist,
 	.inv_sel_reg    = REG_MMU_INV_SEL_GEN2,
-	.banks_num      = 1,
-	.banks_enable   = {true},
+	.banks_num      = 5,
+	.banks_enable   = {true, false, false, false, true},
 	.iova_region    = mt8192_multi_dom,
 	.iova_region_nr = ARRAY_SIZE(mt8192_multi_dom),
 	.iova_region_larb_msk = mt8188_larb_region_msk,
