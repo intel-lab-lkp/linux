@@ -146,6 +146,7 @@
 #define TF_PORT_TO_ADDR_MT8173		BIT(18)
 #define INT_ID_PORT_WIDTH_6		BIT(19)
 #define CFG_IFA_MASTER_IN_ATF		BIT(20)
+#define SECURE_BANK_ENABLE		BIT(21)
 
 #define MTK_IOMMU_HAS_FLAG_MASK(pdata, _x, mask)	\
 				((((pdata)->flags) & (mask)) == (_x))
@@ -161,6 +162,8 @@
 
 #define MTK_IOMMU_GROUP_MAX	8
 #define MTK_IOMMU_BANK_MAX	5
+
+#define MTK_IOMMU_SEC_BANKID	4
 
 enum mtk_iommu_plat {
 	M4U_MT2712,
@@ -240,9 +243,13 @@ struct mtk_iommu_plat_data {
 };
 
 struct mtk_iommu_bank_data {
-	void __iomem			*base;
+	union {
+		void __iomem		*base;
+		phys_addr_t		sec_bank_base;
+	};
 	int				irq;
 	u8				id;
+	bool				is_secure;
 	struct device			*parent_dev;
 	struct mtk_iommu_data		*parent_data;
 	spinlock_t			tlb_lock; /* lock for tlb range flush */
@@ -1309,7 +1316,15 @@ static int mtk_iommu_probe(struct platform_device *pdev)
 			continue;
 		bank = &data->bank[i];
 		bank->id = i;
-		bank->base = base + i * MTK_IOMMU_BANK_SZ;
+		if (MTK_IOMMU_HAS_FLAG(data->plat_data, SECURE_BANK_ENABLE) &&
+		    bank->id == MTK_IOMMU_SEC_BANKID) {
+			/* Record the secure bank base to indicate which iommu TF in sec world */
+			bank->sec_bank_base = res->start + i * MTK_IOMMU_BANK_SZ;
+			bank->is_secure = true;
+		} else {
+			bank->base = base + i * MTK_IOMMU_BANK_SZ;
+			bank->is_secure = false;
+		}
 		bank->m4u_dom = NULL;
 
 		bank->irq = platform_get_irq(pdev, i);
