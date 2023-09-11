@@ -84,7 +84,8 @@ void ucsi_debugfs_register(struct ucsi *ucsi)
 
 void ucsi_debugfs_unregister(struct ucsi *ucsi)
 {
-	debugfs_remove_recursive(ucsi->debugfs->dentry);
+	if (ucsi->debugfs)
+		debugfs_remove_recursive(ucsi->debugfs->dentry);
 	kfree(ucsi->debugfs);
 }
 
