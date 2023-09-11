@@ -21,6 +21,7 @@
 #define MPQ7932_N_VOLTAGES		256
 #define MPQ7932_VOUT_MAX		0xFF
 #define MPQ7932_NUM_PAGES		6
+#define MPQ2286_NUM_PAGES		1
 
 #define MPQ7932_TON_DELAY		0x60
 #define MPQ7932_VOUT_STARTUP_SLEW	0xA3
@@ -130,12 +131,14 @@ static int mpq7932_probe(struct i2c_client *client)
 
 static const struct of_device_id mpq7932_of_match[] = {
 	{ .compatible = "mps,mpq7932", .data = (void *)MPQ7932_NUM_PAGES },
+	{ .compatible = "mps,mpq2286", .data = (void *)MPQ2286_NUM_PAGES },
 	{},
 };
 MODULE_DEVICE_TABLE(of, mpq7932_of_match);
 
 static const struct i2c_device_id mpq7932_id[] = {
 	{ "mpq7932", },
+	{ "mpq2286", },
 	{ },
 };
 MODULE_DEVICE_TABLE(i2c, mpq7932_id);
