@@ -1138,6 +1138,15 @@ static inline bool branch_sample_priv(const struct perf_event *event)
 	return event->attr.branch_sample_type & PERF_SAMPLE_BRANCH_PRIV_SAVE;
 }
 
+static inline bool branch_sample_extra(const struct perf_event *event)
+{
+	return event->attr.branch_sample_type & PERF_SAMPLE_BRANCH_EXTRA;
+}
+
+static inline bool branch_sample_evt_cntrs(const struct perf_event *event)
+{
+	return event->attr.branch_sample_type & PERF_SAMPLE_BRANCH_EVT_CNTRS;
+}
 
 struct perf_sample_data {
 	/*
@@ -1172,6 +1181,7 @@ struct perf_sample_data {
 	struct perf_callchain_entry	*callchain;
 	struct perf_raw_record		*raw;
 	struct perf_branch_stack	*br_stack;
+	u64				*br_stack_ext;
 	union perf_sample_weight	weight;
 	union  perf_mem_data_src	data_src;
 	u64				txn;
@@ -1248,7 +1258,8 @@ static inline void perf_sample_save_raw_data(struct perf_sample_data *data,
 
 static inline void perf_sample_save_brstack(struct perf_sample_data *data,
 					    struct perf_event *event,
-					    struct perf_branch_stack *brs)
+					    struct perf_branch_stack *brs,
+					    u64 *brs_ext)
 {
 	int size = sizeof(u64); /* nr */
 
@@ -1256,7 +1267,16 @@ static inline void perf_sample_save_brstack(struct perf_sample_data *data,
 		size += sizeof(u64);
 	size += brs->nr * sizeof(struct perf_branch_entry);
 
+	/*
+	 * The extension space is appended after the struct perf_branch_stack.
+	 * It is used to store the extra data of each branch, e.g.,
+	 * the occurrences of events since the last branch entry for Intel LBR.
+	 */
+	if (branch_sample_extra(event))
+		size += brs->nr * sizeof(u64);
+
 	data->br_stack = brs;
+	data->br_stack_ext = brs_ext;
 	data->dyn_size += size;
 	data->sample_flags |= PERF_SAMPLE_BRANCH_STACK;
 }
