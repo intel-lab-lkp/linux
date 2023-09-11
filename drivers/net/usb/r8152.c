@@ -871,7 +871,7 @@ struct r8152 {
 	struct tx_agg tx_info[RTL8152_MAX_TX];
 	struct list_head rx_info, rx_used;
 	struct list_head rx_done, tx_free;
-	struct sk_buff_head tx_queue, rx_queue;
+	struct sk_buff_head tx_queue;
 	spinlock_t rx_lock, tx_lock;
 	struct delayed_work schedule, hw_phy_work;
 	struct mii_if_info mii;
@@ -2031,7 +2031,6 @@ static int alloc_all_mem(struct r8152 *tp)
 	INIT_LIST_HEAD(&tp->tx_free);
 	INIT_LIST_HEAD(&tp->rx_done);
 	skb_queue_head_init(&tp->tx_queue);
-	skb_queue_head_init(&tp->rx_queue);
 	atomic_set(&tp->rx_count, 0);
 
 	for (i = 0; i < RTL8152_MAX_RX; i++) {
@@ -2431,24 +2430,6 @@ static int rx_bottom(struct r8152 *tp, int budget)
 	int ret = 0, work_done = 0;
 	struct napi_struct *napi = &tp->napi;
 
-	if (!skb_queue_empty(&tp->rx_queue)) {
-		while (work_done < budget) {
-			struct sk_buff *skb = __skb_dequeue(&tp->rx_queue);
-			struct net_device *netdev = tp->netdev;
-			struct net_device_stats *stats = &netdev->stats;
-			unsigned int pkt_len;
-
-			if (!skb)
-				break;
-
-			pkt_len = skb->len;
-			napi_gro_receive(napi, skb);
-			work_done++;
-			stats->rx_packets++;
-			stats->rx_bytes += pkt_len;
-		}
-	}
-
 	if (list_empty(&tp->rx_done))
 		goto out1;
 
@@ -2483,10 +2464,6 @@ static int rx_bottom(struct r8152 *tp, int budget)
 			struct net_device_stats *stats = &netdev->stats;
 			unsigned int pkt_len, rx_frag_head_sz;
 			struct sk_buff *skb;
-
-			/* limit the skb numbers for rx_queue */
-			if (unlikely(skb_queue_len(&tp->rx_queue) >= 1000))
-				break;
 
 			pkt_len = le32_to_cpu(rx_desc->opts1) & RX_LEN_MASK;
 			if (pkt_len < ETH_ZLEN)
@@ -2525,14 +2502,10 @@ static int rx_bottom(struct r8152 *tp, int budget)
 
 			skb->protocol = eth_type_trans(skb, netdev);
 			rtl_rx_vlan_tag(rx_desc, skb);
-			if (work_done < budget) {
-				work_done++;
-				stats->rx_packets++;
-				stats->rx_bytes += skb->len;
-				napi_gro_receive(napi, skb);
-			} else {
-				__skb_queue_tail(&tp->rx_queue, skb);
-			}
+			work_done++;
+			stats->rx_packets++;
+			stats->rx_bytes += skb->len;
+			napi_gro_receive(napi, skb);
 
 find_next_rx:
 			rx_data = rx_agg_align(rx_data + pkt_len + ETH_FCS_LEN);
@@ -2562,16 +2535,24 @@ submit:
 			urb->actual_length = 0;
 			list_add_tail(&agg->list, next);
 		}
+
+		/* Break if budget is exhausted. */
+		if (work_done >= budget)
+			break;
 	}
 
+	/* Splice the remained list back to rx_done */
 	if (!list_empty(&rx_queue)) {
 		spin_lock_irqsave(&tp->rx_lock, flags);
-		list_splice_tail(&rx_queue, &tp->rx_done);
+		list_splice(&rx_queue, &tp->rx_done);
 		spin_unlock_irqrestore(&tp->rx_lock, flags);
 	}
 
 out1:
-	return work_done;
+	if (work_done > budget)
+		return budget;
+	else
+		return work_done;
 }
 
 static void tx_bottom(struct r8152 *tp)
@@ -2988,9 +2969,6 @@ static int rtl_stop_rx(struct r8152 *tp)
 	WARN_ON(!list_empty(&tp->rx_info));
 	list_splice(&tmp_list, &tp->rx_info);
 	spin_unlock_irqrestore(&tp->rx_lock, flags);
-
-	while (!skb_queue_empty(&tp->rx_queue))
-		dev_kfree_skb(__skb_dequeue(&tp->rx_queue));
 
 	return 0;
 }
