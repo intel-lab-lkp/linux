@@ -618,6 +618,12 @@ static void mddev_delayed_delete(struct work_struct *ws);
 
 void mddev_put(struct mddev *mddev)
 {
+	/* Guard for ambiguous put. */
+	if (unlikely(atomic_read(&mddev->active) < 1)) {
+		pr_warn("%s: active refcount is lower than 1\n", mdname(mddev));
+		return;
+	}
+
 	if (!atomic_dec_and_lock(&mddev->active, &all_mddevs_lock))
 		return;
 	if (!mddev->raid_disks && list_empty(&mddev->disks) &&
@@ -8263,8 +8269,7 @@ static void *md_seq_next(struct seq_file *seq, void *v, loff_t *pos)
 		next_mddev = list_entry(tmp, struct mddev, all_mddevs);
 		if (mddev_get(next_mddev))
 			break;
-		mddev = next_mddev;
-		tmp = mddev->all_mddevs.next;
+		tmp = next_mddev->all_mddevs.next;
 	}
 	spin_unlock(&all_mddevs_lock);
 
