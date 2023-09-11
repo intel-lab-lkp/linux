@@ -24,9 +24,10 @@
 #define VDBGFW	"VenusFW  : "
 
 #define VIDC_CLKS_NUM_MAX		4
-#define VIDC_VCODEC_CLKS_NUM_MAX	2
 #define VIDC_PMDOMAINS_NUM_MAX		3
 #define VIDC_RESETS_NUM_MAX		2
+
+#define MAX_NUM_VCODECS			2
 
 extern int venus_fw_debug;
 
@@ -69,8 +70,6 @@ struct venus_resources {
 	const struct hfi_ubwc_config * const ubwc_conf;
 	const char * const clks[VIDC_CLKS_NUM_MAX];
 	const unsigned int clks_num;
-	const char * const vcodec0_clks[VIDC_VCODEC_CLKS_NUM_MAX];
-	const char * const vcodec1_clks[VIDC_VCODEC_CLKS_NUM_MAX];
 	const unsigned int vcodec_clks_num;
 	const char * const vcodec_pmdomains[VIDC_PMDOMAINS_NUM_MAX];
 	const unsigned int vcodec_pmdomains_num;
@@ -177,8 +176,8 @@ struct venus_core {
 	void __iomem *aon_base;
 	int irq;
 	struct clk *clks[VIDC_CLKS_NUM_MAX];
-	struct clk *vcodec0_clks[VIDC_VCODEC_CLKS_NUM_MAX];
-	struct clk *vcodec1_clks[VIDC_VCODEC_CLKS_NUM_MAX];
+	struct clk *vcodec_core_clks[MAX_NUM_VCODECS];
+	struct clk *vcodec_bus_clks[MAX_NUM_VCODECS];
 	struct icc_path *video_path;
 	struct icc_path *cpucfg_path;
 	bool has_opp_table;
