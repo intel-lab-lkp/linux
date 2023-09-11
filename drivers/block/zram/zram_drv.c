@@ -595,6 +595,46 @@ static void read_from_bdev_async(struct zram *zram, struct page *page,
 #define IDLE_WRITEBACK			(1<<1)
 #define INCOMPRESSIBLE_WRITEBACK	(1<<2)
 
+/*
+ * Returns: true if the index was prepared for further processing
+ *          false if the index can be skipped
+ */
+static bool writeback_prep_or_skip_index(struct zram *zram, int mode,
+					 unsigned long index)
+{
+	bool ret = false;
+
+	zram_slot_lock(zram, index);
+	if (!zram_allocated(zram, index))
+		goto skip;
+
+	if (zram_test_flag(zram, index, ZRAM_WB) ||
+	    zram_test_flag(zram, index, ZRAM_SAME) ||
+	    zram_test_flag(zram, index, ZRAM_UNDER_WB))
+		goto skip;
+
+	if (mode & IDLE_WRITEBACK && !zram_test_flag(zram, index, ZRAM_IDLE))
+		goto skip;
+	if (mode & HUGE_WRITEBACK && !zram_test_flag(zram, index, ZRAM_HUGE))
+		goto skip;
+	if (mode & INCOMPRESSIBLE_WRITEBACK &&
+	    !zram_test_flag(zram, index, ZRAM_INCOMPRESSIBLE))
+		goto skip;
+
+	/*
+	 * Clearing ZRAM_UNDER_WB is duty of caller.
+	 * IOW, zram_free_page never clear it.
+	 */
+	zram_set_flag(zram, index, ZRAM_UNDER_WB);
+	/* Need for hugepage writeback racing */
+	zram_set_flag(zram, index, ZRAM_IDLE);
+
+	ret = true;
+skip:
+	zram_slot_unlock(zram, index);
+	return ret;
+}
+
 static ssize_t writeback_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t len)
 {
@@ -662,33 +702,9 @@ static ssize_t writeback_store(struct device *dev,
 			}
 		}
 
-		zram_slot_lock(zram, index);
-		if (!zram_allocated(zram, index))
-			goto next;
+		if (!writeback_prep_or_skip_index(zram, mode, index))
+			continue;
 
-		if (zram_test_flag(zram, index, ZRAM_WB) ||
-				zram_test_flag(zram, index, ZRAM_SAME) ||
-				zram_test_flag(zram, index, ZRAM_UNDER_WB))
-			goto next;
-
-		if (mode & IDLE_WRITEBACK &&
-		    !zram_test_flag(zram, index, ZRAM_IDLE))
-			goto next;
-		if (mode & HUGE_WRITEBACK &&
-		    !zram_test_flag(zram, index, ZRAM_HUGE))
-			goto next;
-		if (mode & INCOMPRESSIBLE_WRITEBACK &&
-		    !zram_test_flag(zram, index, ZRAM_INCOMPRESSIBLE))
-			goto next;
-
-		/*
-		 * Clearing ZRAM_UNDER_WB is duty of caller.
-		 * IOW, zram_free_page never clear it.
-		 */
-		zram_set_flag(zram, index, ZRAM_UNDER_WB);
-		/* Need for hugepage writeback racing */
-		zram_set_flag(zram, index, ZRAM_IDLE);
-		zram_slot_unlock(zram, index);
 		if (zram_read_page(zram, page, index, NULL)) {
 			zram_slot_lock(zram, index);
 			zram_clear_flag(zram, index, ZRAM_UNDER_WB);
