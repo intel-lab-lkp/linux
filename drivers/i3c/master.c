@@ -1088,9 +1088,36 @@ static int i3c_master_getmxds_locked(struct i3c_master_controller *master,
 				     struct i3c_device_info *info)
 {
 	struct i3c_ccc_getmxds *getmaxds;
+	struct i3c_ccc_getmxds_turnaround *getmaxds_ta;
 	struct i3c_ccc_cmd_dest dest;
 	struct i3c_ccc_cmd cmd;
 	int ret;
+
+	getmaxds_ta = i3c_ccc_cmd_dest_init(&dest, info->dyn_addr,
+					 sizeof(*getmaxds_ta));
+	if (!getmaxds_ta)
+		return -ENOMEM;
+
+	i3c_ccc_cmd_init(&cmd, true, I3C_CCC_GETMXDS, &dest, 1);
+	ret = i3c_master_send_ccc_cmd_locked(master, &cmd);
+	if (ret) {
+		goto alternative;
+	}
+
+	if (dest.payload.len != 2 && dest.payload.len != 5) {
+		ret = -EIO;
+		goto out;
+	}
+
+	info->max_read_ds = getmaxds_ta->maxrd;
+	info->max_write_ds = getmaxds_ta->maxwr;
+	if (dest.payload.len == 5)
+		info->max_read_turnaround = getmaxds_ta->maxrdturn[0] |
+					    ((u32)getmaxds_ta->maxrdturn[1] << 8) |
+					    ((u32)getmaxds_ta->maxrdturn[2] << 16);
+
+alternative:
+	i3c_ccc_cmd_dest_cleanup(&dest);
 
 	getmaxds = i3c_ccc_cmd_dest_init(&dest, info->dyn_addr,
 					 sizeof(*getmaxds));
@@ -1102,17 +1129,13 @@ static int i3c_master_getmxds_locked(struct i3c_master_controller *master,
 	if (ret)
 		goto out;
 
-	if (dest.payload.len != 2 && dest.payload.len != 5) {
+	if (dest.payload.len != 2) {
 		ret = -EIO;
 		goto out;
 	}
 
 	info->max_read_ds = getmaxds->maxrd;
 	info->max_write_ds = getmaxds->maxwr;
-	if (dest.payload.len == 5)
-		info->max_read_turnaround = getmaxds->maxrdturn[0] |
-					    ((u32)getmaxds->maxrdturn[1] << 8) |
-					    ((u32)getmaxds->maxrdturn[2] << 16);
 
 out:
 	i3c_ccc_cmd_dest_cleanup(&dest);

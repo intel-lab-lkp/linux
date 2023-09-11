@@ -269,14 +269,27 @@ enum i3c_tsco {
 #define I3C_CCC_MAX_SDR_FSCL(x)		((x) & I3C_CCC_MAX_SDR_FSCL_MASK)
 
 /**
- * struct i3c_ccc_getmxds - payload passed to GETMXDS CCC
+ * struct i3c_ccc_getmxds - payload passed to GETMXDS CCC without turnaround
+ * (format 1)
+ *
+ * @maxwr: write limitations
+ * @maxrd: read limitations
+ */
+struct i3c_ccc_getmxds {
+	u8 maxwr;
+	u8 maxrd;
+} __packed;
+
+/**
+ * struct i3c_ccc_getmxds_ta - payload passed to GETMXDS CCC with turnaround
+ * (format 2)
  *
  * @maxwr: write limitations
  * @maxrd: read limitations
  * @maxrdturn: maximum read turn-around expressed micro-seconds and
  *	       little-endian formatted
  */
-struct i3c_ccc_getmxds {
+struct i3c_ccc_getmxds_turnaround {
 	u8 maxwr;
 	u8 maxrd;
 	u8 maxrdturn[3];
