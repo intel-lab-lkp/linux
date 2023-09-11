@@ -9,6 +9,7 @@
 #include <linux/dma-heap.h>
 #include <linux/err.h>
 #include <linux/module.h>
+#include <linux/scatterlist.h>
 #include <linux/slab.h>
 #include <linux/tee_drv.h>
 #include <linux/uuid.h>
@@ -41,6 +42,10 @@ struct mtk_secure_heap {
 	const enum kree_mem_type mem_type;
 	u32			 mem_session;
 	struct tee_context	*tee_ctx;
+};
+
+struct mtk_secure_heap_attachment {
+	struct sg_table		*table;
 };
 
 static int mtk_optee_ctx_match(struct tee_ioctl_version_data *ver, const void *data)
@@ -142,6 +147,116 @@ static void mtk_sec_mem_release(struct mtk_secure_heap *sec_heap,
 				     TZCMD_MEM_SECURECM_UNREF, params);
 }
 
+static int mtk_sec_heap_attach(struct dma_buf *dmabuf, struct dma_buf_attachment *attachment)
+{
+	struct mtk_secure_heap_buffer *sec_buf = dmabuf->priv;
+	struct mtk_secure_heap_attachment *a;
+	struct sg_table *table;
+	int ret = 0;
+
+	a = kzalloc(sizeof(*a), GFP_KERNEL);
+	if (!a)
+		return -ENOMEM;
+
+	table = kzalloc(sizeof(*table), GFP_KERNEL);
+	if (!table) {
+		ret = -ENOMEM;
+		goto err_free_attach;
+	}
+
+	ret = sg_alloc_table(table, 1, GFP_KERNEL);
+	if (ret)
+		goto err_free_sgt;
+	sg_set_page(table->sgl, 0, sec_buf->size, 0);
+
+	a->table = table;
+	attachment->priv = a;
+
+	return 0;
+
+err_free_sgt:
+	kfree(table);
+err_free_attach:
+	kfree(a);
+	return ret;
+}
+
+static void mtk_sec_heap_detach(struct dma_buf *dmabuf, struct dma_buf_attachment *attachment)
+{
+	struct mtk_secure_heap_attachment *a = attachment->priv;
+
+	sg_free_table(a->table);
+	kfree(a->table);
+	kfree(a);
+}
+
+static struct sg_table *
+mtk_sec_heap_map_dma_buf(struct dma_buf_attachment *attachment, enum dma_data_direction direction)
+{
+	struct mtk_secure_heap_attachment *a = attachment->priv;
+	struct dma_buf *dmabuf = attachment->dmabuf;
+	struct mtk_secure_heap_buffer *sec_buf = dmabuf->priv;
+	struct sg_table *table = a->table;
+
+	/*
+	 * Technically dma_address refers to the address used by HW, But for secure buffer
+	 * we don't know its dma_address in kernel, Instead, we only know its "secure handle".
+	 * Thus use this property to save the "secure handle", and the user will use it to
+	 * obtain the real address in secure world.
+	 */
+	sg_dma_address(table->sgl) = sec_buf->sec_handle;
+	sg_dma_len(table->sgl) = sec_buf->size;
+
+	return table;
+}
+
+static void
+mtk_sec_heap_unmap_dma_buf(struct dma_buf_attachment *attachment, struct sg_table *table,
+			   enum dma_data_direction direction)
+{
+	struct mtk_secure_heap_attachment *a = attachment->priv;
+
+	WARN_ON(a->table != table);
+	sg_dma_address(table->sgl) = 0;
+}
+
+static int
+mtk_sec_heap_dma_buf_begin_cpu_access(struct dma_buf *dmabuf, enum dma_data_direction direction)
+{
+	return -EPERM;
+}
+
+static int
+mtk_sec_heap_dma_buf_end_cpu_access(struct dma_buf *dmabuf, enum dma_data_direction direction)
+{
+	return -EPERM;
+}
+
+static int mtk_sec_heap_dma_buf_mmap(struct dma_buf *dmabuf, struct vm_area_struct *vma)
+{
+	return -EPERM;
+}
+
+static void mtk_sec_heap_free(struct dma_buf *dmabuf)
+{
+	struct mtk_secure_heap_buffer *sec_buf = dmabuf->priv;
+	struct mtk_secure_heap *sec_heap = dma_heap_get_drvdata(sec_buf->heap);
+
+	mtk_sec_mem_release(sec_heap, sec_buf);
+	kfree(sec_buf);
+}
+
+static const struct dma_buf_ops mtk_sec_heap_buf_ops = {
+	.attach		= mtk_sec_heap_attach,
+	.detach		= mtk_sec_heap_detach,
+	.map_dma_buf	= mtk_sec_heap_map_dma_buf,
+	.unmap_dma_buf	= mtk_sec_heap_unmap_dma_buf,
+	.begin_cpu_access = mtk_sec_heap_dma_buf_begin_cpu_access,
+	.end_cpu_access	= mtk_sec_heap_dma_buf_end_cpu_access,
+	.mmap		= mtk_sec_heap_dma_buf_mmap,
+	.release	= mtk_sec_heap_free,
+};
+
 static struct dma_buf *
 mtk_sec_heap_allocate(struct dma_heap *heap, size_t size,
 		      unsigned long fd_flags, unsigned long heap_flags)
@@ -173,6 +288,7 @@ mtk_sec_heap_allocate(struct dma_heap *heap, size_t size,
 	if (ret)
 		goto err_free_buf;
 	exp_info.exp_name = dma_heap_get_name(heap);
+	exp_info.ops = &mtk_sec_heap_buf_ops;
 	exp_info.size = sec_buf->size;
 	exp_info.flags = fd_flags;
 	exp_info.priv = sec_buf;
