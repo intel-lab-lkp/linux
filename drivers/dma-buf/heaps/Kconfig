@@ -12,3 +12,11 @@ config DMABUF_HEAPS_CMA
 	  Choose this option to enable dma-buf CMA heap. This heap is backed
 	  by the Contiguous Memory Allocator (CMA). If your system has these
 	  regions, you should say Y here.
+
+config DMABUF_HEAPS_MTK_SECURE
+	bool "DMA-BUF MediaTek Secure Heap"
+	depends on DMABUF_HEAPS && TEE
+	help
+	  Choose this option to enable dma-buf MediaTek secure heap for Secure
+	  Video Path. This heap is backed by TEE client interfaces. If in
+	  doubt, say N.
