@@ -95,6 +95,10 @@
 
 #define SPAGE_SIZE			4096
 
+#define SUN50I_IOMMU_PGSIZES		(SZ_4K | SZ_8K | SZ_16K | SZ_32K | \
+					 SZ_64K | SZ_128K | SZ_256K | \
+					 SZ_512K | SZ_1M)
+
 struct sun50i_iommu {
 	struct iommu_device iommu;
 
@@ -593,9 +597,11 @@ static int sun50i_iommu_map(struct iommu_domain *domain, unsigned long iova,
 {
 	struct sun50i_iommu_domain *sun50i_domain = to_sun50i_domain(domain);
 	struct sun50i_iommu *iommu = sun50i_domain->iommu;
-	u32 pte_index;
+	u32 pte_index, pages, i;
 	u32 *page_table, *pte_addr;
 	int ret = 0;
+
+	pages = size / SPAGE_SIZE;
 
 	page_table = sun50i_dte_get_page_table(sun50i_domain, iova, gfp);
 	if (IS_ERR(page_table)) {
@@ -604,18 +610,22 @@ static int sun50i_iommu_map(struct iommu_domain *domain, unsigned long iova,
 	}
 
 	pte_index = sun50i_iova_get_pte_index(iova);
-	pte_addr = &page_table[pte_index];
-	if (unlikely(sun50i_pte_is_page_valid(*pte_addr))) {
-		phys_addr_t page_phys = sun50i_pte_get_page_address(*pte_addr);
-		dev_err(iommu->dev,
-			"iova %pad already mapped to %pa cannot remap to %pa prot: %#x\n",
-			&iova, &page_phys, &paddr, prot);
-		ret = -EBUSY;
-		goto out;
+	for (i = 0; i < pages; i++) {
+		pte_addr = &page_table[pte_index + i];
+		if (unlikely(sun50i_pte_is_page_valid(*pte_addr))) {
+			phys_addr_t page_phys = sun50i_pte_get_page_address(*pte_addr);
+
+			dev_err(iommu->dev,
+				"iova %pad already mapped to %pa cannot remap to %pa prot: %#x\n",
+				&iova, &page_phys, &paddr, prot);
+			ret = -EBUSY;
+			goto out;
+		}
+		*pte_addr = sun50i_mk_pte(paddr, prot);
+		paddr += SPAGE_SIZE;
 	}
 
-	*pte_addr = sun50i_mk_pte(paddr, prot);
-	sun50i_table_flush(sun50i_domain, pte_addr, 1);
+	sun50i_table_flush(sun50i_domain, &page_table[pte_index], pages);
 
 out:
 	return ret;
@@ -626,8 +636,10 @@ static size_t sun50i_iommu_unmap(struct iommu_domain *domain, unsigned long iova
 {
 	struct sun50i_iommu_domain *sun50i_domain = to_sun50i_domain(domain);
 	phys_addr_t pt_phys;
+	u32 dte, pages, i;
 	u32 *pte_addr;
-	u32 dte;
+
+	pages = size / SPAGE_SIZE;
 
 	dte = sun50i_domain->dt[sun50i_iova_get_dte_index(iova)];
 	if (!sun50i_dte_is_pt_valid(dte))
@@ -636,13 +648,14 @@ static size_t sun50i_iommu_unmap(struct iommu_domain *domain, unsigned long iova
 	pt_phys = sun50i_dte_get_pt_address(dte);
 	pte_addr = (u32 *)phys_to_virt(pt_phys) + sun50i_iova_get_pte_index(iova);
 
-	if (!sun50i_pte_is_page_valid(*pte_addr))
-		return 0;
+	for (i = 0; i < pages; i++)
+		if (!sun50i_pte_is_page_valid(pte_addr[i]))
+			return 0;
 
-	memset(pte_addr, 0, sizeof(*pte_addr));
-	sun50i_table_flush(sun50i_domain, pte_addr, 1);
+	memset(pte_addr, 0, sizeof(*pte_addr) * pages);
+	sun50i_table_flush(sun50i_domain, pte_addr, pages);
 
-	return SZ_4K;
+	return size;
 }
 
 static phys_addr_t sun50i_iommu_iova_to_phys(struct iommu_domain *domain,
@@ -827,7 +840,7 @@ static int sun50i_iommu_of_xlate(struct device *dev,
 }
 
 static const struct iommu_ops sun50i_iommu_ops = {
-	.pgsize_bitmap	= SZ_4K,
+	.pgsize_bitmap	= SUN50I_IOMMU_PGSIZES,
 	.device_group	= sun50i_iommu_device_group,
 	.domain_alloc	= sun50i_iommu_domain_alloc,
 	.of_xlate	= sun50i_iommu_of_xlate,
