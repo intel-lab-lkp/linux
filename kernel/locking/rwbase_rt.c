@@ -55,6 +55,15 @@ static __always_inline int rwbase_read_trylock(struct rwbase_rt *rwb)
 	int r;
 
 	/*
+	 * Reader should check if writer in fast patch in case of they
+	 * have race condition in the first time.
+	 */
+
+	if ((atomic_read(&lock->readers) == READER_BIAS) &&
+			rt_mutex_owner_acquire(&lock->rtmutex))
+		return 0;
+
+	/*
 	 * Increment reader count, if sem->readers < 0, i.e. READER_BIAS is
 	 * set.
 	 */

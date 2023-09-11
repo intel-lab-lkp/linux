@@ -140,6 +140,15 @@ static inline struct task_struct *rt_mutex_owner(struct rt_mutex_base *lock)
 	return (struct task_struct *) (owner & ~RT_MUTEX_HAS_WAITERS);
 }
 
+static inline struct task_struct *rt_mutex_owner_acquire(struct rt_mutex_base *lock)
+{
+	/* Add rt mutex onwer acquire method */
+	unsigned long owner = (unsigned long) smp_load_acquire(&lock->owner);
+
+	return (struct task_struct *) (owner & ~RT_MUTEX_HAS_WAITERS);
+}
+
+
 /*
  * Constants for rt mutex functions which have a selectable deadlock
  * detection.
@@ -208,6 +217,12 @@ static inline struct task_struct *rt_mutex_owner(struct rt_mutex_base *lock)
 {
 	return NULL;
 }
+
+static inline struct task_struct *rt_mutex_owner_acquire(struct rt_mutex_base *lock)
+{
+	return NULL;
+}
+
 #endif  /* !CONFIG_RT_MUTEXES */
 
 #endif
