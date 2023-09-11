@@ -2726,7 +2726,7 @@ ext4_ext_rm_leaf(handle_t *handle, struct inode *inode,
 		 * If the extent was completely released,
 		 * we need to remove it from the leaf
 		 */
-		if (num == 0) {
+		if (num == 0 && eh->eh_entries) {
 			if (end != EXT_MAX_BLOCKS - 1) {
 				/*
 				 * For hole punching, we need to scoot all the
