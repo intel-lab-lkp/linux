@@ -227,7 +227,7 @@ struct folio *vma_alloc_zeroed_movable_folio(struct vm_area_struct *vma,
 	struct folio *folio;
 
 	folio = vma_alloc_folio(GFP_HIGHUSER_MOVABLE, 0, vma, vaddr, false);
-	if (folio)
+	if (folio && !want_init_on_alloc(GFP_HIGHUSER_MOVABLE))
 		clear_user_highpage(&folio->page, vaddr);
 
 	return folio;
