@@ -129,6 +129,11 @@ dtb-$(CONFIG_SOC_AM43XX) += \
 am57xx-evm-dtbs := am57xx-beagle-x15.dtb am57xx-evm.dtbo
 am57xx-evm-reva3-dtbs := am57xx-beagle-x15-revc.dtb am57xx-evm.dtbo
 
+am571x-idk-overlays-dtbs := am571x-idk.dtb \
+	am571x-idk-touchscreen.dtbo am57xx-idk-lcd-osd101t2587.dtbo
+am572x-idk-overlays-dtbs := am572x-idk.dtb \
+	am572x-idk-touchscreen.dtbo am57xx-idk-lcd-osd101t2045.dtbo
+
 dtb-$(CONFIG_SOC_DRA7XX) += \
 	am57xx-beagle-x15.dtb \
 	am57xx-beagle-x15-revb1.dtb \
@@ -145,6 +150,8 @@ dtb-$(CONFIG_SOC_DRA7XX) += \
 	am574x-idk.dtb \
 	am57xx-idk-lcd-osd101t2045.dtbo \
 	am57xx-idk-lcd-osd101t2587.dtbo \
+	am571x-idk-overlays.dtb \
+	am572x-idk-overlays.dtb \
 	dra7-evm.dtb \
 	dra72-evm.dtb \
 	dra72-evm-revc.dtb \
