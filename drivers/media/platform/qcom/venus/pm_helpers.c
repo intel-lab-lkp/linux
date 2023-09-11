@@ -875,9 +875,6 @@ static int vcodec_domains_get(struct venus_core *core)
 	struct device *pd;
 	unsigned int i;
 
-	if (!res->vcodec_pmdomains_num)
-		goto skip_pmdomains;
-
 	for (i = 0; i < res->vcodec_pmdomains_num; i++) {
 		pd = dev_pm_domain_attach_by_name(dev,
 						  res->vcodec_pmdomains[i]);
@@ -886,7 +883,6 @@ static int vcodec_domains_get(struct venus_core *core)
 		core->pmdomains[i] = pd;
 	}
 
-skip_pmdomains:
 	if (!core->res->opp_pmdomain)
 		return 0;
 
@@ -922,16 +918,12 @@ static void vcodec_domains_put(struct venus_core *core)
 	const struct venus_resources *res = core->res;
 	unsigned int i;
 
-	if (!res->vcodec_pmdomains_num)
-		goto skip_pmdomains;
-
 	for (i = 0; i < res->vcodec_pmdomains_num; i++) {
 		if (IS_ERR_OR_NULL(core->pmdomains[i]))
 			continue;
 		dev_pm_domain_detach(core->pmdomains[i], true);
 	}
 
-skip_pmdomains:
 	if (!core->has_opp_table)
 		return;
 
@@ -944,9 +936,6 @@ static int core_resets_reset(struct venus_core *core)
 	const struct venus_resources *res = core->res;
 	unsigned int i;
 	int ret;
-
-	if (!res->resets_num)
-		return 0;
 
 	for (i = 0; i < res->resets_num; i++) {
 		ret = reset_control_assert(core->resets[i]);
@@ -969,9 +958,6 @@ static int core_resets_get(struct venus_core *core)
 	const struct venus_resources *res = core->res;
 	unsigned int i;
 	int ret;
-
-	if (!res->resets_num)
-		return 0;
 
 	for (i = 0; i < res->resets_num; i++) {
 		core->resets[i] =
