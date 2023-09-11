@@ -742,7 +742,7 @@ static struct kunit_case drm_buddy_tests[] = {
 	KUNIT_CASE(drm_test_buddy_alloc_range),
 	KUNIT_CASE(drm_test_buddy_alloc_optimistic),
 	KUNIT_CASE(drm_test_buddy_alloc_pessimistic),
-	KUNIT_CASE(drm_test_buddy_alloc_smoke),
+	KUNIT_CASE_SLOW(drm_test_buddy_alloc_smoke),
 	KUNIT_CASE(drm_test_buddy_alloc_pathological),
 	{}
 };
