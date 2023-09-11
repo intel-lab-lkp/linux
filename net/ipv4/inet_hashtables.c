@@ -837,7 +837,8 @@ bool inet_bind2_bucket_match_addr_any(const struct inet_bind2_bucket *tb, const 
 		if (sk->sk_family == AF_INET)
 			return net_eq(ib2_net(tb), net) && tb->port == port &&
 				tb->l3mdev == l3mdev &&
-				ipv6_addr_any(&tb->v6_rcv_saddr);
+				(ipv6_addr_any(&tb->v6_rcv_saddr) ||
+				 ipv6_addr_v4mapped_any(&tb->v6_rcv_saddr));
 
 		return false;
 	}
