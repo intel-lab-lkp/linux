@@ -130,6 +130,40 @@ static void virtio_gpu_config_changed(struct virtio_device *vdev)
 	schedule_work(&vgdev->config_changed_work);
 }
 
+#ifdef CONFIG_PM
+static int virtio_gpu_freeze(struct virtio_device *dev)
+{
+	struct drm_device *ddev = dev->priv;
+	struct virtio_gpu_device *vgdev = ddev->dev_private;
+	int ret = 0;
+
+	if (vgdev->has_freeze_S3) {
+		ret = virtio_gpu_cmd_set_freeze_mode(vgdev,
+					VIRTIO_GPU_FREEZE_MODE_FREEZE_S3);
+	}
+	if (!ret) {
+		flush_work(&vgdev->ctrlq.dequeue_work);
+		flush_work(&vgdev->cursorq.dequeue_work);
+		vgdev->vdev->config->del_vqs(vgdev->vdev);
+	}
+	return ret;
+}
+
+static int virtio_gpu_restore(struct virtio_device *dev)
+{
+	struct drm_device *ddev = dev->priv;
+	struct virtio_gpu_device *vgdev = ddev->dev_private;
+	int ret;
+
+	ret = virtio_gpu_init_vqs(dev);
+	if (!ret && vgdev->has_freeze_S3) {
+		ret = virtio_gpu_cmd_set_freeze_mode(vgdev,
+					VIRTIO_GPU_FREEZE_MODE_UNFREEZE);
+	}
+	return ret;
+}
+#endif
+
 static struct virtio_device_id id_table[] = {
 	{ VIRTIO_ID_GPU, VIRTIO_DEV_ANY_ID },
 	{ 0 },
@@ -148,6 +182,7 @@ static unsigned int features[] = {
 	VIRTIO_GPU_F_RESOURCE_UUID,
 	VIRTIO_GPU_F_RESOURCE_BLOB,
 	VIRTIO_GPU_F_CONTEXT_INIT,
+	VIRTIO_GPU_F_FREEZE_S3,
 };
 static struct virtio_driver virtio_gpu_driver = {
 	.feature_table = features,
@@ -156,6 +191,10 @@ static struct virtio_driver virtio_gpu_driver = {
 	.driver.owner = THIS_MODULE,
 	.id_table = id_table,
 	.probe = virtio_gpu_probe,
+#ifdef CONFIG_PM
+	.freeze = virtio_gpu_freeze,
+	.restore = virtio_gpu_restore,
+#endif
 	.remove = virtio_gpu_remove,
 	.config_changed = virtio_gpu_config_changed
 };

@@ -1302,3 +1302,19 @@ void virtio_gpu_cmd_set_scanout_blob(struct virtio_gpu_device *vgdev,
 
 	virtio_gpu_queue_ctrl_buffer(vgdev, vbuf);
 }
+
+int virtio_gpu_cmd_set_freeze_mode(struct virtio_gpu_device *vgdev,
+				virtio_gpu_freeze_mode_t freeze_mode)
+{
+	struct virtio_gpu_set_freeze_mode *cmd_p;
+	struct virtio_gpu_vbuffer *vbuf;
+
+	cmd_p = virtio_gpu_alloc_cmd(vgdev, &vbuf, sizeof(*cmd_p));
+	memset(cmd_p, 0, sizeof(*cmd_p));
+
+	cmd_p->hdr.type = cpu_to_le32(VIRTIO_GPU_CMD_SET_FREEZE_MODE);
+	cmd_p->freeze_mode = freeze_mode;
+	virtio_gpu_queue_ctrl_buffer(vgdev, vbuf);
+	virtio_gpu_notify(vgdev);
+	return 0;
+}

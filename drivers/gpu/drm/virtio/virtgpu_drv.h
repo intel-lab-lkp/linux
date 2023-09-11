@@ -246,6 +246,7 @@ struct virtio_gpu_device {
 	bool has_resource_blob;
 	bool has_host_visible;
 	bool has_context_init;
+	bool has_freeze_S3;
 	struct virtio_shm_region host_visible_region;
 	struct drm_mm host_visible_mm;
 
@@ -282,6 +283,7 @@ extern struct drm_ioctl_desc virtio_gpu_ioctls[DRM_VIRTIO_NUM_IOCTLS];
 void virtio_gpu_create_context(struct drm_device *dev, struct drm_file *file);
 
 /* virtgpu_kms.c */
+int virtio_gpu_init_vqs(struct virtio_device *vdev);
 int virtio_gpu_init(struct virtio_device *vdev, struct drm_device *dev);
 void virtio_gpu_deinit(struct drm_device *dev);
 void virtio_gpu_release(struct drm_device *dev);
@@ -419,6 +421,9 @@ virtio_gpu_cmd_set_scanout_blob(struct virtio_gpu_device *vgdev,
 				struct drm_framebuffer *fb,
 				uint32_t width, uint32_t height,
 				uint32_t x, uint32_t y);
+
+int virtio_gpu_cmd_set_freeze_mode(struct virtio_gpu_device *vgdev,
+				virtio_gpu_freeze_mode_t freeze_mode);
 
 /* virtgpu_display.c */
 int virtio_gpu_modeset_init(struct virtio_gpu_device *vgdev);

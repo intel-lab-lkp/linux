@@ -65,6 +65,11 @@
  */
 #define VIRTIO_GPU_F_CONTEXT_INIT        4
 
+/*
+ * VIRTIO_GPU_CMD_SET_FREEZE_MODE
+ */
+#define VIRTIO_GPU_F_FREEZE_S3            5
+
 enum virtio_gpu_ctrl_type {
 	VIRTIO_GPU_UNDEFINED = 0,
 
@@ -99,6 +104,9 @@ enum virtio_gpu_ctrl_type {
 	/* cursor commands */
 	VIRTIO_GPU_CMD_UPDATE_CURSOR = 0x0300,
 	VIRTIO_GPU_CMD_MOVE_CURSOR,
+
+	/* freeze mode */
+	VIRTIO_GPU_CMD_SET_FREEZE_MODE = 0x0400,
 
 	/* success responses */
 	VIRTIO_GPU_RESP_OK_NODATA = 0x1100,
@@ -451,6 +459,17 @@ struct virtio_gpu_resource_unmap_blob {
 	struct virtio_gpu_ctrl_hdr hdr;
 	__le32 resource_id;
 	__le32 padding;
+};
+
+/* VIRTIO_GPU_CMD_SET_FREEZE_MODE */
+typedef enum {
+	VIRTIO_GPU_FREEZE_MODE_UNFREEZE = 0,
+	VIRTIO_GPU_FREEZE_MODE_FREEZE_S3 = 3,
+} virtio_gpu_freeze_mode_t;
+
+struct virtio_gpu_set_freeze_mode {
+	struct virtio_gpu_ctrl_hdr hdr;
+	virtio_gpu_freeze_mode_t freeze_mode;
 };
 
 #endif
