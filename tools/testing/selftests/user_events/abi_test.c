@@ -129,7 +129,7 @@ TEST_F(user, bit_sizes) {
 	ASSERT_EQ(0, reg_disable(&self->check, 0));
 	ASSERT_EQ(0, reg_disable(&self->check, 31));
 
-#if BITS_PER_LONG == 8
+#if __BITS_PER_LONG == 64
 	/* Allow 0-64 bits for 64-bit */
 	ASSERT_EQ(0, reg_enable(&self->check, sizeof(long), 63));
 	ASSERT_NE(0, reg_enable(&self->check, sizeof(long), 64));
