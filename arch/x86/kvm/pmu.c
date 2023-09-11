@@ -117,11 +117,11 @@ static inline void __kvm_perf_overflow(struct kvm_pmc *pmc, bool in_pmi)
 			skip_pmi = true;
 		} else {
 			/* Indicate PEBS overflow PMI to guest. */
-			skip_pmi = __test_and_set_bit(GLOBAL_STATUS_BUFFER_OVF_BIT,
-						      (unsigned long *)&pmu->global_status);
+			skip_pmi = test_and_set_bit(GLOBAL_STATUS_BUFFER_OVF_BIT,
+						    (unsigned long *)&pmu->global_status);
 		}
 	} else {
-		__set_bit(pmc->idx, (unsigned long *)&pmu->global_status);
+		set_bit(pmc->idx, (unsigned long *)&pmu->global_status);
 	}
 
 	if (!pmc->intr || skip_pmi)
