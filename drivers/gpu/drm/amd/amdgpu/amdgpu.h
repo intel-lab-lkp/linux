@@ -761,6 +761,26 @@ struct amdgpu_mqd {
 #define AMDGPU_PRODUCT_NAME_LEN 64
 struct amdgpu_reset_domain;
 
+#ifdef CONFIG_DEV_COREDUMP
+struct amdgpu_coredump_info {
+	struct amdgpu_device	*adev;
+	struct amdgpu_task_info reset_task_info;
+	struct timespec64	reset_time;
+	bool			reset_vram_lost;
+};
+#endif
+
+struct amdgpu_reset_info {
+	/* reset dump register */
+	u32 *reset_dump_reg_list;
+	u32 *reset_dump_reg_value;
+	int num_regs;
+
+#ifdef CONFIG_DEV_COREDUMP
+	struct amdgpu_coredump_info *coredump_info;
+#endif
+};
+
 /*
  * Non-zero (true) if the GPU has VRAM. Zero (false) otherwise.
  */
@@ -1065,10 +1085,7 @@ struct amdgpu_device {
 
 	struct mutex			benchmark_mutex;
 
-	/* reset dump register */
-	uint32_t                        *reset_dump_reg_list;
-	uint32_t			*reset_dump_reg_value;
-	int                             num_regs;
+	struct amdgpu_reset_info	reset_info;
 
 	bool                            scpm_enabled;
 	uint32_t                        scpm_status;
@@ -1080,15 +1097,6 @@ struct amdgpu_device {
 	/* Mask of active clusters */
 	uint32_t			aid_mask;
 };
-
-#ifdef CONFIG_DEV_COREDUMP
-struct amdgpu_coredump_info {
-	struct amdgpu_device		*adev;
-	struct amdgpu_task_info         reset_task_info;
-	struct timespec64               reset_time;
-	bool                            reset_vram_lost;
-};
-#endif
 
 static inline struct amdgpu_device *drm_to_adev(struct drm_device *ddev)
 {
