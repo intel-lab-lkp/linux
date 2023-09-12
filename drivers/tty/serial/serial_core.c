@@ -3328,6 +3328,8 @@ static int serial_core_port_device_add(struct serial_ctrl_device *ctrl_dev,
 int serial_core_register_port(struct uart_driver *drv, struct uart_port *port)
 {
 	struct serial_ctrl_device *ctrl_dev, *new_ctrl_dev = NULL;
+	struct uart_match match = {port, drv};
+	struct device *tty_dev;
 	int ret;
 
 	mutex_lock(&port_mutex);
@@ -3368,9 +3370,21 @@ int serial_core_register_port(struct uart_driver *drv, struct uart_port *port)
 
 	port->flags &= ~UPF_DEAD;
 
+	tty_dev = device_find_child(port->dev, &match, serial_match_port);
+	if (tty_dev) {
+		ret = sysfs_create_link(&port->port_dev->dev.kobj, &tty_dev->kobj,
+					"tty");
+		put_device(tty_dev);
+		if (ret)
+			goto err_remove_port;
+	}
+
 	mutex_unlock(&port_mutex);
 
 	return 0;
+
+err_remove_port:
+	serial_core_remove_one_port(drv, port);
 
 err_unregister_port_dev:
 	serial_base_port_device_remove(port->port_dev);
@@ -3393,11 +3407,19 @@ void serial_core_unregister_port(struct uart_driver *drv, struct uart_port *port
 	struct device *phys_dev = port->dev;
 	struct serial_port_device *port_dev = port->port_dev;
 	struct serial_ctrl_device *ctrl_dev = serial_core_get_ctrl_dev(port_dev);
+	struct uart_match match = {port, drv};
 	int ctrl_id = port->ctrl_id;
+	struct device *tty_dev;
 
 	mutex_lock(&port_mutex);
 
 	port->flags |= UPF_DEAD;
+
+	tty_dev = device_find_child(port->dev, &match, serial_match_port);
+	if (tty_dev) {
+		sysfs_remove_link(&port->port_dev->dev.kobj, "tty");
+		put_device(tty_dev);
+	}
 
 	serial_core_remove_one_port(drv, port);
 
