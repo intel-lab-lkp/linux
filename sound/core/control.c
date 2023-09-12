@@ -590,7 +590,8 @@ static int __snd_ctl_remove(struct snd_card *card,
 		remove_hash_entries(card, kcontrol);
 
 	card->controls_count -= kcontrol->count;
-	for (idx = 0; idx < kcontrol->count; idx++)
+	count = kcontrol->count;
+	for (idx = 0; idx < count; idx++)
 		snd_ctl_notify_one(card, SNDRV_CTL_EVENT_MASK_REMOVE, kcontrol, idx);
 	snd_ctl_free_one(kcontrol);
 	return 0;
