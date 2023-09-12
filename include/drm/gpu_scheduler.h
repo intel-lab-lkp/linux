@@ -395,6 +395,23 @@ enum drm_gpu_sched_stat {
 };
 
 /**
+ * struct drm_sched_msg - an in-band (relative to GPU scheduler run queue)
+ * message
+ *
+ * Generic enough for backend defined messages, backend can expand if needed.
+ */
+struct drm_sched_msg {
+	/** @link: list link into the gpu scheduler list of messages */
+	struct list_head		link;
+	/**
+	 * @private_data: opaque pointer to message private data (backend defined)
+	 */
+	void				*private_data;
+	/** @opcode: opcode of message (backend defined) */
+	unsigned int			opcode;
+};
+
+/**
  * struct drm_sched_backend_ops - Define the backend operations
  *	called by the scheduler
  *
@@ -471,6 +488,12 @@ struct drm_sched_backend_ops {
          * and it's time to clean it up.
 	 */
 	void (*free_job)(struct drm_sched_job *sched_job);
+
+	/**
+	 * @process_msg: Process a message. Allowed to block, it is this
+	 * function's responsibility to free message if dynamically allocated.
+	 */
+	void (*process_msg)(struct drm_sched_msg *msg);
 };
 
 /**
@@ -482,15 +505,18 @@ struct drm_sched_backend_ops {
  * @timeout: the time after which a job is removed from the scheduler.
  * @name: name of the ring for which this scheduler is being used.
  * @sched_rq: priority wise array of run queues.
+ * @msgs: list of messages to be processed in @work_process_msg
  * @job_scheduled: once @drm_sched_entity_do_release is called the scheduler
  *                 waits on this wait queue until all the scheduled jobs are
  *                 finished.
  * @hw_rq_count: the number of jobs currently in the hardware queue.
  * @job_id_count: used to assign unique id to the each job.
- * @submit_wq: workqueue used to queue @work_run_job and @work_free_job
+ * @submit_wq: workqueue used to queue @work_run_job, @work_free_job, and
+ *             @work_process_msg
  * @timeout_wq: workqueue used to queue @work_tdr
  * @work_run_job: schedules jobs
  * @work_free_job: cleans up jobs
+ * @work_process_msg: processes messages
  * @work_tdr: schedules a delayed call to @drm_sched_job_timedout after the
  *            timeout interval is over.
  * @pending_list: the list of jobs which are currently in the job queue.
@@ -502,6 +528,8 @@ struct drm_sched_backend_ops {
  * @sched_policy: Schedule policy for scheduler
  * @ready: marks if the underlying HW is ready to work
  * @free_guilty: A hit to time out handler to free the guilty job.
+ * @pause_submit: pause queuing of @work_run_job, @work_free_job, and
+ *                @work_process_msg on @submit_wq
  * @pause_submit: pause queuing of @work_submit on @submit_wq
  * @dev: system &struct device
  *
@@ -514,6 +542,7 @@ struct drm_gpu_scheduler {
 	long				timeout;
 	const char			*name;
 	struct drm_sched_rq		sched_rq[DRM_SCHED_PRIORITY_COUNT];
+	struct list_head		msgs;
 	wait_queue_head_t		job_scheduled;
 	atomic_t			hw_rq_count;
 	atomic64_t			job_id_count;
@@ -521,6 +550,7 @@ struct drm_gpu_scheduler {
 	struct workqueue_struct		*timeout_wq;
 	struct work_struct		work_run_job;
 	struct work_struct		work_free_job;
+	struct work_struct		work_process_msg;
 	struct delayed_work		work_tdr;
 	struct list_head		pending_list;
 	spinlock_t			job_list_lock;
@@ -568,6 +598,8 @@ void drm_sched_entity_modify_sched(struct drm_sched_entity *entity,
 
 void drm_sched_job_cleanup(struct drm_sched_job *job);
 void drm_sched_wakeup_if_can_queue(struct drm_gpu_scheduler *sched);
+void drm_sched_add_msg(struct drm_gpu_scheduler *sched,
+		       struct drm_sched_msg *msg);
 bool drm_sched_submit_ready(struct drm_gpu_scheduler *sched);
 void drm_sched_submit_stop(struct drm_gpu_scheduler *sched);
 void drm_sched_submit_start(struct drm_gpu_scheduler *sched);

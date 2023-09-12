@@ -341,6 +341,35 @@ static void drm_sched_free_job_queue_if_ready(struct drm_gpu_scheduler *sched)
 }
 
 /**
+ * drm_sched_process_msg_queue - queue process msg worker
+ *
+ * @sched: scheduler instance to queue process_msg worker
+ */
+static void drm_sched_process_msg_queue(struct drm_gpu_scheduler *sched)
+{
+	if (!READ_ONCE(sched->pause_submit))
+		queue_work(sched->submit_wq, &sched->work_process_msg);
+}
+
+/**
+ * drm_sched_process_msg_queue_if_ready - queue process msg worker if ready
+ *
+ * @sched: scheduler instance to queue process_msg worker
+ */
+static void
+drm_sched_process_msg_queue_if_ready(struct drm_gpu_scheduler *sched)
+{
+	struct drm_sched_msg *msg;
+
+	spin_lock(&sched->job_list_lock);
+	msg = list_first_entry_or_null(&sched->msgs,
+				       struct drm_sched_msg, link);
+	if (msg)
+		drm_sched_process_msg_queue(sched);
+	spin_unlock(&sched->job_list_lock);
+}
+
+/**
  * drm_sched_job_done - complete a job
  * @s_job: pointer to the job which is done
  *
@@ -1079,6 +1108,71 @@ drm_sched_pick_best(struct drm_gpu_scheduler **sched_list,
 EXPORT_SYMBOL(drm_sched_pick_best);
 
 /**
+ * drm_sched_add_msg - add scheduler message
+ *
+ * @sched: scheduler instance
+ * @msg: message to be added
+ *
+ * Can and will pass an jobs waiting on dependencies or in a runnable queue.
+ * Messages processing will stop if schedule run wq is stopped and resume when
+ * run wq is started.
+ */
+void drm_sched_add_msg(struct drm_gpu_scheduler *sched,
+		       struct drm_sched_msg *msg)
+{
+	spin_lock(&sched->job_list_lock);
+	list_add_tail(&msg->link, &sched->msgs);
+	spin_unlock(&sched->job_list_lock);
+
+	drm_sched_process_msg_queue(sched);
+}
+EXPORT_SYMBOL(drm_sched_add_msg);
+
+/**
+ * drm_sched_get_msg - get scheduler message
+ *
+ * @sched: scheduler instance
+ *
+ * Returns NULL or message
+ */
+static struct drm_sched_msg *
+drm_sched_get_msg(struct drm_gpu_scheduler *sched)
+{
+	struct drm_sched_msg *msg;
+
+	spin_lock(&sched->job_list_lock);
+	msg = list_first_entry_or_null(&sched->msgs,
+				       struct drm_sched_msg, link);
+	if (msg)
+		list_del(&msg->link);
+	spin_unlock(&sched->job_list_lock);
+
+	return msg;
+}
+
+/**
+ * drm_sched_process_msg_work - worker to call process_msg
+ *
+ * @w: process msg work
+ */
+static void drm_sched_process_msg_work(struct work_struct *w)
+{
+	struct drm_gpu_scheduler *sched =
+		container_of(w, struct drm_gpu_scheduler, work_process_msg);
+	struct drm_sched_msg *msg;
+
+	if (READ_ONCE(sched->pause_submit))
+		return;
+
+	msg = drm_sched_get_msg(sched);
+	if (msg) {
+		sched->ops->process_msg(msg);
+
+		drm_sched_process_msg_queue_if_ready(sched);
+	}
+}
+
+/**
  * drm_sched_free_job_work - worker to call free_job
  *
  * @w: free job work
@@ -1212,11 +1306,13 @@ int drm_sched_init(struct drm_gpu_scheduler *sched,
 
 	init_waitqueue_head(&sched->job_scheduled);
 	INIT_LIST_HEAD(&sched->pending_list);
+	INIT_LIST_HEAD(&sched->msgs);
 	spin_lock_init(&sched->job_list_lock);
 	atomic_set(&sched->hw_rq_count, 0);
 	INIT_DELAYED_WORK(&sched->work_tdr, drm_sched_job_timedout);
 	INIT_WORK(&sched->work_run_job, drm_sched_run_job_work);
 	INIT_WORK(&sched->work_free_job, drm_sched_free_job_work);
+	INIT_WORK(&sched->work_process_msg, drm_sched_process_msg_work);
 	atomic_set(&sched->_score, 0);
 	atomic64_set(&sched->job_id_count, 0);
 	sched->pause_submit = false;
@@ -1343,6 +1439,7 @@ void drm_sched_submit_stop(struct drm_gpu_scheduler *sched)
 	WRITE_ONCE(sched->pause_submit, true);
 	cancel_work_sync(&sched->work_run_job);
 	cancel_work_sync(&sched->work_free_job);
+	cancel_work_sync(&sched->work_process_msg);
 }
 EXPORT_SYMBOL(drm_sched_submit_stop);
 
@@ -1356,5 +1453,6 @@ void drm_sched_submit_start(struct drm_gpu_scheduler *sched)
 	WRITE_ONCE(sched->pause_submit, false);
 	queue_work(sched->submit_wq, &sched->work_run_job);
 	queue_work(sched->submit_wq, &sched->work_free_job);
+	queue_work(sched->submit_wq, &sched->work_process_msg);
 }
 EXPORT_SYMBOL(drm_sched_submit_start);
