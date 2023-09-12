@@ -3,6 +3,9 @@
 # Makefile for the kernel serial device drivers.
 #
 
+# Parse kernel command line consoles before the serial drivers probe
+obj-$(CONFIG_SERIAL_CORE_CONSOLE) += serial_base_con.o
+
 obj-$(CONFIG_SERIAL_CORE) += serial_base.o
 serial_base-y := serial_core.o serial_base_bus.o serial_ctrl.o serial_port.o
 
