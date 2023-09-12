@@ -14,6 +14,7 @@
 #include <linux/of_device.h>
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
+#include <linux/dma-direct.h>
 #include "debug.h"
 #include "direct.h"
 
@@ -818,6 +819,50 @@ size_t dma_opt_mapping_size(struct device *dev)
 	return min(dma_max_mapping_size(dev), size);
 }
 EXPORT_SYMBOL_GPL(dma_opt_mapping_size);
+
+/*
+ * To check whether all ram resource ranges are mapped in dma range map
+ * Returns 0 when continuous check is needed
+ * Returns 1 if there is some ram range can't be mapped to dma_range_map
+ */
+static int check_ram_in_range_map(unsigned long start_pfn,
+				  unsigned long nr_pages, void *data)
+{
+	phys_addr_t end_paddr = (start_pfn + nr_pages) << PAGE_SHIFT;
+	phys_addr_t start_paddr = start_pfn << PAGE_SHIFT;
+	struct device *dev = (struct device *)data;
+	struct bus_dma_region *region = NULL;
+	const struct bus_dma_region *m;
+
+	while (start_paddr < end_paddr) {
+		// find region containing start_paddr
+		for (m = dev->dma_range_map; m->size; m++) {
+			if (start_paddr >= m->cpu_start
+			    && start_paddr - m->cpu_start < m->size) {
+				region = (struct bus_dma_region *)m;
+				break;
+			}
+		}
+		if (!region)
+			return 1;
+
+		start_paddr = region->cpu_start + region->size;
+		/* handle overflow of phys_addr_t */
+		if (start_paddr == 0)
+			break;
+	}
+
+	return 0;
+}
+
+bool all_ram_in_dma_range_map(struct device *dev)
+{
+	if (!dev->dma_range_map)
+		return 1;
+
+	return !walk_system_ram_range(0, ULONG_MAX, dev, check_ram_in_range_map);
+}
+EXPORT_SYMBOL_GPL(all_ram_in_dma_range_map);
 
 bool dma_need_sync(struct device *dev, dma_addr_t dma_addr)
 {
