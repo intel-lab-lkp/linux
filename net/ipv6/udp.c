@@ -1506,26 +1506,37 @@ do_udp_sendmsg:
 	fl6->fl6_sport = inet->inet_sport;
 
 	if (cgroup_bpf_enabled(CGROUP_UDP6_SENDMSG) && !connected) {
+		struct sockaddr_in6 tmp_addr;
+		struct sockaddr_in6 *addr = sin6;
+
+		/* BPF_CGROUP_RUN_PROG_UDP6_SENDMSG_LOCK can rewrite sin6, so make a
+		 * copy to insulate the caller.
+		 */
+		if (sin6 && addr_len <= sizeof(tmp_addr)) {
+			memcpy(&tmp_addr, sin6, addr_len);
+			addr = &tmp_addr;
+		}
+
 		err = BPF_CGROUP_RUN_PROG_UDP6_SENDMSG_LOCK(sk,
-					   (struct sockaddr *)sin6,
+					   (struct sockaddr *)addr,
 					   &fl6->saddr);
 		if (err)
 			goto out_no_dst;
-		if (sin6) {
-			if (ipv6_addr_v4mapped(&sin6->sin6_addr)) {
+		if (addr) {
+			if (ipv6_addr_v4mapped(&addr->sin6_addr)) {
 				/* BPF program rewrote IPv6-only by IPv4-mapped
 				 * IPv6. It's currently unsupported.
 				 */
 				err = -ENOTSUPP;
 				goto out_no_dst;
 			}
-			if (sin6->sin6_port == 0) {
+			if (addr->sin6_port == 0) {
 				/* BPF program set invalid port. Reject it. */
 				err = -EINVAL;
 				goto out_no_dst;
 			}
-			fl6->fl6_dport = sin6->sin6_port;
-			fl6->daddr = sin6->sin6_addr;
+			fl6->fl6_dport = addr->sin6_port;
+			fl6->daddr = addr->sin6_addr;
 		}
 	}
 
