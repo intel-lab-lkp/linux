@@ -552,6 +552,12 @@ Overview
 .. kernel-doc:: drivers/gpu/drm/scheduler/sched_main.c
    :doc: Overview
 
+Entity teardown
+---------------
+
+.. kernel-doc:: drivers/gpu/drm/scheduler/sched_entity.c
+   :doc: Entity teardown
+
 Scheduler Function References
 -----------------------------
 

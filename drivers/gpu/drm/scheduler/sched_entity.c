@@ -21,6 +21,25 @@
  *
  */
 
+/**
+ * DOC: Entity teardown
+ *
+ * Drivers can teardown down an entity for several reasons. Reasons typically
+ * are a user closes the entity via an IOCTL, the FD associated with the entity
+ * is closed, or the entity encounters an error. The GPU scheduler provides the
+ * basic infrastructure to do this in a few different ways.
+ *
+ * 1. Let the entity run dry (both the pending list and job queue) and then call
+ * drm_sched_entity_fini. The backend can accelerate the process of running dry.
+ * For example set a flag so run_job is a NOP and set the TDR to a low value to
+ * signal all jobs in a timely manner (this example works for
+ * DRM_SCHED_POLICY_SINGLE_ENTITY).
+ *
+ * 2. Kill the entity directly via drm_sched_entity_flush /
+ * drm_sched_entity_fini ensuring all pending and queued jobs are off the
+ * hardware and signaled.
+ */
+
 #include <linux/kthread.h>
 #include <linux/slab.h>
 #include <linux/completion.h>
