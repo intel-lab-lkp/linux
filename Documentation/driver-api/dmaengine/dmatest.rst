@@ -77,7 +77,7 @@ Example of multi-channel test usage (new in the 5.0 kernel)::
 .. hint::
   A list of available channels can be found by running the following command::
 
-    % ls -1 /sys/class/dma/
+    % ls -l /sys/class/dma/
 
 Once started a message like " dmatest: Added 1 threads using dma0chan0" is
 emitted. A thread for that specific channel is created and is now pending, the
