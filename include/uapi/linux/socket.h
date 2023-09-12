@@ -35,4 +35,15 @@ struct __kernel_sockaddr_storage {
 #define SOCK_TXREHASH_DISABLED	0
 #define SOCK_TXREHASH_ENABLED	1
 
+/*
+ * SOCK_CAN_REUSE and SOCK_NO_REUSE on a socket mean that the socket is OK
+ * or not whether his port will be reused by someone else. SOCK_FORCE_REUSE
+ * on a socket means that the socket will reuse everybody else's port
+ * without looking at the other's sk_reuse value.
+ */
+
+#define SOCK_NO_REUSE     0
+#define SOCK_CAN_REUSE    1
+#define SOCK_FORCE_REUSE  2
+
 #endif /* _UAPI_LINUX_SOCKET_H */

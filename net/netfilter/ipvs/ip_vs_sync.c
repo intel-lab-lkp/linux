@@ -1539,7 +1539,7 @@ static int make_receive_sock(struct netns_ipvs *ipvs, int id,
 	}
 	*sock_ret = sock;
 	/* it is equivalent to the REUSEADDR option in user-space */
-	sock->sk->sk_reuse = SK_CAN_REUSE;
+	sock->sk->sk_reuse = SOCK_CAN_REUSE;
 	result = sysctl_sync_sock_size(ipvs);
 	if (result > 0)
 		set_sock_size(sock->sk, 0, result);

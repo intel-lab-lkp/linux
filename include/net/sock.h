@@ -657,17 +657,6 @@ void sock_net_set(struct sock *sk, struct net *net)
 	write_pnet(&sk->sk_net, net);
 }
 
-/*
- * SK_CAN_REUSE and SK_NO_REUSE on a socket mean that the socket is OK
- * or not whether his port will be reused by someone else. SK_FORCE_REUSE
- * on a socket means that the socket will reuse everybody else's port
- * without looking at the other's sk_reuse value.
- */
-
-#define SK_NO_REUSE	0
-#define SK_CAN_REUSE	1
-#define SK_FORCE_REUSE	2
-
 int sk_set_peek_off(struct sock *sk, int val);
 
 static inline int sk_peek_offset(const struct sock *sk, int flags)

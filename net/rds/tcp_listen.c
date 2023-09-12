@@ -282,7 +282,7 @@ struct socket *rds_tcp_listen_init(struct net *net, bool isv6)
 		goto out;
 	}
 
-	sock->sk->sk_reuse = SK_CAN_REUSE;
+	sock->sk->sk_reuse = SOCK_CAN_REUSE;
 	tcp_sock_set_nodelay(sock->sk);
 
 	write_lock_bh(&sock->sk->sk_callback_lock);

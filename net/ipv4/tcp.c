@@ -3522,15 +3522,15 @@ int do_tcp_setsockopt(struct sock *sk, int level, int optname,
 			err = -EPERM;
 		else if (val == TCP_REPAIR_ON) {
 			tp->repair = 1;
-			sk->sk_reuse = SK_FORCE_REUSE;
+			sk->sk_reuse = SOCK_FORCE_REUSE;
 			tp->repair_queue = TCP_NO_QUEUE;
 		} else if (val == TCP_REPAIR_OFF) {
 			tp->repair = 0;
-			sk->sk_reuse = SK_NO_REUSE;
+			sk->sk_reuse = SOCK_NO_REUSE;
 			tcp_send_window_probe(sk);
 		} else if (val == TCP_REPAIR_OFF_NO_WP) {
 			tp->repair = 0;
-			sk->sk_reuse = SK_NO_REUSE;
+			sk->sk_reuse = SOCK_NO_REUSE;
 		} else
 			err = -EINVAL;
 

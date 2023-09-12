@@ -335,7 +335,7 @@ inet_csk_find_open_port(const struct sock *sk, struct inet_bind_bucket **tb_ret,
 
 	l3mdev = inet_sk_bound_l3mdev(sk);
 ports_exhausted:
-	attempt_half = (sk->sk_reuse == SK_CAN_REUSE) ? 1 : 0;
+	attempt_half = (sk->sk_reuse == SOCK_CAN_REUSE) ? 1 : 0;
 other_half_scan:
 	inet_sk_get_local_port_range(sk, &low, &high);
 	high++; /* [32768, 60999] -> [32768, 61000[ */
@@ -548,7 +548,7 @@ int inet_csk_get_port(struct sock *sk, unsigned short snum)
 
 	if (!found_port) {
 		if (!hlist_empty(&tb->owners)) {
-			if (sk->sk_reuse == SK_FORCE_REUSE ||
+			if (sk->sk_reuse == SOCK_FORCE_REUSE ||
 			    (tb->fastreuse > 0 && reuse) ||
 			    sk_reuseport_match(tb, sk))
 				check_bind_conflict = false;

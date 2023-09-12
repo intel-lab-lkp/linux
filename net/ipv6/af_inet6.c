@@ -197,7 +197,7 @@ lookup_protocol:
 
 	err = 0;
 	if (INET_PROTOSW_REUSE & answer_flags)
-		sk->sk_reuse = SK_CAN_REUSE;
+		sk->sk_reuse = SOCK_CAN_REUSE;
 
 	inet = inet_sk(sk);
 	inet_assign_bit(IS_ICSK, sk, INET_PROTOSW_ICSK & answer_flags);
