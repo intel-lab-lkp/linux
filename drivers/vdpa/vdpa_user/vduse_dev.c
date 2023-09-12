@@ -1220,6 +1220,8 @@ static long vduse_dev_ioctl(struct file *file, unsigned int cmd,
 		struct vduse_vq_info vq_info;
 		struct vduse_virtqueue *vq;
 		u32 index;
+		struct vdpa_reconnect_info *area;
+		struct vhost_reconnect_vring *vq_reconnect;
 
 		ret = -EFAULT;
 		if (copy_from_user(&vq_info, argp, sizeof(vq_info)))
@@ -1250,6 +1252,17 @@ static long vduse_dev_ioctl(struct file *file, unsigned int cmd,
 				vq->state.split.avail_index;
 
 		vq_info.ready = vq->ready;
+
+		area = &vq->reconnect_info;
+
+		vq_reconnect = (struct vhost_reconnect_vring *)area->vaddr;
+		/*check if the vq is reconnect, if yes then update the last_avail_idx*/
+		if ((vq_reconnect->last_avail_idx !=
+		     vq_info.split.avail_index) &&
+		    (vq_reconnect->reconnect_time != 0)) {
+			vq_info.split.avail_index =
+				vq_reconnect->last_avail_idx;
+		}
 
 		ret = -EFAULT;
 		if (copy_to_user(argp, &vq_info, sizeof(vq_info)))

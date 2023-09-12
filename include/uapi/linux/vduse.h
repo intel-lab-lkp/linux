@@ -350,4 +350,10 @@ struct vduse_dev_response {
 	};
 };
 
+struct vhost_reconnect_vring {
+	__u16 reconnect_time;
+	__u16 last_avail_idx;
+	_Bool avail_wrap_counter;
+};
+
 #endif /* _UAPI_VDUSE_H_ */
