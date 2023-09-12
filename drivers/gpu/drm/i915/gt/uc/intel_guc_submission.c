@@ -1433,6 +1433,24 @@ static void guc_timestamp_ping(struct work_struct *wrk)
 	int srcu, ret;
 
 	/*
+	 * The worker is canceled in the __gt_park path, but we still see it
+	 * running sometimes during suspend.
+	 *
+	 * Only update stats if gt is awake. If not, intel_guc_busyness_park
+	 * would have already updated the stats. Note that we do not requeue the
+	 * worker in this case since intel_guc_busyness_unpark would do that at
+	 * some point.
+	 *
+	 * If the gt was parked longer than time taken for GT timestamp to roll
+	 * over, we ignore those rollovers since we don't care about tracking
+	 * the exact GT time. We only care about roll overs when the gt is
+	 * active and running workloads.
+	 */
+	wakeref = intel_runtime_pm_get_if_active(&gt->i915->runtime_pm);
+	if (!wakeref)
+		return;
+
+	/*
 	 * Synchronize with gt reset to make sure the worker does not
 	 * corrupt the engine/guc stats. NB: can't actually block waiting
 	 * for a reset to complete as the reset requires flushing out
@@ -1440,10 +1458,9 @@ static void guc_timestamp_ping(struct work_struct *wrk)
 	 */
 	ret = intel_gt_reset_trylock(gt, &srcu);
 	if (ret)
-		return;
+		goto err_trylock;
 
-	with_intel_runtime_pm(&gt->i915->runtime_pm, wakeref)
-		__update_guc_busyness_stats(guc);
+	__update_guc_busyness_stats(guc);
 
 	/* adjust context stats for overflow */
 	xa_for_each(&guc->context_lookup, index, ce)
@@ -1452,6 +1469,9 @@ static void guc_timestamp_ping(struct work_struct *wrk)
 	intel_gt_reset_unlock(gt, srcu);
 
 	guc_enable_busyness_worker(guc);
+
+err_trylock:
+	intel_runtime_pm_put(&gt->i915->runtime_pm, wakeref);
 }
 
 static int guc_action_enable_usage_stats(struct intel_guc *guc)
