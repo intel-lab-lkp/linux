@@ -3705,9 +3705,9 @@ static void read_ctrl_pos(struct lruvec *lruvec, int type, int tier, int gain,
 	struct lru_gen_folio *lrugen = &lruvec->lrugen;
 	int hist = lru_hist_from_seq(lrugen->min_seq[type]);
 
-	pos->refaulted = lrugen->avg_refaulted[type][tier] +
+	pos->refaulted = atomic_long_read(&lrugen->avg_refaulted[type][tier]) +
 			 atomic_long_read(&lrugen->refaulted[hist][type][tier]);
-	pos->total = lrugen->avg_total[type][tier] +
+	pos->total = atomic_long_read(&lrugen->avg_total[type][tier]) +
 		     atomic_long_read(&lrugen->evicted[hist][type][tier]);
 	if (tier)
 		pos->total += lrugen->protected[hist][type][tier - 1];
@@ -3732,15 +3732,15 @@ static void reset_ctrl_pos(struct lruvec *lruvec, int type, bool carryover)
 		if (carryover) {
 			unsigned long sum;
 
-			sum = lrugen->avg_refaulted[type][tier] +
+			sum = atomic_long_read(&lrugen->avg_refaulted[type][tier]) +
 			      atomic_long_read(&lrugen->refaulted[hist][type][tier]);
-			WRITE_ONCE(lrugen->avg_refaulted[type][tier], sum / 2);
+			atomic_long_set(&lrugen->avg_refaulted[type][tier], sum / 2);
 
-			sum = lrugen->avg_total[type][tier] +
+			sum = atomic_long_read(&lrugen->avg_total[type][tier]) +
 			      atomic_long_read(&lrugen->evicted[hist][type][tier]);
 			if (tier)
 				sum += lrugen->protected[hist][type][tier - 1];
-			WRITE_ONCE(lrugen->avg_total[type][tier], sum / 2);
+			atomic_long_set(&lrugen->avg_total[type][tier], sum / 2);
 		}
 
 		if (clear) {
@@ -5885,8 +5885,8 @@ static void lru_gen_seq_show_full(struct seq_file *m, struct lruvec *lruvec,
 
 			if (seq == max_seq) {
 				s = "RT ";
-				n[0] = READ_ONCE(lrugen->avg_refaulted[type][tier]);
-				n[1] = READ_ONCE(lrugen->avg_total[type][tier]);
+				n[0] = atomic_long_read(&lrugen->avg_refaulted[type][tier]);
+				n[1] = atomic_long_read(&lrugen->avg_total[type][tier]);
 			} else if (seq == min_seq[type] || NR_HIST_GENS > 1) {
 				s = "rep";
 				n[0] = atomic_long_read(&lrugen->refaulted[hist][type][tier]);
