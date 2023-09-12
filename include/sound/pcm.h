@@ -217,6 +217,12 @@ struct snd_pcm_ops {
 #define SNDRV_PCM_FMTBIT_U20		SNDRV_PCM_FMTBIT_U20_BE
 #endif
 
+#define _SNDRV_PCM_SUBFMTBIT(fmt)	BIT((__force int)SNDRV_PCM_SUBFORMAT_##fmt)
+#define SNDRV_PCM_SUBFMTBIT_STD		_SNDRV_PCM_SUBFMTBIT(STD)
+#define SNDRV_PCM_SUBFMTBIT_MSBITS_MAX	_SNDRV_PCM_SUBFMTBIT(MSBITS_MAX)
+#define SNDRV_PCM_SUBFMTBIT_MSBITS_20	_SNDRV_PCM_SUBFMTBIT(MSBITS_20)
+#define SNDRV_PCM_SUBFMTBIT_MSBITS_24	_SNDRV_PCM_SUBFMTBIT(MSBITS_24)
+
 struct snd_pcm_file {
 	struct snd_pcm_substream *substream;
 	int no_compat_mmap;
@@ -288,6 +294,13 @@ struct snd_pcm_hw_constraint_ranges {
 	unsigned int count;
 	const struct snd_interval *ranges;
 	unsigned int mask;
+};
+
+#define SNDRV_PCM_FORMAT_CONSTRAINT_END (~0)
+
+struct snd_pcm_hw_constraint_subformat {
+	snd_pcm_format_t format;	/* SNDRV_PCM_FORMAT_* */
+	u32 subformats;			/* SNDRV_PCM_SUBFMTBIT_* */
 };
 
 /*
@@ -375,6 +388,7 @@ struct snd_pcm_runtime {
 	unsigned int rate_num;
 	unsigned int rate_den;
 	unsigned int no_period_wakeup: 1;
+	unsigned int subformat_constraint: 1;
 
 	/* -- SW params; see struct snd_pcm_sw_params for comments -- */
 	int tstamp_mode;
@@ -1068,6 +1082,9 @@ int snd_pcm_hw_constraint_ratdens(struct snd_pcm_runtime *runtime,
 				  unsigned int cond,
 				  snd_pcm_hw_param_t var,
 				  const struct snd_pcm_hw_constraint_ratdens *r);
+int snd_pcm_hw_constraint_subformats(struct snd_pcm_runtime *runtime,
+				     unsigned int cond,
+				     struct snd_pcm_hw_constraint_subformat *subformats);
 int snd_pcm_hw_constraint_msbits(struct snd_pcm_runtime *runtime, 
 				 unsigned int cond,
 				 unsigned int width,
