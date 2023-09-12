@@ -80,7 +80,7 @@ static int __snapshot_lookup_subvol(struct btree_trans *trans, u32 snapshot,
 	if (!ret)
 		*subvol = le32_to_cpu(s.subvol);
 	else if (bch2_err_matches(ret, ENOENT))
-		bch_err(trans->c, "snapshot %u not fonud", snapshot);
+		bch_err(trans->c, "snapshot %u not found", snapshot);
 	return ret;
 
 }
