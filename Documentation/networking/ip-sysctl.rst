@@ -2304,6 +2304,17 @@ accept_ra_pinfo - BOOLEAN
 		- enabled if accept_ra is enabled.
 		- disabled if accept_ra is disabled.
 
+ra_pinfo_rfc4862_5_5_3e - BOOLEAN
+	Use RFC4862 Section 5.5.3e to determine the valid lifetime of
+	an address matching a prefix sent in a Router Advertisement
+	Prefix Information Option.
+
+	- If enabled, RFC4862 section 5.5.3e is used to determine
+	  the valid lifetime of the address.
+	- If disabled, the PIO valid lifetime will always be honored.
+
+	Default: 1
+
 accept_ra_rt_info_min_plen - INTEGER
 	Minimum prefix length of Route Information in RA.
 

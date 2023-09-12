@@ -204,6 +204,7 @@ static struct ipv6_devconf ipv6_devconf __read_mostly = {
 	.accept_ra_min_hop_limit= 1,
 	.accept_ra_min_lft	= 0,
 	.accept_ra_pinfo	= 1,
+	.ra_pinfo_rfc4862_5_5_3e = 1,
 #ifdef CONFIG_IPV6_ROUTER_PREF
 	.accept_ra_rtr_pref	= 1,
 	.rtr_probe_interval	= 60 * HZ,
@@ -265,6 +266,7 @@ static struct ipv6_devconf ipv6_devconf_dflt __read_mostly = {
 	.accept_ra_min_hop_limit= 1,
 	.accept_ra_min_lft	= 0,
 	.accept_ra_pinfo	= 1,
+	.ra_pinfo_rfc4862_5_5_3e = 1,
 #ifdef CONFIG_IPV6_ROUTER_PREF
 	.accept_ra_rtr_pref	= 1,
 	.rtr_probe_interval	= 60 * HZ,
@@ -2657,22 +2659,23 @@ int addrconf_prefix_rcv_add_addr(struct net *net, struct net_device *dev,
 			stored_lft = ifp->valid_lft - (now - ifp->tstamp) / HZ;
 		else
 			stored_lft = 0;
-		if (!create && stored_lft) {
+
+		/* RFC4862 Section 5.5.3e:
+		 * "Note that the preferred lifetime of the
+		 *  corresponding address is always reset to
+		 *  the Preferred Lifetime in the received
+		 *  Prefix Information option, regardless of
+		 *  whether the valid lifetime is also reset or
+		 *  ignored."
+		 *
+		 * So we should always update prefered_lft here.
+		 */
+		update_lft = !create && stored_lft;
+
+		if (update_lft && in6_dev->cnf.ra_pinfo_rfc4862_5_5_3e) {
 			const u32 minimum_lft = min_t(u32,
 				stored_lft, MIN_VALID_LIFETIME);
 			valid_lft = max(valid_lft, minimum_lft);
-
-			/* RFC4862 Section 5.5.3e:
-			 * "Note that the preferred lifetime of the
-			 *  corresponding address is always reset to
-			 *  the Preferred Lifetime in the received
-			 *  Prefix Information option, regardless of
-			 *  whether the valid lifetime is also reset or
-			 *  ignored."
-			 *
-			 * So we should always update prefered_lft here.
-			 */
-			update_lft = 1;
 		}
 
 		if (update_lft) {
@@ -6845,6 +6848,15 @@ static const struct ctl_table addrconf_sysctl[] = {
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec,
+	},
+	{
+		.procname	= "ra_pinfo_rfc4862_5_5_3e",
+		.data		= &ipv6_devconf.ra_pinfo_rfc4862_5_5_3e,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
 	},
 #ifdef CONFIG_IPV6_ROUTER_PREF
 	{
