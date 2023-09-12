@@ -109,6 +109,7 @@ int ptp_open(struct posix_clock *pc, fmode_t fmode)
 	queue = kzalloc(sizeof(*queue), GFP_KERNEL);
 	if (!queue)
 		return -EINVAL;
+	queue->tsevqmask = 0xFFFFFFFF;
 	queue->reader_pid = task_pid_nr(current);
 	list_add_tail(&queue->qlist, &ptp->tsevqs);
 
@@ -139,9 +140,11 @@ int ptp_release(struct posix_clock *pc)
 long ptp_ioctl(struct posix_clock *pc, unsigned int cmd, unsigned long arg)
 {
 	struct ptp_clock *ptp = container_of(pc, struct ptp_clock, clock);
+	struct timestamp_event_queue *tsevq, *tsevq_alt;
 	struct ptp_sys_offset_extended *extoff = NULL;
 	struct ptp_sys_offset_precise precise_offset;
 	struct system_device_crosststamp xtstamp;
+	struct ptp_tsfilter_request tsfilter_req;
 	struct ptp_clock_info *ops = ptp->info;
 	struct ptp_sys_offset *sysoff = NULL;
 	struct ptp_system_timestamp sts;
@@ -449,6 +452,20 @@ long ptp_ioctl(struct posix_clock *pc, unsigned int cmd, unsigned long arg)
 			return -ERESTARTSYS;
 		err = ptp_set_pinfunc(ptp, pin_index, pd.func, pd.chan);
 		mutex_unlock(&ptp->pincfg_mux);
+		break;
+
+	case PTP_FILTERTS_REQUEST:
+		if (copy_from_user(&tsfilter_req, (void __user *)arg,
+				   sizeof(tsfilter_req))) {
+			err = -EFAULT;
+			break;
+		}
+		list_for_each_entry_safe(tsevq, tsevq_alt, &ptp->tsevqs, qlist) {
+			if (tsevq->reader_pid == (pid_t)tsfilter_req.reader_pid) {
+				tsevq->tsevqmask = tsfilter_req.tsevqmask;
+				break;
+			}
+		}
 		break;
 
 	default:

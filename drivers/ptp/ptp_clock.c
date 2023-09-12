@@ -247,6 +247,7 @@ struct ptp_clock *ptp_clock_register(struct ptp_clock_info *info,
 	if (!queue)
 		goto no_memory_queue;
 	queue->reader_pid = 0;
+	queue->tsevqmask = 0xFFFFFFFF;
 	spin_lock_init(&queue->lock);
 	list_add_tail(&queue->qlist, &ptp->tsevqs);
 	mutex_init(&ptp->pincfg_mux);
@@ -406,7 +407,8 @@ void ptp_clock_event(struct ptp_clock *ptp, struct ptp_clock_event *event)
 	case PTP_CLOCK_EXTTS:
 		/* Enqueue timestamp on all other queues */
 		list_for_each_entry_safe(tsevq, tsevq_alt, &ptp->tsevqs, qlist) {
-			enqueue_external_timestamp(tsevq, event);
+			if (tsevq->tsevqmask & (0x1 << event->index))
+				enqueue_external_timestamp(tsevq, event);
 		}
 		wake_up_interruptible(&ptp->tsev_wq);
 		break;

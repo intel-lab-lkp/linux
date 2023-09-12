@@ -105,6 +105,11 @@ struct ptp_extts_request {
 	unsigned int rsv[2]; /* Reserved for future use. */
 };
 
+struct ptp_tsfilter_request {
+	unsigned int reader_pid; /* PID of process reading the timestamp event queue */
+	unsigned int tsevqmask; /* Channel mask. LSB = channel 0 */
+};
+
 struct ptp_perout_request {
 	union {
 		/*
@@ -224,6 +229,8 @@ struct ptp_pin_desc {
 	_IOWR(PTP_CLK_MAGIC, 17, struct ptp_sys_offset_precise)
 #define PTP_SYS_OFFSET_EXTENDED2 \
 	_IOWR(PTP_CLK_MAGIC, 18, struct ptp_sys_offset_extended)
+#define PTP_FILTERTS_REQUEST \
+	_IOW(PTP_CLK_MAGIC, 19, struct ptp_tsfilter_request)
 
 struct ptp_extts_event {
 	struct ptp_clock_time t; /* Time event occured. */

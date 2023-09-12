@@ -121,6 +121,7 @@ static void usage(char *progname)
 		" -d name    device to open\n"
 		" -e val     read 'val' external time stamp events\n"
 		" -f val     adjust the ptp clock frequency by 'val' ppb\n"
+		" -F pid,msk apply ts channel mask to queue open by pid\n"
 		" -g         get the ptp clock time\n"
 		" -h         prints this message\n"
 		" -i val     index for event/trigger\n"
@@ -162,6 +163,7 @@ int main(int argc, char *argv[])
 	struct ptp_sys_offset *sysoff;
 	struct ptp_sys_offset_extended *soe;
 	struct ptp_sys_offset_precise *xts;
+	struct ptp_tsfilter_request tsfilter_req;
 
 	char *progname;
 	unsigned int i;
@@ -194,9 +196,14 @@ int main(int argc, char *argv[])
 	int64_t pulsewidth = -1;
 	int64_t perout = -1;
 
+	tsfilter_req.reader_pid = 0;
+	tsfilter_req.tsevqmask = 0xFFFFFFFF;
+
 	progname = strrchr(argv[0], '/');
 	progname = progname ? 1+progname : argv[0];
-	while (EOF != (c = getopt(argc, argv, "cd:e:f:ghH:i:k:lL:n:o:p:P:sSt:T:w:x:Xz"))) {
+	while (EOF !=
+	       (c = getopt(argc, argv,
+			   "cd:e:f:F:ghH:i:k:lL:n:o:p:P:sSt:T:w:x:Xz"))) {
 		switch (c) {
 		case 'c':
 			capabilities = 1;
@@ -209,6 +216,14 @@ int main(int argc, char *argv[])
 			break;
 		case 'f':
 			adjfreq = atoi(optarg);
+			break;
+		case 'F':
+			cnt = sscanf(optarg, "%d,%X", &tsfilter_req.reader_pid,
+				     &tsfilter_req.tsevqmask);
+			if (cnt != 2) {
+				usage(progname);
+				return -1;
+			}
 			break;
 		case 'g':
 			gettime = 1;
@@ -602,6 +617,15 @@ int main(int argc, char *argv[])
 		}
 
 		free(xts);
+	}
+
+	if (tsfilter_req.reader_pid != 0) {
+		if (ioctl(fd, PTP_FILTERTS_REQUEST, &tsfilter_req)) {
+			perror("PTP_FILTERTS_REQUEST");
+		} else {
+			printf("Timestamp event queue mask 0x%X applied to reader with PID: %d\n",
+			       (int)tsfilter_req.tsevqmask, tsfilter_req.reader_pid);
+		}
 	}
 
 	close(fd);
