@@ -125,6 +125,7 @@ int inet_diag_msg_attrs_fill(struct sock *sk, struct sk_buff *skb,
 			     bool net_admin)
 {
 	const struct inet_sock *inet = inet_sk(sk);
+	struct inet_diag_reuse inet_reuse = {};
 	struct inet_diag_sockopt inet_sockopt;
 
 	if (nla_put_u8(skb, INET_DIAG_SHUTDOWN, sk->sk_shutdown))
@@ -195,6 +196,12 @@ int inet_diag_msg_attrs_fill(struct sock *sk, struct sk_buff *skb,
 	inet_sockopt.defer_connect = inet_test_bit(DEFER_CONNECT, sk);
 	if (nla_put(skb, INET_DIAG_SOCKOPT, sizeof(inet_sockopt),
 		    &inet_sockopt))
+		goto errout;
+
+	inet_reuse.reuse = sk->sk_reuse;
+	inet_reuse.reuseport = sk->sk_reuseport;
+	if (nla_put(skb, INET_DIAG_REUSE, sizeof(inet_reuse),
+		    &inet_reuse))
 		goto errout;
 
 	return 0;

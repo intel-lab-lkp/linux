@@ -161,6 +161,7 @@ enum {
 	INET_DIAG_SK_BPF_STORAGES,
 	INET_DIAG_CGROUP_ID,
 	INET_DIAG_SOCKOPT,
+	INET_DIAG_REUSE,
 	__INET_DIAG_MAX,
 };
 
@@ -199,6 +200,12 @@ struct inet_diag_sockopt {
 		recverr_rfc4884:1,
 		defer_connect:1,
 		unused:5;
+};
+
+struct inet_diag_reuse {
+	__u8	reuse:4,
+		reuseport:1,
+		unused:3;
 };
 
 /* INET_DIAG_VEGASINFO */

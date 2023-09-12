@@ -77,6 +77,8 @@ static inline size_t inet_diag_msg_attrs_size(void)
 #endif
 		+ nla_total_size(sizeof(struct inet_diag_sockopt))
 						     /* INET_DIAG_SOCKOPT */
+		+ nla_total_size(sizeof(struct inet_diag_reuse))
+						    /* INET_DIAG_REUSE */
 		;
 }
 int inet_diag_msg_attrs_fill(struct sock *sk, struct sk_buff *skb,
