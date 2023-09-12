@@ -2539,8 +2539,6 @@ static unsigned int move_folios_to_lru(struct lruvec *lruvec,
 		lruvec_add_folio(lruvec, folio);
 		nr_pages = folio_nr_pages(folio);
 		nr_moved += nr_pages;
-		if (folio_test_active(folio))
-			workingset_age_nonresident(lruvec, nr_pages);
 	}
 
 	/*
