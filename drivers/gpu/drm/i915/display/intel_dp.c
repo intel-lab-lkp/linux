@@ -6022,7 +6022,7 @@ intel_dp_init_connector(struct intel_digital_port *dig_port,
 	intel_dp->pps.active_pipe = INVALID_PIPE;
 
 	/* Preserve the current hw state. */
-	intel_dp->DP = intel_de_read(dev_priv, intel_dp->output_reg);
+	dig_port->saved_port_bits = intel_de_read(dev_priv, intel_dp->output_reg);
 	intel_dp->attached_connector = intel_connector;
 
 	if (_intel_dp_is_port_edp(dev_priv, intel_encoder->devdata, port)) {
