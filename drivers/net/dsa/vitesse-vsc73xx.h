@@ -30,6 +30,8 @@ struct vsc73xx {
 	const struct vsc73xx_ops	*ops;
 	void				*priv;
 	u8				forward_map[VSC73XX_MAX_NUM_PORTS];
+	u16				pvid_storage[VSC73XX_MAX_NUM_PORTS];
+	u16				untagged_storage[VSC73XX_MAX_NUM_PORTS];
 };
 
 struct vsc73xx_ops {
