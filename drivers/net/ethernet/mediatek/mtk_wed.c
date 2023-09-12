@@ -1718,6 +1718,9 @@ int mtk_wed_flow_add(int index)
 	if (!hw || !hw->wed_dev)
 		return -ENODEV;
 
+	if (!hw->wed_dev->wlan.offload_enable)
+		return 0;
+
 	if (hw->num_flows) {
 		hw->num_flows++;
 		return 0;
@@ -1745,6 +1748,9 @@ void mtk_wed_flow_remove(int index)
 	struct mtk_wed_hw *hw = hw_list[index];
 
 	if (!hw)
+		return;
+
+	if (!hw->wed_dev->wlan.offload_disable)
 		return;
 
 	if (--hw->num_flows)
