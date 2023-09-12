@@ -48,7 +48,7 @@ struct clk_pllv4 {
 };
 
 /* Valid PLL MULT Table */
-static const int pllv4_mult_table[] = {33, 27, 22, 20, 17, 16};
+static const int pllv4_mult_table[] = {40, 33, 27, 22, 20, 17, 16};
 
 /* Valid PLL MULT range, (max, min) */
 static const int pllv4_mult_range[] = {54, 27};
