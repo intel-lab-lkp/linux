@@ -1801,9 +1801,46 @@ static struct folio *compaction_alloc(struct folio *src, unsigned long data)
 	struct compact_control *cc = (struct compact_control *)data;
 	struct folio *dst;
 	int order = folio_order(src);
+	bool has_isolated_pages = false;
 
+again:
 	if (!cc->freepages[order].nr_free) {
-		isolate_freepages(cc);
+		int i;
+
+		for (i = order + 1; i <= MAX_ORDER; i++) {
+			if (cc->freepages[i].nr_free) {
+				struct page *freepage =
+					list_first_entry(&cc->freepages[i].pages,
+							 struct page, lru);
+
+				int start_order = i;
+				unsigned long size = 1 << start_order;
+
+				list_del(&freepage->lru);
+				cc->freepages[i].nr_free--;
+
+				while (start_order > order) {
+					start_order--;
+					size >>= 1;
+
+					list_add(&freepage[size].lru,
+						&cc->freepages[start_order].pages);
+					cc->freepages[start_order].nr_free++;
+					set_page_private(&freepage[size], start_order);
+				}
+				post_alloc_hook(freepage, order, __GFP_MOVABLE);
+				if (order)
+					prep_compound_page(freepage, order);
+				dst = page_folio(freepage);
+				goto done;
+			}
+		}
+		if (!has_isolated_pages) {
+			isolate_freepages(cc);
+			has_isolated_pages = true;
+			goto again;
+		}
+
 		if (!cc->freepages[order].nr_free)
 			return NULL;
 	}
@@ -1814,6 +1851,7 @@ static struct folio *compaction_alloc(struct folio *src, unsigned long data)
 	post_alloc_hook(&dst->page, order, __GFP_MOVABLE);
 	if (order)
 		prep_compound_page(&dst->page, order);
+done:
 	cc->nr_freepages -= 1 << order;
 	return dst;
 }
