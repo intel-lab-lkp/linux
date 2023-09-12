@@ -27,6 +27,7 @@ struct timestamp_event_queue {
 	int tail;
 	spinlock_t lock;
 	struct list_head qlist;
+	pid_t reader_pid;
 };
 
 struct ptp_clock {
@@ -38,7 +39,6 @@ struct ptp_clock {
 	struct pps_device *pps_source;
 	long dialed_frequency; /* remembers the frequency adjustment */
 	struct list_head tsevqs; /* timestamp fifo list */
-	struct mutex tsevq_mux; /* one process at a time reading the fifo */
 	struct mutex pincfg_mux; /* protect concurrent info->pin_config access */
 	wait_queue_head_t tsev_wq;
 	int defunct; /* tells readers to go away when clock is being removed */
@@ -123,6 +123,8 @@ long ptp_ioctl(struct posix_clock *pc,
 	       unsigned int cmd, unsigned long arg);
 
 int ptp_open(struct posix_clock *pc, fmode_t fmode);
+
+int ptp_release(struct posix_clock *pc);
 
 ssize_t ptp_read(struct posix_clock *pc,
 		 uint flags, char __user *buf, size_t cnt);
