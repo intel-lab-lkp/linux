@@ -431,7 +431,8 @@ int nouveau_sched_init(struct nouveau_drm *drm)
 
 	return drm_sched_init(sched, &nouveau_sched_ops, NULL,
 			      NOUVEAU_SCHED_HW_SUBMISSIONS, 0, job_hang_limit,
-			      NULL, NULL, "nouveau_sched", drm->dev->dev);
+			      NULL, NULL, "nouveau_sched",
+			      DRM_SCHED_POLICY_DEFAULT, drm->dev->dev);
 }
 
 void nouveau_sched_fini(struct nouveau_drm *drm)
