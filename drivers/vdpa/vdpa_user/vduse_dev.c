@@ -1367,6 +1367,21 @@ static long vduse_dev_ioctl(struct file *file, unsigned int cmd,
 		ret = 0;
 		break;
 	}
+	case VDUSE_GET_RECONNECT_INFO: {
+		struct vduse_reconnect_mmap_info info;
+
+		ret = -EFAULT;
+		if (copy_from_user(&info, argp, sizeof(info)))
+			break;
+
+		info.size = PAGE_SIZE;
+		info.max_index = dev->vq_num + 1;
+
+		if (copy_to_user(argp, &info, sizeof(info)))
+			break;
+		ret = 0;
+		break;
+	}
 	default:
 		ret = -ENOIOCTLCMD;
 		break;

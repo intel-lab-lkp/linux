@@ -356,4 +356,19 @@ struct vhost_reconnect_vring {
 	_Bool avail_wrap_counter;
 };
 
+/**
+ * struct vduse_reconnect_mmap_info
+ * @size: mapping memory size, always page_size here
+ * @max_index: the number of pages allocated in kernel,just
+ * use for check
+ */
+
+struct vduse_reconnect_mmap_info {
+	__u32 size;
+	__u32 max_index;
+};
+
+#define VDUSE_GET_RECONNECT_INFO \
+	_IOWR(VDUSE_BASE, 0x1b, struct vduse_reconnect_mmap_info)
+
 #endif /* _UAPI_VDUSE_H_ */
