@@ -130,7 +130,7 @@ static unsigned int cs_dbs_update(struct cpufreq_policy *policy)
 		if (requested_freq == policy->min)
 			goto out;
 
-		if (requested_freq > freq_step)
+		if (requested_freq > policy->min + freq_step)
 			requested_freq -= freq_step;
 		else
 			requested_freq = policy->min;
