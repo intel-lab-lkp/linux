@@ -279,7 +279,7 @@ static int snd_card_init(struct snd_card *card, struct device *parent,
 {
 	int err;
 #ifdef CONFIG_SND_DEBUG
-	char name[8];
+	char name[15];
 #endif
 
 	if (extra_size > 0)
