@@ -71,12 +71,14 @@ struct ffs_function {
 	struct ffs_data			*ffs;
 
 	struct ffs_ep			*eps;
-	u8				eps_revmap[16];
+	u8				eps_revmap[32];
 	short				*interfaces_nums;
 
 	struct usb_function		function;
 };
 
+#define REVMAP_IDX(epaddr)	((epaddr & USB_ENDPOINT_NUMBER_MASK) \
+				* 2 + ((epaddr & USB_DIR_IN) ? 1 : 0))
 
 static struct ffs_function *ffs_func_from_usb(struct usb_function *f)
 {
@@ -2843,8 +2845,7 @@ static int __ffs_func_bind_do_descs(enum ffs_entity_type type, u8 *valuep,
 
 		ffs_ep->ep  = ep;
 		ffs_ep->req = req;
-		func->eps_revmap[ds->bEndpointAddress &
-				 USB_ENDPOINT_NUMBER_MASK] = idx + 1;
+		func->eps_revmap[REVMAP_IDX(ds->bEndpointAddress)] = idx + 1;
 		/*
 		 * If we use virtual address mapping, we restore
 		 * original bEndpointAddress value.
@@ -3371,7 +3372,7 @@ static void ffs_func_resume(struct usb_function *f)
 
 static int ffs_func_revmap_ep(struct ffs_function *func, u8 num)
 {
-	num = func->eps_revmap[num & USB_ENDPOINT_NUMBER_MASK];
+	num = func->eps_revmap[REVMAP_IDX(num)];
 	return num ? num : -EDOM;
 }
 
