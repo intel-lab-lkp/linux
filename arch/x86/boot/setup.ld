@@ -39,6 +39,10 @@ SECTIONS
 	.signature	: {
 		setup_sig = .;
 		LONG(0x5a5aaa55)
+
+		/* reserve some extra space for the reloc and compat sections */
+		setup_size = ABSOLUTE(ALIGN(. + 64, 512));
+		setup_sects = ABSOLUTE(setup_size / 512);
 	}
 
 
