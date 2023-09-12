@@ -2014,26 +2014,34 @@ static int rtl8192fu_led_brightness_set(struct led_classdev *led_cdev,
 	struct rtl8xxxu_priv *priv = container_of(led_cdev,
 						  struct rtl8xxxu_priv,
 						  led_cdev);
-	u16 ledcfg;
+	u32 ledcfg;
 
 	/* Values obtained by observing the USB traffic from the Windows driver. */
 	rtl8xxxu_write32(priv, REG_SW_GPIO_SHARE_CTRL_0, 0x20080);
 	rtl8xxxu_write32(priv, REG_SW_GPIO_SHARE_CTRL_1, 0x1b0000);
 
-	ledcfg = rtl8xxxu_read16(priv, REG_LEDCFG0);
+	ledcfg = rtl8xxxu_read32(priv, REG_LEDCFG0);
+
+	/* Set LED0 GPIO enabled */
+	ledcfg |= LEDCFG0_LED0_GPIO_ENABLE;
 
 	if (brightness == LED_OFF) {
-		/* Value obtained like above. */
-		ledcfg = BIT(1) | BIT(7);
+		/* Setting REG_LEDCFG0[15:0] to 0x0000 turns LED0/LED1 off. */
+		ledcfg &= ~GENMASK(15, 0);
 	} else if (brightness == LED_ON) {
-		/* Value obtained like above. */
-		ledcfg = BIT(1) | BIT(7) | BIT(11);
+		/* Setting REG_LEDCFG0[15:0] to 0x0808 turns LED0/LED1 on. */
+		ledcfg &= ~GENMASK(15, 0);
+		ledcfg |= LEDCFG0_LED1SV | LEDCFG0_LED0SV;
 	} else if (brightness == RTL8XXXU_HW_LED_CONTROL) {
-		/* Value obtained by brute force. */
-		ledcfg = BIT(8) | BIT(9);
+		/* Setting REG_LEDCFG0[15:0] to 0x0303 enables
+		 * hardware-controlled blinking for LED0/LED1.
+		 * The value 0x0303 is obtained by brute force.
+		 */
+		ledcfg &= ~GENMASK(15, 0);
+		ledcfg |= BIT(9) | BIT(8) | BIT(1) | BIT(0);
 	}
 
-	rtl8xxxu_write16(priv, REG_LEDCFG0, ledcfg);
+	rtl8xxxu_write32(priv, REG_LEDCFG0, ledcfg);
 
 	return 0;
 }
