@@ -18,6 +18,7 @@
 
 /**
  * struct vsc73xx - VSC73xx state container
+ * @forward_map: Forward table cache
  */
 struct vsc73xx {
 	struct device			*dev;
@@ -28,6 +29,7 @@ struct vsc73xx {
 	u8				addr[ETH_ALEN];
 	const struct vsc73xx_ops	*ops;
 	void				*priv;
+	u8				forward_map[VSC73XX_MAX_NUM_PORTS];
 };
 
 struct vsc73xx_ops {
