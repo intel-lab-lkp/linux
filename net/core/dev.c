@@ -10860,15 +10860,20 @@ static void netdev_rss_contexts_free(struct net_device *dev)
 	struct ethtool_rxfh_context *ctx;
 	u32 context;
 
-	if (!dev->ethtool_ops->set_rxfh_context)
+	if (!dev->ethtool_ops->create_rxfh_context &&
+	    !dev->ethtool_ops->set_rxfh_context)
 		return;
 	idr_for_each_entry(&dev->ethtool->rss_ctx, ctx, context) {
 		u32 *indir = ethtool_rxfh_context_indir(ctx);
 		u8 *key = ethtool_rxfh_context_key(ctx);
 
 		idr_remove(&dev->ethtool->rss_ctx, context);
-		dev->ethtool_ops->set_rxfh_context(dev, indir, key, ctx->hfunc,
-						   &context, true);
+		if (dev->ethtool_ops->create_rxfh_context)
+			dev->ethtool_ops->remove_rxfh_context(dev, ctx, context);
+		else
+			dev->ethtool_ops->set_rxfh_context(dev, indir, key,
+							   ctx->hfunc,
+							   &context, true);
 		kfree(ctx);
 	}
 }

@@ -1274,7 +1274,8 @@ static noinline_for_stack int ethtool_set_rxfh(struct net_device *dev,
 	if (rxfh.rsvd8[0] || rxfh.rsvd8[1] || rxfh.rsvd8[2] || rxfh.rsvd32)
 		return -EINVAL;
 	/* Most drivers don't handle rss_context, check it's 0 as well */
-	if (rxfh.rss_context && !ops->set_rxfh_context)
+	if (rxfh.rss_context && !(ops->create_rxfh_context ||
+				  ops->set_rxfh_context))
 		return -EOPNOTSUPP;
 	create = rxfh.rss_context == ETH_RXFH_CONTEXT_ALLOC;
 
@@ -1349,8 +1350,28 @@ static noinline_for_stack int ethtool_set_rxfh(struct net_device *dev,
 		}
 		ctx->indir_size = dev_indir_size;
 		ctx->key_size = dev_key_size;
-		ctx->hfunc = rxfh.hfunc;
 		ctx->priv_size = ops->rxfh_priv_size;
+		/* Initialise to an empty context */
+		ctx->indir_no_change = ctx->key_no_change = 1;
+		ctx->hfunc = ETH_RSS_HASH_NO_CHANGE;
+		if (ops->create_rxfh_context) {
+			int ctx_id;
+
+			/* driver uses new API, core allocates ID */
+			/* if rss_ctx_max_id is not specified (left as 0), it is
+			 * treated as INT_MAX + 1 by idr_alloc
+			 */
+			ctx_id = idr_alloc(&dev->ethtool->rss_ctx, ctx, 1,
+					   dev->ethtool->rss_ctx_max_id,
+					   GFP_KERNEL_ACCOUNT);
+			/* 0 is not allowed, so treat it like an error here */
+			if (ctx_id <= 0) {
+				kfree(ctx);
+				ret = -ENOMEM;
+				goto out;
+			}
+			rxfh.rss_context = ctx_id;
+		}
 	} else if (rxfh.rss_context) {
 		ctx = idr_find(&dev->ethtool->rss_ctx, rxfh.rss_context);
 		if (!ctx) {
@@ -1359,15 +1380,34 @@ static noinline_for_stack int ethtool_set_rxfh(struct net_device *dev,
 		}
 	}
 
-	if (rxfh.rss_context)
-		ret = ops->set_rxfh_context(dev, indir, hkey, rxfh.hfunc,
-					    &rxfh.rss_context, delete);
-	else
+	if (rxfh.rss_context) {
+		if (ops->create_rxfh_context) {
+			if (create)
+				ret = ops->create_rxfh_context(dev, ctx, indir,
+							       hkey, rxfh.hfunc,
+							       rxfh.rss_context);
+			else if (delete)
+				ret = ops->remove_rxfh_context(dev, ctx,
+							       rxfh.rss_context);
+			else
+				ret = ops->modify_rxfh_context(dev, ctx, indir,
+							       hkey, rxfh.hfunc,
+							       rxfh.rss_context);
+		} else {
+			ret = ops->set_rxfh_context(dev, indir, hkey,
+						    rxfh.hfunc,
+						    &rxfh.rss_context, delete);
+		}
+	} else {
 		ret = ops->set_rxfh(dev, indir, hkey, rxfh.hfunc);
+	}
 	if (ret) {
-		if (create)
+		if (create) {
 			/* failed to create, free our new tracking entry */
+			if (ops->create_rxfh_context)
+				idr_remove(&dev->ethtool->rss_ctx, rxfh.rss_context);
 			kfree(ctx);
+		}
 		goto out;
 	}
 
@@ -1383,12 +1423,8 @@ static noinline_for_stack int ethtool_set_rxfh(struct net_device *dev,
 			dev->priv_flags |= IFF_RXFH_CONFIGURED;
 	}
 	/* Update rss_ctx tracking */
-	if (create) {
-		/* Ideally this should happen before calling the driver,
-		 * so that we can fail more cleanly; but we don't have the
-		 * context ID until the driver picks it, so we have to
-		 * wait until after.
-		 */
+	if (create && !ops->create_rxfh_context) {
+		/* driver uses old API, it chose context ID */
 		if (WARN_ON(idr_find(&dev->ethtool->rss_ctx, rxfh.rss_context))) {
 			/* context ID reused, our tracking is screwed */
 			kfree(ctx);
@@ -1398,8 +1434,6 @@ static noinline_for_stack int ethtool_set_rxfh(struct net_device *dev,
 		WARN_ON(idr_alloc(&dev->ethtool->rss_ctx, ctx, rxfh.rss_context,
 				  rxfh.rss_context + 1, GFP_KERNEL) !=
 			rxfh.rss_context);
-		ctx->indir_no_change = rxfh.indir_size == ETH_RXFH_INDIR_NO_CHANGE;
-		ctx->key_no_change = !rxfh.key_size;
 	}
 	if (delete) {
 		WARN_ON(idr_remove(&dev->ethtool->rss_ctx, rxfh.rss_context) != ctx);
