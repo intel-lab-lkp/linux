@@ -568,6 +568,7 @@ int inet_dgram_connect(struct socket *sock, struct sockaddr *uaddr,
 {
 	struct sock *sk = sock->sk;
 	const struct proto *prot;
+	struct sockaddr_storage addr;
 	int err;
 
 	if (addr_len < sizeof(uaddr->sa_family))
@@ -580,6 +581,14 @@ int inet_dgram_connect(struct socket *sock, struct sockaddr *uaddr,
 		return prot->disconnect(sk, flags);
 
 	if (BPF_CGROUP_PRE_CONNECT_ENABLED(sk)) {
+		if (uaddr && addr_len <= sizeof(addr)) {
+			/* pre_connect can rewrite uaddr, so make a copy to
+			 * insulate the caller.
+			 */
+			memcpy(&addr, uaddr, addr_len);
+			uaddr = (struct sockaddr *)&addr;
+		}
+
 		err = prot->pre_connect(sk, uaddr, addr_len);
 		if (err)
 			return err;
@@ -625,6 +634,7 @@ int __inet_stream_connect(struct socket *sock, struct sockaddr *uaddr,
 			  int addr_len, int flags, int is_sendmsg)
 {
 	struct sock *sk = sock->sk;
+	struct sockaddr_storage addr;
 	int err;
 	long timeo;
 
@@ -668,6 +678,14 @@ int __inet_stream_connect(struct socket *sock, struct sockaddr *uaddr,
 			goto out;
 
 		if (BPF_CGROUP_PRE_CONNECT_ENABLED(sk)) {
+			if (uaddr && addr_len <= sizeof(addr)) {
+				/* pre_connect can rewrite uaddr, so make a copy to
+				 * insulate the caller.
+				 */
+				memcpy(&addr, uaddr, addr_len);
+				uaddr = (struct sockaddr *)&addr;
+			}
+
 			err = sk->sk_prot->pre_connect(sk, uaddr, addr_len);
 			if (err)
 				goto out;

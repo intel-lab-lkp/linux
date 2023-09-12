@@ -1142,18 +1142,29 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 	}
 
 	if (cgroup_bpf_enabled(CGROUP_UDP4_SENDMSG) && !connected) {
+		struct sockaddr_in tmp_addr;
+		struct sockaddr_in *addr = usin;
+
+		/* BPF_CGROUP_RUN_PROG_UDP4_SENDMSG_LOCK can rewrite usin, so make a
+		 * copy to insulate the caller.
+		 */
+		if (usin && msg->msg_namelen <= sizeof(tmp_addr)) {
+			memcpy(&tmp_addr, usin, msg->msg_namelen);
+			addr = &tmp_addr;
+		}
+
 		err = BPF_CGROUP_RUN_PROG_UDP4_SENDMSG_LOCK(sk,
-					    (struct sockaddr *)usin, &ipc.addr);
+					    (struct sockaddr *)addr, &ipc.addr);
 		if (err)
 			goto out_free;
-		if (usin) {
-			if (usin->sin_port == 0) {
+		if (addr) {
+			if (addr->sin_port == 0) {
 				/* BPF program set invalid port. Reject it. */
 				err = -EINVAL;
 				goto out_free;
 			}
-			daddr = usin->sin_addr.s_addr;
-			dport = usin->sin_port;
+			daddr = addr->sin_addr.s_addr;
+			dport = addr->sin_port;
 		}
 	}
 
