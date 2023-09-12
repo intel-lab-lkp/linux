@@ -30,6 +30,10 @@
 #include <uapi/linux/virtio_blk.h>
 #include <linux/mod_devicetable.h>
 
+#ifdef CONFIG_X86
+#include <asm/set_memory.h>
+#endif
+
 #include "iova_domain.h"
 
 #define DRV_AUTHOR   "Yongji Xie <xieyongji@bytedance.com>"
@@ -40,6 +44,23 @@
 #define VDUSE_BOUNCE_SIZE (64 * 1024 * 1024)
 #define VDUSE_IOVA_SIZE (128 * 1024 * 1024)
 #define VDUSE_MSG_DEFAULT_TIMEOUT 30
+
+/* struct vdpa_reconnect_info save the page information for reconnection
+ * kernel will init these information while alloc the pages
+ * and use these information to free the pages
+ */
+struct vdpa_reconnect_info {
+	/* Offset (within vm_file) in PAGE_SIZE,
+	 * this just for check, not using
+	 */
+	u32 index;
+	/* physical address for this page*/
+	phys_addr_t addr;
+	/* virtual address for this page*/
+	unsigned long vaddr;
+	/* memory size, here always page_size*/
+	phys_addr_t size;
+};
 
 struct vduse_virtqueue {
 	u16 index;
@@ -57,6 +78,7 @@ struct vduse_virtqueue {
 	struct vdpa_callback cb;
 	struct work_struct inject;
 	struct work_struct kick;
+	struct vdpa_reconnect_info reconnect_info;
 };
 
 struct vduse_dev;
@@ -106,6 +128,7 @@ struct vduse_dev {
 	u32 vq_align;
 	struct vduse_umem *umem;
 	struct mutex mem_lock;
+	struct vdpa_reconnect_info reconnect_status;
 };
 
 struct vduse_dev_msg {
@@ -1029,6 +1052,65 @@ unlock:
 	return ret;
 }
 
+int vduse_alloc_reconnnect_info_mem(struct vduse_dev *dev)
+{
+	struct vdpa_reconnect_info *info;
+	struct vduse_virtqueue *vq;
+	void *addr;
+
+	/*page 0 is use to save status,dpdk will use this to save the information
+	 *needed in reconnection,kernel don't need to maintain this
+	 */
+	info = &dev->reconnect_status;
+	addr = (void *)get_zeroed_page(GFP_KERNEL);
+	if (!addr)
+		return -1;
+
+	info->addr = virt_to_phys(addr);
+	info->vaddr = (unsigned long)(addr);
+	info->size = PAGE_SIZE;
+	/* index is vm Offset in PAGE_SIZE */
+	info->index = 0;
+
+	/*page 1~ vq_num + 1 save the reconnect info for vqs*/
+	for (int i = 0; i < dev->vq_num + 1; i++) {
+		vq = &dev->vqs[i];
+		info = &vq->reconnect_info;
+		addr = (void *)get_zeroed_page(GFP_KERNEL);
+		if (!addr)
+			return -1;
+
+		info->addr = virt_to_phys(addr);
+		info->vaddr = (unsigned long)(addr);
+		info->size = PAGE_SIZE;
+		info->index = i + 1;
+	}
+
+	return 0;
+}
+
+int vduse_free_reconnnect_info_mem(struct vduse_dev *dev)
+{
+	struct vdpa_reconnect_info *info;
+	struct vduse_virtqueue *vq;
+
+	info = &dev->reconnect_status;
+	free_page(info->vaddr);
+	info->size = 0;
+	info->addr = 0;
+	info->vaddr = 0;
+	for (int i = 0; i < dev->vq_num + 1; i++) {
+		vq = &dev->vqs[i];
+		info = &vq->reconnect_info;
+		free_page(info->vaddr);
+		info->size = 0;
+		info->addr = 0;
+		info->vaddr = 0;
+	}
+
+	return 0;
+}
+
 static long vduse_dev_ioctl(struct file *file, unsigned int cmd,
 			    unsigned long arg)
 {
@@ -1389,6 +1471,8 @@ static int vduse_destroy_dev(char *name)
 		mutex_unlock(&dev->lock);
 		return -EBUSY;
 	}
+	vduse_free_reconnnect_info_mem(dev);
+
 	dev->connected = true;
 	mutex_unlock(&dev->lock);
 
@@ -1540,6 +1624,8 @@ static int vduse_create_dev(struct vduse_dev_config *config,
 		ret = PTR_ERR(dev->dev);
 		goto err_dev;
 	}
+
+	vduse_alloc_reconnnect_info_mem(dev);
 	__module_get(THIS_MODULE);
 
 	return 0;
