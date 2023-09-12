@@ -104,7 +104,10 @@ struct uvc_video {
 	unsigned int req_size;
 	struct uvc_request *ureq;
 	struct list_head req_free;
+	unsigned int req_free_count; /* number of requests in req_free */
 	spinlock_t req_lock;
+
+	wait_queue_head_t req_free_queue;
 
 	unsigned int req_int_count;
 
