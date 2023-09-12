@@ -98,46 +98,45 @@ TRACE_EVENT(cdns2_ep_halt,
 	TP_PROTO(struct cdns2_endpoint *ep_priv, u8 halt, u8 flush),
 	TP_ARGS(ep_priv, halt, flush),
 	TP_STRUCT__entry(
-		__string(name, ep_priv->name)
+		__field(u32, edw3)
 		__field(u8, halt)
 		__field(u8, flush)
 	),
 	TP_fast_assign(
-		__assign_str(name, ep_priv->name);
+		__entry->edw3 = ep_priv->endpoint.dw3;
 		__entry->halt = halt;
 		__entry->flush = flush;
 	),
 	TP_printk("Halt %s for %s: %s", __entry->flush ? " and flush" : "",
-		  __get_str(name), __entry->halt ? "set" : "cleared")
+		  USB_EP_NAME(__entry->edw3), __entry->halt ? "set" : "cleared")
 );
 
 TRACE_EVENT(cdns2_wa1,
 	TP_PROTO(struct cdns2_endpoint *ep_priv, char *msg),
 	TP_ARGS(ep_priv, msg),
 	TP_STRUCT__entry(
-		__string(ep_name, ep_priv->name)
+		__field(u32, edw3)
 		__string(msg, msg)
 	),
 	TP_fast_assign(
-		__assign_str(ep_name, ep_priv->name);
+		__entry->edw3 = ep_priv->endpoint.dw3;
 		__assign_str(msg, msg);
 	),
-	TP_printk("WA1: %s %s", __get_str(ep_name), __get_str(msg))
+	TP_printk("WA1: %s %s", USB_EP_NAME(__entry->edw3), __get_str(msg))
 );
 
 DECLARE_EVENT_CLASS(cdns2_log_doorbell,
 	TP_PROTO(struct cdns2_endpoint *pep, u32 ep_trbaddr),
 	TP_ARGS(pep, ep_trbaddr),
 	TP_STRUCT__entry(
-		__string(name, pep->num ? pep->name :
-				(pep->dir ? "ep0in" : "ep0out"))
+		__field(u32, edw3)
 		__field(u32, ep_trbaddr)
 	),
 	TP_fast_assign(
-		__assign_str(name, pep->name);
+		__entry->edw3 = pep->endpoint.dw3;
 		__entry->ep_trbaddr = ep_trbaddr;
 	),
-	TP_printk("%s, ep_trbaddr %08x", __get_str(name),
+	TP_printk("%s, ep_trbaddr %08x", USB_EP_NAME(__entry->edw3),
 		  __entry->ep_trbaddr)
 );
 
@@ -190,20 +189,20 @@ DECLARE_EVENT_CLASS(cdns2_log_epx_irq,
 	TP_PROTO(struct cdns2_device *pdev, struct cdns2_endpoint *pep),
 	TP_ARGS(pdev, pep),
 	TP_STRUCT__entry(
-		__string(ep_name, pep->name)
+		__field(u32, edw3)
 		__field(u32, ep_sts)
 		__field(u32, ep_ists)
 		__field(u32, ep_traddr)
 	),
 	TP_fast_assign(
-		__assign_str(ep_name, pep->name);
+		__entry->edw3 = pep->endpoint.dw3;
 		__entry->ep_sts = readl(&pdev->adma_regs->ep_sts);
 		__entry->ep_ists = readl(&pdev->adma_regs->ep_ists);
 		__entry->ep_traddr = readl(&pdev->adma_regs->ep_traddr);
 	),
 	TP_printk("%s, ep_traddr: %08x",
 		  cdns2_decode_epx_irq(__get_buf(CDNS2_MSG_MAX), CDNS2_MSG_MAX,
-				       __get_str(ep_name),
+				       USB_EP_NAME(__entry->edw3),
 				       __entry->ep_ists, __entry->ep_sts),
 		  __entry->ep_traddr)
 );
@@ -270,7 +269,7 @@ DECLARE_EVENT_CLASS(cdns2_log_request,
 	TP_PROTO(struct cdns2_request *preq),
 	TP_ARGS(preq),
 	TP_STRUCT__entry(
-		__string(name, preq->pep->name)
+		__field(u32, edw3)
 		__field(struct usb_request *, request)
 		__field(struct cdns2_request *, preq)
 		__field(void *, buf)
@@ -278,9 +277,7 @@ DECLARE_EVENT_CLASS(cdns2_log_request,
 		__field(unsigned int, length)
 		__field(int, status)
 		__field(dma_addr_t, dma)
-		__field(int, zero)
-		__field(int, short_not_ok)
-		__field(int, no_interrupt)
+		__field(u32, rdw1)
 		__field(struct scatterlist*, sg)
 		__field(unsigned int, num_sgs)
 		__field(unsigned int, num_mapped_sgs)
@@ -288,7 +285,7 @@ DECLARE_EVENT_CLASS(cdns2_log_request,
 		__field(int, end_trb)
 	),
 	TP_fast_assign(
-		__assign_str(name, preq->pep->name);
+		__entry->edw3 = preq->pep->endpoint.dw3;
 		__entry->request = &preq->request;
 		__entry->preq = preq;
 		__entry->buf = preq->request.buf;
@@ -296,9 +293,7 @@ DECLARE_EVENT_CLASS(cdns2_log_request,
 		__entry->length = preq->request.length;
 		__entry->status = preq->request.status;
 		__entry->dma = preq->request.dma;
-		__entry->zero = preq->request.zero;
-		__entry->short_not_ok = preq->request.short_not_ok;
-		__entry->no_interrupt = preq->request.no_interrupt;
+		__entry->rdw1 = preq->request.dw1;
 		__entry->sg = preq->request.sg;
 		__entry->num_sgs = preq->request.num_sgs;
 		__entry->num_mapped_sgs = preq->request.num_mapped_sgs;
@@ -308,12 +303,12 @@ DECLARE_EVENT_CLASS(cdns2_log_request,
 	TP_printk("%s: req: %p, preq: %p, req buf: %p, length: %u/%u, status: %d,"
 		  "buf dma: (%pad), %s%s%s, sg: %p, num_sgs: %d, num_m_sgs: %d,"
 		  "trb: [start: %d, end: %d]",
-		  __get_str(name), __entry->request, __entry->preq,
+		  USB_EP_NAME(__entry->edw3), __entry->request, __entry->preq,
 		  __entry->buf, __entry->actual, __entry->length,
 		  __entry->status, &__entry->dma,
-		  __entry->zero ? "Z" : "z",
-		  __entry->short_not_ok ? "S" : "s",
-		  __entry->no_interrupt ? "I" : "i",
+		  USB_REQ_ZERO(__entry->rdw1) ? "Z" : "z",
+		  USB_REQ_SHORT_NOT_OK(__entry->rdw1) ? "S" : "s",
+		  USB_REQ_NO_INTERRUPT(__entry->rdw1) ? "I" : "i",
 		  __entry->sg, __entry->num_sgs, __entry->num_mapped_sgs,
 		  __entry->start_trb,
 		  __entry->end_trb
@@ -374,19 +369,19 @@ DECLARE_EVENT_CLASS(cdns2_log_map_request,
 	TP_PROTO(struct cdns2_request *priv_req),
 	TP_ARGS(priv_req),
 	TP_STRUCT__entry(
-		__string(name, priv_req->pep->name)
+		__field(u32, edw3)
 		__field(struct usb_request *, req)
 		__field(void *, buf)
 		__field(dma_addr_t, dma)
 	),
 	TP_fast_assign(
-		__assign_str(name, priv_req->pep->name);
+		__entry->edw3 = priv_req->pep->endpoint.dw3;
 		__entry->req = &priv_req->request;
 		__entry->buf = priv_req->request.buf;
 		__entry->dma = priv_req->request.dma;
 	),
 	TP_printk("%s: req: %p, req buf %p, dma %p",
-		  __get_str(name), __entry->req, __entry->buf, &__entry->dma
+		  USB_EP_NAME(__entry->edw3), __entry->req, __entry->buf, &__entry->dma
 	)
 );
 
@@ -403,7 +398,7 @@ DECLARE_EVENT_CLASS(cdns2_log_trb,
 	TP_PROTO(struct cdns2_endpoint *pep, struct cdns2_trb *trb),
 	TP_ARGS(pep, trb),
 	TP_STRUCT__entry(
-		__string(name, pep->name)
+		__field(u32, edw3)
 		__field(struct cdns2_trb *, trb)
 		__field(u32, buffer)
 		__field(u32, length)
@@ -411,7 +406,7 @@ DECLARE_EVENT_CLASS(cdns2_log_trb,
 		__field(u32, type)
 	),
 	TP_fast_assign(
-		__assign_str(name, pep->name);
+		__entry->edw3 = pep->endpoint.dw3;
 		__entry->trb = trb;
 		__entry->buffer = le32_to_cpu(trb->buffer);
 		__entry->length = le32_to_cpu(trb->length);
@@ -419,7 +414,7 @@ DECLARE_EVENT_CLASS(cdns2_log_trb,
 		__entry->type = usb_endpoint_type(pep->endpoint.desc);
 	),
 	TP_printk("%s: trb V: %p, dma buf: P: 0x%08x, %s",
-		 __get_str(name), __entry->trb, __entry->buffer,
+		 USB_EP_NAME(__entry->edw3), __entry->trb, __entry->buffer,
 		 cdns2_decode_trb(__get_buf(CDNS2_MSG_MAX), CDNS2_MSG_MAX,
 				  __entry->control, __entry->length,
 				  __entry->buffer))
@@ -467,18 +462,16 @@ DECLARE_EVENT_CLASS(cdns2_log_ep,
 	TP_PROTO(struct cdns2_endpoint *pep),
 	TP_ARGS(pep),
 	TP_STRUCT__entry(
-		__string(name, pep->name)
-		__field(unsigned int, maxpacket)
-		__field(unsigned int, maxpacket_limit)
+		__field(u32, edw3)
+		__field(u32, edw1)
 		__field(unsigned int, flags)
 		__field(unsigned int, dir)
 		__field(u8, enqueue)
 		__field(u8, dequeue)
 	),
 	TP_fast_assign(
-		__assign_str(name, pep->name);
-		__entry->maxpacket = pep->endpoint.maxpacket;
-		__entry->maxpacket_limit = pep->endpoint.maxpacket_limit;
+		__entry->edw3 = pep->endpoint.dw3;
+		__entry->edw1 = pep->endpoint.dw1;
 		__entry->flags = pep->ep_state;
 		__entry->dir = pep->dir;
 		__entry->enqueue = pep->ring.enqueue;
@@ -486,8 +479,8 @@ DECLARE_EVENT_CLASS(cdns2_log_ep,
 	),
 	TP_printk("%s: mps: %d/%d, enq idx: %d, deq idx: %d, "
 		  "flags: %s%s%s%s, dir: %s",
-		__get_str(name), __entry->maxpacket,
-		__entry->maxpacket_limit, __entry->enqueue,
+		USB_EP_NAME(__entry->edw3), USB_EP_MAXPACKET(__entry->edw1),
+		USB_EP_MAXPACKET_LIMIT(__entry->edw1), __entry->enqueue,
 		__entry->dequeue,
 		__entry->flags & EP_ENABLED ? "EN | " : "",
 		__entry->flags & EP_STALLED ? "STALLED | " : "",
@@ -559,7 +552,7 @@ DECLARE_EVENT_CLASS(cdns2_log_epx_reg_config,
 	TP_PROTO(struct cdns2_device *pdev, struct cdns2_endpoint *pep),
 	TP_ARGS(pdev, pep),
 	TP_STRUCT__entry(
-		__string(ep_name, pep->name)
+		__field(u32, edw3)
 		__field(u8, burst_size)
 		__field(__le16, maxpack_reg)
 		__field(__u8, con_reg)
@@ -568,7 +561,7 @@ DECLARE_EVENT_CLASS(cdns2_log_epx_reg_config,
 		__field(u32, ep_cfg_reg)
 	),
 	TP_fast_assign(
-		__assign_str(ep_name, pep->name);
+		__entry->edw3 = pep->endpoint.dw3;
 		__entry->burst_size = pep->trb_burst_size;
 		__entry->maxpack_reg = pep->dir ? readw(&pdev->epx_regs->txmaxpack[pep->num - 1]) :
 						  readw(&pdev->epx_regs->rxmaxpack[pep->num - 1]);
@@ -581,7 +574,7 @@ DECLARE_EVENT_CLASS(cdns2_log_epx_reg_config,
 
 	TP_printk("%s, maxpack: %d, con: %02x, dma_ep_sel: %08x, dma_ep_sts_en: %08x"
 		  " dma_ep_cfg %08x",
-		  __get_str(ep_name), __entry->maxpack_reg, __entry->con_reg,
+		 USB_EP_NAME(__entry->edw3), __entry->maxpack_reg, __entry->con_reg,
 		  __entry->ep_sel_reg, __entry->ep_sts_en_reg,
 		  __entry->ep_cfg_reg
 	)
