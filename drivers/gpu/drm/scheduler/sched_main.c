@@ -439,7 +439,7 @@ void drm_sched_stop(struct drm_gpu_scheduler *sched, struct drm_sched_job *bad)
 {
 	struct drm_sched_job *s_job, *tmp;
 
-	kthread_park(sched->thread);
+	drm_sched_submit_stop(sched);
 
 	/*
 	 * Reinsert back the bad job here - now it's safe as
@@ -552,7 +552,7 @@ void drm_sched_start(struct drm_gpu_scheduler *sched, bool full_recovery)
 		spin_unlock(&sched->job_list_lock);
 	}
 
-	kthread_unpark(sched->thread);
+	drm_sched_submit_start(sched);
 }
 EXPORT_SYMBOL(drm_sched_start);
 
@@ -1206,3 +1206,39 @@ void drm_sched_increase_karma(struct drm_sched_job *bad)
 	}
 }
 EXPORT_SYMBOL(drm_sched_increase_karma);
+
+/**
+ * drm_sched_submit_ready - scheduler ready for submission
+ *
+ * @sched: scheduler instance
+ *
+ * Returns true if submission is ready
+ */
+bool drm_sched_submit_ready(struct drm_gpu_scheduler *sched)
+{
+	return !!sched->thread;
+
+}
+EXPORT_SYMBOL(drm_sched_submit_ready);
+
+/**
+ * drm_sched_submit_stop - stop scheduler submission
+ *
+ * @sched: scheduler instance
+ */
+void drm_sched_submit_stop(struct drm_gpu_scheduler *sched)
+{
+	kthread_park(sched->thread);
+}
+EXPORT_SYMBOL(drm_sched_submit_stop);
+
+/**
+ * drm_sched_submit_start - start scheduler submission
+ *
+ * @sched: scheduler instance
+ */
+void drm_sched_submit_start(struct drm_gpu_scheduler *sched)
+{
+	kthread_unpark(sched->thread);
+}
+EXPORT_SYMBOL(drm_sched_submit_start);
