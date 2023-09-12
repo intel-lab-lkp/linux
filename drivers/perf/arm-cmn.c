@@ -111,6 +111,7 @@
 #define CMN_DTM_PMEVCNTSR		0x240
 
 #define CMN_DTM_UNIT_INFO		0x0910
+#define CMN700_DTM_UNIT_INFO		0x0960
 
 #define CMN_DTM_NUM_COUNTERS		4
 /* Want more local counters? Why not replicate the whole DTM! Ugh... */
@@ -2137,6 +2138,8 @@ static int arm_cmn_discover(struct arm_cmn *cmn, unsigned int rgn_offset)
 
 		if (cmn->part == PART_CMN600)
 			xp->dtc = 0xf;
+		else if (cmn->part == PART_CMN700)
+			xp->dtc = 1 << readl_relaxed(xp_region + CMN700_DTM_UNIT_INFO);
 		else
 			xp->dtc = 1 << readl_relaxed(xp_region + CMN_DTM_UNIT_INFO);
 
