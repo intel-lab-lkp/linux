@@ -10054,6 +10054,7 @@ int register_netdevice(struct net_device *dev)
 	idr_init_base(&dev->ethtool->rss_ctx, 1);
 
 	spin_lock_init(&dev->addr_list_lock);
+	mutex_init(&dev->ethtool->rss_lock);
 	netdev_set_addr_lockdep_class(dev);
 
 	ret = dev_get_valid_name(net, dev, dev->name);
@@ -10863,6 +10864,7 @@ static void netdev_rss_contexts_free(struct net_device *dev)
 	if (!dev->ethtool_ops->create_rxfh_context &&
 	    !dev->ethtool_ops->set_rxfh_context)
 		return;
+	mutex_lock(&dev->ethtool->rss_lock);
 	idr_for_each_entry(&dev->ethtool->rss_ctx, ctx, context) {
 		u32 *indir = ethtool_rxfh_context_indir(ctx);
 		u8 *key = ethtool_rxfh_context_key(ctx);
@@ -10877,6 +10879,7 @@ static void netdev_rss_contexts_free(struct net_device *dev)
 							   &context, true);
 		kfree(ctx);
 	}
+	mutex_unlock(&dev->ethtool->rss_lock);
 }
 
 /**
@@ -10989,6 +10992,8 @@ void unregister_netdevice_many_notify(struct list_head *head,
 
 		if (dev->netdev_ops->ndo_uninit)
 			dev->netdev_ops->ndo_uninit(dev);
+
+		mutex_destroy(&dev->ethtool->rss_lock);
 
 		if (skb)
 			rtmsg_ifinfo_send(skb, dev, GFP_KERNEL, portid, nlh);
