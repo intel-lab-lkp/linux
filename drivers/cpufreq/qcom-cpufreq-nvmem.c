@@ -25,6 +25,7 @@
 #include <linux/platform_device.h>
 #include <linux/pm_domain.h>
 #include <linux/pm_opp.h>
+#include <linux/pm_runtime.h>
 #include <linux/slab.h>
 #include <linux/soc/qcom/smem.h>
 
@@ -280,6 +281,7 @@ static int qcom_cpufreq_probe(struct platform_device *pdev)
 	}
 
 	for_each_possible_cpu(cpu) {
+		struct device **virt_devs = NULL;
 		struct dev_pm_opp_config config = {
 			.supported_hw = NULL,
 		};
@@ -300,7 +302,7 @@ static int qcom_cpufreq_probe(struct platform_device *pdev)
 
 		if (drv->data->genpd_names) {
 			config.genpd_names = drv->data->genpd_names;
-			config.virt_devs = NULL;
+			config.virt_devs = &virt_devs;
 		}
 
 		if (config.supported_hw || config.genpd_names) {
@@ -309,6 +311,23 @@ static int qcom_cpufreq_probe(struct platform_device *pdev)
 				ret = drv->opp_tokens[cpu];
 				dev_err(cpu_dev, "Failed to set OPP config\n");
 				goto free_opp;
+			}
+		}
+
+		if (virt_devs) {
+			const char * const *name = config.genpd_names;
+			int i;
+
+			for (i = 0; *name; i++, name++) {
+				ret = pm_runtime_resume_and_get(virt_devs[i]);
+				if (ret) {
+					dev_err(cpu_dev, "failed to resume %s: %d\n",
+						*name, ret);
+					goto free_opp;
+				}
+
+				/* Keep CPU power domain always-on */
+				dev_pm_syscore_device(virt_devs[i], true);
 			}
 		}
 	}
