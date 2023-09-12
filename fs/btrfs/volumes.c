@@ -559,13 +559,13 @@ static int btrfs_free_stale_devices(dev_t devt, struct btrfs_device *skip_device
 {
 	struct btrfs_fs_devices *fs_devices, *tmp_fs_devices;
 	struct btrfs_device *device, *tmp_device;
-	int ret = 0;
+	int ret;
+	bool freed = false;
 
 	lockdep_assert_held(&uuid_mutex);
 
-	if (devt)
-		ret = -ENOENT;
-
+	/* Return good status if there is no instance of devt. */
+	ret = 0;
 	list_for_each_entry_safe(fs_devices, tmp_fs_devices, &fs_uuids, fs_list) {
 
 		mutex_lock(&fs_devices->device_list_mutex);
@@ -576,8 +576,7 @@ static int btrfs_free_stale_devices(dev_t devt, struct btrfs_device *skip_device
 			if (devt && devt != device->devt)
 				continue;
 			if (fs_devices->opened) {
-				/* for an already deleted device return 0 */
-				if (devt && ret != 0)
+				if (devt)
 					ret = -EBUSY;
 				break;
 			}
@@ -587,7 +586,7 @@ static int btrfs_free_stale_devices(dev_t devt, struct btrfs_device *skip_device
 			list_del(&device->dev_list);
 			btrfs_free_device(device);
 
-			ret = 0;
+			freed = true;
 		}
 		mutex_unlock(&fs_devices->device_list_mutex);
 
@@ -597,6 +596,10 @@ static int btrfs_free_stale_devices(dev_t devt, struct btrfs_device *skip_device
 			free_fs_devices(fs_devices);
 		}
 	}
+
+	/* If there is atleast one freed device return 0 */
+	if (freed)
+		return 0;
 
 	return ret;
 }
