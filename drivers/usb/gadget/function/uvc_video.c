@@ -284,10 +284,18 @@ uvc_video_complete(struct usb_ep *ep, struct usb_request *req)
 
 	spin_lock_irqsave(&video->req_lock, flags);
 	list_add_tail(&req->list, &video->req_free);
+	video->req_free_count++;
 	spin_unlock_irqrestore(&video->req_lock, flags);
 
-	if (uvc->state == UVC_STATE_STREAMING)
+	if (uvc->state == UVC_STATE_STREAMING) {
 		queue_work(video->async_wq, &video->pump);
+	} else if (video->req_free_count == video->req_size) {
+		/*
+		 * Wake up thread waiting for all requests to be returned to
+		 * the gadget driver.
+		 */
+		wake_up_interruptible(&video->req_free_queue);
+	}
 }
 
 static int
@@ -316,6 +324,7 @@ uvc_video_free_requests(struct uvc_video *video)
 
 	INIT_LIST_HEAD(&video->req_free);
 	video->req_size = 0;
+	video->req_free_count = 0;
 	return 0;
 }
 
@@ -360,6 +369,7 @@ uvc_video_alloc_requests(struct uvc_video *video)
 	}
 
 	video->req_size = req_size;
+	video->req_free_count = req_size; /* all requests are currently free */
 
 	return 0;
 
@@ -404,6 +414,7 @@ static void uvcg_video_pump(struct work_struct *work)
 		req = list_first_entry(&video->req_free, struct usb_request,
 					list);
 		list_del(&req->list);
+		video->req_free_count--;
 		spin_unlock_irqrestore(&video->req_lock, flags);
 
 		/*
@@ -480,6 +491,7 @@ static void uvcg_video_pump(struct work_struct *work)
 
 	spin_lock_irqsave(&video->req_lock, flags);
 	list_add_tail(&req->list, &video->req_free);
+	video->req_free_count++;
 	spin_unlock_irqrestore(&video->req_lock, flags);
 	return;
 }
@@ -505,6 +517,22 @@ int uvcg_video_enable(struct uvc_video *video, int enable)
 		for (i = 0; i < video->uvc_num_requests; ++i)
 			if (video->ureq && video->ureq[i].req)
 				usb_ep_dequeue(video->ep, video->ureq[i].req);
+
+		/*
+		 * Wait 500ms for the usb_requests to be given back to the
+		 * gadget driver. This ensures that we don't accidentally
+		 * reference de-allocated usb_requests in the complete callback.
+		 */
+		if (video->req_free_count != video->req_size) {
+			uvcg_info(&video->uvc->func,
+					"Waiting 500ms for usb_request complete callbacks.\n");
+			ret = wait_event_interruptible_timeout(
+					video->req_free_queue,
+					video->req_free_count == video->req_size,
+					msecs_to_jiffies(500));
+			uvcg_info(&video->uvc->func,
+					"Done waiting for complete callbacks: %d\n", ret);
+		}
 
 		uvc_video_free_requests(video);
 		uvcg_queue_enable(&video->queue, 0);
@@ -538,6 +566,7 @@ int uvcg_video_init(struct uvc_video *video, struct uvc_device *uvc)
 {
 	INIT_LIST_HEAD(&video->req_free);
 	spin_lock_init(&video->req_lock);
+	init_waitqueue_head(&video->req_free_queue);
 	INIT_WORK(&video->pump, uvcg_video_pump);
 
 	/* Allocate a work queue for asynchronous video pump handler. */
