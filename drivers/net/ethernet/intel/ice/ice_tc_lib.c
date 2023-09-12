@@ -659,6 +659,19 @@ ice_eswitch_tc_parse_action(struct ice_tc_flower_fltr *fltr,
 
 		break;
 
+	case FLOW_ACTION_MIRRED:
+		fltr->action.fltr_act = ICE_MIRROR_PACKET;
+
+		if (ice_is_port_repr_netdev(act->dev)) {
+			repr = ice_netdev_to_repr(act->dev);
+
+			fltr->dest_vsi = repr->src_vsi;
+		} else {
+			NL_SET_ERR_MSG_MOD(fltr->extack, "Provided netdevice doesn't support mirroring");
+			return -EINVAL;
+		}
+		break;
+
 	default:
 		NL_SET_ERR_MSG_MOD(fltr->extack, "Unsupported action in switchdev mode");
 		return -EINVAL;
