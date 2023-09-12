@@ -10869,7 +10869,8 @@ static void netdev_rss_contexts_free(struct net_device *dev)
 
 		idr_remove(&dev->ethtool->rss_ctx, context);
 		if (dev->ethtool_ops->create_rxfh_context)
-			dev->ethtool_ops->remove_rxfh_context(dev, ctx, context);
+			dev->ethtool_ops->remove_rxfh_context(dev, ctx, context,
+							      NULL);
 		else
 			dev->ethtool_ops->set_rxfh_context(dev, indir, key,
 							   ctx->hfunc,
