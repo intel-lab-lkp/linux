@@ -178,10 +178,10 @@ static int test_no_kmem_bypass(const char *root)
 
 	/* Set up test memcg */
 	if (cg_write(root, "cgroup.subtree_control", "+memory"))
-		goto out;
+		return KSFT_FAIL;
 	test_group = cg_name(root, "kmem_bypass_test");
 	if (!test_group)
-		goto out;
+		return KSFT_FAIL;
 
 	/* Spawn memcg child and wait for it to allocate */
 	set_min_free_kb(min_free_kb_low);
@@ -207,8 +207,6 @@ static int test_no_kmem_bypass(const char *root)
 		usleep(100000);
 		free(trigger_allocation);
 		if (get_zswap_stored_pages(&stored_pages))
-			break;
-		if (stored_pages < 0)
 			break;
 		/* If memory was pushed to zswap, verify it belongs to memcg */
 		if (stored_pages > stored_pages_threshold) {
