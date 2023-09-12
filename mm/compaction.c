@@ -1087,11 +1087,17 @@ isolate_migratepages_block(struct compact_control *cc, unsigned long low_pfn,
 		if (PageCompound(page) && !cc->alloc_contig) {
 			const unsigned int order = compound_order(page);
 
-			if (likely(order <= MAX_ORDER)) {
-				low_pfn += (1UL << order) - 1;
-				nr_scanned += (1UL << order) - 1;
+			/*
+			 * Compacting > pageblock_order pages does not improve
+			 * memory fragmentation. Also skip hugetlbfs pages.
+			 */
+			if (likely(order >= pageblock_order) || PageHuge(page)) {
+				if (order <= MAX_ORDER) {
+					low_pfn += (1UL << order) - 1;
+					nr_scanned += (1UL << order) - 1;
+				}
+				goto isolate_fail;
 			}
-			goto isolate_fail;
 		}
 
 		/*
@@ -1213,17 +1219,6 @@ isolate_migratepages_block(struct compact_control *cc, unsigned long low_pfn,
 					low_pfn = end_pfn;
 					goto isolate_abort;
 				}
-			}
-
-			/*
-			 * folio become large since the non-locked check,
-			 * and it's on LRU.
-			 */
-			if (unlikely(folio_test_large(folio) && !cc->alloc_contig)) {
-				low_pfn += folio_nr_pages(folio) - 1;
-				nr_scanned += folio_nr_pages(folio) - 1;
-				folio_set_lru(folio);
-				goto isolate_fail_put;
 			}
 		}
 
