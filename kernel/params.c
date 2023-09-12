@@ -222,8 +222,7 @@ char *parse_args(const char *doing,
 	}								\
 	int param_get_##name(char *buffer, const struct kernel_param *kp) \
 	{								\
-		return scnprintf(buffer, PAGE_SIZE, format "\n",	\
-				*((type *)kp->arg));			\
+		return sysfs_emit(buffer, format "\n", *((type *)kp->arg));	\
 	}								\
 	const struct kernel_param_ops param_ops_##name = {			\
 		.set = param_set_##name,				\
@@ -287,7 +286,7 @@ EXPORT_SYMBOL(param_set_charp);
 
 int param_get_charp(char *buffer, const struct kernel_param *kp)
 {
-	return scnprintf(buffer, PAGE_SIZE, "%s\n", *((char **)kp->arg));
+	return sysfs_emit(buffer, "%s\n", *((char **)kp->arg));
 }
 EXPORT_SYMBOL(param_get_charp);
 
@@ -318,7 +317,7 @@ EXPORT_SYMBOL(param_set_bool);
 int param_get_bool(char *buffer, const struct kernel_param *kp)
 {
 	/* Y and N chosen as being relatively non-coder friendly */
-	return sprintf(buffer, "%c\n", *(bool *)kp->arg ? 'Y' : 'N');
+	return sysfs_emit(buffer, "%c\n", *(bool *)kp->arg ? 'Y' : 'N');
 }
 EXPORT_SYMBOL(param_get_bool);
 
@@ -377,7 +376,7 @@ EXPORT_SYMBOL(param_set_invbool);
 
 int param_get_invbool(char *buffer, const struct kernel_param *kp)
 {
-	return sprintf(buffer, "%c\n", (*(bool *)kp->arg) ? 'N' : 'Y');
+	return sysfs_emit(buffer, "%c\n", (*(bool *)kp->arg) ? 'N' : 'Y');
 }
 EXPORT_SYMBOL(param_get_invbool);
 
@@ -525,7 +524,8 @@ EXPORT_SYMBOL(param_set_copystring);
 int param_get_string(char *buffer, const struct kernel_param *kp)
 {
 	const struct kparam_string *kps = kp->str;
-	return scnprintf(buffer, PAGE_SIZE, "%s\n", kps->string);
+
+	return sysfs_emit(buffer, "%s\n", kps->string);
 }
 EXPORT_SYMBOL(param_get_string);
 
@@ -859,7 +859,7 @@ ssize_t __modver_version_show(struct module_attribute *mattr,
 	struct module_version_attribute *vattr =
 		container_of(mattr, struct module_version_attribute, mattr);
 
-	return scnprintf(buf, PAGE_SIZE, "%s\n", vattr->version);
+	return sysfs_emit(buf, "%s\n", vattr->version);
 }
 
 extern const struct module_version_attribute __start___modver[];
