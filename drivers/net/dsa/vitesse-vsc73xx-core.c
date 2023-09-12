@@ -17,6 +17,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/device.h>
+#include <linux/iopoll.h>
 #include <linux/of.h>
 #include <linux/of_mdio.h>
 #include <linux/bitops.h>
@@ -589,7 +590,7 @@ static enum dsa_tag_protocol vsc73xx_get_tag_protocol(struct dsa_switch *ds,
 	 * cannot access the tag. (See "Internal frame header" section
 	 * 3.9.1 in the manual.)
 	 */
-	return DSA_TAG_PROTO_NONE;
+	return DSA_TAG_PROTO_VSC73XX_8021Q;
 }
 
 static int vsc73xx_setup(struct dsa_switch *ds)
@@ -663,6 +664,12 @@ static int vsc73xx_setup(struct dsa_switch *ds)
 		      0xff);
 
 	mdelay(50);
+
+	rtnl_lock();
+	ret = dsa_tag_8021q_register(ds, htons(ETH_P_8021Q));
+	rtnl_unlock();
+	if (ret)
+		return ret;
 
 	/* Release reset from the internal PHYs */
 	vsc73xx_write(vsc, VSC73XX_BLOCK_SYSTEM, 0, VSC73XX_GLORESET,
@@ -1412,6 +1419,43 @@ static int vsc73xx_port_vlan_del(struct dsa_switch *ds, int port,
 	return 0;
 }
 
+static int vsc73xx_tag_8021q_vlan_add(struct dsa_switch *ds, int port, u16 vid,
+				      u16 flags)
+{
+	bool untagged = flags & BRIDGE_VLAN_INFO_UNTAGGED;
+	bool pvid = flags & BRIDGE_VLAN_INFO_PVID;
+	struct vsc73xx *vsc = ds->priv;
+	int ret;
+
+	if (untagged) {
+		if (!dsa_port_is_vlan_filtering(dsa_to_port(ds, port))) {
+			ret = vsc73xx_vlan_set_untagged(ds, port, vid, false);
+			if (ret)
+				return ret;
+		} else {
+			vsc->untagged_storage[port] = vid;
+		}
+	}
+	if (pvid) {
+		if (!dsa_port_is_vlan_filtering(dsa_to_port(ds, port))) {
+			ret = vsc73xx_vlan_set_pvid(ds, port, vid, false);
+			if (ret)
+				return ret;
+		} else {
+			vsc->pvid_storage[port] = vid;
+		}
+	}
+
+	return vsc73xx_update_vlan_table(vsc, port, vid, 1);
+}
+
+static int vsc73xx_tag_8021q_vlan_del(struct dsa_switch *ds, int port, u16 vid)
+{
+	struct vsc73xx *vsc = ds->priv;
+
+	return vsc73xx_update_vlan_table(vsc, port, vid, 0);
+}
+
 static int vsc73xx_port_setup(struct dsa_switch *ds, int port)
 {
 	struct vsc73xx *vsc = ds->priv;
@@ -1519,6 +1563,8 @@ static const struct dsa_switch_ops vsc73xx_ds_ops = {
 	.port_vlan_filtering = vsc73xx_port_vlan_filtering,
 	.port_vlan_add = vsc73xx_port_vlan_add,
 	.port_vlan_del = vsc73xx_port_vlan_del,
+	.tag_8021q_vlan_add = vsc73xx_tag_8021q_vlan_add,
+	.tag_8021q_vlan_del = vsc73xx_tag_8021q_vlan_del,
 };
 
 static int vsc73xx_gpio_get(struct gpio_chip *chip, unsigned int offset)
