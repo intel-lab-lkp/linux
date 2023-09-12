@@ -7160,6 +7160,7 @@ void ixgbe_update_stats(struct ixgbe_adapter *adapter)
 	netdev->stats.tx_packets = packets;
 
 	hwstats->crcerrs += IXGBE_READ_REG(hw, IXGBE_CRCERRS);
+	hwstats->illerrc += IXGBE_READ_REG(hw, IXGBE_ILLERRC);
 
 	/* 8 register reads */
 	for (i = 0; i < 8; i++) {
@@ -7313,7 +7314,15 @@ void ixgbe_update_stats(struct ixgbe_adapter *adapter)
 	netdev->stats.multicast = hwstats->mprc;
 
 	/* Rx Errors */
-	netdev->stats.rx_errors = hwstats->crcerrs + hwstats->rlec;
+	netdev->stats.rx_errors = hwstats->crcerrs +
+				  hwstats->illerrc +
+				  adapter->hw_csum_rx_error +
+				  hwstats->rlec +
+				  hwstats->ruc +
+				  hwstats->rfc +
+				  hwstats->roc +
+				  hwstats->rjc;
+
 	netdev->stats.rx_dropped = 0;
 	netdev->stats.rx_length_errors = hwstats->rlec;
 	netdev->stats.rx_crc_errors = hwstats->crcerrs;
