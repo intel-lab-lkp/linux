@@ -38,9 +38,32 @@ struct ttm_buffer_object *ttm_bo_kunit_init(struct kunit *test,
 	bo->base = gem_obj;
 	bo->bdev = devs->ttm_dev;
 
+	kref_init(&bo->kref);
+
+	dma_resv_init(&bo->base._resv);
+	bo->base.resv = &bo->base._resv;
+
 	return bo;
 }
 EXPORT_SYMBOL_GPL(ttm_bo_kunit_init);
+
+struct ttm_place *ttm_place_kunit_init(struct kunit *test,
+				       uint32_t mem_type, uint32_t flags,
+				       size_t size)
+{
+	struct ttm_place *place;
+
+	place = kunit_kzalloc(test, sizeof(*place), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_NULL(test, place);
+
+	place->mem_type = mem_type;
+	place->flags = flags;
+	place->fpfn = size >> PAGE_SHIFT;
+	place->lpfn = place->fpfn + (size >> PAGE_SHIFT);
+
+	return place;
+}
+EXPORT_SYMBOL_GPL(ttm_place_kunit_init);
 
 struct ttm_test_devices *ttm_test_devices_basic(struct kunit *test)
 {
