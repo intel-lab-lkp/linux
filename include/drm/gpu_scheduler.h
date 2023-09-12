@@ -234,6 +234,21 @@ struct drm_sched_entity {
 	struct completion		entity_idle;
 
 	/**
+	 * @pending_job_count:
+	 *
+	 * Number of pending jobs.
+	 */
+	unsigned int                    pending_job_count;
+
+	/**
+	 * @jobs_done:
+	 *
+	 * Signals when entity has no pending jobs, used to sequence entity
+	 * cleanup in drm_sched_entity_fini().
+	 */
+	struct completion		jobs_done;
+
+	/**
 	 * @oldest_job_waiting:
 	 *
 	 * Marks earliest job waiting in SW queue
@@ -655,5 +670,8 @@ void drm_sched_resume_timeout(struct drm_gpu_scheduler *sched,
 struct drm_gpu_scheduler *
 drm_sched_pick_best(struct drm_gpu_scheduler **sched_list,
 		     unsigned int num_sched_list);
+
+void drm_sched_add_pending_job(struct drm_sched_job *job, bool tail);
+void drm_sched_remove_pending_job(struct drm_sched_job *job);
 
 #endif

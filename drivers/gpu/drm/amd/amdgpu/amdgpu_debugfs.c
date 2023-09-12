@@ -1873,7 +1873,7 @@ no_preempt:
 	list_for_each_entry_safe(s_job, tmp, &sched->pending_list, list) {
 		if (dma_fence_is_signaled(&s_job->s_fence->finished)) {
 			/* remove job from ring_mirror_list */
-			list_del_init(&s_job->list);
+			drm_sched_remove_pending_job(s_job);
 			sched->ops->free_job(s_job);
 			continue;
 		}

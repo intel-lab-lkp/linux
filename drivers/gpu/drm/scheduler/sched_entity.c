@@ -104,9 +104,11 @@ int drm_sched_entity_init(struct drm_sched_entity *entity,
 	}
 
 	init_completion(&entity->entity_idle);
+	init_completion(&entity->jobs_done);
 
-	/* We start in an idle state. */
+	/* We start in an idle and jobs done state. */
 	complete_all(&entity->entity_idle);
+	complete_all(&entity->jobs_done);
 
 	spin_lock_init(&entity->rq_lock);
 	spsc_queue_init(&entity->job_queue);
@@ -255,6 +257,9 @@ static void drm_sched_entity_kill(struct drm_sched_entity *entity)
 
 	/* Make sure this entity is not used by the scheduler at the moment */
 	wait_for_completion(&entity->entity_idle);
+
+	/* Make sure all pending jobs are done */
+	wait_for_completion(&entity->jobs_done);
 
 	/* The entity is guaranteed to not be used by the scheduler */
 	prev = rcu_dereference_check(entity->last_scheduled, true);
