@@ -696,8 +696,6 @@ extern struct scsi_transport_template *
 sas_domain_attach_transport(struct sas_domain_function_template *);
 extern struct device_attribute dev_attr_phy_event_threshold;
 
-int  sas_discover_end_dev(struct domain_device *);
-
 void sas_init_dev(struct domain_device *);
 
 void sas_task_abort(struct sas_task *);
