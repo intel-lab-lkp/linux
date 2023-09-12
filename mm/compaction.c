@@ -107,6 +107,44 @@ static void split_map_pages(struct list_head *list)
 	list_splice(&tmp_list, list);
 }
 
+static unsigned long release_free_list(struct free_list *freepages)
+{
+	int order;
+	unsigned long high_pfn = 0;
+
+	for (order = 0; order <= MAX_ORDER; order++) {
+		struct page *page, *next;
+
+		list_for_each_entry_safe(page, next, &freepages[order].pages, lru) {
+			unsigned long pfn = page_to_pfn(page);
+
+			list_del(&page->lru);
+			/*
+			 * Convert free pages into post allocation pages, so
+			 * that we can free them via __free_page.
+			 */
+			post_alloc_hook(page, order, __GFP_MOVABLE);
+			__free_pages(page, order);
+			if (pfn > high_pfn)
+				high_pfn = pfn;
+		}
+	}
+	return high_pfn;
+}
+
+static void sort_free_pages(struct list_head *src, struct free_list *dst)
+{
+	unsigned int order;
+	struct page *page, *next;
+
+	list_for_each_entry_safe(page, next, src, lru) {
+		order = buddy_order(page);
+
+		list_move(&page->lru, &dst[order].pages);
+		dst[order].nr_free++;
+	}
+}
+
 #ifdef CONFIG_COMPACTION
 bool PageMovable(struct page *page)
 {
@@ -1422,6 +1460,7 @@ fast_isolate_around(struct compact_control *cc, unsigned long pfn)
 {
 	unsigned long start_pfn, end_pfn;
 	struct page *page;
+	LIST_HEAD(freelist);
 
 	/* Do not search around if there are enough pages already */
 	if (cc->nr_freepages >= cc->nr_migratepages)
@@ -1439,7 +1478,8 @@ fast_isolate_around(struct compact_control *cc, unsigned long pfn)
 	if (!page)
 		return;
 
-	isolate_freepages_block(cc, &start_pfn, end_pfn, &cc->freepages, 1, false);
+	isolate_freepages_block(cc, &start_pfn, end_pfn, &freelist, 1, false);
+	sort_free_pages(&freelist, cc->freepages);
 
 	/* Skip this pageblock in the future as it's full or nearly full */
 	if (start_pfn == end_pfn && !cc->no_set_skip_hint)
@@ -1568,7 +1608,7 @@ static void fast_isolate_freepages(struct compact_control *cc)
 				nr_scanned += nr_isolated - 1;
 				total_isolated += nr_isolated;
 				cc->nr_freepages += nr_isolated;
-				list_add_tail(&page->lru, &cc->freepages);
+				list_add_tail(&page->lru, &cc->freepages[order].pages);
 				count_compact_events(COMPACTISOLATED, nr_isolated);
 			} else {
 				/* If isolation fails, abort the search */
@@ -1642,13 +1682,13 @@ static void isolate_freepages(struct compact_control *cc)
 	unsigned long isolate_start_pfn; /* exact pfn we start at */
 	unsigned long block_end_pfn;	/* end of current pageblock */
 	unsigned long low_pfn;	     /* lowest pfn scanner is able to scan */
-	struct list_head *freelist = &cc->freepages;
 	unsigned int stride;
+	LIST_HEAD(freelist);
 
 	/* Try a small search of the free lists for a candidate */
 	fast_isolate_freepages(cc);
 	if (cc->nr_freepages)
-		goto splitmap;
+		return;
 
 	/*
 	 * Initialise the free scanner. The starting point is where we last
@@ -1708,7 +1748,8 @@ static void isolate_freepages(struct compact_control *cc)
 
 		/* Found a block suitable for isolating free pages from. */
 		nr_isolated = isolate_freepages_block(cc, &isolate_start_pfn,
-					block_end_pfn, freelist, stride, false);
+					block_end_pfn, &freelist, stride, false);
+		sort_free_pages(&freelist, cc->freepages);
 
 		/* Update the skip hint if the full pageblock was scanned */
 		if (isolate_start_pfn == block_end_pfn)
@@ -1749,10 +1790,6 @@ static void isolate_freepages(struct compact_control *cc)
 	 * and the loop terminated due to isolate_start_pfn < low_pfn
 	 */
 	cc->free_pfn = isolate_start_pfn;
-
-splitmap:
-	/* __isolate_free_page() does not map the pages */
-	split_map_pages(freelist);
 }
 
 /*
@@ -1763,18 +1800,21 @@ static struct folio *compaction_alloc(struct folio *src, unsigned long data)
 {
 	struct compact_control *cc = (struct compact_control *)data;
 	struct folio *dst;
+	int order = folio_order(src);
 
-	if (list_empty(&cc->freepages)) {
+	if (!cc->freepages[order].nr_free) {
 		isolate_freepages(cc);
-
-		if (list_empty(&cc->freepages))
+		if (!cc->freepages[order].nr_free)
 			return NULL;
 	}
 
-	dst = list_entry(cc->freepages.next, struct folio, lru);
+	dst = list_first_entry(&cc->freepages[order].pages, struct folio, lru);
+	cc->freepages[order].nr_free--;
 	list_del(&dst->lru);
-	cc->nr_freepages--;
-
+	post_alloc_hook(&dst->page, order, __GFP_MOVABLE);
+	if (order)
+		prep_compound_page(&dst->page, order);
+	cc->nr_freepages -= 1 << order;
 	return dst;
 }
 
@@ -1786,9 +1826,34 @@ static struct folio *compaction_alloc(struct folio *src, unsigned long data)
 static void compaction_free(struct folio *dst, unsigned long data)
 {
 	struct compact_control *cc = (struct compact_control *)data;
+	int order = folio_order(dst);
+	struct page *page = &dst->page;
 
-	list_add(&dst->lru, &cc->freepages);
-	cc->nr_freepages++;
+	if (order) {
+		int i;
+
+		page[1].flags &= ~PAGE_FLAGS_SECOND;
+		for (i = 1; i < (1 << order); i++) {
+			page[i].mapping = NULL;
+			clear_compound_head(&page[i]);
+			page[i].flags &= ~PAGE_FLAGS_CHECK_AT_PREP;
+		}
+
+	}
+	/* revert post_alloc_hook() operations */
+	page->mapping = NULL;
+	page->flags &= ~PAGE_FLAGS_CHECK_AT_PREP;
+	set_page_count(page, 0);
+	page_mapcount_reset(page);
+	reset_page_owner(page, order);
+	page_table_check_free(page, order);
+	arch_free_page(page, order);
+	set_page_private(page, order);
+	INIT_LIST_HEAD(&dst->lru);
+
+	list_add(&dst->lru, &cc->freepages[order].pages);
+	cc->freepages[order].nr_free++;
+	cc->nr_freepages += 1 << order;
 }
 
 /* possible outcome of isolate_migratepages */
@@ -2412,6 +2477,7 @@ compact_zone(struct compact_control *cc, struct capture_control *capc)
 	const bool sync = cc->mode != MIGRATE_ASYNC;
 	bool update_cached;
 	unsigned int nr_succeeded = 0;
+	int order;
 
 	/*
 	 * These counters track activities during zone compaction.  Initialize
@@ -2421,7 +2487,10 @@ compact_zone(struct compact_control *cc, struct capture_control *capc)
 	cc->total_free_scanned = 0;
 	cc->nr_migratepages = 0;
 	cc->nr_freepages = 0;
-	INIT_LIST_HEAD(&cc->freepages);
+	for (order = 0; order <= MAX_ORDER; order++) {
+		INIT_LIST_HEAD(&cc->freepages[order].pages);
+		cc->freepages[order].nr_free = 0;
+	}
 	INIT_LIST_HEAD(&cc->migratepages);
 
 	cc->migratetype = gfp_migratetype(cc->gfp_mask);
@@ -2607,7 +2676,7 @@ out:
 	 * so we don't leave any returned pages behind in the next attempt.
 	 */
 	if (cc->nr_freepages > 0) {
-		unsigned long free_pfn = release_freepages(&cc->freepages);
+		unsigned long free_pfn = release_free_list(cc->freepages);
 
 		cc->nr_freepages = 0;
 		VM_BUG_ON(free_pfn == 0);
@@ -2626,7 +2695,6 @@ out:
 
 	trace_mm_compaction_end(cc, start_pfn, end_pfn, sync, ret);
 
-	VM_BUG_ON(!list_empty(&cc->freepages));
 	VM_BUG_ON(!list_empty(&cc->migratepages));
 
 	return ret;
