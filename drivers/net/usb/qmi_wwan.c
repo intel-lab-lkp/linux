@@ -46,6 +46,10 @@
  * commands on a serial interface
  */
 
+/* Module parameters */
+static bool rawip_as_default;
+module_param(rawip_as_default, bool, 0644);
+
 /* driver specific data */
 struct qmi_wwan_state {
 	struct usb_driver *subdriver;
@@ -843,6 +847,13 @@ static int qmi_wwan_bind(struct usbnet *dev, struct usb_interface *intf)
 	}
 	dev->net->netdev_ops = &qmi_wwan_netdev_ops;
 	dev->net->sysfs_groups[0] = &qmi_wwan_sysfs_attr_group;
+
+	/* Set the driver into rawip mode if requested by module param */
+	if (rawip_as_default) {
+		info->flags |= QMI_WWAN_FLAG_RAWIP;
+		qmi_wwan_netdev_setup(dev->net);
+	}
+
 err:
 	return status;
 }
