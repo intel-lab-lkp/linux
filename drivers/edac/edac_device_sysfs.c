@@ -564,6 +564,13 @@ static int edac_device_create_block(struct edac_device_ctl_info *edac_dev,
 	}
 	kobject_uevent(&block->kobj, KOBJ_ADD);
 
+	/*
+	 * Save kernfs pointer for ue count and ce count
+	 * to notify from any context when attributes change
+	 */
+	block->kn_ue = sysfs_get_dirent(block->kobj.sd, "ue_count");
+	block->kn_ce = sysfs_get_dirent(block->kobj.sd, "ce_count");
+
 	return 0;
 
 	/* Error unwind stack */
@@ -595,6 +602,9 @@ static void edac_device_delete_block(struct edac_device_ctl_info *edac_dev,
 				(struct attribute *) sysfs_attrib);
 		}
 	}
+
+	block->kn_ue = NULL;
+	block->kn_ce = NULL;
 
 	/* unregister this block's kobject, SEE:
 	 *	edac_device_ctrl_block_release() callback operation
@@ -662,6 +672,13 @@ static int edac_device_create_instance(struct edac_device_ctl_info *edac_dev,
 	edac_dbg(4, "Registered instance %d '%s' kobject\n",
 		 idx, instance->name);
 
+	/*
+	 * Save kernfs pointer for ue count and ce count
+	 * to notify from any context when attributes change
+	 */
+	instance->kn_ue = sysfs_get_dirent(instance->kobj.sd, "ue_count");
+	instance->kn_ce = sysfs_get_dirent(instance->kobj.sd, "ce_count");
+
 	return 0;
 
 	/* error unwind stack */
@@ -683,6 +700,9 @@ static void edac_device_delete_instance(struct edac_device_ctl_info *edac_dev,
 	int i;
 
 	instance = &edac_dev->instances[idx];
+
+	instance->kn_ue = NULL;
+	instance->kn_ce = NULL;
 
 	/* unregister all blocks in this instance */
 	for (i = 0; i < instance->nr_blocks; i++)

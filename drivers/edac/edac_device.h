@@ -127,6 +127,10 @@ struct edac_device_block {
 
 	/* edac sysfs device control */
 	struct kobject kobj;
+
+	/* kern fs node for block ue_count and ce count attributes*/
+	struct kernfs_node *kn_ue;
+	struct kernfs_node *kn_ce;
 };
 
 /* device instance control structure */
@@ -141,6 +145,10 @@ struct edac_device_instance {
 
 	/* edac sysfs device control */
 	struct kobject kobj;
+
+	/* kern fs node for block ue_count and ce count attributes*/
+	struct kernfs_node *kn_ue;
+	struct kernfs_node *kn_ce;
 };
 
 

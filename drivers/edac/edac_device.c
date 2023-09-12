@@ -555,11 +555,19 @@ void edac_device_handle_ce_count(struct edac_device_ctl_info *edac_dev,
 	if (instance->nr_blocks > 0) {
 		block = instance->blocks + block_nr;
 		block->counters.ce_count += count;
+
+		/* Notify block sysfs attribute change */
+		if (block->kn_ce)
+			sysfs_notify_dirent(block->kn_ce);
 	}
 
 	/* Propagate the count up the 'totals' tree */
 	instance->counters.ce_count += count;
 	edac_dev->counters.ce_count += count;
+
+	/* Notify instance sysfs attribute change */
+	if (instance->kn_ce)
+		sysfs_notify_dirent(instance->kn_ce);
 
 	if (edac_device_get_log_ce(edac_dev))
 		edac_device_printk(edac_dev, KERN_WARNING,
@@ -601,11 +609,19 @@ void edac_device_handle_ue_count(struct edac_device_ctl_info *edac_dev,
 	if (instance->nr_blocks > 0) {
 		block = instance->blocks + block_nr;
 		block->counters.ue_count += count;
+
+		/* Notify block sysfs attribute change */
+		if (block->kn_ue)
+			sysfs_notify_dirent(block->kn_ue);
 	}
 
 	/* Propagate the count up the 'totals' tree */
 	instance->counters.ue_count += count;
 	edac_dev->counters.ue_count += count;
+
+	/* Notify instance sysfs attribute change */
+	if (instance->kn_ue)
+		sysfs_notify_dirent(instance->kn_ue);
 
 	if (edac_device_get_log_ue(edac_dev))
 		edac_device_printk(edac_dev, KERN_EMERG,
