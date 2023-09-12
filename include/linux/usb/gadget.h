@@ -41,6 +41,7 @@ struct usb_ep;
  * @num_sgs: number of SG entries
  * @num_mapped_sgs: number of SG entries mapped to DMA (internal)
  * @length: Length of that data
+ * @dw1: trace event purpose
  * @stream_id: The stream id, when USB3.0 bulk streams are being used
  * @is_last: Indicates if this is the last request of a stream_id before
  *	switching to a different stream (required for DWC3 controllers).
@@ -105,12 +106,17 @@ struct usb_request {
 	unsigned		num_sgs;
 	unsigned		num_mapped_sgs;
 
-	unsigned		stream_id:16;
-	unsigned		is_last:1;
-	unsigned		no_interrupt:1;
-	unsigned		zero:1;
-	unsigned		short_not_ok:1;
-	unsigned		dma_mapped:1;
+	union {
+		struct {
+			u32	stream_id:16;
+			u32	is_last:1;
+			u32	no_interrupt:1;
+			u32	zero:1;
+			u32	short_not_ok:1;
+			u32	dma_mapped:1;
+		} __packed;
+		u32		dw1;
+	} __aligned(4);
 
 	void			(*complete)(struct usb_ep *ep,
 					struct usb_request *req);
@@ -122,6 +128,31 @@ struct usb_request {
 	int			status;
 	unsigned		actual;
 };
+
+#define USB_REQ_BITFIELD(n, name) \
+	({\
+	union {\
+		struct {\
+			u32	stream_id:16;\
+			u32	is_last:1;\
+			u32	no_interrupt:1;\
+			u32	zero:1;\
+			u32	short_not_ok:1;\
+			u32	dma_mapped:1;\
+		} __packed;\
+		u32		dw1;\
+	} __aligned(4) __r_u_##name;\
+	u32 __r_##name; \
+	BUILD_BUG_ON(sizeof(__r_u_##name) != 4);\
+	__r_u_##name.dw1 = (n); __r_##name = __r_u_##name.name;\
+	__r_##name; })
+
+#define USB_REQ_STREAM_ID(n) USB_REQ_BITFIELD((n), stream_id)
+#define USB_REQ_IS_LAST(n) USB_REQ_BITFIELD((n), stream_id)
+#define USB_REQ_NO_INTERRUPT(n) USB_REQ_BITFIELD((n), stream_id)
+#define USB_REQ_ZERO(n) USB_REQ_BITFIELD((n), stream_id)
+#define USB_REQ_SHORT_NOT_OK(n) USB_REQ_BITFIELD((n), stream_id)
+#define USB_REQ_DMA_MAPPED(n) USB_REQ_BITFIELD((n), stream_id)
 
 /*-------------------------------------------------------------------------*/
 
