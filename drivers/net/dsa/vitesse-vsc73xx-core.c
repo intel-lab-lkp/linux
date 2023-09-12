@@ -600,6 +600,9 @@ static int vsc73xx_setup(struct dsa_switch *ds)
 
 	dev_info(vsc->dev, "set up the switch\n");
 
+	ds->untag_bridge_pvid = true;
+	ds->max_num_bridges = 7;
+
 	/* Issue RESET */
 	vsc73xx_write(vsc, VSC73XX_BLOCK_SYSTEM, 0, VSC73XX_GLORESET,
 		      VSC73XX_GLORESET_MASTER_RESET);
@@ -1456,6 +1459,73 @@ static int vsc73xx_tag_8021q_vlan_del(struct dsa_switch *ds, int port, u16 vid)
 	return vsc73xx_update_vlan_table(vsc, port, vid, 0);
 }
 
+static void vsc73xx_update_forwarding_map(struct vsc73xx *vsc)
+{
+	int i;
+
+	for (i = 0; i < vsc->ds->num_ports; i++) {
+		u32 val;
+
+		vsc73xx_read(vsc, VSC73XX_BLOCK_ANALYZER, 0,
+			     VSC73XX_SRCMASKS + i, &val);
+		/* update only if port is in forwarding state */
+		if (val & VSC73XX_SRCMASKS_PORTS_MASK)
+			vsc73xx_update_bits(vsc, VSC73XX_BLOCK_ANALYZER, 0,
+					    VSC73XX_SRCMASKS + i,
+					    VSC73XX_SRCMASKS_PORTS_MASK,
+					    vsc->forward_map[i]);
+	}
+}
+
+static int vsc73xx_port_bridge_join(struct dsa_switch *ds, int port,
+				    struct dsa_bridge bridge,
+				    bool *tx_fwd_offload,
+				    struct netlink_ext_ack *extack)
+{
+	struct vsc73xx *vsc = ds->priv;
+	int i;
+
+	*tx_fwd_offload = true;
+
+	for (i = 0; i < ds->num_ports; i++) {
+		/* Add this port to the forwarding matrix of the
+		 * other ports in the same bridge, and viceversa.
+		 */
+		if (!dsa_is_user_port(ds, i))
+			continue;
+
+		if (i == port)
+			continue;
+
+		if (!dsa_port_offloads_bridge(dsa_to_port(ds, i), &bridge))
+			continue;
+
+		vsc->forward_map[port] |= VSC73XX_SRCMASKS_PORTS_MASK & BIT(i);
+		vsc->forward_map[i] |= VSC73XX_SRCMASKS_PORTS_MASK & BIT(port);
+	}
+	vsc73xx_update_forwarding_map(vsc);
+
+	return dsa_tag_8021q_bridge_join(ds, port, bridge);
+}
+
+static void vsc73xx_port_bridge_leave(struct dsa_switch *ds, int port,
+				      struct dsa_bridge bridge)
+{
+	struct vsc73xx *vsc = ds->priv;
+	int i;
+
+	/* configure forward map to CPU <-> port only */
+	for (i = 0; i < vsc->ds->num_ports; i++) {
+		if (i == CPU_PORT)
+			continue;
+		vsc->forward_map[i] &= VSC73XX_SRCMASKS_PORTS_MASK & ~BIT(port);
+	}
+	vsc->forward_map[port] = VSC73XX_SRCMASKS_PORTS_MASK & BIT(CPU_PORT);
+
+	vsc73xx_update_forwarding_map(vsc);
+	dsa_tag_8021q_bridge_leave(ds, port, bridge);
+}
+
 static int vsc73xx_port_setup(struct dsa_switch *ds, int port)
 {
 	struct vsc73xx *vsc = ds->priv;
@@ -1557,6 +1627,8 @@ static const struct dsa_switch_ops vsc73xx_ds_ops = {
 	.get_sset_count = vsc73xx_get_sset_count,
 	.port_enable = vsc73xx_port_enable,
 	.port_disable = vsc73xx_port_disable,
+	.port_bridge_join = vsc73xx_port_bridge_join,
+	.port_bridge_leave = vsc73xx_port_bridge_leave,
 	.port_change_mtu = vsc73xx_change_mtu,
 	.port_max_mtu = vsc73xx_get_max_mtu,
 	.port_stp_state_set = vsc73xx_port_stp_state_set,
