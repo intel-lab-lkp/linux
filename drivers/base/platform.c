@@ -808,6 +808,7 @@ struct platform_device *platform_device_register_full(
 {
 	int ret;
 	struct platform_device *pdev;
+	struct acpi_device *adev = to_acpi_device_node(pdevinfo->fwnode);
 
 	pdev = platform_device_alloc(pdevinfo->name, pdevinfo->id);
 	if (!pdev)
@@ -840,6 +841,9 @@ struct platform_device *platform_device_register_full(
 		if (ret)
 			goto err;
 	}
+
+	if (adev)
+		set_dev_node(&pdev->dev, acpi_get_node(adev->handle));
 
 	ret = platform_device_add(pdev);
 	if (ret) {
