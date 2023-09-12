@@ -194,13 +194,14 @@ struct usb_ep_ops {
  * @dir_out:Endpoint supports OUT direction.
  */
 struct usb_ep_caps {
-	unsigned type_control:1;
-	unsigned type_iso:1;
-	unsigned type_bulk:1;
-	unsigned type_int:1;
-	unsigned dir_in:1;
-	unsigned dir_out:1;
-};
+	u8	type_control:1;
+	u8	type_iso:1;
+	u8	type_bulk:1;
+	u8	type_int:1;
+	u8	dir_in:1;
+	u8	dir_out:1;
+	u8	reserve:2;
+} __packed;
 
 #define USB_EP_CAPS_TYPE_CONTROL     0x01
 #define USB_EP_CAPS_TYPE_ISO         0x02
@@ -230,6 +231,9 @@ struct usb_ep_caps {
  * @caps:The structure describing types and directions supported by endpoint.
  * @enabled: The current endpoint enabled/disabled state.
  * @claimed: True if this endpoint is claimed by a function.
+ * @dw1: trace event purpose
+ * @dw2: trace event purpose
+ * @dw3: trace event purpose
  * @maxpacket:The maximum packet size used on this endpoint.  The initial
  *	value can sometimes be reduced (hardware allowing), according to
  *	the endpoint descriptor used to configure the endpoint.
@@ -259,18 +263,88 @@ struct usb_ep {
 	const char		*name;
 	const struct usb_ep_ops	*ops;
 	struct list_head	ep_list;
-	struct usb_ep_caps	caps;
-	bool			claimed;
-	bool			enabled;
-	unsigned		maxpacket:16;
-	unsigned		maxpacket_limit:16;
-	unsigned		max_streams:16;
-	unsigned		mult:2;
-	unsigned		maxburst:5;
-	u8			address;
+	union {
+		struct {
+			u32	maxpacket:16;
+			u32	maxpacket_limit:16;
+		} __packed;
+		u32	dw1;
+	} __aligned(4);
+	union {
+		struct {
+			u32	max_streams:16;
+			u32	mult:2;
+			u32	maxburst:5;
+		} __packed;
+		u32	dw2;
+	} __aligned(4);
+	union {
+		struct {
+			struct usb_ep_caps	caps;
+			u8			claimed:1;
+			u8			enabled:1;
+			u8			address;
+		} __packed;
+		u32	dw3;
+	} __aligned(4);
 	const struct usb_endpoint_descriptor	*desc;
 	const struct usb_ss_ep_comp_descriptor	*comp_desc;
 };
+
+#define USB_EP_DW1_BITFIELD(n, name) \
+	({\
+	union {\
+		struct {\
+			u32	maxpacket:16;\
+			u32	maxpacket_limit:16;\
+		} __packed;\
+		u32		dw1;\
+	} __aligned(4) __e_u_##name;\
+	u32 __e_##name;\
+	BUILD_BUG_ON(sizeof(__e_u_##name) != 4);\
+	__e_u_##name.dw1 = (n); __e_##name = __e_u_##name.name;\
+	__e_##name; })
+
+#define USB_EP_MAXPACKET(n) USB_EP_DW1_BITFIELD((n), maxpacket)
+#define USB_EP_MAXPACKET_LIMIT(n) USB_EP_DW1_BITFIELD((n), maxpacket_limit)
+
+#define USB_EP_DW2_BITFIELD(n, name) \
+	({\
+	union {\
+		struct {\
+			u32	max_streams:16;\
+			u32	mult:2;\
+			u32	maxburst:5;\
+		} __packed;\
+		u32		dw2;\
+	} __aligned(4) __e_u_##name;\
+	u32 __e_##name; \
+	BUILD_BUG_ON(sizeof(__e_u_##name) != 4);\
+	__e_u_##name.dw2 = (n); __e_##name = __e_u_##name.name;\
+	__e_##name; })
+
+#define USB_EP_MAX_STREAMS(n) USB_EP_DW2_BITFIELD((n), max_streams)
+#define USB_EP_MULT(n) USB_EP_DW2_BITFIELD((n), mult)
+#define USB_EP_MAXBURST(n) USB_EP_DW2_BITFIELD((n), maxburst)
+
+
+#define USB_EP_NAME(n) \
+	({char __s[9]; /* max 8: ep127out */ \
+	union {\
+		struct {\
+			struct usb_ep_caps	caps;\
+			u8			claimed:1;\
+			u8			enabled:1;\
+			u8			address;\
+		} __packed;\
+		u32		dw3;\
+	} __aligned(4) __e_u_##name;\
+	BUILD_BUG_ON(sizeof(__e_u_##name) != 4);\
+	__e_u_##name.dw3 = (n);\
+	snprintf(__s, 9, "ep%d%s", __e_u_##name.address, \
+		(__e_u_##name.caps.dir_in && __e_u_##name.caps.dir_out) ? "" : \
+			__e_u_##name.caps.dir_in ? "in" : "out");\
+	__s; })
 
 /*-------------------------------------------------------------------------*/
 
