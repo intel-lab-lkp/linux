@@ -82,6 +82,8 @@ config KVM_SW_PROTECTED_VM
 	depends on EXPERT
 	depends on X86_64
 	select KVM_GENERIC_PRIVATE_MEM
+	select HAVE_GENERIC_PRIVATE_MEM_HANDLE_ERROR
+	select KVM_GENERIC_PRIVATE_MEM_BMAP
 	help
 	  Enable support for KVM software-protected VMs.  Currently "protected"
 	  means the VM can be backed with memory provided by
