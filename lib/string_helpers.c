@@ -721,10 +721,16 @@ EXPORT_SYMBOL_GPL(kstrdup_quotable_file);
 
 /*
  * Returns duplicate string in which the @old characters are replaced by @new.
+ *
+ * If @new is NUL, copy the string up to the first occurrence of @old, which
+ * will be replaced by a NUL.
  */
 char *kstrdup_and_replace(const char *src, char old, char new, gfp_t gfp)
 {
 	char *dst;
+
+	if (new == '\0')
+		return kmemdup_nul(src, strchrnul(src, old) - src, gfp);
 
 	dst = kstrdup(src, gfp);
 	if (!dst)
