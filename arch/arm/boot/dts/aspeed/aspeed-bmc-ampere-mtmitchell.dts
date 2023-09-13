@@ -541,7 +541,6 @@
 };
 
 &adc0 {
-	ref_voltage = <2500>;
 	status = "okay";
 
 	pinctrl-names = "default";
@@ -552,7 +551,6 @@
 };
 
 &adc1 {
-	ref_voltage = <2500>;
 	status = "okay";
 
 	pinctrl-names = "default";
