@@ -5734,6 +5734,7 @@ unthrottle_throttle:
 #ifdef CONFIG_SMP
 static void __cfsb_csd_unthrottle(void *arg)
 {
+	unsigned int rq_clock_flags;
 	struct cfs_rq *cursor, *tmp;
 	struct rq *rq = arg;
 	struct rq_flags rf;
@@ -5746,7 +5747,7 @@ static void __cfsb_csd_unthrottle(void *arg)
 	 * Do it once and skip the potential next ones.
 	 */
 	update_rq_clock(rq);
-	rq_clock_start_loop_update(rq);
+	rq_clock_start_loop_update(rq, &rq_clock_flags);
 
 	/*
 	 * Since we hold rq lock we're safe from concurrent manipulation of
@@ -5767,7 +5768,7 @@ static void __cfsb_csd_unthrottle(void *arg)
 
 	rcu_read_unlock();
 
-	rq_clock_stop_loop_update(rq);
+	rq_clock_stop_loop_update(rq, &rq_clock_flags);
 	rq_unlock(rq, &rf);
 }
 
@@ -6285,6 +6286,7 @@ static void __maybe_unused update_runtime_enabled(struct rq *rq)
 /* cpu offline callback */
 static void __maybe_unused unthrottle_offline_cfs_rqs(struct rq *rq)
 {
+	unsigned int rq_clock_flags;
 	struct task_group *tg;
 
 	lockdep_assert_rq_held(rq);
@@ -6294,7 +6296,7 @@ static void __maybe_unused unthrottle_offline_cfs_rqs(struct rq *rq)
 	 * set_rq_offline(), so we should skip updating
 	 * the rq clock again in unthrottle_cfs_rq().
 	 */
-	rq_clock_start_loop_update(rq);
+	rq_clock_start_loop_update(rq, &rq_clock_flags);
 
 	rcu_read_lock();
 	list_for_each_entry_rcu(tg, &task_groups, list) {
@@ -6319,7 +6321,7 @@ static void __maybe_unused unthrottle_offline_cfs_rqs(struct rq *rq)
 	}
 	rcu_read_unlock();
 
-	rq_clock_stop_loop_update(rq);
+	rq_clock_stop_loop_update(rq, &rq_clock_flags);
 }
 
 bool cfs_task_bw_constrained(struct task_struct *p)

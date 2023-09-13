@@ -1558,20 +1558,22 @@ static inline void rq_clock_cancel_skipupdate(struct rq *rq)
  * when using list_for_each_entry_*)
  * rq_clock_start_loop_update() can be called after updating the clock
  * once and before iterating over the list to prevent multiple update.
+ * And use @rq_clock_flags to record the previous state of rq->clock_update_flags.
  * After the iterative traversal, we need to call rq_clock_stop_loop_update()
- * to clear RQCF_ACT_SKIP of rq->clock_update_flags.
+ * to restore rq->clock_update_flags through @rq_clock_flags.
  */
-static inline void rq_clock_start_loop_update(struct rq *rq)
+static inline void rq_clock_start_loop_update(struct rq *rq, unsigned int *rq_clock_flags)
 {
 	lockdep_assert_rq_held(rq);
-	SCHED_WARN_ON(rq->clock_update_flags & RQCF_ACT_SKIP);
+	assert_clock_updated(rq);
+	*rq_clock_flags = rq->clock_update_flags;
 	rq->clock_update_flags |= RQCF_ACT_SKIP;
 }
 
-static inline void rq_clock_stop_loop_update(struct rq *rq)
+static inline void rq_clock_stop_loop_update(struct rq *rq, unsigned int *rq_clock_flags)
 {
 	lockdep_assert_rq_held(rq);
-	rq->clock_update_flags &= ~RQCF_ACT_SKIP;
+	rq->clock_update_flags = *rq_clock_flags;
 }
 
 struct rq_flags {
