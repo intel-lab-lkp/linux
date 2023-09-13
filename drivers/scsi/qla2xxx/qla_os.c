@@ -1891,6 +1891,11 @@ __qla2x00_abort_all_cmds(struct qla_qpair *qp, int res)
 				}
 				cmd = (struct qla_tgt_cmd *)sp;
 				cmd->aborted = 1;
+				cmd->trc_flags |= TRC_CTIO_ABORTED;
+				cmd->cmd_sent_to_fw = 0;
+				qlt_unmap_sg(vha, cmd);
+				ha->tgt.tgt_ops->free_cmd(cmd);
+
 				break;
 			case TYPE_TGT_TMCMD:
 				/* Skip task management functions. */

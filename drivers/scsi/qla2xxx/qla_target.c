@@ -542,6 +542,11 @@ static void qla2x00_async_nack_sp_done(srb_t *sp, int res)
 	    "Async done-%s res %x %8phC  type %d\n",
 	    sp->name, res, sp->fcport->port_name, sp->type);
 
+	if (!vha->hw->base_qpair) {
+		kref_put(&sp->cmd_kref, qla2x00_sp_release);
+		return;
+	}
+
 	spin_lock_irqsave(&vha->hw->tgt.sess_lock, flags);
 	sp->fcport->flags &= ~FCF_ASYNC_SENT;
 	sp->fcport->chip_reset = vha->hw->base_qpair->chip_reset;
@@ -2477,7 +2482,7 @@ out_err:
 	return -1;
 }
 
-static void qlt_unmap_sg(struct scsi_qla_host *vha, struct qla_tgt_cmd *cmd)
+void qlt_unmap_sg(struct scsi_qla_host *vha, struct qla_tgt_cmd *cmd)
 {
 	struct qla_hw_data *ha;
 	struct qla_qpair *qpair;
@@ -3246,6 +3251,7 @@ int qlt_xmit_response(struct qla_tgt_cmd *cmd, int xmit_type,
 	uint8_t scsi_status)
 {
 	struct scsi_qla_host *vha = cmd->vha;
+	struct qla_hw_data *ha = vha->hw;
 	struct qla_qpair *qpair = cmd->qpair;
 	struct ctio7_to_24xx *pkt;
 	struct qla_tgt_prm prm;
@@ -3256,6 +3262,8 @@ int qlt_xmit_response(struct qla_tgt_cmd *cmd, int xmit_type,
 	if (!qpair->fw_started || (cmd->reset_count != qpair->chip_reset) ||
 	    (cmd->sess && cmd->sess->deleted)) {
 		cmd->state = QLA_TGT_STATE_PROCESSED;
+		qlt_unmap_sg(vha, cmd);
+		ha->tgt.tgt_ops->free_cmd(cmd);
 		return 0;
 	}
 
