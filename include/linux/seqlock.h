@@ -1239,4 +1239,54 @@ done_seqretry_irqrestore(seqlock_t *lock, int seq, unsigned long flags)
 	if (seq & 1)
 		read_sequnlock_excl_irqrestore(lock, flags);
 }
+
+/*
+ * Like read_seqbegin_or_lock/need_seqretry/done_seqretry above
+ * but for seqcount_LOCKNAME_t.
+ */
+
+#define read_seqcount_begin_or_lock(s, lock, seq)		\
+do {								\
+	if (!(*(seq) & 1))					\
+		*(seq) = read_seqcount_begin(s);		\
+	else							\
+		seqprop_lock((s), (lock));			\
+} while (0)
+
+#define need_seqcount_retry(s, seq)				\
+({								\
+	!((seq) & 1) && read_seqcount_retry((s), (seq));	\
+})
+
+#define done_seqcount_retry(s, lock, seq)			\
+do {								\
+	if ((seq) & 1)						\
+		seqprop_unlock((s), (lock));			\
+} while (0)
+
+
+#define read_seqcount_begin_or_lock_irqsave(s, lock, seq)	\
+({								\
+	unsigned long flags = 0;				\
+								\
+	if (!(*(seq) & 1))					\
+		*(seq) = read_seqcount_begin(s);		\
+	else {							\
+		if (!IS_ENABLED(CONFIG_PREEMPT_RT))		\
+			local_irq_save(flags);			\
+		seqprop_lock((s), (lock));			\
+	}							\
+								\
+	flags;							\
+})
+
+#define done_seqcount_retry_irqrestore(s, lock, seq, flags)	\
+do {								\
+	if ((seq) & 1) {					\
+		seqprop_unlock((s), (lock));			\
+		if (!IS_ENABLED(CONFIG_PREEMPT_RT))		\
+			local_irq_restore((flags));		\
+	}							\
+} while (0)
+
 #endif /* __LINUX_SEQLOCK_H */
