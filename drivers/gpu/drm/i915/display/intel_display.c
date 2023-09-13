@@ -2380,9 +2380,13 @@ void
 intel_link_compute_m_n(u16 bits_per_pixel, int nlanes,
 		       int pixel_clock, int link_clock,
 		       struct intel_link_m_n *m_n,
-		       bool fec_enable)
+		       bool fec_enable,
+		       bool is_dsc_fractional_bpp)
 {
 	u32 data_clock = bits_per_pixel * pixel_clock;
+
+	if (is_dsc_fractional_bpp)
+		data_clock = DIV_ROUND_UP(bits_per_pixel * pixel_clock, 16);
 
 	if (fec_enable)
 		data_clock = intel_dp_mode_to_fec_clock(data_clock);
