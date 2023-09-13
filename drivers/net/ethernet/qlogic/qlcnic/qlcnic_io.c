@@ -832,6 +832,7 @@ static int qlcnic_alloc_rx_skb(struct qlcnic_adapter *adapter,
 	if (dma_mapping_error(&pdev->dev, dma)) {
 		adapter->stats.rx_dma_map_error++;
 		dev_kfree_skb_any(skb);
+		skb = NULL;
 		return -ENOMEM;
 	}
 
