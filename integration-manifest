@@ -1,0 +1,26 @@
+drm drm-fixes afaf2b38025ab327c85e218f36d1819e777d4d45
+	Merge tag 'drm-misc-next-fixes-2023-09-11' of git://anongit.freedesktop.org/drm/drm-misc into drm-fixes
+drm-misc drm-misc-fixes c900529f3d9161bfde5cca0754f83b4d3c3e0220
+	Merge drm/drm-fixes into drm-misc-fixes
+drm-intel drm-intel-fixes 7c95ec3b59479bb24093918bbfc801c9f31826f2
+	drm/i915: Only check eDP HPD when AUX CH is shared
+drm drm-next 0bb80ecc33a8fb5a682236443c1e740d5c917d1d
+	Linux 6.6-rc1
+drm-misc drm-misc-next-fixes d20b484c674d2eae816978a98fa38b4054aeca3b
+	drm/drm_exec: Work around a WW mutex lockdep oddity
+drm-intel drm-intel-next-fixes 0bb80ecc33a8fb5a682236443c1e740d5c917d1d
+	Linux 6.6-rc1
+drm-misc drm-misc-next fc71f615fd08a530d24c7af0a1efa72ec6ea8e34
+	drm/amd/display: Fix -Wuninitialized in dm_helpers_dp_mst_send_payload_allocation()
+drm-intel drm-intel-next 3072a24c778a7102d70692af5556e47363114c67
+	drm/i915: Introduce crtc_state->enhanced_framing
+drm-intel drm-intel-gt-next 3b2562dcf91d460753871415f9571effc7965fcf
+	drm/i915/gt: skip WA verification for GEN7_MISCCPCTL on DG2
+drm-intel topic/core-for-CI 4dfdf656708ee83de89dfb6289c290012212e4c6
+	PCI/ASPM: pci_enable_link_state: Add argument to acquire bus lock
+drm-misc topic/i915-ttm 1e3944578b749449bd7fa6bf0bae4c3d3f5f1733
+	Merge tag 'amd-drm-next-5.16-2021-09-27' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm topic/nouveau-misc dfc4005f8c172eea359f9db08c3b2b0ff0153699
+	drm/nouveau/disp: move DAC load detection method
+drm topic/drm-ci ad6bfe1b66a5c146ec236847eca7af4c8806d666
+	drm: ci: docs: fix build warning - add missing escape
