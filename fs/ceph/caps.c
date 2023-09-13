@@ -4624,7 +4624,7 @@ unsigned long ceph_check_delayed_caps(struct ceph_mds_client *mdsc)
 	struct ceph_inode_info *ci;
 	struct ceph_mount_options *opt = mdsc->fsc->mount_options;
 	unsigned long delay_max = opt->caps_wanted_delay_max * HZ;
-	unsigned long loop_start = jiffies;
+	unsigned long loop_start = jiffies, end;
 	unsigned long delay = 0;
 
 	doutc(cl, "begin\n");
@@ -4633,14 +4633,17 @@ unsigned long ceph_check_delayed_caps(struct ceph_mds_client *mdsc)
 		ci = list_first_entry(&mdsc->cap_delay_list,
 				      struct ceph_inode_info,
 				      i_cap_delay_list);
-		if (time_before(loop_start, ci->i_hold_caps_max - delay_max)) {
-			doutc(cl, "caps added recently.  Exiting loop");
-			delay = ci->i_hold_caps_max;
-			break;
+		/* Do not break the loop if CEPH_I_FLUSH is set. */
+		if (!(ci->i_ceph_flags & CEPH_I_FLUSH)) {
+			end = ci->i_hold_caps_max - delay_max;
+			if (time_before(loop_start, end)) {
+				doutc(cl, "caps added recently.  Exiting loop");
+				delay = ci->i_hold_caps_max;
+				break;
+			}
+			if (time_before(jiffies, ci->i_hold_caps_max))
+				break;
 		}
-		if ((ci->i_ceph_flags & CEPH_I_FLUSH) == 0 &&
-		    time_before(jiffies, ci->i_hold_caps_max))
-			break;
 		list_del_init(&ci->i_cap_delay_list);
 
 		inode = igrab(&ci->netfs.inode);
