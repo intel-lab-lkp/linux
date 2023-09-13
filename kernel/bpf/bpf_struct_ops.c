@@ -615,7 +615,10 @@ static void __bpf_struct_ops_map_free(struct bpf_map *map)
 	if (st_map->links)
 		bpf_struct_ops_map_put_progs(st_map);
 	bpf_map_area_free(st_map->links);
-	bpf_jit_free_exec(st_map->image);
+	if (st_map->image) {
+		bpf_jit_free_exec(st_map->image);
+		bpf_jit_uncharge_modmem(PAGE_SIZE);
+	}
 	bpf_map_area_free(st_map->uvalue);
 	bpf_map_area_free(st_map);
 }
@@ -657,6 +660,7 @@ static struct bpf_map *bpf_struct_ops_map_alloc(union bpf_attr *attr)
 	struct bpf_struct_ops_map *st_map;
 	const struct btf_type *t, *vt;
 	struct bpf_map *map;
+	int ret;
 
 	st_ops = bpf_struct_ops_find_value(attr->btf_vmlinux_value_type_id);
 	if (!st_ops)
@@ -680,6 +684,12 @@ static struct bpf_map *bpf_struct_ops_map_alloc(union bpf_attr *attr)
 
 	st_map->st_ops = st_ops;
 	map = &st_map->map;
+
+	ret = bpf_jit_charge_modmem(PAGE_SIZE);
+	if (ret) {
+		__bpf_struct_ops_map_free(map);
+		return ERR_PTR(ret);
+	}
 
 	st_map->uvalue = bpf_map_area_alloc(vt->size, NUMA_NO_NODE);
 	st_map->links =
@@ -907,4 +917,3 @@ err_out:
 	kfree(link);
 	return err;
 }
-
