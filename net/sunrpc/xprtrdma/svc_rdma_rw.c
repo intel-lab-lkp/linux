@@ -272,7 +272,7 @@ static void svc_rdma_write_done(struct ib_cq *cq, struct ib_wc *wc)
 
 	switch (wc->status) {
 	case IB_WC_SUCCESS:
-		trace_svcrdma_wc_write(wc, &cc->cc_cid);
+		trace_svcrdma_wc_write(&cc->cc_cid);
 		svc_rdma_wake_send_waiters(rdma, cc->cc_sqecount);
 		svc_rdma_write_info_free(info);
 		return;
