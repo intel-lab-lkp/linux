@@ -816,6 +816,8 @@ int i915_driver_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	i915->do_release = true;
 
+	intel_fbdev_setup(i915);
+
 	return 0;
 
 out_cleanup_gem:
