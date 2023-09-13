@@ -1896,6 +1896,8 @@ static void l2cap_conn_del(struct hci_conn *hcon, int err)
 
 	BT_DBG("hcon %p conn %p, err %d", hcon, conn, err);
 
+	hcon->l2cap_data = NULL;
+
 	kfree_skb(conn->rx_skb);
 
 	skb_queue_purge(&conn->pending_rx);
@@ -1931,13 +1933,15 @@ static void l2cap_conn_del(struct hci_conn *hcon, int err)
 
 	mutex_unlock(&conn->chan_lock);
 
-	hci_chan_del(conn->hchan);
+	if (conn->hchan) {
+		conn->hchan->cleanup = NULL;
+		hci_chan_del(conn->hchan);
+		conn->hchan = NULL;
+	}
 
 	if (conn->info_state & L2CAP_INFO_FEAT_MASK_REQ_SENT)
 		cancel_delayed_work_sync(&conn->info_timer);
 
-	hcon->l2cap_data = NULL;
-	conn->hchan = NULL;
 	l2cap_conn_put(conn);
 }
 
@@ -7830,6 +7834,24 @@ static void process_pending_rx(struct work_struct *work)
 		l2cap_recv_frame(conn, skb);
 }
 
+static void l2cap_conn_hchan_cleanup(struct hci_chan *hchan)
+{
+	struct hci_conn *hcon = hchan->conn;
+	struct l2cap_conn *conn;
+
+	if (!hcon)
+		return;
+
+	conn = hcon->l2cap_data;
+	if (!conn)
+		return;
+
+	/* hci_chan_del has been called so we shouldn't call it gain. */
+	conn->hchan = NULL;
+
+	l2cap_conn_del(hcon, bt_to_errno(HCI_ERROR_LOCAL_HOST_TERM));
+}
+
 static struct l2cap_conn *l2cap_conn_add(struct hci_conn *hcon)
 {
 	struct l2cap_conn *conn = hcon->l2cap_data;
@@ -7852,6 +7874,7 @@ static struct l2cap_conn *l2cap_conn_add(struct hci_conn *hcon)
 	hcon->l2cap_data = conn;
 	conn->hcon = hci_conn_get(hcon);
 	conn->hchan = hchan;
+	hchan->cleanup = l2cap_conn_hchan_cleanup;
 
 	BT_DBG("hcon %p conn %p hchan %p", hcon, conn, hchan);
 
