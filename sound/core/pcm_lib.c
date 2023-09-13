@@ -1404,6 +1404,65 @@ int snd_pcm_hw_constraint_ratdens(struct snd_pcm_runtime *runtime,
 }
 EXPORT_SYMBOL(snd_pcm_hw_constraint_ratdens);
 
+static int snd_pcm_hw_rule_subformats(struct snd_pcm_hw_params *params,
+				      struct snd_pcm_hw_rule *rule)
+{
+	const struct snd_pcm_hw_constraint_subformat *sf;
+	snd_pcm_format_t k;
+	struct snd_mask m;
+	struct snd_mask *fmask = hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT);
+	struct snd_mask *mask = hw_param_mask(params, SNDRV_PCM_HW_PARAM_SUBFORMAT);
+	bool found;
+
+	snd_mask_none(&m);
+	snd_mask_set(&m, (__force unsigned)SNDRV_PCM_SUBFORMAT_STD);
+	pcm_for_each_format(k) {
+		if (!snd_mask_test(fmask, k))
+			continue;
+		found = false;
+		for (sf = rule->private; sf && sf->format != SNDRV_PCM_FORMAT_CONSTRAINT_END; sf++) {
+			if (sf->format != k)
+				continue;
+			found = true;
+			m.bits[0] |= sf->subformats;
+			break;
+		}
+		if (!found && snd_pcm_format_linear(k))
+			snd_mask_set(&m, (__force unsigned)SNDRV_PCM_SUBFORMAT_MSBITS_MAX);
+	}
+	return snd_mask_refine(mask, &m);
+}
+
+/**
+ * snd_pcm_hw_constraint_subformats - add a hw constraint subformats rule
+ * @runtime: PCM runtime instance
+ * @cond: condition bits
+ * @subformats: array with struct snd_pcm_subformat elements
+ *
+ * This constraint will set relation between format and subformats.
+ * The STD and MAX subformats are handled automatically. If the driver
+ * does not set this constraint, only STD and MAX subformats are handled.
+ *
+ * Return: Zero if successful, or a negative error code on failure.
+ */
+int snd_pcm_hw_constraint_subformats(struct snd_pcm_runtime *runtime,
+				     unsigned int cond,
+				     struct snd_pcm_hw_constraint_subformat *subformats)
+{
+	int ret;
+
+	ret = snd_pcm_hw_rule_add(runtime, cond, -1,
+				  snd_pcm_hw_rule_subformats,
+				  (void*) subformats,
+				  SNDRV_PCM_HW_PARAM_SUBFORMAT,
+				  SNDRV_PCM_HW_PARAM_FORMAT, -1);
+	if (ret < 0)
+		return ret;
+	runtime->subformat_constraint = 1;
+	return 0;
+}
+EXPORT_SYMBOL(snd_pcm_hw_constraint_subformats);
+
 static int snd_pcm_hw_rule_msbits(struct snd_pcm_hw_params *params,
 				  struct snd_pcm_hw_rule *rule)
 {
