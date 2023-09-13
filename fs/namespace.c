@@ -4988,6 +4988,57 @@ SYSCALL_DEFINE5(statmnt, u64, mnt_id,
 	return err;
 }
 
+static long do_listmnt(struct vfsmount *mnt, u64 __user *buf, size_t bufsize,
+		      const struct path *root)
+{
+	struct mount *r, *m = real_mount(mnt);
+	struct path rootmnt = { .mnt = root->mnt, .dentry = root->mnt->mnt_root };
+	long ctr = 0;
+
+	if (!capable(CAP_SYS_ADMIN) &&
+	    !is_path_reachable(m, mnt->mnt_root, &rootmnt))
+		return -EPERM;
+
+	list_for_each_entry(r, &m->mnt_mounts, mnt_child) {
+		if (!capable(CAP_SYS_ADMIN) &&
+		    !is_path_reachable(r, r->mnt.mnt_root, root))
+			continue;
+
+		if (ctr >= bufsize)
+			return -EOVERFLOW;
+		if (put_user(r->mnt_id_unique, buf + ctr))
+			return -EFAULT;
+		ctr++;
+		if (ctr < 0)
+			return -ERANGE;
+	}
+	return ctr;
+}
+
+SYSCALL_DEFINE4(listmnt, u64, mnt_id, u64 __user *, buf, size_t, bufsize,
+		unsigned int, flags)
+{
+	struct vfsmount *mnt;
+	struct path root;
+	long err;
+
+	if (flags)
+		return -EINVAL;
+
+	down_read(&namespace_sem);
+	mnt = lookup_mnt_in_ns(mnt_id, current->nsproxy->mnt_ns);
+	err = -ENOENT;
+	if (mnt) {
+		get_fs_root(current->fs, &root);
+		err = do_listmnt(mnt, buf, bufsize, &root);
+		path_put(&root);
+	}
+	up_read(&namespace_sem);
+
+	return err;
+}
+
+
 static void __init init_mount_tree(void)
 {
 	struct vfsmount *mnt;

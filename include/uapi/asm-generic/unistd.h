@@ -826,8 +826,11 @@ __SYSCALL(__NR_fchmodat2, sys_fchmodat2)
 #define __NR_statmnt   454
 __SYSCALL(__NR_statmnt, sys_statmnt)
 
+#define __NR_listmnt   455
+__SYSCALL(__NR_listmnt, sys_listmnt)
+
 #undef __NR_syscalls
-#define __NR_syscalls 455
+#define __NR_syscalls 456
 
 /*
  * 32 bit systems traditionally used different

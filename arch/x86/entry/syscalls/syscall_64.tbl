@@ -376,6 +376,7 @@
 452	common	fchmodat2		sys_fchmodat2
 453	64	map_shadow_stack	sys_map_shadow_stack
 454	common	statmnt			sys_statmnt
+455	common	listmnt			sys_listmnt
 
 #
 # Due to a historical design error, certain syscalls are numbered differently
