@@ -1380,7 +1380,7 @@ static bool intel_dp_supports_fec(struct intel_dp *intel_dp,
 static bool intel_dp_supports_dsc(struct intel_dp *intel_dp,
 				  const struct intel_crtc_state *crtc_state)
 {
-	if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_DP) && !crtc_state->fec_enable)
+	if (!intel_dp_is_edp(intel_dp) && !crtc_state->fec_enable)
 		return false;
 
 	return intel_dsc_source_support(crtc_state) &&
