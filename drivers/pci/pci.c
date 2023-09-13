@@ -2752,6 +2752,11 @@ int pci_prepare_to_sleep(struct pci_dev *dev)
 	if (target_state == PCI_POWER_ERROR)
 		return -EIO;
 
+	/* quirk to avoid setting D3 */
+	if (wakeup && dev->dev_flags & PCI_DEV_FLAGS_NO_WAKE_D3 &&
+	   (target_state == PCI_D3hot || target_state == PCI_D3cold))
+		target_state = PCI_D0;
+
 	pci_enable_wake(dev, target_state, wakeup);
 
 	error = pci_set_power_state(dev, target_state);

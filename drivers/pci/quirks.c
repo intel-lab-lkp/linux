@@ -3869,6 +3869,34 @@ static void quirk_apple_poweroff_thunderbolt(struct pci_dev *dev)
 DECLARE_PCI_FIXUP_SUSPEND_LATE(PCI_VENDOR_ID_INTEL,
 			       PCI_DEVICE_ID_INTEL_CACTUS_RIDGE_4C,
 			       quirk_apple_poweroff_thunderbolt);
+
+
+/*
+ * Putting PCIe root ports on Ryzen SoCs with USB4 controllers into D3 power
+ * states may cause problems when the system attempts wake up from s2idle.
+ *
+ * This manifests as a missing wakeup interrupt on the following systems:
+ * Family 19h model 44h (PCI 0x14b9)
+ * Family 19h model 74h (PCI 0x14eb)
+ * Family 19h model 78h (PCI 0x14eb)
+ *
+ * Add a quirk to the root port if a USB4 controller is connected to it
+ * to avoid D3 power states.
+ */
+static void quirk_ryzen_rp_d3(struct pci_dev *pdev)
+{
+	struct pci_dev *child = NULL;
+
+	while (child = pci_get_class(PCI_CLASS_SERIAL_USB_USB4, child)) {
+		if (pci_upstream_bridge(child) != pdev)
+			continue;
+		pdev->dev_flags |= PCI_DEV_FLAGS_NO_WAKE_D3;
+		pci_info(pdev, "quirk: disabling D3 for wakeup\n");
+		break;
+	}
+}
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_AMD, 0x14b9, quirk_ryzen_rp_d3);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_AMD, 0x14eb, quirk_ryzen_rp_d3);
 #endif
 
 /*
