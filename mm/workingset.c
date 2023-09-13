@@ -519,7 +519,11 @@ void workingset_refault(struct folio *folio, void *shadow)
 		return;
 	}
 
-	/* Flush stats (and potentially sleep) before holding RCU read lock */
+	/*
+	 * Flush stats (and potentially sleep) before holding RCU read lock
+	 * XXX: This can be reworked to pass in a memcg, similar to
+	 * mem_cgroup_flush_stats().
+	 */
 	mem_cgroup_flush_stats_ratelimited();
 
 	rcu_read_lock();
@@ -664,7 +668,7 @@ static unsigned long count_shadow_nodes(struct shrinker *shrinker,
 		struct lruvec *lruvec;
 		int i;
 
-		mem_cgroup_flush_stats();
+		mem_cgroup_flush_stats(sc->memcg);
 		lruvec = mem_cgroup_lruvec(sc->memcg, NODE_DATA(sc->nid));
 		for (pages = 0, i = 0; i < NR_LRU_LISTS; i++)
 			pages += lruvec_page_state_local(lruvec,

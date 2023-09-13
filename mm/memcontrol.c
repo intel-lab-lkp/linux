@@ -588,7 +588,6 @@ mem_cgroup_largest_soft_limit_node(struct mem_cgroup_tree_per_node *mctz)
 static void flush_memcg_stats_dwork(struct work_struct *w);
 static DECLARE_DEFERRABLE_WORK(stats_flush_dwork, flush_memcg_stats_dwork);
 static DEFINE_PER_CPU(unsigned int, stats_updates);
-static atomic_t stats_flush_ongoing = ATOMIC_INIT(0);
 /* stats_updates_order is in multiples of MEMCG_CHARGE_BATCH */
 static atomic_t stats_updates_order = ATOMIC_INIT(0);
 static u64 flush_last_time;
@@ -639,36 +638,87 @@ static inline void memcg_rstat_updated(struct mem_cgroup *memcg, int val)
 	}
 }
 
-static void do_flush_stats(void)
+/*
+ * do_flush_stats - flush the statistics of a memory cgroup and its tree
+ * @memcg: the memory cgroup to flush
+ * @wait: wait for an ongoing root flush to complete before returning
+ *
+ * All flushes are serialized by the underlying rstat global lock. If there is
+ * no contention, we try to only flush the subtree of the passed @memcg to
+ * minimize the work. Otherwise, we coalesce multiple flushing requests into a
+ * single flush of the root memcg. When there is an ongoing root flush, we wait
+ * for its completion (unless otherwise requested), to get fresh stats. If the
+ * number of waiters exceeds the number of cpus just skip the flush to bound the
+ * flush latency at the tail with very high concurrency.
+ *
+ * This is a trade-off between stats accuracy and flush latency.
+ */
+static void do_flush_stats(struct mem_cgroup *memcg, bool wait)
 {
+	static DECLARE_COMPLETION(root_flush_done);
+	static DEFINE_SPINLOCK(root_flusher_lock);
+	static DEFINE_MUTEX(subtree_flush_mutex);
+	static atomic_t waiters = ATOMIC_INIT(0);
+	static bool root_flush_ongoing;
+	bool root_flusher = false;
+
+	/* Ongoing root flush, just wait for it (unless otherwise requested) */
+	if (READ_ONCE(root_flush_ongoing))
+		goto root_flush_or_wait;
+
 	/*
-	 * We always flush the entire tree, so concurrent flushers can just
-	 * skip. This avoids a thundering herd problem on the rstat global lock
-	 * from memcg flushers (e.g. reclaim, refault, etc).
+	 * Opportunistically try to only flush the requested subtree. Otherwise
+	 * fallback to a coalesced flush below.
 	 */
-	if (atomic_read(&stats_flush_ongoing) ||
-	    atomic_xchg(&stats_flush_ongoing, 1))
+	if (!mem_cgroup_is_root(memcg) && mutex_trylock(&subtree_flush_mutex)) {
+		cgroup_rstat_flush(memcg->css.cgroup);
+		mutex_unlock(&subtree_flush_mutex);
 		return;
+	}
 
-	WRITE_ONCE(flush_last_time, jiffies_64);
+	/* A coalesced root flush is in order. Are we the designated flusher? */
+	spin_lock(&root_flusher_lock);
+	if (!READ_ONCE(root_flush_ongoing)) {
+		reinit_completion(&root_flush_done);
+		/*
+		 * We must reset the completion before setting
+		 * root_flush_ongoing. Otherwise, waiters may call
+		 * wait_for_completion() and immediately return before we flush.
+		 */
+		smp_wmb();
+		WRITE_ONCE(root_flush_ongoing, true);
+		root_flusher = true;
+	}
+	spin_unlock(&root_flusher_lock);
 
-	cgroup_rstat_flush(root_mem_cgroup->css.cgroup);
-
-	atomic_set(&stats_updates_order, 0);
-	atomic_set(&stats_flush_ongoing, 0);
+root_flush_or_wait:
+	if (root_flusher) {
+		cgroup_rstat_flush(root_mem_cgroup->css.cgroup);
+		complete_all(&root_flush_done);
+		atomic_set(&stats_updates_order, 0);
+		WRITE_ONCE(flush_last_time, jiffies_64);
+		WRITE_ONCE(root_flush_ongoing, false);
+	} else if (wait && atomic_add_unless(&waiters, 1, num_online_cpus())) {
+		smp_rmb(); /* see smp_wmb() above */
+		wait_for_completion_interruptible(&root_flush_done);
+		atomic_dec(&waiters);
+	}
 }
 
-void mem_cgroup_flush_stats(void)
+void mem_cgroup_flush_stats(struct mem_cgroup *memcg)
 {
+	if (!memcg)
+		memcg = root_mem_cgroup;
+
 	if (atomic_read(&stats_updates_order) > STATS_FLUSH_THRESHOLD)
-		do_flush_stats();
+		do_flush_stats(memcg, true);
 }
 
 void mem_cgroup_flush_stats_ratelimited(void)
 {
 	/* Only flush if the periodic flusher is one full cycle late */
 	if (time_after64(jiffies_64, READ_ONCE(flush_last_time) + 2*FLUSH_TIME))
-		mem_cgroup_flush_stats();
+		mem_cgroup_flush_stats(root_mem_cgroup);
 }
 
 static void flush_memcg_stats_dwork(struct work_struct *w)
@@ -677,7 +727,7 @@ static void flush_memcg_stats_dwork(struct work_struct *w)
 	 * Deliberately ignore stats_updates_order here so that flushing in
 	 * latency-sensitive paths is as cheap as possible.
 	 */
-	do_flush_stats();
+	do_flush_stats(root_mem_cgroup, false);
 	queue_delayed_work(system_unbound_wq, &stats_flush_dwork, FLUSH_TIME);
 }
 
@@ -1577,7 +1627,7 @@ static void memcg_stat_format(struct mem_cgroup *memcg, struct seq_buf *s)
 	 *
 	 * Current memory state:
 	 */
-	mem_cgroup_flush_stats();
+	mem_cgroup_flush_stats(memcg);
 
 	for (i = 0; i < ARRAY_SIZE(memory_stats); i++) {
 		u64 size;
@@ -4019,7 +4069,7 @@ static int memcg_numa_stat_show(struct seq_file *m, void *v)
 	int nid;
 	struct mem_cgroup *memcg = mem_cgroup_from_seq(m);
 
-	mem_cgroup_flush_stats();
+	mem_cgroup_flush_stats(memcg);
 
 	for (stat = stats; stat < stats + ARRAY_SIZE(stats); stat++) {
 		seq_printf(m, "%s=%lu", stat->name,
@@ -4094,7 +4144,7 @@ static void memcg1_stat_format(struct mem_cgroup *memcg, struct seq_buf *s)
 
 	BUILD_BUG_ON(ARRAY_SIZE(memcg1_stat_names) != ARRAY_SIZE(memcg1_stats));
 
-	mem_cgroup_flush_stats();
+	mem_cgroup_flush_stats(memcg);
 
 	for (i = 0; i < ARRAY_SIZE(memcg1_stats); i++) {
 		unsigned long nr;
@@ -4596,7 +4646,7 @@ void mem_cgroup_wb_stats(struct bdi_writeback *wb, unsigned long *pfilepages,
 	struct mem_cgroup *memcg = mem_cgroup_from_css(wb->memcg_css);
 	struct mem_cgroup *parent;
 
-	mem_cgroup_flush_stats();
+	mem_cgroup_flush_stats(memcg);
 
 	*pdirty = memcg_page_state(memcg, NR_FILE_DIRTY);
 	*pwriteback = memcg_page_state(memcg, NR_WRITEBACK);
@@ -6618,7 +6668,7 @@ static int memory_numa_stat_show(struct seq_file *m, void *v)
 	int i;
 	struct mem_cgroup *memcg = mem_cgroup_from_seq(m);
 
-	mem_cgroup_flush_stats();
+	mem_cgroup_flush_stats(memcg);
 
 	for (i = 0; i < ARRAY_SIZE(memory_stats); i++) {
 		int nid;
@@ -7784,7 +7834,7 @@ bool obj_cgroup_may_zswap(struct obj_cgroup *objcg)
 			break;
 		}
 
-		cgroup_rstat_flush(memcg->css.cgroup);
+		mem_cgroup_flush_stats(memcg);
 		pages = memcg_page_state(memcg, MEMCG_ZSWAP_B) / PAGE_SIZE;
 		if (pages < max)
 			continue;
@@ -7849,8 +7899,10 @@ void obj_cgroup_uncharge_zswap(struct obj_cgroup *objcg, size_t size)
 static u64 zswap_current_read(struct cgroup_subsys_state *css,
 			      struct cftype *cft)
 {
-	cgroup_rstat_flush(css->cgroup);
-	return memcg_page_state(mem_cgroup_from_css(css), MEMCG_ZSWAP_B);
+	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
+
+	mem_cgroup_flush_stats(memcg);
+	return memcg_page_state(memcg, MEMCG_ZSWAP_B);
 }
 
 static int zswap_max_show(struct seq_file *m, void *v)
