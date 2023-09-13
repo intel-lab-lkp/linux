@@ -95,21 +95,7 @@ struct snd_card {
 	void (*private_free) (struct snd_card *card); /* callback for freeing of
 								private data */
 	struct list_head devices;	/* devices */
-
-	struct device *ctl_dev;		/* control device */
-	unsigned int last_numid;	/* last used numeric ID */
-	struct rw_semaphore controls_rwsem;	/* controls lock (list and values) */
-	rwlock_t ctl_files_rwlock;	/* ctl_files list lock */
-	int controls_count;		/* count of all controls */
-	size_t user_ctl_alloc_size;	// current memory allocation by user controls.
-	struct list_head controls;	/* all controls for this card */
-	struct list_head ctl_files;	/* active control files */
-#ifdef CONFIG_SND_CTL_FAST_LOOKUP
-	struct xarray ctl_numids;	/* hash table for numids */
-	struct xarray ctl_hash;		/* hash table for ctl id matching */
-	bool ctl_hash_collision;	/* ctl_hash collision seen? */
-#endif
-
+	struct snd_control *ctl;	/* control devices */
 	struct snd_info_entry *proc_root;	/* root for soundcard specific files */
 	struct proc_dir_entry *proc_root_link;	/* number link to real id */
 
@@ -144,6 +130,22 @@ struct snd_card {
 #if IS_ENABLED(CONFIG_SND_MIXER_OSS)
 	struct snd_mixer_oss *mixer_oss;
 	int mixer_oss_change_count;
+#endif
+};
+
+struct snd_control {
+	struct device dev;		/* control device */
+	struct rw_semaphore controls_rwsem;	/* controls lock (list and values) */
+	rwlock_t files_rwlock;	/* ctl_files list lock */
+	int controls_count;		/* count of all controls */
+	size_t user_ctl_alloc_size;	/* current memory allocation by user controls. */
+	struct list_head controls;	/* all controls for this card */
+	struct list_head files;	/* active control files */
+	unsigned int last_numid;	/* last used numeric ID */
+#ifdef CONFIG_SND_CTL_FAST_LOOKUP
+	struct xarray numids;	/* hash table for numids */
+	struct xarray hash;		/* hash table for ctl id matching */
+	bool hash_collision;	/* ctl_hash collision seen? */
 #endif
 };
 

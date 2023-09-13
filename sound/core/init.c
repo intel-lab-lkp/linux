@@ -328,14 +328,6 @@ static int snd_card_init(struct snd_card *card, struct device *parent,
 	card->module = module;
 #endif
 	INIT_LIST_HEAD(&card->devices);
-	init_rwsem(&card->controls_rwsem);
-	rwlock_init(&card->ctl_files_rwlock);
-	INIT_LIST_HEAD(&card->controls);
-	INIT_LIST_HEAD(&card->ctl_files);
-#ifdef CONFIG_SND_CTL_FAST_LOOKUP
-	xa_init(&card->ctl_numids);
-	xa_init(&card->ctl_hash);
-#endif
 	spin_lock_init(&card->files_lock);
 	INIT_LIST_HEAD(&card->files_list);
 	mutex_init(&card->memory_mutex);
@@ -360,11 +352,9 @@ static int snd_card_init(struct snd_card *card, struct device *parent,
 	snprintf(card->irq_descr, sizeof(card->irq_descr), "%s:%s",
 		 dev_driver_string(card->dev), dev_name(&card->card_dev));
 
-	/* the control interface cannot be accessed from the user space until */
-	/* snd_cards_bitmask and snd_cards are set with snd_card_register */
-	err = snd_ctl_create(card);
+	err = snd_control_new(card);
 	if (err < 0) {
-		dev_err(parent, "unable to register control minors\n");
+		dev_err(parent, "unable to create controls and register\n");
 		goto __error;
 	}
 	err = snd_info_card_create(card);

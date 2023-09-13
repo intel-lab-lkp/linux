@@ -35,7 +35,7 @@ struct snd_kcontrol *snd_soc_card_get_kcontrol(struct snd_soc_card *soc_card,
 	if (unlikely(!name))
 		return NULL;
 
-	list_for_each_entry(kctl, &card->controls, list)
+	list_for_each_entry(kctl, &card->ctl->controls, list)
 		if (!strncmp(kctl->id.name, name, sizeof(kctl->id.name)))
 			return kctl;
 	return NULL;

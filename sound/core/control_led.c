@@ -243,6 +243,7 @@ static int snd_ctl_led_set_id(int card_number, struct snd_ctl_elem_id *id,
 			      unsigned int group, bool set)
 {
 	struct snd_card *card;
+	struct snd_control *ctl;
 	struct snd_kcontrol *kctl;
 	struct snd_kcontrol_volatile *vd;
 	unsigned int ioff, access, new_access;
@@ -250,7 +251,8 @@ static int snd_ctl_led_set_id(int card_number, struct snd_ctl_elem_id *id,
 
 	card = snd_card_ref(card_number);
 	if (card) {
-		down_write(&card->controls_rwsem);
+		ctl = card->ctl;
+		down_write(&ctl->controls_rwsem);
 		kctl = snd_ctl_find_id_locked(card, id);
 		if (kctl) {
 			ioff = snd_ctl_get_ioff(kctl, id);
@@ -271,7 +273,7 @@ static int snd_ctl_led_set_id(int card_number, struct snd_ctl_elem_id *id,
 			err = -ENOENT;
 		}
 unlock:
-		up_write(&card->controls_rwsem);
+		up_write(&ctl->controls_rwsem);
 		snd_card_unref(card);
 	} else {
 		err = -ENXIO;
@@ -357,7 +359,7 @@ static void snd_ctl_led_register(struct snd_card *card)
 	snd_ctl_led_card_valid[card->number] = true;
 	mutex_unlock(&snd_ctl_led_mutex);
 	/* the register callback is already called with held card->controls_rwsem */
-	list_for_each_entry(kctl, &card->controls, list)
+	list_for_each_entry(kctl, &card->ctl->controls, list)
 		for (ioff = 0; ioff < kctl->count; ioff++)
 			snd_ctl_led_notify(card, SNDRV_CTL_EVENT_MASK_VALUE, kctl, ioff);
 	snd_ctl_led_refresh();
@@ -617,12 +619,14 @@ static ssize_t list_show(struct device *dev,
 	struct snd_ctl_led_card *led_card = container_of(dev, struct snd_ctl_led_card, dev);
 	struct snd_card *card;
 	struct snd_ctl_led_ctl *lctl;
+	struct snd_control *ctl;
 	size_t l = 0;
 
 	card = snd_card_ref(led_card->number);
 	if (!card)
 		return -ENXIO;
-	down_read(&card->controls_rwsem);
+	ctl = card->ctl;
+	down_read(&ctl->controls_rwsem);
 	mutex_lock(&snd_ctl_led_mutex);
 	if (snd_ctl_led_card_valid[led_card->number]) {
 		list_for_each_entry(lctl, &led_card->led->controls, list) {
@@ -635,7 +639,7 @@ static ssize_t list_show(struct device *dev,
 		}
 	}
 	mutex_unlock(&snd_ctl_led_mutex);
-	up_read(&card->controls_rwsem);
+	up_read(&ctl->controls_rwsem);
 	snd_card_unref(card);
 	return l;
 }
@@ -688,7 +692,7 @@ static void snd_ctl_led_sysfs_add(struct snd_card *card)
 			goto cerr;
 		led->cards[card->number] = led_card;
 		snprintf(link_name, sizeof(link_name), "led-%s", led->name);
-		WARN(sysfs_create_link(&card->ctl_dev->kobj, &led_card->dev.kobj, link_name),
+		WARN(sysfs_create_link(&card->ctl->dev.kobj, &led_card->dev.kobj, link_name),
 			"can't create symlink to controlC%i device\n", card->number);
 		WARN(sysfs_create_link(&led_card->dev.kobj, &card->card_dev.kobj, "card"),
 			"can't create symlink to card%i\n", card->number);
@@ -714,7 +718,7 @@ static void snd_ctl_led_sysfs_remove(struct snd_card *card)
 		if (!led_card)
 			continue;
 		snprintf(link_name, sizeof(link_name), "led-%s", led->name);
-		sysfs_remove_link(&card->ctl_dev->kobj, link_name);
+		sysfs_remove_link(&card->ctl->dev.kobj, link_name);
 		sysfs_remove_link(&led_card->dev.kobj, "card");
 		device_unregister(&led_card->dev);
 		led->cards[card->number] = NULL;

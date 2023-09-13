@@ -1784,13 +1784,14 @@ void snd_hda_ctls_clear(struct hda_codec *codec)
 int snd_hda_lock_devices(struct hda_bus *bus)
 {
 	struct snd_card *card = bus->card;
+	struct snd_control *ctl = card->ctl;
 	struct hda_codec *codec;
 
 	spin_lock(&card->files_lock);
 	if (card->shutdown)
 		goto err_unlock;
 	card->shutdown = 1;
-	if (!list_empty(&card->ctl_files))
+	if (!list_empty(&ctl->files))
 		goto err_clear;
 
 	list_for_each_codec(codec, bus) {
