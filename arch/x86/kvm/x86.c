@@ -2714,8 +2714,9 @@ static void __kvm_synchronize_tsc(struct kvm_vcpu *vcpu, u64 offset, u64 tsc,
 	kvm_track_tsc_matching(vcpu);
 }
 
-static void kvm_synchronize_tsc(struct kvm_vcpu *vcpu, u64 data)
+static void kvm_synchronize_tsc(struct kvm_vcpu *vcpu, u64 *user_value)
 {
+	u64 data = user_value ? *user_value : 0;
 	struct kvm *kvm = vcpu->kvm;
 	u64 offset, ns, elapsed;
 	unsigned long flags;
@@ -2728,14 +2729,17 @@ static void kvm_synchronize_tsc(struct kvm_vcpu *vcpu, u64 data)
 	elapsed = ns - kvm->arch.last_tsc_nsec;
 
 	if (vcpu->arch.virtual_tsc_khz) {
+		/*
+		 * Force synchronization when creating or hotplugging a vCPU,
+		 * i.e. when the TSC value is '0', to help keep clocks stable.
+		 * If this is NOT a hotplug/creation case, skip synchronization
+		 * on the first write from userspace so as not to misconstrue
+		 * state restoration after live migration as an attempt from
+		 * userspace to synchronize.
+		 */
 		if (data == 0) {
-			/*
-			 * detection of vcpu initialization -- need to sync
-			 * with other vCPUs. This particularly helps to keep
-			 * kvm_clock stable after CPU hotplug
-			 */
 			synchronizing = true;
-		} else {
+		} else if (kvm->arch.user_set_tsc) {
 			u64 tsc_exp = kvm->arch.last_tsc_write +
 						nsec_to_cycles(vcpu, elapsed);
 			u64 tsc_hz = vcpu->arch.virtual_tsc_khz * 1000LL;
@@ -2748,6 +2752,9 @@ static void kvm_synchronize_tsc(struct kvm_vcpu *vcpu, u64 data)
 					data + tsc_hz > tsc_exp;
 		}
 	}
+
+	if (user_value)
+		kvm->arch.user_set_tsc = true;
 
 	/*
 	 * For a reliable TSC, we can match TSC offsets, and for an unstable
@@ -3777,7 +3784,7 @@ int kvm_set_msr_common(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 		break;
 	case MSR_IA32_TSC:
 		if (msr_info->host_initiated) {
-			kvm_synchronize_tsc(vcpu, data);
+			kvm_synchronize_tsc(vcpu, &data);
 		} else {
 			u64 adj = kvm_compute_l1_tsc_offset(vcpu, data) - vcpu->arch.l1_tsc_offset;
 			adjust_tsc_offset_guest(vcpu, adj);
@@ -11959,7 +11966,7 @@ void kvm_arch_vcpu_postcreate(struct kvm_vcpu *vcpu)
 	if (mutex_lock_killable(&vcpu->mutex))
 		return;
 	vcpu_load(vcpu);
-	kvm_synchronize_tsc(vcpu, 0);
+	kvm_synchronize_tsc(vcpu, NULL);
 	vcpu_put(vcpu);
 
 	/* poll control enabled by default */
