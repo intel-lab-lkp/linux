@@ -307,6 +307,9 @@ static int kvm_gmem_error_page(struct address_space *mapping, struct page *page)
 	pgoff_t start, end;
 	gfn_t gfn;
 
+	if (!IS_ENABLED(CONFIG_HAVE_GENERIC_PRIVATE_MEM_HANDLE_ERROR))
+		return MF_IGNORED;
+
 	filemap_invalidate_lock_shared(mapping);
 
 	start = page->index;
