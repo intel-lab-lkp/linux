@@ -200,6 +200,7 @@
 	pf(VID_RND)		/* Random VLAN ID */			\
 	pf(SVID_RND)		/* Random SVLAN ID */			\
 	pf(NODE)		/* Node memory alloc*/			\
+	pf(SHARED)		/* Shared SKB */			\
 
 #define pf(flag)		flag##_SHIFT,
 enum pkt_flags {
@@ -1198,7 +1199,8 @@ static ssize_t pktgen_if_write(struct file *file,
 		    ((pkt_dev->xmit_mode == M_NETIF_RECEIVE) ||
 		     !(pkt_dev->odev->priv_flags & IFF_TX_SKB_SHARING)))
 			return -ENOTSUPP;
-		if (value > 0 && pkt_dev->n_imix_entries > 0)
+		if (value > 0 && (pkt_dev->n_imix_entries > 0 ||
+				  !(pkt_dev->flags & F_SHARED)))
 			return -EINVAL;
 
 		i += len;
@@ -1211,6 +1213,9 @@ static ssize_t pktgen_if_write(struct file *file,
 		len = num_arg(&user_buffer[i], 10, &value);
 		if (len < 0)
 			return len;
+
+		if ((value > 0) && !(pkt_dev->flags & F_SHARED))
+			return -EINVAL;
 
 		i += len;
 		pkt_dev->count = value;
@@ -1257,6 +1262,10 @@ static ssize_t pktgen_if_write(struct file *file,
 		     ((pkt_dev->xmit_mode == M_START_XMIT) &&
 		     (!(pkt_dev->odev->priv_flags & IFF_TX_SKB_SHARING)))))
 			return -ENOTSUPP;
+
+		if ((value > 1) && !(pkt_dev->flags & F_SHARED))
+			return -EINVAL;
+
 		pkt_dev->burst = value < 1 ? 1 : value;
 		sprintf(pg_result, "OK: burst=%u", pkt_dev->burst);
 		return count;
@@ -1334,10 +1343,18 @@ static ssize_t pktgen_if_write(struct file *file,
 		flag = pktgen_read_flag(f, &disable);
 
 		if (flag) {
-			if (disable)
+			if (disable) {
+				/* If "clone_skb", "burst", or "count" parameters are
+				 * configured, it means that the skb still needs to be
+				 * referenced by the pktgen, so the skb must be shared.
+				 */
+				if (flag == F_SHARED && (pkt_dev->clone_skb ||
+							 pkt_dev->burst > 1 || pkt_dev->count))
+					return -EINVAL;
 				pkt_dev->flags &= ~flag;
-			else
+			} else {
 				pkt_dev->flags |= flag;
+			}
 		} else {
 			sprintf(pg_result,
 				"Flag -:%s:- unknown\nAvailable flags, (prepend ! to un-set flag):\n%s",
@@ -1350,7 +1367,8 @@ static ssize_t pktgen_if_write(struct file *file,
 #ifdef CONFIG_XFRM
 				"IPSEC, "
 #endif
-				"NODE_ALLOC\n");
+				"NODE_ALLOC, "
+				"SHARED\n");
 			return count;
 		}
 		sprintf(pg_result, "OK: flags=0x%x", pkt_dev->flags);
@@ -3483,7 +3501,8 @@ static void pktgen_xmit(struct pktgen_dev *pkt_dev)
 	if (pkt_dev->xmit_mode == M_NETIF_RECEIVE) {
 		skb = pkt_dev->skb;
 		skb->protocol = eth_type_trans(skb, skb->dev);
-		refcount_add(burst, &skb->users);
+		if (pkt_dev->flags & F_SHARED)
+			refcount_add(burst, &skb->users);
 		local_bh_disable();
 		do {
 			ret = netif_receive_skb(skb);
@@ -3491,6 +3510,10 @@ static void pktgen_xmit(struct pktgen_dev *pkt_dev)
 				pkt_dev->errors++;
 			pkt_dev->sofar++;
 			pkt_dev->seq_num++;
+			if (unlikely(!(pkt_dev->flags & F_SHARED))) {
+				pkt_dev->skb = NULL;
+				break;
+			}
 			if (refcount_read(&skb->users) != burst) {
 				/* skb was queued by rps/rfs or taps,
 				 * so cannot reuse this skb
@@ -3509,7 +3532,8 @@ static void pktgen_xmit(struct pktgen_dev *pkt_dev)
 		goto out; /* Skips xmit_mode M_START_XMIT */
 	} else if (pkt_dev->xmit_mode == M_QUEUE_XMIT) {
 		local_bh_disable();
-		refcount_inc(&pkt_dev->skb->users);
+		if (pkt_dev->flags & F_SHARED)
+			refcount_inc(&pkt_dev->skb->users);
 
 		ret = dev_queue_xmit(pkt_dev->skb);
 		switch (ret) {
@@ -3517,8 +3541,13 @@ static void pktgen_xmit(struct pktgen_dev *pkt_dev)
 			pkt_dev->sofar++;
 			pkt_dev->seq_num++;
 			pkt_dev->tx_bytes += pkt_dev->last_pkt_size;
+			if (!(pkt_dev->flags & F_SHARED))
+				pkt_dev->skb = NULL;
 			break;
 		case NET_XMIT_DROP:
+			if (!(pkt_dev->flags & F_SHARED))
+				pkt_dev->skb = NULL;
+			fallthrough;
 		case NET_XMIT_CN:
 		/* These are all valid return codes for a qdisc but
 		 * indicate packets are being dropped or will likely
@@ -3549,7 +3578,8 @@ static void pktgen_xmit(struct pktgen_dev *pkt_dev)
 		pkt_dev->last_ok = 0;
 		goto unlock;
 	}
-	refcount_add(burst, &pkt_dev->skb->users);
+	if (pkt_dev->flags & F_SHARED)
+		refcount_add(burst, &pkt_dev->skb->users);
 
 xmit_more:
 	ret = netdev_start_xmit(pkt_dev->skb, odev, txq, --burst > 0);
@@ -3560,10 +3590,15 @@ xmit_more:
 		pkt_dev->sofar++;
 		pkt_dev->seq_num++;
 		pkt_dev->tx_bytes += pkt_dev->last_pkt_size;
+		if (!(pkt_dev->flags & F_SHARED))
+			pkt_dev->skb = NULL;
 		if (burst > 0 && !netif_xmit_frozen_or_drv_stopped(txq))
 			goto xmit_more;
 		break;
 	case NET_XMIT_DROP:
+		if (!(pkt_dev->flags & F_SHARED))
+			pkt_dev->skb = NULL;
+		fallthrough;
 	case NET_XMIT_CN:
 		/* skb has been consumed */
 		pkt_dev->errors++;
@@ -3771,6 +3806,7 @@ static int pktgen_add_device(struct pktgen_thread *t, const char *ifname)
 	pkt_dev->svlan_id = 0xffff;
 	pkt_dev->burst = 1;
 	pkt_dev->node = NUMA_NO_NODE;
+	pkt_dev->flags = F_SHARED;	/* SKB shared by default */
 
 	err = pktgen_setup_dev(t->net, pkt_dev, ifname);
 	if (err)
