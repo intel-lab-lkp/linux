@@ -39,9 +39,9 @@ void vchiq_add_connected_callback(void (*callback)(void))
 		callback();
 	} else {
 		if (g_num_deferred_callbacks >= MAX_CALLBACKS) {
-			vchiq_log_error(vchiq_core_log_level,
-					"There already %d callback registered - please increase MAX_CALLBACKS",
-					g_num_deferred_callbacks);
+			/* TODO: Should be using vchiq_log_error() too? */
+			pr_err("There already %d callback registered - please increase MAX_CALLBACKS",
+			       g_num_deferred_callbacks);
 		} else {
 			g_deferred_callback[g_num_deferred_callbacks] =
 				callback;

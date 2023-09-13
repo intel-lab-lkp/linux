@@ -39,10 +39,30 @@
 
 #define VCHIQ_LOG_PREFIX   KERN_INFO "vchiq: "
 
+enum vchiq_log_category {
+       VCHIQ_ARM,
+       VCHIQ_CORE,
+       VCHIQ_CORE_MSG,
+       VCHIQ_SYNC,
+       VCHIQ_SUSPEND,
+};
+
+static inline const char *log_category_str(enum vchiq_log_category c)
+{
+       static const char *strings[] = {
+               "vchiq_arm",
+               "vchiq_core",
+               "vchiq_core_msg",
+               "vchiq_sync",
+               "vchiq_suspend",
+       };
+
+       return strings[c];
+};
+
 #ifndef vchiq_log_error
-#define vchiq_log_error(cat, fmt, ...) \
-	do { if (cat >= VCHIQ_LOG_ERROR) \
-		printk(VCHIQ_LOG_PREFIX fmt "\n", ##__VA_ARGS__); } while (0)
+#define vchiq_log_error(dev, cat, fmt, ...) \
+       dev_dbg(dev, "%s error: " fmt, log_category_str(cat), ##__VA_ARGS__);
 #endif
 #ifndef vchiq_log_warning
 #define vchiq_log_warning(cat, fmt, ...) \
@@ -59,9 +79,6 @@
 	do { if (cat >= VCHIQ_LOG_TRACE) \
 		printk(VCHIQ_LOG_PREFIX fmt "\n", ##__VA_ARGS__); } while (0)
 #endif
-
-#define vchiq_loud_error(...) \
-	vchiq_log_error(vchiq_core_log_level, "===== " __VA_ARGS__)
 
 #define VCHIQ_SLOT_MASK        (VCHIQ_SLOT_SIZE - 1)
 #define VCHIQ_SLOT_QUEUE_MASK  (VCHIQ_MAX_SLOTS_PER_SIDE - 1)
@@ -471,7 +488,7 @@ extern const char *
 get_conn_state_name(enum vchiq_connstate conn_state);
 
 extern struct vchiq_slot_zero *
-vchiq_init_slots(void *mem_base, int mem_size);
+vchiq_init_slots(struct device *dev, void *mem_base, int mem_size);
 
 extern int
 vchiq_init_state(struct vchiq_state *state, struct vchiq_slot_zero *slot_zero, struct device *dev);
