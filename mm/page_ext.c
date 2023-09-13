@@ -201,6 +201,8 @@ static int __init alloc_node_page_ext(int nid)
 		return -ENOMEM;
 	NODE_DATA(nid)->node_page_ext = base;
 	total_usage += table_size;
+	__mod_node_page_state(NODE_DATA(nid), NR_PAGE_METADATA,
+			      PAGE_ALIGN(table_size) >> PAGE_SHIFT);
 	return 0;
 }
 
@@ -255,12 +257,15 @@ static void *__meminit alloc_page_ext(size_t size, int nid)
 	void *addr = NULL;
 
 	addr = alloc_pages_exact_nid(nid, size, flags);
-	if (addr) {
+	if (addr)
 		kmemleak_alloc(addr, size, 1, flags);
-		return addr;
-	}
+	else
+		addr = vzalloc_node(size, nid);
 
-	addr = vzalloc_node(size, nid);
+	if (addr) {
+		__mod_node_page_state(NODE_DATA(nid), NR_PAGE_METADATA,
+				      PAGE_ALIGN(size) >> PAGE_SHIFT);
+	}
 
 	return addr;
 }
@@ -314,6 +319,10 @@ static void free_page_ext(void *addr)
 		BUG_ON(PageReserved(page));
 		kmemleak_free(addr);
 		free_pages_exact(addr, table_size);
+
+		__mod_node_page_state(NODE_DATA(page_to_nid(page)), NR_PAGE_METADATA,
+				      (long)-1 * (PAGE_ALIGN(table_size) >> PAGE_SHIFT));
+
 	}
 }
 

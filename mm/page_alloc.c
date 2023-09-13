@@ -5497,6 +5497,7 @@ void __init setup_per_cpu_pageset(void)
 	for_each_online_pgdat(pgdat)
 		pgdat->per_cpu_nodestats =
 			alloc_percpu(struct per_cpu_nodestat);
+	writeout_early_perpage_metadata();
 }
 
 __meminit void zone_pcp_init(struct zone *zone)

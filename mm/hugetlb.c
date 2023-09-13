@@ -1756,6 +1756,10 @@ static void __update_and_free_hugetlb_folio(struct hstate *h,
 		destroy_compound_gigantic_folio(folio, huge_page_order(h));
 		free_gigantic_folio(folio, huge_page_order(h));
 	} else {
+#ifndef CONFIG_SPARSEMEM_VMEMMAP
+		__mod_node_page_state(NODE_DATA(page_to_nid(&folio->page)),
+				      NR_PAGE_METADATA, -huge_page_order(h));
+#endif
 		__free_pages(&folio->page, huge_page_order(h));
 	}
 }
@@ -2127,7 +2131,9 @@ retry:
 		__count_vm_event(HTLB_BUDDY_PGALLOC_FAIL);
 		return NULL;
 	}
-
+#ifndef CONFIG_SPARSEMEM_VMEMMAP
+	__mod_node_page_state(NODE_DATA(nid), NR_PAGE_METADATA, huge_page_order(h));
+#endif
 	__count_vm_event(HTLB_BUDDY_PGALLOC);
 	return page_folio(page);
 }

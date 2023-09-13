@@ -648,4 +648,8 @@ static inline void lruvec_stat_sub_folio(struct folio *folio,
 {
 	lruvec_stat_mod_folio(folio, idx, -folio_nr_pages(folio));
 }
+
+void __init mod_node_early_perpage_metadata(int nid, long delta);
+void __init writeout_early_perpage_metadata(void);
+
 #endif /* _LINUX_VMSTAT_H */
