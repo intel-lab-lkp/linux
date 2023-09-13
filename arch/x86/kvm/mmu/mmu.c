@@ -4335,17 +4335,22 @@ static inline u8 kvm_max_level_for_order(int order)
 	return PG_LEVEL_4K;
 }
 
-static int kvm_do_memory_fault_exit(struct kvm_vcpu *vcpu,
-				    struct kvm_page_fault *fault)
+static int __kvm_do_memory_fault_exit(struct kvm_vcpu *vcpu,
+				      struct kvm_page_fault *fault, __u64 flags)
 {
 	vcpu->run->exit_reason = KVM_EXIT_MEMORY_FAULT;
 	if (fault->is_private)
-		vcpu->run->memory.flags = KVM_MEMORY_EXIT_FLAG_PRIVATE;
-	else
-		vcpu->run->memory.flags = 0;
+		flags |= KVM_MEMORY_EXIT_FLAG_PRIVATE;
+	vcpu->run->flags = flags;
 	vcpu->run->memory.gpa = fault->gfn << PAGE_SHIFT;
 	vcpu->run->memory.size = PAGE_SIZE;
 	return RET_PF_USER;
+}
+
+static int kvm_do_memory_fault_exit(struct kvm_vcpu *vcpu,
+				    struct kvm_page_fault *fault)
+{
+	return __kvm_do_memory_fault_exit(vcpu, fault, 0);
 }
 
 static int kvm_faultin_pfn_private(struct kvm_vcpu *vcpu,
@@ -4358,12 +4363,16 @@ static int kvm_faultin_pfn_private(struct kvm_vcpu *vcpu,
 
 	r = kvm_gmem_get_pfn(vcpu->kvm, fault->slot, fault->gfn, &fault->pfn,
 			     &max_order);
-	if (r)
+	if (r && r != -EHWPOISON)
 		return r;
 
 	fault->max_level = min(kvm_max_level_for_order(max_order),
 			       fault->max_level);
 	fault->map_writable = !(fault->slot->flags & KVM_MEM_READONLY);
+
+	if (r == -EHWPOISON)
+		return __kvm_do_memory_fault_exit(vcpu, fault,
+						  KVM_MEMORY_EXIT_FLAG_HWPOISON);
 	return RET_PF_CONTINUE;
 }
 

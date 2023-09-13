@@ -589,6 +589,7 @@ int kvm_gmem_get_pfn(struct kvm *kvm, struct kvm_memory_slot *slot,
 {
 	pgoff_t index = gfn - slot->base_gfn + slot->gmem.pgoff;
 	struct kvm_gmem *gmem;
+	bool hwpoison = false;
 	struct folio *folio;
 	struct page *page;
 	struct file *file;
@@ -610,6 +611,7 @@ int kvm_gmem_get_pfn(struct kvm *kvm, struct kvm_memory_slot *slot,
 		return -ENOMEM;
 	}
 
+	hwpoison = folio_test_hwpoison(folio);
 	page = folio_file_page(folio, index);
 
 	*pfn = page_to_pfn(page);
@@ -618,7 +620,7 @@ int kvm_gmem_get_pfn(struct kvm *kvm, struct kvm_memory_slot *slot,
 	folio_unlock(folio);
 	fput(file);
 
-	return 0;
+	return hwpoison ? -EHWPOISON : 0;
 }
 EXPORT_SYMBOL_GPL(kvm_gmem_get_pfn);
 
