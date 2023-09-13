@@ -259,6 +259,12 @@ static void __mmc_start_request(struct mmc_host *host, struct mmc_request *mrq)
 		host->cqe_ops->cqe_off(host);
 
 	host->ops->request(host, mrq);
+
+	if (host->card->quirks & MMC_QUIRK_BROKEN_CACHE_FLUSH && !host->card->written_flag) {
+		if (mrq->cmd->opcode == MMC_WRITE_MULTIPLE_BLOCK ||
+		    mrq->cmd->opcode == MMC_WRITE_BLOCK)
+			host->card->written_flag = true;
+	}
 }
 
 static void mmc_mrq_pr_debug(struct mmc_host *host, struct mmc_request *mrq,
