@@ -416,8 +416,8 @@ static u8 __init get_vtl(void)
 	if (hv_result_success(ret)) {
 		ret = output->as64.low & HV_X64_VTL_MASK;
 	} else {
-		pr_err("Failed to get VTL(%lld) and set VTL to zero by default.\n", ret);
-		ret = 0;
+		pr_err("Failed to get VTL(error: %lld) exiting...\n", ret);
+		BUG();
 	}
 
 	local_irq_restore(flags);
@@ -604,8 +604,10 @@ skip_hypercall_pg_init:
 	hv_query_ext_cap(0);
 
 	/* Find the VTL */
-	if (!ms_hyperv.paravisor_present && hv_isolation_type_snp())
+	if (IS_ENABLED(CONFIG_HYPERV_VTL_MODE))
 		ms_hyperv.vtl = get_vtl();
+	else
+		ms_hyperv.vtl = 0;
 
 	return;
 
