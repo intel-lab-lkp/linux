@@ -139,7 +139,6 @@ static struct fuse_req *fuse_get_req(struct fuse_mount *fm, bool for_background)
 	req->in.h.gid = from_kgid(fc->user_ns, current_fsgid());
 	req->in.h.pid = pid_nr_ns(task_pid(current), fc->pid_ns);
 
-	__set_bit(FR_WAITING, &req->flags);
 	if (for_background)
 		__set_bit(FR_BACKGROUND, &req->flags);
 
@@ -171,11 +170,7 @@ static void fuse_put_request(struct fuse_req *req)
 			spin_unlock(&fc->bg_lock);
 		}
 
-		if (test_bit(FR_WAITING, &req->flags)) {
-			__clear_bit(FR_WAITING, &req->flags);
-			fuse_drop_waiting(fc);
-		}
-
+		fuse_drop_waiting(fc);
 		fuse_request_free(req);
 	}
 }
@@ -495,7 +490,6 @@ ssize_t fuse_simple_request(struct fuse_mount *fm, struct fuse_args *args)
 		if (!args->nocreds)
 			fuse_force_creds(req);
 
-		__set_bit(FR_WAITING, &req->flags);
 		__set_bit(FR_FORCE, &req->flags);
 	} else {
 		WARN_ON(args->nocreds);
@@ -556,7 +550,6 @@ int fuse_simple_background(struct fuse_mount *fm, struct fuse_args *args,
 		if (!req)
 			return -ENOMEM;
 		atomic_inc(&fc->num_waiting);
-		__set_bit(FR_WAITING, &req->flags);
 		__set_bit(FR_BACKGROUND, &req->flags);
 	} else {
 		WARN_ON(args->nocreds);
