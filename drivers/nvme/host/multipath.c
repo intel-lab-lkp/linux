@@ -371,6 +371,25 @@ static bool nvme_available_path(struct nvme_ns_head *head)
 	return false;
 }
 
+//for polling queue task to get lowlevel block device
+struct block_device *nvme_mpath_get_bdev(struct block_device *bdev)
+{
+	struct nvme_ns_head *head = bdev->bd_disk->private_data;
+	int srcu_idx;
+	struct nvme_ns *ns;
+	struct block_device *ret = NULL;
+
+	if (!multipath)
+		return NULL;
+	srcu_idx = srcu_read_lock(&head->srcu);
+	ns = nvme_find_path(head);
+	if (likely(ns))
+		ret = ns->disk->part0;
+	srcu_read_unlock(&head->srcu, srcu_idx);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(nvme_mpath_get_bdev);
+
 static void nvme_ns_head_submit_bio(struct bio *bio)
 {
 	struct nvme_ns_head *head = bio->bi_bdev->bd_disk->private_data;
@@ -452,6 +471,7 @@ const struct block_device_operations nvme_ns_head_ops = {
 	.report_zones	= nvme_ns_head_report_zones,
 	.pr_ops		= &nvme_pr_ops,
 };
+EXPORT_SYMBOL_GPL(nvme_ns_head_ops);
 
 static inline struct nvme_ns_head *cdev_to_ns_head(struct cdev *cdev)
 {
