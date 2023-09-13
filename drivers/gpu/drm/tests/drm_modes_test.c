@@ -36,6 +36,19 @@ static int drm_test_modes_init(struct kunit *test)
 	return 0;
 }
 
+static void drm_test_modes_exit(struct kunit *test)
+{
+	struct drm_test_modes_priv *priv = test->priv;
+
+	drm_kunit_helper_free_device(test, priv->dev);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, priv->dev);
+
+	drm_dev_put(priv->drm);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, priv->drm);
+
+	kunit_kfree(test, priv);
+}
+
 static void drm_test_modes_analog_tv_ntsc_480i(struct kunit *test)
 {
 	struct drm_test_modes_priv *priv = test->priv;
@@ -64,6 +77,7 @@ static void drm_test_modes_analog_tv_ntsc_480i(struct kunit *test)
 
 	KUNIT_EXPECT_EQ(test, mode->vdisplay, 480);
 	KUNIT_EXPECT_EQ(test, mode->vtotal, 525);
+	drm_mode_destroy(priv->drm, mode);
 }
 
 static void drm_test_modes_analog_tv_ntsc_480i_inlined(struct kunit *test)
@@ -141,6 +155,7 @@ static struct kunit_case drm_modes_analog_tv_tests[] = {
 static struct kunit_suite drm_modes_analog_tv_test_suite = {
 	.name = "drm_modes_analog_tv",
 	.init = drm_test_modes_init,
+	.exit = drm_test_modes_exit,
 	.test_cases = drm_modes_analog_tv_tests,
 };
 
