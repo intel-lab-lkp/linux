@@ -182,7 +182,9 @@ struct signal_struct {
 	 * Live threads maintain their own counters and add to these
 	 * in __exit_signal, except for the group leader.
 	 */
-	seqlock_t stats_lock;
+	rwlock_t stats_lock;
+	seqcount_rwlock_t stats_seqc;
+
 	u64 utime, stime, cutime, cstime;
 	u64 gtime;
 	u64 cgtime;

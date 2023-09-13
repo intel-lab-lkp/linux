@@ -183,7 +183,8 @@ static void __exit_signal(struct task_struct *tsk)
 	 * see the empty ->thread_head list.
 	 */
 	task_cputime(tsk, &utime, &stime);
-	write_seqlock(&sig->stats_lock);
+	write_lock(&sig->stats_lock);
+	write_seqcount_begin(&sig->stats_seqc);
 	sig->utime += utime;
 	sig->stime += stime;
 	sig->gtime += task_gtime(tsk);
@@ -197,7 +198,8 @@ static void __exit_signal(struct task_struct *tsk)
 	sig->sum_sched_runtime += tsk->se.sum_exec_runtime;
 	sig->nr_threads--;
 	__unhash_process(tsk, group_dead);
-	write_sequnlock(&sig->stats_lock);
+	write_seqcount_end(&sig->stats_seqc);
+	write_unlock(&sig->stats_lock);
 
 	/*
 	 * Do this under ->siglock, we can race with another thread
@@ -1161,7 +1163,8 @@ static int wait_task_zombie(struct wait_opts *wo, struct task_struct *p)
 		 */
 		thread_group_cputime_adjusted(p, &tgutime, &tgstime);
 		spin_lock_irq(&current->sighand->siglock);
-		write_seqlock(&psig->stats_lock);
+		write_lock(&psig->stats_lock);
+		write_seqcount_begin(&psig->stats_seqc);
 		psig->cutime += tgutime + sig->cutime;
 		psig->cstime += tgstime + sig->cstime;
 		psig->cgtime += task_gtime(p) + sig->gtime + sig->cgtime;
@@ -1184,7 +1187,8 @@ static int wait_task_zombie(struct wait_opts *wo, struct task_struct *p)
 			psig->cmaxrss = maxrss;
 		task_io_accounting_add(&psig->ioac, &p->ioac);
 		task_io_accounting_add(&psig->ioac, &sig->ioac);
-		write_sequnlock(&psig->stats_lock);
+		write_seqcount_end(&psig->stats_seqc);
+		write_unlock(&psig->stats_lock);
 		spin_unlock_irq(&current->sighand->siglock);
 	}
 

@@ -1873,7 +1873,8 @@ static int copy_signal(unsigned long clone_flags, struct task_struct *tsk)
 	sig->curr_target = tsk;
 	init_sigpending(&sig->shared_pending);
 	INIT_HLIST_HEAD(&sig->multiprocess);
-	seqlock_init(&sig->stats_lock);
+	rwlock_init(&sig->stats_lock);
+	seqcount_rwlock_init(&sig->stats_seqc, &sig->stats_lock);
 	prev_cputime_init(&sig->prev_cputime);
 
 #ifdef CONFIG_POSIX_TIMERS
