@@ -2420,35 +2420,46 @@ static inline int get_default_free_blocks_flags(struct inode *inode)
 	return 0;
 }
 
-/*
- * ext4_rereserve_cluster - increment the reserved cluster count when
- *                          freeing a cluster with a pending reservation
+/**
+ * free_partial_cluster() - frees all the allocated blocks contained in a
+ *                          partial cluster and rereserves space for delayed
+ *                          allocated blocks it contains
  *
- * @inode - file containing the cluster
- * @lblk - logical block in cluster to be reserved
- *
- * Increments the reserved cluster count and adjusts quota in a bigalloc
- * file system when freeing a partial cluster containing at least one
- * delayed and unwritten block.  A partial cluster meeting that
- * requirement will have a pending reservation.  If so, the
- * RERESERVE_CLUSTER flag is used when calling ext4_free_blocks() to
- * defer reserved and allocated space accounting to a subsequent call
- * to this function.
+ * @handle: journal handle for current transaction
+ * @inode: file containing the partial cluster
+ * @partial: partial cluster to be freed
  */
-static void ext4_rereserve_cluster(struct inode *inode, ext4_lblk_t lblk)
+static void free_partial_cluster(handle_t *handle, struct inode *inode,
+				 struct partial_cluster *partial)
 {
 	struct ext4_sb_info *sbi = EXT4_SB(inode->i_sb);
 	struct ext4_inode_info *ei = EXT4_I(inode);
+	int flags = get_default_free_blocks_flags(inode);
 
-	dquot_reclaim_block(inode, EXT4_C2B(sbi, 1));
+	/*
+	 * When the partial cluster contains at least one delayed and
+	 * unwritten block (has pending reservation), the RERESERVE_CLUSTER
+	 * flag forces ext4_free_blocks() to defer reserved and allocated
+	 * space accounting to this function.  This avoids potential difficult
+	 * to handle ENOSPC conditions when the file system is near exhaustion.
+	 */
+	if (ext4_is_pending(inode, partial->lblk))
+		flags |= EXT4_FREE_BLOCKS_RERESERVE_CLUSTER;
 
-	spin_lock(&ei->i_block_reservation_lock);
-	ei->i_reserved_data_blocks++;
-	percpu_counter_add(&sbi->s_dirtyclusters_counter, 1);
-	spin_unlock(&ei->i_block_reservation_lock);
+	ext4_free_blocks(handle, inode, NULL, EXT4_C2B(sbi, partial->pclu),
+			 sbi->s_cluster_ratio, flags);
 
-	percpu_counter_add(&sbi->s_freeclusters_counter, 1);
-	ext4_remove_pending(inode, lblk);
+	if (flags & EXT4_FREE_BLOCKS_RERESERVE_CLUSTER) {
+		dquot_reclaim_block(inode, EXT4_C2B(sbi, 1));
+
+		spin_lock(&ei->i_block_reservation_lock);
+		ei->i_reserved_data_blocks++;
+		percpu_counter_add(&sbi->s_dirtyclusters_counter, 1);
+		spin_unlock(&ei->i_block_reservation_lock);
+
+		percpu_counter_add(&sbi->s_freeclusters_counter, 1);
+		ext4_remove_pending(inode, partial->lblk);
+	}
 }
 
 static int ext4_remove_blocks(handle_t *handle, struct inode *inode,
@@ -2491,19 +2502,10 @@ static int ext4_remove_blocks(handle_t *handle, struct inode *inode,
 	 * cluster of the last block in the extent, we free it
 	 */
 	last_pblk = ext4_ext_pblock(ex) + ee_len - 1;
-
 	if (partial->state != initial &&
 	    partial->pclu != EXT4_B2C(sbi, last_pblk)) {
-		if (partial->state == tofree) {
-			flags = get_default_free_blocks_flags(inode);
-			if (ext4_is_pending(inode, partial->lblk))
-				flags |= EXT4_FREE_BLOCKS_RERESERVE_CLUSTER;
-			ext4_free_blocks(handle, inode, NULL,
-					 EXT4_C2B(sbi, partial->pclu),
-					 sbi->s_cluster_ratio, flags);
-			if (flags & EXT4_FREE_BLOCKS_RERESERVE_CLUSTER)
-				ext4_rereserve_cluster(inode, partial->lblk);
-		}
+		if (partial->state == tofree)
+			free_partial_cluster(handle, inode, partial);
 		partial->state = initial;
 	}
 
@@ -2516,23 +2518,21 @@ static int ext4_remove_blocks(handle_t *handle, struct inode *inode,
 	 * state is nofree).  If a partial cluster exists here, it must be
 	 * shared with the last block in the extent.
 	 */
-	flags = get_default_free_blocks_flags(inode);
 
 	/* partial, left end cluster aligned, right end unaligned */
 	if ((EXT4_LBLK_COFF(sbi, to) != sbi->s_cluster_ratio - 1) &&
 	    (EXT4_LBLK_CMASK(sbi, to) >= from) &&
 	    (partial->state != nofree)) {
-		if (ext4_is_pending(inode, to))
-			flags |= EXT4_FREE_BLOCKS_RERESERVE_CLUSTER;
-		ext4_free_blocks(handle, inode, NULL,
-				 EXT4_PBLK_CMASK(sbi, last_pblk),
-				 sbi->s_cluster_ratio, flags);
-		if (flags & EXT4_FREE_BLOCKS_RERESERVE_CLUSTER)
-			ext4_rereserve_cluster(inode, to);
+		if (partial->state == initial) {
+			partial->pclu = EXT4_B2C(sbi, last_pblk);
+			partial->lblk = to;
+			partial->state = tofree;
+		}
+		free_partial_cluster(handle, inode, partial);
 		partial->state = initial;
-		flags = get_default_free_blocks_flags(inode);
 	}
 
+	flags = get_default_free_blocks_flags(inode);
 	flags |= EXT4_FREE_BLOCKS_NOFREE_LAST_CLUSTER;
 
 	/*
@@ -2571,20 +2571,17 @@ static int ext4_remove_blocks(handle_t *handle, struct inode *inode,
 	return 0;
 }
 
-/*
- * ext4_ext_rm_leaf() Removes the extents associated with the
- * blocks appearing between "start" and "end".  Both "start"
- * and "end" must appear in the same extent or EIO is returned.
+/**
+ * ext4_ext_rm_leaf() - Removes the extents associated with the blocks
+ *                      appearing between "start" and "end"
  *
  * @handle: The journal handle
- * @inode:  The files inode
- * @path:   The path to the leaf
- * @partial_cluster: The cluster which we'll have to free if all extents
- *                   has been released from it.  However, if this value is
- *                   negative, it's a cluster just to the right of the
- *                   punched region and it must not be freed.
- * @start:  The first block to remove
- * @end:   The last block to remove
+ * @inode: The file's inode
+ * @path:  The path to the leaf
+ * @partial: Information used to determine whether a cluster in a bigalloc
+ *           file system should be freed as extents are removed
+ * @start: The first block to remove
+ * @end: The last block to remove
  */
 static int
 ext4_ext_rm_leaf(handle_t *handle, struct inode *inode,
@@ -2759,24 +2756,18 @@ ext4_ext_rm_leaf(handle_t *handle, struct inode *inode,
 
 	/*
 	 * If there's a partial cluster and at least one extent remains in
-	 * the leaf, free the partial cluster if it isn't shared with the
-	 * current extent.  If it is shared with the current extent
-	 * we reset the partial cluster because we've reached the start of the
-	 * truncated/punched region and we're done removing blocks.
+	 * the leaf, free the partial if it isn't shared with the next
+	 * extent.  Otherwise, clear it - the beginning of the space to be
+	 * removed has been reached.  If no extent remains in the leaf,
+	 * ext4_ext_remove_space() will always read in the next leaf (if any)
+	 * containing the next adjacent extent, allowing this code to handle
+	 * the case where the last block in that extent is outside the space
+	 * to be removed but might be shared with the partial cluster.
 	 */
 	if (partial->state == tofree && ex >= EXT_FIRST_EXTENT(eh)) {
 		pblk = ext4_ext_pblock(ex) + ex_ee_len - 1;
-		if (partial->pclu != EXT4_B2C(sbi, pblk)) {
-			int flags = get_default_free_blocks_flags(inode);
-
-			if (ext4_is_pending(inode, partial->lblk))
-				flags |= EXT4_FREE_BLOCKS_RERESERVE_CLUSTER;
-			ext4_free_blocks(handle, inode, NULL,
-					 EXT4_C2B(sbi, partial->pclu),
-					 sbi->s_cluster_ratio, flags);
-			if (flags & EXT4_FREE_BLOCKS_RERESERVE_CLUSTER)
-				ext4_rereserve_cluster(inode, partial->lblk);
-		}
+		if (partial->pclu != EXT4_B2C(sbi, pblk))
+			free_partial_cluster(handle, inode, partial);
 		partial->state = initial;
 	}
 
@@ -3032,21 +3023,12 @@ again:
 					 path->p_hdr->eh_entries);
 
 	/*
-	 * if there's a partial cluster and we have removed the first extent
-	 * in the file, then we also free the partial cluster, if any
+	 * if a partial cluster still remains here the extent tree has
+	 * been traversed to the beginning of the file, so it is not
+	 * shared with another extent
 	 */
-	if (partial.state == tofree && err == 0) {
-		int flags = get_default_free_blocks_flags(inode);
-
-		if (ext4_is_pending(inode, partial.lblk))
-			flags |= EXT4_FREE_BLOCKS_RERESERVE_CLUSTER;
-		ext4_free_blocks(handle, inode, NULL,
-				 EXT4_C2B(sbi, partial.pclu),
-				 sbi->s_cluster_ratio, flags);
-		if (flags & EXT4_FREE_BLOCKS_RERESERVE_CLUSTER)
-			ext4_rereserve_cluster(inode, partial.lblk);
-		partial.state = initial;
-	}
+	if (partial.state == tofree && err == 0)
+		free_partial_cluster(handle, inode, &partial);
 
 	/* TODO: flexible tree reduction should be here */
 	if (path->p_hdr->eh_entries == 0) {
