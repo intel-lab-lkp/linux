@@ -1322,6 +1322,7 @@ struct kvm_arch {
 	u64 cur_tsc_offset;
 	u64 cur_tsc_generation;
 	int nr_vcpus_matched_tsc;
+	bool user_set_tsc;
 
 	u32 default_tsc_khz;
 
