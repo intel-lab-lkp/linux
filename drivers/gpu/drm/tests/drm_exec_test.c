@@ -42,6 +42,19 @@ static int drm_exec_test_init(struct kunit *test)
 	return 0;
 }
 
+static void drm_exec_test_exit(struct kunit *test)
+{
+	struct drm_exec_priv *priv = test->priv;
+
+	drm_kunit_helper_free_device(test, priv->dev);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, priv->dev);
+
+	drm_dev_put(priv->drm);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, priv->drm);
+
+	kunit_kfree(test, priv);
+}
+
 static void sanitycheck(struct kunit *test)
 {
 	struct drm_exec exec;
@@ -204,6 +217,7 @@ static struct kunit_case drm_exec_tests[] = {
 static struct kunit_suite drm_exec_test_suite = {
 	.name = "drm_exec",
 	.init = drm_exec_test_init,
+	.exit = drm_exec_test_exit,
 	.test_cases = drm_exec_tests,
 };
 
