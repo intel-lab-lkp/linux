@@ -589,10 +589,12 @@ static void flush_memcg_stats_dwork(struct work_struct *w);
 static DECLARE_DEFERRABLE_WORK(stats_flush_dwork, flush_memcg_stats_dwork);
 static DEFINE_PER_CPU(unsigned int, stats_updates);
 static atomic_t stats_flush_ongoing = ATOMIC_INIT(0);
-static atomic_t stats_flush_threshold = ATOMIC_INIT(0);
+/* stats_updates_order is in multiples of MEMCG_CHARGE_BATCH */
+static atomic_t stats_updates_order = ATOMIC_INIT(0);
 static u64 flush_last_time;
 
 #define FLUSH_TIME (2UL*HZ)
+#define STATS_FLUSH_THRESHOLD num_online_cpus()
 
 /*
  * Accessors to ensure that preemption is disabled on PREEMPT_RT because it can
@@ -628,13 +630,11 @@ static inline void memcg_rstat_updated(struct mem_cgroup *memcg, int val)
 	x = __this_cpu_add_return(stats_updates, abs(val));
 	if (x > MEMCG_CHARGE_BATCH) {
 		/*
-		 * If stats_flush_threshold exceeds the threshold
-		 * (>num_online_cpus()), cgroup stats update will be triggered
-		 * in __mem_cgroup_flush_stats(). Increasing this var further
-		 * is redundant and simply adds overhead in atomic update.
+		 * Incrementing stats_updates_order beyond the threshold is
+		 * redundant. Avoid the overhead of the atomic update.
 		 */
-		if (atomic_read(&stats_flush_threshold) <= num_online_cpus())
-			atomic_add(x / MEMCG_CHARGE_BATCH, &stats_flush_threshold);
+		if (atomic_read(&stats_updates_order) <= STATS_FLUSH_THRESHOLD)
+			atomic_add(x / MEMCG_CHARGE_BATCH, &stats_updates_order);
 		__this_cpu_write(stats_updates, 0);
 	}
 }
@@ -654,13 +654,13 @@ static void do_flush_stats(void)
 
 	cgroup_rstat_flush(root_mem_cgroup->css.cgroup);
 
-	atomic_set(&stats_flush_threshold, 0);
+	atomic_set(&stats_updates_order, 0);
 	atomic_set(&stats_flush_ongoing, 0);
 }
 
 void mem_cgroup_flush_stats(void)
 {
-	if (atomic_read(&stats_flush_threshold) > num_online_cpus())
+	if (atomic_read(&stats_updates_order) > STATS_FLUSH_THRESHOLD)
 		do_flush_stats();
 }
 
@@ -674,8 +674,8 @@ void mem_cgroup_flush_stats_ratelimited(void)
 static void flush_memcg_stats_dwork(struct work_struct *w)
 {
 	/*
-	 * Always flush here so that flushing in latency-sensitive paths is
-	 * as cheap as possible.
+	 * Deliberately ignore stats_updates_order here so that flushing in
+	 * latency-sensitive paths is as cheap as possible.
 	 */
 	do_flush_stats();
 	queue_delayed_work(system_unbound_wq, &stats_flush_dwork, FLUSH_TIME);
