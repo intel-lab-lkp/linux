@@ -179,17 +179,27 @@ module_param_named(debug, uv_nmi_debug, int, 0644);
 
 /* Valid NMI Actions */
 #define	ACTION_LEN	16
-static struct nmi_action {
-	char	*action;
-	char	*desc;
-} valid_acts[] = {
-	{	"kdump",	"do kernel crash dump"			},
-	{	"dump",		"dump process stack for each cpu"	},
-	{	"ips",		"dump Inst Ptr info for each cpu"	},
-	{	"kdb",		"enter KDB (needs kgdboc= assignment)"	},
-	{	"kgdb",		"enter KGDB (needs gdb target remote)"	},
-	{	"health",	"check if CPUs respond to NMI"		},
+
+static const char * const valid_acts[] = {
+	"kdump",
+	"dump",
+	"ips",
+	"kdb",
+	"kgdb",
+	"health",
 };
+
+static const char * const valid_acts_desc[] = {
+	"do kernel crash dump",
+	"dump process stack for each cpu",
+	"dump Inst Ptr info for each cpu",
+	"enter KDB (needs kgdboc= assignment)",
+	"enter KGDB (needs gdb target remote)",
+	"check if CPUs respond to NMI",
+};
+
+static_assert(ARRAY_SIZE(valid_acts) == ARRAY_SIZE(valid_acts_desc));
+
 typedef char action_t[ACTION_LEN];
 static action_t uv_nmi_action = { "dump" };
 
@@ -202,25 +212,19 @@ static int param_set_action(const char *val, const struct kernel_param *kp)
 {
 	int i;
 	int n = ARRAY_SIZE(valid_acts);
-	char arg[ACTION_LEN];
 
-	/* (remove possible '\n') */
-	strscpy(arg, val, strnchrnul(val, sizeof(arg)-1, '\n') - val + 1);
+	i = sysfs_match_string(valid_acts, val);
 
-	for (i = 0; i < n; i++)
-		if (!strcmp(arg, valid_acts[i].action))
-			break;
-
-	if (i < n) {
-		strscpy(uv_nmi_action, arg, sizeof(uv_nmi_action));
+	if (i >= 0) {
+		strscpy(uv_nmi_action, valid_acts[i], sizeof(uv_nmi_action));
 		pr_info("UV: New NMI action:%s\n", uv_nmi_action);
 		return 0;
 	}
 
-	pr_err("UV: Invalid NMI action:%s, valid actions are:\n", arg);
+	pr_err("UV: Invalid NMI action:%s, valid actions are:\n", val);
 	for (i = 0; i < n; i++)
-		pr_err("UV: %-8s - %s\n",
-			valid_acts[i].action, valid_acts[i].desc);
+		pr_err("UV: %-8s - %s\n", valid_acts[i], valid_acts_desc[i]);
+
 	return -EINVAL;
 }
 
