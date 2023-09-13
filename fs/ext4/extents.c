@@ -2505,7 +2505,7 @@ static int ext4_remove_blocks(handle_t *handle, struct inode *inode,
 	 */
 	last_pblk = ext4_ext_pblock(ex) + ee_len - 1;
 	if (partial->state != none &&
-	    partial->pclu != EXT4_B2C(sbi, last_pblk)) {
+		EXT4_B2C(sbi, partial->lblk) != EXT4_B2C(sbi, to)) {
 		if (partial->state == free)
 			free_partial_cluster(handle, inode, partial);
 		partial->state = none;
@@ -2547,7 +2547,8 @@ static int ext4_remove_blocks(handle_t *handle, struct inode *inode,
 	ext4_free_blocks(handle, inode, NULL, pblk, num, flags);
 
 	/* reset the partial cluster if we've freed past it */
-	if (partial->state != none && partial->pclu != EXT4_B2C(sbi, pblk))
+	if (partial->state != none &&
+	    EXT4_B2C(sbi, partial->lblk) != EXT4_B2C(sbi, from))
 		partial->state = none;
 
 	/*
@@ -2597,11 +2598,10 @@ ext4_ext_rm_leaf(handle_t *handle, struct inode *inode,
 	struct ext4_extent_header *eh;
 	ext4_lblk_t a, b;
 	unsigned num;
-	ext4_lblk_t ex_ee_block;
+	ext4_lblk_t ex_ee_block, lblk;
 	unsigned short ex_ee_len;
 	unsigned unwritten = 0;
 	struct ext4_extent *ex;
-	ext4_fsblk_t pblk;
 
 	/* the header must be checked already in ext4_ext_remove_space() */
 	ext_debug(inode, "truncate since %u in leaf to %u\n", start, end);
@@ -2649,8 +2649,7 @@ ext4_ext_rm_leaf(handle_t *handle, struct inode *inode,
 			 * be just to the left.
 			 */
 			if (sbi->s_cluster_ratio > 1) {
-				pblk = ext4_ext_pblock(ex);
-				partial->pclu = EXT4_B2C(sbi, pblk);
+				partial->lblk = ex_ee_block;
 				partial->state = keep;
 			}
 			ex--;
@@ -2767,8 +2766,8 @@ ext4_ext_rm_leaf(handle_t *handle, struct inode *inode,
 	 * to be removed but might be shared with the partial cluster.
 	 */
 	if (partial->state == free && ex >= EXT_FIRST_EXTENT(eh)) {
-		pblk = ext4_ext_pblock(ex) + ex_ee_len - 1;
-		if (partial->pclu != EXT4_B2C(sbi, pblk))
+		lblk = ex_ee_block + ex_ee_len - 1;
+		if (EXT4_B2C(sbi, partial->lblk) != EXT4_B2C(sbi, lblk))
 			free_partial_cluster(handle, inode, partial);
 		partial->state = none;
 	}
@@ -2878,8 +2877,7 @@ again:
 			 * in use to avoid freeing it when removing blocks.
 			 */
 			if (sbi->s_cluster_ratio > 1) {
-				pblk = ext4_ext_pblock(ex) + end - ee_block + 1;
-				partial.pclu = EXT4_B2C(sbi, pblk);
+				partial.lblk = end + 1;
 				partial.state = keep;
 			}
 
@@ -2912,7 +2910,7 @@ again:
 			if (err < 0)
 				goto out;
 			if (pblk) {
-				partial.pclu = EXT4_B2C(sbi, pblk);
+				partial.lblk = lblk;
 				partial.state = keep;
 			}
 		}
