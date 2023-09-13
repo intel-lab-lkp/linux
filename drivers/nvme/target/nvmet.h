@@ -395,6 +395,12 @@ struct nvmet_req {
 	u64			error_slba;
 };
 
+struct nvmet_pqt_bio_req {
+	struct nvmet_req		*req;
+	struct bio_list			blist;
+	unsigned short			io_completed;
+};
+
 #define NVMET_MAX_MPOOL_BVEC		16
 extern struct kmem_cache *nvmet_bvec_cache;
 extern struct workqueue_struct *buffered_io_wq;
@@ -454,6 +460,13 @@ u16 nvmet_parse_admin_cmd(struct nvmet_req *req);
 u16 nvmet_parse_discovery_cmd(struct nvmet_req *req);
 u16 nvmet_parse_fabrics_admin_cmd(struct nvmet_req *req);
 u16 nvmet_parse_fabrics_io_cmd(struct nvmet_req *req);
+
+//below is for enabling nvmet polling queue task
+int nvmet_init_pq_thread(u32 thread_idle, int affinity_cpu, u32 ring_size);
+void nvmet_exit_pq_thread(void);
+bool nvmet_pqt_enabled(void);
+int nvmet_pqt_ring_enqueue(void *pt);
+void nvmet_wakeup_pq_thread(void);
 
 bool nvmet_req_init(struct nvmet_req *req, struct nvmet_cq *cq,
 		struct nvmet_sq *sq, const struct nvmet_fabrics_ops *ops);
