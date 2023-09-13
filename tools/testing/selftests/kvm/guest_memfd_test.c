@@ -10,6 +10,7 @@
 #include "kvm_util_base.h"
 #include <linux/bitmap.h>
 #include <linux/falloc.h>
+#include <linux/fs.h>
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -91,6 +92,49 @@ static void test_fallocate(int fd, size_t page_size, size_t total_size)
 	TEST_ASSERT(!ret, "fallocate to restore punched hole should succeed");
 }
 
+static void test_fibmap(int fd, size_t page_size, size_t total_size)
+{
+	int ret;
+	int b;
+	int i;
+
+	/* Make while file unallocated as known initial state */
+	ret = fallocate(fd, FALLOC_FL_KEEP_SIZE | FALLOC_FL_PUNCH_HOLE,
+			0, total_size);
+	TEST_ASSERT(!ret, "fallocate(PUNCH_HOLE) at while file should succeed");
+
+	for (i = 0; i < total_size / page_size; i++) {
+		b = i;
+		ret = ioctl(fd, FIBMAP, &b);
+		if (ret == -EINVAL) {
+			print_skip("Set CONFIG_KVM_GENERIC_PRIVATE_MEM_BMAP=y. bmap test. ");
+			return;
+		}
+		TEST_ASSERT(!ret, "ioctl(FIBMAP) should succeed");
+		TEST_ASSERT(!b, "ioctl(FIBMAP) should return zero 0x%x", b);
+	}
+
+	ret = fallocate(fd, FALLOC_FL_KEEP_SIZE, page_size, page_size * 2);
+	TEST_ASSERT(!ret, "fallocate beginning at page_size should succeed");
+
+	for (i = 0; i < total_size / page_size; i++) {
+		b = i;
+		ret = ioctl(fd, FIBMAP, &b);
+		if (ret == -EINVAL) {
+			print_skip("Set CONFIG_KVM_GENERIC_PRIVATE_MEM_BMAP=y. bmap test. ");
+			return;
+		}
+		TEST_ASSERT(!ret, "ioctl(FIBMAP) should succeed");
+
+		if (i == 1 || i == 2) {
+			TEST_ASSERT(b, "ioctl(FIBMAP) should return non-zero 0x%x", b);
+		} else {
+			TEST_ASSERT(!b, "ioctl(FIBMAP) should return non-zero, 0x%x", b);
+		}
+	}
+
+}
+
 static void test_create_guest_memfd_invalid(struct kvm_vm *vm)
 {
 	uint64_t valid_flags = 0;
@@ -158,6 +202,7 @@ int main(int argc, char *argv[])
 	test_mmap(fd, page_size);
 	test_file_size(fd, page_size, total_size);
 	test_fallocate(fd, page_size, total_size);
+	test_fibmap(fd, page_size, total_size);
 
 	close(fd);
 }
