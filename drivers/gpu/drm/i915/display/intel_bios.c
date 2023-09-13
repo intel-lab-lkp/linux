@@ -33,6 +33,7 @@
 #include "i915_reg.h"
 #include "intel_display.h"
 #include "intel_display_types.h"
+#include "intel_fractional_helper.h"
 #include "intel_gmbus.h"
 
 #define _INTEL_BIOS_PRIVATE
@@ -3384,8 +3385,9 @@ static void fill_dsc(struct intel_crtc_state *crtc_state,
 
 	crtc_state->pipe_bpp = bpc * 3;
 
-	crtc_state->dsc.compressed_bpp = min(crtc_state->pipe_bpp,
-					     VBT_DSC_MAX_BPP(dsc->max_bpp));
+	crtc_state->dsc.compressed_bpp_x16 =
+		intel_fractional_bpp_to_x16(min(crtc_state->pipe_bpp,
+						VBT_DSC_MAX_BPP(dsc->max_bpp)));
 
 	/*
 	 * FIXME: This is ugly, and slice count should take DSC engine
