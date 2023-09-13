@@ -121,15 +121,22 @@ struct ext4_ext_path {
 
 /*
  * Used to record a portion of a cluster found at the beginning or end
- * of an extent while traversing the extent tree during space removal.
- * A partial cluster may be removed if it does not contain blocks shared
- * with extents that aren't being deleted (tofree state).  Otherwise,
- * it cannot be removed (nofree state).
+ * of an extent while traversing the extent tree when removing space.
+ * In the "none" state, no partial cluster is being tracked and both
+ * lblk and pclu values are invalid.
+ * In the "free" state, a partial cluster that is a possible candidate
+ * to be freed is being tracked, and both lblk and pclu values are valid.
+ * In the "keep" state, a partial cluster that must not be freed is being
+ * tracked, the lblk value is valid and the pclu value is not valid.
+ * start_lclu and end_lclu are the logical clusters at the start and end
+ * of the space to be removed.
  */
 struct partial_cluster {
-	ext4_fsblk_t pclu;  /* physical cluster number */
+	enum {none, free, keep} state;
 	ext4_lblk_t lblk;   /* logical block number within logical cluster */
-	enum {initial, tofree, nofree} state;
+	ext4_fsblk_t pclu;  /* physical cluster number */
+	ext4_lblk_t start_lclu;
+	ext4_lblk_t end_lclu;
 };
 
 /*

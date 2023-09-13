@@ -95,6 +95,16 @@ TRACE_DEFINE_ENUM(ES_REFERENCED_B);
 	{ FALLOC_FL_COLLAPSE_RANGE,	"COLLAPSE_RANGE"},	\
 	{ FALLOC_FL_ZERO_RANGE,		"ZERO_RANGE"})
 
+TRACE_DEFINE_ENUM(none);
+TRACE_DEFINE_ENUM(free);
+TRACE_DEFINE_ENUM(keep);
+
+#define show_partial_cluster_state(state)	\
+	__print_symbolic(state,			\
+			{ none,	"none"},	\
+			{ free,	"free"},	\
+			{ keep,	"keep"})
+
 TRACE_DEFINE_ENUM(EXT4_FC_REASON_XATTR);
 TRACE_DEFINE_ENUM(EXT4_FC_REASON_CROSS_RENAME);
 TRACE_DEFINE_ENUM(EXT4_FC_REASON_JOURNAL_FLAG_CHANGE);
@@ -1984,6 +1994,42 @@ TRACE_EVENT(ext4_ext_show_extent,
 		  (unsigned short) __entry->len)
 );
 
+TRACE_EVENT(free_partial_cluster,
+	TP_PROTO(struct inode *inode, struct partial_cluster *pc),
+
+	TP_ARGS(inode, pc),
+
+	TP_STRUCT__entry(
+		__field(	dev_t,		dev		)
+		__field(	ino_t,		ino		)
+		__field(	int,		pc_state	)
+		__field(	ext4_lblk_t,	pc_lblk		)
+		__field(	ext4_fsblk_t,	pc_pclu		)
+		__field(	ext4_lblk_t,	pc_start_lclu	)
+		__field(	ext4_lblk_t,	pc_end_lclu	)
+	),
+
+	TP_fast_assign(
+		__entry->dev		= inode->i_sb->s_dev;
+		__entry->ino		= inode->i_ino;
+		__entry->pc_state	= pc->state;
+		__entry->pc_lblk	= pc->lblk;
+		__entry->pc_pclu	= pc->pclu;
+		__entry->pc_start_lclu	= pc->start_lclu;
+		__entry->pc_end_lclu	= pc->end_lclu;
+	),
+
+	TP_printk("dev %d,%d ino %lu partial "
+		  "[state %s lblk %u pclu %lld start_lclu %u end_lclu %u]",
+		  MAJOR(__entry->dev), MINOR(__entry->dev),
+		  (unsigned long) __entry->ino,
+		  show_partial_cluster_state(__entry->pc_state),
+		  (unsigned int) __entry->pc_lblk,
+		  (long long) __entry->pc_pclu,
+		  (unsigned int) __entry->pc_start_lclu,
+		  (unsigned int) __entry->pc_end_lclu)
+);
+
 TRACE_EVENT(ext4_remove_blocks,
 	TP_PROTO(struct inode *inode, struct ext4_extent *ex,
 		 ext4_lblk_t from, ext4_fsblk_t to,
@@ -1992,16 +2038,18 @@ TRACE_EVENT(ext4_remove_blocks,
 	TP_ARGS(inode, ex, from, to, pc),
 
 	TP_STRUCT__entry(
-		__field(	dev_t,		dev	)
-		__field(	ino_t,		ino	)
-		__field(	ext4_lblk_t,	from	)
-		__field(	ext4_lblk_t,	to	)
-		__field(	ext4_fsblk_t,	ee_pblk	)
-		__field(	ext4_lblk_t,	ee_lblk	)
-		__field(	unsigned short,	ee_len	)
-		__field(	ext4_fsblk_t,	pc_pclu	)
-		__field(	ext4_lblk_t,	pc_lblk	)
-		__field(	int,		pc_state)
+		__field(	dev_t,		dev		)
+		__field(	ino_t,		ino		)
+		__field(	ext4_lblk_t,	from		)
+		__field(	ext4_lblk_t,	to		)
+		__field(	ext4_fsblk_t,	ee_pblk		)
+		__field(	ext4_lblk_t,	ee_lblk		)
+		__field(	unsigned short,	ee_len		)
+		__field(	int,		pc_state	)
+		__field(	ext4_lblk_t,	pc_lblk		)
+		__field(	ext4_fsblk_t,	pc_pclu		)
+		__field(	ext4_lblk_t,	pc_start_lclu	)
+		__field(	ext4_lblk_t,	pc_end_lclu	)
 	),
 
 	TP_fast_assign(
@@ -2012,13 +2060,16 @@ TRACE_EVENT(ext4_remove_blocks,
 		__entry->ee_pblk	= ext4_ext_pblock(ex);
 		__entry->ee_lblk	= le32_to_cpu(ex->ee_block);
 		__entry->ee_len		= ext4_ext_get_actual_len(ex);
-		__entry->pc_pclu	= pc->pclu;
-		__entry->pc_lblk	= pc->lblk;
 		__entry->pc_state	= pc->state;
+		__entry->pc_lblk	= pc->lblk;
+		__entry->pc_pclu	= pc->pclu;
+		__entry->pc_start_lclu	= pc->start_lclu;
+		__entry->pc_end_lclu	= pc->end_lclu;
 	),
 
-	TP_printk("dev %d,%d ino %lu extent [%u(%llu), %u]"
-		  "from %u to %u partial [pclu %lld lblk %u state %d]",
+	TP_printk("dev %d,%d ino %lu extent [%u(%llu), %u] "
+		  "from %u to %u partial "
+		  "[state %s lblk %u pclu %lld start_lclu %u end_lclu %u]",
 		  MAJOR(__entry->dev), MINOR(__entry->dev),
 		  (unsigned long) __entry->ino,
 		  (unsigned) __entry->ee_lblk,
@@ -2026,9 +2077,11 @@ TRACE_EVENT(ext4_remove_blocks,
 		  (unsigned short) __entry->ee_len,
 		  (unsigned) __entry->from,
 		  (unsigned) __entry->to,
-		  (long long) __entry->pc_pclu,
+		  show_partial_cluster_state(__entry->pc_state),
 		  (unsigned int) __entry->pc_lblk,
-		  (int) __entry->pc_state)
+		  (long long) __entry->pc_pclu,
+		  (unsigned int) __entry->pc_start_lclu,
+		  (unsigned int) __entry->pc_end_lclu)
 );
 
 TRACE_EVENT(ext4_ext_rm_leaf,
@@ -2045,9 +2098,9 @@ TRACE_EVENT(ext4_ext_rm_leaf,
 		__field(	ext4_lblk_t,	ee_lblk	)
 		__field(	ext4_fsblk_t,	ee_pblk	)
 		__field(	short,		ee_len	)
-		__field(	ext4_fsblk_t,	pc_pclu	)
-		__field(	ext4_lblk_t,	pc_lblk	)
 		__field(	int,		pc_state)
+		__field(	ext4_lblk_t,	pc_lblk	)
+		__field(	ext4_fsblk_t,	pc_pclu	)
 	),
 
 	TP_fast_assign(
@@ -2057,22 +2110,22 @@ TRACE_EVENT(ext4_ext_rm_leaf,
 		__entry->ee_lblk	= le32_to_cpu(ex->ee_block);
 		__entry->ee_pblk	= ext4_ext_pblock(ex);
 		__entry->ee_len		= ext4_ext_get_actual_len(ex);
-		__entry->pc_pclu	= pc->pclu;
-		__entry->pc_lblk	= pc->lblk;
 		__entry->pc_state	= pc->state;
+		__entry->pc_lblk	= pc->lblk;
+		__entry->pc_pclu	= pc->pclu;
 	),
 
-	TP_printk("dev %d,%d ino %lu start_lblk %u last_extent [%u(%llu), %u]"
-		  "partial [pclu %lld lblk %u state %d]",
+	TP_printk("dev %d,%d ino %lu start_lblk %u last_extent [%u(%llu), %u] "
+		  "partial [state %s lblk %u pclu %lld]",
 		  MAJOR(__entry->dev), MINOR(__entry->dev),
 		  (unsigned long) __entry->ino,
 		  (unsigned) __entry->start,
 		  (unsigned) __entry->ee_lblk,
 		  (unsigned long long) __entry->ee_pblk,
 		  (unsigned short) __entry->ee_len,
-		  (long long) __entry->pc_pclu,
+		  show_partial_cluster_state(__entry->pc_state),
 		  (unsigned int) __entry->pc_lblk,
-		  (int) __entry->pc_state)
+		  (long long) __entry->pc_pclu)
 );
 
 TRACE_EVENT(ext4_ext_rm_idx,
@@ -2120,7 +2173,7 @@ TRACE_EVENT(ext4_ext_remove_space,
 		__entry->depth	= depth;
 	),
 
-	TP_printk("dev %d,%d ino %lu since %u end %u depth %d",
+	TP_printk("dev %d,%d ino %lu start %u end %u depth %d",
 		  MAJOR(__entry->dev), MINOR(__entry->dev),
 		  (unsigned long) __entry->ino,
 		  (unsigned) __entry->start,
@@ -2140,9 +2193,9 @@ TRACE_EVENT(ext4_ext_remove_space_done,
 		__field(	ext4_lblk_t,	start		)
 		__field(	ext4_lblk_t,	end		)
 		__field(	int,		depth		)
-		__field(	ext4_fsblk_t,	pc_pclu		)
-		__field(	ext4_lblk_t,	pc_lblk		)
 		__field(	int,		pc_state	)
+		__field(	ext4_lblk_t,	pc_lblk		)
+		__field(	ext4_fsblk_t,	pc_pclu		)
 		__field(	unsigned short,	eh_entries	)
 	),
 
@@ -2152,23 +2205,23 @@ TRACE_EVENT(ext4_ext_remove_space_done,
 		__entry->start		= start;
 		__entry->end		= end;
 		__entry->depth		= depth;
-		__entry->pc_pclu	= pc->pclu;
-		__entry->pc_lblk	= pc->lblk;
 		__entry->pc_state	= pc->state;
+		__entry->pc_lblk	= pc->lblk;
+		__entry->pc_pclu	= pc->pclu;
 		__entry->eh_entries	= le16_to_cpu(eh_entries);
 	),
 
-	TP_printk("dev %d,%d ino %lu since %u end %u depth %d "
-		  "partial [pclu %lld lblk %u state %d] "
+	TP_printk("dev %d,%d ino %lu start %u end %u depth %d "
+		  "partial [state %s lblk %u pclu %lld] "
 		  "remaining_entries %u",
 		  MAJOR(__entry->dev), MINOR(__entry->dev),
 		  (unsigned long) __entry->ino,
 		  (unsigned) __entry->start,
 		  (unsigned) __entry->end,
 		  __entry->depth,
-		  (long long) __entry->pc_pclu,
+		  show_partial_cluster_state(__entry->pc_state),
 		  (unsigned int) __entry->pc_lblk,
-		  (int) __entry->pc_state,
+		  (long long) __entry->pc_pclu,
 		  (unsigned short) __entry->eh_entries)
 );
 
