@@ -2725,6 +2725,28 @@ void gpiod_toggle_active_low(struct gpio_desc *desc)
 }
 EXPORT_SYMBOL_GPL(gpiod_toggle_active_low);
 
+/**
+ * gpiod_set_active_low() - set the GPIO as active-low
+ * @desc: the GPIO descriptor to set the active-low setting for
+ */
+void gpiod_set_active_low(struct gpio_desc *desc)
+{
+	VALIDATE_DESC_VOID(desc);
+	set_bit(FLAG_ACTIVE_LOW, &desc->flags);
+}
+EXPORT_SYMBOL_GPL(gpiod_set_active_low);
+
+/**
+ * gpiod_set_active_high() - set the GPIO as active-high
+ * @desc: the GPIO descriptor to set the active-low setting for
+ */
+void gpiod_set_active_high(struct gpio_desc *desc)
+{
+	VALIDATE_DESC_VOID(desc);
+	clear_bit(FLAG_ACTIVE_LOW, &desc->flags);
+}
+EXPORT_SYMBOL_GPL(gpiod_set_active_high);
+
 static int gpio_chip_get_value(struct gpio_chip *gc, const struct gpio_desc *desc)
 {
 	return gc->get ? gc->get(gc, gpio_chip_hwgpio(desc)) : -EIO;
