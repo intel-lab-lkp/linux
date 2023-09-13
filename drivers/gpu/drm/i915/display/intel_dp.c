@@ -1363,7 +1363,8 @@ static bool intel_dp_source_supports_fec(struct intel_dp *intel_dp,
 	if (DISPLAY_VER(dev_priv) >= 12)
 		return true;
 
-	if (DISPLAY_VER(dev_priv) == 11 && encoder->port != PORT_A)
+	if (DISPLAY_VER(dev_priv) == 11 &&
+	    encoder->port != PORT_A && pipe_config->lane_count != 1)
 		return true;
 
 	return false;
@@ -2105,15 +2106,6 @@ int intel_dp_dsc_compute_config(struct intel_dp *intel_dp,
 		&pipe_config->hw.adjusted_mode;
 	int ret;
 
-	pipe_config->fec_enable = !intel_dp_is_edp(intel_dp) &&
-		intel_dp_supports_fec(intel_dp, pipe_config);
-
-	if (!intel_dp_supports_dsc(intel_dp, pipe_config))
-		return -EINVAL;
-
-	if (!intel_dp_dsc_supports_format(intel_dp, pipe_config->output_format))
-		return -EINVAL;
-
 	/*
 	 * compute pipe bpp is set to false for DP MST DSC case
 	 * and compressed_bpp is calculated same time once
@@ -2133,6 +2125,15 @@ int intel_dp_dsc_compute_config(struct intel_dp *intel_dp,
 			return ret;
 		}
 	}
+
+	pipe_config->fec_enable = !intel_dp_is_edp(intel_dp) &&
+		intel_dp_supports_fec(intel_dp, pipe_config);
+
+	if (!intel_dp_supports_dsc(intel_dp, pipe_config))
+		return -EINVAL;
+
+	if (!intel_dp_dsc_supports_format(intel_dp, pipe_config->output_format))
+		return -EINVAL;
 
 	/* Calculate Slice count */
 	if (intel_dp_is_edp(intel_dp)) {
