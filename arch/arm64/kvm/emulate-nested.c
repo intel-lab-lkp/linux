@@ -649,14 +649,46 @@ static const struct encoding_to_trap_config encoding_to_cgt[] __initconst = {
 	SR_TRAP(SYS_APGAKEYHI_EL1,	CGT_HCR_APK),
 	/* All _EL2 registers */
 	SR_RANGE_TRAP(sys_reg(3, 4, 0, 0, 0),
-		      sys_reg(3, 4, 3, 15, 7), CGT_HCR_NV),
+			sys_reg(3, 4, 4, 0, 1), CGT_HCR_NV),
 	/* Skip the SP_EL1 encoding... */
-	SR_TRAP(SYS_SPSR_EL2,		CGT_HCR_NV),
-	SR_TRAP(SYS_ELR_EL2,		CGT_HCR_NV),
-	SR_RANGE_TRAP(sys_reg(3, 4, 4, 1, 1),
-		      sys_reg(3, 4, 10, 15, 7), CGT_HCR_NV),
+	SR_RANGE_TRAP(sys_reg(3, 4, 4, 3, 0),
+			sys_reg(3, 4, 10, 6, 7), CGT_HCR_NV),
+	/* skip MECID_A0_EL2, MECID_A1_EL2, MECID_P0_EL2,
+	 *      MECID_P1_EL2, MECIDR_EL2, VMECID_A_EL2,
+	 *      VMECID_P_EL2.
+	 */
 	SR_RANGE_TRAP(sys_reg(3, 4, 12, 0, 0),
-		      sys_reg(3, 4, 14, 15, 7), CGT_HCR_NV),
+			sys_reg(3, 4, 12, 1, 1), CGT_HCR_NV),
+	/* ICH_AP0R<m>_EL2 */
+	SR_RANGE_TRAP(SYS_ICH_AP0R0_EL2,
+			SYS_ICH_AP0R3_EL2, CGT_HCR_NV),
+	/* ICH_AP1R<m>_EL2 */
+	SR_RANGE_TRAP(SYS_ICH_AP1R0_EL2,
+			SYS_ICH_AP1R3_EL2, CGT_HCR_NV),
+	SR_RANGE_TRAP(sys_reg(3, 4, 12, 9, 5),
+			sys_reg(3, 4, 12, 11, 7), CGT_HCR_NV),
+	/* ICH_LR<m>_EL2 */
+	SR_TRAP(SYS_ICH_LR0_EL2,	CGT_HCR_NV),
+	SR_TRAP(SYS_ICH_LR1_EL2,	CGT_HCR_NV),
+	SR_TRAP(SYS_ICH_LR2_EL2,	CGT_HCR_NV),
+	SR_TRAP(SYS_ICH_LR3_EL2,	CGT_HCR_NV),
+	SR_TRAP(SYS_ICH_LR4_EL2,	CGT_HCR_NV),
+	SR_TRAP(SYS_ICH_LR5_EL2,	CGT_HCR_NV),
+	SR_TRAP(SYS_ICH_LR6_EL2,	CGT_HCR_NV),
+	SR_TRAP(SYS_ICH_LR7_EL2,	CGT_HCR_NV),
+	SR_TRAP(SYS_ICH_LR8_EL2,	CGT_HCR_NV),
+	SR_TRAP(SYS_ICH_LR9_EL2,	CGT_HCR_NV),
+	SR_TRAP(SYS_ICH_LR10_EL2,	CGT_HCR_NV),
+	SR_TRAP(SYS_ICH_LR11_EL2,	CGT_HCR_NV),
+	SR_TRAP(SYS_ICH_LR12_EL2,	CGT_HCR_NV),
+	SR_TRAP(SYS_ICH_LR13_EL2,	CGT_HCR_NV),
+	SR_TRAP(SYS_ICH_LR14_EL2,	CGT_HCR_NV),
+	SR_TRAP(SYS_ICH_LR15_EL2,	CGT_HCR_NV),
+	SR_RANGE_TRAP(sys_reg(3, 4, 13, 0, 1),
+			sys_reg(3, 4, 13, 0, 7), CGT_HCR_NV),
+	/* skip AMEVCNTVOFF0<n>_EL2 and AMEVCNTVOFF1<n>_EL2 */
+	SR_RANGE_TRAP(sys_reg(3, 4, 14, 0, 3),
+			sys_reg(3, 4, 14, 5, 2), CGT_HCR_NV),
 	/* All _EL02, _EL12 registers */
 	SR_RANGE_TRAP(sys_reg(3, 5, 0, 0, 0),
 		      sys_reg(3, 5, 10, 15, 7), CGT_HCR_NV),
