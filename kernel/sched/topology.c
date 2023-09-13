@@ -208,9 +208,11 @@ sd_parent_degenerate(struct sched_domain *sd, struct sched_domain *parent)
 
 #if defined(CONFIG_ENERGY_MODEL) && defined(CONFIG_CPU_FREQ_GOV_SCHEDUTIL)
 DEFINE_STATIC_KEY_FALSE(sched_energy_present);
-static unsigned int sysctl_sched_energy_aware = 1;
+static unsigned int sysctl_sched_energy_aware;
+static struct ctl_table_header *sysctl_eas_header;
 static DEFINE_MUTEX(sched_energy_mutex);
 static bool sched_energy_update;
+static bool is_sysctl_eas_changing;
 
 void rebuild_sched_domains_energy(void)
 {
@@ -226,6 +228,7 @@ static int sched_energy_aware_handler(struct ctl_table *table, int write,
 		void *buffer, size_t *lenp, loff_t *ppos)
 {
 	int ret, state;
+	int prev_val = sysctl_sched_energy_aware;
 
 	if (write && !capable(CAP_SYS_ADMIN))
 		return -EPERM;
@@ -233,8 +236,13 @@ static int sched_energy_aware_handler(struct ctl_table *table, int write,
 	ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
 	if (!ret && write) {
 		state = static_branch_unlikely(&sched_energy_present);
-		if (state != sysctl_sched_energy_aware)
+		if (state != sysctl_sched_energy_aware && prev_val != sysctl_sched_energy_aware) {
+			is_sysctl_eas_changing = true;
+			if (sysctl_sched_energy_aware && !state)
+				pr_warn("Attempt to build energy domains when EAS is disabled\n");
 			rebuild_sched_domains_energy();
+			is_sysctl_eas_changing = false;
+		}
 	}
 
 	return ret;
@@ -255,7 +263,14 @@ static struct ctl_table sched_energy_aware_sysctls[] = {
 
 static int __init sched_energy_aware_sysctl_init(void)
 {
-	register_sysctl_init("kernel", sched_energy_aware_sysctls);
+	int cpu = cpumask_first(cpu_active_mask);
+
+	if (sched_smt_active() || !per_cpu(sd_asym_cpucapacity, cpu) ||
+	    !arch_scale_freq_invariant())
+		return 0;
+
+	sysctl_eas_header = register_sysctl("kernel", sched_energy_aware_sysctls);
+	sysctl_sched_energy_aware = 1;
 	return 0;
 }
 
@@ -336,10 +351,29 @@ static void sched_energy_set(bool has_eas)
 		if (sched_debug())
 			pr_info("%s: stopping EAS\n", __func__);
 		static_branch_disable_cpuslocked(&sched_energy_present);
+#ifdef CONFIG_PROC_SYSCTL
+		/*
+		 * if the architecture supports EAS and forcefully
+		 * perf domains are destroyed, there should be a sysctl
+		 * to enable it later. If this was due to dynamic system
+		 * change such as SMT<->NON_SMT then remove sysctl.
+		 */
+		if (sysctl_eas_header && !is_sysctl_eas_changing) {
+			unregister_sysctl_table(sysctl_eas_header);
+			sysctl_eas_header = NULL;
+			sysctl_sched_energy_aware = 0;
+		}
+#endif
 	} else if (has_eas && !static_branch_unlikely(&sched_energy_present)) {
 		if (sched_debug())
 			pr_info("%s: starting EAS\n", __func__);
 		static_branch_enable_cpuslocked(&sched_energy_present);
+#ifdef CONFIG_PROC_SYSCTL
+		if (!sysctl_eas_header) {
+			sysctl_eas_header = register_sysctl("kernel", sched_energy_aware_sysctls);
+			sysctl_sched_energy_aware = 1;
+		}
+#endif
 	}
 }
 
@@ -380,15 +414,14 @@ static bool build_perf_domains(const struct cpumask *cpu_map)
 	struct cpufreq_policy *policy;
 	struct cpufreq_governor *gov;
 
-	if (!sysctl_sched_energy_aware)
+	if (!sysctl_sched_energy_aware && is_sysctl_eas_changing)
 		goto free;
 
 	/* EAS is enabled for asymmetric CPU capacity topologies. */
 	if (!per_cpu(sd_asym_cpucapacity, cpu)) {
-		if (sched_debug()) {
-			pr_info("rd %*pbl: CPUs do not have asymmetric capacities\n",
-					cpumask_pr_args(cpu_map));
-		}
+		if (sched_debug())
+			pr_info("rd %*pbl: Disabling EAS,  CPUs do not have asymmetric capacities\n",
+				cpumask_pr_args(cpu_map));
 		goto free;
 	}
 
