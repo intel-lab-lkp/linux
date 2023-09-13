@@ -355,12 +355,40 @@ static int kvm_gmem_error_page(struct address_space *mapping, struct page *page)
 	return MF_DELAYED;
 }
 
+#ifdef CONFIG_KVM_GENERIC_PRIVATE_MEM_BMAP
+static sector_t kvm_gmem_bmap(struct address_space *mapping, sector_t block)
+{
+	struct folio *folio;
+	sector_t pfn = 0;
+
+	filemap_invalidate_lock_shared(mapping);
+
+	if (block << PAGE_SHIFT > i_size_read(mapping->host))
+		goto out;
+
+	folio = filemap_get_folio(mapping, block);
+	if (IS_ERR_OR_NULL(folio))
+		goto out;
+
+	pfn = folio_pfn(folio) + (block - folio->index);
+	folio_put(folio);
+
+out:
+	filemap_invalidate_unlock_shared(mapping);
+	return pfn;
+
+}
+#endif
+
 static const struct address_space_operations kvm_gmem_aops = {
 	.dirty_folio = noop_dirty_folio,
 #ifdef CONFIG_MIGRATION
 	.migrate_folio	= kvm_gmem_migrate_folio,
 #endif
 	.error_remove_page = kvm_gmem_error_page,
+#ifdef CONFIG_KVM_GENERIC_PRIVATE_MEM_BMAP
+	.bmap = kvm_gmem_bmap,
+#endif
 };
 
 static int  kvm_gmem_getattr(struct mnt_idmap *idmap,
