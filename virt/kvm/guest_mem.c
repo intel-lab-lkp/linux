@@ -305,7 +305,7 @@ static int kvm_gmem_error_page(struct address_space *mapping, struct page *page)
 	struct kvm_gmem *gmem;
 	unsigned long index;
 	pgoff_t start, end;
-	gfn_t gfn;
+	bool flush;
 
 	if (!IS_ENABLED(CONFIG_HAVE_GENERIC_PRIVATE_MEM_HANDLE_ERROR))
 		return MF_IGNORED;
@@ -316,26 +316,43 @@ static int kvm_gmem_error_page(struct address_space *mapping, struct page *page)
 	end = start + thp_nr_pages(page);
 
 	list_for_each_entry(gmem, gmem_list, entry) {
-		xa_for_each_range(&gmem->bindings, index, slot, start, end - 1) {
-			for (gfn = start; gfn < end; gfn++) {
-				if (WARN_ON_ONCE(gfn < slot->base_gfn ||
-						gfn >= slot->base_gfn + slot->npages))
-					continue;
+		struct kvm *kvm = gmem->kvm;
 
-				/*
-				 * FIXME: Tell userspace that the *private*
-				 * memory encountered an error.
-				 */
-				send_sig_mceerr(BUS_MCEERR_AR,
-						(void __user *)gfn_to_hva_memslot(slot, gfn),
-						PAGE_SHIFT, current);
-			}
+		KVM_MMU_LOCK(kvm);
+		kvm_mmu_invalidate_begin(kvm);
+		KVM_MMU_UNLOCK(kvm);
+
+		flush = false;
+		xa_for_each_range(&gmem->bindings, index, slot, start, end - 1) {
+			pgoff_t pgoff;
+
+			if (WARN_ON_ONCE(end < slot->base_gfn ||
+					 start >= slot->base_gfn + slot->npages))
+				continue;
+
+			pgoff = slot->gmem.pgoff;
+			struct kvm_gfn_range gfn_range = {
+				.slot = slot,
+				.start = slot->base_gfn + max(pgoff, start) - pgoff,
+				.end = slot->base_gfn + min(pgoff + slot->npages, end) - pgoff,
+				.arg.page = page,
+				.may_block = true,
+				.memory_error = true,
+			};
+
+			flush |= kvm_mmu_unmap_gfn_range(kvm, &gfn_range);
 		}
+		if (flush)
+			kvm_flush_remote_tlbs(kvm);
+
+		KVM_MMU_LOCK(kvm);
+		kvm_mmu_invalidate_end(kvm);
+		KVM_MMU_UNLOCK(kvm);
 	}
 
 	filemap_invalidate_unlock_shared(mapping);
 
-	return 0;
+	return MF_DELAYED;
 }
 
 static const struct address_space_operations kvm_gmem_aops = {

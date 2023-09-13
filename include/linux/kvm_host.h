@@ -266,8 +266,10 @@ struct kvm_gfn_range {
 		pte_t pte;
 		unsigned long attributes;
 		u64 raw;
+		struct page *page;
 	} arg;
 	bool may_block;
+	bool memory_error;
 };
 bool kvm_unmap_gfn_range(struct kvm *kvm, struct kvm_gfn_range *range);
 bool kvm_age_gfn(struct kvm *kvm, struct kvm_gfn_range *range);
