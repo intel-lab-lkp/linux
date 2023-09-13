@@ -216,9 +216,11 @@ Returns:
 Specifies the guest's TSC offset relative to the host's TSC. The guest's
 TSC is then derived by the following equation:
 
-  guest_tsc = host_tsc + KVM_VCPU_TSC_OFFSET
+  guest_tsc = (( host_tsc * tsc_scale_ratio ) >> tsc_scale_bits ) + KVM_VCPU_TSC_OFFSET
 
-This attribute is useful to adjust the guest's TSC on live migration,
+The value of tsc_scale_bits is 48 on Intel and 32 on AMD. You can calculate
+tsc_scale_ratio as (... where you might be able to botain tsc_scale_bits from debugfs
+  if you're luckyThis attribute is useful to adjust the guest's TSC on live migration,
 so that the TSC counts the time during which the VM was paused. The
 following describes a possible algorithm to use for this purpose.
 
@@ -234,9 +236,19 @@ From the source VMM process:
 3. Invoke the KVM_GET_TSC_KHZ ioctl to record the frequency of the
    guest's TSC (freq).
 
+4. Read the KVM_VCPU_TSC_SCALE attribute for each vCPU to obtain the
+   src_tsc_ratio[i] and src_tsc_frac_bits[i] values.
+
+5. For each vCPU[i], calculate the guest TSC value (guest_tsc_src) at time
+   [guest_src] in guest KVM time. This is calculated by the formula:
+      guest_tsc_src[i] = ((tsc_src * src_tsc_ratio[i]) >> src_tsc_frac_bits[i]) + ofs_src[i]
+
 From the destination VMM process:
 
-4. Invoke the KVM_SET_CLOCK ioctl, providing the source nanoseconds from
+6. Invoke the KVM_SET_TSC_KHZ ioctl to set the scaled frequency of the
+   guest's TSC (freq).
+
+7. Invoke the KVM_SET_CLOCK ioctl, providing the source nanoseconds from
    kvmclock (guest_src) and CLOCK_REALTIME (host_src) in their respective
    fields.  Ensure that the KVM_CLOCK_REALTIME flag is set in the provided
    structure.
@@ -248,20 +260,58 @@ From the destination VMM process:
    between the source pausing the VMs and the destination executing
    steps 4-7.
 
-5. Invoke the KVM_GET_CLOCK ioctl to record the host TSC (tsc_dest) and
+8. Invoke the KVM_GET_CLOCK ioctl to record the host TSC (tsc_dest) and
    kvmclock nanoseconds (guest_dest).
 
-6. Adjust the guest TSC offsets for every vCPU to account for (1) time
-   elapsed since recording state and (2) difference in TSCs between the
-   source and destination machine:
+9. Read the KVM_VCPU_TSC_SCALE attribute for each vCPU to obtain the
+   dest_tsc_ratio[i] and dest_tsc_frac_bits[i] values.
 
-   ofs_dst[i] = ofs_src[i] -
-     (guest_src - guest_dest) * freq +
-     (tsc_src - tsc_dest)
+10. For each vCPU[i], calculate the guest TSC value (guest_src_dest) at time
+    [guest_dest] in guest KVM time, as follows:
+       guest_tsc_dest[i] = guest_tsc_src[i] + (guest_dest - guest_src) / (1000000 * freq)
 
-   ("ofs[i] + tsc - guest * freq" is the guest TSC value corresponding to
-   a time of 0 in kvmclock.  The above formula ensures that it is the
-   same on the destination as it was on the source).
+11. For each vcpu[i], calculate what KVM will use internally as the scaled
+    guest time _before_ offsetting at time [guest_dest]:
+       raw_guest_tsc_dest[i] = (tsc_dest * dest_tsc_ratio[i]) >> dest_tsc_frac_bits[i]
 
-7. Write the KVM_VCPU_TSC_OFFSET attribute for every vCPU with the
-   respective value derived in the previous step.
+12. Calculate the post-scaling guest TSC offsets for every vCPU to account
+    for the difference between the raw scaled value and the intended value:
+
+       ofs_dst[i] = guest_tsc_dest[i] - raw_guest_tsc_dest[i]
+
+13. Write the KVM_VCPU_TSC_OFFSET attribute for every vCPU with the
+    respective value derived in the previous step.
+
+4.2 ATTRIBUTE: KVM_VCPU_TSC_SCALE
+
+:Parameters: 64-bit fixed point TSC scale factor
+
+Returns:
+
+	 ======= ======================================
+	 -EFAULT Error reading the provided parameter
+		 address.
+	 -ENXIO  Attribute not supported
+	 -EINVAL Invalid request to write the attribute
+	 ======= ======================================
+
+This read-only attribute reports the guest's TSC scaling factor, in the form
+of a fixed-point number represented by the following structure:
+
+    struct kvm_vcpu_tsc_scale {
+	    __u64	tsc_ratio;
+	    __u64	tsc_frac_bits;
+    };
+
+
+The tsc_frac_bits field indicate the location of the fixed point, such that
+host TSC values are converted to guest TSC using the formula:
+
+    guest_tsc = ( ( host_tsc * tsc_ratio ) >> tsc_frac_bits) + offset
+
+Userspace generally has no need to know this, as it has set the desired
+guest TSC frequency. But since KVM only offsets the KVM_VCPU_TSC_OFFSET
+attribute as documented above, and not a KVM_VCPU_TSC_VALUE attribute
+which would have made life much easier, userspace needs to extract these
+values so that it can do for itself all the calculations that the kernel
+could have done more easily.
