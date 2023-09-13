@@ -9,6 +9,7 @@
 #include <linux/security.h>
 #include <linux/uaccess.h>
 #include <linux/compat.h>
+#include <uapi/linux/mount.h>
 #include "internal.h"
 
 static int flags_by_mnt(int mnt_flags)

@@ -84,6 +84,11 @@ int path_mount(const char *dev_name, struct path *path,
 int path_umount(struct path *path, int flags);
 
 /*
+ * proc_namespace.c
+ */
+int show_path(struct seq_file *m, struct dentry *root);
+
+/*
  * fs_struct.c
  */
 extern void chroot_fs_refs(const struct path *, const struct path *);

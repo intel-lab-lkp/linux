@@ -69,7 +69,8 @@ static DEFINE_IDA(mnt_id_ida);
 static DEFINE_IDA(mnt_group_ida);
 
 /* Don't allow confusion with mount ID allocated wit IDA */
-static atomic64_t mnt_id_ctr = ATOMIC64_INIT(1ULL << 32);
+#define OLD_MNT_ID_MAX UINT_MAX
+static atomic64_t mnt_id_ctr = ATOMIC64_INIT(OLD_MNT_ID_MAX);
 
 static struct hlist_head *mount_hashtable __read_mostly;
 static struct hlist_head *mountpoint_hashtable __read_mostly;
@@ -4675,6 +4676,315 @@ SYSCALL_DEFINE5(mount_setattr, int, dfd, const char __user *, path,
 		path_put(&target);
 	}
 	finish_mount_kattr(&kattr);
+	return err;
+}
+
+static bool mnt_id_match(struct mount *mnt, u64 id)
+{
+	if (id <= OLD_MNT_ID_MAX)
+		return id == mnt->mnt_id;
+	else
+		return id == mnt->mnt_id_unique;
+}
+
+struct vfsmount *lookup_mnt_in_ns(u64 id, struct mnt_namespace *ns)
+{
+	struct mount *mnt;
+	struct vfsmount *res = NULL;
+
+	lock_ns_list(ns);
+	list_for_each_entry(mnt, &ns->list, mnt_list) {
+		if (!mnt_is_cursor(mnt) && mnt_id_match(mnt, id)) {
+			res = &mnt->mnt;
+			break;
+		}
+	}
+	unlock_ns_list(ns);
+	return res;
+}
+
+struct stmt_state {
+	void __user *const buf;
+	size_t const bufsize;
+	struct vfsmount *const mnt;
+	u64 const mask;
+	struct seq_file seq;
+	struct path root;
+	struct statmnt sm;
+	size_t pos;
+	int err;
+};
+
+typedef int (*stmt_func_t)(struct stmt_state *);
+
+static int stmt_string_seq(struct stmt_state *s, stmt_func_t func)
+{
+	struct seq_file *seq = &s->seq;
+	int ret;
+
+	seq->count = 0;
+	seq->size = min_t(size_t, seq->size, s->bufsize - s->pos);
+	seq->buf = kvmalloc(seq->size, GFP_KERNEL_ACCOUNT);
+	if (!seq->buf)
+		return -ENOMEM;
+
+	ret = func(s);
+	if (ret)
+		return ret;
+
+	if (seq_has_overflowed(seq)) {
+		if (seq->size == s->bufsize - s->pos)
+			return -EOVERFLOW;
+		seq->size *= 2;
+		if (seq->size > MAX_RW_COUNT)
+			return -ENOMEM;
+		kvfree(seq->buf);
+		return 0;
+	}
+
+	/* Done */
+	return 1;
+}
+
+static void stmt_string(struct stmt_state *s, u64 mask, stmt_func_t func,
+		       stmt_str_t *str)
+{
+	int ret = s->pos >= s->bufsize ? -EOVERFLOW : 0;
+	struct statmnt *sm = &s->sm;
+	struct seq_file *seq = &s->seq;
+
+	if (s->err || !(s->mask & mask))
+		return;
+
+	seq->size = PAGE_SIZE;
+	while (!ret)
+		ret = stmt_string_seq(s, func);
+
+	if (ret < 0) {
+		s->err = ret;
+	} else {
+		seq->buf[seq->count++] = '\0';
+		if (copy_to_user(s->buf + s->pos, seq->buf, seq->count)) {
+			s->err = -EFAULT;
+		} else {
+			str->off = s->pos;
+			str->len = seq->count - 1;
+			s->pos += seq->count;
+		}
+	}
+	kvfree(seq->buf);
+	sm->mask |= mask;
+}
+
+static void stmt_numeric(struct stmt_state *s, u64 mask, stmt_func_t func)
+{
+	if (s->err || !(s->mask & mask))
+		return;
+
+	s->err = func(s);
+	s->sm.mask |= mask;
+}
+
+static u64 mnt_to_attr_flags(struct vfsmount *mnt)
+{
+	unsigned int mnt_flags = READ_ONCE(mnt->mnt_flags);
+	u64 attr_flags = 0;
+
+	if (mnt_flags & MNT_READONLY)
+		attr_flags |= MOUNT_ATTR_RDONLY;
+	if (mnt_flags & MNT_NOSUID)
+		attr_flags |= MOUNT_ATTR_NOSUID;
+	if (mnt_flags & MNT_NODEV)
+		attr_flags |= MOUNT_ATTR_NODEV;
+	if (mnt_flags & MNT_NOEXEC)
+		attr_flags |= MOUNT_ATTR_NOEXEC;
+	if (mnt_flags & MNT_NODIRATIME)
+		attr_flags |= MOUNT_ATTR_NODIRATIME;
+	if (mnt_flags & MNT_NOSYMFOLLOW)
+		attr_flags |= MOUNT_ATTR_NOSYMFOLLOW;
+
+	if (mnt_flags & MNT_NOATIME)
+		attr_flags |= MOUNT_ATTR_NOATIME;
+	else if (mnt_flags & MNT_RELATIME)
+		attr_flags |= MOUNT_ATTR_RELATIME;
+	else
+		attr_flags |= MOUNT_ATTR_STRICTATIME;
+
+	if (is_idmapped_mnt(mnt))
+		attr_flags |= MOUNT_ATTR_IDMAP;
+
+	return attr_flags;
+}
+
+static u64 mnt_to_propagation_flags(struct mount *m)
+{
+	u64 propagation = 0;
+
+	if (IS_MNT_SHARED(m))
+		propagation |= MS_SHARED;
+	if (IS_MNT_SLAVE(m))
+		propagation |= MS_SLAVE;
+	if (IS_MNT_UNBINDABLE(m))
+		propagation |= MS_UNBINDABLE;
+	if (!propagation)
+		propagation |= MS_PRIVATE;
+
+	return propagation;
+}
+
+static int stmt_sb_basic(struct stmt_state *s)
+{
+	struct super_block *sb = s->mnt->mnt_sb;
+
+	s->sm.sb_dev_major = MAJOR(sb->s_dev);
+	s->sm.sb_dev_minor = MINOR(sb->s_dev);
+	s->sm.sb_magic = sb->s_magic;
+	s->sm.sb_flags = sb->s_flags & (SB_RDONLY|SB_SYNCHRONOUS|SB_DIRSYNC|SB_LAZYTIME);
+
+	return 0;
+}
+
+static int stmt_mnt_basic(struct stmt_state *s)
+{
+	struct mount *m = real_mount(s->mnt);
+
+	s->sm.mnt_id = m->mnt_id_unique;
+	s->sm.mnt_parent_id = m->mnt_parent->mnt_id_unique;
+	s->sm.mnt_id_old = m->mnt_id;
+	s->sm.mnt_parent_id_old = m->mnt_parent->mnt_id;
+	s->sm.mnt_attr = mnt_to_attr_flags(&m->mnt);
+	s->sm.mnt_propagation = mnt_to_propagation_flags(m);
+	s->sm.mnt_peer_group = IS_MNT_SHARED(m) ? m->mnt_group_id : 0;
+	s->sm.mnt_master = IS_MNT_SLAVE(m) ? m->mnt_master->mnt_group_id : 0;
+
+	return 0;
+}
+
+static int stmt_propagate_from(struct stmt_state *s)
+{
+	struct mount *m = real_mount(s->mnt);
+
+	if (!IS_MNT_SLAVE(m))
+		return 0;
+
+	s->sm.propagate_from = get_dominating_id(m, &current->fs->root);
+
+	return 0;
+}
+
+static int stmt_mnt_root(struct stmt_state *s)
+{
+	struct seq_file *seq = &s->seq;
+	int err = show_path(seq, s->mnt->mnt_root);
+
+	if (!err && !seq_has_overflowed(seq)) {
+		seq->buf[seq->count] = '\0';
+		seq->count = string_unescape_inplace(seq->buf, UNESCAPE_OCTAL);
+	}
+	return err;
+}
+
+static int stmt_mountpoint(struct stmt_state *s)
+{
+	struct vfsmount *mnt = s->mnt;
+	struct path mnt_path = { .dentry = mnt->mnt_root, .mnt = mnt };
+	int err = seq_path_root(&s->seq, &mnt_path, &s->root, "");
+
+	return err == SEQ_SKIP ? 0 : err;
+}
+
+static int stmt_fs_type(struct stmt_state *s)
+{
+	struct seq_file *seq = &s->seq;
+	struct super_block *sb = s->mnt->mnt_sb;
+
+	seq_puts(seq, sb->s_type->name);
+	if (sb->s_subtype) {
+		seq_putc(seq, '.');
+		seq_puts(seq, sb->s_subtype);
+	}
+	return 0;
+}
+
+static int stmt_sb_opts(struct stmt_state *s)
+{
+	struct seq_file *seq = &s->seq;
+	struct super_block *sb = s->mnt->mnt_sb;
+	char *p, *end, *next, *u = seq->buf;
+	int err;
+
+	if (!sb->s_op->show_options)
+		return 0;
+
+	err = sb->s_op->show_options(seq, s->mnt->mnt_root);
+	if (err || seq_has_overflowed(seq) || !seq->count)
+		return err;
+
+	end = seq->buf + seq->count;
+	*end = '\0';
+	for (p = seq->buf + 1; p < end; p = next + 1) {
+		next = strchrnul(p, ',');
+		*next = '\0';
+		u += string_unescape(p, u, 0, UNESCAPE_OCTAL) + 1;
+	}
+	seq->count = u - 1 - seq->buf;
+	return 0;
+}
+
+static int do_statmnt(struct stmt_state *s)
+{
+	struct statmnt *sm = &s->sm;
+	struct mount *m = real_mount(s->mnt);
+
+	if (!capable(CAP_SYS_ADMIN) &&
+	    !is_path_reachable(m, m->mnt.mnt_root, &s->root))
+		return -EPERM;
+
+	stmt_numeric(s, STMT_SB_BASIC, stmt_sb_basic);
+	stmt_numeric(s, STMT_MNT_BASIC, stmt_mnt_basic);
+	stmt_numeric(s, STMT_PROPAGATE_FROM, stmt_propagate_from);
+	stmt_string(s, STMT_MNT_ROOT, stmt_mnt_root, &sm->mnt_root);
+	stmt_string(s, STMT_MOUNTPOINT, stmt_mountpoint, &sm->mountpoint);
+	stmt_string(s, STMT_FS_TYPE, stmt_fs_type, &sm->fs_type);
+	stmt_string(s, STMT_SB_OPTS, stmt_sb_opts, &sm->sb_opts);
+
+	if (s->err)
+		return s->err;
+
+	if (copy_to_user(s->buf, sm, min_t(size_t, s->bufsize, sizeof(*sm))))
+		return -EFAULT;
+
+	return 0;
+}
+
+SYSCALL_DEFINE5(statmnt, u64, mnt_id,
+		u64, mask, struct statmnt __user *, buf,
+		size_t, bufsize, unsigned int, flags)
+{
+	struct vfsmount *mnt;
+	int err;
+
+	if (flags)
+		return -EINVAL;
+
+	down_read(&namespace_sem);
+	mnt = lookup_mnt_in_ns(mnt_id, current->nsproxy->mnt_ns);
+	err = -ENOENT;
+	if (mnt) {
+		struct stmt_state s = {
+			.mask = mask,
+			.buf = buf,
+			.bufsize = bufsize,
+			.mnt = mnt,
+			.pos = sizeof(*buf),
+		};
+
+		get_fs_root(current->fs, &s.root);
+		err = do_statmnt(&s);
+		path_put(&s.root);
+	}
+	up_read(&namespace_sem);
+
 	return err;
 }
 
