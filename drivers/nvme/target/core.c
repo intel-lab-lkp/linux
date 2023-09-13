@@ -17,6 +17,29 @@
 
 #include "nvmet.h"
 
+/* Define the polling queue thread's affinity cpu core.
+ *  */
+static int pqt_affinity_core = -1;
+module_param(pqt_affinity_core, int, 0644);
+MODULE_PARM_DESC(pqt_affinity_core,
+			    "nvme polling queue thread's affinity core, -1 for all online cpus");
+
+/* Define a time (in usecs) that polling queue thread shall sample the
+ *  * io request ring before determining it to be idle.
+ *   */
+static int pqt_idle_usecs;
+module_param(pqt_idle_usecs, int, 0644);
+MODULE_PARM_DESC(pqt_idle_usecs,
+				"polling queue task will poll io request till idle time in usecs");
+
+/* Define the polling queue thread ring's size.
+ *  * The ring will be consumed by polling queue thread.
+ *   */
+static int pqt_ring_size;
+module_param(pqt_ring_size, int, 0644);
+MODULE_PARM_DESC(pqt_ring_size,
+				"nvme target polling queue thread ring size");
+
 struct kmem_cache *nvmet_bvec_cache;
 struct workqueue_struct *buffered_io_wq;
 struct workqueue_struct *zbd_wq;
@@ -1648,13 +1671,34 @@ static int __init nvmet_init(void)
 {
 	int error = -ENOMEM;
 
+	if ((pqt_affinity_core >= -1 &&
+		pqt_affinity_core < nr_cpu_ids) ||
+		pqt_idle_usecs > 0 || pqt_ring_size > 0) {
+		if (pqt_idle_usecs == 0)
+			pqt_idle_usecs = 1000; //default 1ms
+		if (pqt_affinity_core < -1 ||
+			pqt_affinity_core >= nr_cpu_ids) {
+			printk(KERN_ERR "bad parameter for affinity core \n");
+			error =  -EINVAL;
+			return error;
+		}
+		if (pqt_ring_size == 0)
+			pqt_ring_size = 4096; //default 4k
+		error = nvmet_init_pq_thread(pqt_idle_usecs,
+						pqt_affinity_core, pqt_ring_size);
+		if (error)
+			return error;
+	}
+
 	nvmet_ana_group_enabled[NVMET_DEFAULT_ANA_GRPID] = 1;
 
 	nvmet_bvec_cache = kmem_cache_create("nvmet-bvec",
 			NVMET_MAX_MPOOL_BVEC * sizeof(struct bio_vec), 0,
 			SLAB_HWCACHE_ALIGN, NULL);
-	if (!nvmet_bvec_cache)
-		return -ENOMEM;
+	if (!nvmet_bvec_cache) {
+		error = -ENOMEM;
+		goto out_free_pqt;
+	}
 
 	zbd_wq = alloc_workqueue("nvmet-zbd-wq", WQ_MEM_RECLAIM, 0);
 	if (!zbd_wq)
@@ -1688,6 +1732,8 @@ out_free_zbd_work_queue:
 	destroy_workqueue(zbd_wq);
 out_destroy_bvec_cache:
 	kmem_cache_destroy(nvmet_bvec_cache);
+out_free_pqt:
+	nvmet_exit_pq_thread();
 	return error;
 }
 
@@ -1700,6 +1746,11 @@ static void __exit nvmet_exit(void)
 	destroy_workqueue(buffered_io_wq);
 	destroy_workqueue(zbd_wq);
 	kmem_cache_destroy(nvmet_bvec_cache);
+
+	if ((pqt_affinity_core >= -1 &&
+		pqt_affinity_core < nr_cpu_ids) ||
+		pqt_idle_usecs > 0 || pqt_ring_size > 0)
+		nvmet_exit_pq_thread();
 
 	BUILD_BUG_ON(sizeof(struct nvmf_disc_rsp_page_entry) != 1024);
 	BUILD_BUG_ON(sizeof(struct nvmf_disc_rsp_page_hdr) != 1024);
