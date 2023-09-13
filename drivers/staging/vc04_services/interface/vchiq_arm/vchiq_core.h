@@ -69,9 +69,8 @@ static inline const char *log_category_str(enum vchiq_log_category c)
        dev_dbg(dev, "%s warning: " fmt, log_category_str(cat), ##__VA_ARGS__);
 #endif
 #ifndef vchiq_log_info
-#define vchiq_log_info(cat, fmt, ...) \
-	do { if (cat >= VCHIQ_LOG_INFO) \
-		printk(VCHIQ_LOG_PREFIX fmt "\n", ##__VA_ARGS__); } while (0)
+#define vchiq_log_info(dev, cat, fmt, ...) \
+       dev_dbg(dev, "%s info: " fmt, log_category_str(cat), ##__VA_ARGS__);
 #endif
 #ifndef vchiq_log_trace
 #define vchiq_log_trace(cat, fmt, ...) \
