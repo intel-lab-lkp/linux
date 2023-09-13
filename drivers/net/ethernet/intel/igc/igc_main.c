@@ -6850,6 +6850,7 @@ static int igc_probe(struct pci_dev *pdev,
 	netdev->hw_features |= NETIF_F_NTUPLE;
 	netdev->hw_features |= NETIF_F_HW_VLAN_CTAG_TX;
 	netdev->hw_features |= NETIF_F_HW_VLAN_CTAG_RX;
+	netdev->hw_features |= NETIF_F_RXALL;
 	netdev->hw_features |= netdev->features;
 
 	netdev->features |= NETIF_F_HIGHDMA;
