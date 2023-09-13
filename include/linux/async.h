@@ -35,6 +35,12 @@ struct async_domain {
 	struct async_domain _name = { .pending = LIST_HEAD_INIT(_name.pending), \
 				      .registered = 0 }
 
+static inline void INIT_ASYNC_DOMAIN_EXCLUSIVE(struct async_domain *domain)
+{
+	INIT_LIST_HEAD(&domain->pending);
+	domain->registered = 0;
+}
+
 async_cookie_t async_schedule_node(async_func_t func, void *data,
 				   int node);
 async_cookie_t async_schedule_node_domain(async_func_t func, void *data,
