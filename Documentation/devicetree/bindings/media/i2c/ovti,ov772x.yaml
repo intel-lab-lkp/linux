@@ -114,7 +114,7 @@ examples:
             compatible = "ovti,ov7725";
             reg = <0x21>;
             reset-gpios = <&axi_gpio_0 0 GPIO_ACTIVE_LOW>;
-            powerdown-gpios = <&axi_gpio_0 1 GPIO_ACTIVE_LOW>;
+            powerdown-gpios = <&axi_gpio_0 1 GPIO_ACTIVE_HIGH>;
             clocks = <&xclk>;
 
             port {
