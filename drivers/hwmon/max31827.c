@@ -43,6 +43,9 @@
 #define MAX31827_CONFIGURATION_U_TEMP_STAT_MASK BIT(14)
 #define MAX31827_CONFIGURATION_O_TEMP_STAT_MASK BIT(15)
 
+#define MAX31827_8_BIT_CNV_TIME		9
+#define MAX31827_9_BIT_CNV_TIME		18
+#define MAX31827_10_BIT_CNV_TIME	35
 #define MAX31827_12_BIT_CNV_TIME	140
 
 #define MAX31827_FLT_Q_1	0x0
@@ -51,6 +54,7 @@
 #define MAX31827_16_BIT_TO_M_DGR(x)	(sign_extend32(x, 15) * 1000 / 16)
 #define MAX31827_M_DGR_TO_16_BIT(x)	(((x) << 4) / 1000)
 #define MAX31827_DEVICE_ENABLE(x)	((x) ? 0xA : 0x0)
+#define MAX31827_FLT_Q
 
 enum chips { max31827, max31828, max31829 };
 
@@ -74,6 +78,27 @@ static const u16 max31827_conversions[] = {
 	[MAX31827_CNV_8_HZ] = 125,
 };
 
+enum max31827_resolution {
+	MAX31827_RES_8_BIT = 0,
+	MAX31827_RES_9_BIT,
+	MAX31827_RES_10_BIT,
+	MAX31827_RES_12_BIT,
+};
+
+static const u16 max31827_resolutions[] = {
+	[MAX31827_RES_8_BIT] = 1000,
+	[MAX31827_RES_9_BIT] = 500,
+	[MAX31827_RES_10_BIT] = 250,
+	[MAX31827_RES_12_BIT] = 62,
+};
+
+static const u16 max31827_conv_times[] = {
+	[MAX31827_RES_8_BIT] = MAX31827_8_BIT_CNV_TIME,
+	[MAX31827_RES_9_BIT] = MAX31827_9_BIT_CNV_TIME,
+	[MAX31827_RES_10_BIT] = MAX31827_10_BIT_CNV_TIME,
+	[MAX31827_RES_12_BIT] = MAX31827_12_BIT_CNV_TIME,
+};
+
 struct max31827_state {
 	/*
 	 * Prevent simultaneous access to the i2c client.
@@ -81,6 +106,8 @@ struct max31827_state {
 	struct mutex lock;
 	struct regmap *regmap;
 	bool enable;
+	unsigned int resolution;
+	unsigned int update_interval;
 	struct i2c_client *client;
 };
 
@@ -98,9 +125,9 @@ static int shutdown_write(struct max31827_state *st, unsigned int reg,
 	int ret;
 
 	/*
-	 * Before the Temperature Threshold Alarm and Alarm Hysteresis Threshold
-	 * register values are changed over I2C, the part must be in shutdown
-	 * mode.
+	 * Before the Temperature Threshold Alarm, Alarm Hysteresis Threshold
+	 * and Resolution bits from Configuration register are changed over I2C,
+	 * the part must be in shutdown mode.
 	 *
 	 * Mutex is used to ensure, that some other process doesn't change the
 	 * configuration register.
@@ -211,9 +238,18 @@ static int max31827_read(struct device *dev, enum hwmon_sensor_types type,
 					mutex_unlock(&st->lock);
 					return ret;
 				}
-
-				msleep(MAX31827_12_BIT_CNV_TIME);
+				msleep(max31827_conv_times[st->resolution]);
 			}
+
+			/*
+			 * For 12-bit resolution the conversion time is 140 ms,
+			 * thus an additional 15 ms is needed to complete the
+			 * conversion: 125 ms + 15 ms = 140 ms
+			 */
+			if (max31827_resolutions[st->resolution] == 12 &&
+			    st->update_interval == 125)
+				usleep_range(15000, 20000);
+
 			ret = regmap_read(st->regmap, MAX31827_T_REG, &uval);
 
 			mutex_unlock(&st->lock);
@@ -371,10 +407,14 @@ static int max31827_write(struct device *dev, enum hwmon_sensor_types type,
 			res = FIELD_PREP(MAX31827_CONFIGURATION_CNV_RATE_MASK,
 					 res);
 
-			return regmap_update_bits(st->regmap,
-						  MAX31827_CONFIGURATION_REG,
-						  MAX31827_CONFIGURATION_CNV_RATE_MASK,
-						  res);
+			ret = regmap_update_bits(st->regmap,
+						 MAX31827_CONFIGURATION_REG,
+						 MAX31827_CONFIGURATION_CNV_RATE_MASK,
+						 res);
+			if (ret)
+				return ret;
+
+			st->update_interval = val;
 		}
 		break;
 
@@ -385,11 +425,79 @@ static int max31827_write(struct device *dev, enum hwmon_sensor_types type,
 	return -EOPNOTSUPP;
 }
 
+static ssize_t temp1_resolution_show(struct device *dev,
+				     struct device_attribute *devattr,
+				     char *buf)
+{
+	struct max31827_state *st = dev_get_drvdata(dev);
+	unsigned int val;
+	int ret;
+
+	ret = regmap_read(st->regmap, MAX31827_CONFIGURATION_REG, &val);
+	if (ret)
+		return ret;
+
+	val = FIELD_GET(MAX31827_CONFIGURATION_RESOLUTION_MASK, val);
+
+	return scnprintf(buf, PAGE_SIZE, "%u\n", max31827_resolutions[val]);
+}
+
+static ssize_t temp1_resolution_store(struct device *dev,
+				      struct device_attribute *devattr,
+				      const char *buf, size_t count)
+{
+	struct max31827_state *st = dev_get_drvdata(dev);
+	unsigned int idx = 0;
+	unsigned int val, cfg;
+	int ret;
+
+	ret = kstrtouint(buf, 10, &val);
+	if (ret)
+		return ret;
+
+	/*
+	 * Convert the desired conversion rate into register
+	 * bits. idx is already initialized with 1.
+	 *
+	 * This was inspired by lm73 driver.
+	 */
+	while (idx < ARRAY_SIZE(max31827_resolutions) &&
+	       val < max31827_resolutions[idx])
+		idx++;
+
+	if (idx == ARRAY_SIZE(max31827_resolutions) ||
+	    val != max31827_resolutions[idx])
+		return -EOPNOTSUPP;
+
+	st->resolution = idx;
+
+	ret = regmap_read(st->regmap, MAX31827_CONFIGURATION_REG, &cfg);
+	if (ret)
+		return ret;
+
+	cfg = (cfg & ~MAX31827_CONFIGURATION_RESOLUTION_MASK) |
+	       FIELD_PREP(MAX31827_CONFIGURATION_RESOLUTION_MASK, idx);
+	cfg &= ~(MAX31827_CONFIGURATION_CNV_RATE_MASK |
+		 MAX31827_CONFIGURATION_1SHOT_MASK);
+
+	ret = shutdown_write(st, MAX31827_CONFIGURATION_REG, cfg);
+
+	return (ret) ? ret : count;
+}
+
+static DEVICE_ATTR_RW(temp1_resolution);
+
+static struct attribute *max31827_attrs[] = {
+	&dev_attr_temp1_resolution.attr,
+	NULL
+};
+ATTRIBUTE_GROUPS(max31827);
+
 static const struct i2c_device_id max31827_i2c_ids[] = {
-       { "max31827", max31827 },
-       { "max31828", max31828 },
-       { "max31829", max31829 },
-       { }
+	{ "max31827", max31827 },
+	{ "max31828", max31828 },
+	{ "max31829", max31829 },
+	{ }
 };
 MODULE_DEVICE_TABLE(i2c, max31827_i2c_ids);
 
@@ -525,7 +633,7 @@ static int max31827_probe(struct i2c_client *client)
 
 	hwmon_dev = devm_hwmon_device_register_with_info(dev, client->name, st,
 							 &max31827_chip_info,
-							 NULL);
+							 max31827_groups);
 
 	return PTR_ERR_OR_ZERO(hwmon_dev);
 }
