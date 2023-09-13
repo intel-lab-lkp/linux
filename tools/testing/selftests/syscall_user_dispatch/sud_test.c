@@ -158,6 +158,14 @@ static void handle_sigsys(int sig, siginfo_t *info, void *ucontext)
 
 	/* In preparation for sigreturn. */
 	SYSCALL_DISPATCH_OFF(glob_sel);
+
+	/*
+	 * Modify interrupted context returned value according to syscall
+	 * calling convention
+	 */
+#if defined(__riscv)
+	((ucontext_t*)ucontext)->uc_mcontext.__gregs[REG_A0] = MAGIC_SYSCALL_1;
+#endif
 }
 
 TEST(dispatch_and_return)
