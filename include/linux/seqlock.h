@@ -241,6 +241,21 @@ static __always_inline void						\
 __seqprop_##lockname##_assert(const seqcount_##lockname##_t *s)		\
 {									\
 	__SEQ_LOCK(lockdep_assert_held(s->lock));			\
+}									\
+									\
+static __always_inline void						\
+__seqprop_##lockname##_lock(seqcount_##lockname##_t *s,			\
+				locktype *lock)				\
+{									\
+	__SEQ_LOCK(WARN_ON_ONCE(s->lock != lock));			\
+	lockbase##_lock(lock);						\
+}									\
+									\
+static __always_inline void						\
+__seqprop_##lockname##_unlock(seqcount_##lockname##_t *s,		\
+				locktype *lock)				\
+{									\
+	lockbase##_unlock(lock); 					\
 }
 
 /*
@@ -305,6 +320,12 @@ SEQCOUNT_LOCKNAME(mutex,        struct mutex,    true,     mutex)
 #define seqprop_sequence(s)		__seqprop(s, sequence)(s)
 #define seqprop_preemptible(s)		__seqprop(s, preemptible)(s)
 #define seqprop_assert(s)		__seqprop(s, assert)(s)
+
+/* seqcount_t doesn't have these methods */
+static inline void __seqprop_lock   (seqcount_t *s, void *l) { BUILD_BUG(); }
+static inline void __seqprop_unlock (seqcount_t *s, void *l) { BUILD_BUG(); }
+#define seqprop_lock(s, l)		__seqprop(s, lock)(s, l)
+#define seqprop_unlock(s, l)		__seqprop(s, unlock)(s, l)
 
 /**
  * __read_seqcount_begin() - begin a seqcount_t read section w/o barrier
