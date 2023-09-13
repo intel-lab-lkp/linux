@@ -2641,17 +2641,6 @@ ext4_ext_rm_leaf(handle_t *handle, struct inode *inode,
 
 		/* If this extent is beyond the end of the hole, skip it */
 		if (end < ex_ee_block) {
-			/*
-			 * We're going to skip this extent and move to another,
-			 * so note that its first cluster is in use to avoid
-			 * freeing it when removing blocks.  Eventually, the
-			 * right edge of the truncated/punched region will
-			 * be just to the left.
-			 */
-			if (sbi->s_cluster_ratio > 1) {
-				partial->lblk = ex_ee_block;
-				partial->state = keep;
-			}
 			ex--;
 			ex_ee_block = le32_to_cpu(ex->ee_block);
 			ex_ee_len = ext4_ext_get_actual_len(ex);
@@ -2812,10 +2801,6 @@ int ext4_ext_remove_space(struct inode *inode, ext4_lblk_t start,
 	handle_t *handle;
 	int i = 0, err = 0;
 
-	partial.pclu = 0;
-	partial.lblk = 0;
-	partial.state = none;
-
 	ext_debug(inode, "truncate since %u to %u\n", start, end);
 
 	/* probably first extent we're gonna free will be last in block */
@@ -2824,6 +2809,13 @@ int ext4_ext_remove_space(struct inode *inode, ext4_lblk_t start,
 			ext4_free_metadata_revoke_credits(inode->i_sb, depth));
 	if (IS_ERR(handle))
 		return PTR_ERR(handle);
+
+	/* state never changes for non-bigalloc file systems */
+	partial.state = none;
+	if (sbi->s_cluster_ratio > 1) {
+		partial.start_lclu = EXT4_B2C(sbi, start);
+		partial.end_lclu = EXT4_B2C(sbi, end);
+	}
 
 again:
 	trace_ext4_ext_remove_space(inode, start, end, depth);
@@ -2838,7 +2830,6 @@ again:
 	if (end < EXT_MAX_BLOCKS - 1) {
 		struct ext4_extent *ex;
 		ext4_lblk_t ee_block, ex_end, lblk;
-		ext4_fsblk_t pblk;
 
 		/* find extent for or closest extent to this block */
 		path = ext4_find_extent(inode, end, NULL,
@@ -2872,16 +2863,6 @@ again:
 		if (end >= ee_block && end < ex_end) {
 
 			/*
-			 * If we're going to split the extent, note that
-			 * the cluster containing the block after 'end' is
-			 * in use to avoid freeing it when removing blocks.
-			 */
-			if (sbi->s_cluster_ratio > 1) {
-				partial.lblk = end + 1;
-				partial.state = keep;
-			}
-
-			/*
 			 * Split the extent in two so that 'end' is the last
 			 * block in the first new extent. Also we should not
 			 * fail removing space due to ENOSPC so try to use
@@ -2891,27 +2872,26 @@ again:
 							 end + 1, 1);
 			if (err < 0)
 				goto out;
+		}
 
-		} else if (sbi->s_cluster_ratio > 1 && end >= ex_end &&
-			   partial.state == none) {
-			/*
-			 * If we're punching, there's an extent to the right.
-			 * If the partial cluster hasn't been set, set it to
-			 * that extent's first cluster and its state to keep
-			 * so it won't be freed should it contain blocks to be
-			 * removed. If it's already set (free/keep), we're
-			 * retrying and keep the original partial cluster info
-			 * so a cluster marked free as a result of earlier
-			 * extent removal is not lost.
-			 */
-			lblk = ex_end + 1;
-			err = ext4_ext_search_right(inode, path, &lblk, &pblk,
-						    NULL);
-			if (err < 0)
-				goto out;
-			if (pblk) {
-				partial.lblk = lblk;
+		/*
+		 * if there's a block following the space to be removed
+		 * in a bigalloc file system note that the cluster
+		 * containing it must not be freed
+		 */
+		if (sbi->s_cluster_ratio > 1 && partial.state == none) {
+			if (end < ee_block) {
+				partial.lblk = ee_block;
 				partial.state = keep;
+			} else if (end >= ee_block && end < ex_end) {
+				partial.lblk = end + 1;
+				partial.state = keep;
+			} else if (end >= ex_end) {
+				lblk = ext4_ext_next_allocated_block(path);
+				if (lblk != EXT_MAX_BLOCKS) {
+					partial.lblk = lblk;
+					partial.state = keep;
+				}
 			}
 		}
 	}
