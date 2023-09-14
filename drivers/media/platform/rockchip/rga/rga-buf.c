@@ -7,6 +7,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/scatterlist.h>
 
+#include <media/v4l2-common.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-ioctl.h>
 #include <media/v4l2-mem2mem.h>
@@ -42,15 +43,29 @@ rga_queue_setup(struct vb2_queue *vq,
 {
 	struct rga_ctx *ctx = vb2_get_drv_priv(vq);
 	struct rga_frame *f = rga_get_frame(ctx, vq->type);
+	const struct v4l2_pix_format_mplane *pix_fmt;
+	int i;
 
 	if (IS_ERR(f))
 		return PTR_ERR(f);
 
-	if (*nplanes)
-		return sizes[0] < f->size ? -EINVAL : 0;
+	pix_fmt = &f->pix;
 
-	sizes[0] = f->size;
-	*nplanes = 1;
+	if (*nplanes) {
+		if (*nplanes != pix_fmt->num_planes)
+			return -EINVAL;
+
+		for (i = 0; i < pix_fmt->num_planes; i++)
+			if (sizes[i] < pix_fmt->plane_fmt[i].sizeimage)
+				return -EINVAL;
+
+		return 0;
+	}
+
+	*nplanes = pix_fmt->num_planes;
+
+	for (i = 0; i < pix_fmt->num_planes; i++)
+		sizes[i] = pix_fmt->plane_fmt[i].sizeimage;
 
 	return 0;
 }
@@ -95,23 +110,38 @@ static int rga_buf_prepare(struct vb2_buffer *vb)
 	struct rga_ctx *ctx = vb2_get_drv_priv(vb->vb2_queue);
 	struct rga_frame *f = rga_get_frame(ctx, vb->vb2_queue->type);
 	struct rockchip_rga *rga = ctx->rga;
-	int n_desc;
+	int n_desc = 0;
+	int i;
+	const struct v4l2_format_info *info;
+	unsigned int offsets[VIDEO_MAX_PLANES];
 
 	if (IS_ERR(f))
 		return PTR_ERR(f);
 
-	vb2_set_plane_payload(vb, 0, f->size);
+	for (i = 0; i < vb->num_planes; i++) {
+		unsigned int ret;
 
-	/* Create local MMU table for RGA */
-	n_desc = fill_descriptors(rbuf->dma_desc,
-				  vb2_dma_sg_plane_desc(vb, 0));
-	if (n_desc < 0) {
-		dev_err(rga->dev, "Failed to map buffer");
-		return n_desc;
+		vb2_set_plane_payload(vb, i, f->pix.plane_fmt[i].sizeimage);
+
+		/* Create local MMU table for RGA */
+		ret = fill_descriptors(&rbuf->dma_desc[n_desc],
+				       vb2_dma_sg_plane_desc(vb, i));
+		if (ret < 0) {
+			dev_err(rga->dev, "Failed to map buffer");
+			return ret;
+		}
+		offsets[i] = n_desc << PAGE_SHIFT;
+		n_desc += ret;
 	}
-	rbuf->offset.y_off = get_plane_offset(f, 0);
-	rbuf->offset.u_off = get_plane_offset(f, 1);
-	rbuf->offset.v_off = get_plane_offset(f, 2);
+
+	/* Fill the remaining planes */
+	info = v4l2_format_info(f->fmt->fourcc);
+	for (i = info->mem_planes; i < info->comp_planes; i++)
+		offsets[i] = get_plane_offset(f, i);
+
+	rbuf->offset.y_off = offsets[0];
+	rbuf->offset.u_off = offsets[1];
+	rbuf->offset.v_off = offsets[2];
 
 	/* sync local MMU table for RGA */
 	dma_sync_single_for_device(rga->dev, rbuf->dma_desc_pa,
