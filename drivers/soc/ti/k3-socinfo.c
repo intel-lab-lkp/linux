@@ -20,7 +20,7 @@
  *  31-28 VARIANT	Device variant
  *  27-12 PARTNO	Part number
  *  11-1  MFG		Indicates TI as manufacturer (0x17)
- *  1			Always 1
+ *  0			Always 1
  */
 #define CTRLMMR_WKUP_JTAGID_VARIANT_SHIFT	(28)
 #define CTRLMMR_WKUP_JTAGID_VARIANT_MASK	GENMASK(31, 28)
@@ -33,33 +33,81 @@
 
 #define CTRLMMR_WKUP_JTAGID_MFG_TI		0x17
 
-static const struct k3_soc_id {
-	unsigned int id;
-	const char *family_name;
-} k3_soc_ids[] = {
-	{ 0xBB5A, "AM65X" },
-	{ 0xBB64, "J721E" },
-	{ 0xBB6D, "J7200" },
-	{ 0xBB38, "AM64X" },
-	{ 0xBB75, "J721S2"},
-	{ 0xBB7E, "AM62X" },
-	{ 0xBB80, "J784S4" },
-	{ 0xBB8D, "AM62AX" },
-	{ 0xBB9D, "AM62PX" },
+#define JTAG_ID_PARTNO_AM65X		0xBB5A
+#define JTAG_ID_PARTNO_J721E		0xBB64
+#define JTAG_ID_PARTNO_J7200		0xBB6D
+#define JTAG_ID_PARTNO_AM64X		0xBB38
+#define JTAG_ID_PARTNO_J721S2		0xBB75
+#define JTAG_ID_PARTNO_AM62X		0xBB7E
+#define JTAG_ID_PARTNO_J784S4		0xBB80
+#define JTAG_ID_PARTNO_AM62AX		0xBB8D
+#define JTAG_ID_PARTNO_AM62PX		0xBB9D
+
+static char *j721e_rev_string_map[] = {
+	"1.0", "1.1",
+};
+
+static char *typical_rev_string_map[] = {
+	"1.0", "2.0", "3.0",
 };
 
 static int
 k3_chipinfo_partno_to_names(unsigned int partno,
 			    struct soc_device_attribute *soc_dev_attr)
 {
-	int i;
+	switch (partno) {
+	case JTAG_ID_PARTNO_AM62AX:
+		soc_dev_attr->family = "AM62AX";
+		break;
+	case JTAG_ID_PARTNO_AM62PX:
+		soc_dev_attr->family = "AM62PX";
+		break;
+	case JTAG_ID_PARTNO_AM62X:
+		soc_dev_attr->family = "AM62X";
+		break;
+	case JTAG_ID_PARTNO_AM64X:
+		soc_dev_attr->family = "AM64X";
+		break;
+	case JTAG_ID_PARTNO_AM65X:
+		soc_dev_attr->family = "AM65X";
+		break;
+	case JTAG_ID_PARTNO_J7200:
+		soc_dev_attr->family = "J7200";
+		break;
+	case JTAG_ID_PARTNO_J721E:
+		soc_dev_attr->family = "J721E";
+		break;
+	case JTAG_ID_PARTNO_J721S2:
+		soc_dev_attr->family = "J721S2";
+		break;
+	case JTAG_ID_PARTNO_J784S4:
+		soc_dev_attr->family = "J784S4";
+		break;
+	default:
+		return -EINVAL;
+	};
+	return 0;
+};
 
-	for (i = 0; i < ARRAY_SIZE(k3_soc_ids); i++)
-		if (partno == k3_soc_ids[i].id) {
-			soc_dev_attr->family = k3_soc_ids[i].family_name;
-			return 0;
-		}
+static int k3_chipinfo_variant_to_sr(unsigned int partno, unsigned int variant,
+				     struct soc_device_attribute *soc_dev_attr)
+{
+	switch (partno) {
+	case JTAG_ID_PARTNO_J721E:
+		if (variant >= ARRAY_SIZE(j721e_rev_string_map))
+			goto bail;
+		soc_dev_attr->revision = kasprintf(GFP_KERNEL, "SR%s",
+						   j721e_rev_string_map[variant]);
+		break;
+	default:
+		if (variant >= ARRAY_SIZE(typical_rev_string_map))
+			goto bail;
+		soc_dev_attr->revision = kasprintf(GFP_KERNEL, "SR%s",
+						   typical_rev_string_map[variant]);
+	}
+	return 0;
 
+bail:
 	return -EINVAL;
 }
 
@@ -70,10 +118,10 @@ static int k3_chipinfo_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct soc_device *soc_dev;
 	struct regmap *regmap;
-	u32 partno_id;
-	u32 variant;
 	u32 jtag_id;
 	u32 mfg;
+	u32 partno_id;
+	u32 variant;
 	int ret;
 
 	regmap = device_node_to_regmap(node);
@@ -92,28 +140,28 @@ static int k3_chipinfo_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
-	variant = (jtag_id & CTRLMMR_WKUP_JTAGID_VARIANT_MASK) >>
-		  CTRLMMR_WKUP_JTAGID_VARIANT_SHIFT;
-	variant++;
-
 	partno_id = (jtag_id & CTRLMMR_WKUP_JTAGID_PARTNO_MASK) >>
 		 CTRLMMR_WKUP_JTAGID_PARTNO_SHIFT;
+
+	variant = (jtag_id & CTRLMMR_WKUP_JTAGID_VARIANT_MASK) >>
+		  CTRLMMR_WKUP_JTAGID_VARIANT_SHIFT;
 
 	soc_dev_attr = kzalloc(sizeof(*soc_dev_attr), GFP_KERNEL);
 	if (!soc_dev_attr)
 		return -ENOMEM;
 
-	soc_dev_attr->revision = kasprintf(GFP_KERNEL, "SR%x.0", variant);
-	if (!soc_dev_attr->revision) {
-		ret = -ENOMEM;
-		goto err;
-	}
-
 	ret = k3_chipinfo_partno_to_names(partno_id, soc_dev_attr);
 	if (ret) {
 		dev_err(dev, "Unknown SoC JTAGID[0x%08X]\n", jtag_id);
 		ret = -ENODEV;
-		goto err_free_rev;
+		goto err;
+	}
+
+	ret = k3_chipinfo_variant_to_sr(partno_id, variant, soc_dev_attr);
+	if (ret) {
+		dev_err(dev, "Unknown revision for %s\n", soc_dev_attr->family);
+		ret = -ENODEV;
+		goto err;
 	}
 
 	node = of_find_node_by_path("/");
