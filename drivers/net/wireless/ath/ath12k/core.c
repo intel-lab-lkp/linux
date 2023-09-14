@@ -696,6 +696,7 @@ static void ath12k_update_11d(struct work_struct *work)
 		pdev = &ab->pdevs[i];
 		ar = pdev->ar;
 
+		memcpy(&ar->alpha2, &set_current_param.alpha2, 2);
 		ret = ath12k_wmi_send_set_current_country_cmd(ar, &set_current_param);
 		if (ret)
 			ath12k_warn(ar->ab,

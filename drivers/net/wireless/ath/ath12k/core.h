@@ -582,6 +582,7 @@ struct ath12k {
 	struct completion completed_11d_scan;
 	enum ath12k_11d_state state_11d;
 	bool regdom_set_by_user;
+	u8 alpha2[REG_ALPHA2_LEN];
 };
 
 struct ath12k_band_cap {
