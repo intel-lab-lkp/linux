@@ -1856,14 +1856,23 @@ chk_mptcp_info()
 	local exp1=$2
 	local info2=$3
 	local exp2=$4
+	local all=${5:-""}
 	local cnt1
 	local cnt2
 	local dump_stats
 
-	print_check "mptcp_info ${info1:0:8}=$exp1:$exp2"
+	print_check "mptcp_info $all ${info1:0:8}=$exp1:$exp2"
 
 	cnt1=$(ss -N $ns1 -inmHM | mptcp_lib_get_info_value "$info1" "$info1")
 	cnt2=$(ss -N $ns2 -inmHM | mptcp_lib_get_info_value "$info2" "$info2")
+	if [ "$all" == "all" ]; then
+		local no_initial_1=0 no_initial_2=0
+
+		no_initial_1=$(ss -N $ns1 -inmHM | grep -c "no_initial_subflow")
+		no_initial_2=$(ss -N $ns2 -inmHM | grep -c "no_initial_subflow")
+		[ $info1 == "subflows" ] && [ $no_initial_1 == 0 ] && cnt1=$((cnt1+1))
+		[ $info2 == "subflows" ] && [ $no_initial_2 == 0 ] && cnt2=$((cnt2+1))
+	fi
 	# 'ss' only display active connections and counters that are not 0.
 	[ -z "$cnt1" ] && cnt1=0
 	[ -z "$cnt2" ] && cnt2=0
@@ -1878,6 +1887,43 @@ chk_mptcp_info()
 	if [ "$dump_stats" = 1 ]; then
 		ss -N $ns1 -inmHM
 		ss -N $ns2 -inmHM
+	fi
+}
+
+ver()
+{
+	printf "%02d%02d%02d%02d" ${1//./ }
+}
+
+# $1: subflows in ns1 ; $2: subflows in ns2
+# number of all subflows, including the initial subflow.
+chk_all_subflows()
+{
+	local ver_iproute2
+	local cnt1
+	local cnt2
+
+	ver_iproute2=$(ss -v |
+		 sed -n 's/.*\(iproute2-\)\([0-9].[0-9].[0-9]\).*$/\2/p')
+	(( $(ver $ver_iproute2) > $(ver 6.5.0) )) && \
+		chk_mptcp_info subflows $1 subflows $2 all && \
+		return
+
+	print_check "all subflows $1:$2"
+
+	cnt1=$(ss -N $ns1 -ti | grep -c tcp-ulp-mptcp)
+	cnt2=$(ss -N $ns2 -ti | grep -c tcp-ulp-mptcp)
+
+	if [ "$1" != "$cnt1" ] || [ "$2" != "$cnt2" ]; then
+		fail_test "got subflows $cnt1:$cnt2 expected $1:$2"
+		dump_stats=1
+	else
+		print_ok
+	fi
+
+	if [ "$dump_stats" = 1 ]; then
+		ss -N $ns1 -ti
+		ss -N $ns2 -ti
 	fi
 }
 
@@ -3427,6 +3473,28 @@ userspace_tests()
 		userspace_pm_rm_sf $ns2 10.0.3.2 $SUB_ESTABLISHED
 		chk_rm_nr 1 1
 		chk_mptcp_info subflows 0 subflows 0
+		kill_events_pids
+		wait $tests_pid
+	fi
+
+	# userspace pm remove id 0 subflow
+	if reset_with_events "userspace pm remove id 0 subflow" &&
+	   continue_if mptcp_lib_has_file '/proc/sys/net/mptcp/pm_type'; then
+		set_userspace_pm $ns2
+		pm_nl_set_limits $ns1 0 1
+		speed=10 \
+			run_tests $ns1 $ns2 10.0.1.1 &
+		local tests_pid=$!
+		wait_mpj $ns2
+		userspace_pm_add_sf $ns2 10.0.3.2 20
+		chk_join_nr 1 1 1
+		chk_mptcp_info subflows 1 subflows 1
+		chk_all_subflows 2 2
+		userspace_pm_rm_sf $ns2 10.0.1.2
+		chk_rm_nr 0 1
+		chk_rst_nr 1 1 invert
+		chk_mptcp_info subflows 1 subflows 1
+		chk_all_subflows 1 1
 		kill_events_pids
 		wait $tests_pid
 	fi
