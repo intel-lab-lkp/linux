@@ -864,15 +864,11 @@ static int cs35l56_hda_read_acpi(struct cs35l56_hda *cs35l56, int id)
 
 	sub = acpi_get_subsystem_id(ACPI_HANDLE(cs35l56->base.dev));
 
-	if (IS_ERR(sub)) {
-		/* If no ACPI SUB, return 0 and fallback to legacy firmware path, otherwise fail */
-		if (PTR_ERR(sub) == -ENODATA)
-			return 0;
-		else
-			return PTR_ERR(sub);
-	}
-
-	cs35l56->system_name = sub;
+	if (IS_ERR(sub))
+		dev_err_probe(cs35l56->base.dev, PTR_ERR(sub),
+			      "Read ACPI _SUB failed: fallback to generic firmware\n");
+	else
+		cs35l56->system_name = sub;
 
 	cs35l56->base.reset_gpio = devm_gpiod_get_index_optional(cs35l56->base.dev,
 								 "reset",
