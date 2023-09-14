@@ -551,6 +551,7 @@ static inline struct tracepoint *tracepoint_ptr_deref(tracepoint_ptr_t *p)
  */
 
 #define DECLARE_EVENT_CLASS(name, proto, args, tstruct, assign, print)
+#define DECLARE_EVENT_CLASS_PRINT_INIT(name, proto, args, tstruct, assign, print, init)
 #define DEFINE_EVENT(template, name, proto, args)		\
 	DECLARE_TRACE(name, PARAMS(proto), PARAMS(args))
 #define DEFINE_EVENT_FN(template, name, proto, args, reg, unreg)\
@@ -576,6 +577,20 @@ static inline struct tracepoint *tracepoint_ptr_deref(tracepoint_ptr_t *p)
 	DECLARE_TRACE_CONDITION(name, PARAMS(proto),		\
 				PARAMS(args), PARAMS(cond))
 
+#define TRACE_EVENT_PRINT_INIT(name, proto, args, struct, assign, print, init)	\
+	DECLARE_TRACE(name, PARAMS(proto), PARAMS(args))
+#define TRACE_EVENT_FN_PRINT_INIT(name, proto, args, struct,		\
+		assign, print, reg, unreg, init)			\
+	DECLARE_TRACE(name, PARAMS(proto), PARAMS(args))
+#define TRACE_EVENT_FN_COND_PRINT_INIT(name, proto, args, cond, struct,		\
+		assign, print, reg, unreg, init)			\
+	DECLARE_TRACE_CONDITION(name, PARAMS(proto),	\
+			PARAMS(args), PARAMS(cond))
+#define TRACE_EVENT_CONDITION_PRINT_INIT(name, proto, args, cond,		\
+			      struct, assign, print, init)		\
+	DECLARE_TRACE_CONDITION(name, PARAMS(proto),		\
+				PARAMS(args), PARAMS(cond))
+
 #define TRACE_EVENT_FLAGS(event, flag)
 
 #define TRACE_EVENT_PERF_PERM(event, expr...)
@@ -592,6 +607,13 @@ static inline struct tracepoint *tracepoint_ptr_deref(tracepoint_ptr_t *p)
 	DECLARE_EVENT_NOP(name, PARAMS(proto), PARAMS(args))
 
 #define DECLARE_EVENT_CLASS_NOP(name, proto, args, tstruct, assign, print)
+#define DEFINE_EVENT_NOP(template, name, proto, args)			\
+	DECLARE_EVENT_NOP(name, PARAMS(proto), PARAMS(args))
+
+#define TRACE_EVENT_NOP_PRINT_INIT(name, proto, args, struct, assign, print, init)	\
+	DECLARE_EVENT_NOP(name, PARAMS(proto), PARAMS(args))
+
+#define DECLARE_EVENT_CLASS_NOP_PRINT_INIT(name, proto, args, tstruct, assign, print, init)
 #define DEFINE_EVENT_NOP(template, name, proto, args)			\
 	DECLARE_EVENT_NOP(name, PARAMS(proto), PARAMS(args))
 

@@ -142,3 +142,6 @@
 
 #undef __get_buf
 #define __get_buf(len)		trace_seq_acquire(p, (len))
+
+#undef TP_printk_init
+#define TP_printk_init(args...) args

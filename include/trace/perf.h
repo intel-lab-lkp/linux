@@ -55,6 +55,49 @@ perf_trace_##call(void *__data, proto)					\
 				  head, __task);			\
 }
 
+#undef DECLARE_EVENT_CLASS_PRINT_INIT
+#define DECLARE_EVENT_CLASS_PRINT_INIT(call, proto, args, tstruct, assign, print, init)	\
+static notrace void							\
+perf_trace_##call(void *__data, proto)					\
+{									\
+	struct trace_event_call *event_call = __data;			\
+	struct trace_event_data_offsets_##call __maybe_unused __data_offsets;\
+	struct trace_event_raw_##call *entry;				\
+	struct pt_regs *__regs;						\
+	u64 __count = 1;						\
+	struct task_struct *__task = NULL;				\
+	struct hlist_head *head;					\
+	int __entry_size;						\
+	int __data_size;						\
+	int rctx;							\
+									\
+	__data_size = trace_event_get_offsets_##call(&__data_offsets, args); \
+									\
+	head = this_cpu_ptr(event_call->perf_events);			\
+	if (!bpf_prog_array_valid(event_call) &&			\
+	    __builtin_constant_p(!__task) && !__task &&			\
+	    hlist_empty(head))						\
+		return;							\
+									\
+	__entry_size = ALIGN(__data_size + sizeof(*entry) + sizeof(u32),\
+			     sizeof(u64));				\
+	__entry_size -= sizeof(u32);					\
+									\
+	entry = perf_trace_buf_alloc(__entry_size, &__regs, &rctx);	\
+	if (!entry)							\
+		return;							\
+									\
+	perf_fetch_caller_regs(__regs);					\
+									\
+	tstruct								\
+									\
+	{ assign; }							\
+									\
+	perf_trace_run_bpf_submit(entry, __entry_size, rctx,		\
+				  event_call, __count, __regs,		\
+				  head, __task);			\
+}
+
 /*
  * This part is compiled out, it is only here as a build time check
  * to make sure that if the tracepoint handling changes, the
