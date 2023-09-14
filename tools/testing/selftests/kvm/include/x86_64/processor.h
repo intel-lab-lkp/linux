@@ -1160,6 +1160,11 @@ static inline uint8_t xsetbv_safe(uint32_t index, uint64_t value)
 	return kvm_asm_safe("xsetbv", "a" (eax), "d" (edx), "c" (index));
 }
 
+static inline bool is_canonical_addr(uint64_t la, uint8_t law)
+{
+	return (((int64_t)la << (64 - law)) >> (64 - law)) == la;
+}
+
 bool kvm_is_tdp_enabled(void);
 
 uint64_t *__vm_get_page_table_entry(struct kvm_vm *vm, uint64_t vaddr,
