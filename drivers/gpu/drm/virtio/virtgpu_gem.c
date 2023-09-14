@@ -294,3 +294,22 @@ void virtio_gpu_array_put_free_work(struct work_struct *work)
 	}
 	spin_unlock(&vgdev->obj_free_lock);
 }
+
+int virtio_gpu_gem_pin(struct virtio_gpu_object *bo)
+{
+	int err;
+
+	if (virtio_gpu_is_shmem(bo)) {
+		err = drm_gem_shmem_pin(&bo->base);
+		if (err)
+			return err;
+	}
+
+	return 0;
+}
+
+void virtio_gpu_gem_unpin(struct virtio_gpu_object *bo)
+{
+	if (virtio_gpu_is_shmem(bo))
+		drm_gem_shmem_unpin(&bo->base);
+}
