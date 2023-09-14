@@ -663,7 +663,6 @@ void of_pci_make_dev_node(struct pci_dev *pdev)
 	np = of_changeset_create_node(cset, ppnode, name);
 	if (!np)
 		goto failed;
-	np->data = cset;
 
 	ret = of_pci_add_properties(pdev, cset, np);
 	if (ret)
@@ -673,12 +672,17 @@ void of_pci_make_dev_node(struct pci_dev *pdev)
 	if (ret)
 		goto failed;
 
+	np->data = cset;
 	pdev->dev.of_node = np;
 	kfree(name);
 
 	return;
 
 failed:
+	if (cset) {
+		of_changeset_destroy(cset);
+		kfree(cset);
+	}
 	if (np)
 		of_node_put(np);
 	kfree(name);
