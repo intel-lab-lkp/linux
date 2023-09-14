@@ -61,7 +61,7 @@
 #include <linux/tracepoint.h>
 
 /*
- * The TRACE_EVENT macro is broken up into 5 parts.
+ * The TRACE_EVENT macro is broken up into 6 parts.
  *
  * name: name of the trace point. This is also how to enable the tracepoint.
  *   A function called trace_foo_bar() will be created.
@@ -93,7 +93,7 @@
  *
  *         __field_struct(struct bar, foo)
  *
- *         __entry->bar.x = y;
+ *         __entry->foo.x = y;
 
  *   __array: There are three fields (type, name, size). The type is the
  *         type of elements in the array, the name is the name of the array.
@@ -410,7 +410,7 @@ TRACE_EVENT_CONDITION(foo_bar_with_cond,
 
 	TP_STRUCT__entry(
 		__string(	foo,    foo		)
-		__field(	int,	bar			)
+		__field(	int,	bar		)
 	),
 
 	TP_fast_assign(
