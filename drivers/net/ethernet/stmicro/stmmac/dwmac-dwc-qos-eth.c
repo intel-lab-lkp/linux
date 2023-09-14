@@ -181,32 +181,10 @@ static void dwc_qos_remove(struct platform_device *pdev)
 static void tegra_eqos_fix_speed(void *priv, unsigned int speed, unsigned int mode)
 {
 	struct tegra_eqos *eqos = priv;
-	unsigned long rate = 125000000;
-	bool needs_calibration = false;
 	u32 value;
 	int err;
 
-	switch (speed) {
-	case SPEED_1000:
-		needs_calibration = true;
-		rate = 125000000;
-		break;
-
-	case SPEED_100:
-		needs_calibration = true;
-		rate = 25000000;
-		break;
-
-	case SPEED_10:
-		rate = 2500000;
-		break;
-
-	default:
-		dev_err(eqos->dev, "invalid speed %u\n", speed);
-		break;
-	}
-
-	if (needs_calibration) {
+	if (speed == SPEED_1000 || speed == SPEED_100) {
 		/* calibrate */
 		value = readl(eqos->regs + SDMEMCOMPPADCTRL);
 		value |= SDMEMCOMPPADCTRL_PAD_E_INPUT_OR_E_PWRD;
@@ -246,9 +224,15 @@ static void tegra_eqos_fix_speed(void *priv, unsigned int speed, unsigned int mo
 		writel(value, eqos->regs + AUTO_CAL_CONFIG);
 	}
 
-	err = clk_set_rate(eqos->clk_tx, rate);
-	if (err < 0)
-		dev_err(eqos->dev, "failed to set TX rate: %d\n", err);
+	err = stmmac_set_tx_clk_gmii(eqos->clk_tx, speed);
+	if (err == -ENOTSUPP) {
+		dev_err(eqos->dev, "invalid speed %uMbps\n", speed);
+		err = stmmac_set_tx_clk_gmii(eqos->clk_tx, SPEED_1000);
+	} else if (err) {
+		dev_err(eqos->dev,
+			"failed to set tx rate for speed %uMbps: %pe\n",
+			speed, ERR_PTR(err));
+	}
 }
 
 static int tegra_eqos_init(struct platform_device *pdev, void *priv)
