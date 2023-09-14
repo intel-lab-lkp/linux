@@ -56,7 +56,6 @@ static void filter_suites_test(struct kunit *test)
 	got = kunit_filter_suites(&suite_set, "suite2", NULL, NULL, &err);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, got.start);
 	KUNIT_ASSERT_EQ(test, err, 0);
-	kfree_at_end(test, got.start);
 
 	/* Validate we just have suite2 */
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, got.start[0]);
@@ -64,6 +63,9 @@ static void filter_suites_test(struct kunit *test)
 
 	/* Contains one element (end is 1 past end) */
 	KUNIT_ASSERT_EQ(test, got.end - got.start, 1);
+
+	if (!err)
+		kunit_free_suite_set(got);
 }
 
 static void filter_suites_test_glob_test(struct kunit *test)
@@ -82,7 +84,6 @@ static void filter_suites_test_glob_test(struct kunit *test)
 	got = kunit_filter_suites(&suite_set, "suite2.test2", NULL, NULL, &err);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, got.start);
 	KUNIT_ASSERT_EQ(test, err, 0);
-	kfree_at_end(test, got.start);
 
 	/* Validate we just have suite2 */
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, got.start[0]);
@@ -93,6 +94,9 @@ static void filter_suites_test_glob_test(struct kunit *test)
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, got.start[0]->test_cases);
 	KUNIT_EXPECT_STREQ(test, (const char *)got.start[0]->test_cases[0].name, "test2");
 	KUNIT_EXPECT_FALSE(test, got.start[0]->test_cases[1].name);
+
+	if (!err)
+		kunit_free_suite_set(got);
 }
 
 static void filter_suites_to_empty_test(struct kunit *test)
@@ -109,10 +113,12 @@ static void filter_suites_to_empty_test(struct kunit *test)
 
 	got = kunit_filter_suites(&suite_set, "not_found", NULL, NULL, &err);
 	KUNIT_ASSERT_EQ(test, err, 0);
-	kfree_at_end(test, got.start); /* just in case */
 
 	KUNIT_EXPECT_PTR_EQ_MSG(test, got.start, got.end,
 				"should be empty to indicate no match");
+
+	if (!err)
+		kunit_free_suite_set(got);
 }
 
 static void parse_filter_attr_test(struct kunit *test)
@@ -172,7 +178,6 @@ static void filter_attr_test(struct kunit *test)
 	got = kunit_filter_suites(&suite_set, NULL, filter, NULL, &err);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, got.start);
 	KUNIT_ASSERT_EQ(test, err, 0);
-	kfree_at_end(test, got.start);
 
 	/* Validate we just have normal_suite */
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, got.start[0]);
@@ -183,6 +188,9 @@ static void filter_attr_test(struct kunit *test)
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, got.start[0]->test_cases);
 	KUNIT_EXPECT_STREQ(test, got.start[0]->test_cases[0].name, "normal");
 	KUNIT_EXPECT_FALSE(test, got.start[0]->test_cases[1].name);
+
+	if (!err)
+		kunit_free_suite_set(got);
 }
 
 static void filter_attr_empty_test(struct kunit *test)
@@ -200,10 +208,12 @@ static void filter_attr_empty_test(struct kunit *test)
 
 	got = kunit_filter_suites(&suite_set, NULL, filter, NULL, &err);
 	KUNIT_ASSERT_EQ(test, err, 0);
-	kfree_at_end(test, got.start); /* just in case */
 
 	KUNIT_EXPECT_PTR_EQ_MSG(test, got.start, got.end,
 				"should be empty to indicate no match");
+
+	if (!err)
+		kunit_free_suite_set(got);
 }
 
 static void filter_attr_skip_test(struct kunit *test)
@@ -222,7 +232,6 @@ static void filter_attr_skip_test(struct kunit *test)
 	got = kunit_filter_suites(&suite_set, NULL, filter, "skip", &err);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, got.start);
 	KUNIT_ASSERT_EQ(test, err, 0);
-	kfree_at_end(test, got.start);
 
 	/* Validate we have both the slow and normal test */
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, got.start[0]->test_cases);
@@ -233,6 +242,9 @@ static void filter_attr_skip_test(struct kunit *test)
 	/* Now ensure slow is skipped and normal is not */
 	KUNIT_EXPECT_EQ(test, got.start[0]->test_cases[0].status, KUNIT_SKIPPED);
 	KUNIT_EXPECT_FALSE(test, got.start[0]->test_cases[1].status);
+
+	if (!err)
+		kunit_free_suite_set(got);
 }
 
 static struct kunit_case executor_test_cases[] = {
