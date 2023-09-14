@@ -855,28 +855,21 @@ static int mbind_range(struct vma_iterator *vmi, struct vm_area_struct *vma,
 	return vma_replace_policy(vma, new_pol);
 }
 
-/* Set the process memory policy */
-static long do_set_mempolicy(unsigned short mode, unsigned short flags,
-			     nodemask_t *nodes)
+/* Swap in a new mempolicy, release the old one if successful */
+static long swap_mempolicy(struct mempolicy *new,
+			   nodemask_t *nodes)
 {
-	struct mempolicy *new, *old;
-	NODEMASK_SCRATCH(scratch);
+	struct mempolicy *old = NULL;
 	int ret;
+	NODEMASK_SCRATCH(scratch);
 
 	if (!scratch)
 		return -ENOMEM;
-
-	new = mpol_new(mode, flags, nodes);
-	if (IS_ERR(new)) {
-		ret = PTR_ERR(new);
-		goto out;
-	}
 
 	task_lock(current);
 	ret = mpol_set_nodemask(new, nodes, scratch);
 	if (ret) {
 		task_unlock(current);
-		mpol_put(new);
 		goto out;
 	}
 
@@ -884,11 +877,32 @@ static long do_set_mempolicy(unsigned short mode, unsigned short flags,
 	current->mempolicy = new;
 	if (new && new->mode == MPOL_INTERLEAVE)
 		current->il_prev = MAX_NUMNODES-1;
-	task_unlock(current);
-	mpol_put(old);
-	ret = 0;
 out:
+	task_unlock(current);
+	if (old)
+		mpol_put(old);
+
 	NODEMASK_SCRATCH_FREE(scratch);
+	return ret;
+}
+
+/* Set the process memory policy */
+static long do_set_mempolicy(unsigned short mode, unsigned short flags,
+			     nodemask_t *nodes)
+{
+	struct mempolicy *new;
+	int ret;
+
+	new = mpol_new(mode, flags, nodes);
+	if (IS_ERR(new)) {
+		ret = PTR_ERR(new);
+		goto out;
+	}
+
+	ret = swap_mempolicy(new, nodes);
+	if (ret)
+		mpol_put(new);
+out:
 	return ret;
 }
 
