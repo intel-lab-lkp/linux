@@ -657,21 +657,28 @@ irqreturn_t tcpci_irq(struct tcpci *tcpci)
 	int ret;
 	unsigned int raw;
 
-	tcpci_read16(tcpci, TCPC_ALERT, &status);
+	ret = tcpci_read16(tcpci, TCPC_ALERT, &status);
+	if (ret < 0)
+		return ret;
 
 	/*
 	 * Clear alert status for everything except RX_STATUS, which shouldn't
 	 * be cleared until we have successfully retrieved message.
 	 */
-	if (status & ~TCPC_ALERT_RX_STATUS)
-		tcpci_write16(tcpci, TCPC_ALERT,
+	if (status & ~TCPC_ALERT_RX_STATUS) {
+		ret = tcpci_write16(tcpci, TCPC_ALERT,
 			      status & ~TCPC_ALERT_RX_STATUS);
+		if (ret < 0)
+			return ret;
+	}
 
 	if (status & TCPC_ALERT_CC_STATUS)
 		tcpm_cc_change(tcpci->port);
 
 	if (status & TCPC_ALERT_POWER_STATUS) {
-		regmap_read(tcpci->regmap, TCPC_POWER_STATUS_MASK, &raw);
+		ret = regmap_read(tcpci->regmap, TCPC_POWER_STATUS_MASK, &raw);
+		if (ret < 0)
+			return ret;
 		/*
 		 * If power status mask has been reset, then the TCPC
 		 * has reset.
@@ -687,7 +694,9 @@ irqreturn_t tcpci_irq(struct tcpci *tcpci)
 		unsigned int cnt, payload_cnt;
 		u16 header;
 
-		regmap_read(tcpci->regmap, TCPC_RX_BYTE_CNT, &cnt);
+		ret = regmap_read(tcpci->regmap, TCPC_RX_BYTE_CNT, &cnt);
+		if (ret < 0)
+			return ret;
 		/*
 		 * 'cnt' corresponds to READABLE_BYTE_COUNT in section 4.4.14
 		 * of the TCPCI spec [Rev 2.0 Ver 1.0 October 2017] and is
@@ -699,18 +708,25 @@ irqreturn_t tcpci_irq(struct tcpci *tcpci)
 		else
 			payload_cnt = 0;
 
-		tcpci_read16(tcpci, TCPC_RX_HDR, &header);
+		ret = tcpci_read16(tcpci, TCPC_RX_HDR, &header);
+		if (ret < 0)
+			return ret;
 		msg.header = cpu_to_le16(header);
 
 		if (WARN_ON(payload_cnt > sizeof(msg.payload)))
 			payload_cnt = sizeof(msg.payload);
 
-		if (payload_cnt > 0)
-			regmap_raw_read(tcpci->regmap, TCPC_RX_DATA,
+		if (payload_cnt > 0) {
+			ret = regmap_raw_read(tcpci->regmap, TCPC_RX_DATA,
 					&msg.payload, payload_cnt);
+			if (ret < 0)
+				return ret;
+		}
 
 		/* Read complete, clear RX status alert bit */
-		tcpci_write16(tcpci, TCPC_ALERT, TCPC_ALERT_RX_STATUS);
+		ret = tcpci_write16(tcpci, TCPC_ALERT, TCPC_ALERT_RX_STATUS);
+		if (ret < 0)
+			return ret;
 
 		tcpm_pd_receive(tcpci->port, &msg);
 	}
