@@ -1240,6 +1240,12 @@ static inline void vb2_clear_last_buffer_dequeued(struct vb2_queue *q)
  */
 struct vb2_buffer *vb2_get_buffer(struct vb2_queue *q, unsigned int index);
 
+/**
+ * vb2_get_num_buffers() - get the number of buffer in a queue
+ * @q:		pointer to &struct vb2_queue with videobuf2 queue.
+ */
+unsigned int vb2_get_num_buffers(struct vb2_queue *q);
+
 /*
  * The following functions are not part of the vb2 core API, but are useful
  * functions for videobuf2-*.
