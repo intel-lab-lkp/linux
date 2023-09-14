@@ -479,7 +479,7 @@ static int user_event_enabler_write(struct user_event_mm *mm,
 				    bool fixup_fault, int *attempt)
 {
 	unsigned long uaddr = enabler->addr;
-	unsigned long *ptr;
+	unsigned long *ptr, bit_offset;
 	struct page *page;
 	void *kaddr;
 	int ret;
@@ -511,13 +511,19 @@ static int user_event_enabler_write(struct user_event_mm *mm,
 	}
 
 	kaddr = kmap_local_page(page);
+
+	bit_offset = uaddr & (sizeof(unsigned long) - 1);
+	if (bit_offset) {
+		bit_offset *= 8;
+		uaddr &= ~(sizeof(unsigned long) - 1);
+	}
 	ptr = kaddr + (uaddr & ~PAGE_MASK);
 
 	/* Update bit atomically, user tracers must be atomic as well */
 	if (enabler->event && enabler->event->status)
-		set_bit(ENABLE_BIT(enabler), ptr);
+		set_bit(ENABLE_BIT(enabler) + bit_offset, ptr);
 	else
-		clear_bit(ENABLE_BIT(enabler), ptr);
+		clear_bit(ENABLE_BIT(enabler) + bit_offset, ptr);
 
 	kunmap_local(kaddr);
 	unpin_user_pages_dirty_lock(&page, 1, true);
