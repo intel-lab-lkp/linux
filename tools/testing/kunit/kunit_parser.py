@@ -509,6 +509,34 @@ def print_test_header(test: Test) -> None:
 			message += f'({test.expected_count} subtests)'
 	stdout.print_with_timestamp(format_test_divider(message, len(message)))
 
+TEST_HEADER_ATTR = re.compile(r'^\s*# (.*): (.*)$')
+TEST_ATTR = re.compile(r'^\s*# (.*)\.(.*): (.*)$')
+
+def print_test_attr(test: Test) -> None:
+	"""
+	Attributes, if present, will be printed in a list separated by
+	commas.
+
+	Example:
+	'module: example_test, speed: slow'
+
+	Parameters:
+	test - Test object representing current test being printed
+	"""
+	attr_list = ["module", "speed"]
+	output = []
+
+	for line in test.log:
+		test_match = TEST_ATTR.match(line)
+		header_match = TEST_HEADER_ATTR.match(line)
+		if test_match and (test_match.group(1) == test.name
+					  and (test_match.group(2) in attr_list)):
+			output.append(test_match.group(2) + ": " + test_match.group(3))
+		elif header_match and (header_match.group(1) in attr_list):
+			output.append(header_match.group(1) + ": " + header_match.group(2))
+	if output:
+		stdout.print_with_timestamp(", ".join(output))
+
 def print_log(log: Iterable[str]) -> None:
 	"""Prints all strings in saved log for test in yellow."""
 	formatted = textwrap.dedent('\n'.join(log))
@@ -741,6 +769,7 @@ def parse_test(lines: LineStream, expected_num: int, log: List[str], is_subtest:
 			test.log.extend(parse_diagnostic(lines))
 			parse_test_plan(lines, test)
 			print_test_header(test)
+			print_test_attr(test)
 	expected_count = test.expected_count
 	subtests = []
 	test_num = 1
@@ -763,6 +792,7 @@ def parse_test(lines: LineStream, expected_num: int, log: List[str], is_subtest:
 				test.counts.add_status(
 					TestStatus.TEST_CRASHED)
 				print_test_result(sub_test)
+				print_test_attr(sub_test)
 			else:
 				test.log.extend(sub_log)
 				break
@@ -796,6 +826,7 @@ def parse_test(lines: LineStream, expected_num: int, log: List[str], is_subtest:
 		print_test_footer(test)
 	elif is_subtest:
 		print_test_result(test)
+		print_test_attr(test)
 	return test
 
 def parse_run_tests(kernel_output: Iterable[str]) -> Test:
