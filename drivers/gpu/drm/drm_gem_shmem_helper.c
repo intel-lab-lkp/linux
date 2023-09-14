@@ -334,7 +334,7 @@ int drm_gem_shmem_vmap_locked(struct drm_gem_shmem_object *shmem,
 			      struct iosys_map *map)
 {
 	struct drm_gem_object *obj = &shmem->base;
-	int ret = 0;
+	int ret;
 
 	if (obj->import_attach) {
 		ret = dma_buf_vmap(obj->import_attach->dmabuf, map);
@@ -357,6 +357,7 @@ int drm_gem_shmem_vmap_locked(struct drm_gem_shmem_object *shmem,
 		shmem->vaddr = vmap(shmem->pages, obj->size >> PAGE_SHIFT,
 				    VM_MAP, prot);
 		if (!shmem->vaddr) {
+			drm_gem_shmem_unpin_locked(shmem);
 			ret = -ENOMEM;
 		} else {
 			iosys_map_set_vaddr(map, shmem->vaddr);
@@ -364,16 +365,8 @@ int drm_gem_shmem_vmap_locked(struct drm_gem_shmem_object *shmem,
 		}
 	}
 
-	if (ret) {
+	if (ret)
 		drm_dbg_kms(obj->dev, "Failed to vmap pages, error %d\n", ret);
-		goto err_put_pages;
-	}
-
-	return 0;
-
-err_put_pages:
-	if (!obj->import_attach)
-		drm_gem_shmem_unpin_locked(shmem);
 
 	return ret;
 }
