@@ -2041,12 +2041,14 @@ static void module_augment_kernel_taints(struct module *mod, struct load_info *i
 		add_taint_module(mod, TAINT_TEST, LOCKDEP_STILL_OK);
 	}
 #ifdef CONFIG_MODULE_SIG
-	mod->sig_ok = info->sig_ok;
-	if (!mod->sig_ok) {
-		pr_notice_once("%s: module verification failed: signature "
-			       "and/or required key missing - tainting "
-			       "kernel\n", mod->name);
-		add_taint_module(mod, TAINT_UNSIGNED_MODULE, LOCKDEP_STILL_OK);
+	if (!module_sig_check_wait) {
+		mod->sig_ok = info->sig_ok;
+		if (!mod->sig_ok) {
+			pr_notice_once("%s: module verification failed: signature "
+				       "and/or required key missing - tainting "
+				       "kernel\n", mod->name);
+			add_taint_module(mod, TAINT_UNSIGNED_MODULE, LOCKDEP_STILL_OK);
+		}
 	}
 #endif
 

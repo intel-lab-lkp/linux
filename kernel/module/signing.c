@@ -19,6 +19,8 @@
 #undef MODULE_PARAM_PREFIX
 #define MODULE_PARAM_PREFIX "module."
 
+int module_sig_check_wait;
+
 static bool sig_enforce = IS_ENABLED(CONFIG_MODULE_SIG_FORCE);
 module_param(sig_enforce, bool_enable_only, 0644);
 
@@ -36,6 +38,58 @@ void set_module_sig_enforced(void)
 {
 	sig_enforce = true;
 }
+
+/*
+ * test thing to enable sig enforcing later in boot sequence
+ */
+static int __init module_sig_check_wait_arg(char *str)
+{
+	return kstrtoint(str, 0, &module_sig_check_wait);
+}
+__setup("module_sig_check_wait=", module_sig_check_wait_arg);
+
+/*
+ * securityfs entry to disable module_sig_check_wait, and start enforcing modules signature check
+ */
+static ssize_t module_sig_check_wait_read(struct file *file, char __user *buf, size_t count,
+					  loff_t *ppos)
+{
+	return simple_read_from_buffer(buf, count, ppos,
+				       module_sig_check_wait == 1 ? "1\n" : "0\n", 2);
+}
+
+static ssize_t module_sig_check_wait_write(struct file *file, const char __user *buf,
+					   size_t n, loff_t *ppos)
+{
+	int tmp;
+
+	if (kstrtoint_from_user(buf, n, 10, &tmp))
+		return -EINVAL;
+	if (tmp != 0) {
+		pr_info("module_sig_check_wait can be only disabled!\n");
+		return -EINVAL;
+	}
+	pr_info("module_sig_check_wait disabled!\n");
+	module_sig_check_wait = tmp;
+
+	return n;
+}
+
+static const struct file_operations module_sig_check_wait_ops = {
+	.read  = module_sig_check_wait_read,
+	.write = module_sig_check_wait_write,
+};
+
+static int __init module_sig_check_wait_secfs_init(void)
+{
+	struct dentry *dentry;
+
+	dentry = securityfs_create_file("module_sig_check_wait", 0644, NULL, NULL,
+					&module_sig_check_wait_ops);
+	return PTR_ERR_OR_ZERO(dentry);
+}
+
+core_initcall(module_sig_check_wait_secfs_init);
 
 /*
  * Verify the signature on a module.
@@ -69,6 +123,8 @@ int mod_verify_sig(const void *mod, struct load_info *info)
 
 int module_sig_check(struct load_info *info, int flags)
 {
+	if (module_sig_check_wait)
+		return 0;
 	int err = -ENODATA;
 	const unsigned long markerlen = sizeof(MODULE_SIG_STRING) - 1;
 	const char *reason;

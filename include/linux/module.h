@@ -34,6 +34,10 @@
 
 #define MODULE_NAME_LEN MAX_PARAM_PREFIX_LEN
 
+#ifdef CONFIG_MODULE_SIG
+extern int module_sig_check_wait;
+#endif
+
 struct modversion_info {
 	unsigned long crc;
 	char name[MODULE_NAME_LEN];
