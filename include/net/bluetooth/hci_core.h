@@ -795,6 +795,8 @@ struct hci_chan {
 	unsigned int	sent;
 	__u8		state;
 	bool		amp;
+
+	void (*cleanup)(struct hci_chan *chan);
 };
 
 struct hci_conn_params {
