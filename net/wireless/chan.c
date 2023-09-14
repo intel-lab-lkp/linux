@@ -461,6 +461,8 @@ static void cfg80211_set_chans_dfs_state(struct wiphy *wiphy, u32 center_freq,
 
 		c->dfs_state = dfs_state;
 		c->dfs_state_entered = jiffies;
+		if (dfs_state == NL80211_DFS_AVAILABLE)
+			c->dfs_state_last_available = jiffies;
 	}
 }
 
@@ -872,6 +874,49 @@ static bool cfg80211_get_chans_dfs_available(struct wiphy *wiphy,
 	}
 
 	return true;
+}
+
+static void
+__cfg80211_update_last_available(struct wiphy *wiphy,
+					 u32 center_freq,
+					 u32 bandwidth)
+{
+	struct ieee80211_channel *c;
+	u32 freq, start_freq, end_freq;
+
+	start_freq = cfg80211_get_start_freq(center_freq, bandwidth);
+	end_freq = cfg80211_get_end_freq(center_freq, bandwidth);
+
+	/*
+	 * Check entire range of channels for the bandwidth.
+	 * If any channel in between is disabled or has not
+	 * had gone through CAC return false
+	 */
+	for (freq = start_freq; freq <= end_freq; freq += MHZ_TO_KHZ(20)) {
+		c = ieee80211_get_channel_khz(wiphy, freq);
+		if (!c)
+			return;
+
+		c->dfs_state_last_available = jiffies;
+	}
+}
+
+void cfg80211_update_last_available(struct wiphy *wiphy,
+				    const struct cfg80211_chan_def *chandef)
+{
+	int width;
+
+	width = cfg80211_chandef_get_width(chandef);
+	if (width < 0)
+		return;
+
+	__cfg80211_update_last_available(wiphy, MHZ_TO_KHZ(chandef->center_freq1),
+						 width);
+	if (chandef->width != NL80211_CHAN_WIDTH_80P80)
+	    return;
+
+	__cfg80211_update_last_available(wiphy, MHZ_TO_KHZ(chandef->center_freq2),
+						 width);
 }
 
 static bool cfg80211_chandef_dfs_available(struct wiphy *wiphy,

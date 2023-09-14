@@ -30,6 +30,9 @@ static int ___cfg80211_stop_ap(struct cfg80211_registered_device *rdev,
 	if (!wdev->links[link_id].ap.beacon_interval)
 		return -ENOENT;
 
+	cfg80211_update_last_available(wdev->wiphy,
+				       &wdev->links[link_id].ap.chandef);
+
 	err = rdev_stop_ap(rdev, dev, link_id);
 	if (!err) {
 		wdev->conn_owner_nlportid = 0;
@@ -41,9 +44,6 @@ static int ___cfg80211_stop_ap(struct cfg80211_registered_device *rdev,
 		if (notify)
 			nl80211_send_ap_stopped(wdev, link_id);
 
-		/* Should we apply the grace period during beaconing interface
-		 * shutdown also?
-		 */
 		cfg80211_sched_dfs_chan_update(rdev);
 	}
 
