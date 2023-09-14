@@ -942,6 +942,8 @@ struct devfreq *devfreq_add_device(struct device *dev,
 		goto err_init;
 	}
 	create_sysfs_files(devfreq, devfreq->governor);
+	devfreq->debugfs_dir =
+		debugfs_create_dir(dev_name(&(devfreq->dev)), devfreq_debugfs);
 
 	list_add(&devfreq->node, &devfreq_list);
 
@@ -980,6 +982,7 @@ int devfreq_remove_device(struct devfreq *devfreq)
 
 	devfreq_cooling_unregister(devfreq->cdev);
 
+	debugfs_remove_recursive(devfreq->debugfs_dir);
 	if (devfreq->governor) {
 		devfreq->governor->event_handler(devfreq,
 						 DEVFREQ_GOV_STOP, NULL);
@@ -1684,6 +1687,66 @@ static ssize_t available_frequencies_show(struct device *d,
 }
 static DEVICE_ATTR_RO(available_frequencies);
 
+/**
+ * devfreq_trans_stat_show() - show trans stat info through debugfs
+ * @s:		seq_file instance to show trans_stat info of devfreq devices
+ * @data:	not used
+ *
+ * Show detailed information for some device which has more than PAGE_SIZE
+ * bytes of trans stat info.
+ */
+static int devfreq_trans_stat_show(struct seq_file *s, void *unused)
+{
+	struct devfreq *df = s->private;
+	unsigned int max_state;
+	int i, j;
+
+	if (!df->profile)
+		return -EINVAL;
+	max_state = df->max_state;
+
+	if (max_state == 0) {
+		seq_puts(s, "Not Supported.\n");
+		return 0;
+	}
+
+	mutex_lock(&df->lock);
+	if (!df->stop_polling &&
+			devfreq_update_status(df, df->previous_freq)) {
+		mutex_unlock(&df->lock);
+		return 0;
+	}
+	mutex_unlock(&df->lock);
+
+	seq_puts(s, "     From  :   To\n");
+	seq_puts(s, "           :");
+	for (i = 0; i < max_state; i++)
+		seq_printf(s, "%10lu", df->freq_table[i]);
+
+	seq_puts(s, "   time(ms)\n");
+
+	for (i = 0; i < max_state; i++) {
+		if (df->freq_table[i] == df->previous_freq)
+			seq_puts(s, "*");
+		else
+			seq_puts(s, " ");
+
+		seq_printf(s, "%10lu:", df->freq_table[i]);
+
+		for (j = 0; j < max_state; j++)
+			seq_printf(s, "%10u",
+				df->stats.trans_table[(i * max_state) + j]);
+
+		seq_printf(s, "%10llu\n", (u64)
+			jiffies64_to_msecs(df->stats.time_in_state[i]));
+	}
+
+	seq_printf(s, "Total transition : %u\n", df->stats.total_trans);
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(devfreq_trans_stat);
+
 static ssize_t trans_stat_show(struct device *dev,
 			       struct device_attribute *attr, char *buf)
 {
@@ -1696,8 +1759,22 @@ static ssize_t trans_stat_show(struct device *dev,
 		return -EINVAL;
 	max_state = df->max_state;
 
-	if (max_state == 0)
+	if (max_state == 0) {
 		return sprintf(buf, "Not Supported.\n");
+	} else if (max_state > 12) {
+		/*
+		 * In theory, 13 states will use more than PAGE_SIZE
+		 * bytes, show detail info through debugfs
+		 */
+		if (!df->trans_stat)
+			df->trans_stat = debugfs_create_file("trans_stat", 0444,
+					df->debugfs_dir, df,
+					&devfreq_trans_stat_fops);
+		return sprintf(buf,
+				"This device's data size exceeds the limit of sysfs.\n"
+				"Please use debugfs for detailed information:\n"
+				"/sys/kernel/debug/devfreq/.../trans_stat\n");
+	}
 
 	mutex_lock(&df->lock);
 	if (!df->stop_polling &&

@@ -208,6 +208,8 @@ struct devfreq {
 
 	/* information for device frequency transitions */
 	struct devfreq_stats stats;
+	struct dentry *debugfs_dir;
+	struct dentry *trans_stat;
 
 	struct srcu_notifier_head transition_notifier_list;
 
