@@ -2930,6 +2930,7 @@ static int xgbe_phy_link_status(struct xgbe_prv_data *pdata, int *an_restart)
 
 		/* check again for the link and adaptation status */
 		reg = XMDIO_READ(pdata, MDIO_MMD_PCS, MDIO_STAT1);
+		reg = XMDIO_READ(pdata, MDIO_MMD_PCS, MDIO_STAT1);
 		if ((reg & MDIO_STAT1_LSTATUS) && pdata->rx_adapt_done)
 			return 1;
 	} else if (reg & MDIO_STAT1_LSTATUS)
