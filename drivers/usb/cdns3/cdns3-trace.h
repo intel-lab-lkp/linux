@@ -24,49 +24,73 @@
 
 #define CDNS3_MSG_MAX	500
 
-TRACE_EVENT(cdns3_halt,
+TRACE_EVENT_PRINT_INIT(cdns3_halt,
 	TP_PROTO(struct cdns3_endpoint *ep_priv, u8 halt, u8 flush),
 	TP_ARGS(ep_priv, halt, flush),
 	TP_STRUCT__entry(
-		__string(name, ep_priv->name)
+		__field(u32, edw3)
 		__field(u8, halt)
 		__field(u8, flush)
 	),
 	TP_fast_assign(
-		__assign_str(name, ep_priv->name);
+		__entry->edw3 = ep_priv->endpoint.dw3;
 		__entry->halt = halt;
 		__entry->flush = flush;
 	),
 	TP_printk("Halt %s for %s: %s", __entry->flush ? " and flush" : "",
-		  __get_str(name), __entry->halt ? "set" : "cleared")
+		  __s, __entry->halt ? "set" : "cleared"),
+	TP_printk_init(
+		struct usb_ep te;
+		char __s[9];
+		te.dw3 = __entry->edw3;
+		snprintf(__s, 9, "ep%d%s", te.address, \
+			(te.caps.dir_in && te.caps.dir_out) ? "" : \
+			te.caps.dir_in ? "in" : "out");
+	)
 );
 
-TRACE_EVENT(cdns3_wa1,
+TRACE_EVENT_PRINT_INIT(cdns3_wa1,
 	TP_PROTO(struct cdns3_endpoint *ep_priv, char *msg),
 	TP_ARGS(ep_priv, msg),
 	TP_STRUCT__entry(
-		__string(ep_name, ep_priv->name)
+		__field(u32, edw3)
 		__string(msg, msg)
 	),
 	TP_fast_assign(
-		__assign_str(ep_name, ep_priv->name);
+		__entry->edw3 = ep_priv->endpoint.dw3;
 		__assign_str(msg, msg);
 	),
-	TP_printk("WA1: %s %s", __get_str(ep_name), __get_str(msg))
+	TP_printk("WA1: %s %s", __s, __get_str(msg)),
+	TP_printk_init(
+		struct usb_ep te;
+		char __s[9];
+		te.dw3 = __entry->edw3;
+		snprintf(__s, 9, "ep%d%s", te.address, \
+			(te.caps.dir_in && te.caps.dir_out) ? "" : \
+			te.caps.dir_in ? "in" : "out");
+	)
 );
 
-TRACE_EVENT(cdns3_wa2,
+TRACE_EVENT_PRINT_INIT(cdns3_wa2,
 	TP_PROTO(struct cdns3_endpoint *ep_priv, char *msg),
 	TP_ARGS(ep_priv, msg),
 	TP_STRUCT__entry(
-		__string(ep_name, ep_priv->name)
+		__field(u32, edw3)
 		__string(msg, msg)
 	),
 	TP_fast_assign(
-		__assign_str(ep_name, ep_priv->name);
+		__entry->edw3 = ep_priv->endpoint.dw3;
 		__assign_str(msg, msg);
 	),
-	TP_printk("WA2: %s %s", __get_str(ep_name), __get_str(msg))
+	TP_printk("WA2: %s %s", __s, __get_str(msg)),
+	TP_printk_init(
+		struct usb_ep te;
+		char __s[9];
+		te.dw3 = __entry->edw3;
+		snprintf(__s, 9, "ep%d%s", te.address, \
+			(te.caps.dir_in && te.caps.dir_out) ? "" : \
+			te.caps.dir_in ? "in" : "out");
+	)
 );
 
 DECLARE_EVENT_CLASS(cdns3_log_doorbell,
@@ -114,18 +138,18 @@ DEFINE_EVENT(cdns3_log_usb_irq, cdns3_usb_irq,
 	TP_ARGS(priv_dev, usb_ists)
 );
 
-DECLARE_EVENT_CLASS(cdns3_log_epx_irq,
+DECLARE_EVENT_CLASS_PRINT_INIT(cdns3_log_epx_irq,
 	TP_PROTO(struct cdns3_device *priv_dev, struct cdns3_endpoint *priv_ep),
 	TP_ARGS(priv_dev, priv_ep),
 	TP_STRUCT__entry(
-		__string(ep_name, priv_ep->name)
+		__field(u32, edw3)
 		__field(u32, ep_sts)
 		__field(u32, ep_traddr)
 		__field(u32, ep_last_sid)
 		__field(u32, use_streams)
 	),
 	TP_fast_assign(
-		__assign_str(ep_name, priv_ep->name);
+		__entry->edw3 = priv_ep->endpoint.dw3;
 		__entry->ep_sts = readl(&priv_dev->regs->ep_sts);
 		__entry->ep_traddr = readl(&priv_dev->regs->ep_traddr);
 		__entry->ep_last_sid = priv_ep->last_stream_id;
@@ -133,11 +157,19 @@ DECLARE_EVENT_CLASS(cdns3_log_epx_irq,
 	),
 	TP_printk("%s, ep_traddr: %08x ep_last_sid: %08x use_streams: %d",
 		  cdns3_decode_epx_irq(__get_buf(CDNS3_MSG_MAX),
-				       __get_str(ep_name),
+				       __s,
 				       __entry->ep_sts),
 		  __entry->ep_traddr,
 		  __entry->ep_last_sid,
-		  __entry->use_streams)
+		  __entry->use_streams),
+	TP_printk_init(
+		struct usb_ep te;
+		char __s[9];
+		te.dw3 = __entry->edw3;
+		snprintf(__s, 9, "ep%d%s", te.address, \
+			(te.caps.dir_in && te.caps.dir_out) ? "" : \
+			te.caps.dir_in ? "in" : "out");
+	)
 );
 
 DEFINE_EVENT(cdns3_log_epx_irq, cdns3_epx_irq,
@@ -195,51 +227,56 @@ DEFINE_EVENT(cdns3_log_ctrl, cdns3_ctrl_req,
 	TP_ARGS(ctrl)
 );
 
-DECLARE_EVENT_CLASS(cdns3_log_request,
+DECLARE_EVENT_CLASS_PRINT_INIT(cdns3_log_request,
 	TP_PROTO(struct cdns3_request *req),
 	TP_ARGS(req),
 	TP_STRUCT__entry(
-		__string(name, req->priv_ep->name)
+		__field(u32, edw3)
 		__field(struct cdns3_request *, req)
 		__field(void *, buf)
 		__field(unsigned int, actual)
 		__field(unsigned int, length)
 		__field(int, status)
-		__field(int, zero)
-		__field(int, short_not_ok)
-		__field(int, no_interrupt)
+		__field(u32, rdw1)
 		__field(int, start_trb)
 		__field(int, end_trb)
 		__field(int, flags)
 		__field(unsigned int, stream_id)
 	),
 	TP_fast_assign(
-		__assign_str(name, req->priv_ep->name);
+		__entry->edw3 = req->priv_ep->endpoint.dw3;
 		__entry->req = req;
 		__entry->buf = req->request.buf;
 		__entry->actual = req->request.actual;
 		__entry->length = req->request.length;
 		__entry->status = req->request.status;
-		__entry->zero = req->request.zero;
-		__entry->short_not_ok = req->request.short_not_ok;
-		__entry->no_interrupt = req->request.no_interrupt;
+		__entry->rdw1 = req->request.dw1;
 		__entry->start_trb = req->start_trb;
 		__entry->end_trb = req->end_trb;
 		__entry->flags = req->flags;
-		__entry->stream_id = req->request.stream_id;
 	),
 	TP_printk("%s: req: %p, req buff %p, length: %u/%u %s%s%s, status: %d,"
 		  " trb: [start:%d, end:%d], flags:%x SID: %u",
-		__get_str(name), __entry->req, __entry->buf, __entry->actual,
+		__s, __entry->req, __entry->buf, __entry->actual,
 		__entry->length,
-		__entry->zero ? "Z" : "z",
-		__entry->short_not_ok ? "S" : "s",
-		__entry->no_interrupt ? "I" : "i",
+		tr.zero ? "Z" : "z",
+		tr.short_not_ok ? "S" : "s",
+		tr.no_interrupt ? "I" : "i",
 		__entry->status,
 		__entry->start_trb,
 		__entry->end_trb,
 		__entry->flags,
-		__entry->stream_id
+		tr.stream_id
+	),
+	TP_printk_init(
+		struct usb_ep te;
+		struct usb_request tr;
+		char __s[9];
+		te.dw3 = __entry->edw3;
+		tr.dw1 = __entry->rdw1;
+		snprintf(__s, 9, "ep%d%s", te.address, \
+			(te.caps.dir_in && te.caps.dir_out) ? "" : \
+			te.caps.dir_in ? "in" : "out");
 	)
 );
 
@@ -283,26 +320,34 @@ TRACE_EVENT(cdns3_ep0_queue,
 		  __entry->length)
 );
 
-DECLARE_EVENT_CLASS(cdns3_stream_split_transfer_len,
+DECLARE_EVENT_CLASS_PRINT_INIT(cdns3_stream_split_transfer_len,
 	TP_PROTO(struct cdns3_request *req),
 	TP_ARGS(req),
 	TP_STRUCT__entry(
-		__string(name, req->priv_ep->name)
+		__field(u32, edw3)
 		__field(struct cdns3_request *, req)
 		__field(unsigned int, length)
 		__field(unsigned int, actual)
 		__field(unsigned int, stream_id)
 	),
 	TP_fast_assign(
-		__assign_str(name, req->priv_ep->name);
+		__entry->edw3 = req->priv_ep->endpoint.dw3;
 		__entry->req = req;
 		__entry->actual = req->request.length;
 		__entry->length = req->request.actual;
 		__entry->stream_id = req->request.stream_id;
 	),
 	TP_printk("%s: req: %p,request length: %u actual length: %u  SID: %u",
-		  __get_str(name), __entry->req, __entry->length,
-		  __entry->actual, __entry->stream_id)
+		  __s, __entry->req, __entry->length,
+		  __entry->actual, __entry->stream_id),
+	TP_printk_init(
+		struct usb_ep te;
+		char __s[9];
+		te.dw3 = __entry->edw3;
+		snprintf(__s, 9, "ep%d%s", te.address, \
+			(te.caps.dir_in && te.caps.dir_out) ? "" : \
+			te.caps.dir_in ? "in" : "out");
+	)
 );
 
 DEFINE_EVENT(cdns3_stream_split_transfer_len, cdns3_stream_transfer_split,
@@ -316,11 +361,11 @@ DEFINE_EVENT(cdns3_stream_split_transfer_len,
 	     TP_ARGS(req)
 );
 
-DECLARE_EVENT_CLASS(cdns3_log_aligned_request,
+DECLARE_EVENT_CLASS_PRINT_INIT(cdns3_log_aligned_request,
 	TP_PROTO(struct cdns3_request *priv_req),
 	TP_ARGS(priv_req),
 	TP_STRUCT__entry(
-		__string(name, priv_req->priv_ep->name)
+		__field(u32, edw3)
 		__field(struct usb_request *, req)
 		__field(void *, buf)
 		__field(dma_addr_t, dma)
@@ -329,7 +374,7 @@ DECLARE_EVENT_CLASS(cdns3_log_aligned_request,
 		__field(u32, aligned_buf_size)
 	),
 	TP_fast_assign(
-		__assign_str(name, priv_req->priv_ep->name);
+		__entry->edw3 = priv_req->priv_ep->endpoint.dw3;
 		__entry->req = &priv_req->request;
 		__entry->buf = priv_req->request.buf;
 		__entry->dma = priv_req->request.dma;
@@ -338,9 +383,17 @@ DECLARE_EVENT_CLASS(cdns3_log_aligned_request,
 		__entry->aligned_buf_size = priv_req->aligned_buf->size;
 	),
 	TP_printk("%s: req: %p, req buf %p, dma %pad a_buf %p a_dma %pad, size %d",
-		__get_str(name), __entry->req, __entry->buf, &__entry->dma,
+		__s, __entry->req, __entry->buf, &__entry->dma,
 		__entry->aligned_buf, &__entry->aligned_dma,
 		__entry->aligned_buf_size
+	),
+	TP_printk_init(
+		struct usb_ep te;
+		char __s[9];
+		te.dw3 = __entry->edw3;
+		snprintf(__s, 9, "ep%d%s", te.address, \
+			(te.caps.dir_in && te.caps.dir_out) ? "" : \
+			te.caps.dir_in ? "in" : "out");
 	)
 );
 
@@ -354,23 +407,31 @@ DEFINE_EVENT(cdns3_log_aligned_request, cdns3_prepare_aligned_request,
 	TP_ARGS(req)
 );
 
-DECLARE_EVENT_CLASS(cdns3_log_map_request,
+DECLARE_EVENT_CLASS_PRINT_INIT(cdns3_log_map_request,
 	TP_PROTO(struct cdns3_request *priv_req),
 	TP_ARGS(priv_req),
 	TP_STRUCT__entry(
-		__string(name, priv_req->priv_ep->name)
+		__field(u32, edw3)
 		__field(struct usb_request *, req)
 		__field(void *, buf)
 		__field(dma_addr_t, dma)
 	),
 	TP_fast_assign(
-		__assign_str(name, priv_req->priv_ep->name);
+		__entry->edw3 = priv_req->priv_ep->endpoint.dw3;
 		__entry->req = &priv_req->request;
 		__entry->buf = priv_req->request.buf;
 		__entry->dma = priv_req->request.dma;
 	),
 	TP_printk("%s: req: %p, req buf %p, dma %p",
-		  __get_str(name), __entry->req, __entry->buf, &__entry->dma
+		  __s, __entry->req, __entry->buf, &__entry->dma
+	),
+	TP_printk_init(
+		struct usb_ep te;
+		char __s[9];
+		te.dw3 = __entry->edw3;
+		snprintf(__s, 9, "ep%d%s", te.address, \
+			(te.caps.dir_in && te.caps.dir_out) ? "" : \
+			te.caps.dir_in ? "in" : "out");
 	)
 );
 DEFINE_EVENT(cdns3_log_map_request, cdns3_map_request,
@@ -382,11 +443,11 @@ DEFINE_EVENT(cdns3_log_map_request, cdns3_mapped_request,
 	     TP_ARGS(req)
 );
 
-DECLARE_EVENT_CLASS(cdns3_log_trb,
+DECLARE_EVENT_CLASS_PRINT_INIT(cdns3_log_trb,
 	TP_PROTO(struct cdns3_endpoint *priv_ep, struct cdns3_trb *trb),
 	TP_ARGS(priv_ep, trb),
 	TP_STRUCT__entry(
-		__string(name, priv_ep->name)
+		__field(u32, edw3)
 		__field(struct cdns3_trb *, trb)
 		__field(u32, buffer)
 		__field(u32, length)
@@ -395,7 +456,7 @@ DECLARE_EVENT_CLASS(cdns3_log_trb,
 		__field(unsigned int, last_stream_id)
 	),
 	TP_fast_assign(
-		__assign_str(name, priv_ep->name);
+		__entry->edw3 = priv_ep->endpoint.dw3;
 		__entry->trb = trb;
 		__entry->buffer = le32_to_cpu(trb->buffer);
 		__entry->length = le32_to_cpu(trb->length);
@@ -404,7 +465,7 @@ DECLARE_EVENT_CLASS(cdns3_log_trb,
 		__entry->last_stream_id = priv_ep->last_stream_id;
 	),
 	TP_printk("%s: trb %p, dma buf: 0x%08x, size: %ld, burst: %d ctrl: 0x%08x (%s%s%s%s%s%s%s) SID:%lu LAST_SID:%u",
-		__get_str(name), __entry->trb, __entry->buffer,
+		__s, __entry->trb, __entry->buffer,
 		TRB_LEN(__entry->length),
 		(u8)TRB_BURST_LEN_GET(__entry->length),
 		__entry->control,
@@ -417,6 +478,14 @@ DECLARE_EVENT_CLASS(cdns3_log_trb,
 		TRB_FIELD_TO_TYPE(__entry->control) == TRB_NORMAL ? "Normal" : "LINK",
 		TRB_FIELD_TO_STREAMID(__entry->control),
 		__entry->last_stream_id
+	),
+	TP_printk_init(
+		struct usb_ep te;
+		char __s[9];
+		te.dw3 = __entry->edw3;
+		snprintf(__s, 9, "ep%d%s", te.address, \
+			(te.caps.dir_in && te.caps.dir_out) ? "" : \
+			te.caps.dir_in ? "in" : "out");
 	)
 );
 
@@ -451,28 +520,24 @@ DEFINE_EVENT(cdns3_log_ring, cdns3_ring,
 	TP_ARGS(priv_ep)
 );
 
-DECLARE_EVENT_CLASS(cdns3_log_ep,
+DECLARE_EVENT_CLASS_PRINT_INIT(cdns3_log_ep,
 	TP_PROTO(struct cdns3_endpoint *priv_ep),
 	TP_ARGS(priv_ep),
 	TP_STRUCT__entry(
-		__string(name, priv_ep->name)
-		__field(unsigned int, maxpacket)
-		__field(unsigned int, maxpacket_limit)
-		__field(unsigned int, max_streams)
+		__field(u32, edw3)
+		__field(u32, edw1)
+		__field(u32, edw2)
 		__field(unsigned int, use_streams)
-		__field(unsigned int, maxburst)
 		__field(unsigned int, flags)
 		__field(unsigned int, dir)
 		__field(u8, enqueue)
 		__field(u8, dequeue)
 	),
 	TP_fast_assign(
-		__assign_str(name, priv_ep->name);
-		__entry->maxpacket = priv_ep->endpoint.maxpacket;
-		__entry->maxpacket_limit = priv_ep->endpoint.maxpacket_limit;
-		__entry->max_streams = priv_ep->endpoint.max_streams;
+		__entry->edw3 = priv_ep->endpoint.dw3;
+		__entry->edw2 = priv_ep->endpoint.dw2;
+		__entry->edw1 = priv_ep->endpoint.dw1;
 		__entry->use_streams = priv_ep->use_streams;
-		__entry->maxburst = priv_ep->endpoint.maxburst;
 		__entry->flags = priv_ep->flags;
 		__entry->dir = priv_ep->dir;
 		__entry->enqueue = priv_ep->enqueue;
@@ -480,10 +545,10 @@ DECLARE_EVENT_CLASS(cdns3_log_ep,
 	),
 	TP_printk("%s: mps: %d/%d. streams: %d, stream enable: %d, burst: %d, "
 		  "enq idx: %d, deq idx: %d, flags %s%s%s%s%s%s%s%s, dir: %s",
-		__get_str(name), __entry->maxpacket,
-		__entry->maxpacket_limit, __entry->max_streams,
+		__s, te.maxpacket,
+		te.maxpacket_limit, te.max_streams,
 		__entry->use_streams,
-		__entry->maxburst, __entry->enqueue,
+		te.maxburst, __entry->enqueue,
 		__entry->dequeue,
 		__entry->flags & EP_ENABLED ? "EN | " : "",
 		__entry->flags & EP_STALLED ? "STALLED | " : "",
@@ -494,6 +559,16 @@ DECLARE_EVENT_CLASS(cdns3_log_ep,
 		__entry->flags & EP_RING_FULL ? "RING FULL |" : "",
 		__entry->flags & EP_CLAIMED ?  "CLAIMED " : "",
 		__entry->dir ? "IN" : "OUT"
+	),
+	TP_printk_init(
+		struct usb_ep te;
+		char __s[9];
+		te.dw1 = __entry->edw1;
+		te.dw2 = __entry->edw2;
+		te.dw3 = __entry->edw3;
+		snprintf(__s, 9, "ep%d%s", te.address, \
+			(te.caps.dir_in && te.caps.dir_out) ? "" : \
+			te.caps.dir_in ? "in" : "out");
 	)
 );
 
