@@ -491,6 +491,21 @@ static void kvm_xen_inject_vcpu_vector(struct kvm_vcpu *v)
 
 struct gfn_to_pfn_cache *get_vcpu_info_cache(struct kvm_vcpu *v, unsigned long *offset)
 {
+	if (!v->arch.xen.vcpu_info_cache.active && v->arch.xen.vcpu_id < MAX_VIRT_CPUS) {
+		struct kvm *kvm = v->kvm;
+
+		if (offset) {
+			if (IS_ENABLED(CONFIG_64BIT) && kvm->arch.xen.long_mode)
+				*offset = offsetof(struct shared_info,
+						   vcpu_info[v->arch.xen.vcpu_id]);
+			else
+				*offset = offsetof(struct compat_shared_info,
+						   vcpu_info[v->arch.xen.vcpu_id]);
+		}
+
+		return &kvm->arch.xen.shinfo_cache;
+	}
+
 	if (offset)
 		*offset = 0;
 

@@ -1283,6 +1283,7 @@ struct kvm_x86_mce {
 #define KVM_XEN_HVM_CONFIG_EVTCHN_SEND		(1 << 5)
 #define KVM_XEN_HVM_CONFIG_RUNSTATE_UPDATE_FLAG	(1 << 6)
 #define KVM_XEN_HVM_CONFIG_SHARED_INFO_HVA	(1 << 7)
+#define KVM_XEN_HVM_CONFIG_DEFAULT_VCPU_INFO	(1 << 8)
 
 struct kvm_xen_hvm_config {
 	__u32 flags;
