@@ -76,7 +76,8 @@ FILES=                                          \
          test-libzstd.bin			\
          test-clang-bpf-co-re.bin		\
          test-file-handle.bin			\
-         test-libpfm4.bin
+         test-libpfm4.bin			\
+         test-shellcheck.bin
 
 FILES := $(addprefix $(OUTPUT),$(FILES))
 
@@ -91,6 +92,8 @@ __BUILD = $(CC) $(CFLAGS) -MD -Wall -Werror -o $@ $(patsubst %.bin,%.c,$(@F)) $(
 
 __BUILDXX = $(CXX) $(CXXFLAGS) -MD -Wall -Werror -o $@ $(patsubst %.bin,%.cpp,$(@F)) $(LDFLAGS)
   BUILDXX = $(__BUILDXX) > $(@:.bin=.make.output) 2>&1
+
+  BUILD_BINARY = sh -c $1 > $(@:.bin=.make.output) 2>&1
 
 ###############################
 
@@ -206,6 +209,9 @@ $(OUTPUT)test-libslang-include-subdir.bin:
 
 $(OUTPUT)test-libtraceevent.bin:
 	$(BUILD) -ltraceevent
+
+$(OUTPUT)test-shellcheck.bin:
+	$(BUILD_BINARY) "shellcheck --version"
 
 $(OUTPUT)test-libtracefs.bin:
 	 $(BUILD) $(shell $(PKG_CONFIG) --cflags libtraceevent 2>/dev/null) -ltracefs
