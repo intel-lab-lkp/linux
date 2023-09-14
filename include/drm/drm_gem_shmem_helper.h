@@ -61,13 +61,6 @@ struct drm_gem_shmem_object {
 	int madv;
 
 	/**
-	 * @madv_list: List entry for madvise tracking
-	 *
-	 * Typically used by drivers to track purgeable objects
-	 */
-	struct list_head madv_list;
-
-	/**
 	 * @sgt: Scatter/gather table for imported PRIME buffers
 	 */
 	struct sg_table *sgt;
