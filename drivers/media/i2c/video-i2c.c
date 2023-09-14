@@ -406,7 +406,7 @@ static int queue_setup(struct vb2_queue *vq,
 	struct video_i2c_data *data = vb2_get_drv_priv(vq);
 	unsigned int size = data->chip->buffer_size;
 
-	if (vq->num_buffers + *nbuffers < 2)
+	if (vb2_get_num_buffers(vq) + *nbuffers < 2)
 		*nbuffers = 2;
 
 	if (*nplanes)
