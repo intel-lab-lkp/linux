@@ -101,6 +101,15 @@ static __always_inline enum lru_list folio_lru_list(struct folio *folio)
 
 #ifdef CONFIG_LRU_GEN
 
+#define DEFINE_MAX_SEQ(lruvec)						\
+	unsigned long max_seq = READ_ONCE((lruvec)->lrugen.max_seq)
+
+#define DEFINE_MIN_SEQ(lruvec)						\
+	unsigned long min_seq[ANON_AND_FILE] = {			\
+		READ_ONCE((lruvec)->lrugen.min_seq[LRU_GEN_ANON]),	\
+		READ_ONCE((lruvec)->lrugen.min_seq[LRU_GEN_FILE]),	\
+	}
+
 #ifdef CONFIG_LRU_GEN_ENABLED
 static inline bool lru_gen_enabled(void)
 {

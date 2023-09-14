@@ -2585,15 +2585,6 @@ static bool should_clear_pmd_young(void)
 
 #define LRU_REFS_FLAGS	(BIT(PG_referenced) | BIT(PG_workingset))
 
-#define DEFINE_MAX_SEQ(lruvec)						\
-	unsigned long max_seq = READ_ONCE((lruvec)->lrugen.max_seq)
-
-#define DEFINE_MIN_SEQ(lruvec)						\
-	unsigned long min_seq[ANON_AND_FILE] = {			\
-		READ_ONCE((lruvec)->lrugen.min_seq[LRU_GEN_ANON]),	\
-		READ_ONCE((lruvec)->lrugen.min_seq[LRU_GEN_FILE]),	\
-	}
-
 #define for_each_gen_type_zone(gen, type, zone)				\
 	for ((gen) = 0; (gen) < MAX_NR_GENS; (gen)++)			\
 		for ((type) = 0; (type) < ANON_AND_FILE; (type)++)	\
@@ -5358,6 +5349,29 @@ static int run_eviction(struct lruvec *lruvec, unsigned long seq, struct scan_co
 	return -EINTR;
 }
 
+static int __process_one_cmd(char cmd, struct lruvec *lruvec, unsigned long seq,
+			     struct scan_control *sc, int swappiness,
+			     unsigned long opt)
+{
+	int err;
+
+	if (swappiness < 0)
+		swappiness = get_swappiness(lruvec, sc);
+	else if (swappiness > 200)
+		return -EINVAL;
+
+	switch (cmd) {
+	case '+':
+		err = run_aging(lruvec, seq, sc, swappiness, opt);
+		break;
+	case '-':
+		err = run_eviction(lruvec, seq, sc, swappiness, opt);
+		break;
+	}
+
+	return err;
+}
+
 static int run_cmd(char cmd, int memcg_id, int nid, unsigned long seq,
 		   struct scan_control *sc, int swappiness, unsigned long opt)
 {
@@ -5386,19 +5400,8 @@ static int run_cmd(char cmd, int memcg_id, int nid, unsigned long seq,
 
 	lruvec = get_lruvec(memcg, nid);
 
-	if (swappiness < 0)
-		swappiness = get_swappiness(lruvec, sc);
-	else if (swappiness > 200)
-		goto done;
+	err = __process_one_cmd(cmd, lruvec, seq, sc, swappiness, opt);
 
-	switch (cmd) {
-	case '+':
-		err = run_aging(lruvec, seq, sc, swappiness, opt);
-		break;
-	case '-':
-		err = run_eviction(lruvec, seq, sc, swappiness, opt);
-		break;
-	}
 done:
 	mem_cgroup_put(memcg);
 
