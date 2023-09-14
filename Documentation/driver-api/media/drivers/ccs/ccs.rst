@@ -114,4 +114,12 @@ The PLL model implemented by the PLL calculator corresponds to MIPI CCS 1.1.
 
 .. kernel-doc:: drivers/media/i2c/ccs-pll.h
 
+CCS tools
+=========
+
+`CCS tools <https://github.com/MIPI-Alliance/ccs-tools/>`_ is a set of
+tools for working with CCS static data files. CCS tools includes a
+definition of the human-readable CCS static data YAML format and includes a
+program to convert it to a binary.
+
 **Copyright** |copy| 2020 Intel Corporation
