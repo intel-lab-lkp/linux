@@ -36,6 +36,8 @@
 #define	ATH12K_RX_RATE_TABLE_NUM	320
 #define	ATH12K_RX_RATE_TABLE_11AX_NUM	576
 
+#define ATH12K_SCAN_TIMEOUT_HZ (20 * HZ)
+
 #define ATH12K_MON_TIMER_INTERVAL  10
 #define ATH12K_RESET_TIMEOUT_HZ			(20 * HZ)
 #define ATH12K_RESET_MAX_FAIL_COUNT_FIRST	3
@@ -169,6 +171,12 @@ enum ath12k_scan_state {
 	ATH12K_SCAN_STARTING,
 	ATH12K_SCAN_RUNNING,
 	ATH12K_SCAN_ABORTING,
+};
+
+enum ath12k_11d_state {
+	ATH12K_11D_IDLE,
+	ATH12K_11D_PREPARING,
+	ATH12K_11D_RUNNING,
 };
 
 enum ath12k_dev_flags {
@@ -570,6 +578,10 @@ struct ath12k {
 	bool monitor_vdev_created;
 	bool monitor_started;
 	int monitor_vdev_id;
+	u32 vdev_id_11d_scan;
+	struct completion completed_11d_scan;
+	enum ath12k_11d_state state_11d;
+	bool regdom_set_by_user;
 };
 
 struct ath12k_band_cap {
@@ -755,6 +767,10 @@ struct ath12k_base {
 	/* continuous recovery fail count */
 	atomic_t fail_cont_count;
 	unsigned long reset_fail_timeout;
+	struct work_struct update_11d_work;
+	u8 new_alpha2[2];
+	/* To synchronize 11d scan vdev id */
+	struct mutex vdev_id_11d_lock;
 	struct {
 		/* protected by data_lock */
 		u32 fw_crash_counter;
