@@ -54,7 +54,7 @@ static int init_vas_instance(struct platform_device *pdev)
 	struct xive_irq_data *xd;
 	uint32_t chipid, hwirq;
 	struct resource *res;
-	int rc, cpu, vasid;
+	int rc, cpu, vasid, ret;
 
 	rc = of_property_read_u32(dn, "ibm,vas-id", &vasid);
 	if (rc) {
@@ -102,6 +102,7 @@ static int init_vas_instance(struct platform_device *pdev)
 	res = &pdev->resource[3];
 	if (res->end > 62) {
 		pr_err("Bad 'paste_win_id_shift' in DT, %llx\n", res->end);
+		ret = -ENODEV
 		goto free_vinst;
 	}
 
@@ -111,21 +112,24 @@ static int init_vas_instance(struct platform_device *pdev)
 	if (!hwirq) {
 		pr_err("Inst%d: Unable to allocate global irq for chip %d\n",
 				vinst->vas_id, chipid);
-		return -ENOENT;
+		ret = -ENOENT;
+		goto free_vinst;
 	}
 
 	vinst->virq = irq_create_mapping(NULL, hwirq);
 	if (!vinst->virq) {
 		pr_err("Inst%d: Unable to map global irq %d\n",
 				vinst->vas_id, hwirq);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto free_vinst;
 	}
 
 	xd = irq_get_handler_data(vinst->virq);
 	if (!xd) {
 		pr_err("Inst%d: Invalid virq %d\n",
 				vinst->vas_id, vinst->virq);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto free_vinst;
 	}
 
 	vinst->irq_port = xd->trig_page;
@@ -168,7 +172,7 @@ static int init_vas_instance(struct platform_device *pdev)
 free_vinst:
 	kfree(vinst->name);
 	kfree(vinst);
-	return -ENODEV;
+	return ret;
 
 }
 
