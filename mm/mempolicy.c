@@ -399,6 +399,10 @@ static const struct mempolicy_operations mpol_ops[MPOL_MAX] = {
 		.create = mpol_new_nodemask,
 		.rebind = mpol_rebind_nodemask,
 	},
+	[MPOL_PARTIAL_INTERLEAVE] = {
+		.create = mpol_new_nodemask,
+		.rebind = mpol_rebind_nodemask,
+	},
 	[MPOL_PREFERRED] = {
 		.create = mpol_new_preferred,
 		.rebind = mpol_rebind_preferred,
@@ -875,7 +879,8 @@ static long swap_mempolicy(struct mempolicy *new,
 
 	old = current->mempolicy;
 	current->mempolicy = new;
-	if (new && new->mode == MPOL_INTERLEAVE)
+	if (new && (new->mode == MPOL_INTERLEAVE ||
+		    new->mode == MPOL_PARTIAL_INTERLEAVE))
 		current->il_prev = MAX_NUMNODES-1;
 out:
 	task_unlock(current);
@@ -920,6 +925,7 @@ static void get_policy_nodemask(struct mempolicy *p, nodemask_t *nodes)
 	switch (p->mode) {
 	case MPOL_BIND:
 	case MPOL_INTERLEAVE:
+	case MPOL_PARTIAL_INTERLEAVE:
 	case MPOL_PREFERRED:
 	case MPOL_PREFERRED_MANY:
 		*nodes = p->nodes;
@@ -1614,6 +1620,23 @@ SYSCALL_DEFINE3(set_mempolicy, int, mode, const unsigned long __user *, nmask,
 	return kernel_set_mempolicy(mode, nmask, maxnode);
 }
 
+static long do_set_partial_interleave(struct mempolicy_args *args,
+				      struct mempolicy *new,
+				      nodemask_t *nodes)
+{
+	/* Preferred interleave cannot be done with no nodemask */
+	if (nodes_empty(*nodes))
+		return -EINVAL;
+
+	/* Preferred interleave interval cannot be <= 0 */
+	if (args->part_int.interval <= 0)
+		return -EINVAL;
+
+	new->part_int.interval = args->part_int.interval;
+	new->part_int.count = 0;
+	return 0;
+}
+
 static long do_set_mempolicy2(struct mempolicy_args *args)
 {
 	struct mempolicy *new = NULL;
@@ -1637,6 +1660,9 @@ static long do_set_mempolicy2(struct mempolicy_args *args)
 	}
 
 	switch (args->mode) {
+	case MPOL_PARTIAL_INTERLEAVE:
+		err = do_set_partial_interleave(args, new, &nodes);
+		break;
 	default:
 		BUG();
 	}
@@ -1790,6 +1816,11 @@ mode_info:
 	case MPOL_INTERLEAVE:
 		kargs->interleave.next_node = next_node_in(current->il_prev,
 							   pol->nodes);
+		break;
+	case MPOL_PARTIAL_INTERLEAVE:
+		kargs->part_int.next_node = next_node_in(current->il_prev,
+							 pol->nodes);
+		kargs->part_int.interval = pol->part_int.interval;
 		break;
 	default:
 		break;
@@ -2133,8 +2164,19 @@ static unsigned interleave_nodes(struct mempolicy *policy)
 	struct task_struct *me = current;
 
 	next = next_node_in(me->il_prev, policy->nodes);
-	if (next < MAX_NUMNODES)
+
+	if (policy->mode == MPOL_PARTIAL_INTERLEAVE) {
+		if (next == numa_node_id()) {
+			if (++policy->part_int.count >= policy->part_int.interval) {
+				policy->part_int.count = 0;
+				me->il_prev = next;
+			}
+		} else if (next < MAX_NUMNODES) {
+			me->il_prev = next;
+		}
+	} else if (next < MAX_NUMNODES)
 		me->il_prev = next;
+
 	return next;
 }
 
@@ -2159,6 +2201,7 @@ unsigned int mempolicy_slab_node(void)
 		return first_node(policy->nodes);
 
 	case MPOL_INTERLEAVE:
+	case MPOL_PARTIAL_INTERLEAVE:
 		return interleave_nodes(policy);
 
 	case MPOL_BIND:
@@ -2195,7 +2238,7 @@ static unsigned offset_il_node(struct mempolicy *pol, unsigned long n)
 	nodemask_t nodemask = pol->nodes;
 	unsigned int target, nnodes;
 	int i;
-	int nid;
+	int nid = MAX_NUMNODES;
 	/*
 	 * The barrier will stabilize the nodemask in a register or on
 	 * the stack so that it will stop changing under the code.
@@ -2208,8 +2251,35 @@ static unsigned offset_il_node(struct mempolicy *pol, unsigned long n)
 	nnodes = nodes_weight(nodemask);
 	if (!nnodes)
 		return numa_node_id();
-	target = (unsigned int)n % nnodes;
-	nid = first_node(nodemask);
+
+	if (pol->mode == MPOL_PARTIAL_INTERLEAVE) {
+		int interval = pol->part_int.interval;
+		/*
+		 * Mode or interval can change so default to basic interleave
+		 * if the interval has become invalid.  Basic interleave is
+		 * equivalent to interval=1. Don't double-count the base node
+		 */
+		if (interval == 0)
+			interval = 1;
+		interval -= 1;
+
+		/* If target <= the interval, no need to call next_node */
+		target = ((unsigned int)n % (nnodes + interval));
+		target -= (target > interval) ? interval : target;
+		target %= MAX_NUMNODES;
+
+		/* If the local node ID is no longer set, do interleave */
+		nid = numa_node_id();
+		if (!node_isset(nid, nodemask))
+			nid = MAX_NUMNODES;
+	}
+
+	/* If partial interleave generated an invalid nid, do interleave */
+	if (nid == MAX_NUMNODES) {
+		target = (unsigned int)n % nnodes;
+		nid = first_node(nodemask);
+	}
+
 	for (i = 0; i < target; i++)
 		nid = next_node(nid, nodemask);
 	return nid;
@@ -2263,7 +2333,8 @@ int huge_node(struct vm_area_struct *vma, unsigned long addr, gfp_t gfp_flags,
 	*nodemask = NULL;
 	mode = (*mpol)->mode;
 
-	if (unlikely(mode == MPOL_INTERLEAVE)) {
+	if (unlikely(mode == MPOL_INTERLEAVE) ||
+	    unlikely(mode == MPOL_PARTIAL_INTERLEAVE)) {
 		nid = interleave_nid(*mpol, vma, addr,
 					huge_page_shift(hstate_vma(vma)));
 	} else {
@@ -2304,6 +2375,7 @@ bool init_nodemask_of_mempolicy(nodemask_t *mask)
 	case MPOL_PREFERRED_MANY:
 	case MPOL_BIND:
 	case MPOL_INTERLEAVE:
+	case MPOL_PARTIAL_INTERLEAVE:
 		*mask = mempolicy->nodes;
 		break;
 
@@ -2414,7 +2486,8 @@ struct folio *vma_alloc_folio(gfp_t gfp, int order, struct vm_area_struct *vma,
 
 	pol = get_vma_policy(vma, addr);
 
-	if (pol->mode == MPOL_INTERLEAVE) {
+	if (pol->mode == MPOL_INTERLEAVE ||
+	    pol->mode == MPOL_PARTIAL_INTERLEAVE) {
 		struct page *page;
 		unsigned nid;
 
@@ -2516,7 +2589,8 @@ struct page *alloc_pages(gfp_t gfp, unsigned order)
 	 * No reference counting needed for current->mempolicy
 	 * nor system default_policy
 	 */
-	if (pol->mode == MPOL_INTERLEAVE)
+	if (pol->mode == MPOL_INTERLEAVE ||
+	    pol->mode == MPOL_PARTIAL_INTERLEAVE)
 		page = alloc_page_interleave(gfp, order, interleave_nodes(pol));
 	else if (pol->mode == MPOL_PREFERRED_MANY)
 		page = alloc_pages_preferred_many(gfp, order,
@@ -2576,6 +2650,68 @@ static unsigned long alloc_pages_bulk_array_interleave(gfp_t gfp,
 	return total_allocated;
 }
 
+static unsigned long alloc_pages_bulk_array_partial_interleave(gfp_t gfp,
+		struct mempolicy *pol, unsigned long nr_pages,
+		struct page **page_array)
+{
+	nodemask_t nodemask = pol->nodes;
+	unsigned long nr_pages_main;
+	unsigned long nr_pages_other;
+	unsigned long total_cycle;
+	unsigned long delta;
+	unsigned long interval;
+	int allocated = 0;
+	int start_nid;
+	int nnodes;
+	int prev, next;
+	int i;
+
+	/* This stabilizes nodes on the stack incase pol->nodes changes */
+	barrier();
+
+	nnodes = nodes_weight(nodemask);
+	start_nid = numa_node_id();
+
+	if (!node_isset(start_nid, nodemask))
+		start_nid = first_node(nodemask);
+
+	if (nnodes == 1) {
+		allocated = __alloc_pages_bulk(gfp, start_nid,
+					       NULL, nr_pages_main,
+					       NULL, page_array);
+		return allocated;
+	}
+	/* We don't want to double-count the main node in calculations */
+	nnodes--;
+
+	interval = pol->part_int.interval;
+	total_cycle = (interval + nnodes);
+	/* Number of pages on main node: (cycles*interval + up to interval) */
+	nr_pages_main = ((nr_pages / total_cycle) * interval);
+	nr_pages_main += (nr_pages % total_cycle % (interval + 1));
+	/* Number of pages on others: (remaining/nodes) + 1 page if delta  */
+	nr_pages_other = (nr_pages - nr_pages_main) / nnodes;
+	nr_pages_other /= nnodes;
+	/* Delta is number of pages beyond interval up to full cycle */
+	delta = nr_pages - (nr_pages_main + (nr_pages_other * nnodes));
+
+	/* start by allocating for the main node, then interleave rest */
+	prev = start_nid;
+	allocated = __alloc_pages_bulk(gfp, start_nid, NULL, nr_pages_main,
+				       NULL, page_array);
+	for (i = 0; i < nnodes; i++) {
+		int pages = nr_pages_other + (delta-- ? 1 : 0);
+
+		next = next_node_in(prev, nodemask);
+		if (next < MAX_NUMNODES)
+			prev = next;
+		allocated += __alloc_pages_bulk(gfp, next, NULL, pages,
+						NULL, page_array);
+	}
+
+	return allocated;
+}
+
 static unsigned long alloc_pages_bulk_array_preferred_many(gfp_t gfp, int nid,
 		struct mempolicy *pol, unsigned long nr_pages,
 		struct page **page_array)
@@ -2613,6 +2749,11 @@ unsigned long alloc_pages_bulk_array_mempolicy(gfp_t gfp,
 	if (pol->mode == MPOL_INTERLEAVE)
 		return alloc_pages_bulk_array_interleave(gfp, pol,
 							 nr_pages, page_array);
+
+	if (pol->mode == MPOL_PARTIAL_INTERLEAVE)
+		return alloc_pages_bulk_array_partial_interleave(gfp, pol,
+								 nr_pages,
+								 page_array);
 
 	if (pol->mode == MPOL_PREFERRED_MANY)
 		return alloc_pages_bulk_array_preferred_many(gfp,
@@ -2686,6 +2827,7 @@ bool __mpol_equal(struct mempolicy *a, struct mempolicy *b)
 	switch (a->mode) {
 	case MPOL_BIND:
 	case MPOL_INTERLEAVE:
+	case MPOL_PARTIAL_INTERLEAVE:
 	case MPOL_PREFERRED:
 	case MPOL_PREFERRED_MANY:
 		return !!nodes_equal(a->nodes, b->nodes);
@@ -2822,6 +2964,7 @@ int mpol_misplaced(struct page *page, struct vm_area_struct *vma, unsigned long 
 
 	switch (pol->mode) {
 	case MPOL_INTERLEAVE:
+	case MPOL_PARTIAL_INTERLEAVE:
 		pgoff = vma->vm_pgoff;
 		pgoff += (addr - vma->vm_start) >> PAGE_SHIFT;
 		polnid = offset_il_node(pol, pgoff);
@@ -3209,6 +3352,7 @@ static const char * const policy_modes[] =
 	[MPOL_PREFERRED]  = "prefer",
 	[MPOL_BIND]       = "bind",
 	[MPOL_INTERLEAVE] = "interleave",
+	[MPOL_PARTIAL_INTERLEAVE] = "partial interleave",
 	[MPOL_LOCAL]      = "local",
 	[MPOL_PREFERRED_MANY]  = "prefer (many)",
 };
@@ -3379,6 +3523,7 @@ void mpol_to_str(char *buffer, int maxlen, struct mempolicy *pol)
 	case MPOL_PREFERRED_MANY:
 	case MPOL_BIND:
 	case MPOL_INTERLEAVE:
+	case MPOL_PARTIAL_INTERLEAVE:
 		nodes = pol->nodes;
 		break;
 	default:
