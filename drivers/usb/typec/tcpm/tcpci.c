@@ -861,6 +861,9 @@ static int tcpci_probe(struct i2c_client *client)
 
 	i2c_set_clientdata(client, chip);
 
+	chip->data.vbus_vsafe0v = 1;
+	chip->data.auto_discharge_disconnect = 1;
+
 	/* Disable chip interrupts before requesting irq */
 	err = regmap_raw_write(chip->data.regmap, TCPC_ALERT_MASK, &val,
 			       sizeof(u16));
