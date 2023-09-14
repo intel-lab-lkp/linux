@@ -71,12 +71,28 @@ struct ffs_function {
 	struct ffs_data			*ffs;
 
 	struct ffs_ep			*eps;
-	u8				eps_revmap[16];
+	u8				eps_revmap[31];
 	short				*interfaces_nums;
 
 	struct usb_function		function;
 };
 
+/*
+ * index 0 for control ep
+ * For same-address, opposite-direction endpoints, each address
+ * corresponds to two indices, distinguished by dir.
+ * index 1 for 1out
+ * index 2 for 1in
+ * ...
+ */
+static int ffs_ep_revmap_index(u8 epaddr)
+{
+	if (!(epaddr & USB_ENDPOINT_NUMBER_MASK))
+		return 0;
+
+	return ((epaddr & USB_ENDPOINT_NUMBER_MASK) * 2) +
+		(epaddr & USB_DIR_IN ? 1 : 0) - 1;
+}
 
 static struct ffs_function *ffs_func_from_usb(struct usb_function *f)
 {
@@ -2820,6 +2836,7 @@ static int __ffs_func_bind_do_descs(enum ffs_entity_type type, u8 *valuep,
 		struct usb_ep *ep;
 		u8 bEndpointAddress;
 		u16 wMaxPacketSize;
+		int revmap_idx;
 
 		/*
 		 * We back up bEndpointAddress because autoconfig overwrites
@@ -2843,8 +2860,8 @@ static int __ffs_func_bind_do_descs(enum ffs_entity_type type, u8 *valuep,
 
 		ffs_ep->ep  = ep;
 		ffs_ep->req = req;
-		func->eps_revmap[ds->bEndpointAddress &
-				 USB_ENDPOINT_NUMBER_MASK] = idx + 1;
+		revmap_idx = ffs_ep_revmap_index(ds->bEndpointAddress);
+		func->eps_revmap[revmap_idx] = idx + 1;
 		/*
 		 * If we use virtual address mapping, we restore
 		 * original bEndpointAddress value.
@@ -3371,7 +3388,7 @@ static void ffs_func_resume(struct usb_function *f)
 
 static int ffs_func_revmap_ep(struct ffs_function *func, u8 num)
 {
-	num = func->eps_revmap[num & USB_ENDPOINT_NUMBER_MASK];
+	num = func->eps_revmap[ffs_ep_revmap_index(num)];
 	return num ? num : -EDOM;
 }
 
