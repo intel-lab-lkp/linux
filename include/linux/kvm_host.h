@@ -1374,6 +1374,13 @@ void kvm_gpc_deactivate(struct gfn_to_pfn_cache *gpc);
  */
 void kvm_gpc_mark_dirty(struct gfn_to_pfn_cache *gpc);
 
+/**
+ * kvm_gpc_gpa - retrieve the guest physical address of a cached mapping
+ *
+ * @gpc:	   struct gfn_to_pfn_cache object.
+ */
+gpa_t kvm_gpc_gpa(struct gfn_to_pfn_cache *gpc);
+
 void kvm_sigset_activate(struct kvm_vcpu *vcpu);
 void kvm_sigset_deactivate(struct kvm_vcpu *vcpu);
 
