@@ -254,10 +254,9 @@ int iommu_page_response(struct device *dev,
 
 	/* Only send response if there is a fault report pending */
 	mutex_lock(&fault_param->lock);
-	if (list_empty(&fault_param->faults)) {
-		dev_warn_ratelimited(dev, "no pending PRQ, drop response\n");
+	if (list_empty(&fault_param->faults))
 		goto done_unlock;
-	}
+
 	/*
 	 * Check if we have a matching page request pending to respond,
 	 * otherwise return -EINVAL
@@ -300,6 +299,7 @@ EXPORT_SYMBOL_GPL(iommu_page_response);
 /**
  * iopf_queue_flush_dev - Ensure that all queued faults have been processed
  * @dev: the endpoint whose faults need to be flushed.
+ * @pasid: the PASID of the endpoint.
  *
  * The IOMMU driver calls this before releasing a PASID, to ensure that all
  * pending faults for this PASID have been handled, and won't hit the address
@@ -309,17 +309,53 @@ EXPORT_SYMBOL_GPL(iommu_page_response);
  *
  * Return: 0 on success and <0 on error.
  */
-int iopf_queue_flush_dev(struct device *dev)
+int iopf_queue_flush_dev(struct device *dev, ioasid_t pasid)
 {
 	struct iommu_fault_param *iopf_param = iopf_get_dev_fault_param(dev);
+	const struct iommu_ops *ops = dev_iommu_ops(dev);
+	struct iommu_page_response resp;
+	struct iopf_fault *iopf, *next;
+	int ret = 0;
 
 	if (!iopf_param)
 		return -ENODEV;
 
 	flush_workqueue(iopf_param->queue->wq);
+
+	mutex_lock(&iopf_param->lock);
+	list_for_each_entry_safe(iopf, next, &iopf_param->partial, list) {
+		if (!(iopf->fault.prm.flags & IOMMU_FAULT_PAGE_REQUEST_PASID_VALID) ||
+		    iopf->fault.prm.pasid != pasid)
+			break;
+
+		list_del(&iopf->list);
+		kfree(iopf);
+	}
+
+	list_for_each_entry_safe(iopf, next, &iopf_param->faults, list) {
+		if (!(iopf->fault.prm.flags & IOMMU_FAULT_PAGE_REQUEST_PASID_VALID) ||
+		    iopf->fault.prm.pasid != pasid)
+			continue;
+
+		memset(&resp, 0, sizeof(struct iommu_page_response));
+		resp.pasid = iopf->fault.prm.pasid;
+		resp.grpid = iopf->fault.prm.grpid;
+		resp.code = IOMMU_PAGE_RESP_INVALID;
+
+		if (iopf->fault.prm.flags & IOMMU_FAULT_PAGE_RESPONSE_NEEDS_PASID)
+			resp.flags = IOMMU_PAGE_RESP_PASID_VALID;
+
+		ret = ops->page_response(dev, iopf, &resp);
+		if (ret)
+			break;
+
+		list_del(&iopf->list);
+		kfree(iopf);
+	}
+	mutex_unlock(&iopf_param->lock);
 	iopf_put_dev_fault_param(iopf_param);
 
-	return 0;
+	return ret;
 }
 EXPORT_SYMBOL_GPL(iopf_queue_flush_dev);
 
