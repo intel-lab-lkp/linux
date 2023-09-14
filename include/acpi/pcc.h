@@ -16,6 +16,7 @@ struct pcc_mbox_chan {
 	u32 latency;
 	u32 max_access_rate;
 	u16 min_turnaround_time;
+	u8 type;
 };
 
 #define MAX_PCC_SUBSPACES	256

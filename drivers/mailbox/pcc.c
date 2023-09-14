@@ -91,7 +91,6 @@ struct pcc_chan_reg {
  * @cmd_update: PCC register bundle for the command complete update register
  * @error: PCC register bundle for the error status register
  * @plat_irq: platform interrupt
- * @type: PCC subspace type
  * @plat_irq_flags: platform interrupt flags
  * @chan_in_use: this flag is used just to check if the interrupt needs
  *		handling when it is shared. Since only one transfer can occur
@@ -108,7 +107,6 @@ struct pcc_chan_info {
 	struct pcc_chan_reg cmd_update;
 	struct pcc_chan_reg error;
 	int plat_irq;
-	u8 type;
 	unsigned int plat_irq_flags;
 	bool chan_in_use;
 };
@@ -263,7 +261,7 @@ static bool pcc_mbox_cmd_complete_check(struct pcc_chan_info *pchan)
 	 * bit 0 indicates that Platform is sending a notification and OSPM
 	 * needs to respond this interrupt to process this command.
 	 */
-	if (pchan->type == ACPI_PCCT_TYPE_EXT_PCC_SLAVE_SUBSPACE)
+	if (pchan->chan.type == ACPI_PCCT_TYPE_EXT_PCC_SLAVE_SUBSPACE)
 		return !val;
 
 	return !!val;
@@ -284,7 +282,7 @@ static irqreturn_t pcc_mbox_irq(int irq, void *p)
 	int ret;
 
 	pchan = chan->con_priv;
-	if (pchan->type == ACPI_PCCT_TYPE_EXT_PCC_MASTER_SUBSPACE &&
+	if (pchan->chan.type == ACPI_PCCT_TYPE_EXT_PCC_MASTER_SUBSPACE &&
 	    !pchan->chan_in_use)
 		return IRQ_NONE;
 
@@ -312,7 +310,7 @@ static irqreturn_t pcc_mbox_irq(int irq, void *p)
 	 *
 	 * The PCC master subspace channel clears chan_in_use to free channel.
 	 */
-	if (pchan->type == ACPI_PCCT_TYPE_EXT_PCC_SLAVE_SUBSPACE)
+	if (pchan->chan.type == ACPI_PCCT_TYPE_EXT_PCC_SLAVE_SUBSPACE)
 		pcc_send_data(chan, NULL);
 	pchan->chan_in_use = false;
 
@@ -766,7 +764,7 @@ static int pcc_mbox_probe(struct platform_device *pdev)
 
 		pcc_parse_subspace_shmem(pchan, pcct_entry);
 
-		pchan->type = pcct_entry->type;
+		pchan->chan.type = pcct_entry->type;
 		pcct_entry = (struct acpi_subtable_header *)
 			((unsigned long) pcct_entry + pcct_entry->length);
 	}
