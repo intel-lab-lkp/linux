@@ -113,35 +113,43 @@ DEFINE_EVENT(mtu3_log_setup, mtu3_handle_setup,
 	TP_ARGS(setup)
 );
 
-DECLARE_EVENT_CLASS(mtu3_log_request,
+DECLARE_EVENT_CLASS_PRINT_INIT(mtu3_log_request,
 	TP_PROTO(struct mtu3_request *mreq),
 	TP_ARGS(mreq),
 	TP_STRUCT__entry(
-		__string(name, mreq->mep->name)
+		__field(u32, edw3)
 		__field(struct mtu3_request *, mreq)
 		__field(struct qmu_gpd *, gpd)
 		__field(unsigned int, actual)
 		__field(unsigned int, length)
 		__field(int, status)
-		__field(int, zero)
-		__field(int, no_interrupt)
+		__field(u32, rdw1)
 	),
 	TP_fast_assign(
-		__assign_str(name, mreq->mep->name);
+		__entry->edw3 = mreq->mep->ep.dw3;
 		__entry->mreq = mreq;
 		__entry->gpd = mreq->gpd;
 		__entry->actual = mreq->request.actual;
 		__entry->length = mreq->request.length;
 		__entry->status = mreq->request.status;
-		__entry->zero = mreq->request.zero;
-		__entry->no_interrupt = mreq->request.no_interrupt;
+		__entry->rdw1 = mreq->request.dw1;
 	),
 	TP_printk("%s: req %p gpd %p len %u/%u %s%s --> %d",
-		__get_str(name), __entry->mreq, __entry->gpd,
+		__s, __entry->mreq, __entry->gpd,
 		__entry->actual, __entry->length,
-		__entry->zero ? "Z" : "z",
-		__entry->no_interrupt ? "i" : "I",
+		tr.zero ? "Z" : "z",
+		tr.no_interrupt ? "i" : "I",
 		__entry->status
+	),
+	TP_printk_init(
+		struct usb_ep te;
+		struct usb_request tr;
+		char __s[9];
+		te.dw3 = __entry->edw3;
+		tr.dw1 = __entry->rdw1;
+		snprintf(__s, 9, "ep%d%s", te.address, \
+			(te.caps.dir_in && te.caps.dir_out) ? "" : \
+			te.caps.dir_in ? "in" : "out");
 	)
 );
 
@@ -170,11 +178,11 @@ DEFINE_EVENT(mtu3_log_request, mtu3_req_complete,
 	TP_ARGS(req)
 );
 
-DECLARE_EVENT_CLASS(mtu3_log_gpd,
+DECLARE_EVENT_CLASS_PRINT_INIT(mtu3_log_gpd,
 	TP_PROTO(struct mtu3_ep *mep, struct qmu_gpd *gpd),
 	TP_ARGS(mep, gpd),
 	TP_STRUCT__entry(
-		__string(name, mep->name)
+		__field(u32, edw3)
 		__field(struct qmu_gpd *, gpd)
 		__field(u32, dw0)
 		__field(u32, dw1)
@@ -182,7 +190,7 @@ DECLARE_EVENT_CLASS(mtu3_log_gpd,
 		__field(u32, dw3)
 	),
 	TP_fast_assign(
-		__assign_str(name, mep->name);
+		__entry->edw3 = mep->ep.dw3;
 		__entry->gpd = gpd;
 		__entry->dw0 = le32_to_cpu(gpd->dw0_info);
 		__entry->dw1 = le32_to_cpu(gpd->next_gpd);
@@ -190,9 +198,17 @@ DECLARE_EVENT_CLASS(mtu3_log_gpd,
 		__entry->dw3 = le32_to_cpu(gpd->dw3_info);
 	),
 	TP_printk("%s: gpd %p - %08x %08x %08x %08x",
-		__get_str(name), __entry->gpd,
+		__s, __entry->gpd,
 		__entry->dw0, __entry->dw1,
 		__entry->dw2, __entry->dw3
+	),
+	TP_printk_init(
+		struct usb_ep te;
+		char __s[9];
+		te.dw3 = __entry->edw3;
+		snprintf(__s, 9, "ep%d%s", te.address, \
+			(te.caps.dir_in && te.caps.dir_out) ? "" : \
+			te.caps.dir_in ? "in" : "out");
 	)
 );
 
@@ -211,41 +227,49 @@ DEFINE_EVENT(mtu3_log_gpd, mtu3_zlp_exp_gpd,
 	TP_ARGS(mep, gpd)
 );
 
-DECLARE_EVENT_CLASS(mtu3_log_ep,
+DECLARE_EVENT_CLASS_PRINT_INIT(mtu3_log_ep,
 	TP_PROTO(struct mtu3_ep *mep),
 	TP_ARGS(mep),
 	TP_STRUCT__entry(
-		__string(name, mep->name)
+		__field(u32, edw3)
 		__field(unsigned int, type)
 		__field(unsigned int, slot)
-		__field(unsigned int, maxp)
-		__field(unsigned int, mult)
-		__field(unsigned int, maxburst)
+		__field(u32, edw1)
+		__field(u32, edw2)
 		__field(unsigned int, flags)
 		__field(unsigned int, direction)
 		__field(struct mtu3_gpd_ring *, gpd_ring)
 	),
 	TP_fast_assign(
-		__assign_str(name, mep->name);
+		__entry->edw3 = mep->ep.dw3;
 		__entry->type = mep->type;
 		__entry->slot = mep->slot;
-		__entry->maxp = mep->ep.maxpacket;
-		__entry->mult = mep->ep.mult;
-		__entry->maxburst = mep->ep.maxburst;
+		__entry->edw1 = mep->ep.dw1;
+		__entry->edw2 = mep->ep.dw2;
 		__entry->flags = mep->flags;
 		__entry->direction = mep->is_in;
 		__entry->gpd_ring = &mep->gpd_ring;
 	),
 	TP_printk("%s: type %s maxp %d slot %d mult %d burst %d ring %p/%pad flags %c:%c%c%c:%c",
-		__get_str(name), usb_ep_type_string(__entry->type),
-		__entry->maxp, __entry->slot,
-		__entry->mult, __entry->maxburst,
+		__s, usb_ep_type_string(__entry->type),
+		te.maxpacket, __entry->slot,
+		te.mult, te.maxburst,
 		__entry->gpd_ring, &__entry->gpd_ring->dma,
 		__entry->flags & MTU3_EP_ENABLED ? 'E' : 'e',
 		__entry->flags & MTU3_EP_STALL ? 'S' : 's',
 		__entry->flags & MTU3_EP_WEDGE ? 'W' : 'w',
 		__entry->flags & MTU3_EP_BUSY ? 'B' : 'b',
 		__entry->direction ? '<' : '>'
+	),
+	TP_printk_init(
+		struct usb_ep te;
+		char __s[9];
+		te.dw1 = __entry->edw1;
+		te.dw2 = __entry->edw2;
+		te.dw3 = __entry->edw3;
+		snprintf(__s, 9, "ep%d%s", te.address, \
+			(te.caps.dir_in && te.caps.dir_out) ? "" : \
+			te.caps.dir_in ? "in" : "out");
 	)
 );
 
