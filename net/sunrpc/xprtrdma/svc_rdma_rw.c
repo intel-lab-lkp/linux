@@ -183,10 +183,10 @@ static void svc_rdma_cc_init(struct svcxprt_rdma *rdma,
  * that only one atomic llist operation is needed to put them all
  * back on the free list.
  */
-static void svc_rdma_cc_release(struct svc_rdma_chunk_ctxt *cc,
+static void svc_rdma_cc_release(struct svcxprt_rdma *rdma,
+				struct svc_rdma_chunk_ctxt *cc,
 				enum dma_data_direction dir)
 {
-	struct svcxprt_rdma *rdma = cc->cc_rdma;
 	struct llist_node *first, *last;
 	struct svc_rdma_rw_ctxt *ctxt;
 	LLIST_HEAD(free);
@@ -249,9 +249,10 @@ svc_rdma_write_info_alloc(struct svcxprt_rdma *rdma,
 	return info;
 }
 
-static void svc_rdma_write_info_free(struct svc_rdma_write_info *info)
+static void svc_rdma_write_info_free(struct svcxprt_rdma *rdma,
+				     struct svc_rdma_write_info *info)
 {
-	svc_rdma_cc_release(&info->wi_cc, DMA_TO_DEVICE);
+	svc_rdma_cc_release(rdma, &info->wi_cc, DMA_TO_DEVICE);
 	kfree(info);
 }
 
@@ -275,7 +276,7 @@ static void svc_rdma_write_done(struct ib_cq *cq, struct ib_wc *wc)
 	case IB_WC_SUCCESS:
 		trace_svcrdma_wc_write(&cc->cc_cid);
 		svc_rdma_wake_send_waiters(rdma, cc->cc_sqecount);
-		svc_rdma_write_info_free(info);
+		svc_rdma_write_info_free(rdma, info);
 		return;
 	case IB_WC_WR_FLUSH_ERR:
 		trace_svcrdma_wc_write_flush(wc, &cc->cc_cid);
@@ -285,7 +286,7 @@ static void svc_rdma_write_done(struct ib_cq *cq, struct ib_wc *wc)
 	}
 
 	svc_rdma_wake_send_waiters(rdma, cc->cc_sqecount);
-	svc_rdma_write_info_free(info);
+	svc_rdma_write_info_free(rdma, info);
 	svc_xprt_deferred_close(&rdma->sc_xprt);
 }
 
@@ -316,9 +317,10 @@ svc_rdma_read_info_alloc(struct svcxprt_rdma *rdma)
 	return info;
 }
 
-static void svc_rdma_read_info_free(struct svc_rdma_read_info *info)
+static void svc_rdma_read_info_free(struct svcxprt_rdma *rdma,
+				    struct svc_rdma_read_info *info)
 {
-	svc_rdma_cc_release(&info->ri_cc, DMA_FROM_DEVICE);
+	svc_rdma_cc_release(rdma, &info->ri_cc, DMA_FROM_DEVICE);
 	kfree(info);
 }
 
@@ -640,7 +642,7 @@ int svc_rdma_send_write_chunk(struct svcxprt_rdma *rdma,
 	return xdr->len;
 
 out_err:
-	svc_rdma_write_info_free(info);
+	svc_rdma_write_info_free(rdma, info);
 	return ret;
 }
 
@@ -688,7 +690,7 @@ int svc_rdma_send_reply_chunk(struct svcxprt_rdma *rdma,
 	return xdr->len;
 
 out_err:
-	svc_rdma_write_info_free(info);
+	svc_rdma_write_info_free(rdma, info);
 	return ret;
 }
 
@@ -1165,6 +1167,6 @@ int svc_rdma_process_read_list(struct svcxprt_rdma *rdma,
 	head->rc_page_count = 0;
 
 out_err:
-	svc_rdma_read_info_free(info);
+	svc_rdma_read_info_free(rdma, info);
 	return ret;
 }
