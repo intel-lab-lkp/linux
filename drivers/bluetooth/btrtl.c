@@ -58,7 +58,8 @@ enum btrtl_chip_id {
 	CHIP_ID_8723B,
 	CHIP_ID_8821A,
 	CHIP_ID_8761A,
-	CHIP_ID_8822B = 8,
+	CHIP_ID_8703B = 7,
+	CHIP_ID_8822B,
 	CHIP_ID_8723D,
 	CHIP_ID_8821C,
 	CHIP_ID_8822C = 13,
@@ -604,20 +605,20 @@ static int rtlbt_parse_firmware(struct hci_dev *hdev,
 		__u16 lmp_subver;
 		__u8 id;
 	} project_id_to_lmp_subver[] = {
-		{ RTL_ROM_LMP_8723A, 0 },
-		{ RTL_ROM_LMP_8723B, 1 },
-		{ RTL_ROM_LMP_8821A, 2 },
-		{ RTL_ROM_LMP_8761A, 3 },
-		{ RTL_ROM_LMP_8703B, 7 },
-		{ RTL_ROM_LMP_8822B, 8 },
-		{ RTL_ROM_LMP_8723B, 9 },	/* 8723D */
-		{ RTL_ROM_LMP_8821A, 10 },	/* 8821C */
-		{ RTL_ROM_LMP_8822B, 13 },	/* 8822C */
-		{ RTL_ROM_LMP_8761A, 14 },	/* 8761B */
-		{ RTL_ROM_LMP_8852A, 18 },	/* 8852A */
-		{ RTL_ROM_LMP_8852A, 20 },	/* 8852B */
-		{ RTL_ROM_LMP_8852A, 25 },	/* 8852C */
-		{ RTL_ROM_LMP_8851B, 36 },	/* 8851B */
+		{ RTL_ROM_LMP_8723A, CHIP_ID_8723A },
+		{ RTL_ROM_LMP_8723B, CHIP_ID_8723B },
+		{ RTL_ROM_LMP_8821A, CHIP_ID_8821A },
+		{ RTL_ROM_LMP_8761A, CHIP_ID_8761A },
+		{ RTL_ROM_LMP_8703B, CHIP_ID_8703B },
+		{ RTL_ROM_LMP_8822B, CHIP_ID_8822B },
+		{ RTL_ROM_LMP_8723B, CHIP_ID_8723D },
+		{ RTL_ROM_LMP_8821A, CHIP_ID_8821C },
+		{ RTL_ROM_LMP_8822B, CHIP_ID_8822C },
+		{ RTL_ROM_LMP_8761A, CHIP_ID_8761B },
+		{ RTL_ROM_LMP_8852A, CHIP_ID_8852A },
+		{ RTL_ROM_LMP_8852A, CHIP_ID_8852B },
+		{ RTL_ROM_LMP_8852A, CHIP_ID_8852C },
+		{ RTL_ROM_LMP_8851B, CHIP_ID_8851B },
 	};
 
 	if (btrtl_dev->fw_len <= 8)
