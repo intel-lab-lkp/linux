@@ -3385,6 +3385,15 @@
 			Note that if CONFIG_MODULE_SIG_FORCE is set, that
 			is always true, so this option does nothing.
 
+	module_sig_check_wait=
+			This parameter enables delayed activation of module
+			signature checks, deferring the process until userspace
+			triggers it. Once activated, this setting becomes
+			permanent and cannot be reversed. This feature proves
+			valuable for incorporating unsigned modules within
+			initrd, especially after bootloader verification.
+			By employing this option, boot times can be quicker.
+
 	module_blacklist=  [KNL] Do not load a comma-separated list of
 			modules.  Useful for debugging problem modules.
 
