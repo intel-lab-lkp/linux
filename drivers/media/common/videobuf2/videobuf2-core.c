@@ -411,10 +411,11 @@ static void init_buffer_cache_hints(struct vb2_queue *q, struct vb2_buffer *vb)
  */
 static bool vb2_queue_add_buffer(struct vb2_queue *q, struct vb2_buffer *vb, unsigned int index)
 {
-	if (index < q->max_allowed_buffers && !q->bufs[index]) {
+	if (index < q->max_allowed_buffers && !test_bit(index, q->bufs_map)) {
 		q->bufs[index] = vb;
 		vb->index = index;
 		vb->vb2_queue = q;
+		set_bit(index, q->bufs_map);
 		return true;
 	}
 
@@ -428,9 +429,10 @@ static bool vb2_queue_add_buffer(struct vb2_queue *q, struct vb2_buffer *vb, uns
  */
 static void vb2_queue_remove_buffer(struct vb2_queue *q, struct vb2_buffer *vb)
 {
-	if (vb->index < q->max_allowed_buffers) {
+	if (vb->index < q->max_allowed_buffers && test_bit(vb->index, q->bufs_map)) {
 		q->bufs[vb->index] = NULL;
 		vb->vb2_queue = NULL;
+		clear_bit(vb->index, q->bufs_map);
 	}
 }
 
@@ -451,11 +453,12 @@ static int __vb2_queue_alloc(struct vb2_queue *q, enum vb2_memory memory,
 	unsigned long first_index;
 	int ret;
 
-	/* Ensure that q->num_buffers+num_buffers is below q->max_allowed_buffers */
+	/* Ensure that the number of already queue + num_buffers is below q->max_allowed_buffers */
 	num_buffers = min_t(unsigned int, num_buffers,
 			    q->max_allowed_buffers - vb2_get_num_buffers(q));
 
-	first_index = vb2_get_num_buffers(q);
+	first_index = bitmap_find_next_zero_area(q->bufs_map, q->max_allowed_buffers,
+						 0, num_buffers, 0);
 
 	if (first_index >= q->max_allowed_buffers)
 		return 0;
@@ -675,7 +678,13 @@ static void __vb2_queue_free(struct vb2_queue *q, unsigned int buffers)
 
 struct vb2_buffer *vb2_get_buffer(struct vb2_queue *q, unsigned int index)
 {
-	if (index < q->num_buffers)
+	if (!q->bufs_map || !q->bufs)
+		return NULL;
+
+	if (index >= q->max_allowed_buffers)
+		return NULL;
+
+	if (test_bit(index, q->bufs_map))
 		return q->bufs[index];
 	return NULL;
 }
@@ -683,7 +692,10 @@ EXPORT_SYMBOL_GPL(vb2_get_buffer);
 
 unsigned int vb2_get_num_buffers(struct vb2_queue *q)
 {
-	return q->num_buffers;
+	if (!q->bufs_map)
+		return 0;
+
+	return bitmap_weight(q->bufs_map, q->max_allowed_buffers);
 }
 EXPORT_SYMBOL_GPL(vb2_get_num_buffers);
 
@@ -899,6 +911,14 @@ int vb2_core_reqbufs(struct vb2_queue *q, enum vb2_memory memory,
 		q->bufs = kcalloc(q->max_allowed_buffers, sizeof(*q->bufs), GFP_KERNEL);
 	if (!q->bufs)
 		ret = -ENOMEM;
+
+	if (!q->bufs_map)
+		q->bufs_map = bitmap_zalloc(q->max_allowed_buffers, GFP_KERNEL);
+	if (!q->bufs_map) {
+		ret = -ENOMEM;
+		kfree(q->bufs);
+		q->bufs = NULL;
+	}
 	q->memory = memory;
 	mutex_unlock(&q->mmap_lock);
 	if (ret)
@@ -968,7 +988,6 @@ int vb2_core_reqbufs(struct vb2_queue *q, enum vb2_memory memory,
 	}
 
 	mutex_lock(&q->mmap_lock);
-	q->num_buffers = allocated_buffers;
 
 	if (ret < 0) {
 		/*
@@ -995,6 +1014,10 @@ error:
 	mutex_lock(&q->mmap_lock);
 	q->memory = VB2_MEMORY_UNKNOWN;
 	mutex_unlock(&q->mmap_lock);
+	kfree(q->bufs);
+	q->bufs = NULL;
+	bitmap_free(q->bufs_map);
+	q->bufs_map = NULL;
 	return ret;
 }
 EXPORT_SYMBOL_GPL(vb2_core_reqbufs);
@@ -1031,9 +1054,19 @@ int vb2_core_create_bufs(struct vb2_queue *q, enum vb2_memory memory,
 		q->memory = memory;
 		if (!q->bufs)
 			q->bufs = kcalloc(q->max_allowed_buffers, sizeof(*q->bufs), GFP_KERNEL);
-		if (!q->bufs)
+		if (!q->bufs) {
 			ret = -ENOMEM;
+			goto unlock;
+		}
+		if (!q->bufs_map)
+			q->bufs_map = bitmap_zalloc(q->max_allowed_buffers, GFP_KERNEL);
+		if (!q->bufs_map) {
+			ret = -ENOMEM;
+			kfree(q->bufs);
+			q->bufs = NULL;
+		}
 		mutex_unlock(&q->mmap_lock);
+unlock:
 		if (ret)
 			return ret;
 		q->waiting_for_buffers = !q->is_output;
@@ -1095,7 +1128,6 @@ int vb2_core_create_bufs(struct vb2_queue *q, enum vb2_memory memory,
 	}
 
 	mutex_lock(&q->mmap_lock);
-	q->num_buffers += allocated_buffers;
 
 	if (ret < 0) {
 		/*
@@ -2588,6 +2620,9 @@ void vb2_core_queue_release(struct vb2_queue *q)
 	__vb2_queue_free(q, q->max_allowed_buffers);
 	kfree(q->bufs);
 	q->bufs = NULL;
+	bitmap_free(q->bufs_map);
+	q->bufs_map = NULL;
+
 	mutex_unlock(&q->mmap_lock);
 }
 EXPORT_SYMBOL_GPL(vb2_core_queue_release);
@@ -2944,7 +2979,7 @@ static size_t __vb2_perform_fileio(struct vb2_queue *q, char __user *data, size_
 	 * Check if we need to dequeue the buffer.
 	 */
 	index = fileio->cur_index;
-	if (index >= q->num_buffers) {
+	if (!test_bit(index, q->bufs_map)) {
 		struct vb2_buffer *b;
 
 		/*
