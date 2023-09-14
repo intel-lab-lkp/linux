@@ -696,6 +696,7 @@ out_err:
 
 /**
  * svc_rdma_build_read_segment - Build RDMA Read WQEs to pull one RDMA segment
+ * @rdma: controlling transport
  * @info: context for ongoing I/O
  * @segment: co-ordinates of remote memory to be read
  *
@@ -705,7 +706,8 @@ out_err:
  *   %-ENOMEM: allocating a local resources failed
  *   %-EIO: a DMA mapping error occurred
  */
-static int svc_rdma_build_read_segment(struct svc_rdma_read_info *info,
+static int svc_rdma_build_read_segment(struct svcxprt_rdma *rdma,
+				       struct svc_rdma_read_info *info,
 				       const struct svc_rdma_segment *segment)
 {
 	struct svc_rdma_recv_ctxt *head = info->ri_readctxt;
@@ -718,7 +720,7 @@ static int svc_rdma_build_read_segment(struct svc_rdma_read_info *info,
 
 	len = segment->rs_length;
 	sge_no = PAGE_ALIGN(info->ri_pageoff + len) >> PAGE_SHIFT;
-	ctxt = svc_rdma_get_rw_ctxt(cc->cc_rdma, sge_no);
+	ctxt = svc_rdma_get_rw_ctxt(rdma, sge_no);
 	if (!ctxt)
 		return -ENOMEM;
 	ctxt->rw_nents = sge_no;
@@ -748,7 +750,7 @@ static int svc_rdma_build_read_segment(struct svc_rdma_read_info *info,
 			goto out_overrun;
 	}
 
-	ret = svc_rdma_rw_ctx_init(cc->cc_rdma, ctxt, segment->rs_offset,
+	ret = svc_rdma_rw_ctx_init(rdma, ctxt, segment->rs_offset,
 				   segment->rs_handle, DMA_FROM_DEVICE);
 	if (ret < 0)
 		return -EIO;
@@ -765,6 +767,7 @@ out_overrun:
 
 /**
  * svc_rdma_build_read_chunk - Build RDMA Read WQEs to pull one RDMA chunk
+ * @rdma: controlling transport
  * @info: context for ongoing I/O
  * @chunk: Read chunk to pull
  *
@@ -774,7 +777,8 @@ out_overrun:
  *   %-ENOMEM: allocating a local resources failed
  *   %-EIO: a DMA mapping error occurred
  */
-static int svc_rdma_build_read_chunk(struct svc_rdma_read_info *info,
+static int svc_rdma_build_read_chunk(struct svcxprt_rdma *rdma,
+				     struct svc_rdma_read_info *info,
 				     const struct svc_rdma_chunk *chunk)
 {
 	const struct svc_rdma_segment *segment;
@@ -782,7 +786,7 @@ static int svc_rdma_build_read_chunk(struct svc_rdma_read_info *info,
 
 	ret = -EINVAL;
 	pcl_for_each_segment(segment, chunk) {
-		ret = svc_rdma_build_read_segment(info, segment);
+		ret = svc_rdma_build_read_segment(rdma, info, segment);
 		if (ret < 0)
 			break;
 		info->ri_totalbytes += segment->rs_length;
@@ -842,6 +846,7 @@ static int svc_rdma_copy_inline_range(struct svc_rdma_read_info *info,
 
 /**
  * svc_rdma_read_multiple_chunks - Construct RDMA Reads to pull data item Read chunks
+ * @rdma: controlling transport
  * @info: context for RDMA Reads
  *
  * The chunk data lands in rqstp->rq_arg as a series of contiguous pages,
@@ -854,7 +859,8 @@ static int svc_rdma_copy_inline_range(struct svc_rdma_read_info *info,
  *   %-ENOTCONN: posting failed (connection is lost),
  *   %-EIO: rdma_rw initialization failed (DMA mapping, etc).
  */
-static noinline int svc_rdma_read_multiple_chunks(struct svc_rdma_read_info *info)
+static noinline int svc_rdma_read_multiple_chunks(struct svcxprt_rdma *rdma,
+						  struct svc_rdma_read_info *info)
 {
 	struct svc_rdma_recv_ctxt *head = info->ri_readctxt;
 	const struct svc_rdma_pcl *pcl = &head->rc_read_pcl;
@@ -871,7 +877,7 @@ static noinline int svc_rdma_read_multiple_chunks(struct svc_rdma_read_info *inf
 		return ret;
 
 	pcl_for_each_chunk(chunk, pcl) {
-		ret = svc_rdma_build_read_chunk(info, chunk);
+		ret = svc_rdma_build_read_chunk(rdma, info, chunk);
 		if (ret < 0)
 			return ret;
 
@@ -904,6 +910,7 @@ static noinline int svc_rdma_read_multiple_chunks(struct svc_rdma_read_info *inf
 
 /**
  * svc_rdma_read_data_item - Construct RDMA Reads to pull data item Read chunks
+ * @rdma: controlling transport
  * @info: context for RDMA Reads
  *
  * The chunk data lands in the page list of rqstp->rq_arg.pages.
@@ -919,7 +926,8 @@ static noinline int svc_rdma_read_multiple_chunks(struct svc_rdma_read_info *inf
  *   %-ENOTCONN: posting failed (connection is lost),
  *   %-EIO: rdma_rw initialization failed (DMA mapping, etc).
  */
-static int svc_rdma_read_data_item(struct svc_rdma_read_info *info)
+static int svc_rdma_read_data_item(struct svcxprt_rdma *rdma,
+				   struct svc_rdma_read_info *info)
 {
 	struct svc_rdma_recv_ctxt *head = info->ri_readctxt;
 	struct xdr_buf *buf = &info->ri_rqst->rq_arg;
@@ -928,7 +936,7 @@ static int svc_rdma_read_data_item(struct svc_rdma_read_info *info)
 	int ret;
 
 	chunk = pcl_first_chunk(&head->rc_read_pcl);
-	ret = svc_rdma_build_read_chunk(info, chunk);
+	ret = svc_rdma_build_read_chunk(rdma, info, chunk);
 	if (ret < 0)
 		goto out;
 
@@ -962,6 +970,7 @@ out:
 
 /**
  * svc_rdma_read_chunk_range - Build RDMA Read WQEs for portion of a chunk
+ * @rdma: controlling transport
  * @info: context for RDMA Reads
  * @chunk: parsed Call chunk to pull
  * @offset: offset of region to pull
@@ -974,7 +983,8 @@ out:
  *   %-ENOTCONN: posting failed (connection is lost),
  *   %-EIO: rdma_rw initialization failed (DMA mapping, etc).
  */
-static int svc_rdma_read_chunk_range(struct svc_rdma_read_info *info,
+static int svc_rdma_read_chunk_range(struct svcxprt_rdma *rdma,
+				     struct svc_rdma_read_info *info,
 				     const struct svc_rdma_chunk *chunk,
 				     unsigned int offset, unsigned int length)
 {
@@ -994,7 +1004,7 @@ static int svc_rdma_read_chunk_range(struct svc_rdma_read_info *info,
 		dummy.rs_length = min_t(u32, length, segment->rs_length) - offset;
 		dummy.rs_offset = segment->rs_offset + offset;
 
-		ret = svc_rdma_build_read_segment(info, &dummy);
+		ret = svc_rdma_build_read_segment(rdma, info, &dummy);
 		if (ret < 0)
 			break;
 
@@ -1007,6 +1017,7 @@ static int svc_rdma_read_chunk_range(struct svc_rdma_read_info *info,
 
 /**
  * svc_rdma_read_call_chunk - Build RDMA Read WQEs to pull a Long Message
+ * @rdma: controlling transport
  * @info: context for RDMA Reads
  *
  * Return values:
@@ -1016,7 +1027,8 @@ static int svc_rdma_read_chunk_range(struct svc_rdma_read_info *info,
  *   %-ENOTCONN: posting failed (connection is lost),
  *   %-EIO: rdma_rw initialization failed (DMA mapping, etc).
  */
-static int svc_rdma_read_call_chunk(struct svc_rdma_read_info *info)
+static int svc_rdma_read_call_chunk(struct svcxprt_rdma *rdma,
+				    struct svc_rdma_read_info *info)
 {
 	struct svc_rdma_recv_ctxt *head = info->ri_readctxt;
 	const struct svc_rdma_chunk *call_chunk =
@@ -1027,17 +1039,17 @@ static int svc_rdma_read_call_chunk(struct svc_rdma_read_info *info)
 	int ret;
 
 	if (pcl_is_empty(pcl))
-		return svc_rdma_build_read_chunk(info, call_chunk);
+		return svc_rdma_build_read_chunk(rdma, info, call_chunk);
 
 	start = 0;
 	chunk = pcl_first_chunk(pcl);
 	length = chunk->ch_position;
-	ret = svc_rdma_read_chunk_range(info, call_chunk, start, length);
+	ret = svc_rdma_read_chunk_range(rdma, info, call_chunk, start, length);
 	if (ret < 0)
 		return ret;
 
 	pcl_for_each_chunk(chunk, pcl) {
-		ret = svc_rdma_build_read_chunk(info, chunk);
+		ret = svc_rdma_build_read_chunk(rdma, info, chunk);
 		if (ret < 0)
 			return ret;
 
@@ -1047,7 +1059,7 @@ static int svc_rdma_read_call_chunk(struct svc_rdma_read_info *info)
 
 		start += length;
 		length = next->ch_position - info->ri_totalbytes;
-		ret = svc_rdma_read_chunk_range(info, call_chunk,
+		ret = svc_rdma_read_chunk_range(rdma, info, call_chunk,
 						start, length);
 		if (ret < 0)
 			return ret;
@@ -1055,11 +1067,12 @@ static int svc_rdma_read_call_chunk(struct svc_rdma_read_info *info)
 
 	start += length;
 	length = call_chunk->ch_length - start;
-	return svc_rdma_read_chunk_range(info, call_chunk, start, length);
+	return svc_rdma_read_chunk_range(rdma, info, call_chunk, start, length);
 }
 
 /**
  * svc_rdma_read_special - Build RDMA Read WQEs to pull a Long Message
+ * @rdma: controlling transport
  * @info: context for RDMA Reads
  *
  * The start of the data lands in the first page just after the
@@ -1076,12 +1089,13 @@ static int svc_rdma_read_call_chunk(struct svc_rdma_read_info *info)
  *   %-ENOTCONN: posting failed (connection is lost),
  *   %-EIO: rdma_rw initialization failed (DMA mapping, etc).
  */
-static noinline int svc_rdma_read_special(struct svc_rdma_read_info *info)
+static noinline int svc_rdma_read_special(struct svcxprt_rdma *rdma,
+					  struct svc_rdma_read_info *info)
 {
 	struct xdr_buf *buf = &info->ri_rqst->rq_arg;
 	int ret;
 
-	ret = svc_rdma_read_call_chunk(info);
+	ret = svc_rdma_read_call_chunk(rdma, info);
 	if (ret < 0)
 		goto out;
 
@@ -1140,11 +1154,11 @@ int svc_rdma_process_read_list(struct svcxprt_rdma *rdma,
 
 	if (pcl_is_empty(&head->rc_call_pcl)) {
 		if (head->rc_read_pcl.cl_count == 1)
-			ret = svc_rdma_read_data_item(info);
+			ret = svc_rdma_read_data_item(rdma, info);
 		else
-			ret = svc_rdma_read_multiple_chunks(info);
+			ret = svc_rdma_read_multiple_chunks(rdma, info);
 	} else
-		ret = svc_rdma_read_special(info);
+		ret = svc_rdma_read_special(rdma, info);
 	if (ret < 0)
 		goto out_err;
 
