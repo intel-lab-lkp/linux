@@ -16,6 +16,7 @@
 #define SCMI_MAX_STR_SIZE		64
 #define SCMI_SHORT_NAME_MAX_SIZE	16
 #define SCMI_MAX_NUM_RATES		16
+#define SCMI_MAX_NUM_PARENTS		8
 
 /**
  * struct scmi_revision_info - version information structure
@@ -58,6 +59,8 @@ struct scmi_clock_info {
 			u64 step_size;
 		} range;
 	};
+	int num_parents;
+	u32 parents[SCMI_MAX_NUM_PARENTS];
 };
 
 enum scmi_power_scale {
@@ -104,6 +107,8 @@ struct scmi_clk_proto_ops {
 			      bool atomic);
 	int (*config_oem_set)(const struct scmi_protocol_handle *ph, u32 clk_id,
 			      u8 oem_type, u32 oem_val, bool atomic);
+	int (*parent_get)(const struct scmi_protocol_handle *ph, u32 clk_id, u32 *parent_id);
+	int (*parent_set)(const struct scmi_protocol_handle *ph, u32 clk_id, u32 parent_id);
 };
 
 /**
