@@ -40,6 +40,16 @@ struct drm_gem_shmem_object {
 	unsigned int pages_use_count;
 
 	/**
+	 * @pages_pin_count:
+	 *
+	 * Reference count on the pinned pages table.
+	 * The pages allowed to be evicted and purged by memory
+	 * shrinker only when the count is zero, otherwise pages
+	 * are hard-pinned in memory.
+	 */
+	refcount_t pages_pin_count;
+
+	/**
 	 * @madv: State for madvise
 	 *
 	 * 0 is active/inuse.
