@@ -538,6 +538,7 @@ static void vfio_msi_disable(struct vfio_pci_core_device *vdev, bool msix)
 	cmd = vfio_pci_memory_lock_and_enable(vdev);
 	pci_free_irq_vectors(pdev);
 	vfio_pci_memory_unlock_and_restore(vdev, cmd);
+	msi_remove_device_irq_domain(&pdev->dev, MSI_DEFAULT_DOMAIN);
 
 	/*
 	 * Both disable paths above use pci_intx_for_msi() to clear DisINTx
