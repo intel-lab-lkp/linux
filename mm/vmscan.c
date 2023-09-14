@@ -5372,6 +5372,43 @@ static int __process_one_cmd(char cmd, struct lruvec *lruvec, unsigned long seq,
 	return err;
 }
 
+#ifdef CONFIG_MEMCG
+int mem_cgroup_lru_gen_cmd(char cmd, struct mem_cgroup *memcg, int nid,
+			   unsigned long seq, int swappiness, unsigned long opt)
+{
+	int err;
+	struct lruvec *lruvec;
+	unsigned int flags;
+	struct blk_plug plug;
+	struct scan_control sc = {
+		.may_writepage = true,
+		.may_unmap = true,
+		.may_swap = true,
+		.reclaim_idx = MAX_NR_ZONES - 1,
+		.gfp_mask = GFP_KERNEL,
+	};
+
+	set_task_reclaim_state(current, &sc.reclaim_state);
+	flags = memalloc_noreclaim_save();
+	blk_start_plug(&plug);
+	if (!set_mm_walk(NULL, true)) {
+		err = -ENOMEM;
+		goto done;
+	}
+
+	lruvec = get_lruvec(memcg, nid);
+	err = __process_one_cmd(cmd, lruvec, seq, &sc, swappiness, opt);
+
+done:
+	clear_mm_walk();
+	blk_finish_plug(&plug);
+	memalloc_noreclaim_restore(flags);
+	set_task_reclaim_state(current, NULL);
+
+	return err;
+}
+#endif
+
 static int run_cmd(char cmd, int memcg_id, int nid, unsigned long seq,
 		   struct scan_control *sc, int swappiness, unsigned long opt)
 {

@@ -5006,6 +5006,155 @@ static int mem_cgroup_slab_show(struct seq_file *m, void *p)
 
 static int memory_stat_show(struct seq_file *m, void *v);
 
+#ifdef CONFIG_LRU_GEN
+static ssize_t mem_cgroup_lru_gen_write(struct kernfs_open_file *of, char *buf,
+					size_t nbytes, loff_t off)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_css(of_css(of));
+	int n;
+	int end;
+	char cmd;
+	unsigned int nid;
+	unsigned long seq;
+	unsigned int swappiness = -1;
+	unsigned long opt = -1;
+	int ret;
+
+	buf = strstrip(buf);
+	n = sscanf(buf, "%c %u %lu %n %u %n %lu %n", &cmd, &nid, &seq, &end,
+		   &swappiness, &end, &opt, &end);
+	if (n < 3 || buf[end])
+		return -EINVAL;
+
+	if (nid < 0 || nid >= MAX_NUMNODES || !node_state(nid, N_MEMORY))
+		return -EINVAL;
+
+	ret = mem_cgroup_lru_gen_cmd(cmd, memcg, nid, seq, swappiness, opt);
+	if (ret)
+		return ret;
+
+	return nbytes;
+}
+
+static void __lru_gen_show_info_full(struct seq_file *m, struct lruvec *lruvec,
+				  unsigned long max_seq, unsigned long *min_seq,
+				  unsigned long seq)
+{
+	int i;
+	int type, tier;
+	int hist = lru_hist_from_seq(seq);
+	struct lru_gen_folio *lrugen = &lruvec->lrugen;
+
+	for (tier = 0; tier < MAX_NR_TIERS; tier++) {
+		seq_printf(m, "            %10d", tier);
+		for (type = 0; type < ANON_AND_FILE; type++) {
+			const char *s = "   ";
+			unsigned long n[3] = {};
+
+			if (seq == max_seq) {
+				s = "RT ";
+				n[0] = READ_ONCE(lrugen->avg_refaulted[type][tier]);
+				n[1] = READ_ONCE(lrugen->avg_total[type][tier]);
+			} else if (seq == min_seq[type] || NR_HIST_GENS > 1) {
+				s = "rep";
+				n[0] = atomic_long_read(&lrugen->refaulted[hist][type][tier]);
+				n[1] = atomic_long_read(&lrugen->evicted[hist][type][tier]);
+				if (tier)
+					n[2] = READ_ONCE(lrugen->protected[hist][type][tier - 1]);
+			}
+
+			for (i = 0; i < 3; i++)
+				seq_printf(m, " %10lu%c", n[i], s[i]);
+		}
+		seq_putc(m, '\n');
+	}
+
+	seq_puts(m, "                      ");
+	for (i = 0; i < NR_MM_STATS; i++) {
+		const char *s = "      ";
+		unsigned long n = 0;
+
+		if (seq == max_seq && NR_HIST_GENS == 1) {
+			s = "LOYNFA";
+			n = READ_ONCE(lruvec->mm_state.stats[hist][i]);
+		} else if (seq != max_seq && NR_HIST_GENS > 1) {
+			s = "loynfa";
+			n = READ_ONCE(lruvec->mm_state.stats[hist][i]);
+		}
+
+		seq_printf(m, " %10lu%c", n, s[i]);
+	}
+	seq_putc(m, '\n');
+}
+
+
+static int __lru_gen_show_info(struct seq_file *m, struct mem_cgroup *memcg, int nid)
+{
+	unsigned long seq;
+	struct lruvec *lruvec = mem_cgroup_lruvec(memcg, NODE_DATA(nid));
+	struct lru_gen_folio *lrugen = &lruvec->lrugen;
+	DEFINE_MAX_SEQ(lruvec);
+	DEFINE_MIN_SEQ(lruvec);
+	char *path = kvmalloc(PATH_MAX, GFP_KERNEL);
+
+	if (unlikely(!path))
+		return -ENOMEM;
+
+	if (nid == first_memory_node) {
+		cgroup_path(memcg->css.cgroup, path, PATH_MAX);
+		seq_printf(m, "memcg %5u %s\n", mem_cgroup_id(memcg), path);
+	}
+
+	seq_printf(m, " node %5d\n", nid);
+
+	if (max_seq >= MAX_NR_GENS)
+		seq = max_seq - MAX_NR_GENS + 1;
+	else
+		seq = 0;
+
+	for (; seq <= max_seq; seq++) {
+		int type, zone;
+		int gen = lru_gen_from_seq(seq);
+		unsigned long birth = READ_ONCE(lrugen->timestamps[gen]);
+
+		seq_printf(m, " %10lu %10u", seq, jiffies_to_msecs(jiffies - birth));
+
+		for (type = 0; type < ANON_AND_FILE; type++) {
+			unsigned long size = 0;
+			char mark = seq < min_seq[type] ? 'x' : ' ';
+
+			for (zone = 0; zone < MAX_NR_ZONES; zone++)
+				size += max(READ_ONCE(lrugen->nr_pages[gen][type][zone]), 0L);
+
+			seq_printf(m, " %10lu%c", size, mark);
+		}
+
+		seq_putc(m, '\n');
+
+
+		__lru_gen_show_info_full(m, lruvec, max_seq, min_seq, seq);
+	}
+
+	kvfree(path);
+
+	return 0;
+}
+
+static int mem_cgroup_lru_gen_show(struct seq_file *m, void *v)
+{
+	int nid, ret;
+	struct mem_cgroup *memcg = mem_cgroup_from_seq(m);
+
+	for_each_node_state(nid, N_MEMORY) {
+		ret = __lru_gen_show_info(m, memcg, nid);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+#endif
+
 static struct cftype mem_cgroup_legacy_files[] = {
 	{
 		.name = "usage_in_bytes",
@@ -5126,6 +5275,13 @@ static struct cftype mem_cgroup_legacy_files[] = {
 		.write = mem_cgroup_reset,
 		.read_u64 = mem_cgroup_read_u64,
 	},
+#ifdef CONFIG_LRU_GEN
+	{
+		.name = "lru_gen",
+		.write = mem_cgroup_lru_gen_write,
+		.seq_show = mem_cgroup_lru_gen_show,
+	},
+#endif
 	{ },	/* terminate */
 };
 
@@ -6785,6 +6941,13 @@ static struct cftype memory_files[] = {
 		.flags = CFTYPE_NS_DELEGATABLE,
 		.write = memory_reclaim,
 	},
+#ifdef CONFIG_LRU_GEN
+	{
+		.name = "lru_gen",
+		.write = mem_cgroup_lru_gen_write,
+		.seq_show = mem_cgroup_lru_gen_show,
+	},
+#endif
 	{ }	/* terminate */
 };
 

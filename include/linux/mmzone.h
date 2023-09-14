@@ -553,7 +553,9 @@ void lru_gen_online_memcg(struct mem_cgroup *memcg);
 void lru_gen_offline_memcg(struct mem_cgroup *memcg);
 void lru_gen_release_memcg(struct mem_cgroup *memcg);
 void lru_gen_soft_reclaim(struct mem_cgroup *memcg, int nid);
-
+int mem_cgroup_lru_gen_cmd(char cmd, struct mem_cgroup *memcg, int nid,
+			   unsigned long seq, int swappiness,
+			   unsigned long opt);
 #else /* !CONFIG_MEMCG */
 
 #define MEMCG_NR_GENS	1
