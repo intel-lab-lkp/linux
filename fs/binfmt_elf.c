@@ -112,7 +112,7 @@ static struct linux_binfmt elf_format = {
 
 static int set_brk(unsigned long start, unsigned long end, int prot)
 {
-	start = ELF_PAGEALIGN(start);
+	start = ELF_PAGESTART(start);
 	end = ELF_PAGEALIGN(end);
 	if (end > start) {
 		/*
