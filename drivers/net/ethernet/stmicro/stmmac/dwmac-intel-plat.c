@@ -31,32 +31,14 @@ struct intel_dwmac_data {
 static void kmb_eth_fix_mac_speed(void *priv, unsigned int speed, unsigned int mode)
 {
 	struct intel_dwmac *dwmac = priv;
-	unsigned long rate;
-	int ret;
+	int err;
 
-	rate = clk_get_rate(dwmac->tx_clk);
-
-	switch (speed) {
-	case SPEED_1000:
-		rate = 125000000;
-		break;
-
-	case SPEED_100:
-		rate = 25000000;
-		break;
-
-	case SPEED_10:
-		rate = 2500000;
-		break;
-
-	default:
-		dev_err(dwmac->dev, "Invalid speed\n");
-		break;
-	}
-
-	ret = clk_set_rate(dwmac->tx_clk, rate);
-	if (ret)
-		dev_err(dwmac->dev, "Failed to configure tx clock rate\n");
+	err = stmmac_set_tx_clk_gmii(dwmac->tx_clk, speed);
+	if (err == -ENOTSUPP)
+		dev_err(dwmac->dev, "invalid speed %uMbps\n", speed);
+	else if (err)
+		dev_err(dwmac->dev, "failed to set tx rate for speed %uMbps: %pe\n",
+			speed, ERR_PTR(err));
 }
 
 static const struct intel_dwmac_data kmb_data = {
