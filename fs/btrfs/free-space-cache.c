@@ -1930,7 +1930,7 @@ static int count_bitmap_extents(struct btrfs_free_space_ctl *ctl,
 
 	bitmap_for_each_set_region(bitmap_info->bitmap, rs, re, 0,
 				   BITS_PER_BITMAP) {
-		bytes -= (rs - re) * ctl->unit;
+		bytes -= (re - rs) * ctl->unit;
 		count++;
 
 		if (!bytes)
