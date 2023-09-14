@@ -93,6 +93,14 @@ int dpu_rm_get_assigned_resources(struct dpu_rm *rm,
 	enum dpu_hw_blk_type type, struct dpu_hw_blk **blks, int blks_size);
 
 /**
+ * dpu_rm_print_state - output the RM private state
+ * @p: DRM printer
+ * @state: private object state
+ */
+void dpu_rm_print_state(struct drm_printer *p,
+			const struct drm_private_state *state);
+
+/**
  * dpu_rm_get_intf - Return a struct dpu_hw_intf instance given it's index.
  * @rm: DPU Resource Manager handle
  * @intf_idx: INTF's index

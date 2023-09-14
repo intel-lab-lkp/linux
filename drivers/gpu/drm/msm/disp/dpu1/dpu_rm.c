@@ -652,3 +652,51 @@ int dpu_rm_get_assigned_resources(struct dpu_rm *rm,
 
 	return num_blks;
 }
+
+void dpu_rm_print_state(struct drm_printer *p,
+			const struct drm_private_state *state)
+{
+	const struct dpu_global_state *global_state = to_dpu_global_state(state);
+	const struct dpu_rm *rm = global_state->rm;
+	int i;
+
+	drm_puts(p, "pingpong:");
+	for (i = 0; i < ARRAY_SIZE(global_state->pingpong_to_enc_id); i++)
+		if (rm->pingpong_blks[i])
+			drm_printf(p, " %d,", global_state->pingpong_to_enc_id[i]);
+		else
+			drm_puts(p, " -,");
+	drm_puts(p, "\n");
+
+	drm_puts(p, "mixer:");
+	for (i = 0; i < ARRAY_SIZE(global_state->mixer_to_enc_id); i++)
+		if (rm->mixer_blks[i])
+			drm_printf(p, " %d,", global_state->mixer_to_enc_id[i]);
+		else
+			drm_puts(p, " -,");
+	drm_puts(p, "\n");
+
+	drm_puts(p, "ctl:");
+	for (i = 0; i < ARRAY_SIZE(global_state->ctl_to_enc_id); i++)
+		if (rm->ctl_blks[i])
+			drm_printf(p, " %d,", global_state->ctl_to_enc_id[i]);
+		else
+			drm_puts(p, " -,");
+	drm_puts(p, "\n");
+
+	drm_puts(p, "dspp:");
+	for (i = 0; i < ARRAY_SIZE(global_state->dspp_to_enc_id); i++)
+		if (rm->dspp_blks[i])
+			drm_printf(p, " %d,", global_state->dspp_to_enc_id[i]);
+		else
+			drm_puts(p, " -,");
+	drm_puts(p, "\n");
+
+	drm_puts(p, "dsc:");
+	for (i = 0; i < ARRAY_SIZE(global_state->dsc_to_enc_id); i++)
+		if (rm->dsc_blks[i])
+			drm_printf(p, " %d,", global_state->dsc_to_enc_id[i]);
+		else
+			drm_puts(p, " -,");
+	drm_puts(p, "\n");
+}
