@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: GPL-2.0
+# Athira Rajeev <atrajeev@linux.vnet.ibm.com>, 2023
+-include $(OUTPUT).config-detected
+
+log_file = $(OUTPUT)shellcheck_test.log
+PROGS = $(subst ./,,$(shell find tests/shell -perm -o=x -type f -name '*.sh'))
+DEPS = $(addprefix output/,$(addsuffix .dep,$(basename $(PROGS))))
+DIRS = $(shell echo $(dir $(DEPS)) | xargs -n1 | sort -u | xargs)
+
+.PHONY: all
+all: SHELLCHECK_RUN
+	@:
+
+SHELLCHECK_RUN: $(DEPS) $(DIRS)
+
+output/%.dep: %.sh | $(DIRS)
+	$(call rule_mkdir)
+	$(Q)$(call frecho-cmd,test)@touch $@
+	$(Q)$(call frecho-cmd,test)@shellcheck -S warning $(subst output/,./,$(patsubst %.dep, %.sh, $@)) 1> ${log_file} && ([[ ! -s ${log_file} ]])
+$(DIRS):
+	@mkdir -p $@
+
+clean:
+	@rm -rf $(log_file) output
