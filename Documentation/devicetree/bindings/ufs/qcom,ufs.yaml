@@ -77,7 +77,13 @@ properties:
 
   reg:
     minItems: 1
-    maxItems: 2
+    description:
+      Register base addresses and lengths of the UFS areas.
+
+  reg-names:
+    minItems: 1
+    description:
+      Names of the reg areas to use during resource lookup.
 
   required-opps:
     maxItems: 1
@@ -96,6 +102,10 @@ properties:
     maxItems: 1
     description:
       GPIO connected to the RESET pin of the UFS memory device.
+
+  msi-parent:
+    description:
+      Pointer to the hardware entity that serves as the MSI controller for thi UFS controller.
 
 required:
   - compatible
