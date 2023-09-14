@@ -86,8 +86,8 @@ static long bch2_ioctl_assemble(struct bch_ioctl_assemble __user *user_arg)
 		devs[i] = strndup_user((const char __user *)(unsigned long)
 				       user_devs[i],
 				       PATH_MAX);
-		if (!devs[i]) {
-			ret = -ENOMEM;
+		if (IS_ERR(devs[i])) {
+			ret = PTR_ERR(devs[i]);
 			goto err;
 		}
 	}
@@ -117,8 +117,8 @@ static long bch2_ioctl_incremental(struct bch_ioctl_incremental __user *user_arg
 		return -EINVAL;
 
 	path = strndup_user((const char __user *)(unsigned long) arg.dev, PATH_MAX);
-	if (!path)
-		return -ENOMEM;
+	if (IS_ERR(path))
+		return PTR_ERR(path);
 
 	err = bch2_fs_open_incremental(path);
 	kfree(path);
@@ -189,8 +189,8 @@ static long bch2_ioctl_disk_add(struct bch_fs *c, struct bch_ioctl_disk arg)
 		return -EINVAL;
 
 	path = strndup_user((const char __user *)(unsigned long) arg.dev, PATH_MAX);
-	if (!path)
-		return -ENOMEM;
+	if (IS_ERR(path))
+		return PTR_ERR(path);
 
 	ret = bch2_dev_add(c, path);
 	kfree(path);
@@ -231,8 +231,8 @@ static long bch2_ioctl_disk_online(struct bch_fs *c, struct bch_ioctl_disk arg)
 		return -EINVAL;
 
 	path = strndup_user((const char __user *)(unsigned long) arg.dev, PATH_MAX);
-	if (!path)
-		return -ENOMEM;
+	if (IS_ERR(path))
+		return PTR_ERR(path);
 
 	ret = bch2_dev_online(c, path);
 	kfree(path);
