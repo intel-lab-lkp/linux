@@ -380,7 +380,7 @@ static int vb2_queue_or_prepare_buf(struct vb2_queue *q, struct media_device *md
 
 	vb = vb2_get_buffer(q, b->index);
 	if (!vb) {
-		dprintk(q, 1, "%s: buffer is NULL\n", opname);
+		dprintk(q, 1, "%s: buffer %u was deleted\n", opname, b->index);
 		return -EINVAL;
 	}
 
@@ -752,6 +752,12 @@ int vb2_prepare_buf(struct vb2_queue *q, struct media_device *mdev,
 }
 EXPORT_SYMBOL_GPL(vb2_prepare_buf);
 
+int vb2_delete_bufs(struct vb2_queue *q, struct v4l2_delete_buffers *d)
+{
+	return vb2_core_delete_bufs(q, d->index, d->count);
+}
+EXPORT_SYMBOL_GPL(vb2_delete_bufs);
+
 int vb2_create_bufs(struct vb2_queue *q, struct v4l2_create_buffers *create)
 {
 	unsigned requested_planes = 1;
@@ -1009,6 +1015,18 @@ EXPORT_SYMBOL_GPL(vb2_poll);
  */
 
 /* vb2 ioctl helpers */
+
+int vb2_ioctl_delete_bufs(struct file *file, void *priv,
+			  struct v4l2_delete_buffers *p)
+{
+	struct video_device *vdev = video_devdata(file);
+
+	if (vb2_queue_is_busy(vdev->queue, file))
+		return -EBUSY;
+
+	return vb2_delete_bufs(vdev->queue, p);
+}
+EXPORT_SYMBOL_GPL(vb2_ioctl_delete_bufs);
 
 int vb2_ioctl_reqbufs(struct file *file, void *priv,
 			  struct v4l2_requestbuffers *p)
