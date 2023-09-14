@@ -386,6 +386,12 @@ int kvm_gpc_activate(struct gfn_to_pfn_cache *gpc, gpa_t gpa, unsigned long len)
 }
 EXPORT_SYMBOL_GPL(kvm_gpc_activate);
 
+void kvm_gpc_mark_dirty(struct gfn_to_pfn_cache *gpc)
+{
+	mark_page_dirty_in_slot(gpc->kvm, gpc->memslot, gpc->gpa >> PAGE_SHIFT);
+}
+EXPORT_SYMBOL_GPL(kvm_gpc_mark_dirty);
+
 void kvm_gpc_deactivate(struct gfn_to_pfn_cache *gpc)
 {
 	struct kvm *kvm = gpc->kvm;
