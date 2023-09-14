@@ -938,14 +938,17 @@ static int vfio_ioctl_device_feature_migration(struct vfio_device *device,
 void vfio_combine_iova_ranges(struct rb_root_cached *root, u32 cur_nodes,
 			      u32 req_nodes)
 {
-	struct interval_tree_node *prev, *curr, *comb_start, *comb_end;
+	struct interval_tree_node *prev, *curr;
+	struct interval_tree_node *comb_start = NULL, *comb_end = NULL;
 	unsigned long min_gap, curr_gap;
 
 	/* Special shortcut when a single range is required */
 	if (req_nodes == 1) {
-		unsigned long last;
+		unsigned long last = 0;
 
 		comb_start = interval_tree_iter_first(root, 0, ULONG_MAX);
+		if (!comb_start)
+			return;
 		curr = comb_start;
 		while (curr) {
 			last = curr->last;
@@ -963,6 +966,10 @@ void vfio_combine_iova_ranges(struct rb_root_cached *root, u32 cur_nodes,
 		prev = NULL;
 		min_gap = ULONG_MAX;
 		curr = interval_tree_iter_first(root, 0, ULONG_MAX);
+		if (!curr) {
+			/* No more ranges to combine */
+			break;
+		}
 		while (curr) {
 			if (prev) {
 				curr_gap = curr->start - prev->last;
@@ -974,6 +981,10 @@ void vfio_combine_iova_ranges(struct rb_root_cached *root, u32 cur_nodes,
 			}
 			prev = curr;
 			curr = interval_tree_iter_next(curr, 0, ULONG_MAX);
+		}
+		if (!comb_start || !comb_end) {
+			/* No more ranges to combine */
+			break;
 		}
 		comb_start->last = comb_end->last;
 		interval_tree_remove(comb_end, root);
