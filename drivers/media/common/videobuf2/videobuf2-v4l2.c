@@ -667,7 +667,7 @@ int vb2_querybuf(struct vb2_queue *q, struct v4l2_buffer *b)
 	vb = q->bufs[b->index];
 	ret = __verify_planes_array(vb, b);
 	if (!ret)
-		vb2_core_querybuf(q, b->index, b);
+		vb2_core_querybuf(q, vb, b);
 	return ret;
 }
 EXPORT_SYMBOL(vb2_querybuf);
@@ -723,6 +723,7 @@ EXPORT_SYMBOL_GPL(vb2_reqbufs);
 int vb2_prepare_buf(struct vb2_queue *q, struct media_device *mdev,
 		    struct v4l2_buffer *b)
 {
+	struct vb2_buffer *vb;
 	int ret;
 
 	if (vb2_fileio_is_active(q)) {
@@ -733,9 +734,15 @@ int vb2_prepare_buf(struct vb2_queue *q, struct media_device *mdev,
 	if (b->flags & V4L2_BUF_FLAG_REQUEST_FD)
 		return -EINVAL;
 
+	if (b->index >= q->num_buffers) {
+		dprintk(q, 1, "buffer index out of range\n");
+		return -EINVAL;
+	}
+	vb = q->bufs[b->index];
+
 	ret = vb2_queue_or_prepare_buf(q, mdev, b, true, NULL);
 
-	return ret ? ret : vb2_core_prepare_buf(q, b->index, b);
+	return ret ? ret : vb2_core_prepare_buf(q, vb, b);
 }
 EXPORT_SYMBOL_GPL(vb2_prepare_buf);
 
@@ -803,6 +810,7 @@ int vb2_qbuf(struct vb2_queue *q, struct media_device *mdev,
 	     struct v4l2_buffer *b)
 {
 	struct media_request *req = NULL;
+	struct vb2_buffer *vb;
 	int ret;
 
 	if (vb2_fileio_is_active(q)) {
@@ -810,10 +818,16 @@ int vb2_qbuf(struct vb2_queue *q, struct media_device *mdev,
 		return -EBUSY;
 	}
 
+	if (b->index >= q->num_buffers) {
+		dprintk(q, 1, "buffer index out of range\n");
+		return -EINVAL;
+	}
+	vb = q->bufs[b->index];
+
 	ret = vb2_queue_or_prepare_buf(q, mdev, b, false, &req);
 	if (ret)
 		return ret;
-	ret = vb2_core_qbuf(q, b->index, b, req);
+	ret = vb2_core_qbuf(q, vb, b, req);
 	if (req)
 		media_request_put(req);
 	return ret;
@@ -873,7 +887,15 @@ EXPORT_SYMBOL_GPL(vb2_streamoff);
 
 int vb2_expbuf(struct vb2_queue *q, struct v4l2_exportbuffer *eb)
 {
-	return vb2_core_expbuf(q, &eb->fd, eb->type, eb->index,
+	struct vb2_buffer *vb;
+
+	if (eb->index >= q->num_buffers) {
+		dprintk(q, 1, "buffer index out of range\n");
+		return -EINVAL;
+	}
+	vb = q->bufs[eb->index];
+
+	return vb2_core_expbuf(q, &eb->fd, eb->type, vb,
 				eb->plane, eb->flags);
 }
 EXPORT_SYMBOL_GPL(vb2_expbuf);
