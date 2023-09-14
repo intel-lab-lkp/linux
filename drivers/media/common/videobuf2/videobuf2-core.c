@@ -660,6 +660,14 @@ static void __vb2_queue_free(struct vb2_queue *q, unsigned int buffers)
 	}
 }
 
+struct vb2_buffer *vb2_get_buffer(struct vb2_queue *q, unsigned int index)
+{
+	if (index < q->num_buffers)
+		return q->bufs[index];
+	return NULL;
+}
+EXPORT_SYMBOL_GPL(vb2_get_buffer);
+
 bool vb2_buffer_in_use(struct vb2_queue *q, struct vb2_buffer *vb)
 {
 	unsigned int plane;

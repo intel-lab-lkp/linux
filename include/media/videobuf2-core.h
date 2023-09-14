@@ -1238,13 +1238,7 @@ static inline void vb2_clear_last_buffer_dequeued(struct vb2_queue *q)
  * operation, so the buffer lifetime should be taken into
  * consideration.
  */
-static inline struct vb2_buffer *vb2_get_buffer(struct vb2_queue *q,
-						unsigned int index)
-{
-	if (index < q->num_buffers)
-		return q->bufs[index];
-	return NULL;
-}
+struct vb2_buffer *vb2_get_buffer(struct vb2_queue *q, unsigned int index);
 
 /*
  * The following functions are not part of the vb2 core API, but are useful
