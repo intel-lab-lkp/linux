@@ -543,8 +543,11 @@ static int tiadc_request_dma(struct platform_device *pdev,
 	if (IS_ERR(dma->chan)) {
 		int ret = PTR_ERR(dma->chan);
 
+		if (ret != -ENODEV)
+			return dev_err_probe(&pdev->dev, ret,
+					     "RX DMA channel request failed\n");
 		dma->chan = NULL;
-		return ret;
+		return 0;
 	}
 
 	/* RX buffer */
@@ -670,7 +673,7 @@ static int tiadc_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, indio_dev);
 
 	err = tiadc_request_dma(pdev, adc_dev);
-	if (err && err == -EPROBE_DEFER)
+	if (err)
 		goto err_dma;
 
 	return 0;
