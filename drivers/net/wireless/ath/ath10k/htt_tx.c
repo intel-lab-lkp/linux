@@ -798,16 +798,14 @@ static int ath10k_htt_send_frag_desc_bank_cfg_64(struct ath10k_htt *htt)
 
 static void ath10k_htt_fill_rx_desc_offset_32(struct ath10k_hw_params *hw, void *rx_ring)
 {
-	struct htt_rx_ring_setup_ring32 *ring =
-			(struct htt_rx_ring_setup_ring32 *)rx_ring;
+	struct htt_rx_ring_setup_ring32 *ring = rx_ring;
 
 	ath10k_htt_rx_desc_get_offsets(hw, &ring->offsets);
 }
 
 static void ath10k_htt_fill_rx_desc_offset_64(struct ath10k_hw_params *hw, void *rx_ring)
 {
-	struct htt_rx_ring_setup_ring64 *ring =
-			(struct htt_rx_ring_setup_ring64 *)rx_ring;
+	struct htt_rx_ring_setup_ring64 *ring = rx_ring;
 
 	ath10k_htt_rx_desc_get_offsets(hw, &ring->offsets);
 }
