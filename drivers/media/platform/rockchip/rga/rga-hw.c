@@ -16,12 +16,6 @@ enum e_rga_start_pos {
 	RB = 3,
 };
 
-struct rga_addr_offset {
-	unsigned int y_off;
-	unsigned int u_off;
-	unsigned int v_off;
-};
-
 struct rga_corners_addr_offset {
 	struct rga_addr_offset left_top;
 	struct rga_addr_offset right_top;
@@ -43,8 +37,8 @@ static unsigned int rga_get_scaling(unsigned int src, unsigned int dst)
 }
 
 static struct rga_corners_addr_offset
-rga_get_addr_offset(struct rga_frame *frm, unsigned int x, unsigned int y,
-		    unsigned int w, unsigned int h)
+rga_get_addr_offset(struct rga_frame *frm, struct rga_addr_offset *offset,
+		    unsigned int x, unsigned int y, unsigned int w, unsigned int h)
 {
 	struct rga_corners_addr_offset offsets;
 	struct rga_addr_offset *lt, *lb, *rt, *rb;
@@ -62,10 +56,9 @@ rga_get_addr_offset(struct rga_frame *frm, unsigned int x, unsigned int y,
 	uv_stride = frm->stride / x_div;
 	pixel_width = frm->stride / frm->width;
 
-	lt->y_off = y * frm->stride + x * pixel_width;
-	lt->u_off =
-		frm->width * frm->height + (y / y_div) * uv_stride + x / x_div;
-	lt->v_off = lt->u_off + frm->width * frm->height / uv_factor;
+	lt->y_off = offset->y_off + y * frm->stride + x * pixel_width;
+	lt->u_off = offset->u_off + (y / y_div) * uv_stride + x / x_div;
+	lt->v_off = offset->v_off + (y / y_div) * uv_stride + x / x_div;
 
 	lb->y_off = lt->y_off + (h - 1) * frm->stride;
 	lb->u_off = lt->u_off + (h / y_div - 1) * uv_stride;
@@ -317,7 +310,8 @@ static void rga_cmd_set_trans_info(struct rga_ctx *ctx)
 	dest[(RGA_DST_INFO - RGA_MODE_BASE_REG) >> 2] = dst_info.val;
 }
 
-static void rga_cmd_set_src_info(struct rga_ctx *ctx)
+static void rga_cmd_set_src_info(struct rga_ctx *ctx,
+				 struct rga_addr_offset *offset)
 {
 	struct rga_corners_addr_offset src_offsets;
 	struct rockchip_rga *rga = ctx->rga;
@@ -332,8 +326,8 @@ static void rga_cmd_set_src_info(struct rga_ctx *ctx)
 	/*
 	 * Calculate the source framebuffer base address with offset pixel.
 	 */
-	src_offsets = rga_get_addr_offset(&ctx->in, src_x, src_y,
-					  src_w, src_h);
+	src_offsets = rga_get_addr_offset(&ctx->in, offset,
+					  src_x, src_y, src_w, src_h);
 
 	dest[(RGA_SRC_Y_RGB_BASE_ADDR - RGA_MODE_BASE_REG) >> 2] =
 		src_offsets.left_top.y_off;
@@ -343,7 +337,8 @@ static void rga_cmd_set_src_info(struct rga_ctx *ctx)
 		src_offsets.left_top.v_off;
 }
 
-static void rga_cmd_set_dst_info(struct rga_ctx *ctx)
+static void rga_cmd_set_dst_info(struct rga_ctx *ctx,
+				 struct rga_addr_offset *offset)
 {
 	struct rga_addr_offset *dst_offset;
 	struct rga_corners_addr_offset offsets;
@@ -381,7 +376,7 @@ static void rga_cmd_set_dst_info(struct rga_ctx *ctx)
 	/*
 	 * Configure the dest framebuffer base address with pixel offset.
 	 */
-	offsets = rga_get_addr_offset(&ctx->out, dst_x, dst_y, dst_w, dst_h);
+	offsets = rga_get_addr_offset(&ctx->out, offset, dst_x, dst_y, dst_w, dst_h);
 	dst_offset = rga_lookup_draw_pos(&offsets, mir_mode, rot_mode);
 
 	dest[(RGA_DST_Y_RGB_BASE_ADDR - RGA_MODE_BASE_REG) >> 2] =
@@ -432,8 +427,8 @@ static void rga_cmd_set(struct rga_ctx *ctx,
 	rga_cmd_set_dst_addr(ctx, dst->dma_desc_pa);
 	rga_cmd_set_mode(ctx);
 
-	rga_cmd_set_src_info(ctx);
-	rga_cmd_set_dst_info(ctx);
+	rga_cmd_set_src_info(ctx, &src->offset);
+	rga_cmd_set_dst_info(ctx, &dst->offset);
 	rga_cmd_set_trans_info(ctx);
 
 	rga_write(rga, RGA_CMD_BASE, rga->cmdbuf_phy);
