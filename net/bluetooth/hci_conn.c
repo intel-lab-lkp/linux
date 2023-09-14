@@ -2731,6 +2731,10 @@ void hci_chan_del(struct hci_chan *chan)
 	/* Prevent new hci_chan's to be created for this hci_conn */
 	set_bit(HCI_CONN_DROP, &conn->flags);
 
+	if (chan->cleanup)
+		chan->cleanup(chan);
+
+	chan->conn = NULL;
 	hci_conn_put(conn);
 
 	skb_queue_purge(&chan->data_q);
