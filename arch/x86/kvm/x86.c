@@ -5407,11 +5407,21 @@ static void kvm_vcpu_ioctl_x86_get_xsave2(struct kvm_vcpu *vcpu,
 static int kvm_vcpu_ioctl_x86_set_xsave(struct kvm_vcpu *vcpu,
 					struct kvm_xsave *guest_xsave)
 {
+	union fpregs_state *ustate = (union fpregs_state *) guest_xsave->region;
+	u64 user_xfeatures = vcpu->arch.guest_fpu.fpstate->user_xfeatures;
+
 	if (fpstate_is_confidential(&vcpu->arch.guest_fpu))
 		return 0;
 
-	return fpu_copy_uabi_to_guest_fpstate(&vcpu->arch.guest_fpu,
-					      guest_xsave->region,
+	/*
+	 * In previous kernels, kvm_arch_vcpu_create() set the guest's fpstate
+	 * based on what the host CPU supported. Recent kernels changed this
+	 * and only accept ustate containing xfeatures that the guest CPU is
+	 * capable of supporting.
+	 */
+	ustate->xsave.header.xfeatures &= user_xfeatures;
+
+	return fpu_copy_uabi_to_guest_fpstate(&vcpu->arch.guest_fpu, ustate,
 					      kvm_caps.supported_xcr0,
 					      &vcpu->arch.pkru);
 }
