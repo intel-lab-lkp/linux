@@ -180,7 +180,8 @@ static inline u64 bch2_dev_buckets_reserved(struct bch_dev *ca, enum bch_waterma
 
 	switch (watermark) {
 	case BCH_WATERMARK_NR:
-		unreachable();
+		WARN_ON(1);
+		break;
 	case BCH_WATERMARK_stripe:
 		reserved += ca->mi.nbuckets >> 6;
 		fallthrough;
