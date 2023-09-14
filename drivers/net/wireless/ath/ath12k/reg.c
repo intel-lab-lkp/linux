@@ -48,6 +48,7 @@ ath12k_reg_notifier(struct wiphy *wiphy, struct regulatory_request *request)
 {
 	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
 	struct ath12k_wmi_init_country_arg arg;
+	struct wmi_set_current_country_params set_current_param = {};
 	struct ath12k *ar = hw->priv;
 	int ret;
 
@@ -76,18 +77,26 @@ ath12k_reg_notifier(struct wiphy *wiphy, struct regulatory_request *request)
 		return;
 	}
 
-	/* Set the country code to the firmware and wait for
-	 * the WMI_REG_CHAN_LIST_CC EVENT for updating the
-	 * reg info
+	/* Set the country code to the firmware. ath12k will subsequently receive
+	 * the WMI_REG_CHAN_LIST_CC EVENT for updating the regulatory info.
 	 */
-	arg.flags = ALPHA_IS_SET;
-	memcpy(&arg.cc_info.alpha2, request->alpha2, 2);
-	arg.cc_info.alpha2[2] = 0;
+	if (ar->ab->hw_params->current_cc_support) {
+		memcpy(&set_current_param.alpha2, request->alpha2, 2);
 
-	ret = ath12k_wmi_send_init_country_cmd(ar, &arg);
-	if (ret)
-		ath12k_warn(ar->ab,
-			    "INIT Country code set to fw failed : %d\n", ret);
+		ret = ath12k_wmi_send_set_current_country_cmd(ar, &set_current_param);
+		if (ret)
+			ath12k_warn(ar->ab,
+				    "failed set current country code: %d\n", ret);
+	} else {
+		arg.flags = ALPHA_IS_SET;
+		memcpy(&arg.cc_info.alpha2, request->alpha2, 2);
+		arg.cc_info.alpha2[2] = 0;
+
+		ret = ath12k_wmi_send_init_country_cmd(ar, &arg);
+		if (ret)
+			ath12k_warn(ar->ab,
+				    "INIT Country code set to fw failed : %d\n", ret);
+	}
 
 	ath12k_mac_11d_scan_stop(ar);
 	ar->regdom_set_by_user = true;
