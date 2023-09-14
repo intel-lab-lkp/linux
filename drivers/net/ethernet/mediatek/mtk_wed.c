@@ -1245,11 +1245,20 @@ mtk_wed_ring_alloc(struct mtk_wed_device *dev, struct mtk_wed_ring *ring,
 	return 0;
 }
 
+static u32
+mtk_wed_wdma_get_desc_size(struct mtk_wed_hw *hw)
+{
+	if (mtk_wed_is_v1(hw))
+		return sizeof(struct mtk_wdma_desc);
+
+	return 2 * sizeof(struct mtk_wdma_desc);
+}
+
 static int
 mtk_wed_wdma_rx_ring_setup(struct mtk_wed_device *dev, int idx, int size,
 			   bool reset)
 {
-	u32 desc_size = sizeof(struct mtk_wdma_desc) * dev->hw->version;
+	u32 desc_size = mtk_wed_wdma_get_desc_size(dev->hw);
 	struct mtk_wed_ring *wdma;
 
 	if (idx >= ARRAY_SIZE(dev->rx_wdma))
@@ -1278,7 +1287,7 @@ static int
 mtk_wed_wdma_tx_ring_setup(struct mtk_wed_device *dev, int idx, int size,
 			   bool reset)
 {
-	u32 desc_size = sizeof(struct mtk_wdma_desc) * dev->hw->version;
+	u32 desc_size = mtk_wed_wdma_get_desc_size(dev->hw);
 	struct mtk_wed_ring *wdma;
 
 	if (idx >= ARRAY_SIZE(dev->tx_wdma))
