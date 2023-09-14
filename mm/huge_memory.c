@@ -1959,6 +1959,124 @@ unlock:
 	return ret;
 }
 
+#ifdef CONFIG_USERFAULTFD
+/*
+ * The PT lock for src_pmd and the mmap_lock for reading are held by
+ * the caller, but it must return after releasing the
+ * page_table_lock. We're guaranteed the src_pmd is a pmd_trans_huge
+ * until the PT lock of the src_pmd is released. Just move the page
+ * from src_pmd to dst_pmd if possible. Return zero if succeeded in
+ * moving the page, -EAGAIN if it needs to be repeated by the caller,
+ * or other errors in case of failure.
+ */
+int remap_pages_huge_pmd(struct mm_struct *dst_mm,
+			 struct mm_struct *src_mm,
+			 pmd_t *dst_pmd, pmd_t *src_pmd,
+			 pmd_t dst_pmdval,
+			 struct vm_area_struct *dst_vma,
+			 struct vm_area_struct *src_vma,
+			 unsigned long dst_addr,
+			 unsigned long src_addr)
+{
+	pmd_t _dst_pmd, src_pmdval;
+	struct page *src_page;
+	struct anon_vma *src_anon_vma, *dst_anon_vma;
+	spinlock_t *src_ptl, *dst_ptl;
+	pgtable_t pgtable;
+	struct mmu_notifier_range range;
+
+	src_pmdval = *src_pmd;
+	src_ptl = pmd_lockptr(src_mm, src_pmd);
+
+	BUG_ON(!pmd_trans_huge(src_pmdval));
+	BUG_ON(!pmd_none(dst_pmdval));
+	BUG_ON(!spin_is_locked(src_ptl));
+	mmap_assert_locked(src_mm);
+	mmap_assert_locked(dst_mm);
+	BUG_ON(src_addr & ~HPAGE_PMD_MASK);
+	BUG_ON(dst_addr & ~HPAGE_PMD_MASK);
+
+	src_page = pmd_page(src_pmdval);
+	BUG_ON(!PageHead(src_page));
+	BUG_ON(!PageAnon(src_page));
+	if (unlikely(page_mapcount(src_page) != 1)) {
+		spin_unlock(src_ptl);
+		return -EBUSY;
+	}
+
+	get_page(src_page);
+	spin_unlock(src_ptl);
+
+	mmu_notifier_range_init(&range, MMU_NOTIFY_CLEAR, 0, src_mm, src_addr,
+				src_addr + HPAGE_PMD_SIZE);
+	mmu_notifier_invalidate_range_start(&range);
+
+	/* block all concurrent rmap walks */
+	lock_page(src_page);
+
+	/*
+	 * split_huge_page walks the anon_vma chain without the page
+	 * lock. Serialize against it with the anon_vma lock, the page
+	 * lock is not enough.
+	 */
+	src_anon_vma = folio_get_anon_vma(page_folio(src_page));
+	if (!src_anon_vma) {
+		unlock_page(src_page);
+		put_page(src_page);
+		mmu_notifier_invalidate_range_end(&range);
+		return -EAGAIN;
+	}
+	anon_vma_lock_write(src_anon_vma);
+
+	dst_ptl = pmd_lockptr(dst_mm, dst_pmd);
+	double_pt_lock(src_ptl, dst_ptl);
+	if (unlikely(!pmd_same(*src_pmd, src_pmdval) ||
+		     !pmd_same(*dst_pmd, dst_pmdval) ||
+		     page_mapcount(src_page) != 1)) {
+		double_pt_unlock(src_ptl, dst_ptl);
+		anon_vma_unlock_write(src_anon_vma);
+		put_anon_vma(src_anon_vma);
+		unlock_page(src_page);
+		put_page(src_page);
+		mmu_notifier_invalidate_range_end(&range);
+		return -EAGAIN;
+	}
+
+	BUG_ON(!PageHead(src_page));
+	BUG_ON(!PageAnon(src_page));
+	/* the PT lock is enough to keep the page pinned now */
+	put_page(src_page);
+
+	dst_anon_vma = (void *) dst_vma->anon_vma + PAGE_MAPPING_ANON;
+	WRITE_ONCE(src_page->mapping, (struct address_space *) dst_anon_vma);
+	WRITE_ONCE(src_page->index, linear_page_index(dst_vma, dst_addr));
+
+	if (!pmd_same(pmdp_huge_clear_flush(src_vma, src_addr, src_pmd),
+		      src_pmdval))
+		BUG_ON(1);
+	_dst_pmd = mk_huge_pmd(src_page, dst_vma->vm_page_prot);
+	_dst_pmd = maybe_pmd_mkwrite(pmd_mkdirty(_dst_pmd), dst_vma);
+	set_pmd_at(dst_mm, dst_addr, dst_pmd, _dst_pmd);
+
+	pgtable = pgtable_trans_huge_withdraw(src_mm, src_pmd);
+	pgtable_trans_huge_deposit(dst_mm, dst_pmd, pgtable);
+	if (dst_mm != src_mm) {
+		add_mm_counter(dst_mm, MM_ANONPAGES, HPAGE_PMD_NR);
+		add_mm_counter(src_mm, MM_ANONPAGES, -HPAGE_PMD_NR);
+	}
+	double_pt_unlock(src_ptl, dst_ptl);
+
+	anon_vma_unlock_write(src_anon_vma);
+	put_anon_vma(src_anon_vma);
+
+	/* unblock rmap walks */
+	unlock_page(src_page);
+
+	mmu_notifier_invalidate_range_end(&range);
+	return 0;
+}
+#endif /* CONFIG_USERFAULTFD */
+
 /*
  * Returns page table lock pointer if a given pmd maps a thp, NULL otherwise.
  *
