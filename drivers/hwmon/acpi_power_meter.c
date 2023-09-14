@@ -803,7 +803,7 @@ static int read_capabilities(struct acpi_power_meter_resource *resource)
 			goto error;
 		}
 
-		strncpy(*str, element->string.pointer, element->string.length);
+		strscpy(*str, element->string.pointer, element->string.length);
 		str++;
 	}
 
