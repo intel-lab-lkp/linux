@@ -83,7 +83,7 @@ bool kvm_gpc_check(struct gfn_to_pfn_cache *gpc, unsigned long len)
 	if (!gpc->active)
 		return false;
 
-	if (gpc->generation != slots->generation)
+	if (gpc->addr_is_gpa && gpc->generation != slots->generation)
 		return false;
 
 	if (kvm_is_error_hva(gpc->uhva))
@@ -229,7 +229,7 @@ static kvm_pfn_t hva_to_pfn_retry(struct gfn_to_pfn_cache *gpc)
 
 	gpc->valid = true;
 	gpc->pfn = new_pfn;
-	gpc->khva = new_khva + (gpc->gpa & ~PAGE_MASK);
+	gpc->khva = new_khva + (gpc->addr & ~PAGE_MASK);
 
 	/*
 	 * Put the reference to the _new_ pfn.  The pfn is now tracked by the
@@ -246,11 +246,11 @@ out_error:
 	return -EFAULT;
 }
 
-static int __kvm_gpc_refresh(struct gfn_to_pfn_cache *gpc, gpa_t gpa,
-			     unsigned long len)
+static int __kvm_gpc_refresh(struct gfn_to_pfn_cache *gpc, u64 addr,
+			     unsigned long len, bool addr_is_gpa)
 {
 	struct kvm_memslots *slots = kvm_memslots(gpc->kvm);
-	unsigned long page_offset = gpa & ~PAGE_MASK;
+	unsigned long page_offset = addr & ~PAGE_MASK;
 	bool unmap_old = false;
 	unsigned long old_uhva;
 	kvm_pfn_t old_pfn;
@@ -282,20 +282,32 @@ static int __kvm_gpc_refresh(struct gfn_to_pfn_cache *gpc, gpa_t gpa,
 	old_khva = gpc->khva - offset_in_page(gpc->khva);
 	old_uhva = gpc->uhva;
 
-	/* If the userspace HVA is invalid, refresh that first */
-	if (gpc->gpa != gpa || gpc->generation != slots->generation ||
+	/*
+	 * If the address has changed, switched from guest to host (or vice
+	 * versa), or it's a guest address and the memory slots have been
+	 * updated, we need to refresh the userspace HVA.
+	 */
+	if (gpc->addr != addr ||
+	    gpc->addr_is_gpa != addr_is_gpa ||
+	    (addr_is_gpa && gpc->generation != slots->generation) ||
 	    kvm_is_error_hva(gpc->uhva)) {
-		gfn_t gfn = gpa_to_gfn(gpa);
+		gpc->addr = addr;
+		gpc->addr_is_gpa = addr_is_gpa;
 
-		gpc->gpa = gpa;
-		gpc->generation = slots->generation;
-		gpc->memslot = __gfn_to_memslot(slots, gfn);
-		gpc->uhva = gfn_to_hva_memslot(gpc->memslot, gfn);
+		if (addr_is_gpa) {
+			gfn_t gfn = gpa_to_gfn(addr);
 
-		if (kvm_is_error_hva(gpc->uhva)) {
-			ret = -EFAULT;
-			goto out;
+			gpc->generation = slots->generation;
+			gpc->memslot = __gfn_to_memslot(slots, gfn);
+			gpc->uhva = gfn_to_hva_memslot(gpc->memslot, gfn);
+		} else {
+			gpc->uhva = addr & PAGE_MASK;
 		}
+	}
+
+	if (kvm_is_error_hva(gpc->uhva)) {
+		ret = -EFAULT;
+		goto out;
 	}
 
 	/*
@@ -343,7 +355,7 @@ out_unlock:
 
 int kvm_gpc_refresh(struct gfn_to_pfn_cache *gpc, unsigned long len)
 {
-	return __kvm_gpc_refresh(gpc, gpc->gpa, len);
+	return __kvm_gpc_refresh(gpc, gpc->addr, len, gpc->addr_is_gpa);
 }
 EXPORT_SYMBOL_GPL(kvm_gpc_refresh);
 
@@ -364,7 +376,8 @@ void kvm_gpc_init(struct gfn_to_pfn_cache *gpc, struct kvm *kvm,
 }
 EXPORT_SYMBOL_GPL(kvm_gpc_init);
 
-int kvm_gpc_activate(struct gfn_to_pfn_cache *gpc, gpa_t gpa, unsigned long len)
+static int __kvm_gpc_activate(struct gfn_to_pfn_cache *gpc, unsigned long addr, unsigned long len,
+			      bool addr_is_gpa)
 {
 	struct kvm *kvm = gpc->kvm;
 
@@ -385,19 +398,39 @@ int kvm_gpc_activate(struct gfn_to_pfn_cache *gpc, gpa_t gpa, unsigned long len)
 		gpc->active = true;
 		write_unlock_irq(&gpc->lock);
 	}
-	return __kvm_gpc_refresh(gpc, gpa, len);
+	return __kvm_gpc_refresh(gpc, addr, len, addr_is_gpa);
+}
+
+int kvm_gpc_activate(struct gfn_to_pfn_cache *gpc, gpa_t gpa, unsigned long len)
+{
+	return __kvm_gpc_activate(gpc, gpa, len, true);
 }
 EXPORT_SYMBOL_GPL(kvm_gpc_activate);
 
 gpa_t kvm_gpc_gpa(struct gfn_to_pfn_cache *gpc)
 {
-	return gpc->gpa;
+	return gpc->addr_is_gpa ? gpc->addr : INVALID_GPA;
 }
 EXPORT_SYMBOL_GPL(kvm_gpc_gpa);
 
+int kvm_gpc_activate_hva(struct gfn_to_pfn_cache *gpc, unsigned long hva, unsigned long len)
+{
+	return __kvm_gpc_activate(gpc, hva, len, false);
+}
+EXPORT_SYMBOL_GPL(kvm_gpc_activate_hva);
+
+unsigned long kvm_gpc_hva(struct gfn_to_pfn_cache *gpc)
+{
+	return !gpc->addr_is_gpa ? gpc->addr : 0;
+}
+EXPORT_SYMBOL_GPL(kvm_gpc_hva);
+
 void kvm_gpc_mark_dirty(struct gfn_to_pfn_cache *gpc)
 {
-	mark_page_dirty_in_slot(gpc->kvm, gpc->memslot, gpc->gpa >> PAGE_SHIFT);
+	if (!gpc->addr_is_gpa)
+		return;
+
+	mark_page_dirty_in_slot(gpc->kvm, gpc->memslot, gpc->addr >> PAGE_SHIFT);
 }
 EXPORT_SYMBOL_GPL(kvm_gpc_mark_dirty);
 
