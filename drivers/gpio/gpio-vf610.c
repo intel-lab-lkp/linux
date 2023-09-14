@@ -67,6 +67,7 @@ static const struct fsl_gpio_soc_data imx_data = {
 static const struct of_device_id vf610_gpio_dt_ids[] = {
 	{ .compatible = "fsl,vf610-gpio",	.data = NULL, },
 	{ .compatible = "fsl,imx7ulp-gpio",	.data = &imx_data, },
+	{ .compatible = "fsl,imx8ulp-gpio",	.data = &imx_data, },
 	{ /* sentinel */ }
 };
 
