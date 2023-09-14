@@ -773,4 +773,12 @@ void dpu_rm_print_state(struct drm_printer *p,
 		else
 			drm_puts(p, " -,");
 	drm_puts(p, "\n");
+
+	drm_puts(p, "sspp:");
+	for (i = 0; i < ARRAY_SIZE(global_state->sspp_to_crtc_id); i++)
+		if (rm->hw_sspp[i])
+			drm_printf(p, " %d,", global_state->sspp_to_crtc_id[i]);
+		else
+			drm_puts(p, " -,");
+	drm_puts(p, "\n");
 }
