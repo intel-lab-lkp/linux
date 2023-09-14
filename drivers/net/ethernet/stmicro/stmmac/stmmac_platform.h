@@ -11,6 +11,7 @@
 
 #include "stmmac.h"
 
+int stmmac_set_tx_clk_gmii(struct clk *tx_clk, unsigned int speed);
 struct plat_stmmacenet_data *
 stmmac_probe_config_dt(struct platform_device *pdev, u8 *mac);
 struct plat_stmmacenet_data *
