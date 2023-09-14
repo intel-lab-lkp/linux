@@ -649,11 +649,13 @@ static void cedrus_h264_stop(struct cedrus_ctx *ctx)
 	struct cedrus_dev *dev = ctx->dev;
 	struct cedrus_buffer *buf;
 	struct vb2_queue *vq;
+	unsigned int q_num_bufs;
 	unsigned int i;
 
 	vq = v4l2_m2m_get_vq(ctx->fh.m2m_ctx, V4L2_BUF_TYPE_VIDEO_CAPTURE);
+	q_num_bufs = vb2_get_num_buffers(vq);
 
-	for (i = 0; i < vq->num_buffers; i++) {
+	for (i = 0; i < q_num_bufs; i++) {
 		buf = vb2_to_cedrus_buffer(vb2_get_buffer(vq, i));
 
 		if (buf->codec.h264.mv_col_buf_size > 0) {
