@@ -97,6 +97,60 @@ static void virtio_gpu_free_object(struct drm_gem_object *obj)
 	virtio_gpu_cleanup_object(bo);
 }
 
+static int virtio_gpu_detach_object_fenced(struct virtio_gpu_object *bo)
+{
+	struct virtio_gpu_device *vgdev = bo->base.base.dev->dev_private;
+	struct virtio_gpu_fence *fence;
+
+	if (bo->detached)
+		return 0;
+
+	fence = virtio_gpu_fence_alloc(vgdev, vgdev->fence_drv.context, 0);
+	if (!fence)
+		return -ENOMEM;
+
+	virtio_gpu_object_detach(vgdev, bo, fence);
+	virtio_gpu_notify(vgdev);
+
+	dma_fence_wait(&fence->f, false);
+	dma_fence_put(&fence->f);
+
+	bo->detached = true;
+
+	return 0;
+}
+
+static int virtio_gpu_shmem_evict(struct drm_gem_object *obj)
+{
+	struct virtio_gpu_object *bo = gem_to_virtio_gpu_obj(obj);
+	int err;
+
+	/* blob is not movable, it's impossible to detach it from host */
+	if (bo->blob_mem)
+		return -EBUSY;
+
+	/*
+	 * At first tell host to stop using guest's memory to ensure that
+	 * host won't touch the released guest's memory once it's gone.
+	 */
+	err = virtio_gpu_detach_object_fenced(bo);
+	if (err)
+		return err;
+
+	if (drm_gem_shmem_is_purgeable(&bo->base)) {
+		err = virtio_gpu_gem_host_mem_release(bo);
+		if (err)
+			return err;
+
+		drm_gem_shmem_purge_locked(&bo->base);
+	} else {
+		bo->base.pages_mark_dirty_on_put = 1;
+		drm_gem_shmem_evict_locked(&bo->base);
+	}
+
+	return 0;
+}
+
 static const struct drm_gem_object_funcs virtio_gpu_shmem_funcs = {
 	.free = virtio_gpu_free_object,
 	.open = virtio_gpu_gem_object_open,
@@ -110,6 +164,7 @@ static const struct drm_gem_object_funcs virtio_gpu_shmem_funcs = {
 	.vunmap = drm_gem_shmem_object_vunmap_locked,
 	.mmap = drm_gem_shmem_object_mmap,
 	.vm_ops = &drm_gem_shmem_vm_ops,
+	.evict = virtio_gpu_shmem_evict,
 };
 
 bool virtio_gpu_is_shmem(struct virtio_gpu_object *bo)
@@ -189,6 +244,10 @@ int virtio_gpu_reattach_shmem_object_locked(struct virtio_gpu_object *bo)
 	if (!bo->detached)
 		return 0;
 
+	err = drm_gem_shmem_swapin_locked(&bo->base);
+	if (err)
+		return err;
+
 	err = virtio_gpu_object_shmem_init(vgdev, bo, &ents, &nents);
 	if (err)
 		return err;
@@ -238,6 +297,8 @@ int virtio_gpu_object_create(struct virtio_gpu_device *vgdev,
 		goto err_free_gem;
 
 	bo->dumb = params->dumb;
+	bo->blob_mem = params->blob_mem;
+	bo->blob_flags = params->blob_flags;
 
 	if (bo->blob_mem == VIRTGPU_BLOB_MEM_GUEST)
 		bo->guest_blob = true;
