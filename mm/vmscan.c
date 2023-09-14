@@ -4237,7 +4237,7 @@ static bool sort_folio(struct lruvec *lruvec, struct folio *folio, struct scan_c
 		success = lru_gen_del_folio(lruvec, folio, true);
 		VM_WARN_ON_ONCE_FOLIO(!success, folio);
 		folio_set_unevictable(folio);
-		lruvec_add_folio(lruvec, folio);
+		lruvec_add_folio_tail(lruvec, folio);
 		__count_vm_events(UNEVICTABLE_PGCULLED, delta);
 		return true;
 	}
