@@ -6,6 +6,7 @@
 #include <linux/fs.h>
 #include <linux/mm.h>
 #include <linux/mutex.h>
+#include <linux/shrinker.h>
 
 #include <drm/drm_file.h>
 #include <drm/drm_gem.h>
@@ -13,6 +14,7 @@
 #include <drm/drm_prime.h>
 
 struct dma_buf_attachment;
+struct drm_device;
 struct drm_mode_create_dumb;
 struct drm_printer;
 struct sg_table;
@@ -53,8 +55,8 @@ struct drm_gem_shmem_object {
 	 * @madv: State for madvise
 	 *
 	 * 0 is active/inuse.
+	 * 1 is not-needed/can-be-purged
 	 * A negative value is the object is purged.
-	 * Positive values are driver specific and not used by the helpers.
 	 */
 	int madv;
 
@@ -101,6 +103,12 @@ struct drm_gem_shmem_object {
 	 * @map_wc: map object write-combined (instead of using shmem defaults).
 	 */
 	bool map_wc : 1;
+
+	/**
+	 * @evicted: True if shmem pages are evicted by the memory shrinker.
+	 * Used internally by memory shrinker.
+	 */
+	bool evicted : 1;
 };
 
 #define to_drm_gem_shmem_obj(obj) \
@@ -119,14 +127,22 @@ void drm_gem_shmem_vunmap_locked(struct drm_gem_shmem_object *shmem,
 int drm_gem_shmem_mmap(struct drm_gem_shmem_object *shmem, struct vm_area_struct *vma);
 
 int drm_gem_shmem_madvise_locked(struct drm_gem_shmem_object *shmem, int madv);
+int drm_gem_shmem_madvise(struct drm_gem_shmem_object *shmem, int madv);
 
 static inline bool drm_gem_shmem_is_purgeable(struct drm_gem_shmem_object *shmem)
 {
-	return (shmem->madv > 0) &&
-		!refcount_read(&shmem->pages_pin_count) && shmem->sgt &&
-		!shmem->base.dma_buf && !shmem->base.import_attach;
+	dma_resv_assert_held(shmem->base.resv);
+
+	return (shmem->madv > 0) && shmem->base.funcs->evict &&
+		refcount_read(&shmem->pages_use_count) &&
+		!refcount_read(&shmem->pages_pin_count) &&
+		!shmem->base.dma_buf && !shmem->base.import_attach &&
+		(shmem->sgt || shmem->evicted);
 }
 
+int drm_gem_shmem_swapin_locked(struct drm_gem_shmem_object *shmem);
+
+void drm_gem_shmem_evict_locked(struct drm_gem_shmem_object *shmem);
 void drm_gem_shmem_purge_locked(struct drm_gem_shmem_object *shmem);
 
 struct sg_table *drm_gem_shmem_get_sg_table(struct drm_gem_shmem_object *shmem);
@@ -269,6 +285,53 @@ static inline int drm_gem_shmem_object_mmap(struct drm_gem_object *obj, struct v
 
 	return drm_gem_shmem_mmap(shmem, vma);
 }
+
+/**
+ * drm_gem_shmem_object_madvise - unlocked GEM object function for drm_gem_shmem_madvise_locked()
+ * @obj: GEM object
+ * @madv: Madvise value
+ *
+ * This function wraps drm_gem_shmem_madvise_locked(), providing unlocked variant.
+ *
+ * Returns:
+ * 0 on success or a negative error code on failure.
+ */
+static inline int drm_gem_shmem_object_madvise(struct drm_gem_object *obj, int madv)
+{
+	struct drm_gem_shmem_object *shmem = to_drm_gem_shmem_obj(obj);
+
+	return drm_gem_shmem_madvise(shmem, madv);
+}
+
+/**
+ * struct drm_gem_shmem_shrinker - Memory shrinker of GEM shmem memory manager
+ */
+struct drm_gem_shmem_shrinker {
+	/** @base: Shrinker for purging shmem GEM objects */
+	struct shrinker base;
+
+	/** @lock: Protects @lru_* */
+	struct mutex lock;
+
+	/** @lru_pinned: List of pinned shmem GEM objects */
+	struct drm_gem_lru lru_pinned;
+
+	/** @lru_evictable: List of shmem GEM objects to be evicted */
+	struct drm_gem_lru lru_evictable;
+
+	/** @lru_evicted: List of evicted shmem GEM objects */
+	struct drm_gem_lru lru_evicted;
+};
+
+/**
+ * struct drm_gem_shmem - GEM shmem memory manager
+ */
+struct drm_gem_shmem {
+	/** @shrinker: GEM shmem shrinker */
+	struct drm_gem_shmem_shrinker shrinker;
+};
+
+int drmm_gem_shmem_init(struct drm_device *dev);
 
 /*
  * Driver ops
