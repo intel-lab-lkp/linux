@@ -369,7 +369,7 @@ int smsdvb_debugfs_create(struct smsdvb_client_t *client)
 
 	d = debugfs_create_file("stats", S_IRUGO | S_IWUSR, client->debugfs,
 				client, &debugfs_stats_ops);
-	if (!d) {
+	if (IS_ERR(d)) {
 		debugfs_remove(client->debugfs);
 		return -ENOMEM;
 	}
