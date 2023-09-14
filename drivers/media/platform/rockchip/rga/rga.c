@@ -824,6 +824,12 @@ static int rga_probe(struct platform_device *pdev)
 		goto err_put_clk;
 	}
 
+	ret = dma_set_mask(rga->dev, DMA_BIT_MASK(32));
+	if (ret) {
+		dev_err(rga->dev, "32-bit DMA not supported");
+		goto err_put_clk;
+	}
+
 	ret = v4l2_device_register(&pdev->dev, &rga->v4l2_dev);
 	if (ret)
 		goto err_put_clk;
