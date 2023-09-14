@@ -937,9 +937,9 @@ out:
 }
 
 /**
- * svc_rdma_read_chunk_range - Build RDMA Read WQEs for portion of a chunk
- * @rdma: controlling transport
- * @info: context for RDMA Reads
+ * svc_rdma_read_chunk_range - Build RDMA Read WRs for portion of a chunk
+ * @rqstp: RPC transaction context
+ * @head: context for ongoing I/O
  * @chunk: parsed Call chunk to pull
  * @offset: offset of region to pull
  * @length: length of region to pull
@@ -951,12 +951,11 @@ out:
  *   %-ENOTCONN: posting failed (connection is lost),
  *   %-EIO: rdma_rw initialization failed (DMA mapping, etc).
  */
-static int svc_rdma_read_chunk_range(struct svcxprt_rdma *rdma,
-				     struct svc_rdma_read_info *info,
+static int svc_rdma_read_chunk_range(struct svc_rqst *rqstp,
+				     struct svc_rdma_recv_ctxt *head,
 				     const struct svc_rdma_chunk *chunk,
 				     unsigned int offset, unsigned int length)
 {
-	struct svc_rdma_recv_ctxt *head = info->ri_readctxt;
 	const struct svc_rdma_segment *segment;
 	int ret;
 
@@ -973,8 +972,7 @@ static int svc_rdma_read_chunk_range(struct svcxprt_rdma *rdma,
 		dummy.rs_length = min_t(u32, length, segment->rs_length) - offset;
 		dummy.rs_offset = segment->rs_offset + offset;
 
-		ret = svc_rdma_build_read_segment(info->ri_rqst,
-						  info->ri_readctxt, &dummy);
+		ret = svc_rdma_build_read_segment(rqstp, head, &dummy);
 		if (ret < 0)
 			break;
 
@@ -1015,7 +1013,8 @@ static int svc_rdma_read_call_chunk(struct svcxprt_rdma *rdma,
 	start = 0;
 	chunk = pcl_first_chunk(pcl);
 	length = chunk->ch_position;
-	ret = svc_rdma_read_chunk_range(rdma, info, call_chunk, start, length);
+	ret = svc_rdma_read_chunk_range(info->ri_rqst, head, call_chunk,
+					start, length);
 	if (ret < 0)
 		return ret;
 
@@ -1030,15 +1029,16 @@ static int svc_rdma_read_call_chunk(struct svcxprt_rdma *rdma,
 
 		start += length;
 		length = next->ch_position - head->rc_readbytes;
-		ret = svc_rdma_read_chunk_range(rdma, info, call_chunk,
-						start, length);
+		ret = svc_rdma_read_chunk_range(info->ri_rqst, head,
+						call_chunk, start, length);
 		if (ret < 0)
 			return ret;
 	}
 
 	start += length;
 	length = call_chunk->ch_length - start;
-	return svc_rdma_read_chunk_range(rdma, info, call_chunk, start, length);
+	return svc_rdma_read_chunk_range(info->ri_rqst, head, call_chunk,
+					 start, length);
 }
 
 /**
