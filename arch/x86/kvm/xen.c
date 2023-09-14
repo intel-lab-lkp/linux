@@ -489,6 +489,29 @@ static void kvm_xen_inject_vcpu_vector(struct kvm_vcpu *v)
 	WARN_ON_ONCE(!kvm_irq_delivery_to_apic_fast(v->kvm, NULL, &irq, &r, NULL));
 }
 
+struct gfn_to_pfn_cache *get_vcpu_info_cache(struct kvm_vcpu *v, unsigned long *offset)
+{
+	if (offset)
+		*offset = 0;
+
+	return &v->arch.xen.vcpu_info_cache;
+}
+
+void kvm_xen_guest_time_update(struct kvm_vcpu *v)
+{
+	unsigned long offset;
+	struct gfn_to_pfn_cache *gpc = get_vcpu_info_cache(v, &offset);
+
+	BUILD_BUG_ON(offsetof(struct vcpu_info, time) !=
+		     offsetof(struct compat_vcpu_info, time));
+
+	if (gpc->active)
+		kvm_setup_guest_pvclock(v, gpc, offset + offsetof(struct compat_vcpu_info, time));
+
+	if (v->arch.xen.vcpu_time_info_cache.active)
+		kvm_setup_guest_pvclock(v, &v->arch.xen.vcpu_time_info_cache, 0);
+}
+
 /*
  * On event channel delivery, the vcpu_info may not have been accessible.
  * In that case, there are bits in vcpu->arch.xen.evtchn_pending_sel which
@@ -499,7 +522,8 @@ static void kvm_xen_inject_vcpu_vector(struct kvm_vcpu *v)
 void kvm_xen_inject_pending_events(struct kvm_vcpu *v)
 {
 	unsigned long evtchn_pending_sel = READ_ONCE(v->arch.xen.evtchn_pending_sel);
-	struct gfn_to_pfn_cache *gpc = &v->arch.xen.vcpu_info_cache;
+	unsigned long offset;
+	struct gfn_to_pfn_cache *gpc = get_vcpu_info_cache(v, &offset);
 	unsigned long flags;
 
 	if (!evtchn_pending_sel)
@@ -522,7 +546,7 @@ void kvm_xen_inject_pending_events(struct kvm_vcpu *v)
 
 	/* Now gpc->khva is a valid kernel address for the vcpu_info */
 	if (IS_ENABLED(CONFIG_64BIT) && v->kvm->arch.xen.long_mode) {
-		struct vcpu_info *vi = gpc->khva;
+		struct vcpu_info *vi = gpc->khva + offset;
 
 		asm volatile(LOCK_PREFIX "orq %0, %1\n"
 			     "notq %0\n"
@@ -534,7 +558,7 @@ void kvm_xen_inject_pending_events(struct kvm_vcpu *v)
 		WRITE_ONCE(vi->evtchn_upcall_pending, 1);
 	} else {
 		u32 evtchn_pending_sel32 = evtchn_pending_sel;
-		struct compat_vcpu_info *vi = gpc->khva;
+		struct compat_vcpu_info *vi = gpc->khva + offset;
 
 		asm volatile(LOCK_PREFIX "orl %0, %1\n"
 			     "notl %0\n"
@@ -556,7 +580,8 @@ void kvm_xen_inject_pending_events(struct kvm_vcpu *v)
 
 int __kvm_xen_has_interrupt(struct kvm_vcpu *v)
 {
-	struct gfn_to_pfn_cache *gpc = &v->arch.xen.vcpu_info_cache;
+	unsigned long offset;
+	struct gfn_to_pfn_cache *gpc = get_vcpu_info_cache(v, &offset);
 	unsigned long flags;
 	u8 rc = 0;
 
@@ -598,7 +623,7 @@ int __kvm_xen_has_interrupt(struct kvm_vcpu *v)
 		read_lock_irqsave(&gpc->lock, flags);
 	}
 
-	rc = ((struct vcpu_info *)gpc->khva)->evtchn_upcall_pending;
+	rc = ((struct vcpu_info *)(gpc->khva + offset))->evtchn_upcall_pending;
 	read_unlock_irqrestore(&gpc->lock, flags);
 	return rc;
 }
@@ -1567,7 +1592,7 @@ static void kvm_xen_check_poller(struct kvm_vcpu *vcpu, int port)
  */
 int kvm_xen_set_evtchn_fast(struct kvm_xen_evtchn *xe, struct kvm *kvm)
 {
-	struct gfn_to_pfn_cache *gpc = &kvm->arch.xen.shinfo_cache;
+	struct gfn_to_pfn_cache *gpc;
 	struct kvm_vcpu *vcpu;
 	unsigned long *pending_bits, *mask_bits;
 	unsigned long flags;
@@ -1585,7 +1610,8 @@ int kvm_xen_set_evtchn_fast(struct kvm_xen_evtchn *xe, struct kvm *kvm)
 		WRITE_ONCE(xe->vcpu_idx, vcpu->vcpu_idx);
 	}
 
-	if (!vcpu->arch.xen.vcpu_info_cache.active)
+	gpc = get_vcpu_info_cache(vcpu, NULL);
+	if (!gpc->active)
 		return -EINVAL;
 
 	if (xe->port >= max_evtchn_port(kvm))
@@ -1594,6 +1620,7 @@ int kvm_xen_set_evtchn_fast(struct kvm_xen_evtchn *xe, struct kvm *kvm)
 	rc = -EWOULDBLOCK;
 
 	idx = srcu_read_lock(&kvm->srcu);
+	gpc = &kvm->arch.xen.shinfo_cache;
 
 	read_lock_irqsave(&gpc->lock, flags);
 	if (!kvm_gpc_check(gpc, PAGE_SIZE))
@@ -1624,10 +1651,13 @@ int kvm_xen_set_evtchn_fast(struct kvm_xen_evtchn *xe, struct kvm *kvm)
 		rc = -ENOTCONN; /* Masked */
 		kvm_xen_check_poller(vcpu, xe->port);
 	} else {
+		unsigned long offset;
+
 		rc = 1; /* Delivered to the bitmap in shared_info. */
+
 		/* Now switch to the vCPU's vcpu_info to set the index and pending_sel */
 		read_unlock_irqrestore(&gpc->lock, flags);
-		gpc = &vcpu->arch.xen.vcpu_info_cache;
+		gpc = get_vcpu_info_cache(vcpu, &offset);
 
 		read_lock_irqsave(&gpc->lock, flags);
 		if (!kvm_gpc_check(gpc, sizeof(struct vcpu_info))) {
@@ -1641,13 +1671,13 @@ int kvm_xen_set_evtchn_fast(struct kvm_xen_evtchn *xe, struct kvm *kvm)
 		}
 
 		if (IS_ENABLED(CONFIG_64BIT) && kvm->arch.xen.long_mode) {
-			struct vcpu_info *vcpu_info = gpc->khva;
+			struct vcpu_info *vcpu_info = gpc->khva + offset;
 			if (!test_and_set_bit(port_word_bit, &vcpu_info->evtchn_pending_sel)) {
 				WRITE_ONCE(vcpu_info->evtchn_upcall_pending, 1);
 				kick_vcpu = true;
 			}
 		} else {
-			struct compat_vcpu_info *vcpu_info = gpc->khva;
+			struct compat_vcpu_info *vcpu_info = gpc->khva + offset;
 			if (!test_and_set_bit(port_word_bit,
 					      (unsigned long *)&vcpu_info->evtchn_pending_sel)) {
 				WRITE_ONCE(vcpu_info->evtchn_upcall_pending, 1);
