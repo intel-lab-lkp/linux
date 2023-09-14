@@ -375,8 +375,10 @@ int smsdvb_debugfs_create(struct smsdvb_client_t *client)
 	}
 
 	debug_data = kzalloc(sizeof(*client->debug_data), GFP_KERNEL);
-	if (!debug_data)
+	if (!debug_data) {
+		debugfs_remove_recursive(client->debugfs);
 		return -ENOMEM;
+	}
 
 	client->debug_data        = debug_data;
 	client->prt_dvb_stats     = smsdvb_print_dvb_stats;
