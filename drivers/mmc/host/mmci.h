@@ -331,6 +331,7 @@ enum mmci_busy_state {
  *	       register.
  * @opendrain: bitmask identifying the OPENDRAIN bit inside MMCIPOWER register
  * @dma_lli: true if variant has dma link list feature.
+ * @supports_sdio_irq: allow SD I/O card to interrupt the host
  * @stm32_idmabsize_mask: stm32 sdmmc idma buffer size.
  */
 struct variant_data {
@@ -376,6 +377,7 @@ struct variant_data {
 	u32			start_err;
 	u32			opendrain;
 	u8			dma_lli:1;
+	bool			supports_sdio_irq;
 	u32			stm32_idmabsize_mask;
 	u32			stm32_idmabsize_align;
 	void (*init)(struct mmci_host *host);
@@ -400,6 +402,8 @@ struct mmci_host_ops {
 	bool (*busy_complete)(struct mmci_host *host, struct mmc_command *cmd, u32 status, u32 err_msk);
 	void (*pre_sig_volt_switch)(struct mmci_host *host);
 	int (*post_sig_volt_switch)(struct mmci_host *host, struct mmc_ios *ios);
+	void (*enable_sdio_irq)(struct mmci_host *host, int enable);
+	void (*sdio_irq)(struct mmci_host *host, u32 status);
 };
 
 struct mmci_host {
@@ -480,6 +484,9 @@ int mmci_dmae_start(struct mmci_host *host, unsigned int *datactrl);
 void mmci_dmae_finalize(struct mmci_host *host, struct mmc_data *data);
 void mmci_dmae_error(struct mmci_host *host);
 #endif
+
+void ux500_and_stm32_enable_sdio_irq(struct mmci_host *host, int enable);
+void ux500_and_stm32_sdio_irq(struct mmci_host *host, u32 status);
 
 #ifdef CONFIG_MMC_QCOM_DML
 void qcom_variant_init(struct mmci_host *host);

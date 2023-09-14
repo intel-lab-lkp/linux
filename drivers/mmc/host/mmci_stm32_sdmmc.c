@@ -681,6 +681,8 @@ static struct mmci_host_ops sdmmc_variant_ops = {
 	.busy_complete = sdmmc_busy_complete,
 	.pre_sig_volt_switch = sdmmc_pre_sig_volt_vswitch,
 	.post_sig_volt_switch = sdmmc_post_sig_volt_switch,
+	.enable_sdio_irq = ux500_and_stm32_enable_sdio_irq,
+	.sdio_irq = ux500_and_stm32_sdio_irq,
 };
 
 static struct sdmmc_tuning_ops dlyb_tuning_mp15_ops = {
