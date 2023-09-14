@@ -569,6 +569,7 @@
 #define	GEN10_MIRROR_FUSE3			_MMIO(0x9118)
 #define   GEN10_L3BANK_PAIR_COUNT		4
 #define   GEN10_L3BANK_MASK			0x0F
+#define   XEHPC_GT_L3_MODE_MASK			REG_GENMASK(7, 4)
 /* on Xe_HP the same fuses indicates mslices instead of L3 banks */
 #define   GEN12_MAX_MSLICES			4
 #define   GEN12_MEML3_EN_MASK			0x0F

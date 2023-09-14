@@ -884,6 +884,32 @@ static int intel_gt_tile_setup(struct intel_gt *gt, phys_addr_t phys_addr)
 	return 0;
 }
 
+int intel_count_l3_banks(struct drm_i915_private *i915,
+			 struct intel_engine_cs *engine)
+{
+	struct intel_gt *gt = engine->gt;
+	struct intel_uncore *uncore = gt->uncore;
+	intel_wakeref_t wakeref;
+	u32 count, store;
+
+	/* L3 Banks not supported prior to version 12 */
+	if (GRAPHICS_VER(i915) < 12)
+		return -ENODEV;
+
+	if (IS_PONTEVECCHIO(i915)) {
+		with_intel_runtime_pm(uncore->rpm, wakeref)
+			store = intel_uncore_read(uncore, GEN10_MIRROR_FUSE3);
+		count = hweight32(REG_FIELD_GET(GEN12_MEML3_EN_MASK, store)) * 4 *
+			hweight32(REG_FIELD_GET(XEHPC_GT_L3_MODE_MASK, store));
+	} else if (GRAPHICS_VER_FULL(i915) > IP_VER(12, 50)) {
+		count = hweight32(gt->info.mslice_mask) * 8;
+	} else {
+		count = hweight32(gt->info.l3bank_mask);
+	}
+
+	return count;
+}
+
 int intel_gt_probe_all(struct drm_i915_private *i915)
 {
 	struct pci_dev *pdev = to_pci_dev(i915->drm.dev);

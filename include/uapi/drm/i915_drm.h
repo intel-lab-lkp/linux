@@ -3013,6 +3013,7 @@ struct drm_i915_query_item {
 	 *  - %DRM_I915_QUERY_MEMORY_REGIONS (see struct drm_i915_query_memory_regions)
 	 *  - %DRM_I915_QUERY_HWCONFIG_BLOB (see `GuC HWCONFIG blob uAPI`)
 	 *  - %DRM_I915_QUERY_GEOMETRY_SUBSLICES (see struct drm_i915_query_topology_info)
+	 *  - %DRM_I915_QUERY_L3BANK_COUNT (see `L3 Bank Count Query uAPI`)
 	 */
 	__u64 query_id;
 #define DRM_I915_QUERY_TOPOLOGY_INFO		1
@@ -3021,6 +3022,7 @@ struct drm_i915_query_item {
 #define DRM_I915_QUERY_MEMORY_REGIONS		4
 #define DRM_I915_QUERY_HWCONFIG_BLOB		5
 #define DRM_I915_QUERY_GEOMETRY_SUBSLICES	6
+#define DRM_I915_QUERY_L3BANK_COUNT		7
 /* Must be kept compact -- no holes and well documented */
 
 	/**
@@ -3443,7 +3445,7 @@ struct drm_i915_memory_region_info {
 	__u64 probed_size;
 
 	/**
-	 * @unallocated_size: Estimate of memory remaining
+.	 * @unallocated_size: Estimate of memory remaining
 	 *
 	 * Requires CAP_PERFMON or CAP_SYS_ADMIN to get reliable accounting.
 	 * Without this (or if this is an older kernel) the value here will
@@ -3689,6 +3691,17 @@ struct drm_i915_gem_create_ext {
 #define I915_GEM_CREATE_EXT_SET_PAT 2
 	__u64 extensions;
 };
+
+/**
+ * DOC: L3 Bank Count Query uAPI
+ *
+ * The L3 bank count query called through the query id
+ * DRM_I915_QUERY_L3BANK_COUNT and returns the count of
+ * the available L3 Banks on a given engine.
+ *
+ * The count itself is an integer, and since no additional
+ * data is returned, the count is returned as such.
+ */
 
 /**
  * struct drm_i915_gem_create_ext_memory_regions - The

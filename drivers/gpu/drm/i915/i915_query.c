@@ -10,6 +10,7 @@
 #include "i915_perf.h"
 #include "i915_query.h"
 #include "gt/intel_engine_user.h"
+#include "gt/intel_gt.h"
 #include <uapi/drm/i915_drm.h>
 
 static int copy_query_item(void *query_hdr, size_t query_sz,
@@ -551,6 +552,38 @@ static int query_hwconfig_blob(struct drm_i915_private *i915,
 	return hwconfig->size;
 }
 
+static int
+query_l3bank_count(struct drm_i915_private *i915,
+		   struct drm_i915_query_item *query_item)
+{
+	struct drm_i915_query_memory_regions __user *query_ptr =
+		u64_to_user_ptr(query_item->data_ptr);
+	struct i915_engine_class_instance classinstance;
+	struct intel_engine_cs *engine;
+	int count;
+
+	if (query_item->length == 0)
+		return sizeof(count);
+
+	classinstance = *((struct i915_engine_class_instance *)&query_item->flags);
+
+	engine = intel_engine_lookup_user(i915, (u8)classinstance.engine_class,
+					  (u8)classinstance.engine_instance);
+
+	if (!engine)
+		return -EINVAL;
+
+	count = intel_count_l3_banks(i915, engine);
+
+	if (count < 0)
+		return count;
+
+	if (copy_to_user(query_ptr, &count, sizeof(count)))
+		return -EFAULT;
+
+	return sizeof(count);
+}
+
 static int (* const i915_query_funcs[])(struct drm_i915_private *dev_priv,
 					struct drm_i915_query_item *query_item) = {
 	query_topology_info,
@@ -559,6 +592,7 @@ static int (* const i915_query_funcs[])(struct drm_i915_private *dev_priv,
 	query_memregion_info,
 	query_hwconfig_blob,
 	query_geometry_subslices,
+	query_l3bank_count,
 };
 
 int i915_query_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
