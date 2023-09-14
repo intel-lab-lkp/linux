@@ -58,7 +58,7 @@ struct vb2_dma_sg_buf {
 static void vb2_dma_sg_put(void *buf_priv);
 
 static int vb2_dma_sg_alloc_compacted(struct vb2_dma_sg_buf *buf,
-		gfp_t gfp_flags)
+		gfp_t gfp_flags, struct device *dev)
 {
 	unsigned int last_page = 0;
 	unsigned long size = buf->size;
@@ -67,6 +67,7 @@ static int vb2_dma_sg_alloc_compacted(struct vb2_dma_sg_buf *buf,
 		struct page *pages;
 		int order;
 		int i;
+		dma_addr_t dma_handle;
 
 		order = get_order(size);
 		/* Don't over allocate*/
@@ -75,8 +76,9 @@ static int vb2_dma_sg_alloc_compacted(struct vb2_dma_sg_buf *buf,
 
 		pages = NULL;
 		while (!pages) {
-			pages = alloc_pages(GFP_KERNEL | __GFP_ZERO |
-					__GFP_NOWARN | gfp_flags, order);
+			pages = dma_alloc_pages(dev, PAGE_SIZE << order, &dma_handle,
+				DMA_BIDIRECTIONAL,
+				GFP_KERNEL | __GFP_ZERO | __GFP_NOWARN | gfp_flags);
 			if (pages)
 				break;
 
@@ -96,6 +98,7 @@ static int vb2_dma_sg_alloc_compacted(struct vb2_dma_sg_buf *buf,
 	}
 
 	return 0;
+
 }
 
 static void *vb2_dma_sg_alloc(struct vb2_buffer *vb, struct device *dev,
@@ -130,7 +133,7 @@ static void *vb2_dma_sg_alloc(struct vb2_buffer *vb, struct device *dev,
 	if (!buf->pages)
 		goto fail_pages_array_alloc;
 
-	ret = vb2_dma_sg_alloc_compacted(buf, vb->vb2_queue->gfp_flags);
+	ret = vb2_dma_sg_alloc_compacted(buf, vb->vb2_queue->gfp_flags, dev);
 	if (ret)
 		goto fail_pages_alloc;
 
