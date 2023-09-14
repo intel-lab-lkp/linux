@@ -115,6 +115,7 @@
 #define MPTCP_WORK_RTX		2
 #define MPTCP_FALLBACK_DONE	4
 #define MPTCP_WORK_CLOSE_SUBFLOW 5
+#define MPTCP_NO_INITIAL_SUBFLOW 6
 
 /* MPTCP socket release cb flags */
 #define MPTCP_PUSH_PENDING	1
@@ -1001,6 +1002,20 @@ static inline void __mptcp_do_fallback(struct mptcp_sock *msk)
 		return;
 	}
 	set_bit(MPTCP_FALLBACK_DONE, &msk->flags);
+}
+
+static inline bool __mptcp_check_no_initial_subflow(const struct mptcp_sock *msk)
+{
+	return test_bit(MPTCP_NO_INITIAL_SUBFLOW, &msk->flags);
+}
+
+static inline void __mptcp_set_no_initial_subflow(struct mptcp_sock *msk)
+{
+	if (__mptcp_check_no_initial_subflow(msk)) {
+		pr_debug("no initial subflow (msk=%p)", msk);
+		return;
+	}
+	set_bit(MPTCP_NO_INITIAL_SUBFLOW, &msk->flags);
 }
 
 static inline void mptcp_do_fallback(struct sock *ssk)

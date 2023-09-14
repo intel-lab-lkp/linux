@@ -2407,6 +2407,8 @@ out:
 void mptcp_close_ssk(struct sock *sk, struct sock *ssk,
 		     struct mptcp_subflow_context *subflow)
 {
+	struct mptcp_sock *msk = mptcp_sk(sk);
+
 	if (sk->sk_state == TCP_ESTABLISHED)
 		mptcp_event(MPTCP_EVENT_SUB_CLOSED, mptcp_sk(sk), ssk, GFP_KERNEL);
 
@@ -2415,6 +2417,8 @@ void mptcp_close_ssk(struct sock *sk, struct sock *ssk,
 	 */
 	mptcp_pm_subflow_check_next(mptcp_sk(sk), ssk, subflow);
 
+	if (ssk == msk->first)
+		__mptcp_set_no_initial_subflow(msk);
 	__mptcp_close_ssk(sk, ssk, subflow, MPTCP_CF_PUSH);
 }
 
