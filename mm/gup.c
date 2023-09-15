@@ -2622,13 +2622,13 @@ static int gup_pte_range(pmd_t pmd, pmd_t *pmdp, unsigned long addr,
 		}
 
 		/*
-		 * We need to make the page accessible if and only if we are
+		 * We need to make the folio accessible if and only if we are
 		 * going to access its content (the FOLL_PIN case).  Please
 		 * see Documentation/core-api/pin_user_pages.rst for
 		 * details.
 		 */
 		if (flags & FOLL_PIN) {
-			ret = arch_make_page_accessible(page);
+			ret = arch_make_folio_accessible(folio);
 			if (ret) {
 				gup_put_folio(folio, 1, flags);
 				goto pte_unmap;
