@@ -657,30 +657,33 @@ void of_pci_make_dev_node(struct pci_dev *pdev)
 
 	cset = kmalloc(sizeof(*cset), GFP_KERNEL);
 	if (!cset)
-		goto failed;
+		goto failed_alloc_cset;
 	of_changeset_init(cset);
 
 	np = of_changeset_create_node(cset, ppnode, name);
 	if (!np)
-		goto failed;
-	np->data = cset;
+		goto failed_create_node;
 
 	ret = of_pci_add_properties(pdev, cset, np);
 	if (ret)
-		goto failed;
+		goto failed_add_prop;
 
 	ret = of_changeset_apply(cset);
 	if (ret)
-		goto failed;
+		goto failed_add_prop;
 
+	np->data = cset;
 	pdev->dev.of_node = np;
 	kfree(name);
 
 	return;
 
-failed:
-	if (np)
-		of_node_put(np);
+failed_add_prop:
+	of_node_put(np);
+failed_create_node:
+	of_changeset_destroy(cset);
+	kfree(cset);
+failed_alloc_cset:
 	kfree(name);
 }
 #endif
