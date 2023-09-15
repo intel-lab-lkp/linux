@@ -138,7 +138,13 @@
 void
 file_ra_state_init(struct file_ra_state *ra, struct address_space *mapping)
 {
+	unsigned int order = mapping_min_folio_order(mapping);
+	unsigned int min_nrpages = 1U << order;
+	unsigned int max_pages = inode_to_bdi(mapping->host)->io_pages;
+
 	ra->ra_pages = inode_to_bdi(mapping->host)->ra_pages;
+	if (ra->ra_pages < min_nrpages && min_nrpages < max_pages)
+		ra->ra_pages = min_nrpages;
 	ra->prev_pos = -1;
 }
 EXPORT_SYMBOL_GPL(file_ra_state_init);
