@@ -91,4 +91,13 @@ config MTK_SVS
 	  chip process corner, temperatures and other factors. Then DVFS
 	  driver could apply SVS bank voltage to PMIC/Buck.
 
+config MTK_SOCINFO
+	tristate "MediaTek SOCINFO"
+	depends on MTK_EFUSE && NVMEM
+	help
+	  Say y here to enable mtk socinfo information.
+	  This enables a sysfs node which shows attributes of MTK soc info.
+	  Information of soc info includes the manufacturer, the marketing
+	  name, and the soc used.
+
 endmenu
