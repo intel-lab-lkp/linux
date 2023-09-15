@@ -256,8 +256,10 @@ static int __static_call_init(struct module *mod,
 			}
 
 			site_mod = kzalloc(sizeof(*site_mod), GFP_KERNEL);
-			if (!site_mod)
+			if (!site_mod) {
+				key->mods = NULL;
 				return -ENOMEM;
+			}
 
 			/*
 			 * When the key has a direct sites pointer, extract
@@ -422,7 +424,7 @@ static void static_call_del_module(struct module *mod)
 			;
 
 		if (!site_mod)
-			continue;
+			break;
 
 		*prev = site_mod->next;
 		kfree(site_mod);
