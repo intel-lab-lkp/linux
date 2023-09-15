@@ -426,46 +426,58 @@ out:
 EXPORT_SYMBOL_GPL(gmap_destroy_page);
 
 /*
- * To be called with the page locked or with an extra reference! This will
- * prevent gmap_make_secure from touching the page concurrently. Having 2
- * parallel make_page_accessible is fine, as the UV calls will become a
- * no-op if the page is already exported.
+ * To be called with the folio locked or with an extra reference! This will
+ * prevent gmap_make_secure from touching the folio concurrently. Having 2
+ * parallel make_folio_accessible is fine, as the UV calls will become a
+ * no-op if the folio is already exported.
+ *
+ * Returns 0 on success or negative errno.
  */
-int arch_make_page_accessible(struct page *page)
+int arch_make_folio_accessible(struct folio *folio)
 {
-	int rc = 0;
+	unsigned long i, nr = folio_nr_pages(folio);
+	unsigned long pfn = folio_pfn(folio);
+	int err = 0;
 
 	/* Hugepage cannot be protected, so nothing to do */
-	if (PageHuge(page))
+	if (folio_test_hugetlb(folio))
 		return 0;
 
 	/*
 	 * PG_arch_1 is used in 3 places:
 	 * 1. for kernel page tables during early boot
 	 * 2. for storage keys of huge pages and KVM
-	 * 3. As an indication that this page might be secure. This can
+	 * 3. As an indication that this folio might be secure. This can
 	 *    overindicate, e.g. we set the bit before calling
 	 *    convert_to_secure.
 	 * As secure pages are never huge, all 3 variants can co-exists.
 	 */
-	if (!test_bit(PG_arch_1, &page->flags))
+	if (!test_bit(PG_arch_1, &folio->flags))
 		return 0;
 
-	rc = uv_pin_shared(page_to_phys(page));
-	if (!rc) {
-		clear_bit(PG_arch_1, &page->flags);
+	for (i = 0; i < nr; i++) {
+		err = uv_pin_shared((pfn + i) * PAGE_SIZE);
+		if (err)
+			break;
+	}
+	if (!err) {
+		clear_bit(PG_arch_1, &folio->flags);
 		return 0;
 	}
 
-	rc = uv_convert_from_secure(page_to_phys(page));
-	if (!rc) {
-		clear_bit(PG_arch_1, &page->flags);
+	for (i = 0; i < nr; i++) {
+		err = uv_convert_from_secure((pfn + i) * PAGE_SIZE);
+		if (err)
+			break;
+	}
+	if (!err) {
+		clear_bit(PG_arch_1, &folio->flags);
 		return 0;
 	}
 
-	return rc;
+	return err;
 }
-EXPORT_SYMBOL_GPL(arch_make_page_accessible);
+EXPORT_SYMBOL_GPL(arch_make_folio_accessible);
 
 #endif
 
