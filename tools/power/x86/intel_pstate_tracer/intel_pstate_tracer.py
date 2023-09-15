@@ -32,7 +32,7 @@ import re
 import signal
 import sys
 import getopt
-import Gnuplot
+from pygnuplot import gnuplot
 from numpy import *
 from decimal import *
 
@@ -295,7 +295,7 @@ def common_all_gnuplot_settings(output_png):
 def common_gnuplot_settings():
     """ common gnuplot settings. """
 
-    g_plot = Gnuplot.Gnuplot(persist=1)
+    g_plot = gnuplot.Gnuplot(persist=1)
 #   The following line is for rigor only. It seems to be assumed for .csv files
     g_plot('set datafile separator \",\"')
     g_plot('set ytics nomirror')

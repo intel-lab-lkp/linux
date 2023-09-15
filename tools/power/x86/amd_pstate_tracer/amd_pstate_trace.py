@@ -27,7 +27,6 @@ import re
 import signal
 import sys
 import getopt
-import Gnuplot
 from numpy import *
 from decimal import *
 sys.path.append(os.path.join(os.path.dirname(__file__), '../intel_pstate_tracer'))
