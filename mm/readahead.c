@@ -605,7 +605,11 @@ static void ondemand_readahead(struct readahead_control *ractl,
 	unsigned long add_pages;
 	pgoff_t index = readahead_index(ractl);
 	pgoff_t expected, prev_index;
-	unsigned int order = folio ? folio_order(folio) : 0;
+	unsigned int min_order = mapping_min_folio_order(ractl->mapping);
+	unsigned int min_nrpages = 1UL << min_order;
+	unsigned int order = folio ? folio_order(folio) : min_order;
+
+	VM_BUG_ON(ractl->_index & (min_nrpages - 1));
 
 	/*
 	 * If the request exceeds the readahead window, allow the read to
@@ -627,9 +631,13 @@ static void ondemand_readahead(struct readahead_control *ractl,
 	expected = round_up(ra->start + ra->size - ra->async_size,
 			1UL << order);
 	if (index == expected || index == (ra->start + ra->size)) {
-		ra->start += ra->size;
-		ra->size = get_next_ra_size(ra, max_pages);
+		ra->start += round_down(ra->size, min_nrpages);
+		ra->size = get_next_ra_size(ra, min_order, max_pages);
 		ra->async_size = ra->size;
+
+		VM_BUG_ON(ra->size & ((1UL << min_order) - 1));
+		VM_BUG_ON(ra->start & ((1UL << min_order) - 1));
+
 		goto readit;
 	}
 
@@ -647,13 +655,19 @@ static void ondemand_readahead(struct readahead_control *ractl,
 				max_pages);
 		rcu_read_unlock();
 
+		start = round_down(start, min_nrpages);
+
+		VM_BUG_ON(start & (min_nrpages - 1));
+		VM_BUG_ON(folio->index & (folio_nr_pages(folio) - 1));
+
 		if (!start || start - index > max_pages)
 			return;
 
 		ra->start = start;
 		ra->size = start - index;	/* old async_size */
-		ra->size += req_size;
-		ra->size = get_next_ra_size(ra, max_pages);
+		VM_BUG_ON(ra->size & (min_nrpages - 1));
+		ra->size += round_up(req_size, min_nrpages);
+		ra->size = get_next_ra_size(ra, min_order, max_pages);
 		ra->async_size = ra->size;
 		goto readit;
 	}
@@ -690,7 +704,7 @@ static void ondemand_readahead(struct readahead_control *ractl,
 
 initial_readahead:
 	ra->start = index;
-	ra->size = get_init_ra_size(req_size, max_pages);
+	ra->size = get_init_ra_size(req_size, min_order, max_pages);
 	ra->async_size = ra->size > req_size ? ra->size - req_size : ra->size;
 
 readit:
@@ -701,7 +715,7 @@ readit:
 	 * Take care of maximum IO pages as above.
 	 */
 	if (index == ra->start && ra->size == ra->async_size) {
-		add_pages = get_next_ra_size(ra, max_pages);
+		add_pages = get_next_ra_size(ra, min_order, max_pages);
 		if (ra->size + add_pages <= max_pages) {
 			ra->async_size = add_pages;
 			ra->size += add_pages;
@@ -712,6 +726,7 @@ readit:
 	}
 
 	ractl->_index = ra->start;
+	VM_BUG_ON(ractl->_index & (min_nrpages - 1));
 	page_cache_ra_order(ractl, ra, order);
 }
 
