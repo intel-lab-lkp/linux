@@ -59,6 +59,7 @@ struct st1232_ts_data {
 	const struct st_chip_info *chip_info;
 	int read_buf_len;
 	u8 *read_buf;
+	bool suspended;
 };
 
 static int st1232_ts_read_data(struct st1232_ts_data *ts, u8 reg,
@@ -173,8 +174,12 @@ static int st1232_ts_parse_and_report(struct st1232_ts_data *ts)
 static irqreturn_t st1232_ts_irq_handler(int irq, void *dev_id)
 {
 	struct st1232_ts_data *ts = dev_id;
+	struct i2c_client *client = ts->client;
 	int count;
 	int error;
+
+	if (ts->suspended && device_may_wakeup(&client->dev))
+		pm_wakeup_event(&client->dev, 0);
 
 	error = st1232_ts_read_data(ts, REG_XY_COORDINATES, ts->read_buf_len);
 	if (error)
@@ -345,6 +350,8 @@ static int st1232_ts_suspend(struct device *dev)
 	struct i2c_client *client = to_i2c_client(dev);
 	struct st1232_ts_data *ts = i2c_get_clientdata(client);
 
+	ts->suspended = true;
+
 	if (!device_may_wakeup(&client->dev)) {
 		disable_irq(client->irq);
 		st1232_ts_power(ts, false);
@@ -357,6 +364,8 @@ static int st1232_ts_resume(struct device *dev)
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct st1232_ts_data *ts = i2c_get_clientdata(client);
+
+	ts->suspended = false;
 
 	if (!device_may_wakeup(&client->dev)) {
 		enable_irq(client->irq);
