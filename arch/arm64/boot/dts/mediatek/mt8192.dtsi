@@ -1120,6 +1120,14 @@
 			#address-cells = <1>;
 			#size-cells = <1>;
 
+			socinfo_data1: socinfo-data1 {
+				reg = <0x044 0x4>;
+			};
+
+			socinfo_data2: socinfo-data2 {
+				reg = <0x050 0x4>;
+			};
+
 			lvts_e_data1: data1@1c0 {
 				reg = <0x1c0 0x58>;
 			};
@@ -1898,5 +1906,11 @@
 			clock-names = "apb", "smi";
 			power-domains = <&spm MT8192_POWER_DOMAIN_MDP>;
 		};
+	};
+
+	socinfo {
+		compatible = "mediatek,socinfo";
+		nvmem-cells = <&socinfo_data1 &socinfo_data2>;
+		nvmem-cell-names = "socinfo-data1", "socinfo-data2";
 	};
 };

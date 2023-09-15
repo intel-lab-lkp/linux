@@ -1681,6 +1681,9 @@
 			lvts_efuse_data2: lvts2-calib@1d0 {
 				reg = <0x1d0 0x38>;
 			};
+			socinfo_data1: socinfo-data1 {
+				reg = <0x7a0 0x4>;
+			};
 		};
 
 		u3phy2: t-phy@11c40000 {
@@ -3516,5 +3519,11 @@
 				};
 			};
 		};
+	};
+
+	socinfo {
+		compatible = "mediatek,socinfo";
+		nvmem-cells = <&socinfo_data1>;
+		nvmem-cell-names = "socinfo-data1";
 	};
 };

@@ -1660,6 +1660,10 @@
 				reg = <0x59c 0x4>;
 				bits = <0 3>;
 			};
+
+			socinfo_data1: socinfo-data1 {
+				reg = <0x7a0 0x4>;
+			};
 		};
 
 		mipi_tx0: dsi-phy@11cc0000 {
@@ -2082,5 +2086,11 @@
 			mediatek,smi = <&smi_common>;
 			power-domains = <&spm MT8186_POWER_DOMAIN_IPE>;
 		};
+	};
+
+	socinfo {
+		compatible = "mediatek,socinfo";
+		nvmem-cells = <&socinfo_data1>;
+		nvmem-cell-names = "socinfo-data1";
 	};
 };
