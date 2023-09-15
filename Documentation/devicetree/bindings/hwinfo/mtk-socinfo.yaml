@@ -1,0 +1,48 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/hwinfo/mtk-socinfo.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: MediaTek SoC ChipID
+
+maintainers:
+  - William Lin <william-tw.lin@mediatek.com>
+  - Matthias Brugger <matthias.bgg@gmail.com>
+  - Kevin Hilman <khilman@kernel.org>
+  - AngeloGioacchino Del Regno <angelogioacchino.delregno@collabora.com>
+
+description:
+  MediaTek SoCs store various product information in eFuses, including
+  Chip ID and Revision fields, usable to identify the manufacturer,
+  SoC version, plus segment and marketing names.
+
+properties:
+  compatible:
+    const: mediatek,socinfo
+
+  nvmem-cells:
+    maxItems: 2
+    description: Phandle to nvmem cells containing SoC identification data
+
+  nvmem-cell-names:
+    minItems: 1
+    items:
+      - const: socinfo-data1
+      - const: socinfo-data2
+
+required:
+  - compatible
+  - nvmem-cells
+  - nvmem-cell-names
+
+additionalProperties: false
+
+examples:
+  - |
+        socinfo {
+            compatible = "mediatek,socinfo";
+            nvmem-cells = <&socinfo_data1>, <&socinfo_data2>;
+            nvmem-cell-names = "socinfo-data1", "socinfo-data2";
+        };
+
