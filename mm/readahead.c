@@ -357,9 +357,17 @@ void force_page_cache_ra(struct readahead_control *ractl,
  * for small size, x 4 for medium, and x 2 for large
  * for 128k (32 page) max ra
  * 1-2 page = 16k, 3-4 page 32k, 5-8 page = 64k, > 8 page = 128k initial
+ *
+ * For higher order address space requirements we ensure no initial reads
+ * are ever less than the min number of pages required.
+ *
+ * We *always* cap the max io size allowed by the device.
  */
-static unsigned long get_init_ra_size(unsigned long size, unsigned long max)
+static unsigned long get_init_ra_size(unsigned long size,
+				      unsigned int min_order,
+				      unsigned long max)
 {
+	unsigned int min_nrpages = 1UL << min_order;
 	unsigned long newsize = roundup_pow_of_two(size);
 
 	if (newsize <= max / 32)
@@ -369,6 +377,15 @@ static unsigned long get_init_ra_size(unsigned long size, unsigned long max)
 	else
 		newsize = max;
 
+	if (newsize < min_nrpages) {
+		if (min_nrpages <= max)
+			newsize = min_nrpages;
+		else
+			newsize = round_up(max, min_nrpages);
+	}
+
+	VM_BUG_ON(newsize & (min_nrpages - 1));
+
 	return newsize;
 }
 
@@ -377,14 +394,19 @@ static unsigned long get_init_ra_size(unsigned long size, unsigned long max)
  *  return it as the new window size.
  */
 static unsigned long get_next_ra_size(struct file_ra_state *ra,
+				      unsigned int min_order,
 				      unsigned long max)
 {
-	unsigned long cur = ra->size;
+	unsigned int min_nrpages = 1UL << min_order;
+	unsigned long cur = max(ra->size, min_nrpages);
+
+	cur = round_down(cur, min_nrpages);
 
 	if (cur < max / 16)
 		return 4 * cur;
 	if (cur <= max / 2)
 		return 2 * cur;
+
 	return max;
 }
 
