@@ -131,11 +131,16 @@ xfs_sb_validate_fsb_count(
 	xfs_sb_t	*sbp,
 	uint64_t	nblocks)
 {
-	ASSERT(PAGE_SHIFT >= sbp->sb_blocklog);
 	ASSERT(sbp->sb_blocklog >= BBSHIFT);
+	unsigned long mapping_count;
+
+	if (sbp->sb_blocklog <= PAGE_SHIFT)
+		mapping_count = nblocks >> (PAGE_SHIFT - sbp->sb_blocklog);
+	else
+		mapping_count = nblocks << (sbp->sb_blocklog - PAGE_SHIFT);
 
 	/* Limited by ULONG_MAX of page cache index */
-	if (nblocks >> (PAGE_SHIFT - sbp->sb_blocklog) > ULONG_MAX)
+	if (mapping_count > ULONG_MAX)
 		return -EFBIG;
 	return 0;
 }
