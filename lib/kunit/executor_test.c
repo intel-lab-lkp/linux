@@ -27,13 +27,15 @@ static void parse_filter_test(struct kunit *test)
 {
 	struct kunit_glob_filter filter = {NULL, NULL};
 
-	kunit_parse_glob_filter(&filter, "suite");
+	if (!kunit_parse_glob_filter(&filter, "suite"))
+		return;
 	KUNIT_EXPECT_STREQ(test, filter.suite_glob, "suite");
 	KUNIT_EXPECT_FALSE(test, filter.test_glob);
 	kfree(filter.suite_glob);
 	kfree(filter.test_glob);
 
-	kunit_parse_glob_filter(&filter, "suite.test");
+	if (!kunit_parse_glob_filter(&filter, "suite.test"))
+		return;
 	KUNIT_EXPECT_STREQ(test, filter.suite_glob, "suite");
 	KUNIT_EXPECT_STREQ(test, filter.test_glob, "test");
 	kfree(filter.suite_glob);
