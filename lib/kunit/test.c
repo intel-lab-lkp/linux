@@ -512,6 +512,7 @@ static void kunit_run_case_catch_errors(struct kunit_suite *suite,
 {
 	struct kunit_try_catch_context context;
 	struct kunit_try_catch *try_catch;
+	int ret = 0;
 
 	try_catch = &test->try_catch;
 
@@ -522,7 +523,9 @@ static void kunit_run_case_catch_errors(struct kunit_suite *suite,
 	context.test = test;
 	context.suite = suite;
 	context.test_case = test_case;
-	kunit_try_catch_run(try_catch, &context);
+	ret = kunit_try_catch_run(try_catch, &context);
+	if (ret)
+		goto out;
 
 	/* Now run the cleanup */
 	kunit_try_catch_init(try_catch,
@@ -531,6 +534,7 @@ static void kunit_run_case_catch_errors(struct kunit_suite *suite,
 			     kunit_catch_run_case_cleanup);
 	kunit_try_catch_run(try_catch, &context);
 
+out:
 	/* Propagate the parameter result to the test case. */
 	if (test->status == KUNIT_FAILURE)
 		test_case->status = KUNIT_FAILURE;

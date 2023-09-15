@@ -55,7 +55,7 @@ static unsigned long kunit_test_timeout(void)
 	return 300 * msecs_to_jiffies(MSEC_PER_SEC); /* 5 min */
 }
 
-void kunit_try_catch_run(struct kunit_try_catch *try_catch, void *context)
+int kunit_try_catch_run(struct kunit_try_catch *try_catch, void *context)
 {
 	DECLARE_COMPLETION_ONSTACK(try_completion);
 	struct kunit *test = try_catch->test;
@@ -70,7 +70,8 @@ void kunit_try_catch_run(struct kunit_try_catch *try_catch, void *context)
 				  "kunit_try_catch_thread");
 	if (IS_ERR(task_struct)) {
 		try_catch->catch(try_catch->context);
-		return;
+		try_catch->try_result = -EINTR;
+		return PTR_ERR(task_struct);
 	}
 
 	time_remaining = wait_for_completion_timeout(&try_completion,
@@ -84,7 +85,7 @@ void kunit_try_catch_run(struct kunit_try_catch *try_catch, void *context)
 	exit_code = try_catch->try_result;
 
 	if (!exit_code)
-		return;
+		return 0;
 
 	if (exit_code == -EFAULT)
 		try_catch->try_result = 0;
@@ -94,5 +95,7 @@ void kunit_try_catch_run(struct kunit_try_catch *try_catch, void *context)
 		kunit_err(test, "Unknown error: %d\n", exit_code);
 
 	try_catch->catch(try_catch->context);
+
+	return 0;
 }
 EXPORT_SYMBOL_GPL(kunit_try_catch_run);

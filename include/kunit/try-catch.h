@@ -53,7 +53,7 @@ struct kunit_try_catch {
 	void *context;
 };
 
-void kunit_try_catch_run(struct kunit_try_catch *try_catch, void *context);
+int kunit_try_catch_run(struct kunit_try_catch *try_catch, void *context);
 
 void __noreturn kunit_try_catch_throw(struct kunit_try_catch *try_catch);
 
