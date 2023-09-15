@@ -21,7 +21,7 @@ static int mana_ib_cfg_vport_steering(struct mana_ib_dev *mib_dev,
 	u32 req_buf_size;
 	int i, err;
 
-	mdev = mib_dev->gdma_dev;
+	mdev = &mib_dev->gc->mana;
 	gc = mdev->gdma_context;
 
 	req_buf_size =
@@ -267,7 +267,7 @@ static int mana_ib_create_qp_raw(struct ib_qp *ibqp, struct ib_pd *ibpd,
 		rdma_udata_to_drv_context(udata, struct mana_ib_ucontext,
 					  ibucontext);
 	struct mana_ib_create_qp_resp resp = {};
-	struct gdma_dev *gd = mib_dev->gdma_dev;
+	struct gdma_dev *gd = &mib_dev->gc->mana;
 	struct mana_ib_create_qp ucmd = {};
 	struct mana_obj_spec wq_spec = {};
 	struct mana_obj_spec cq_spec = {};
@@ -437,7 +437,7 @@ static int mana_ib_destroy_qp_rss(struct mana_ib_qp *qp,
 {
 	struct mana_ib_dev *mib_dev =
 		container_of(qp->ibqp.device, struct mana_ib_dev, ib_dev);
-	struct gdma_dev *gd = mib_dev->gdma_dev;
+	struct gdma_dev *gd = &mib_dev->gc->mana;
 	struct mana_port_context *mpc;
 	struct mana_context *mc;
 	struct net_device *ndev;
@@ -464,7 +464,7 @@ static int mana_ib_destroy_qp_raw(struct mana_ib_qp *qp, struct ib_udata *udata)
 {
 	struct mana_ib_dev *mib_dev =
 		container_of(qp->ibqp.device, struct mana_ib_dev, ib_dev);
-	struct gdma_dev *gd = mib_dev->gdma_dev;
+	struct gdma_dev *gd = &mib_dev->gc->mana;
 	struct ib_pd *ibpd = qp->ibqp.pd;
 	struct mana_port_context *mpc;
 	struct mana_context *mc;
