@@ -1318,6 +1318,7 @@ static ssize_t pktgen_if_write(struct file *file,
 		return count;
 	}
 	if (!strcmp(name, "flag")) {
+		unsigned int n;
 		__u32 flag;
 		char f[32];
 		bool disable = false;
@@ -1339,18 +1340,19 @@ static ssize_t pktgen_if_write(struct file *file,
 			else
 				pkt_dev->flags |= flag;
 		} else {
-			sprintf(pg_result,
-				"Flag -:%s:- unknown\nAvailable flags, (prepend ! to un-set flag):\n%s",
-				f,
-				"IPSRC_RND, IPDST_RND, UDPSRC_RND, UDPDST_RND, "
-				"MACSRC_RND, MACDST_RND, TXSIZE_RND, IPV6, "
-				"MPLS_RND, VID_RND, SVID_RND, FLOW_SEQ, "
-				"QUEUE_MAP_RND, QUEUE_MAP_CPU, UDPCSUM, "
-				"NO_TIMESTAMP, "
-#ifdef CONFIG_XFRM
-				"IPSEC, "
+			pg_result += sprintf(pg_result,
+				"Flag -:%s:- unknown\n%s", f,
+				"Available flags, (prepend ! to un-set flag):\n");
+			for (n = 0; n < NR_PKT_FLAGS; n++) {
+#ifndef CONFIG_XFRM
+				if (!strcmp("IPSEC", pkt_flag_names[n]))
+					continue;
 #endif
-				"NODE_ALLOC\n");
+				pg_result += sprintf(pg_result, "%s, ", pkt_flag_names[n]);
+			}
+			/* Remove the comma and whitespace at the end */
+			*(pg_result - 2) = '\n';
+
 			return count;
 		}
 		sprintf(pg_result, "OK: flags=0x%x", pkt_dev->flags);
