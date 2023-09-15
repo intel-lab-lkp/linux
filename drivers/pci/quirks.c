@@ -6188,3 +6188,64 @@ DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_INTEL, 0x9a31, dpc_log_size);
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_XILINX, 0x5020, of_pci_make_dev_node);
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_XILINX, 0x5021, of_pci_make_dev_node);
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_REDHAT, 0x0005, of_pci_make_dev_node);
+
+/*
+ * When AMD PCIe root ports with AMD USB4 controllers attached to them are put
+ * into D3hot or D3cold downstream USB devices may fail to wakeup the system.
+ * This manifests as a missing wakeup interrupt.
+ *
+ * Prevent the associated root port from using PME to wake from D3hot or
+ * D3cold power states during s2idle.
+ * This will effectively put the root port into D0 power state over s2idle.
+ */
+static bool child_has_amd_usb4(struct pci_dev *pdev)
+{
+	struct pci_dev *child = NULL;
+
+	while ((child = pci_get_class(PCI_CLASS_SERIAL_USB_USB4, child))) {
+		if (child->vendor != PCI_VENDOR_ID_AMD)
+			continue;
+		if (pcie_find_root_port(child) != pdev)
+			continue;
+		return true;
+	}
+
+	return false;
+}
+
+static void quirk_reenable_pme(struct pci_dev *dev)
+{
+	u16 pmc;
+
+	if (!dev->pm_cap)
+		return;
+
+	if (!child_has_amd_usb4(dev))
+		return;
+
+	pci_read_config_word(dev, dev->pm_cap + PCI_PM_PMC, &pmc);
+	pmc &= PCI_PM_CAP_PME_MASK;
+	dev->pme_support = pmc >> PCI_PM_CAP_PME_SHIFT;
+}
+
+static void quirk_disable_pme_suspend(struct pci_dev *dev)
+{
+	int mask;
+
+	if (pm_suspend_via_firmware())
+		return;
+
+	if (!child_has_amd_usb4(dev))
+		return;
+
+	mask = (PCI_PM_CAP_PME_D3hot|PCI_PM_CAP_PME_D3cold) >> PCI_PM_CAP_PME_SHIFT;
+	if (!(dev->pme_support & mask))
+		return;
+	dev->pme_support &= ~mask;
+	dev_info_once(&dev->dev, "quirk: disabling PME from D3hot and D3cold at suspend\n");
+}
+
+DECLARE_PCI_FIXUP_SUSPEND(PCI_VENDOR_ID_AMD, 0x14b9, quirk_disable_pme_suspend);
+DECLARE_PCI_FIXUP_RESUME(PCI_VENDOR_ID_AMD, 0x14b9, quirk_reenable_pme);
+DECLARE_PCI_FIXUP_SUSPEND(PCI_VENDOR_ID_AMD, 0x14eb, quirk_disable_pme_suspend);
+DECLARE_PCI_FIXUP_RESUME(PCI_VENDOR_ID_AMD, 0x14eb, quirk_reenable_pme);
