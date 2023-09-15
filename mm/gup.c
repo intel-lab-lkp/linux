@@ -582,6 +582,7 @@ static struct page *follow_page_pte(struct vm_area_struct *vma,
 {
 	struct mm_struct *mm = vma->vm_mm;
 	struct page *page;
+	struct folio *folio;
 	spinlock_t *ptl;
 	pte_t *ptep, pte;
 	int ret;
@@ -644,7 +645,8 @@ static struct page *follow_page_pte(struct vm_area_struct *vma,
 		goto out;
 	}
 
-	VM_BUG_ON_PAGE((flags & FOLL_PIN) && PageAnon(page) &&
+	folio = page_folio(page);
+	VM_BUG_ON_PAGE((flags & FOLL_PIN) && folio_test_anon(folio) &&
 		       !PageAnonExclusive(page), page);
 
 	/* try_grab_page() does nothing unless FOLL_GET or FOLL_PIN is set. */
@@ -655,28 +657,28 @@ static struct page *follow_page_pte(struct vm_area_struct *vma,
 	}
 
 	/*
-	 * We need to make the page accessible if and only if we are going
+	 * We need to make the folio accessible if and only if we are going
 	 * to access its content (the FOLL_PIN case).  Please see
 	 * Documentation/core-api/pin_user_pages.rst for details.
 	 */
 	if (flags & FOLL_PIN) {
-		ret = arch_make_page_accessible(page);
+		ret = arch_make_folio_accessible(folio);
 		if (ret) {
-			unpin_user_page(page);
+			gup_put_folio(folio, 1, FOLL_PIN);
 			page = ERR_PTR(ret);
 			goto out;
 		}
 	}
 	if (flags & FOLL_TOUCH) {
 		if ((flags & FOLL_WRITE) &&
-		    !pte_dirty(pte) && !PageDirty(page))
-			set_page_dirty(page);
+		    !pte_dirty(pte) && !folio_test_dirty(folio))
+			folio_mark_dirty(folio);
 		/*
 		 * pte_mkyoung() would be more correct here, but atomic care
 		 * is needed to avoid losing the dirty bit: it is easier to use
-		 * mark_page_accessed().
+		 * folio_mark_accessed().
 		 */
-		mark_page_accessed(page);
+		folio_mark_accessed(folio);
 	}
 out:
 	pte_unmap_unlock(ptep, ptl);
