@@ -734,6 +734,36 @@ TRACE_EVENT(cxl_log_type,
 	)
 );
 
+TRACE_EVENT(cxl_opcode,
+
+	TP_PROTO(const struct cxl_memdev *cxlmd, u16 opcode, bool enabled),
+
+	TP_ARGS(cxlmd, opcode, enabled),
+
+	TP_STRUCT__entry(
+		__string(memdev, dev_name(&cxlmd->dev))
+		__string(host, dev_name(cxlmd->dev.parent))
+		__field(u64, serial)
+		__field(u16, opcode)
+		__field(bool, enabled)
+	),
+
+	TP_fast_assign(
+		__assign_str(memdev, dev_name(&cxlmd->dev));
+		__assign_str(host, dev_name(cxlmd->dev.parent));
+		__entry->serial = cxlmd->cxlds->serial;
+		__entry->opcode = opcode;
+		__entry->enabled = enabled;
+	),
+
+	TP_printk("memdev=%s host=%s serial=%lld opcode=%d state=%s",
+		  __get_str(memdev),
+		  __get_str(host),
+		  __entry->serial,
+		  __entry->opcode,
+		  __entry->enabled ? "enabled" : "unsupported"
+	)
+);
 #endif /* _CXL_EVENTS_H */
 
 #define TRACE_INCLUDE_FILE trace
