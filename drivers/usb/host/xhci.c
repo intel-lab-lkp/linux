@@ -84,6 +84,30 @@ int xhci_handshake(void __iomem *ptr, u32 mask, u32 done, u64 timeout_us)
 /*
  * Disable interrupts and begin the xHCI halting process.
  */
+int xhci_handshake_check_state(struct xhci_hcd *xhci,
+	void __iomem *ptr, u32 mask, u32 done, int usec)
+{
+	u32	result;
+
+	do {
+		result = readl_relaxed(ptr);
+		if (result == ~(u32)0)
+			return -ENODEV;
+
+		if (xhci->xhc_state & XHCI_STATE_REMOVING)
+			return -ENODEV;
+
+		result &= mask;
+		if (result == done)
+			return 0;
+
+		udelay(1);
+		usec--;
+	} while (usec > 0);
+
+	return -ETIMEDOUT;
+}
+
 void xhci_quiesce(struct xhci_hcd *xhci)
 {
 	u32 halted;
@@ -201,7 +225,8 @@ int xhci_reset(struct xhci_hcd *xhci, u64 timeout_us)
 	if (xhci->quirks & XHCI_INTEL_HOST)
 		udelay(1000);
 
-	ret = xhci_handshake(&xhci->op_regs->command, CMD_RESET, 0, timeout_us);
+	ret = xhci_handshake_check_state(xhci, &xhci->op_regs->command,
+						CMD_RESET, 0, timeout_us);
 	if (ret)
 		return ret;
 
