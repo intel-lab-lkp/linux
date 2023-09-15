@@ -274,8 +274,11 @@ static int __static_call_init(struct module *mod,
 				key->mods = site_mod;
 
 				site_mod = kzalloc(sizeof(*site_mod), GFP_KERNEL);
-				if (!site_mod)
+				if (!site_mod) {
+					kfree(key->mods);
+					key->mods = NULL;
 					return -ENOMEM;
+				}
 			}
 
 			site_mod->mod = mod;
