@@ -51,51 +51,51 @@ static int mana_ib_probe(struct auxiliary_device *adev,
 {
 	struct mana_adev *madev = container_of(adev, struct mana_adev, adev);
 	struct gdma_dev *mdev = madev->mdev;
+	struct mana_ib_dev *mib_dev;
 	struct mana_context *mc;
-	struct mana_ib_dev *dev;
 	int ret;
 
 	mc = mdev->driver_data;
 
-	dev = ib_alloc_device(mana_ib_dev, ib_dev);
-	if (!dev)
+	mib_dev = ib_alloc_device(mana_ib_dev, ib_dev);
+	if (!mib_dev)
 		return -ENOMEM;
 
-	ib_set_device_ops(&dev->ib_dev, &mana_ib_dev_ops);
+	ib_set_device_ops(&mib_dev->ib_dev, &mana_ib_dev_ops);
 
-	dev->ib_dev.phys_port_cnt = mc->num_ports;
+	mib_dev->ib_dev.phys_port_cnt = mc->num_ports;
 
-	ibdev_dbg(&dev->ib_dev, "mdev=%p id=%d num_ports=%d\n", mdev,
-		  mdev->dev_id.as_uint32, dev->ib_dev.phys_port_cnt);
+	ibdev_dbg(&mib_dev->ib_dev, "mdev=%p id=%d num_ports=%d\n", mdev,
+		  mdev->dev_id.as_uint32, mib_dev->ib_dev.phys_port_cnt);
 
-	dev->gdma_dev = mdev;
-	dev->ib_dev.node_type = RDMA_NODE_IB_CA;
+	mib_dev->gdma_dev = mdev;
+	mib_dev->ib_dev.node_type = RDMA_NODE_IB_CA;
 
 	/*
 	 * num_comp_vectors needs to set to the max MSIX index
 	 * when interrupts and event queues are implemented
 	 */
-	dev->ib_dev.num_comp_vectors = 1;
-	dev->ib_dev.dev.parent = mdev->gdma_context->dev;
+	mib_dev->ib_dev.num_comp_vectors = 1;
+	mib_dev->ib_dev.dev.parent = mdev->gdma_context->dev;
 
-	ret = ib_register_device(&dev->ib_dev, "mana_%d",
+	ret = ib_register_device(&mib_dev->ib_dev, "mana_%d",
 				 mdev->gdma_context->dev);
 	if (ret) {
-		ib_dealloc_device(&dev->ib_dev);
+		ib_dealloc_device(&mib_dev->ib_dev);
 		return ret;
 	}
 
-	dev_set_drvdata(&adev->dev, dev);
+	dev_set_drvdata(&adev->dev, mib_dev);
 
 	return 0;
 }
 
 static void mana_ib_remove(struct auxiliary_device *adev)
 {
-	struct mana_ib_dev *dev = dev_get_drvdata(&adev->dev);
+	struct mana_ib_dev *mib_dev = dev_get_drvdata(&adev->dev);
 
-	ib_unregister_device(&dev->ib_dev);
-	ib_dealloc_device(&dev->ib_dev);
+	ib_unregister_device(&mib_dev->ib_dev);
+	ib_dealloc_device(&mib_dev->ib_dev);
 }
 
 static const struct auxiliary_device_id mana_id_table[] = {

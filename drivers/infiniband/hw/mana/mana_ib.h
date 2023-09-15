@@ -92,10 +92,11 @@ struct mana_ib_rwq_ind_table {
 	struct ib_rwq_ind_table ib_ind_table;
 };
 
-int mana_ib_gd_create_dma_region(struct mana_ib_dev *dev, struct ib_umem *umem,
+int mana_ib_gd_create_dma_region(struct mana_ib_dev *mib_dev,
+				 struct ib_umem *umem,
 				 mana_handle_t *gdma_region);
 
-int mana_ib_gd_destroy_dma_region(struct mana_ib_dev *dev,
+int mana_ib_gd_destroy_dma_region(struct mana_ib_dev *mib_dev,
 				  mana_handle_t gdma_region);
 
 struct ib_wq *mana_ib_create_wq(struct ib_pd *pd,
@@ -129,9 +130,9 @@ int mana_ib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 
 int mana_ib_destroy_qp(struct ib_qp *ibqp, struct ib_udata *udata);
 
-int mana_ib_cfg_vport(struct mana_ib_dev *dev, u32 port_id,
+int mana_ib_cfg_vport(struct mana_ib_dev *mib_dev, u32 port_id,
 		      struct mana_ib_pd *pd, u32 doorbell_id);
-void mana_ib_uncfg_vport(struct mana_ib_dev *dev, struct mana_ib_pd *pd,
+void mana_ib_uncfg_vport(struct mana_ib_dev *mib_dev, struct mana_ib_pd *pd,
 			 u32 port);
 
 int mana_ib_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
