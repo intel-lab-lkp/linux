@@ -2558,14 +2558,17 @@ static int filemap_get_pages(struct kiocb *iocb, size_t count,
 {
 	struct file *filp = iocb->ki_filp;
 	struct address_space *mapping = filp->f_mapping;
+	unsigned int min_order = mapping_min_folio_order(mapping);
+	unsigned int nrpages = 1UL << min_order;
 	struct file_ra_state *ra = &filp->f_ra;
-	pgoff_t index = iocb->ki_pos >> PAGE_SHIFT;
+	pgoff_t index = round_down(iocb->ki_pos >> PAGE_SHIFT, nrpages);
 	pgoff_t last_index;
 	struct folio *folio;
 	int err = 0;
 
 	/* "last_index" is the index of the page beyond the end of the read */
 	last_index = DIV_ROUND_UP(iocb->ki_pos + count, PAGE_SIZE);
+	last_index = round_up(last_index, nrpages);
 retry:
 	if (fatal_signal_pending(current))
 		return -EINTR;
@@ -2581,8 +2584,7 @@ retry:
 	if (!folio_batch_count(fbatch)) {
 		if (iocb->ki_flags & (IOCB_NOWAIT | IOCB_WAITQ))
 			return -EAGAIN;
-		err = filemap_create_folio(filp, mapping,
-				iocb->ki_pos >> PAGE_SHIFT, fbatch);
+		err = filemap_create_folio(filp, mapping, index, fbatch);
 		if (err == AOP_TRUNCATED_PAGE)
 			goto retry;
 		return err;
