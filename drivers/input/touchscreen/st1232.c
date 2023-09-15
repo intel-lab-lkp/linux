@@ -345,10 +345,10 @@ static int st1232_ts_suspend(struct device *dev)
 	struct i2c_client *client = to_i2c_client(dev);
 	struct st1232_ts_data *ts = i2c_get_clientdata(client);
 
-	disable_irq(client->irq);
-
-	if (!device_may_wakeup(&client->dev))
+	if (!device_may_wakeup(&client->dev)) {
+		disable_irq(client->irq);
 		st1232_ts_power(ts, false);
+	}
 
 	return 0;
 }
@@ -358,10 +358,10 @@ static int st1232_ts_resume(struct device *dev)
 	struct i2c_client *client = to_i2c_client(dev);
 	struct st1232_ts_data *ts = i2c_get_clientdata(client);
 
-	if (!device_may_wakeup(&client->dev))
+	if (!device_may_wakeup(&client->dev)) {
+		enable_irq(client->irq);
 		st1232_ts_power(ts, true);
-
-	enable_irq(client->irq);
+	}
 
 	return 0;
 }
