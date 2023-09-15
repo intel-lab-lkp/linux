@@ -5,6 +5,7 @@
 
 #include <linux/gfp.h>
 #include <rdma/ib_verbs.h>
+#include <rdma/ib_umem.h>
 #include <linux/dma-mapping.h>
 #include <linux/slab.h>
 #include <linux/sched/mm.h>
@@ -367,7 +368,6 @@ struct siw_umem *siw_umem_get(u64 start, u64 len, bool writable)
 	struct siw_umem *umem;
 	struct mm_struct *mm_s;
 	u64 first_page_va;
-	unsigned long mlock_limit;
 	unsigned int foll_flags = FOLL_LONGTERM;
 	int num_pages, num_chunks, i, rv = 0;
 
@@ -396,9 +396,9 @@ struct siw_umem *siw_umem_get(u64 start, u64 len, bool writable)
 
 	mmap_read_lock(mm_s);
 
-	mlock_limit = rlimit(RLIMIT_MEMLOCK) >> PAGE_SHIFT;
 
-	if (atomic64_add_return(num_pages, &mm_s->pinned_vm) > mlock_limit) {
+	if (!ib_umem_check_rlimit_memlock(
+		atomic64_add_return(num_pages, &mm_s->pinned_vm))) {
 		rv = -ENOMEM;
 		goto out_sem_up;
 	}

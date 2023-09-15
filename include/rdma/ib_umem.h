@@ -11,6 +11,7 @@
 #include <linux/scatterlist.h>
 #include <linux/workqueue.h>
 #include <rdma/ib_verbs.h>
+#include <linux/sched/signal.h>
 
 struct ib_ucontext;
 struct ib_umem_odp;
@@ -69,6 +70,16 @@ static inline size_t ib_umem_num_dma_blocks(struct ib_umem *umem,
 static inline size_t ib_umem_num_pages(struct ib_umem *umem)
 {
 	return ib_umem_num_dma_blocks(umem, PAGE_SIZE);
+}
+
+static inline bool ib_umem_check_rlimit_memlock(unsigned long value)
+{
+	unsigned long lock_limit = rlimit(RLIMIT_MEMLOCK);
+
+	if (lock_limit == RLIM_INFINITY || capable(CAP_IPC_LOCK))
+		return true;
+
+	return value <= PFN_DOWN(lock_limit);
 }
 
 static inline void __rdma_umem_block_iter_start(struct ib_block_iter *biter,
