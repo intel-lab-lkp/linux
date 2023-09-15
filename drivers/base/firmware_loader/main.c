@@ -93,6 +93,7 @@ static inline struct fw_priv *to_fw_priv(struct kref *ref)
 DEFINE_MUTEX(fw_lock);
 
 struct firmware_cache fw_cache;
+bool reboot_in_progress;
 
 void fw_state_init(struct fw_priv *fw_priv)
 {
@@ -1613,6 +1614,7 @@ static int fw_shutdown_notify(struct notifier_block *unused1,
 	 * and avoid a deadlock with the usermode_lock.
 	 */
 	kill_pending_fw_fallback_reqs(false);
+	reboot_in_progress = true;
 
 	return NOTIFY_DONE;
 }
