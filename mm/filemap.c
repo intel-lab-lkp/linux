@@ -477,9 +477,12 @@ EXPORT_SYMBOL(filemap_flush);
 bool filemap_range_has_page(struct address_space *mapping,
 			   loff_t start_byte, loff_t end_byte)
 {
+	unsigned int min_order = mapping_min_folio_order(mapping);
+	unsigned int nrpages = 1UL << min_order;
+	pgoff_t index = round_down(start_byte >> PAGE_SHIFT, nrpages);
 	struct folio *folio;
-	XA_STATE(xas, &mapping->i_pages, start_byte >> PAGE_SHIFT);
-	pgoff_t max = end_byte >> PAGE_SHIFT;
+	XA_STATE(xas, &mapping->i_pages, index);
+	pgoff_t max = round_down(end_byte >> PAGE_SHIFT, nrpages);
 
 	if (end_byte < start_byte)
 		return false;
