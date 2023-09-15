@@ -52,6 +52,7 @@ properties:
           - qcom,scm-sdx55
           - qcom,scm-sdx65
           - qcom,scm-sdx75
+          - qcom,scm-sm4450
           - qcom,scm-sm6115
           - qcom,scm-sm6125
           - qcom,scm-sm6350
@@ -177,6 +178,7 @@ allOf:
               enum:
                 - qcom,scm-qdu1000
                 - qcom,scm-sc8280xp
+                - qcom,scm-sm4450
                 - qcom,scm-sm8450
                 - qcom,scm-sm8550
     then:
@@ -190,6 +192,7 @@ allOf:
           compatible:
             contains:
               enum:
+                - qcom,scm-sm4450
                 - qcom,scm-sm8450
                 - qcom,scm-sm8550
     then:
