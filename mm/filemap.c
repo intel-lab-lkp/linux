@@ -1915,14 +1915,6 @@ no_page:
 		if (WARN_ON_ONCE(!(fgp_flags & (FGP_LOCK | FGP_FOR_MMAP))))
 			fgp_flags |= FGP_LOCK;
 
-		if (!mapping_large_folio_support(mapping))
-			order = 0;
-		if (order > MAX_PAGECACHE_ORDER)
-			order = MAX_PAGECACHE_ORDER;
-		/* If we're not aligned, allocate a smaller folio */
-		if (index & ((1UL << order) - 1))
-			order = __ffs(index);
-
 		do {
 			gfp_t alloc_gfp = gfp;
 

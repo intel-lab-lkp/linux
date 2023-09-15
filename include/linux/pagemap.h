@@ -577,6 +577,39 @@ typedef unsigned int __bitwise fgf_t;
 #define FGP_WRITEBEGIN		(FGP_LOCK | FGP_WRITE | FGP_CREAT | FGP_STABLE)
 
 /**
+ * mapping_size_order - Get maximum folio order for the given file size.
+ * @mapping: Target address_space.
+ * @index: The page index.
+ * @size: The suggested size of the folio to create.
+ *
+ * This returns a high order for folios (when supported) based on the file size
+ * which the mapping currently allows at the given index. The index is relevant
+ * due to alignment considerations the mapping might have. The returned order
+ * may be less than the size passed.
+ *
+ * Return: The order.
+ */
+static inline unsigned int mapping_size_order(struct address_space *mapping,
+						 pgoff_t index, size_t size)
+{
+	unsigned int order = ilog2(size);
+
+	if ((order <= PAGE_SHIFT) || (!mapping_large_folio_support(mapping)))
+		return 0;
+	else
+		order = order - PAGE_SHIFT;
+
+	/* If we're not aligned, allocate a smaller folio */
+	if (index & ((1UL << order) - 1))
+		order = __ffs(index);
+
+	order = min_t(size_t, order, MAX_PAGECACHE_ORDER);
+
+	/* Order-1 not supported due to THP dependency */
+	return (order == 1) ? 0 : order;
+}
+
+/**
  * fgf_set_order - Encode a length in the fgf_t flags.
  * @size: The suggested size of the folio to create.
  *
@@ -587,13 +620,12 @@ typedef unsigned int __bitwise fgf_t;
  * due to alignment constraints, memory pressure, or the presence of
  * other folios at nearby indices.
  */
-static inline fgf_t fgf_set_order(size_t size)
+static inline fgf_t fgf_set_order(struct address_space *mapping, pgoff_t index,
+				  size_t size)
 {
-	unsigned int shift = ilog2(size);
+	unsigned int order = mapping_size_order(mapping, index, size);
 
-	if (shift <= PAGE_SHIFT)
-		return 0;
-	return (__force fgf_t)((shift - PAGE_SHIFT) << 26);
+	return (__force fgf_t)(order << 26);
 }
 
 void *filemap_get_entry(struct address_space *mapping, pgoff_t index);
