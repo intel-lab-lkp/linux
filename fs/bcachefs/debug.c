@@ -319,10 +319,9 @@ static ssize_t flush_buf(struct dump_iter *i)
 {
 	if (i->buf.pos) {
 		size_t bytes = min_t(size_t, i->buf.pos, i->size);
-		int err = copy_to_user(i->ubuf, i->buf.buf, bytes);
 
-		if (err)
-			return err;
+		if (copy_to_user(i->ubuf, i->buf.buf, bytes))
+			return -EFAULT;
 
 		i->ret	 += bytes;
 		i->ubuf	 += bytes;
