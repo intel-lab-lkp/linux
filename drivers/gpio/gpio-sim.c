@@ -717,13 +717,14 @@ gpio_sim_device_config_live_show(struct config_item *item, char *page)
 	return sprintf(page, "%c\n", live ? '1' : '0');
 }
 
-static char **gpio_sim_make_line_names(struct gpio_sim_bank *bank,
-				       unsigned int *line_names_size)
+static int gpio_sim_make_line_names(struct gpio_sim_bank *bank,
+				    char ***line_names)
 {
 	unsigned int max_offset = 0;
 	bool has_line_names = false;
 	struct gpio_sim_line *line;
-	char **line_names;
+	int line_names_size;
+	char **names;
 
 	list_for_each_entry(line, &bank->line_list, siblings) {
 		if (line->offset >= bank->num_lines)
@@ -743,26 +744,27 @@ static char **gpio_sim_make_line_names(struct gpio_sim_bank *bank,
 
 	if (!has_line_names)
 		/*
-		 * This is not an error - NULL means, there are no line
-		 * names configured.
+		 * This is not an error - 0 means, there are no line names
+		 * configured.
 		 */
-		return NULL;
+		return 0;
 
-	*line_names_size = max_offset + 1;
+	line_names_size = max_offset + 1;
 
-	line_names = kcalloc(*line_names_size, sizeof(*line_names), GFP_KERNEL);
-	if (!line_names)
-		return ERR_PTR(-ENOMEM);
+	names = kcalloc(line_names_size, sizeof(*line_names), GFP_KERNEL);
+	if (!names)
+		return -ENOMEM;
 
 	list_for_each_entry(line, &bank->line_list, siblings) {
 		if (line->offset >= bank->num_lines)
 			continue;
 
 		if (line->name && (line->offset <= max_offset))
-			line_names[line->offset] = line->name;
+			names[line->offset] = line->name;
 	}
 
-	return line_names;
+	*line_names = names;
+	return line_names_size;
 }
 
 static void gpio_sim_remove_hogs(struct gpio_sim_device *dev)
@@ -866,8 +868,9 @@ gpio_sim_make_bank_swnode(struct gpio_sim_bank *bank,
 			  struct fwnode_handle *parent)
 {
 	struct property_entry properties[GPIO_SIM_PROP_MAX];
-	unsigned int prop_idx = 0, line_names_size = 0;
 	char **line_names __free(kfree) = NULL;
+	unsigned int prop_idx = 0;
+	int line_names_size;
 
 	memset(properties, 0, sizeof(properties));
 
@@ -877,11 +880,11 @@ gpio_sim_make_bank_swnode(struct gpio_sim_bank *bank,
 		properties[prop_idx++] = PROPERTY_ENTRY_STRING("gpio-sim,label",
 							       bank->label);
 
-	line_names = gpio_sim_make_line_names(bank, &line_names_size);
-	if (IS_ERR(line_names))
-		return ERR_CAST(line_names);
+	line_names_size = gpio_sim_make_line_names(bank, &line_names);
+	if (line_names_size < 0)
+		return ERR_PTR(line_names_size);
 
-	if (line_names)
+	if (line_names_size > 0)
 		properties[prop_idx++] = PROPERTY_ENTRY_STRING_ARRAY_LEN(
 						"gpio-line-names",
 						line_names, line_names_size);
