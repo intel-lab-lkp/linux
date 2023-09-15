@@ -189,18 +189,21 @@ struct fscrypt_prepared_key {
 };
 
 /*
- * fscrypt_info - the "encryption key" for an inode
+ * fscrypt_inode_info - the "encryption key" for an inode
  *
  * When an encrypted file's key is made available, an instance of this struct is
  * allocated and stored in ->i_crypt_info.  Once created, it remains until the
  * inode is evicted.
  */
-struct fscrypt_info {
+struct fscrypt_inode_info {
 
 	/* The key in a form prepared for actual encryption/decryption */
 	struct fscrypt_prepared_key ci_enc_key;
 
-	/* True if ci_enc_key should be freed when this fscrypt_info is freed */
+	/*
+	 * True if ci_enc_key should be freed when this fscrypt_inode_info is
+	 * freed
+	 */
 	bool ci_owns_key;
 
 #ifdef CONFIG_FS_ENCRYPTION_INLINE_CRYPT
@@ -263,7 +266,7 @@ typedef enum {
 } fscrypt_direction_t;
 
 /* crypto.c */
-extern struct kmem_cache *fscrypt_info_cachep;
+extern struct kmem_cache *fscrypt_inode_info_cachep;
 int fscrypt_initialize(struct super_block *sb);
 int fscrypt_crypt_block(const struct inode *inode, fscrypt_direction_t rw,
 			u64 lblk_num, struct page *src_page,
@@ -294,7 +297,7 @@ union fscrypt_iv {
 };
 
 void fscrypt_generate_iv(union fscrypt_iv *iv, u64 lblk_num,
-			 const struct fscrypt_info *ci);
+			 const struct fscrypt_inode_info *ci);
 
 /* fname.c */
 bool __fscrypt_fname_encrypted_size(const union fscrypt_policy *policy,
@@ -332,17 +335,17 @@ void fscrypt_destroy_hkdf(struct fscrypt_hkdf *hkdf);
 
 /* inline_crypt.c */
 #ifdef CONFIG_FS_ENCRYPTION_INLINE_CRYPT
-int fscrypt_select_encryption_impl(struct fscrypt_info *ci);
+int fscrypt_select_encryption_impl(struct fscrypt_inode_info *ci);
 
 static inline bool
-fscrypt_using_inline_encryption(const struct fscrypt_info *ci)
+fscrypt_using_inline_encryption(const struct fscrypt_inode_info *ci)
 {
 	return ci->ci_inlinecrypt;
 }
 
 int fscrypt_prepare_inline_crypt_key(struct fscrypt_prepared_key *prep_key,
 				     const u8 *raw_key,
-				     const struct fscrypt_info *ci);
+				     const struct fscrypt_inode_info *ci);
 
 void fscrypt_destroy_inline_crypt_key(struct super_block *sb,
 				      struct fscrypt_prepared_key *prep_key);
@@ -353,7 +356,7 @@ void fscrypt_destroy_inline_crypt_key(struct super_block *sb,
  */
 static inline bool
 fscrypt_is_key_prepared(struct fscrypt_prepared_key *prep_key,
-			const struct fscrypt_info *ci)
+			const struct fscrypt_inode_info *ci)
 {
 	/*
 	 * The two smp_load_acquire()'s here pair with the smp_store_release()'s
@@ -370,13 +373,13 @@ fscrypt_is_key_prepared(struct fscrypt_prepared_key *prep_key,
 
 #else /* CONFIG_FS_ENCRYPTION_INLINE_CRYPT */
 
-static inline int fscrypt_select_encryption_impl(struct fscrypt_info *ci)
+static inline int fscrypt_select_encryption_impl(struct fscrypt_inode_info *ci)
 {
 	return 0;
 }
 
 static inline bool
-fscrypt_using_inline_encryption(const struct fscrypt_info *ci)
+fscrypt_using_inline_encryption(const struct fscrypt_inode_info *ci)
 {
 	return false;
 }
@@ -384,7 +387,7 @@ fscrypt_using_inline_encryption(const struct fscrypt_info *ci)
 static inline int
 fscrypt_prepare_inline_crypt_key(struct fscrypt_prepared_key *prep_key,
 				 const u8 *raw_key,
-				 const struct fscrypt_info *ci)
+				 const struct fscrypt_inode_info *ci)
 {
 	WARN_ON_ONCE(1);
 	return -EOPNOTSUPP;
@@ -398,7 +401,7 @@ fscrypt_destroy_inline_crypt_key(struct super_block *sb,
 
 static inline bool
 fscrypt_is_key_prepared(struct fscrypt_prepared_key *prep_key,
-			const struct fscrypt_info *ci)
+			const struct fscrypt_inode_info *ci)
 {
 	return smp_load_acquire(&prep_key->tfm) != NULL;
 }
@@ -598,17 +601,18 @@ struct fscrypt_mode {
 extern struct fscrypt_mode fscrypt_modes[];
 
 int fscrypt_prepare_key(struct fscrypt_prepared_key *prep_key,
-			const u8 *raw_key, const struct fscrypt_info *ci);
+			const u8 *raw_key, const struct fscrypt_inode_info *ci);
 
 void fscrypt_destroy_prepared_key(struct super_block *sb,
 				  struct fscrypt_prepared_key *prep_key);
 
-int fscrypt_set_per_file_enc_key(struct fscrypt_info *ci, const u8 *raw_key);
+int fscrypt_set_per_file_enc_key(struct fscrypt_inode_info *ci,
+				 const u8 *raw_key);
 
-int fscrypt_derive_dirhash_key(struct fscrypt_info *ci,
+int fscrypt_derive_dirhash_key(struct fscrypt_inode_info *ci,
 			       const struct fscrypt_master_key *mk);
 
-void fscrypt_hash_inode_number(struct fscrypt_info *ci,
+void fscrypt_hash_inode_number(struct fscrypt_inode_info *ci,
 			       const struct fscrypt_master_key *mk);
 
 int fscrypt_get_encryption_info(struct inode *inode, bool allow_unsupported);
@@ -643,10 +647,10 @@ static inline int fscrypt_require_key(struct inode *inode)
 
 void fscrypt_put_direct_key(struct fscrypt_direct_key *dk);
 
-int fscrypt_setup_v1_file_key(struct fscrypt_info *ci,
+int fscrypt_setup_v1_file_key(struct fscrypt_inode_info *ci,
 			      const u8 *raw_master_key);
 
-int fscrypt_setup_v1_file_key_via_subscribed_keyrings(struct fscrypt_info *ci);
+int fscrypt_setup_v1_file_key_via_subscribed_keyrings(struct fscrypt_inode_info *ci);
 
 /* policy.c */
 

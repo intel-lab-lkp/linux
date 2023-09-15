@@ -39,7 +39,7 @@ static mempool_t *fscrypt_bounce_page_pool = NULL;
 static struct workqueue_struct *fscrypt_read_workqueue;
 static DEFINE_MUTEX(fscrypt_init_mutex);
 
-struct kmem_cache *fscrypt_info_cachep;
+struct kmem_cache *fscrypt_inode_info_cachep;
 
 void fscrypt_enqueue_decrypt_work(struct work_struct *work)
 {
@@ -78,7 +78,7 @@ EXPORT_SYMBOL(fscrypt_free_bounce_page);
  * simply contain the lblk_num (e.g., IV_INO_LBLK_32).
  */
 void fscrypt_generate_iv(union fscrypt_iv *iv, u64 lblk_num,
-			 const struct fscrypt_info *ci)
+			 const struct fscrypt_inode_info *ci)
 {
 	u8 flags = fscrypt_policy_flags(&ci->ci_policy);
 
@@ -107,7 +107,7 @@ int fscrypt_crypt_block(const struct inode *inode, fscrypt_direction_t rw,
 	struct skcipher_request *req = NULL;
 	DECLARE_CRYPTO_WAIT(wait);
 	struct scatterlist dst, src;
-	struct fscrypt_info *ci = inode->i_crypt_info;
+	struct fscrypt_inode_info *ci = inode->i_crypt_info;
 	struct crypto_skcipher *tfm = ci->ci_enc_key.tfm;
 	int res = 0;
 
@@ -391,8 +391,9 @@ static int __init fscrypt_init(void)
 	if (!fscrypt_read_workqueue)
 		goto fail;
 
-	fscrypt_info_cachep = KMEM_CACHE(fscrypt_info, SLAB_RECLAIM_ACCOUNT);
-	if (!fscrypt_info_cachep)
+	fscrypt_inode_info_cachep = KMEM_CACHE(fscrypt_inode_info,
+					       SLAB_RECLAIM_ACCOUNT);
+	if (!fscrypt_inode_info_cachep)
 		goto fail_free_queue;
 
 	err = fscrypt_init_keyring();
@@ -402,7 +403,7 @@ static int __init fscrypt_init(void)
 	return 0;
 
 fail_free_info:
-	kmem_cache_destroy(fscrypt_info_cachep);
+	kmem_cache_destroy(fscrypt_inode_info_cachep);
 fail_free_queue:
 	destroy_workqueue(fscrypt_read_workqueue);
 fail:
