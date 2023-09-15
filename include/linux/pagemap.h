@@ -620,6 +620,7 @@ typedef unsigned int __bitwise fgf_t;
 
 /**
  * fgf_set_order - Encode a length in the fgf_t flags.
+ * @mapping: address_space struct from the inode
  * @size: The suggested size of the folio to create.
  *
  * The caller of __filemap_get_folio() can use this to suggest a preferred
@@ -629,13 +630,13 @@ typedef unsigned int __bitwise fgf_t;
  * due to alignment constraints, memory pressure, or the presence of
  * other folios at nearby indices.
  */
-static inline fgf_t fgf_set_order(size_t size)
+static inline fgf_t fgf_set_order(struct address_space *mapping, size_t size)
 {
 	unsigned int shift = ilog2(size);
+	unsigned int min_order = mapping_min_folio_order(mapping);
+	int order = max(min_order, shift - PAGE_SHIFT);
 
-	if (shift <= PAGE_SHIFT)
-		return 0;
-	return (__force fgf_t)((shift - PAGE_SHIFT) << 26);
+	return (__force fgf_t)((order) << 26);
 }
 
 void *filemap_get_entry(struct address_space *mapping, pgoff_t index);
