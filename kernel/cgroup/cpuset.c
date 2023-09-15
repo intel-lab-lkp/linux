@@ -1758,11 +1758,15 @@ update_parent_subparts:
 		 * empty cpuset is changed, we need to rebuild sched domains.
 		 * On default hierarchy, the cpuset needs to be a partition
 		 * root as well.
+		 * Also rebuild sched domains if the cpuset of an isolated
+		 * partition changed.
 		 */
-		if (!cpumask_empty(cp->cpus_allowed) &&
-		    is_sched_load_balance(cp) &&
-		   (!cgroup_subsys_on_dfl(cpuset_cgrp_subsys) ||
-		    is_partition_valid(cp)))
+		if ((!cpumask_empty(cp->cpus_allowed) &&
+		     is_sched_load_balance(cp) &&
+		     (!cgroup_subsys_on_dfl(cpuset_cgrp_subsys) ||
+		      is_partition_valid(cp))) ||
+		    (cp->partition_root_state == PRS_ISOLATED ||
+		     cp->partition_root_state == PRS_INVALID_ISOLATED))
 			need_rebuild_sched_domains = true;
 
 		rcu_read_lock();
