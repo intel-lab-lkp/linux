@@ -331,7 +331,6 @@ static inline bool xor_unlock_is_negative_byte(unsigned long mask,
 		: "memory");
 	return result;
 }
-#define xor_unlock_is_negative_byte xor_unlock_is_negative_byte
 
 /*
  *	The true 68020 and more advanced processors support the "bfffo"
