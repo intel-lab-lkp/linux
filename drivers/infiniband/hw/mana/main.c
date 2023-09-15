@@ -469,20 +469,15 @@ int mana_ib_get_port_immutable(struct ib_device *ibdev, u32 port_num,
 int mana_ib_query_device(struct ib_device *ibdev, struct ib_device_attr *props,
 			 struct ib_udata *uhw)
 {
-	props->max_qp = MANA_MAX_NUM_QUEUES;
-	props->max_qp_wr = MAX_SEND_BUFFERS_PER_QUEUE;
+	struct mana_ib_dev *mib_dev = container_of(ibdev,
+			struct mana_ib_dev, ib_dev);
 
-	/*
-	 * max_cqe could be potentially much bigger.
-	 * As this version of driver only support RAW QP, set it to the same
-	 * value as max_qp_wr
-	 */
-	props->max_cqe = MAX_SEND_BUFFERS_PER_QUEUE;
-
-	props->max_mr_size = MANA_IB_MAX_MR_SIZE;
-	props->max_mr = MANA_IB_MAX_MR;
-	props->max_send_sge = MAX_TX_WQE_SGL_ENTRIES;
-	props->max_recv_sge = MAX_RX_WQE_SGL_ENTRIES;
+	props->max_qp = mib_dev->adapter_caps.max_qp_count;
+	props->max_qp_wr = mib_dev->adapter_caps.max_requester_sq_size;
+	props->max_cqe = mib_dev->adapter_caps.max_requester_sq_size;
+	props->max_mr = mib_dev->adapter_caps.max_mr_count;
+	props->max_send_sge = mib_dev->adapter_caps.max_send_wqe_size;
+	props->max_recv_sge = mib_dev->adapter_caps.max_recv_wqe_size;
 
 	return 0;
 }
@@ -599,5 +594,51 @@ int mana_ib_create_error_eq(struct mana_ib_dev *mib_dev)
 
 	mib_dev->fatal_err_eq->eq.disable_needed = true;
 
+	return 0;
+}
+
+static void assign_caps(struct mana_ib_adapter_caps *caps,
+			struct mana_ib_query_adapter_caps_resp *resp)
+{
+	caps->max_sq_id = resp->max_sq_id;
+	caps->max_rq_id = resp->max_rq_id;
+	caps->max_cq_id = resp->max_cq_id;
+	caps->max_qp_count = resp->max_qp_count;
+	caps->max_cq_count = resp->max_cq_count;
+	caps->max_mr_count = resp->max_mr_count;
+	caps->max_pd_count = resp->max_pd_count;
+	caps->max_inbound_read_limit = resp->max_inbound_read_limit;
+	caps->max_outbound_read_limit = resp->max_outbound_read_limit;
+	caps->mw_count = resp->mw_count;
+	caps->max_srq_count = resp->max_srq_count;
+	caps->max_requester_sq_size = resp->max_requester_sq_size;
+	caps->max_responder_sq_size = resp->max_responder_sq_size;
+	caps->max_requester_rq_size = resp->max_requester_rq_size;
+	caps->max_responder_rq_size = resp->max_responder_rq_size;
+	caps->max_send_wqe_size = resp->max_send_wqe_size;
+	caps->max_recv_wqe_size = resp->max_recv_wqe_size;
+	caps->max_inline_data_size = resp->max_inline_data_size;
+}
+
+int mana_ib_query_adapter_caps(struct mana_ib_dev *mib_dev)
+{
+	struct mana_ib_query_adapter_caps_resp resp = {};
+	struct mana_ib_query_adapter_caps_req req = {};
+	int err;
+
+	mana_gd_init_req_hdr(&req.hdr, MANA_IB_GET_ADAPTER_CAP, sizeof(req),
+			     sizeof(resp));
+	req.hdr.resp.msg_version = MANA_IB_GET_ADAPTER_CAP_RESPONSE_V3;
+	req.hdr.dev_id = mib_dev->gc->mana_ib.dev_id;
+
+	err = mana_gd_send_request(mib_dev->gc, sizeof(req), &req,
+				   sizeof(resp), &resp);
+
+	if (err) {
+		ibdev_err(&mib_dev->ib_dev, "Failed to query adapter caps err %d", err);
+		return err;
+	}
+
+	assign_caps(&mib_dev->adapter_caps, &resp);
 	return 0;
 }
