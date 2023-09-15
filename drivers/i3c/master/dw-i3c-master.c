@@ -782,17 +782,15 @@ static int dw_i3c_master_daa(struct i3c_master_controller *m)
 	struct dw_i3c_master *master = to_dw_i3c_master(m);
 	struct dw_i3c_xfer *xfer;
 	struct dw_i3c_cmd *cmd;
-	u32 olddevs, newdevs;
 	u8 p, last_addr = 0;
-	int ret, pos;
+	int ret, pos, start_idx, end_idx;
 
-	olddevs = ~(master->free_pos);
+	start_idx = dw_i3c_master_get_free_pos(master);
+	if (start_idx < 0)
+		return start_idx;
 
 	/* Prepare DAT before launching DAA. */
-	for (pos = 0; pos < master->maxdevs; pos++) {
-		if (olddevs & BIT(pos))
-			continue;
-
+	for (pos = start_idx; pos < master->maxdevs; pos++) {
 		ret = i3c_master_get_free_addr(m, last_addr + 1);
 		if (ret < 0)
 			return -ENOSPC;
@@ -811,15 +809,10 @@ static int dw_i3c_master_daa(struct i3c_master_controller *m)
 	if (!xfer)
 		return -ENOMEM;
 
-	pos = dw_i3c_master_get_free_pos(master);
-	if (pos < 0) {
-		dw_i3c_master_free_xfer(xfer);
-		return pos;
-	}
 	cmd = &xfer->cmds[0];
 	cmd->cmd_hi = 0x1;
-	cmd->cmd_lo = COMMAND_PORT_DEV_COUNT(master->maxdevs - pos) |
-		      COMMAND_PORT_DEV_INDEX(pos) |
+	cmd->cmd_lo = COMMAND_PORT_DEV_COUNT(master->maxdevs - start_idx) |
+		      COMMAND_PORT_DEV_INDEX(start_idx) |
 		      COMMAND_PORT_CMD(I3C_CCC_ENTDAA) |
 		      COMMAND_PORT_ADDR_ASSGN_CMD |
 		      COMMAND_PORT_TOC |
@@ -829,13 +822,10 @@ static int dw_i3c_master_daa(struct i3c_master_controller *m)
 	if (!wait_for_completion_timeout(&xfer->comp, XFER_TIMEOUT))
 		dw_i3c_master_dequeue_xfer(master, xfer);
 
-	newdevs = GENMASK(master->maxdevs - cmd->rx_len - 1, 0);
-	newdevs &= ~olddevs;
+	end_idx = master->maxdevs - cmd->rx_len;
 
-	for (pos = 0; pos < master->maxdevs; pos++) {
-		if (newdevs & BIT(pos))
-			i3c_master_add_i3c_dev_locked(m, master->devs[pos].addr);
-	}
+	for (pos = start_idx; pos < end_idx; pos++)
+		i3c_master_add_i3c_dev_locked(m, master->devs[pos].addr);
 
 	dw_i3c_master_free_xfer(xfer);
 
