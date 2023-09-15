@@ -3288,13 +3288,17 @@ vm_fault_t filemap_fault(struct vm_fault *vmf)
 	struct file *file = vmf->vma->vm_file;
 	struct file *fpin = NULL;
 	struct address_space *mapping = file->f_mapping;
+	unsigned int min_order = mapping_min_folio_order(mapping);
+	unsigned int nrpages = 1UL << min_order;
 	struct inode *inode = mapping->host;
-	pgoff_t max_idx, index = vmf->pgoff;
+	pgoff_t max_idx, index = round_down(vmf->pgoff, nrpages);
 	struct folio *folio;
 	vm_fault_t ret = 0;
 	bool mapping_locked = false;
 
 	max_idx = DIV_ROUND_UP(i_size_read(inode), PAGE_SIZE);
+	max_idx = round_up(max_idx, nrpages);
+
 	if (unlikely(index >= max_idx))
 		return VM_FAULT_SIGBUS;
 
@@ -3386,13 +3390,17 @@ retry_find:
 	 * We must recheck i_size under page lock.
 	 */
 	max_idx = DIV_ROUND_UP(i_size_read(inode), PAGE_SIZE);
+	max_idx = round_up(max_idx, nrpages);
+
 	if (unlikely(index >= max_idx)) {
 		folio_unlock(folio);
 		folio_put(folio);
 		return VM_FAULT_SIGBUS;
 	}
 
-	vmf->page = folio_file_page(folio, index);
+	VM_BUG_ON_FOLIO(folio_order(folio) < min_order, folio);
+
+	vmf->page = folio_file_page(folio, vmf->pgoff);
 	return ret | VM_FAULT_LOCKED;
 
 page_not_uptodate:
