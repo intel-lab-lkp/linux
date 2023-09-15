@@ -1683,12 +1683,18 @@ static struct folio *shmem_alloc_folio(gfp_t gfp,
 }
 
 static struct folio *shmem_alloc_and_acct_folio(gfp_t gfp, struct inode *inode,
-		pgoff_t index, bool huge, unsigned int *order)
+		pgoff_t index, bool huge, unsigned int *order,
+		struct shmem_sb_info *sbinfo)
 {
 	struct shmem_inode_info *info = SHMEM_I(inode);
 	struct folio *folio;
 	int nr;
 	int err;
+
+	if (!sbinfo->noswap)
+		*order = 0;
+	else
+		*order = (*order == 1) ? 0 : *order;
 
 	if (!IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE))
 		huge = false;
@@ -2032,6 +2038,8 @@ repeat:
 		return 0;
 	}
 
+	order = mapping_size_order(inode->i_mapping, index, len);
+
 	if (!shmem_is_huge(inode, index, false,
 			   vma ? vma->vm_mm : NULL, vma ? vma->vm_flags : 0))
 		goto alloc_nohuge;
@@ -2039,11 +2047,11 @@ repeat:
 	huge_gfp = vma_thp_gfp_mask(vma);
 	huge_gfp = limit_gfp_mask(huge_gfp, gfp);
 	folio = shmem_alloc_and_acct_folio(huge_gfp, inode, index, true,
-					   &order);
+					   &order, sbinfo);
 	if (IS_ERR(folio)) {
 alloc_nohuge:
 		folio = shmem_alloc_and_acct_folio(gfp, inode, index, false,
-						   &order);
+						   &order, sbinfo);
 	}
 	if (IS_ERR(folio)) {
 		int retry = 5;
@@ -2147,6 +2155,8 @@ unacct:
 	if (folio_test_large(folio)) {
 		folio_unlock(folio);
 		folio_put(folio);
+		if (order > 0)
+			order--;
 		goto alloc_nohuge;
 	}
 unlock:
