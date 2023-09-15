@@ -703,6 +703,37 @@ TRACE_EVENT(cxl_poison,
 	)
 );
 
+TRACE_EVENT(cxl_log_type,
+
+	TP_PROTO(const struct cxl_memdev *cxlmd, uuid_t *uuid, int size),
+
+	TP_ARGS(cxlmd, uuid, size),
+
+	TP_STRUCT__entry(
+		__string(memdev, dev_name(&cxlmd->dev))
+		__string(host, dev_name(cxlmd->dev.parent))
+		__array(char, uuid, 16)
+		__field(u64, serial)
+		__field(int, size)
+	),
+
+	TP_fast_assign(
+		__assign_str(memdev, dev_name(&cxlmd->dev));
+		__assign_str(host, dev_name(cxlmd->dev.parent));
+		__entry->serial = cxlmd->cxlds->serial;
+		memcpy(__entry->uuid, uuid, 16);
+		__entry->size = size;
+	),
+
+	TP_printk("memdev=%s host=%s serial=%lld log_type=%pU size=%d",
+		  __get_str(memdev),
+		  __get_str(host),
+		  __entry->serial,
+		  __entry->uuid,
+		  __entry->size
+	)
+);
+
 #endif /* _CXL_EVENTS_H */
 
 #define TRACE_INCLUDE_FILE trace
