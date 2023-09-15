@@ -188,6 +188,7 @@ static void pvm_init_trap_regs(struct kvm_vcpu *vcpu)
 
 	/* Clear res0 and set res1 bits to trap potential new features. */
 	vcpu->arch.hcr_el2 &= ~(HCR_RES0);
+	vcpu->arch.hcrx_el2 &= ~(HCRX_EL2_RES0);
 	vcpu->arch.mdcr_el2 &= ~(MDCR_EL2_RES0);
 	if (!has_hvhe()) {
 		vcpu->arch.cptr_el2 |= CPTR_NVHE_EL2_RES1;
