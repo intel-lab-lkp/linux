@@ -1165,8 +1165,19 @@ static void dwc3_gadget_ep_free_request(struct usb_ep *ep,
 		struct usb_request *request)
 {
 	struct dwc3_request		*req = to_dwc3_request(request);
+	struct dwc3_ep			*dep = to_dwc3_ep(ep);
+	struct dwc3			*dwc = dep->dwc;
+	unsigned long			flags;
 
 	trace_dwc3_free_request(req);
+
+	spin_lock_irqsave(&dwc->lock, flags);
+
+	if (!list_is_singular(&req->list))
+		list_del(&req->list);
+
+	spin_unlock_irqrestore(&dwc->lock, flags);
+
 	kfree(req);
 }
 
