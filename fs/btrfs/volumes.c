@@ -1415,11 +1415,11 @@ struct btrfs_device *btrfs_scan_one_device(const char *path,
 		dev_t	devt;
 
 		ret = lookup_bdev(path, &devt);
-		if (ret) {
+		if (ret)
 			btrfs_warn(NULL, "lookup bdev failed for path %s: %d",
 			path, ret);
-		}
-		btrfs_free_stale_devices(devt, NULL);
+		else
+			btrfs_free_stale_devices(devt, NULL);
 
 		pr_debug("BTRFS (%s) skip registering single non seed device\n",
 			 path);
