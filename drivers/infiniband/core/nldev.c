@@ -308,10 +308,12 @@ static int fill_port_info(struct sk_buff *msg,
 			  struct ib_device *device, u32 port,
 			  const struct net *net)
 {
+	struct net_device *ipoib_netdev = NULL;
 	struct net_device *netdev = NULL;
 	struct ib_port_attr attr;
-	int ret;
 	u64 cap_flags = 0;
+	u16 pkey;
+	int ret;
 
 	if (fill_nldev_handle(msg, device))
 		return -EMSGSIZE;
@@ -340,6 +342,26 @@ static int fill_port_info(struct sk_buff *msg,
 			return -EMSGSIZE;
 		if (nla_put_u8(msg, RDMA_NLDEV_ATTR_LMC, attr.lmc))
 			return -EMSGSIZE;
+
+		ret = ib_query_pkey(device, port, 0, &pkey);
+		if (ret)
+			goto out;
+
+		ipoib_netdev = ib_get_net_dev_by_params(device, port,
+							pkey,
+							NULL, NULL);
+		if (ipoib_netdev && net_eq(dev_net(ipoib_netdev), net)) {
+			ret = nla_put_u32(msg,
+					  RDMA_NLDEV_ATTR_NDEV_INDEX,
+					  ipoib_netdev->ifindex);
+			if (ret)
+				goto out;
+			ret = nla_put_string(msg,
+					     RDMA_NLDEV_ATTR_NDEV_NAME,
+					     ipoib_netdev->name);
+			if (ret)
+				goto out;
+		}
 	}
 	if (nla_put_u8(msg, RDMA_NLDEV_ATTR_PORT_STATE, attr.state))
 		return -EMSGSIZE;
@@ -357,6 +379,9 @@ static int fill_port_info(struct sk_buff *msg,
 	}
 
 out:
+	if (ipoib_netdev)
+		dev_put(ipoib_netdev);
+
 	if (netdev)
 		dev_put(netdev);
 	return ret;
