@@ -515,6 +515,8 @@ xfs_stat_blksize(
 	struct xfs_inode	*ip)
 {
 	struct xfs_mount	*mp = ip->i_mount;
+	unsigned long	default_size = max_t(unsigned long, PAGE_SIZE,
+					     mp->m_sb.sb_blocksize);
 
 	/*
 	 * If the file blocks are being allocated from a realtime volume, then
@@ -543,7 +545,7 @@ xfs_stat_blksize(
 			return 1U << mp->m_allocsize_log;
 	}
 
-	return PAGE_SIZE;
+	return default_size;
 }
 
 STATIC int
