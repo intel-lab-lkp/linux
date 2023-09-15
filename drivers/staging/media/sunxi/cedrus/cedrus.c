@@ -404,6 +404,8 @@ static int cedrus_release(struct file *file)
 	struct cedrus_ctx *ctx = container_of(file->private_data,
 					      struct cedrus_ctx, fh);
 
+	cancel_delayed_work_sync(&ctx->dev->watchdog_work);
+
 	mutex_lock(&dev->dev_mutex);
 
 	v4l2_fh_del(&ctx->fh);
