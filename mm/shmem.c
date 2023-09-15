@@ -869,16 +869,16 @@ unsigned long shmem_partial_swap_usage(struct address_space *mapping,
 						pgoff_t start, pgoff_t end)
 {
 	XA_STATE(xas, &mapping->i_pages, start);
-	struct page *page;
+	struct folio *folio;
 	unsigned long swapped = 0;
 	unsigned long max = end - 1;
 
 	rcu_read_lock();
-	xas_for_each(&xas, page, max) {
-		if (xas_retry(&xas, page))
+	xas_for_each(&xas, folio, max) {
+		if (xas_retry(&xas, folio))
 			continue;
-		if (xa_is_value(page))
-			swapped++;
+		if (xa_is_value(folio))
+			swapped += (folio_nr_pages(folio));
 		if (xas.xa_index == max)
 			break;
 		if (need_resched()) {
@@ -1006,10 +1006,12 @@ static void shmem_undo_range(struct inode *inode, loff_t lstart, loff_t lend,
 			folio = fbatch.folios[i];
 
 			if (xa_is_value(folio)) {
+				long swaps_freed;
 				if (unfalloc)
 					continue;
-				nr_swaps_freed += !shmem_free_swap(mapping,
-							indices[i], folio);
+				swaps_freed = folio_nr_pages(folio);
+				if (!shmem_free_swap(mapping, indices[i], folio))
+					nr_swaps_freed += swaps_freed;
 				continue;
 			}
 
@@ -1075,14 +1077,16 @@ whole_folios:
 			folio = fbatch.folios[i];
 
 			if (xa_is_value(folio)) {
+				long swaps_freed;
 				if (unfalloc)
 					continue;
+				swaps_freed = folio_nr_pages(folio);
 				if (shmem_free_swap(mapping, indices[i], folio)) {
 					/* Swap was replaced by page: retry */
 					index = indices[i];
 					break;
 				}
-				nr_swaps_freed++;
+				nr_swaps_freed += swaps_freed;
 				continue;
 			}
 
@@ -1528,7 +1532,7 @@ static int shmem_writepage(struct page *page, struct writeback_control *wbc)
 	if (add_to_swap_cache(folio, swap,
 			__GFP_HIGH | __GFP_NOMEMALLOC | __GFP_NOWARN,
 			NULL) == 0) {
-		shmem_recalc_inode(inode, 0, 1);
+		shmem_recalc_inode(inode, 0, folio_nr_pages(folio));
 		swap_shmem_alloc(swap);
 		shmem_delete_from_page_cache(folio, swp_to_radix_entry(swap));
 
@@ -1801,6 +1805,7 @@ static void shmem_set_folio_swapin_error(struct inode *inode, pgoff_t index,
 	struct address_space *mapping = inode->i_mapping;
 	swp_entry_t swapin_error;
 	void *old;
+	long num_swap_pages;
 
 	swapin_error = make_poisoned_swp_entry();
 	old = xa_cmpxchg_irq(&mapping->i_pages, index,
@@ -1810,13 +1815,14 @@ static void shmem_set_folio_swapin_error(struct inode *inode, pgoff_t index,
 		return;
 
 	folio_wait_writeback(folio);
+	num_swap_pages = folio_nr_pages(folio);
 	delete_from_swap_cache(folio);
 	/*
 	 * Don't treat swapin error folio as alloced. Otherwise inode->i_blocks
 	 * won't be 0 when inode is released and thus trigger WARN_ON(i_blocks)
 	 * in shmem_evict_inode().
 	 */
-	shmem_recalc_inode(inode, -1, -1);
+	shmem_recalc_inode(inode, num_swap_pages, num_swap_pages);
 	swap_free(swap);
 }
 
@@ -1903,7 +1909,7 @@ static int shmem_swapin_folio(struct inode *inode, pgoff_t index,
 	if (error)
 		goto failed;
 
-	shmem_recalc_inode(inode, 0, -1);
+	shmem_recalc_inode(inode, 0, folio_nr_pages(folio));
 
 	if (sgp == SGP_WRITE)
 		folio_mark_accessed(folio);
@@ -2663,7 +2669,7 @@ int shmem_mfill_atomic_pte(pmd_t *dst_pmd,
 	if (ret)
 		goto out_delete_from_cache;
 
-	shmem_recalc_inode(inode, 1, 0);
+	shmem_recalc_inode(inode, folio_nr_pages(folio), 0);
 	folio_unlock(folio);
 	return 0;
 out_delete_from_cache:
