@@ -60,6 +60,8 @@ enum {
 	EV_IRQ_HPD_INT,
 	EV_HPD_UNPLUG_INT,
 	EV_USER_NOTIFICATION,
+	EV_POWER_PM_GET,
+	EV_POWER_PM_PUT,
 };
 
 #define EVENT_TIMEOUT	(HZ/10)	/* 100ms */
@@ -276,24 +278,11 @@ static int dp_display_bind(struct device *dev, struct device *master,
 	dp->dp_display.drm_dev = drm;
 	priv->dp[dp->id] = &dp->dp_display;
 
-	rc = dp->parser->parse(dp->parser);
-	if (rc) {
-		DRM_ERROR("device tree parsing failed\n");
-		goto end;
-	}
-
-
 	dp->drm_dev = drm;
 	dp->aux->drm_dev = drm;
 	rc = dp_aux_register(dp->aux);
 	if (rc) {
 		DRM_ERROR("DRM DP AUX register failed\n");
-		goto end;
-	}
-
-	rc = dp_power_client_init(dp->power);
-	if (rc) {
-		DRM_ERROR("Power client create failed\n");
 		goto end;
 	}
 
@@ -319,10 +308,6 @@ static void dp_display_unbind(struct device *dev, struct device *master,
 {
 	struct dp_display_private *dp = dev_get_dp_display_private(dev);
 	struct msm_drm_private *priv = dev_get_drvdata(master);
-
-	/* disable all HPD interrupts */
-	if (dp->core_initialized)
-		dp_catalog_hpd_config_intr(dp->catalog, DP_DP_HPD_INT_MASK, false);
 
 	kthread_stop(dp->ev_tsk);
 
@@ -465,6 +450,18 @@ static void dp_display_host_deinit(struct dp_display_private *dp)
 	dp_aux_deinit(dp->aux);
 	dp_power_deinit(dp->power);
 	dp->core_initialized = false;
+}
+
+static void dp_display_pm_get(struct dp_display_private *dp)
+{
+	if (pm_runtime_resume_and_get(&dp->pdev->dev))
+		DRM_ERROR("failed to start power\n");
+}
+
+static void dp_display_pm_put(struct dp_display_private *dp)
+{
+	pm_runtime_mark_last_busy(&dp->pdev->dev);
+	pm_runtime_put_autosuspend(&dp->pdev->dev);
 }
 
 static int dp_display_usbpd_configure_cb(struct device *dev)
@@ -1096,7 +1093,6 @@ static int hpd_event_thread(void *data)
 
 		switch (todo->event_id) {
 		case EV_HPD_INIT_SETUP:
-			dp_display_host_init(dp_priv);
 			break;
 		case EV_HPD_PLUG_INT:
 			dp_hpd_plug_handle(dp_priv, todo->data);
@@ -1110,6 +1106,12 @@ static int hpd_event_thread(void *data)
 		case EV_USER_NOTIFICATION:
 			dp_display_send_hpd_notification(dp_priv,
 						todo->data);
+			break;
+		case EV_POWER_PM_GET:
+			dp_display_pm_get(dp_priv);
+			break;
+		case EV_POWER_PM_PUT:
+			dp_display_pm_put(dp_priv);
 			break;
 		default:
 			break;
@@ -1251,6 +1253,18 @@ static int dp_display_probe(struct platform_device *pdev)
 		return -EPROBE_DEFER;
 	}
 
+	rc = dp->parser->parse(dp->parser);
+	if (rc) {
+		DRM_ERROR("device tree parsing failed\n");
+		return -EPROBE_DEFER;
+	}
+
+	rc = dp_power_client_init(dp->power);
+	if (rc) {
+		DRM_ERROR("Power client create failed\n");
+		return -EPROBE_DEFER;
+	}
+
 	/* setup event q */
 	mutex_init(&dp->event_mutex);
 	init_waitqueue_head(&dp->event_q);
@@ -1262,6 +1276,10 @@ static int dp_display_probe(struct platform_device *pdev)
 	init_completion(&dp->audio_comp);
 
 	platform_set_drvdata(pdev, &dp->dp_display);
+
+	devm_pm_runtime_enable(&pdev->dev);
+	pm_runtime_set_autosuspend_delay(&pdev->dev, 1000);
+	pm_runtime_use_autosuspend(&pdev->dev);
 
 	rc = dp_display_request_irq(dp);
 	if (rc)
@@ -1284,6 +1302,36 @@ static int dp_display_remove(struct platform_device *pdev)
 	dp_display_deinit_sub_modules(dp);
 
 	platform_set_drvdata(pdev, NULL);
+
+	pm_runtime_put_sync_suspend(&pdev->dev);
+	pm_runtime_dont_use_autosuspend(&pdev->dev);
+	pm_runtime_disable(&pdev->dev);
+
+	return 0;
+}
+
+static int dp_pm_runtime_suspend(struct device *dev)
+{
+	struct dp_display_private *dp = dev_get_dp_display_private(dev);
+
+	if (dp->dp_display.is_edp) {
+		dp_display_host_phy_exit(dp);
+		dp_catalog_ctrl_hpd_disable(dp->catalog);
+	}
+	dp_display_host_deinit(dp);
+
+	return 0;
+}
+
+static int dp_pm_runtime_resume(struct device *dev)
+{
+	struct dp_display_private *dp = dev_get_dp_display_private(dev);
+
+	dp_display_host_init(dp);
+	if (dp->dp_display.is_edp) {
+		dp_catalog_ctrl_hpd_enable(dp->catalog);
+		dp_display_host_phy_init(dp);
+	}
 
 	return 0;
 }
@@ -1389,6 +1437,7 @@ static int dp_pm_suspend(struct device *dev)
 }
 
 static const struct dev_pm_ops dp_pm_ops = {
+	SET_RUNTIME_PM_OPS(dp_pm_runtime_suspend, dp_pm_runtime_resume, NULL)
 	.suspend = dp_pm_suspend,
 	.resume =  dp_pm_resume,
 };
@@ -1473,10 +1522,6 @@ static int dp_display_get_next_bridge(struct msm_dp *dp)
 	aux_bus = of_get_child_by_name(dev->of_node, "aux-bus");
 
 	if (aux_bus && dp->is_edp) {
-		dp_display_host_init(dp_priv);
-		dp_catalog_ctrl_hpd_enable(dp_priv->catalog);
-		dp_display_host_phy_init(dp_priv);
-
 		/*
 		 * The code below assumes that the panel will finish probing
 		 * by the time devm_of_dp_aux_populate_ep_devices() returns.
@@ -1578,6 +1623,11 @@ void dp_bridge_atomic_enable(struct drm_bridge *drm_bridge,
 		dp_hpd_plug_handle(dp_display, 0);
 
 	mutex_lock(&dp_display->event_mutex);
+	if (pm_runtime_resume_and_get(&dp_display->pdev->dev)) {
+		DRM_ERROR("failed to start power\n");
+		mutex_unlock(&dp_display->event_mutex);
+		return;
+	}
 
 	state = dp_display->hpd_state;
 	if (state != ST_DISPLAY_OFF && state != ST_MAINLINK_READY) {
@@ -1658,6 +1708,8 @@ void dp_bridge_atomic_post_disable(struct drm_bridge *drm_bridge,
 	}
 
 	drm_dbg_dp(dp->drm_dev, "type=%d Done\n", dp->connector_type);
+
+	pm_runtime_put_sync(&dp_display->pdev->dev);
 	mutex_unlock(&dp_display->event_mutex);
 }
 
@@ -1697,6 +1749,9 @@ void dp_bridge_hpd_enable(struct drm_bridge *bridge)
 	struct dp_display_private *dp = container_of(dp_display, struct dp_display_private, dp_display);
 
 	mutex_lock(&dp->event_mutex);
+	if (pm_runtime_resume_and_get(&dp->pdev->dev))
+		DRM_ERROR("failed to start power\n");
+
 	dp_catalog_ctrl_hpd_enable(dp->catalog);
 
 	/* enable HDP interrupts */
@@ -1718,6 +1773,9 @@ void dp_bridge_hpd_disable(struct drm_bridge *bridge)
 	dp_catalog_ctrl_hpd_disable(dp->catalog);
 
 	dp_display->internal_hpd = false;
+
+	pm_runtime_mark_last_busy(&dp->pdev->dev);
+	pm_runtime_put_autosuspend(&dp->pdev->dev);
 	mutex_unlock(&dp->event_mutex);
 }
 
@@ -1732,13 +1790,11 @@ void dp_bridge_hpd_notify(struct drm_bridge *bridge,
 	if (dp_display->internal_hpd)
 		return;
 
-	if (!dp->core_initialized) {
-		drm_dbg_dp(dp->drm_dev, "not initialized\n");
-		return;
-	}
-
-	if (!dp_display->link_ready && status == connector_status_connected)
+	if (!dp_display->link_ready && status == connector_status_connected) {
+		dp_add_event(dp, EV_POWER_PM_GET, 0, 0);
 		dp_add_event(dp, EV_HPD_PLUG_INT, 0, 0);
-	else if (dp_display->link_ready && status == connector_status_disconnected)
+	} else if (dp_display->link_ready && status == connector_status_disconnected) {
 		dp_add_event(dp, EV_HPD_UNPLUG_INT, 0, 0);
+		dp_add_event(dp, EV_POWER_PM_PUT, 0, 0);
+	}
 }
