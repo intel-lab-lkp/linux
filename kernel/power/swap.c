@@ -22,6 +22,7 @@
 #include <linux/swap.h>
 #include <linux/swapops.h>
 #include <linux/pm.h>
+#include <linux/pm_qos.h>
 #include <linux/slab.h>
 #include <linux/lzo.h>
 #include <linux/vmalloc.h>
@@ -1180,6 +1181,7 @@ static int load_image_lzo(struct swap_map_handle *handle,
 	unsigned char **page = NULL;
 	struct dec_data *data = NULL;
 	struct crc_data *crc = NULL;
+	struct pm_qos_request qos;
 
 	hib_init_batch(&hb);
 
@@ -1189,6 +1191,8 @@ static int load_image_lzo(struct swap_map_handle *handle,
 	 */
 	nr_threads = num_online_cpus() - 1;
 	nr_threads = clamp_val(nr_threads, 1, LZO_THREADS);
+
+	cpu_latency_qos_add_request(&qos, 0);
 
 	page = vmalloc(array_size(LZO_MAX_RD_PAGES, sizeof(*page)));
 	if (!page) {
@@ -1469,6 +1473,8 @@ out_clean:
 		vfree(data);
 	}
 	vfree(page);
+
+	cpu_latency_qos_remove_request(&qos);
 
 	return ret;
 }
