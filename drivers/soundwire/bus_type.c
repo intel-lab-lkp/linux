@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 // Copyright(c) 2015-17 Intel Corporation.
 
+#include <linux/irqdomain.h>
 #include <linux/module.h>
 #include <linux/mod_devicetable.h>
 #include <linux/pm_domain.h>
