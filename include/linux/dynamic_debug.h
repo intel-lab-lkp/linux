@@ -39,6 +39,16 @@ struct _ddebug {
 #define _DPRINTK_FLAGS_INCL_TID		(1<<4)
 #define _DPRINTK_FLAGS_INCL_SOURCENAME	(1<<5)
 
+#if defined CONFIG_DYNAMIC_DEBUG_DST
+	/*
+	 * The 6th and 7th bits of the flags are used to determine
+	 * destination of debug logs, currently supported destinations
+	 * are defined in ddebug_dst_type enumeration
+	 */
+#define _DPRINTK_FLAGS_DST_SHIFT	6
+#define _DPRINTK_FLAGS_DST_MASK	(3<<_DPRINTK_FLAGS_DST_SHIFT)
+#endif
+
 #define _DPRINTK_FLAGS_INCL_ANY		\
 	(_DPRINTK_FLAGS_INCL_MODNAME | _DPRINTK_FLAGS_INCL_FUNCNAME |\
 	 _DPRINTK_FLAGS_INCL_LINENO  | _DPRINTK_FLAGS_INCL_TID |\
@@ -55,6 +65,10 @@ struct _ddebug {
 		struct static_key_true dd_key_true;
 		struct static_key_false dd_key_false;
 	} key;
+#endif
+
+#if defined CONFIG_DYNAMIC_DEBUG_DST
+	struct ddebug_dst *dst;
 #endif
 } __attribute__((aligned(8)));
 
@@ -281,12 +295,28 @@ void __dynamic_ibdev_dbg(struct _ddebug *descriptor,
 	_dynamic_func_call(fmt, __dynamic_ibdev_dbg,		\
 			   dev, fmt, ##__VA_ARGS__)
 
+#if defined CONFIG_DYNAMIC_DEBUG_DST
+
+void __print_hex_dump_dst(const struct _ddebug *descriptor, const char *level,
+			  const char *prefix_str, int prefix_type, int rowsize,
+			  int groupsize, const void *buf, size_t len,
+			  bool ascii);
+
+#define dynamic_hex_dump(prefix_str, prefix_type, rowsize,				\
+			 groupsize, buf, len, ascii)					\
+	_dynamic_func_call(__builtin_constant_p(prefix_str) ? prefix_str : "hexdump",	\
+			   __print_hex_dump_dst,					\
+			   KERN_DEBUG, prefix_str, prefix_type,				\
+			   rowsize, groupsize, buf, len, ascii)
+#else
+
 #define dynamic_hex_dump(prefix_str, prefix_type, rowsize,		\
 			 groupsize, buf, len, ascii)			\
 	_dynamic_func_call_no_desc(__builtin_constant_p(prefix_str) ? prefix_str : "hexdump", \
 				   print_hex_dump,			\
 				   KERN_DEBUG, prefix_str, prefix_type,	\
 				   rowsize, groupsize, buf, len, ascii)
+#endif
 
 /* for test only, generally expect drm.debug style macro wrappers */
 #define __pr_debug_cls(cls, fmt, ...) do {			\
