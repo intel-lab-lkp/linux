@@ -212,5 +212,9 @@ SYM_FUNC_START(__memmove)
 SYM_FUNC_END(__memmove)
 EXPORT_SYMBOL(__memmove)
 
+#ifdef CONFIG_UML
+SYM_FUNC_ALIAS_WEAK(memmove, __memmove)
+#else
 SYM_FUNC_ALIAS(memmove, __memmove)
+#endif
 EXPORT_SYMBOL(memmove)
