@@ -815,12 +815,14 @@ EXPORT_SYMBOL(file_write_and_wait_range);
 void replace_page_cache_folio(struct folio *old, struct folio *new)
 {
 	struct address_space *mapping = old->mapping;
+	unsigned int min_order = mapping_min_folio_order(mapping);
 	void (*free_folio)(struct folio *) = mapping->a_ops->free_folio;
 	pgoff_t offset = old->index;
 	XA_STATE(xas, &mapping->i_pages, offset);
 
 	VM_BUG_ON_FOLIO(!folio_test_locked(old), old);
 	VM_BUG_ON_FOLIO(!folio_test_locked(new), new);
+	VM_BUG_ON_FOLIO(folio_order(new) != folio_order(old), new);
 	VM_BUG_ON_FOLIO(new->mapping, new);
 
 	folio_get(new);
@@ -828,6 +830,11 @@ void replace_page_cache_folio(struct folio *old, struct folio *new)
 	new->index = offset;
 
 	mem_cgroup_migrate(old, new);
+
+	if (!folio_test_hugetlb(new)) {
+		VM_BUG_ON_FOLIO(folio_order(new) < min_order, new);
+		xas_set_order(&xas, offset, folio_order(new));
+	}
 
 	xas_lock_irq(&xas);
 	xas_store(&xas, new);
