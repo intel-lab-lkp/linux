@@ -10785,6 +10785,79 @@ static struct ibm_struct dprc_driver_data = {
 	.name = "dprc",
 };
 
+/*
+ * Auxmac
+ *
+ * This auxiliary mac address is enabled in the bios through the
+ * Mac Address Passthrough feature. In most cases, there are three
+ * possibilities: Internal Mac, Second Mac, and disabled.
+ *
+ */
+
+#define AUXMAC_LEN 12
+#define AUXMAC_START 9
+#define AUXMAC_STRLEN 22
+static char auxmac[AUXMAC_LEN];
+
+static int auxmac_init(struct ibm_init_struct *iibm)
+{
+	acpi_status status;
+	struct acpi_buffer buffer = { ACPI_ALLOCATE_BUFFER, NULL };
+	union acpi_object *obj;
+
+	status = acpi_evaluate_object(NULL, "\\MACA", NULL, &buffer);
+
+	if (ACPI_FAILURE(status))
+		return -ENODEV;
+
+	obj = (union acpi_object *)buffer.pointer;
+
+	if (obj->type != ACPI_TYPE_STRING || obj->string.length != AUXMAC_STRLEN) {
+		pr_info("Invalid buffer for mac addr passthrough.\n");
+		goto auxmacinvalid;
+	}
+
+	if (strncmp(obj->string.pointer + 0x8, "#", 1) != 0 ||
+	    strncmp(obj->string.pointer + 0x15, "#", 1) != 0) {
+		pr_info("Invalid header for mac addr passthrough.\n");
+		goto auxmacinvalid;
+	}
+
+	if (strncmp(obj->string.pointer + 0x9, "XXXXXXXXXXXX", AUXMAC_LEN) == 0)
+		memcpy(auxmac, "disabled", 9);
+	else
+		memcpy(auxmac, obj->string.pointer + AUXMAC_START, AUXMAC_LEN);
+
+	kfree(obj);
+	return 0;
+
+auxmacinvalid:
+	kfree(obj);
+	memcpy(auxmac, "unavailable", 11);
+	return 0;
+}
+
+static struct ibm_struct auxmac_data = {
+	.name = "auxmac",
+};
+
+static ssize_t auxmac_show(struct device *dev,
+			   struct device_attribute *attr,
+			   char *buf)
+{
+	return sysfs_emit(buf, "%s\n", auxmac);
+}
+static DEVICE_ATTR_RO(auxmac);
+
+static struct attribute *auxmac_attributes[] = {
+	&dev_attr_auxmac.attr,
+	NULL
+};
+
+static const struct attribute_group auxmac_attr_group = {
+	.attrs = auxmac_attributes,
+};
+
 /* --------------------------------------------------------------------- */
 
 static struct attribute *tpacpi_driver_attributes[] = {
@@ -10843,6 +10916,7 @@ static const struct attribute_group *tpacpi_groups[] = {
 	&proxsensor_attr_group,
 	&kbdlang_attr_group,
 	&dprc_attr_group,
+	&auxmac_attr_group,
 	NULL,
 };
 
@@ -11413,6 +11487,10 @@ static struct ibm_init_struct ibms_init[] __initdata = {
 	{
 		.init = tpacpi_dprc_init,
 		.data = &dprc_driver_data,
+	},
+	{
+		.init = auxmac_init,
+		.data = &auxmac_data,
 	},
 };
 
