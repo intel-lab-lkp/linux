@@ -2280,7 +2280,9 @@ EXPORT_SYMBOL(filemap_get_folios_contig);
 unsigned filemap_get_folios_tag(struct address_space *mapping, pgoff_t *start,
 			pgoff_t end, xa_mark_t tag, struct folio_batch *fbatch)
 {
-	XA_STATE(xas, &mapping->i_pages, *start);
+	unsigned int min_order = mapping_min_folio_order(mapping);
+	unsigned int nrpages = 1UL << min_order;
+	XA_STATE(xas, &mapping->i_pages, round_down(*start, nrpages));
 	struct folio *folio;
 
 	rcu_read_lock();
