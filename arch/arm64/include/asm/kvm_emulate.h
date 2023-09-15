@@ -137,6 +137,11 @@ static inline void vcpu_ptrauth_disable(struct kvm_vcpu *vcpu)
 static inline void vcpu_reset_hcrx(struct kvm_vcpu *vcpu)
 {
 	vcpu->arch.hcrx_el2 = HCRX_GUEST_FLAGS;
+
+	if (cpus_have_final_cap(ARM64_HAS_MOPS)) {
+		vcpu->arch.hcrx_el2 |= HCRX_EL2_MSCEn;
+		vcpu->arch.hcrx_el2 |= HCRX_EL2_MCE2;
+	}
 }
 
 static inline unsigned long vcpu_get_vsesr(struct kvm_vcpu *vcpu)
