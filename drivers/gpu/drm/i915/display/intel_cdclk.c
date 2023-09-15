@@ -39,6 +39,7 @@
 #include "intel_pcode.h"
 #include "intel_psr.h"
 #include "intel_vdsc.h"
+#include "skl_watermark.h"
 #include "vlv_sideband.h"
 
 /**
@@ -1800,6 +1801,16 @@ static bool cdclk_pll_is_unknown(unsigned int vco)
 	return vco == ~0;
 }
 
+/* Return the MBUS_CTL's encoding of the mdclk/cdclk ratio */
+static int get_mdclk_cdclk_ratio(struct drm_i915_private *i915,
+				 const struct intel_cdclk_config *cdclk_config)
+{
+	if (DISPLAY_VER(i915) >= 20)
+		return DIV_ROUND_UP(cdclk_config->vco, cdclk_config->cdclk) - 1;
+
+	return 1;
+}
+
 static int cdclk_squash_divider(u16 waveform)
 {
 	return hweight16(waveform ?: 0xffff);
@@ -2712,6 +2723,8 @@ static int intel_compute_min_cdclk(struct intel_cdclk_state *cdclk_state)
 	struct intel_crtc_state *crtc_state;
 	int min_cdclk, i;
 	enum pipe pipe;
+	struct intel_dbuf_state *new_dbuf_state;
+	struct intel_dbuf_state *old_dbuf_state;
 
 	for_each_new_intel_crtc_in_state(state, crtc, crtc_state, i) {
 		int ret;
@@ -2740,6 +2753,21 @@ static int intel_compute_min_cdclk(struct intel_cdclk_state *cdclk_state)
 			cdclk_state->bw_min_cdclk = min_cdclk;
 
 			ret = intel_atomic_lock_global_state(&cdclk_state->base);
+			if (ret)
+				return ret;
+		}
+	}
+
+	new_dbuf_state = intel_atomic_get_new_dbuf_state(state);
+	old_dbuf_state = intel_atomic_get_old_dbuf_state(state);
+	if (new_dbuf_state && old_dbuf_state) {
+		new_dbuf_state->mdclk_cdclk_ratio =
+			get_mdclk_cdclk_ratio(dev_priv, &cdclk_state->actual);
+
+		if (new_dbuf_state->mdclk_cdclk_ratio != old_dbuf_state->mdclk_cdclk_ratio) {
+			int ret;
+
+			ret = intel_atomic_serialize_global_state(&new_dbuf_state->base);
 			if (ret)
 				return ret;
 		}
