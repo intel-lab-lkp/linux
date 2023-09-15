@@ -1154,13 +1154,12 @@ static void __folio_set_anon(struct folio *folio, struct vm_area_struct *vma,
 }
 
 /**
- * __page_check_anon_rmap - sanity check anonymous rmap addition
+ * __folio_check_anon_rmap - sanity check anonymous rmap addition
  * @folio:	The folio containing @page.
- * @page:	the page to check the mapping of
  * @vma:	the vm area in which the mapping is added
  * @address:	the user virtual address mapped
  */
-static void __page_check_anon_rmap(struct folio *folio, struct page *page,
+static void __folio_check_anon_rmap(struct folio *folio,
 	struct vm_area_struct *vma, unsigned long address)
 {
 	/*
@@ -1176,8 +1175,8 @@ static void __page_check_anon_rmap(struct folio *folio, struct page *page,
 	 */
 	VM_BUG_ON_FOLIO(folio_anon_vma(folio)->root != vma->anon_vma->root,
 			folio);
-	VM_BUG_ON_PAGE(page_to_pgoff(page) != linear_page_index(vma, address),
-		       page);
+	VM_BUG_ON_FOLIO(folio_pgoff(folio) != linear_page_index(vma, address),
+		       folio);
 }
 
 /**
@@ -1245,7 +1244,7 @@ void page_add_anon_rmap(struct page *page, struct vm_area_struct *vma,
 		__folio_set_anon(folio, vma, address,
 				 !!(flags & RMAP_EXCLUSIVE));
 	} else if (likely(!folio_test_ksm(folio))) {
-		__page_check_anon_rmap(folio, page, vma, address);
+		__folio_check_anon_rmap(folio, vma, address);
 	}
 	if (flags & RMAP_EXCLUSIVE)
 		SetPageAnonExclusive(page);
