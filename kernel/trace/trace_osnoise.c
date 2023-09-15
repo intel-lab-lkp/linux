@@ -229,6 +229,19 @@ static inline struct osnoise_variables *this_cpu_osn_var(void)
 }
 
 #ifdef CONFIG_TIMERLAT_TRACER
+
+/*
+ * osnoise/per_cpu dir
+ */
+static struct dentry		*osnoise_per_cpu_fd;
+
+struct osnoise_per_cpu_dir {
+	struct dentry *root;
+	struct dentry *timerlat_fd;
+};
+
+static DEFINE_PER_CPU(struct osnoise_per_cpu_dir, osnoise_per_cpu_dir);
+
 /*
  * Runtime information for the timer mode.
  */
@@ -2000,6 +2013,9 @@ static int start_kthread(unsigned int cpu)
 	char comm[24];
 
 	if (timerlat_enabled()) {
+		if (!test_bit(OSN_WORKLOAD, &osnoise_options))
+			return 0;
+
 		snprintf(comm, 24, "timerlat/%d", cpu);
 		main = timerlat_main;
 	} else {
@@ -2065,18 +2081,63 @@ static int start_per_cpu_kthreads(void)
 	return retval;
 }
 
+#ifdef CONFIG_TIMERLAT_TRACER
+static const struct file_operations timerlat_fd_fops;
+static int timerlat_add_per_cpu_interface(long cpu)
+{
+	struct dentry *timerlat_fd, *cpu_dir_fd;
+	char cpu_str[30]; /* see trace.c: tracing_init_tracefs_percpu() */
+
+	if (!osnoise_per_cpu_fd)
+		return 0;
+
+	snprintf(cpu_str, 30, "cpu%ld", cpu);
+	cpu_dir_fd = tracefs_create_dir(cpu_str, osnoise_per_cpu_fd);
+
+	if (cpu_dir_fd) {
+		timerlat_fd = trace_create_file("timerlat_fd", TRACE_MODE_READ,
+					       cpu_dir_fd, NULL, &timerlat_fd_fops);
+		WARN_ON_ONCE(!timerlat_fd);
+		per_cpu_ptr(&osnoise_per_cpu_dir, cpu)->root = cpu_dir_fd;
+		per_cpu_ptr(&osnoise_per_cpu_dir, cpu)->timerlat_fd = timerlat_fd;
+
+		/* Record the CPU */
+		d_inode(timerlat_fd)->i_cdev = (void *)(cpu);
+
+		return 0;
+	}
+
+	return -ENOMEM;
+}
+
+static void timerlat_rm_per_cpu_interface(long cpu)
+{
+	struct dentry *cpu_dir = per_cpu_ptr(&osnoise_per_cpu_dir, cpu)->root;
+
+	if (cpu_dir) {
+		tracefs_remove(cpu_dir);
+		per_cpu_ptr(&osnoise_per_cpu_dir, cpu)->root = NULL;
+		per_cpu_ptr(&osnoise_per_cpu_dir, cpu)->timerlat_fd = NULL;
+	}
+}
+#else
+static int timerlat_add_per_cpu_interface(long cpu) { return 0; };
+static void timerlat_rm_per_cpu_interface(long cpu) {};
+#endif
+
 #ifdef CONFIG_HOTPLUG_CPU
 static void osnoise_hotplug_workfn(struct work_struct *dummy)
 {
 	unsigned int cpu = smp_processor_id();
 
 	mutex_lock(&trace_types_lock);
-
-	if (!osnoise_has_registered_instances())
-		goto out_unlock_trace;
-
 	mutex_lock(&interface_lock);
 	cpus_read_lock();
+
+	timerlat_add_per_cpu_interface(cpu);
+
+	if (!osnoise_has_registered_instances())
+		goto out_unlock;
 
 	if (!cpumask_test_cpu(cpu, &osnoise_cpumask))
 		goto out_unlock;
@@ -2086,7 +2147,6 @@ static void osnoise_hotplug_workfn(struct work_struct *dummy)
 out_unlock:
 	cpus_read_unlock();
 	mutex_unlock(&interface_lock);
-out_unlock_trace:
 	mutex_unlock(&trace_types_lock);
 }
 
@@ -2106,6 +2166,7 @@ static int osnoise_cpu_init(unsigned int cpu)
  */
 static int osnoise_cpu_die(unsigned int cpu)
 {
+	timerlat_rm_per_cpu_interface(cpu);
 	stop_kthread(cpu);
 	return 0;
 }
@@ -2708,10 +2769,7 @@ static int init_timerlat_stack_tracefs(struct dentry *top_dir)
 
 static int osnoise_create_cpu_timerlat_fd(struct dentry *top_dir)
 {
-	struct dentry *timerlat_fd;
-	struct dentry *per_cpu;
-	struct dentry *cpu_dir;
-	char cpu_str[30]; /* see trace.c: tracing_init_tracefs_percpu() */
+	int retval;
 	long cpu;
 
 	/*
@@ -2720,29 +2778,24 @@ static int osnoise_create_cpu_timerlat_fd(struct dentry *top_dir)
 	 * Because osnoise/timerlat have a single workload, having
 	 * multiple files like these are wast of memory.
 	 */
-	per_cpu = tracefs_create_dir("per_cpu", top_dir);
-	if (!per_cpu)
+	osnoise_per_cpu_fd = tracefs_create_dir("per_cpu", top_dir);
+	if (!osnoise_per_cpu_fd)
 		return -ENOMEM;
 
-	for_each_possible_cpu(cpu) {
-		snprintf(cpu_str, 30, "cpu%ld", cpu);
-		cpu_dir = tracefs_create_dir(cpu_str, per_cpu);
-		if (!cpu_dir)
+	for_each_online_cpu(cpu) {
+		retval = timerlat_add_per_cpu_interface(cpu);
+		if (retval < 0)
 			goto out_clean;
-
-		timerlat_fd = trace_create_file("timerlat_fd", TRACE_MODE_READ,
-						cpu_dir, NULL, &timerlat_fd_fops);
-		if (!timerlat_fd)
-			goto out_clean;
-
-		/* Record the CPU */
-		d_inode(timerlat_fd)->i_cdev = (void *)(cpu);
 	}
 
 	return 0;
 
 out_clean:
-	tracefs_remove(per_cpu);
+	tracefs_remove(osnoise_per_cpu_fd);
+	/* tracefs_remove() recursively deletes all the other files */
+	osnoise_per_cpu_fd = NULL;
+	for_each_online_cpu(cpu)
+		timerlat_rm_per_cpu_interface(cpu);
 	return -ENOMEM;
 }
 
