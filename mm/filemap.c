@@ -859,7 +859,10 @@ EXPORT_SYMBOL_GPL(replace_page_cache_folio);
 noinline int __filemap_add_folio(struct address_space *mapping,
 		struct folio *folio, pgoff_t index, gfp_t gfp, void **shadowp)
 {
-	XA_STATE(xas, &mapping->i_pages, index);
+	unsigned int min_order = mapping_min_folio_order(mapping);
+	unsigned int nr_of_pages = (1U << min_order);
+	pgoff_t rounded_index = round_down(index, nr_of_pages);
+	XA_STATE(xas, &mapping->i_pages, rounded_index);
 	int huge = folio_test_hugetlb(folio);
 	bool charged = false;
 	long nr = 1;
@@ -875,8 +878,8 @@ noinline int __filemap_add_folio(struct address_space *mapping,
 		charged = true;
 	}
 
-	VM_BUG_ON_FOLIO(index & (folio_nr_pages(folio) - 1), folio);
-	xas_set_order(&xas, index, folio_order(folio));
+	VM_BUG_ON_FOLIO(rounded_index & (folio_nr_pages(folio) - 1), folio);
+	xas_set_order(&xas, rounded_index, folio_order(folio));
 	nr = folio_nr_pages(folio);
 
 	gfp &= GFP_RECLAIM_MASK;
@@ -913,6 +916,7 @@ noinline int __filemap_add_folio(struct address_space *mapping,
 			}
 		}
 
+		VM_BUG_ON_FOLIO(folio_order(folio) < min_order, folio);
 		xas_store(&xas, folio);
 		if (xas_error(&xas))
 			goto unlock;
