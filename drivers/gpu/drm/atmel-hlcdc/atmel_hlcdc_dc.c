@@ -30,6 +30,26 @@
 
 #define ATMEL_HLCDC_LAYER_IRQS_OFFSET		8
 
+static const struct atmel_lcdc_dc_ops  atmel_hlcdc_ops = {
+	.plane_setup_scaler = atmel_hlcdc_plane_setup_scaler,
+	.update_lcdc_buffers = update_hlcdc_buffers,
+	.lcdc_atomic_disable = hlcdc_atomic_disable,
+	.lcdc_update_general_settings = atmel_hlcdc_plane_update_general_settings,
+	.lcdc_atomic_update = hlcdc_atomic_update,
+	.lcdc_csc_init = hlcdc_csc_init,
+	.lcdc_irq_dbg = hlcdc_irq_dbg,
+};
+
+static const struct atmel_lcdc_dc_ops  atmel_xlcdc_ops = {
+	.plane_setup_scaler = atmel_xlcdc_plane_setup_scaler,
+	.update_lcdc_buffers = update_xlcdc_buffers,
+	.lcdc_atomic_disable = xlcdc_atomic_disable,
+	.lcdc_update_general_settings = atmel_xlcdc_plane_update_general_settings,
+	.lcdc_atomic_update = xlcdc_atomic_update,
+	.lcdc_csc_init = xlcdc_csc_init,
+	.lcdc_irq_dbg = xlcdc_irq_dbg,
+};
+
 static const struct atmel_hlcdc_layer_desc atmel_hlcdc_at91sam9n12_layers[] = {
 	{
 		.name = "base",
@@ -58,6 +78,7 @@ static const struct atmel_hlcdc_dc_desc atmel_hlcdc_dc_at91sam9n12 = {
 	.conflicting_output_formats = true,
 	.nlayers = ARRAY_SIZE(atmel_hlcdc_at91sam9n12_layers),
 	.layers = atmel_hlcdc_at91sam9n12_layers,
+	.ops = &atmel_hlcdc_ops,
 };
 
 static const struct atmel_hlcdc_layer_desc atmel_hlcdc_at91sam9x5_layers[] = {
@@ -151,6 +172,7 @@ static const struct atmel_hlcdc_dc_desc atmel_hlcdc_dc_at91sam9x5 = {
 	.conflicting_output_formats = true,
 	.nlayers = ARRAY_SIZE(atmel_hlcdc_at91sam9x5_layers),
 	.layers = atmel_hlcdc_at91sam9x5_layers,
+	.ops = &atmel_hlcdc_ops,
 };
 
 static const struct atmel_hlcdc_layer_desc atmel_hlcdc_sama5d3_layers[] = {
@@ -269,6 +291,7 @@ static const struct atmel_hlcdc_dc_desc atmel_hlcdc_dc_sama5d3 = {
 	.conflicting_output_formats = true,
 	.nlayers = ARRAY_SIZE(atmel_hlcdc_sama5d3_layers),
 	.layers = atmel_hlcdc_sama5d3_layers,
+	.ops = &atmel_hlcdc_ops,
 };
 
 static const struct atmel_hlcdc_layer_desc atmel_hlcdc_sama5d4_layers[] = {
@@ -364,6 +387,7 @@ static const struct atmel_hlcdc_dc_desc atmel_hlcdc_dc_sama5d4 = {
 	.max_hpw = 0x3ff,
 	.nlayers = ARRAY_SIZE(atmel_hlcdc_sama5d4_layers),
 	.layers = atmel_hlcdc_sama5d4_layers,
+	.ops = &atmel_hlcdc_ops,
 };
 
 static const struct atmel_hlcdc_layer_desc atmel_hlcdc_sam9x60_layers[] = {
@@ -460,6 +484,7 @@ static const struct atmel_hlcdc_dc_desc atmel_hlcdc_dc_sam9x60 = {
 	.fixed_clksrc = true,
 	.nlayers = ARRAY_SIZE(atmel_hlcdc_sam9x60_layers),
 	.layers = atmel_hlcdc_sam9x60_layers,
+	.ops = &atmel_hlcdc_ops,
 };
 
 static const struct atmel_hlcdc_layer_desc atmel_xlcdc_sam9x75_layers[] = {
@@ -553,6 +578,7 @@ static const struct atmel_hlcdc_dc_desc atmel_xlcdc_dc_sam9x75 = {
 	.is_xlcdc = true,
 	.nlayers = ARRAY_SIZE(atmel_xlcdc_sam9x75_layers),
 	.layers = atmel_xlcdc_sam9x75_layers,
+	.ops = &atmel_xlcdc_ops,
 };
 
 static const struct of_device_id atmel_hlcdc_of_match[] = {
