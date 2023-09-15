@@ -2617,16 +2617,24 @@ static void __split_huge_page(struct page *page, struct list_head *list,
 bool can_split_folio(struct folio *folio, int *pextra_pins)
 {
 	int extra_pins;
+	unsigned int min_order = 0;
+	unsigned int nrpages;
 
 	/* Additional pins from page cache */
-	if (folio_test_anon(folio))
+	if (folio_test_anon(folio)) {
 		extra_pins = folio_test_swapcache(folio) ?
 				folio_nr_pages(folio) : 0;
-	else
+	} else {
 		extra_pins = folio_nr_pages(folio);
+		if (folio->mapping)
+			min_order = mapping_min_folio_order(folio->mapping);
+	}
+
+	nrpages = 1UL << min_order;
+
 	if (pextra_pins)
 		*pextra_pins = extra_pins;
-	return folio_mapcount(folio) == folio_ref_count(folio) - extra_pins - 1;
+	return folio_mapcount(folio) == folio_ref_count(folio) - extra_pins - nrpages;
 }
 
 /*
