@@ -1669,20 +1669,21 @@ static struct folio *shmem_alloc_hugefolio(gfp_t gfp,
 }
 
 static struct folio *shmem_alloc_folio(gfp_t gfp,
-			struct shmem_inode_info *info, pgoff_t index)
+			struct shmem_inode_info *info, pgoff_t index,
+			unsigned int order)
 {
 	struct vm_area_struct pvma;
 	struct folio *folio;
 
 	shmem_pseudo_vma_init(&pvma, info, index);
-	folio = vma_alloc_folio(gfp, 0, &pvma, 0, false);
+	folio = vma_alloc_folio(gfp, order, &pvma, 0, false);
 	shmem_pseudo_vma_destroy(&pvma);
 
 	return folio;
 }
 
 static struct folio *shmem_alloc_and_acct_folio(gfp_t gfp, struct inode *inode,
-		pgoff_t index, bool huge)
+		pgoff_t index, bool huge, unsigned int *order)
 {
 	struct shmem_inode_info *info = SHMEM_I(inode);
 	struct folio *folio;
@@ -1691,7 +1692,7 @@ static struct folio *shmem_alloc_and_acct_folio(gfp_t gfp, struct inode *inode,
 
 	if (!IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE))
 		huge = false;
-	nr = huge ? HPAGE_PMD_NR : 1;
+	nr = huge ? HPAGE_PMD_NR : 1U << *order;
 
 	err = shmem_inode_acct_block(inode, nr);
 	if (err)
@@ -1700,7 +1701,7 @@ static struct folio *shmem_alloc_and_acct_folio(gfp_t gfp, struct inode *inode,
 	if (huge)
 		folio = shmem_alloc_hugefolio(gfp, info, index);
 	else
-		folio = shmem_alloc_folio(gfp, info, index);
+		folio = shmem_alloc_folio(gfp, info, index, *order);
 	if (folio) {
 		__folio_set_locked(folio);
 		__folio_set_swapbacked(folio);
@@ -1750,7 +1751,7 @@ static int shmem_replace_folio(struct folio **foliop, gfp_t gfp,
 	 */
 	gfp &= ~GFP_CONSTRAINT_MASK;
 	VM_BUG_ON_FOLIO(folio_test_large(old), old);
-	new = shmem_alloc_folio(gfp, info, index);
+	new = shmem_alloc_folio(gfp, info, index, 0);
 	if (!new)
 		return -ENOMEM;
 
@@ -1961,6 +1962,7 @@ static int shmem_get_folio_gfp(struct inode *inode, pgoff_t index,
 	int error;
 	int once = 0;
 	int alloced = 0;
+	unsigned int order = 0;
 
 	if (index > (MAX_LFS_FILESIZE >> PAGE_SHIFT))
 		return -EFBIG;
@@ -2036,10 +2038,12 @@ repeat:
 
 	huge_gfp = vma_thp_gfp_mask(vma);
 	huge_gfp = limit_gfp_mask(huge_gfp, gfp);
-	folio = shmem_alloc_and_acct_folio(huge_gfp, inode, index, true);
+	folio = shmem_alloc_and_acct_folio(huge_gfp, inode, index, true,
+					   &order);
 	if (IS_ERR(folio)) {
 alloc_nohuge:
-		folio = shmem_alloc_and_acct_folio(gfp, inode, index, false);
+		folio = shmem_alloc_and_acct_folio(gfp, inode, index, false,
+						   &order);
 	}
 	if (IS_ERR(folio)) {
 		int retry = 5;
@@ -2602,7 +2606,7 @@ int shmem_mfill_atomic_pte(pmd_t *dst_pmd,
 
 	if (!*foliop) {
 		ret = -ENOMEM;
-		folio = shmem_alloc_folio(gfp, info, pgoff);
+		folio = shmem_alloc_folio(gfp, info, pgoff, 0);
 		if (!folio)
 			goto out_unacct_blocks;
 
