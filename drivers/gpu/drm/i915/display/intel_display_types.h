@@ -1701,7 +1701,7 @@ struct intel_psr {
 
 struct intel_dp {
 	i915_reg_t output_reg;
-	u32 DP;
+	u32 output_reg_bits;
 	int link_rate;
 	u8 lane_count;
 	u8 sink_count;
