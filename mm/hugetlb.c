@@ -2249,6 +2249,11 @@ static void prep_and_add_allocated_folios(struct hstate *h,
 	struct folio *folio, *tmp_f;
 
 	/*
+	 * Send list for bulk vmemmap optimization processing
+	 */
+	hugetlb_vmemmap_optimize_folios(h, folio_list);
+
+	/*
 	 * Add all new pool pages to free lists in one lock cycle
 	 */
 	spin_lock_irq(&hugetlb_lock);
