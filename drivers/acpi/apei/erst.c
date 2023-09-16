@@ -26,6 +26,8 @@
 #include <linux/vmalloc.h>
 #include <linux/mm.h> /* kvfree() */
 #include <acpi/apei.h>
+/* only define CREATE_TRACE_POINTS once */
+#include <trace/events/mce.h>
 
 #include "apei-internal.h"
 
@@ -1063,8 +1065,10 @@ skip:
 		record->compressed = true;
 	} else if (guid_equal(&rcd->sec_hdr.section_type, &CPER_SECTION_TYPE_DMESG))
 		record->type = PSTORE_TYPE_DMESG;
-	else if (guid_equal(&rcd->sec_hdr.section_type, &CPER_SECTION_TYPE_MCE))
+	else if (guid_equal(&rcd->sec_hdr.section_type, &CPER_SECTION_TYPE_MCE)) {
+		trace_mce_record((struct mce *)rcd->data);
 		record->type = PSTORE_TYPE_MCE;
+	}
 	else
 		record->type = PSTORE_TYPE_MAX;
 
