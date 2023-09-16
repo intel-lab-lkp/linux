@@ -25,6 +25,7 @@
 struct fsl_gpio_soc_data {
 	/* SoCs has a Port Data Direction Register (PDDR) */
 	bool have_paddr;
+	bool is_imx8ulp;
 };
 
 struct vf610_gpio_port {
@@ -60,13 +61,22 @@ struct vf610_gpio_port {
 #define PORT_INT_EITHER_EDGE	0xb
 #define PORT_INT_LOGIC_ONE	0xc
 
+#define IMX8ULP_GPIO_BASE_OFF	0x40
+#define IMX8ULP_BASE_OFF	0x80
+
 static const struct fsl_gpio_soc_data imx_data = {
 	.have_paddr = true,
+};
+
+static const struct fsl_gpio_soc_data imx8ulp_data = {
+	.have_paddr = true,
+	.is_imx8ulp = true,
 };
 
 static const struct of_device_id vf610_gpio_dt_ids[] = {
 	{ .compatible = "fsl,vf610-gpio",	.data = NULL, },
 	{ .compatible = "fsl,imx7ulp-gpio",	.data = &imx_data, },
+	{ .compatible = "fsl,imx8ulp-gpio",	.data = &imx8ulp_data, },
 	{ /* sentinel */ }
 };
 
@@ -255,6 +265,42 @@ static void vf610_gpio_disable_clk(void *data)
 	clk_disable_unprepare(data);
 }
 
+static int vf610_gpio_map_base(struct platform_device *pdev, struct vf610_gpio_port *port)
+{
+	struct device *dev = &pdev->dev;
+	bool dual_base;
+
+	/* support old compatible strings */
+	if (device_is_compatible(dev, "fsl,imx7ulp-gpio") &&
+	    (device_is_compatible(dev, "fsl,imx93-gpio") ||
+	    (device_is_compatible(dev, "fsl,imx8ulp-gpio")))) {
+		dual_base = true;
+	} else if (port->sdata && port->sdata->is_imx8ulp) {
+		dual_base = false;
+	} else {
+		dual_base = true;
+	};
+
+	if (dual_base) {
+		port->base = devm_platform_ioremap_resource(pdev, 0);
+		if (IS_ERR(port->base))
+			return PTR_ERR(port->base);
+
+		port->gpio_base = devm_platform_ioremap_resource(pdev, 1);
+		if (IS_ERR(port->gpio_base))
+			return PTR_ERR(port->gpio_base);
+	} else {
+		port->base = devm_platform_ioremap_resource(pdev, 0);
+		if (IS_ERR(port->base))
+			return PTR_ERR(port->base);
+
+		port->gpio_base = port->base + IMX8ULP_GPIO_BASE_OFF;
+		port->base = port->base + IMX8ULP_BASE_OFF;
+	}
+
+	return 0;
+}
+
 static int vf610_gpio_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -269,13 +315,10 @@ static int vf610_gpio_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	port->sdata = of_device_get_match_data(dev);
-	port->base = devm_platform_ioremap_resource(pdev, 0);
-	if (IS_ERR(port->base))
-		return PTR_ERR(port->base);
 
-	port->gpio_base = devm_platform_ioremap_resource(pdev, 1);
-	if (IS_ERR(port->gpio_base))
-		return PTR_ERR(port->gpio_base);
+	ret = vf610_gpio_map_base(pdev, port);
+	if (ret)
+		return ret;
 
 	port->irq = platform_get_irq(pdev, 0);
 	if (port->irq < 0)
