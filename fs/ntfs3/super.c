@@ -1563,6 +1563,13 @@ put_inode_out:
 	iput(inode);
 out:
 	kfree(boot2);
+
+	if (sbi->mft.bitmap.inited)
+		wnd_close(&sbi->mft.bitmap);
+
+	if (sbi->used.bitmap.inited)
+		wnd_close(&sbi->used.bitmap);
+
 	return err;
 }
 
