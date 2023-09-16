@@ -220,6 +220,20 @@ out:
 	return tz;
 }
 
+static void thermal_of_get_critical_action(struct device_node *np,
+					   enum thermal_action *action)
+{
+	const char *action_string;
+	int ret;
+
+	ret = of_property_read_string(np->parent, "critical-action", &action_string);
+	if (ret < 0)
+		*action = THERMAL_CRITICAL_ACTION_SHUTDOWN;
+
+	if (!strcasecmp(action_string, "reboot"))
+		*action = THERMAL_CRITICAL_ACTION_REBOOT;
+}
+
 static int thermal_of_monitor_init(struct device_node *np, int *delay, int *pdelay)
 {
 	int ret;
@@ -519,6 +533,8 @@ static struct thermal_zone_device *thermal_of_zone_register(struct device_node *
 		pr_err("Failed to register thermal zone %pOFn: %d\n", np, ret);
 		goto out_kfree_trips;
 	}
+
+	thermal_of_get_critical_action(np, &tz->action);
 
 	ret = thermal_zone_device_enable(tz);
 	if (ret) {
