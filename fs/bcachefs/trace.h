@@ -450,7 +450,7 @@ TRACE_EVENT(btree_path_relock_fail,
 			c = six_lock_counts(&path->l[level].b->c.lock);
 			__entry->read_count	= c.n[SIX_LOCK_read];
 			__entry->intent_count	= c.n[SIX_LOCK_intent];
-			scnprintf(__entry->node, sizeof(__entry->node), "%px", b);
+			snprintf(__entry->node, sizeof(__entry->node), "%px", b);
 		}
 		__entry->iter_lock_seq		= path->l[level].lock_seq;
 		__entry->node_lock_seq		= is_btree_node(path, level)

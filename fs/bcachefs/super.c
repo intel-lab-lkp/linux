@@ -1180,7 +1180,7 @@ static void bch2_dev_attach(struct bch_fs *c, struct bch_dev *ca,
 {
 	ca->dev_idx = dev_idx;
 	__set_bit(ca->dev_idx, ca->self.d);
-	scnprintf(ca->name, sizeof(ca->name), "dev-%u", dev_idx);
+	snprintf(ca->name, sizeof(ca->name), "dev-%u", dev_idx);
 
 	ca->fs = c;
 	rcu_assign_pointer(c->devs[ca->dev_idx], ca);
