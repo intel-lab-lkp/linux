@@ -26,6 +26,7 @@
 #include <linux/kfence.h>
 
 #include <asm/branch.h>
+#include <asm/exception.h>
 #include <asm/mmu_context.h>
 #include <asm/ptrace.h>
 
