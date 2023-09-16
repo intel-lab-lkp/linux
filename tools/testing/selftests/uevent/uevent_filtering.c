@@ -158,7 +158,7 @@ static int uevent_listener(unsigned long post_flags, bool expect_uevent,
 		r = recvmsg(sk_fd, &hdr, 0);
 		if (r <= 0) {
 			fprintf(stderr, "%s - Failed to receive uevent\n", strerror(errno));
-			ret = -1;
+			fret = -1;
 			break;
 		}
 
@@ -172,7 +172,7 @@ static int uevent_listener(unsigned long post_flags, bool expect_uevent,
 
 		if (!expect_uevent) {
 			fprintf(stderr, "Received unexpected uevent:\n");
-			ret = -1;
+			fret = -1;
 		}
 
 		if (TH_LOG_ENABLED) {
