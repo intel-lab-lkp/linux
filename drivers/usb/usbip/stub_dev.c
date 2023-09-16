@@ -495,24 +495,25 @@ static void stub_disconnect(struct usb_device *udev)
 		busid_priv->status = STUB_BUSID_ADDED;
 	/* release busid_lock */
 	spin_unlock(&busid_priv->busid_lock);
-	return;
 }
 
 #ifdef CONFIG_PM
 
-/* These functions need usb_port_suspend and usb_port_resume,
- * which reside in drivers/usb/core/usb.h. Skip for now. */
+/*
+ * These functions need usb_port_suspend and usb_port_resume,
+ * which reside in drivers/usb/core/usb.h. Skip for now.
+ */
 
 static int stub_suspend(struct usb_device *udev, pm_message_t message)
 {
-	dev_dbg(&udev->dev, "stub_suspend\n");
+	dev_dbg(&udev->dev, "stub suspend\n");
 
 	return 0;
 }
 
 static int stub_resume(struct usb_device *udev, pm_message_t message)
 {
-	dev_dbg(&udev->dev, "stub_resume\n");
+	dev_dbg(&udev->dev, "stub resume\n");
 
 	return 0;
 }
