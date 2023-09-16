@@ -43,6 +43,7 @@ enum pstore_type_id {
 	/* APEI section */
 	PSTORE_TYPE_CPER_MEM		= 9,
 	PSTORE_TYPE_CPER_PCIE		= 10,
+	PSTORE_TYPE_CPER_PROC_ARM	= 11,
 
 	/* End of the list */
 	PSTORE_TYPE_MAX

@@ -53,6 +53,7 @@ static const char * const pstore_type_names[] = {
 	"powerpc-opal",
 	"cper-mem",
 	"cper-pcie",
+	"cper-proc-arm",
 };
 
 static int pstore_new_entry;
