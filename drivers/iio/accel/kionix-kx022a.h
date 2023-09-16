@@ -76,29 +76,34 @@
 
 struct device;
 
+struct kx022a_data;
+
 /**
  * struct kx022a_chip_info - Kionix accelerometer chip specific information
  *
- * @name:		name of the device
- * @regmap_config:	pointer to register map configuration
- * @channels:		pointer to iio_chan_spec array
- * @num_channels:	number of iio_chan_spec channels
- * @fifo_length:	number of 16-bit samples in a full buffer
- * @who:		WHO_AM_I register
- * @id:			WHO_AM_I register value
- * @cntl:		control register 1
- * @cntl2:		control register 2
- * @odcntl:		output data control register
- * @buf_cntl1:		buffer control register 1
- * @buf_cntl2:		buffer control register 2
- * @buf_clear:		buffer clear register
- * @buf_status1:	buffer status register 1
- * @buf_read:		buffer read register
- * @inc1:		interrupt control register 1
- * @inc4:		interrupt control register 4
- * @inc5:		interrupt control register 5
- * @inc6:		interrupt control register 6
- * @xout_l:		x-axis output least significant byte
+ * @name:			name of the device
+ * @regmap_config:		pointer to register map configuration
+ * @channels:			pointer to iio_chan_spec array
+ * @num_channels:		number of iio_chan_spec channels
+ * @fifo_length:		number of 16-bit samples in a full buffer
+ * @who:			WHO_AM_I register
+ * @id:				WHO_AM_I register value
+ * @cntl:			control register 1
+ * @cntl2:			control register 2
+ * @odcntl:			output data control register
+ * @buf_cntl1:			buffer control register 1
+ * @buf_cntl2:			buffer control register 2
+ * @buf_clear:			buffer clear register
+ * @buf_status1:		buffer status register 1
+ * @buf_read:			buffer read register
+ * @inc1:			interrupt control register 1
+ * @inc4:			interrupt control register 4
+ * @inc5:			interrupt control register 5
+ * @inc6:			interrupt control register 6
+ * @xout_l:			x-axis output least significant byte
+ * @get_fifo_bytes_available:	function pointer to get amount of acceleration
+ *				data bytes currently stored in the sensor's FIFO
+ *				buffer
  */
 struct kx022a_chip_info {
 	const char *name;
@@ -121,6 +126,7 @@ struct kx022a_chip_info {
 	u8 inc5;
 	u8 inc6;
 	u8 xout_l;
+	int (*get_fifo_bytes_available)(struct kx022a_data *);
 };
 
 int kx022a_probe_internal(struct device *dev, const struct kx022a_chip_info *chip_info);

@@ -585,26 +585,33 @@ static int kx022a_drop_fifo_contents(struct kx022a_data *data)
 	return regmap_write(data->regmap, data->chip_info->buf_clear, 0x0);
 }
 
+static int kx022a_get_fifo_bytes_available(struct kx022a_data *data)
+{
+	int ret, fifo_bytes;
+
+	ret = regmap_read(data->regmap, KX022A_REG_BUF_STATUS_1, &fifo_bytes);
+	if (ret) {
+		dev_err(data->dev, "Error reading buffer status\n");
+		return ret;
+	}
+
+	if (fifo_bytes == KX022A_FIFO_FULL_VALUE)
+		return KX022A_FIFO_MAX_BYTES;
+
+	return fifo_bytes;
+}
+
 static int __kx022a_fifo_flush(struct iio_dev *idev, unsigned int samples,
 			       bool irq)
 {
 	struct kx022a_data *data = iio_priv(idev);
-	struct device *dev = regmap_get_device(data->regmap);
 	uint64_t sample_period;
 	int count, fifo_bytes;
 	bool renable = false;
 	int64_t tstamp;
 	int ret, i;
 
-	ret = regmap_read(data->regmap, KX022A_REG_BUF_STATUS_1, &fifo_bytes);
-	if (ret) {
-		dev_err(dev, "Error reading buffer status\n");
-		return ret;
-	}
-
-	/* Let's not overflow if we for some reason get bogus value from i2c */
-	if (fifo_bytes == KX022A_FIFO_FULL_VALUE)
-		fifo_bytes = KX022A_FIFO_MAX_BYTES;
+	fifo_bytes = data->chip_info->get_fifo_bytes_available(data);
 
 	if (fifo_bytes % KX022A_FIFO_SAMPLES_SIZE_BYTES)
 		dev_warn(data->dev, "Bad FIFO alignment. Data may be corrupt\n");
@@ -993,26 +1000,27 @@ static int kx022a_chip_init(struct kx022a_data *data)
 }
 
 const struct kx022a_chip_info kx022a_chip_info = {
-	.name		  = "kx022-accel",
-	.regmap_config	  = &kx022a_regmap_config,
-	.channels	  = kx022a_channels,
-	.num_channels	  = ARRAY_SIZE(kx022a_channels),
-	.fifo_length	  = KX022A_FIFO_LENGTH,
-	.who		  = KX022A_REG_WHO,
-	.id		  = KX022A_ID,
-	.cntl		  = KX022A_REG_CNTL,
-	.cntl2		  = KX022A_REG_CNTL2,
-	.odcntl		  = KX022A_REG_ODCNTL,
-	.buf_cntl1	  = KX022A_REG_BUF_CNTL1,
-	.buf_cntl2	  = KX022A_REG_BUF_CNTL2,
-	.buf_clear	  = KX022A_REG_BUF_CLEAR,
-	.buf_status1	  = KX022A_REG_BUF_STATUS_1,
-	.buf_read	  = KX022A_REG_BUF_READ,
-	.inc1		  = KX022A_REG_INC1,
-	.inc4		  = KX022A_REG_INC4,
-	.inc5		  = KX022A_REG_INC5,
-	.inc6		  = KX022A_REG_INC6,
-	.xout_l		  = KX022A_REG_XOUT_L,
+	.name				= "kx022-accel",
+	.regmap_config			= &kx022a_regmap_config,
+	.channels			= kx022a_channels,
+	.num_channels			= ARRAY_SIZE(kx022a_channels),
+	.fifo_length			= KX022A_FIFO_LENGTH,
+	.who				= KX022A_REG_WHO,
+	.id				= KX022A_ID,
+	.cntl				= KX022A_REG_CNTL,
+	.cntl2				= KX022A_REG_CNTL2,
+	.odcntl				= KX022A_REG_ODCNTL,
+	.buf_cntl1			= KX022A_REG_BUF_CNTL1,
+	.buf_cntl2			= KX022A_REG_BUF_CNTL2,
+	.buf_clear			= KX022A_REG_BUF_CLEAR,
+	.buf_status1			= KX022A_REG_BUF_STATUS_1,
+	.buf_read			= KX022A_REG_BUF_READ,
+	.inc1				= KX022A_REG_INC1,
+	.inc4				= KX022A_REG_INC4,
+	.inc5				= KX022A_REG_INC5,
+	.inc6				= KX022A_REG_INC6,
+	.xout_l				= KX022A_REG_XOUT_L,
+	.get_fifo_bytes_available	= kx022a_get_fifo_bytes_available,
 };
 EXPORT_SYMBOL_NS_GPL(kx022a_chip_info, IIO_KX022A);
 
