@@ -243,9 +243,9 @@ extern void svc_rdma_cc_init(struct svcxprt_rdma *rdma,
 extern void svc_rdma_destroy_rw_ctxts(struct svcxprt_rdma *rdma);
 extern void svc_rdma_reply_chunk_release(struct svcxprt_rdma *rdma,
 					 struct svc_rdma_send_ctxt *ctxt);
-extern int svc_rdma_send_write_chunk(struct svcxprt_rdma *rdma,
-				     const struct svc_rdma_chunk *chunk,
-				     const struct xdr_buf *xdr);
+extern int svc_rdma_send_write_list(struct svcxprt_rdma *rdma,
+				    const struct svc_rdma_recv_ctxt *rctxt,
+				    const struct xdr_buf *xdr);
 extern int svc_rdma_prepare_reply_chunk(struct svcxprt_rdma *rdma,
 					const struct svc_rdma_recv_ctxt *rctxt,
 					struct svc_rdma_send_ctxt *sctxt,
