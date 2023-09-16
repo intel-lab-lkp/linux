@@ -1502,6 +1502,7 @@ static long __cpu_down_maps_locked(void *arg)
 static int cpu_down_maps_locked(unsigned int cpu, enum cpuhp_state target)
 {
 	struct cpu_down_work work = { .cpu = cpu, .target = target, };
+	struct cpumask tmp_mask;
 
 	/*
 	 * If the platform does not support hotplug, report it explicitly to
@@ -1513,10 +1514,15 @@ static int cpu_down_maps_locked(unsigned int cpu, enum cpuhp_state target)
 		return -EBUSY;
 
 	/*
+	 * Ensure the last non-isolated CPU is not offlined.
+	 */
+	cpumask_and(&tmp_mask, cpu_online_mask, housekeeping_cpumask(HK_TYPE_DOMAIN));
+
+	/*
 	 * Ensure that the control task does not run on the to be offlined
 	 * CPU to prevent a deadlock against cfs_b->period_timer.
 	 */
-	cpu = cpumask_any_but(cpu_online_mask, cpu);
+	cpu = cpumask_any_but(&tmp_mask, cpu);
 	if (cpu >= nr_cpu_ids)
 		return -EBUSY;
 	return work_on_cpu(cpu, __cpu_down_maps_locked, &work);
