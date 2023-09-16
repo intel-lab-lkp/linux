@@ -527,7 +527,7 @@ static void
 cper_estatus_print_section(const char *pfx, struct acpi_hest_generic_data *gdata,
 			   int sec_no)
 {
-	guid_t *sec_type = (guid_t *)gdata->section_type;
+	guid_t *sec_type = &gdata->section_type;
 	__u16 severity;
 	char newpfx[64];
 
