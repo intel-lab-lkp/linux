@@ -48,6 +48,14 @@ properties:
       platform-data regarding temperature thresholds and the mitigation actions
       to take when the temperature crosses those thresholds.
 
+  critical-action:
+    $ref: /schemas/types.yaml#/definitions/string
+    description:
+      The action the OS should perform after the critical temperature is reached.
+    enum:
+      - shutdown
+      - reboot
+
 patternProperties:
   "^[a-zA-Z][a-zA-Z0-9\\-]{1,12}-thermal$":
     type: object
