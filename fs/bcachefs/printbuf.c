@@ -28,7 +28,7 @@ int bch2_printbuf_make_room(struct printbuf *out, unsigned extra)
 	if (out->pos + extra < out->size)
 		return 0;
 
-	new_size = roundup_pow_of_two(out->size + extra);
+	new_size = kmalloc_size_roundup(out->size + extra);
 
 	/*
 	 * Note: output buffer must be freeable with kfree(), it's not required
