@@ -196,8 +196,11 @@ static void powermate_config_complete(struct urb *urb)
 	struct powermate_device *pm = urb->context;
 	unsigned long flags;
 
-	if (urb->status)
+	if (urb->status) {
 		printk(KERN_ERR "powermate: config urb returned %d\n", urb->status);
+		if (status == -ENOENT || status == -ESHUTDOWN)
+			return;
+	}
 
 	spin_lock_irqsave(&pm->lock, flags);
 	powermate_sync_state(pm);
