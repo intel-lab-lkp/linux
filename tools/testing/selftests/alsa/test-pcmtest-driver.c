@@ -13,7 +13,7 @@
 
 struct pattern_buf {
 	char buf[1024];
-	int len;
+	unsigned int len;
 };
 
 struct pattern_buf patterns[CH_NUM];
@@ -313,7 +313,6 @@ TEST_F(pcmtest, ni_playback) {
  */
 TEST_F(pcmtest, reset_ioctl) {
 	snd_pcm_t *handle;
-	unsigned char *it;
 	int test_res;
 	struct pcmtest_test_params *params = &self->params;
 
