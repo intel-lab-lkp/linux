@@ -47,13 +47,12 @@ static unsigned long imx8m_clk_composite_divider_recalc_rate(struct clk_hw *hw,
 				   divider->flags, PCG_DIV_WIDTH);
 }
 
-static int imx8m_clk_composite_compute_dividers(unsigned long rate,
+static void imx8m_clk_composite_compute_dividers(unsigned long rate,
 						unsigned long parent_rate,
 						int *prediv, int *postdiv)
 {
 	int div1, div2;
 	int error = INT_MAX;
-	int ret = -EINVAL;
 
 	*prediv = 1;
 	*postdiv = 1;
@@ -66,11 +65,9 @@ static int imx8m_clk_composite_compute_dividers(unsigned long rate,
 				*prediv = div1;
 				*postdiv = div2;
 				error = new_error;
-				ret = 0;
 			}
 		}
 	}
-	return ret;
 }
 
 static long imx8m_clk_composite_divider_round_rate(struct clk_hw *hw,
@@ -80,8 +77,8 @@ static long imx8m_clk_composite_divider_round_rate(struct clk_hw *hw,
 	int prediv_value;
 	int div_value;
 
-	imx8m_clk_composite_compute_dividers(rate, *prate,
-						&prediv_value, &div_value);
+	imx8m_clk_composite_compute_dividers(rate, *prate, &prediv_value,
+					     &div_value);
 	rate = DIV_ROUND_UP(*prate, prediv_value);
 
 	return DIV_ROUND_UP(rate, div_value);
@@ -96,13 +93,10 @@ static int imx8m_clk_composite_divider_set_rate(struct clk_hw *hw,
 	unsigned long flags;
 	int prediv_value;
 	int div_value;
-	int ret;
 	u32 orig, val;
 
-	ret = imx8m_clk_composite_compute_dividers(rate, parent_rate,
-						&prediv_value, &div_value);
-	if (ret)
-		return -EINVAL;
+	imx8m_clk_composite_compute_dividers(rate, parent_rate,	&prediv_value,
+					     &div_value);
 
 	spin_lock_irqsave(divider->lock, flags);
 
@@ -118,7 +112,7 @@ static int imx8m_clk_composite_divider_set_rate(struct clk_hw *hw,
 
 	spin_unlock_irqrestore(divider->lock, flags);
 
-	return ret;
+	return 0;
 }
 
 static int imx8m_divider_determine_rate(struct clk_hw *hw,
