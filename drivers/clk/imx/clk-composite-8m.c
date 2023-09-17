@@ -4,6 +4,7 @@
  */
 
 #include <linux/clk-provider.h>
+#include <linux/clk.h>
 #include <linux/errno.h>
 #include <linux/export.h>
 #include <linux/io.h>
@@ -119,8 +120,12 @@ static int imx8m_divider_determine_rate(struct clk_hw *hw,
 				      struct clk_rate_request *req)
 {
 	struct clk_divider *divider = to_clk_divider(hw);
+	struct clk_hw *parent = clk_hw_get_parent(hw);
 	int prediv_value;
 	int div_value;
+	unsigned long target_rate;
+	struct clk_rate_request req_parent;
+	int ret;
 
 	/* if read only, just return current value */
 	if (divider->flags & CLK_DIVIDER_READ_ONLY) {
@@ -140,9 +145,29 @@ static int imx8m_divider_determine_rate(struct clk_hw *hw,
 						 divider->flags, prediv_value * div_value);
 	}
 
-	return divider_determine_rate(hw, req, divider->table,
-				      PCG_PREDIV_WIDTH + PCG_DIV_WIDTH,
-				      divider->flags);
+	target_rate = req->rate;
+	ret = divider_determine_rate(hw, req, divider->table,
+				     PCG_PREDIV_WIDTH + PCG_DIV_WIDTH,
+				     divider->flags);
+	if (ret || req->rate == target_rate)
+		return ret;
+
+	/*
+	 * If re-configuring the parent gives a better rate, do this instead.
+	 * Avoid re-parenting for now, which could be done first if a possible
+	 * parent already has a satisfying rate. The implementation does not
+	 * consider the dividers between the parent and the current clock.
+	 */
+	clk_hw_forward_rate_request(hw, req, parent, &req_parent, target_rate);
+	if (__clk_determine_rate(parent, &req_parent))
+		return 0;
+
+	if (abs(req_parent.rate - target_rate) < abs(req->rate - target_rate)) {
+		req->rate = req_parent.rate;
+		req->best_parent_rate = req_parent.rate;
+	}
+
+	return 0;
 }
 
 static const struct clk_ops imx8m_clk_composite_divider_ops = {
@@ -198,6 +223,33 @@ static const struct clk_ops imx8m_clk_composite_mux_ops = {
 	.determine_rate = imx8m_clk_composite_mux_determine_rate,
 };
 
+static int imx8m_clk_composite_notifier_fn(struct notifier_block *notifier,
+					   unsigned long code, void *data)
+{
+	struct clk_notifier_data *cnd = data;
+	struct clk_hw *hw = __clk_get_hw(cnd->clk);
+
+	if (code != PRE_RATE_CHANGE)
+		return NOTIFY_OK;
+
+	if (!__clk_is_rate_set(cnd->clk))
+		return NOTIFY_OK;
+
+	/*
+	 * Consumer of a composite-m8 clock usually use the root clk, a gate
+	 * connected to the composite (e.g. media_ldb and media_ldb_root).
+	 * Therefore, evaluate the trigger's parent too.
+	 */
+	if (cnd->clk != cnd->trigger && cnd->clk != clk_get_parent(cnd->trigger))
+		return notifier_from_errno(clk_hw_set_rate(hw, cnd->old_rate));
+
+	return NOTIFY_OK;
+}
+
+static struct notifier_block imx8m_clk_composite_notifier = {
+	.notifier_call = imx8m_clk_composite_notifier_fn,
+};
+
 struct clk_hw *__imx8m_clk_hw_composite(const char *name,
 					const char * const *parent_names,
 					int num_parents, void __iomem *reg,
@@ -211,6 +263,7 @@ struct clk_hw *__imx8m_clk_hw_composite(const char *name,
 	struct clk_mux *mux = NULL;
 	const struct clk_ops *divider_ops;
 	const struct clk_ops *mux_ops;
+	int ret;
 
 	mux = kzalloc(sizeof(*mux), GFP_KERNEL);
 	if (!mux)
@@ -267,6 +320,18 @@ struct clk_hw *__imx8m_clk_hw_composite(const char *name,
 			divider_ops, gate_hw, &clk_gate_ops, flags);
 	if (IS_ERR(hw))
 		goto fail;
+
+	/*
+	 * register a notifier which should switch back to the configured rate
+	 * if the rate is going to be changed unintentionally.
+	 */
+	if (flags & CLK_SET_RATE_PARENT) {
+		ret = clk_notifier_register(hw->clk, &imx8m_clk_composite_notifier);
+		if (ret) {
+			hw = ERR_PTR(ret);
+			goto fail;
+		}
+	}
 
 	return hw;
 
