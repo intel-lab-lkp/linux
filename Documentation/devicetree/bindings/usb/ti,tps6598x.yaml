@@ -20,6 +20,8 @@ properties:
     enum:
       - ti,tps6598x
       - apple,cd321x
+      - ti,tps25750
+
   reg:
     maxItems: 1
 
@@ -32,9 +34,44 @@ properties:
     items:
       - const: irq
 
+  firmware-name:
+    description: |
+      Should contain the name of the default patch binary
+      file located on the firmware search path which is
+      used to switch the controller into APP mode.
+      This is used when tps25750 doesn't have an EEPROM
+      connected to it.
+    maxItems: 1
+
+  ti,patch-address:
+    description: |
+      One of PBMs command data field is I2C slave address
+      which is used when writing the patch for TPS25750.
+      The slave address can be any value except 0x00, 0x20,
+      0x21, 0x22, and 0x23
+    $ref: /schemas/types.yaml#/definitions/uint8
+    minimum: 1
+    maximum: 0x7e
+
 required:
   - compatible
   - reg
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: ti,tps25750
+    then:
+      required:
+        - ti,patch-address
+        - connector
+
+      properties:
+        connector:
+          required:
+            - data-role
 
 additionalProperties: true
 
@@ -62,6 +99,39 @@ examples:
                 label = "USB-C";
                 port {
                     typec_ep: endpoint {
+                        remote-endpoint = <&otg_ep>;
+                    };
+                };
+            };
+        };
+    };
+
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        typec@21 {
+            compatible = "ti,tps25750";
+            reg = <0x21>;
+
+            interrupt-parent = <&msmgpio>;
+            interrupts = <100 IRQ_TYPE_LEVEL_LOW>;
+            interrupt-names = "irq";
+            firmware-name = "tps25750.bin";
+
+            pinctrl-names = "default";
+            pinctrl-0 = <&typec_pins>;
+
+            ti,patch-address = /bits/ 8 <0x0f>;
+
+            typec_con0: connector {
+                compatible = "usb-c-connector";
+                label = "USB-C";
+                data-role = "dual";
+                port {
+                    typec_ep0: endpoint {
                         remote-endpoint = <&otg_ep>;
                     };
                 };
