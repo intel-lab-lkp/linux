@@ -1142,10 +1142,6 @@ static int tps6598x_probe(struct i2c_client *client)
 	if (IS_ERR(tps->regmap))
 		return PTR_ERR(tps->regmap);
 
-	ret = tps6598x_read32(tps, TPS_REG_VID, &vid);
-	if (ret < 0 || !vid)
-		return -ENODEV;
-
 	/*
 	 * Checking can the adapter handle SMBus protocol. If it can not, the
 	 * driver needs to take care of block reads separately.
@@ -1175,6 +1171,12 @@ static int tps6598x_probe(struct i2c_client *client)
 	}
 
 	tps->irq_handler = irq_handler;
+
+	if (!tps->is_tps25750) {
+		ret = tps6598x_read32(tps, TPS_REG_VID, &vid);
+		if (ret < 0 || !vid)
+			return -ENODEV;
+	}
 
 	/* Make sure the controller has application firmware running */
 	ret = tps6598x_check_mode(tps, &mode);
