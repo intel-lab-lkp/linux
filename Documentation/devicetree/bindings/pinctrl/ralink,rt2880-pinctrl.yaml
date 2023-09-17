@@ -17,7 +17,10 @@ description: |
 
 properties:
   compatible:
-    const: ralink,rt2880-pinctrl
+    oneOf:
+      - const: ralink,rt2880-pinctrl
+      - const: ralink,rt2880-pinmux
+        deprecated: true
 
 patternProperties:
   '-pins$':
