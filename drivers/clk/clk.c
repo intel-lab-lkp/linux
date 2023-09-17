@@ -2462,6 +2462,21 @@ err:
 	return ret;
 }
 
+int clk_hw_set_rate(struct clk_hw *hw, unsigned long req_rate)
+{
+	/* A rate change is ongoing, so just target the required rate.
+	 * Note: this does not work if one clock along the line has
+	 * CLK_RECALC_NEW_RATES active, as this overwrites the new_rate again.
+	 */
+	if (hw->core->new_rate != hw->core->rate) {
+		hw->core->new_rate = req_rate;
+		return 0;
+	}
+
+	return clk_core_set_rate_nolock(hw->core, req_rate);
+}
+EXPORT_SYMBOL_GPL(clk_hw_set_rate);
+
 /**
  * clk_set_rate - specify a new rate for clk
  * @clk: the clk whose rate is being changed
