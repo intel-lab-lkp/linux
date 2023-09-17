@@ -105,7 +105,6 @@ properties:
     const: 0
 
 allOf:
-  - $ref: ethernet-controller.yaml#
   - if:
       properties:
         compatible:
