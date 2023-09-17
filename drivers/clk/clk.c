@@ -2241,9 +2241,14 @@ static struct clk_core *clk_calc_new_rates(struct clk_core *core,
 		}
 	}
 
-	if ((core->flags & CLK_SET_RATE_PARENT) && parent &&
-	    best_parent_rate != parent->rate)
-		top = clk_calc_new_rates(parent, best_parent_rate);
+	if (parent && best_parent_rate != parent->rate) {
+		if (core->flags & CLK_SET_RATE_PARENT)
+			top = clk_calc_new_rates(parent, best_parent_rate);
+		else
+			pr_debug("%s: ignore parent %s re-config from %lu to %lu\n",
+				 core->name, parent->name, parent->rate,
+				 best_parent_rate);
+	}
 
 out:
 	clk_calc_subtree(core, new_rate, parent, p_index);
