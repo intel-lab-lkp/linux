@@ -1,0 +1,143 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/net/mediatek,mt7621-eth.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: MediaTek MT7621 Frame Engine Ethernet controller
+
+maintainers:
+  - Arınç ÜNAL <arinc.unal@arinc9.com>
+
+description:
+  The frame engine ethernet controller can be found on MediaTek MT7621 SoC. This
+  SoC has got dual GMAC ports.
+
+properties:
+  compatible:
+    const: mediatek,mt7621-eth
+
+  reg:
+    maxItems: 1
+
+  clocks:
+    maxItems: 2
+
+  clock-names:
+    items:
+      - const: fe
+      - const: ethif
+
+  interrupts:
+    maxItems: 1
+
+  resets:
+    maxItems: 2
+
+  reset-names:
+    items:
+      - const: fe
+      - const: eth
+
+  mediatek,ethsys:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description:
+      Phandle to the syscon node that handles the port setup.
+
+  mdio-bus:
+    $ref: mdio.yaml#
+    unevaluatedProperties: false
+
+  "#address-cells":
+    const: 1
+
+  "#size-cells":
+    const: 0
+
+patternProperties:
+  "^mac@[0-1]$":
+    type: object
+    unevaluatedProperties: false
+    allOf:
+      - $ref: ethernet-controller.yaml#
+    description:
+      Ethernet MAC node
+    properties:
+      compatible:
+        const: mediatek,eth-mac
+
+      reg:
+        maxItems: 1
+
+    required:
+      - reg
+      - compatible
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - clocks
+  - clock-names
+  - resets
+  - reset-names
+  - mediatek,ethsys
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/mips-gic.h>
+    #include <dt-bindings/clock/mt7621-clk.h>
+    #include <dt-bindings/reset/mt7621-reset.h>
+
+    soc {
+        #address-cells = <1>;
+        #size-cells = <1>;
+
+        ethernet: ethernet@1e100000 {
+            compatible = "mediatek,mt7621-eth";
+            reg = <0x1e100000 0x10000>;
+
+            clocks = <&sysc MT7621_CLK_FE>, <&sysc MT7621_CLK_ETH>;
+            clock-names = "fe", "ethif";
+
+            #address-cells = <1>;
+            #size-cells = <0>;
+
+            resets = <&sysc MT7621_RST_FE>, <&sysc MT7621_RST_ETH>;
+            reset-names = "fe", "eth";
+
+            interrupt-parent = <&gic>;
+            interrupts = <GIC_SHARED 3 IRQ_TYPE_LEVEL_HIGH>;
+
+            mediatek,ethsys = <&sysc>;
+
+            pinctrl-names = "default";
+            pinctrl-0 = <&mdio_pins>, <&rgmii1_pins>, <&rgmii2_pins>;
+
+            gmac0: mac@0 {
+                compatible = "mediatek,eth-mac";
+                reg = <0>;
+                phy-mode = "rgmii";
+
+                fixed-link {
+                    speed = <1000>;
+                    full-duplex;
+                    pause;
+                };
+            };
+
+            gmac1: mac@1 {
+                compatible = "mediatek,eth-mac";
+                reg = <1>;
+                phy-mode = "rgmii";
+
+                fixed-link {
+                    speed = <1000>;
+                    full-duplex;
+                    pause;
+                };
+            };
+        };
+    };
