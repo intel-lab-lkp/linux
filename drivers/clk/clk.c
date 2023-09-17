@@ -2281,6 +2281,74 @@ out:
 }
 
 /*
+ * If the changed clock is consumer-configured, but not an ancestor of the
+ * trigger, it is most likely an unintended change. As a workaround, we try to
+ * set the rate back to the old without changing the parent. If this is not
+ * possible, the change should not have been suggested in the first place.
+ */
+static struct clk_core *clk_detect_unintended_rate_changes(struct clk_core *core,
+							   bool fix)
+{
+	struct clk_core *child, *tmp_clk;
+
+	if (core->rate == core->new_rate)
+		return NULL;
+
+	if (core->set_rate && core != rate_trigger_clk->core &&
+	    !clk_core_is_ancestor(rate_trigger_clk->core, core)) {
+		struct clk_core *parent = core->new_parent ? : core->parent;
+		struct clk_rate_request req;
+
+		pr_debug("%s: unintended change by %s (%lu -> %lu)\n", core->name,
+			 rate_trigger_clk->core->name, core->rate, core->new_rate);
+
+		if (fix) {
+			clk_hw_init_rate_request(core->hw, &req, core->rate);
+			req.best_parent_rate = parent->new_rate;
+			req.best_parent_hw = parent->hw;
+
+			if (clk_core_round_rate_nolock(core, &req))
+				return core;
+
+			/* TODO: how close is close enough? */
+			if (req.rate != core->rate) {
+				pr_debug("%s: %s fix failed, req=%lu, sugg=%lu\n",
+					 __func__, core->name, core->rate, req.rate);
+				return core;
+			}
+			if (req.best_parent_rate != parent->new_rate ||
+			    req.best_parent_hw != parent->hw) {
+				pr_debug("%s: %s fix failed, req=%s@%lu, sugg=%s@%lu\n",
+					 __func__, core->name, parent->name,
+					 parent->new_rate,
+					 req.best_parent_hw->core->name,
+					 req.best_parent_rate);
+				return core;
+			}
+
+			core->new_rate = core->rate;
+		}
+		return NULL;
+	}
+
+	hlist_for_each_entry(child, &core->children, child_node) {
+		if (child->new_parent && child->new_parent != core)
+			continue;
+		tmp_clk = clk_detect_unintended_rate_changes(child, fix);
+		if (tmp_clk)
+			return tmp_clk;
+	}
+
+	if (core->new_child) {
+		tmp_clk = clk_detect_unintended_rate_changes(core->new_child, fix);
+		if (tmp_clk)
+			return tmp_clk;
+	}
+
+	return NULL;
+}
+
+/*
  * Notify about rate changes in a subtree. Always walk down the whole tree
  * so that in case of an error we can walk down the whole tree again and
  * abort the change.
@@ -2483,6 +2551,21 @@ static int clk_core_set_rate_nolock(struct clk_core *core,
 		ret = -EBUSY;
 		goto err;
 	}
+
+	/*
+	 * The notifying process offers the possibility to fix the rates of
+	 * unrelated clocks along the tree. After that, run a detection to find
+	 * clocks which are potentially wrongly configured now. These might be
+	 * fixed by the core in the future.
+	 */
+	fail_clk = clk_detect_unintended_rate_changes(top, false);
+	if (fail_clk) {
+		pr_err("%s: unintended rate change cannot be fixed\n",
+		       fail_clk->name);
+		ret = -EINVAL;
+		goto err;
+	}
+
 
 	/* change the rates */
 	clk_change_rate(top);
