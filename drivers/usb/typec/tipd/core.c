@@ -484,7 +484,11 @@ static bool tps6598x_read_power_status(struct tps6598x *tps)
 		return false;
 	}
 	tps->pwr_status = pwr_status;
-	trace_tps6598x_power_status(pwr_status);
+
+	if (tps->is_tps25750)
+		trace_tps25750_power_status(pwr_status);
+	else
+		trace_tps6598x_power_status(pwr_status);
 
 	return true;
 }
