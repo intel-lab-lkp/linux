@@ -12,6 +12,7 @@
 #include <linux/export.h>
 #include <linux/io.h>
 #include <linux/iopoll.h>
+#include <linux/lcm.h>
 #include <linux/slab.h>
 #include <linux/jiffies.h>
 
@@ -36,6 +37,7 @@
 
 struct clk_pll14xx {
 	struct clk_hw			hw;
+	unsigned long			rate;
 	void __iomem			*base;
 	enum imx_pll14xx_type		type;
 	const struct imx_pll14xx_rate_table *rate_table;
@@ -235,6 +237,22 @@ static long clk_pll1443x_round_rate(struct clk_hw *hw, unsigned long rate,
 	struct clk_pll14xx *pll = to_clk_pll14xx(hw);
 	struct imx_pll14xx_rate_table t;
 
+	/*
+	 * If the PLL is configured more than once, we have to consider the
+	 * active config for the new rate. As the children have divider, also
+	 * allow multiples of the already configured rate. This is a simple
+	 * approach to enable dynamic re-config via SET_CLK_RATE_PARENT for more
+	 * than one consumer. E.g. on the imx8mp, when video_pll1 is parent of
+	 * media_ldb and media_disp2_pix (always 7:1).
+	 */
+	if (pll->rate) {
+		unsigned long want = rate;
+
+		rate = lcm(pll->rate, rate);
+		pr_debug("%s: old=%ld, want=%ld, new=%ld\n", clk_hw_get_name(hw),
+			 pll->rate, want, rate);
+	}
+
 	imx_pll14xx_calc_settings(pll, rate, *prate, &t);
 
 	return t.rate;
@@ -342,6 +360,8 @@ static int clk_pll1416x_set_rate(struct clk_hw *hw, unsigned long drate,
 	/* Bypass */
 	tmp &= ~BYPASS_MASK;
 	writel_relaxed(tmp, pll->base + GNRL_CTL);
+
+	pll->rate = rate->rate;
 
 	return 0;
 }
