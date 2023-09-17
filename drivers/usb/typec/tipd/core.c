@@ -42,6 +42,7 @@
 #define TPS_REG_PD_STATUS		0x40
 #define TPS_REG_RX_IDENTITY_SOP		0x48
 #define TPS_REG_DATA_STATUS		0x5f
+#define TPS_REG_SLEEP_CONF		0x70
 
 /* TPS_REG_SYSTEM_CONF bits */
 #define TPS_SYSCONF_PORTINFO(c)		((c) & 7)
@@ -203,6 +204,11 @@ static inline int tps6598x_read32(struct tps6598x *tps, u8 reg, u32 *val)
 static inline int tps6598x_read64(struct tps6598x *tps, u8 reg, u64 *val)
 {
 	return tps6598x_block_read(tps, reg, val, sizeof(u64));
+}
+
+static inline int tps6598x_write8(struct tps6598x *tps, u8 reg, u8 val)
+{
+	return tps6598x_block_write(tps, reg, &val, sizeof(u8));
 }
 
 static inline int tps6598x_write64(struct tps6598x *tps, u8 reg, u64 val)
@@ -977,6 +983,24 @@ wait_for_app:
 	return 0;
 };
 
+static int tps25750_init(struct tps6598x *tps)
+{
+	int ret;
+
+	ret = tps25750_apply_patch(tps);
+	if (ret)
+		return ret;
+
+	ret = tps6598x_write8(tps, TPS_REG_SLEEP_CONF,
+			      TPS_SLEEP_CONF_SLEEP_MODE_ALLOWED);
+	if (ret)
+		dev_warn(tps->dev,
+			 "%s: failed to enable sleep mode: %d\n",
+			 __func__, ret);
+
+	return 0;
+}
+
 static int
 tps6598x_register_port(struct tps6598x *tps, struct fwnode_handle *fwnode)
 {
@@ -1131,6 +1155,7 @@ static int tps6598x_probe(struct i2c_client *client)
 		irq_handler = cd321x_interrupt;
 	} else {
 		tps->is_tps25750 = of_device_is_compatible(np, "ti,tps25750");
+
 		/* Enable power status, data status and plug event interrupts */
 		mask1 = TPS_REG_INT_POWER_STATUS_UPDATE |
 			TPS_REG_INT_DATA_STATUS_UPDATE |
@@ -1138,6 +1163,7 @@ static int tps6598x_probe(struct i2c_client *client)
 	}
 
 	tps->irq_handler = irq_handler;
+
 	/* Make sure the controller has application firmware running */
 	ret = tps6598x_check_mode(tps, &mode);
 	if (ret)
@@ -1148,6 +1174,7 @@ static int tps6598x_probe(struct i2c_client *client)
 		if (ret)
 			return ret;
 	}
+
 
 	ret = tps6598x_write64(tps, TPS_REG_INT_MASK1, mask1);
 	if (ret)
@@ -1286,7 +1313,7 @@ static int __maybe_unused tps6598x_resume(struct device *dev)
 		return ret;
 
 	if (mode == TPS_MODE_PTCH) {
-		ret = tps25750_apply_patch(tps);
+		ret = tps25750_init(tps);
 		if (ret)
 			return ret;
 	}
