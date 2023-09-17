@@ -574,7 +574,11 @@ static irqreturn_t tps6598x_interrupt(int irq, void *data)
 		dev_err(tps->dev, "%s: failed to read events\n", __func__);
 		goto err_unlock;
 	}
-	trace_tps6598x_irq(event[0], event[1]);
+
+	if (tps->is_tps25750)
+		trace_tps25750_irq(event[0]);
+	else
+		trace_tps6598x_irq(event[0], event[1]);
 
 	if (!(event[0] | event[1]))
 		goto err_unlock;
