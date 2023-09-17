@@ -43,8 +43,22 @@ patternProperties:
                    pcm gpio, pcm i2s, pcm uartf, spi, uartf, uartlite]
 
           groups:
-            description:
+            description: |
               An array of strings. Each string contains the name of a group.
+
+              group             pins
+              ------------------------------------------------------------------
+              "i2c"             1, 2
+              "spi"             3, 4, 5, 6
+              "uartf"           7, 8, 9, 10, 11, 12, 13, 14
+              "uartlite"        15, 16
+              "jtag"            17, 18, 19, 20, 21
+              "mdio"            22, 23
+              "lna a"           32, 33, 34
+              "lna g"           35, 36, 37
+              "ge1"             72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83
+              "ge2"             84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95
+
             maxItems: 1
 
         required:

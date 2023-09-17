@@ -43,8 +43,23 @@ patternProperties:
                    uartf, uartlite, wdg_cs1]
 
           groups:
-            description:
+            description: |
               An array of strings. Each string contains the name of a group.
+
+              group             pins
+              ------------------------------------------------------------------
+              "i2c"             1, 2
+              "spi"             3, 4, 5, 6
+              "uartf"           7, 8, 9, 10, 11, 12, 13, 14
+              "uartlite"        15, 16
+              "jtag"            17, 18, 19, 20, 21
+              "mdio"            22, 23
+              "rgmii"           24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35
+              "lna"             36, 37
+              "pa"              38, 39
+              "led"             40, 41, 42, 43, 44
+              "spi_cs1"         45
+
             maxItems: 1
 
         required:
