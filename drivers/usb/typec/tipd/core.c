@@ -1189,6 +1189,18 @@ static int __maybe_unused tps6598x_resume(struct device *dev)
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct tps6598x *tps = i2c_get_clientdata(client);
+	u8 mode;
+	int ret;
+
+	ret = tps6598x_check_mode(tps, &mode);
+	if (ret)
+		return ret;
+
+	if (mode == TPS_MODE_PTCH) {
+		ret = tps25750_apply_patch(tps);
+		if (ret)
+			return ret;
+	}
 
 	if (tps->wakeup) {
 		disable_irq_wake(client->irq);
