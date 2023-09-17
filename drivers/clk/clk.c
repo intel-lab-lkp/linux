@@ -70,6 +70,7 @@ struct clk_core {
 	unsigned long		rate;
 	unsigned long		req_rate;
 	unsigned long		new_rate;
+	unsigned long		set_rate;
 	struct clk_core		*new_parent;
 	struct clk_core		*new_child;
 	unsigned long		flags;
@@ -541,6 +542,12 @@ bool __clk_is_enabled(struct clk *clk)
 }
 EXPORT_SYMBOL_GPL(__clk_is_enabled);
 
+bool __clk_is_rate_set(struct clk *clk)
+{
+	return clk->core->set_rate > 0;
+}
+EXPORT_SYMBOL_GPL(__clk_is_rate_set);
+
 static bool mux_is_better_rate(unsigned long rate, unsigned long now,
 			   unsigned long best, unsigned long flags)
 {
@@ -573,6 +580,19 @@ static bool clk_core_has_parent(struct clk_core *core, const struct clk_core *pa
 
 		if (tmp == parent)
 			return true;
+	}
+
+	return false;
+}
+
+static bool clk_core_is_ancestor(struct clk_core *core, const struct clk_core *ancestor)
+{
+	struct clk_core *tmp = core->parent;
+
+	while (tmp) {
+		if (tmp == ancestor)
+			return true;
+		tmp = tmp->parent;
 	}
 
 	return false;
@@ -2358,6 +2378,9 @@ static void clk_change_rate(struct clk_core *core)
 
 	trace_clk_set_rate_complete(core, core->new_rate);
 
+	if (rate_trigger_clk && clk_core_is_ancestor(rate_trigger_clk->core, core))
+		core->set_rate = core->new_rate;
+
 	core->rate = clk_recalc(core, best_parent_rate);
 
 	if (core->flags & CLK_SET_RATE_UNGATE) {
@@ -2528,6 +2551,7 @@ int clk_set_rate(struct clk *clk, unsigned long rate)
 		clk_core_rate_protect(clk->core);
 
 	rate_trigger_clk = NULL;
+	clk->core->set_rate = rate;
 
 	clk_prepare_unlock();
 
@@ -2579,6 +2603,7 @@ int clk_set_rate_exclusive(struct clk *clk, unsigned long rate)
 	}
 
 	rate_trigger_clk = NULL;
+	clk->core->set_rate = rate;
 
 	clk_prepare_unlock();
 
