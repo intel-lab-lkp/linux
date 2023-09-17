@@ -734,7 +734,7 @@ static int newseg(struct ipc_namespace *ns, struct ipc_params *params)
 
 	shp->shm_perm.security = NULL;
 	error = security_shm_alloc(&shp->shm_perm);
-	if (error) {
+	if (unlikely(error)) {
 		kfree(shp);
 		return error;
 	}
