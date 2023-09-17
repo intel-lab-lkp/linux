@@ -60,6 +60,7 @@ struct clk_notifier {
 /**
  * struct clk_notifier_data - rate data to pass to the notifier callback
  * @clk: struct clk * being changed
+ * @trigger: struct clk * being responsible for the change
  * @old_rate: previous rate of this clk
  * @new_rate: new rate of this clk
  *
@@ -70,6 +71,7 @@ struct clk_notifier {
  */
 struct clk_notifier_data {
 	struct clk		*clk;
+	struct clk		*trigger;
 	unsigned long		old_rate;
 	unsigned long		new_rate;
 };

@@ -33,6 +33,9 @@ static struct task_struct *enable_owner;
 static int prepare_refcnt;
 static int enable_refcnt;
 
+/* responsible for ongoing rate change, protected by prepare_lock */
+static struct clk *rate_trigger_clk;
+
 static HLIST_HEAD(clk_root_list);
 static HLIST_HEAD(clk_orphan_list);
 static LIST_HEAD(clk_notifier_list);
@@ -1742,6 +1745,7 @@ static int __clk_notify(struct clk_core *core, unsigned long msg,
 
 	cnd.old_rate = old_rate;
 	cnd.new_rate = new_rate;
+	cnd.trigger = rate_trigger_clk ? : core->parent->hw->clk;
 
 	list_for_each_entry(cn, &clk_notifier_list, node) {
 		if (cn->clk->core == core) {
@@ -2513,6 +2517,8 @@ int clk_set_rate(struct clk *clk, unsigned long rate)
 	/* prevent racing with updates to the clock topology */
 	clk_prepare_lock();
 
+	rate_trigger_clk = clk;
+
 	if (clk->exclusive_count)
 		clk_core_rate_unprotect(clk->core);
 
@@ -2520,6 +2526,8 @@ int clk_set_rate(struct clk *clk, unsigned long rate)
 
 	if (clk->exclusive_count)
 		clk_core_rate_protect(clk->core);
+
+	rate_trigger_clk = NULL;
 
 	clk_prepare_unlock();
 
@@ -2556,6 +2564,8 @@ int clk_set_rate_exclusive(struct clk *clk, unsigned long rate)
 	/* prevent racing with updates to the clock topology */
 	clk_prepare_lock();
 
+	rate_trigger_clk = clk;
+
 	/*
 	 * The temporary protection removal is not here, on purpose
 	 * This function is meant to be used instead of clk_rate_protect,
@@ -2567,6 +2577,8 @@ int clk_set_rate_exclusive(struct clk *clk, unsigned long rate)
 		clk_core_rate_protect(clk->core);
 		clk->exclusive_count++;
 	}
+
+	rate_trigger_clk = NULL;
 
 	clk_prepare_unlock();
 
