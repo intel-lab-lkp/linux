@@ -68,6 +68,7 @@ enum {
 	TPS_MODE_BOOT,
 	TPS_MODE_BIST,
 	TPS_MODE_DISC,
+	TPS_MODE_PTCH,
 };
 
 static const char *const modes[] = {
@@ -75,6 +76,7 @@ static const char *const modes[] = {
 	[TPS_MODE_BOOT]	= "BOOT",
 	[TPS_MODE_BIST]	= "BIST",
 	[TPS_MODE_DISC]	= "DISC",
+	[TPS_MODE_PTCH] = "PTCH",
 };
 
 /* Unrecognized commands will be replaced with "!CMD" */
@@ -576,7 +578,7 @@ static void tps6598x_poll_work(struct work_struct *work)
 			   &tps->wq_poll, msecs_to_jiffies(POLL_INTERVAL));
 }
 
-static int tps6598x_check_mode(struct tps6598x *tps)
+static int tps6598x_check_mode(struct tps6598x *tps, u8 *curr_mode)
 {
 	char mode[5] = { };
 	int ret;
@@ -585,8 +587,11 @@ static int tps6598x_check_mode(struct tps6598x *tps)
 	if (ret)
 		return ret;
 
-	switch (match_string(modes, ARRAY_SIZE(modes), mode)) {
+	*curr_mode = match_string(modes, ARRAY_SIZE(modes), mode);
+
+	switch (*curr_mode) {
 	case TPS_MODE_APP:
+	case TPS_MODE_PTCH:
 		return 0;
 	case TPS_MODE_BOOT:
 		dev_warn(tps->dev, "dead-battery condition\n");
@@ -715,6 +720,7 @@ static int tps6598x_probe(struct i2c_client *client)
 	u32 vid;
 	int ret;
 	u64 mask1;
+	u8 mode;
 
 	tps = devm_kzalloc(&client->dev, sizeof(*tps), GFP_KERNEL);
 	if (!tps)
@@ -759,7 +765,7 @@ static int tps6598x_probe(struct i2c_client *client)
 
 	tps->irq_handler = irq_handler;
 	/* Make sure the controller has application firmware running */
-	ret = tps6598x_check_mode(tps);
+	ret = tps6598x_check_mode(tps, &mode);
 	if (ret)
 		return ret;
 
