@@ -332,6 +332,15 @@ static int clk_divider_bestdiv(struct clk_hw *hw, struct clk_hw *parent,
 			bestdiv = i;
 			best = now;
 			*best_parent_rate = parent_rate;
+			if (now == rate)
+				/*
+				 * Calculating fitting PLL parameters, which
+				 * might be done in parent's round_rate, can be
+				 * time-consuming. Therefore, the lowest parent
+				 * rate which gives us the exact required rate
+				 * is already optimal.
+				 */
+				return i;
 		}
 	}
 
