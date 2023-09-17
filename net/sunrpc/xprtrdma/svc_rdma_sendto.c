@@ -211,6 +211,7 @@ out:
 	xdr_init_encode(&ctxt->sc_stream, &ctxt->sc_hdrbuf,
 			ctxt->sc_xprt_buf, NULL);
 
+	svc_rdma_cc_init(rdma, &ctxt->sc_reply_info.wi_cc);
 	ctxt->sc_send_wr.num_sge = 0;
 	ctxt->sc_cur_sge_no = 0;
 	ctxt->sc_page_count = 0;
@@ -238,6 +239,8 @@ void svc_rdma_send_ctxt_put(struct svcxprt_rdma *rdma,
 {
 	struct ib_device *device = rdma->sc_cm_id->device;
 	unsigned int i;
+
+	svc_rdma_reply_chunk_release(rdma, ctxt);
 
 	if (ctxt->sc_page_count)
 		release_pages(ctxt->sc_pages, ctxt->sc_page_count);
@@ -854,7 +857,10 @@ static void svc_rdma_save_io_pages(struct svc_rqst *rqstp,
  *
  * RDMA Send is the last step of transmitting an RPC reply. Pages
  * involved in the earlier RDMA Writes are here transferred out
- * of the rqstp and into the sctxt's page array. These pages are
+ * of the rqstp and into the sctxt's page array.
+ *
+ * UPDATE ME:
+ * These pages are
  * DMA unmapped by each Write completion, but the subsequent Send
  * completion finally releases these pages.
  *
@@ -866,6 +872,7 @@ static int svc_rdma_send_reply_msg(struct svcxprt_rdma *rdma,
 				   const struct svc_rdma_recv_ctxt *rctxt,
 				   struct svc_rqst *rqstp)
 {
+	struct ib_send_wr *send_wr = &sctxt->sc_send_wr;
 	int ret;
 
 	ret = svc_rdma_map_reply_msg(rdma, sctxt, rctxt, &rqstp->rq_res);
@@ -875,10 +882,10 @@ static int svc_rdma_send_reply_msg(struct svcxprt_rdma *rdma,
 	svc_rdma_save_io_pages(rqstp, sctxt);
 
 	if (rctxt->rc_inv_rkey) {
-		sctxt->sc_send_wr.opcode = IB_WR_SEND_WITH_INV;
-		sctxt->sc_send_wr.ex.invalidate_rkey = rctxt->rc_inv_rkey;
+		send_wr->opcode = IB_WR_SEND_WITH_INV;
+		send_wr->ex.invalidate_rkey = rctxt->rc_inv_rkey;
 	} else {
-		sctxt->sc_send_wr.opcode = IB_WR_SEND;
+		send_wr->opcode = IB_WR_SEND;
 	}
 
 	return svc_rdma_post_send(rdma, sctxt);
@@ -992,7 +999,7 @@ int svc_rdma_sendto(struct svc_rqst *rqstp)
 	if (!p)
 		goto put_ctxt;
 
-	ret = svc_rdma_send_reply_chunk(rdma, rctxt, sctxt, &rqstp->rq_res);
+	ret = svc_rdma_prepare_reply_chunk(rdma, rctxt, sctxt, &rqstp->rq_res);
 	if (ret < 0)
 		goto reply_chunk;
 	rc_size = ret;
