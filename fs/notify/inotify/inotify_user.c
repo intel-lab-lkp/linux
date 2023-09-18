@@ -797,6 +797,12 @@ SYSCALL_DEFINE3(inotify_add_watch, int, fd, const char __user *, pathname,
 	return do_inotify_add_watch(fd, AT_FDCWD, pathname, mask);
 }
 
+SYSCALL_DEFINE4(inotify_add_watch_at, int, fd, int, dfd, const char __user *, pathname,
+		u32, mask)
+{
+	return do_inotify_add_watch(fd, dfd, pathname, mask);
+}
+
 SYSCALL_DEFINE2(inotify_rm_watch, int, fd, __s32, wd)
 {
 	struct fsnotify_group *group;
