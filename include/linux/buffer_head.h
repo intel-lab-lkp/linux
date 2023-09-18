@@ -277,6 +277,7 @@ int generic_cont_expand_simple(struct inode *inode, loff_t size);
 void block_commit_write(struct page *page, unsigned int from, unsigned int to);
 int block_page_mkwrite(struct vm_area_struct *vma, struct vm_fault *vmf,
 				get_block_t get_block);
+
 sector_t generic_block_bmap(struct address_space *, sector_t, get_block_t *);
 int block_truncate_page(struct address_space *, loff_t, get_block_t *);
 
@@ -448,6 +449,22 @@ __bread(struct block_device *bdev, sector_t block, unsigned size)
 }
 
 bool block_dirty_folio(struct address_space *mapping, struct folio *folio);
+
+static inline sector_t block_index_to_sector(pgoff_t index, unsigned int blkbits)
+{
+	if (PAGE_SHIFT < blkbits)
+		return (sector_t)index >> (blkbits - PAGE_SHIFT);
+	else
+		return (sector_t)index << (PAGE_SHIFT - blkbits);
+}
+
+static inline pgoff_t block_sector_to_index(sector_t block, unsigned int blkbits)
+{
+	if (PAGE_SHIFT < blkbits)
+		return (pgoff_t)block << (blkbits - PAGE_SHIFT);
+	else
+		return (pgoff_t)block >> (PAGE_SHIFT - blkbits);
+}
 
 #ifdef CONFIG_BUFFER_HEAD
 
