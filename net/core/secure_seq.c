@@ -118,13 +118,13 @@ EXPORT_SYMBOL(secure_ipv6_port_ephemeral);
 #endif
 
 #ifdef CONFIG_INET
-u32 secure_tcp_ts_off(const struct net *net, __be32 saddr, __be32 daddr)
+u32 secure_tcp_ts_off(const struct net *net, __be16 sport, __be32 daddr)
 {
 	if (READ_ONCE(net->ipv4.sysctl_tcp_timestamps) != 1)
 		return 0;
 
 	ts_secret_init();
-	return siphash_2u32((__force u32)saddr, (__force u32)daddr,
+	return siphash_2u32((__force u32)sport, (__force u32)daddr,
 			    &ts_secret);
 }
 
