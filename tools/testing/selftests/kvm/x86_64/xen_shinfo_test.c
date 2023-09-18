@@ -68,6 +68,7 @@ enum {
 	TEST_POLL_TIMEOUT,
 	TEST_POLL_MASKED,
 	TEST_POLL_WAKE,
+	SET_VCPU_INFO,
 	TEST_TIMER_PAST,
 	TEST_LOCKING_SEND_RACE,
 	TEST_LOCKING_POLL_RACE,
@@ -327,6 +328,10 @@ static void guest_code(void)
 
 	GUEST_SYNC(TEST_POLL_WAKE);
 
+	/* Set the vcpu_info to point at exactly the place it already is to
+	 * make sure the attribute is functional. */
+	GUEST_SYNC(SET_VCPU_INFO);
+
 	/* A timer wake an *unmasked* port which should wake us with an
 	 * actual interrupt, while we're polling on a different port. */
 	ports[0]++;
@@ -549,7 +554,10 @@ int main(int argc, char *argv[])
 		.type = KVM_XEN_VCPU_ATTR_TYPE_VCPU_INFO,
 		.u.gpa = VCPU_INFO_ADDR,
 	};
-	vcpu_ioctl(vcpu, KVM_XEN_VCPU_SET_ATTR, &vi);
+
+	if (!has_vcpu_id || !has_shinfo_hva) {
+		vcpu_ioctl(vcpu, KVM_XEN_VCPU_SET_ATTR, &vi);
+	}
 
 	struct kvm_xen_vcpu_attr pvclock = {
 		.type = KVM_XEN_VCPU_ATTR_TYPE_VCPU_TIME_INFO,
@@ -901,6 +909,10 @@ int main(int argc, char *argv[])
 				TEST_ASSERT(tmr.u.timer.expires_ns == rs->state_entry_time + 100000000,
 					    "Timer not reported pending");
 				alarm(1);
+				break;
+
+			case SET_VCPU_INFO:
+				vcpu_ioctl(vcpu, KVM_XEN_VCPU_SET_ATTR, &vi);
 				break;
 
 			case TEST_TIMER_PAST:
