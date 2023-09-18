@@ -298,7 +298,8 @@ static int rockchip_cpuclk_notifier_cb(struct notifier_block *nb,
 }
 
 struct clk *rockchip_clk_register_cpuclk(const char *name,
-			const char *const *parent_names, u8 num_parents,
+			u8 num_parents,
+			struct clk *parent, struct clk *alt_parent,
 			const struct rockchip_cpuclk_reg_data *reg_data,
 			const struct rockchip_cpuclk_rate_table *rates,
 			int nrates, void __iomem *reg_base, spinlock_t *lock)
@@ -306,6 +307,7 @@ struct clk *rockchip_clk_register_cpuclk(const char *name,
 	struct rockchip_cpuclk *cpuclk;
 	struct clk_init_data init;
 	struct clk *clk, *cclk;
+	const char *parent_name;
 	int ret;
 
 	if (num_parents < 2) {
@@ -313,12 +315,18 @@ struct clk *rockchip_clk_register_cpuclk(const char *name,
 		return ERR_PTR(-EINVAL);
 	}
 
+	if (IS_ERR(parent) || IS_ERR(alt_parent)) {
+		pr_err("%s: invalid parent clock(s)\n", __func__);
+		return ERR_PTR(-EINVAL);
+	}
+
 	cpuclk = kzalloc(sizeof(*cpuclk), GFP_KERNEL);
 	if (!cpuclk)
 		return ERR_PTR(-ENOMEM);
 
+	parent_name = clk_hw_get_name(__clk_get_hw(parent));
 	init.name = name;
-	init.parent_names = &parent_names[reg_data->mux_core_main];
+	init.parent_names = &parent_name;
 	init.num_parents = 1;
 	init.ops = &rockchip_cpuclk_ops;
 
@@ -336,7 +344,7 @@ struct clk *rockchip_clk_register_cpuclk(const char *name,
 	cpuclk->clk_nb.notifier_call = rockchip_cpuclk_notifier_cb;
 	cpuclk->hw.init = &init;
 
-	cpuclk->alt_parent = __clk_lookup(parent_names[reg_data->mux_core_alt]);
+	cpuclk->alt_parent = alt_parent;
 	if (!cpuclk->alt_parent) {
 		pr_err("%s: could not lookup alternate parent: (%d)\n",
 		       __func__, reg_data->mux_core_alt);
@@ -351,11 +359,11 @@ struct clk *rockchip_clk_register_cpuclk(const char *name,
 		goto free_cpuclk;
 	}
 
-	clk = __clk_lookup(parent_names[reg_data->mux_core_main]);
+	clk = parent;
 	if (!clk) {
 		pr_err("%s: could not lookup parent clock: (%d) %s\n",
 		       __func__, reg_data->mux_core_main,
-		       parent_names[reg_data->mux_core_main]);
+		       parent_name);
 		ret = -EINVAL;
 		goto free_alt_parent;
 	}

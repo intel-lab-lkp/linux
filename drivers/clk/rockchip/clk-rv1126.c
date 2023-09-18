@@ -1056,6 +1056,7 @@ static struct rockchip_clk_branch rv1126_clk_branches[] __initdata = {
 			RV1126_CLKGATE_CON(23), 0, GFLAGS),
 };
 
+static struct rockchip_clk_provider *pmucru_ctx;
 static void __init rv1126_pmu_clk_init(struct device_node *np)
 {
 	struct rockchip_clk_provider *ctx;
@@ -1084,12 +1085,15 @@ static void __init rv1126_pmu_clk_init(struct device_node *np)
 				  ROCKCHIP_SOFTRST_HIWORD_MASK);
 
 	rockchip_clk_of_add_provider(np, ctx);
+
+	pmucru_ctx = ctx;
 }
 
 static void __init rv1126_clk_init(struct device_node *np)
 {
 	struct rockchip_clk_provider *ctx;
 	void __iomem *reg_base;
+	struct clk **cru_clks, **pmucru_clks;
 
 	reg_base = of_iomap(np, 0);
 	if (!reg_base) {
@@ -1103,13 +1107,15 @@ static void __init rv1126_clk_init(struct device_node *np)
 		iounmap(reg_base);
 		return;
 	}
+	cru_clks = ctx->clk_data.clks;
+	pmucru_clks = pmucru_ctx->clk_data.clks;
 
 	rockchip_clk_register_plls(ctx, rv1126_pll_clks,
 				   ARRAY_SIZE(rv1126_pll_clks),
 				   RV1126_GRF_SOC_STATUS0);
 
 	rockchip_clk_register_armclk(ctx, ARMCLK, "armclk",
-				     mux_armclk_p, ARRAY_SIZE(mux_armclk_p),
+				     3, cru_clks[PLL_APLL], pmucru_clks[PLL_GPLL],
 				     &rv1126_cpuclk_data, rv1126_cpuclk_rates,
 				     ARRAY_SIZE(rv1126_cpuclk_rates));
 
