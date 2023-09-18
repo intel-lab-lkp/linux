@@ -755,12 +755,15 @@ void snd_hda_codec_disconnect_pcms(struct hda_codec *codec)
 static void codec_release_pcms(struct hda_codec *codec)
 {
 	struct hda_pcm *pcm, *n;
+	int dir;
 
 	list_for_each_entry_safe(pcm, n, &codec->pcm_list_head, list) {
 		list_del(&pcm->list);
 		if (pcm->pcm)
 			snd_device_free(pcm->codec->card, pcm->pcm);
 		clear_bit(pcm->device, pcm->codec->bus->pcm_dev_bits);
+		for_each_pcm_streams(dir)
+			kfree(pcm->stream[dir].subformats);
 		kfree(pcm->name);
 		kfree(pcm);
 	}
@@ -3163,6 +3166,7 @@ static int set_pcm_default_values(struct hda_codec *codec,
 		err = snd_hda_query_supported_pcm(codec, info->nid,
 				info->rates ? NULL : &info->rates,
 				info->formats ? NULL : &info->formats,
+				info->subformats ? NULL : &info->subformats,
 				info->maxbps ? NULL : &info->maxbps);
 		if (err < 0)
 			return err;
@@ -3757,6 +3761,7 @@ int snd_hda_multi_out_analog_open(struct hda_codec *codec,
 			snd_hda_query_supported_pcm(codec, mout->dig_out_nid,
 						    &mout->spdif_rates,
 						    &mout->spdif_formats,
+						    NULL,
 						    &mout->spdif_maxbps);
 		}
 		mutex_lock(&codec->spdif_mutex);
