@@ -790,7 +790,7 @@ static int inv_icm42600_runtime_resume(struct device *dev)
 	return ret;
 }
 
-EXPORT_NS_GPL_DEV_PM_OPS(inv_icm42600_pm_ops, IIO_ICM42600) = {
+EXPORT_NS_GPL_RUNTIME_PM_OPS(inv_icm42600_pm_ops, IIO_ICM42600) = {
 	SYSTEM_SLEEP_PM_OPS(inv_icm42600_suspend, inv_icm42600_resume)
 	RUNTIME_PM_OPS(inv_icm42600_runtime_suspend,
 		       inv_icm42600_runtime_resume, NULL)
