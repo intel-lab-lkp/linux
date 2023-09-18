@@ -38,6 +38,10 @@ enum {
 	IOU_STOP_MULTISHOT	= -ECANCELED,
 };
 
+struct io_ring_ctx *io_uring_id_to_ctx(unsigned int id);
+int io_uring_register_notifier(struct notifier_block *nb);
+void io_uring_unregister_notifier(struct notifier_block *nb);
+
 bool io_cqe_cache_refill(struct io_ring_ctx *ctx, bool overflow);
 void io_req_cqe_overflow(struct io_kiocb *req);
 int io_run_task_work_sig(struct io_ring_ctx *ctx);

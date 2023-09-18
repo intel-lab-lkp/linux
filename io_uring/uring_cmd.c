@@ -192,3 +192,15 @@ int io_uring_cmd_sock(struct io_uring_cmd *cmd, unsigned int issue_flags)
 	}
 }
 EXPORT_SYMBOL_GPL(io_uring_cmd_sock);
+
+int io_uring_cmd_register_notifier(struct notifier_block *nb)
+{
+	return io_uring_register_notifier(nb);
+}
+EXPORT_SYMBOL_GPL(io_uring_cmd_register_notifier);
+
+void io_uring_cmd_unregister_notifier(struct notifier_block *nb)
+{
+	io_uring_unregister_notifier(nb);
+}
+EXPORT_SYMBOL_GPL(io_uring_cmd_unregister_notifier);

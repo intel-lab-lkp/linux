@@ -47,7 +47,19 @@ static inline const void *io_uring_sqe_cmd(const struct io_uring_sqe *sqe)
 
 #define IO_URING_INVALID_CTX_ID  UINT_MAX
 
+enum io_uring_notifier {
+	IO_URING_NOTIFIER_CTX_EXIT,
+	IO_URING_NOTIFIER_IO_TASK_EXIT,
+};
+
+struct io_uring_notifier_data {
+	unsigned int ctx_id;
+	const struct task_struct *task;
+};
+
 #if defined(CONFIG_IO_URING)
+int io_uring_cmd_register_notifier(struct notifier_block *nb);
+void io_uring_cmd_unregister_notifier(struct notifier_block *nb);
 int io_uring_cmd_import_fixed(u64 ubuf, unsigned long len, int rw,
 			      struct iov_iter *iter, void *ioucmd);
 void io_uring_cmd_done(struct io_uring_cmd *cmd, ssize_t ret, ssize_t res2,
@@ -89,6 +101,13 @@ static inline void io_uring_free(struct task_struct *tsk)
 }
 int io_uring_cmd_sock(struct io_uring_cmd *cmd, unsigned int issue_flags);
 #else
+static inline int io_uring_cmd_register_notifier(struct notifier_block *nb)
+{
+	return 0;
+}
+static inline void io_uring_cmd_unregister_notifier(struct notifier_block *nb)
+{
+}
 static inline int io_uring_cmd_import_fixed(u64 ubuf, unsigned long len, int rw,
 			      struct iov_iter *iter, void *ioucmd)
 {

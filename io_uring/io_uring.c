@@ -73,6 +73,7 @@
 #include <linux/audit.h>
 #include <linux/security.h>
 #include <asm/shmparam.h>
+#include <linux/notifier.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/io_uring.h>
@@ -180,6 +181,22 @@ static struct ctl_table kernel_io_uring_disabled_table[] = {
 /* mapping between io_ring_ctx instance and its ctx_id */
 static DEFINE_XARRAY_FLAGS(ctx_ids, XA_FLAGS_ALLOC);
 
+/*
+ * Uring_cmd driver can register to be notified when ctx/io_uring_task
+ * is going away for canceling inflight commands.
+ */
+static struct srcu_notifier_head notifier_chain;
+
+int io_uring_register_notifier(struct notifier_block *nb)
+{
+	return srcu_notifier_chain_register(&notifier_chain, nb);
+}
+
+void io_uring_unregister_notifier(struct notifier_block *nb)
+{
+	srcu_notifier_chain_unregister(&notifier_chain, nb);
+}
+
 struct sock *io_uring_get_socket(struct file *file)
 {
 #if defined(CONFIG_UNIX)
@@ -192,6 +209,11 @@ struct sock *io_uring_get_socket(struct file *file)
 	return NULL;
 }
 EXPORT_SYMBOL(io_uring_get_socket);
+
+struct io_ring_ctx *io_uring_id_to_ctx(unsigned int id)
+{
+	return (struct io_ring_ctx *)xa_load(&ctx_ids, id);
+}
 
 static inline void io_submit_flush_completions(struct io_ring_ctx *ctx)
 {
@@ -3068,6 +3090,23 @@ static __cold bool io_cancel_ctx_cb(struct io_wq_work *work, void *data)
 	return req->ctx == data;
 }
 
+static __cold void io_uring_cancel_notify(struct io_ring_ctx *ctx,
+					  struct task_struct *task)
+{
+	struct io_uring_notifier_data notifier_data = {
+		.ctx_id = ctx->id,
+		.task	= task,
+	};
+	enum io_uring_notifier notifier;
+
+	if (!task)
+		notifier = IO_URING_NOTIFIER_CTX_EXIT;
+	else
+		notifier = IO_URING_NOTIFIER_IO_TASK_EXIT;
+
+	srcu_notifier_call_chain(&notifier_chain, notifier, &notifier_data);
+}
+
 static __cold void io_ring_exit_work(struct work_struct *work)
 {
 	struct io_ring_ctx *ctx = container_of(work, struct io_ring_ctx, exit_work);
@@ -3076,6 +3115,8 @@ static __cold void io_ring_exit_work(struct work_struct *work)
 	struct io_tctx_exit exit;
 	struct io_tctx_node *node;
 	int ret;
+
+	io_uring_cancel_notify(ctx, NULL);
 
 	/*
 	 * If we're doing polled IO and end up having requests being
@@ -3355,6 +3396,11 @@ __cold void io_uring_cancel_generic(bool cancel_all, struct io_sq_data *sqd)
 		return;
 	if (tctx->io_wq)
 		io_wq_exit_start(tctx->io_wq);
+
+	if (!cancel_all) {
+		xa_for_each(&tctx->xa, index, node)
+			io_uring_cancel_notify(node->ctx, current);
+	}
 
 	atomic_inc(&tctx->in_cancel);
 	do {
@@ -4704,6 +4750,8 @@ static int __init io_uring_init(void)
 #ifdef CONFIG_SYSCTL
 	register_sysctl_init("kernel", kernel_io_uring_disabled_table);
 #endif
+
+	srcu_init_notifier_head(&notifier_chain);
 
 	return 0;
 };
