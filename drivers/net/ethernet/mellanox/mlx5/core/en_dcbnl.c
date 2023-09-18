@@ -1159,7 +1159,7 @@ static int mlx5e_set_trust_state(struct mlx5e_priv *priv, u8 trust_state)
 
 	err = mlx5e_safe_switch_params(priv, &new_params,
 				       mlx5e_update_trust_state_hw,
-				       &trust_state, reset);
+				       &trust_state, reset, -1);
 
 	mutex_unlock(&priv->state_lock);
 

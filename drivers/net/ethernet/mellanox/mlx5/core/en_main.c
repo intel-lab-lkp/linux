@@ -3055,19 +3055,35 @@ out:
 int mlx5e_safe_switch_params(struct mlx5e_priv *priv,
 			     struct mlx5e_params *params,
 			     mlx5e_fp_preactivate preactivate,
-			     void *context, bool reset)
+			     void *context, bool reset,
+			     int queue)
 {
 	struct mlx5e_channels *new_chs;
 	int err;
+	int i;
+
+	if (queue == -1) {
+		for (i = 0; i < priv->channels.num; i++)
+			priv->channels.c[i]->params = *params;
+	} else {
+		priv->channels.c[queue]->params = *params;
+	}
 
 	reset &= test_bit(MLX5E_STATE_OPENED, &priv->state);
-	if (!reset)
-		return mlx5e_switch_priv_params(priv, params, preactivate, context);
+	if (!reset) {
+		if (queue == -1)
+			return mlx5e_switch_priv_params(priv, params, preactivate, context);
+		else
+			return 0;
+	}
 
 	new_chs = kzalloc(sizeof(*new_chs), GFP_KERNEL);
 	if (!new_chs)
 		return -ENOMEM;
-	new_chs->params = *params;
+	if (queue == -1)
+		new_chs->params = *params;
+	else
+		new_chs->params = priv->channels.params;
 
 	mlx5e_selq_prepare_params(&priv->selq, &new_chs->params);
 
@@ -3093,7 +3109,7 @@ err_cancel_selq:
 
 int mlx5e_safe_reopen_channels(struct mlx5e_priv *priv)
 {
-	return mlx5e_safe_switch_params(priv, &priv->channels.params, NULL, NULL, true);
+	return mlx5e_safe_switch_params(priv, &priv->channels.params, NULL, NULL, true, -1);
 }
 
 void mlx5e_timestamp_init(struct mlx5e_priv *priv)
@@ -3486,7 +3502,7 @@ static int mlx5e_setup_tc_mqprio_dcb(struct mlx5e_priv *priv,
 	mlx5e_params_mqprio_dcb_set(&new_params, tc ? tc : 1);
 
 	err = mlx5e_safe_switch_params(priv, &new_params,
-				       mlx5e_num_channels_changed_ctx, NULL, true);
+				       mlx5e_num_channels_changed_ctx, NULL, true, -1);
 
 	if (!err && priv->mqprio_rl) {
 		mlx5e_mqprio_rl_cleanup(priv->mqprio_rl);
@@ -3607,7 +3623,7 @@ static int mlx5e_setup_tc_mqprio_channel(struct mlx5e_priv *priv,
 	nch_changed = mlx5e_get_dcb_num_tc(&priv->channels.params) > 1;
 	preactivate = nch_changed ? mlx5e_num_channels_changed_ctx :
 		mlx5e_update_netdev_queues_ctx;
-	err = mlx5e_safe_switch_params(priv, &new_params, preactivate, NULL, true);
+	err = mlx5e_safe_switch_params(priv, &new_params, preactivate, NULL, true, -1);
 	if (err) {
 		if (rl) {
 			mlx5e_mqprio_rl_cleanup(rl);
@@ -3849,7 +3865,7 @@ static int set_feature_lro(struct net_device *netdev, bool enable)
 	}
 
 	err = mlx5e_safe_switch_params(priv, &new_params,
-				       mlx5e_modify_tirs_packet_merge_ctx, NULL, reset);
+				       mlx5e_modify_tirs_packet_merge_ctx, NULL, reset, -1);
 out:
 	mutex_unlock(&priv->state_lock);
 	return err;
@@ -3877,7 +3893,7 @@ static int set_feature_hw_gro(struct net_device *netdev, bool enable)
 		goto out;
 	}
 
-	err = mlx5e_safe_switch_params(priv, &new_params, NULL, NULL, reset);
+	err = mlx5e_safe_switch_params(priv, &new_params, NULL, NULL, reset, -1);
 out:
 	mutex_unlock(&priv->state_lock);
 	return err;
@@ -3975,7 +3991,7 @@ static int set_feature_rx_fcs(struct net_device *netdev, bool enable)
 	new_params = chs->params;
 	new_params.scatter_fcs_en = enable;
 	err = mlx5e_safe_switch_params(priv, &new_params, mlx5e_set_rx_port_ts_wrap,
-				       &new_params.scatter_fcs_en, true);
+				       &new_params.scatter_fcs_en, true, -1);
 	mutex_unlock(&priv->state_lock);
 	return err;
 }
@@ -4349,7 +4365,7 @@ int mlx5e_change_mtu(struct net_device *netdev, int new_mtu,
 			reset = false;
 	}
 
-	err = mlx5e_safe_switch_params(priv, &new_params, preactivate, NULL, reset);
+	err = mlx5e_safe_switch_params(priv, &new_params, preactivate, NULL, reset, -1);
 
 out:
 	netdev->mtu = params->sw_mtu;
@@ -4400,7 +4416,7 @@ static int mlx5e_hwstamp_config_ptp_rx(struct mlx5e_priv *priv, bool ptp_rx)
 	new_params = priv->channels.params;
 	new_params.ptp_rx = ptp_rx;
 	return mlx5e_safe_switch_params(priv, &new_params, mlx5e_ptp_rx_manage_fs_ctx,
-					&new_params.ptp_rx, true);
+					&new_params.ptp_rx, true, -1);
 }
 
 int mlx5e_hwstamp_set(struct mlx5e_priv *priv, struct ifreq *ifr)
@@ -4831,7 +4847,7 @@ static int mlx5e_xdp_set(struct net_device *netdev, struct bpf_prog *prog)
 
 	old_prog = priv->channels.params.xdp_prog;
 
-	err = mlx5e_safe_switch_params(priv, &new_params, NULL, NULL, reset);
+	err = mlx5e_safe_switch_params(priv, &new_params, NULL, NULL, reset, -1);
 	if (err)
 		goto unlock;
 

@@ -389,7 +389,7 @@ int mlx5e_ethtool_set_ringparam(struct mlx5e_priv *priv,
 	if (err)
 		goto unlock;
 
-	err = mlx5e_safe_switch_params(priv, &new_params, NULL, NULL, true);
+	err = mlx5e_safe_switch_params(priv, &new_params, NULL, NULL, true, -1);
 
 unlock:
 	mutex_unlock(&priv->state_lock);
@@ -489,7 +489,7 @@ int mlx5e_ethtool_set_channels(struct mlx5e_priv *priv,
 
 	/* Switch to new channels, set new parameters and close old ones */
 	err = mlx5e_safe_switch_params(priv, &new_params,
-				       mlx5e_num_channels_changed_ctx, NULL, true);
+				       mlx5e_num_channels_changed_ctx, NULL, true, -1);
 
 	if (arfs_enabled) {
 		int err2 = mlx5e_arfs_enable(priv->fs);
@@ -684,7 +684,7 @@ int mlx5e_ethtool_set_coalesce(struct mlx5e_priv *priv,
 		reset = false;
 	}
 
-	err = mlx5e_safe_switch_params(priv, &new_params, NULL, NULL, reset);
+	err = mlx5e_safe_switch_params(priv, &new_params, NULL, NULL, reset, -1);
 
 	mutex_unlock(&priv->state_lock);
 	return err;
@@ -1893,7 +1893,7 @@ static int set_pflag_cqe_based_moder(struct net_device *netdev, bool enable,
 	else
 		mlx5e_set_tx_cq_mode_params(&new_params, cq_period_mode);
 
-	return mlx5e_safe_switch_params(priv, &new_params, NULL, NULL, true);
+	return mlx5e_safe_switch_params(priv, &new_params, NULL, NULL, true, -1);
 }
 
 static int set_pflag_tx_cqe_based_moder(struct net_device *netdev, bool enable)
@@ -1935,10 +1935,10 @@ int mlx5e_modify_rx_cqe_compression_locked(struct mlx5e_priv *priv, bool new_val
 		new_params.ptp_rx = new_val;
 
 	if (new_params.ptp_rx == priv->channels.params.ptp_rx)
-		err = mlx5e_safe_switch_params(priv, &new_params, NULL, NULL, true);
+		err = mlx5e_safe_switch_params(priv, &new_params, NULL, NULL, true, -1);
 	else
 		err = mlx5e_safe_switch_params(priv, &new_params, mlx5e_ptp_rx_manage_fs_ctx,
-					       &new_params.ptp_rx, true);
+					       &new_params.ptp_rx, true, -1);
 	if (err)
 		return err;
 
@@ -1996,7 +1996,7 @@ static int set_pflag_rx_striding_rq(struct net_device *netdev, bool enable)
 	MLX5E_SET_PFLAG(&new_params, MLX5E_PFLAG_RX_STRIDING_RQ, enable);
 	mlx5e_set_rq_type(mdev, &new_params);
 
-	err = mlx5e_safe_switch_params(priv, &new_params, NULL, NULL, true);
+	err = mlx5e_safe_switch_params(priv, &new_params, NULL, NULL, true, -1);
 	if (err)
 		return err;
 
@@ -2041,7 +2041,7 @@ static int set_pflag_tx_mpwqe_common(struct net_device *netdev, u32 flag, bool e
 
 	MLX5E_SET_PFLAG(&new_params, flag, enable);
 
-	return mlx5e_safe_switch_params(priv, &new_params, NULL, NULL, true);
+	return mlx5e_safe_switch_params(priv, &new_params, NULL, NULL, true, -1);
 }
 
 static int set_pflag_xdp_tx_mpwqe(struct net_device *netdev, bool enable)
@@ -2094,7 +2094,7 @@ static int set_pflag_tx_port_ts(struct net_device *netdev, bool enable)
 	 */
 
 	err = mlx5e_safe_switch_params(priv, &new_params,
-				       mlx5e_num_channels_changed_ctx, NULL, true);
+				       mlx5e_num_channels_changed_ctx, NULL, true, -1);
 	if (!err)
 		priv->tx_ptp_opened = true;
 
