@@ -507,9 +507,14 @@ static void __filemap_fdatawait_range(struct address_space *mapping,
 	pgoff_t end = end_byte >> PAGE_SHIFT;
 	struct folio_batch fbatch;
 	unsigned nr_folios;
+	unsigned int order = mapping_min_folio_order(mapping);
 
 	folio_batch_init(&fbatch);
 
+	if (order) {
+		index = ALIGN_DOWN(index, 1 << order);
+		end = ALIGN_DOWN(end, 1 << order);
+	}
 	while (index <= end) {
 		unsigned i;
 
@@ -2482,7 +2487,8 @@ static int filemap_create_folio(struct file *file,
 	struct folio *folio;
 	int error;
 
-	folio = filemap_alloc_folio(mapping_gfp_mask(mapping), 0);
+	folio = filemap_alloc_folio(mapping_gfp_mask(mapping),
+				    mapping_min_folio_order(mapping));
 	if (!folio)
 		return -ENOMEM;
 
@@ -2542,9 +2548,16 @@ static int filemap_get_pages(struct kiocb *iocb, size_t count,
 	pgoff_t last_index;
 	struct folio *folio;
 	int err = 0;
+	unsigned int order = mapping_min_folio_order(mapping);
 
 	/* "last_index" is the index of the page beyond the end of the read */
 	last_index = DIV_ROUND_UP(iocb->ki_pos + count, PAGE_SIZE);
+	if (order) {
+		/* Align with folio order */
+		WARN_ON(index % 1 << order);
+		index = ALIGN_DOWN(index, 1 << order);
+		last_index = ALIGN(last_index, 1 << order);
+	}
 retry:
 	if (fatal_signal_pending(current))
 		return -EINTR;
@@ -2561,7 +2574,7 @@ retry:
 		if (iocb->ki_flags & (IOCB_NOWAIT | IOCB_WAITQ))
 			return -EAGAIN;
 		err = filemap_create_folio(filp, mapping,
-				iocb->ki_pos >> PAGE_SHIFT, fbatch);
+				index, fbatch);
 		if (err == AOP_TRUNCATED_PAGE)
 			goto retry;
 		return err;
@@ -3676,7 +3689,8 @@ static struct folio *do_read_cache_folio(struct address_space *mapping,
 repeat:
 	folio = filemap_get_folio(mapping, index);
 	if (IS_ERR(folio)) {
-		folio = filemap_alloc_folio(gfp, 0);
+		folio = filemap_alloc_folio(gfp,
+				mapping_min_folio_order(mapping));
 		if (!folio)
 			return ERR_PTR(-ENOMEM);
 		err = filemap_add_folio(mapping, folio, index, gfp);
