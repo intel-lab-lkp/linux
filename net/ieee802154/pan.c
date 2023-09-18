@@ -1,0 +1,75 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * IEEE 802.15.4 PAN management
+ *
+ * Copyright (C) 2021 Qorvo US, Inc
+ * Authors:
+ *   - David Girault <david.girault@qorvo.com>
+ *   - Miquel Raynal <miquel.raynal@bootlin.com>
+ */
+
+#include <linux/kernel.h>
+#include <net/cfg802154.h>
+#include <net/af_ieee802154.h>
+
+/* Checks whether a device address matches one from the PAN list */
+static bool cfg802154_device_in_pan(struct ieee802154_pan_device *pan_dev,
+				    struct ieee802154_addr *ext_dev)
+{
+	if (!pan_dev || !ext_dev)
+		return false;
+
+	/* We know the PAN device extended address, and if it is a child which
+	 * required a short address, then we also know its short address and the
+	 * (preferred) mode is set to IEEE802154_ADDR_SHORT.
+	 */
+	if (ext_dev->mode == IEEE802154_ADDR_SHORT &&
+	    pan_dev->mode != IEEE802154_ADDR_SHORT)
+		return false;
+
+	switch (ext_dev->mode) {
+	case IEEE802154_ADDR_SHORT:
+		return pan_dev->short_addr == ext_dev->short_addr;
+	case IEEE802154_ADDR_LONG:
+		return pan_dev->extended_addr == ext_dev->extended_addr;
+	default:
+		return false;
+	}
+}
+
+bool cfg802154_device_is_associated(struct wpan_dev *wpan_dev)
+{
+	bool is_assoc;
+
+	mutex_lock(&wpan_dev->association_lock);
+	is_assoc = !list_empty(&wpan_dev->children) || wpan_dev->parent;
+	mutex_unlock(&wpan_dev->association_lock);
+
+	return is_assoc;
+}
+
+bool cfg802154_device_is_parent(struct wpan_dev *wpan_dev,
+				struct ieee802154_addr *target)
+{
+	lockdep_assert_held(&wpan_dev->association_lock);
+
+	if (cfg802154_device_in_pan(wpan_dev->parent, target))
+		return true;
+
+	return false;
+}
+
+struct ieee802154_pan_device *
+cfg802154_device_is_child(struct wpan_dev *wpan_dev,
+			  struct ieee802154_addr *target)
+{
+	struct ieee802154_pan_device *child;
+
+	lockdep_assert_held(&wpan_dev->association_lock);
+
+	list_for_each_entry(child, &wpan_dev->children, node)
+		if (cfg802154_device_in_pan(child, target))
+			return child;
+
+	return NULL;
+}
