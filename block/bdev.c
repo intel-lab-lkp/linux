@@ -133,6 +133,9 @@ static void set_init_blocksize(struct block_device *bdev)
 		bsize <<= 1;
 	}
 	bdev->bd_inode->i_blkbits = blksize_bits(bsize);
+	if (bsize > PAGE_SIZE)
+		mapping_set_folio_orders(bdev->bd_inode->i_mapping,
+					 get_order(bsize), MAX_ORDER);
 }
 
 int set_blocksize(struct block_device *bdev, int size)
@@ -149,6 +152,9 @@ int set_blocksize(struct block_device *bdev, int size)
 	if (bdev->bd_inode->i_blkbits != blksize_bits(size)) {
 		sync_blockdev(bdev);
 		bdev->bd_inode->i_blkbits = blksize_bits(size);
+		if (size > PAGE_SIZE)
+			mapping_set_folio_orders(bdev->bd_inode->i_mapping,
+						 get_order(size), MAX_ORDER);
 		kill_bdev(bdev);
 	}
 	return 0;
@@ -425,6 +431,11 @@ void bdev_set_nr_sectors(struct block_device *bdev, sector_t sectors)
 
 void bdev_add(struct block_device *bdev, dev_t dev)
 {
+	unsigned int bsize = bdev_logical_block_size(bdev);
+
+	if (bsize > PAGE_SIZE)
+		mapping_set_folio_orders(bdev->bd_inode->i_mapping,
+					 get_order(bsize), MAX_ORDER);
 	bdev->bd_dev = dev;
 	bdev->bd_inode->i_rdev = dev;
 	bdev->bd_inode->i_ino = dev;
