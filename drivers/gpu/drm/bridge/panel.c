@@ -67,20 +67,20 @@ static int panel_bridge_attach(struct drm_bridge *bridge,
 	struct drm_device *drm_dev = bridge->dev;
 	int ret;
 
-	if (flags & DRM_BRIDGE_ATTACH_NO_CONNECTOR)
-		return 0;
-
-	if (!bridge->encoder) {
-		DRM_ERROR("Missing encoder\n");
-		return -ENODEV;
-	}
-
 	panel_bridge->link = device_link_add(drm_dev->dev, panel->dev,
 					     DL_FLAG_STATELESS);
 	if (!panel_bridge->link) {
 		DRM_ERROR("Failed to add device link between %s and %s\n",
 			  dev_name(drm_dev->dev), dev_name(panel->dev));
 		return -EINVAL;
+	}
+
+	if (flags & DRM_BRIDGE_ATTACH_NO_CONNECTOR)
+		return 0;
+
+	if (!bridge->encoder) {
+		DRM_ERROR("Missing encoder\n");
+		return -ENODEV;
 	}
 
 	drm_connector_helper_add(connector,
