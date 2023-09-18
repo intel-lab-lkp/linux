@@ -215,6 +215,9 @@ struct io_ring_ctx {
 		struct percpu_ref	refs;
 
 		enum task_work_notify_mode	notify_method;
+
+		/* for uring cmd driver to retrieve context  */
+		unsigned int		id;
 	} ____cacheline_aligned_in_smp;
 
 	/* submission data */
