@@ -53,8 +53,8 @@ struct ms_hyperv_info {
 			u32 reserved_b2 : 20;
 		};
 	};
-	u64 shared_gpa_boundary;
 	u8 vtl;
+	u64 shared_gpa_boundary;
 };
 extern struct ms_hyperv_info ms_hyperv;
 extern bool hv_nested;
