@@ -370,12 +370,12 @@ static const struct file_operations inotify_fops = {
 /*
  * find_inode - resolve a user-given path to a specific inode
  */
-static int inotify_find_inode(const char __user *dirname, struct path *path,
+static int inotify_find_inode(int dfd, const char __user *dirname, struct path *path,
 						unsigned int flags, __u64 mask)
 {
 	int error;
 
-	error = user_path_at(AT_FDCWD, dirname, flags, path);
+	error = user_path_at(dfd, dirname, flags, path);
 	if (error)
 		return error;
 	/* you can only watch an inode if you have read permissions on it */
@@ -774,7 +774,7 @@ SYSCALL_DEFINE3(inotify_add_watch, int, fd, const char __user *, pathname,
 	if (mask & IN_ONLYDIR)
 		flags |= LOOKUP_DIRECTORY;
 
-	ret = inotify_find_inode(pathname, &path, flags,
+	ret = inotify_find_inode(AT_FDCWD, pathname, &path, flags,
 			(mask & IN_ALL_EVENTS));
 	if (ret)
 		goto fput_and_out;
