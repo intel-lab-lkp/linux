@@ -318,7 +318,7 @@ static int dcss_dev_runtime_resume(struct device *dev)
 	return 0;
 }
 
-EXPORT_GPL_DEV_PM_OPS(dcss_dev_pm_ops) = {
+EXPORT_GPL_RUNTIME_PM_OPS(dcss_dev_pm_ops) = {
 	RUNTIME_PM_OPS(dcss_dev_runtime_suspend, dcss_dev_runtime_resume, NULL)
 	SYSTEM_SLEEP_PM_OPS(dcss_dev_suspend, dcss_dev_resume)
 };
