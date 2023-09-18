@@ -450,14 +450,17 @@ int hinic_set_rx_vlan_offload(struct hinic_dev *nic_dev, u8 en)
 int hinic_set_vlan_fliter(struct hinic_dev *nic_dev, u32 en)
 {
 	struct hinic_hwdev *hwdev = nic_dev->hwdev;
-	struct hinic_hwif *hwif = hwdev->hwif;
-	struct pci_dev *pdev = hwif->pdev;
+	struct hinic_hwif *hwif;
+	struct pci_dev *pdev;
 	struct hinic_vlan_filter vlan_filter;
 	u16 out_size = sizeof(vlan_filter);
 	int err;
 
 	if (!hwdev)
 		return -EINVAL;
+
+	hwif = hwdev->hwif;
+	pdev = hwif->pdev;
 
 	vlan_filter.func_idx = HINIC_HWIF_FUNC_IDX(hwif);
 	vlan_filter.enable = en;
