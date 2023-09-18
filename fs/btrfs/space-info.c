@@ -366,6 +366,23 @@ static u64 calc_available_free_space(struct btrfs_fs_info *fs_info,
 	avail = div_u64(avail, factor);
 
 	/*
+	 * Since data allocations immediately use block groups as part of the
+	 * reservation, because we assume that data reservations will == actual
+	 * usage, we could potentially overcommit and then immediately have that
+	 * available space used by a data allocation, which could put us in a
+	 * bind when we get close to filling the file system.
+	 *
+	 * To handle this simply remove 1G (which is our current maximum chunk
+	 * allocation size) from the available space.  If we are relatively
+	 * empty this won't affect our ability to overcommit much, and if we're
+	 * very close to full it'll keep us from getting into a position where
+	 * we've given ourselves very little metadata wiggle room.
+	 */
+	if (avail < SZ_1G)
+		return 0;
+	avail -= SZ_1G;
+
+	/*
 	 * If we aren't flushing all things, let us overcommit up to
 	 * 1/2th of the space. If we can flush, don't let us overcommit
 	 * too much, let it overcommit up to 1/8 of the space.
