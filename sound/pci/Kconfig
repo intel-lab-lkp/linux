@@ -222,6 +222,16 @@ config SND_CMIPCI
 	  To compile this driver as a module, choose M here: the module
 	  will be called snd-cmipci.
 
+config SND_MARIANM2
+	tristate "MARIAN Seraph M2"
+	select SND_PCM
+	help
+	  Say Y to include support for MARIAN Seraph M2 sound card
+	  <file:Documentation/sound/cards/marian-m2.rst>.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called snd-marianm2
+
 config SND_OXYGEN_LIB
 	tristate
 
