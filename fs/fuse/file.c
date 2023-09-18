@@ -1313,6 +1313,10 @@ static bool fuse_dio_wr_exclusive_lock(struct kiocb *iocb, struct iov_iter *from
 	struct file *file = iocb->ki_filp;
 	struct fuse_file *ff = file->private_data;
 
+	/* the shared lock is about direct IO only */
+	if (!(iocb->ki_flags & IOCB_DIRECT))
+		return true;
+
 	/* server side has to advise that it supports parallel dio writes */
 	if (!(ff->open_flags & FOPEN_PARALLEL_DIRECT_WRITES))
 		return true;
@@ -1338,6 +1342,7 @@ static ssize_t fuse_cache_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	struct inode *inode = mapping->host;
 	ssize_t err;
 	struct fuse_conn *fc = get_fuse_conn(inode);
+	bool excl_lock = fuse_dio_wr_exclusive_lock(iocb, from) || 1;
 
 	if (fc->writeback_cache && !(iocb->ki_flags & IOCB_DIRECT)) {
 		/* Update size (EOF optimization) and mode (SUID clearing) */
@@ -1356,7 +1361,20 @@ static ssize_t fuse_cache_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	}
 
 writethrough:
-	inode_lock(inode);
+relock:
+	if (excl_lock)
+		inode_lock(inode);
+	else {
+		inode_lock_shared(inode);
+		if (fuse_io_past_eof(iocb, from)) {
+			/* file extending writes will trigger i_size_write,
+			 *  exclusive lock is needed
+			 */
+			inode_unlock_shared(inode);
+			excl_lock = true;
+			goto relock;
+		}
+	}
 
 	err = generic_write_checks(iocb, from);
 	if (err <= 0)
@@ -1374,13 +1392,24 @@ writethrough:
 		written = generic_file_direct_write(iocb, from);
 		if (written < 0 || !iov_iter_count(from))
 			goto out;
+
+		if (!excl_lock) {
+			/* fallback to page IO needs the exclusive lock */
+			inode_unlock_shared(inode);
+			excl_lock = true;
+			goto relock;
+		}
+
 		written = direct_write_fallback(iocb, from, written,
 				fuse_perform_write(iocb, from));
 	} else {
 		written = fuse_perform_write(iocb, from);
 	}
 out:
-	inode_unlock(inode);
+	if (excl_lock)
+		inode_unlock(inode);
+	else
+		inode_unlock_shared(inode);
 	if (written > 0)
 		written = generic_write_sync(iocb, written);
 
