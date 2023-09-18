@@ -26,8 +26,6 @@
 #include <linux/workqueue.h>
 #include <linux/usb/ch9.h>
 
-#define UDC_TRACE_STR_MAX	512
-
 struct usb_ep;
 
 /**
