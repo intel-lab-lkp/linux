@@ -1795,7 +1795,7 @@ static int inv_mpu_runtime_resume(struct device *dev)
 	return inv_mpu6050_set_power_itg(st, true);
 }
 
-EXPORT_NS_GPL_DEV_PM_OPS(inv_mpu_pmops, IIO_MPU6050) = {
+EXPORT_NS_GPL_RUNTIME_PM_OPS(inv_mpu_pmops, IIO_MPU6050) = {
 	SYSTEM_SLEEP_PM_OPS(inv_mpu_suspend, inv_mpu_resume)
 	RUNTIME_PM_OPS(inv_mpu_runtime_suspend, inv_mpu_runtime_resume, NULL)
 };
