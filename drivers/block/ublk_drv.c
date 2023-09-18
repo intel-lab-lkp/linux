@@ -131,6 +131,7 @@ struct ublk_queue {
 	unsigned long flags;
 	struct task_struct	*ubq_daemon;
 	char *io_cmd_buf;
+	unsigned int ctx_id;
 
 	struct llist_head	io_cmds;
 
@@ -1410,6 +1411,11 @@ static void ublk_commit_completion(struct ublk_device *ub,
 		ublk_put_req_ref(ubq, req);
 }
 
+static inline bool ublk_ctx_id_is_valid(unsigned int ctx_id)
+{
+	return ctx_id != IO_URING_INVALID_CTX_ID;
+}
+
 /*
  * When ->ubq_daemon is exiting, either new request is ended immediately,
  * or any queued io command is drained, so it is safe to abort queue
@@ -1609,11 +1615,13 @@ static void ublk_stop_dev(struct ublk_device *ub)
 }
 
 /* device can only be started after all IOs are ready */
-static void ublk_mark_io_ready(struct ublk_device *ub, struct ublk_queue *ubq)
+static void ublk_mark_io_ready(struct ublk_device *ub, struct ublk_queue *ubq,
+		unsigned int ctx_id)
 {
 	mutex_lock(&ub->mutex);
 	ubq->nr_io_ready++;
 	if (ublk_queue_ready(ubq)) {
+		ubq->ctx_id = ctx_id;
 		ubq->ubq_daemon = current;
 		get_task_struct(ubq->ubq_daemon);
 		ub->nr_queues_ready++;
@@ -1682,6 +1690,9 @@ static int __ublk_ch_uring_cmd(struct io_uring_cmd *cmd,
 	if (ubq->ubq_daemon && ubq->ubq_daemon != current)
 		goto out;
 
+	if (ublk_ctx_id_is_valid(ubq->ctx_id) && cmd->ctx_id != ubq->ctx_id)
+		goto out;
+
 	if (tag >= ubq->q_depth)
 		goto out;
 
@@ -1734,7 +1745,7 @@ static int __ublk_ch_uring_cmd(struct io_uring_cmd *cmd,
 		}
 
 		ublk_fill_io_cmd(io, cmd, ub_cmd->addr);
-		ublk_mark_io_ready(ub, ubq);
+		ublk_mark_io_ready(ub, ubq, cmd->ctx_id);
 		break;
 	case UBLK_IO_COMMIT_AND_FETCH_REQ:
 		req = blk_mq_tag_to_rq(ub->tag_set.tags[ub_cmd->q_id], tag);
@@ -1989,6 +2000,7 @@ static int ublk_init_queue(struct ublk_device *ub, int q_id)
 
 	ubq->io_cmd_buf = ptr;
 	ubq->dev = ub;
+	ubq->ctx_id = IO_URING_INVALID_CTX_ID;
 	return 0;
 }
 
@@ -2592,6 +2604,8 @@ static void ublk_queue_reinit(struct ublk_device *ub, struct ublk_queue *ubq)
 	/* We have to reset it to NULL, otherwise ub won't accept new FETCH_REQ */
 	ubq->ubq_daemon = NULL;
 	ubq->timeout = false;
+
+	ubq->ctx_id = IO_URING_INVALID_CTX_ID;
 
 	for (i = 0; i < ubq->q_depth; i++) {
 		struct ublk_io *io = &ubq->ios[i];
