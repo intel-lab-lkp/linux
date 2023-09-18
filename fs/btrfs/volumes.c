@@ -6576,11 +6576,15 @@ int btrfs_map_block(struct btrfs_fs_info *fs_info, enum btrfs_map_op op,
 		 */
 		bioc->full_stripe_logical = em->start +
 			btrfs_stripe_nr_to_offset(stripe_nr * data_stripes);
-		for (i = 0; i < num_stripes; i++)
+		for (i = 0; i < num_stripes; i++) {
 			ret = set_io_stripe(fs_info, op, logical, length,
 					    &bioc->stripes[i], map,
 					    (i + stripe_nr) % num_stripes,
 					    stripe_offset, stripe_nr);
+			if (ret)
+				break;
+		}
+
 	} else {
 		/*
 		 * For all other non-RAID56 profiles, just copy the target
@@ -6590,6 +6594,8 @@ int btrfs_map_block(struct btrfs_fs_info *fs_info, enum btrfs_map_op op,
 			ret = set_io_stripe(fs_info, op, logical, length,
 					    &bioc->stripes[i], map, stripe_index,
 					    stripe_offset, stripe_nr);
+			if (ret)
+				break;
 			stripe_index++;
 		}
 	}
