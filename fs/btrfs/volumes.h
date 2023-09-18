@@ -432,7 +432,7 @@ struct btrfs_io_context {
 
 	u64 logical;
 	u64 size;
-	struct list_head ordered_entry;
+	struct list_head rst_ordered_entry;
 
 	/*
 	 * The total number of stripes, including the extra duplicated

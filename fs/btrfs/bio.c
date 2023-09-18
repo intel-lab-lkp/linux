@@ -708,7 +708,8 @@ static bool btrfs_submit_chunk(struct btrfs_bio *bbio, int mirror_num)
 			 * can't happen until after the last submission.
 			 */
 			btrfs_get_bioc(bioc);
-			list_add_tail(&bioc->ordered_entry, &bbio->ordered->bioc_list);
+			list_add_tail(&bioc->rst_ordered_entry,
+				      &bbio->ordered->bioc_list);
 		}
 
 		/*

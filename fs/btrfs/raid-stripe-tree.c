@@ -132,7 +132,7 @@ static int btrfs_insert_mirrored_raid_extents(struct btrfs_trans_handle *trans,
 	struct btrfs_io_context *bioc;
 	int ret;
 
-	list_for_each_entry(bioc, &ordered->bioc_list, ordered_entry) {
+	list_for_each_entry(bioc, &ordered->bioc_list, rst_ordered_entry) {
 		ret = btrfs_insert_one_raid_extent(trans, num_stripes, bioc);
 		if (ret)
 			return ret;
@@ -167,12 +167,12 @@ static int btrfs_insert_striped_mirrored_raid_extents(
 
 	rbioc->map_type = map_type;
 	rbioc->logical = list_first_entry(&ordered->bioc_list, typeof(*rbioc),
-					  ordered_entry)->logical;
+					  rst_ordered_entry)->logical;
 
 	stripe_end = rbioc->logical;
 	prev_end = stripe_end;
 	i = 0;
-	list_for_each_entry(bioc, &ordered->bioc_list, ordered_entry) {
+	list_for_each_entry(bioc, &ordered->bioc_list, rst_ordered_entry) {
 		rbioc->size += bioc->size;
 		for (int j = 0; j < substripes; j++) {
 			int stripe = i + j;
@@ -201,7 +201,7 @@ static int btrfs_insert_striped_mirrored_raid_extents(
 	}
 
 	if (left) {
-		bioc = list_prev_entry(bioc, ordered_entry);
+		bioc = list_prev_entry(bioc, rst_ordered_entry);
 		ret = btrfs_insert_one_raid_extent(trans, substripes, bioc);
 	}
 
@@ -225,10 +225,10 @@ static int btrfs_insert_striped_raid_extents(struct btrfs_trans_handle *trans,
 		return -ENOMEM;
 	rbioc->map_type = map_type;
 	rbioc->logical = list_first_entry(&ordered->bioc_list, typeof(*rbioc),
-					  ordered_entry)->logical;
+					  rst_ordered_entry)->logical;
 
 	i = 0;
-	list_for_each_entry(bioc, &ordered->bioc_list, ordered_entry) {
+	list_for_each_entry(bioc, &ordered->bioc_list, rst_ordered_entry) {
 		rbioc->size += bioc->size;
 		rbioc->stripes[i].dev = bioc->stripes[0].dev;
 		rbioc->stripes[i].physical = bioc->stripes[0].physical;
@@ -266,7 +266,7 @@ int btrfs_insert_raid_extent(struct btrfs_trans_handle *trans,
 		return 0;
 
 	map_type = list_first_entry(&ordered_extent->bioc_list, typeof(*bioc),
-				    ordered_entry)->map_type;
+				    rst_ordered_entry)->map_type;
 
 	switch (map_type & BTRFS_BLOCK_GROUP_PROFILE_MASK) {
 	case BTRFS_BLOCK_GROUP_DUP:
@@ -291,8 +291,8 @@ int btrfs_insert_raid_extent(struct btrfs_trans_handle *trans,
 
 	while (!list_empty(&ordered_extent->bioc_list)) {
 		bioc = list_first_entry(&ordered_extent->bioc_list,
-					typeof(*bioc), ordered_entry);
-		list_del(&bioc->ordered_entry);
+					typeof(*bioc), rst_ordered_entry);
+		list_del(&bioc->rst_ordered_entry);
 		btrfs_put_bioc(bioc);
 	}
 
