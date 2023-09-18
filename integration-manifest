@@ -1,0 +1,26 @@
+drm drm-fixes ce9ecca0238b140b88f43859b211c9fdfd8e5b70
+	Linux 6.6-rc2
+drm-misc drm-misc-fixes bb6c4507fe825f1b4904fc3ffd329ab196c5e645
+	drm: fix up fbdev Kconfig defaults
+drm-intel drm-intel-fixes ce9ecca0238b140b88f43859b211c9fdfd8e5b70
+	Linux 6.6-rc2
+drm drm-next 0bb80ecc33a8fb5a682236443c1e740d5c917d1d
+	Linux 6.6-rc1
+drm-misc drm-misc-next-fixes d20b484c674d2eae816978a98fa38b4054aeca3b
+	drm/drm_exec: Work around a WW mutex lockdep oddity
+drm-intel drm-intel-next-fixes 0bb80ecc33a8fb5a682236443c1e740d5c917d1d
+	Linux 6.6-rc1
+drm-misc drm-misc-next 0663e1da5ba8e6459e3555ac12c62741668c0d30
+	drm/dp_mst: Tune down error message during payload addition
+drm-intel drm-intel-next e356289680321c39036847b5967c26716d285c3e
+	drm/i915/cx0: Add step for programming msgbus timer
+drm-intel drm-intel-gt-next 4d938bb93ffd35b1ea664222bb625061d7c4c73b
+	drm/i915/huc: silence injected failure in the load via GSC path
+drm-intel topic/core-for-CI 4dfdf656708ee83de89dfb6289c290012212e4c6
+	PCI/ASPM: pci_enable_link_state: Add argument to acquire bus lock
+drm-misc topic/i915-ttm 1e3944578b749449bd7fa6bf0bae4c3d3f5f1733
+	Merge tag 'amd-drm-next-5.16-2021-09-27' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm topic/nouveau-misc dfc4005f8c172eea359f9db08c3b2b0ff0153699
+	drm/nouveau/disp: move DAC load detection method
+drm topic/drm-ci ad6bfe1b66a5c146ec236847eca7af4c8806d666
+	drm: ci: docs: fix build warning - add missing escape
