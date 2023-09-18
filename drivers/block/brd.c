@@ -45,6 +45,8 @@ struct brd_device {
 	u64			brd_nr_folios;
 	unsigned int		brd_sector_shift;
 	unsigned int		brd_sector_size;
+	unsigned int		brd_logical_sector_shift;
+	unsigned int		brd_logical_sector_size;
 };
 
 #define BRD_SECTOR_SHIFT(b) ((b)->brd_sector_shift - SECTOR_SHIFT)
@@ -242,8 +244,8 @@ static void brd_submit_bio(struct bio *bio)
 		int err;
 
 		/* Don't support un-aligned buffer */
-		WARN_ON_ONCE((iter.offset & (SECTOR_SIZE - 1)) ||
-				(len & (SECTOR_SIZE - 1)));
+		WARN_ON_ONCE((iter.offset & (brd->brd_logical_sector_size - 1)) ||
+				(len & (brd->brd_logical_sector_size - 1)));
 
 		err = brd_do_folio(brd, iter.folio, len, iter.offset,
 				   bio->bi_opf, sector);
@@ -284,6 +286,10 @@ MODULE_PARM_DESC(max_part, "Num Minors to reserve between devices");
 static unsigned int rd_blksize = PAGE_SIZE;
 module_param(rd_blksize, uint, 0444);
 MODULE_PARM_DESC(rd_blksize, "Blocksize of each RAM disk in bytes.");
+
+static unsigned int rd_logical_blksize = SECTOR_SIZE;
+module_param(rd_logical_blksize, uint, 0444);
+MODULE_PARM_DESC(rd_logical_blksize, "Logical blocksize of each RAM disk in bytes.");
 
 MODULE_LICENSE("GPL");
 MODULE_ALIAS_BLOCKDEV_MAJOR(RAMDISK_MAJOR);
@@ -342,6 +348,21 @@ static int brd_alloc(int i)
 	brd->brd_sector_shift = ilog2(rd_blksize);
 	brd->brd_sector_size = rd_blksize;
 
+	if (!is_power_of_2(rd_logical_blksize)) {
+		pr_err("rd_logical_blksize %d is not supported\n",
+		       rd_logical_blksize);
+		err = -EINVAL;
+		goto out_free_dev;
+	}
+	if (rd_logical_blksize > rd_blksize) {
+		pr_err("rd_logical_blksize %d larger than rd_blksize %d\n",
+		       rd_logical_blksize, rd_blksize);
+		err = -EINVAL;
+		goto out_free_dev;
+	}
+	brd->brd_logical_sector_shift = ilog2(rd_logical_blksize);
+	brd->brd_logical_sector_size = rd_logical_blksize;
+
 	xa_init(&brd->brd_folios);
 
 	snprintf(buf, DISK_NAME_LEN, "ram%d", i);
@@ -362,6 +383,7 @@ static int brd_alloc(int i)
 	set_capacity(disk, rd_size * 2);
 
 	blk_queue_physical_block_size(disk->queue, rd_blksize);
+	blk_queue_logical_block_size(disk->queue, rd_logical_blksize);
 	blk_queue_max_hw_sectors(disk->queue, rd_max_sectors);
 
 	/* Tell the block layer that this is not a rotational device */
