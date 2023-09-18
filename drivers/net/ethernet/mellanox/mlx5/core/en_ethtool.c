@@ -515,8 +515,8 @@ static int mlx5e_set_channels(struct net_device *dev,
 
 static int mlx5e_ethtool_get_per_queue_coalesce(struct mlx5e_priv *priv,
 						int queue,
-			       struct ethtool_coalesce *coal,
-			       struct kernel_ethtool_coalesce *kernel_coal)
+						struct ethtool_coalesce *coal,
+						struct kernel_ethtool_coalesce *kernel_coal)
 {
 	struct dim_cq_moder *rx_moder, *tx_moder;
 	struct mlx5e_params *params;
@@ -570,6 +570,23 @@ static int mlx5e_get_coalesce(struct net_device *netdev,
 	struct mlx5e_priv *priv = netdev_priv(netdev);
 
 	return mlx5e_ethtool_get_coalesce(priv, coal, kernel_coal);
+}
+
+/**
+ * mlx5e_get_per_queue_coalesce - gets coalesce settings for particular queue
+ * @netdev: netdev structure
+ * @coal: ethtool's coalesce settings
+ * @queue: the particular queue to read
+ *
+ * Reads a specific queue's coalesce settings
+ **/
+static int mlx5e_get_per_queue_coalesce(struct net_device *netdev,
+					u32 queue,
+					struct ethtool_coalesce *coal)
+{
+	struct mlx5e_priv *priv = netdev_priv(netdev);
+
+	return mlx5e_ethtool_get_per_queue_coalesce(priv, queue, coal, NULL);
 }
 
 #define MLX5E_MAX_COAL_TIME		MLX5_MAX_CQ_PERIOD
@@ -643,9 +660,9 @@ static int cqe_mode_to_period_mode(bool val)
 
 static int mlx5e_ethtool_set_per_queue_coalesce(struct mlx5e_priv *priv,
 						int queue,
-			       struct ethtool_coalesce *coal,
-			       struct kernel_ethtool_coalesce *kernel_coal,
-			       struct netlink_ext_ack *extack)
+						struct ethtool_coalesce *coal,
+						struct kernel_ethtool_coalesce *kernel_coal,
+						struct netlink_ext_ack *extack)
 {
 	struct dim_cq_moder *rx_moder, *tx_moder;
 	struct mlx5_core_dev *mdev = priv->mdev;
@@ -770,6 +787,23 @@ static int mlx5e_set_coalesce(struct net_device *netdev,
 	struct mlx5e_priv *priv = netdev_priv(netdev);
 
 	return mlx5e_ethtool_set_coalesce(priv, coal, kernel_coal, extack);
+}
+
+/**
+ * mlx5e_set_per_queue_coalesce - set specific queue's coalesce settings
+ * @netdev: the netdev to change
+ * @coal: ethtool's coalesce settings
+ * @queue: the queue to change
+ *
+ * Sets the specified queue's coalesce settings.
+ **/
+static int mlx5e_set_per_queue_coalesce(struct net_device *netdev,
+					u32 queue,
+					struct ethtool_coalesce *coal)
+{
+	struct mlx5e_priv *priv = netdev_priv(netdev);
+
+	return mlx5e_ethtool_set_per_queue_coalesce(priv, queue, coal, NULL, NULL);
 }
 
 static void ptys2ethtool_supported_link(struct mlx5_core_dev *mdev,
@@ -2506,6 +2540,8 @@ const struct ethtool_ops mlx5e_ethtool_ops = {
 	.flash_device      = mlx5e_flash_device,
 	.get_priv_flags    = mlx5e_get_priv_flags,
 	.set_priv_flags    = mlx5e_set_priv_flags,
+	.get_per_queue_coalesce	= mlx5e_get_per_queue_coalesce,
+	.set_per_queue_coalesce	= mlx5e_set_per_queue_coalesce,
 	.self_test         = mlx5e_self_test,
 	.get_fec_stats     = mlx5e_get_fec_stats,
 	.get_fecparam      = mlx5e_get_fecparam,
