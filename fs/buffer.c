@@ -199,7 +199,7 @@ __find_get_block_slow(struct block_device *bdev, sector_t block)
 	int all_mapped = 1;
 	static DEFINE_RATELIMIT_STATE(last_warned, HZ, 1);
 
-	index = block >> (PAGE_SHIFT - bd_inode->i_blkbits);
+	index = block_sector_to_index(block, bd_inode->i_blkbits);
 	folio = __filemap_get_folio(bd_mapping, index, FGP_ACCESSED, 0);
 	if (IS_ERR(folio))
 		goto out;
@@ -1702,13 +1702,13 @@ void clean_bdev_aliases(struct block_device *bdev, sector_t block, sector_t len)
 	struct inode *bd_inode = bdev->bd_inode;
 	struct address_space *bd_mapping = bd_inode->i_mapping;
 	struct folio_batch fbatch;
-	pgoff_t index = block >> (PAGE_SHIFT - bd_inode->i_blkbits);
+	pgoff_t index = block_sector_to_index(block, bd_inode->i_blkbits);
 	pgoff_t end;
 	int i, count;
 	struct buffer_head *bh;
 	struct buffer_head *head;
 
-	end = (block + len - 1) >> (PAGE_SHIFT - bd_inode->i_blkbits);
+	end = block_sector_to_index(block + len - 1, bd_inode->i_blkbits);
 	folio_batch_init(&fbatch);
 	while (filemap_get_folios(bd_mapping, &index, end, &fbatch)) {
 		count = folio_batch_count(&fbatch);
@@ -1835,7 +1835,7 @@ int __block_write_full_folio(struct inode *inode, struct folio *folio,
 	blocksize = bh->b_size;
 	bbits = block_size_bits(blocksize);
 
-	block = (sector_t)folio->index << (PAGE_SHIFT - bbits);
+	block = block_index_to_sector(folio->index, bbits);
 	last_block = (i_size_read(inode) - 1) >> bbits;
 
 	/*
@@ -2087,7 +2087,7 @@ int __block_write_begin_int(struct folio *folio, loff_t pos, unsigned len,
 	blocksize = head->b_size;
 	bbits = block_size_bits(blocksize);
 
-	block = (sector_t)folio->index << (PAGE_SHIFT - bbits);
+	block = block_index_to_sector(folio->index, bbits);
 
 	for(bh = head, block_start = 0; bh != head || !block_start;
 	    block++, block_start=block_end, bh = bh->b_this_page) {
@@ -2369,7 +2369,7 @@ int block_read_full_folio(struct folio *folio, get_block_t *get_block)
 	blocksize = head->b_size;
 	bbits = block_size_bits(blocksize);
 
-	iblock = (sector_t)folio->index << (PAGE_SHIFT - bbits);
+	iblock = block_index_to_sector(folio->index, bbits);
 	lblock = (limit+blocksize-1) >> bbits;
 	bh = head;
 	nr = 0;
@@ -2657,7 +2657,7 @@ int block_truncate_page(struct address_space *mapping,
 		return 0;
 
 	length = blocksize - length;
-	iblock = (sector_t)index << (PAGE_SHIFT - inode->i_blkbits);
+	iblock = block_index_to_sector(index, inode->i_blkbits);
 	
 	folio = filemap_grab_folio(mapping, index);
 	if (IS_ERR(folio))
