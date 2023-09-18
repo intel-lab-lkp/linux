@@ -38,6 +38,8 @@
 #define VCPU_INFO_VADDR	(SHINFO_REGION_GVA + 0x40)
 #define RUNSTATE_VADDR	(SHINFO_REGION_GVA + PAGE_SIZE + PAGE_SIZE - 15)
 
+#define VCPU_ID		1 /* Must correspond to offset of VCPU_INFO_[V]ADDR */
+
 #define EVTCHN_VECTOR	0x10
 
 #define EVTCHN_TEST1 15
@@ -410,7 +412,7 @@ static void *juggle_shinfo_state(void *arg)
 
 	struct kvm_xen_hvm_attr cache_activate = {
 		.type = KVM_XEN_ATTR_TYPE_SHARED_INFO,
-		.u.shared_info.gfn = SHINFO_REGION_GPA / PAGE_SIZE
+		.u.shared_info.gfn = SHINFO_ADDR / PAGE_SIZE
 	};
 
 	struct kvm_xen_hvm_attr cache_deactivate = {
@@ -446,6 +448,7 @@ int main(int argc, char *argv[])
 	bool do_runstate_flag = !!(xen_caps & KVM_XEN_HVM_CONFIG_RUNSTATE_UPDATE_FLAG);
 	bool do_eventfd_tests = !!(xen_caps & KVM_XEN_HVM_CONFIG_EVTCHN_2LEVEL);
 	bool do_evtchn_tests = do_eventfd_tests && !!(xen_caps & KVM_XEN_HVM_CONFIG_EVTCHN_SEND);
+	bool has_vcpu_id = !!(xen_caps & KVM_XEN_HVM_CONFIG_EVTCHN_SEND);
 
 	clock_gettime(CLOCK_REALTIME, &min_ts);
 
@@ -494,7 +497,7 @@ int main(int argc, char *argv[])
 
 	struct kvm_xen_hvm_attr ha = {
 		.type = KVM_XEN_ATTR_TYPE_SHARED_INFO,
-		.u.shared_info.gfn = SHINFO_REGION_GPA / PAGE_SIZE,
+		.u.shared_info.gfn = SHINFO_ADDR / PAGE_SIZE,
 	};
 	vm_ioctl(vm, KVM_XEN_HVM_SET_ATTR, &ha);
 
@@ -507,6 +510,14 @@ int main(int argc, char *argv[])
 	void *m = mmap(shinfo, PAGE_SIZE, PROT_READ|PROT_WRITE, MAP_FIXED|MAP_PRIVATE, zero_fd, 0);
 	TEST_ASSERT(m == shinfo, "Failed to map /dev/zero over shared info");
 	shinfo->wc = wc_copy;
+
+	if (has_vcpu_id) {
+		struct kvm_xen_vcpu_attr vid = {
+			.type = KVM_XEN_VCPU_ATTR_TYPE_VCPU_ID,
+			.u.vcpu_id = VCPU_ID,
+		};
+		vcpu_ioctl(vcpu, KVM_XEN_VCPU_SET_ATTR, &vid);
+	}
 
 	struct kvm_xen_vcpu_attr vi = {
 		.type = KVM_XEN_VCPU_ATTR_TYPE_VCPU_INFO,
@@ -983,8 +994,8 @@ int main(int argc, char *argv[])
 	struct pvclock_wall_clock *wc;
 	struct pvclock_vcpu_time_info *ti, *ti2;
 
-	wc = addr_gpa2hva(vm, SHINFO_REGION_GPA + 0xc00);
-	ti = addr_gpa2hva(vm, SHINFO_REGION_GPA + 0x40 + 0x20);
+	wc = addr_gpa2hva(vm, SHINFO_ADDR + 0xc00);
+	ti = addr_gpa2hva(vm, VCPU_INFO_ADDR + 0x20);
 	ti2 = addr_gpa2hva(vm, PVTIME_ADDR);
 
 	if (verbose) {
