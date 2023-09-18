@@ -1496,8 +1496,8 @@ static int fuse_get_user_pages(struct fuse_args_pages *ap, struct iov_iter *ii,
 	return ret < 0 ? ret : 0;
 }
 
-ssize_t fuse_direct_io(struct fuse_io_priv *io, struct iov_iter *iter,
-		       loff_t *ppos, int flags)
+ssize_t fuse_send_dio(struct fuse_io_priv *io, struct iov_iter *iter,
+		      loff_t *ppos, int flags)
 {
 	int write = flags & FUSE_DIO_WRITE;
 	int cuse = flags & FUSE_DIO_CUSE;
@@ -1598,7 +1598,7 @@ ssize_t fuse_direct_io(struct fuse_io_priv *io, struct iov_iter *iter,
 
 	return res > 0 ? res : err;
 }
-EXPORT_SYMBOL_GPL(fuse_direct_io);
+EXPORT_SYMBOL_GPL(fuse_send_dio);
 
 static ssize_t __fuse_direct_read(struct fuse_io_priv *io,
 				  struct iov_iter *iter,
@@ -1607,7 +1607,7 @@ static ssize_t __fuse_direct_read(struct fuse_io_priv *io,
 	ssize_t res;
 	struct inode *inode = file_inode(io->iocb->ki_filp);
 
-	res = fuse_direct_io(io, iter, ppos, 0);
+	res = fuse_send_dio(io, iter, ppos, 0);
 
 	fuse_invalidate_atime(inode);
 
@@ -1664,8 +1664,8 @@ static ssize_t fuse_direct_write_iter(struct kiocb *iocb, struct iov_iter *from)
 		if (!is_sync_kiocb(iocb) && iocb->ki_flags & IOCB_DIRECT) {
 			res = fuse_direct_IO(iocb, from);
 		} else {
-			res = fuse_direct_io(&io, from, &iocb->ki_pos,
-					     FUSE_DIO_WRITE);
+			res = fuse_send_dio(&io, from, &iocb->ki_pos,
+					    FUSE_DIO_WRITE);
 			fuse_write_update_attr(inode, iocb->ki_pos, res);
 		}
 	}
@@ -3001,7 +3001,7 @@ fuse_direct_IO(struct kiocb *iocb, struct iov_iter *iter)
 	}
 
 	if (iov_iter_rw(iter) == WRITE) {
-		ret = fuse_direct_io(io, iter, &pos, FUSE_DIO_WRITE);
+		ret = fuse_send_dio(io, iter, &pos, FUSE_DIO_WRITE);
 		fuse_invalidate_attr_mask(inode, FUSE_STATX_MODSIZE);
 	} else {
 		ret = __fuse_direct_read(io, iter, &pos);
