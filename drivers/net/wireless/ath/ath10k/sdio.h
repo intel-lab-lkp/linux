@@ -29,7 +29,6 @@
 	(ATH10K_SDIO_MAX_BUFFER_SIZE - sizeof(struct ath10k_htc_hdr))
 
 #define ATH10K_HIF_MBOX_NUM_MAX                 4
-#define ATH10K_SDIO_BUS_REQUEST_MAX_NUM         1024
 
 #define ATH10K_SDIO_HIF_COMMUNICATION_TIMEOUT_HZ (100 * HZ)
 
@@ -104,10 +103,8 @@ enum sdio_mbox_state {
 #define ATH10K_CIS_READ_RETRY			10
 #define ATH10K_MIN_SLEEP_INACTIVITY_TIME_MS	50
 
-/* TODO: remove this and use skb->cb instead, much cleaner approach */
+/* Keep this small, see ath10k_sdio_prep_async_req() to check why. */
 struct ath10k_sdio_bus_request {
-	struct list_head list;
-
 	/* sdio address */
 	u32 address;
 
@@ -189,15 +186,8 @@ struct ath10k_sdio {
 	u32 mbox_addr[ATH10K_HTC_EP_COUNT];
 	u32 mbox_size[ATH10K_HTC_EP_COUNT];
 
-	/* available bus requests */
-	struct ath10k_sdio_bus_request bus_req[ATH10K_SDIO_BUS_REQUEST_MAX_NUM];
-	/* free list of bus requests */
-	struct list_head bus_req_freeq;
-
 	struct sk_buff_head rx_head;
-
-	/* protects access to bus_req_freeq */
-	spinlock_t lock;
+	struct sk_buff_head async_head;
 
 	struct ath10k_sdio_rx_data rx_pkts[ATH10K_SDIO_MAX_RX_MSGS];
 	size_t n_rx_pkts;

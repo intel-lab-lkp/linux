@@ -1285,40 +1285,6 @@ static int ath10k_sdio_bmi_exchange_msg(struct ath10k *ar,
 
 /* sdio async handling functions */
 
-static struct ath10k_sdio_bus_request
-*ath10k_sdio_alloc_busreq(struct ath10k *ar)
-{
-	struct ath10k_sdio *ar_sdio = ath10k_sdio_priv(ar);
-	struct ath10k_sdio_bus_request *bus_req;
-
-	spin_lock_bh(&ar_sdio->lock);
-
-	if (list_empty(&ar_sdio->bus_req_freeq)) {
-		bus_req = NULL;
-		goto out;
-	}
-
-	bus_req = list_first_entry(&ar_sdio->bus_req_freeq,
-				   struct ath10k_sdio_bus_request, list);
-	list_del(&bus_req->list);
-
-out:
-	spin_unlock_bh(&ar_sdio->lock);
-	return bus_req;
-}
-
-static void ath10k_sdio_free_bus_req(struct ath10k *ar,
-				     struct ath10k_sdio_bus_request *bus_req)
-{
-	struct ath10k_sdio *ar_sdio = ath10k_sdio_priv(ar);
-
-	memset(bus_req, 0, sizeof(*bus_req));
-
-	spin_lock_bh(&ar_sdio->lock);
-	list_add_tail(&bus_req->list, &ar_sdio->bus_req_freeq);
-	spin_unlock_bh(&ar_sdio->lock);
-}
-
 static void __ath10k_sdio_write_async(struct ath10k *ar,
 				      struct ath10k_sdio_bus_request *req)
 {
@@ -1338,8 +1304,6 @@ static void __ath10k_sdio_write_async(struct ath10k *ar,
 	} else if (req->comp) {
 		complete(req->comp);
 	}
-
-	ath10k_sdio_free_bus_req(ar, req);
 }
 
 /* To improve throughput use workqueue to deliver packets to HTC layer,
@@ -1457,15 +1421,16 @@ static void ath10k_sdio_write_async_work(struct work_struct *work)
 	struct ath10k_sdio *ar_sdio = container_of(work, struct ath10k_sdio,
 						   wr_async_work);
 	struct ath10k *ar = ar_sdio->ar;
-	struct ath10k_sdio_bus_request *req, *tmp_req;
+	struct ath10k_sdio_bus_request *req;
 	struct ath10k_mbox_info *mbox_info = &ar_sdio->mbox_info;
+	struct sk_buff *skb;
 
 	spin_lock_bh(&ar_sdio->wr_async_lock);
 
-	list_for_each_entry_safe(req, tmp_req, &ar_sdio->wr_asyncq, list) {
-		list_del(&req->list);
+	while ((skb = skb_dequeue(&ar_sdio->async_head))) {
 		spin_unlock_bh(&ar_sdio->wr_async_lock);
 
+		req = (struct ath10k_sdio_bus_request *)(skb->cb);
 		if (req->address >= mbox_info->htc_addr &&
 		    ar_sdio->mbox_state == SDIO_MBOX_SLEEP_STATE) {
 			ath10k_sdio_set_mbox_sleep(ar, false);
@@ -1483,23 +1448,15 @@ static void ath10k_sdio_write_async_work(struct work_struct *work)
 		ath10k_sdio_set_mbox_sleep(ar, true);
 }
 
-static int ath10k_sdio_prep_async_req(struct ath10k *ar, u32 addr,
-				      struct sk_buff *skb,
-				      struct completion *comp,
-				      bool htc_msg, enum ath10k_htc_ep_id eid)
+static void ath10k_sdio_prep_async_req(struct ath10k *ar, u32 addr,
+				       struct sk_buff *skb,
+				       struct completion *comp,
+				       bool htc_msg, enum ath10k_htc_ep_id eid)
 {
 	struct ath10k_sdio *ar_sdio = ath10k_sdio_priv(ar);
-	struct ath10k_sdio_bus_request *bus_req;
+	struct ath10k_sdio_bus_request *bus_req = (void *)skb->cb;
 
-	/* Allocate a bus request for the message and queue it on the
-	 * SDIO workqueue.
-	 */
-	bus_req = ath10k_sdio_alloc_busreq(ar);
-	if (!bus_req) {
-		ath10k_warn(ar,
-			    "unable to allocate bus request for async request\n");
-		return -ENOMEM;
-	}
+	BUILD_BUG_ON(sizeof(struct ath10k_sdio_bus_request) > sizeof(skb->cb));
 
 	bus_req->skb = skb;
 	bus_req->eid = eid;
@@ -1508,10 +1465,8 @@ static int ath10k_sdio_prep_async_req(struct ath10k *ar, u32 addr,
 	bus_req->comp = comp;
 
 	spin_lock_bh(&ar_sdio->wr_async_lock);
-	list_add_tail(&bus_req->list, &ar_sdio->wr_asyncq);
+	skb_queue_tail(&ar_sdio->async_head, skb);
 	spin_unlock_bh(&ar_sdio->wr_async_lock);
-
-	return 0;
 }
 
 /* IRQ handler */
@@ -1648,7 +1603,7 @@ static int ath10k_sdio_hif_tx_sg(struct ath10k *ar, u8 pipe_id,
 	struct ath10k_sdio *ar_sdio = ath10k_sdio_priv(ar);
 	enum ath10k_htc_ep_id eid;
 	struct sk_buff *skb;
-	int ret, i;
+	int i;
 
 	eid = pipe_id_to_eid(pipe_id);
 
@@ -1664,10 +1619,7 @@ static int ath10k_sdio_hif_tx_sg(struct ath10k *ar, u8 pipe_id,
 		/* Write TX data to the end of the mbox address space */
 		address = ar_sdio->mbox_addr[eid] + ar_sdio->mbox_size[eid] -
 			  skb->len;
-		ret = ath10k_sdio_prep_async_req(ar, address, skb,
-						 NULL, true, eid);
-		if (ret)
-			return ret;
+		ath10k_sdio_prep_async_req(ar, address, skb, NULL, true, eid);
 	}
 
 	queue_work(ar_sdio->workqueue, &ar_sdio->wr_async_work);
@@ -1934,10 +1886,8 @@ static void ath10k_sdio_irq_disable(struct ath10k *ar)
 	mutex_unlock(&irq_data->mtx);
 
 	init_completion(&irqs_disabled_comp);
-	ret = ath10k_sdio_prep_async_req(ar, MBOX_INT_STATUS_ENABLE_ADDRESS,
-					 skb, &irqs_disabled_comp, false, 0);
-	if (ret)
-		goto out;
+	ath10k_sdio_prep_async_req(ar, MBOX_INT_STATUS_ENABLE_ADDRESS,
+				   skb, &irqs_disabled_comp, false, 0);
 
 	queue_work(ar_sdio->workqueue, &ar_sdio->wr_async_work);
 
@@ -1957,14 +1907,13 @@ static void ath10k_sdio_irq_disable(struct ath10k *ar)
 
 	sdio_release_host(ar_sdio->func);
 
-out:
 	kfree_skb(skb);
 }
 
 static void ath10k_sdio_hif_stop(struct ath10k *ar)
 {
-	struct ath10k_sdio_bus_request *req, *tmp_req;
 	struct ath10k_sdio *ar_sdio = ath10k_sdio_priv(ar);
+	struct ath10k_sdio_bus_request *req;
 	struct sk_buff *skb;
 
 	ath10k_sdio_irq_disable(ar);
@@ -1979,18 +1928,16 @@ static void ath10k_sdio_hif_stop(struct ath10k *ar)
 	spin_lock_bh(&ar_sdio->wr_async_lock);
 
 	/* Free all bus requests that have not been handled */
-	list_for_each_entry_safe(req, tmp_req, &ar_sdio->wr_asyncq, list) {
+	while ((skb = skb_dequeue(&ar_sdio->async_head))) {
 		struct ath10k_htc_ep *ep;
 
-		list_del(&req->list);
-
+		req = (struct ath10k_sdio_bus_request *)(skb->cb);
 		if (req->htc_msg) {
 			ep = &ar->htc.endpoint[req->eid];
 			ath10k_htc_notify_tx_completion(ep, req->skb);
-		} else if (req->skb) {
-			kfree_skb(req->skb);
+		} else {
+			kfree_skb(skb);
 		}
-		ath10k_sdio_free_bus_req(ar, req);
 	}
 
 	spin_unlock_bh(&ar_sdio->wr_async_lock);
@@ -2514,7 +2461,7 @@ static int ath10k_sdio_probe(struct sdio_func *func,
 	enum ath10k_hw_rev hw_rev;
 	u32 dev_id_base;
 	struct ath10k_bus_params bus_params = {};
-	int ret, i;
+	int ret;
 
 	/* Assumption: All SDIO based chipsets (so far) are QCA6174 based.
 	 * If there will be newer chipsets that does not use the hw reg
@@ -2574,12 +2521,8 @@ static int ath10k_sdio_probe(struct sdio_func *func,
 	ar_sdio->is_disabled = true;
 	ar_sdio->ar = ar;
 
-	spin_lock_init(&ar_sdio->lock);
 	spin_lock_init(&ar_sdio->wr_async_lock);
 	mutex_init(&ar_sdio->irq_data.mtx);
-
-	INIT_LIST_HEAD(&ar_sdio->bus_req_freeq);
-	INIT_LIST_HEAD(&ar_sdio->wr_asyncq);
 
 	INIT_WORK(&ar_sdio->wr_async_work, ath10k_sdio_write_async_work);
 	ar_sdio->workqueue = create_singlethread_workqueue("ath10k_sdio_wq");
@@ -2588,10 +2531,9 @@ static int ath10k_sdio_probe(struct sdio_func *func,
 		goto err_core_destroy;
 	}
 
-	for (i = 0; i < ATH10K_SDIO_BUS_REQUEST_MAX_NUM; i++)
-		ath10k_sdio_free_bus_req(ar, &ar_sdio->bus_req[i]);
-
 	skb_queue_head_init(&ar_sdio->rx_head);
+	skb_queue_head_init(&ar_sdio->async_head);
+
 	INIT_WORK(&ar_sdio->async_work_rx, ath10k_rx_indication_async_work);
 
 	dev_id_base = (id->device & 0x0F00);
