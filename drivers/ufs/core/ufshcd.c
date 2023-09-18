@@ -2822,7 +2822,8 @@ static int ufshcd_queuecommand(struct Scsi_Host *host, struct scsi_cmnd *cmd)
 	int err = 0;
 	struct ufs_hw_queue *hwq = NULL;
 
-	WARN_ONCE(tag < 0 || tag >= hba->nutrs, "Invalid tag %d\n", tag);
+	if (WARN_ONCE(tag < 0 || tag >= hba->nutrs, "Invalid tag %d\n", tag))
+		return 0;
 
 	switch (hba->ufshcd_state) {
 	case UFSHCD_STATE_OPERATIONAL:
@@ -6923,8 +6924,11 @@ static int __ufshcd_issue_tm_cmd(struct ufs_hba *hba,
 	spin_lock_irqsave(host->host_lock, flags);
 
 	task_tag = req->tag;
-	WARN_ONCE(task_tag < 0 || task_tag >= hba->nutmrs, "Invalid tag %d\n",
-		  task_tag);
+	if (WARN_ONCE(task_tag < 0 || task_tag >= hba->nutmrs,
+		      "Invalid tag %d\n", task_tag)) {
+		err = -EINVAL;
+		goto unlock;
+	}
 	hba->tmf_rqs[req->tag] = req;
 	treq->upiu_req.req_header.task_tag = task_tag;
 
@@ -6963,6 +6967,7 @@ static int __ufshcd_issue_tm_cmd(struct ufs_hba *hba,
 	spin_lock_irqsave(hba->host->host_lock, flags);
 	hba->tmf_rqs[req->tag] = NULL;
 	__clear_bit(task_tag, &hba->outstanding_tasks);
+unlock:
 	spin_unlock_irqrestore(hba->host->host_lock, flags);
 
 	ufshcd_release(hba);
@@ -7485,7 +7490,7 @@ out:
  * ufshcd_abort - scsi host template eh_abort_handler callback
  * @cmd: SCSI command pointer
  *
- * Return: SUCCESS or FAILED.
+ * Return: SUCCESS, FAILED or FAST_IO_FAIL.
  */
 static int ufshcd_abort(struct scsi_cmnd *cmd)
 {
@@ -7498,7 +7503,8 @@ static int ufshcd_abort(struct scsi_cmnd *cmd)
 	bool outstanding;
 	u32 reg;
 
-	WARN_ONCE(tag < 0, "Invalid tag %d\n", tag);
+	if (WARN_ONCE(tag < 0, "Invalid tag %d\n", tag))
+		return FAST_IO_FAIL;
 
 	ufshcd_hold(hba);
 
