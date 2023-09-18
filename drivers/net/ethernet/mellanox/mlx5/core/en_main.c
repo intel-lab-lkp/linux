@@ -2471,6 +2471,7 @@ static int mlx5e_open_channel(struct mlx5e_priv *priv, int ix,
 	c->tstamp   = &priv->tstamp;
 	c->ix       = ix;
 	c->cpu      = cpu;
+	c->params   = *params;
 	c->pdev     = mlx5_core_dma_dev(priv->mdev);
 	c->netdev   = priv->netdev;
 	c->mkey_be  = cpu_to_be32(priv->mdev->mlx5e_res.hw_objs.mkey);
@@ -2558,27 +2559,42 @@ int mlx5e_open_channels(struct mlx5e_priv *priv,
 			struct mlx5e_channels *chs)
 {
 	struct mlx5e_channel_param *cparam;
+	bool use_global_params = true;
 	int err = -ENOMEM;
 	int i;
 
 	chs->num = chs->params.num_channels;
 
-	chs->c = kcalloc(chs->num, sizeof(struct mlx5e_channel *), GFP_KERNEL);
-	cparam = kvzalloc(sizeof(struct mlx5e_channel_param), GFP_KERNEL);
-	if (!chs->c || !cparam)
-		goto err_free;
+	/* This check is necessary here in case chs == priv->channels because the allocation of
+	 * chs->c will invalidate it
+	 */
+	if (priv->channels.c)
+		use_global_params = false;
 
-	err = mlx5e_build_channel_param(priv->mdev, &chs->params, priv->q_counter, cparam);
-	if (err)
+	chs->c = kcalloc(chs->num, sizeof(struct mlx5e_channel *), GFP_KERNEL);
+	cparam = kvmalloc(sizeof(*cparam), GFP_KERNEL);
+	if (!chs->c || !cparam)
 		goto err_free;
 
 	for (i = 0; i < chs->num; i++) {
 		struct xsk_buff_pool *xsk_pool = NULL;
+		struct mlx5e_params *params = NULL;
 
-		if (chs->params.xdp_prog)
-			xsk_pool = mlx5e_xsk_get_pool(&chs->params, chs->params.xsk, i);
+		/* If priv->channels.c is not NULL, then retain the original params */
+		if (use_global_params)
+			params = &chs->params;
+		else
+			params = &priv->channels.c[i]->params;
 
-		err = mlx5e_open_channel(priv, i, &chs->params, cparam, xsk_pool, &chs->c[i]);
+		memset(cparam, 0, sizeof(*cparam));
+		err = mlx5e_build_channel_param(priv->mdev, params, priv->q_counter, cparam);
+		if (err)
+			goto err_free;
+
+		if (params->xdp_prog)
+			xsk_pool = mlx5e_xsk_get_pool(params, params->xsk, i);
+
+		err = mlx5e_open_channel(priv, i, params, cparam, xsk_pool, &chs->c[i]);
 		if (err)
 			goto err_close_channels;
 	}
@@ -3115,6 +3131,7 @@ int mlx5e_open_locked(struct net_device *netdev)
 
 	set_bit(MLX5E_STATE_OPENED, &priv->state);
 
+	priv->channels.c  = NULL;
 	err = mlx5e_open_channels(priv, &priv->channels);
 	if (err)
 		goto err_clear_state_opened_flag;
@@ -5611,6 +5628,7 @@ int mlx5e_priv_init(struct mlx5e_priv *priv,
 	priv->netdev      = netdev;
 	priv->max_nch     = nch;
 	priv->max_opened_tc = 1;
+	priv->channels.c  = NULL;
 
 	if (!alloc_cpumask_var(&priv->scratchpad.cpumask, GFP_KERNEL))
 		return -ENOMEM;
