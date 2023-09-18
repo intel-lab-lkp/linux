@@ -375,6 +375,7 @@
 451	common	cachestat		sys_cachestat
 452	common	fchmodat2		sys_fchmodat2
 453	64	map_shadow_stack	sys_map_shadow_stack
+454	common	inotify_add_watch_at	sys_inotify_add_watch_at
 
 #
 # Due to a historical design error, certain syscalls are numbered differently

@@ -379,6 +379,8 @@ asmlinkage long sys_fcntl64(unsigned int fd,
 asmlinkage long sys_inotify_init1(int flags);
 asmlinkage long sys_inotify_add_watch(int fd, const char __user *path,
 					u32 mask);
+asmlinkage long sys_inotify_add_watch_at(int fd, int dfd, const char __user *path,
+					 u32 mask);
 asmlinkage long sys_inotify_rm_watch(int fd, __s32 wd);
 asmlinkage long sys_ioctl(unsigned int fd, unsigned int cmd,
 				unsigned long arg);

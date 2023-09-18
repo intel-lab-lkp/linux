@@ -911,6 +911,8 @@ __SYSCALL(__NR_set_mempolicy_home_node, sys_set_mempolicy_home_node)
 __SYSCALL(__NR_cachestat, sys_cachestat)
 #define __NR_fchmodat2 452
 __SYSCALL(__NR_fchmodat2, sys_fchmodat2)
+#define __NR_inotify_add_watch_at 454
+__SYSCALL(__NR_inotify_add_watch_at, sys_inotify_add_watch_at)
 
 /*
  * Please add new compat syscalls above this comment and update
