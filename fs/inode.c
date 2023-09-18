@@ -2013,6 +2013,14 @@ int dentry_needs_remove_privs(struct mnt_idmap *idmap,
 	return mask;
 }
 
+int file_needs_remove_privs(struct file *file)
+{
+	struct dentry *dentry = file_dentry(file);
+
+	return dentry_needs_remove_privs(file_mnt_idmap(file), dentry);
+}
+EXPORT_SYMBOL_GPL(file_needs_remove_privs);
+
 static int __remove_privs(struct mnt_idmap *idmap,
 			  struct dentry *dentry, int kill)
 {
