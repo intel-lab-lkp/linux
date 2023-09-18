@@ -1047,7 +1047,7 @@ static int fxas21002c_runtime_resume(struct device *dev)
 	return fxas21002c_mode_set(data, FXAS21002C_MODE_ACTIVE);
 }
 
-EXPORT_NS_GPL_DEV_PM_OPS(fxas21002c_pm_ops, IIO_FXAS21002C) = {
+EXPORT_NS_GPL_RUNTIME_PM_OPS(fxas21002c_pm_ops, IIO_FXAS21002C) = {
 	SYSTEM_SLEEP_PM_OPS(fxas21002c_suspend, fxas21002c_resume)
 	RUNTIME_PM_OPS(fxas21002c_runtime_suspend, fxas21002c_runtime_resume,
 		       NULL)
