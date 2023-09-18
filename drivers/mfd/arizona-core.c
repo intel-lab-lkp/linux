@@ -781,7 +781,7 @@ static int arizona_resume(struct device *dev)
 	return 0;
 }
 
-EXPORT_GPL_DEV_PM_OPS(arizona_pm_ops) = {
+EXPORT_GPL_RUNTIME_PM_OPS(arizona_pm_ops) = {
 	RUNTIME_PM_OPS(arizona_runtime_suspend,
 		       arizona_runtime_resume,
 		       NULL)
