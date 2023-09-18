@@ -169,10 +169,13 @@ void rxe_set_mtu(struct rxe_dev *rxe, unsigned int ndev_mtu)
  */
 int rxe_add(struct rxe_dev *rxe, unsigned int mtu, const char *ibdev_name)
 {
+	int ret;
+
 	rxe_init(rxe);
+	ret = rxe_register_device(rxe, ibdev_name);
 	rxe_set_mtu(rxe, mtu);
 
-	return rxe_register_device(rxe, ibdev_name);
+	return ret;
 }
 
 static int rxe_newlink(const char *ibdev_name, struct net_device *ndev)
