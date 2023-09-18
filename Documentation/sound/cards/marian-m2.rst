@@ -11,14 +11,14 @@ Ivan Orlov <ivan.orlov0322@gmail.com>
 STATE OF DEVELOPMENT
 ====================
 
-This driver is based on initial driver written by Florian Faber in 2012, which seemed to work fine.
+This driver is based on the driver written by Florian Faber in 2012, which seemed to work fine.
 However, the initial code contained multiple issues, which had to be solved before sending the
 driver upstream.
 
 The vendor lost the full documentation, so what we have here was recovered from drafts and found
 after experiments with the card.
 
-What seems to be working fine:
+What seems to work fine:
 - Playback and capture for all supported rates
 - Integrated loopback (with some exceptions, see below)
 
@@ -95,7 +95,7 @@ Loopback
 Loopback
 ========
 
-The card contains integrated loopback. When it is enabled, it sets the hardware’s DAW-in memory pointer
+The card contains an integrated loopback. When it is enabled, it sets the hardware’s DAW-in memory pointer
 to the hardware’s DAW-out memory. So, what you play is what you record.
 
 You can enable the integrated loopback using the corresponding control.
