@@ -148,10 +148,10 @@ static int btrfs_insert_striped_mirrored_raid_extents(
 {
 	struct btrfs_io_context *bioc;
 	struct btrfs_io_context *rbioc;
-	const int nstripes = list_count_nodes(&ordered->bioc_list);
-	const int index = btrfs_bg_flags_to_raid_index(map_type);
-	const int substripes = btrfs_raid_array[index].sub_stripes;
-	const int max_stripes = trans->fs_info->fs_devices->rw_devices / substripes;
+	const size_t nstripes = list_count_nodes(&ordered->bioc_list);
+	const enum btrfs_raid_types index = btrfs_bg_flags_to_raid_index(map_type);
+	const u8 substripes = btrfs_raid_array[index].sub_stripes;
+	const int max_stripes = div_u64(trans->fs_info->fs_devices->rw_devices, substripes);
 	int left = nstripes;
 	int i;
 	int ret = 0;
