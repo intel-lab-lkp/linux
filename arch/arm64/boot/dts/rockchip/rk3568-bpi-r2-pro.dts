@@ -12,7 +12,7 @@
 #include "rk3568.dtsi"
 
 / {
-	model = "Bananapi-R2 Pro (RK3568) DDR4 Board";
+	model = "Banana Pi BPI-R2 Pro (RK3568) DDR4 Board";
 	compatible = "rockchip,rk3568-bpi-r2pro", "rockchip,rk3568";
 
 	aliases {

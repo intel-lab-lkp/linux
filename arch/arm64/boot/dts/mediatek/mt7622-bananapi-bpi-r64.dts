@@ -14,7 +14,7 @@
 #include "mt6380.dtsi"
 
 / {
-	model = "Bananapi BPI-R64";
+	model = "Banana Pi BPI-R64";
 	chassis-type = "embedded";
 	compatible = "bananapi,bpi-r64", "mediatek,mt7622";
 
