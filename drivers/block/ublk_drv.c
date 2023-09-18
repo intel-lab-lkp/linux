@@ -1077,13 +1077,10 @@ static void __ublk_fail_req(struct ublk_queue *ubq, struct ublk_io *io,
 {
 	WARN_ON_ONCE(io->flags & UBLK_IO_FLAG_ACTIVE);
 
-	if (!(io->flags & UBLK_IO_FLAG_ABORTED)) {
-		io->flags |= UBLK_IO_FLAG_ABORTED;
-		if (ublk_queue_can_use_recovery_reissue(ubq))
-			blk_mq_requeue_request(req, false);
-		else
-			ublk_put_req_ref(ubq, req);
-	}
+	if (ublk_queue_can_use_recovery_reissue(ubq))
+		blk_mq_requeue_request(req, false);
+	else
+		ublk_put_req_ref(ubq, req);
 }
 
 static void ubq_complete_io_cmd(struct ublk_io *io, int res,
@@ -1221,30 +1218,12 @@ static void ublk_rq_task_work_cb(struct io_uring_cmd *cmd, unsigned issue_flags)
 	ublk_forward_io_cmds(ubq, issue_flags);
 }
 
-static void ublk_queue_cmd(struct ublk_queue *ubq, struct request *rq)
+static inline void ublk_queue_cmd(struct ublk_queue *ubq, struct request *rq)
 {
 	struct ublk_rq_data *data = blk_mq_rq_to_pdu(rq);
-	struct ublk_io *io;
 
-	if (!llist_add(&data->node, &ubq->io_cmds))
-		return;
-
-	io = &ubq->ios[rq->tag];
-	/*
-	 * If the check pass, we know that this is a re-issued request aborted
-	 * previously in exit notifier because the ubq_daemon(cmd's task) is
-	 * PF_EXITING. We cannot call io_uring_cmd_complete_in_task() anymore
-	 * because this ioucmd's io_uring context may be freed now if no inflight
-	 * ioucmd exists. Otherwise we may cause null-deref in ctx->fallback_work.
-	 *
-	 * Note: exit notifier sets UBLK_IO_FLAG_ABORTED and ends this request(releasing
-	 * the tag). Then the request is re-started(allocating the tag) and we are here.
-	 * Since releasing/allocating a tag implies smp_mb(), finding UBLK_IO_FLAG_ABORTED
-	 * guarantees that here is a re-issued request aborted previously.
-	 */
-	if (unlikely(io->flags & UBLK_IO_FLAG_ABORTED)) {
-		ublk_abort_io_cmds(ubq);
-	} else {
+	if (llist_add(&data->node, &ubq->io_cmds)) {
+		struct ublk_io *io = &ubq->ios[rq->tag];
 		struct io_uring_cmd *cmd = io->cmd;
 		struct ublk_uring_cmd_pdu *pdu = ublk_get_uring_cmd_pdu(cmd);
 
@@ -1274,6 +1253,7 @@ static blk_status_t ublk_queue_rq(struct blk_mq_hw_ctx *hctx,
 {
 	struct ublk_queue *ubq = hctx->driver_data;
 	struct request *rq = bd->rq;
+	struct ublk_io *io = &ubq->ios[rq->tag];
 	blk_status_t res;
 
 	/* fill iod to slot in io cmd buffer */
@@ -1293,13 +1273,12 @@ static blk_status_t ublk_queue_rq(struct blk_mq_hw_ctx *hctx,
 	if (ublk_queue_can_use_recovery(ubq) && unlikely(ubq->force_abort))
 		return BLK_STS_IOERR;
 
-	blk_mq_start_request(bd->rq);
-
-	if (unlikely(ubq_daemon_is_dying(ubq))) {
+	if (unlikely(io->flags & UBLK_IO_FLAG_ABORTED)) {
 		__ublk_abort_rq(ubq, rq);
 		return BLK_STS_OK;
 	}
 
+	blk_mq_start_request(bd->rq);
 	ublk_queue_cmd(ubq, rq);
 
 	return BLK_STS_OK;
@@ -1429,6 +1408,9 @@ static void ublk_abort_queue(struct ublk_device *ub, struct ublk_queue *ubq)
 	for (i = 0; i < ubq->q_depth; i++) {
 		struct ublk_io *io = &ubq->ios[i];
 
+		if (!(io->flags & UBLK_IO_FLAG_ABORTED))
+			io->flags |= UBLK_IO_FLAG_ABORTED;
+
 		if (!(io->flags & UBLK_IO_FLAG_ACTIVE)) {
 			struct request *rq;
 
@@ -1437,7 +1419,7 @@ static void ublk_abort_queue(struct ublk_device *ub, struct ublk_queue *ubq)
 			 * will do it
 			 */
 			rq = blk_mq_tag_to_rq(ub->tag_set.tags[ubq->q_id], i);
-			if (rq)
+			if (rq && blk_mq_request_started(rq))
 				__ublk_fail_req(ubq, io, rq);
 		}
 	}
