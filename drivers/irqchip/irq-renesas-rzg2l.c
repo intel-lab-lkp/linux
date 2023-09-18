@@ -116,11 +116,13 @@ static void rzg2l_irqc_irq_disable(struct irq_data *d)
 		u8 tssr_index = TSSR_INDEX(offset);
 		u32 reg;
 
+		irq_chip_mask_parent(d);
 		raw_spin_lock(&priv->lock);
 		reg = readl_relaxed(priv->base + TSSR(tssr_index));
 		reg &= ~(TSSEL_MASK << TSSEL_SHIFT(tssr_offset));
 		writel_relaxed(reg, priv->base + TSSR(tssr_index));
 		raw_spin_unlock(&priv->lock);
+		irq_chip_unmask_parent(d);
 	}
 	irq_chip_disable_parent(d);
 }
@@ -137,11 +139,13 @@ static void rzg2l_irqc_irq_enable(struct irq_data *d)
 		u8 tssr_index = TSSR_INDEX(offset);
 		u32 reg;
 
+		irq_chip_mask_parent(d);
 		raw_spin_lock(&priv->lock);
 		reg = readl_relaxed(priv->base + TSSR(tssr_index));
 		reg |= (TIEN | tint) << TSSEL_SHIFT(tssr_offset);
 		writel_relaxed(reg, priv->base + TSSR(tssr_index));
 		raw_spin_unlock(&priv->lock);
+		irq_chip_unmask_parent(d);
 	}
 	irq_chip_enable_parent(d);
 }
@@ -226,10 +230,12 @@ static int rzg2l_irqc_set_type(struct irq_data *d, unsigned int type)
 	unsigned int hw_irq = irqd_to_hwirq(d);
 	int ret = -EINVAL;
 
+	irq_chip_mask_parent(d);
 	if (hw_irq >= IRQC_IRQ_START && hw_irq <= IRQC_IRQ_COUNT)
 		ret = rzg2l_irq_set_type(d, type);
 	else if (hw_irq >= IRQC_TINT_START && hw_irq < IRQC_NUM_IRQ)
 		ret = rzg2l_tint_set_edge(d, type);
+	irq_chip_unmask_parent(d);
 	if (ret)
 		return ret;
 
