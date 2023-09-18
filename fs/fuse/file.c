@@ -1352,7 +1352,7 @@ static ssize_t fuse_cache_write_iter(struct kiocb *iocb, struct iov_iter *from)
 
 	if (fc->writeback_cache && !(iocb->ki_flags & IOCB_DIRECT)) {
 		/* Update size (EOF optimization) and mode (SUID clearing) */
-		err = fuse_update_attributes(mapping->host, file,
+		err = fuse_update_attributes(inode, file,
 					     STATX_SIZE | STATX_MODE);
 		if (err)
 			return err;
