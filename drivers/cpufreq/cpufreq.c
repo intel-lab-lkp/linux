@@ -1673,6 +1673,8 @@ static void __cpufreq_offline(unsigned int cpu, struct cpufreq_policy *policy)
 		cpufreq_driver->exit(policy);
 		policy->freq_table = NULL;
 	}
+
+	sched_cpufreq_governor_change(policy, policy->governor);
 }
 
 static int cpufreq_offline(unsigned int cpu)
