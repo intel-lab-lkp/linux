@@ -96,6 +96,7 @@
 #define PIN(n)			(0x0800 + 0x10 + (n))
 #define IOLH(n)			(0x1000 + (n) * 8)
 #define IEN(n)			(0x1800 + (n) * 8)
+#define FILONOFF(n)		(0x2080 + (n) * 8)
 #define ISEL(n)			(0x2c80 + (n) * 8)
 #define PWPR			(0x3014)
 #define SD_CH(n)		(0x3000 + (n) * 4)
@@ -1169,9 +1170,9 @@ static void rzg2l_gpio_irq_disable(struct irq_data *d)
 {
 	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
 	struct rzg2l_pinctrl *pctrl = container_of(gc, struct rzg2l_pinctrl, gpio_chip);
+	void __iomem *addr, *noise_filter_addr;
 	unsigned int hwirq = irqd_to_hwirq(d);
 	unsigned long flags;
-	void __iomem *addr;
 	u32 port;
 	u8 bit;
 
@@ -1181,12 +1182,15 @@ static void rzg2l_gpio_irq_disable(struct irq_data *d)
 	bit = RZG2L_PIN_ID_TO_PIN(hwirq);
 
 	addr = pctrl->base + ISEL(port);
+	noise_filter_addr = pctrl->base + FILONOFF(port);
 	if (bit >= 4) {
 		bit -= 4;
 		addr += 4;
+		noise_filter_addr += 4;
 	}
 
 	spin_lock_irqsave(&pctrl->lock, flags);
+	writel(readl(noise_filter_addr) & ~BIT(bit * 8), noise_filter_addr);
 	writel(readl(addr) & ~BIT(bit * 8), addr);
 	spin_unlock_irqrestore(&pctrl->lock, flags);
 
@@ -1197,9 +1201,9 @@ static void rzg2l_gpio_irq_enable(struct irq_data *d)
 {
 	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
 	struct rzg2l_pinctrl *pctrl = container_of(gc, struct rzg2l_pinctrl, gpio_chip);
+	void __iomem *addr, *noise_filter_addr;
 	unsigned int hwirq = irqd_to_hwirq(d);
 	unsigned long flags;
-	void __iomem *addr;
 	u32 port;
 	u8 bit;
 
@@ -1209,13 +1213,16 @@ static void rzg2l_gpio_irq_enable(struct irq_data *d)
 	bit = RZG2L_PIN_ID_TO_PIN(hwirq);
 
 	addr = pctrl->base + ISEL(port);
+	noise_filter_addr = pctrl->base + FILONOFF(port);
 	if (bit >= 4) {
 		bit -= 4;
 		addr += 4;
+		noise_filter_addr += 4;
 	}
 
 	spin_lock_irqsave(&pctrl->lock, flags);
 	writel(readl(addr) | BIT(bit * 8), addr);
+	writel(readl(noise_filter_addr) | BIT(bit * 8), noise_filter_addr);
 	spin_unlock_irqrestore(&pctrl->lock, flags);
 
 	irq_chip_enable_parent(d);
