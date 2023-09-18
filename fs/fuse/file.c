@@ -1308,7 +1308,8 @@ static bool fuse_io_past_eof(struct kiocb *iocb, struct iov_iter *iter)
 /*
  * @return true if an exclusive lock for direct IO writes is needed
  */
-static bool fuse_dio_wr_exclusive_lock(struct kiocb *iocb, struct iov_iter *from)
+static bool fuse_dio_wr_exclusive_lock(struct kiocb *iocb, struct iov_iter *from,
+				       struct inode *inode)
 {
 	struct file *file = iocb->ki_filp;
 	struct fuse_file *ff = file->private_data;
@@ -1342,7 +1343,8 @@ static ssize_t fuse_cache_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	struct inode *inode = mapping->host;
 	ssize_t err;
 	struct fuse_conn *fc = get_fuse_conn(inode);
-	bool excl_lock = fuse_dio_wr_exclusive_lock(iocb, from) || 1;
+	bool excl_lock = fuse_dio_wr_exclusive_lock(iocb, from, inode);
+	int remove_privs = 1;
 
 	if (fc->writeback_cache && !(iocb->ki_flags & IOCB_DIRECT)) {
 		/* Update size (EOF optimization) and mode (SUID clearing) */
@@ -1380,9 +1382,20 @@ relock:
 	if (err <= 0)
 		goto out;
 
-	err = file_remove_privs(file);
-	if (err)
-		goto out;
+	if (!excl_lock) {
+		remove_privs = file_needs_remove_privs(file);
+		if (remove_privs) {
+			inode_unlock_shared(inode);
+			excl_lock = true;
+			goto relock;
+		}
+	}
+
+	if (remove_privs) {
+		err = file_remove_privs(file);
+		if (err)
+			goto out;
+	}
 
 	err = file_update_time(file);
 	if (err)
@@ -1623,7 +1636,7 @@ static ssize_t fuse_direct_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	struct inode *inode = file_inode(iocb->ki_filp);
 	struct fuse_io_priv io = FUSE_IO_PRIV_SYNC(iocb);
 	ssize_t res;
-	bool exclusive_lock = fuse_dio_wr_exclusive_lock(iocb, from);
+	bool exclusive_lock = fuse_dio_wr_exclusive_lock(iocb, from, inode);
 
 	/*
 	 * Take exclusive lock if
