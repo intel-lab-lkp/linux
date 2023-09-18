@@ -144,6 +144,12 @@ static void rzg2l_irqc_irq_enable(struct irq_data *d)
 		reg = readl_relaxed(priv->base + TSSR(tssr_index));
 		reg |= (TIEN | tint) << TSSEL_SHIFT(tssr_offset);
 		writel_relaxed(reg, priv->base + TSSR(tssr_index));
+		/*
+		 * In case of edge trigger detection, enabling the TINT source
+		 * cause a phantum interrupt that leads to irq storm. So clear
+		 * the phantum interrupt.
+		 */
+		rzg2l_tint_eoi(d);
 		raw_spin_unlock(&priv->lock);
 		irq_chip_unmask_parent(d);
 	}
