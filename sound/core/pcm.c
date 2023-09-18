@@ -265,6 +265,9 @@ static const char * const snd_pcm_access_names[] = {
 
 static const char * const snd_pcm_subformat_names[] = {
 	SUBFORMAT(STD), 
+	SUBFORMAT(MSBITS_MAX),
+	SUBFORMAT(MSBITS_20),
+	SUBFORMAT(MSBITS_24),
 };
 
 static const char * const snd_pcm_tstamp_mode_names[] = {
@@ -999,6 +1002,7 @@ void snd_pcm_detach_substream(struct snd_pcm_substream *substream)
 	free_pages_exact(runtime->control,
 		       PAGE_ALIGN(sizeof(struct snd_pcm_mmap_control)));
 	kfree(runtime->hw_constraints.rules);
+	kfree(runtime->hw.subformats);
 	/* Avoid concurrent access to runtime via PCM timer interface */
 	if (substream->timer) {
 		spin_lock_irq(&substream->timer->lock);

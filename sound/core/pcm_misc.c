@@ -483,6 +483,57 @@ int snd_pcm_format_set_silence(snd_pcm_format_t format, void *data, unsigned int
 EXPORT_SYMBOL(snd_pcm_format_set_silence);
 
 /**
+ * snd_pcm_subformat_width - return the bit-width of the subformat
+ * @subformat: the subformat to check
+ *
+ * Return: The bit-width of the subformat, or 0 if result is dependent
+ * on other parameters in the configuration space.
+ */
+int snd_pcm_subformat_width(snd_pcm_subformat_t subformat)
+{
+	switch (subformat) {
+	case SNDRV_PCM_SUBFORMAT_MSBITS_20:
+		return 20;
+	case SNDRV_PCM_SUBFORMAT_MSBITS_24:
+		return 24;
+	case SNDRV_PCM_SUBFORMAT_MSBITS_MAX:
+	case SNDRV_PCM_SUBFORMAT_STD:
+	default:
+		return 0;
+	}
+}
+EXPORT_SYMBOL(snd_pcm_subformat_width);
+
+/**
+ * snd_pcm_hw_copy - Copy information of one hardware parameters space into another.
+ * @hw: the space to copy the information into.
+ * @from: the space to copy the information from.
+ *
+ * Return: Zero on success, negative error code otherwise.
+ */
+int snd_pcm_hw_copy(struct snd_pcm_hardware *hw, const struct snd_pcm_hardware *from)
+{
+	struct snd_pcm_subformat *sf = NULL;
+	struct snd_pcm_subformat *pos;
+	u32 count = 1; /* At least a sentinel. */
+
+	if (from->subformats) {
+		for (pos = from->subformats; pos->mask; pos++)
+			count++;
+
+		sf = kmemdup(from->subformats, count * sizeof(*from->subformats), GFP_KERNEL);
+		if (!sf)
+			return -ENOMEM;
+		kfree(hw->subformats);
+	}
+
+	*hw = *from;
+	hw->subformats = sf;
+	return 0;
+}
+EXPORT_SYMBOL(snd_pcm_hw_copy);
+
+/**
  * snd_pcm_hw_limit_rates - determine rate_min/rate_max fields
  * @hw: the pcm hw instance
  *
