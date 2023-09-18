@@ -33,7 +33,11 @@ struct io_uring_cmd {
 	};
 	u32		cmd_op;
 	u32		flags;
-	u8		pdu[32]; /* available inline for free use */
+	union {
+		/* driver needs to save ctx_id */
+		u32		ctx_id;
+		u8		pdu[32]; /* available inline for free use */
+	};
 };
 
 static inline const void *io_uring_sqe_cmd(const struct io_uring_sqe *sqe)
