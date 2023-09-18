@@ -244,7 +244,8 @@ void page_cache_ra_unbounded(struct readahead_control *ractl,
 			continue;
 		}
 
-		folio = filemap_alloc_folio(gfp_mask, 0);
+		folio = filemap_alloc_folio(gfp_mask,
+				mapping_min_folio_order(mapping));
 		if (!folio)
 			break;
 		if (filemap_add_folio(mapping, folio, index + i,
@@ -311,6 +312,8 @@ void force_page_cache_ra(struct readahead_control *ractl,
 	struct file_ra_state *ra = ractl->ra;
 	struct backing_dev_info *bdi = inode_to_bdi(mapping->host);
 	unsigned long max_pages, index;
+	unsigned int order = mapping_min_folio_order(mapping);
+	unsigned int min_pages = 1 << order;
 
 	if (unlikely(!mapping->a_ops->read_folio && !mapping->a_ops->readahead))
 		return;
@@ -320,6 +323,10 @@ void force_page_cache_ra(struct readahead_control *ractl,
 	 * be up to the optimal hardware IO size
 	 */
 	index = readahead_index(ractl);
+	if (order) {
+		WARN_ON(index & (min_pages - 1));
+		index = ALIGN_DOWN(index, min_pages);
+	}
 	max_pages = max_t(unsigned long, bdi->io_pages, ra->ra_pages);
 	nr_to_read = min_t(unsigned long, nr_to_read, max_pages);
 	while (nr_to_read) {
@@ -327,6 +334,8 @@ void force_page_cache_ra(struct readahead_control *ractl,
 
 		if (this_chunk > nr_to_read)
 			this_chunk = nr_to_read;
+		if (this_chunk < min_pages)
+			this_chunk = min_pages;
 		ractl->_index = index;
 		do_page_cache_ra(ractl, this_chunk, 0);
 
@@ -597,8 +606,8 @@ static void ondemand_readahead(struct readahead_control *ractl,
 		pgoff_t start;
 
 		rcu_read_lock();
-		start = page_cache_next_miss(ractl->mapping, index + 1,
-				max_pages);
+		start = page_cache_next_miss(ractl->mapping,
+				index + folio_nr_pages(folio), max_pages);
 		rcu_read_unlock();
 
 		if (!start || start - index > max_pages)
@@ -782,18 +791,20 @@ void readahead_expand(struct readahead_control *ractl,
 	struct file_ra_state *ra = ractl->ra;
 	pgoff_t new_index, new_nr_pages;
 	gfp_t gfp_mask = readahead_gfp_mask(mapping);
+	unsigned int order = mapping_min_folio_order(mapping);
+	unsigned int min_nr_pages = 1 << order;
 
-	new_index = new_start / PAGE_SIZE;
+	new_index = new_start / (min_nr_pages * PAGE_SIZE);
 
 	/* Expand the leading edge downwards */
 	while (ractl->_index > new_index) {
-		unsigned long index = ractl->_index - 1;
+		unsigned long index = ractl->_index - min_nr_pages;
 		struct folio *folio = xa_load(&mapping->i_pages, index);
 
 		if (folio && !xa_is_value(folio))
 			return; /* Folio apparently present */
 
-		folio = filemap_alloc_folio(gfp_mask, 0);
+		folio = filemap_alloc_folio(gfp_mask, order);
 		if (!folio)
 			return;
 		if (filemap_add_folio(mapping, folio, index, gfp_mask) < 0) {
@@ -805,12 +816,12 @@ void readahead_expand(struct readahead_control *ractl,
 			ractl->_workingset = true;
 			psi_memstall_enter(&ractl->_pflags);
 		}
-		ractl->_nr_pages++;
+		ractl->_nr_pages += folio_nr_pages(folio);
 		ractl->_index = folio->index;
 	}
 
 	new_len += new_start - readahead_pos(ractl);
-	new_nr_pages = DIV_ROUND_UP(new_len, PAGE_SIZE);
+	new_nr_pages = DIV_ROUND_UP(new_len, min_nr_pages * PAGE_SIZE);
 
 	/* Expand the trailing edge upwards */
 	while (ractl->_nr_pages < new_nr_pages) {
@@ -820,7 +831,7 @@ void readahead_expand(struct readahead_control *ractl,
 		if (folio && !xa_is_value(folio))
 			return; /* Folio apparently present */
 
-		folio = filemap_alloc_folio(gfp_mask, 0);
+		folio = filemap_alloc_folio(gfp_mask, order);
 		if (!folio)
 			return;
 		if (filemap_add_folio(mapping, folio, index, gfp_mask) < 0) {
@@ -832,10 +843,10 @@ void readahead_expand(struct readahead_control *ractl,
 			ractl->_workingset = true;
 			psi_memstall_enter(&ractl->_pflags);
 		}
-		ractl->_nr_pages++;
+		ractl->_nr_pages += folio_nr_pages(folio);
 		if (ra) {
-			ra->size++;
-			ra->async_size++;
+			ra->size += folio_nr_pages(folio);
+			ra->async_size += folio_nr_pages(folio);
 		}
 	}
 }
