@@ -479,12 +479,30 @@ static int fixup_unreferenced_params(struct snd_pcm_substream *substream,
 {
 	const struct snd_interval *i;
 	const struct snd_mask *m;
+	struct snd_mask *sfmask;
 	int err;
 
 	if (!params->msbits) {
 		i = hw_param_interval_c(params, SNDRV_PCM_HW_PARAM_SAMPLE_BITS);
 		if (snd_interval_single(i))
 			params->msbits = snd_interval_value(i);
+	}
+
+	if (params->msbits) {
+		m = hw_param_mask_c(params, SNDRV_PCM_HW_PARAM_FORMAT);
+
+		if (snd_mask_single(m)) {
+			snd_pcm_format_t format = (__force snd_pcm_format_t)snd_mask_min(m);
+
+			if (snd_pcm_format_linear(format) &&
+			    snd_pcm_format_width(format) != params->msbits) {
+				sfmask = hw_param_mask(params, SNDRV_PCM_HW_PARAM_SUBFORMAT);
+				snd_mask_reset(sfmask,
+					       (__force unsigned)SNDRV_PCM_SUBFORMAT_MSBITS_MAX);
+				if (snd_mask_empty(sfmask))
+					return -EINVAL;
+			}
+		}
 	}
 
 	if (!params->rate_den) {
@@ -2483,6 +2501,52 @@ static int snd_pcm_hw_rule_buffer_bytes_max(struct snd_pcm_hw_params *params,
 	return snd_interval_refine(hw_param_interval(params, rule->var), &t);
 }		
 
+static int snd_pcm_hw_rule_subformats(struct snd_pcm_hw_params *params,
+				      struct snd_pcm_hw_rule *rule)
+{
+	struct snd_mask *sfmask = hw_param_mask(params, SNDRV_PCM_HW_PARAM_SUBFORMAT);
+	struct snd_mask *fmask = hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT);
+	struct snd_pcm_hardware *hw = rule->private;
+	struct snd_pcm_subformat *sf;
+	snd_pcm_format_t f;
+	struct snd_mask m;
+	bool found;
+
+	snd_mask_none(&m);
+	/* All PCMs support at least the default STD subformat. */
+	snd_mask_set(&m, (__force unsigned)SNDRV_PCM_SUBFORMAT_STD);
+
+	if (!hw->subformats)
+		goto exit;
+
+	pcm_for_each_format(f) {
+		if (!snd_mask_test(fmask, f))
+			continue;
+
+		found = false;
+		for (sf = hw->subformats; sf->mask && !found; sf++) {
+			if (sf->format != f)
+				continue;
+			m.bits[0] |= sf->mask;
+			found = true;
+		}
+		if (!found && snd_pcm_format_linear(f))
+			snd_mask_set(&m, (__force unsigned)SNDRV_PCM_SUBFORMAT_MSBITS_MAX);
+	}
+exit:
+	return snd_mask_refine(sfmask, &m);
+}
+
+static int snd_pcm_hw_constraint_subformats(struct snd_pcm_runtime *runtime,
+					   unsigned int cond,
+					   struct snd_pcm_hardware *hw)
+{
+	return snd_pcm_hw_rule_add(runtime, cond, -1,
+				   snd_pcm_hw_rule_subformats, (void *)hw,
+				   SNDRV_PCM_HW_PARAM_SUBFORMAT,
+				   SNDRV_PCM_HW_PARAM_FORMAT, -1);
+}
+
 static int snd_pcm_hw_constraints_init(struct snd_pcm_substream *substream)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
@@ -2634,8 +2698,7 @@ static int snd_pcm_hw_constraints_complete(struct snd_pcm_substream *substream)
 	if (err < 0)
 		return err;
 
-	err = snd_pcm_hw_constraint_mask(runtime, SNDRV_PCM_HW_PARAM_SUBFORMAT,
-					 PARAM_MASK_BIT(SNDRV_PCM_SUBFORMAT_STD));
+	err = snd_pcm_hw_constraint_subformats(runtime, 0, hw);
 	if (err < 0)
 		return err;
 
