@@ -573,6 +573,7 @@ EXPORT_SYMBOL_GPL(devm_power_supply_get_by_phandle);
 int power_supply_get_battery_info(struct power_supply *psy,
 				  struct power_supply_battery_info **info_out)
 {
+	struct device *allocdev = psy->dev.parent ?: &psy->dev;
 	struct power_supply_resistance_temp_table *resist_table;
 	struct power_supply_battery_info *info;
 	struct device_node *battery_np = NULL;
@@ -623,7 +624,7 @@ int power_supply_get_battery_info(struct power_supply *psy,
 		goto out_put_node;
 	}
 
-	info = devm_kzalloc(&psy->dev, sizeof(*info), GFP_KERNEL);
+	info = devm_kzalloc(allocdev, sizeof(*info), GFP_KERNEL);
 	if (!info) {
 		err = -ENOMEM;
 		goto out_put_node;
@@ -776,7 +777,7 @@ int power_supply_get_battery_info(struct power_supply *psy,
 		info->ocv_table_size[index] = tab_len;
 
 		table = info->ocv_table[index] =
-			devm_kcalloc(&psy->dev, tab_len, sizeof(*table), GFP_KERNEL);
+			devm_kcalloc(allocdev, tab_len, sizeof(*table), GFP_KERNEL);
 		if (!info->ocv_table[index]) {
 			power_supply_put_battery_info(psy, info);
 			err = -ENOMEM;
@@ -796,7 +797,7 @@ int power_supply_get_battery_info(struct power_supply *psy,
 		goto out_ret_pointer;
 
 	info->resist_table_size = len / (2 * sizeof(__be32));
-	resist_table = info->resist_table = devm_kcalloc(&psy->dev,
+	resist_table = info->resist_table = devm_kcalloc(allocdev,
 							 info->resist_table_size,
 							 sizeof(*resist_table),
 							 GFP_KERNEL);
@@ -825,17 +826,18 @@ EXPORT_SYMBOL_GPL(power_supply_get_battery_info);
 void power_supply_put_battery_info(struct power_supply *psy,
 				   struct power_supply_battery_info *info)
 {
+	struct device *allocdev = psy->dev.parent ?: &psy->dev;
 	int i;
 
 	for (i = 0; i < POWER_SUPPLY_OCV_TEMP_MAX; i++) {
 		if (info->ocv_table[i])
-			devm_kfree(&psy->dev, info->ocv_table[i]);
+			devm_kfree(allocdev, info->ocv_table[i]);
 	}
 
 	if (info->resist_table)
-		devm_kfree(&psy->dev, info->resist_table);
+		devm_kfree(allocdev, info->resist_table);
 
-	devm_kfree(&psy->dev, info);
+	devm_kfree(allocdev, info);
 }
 EXPORT_SYMBOL_GPL(power_supply_put_battery_info);
 
