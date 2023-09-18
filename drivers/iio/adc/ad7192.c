@@ -193,7 +193,6 @@ struct ad7192_state {
 	struct clk			*mclk;
 	u16				int_vref_mv;
 	u32				fclk;
-	u32				f_order;
 	u32				mode;
 	u32				conf;
 	u32				scale_avail[8][2];
@@ -433,7 +432,6 @@ static int ad7192_setup(struct iio_dev *indio_dev, struct device_node *np)
 		st->conf |= AD7192_CONF_REFSEL;
 
 	st->conf &= ~AD7192_CONF_CHOP;
-	st->f_order = AD7192_NO_SYNC_FILTER;
 
 	buf_en = of_property_read_bool(np, "adi,buffer-enable");
 	if (buf_en)
@@ -544,22 +542,60 @@ static ssize_t ad7192_set(struct device *dev,
 	return ret ? ret : len;
 }
 
+static int ad7192_compute_f_order(bool sinc3_en, bool chop_en)
+{
+	if (!chop_en)
+		return 1;
+
+	if (sinc3_en)
+		return AD7192_SYNC3_FILTER;
+
+	return AD7192_SYNC4_FILTER;
+}
+
+static int ad7192_get_f_order(struct ad7192_state *st)
+{
+	bool sinc3_en, chop_en;
+
+	sinc3_en = FIELD_GET(AD7192_MODE_SINC3, st->mode);
+	chop_en = FIELD_GET(AD7192_CONF_CHOP, st->conf);
+
+	return ad7192_compute_f_order(sinc3_en, chop_en);
+}
+
+static int ad7192_compute_f_adc(struct ad7192_state *st, bool sinc3_en,
+				bool chop_en)
+{
+	unsigned int f_order = ad7192_compute_f_order(sinc3_en, chop_en);
+
+	return DIV_ROUND_CLOSEST(st->fclk,
+				 f_order * AD7192_MODE_RATE(st->mode));
+}
+
+static int ad7192_get_f_adc(struct ad7192_state *st)
+{
+	unsigned int f_order = ad7192_get_f_order(st);
+
+	return DIV_ROUND_CLOSEST(st->fclk,
+				 f_order * AD7192_MODE_RATE(st->mode));
+}
+
 static void ad7192_get_available_filter_freq(struct ad7192_state *st,
 						    int *freq)
 {
 	unsigned int fadc;
 
 	/* Formulas for filter at page 25 of the datasheet */
-	fadc = DIV_ROUND_CLOSEST(st->fclk,
-				 AD7192_SYNC4_FILTER * AD7192_MODE_RATE(st->mode));
+	fadc = ad7192_compute_f_adc(st, false, true);
 	freq[0] = DIV_ROUND_CLOSEST(fadc * 240, 1024);
 
-	fadc = DIV_ROUND_CLOSEST(st->fclk,
-				 AD7192_SYNC3_FILTER * AD7192_MODE_RATE(st->mode));
+	fadc = ad7192_compute_f_adc(st, true, true);
 	freq[1] = DIV_ROUND_CLOSEST(fadc * 240, 1024);
 
-	fadc = DIV_ROUND_CLOSEST(st->fclk, AD7192_MODE_RATE(st->mode));
+	fadc = ad7192_compute_f_adc(st, false, false);
 	freq[2] = DIV_ROUND_CLOSEST(fadc * 230, 1024);
+
+	fadc = ad7192_compute_f_adc(st, true, false);
 	freq[3] = DIV_ROUND_CLOSEST(fadc * 272, 1024);
 }
 
@@ -642,25 +678,21 @@ static int ad7192_set_3db_filter_freq(struct ad7192_state *st,
 
 	switch (idx) {
 	case 0:
-		st->f_order = AD7192_SYNC4_FILTER;
 		st->mode &= ~AD7192_MODE_SINC3;
 
 		st->conf |= AD7192_CONF_CHOP;
 		break;
 	case 1:
-		st->f_order = AD7192_SYNC3_FILTER;
 		st->mode |= AD7192_MODE_SINC3;
 
 		st->conf |= AD7192_CONF_CHOP;
 		break;
 	case 2:
-		st->f_order = AD7192_NO_SYNC_FILTER;
 		st->mode &= ~AD7192_MODE_SINC3;
 
 		st->conf &= ~AD7192_CONF_CHOP;
 		break;
 	case 3:
-		st->f_order = AD7192_NO_SYNC_FILTER;
 		st->mode |= AD7192_MODE_SINC3;
 
 		st->conf &= ~AD7192_CONF_CHOP;
@@ -678,8 +710,7 @@ static int ad7192_get_3db_filter_freq(struct ad7192_state *st)
 {
 	unsigned int fadc;
 
-	fadc = DIV_ROUND_CLOSEST(st->fclk,
-				 st->f_order * AD7192_MODE_RATE(st->mode));
+	fadc = ad7192_get_f_adc(st);
 
 	if (FIELD_GET(AD7192_CONF_CHOP, st->conf))
 		return DIV_ROUND_CLOSEST(fadc * 240, 1024);
@@ -726,8 +757,7 @@ static int ad7192_read_raw(struct iio_dev *indio_dev,
 			*val -= 273 * ad7192_get_temp_scale(unipolar);
 		return IIO_VAL_INT;
 	case IIO_CHAN_INFO_SAMP_FREQ:
-		*val = st->fclk /
-			(st->f_order * 1024 * AD7192_MODE_RATE(st->mode));
+		*val = DIV_ROUND_CLOSEST(ad7192_get_f_adc(st), 1024);
 		return IIO_VAL_INT;
 	case IIO_CHAN_INFO_LOW_PASS_FILTER_3DB_FREQUENCY:
 		*val = ad7192_get_3db_filter_freq(st);
@@ -777,7 +807,7 @@ static int ad7192_write_raw(struct iio_dev *indio_dev,
 			break;
 		}
 
-		div = st->fclk / (val * st->f_order * 1024);
+		div = st->fclk / (val * ad7192_get_f_order(st) * 1024);
 		if (div < 1 || div > 1023) {
 			ret = -EINVAL;
 			break;
