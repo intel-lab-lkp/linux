@@ -30,7 +30,7 @@
 /*
  * Each block ramdisk device has a xarray of folios that stores the folios
  * containing the block device's contents. A brd folio's ->index is its offset
- * in PAGE_SIZE units. This is similar to, but in no way connected with,
+ * in brd_sector_size units. This is similar to, but in no way connected with,
  * the kernel's pagecache or buffer cache (which sit above our block device).
  */
 struct brd_device {
@@ -43,9 +43,11 @@ struct brd_device {
 	 */
 	struct xarray	        brd_folios;
 	u64			brd_nr_folios;
+	unsigned int		brd_sector_shift;
+	unsigned int		brd_sector_size;
 };
 
-#define BRD_SECTOR_SHIFT(b) (PAGE_SHIFT - SECTOR_SHIFT)
+#define BRD_SECTOR_SHIFT(b) ((b)->brd_sector_shift - SECTOR_SHIFT)
 
 static pgoff_t brd_sector_index(struct brd_device *brd, sector_t sector)
 {
@@ -85,7 +87,7 @@ static int brd_insert_folio(struct brd_device *brd, sector_t sector, gfp_t gfp)
 {
 	pgoff_t idx;
 	struct folio *folio, *cur;
-	unsigned int rd_sector_order = get_order(PAGE_SIZE);
+	unsigned int rd_sector_order = get_order(brd->brd_sector_size);
 	int ret = 0;
 
 	folio = brd_lookup_folio(brd, sector);
@@ -140,7 +142,7 @@ static void brd_free_folios(struct brd_device *brd)
 static int copy_to_brd_setup(struct brd_device *brd, sector_t sector, size_t n,
 			     gfp_t gfp)
 {
-	unsigned int rd_sector_size = PAGE_SIZE;
+	unsigned int rd_sector_size = brd->brd_sector_size;
 	unsigned int offset = brd_sector_offset(brd, sector);
 	size_t copy;
 	int ret;
@@ -163,7 +165,7 @@ static void copy_to_brd(struct brd_device *brd, const void *src,
 			sector_t sector, size_t n)
 {
 	struct folio *folio;
-	unsigned int rd_sector_size = PAGE_SIZE;
+	unsigned int rd_sector_size = brd->brd_sector_size;
 	unsigned int offset = brd_sector_offset(brd, sector);
 	size_t copy;
 
@@ -181,7 +183,7 @@ static void copy_from_brd(void *dst, struct brd_device *brd,
 			sector_t sector, size_t n)
 {
 	struct folio *folio;
-	unsigned int rd_sector_size = PAGE_SIZE;
+	unsigned int rd_sector_size = brd->brd_sector_size;
 	unsigned int offset = brd_sector_offset(brd, sector);
 	size_t copy;
 
@@ -279,6 +281,10 @@ static int max_part = 1;
 module_param(max_part, int, 0444);
 MODULE_PARM_DESC(max_part, "Num Minors to reserve between devices");
 
+static unsigned int rd_blksize = PAGE_SIZE;
+module_param(rd_blksize, uint, 0444);
+MODULE_PARM_DESC(rd_blksize, "Blocksize of each RAM disk in bytes.");
+
 MODULE_LICENSE("GPL");
 MODULE_ALIAS_BLOCKDEV_MAJOR(RAMDISK_MAJOR);
 MODULE_ALIAS("rd");
@@ -305,6 +311,7 @@ static int brd_alloc(int i)
 	struct brd_device *brd;
 	struct gendisk *disk;
 	char buf[DISK_NAME_LEN];
+	unsigned int rd_max_sectors;
 	int err = -ENOMEM;
 
 	list_for_each_entry(brd, &brd_devices, brd_list)
@@ -315,6 +322,25 @@ static int brd_alloc(int i)
 		return -ENOMEM;
 	brd->brd_number		= i;
 	list_add_tail(&brd->brd_list, &brd_devices);
+	if (!is_power_of_2(rd_blksize)) {
+		pr_err("rd_blksize %d is not supported\n", rd_blksize);
+		err = -EINVAL;
+		goto out_free_dev;
+	}
+	if (rd_blksize < SECTOR_SIZE) {
+		pr_err("rd_blksize must be at least 512 bytes\n");
+		err = -EINVAL;
+		goto out_free_dev;
+	}
+	/* We can't allocate more than MAX_ORDER pages */
+	rd_max_sectors = (1ULL << MAX_ORDER) << PAGE_SECTORS_SHIFT;
+	if ((rd_blksize >> SECTOR_SHIFT) > rd_max_sectors) {
+		pr_err("rd_blocksize too large\n");
+		err = -EINVAL;
+		goto out_free_dev;
+	}
+	brd->brd_sector_shift = ilog2(rd_blksize);
+	brd->brd_sector_size = rd_blksize;
 
 	xa_init(&brd->brd_folios);
 
@@ -334,15 +360,9 @@ static int brd_alloc(int i)
 	disk->private_data	= brd;
 	strscpy(disk->disk_name, buf, DISK_NAME_LEN);
 	set_capacity(disk, rd_size * 2);
-	
-	/*
-	 * This is so fdisk will align partitions on 4k, because of
-	 * direct_access API needing 4k alignment, returning a PFN
-	 * (This is only a problem on very small devices <= 4M,
-	 *  otherwise fdisk will align on 1M. Regardless this call
-	 *  is harmless)
-	 */
-	blk_queue_physical_block_size(disk->queue, PAGE_SIZE);
+
+	blk_queue_physical_block_size(disk->queue, rd_blksize);
+	blk_queue_max_hw_sectors(disk->queue, rd_max_sectors);
 
 	/* Tell the block layer that this is not a rotational device */
 	blk_queue_flag_set(QUEUE_FLAG_NONROT, disk->queue);
