@@ -16,6 +16,7 @@ properties:
       - enum:
           - chipidea,usb2
           - lsi,zevio-usb
+          - nuvoton,npcm-udc
           - nvidia,tegra20-ehci
           - nvidia,tegra20-udc
           - nvidia,tegra30-ehci
@@ -325,6 +326,20 @@ properties:
     type: boolean
     deprecated: true
 
+  nuvoton,sysgcr:
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+    items:
+      - items:
+          - description: phandle to syscon that configures usb phy mux.
+          - description: offset of usb phy mux selection.
+          - description: mask usb phy mux selection.
+          - description: value usb phy mux selection.
+    description:
+      A phandle to syscon with three arguments that configure usb phy mux.
+      The argument one is the offset of usb phy mux selection, the argument two
+      is the mask usb phy mux selection, the argument three is the mask usb phy
+      mux selection.
+
   port:
     description:
       Any connector to the data bus of this controller should be modelled
@@ -388,6 +403,7 @@ allOf:
             enum:
               - chipidea,usb2
               - lsi,zevio-usb
+              - nuvoton,npcm-udc
               - nvidia,tegra20-udc
               - nvidia,tegra30-udc
               - nvidia,tegra114-udc
