@@ -163,7 +163,6 @@ static void copy_to_brd(struct brd_device *brd, const void *src,
 			sector_t sector, size_t n)
 {
 	struct folio *folio;
-	void *dst;
 	unsigned int rd_sector_size = PAGE_SIZE;
 	unsigned int offset = brd_sector_offset(brd, sector);
 	size_t copy;
@@ -172,21 +171,7 @@ static void copy_to_brd(struct brd_device *brd, const void *src,
 	folio = brd_lookup_folio(brd, sector);
 	BUG_ON(!folio);
 
-	dst = kmap_local_folio(folio, offset);
-	memcpy(dst, src, copy);
-	kunmap_local(dst);
-
-	if (copy < n) {
-		src += copy;
-		sector += copy >> SECTOR_SHIFT;
-		copy = n - copy;
-		folio = brd_lookup_folio(brd, sector);
-		BUG_ON(!folio);
-
-		dst = kmap_local_folio(folio, 0);
-		memcpy(dst, src, copy);
-		kunmap_local(dst);
-	}
+	memcpy_to_folio(folio, offset, src, copy);
 }
 
 /*
@@ -196,32 +181,16 @@ static void copy_from_brd(void *dst, struct brd_device *brd,
 			sector_t sector, size_t n)
 {
 	struct folio *folio;
-	void *src;
 	unsigned int rd_sector_size = PAGE_SIZE;
 	unsigned int offset = brd_sector_offset(brd, sector);
 	size_t copy;
 
 	copy = min_t(size_t, n, rd_sector_size - offset);
 	folio = brd_lookup_folio(brd, sector);
-	if (folio) {
-		src = kmap_local_folio(folio, offset);
-		memcpy(dst, src, copy);
-		kunmap_local(src);
-	} else
+	if (folio)
+		memcpy_from_folio(dst, folio, offset, copy);
+	else
 		memset(dst, 0, copy);
-
-	if (copy < n) {
-		dst += copy;
-		sector += copy >> SECTOR_SHIFT;
-		copy = n - copy;
-		folio = brd_lookup_folio(brd, sector);
-		if (folio) {
-			src = kmap_local_folio(folio, 0);
-			memcpy(dst, src, copy);
-			kunmap_local(src);
-		} else
-			memset(dst, 0, copy);
-	}
 }
 
 /*
