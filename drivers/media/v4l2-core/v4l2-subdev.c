@@ -309,9 +309,42 @@ static int call_set_selection(struct v4l2_subdev *sd,
 static int call_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
 			       struct v4l2_mbus_frame_desc *fd)
 {
+	unsigned int i;
+	int ret;
+
 	memset(fd, 0, sizeof(*fd));
 
-	return sd->ops->pad->get_frame_desc(sd, pad, fd);
+	ret = sd->ops->pad->get_frame_desc(sd, pad, fd);
+	if (ret)
+		return ret;
+
+	dev_dbg(sd->dev, "Frame descriptor\n");
+	dev_dbg(sd->dev, "\ttype %s\n",
+		fd->type == V4L2_MBUS_FRAME_DESC_TYPE_PARALLEL ? "parallel" :
+		fd->type == V4L2_MBUS_FRAME_DESC_TYPE_CSI2 ? "CSI-2" :
+		"unknown");
+	dev_dbg(sd->dev, "\tentries %u\n", fd->num_entries);
+
+	for (i = 0; i < fd->num_entries; i++) {
+		struct v4l2_mbus_frame_desc_entry *entry = &fd->entry[i];
+
+		dev_dbg(sd->dev, "\tentry %u\n", i);
+		dev_dbg(sd->dev, "\tflags%s%s\n",
+			entry->flags & V4L2_MBUS_FRAME_DESC_FL_LEN_MAX ?
+			" LEN_MAX" : "",
+			entry->flags & V4L2_MBUS_FRAME_DESC_FL_BLOB ?
+			" BLOB" : "");
+		dev_dbg(sd->dev, "\t\tstream %u\n", entry->stream);
+		dev_dbg(sd->dev, "\t\tpixelcode 0x%4.4x\n", entry->pixelcode);
+		dev_dbg(sd->dev, "\t\tlength %u\n", entry->length);
+
+		if (fd->type == V4L2_MBUS_FRAME_DESC_TYPE_CSI2) {
+			dev_dbg(sd->dev, "\t\tvc %u\n", entry->bus.csi2.vc);
+			dev_dbg(sd->dev, "\t\tdt 0x%2.2x\n", entry->bus.csi2.dt);
+		}
+	}
+
+	return 0;
 }
 
 static inline int check_edid(struct v4l2_subdev *sd,
