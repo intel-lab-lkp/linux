@@ -550,11 +550,13 @@ int main(int argc, char *argv[])
 		vcpu_ioctl(vcpu, KVM_XEN_VCPU_SET_ATTR, &vid);
 	}
 
-	struct kvm_xen_vcpu_attr vi = {
-		.type = KVM_XEN_VCPU_ATTR_TYPE_VCPU_INFO,
-		.u.gpa = VCPU_INFO_ADDR,
-	};
-	vcpu_ioctl(vcpu, KVM_XEN_VCPU_SET_ATTR, &vi);
+	if (!has_vcpu_id || !has_shinfo_hva) {
+		struct kvm_xen_vcpu_attr vi = {
+			.type = KVM_XEN_VCPU_ATTR_TYPE_VCPU_INFO,
+			.u.gpa = VCPU_INFO_ADDR,
+		};
+		vcpu_ioctl(vcpu, KVM_XEN_VCPU_SET_ATTR, &vi);
+	}
 
 	struct kvm_xen_vcpu_attr pvclock = {
 		.type = KVM_XEN_VCPU_ATTR_TYPE_VCPU_TIME_INFO,
