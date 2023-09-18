@@ -727,8 +727,8 @@ SYSCALL_DEFINE0(inotify_init)
 	return do_inotify_init(0);
 }
 
-SYSCALL_DEFINE3(inotify_add_watch, int, fd, const char __user *, pathname,
-		u32, mask)
+static int do_inotify_add_watch(int fd, int dfd, const char __user *pathname,
+				u32 mask)
 {
 	struct fsnotify_group *group;
 	struct inode *inode;
@@ -774,7 +774,7 @@ SYSCALL_DEFINE3(inotify_add_watch, int, fd, const char __user *, pathname,
 	if (mask & IN_ONLYDIR)
 		flags |= LOOKUP_DIRECTORY;
 
-	ret = inotify_find_inode(AT_FDCWD, pathname, &path, flags,
+	ret = inotify_find_inode(dfd, pathname, &path, flags,
 			(mask & IN_ALL_EVENTS));
 	if (ret)
 		goto fput_and_out;
@@ -789,6 +789,12 @@ SYSCALL_DEFINE3(inotify_add_watch, int, fd, const char __user *, pathname,
 fput_and_out:
 	fdput(f);
 	return ret;
+}
+
+SYSCALL_DEFINE3(inotify_add_watch, int, fd, const char __user *, pathname,
+		u32, mask)
+{
+	return do_inotify_add_watch(fd, AT_FDCWD, pathname, mask);
 }
 
 SYSCALL_DEFINE2(inotify_rm_watch, int, fd, __s32, wd)
