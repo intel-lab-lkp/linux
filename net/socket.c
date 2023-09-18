@@ -3519,6 +3519,13 @@ static long compat_sock_ioctl(struct file *file, unsigned int cmd,
 
 int kernel_bind(struct socket *sock, struct sockaddr *addr, int addrlen)
 {
+	struct sockaddr_storage address;
+
+	if (addrlen > sizeof(address))
+		return -EINVAL;
+
+	memcpy(&address, addr, addrlen);
+
 	return READ_ONCE(sock->ops)->bind(sock, addr, addrlen);
 }
 EXPORT_SYMBOL(kernel_bind);
