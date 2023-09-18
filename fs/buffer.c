@@ -1044,6 +1044,7 @@ grow_dev_page(struct block_device *bdev, sector_t block,
 	sector_t end_block;
 	int ret = 0;
 	gfp_t gfp_mask;
+	fgf_t fgf = FGP_LOCK | FGP_ACCESSED | FGP_CREAT;
 
 	gfp_mask = mapping_gfp_constraint(inode->i_mapping, ~__GFP_FS) | gfp;
 
@@ -1054,9 +1055,8 @@ grow_dev_page(struct block_device *bdev, sector_t block,
 	 * code knows what it's doing.
 	 */
 	gfp_mask |= __GFP_NOFAIL;
-
-	folio = __filemap_get_folio(inode->i_mapping, index,
-			FGP_LOCK | FGP_ACCESSED | FGP_CREAT, gfp_mask);
+	fgf |= fgf_set_order(mapping_min_folio_order(inode->i_mapping));
+	folio = __filemap_get_folio(inode->i_mapping, index, fgf, gfp_mask);
 
 	bh = folio_buffers(folio);
 	if (bh) {
