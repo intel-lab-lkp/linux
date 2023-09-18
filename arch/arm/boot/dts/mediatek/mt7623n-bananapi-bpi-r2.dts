@@ -10,7 +10,7 @@
 #include "mt6323.dtsi"
 
 / {
-	model = "Bananapi BPI-R2";
+	model = "Banana Pi BPI-R2";
 	compatible = "bananapi,bpi-r2", "mediatek,mt7623";
 
 	aliases {

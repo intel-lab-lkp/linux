@@ -7,7 +7,7 @@
 
 / {
 	/*
-	 * Bananapi M2+ v1.2 uses a GPIO line to change the effective
+	 * Banana Pi BPI-M2+ v1.2 uses a GPIO line to change the effective
 	 * resistance on the CPU regulator's feedback pin.
 	 */
 	reg_vdd_cpux: vdd-cpux {
