@@ -2128,9 +2128,23 @@ static int kvm_emulate_monitor_mwait(struct kvm_vcpu *vcpu, const char *insn)
 	pr_warn_once("%s instruction emulated as NOP!\n", insn);
 	return kvm_emulate_as_nop(vcpu);
 }
+
 int kvm_emulate_mwait(struct kvm_vcpu *vcpu)
 {
-	return kvm_emulate_monitor_mwait(vcpu, "MWAIT");
+	int ret = kvm_emulate_monitor_mwait(vcpu, "MWAIT");
+
+	if (ret && kvm_userspace_exit(vcpu, KVM_EXIT_MWAIT)) {
+		vcpu->run->exit_reason = KVM_EXIT_MWAIT;
+		ret = 0;
+	} else {
+		/*
+		 * Calling yield() has poorly defined semantics, but the
+		 * guest is in a busy loop and it's the best we can do
+		 * without a full emulation of MONITOR/MWAIT.
+		 */
+		yield();
+	}
+	return ret;
 }
 EXPORT_SYMBOL_GPL(kvm_emulate_mwait);
 
@@ -4553,6 +4567,9 @@ int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 			if (kvm_can_mwait_in_guest())
 				r |= KVM_X86_DISABLE_EXITS_MWAIT;
 		}
+		break;
+	case KVM_CAP_X86_USERSPACE_EXITS:
+		r = KVM_X86_USERSPACE_VALID_EXITS;
 		break;
 	case KVM_CAP_X86_SMM:
 		if (!IS_ENABLED(CONFIG_KVM_SMM))
@@ -9628,11 +9645,11 @@ static int __kvm_emulate_halt(struct kvm_vcpu *vcpu, int state, int reason)
 	++vcpu->stat.halt_exits;
 	if (lapic_in_kernel(vcpu)) {
 		vcpu->arch.mp_state = state;
-		return 1;
-	} else {
-		vcpu->run->exit_reason = reason;
-		return 0;
+		if (!kvm_userspace_exit(vcpu, reason))
+			return 1;
 	}
+	vcpu->run->exit_reason = reason;
+	return 0;
 }
 
 int kvm_emulate_halt_noskip(struct kvm_vcpu *vcpu)

@@ -430,6 +430,19 @@ static inline bool kvm_notify_vmexit_enabled(struct kvm *kvm)
 	return kvm->arch.notify_vmexit_flags & KVM_X86_NOTIFY_VMEXIT_ENABLED;
 }
 
+static inline bool kvm_userspace_exit(struct kvm_vcpu *vcpu, int reason)
+{
+	if (reason == KVM_EXIT_HLT &&
+	    (vcpu->run->userspace_exits & KVM_X86_USERSPACE_EXIT_HLT))
+		return true;
+
+	if (reason == KVM_EXIT_MWAIT &&
+	    (vcpu->run->userspace_exits & KVM_X86_USERSPACE_EXIT_MWAIT))
+		return true;
+
+	return false;
+}
+
 enum kvm_intr_type {
 	/* Values are arbitrary, but must be non-zero. */
 	KVM_HANDLING_IRQ = 1,

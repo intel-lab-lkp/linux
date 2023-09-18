@@ -264,6 +264,7 @@ struct kvm_xen_exit {
 #define KVM_EXIT_RISCV_SBI        35
 #define KVM_EXIT_RISCV_CSR        36
 #define KVM_EXIT_NOTIFY           37
+#define KVM_EXIT_MWAIT            38
 
 /* For KVM_EXIT_INTERNAL_ERROR */
 /* Emulate instruction failed. */
@@ -283,7 +284,8 @@ struct kvm_run {
 	/* in */
 	__u8 request_interrupt_window;
 	__u8 immediate_exit;
-	__u8 padding1[6];
+	__u8 userspace_exits;
+	__u8 padding1[5];
 
 	/* out */
 	__u32 exit_reason;
@@ -841,6 +843,11 @@ struct kvm_ioeventfd {
                                               KVM_X86_DISABLE_EXITS_PAUSE | \
                                               KVM_X86_DISABLE_EXITS_CSTATE)
 
+#define KVM_X86_USERSPACE_EXIT_MWAIT	     (1 << 0)
+#define KVM_X86_USERSPACE_EXIT_HLT	     (1 << 1)
+#define KVM_X86_USERSPACE_VALID_EXITS        (KVM_X86_USERSPACE_EXIT_MWAIT | \
+                                              KVM_X86_USERSPACE_EXIT_HLT)
+
 /* for KVM_ENABLE_CAP */
 struct kvm_enable_cap {
 	/* in */
@@ -1192,6 +1199,7 @@ struct kvm_ppc_resize_hpt {
 #define KVM_CAP_COUNTER_OFFSET 227
 #define KVM_CAP_ARM_EAGER_SPLIT_CHUNK_SIZE 228
 #define KVM_CAP_ARM_SUPPORTED_BLOCK_SIZES 229
+#define KVM_CAP_X86_USERSPACE_EXITS 230
 
 #ifdef KVM_CAP_IRQ_ROUTING
 
