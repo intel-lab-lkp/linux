@@ -24,6 +24,12 @@
 #define SPLICE_F_ALL (SPLICE_F_MOVE|SPLICE_F_NONBLOCK|SPLICE_F_MORE|SPLICE_F_GIFT)
 
 /*
+ * Don't wait for I/O (internal flag for the splice_direct_to_actor()
+ * loop).
+ */
+#define SPLICE_F_NOWAIT	(1U << 30)
+
+/*
  * Passed to the actors
  */
 struct splice_desc {
