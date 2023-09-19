@@ -642,8 +642,13 @@ posix_acl_create(struct inode *dir, umode_t *mode,
 	*acl = NULL;
 	*default_acl = NULL;
 
-	if (S_ISLNK(*mode) || !IS_POSIXACL(dir))
+	if (S_ISLNK(*mode))
 		return 0;
+
+	if (!IS_POSIXACL(dir)) {
+		*mode &= ~current_umask();
+		return 0;
+	}
 
 	p = get_inode_acl(dir, ACL_TYPE_DEFAULT);
 	if (!p || p == ERR_PTR(-EOPNOTSUPP)) {
