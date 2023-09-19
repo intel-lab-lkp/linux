@@ -133,6 +133,7 @@ static inline unsigned int inotify_arg_to_flags(u32 arg)
 static inline u32 inotify_mask_to_arg(__u32 mask)
 {
 	return mask & (IN_ALL_EVENTS | IN_ISDIR | IN_UNMOUNT | IN_IGNORED |
+		       IN_FID |
 		       IN_Q_OVERFLOW);
 }
 
@@ -173,6 +174,7 @@ static struct fsnotify_event *get_one_event(struct fsnotify_group *group,
 {
 	size_t event_size = sizeof(struct inotify_event);
 	struct fsnotify_event *event;
+	const struct inotify_event_info *ie;
 
 	event = fsnotify_peek_first_event(group);
 	if (!event)
@@ -181,6 +183,12 @@ static struct fsnotify_event *get_one_event(struct fsnotify_group *group,
 	pr_debug("%s: group=%p event=%p\n", __func__, group, event);
 
 	event_size += round_event_name_len(event);
+
+	ie = INOTIFY_E(event);
+	if (ie->mask & IN_FID)
+		event_size += roundup(sizeof(struct inotify_extra_fid) + ie->file_handle_size,
+				      sizeof(struct inotify_event));
+
 	if (event_size > count)
 		return ERR_PTR(-EINVAL);
 
@@ -241,7 +249,40 @@ static ssize_t copy_event_to_user(struct fsnotify_group *group,
 		/* fill userspace with 0's */
 		if (clear_user(buf, pad_name_len - name_len))
 			return -EFAULT;
+
+		buf += pad_name_len - name_len;
 		event_size += pad_name_len;
+	}
+
+	if (event->mask & IN_FID) {
+		const size_t handle_size = event->file_handle_size;
+		const size_t extra_size = sizeof(struct inotify_extra_fid) + handle_size;
+		const size_t padded_extra_size = roundup(extra_size, sizeof(struct inotify_event));
+		const size_t padding = padded_extra_size - extra_size;
+
+		const struct inotify_extra_fid extra = {
+			.fsid = event->fsid,
+			.handle_size = handle_size,
+			.padding = padding,
+		};
+
+		if (copy_to_user(buf, &extra, sizeof(extra)))
+			return -EFAULT;
+
+		buf += sizeof(extra);
+
+		const unsigned char *handle = (const unsigned char *)(event + 1) + roundup(name_len + (name_len > 0), 4);
+		if (copy_to_user(buf, handle, handle_size))
+			return -EFAULT;
+
+		buf += handle_size;
+
+		if (clear_user(buf, padding))
+			return -EFAULT;
+
+		buf += padding;
+
+		event_size += padded_extra_size;
 	}
 
 	return event_size;
@@ -860,7 +901,7 @@ static int __init inotify_user_setup(void)
 	BUILD_BUG_ON(IN_IGNORED != FS_IN_IGNORED);
 	BUILD_BUG_ON(IN_ISDIR != FS_ISDIR);
 
-	BUILD_BUG_ON(HWEIGHT32(ALL_INOTIFY_BITS) != 22);
+	BUILD_BUG_ON(HWEIGHT32(ALL_INOTIFY_BITS) != 23);
 
 	inotify_inode_mark_cachep = KMEM_CACHE(inotify_inode_mark,
 					       SLAB_PANIC|SLAB_ACCOUNT);

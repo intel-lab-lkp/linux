@@ -9,6 +9,8 @@ struct inotify_event_info {
 	int wd;
 	u32 sync_cookie;
 	int name_len;
+	__kernel_fsid_t fsid;
+	u8 file_handle_size;
 	char name[];
 };
 
@@ -27,7 +29,7 @@ static inline struct inotify_event_info *INOTIFY_E(struct fsnotify_event *fse)
  * userspace.  There is at least one bit (FS_EVENT_ON_CHILD) which is
  * used only internally to the kernel.
  */
-#define INOTIFY_USER_MASK (IN_ALL_EVENTS)
+#define INOTIFY_USER_MASK (IN_ALL_EVENTS|IN_FID)
 
 static inline __u32 inotify_mark_user_mask(struct fsnotify_mark *fsn_mark)
 {

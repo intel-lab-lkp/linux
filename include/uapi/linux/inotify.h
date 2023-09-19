@@ -26,6 +26,16 @@ struct inotify_event {
 	char		name[];	/* stub for possible name */
 };
 
+struct inotify_extra_fid {
+	__kernel_fsid_t fsid;
+
+	__u8 handle_size;
+	__u8 padding;
+	__u8 reserved1, reserved2;
+
+	unsigned char handle[];
+};
+
 /* the following are legal, implemented events that user-space can watch for */
 #define IN_ACCESS		0x00000001	/* File was accessed */
 #define IN_MODIFY		0x00000002	/* File was modified */
@@ -50,6 +60,7 @@ struct inotify_event {
 #define IN_MOVE			(IN_MOVED_FROM | IN_MOVED_TO) /* moves */
 
 /* special flags */
+#define IN_FID			0x00800000	/* return fsid and file_handle (struct inotify_extra_fid) */
 #define IN_ONLYDIR		0x01000000	/* only watch the path if it is a directory */
 #define IN_DONT_FOLLOW		0x02000000	/* don't follow a sym link */
 #define IN_EXCL_UNLINK		0x04000000	/* exclude events on unlinked objects */

@@ -17,6 +17,7 @@
 #include <linux/fs.h> /* struct inode */
 #include <linux/fsnotify_backend.h>
 #include <linux/inotify.h>
+#include <linux/exportfs.h>
 #include <linux/path.h> /* struct path */
 #include <linux/slab.h> /* kmem_* */
 #include <linux/types.h>
@@ -43,6 +44,7 @@ static bool event_compare(struct fsnotify_event *old_fsn,
 	    (old->name_len == new->name_len) &&
 	    (!old->name_len || !strcmp(old->name, new->name)))
 		return true;
+	// TODO compare fsid, file_handle
 	return false;
 }
 
@@ -56,6 +58,16 @@ static int inotify_merge(struct fsnotify_group *group,
 	return event_compare(last_event, event);
 }
 
+static int get_file_handle_dwords(struct inode *inode)
+{
+	if (inode == NULL)
+		return 0;
+
+	int dwords = 0;
+	exportfs_encode_fid(inode, NULL, &dwords);
+	return dwords;
+}
+
 int inotify_handle_inode_event(struct fsnotify_mark *inode_mark, u32 mask,
 			       struct inode *inode, struct inode *dir,
 			       const struct qstr *name, u32 cookie)
@@ -66,12 +78,22 @@ int inotify_handle_inode_event(struct fsnotify_mark *inode_mark, u32 mask,
 	struct fsnotify_group *group = inode_mark->group;
 	int ret;
 	int len = 0, wd;
+	int file_handle_dwords;
 	int alloc_len = sizeof(struct inotify_event_info);
+	size_t file_handle_offset = 0;
 	struct mem_cgroup *old_memcg;
 
 	if (name) {
 		len = name->len;
 		alloc_len += len + 1;
+	}
+
+	if (inode_mark->mask & IN_FID) {
+		file_handle_dwords = get_file_handle_dwords(inode);
+		if (file_handle_dwords > 0) {
+			file_handle_offset = roundup(alloc_len, 4);
+			alloc_len = file_handle_offset + sizeof(struct file_handle) + (file_handle_dwords << 2);
+		}
 	}
 
 	pr_debug("%s: group=%p mark=%p mask=%x\n", __func__, group, inode_mark,
@@ -120,8 +142,17 @@ int inotify_handle_inode_event(struct fsnotify_mark *inode_mark, u32 mask,
 	event->wd = wd;
 	event->sync_cookie = cookie;
 	event->name_len = len;
+	memset(&event->fsid, 0, sizeof(event->fsid)); // TODO
 	if (len)
 		strcpy(event->name, name->name);
+
+	if (file_handle_offset > 0) {
+		struct file_handle *fh = (struct file_handle *)((unsigned char *)event + file_handle_offset);
+		fh->handle_type = exportfs_encode_fid(inode, (struct fid *)fh->f_handle, &file_handle_dwords);
+		fh->handle_bytes = file_handle_dwords << 2;
+		event->mask |= IN_FID;
+		event->file_handle_size = sizeof(*fh) + (file_handle_dwords << 2);
+	}
 
 	ret = fsnotify_add_event(group, fsn_event, inotify_merge);
 	if (ret) {
