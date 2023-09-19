@@ -1722,6 +1722,10 @@ static void xtLog(struct jfs_log * log, struct tblock * tblk, struct lrd * lrd,
 			jfs_err("xtLog: lwm > next");
 			goto out;
 		}
+		if (lwm >= XTROOTMAXSLOT) {
+			jfs_err("xtLog: lwm out of range");
+			goto out;
+		}
 		tlck->flag |= tlckUPDATEMAP;
 		xadlock->flag = mlckALLOCXADLIST;
 		xadlock->count = next - lwm;
