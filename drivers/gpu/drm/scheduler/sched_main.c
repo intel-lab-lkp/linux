@@ -517,7 +517,6 @@ static void drm_sched_job_begin(struct drm_sched_job *s_job)
 
 	spin_lock(&sched->job_list_lock);
 	list_add_tail(&s_job->list, &sched->pending_list);
-	drm_sched_start_timeout(sched);
 	spin_unlock(&sched->job_list_lock);
 }
 
@@ -1138,6 +1137,7 @@ static void drm_sched_run_job_work(struct work_struct *w)
 	fence = sched->ops->run_job(sched_job);
 	complete_all(&entity->entity_idle);
 	drm_sched_fence_scheduled(s_fence, fence);
+	drm_sched_start_timeout_unlocked(sched);
 
 	if (!IS_ERR_OR_NULL(fence)) {
 		/* Drop for original kref_init of the fence */
