@@ -1092,6 +1092,11 @@ void nbcon_atomic_flush_all(void)
  * Return:	The previous priority that needs to be fed into
  *		the corresponding nbcon_atomic_exit()
  * Context:	Any context. Disables migration.
+ *
+ * When within an atomic printing section, no atomic printing occurs. This
+ * is to allow all emergency messages to be dumped into the ringbuffer before
+ * flushing the ringbuffer. The actual atomic printing occurs when exiting
+ * the outermost atomic printing section.
  */
 enum nbcon_prio nbcon_atomic_enter(enum nbcon_prio prio)
 {
@@ -1130,7 +1135,12 @@ void nbcon_atomic_exit(enum nbcon_prio prio, enum nbcon_prio prev_prio)
 {
 	struct nbcon_cpu_state *cpu_state;
 
+	__nbcon_atomic_flush_all(false);
+
 	cpu_state = nbcon_get_cpu_state();
+
+	if (cpu_state->prio == NBCON_PRIO_PANIC)
+		__nbcon_atomic_flush_all(true);
 
 	/*
 	 * Undo the nesting of nbcon_atomic_enter() at the CPU state
