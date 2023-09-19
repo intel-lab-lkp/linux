@@ -640,71 +640,94 @@ static void cs_etm__packet_dump(const char *pkt_string)
 	fflush(stdout);
 }
 
-static void cs_etm__set_trace_param_etmv3(struct cs_etm_trace_params *t_params,
-					  struct cs_etm_auxtrace *etm, int idx,
-					  u32 etmidr)
+static void cs_etm__set_trace_param_etmv3(struct cs_etm_trace_params *t_param,
+					  u64 *metadata, u32 etmidr)
 {
-	u64 **metadata = etm->metadata;
-
-	t_params[idx].protocol = cs_etm__get_v7_protocol_version(etmidr);
-	t_params[idx].etmv3.reg_ctrl = metadata[idx][CS_ETM_ETMCR];
-	t_params[idx].etmv3.reg_trc_id = metadata[idx][CS_ETM_ETMTRACEIDR];
+	t_param->protocol = cs_etm__get_v7_protocol_version(etmidr);
+	t_param->etmv3.reg_ctrl = metadata[CS_ETM_ETMCR];
+	t_param->etmv3.reg_trc_id = metadata[CS_ETM_ETMTRACEIDR];
 }
 
-static void cs_etm__set_trace_param_etmv4(struct cs_etm_trace_params *t_params,
-					  struct cs_etm_auxtrace *etm, int idx)
+static void cs_etm__set_trace_param_etmv4(struct cs_etm_trace_params *t_param,
+					  u64 *metadata)
 {
-	u64 **metadata = etm->metadata;
-
-	t_params[idx].protocol = CS_ETM_PROTO_ETMV4i;
-	t_params[idx].etmv4.reg_idr0 = metadata[idx][CS_ETMV4_TRCIDR0];
-	t_params[idx].etmv4.reg_idr1 = metadata[idx][CS_ETMV4_TRCIDR1];
-	t_params[idx].etmv4.reg_idr2 = metadata[idx][CS_ETMV4_TRCIDR2];
-	t_params[idx].etmv4.reg_idr8 = metadata[idx][CS_ETMV4_TRCIDR8];
-	t_params[idx].etmv4.reg_configr = metadata[idx][CS_ETMV4_TRCCONFIGR];
-	t_params[idx].etmv4.reg_traceidr = metadata[idx][CS_ETMV4_TRCTRACEIDR];
+	t_param->protocol = CS_ETM_PROTO_ETMV4i;
+	t_param->etmv4.reg_idr0 = metadata[CS_ETMV4_TRCIDR0];
+	t_param->etmv4.reg_idr1 = metadata[CS_ETMV4_TRCIDR1];
+	t_param->etmv4.reg_idr2 = metadata[CS_ETMV4_TRCIDR2];
+	t_param->etmv4.reg_idr8 = metadata[CS_ETMV4_TRCIDR8];
+	t_param->etmv4.reg_configr = metadata[CS_ETMV4_TRCCONFIGR];
+	t_param->etmv4.reg_traceidr = metadata[CS_ETMV4_TRCTRACEIDR];
 }
 
-static void cs_etm__set_trace_param_ete(struct cs_etm_trace_params *t_params,
-					  struct cs_etm_auxtrace *etm, int idx)
+static void cs_etm__set_trace_param_ete(struct cs_etm_trace_params *t_param,
+					u64 *metadata)
 {
-	u64 **metadata = etm->metadata;
+	t_param->protocol = CS_ETM_PROTO_ETE;
+	t_param->ete.reg_idr0 = metadata[CS_ETE_TRCIDR0];
+	t_param->ete.reg_idr1 = metadata[CS_ETE_TRCIDR1];
+	t_param->ete.reg_idr2 = metadata[CS_ETE_TRCIDR2];
+	t_param->ete.reg_idr8 = metadata[CS_ETE_TRCIDR8];
+	t_param->ete.reg_configr = metadata[CS_ETE_TRCCONFIGR];
+	t_param->ete.reg_traceidr = metadata[CS_ETE_TRCTRACEIDR];
+	t_param->ete.reg_devarch = metadata[CS_ETE_TRCDEVARCH];
+}
 
-	t_params[idx].protocol = CS_ETM_PROTO_ETE;
-	t_params[idx].ete.reg_idr0 = metadata[idx][CS_ETE_TRCIDR0];
-	t_params[idx].ete.reg_idr1 = metadata[idx][CS_ETE_TRCIDR1];
-	t_params[idx].ete.reg_idr2 = metadata[idx][CS_ETE_TRCIDR2];
-	t_params[idx].ete.reg_idr8 = metadata[idx][CS_ETE_TRCIDR8];
-	t_params[idx].ete.reg_configr = metadata[idx][CS_ETE_TRCCONFIGR];
-	t_params[idx].ete.reg_traceidr = metadata[idx][CS_ETE_TRCTRACEIDR];
-	t_params[idx].ete.reg_devarch = metadata[idx][CS_ETE_TRCDEVARCH];
+static int cs_etm__set_trace_param(struct cs_etm_trace_params *t_param,
+				   u64 *metadata)
+{
+	u32 etmidr;
+	u64 architecture = metadata[CS_ETM_MAGIC];
+
+	switch (architecture) {
+	case __perf_cs_etmv3_magic:
+		etmidr = metadata[CS_ETM_ETMIDR];
+		cs_etm__set_trace_param_etmv3(t_param, metadata, etmidr);
+		break;
+	case __perf_cs_etmv4_magic:
+		cs_etm__set_trace_param_etmv4(t_param, metadata);
+		break;
+	case __perf_cs_ete_magic:
+		cs_etm__set_trace_param_ete(t_param, metadata);
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
 }
 
 static int cs_etm__init_trace_params(struct cs_etm_trace_params *t_params,
 				     struct cs_etm_auxtrace *etm,
+				     bool formatted,
+				     int sample_cpu,
 				     int decoders)
 {
-	int i;
-	u32 etmidr;
-	u64 architecture;
+	int i, ret;
+	struct cs_etm_trace_params *t_param;
+	u64 *metadata;
 
-	for (i = 0; i < decoders; i++) {
-		architecture = etm->metadata[i][CS_ETM_MAGIC];
-
-		switch (architecture) {
-		case __perf_cs_etmv3_magic:
-			etmidr = etm->metadata[i][CS_ETM_ETMIDR];
-			cs_etm__set_trace_param_etmv3(t_params, etm, i, etmidr);
-			break;
-		case __perf_cs_etmv4_magic:
-			cs_etm__set_trace_param_etmv4(t_params, etm, i);
-			break;
-		case __perf_cs_ete_magic:
-			cs_etm__set_trace_param_ete(t_params, etm, i);
-			break;
-		default:
+	if (!formatted) {
+		/*
+		 * There is only one decoder when unformatted. Use metadata of
+		 * sample AUX cpu.
+		 */
+		t_param = t_params;
+		metadata = get_cpu_data(etm, sample_cpu);
+		if (!metadata) {
+			pr_err("CS_ETM: invalid sample CPU: %d\n", sample_cpu);
 			return -EINVAL;
 		}
+
+		return cs_etm__set_trace_param(t_param, metadata);
+	}
+
+	for (i = 0; i < decoders; i++) {
+		t_param = &t_params[i];
+		metadata = etm->metadata[i];
+		ret = cs_etm__set_trace_param(t_param, metadata);
+		if (ret)
+			return ret;
 	}
 
 	return 0;
@@ -1016,7 +1039,7 @@ out:
 }
 
 static struct cs_etm_queue *cs_etm__alloc_queue(struct cs_etm_auxtrace *etm,
-						bool formatted)
+						bool formatted, int sample_cpu)
 {
 	struct cs_etm_decoder_params d_params;
 	struct cs_etm_trace_params  *t_params = NULL;
@@ -1041,7 +1064,7 @@ static struct cs_etm_queue *cs_etm__alloc_queue(struct cs_etm_auxtrace *etm,
 	if (!t_params)
 		goto out_free;
 
-	if (cs_etm__init_trace_params(t_params, etm, decoders))
+	if (cs_etm__init_trace_params(t_params, etm, formatted, sample_cpu, decoders))
 		goto out_free;
 
 	/* Set decoder parameters to decode trace packets */
@@ -1081,14 +1104,15 @@ out_free:
 static int cs_etm__setup_queue(struct cs_etm_auxtrace *etm,
 			       struct auxtrace_queue *queue,
 			       unsigned int queue_nr,
-			       bool formatted)
+			       bool formatted,
+			       int sample_cpu)
 {
 	struct cs_etm_queue *etmq = queue->priv;
 
 	if (list_empty(&queue->head) || etmq)
 		return 0;
 
-	etmq = cs_etm__alloc_queue(etm, formatted);
+	etmq = cs_etm__alloc_queue(etm, formatted, sample_cpu);
 
 	if (!etmq)
 		return -ENOMEM;
@@ -2816,7 +2840,7 @@ static int cs_etm__process_auxtrace_event(struct perf_session *session,
 		 * formatted in piped mode (true).
 		 */
 		err = cs_etm__setup_queue(etm, &etm->queues.queue_array[idx],
-					  idx, true);
+					  idx, true, -1);
 		if (err)
 			return err;
 
@@ -3022,7 +3046,7 @@ static int cs_etm__queue_aux_fragment(struct perf_session *session, off_t file_o
 		idx = auxtrace_event->idx;
 		formatted = !(aux_event->flags & PERF_AUX_FLAG_CORESIGHT_FORMAT_RAW);
 		return cs_etm__setup_queue(etm, &etm->queues.queue_array[idx],
-					   idx, formatted);
+					   idx, formatted, sample->cpu);
 	}
 
 	/* Wasn't inside this buffer, but there were no parse errors. 1 == 'not found' */
