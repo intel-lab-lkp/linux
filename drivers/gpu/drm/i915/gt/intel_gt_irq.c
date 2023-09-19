@@ -214,6 +214,9 @@ void gen11_gt_irq_reset(struct intel_gt *gt)
 {
 	struct intel_uncore *uncore = gt->uncore;
 
+	if (gt->type != GT_MEDIA && GRAPHICS_VER_FULL(gt->i915) >= IP_VER(12, 10))
+		intel_uncore_write(uncore, GEN11_GFX_MSTR_IRQ, ~0);
+
 	/* Disable RCS, BCS, VCS and VECS class engines. */
 	intel_uncore_write(uncore, GEN11_RENDER_COPY_INTR_ENABLE, 0);
 	intel_uncore_write(uncore, GEN11_VCS_VECS_INTR_ENABLE,	  0);
