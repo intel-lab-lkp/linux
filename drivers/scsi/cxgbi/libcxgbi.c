@@ -670,6 +670,7 @@ cxgbi_check_route(struct sockaddr *dst_addr, int ifindex)
 		"route to %pI4 :%u, ndev p#%d,%s, cdev 0x%p.\n",
 		&daddr->sin_addr.s_addr, ntohs(daddr->sin_port),
 			   port, ndev->name, cdev);
+	dev_put(ndev);
 
 	csk = cxgbi_sock_create(cdev);
 	if (!csk) {
