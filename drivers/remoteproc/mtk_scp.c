@@ -1149,13 +1149,23 @@ static int scp_is_single_core(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct device_node *np = dev_of_node(dev);
 	struct device_node *child;
+	bool has_rpmsg;
 
 	child = of_get_next_available_child(np, NULL);
 	if (!child)
 		return dev_err_probe(dev, -ENODEV, "No child node\n");
 
+	/*
+	 * On single core SCP systems, the immediate child of the SCP device
+	 * is the rpmsg node; on multi core systems, there's an intermediate
+	 * level node, one describing each core. Instead of matching on the
+	 * node name, which was recently changed in the DT binding in a
+	 * backward incompatible way, match against the "mediatek,rpmsg-name"
+	 * property, which is required in all rpmsg sub-nodes.
+	 */
+	has_rpmsg = of_property_present(child, "mediatek,rpmsg-name");
 	of_node_put(child);
-	return of_node_name_eq(child, "cros-ec-rpmsg");
+	return has_rpmsg;
 }
 
 static int scp_cluster_init(struct platform_device *pdev, struct mtk_scp_of_cluster *scp_cluster)
