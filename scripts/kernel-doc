@@ -127,6 +127,7 @@ if ($#ARGV == -1) {
 }
 
 my $kernelversion;
+my $line_label;
 my ($sphinx_major, $sphinx_minor, $sphinx_patch);
 
 my $dohighlight = "";
@@ -439,6 +440,16 @@ sub get_kernel_version() {
     return $version;
 }
 
+# get line label from env
+sub get_line_label() {
+    my $label = '';
+
+    if (defined($ENV{'KDOC_LABEL'})) {
+	$label = $ENV{'KDOC_LABEL'} . " ";
+    }
+    return $label;
+}
+
 #
 sub print_lineno {
     my $lineno = shift;
@@ -450,7 +461,7 @@ sub print_lineno {
 sub emit_warning {
     my $location = shift;
     my $msg = shift;
-    print STDERR "$location: warning: $msg";
+    print STDERR "$location: ${line_label}warning: $msg";
     ++$warnings;
 }
 ##
@@ -2359,6 +2370,8 @@ if ($output_mode eq "rst") {
 }
 
 $kernelversion = get_kernel_version();
+
+$line_label = get_line_label();
 
 # generate a sequence of code that will splice in highlighting information
 # using the s// operator.
