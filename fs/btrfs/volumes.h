@@ -308,28 +308,28 @@ struct btrfs_fs_devices {
 	 * Number of devices under this fsid including missing and
 	 * replace-target device and excludes seed devices.
 	 */
-	u64 num_devices;
+	u16 num_devices;
 
 	/*
 	 * The number of devices that successfully opened, including
 	 * replace-target, excludes seed devices.
 	 */
-	u64 open_devices;
+	u16 open_devices;
 
 	/* The number of devices that are under the chunk allocation list. */
-	u64 rw_devices;
+	u16 rw_devices;
 
 	/* Count of missing devices under this fsid excluding seed device. */
-	u64 missing_devices;
-	u64 total_rw_bytes;
+	u16 missing_devices;
 
 	/*
 	 * Count of devices from btrfs_super_block::num_devices for this fsid,
 	 * which includes the seed device, excludes the transient replace-target
 	 * device.
 	 */
-	u64 total_devices;
+	u16 total_devices;
 
+	u64 total_rw_bytes;
 	/* Highest generation number of seen devices */
 	u64 latest_generation;
 

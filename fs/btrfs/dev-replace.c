@@ -250,6 +250,15 @@ static int btrfs_init_dev_replace_tgtdev(struct btrfs_fs_info *fs_info,
 	u64 devid = BTRFS_DEV_REPLACE_DEVID;
 	int ret = 0;
 
+	mutex_lock(&fs_devices->device_list_mutex);
+	if (unlikely(fs_devices->num_devices >= U16_MAX)) {
+		mutex_unlock(&fs_devices->device_list_mutex);
+		btrfs_err(fs_info,
+			  "too many devices, has %u devices, up limit is %u",
+			  fs_devices->num_devices, U16_MAX);
+		return -EINVAL;
+	}
+	mutex_unlock(&fs_devices->device_list_mutex);
 	*device_out = NULL;
 	if (srcdev->fs_devices->seeding) {
 		btrfs_err(fs_info, "the filesystem is a seed filesystem!");

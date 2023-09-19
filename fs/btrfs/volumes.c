@@ -2653,6 +2653,15 @@ int btrfs_init_new_device(struct btrfs_fs_info *fs_info, const char *device_path
 	if (sb_rdonly(sb) && !fs_devices->seeding)
 		return -EROFS;
 
+	mutex_lock(&fs_info->chunk_mutex);
+	if (unlikely(fs_devices->num_devices >= U16_MAX)) {
+		btrfs_err(fs_info, "too many devices, has %u devices, up limit is %u",
+			  fs_devices->num_devices, U16_MAX);
+		mutex_unlock(&fs_info->chunk_mutex);
+		return -EINVAL;
+	}
+	mutex_unlock(&fs_info->chunk_mutex);
+
 	bdev = blkdev_get_by_path(device_path, BLK_OPEN_WRITE,
 				  fs_info->bdev_holder, NULL);
 	if (IS_ERR(bdev))
@@ -5264,7 +5273,7 @@ static int gather_device_info(struct btrfs_fs_devices *fs_devices,
 		}
 
 		if (ndevs == fs_devices->rw_devices) {
-			WARN(1, "%s: found more than %llu devices\n",
+			WARN(1, "%s: found more than %u devices\n",
 			     __func__, fs_devices->rw_devices);
 			break;
 		}
