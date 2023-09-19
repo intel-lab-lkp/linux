@@ -368,8 +368,7 @@ static void icmp_push_reply(struct sock *sk,
 	struct sk_buff *skb;
 
 	if (ip_append_data(sk, fl4, icmp_glue_bits, icmp_param,
-			   icmp_param->data_len+icmp_param->head_len,
-			   icmp_param->head_len,
+			   icmp_param->data_len, icmp_param->head_len,
 			   ipc, rt, MSG_DONTWAIT) < 0) {
 		__ICMP_INC_STATS(sock_net(sk), ICMP_MIB_OUTERRORS);
 		ip_flush_pending_frames(sk);

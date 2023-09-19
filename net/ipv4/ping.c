@@ -819,7 +819,8 @@ back_from_confirm:
 	pfh.wcheck = 0;
 	pfh.family = AF_INET;
 
-	err = ip_append_data(sk, &fl4, ping_getfrag, &pfh, len,
+	err = ip_append_data(sk, &fl4, ping_getfrag, &pfh,
+			     len - sizeof(struct icmphdr),
 			     sizeof(struct icmphdr), &ipc, &rt,
 			     msg->msg_flags);
 	if (err)

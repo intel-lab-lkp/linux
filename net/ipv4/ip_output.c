@@ -974,6 +974,11 @@ static int __ip_append_data(struct sock *sk,
 	bool paged, extra_uref = false;
 	u32 tskey = 0;
 
+	if (skb_queue_empty(&sk->sk_write_queue))
+		length += transhdrlen;
+	else
+		transhdrlen = 0;
+
 	skb = skb_peek_tail(queue);
 
 	exthdrlen = !skb ? rt->dst.header_len : 0;
@@ -1353,8 +1358,6 @@ int ip_append_data(struct sock *sk, struct flowi4 *fl4,
 		err = ip_setup_cork(sk, &inet->cork.base, ipc, rtp);
 		if (err)
 			return err;
-	} else {
-		transhdrlen = 0;
 	}
 
 	return __ip_append_data(sk, fl4, &sk->sk_write_queue, &inet->cork.base,

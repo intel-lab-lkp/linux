@@ -174,7 +174,8 @@ static int ping_v6_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 		ipc6.hlimit = ip6_sk_dst_hoplimit(np, &fl6, dst);
 
 	lock_sock(sk);
-	err = ip6_append_data(sk, ping_getfrag, &pfh, len,
+	err = ip6_append_data(sk, ping_getfrag, &pfh,
+			      len - sizeof(struct icmp6hdr),
 			      sizeof(struct icmp6hdr), &ipc6, &fl6, rt,
 			      MSG_DONTWAIT);
 

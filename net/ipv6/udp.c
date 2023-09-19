@@ -1331,7 +1331,6 @@ int udpv6_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 	struct ipcm6_cookie ipc6;
 	int addr_len = msg->msg_namelen;
 	bool connected = false;
-	int ulen = len;
 	int corkreq = READ_ONCE(up->corkflag) || msg->msg_flags&MSG_MORE;
 	int err;
 	int is_udplite = IS_UDPLITE(sk);
@@ -1416,7 +1415,6 @@ do_udp_sendmsg:
 		}
 		release_sock(sk);
 	}
-	ulen += sizeof(struct udphdr);
 
 	memset(fl6, 0, sizeof(*fl6));
 
@@ -1567,7 +1565,7 @@ back_from_confirm:
 	if (!corkreq) {
 		struct sk_buff *skb;
 
-		skb = ip6_make_skb(sk, getfrag, msg, ulen,
+		skb = ip6_make_skb(sk, getfrag, msg, len,
 				   sizeof(struct udphdr), &ipc6,
 				   (struct rt6_info *)dst,
 				   msg->msg_flags, &cork);
@@ -1594,8 +1592,8 @@ back_from_confirm:
 do_append_data:
 	if (ipc6.dontfrag < 0)
 		ipc6.dontfrag = np->dontfrag;
-	up->len += ulen;
-	err = ip6_append_data(sk, getfrag, msg, ulen, sizeof(struct udphdr),
+	up->len += sizeof(struct udphdr) + len;
+	err = ip6_append_data(sk, getfrag, msg, len, sizeof(struct udphdr),
 			      &ipc6, fl6, (struct rt6_info *)dst,
 			      corkreq ? msg->msg_flags|MSG_MORE : msg->msg_flags);
 	if (err)

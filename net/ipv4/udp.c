@@ -1042,7 +1042,6 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 	DECLARE_SOCKADDR(struct sockaddr_in *, usin, msg->msg_name);
 	struct flowi4 fl4_stack;
 	struct flowi4 *fl4;
-	int ulen = len;
 	struct ipcm_cookie ipc;
 	struct rtable *rt = NULL;
 	int free = 0;
@@ -1084,7 +1083,6 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 		}
 		release_sock(sk);
 	}
-	ulen += sizeof(struct udphdr);
 
 	/*
 	 *	Get and verify the address.
@@ -1238,7 +1236,7 @@ back_from_confirm:
 	if (!corkreq) {
 		struct inet_cork cork;
 
-		skb = ip_make_skb(sk, fl4, getfrag, msg, ulen,
+		skb = ip_make_skb(sk, fl4, getfrag, msg, len,
 				  sizeof(struct udphdr), &ipc, &rt,
 				  &cork, msg->msg_flags);
 		err = PTR_ERR(skb);
@@ -1268,8 +1266,8 @@ back_from_confirm:
 	up->pending = AF_INET;
 
 do_append_data:
-	up->len += ulen;
-	err = ip_append_data(sk, fl4, getfrag, msg, ulen,
+	up->len += sizeof(struct udphdr) + len;
+	err = ip_append_data(sk, fl4, getfrag, msg, len,
 			     sizeof(struct udphdr), &ipc, &rt,
 			     corkreq ? msg->msg_flags|MSG_MORE : msg->msg_flags);
 	if (err)

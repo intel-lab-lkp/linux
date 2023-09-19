@@ -614,8 +614,7 @@ void icmp6_send(struct sk_buff *skb, u8 type, u8 code, __u32 info,
 	idev = __in6_dev_get(skb->dev);
 
 	if (ip6_append_data(sk, icmpv6_getfrag, &msg,
-			    len + sizeof(struct icmp6hdr),
-			    sizeof(struct icmp6hdr),
+			    len, sizeof(struct icmp6hdr),
 			    &ipc6, &fl6, (struct rt6_info *)dst,
 			    MSG_DONTWAIT)) {
 		ICMP6_INC_STATS(net, idev, ICMP6_MIB_OUTERRORS);
@@ -801,8 +800,7 @@ static enum skb_drop_reason icmpv6_echo_reply(struct sk_buff *skb)
 			goto out_dst_release;
 
 	if (ip6_append_data(sk, icmpv6_getfrag, &msg,
-			    skb->len + sizeof(struct icmp6hdr),
-			    sizeof(struct icmp6hdr), &ipc6, &fl6,
+			    skb->len, sizeof(struct icmp6hdr), &ipc6, &fl6,
 			    (struct rt6_info *)dst, MSG_DONTWAIT)) {
 		__ICMP6_INC_STATS(net, idev, ICMP6_MIB_OUTERRORS);
 		ip6_flush_pending_frames(sk);

@@ -1490,6 +1490,11 @@ static int __ip6_append_data(struct sock *sk,
 	unsigned int wmem_alloc_delta = 0;
 	bool paged, extra_uref = false;
 
+	if (skb_queue_empty(&sk->sk_write_queue))
+		length += transhdrlen;
+	else
+		transhdrlen = 0;
+
 	skb = skb_peek_tail(queue);
 	if (!skb) {
 		exthdrlen = opt ? opt->opt_flen : 0;
@@ -1868,7 +1873,6 @@ int ip6_append_data(struct sock *sk,
 {
 	struct inet_sock *inet = inet_sk(sk);
 	struct ipv6_pinfo *np = inet6_sk(sk);
-	int exthdrlen;
 	int err;
 
 	if (flags&MSG_PROBE)
@@ -1884,12 +1888,10 @@ int ip6_append_data(struct sock *sk,
 			return err;
 
 		inet->cork.fl.u.ip6 = *fl6;
-		exthdrlen = (ipc6->opt ? ipc6->opt->opt_flen : 0);
-		length += exthdrlen;
-		transhdrlen += exthdrlen;
-	} else {
-		transhdrlen = 0;
 	}
+
+	/* Add space for extensions */
+	transhdrlen += (ipc6->opt ? ipc6->opt->opt_flen : 0);
 
 	return __ip6_append_data(sk, &sk->sk_write_queue, &inet->cork,
 				 &np->cork, sk_page_frag(sk), getfrag,
@@ -2095,7 +2097,7 @@ struct sk_buff *ip6_make_skb(struct sock *sk,
 
 	err = __ip6_append_data(sk, &queue, cork, &v6_cork,
 				&current->task_frag, getfrag, from,
-				length + exthdrlen, transhdrlen + exthdrlen,
+				length, transhdrlen + exthdrlen,
 				flags, ipc6);
 	if (err) {
 		__ip6_flush_pending_frames(sk, &queue, cork, &v6_cork);
