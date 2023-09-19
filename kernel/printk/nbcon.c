@@ -962,6 +962,95 @@ update_con:
 }
 
 /**
+ * struct nbcon_cpu_state - Per CPU printk context state
+ * @prio:	The current context priority level
+ * @nesting:	Per priority nest counter
+ */
+struct nbcon_cpu_state {
+	enum nbcon_prio		prio;
+	int			nesting[NBCON_PRIO_MAX];
+};
+
+static DEFINE_PER_CPU(struct nbcon_cpu_state, nbcon_pcpu_state);
+static struct nbcon_cpu_state early_nbcon_pcpu_state __initdata;
+
+/**
+ * nbcon_get_cpu_state - Get the per CPU console state pointer
+ *
+ * Returns either a pointer to the per CPU state of the current CPU or to
+ * the init data state during early boot.
+ */
+static __ref struct nbcon_cpu_state *nbcon_get_cpu_state(void)
+{
+	if (!printk_percpu_data_ready())
+		return &early_nbcon_pcpu_state;
+
+	return this_cpu_ptr(&nbcon_pcpu_state);
+}
+
+/**
+ * nbcon_atomic_enter - Enter a context that enforces atomic printing
+ * @prio:	Priority of the context
+ *
+ * Return:	The previous priority that needs to be fed into
+ *		the corresponding nbcon_atomic_exit()
+ * Context:	Any context. Disables migration.
+ */
+enum nbcon_prio nbcon_atomic_enter(enum nbcon_prio prio)
+{
+	struct nbcon_cpu_state *cpu_state;
+	enum nbcon_prio prev_prio;
+
+	migrate_disable();
+
+	cpu_state = nbcon_get_cpu_state();
+
+	prev_prio = cpu_state->prio;
+	if (prio > prev_prio)
+		cpu_state->prio = prio;
+
+	/*
+	 * Increment the nesting on @cpu_state->prio (instead of
+	 * @prio) so that a WARN() nested within a panic printout
+	 * does not attempt to scribble state.
+	 */
+	cpu_state->nesting[cpu_state->prio]++;
+
+	return prev_prio;
+}
+
+/**
+ * nbcon_atomic_exit - Exit a context that enforces atomic printing
+ * @prio:	Priority of the context to leave
+ * @prev_prio:	Priority of the previous context for restore
+ *
+ * Context:	Any context. Enables migration.
+ *
+ * @prev_prio is the priority returned by the corresponding
+ * nbcon_atomic_enter().
+ */
+void nbcon_atomic_exit(enum nbcon_prio prio, enum nbcon_prio prev_prio)
+{
+	struct nbcon_cpu_state *cpu_state;
+
+	cpu_state = nbcon_get_cpu_state();
+
+	/*
+	 * Undo the nesting of nbcon_atomic_enter() at the CPU state
+	 * priority.
+	 */
+	cpu_state->nesting[cpu_state->prio]--;
+
+	/*
+	 * Restore the previous priority, which was returned by
+	 * nbcon_atomic_enter().
+	 */
+	cpu_state->prio = prev_prio;
+
+	migrate_enable();
+}
+
+/**
  * nbcon_alloc - Allocate buffers needed by the nbcon console
  * @con:	Console to allocate buffers for
  *
