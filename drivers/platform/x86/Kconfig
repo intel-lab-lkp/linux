@@ -189,6 +189,30 @@ config ACER_WMI
 	  If you have an ACPI-WMI compatible Acer/ Wistron laptop, say Y or M
 	  here.
 
+config SILICOM_PLATFORM
+	tristate "Silicom Edge Networking device support"
+	depends on HWMON
+	select LEDS_CLASS_MULTICOLOR
+	help
+	  This option enables support for the LEDs/GPIO/etc downstream of the
+	  embedded controller on Silicom "Cordoba" hardware and derivatives.
+
+	  The Silicom platform (silicom-platform) Linux driver for Swisscom
+	  Business Box (Swisscom BB) as well as Cordoba family products is a
+	  software solution designed to facilitate the efficient management
+	  and control of devices through the integration of various Linux
+	  frameworks. This platform driver provides seamless support for
+	  device management via the Linux LED framework, GPIO framework,
+	  Hardware Monitoring (HWMON), and device attributes. The Silicom
+	  platform driver's compatibility with these Linux frameworks allows
+	  applications to access and control Cordoba family devices using
+	  existing software that is compatible with these frameworks. This
+	  compatibility simplifies the development process, reduces
+	  dependencies on proprietary solutions, and promotes
+	  interoperability with other Linux-based systems and software.
+
+	  If you have a Silicom network appliance, say Y or M here.
+
 source "drivers/platform/x86/amd/Kconfig"
 
 config ADV_SWBUTTON
