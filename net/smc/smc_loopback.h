@@ -18,11 +18,14 @@
 #include <linux/err.h>
 #include <net/smc.h>
 
+#define SMC_LO_CHID 0xFFFF
 #define SMC_LODEV_MAX_DMBS 5000
 
 struct smc_lo_dev {
 	struct smcd_dev *smcd;
 	struct device dev;
+	u16 chid;
+	struct smcd_gid local_gid;
 };
 
 int smc_loopback_init(void);
