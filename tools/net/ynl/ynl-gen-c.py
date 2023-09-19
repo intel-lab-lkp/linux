@@ -723,6 +723,8 @@ class AttrSet(SpecAttrSet):
             self.c_name = ''
 
     def new_attr(self, elem, value):
+        if 'type' not in elem:
+            raise Exception(f"Type has to be set for attribute {elem['name']}")
         if elem['type'] in scalars:
             t = TypeScalar(self.family, self, elem, value)
         elif elem['type'] == 'unused':
