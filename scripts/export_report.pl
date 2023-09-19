@@ -112,6 +112,8 @@ foreach my $thismod (@allcfiles) {
 		next;
 	}
 
+	$thismod =~ s/\.mod\.c/.ko/;
+
 	my $state=0;
 	while ( <$module> ) {
 		chomp;
