@@ -1018,6 +1018,52 @@ static bool nbcon_atomic_emit_one(struct nbcon_write_context *wctxt)
 }
 
 /**
+ * nbcon_console_emit_next_record - Print one record for an nbcon console
+ *					in atomic mode
+ * @con:	The console to print on
+ *
+ * Return:	True if a record could be printed, otherwise false.
+ *
+ * This function is meant to be called by console_flush_all() to atomically
+ * print records on nbcon consoles. Essentially it is the nbcon version of
+ * console_emit_next_record().
+ *
+ * This function also returns false if the current CPU is in an elevated
+ * atomic priority state in order to allow the CPU to get all of the
+ * emergency messages into the ringbuffer first.
+ */
+bool nbcon_console_emit_next_record(struct console *con)
+{
+	struct nbcon_cpu_state *cpu_state;
+	bool progress = false;
+
+	migrate_disable();
+
+	cpu_state = nbcon_get_cpu_state();
+
+	/*
+	 * Atomic printing from console_flush_all() only occurs if this
+	 * CPU is not in an elevated atomic priority state. If it is, the
+	 * atomic printing will occur when this CPU exits that state. This
+	 * allows a set of emergency messages to be completely stored in
+	 * the ringbuffer before this CPU begins flushing.
+	 */
+	if (cpu_state->prio <= NBCON_PRIO_NORMAL) {
+		struct nbcon_write_context wctxt = { };
+		struct nbcon_context *ctxt = &ACCESS_PRIVATE(&wctxt, ctxt);
+
+		ctxt->console	= con;
+		ctxt->prio	= NBCON_PRIO_NORMAL;
+
+		progress = nbcon_atomic_emit_one(&wctxt);
+	}
+
+	migrate_enable();
+
+	return progress;
+}
+
+/**
  * __nbcon_atomic_flush_all - Flush all nbcon consoles in atomic mode
  * @allow_unsafe_takeover:	True, to allow unsafe hostile takeovers
  */
