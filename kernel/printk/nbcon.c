@@ -571,7 +571,6 @@ static struct printk_buffers panic_nbcon_pbufs;
  * in an unsafe state. Otherwise, on success the caller may assume
  * the console is not in an unsafe state.
  */
-__maybe_unused
 static bool nbcon_context_try_acquire(struct nbcon_context *ctxt)
 {
 	unsigned int cpu = smp_processor_id();
@@ -873,7 +872,6 @@ EXPORT_SYMBOL_GPL(nbcon_exit_unsafe);
  * When true is returned, @wctxt->ctxt.backlog indicates whether there are
  * still records pending in the ringbuffer,
  */
-__maybe_unused
 static bool nbcon_emit_next_record(struct nbcon_write_context *wctxt)
 {
 	struct nbcon_context *ctxt = &ACCESS_PRIVATE(wctxt, ctxt);
@@ -986,6 +984,105 @@ static __ref struct nbcon_cpu_state *nbcon_get_cpu_state(void)
 		return &early_nbcon_pcpu_state;
 
 	return this_cpu_ptr(&nbcon_pcpu_state);
+}
+
+/**
+ * nbcon_atomic_emit_one - Print one record for a console in atomic mode
+ * @wctxt:			An initialized write context struct to use
+ *				for this context
+ *
+ * Returns false if the given console could not print a record or there are
+ * no more records to print, otherwise true.
+ *
+ * This is an internal helper to handle the locking of the console before
+ * calling nbcon_emit_next_record().
+ */
+static bool nbcon_atomic_emit_one(struct nbcon_write_context *wctxt)
+{
+	struct nbcon_context *ctxt = &ACCESS_PRIVATE(wctxt, ctxt);
+
+	if (!nbcon_context_try_acquire(ctxt))
+		return false;
+
+	/*
+	 * nbcon_emit_next_record() returns false when the console was
+	 * handed over or taken over. In both cases the context is no
+	 * longer valid.
+	 */
+	if (!nbcon_emit_next_record(wctxt))
+		return false;
+
+	nbcon_context_release(ctxt);
+
+	return prb_read_valid(prb, ctxt->seq, NULL);
+}
+
+/**
+ * __nbcon_atomic_flush_all - Flush all nbcon consoles in atomic mode
+ * @allow_unsafe_takeover:	True, to allow unsafe hostile takeovers
+ */
+static void __nbcon_atomic_flush_all(bool allow_unsafe_takeover)
+{
+	struct nbcon_write_context wctxt = { };
+	struct nbcon_context *ctxt = &ACCESS_PRIVATE(&wctxt, ctxt);
+	struct nbcon_cpu_state *cpu_state;
+	struct console *con;
+	bool any_progress;
+	int cookie;
+
+	cpu_state = nbcon_get_cpu_state();
+
+	/*
+	 * Let the outermost flush of this priority print. This avoids
+	 * nasty hackery for nested WARN() where the printing itself
+	 * generates one and ensures such nested messages are stored to
+	 * the ringbuffer before any printing resumes.
+	 *
+	 * cpu_state->prio <= NBCON_PRIO_NORMAL is not subject to nesting
+	 * and can proceed in order to allow any atomic printing for
+	 * regular kernel messages.
+	 */
+	if (cpu_state->prio > NBCON_PRIO_NORMAL &&
+	    cpu_state->nesting[cpu_state->prio] != 1)
+		return;
+
+	do {
+		any_progress = false;
+
+		cookie = console_srcu_read_lock();
+		for_each_console_srcu(con) {
+			short flags = console_srcu_read_flags(con);
+			bool progress;
+
+			if (!(flags & CON_NBCON))
+				continue;
+
+			if (!console_is_usable(con, flags))
+				continue;
+
+			memset(ctxt, 0, sizeof(*ctxt));
+			ctxt->console			= con;
+			ctxt->spinwait_max_us		= 2000;
+			ctxt->prio			= cpu_state->prio;
+			ctxt->allow_unsafe_takeover	= allow_unsafe_takeover;
+
+			progress = nbcon_atomic_emit_one(&wctxt);
+			if (!progress)
+				continue;
+			any_progress = true;
+		}
+		console_srcu_read_unlock(cookie);
+	} while (any_progress);
+}
+
+/**
+ * nbcon_atomic_flush_all - Flush all nbcon consoles in atomic mode
+ *
+ * Context:	Any context where migration is disabled.
+ */
+void nbcon_atomic_flush_all(void)
+{
+	__nbcon_atomic_flush_all(false);
 }
 
 /**
