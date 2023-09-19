@@ -381,6 +381,13 @@
 		interrupt-controller;
 		#interrupt-cells = <2>;
 	};
+
+	pca9554_1: gpio@38 {
+		compatible = "nxp,pca9554";
+		reg = <0x38>;
+		gpio-controller;
+		#gpio-cells = <2>;
+	};
 };
 
 &mcu_i2c0 {
