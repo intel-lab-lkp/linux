@@ -872,6 +872,8 @@ void drm_send_event(struct drm_device *dev, struct drm_pending_event *e)
 }
 EXPORT_SYMBOL(drm_send_event);
 
+#define UPPER_UNIT_THRESHOLD 100
+
 static void print_size(struct drm_printer *p, const char *stat,
 		       const char *region, u64 sz)
 {
@@ -879,7 +881,8 @@ static void print_size(struct drm_printer *p, const char *stat,
 	unsigned u;
 
 	for (u = 0; u < ARRAY_SIZE(units) - 1; u++) {
-		if (sz < SZ_1K)
+		if ((sz & (SZ_1K - 1)) &&
+		    sz < UPPER_UNIT_THRESHOLD * SZ_1K)
 			break;
 		sz = div_u64(sz, SZ_1K);
 	}
