@@ -2571,6 +2571,13 @@ struct timespec64 current_time(struct inode *inode)
 }
 EXPORT_SYMBOL(current_time);
 
+/*
+ * Coarse timer ticks happen (roughly) every jiffy. If we see a coarse time
+ * more than 2 jiffies earlier than the current ctime, then we need to
+ * update it. This is the max delta allowed (in ns).
+ */
+#define COARSE_TIME_MAX_DELTA (2 / HZ * NSEC_PER_SEC)
+
 /**
  * inode_set_ctime_current - set the ctime to current_time
  * @inode: inode
@@ -2599,8 +2606,19 @@ struct timespec64 inode_set_ctime_current(struct inode *inode)
 		 * existing ctime. Just keep the existing value if so.
 		 */
 		ctime.tv_sec = inode->__i_ctime.tv_sec;
-		if (timespec64_compare(&ctime, &now) > 0)
-			return ctime;
+		if (timespec64_compare(&ctime, &now) > 0) {
+			struct timespec64	limit = now;
+
+			/*
+			 * If the current coarse-grained clock is earlier than
+			 * it should be, then that's an indication that there
+			 * may have been a backward clock jump, and that the
+			 * update should not be skipped.
+			 */
+			timespec64_add_ns(&limit, COARSE_TIME_MAX_DELTA);
+			if (timespec64_compare(&ctime, &limit) < 0)
+				return ctime;
+		}
 
 		/*
 		 * Ctime updates are usually protected by the inode_lock, but
