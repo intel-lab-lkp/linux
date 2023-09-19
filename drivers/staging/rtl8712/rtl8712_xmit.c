@@ -669,7 +669,7 @@ int r8712_xmitframe_complete(struct _adapter *padapter,
 			 */
 			r8712_xmit_complete(padapter, pxmitframe);
 		}
-		if (res == _SUCCESS)
+		if (res == _SUCCESS && pxmitframe->attrib.priority <= 15)
 			dump_xframe(padapter, pxmitframe);
 		else
 			r8712_free_xmitframe_ex(pxmitpriv, pxmitframe);
