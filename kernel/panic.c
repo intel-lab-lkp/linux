@@ -614,6 +614,10 @@ bool oops_may_print(void)
 	return pause_on_oops_flag == 0;
 }
 
+static atomic_t oops_cpu = ATOMIC_INIT(-1);
+static int oops_nesting;
+static enum nbcon_prio oops_prev_prio;
+
 /*
  * Called when the architecture enters its oops handler, before it prints
  * anything.  If this is the first CPU to oops, and it's oopsing the first
@@ -630,6 +634,36 @@ bool oops_may_print(void)
  */
 void oops_enter(void)
 {
+	enum nbcon_prio prev_prio;
+	int cpu = -1;
+
+	/*
+	 * If this turns out to be the first CPU in oops, this is the
+	 * beginning of the outermost atomic section. Otherwise it is
+	 * the beginning of an inner atomic section.
+	 */
+	prev_prio = nbcon_atomic_enter(NBCON_PRIO_EMERGENCY);
+
+	if (atomic_try_cmpxchg_relaxed(&oops_cpu, &cpu, smp_processor_id())) {
+		/*
+		 * This is the first CPU in oops. Save the outermost
+		 * @prev_prio in order to restore it on the outermost
+		 * matching oops_exit(), when @oops_nesting == 0.
+		 */
+		oops_prev_prio = prev_prio;
+
+		/*
+		 * Enter an inner atomic section that ends at the end of this
+		 * function. In this case, the nbcon_atomic_enter() above
+		 * began the outermost atomic section.
+		 */
+		prev_prio = nbcon_atomic_enter(NBCON_PRIO_EMERGENCY);
+	}
+
+	/* Track nesting when this CPU is the owner. */
+	if (cpu == -1 || cpu == smp_processor_id())
+		oops_nesting++;
+
 	tracing_off();
 	/* can't trust the integrity of the kernel anymore: */
 	debug_locks_off();
@@ -637,6 +671,9 @@ void oops_enter(void)
 
 	if (sysctl_oops_all_cpu_backtrace)
 		trigger_all_cpu_backtrace();
+
+	/* Exit inner atomic section. */
+	nbcon_atomic_exit(NBCON_PRIO_EMERGENCY, prev_prio);
 }
 
 static void print_oops_end_marker(void)
@@ -652,6 +689,18 @@ void oops_exit(void)
 {
 	do_oops_enter_exit();
 	print_oops_end_marker();
+
+	if (atomic_read(&oops_cpu) == smp_processor_id()) {
+		oops_nesting--;
+		if (oops_nesting == 0) {
+			atomic_set(&oops_cpu, -1);
+
+			/* Exit outmost atomic section. */
+			nbcon_atomic_exit(NBCON_PRIO_EMERGENCY, oops_prev_prio);
+		}
+	}
+	put_cpu();
+
 	kmsg_dump(KMSG_DUMP_OOPS);
 }
 
