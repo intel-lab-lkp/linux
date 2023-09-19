@@ -1064,14 +1064,19 @@ static void nfs_fill_super(struct super_block *sb, struct nfs_fs_context *ctx)
 		 * The VFS shouldn't apply the umask to mode bits.
 		 * We will do so ourselves when necessary.
 		 */
-		sb->s_flags |= SB_POSIXACL;
+		if (NFS_SB(sb)->caps & NFS_CAP_ACLS) {
+			sb->s_flags |= SB_POSIXACL;
+		}
+
 		sb->s_time_gran = 1;
 		sb->s_time_min = 0;
 		sb->s_time_max = U32_MAX;
 		sb->s_export_op = &nfs_export_ops;
 		break;
 	case 4:
-		sb->s_flags |= SB_POSIXACL;
+		if (NFS_SB(sb)->caps & NFS_CAP_ACLS) {
+			sb->s_flags |= SB_POSIXACL;
+		}
 		sb->s_time_gran = 1;
 		sb->s_time_min = S64_MIN;
 		sb->s_time_max = S64_MAX;
