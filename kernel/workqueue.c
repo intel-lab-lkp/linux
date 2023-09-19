@@ -4743,6 +4743,8 @@ err_unreg_lockdep:
 	wq_free_lockdep(wq);
 err_free_wq:
 	free_workqueue_attrs(wq->unbound_attrs);
+	if (wq->flags & WQ_UNBOUND)
+		kthread_flush_worker(pwq_release_worker);
 	kfree(wq);
 	return NULL;
 err_destroy:
