@@ -164,3 +164,61 @@ and should be used to mask the upper bits as needed.
    https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/tools/perf/arch/arm64/tests/user-events.c
 .. _tools/lib/perf/tests/test-evsel.c:
    https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/tools/lib/perf/tests/test-evsel.c
+
+Event Counting Threshold
+==========================================
+
+Overview
+--------
+
+FEAT_PMUv3_TH (Armv8.8) permits a PMU counter to increment only on
+events whose count meets a specified threshold condition. For example if
+threshold_control is set to 5 ('Greater than or equal, count'), and
+the threshold is set to 2, then the PMU counter will now only increment
+by 1 when an event would have previously incremented the PMU counter by
+2 or more on a single processor cycle.
+
+To increment by the value of the event instead of 1, use the non 'count'
+comparisons, in this case 4 ('Greater than or equal'). Each comparison
+has a count and non count version, where the 'count' version always
+increments the PMU counter by 1 instead of the value of the event.
+
+How-to
+------
+
+The threshold and threshold control values can be provided per event:
+
+.. code-block:: sh
+
+  perf stat -e stall_slot/threshold=2,threshold_control=5/ \
+            -e dtlb_walk/threshold=10,threshold_control=4/
+
+And the following control values are supported:
+
+.. code-block::
+
+  0: Not-equal
+  1: Not-equal, count
+  2: Equals
+  3: Equals, count
+  4: Greater-than-or-equal
+  5: Greater-than-or-equal, count
+  6: Less-than
+  7: Less-than, count
+
+The maximum supported threshold value can be read from the caps of each
+PMU, for example:
+
+.. code-block:: sh
+
+  cat /sys/bus/event_source/devices/armv8_pmuv3/caps/threshold_max
+
+  0x000000ff
+
+If a value higher than this is given, then it will be silently clamped
+to the maximum. The highest possible maximum is 4095, as the config
+field for threshold is limited to 12 bits, and the Perf tool will refuse
+to parse higher values.
+
+If the PMU doesn't support FEAT_PMUv3_TH, then threshold_max will read
+0, and both threshold and threshold_control will be silently ignored.
