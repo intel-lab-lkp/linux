@@ -67,6 +67,7 @@ extern int ext2_init_acl (struct inode *, struct inode *);
 
 static inline int ext2_init_acl (struct inode *inode, struct inode *dir)
 {
+	inode->i_mode &= ~current_umask();
 	return 0;
 }
 #endif

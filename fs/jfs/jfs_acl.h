@@ -17,6 +17,7 @@ int jfs_init_acl(tid_t, struct inode *, struct inode *);
 static inline int jfs_init_acl(tid_t tid, struct inode *inode,
 			       struct inode *dir)
 {
+	inode->i_mode &= ~current_umask();
 	return 0;
 }
 
