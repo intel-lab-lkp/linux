@@ -228,7 +228,11 @@
 /*
  * PMXEVTYPER: Event selection reg
  */
-#define ARMV8_PMU_EVTYPE_MASK	0xc800ffff	/* Mask for writable bits */
+#define ARMV8_PMU_EVTYPE_TH	GENMASK(43, 32)
+#define ARMV8_PMU_EVTYPE_TC	GENMASK(63, 61)
+/* Mask for writable bits */
+#define ARMV8_PMU_EVTYPE_MASK	(0xc800ffff | ARMV8_PMU_EVTYPE_TH | \
+				ARMV8_PMU_EVTYPE_TC)
 #define ARMV8_PMU_EVTYPE_EVENT	0xffff		/* Mask for EVENT bits */
 
 /*
@@ -254,6 +258,7 @@
 #define ARMV8_PMU_BUS_SLOTS_MASK 0xff
 #define ARMV8_PMU_BUS_WIDTH_SHIFT 16
 #define ARMV8_PMU_BUS_WIDTH_MASK 0xf
+#define ARMV8_PMU_THWIDTH GENMASK(23, 20)
 
 /*
  * This code is really good
