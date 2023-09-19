@@ -846,16 +846,18 @@ static void shmem_delete_from_page_cache(struct folio *folio, void *radswap)
 /*
  * Remove swap entry from page cache, free the swap and its page cache.
  */
-static int shmem_free_swap(struct address_space *mapping,
+static long shmem_free_swap(struct address_space *mapping,
 			   pgoff_t index, void *radswap)
 {
 	void *old;
 
 	old = xa_cmpxchg_irq(&mapping->i_pages, index, radswap, NULL, 0);
 	if (old != radswap)
-		return -ENOENT;
+		return 0;
+
 	free_swap_and_cache(radix_to_swp_entry(radswap));
-	return 0;
+
+	return folio_nr_pages((struct folio *)radswap);
 }
 
 /*
@@ -1008,7 +1010,7 @@ static void shmem_undo_range(struct inode *inode, loff_t lstart, loff_t lend,
 			if (xa_is_value(folio)) {
 				if (unfalloc)
 					continue;
-				nr_swaps_freed += !shmem_free_swap(mapping,
+				nr_swaps_freed += shmem_free_swap(mapping,
 							indices[i], folio);
 				continue;
 			}
@@ -1077,12 +1079,12 @@ whole_folios:
 			if (xa_is_value(folio)) {
 				if (unfalloc)
 					continue;
-				if (shmem_free_swap(mapping, indices[i], folio)) {
+				nr_swaps_freed += shmem_free_swap(mapping, indices[i], folio);
+				if (!nr_swaps_freed) {
 					/* Swap was replaced by page: retry */
 					index = indices[i];
 					break;
 				}
-				nr_swaps_freed++;
 				continue;
 			}
 
