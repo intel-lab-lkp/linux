@@ -491,6 +491,21 @@ static void kvm_xen_inject_vcpu_vector(struct kvm_vcpu *v)
 
 static struct gfn_to_pfn_cache *get_vcpu_info_cache(struct kvm_vcpu *v, unsigned long *offset)
 {
+	if (!v->arch.xen.vcpu_info_cache.active && v->arch.xen.vcpu_id < MAX_VIRT_CPUS) {
+		struct kvm *kvm = v->kvm;
+
+		if (offset) {
+			if (IS_ENABLED(CONFIG_64BIT) && kvm->arch.xen.long_mode)
+				*offset = offsetof(struct shared_info,
+						   vcpu_info[v->arch.xen.vcpu_id]);
+			else
+				*offset = offsetof(struct compat_shared_info,
+						   vcpu_info[v->arch.xen.vcpu_id]);
+		}
+
+		return &kvm->arch.xen.shinfo_cache;
+	}
+
 	if (offset)
 		*offset = 0;
 
@@ -764,6 +779,92 @@ static int kvm_xen_set_vcpu_id(struct kvm_vcpu *vcpu, unsigned int vcpu_id)
 	return 0;
 }
 
+static int kvm_xen_set_vcpu_info(struct kvm_vcpu *vcpu, gpa_t gpa)
+{
+	struct kvm *kvm = vcpu->kvm;
+	struct gfn_to_pfn_cache *si_gpc = &kvm->arch.xen.shinfo_cache;
+	struct gfn_to_pfn_cache *vi_gpc = &vcpu->arch.xen.vcpu_info_cache;
+	unsigned long flags;
+	unsigned long offset;
+	int ret;
+
+	if (gpa == KVM_XEN_INVALID_GPA) {
+		kvm_gpc_deactivate(vi_gpc);
+		return 0;
+	}
+
+	/*
+	 * In Xen it is not possible for an explicit vcpu_info to be set
+	 * before the shared_info exists since the former is done in response
+	 * to a hypercall and the latter is set up as part of domain creation.
+	 * The first 32 vCPUs have a default vcpu_info embedded in shared_info
+	 * the content of which is copied across when an explicit vcpu_info is
+	 * set, which can also clearly not be done if we don't know where the
+	 * shared_info is. Hence we need to enforce that the shared_info cache
+	 * is active here.
+	 */
+	if (!si_gpc->active)
+		return -EINVAL;
+
+	/* Setting an explicit vcpu_info is a one-off operation */
+	if (vi_gpc->active)
+		return -EINVAL;
+
+	ret = kvm_gpc_activate(vi_gpc, gpa, sizeof(struct vcpu_info));
+	if (ret)
+		return ret;
+
+	/* Nothing more to do if the vCPU is not among the first 32 */
+	if (vcpu->arch.xen.vcpu_id >= MAX_VIRT_CPUS)
+		return 0;
+
+	/*
+	 * It's possible that the vcpu_info cache has been invalidated since
+	 * we activated it so we need to go through the check-refresh dance.
+	 */
+	read_lock_irqsave(&vi_gpc->lock, flags);
+	while (!kvm_gpc_check(vi_gpc, sizeof(struct vcpu_info))) {
+		read_unlock_irqrestore(&vi_gpc->lock, flags);
+
+		ret = kvm_gpc_refresh(vi_gpc, sizeof(struct vcpu_info));
+		if (ret) {
+			kvm_gpc_deactivate(vi_gpc);
+			return ret;
+		}
+
+		read_lock_irqsave(&vi_gpc->lock, flags);
+	}
+
+	/* Now lock the shared_info cache so we can copy the vcpu_info */
+	read_lock(&si_gpc->lock);
+	while (!kvm_gpc_check(si_gpc, PAGE_SIZE)) {
+		read_unlock(&si_gpc->lock);
+
+		ret = kvm_gpc_refresh(si_gpc, PAGE_SIZE);
+		if (ret) {
+			read_unlock_irqrestore(&vi_gpc->lock, flags);
+			kvm_gpc_deactivate(vi_gpc);
+			return ret;
+		}
+
+		read_lock(&si_gpc->lock);
+	}
+
+	if (IS_ENABLED(CONFIG_64BIT) && kvm->arch.xen.long_mode)
+		offset = offsetof(struct shared_info,
+				  vcpu_info[vcpu->arch.xen.vcpu_id]);
+	else
+		offset = offsetof(struct compat_shared_info,
+				  vcpu_info[vcpu->arch.xen.vcpu_id]);
+
+	memcpy(vi_gpc->khva, si_gpc->khva + offset, sizeof(struct vcpu_info));
+
+	read_unlock(&si_gpc->lock);
+	read_unlock_irqrestore(&vi_gpc->lock, flags);
+
+	return 0;
+}
+
 int kvm_xen_vcpu_set_attr(struct kvm_vcpu *vcpu, struct kvm_xen_vcpu_attr *data)
 {
 	int idx, r = -ENOENT;
@@ -779,14 +880,7 @@ int kvm_xen_vcpu_set_attr(struct kvm_vcpu *vcpu, struct kvm_xen_vcpu_attr *data)
 		BUILD_BUG_ON(offsetof(struct vcpu_info, time) !=
 			     offsetof(struct compat_vcpu_info, time));
 
-		if (data->u.gpa == KVM_XEN_INVALID_GPA) {
-			kvm_gpc_deactivate(&vcpu->arch.xen.vcpu_info_cache);
-			r = 0;
-			break;
-		}
-
-		r = kvm_gpc_activate(&vcpu->arch.xen.vcpu_info_cache,
-				     data->u.gpa, sizeof(struct vcpu_info));
+		r = kvm_xen_set_vcpu_info(vcpu, data->u.gpa);
 		if (!r)
 			kvm_make_request(KVM_REQ_CLOCK_UPDATE, vcpu);
 

@@ -5442,13 +5442,7 @@ KVM_XEN_ATTR_TYPE_LONG_MODE
 
 KVM_XEN_ATTR_TYPE_SHARED_INFO
   Sets the guest physical frame number at which the Xen shared_info
-  page resides. Note that although Xen places vcpu_info for the first
-  32 vCPUs in the shared_info page, KVM does not automatically do so
-  and instead requires that KVM_XEN_VCPU_ATTR_TYPE_VCPU_INFO be used
-  explicitly even when the vcpu_info for a given vCPU resides at the
-  "default" location in the shared_info page. This is because KVM may
-  not be aware of the Xen CPU id which is used as the index into the
-  vcpu_info[] array, so may know the correct default location.
+  page resides.
 
   Note that the shared_info page may be constantly written to by KVM;
   it contains the event channel bitmap used to deliver interrupts to
@@ -5564,11 +5558,25 @@ type values:
 
 KVM_XEN_VCPU_ATTR_TYPE_VCPU_INFO
   Sets the guest physical address of the vcpu_info for a given vCPU.
+  The location of the shared_info page for the VM must be specified before
+  this attribute is set.
+
+  If the KVM_XEN_HVM_CONFIG_SHARED_INFO_HVA flag is also set in the
+  Xen capabilities then the VMM is not required to set this default
+  location for any of the first 32 vCPUs; KVM will handle that
+  internally (using the vcpu_info embedded in the shared_info page).
+  Otherwise this attribute must be set for all vCPUs.
+
   As with the shared_info page for the VM, the corresponding page may be
   dirtied at any time if event channel interrupt delivery is enabled, so
   userspace should always assume that the page is dirty without relying
   on dirty logging. Setting the gpa to KVM_XEN_INVALID_GPA will disable
   the vcpu_info.
+
+  Note that once vcpu_info is set then it may not be set again unless
+  it is explicitly disabled beforehand. If it is set for any of the
+  first 32 vCPUS then the content of the default vcpu_info will be copied
+  into the specified location.
 
 KVM_XEN_VCPU_ATTR_TYPE_VCPU_TIME_INFO
   Sets the guest physical address of an additional pvclock structure
