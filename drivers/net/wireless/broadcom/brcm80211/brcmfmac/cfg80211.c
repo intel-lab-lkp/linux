@@ -4999,15 +4999,23 @@ exit:
 
 s32 brcmf_vif_clear_mgmt_ies(struct brcmf_cfg80211_vif *vif)
 {
+	struct brcmf_pub *drvr = vif->ifp->drvr;
 	static const s32 pktflags[] = {
 		BRCMF_VNDR_IE_PRBREQ_FLAG,
 		BRCMF_VNDR_IE_PRBRSP_FLAG,
 		BRCMF_VNDR_IE_BEACON_FLAG
 	};
+	s32 err;
 	int i;
 
-	for (i = 0; i < ARRAY_SIZE(pktflags); i++)
-		brcmf_vif_set_mgmt_ie(vif, pktflags[i], NULL, 0);
+	for (i = 0; i < ARRAY_SIZE(pktflags); i++) {
+		err = brcmf_vif_set_mgmt_ie(vif, pktflags[i], NULL, 0);
+		if (err) {
+			bphy_err(drvr, "Clear IE %d failed (error %d)\n",
+				 pktflags[i], err);
+			return err;
+		}
+	}
 
 	memset(&vif->saved_ie, 0, sizeof(vif->saved_ie));
 	return 0;
