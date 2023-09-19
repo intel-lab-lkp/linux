@@ -657,6 +657,8 @@ struct netdev_queue {
 
 	unsigned long		state;
 
+	/* NAPI instance for the queue */
+	struct napi_struct      *napi;
 #ifdef CONFIG_BQL
 	struct dql		dql;
 #endif
@@ -2618,6 +2620,9 @@ static inline void *netdev_priv(const struct net_device *dev)
  * example Ethernet, Wireless LAN, Bluetooth, WiMAX etc.
  */
 #define SET_NETDEV_DEVTYPE(net, devtype)	((net)->dev.type = (devtype))
+
+int netif_napi_add_queue(struct napi_struct *napi, unsigned int queue_index,
+			 enum netdev_queue_type type);
 
 /* Default NAPI poll() weight
  * Device drivers are strongly advised to not use bigger value
