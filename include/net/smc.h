@@ -51,9 +51,14 @@ struct smcd_dmb {
 
 struct smcd_dev;
 
+struct smcd_gid {
+	u64	gid;
+	u64	gid_ext;
+};
+
 struct smcd_ops {
-	int (*query_remote_gid)(struct smcd_dev *dev, u64 rgid, u32 vid_valid,
-				u32 vid);
+	int (*query_remote_gid)(struct smcd_dev *dev, struct smcd_gid *rgid,
+				u32 vid_valid, u32 vid);
 	int (*register_dmb)(struct smcd_dev *dev, struct smcd_dmb *dmb,
 			    void *client);
 	int (*unregister_dmb)(struct smcd_dev *dev, struct smcd_dmb *dmb);
@@ -68,7 +73,7 @@ struct smcd_ops {
 			 unsigned int size);
 	int (*supports_v2)(void);
 	u8* (*get_system_eid)(void);
-	u64 (*get_local_gid)(struct smcd_dev *dev);
+	void (*get_local_gid)(struct smcd_dev *dev, struct smcd_gid *gid);
 	u16 (*get_chid)(struct smcd_dev *dev);
 	struct device* (*get_dev)(struct smcd_dev *dev);
 };

@@ -1044,7 +1044,8 @@ static int smc_find_ism_v2_device_clnt(struct smc_sock *smc,
 {
 	int rc = SMC_CLC_DECL_NOSMCDDEV;
 	struct smcd_dev *smcd;
-	int i = 1;
+	int i = 1, slot = 1;
+	bool is_virtdev;
 	u16 chid;
 
 	if (smcd_indicated(ini->smc_type_v1))
@@ -1056,14 +1057,19 @@ static int smc_find_ism_v2_device_clnt(struct smc_sock *smc,
 		chid = smc_ism_get_chid(smcd);
 		if (!smc_find_ism_v2_is_unique_chid(chid, ini, i))
 			continue;
+		is_virtdev = __smc_ism_is_virtdev(chid);
 		if (!smc_pnet_is_pnetid_set(smcd->pnetid) ||
 		    smc_pnet_is_ndev_pnetid(sock_net(&smc->sk), smcd->pnetid)) {
+			/* GID-CHID array is not enough for a virtual GID (128bits) */
+			if (is_virtdev && slot >= SMC_MAX_ISM_DEVS)
+				continue;
 			ini->ism_dev[i] = smcd;
 			ini->ism_chid[i] = chid;
 			ini->is_smcd = true;
 			rc = 0;
 			i++;
-			if (i > SMC_MAX_ISM_DEVS)
+			slot = is_virtdev ? slot + 2 : slot + 1;
+			if (slot > SMC_MAX_ISM_DEVS)
 				break;
 		}
 	}
@@ -1409,8 +1415,9 @@ static int smc_connect_ism(struct smc_sock *smc,
 		rc = smc_v2_determine_accepted_chid(aclc_v2, ini);
 		if (rc)
 			return rc;
+		ini->ism_peer_gid[ini->ism_selected].gid_ext = aclc_v2->d1.gid_ext;
 	}
-	ini->ism_peer_gid[ini->ism_selected] = aclc->d0.gid;
+	ini->ism_peer_gid[ini->ism_selected].gid = aclc->d0.gid;
 
 	/* there is only one lgr role for SMC-D; use server lock */
 	mutex_lock(&smc_server_lgr_pending);
@@ -2101,7 +2108,8 @@ static bool smc_is_already_selected(struct smcd_dev *smcd,
 
 /* check for ISM devices matching proposed ISM devices */
 static void smc_check_ism_v2_match(struct smc_init_info *ini,
-				   u16 proposed_chid, u64 proposed_gid,
+				   u16 proposed_chid,
+				   struct smcd_gid *proposed_gid,
 				   unsigned int *matches)
 {
 	struct smcd_dev *smcd;
@@ -2113,7 +2121,10 @@ static void smc_check_ism_v2_match(struct smc_init_info *ini,
 			continue;
 		if (smc_ism_get_chid(smcd) == proposed_chid &&
 		    !smc_ism_cantalk(proposed_gid, ISM_RESERVED_VLANID, smcd)) {
-			ini->ism_peer_gid[*matches] = proposed_gid;
+			ini->ism_peer_gid[*matches].gid = proposed_gid->gid;
+			if (__smc_ism_is_virtdev(proposed_chid))
+				ini->ism_peer_gid[*matches].gid_ext =
+							proposed_gid->gid_ext;
 			ini->ism_dev[*matches] = smcd;
 			(*matches)++;
 			break;
@@ -2135,9 +2146,11 @@ static void smc_find_ism_v2_device_serv(struct smc_sock *new_smc,
 	struct smc_clc_v2_extension *smc_v2_ext;
 	struct smc_clc_msg_smcd *pclc_smcd;
 	unsigned int matches = 0;
+	struct smcd_gid smcd_gid;
 	u8 smcd_version;
 	u8 *eid = NULL;
 	int i, rc;
+	u16 chid;
 
 	if (!(ini->smcd_version & SMC_V2) || !smcd_indicated(ini->smc_type_v2))
 		goto not_found;
@@ -2147,18 +2160,26 @@ static void smc_find_ism_v2_device_serv(struct smc_sock *new_smc,
 	smcd_v2_ext = smc_get_clc_smcd_v2_ext(smc_v2_ext);
 
 	mutex_lock(&smcd_dev_list.mutex);
-	if (pclc_smcd->ism.chid)
+	if (pclc_smcd->ism.chid) {
 		/* check for ISM device matching proposed native ISM device */
+		smcd_gid.gid = ntohll(pclc_smcd->ism.gid);
 		smc_check_ism_v2_match(ini, ntohs(pclc_smcd->ism.chid),
-				       ntohll(pclc_smcd->ism.gid), &matches);
+				       &smcd_gid, &matches);
+	}
 	for (i = 1; i <= smc_v2_ext->hdr.ism_gid_cnt; i++) {
 		/* check for ISM devices matching proposed non-native ISM
 		 * devices
 		 */
-		smc_check_ism_v2_match(ini,
-				       ntohs(smcd_v2_ext->gidchid[i - 1].chid),
-				       ntohll(smcd_v2_ext->gidchid[i - 1].gid),
-				       &matches);
+		smcd_gid.gid = ntohll(smcd_v2_ext->gidchid[i - 1].gid);
+		chid = ntohs(smcd_v2_ext->gidchid[i - 1].chid);
+		if (__smc_ism_is_virtdev(chid)) {
+			/* check if extended entry exists and is valid */
+			if (i >= smc_v2_ext->hdr.ism_gid_cnt ||
+			    chid != ntohs(smcd_v2_ext->gidchid[i].chid))
+				continue;
+			smcd_gid.gid_ext = ntohll(smcd_v2_ext->gidchid[i++].gid);
+		}
+		smc_check_ism_v2_match(ini, chid, &smcd_gid, &matches);
 	}
 	mutex_unlock(&smcd_dev_list.mutex);
 
@@ -2207,7 +2228,7 @@ static void smc_find_ism_v1_device_serv(struct smc_sock *new_smc,
 	if (!(ini->smcd_version & SMC_V1) || !smcd_indicated(ini->smc_type_v1))
 		goto not_found;
 	ini->is_smcd = true; /* prepare ISM check */
-	ini->ism_peer_gid[0] = ntohll(pclc_smcd->ism.gid);
+	ini->ism_peer_gid[0].gid = ntohll(pclc_smcd->ism.gid);
 	rc = smc_find_ism_device(new_smc, ini);
 	if (rc)
 		goto not_found;

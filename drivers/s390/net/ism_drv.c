@@ -774,10 +774,10 @@ module_exit(ism_exit);
 /*************************** SMC-D Implementation *****************************/
 
 #if IS_ENABLED(CONFIG_SMC)
-static int smcd_query_rgid(struct smcd_dev *smcd, u64 rgid, u32 vid_valid,
-			   u32 vid)
+static int smcd_query_rgid(struct smcd_dev *smcd, struct smcd_gid *rgid,
+			   u32 vid_valid, u32 vid)
 {
-	return ism_query_rgid(smcd->priv, rgid, vid_valid, vid);
+	return ism_query_rgid(smcd->priv, rgid->gid, vid_valid, vid);
 }
 
 static int smcd_register_dmb(struct smcd_dev *smcd, struct smcd_dmb *dmb,
@@ -830,9 +830,10 @@ static int smcd_supports_v2(void)
 		SYSTEM_EID.type[0] != '0';
 }
 
-static u64 smcd_get_local_gid(struct smcd_dev *smcd)
+static void smcd_get_local_gid(struct smcd_dev *smcd,
+			       struct smcd_gid *smcd_gid)
 {
-	return ism_get_local_gid(smcd->priv);
+	smcd_gid->gid = ism_get_local_gid(smcd->priv);
 }
 
 static u16 smcd_get_chid(struct smcd_dev *smcd)
