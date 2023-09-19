@@ -15862,10 +15862,8 @@ F:	Documentation/devicetree/bindings/media/i2c/ovti,ov8858.yaml
 F:	drivers/media/i2c/ov8858.c
 
 OMNIVISION OV9282 SENSOR DRIVER
-M:	Paul J. Murphy <paul.j.murphy@intel.com>
-M:	Daniele Alessandrelli <daniele.alessandrelli@intel.com>
 L:	linux-media@vger.kernel.org
-S:	Maintained
+S:	Orphan
 T:	git git://linuxtv.org/media_tree.git
 F:	Documentation/devicetree/bindings/media/i2c/ovti,ov9282.yaml
 F:	drivers/media/i2c/ov9282.c
