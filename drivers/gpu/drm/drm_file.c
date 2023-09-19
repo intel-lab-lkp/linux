@@ -944,7 +944,10 @@ void drm_show_memory_stats(struct drm_printer *p, struct drm_file *file)
 		}
 
 		if (s & DRM_GEM_OBJECT_RESIDENT) {
-			status.resident += obj->size;
+			if (obj->funcs && obj->funcs->rss)
+				status.resident += obj->funcs->rss(obj);
+			else
+				status.resident += obj->size;
 		} else {
 			/* If already purged or not yet backed by pages, don't
 			 * count it as purgeable:
