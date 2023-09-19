@@ -3910,31 +3910,39 @@ EXPORT_SYMBOL_GPL(netdev_xmit_skip_txqueue);
 #endif /* CONFIG_NET_EGRESS */
 
 #ifdef CONFIG_NET_XGRESS
-static int tc_run(struct tcx_entry *entry, struct sk_buff *skb)
+static int tc_run(struct tcx_entry *entry, struct sk_buff *skb,
+		  struct tcf_result *res)
 {
-	int ret = TC_ACT_UNSPEC;
+	int ret = 0;
 #ifdef CONFIG_NET_CLS_ACT
 	struct mini_Qdisc *miniq = rcu_dereference_bh(entry->miniq);
-	struct tcf_result res;
 
-	if (!miniq)
+	if (!miniq) {
+		tcf_result_set_verdict(res, TC_ACT_UNSPEC);
 		return ret;
+	}
 
 	tc_skb_cb(skb)->mru = 0;
 	tc_skb_cb(skb)->post_ct = false;
 
 	mini_qdisc_bstats_cpu_update(miniq, skb);
-	ret = tcf_classify(skb, miniq->block, miniq->filter_list, &res, false);
+	ret = tcf_classify(skb, miniq->block, miniq->filter_list, res, false);
+	if (ret < 0) {
+		mini_qdisc_qstats_cpu_drop(miniq);
+		return ret;
+	}
 	/* Only tcf related quirks below. */
-	switch (ret) {
+	switch (res->verdict) {
 	case TC_ACT_SHOT:
 		mini_qdisc_qstats_cpu_drop(miniq);
 		break;
 	case TC_ACT_OK:
 	case TC_ACT_RECLASSIFY:
-		skb->tc_index = TC_H_MIN(res.classid);
+		skb->tc_index = TC_H_MIN(res->classid);
 		break;
 	}
+#else
+	tcf_result_set_verdict(res, TC_ACT_UNSPEC);
 #endif /* CONFIG_NET_CLS_ACT */
 	return ret;
 }
@@ -3977,6 +3985,7 @@ sch_handle_ingress(struct sk_buff *skb, struct packet_type **pt_prev, int *ret,
 		   struct net_device *orig_dev, bool *another)
 {
 	struct bpf_mprog_entry *entry = rcu_dereference_bh(skb->dev->tcx_ingress);
+	struct tcf_result res = {0};
 	int sch_ret;
 
 	if (!entry)
@@ -3994,9 +4003,14 @@ sch_handle_ingress(struct sk_buff *skb, struct packet_type **pt_prev, int *ret,
 		if (sch_ret != TC_ACT_UNSPEC)
 			goto ingress_verdict;
 	}
-	sch_ret = tc_run(tcx_entry(entry), skb);
+	sch_ret = tc_run(tcx_entry(entry), skb, &res);
+	if (sch_ret < 0) {
+		kfree_skb_reason(skb, SKB_DROP_REASON_TC_INGRESS_ERROR);
+		*ret = NET_RX_DROP;
+		return NULL;
+	}
 ingress_verdict:
-	switch (sch_ret) {
+	switch (res.verdict) {
 	case TC_ACT_REDIRECT:
 		/* skb_mac_header check was done by BPF, so we can safely
 		 * push the L2 header back before redirecting to another
@@ -4032,6 +4046,7 @@ static __always_inline struct sk_buff *
 sch_handle_egress(struct sk_buff *skb, int *ret, struct net_device *dev)
 {
 	struct bpf_mprog_entry *entry = rcu_dereference_bh(dev->tcx_egress);
+	struct tcf_result res = {0};
 	int sch_ret;
 
 	if (!entry)
@@ -4045,9 +4060,14 @@ sch_handle_egress(struct sk_buff *skb, int *ret, struct net_device *dev)
 		if (sch_ret != TC_ACT_UNSPEC)
 			goto egress_verdict;
 	}
-	sch_ret = tc_run(tcx_entry(entry), skb);
+	sch_ret = tc_run(tcx_entry(entry), skb, &res);
+	if (sch_ret < 0) {
+		kfree_skb_reason(skb, SKB_DROP_REASON_TC_EGRESS_ERROR);
+		*ret = NET_XMIT_DROP;
+		return NULL;
+	}
 egress_verdict:
-	switch (sch_ret) {
+	switch (res.verdict) {
 	case TC_ACT_REDIRECT:
 		/* No need to push/pop skb's mac_header here on egress! */
 		skb_do_redirect(skb);

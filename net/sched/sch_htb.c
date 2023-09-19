@@ -220,8 +220,8 @@ static struct htb_class *htb_classify(struct sk_buff *skb, struct Qdisc *sch,
 				      int *qerr)
 {
 	struct htb_sched *q = qdisc_priv(sch);
+	struct tcf_result res = {0};
 	struct htb_class *cl;
-	struct tcf_result res;
 	struct tcf_proto *tcf;
 	int result;
 
@@ -243,8 +243,10 @@ static struct htb_class *htb_classify(struct sk_buff *skb, struct Qdisc *sch,
 
 	*qerr = NET_XMIT_SUCCESS | __NET_XMIT_BYPASS;
 	while (tcf && (result = tcf_classify(skb, NULL, tcf, &res, false)) >= 0) {
+		if (result < 0)
+			return NULL;
 #ifdef CONFIG_NET_CLS_ACT
-		switch (result) {
+		switch (res.verdict) {
 		case TC_ACT_QUEUED:
 		case TC_ACT_STOLEN:
 		case TC_ACT_TRAP:

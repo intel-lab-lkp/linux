@@ -254,26 +254,25 @@ static bool sfb_rate_limit(struct sk_buff *skb, struct sfb_sched_data *q)
 static bool sfb_classify(struct sk_buff *skb, struct tcf_proto *fl,
 			 int *qerr, u32 *salt)
 {
-	struct tcf_result res;
+	struct tcf_result res = {0};
 	int result;
 
 	result = tcf_classify(skb, NULL, fl, &res, false);
-	if (result >= 0) {
+	if (result < 0)
+		return false;
 #ifdef CONFIG_NET_CLS_ACT
-		switch (result) {
-		case TC_ACT_STOLEN:
-		case TC_ACT_QUEUED:
-		case TC_ACT_TRAP:
-			*qerr = NET_XMIT_SUCCESS | __NET_XMIT_STOLEN;
-			fallthrough;
-		case TC_ACT_SHOT:
-			return false;
-		}
-#endif
-		*salt = TC_H_MIN(res.classid);
-		return true;
+	switch (res.verdict) {
+	case TC_ACT_STOLEN:
+	case TC_ACT_QUEUED:
+	case TC_ACT_TRAP:
+		*qerr = NET_XMIT_SUCCESS | __NET_XMIT_STOLEN;
+		fallthrough;
+	case TC_ACT_SHOT:
+		return false;
 	}
-	return false;
+#endif
+	*salt = TC_H_MIN(res.classid);
+	return true;
 }
 
 static int sfb_enqueue(struct sk_buff *skb, struct Qdisc *sch,

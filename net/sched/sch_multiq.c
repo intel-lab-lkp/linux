@@ -31,14 +31,16 @@ multiq_classify(struct sk_buff *skb, struct Qdisc *sch, int *qerr)
 {
 	struct multiq_sched_data *q = qdisc_priv(sch);
 	u32 band;
-	struct tcf_result res;
 	struct tcf_proto *fl = rcu_dereference_bh(q->filter_list);
+	struct tcf_result res = {0};
 	int err;
 
 	*qerr = NET_XMIT_SUCCESS | __NET_XMIT_BYPASS;
 	err = tcf_classify(skb, NULL, fl, &res, false);
+	if (err < 0)
+		return NULL;
 #ifdef CONFIG_NET_CLS_ACT
-	switch (err) {
+	switch (res.verdict) {
 	case TC_ACT_STOLEN:
 	case TC_ACT_QUEUED:
 	case TC_ACT_TRAP:

@@ -1682,11 +1682,11 @@ reclassify:
 			 */
 			if (unlikely(n->tp != tp || n->tp->chain != n->chain ||
 				     !tp->ops->get_exts))
-				return TC_ACT_SHOT;
+				return -EINVAL;
 
 			exts = tp->ops->get_exts(tp, n->handle);
 			if (unlikely(!exts || n->exts != exts))
-				return TC_ACT_SHOT;
+				return -EINVAL;
 
 			n = NULL;
 			err = tcf_exts_exec_ex(skb, exts, act_index, res);
@@ -1708,14 +1708,17 @@ reclassify:
 			goto reset;
 		}
 #endif
-		if (err >= 0)
-			return err;
+		if (err >= 0) {
+			tcf_result_set_verdict(res, err);
+			return 0;
+		}
 	}
 
 	if (unlikely(n))
-		return TC_ACT_SHOT;
+		return -ENOENT;
 
-	return TC_ACT_UNSPEC; /* signal: continue lookup */
+	tcf_result_set_verdict(res, TC_ACT_UNSPEC);
+	return 0;
 #ifdef CONFIG_NET_CLS_ACT
 reset:
 	if (unlikely(limit++ >= max_reclassify_loop)) {
@@ -1723,7 +1726,7 @@ reset:
 				       tp->chain->block->index,
 				       tp->prio & 0xffff,
 				       ntohs(tp->protocol));
-		return TC_ACT_SHOT;
+		return -ELOOP;
 	}
 
 	tp = first_tp;
@@ -1760,7 +1763,7 @@ int tcf_classify(struct sk_buff *skb,
 				n = tcf_exts_miss_cookie_lookup(ext->act_miss_cookie,
 								&act_index);
 				if (!n)
-					return TC_ACT_SHOT;
+					return -ENOENT;
 
 				chain = n->chain_index;
 			} else {
@@ -1769,7 +1772,7 @@ int tcf_classify(struct sk_buff *skb,
 
 			fchain = tcf_chain_lookup_rcu(block, chain);
 			if (!fchain)
-				return TC_ACT_SHOT;
+				return -ENOENT;
 
 			/* Consume, so cloned/redirect skbs won't inherit ext */
 			skb_ext_del(skb, TC_SKB_EXT);
@@ -1784,12 +1787,13 @@ int tcf_classify(struct sk_buff *skb,
 
 	if (tc_skb_ext_tc_enabled()) {
 		/* If we missed on some chain */
-		if (ret == TC_ACT_UNSPEC && last_executed_chain) {
+		if (res->verdict == TC_ACT_UNSPEC && last_executed_chain) {
 			struct tc_skb_cb *cb = tc_skb_cb(skb);
 
 			ext = tc_skb_ext_alloc(skb);
 			if (WARN_ON_ONCE(!ext))
-				return TC_ACT_SHOT;
+				return -ENOMEM;
+
 			ext->chain = last_executed_chain;
 			ext->mru = cb->mru;
 			ext->post_ct = cb->post_ct;
@@ -3896,15 +3900,23 @@ EXPORT_SYMBOL(tcf_qevent_validate_change);
 struct sk_buff *tcf_qevent_handle(struct tcf_qevent *qe, struct Qdisc *sch, struct sk_buff *skb,
 				  struct sk_buff **to_free, int *ret)
 {
-	struct tcf_result cl_res;
+	struct tcf_result cl_res = {0};
 	struct tcf_proto *fl;
+	int res;
 
 	if (!qe->info.block_index)
 		return skb;
 
 	fl = rcu_dereference_bh(qe->filter_chain);
 
-	switch (tcf_classify(skb, NULL, fl, &cl_res, false)) {
+	res = tcf_classify(skb, NULL, fl, &cl_res, false);
+	if (res < 0) {
+		qdisc_qstats_drop(sch);
+		__qdisc_drop(skb, to_free);
+		*ret = __NET_XMIT_BYPASS;
+		return NULL;
+	}
+	switch (cl_res.verdict) {
 	case TC_ACT_SHOT:
 		qdisc_qstats_drop(sch);
 		__qdisc_drop(skb, to_free);

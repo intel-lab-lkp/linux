@@ -326,6 +326,7 @@ struct Qdisc_ops {
 
 
 struct tcf_result {
+	u32 verdict;
 	union {
 		struct {
 			unsigned long	class;
@@ -335,6 +336,12 @@ struct tcf_result {
 
 	};
 };
+
+static inline void tcf_result_set_verdict(struct tcf_result *res,
+					  const u32 verdict)
+{
+	res->verdict = verdict;
+}
 
 struct tcf_chain;
 

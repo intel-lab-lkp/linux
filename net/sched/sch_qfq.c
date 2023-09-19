@@ -680,8 +680,8 @@ static struct qfq_class *qfq_classify(struct sk_buff *skb, struct Qdisc *sch,
 				      int *qerr)
 {
 	struct qfq_sched *q = qdisc_priv(sch);
+	struct tcf_result res = {0};
 	struct qfq_class *cl;
-	struct tcf_result res;
 	struct tcf_proto *fl;
 	int result;
 
@@ -695,25 +695,23 @@ static struct qfq_class *qfq_classify(struct sk_buff *skb, struct Qdisc *sch,
 	*qerr = NET_XMIT_SUCCESS | __NET_XMIT_BYPASS;
 	fl = rcu_dereference_bh(q->filter_list);
 	result = tcf_classify(skb, NULL, fl, &res, false);
-	if (result >= 0) {
+	if (result < 0)
+		return NULL;
 #ifdef CONFIG_NET_CLS_ACT
-		switch (result) {
-		case TC_ACT_QUEUED:
-		case TC_ACT_STOLEN:
-		case TC_ACT_TRAP:
-			*qerr = NET_XMIT_SUCCESS | __NET_XMIT_STOLEN;
-			fallthrough;
-		case TC_ACT_SHOT:
-			return NULL;
-		}
-#endif
-		cl = (struct qfq_class *)res.class;
-		if (cl == NULL)
-			cl = qfq_find_class(sch, res.classid);
-		return cl;
+	switch (res.verdict) {
+	case TC_ACT_QUEUED:
+	case TC_ACT_STOLEN:
+	case TC_ACT_TRAP:
+		*qerr = NET_XMIT_SUCCESS | __NET_XMIT_STOLEN;
+		fallthrough;
+	case TC_ACT_SHOT:
+		return NULL;
 	}
-
-	return NULL;
+#endif
+	cl = (struct qfq_class *)res.class;
+	if (cl == NULL)
+		cl = qfq_find_class(sch, res.classid);
+	return cl;
 }
 
 /* Generic comparison function, handling wraparound. */

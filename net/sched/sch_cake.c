@@ -1656,8 +1656,8 @@ static u32 cake_classify(struct Qdisc *sch, struct cake_tin_data **t,
 			 struct sk_buff *skb, int flow_mode, int *qerr)
 {
 	struct cake_sched_data *q = qdisc_priv(sch);
+	struct tcf_result res = {0};
 	struct tcf_proto *filter;
-	struct tcf_result res;
 	u16 flow = 0, host = 0;
 	int result;
 
@@ -1667,24 +1667,24 @@ static u32 cake_classify(struct Qdisc *sch, struct cake_tin_data **t,
 
 	*qerr = NET_XMIT_SUCCESS | __NET_XMIT_BYPASS;
 	result = tcf_classify(skb, NULL, filter, &res, false);
+	if (result < 0)
+		return result;
 
-	if (result >= 0) {
 #ifdef CONFIG_NET_CLS_ACT
-		switch (result) {
-		case TC_ACT_STOLEN:
-		case TC_ACT_QUEUED:
-		case TC_ACT_TRAP:
-			*qerr = NET_XMIT_SUCCESS | __NET_XMIT_STOLEN;
-			fallthrough;
-		case TC_ACT_SHOT:
-			return 0;
-		}
-#endif
-		if (TC_H_MIN(res.classid) <= CAKE_QUEUES)
-			flow = TC_H_MIN(res.classid);
-		if (TC_H_MAJ(res.classid) <= (CAKE_QUEUES << 16))
-			host = TC_H_MAJ(res.classid) >> 16;
+	switch (res.verdict) {
+	case TC_ACT_STOLEN:
+	case TC_ACT_QUEUED:
+	case TC_ACT_TRAP:
+		*qerr = NET_XMIT_SUCCESS | __NET_XMIT_STOLEN;
+		fallthrough;
+	case TC_ACT_SHOT:
+		return 0;
 	}
+#endif
+	if (TC_H_MIN(res.classid) <= CAKE_QUEUES)
+		flow = TC_H_MIN(res.classid);
+	if (TC_H_MAJ(res.classid) <= (CAKE_QUEUES << 16))
+		host = TC_H_MAJ(res.classid) >> 16;
 hash:
 	*t = cake_select_tin(sch, skb);
 	return cake_hash(*t, skb, flow_mode, flow, host) + 1;

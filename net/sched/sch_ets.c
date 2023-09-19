@@ -374,8 +374,8 @@ static struct ets_class *ets_classify(struct sk_buff *skb, struct Qdisc *sch,
 				      int *qerr)
 {
 	struct ets_sched *q = qdisc_priv(sch);
+	struct tcf_result res = {0};
 	u32 band = skb->priority;
-	struct tcf_result res;
 	struct tcf_proto *fl;
 	int err;
 
@@ -383,8 +383,10 @@ static struct ets_class *ets_classify(struct sk_buff *skb, struct Qdisc *sch,
 	if (TC_H_MAJ(skb->priority) != sch->handle) {
 		fl = rcu_dereference_bh(q->filter_list);
 		err = tcf_classify(skb, NULL, fl, &res, false);
+		if (err < 0)
+			return NULL;
 #ifdef CONFIG_NET_CLS_ACT
-		switch (err) {
+		switch (res.verdict) {
 		case TC_ACT_STOLEN:
 		case TC_ACT_QUEUED:
 		case TC_ACT_TRAP:

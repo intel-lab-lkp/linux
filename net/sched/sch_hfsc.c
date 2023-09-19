@@ -1122,7 +1122,7 @@ hfsc_classify(struct sk_buff *skb, struct Qdisc *sch, int *qerr)
 {
 	struct hfsc_sched *q = qdisc_priv(sch);
 	struct hfsc_class *head, *cl;
-	struct tcf_result res;
+	struct tcf_result res = {0};
 	struct tcf_proto *tcf;
 	int result;
 
@@ -1135,8 +1135,10 @@ hfsc_classify(struct sk_buff *skb, struct Qdisc *sch, int *qerr)
 	head = &q->root;
 	tcf = rcu_dereference_bh(q->root.filter_list);
 	while (tcf && (result = tcf_classify(skb, NULL, tcf, &res, false)) >= 0) {
+		if (result < 0)
+			return NULL;
 #ifdef CONFIG_NET_CLS_ACT
-		switch (result) {
+		switch (res.verdict) {
 		case TC_ACT_QUEUED:
 		case TC_ACT_STOLEN:
 		case TC_ACT_TRAP:
