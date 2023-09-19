@@ -215,12 +215,11 @@ ssize_t splice_to_pipe(struct pipe_inode_info *pipe,
 	while (!pipe_full(head, tail, pipe->max_usage)) {
 		struct pipe_buffer *buf = &pipe->bufs[head & mask];
 
-		buf->page = spd->pages[page_nr];
-		buf->offset = spd->partial[page_nr].offset;
-		buf->len = spd->partial[page_nr].len;
+		pipe_buf_init(buf, spd->pages[page_nr],
+			      spd->partial[page_nr].offset,
+			      spd->partial[page_nr].len,
+			      spd->ops, 0);
 		buf->private = spd->partial[page_nr].private;
-		buf->ops = spd->ops;
-		buf->flags = 0;
 
 		head++;
 		pipe->head = head;

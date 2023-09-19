@@ -2850,12 +2850,8 @@ size_t splice_folio_into_pipe(struct pipe_inode_info *pipe,
 		struct pipe_buffer *buf = pipe_head_buf(pipe);
 		size_t part = min_t(size_t, PAGE_SIZE - offset, size - spliced);
 
-		*buf = (struct pipe_buffer) {
-			.ops	= &page_cache_pipe_buf_ops,
-			.page	= page,
-			.offset	= offset,
-			.len	= part,
-		};
+		pipe_buf_init(buf, page, offset, part,
+			      &page_cache_pipe_buf_ops, 0);
 		folio_get(folio);
 		pipe->head++;
 		page++;

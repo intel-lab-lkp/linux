@@ -520,14 +520,11 @@ pipe_write(struct kiocb *iocb, struct iov_iter *from)
 
 			/* Insert it into the buffer array */
 			buf = &pipe->bufs[head & mask];
-			buf->page = page;
-			buf->ops = &anon_pipe_buf_ops;
-			buf->offset = 0;
-			buf->len = 0;
+			pipe_buf_init(buf, page, 0, 0,
+				      &anon_pipe_buf_ops,
+				      PIPE_BUF_FLAG_CAN_MERGE);
 			if (is_packetized(filp))
 				buf->flags = PIPE_BUF_FLAG_PACKET;
-			else
-				buf->flags = PIPE_BUF_FLAG_CAN_MERGE;
 			pipe->tmp_page = NULL;
 
 			copied = copy_page_from_iter(page, 0, PAGE_SIZE, from);

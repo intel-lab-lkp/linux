@@ -177,6 +177,26 @@ static inline struct pipe_buffer *pipe_head_buf(const struct pipe_inode_info *pi
 }
 
 /**
+ * Initialize a struct pipe_buffer.
+ */
+static inline void pipe_buf_init(struct pipe_buffer *buf,
+				 struct page *page,
+				 unsigned int offset, unsigned int len,
+				 const struct pipe_buf_operations *ops,
+				 unsigned int flags)
+{
+	buf->page = page;
+	buf->offset = offset;
+	buf->len = len;
+	buf->ops = ops;
+	buf->flags = flags;
+
+	/* not initializing the "private" member because it is only
+	   used by pipe_buf_operations which inject it via struct
+	   partial_page / struct splice_pipe_desc */
+}
+
+/**
  * pipe_buf_get - get a reference to a pipe_buffer
  * @pipe:	the pipe that the buffer belongs to
  * @buf:	the buffer to get a reference to

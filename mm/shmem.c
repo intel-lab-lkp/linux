@@ -2918,12 +2918,9 @@ static size_t splice_zeropage_into_pipe(struct pipe_inode_info *pipe,
 	if (!pipe_full(pipe->head, pipe->tail, pipe->max_usage)) {
 		struct pipe_buffer *buf = pipe_head_buf(pipe);
 
-		*buf = (struct pipe_buffer) {
-			.ops	= &zero_pipe_buf_ops,
-			.page	= ZERO_PAGE(0),
-			.offset	= offset,
-			.len	= size,
-		};
+		pipe_buf_init(buf, ZERO_PAGE(0),
+			      offset, size,
+			      &zero_pipe_buf_ops, 0);
 		pipe->head++;
 	}
 
