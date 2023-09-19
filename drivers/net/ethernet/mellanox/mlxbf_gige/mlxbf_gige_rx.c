@@ -298,6 +298,9 @@ int mlxbf_gige_poll(struct napi_struct *napi, int budget)
 
 	priv = container_of(napi, struct mlxbf_gige, napi);
 
+	if (!priv)
+		return 0;
+
 	mlxbf_gige_handle_tx_complete(priv);
 
 	do {
