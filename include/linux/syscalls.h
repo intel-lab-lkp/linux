@@ -821,6 +821,11 @@ asmlinkage long sys_move_pages(pid_t pid, unsigned long nr_pages,
 				const int __user *nodes,
 				int __user *status,
 				int flags);
+asmlinkage long sys_move_phys_pages(unsigned long nr_pages,
+				    const void __user * __user *pages,
+				    const int __user *nodes,
+				    int __user *status,
+				    int flags);
 asmlinkage long sys_rt_tgsigqueueinfo(pid_t tgid, pid_t  pid, int sig,
 		siginfo_t __user *uinfo);
 asmlinkage long sys_perf_event_open(
