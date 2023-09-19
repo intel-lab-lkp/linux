@@ -1043,9 +1043,8 @@ void snd_hda_pick_fixup(struct hda_codec *codec,
 
  found_device:
 	id = q->value;
-#ifdef CONFIG_SND_DEBUG_VERBOSE
 	name = q->name;
-#endif
+
 	codec_dbg(codec, "%s: picked fixup %s for %s %04x:%04x\n",
 		  codec->core.chip_name, name ? name : "",
 		  type, q->subvendor, q->subdevice);
