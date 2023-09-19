@@ -331,9 +331,9 @@ static inline void list_splice_tail_init_rcu(struct list_head *list,
  * rcu_dereference() is not needed), which means that list_empty() can be
  * used anywhere you would want to use list_empty_rcu().  Just don't
  * expect anything useful to happen if you do a subsequent lockless
- * call to list_first_entry_rcu()!!!
+ * call to list_first_entry()!!!
  *
- * See list_first_or_null_rcu for an alternative.
+ * See list_first_or_null_rcu() for an alternative.
  */
 
 /**
