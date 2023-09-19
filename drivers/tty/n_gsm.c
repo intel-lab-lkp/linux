@@ -3136,8 +3136,10 @@ static int gsm_activate_mux(struct gsm_mux *gsm)
 		gsm->receive = gsm1_receive;
 
 	ret = gsm_register_devices(gsm_tty_driver, gsm->num);
-	if (ret)
+	if (ret) {
+		gsm_dlci_free(&dlci->port);
 		return ret;
+	}
 
 	gsm->has_devices = true;
 	gsm->dead = false;		/* Tty opens are now permissible */
