@@ -7,6 +7,7 @@
 #include <linux/idr.h>
 #include <linux/of.h>
 #include <uapi/linux/virtio_ids.h>
+#include <uapi/linux/virtio_pci.h>
 
 /* Unique numbering for virtio devices. */
 static DEFINE_IDA(virtio_index_ida);
@@ -486,9 +487,19 @@ void unregister_virtio_device(struct virtio_device *dev)
 EXPORT_SYMBOL_GPL(unregister_virtio_device);
 
 #ifdef CONFIG_PM_SLEEP
+static void virtio_set_freeze_mode(struct virtio_device *dev, u16 mode)
+{
+	if (!dev->config->set_freeze_mode)
+		return;
+	might_sleep();
+	dev->config->set_freeze_mode(dev, mode);
+}
+
 int virtio_device_freeze(struct virtio_device *dev)
 {
 	struct virtio_driver *drv = drv_to_virtio(dev->dev.driver);
+
+	virtio_set_freeze_mode(dev, VIRTIO_PCI_FREEZE_MODE_FREEZE_S3);
 
 	virtio_config_disable(dev);
 
@@ -543,6 +554,8 @@ int virtio_device_restore(struct virtio_device *dev)
 		virtio_device_ready(dev);
 
 	virtio_config_enable(dev);
+
+	virtio_set_freeze_mode(dev, VIRTIO_PCI_FREEZE_MODE_UNFREEZE);
 
 	return 0;
 

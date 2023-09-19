@@ -140,6 +140,15 @@ struct virtio_pci_notify_cap {
 	__le32 notify_off_multiplier;	/* Multiplier for queue_notify_off. */
 };
 
+typedef enum {
+       VIRTIO_PCI_FREEZE_MODE_UNFREEZE = 0,
+       VIRTIO_PCI_FREEZE_MODE_FREEZE_S3 = 3,
+} virtio_pci_freeze_mode_t;
+
+#define VIRTIO_PCI_FREEZE_MODE_MASK \
+	((1 << VIRTIO_PCI_FREEZE_MODE_UNFREEZE) | \
+	(1 << VIRTIO_PCI_FREEZE_MODE_FREEZE_S3))
+
 /* Fields in VIRTIO_PCI_CAP_COMMON_CFG: */
 struct virtio_pci_common_cfg {
 	/* About the whole device. */
@@ -164,6 +173,8 @@ struct virtio_pci_common_cfg {
 	__le32 queue_avail_hi;		/* read-write */
 	__le32 queue_used_lo;		/* read-write */
 	__le32 queue_used_hi;		/* read-write */
+
+	__le16 freeze_mode;		/* read-write */
 };
 
 /* Fields in VIRTIO_PCI_CAP_PCI_CFG: */
@@ -202,8 +213,9 @@ struct virtio_pci_cfg_cap {
 #define VIRTIO_PCI_COMMON_Q_AVAILHI	44
 #define VIRTIO_PCI_COMMON_Q_USEDLO	48
 #define VIRTIO_PCI_COMMON_Q_USEDHI	52
-#define VIRTIO_PCI_COMMON_Q_NDATA	56
-#define VIRTIO_PCI_COMMON_Q_RESET	58
+#define VIRTIO_PCI_COMMON_F_MODE	56
+#define VIRTIO_PCI_COMMON_Q_NDATA	58
+#define VIRTIO_PCI_COMMON_Q_RESET	60
 
 #endif /* VIRTIO_PCI_NO_MODERN */
 

@@ -491,6 +491,13 @@ static bool vp_get_shm_region(struct virtio_device *vdev,
 	return true;
 }
 
+static void vp_set_freeze_mode(struct virtio_device *vdev, u16 mode)
+{
+	struct virtio_pci_device *vp_dev = to_vp_device(vdev);
+
+	vp_modern_set_freeze_mode(&vp_dev->mdev, mode);
+}
+
 static const struct virtio_config_ops virtio_pci_config_nodev_ops = {
 	.get		= NULL,
 	.set		= NULL,
@@ -509,6 +516,7 @@ static const struct virtio_config_ops virtio_pci_config_nodev_ops = {
 	.get_shm_region  = vp_get_shm_region,
 	.disable_vq_and_reset = vp_modern_disable_vq_and_reset,
 	.enable_vq_after_reset = vp_modern_enable_vq_after_reset,
+	.set_freeze_mode = vp_set_freeze_mode,
 };
 
 static const struct virtio_config_ops virtio_pci_config_ops = {
@@ -529,6 +537,7 @@ static const struct virtio_config_ops virtio_pci_config_ops = {
 	.get_shm_region  = vp_get_shm_region,
 	.disable_vq_and_reset = vp_modern_disable_vq_and_reset,
 	.enable_vq_after_reset = vp_modern_enable_vq_after_reset,
+	.set_freeze_mode = vp_set_freeze_mode,
 };
 
 /* the PCI probing function */

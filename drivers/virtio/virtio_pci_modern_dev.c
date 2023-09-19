@@ -203,6 +203,8 @@ static inline void check_offsets(void)
 		     offsetof(struct virtio_pci_common_cfg, queue_used_lo));
 	BUILD_BUG_ON(VIRTIO_PCI_COMMON_Q_USEDHI !=
 		     offsetof(struct virtio_pci_common_cfg, queue_used_hi));
+	BUILD_BUG_ON(VIRTIO_PCI_COMMON_F_MODE !=
+		     offsetof(struct virtio_pci_common_cfg, freeze_mode));
 }
 
 /*
@@ -713,6 +715,20 @@ void __iomem *vp_modern_map_vq_notify(struct virtio_pci_modern_device *mdev,
 	}
 }
 EXPORT_SYMBOL_GPL(vp_modern_map_vq_notify);
+
+/*
+ * vp_modern_set_freeze_mode - set freeze mode to device
+ * @mdev: the modern virtio-pci device
+ * @mode: the mode set to device
+ */
+void vp_modern_set_freeze_mode(struct virtio_pci_modern_device *mdev,
+				 u16 mode)
+{
+	struct virtio_pci_common_cfg __iomem *cfg = mdev->common;
+
+	vp_iowrite16(mode, &cfg->freeze_mode);
+}
+EXPORT_SYMBOL_GPL(vp_modern_set_freeze_mode);
 
 MODULE_VERSION("0.1");
 MODULE_DESCRIPTION("Modern Virtio PCI Device");
