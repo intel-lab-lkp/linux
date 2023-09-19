@@ -3572,6 +3572,9 @@ int kernel_connect(struct socket *sock, struct sockaddr *addr, int addrlen,
 {
 	struct sockaddr_storage address;
 
+	if (addrlen < 0 || addrlen > sizeof(address))
+		return -EINVAL;
+
 	memcpy(&address, addr, addrlen);
 
 	return READ_ONCE(sock->ops)->connect(sock, (struct sockaddr *)&address,
