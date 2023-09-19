@@ -2440,7 +2440,8 @@ int btrfs_validate_super(struct btrfs_fs_info *fs_info,
 			  btrfs_super_stripesize(sb));
 		ret = -EINVAL;
 	}
-	if (btrfs_super_num_devices(sb) > (1UL << 31))
+	/* 65536 devices already doesn't sound sane. */
+	if (btrfs_super_num_devices(sb) > U16_MAX)
 		btrfs_warn(fs_info, "suspicious number of devices: %llu",
 			   btrfs_super_num_devices(sb));
 	if (btrfs_super_num_devices(sb) == 0) {
