@@ -91,7 +91,12 @@ vmlinux_link()
 
 	# The kallsyms linking does not need debug symbols included.
 	if [ "$output" != "${output#.tmp_vmlinux.kallsyms}" ] ; then
-		ldflags="${ldflags} ${wl}--strip-debug"
+		# The kallsyms linking does not need debug symbols included,
+		# unless the KALLSYMS_ALIAS_SRCLINE.
+		if ! is_enabled CONFIG_KALLSYMS_ALIAS_SRCLINE && \
+		   [ "$output" != "${output#.tmp_vmlinux.kallsyms}" ] ; then
+			ldflags="${ldflags} ${wl}--strip-debug"
+		fi
 	fi
 
 	if is_enabled CONFIG_VMLINUX_MAP; then
@@ -161,7 +166,18 @@ kallsyms()
 	fi
 
 	info KSYMS ${2}
-	scripts/kallsyms ${kallsymopt} ${1} > ${2}
+	ALIAS=""
+	KAS_DATA=""
+	if is_enabled CONFIG_KALLSYMS_ALIAS_SRCLINE_DATA; then
+		KAS_DATA="-d"
+	fi
+	if is_enabled CONFIG_KALLSYMS_ALIAS_SRCLINE; then
+		ALIAS=".alias"
+		scripts/kas_alias.py \
+			-a ${ADDR2LINE} -v ${kallsyms_vmlinux} -n ${1} \
+			-o ${1}${ALIAS} -s @ ${KAS_DATA}
+	fi
+	scripts/kallsyms ${kallsymopt} ${1}${ALIAS} > ${2}
 }
 
 # Perform one step in kallsyms generation, including temporary linking of
