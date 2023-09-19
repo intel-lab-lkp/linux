@@ -122,7 +122,7 @@ foreach my $thismod (@allcfiles) {
 			next;
 		}
 		if ($state == 1) {
-			$state = 2 if ($_ =~ /__attribute__\(\(section\("__versions"\)\)\)/);
+			$state = 2 if ($_ =~ /__used __section\(\"__versions\"\)/);
 			next;
 		}
 		if ($state == 2) {
