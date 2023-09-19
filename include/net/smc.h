@@ -55,6 +55,10 @@ struct smcd_seid {
 
 #define ISM_ERROR	0xFFFF
 
+enum {
+	ISM_ATTR_DMB_MAP = 0,
+};
+
 struct smcd_dev;
 
 struct smcd_gid {
@@ -82,6 +86,7 @@ struct smcd_ops {
 	void (*get_local_gid)(struct smcd_dev *dev, struct smcd_gid *gid);
 	u16 (*get_chid)(struct smcd_dev *dev);
 	struct device* (*get_dev)(struct smcd_dev *dev);
+	int (*get_dev_attr)(struct smcd_dev *dev);
 };
 
 struct smcd_dev {
