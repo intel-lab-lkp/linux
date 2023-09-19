@@ -5605,7 +5605,8 @@ KVM_XEN_VCPU_ATTR_TYPE_VCPU_ID
   This attribute is available when the KVM_CAP_XEN_HVM ioctl indicates
   support for KVM_XEN_HVM_CONFIG_EVTCHN_SEND features. It sets the Xen
   vCPU ID of the given vCPU, to allow timer-related VCPU operations to
-  be intercepted by KVM.
+  be intercepted by KVM. Note that this must be set before the
+  shared_info page is set.
 
 KVM_XEN_VCPU_ATTR_TYPE_TIMER
   This attribute is available when the KVM_CAP_XEN_HVM ioctl indicates

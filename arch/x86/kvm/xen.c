@@ -752,6 +752,18 @@ int kvm_xen_hvm_get_attr(struct kvm *kvm, struct kvm_xen_hvm_attr *data)
 	return r;
 }
 
+static int kvm_xen_set_vcpu_id(struct kvm_vcpu *vcpu, unsigned int vcpu_id)
+{
+	struct kvm *kvm = vcpu->kvm;
+	struct gfn_to_pfn_cache *gpc = &kvm->arch.xen.shinfo_cache;
+
+	if (gpc->active)
+		return -EBUSY;
+
+	vcpu->arch.xen.vcpu_id = vcpu_id;
+	return 0;
+}
+
 int kvm_xen_vcpu_set_attr(struct kvm_vcpu *vcpu, struct kvm_xen_vcpu_attr *data)
 {
 	int idx, r = -ENOENT;
@@ -941,10 +953,8 @@ int kvm_xen_vcpu_set_attr(struct kvm_vcpu *vcpu, struct kvm_xen_vcpu_attr *data)
 	case KVM_XEN_VCPU_ATTR_TYPE_VCPU_ID:
 		if (data->u.vcpu_id >= KVM_MAX_VCPUS)
 			r = -EINVAL;
-		else {
-			vcpu->arch.xen.vcpu_id = data->u.vcpu_id;
-			r = 0;
-		}
+		else
+			r = kvm_xen_set_vcpu_id(vcpu, data->u.vcpu_id);
 		break;
 
 	case KVM_XEN_VCPU_ATTR_TYPE_TIMER:
