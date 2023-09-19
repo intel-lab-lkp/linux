@@ -135,9 +135,9 @@ u8 mt76x02_get_lna_gain(struct mt76x02_dev *dev,
 	u8 lna;
 
 	val = mt76x02_eeprom_get(dev, MT_EE_NIC_CONF_1);
-	if (val & MT_EE_NIC_CONF_1_LNA_EXT_2G)
+	if (!(val & MT_EE_NIC_CONF_1_LNA_EXT_2G))
 		*lna_2g = 0;
-	if (val & MT_EE_NIC_CONF_1_LNA_EXT_5G)
+	if (!(val & MT_EE_NIC_CONF_1_LNA_EXT_5G))
 		memset(lna_5g, 0, sizeof(s8) * 3);
 
 	if (chan->band == NL80211_BAND_2GHZ)
