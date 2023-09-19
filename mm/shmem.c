@@ -95,6 +95,9 @@ static struct vfsmount *shm_mnt;
 /* Symlink up to this size is kmalloc'ed instead of using a swappable page */
 #define SHORT_SYMLINK_LEN 128
 
+/* Like MAX_PAGECACHE_ORDER but respecting huge option */
+#define MAX_SHMEM_ORDER	HPAGE_PMD_ORDER - 1
+
 /*
  * shmem_fallocate communicates with shmem_fault or shmem_writepage via
  * inode->i_private (with i_rwsem making sure that it has only one user at
@@ -1680,26 +1683,58 @@ static struct folio *shmem_alloc_folio(gfp_t gfp,
 	return folio;
 }
 
+/**
+ * shmem_mapping_size_order - Get maximum folio order for the given file size.
+ * @mapping: Target address_space.
+ * @index: The page index.
+ * @size: The suggested size of the folio to create.
+ *
+ * This returns a high order for folios (when supported) based on the file size
+ * which the mapping currently allows at the given index. The index is relevant
+ * due to alignment considerations the mapping might have. The returned order
+ * may be less than the size passed.
+ *
+ * Like __filemap_get_folio order calculation.
+ *
+ * Return: The order.
+ */
+static inline unsigned int
+shmem_mapping_size_order(struct address_space *mapping, pgoff_t index,
+			 size_t size, struct shmem_sb_info *sbinfo)
+{
+	unsigned int order = ilog2(size);
+
+	if ((order <= PAGE_SHIFT) ||
+	    (!mapping_large_folio_support(mapping) || !sbinfo->noswap))
+		return 0;
+	else
+		order = order - PAGE_SHIFT;
+
+	/* If we're not aligned, allocate a smaller folio */
+	if (index & ((1UL << order) - 1))
+		order = __ffs(index);
+
+	order = min_t(size_t, order, MAX_SHMEM_ORDER);
+
+	/* Order-1 not supported due to THP dependency */
+	return (order == 1) ? 0 : order;
+}
+
 static struct folio *shmem_alloc_and_acct_folio(gfp_t gfp, struct inode *inode,
-		pgoff_t index, bool huge, unsigned int *order)
+		pgoff_t index, unsigned int order)
 {
 	struct shmem_inode_info *info = SHMEM_I(inode);
 	struct folio *folio;
-	int nr;
-	int err;
+	int nr = 1U << order;
+	int err = shmem_inode_acct_block(inode, nr);
 
-	if (!IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE))
-		huge = false;
-	nr = huge ? HPAGE_PMD_NR : 1U << *order;
-
-	err = shmem_inode_acct_block(inode, nr);
 	if (err)
 		goto failed;
 
-	if (huge)
+	if (order == HPAGE_PMD_ORDER)
 		folio = shmem_alloc_hugefolio(gfp, info, index);
 	else
-		folio = shmem_alloc_folio(gfp, info, index, *order);
+		folio = shmem_alloc_folio(gfp, info, index, order);
 	if (folio) {
 		__folio_set_locked(folio);
 		__folio_set_swapbacked(folio);
@@ -2030,18 +2065,19 @@ repeat:
 		return 0;
 	}
 
+	order = shmem_mapping_size_order(inode->i_mapping, index, len, sbinfo);
+
 	if (!shmem_is_huge(inode, index, false,
 			   vma ? vma->vm_mm : NULL, vma ? vma->vm_flags : 0))
 		goto alloc_nohuge;
 
 	huge_gfp = vma_thp_gfp_mask(vma);
 	huge_gfp = limit_gfp_mask(huge_gfp, gfp);
-	folio = shmem_alloc_and_acct_folio(huge_gfp, inode, index, true,
-					   &order);
+	folio = shmem_alloc_and_acct_folio(huge_gfp, inode, index,
+					   HPAGE_PMD_ORDER);
 	if (IS_ERR(folio)) {
 alloc_nohuge:
-		folio = shmem_alloc_and_acct_folio(gfp, inode, index, false,
-						   &order);
+		folio = shmem_alloc_and_acct_folio(gfp, inode, index, order);
 	}
 	if (IS_ERR(folio)) {
 		int retry = 5;
@@ -2145,6 +2181,8 @@ unacct:
 	if (folio_test_large(folio)) {
 		folio_unlock(folio);
 		folio_put(folio);
+		if (--order == 1)
+			order = 0;
 		goto alloc_nohuge;
 	}
 unlock:
