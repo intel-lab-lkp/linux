@@ -96,7 +96,7 @@ static int alpha_core_agp_insert_memory(struct agp_memory *mem, off_t pg_start,
 	if ((pg_start + mem->page_count) > num_entries)
 		return -EINVAL;
 
-	status = agp->ops->bind(agp, pg_start, mem);
+	status = kernel_bind(agp, pg_start, mem);
 	mb();
 	alpha_core_agp_tlbflush(mem);
 
