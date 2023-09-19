@@ -54,7 +54,7 @@ sub collectcfiles {
     my @file;
     open my $fh, '< modules.order' or die "cannot open modules.order: $!\n";
     while (<$fh>) {
-	s/\.ko$/.mod.c/;
+	s/\.o$/.mod.c/;
 	push (@file, $_)
     }
     close($fh);
