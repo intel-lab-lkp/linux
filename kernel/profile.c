@@ -465,7 +465,7 @@ int __ref create_proc_profile(void)
 	enum cpuhp_state online_state;
 #endif
 
-	int err = 0;
+	int err;
 
 	if (!prof_on)
 		return 0;
