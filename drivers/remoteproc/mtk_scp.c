@@ -1144,29 +1144,29 @@ init_fail:
 	return ret;
 }
 
-static int scp_is_single_core(struct platform_device *pdev)
+static bool scp_find_core_node(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct device_node *np = dev_of_node(dev);
 	struct device_node *child;
+	int found = 0;
 
-	child = of_get_next_available_child(np, NULL);
-	if (!child)
-		return dev_err_probe(dev, -ENODEV, "No child node\n");
+	for_each_child_of_node(np, child) {
+		if (of_device_is_compatible(child, "mediatek,scp-core")) {
+			found = 1;
+			of_node_put(child);
+			break;
+		}
+	}
 
-	of_node_put(child);
-	return of_node_name_eq(child, "cros-ec-rpmsg");
+	return found;
 }
 
 static int scp_cluster_init(struct platform_device *pdev, struct mtk_scp_of_cluster *scp_cluster)
 {
 	int ret;
 
-	ret = scp_is_single_core(pdev);
-	if (ret < 0)
-		return ret;
-
-	if (ret)
+	if (!scp_find_core_node(pdev))
 		ret = scp_add_single_core(pdev, scp_cluster);
 	else
 		ret = scp_add_multi_core(pdev, scp_cluster);
