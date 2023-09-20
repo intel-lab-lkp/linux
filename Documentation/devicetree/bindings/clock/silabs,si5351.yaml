@@ -50,6 +50,22 @@ properties:
       Pair of <number source> for each PLL. Allows to overwrite clock source of
       PLL A (number=0) or PLL B (number=1).
 
+  silabs,pll-reset-mode:
+    $ref: /schemas/types.yaml#/definitions/uint32-matrix
+    minItems: 1
+    maxItems: 2
+    description: |
+      Pair of <number mode> for each PLL. Configures the reset mode for PLL A
+      (number=0) and/or PLL B (number=1). Mode can be one of:
+
+      0 - reset whenever PLL rate is adjusted (default mode)
+      1 - do not reset when PLL rate is adjusted
+
+      In mode 1, the PLL is only reset if the silabs,pll-reset is specified in
+      one of the clock output child nodes that also sources the PLL. This mode
+      may be preferable if output clocks are expected to be adjusted without
+      glitches.
+
 patternProperties:
   "^clkout@?[0-8]$":
     type: object
@@ -204,6 +220,9 @@ examples:
 
         /* Use XTAL input as source of PLL0 and PLL1 */
         silabs,pll-source = <0 0>, <1 0>;
+
+        /* Don't reset PLL1 on rate adjustment */
+        silabs,pll-reset-mode = <1 1>;
 
         /*
          * Overwrite CLK0 configuration with:
