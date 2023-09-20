@@ -102,11 +102,14 @@
 #define DDR_MSTR_BUSWIDTH_16		2
 #define DDR_MSTR_BUSWIDTH_32		1
 #define DDR_MSTR_BUSWIDTH_64		0
+#define DDR_MSTR_MEM_MASK		GENMASK(5, 0)
 #define DDR_MSTR_MEM_LPDDR4		BIT(5)
 #define DDR_MSTR_MEM_DDR4		BIT(4)
 #define DDR_MSTR_MEM_LPDDR3		BIT(3)
-#define DDR_MSTR_MEM_DDR2		BIT(2)
+#define DDR_MSTR_MEM_LPDDR2		BIT(2)
+#define DDR_MSTR_MEM_LPDDR		BIT(1)
 #define DDR_MSTR_MEM_DDR3		BIT(0)
+#define DDR_MSTR_MEM_DDR2		0
 
 /* ECC CFG0 register definitions */
 #define ECC_CFG0_MODE_MASK		GENMASK(2, 0)
@@ -535,21 +538,29 @@ static u32 snps_get_memsize(void)
  */
 static enum mem_type snps_get_mtype(const void __iomem *base)
 {
-	enum mem_type mt;
-	u32 memtype;
+	u32 regval;
 
-	memtype = readl(base + DDR_MSTR_OFST);
+	regval = readl(base + DDR_MSTR_OFST);
+	regval = FIELD_GET(DDR_MSTR_MEM_MASK, regval);
 
-	if ((memtype & DDR_MSTR_MEM_DDR3) || (memtype & DDR_MSTR_MEM_LPDDR3))
-		mt = MEM_DDR3;
-	else if (memtype & DDR_MSTR_MEM_DDR2)
-		mt = MEM_RDDR2;
-	else if ((memtype & DDR_MSTR_MEM_LPDDR4) || (memtype & DDR_MSTR_MEM_DDR4))
-		mt = MEM_DDR4;
-	else
-		mt = MEM_EMPTY;
+	switch (regval) {
+	case DDR_MSTR_MEM_DDR2:
+		return MEM_DDR2;
+	case DDR_MSTR_MEM_DDR3:
+		return MEM_DDR3;
+	case DDR_MSTR_MEM_LPDDR:
+		return MEM_LPDDR;
+	case DDR_MSTR_MEM_LPDDR2:
+		return MEM_LPDDR2;
+	case DDR_MSTR_MEM_LPDDR3:
+		return MEM_LPDDR3;
+	case DDR_MSTR_MEM_DDR4:
+		return MEM_DDR4;
+	case DDR_MSTR_MEM_LPDDR4:
+		return MEM_LPDDR4;
+	}
 
-	return mt;
+	return MEM_RESERVED;
 }
 
 /**
@@ -597,7 +608,9 @@ static void snps_mc_init(struct mem_ctl_info *mci, struct platform_device *pdev)
 	platform_set_drvdata(pdev, mci);
 
 	/* Initialize controller capabilities and configuration */
-	mci->mtype_cap = MEM_FLAG_DDR3 | MEM_FLAG_DDR2;
+	mci->mtype_cap = MEM_FLAG_LPDDR | MEM_FLAG_DDR2 | MEM_FLAG_LPDDR2 |
+			 MEM_FLAG_DDR3 | MEM_FLAG_LPDDR3 |
+			 MEM_FLAG_DDR4 | MEM_FLAG_LPDDR4;
 	mci->edac_ctl_cap = EDAC_FLAG_NONE | EDAC_FLAG_SECDED;
 	mci->scrub_cap = SCRUB_FLAG_HW_SRC;
 	mci->scrub_mode = SCRUB_NONE;
