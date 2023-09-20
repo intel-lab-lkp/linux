@@ -157,6 +157,7 @@ static inline char *mc_event_error_type(const unsigned int err_type)
  *			This is a variant of the DDR memories.
  *			A registered memory has a buffer inside it, hiding
  *			part of the memory details to the memory controller.
+ * @MEM_LPDDR:		Low-Power DDR memory (mDDR).
  * @MEM_RMBS:		Rambus DRAM, used on a few Pentium III/IV controllers.
  * @MEM_DDR2:		DDR2 RAM, as described at JEDEC JESD79-2F.
  *			Those memories are labeled as "PC2-" instead of "PC" to
@@ -167,6 +168,7 @@ static inline char *mc_event_error_type(const unsigned int err_type)
  *			a chip select signal.
  * @MEM_RDDR2:		Registered DDR2 RAM
  *			This is a variant of the DDR2 memories.
+ * @MEM_LPDDR2:		Low-Power DDR2 memory.
  * @MEM_XDR:		Rambus XDR
  *			It is an evolution of the original RAMBUS memories,
  *			created to compete with DDR2. Weren't used on any
@@ -199,10 +201,12 @@ enum mem_type {
 	MEM_RDR,
 	MEM_DDR,
 	MEM_RDDR,
+	MEM_LPDDR,
 	MEM_RMBS,
 	MEM_DDR2,
 	MEM_FB_DDR2,
 	MEM_RDDR2,
+	MEM_LPDDR2,
 	MEM_XDR,
 	MEM_DDR3,
 	MEM_RDDR3,
@@ -230,10 +234,12 @@ enum mem_type {
 #define MEM_FLAG_RDR		BIT(MEM_RDR)
 #define MEM_FLAG_DDR		BIT(MEM_DDR)
 #define MEM_FLAG_RDDR		BIT(MEM_RDDR)
+#define MEM_FLAG_LPDDR		BIT(MEM_LPDDR)
 #define MEM_FLAG_RMBS		BIT(MEM_RMBS)
 #define MEM_FLAG_DDR2		BIT(MEM_DDR2)
 #define MEM_FLAG_FB_DDR2	BIT(MEM_FB_DDR2)
 #define MEM_FLAG_RDDR2		BIT(MEM_RDDR2)
+#define MEM_FLAG_LPDDR2		BIT(MEM_LPDDR2)
 #define MEM_FLAG_XDR		BIT(MEM_XDR)
 #define MEM_FLAG_DDR3		BIT(MEM_DDR3)
 #define MEM_FLAG_RDDR3		BIT(MEM_RDDR3)
