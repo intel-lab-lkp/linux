@@ -1354,6 +1354,7 @@ int ip_append_data(struct sock *sk, struct flowi4 *fl4,
 		if (err)
 			return err;
 	} else {
+		length -= transhdrlen;
 		transhdrlen = 0;
 	}
 

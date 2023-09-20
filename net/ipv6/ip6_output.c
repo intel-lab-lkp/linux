@@ -1888,6 +1888,7 @@ int ip6_append_data(struct sock *sk,
 		length += exthdrlen;
 		transhdrlen += exthdrlen;
 	} else {
+		length -= transhdrlen;
 		transhdrlen = 0;
 	}
 
