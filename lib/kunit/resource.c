@@ -176,3 +176,22 @@ void kunit_release_action(struct kunit *test,
 	}
 }
 EXPORT_SYMBOL_GPL(kunit_release_action);
+
+int kunit_move_action_to_top_or_reset(struct kunit *test,
+				      kunit_action_t *action,
+				      void *ctx)
+{
+	struct kunit_action_ctx match_ctx;
+	struct kunit_resource *res;
+
+	match_ctx.func = action;
+	match_ctx.ctx = ctx;
+	res = kunit_find_resource(test, __kunit_action_match, &match_ctx);
+	if (res) {
+		kunit_remove_action(test, action, ctx);
+		return kunit_add_action_or_reset(test, action, ctx);
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(kunit_move_action_to_top_or_reset);

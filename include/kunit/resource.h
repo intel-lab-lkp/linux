@@ -479,4 +479,21 @@ void kunit_remove_action(struct kunit *test,
 void kunit_release_action(struct kunit *test,
 			  kunit_action_t *action,
 			  void *ctx);
+
+/**
+ * kunit_move_action_to_top_or_reset - Move a previously added action to the top
+ *				       of the order of actions calls.
+ * @test: Test case to associate the action with.
+ * @action: The function to run on test exit
+ * @ctx: Data passed into @func
+ *
+ * Reorder the action stack, by moving the desired action to the top.
+ *
+ * Returns:
+ *   0 on success, an error if the action could not be inserted on the top.
+ */
+int kunit_move_action_to_top_or_reset(struct kunit *test,
+				      kunit_action_t *action,
+				      void *ctx);
+
 #endif /* _KUNIT_RESOURCE_H */
