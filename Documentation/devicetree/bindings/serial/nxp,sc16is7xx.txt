@@ -21,8 +21,8 @@ Optional properties:
   the second cell is used to specify the GPIO polarity:
     0 = active high,
     1 = active low.
-- irda-mode-ports: An array that lists the indices of the port that
-		   should operate in IrDA mode.
+- nxp,irda-mode-ports: An array that lists the indices of the port that
+		       should operate in IrDA mode.
 - nxp,modem-control-line-ports: An array that lists the indices of the port that
 				should have shared GPIO lines configured as
 				modem control lines.
@@ -80,8 +80,8 @@ Optional properties:
   the second cell is used to specify the GPIO polarity:
     0 = active high,
     1 = active low.
-- irda-mode-ports: An array that lists the indices of the port that
-		   should operate in IrDA mode.
+- nxp,irda-mode-ports: An array that lists the indices of the port that
+		       should operate in IrDA mode.
 - nxp,modem-control-line-ports: An array that lists the indices of the port that
 				should have shared GPIO lines configured as
 				modem control lines.
