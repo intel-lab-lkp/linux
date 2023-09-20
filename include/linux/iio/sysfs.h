@@ -87,6 +87,10 @@ struct iio_const_attr {
 	struct iio_dev_attr iio_dev_attr_##_vname			\
 	= IIO_ATTR(_name, _mode, _show, _store, _addr)
 
+#define IIO_DEVICE_ATTR_NAMED_RW(_vname, _name, _addr)			\
+	struct iio_dev_attr iio_dev_attr_##_vname			\
+	= IIO_ATTR_RW(_name, _addr)
+
 #define IIO_CONST_ATTR(_name, _string)					\
 	struct iio_const_attr iio_const_attr_##_name			\
 	= { .string = _string,						\
