@@ -174,6 +174,19 @@ out:
 	return rc;
 }
 
+static int hccs_check_pcc_info(struct hccs_dev *hdev)
+{
+	struct pcc_mbox_chan *pcc_chan = hdev->cl_info.pcc_chan;
+
+	if (pcc_chan->type >= ACPI_PCCT_TYPE_EXT_PCC_MASTER_SUBSPACE) {
+		dev_err(hdev->dev, "unsupport for subspace type%u.\n",
+			pcc_chan->type);
+		return -EOPNOTSUPP;
+	}
+
+	return 0;
+}
+
 static int hccs_check_chan_cmd_complete(struct hccs_dev *hdev)
 {
 	struct hccs_mbox_client_info *cl_info = &hdev->cl_info;
@@ -1223,6 +1236,10 @@ static int hccs_probe(struct platform_device *pdev)
 	rc = hccs_register_pcc_channel(hdev);
 	if (rc)
 		return rc;
+
+	rc = hccs_check_pcc_info(hdev);
+	if (rc)
+		goto unregister_pcc_chan;
 
 	rc = hccs_get_dev_caps(hdev);
 	if (rc)
