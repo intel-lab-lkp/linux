@@ -2656,6 +2656,9 @@ void ufshpb_init(struct ufs_hba *hba)
 
 void ufshpb_remove(struct ufs_hba *hba)
 {
+	if (!ufshpb_is_allowed(hba) || !hba->dev_info.hpb_enabled)
+		return;
+
 	mempool_destroy(ufshpb_page_pool);
 	mempool_destroy(ufshpb_mctx_pool);
 	kmem_cache_destroy(ufshpb_mctx_cache);
