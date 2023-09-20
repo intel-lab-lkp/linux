@@ -361,4 +361,19 @@ int vfio_virqfd_enable(void *opaque, int (*handler)(void *, void *),
 		       struct virqfd **pvirqfd, int fd);
 void vfio_virqfd_disable(struct virqfd **pvirqfd);
 
+/*
+ * VFIO device file.
+ */
+struct vfio_device_file {
+	struct vfio_device *device;
+	struct vfio_group *group;
+	u8 access_granted;
+	u32 devid; /* only valid when iommufd is valid */
+	spinlock_t kvm_ref_lock; /* protect kvm field */
+	struct kvm *kvm;
+	struct iommufd_ctx *iommufd; /* protected by struct vfio_device_set::lock */
+};
+
+struct vfio_device *vfio_device_from_file(struct file *file);
+
 #endif /* VFIO_H */

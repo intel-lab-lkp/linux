@@ -6,6 +6,10 @@
 #include <linux/pci.h>
 #include <linux/vfio_pci_core.h>
 #include <linux/vfio.h>
+#ifdef CONFIG_MEMORY_FAILURE
+#include <linux/bitmap.h>
+#include <linux/memory-failure.h>
+#endif
 
 struct nvgrace_gpu_vfio_pci_core_device {
 	struct vfio_pci_core_device core_device;
@@ -13,7 +17,84 @@ struct nvgrace_gpu_vfio_pci_core_device {
 	size_t memlength;
 	void *memmap;
 	struct mutex memmap_lock;
+#ifdef CONFIG_MEMORY_FAILURE
+	struct pfn_address_space pfn_address_space;
+	unsigned long *pfn_bitmap;
+#endif
 };
+
+#ifdef CONFIG_MEMORY_FAILURE
+void nvgrace_gpu_vfio_pci_pfn_memory_failure(struct pfn_address_space *pfn_space,
+		unsigned long pfn)
+{
+	struct nvgrace_gpu_vfio_pci_core_device *nvdev = container_of(
+		pfn_space, struct nvgrace_gpu_vfio_pci_core_device, pfn_address_space);
+	unsigned long mem_offset = pfn - pfn_space->node.start;
+
+	if (mem_offset >= nvdev->memlength)
+		return;
+
+	/*
+	 * MM has called to notify a poisoned page. Track that in the bitmap.
+	 */
+	__set_bit(mem_offset, nvdev->pfn_bitmap);
+}
+
+struct pfn_address_space_ops nvgrace_gpu_vfio_pci_pas_ops = {
+	.failure = nvgrace_gpu_vfio_pci_pfn_memory_failure,
+};
+
+static int
+nvgrace_gpu_vfio_pci_register_pfn_range(struct nvgrace_gpu_vfio_pci_core_device *nvdev,
+					struct vm_area_struct *vma)
+{
+	unsigned long nr_pages;
+	int ret = 0;
+
+	nr_pages = nvdev->memlength >> PAGE_SHIFT;
+
+	nvdev->pfn_address_space.node.start = vma->vm_pgoff;
+	nvdev->pfn_address_space.node.last = vma->vm_pgoff + nr_pages - 1;
+	nvdev->pfn_address_space.ops = &nvgrace_gpu_vfio_pci_pas_ops;
+	nvdev->pfn_address_space.mapping = vma->vm_file->f_mapping;
+
+	ret = register_pfn_address_space(&(nvdev->pfn_address_space));
+
+	return ret;
+}
+
+static vm_fault_t nvgrace_gpu_vfio_pci_fault(struct vm_fault *vmf)
+{
+	unsigned long mem_offset = vmf->pgoff - vmf->vma->vm_pgoff;
+	struct vfio_device *core_vdev;
+	struct nvgrace_gpu_vfio_pci_core_device *nvdev;
+
+	if (!(vmf->vma->vm_file))
+		goto error_exit;
+
+	core_vdev = vfio_device_from_file(vmf->vma->vm_file);
+
+	if (!core_vdev)
+		goto error_exit;
+
+	nvdev = container_of(core_vdev,
+			struct nvgrace_gpu_vfio_pci_core_device, core_device.vdev);
+
+	/*
+	 * Check if the page is poisoned.
+	 */
+	if (mem_offset < (nvdev->memlength >> PAGE_SHIFT) &&
+		test_bit(mem_offset, nvdev->pfn_bitmap))
+		return VM_FAULT_HWPOISON;
+
+error_exit:
+	return VM_FAULT_ERROR;
+}
+
+static const struct vm_operations_struct nvgrace_gpu_vfio_pci_mmap_ops = {
+	.fault = nvgrace_gpu_vfio_pci_fault,
+};
+#endif
 
 static int nvgrace_gpu_vfio_pci_open_device(struct vfio_device *core_vdev)
 {
@@ -46,6 +127,9 @@ static void nvgrace_gpu_vfio_pci_close_device(struct vfio_device *core_vdev)
 
 	mutex_destroy(&nvdev->memmap_lock);
 
+#ifdef CONFIG_MEMORY_FAILURE
+	unregister_pfn_address_space(&(nvdev->pfn_address_space));
+#endif
 	vfio_pci_core_close_device(core_vdev);
 }
 
@@ -104,8 +188,12 @@ static int nvgrace_gpu_vfio_pci_mmap(struct vfio_device *core_vdev,
 		return ret;
 
 	vma->vm_pgoff = start_pfn;
+#ifdef CONFIG_MEMORY_FAILURE
+	vma->vm_ops = &nvgrace_gpu_vfio_pci_mmap_ops;
 
-	return 0;
+	ret = nvgrace_gpu_vfio_pci_register_pfn_range(nvdev, vma);
+#endif
+	return ret;
 }
 
 static long
@@ -406,6 +494,19 @@ nvgrace_gpu_vfio_pci_fetch_memory_property(struct pci_dev *pdev,
 
 	nvdev->memlength = memlength;
 
+#ifdef CONFIG_MEMORY_FAILURE
+	/*
+	 * A bitmap is maintained to track the pages that are poisoned. Each
+	 * page is represented by a bit. Allocation size in bytes is
+	 * determined by shifting the device memory size by PAGE_SHIFT to
+	 * determine the number of pages; and further shifted by 3 as each
+	 * byte could track 8 pages.
+	 */
+	nvdev->pfn_bitmap
+		= vzalloc((nvdev->memlength >> PAGE_SHIFT)/BITS_PER_TYPE(char));
+	if (!nvdev->pfn_bitmap)
+		ret = -ENOMEM;
+#endif
 	return ret;
 }
 
@@ -441,6 +542,10 @@ static void nvgrace_gpu_vfio_pci_remove(struct pci_dev *pdev)
 {
 	struct nvgrace_gpu_vfio_pci_core_device *nvdev = nvgrace_gpu_drvdata(pdev);
 	struct vfio_pci_core_device *vdev = &nvdev->core_device;
+
+#ifdef CONFIG_MEMORY_FAILURE
+	vfree(nvdev->pfn_bitmap);
+#endif
 
 	vfio_pci_core_unregister_device(vdev);
 	vfio_put_device(&vdev->vdev);
