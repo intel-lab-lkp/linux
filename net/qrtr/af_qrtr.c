@@ -849,6 +849,7 @@ static int qrtr_local_enqueue(struct qrtr_node *node, struct sk_buff *skb,
 			      int type, struct sockaddr_qrtr *from,
 			      struct sockaddr_qrtr *to)
 {
+	struct sock *sk = skb->sk;
 	struct qrtr_sock *ipc;
 	struct qrtr_cb *cb;
 
@@ -858,6 +859,14 @@ static int qrtr_local_enqueue(struct qrtr_node *node, struct sk_buff *skb,
 			qrtr_port_put(ipc);
 		kfree_skb(skb);
 		return -ENODEV;
+	}
+
+	/* Keep resetting NETRESET until socket is closed */
+	if (sk && sk->sk_err == ENETRESET) {
+		sk_error_report(sk);
+		qrtr_port_put(ipc);
+		kfree_skb(skb);
+		return 0;
 	}
 
 	cb = (struct qrtr_cb *)skb->cb;
