@@ -31,6 +31,7 @@
 #include <drm/drm_connector.h>
 #include <drm/drm_crtc.h>
 #include <drm/drm_device.h>
+#include <drm/drm_edid.h>
 #include <drm/drm_framebuffer.h>
 #include <drm/drm_plane.h>
 #include <drm/drm_print.h>
@@ -621,6 +622,15 @@ int drm_atomic_helper_connector_tv_check(struct drm_connector *connector,
 }
 EXPORT_SYMBOL(drm_atomic_helper_connector_tv_check);
 
+static const struct drm_display_mode *
+connector_state_get_adjusted_mode(const struct drm_connector_state *state)
+{
+	struct drm_crtc *crtc = state->crtc;
+	struct drm_crtc_state *crtc_state = crtc->state;
+
+	return &crtc_state->adjusted_mode;
+}
+
 /**
  * drm_atomic_helper_connector_hdmi_check() - Helper to check HDMI connector atomic state
  * @connector: DRM Connector
@@ -655,6 +665,35 @@ int drm_atomic_helper_connector_hdmi_check(struct drm_connector *connector,
 	return 0;
 }
 EXPORT_SYMBOL(drm_atomic_helper_connector_hdmi_check);
+
+/**
+ * drm_atomic_helper_connector_hdmi_is_full_range() - Checks whether a state uses Full-Range RGB
+ * @connector: the HDMI connector this state refers to
+ * @state: the HDMI connector state to check
+ *
+ * RETURNS:
+ * True if @state requires a Full range RGB output, False otherwise
+ */
+bool
+drm_atomic_helper_connector_hdmi_is_full_range(const struct drm_connector *connector,
+					       const struct drm_connector_state *state)
+{
+	const struct drm_display_mode *mode =
+		connector_state_get_adjusted_mode(state);
+	const struct drm_display_info *display = &connector->display_info;
+
+	if (state->hdmi.broadcast_rgb == DRM_HDMI_BROADCAST_RGB_FULL)
+		return true;
+
+	if (state->hdmi.broadcast_rgb == DRM_HDMI_BROADCAST_RGB_LIMITED)
+		return false;
+
+	if (!display->is_hdmi)
+		return true;
+
+	return drm_default_rgb_quant_range(mode);
+}
+EXPORT_SYMBOL(drm_atomic_helper_connector_hdmi_is_full_range);
 
 /**
  * __drm_atomic_helper_connector_duplicate_state - copy atomic connector state
