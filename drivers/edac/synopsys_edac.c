@@ -305,6 +305,7 @@ struct snps_ddrc_info {
  * @syndrome:	Error syndrome.
  * @bitpos:	Bit position.
  * @data:	Data causing the error.
+ * @ecc:	Data ECC.
  */
 struct snps_ecc_error_info {
 	u32 row;
@@ -313,7 +314,8 @@ struct snps_ecc_error_info {
 	u32 bankgrp;
 	u32 syndrome;
 	u32 bitpos;
-	u32 data;
+	u64 data;
+	u32 ecc;
 };
 
 /**
@@ -422,10 +424,10 @@ static int snps_get_error_info(struct snps_edac_priv *priv)
 	p->ceinfo.col = FIELD_GET(ECC_CEADDR1_COL_MASK, regval);
 
 	p->ceinfo.data = readl(base + ECC_CSYND0_OFST);
+	if (priv->info.dq_width == SNPS_DQ_64)
+		p->ceinfo.data |= (u64)readl(base + ECC_CSYND1_OFST) << 32;
 
-	edac_dbg(2, "ECCCSYN0: 0x%08X ECCCSYN1: 0x%08X ECCCSYN2: 0x%08X\n",
-		 readl(base + ECC_CSYND0_OFST), readl(base + ECC_CSYND1_OFST),
-		 readl(base + ECC_CSYND2_OFST));
+	p->ceinfo.ecc = readl(base + ECC_CSYND2_OFST);
 
 ue_err:
 	if (!p->ue_cnt)
@@ -440,6 +442,11 @@ ue_err:
 	p->ueinfo.col = FIELD_GET(ECC_CEADDR1_COL_MASK, regval);
 
 	p->ueinfo.data = readl(base + ECC_UESYND0_OFST);
+	if (priv->info.dq_width == SNPS_DQ_64)
+		p->ueinfo.data |= (u64)readl(base + ECC_UESYND1_OFST) << 32;
+
+	p->ueinfo.ecc = readl(base + ECC_UESYND2_OFST);
+
 out:
 	spin_lock_irqsave(&priv->reglock, flags);
 
@@ -469,9 +476,9 @@ static void snps_handle_error(struct mem_ctl_info *mci, struct snps_ecc_status *
 		pinf = &p->ceinfo;
 
 		snprintf(priv->message, SNPS_EDAC_MSG_SIZE,
-			 "Row %d Col %d Bank %d Bank Group %d Bit %d Data 0x%08x",
+			 "Row %d Col %d Bank %d Bank Group %d Bit %d Data 0x%08llx:0x%02x",
 			 pinf->row, pinf->col, pinf->bank, pinf->bankgrp,
-			 pinf->bitpos, pinf->data);
+			 pinf->bitpos, pinf->data, pinf->ecc);
 
 		edac_mc_handle_error(HW_EVENT_ERR_CORRECTED, mci,
 				     p->ce_cnt, 0, 0, pinf->syndrome, 0, 0, -1,
@@ -482,8 +489,9 @@ static void snps_handle_error(struct mem_ctl_info *mci, struct snps_ecc_status *
 		pinf = &p->ueinfo;
 
 		snprintf(priv->message, SNPS_EDAC_MSG_SIZE,
-			 "Row %d Col %d Bank %d Bank Group %d",
-			 pinf->row, pinf->col, pinf->bank, pinf->bankgrp);
+			 "Row %d Col %d Bank %d Bank Group %d Data 0x%08llx:0x%02x",
+			 pinf->row, pinf->col, pinf->bank, pinf->bankgrp,
+			 pinf->data, pinf->ecc);
 
 		edac_mc_handle_error(HW_EVENT_ERR_UNCORRECTED, mci,
 				     p->ue_cnt, 0, 0, 0, 0, 0, -1,
