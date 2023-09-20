@@ -509,4 +509,13 @@ config SENSORS_ZL6100
 	  This driver can also be built as a module. If so, the module will
 	  be called zl6100.
 
+config SENSORS_INA233
+        tristate "Texas Instruments INA233 and compatibles"
+        help
+          If you say yes here you get hardware monitoring support for Texas
+          Instruments INA233.
+
+          This driver can also be built as a module. If so, the module will
+          be called ina233.
+
 endif # PMBUS
