@@ -474,7 +474,7 @@ static void snps_handle_error(struct mem_ctl_info *mci, struct snps_ecc_status *
 			 pinf->bitpos, pinf->data);
 
 		edac_mc_handle_error(HW_EVENT_ERR_CORRECTED, mci,
-				     p->ce_cnt, 0, 0, 0, 0, 0, -1,
+				     p->ce_cnt, 0, 0, pinf->syndrome, 0, 0, -1,
 				     priv->message, "");
 	}
 
