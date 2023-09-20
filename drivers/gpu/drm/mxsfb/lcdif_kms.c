@@ -505,6 +505,8 @@ static int lcdif_crtc_atomic_check(struct drm_crtc *crtc,
 static void lcdif_crtc_atomic_flush(struct drm_crtc *crtc,
 				    struct drm_atomic_state *state)
 {
+	struct drm_crtc_state *crtc_state = drm_atomic_get_new_crtc_state(state,
+									  crtc);
 	struct lcdif_drm_private *lcdif = to_lcdif_drm_private(crtc->dev);
 	struct drm_pending_vblank_event *event;
 	u32 reg;
@@ -512,6 +514,9 @@ static void lcdif_crtc_atomic_flush(struct drm_crtc *crtc,
 	reg = readl(lcdif->base + LCDC_V8_CTRLDESCL0_5);
 	reg |= CTRLDESCL0_5_SHADOW_LOAD_EN;
 	writel(reg, lcdif->base + LCDC_V8_CTRLDESCL0_5);
+
+	if (drm_atomic_crtc_needs_modeset(crtc_state))
+		lcdif_enable_controller(lcdif);
 
 	event = crtc->state->event;
 	crtc->state->event = NULL;
@@ -552,7 +557,6 @@ static void lcdif_crtc_atomic_enable(struct drm_crtc *crtc,
 		writel(CTRLDESCL_HIGH0_4_ADDR_HIGH(upper_32_bits(paddr)),
 		       lcdif->base + LCDC_V8_CTRLDESCL_HIGH0_4);
 	}
-	lcdif_enable_controller(lcdif);
 
 	drm_crtc_vblank_on(crtc);
 }
