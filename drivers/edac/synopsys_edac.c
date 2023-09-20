@@ -26,9 +26,6 @@
 /* Number of channels per memory controller */
 #define SNPS_EDAC_NR_CHANS		1
 
-/* Granularity of reported error in bytes */
-#define SNPS_EDAC_ERR_GRAIN		1
-
 #define SNPS_EDAC_MSG_SIZE		256
 
 #define SNPS_EDAC_MOD_STRING		"snps_edac"
@@ -736,8 +733,11 @@ static void snps_init_csrows(struct mem_ctl_info *mci)
 	struct snps_edac_priv *priv = mci->pvt_info;
 	struct csrow_info *csi;
 	struct dimm_info *dimm;
-	u32 size, row;
+	u32 size, row, width;
 	int j;
+
+	/* Actual SDRAM-word width for which ECC is calculated */
+	width = 1U << (priv->info.dq_width - priv->info.dq_mode);
 
 	for (row = 0; row < mci->nr_csrows; row++) {
 		csi = mci->csrows[row];
@@ -748,7 +748,7 @@ static void snps_init_csrows(struct mem_ctl_info *mci)
 			dimm->edac_mode	= EDAC_SECDED;
 			dimm->mtype	= priv->info.sdram_mode;
 			dimm->nr_pages	= (size >> PAGE_SHIFT) / csi->nr_channels;
-			dimm->grain	= SNPS_EDAC_ERR_GRAIN;
+			dimm->grain	= width;
 			dimm->dtype	= priv->info.dev_cfg;
 		}
 	}
