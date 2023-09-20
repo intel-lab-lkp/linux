@@ -64,74 +64,64 @@
  * thrashing on the inactive list, after which refaulting pages can be
  * activated optimistically to compete with the existing active pages.
  *
- * Approximating inactive page access frequency - Observations:
+ * For such approximation, we introduce a counter `nonresistence_age` (NA)
+ * here. This counter increases each time a page is evicted, and each evicted
+ * page will have a shadow that stores the counter reading at the eviction
+ * time as a timestamp. So when an evicted page was faulted again, we have:
  *
- * 1. When a page is accessed for the first time, it is added to the
- *    head of the inactive list, slides every existing inactive page
- *    towards the tail by one slot, and pushes the current tail page
- *    out of memory.
+ *   Let SP = ((NA's reading @ current) - (NA's reading @ eviction))
  *
- * 2. When a page is accessed for the second time, it is promoted to
- *    the active list, shrinking the inactive list by one slot.  This
- *    also slides all inactive pages that were faulted into the cache
- *    more recently than the activated page towards the tail of the
- *    inactive list.
+ *                            +-memory available to cache-+
+ *                            |                           |
+ *  +-------------------------+===============+===========+
+ *  | *   shadows  O O  O     |   INACTIVE    |   ACTIVE  |
+ *  +-+-----------------------+===============+===========+
+ *    |                       |
+ *    +-----------------------+
+ *    |         SP
+ *  fault page          O -> Hole left by previously faulted in pages
+ *                      * -> The page corresponding to SP
  *
- * Thus:
+ * Here SP can stands for how far the current workflow could push a page
+ * out of available memory. Since all evicted page was once head of
+ * INACTIVE list, the page could have such an access distance of:
  *
- * 1. The sum of evictions and activations between any two points in
- *    time indicate the minimum number of inactive pages accessed in
- *    between.
+ *   SP + NR_INACTIVE
  *
- * 2. Moving one inactive page N page slots towards the tail of the
- *    list requires at least N inactive page accesses.
+ * So if:
  *
- * Combining these:
+ *   SP + NR_INACTIVE < NR_INACTIVE + NR_ACTIVE
  *
- * 1. When a page is finally evicted from memory, the number of
- *    inactive pages accessed while the page was in cache is at least
- *    the number of page slots on the inactive list.
+ * Which can be simplified to:
  *
- * 2. In addition, measuring the sum of evictions and activations (E)
- *    at the time of a page's eviction, and comparing it to another
- *    reading (R) at the time the page faults back into memory tells
- *    the minimum number of accesses while the page was not cached.
- *    This is called the refault distance.
+ *   SP < NR_ACTIVE
  *
- * Because the first access of the page was the fault and the second
- * access the refault, we combine the in-cache distance with the
- * out-of-cache distance to get the complete minimum access distance
- * of this page:
+ * Then the page is worth getting re-activated to start from ACTIVE part,
+ * since the access distance is shorter than total memory to make it stay.
  *
- *      NR_inactive + (R - E)
+ * And since this is only an estimation, based on several hypotheses, and
+ * it could break the ability of LRU to distinguish a workingset out of
+ * caches, so throttle this by two factors:
  *
- * And knowing the minimum access distance of a page, we can easily
- * tell if the page would be able to stay in cache assuming all page
- * slots in the cache were available:
+ * 1. Notice that re-faulted in pages may leave "holes" on the shadow
+ *    part of LRU, that part is left unhandled on purpose to decrease
+ *    re-activate rate for pages that have a large SP value (the larger
+ *    SP value a page have, the more likely it will be affected by such
+ *    holes).
+ * 2. When the ACTIVE part of LRU is long enough, challenging ACTIVE pages
+ *    by re-activating a one-time faulted previously INACTIVE page may not
+ *    be a good idea, so throttle the re-activation when ACTIVE > INACTIVE
+ *    by comparing with INACTIVE instead.
  *
- *   NR_inactive + (R - E) <= NR_inactive + NR_active
+ * Combined all above, we have:
+ * Upon refault, if any of the following conditions is met, mark the page
+ * as active:
  *
- * If we have swap we should consider about NR_inactive_anon and
- * NR_active_anon, so for page cache and anonymous respectively:
+ * - If ACTIVE LRU is low (NR_ACTIVE < NR_INACTIVE), check if:
+ *   SP < NR_ACTIVE
  *
- *   NR_inactive_file + (R - E) <= NR_inactive_file + NR_active_file
- *   + NR_inactive_anon + NR_active_anon
- *
- *   NR_inactive_anon + (R - E) <= NR_inactive_anon + NR_active_anon
- *   + NR_inactive_file + NR_active_file
- *
- * Which can be further simplified to:
- *
- *   (R - E) <= NR_active_file + NR_inactive_anon + NR_active_anon
- *
- *   (R - E) <= NR_active_anon + NR_inactive_file + NR_active_file
- *
- * Put into words, the refault distance (out-of-cache) can be seen as
- * a deficit in inactive list space (in-cache).  If the inactive list
- * had (R - E) more page slots, the page would not have been evicted
- * in between accesses, but activated instead.  And on a full system,
- * the only thing eating into inactive list space is active pages.
- *
+ * - If ACTIVE LRU is high (NR_ACTIVE >= NR_INACTIVE), check if:
+ *   SP < NR_INACTIVE
  *
  *		Refaulting inactive pages
  *
@@ -419,8 +409,10 @@ bool workingset_test_recent(void *shadow, bool file, bool *workingset)
 	struct mem_cgroup *eviction_memcg;
 	struct lruvec *eviction_lruvec;
 	unsigned long refault_distance;
-	unsigned long workingset_size;
+	unsigned long inactive_file;
+	unsigned long inactive_anon;
 	unsigned long refault;
+	unsigned long active;
 	int memcgid;
 	struct pglist_data *pgdat;
 	unsigned long eviction;
@@ -479,21 +471,27 @@ bool workingset_test_recent(void *shadow, bool file, bool *workingset)
 	 * workingset competition needs to consider anon or not depends
 	 * on having free swap space.
 	 */
-	workingset_size = lruvec_page_state(eviction_lruvec, NR_ACTIVE_FILE);
-	if (!file) {
-		workingset_size += lruvec_page_state(eviction_lruvec,
-						     NR_INACTIVE_FILE);
-	}
+	active = lruvec_page_state(eviction_lruvec, NR_ACTIVE_FILE);
+	inactive_file = lruvec_page_state(eviction_lruvec, NR_INACTIVE_FILE);
+
 	if (mem_cgroup_get_nr_swap_pages(eviction_memcg) > 0) {
-		workingset_size += lruvec_page_state(eviction_lruvec,
+		active += lruvec_page_state(eviction_lruvec,
 						     NR_ACTIVE_ANON);
-		if (file) {
-			workingset_size += lruvec_page_state(eviction_lruvec,
-						     NR_INACTIVE_ANON);
-		}
+		inactive_anon = lruvec_page_state(eviction_lruvec,
+						  NR_INACTIVE_ANON);
+	} else {
+		inactive_anon = 0;
 	}
 
-	return refault_distance <= workingset_size;
+	/*
+	 * When there are already enough active pages, be less aggressive
+	 * on reactivating pages, challenge an large set of established
+	 * active pages with one time refaulted page may not be a good idea.
+	 */
+	if (active >= inactive_anon + inactive_file)
+		return refault_distance < inactive_anon + inactive_file;
+	else
+		return refault_distance < active + (file ? inactive_anon : inactive_file);
 }
 
 /**
@@ -543,7 +541,6 @@ void workingset_refault(struct folio *folio, void *shadow)
 		goto out;
 
 	folio_set_active(folio);
-	workingset_age_nonresident(lruvec, nr);
 	mod_lruvec_state(lruvec, WORKINGSET_ACTIVATE_BASE + file, nr);
 
 	/* Folio was active prior to eviction */
@@ -556,30 +553,6 @@ void workingset_refault(struct folio *folio, void *shadow)
 		lru_note_cost_refault(folio);
 		mod_lruvec_state(lruvec, WORKINGSET_RESTORE_BASE + file, nr);
 	}
-out:
-	rcu_read_unlock();
-}
-
-/**
- * workingset_activation - note a page activation
- * @folio: Folio that is being activated.
- */
-void workingset_activation(struct folio *folio)
-{
-	struct mem_cgroup *memcg;
-
-	rcu_read_lock();
-	/*
-	 * Filter non-memcg pages here, e.g. unmap can call
-	 * mark_page_accessed() on VDSO pages.
-	 *
-	 * XXX: See workingset_refault() - this should return
-	 * root_mem_cgroup even for !CONFIG_MEMCG.
-	 */
-	memcg = folio_memcg_rcu(folio);
-	if (!mem_cgroup_disabled() && !memcg)
-		goto out;
-	workingset_age_nonresident(folio_lruvec(folio), folio_nr_pages(folio));
 out:
 	rcu_read_unlock();
 }
