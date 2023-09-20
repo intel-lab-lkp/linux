@@ -234,6 +234,19 @@ static void nbcon_seq_try_update(struct nbcon_context *ctxt, u64 new_seq)
 	}
 }
 
+#ifdef CONFIG_PROVE_LOCKING
+static inline void nbcon_assert_cpu_migration_disabled(void)
+{
+	WARN_ON_ONCE(IS_ENABLED(CONFIG_SMP) &&
+		     __lockdep_enabled &&
+		     this_cpu_read(hardirqs_enabled) &&
+		     preempt_count() == 0 &&
+		     !current->migration_disabled);
+}
+#else
+#define nbcon_assert_cpu_migration(void) {}
+#endif
+
 /**
  * nbcon_context_try_acquire_direct - Try to acquire directly
  * @ctxt:	The context of the caller
@@ -578,6 +591,8 @@ static bool nbcon_context_try_acquire(struct nbcon_context *ctxt)
 	struct console *con = ctxt->console;
 	struct nbcon_state cur;
 	int err;
+
+	nbcon_assert_cpu_migration_disabled();
 
 	nbcon_state_read(con, &cur);
 try_again:
