@@ -1364,7 +1364,12 @@ struct intel_crtc_state {
 
 	bool enhanced_framing;
 
-	/* Forward Error correction State */
+	/*
+	 * Forward Error Correction.
+	 *
+	 * Note: This will be false for 128b/132b, which will always have FEC
+	 * enabled automatically.
+	 */
 	bool fec_enable;
 
 	bool sdp_split_enable;
