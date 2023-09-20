@@ -1008,12 +1008,15 @@ static void snps_setup_row_address_map(struct snps_edac_priv *priv, u32 *addrmap
 	priv->row_shift[15] = (((addrmap[6] >> 24) & ROW_MAX_VAL_MASK) ==
 				ROW_MAX_VAL_MASK) ? 0 : (((addrmap[6] >> 24) &
 				ROW_MAX_VAL_MASK) + ROW_B15_BASE);
-	priv->row_shift[16] = ((addrmap[7] & ROW_MAX_VAL_MASK) ==
-				ROW_MAX_VAL_MASK) ? 0 : ((addrmap[7] &
-				ROW_MAX_VAL_MASK) + ROW_B16_BASE);
-	priv->row_shift[17] = (((addrmap[7] >> 8) & ROW_MAX_VAL_MASK) ==
-				ROW_MAX_VAL_MASK) ? 0 : (((addrmap[7] >> 8) &
-				ROW_MAX_VAL_MASK) + ROW_B17_BASE);
+
+	if (priv->info.sdram_mode == MEM_DDR4 || priv->info.sdram_mode == MEM_LPDDR4) {
+		priv->row_shift[16] = ((addrmap[7] & ROW_MAX_VAL_MASK) ==
+					ROW_MAX_VAL_MASK) ? 0 : ((addrmap[7] &
+					ROW_MAX_VAL_MASK) + ROW_B16_BASE);
+		priv->row_shift[17] = (((addrmap[7] >> 8) & ROW_MAX_VAL_MASK) ==
+					ROW_MAX_VAL_MASK) ? 0 : (((addrmap[7] >> 8) &
+					ROW_MAX_VAL_MASK) + ROW_B17_BASE);
+	}
 }
 
 static void snps_setup_column_address_map(struct snps_edac_priv *priv, u32 *addrmap)
@@ -1129,6 +1132,10 @@ static void snps_setup_bank_address_map(struct snps_edac_priv *priv, u32 *addrma
 
 static void snps_setup_bg_address_map(struct snps_edac_priv *priv, u32 *addrmap)
 {
+	/* Bank group signals are available on the DDR4 memory only */
+	if (priv->info.sdram_mode != MEM_DDR4)
+		return;
+
 	priv->bankgrp_shift[0] = (addrmap[8] &
 				BANKGRP_MAX_VAL_MASK) + BANKGRP_B0_BASE;
 	priv->bankgrp_shift[1] = (((addrmap[8] >> 8) & BANKGRP_MAX_VAL_MASK) ==
