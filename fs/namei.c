@@ -3388,6 +3388,44 @@ static struct dentry *atomic_open(struct nameidata *nd, struct dentry *dentry,
 	return dentry;
 }
 
+static struct dentry *atomic_revalidate_open(struct dentry *dentry,
+					     struct nameidata *nd,
+					     struct file *file,
+					     const struct open_flags *op,
+					     bool *got_write)
+{
+	struct mnt_idmap *idmap;
+	struct dentry *dir = nd->path.dentry;
+	struct inode *dir_inode = dir->d_inode;
+	int open_flag = op->open_flag;
+	umode_t mode = op->mode;
+
+	if (unlikely(IS_DEADDIR(dir_inode)))
+		return ERR_PTR(-ENOENT);
+
+	file->f_mode &= ~FMODE_CREATED;
+
+	if (unlikely(open_flag & O_CREAT)) {
+		WARN_ON(1);
+		return ERR_PTR(-EINVAL);
+	}
+
+	if (open_flag & (O_TRUNC | O_WRONLY | O_RDWR))
+		*got_write = !mnt_want_write(nd->path.mnt);
+	else
+		*got_write = false;
+
+	if (!got_write)
+		open_flag &= ~O_TRUNC;
+
+	inode_lock_shared(dir->d_inode);
+	dentry = atomic_open(nd, dentry, file, open_flag, mode);
+	inode_unlock_shared(dir->d_inode);
+
+	return dentry;
+
+}
+
 /*
  * Look up and maybe create and open the last component.
  *
@@ -3541,8 +3579,10 @@ static const char *open_last_lookups(struct nameidata *nd,
 		if (IS_ERR(dentry))
 			return ERR_CAST(dentry);
 		if (dentry && unlikely(atomic_revalidate)) {
-			dput(dentry);
-			dentry = NULL;
+			BUG_ON(nd->flags & LOOKUP_RCU);
+			dentry = atomic_revalidate_open(dentry, nd, file, op,
+							&got_write);
+			goto drop_write;
 		}
 		if (likely(dentry))
 			goto finish_lookup;
@@ -3580,6 +3620,7 @@ static const char *open_last_lookups(struct nameidata *nd,
 	else
 		inode_unlock_shared(dir->d_inode);
 
+drop_write:
 	if (got_write)
 		mnt_drop_write(nd->path.mnt);
 
