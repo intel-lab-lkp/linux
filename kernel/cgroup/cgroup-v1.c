@@ -1297,8 +1297,7 @@ static int __init cgroup_no_v1(char *str)
 		}
 
 		for_each_subsys(ss, i) {
-			if (strcmp(token, ss->name) &&
-			    strcmp(token, ss->legacy_name))
+			if (strcmp(token, ss->legacy_name))
 				continue;
 
 			cgroup_no_v1_mask |= 1 << i;
