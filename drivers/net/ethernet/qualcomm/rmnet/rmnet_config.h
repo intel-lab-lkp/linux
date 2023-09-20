@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Copyright (c) 2013-2014, 2016-2018, 2021 The Linux Foundation.
  * All rights reserved.
+ * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * RMNET Data configuration engine
  */
@@ -87,6 +88,7 @@ struct rmnet_priv {
 	struct rmnet_pcpu_stats __percpu *pcpu_stats;
 	struct gro_cells gro_cells;
 	struct rmnet_priv_stats stats;
+	struct xarray queue_map;
 };
 
 struct rmnet_port *rmnet_get_port_rcu(struct net_device *real_dev);
