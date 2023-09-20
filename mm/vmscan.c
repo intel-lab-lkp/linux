@@ -3730,17 +3730,21 @@ static void reset_ctrl_pos(struct lruvec *lruvec, int type, bool carryover)
 
 	for (tier = 0; tier < MAX_NR_TIERS; tier++) {
 		if (carryover) {
-			unsigned long sum;
+			unsigned long refaulted, total;
 
-			sum = atomic_long_read(&lrugen->avg_refaulted[type][tier]) +
-			      atomic_long_read(&lrugen->refaulted[hist][type][tier]);
-			atomic_long_set(&lrugen->avg_refaulted[type][tier], sum / 2);
+			refaulted = atomic_long_read(&lrugen->avg_refaulted[type][tier]) +
+				atomic_long_read(&lrugen->refaulted[hist][type][tier]);
 
-			sum = atomic_long_read(&lrugen->avg_total[type][tier]) +
-			      atomic_long_read(&lrugen->evicted[hist][type][tier]);
+			total = atomic_long_read(&lrugen->avg_total[type][tier]) +
+				atomic_long_read(&lrugen->evicted[hist][type][tier]);
 			if (tier)
-				sum += lrugen->protected[hist][type][tier - 1];
-			atomic_long_set(&lrugen->avg_total[type][tier], sum / 2);
+				total += lrugen->protected[hist][type][tier - 1];
+
+			/* total could be less than refaulted, see lru_gen_refault */
+			total = max(total, refaulted);
+
+			atomic_long_set(&lrugen->avg_refaulted[type][tier], refaulted / 2);
+			atomic_long_set(&lrugen->avg_total[type][tier], total / 2);
 		}
 
 		if (clear) {
