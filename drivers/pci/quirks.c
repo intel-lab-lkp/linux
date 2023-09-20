@@ -6188,3 +6188,74 @@ DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_INTEL, 0x9a31, dpc_log_size);
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_XILINX, 0x5020, of_pci_make_dev_node);
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_XILINX, 0x5021, of_pci_make_dev_node);
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_REDHAT, 0x0005, of_pci_make_dev_node);
+
+#ifdef CONFIG_SUSPEND
+/*
+ * When AMD PCIe root ports with AMD USB4 controllers attached to them are put
+ * into D3hot or D3cold downstream USB devices may fail to wakeup the system
+ * from suspend to idle.  This manifests as a missing wakeup interrupt.
+ *
+ * Prevent the associated root port from using PME to wake from D3hot or
+ * D3cold power states during suspend.
+ * This will effectively put the root port into D0 power state over suspend.
+ */
+#define PCI_PM_CAP_D3_PME_MASK	((PCI_PM_CAP_PME_D3hot|PCI_PM_CAP_PME_D3cold) \
+				>> PCI_PM_CAP_PME_SHIFT)
+static int modify_pme_amd_usb4(struct pci_dev *dev, void *data)
+{
+	bool *suspend = (bool *)data;
+	struct pci_dev *rp;
+	u16 pmc;
+
+	if (dev->vendor != PCI_VENDOR_ID_AMD ||
+	    dev->class != PCI_CLASS_SERIAL_USB_USB4)
+		return 0;
+	rp = pcie_find_root_port(dev);
+	if (!rp->pm_cap)
+		return -ENODEV;
+
+	if (*suspend) {
+		if (!(rp->pme_support & PCI_PM_CAP_D3_PME_MASK))
+			return -EINVAL;
+
+		rp->pme_support &= ~PCI_PM_CAP_D3_PME_MASK;
+		dev_info_once(&rp->dev, "quirk: disabling PME from D3hot and D3cold at suspend\n");
+
+		/* no need to check any more devices, found and applied quirk */
+		return -EEXIST;
+	}
+
+	/* already done */
+	if (rp->pme_support & PCI_PM_CAP_D3_PME_MASK)
+		return -EINVAL;
+
+	/* restore hardware defaults so runtime suspend can use it */
+	pci_read_config_word(rp, rp->pm_cap + PCI_PM_PMC, &pmc);
+	rp->pme_support = FIELD_GET(PCI_PM_CAP_PME_MASK, pmc);
+
+	return -EEXIST;
+}
+
+static void quirk_reenable_pme(struct pci_dev *dev)
+{
+	bool suspend = FALSE;
+
+	pci_walk_bus(dev->bus, modify_pme_amd_usb4, (void *)&suspend);
+}
+
+static void quirk_disable_pme_suspend(struct pci_dev *dev)
+{
+	bool suspend = TRUE;
+
+	/* skip for runtime suspend */
+	if (pm_suspend_target_state == PM_SUSPEND_ON)
+		return;
+
+	pci_walk_bus(dev->bus, modify_pme_amd_usb4, (void *)&suspend);
+}
+
+DECLARE_PCI_FIXUP_SUSPEND(PCI_VENDOR_ID_AMD, 0x14b9, quirk_disable_pme_suspend);
+DECLARE_PCI_FIXUP_RESUME(PCI_VENDOR_ID_AMD, 0x14b9, quirk_reenable_pme);
+DECLARE_PCI_FIXUP_SUSPEND(PCI_VENDOR_ID_AMD, 0x14eb, quirk_disable_pme_suspend);
+DECLARE_PCI_FIXUP_RESUME(PCI_VENDOR_ID_AMD, 0x14eb, quirk_reenable_pme);
+#endif /* CONFIG_SUSPEND */
