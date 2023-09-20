@@ -242,6 +242,7 @@ struct snps_ecc_status {
 
 /**
  * struct snps_edac_priv - DDR memory controller private data.
+ * @pdev:		Platform device.
  * @baseaddr:		Base address of the DDR controller.
  * @reglock:		Concurrent CSRs access lock.
  * @message:		Buffer for framing the event specific info.
@@ -255,6 +256,7 @@ struct snps_ecc_status {
  * @rank_shift:		Bit shifts for rank bit.
  */
 struct snps_edac_priv {
+	struct platform_device *pdev;
 	void __iomem *baseaddr;
 	spinlock_t reglock;
 	char message[SNPS_EDAC_MSG_SIZE];
@@ -464,6 +466,34 @@ static irqreturn_t snps_irq_handler(int irq, void *dev_id)
 }
 
 /**
+ * snps_create_data - Create private data.
+ * @pdev:	platform device.
+ *
+ * Return: Private data instance or negative errno.
+ */
+static struct snps_edac_priv *snps_create_data(struct platform_device *pdev)
+{
+	struct snps_edac_priv *priv;
+
+	priv = devm_kzalloc(&pdev->dev, sizeof(*priv), GFP_KERNEL);
+	if (!priv)
+		return ERR_PTR(-ENOMEM);
+
+	priv->baseaddr = devm_platform_ioremap_resource(pdev, 0);
+	if (IS_ERR(priv->baseaddr))
+		return ERR_CAST(priv->baseaddr);
+
+	priv->p_data = of_device_get_match_data(&pdev->dev);
+	if (!priv->p_data)
+		return ERR_PTR(-ENODEV);
+
+	priv->pdev = pdev;
+	spin_lock_init(&priv->reglock);
+
+	return priv;
+}
+
+/**
  * snps_get_dtype - Return the controller memory width.
  * @base:	DDR memory controller base address.
  *
@@ -594,18 +624,36 @@ static void snps_init_csrows(struct mem_ctl_info *mci)
 }
 
 /**
- * snps_mc_init - Initialize one driver instance.
- * @mci:	EDAC memory controller instance.
- * @pdev:	platform device.
+ * snps_mc_create - Create and initialize MC instance.
+ * @priv:	DDR memory controller private data.
  *
- * Perform initialization of the EDAC memory controller instance and
- * related driver-private data associated with the memory controller the
- * instance is bound to.
+ * Allocate the EDAC memory controller descriptor and initialize it
+ * using the private data info.
+ *
+ * Return: MC data instance or negative errno.
  */
-static void snps_mc_init(struct mem_ctl_info *mci, struct platform_device *pdev)
+static struct mem_ctl_info *snps_mc_create(struct snps_edac_priv *priv)
 {
-	mci->pdev = &pdev->dev;
-	platform_set_drvdata(pdev, mci);
+	struct edac_mc_layer layers[2];
+	struct mem_ctl_info *mci;
+
+	layers[0].type = EDAC_MC_LAYER_CHIP_SELECT;
+	layers[0].size = SNPS_EDAC_NR_CSROWS;
+	layers[0].is_virt_csrow = true;
+	layers[1].type = EDAC_MC_LAYER_CHANNEL;
+	layers[1].size = SNPS_EDAC_NR_CHANS;
+	layers[1].is_virt_csrow = false;
+
+	mci = edac_mc_alloc(EDAC_AUTO_MC_NUM, ARRAY_SIZE(layers), layers, 0);
+	if (!mci) {
+		edac_printk(KERN_ERR, EDAC_MC,
+			    "Failed memory allocation for mc instance\n");
+		return ERR_PTR(-ENOMEM);
+	}
+
+	mci->pvt_info = priv;
+	mci->pdev = &priv->pdev->dev;
+	platform_set_drvdata(priv->pdev, mci);
 
 	/* Initialize controller capabilities and configuration */
 	mci->mtype_cap = MEM_FLAG_LPDDR | MEM_FLAG_DDR2 | MEM_FLAG_LPDDR2 |
@@ -625,24 +673,43 @@ static void snps_mc_init(struct mem_ctl_info *mci, struct platform_device *pdev)
 	mci->ctl_page_to_phys = NULL;
 
 	snps_init_csrows(mci);
+
+	return mci;
+}
+
+/**
+ * snps_mc_free - Free MC instance.
+ * @mci:	EDAC memory controller instance.
+ *
+ * Just revert what was done in the framework of the snps_mc_create().
+ *
+ * Return: MC data instance or negative errno.
+ */
+static void snps_mc_free(struct mem_ctl_info *mci)
+{
+	struct snps_edac_priv *priv = mci->pvt_info;
+
+	platform_set_drvdata(priv->pdev, NULL);
+
+	edac_mc_free(mci);
 }
 
 
 
-static int snps_setup_irq(struct mem_ctl_info *mci, struct platform_device *pdev)
+static int snps_setup_irq(struct mem_ctl_info *mci)
 {
 	struct snps_edac_priv *priv = mci->pvt_info;
 	int ret, irq;
 
-	irq = platform_get_irq(pdev, 0);
+	irq = platform_get_irq(priv->pdev, 0);
 	if (irq < 0) {
 		edac_printk(KERN_ERR, EDAC_MC,
 			    "No IRQ %d in DT\n", irq);
 		return irq;
 	}
 
-	ret = devm_request_irq(&pdev->dev, irq, snps_irq_handler,
-			       0, dev_name(&pdev->dev), mci);
+	ret = devm_request_irq(&priv->pdev->dev, irq, snps_irq_handler,
+			       0, dev_name(&priv->pdev->dev), mci);
 	if (ret < 0) {
 		edac_printk(KERN_ERR, EDAC_MC, "Failed to request IRQ\n");
 		return ret;
@@ -1066,49 +1133,24 @@ static inline void snps_create_debugfs_nodes(struct mem_ctl_info *mci) {}
  */
 static int snps_mc_probe(struct platform_device *pdev)
 {
-	const struct snps_platform_data *p_data;
-	struct edac_mc_layer layers[2];
 	struct snps_edac_priv *priv;
 	struct mem_ctl_info *mci;
-	void __iomem *baseaddr;
 	int rc;
 
-	baseaddr = devm_platform_ioremap_resource(pdev, 0);
-	if (IS_ERR(baseaddr))
-		return PTR_ERR(baseaddr);
-
-	p_data = of_device_get_match_data(&pdev->dev);
-	if (!p_data)
-		return -ENODEV;
+	priv = snps_create_data(pdev);
+	if (IS_ERR(priv))
+		return PTR_ERR(priv);
 
 	if (!snps_get_ecc_state(baseaddr)) {
 		edac_printk(KERN_INFO, EDAC_MC, "ECC not enabled\n");
 		return -ENXIO;
 	}
 
-	layers[0].type = EDAC_MC_LAYER_CHIP_SELECT;
-	layers[0].size = SNPS_EDAC_NR_CSROWS;
-	layers[0].is_virt_csrow = true;
-	layers[1].type = EDAC_MC_LAYER_CHANNEL;
-	layers[1].size = SNPS_EDAC_NR_CHANS;
-	layers[1].is_virt_csrow = false;
+	mci = snps_mc_create(priv);
+	if (IS_ERR(mci))
+		return PTR_ERR(mci);
 
-	mci = edac_mc_alloc(EDAC_AUTO_MC_NUM, ARRAY_SIZE(layers), layers,
-			    sizeof(struct snps_edac_priv));
-	if (!mci) {
-		edac_printk(KERN_ERR, EDAC_MC,
-			    "Failed memory allocation for mc instance\n");
-		return -ENOMEM;
-	}
-
-	priv = mci->pvt_info;
-	priv->baseaddr = baseaddr;
-	priv->p_data = p_data;
-	spin_lock_init(&priv->reglock);
-
-	snps_mc_init(mci, pdev);
-
-	rc = snps_setup_irq(mci, pdev);
+	rc = snps_setup_irq(mci);
 	if (rc)
 		goto free_edac_mc;
 
@@ -1124,7 +1166,7 @@ static int snps_mc_probe(struct platform_device *pdev)
 	return 0;
 
 free_edac_mc:
-	edac_mc_free(mci);
+	snps_mc_free(mci);
 
 	return rc;
 }
@@ -1143,7 +1185,8 @@ static int snps_mc_remove(struct platform_device *pdev)
 	snps_disable_irq(priv);
 
 	edac_mc_del_mc(&pdev->dev);
-	edac_mc_free(mci);
+
+	snps_mc_free(mci);
 
 	return 0;
 }
