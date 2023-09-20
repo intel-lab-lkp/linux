@@ -422,6 +422,10 @@ int utf8ncursor(struct utf8cursor *u8c, const struct unicode_map *um,
 {
 	if (!s)
 		return -1;
+
+	if (IS_ERR_OR_NULL(um))
+		return -1;
+
 	u8c->um = um;
 	u8c->n = n;
 	u8c->s = s;
