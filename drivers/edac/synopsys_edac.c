@@ -156,6 +156,7 @@
 /* DDRC address mapping parameters */
 #define DDR_ADDRMAP_NREGS		12
 
+#define DDR_MAX_HIF_WIDTH		60
 #define DDR_MAX_ROW_WIDTH		18
 #define DDR_MAX_COL_WIDTH		14
 #define DDR_MAX_BANK_WIDTH		3
@@ -1324,6 +1325,84 @@ static int snps_ddrc_info_show(struct seq_file *s, void *data)
 
 DEFINE_SHOW_ATTRIBUTE(snps_ddrc_info);
 
+static u8 snps_find_sdram_dim(struct snps_edac_priv *priv, u8 hif, char *dim)
+{
+	struct snps_hif_sdram_map *map = &priv->hif_sdram_map;
+	int i;
+
+	for (i = 0; i < DDR_MAX_ROW_WIDTH; i++) {
+		if (map->row[i] == hif) {
+			*dim = 'r';
+			return i;
+		}
+	}
+
+	for (i = 0; i < DDR_MAX_COL_WIDTH; i++) {
+		if (map->col[i] == hif) {
+			*dim = 'c';
+			return i;
+		}
+	}
+
+	for (i = 0; i < DDR_MAX_BANK_WIDTH; i++) {
+		if (map->bank[i] == hif) {
+			*dim = 'b';
+			return i;
+		}
+	}
+
+	for (i = 0; i < DDR_MAX_BANKGRP_WIDTH; i++) {
+		if (map->bankgrp[i] == hif) {
+			*dim = 'g';
+			return i;
+		}
+	}
+
+	for (i = 0; i < DDR_MAX_RANK_WIDTH; i++) {
+		if (map->rank[i] == hif) {
+			*dim = 'a';
+			return i;
+		}
+	}
+
+	return DDR_ADDRMAP_UNUSED;
+}
+
+static int snps_hif_sdram_map_show(struct seq_file *s, void *data)
+{
+	struct mem_ctl_info *mci = s->private;
+	struct snps_edac_priv *priv = mci->pvt_info;
+	char dim, buf[SNPS_DBGFS_BUF_LEN];
+	const int line_len = 10;
+	u8 bit;
+	int i;
+
+	seq_printf(s, "%3s", "");
+	for (i = 0; i < line_len; i++)
+		seq_printf(s, " %02d ", i);
+
+	for (i = 0; i < DDR_MAX_HIF_WIDTH; i++) {
+		if (i % line_len == 0)
+			seq_printf(s, "\n%02d ", i);
+
+		bit = snps_find_sdram_dim(priv, i, &dim);
+
+		if (bit != DDR_ADDRMAP_UNUSED)
+			scnprintf(buf, SNPS_DBGFS_BUF_LEN, "%c%hhu", dim, bit);
+		else
+			scnprintf(buf, SNPS_DBGFS_BUF_LEN, "--");
+
+		seq_printf(s, "%3s ", buf);
+	}
+	seq_putc(s, '\n');
+
+	seq_puts(s, "r - row, c - column, b - bank, g - bank group, a - rank\n");
+
+	return 0;
+}
+
+DEFINE_SHOW_ATTRIBUTE(snps_hif_sdram_map);
+
 /**
  * snps_data_poison_setup - Update poison registers.
  * @priv:		DDR memory controller private instance data.
@@ -1442,6 +1521,9 @@ static void snps_create_debugfs_nodes(struct mem_ctl_info *mci)
 {
 	edac_debugfs_create_file("ddrc_info", 0400, mci->debugfs, mci,
 				 &snps_ddrc_info_fops);
+
+	edac_debugfs_create_file("hif_sdram_map", 0400, mci->debugfs, mci,
+				 &snps_hif_sdram_map_fops);
 
 	edac_debugfs_create_file("inject_data_error", 0600, mci->debugfs, mci,
 				 &snps_inject_data_error);
