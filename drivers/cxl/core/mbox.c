@@ -707,7 +707,6 @@ static void cxl_walk_cel(struct cxl_memdev_state *mds, size_t size, u8 *cel)
 {
 	struct cxl_cel_entry *cel_entry;
 	const int cel_entries = size / sizeof(*cel_entry);
-	struct device *dev = mds->cxlds.dev;
 	int i;
 
 	cel_entry = (struct cxl_cel_entry *) cel;
@@ -717,11 +716,8 @@ static void cxl_walk_cel(struct cxl_memdev_state *mds, size_t size, u8 *cel)
 		struct cxl_mem_command *cmd = cxl_mem_find_command(opcode);
 
 		if (!cmd && (!cxl_is_poison_command(opcode) ||
-			     !cxl_is_security_command(opcode))) {
-			dev_dbg(dev,
-				"Opcode 0x%04x unsupported by driver\n", opcode);
+			     !cxl_is_security_command(opcode)))
 			continue;
-		}
 
 		if (cmd)
 			set_bit(cmd->info.id, mds->enabled_cmds);
@@ -731,8 +727,6 @@ static void cxl_walk_cel(struct cxl_memdev_state *mds, size_t size, u8 *cel)
 
 		if (cxl_is_security_command(opcode))
 			cxl_set_security_cmd_enabled(&mds->security, opcode);
-
-		dev_dbg(dev, "Opcode 0x%04x enabled\n", opcode);
 	}
 }
 
@@ -787,7 +781,6 @@ static const uuid_t log_uuid[] = {
 int cxl_enumerate_cmds(struct cxl_memdev_state *mds)
 {
 	struct cxl_mbox_get_supported_logs *gsl;
-	struct device *dev = mds->cxlds.dev;
 	struct cxl_mem_command *cmd;
 	int i, rc;
 
@@ -800,8 +793,6 @@ int cxl_enumerate_cmds(struct cxl_memdev_state *mds)
 		u32 size = le32_to_cpu(gsl->entry[i].size);
 		uuid_t uuid = gsl->entry[i].uuid;
 		u8 *log;
-
-		dev_dbg(dev, "Found LOG type %pU of size %d", &uuid, size);
 
 		if (!uuid_equal(&uuid, &log_uuid[CEL_UUID]))
 			continue;
