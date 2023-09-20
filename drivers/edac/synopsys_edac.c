@@ -996,8 +996,22 @@ static void snps_get_hif_col_map(struct snps_edac_priv *priv, u32 *addrmap)
 	map->col[9] = map->col[9] == DDR_ADDRMAP_MAX_15 ?
 		      DDR_ADDRMAP_UNUSED : map->col[9] + COL_B9_BASE;
 
+	map->col[10] = FIELD_GET(DDR_ADDRMAP_B0_M15, addrmap[4]);
+	map->col[10] = map->col[10] == DDR_ADDRMAP_MAX_15 ?
+		      DDR_ADDRMAP_UNUSED : map->col[10] + COL_B10_BASE;
+
+	map->col[11] = FIELD_GET(DDR_ADDRMAP_B8_M15, addrmap[4]);
+	map->col[11] = map->col[11] == DDR_ADDRMAP_MAX_15 ?
+		      DDR_ADDRMAP_UNUSED : map->col[11] + COL_B11_BASE;
+
+	/*
+	 * In case of the non-Full DQ bus mode the lowest columns are
+	 * unmapped and used by the controller to read the full DQ word
+	 * in multiple cycles (col[0] for the Half bus mode, col[0:1] for
+	 * the Quarter bus mode).
+	 */
 	if (priv->info.dq_mode) {
-		for (i = 9; i > priv->info.dq_mode; i--) {
+		for (i = 11 + priv->info.dq_mode; i >= priv->info.dq_mode; i--) {
 			map->col[i] = map->col[i - priv->info.dq_mode];
 			map->col[i - priv->info.dq_mode] = DDR_ADDRMAP_UNUSED;
 		}
@@ -1007,65 +1021,22 @@ static void snps_get_hif_col_map(struct snps_edac_priv *priv, u32 *addrmap)
 	 * Per JEDEC DDR2/3/4/mDDR specification, column address bit 10 is
 	 * reserved for indicating auto-precharge, and hence no source
 	 * address bit can be mapped to col[10].
+	 */
+	if (priv->info.sdram_mode == MEM_LPDDR || priv->info.sdram_mode == MEM_DDR2 ||
+	    priv->info.sdram_mode == MEM_DDR3 || priv->info.sdram_mode == MEM_DDR4) {
+		for (i = 12 + priv->info.dq_mode; i > 10; i--) {
+			map->col[i] = map->col[i - 1];
+			map->col[i - 1] = DDR_ADDRMAP_UNUSED;
+		}
+	}
+
+	/*
 	 * Per JEDEC specification, column address bit 12 is reserved
 	 * for the Burst-chop status, so no source address bit mapping
 	 * for col[12] either.
 	 */
-	if (priv->info.dq_mode == SNPS_DQ_FULL) {
-		if (priv->info.sdram_mode == MEM_LPDDR3) {
-			map->col[10] = FIELD_GET(DDR_ADDRMAP_B0_M15, addrmap[4]);
-			map->col[10] = map->col[10] == DDR_ADDRMAP_MAX_15 ?
-				       DDR_ADDRMAP_UNUSED : map->col[10] + COL_B10_BASE;
-
-			map->col[11] = FIELD_GET(DDR_ADDRMAP_B8_M15, addrmap[4]);
-			map->col[11] = map->col[11] == DDR_ADDRMAP_MAX_15 ?
-				       DDR_ADDRMAP_UNUSED : map->col[11] + COL_B11_BASE;
-		} else {
-			map->col[11] = FIELD_GET(DDR_ADDRMAP_B0_M15, addrmap[4]);
-			map->col[11] = map->col[11] == DDR_ADDRMAP_MAX_15 ?
-				       DDR_ADDRMAP_UNUSED : map->col[11] + COL_B10_BASE;
-
-			map->col[13] = FIELD_GET(DDR_ADDRMAP_B8_M15, addrmap[4]);
-			map->col[13] = map->col[13] == DDR_ADDRMAP_MAX_15 ?
-				       DDR_ADDRMAP_UNUSED : map->col[13] + COL_B11_BASE;
-		}
-	} else if (priv->info.dq_mode == SNPS_DQ_HALF) {
-		if (priv->info.sdram_mode == MEM_LPDDR3) {
-			map->col[10] = FIELD_GET(DDR_ADDRMAP_B24_M15, addrmap[3]);
-			map->col[10] = map->col[10] == DDR_ADDRMAP_MAX_15 ?
-				       DDR_ADDRMAP_UNUSED : map->col[10] + COL_B9_BASE;
-
-			map->col[11] = FIELD_GET(DDR_ADDRMAP_B0_M15, addrmap[4]);
-			map->col[11] = map->col[11] == DDR_ADDRMAP_MAX_15 ?
-				       DDR_ADDRMAP_UNUSED : map->col[11] + COL_B10_BASE;
-		} else {
-			map->col[11] = FIELD_GET(DDR_ADDRMAP_B24_M15, addrmap[3]);
-			map->col[11] = map->col[11] == DDR_ADDRMAP_MAX_15 ?
-				       DDR_ADDRMAP_UNUSED : map->col[11] + COL_B9_BASE;
-
-			map->col[13] = FIELD_GET(DDR_ADDRMAP_B0_M15, addrmap[4]);
-			map->col[13] = map->col[13] == DDR_ADDRMAP_MAX_15 ?
-				       DDR_ADDRMAP_UNUSED : map->col[13] + COL_B10_BASE;
-		}
-	} else {
-		if (priv->info.sdram_mode == MEM_LPDDR3) {
-			map->col[10] = FIELD_GET(DDR_ADDRMAP_B16_M15, addrmap[3]);
-			map->col[10] = map->col[10] == DDR_ADDRMAP_MAX_15 ?
-				       DDR_ADDRMAP_UNUSED : map->col[10] + COL_B8_BASE;
-
-			map->col[11] = FIELD_GET(DDR_ADDRMAP_B24_M15, addrmap[3]);
-			map->col[11] = map->col[11] == DDR_ADDRMAP_MAX_15 ?
-				       DDR_ADDRMAP_UNUSED : map->col[11] + COL_B9_BASE;
-		} else {
-			map->col[11] = FIELD_GET(DDR_ADDRMAP_B16_M15, addrmap[3]);
-			map->col[11] = map->col[11] == DDR_ADDRMAP_MAX_15 ?
-				       DDR_ADDRMAP_UNUSED : map->col[11] + COL_B8_BASE;
-
-			map->col[11] = FIELD_GET(DDR_ADDRMAP_B24_M15, addrmap[3]);
-			map->col[13] = map->col[13] == DDR_ADDRMAP_MAX_15 ?
-				       DDR_ADDRMAP_UNUSED : map->col[13] + COL_B9_BASE;
-		}
-	}
+	map->col[13] = map->col[12];
+	map->col[12] = DDR_ADDRMAP_UNUSED;
 }
 
 /**
