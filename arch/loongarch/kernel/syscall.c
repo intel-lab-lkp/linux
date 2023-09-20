@@ -15,6 +15,7 @@
 #include <asm/asm.h>
 #include <asm/signal.h>
 #include <asm/switch_to.h>
+#include <asm/syscall.h>
 #include <asm-generic/syscalls.h>
 
 #undef __SYSCALL

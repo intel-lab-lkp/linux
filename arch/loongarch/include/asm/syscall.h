@@ -20,6 +20,7 @@
 
 extern void *sys_call_table[];
 
+void noinstr do_syscall(struct pt_regs *regs);
 static inline long syscall_get_nr(struct task_struct *task,
 				  struct pt_regs *regs)
 {

@@ -13,6 +13,7 @@
 #include <linux/audit.h>
 #include <linux/cache.h>
 #include <linux/context_tracking.h>
+#include <linux/entry-common.h>
 #include <linux/irqflags.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
@@ -891,7 +892,7 @@ static unsigned long setup_extcontext(struct extctx_layout *extctx, unsigned lon
 	return new_sp;
 }
 
-void __user *get_sigframe(struct ksignal *ksig, struct pt_regs *regs,
+static void __user *get_sigframe(struct ksignal *ksig, struct pt_regs *regs,
 			  struct extctx_layout *extctx)
 {
 	unsigned long sp;
@@ -921,8 +922,7 @@ void __user *get_sigframe(struct ksignal *ksig, struct pt_regs *regs,
 /*
  * Atomically swap in the new signal mask, and wait for a signal.
  */
-
-asmlinkage long sys_rt_sigreturn(void)
+SYSCALL_DEFINE0(rt_sigreturn)
 {
 	int sig;
 	sigset_t set;

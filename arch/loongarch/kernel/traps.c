@@ -35,6 +35,7 @@
 #include <asm/branch.h>
 #include <asm/break.h>
 #include <asm/cpu.h>
+#include <asm/exception.h>
 #include <asm/fpu.h>
 #include <asm/lbt.h>
 #include <asm/inst.h>
@@ -371,7 +372,7 @@ void show_regs(struct pt_regs *regs)
 	dump_stack();
 }
 
-void show_registers(struct pt_regs *regs)
+static void show_registers(struct pt_regs *regs)
 {
 	__show_regs(regs);
 	print_modules();
@@ -439,7 +440,7 @@ static inline void setup_vint_size(unsigned int size)
  * happen together with Overflow or Underflow, and `ptrace' can set
  * any bits.
  */
-void force_fcsr_sig(unsigned long fcsr, void __user *fault_addr,
+static void force_fcsr_sig(unsigned long fcsr, void __user *fault_addr,
 		     struct task_struct *tsk)
 {
 	int si_code = FPE_FLTUNK;
@@ -458,7 +459,8 @@ void force_fcsr_sig(unsigned long fcsr, void __user *fault_addr,
 	force_sig_fault(SIGFPE, si_code, fault_addr);
 }
 
-int process_fpemu_return(int sig, void __user *fault_addr, unsigned long fcsr)
+static int process_fpemu_return(int sig, void __user *fault_addr,
+				unsigned long fcsr)
 {
 	int si_code;
 
@@ -824,7 +826,7 @@ out:
 asmlinkage void noinstr do_ri(struct pt_regs *regs)
 {
 	int status = SIGILL;
-	unsigned int opcode = 0;
+	unsigned int __maybe_unused opcode;
 	unsigned int __user *era = (unsigned int __user *)exception_era(regs);
 	irqentry_state_t state = irqentry_enter(regs);
 
