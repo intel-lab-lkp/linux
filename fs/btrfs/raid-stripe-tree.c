@@ -263,7 +263,7 @@ int btrfs_insert_raid_extent(struct btrfs_trans_handle *trans,
 	u64 map_type;
 	int ret;
 
-	if (!trans->fs_info->stripe_root)
+	if (!btrfs_fs_incompat(trans->fs_info, RAID_STRIPE_TREE))
 		return 0;
 
 	map_type = list_first_entry(&ordered_extent->bioc_list, typeof(*bioc),
