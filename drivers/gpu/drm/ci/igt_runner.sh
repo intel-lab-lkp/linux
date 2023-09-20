@@ -21,9 +21,9 @@ cat /sys/kernel/debug/dri/*/state
 set -e
 
 # Cannot use HWCI_KERNEL_MODULES as at that point we don't have the module in /lib
-if [ "$IGT_FORCE_DRIVER" = "amdgpu" ]; then
-    mv /install/modules/lib/modules/* /lib/modules/.
-    modprobe amdgpu
+if [ "$IGT_FORCE_DRIVER" = "amdgpu" || "$IGT_FORCE_DRIVER" = "vkms" ]; then
+    mv /install/modules/lib/modules/* /lib/modules/. || true
+    modprobe --first-time "$IGT_FORCE_DRIVER"
 fi
 
 if [ -e "/install/xfails/$DRIVER_NAME-$GPU_VERSION-skips.txt" ]; then
