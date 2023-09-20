@@ -642,6 +642,7 @@ static const struct intel_device_info jsl_info = {
 	GEN(12), \
 	TGL_CACHELEVEL, \
 	.has_global_mocs = 1, \
+	.has_null_page = 1, \
 	.has_pxp = 1, \
 	.max_pat_index = 3
 
@@ -721,6 +722,7 @@ static const struct intel_device_info adl_p_info = {
 	.has_mslice_steering = 1, \
 	.has_oa_bpc_reporting = 1, \
 	.has_oa_slice_contrib_limits = 1, \
+	.has_null_page = 1, \
 	.has_oam = 1, \
 	.has_rc6 = 1, \
 	.has_reset_engine = 1, \

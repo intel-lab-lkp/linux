@@ -782,6 +782,8 @@ IS_SUBPLATFORM(const struct drm_i915_private *i915,
  */
 #define HAS_FLAT_CCS(i915)   (INTEL_INFO(i915)->has_flat_ccs)
 
+#define HAS_NULL_PAGE(dev_priv) (INTEL_INFO(dev_priv)->has_null_page)
+
 #define HAS_GT_UC(i915)	(INTEL_INFO(i915)->has_gt_uc)
 
 #define HAS_POOLED_EU(i915)	(RUNTIME_INFO(i915)->has_pooled_eu)
