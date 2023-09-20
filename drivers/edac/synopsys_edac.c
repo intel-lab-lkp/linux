@@ -9,6 +9,7 @@
 #include <linux/bitfield.h>
 #include <linux/bits.h>
 #include <linux/edac.h>
+#include <linux/fs.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/spinlock.h>
@@ -641,6 +642,16 @@ static int snps_setup_irq(struct mem_ctl_info *mci, struct platform_device *pdev
 
 #ifdef CONFIG_EDAC_DEBUG
 
+#define SNPS_DEBUGFS_FOPS(__name, __read, __write) \
+	static const struct file_operations __name = {	\
+		.owner = THIS_MODULE,		\
+		.open = simple_open,		\
+		.read = __read,			\
+		.write = __write,		\
+	}
+
+#define SNPS_DBGFS_BUF_LEN 128
+
 /**
  * snps_data_poison_setup - Update poison registers.
  * @priv:		DDR memory controller private instance data.
@@ -699,90 +710,6 @@ static void snps_data_poison_setup(struct snps_edac_priv *priv)
 		 FIELD_PREP(ECC_POISON1_BANK_MASK, bank) |
 		 FIELD_PREP(ECC_POISON1_ROW_MASK, row);
 	writel(regval, priv->baseaddr + ECC_POISON1_OFST);
-}
-
-static ssize_t inject_data_error_show(struct device *dev,
-				      struct device_attribute *mattr,
-				      char *data)
-{
-	struct mem_ctl_info *mci = to_mci(dev);
-	struct snps_edac_priv *priv = mci->pvt_info;
-
-	return sprintf(data, "Poison0 Addr: 0x%08x\n\rPoison1 Addr: 0x%08x\n\r"
-			"Error injection Address: 0x%lx\n\r",
-			readl(priv->baseaddr + ECC_POISON0_OFST),
-			readl(priv->baseaddr + ECC_POISON1_OFST),
-			priv->poison_addr);
-}
-
-static ssize_t inject_data_error_store(struct device *dev,
-				       struct device_attribute *mattr,
-				       const char *data, size_t count)
-{
-	struct mem_ctl_info *mci = to_mci(dev);
-	struct snps_edac_priv *priv = mci->pvt_info;
-
-	if (kstrtoul(data, 0, &priv->poison_addr))
-		return -EINVAL;
-
-	snps_data_poison_setup(priv);
-
-	return count;
-}
-
-static ssize_t inject_data_poison_show(struct device *dev,
-				       struct device_attribute *mattr,
-				       char *data)
-{
-	struct mem_ctl_info *mci = to_mci(dev);
-	struct snps_edac_priv *priv = mci->pvt_info;
-	const char *errstr;
-	u32 regval;
-
-	regval = readl(priv->baseaddr + ECC_CFG1_OFST);
-	errstr = FIELD_GET(ECC_CEPOISON_MASK, regval) == ECC_CEPOISON_MASK ?
-		 "Correctable Error" : "UnCorrectable Error";
-
-	return sprintf(data, "Data Poisoning: %s\n\r", errstr);
-}
-
-static ssize_t inject_data_poison_store(struct device *dev,
-					struct device_attribute *mattr,
-					const char *data, size_t count)
-{
-	struct mem_ctl_info *mci = to_mci(dev);
-	struct snps_edac_priv *priv = mci->pvt_info;
-
-	writel(0, priv->baseaddr + DDR_SWCTL);
-	if (strncmp(data, "CE", 2) == 0)
-		writel(ECC_CEPOISON_MASK, priv->baseaddr + ECC_CFG1_OFST);
-	else
-		writel(ECC_UEPOISON_MASK, priv->baseaddr + ECC_CFG1_OFST);
-	writel(1, priv->baseaddr + DDR_SWCTL);
-
-	return count;
-}
-
-static DEVICE_ATTR_RW(inject_data_error);
-static DEVICE_ATTR_RW(inject_data_poison);
-
-static int snps_create_sysfs_attributes(struct mem_ctl_info *mci)
-{
-	int rc;
-
-	rc = device_create_file(&mci->dev, &dev_attr_inject_data_error);
-	if (rc < 0)
-		return rc;
-	rc = device_create_file(&mci->dev, &dev_attr_inject_data_poison);
-	if (rc < 0)
-		return rc;
-	return 0;
-}
-
-static void snps_remove_sysfs_attributes(struct mem_ctl_info *mci)
-{
-	device_remove_file(&mci->dev, &dev_attr_inject_data_error);
-	device_remove_file(&mci->dev, &dev_attr_inject_data_poison);
 }
 
 static void snps_setup_row_address_map(struct snps_edac_priv *priv, u32 *addrmap)
@@ -1005,7 +932,115 @@ static void snps_setup_address_map(struct snps_edac_priv *priv)
 
 	snps_setup_rank_address_map(priv, addrmap);
 }
-#endif /* CONFIG_EDAC_DEBUG */
+
+static ssize_t snps_inject_data_error_read(struct file *filep, char __user *ubuf,
+					   size_t size, loff_t *offp)
+{
+	struct mem_ctl_info *mci = filep->private_data;
+	struct snps_edac_priv *priv = mci->pvt_info;
+	char buf[SNPS_DBGFS_BUF_LEN];
+	int pos;
+
+	pos = scnprintf(buf, sizeof(buf), "Poison0 Addr: 0x%08x\n\r",
+			readl(priv->baseaddr + ECC_POISON0_OFST));
+	pos += scnprintf(buf + pos, sizeof(buf) - pos, "Poison1 Addr: 0x%08x\n\r",
+			 readl(priv->baseaddr + ECC_POISON1_OFST));
+	pos += scnprintf(buf + pos, sizeof(buf) - pos, "Error injection Address: 0x%lx\n\r",
+			 priv->poison_addr);
+
+	return simple_read_from_buffer(ubuf, size, offp, buf, pos);
+}
+
+static ssize_t snps_inject_data_error_write(struct file *filep, const char __user *ubuf,
+					    size_t size, loff_t *offp)
+{
+	struct mem_ctl_info *mci = filep->private_data;
+	struct snps_edac_priv *priv = mci->pvt_info;
+	int rc;
+
+	rc = kstrtoul_from_user(ubuf, size, 0, &priv->poison_addr);
+	if (rc)
+		return rc;
+
+	snps_data_poison_setup(priv);
+
+	return size;
+}
+
+SNPS_DEBUGFS_FOPS(snps_inject_data_error, snps_inject_data_error_read,
+		  snps_inject_data_error_write);
+
+static ssize_t snps_inject_data_poison_read(struct file *filep, char __user *ubuf,
+					    size_t size, loff_t *offp)
+{
+	struct mem_ctl_info *mci = filep->private_data;
+	struct snps_edac_priv *priv = mci->pvt_info;
+	char buf[SNPS_DBGFS_BUF_LEN];
+	const char *errstr;
+	u32 regval;
+	int pos;
+
+	regval = readl(priv->baseaddr + ECC_CFG1_OFST);
+	errstr = FIELD_GET(ECC_CEPOISON_MASK, regval) == ECC_CEPOISON_MASK ?
+		 "Correctable Error" : "UnCorrectable Error";
+
+	pos = scnprintf(buf, sizeof(buf), "Data Poisoning: %s\n\r", errstr);
+
+	return simple_read_from_buffer(ubuf, size, offp, buf, pos);
+}
+
+static ssize_t snps_inject_data_poison_write(struct file *filep, const char __user *ubuf,
+					     size_t size, loff_t *offp)
+{
+	struct mem_ctl_info *mci = filep->private_data;
+	struct snps_edac_priv *priv = mci->pvt_info;
+	char buf[SNPS_DBGFS_BUF_LEN];
+	int rc;
+
+	rc = simple_write_to_buffer(buf, sizeof(buf), offp, ubuf, size);
+	if (rc < 0)
+		return rc;
+
+	writel(0, priv->baseaddr + DDR_SWCTL);
+	if (strncmp(buf, "CE", 2) == 0)
+		writel(ECC_CEPOISON_MASK, priv->baseaddr + ECC_CFG1_OFST);
+	else
+		writel(ECC_UEPOISON_MASK, priv->baseaddr + ECC_CFG1_OFST);
+	writel(1, priv->baseaddr + DDR_SWCTL);
+
+	return size;
+}
+
+SNPS_DEBUGFS_FOPS(snps_inject_data_poison, snps_inject_data_poison_read,
+		  snps_inject_data_poison_write);
+
+/**
+ * snps_create_debugfs_nodes -	Create DebugFS nodes.
+ * @mci:	EDAC memory controller instance.
+ *
+ * Create DW uMCTL2 EDAC driver DebugFS nodes in the device private
+ * DebugFS directory.
+ *
+ * Return: none.
+ */
+static void snps_create_debugfs_nodes(struct mem_ctl_info *mci)
+{
+	struct snps_edac_priv *priv = mci->pvt_info;
+
+	snps_setup_address_map(priv);
+
+	edac_debugfs_create_file("inject_data_error", 0600, mci->debugfs, mci,
+				 &snps_inject_data_error);
+
+	edac_debugfs_create_file("inject_data_poison", 0600, mci->debugfs, mci,
+				 &snps_inject_data_poison);
+}
+
+#else /* !CONFIG_EDAC_DEBUG */
+
+static inline void snps_create_debugfs_nodes(struct mem_ctl_info *mci) {}
+
+#endif /* !CONFIG_EDAC_DEBUG */
 
 /**
  * snps_mc_probe - Check controller and bind driver.
@@ -1071,17 +1106,9 @@ static int snps_mc_probe(struct platform_device *pdev)
 		goto free_edac_mc;
 	}
 
-#ifdef CONFIG_EDAC_DEBUG
-	rc = snps_create_sysfs_attributes(mci);
-	if (rc) {
-		edac_printk(KERN_ERR, EDAC_MC, "Failed to create sysfs entries\n");
-		goto free_edac_mc;
-	}
+	snps_create_debugfs_nodes(mci);
 
-	snps_setup_address_map(priv);
-#endif
-
-	return rc;
+	return 0;
 
 free_edac_mc:
 	edac_mc_free(mci);
@@ -1101,10 +1128,6 @@ static int snps_mc_remove(struct platform_device *pdev)
 	struct snps_edac_priv *priv = mci->pvt_info;
 
 	snps_disable_irq(priv);
-
-#ifdef CONFIG_EDAC_DEBUG
-	snps_remove_sysfs_attributes(mci);
-#endif
 
 	edac_mc_del_mc(&pdev->dev);
 	edac_mc_free(mci);
