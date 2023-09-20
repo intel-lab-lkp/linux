@@ -10251,6 +10251,12 @@ F:	Documentation/devicetree/bindings/hwmon/ti,ina2xx.yaml
 F:	Documentation/hwmon/ina209.rst
 F:	drivers/hwmon/ina209.c
 
+INA233 HARDWARE MONITOR DRIVER
+M:     Delphine CC Chiu <Delphine_CC_Chiu@wiwynn.com>
+S:     Odd Fixes
+F:     Documentation/devicetree/bindings/hwmon/ina233.txt
+F:     drivers/hwmon/ina233.c
+
 INA2XX HARDWARE MONITOR DRIVER
 M:	Guenter Roeck <linux@roeck-us.net>
 L:	linux-hwmon@vger.kernel.org

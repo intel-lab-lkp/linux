@@ -1,0 +1,27 @@
+Bindings for the Maxim MAX31790 Intelligent Fan Controller
+==========================================================
+
+Reference:
+
+https://pdf1.alldatasheet.com/datasheet-pdf/view/930928/TI1/INA233.html
+
+The INA233 device is a current, voltage and power monitor with an I2C-, SMBus-,and PMBus-compatible interface
+that is compliant with digital bus voltages from 1.8 V to 5.0 V.
+The device monitors and reports values for current, voltage and power.
+The integrated power accumulator can be used for energy or average power calculations.
+Programmable calibration value, conversion times and averaging when combined with an internal multiplier
+enable direct readouts of current in amperes and power in watts.
+
+Required properties:
+- compatible     	: ti,ina233
+- reg            	: I2C address
+- resistor-calibration  : MFR_CALIBRATION which will be set into register 0xd4
+- current-lsb    	: Current_LSB for calibration
+Example:
+
+        ina233@45 {
+                compatible = "ti,ina233";
+                reg = <0x45>;
+                resistor-calibration = /bits/ 16 <0x0a00>;
+                current-lsb= /bits/ 16 <0x0001>;
+        };
