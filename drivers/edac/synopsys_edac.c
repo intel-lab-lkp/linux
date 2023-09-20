@@ -1146,9 +1146,12 @@ static void snps_setup_bg_address_map(struct snps_edac_priv *priv, u32 *addrmap)
 
 static void snps_setup_rank_address_map(struct snps_edac_priv *priv, u32 *addrmap)
 {
-	priv->rank_shift[0] = ((addrmap[0] & RANK_MAX_VAL_MASK) ==
-				RANK_MAX_VAL_MASK) ? 0 : ((addrmap[0] &
-				RANK_MAX_VAL_MASK) + RANK_B0_BASE);
+	/* Ranks mapping is unavailable for the single-ranked memory */
+	if (priv->info.ranks > 1) {
+		priv->rank_shift[0] = ((addrmap[0] & RANK_MAX_VAL_MASK) ==
+					RANK_MAX_VAL_MASK) ? 0 : ((addrmap[0] &
+					RANK_MAX_VAL_MASK) + RANK_B0_BASE);
+	}
 }
 
 /**
