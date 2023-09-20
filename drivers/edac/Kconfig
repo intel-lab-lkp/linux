@@ -487,7 +487,7 @@ config EDAC_ARMADA_XP
 
 config EDAC_SYNOPSYS
 	tristate "Synopsys DDR Memory Controller"
-	depends on ARCH_ZYNQ || ARCH_ZYNQMP || ARCH_INTEL_SOCFPGA || ARCH_MXC
+	depends on ARCH_ZYNQMP || ARCH_INTEL_SOCFPGA || ARCH_MXC
 	help
 	  Support for error detection and correction on the Synopsys DDR
 	  memory controller.
@@ -560,5 +560,12 @@ config EDAC_NPCM
 	  The memory controller supports single bit error correction, double bit
 	  error detection (in-line ECC in which a section 1/8th of the memory
 	  device used to store data is used for ECC storage).
+
+config EDAC_ZYNQ
+	tristate "Xilinx Zynq A05 DDR Memory Controller"
+	depends on ARCH_ZYNQ || COMPILE_TEST
+	help
+	  Support for error detection and correction on the Xilinx Zynq A05
+	  DDR memory controller.
 
 endif # EDAC
