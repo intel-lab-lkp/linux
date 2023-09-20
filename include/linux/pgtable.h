@@ -205,6 +205,10 @@ static inline int pmd_young(pmd_t pmd)
 #define arch_flush_lazy_mmu_mode()	do {} while (0)
 #endif
 
+#ifndef pte_next_pfn
+#define pte_next_pfn(pte)	((pte) + (1UL << PFN_PTE_SHIFT))
+#endif
+
 #ifndef set_ptes
 /**
  * set_ptes - Map consecutive pages to a contiguous range of addresses.
@@ -231,7 +235,7 @@ static inline void set_ptes(struct mm_struct *mm, unsigned long addr,
 		if (--nr == 0)
 			break;
 		ptep++;
-		pte = __pte(pte_val(pte) + (1UL << PFN_PTE_SHIFT));
+		pte = pte_next_pfn(pte);
 	}
 	arch_leave_lazy_mmu_mode();
 }
