@@ -47,6 +47,13 @@ enum {LAST_NORM, LAST_ROOT, LAST_DOT, LAST_DOTDOT};
 /* LOOKUP_* flags which do scope-related checks based on the dirfd. */
 #define LOOKUP_IS_SCOPED (LOOKUP_BENEATH | LOOKUP_IN_ROOT)
 
+/* ->d_revalidate return codes */
+enum {
+	D_REVALIDATE_INVALID = 0, /* invalid dentry */
+	D_REVALIDATE_VALID   = 1, /* valid dentry */
+	D_REVALIDATE_ATOMIC =  2, /* atomic_open will revalidate */
+};
+
 extern int path_pts(struct path *path);
 
 extern int user_path_at_empty(int, const char __user *, unsigned, struct path *, int *empty);

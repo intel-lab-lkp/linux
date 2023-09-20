@@ -858,7 +858,7 @@ static inline int d_revalidate(struct dentry *dentry, unsigned int flags)
 	if (unlikely(dentry->d_flags & DCACHE_OP_REVALIDATE))
 		return dentry->d_op->d_revalidate(dentry, flags);
 	else
-		return 1;
+		return D_REVALIDATE_VALID;
 }
 
 /**
@@ -1611,10 +1611,11 @@ struct dentry *lookup_one_qstr_excl(const struct qstr *name,
 }
 EXPORT_SYMBOL(lookup_one_qstr_excl);
 
-static struct dentry *lookup_fast(struct nameidata *nd)
+static struct dentry *lookup_fast(struct nameidata *nd, bool *atomic_revalidate)
 {
 	struct dentry *dentry, *parent = nd->path.dentry;
 	int status = 1;
+	*atomic_revalidate = false;
 
 	/*
 	 * Rename seqlock is not required here because in the off chance
@@ -1656,6 +1657,10 @@ static struct dentry *lookup_fast(struct nameidata *nd)
 		dput(dentry);
 		return ERR_PTR(status);
 	}
+
+	if (status == D_REVALIDATE_ATOMIC)
+		*atomic_revalidate = true;
+
 	return dentry;
 }
 
@@ -1981,6 +1986,7 @@ static const char *handle_dots(struct nameidata *nd, int type)
 static const char *walk_component(struct nameidata *nd, int flags)
 {
 	struct dentry *dentry;
+	bool atomic_revalidate;
 	/*
 	 * "." and ".." are special - ".." especially so because it has
 	 * to be able to know about the current root directory and
@@ -1991,7 +1997,7 @@ static const char *walk_component(struct nameidata *nd, int flags)
 			put_link(nd);
 		return handle_dots(nd, nd->last_type);
 	}
-	dentry = lookup_fast(nd);
+	dentry = lookup_fast(nd, &atomic_revalidate);
 	if (IS_ERR(dentry))
 		return ERR_CAST(dentry);
 	if (unlikely(!dentry)) {
@@ -1999,6 +2005,9 @@ static const char *walk_component(struct nameidata *nd, int flags)
 		if (IS_ERR(dentry))
 			return ERR_CAST(dentry);
 	}
+
+	WARN_ON(atomic_revalidate);
+
 	if (!(flags & WALK_MORE) && nd->depth)
 		put_link(nd);
 	return step_into(nd, flags, dentry);
@@ -3430,7 +3439,7 @@ static struct dentry *lookup_open(struct nameidata *nd, struct file *file,
 		dput(dentry);
 		dentry = NULL;
 	}
-	if (dentry->d_inode) {
+	if (dentry->d_inode && error != D_REVALIDATE_ATOMIC) {
 		/* Cached positive dentry: will open in f_op->open */
 		return dentry;
 	}
@@ -3523,12 +3532,18 @@ static const char *open_last_lookups(struct nameidata *nd,
 	}
 
 	if (!(open_flag & O_CREAT)) {
+		bool atomic_revalidate;
+
 		if (nd->last.name[nd->last.len])
 			nd->flags |= LOOKUP_FOLLOW | LOOKUP_DIRECTORY;
 		/* we _can_ be in RCU mode here */
-		dentry = lookup_fast(nd);
+		dentry = lookup_fast(nd, &atomic_revalidate);
 		if (IS_ERR(dentry))
 			return ERR_CAST(dentry);
+		if (dentry && unlikely(atomic_revalidate)) {
+			dput(dentry);
+			dentry = NULL;
+		}
 		if (likely(dentry))
 			goto finish_lookup;
 
