@@ -9,6 +9,8 @@
 #include <linux/err.h>
 #include <linux/types.h>
 
+#include "i915_drv.h"
+
 struct drm_i915_private;
 
 struct intel_hdcp_gsc_message {
