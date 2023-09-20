@@ -34,8 +34,8 @@
 #define SNPS_EDAC_MOD_STRING		"snps_edac"
 #define SNPS_EDAC_MOD_VER		"1"
 
-/* DDR ECC Quirks */
-#define SNPS_ZYNQMP_IRQ_REGS		BIT(0)
+/* DDR capabilities */
+#define SNPS_CAP_ZYNQMP			BIT(31)
 
 /* Synopsys uMCTL2 DDR controller registers that are relevant to ECC */
 
@@ -338,7 +338,6 @@ struct snps_ecc_status {
  * @reglock:		Concurrent CSRs access lock.
  * @message:		Buffer for framing the event specific info.
  * @stat:		ECC status information.
- * @p_data:		Platform data.
  * @poison_addr:	Data poison address.
  * @row_shift:		Bit shifts for row bit.
  * @col_shift:		Bit shifts for column bit.
@@ -353,7 +352,6 @@ struct snps_edac_priv {
 	spinlock_t reglock;
 	char message[SNPS_EDAC_MSG_SIZE];
 	struct snps_ecc_status stat;
-	const struct snps_platform_data *p_data;
 #ifdef CONFIG_EDAC_DEBUG
 	ulong poison_addr;
 	u32 row_shift[18];
@@ -362,14 +360,6 @@ struct snps_edac_priv {
 	u32 bankgrp_shift[2];
 	u32 rank_shift[1];
 #endif
-};
-
-/**
- * struct snps_platform_data - Synopsys uMCTL2 DDRC platform data.
- * @quirks:	IP-core specific quirks.
- */
-struct snps_platform_data {
-	u32 quirks;
 };
 
 /**
@@ -485,7 +475,7 @@ static void snps_enable_irq(struct snps_edac_priv *priv)
 	unsigned long flags;
 
 	/* Enable UE/CE Interrupts */
-	if (priv->p_data->quirks & SNPS_ZYNQMP_IRQ_REGS) {
+	if (priv->info.caps & SNPS_CAP_ZYNQMP) {
 		writel(ZYNQMP_DDR_QOS_UE_MASK | ZYNQMP_DDR_QOS_CE_MASK,
 		       priv->baseaddr + ZYNQMP_DDR_QOS_IRQ_EN_OFST);
 
@@ -509,7 +499,7 @@ static void snps_disable_irq(struct snps_edac_priv *priv)
 	unsigned long flags;
 
 	/* Disable UE/CE Interrupts */
-	if (priv->p_data->quirks & SNPS_ZYNQMP_IRQ_REGS) {
+	if (priv->info.caps & SNPS_CAP_ZYNQMP) {
 		writel(ZYNQMP_DDR_QOS_UE_MASK | ZYNQMP_DDR_QOS_CE_MASK,
 		       priv->baseaddr + ZYNQMP_DDR_QOS_IRQ_DB_OFST);
 
@@ -538,7 +528,7 @@ static irqreturn_t snps_irq_handler(int irq, void *dev_id)
 
 	priv = mci->pvt_info;
 
-	if (priv->p_data->quirks & SNPS_ZYNQMP_IRQ_REGS) {
+	if (priv->info.caps & SNPS_CAP_ZYNQMP) {
 		regval = readl(priv->baseaddr + ZYNQMP_DDR_QOS_IRQ_STAT_OFST);
 		regval &= (ZYNQMP_DDR_QOS_CE_MASK | ZYNQMP_DDR_QOS_UE_MASK);
 		if (!(regval & ZYNQMP_DDR_QOS_IRQ_MASK))
@@ -551,7 +541,7 @@ static irqreturn_t snps_irq_handler(int irq, void *dev_id)
 
 	snps_handle_error(mci, &priv->stat);
 
-	if (priv->p_data->quirks & SNPS_ZYNQMP_IRQ_REGS)
+	if (priv->info.caps & SNPS_CAP_ZYNQMP)
 		writel(regval, priv->baseaddr + ZYNQMP_DDR_QOS_IRQ_STAT_OFST);
 
 	return IRQ_HANDLED;
@@ -575,14 +565,24 @@ static struct snps_edac_priv *snps_create_data(struct platform_device *pdev)
 	if (IS_ERR(priv->baseaddr))
 		return ERR_CAST(priv->baseaddr);
 
-	priv->p_data = of_device_get_match_data(&pdev->dev);
-	if (!priv->p_data)
-		return ERR_PTR(-ENODEV);
-
 	priv->pdev = pdev;
 	spin_lock_init(&priv->reglock);
 
 	return priv;
+}
+
+/*
+ * zynqmp_init_plat - ZynqMP-specific platform initialization.
+ * @priv:	DDR memory controller private data.
+ *
+ * Return: always zero.
+ */
+static int zynqmp_init_plat(struct snps_edac_priv *priv)
+{
+	priv->info.caps |= SNPS_CAP_ZYNQMP;
+	priv->info.dq_width = SNPS_DQ_64;
+
+	return 0;
 }
 
 /**
@@ -718,7 +718,10 @@ static int snps_get_ddrc_info(struct snps_edac_priv *priv)
 
 	writel(1, priv->baseaddr + DDR_SWCTL);
 
-	return 0;
+	/* Apply platform setups after all the configs auto-detection */
+	init_plat = device_get_match_data(&priv->pdev->dev);
+
+	return init_plat ? init_plat(priv) : 0;
 }
 
 /**
@@ -822,8 +825,6 @@ static void snps_mc_free(struct mem_ctl_info *mci)
 	edac_mc_free(mci);
 }
 
-
-
 static int snps_setup_irq(struct mem_ctl_info *mci)
 {
 	struct snps_edac_priv *priv = mci->pvt_info;
@@ -881,6 +882,15 @@ static int snps_ddrc_info_show(struct seq_file *s, void *data)
 		   priv->info.ecc_mode == SNPS_ECC_SECDED ? "SEC/DED" :
 		   priv->info.ecc_mode == SNPS_ECC_ADVX4X8 ? "Advanced X4/X8" :
 		   "Unknown");
+
+	seq_puts(s, "Caps:");
+	if (priv->info.caps) {
+		if (priv->info.caps & SNPS_CAP_ZYNQMP)
+			seq_puts(s, " +ZynqMP");
+	} else {
+		seq_puts(s, " -");
+	}
+	seq_putc(s, '\n');
 
 	return 0;
 }
@@ -1345,17 +1355,9 @@ static int snps_mc_remove(struct platform_device *pdev)
 	return 0;
 }
 
-static const struct snps_platform_data zynqmp_edac_def = {
-	.quirks = SNPS_ZYNQMP_IRQ_REGS,
-};
-
-static const struct snps_platform_data snps_edac_def = {
-	.quirks = 0,
-};
-
 static const struct of_device_id snps_edac_match[] = {
-	{ .compatible = "xlnx,zynqmp-ddrc-2.40a", .data = &zynqmp_edac_def },
-	{ .compatible = "snps,ddrc-3.80a", .data = &snps_edac_def },
+	{ .compatible = "xlnx,zynqmp-ddrc-2.40a", .data = zynqmp_init_plat },
+	{ .compatible = "snps,ddrc-3.80a" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, snps_edac_match);
