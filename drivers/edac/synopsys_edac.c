@@ -10,6 +10,7 @@
 #include <linux/bits.h>
 #include <linux/edac.h>
 #include <linux/fs.h>
+#include <linux/log2.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/seq_file.h>
@@ -301,6 +302,7 @@ struct snps_ddrc_info {
  * @col:	Column number.
  * @bank:	Bank number.
  * @bankgrp:	Bank group number.
+ * @syndrome:	Error syndrome.
  * @bitpos:	Bit position.
  * @data:	Data causing the error.
  */
@@ -309,6 +311,7 @@ struct snps_ecc_error_info {
 	u32 col;
 	u32 bank;
 	u32 bankgrp;
+	u32 syndrome;
 	u32 bitpos;
 	u32 data;
 };
@@ -360,6 +363,27 @@ struct snps_edac_priv {
 };
 
 /**
+ * snps_get_bitpos - Get DQ-bus corrected bit position.
+ * @syndrome:	Error syndrome.
+ * @dq_width:	Controller DQ-bus width.
+ *
+ * Return: actual corrected DQ-bus bit position starting from 0.
+ */
+static inline u32 snps_get_bitpos(u32 syndrome, enum snps_dq_width dq_width)
+{
+	/* ecc[0] bit */
+	if (syndrome == 0)
+		return BITS_PER_BYTE << dq_width;
+
+	/* ecc[1:x] bit */
+	if (is_power_of_2(syndrome))
+		return (BITS_PER_BYTE << dq_width) + ilog2(syndrome) + 1;
+
+	/* data[0:y] bit */
+	return syndrome - ilog2(syndrome) - 2;
+}
+
+/**
  * snps_get_error_info - Get the current ECC error info.
  * @priv:	DDR memory controller private instance data.
  *
@@ -379,13 +403,15 @@ static int snps_get_error_info(struct snps_edac_priv *priv)
 	if (!regval)
 		return 1;
 
-	p->ceinfo.bitpos = FIELD_GET(ECC_STAT_BITNUM_MASK, regval);
+	p->ceinfo.syndrome = FIELD_GET(ECC_STAT_BITNUM_MASK, regval);
 
 	regval = readl(base + ECC_ERRCNT_OFST);
 	p->ce_cnt = FIELD_GET(ECC_ERRCNT_CECNT_MASK, regval);
 	p->ue_cnt = FIELD_GET(ECC_ERRCNT_UECNT_MASK, regval);
 	if (!p->ce_cnt)
 		goto ue_err;
+
+	p->ceinfo.bitpos = snps_get_bitpos(p->ceinfo.syndrome, priv->info.dq_width);
 
 	regval = readl(base + ECC_CEADDR0_OFST);
 	p->ceinfo.row = FIELD_GET(ECC_CEADDR0_ROW_MASK, regval);
