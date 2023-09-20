@@ -792,6 +792,13 @@ static noinline struct btrfs_device *device_list_add(const char *path,
 	bool fsid_change_in_progress = (btrfs_super_flags(disk_super) &
 					BTRFS_SUPER_FLAG_CHANGING_FSID_V2);
 
+	if (fsid_change_in_progress) {
+		btrfs_err(NULL,
+"device %s has incomplete FSID changes please use btrfstune to complete",
+			  path);
+		return ERR_PTR(-EINVAL);
+	}
+
 	error = lookup_bdev(path, &path_devt);
 	if (error) {
 		btrfs_err(NULL, "failed to lookup block device for path %s: %d",
