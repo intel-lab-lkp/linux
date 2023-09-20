@@ -72,7 +72,8 @@ i915_gem_object_wait_reservation(struct dma_resv *resv,
 	struct dma_fence *fence;
 	long ret = timeout ?: 1;
 
-	i915_gem_object_boost(resv, flags);
+	if (!(flags & I915_WAITBOOST_DISABLE))
+		i915_gem_object_boost(resv, flags);
 
 	dma_resv_iter_begin(&cursor, resv,
 			    dma_resv_usage_rw(flags & I915_WAIT_ALL));
@@ -236,7 +237,7 @@ i915_gem_wait_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
 	ktime_t start;
 	long ret;
 
-	if (args->flags != 0)
+	if (args->flags != 0 || args->flags != I915_GEM_WAITBOOST_DISABLE)
 		return -EINVAL;
 
 	obj = i915_gem_object_lookup(file, args->bo_handle);
@@ -248,7 +249,9 @@ i915_gem_wait_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
 	ret = i915_gem_object_wait(obj,
 				   I915_WAIT_INTERRUPTIBLE |
 				   I915_WAIT_PRIORITY |
-				   I915_WAIT_ALL,
+				   I915_WAIT_ALL |
+				   (args->flags & I915_GEM_WAITBOOST_DISABLE ?
+				    I915_WAITBOOST_DISABLE : 0),
 				   to_wait_timeout(args->timeout_ns));
 
 	if (args->timeout_ns > 0) {

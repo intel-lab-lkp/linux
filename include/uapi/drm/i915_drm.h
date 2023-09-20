@@ -1928,6 +1928,7 @@ struct drm_i915_gem_wait {
 	/** Handle of BO we shall wait on */
 	__u32 bo_handle;
 	__u32 flags;
+#define I915_GEM_WAITBOOST_DISABLE      (1u<<0)
 	/** Number of nanoseconds to wait, Returns time remaining. */
 	__s64 timeout_ns;
 };

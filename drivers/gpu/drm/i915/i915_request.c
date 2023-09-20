@@ -2044,7 +2044,8 @@ long i915_request_wait_timeout(struct i915_request *rq,
 	 * but at a cost of spending more power processing the workload
 	 * (bad for battery).
 	 */
-	if (flags & I915_WAIT_PRIORITY && !i915_request_started(rq))
+	if (!(flags & I915_WAITBOOST_DISABLE) && (flags & I915_WAIT_PRIORITY) &&
+	    !i915_request_started(rq))
 		intel_rps_boost(rq);
 
 	wait.tsk = current;

@@ -445,6 +445,7 @@ long i915_request_wait(struct i915_request *rq,
 #define I915_WAIT_INTERRUPTIBLE	BIT(0)
 #define I915_WAIT_PRIORITY	BIT(1) /* small priority bump for the request */
 #define I915_WAIT_ALL		BIT(2) /* used by i915_gem_object_wait() */
+#define I915_WAITBOOST_DISABLE	BIT(3) /* used by i915_gem_object_wait() */
 
 void i915_request_show(struct drm_printer *m,
 		       const struct i915_request *rq,
