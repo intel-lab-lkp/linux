@@ -126,7 +126,7 @@ static const struct dpu_dspp_cfg sc7280_dspp[] = {
 static const struct dpu_pingpong_cfg sc7280_pp[] = {
 	{
 		.name = "pingpong_0", .id = PINGPONG_0,
-		.base = 0x69000, .len = 0,
+		.base = 0x69000, .len = 0xd4,
 		.features = BIT(DPU_PINGPONG_DITHER),
 		.sblk = &sc7280_pp_sblk,
 		.merge_3d = 0,
@@ -134,7 +134,7 @@ static const struct dpu_pingpong_cfg sc7280_pp[] = {
 		.intr_rdptr = -1,
 	}, {
 		.name = "pingpong_1", .id = PINGPONG_1,
-		.base = 0x6a000, .len = 0,
+		.base = 0x6a000, .len = 0xd4,
 		.features = BIT(DPU_PINGPONG_DITHER),
 		.sblk = &sc7280_pp_sblk,
 		.merge_3d = 0,
@@ -142,7 +142,7 @@ static const struct dpu_pingpong_cfg sc7280_pp[] = {
 		.intr_rdptr = -1,
 	}, {
 		.name = "pingpong_2", .id = PINGPONG_2,
-		.base = 0x6b000, .len = 0,
+		.base = 0x6b000, .len = 0xd4,
 		.features = BIT(DPU_PINGPONG_DITHER),
 		.sblk = &sc7280_pp_sblk,
 		.merge_3d = 0,
@@ -150,7 +150,7 @@ static const struct dpu_pingpong_cfg sc7280_pp[] = {
 		.intr_rdptr = -1,
 	}, {
 		.name = "pingpong_3", .id = PINGPONG_3,
-		.base = 0x6c000, .len = 0,
+		.base = 0x6c000, .len = 0xd4,
 		.features = BIT(DPU_PINGPONG_DITHER),
 		.sblk = &sc7280_pp_sblk,
 		.merge_3d = 0,
