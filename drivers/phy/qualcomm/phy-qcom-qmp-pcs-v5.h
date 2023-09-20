@@ -30,5 +30,7 @@
 #define QPHY_V5_PCS_EQ_CONFIG2				0x1e0
 #define QPHY_V5_PCS_EQ_CONFIG3				0x1e4
 #define QPHY_V5_PCS_EQ_CONFIG5				0x1ec
+#define QPHY_V5_PCS_INSIG_MX_CTRL7			0x07c
+#define QPHY_V5_PCS_INSIG_SW_CTRL7			0x060
 
 #endif
