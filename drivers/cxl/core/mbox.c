@@ -707,7 +707,7 @@ static void cxl_walk_cel(struct cxl_memdev_state *mds, size_t size, u8 *cel)
 {
 	struct cxl_cel_entry *cel_entry;
 	const int cel_entries = size / sizeof(*cel_entry);
-	struct device *dev = mds->cxlds.dev;
+	struct cxl_memdev *cxlmd = mds->cxlds.cxlmd;
 	int i;
 
 	cel_entry = (struct cxl_cel_entry *) cel;
@@ -718,8 +718,7 @@ static void cxl_walk_cel(struct cxl_memdev_state *mds, size_t size, u8 *cel)
 
 		if (!cmd && (!cxl_is_poison_command(opcode) ||
 			     !cxl_is_security_command(opcode))) {
-			dev_dbg(dev,
-				"Opcode 0x%04x unsupported by driver\n", opcode);
+			trace_cxl_opcode(cxlmd, opcode, false);
 			continue;
 		}
 
@@ -732,7 +731,7 @@ static void cxl_walk_cel(struct cxl_memdev_state *mds, size_t size, u8 *cel)
 		if (cxl_is_security_command(opcode))
 			cxl_set_security_cmd_enabled(&mds->security, opcode);
 
-		dev_dbg(dev, "Opcode 0x%04x enabled\n", opcode);
+		trace_cxl_opcode(cxlmd, opcode, true);
 	}
 }
 
