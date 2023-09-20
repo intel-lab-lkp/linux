@@ -29,7 +29,7 @@ static inline bool btrfs_need_stripe_tree_update(struct btrfs_fs_info *fs_info,
 	u64 type = map_type & BTRFS_BLOCK_GROUP_TYPE_MASK;
 	u64 profile = map_type & BTRFS_BLOCK_GROUP_PROFILE_MASK;
 
-	if (!fs_info->stripe_root)
+	if (!btrfs_fs_incompat(fs_info, RAID_STRIPE_TREE))
 		return false;
 
 	if (type != BTRFS_BLOCK_GROUP_DATA)
