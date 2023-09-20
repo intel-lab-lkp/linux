@@ -12,6 +12,7 @@
 #include <linux/fs.h>
 #include <linux/log2.h>
 #include <linux/module.h>
+#include <linux/pfn.h>
 #include <linux/platform_device.h>
 #include <linux/seq_file.h>
 #include <linux/spinlock.h>
@@ -346,20 +347,14 @@ struct snps_sdram_addr {
 
 /**
  * struct snps_ecc_error_info - ECC error log information.
- * @row:	Row number.
- * @col:	Column number.
- * @bank:	Bank number.
- * @bankgrp:	Bank group number.
+ * @sdram:	SDRAM address.
  * @syndrome:	Error syndrome.
  * @bitpos:	Bit position.
  * @data:	Data causing the error.
  * @ecc:	Data ECC.
  */
 struct snps_ecc_error_info {
-	u32 row;
-	u32 col;
-	u32 bank;
-	u32 bankgrp;
+	struct snps_sdram_addr sdram;
 	u32 syndrome;
 	u32 bitpos;
 	u64 data;
@@ -421,6 +416,21 @@ static void snps_map_app_to_hif(struct snps_edac_priv *priv,
 }
 
 /**
+ * snps_map_hif_to_app - Map HIF address to Application address.
+ * @priv:	DDR memory controller private instance data.
+ * @hif:	HIF address (source).
+ * @app:	Application address (destination).
+ *
+ * Backward HIF-to-App translation is just the opposite DQ-width-based
+ * shift operation.
+ */
+static void snps_map_hif_to_app(struct snps_edac_priv *priv,
+				u64 hif, u64 *app)
+{
+	*app = hif << priv->info.dq_width;
+}
+
+/**
  * snps_map_hif_to_sdram - Map HIF address to SDRAM address.
  * @priv:	DDR memory controller private instance data.
  * @hif:	HIF address (source).
@@ -472,6 +482,58 @@ static void snps_map_hif_to_sdram(struct snps_edac_priv *priv,
 }
 
 /**
+ * snps_map_sdram_to_hif - Map SDRAM address to HIF address.
+ * @priv:	DDR memory controller private instance data.
+ * @sdram:	SDRAM address (source).
+ * @hif:	HIF address (destination).
+ *
+ * SDRAM-HIF address mapping is similar to the HIF-SDRAM mapping procedure, but
+ * we'll traverse each SDRAM rank/bank/column/row bit.
+ *
+ * Note the unmapped bits of the SDRAM address components will be just
+ * ignored. So make sure the source address is valid.
+ */
+static void snps_map_sdram_to_hif(struct snps_edac_priv *priv,
+				  struct snps_sdram_addr *sdram, u64 *hif)
+{
+	struct snps_hif_sdram_map *map = &priv->hif_sdram_map;
+	unsigned long addr;
+	int i;
+
+	*hif = 0;
+
+	addr = sdram->row;
+	for_each_set_bit(i, &addr, DDR_MAX_ROW_WIDTH) {
+		if (map->row[i] != DDR_ADDRMAP_UNUSED)
+			*hif |= BIT_ULL(map->row[i]);
+	}
+
+	addr = sdram->col;
+	for_each_set_bit(i, &addr, DDR_MAX_COL_WIDTH) {
+		if (map->col[i] != DDR_ADDRMAP_UNUSED)
+			*hif |= BIT_ULL(map->col[i]);
+	}
+
+	addr = sdram->bank;
+	for_each_set_bit(i, &addr, DDR_MAX_BANK_WIDTH) {
+		if (map->bank[i] != DDR_ADDRMAP_UNUSED)
+			*hif |= BIT_ULL(map->bank[i]);
+	}
+
+	addr = sdram->bankgrp;
+	for_each_set_bit(i, &addr, DDR_MAX_BANKGRP_WIDTH) {
+		if (map->bankgrp[i] != DDR_ADDRMAP_UNUSED)
+			*hif |= BIT_ULL(map->bankgrp[i]);
+	}
+
+	addr = sdram->rank;
+	for_each_set_bit(i, &addr, DDR_MAX_RANK_WIDTH) {
+		if (map->rank[i] != DDR_ADDRMAP_UNUSED)
+			*hif |= BIT_ULL(map->rank[i]);
+	}
+}
+
+/**
  * snps_map_sys_to_sdram - Map System address to SDRAM address.
  * @priv:	DDR memory controller private instance data.
  * @sys:	System address (source).
@@ -490,6 +552,27 @@ static void snps_map_sys_to_sdram(struct snps_edac_priv *priv,
 	snps_map_app_to_hif(priv, app, &hif);
 
 	snps_map_hif_to_sdram(priv, hif, sdram);
+}
+
+/**
+ * snps_map_sdram_to_sys - Map SDRAM address to SDRAM address.
+ * @priv:	DDR memory controller private instance data.
+ * @sys:	System address (source).
+ * @sdram:	SDRAM address (destination).
+ *
+ * Perform a full mapping of the SDRAM address (row/column/bank/etc) to
+ * the system address specific to the controller system bus ports.
+ */
+static void snps_map_sdram_to_sys(struct snps_edac_priv *priv,
+				  struct snps_sdram_addr *sdram, dma_addr_t *sys)
+{
+	u64 app, hif;
+
+	snps_map_sdram_to_hif(priv, sdram, &hif);
+
+	snps_map_hif_to_app(priv, hif, &app);
+
+	*sys = app;
 }
 
 /**
@@ -544,12 +627,13 @@ static int snps_get_error_info(struct snps_edac_priv *priv)
 	p->ceinfo.bitpos = snps_get_bitpos(p->ceinfo.syndrome, priv->info.dq_width);
 
 	regval = readl(base + ECC_CEADDR0_OFST);
-	p->ceinfo.row = FIELD_GET(ECC_CEADDR0_ROW_MASK, regval);
+	p->ceinfo.sdram.rank = FIELD_GET(ECC_CEADDR0_RANK_MASK, regval);
+	p->ceinfo.sdram.row = FIELD_GET(ECC_CEADDR0_ROW_MASK, regval);
 
 	regval = readl(base + ECC_CEADDR1_OFST);
-	p->ceinfo.bank = FIELD_GET(ECC_CEADDR1_BANK_MASK, regval);
-	p->ceinfo.bankgrp = FIELD_GET(ECC_CEADDR1_BANKGRP_MASK, regval);
-	p->ceinfo.col = FIELD_GET(ECC_CEADDR1_COL_MASK, regval);
+	p->ceinfo.sdram.bankgrp = FIELD_GET(ECC_CEADDR1_BANKGRP_MASK, regval);
+	p->ceinfo.sdram.bank = FIELD_GET(ECC_CEADDR1_BANK_MASK, regval);
+	p->ceinfo.sdram.col = FIELD_GET(ECC_CEADDR1_COL_MASK, regval);
 
 	p->ceinfo.data = readl(base + ECC_CSYND0_OFST);
 	if (priv->info.dq_width == SNPS_DQ_64)
@@ -562,12 +646,13 @@ ue_err:
 		goto out;
 
 	regval = readl(base + ECC_UEADDR0_OFST);
-	p->ueinfo.row = FIELD_GET(ECC_CEADDR0_ROW_MASK, regval);
+	p->ueinfo.sdram.rank = FIELD_GET(ECC_CEADDR0_RANK_MASK, regval);
+	p->ueinfo.sdram.row = FIELD_GET(ECC_CEADDR0_ROW_MASK, regval);
 
 	regval = readl(base + ECC_UEADDR1_OFST);
-	p->ueinfo.bankgrp = FIELD_GET(ECC_CEADDR1_BANKGRP_MASK, regval);
-	p->ueinfo.bank = FIELD_GET(ECC_CEADDR1_BANK_MASK, regval);
-	p->ueinfo.col = FIELD_GET(ECC_CEADDR1_COL_MASK, regval);
+	p->ueinfo.sdram.bankgrp = FIELD_GET(ECC_CEADDR1_BANKGRP_MASK, regval);
+	p->ueinfo.sdram.bank = FIELD_GET(ECC_CEADDR1_BANK_MASK, regval);
+	p->ueinfo.sdram.col = FIELD_GET(ECC_CEADDR1_COL_MASK, regval);
 
 	p->ueinfo.data = readl(base + ECC_UESYND0_OFST);
 	if (priv->info.dq_width == SNPS_DQ_64)
@@ -599,31 +684,39 @@ static void snps_handle_error(struct mem_ctl_info *mci, struct snps_ecc_status *
 {
 	struct snps_edac_priv *priv = mci->pvt_info;
 	struct snps_ecc_error_info *pinf;
+	dma_addr_t sys;
 
 	if (p->ce_cnt) {
 		pinf = &p->ceinfo;
 
+		snps_map_sdram_to_sys(priv, &pinf->sdram, &sys);
+
 		snprintf(priv->message, SNPS_EDAC_MSG_SIZE,
-			 "Row %d Col %d Bank %d Bank Group %d Bit %d Data 0x%08llx:0x%02x",
-			 pinf->row, pinf->col, pinf->bank, pinf->bankgrp,
+			 "Row %hu Col %hu Bank %hhu Bank Group %hhu Rank %hhu Bit %d Data 0x%08llx:0x%02x",
+			 pinf->sdram.row, pinf->sdram.col, pinf->sdram.bank,
+			 pinf->sdram.bankgrp, pinf->sdram.rank,
 			 pinf->bitpos, pinf->data, pinf->ecc);
 
-		edac_mc_handle_error(HW_EVENT_ERR_CORRECTED, mci,
-				     p->ce_cnt, 0, 0, pinf->syndrome, 0, 0, -1,
+		edac_mc_handle_error(HW_EVENT_ERR_CORRECTED, mci, p->ce_cnt,
+				     PHYS_PFN(sys), offset_in_page(sys),
+				     pinf->syndrome, 0, 0, -1,
 				     priv->message, "");
 	}
 
 	if (p->ue_cnt) {
 		pinf = &p->ueinfo;
 
+		snps_map_sdram_to_sys(priv, &pinf->sdram, &sys);
+
 		snprintf(priv->message, SNPS_EDAC_MSG_SIZE,
-			 "Row %d Col %d Bank %d Bank Group %d Data 0x%08llx:0x%02x",
-			 pinf->row, pinf->col, pinf->bank, pinf->bankgrp,
+			 "Row %hu Col %hu Bank %hhu Bank Group %hhu Rank %hhu Data 0x%08llx:0x%02x",
+			 pinf->sdram.row, pinf->sdram.col, pinf->sdram.bank,
+			 pinf->sdram.bankgrp, pinf->sdram.rank,
 			 pinf->data, pinf->ecc);
 
-		edac_mc_handle_error(HW_EVENT_ERR_UNCORRECTED, mci,
-				     p->ue_cnt, 0, 0, 0, 0, 0, -1,
-				     priv->message, "");
+		edac_mc_handle_error(HW_EVENT_ERR_UNCORRECTED, mci, p->ue_cnt,
+				     PHYS_PFN(sys), offset_in_page(sys),
+				     0, 0, 0, -1, priv->message, "");
 	}
 
 	memset(p, 0, sizeof(*p));
