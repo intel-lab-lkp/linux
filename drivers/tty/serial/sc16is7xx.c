@@ -1415,13 +1415,19 @@ static void sc16is7xx_setup_irda_ports(struct sc16is7xx_port *s)
 	int count;
 	u32 irda_port[2];
 	struct device *dev = s->p[0].port.dev;
+	const char *prop_name = "nxp,irda-mode-ports";
 
-	count = device_property_count_u32(dev, "irda-mode-ports");
+	count = device_property_count_u32(dev, prop_name);
+	if (count < 0) {
+		/* For backward compatibility with old DTBs. */
+		prop_name = "irda-mode-ports";
+		count = device_property_count_u32(dev, prop_name);
+	}
+
 	if (count < 0 || count > ARRAY_SIZE(irda_port))
 		return;
 
-	ret = device_property_read_u32_array(dev, "irda-mode-ports",
-					     irda_port, count);
+	ret = device_property_read_u32_array(dev, prop_name, irda_port, count);
 	if (ret)
 		return;
 
