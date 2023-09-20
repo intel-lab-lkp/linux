@@ -56,5 +56,7 @@ int ksz9477_reset_switch(struct ksz_device *dev);
 int ksz9477_switch_init(struct ksz_device *dev);
 void ksz9477_switch_exit(struct ksz_device *dev);
 void ksz9477_port_queue_split(struct ksz_device *dev, int port);
+void ksz9477_hsr_join(struct dsa_switch *ds, int port, struct net_device *hsr);
+void ksz9477_hsr_leave(struct dsa_switch *ds, int port, struct net_device *hsr);
 
 #endif
