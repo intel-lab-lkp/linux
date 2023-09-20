@@ -129,6 +129,7 @@ __drm_kunit_helper_alloc_drm_device_with_driver(struct kunit *test,
 						const struct drm_driver *driver)
 {
 	struct drm_device *drm;
+	struct platform_device *pdev = to_platform_device(dev);
 	void *container;
 	int ret;
 
@@ -142,6 +143,21 @@ __drm_kunit_helper_alloc_drm_device_with_driver(struct kunit *test,
 	ret = drmm_mode_config_init(drm);
 	if (ret)
 		return ERR_PTR(ret);
+
+	ret = kunit_move_action_to_top_or_reset(test,
+						kunit_action_platform_driver_unregister,
+						&fake_platform_driver);
+	KUNIT_ASSERT_EQ(test, ret, 0);
+
+	ret = kunit_move_action_to_top_or_reset(test,
+						kunit_action_platform_device_put,
+						pdev);
+	KUNIT_ASSERT_EQ(test, ret, 0);
+
+	ret = kunit_move_action_to_top_or_reset(test,
+						kunit_action_platform_device_del,
+						pdev);
+	KUNIT_ASSERT_EQ(test, ret, 0);
 
 	return drm;
 }
