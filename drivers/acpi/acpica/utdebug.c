@@ -16,6 +16,8 @@
 #define _COMPONENT          ACPI_UTILITIES
 ACPI_MODULE_NAME("utdebug")
 
+static DEFINE_SPINLOCK(acpi_utdebug_lock);
+
 #ifdef ACPI_DEBUG_OUTPUT
 static acpi_thread_id acpi_gbl_previous_thread_id = (acpi_thread_id) 0xFFFFFFFF;
 static const char *acpi_gbl_function_entry_prefix = "----Entry";
@@ -60,13 +62,16 @@ void acpi_ut_init_stack_ptr_trace(void)
 void acpi_ut_track_stack_ptr(void)
 {
 	acpi_size current_sp;
+	u32 nesting_level;
 
 	if (&current_sp < acpi_gbl_lowest_stack_pointer) {
 		acpi_gbl_lowest_stack_pointer = &current_sp;
 	}
 
-	if (acpi_gbl_nesting_level > acpi_gbl_deepest_nesting) {
-		acpi_gbl_deepest_nesting = acpi_gbl_nesting_level;
+	nesting_level = READ_ONCE(acpi_gbl_nesting_level);
+
+	if (nesting_level > acpi_gbl_deepest_nesting) {
+		acpi_gbl_deepest_nesting = nesting_level;
 	}
 }
 
@@ -137,6 +142,7 @@ acpi_debug_print(u32 requested_debug_level,
 #ifdef ACPI_APPLICATION
 	int fill_count;
 #endif
+	u32 nesting_level;
 
 	/* Check if debug output enabled */
 
@@ -156,7 +162,7 @@ acpi_debug_print(u32 requested_debug_level,
 		}
 
 		acpi_gbl_previous_thread_id = thread_id;
-		acpi_gbl_nesting_level = 0;
+		WRITE_ONCE(acpi_gbl_nesting_level, 0);
 	}
 
 	/*
@@ -176,14 +182,16 @@ acpi_debug_print(u32 requested_debug_level,
 		acpi_os_printf("[%u] ", (u32)thread_id);
 	}
 
-	fill_count = 48 - acpi_gbl_nesting_level -
+	fill_count = 48 - READ_ONCE(acpi_gbl_nesting_level) -
 	    strlen(acpi_ut_trim_function_name(function_name));
 	if (fill_count < 0) {
 		fill_count = 0;
 	}
 
+	nesting_level = READ_ONCE(acpi_gbl_nesting_level);
+
 	acpi_os_printf("[%02d] %*s",
-		       acpi_gbl_nesting_level, acpi_gbl_nesting_level + 1, " ");
+		       nesting_level, nesting_level + 1, " ");
 	acpi_os_printf("%s%*s: ",
 		       acpi_ut_trim_function_name(function_name), fill_count,
 		       " ");
@@ -260,7 +268,10 @@ acpi_ut_trace(u32 line_number,
 	      const char *module_name, u32 component_id)
 {
 
+	spin_lock(&acpi_utdebug_lock);
 	acpi_gbl_nesting_level++;
+	spin_unlock(&acpi_utdebug_lock);
+
 	acpi_ut_track_stack_ptr();
 
 	/* Check if enabled up-front for performance */
@@ -298,7 +309,10 @@ acpi_ut_trace_ptr(u32 line_number,
 		  u32 component_id, const void *pointer)
 {
 
+	spin_lock(&acpi_utdebug_lock);
 	acpi_gbl_nesting_level++;
+	spin_unlock(&acpi_utdebug_lock);
+
 	acpi_ut_track_stack_ptr();
 
 	/* Check if enabled up-front for performance */
@@ -334,7 +348,10 @@ acpi_ut_trace_str(u32 line_number,
 		  const char *module_name, u32 component_id, const char *string)
 {
 
+	spin_lock(&acpi_utdebug_lock);
 	acpi_gbl_nesting_level++;
+	spin_unlock(&acpi_utdebug_lock);
+
 	acpi_ut_track_stack_ptr();
 
 	/* Check if enabled up-front for performance */
@@ -370,7 +387,10 @@ acpi_ut_trace_u32(u32 line_number,
 		  const char *module_name, u32 component_id, u32 integer)
 {
 
+	spin_lock(&acpi_utdebug_lock);
 	acpi_gbl_nesting_level++;
+	spin_unlock(&acpi_utdebug_lock);
+
 	acpi_ut_track_stack_ptr();
 
 	/* Check if enabled up-front for performance */
@@ -414,9 +434,11 @@ acpi_ut_exit(u32 line_number,
 				 acpi_gbl_function_exit_prefix);
 	}
 
+	spin_lock(&acpi_utdebug_lock);
 	if (acpi_gbl_nesting_level) {
 		acpi_gbl_nesting_level--;
 	}
+	spin_unlock(&acpi_utdebug_lock);
 }
 
 ACPI_EXPORT_SYMBOL(acpi_ut_exit)
@@ -463,9 +485,11 @@ acpi_ut_status_exit(u32 line_number,
 		}
 	}
 
+	spin_lock(&acpi_utdebug_lock);
 	if (acpi_gbl_nesting_level) {
 		acpi_gbl_nesting_level--;
 	}
+	spin_unlock(&acpi_utdebug_lock);
 }
 
 ACPI_EXPORT_SYMBOL(acpi_ut_status_exit)
@@ -502,9 +526,11 @@ acpi_ut_value_exit(u32 line_number,
 				 ACPI_FORMAT_UINT64(value));
 	}
 
+	spin_lock(&acpi_utdebug_lock);
 	if (acpi_gbl_nesting_level) {
 		acpi_gbl_nesting_level--;
 	}
+	spin_unlock(&acpi_utdebug_lock);
 }
 
 ACPI_EXPORT_SYMBOL(acpi_ut_value_exit)
@@ -540,9 +566,11 @@ acpi_ut_ptr_exit(u32 line_number,
 				 acpi_gbl_function_exit_prefix, ptr);
 	}
 
+	spin_lock(&acpi_utdebug_lock);
 	if (acpi_gbl_nesting_level) {
 		acpi_gbl_nesting_level--;
 	}
+	spin_unlock(&acpi_utdebug_lock);
 }
 
 /*******************************************************************************
@@ -577,9 +605,11 @@ acpi_ut_str_exit(u32 line_number,
 				 acpi_gbl_function_exit_prefix, string);
 	}
 
+	spin_lock(&acpi_utdebug_lock);
 	if (acpi_gbl_nesting_level) {
 		acpi_gbl_nesting_level--;
 	}
+	spin_unlock(&acpi_utdebug_lock);
 }
 
 /*******************************************************************************
