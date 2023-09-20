@@ -705,7 +705,7 @@ drm_gpuva_range_valid(struct drm_gpuvm *gpuvm,
  */
 void
 drm_gpuvm_init(struct drm_gpuvm *gpuvm, struct drm_device *drm,
-	       const char *name,
+	       const char *name, enum drm_gpuva_flags flags,
 	       u64 start_offset, u64 range,
 	       u64 reserve_offset, u64 reserve_range,
 	       const struct drm_gpuvm_ops *ops)
@@ -718,6 +718,7 @@ drm_gpuvm_init(struct drm_gpuvm *gpuvm, struct drm_device *drm,
 	gpuvm->mm_range = range;
 
 	gpuvm->name = name ? name : "unknown";
+	gpuvm->flags = flags;
 	gpuvm->ops = ops;
 
 	memset(&gpuvm->kernel_alloc_node, 0, sizeof(struct drm_gpuva));
