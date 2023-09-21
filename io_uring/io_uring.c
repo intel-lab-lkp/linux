@@ -3256,6 +3256,35 @@ static __cold bool io_uring_try_cancel_iowq(struct io_ring_ctx *ctx)
 	return ret;
 }
 
+static bool io_uring_try_cancel_uring_cmd(struct io_ring_ctx *ctx,
+					  struct task_struct *task,
+					  bool cancel_all)
+{
+	struct hlist_node *tmp;
+	struct io_kiocb *req;
+	bool ret = false;
+
+	mutex_lock(&ctx->uring_lock);
+	hlist_for_each_entry_safe(req, tmp, &ctx->cancelable_uring_cmd,
+			hash_node) {
+		struct io_uring_cmd *cmd = io_kiocb_to_cmd(req,
+				struct io_uring_cmd);
+
+		if (!cancel_all && req->task != task)
+			continue;
+
+		/* safe to call ->cancel_fn() since cmd isn't done yet */
+		if (cmd->flags & IORING_URING_CMD_CANCELABLE) {
+			cmd->cancel_fn(cmd, 0, task);
+			ret = true;
+		}
+	}
+	io_submit_flush_completions(ctx);
+	mutex_unlock(&ctx->uring_lock);
+
+	return ret;
+}
+
 static __cold bool io_uring_try_cancel_requests(struct io_ring_ctx *ctx,
 						struct task_struct *task,
 						bool cancel_all)
@@ -3307,6 +3336,7 @@ static __cold bool io_uring_try_cancel_requests(struct io_ring_ctx *ctx,
 	ret |= io_kill_timeouts(ctx, task, cancel_all);
 	if (task)
 		ret |= io_run_task_work() > 0;
+	ret |= io_uring_try_cancel_uring_cmd(ctx, task, cancel_all);
 	return ret;
 }
 

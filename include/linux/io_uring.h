@@ -22,6 +22,9 @@ enum io_uring_cmd_flags {
 	IO_URING_F_IOPOLL		= (1 << 10),
 };
 
+typedef void (uring_cmd_cancel_fn)(struct io_uring_cmd *,
+		unsigned int issue_flags, struct task_struct *task);
+
 struct io_uring_cmd {
 	struct file	*file;
 	const struct io_uring_sqe *sqe;
@@ -33,7 +36,17 @@ struct io_uring_cmd {
 	};
 	u32		cmd_op;
 	u32		flags;
-	u8		pdu[32]; /* available inline for free use */
+
+	/* less than 32 is available for cancelable cmd */
+	union {
+		u8		pdu[32]; /* available inline for free use */
+
+		struct {
+			/* available inline for free use */
+			u8	__pdu[32 - sizeof(uring_cmd_cancel_fn  *)];
+			uring_cmd_cancel_fn  *cancel_fn;
+		};
+	};
 };
 
 static inline const void *io_uring_sqe_cmd(const struct io_uring_sqe *sqe)
@@ -82,6 +95,8 @@ static inline void io_uring_free(struct task_struct *tsk)
 		__io_uring_free(tsk);
 }
 int io_uring_cmd_sock(struct io_uring_cmd *cmd, unsigned int issue_flags);
+int io_uring_cmd_mark_cancelable(struct io_uring_cmd *cmd,
+		unsigned int issue_flags, uring_cmd_cancel_fn *fn);
 #else
 static inline int io_uring_cmd_import_fixed(u64 ubuf, unsigned long len, int rw,
 			      struct iov_iter *iter, void *ioucmd)
@@ -119,6 +134,11 @@ static inline const char *io_uring_get_opcode(u8 opcode)
 }
 static inline int io_uring_cmd_sock(struct io_uring_cmd *cmd,
 				    unsigned int issue_flags)
+{
+	return -EOPNOTSUPP;
+}
+static inline int io_uring_cmd_mark_cancelable(struct io_uring_cmd *cmd,
+		unsigned int issue_flags, uring_cmd_cancel_fn *fn)
 {
 	return -EOPNOTSUPP;
 }

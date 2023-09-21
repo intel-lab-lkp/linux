@@ -13,6 +13,46 @@
 #include "rsrc.h"
 #include "uring_cmd.h"
 
+static void io_uring_cmd_del_cancelable(struct io_uring_cmd *cmd,
+		unsigned int issue_flags)
+{
+	if (cmd->flags & IORING_URING_CMD_CANCELABLE) {
+		struct io_kiocb *req = cmd_to_io_kiocb(cmd);
+		struct io_ring_ctx *ctx = req->ctx;
+
+		io_ring_submit_lock(ctx, issue_flags);
+		cmd->flags &= ~IORING_URING_CMD_CANCELABLE;
+		hlist_del(&req->hash_node);
+		io_ring_submit_unlock(ctx, issue_flags);
+	}
+}
+
+/*
+ * cancel callback is called in io_uring_cancel_generic() for canceling
+ * this uring_cmd, and it is driver's responsibility to cover race between
+ * race between normal completion and canceling.
+ */
+int io_uring_cmd_mark_cancelable(struct io_uring_cmd *cmd,
+		unsigned int issue_flags, uring_cmd_cancel_fn *fn)
+{
+	struct io_kiocb *req = cmd_to_io_kiocb(cmd);
+	struct io_ring_ctx *ctx = req->ctx;
+
+	if (!fn)
+		return -EINVAL;
+
+	io_ring_submit_lock(ctx, issue_flags);
+	if (!(cmd->flags & IORING_URING_CMD_CANCELABLE)) {
+		cmd->cancel_fn = fn;
+		cmd->flags |= IORING_URING_CMD_CANCELABLE;
+		hlist_add_head(&req->hash_node, &ctx->cancelable_uring_cmd);
+	}
+	io_ring_submit_unlock(ctx, issue_flags);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(io_uring_cmd_mark_cancelable);
+
 static void io_uring_cmd_work(struct io_kiocb *req, struct io_tw_state *ts)
 {
 	struct io_uring_cmd *ioucmd = io_kiocb_to_cmd(req, struct io_uring_cmd);
@@ -55,6 +95,8 @@ void io_uring_cmd_done(struct io_uring_cmd *ioucmd, ssize_t ret, ssize_t res2,
 		       unsigned issue_flags)
 {
 	struct io_kiocb *req = cmd_to_io_kiocb(ioucmd);
+
+	io_uring_cmd_del_cancelable(ioucmd, issue_flags);
 
 	if (ret < 0)
 		req_set_fail(req);
