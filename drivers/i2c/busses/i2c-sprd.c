@@ -17,6 +17,7 @@
 #include <linux/of_device.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
+#include <linux/reset.h>
 
 #define I2C_CTL			0x00
 #define I2C_ADDR_CFG		0x04
@@ -85,6 +86,7 @@ struct sprd_i2c {
 	u32 src_clk;
 	u32 bus_freq;
 	struct completion complete;
+	struct reset_control *rst;
 	u8 *buf;
 	u32 count;
 	int irq;
@@ -278,9 +280,17 @@ static int sprd_i2c_handle_msg(struct i2c_adapter *i2c_adap,
 
 	time_left = wait_for_completion_timeout(&i2c_dev->complete,
 				msecs_to_jiffies(I2C_XFER_TIMEOUT));
-	if (!time_left)
-		return -ETIMEDOUT;
+	if (!time_left) {
+		dev_err(i2c_dev->dev, "transfer timeout, I2C_STATUS = 0x%x\n",
+			readl(i2c_dev->base + I2C_STATUS));
+		if (i2c_dev->rst) {
+			int ret = reset_control_reset(i2c_dev->rst);
 
+			if (ret < 0)
+				dev_warn(i2c_dev->dev, "i2c soft reset failed, ret = %d\n", ret);
+		}
+		return -ETIMEDOUT;
+	}
 	return i2c_dev->err;
 }
 
@@ -544,6 +554,11 @@ static int sprd_i2c_probe(struct platform_device *pdev)
 		return ret;
 
 	platform_set_drvdata(pdev, i2c_dev);
+	i2c_dev->rst = devm_reset_control_get(i2c_dev->dev, "i2c_rst");
+	if (IS_ERR(i2c_dev->rst)) {
+		dev_dbg(i2c_dev->dev, "reset control not configured!\n");
+		i2c_dev->rst = NULL;
+	}
 
 	ret = clk_prepare_enable(i2c_dev->clk);
 	if (ret)
