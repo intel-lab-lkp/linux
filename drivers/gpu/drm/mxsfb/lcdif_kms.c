@@ -536,7 +536,6 @@ static void lcdif_crtc_atomic_enable(struct drm_crtc *crtc,
 									    crtc->primary);
 	struct drm_display_mode *m = &lcdif->crtc.state->adjusted_mode;
 	struct drm_device *drm = lcdif->drm;
-	dma_addr_t paddr;
 
 	clk_set_rate(lcdif->clk, m->crtc_clock * 1000);
 
@@ -548,14 +547,6 @@ static void lcdif_crtc_atomic_enable(struct drm_crtc *crtc,
 
 	lcdif_crtc_mode_set_nofb(new_cstate, new_pstate);
 
-	/* Write cur_buf as well to avoid an initial corrupt frame */
-	paddr = drm_fb_dma_get_gem_addr(new_pstate->fb, new_pstate, 0);
-	if (paddr) {
-		writel(lower_32_bits(paddr),
-		       lcdif->base + LCDC_V8_CTRLDESCL_LOW0_4);
-		writel(CTRLDESCL_HIGH0_4_ADDR_HIGH(upper_32_bits(paddr)),
-		       lcdif->base + LCDC_V8_CTRLDESCL_HIGH0_4);
-	}
 	lcdif_enable_controller(lcdif);
 
 	drm_crtc_vblank_on(crtc);
