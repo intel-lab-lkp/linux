@@ -327,19 +327,6 @@ static void lcdif_set_mode(struct lcdif_drm_private *lcdif, u32 bus_flags)
 	writel(CTRLDESCL0_1_HEIGHT(m->vdisplay) |
 	       CTRLDESCL0_1_WIDTH(m->hdisplay),
 	       lcdif->base + LCDC_V8_CTRLDESCL0_1);
-
-	/*
-	 * The P_SIZE and T_SIZE bitfields are only documented in the
-	 * downstream driver. Those bitfields control the AXI burst size.
-	 * As of now there are two known values:
-	 *  1 - 128Byte
-	 *  2 - 256Byte
-	 * Downstream sets this to 256B burst size to improve the memory access
-	 * efficiency so set it here too.
-	 */
-	ctrl = CTRLDESCL0_3_P_SIZE(2) | CTRLDESCL0_3_T_SIZE(2) |
-	       CTRLDESCL0_3_PITCH(lcdif->crtc.primary->state->fb->pitches[0]);
-	writel(ctrl, lcdif->base + LCDC_V8_CTRLDESCL0_3);
 }
 
 static void lcdif_enable_controller(struct lcdif_drm_private *lcdif)
@@ -694,6 +681,19 @@ static void lcdif_plane_primary_atomic_update(struct drm_plane *plane,
 		writel(CTRLDESCL_HIGH0_4_ADDR_HIGH(upper_32_bits(paddr)),
 		       lcdif->base + LCDC_V8_CTRLDESCL_HIGH0_4);
 	}
+
+	/*
+	 * The P_SIZE and T_SIZE bitfields are only documented in the
+	 * downstream driver. Those bitfields control the AXI burst size.
+	 * As of now there are two known values:
+	 *  1 - 128Byte
+	 *  2 - 256Byte
+	 * Downstream sets this to 256B burst size to improve the memory access
+	 * efficiency so set it here too.
+	 */
+	writel(CTRLDESCL0_3_P_SIZE(2) | CTRLDESCL0_3_T_SIZE(2) |
+	       CTRLDESCL0_3_PITCH(new_pstate->fb->pitches[0]),
+	       lcdif->base + LCDC_V8_CTRLDESCL0_3);
 }
 
 static bool lcdif_format_mod_supported(struct drm_plane *plane,
