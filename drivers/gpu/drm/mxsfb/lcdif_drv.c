@@ -36,8 +36,28 @@ static const struct drm_mode_config_funcs lcdif_mode_config_funcs = {
 	.atomic_commit		= drm_atomic_helper_commit,
 };
 
+void lcdif_commit_tail(struct drm_atomic_state *old_state)
+{
+	struct drm_device *drm = old_state->dev;
+
+	pm_runtime_get_sync(drm->dev);
+
+	drm_atomic_helper_commit_modeset_disables(drm, old_state);
+	drm_atomic_helper_commit_planes(drm, old_state,
+					DRM_PLANE_COMMIT_ACTIVE_ONLY);
+	drm_atomic_helper_commit_modeset_enables(drm, old_state);
+
+	drm_atomic_helper_fake_vblank(old_state);
+	drm_atomic_helper_commit_hw_done(old_state);
+	drm_atomic_helper_wait_for_vblanks(drm, old_state);
+
+	pm_runtime_put(drm->dev);
+
+	drm_atomic_helper_cleanup_planes(drm, old_state);
+}
+
 static const struct drm_mode_config_helper_funcs lcdif_mode_config_helpers = {
-	.atomic_commit_tail = drm_atomic_helper_commit_tail_rpm,
+	.atomic_commit_tail = lcdif_commit_tail,
 };
 
 static const struct drm_encoder_funcs lcdif_encoder_funcs = {

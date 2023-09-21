@@ -540,7 +540,11 @@ static void lcdif_crtc_atomic_enable(struct drm_crtc *crtc,
 
 	clk_set_rate(lcdif->clk, m->crtc_clock * 1000);
 
-	pm_runtime_get_sync(drm->dev);
+	/*
+	 * Update the RPM usage count, actual resume already happened in
+	 * lcdif_commit_tail wrapping all the atomic update.
+	 */
+	pm_runtime_get_noresume(drm->dev);
 
 	lcdif_crtc_mode_set_nofb(new_cstate, new_pstate);
 
@@ -576,7 +580,11 @@ static void lcdif_crtc_atomic_disable(struct drm_crtc *crtc,
 	}
 	spin_unlock_irq(&drm->event_lock);
 
-	pm_runtime_put_sync(drm->dev);
+	/*
+	 * Update the RPM usage count, actual suspend happens in
+	 * lcdif_commit_tail wrapping all the atomic update.
+	 */
+	pm_runtime_put(drm->dev);
 }
 
 static void lcdif_crtc_atomic_destroy_state(struct drm_crtc *crtc,
