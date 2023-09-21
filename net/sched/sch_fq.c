@@ -607,7 +607,7 @@ begin:
 	 */
 	if (!skb->tstamp) {
 		if (skb->sk)
-			rate = min(skb->sk->sk_pacing_rate, rate);
+			rate = min(READ_ONCE(skb->sk->sk_pacing_rate), rate);
 
 		if (rate <= q->low_rate_threshold) {
 			f->credit = 0;
