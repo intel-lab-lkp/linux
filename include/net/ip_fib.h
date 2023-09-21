@@ -153,7 +153,8 @@ struct fib_info {
 #define fib_advmss fib_metrics->metrics[RTAX_ADVMSS-1]
 	int			fib_nhs;
 	u8			fib_nh_is_v6:1,
-				nh_updated:1;
+				nh_updated:1,
+				pfsrc_removed:1;
 	struct nexthop		*nh;
 	struct rcu_head		rcu;
 	struct fib_nh		fib_nh[];
