@@ -1573,7 +1573,7 @@ struct fib_info *fib_create_info(struct fib_config *cfg,
 			fib_info_update_nhc_saddr(net, &nexthop_nh->nh_common,
 						  fi->fib_scope);
 			if (nexthop_nh->fib_nh_gw_family == AF_INET6)
-				fi->fib_nh_is_v6 = true;
+				fi->fib_nh_is_v6 = 1;
 		} endfor_nexthops(fi)
 
 		fib_rebalance(fi);

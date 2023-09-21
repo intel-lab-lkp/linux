@@ -2213,12 +2213,12 @@ static void __nexthop_replace_notify(struct net *net, struct nexthop *nh,
 		 * and then walk the fib tables once
 		 */
 		list_for_each_entry(fi, &nh->fi_list, nh_list)
-			fi->nh_updated = true;
+			fi->nh_updated = 1;
 
 		fib_info_notify_update(net, info);
 
 		list_for_each_entry(fi, &nh->fi_list, nh_list)
-			fi->nh_updated = false;
+			fi->nh_updated = 0;
 	}
 
 	list_for_each_entry(f6i, &nh->f6i_list, nh_list)
