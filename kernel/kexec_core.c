@@ -47,7 +47,7 @@
 #include <crypto/hash.h>
 #include "kexec_internal.h"
 
-atomic_t __kexec_lock = ATOMIC_INIT(0);
+DEFINE_MUTEX(__kexec_lock);
 
 /* Flag to indicate we are going to kexec a new kernel */
 bool kexec_in_progress = false;
@@ -1057,7 +1057,7 @@ void __noclone __crash_kexec(struct pt_regs *regs)
 	 * of memory the xchg(&kexec_crash_image) would be
 	 * sufficient.  But since I reuse the memory...
 	 */
-	if (kexec_trylock()) {
+	if (mutex_trylock(&__kexec_lock)) {
 		if (kexec_crash_image) {
 			struct pt_regs fixed_regs;
 
@@ -1103,8 +1103,7 @@ ssize_t crash_get_memory_size(void)
 {
 	ssize_t size = 0;
 
-	if (!kexec_trylock())
-		return -EBUSY;
+	kexec_lock();
 
 	size += crash_resource_size(&crashk_res);
 	size += crash_resource_size(&crashk_low_res);
@@ -1146,8 +1145,7 @@ int crash_shrink_memory(unsigned long new_size)
 	int ret = 0;
 	unsigned long old_size, low_size;
 
-	if (!kexec_trylock())
-		return -EBUSY;
+	kexec_lock();
 
 	if (kexec_crash_image) {
 		ret = -ENOENT;
@@ -1229,8 +1227,7 @@ int kernel_kexec(void)
 {
 	int error = 0;
 
-	if (!kexec_trylock())
-		return -EBUSY;
+	kexec_lock();
 	if (!kexec_image) {
 		error = -EINVAL;
 		goto Unlock;

@@ -749,10 +749,7 @@ int crash_check_update_elfcorehdr(void)
 	int rc = 0;
 
 	/* Obtain lock while reading crash information */
-	if (!kexec_trylock()) {
-		pr_info("kexec_trylock() failed, elfcorehdr may be inaccurate\n");
-		return 0;
-	}
+	kexec_lock();
 	if (kexec_crash_image) {
 		if (kexec_crash_image->file_mode)
 			rc = 1;
@@ -784,10 +781,7 @@ static void crash_handle_hotplug_event(unsigned int hp_action, unsigned int cpu)
 	struct kimage *image;
 
 	/* Obtain lock while changing crash information */
-	if (!kexec_trylock()) {
-		pr_info("kexec_trylock() failed, elfcorehdr may be inaccurate\n");
-		return;
-	}
+	kexec_lock();
 
 	/* Check kdump is not loaded */
 	if (!kexec_crash_image)

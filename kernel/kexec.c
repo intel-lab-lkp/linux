@@ -96,8 +96,7 @@ static int do_kexec_load(unsigned long entry, unsigned long nr_segments,
 	 * crash kernels we need a serialization here to prevent multiple crash
 	 * kernels from attempting to load simultaneously.
 	 */
-	if (!kexec_trylock())
-		return -EBUSY;
+	kexec_lock();
 
 	if (flags & KEXEC_ON_CRASH) {
 		dest_image = &kexec_crash_image;
