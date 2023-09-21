@@ -1527,12 +1527,14 @@ static int
 intel_dp_compute_link_config_wide(struct intel_dp *intel_dp,
 				  struct intel_crtc_state *pipe_config,
 				  const struct drm_connector_state *conn_state,
-				  const struct link_config_limits *limits)
+				  const struct link_config_limits *limits,
+				  bool allow_bpp_change)
 {
 	int bpp, i, lane_count, clock = intel_dp_mode_clock(pipe_config, conn_state);
 	int mode_rate, link_rate, link_avail;
+	int min_bpp = allow_bpp_change ? limits->min_bpp : limits->max_bpp;
 
-	for (bpp = limits->max_bpp; bpp >= limits->min_bpp; bpp -= 2 * 3) {
+	for (bpp = limits->max_bpp; bpp >= min_bpp; bpp -= 2 * 3) {
 		int link_bpp = intel_dp_output_bpp(pipe_config->output_format, bpp);
 
 		mode_rate = intel_dp_link_required(clock, link_bpp);
@@ -2247,7 +2249,8 @@ intel_dp_compute_link_config(struct intel_encoder *encoder,
 	 * Optimize for slow and wide for everything, because there are some
 	 * eDP 1.3 and 1.4 panels don't work well with fast and narrow.
 	 */
-	ret = intel_dp_compute_link_config_wide(intel_dp, pipe_config, conn_state, &limits);
+	ret = intel_dp_compute_link_config_wide(intel_dp, pipe_config,
+						conn_state, &limits, false);
 
 	if (ret || joiner_needs_dsc || intel_dp->force_dsc_en) {
 		drm_dbg_kms(&i915->drm, "Try DSC (fallback=%s, joiner=%s, force=%s)\n",
@@ -2255,9 +2258,15 @@ intel_dp_compute_link_config(struct intel_encoder *encoder,
 			    str_yes_no(intel_dp->force_dsc_en));
 		ret = intel_dp_dsc_compute_config(intel_dp, pipe_config,
 						  conn_state, &limits, 64, true);
-		if (ret < 0)
-			return ret;
 	}
+
+	if (ret < 0)
+		ret = intel_dp_compute_link_config_wide(intel_dp, pipe_config,
+							conn_state, &limits,
+							true);
+
+	if (ret < 0)
+		return ret;
 
 	if (pipe_config->dsc.compression_enable) {
 		drm_dbg_kms(&i915->drm,
