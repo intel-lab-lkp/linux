@@ -3251,4 +3251,31 @@ void virtqueue_dma_sync_single_range_for_device(struct virtqueue *_vq,
 }
 EXPORT_SYMBOL_GPL(virtqueue_dma_sync_single_range_for_device);
 
+int virtqueue_exec_cmd(struct virtqueue *vq,
+		       struct scatterlist **sgs,
+		       unsigned int out_num,
+		       unsigned int in_num,
+		       void *data,
+		       gfp_t gfp)
+{
+	int ret, len;
+
+	ret = virtqueue_add_sgs(vq, sgs, out_num, in_num, data, gfp);
+	if (ret < 0)
+		return ret;
+
+	if (unlikely(!virtqueue_kick(vq)))
+		return -EIO;
+
+	/* Spin for a response, the kick causes an ioport write, trapping
+	 * into the hypervisor, so the request should be handled immediately.
+	 */
+	while (!virtqueue_get_buf(vq, &len) &&
+	       !virtqueue_is_broken(vq))
+		cpu_relax();
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(virtqueue_exec_cmd);
+
 MODULE_LICENSE("GPL");

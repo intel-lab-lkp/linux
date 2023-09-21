@@ -2451,7 +2451,7 @@ static bool virtnet_send_command(struct virtnet_info *vi, u8 class, u8 cmd,
 				 struct scatterlist *out)
 {
 	struct scatterlist *sgs[4], hdr, stat;
-	unsigned out_num = 0, tmp;
+	unsigned int out_num = 0;
 	int ret;
 
 	/* Caller should know better */
@@ -2472,22 +2472,13 @@ static bool virtnet_send_command(struct virtnet_info *vi, u8 class, u8 cmd,
 	sgs[out_num] = &stat;
 
 	BUG_ON(out_num + 1 > ARRAY_SIZE(sgs));
-	ret = virtqueue_add_sgs(vi->cvq, sgs, out_num, 1, vi, GFP_ATOMIC);
-	if (ret < 0) {
-		dev_warn(&vi->vdev->dev,
-			 "Failed to add sgs for command vq: %d\n.", ret);
+	ret = virtqueue_exec_cmd(vi->cvq, sgs, out_num, 1, vi, GFP_ATOMIC);
+	if (ret) {
+		dev_err(&vi->vdev->dev,
+			"Failed to exec command vq(%s,%d): %d\n",
+			vi->cvq->name, vi->cvq->index, ret);
 		return false;
 	}
-
-	if (unlikely(!virtqueue_kick(vi->cvq)))
-		return vi->ctrl->status == VIRTIO_NET_OK;
-
-	/* Spin for a response, the kick causes an ioport write, trapping
-	 * into the hypervisor, so the request should be handled immediately.
-	 */
-	while (!virtqueue_get_buf(vi->cvq, &tmp) &&
-	       !virtqueue_is_broken(vi->cvq))
-		cpu_relax();
 
 	return vi->ctrl->status == VIRTIO_NET_OK;
 }

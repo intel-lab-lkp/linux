@@ -103,6 +103,13 @@ int virtqueue_resize(struct virtqueue *vq, u32 num,
 int virtqueue_reset(struct virtqueue *vq,
 		    void (*recycle)(struct virtqueue *vq, void *buf));
 
+int virtqueue_exec_cmd(struct virtqueue *vq,
+		       struct scatterlist **sgs,
+		       unsigned int out_num,
+		       unsigned int in_num,
+		       void *data,
+		       gfp_t gfp);
+
 /**
  * struct virtio_device - representation of a device using virtio
  * @index: unique position on the virtio bus
