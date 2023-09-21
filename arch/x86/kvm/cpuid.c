@@ -1004,7 +1004,15 @@ static inline int __do_cpuid_func(struct kvm_cpuid_array *array, u32 function)
 
 		entry->eax = eax.full;
 		entry->ebx = kvm_pmu_cap.events_mask;
-		entry->ecx = 0;
+		if (kvm_pmu_cap.version < 5)
+			entry->ecx = 0;
+		else
+			/*
+			 * Todo: When perf driver supports Fixed counter bitmap
+			 * and export it, KVM will get it from perf driver and set
+			 * it into entry->ecx.
+			 */
+			entry->ecx = (1ULL << kvm_pmu_cap.num_counters_fixed) - 1;
 		entry->edx = edx.full;
 		break;
 	}
