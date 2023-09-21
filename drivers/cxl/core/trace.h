@@ -199,17 +199,19 @@ TRACE_EVENT(cxl_overflow,
 	__field(u8, hdr_maint_op_class)
 
 #define CXL_EVT_TP_fast_assign(cxlmd, l, hdr)					\
-	__assign_str(memdev, dev_name(&(cxlmd)->dev));				\
-	__assign_str(host, dev_name((cxlmd)->dev.parent));			\
-	__entry->log = (l);							\
-	__entry->serial = (cxlmd)->cxlds->serial;				\
-	memcpy(&__entry->hdr_uuid, &(hdr).id, sizeof(uuid_t));			\
-	__entry->hdr_length = (hdr).length;					\
-	__entry->hdr_flags = get_unaligned_le24((hdr).flags);			\
-	__entry->hdr_handle = le16_to_cpu((hdr).handle);			\
-	__entry->hdr_related_handle = le16_to_cpu((hdr).related_handle);	\
-	__entry->hdr_timestamp = le64_to_cpu((hdr).timestamp);			\
-	__entry->hdr_maint_op_class = (hdr).maint_op_class
+	do {									\
+	    __assign_str(memdev, dev_name(&(cxlmd)->dev));			\
+	    __assign_str(host, dev_name((cxlmd)->dev.parent));			\
+	    __entry->log = (l);							\
+	    __entry->serial = (cxlmd)->cxlds->serial;				\
+	    memcpy(&__entry->hdr_uuid, &(hdr).id, sizeof(uuid_t));		\
+	    __entry->hdr_length = (hdr).length;					\
+	    __entry->hdr_flags = get_unaligned_le24((hdr).flags);		\
+	    __entry->hdr_handle = le16_to_cpu((hdr).handle);			\
+	    __entry->hdr_related_handle = le16_to_cpu((hdr).related_handle);	\
+	    __entry->hdr_timestamp = le64_to_cpu((hdr).timestamp);		\
+	    __entry->hdr_maint_op_class = (hdr).maint_op_class;			\
+	} while (0)
 
 #define CXL_EVT_TP_printk(fmt, ...) \
 	TP_printk("memdev=%s host=%s serial=%lld log=%s : time=%llu uuid=%pUb "	\
