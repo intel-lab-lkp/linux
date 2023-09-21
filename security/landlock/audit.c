@@ -14,6 +14,25 @@
 
 atomic64_t ruleset_and_domain_counter = ATOMIC64_INIT(0);
 
+static const char *op_to_string(enum landlock_operation operation)
+{
+	const char *const desc[] = {
+		[0] = "",
+		[LANDLOCK_OP_MKDIR] = "mkdir",
+		[LANDLOCK_OP_MKNOD] = "mknod",
+		[LANDLOCK_OP_SYMLINK] = "symlink",
+		[LANDLOCK_OP_UNLINK] = "unlink",
+		[LANDLOCK_OP_RMDIR] = "rmdir",
+		[LANDLOCK_OP_TRUNCATE] = "truncate",
+		[LANDLOCK_OP_OPEN] = "open",
+	};
+
+	if (WARN_ON_ONCE(operation < 0 || operation > ARRAY_SIZE(desc)))
+		return "unknown";
+
+	return desc[operation];
+}
+
 #define BIT_INDEX(bit) HWEIGHT(bit - 1)
 
 static void log_accesses(struct audit_buffer *const ab,
@@ -140,4 +159,99 @@ void landlock_log_release_ruleset(const struct landlock_ruleset *const ruleset)
 	 */
 	audit_log_format(ab, "op=release-%s %s=%llu", name, name, id);
 	audit_log_end(ab);
+}
+
+/* Update request.youngest_domain and request.missing_access */
+static void
+update_request(struct landlock_request *const request,
+	       const struct landlock_ruleset *const domain,
+	       const access_mask_t access_request,
+	       const layer_mask_t (*const layer_masks)[LANDLOCK_NUM_ACCESS_FS])
+{
+	const unsigned long access_req = access_request;
+	unsigned long access_bit;
+	long youngest_denied_layer = -1;
+	const struct landlock_hierarchy *node = domain->hierarchy;
+	size_t i;
+
+	WARN_ON_ONCE(request->youngest_domain);
+	WARN_ON_ONCE(request->missing_access);
+
+	if (WARN_ON_ONCE(!access_request))
+		return;
+
+	if (WARN_ON_ONCE(!layer_masks))
+		return;
+
+	for_each_set_bit(access_bit, &access_req, ARRAY_SIZE(*layer_masks)) {
+		long domain_layer;
+
+		if (!(*layer_masks)[access_bit])
+			continue;
+
+		domain_layer = __fls((*layer_masks)[access_bit]);
+
+		/*
+		 * Gets the access rights that are missing from
+		 * the youngest (i.e. closest) domain.
+		 */
+		if (domain_layer == youngest_denied_layer) {
+			request->missing_access |= BIT_ULL(access_bit);
+		} else if (domain_layer > youngest_denied_layer) {
+			youngest_denied_layer = domain_layer;
+			request->missing_access = BIT_ULL(access_bit);
+		}
+	}
+
+	WARN_ON_ONCE(!request->missing_access);
+	WARN_ON_ONCE(youngest_denied_layer < 0);
+
+	/* Gets the nearest domain ID that denies request.missing_access */
+	for (i = domain->num_layers - youngest_denied_layer - 1; i > 0; i--)
+		node = node->parent;
+	request->youngest_domain = node->id;
+}
+
+static void
+log_request(const int error, struct landlock_request *const request,
+	    const struct landlock_ruleset *const domain,
+	    const access_mask_t access_request,
+	    const layer_mask_t (*const layer_masks)[LANDLOCK_NUM_ACCESS_FS])
+{
+	struct audit_buffer *ab;
+
+	if (WARN_ON_ONCE(!error))
+		return;
+	if (WARN_ON_ONCE(!request))
+		return;
+	if (WARN_ON_ONCE(!domain || !domain->hierarchy))
+		return;
+
+	/* Uses GFP_ATOMIC to not sleep. */
+	ab = audit_log_start(audit_context(), GFP_ATOMIC | __GFP_NOWARN,
+			     AUDIT_LANDLOCK);
+	if (!ab)
+		return;
+
+	update_request(request, domain, access_request, layer_masks);
+
+	log_task(ab);
+	audit_log_format(ab, " domain=%llu op=%s errno=%d missing-fs-accesses=",
+			 request->youngest_domain,
+			 op_to_string(request->operation), -error);
+	log_accesses(ab, request->missing_access);
+	audit_log_lsm_data(ab, &request->audit);
+	audit_log_end(ab);
+}
+
+// TODO: Make it generic, not FS-centric.
+int landlock_log_request(
+	const int error, struct landlock_request *const request,
+	const struct landlock_ruleset *const domain,
+	const access_mask_t access_request,
+	const layer_mask_t (*const layer_masks)[LANDLOCK_NUM_ACCESS_FS])
+{
+	/* No need to log the access request, only the missing accesses. */
+	log_request(error, request, domain, access_request, layer_masks);
+	return error;
 }

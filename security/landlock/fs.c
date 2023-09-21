@@ -18,6 +18,7 @@
 #include <linux/kernel.h>
 #include <linux/limits.h>
 #include <linux/list.h>
+#include <linux/lsm_audit.h>
 #include <linux/lsm_hooks.h>
 #include <linux/mount.h>
 #include <linux/namei.h>
@@ -30,6 +31,7 @@
 #include <linux/workqueue.h>
 #include <uapi/linux/landlock.h>
 
+#include "audit.h"
 #include "common.h"
 #include "cred.h"
 #include "fs.h"
@@ -636,7 +638,8 @@ jump_up:
 }
 
 static int current_check_access_path(const struct path *const path,
-				     access_mask_t access_request)
+				     access_mask_t access_request,
+				     struct landlock_request *const request)
 {
 	const struct landlock_ruleset *const dom =
 		landlock_get_current_domain();
@@ -650,7 +653,10 @@ static int current_check_access_path(const struct path *const path,
 				       NULL, 0, NULL, NULL))
 		return 0;
 
-	return -EACCES;
+	request->audit.type = LSM_AUDIT_DATA_PATH;
+	request->audit.u.path = *path;
+	return landlock_log_request(-EACCES, request, dom, access_request,
+				    &layer_masks);
 }
 
 static inline access_mask_t get_mode_access(const umode_t mode)
@@ -1097,6 +1103,7 @@ static int hook_path_link(struct dentry *const old_dentry,
 			  const struct path *const new_dir,
 			  struct dentry *const new_dentry)
 {
+	// TODO: Implement fine-grained audit
 	return current_check_refer_path(old_dentry, new_dir, new_dentry, false,
 					false);
 }
@@ -1115,38 +1122,67 @@ static int hook_path_rename(const struct path *const old_dir,
 static int hook_path_mkdir(const struct path *const dir,
 			   struct dentry *const dentry, const umode_t mode)
 {
-	return current_check_access_path(dir, LANDLOCK_ACCESS_FS_MAKE_DIR);
+	struct landlock_request request = {
+		.operation = LANDLOCK_OP_MKDIR,
+	};
+
+	return current_check_access_path(dir, LANDLOCK_ACCESS_FS_MAKE_DIR,
+					 &request);
 }
 
 static int hook_path_mknod(const struct path *const dir,
 			   struct dentry *const dentry, const umode_t mode,
 			   const unsigned int dev)
 {
-	return current_check_access_path(dir, get_mode_access(mode));
+	struct landlock_request request = {
+		.operation = LANDLOCK_OP_MKNOD,
+	};
+
+	return current_check_access_path(dir, get_mode_access(mode), &request);
 }
 
 static int hook_path_symlink(const struct path *const dir,
 			     struct dentry *const dentry,
 			     const char *const old_name)
 {
-	return current_check_access_path(dir, LANDLOCK_ACCESS_FS_MAKE_SYM);
+	struct landlock_request request = {
+		.operation = LANDLOCK_OP_SYMLINK,
+	};
+
+	return current_check_access_path(dir, LANDLOCK_ACCESS_FS_MAKE_SYM,
+					 &request);
 }
 
 static int hook_path_unlink(const struct path *const dir,
 			    struct dentry *const dentry)
 {
-	return current_check_access_path(dir, LANDLOCK_ACCESS_FS_REMOVE_FILE);
+	struct landlock_request request = {
+		.operation = LANDLOCK_OP_UNLINK,
+	};
+
+	return current_check_access_path(dir, LANDLOCK_ACCESS_FS_REMOVE_FILE,
+					 &request);
 }
 
 static int hook_path_rmdir(const struct path *const dir,
 			   struct dentry *const dentry)
 {
-	return current_check_access_path(dir, LANDLOCK_ACCESS_FS_REMOVE_DIR);
+	struct landlock_request request = {
+		.operation = LANDLOCK_OP_RMDIR,
+	};
+
+	return current_check_access_path(dir, LANDLOCK_ACCESS_FS_REMOVE_DIR,
+					 &request);
 }
 
 static int hook_path_truncate(const struct path *const path)
 {
-	return current_check_access_path(path, LANDLOCK_ACCESS_FS_TRUNCATE);
+	struct landlock_request request = {
+		.operation = LANDLOCK_OP_TRUNCATE,
+	};
+
+	return current_check_access_path(path, LANDLOCK_ACCESS_FS_TRUNCATE,
+					 &request);
 }
 
 /* File hooks */
@@ -1199,6 +1235,13 @@ static int hook_file_open(struct file *const file)
 	const access_mask_t optional_access = LANDLOCK_ACCESS_FS_TRUNCATE;
 	const struct landlock_ruleset *const dom =
 		landlock_get_current_domain();
+	struct landlock_request request = {
+		.operation = LANDLOCK_OP_OPEN,
+		.audit = {
+			.type = LSM_AUDIT_DATA_PATH,
+			.u.path = file->f_path,
+		},
+	};
 
 	if (!dom)
 		return 0;
@@ -1249,7 +1292,8 @@ static int hook_file_open(struct file *const file)
 	if ((open_access_request & allowed_access) == open_access_request)
 		return 0;
 
-	return -EACCES;
+	return landlock_log_request(-EACCES, &request, dom, open_access_request,
+				    &layer_masks);
 }
 
 static int hook_file_truncate(struct file *const file)
