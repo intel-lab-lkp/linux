@@ -74,6 +74,11 @@ struct landlock_rule {
  * struct landlock_hierarchy - Node in a ruleset hierarchy
  */
 struct landlock_hierarchy {
+#ifdef CONFIG_AUDIT
+	/* domain's ID */
+	u64 id;
+#endif /* CONFIG_AUDIT */
+
 	/**
 	 * @parent: Pointer to the parent node, or NULL if it is a root
 	 * Landlock domain.
@@ -93,6 +98,11 @@ struct landlock_hierarchy {
  * match an object.
  */
 struct landlock_ruleset {
+#ifdef CONFIG_AUDIT
+	/* ruleset's ID, must be 0 for a domain */
+	u64 id;
+#endif /* CONFIG_AUDIT */
+
 	/**
 	 * @root: Root of a red-black tree containing &struct landlock_rule
 	 * nodes.  Once a ruleset is tied to a process (i.e. as a domain), this

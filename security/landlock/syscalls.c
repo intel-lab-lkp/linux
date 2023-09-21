@@ -26,6 +26,7 @@
 #include <linux/uaccess.h>
 #include <uapi/linux/landlock.h>
 
+#include "audit.h"
 #include "cred.h"
 #include "fs.h"
 #include "limits.h"
@@ -97,6 +98,10 @@ static int fop_ruleset_release(struct inode *const inode,
 			       struct file *const filp)
 {
 	struct landlock_ruleset *ruleset = filp->private_data;
+
+	/* Only called by ruleset_fops, hence for a ruleset. */
+	WARN_ON_ONCE(ruleset->hierarchy);
+	landlock_log_release_ruleset(ruleset);
 
 	landlock_put_ruleset(ruleset);
 	return 0;
@@ -198,6 +203,9 @@ SYSCALL_DEFINE3(landlock_create_ruleset,
 				      ruleset, O_RDWR | O_CLOEXEC);
 	if (ruleset_fd < 0)
 		landlock_put_ruleset(ruleset);
+	else
+		landlock_log_create_ruleset(ruleset);
+
 	return ruleset_fd;
 }
 

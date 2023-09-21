@@ -20,6 +20,7 @@
 #include <linux/spinlock.h>
 #include <linux/workqueue.h>
 
+#include "audit.h"
 #include "limits.h"
 #include "object.h"
 #include "ruleset.h"
@@ -379,6 +380,11 @@ static void free_ruleset_work(struct work_struct *const work)
 	struct landlock_ruleset *ruleset;
 
 	ruleset = container_of(work, struct landlock_ruleset, work_free);
+
+	/* Only called by hook_cred_free(), hence for a domain. */
+	WARN_ON_ONCE(!ruleset->hierarchy);
+	landlock_log_release_ruleset(ruleset);
+
 	free_ruleset(ruleset);
 }
 
