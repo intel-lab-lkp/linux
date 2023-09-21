@@ -4733,6 +4733,8 @@ __ieee80211_create_tpt_led_trigger(struct ieee80211_hw *hw,
 				   unsigned int flags,
 				   const struct ieee80211_tpt_blink *blink_table,
 				   unsigned int blink_table_len);
+void __ieee80211_tpt_led_trig_trx(struct ieee80211_hw *hw,
+				  int tx_bytes, int rx_bytes);
 #endif
 /**
  * ieee80211_get_tx_led_name - get name of TX LED

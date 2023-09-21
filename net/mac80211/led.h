@@ -71,8 +71,7 @@ static inline void
 ieee80211_tpt_led_trig_tx(struct ieee80211_local *local, int bytes)
 {
 #ifdef CONFIG_MAC80211_LEDS
-	if (atomic_read(&local->tpt_led_active))
-		local->tpt_led_trigger->tx_bytes += bytes;
+	__ieee80211_tpt_led_trig_trx(&local->hw, bytes, 0);
 #endif
 }
 
@@ -80,7 +79,6 @@ static inline void
 ieee80211_tpt_led_trig_rx(struct ieee80211_local *local, int bytes)
 {
 #ifdef CONFIG_MAC80211_LEDS
-	if (atomic_read(&local->tpt_led_active))
-		local->tpt_led_trigger->rx_bytes += bytes;
+	__ieee80211_tpt_led_trig_trx(&local->hw, 0, bytes);
 #endif
 }
