@@ -13,7 +13,15 @@
 
 struct virtiovf_pci_core_device {
 	struct vfio_pci_core_device core_device;
+	u8 bar0_virtual_buf_size;
+	u8 *bar0_virtual_buf;
+	/* synchronize access to the virtual buf */
+	struct mutex bar_mutex;
 	int vf_id;
+	void __iomem *notify_addr;
+	u32 notify_offset;
+	u8 notify_bar;
+	u8 pci_cmd_io :1;
 };
 
 int virtiovf_cmd_list_query(struct pci_dev *pdev, u8 *buf, int buf_size);

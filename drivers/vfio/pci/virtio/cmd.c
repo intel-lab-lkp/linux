@@ -44,7 +44,7 @@ int virtiovf_cmd_lr_write(struct virtiovf_pci_core_device *virtvdev, u16 opcode,
 {
 	struct virtio_device *virtio_dev =
 		virtio_pci_vf_get_pf_dev(virtvdev->core_device.pdev);
-	struct virtio_admin_cmd_data_lr_write *in;
+	struct virtio_admin_cmd_legacy_wr_data *in;
 	struct scatterlist in_sg;
 	struct virtio_admin_cmd cmd = {};
 	int ret;
@@ -74,7 +74,7 @@ int virtiovf_cmd_lr_read(struct virtiovf_pci_core_device *virtvdev, u16 opcode,
 {
 	struct virtio_device *virtio_dev =
 		virtio_pci_vf_get_pf_dev(virtvdev->core_device.pdev);
-	struct virtio_admin_cmd_data_lr_read *in;
+	struct virtio_admin_cmd_legacy_rd_data *in;
 	struct scatterlist in_sg, out_sg;
 	struct virtio_admin_cmd cmd = {};
 	int ret;
