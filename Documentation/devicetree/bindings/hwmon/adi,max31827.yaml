@@ -27,7 +27,7 @@ properties:
   reg:
     maxItems: 1
 
-  vref-supply:
+  vdd-supply:
     description:
       Must have values in the interval (1.6V; 3.6V) in order for the device to
       function correctly.
@@ -35,7 +35,7 @@ properties:
 required:
   - compatible
   - reg
-  - vref-supply
+  - vdd-supply
 
 additionalProperties: false
 
@@ -48,7 +48,7 @@ examples:
         temperature-sensor@42 {
             compatible = "adi,max31827";
             reg = <0x42>;
-            vref-supply = <&reg_vdd>;
+            vdd-supply = <&reg_vdd>;
         };
     };
 ...
