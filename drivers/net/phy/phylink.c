@@ -1723,6 +1723,34 @@ bool phylink_expects_phy(struct phylink *pl)
 }
 EXPORT_SYMBOL_GPL(phylink_expects_phy);
 
+/**
+ * phylink_interface_change() - update both cfg_link_an_mode and
+ * cur_link_an_mode when there is a change in the interface.
+ * @phydev: pointer to &struct phy_device
+ *
+ * When the PHY interface switches between SGMII and 2500BaseX in
+ * accordance with the link speed, the in-band AN mode should also switch
+ * based on the PHY interface
+ */
+static void phylink_interface_change(struct phy_device *phydev)
+{
+	struct phylink *pl = phydev->phylink;
+
+	if (pl->phy_state.interface != phydev->interface) {
+		/* Fallback to the correct AN mode. */
+		if (phy_interface_mode_is_8023z(phydev->interface) &&
+		    pl->cfg_link_an_mode == MLO_AN_INBAND) {
+			pl->cfg_link_an_mode = MLO_AN_PHY;
+			pl->cur_link_an_mode = MLO_AN_PHY;
+		} else if (pl->config->ovr_an_inband) {
+			pl->cfg_link_an_mode = MLO_AN_INBAND;
+			pl->cur_link_an_mode = MLO_AN_INBAND;
+		}
+
+		pl->phy_state.interface = phydev->interface;
+	}
+}
+
 static void phylink_phy_change(struct phy_device *phydev, bool up)
 {
 	struct phylink *pl = phydev->phylink;
@@ -1739,7 +1767,7 @@ static void phylink_phy_change(struct phy_device *phydev, bool up)
 		pl->phy_state.pause |= MLO_PAUSE_TX;
 	if (rx_pause)
 		pl->phy_state.pause |= MLO_PAUSE_RX;
-	pl->phy_state.interface = phydev->interface;
+	phylink_interface_change(phydev);
 	pl->phy_state.link = up;
 	mutex_unlock(&pl->state_mutex);
 
