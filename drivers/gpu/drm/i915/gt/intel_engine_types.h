@@ -416,6 +416,7 @@ struct intel_engine_cs {
 	struct llist_head barrier_tasks;
 
 	struct intel_context *kernel_context; /* pinned */
+	struct intel_context *dummy_context; /* Wa_16018031267 / Wa_16018063123 */
 
 	/**
 	 * pinned_contexts_list: List of pinned contexts. This list is only

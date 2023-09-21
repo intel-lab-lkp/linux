@@ -1428,6 +1428,45 @@ create_kernel_context(struct intel_engine_cs *engine)
 						  &kernel, "kernel_context");
 }
 
+static int
+setup_dummy_context(struct intel_engine_cs *engine)
+{
+	static struct lock_class_key dummy;
+	static struct intel_context *ce;
+	struct i915_ppgtt *ppgtt;
+	int ret;
+
+	ppgtt = i915_ppgtt_create(engine->gt, 0);
+	if (IS_ERR(ppgtt))
+		return PTR_ERR(ppgtt);
+
+	ce = intel_engine_create_pinned_context(engine,
+						&ppgtt->vm, SZ_4K,
+						I915_GEM_HWS_DUMMY_ADDR,
+						&dummy, "dummy_context");
+	if (IS_ERR(ce)) {
+		ret = PTR_ERR(ce);
+		goto err_ce;
+	}
+
+	/* Ensure this context does not get registered for use as a real context */
+	__set_bit(CONTEXT_L3_BB, &ce->flags);
+
+	ret = intel_guc_assign_wa_guc_id(&engine->gt->uc.guc, ce);
+	if (ret < 0)
+		goto err;
+
+	engine->dummy_context = ce;
+	i915_vm_put(ce->vm);
+	return 0;
+
+err:
+	intel_engine_destroy_pinned_context(fetch_and_zero(&engine->dummy_context));
+err_ce:
+	i915_vm_put(&ppgtt->vm);
+	return ret;
+}
+
 /*
  * engine_init_common - initialize engine state which might require hw access
  * @engine: Engine to initialize.
@@ -1464,6 +1503,13 @@ static int engine_init_common(struct intel_engine_cs *engine)
 
 	engine->emit_fini_breadcrumb_dw = ret;
 	engine->kernel_context = ce;
+
+	/* Wa_16018031267 / Wa_16018063123 */
+	if (NEEDS_FASTCOLOR_BLT_WABB(engine)) {
+		ret = setup_dummy_context(engine);
+		if (ret)
+			goto err_context;
+	}
 
 	return 0;
 
@@ -1534,6 +1580,8 @@ void intel_engine_cleanup_common(struct intel_engine_cs *engine)
 	if (engine->default_state)
 		fput(engine->default_state);
 
+	if (engine->dummy_context)
+		intel_engine_destroy_pinned_context(engine->dummy_context);
 	if (engine->kernel_context)
 		intel_engine_destroy_pinned_context(engine->kernel_context);
 

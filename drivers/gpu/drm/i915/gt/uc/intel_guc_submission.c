@@ -2222,6 +2222,11 @@ static void unpin_guc_id(struct intel_guc *guc, struct intel_context *ce)
 	spin_unlock_irqrestore(&guc->submission_state.lock, flags);
 }
 
+int intel_guc_assign_wa_guc_id(struct intel_guc *guc, struct intel_context *ce)
+{
+	return pin_guc_id(guc, ce);
+}
+
 static int __guc_action_register_multi_lrc_v69(struct intel_guc *guc,
 					       struct intel_context *ce,
 					       u32 guc_id,
@@ -4167,9 +4172,11 @@ static inline int guc_kernel_context_pin(struct intel_guc *guc,
 	if (!test_bit(CONTEXT_GUC_INIT, &ce->flags))
 		guc_context_init(ce);
 
-	ret = try_context_registration(ce, true);
-	if (ret)
-		unpin_guc_id(guc, ce);
+	if (!intel_context_is_hidden(ce)) {
+		ret = try_context_registration(ce, true);
+		if (ret)
+			unpin_guc_id(guc, ce);
+	}
 
 	return ret;
 }

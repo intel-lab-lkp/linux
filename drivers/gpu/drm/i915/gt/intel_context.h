@@ -315,6 +315,15 @@ static inline void intel_context_clear_use_semaphores(struct intel_context *ce)
 	clear_bit(CONTEXT_USE_SEMAPHORES, &ce->flags);
 }
 
+/*
+ * Some contexts are only used for special workarounds and should
+ * not be included in normal context operations.
+ */
+static inline bool intel_context_is_hidden(const struct intel_context *ce)
+{
+	return test_bit(CONTEXT_L3_BB, &ce->flags);
+}
+
 static inline bool intel_context_is_banned(const struct intel_context *ce)
 {
 	return test_bit(CONTEXT_BANNED, &ce->flags);
