@@ -75,7 +75,14 @@
 #define SPRD_I2C_PM_TIMEOUT	1000
 /* timeout (ms) for transfer message */
 #define I2C_XFER_TIMEOUT	1000
+/* dynamic modify clk_freq flag  */
+#define I2C_3M4_FLAG		0x0100
+#define I2C_1M_FLAG		0x0080
+#define I2C_400K_FLAG		0x0040
 
+#define I2C_FREQ_400K		400000
+#define I2C_FREQ_1M		1000000
+#define I2C_FREQ_3_4M		3400000
 /* SPRD i2c data structure */
 struct sprd_i2c {
 	struct i2c_adapter adap;
@@ -93,6 +100,49 @@ struct sprd_i2c {
 	int irq;
 	int err;
 };
+
+static void sprd_i2c_set_clk(struct sprd_i2c *i2c_dev, u32 freq)
+{
+	u32 apb_clk = i2c_dev->src_clk;
+	/*
+	 * From I2C databook, the prescale calculation formula:
+	 * prescale = freq_i2c / (4 * freq_scl) - 1;
+	 */
+	u32 i2c_dvd = apb_clk / (4 * freq) - 1;
+	/*
+	 * From I2C databook, the high period of SCL clock is recommended as
+	 * 40% (2/5), and the low period of SCL clock is recommended as 60%
+	 * (3/5), then the formula should be:
+	 * high = (prescale * 2 * 2) / 5
+	 * low = (prescale * 2 * 3) / 5
+	 */
+	u32 high = ((i2c_dvd << 1) * 2) / 5;
+	u32 low = ((i2c_dvd << 1) * 3) / 5;
+	u32 div0 = I2C_ADDR_DVD0_CALC(high, low);
+	u32 div1 = I2C_ADDR_DVD1_CALC(high, low);
+
+	writel(div0, i2c_dev->base + ADDR_DVD0);
+	writel(div1, i2c_dev->base + ADDR_DVD1);
+
+	/* Start hold timing = hold time(us) * source clock */
+	switch (freq) {
+	case I2C_MAX_STANDARD_MODE_FREQ:
+		writel((4 * apb_clk) / 1000000, i2c_dev->base + ADDR_STA0_DVD);
+		break;
+	case I2C_MAX_FAST_MODE_FREQ:
+		writel((6 * apb_clk) / 10000000, i2c_dev->base + ADDR_STA0_DVD);
+		break;
+	case I2C_MAX_FAST_MODE_PLUS_FREQ:
+		writel((8 * apb_clk) / 10000000, i2c_dev->base + ADDR_STA0_DVD);
+		break;
+	case I2C_MAX_HIGH_SPEED_MODE_FREQ:
+		writel((8 * apb_clk) / 10000000, i2c_dev->base + ADDR_STA0_DVD);
+		break;
+	default:
+		dev_err(i2c_dev->dev, "Unsupported frequency: %d\n", freq);
+		break;
+	}
+}
 
 static void sprd_i2c_set_count(struct sprd_i2c *i2c_dev, u32 count)
 {
@@ -269,6 +319,12 @@ static int sprd_i2c_handle_msg(struct i2c_adapter *i2c_adap,
 		sprd_i2c_send_stop(i2c_dev, !!is_last_msg);
 	}
 
+	if (msg->flags & I2C_400K_FLAG)
+		sprd_i2c_set_clk(i2c_dev, I2C_FREQ_400K);
+	else if (msg->flags & I2C_1M_FLAG)
+		sprd_i2c_set_clk(i2c_dev, I2C_FREQ_1M);
+	else if (msg->flags & I2C_3M4_FLAG)
+		sprd_i2c_set_clk(i2c_dev, I2C_FREQ_3_4M);
 	/*
 	 * We should enable rx fifo full interrupt to get data when receiving
 	 * full data.
@@ -330,49 +386,6 @@ static const struct i2c_algorithm sprd_i2c_algo = {
 	.master_xfer = sprd_i2c_master_xfer,
 	.functionality = sprd_i2c_func,
 };
-
-static void sprd_i2c_set_clk(struct sprd_i2c *i2c_dev, u32 freq)
-{
-	u32 apb_clk = i2c_dev->src_clk;
-	/*
-	 * From I2C databook, the prescale calculation formula:
-	 * prescale = freq_i2c / (4 * freq_scl) - 1;
-	 */
-	u32 i2c_dvd = apb_clk / (4 * freq) - 1;
-	/*
-	 * From I2C databook, the high period of SCL clock is recommended as
-	 * 40% (2/5), and the low period of SCL clock is recommended as 60%
-	 * (3/5), then the formula should be:
-	 * high = (prescale * 2 * 2) / 5
-	 * low = (prescale * 2 * 3) / 5
-	 */
-	u32 high = ((i2c_dvd << 1) * 2) / 5;
-	u32 low = ((i2c_dvd << 1) * 3) / 5;
-	u32 div0 = I2C_ADDR_DVD0_CALC(high, low);
-	u32 div1 = I2C_ADDR_DVD1_CALC(high, low);
-
-	writel(div0, i2c_dev->base + ADDR_DVD0);
-	writel(div1, i2c_dev->base + ADDR_DVD1);
-
-	/* Start hold timing = hold time(us) * source clock */
-	switch (freq) {
-	case I2C_MAX_STANDARD_MODE_FREQ:
-		writel((4 * apb_clk) / 1000000, i2c_dev->base + ADDR_STA0_DVD);
-		break;
-	case I2C_MAX_FAST_MODE_FREQ:
-		writel((6 * apb_clk) / 10000000, i2c_dev->base + ADDR_STA0_DVD);
-		break;
-	case I2C_MAX_FAST_MODE_PLUS_FREQ:
-		writel((8 * apb_clk) / 10000000, i2c_dev->base + ADDR_STA0_DVD);
-		break;
-	case I2C_MAX_HIGH_SPEED_MODE_FREQ:
-		writel((8 * apb_clk) / 10000000, i2c_dev->base + ADDR_STA0_DVD);
-		break;
-	default:
-		dev_err(i2c_dev->dev, "Unsupported frequency: %d\n", freq);
-		break;
-	}
-}
 
 static void sprd_i2c_enable(struct sprd_i2c *i2c_dev)
 {
