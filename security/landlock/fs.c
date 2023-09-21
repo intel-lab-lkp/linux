@@ -1050,17 +1050,41 @@ static int hook_sb_mount(const char *const dev_name,
 			 const struct path *const path, const char *const type,
 			 const unsigned long flags, void *const data)
 {
-	if (!landlock_get_current_domain())
+	const struct landlock_ruleset *const dom =
+		landlock_get_current_domain();
+	struct landlock_request request = {
+		.operation = LANDLOCK_OP_MOUNT,
+		.missing_permission = LANDLOCK_PERM_FS_LAYOUT,
+		.audit = {
+			.type = LSM_AUDIT_DATA_PATH,
+			.u.path = *path,
+		},
+	};
+
+	if (!dom)
 		return 0;
-	return -EPERM;
+
+	return landlock_log_request(-EPERM, &request, dom, 0, NULL);
 }
 
 static int hook_move_mount(const struct path *const from_path,
 			   const struct path *const to_path)
 {
-	if (!landlock_get_current_domain())
+	const struct landlock_ruleset *const dom =
+		landlock_get_current_domain();
+	struct landlock_request request = {
+		.operation = LANDLOCK_OP_MOVE_MOUNT,
+		.missing_permission = LANDLOCK_PERM_FS_LAYOUT,
+		.audit = {
+			.type = LSM_AUDIT_DATA_PATH,
+			.u.path = *to_path,
+		},
+	};
+
+	if (!dom)
 		return 0;
-	return -EPERM;
+
+	return landlock_log_request(-EPERM, &request, dom, 0, NULL);
 }
 
 /*
@@ -1069,16 +1093,42 @@ static int hook_move_mount(const struct path *const from_path,
  */
 static int hook_sb_umount(struct vfsmount *const mnt, const int flags)
 {
-	if (!landlock_get_current_domain())
+	const struct landlock_ruleset *const dom =
+		landlock_get_current_domain();
+	struct landlock_request request = {
+		.operation = LANDLOCK_OP_UMOUNT,
+		.missing_permission = LANDLOCK_PERM_FS_LAYOUT,
+		.audit = {
+			// TODO: try to print the mounted path
+			// cf. dentry_path()
+			.type = LSM_AUDIT_DATA_DENTRY,
+			.u.dentry = mnt->mnt_root,
+		},
+	};
+
+	if (!dom)
 		return 0;
-	return -EPERM;
+
+	return landlock_log_request(-EPERM, &request, dom, 0, NULL);
 }
 
 static int hook_sb_remount(struct super_block *const sb, void *const mnt_opts)
 {
-	if (!landlock_get_current_domain())
+	const struct landlock_ruleset *const dom =
+		landlock_get_current_domain();
+	struct landlock_request request = {
+		.operation = LANDLOCK_OP_REMOUNT,
+		.missing_permission = LANDLOCK_PERM_FS_LAYOUT,
+		.audit = {
+			.type = LSM_AUDIT_DATA_DENTRY,
+			.u.dentry = sb->s_root,
+		},
+	};
+
+	if (!dom)
 		return 0;
-	return -EPERM;
+
+	return landlock_log_request(-EPERM, &request, dom, 0, NULL);
 }
 
 /*
@@ -1092,9 +1142,21 @@ static int hook_sb_remount(struct super_block *const sb, void *const mnt_opts)
 static int hook_sb_pivotroot(const struct path *const old_path,
 			     const struct path *const new_path)
 {
-	if (!landlock_get_current_domain())
+	const struct landlock_ruleset *const dom =
+		landlock_get_current_domain();
+	struct landlock_request request = {
+		.operation = LANDLOCK_OP_PIVOT_ROOT,
+		.missing_permission = LANDLOCK_PERM_FS_LAYOUT,
+		.audit = {
+			.type = LSM_AUDIT_DATA_PATH,
+			.u.path = *new_path,
+		},
+	};
+
+	if (!dom)
 		return 0;
-	return -EPERM;
+
+	return landlock_log_request(-EPERM, &request, dom, 0, NULL);
 }
 
 /* Path hooks */

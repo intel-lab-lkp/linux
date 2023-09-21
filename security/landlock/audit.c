@@ -18,6 +18,11 @@ static const char *op_to_string(enum landlock_operation operation)
 {
 	const char *const desc[] = {
 		[0] = "",
+		[LANDLOCK_OP_MOUNT] = "mount",
+		[LANDLOCK_OP_MOVE_MOUNT] = "move_mount",
+		[LANDLOCK_OP_UMOUNT] = "umount",
+		[LANDLOCK_OP_REMOUNT] = "remount",
+		[LANDLOCK_OP_PIVOT_ROOT] = "pivot_root",
 		[LANDLOCK_OP_MKDIR] = "mkdir",
 		[LANDLOCK_OP_MKNOD] = "mknod",
 		[LANDLOCK_OP_SYMLINK] = "symlink",
@@ -31,6 +36,20 @@ static const char *op_to_string(enum landlock_operation operation)
 		return "unknown";
 
 	return desc[operation];
+}
+
+static const char *perm_to_string(enum landlock_permission permission)
+{
+	const char *const desc[] = {
+		[0] = "",
+		[LANDLOCK_PERM_PTRACE] = "ptrace",
+		[LANDLOCK_PERM_FS_LAYOUT] = "fs_layout",
+	};
+
+	if (WARN_ON_ONCE(permission < 0 || permission > ARRAY_SIZE(desc)))
+		return "unknown";
+
+	return desc[permission];
 }
 
 #define BIT_INDEX(bit) HWEIGHT(bit - 1)
@@ -177,8 +196,11 @@ update_request(struct landlock_request *const request,
 	WARN_ON_ONCE(request->youngest_domain);
 	WARN_ON_ONCE(request->missing_access);
 
-	if (WARN_ON_ONCE(!access_request))
+	if (!access_request) {
+		/* No missing accesses. */
+		request->youngest_domain = node->id;
 		return;
+	}
 
 	if (WARN_ON_ONCE(!layer_masks))
 		return;
@@ -240,6 +262,8 @@ log_request(const int error, struct landlock_request *const request,
 			 request->youngest_domain,
 			 op_to_string(request->operation), -error);
 	log_accesses(ab, request->missing_access);
+	audit_log_format(ab, " missing-permission=%s",
+			 perm_to_string(request->missing_permission));
 	audit_log_lsm_data(ab, &request->audit);
 	audit_log_end(ab);
 }

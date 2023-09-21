@@ -14,7 +14,12 @@
 #include "ruleset.h"
 
 enum landlock_operation {
-	LANDLOCK_OP_MKDIR = 1,
+	LANDLOCK_OP_MOUNT = 1,
+	LANDLOCK_OP_MOVE_MOUNT,
+	LANDLOCK_OP_UMOUNT,
+	LANDLOCK_OP_REMOUNT,
+	LANDLOCK_OP_PIVOT_ROOT,
+	LANDLOCK_OP_MKDIR,
 	LANDLOCK_OP_MKNOD,
 	LANDLOCK_OP_SYMLINK,
 	LANDLOCK_OP_UNLINK,
@@ -23,8 +28,14 @@ enum landlock_operation {
 	LANDLOCK_OP_OPEN,
 };
 
+enum landlock_permission {
+	LANDLOCK_PERM_PTRACE = 1,
+	LANDLOCK_PERM_FS_LAYOUT,
+};
+
 struct landlock_request {
 	const enum landlock_operation operation;
+	const enum landlock_permission missing_permission;
 	access_mask_t missing_access;
 	u64 youngest_domain;
 	struct common_audit_data audit;
