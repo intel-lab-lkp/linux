@@ -2242,7 +2242,7 @@ static int vmx_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 		if (intel_pmu_lbr_is_enabled(vcpu) && (data & DEBUGCTLMSR_LBR)) {
 			struct lbr_desc *lbr_desc = vcpu_to_lbr_desc(vcpu);
 
-			lbr_desc->in_use = true;
+			lbr_desc->state = LBR_STATE_IN_USE;
 			if (!lbr_desc->event)
 				intel_pmu_create_guest_lbr_event(vcpu);
 		}

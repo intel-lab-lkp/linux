@@ -628,7 +628,7 @@ static void intel_pmu_init(struct kvm_vcpu *vcpu)
 	lbr_desc->records.nr = 0;
 	lbr_desc->event = NULL;
 	lbr_desc->msr_passthrough = false;
-	lbr_desc->in_use = FALSE;
+	lbr_desc->state = LBR_STATE_PREDICT_FREE;
 }
 
 static void intel_pmu_reset(struct kvm_vcpu *vcpu)
@@ -671,6 +671,7 @@ static void intel_pmu_legacy_freezing_lbrs_on_pmi(struct kvm_vcpu *vcpu)
 	if (data & DEBUGCTLMSR_FREEZE_LBRS_ON_PMI) {
 		data &= ~DEBUGCTLMSR_LBR;
 		vmcs_write64(GUEST_IA32_DEBUGCTL, data);
+		vcpu_to_lbr_desc(vcpu)->state = LBR_STATE_FREEZE_ON_PMI;
 	}
 }
 
@@ -765,9 +766,10 @@ static void intel_pmu_cleanup(struct kvm_vcpu *vcpu)
 	struct lbr_desc *lbr_desc = vcpu_to_lbr_desc(vcpu);
 
 	if (!(vmcs_read64(GUEST_IA32_DEBUGCTL) & DEBUGCTLMSR_LBR)) {
-		if (!lbr_desc->in_use)
+		if (lbr_desc->state == LBR_STATE_PREDICT_FREE)
 			intel_pmu_release_guest_lbr_event(vcpu);
-		lbr_desc->in_use = false;
+		else if (lbr_desc->state == LBR_STATE_IN_USE)
+			lbr_desc->state = LBR_STATE_PREDICT_FREE;
 	}
 }
 

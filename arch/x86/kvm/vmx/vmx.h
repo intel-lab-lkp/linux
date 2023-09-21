@@ -93,6 +93,12 @@ union vmx_exit_reason {
 	u32 full;
 };
 
+enum lbr_state {
+	LBR_STATE_PREDICT_FREE = 0,
+	LBR_STATE_IN_USE = 1,
+	LBR_STATE_FREEZE_ON_PMI = 2
+};
+
 struct lbr_desc {
 	/* Basic info about guest LBR records. */
 	struct x86_pmu_lbr records;
@@ -108,7 +114,7 @@ struct lbr_desc {
 	/* True if LBRs are marked as not intercepted in the MSR bitmap */
 	bool msr_passthrough;
 
-	bool in_use;
+	enum lbr_state state;
 };
 
 /*
