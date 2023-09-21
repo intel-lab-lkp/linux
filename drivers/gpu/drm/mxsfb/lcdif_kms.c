@@ -652,18 +652,32 @@ static const struct drm_crtc_funcs lcdif_crtc_funcs = {
 static int lcdif_plane_atomic_check(struct drm_plane *plane,
 				    struct drm_atomic_state *state)
 {
-	struct drm_plane_state *plane_state = drm_atomic_get_new_plane_state(state,
-									     plane);
+	struct drm_plane_state *new_state = drm_atomic_get_new_plane_state(state,
+									   plane);
+	struct drm_plane_state *old_state = drm_atomic_get_old_plane_state(state,
+									   plane);
 	struct lcdif_drm_private *lcdif = to_lcdif_drm_private(plane->dev);
 	struct drm_crtc_state *crtc_state;
+	int ret;
+
+	/* always okay to disable the plane */
+	if (!new_state->fb)
+		return 0;
 
 	crtc_state = drm_atomic_get_new_crtc_state(state,
 						   &lcdif->crtc);
 
-	return drm_atomic_helper_check_plane_state(plane_state, crtc_state,
-						   DRM_PLANE_NO_SCALING,
-						   DRM_PLANE_NO_SCALING,
-						   false, true);
+	ret = drm_atomic_helper_check_plane_state(new_state, crtc_state,
+						  DRM_PLANE_NO_SCALING,
+						  DRM_PLANE_NO_SCALING,
+						  false, true);
+	if (ret)
+		return ret;
+
+	if (old_state->fb && new_state->fb->format != old_state->fb->format)
+		crtc_state->mode_changed = true;
+
+	return 0;
 }
 
 static void lcdif_plane_primary_atomic_update(struct drm_plane *plane,

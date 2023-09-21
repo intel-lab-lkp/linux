@@ -30,9 +30,25 @@
 #include "lcdif_drv.h"
 #include "lcdif_regs.h"
 
+static int lcdif_atomic_check(struct drm_device *dev,
+			      struct drm_atomic_state *state)
+{
+	int ret;
+
+	ret = drm_atomic_helper_check(dev, state);
+	if (ret)
+		return ret;
+
+	/*
+	 * Check modeset again in case crtc_state->mode_changed is
+	 * updated in plane's ->atomic_check callback.
+	 */
+	return drm_atomic_helper_check_modeset(dev, state);
+}
+
 static const struct drm_mode_config_funcs lcdif_mode_config_funcs = {
 	.fb_create		= drm_gem_fb_create,
-	.atomic_check		= drm_atomic_helper_check,
+	.atomic_check		= lcdif_atomic_check,
 	.atomic_commit		= drm_atomic_helper_commit,
 };
 
