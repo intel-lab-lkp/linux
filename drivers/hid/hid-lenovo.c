@@ -1344,6 +1344,28 @@ static int lenovo_input_configured(struct hid_device *hdev,
 	return 0;
 }
 
+static int __maybe_unused lenovo_resume(struct hid_device *hdev)
+{
+	int ret;
+
+	switch (hdev->product) {
+	case USB_DEVICE_ID_LENOVO_CUSBKBD:
+	case USB_DEVICE_ID_LENOVO_CBTKBD:
+	case USB_DEVICE_ID_LENOVO_TPIIUSBKBD:
+	case USB_DEVICE_ID_LENOVO_TPIIBTKBD:
+		/* Switch middle button to native mode again */
+		ret = lenovo_send_cmd_cptkbd(hdev, 0x09, 0x01);
+		if (ret)
+			hid_warn(hdev, "Failed to switch middle button: %d\n",
+				 ret);
+		break;
+	default:
+		ret = 0;
+		break;
+	}
+
+	return ret;
+}
 
 static const struct hid_device_id lenovo_devices[] = {
 	{ HID_USB_DEVICE(USB_VENDOR_ID_LENOVO, USB_DEVICE_ID_LENOVO_TPKBD) },
@@ -1380,6 +1402,9 @@ static struct hid_driver lenovo_driver = {
 	.raw_event = lenovo_raw_event,
 	.event = lenovo_event,
 	.report_fixup = lenovo_report_fixup,
+#ifdef CONFIG_PM
+	.reset_resume = lenovo_resume,
+#endif
 };
 module_hid_driver(lenovo_driver);
 
