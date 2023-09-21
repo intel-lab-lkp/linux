@@ -29,7 +29,9 @@ properties:
     maxItems: 1
 
   "#pwm-cells":
-    const: 3
+    enum:
+      - 2
+      - 3
 
   fsl,pwm-number:
     $ref: /schemas/types.yaml#/definitions/uint32
