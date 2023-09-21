@@ -789,6 +789,9 @@ static int __driver_probe_device(struct device_driver *drv, struct device *dev)
 	pr_debug("bus: '%s': %s: matched device %s with driver %s\n",
 		 drv->bus->name, __func__, dev_name(dev), drv->name);
 
+	if (dev->probe_mutex)
+		mutex_lock(dev->probe_mutex);
+
 	pm_runtime_get_suppliers(dev);
 	if (dev->parent)
 		pm_runtime_get_sync(dev->parent);
@@ -804,6 +807,10 @@ static int __driver_probe_device(struct device_driver *drv, struct device *dev)
 		pm_runtime_put(dev->parent);
 
 	pm_runtime_put_suppliers(dev);
+
+	if (dev->probe_mutex)
+		mutex_unlock(dev->probe_mutex);
+
 	return ret;
 }
 

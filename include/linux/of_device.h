@@ -30,6 +30,7 @@ extern ssize_t of_device_modalias(struct device *dev, char *str, ssize_t len);
 
 extern void of_device_uevent(const struct device *dev, struct kobj_uevent_env *env);
 extern int of_device_uevent_modalias(const struct device *dev, struct kobj_uevent_env *env);
+extern void of_device_init(struct device *dev);
 
 int of_dma_configure_id(struct device *dev,
 		     struct device_node *np,
@@ -82,6 +83,11 @@ static inline int of_dma_configure(struct device *dev,
 {
 	return 0;
 }
+
+static inline void of_device_init(struct device *dev)
+{
+}
+
 #endif /* CONFIG_OF */
 
 #endif /* _LINUX_OF_DEVICE_H */

@@ -304,3 +304,57 @@ int of_device_uevent_modalias(const struct device *dev, struct kobj_uevent_env *
 	return 0;
 }
 EXPORT_SYMBOL_GPL(of_device_uevent_modalias);
+
+struct of_mutex_list_node {
+	struct list_head list;
+	struct device_node *np;
+	struct mutex mutex;
+};
+
+static DEFINE_MUTEX(of_mutex_list_lock);
+static LIST_HEAD(of_mutex_list);
+
+/**
+ * of_device_init() - Init a OF-related elements in a new struct device
+ * @dev: the new struct device
+ *
+ * The only initialization we need done at the moment is to init the
+ * "probe_mutex" if this device is part of a mutual-exclusion-group.
+ */
+void of_device_init(struct device *dev)
+{
+	struct of_mutex_list_node *node;
+	struct device_node *mutex_np;
+
+	mutex_np = of_parse_phandle(dev->of_node, "mutual-exclusion-group", 0);
+	if (!mutex_np)
+		return;
+
+	mutex_lock(&of_mutex_list_lock);
+
+	/*
+	 * Check to see if we've already created a mutex for this group. If
+	 * so then we're done.
+	 */
+	list_for_each_entry(node, &of_mutex_list, list) {
+		if (node->np == mutex_np) {
+			of_node_put(mutex_np);
+			dev->probe_mutex = &node->mutex;
+			goto exit;
+		}
+	}
+
+	/*
+	 * We need to create a new mutex. We'll never free the memory for this
+	 * (nor release the referenced to the mutual-exclusion-group node) but
+	 * there is only one object per group.
+	 */
+	node = kzalloc(sizeof(*node), GFP_KERNEL);
+	mutex_init(&node->mutex);
+	node->np = mutex_np;
+	list_add_tail(&node->list, &of_mutex_list);
+	dev->probe_mutex = &node->mutex;
+
+exit:
+	mutex_unlock(&of_mutex_list_lock);
+}

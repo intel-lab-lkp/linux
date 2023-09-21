@@ -3109,6 +3109,7 @@ void device_initialize(struct device *dev)
 	dev->dma_coherent = dma_default_coherent;
 #endif
 	swiotlb_dev_init(dev);
+	of_device_init(dev);
 }
 EXPORT_SYMBOL_GPL(device_initialize);
 

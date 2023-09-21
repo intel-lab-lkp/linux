@@ -672,6 +672,9 @@ struct device_physical_location {
  * @iommu:	Per device generic IOMMU runtime data
  * @physical_location: Describes physical location of the device connection
  *		point in the system housing.
+ * @probe_mutex: If non-NULL, this mutex will be held during device probe
+ *		to allow mutual exclusion between multiple sources of probable
+ *		but non-discoverable devices with conflicting resources.
  * @removable:  Whether the device can be removed from the system. This
  *              should be set by the subsystem / bus driver that discovered
  *              the device.
@@ -789,6 +792,8 @@ struct device {
 	struct dev_iommu	*iommu;
 
 	struct device_physical_location *physical_location;
+
+	struct mutex		*probe_mutex;
 
 	enum device_removable	removable;
 
