@@ -1565,6 +1565,104 @@ static void *f_next(struct seq_file *m, void *v, loff_t *pos)
 		return node;
 }
 
+extern struct trace_sym_def *__start_ftrace_sym_defs[];
+extern struct trace_sym_def *__stop_ftrace_sym_defs[];
+
+static void show_sym_list(struct seq_file *m, struct trace_event_call *call,
+			  const char *name)
+{
+	struct trace_sym_def **sym_defs;
+	unsigned int n_sym_defs, i;
+
+	if (call->module) {
+		struct module *mod = call->module;
+
+		sym_defs = mod->trace_sym_defs;
+		n_sym_defs = mod->num_trace_sym_defs;
+	} else {
+		sym_defs = __start_ftrace_sym_defs;
+		n_sym_defs = __stop_ftrace_sym_defs - __start_ftrace_sym_defs;
+	}
+
+	for (i = 0; i < n_sym_defs; i++) {
+		if (!sym_defs[i])
+			continue;
+		if (sym_defs[i]->system != call->class->system)
+			continue;
+		if (strncmp(name, sym_defs[i]->symbol_id,
+			    strlen(sym_defs[i]->symbol_id)))
+			continue;
+		if (sym_defs[i]->show)
+			sym_defs[i]->show(m);
+		break;
+	}
+}
+
+static void show_print_fmt(struct seq_file *m, struct trace_event_call *call)
+{
+	char *ptr = call->print_fmt;
+	int quote = 0;
+	int wait_for_doubleslash = 0;
+
+	if (!(call->flags & TRACE_EVENT_FL_DYNPRINT) ||
+	    /* WARN because dynamic events have no module */
+	    WARN_ON_ONCE(call->flags & TRACE_EVENT_FL_DYNAMIC)) {
+		seq_printf(m, "\nprint fmt: %s\n", call->print_fmt);
+		return;
+	}
+
+	seq_puts(m, "\nprint fmt: ");
+	while (*ptr) {
+		if (*ptr == '\\') {
+			seq_putc(m, *ptr);
+			ptr++;
+			/* paranoid */
+			if (!*ptr)
+				break;
+			goto next;
+		}
+		if (*ptr == '"') {
+			quote ^= 1;
+			goto next;
+		}
+		if (quote)
+			goto next;
+
+		if (wait_for_doubleslash == 1 && *ptr == '/') {
+			wait_for_doubleslash = 2;
+			ptr++;
+			continue;
+		} else if (wait_for_doubleslash == 2 && *ptr != '/') {
+			seq_putc(m, '/');
+			wait_for_doubleslash = 1;
+			goto next;
+		} else if (wait_for_doubleslash == 2 && *ptr == '/') {
+			const char *name;
+
+			ptr++;
+			name = ptr;
+			/* skip the name */
+			while (*ptr && *ptr != ')')
+				ptr++;
+			wait_for_doubleslash = 0;
+			show_sym_list(m, call, name);
+			continue;
+		}
+
+		if (strncmp(ptr, "__print_sym(", 12) == 0) {
+			ptr += 12;
+			seq_puts(m, "__print_symbolic(");
+			wait_for_doubleslash = 1;
+			continue;
+		}
+next:
+		seq_putc(m, *ptr);
+		ptr++;
+	}
+
+	seq_putc(m, '\n');
+}
+
 static int f_show(struct seq_file *m, void *v)
 {
 	struct trace_event_call *call = event_file_data(m->private);
@@ -1583,8 +1681,7 @@ static int f_show(struct seq_file *m, void *v)
 		return 0;
 
 	case FORMAT_PRINTFMT:
-		seq_printf(m, "\nprint fmt: %s\n",
-			   call->print_fmt);
+		show_print_fmt(m, call);
 		return 0;
 	}
 
@@ -2557,6 +2654,32 @@ static int event_init(struct trace_event_call *call)
 	return ret;
 }
 
+static void set_event_dynprint(struct trace_event_call *call)
+{
+	char *ptr;
+	int quote = 0;
+
+	for (ptr = call->print_fmt; *ptr; ptr++) {
+		if (*ptr == '\\') {
+			ptr++;
+			/* paranoid */
+			if (!*ptr)
+				break;
+			continue;
+		}
+		if (*ptr == '"') {
+			quote ^= 1;
+			continue;
+		}
+		if (quote)
+			continue;
+		if (strncmp(ptr, "__print_sym(", 12) == 0) {
+			call->flags |= TRACE_EVENT_FL_DYNPRINT;
+			break;
+		}
+	}
+}
+
 static int
 __register_event(struct trace_event_call *call, struct module *mod)
 {
@@ -2571,6 +2694,8 @@ __register_event(struct trace_event_call *call, struct module *mod)
 		atomic_set(&call->refcnt, 0);
 	else
 		call->module = mod;
+
+	set_event_dynprint(call);
 
 	return 0;
 }
@@ -3814,6 +3939,8 @@ static __init int event_trace_enable(void)
 		ret = event_init(call);
 		if (!ret)
 			list_add(&call->list, &ftrace_events);
+
+		set_event_dynprint(call);
 	}
 
 	register_trigger_cmds();
