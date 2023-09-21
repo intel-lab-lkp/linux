@@ -158,6 +158,7 @@ static int btrfs_insert_striped_mirrored_raid_extents(
 	int ret = 0;
 	u64 stripe_end;
 	u64 prev_end;
+	int stripe;
 
 	if (nstripes == 1)
 		return btrfs_insert_mirrored_raid_extents(trans, ordered, map_type);
@@ -173,11 +174,11 @@ static int btrfs_insert_striped_mirrored_raid_extents(
 	stripe_end = rbioc->logical;
 	prev_end = stripe_end;
 	i = 0;
+	stripe = 0;
 	list_for_each_entry(bioc, &ordered->bioc_list, rst_ordered_entry) {
 		rbioc->size += bioc->size;
 		for (int j = 0; j < substripes; j++) {
-			int stripe = i + j;
-
+			stripe = i + j;
 			rbioc->stripes[stripe].dev = bioc->stripes[j].dev;
 			rbioc->stripes[stripe].physical = bioc->stripes[j].physical;
 			rbioc->stripes[stripe].length = bioc->size;
@@ -186,12 +187,15 @@ static int btrfs_insert_striped_mirrored_raid_extents(
 		stripe_end += rbioc->size;
 		if (i >= nstripes ||
 		    (stripe_end - prev_end >= max_stripes * BTRFS_STRIPE_LEN)) {
-			ret = btrfs_insert_one_raid_extent(trans, nstripes * substripes,
+			ret = btrfs_insert_one_raid_extent(trans, stripe + 1,
 							   rbioc);
 			if (ret)
 				goto out;
 
-			left -= nstripes;
+			left -= stripe + 1;
+			if (left <= 0)
+				break;
+
 			i = 0;
 			rbioc->logical += rbioc->size;
 			rbioc->size = 0;
@@ -201,7 +205,7 @@ static int btrfs_insert_striped_mirrored_raid_extents(
 		}
 	}
 
-	if (left) {
+	if (left > 0) {
 		bioc = list_prev_entry(bioc, rst_ordered_entry);
 		ret = btrfs_insert_one_raid_extent(trans, substripes, bioc);
 	}
