@@ -95,6 +95,7 @@ typedef void vq_callback_t(struct virtqueue *);
  *	set.
  * @create_avq: initialize admin virtqueue resource.
  * @destroy_avq: destroy admin virtqueue resource.
+ * @exec_admin_cmd: Send admin command and get result.
  */
 struct virtio_config_ops {
 	void (*get)(struct virtio_device *vdev, unsigned offset,
@@ -124,6 +125,8 @@ struct virtio_config_ops {
 	int (*enable_vq_after_reset)(struct virtqueue *vq);
 	int (*create_avq)(struct virtio_device *vdev);
 	void (*destroy_avq)(struct virtio_device *vdev);
+	int (*exec_admin_cmd)(struct virtio_device *vdev,
+			      struct virtio_admin_cmd *cmd);
 };
 
 /* If driver didn't advertise the feature, it will never appear. */

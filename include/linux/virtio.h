@@ -110,6 +110,14 @@ int virtqueue_exec_cmd(struct virtqueue *vq,
 		       void *data,
 		       gfp_t gfp);
 
+struct virtio_admin_cmd {
+	__le16 opcode;
+	__le16 group_type;
+	__le64 group_member_id;
+	struct scatterlist *data_sg;
+	struct scatterlist *result_sg;
+};
+
 /**
  * struct virtio_device - representation of a device using virtio
  * @index: unique position on the virtio bus
@@ -206,6 +214,9 @@ static inline struct virtio_driver *drv_to_virtio(struct device_driver *drv)
 {
 	return container_of(drv, struct virtio_driver, driver);
 }
+
+int virtio_admin_cmd_exec(struct virtio_device *vdev,
+			  struct virtio_admin_cmd *cmd);
 
 int register_virtio_driver(struct virtio_driver *drv);
 void unregister_virtio_driver(struct virtio_driver *drv);

@@ -128,6 +128,7 @@ int vp_find_vqs(struct virtio_device *vdev, unsigned int nvqs,
 const char *vp_bus_name(struct virtio_device *vdev);
 void vp_destroy_avq(struct virtio_device *vdev);
 int vp_create_avq(struct virtio_device *vdev);
+int vp_avq_cmd_exec(struct virtio_device *vdev, struct virtio_admin_cmd *cmd);
 
 /* Setup the affinity for a virtqueue:
  * - force the affinity for per vq vector

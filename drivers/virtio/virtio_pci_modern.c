@@ -515,6 +515,7 @@ static const struct virtio_config_ops virtio_pci_config_nodev_ops = {
 	.enable_vq_after_reset = vp_modern_enable_vq_after_reset,
 	.create_avq = vp_create_avq,
 	.destroy_avq = vp_destroy_avq,
+	.exec_admin_cmd = vp_avq_cmd_exec,
 };
 
 static const struct virtio_config_ops virtio_pci_config_ops = {
@@ -537,6 +538,7 @@ static const struct virtio_config_ops virtio_pci_config_ops = {
 	.enable_vq_after_reset = vp_modern_enable_vq_after_reset,
 	.create_avq = vp_create_avq,
 	.destroy_avq = vp_destroy_avq,
+	.exec_admin_cmd = vp_avq_cmd_exec,
 };
 
 /* the PCI probing function */

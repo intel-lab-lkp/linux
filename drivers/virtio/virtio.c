@@ -582,6 +582,13 @@ err:
 EXPORT_SYMBOL_GPL(virtio_device_restore);
 #endif
 
+int virtio_admin_cmd_exec(struct virtio_device *vdev,
+			  struct virtio_admin_cmd *cmd)
+{
+	return vdev->config->exec_admin_cmd(vdev, cmd);
+}
+EXPORT_SYMBOL_GPL(virtio_admin_cmd_exec);
+
 static int virtio_init(void)
 {
 	if (bus_register(&virtio_bus) != 0)
