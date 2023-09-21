@@ -37,6 +37,7 @@
 #include "icssg_config.h"
 #include "icss_iep.h"
 #include "icssg_switch_map.h"
+#include "icssg_qos.h"
 
 #define PRUETH_MAX_MTU          (2000 - ETH_HLEN - ETH_FCS_LEN)
 #define PRUETH_MIN_PKT_SIZE     (VLAN_ETH_ZLEN)
@@ -174,6 +175,9 @@ struct prueth_emac {
 
 	struct pruss_mem_region dram;
 
+	struct prueth_qos qos;
+	struct work_struct ts_work;
+
 	struct delayed_work stats_work;
 	u64 stats[ICSSG_NUM_STATS];
 };
@@ -285,4 +289,7 @@ u32 icssg_queue_level(struct prueth *prueth, int queue);
 void emac_stats_work_handler(struct work_struct *work);
 void emac_update_hardware_stats(struct prueth_emac *emac);
 int emac_get_stat_by_name(struct prueth_emac *emac, char *stat_name);
+
+u64 prueth_iep_gettime(void *clockops_data, struct ptp_system_timestamp *sts);
+
 #endif /* __NET_TI_ICSSG_PRUETH_H */

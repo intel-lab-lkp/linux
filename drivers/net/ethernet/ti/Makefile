@@ -37,5 +37,6 @@ icssg-prueth-y := k3-cppi-desc-pool.o \
 		  icssg/icssg_config.o \
 		  icssg/icssg_mii_cfg.o \
 		  icssg/icssg_stats.o \
-		  icssg/icssg_ethtool.o
+		  icssg/icssg_ethtool.o \
+		  icssg/icssg_qos.o
 obj-$(CONFIG_TI_ICSS_IEP) += icssg/icss_iep.o
