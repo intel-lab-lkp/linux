@@ -217,6 +217,7 @@ static inline struct virtio_driver *drv_to_virtio(struct device_driver *drv)
 
 int virtio_admin_cmd_exec(struct virtio_device *vdev,
 			  struct virtio_admin_cmd *cmd);
+struct virtio_device *virtio_pci_vf_get_pf_dev(struct pci_dev *pdev);
 
 int register_virtio_driver(struct virtio_driver *drv);
 void unregister_virtio_driver(struct virtio_driver *drv);
