@@ -38,17 +38,18 @@ MODULE_LICENSE("GPL and additional rights");
 
 #if IS_ENABLED(CONFIG_DRM_LOAD_EDID_FIRMWARE)
 
-/* Backward compatibility for drm_kms_helper.edid_firmware */
 static int edid_firmware_set(const char *val, const struct kernel_param *kp)
 {
-	DRM_NOTE("drm_kms_helper.edid_firmware is deprecated, please use drm.edid_firmware instead.\n");
+	pr_warn("drm_kms_helper.edid_firmware has been removed, please use drm.edid_firmware instead.\n");
 
-	return __drm_set_edid_firmware_path(val);
+	return -ENOENT;
 }
 
 static int edid_firmware_get(char *buffer, const struct kernel_param *kp)
 {
-	return __drm_get_edid_firmware_path(buffer, PAGE_SIZE);
+	pr_warn("drm_kms_helper.edid_firmware has been removed, please use drm.edid_firmware instead.\n");
+
+	return -ENOENT;
 }
 
 static const struct kernel_param_ops edid_firmware_ops = {
@@ -59,6 +60,6 @@ static const struct kernel_param_ops edid_firmware_ops = {
 module_param_cb(edid_firmware, &edid_firmware_ops, NULL, 0644);
 __MODULE_PARM_TYPE(edid_firmware, "charp");
 MODULE_PARM_DESC(edid_firmware,
-		 "DEPRECATED. Use drm.edid_firmware module parameter instead.");
+		 "REMOVED. Use drm.edid_firmware module parameter instead.");
 
 #endif
