@@ -2378,6 +2378,10 @@ enum mmc_issued mmc_blk_mq_issue_rq(struct mmc_queue *mq, struct request *req)
 				ret = mmc_blk_cqe_issue_rw_rq(mq, req);
 			else
 				ret = mmc_blk_mq_issue_rw_rq(mq, req);
+
+			if (host->card->quirks & MMC_QUIRK_BROKEN_CACHE_FLUSH &&
+			    !host->card->written_flag && !ret)
+				host->card->written_flag = true;
 			break;
 		default:
 			WARN_ON_ONCE(1);

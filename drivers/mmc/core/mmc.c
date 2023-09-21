@@ -1929,6 +1929,8 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 	if (!oldcard)
 		host->card = card;
 
+	card->written_flag = false;
+
 	return 0;
 
 free_card:
@@ -2080,6 +2082,9 @@ static bool _mmc_cache_enabled(struct mmc_host *host)
 static int _mmc_flush_cache(struct mmc_host *host)
 {
 	int err = 0;
+
+	if (host->card->quirks & MMC_QUIRK_BROKEN_CACHE_FLUSH && !host->card->written_flag)
+		return err;
 
 	if (_mmc_cache_enabled(host)) {
 		err = mmc_switch(host->card, EXT_CSD_CMD_SET_NORMAL,
