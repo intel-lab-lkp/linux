@@ -60,6 +60,7 @@ struct virtio_pci_device {
 
 	/* array of all queues for house-keeping */
 	struct virtio_pci_vq_info **vqs;
+	u32 nvqs;
 
 	/* MSI-X support */
 	int msix_enabled;
