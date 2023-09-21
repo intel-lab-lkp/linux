@@ -180,7 +180,7 @@ static int qcom_rmtfs_mem_probe(struct platform_device *pdev)
 	int ret, i;
 
 	rmem = of_reserved_mem_lookup(node);
-	if (!rmem) {
+	if (!rmem || !rmem->size) {
 		dev_err(&pdev->dev, "failed to acquire memory region\n");
 		return -EINVAL;
 	}
