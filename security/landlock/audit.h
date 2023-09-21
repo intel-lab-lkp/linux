@@ -16,12 +16,20 @@
 #ifdef CONFIG_AUDIT
 
 void landlock_log_create_ruleset(struct landlock_ruleset *const ruleset);
+void landlock_log_restrict_self(struct landlock_ruleset *const domain,
+				struct landlock_ruleset *const ruleset);
 void landlock_log_release_ruleset(const struct landlock_ruleset *const ruleset);
 
 #else /* CONFIG_AUDIT */
 
 static inline void
 landlock_log_create_ruleset(struct landlock_ruleset *const ruleset)
+{
+}
+
+static inline void
+landlock_log_restrict_self(struct landlock_ruleset *const domain,
+			   struct landlock_ruleset *const ruleset)
 {
 }
 

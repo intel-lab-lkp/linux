@@ -452,6 +452,10 @@ SYSCALL_DEFINE2(landlock_restrict_self, const int, ruleset_fd, const __u32,
 	landlock_put_ruleset(new_llcred->domain);
 	new_llcred->domain = new_dom;
 
+	// FIXME: Must be atomic between the ruleset merge and the audit log to
+	// be sure about the content of the domain.
+	// -> move mutex_lock() from merge_ruleset() into this function
+	landlock_log_restrict_self(new_dom, ruleset);
 	landlock_put_ruleset(ruleset);
 	return commit_creds(new_cred);
 

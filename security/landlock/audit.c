@@ -84,6 +84,30 @@ void landlock_log_create_ruleset(struct landlock_ruleset *const ruleset)
 	audit_log_end(ab);
 }
 
+void landlock_log_restrict_self(struct landlock_ruleset *const domain,
+				struct landlock_ruleset *const ruleset)
+{
+	struct audit_buffer *ab;
+
+	WARN_ON_ONCE(domain->id);
+	WARN_ON_ONCE(!ruleset->id);
+
+	ab = audit_log_start(audit_context(), GFP_ATOMIC, AUDIT_LANDLOCK);
+	if (!ab)
+		/* audit_log_lost() call */
+		return;
+
+	domain->hierarchy->id =
+		atomic64_inc_return(&ruleset_and_domain_counter);
+	log_task(ab);
+	audit_log_format(ab, " op=restrict-self domain=%llu ruleset=%llu",
+			 domain->hierarchy->id, ruleset->id);
+	audit_log_format(
+		ab, " parent=%llu",
+		domain->hierarchy->parent ? domain->hierarchy->parent->id : 0);
+	audit_log_end(ab);
+}
+
 /*
  * This is useful to know when a domain or a ruleset will never show again in
  * the audit log.
