@@ -905,7 +905,10 @@ static void sdma_update_channel_loop(struct sdma_channel *sdmac)
 	 * owned buffer is available (i.e. BD_DONE was set too late).
 	 */
 	if (sdmac->desc && !is_sdma_channel_enabled(sdmac->sdma, sdmac->channel)) {
+		spin_unlock(&sdmac->vc.lock);
 		dev_warn(sdmac->sdma->dev, "restart cyclic channel %d\n", sdmac->channel);
+		spin_lock(&sdmac->vc.lock);
+
 		sdma_enable_channel(sdmac->sdma, sdmac->channel);
 	}
 }
