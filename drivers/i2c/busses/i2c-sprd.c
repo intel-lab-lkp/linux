@@ -352,6 +352,23 @@ static int sprd_i2c_handle_msg(struct i2c_adapter *i2c_adap,
 	return i2c_dev->err;
 }
 
+static void sprd_i2c_enable(struct sprd_i2c *i2c_dev)
+{
+	u32 tmp = I2C_DVD_OPT;
+
+	writel(tmp, i2c_dev->base + I2C_CTL);
+
+	sprd_i2c_set_full_thld(i2c_dev, I2C_FIFO_FULL_THLD);
+	sprd_i2c_set_empty_thld(i2c_dev, I2C_FIFO_EMPTY_THLD);
+
+	sprd_i2c_set_clk(i2c_dev, i2c_dev->bus_freq);
+	sprd_i2c_reset_fifo(i2c_dev);
+	sprd_i2c_clear_irq(i2c_dev);
+
+	tmp = readl(i2c_dev->base + I2C_CTL);
+	writel(tmp | I2C_EN | I2C_INT_EN, i2c_dev->base + I2C_CTL);
+}
+
 static int sprd_i2c_master_xfer(struct i2c_adapter *i2c_adap,
 				struct i2c_msg *msgs, int num)
 {
@@ -361,6 +378,8 @@ static int sprd_i2c_master_xfer(struct i2c_adapter *i2c_adap,
 	ret = pm_runtime_resume_and_get(i2c_dev->dev);
 	if (ret < 0)
 		return ret;
+
+	sprd_i2c_enable(i2c_dev);
 
 	for (im = 0; im < num - 1; im++) {
 		ret = sprd_i2c_handle_msg(i2c_adap, &msgs[im], 0);
@@ -386,23 +405,6 @@ static const struct i2c_algorithm sprd_i2c_algo = {
 	.master_xfer = sprd_i2c_master_xfer,
 	.functionality = sprd_i2c_func,
 };
-
-static void sprd_i2c_enable(struct sprd_i2c *i2c_dev)
-{
-	u32 tmp = I2C_DVD_OPT;
-
-	writel(tmp, i2c_dev->base + I2C_CTL);
-
-	sprd_i2c_set_full_thld(i2c_dev, I2C_FIFO_FULL_THLD);
-	sprd_i2c_set_empty_thld(i2c_dev, I2C_FIFO_EMPTY_THLD);
-
-	sprd_i2c_set_clk(i2c_dev, i2c_dev->bus_freq);
-	sprd_i2c_reset_fifo(i2c_dev);
-	sprd_i2c_clear_irq(i2c_dev);
-
-	tmp = readl(i2c_dev->base + I2C_CTL);
-	writel(tmp | I2C_EN | I2C_INT_EN, i2c_dev->base + I2C_CTL);
-}
 
 static irqreturn_t sprd_i2c_isr_thread(int irq, void *dev_id)
 {
@@ -668,8 +670,6 @@ static int __maybe_unused sprd_i2c_runtime_resume(struct device *dev)
 	ret = clk_prepare_enable(i2c_dev->clk);
 	if (ret)
 		return ret;
-
-	sprd_i2c_enable(i2c_dev);
 
 	return 0;
 }
