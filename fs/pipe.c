@@ -322,14 +322,34 @@ pipe_read(struct kiocb *iocb, struct iov_iter *to)
 
 			if (!buf->len) {
 				pipe_buf_release(pipe, buf);
-				spin_lock_irq(&pipe->rd_wait.lock);
+
+				if (pipe_has_watch_queue(pipe)) {
+					/* if the pipe has a
+					 * watch_queue, we need
+					 * additional protection by
+					 * the spinlock because
+					 * notifications get posted
+					 * with only this spinlock, no
+					 * mutex
+					 */
+
+					spin_lock_irq(&pipe->rd_wait.lock);
 #ifdef CONFIG_WATCH_QUEUE
-				if (buf->flags & PIPE_BUF_FLAG_LOSS)
-					pipe->note_loss = true;
+					if (buf->flags & PIPE_BUF_FLAG_LOSS)
+						pipe->note_loss = true;
 #endif
-				tail++;
-				pipe->tail = tail;
-				spin_unlock_irq(&pipe->rd_wait.lock);
+					tail++;
+					pipe->tail = tail;
+					spin_unlock_irq(&pipe->rd_wait.lock);
+				} else {
+					/* without a watch_queue, we
+					 * can simply increment the
+					 * tail without the spinlock -
+					 * the mutex is enough
+					 */
+
+					pipe->tail = ++tail;
+				}
 			}
 			total_len -= chars;
 			if (!total_len)
