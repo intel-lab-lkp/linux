@@ -831,7 +831,8 @@ void handle_edge_irq(struct irq_desc *desc)
 		handle_irq_event(desc);
 
 	} while ((desc->istate & IRQS_PENDING) &&
-		 !irqd_irq_disabled(&desc->irq_data));
+		 !irqd_irq_disabled(&desc->irq_data) &&
+		 cpumask_test_cpu(smp_processor_id(), desc->irq_common_data.affinity));
 
 out_unlock:
 	raw_spin_unlock(&desc->lock);
