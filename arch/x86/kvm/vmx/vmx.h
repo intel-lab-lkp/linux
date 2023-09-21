@@ -107,6 +107,8 @@ struct lbr_desc {
 
 	/* True if LBRs are marked as not intercepted in the MSR bitmap */
 	bool msr_passthrough;
+
+	bool in_use;
 };
 
 /*

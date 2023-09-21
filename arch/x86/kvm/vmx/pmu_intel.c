@@ -628,6 +628,7 @@ static void intel_pmu_init(struct kvm_vcpu *vcpu)
 	lbr_desc->records.nr = 0;
 	lbr_desc->event = NULL;
 	lbr_desc->msr_passthrough = false;
+	lbr_desc->in_use = FALSE;
 }
 
 static void intel_pmu_reset(struct kvm_vcpu *vcpu)
@@ -761,8 +762,13 @@ warn:
 
 static void intel_pmu_cleanup(struct kvm_vcpu *vcpu)
 {
-	if (!(vmcs_read64(GUEST_IA32_DEBUGCTL) & DEBUGCTLMSR_LBR))
-		intel_pmu_release_guest_lbr_event(vcpu);
+	struct lbr_desc *lbr_desc = vcpu_to_lbr_desc(vcpu);
+
+	if (!(vmcs_read64(GUEST_IA32_DEBUGCTL) & DEBUGCTLMSR_LBR)) {
+		if (!lbr_desc->in_use)
+			intel_pmu_release_guest_lbr_event(vcpu);
+		lbr_desc->in_use = false;
+	}
 }
 
 void intel_pmu_cross_mapped_check(struct kvm_pmu *pmu)
