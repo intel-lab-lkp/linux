@@ -10,10 +10,12 @@
 #include <linux/cred.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
+#include <linux/lsm_audit.h>
 #include <linux/lsm_hooks.h>
 #include <linux/rcupdate.h>
 #include <linux/sched.h>
 
+#include "audit.h"
 #include "common.h"
 #include "cred.h"
 #include "ptrace.h"
@@ -64,11 +66,9 @@ static bool task_is_scoped(const struct task_struct *const parent,
 static int task_ptrace(const struct task_struct *const parent,
 		       const struct task_struct *const child)
 {
-	/* Quick return for non-landlocked tasks. */
-	if (!landlocked(parent))
-		return 0;
 	if (task_is_scoped(parent, child))
 		return 0;
+
 	return -EPERM;
 }
 
@@ -88,7 +88,26 @@ static int task_ptrace(const struct task_struct *const parent,
 static int hook_ptrace_access_check(struct task_struct *const child,
 				    const unsigned int mode)
 {
-	return task_ptrace(current, child);
+	const struct landlock_ruleset *const dom =
+		landlock_get_current_domain();
+	struct landlock_request request = {
+		.operation = LANDLOCK_OP_PTRACE,
+		.missing_permission = LANDLOCK_PERM_PTRACE,
+		.audit = {
+			.type = LSM_AUDIT_DATA_TASK,
+			.u.tsk = child,
+		},
+	};
+	int err;
+
+	if (!dom)
+		return 0;
+
+	err = task_ptrace(current, child);
+	if (!err)
+		return 0;
+
+	return landlock_log_request(err, &request, dom, 0, NULL);
 }
 
 /**
@@ -105,7 +124,25 @@ static int hook_ptrace_access_check(struct task_struct *const child,
  */
 static int hook_ptrace_traceme(struct task_struct *const parent)
 {
-	return task_ptrace(parent, current);
+	struct landlock_request request = {
+		.operation = LANDLOCK_OP_PTRACE_TRACEME,
+		.missing_permission = LANDLOCK_PERM_PTRACE,
+		.audit = {
+			.type = LSM_AUDIT_DATA_TASK,
+			.u.tsk = parent,
+		},
+	};
+	int err;
+
+	if (!landlock_get_task_domain(parent))
+		return 0;
+
+	err = task_ptrace(parent, current);
+	if (!err)
+		return 0;
+
+	return landlock_log_request(err, &request,
+				    landlock_get_current_domain(), 0, NULL);
 }
 
 static struct security_hook_list landlock_hooks[] __ro_after_init = {

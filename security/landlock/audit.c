@@ -18,6 +18,8 @@ static const char *op_to_string(enum landlock_operation operation)
 {
 	const char *const desc[] = {
 		[0] = "",
+		[LANDLOCK_OP_PTRACE] = "ptrace",
+		[LANDLOCK_OP_PTRACE_TRACEME] = "ptrace_traceme",
 		[LANDLOCK_OP_MOUNT] = "mount",
 		[LANDLOCK_OP_MOVE_MOUNT] = "move_mount",
 		[LANDLOCK_OP_UMOUNT] = "umount",
