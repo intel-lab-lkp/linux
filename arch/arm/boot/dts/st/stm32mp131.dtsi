@@ -1220,6 +1220,14 @@
 			dma-requests = <48>;
 		};
 
+		rng: rng@54004000 {
+			compatible = "st,stm32mp13-rng";
+			reg = <0x54004000 0x400>;
+			clocks = <&rcc RNG1_K>;
+			resets = <&rcc RNG1_R>;
+			status = "disabled";
+		};
+
 		fmc: memory-controller@58002000 {
 			compatible = "st,stm32mp1-fmc2-ebi";
 			reg = <0x58002000 0x1000>;
