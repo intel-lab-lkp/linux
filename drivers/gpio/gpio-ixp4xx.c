@@ -38,6 +38,18 @@
 #define IXP4XX_GPIO_STYLE_MASK		GENMASK(2, 0)
 #define IXP4XX_GPIO_STYLE_SIZE		3
 
+/*
+ * Clock output control register defines.
+ */
+#define IXP4XX_GPCLK_CLK0DC_SHIFT	0
+#define IXP4XX_GPCLK_CLK0TC_SHIFT	4
+#define IXP4XX_GPCLK_CLK0_MASK		GENMASK(7, 0)
+#define IXP4XX_GPCLK_MUX14		BIT(8)
+#define IXP4XX_GPCLK_CLK1DC_SHIFT	16
+#define IXP4XX_GPCLK_CLK1TC_SHIFT	20
+#define IXP4XX_GPCLK_CLK1_MASK		GENMASK(23, 16)
+#define IXP4XX_GPCLK_MUX15		BIT(24)
+
 /**
  * struct ixp4xx_gpio - IXP4 GPIO state container
  * @dev: containing device for this instance
@@ -202,6 +214,7 @@ static int ixp4xx_gpio_probe(struct platform_device *pdev)
 	struct ixp4xx_gpio *g;
 	struct gpio_irq_chip *girq;
 	struct device_node *irq_parent;
+	u32 val;
 	int ret;
 
 	g = devm_kzalloc(dev, sizeof(*g), GFP_KERNEL);
@@ -227,11 +240,34 @@ static int ixp4xx_gpio_probe(struct platform_device *pdev)
 
 	/*
 	 * Make sure GPIO 14 and 15 are NOT used as clocks but GPIO on
-	 * specific machines.
+	 * specific machines. For others, use the boot defaults as
+	 * starting point.
 	 */
 	if (of_machine_is_compatible("dlink,dsm-g600-a") ||
 	    of_machine_is_compatible("iom,nas-100d"))
-		__raw_writel(0x0, g->base + IXP4XX_REG_GPCLK);
+		val = 0;
+	else
+		val = __raw_readl(g->base + IXP4XX_REG_GPCLK);
+
+	/*
+	 * Enable clock outputs with default timings of requested clock.
+	 * If you need control over TC and DC, add these to the device
+	 * tree bindings and use them here.
+	 */
+	if (of_property_read_bool(np, "intel,ixp4xx-gpio14-clkout")) {
+		val &= ~IXP4XX_GPCLK_CLK0_MASK;
+		val |= (0 << IXP4XX_GPCLK_CLK0DC_SHIFT);
+		val |= (1 << IXP4XX_GPCLK_CLK0TC_SHIFT);
+		val |= IXP4XX_GPCLK_MUX14;
+	}
+
+	if (of_property_read_bool(np, "intel,ixp4xx-gpio15-clkout")) {
+		val &= ~IXP4XX_GPCLK_CLK1_MASK;
+		val |= (0 << IXP4XX_GPCLK_CLK1DC_SHIFT);
+		val |= (1 << IXP4XX_GPCLK_CLK1TC_SHIFT);
+		val |= IXP4XX_GPCLK_MUX15;
+	}
+	__raw_writel(val, g->base + IXP4XX_REG_GPCLK);
 
 	/*
 	 * This is a very special big-endian ARM issue: when the IXP4xx is
