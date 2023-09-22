@@ -1442,6 +1442,7 @@ bool zone_watermark_ok_safe(struct zone *z, unsigned int order,
  */
 enum meminit_context {
 	MEMINIT_EARLY,
+	MEMINIT_LATE,
 	MEMINIT_HOTPLUG,
 };
 

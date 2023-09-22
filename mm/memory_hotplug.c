@@ -634,7 +634,7 @@ void generic_online_page(struct page *page, unsigned int order)
 	 * case in page freeing fast path.
 	 */
 	debug_pagealloc_map_pages(page, 1 << order);
-	__free_pages_core(page, order);
+	__free_pages_core(page, order, MEMINIT_HOTPLUG);
 	totalram_pages_add(1UL << order);
 }
 EXPORT_SYMBOL_GPL(generic_online_page);
