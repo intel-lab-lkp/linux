@@ -498,10 +498,9 @@ static void release_pte_page(struct page *page)
 	release_pte_folio(page_folio(page));
 }
 
-static void release_pte_pages(pte_t *pte, pte_t *_pte,
-		struct list_head *compound_pagelist)
+static void release_pte_folios(pte_t *pte, pte_t *_pte)
 {
-	struct folio *folio, *tmp;
+	struct folio *folio;
 
 	while (--_pte >= pte) {
 		pte_t pteval = ptep_get(_pte);
@@ -514,12 +513,7 @@ static void release_pte_pages(pte_t *pte, pte_t *_pte,
 			continue;
 		folio = pfn_folio(pfn);
 		if (folio_test_large(folio))
-			continue;
-		release_pte_folio(folio);
-	}
-
-	list_for_each_entry_safe(folio, tmp, compound_pagelist, lru) {
-		list_del(&folio->lru);
+			_pte -= folio_nr_pages(folio) - 1;
 		release_pte_folio(folio);
 	}
 }
@@ -538,8 +532,7 @@ static bool is_refcount_suitable(struct page *page)
 static int __collapse_huge_page_isolate(struct vm_area_struct *vma,
 					unsigned long address,
 					pte_t *pte,
-					struct collapse_control *cc,
-					struct list_head *compound_pagelist)
+					struct collapse_control *cc)
 {
 	struct folio *folio = NULL;
 	pte_t *_pte;
@@ -588,19 +581,6 @@ static int __collapse_huge_page_isolate(struct vm_area_struct *vma,
 			}
 		}
 
-		if (folio_test_large(folio)) {
-			struct folio *f;
-
-			/*
-			 * Check if we have dealt with the compound page
-			 * already
-			 */
-			list_for_each_entry(f, compound_pagelist, lru) {
-				if (folio == f)
-					goto next;
-			}
-		}
-
 		/*
 		 * We can do it before isolate_lru_page because the
 		 * page can't be freed from under us. NOTE: PG_lock
@@ -644,9 +624,6 @@ static int __collapse_huge_page_isolate(struct vm_area_struct *vma,
 		VM_BUG_ON_FOLIO(!folio_test_locked(folio), folio);
 		VM_BUG_ON_FOLIO(folio_test_lru(folio), folio);
 
-		if (folio_test_large(folio))
-			list_add_tail(&folio->lru, compound_pagelist);
-next:
 		/*
 		 * If collapse was initiated by khugepaged, check that there is
 		 * enough young pte to justify collapsing the page
@@ -660,6 +637,10 @@ next:
 		if (pte_write(pteval))
 			writable = true;
 
+		if (folio_test_large(folio)) {
+			_pte += folio_nr_pages(folio) - 1;
+			address += folio_size(folio) - PAGE_SIZE;
+		}
 	}
 
 	if (unlikely(!writable)) {
@@ -673,7 +654,7 @@ next:
 		return result;
 	}
 out:
-	release_pte_pages(pte, _pte, compound_pagelist);
+	release_pte_folios(pte, _pte);
 	trace_mm_collapse_huge_page_isolate(&folio->page, none_or_zero,
 					    referenced, writable, result);
 	return result;
@@ -682,11 +663,9 @@ out:
 static void __collapse_huge_page_copy_succeeded(pte_t *pte,
 						struct vm_area_struct *vma,
 						unsigned long address,
-						spinlock_t *ptl,
-						struct list_head *compound_pagelist)
+						spinlock_t *ptl)
 {
 	struct page *src_page;
-	struct page *tmp;
 	pte_t *_pte;
 	pte_t pteval;
 
@@ -706,8 +685,7 @@ static void __collapse_huge_page_copy_succeeded(pte_t *pte,
 			}
 		} else {
 			src_page = pte_page(pteval);
-			if (!PageCompound(src_page))
-				release_pte_page(src_page);
+			release_pte_page(src_page);
 			/*
 			 * ptl mostly unnecessary, but preempt has to
 			 * be disabled to update the per-cpu stats
@@ -720,23 +698,12 @@ static void __collapse_huge_page_copy_succeeded(pte_t *pte,
 			free_page_and_swap_cache(src_page);
 		}
 	}
-
-	list_for_each_entry_safe(src_page, tmp, compound_pagelist, lru) {
-		list_del(&src_page->lru);
-		mod_node_page_state(page_pgdat(src_page),
-				    NR_ISOLATED_ANON + page_is_file_lru(src_page),
-				    -compound_nr(src_page));
-		unlock_page(src_page);
-		free_swap_cache(src_page);
-		putback_lru_page(src_page);
-	}
 }
 
 static void __collapse_huge_page_copy_failed(pte_t *pte,
 					     pmd_t *pmd,
 					     pmd_t orig_pmd,
-					     struct vm_area_struct *vma,
-					     struct list_head *compound_pagelist)
+					     struct vm_area_struct *vma)
 {
 	spinlock_t *pmd_ptl;
 
@@ -753,7 +720,7 @@ static void __collapse_huge_page_copy_failed(pte_t *pte,
 	 * Release both raw and compound pages isolated
 	 * in __collapse_huge_page_isolate.
 	 */
-	release_pte_pages(pte, pte + HPAGE_PMD_NR, compound_pagelist);
+	release_pte_folios(pte, pte + HPAGE_PMD_NR);
 }
 
 /*
@@ -769,7 +736,6 @@ static void __collapse_huge_page_copy_failed(pte_t *pte,
  * @vma: the original raw pages' virtual memory area
  * @address: starting address to copy
  * @ptl: lock on raw pages' PTEs
- * @compound_pagelist: list that stores compound pages
  */
 static int __collapse_huge_page_copy(pte_t *pte,
 				     struct page *page,
@@ -777,8 +743,7 @@ static int __collapse_huge_page_copy(pte_t *pte,
 				     pmd_t orig_pmd,
 				     struct vm_area_struct *vma,
 				     unsigned long address,
-				     spinlock_t *ptl,
-				     struct list_head *compound_pagelist)
+				     spinlock_t *ptl)
 {
 	struct page *src_page;
 	pte_t *_pte;
@@ -804,11 +769,9 @@ static int __collapse_huge_page_copy(pte_t *pte,
 	}
 
 	if (likely(result == SCAN_SUCCEED))
-		__collapse_huge_page_copy_succeeded(pte, vma, address, ptl,
-						    compound_pagelist);
+		__collapse_huge_page_copy_succeeded(pte, vma, address, ptl);
 	else
-		__collapse_huge_page_copy_failed(pte, pmd, orig_pmd, vma,
-						 compound_pagelist);
+		__collapse_huge_page_copy_failed(pte, pmd, orig_pmd, vma);
 
 	return result;
 }
@@ -1081,7 +1044,6 @@ static int collapse_huge_page(struct mm_struct *mm, unsigned long address,
 			      int referenced, int unmapped,
 			      struct collapse_control *cc)
 {
-	LIST_HEAD(compound_pagelist);
 	pmd_t *pmd, _pmd;
 	pte_t *pte;
 	pgtable_t pgtable;
@@ -1168,8 +1130,7 @@ static int collapse_huge_page(struct mm_struct *mm, unsigned long address,
 
 	pte = pte_offset_map_lock(mm, &_pmd, address, &pte_ptl);
 	if (pte) {
-		result = __collapse_huge_page_isolate(vma, address, pte, cc,
-						      &compound_pagelist);
+		result = __collapse_huge_page_isolate(vma, address, pte, cc);
 		spin_unlock(pte_ptl);
 	} else {
 		result = SCAN_PMD_NULL;
@@ -1198,8 +1159,7 @@ static int collapse_huge_page(struct mm_struct *mm, unsigned long address,
 	anon_vma_unlock_write(vma->anon_vma);
 
 	result = __collapse_huge_page_copy(pte, hpage, pmd, _pmd,
-					   vma, address, pte_ptl,
-					   &compound_pagelist);
+					   vma, address, pte_ptl);
 	pte_unmap(pte);
 	if (unlikely(result != SCAN_SUCCEED))
 		goto out_up_write;
