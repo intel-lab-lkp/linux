@@ -487,12 +487,16 @@ static void auditd_conn_free(struct rcu_head *rcu)
  * @pid: auditd PID
  * @portid: auditd netlink portid
  * @net: auditd network namespace pointer
+ * @ack_status: if AUDIT_ACK_ALWAYS, send ACK before setting connection and
+ *              set to AUDIT_ACK_DONE
+ * @skb: socket buffer for sending ACK
  *
  * Description:
  * This function will obtain and drop network namespace references as
  * necessary.  Returns zero on success, negative values on failure.
  */
-static int auditd_set(struct pid *pid, u32 portid, struct net *net)
+static int auditd_set(struct pid *pid, u32 portid, struct net *net,
+                      int *ack_status, struct sk_buff *skb)
 {
 	unsigned long flags;
 	struct auditd_connection *ac_old, *ac_new;
@@ -506,6 +510,13 @@ static int auditd_set(struct pid *pid, u32 portid, struct net *net)
 	ac_new->pid = get_pid(pid);
 	ac_new->portid = portid;
 	ac_new->net = get_net(net);
+
+	if (*ack_status == AUDIT_ACK_ALWAYS) {
+		// Send ACK before we set auditd_conn. Otherwise, the socket buffer may
+		// get filled with backlogged audit messages causing the ACK to be dropped.
+		netlink_ack(skb, nlmsg_hdr(skb), 0, NULL);
+		*ack_status = AUDIT_ACK_DONE;
+	}
 
 	spin_lock_irqsave(&auditd_conn_lock, flags);
 	ac_old = rcu_dereference_protected(auditd_conn,
@@ -1200,7 +1211,7 @@ static int audit_replace(struct pid *pid)
 	return auditd_send_unicast_skb(skb);
 }
 
-static int audit_receive_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
+static int audit_receive_msg(struct sk_buff *skb, struct nlmsghdr *nlh, int *ack_status)
 {
 	u32			seq;
 	void			*data;
@@ -1293,7 +1304,9 @@ static int audit_receive_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 				/* register a new auditd connection */
 				err = auditd_set(req_pid,
 						 NETLINK_CB(skb).portid,
-						 sock_net(NETLINK_CB(skb).sk));
+						 sock_net(NETLINK_CB(skb).sk),
+						 ack_status,
+						 skb);
 				if (audit_enabled != AUDIT_OFF)
 					audit_log_config_change("audit_pid",
 								new_pid,
@@ -1547,15 +1560,20 @@ static void audit_receive(struct sk_buff  *skb)
 	 */
 	int len;
 	int err;
+	int ack_status = AUDIT_ACK_ON_ERR;
 
 	nlh = nlmsg_hdr(skb);
 	len = skb->len;
 
 	audit_ctl_lock();
 	while (nlmsg_ok(nlh, len)) {
-		err = audit_receive_msg(skb, nlh);
-		/* if err or if this message says it wants a response */
-		if (err || (nlh->nlmsg_flags & NLM_F_ACK))
+		if (nlh->nlmsg_flags & NLM_F_ACK)
+			ack_status = AUDIT_ACK_ALWAYS;
+
+		err = audit_receive_msg(skb, nlh, &ack_status);
+
+		/* send ACK if err or the message asked for one (and not already sent) */
+		if (ack_status == AUDIT_ACK_ALWAYS || (ack_status == AUDIT_ACK_ON_ERR && err))
 			netlink_ack(skb, nlh, err, NULL);
 
 		nlh = nlmsg_next(nlh, &len);

@@ -344,4 +344,9 @@ extern int audit_filter(int msgtype, unsigned int listtype);
 extern void audit_ctl_lock(void);
 extern void audit_ctl_unlock(void);
 
+/* Control netlink ACK behaviour in audit_receive. */
+#define AUDIT_ACK_ON_ERR 1
+#define AUDIT_ACK_ALWAYS 2
+#define AUDIT_ACK_DONE 3
+
 #endif
