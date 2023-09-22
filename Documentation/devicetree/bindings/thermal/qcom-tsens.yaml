@@ -44,6 +44,10 @@ properties:
               - qcom,qcs404-tsens
           - const: qcom,tsens-v1
 
+      - description: v1 of TSENS without rpm
+        enum:
+          - qcom,ipq5018-tsens
+
       - description: v2 of TSENS
         items:
           - enum:
