@@ -127,3 +127,13 @@ Description:
 		shown. When written with any non-zero value, it clears
 		the boot code selection and the timeout counter, which results
 		in chipselect reset for AST2400/AST2500.
+
+What:		/sys/class/watchdog/watchdogn/reset_ctrl/*
+Date:		September 2023
+Contact:	Zev Weiss <zev@bewilderbeest.net>
+Description:
+		The read/write files in this subdirectory (present on Aspeed
+		AST2500 and AST2600 only) control which devices and SoC
+		components are reset when the watchdog timer expires.  When set
+		to '1', the device indicated by the name of the file will be
+		reset; when set to '0' it will not.
