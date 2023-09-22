@@ -68,3 +68,24 @@ int amd_pmf_get_gfx_data(struct amd_gpu_pmf_data *pmf)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(amd_pmf_get_gfx_data);
+
+int amd_pmf_set_gfx_data(struct amd_gpu_pmf_data *pmf)
+{
+	struct drm_device *drm_dev = pci_get_drvdata(pmf->gpu_dev);
+	struct amdgpu_device *adev = drm_to_adev(drm_dev);
+	struct backlight_device *bd;
+
+	if (!(adev->flags & AMD_IS_APU)) {
+		DRM_ERROR("PMF-AMDGPU interface not supported\n");
+		return -ENODEV;
+	}
+
+	bd = backlight_device_get_by_type(BACKLIGHT_RAW);
+	if (!bd)
+		return -ENODEV;
+
+	backlight_device_set_brightness(bd, pmf->brightness);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(amd_pmf_set_gfx_data);

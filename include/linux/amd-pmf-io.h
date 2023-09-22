@@ -25,4 +25,5 @@ struct amd_gpu_pmf_data {
 };
 
 int amd_pmf_get_gfx_data(struct amd_gpu_pmf_data *pmf);
+int amd_pmf_set_gfx_data(struct amd_gpu_pmf_data *pmf);
 #endif

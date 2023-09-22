@@ -79,10 +79,10 @@ static int amd_pmf_update_uevents(struct amd_pmf_dev *dev, u16 event)
 	return 0;
 }
 
-static void amd_pmf_apply_policies(struct amd_pmf_dev *dev, struct ta_pmf_enact_result *out)
+static int amd_pmf_apply_policies(struct amd_pmf_dev *dev, struct ta_pmf_enact_result *out)
 {
 	u32 val, event = 0;
-	int idx;
+	int idx, ret;
 
 	for (idx = 0; idx < out->actions_count; idx++) {
 		val = out->actions_list[idx].value;
@@ -160,8 +160,23 @@ static void amd_pmf_apply_policies(struct amd_pmf_dev *dev, struct ta_pmf_enact_
 				dev->prev_data->system_state = 0;
 			}
 			break;
+
+		case PMF_POLICY_DISPLAY_BRIGHTNESS:
+			ret = amd_pmf_get_gfx_data(&dev->gfx_data);
+			if (ret)
+				return ret;
+
+			dev->prev_data->display_brightness = dev->gfx_data.brightness;
+			if (dev->prev_data->display_brightness != val) {
+				dev->gfx_data.brightness = val;
+				amd_pmf_set_gfx_data(&dev->gfx_data);
+				dev_dbg(dev->dev, "update DISPLAY_BRIGHTNESS : %d\n", val);
+			}
+			break;
 		}
 	}
+
+	return 0;
 }
 
 static int amd_pmf_invoke_cmd_enact(struct amd_pmf_dev *dev)
