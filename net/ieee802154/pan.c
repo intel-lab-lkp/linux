@@ -56,6 +56,7 @@ bool cfg802154_device_is_parent(struct wpan_dev *wpan_dev,
 
 	return false;
 }
+EXPORT_SYMBOL_GPL(cfg802154_device_is_parent);
 
 struct ieee802154_pan_device *
 cfg802154_device_is_child(struct wpan_dev *wpan_dev,
@@ -71,3 +72,4 @@ cfg802154_device_is_child(struct wpan_dev *wpan_dev,
 
 	return NULL;
 }
+EXPORT_SYMBOL_GPL(cfg802154_device_is_child);
