@@ -28,6 +28,17 @@ static inline void kexec_unlock(void)
 	atomic_set_release(&__kexec_lock, 0);
 }
 
+/*
+ * Different than kexec/kdump loading/unloading/crash or kexec jumping/shrinking
+ * which usually rarely happen, there will be many crash hotplug events notified
+ * during one short period, e.g one memory board is hot added and memory regions
+ * are online. So mutex lock  __crash_hotplug_lock is used to serialize the crash
+ * hotplug handling specificially.
+ * */
+extern struct mutex __crash_hotplug_lock;
+#define crash_hotplug_lock() mutex_lock(&__crash_hotplug_lock)
+#define crash_hotplug_unlock() mutex_unlock(&__crash_hotplug_lock)
+
 #ifdef CONFIG_KEXEC_FILE
 #include <linux/purgatory.h>
 void kimage_file_post_load_cleanup(struct kimage *image);
