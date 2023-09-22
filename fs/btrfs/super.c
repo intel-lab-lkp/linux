@@ -128,6 +128,7 @@ enum {
 	/* Extra abort options. */
 	Opt_abort,
 	Opt_abort_super,
+	Opt_abort_data,
 	Opt_abort_all,
 
 	/* Deprecated options */
@@ -233,6 +234,7 @@ static const match_table_t rescue_tokens = {
 
 static const match_table_t abort_tokens = {
 	{Opt_abort_super, "super"},
+	{Opt_abort_data, "data"},
 	{Opt_abort_all, "all"},
 	{Opt_err, NULL},
 };
@@ -272,10 +274,16 @@ static int parse_abort_options(struct btrfs_fs_info *info, const char *options)
 			btrfs_set_and_info(info, ABORT_SUPER,
 				"will abort if any super block write back failed");
 			break;
+		case Opt_abort_data:
+			btrfs_set_and_info(info, ABORT_DATA,
+				"will abort if any data write back failed");
+			break;
 		case Opt_abort_all:
 			btrfs_info(info, "enabling all abort options");
 			btrfs_set_and_info(info, ABORT_SUPER,
 				"will abort if any super block write back failed");
+			btrfs_set_and_info(info, ABORT_DATA,
+				"will abort if any data write back failed");
 			break;
 		case Opt_err:
 			btrfs_info(info, "unrecognized abort option '%s'", p);
@@ -1310,6 +1318,8 @@ static int btrfs_show_options(struct seq_file *seq, struct dentry *dentry)
 		print_rescue_option(seq, "ignoredatacsums", &rescue_printed);
 	if (btrfs_test_opt(info, ABORT_SUPER))
 		print_abort_option(seq, "super", &abort_printed);
+	if (btrfs_test_opt(info, ABORT_DATA))
+		print_abort_option(seq, "data", &abort_printed);
 	if (btrfs_test_opt(info, FLUSHONCOMMIT))
 		seq_puts(seq, ",flushoncommit");
 	if (btrfs_test_opt(info, DISCARD_SYNC))
