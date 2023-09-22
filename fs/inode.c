@@ -2587,26 +2587,35 @@ EXPORT_SYMBOL(current_time);
  */
 struct timespec64 inode_set_ctime_current(struct inode *inode)
 {
-	struct timespec64 now;
+	struct timespec64 now = current_time(inode);
 	struct timespec64 ctime;
+	bool queried;
+	int tscomp;
 
+	/* Just copy it into place if it's not multigrain */
+	if (!is_mgtime(inode)) {
+		inode_set_ctime_to_ts(inode, now);
+		return now;
+	}
+
+	ctime.tv_sec = inode->__i_ctime.tv_sec;
 	ctime.tv_nsec = READ_ONCE(inode->__i_ctime.tv_nsec);
-	if (!(ctime.tv_nsec & I_CTIME_QUERIED)) {
-		now = current_time(inode);
+	queried = ctime.tv_nsec & I_CTIME_QUERIED;
+	ctime.tv_nsec &= ~I_CTIME_QUERIED;
 
-		/* Just copy it into place if it's not multigrain */
-		if (!is_mgtime(inode)) {
-			inode_set_ctime_to_ts(inode, now);
-			return now;
-		}
+	tscomp = timespec64_compare(&ctime, &now);
 
+	/*
+	 * We can use a coarse-grained timestamp if no one has queried for it,
+	 * or coarse time is already later than the existing ctime.
+	 */
+	if (!queried || tscomp < 0) {
 		/*
 		 * If we've recently updated with a fine-grained timestamp,
 		 * then the coarse-grained one may still be earlier than the
 		 * existing ctime. Just keep the existing value if so.
 		 */
-		ctime.tv_sec = inode->__i_ctime.tv_sec;
-		if (timespec64_compare(&ctime, &now) > 0) {
+		if (tscomp > 0) {
 			struct timespec64	limit = now;
 
 			/*
@@ -2619,6 +2628,10 @@ struct timespec64 inode_set_ctime_current(struct inode *inode)
 			if (timespec64_compare(&ctime, &limit) < 0)
 				return ctime;
 		}
+
+		/* Put back the queried bit if we stripped it before */
+		if (queried)
+			ctime.tv_nsec |= I_CTIME_QUERIED;
 
 		/*
 		 * Ctime updates are usually protected by the inode_lock, but
