@@ -559,6 +559,7 @@ xfs_vn_getattr(
 	struct xfs_mount	*mp = ip->i_mount;
 	vfsuid_t		vfsuid = i_uid_into_vfsuid(idmap, inode);
 	vfsgid_t		vfsgid = i_gid_into_vfsgid(idmap, inode);
+	struct timespec64	ctime;
 
 	trace_xfs_getattr(ip);
 
@@ -573,8 +574,23 @@ xfs_vn_getattr(
 	stat->gid = vfsgid_into_kgid(vfsgid);
 	stat->ino = ip->i_ino;
 	stat->atime = inode->i_atime;
-	stat->mtime = inode->i_mtime;
-	stat->ctime = inode_get_ctime(inode);
+	stat->mtime = timestamp_truncate_to_gran(inode->i_mtime, NSEC_PER_SEC/HZ);
+
+	/*
+	 * Don't bother flagging the inode for a fine-grained update unless
+	 * STATX_CHANGE_COOKIE is set, in which case, use the fine-grained
+	 * value to fake up a change_cookie.
+	 */
+	if (request_mask & STATX_CHANGE_COOKIE) {
+		ctime = inode_query_ctime(inode);
+		stat->change_cookie = time_to_chattr(&ctime);
+		stat->result_mask |= STATX_CHANGE_COOKIE;
+	} else {
+		ctime = inode_get_ctime(inode);
+	}
+
+	stat->ctime = timestamp_truncate_to_gran(ctime, NSEC_PER_SEC/HZ);
+
 	stat->blocks = XFS_FSB_TO_BB(mp, ip->i_nblocks + ip->i_delayed_blks);
 
 	if (xfs_has_v3inodes(mp)) {
@@ -914,12 +930,8 @@ xfs_setattr_size(
 	 * these flags set.  For all other operations the VFS set these flags
 	 * explicitly if it wants a timestamp update.
 	 */
-	if (newsize != oldsize &&
-	    !(iattr->ia_valid & (ATTR_CTIME | ATTR_MTIME))) {
-		iattr->ia_ctime = iattr->ia_mtime =
-			current_time(inode);
+	if (newsize != oldsize)
 		iattr->ia_valid |= ATTR_CTIME | ATTR_MTIME;
-	}
 
 	/*
 	 * The first thing we do is set the size to new_size permanently on
