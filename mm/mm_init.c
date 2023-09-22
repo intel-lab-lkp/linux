@@ -718,7 +718,7 @@ static void __meminit init_reserved_page(unsigned long pfn, int nid)
 		if (zone_spans_pfn(zone, pfn))
 			break;
 	}
-	__init_single_page(pfn_to_page(pfn), pfn, zid, nid, true, false);
+	__init_single_page(pfn_to_page(pfn), pfn, zid, nid, false, false);
 }
 #else
 static inline void pgdat_set_deferred_range(pg_data_t *pgdat) {}
@@ -756,8 +756,8 @@ void __meminit reserve_bootmem_region(phys_addr_t start,
 
 			init_reserved_page(start_pfn, nid);
 
-			/* Avoid false-positive PageTail() */
-			INIT_LIST_HEAD(&page->lru);
+			/* Set page count for the reserve region */
+			init_page_count(page);
 
 			/*
 			 * no need for atomic set_bit because the struct
@@ -888,9 +888,17 @@ void __meminit memmap_init_range(unsigned long size, int nid, unsigned long zone
 		}
 
 		page = pfn_to_page(pfn);
-		__init_single_page(page, pfn, zone, nid, true, false);
-		if (context == MEMINIT_HOTPLUG)
-			__SetPageReserved(page);
+
+		/* If the context is MEMINIT_EARLY, we will set page count and
+		 * mark page reserved in reserve_bootmem_region, the free region
+		 * wouldn't have page count and reserved flag and we don't
+		 * need to reset pages count and clear reserved flag in
+		 * __free_pages_core.
+		 */
+		if (context == MEMINIT_EARLY)
+			__init_single_page(page, pfn, zone, nid, false, false);
+		else
+			__init_single_page(page, pfn, zone, nid, true, true);
 
 		/*
 		 * Usually, we want to mark the pageblock MIGRATE_MOVABLE,

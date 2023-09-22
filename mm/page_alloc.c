@@ -1285,9 +1285,11 @@ void __free_pages_core(struct page *page, unsigned int order, enum meminit_conte
 	unsigned int loop;
 
 	/*
-	 * When initializing the memmap, __init_single_page() sets the refcount
-	 * of all pages to 1 ("allocated"/"not free"). We have to set the
-	 * refcount of all involved pages to 0.
+	 * When initializing the memmap, memmap_init_range sets the refcount
+	 * of all pages to 1 ("allocated"/"not free") in hotplug context. We
+	 * have to set the refcount of all involved pages to 0. Otherwise,
+	 * we don't do it, as reserve_bootmem_region only set the refcount on
+	 * reserve region ("allocated") in early context.
 	 */
 	if (context != MEMINIT_EARLY) {
 		prefetchw(p);

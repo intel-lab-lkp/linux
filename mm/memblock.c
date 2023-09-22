@@ -2089,7 +2089,7 @@ static void __init __free_pages_memory(unsigned long start, unsigned long end)
 		while (start + (1UL << order) > end)
 			order--;
 
-		memblock_free_pages(start, order, MEMINIT_LATE);
+		memblock_free_pages(start, order, MEMINIT_EARLY);
 
 		start += (1UL << order);
 	}
