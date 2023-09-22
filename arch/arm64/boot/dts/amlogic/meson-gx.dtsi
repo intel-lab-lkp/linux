@@ -506,7 +506,7 @@
 
 			ir: ir@580 {
 				compatible = "amlogic,meson-gx-ir", "amlogic,meson-gxbb-ir";
-				reg = <0x0 0x00580 0x0 0x40>;
+				reg = <0x0 0x00580 0x0 0x24>;
 				interrupts = <GIC_SPI 196 IRQ_TYPE_EDGE_RISING>;
 				status = "disabled";
 			};

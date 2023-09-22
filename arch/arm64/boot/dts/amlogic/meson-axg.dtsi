@@ -1705,9 +1705,9 @@
 				status = "disabled";
 			};
 
-			ir: ir@8000 {
+			ir: ir@8040 {
 				compatible = "amlogic,meson-gxbb-ir";
-				reg = <0x0 0x8000 0x0 0x20>;
+				reg = <0x0 0x8040 0x0 0x24>;
 				interrupts = <GIC_SPI 196 IRQ_TYPE_EDGE_RISING>;
 				status = "disabled";
 			};
