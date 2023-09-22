@@ -1077,6 +1077,60 @@ skip_listen_ht:
 		s_i = num = s_num = 0;
 	}
 
+	/* Dump bound-only sockets */
+	if (cb->args[0] == 1) {
+		if (!(idiag_states & TCPF_CLOSE))
+			goto skip_bind_ht;
+
+		for (i = s_i; i <= hashinfo->bhash_size; i++) {
+			struct inet_bind_hashbucket *ibb;
+			struct inet_bind_bucket *tb;
+
+			num = 0;
+			ibb = &hashinfo->bhash[i];
+
+			spin_lock_bh(&ibb->lock);
+			inet_bind_bucket_for_each(tb, &ibb->chain) {
+				if (!net_eq(ib_net(tb), net))
+					continue;
+
+				sk_for_each_bound(sk, &tb->owners) {
+					struct inet_sock *inet = inet_sk(sk);
+
+					if (num < s_num)
+						goto next_bind;
+
+					if (sk->sk_state != TCP_CLOSE ||
+					    !inet->inet_num)
+						goto next_bind;
+
+					if (r->sdiag_family != AF_UNSPEC &&
+					    r->sdiag_family != sk->sk_family)
+						goto next_bind;
+
+					if (!inet_diag_bc_sk(bc, sk))
+						goto next_bind;
+
+					if (inet_sk_diag_fill(sk, NULL, skb,
+							      cb, r,
+							      NLM_F_MULTI,
+							      net_admin) < 0) {
+						spin_unlock_bh(&ibb->lock);
+						goto done;
+					}
+next_bind:
+					num++;
+				}
+			}
+			spin_unlock_bh(&ibb->lock);
+
+			s_num = 0;
+		}
+skip_bind_ht:
+		cb->args[0] = 2;
+		s_i = num = s_num = 0;
+	}
+
 	if (!(idiag_states & ~TCPF_LISTEN))
 		goto out;
 
