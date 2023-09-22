@@ -321,6 +321,7 @@ static int spmi_controller_probe(struct platform_device *pdev)
 
 err_put_controller:
 	spmi_controller_put(ctrl);
+	spmi_controller->controller = NULL;
 	return ret;
 }
 
