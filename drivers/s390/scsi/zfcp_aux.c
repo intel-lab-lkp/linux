@@ -552,7 +552,7 @@ struct zfcp_port *zfcp_port_enqueue(struct zfcp_adapter *adapter, u64 wwpn,
 
 	if (device_register(&port->dev)) {
 		put_device(&port->dev);
-		goto err_out;
+		goto err_register;
 	}
 
 	write_lock_irq(&adapter->port_list_lock);
@@ -565,5 +565,6 @@ struct zfcp_port *zfcp_port_enqueue(struct zfcp_adapter *adapter, u64 wwpn,
 
 err_out:
 	zfcp_ccw_adapter_put(adapter);
+err_register:
 	return ERR_PTR(retval);
 }
