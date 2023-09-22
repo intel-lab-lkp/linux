@@ -78,12 +78,6 @@ unsigned int sysctl_sched_tunable_scaling = SCHED_TUNABLESCALING_LOG;
 unsigned int sysctl_sched_base_slice			= 750000ULL;
 static unsigned int normalized_sysctl_sched_base_slice	= 750000ULL;
 
-/*
- * After fork, child runs first. If set to 0 (default) then
- * parent will (try to) run first.
- */
-unsigned int sysctl_sched_child_runs_first __read_mostly;
-
 const_debug unsigned int sysctl_sched_migration_cost	= 500000UL;
 
 int sched_thermal_decay_shift;
@@ -145,13 +139,6 @@ static unsigned int sysctl_numa_balancing_promote_rate_limit = 65536;
 
 #ifdef CONFIG_SYSCTL
 static struct ctl_table sched_fair_sysctls[] = {
-	{
-		.procname       = "sched_child_runs_first",
-		.data           = &sysctl_sched_child_runs_first,
-		.maxlen         = sizeof(unsigned int),
-		.mode           = 0644,
-		.proc_handler   = proc_dointvec,
-	},
 #ifdef CONFIG_CFS_BANDWIDTH
 	{
 		.procname       = "sched_cfs_bandwidth_slice_us",
@@ -2847,19 +2834,7 @@ static void task_numa_placement(struct task_struct *p)
 	}
 
 	/* Cannot migrate task to CPU-less node */
-	if (max_nid != NUMA_NO_NODE && !node_state(max_nid, N_CPU)) {
-		int near_nid = max_nid;
-		int distance, near_distance = INT_MAX;
-
-		for_each_node_state(nid, N_CPU) {
-			distance = node_distance(max_nid, nid);
-			if (distance < near_distance) {
-				near_nid = nid;
-				near_distance = distance;
-			}
-		}
-		max_nid = near_nid;
-	}
+	max_nid = numa_nearest_node(max_nid, N_CPU);
 
 	if (ng) {
 		numa_group_count_active_nodes(ng);
@@ -3888,7 +3863,8 @@ static inline bool cfs_rq_is_decayed(struct cfs_rq *cfs_rq)
  */
 static inline void update_tg_load_avg(struct cfs_rq *cfs_rq)
 {
-	long delta = cfs_rq->avg.load_avg - cfs_rq->tg_load_avg_contrib;
+	long delta;
+	u64 now;
 
 	/*
 	 * No need to update load_avg for root_task_group as it is not used.
@@ -3896,9 +3872,19 @@ static inline void update_tg_load_avg(struct cfs_rq *cfs_rq)
 	if (cfs_rq->tg == &root_task_group)
 		return;
 
+	/*
+	 * For migration heavy workloads, access to tg->load_avg can be
+	 * unbound. Limit the update rate to at most once per ms.
+	 */
+	now = sched_clock_cpu(cpu_of(rq_of(cfs_rq)));
+	if (now - cfs_rq->last_update_tg_load_avg < NSEC_PER_MSEC)
+		return;
+
+	delta = cfs_rq->avg.load_avg - cfs_rq->tg_load_avg_contrib;
 	if (abs(delta) > cfs_rq->tg_load_avg_contrib / 64) {
 		atomic_long_add(delta, &cfs_rq->tg->load_avg);
 		cfs_rq->tg_load_avg_contrib = cfs_rq->avg.load_avg;
+		cfs_rq->last_update_tg_load_avg = now;
 	}
 }
 
@@ -4878,7 +4864,7 @@ static inline void update_misfit_status(struct task_struct *p, struct rq *rq)
 
 static inline bool cfs_rq_is_decayed(struct cfs_rq *cfs_rq)
 {
-	return true;
+	return !cfs_rq->nr_running;
 }
 
 #define UPDATE_TG	0x0
@@ -7996,7 +7982,7 @@ static void set_next_buddy(struct sched_entity *se)
 /*
  * Preempt the current task with a newly woken task if needed:
  */
-static void check_preempt_wakeup(struct rq *rq, struct task_struct *p, int wake_flags)
+static void check_preempt_wakeup_fair(struct rq *rq, struct task_struct *p, int wake_flags)
 {
 	struct task_struct *curr = rq->curr;
 	struct sched_entity *se = &curr->se, *pse = &p->se;
@@ -8009,7 +7995,7 @@ static void check_preempt_wakeup(struct rq *rq, struct task_struct *p, int wake_
 
 	/*
 	 * This is possible from callers such as attach_tasks(), in which we
-	 * unconditionally check_preempt_curr() after an enqueue (which may have
+	 * unconditionally wakeup_preempt() after an enqueue (which may have
 	 * lead to a throttle).  This both saves work and prevents false
 	 * next-buddy nomination below.
 	 */
@@ -8916,7 +8902,7 @@ static void attach_task(struct rq *rq, struct task_struct *p)
 
 	WARN_ON_ONCE(task_rq(p) != rq);
 	activate_task(rq, p, ENQUEUE_NOCLOCK);
-	check_preempt_curr(rq, p, 0);
+	wakeup_preempt(rq, p, 0);
 }
 
 /*
@@ -12391,7 +12377,7 @@ prio_changed_fair(struct rq *rq, struct task_struct *p, int oldprio)
 		if (p->prio > oldprio)
 			resched_curr(rq);
 	} else
-		check_preempt_curr(rq, p, 0);
+		wakeup_preempt(rq, p, 0);
 }
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
@@ -12493,7 +12479,7 @@ static void switched_to_fair(struct rq *rq, struct task_struct *p)
 		if (task_current(rq, p))
 			resched_curr(rq);
 		else
-			check_preempt_curr(rq, p, 0);
+			wakeup_preempt(rq, p, 0);
 	}
 }
 
@@ -12852,7 +12838,7 @@ DEFINE_SCHED_CLASS(fair) = {
 	.yield_task		= yield_task_fair,
 	.yield_to_task		= yield_to_task_fair,
 
-	.check_preempt_curr	= check_preempt_wakeup,
+	.wakeup_preempt		= check_preempt_wakeup_fair,
 
 	.pick_next_task		= __pick_next_task_fair,
 	.put_prev_task		= put_prev_task_fair,
