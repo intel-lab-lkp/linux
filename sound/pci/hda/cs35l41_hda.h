@@ -64,7 +64,6 @@ struct cs35l41_hda {
 	struct work_struct fw_load_work;
 
 	struct regmap_irq_chip_data *irq_data;
-	bool firmware_running;
 	bool request_fw_load;
 	bool fw_request_ongoing;
 	bool halo_initialized;
