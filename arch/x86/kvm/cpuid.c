@@ -373,6 +373,16 @@ static void kvm_vcpu_after_set_cpuid(struct kvm_vcpu *vcpu)
 	vcpu->arch.maxphyaddr = cpuid_query_maxphyaddr(vcpu);
 	vcpu->arch.reserved_gpa_bits = kvm_vcpu_reserved_gpa_bits_raw(vcpu);
 
+	/*
+	 * HWCR.TscFreqSel[bit 24] has a reset value of 1 on some processors.
+	 */
+	if (guest_cpuid_is_amd_or_hygon(vcpu) &&
+	    guest_cpuid_has(vcpu, X86_FEATURE_CONSTANT_TSC) &&
+	    (guest_cpuid_family(vcpu) > 0x10 ||
+	     (guest_cpuid_family(vcpu) == 0x10 &&
+	      guest_cpuid_model(vcpu) >= 2)))
+		vcpu->arch.msr_hwcr |= BIT(24);
+
 	kvm_pmu_refresh(vcpu);
 	vcpu->arch.cr4_guest_rsvd_bits =
 	    __cr4_reserved_bits(guest_cpuid_has, vcpu);
