@@ -9,6 +9,7 @@
 #include <linux/mm.h>
 #include <linux/highmem.h>
 #include <linux/pagemap.h>
+#include <linux/gfp.h>
 
 #include <asm/shmparam.h>
 #include <asm/tlbflush.h>
@@ -45,6 +46,13 @@ static void v6_copy_user_highpage_nonaliasing(struct page *to,
  */
 static void v6_clear_user_highpage_nonaliasing(struct page *page, unsigned long vaddr)
 {
+	/*
+	 * This criteria only help bailing out when CONFIG_INIT_ON_ALLOC_DEFAULT_ON
+	 * is on. The page has been memset to zero when it allocated and the
+	 * bellowing clear_page will do it again.
+	 */
+	if (want_init_on_alloc(GFP_HIGHUSER_MOVABLE))
+		return;
 	void *kaddr = kmap_atomic(page);
 	clear_page(kaddr);
 	kunmap_atomic(kaddr);
