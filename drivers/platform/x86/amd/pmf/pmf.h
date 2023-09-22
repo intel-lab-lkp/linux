@@ -70,6 +70,7 @@
 #define PMF_POLICY_STT_MIN					6
 #define PMF_POLICY_STT_SKINTEMP_APU				7
 #define PMF_POLICY_STT_SKINTEMP_HS2				8
+#define PMF_POLICY_SYSTEM_STATE					9
 #define PMF_POLICY_P3T						38
 
 /* TA macros */
@@ -436,6 +437,13 @@ struct apmf_dyn_slider_output {
 } __packed;
 
 /* Smart PC - TA internals */
+enum system_state {
+	SYSTEM_STATE__S0i3 = 1,
+	SYSTEM_STATE__S4,
+	SYSTEM_STATE__SCREEN_LOCK,
+	SYSTEM_STATE__MAX
+};
+
 enum ta_slider {
 	TA_BEST_BATTERY, /* Best Battery */
 	TA_BETTER_BATTERY, /* Better Battery */
@@ -467,6 +475,7 @@ enum ta_pmf_error_type {
 };
 
 struct pmf_action_table {
+	enum system_state system_state;
 	unsigned long spl; /* in mW */
 	unsigned long sppt; /* in mW */
 	unsigned long sppt_apuonly; /* in mW */
