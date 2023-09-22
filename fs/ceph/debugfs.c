@@ -170,6 +170,30 @@ static const char * const metric_str[] = {
 	"metadata",
 	"copyfrom"
 };
+
+static int metrics_counters_show(struct seq_file *s, void *p)
+{
+	struct ceph_fs_client *fsc = s->private;
+	struct ceph_client_metric *cm = &fsc->mdsc->metric;
+	u64 count, size_bytes, wait_ns;
+
+	seq_printf(s, "item count size_bytes wait_ns\n");
+
+	for (unsigned i = 0; i < METRIC_MAX; i++) {
+		struct ceph_metric *m = &cm->metric[i];
+		spin_lock(&m->lock);
+		count = m->total;
+		size_bytes = m->size_sum;
+		wait_ns = ktime_to_ns(m->latency_sum);
+		spin_unlock(&m->lock);
+
+		seq_printf(s, "%s %llu %llu %llu\n",
+			   metric_str[i], count, size_bytes, wait_ns);
+	}
+
+	return 0;
+}
+
 static int metrics_latency_show(struct seq_file *s, void *p)
 {
 	struct ceph_fs_client *fsc = s->private;
@@ -368,6 +392,7 @@ DEFINE_SHOW_ATTRIBUTE(caps);
 DEFINE_SHOW_ATTRIBUTE(mds_sessions);
 DEFINE_SHOW_ATTRIBUTE(status);
 DEFINE_SHOW_ATTRIBUTE(metrics_file);
+DEFINE_SHOW_ATTRIBUTE(metrics_counters);
 DEFINE_SHOW_ATTRIBUTE(metrics_latency);
 DEFINE_SHOW_ATTRIBUTE(metrics_size);
 DEFINE_SHOW_ATTRIBUTE(metrics_caps);
@@ -463,6 +488,8 @@ void ceph_fs_debugfs_init(struct ceph_fs_client *fsc)
 
 	debugfs_create_file("file", 0444, fsc->debugfs_metrics_dir, fsc,
 			    &metrics_file_fops);
+	debugfs_create_file("counters", 0444, fsc->debugfs_metrics_dir, fsc,
+			    &metrics_counters_fops);
 	debugfs_create_file("latency", 0444, fsc->debugfs_metrics_dir, fsc,
 			    &metrics_latency_fops);
 	debugfs_create_file("size", 0444, fsc->debugfs_metrics_dir, fsc,
