@@ -64,7 +64,7 @@ struct gfn_to_hva_cache {
 
 struct gfn_to_pfn_cache {
 	u64 generation;
-	gpa_t gpa;
+	u64 addr;
 	unsigned long uhva;
 	struct kvm_memory_slot *memslot;
 	struct kvm *kvm;
@@ -77,6 +77,7 @@ struct gfn_to_pfn_cache {
 	enum pfn_cache_usage usage;
 	bool active;
 	bool valid;
+	bool addr_is_gpa;
 };
 
 #ifdef KVM_ARCH_NR_OBJS_PER_MEMORY_CACHE

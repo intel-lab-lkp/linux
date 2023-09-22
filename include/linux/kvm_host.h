@@ -1322,6 +1322,22 @@ void kvm_gpc_init(struct gfn_to_pfn_cache *gpc, struct kvm *kvm,
 int kvm_gpc_activate(struct gfn_to_pfn_cache *gpc, gpa_t gpa, unsigned long len);
 
 /**
+ * kvm_gpc_activate_hva - prepare a cached kernel mapping and HPA for a given HVA.
+ *
+ * @gpc:	   struct gfn_to_pfn_cache object.
+ * @hva:	   userspace virtual address to map.
+ * @len:	   sanity check; the range being access must fit a single page.
+ *
+ * @return:	   0 for success.
+ *		   -EINVAL for a mapping which would cross a page boundary.
+ *		   -EFAULT for an untranslatable guest physical address.
+ *
+ * The semantics of this function are the same as those of kvm_gpc_activate(). It
+ * merely bypasses a layer of address translation.
+ */
+int kvm_gpc_activate_hva(struct gfn_to_pfn_cache *gpc, unsigned long hva, unsigned long len);
+
+/**
  * kvm_gpc_check - check validity of a gfn_to_pfn_cache.
  *
  * @gpc:	   struct gfn_to_pfn_cache object.
@@ -1378,8 +1394,21 @@ void kvm_gpc_mark_dirty(struct gfn_to_pfn_cache *gpc);
  * kvm_gpc_gpa - retrieve the guest physical address of a cached mapping
  *
  * @gpc:	   struct gfn_to_pfn_cache object.
+ *
+ * @return:	   If the cache was activated with a fixed HVA then INVALID_GPA
+ *		   will be returned.
  */
 gpa_t kvm_gpc_gpa(struct gfn_to_pfn_cache *gpc);
+
+/**
+ * kvm_gpc_hva - retrieve the fixed host physical address of a cached mapping
+ *
+ * @gpc:	   struct gfn_to_pfn_cache object.
+ *
+ * @return:	   If the cache was activated with a guest physical address then
+ *		   0 will be returned.
+ */
+unsigned long kvm_gpc_hva(struct gfn_to_pfn_cache *gpc);
 
 void kvm_sigset_activate(struct kvm_vcpu *vcpu);
 void kvm_sigset_deactivate(struct kvm_vcpu *vcpu);
