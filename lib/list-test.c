@@ -27,9 +27,18 @@ static void list_test_list_init(struct kunit *test)
 	INIT_LIST_HEAD(&list2);
 
 	list4 = kzalloc(sizeof(*list4), GFP_KERNEL | __GFP_NOFAIL);
+	if (!list4) {
+		KUNIT_FAIL(test, "Initialising list4 failed.\n");
+		return;
+	}
 	INIT_LIST_HEAD(list4);
 
 	list5 = kmalloc(sizeof(*list5), GFP_KERNEL | __GFP_NOFAIL);
+	if (!list5) {
+		kfree(list4);
+		KUNIT_FAIL(test, "Initialising list5 failed.\n");
+		return;
+	}
 	memset(list5, 0xFF, sizeof(*list5));
 	INIT_LIST_HEAD(list5);
 
