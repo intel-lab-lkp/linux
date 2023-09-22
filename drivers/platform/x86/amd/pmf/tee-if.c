@@ -8,6 +8,7 @@
  * Author: Shyam Sundar S K <Shyam-sundar.S-k@amd.com>
  */
 
+#include <linux/debugfs.h>
 #include <linux/tee_drv.h>
 #include <linux/uuid.h>
 #include "pmf.h"
@@ -19,6 +20,13 @@ static int pb_actions_ms = 1000;
 #ifdef CONFIG_AMD_PMF_DEBUG
 module_param(pb_actions_ms, int, 0644);
 MODULE_PARM_DESC(pb_actions_ms, "Policy binary actions sampling frequency (default = 1000ms)");
+#endif
+
+#ifdef CONFIG_AMD_PMF_DEBUG
+/* Sideload policy binaries to debug policy failures */
+static bool pb_side_load;
+module_param(pb_side_load, bool, 0444);
+MODULE_PARM_DESC(pb_side_load, "Sideload policy binaries debug policy failures");
 #endif
 
 static const uuid_t amd_pmf_ta_uuid = UUID_INIT(0x6fd93b77, 0x3fb8, 0x524d,
@@ -267,6 +275,49 @@ static int amd_pmf_start_policy_engine(struct amd_pmf_dev *dev)
 	return 0;
 }
 
+#ifdef CONFIG_AMD_PMF_DEBUG
+static ssize_t amd_pmf_get_pb_data(struct file *filp, const char __user *buf,
+				   size_t length, loff_t *pos)
+{
+	struct amd_pmf_dev *dev = filp->private_data;
+	int ret;
+
+	/* policy binary size cannot exceed POLICY_BUF_MAX_SZ */
+	if (length > POLICY_BUF_MAX_SZ || length == 0)
+		return -EINVAL;
+
+	dev->policy_sz = length;
+	if (copy_from_user(dev->policy_buf, buf, dev->policy_sz))
+		return -EFAULT;
+
+	ret = amd_pmf_start_policy_engine(dev);
+	if (ret)
+		return -EINVAL;
+
+	return length;
+}
+
+static const struct file_operations pb_fops = {
+	.write = amd_pmf_get_pb_data,
+	.open = simple_open,
+};
+
+int amd_pmf_open_pb(struct amd_pmf_dev *dev, struct dentry *debugfs_root)
+{
+	struct dentry *file = NULL;
+
+	dev->esbin = debugfs_create_dir("pb", debugfs_root);
+	if (IS_ERR(dev->esbin))
+		return -EINVAL;
+
+	file = debugfs_create_file("update_policy", 0644, dev->esbin, dev, &pb_fops);
+	if (!file)
+		return -EINVAL;
+
+	return 0;
+}
+#endif
+
 static int amd_pmf_get_bios_buffer(struct amd_pmf_dev *dev)
 {
 	dev->policy_buf = kzalloc(dev->policy_sz, GFP_KERNEL);
@@ -278,6 +329,11 @@ static int amd_pmf_get_bios_buffer(struct amd_pmf_dev *dev)
 		return -ENOMEM;
 
 	memcpy(dev->policy_buf, dev->policy_base, dev->policy_sz);
+
+#ifdef CONFIG_AMD_PMF_DEBUG
+	if (pb_side_load)
+		amd_pmf_open_pb(dev, dev->dbgfs_dir);
+#endif
 
 	return amd_pmf_start_policy_engine(dev);
 }
@@ -381,6 +437,10 @@ int amd_pmf_init_smart_pc(struct amd_pmf_dev *dev)
 
 void amd_pmf_deinit_smart_pc(struct amd_pmf_dev *dev)
 {
+#ifdef CONFIG_AMD_PMF_DEBUG
+	if (pb_side_load)
+		debugfs_remove_recursive(dev->esbin);
+#endif
 	kfree(dev->prev_data);
 	kfree(dev->policy_buf);
 	cancel_delayed_work_sync(&dev->pb_work);
