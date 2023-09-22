@@ -114,14 +114,12 @@ void extent_io_tree_init(struct btrfs_fs_info *fs_info,
  */
 void extent_io_tree_release(struct extent_io_tree *tree)
 {
-	spin_lock(&tree->lock);
-	while (!RB_EMPTY_ROOT(&tree->state)) {
-		struct rb_node *node;
-		struct extent_state *state;
+	struct extent_state *state;
+	struct extent_state *tmp;
 
-		node = rb_first(&tree->state);
-		state = rb_entry(node, struct extent_state, rb_node);
-		rb_erase(&state->rb_node, &tree->state);
+	spin_lock(&tree->lock);
+	rbtree_postorder_for_each_entry_safe(state, tmp, &tree->state, rb_node) {
+		/* Clear node to keep free_extent_state() happy. */
 		RB_CLEAR_NODE(&state->rb_node);
 		ASSERT(!(state->state & EXTENT_LOCKED));
 		/*
@@ -131,9 +129,9 @@ void extent_io_tree_release(struct extent_io_tree *tree)
 		 */
 		ASSERT(!waitqueue_active(&state->wq));
 		free_extent_state(state);
-
-		cond_resched_lock(&tree->lock);
+		cond_resched();
 	}
+	tree->state = RB_ROOT;
 	spin_unlock(&tree->lock);
 }
 
