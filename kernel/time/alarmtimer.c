@@ -61,6 +61,7 @@ static DEFINE_SPINLOCK(freezer_delta_lock);
 /* rtc timer and device for setting alarm wakeups at suspend */
 static struct rtc_timer		rtctimer;
 static struct rtc_device	*rtcdev;
+static struct platform_device	*alarmtimer_pdev;
 static DEFINE_SPINLOCK(rtcdev_lock);
 
 /**
@@ -109,6 +110,7 @@ static int alarmtimer_rtc_add_device(struct device *dev)
 		}
 
 		rtcdev = rtc;
+		alarmtimer_pdev = pdev;
 		/* hold a reference so it doesn't go away */
 		get_device(dev);
 		pdev = NULL;
@@ -123,6 +125,22 @@ unlock:
 	return ret;
 }
 
+static void alarmtimer_rtc_remove_device(struct device *dev)
+{
+	struct rtc_device *rtc = to_rtc_device(dev);
+
+	if (rtcdev == rtc) {
+		module_put(rtc->owner);
+		if (device_may_wakeup(rtc->dev.parent))
+			device_init_wakeup(&alarmtimer_pdev->dev, false);
+
+		platform_device_unregister(alarmtimer_pdev);
+		put_device(dev);
+		alarmtimer_pdev = NULL;
+		rtcdev = NULL;
+	}
+}
+
 static inline void alarmtimer_rtc_timer_init(void)
 {
 	rtc_timer_init(&rtctimer, NULL, NULL);
@@ -130,6 +148,7 @@ static inline void alarmtimer_rtc_timer_init(void)
 
 static struct class_interface alarmtimer_rtc_interface = {
 	.add_dev = &alarmtimer_rtc_add_device,
+	.remove_dev = &alarmtimer_rtc_remove_device,
 };
 
 static int alarmtimer_rtc_interface_setup(void)
