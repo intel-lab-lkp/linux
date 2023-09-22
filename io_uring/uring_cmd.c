@@ -90,7 +90,7 @@ int io_uring_cmd_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 	if (sqe->__pad1)
 		return -EINVAL;
 
-	ioucmd->flags = READ_ONCE(sqe->uring_cmd_flags);
+	ioucmd->flags = READ_ONCE(sqe->uring_cmd_flags) & IORING_URING_CMD_MASK;
 	if (ioucmd->flags & ~IORING_URING_CMD_FIXED)
 		return -EINVAL;
 
