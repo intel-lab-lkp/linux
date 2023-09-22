@@ -60,7 +60,6 @@ struct resv_map {
 	long adds_in_progress;
 	struct list_head region_cache;
 	long region_cache_count;
-	struct rw_semaphore rw_sema;
 #ifdef CONFIG_CGROUP_HUGETLB
 	/*
 	 * On private mappings, the counter to uncharge reservations is stored
@@ -105,12 +104,6 @@ struct file_region {
 	struct page_counter *reservation_counter;
 	struct cgroup_subsys_state *css;
 #endif
-};
-
-struct hugetlb_vma_lock {
-	struct kref refs;
-	struct rw_semaphore rw_sema;
-	struct vm_area_struct *vma;
 };
 
 extern struct resv_map *resv_map_alloc(void);
