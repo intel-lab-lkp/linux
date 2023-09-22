@@ -411,19 +411,32 @@ static const unsigned long *iio_scan_mask_match(const unsigned long *av_masks,
 						const unsigned long *mask,
 						bool strict)
 {
+	const unsigned long *first_subset = NULL;
+
 	if (bitmap_empty(mask, masklength))
 		return NULL;
-	while (*av_masks) {
-		if (strict) {
+
+	if (strict) {
+		while (*av_masks) {
 			if (bitmap_equal(mask, av_masks, masklength))
 				return av_masks;
-		} else {
-			if (bitmap_subset(mask, av_masks, masklength))
-				return av_masks;
+
+			av_masks += BITS_TO_LONGS(masklength);
 		}
+
+		return NULL;
+	}
+	while (*av_masks) {
+		if (bitmap_equal(mask, av_masks, masklength))
+			return av_masks;
+
+		if (!first_subset && bitmap_subset(mask, av_masks, masklength))
+			first_subset = av_masks;
+
 		av_masks += BITS_TO_LONGS(masklength);
 	}
-	return NULL;
+
+	return first_subset;
 }
 
 static bool iio_validate_scan_mask(struct iio_dev *indio_dev,
