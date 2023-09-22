@@ -9,6 +9,7 @@
  */
 
 #include <linux/debugfs.h>
+#include <linux/pci.h>
 #include <linux/tee_drv.h>
 #include <linux/uuid.h>
 #include "pmf.h"
@@ -345,6 +346,20 @@ static int amd_pmf_get_bios_buffer(struct amd_pmf_dev *dev)
 	return amd_pmf_start_policy_engine(dev);
 }
 
+static int amd_pmf_get_gpu_handle(struct pci_dev *pdev, void *data)
+{
+	struct amd_pmf_dev *dev = data;
+
+	if (pdev->vendor == PCI_VENDOR_ID_ATI && pdev->devfn == 0) {
+		dev->gfx_data.gpu_dev = pci_get_device(pdev->vendor, pdev->device, NULL);
+		if (dev->gfx_data.gpu_dev) {
+			pci_dev_put(pdev);
+			return 1; /* stop walking */
+		}
+	}
+	return 0; /* continue walking */
+}
+
 static int amd_pmf_amdtee_ta_match(struct tee_ioctl_version_data *ver, const void *data)
 {
 	return ver->impl_id == TEE_IMPL_ID_AMDTEE;
@@ -435,6 +450,12 @@ int amd_pmf_init_smart_pc(struct amd_pmf_dev *dev)
 	INIT_DELAYED_WORK(&dev->pb_work, amd_pmf_invoke_cmd);
 	amd_pmf_set_dram_addr(dev);
 	amd_pmf_get_bios_buffer(dev);
+
+	/* get amdgpu handle */
+	pci_walk_bus(dev->root->bus, amd_pmf_get_gpu_handle, dev);
+	if (!dev->gfx_data.gpu_dev)
+		dev_err(dev->dev, "GPU handle not found!\n");
+
 	dev->prev_data = kzalloc(sizeof(*dev->prev_data), GFP_KERNEL);
 	if (!dev->prev_data)
 		return -ENOMEM;
@@ -451,5 +472,6 @@ void amd_pmf_deinit_smart_pc(struct amd_pmf_dev *dev)
 	kfree(dev->prev_data);
 	kfree(dev->policy_buf);
 	cancel_delayed_work_sync(&dev->pb_work);
+	pci_dev_put(dev->gfx_data.gpu_dev);
 	amd_pmf_tee_deinit(dev);
 }
