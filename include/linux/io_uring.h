@@ -20,6 +20,9 @@ enum io_uring_cmd_flags {
 	IO_URING_F_SQE128		= (1 << 8),
 	IO_URING_F_CQE32		= (1 << 9),
 	IO_URING_F_IOPOLL		= (1 << 10),
+
+	/* set when uring wants to cancel one issued command */
+	IO_URING_F_CANCEL		= (1 << 11),
 };
 
 struct io_uring_cmd {
@@ -82,6 +85,9 @@ static inline void io_uring_free(struct task_struct *tsk)
 		__io_uring_free(tsk);
 }
 int io_uring_cmd_sock(struct io_uring_cmd *cmd, unsigned int issue_flags);
+int io_uring_cmd_mark_cancelable(struct io_uring_cmd *cmd,
+		unsigned int issue_flags);
+struct task_struct *io_uring_cmd_get_task(struct io_uring_cmd *cmd);
 #else
 static inline int io_uring_cmd_import_fixed(u64 ubuf, unsigned long len, int rw,
 			      struct iov_iter *iter, void *ioucmd)
@@ -121,6 +127,15 @@ static inline int io_uring_cmd_sock(struct io_uring_cmd *cmd,
 				    unsigned int issue_flags)
 {
 	return -EOPNOTSUPP;
+}
+static inline int io_uring_cmd_mark_cancelable(struct io_uring_cmd *cmd,
+		unsigned int issue_flags)
+{
+	return -EOPNOTSUPP;
+}
+static inline struct task_struct *io_uring_cmd_get_task(struct io_uring_cmd *cmd)
+{
+	return NULL;
 }
 #endif
 
