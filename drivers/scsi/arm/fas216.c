@@ -2589,7 +2589,7 @@ int fas216_eh_bus_reset(struct scsi_cmnd *SCpnt)
 	 * all command structures.  Leave the running
 	 * command in place.
 	 */
-	shost_for_each_device(SDpnt, info->host) {
+	shost_for_each_device(SDpnt, info->host, 1) {
 		int i;
 
 		if (SDpnt->soft_reset)
@@ -2999,7 +2999,7 @@ void fas216_print_devices(FAS216_Info *info, struct seq_file *m)
 
 	seq_puts(m, "Device/Lun TaggedQ       Parity   Sync\n");
 
-	shost_for_each_device(scd, info->host) {
+	shost_for_each_device(scd, info->host, 1) {
 		dev = &info->device[scd->id];
 		seq_printf(m, "     %d/%llu   ", scd->id, scd->lun);
 		if (scd->tagged_supported)

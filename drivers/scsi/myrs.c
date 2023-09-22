@@ -2141,7 +2141,7 @@ static void myrs_monitor(struct work_struct *work)
 	    info->exp_active != 0) {
 		struct scsi_device *sdev;
 
-		shost_for_each_device(sdev, shost) {
+		shost_for_each_device(sdev, shost, 1) {
 			struct myrs_ldev_info *ldev_info;
 			int ldev_num;
 

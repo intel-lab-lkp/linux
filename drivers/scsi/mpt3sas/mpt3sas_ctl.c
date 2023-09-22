@@ -3879,7 +3879,7 @@ enable_sdev_max_qd_store(struct device *cdev,
 	switch (val) {
 	case 0:
 		ioc->enable_sdev_max_qd = 0;
-		shost_for_each_device(sdev, ioc->shost) {
+		shost_for_each_device(sdev, ioc->shost, 1) {
 			sas_device_priv_data = sdev->hostdata;
 			if (!sas_device_priv_data)
 				continue;
@@ -3922,7 +3922,7 @@ enable_sdev_max_qd_store(struct device *cdev,
 		break;
 	case 1:
 		ioc->enable_sdev_max_qd = 1;
-		shost_for_each_device(sdev, ioc->shost)
+		shost_for_each_device(sdev, ioc->shost, 1)
 			mpt3sas_scsih_change_queue_depth(sdev,
 			    shost->can_queue);
 		break;

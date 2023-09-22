@@ -502,7 +502,7 @@ static void storvsc_host_scan(struct work_struct *work)
 	 * may have been removed this way.
 	 */
 	mutex_lock(&host->scan_mutex);
-	shost_for_each_device(sdev, host)
+	shost_for_each_device(sdev, host, 1)
 		scsi_test_unit_ready(sdev, 1, 1, NULL);
 	mutex_unlock(&host->scan_mutex);
 	/*

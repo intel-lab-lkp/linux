@@ -1125,7 +1125,7 @@ static void mpt_work_wrapper(struct work_struct *work)
 	if (!pg3)
 		return;
 
-	shost_for_each_device(sdev,shost) {
+	shost_for_each_device(sdev, shost, 1) {
 		struct scsi_target *starget = scsi_target(sdev);
 		VirtTarget *vtarget = starget->hostdata;
 
@@ -1267,7 +1267,7 @@ mptspi_dv_renegotiate_work(struct work_struct *work)
 	kfree(wqw);
 
 	if (hd->spi_pending) {
-		shost_for_each_device(sdev, ioc->sh) {
+		shost_for_each_device(sdev, ioc->sh, 1) {
 			if  (hd->spi_pending & (1 << sdev->id))
 				continue;
 			starget = scsi_target(sdev);
@@ -1278,7 +1278,7 @@ mptspi_dv_renegotiate_work(struct work_struct *work)
 			mptspi_write_spi_device_pg1(starget, &pg1);
 		}
 	} else {
-		shost_for_each_device(sdev, ioc->sh)
+		shost_for_each_device(sdev, ioc->sh, 1)
 			mptspi_dv_device(hd, sdev);
 	}
 }

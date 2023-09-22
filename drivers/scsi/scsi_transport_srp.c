@@ -564,7 +564,7 @@ int srp_reconnect_rport(struct srp_rport *rport)
 		 * invoking scsi_target_unblock() won't change the state of
 		 * these devices into running so do that explicitly.
 		 */
-		shost_for_each_device(sdev, shost) {
+		shost_for_each_device(sdev, shost, 1) {
 			mutex_lock(&sdev->state_mutex);
 			if (sdev->sdev_state == SDEV_OFFLINE)
 				sdev->sdev_state = SDEV_RUNNING;

@@ -341,7 +341,7 @@ static int virtscsi_rescan_hotunplug(struct virtio_scsi *vscsi)
 	if (!inq_result)
 		return -ENOMEM;
 
-	shost_for_each_device(sdev, shost) {
+	shost_for_each_device(sdev, shost, 1) {
 		inquiry_len = sdev->inquiry_len ? sdev->inquiry_len : 36;
 
 		memset(scsi_cmd, 0, sizeof(scsi_cmd));

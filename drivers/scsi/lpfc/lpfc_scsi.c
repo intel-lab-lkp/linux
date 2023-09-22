@@ -185,7 +185,7 @@ lpfc_ramp_down_queue_handler(struct lpfc_hba *phba)
 	if (vports != NULL)
 		for (i = 0; i <= phba->max_vports && vports[i] != NULL; i++) {
 			shost = lpfc_shost_from_vport(vports[i]);
-			shost_for_each_device(sdev, shost) {
+			shost_for_each_device(sdev, shost, 1) {
 				new_queue_depth =
 					sdev->queue_depth * num_rsrc_err /
 					(num_rsrc_err + num_cmd_success);
@@ -223,7 +223,7 @@ lpfc_scsi_dev_block(struct lpfc_hba *phba)
 	if (vports != NULL)
 		for (i = 0; i <= phba->max_vports && vports[i] != NULL; i++) {
 			shost = lpfc_shost_from_vport(vports[i]);
-			shost_for_each_device(sdev, shost) {
+			shost_for_each_device(sdev, shost, 1) {
 				rport = starget_to_rport(scsi_target(sdev));
 				fc_remote_port_delete(rport);
 			}

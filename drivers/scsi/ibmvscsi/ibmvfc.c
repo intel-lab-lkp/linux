@@ -3077,7 +3077,7 @@ static void ibmvfc_terminate_rport_io(struct fc_rport *rport)
 	unsigned int found;
 
 	ENTER;
-	shost_for_each_device(sdev, shost) {
+	shost_for_each_device(sdev, shost, 1) {
 		dev_rport = starget_to_rport(scsi_target(sdev));
 		if (dev_rport != rport)
 			continue;

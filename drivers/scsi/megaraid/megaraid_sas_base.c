@@ -3441,7 +3441,7 @@ enable_sdev_max_qd_store(struct device *cdev,
 	else
 		instance->enable_sdev_max_qd = false;
 
-	shost_for_each_device(sdev, shost) {
+	shost_for_each_device(sdev, shost, 1) {
 		ret_target_prop = megasas_get_target_prop(instance, sdev);
 		is_target_prop = (ret_target_prop == DCMD_SUCCESS) ? true : false;
 		megasas_set_fw_assisted_qd(sdev, is_target_prop);

@@ -357,7 +357,7 @@ static void myrb_get_errtable(struct myrb_hba *cb)
 		size_t err_table_offset;
 		struct scsi_device *sdev;
 
-		shost_for_each_device(sdev, cb->host) {
+		shost_for_each_device(sdev, cb->host, 1) {
 			if (sdev->channel >= myrb_logical_channel(cb->host))
 				continue;
 			err_table_offset = sdev->channel * MYRB_MAX_TARGETS

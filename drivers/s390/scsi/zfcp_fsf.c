@@ -2036,7 +2036,7 @@ static void zfcp_fsf_close_physical_port_handler(struct zfcp_fsf_req *req)
 		/* can't use generic zfcp_erp_modify_port_status because
 		 * ZFCP_STATUS_COMMON_OPEN must not be reset for the port */
 		atomic_andnot(ZFCP_STATUS_PORT_PHYS_OPEN, &port->status);
-		shost_for_each_device(sdev, port->adapter->scsi_host)
+		shost_for_each_device(sdev, port->adapter->scsi_host, 1)
 			if (sdev_to_zfcp(sdev)->port == port)
 				atomic_andnot(ZFCP_STATUS_COMMON_OPEN,
 						  &sdev_to_zfcp(sdev)->status);
@@ -2058,7 +2058,7 @@ static void zfcp_fsf_close_physical_port_handler(struct zfcp_fsf_req *req)
 		 * ZFCP_STATUS_COMMON_OPEN must not be reset for the port
 		 */
 		atomic_andnot(ZFCP_STATUS_PORT_PHYS_OPEN, &port->status);
-		shost_for_each_device(sdev, port->adapter->scsi_host)
+		shost_for_each_device(sdev, port->adapter->scsi_host, 1)
 			if (sdev_to_zfcp(sdev)->port == port)
 				atomic_andnot(ZFCP_STATUS_COMMON_OPEN,
 						  &sdev_to_zfcp(sdev)->status);

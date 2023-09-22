@@ -407,7 +407,7 @@ static inline void scsi_eh_prt_fail_stats(struct Scsi_Host *shost,
 	int cmd_cancel = 0;
 	int devices_failed = 0;
 
-	shost_for_each_device(sdev, shost) {
+	shost_for_each_device(sdev, shost, 0) {
 		list_for_each_entry(scmd, work_q, eh_entry) {
 			if (scmd->device == sdev) {
 				++total_failures;
@@ -743,7 +743,7 @@ static void scsi_handle_queue_ramp_up(struct scsi_device *sdev)
 	 * Walk all devices of a target and do
 	 * ramp up on them.
 	 */
-	shost_for_each_device(tmp_sdev, sdev->host) {
+	shost_for_each_device(tmp_sdev, sdev->host, 1) {
 		if (tmp_sdev->channel != sdev->channel ||
 		    tmp_sdev->id != sdev->id ||
 		    tmp_sdev->queue_depth == sdev->max_queue_depth)
@@ -762,7 +762,7 @@ static void scsi_handle_queue_full(struct scsi_device *sdev)
 	if (!sht->track_queue_depth)
 		return;
 
-	shost_for_each_device(tmp_sdev, sdev->host) {
+	shost_for_each_device(tmp_sdev, sdev->host, 1) {
 		if (tmp_sdev->channel != sdev->channel ||
 		    tmp_sdev->id != sdev->id)
 			continue;
@@ -1501,7 +1501,7 @@ static int scsi_eh_stu(struct Scsi_Host *shost,
 	struct scsi_cmnd *scmd, *stu_scmd, *next;
 	struct scsi_device *sdev;
 
-	shost_for_each_device(sdev, shost) {
+	shost_for_each_device(sdev, shost, 1) {
 		if (scsi_host_eh_past_deadline(shost)) {
 			SCSI_LOG_ERROR_RECOVERY(3,
 				sdev_printk(KERN_INFO, sdev,
@@ -1568,7 +1568,7 @@ static int scsi_eh_bus_device_reset(struct Scsi_Host *shost,
 	struct scsi_device *sdev;
 	enum scsi_disposition rtn;
 
-	shost_for_each_device(sdev, shost) {
+	shost_for_each_device(sdev, shost, 0) {
 		if (scsi_host_eh_past_deadline(shost)) {
 			SCSI_LOG_ERROR_RECOVERY(3,
 				sdev_printk(KERN_INFO, sdev,
@@ -2120,7 +2120,7 @@ static void scsi_restart_operations(struct Scsi_Host *shost)
 	 * onto the head of the SCSI request queue for the device.  There
 	 * is no point trying to lock the door of an off-line device.
 	 */
-	shost_for_each_device(sdev, shost) {
+	shost_for_each_device(sdev, shost, 0) {
 		if (scsi_device_online(sdev) && sdev->was_reset && sdev->locked) {
 			scsi_eh_lock_door(sdev);
 			sdev->was_reset = 0;

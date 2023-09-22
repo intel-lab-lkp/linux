@@ -3098,7 +3098,7 @@ static int srp_sdev_count(struct Scsi_Host *host)
 	struct scsi_device *sdev;
 	int c = 0;
 
-	shost_for_each_device(sdev, host)
+	shost_for_each_device(sdev, host, 1)
 		c++;
 
 	return c;

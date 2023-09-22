@@ -2760,7 +2760,7 @@ static int acornscsi_show_info(struct seq_file *m, struct Scsi_Host *instance)
 
     seq_printf(m, "\nAttached devices:\n");
 
-    shost_for_each_device(scd, instance) {
+    shost_for_each_device(scd, instance, 1) {
 	seq_printf(m, "Device/Lun TaggedQ      Sync\n");
 	seq_printf(m, "     %d/%llu   ", scd->id, scd->lun);
 	if (scd->tagged_supported)

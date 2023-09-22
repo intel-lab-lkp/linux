@@ -6309,7 +6309,7 @@ static void ufshcd_recover_pm_error(struct ufs_hba *hba)
 	 * blk_queue_enter in case there are bios waiting inside it.
 	 */
 	if (!ret) {
-		shost_for_each_device(sdev, shost) {
+		shost_for_each_device(sdev, shost, 1) {
 			q = sdev->request_queue;
 			if (q->dev && (q->rpm_status == RPM_SUSPENDED ||
 				       q->rpm_status == RPM_SUSPENDING))
@@ -10063,7 +10063,7 @@ static void ufshcd_wl_shutdown(struct device *dev)
 	/* Turn on everything while shutting down */
 	ufshcd_rpm_get_sync(hba);
 	scsi_device_quiesce(sdev);
-	shost_for_each_device(sdev, hba->host) {
+	shost_for_each_device(sdev, hba->host, 1) {
 		if (sdev == hba->ufs_device_wlun)
 			continue;
 		scsi_device_quiesce(sdev);

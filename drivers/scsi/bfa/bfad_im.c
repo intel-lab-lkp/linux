@@ -874,7 +874,7 @@ bfad_ramp_up_qdepth(struct bfad_itnim_s *itnim, struct scsi_device *sdev)
 		BFA_QUEUE_FULL_RAMP_UP_TIME * HZ) &&
 		((jiffies - itnim->last_queue_full_time) >
 		BFA_QUEUE_FULL_RAMP_UP_TIME * HZ)) {
-		shost_for_each_device(tmp_sdev, sdev->host) {
+		shost_for_each_device(tmp_sdev, sdev->host, 1) {
 			if (bfa_lun_queue_depth > tmp_sdev->queue_depth) {
 				if (tmp_sdev->id != sdev->id)
 					continue;
@@ -894,7 +894,7 @@ bfad_handle_qfull(struct bfad_itnim_s *itnim, struct scsi_device *sdev)
 
 	itnim->last_queue_full_time = jiffies;
 
-	shost_for_each_device(tmp_sdev, sdev->host) {
+	shost_for_each_device(tmp_sdev, sdev->host, 1) {
 		if (tmp_sdev->id != sdev->id)
 			continue;
 		scsi_track_queue_full(tmp_sdev, tmp_sdev->queue_depth - 1);

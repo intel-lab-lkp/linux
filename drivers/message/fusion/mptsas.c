@@ -623,7 +623,7 @@ mptsas_add_device_component(MPT_ADAPTER *ioc, u8 channel, u8 id,
 	/*
 	 * Set OS mapping
 	 */
-	shost_for_each_device(sdev, ioc->sh) {
+	shost_for_each_device(sdev, ioc->sh, 1) {
 		starget = scsi_target(sdev);
 		rphy = dev_to_rphy(starget->dev.parent);
 		if (rphy->identify.sas_address == sas_address) {
@@ -996,7 +996,7 @@ mptsas_find_vtarget(MPT_ADAPTER *ioc, u8 channel, u8 id)
 	VirtDevice			*vdevice;
 	VirtTarget 			*vtarget = NULL;
 
-	shost_for_each_device(sdev, ioc->sh) {
+	shost_for_each_device(sdev, ioc->sh, 1) {
 		vdevice = sdev->hostdata;
 		if ((vdevice == NULL) ||
 			(vdevice->vtarget == NULL))
@@ -3768,7 +3768,7 @@ mptsas_send_link_status_event(struct fw_event_work *fw_event)
 				    ioc->name, phy_info->attached.id,
 				    phy_info->attached.channel));
 
-				shost_for_each_device(sdev, ioc->sh) {
+				shost_for_each_device(sdev, ioc->sh, 1) {
 					vdevice = sdev->hostdata;
 					if ((vdevice == NULL) ||
 						(vdevice->vtarget == NULL))
@@ -4101,7 +4101,7 @@ mptsas_handle_queue_full_event(struct fw_event_work *fw_event)
 	mutex_unlock(&ioc->sas_device_info_mutex);
 
 	if (id != -1) {
-		shost_for_each_device(sdev, ioc->sh) {
+		shost_for_each_device(sdev, ioc->sh, 1) {
 			if (sdev->id == id && sdev->channel == channel) {
 				if (current_depth > sdev->queue_depth) {
 					sdev_printk(KERN_INFO, sdev,

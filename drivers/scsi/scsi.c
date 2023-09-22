@@ -704,6 +704,23 @@ int scsi_cdl_enable(struct scsi_device *sdev, bool enable)
 	return 0;
 }
 
+static int __scsi_device_get(struct scsi_device *sdev, bool check_state)
+{
+	if (check_state &&
+	    (sdev->sdev_state == SDEV_DEL || sdev->sdev_state == SDEV_CANCEL))
+		goto fail;
+	if (!try_module_get(sdev->host->hostt->module))
+		goto fail;
+	if (!get_device(&sdev->sdev_gendev))
+		goto fail_put_module;
+	return 0;
+
+fail_put_module:
+	module_put(sdev->host->hostt->module);
+fail:
+	return -ENXIO;
+}
+
 /**
  * scsi_device_get  -  get an additional reference to a scsi_device
  * @sdev:	device to get a reference to
@@ -717,18 +734,7 @@ int scsi_cdl_enable(struct scsi_device *sdev, bool enable)
  */
 int scsi_device_get(struct scsi_device *sdev)
 {
-	if (sdev->sdev_state == SDEV_DEL || sdev->sdev_state == SDEV_CANCEL)
-		goto fail;
-	if (!try_module_get(sdev->host->hostt->module))
-		goto fail;
-	if (!get_device(&sdev->sdev_gendev))
-		goto fail_put_module;
-	return 0;
-
-fail_put_module:
-	module_put(sdev->host->hostt->module);
-fail:
-	return -ENXIO;
+	return __scsi_device_get(sdev, 1);
 }
 EXPORT_SYMBOL(scsi_device_get);
 
@@ -751,7 +757,8 @@ EXPORT_SYMBOL(scsi_device_put);
 
 /* helper for shost_for_each_device, see that for documentation */
 struct scsi_device *__scsi_iterate_devices(struct Scsi_Host *shost,
-					   struct scsi_device *prev)
+					   struct scsi_device *prev,
+					   bool check_state)
 {
 	struct list_head *list = (prev ? &prev->siblings : &shost->__devices);
 	struct scsi_device *next = NULL;
@@ -761,7 +768,7 @@ struct scsi_device *__scsi_iterate_devices(struct Scsi_Host *shost,
 	while (list->next != &shost->__devices) {
 		next = list_entry(list->next, struct scsi_device, siblings);
 		/* skip devices that we can't get a reference to */
-		if (!scsi_device_get(next))
+		if (!__scsi_device_get(next, check_state))
 			break;
 		next = NULL;
 		list = list->next;
@@ -790,7 +797,7 @@ void starget_for_each_device(struct scsi_target *starget, void *data,
 	struct Scsi_Host *shost = dev_to_shost(starget->dev.parent);
 	struct scsi_device *sdev;
 
-	shost_for_each_device(sdev, shost) {
+	shost_for_each_device(sdev, shost, 1) {
 		if ((sdev->channel == starget->channel) &&
 		    (sdev->id == starget->id))
 			fn(sdev, data);

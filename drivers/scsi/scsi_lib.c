@@ -466,7 +466,7 @@ void scsi_run_host_queues(struct Scsi_Host *shost)
 {
 	struct scsi_device *sdev;
 
-	shost_for_each_device(sdev, shost)
+	shost_for_each_device(sdev, shost, 1)
 		scsi_run_queue(sdev->request_queue);
 }
 
@@ -2963,7 +2963,7 @@ scsi_host_block(struct Scsi_Host *shost)
 	 * Call scsi_internal_device_block_nowait so we can avoid
 	 * calling synchronize_rcu() for each LUN.
 	 */
-	shost_for_each_device(sdev, shost) {
+	shost_for_each_device(sdev, shost, 1) {
 		mutex_lock(&sdev->state_mutex);
 		ret = scsi_internal_device_block_nowait(sdev);
 		mutex_unlock(&sdev->state_mutex);
@@ -2986,7 +2986,7 @@ scsi_host_unblock(struct Scsi_Host *shost, int new_state)
 	struct scsi_device *sdev;
 	int ret = 0;
 
-	shost_for_each_device(sdev, shost) {
+	shost_for_each_device(sdev, shost, 1) {
 		ret = scsi_internal_device_unblock(sdev, new_state);
 		if (ret) {
 			scsi_device_put(sdev);

@@ -350,7 +350,7 @@ static int zfcp_scsi_eh_target_reset_handler(struct scsi_cmnd *scpnt)
 		(struct zfcp_adapter *)shost->hostdata[0];
 	int ret;
 
-	shost_for_each_device(tmp_sdev, shost) {
+	shost_for_each_device(tmp_sdev, shost, 1) {
 		if (tmp_sdev->id == starget->id) {
 			sdev = tmp_sdev;
 			break;

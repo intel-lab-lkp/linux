@@ -796,7 +796,7 @@ page2_not_supported:
 
 	/* see if there are any devices matching before
 	 * we found the enclosure */
-	shost_for_each_device(tmp_sdev, sdev->host) {
+	shost_for_each_device(tmp_sdev, sdev->host, 1) {
 		if (tmp_sdev->lun != 0 || scsi_device_enclosure(tmp_sdev))
 			continue;
 		ses_match_to_enclosure(edev, tmp_sdev, 0);

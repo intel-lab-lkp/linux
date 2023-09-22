@@ -1045,7 +1045,7 @@ static void all_config_cdb_len(void)
 	mutex_lock(&sdebug_host_list_mutex);
 	list_for_each_entry(sdbg_host, &sdebug_host_list, host_list) {
 		shost = sdbg_host->shost;
-		shost_for_each_device(sdev, shost) {
+		shost_for_each_device(sdev, shost, 1) {
 			config_cdb_len(sdev);
 		}
 	}

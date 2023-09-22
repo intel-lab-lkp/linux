@@ -1310,7 +1310,7 @@ mptctl_getiocinfo (MPT_ADAPTER *ioc, unsigned long arg, unsigned int data_size)
          */
 	karg->numDevices = 0;
 	if (ioc->sh) {
-		shost_for_each_device(sdev, ioc->sh) {
+		shost_for_each_device(sdev, ioc->sh, 1) {
 			vdevice = sdev->hostdata;
 			if (vdevice == NULL || vdevice->vtarget == NULL)
 				continue;
@@ -1416,7 +1416,7 @@ mptctl_gettargetinfo (MPT_ADAPTER *ioc, unsigned long arg)
 	/* Get number of devices
          */
 	if (ioc->sh){
-		shost_for_each_device(sdev, ioc->sh) {
+		shost_for_each_device(sdev, ioc->sh, 1) {
 			if (!maxWordsLeft)
 				continue;
 			vdevice = sdev->hostdata;
@@ -1889,7 +1889,7 @@ mptctl_do_mpt_command (MPT_ADAPTER *ioc, struct mpt_ioctl_command karg, void __u
 				cpu_to_le32(ioc->sense_buf_low_dma
 				   + (req_idx * MPT_SENSE_BUFFER_ALLOC));
 
-			shost_for_each_device(sdev, ioc->sh) {
+			shost_for_each_device(sdev, ioc->sh, 1) {
 				struct scsi_target *starget = scsi_target(sdev);
 				VirtTarget *vtarget = starget->hostdata;
 

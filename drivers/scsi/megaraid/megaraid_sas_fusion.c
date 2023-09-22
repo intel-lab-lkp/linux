@@ -5110,7 +5110,7 @@ int megasas_reset_fusion(struct Scsi_Host *shost, int reason)
 				  &instance->reset_flags);
 			instance->instancet->enable_intr(instance);
 			megasas_enable_irq_poll(instance);
-			shost_for_each_device(sdev, shost) {
+			shost_for_each_device(sdev, shost, 1) {
 				if ((instance->tgt_prop) &&
 				    (instance->nvme_page_size))
 					ret_target_prop = megasas_get_target_prop(instance, sdev);

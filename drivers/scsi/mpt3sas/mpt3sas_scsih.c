@@ -2888,7 +2888,7 @@ mpt3sas_scsih_set_tm_flag(struct MPT3SAS_ADAPTER *ioc, u16 handle)
 	struct scsi_device *sdev;
 	u8 skip = 0;
 
-	shost_for_each_device(sdev, ioc->shost) {
+	shost_for_each_device(sdev, ioc->shost, 1) {
 		if (skip)
 			continue;
 		sas_device_priv_data = sdev->hostdata;
@@ -2916,7 +2916,7 @@ mpt3sas_scsih_clear_tm_flag(struct MPT3SAS_ADAPTER *ioc, u16 handle)
 	struct scsi_device *sdev;
 	u8 skip = 0;
 
-	shost_for_each_device(sdev, ioc->shost) {
+	shost_for_each_device(sdev, ioc->shost, 1) {
 		if (skip)
 			continue;
 		sas_device_priv_data = sdev->hostdata;
@@ -3836,7 +3836,7 @@ _scsih_ublock_io_all_device(struct MPT3SAS_ADAPTER *ioc)
 	struct MPT3SAS_DEVICE *sas_device_priv_data;
 	struct scsi_device *sdev;
 
-	shost_for_each_device(sdev, ioc->shost) {
+	shost_for_each_device(sdev, ioc->shost, 1) {
 		sas_device_priv_data = sdev->hostdata;
 		if (!sas_device_priv_data)
 			continue;
@@ -3866,7 +3866,7 @@ _scsih_ublock_io_device(struct MPT3SAS_ADAPTER *ioc,
 	struct MPT3SAS_DEVICE *sas_device_priv_data;
 	struct scsi_device *sdev;
 
-	shost_for_each_device(sdev, ioc->shost) {
+	shost_for_each_device(sdev, ioc->shost, 1) {
 		sas_device_priv_data = sdev->hostdata;
 		if (!sas_device_priv_data || !sas_device_priv_data->sas_target)
 			continue;
@@ -3893,7 +3893,7 @@ _scsih_block_io_all_device(struct MPT3SAS_ADAPTER *ioc)
 	struct MPT3SAS_DEVICE *sas_device_priv_data;
 	struct scsi_device *sdev;
 
-	shost_for_each_device(sdev, ioc->shost) {
+	shost_for_each_device(sdev, ioc->shost, 1) {
 		sas_device_priv_data = sdev->hostdata;
 		if (!sas_device_priv_data)
 			continue;
@@ -3925,7 +3925,7 @@ _scsih_block_io_device(struct MPT3SAS_ADAPTER *ioc, u16 handle)
 
 	sas_device = mpt3sas_get_sdev_by_handle(ioc, handle);
 
-	shost_for_each_device(sdev, ioc->shost) {
+	shost_for_each_device(sdev, ioc->shost, 1) {
 		sas_device_priv_data = sdev->hostdata;
 		if (!sas_device_priv_data)
 			continue;
@@ -9654,7 +9654,7 @@ _scsih_prep_device_scan(struct MPT3SAS_ADAPTER *ioc)
 	struct MPT3SAS_DEVICE *sas_device_priv_data;
 	struct scsi_device *sdev;
 
-	shost_for_each_device(sdev, ioc->shost) {
+	shost_for_each_device(sdev, ioc->shost, 1) {
 		sas_device_priv_data = sdev->hostdata;
 		if (sas_device_priv_data && sas_device_priv_data->sas_target)
 			sas_device_priv_data->sas_target->deleted = 1;
@@ -9676,7 +9676,7 @@ _scsih_update_device_qdepth(struct MPT3SAS_ADAPTER *ioc)
 	u16 qdepth;
 
 	ioc_info(ioc, "Update devices with firmware reported queue depth\n");
-	shost_for_each_device(sdev, ioc->shost) {
+	shost_for_each_device(sdev, ioc->shost, 1) {
 		sas_device_priv_data = sdev->hostdata;
 		if (sas_device_priv_data && sas_device_priv_data->sas_target) {
 			sas_target_priv_data = sas_device_priv_data->sas_target;
