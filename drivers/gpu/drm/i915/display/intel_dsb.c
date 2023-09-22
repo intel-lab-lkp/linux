@@ -4,8 +4,6 @@
  *
  */
 
-#include "gem/i915_gem_internal.h"
-
 #include "i915_drv.h"
 #include "i915_reg.h"
 #include "intel_de.h"
@@ -13,41 +11,7 @@
 #include "intel_dsb.h"
 #include "intel_dsb_regs.h"
 
-struct i915_vma;
-
-enum dsb_id {
-	INVALID_DSB = -1,
-	DSB1,
-	DSB2,
-	DSB3,
-	MAX_DSB_PER_PIPE
-};
-
-struct intel_dsb {
-	enum dsb_id id;
-
-	u32 *cmd_buf;
-	struct i915_vma *vma;
-	struct intel_crtc *crtc;
-
-	/*
-	 * maximum number of dwords the buffer will hold.
-	 */
-	unsigned int size;
-
-	/*
-	 * free_pos will point the first free dword and
-	 * help in calculating tail of command buffer.
-	 */
-	unsigned int free_pos;
-
-	/*
-	 * ins_start_offset will help to store start dword of the dsb
-	 * instuction and help in identifying the batch of auto-increment
-	 * register.
-	 */
-	unsigned int ins_start_offset;
-};
+#define CACHELINE_BYTES 64
 
 /**
  * DOC: DSB
@@ -117,8 +81,6 @@ static bool is_dsb_busy(struct drm_i915_private *i915, enum pipe pipe,
 
 static void intel_dsb_emit(struct intel_dsb *dsb, u32 ldw, u32 udw)
 {
-	u32 *buf = dsb->cmd_buf;
-
 	if (!assert_dsb_has_room(dsb))
 		return;
 
@@ -127,14 +89,13 @@ static void intel_dsb_emit(struct intel_dsb *dsb, u32 ldw, u32 udw)
 
 	dsb->ins_start_offset = dsb->free_pos;
 
-	buf[dsb->free_pos++] = ldw;
-	buf[dsb->free_pos++] = udw;
+	intel_dsb_write(dsb, dsb->free_pos++, ldw);
+	intel_dsb_write(dsb, dsb->free_pos++, udw);
 }
 
 static bool intel_dsb_prev_ins_is_write(struct intel_dsb *dsb,
 					u32 opcode, i915_reg_t reg)
 {
-	const u32 *buf = dsb->cmd_buf;
 	u32 prev_opcode, prev_reg;
 
 	/*
@@ -145,8 +106,8 @@ static bool intel_dsb_prev_ins_is_write(struct intel_dsb *dsb,
 	if (dsb->free_pos == 0)
 		return false;
 
-	prev_opcode = buf[dsb->ins_start_offset + 1] & ~DSB_REG_VALUE_MASK;
-	prev_reg = buf[dsb->ins_start_offset + 1] & DSB_REG_VALUE_MASK;
+	prev_opcode = intel_dsb_read(dsb, dsb->ins_start_offset + 1) >> DSB_OPCODE_SHIFT;
+	prev_reg =  intel_dsb_read(dsb, dsb->ins_start_offset + 1) & DSB_REG_VALUE_MASK;
 
 	return prev_opcode == opcode && prev_reg == i915_mmio_reg_offset(reg);
 }
@@ -179,6 +140,8 @@ static bool intel_dsb_prev_ins_is_indexed_write(struct intel_dsb *dsb, i915_reg_
 void intel_dsb_reg_write(struct intel_dsb *dsb,
 			 i915_reg_t reg, u32 val)
 {
+	u32 old_val;
+
 	/*
 	 * For example the buffer will look like below for 3 dwords for auto
 	 * increment register:
@@ -202,31 +165,30 @@ void intel_dsb_reg_write(struct intel_dsb *dsb,
 			       (DSB_BYTE_EN << DSB_BYTE_EN_SHIFT) |
 			       i915_mmio_reg_offset(reg));
 	} else {
-		u32 *buf = dsb->cmd_buf;
-
 		if (!assert_dsb_has_room(dsb))
 			return;
 
 		/* convert to indexed write? */
 		if (intel_dsb_prev_ins_is_mmio_write(dsb, reg)) {
-			u32 prev_val = buf[dsb->ins_start_offset + 0];
+			u32 prev_val = intel_dsb_read(dsb, dsb->ins_start_offset + 0);
 
-			buf[dsb->ins_start_offset + 0] = 1; /* count */
-			buf[dsb->ins_start_offset + 1] =
-				(DSB_OPCODE_INDEXED_WRITE << DSB_OPCODE_SHIFT) |
-				i915_mmio_reg_offset(reg);
-			buf[dsb->ins_start_offset + 2] = prev_val;
+			intel_dsb_write(dsb, dsb->ins_start_offset + 0, 1); /* count */
+			intel_dsb_write(dsb, dsb->ins_start_offset + 1,
+					(DSB_OPCODE_INDEXED_WRITE << DSB_OPCODE_SHIFT) |
+					i915_mmio_reg_offset(reg));
+			intel_dsb_write(dsb, dsb->ins_start_offset + 2, prev_val);
 
 			dsb->free_pos++;
 		}
 
-		buf[dsb->free_pos++] = val;
+		intel_dsb_write(dsb, dsb->free_pos++, val);
 		/* Update the count */
-		buf[dsb->ins_start_offset]++;
+		old_val = intel_dsb_read(dsb, dsb->ins_start_offset);
+		intel_dsb_write(dsb, dsb->ins_start_offset, old_val + 1);
 
 		/* if number of data words is odd, then the last dword should be 0.*/
 		if (dsb->free_pos & 0x1)
-			buf[dsb->free_pos] = 0;
+			intel_dsb_write(dsb, dsb->free_pos, 0);
 	}
 }
 
@@ -238,8 +200,8 @@ static void intel_dsb_align_tail(struct intel_dsb *dsb)
 	aligned_tail = ALIGN(tail, CACHELINE_BYTES);
 
 	if (aligned_tail > tail)
-		memset(&dsb->cmd_buf[dsb->free_pos], 0,
-		       aligned_tail - tail);
+		intel_dsb_memset(dsb, dsb->free_pos, 0,
+				 aligned_tail - tail);
 
 	dsb->free_pos = aligned_tail / 4;
 }
@@ -277,9 +239,9 @@ void intel_dsb_commit(struct intel_dsb *dsb, bool wait_for_vblank)
 		       (wait_for_vblank ? DSB_WAIT_FOR_VBLANK : 0) |
 		       DSB_ENABLE);
 	intel_de_write(dev_priv, DSB_HEAD(pipe, dsb->id),
-		       i915_ggtt_offset(dsb->vma));
+		       intel_dsb_ggtt_offset(dsb));
 	intel_de_write(dev_priv, DSB_TAIL(pipe, dsb->id),
-		       i915_ggtt_offset(dsb->vma) + tail);
+		       intel_dsb_ggtt_offset(dsb) + tail);
 }
 
 void intel_dsb_wait(struct intel_dsb *dsb)
@@ -325,12 +287,9 @@ struct intel_dsb *intel_dsb_prepare(struct intel_crtc *crtc,
 				    unsigned int max_cmds)
 {
 	struct drm_i915_private *i915 = to_i915(crtc->base.dev);
-	struct drm_i915_gem_object *obj;
 	intel_wakeref_t wakeref;
 	struct intel_dsb *dsb;
-	struct i915_vma *vma;
 	unsigned int size;
-	u32 *buf;
 
 	if (!HAS_DSB(i915))
 		return NULL;
@@ -344,28 +303,11 @@ struct intel_dsb *intel_dsb_prepare(struct intel_crtc *crtc,
 	/* ~1 qword per instruction, full cachelines */
 	size = ALIGN(max_cmds * 8, CACHELINE_BYTES);
 
-	obj = i915_gem_object_create_internal(i915, PAGE_ALIGN(size));
-	if (IS_ERR(obj))
+	if (!intel_dsb_buffer_create(crtc, dsb, size))
 		goto out_put_rpm;
-
-	vma = i915_gem_object_ggtt_pin(obj, NULL, 0, 0, 0);
-	if (IS_ERR(vma)) {
-		i915_gem_object_put(obj);
-		goto out_put_rpm;
-	}
-
-	buf = i915_gem_object_pin_map_unlocked(vma->obj, I915_MAP_WC);
-	if (IS_ERR(buf)) {
-		i915_vma_unpin_and_release(&vma, I915_VMA_RELEASE_MAP);
-		goto out_put_rpm;
-	}
 
 	intel_runtime_pm_put(&i915->runtime_pm, wakeref);
 
-	dsb->id = DSB1;
-	dsb->vma = vma;
-	dsb->crtc = crtc;
-	dsb->cmd_buf = buf;
 	dsb->size = size / 4; /* in dwords */
 	dsb->free_pos = 0;
 	dsb->ins_start_offset = 0;
@@ -381,17 +323,4 @@ out:
 		      crtc->base.base.id, crtc->base.name, DSB1);
 
 	return NULL;
-}
-
-/**
- * intel_dsb_cleanup() - To cleanup DSB context.
- * @dsb: DSB context
- *
- * This function cleanup the DSB context by unpinning and releasing
- * the VMA object associated with it.
- */
-void intel_dsb_cleanup(struct intel_dsb *dsb)
-{
-	i915_vma_unpin_and_release(&dsb->vma, I915_VMA_RELEASE_MAP);
-	kfree(dsb);
 }
