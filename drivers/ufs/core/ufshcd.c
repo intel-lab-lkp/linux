@@ -7713,8 +7713,28 @@ static int ufshcd_eh_host_reset_handler(struct scsi_cmnd *cmd)
 	int err = SUCCESS;
 	unsigned long flags;
 	struct ufs_hba *hba;
+	struct device *dev;
 
 	hba = shost_priv(cmd->device->host);
+
+	/*
+	 * If runtime pm send SSU and got timeout, scsi_error_handler
+	 * stuck at this function to wait flush_work(&hba->eh_work).
+	 * And ufshcd_err_handler(eh_work) stuck at wait runtime pm active.
+	 * Do ufshcd_link_recovery instead shedule eh_work can prevent
+	 * dead lock happen.
+	 */
+	dev = &hba->ufs_device_wlun->sdev_gendev;
+	if ((dev->power.runtime_status == RPM_RESUMING) ||
+		(dev->power.runtime_status == RPM_SUSPENDING)) {
+		err = ufshcd_link_recovery(hba);
+		if (err) {
+			dev_err(hba->dev, "WL Device PM: status:%d, err:%d\n",
+				dev->power.runtime_status,
+				dev->power.runtime_error);
+		}
+		return err;
+	}
 
 	spin_lock_irqsave(hba->host->host_lock, flags);
 	hba->force_reset = true;
