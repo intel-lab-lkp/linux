@@ -221,74 +221,6 @@ static void *nft_rbtree_get(const struct net *net, const struct nft_set *set,
 	return rbe;
 }
 
-static void nft_rbtree_gc_remove(struct net *net, struct nft_set *set,
-				 struct nft_rbtree *priv,
-				 struct nft_rbtree_elem *rbe)
-{
-	struct nft_set_elem elem = {
-		.priv	= rbe,
-	};
-
-	nft_setelem_data_deactivate(net, set, &elem);
-	rb_erase(&rbe->node, &priv->root);
-}
-
-static int nft_rbtree_gc_elem(const struct nft_set *__set,
-			      struct nft_rbtree *priv,
-			      struct nft_rbtree_elem *rbe,
-			      u8 genmask)
-{
-	struct nft_set *set = (struct nft_set *)__set;
-	struct rb_node *prev = rb_prev(&rbe->node);
-	struct net *net = read_pnet(&set->net);
-	struct nft_rbtree_elem *rbe_prev;
-	struct nft_trans_gc *gc;
-
-	gc = nft_trans_gc_alloc(set, 0, GFP_ATOMIC);
-	if (!gc)
-		return -ENOMEM;
-
-	/* search for end interval coming before this element.
-	 * end intervals don't carry a timeout extension, they
-	 * are coupled with the interval start element.
-	 */
-	while (prev) {
-		rbe_prev = rb_entry(prev, struct nft_rbtree_elem, node);
-		if (nft_rbtree_interval_end(rbe_prev) &&
-		    nft_set_elem_active(&rbe_prev->ext, genmask))
-			break;
-
-		prev = rb_prev(prev);
-	}
-
-	if (prev) {
-		rbe_prev = rb_entry(prev, struct nft_rbtree_elem, node);
-		nft_rbtree_gc_remove(net, set, priv, rbe_prev);
-
-		/* There is always room in this trans gc for this element,
-		 * memory allocation never actually happens, hence, the warning
-		 * splat in such case. No need to set NFT_SET_ELEM_DEAD_BIT,
-		 * this is synchronous gc which never fails.
-		 */
-		gc = nft_trans_gc_queue_sync(gc, GFP_ATOMIC);
-		if (WARN_ON_ONCE(!gc))
-			return -ENOMEM;
-
-		nft_trans_gc_elem_add(gc, rbe_prev);
-	}
-
-	nft_rbtree_gc_remove(net, set, priv, rbe);
-	gc = nft_trans_gc_queue_sync(gc, GFP_ATOMIC);
-	if (WARN_ON_ONCE(!gc))
-		return -ENOMEM;
-
-	nft_trans_gc_elem_add(gc, rbe);
-
-	nft_trans_gc_queue_sync_done(gc);
-
-	return 0;
-}
-
 static bool nft_rbtree_update_first(const struct nft_set *set,
 				    struct nft_rbtree_elem *rbe,
 				    struct rb_node *first)
@@ -313,7 +245,7 @@ static int __nft_rbtree_insert(const struct net *net, const struct nft_set *set,
 	struct rb_node *node, *next, *parent, **p, *first = NULL;
 	struct nft_rbtree *priv = nft_set_priv(set);
 	u8 genmask = nft_genmask_next(net);
-	int d, err;
+	int d;
 
 	/* Descend the tree to search for an existing element greater than the
 	 * key value to insert that is greater than the new element. This is the
@@ -357,13 +289,19 @@ static int __nft_rbtree_insert(const struct net *net, const struct nft_set *set,
 		if (!nft_set_elem_active(&rbe->ext, genmask))
 			continue;
 
-		/* perform garbage collection to avoid bogus overlap reports. */
-		if (nft_set_elem_expired(&rbe->ext)) {
-			err = nft_rbtree_gc_elem(set, priv, rbe, genmask);
-			if (err < 0)
-				return err;
+		/* skip expired intervals to avoid bogus overlap reports:
+		 * end element has no expiration, check next start element.
+		 */
+		if (nft_rbtree_interval_end(rbe) && next) {
+			struct nft_rbtree_elem *rbe_next;
 
-			continue;
+			rbe_next = rb_entry(next, struct nft_rbtree_elem, node);
+
+			if (nft_set_elem_expired(&rbe_next->ext)) {
+				/* skip expired next start element. */
+				next = rb_next(next);
+				continue;
+			}
 		}
 
 		d = nft_rbtree_cmp(set, rbe, new);
