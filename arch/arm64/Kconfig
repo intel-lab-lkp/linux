@@ -2093,6 +2093,17 @@ config ARM64_EPAN
 	  if the cpu does not implement the feature.
 endmenu # "ARMv8.7 architectural features"
 
+config ARM64_MTE_COMP
+	bool "Tag compression for ARM64 Memory Tagging Extension"
+	default y
+	depends on ARM64_MTE
+	help
+	  Enable tag compression support for ARM64 Memory Tagging Extension.
+
+	  Tag buffers corresponding to swapped RAM pages are compressed using
+	  RLE to conserve heap memory. In the common case compressed tags
+	  occupy 2.5x less memory.
+
 config ARM64_SVE
 	bool "ARM Scalable Vector Extension support"
 	default y
