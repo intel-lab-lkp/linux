@@ -146,7 +146,6 @@ fi
 
 mkdir -p artifacts/install/lib
 mv install/* artifacts/install/.
-rm -rf artifacts/install/modules
 ln -s common artifacts/install/ci-common
 
 for image in ${KERNEL_IMAGE_NAME}; do
