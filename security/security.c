@@ -825,7 +825,8 @@ static int lsm_superblock_alloc(struct super_block *sb)
  */
 #define __CALL_STATIC_VOID(NUM, HOOK, ...)				     \
 do {									     \
-	if (static_branch_unlikely(&SECURITY_HOOK_ACTIVE_KEY(HOOK, NUM))) {    \
+	if (static_branch_maybe(CONFIG_SECURITY_HOOK_LIKELY,		     \
+				&SECURITY_HOOK_ACTIVE_KEY(HOOK, NUM))) {     \
 		static_call(LSM_STATIC_CALL(HOOK, NUM))(__VA_ARGS__);	     \
 	}								     \
 } while (0);
@@ -837,7 +838,8 @@ do {									     \
 
 #define __CALL_STATIC_INT(NUM, R, HOOK, LABEL, ...)			     \
 do {									     \
-	if (static_branch_unlikely(&SECURITY_HOOK_ACTIVE_KEY(HOOK, NUM))) {  \
+	if (static_branch_maybe(CONFIG_SECURITY_HOOK_LIKELY,		     \
+				&SECURITY_HOOK_ACTIVE_KEY(HOOK, NUM))) {     \
 		R = static_call(LSM_STATIC_CALL(HOOK, NUM))(__VA_ARGS__);    \
 		if (R != 0)						     \
 			goto LABEL;					     \
