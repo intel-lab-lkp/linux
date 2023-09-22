@@ -361,7 +361,7 @@ static void handle_thermal_trip(struct thermal_zone_device *tz, int trip_id)
 		    tz->temperature >= trip.temperature)
 			thermal_notify_tz_trip_up(tz->id, trip_id,
 						  tz->temperature);
-		if (tz->last_temperature >= trip.temperature &&
+		if (tz->last_temperature >= (trip.temperature - trip.hysteresis) &&
 		    tz->temperature < (trip.temperature - trip.hysteresis))
 			thermal_notify_tz_trip_down(tz->id, trip_id,
 						    tz->temperature);
