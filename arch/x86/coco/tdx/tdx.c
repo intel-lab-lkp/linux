@@ -37,6 +37,27 @@
 
 #define TDREPORT_SUBTYPE_0	0
 
+/*
+ * TDX metadata base field id, used by TDCALL TDG.SYS.RD
+ * See TDX ABI Spec section 3.3.2.3 Global Metadata Fields
+ */
+#define TDX_SYS_VENDOR_ID_FID		0x0800000200000000ULL
+#define TDX_SYS_MINOR_FID		0x0800000100000003ULL
+#define TDX_SYS_MAJOR_FID		0x0800000100000004ULL
+#define TDX_VENDOR_INTEL		0x8086
+
+struct tdg_sys_info {
+	u32 vendor_id;
+	u16 major_version;
+	u16 minor_version;
+};
+
+/*
+ * Fetch TDX Module global-scope metadata field via TDG.SYS.RD TDCALL
+ * Do NOT change it once initialized.
+ */
+static struct tdg_sys_info td_sys_info;
+
 /* Called from __tdx_hypercall() for unrecoverable failure */
 noinstr void __tdx_hypercall_failed(void)
 {
@@ -757,6 +778,46 @@ static bool tdx_enc_status_change_finish(unsigned long vaddr, int numpages,
 	return true;
 }
 
+/*
+ * Parse the tdx module version info from the global-scope metadata fields.
+ */
+static int tdg_get_sysinfo(void)
+{
+	struct tdx_module_output out;
+	u64 ret;
+
+	ret = __tdx_module_call(TDX_SYS_RD, 0, TDX_SYS_VENDOR_ID_FID, 0, 0,
+				&out);
+	if (TDCALL_RETURN_CODE(ret) == TDCALL_INVALID_OPERAND)
+		goto version_1_0;
+	else if (ret)
+		return ret;
+
+	td_sys_info.vendor_id = (u32)(out).r8;
+
+	ret = __tdx_module_call(TDX_SYS_RD, 0, TDX_SYS_MAJOR_FID, 0, 0, &out);
+	if (ret)
+		return ret;
+
+	td_sys_info.major_version = (u16)(out).r8;
+
+	ret = __tdx_module_call(TDX_SYS_RD, 0, TDX_SYS_MINOR_FID, 0, 0, &out);
+	if (ret)
+		return ret;
+
+	td_sys_info.minor_version = (u16)(out).r8;
+
+	return 0;
+
+	/* TDX 1.0 does not have the TDCALL TDG.SYS.RD */
+version_1_0:
+	td_sys_info.vendor_id = TDX_VENDOR_INTEL;
+	td_sys_info.major_version = 1;
+	td_sys_info.minor_version = 0;
+
+	return 0;
+}
+
 void __init tdx_early_init(void)
 {
 	u64 cc_mask;
@@ -820,5 +881,9 @@ void __init tdx_early_init(void)
 	 */
 	x86_cpuinit.parallel_bringup = false;
 
-	pr_info("Guest detected\n");
+	tdg_get_sysinfo();
+
+	pr_info("Guest detected. TDX version:%u.%u VendorID: %x\n",
+		td_sys_info.major_version, td_sys_info.minor_version,
+		td_sys_info.vendor_id);
 }
