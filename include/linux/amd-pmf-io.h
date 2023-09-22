@@ -31,6 +31,7 @@ int amd_pmf_set_gfx_data(struct amd_gpu_pmf_data *pmf);
 /* amd-sfh */
 enum sfh_message_type {
 	MT_HPD,
+	MT_ALS,
 };
 
 enum hpd_info {
@@ -40,6 +41,7 @@ enum hpd_info {
 };
 
 struct amd_sfh_info {
+	u32 ambient_light;
 	u8 user_present;
 	/* add future caps below */
 };
