@@ -13,6 +13,43 @@
 #include <linux/power_supply.h>
 #include "pmf.h"
 
+#ifdef CONFIG_AMD_PMF_DEBUG
+static const char *ta_slider_as_str(unsigned int state)
+{
+	switch (state) {
+	case TA_BEST_PERFORMANCE:
+		return "PERFORMANCE";
+	case TA_BETTER_PERFORMANCE:
+		return "BALANCED";
+	case TA_BEST_BATTERY:
+		return "POWER_SAVER";
+	default:
+		return "Unknown TA Slider State";
+	}
+}
+
+void amd_pmf_dump_ta_inputs(struct amd_pmf_dev *dev, struct ta_pmf_enact_table *in)
+{
+	dev_dbg(dev->dev, "==== TA inputs START ====\n");
+	dev_dbg(dev->dev, "Slider State : %s\n", ta_slider_as_str(in->ev_info.power_slider));
+	dev_dbg(dev->dev, "Power Source : %s\n", source_as_str(in->ev_info.power_source));
+	dev_dbg(dev->dev, "Battery Percentage : %d\n", in->ev_info.bat_percentage);
+	dev_dbg(dev->dev, "Designed Battery Capacity : %d\n", in->ev_info.bat_design);
+	dev_dbg(dev->dev, "Fully Charged Capacity : %d\n", in->ev_info.full_charge_capacity);
+	dev_dbg(dev->dev, "Drain Rate : %d\n", in->ev_info.drain_rate);
+	dev_dbg(dev->dev, "Socket Power : %d\n", in->ev_info.socket_power);
+	dev_dbg(dev->dev, "Skin Temperature : %d\n", in->ev_info.skin_temperature);
+	dev_dbg(dev->dev, "Avg C0 Residency : %d\n", in->ev_info.avg_c0residency);
+	dev_dbg(dev->dev, "Max C0 Residency : %d\n", in->ev_info.max_c0residency);
+	dev_dbg(dev->dev, "GFX Busy : %d\n", in->ev_info.gfx_busy);
+	dev_dbg(dev->dev, "Connected Display Count : %d\n", in->ev_info.monitor_count);
+	dev_dbg(dev->dev, "LID State : %s\n", in->ev_info.lid_state ? "Close" : "Open");
+	dev_dbg(dev->dev, "==== TA inputs END ====\n");
+}
+#else
+void amd_pmf_dump_ta_inputs(struct amd_pmf_dev *dev, struct ta_pmf_enact_table *in) {}
+#endif
+
 static void amd_pmf_get_smu_info(struct amd_pmf_dev *dev, struct ta_pmf_enact_table *in)
 {
 	u16 max, avg = 0;

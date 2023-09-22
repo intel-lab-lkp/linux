@@ -27,7 +27,7 @@ static const char *slider_as_str(unsigned int state)
 	}
 }
 
-static const char *source_as_str(unsigned int state)
+const char *source_as_str(unsigned int state)
 {
 	switch (state) {
 	case POWER_SOURCE_AC:
