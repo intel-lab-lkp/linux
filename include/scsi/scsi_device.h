@@ -518,7 +518,8 @@ static inline int scsi_device_online(struct scsi_device *sdev)
 {
 	return (sdev->sdev_state != SDEV_OFFLINE &&
 		sdev->sdev_state != SDEV_TRANSPORT_OFFLINE &&
-		sdev->sdev_state != SDEV_DEL);
+		sdev->sdev_state != SDEV_DEL &&
+		sdev->sdev_state != SDEV_CANCEL);
 }
 static inline int scsi_device_blocked(struct scsi_device *sdev)
 {
