@@ -261,8 +261,8 @@ static void kvm_xen_update_runstate_guest(struct kvm_vcpu *v, bool atomic)
 	 * alignment (and the 32-bit ABI doesn't align the 64-bit integers
 	 * anyway, even if the overall struct had been 64-bit aligned).
 	 */
-	if ((gpc1->gpa & ~PAGE_MASK) + user_len >= PAGE_SIZE) {
-		user_len1 = PAGE_SIZE - (gpc1->gpa & ~PAGE_MASK);
+	if ((kvm_gpc_gpa(gpc1) & ~PAGE_MASK) + user_len >= PAGE_SIZE) {
+		user_len1 = PAGE_SIZE - (kvm_gpc_gpa(gpc1) & ~PAGE_MASK);
 		user_len2 = user_len - user_len1;
 	} else {
 		user_len1 = user_len;
@@ -343,7 +343,7 @@ static void kvm_xen_update_runstate_guest(struct kvm_vcpu *v, bool atomic)
 			 * to the second page now because the guest changed to
 			 * 64-bit mode, the second GPC won't have been set up.
 			 */
-			if (kvm_gpc_activate(gpc2, gpc1->gpa + user_len1,
+			if (kvm_gpc_activate(gpc2, kvm_gpc_gpa(gpc1) + user_len1,
 					     user_len2))
 				return;
 
@@ -677,7 +677,8 @@ int kvm_xen_hvm_get_attr(struct kvm *kvm, struct kvm_xen_hvm_attr *data)
 
 	case KVM_XEN_ATTR_TYPE_SHARED_INFO:
 		if (kvm->arch.xen.shinfo_cache.active)
-			data->u.shared_info.gfn = gpa_to_gfn(kvm->arch.xen.shinfo_cache.gpa);
+			data->u.shared_info.gfn =
+				gpa_to_gfn(kvm_gpc_gpa(&kvm->arch.xen.shinfo_cache));
 		else
 			data->u.shared_info.gfn = KVM_XEN_INVALID_GFN;
 		r = 0;
@@ -955,7 +956,7 @@ int kvm_xen_vcpu_get_attr(struct kvm_vcpu *vcpu, struct kvm_xen_vcpu_attr *data)
 	switch (data->type) {
 	case KVM_XEN_VCPU_ATTR_TYPE_VCPU_INFO:
 		if (vcpu->arch.xen.vcpu_info_cache.active)
-			data->u.gpa = vcpu->arch.xen.vcpu_info_cache.gpa;
+			data->u.gpa = kvm_gpc_gpa(&vcpu->arch.xen.vcpu_info_cache);
 		else
 			data->u.gpa = KVM_XEN_INVALID_GPA;
 		r = 0;
@@ -963,7 +964,7 @@ int kvm_xen_vcpu_get_attr(struct kvm_vcpu *vcpu, struct kvm_xen_vcpu_attr *data)
 
 	case KVM_XEN_VCPU_ATTR_TYPE_VCPU_TIME_INFO:
 		if (vcpu->arch.xen.vcpu_time_info_cache.active)
-			data->u.gpa = vcpu->arch.xen.vcpu_time_info_cache.gpa;
+			data->u.gpa = kvm_gpc_gpa(&vcpu->arch.xen.vcpu_time_info_cache);
 		else
 			data->u.gpa = KVM_XEN_INVALID_GPA;
 		r = 0;
@@ -975,7 +976,7 @@ int kvm_xen_vcpu_get_attr(struct kvm_vcpu *vcpu, struct kvm_xen_vcpu_attr *data)
 			break;
 		}
 		if (vcpu->arch.xen.runstate_cache.active) {
-			data->u.gpa = vcpu->arch.xen.runstate_cache.gpa;
+			data->u.gpa = kvm_gpc_gpa(&vcpu->arch.xen.runstate_cache);
 			r = 0;
 		}
 		break;
