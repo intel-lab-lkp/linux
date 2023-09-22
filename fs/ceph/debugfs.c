@@ -429,31 +429,31 @@ void ceph_fs_debugfs_init(struct ceph_fs_client *fsc)
 				       name);
 
 	fsc->debugfs_mdsmap = debugfs_create_file("mdsmap",
-					0400,
+					0444,
 					fsc->client->debugfs_dir,
 					fsc,
 					&mdsmap_fops);
 
 	fsc->debugfs_mds_sessions = debugfs_create_file("mds_sessions",
-					0400,
+					0444,
 					fsc->client->debugfs_dir,
 					fsc,
 					&mds_sessions_fops);
 
 	fsc->debugfs_mdsc = debugfs_create_file("mdsc",
-						0400,
+						0444,
 						fsc->client->debugfs_dir,
 						fsc,
 						&mdsc_fops);
 
 	fsc->debugfs_caps = debugfs_create_file("caps",
-						0400,
+						0444,
 						fsc->client->debugfs_dir,
 						fsc,
 						&caps_fops);
 
 	fsc->debugfs_status = debugfs_create_file("status",
-						  0400,
+						  0444,
 						  fsc->client->debugfs_dir,
 						  fsc,
 						  &status_fops);
@@ -461,13 +461,13 @@ void ceph_fs_debugfs_init(struct ceph_fs_client *fsc)
 	fsc->debugfs_metrics_dir = debugfs_create_dir("metrics",
 						      fsc->client->debugfs_dir);
 
-	debugfs_create_file("file", 0400, fsc->debugfs_metrics_dir, fsc,
+	debugfs_create_file("file", 0444, fsc->debugfs_metrics_dir, fsc,
 			    &metrics_file_fops);
-	debugfs_create_file("latency", 0400, fsc->debugfs_metrics_dir, fsc,
+	debugfs_create_file("latency", 0444, fsc->debugfs_metrics_dir, fsc,
 			    &metrics_latency_fops);
-	debugfs_create_file("size", 0400, fsc->debugfs_metrics_dir, fsc,
+	debugfs_create_file("size", 0444, fsc->debugfs_metrics_dir, fsc,
 			    &metrics_size_fops);
-	debugfs_create_file("caps", 0400, fsc->debugfs_metrics_dir, fsc,
+	debugfs_create_file("caps", 0444, fsc->debugfs_metrics_dir, fsc,
 			    &metrics_caps_fops);
 }
 
