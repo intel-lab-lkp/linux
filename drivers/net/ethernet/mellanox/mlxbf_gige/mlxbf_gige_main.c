@@ -471,24 +471,21 @@ out:
 	return err;
 }
 
-static int mlxbf_gige_remove(struct platform_device *pdev)
+static void mlxbf_gige_remove(struct platform_device *pdev)
 {
 	struct mlxbf_gige *priv = platform_get_drvdata(pdev);
 
+	if (!priv)
+		return;
+
+	writeq(0, priv->base + MLXBF_GIGE_INT_EN);
+        mlxbf_gige_clean_port(priv);
 	unregister_netdev(priv->netdev);
 	phy_disconnect(priv->netdev->phydev);
 	mlxbf_gige_mdio_remove(priv);
-	platform_set_drvdata(pdev, NULL);
-
-	return 0;
-}
-
-static void mlxbf_gige_shutdown(struct platform_device *pdev)
-{
-	struct mlxbf_gige *priv = platform_get_drvdata(pdev);
-
 	writeq(0, priv->base + MLXBF_GIGE_INT_EN);
 	mlxbf_gige_clean_port(priv);
+	platform_set_drvdata(pdev, NULL);
 }
 
 static const struct acpi_device_id __maybe_unused mlxbf_gige_acpi_match[] = {
@@ -499,8 +496,8 @@ MODULE_DEVICE_TABLE(acpi, mlxbf_gige_acpi_match);
 
 static struct platform_driver mlxbf_gige_driver = {
 	.probe = mlxbf_gige_probe,
-	.remove = mlxbf_gige_remove,
-	.shutdown = mlxbf_gige_shutdown,
+	.remove_new = mlxbf_gige_remove,
+	.shutdown = mlxbf_gige_remove,
 	.driver = {
 		.name = KBUILD_MODNAME,
 		.acpi_match_table = ACPI_PTR(mlxbf_gige_acpi_match),
