@@ -1695,6 +1695,104 @@ int nfsd_nl_rpc_status_get_done(struct netlink_callback *cb)
 }
 
 /**
+ * nfsd_nl_threads_set_doit - set the number of running threads
+ * @skb: reply buffer
+ * @info: netlink metadata and command arguments
+ *
+ * Return 0 on success or a negative errno.
+ */
+int nfsd_nl_threads_set_doit(struct sk_buff *skb, struct genl_info *info)
+{
+	u16 nthreads;
+	int ret;
+
+	if (!info->attrs[NFSD_A_SERVER_ATTR_THREADS])
+		return -EINVAL;
+
+	nthreads = nla_get_u16(info->attrs[NFSD_A_SERVER_ATTR_THREADS]);
+
+	ret = nfsd_svc(nthreads, genl_info_net(info), get_current_cred());
+	return ret == nthreads ? 0 : ret;
+}
+
+/**
+ * nfsd_nl_v4_grace_release_doit - release the nfs4 grace period
+ * @skb: reply buffer
+ * @info: netlink metadata and command arguments
+ *
+ * Return 0 on success or a negative errno.
+ */
+int nfsd_nl_v4_grace_release_doit(struct sk_buff *skb, struct genl_info *info)
+{
+#ifdef CONFIG_NFSD_V4
+	struct nfsd_net *nn = net_generic(genl_info_net(info), nfsd_net_id);
+
+	if (!info->attrs[NFSD_A_SERVER_ATTR_V4_GRACE])
+		return -EINVAL;
+
+	if (nla_get_u8(info->attrs[NFSD_A_SERVER_ATTR_V4_GRACE]))
+		nfsd4_end_grace(nn);
+
+	return 0;
+#else
+	return -EOPNOTSUPP;
+#endif /* CONFIG_NFSD_V4 */
+}
+
+/**
+ * nfsd_nl_server_status_get_start - Prepare server_status_get dumpit
+ * @cb: netlink metadata and command arguments
+ *
+ * Return values:
+ *   %0: The server_status_get command may proceed
+ *   %-ENODEV: There is no NFSD running in this namespace
+ */
+int nfsd_nl_server_status_get_start(struct netlink_callback *cb)
+{
+	struct nfsd_net *nn = net_generic(sock_net(cb->skb->sk), nfsd_net_id);
+
+	return nn->nfsd_serv ? 0 : -ENODEV;
+}
+
+/**
+ * nfsd_nl_server_status_get_dumpit - dump server status info
+ * @skb: reply buffer
+ * @cb: netlink metadata and command arguments
+ *
+ * Returns the size of the reply or a negative errno.
+ */
+int nfsd_nl_server_status_get_dumpit(struct sk_buff *skb,
+				     struct netlink_callback *cb)
+{
+	struct net *net = sock_net(skb->sk);
+#ifdef CONFIG_NFSD_V4
+	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
+#endif /* CONFIG_NFSD_V4 */
+	void *hdr;
+
+	if (cb->args[0]) /* already consumed */
+		return 0;
+
+	hdr = genlmsg_put(skb, NETLINK_CB(cb->skb).portid, cb->nlh->nlmsg_seq,
+			  &nfsd_nl_family, NLM_F_MULTI,
+			  NFSD_CMD_SERVER_STATUS_GET);
+	if (!hdr)
+		return -ENOBUFS;
+
+	if (nla_put_u16(skb, NFSD_A_SERVER_ATTR_THREADS, nfsd_nrthreads(net)))
+		return -ENOBUFS;
+#ifdef CONFIG_NFSD_V4
+	if (nla_put_u8(skb, NFSD_A_SERVER_ATTR_V4_GRACE, !nn->grace_ended))
+		return -ENOBUFS;
+#endif /* CONFIG_NFSD_V4 */
+
+	genlmsg_end(skb, hdr);
+	cb->args[0] = 1;
+
+	return skb->len;
+}
+
+/**
  * nfsd_net_init - Prepare the nfsd_net portion of a new net namespace
  * @net: a freshly-created network namespace
  *
