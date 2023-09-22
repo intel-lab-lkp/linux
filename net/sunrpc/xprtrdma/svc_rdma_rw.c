@@ -273,7 +273,9 @@ static void svc_rdma_write_done(struct ib_cq *cq, struct ib_wc *wc)
 	switch (wc->status) {
 	case IB_WC_SUCCESS:
 		trace_svcrdma_wc_write(wc, &cc->cc_cid);
-		break;
+		svc_rdma_wake_send_waiters(rdma, cc->cc_sqecount);
+		svc_rdma_write_info_free(info);
+		return;
 	case IB_WC_WR_FLUSH_ERR:
 		trace_svcrdma_wc_write_flush(wc, &cc->cc_cid);
 		break;
@@ -282,11 +284,8 @@ static void svc_rdma_write_done(struct ib_cq *cq, struct ib_wc *wc)
 	}
 
 	svc_rdma_wake_send_waiters(rdma, cc->cc_sqecount);
-
-	if (unlikely(wc->status != IB_WC_SUCCESS))
-		svc_xprt_deferred_close(&rdma->sc_xprt);
-
 	svc_rdma_write_info_free(info);
+	svc_xprt_deferred_close(&rdma->sc_xprt);
 }
 
 /* State for pulling a Read chunk.
