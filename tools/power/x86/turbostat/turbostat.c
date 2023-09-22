@@ -6717,6 +6717,18 @@ void cmdline(int argc, char **argv)
 	}
 }
 
+void set_rlimit(void)
+{
+	struct rlimit limit;
+
+	limit.rlim_cur = 0x8000;
+	limit.rlim_max = 0x8000;
+
+	if (setrlimit(RLIMIT_NOFILE, &limit) < 0) {
+		err(1, "Failed to set rlimit");
+	}
+}
+
 int main(int argc, char **argv)
 {
 	outf = stderr;
@@ -6728,6 +6740,9 @@ int main(int argc, char **argv)
 	}
 
 	probe_sysfs();
+
+	if (!getuid())
+		set_rlimit();
 
 	turbostat_init();
 
