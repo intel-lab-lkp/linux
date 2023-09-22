@@ -1984,7 +1984,7 @@ static void __init deferred_free_range(unsigned long pfn,
 	if (nr_pages == MAX_ORDER_NR_PAGES && IS_MAX_ORDER_ALIGNED(pfn)) {
 		for (i = 0; i < nr_pages; i += pageblock_nr_pages)
 			set_pageblock_migratetype(page + i, MIGRATE_MOVABLE);
-		__free_pages_core(page, MAX_ORDER, MEMINIT_LATE);
+		__free_pages_core(page, MAX_ORDER, MEMINIT_EARLY);
 		return;
 	}
 
@@ -1994,7 +1994,7 @@ static void __init deferred_free_range(unsigned long pfn,
 	for (i = 0; i < nr_pages; i++, page++, pfn++) {
 		if (pageblock_aligned(pfn))
 			set_pageblock_migratetype(page, MIGRATE_MOVABLE);
-		__free_pages_core(page, 0, MEMINIT_LATE);
+		__free_pages_core(page, 0, MEMINIT_EARLY);
 	}
 }
 
@@ -2068,7 +2068,7 @@ static unsigned long  __init deferred_init_pages(struct zone *zone,
 		} else {
 			page++;
 		}
-		__init_single_page(page, pfn, zid, nid, true, false);
+		__init_single_page(page, pfn, zid, nid, false, false);
 		nr_pages++;
 	}
 	return (nr_pages);
