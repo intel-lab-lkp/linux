@@ -6955,6 +6955,7 @@ static void kswapd_try_to_sleep(pg_data_t *pgdat, int alloc_order, int reclaim_o
 	 * succeed.
 	 */
 	if (prepare_kswapd_sleep(pgdat, reclaim_order, highest_zoneidx)) {
+		int kcompactd_order;
 		/*
 		 * Compaction records what page blocks it recently failed to
 		 * isolate pages from and skips them in the future scanning.
@@ -6967,7 +6968,8 @@ static void kswapd_try_to_sleep(pg_data_t *pgdat, int alloc_order, int reclaim_o
 		 * We have freed the memory, now we should compact it to make
 		 * allocation of the requested order possible.
 		 */
-		wakeup_kcompactd(pgdat, alloc_order, highest_zoneidx);
+		kcompactd_order = max(alloc_order, pgdat->kswapd_order);
+		wakeup_kcompactd(pgdat, kcompactd_order, highest_zoneidx);
 
 		remaining = schedule_timeout(HZ/10);
 
