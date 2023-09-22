@@ -214,6 +214,9 @@ out:
 	ctxt->sc_send_wr.num_sge = 0;
 	ctxt->sc_cur_sge_no = 0;
 	ctxt->sc_page_count = 0;
+	ctxt->sc_wr_chain = &ctxt->sc_send_wr;
+	ctxt->sc_sqecount = 1;
+
 	return ctxt;
 
 out_empty:
@@ -303,51 +306,68 @@ flushed:
 }
 
 /**
- * svc_rdma_send - Post a single Send WR
- * @rdma: transport on which to post the WR
- * @ctxt: send ctxt with a Send WR ready to post
+ * svc_rdma_post_send - Post a WR chain to the Send Queue
+ * @rdma: transport context
+ * @ctxt: WR chain to post
  *
- * Returns zero if the Send WR was posted successfully. Otherwise, a
- * negative errno is returned.
+ * Return values:
+ *   %0: The chain was posted successfully
+ *   %-ENOTCONN: The connection was lost
  */
-int svc_rdma_send(struct svcxprt_rdma *rdma, struct svc_rdma_send_ctxt *ctxt)
+int svc_rdma_post_send(struct svcxprt_rdma *rdma,
+		       struct svc_rdma_send_ctxt *ctxt)
 {
-	struct ib_send_wr *wr = &ctxt->sc_send_wr;
-	int ret;
+	struct ib_send_wr *first_wr = ctxt->sc_wr_chain;
+	struct ib_send_wr *send_wr = &ctxt->sc_send_wr;
+	const struct ib_send_wr *bad_wr = first_wr;
 
 	might_sleep();
 
-	/* Sync the transport header buffer */
+	/* Sanity */
+	if (unlikely(ctxt->sc_sqecount > rdma->sc_sq_depth))
+		goto out_notconn;
+
 	ib_dma_sync_single_for_device(rdma->sc_cm_id->device,
-				      wr->sg_list[0].addr,
-				      wr->sg_list[0].length,
+				      send_wr->sg_list[0].addr,
+				      send_wr->sg_list[0].length,
 				      DMA_TO_DEVICE);
 
-	/* If the SQ is full, wait until an SQ entry is available */
-	while (1) {
-		if ((atomic_dec_return(&rdma->sc_sq_avail) < 0)) {
-			percpu_counter_inc(&svcrdma_stat_sq_starve);
-			trace_svcrdma_sq_full(rdma, &ctxt->sc_cid);
-			atomic_inc(&rdma->sc_sq_avail);
-			wait_event(rdma->sc_send_wait,
-				   atomic_read(&rdma->sc_sq_avail) > 1);
-			if (test_bit(XPT_CLOSE, &rdma->sc_xprt.xpt_flags))
-				return -ENOTCONN;
-			trace_svcrdma_sq_retry(rdma, &ctxt->sc_cid);
-			continue;
+	do {
+		if (unlikely(test_bit(XPT_CLOSE, &rdma->sc_xprt.xpt_flags)))
+			goto out_notconn;
+
+		if (atomic_sub_return(ctxt->sc_sqecount,
+				      &rdma->sc_sq_avail) > 0) {
+			int ret;
+
+			trace_svcrdma_post_send(ctxt);
+			ret = ib_post_send(rdma->sc_qp, first_wr, &bad_wr);
+			if (ret) {
+				trace_svcrdma_sq_post_err(rdma, &ctxt->sc_cid,
+							  ret);
+				break;
+			}
+			return 0;
 		}
 
-		trace_svcrdma_post_send(ctxt);
-		ret = ib_post_send(rdma->sc_qp, wr, NULL);
-		if (ret)
-			break;
-		return 0;
-	}
+		percpu_counter_inc(&svcrdma_stat_sq_starve);
+		trace_svcrdma_sq_full(rdma, &ctxt->sc_cid);
+		atomic_add(ctxt->sc_sqecount, &rdma->sc_sq_avail);
+		wait_event(rdma->sc_send_wait,
+			   atomic_read(&rdma->sc_sq_avail) > ctxt->sc_sqecount);
+		trace_svcrdma_sq_retry(rdma, &ctxt->sc_cid);
+	} while (true);
 
-	trace_svcrdma_sq_post_err(rdma, &ctxt->sc_cid, ret);
 	svc_xprt_deferred_close(&rdma->sc_xprt);
+
+	/* If even one was posted, there will be a completion. */
+	if (bad_wr != first_wr)
+		return 0;
+
+	atomic_add(ctxt->sc_sqecount, &rdma->sc_sq_avail);
 	wake_up(&rdma->sc_send_wait);
-	return ret;
+out_notconn:
+	return -ENOTCONN;
 }
 
 /**
@@ -861,7 +881,7 @@ static int svc_rdma_send_reply_msg(struct svcxprt_rdma *rdma,
 		sctxt->sc_send_wr.opcode = IB_WR_SEND;
 	}
 
-	return svc_rdma_send(rdma, sctxt);
+	return svc_rdma_post_send(rdma, sctxt);
 }
 
 /**
@@ -925,7 +945,7 @@ void svc_rdma_send_error_msg(struct svcxprt_rdma *rdma,
 	sctxt->sc_send_wr.num_sge = 1;
 	sctxt->sc_send_wr.opcode = IB_WR_SEND;
 	sctxt->sc_sges[0].length = sctxt->sc_hdrbuf.len;
-	if (svc_rdma_send(rdma, sctxt))
+	if (svc_rdma_post_send(rdma, sctxt))
 		goto put_ctxt;
 	return;
 
