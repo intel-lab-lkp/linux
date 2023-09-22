@@ -22,7 +22,7 @@ enum {
  * called again.
  */
 struct rxe_task {
-	struct work_struct	work;
+	struct tasklet_struct	tasklet;
 	int			state;
 	spinlock_t		lock;
 	struct rxe_qp		*qp;
@@ -31,10 +31,6 @@ struct rxe_task {
 	long			num_sched;
 	long			num_done;
 };
-
-int rxe_alloc_wq(void);
-
-void rxe_destroy_wq(void);
 
 /*
  * init rxe_task structure
