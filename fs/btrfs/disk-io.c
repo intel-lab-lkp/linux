@@ -3764,6 +3764,8 @@ static int write_dev_supers(struct btrfs_device *device,
 
 	if (max_mirrors == 0)
 		max_mirrors = BTRFS_SUPER_MIRROR_MAX;
+	if (btrfs_test_opt(fs_info, ABORT_SUPER))
+		max_mirrors = 1;
 
 	shash->tfm = fs_info->csum_shash;
 
@@ -3855,6 +3857,8 @@ static int wait_dev_supers(struct btrfs_device *device, int max_mirrors)
 
 	if (max_mirrors == 0)
 		max_mirrors = BTRFS_SUPER_MIRROR_MAX;
+	if (btrfs_test_opt(device->fs_info, ABORT_SUPER))
+		max_mirrors = 1;
 
 	for (i = 0; i < max_mirrors; i++) {
 		struct page *page;
@@ -3898,6 +3902,12 @@ static int wait_dev_supers(struct btrfs_device *device, int max_mirrors)
 	/* log error, force error return */
 	if (primary_failed) {
 		btrfs_err(device->fs_info, "error writing primary super block to device %llu",
+			  device->devid);
+		return -1;
+	}
+	if (errors >= i) {
+		btrfs_err(device->fs_info,
+			  "error writing super blocks to device %llu",
 			  device->devid);
 		return -1;
 	}
@@ -4064,6 +4074,8 @@ int write_all_supers(struct btrfs_fs_info *fs_info, int max_mirrors)
 	mutex_lock(&fs_info->fs_devices->device_list_mutex);
 	head = &fs_info->fs_devices->devices;
 	max_errors = btrfs_super_num_devices(fs_info->super_copy) - 1;
+	if (btrfs_test_opt(fs_info, ABORT_SUPER))
+		max_errors = 0;
 
 	if (do_barriers) {
 		ret = barrier_all_devices(fs_info);

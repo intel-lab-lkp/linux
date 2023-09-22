@@ -125,6 +125,11 @@ enum {
 	Opt_ignoredatacsums,
 	Opt_rescue_all,
 
+	/* Extra abort options. */
+	Opt_abort,
+	Opt_abort_super,
+	Opt_abort_all,
+
 	/* Deprecated options */
 	Opt_recovery,
 	Opt_inode_cache, Opt_noinode_cache,
@@ -187,8 +192,12 @@ static const match_table_t tokens = {
 	{Opt_notreelog, "notreelog"},
 	{Opt_user_subvol_rm_allowed, "user_subvol_rm_allowed"},
 
+	/* Abort options */
+	{Opt_abort, "abort=%s"},
+
 	/* Rescue options */
 	{Opt_rescue, "rescue=%s"},
+
 	/* Deprecated, with alias rescue=nologreplay */
 	{Opt_nologreplay, "nologreplay"},
 	/* Deprecated, with alias rescue=usebackuproot */
@@ -222,6 +231,12 @@ static const match_table_t rescue_tokens = {
 	{Opt_err, NULL},
 };
 
+static const match_table_t abort_tokens = {
+	{Opt_abort_super, "super"},
+	{Opt_abort_all, "all"},
+	{Opt_err, NULL},
+};
+
 static bool check_ro_option(struct btrfs_fs_info *fs_info, unsigned long opt,
 			    const char *opt_name)
 {
@@ -231,6 +246,48 @@ static bool check_ro_option(struct btrfs_fs_info *fs_info, unsigned long opt,
 		return true;
 	}
 	return false;
+}
+
+static int parse_abort_options(struct btrfs_fs_info *info, const char *options)
+{
+	char *opts;
+	char *orig;
+	char *p;
+	substring_t args[MAX_OPT_ARGS];
+	int ret = 0;
+
+	opts = kstrdup(options, GFP_KERNEL);
+	if (!opts)
+		return -ENOMEM;
+	orig = opts;
+
+	while ((p = strsep(&opts, ":")) != NULL) {
+		int token;
+
+		if (!*p)
+			continue;
+		token = match_token(p, abort_tokens, args);
+		switch (token) {
+		case Opt_abort_super:
+			btrfs_set_and_info(info, ABORT_SUPER,
+				"will abort if any super block write back failed");
+			break;
+		case Opt_abort_all:
+			btrfs_info(info, "enabling all abort options");
+			btrfs_set_and_info(info, ABORT_SUPER,
+				"will abort if any super block write back failed");
+			break;
+		case Opt_err:
+			btrfs_info(info, "unrecognized abort option '%s'", p);
+			ret = -EINVAL;
+			goto out;
+		default:
+			break;
+		}
+	}
+out:
+	kfree(orig);
+	return ret;
 }
 
 static int parse_rescue_options(struct btrfs_fs_info *info, const char *options)
@@ -736,6 +793,14 @@ int btrfs_parse_options(struct btrfs_fs_info *info, char *options,
 			}
 			info->commit_interval = intarg;
 			break;
+		case Opt_abort:
+			ret = parse_abort_options(info, args[0].from);
+			if (ret < 0) {
+				btrfs_err(info, "unrecognized abort value %s",
+					  args[0].from);
+				goto out;
+			}
+			break;
 		case Opt_rescue:
 			ret = parse_rescue_options(info, args[0].from);
 			if (ret < 0) {
@@ -1191,12 +1256,19 @@ static void print_rescue_option(struct seq_file *seq, const char *s, bool *print
 	*printed = true;
 }
 
+static void print_abort_option(struct seq_file *seq, const char *s, bool *printed)
+{
+	seq_printf(seq, "%s%s", (*printed) ? ":" : ",abort=", s);
+	*printed = true;
+}
+
 static int btrfs_show_options(struct seq_file *seq, struct dentry *dentry)
 {
 	struct btrfs_fs_info *info = btrfs_sb(dentry->d_sb);
 	const char *compress_type;
 	const char *subvol_name;
-	bool printed = false;
+	bool rescue_printed = false;
+	bool abort_printed = false;
 
 	if (btrfs_test_opt(info, DEGRADED))
 		seq_puts(seq, ",degraded");
@@ -1229,13 +1301,15 @@ static int btrfs_show_options(struct seq_file *seq, struct dentry *dentry)
 	if (btrfs_test_opt(info, NOTREELOG))
 		seq_puts(seq, ",notreelog");
 	if (btrfs_test_opt(info, NOLOGREPLAY))
-		print_rescue_option(seq, "nologreplay", &printed);
+		print_rescue_option(seq, "nologreplay", &rescue_printed);
 	if (btrfs_test_opt(info, USEBACKUPROOT))
-		print_rescue_option(seq, "usebackuproot", &printed);
+		print_rescue_option(seq, "usebackuproot", &rescue_printed);
 	if (btrfs_test_opt(info, IGNOREBADROOTS))
-		print_rescue_option(seq, "ignorebadroots", &printed);
+		print_rescue_option(seq, "ignorebadroots", &rescue_printed);
 	if (btrfs_test_opt(info, IGNOREDATACSUMS))
-		print_rescue_option(seq, "ignoredatacsums", &printed);
+		print_rescue_option(seq, "ignoredatacsums", &rescue_printed);
+	if (btrfs_test_opt(info, ABORT_SUPER))
+		print_abort_option(seq, "super", &abort_printed);
 	if (btrfs_test_opt(info, FLUSHONCOMMIT))
 		seq_puts(seq, ",flushoncommit");
 	if (btrfs_test_opt(info, DISCARD_SYNC))
