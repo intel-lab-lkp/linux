@@ -1916,7 +1916,7 @@ static void memcg_oom_recover(struct mem_cgroup *memcg)
 	 * achieved by invoking mem_cgroup_mark_under_oom() before
 	 * triggering notification.
 	 */
-	if (memcg && memcg->under_oom)
+	if (memcg && memcg->under_oom && !list_empty(&memcg_oom_waitq.head))
 		__wake_up(&memcg_oom_waitq, TASK_NORMAL, 0, memcg);
 }
 
