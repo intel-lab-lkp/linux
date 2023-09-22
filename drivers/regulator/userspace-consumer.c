@@ -115,11 +115,32 @@ static const struct attribute_group attr_group = {
 	.is_visible =  attr_visible,
 };
 
+#define SUPPLY_SUFFIX "-supply"
+#define SUPPLY_SUFFIX_LEN 7
+
+static int get_num_supplies(struct platform_device *pdev)
+{
+	struct  property *prop;
+	int num_supplies = 0;
+
+	for_each_property_of_node(pdev->dev.of_node, prop) {
+		const char *prop_name = prop->name;
+		int len = strlen(prop_name);
+
+		if (len > SUPPLY_SUFFIX_LEN &&
+		    strcmp(prop_name + len - SUPPLY_SUFFIX_LEN, SUPPLY_SUFFIX) == 0) {
+			num_supplies++;
+		}
+	}
+	return num_supplies;
+}
+
 static int regulator_userspace_consumer_probe(struct platform_device *pdev)
 {
 	struct regulator_userspace_consumer_data tmpdata;
 	struct regulator_userspace_consumer_data *pdata;
 	struct userspace_consumer_data *drvdata;
+	struct  property *prop;
 	int ret;
 
 	pdata = dev_get_platdata(&pdev->dev);
@@ -131,11 +152,27 @@ static int regulator_userspace_consumer_probe(struct platform_device *pdev)
 		memset(pdata, 0, sizeof(*pdata));
 
 		pdata->no_autoswitch = true;
-		pdata->num_supplies = 1;
-		pdata->supplies = devm_kzalloc(&pdev->dev, sizeof(*pdata->supplies), GFP_KERNEL);
+		pdata->num_supplies = get_num_supplies(pdev);
+
+		pdata->supplies = devm_kzalloc(&pdev->dev, pdata->num_supplies *
+					       sizeof(*pdata->supplies), GFP_KERNEL);
 		if (!pdata->supplies)
 			return -ENOMEM;
-		pdata->supplies[0].supply = "vout";
+
+		for_each_property_of_node(pdev->dev.of_node, prop) {
+			const char *prop_name = prop->name;
+			int len = strlen(prop_name);
+
+			if (len > SUPPLY_SUFFIX_LEN &&
+			    strcmp(prop_name + len - SUPPLY_SUFFIX_LEN, SUPPLY_SUFFIX) == 0) {
+				char *supply_name = devm_kzalloc(&pdev->dev,
+								 len - SUPPLY_SUFFIX_LEN + 1,
+								 GFP_KERNEL);
+				strscpy(supply_name, prop_name, len - SUPPLY_SUFFIX_LEN);
+				supply_name[len - SUPPLY_SUFFIX_LEN] = '\0';
+				pdata->supplies[0].supply = supply_name;
+			}
+		}
 	}
 
 	if (pdata->num_supplies < 1) {
