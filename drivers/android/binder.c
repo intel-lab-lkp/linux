@@ -4831,6 +4831,9 @@ static void binder_release_work(struct binder_proc *proc,
 		} break;
 		case BINDER_WORK_NODE:
 			break;
+		case BINDER_WORK_TRANSACTION_ONEWAY_SPAM_SUSPECT:
+			kfree(w);
+			break;
 		default:
 			pr_err("unexpected work type, %d, not freed\n",
 			       wtype);
