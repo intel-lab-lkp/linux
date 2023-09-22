@@ -46,6 +46,7 @@
 #define GET_STT_MIN_LIMIT	0x1F
 #define GET_STT_LIMIT_APU	0x20
 #define GET_STT_LIMIT_HS2	0x21
+#define SET_P3T				0x23 /* P3T: Peak Package Power Limit */
 
 /* OS slider update notification */
 #define DC_BEST_PERF		0
@@ -69,6 +70,7 @@
 #define PMF_POLICY_STT_MIN					6
 #define PMF_POLICY_STT_SKINTEMP_APU				7
 #define PMF_POLICY_STT_SKINTEMP_HS2				8
+#define PMF_POLICY_P3T						38
 
 /* TA macros */
 #define PMF_TA_IF_VERSION__MAJOR				1
@@ -472,6 +474,7 @@ struct pmf_action_table {
 	unsigned long stt_minlimit; /* in mW */
 	unsigned long stt_skintemp_apu; /* in C */
 	unsigned long stt_skintemp_hs2; /* in C */
+	unsigned long p3t_limit; /* in mW */
 };
 
 /* Input conditions */
