@@ -2522,6 +2522,29 @@ void inode_nohighmem(struct inode *inode)
 EXPORT_SYMBOL(inode_nohighmem);
 
 /**
+ * timestamp_truncate_to_gran - Truncate timespec to a granularity
+ * @t: Timespec
+ * @gran: the specified granularity (in ns)
+ *
+ * Truncate a timespec to the specified granularity. Always rounds down.
+ * gran must not be 0 nor greater than a second (NSEC_PER_SEC, or 10^9 ns).
+ */
+struct timespec64 timestamp_truncate_to_gran(struct timespec64 t, unsigned int gran)
+{
+	/* Avoid division in the common cases 1 ns and 1 s. */
+	if (gran == 1)
+		; /* nothing */
+	else if (gran == NSEC_PER_SEC)
+		t.tv_nsec = 0;
+	else if (gran > 1 && gran < NSEC_PER_SEC)
+		t.tv_nsec -= t.tv_nsec % gran;
+	else
+		WARN(1, "invalid file time granularity: %u", gran);
+	return t;
+}
+EXPORT_SYMBOL(timestamp_truncate_to_gran);
+
+/**
  * timestamp_truncate - Truncate timespec to a granularity
  * @t: Timespec
  * @inode: inode being updated
@@ -2536,19 +2559,12 @@ struct timespec64 timestamp_truncate(struct timespec64 t, struct inode *inode)
 	unsigned int gran = sb->s_time_gran;
 
 	t.tv_sec = clamp(t.tv_sec, sb->s_time_min, sb->s_time_max);
-	if (unlikely(t.tv_sec == sb->s_time_max || t.tv_sec == sb->s_time_min))
+	if (unlikely(t.tv_sec == sb->s_time_max || t.tv_sec == sb->s_time_min)) {
 		t.tv_nsec = 0;
+		return t;
+	}
 
-	/* Avoid division in the common cases 1 ns and 1 s. */
-	if (gran == 1)
-		; /* nothing */
-	else if (gran == NSEC_PER_SEC)
-		t.tv_nsec = 0;
-	else if (gran > 1 && gran < NSEC_PER_SEC)
-		t.tv_nsec -= t.tv_nsec % gran;
-	else
-		WARN(1, "invalid file time granularity: %u", gran);
-	return t;
+	return timestamp_truncate_to_gran(t, gran);
 }
 EXPORT_SYMBOL(timestamp_truncate);
 
