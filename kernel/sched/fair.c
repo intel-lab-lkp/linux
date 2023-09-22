@@ -12693,6 +12693,9 @@ int sched_group_set_shares(struct task_group *tg, unsigned long shares)
 {
 	int ret;
 
+	if (tg == &root_task_group)
+		return -EINVAL;
+
 	mutex_lock(&shares_mutex);
 	if (tg_is_idle(tg))
 		ret = -EINVAL;
