@@ -54,9 +54,12 @@ enum autochan {
 static unsigned int size_from_channelarray(struct iio_channel_info *channels, int num_channels)
 {
 	unsigned int bytes = 0;
-	int i = 0;
+	int i = 0, max = 0;
+	unsigned int misalignment;
 
 	while (i < num_channels) {
+		if (channels[i].bytes > max)
+			max = channels[i].bytes;
 		if (bytes % channels[i].bytes == 0)
 			channels[i].location = bytes;
 		else
@@ -65,6 +68,16 @@ static unsigned int size_from_channelarray(struct iio_channel_info *channels, in
 
 		bytes = channels[i].location + channels[i].bytes;
 		i++;
+	}
+	/*
+	 * We wan't the data in next sample to also be properly aligned so
+	 * we'll add padding at the end if needed. TODO: should we use fixed
+	 * 8 byte alignment instead of the size of the biggest samnple?
+	 */
+	misalignment = bytes % max;
+	if (misalignment) {
+		printf("Misalignment %u. Adding Padding %u\n", misalignment,  max - misalignment);
+		bytes += max - misalignment;
 	}
 
 	return bytes;
