@@ -290,6 +290,9 @@ static ssize_t amd_pmf_get_pb_data(struct file *filp, const char __user *buf,
 	if (copy_from_user(dev->policy_buf, buf, dev->policy_sz))
 		return -EFAULT;
 
+	print_hex_dump_debug("(pb):  ", DUMP_PREFIX_OFFSET, 16, 1, dev->policy_buf,
+			     dev->policy_sz, false);
+
 	ret = amd_pmf_start_policy_engine(dev);
 	if (ret)
 		return -EINVAL;
@@ -329,6 +332,10 @@ static int amd_pmf_get_bios_buffer(struct amd_pmf_dev *dev)
 		return -ENOMEM;
 
 	memcpy(dev->policy_buf, dev->policy_base, dev->policy_sz);
+#ifdef CONFIG_AMD_PMF_DEBUG
+	print_hex_dump_debug("(pb):  ", DUMP_PREFIX_OFFSET, 16, 1, dev->policy_buf,
+			     dev->policy_sz, false);
+#endif
 
 #ifdef CONFIG_AMD_PMF_DEBUG
 	if (pb_side_load)
