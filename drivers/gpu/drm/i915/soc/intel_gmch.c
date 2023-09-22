@@ -12,6 +12,7 @@
 #include "i915_drv.h"
 #include "intel_gmch.h"
 #include "intel_pci_config.h"
+#include <linux/vgaarb.h>
 
 static void intel_gmch_bridge_release(struct drm_device *dev, void *bridge)
 {
@@ -166,4 +167,17 @@ int intel_gmch_vga_set_state(struct drm_i915_private *i915, bool enable_decode)
 	}
 
 	return 0;
+}
+
+unsigned int intel_gmch_vga_set_decode(struct pci_dev *pdev, bool enable_decode)
+{
+	struct drm_i915_private *i915 = pdev_to_i915(pdev);
+
+	intel_gmch_vga_set_state(i915, enable_decode);
+
+	if (enable_decode)
+		return VGA_RSRC_LEGACY_IO | VGA_RSRC_LEGACY_MEM |
+		       VGA_RSRC_NORMAL_IO | VGA_RSRC_NORMAL_MEM;
+	else
+		return VGA_RSRC_NORMAL_IO | VGA_RSRC_NORMAL_MEM;
 }
