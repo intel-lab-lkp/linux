@@ -4786,8 +4786,8 @@ static const struct usb_gadget_ops dwc2_hsotg_gadget_ops = {
  */
 static void dwc2_hsotg_initep(struct dwc2_hsotg *hsotg,
 			      struct dwc2_hsotg_ep *hs_ep,
-				       int epnum,
-				       bool dir_in)
+			      unsigned int epnum,
+			      bool dir_in)
 {
 	char *dir;
 
@@ -4801,7 +4801,7 @@ static void dwc2_hsotg_initep(struct dwc2_hsotg *hsotg,
 	hs_ep->dir_in = dir_in;
 	hs_ep->index = epnum;
 
-	snprintf(hs_ep->name, sizeof(hs_ep->name), "ep%d%s", epnum, dir);
+	snprintf(hs_ep->name, sizeof(hs_ep->name), "ep%u%s", epnum, dir);
 
 	INIT_LIST_HEAD(&hs_ep->queue);
 	INIT_LIST_HEAD(&hs_ep->ep.ep_list);
@@ -4965,7 +4965,7 @@ static void dwc2_hsotg_dump(struct dwc2_hsotg *hsotg)
 int dwc2_gadget_init(struct dwc2_hsotg *hsotg)
 {
 	struct device *dev = hsotg->dev;
-	int epnum;
+	unsigned int epnum;
 	int ret;
 
 	/* Dump fifo information */
