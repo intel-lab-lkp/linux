@@ -110,6 +110,7 @@ struct tipd_data {
 	int (*read_events)(struct tps6598x *tps, void *events);
 	int (*clear_events)(struct tps6598x *tps, void *events);
 	int (*register_port)(struct tps6598x *tps, struct fwnode_handle *node);
+	void (*trace_irq)(void *events);
 };
 
 struct tps6598x {
@@ -534,6 +535,13 @@ static int tps6598x_clear_events(struct tps6598x *tps, void *events)
 	       tps6598x_write64(tps, TPS_REG_INT_CLEAR2, e[1]);
 }
 
+static void tps6598x_trace_irq(void *events)
+{
+	uint64_t *e = events;
+
+	trace_tps6598x_irq(e[0], e[1]);
+}
+
 static int tps25750_read_events(struct tps6598x *tps, void *events)
 {
 	return tps6598x_block_read(tps, TPS_REG_INT_EVENT1, events, 11);
@@ -542,6 +550,11 @@ static int tps25750_read_events(struct tps6598x *tps, void *events)
 static int tps25750_clear_events(struct tps6598x *tps, void *events)
 {
 	return tps6598x_block_write(tps, TPS_REG_INT_CLEAR1, events, 11);
+}
+
+static void tps25750_trace_irq(void *events)
+{
+	trace_tps25750_irq(*(uint64_t *)events);
 }
 
 static irqreturn_t cd321x_interrupt(int irq, void *data)
@@ -610,7 +623,7 @@ static irqreturn_t tps6598x_interrupt(int irq, void *data)
 		dev_err(tps->dev, "%s: failed to read events\n", __func__);
 		goto err_unlock;
 	}
-	trace_tps6598x_irq(event[0], event[1]);
+	tps->cb.trace_irq(event);
 
 	if (!(event[0] | event[1]))
 		goto err_unlock;
@@ -1155,6 +1168,7 @@ static const struct tipd_data tps6598x_data = {
 	.read_events = tps6598x_read_events,
 	.clear_events = tps6598x_clear_events,
 	.register_port = tps6598x_register_port,
+	.trace_irq = tps6598x_trace_irq,
 };
 
 static const struct tipd_data tps25750_data = {
@@ -1162,6 +1176,7 @@ static const struct tipd_data tps25750_data = {
 	.read_events = tps25750_read_events,
 	.clear_events = tps25750_clear_events,
 	.register_port = tps25750_register_port,
+	.trace_irq = tps25750_trace_irq,
 };
 
 static int tps6598x_probe(struct i2c_client *client)
