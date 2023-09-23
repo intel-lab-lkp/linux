@@ -141,6 +141,10 @@ static int hsr_portdev_setup(struct hsr_priv *hsr, struct net_device *dev,
 	}
 
 	master = hsr_port_get_hsr(hsr, HSR_PT_MASTER);
+
+	if (!master)
+		return -ENODEV;
+
 	hsr_dev = master->dev;
 
 	res = netdev_upper_dev_link(dev, hsr_dev, extack);
