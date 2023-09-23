@@ -253,7 +253,7 @@ int get_dma_residue(unsigned int chan)
 	dma_t *dma = dma_channel(chan);
 	int ret = 0;
 
-	if (dma->d_ops->residue)
+	if (dma && dma->d_ops->residue)
 		ret = dma->d_ops->residue(chan, dma);
 
 	return ret;
