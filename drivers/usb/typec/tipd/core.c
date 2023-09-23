@@ -39,6 +39,7 @@
 #define TPS_REG_CTRL_CONF		0x29
 #define TPS_REG_BOOT_STATUS		0x2D
 #define TPS_REG_POWER_STATUS		0x3f
+#define TPS_REG_PD_STATUS		0x40
 #define TPS_REG_RX_IDENTITY_SOP		0x48
 #define TPS_REG_DATA_STATUS		0x5f
 
@@ -107,6 +108,7 @@ struct tipd_data {
 	irq_handler_t irq_handler;
 	int (*read_events)(struct tps6598x *tps, void *events);
 	int (*clear_events)(struct tps6598x *tps, void *events);
+	int (*register_port)(struct tps6598x *tps, struct fwnode_handle *node);
 };
 
 struct tps6598x {
@@ -209,6 +211,11 @@ static inline int tps6598x_read32(struct tps6598x *tps, u8 reg, u32 *val)
 static inline int tps6598x_read64(struct tps6598x *tps, u8 reg, u64 *val)
 {
 	return tps6598x_block_read(tps, reg, val, sizeof(u64));
+}
+
+static inline int tps6598x_write8(struct tps6598x *tps, u8 reg, u8 val)
+{
+	return tps6598x_block_write(tps, reg, &val, sizeof(u8));
 }
 
 static inline int tps6598x_write64(struct tps6598x *tps, u8 reg, u64 val)
@@ -1065,20 +1072,77 @@ tps6598x_register_port(struct tps6598x *tps, struct fwnode_handle *fwnode)
 	return 0;
 }
 
+static int
+tps25750_register_port(struct tps6598x *tps, struct fwnode_handle *fwnode)
+{
+	struct typec_capability typec_cap = { };
+	const char *data_role;
+	u8 pd_status;
+	int ret;
+
+	ret = tps6598x_read8(tps, TPS_REG_PD_STATUS, &pd_status);
+	if (ret)
+		return ret;
+
+	ret = fwnode_property_read_string(fwnode, "data-role", &data_role);
+	if (ret) {
+		dev_err(tps->dev, "data-role not found: %d\n", ret);
+		return ret;
+	}
+
+	ret = typec_find_port_data_role(data_role);
+	if (ret < 0) {
+		dev_err(tps->dev, "unknown data-role: %s\n", data_role);
+		return ret;
+	}
+
+	typec_cap.data = ret;
+	typec_cap.revision = USB_TYPEC_REV_1_3;
+	typec_cap.pd_revision = 0x300;
+	typec_cap.driver_data = tps;
+	typec_cap.ops = &tps6598x_ops;
+	typec_cap.fwnode = fwnode;
+	typec_cap.prefer_role = TYPEC_NO_PREFERRED_ROLE;
+
+	switch (TPS_PD_STATUS_PORT_TYPE(pd_status)) {
+	case TPS_PD_STATUS_PORT_TYPE_SINK_SOURCE:
+	case TPS_PD_STATUS_PORT_TYPE_SOURCE_SINK:
+		typec_cap.type = TYPEC_PORT_DRP;
+		break;
+	case TPS_PD_STATUS_PORT_TYPE_SINK:
+		typec_cap.type = TYPEC_PORT_SNK;
+		break;
+	case TPS_PD_STATUS_PORT_TYPE_SOURCE:
+		typec_cap.type = TYPEC_PORT_SRC;
+		break;
+	default:
+		return -ENODEV;
+	}
+
+	tps->port = typec_register_port(tps->dev, &typec_cap);
+	if (IS_ERR(tps->port))
+		return PTR_ERR(tps->port);
+
+	return 0;
+}
+
 static const struct tipd_data cd321x_data = {
 	.irq_handler = cd321x_interrupt,
+	.register_port = tps6598x_register_port,
 };
 
 static const struct tipd_data tps6598x_data = {
 	.irq_handler = tps6598x_interrupt,
 	.read_events = tps6598x_read_events,
 	.clear_events = tps6598x_clear_events,
+	.register_port = tps6598x_register_port,
 };
 
 static const struct tipd_data tps25750_data = {
 	.irq_handler = tps6598x_interrupt,
 	.read_events = tps25750_read_events,
 	.clear_events = tps25750_clear_events,
+	.register_port = tps25750_register_port,
 };
 
 static int tps6598x_probe(struct i2c_client *client)
@@ -1181,7 +1245,7 @@ static int tps6598x_probe(struct i2c_client *client)
 	if (ret)
 		goto err_role_put;
 
-	ret = tps6598x_register_port(tps, fwnode);
+	ret = tps->cb.register_port(tps, fwnode);
 	if (ret)
 		goto err_role_put;
 
