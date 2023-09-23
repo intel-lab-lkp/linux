@@ -73,13 +73,22 @@ int hda_dsp_trace_release(struct snd_sof_dev *sdev)
 {
 	struct sof_intel_hda_dev *hda = sdev->pdata->hw_pdata;
 	struct hdac_stream *hstream;
+	int ret;
 
 	if (hda->dtrace_stream) {
 		hstream = &hda->dtrace_stream->hstream;
-		hda_dsp_stream_put(sdev,
+		ret = hda_dsp_stream_put(sdev,
 				   SNDRV_PCM_STREAM_CAPTURE,
 				   hstream->stream_tag);
+
 		hda->dtrace_stream = NULL;
+
+		if (ret < 0) {
+			dev_dbg(sdev->dev,
+				"stream put failed: %d\n", ret);
+			return ret;
+		}
+
 		return 0;
 	}
 
