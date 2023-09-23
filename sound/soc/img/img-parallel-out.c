@@ -137,7 +137,10 @@ static int img_prl_out_hw_params(struct snd_pcm_substream *substream,
 	if (channels != 2)
 		return -EINVAL;
 
-	clk_set_rate(prl->clk_ref, rate * 256);
+	int ret = clk_set_rate(prl->clk_ref, rate * 256);
+
+	if (!ret)
+		return ret;
 
 	reg = img_prl_out_readl(prl, IMG_PRL_OUT_CTL);
 	reg = (reg & ~IMG_PRL_OUT_CTL_PACKH_MASK) | control_set;
