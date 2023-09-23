@@ -261,6 +261,7 @@ static struct notifier_block dc21285_pci_bus_nb = {
 int __init dc21285_setup(int nr, struct pci_sys_data *sys)
 {
 	struct resource *res;
+	int error;
 
 	res = kcalloc(2, sizeof(struct resource), GFP_KERNEL);
 	if (!res) {
@@ -273,10 +274,21 @@ int __init dc21285_setup(int nr, struct pci_sys_data *sys)
 	res[1].flags = IORESOURCE_MEM | IORESOURCE_PREFETCH;
 	res[1].name  = "Footbridge prefetch";
 
-	allocate_resource(&iomem_resource, &res[1], 0x20000000,
+	error = allocate_resource(&iomem_resource, &res[1], 0x20000000,
 			  0xa0000000, 0xffffffff, 0x20000000, NULL, NULL);
+	if (error < 0) {
+		printk(KERN_ERR "%s: allocate_resource failed %d!"
+		       , __func__, error);
+		return 0;
+	}
+
 	allocate_resource(&iomem_resource, &res[0], 0x40000000,
 			  0x80000000, 0xffffffff, 0x40000000, NULL, NULL);
+	if (error < 0) {
+		printk(KERN_ERR "%s: allocate_resource failed %d!"
+		       , __func__, error);
+		return 0;
+	}
 
 	sys->mem_offset  = DC21285_PCI_MEM;
 
