@@ -36,6 +36,13 @@ static struct vchiq_debugfs_log_entry vchiq_debugfs_log_entries[] = {
 	{ "arm",  &vchiq_arm_log_level },
 };
 
+static int vchiq_dump_show(struct seq_file *f, void *offset)
+{
+	vchiq_dump_state(f, &g_state);
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(vchiq_dump);
+
 static int debugfs_log_show(struct seq_file *f, void *offset)
 {
 	int *levp = f->private;
@@ -210,6 +217,9 @@ void vchiq_debugfs_init(void)
 
 	vchiq_dbg_dir = debugfs_create_dir("vchiq", NULL);
 	vchiq_dbg_clients = debugfs_create_dir("clients", vchiq_dbg_dir);
+
+	debugfs_create_file("state", S_IFREG | 0444, vchiq_dbg_dir, NULL,
+			    &vchiq_dump_fops);
 
 	/* create an entry under <debugfs>/vchiq/log for each log category */
 	dir = debugfs_create_dir("log", vchiq_dbg_dir);
