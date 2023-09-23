@@ -111,6 +111,7 @@ struct tipd_data {
 	int (*clear_events)(struct tps6598x *tps, void *events);
 	int (*register_port)(struct tps6598x *tps, struct fwnode_handle *node);
 	void (*trace_irq)(void *events);
+	void (*trace_power_status)(u16 status);
 };
 
 struct tps6598x {
@@ -501,7 +502,9 @@ static bool tps6598x_read_power_status(struct tps6598x *tps)
 		return false;
 	}
 	tps->pwr_status = pwr_status;
-	trace_tps6598x_power_status(pwr_status);
+
+	if (tps->cb.trace_power_status)
+		tps->cb.trace_power_status(pwr_status);
 
 	return true;
 }
@@ -1161,6 +1164,7 @@ tps25750_register_port(struct tps6598x *tps, struct fwnode_handle *fwnode)
 static const struct tipd_data cd321x_data = {
 	.irq_handler = cd321x_interrupt,
 	.register_port = tps6598x_register_port,
+	.trace_power_status = trace_tps6598x_power_status,
 };
 
 static const struct tipd_data tps6598x_data = {
@@ -1169,6 +1173,7 @@ static const struct tipd_data tps6598x_data = {
 	.clear_events = tps6598x_clear_events,
 	.register_port = tps6598x_register_port,
 	.trace_irq = tps6598x_trace_irq,
+	.trace_power_status = trace_tps6598x_power_status,
 };
 
 static const struct tipd_data tps25750_data = {
@@ -1177,6 +1182,7 @@ static const struct tipd_data tps25750_data = {
 	.clear_events = tps25750_clear_events,
 	.register_port = tps25750_register_port,
 	.trace_irq = tps25750_trace_irq,
+	.trace_power_status = trace_tps25750_power_status,
 };
 
 static int tps6598x_probe(struct i2c_client *client)
