@@ -1,0 +1,171 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/clock/qcom,camcc.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Qualcomm Camera Clock & Reset Controller
+
+maintainers:
+  - Bjorn Andersson <andersson@kernel.org>
+  - Jonathan Marek <jonathan@marek.ca>
+  - Konrad Dybcio <konrad.dybcio@linaro.org>
+  - Taniya Das <quic_tdas@quicinc.com>
+  - Vladimir Zapolskiy <vladimir.zapolskiy@linaro.org>
+
+description: |
+  Qualcomm camera clock control module provides the clocks, resets and power
+  domains on Qualcomm SoCs.
+
+  See also:: include/dt-bindings/clock/qcom,camcc-sc7180.h
+  See also:: include/dt-bindings/clock/qcom,camcc-sc7280.h
+  See also:: include/dt-bindings/clock/qcom,camcc-sdm845.h
+  See also:: include/dt-bindings/clock/qcom,camcc-sm8250.h
+  See also:: include/dt-bindings/clock/qcom,sm6350-camcc.h
+  See also:: include/dt-bindings/clock/qcom,sm8450-camcc.h
+  See also:: include/dt-bindings/clock/qcom,sm8550-camcc.h
+
+properties:
+  compatible:
+    enum:
+      - qcom,sc7180-camcc
+      - qcom,sc7280-camcc
+      - qcom,sdm845-camcc
+      - qcom,sm6350-camcc
+      - qcom,sm8250-camcc
+      - qcom,sm8450-camcc
+      - qcom,sm8550-camcc
+
+  clocks:
+    minItems: 1
+    maxItems: 4
+
+  clock-names:
+    minItems: 1
+    maxItems: 4
+
+  '#clock-cells':
+    const: 1
+
+  '#reset-cells':
+    const: 1
+
+  '#power-domain-cells':
+    const: 1
+
+  power-domains:
+    maxItems: 1
+    description:
+      A phandle and PM domain specifier for the MMCX power domain.
+
+  reg:
+    maxItems: 1
+
+  required-opps:
+    maxItems: 1
+    description:
+      OPP node describing required MMCX performance point.
+
+required:
+  - compatible
+  - reg
+  - clocks
+  - '#clock-cells'
+  - '#reset-cells'
+  - '#power-domain-cells'
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          enum:
+            - qcom,sc7180-camcc
+    then:
+      properties:
+        clocks:
+          items:
+            - description: Board XO source
+            - description: Camera_ahb clock from GCC
+            - description: Camera XO clock from GCC
+        clock-names:
+          items:
+            - const: bi_tcxo
+            - const: iface
+            - const: xo
+  - if:
+      properties:
+        compatible:
+          enum:
+            - qcom,sdm845-camcc
+            - qcom,sm6350-camcc
+    then:
+      properties:
+        clocks:
+          items:
+            - description: Board XO source
+        clock-names:
+          items:
+            - const: bi_tcxo
+  - if:
+      properties:
+        compatible:
+          enum:
+            - qcom,sc7280-camcc
+    then:
+      properties:
+        clocks:
+          items:
+            - description: Board XO source
+            - description: Board XO active source
+            - description: Sleep clock source
+        clock-names:
+          items:
+            - const: bi_tcxo
+            - const: bi_tcxo_ao
+            - const: sleep_clk
+  - if:
+      properties:
+        compatible:
+          enum:
+            - qcom,sm8250-camcc
+            - qcom,sm8450-camcc
+    then:
+      properties:
+        clocks:
+          items:
+            - description: AHB
+            - description: Board XO source
+            - description: Board active XO source
+            - description: Sleep clock source
+        clock-names:
+          items:
+            - const: iface
+            - const: bi_tcxo
+            - const: bi_tcxo_ao
+            - const: sleep_clk
+      required:
+        - power-domains
+        - required-opps
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/clock/qcom,gcc-sm8250.h>
+    #include <dt-bindings/clock/qcom,rpmh.h>
+    #include <dt-bindings/power/qcom,rpmhpd.h>
+    clock-controller@ad00000 {
+      compatible = "qcom,sm8250-camcc";
+      reg = <0x0ad00000 0x10000>;
+      clocks = <&gcc GCC_CAMERA_AHB_CLK>,
+               <&rpmhcc RPMH_CXO_CLK>,
+               <&rpmhcc RPMH_CXO_CLK_A>,
+               <&sleep_clk>;
+      clock-names = "iface", "bi_tcxo", "bi_tcxo_ao", "sleep_clk";
+      #clock-cells = <1>;
+      #reset-cells = <1>;
+      #power-domain-cells = <1>;
+      power-domains = <&rpmhpd RPMHPD_MMCX>;
+      required-opps = <&rpmhpd_opp_low_svs>;
+    };
+...
