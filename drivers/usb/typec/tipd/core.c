@@ -112,6 +112,7 @@ struct tipd_data {
 	int (*register_port)(struct tps6598x *tps, struct fwnode_handle *node);
 	void (*trace_irq)(void *events);
 	void (*trace_power_status)(u16 status);
+	void (*trace_status)(u32 status);
 };
 
 struct tps6598x {
@@ -471,7 +472,9 @@ static bool tps6598x_read_status(struct tps6598x *tps, u32 *status)
 		dev_err(tps->dev, "%s: failed to read status\n", __func__);
 		return false;
 	}
-	trace_tps6598x_status(*status);
+
+	if (tps->cb.trace_status)
+		tps->cb.trace_status(*status);
 
 	return true;
 }
@@ -1165,6 +1168,7 @@ static const struct tipd_data cd321x_data = {
 	.irq_handler = cd321x_interrupt,
 	.register_port = tps6598x_register_port,
 	.trace_power_status = trace_tps6598x_power_status,
+	.trace_status = trace_tps6598x_status,
 };
 
 static const struct tipd_data tps6598x_data = {
@@ -1174,6 +1178,7 @@ static const struct tipd_data tps6598x_data = {
 	.register_port = tps6598x_register_port,
 	.trace_irq = tps6598x_trace_irq,
 	.trace_power_status = trace_tps6598x_power_status,
+	.trace_status = trace_tps6598x_status,
 };
 
 static const struct tipd_data tps25750_data = {
@@ -1183,6 +1188,7 @@ static const struct tipd_data tps25750_data = {
 	.register_port = tps25750_register_port,
 	.trace_irq = tps25750_trace_irq,
 	.trace_power_status = trace_tps25750_power_status,
+	.trace_status = trace_tps25750_status,
 };
 
 static int tps6598x_probe(struct i2c_client *client)
@@ -1259,10 +1265,8 @@ static int tps6598x_probe(struct i2c_client *client)
 	if (ret)
 		goto err_reset_controller;
 
-	ret = tps6598x_read32(tps, TPS_REG_STATUS, &status);
-	if (ret < 0)
+	if (!tps6598x_read_status(tps, &status))
 		goto err_clear_mask;
-	trace_tps6598x_status(status);
 
 	/*
 	 * This fwnode has a "compatible" property, but is never populated as a
