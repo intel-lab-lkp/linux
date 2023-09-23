@@ -7733,6 +7733,16 @@ nla_put_failure:
 	return -1;
 }
 
+static void audit_log_obj_reset(const struct nft_table *table,
+				unsigned int base_seq, unsigned int nentries)
+{
+	char *buf = kasprintf(GFP_ATOMIC, "%s:%u", table->name, base_seq);
+
+	audit_log_nfcfg(buf, table->family, nentries,
+			AUDIT_NFT_OP_OBJ_RESET, GFP_ATOMIC);
+	kfree(buf);
+}
+
 struct nft_obj_dump_ctx {
 	unsigned int	s_idx;
 	char		*table;
@@ -7748,8 +7758,10 @@ static int nf_tables_dump_obj(struct sk_buff *skb, struct netlink_callback *cb)
 	int family = nfmsg->nfgen_family;
 	struct nftables_pernet *nft_net;
 	const struct nft_table *table;
+	unsigned int entries = 0;
 	struct nft_object *obj;
 	unsigned int idx = 0;
+	int rc = 0;
 
 	rcu_read_lock();
 	nft_net = nft_pernet(net);
@@ -7759,6 +7771,7 @@ static int nf_tables_dump_obj(struct sk_buff *skb, struct netlink_callback *cb)
 		if (family != NFPROTO_UNSPEC && family != table->family)
 			continue;
 
+		entries = 0;
 		list_for_each_entry_rcu(obj, &table->objects, list) {
 			if (!nft_is_active(net, obj))
 				goto cont;
@@ -7769,34 +7782,27 @@ static int nf_tables_dump_obj(struct sk_buff *skb, struct netlink_callback *cb)
 			if (ctx->type != NFT_OBJECT_UNSPEC &&
 			    obj->ops->type->type != ctx->type)
 				goto cont;
-			if (ctx->reset) {
-				char *buf = kasprintf(GFP_ATOMIC,
-						      "%s:%u",
-						      table->name,
-						      nft_net->base_seq);
 
-				audit_log_nfcfg(buf,
-						family,
-						obj->handle,
-						AUDIT_NFT_OP_OBJ_RESET,
-						GFP_ATOMIC);
-				kfree(buf);
-			}
+			rc = nf_tables_fill_obj_info(skb, net,
+						     NETLINK_CB(cb->skb).portid,
+						     cb->nlh->nlmsg_seq,
+						     NFT_MSG_NEWOBJ,
+						     NLM_F_MULTI | NLM_F_APPEND,
+						     table->family, table,
+						     obj, ctx->reset);
+			if (rc < 0)
+				break;
 
-			if (nf_tables_fill_obj_info(skb, net, NETLINK_CB(cb->skb).portid,
-						    cb->nlh->nlmsg_seq,
-						    NFT_MSG_NEWOBJ,
-						    NLM_F_MULTI | NLM_F_APPEND,
-						    table->family, table,
-						    obj, ctx->reset) < 0)
-				goto done;
-
+			entries++;
 			nl_dump_check_consistent(cb, nlmsg_hdr(skb));
 cont:
 			idx++;
 		}
+		if (ctx->reset && entries)
+			audit_log_obj_reset(table, nft_net->base_seq, entries);
+		if (rc < 0)
+			break;
 	}
-done:
 	rcu_read_unlock();
 
 	ctx->s_idx = idx;
@@ -7977,8 +7983,7 @@ static int nf_tables_getobj_reset(struct sk_buff *skb,
 		return PTR_ERR(skb2);
 
 	buf = kasprintf(GFP_ATOMIC, "%s:%u", table->name, nft_net->base_seq);
-	audit_log_nfcfg(buf, family, obj->handle,
-			AUDIT_NFT_OP_OBJ_RESET, GFP_ATOMIC);
+	audit_log_nfcfg(buf, family, 1, AUDIT_NFT_OP_OBJ_RESET, GFP_ATOMIC);
 	kfree(buf);
 
 	return nfnetlink_unicast(skb2, net, portid);
