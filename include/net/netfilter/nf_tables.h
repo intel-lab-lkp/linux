@@ -1732,6 +1732,7 @@ struct nftables_pernet {
 	struct list_head	module_list;
 	struct list_head	notify_list;
 	struct mutex		commit_mutex;
+	spinlock_t		reset_lock;
 	u64			table_handle;
 	unsigned int		base_seq;
 	unsigned int		gc_seq;
