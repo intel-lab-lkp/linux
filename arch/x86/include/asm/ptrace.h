@@ -56,6 +56,25 @@ struct pt_regs {
 
 #else /* __i386__ */
 
+struct fred_ss {
+	u64	ss	: 16,	// SS selector
+		sti	:  1,	// STI state
+		swevent	:  1,	// Set if syscall, sysenter or INT n
+		nmi	:  1,	// Event is NMI type
+			: 13,
+		vector	:  8,	// Event vector
+			:  8,
+		type	:  4,	// Event type
+			:  4,
+		enclave	:  1,	// Event was incident to enclave execution
+		lm	:  1,	// CPU was in long mode
+		nested	:  1,	// Nested exception during FRED delivery
+				// not set for #DF
+			:  1,
+		insnlen	:  4;	// The length of the instruction causing the event
+				// Only set for INT0, INT1, INT3, INT n, SYSCALL
+};				// and SYSENTER. 0 otherwise.
+
 struct pt_regs {
 	/*
 	 * C ABI says these regs are callee-preserved. They aren't saved on
@@ -85,6 +104,12 @@ struct pt_regs {
 	 * - the syscall number (syscall, sysenter, int80)
 	 * - error_code stored by the CPU on traps and exceptions
 	 * - the interrupt number for device interrupts
+	 *
+	 * A FRED stack frame starts here:
+	 *   1) It _always_ includes an error code;
+	 *
+	 *   2) The return frame for ERET[US] starts here, but
+	 *	the content of orig_ax is ignored.
 	 */
 	unsigned long orig_ax;
 
@@ -92,20 +117,36 @@ struct pt_regs {
 	unsigned long ip;
 
 	union {
-		u64	csx;	// The full 64-bit data slot containing CS
-		u16	cs;	// CS selector
+		u64	csx;		// The full data for FRED
+		/*
+		 * The 'cs' member should be defined as a 16-bit bit-field
+		 * along with the 'sl' and 'wfe' members, which however
+		 * breaks compiling REG_OFFSET_NAME(cs), because compilers
+		 * disallow calculating the address of a bit-field.
+		 *
+		 * Therefore 'cs" is defined as an individual member with
+		 * type u16.
+		 */
+		u16	cs;		// CS selector
+		u64		: 16,
+			sl	:  2,	// Stack level at event time
+			wfe	:  1,	// IBT is in WAIT_FOR_BRANCH_STATE
+				: 45;
 	};
 
 	unsigned long flags;
 	unsigned long sp;
 
 	union {
-		u64	ssx;	// The full 64-bit data slot containing SS
-		u16	ss;	// SS selector
+		u64		ssx;		// The full data for FRED
+		u16		ss;		// SS selector
+		struct fred_ss	fred_ss;	// The fred extension
 	};
 
 	/*
-	 * Top of stack on IDT systems.
+	 * Top of stack on IDT systems, while FRED systems have extra fields
+	 * defined above for storing exception related information, e.g. CR2 or
+	 * DR6.
 	 */
 };
 
