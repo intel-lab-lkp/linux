@@ -211,7 +211,7 @@ static ssize_t mtdchar_read(struct file *file, char __user *buf, size_t count,
 	}
 
 	kfree(kbuf);
-	return total_retlen;
+	return total_retlen ? total_retlen : ret;
 } /* mtdchar_read */
 
 static ssize_t mtdchar_write(struct file *file, const char __user *buf, size_t count,
