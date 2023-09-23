@@ -4758,7 +4758,7 @@ static int gcc_sa8775p_probe(struct platform_device *pdev)
 	regmap_update_bits(regmap, 0x34004, BIT(0), BIT(0));
 	regmap_update_bits(regmap, 0x34024, BIT(0), BIT(0));
 
-	return qcom_cc_really_probe(pdev, &gcc_sa8775p_desc, regmap);
+	return qcom_cc_really_probe(&pdev->dev, &gcc_sa8775p_desc, regmap);
 }
 
 static struct platform_driver gcc_sa8775p_driver = {
