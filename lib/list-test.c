@@ -26,10 +26,12 @@ static void list_test_list_init(struct kunit *test)
 
 	INIT_LIST_HEAD(&list2);
 
-	list4 = kzalloc(sizeof(*list4), GFP_KERNEL | __GFP_NOFAIL);
+	list4 = kunit_kzalloc(test, sizeof(*list4), GFP_KERNEL | __GFP_NOFAIL);
+	KUNIT_ASSERT_NOT_NULL(test, list4);
 	INIT_LIST_HEAD(list4);
 
 	list5 = kmalloc(sizeof(*list5), GFP_KERNEL | __GFP_NOFAIL);
+	KUNIT_ASSERT_NOT_NULL(test, list5);
 	memset(list5, 0xFF, sizeof(*list5));
 	INIT_LIST_HEAD(list5);
 
@@ -40,7 +42,6 @@ static void list_test_list_init(struct kunit *test)
 	KUNIT_EXPECT_TRUE(test, list_empty_careful(list4));
 	KUNIT_EXPECT_TRUE(test, list_empty_careful(list5));
 
-	kfree(list4);
 	kfree(list5);
 }
 
