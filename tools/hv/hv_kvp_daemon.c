@@ -209,11 +209,13 @@ static void kvp_update_mem_state(int pool)
 			 * We have more data to read.
 			 */
 			num_blocks++;
-			record = realloc(record, alloc_unit * num_blocks);
+			struct kvp_record *record_tmp =
+				realloc(record, alloc_unit * num_blocks);
 
-			if (record == NULL) {
+			if (record_tmp == NULL) {
 				syslog(LOG_ERR, "malloc failed");
 				kvp_release_lock(pool);
+				free(record);
 				exit(EXIT_FAILURE);
 			}
 			continue;
@@ -345,11 +347,15 @@ static int kvp_key_add_or_modify(int pool, const __u8 *key, int key_size,
 	 */
 	if (num_records == (ENTRIES_PER_BLOCK * num_blocks)) {
 		/* Need to allocate a larger array for reg entries. */
-		record = realloc(record, sizeof(struct kvp_record) *
-			 ENTRIES_PER_BLOCK * (num_blocks + 1));
+		struct kvp_record *record_tmp = realloc(
+			record, sizeof(struct kvp_record) * ENTRIES_PER_BLOCK *
+					(num_blocks + 1));
 
-		if (record == NULL)
+		if (record_tmp == NULL) {
+			free(record);
 			return 1;
+		}
+		record = record_tmp;
 		kvp_file_info[pool].num_blocks++;
 
 	}
