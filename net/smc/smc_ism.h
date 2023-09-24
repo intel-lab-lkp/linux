@@ -15,6 +15,8 @@
 
 #include "smc.h"
 
+#define S390_ISM_IDENT_MASK		0x00FFFF
+
 #define SMC_VIRT_ISM_CHID_MAX		0xFFFF
 #define SMC_VIRT_ISM_CHID_MIN		0xFF00
 

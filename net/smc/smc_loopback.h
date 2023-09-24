@@ -19,11 +19,14 @@
 #include <net/smc.h>
 
 #if IS_ENABLED(CONFIG_SMC_LO)
+#define SMC_LO_CHID 0xFFFF
 #define SMC_LODEV_MAX_DMBS 5000
 
 struct smc_lo_dev {
 	struct smcd_dev *smcd;
 	struct device dev;
+	u16 chid;
+	struct smcd_gid local_gid;
 };
 #endif
 
