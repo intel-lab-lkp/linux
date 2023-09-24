@@ -224,9 +224,22 @@ static struct sun4i_layer *sun4i_layer_init_one(struct drm_device *drm,
 	drm_plane_helper_add(&layer->plane,
 			     &sun4i_backend_layer_helper_funcs);
 
-	drm_plane_create_alpha_property(&layer->plane);
-	drm_plane_create_zpos_property(&layer->plane, layer->id,
-				       0, SUN4I_BACKEND_NUM_LAYERS - 1);
+	ret = drm_plane_create_alpha_property(&layer->plane);
+
+	if (ret) {
+		dev_err(drm->dev, "Failed to install alpha property,
+			rc = %d\n", ret);
+		return ERR_PTR(ret);
+	}
+
+	ret = drm_plane_create_zpos_property(&layer->plane, layer->id, 0,
+					     SUN4I_BACKEND_NUM_LAYERS - 1);
+
+	if (ret) {
+		dev_err(drm->dev, "Failed to install zpos property,
+			rc = %d\n", ret);
+		return ERR_PTR(ret);
+	}
 
 	return layer;
 }
