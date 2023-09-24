@@ -60,6 +60,8 @@
 #define AD7192_MODE_SEL_MASK	GENMASK(23, 21) /* Operation Mode Select Mask */
 #define AD7192_MODE_STA_MASK	BIT(20) /* Status Register transmission Mask */
 #define AD7192_MODE_CLKSRC_MASK	GENMASK(19, 18) /* Clock Source Select Mask */
+#define AD7192_MODE_AVG_MASK	GENMASK(17, 16)
+		  /* Fast Settling Filter Average Select Mask (AD7193 only) */
 #define AD7192_MODE_SINC3	BIT(15) /* SINC3 Filter Select */
 #define AD7192_MODE_ENPAR	BIT(13) /* Parity Enable */
 #define AD7192_MODE_CLKDIV	BIT(12) /* Clock divide by 2 (AD7190/2 only)*/
@@ -182,6 +184,7 @@ struct ad7192_state {
 	u32				mode;
 	u32				conf;
 	u32				scale_avail[8][2];
+	u8				avg_avail[4];
 	u8				gpocon;
 	u8				clock_sel;
 	struct mutex			lock;	/* protect sensor state */
@@ -459,6 +462,13 @@ static int ad7192_setup(struct iio_dev *indio_dev, struct device_node *np)
 		st->scale_avail[i][0] = scale_uv;
 	}
 
+	if (st->chip_info->chip_id == CHIPID_AD7193) {
+		st->avg_avail[0] = 1;
+		st->avg_avail[1] = 2;
+		st->avg_avail[2] = 8;
+		st->avg_avail[3] = 16;
+	}
+
 	return 0;
 }
 
@@ -483,6 +493,18 @@ static ssize_t ad7192_show_bridge_switch(struct device *dev,
 			  FIELD_GET(AD7192_GPOCON_BPDSW, st->gpocon));
 }
 
+static ssize_t ad7192_show_average_factor(struct device *dev,
+					  struct device_attribute *attr,
+					  char *buf)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct ad7192_state *st = iio_priv(indio_dev);
+	u8 avg_factor_index;
+
+	avg_factor_index = FIELD_GET(AD7192_MODE_AVG_MASK, st->mode);
+	return sysfs_emit(buf, "%d\n", st->avg_avail[avg_factor_index]);
+}
+
 static ssize_t ad7192_set(struct device *dev,
 			  struct device_attribute *attr,
 			  const char *buf,
@@ -491,12 +513,10 @@ static ssize_t ad7192_set(struct device *dev,
 	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
 	struct ad7192_state *st = iio_priv(indio_dev);
 	struct iio_dev_attr *this_attr = to_iio_dev_attr(attr);
+	bool val, ret_einval;
+	u8 val_avg_factor;
+	unsigned int i;
 	int ret;
-	bool val;
-
-	ret = kstrtobool(buf, &val);
-	if (ret < 0)
-		return ret;
 
 	ret = iio_device_claim_direct_mode(indio_dev);
 	if (ret)
@@ -504,6 +524,10 @@ static ssize_t ad7192_set(struct device *dev,
 
 	switch ((u32)this_attr->address) {
 	case AD7192_REG_GPOCON:
+		ret = kstrtobool(buf, &val);
+		if (ret < 0)
+			return ret;
+
 		if (val)
 			st->gpocon |= AD7192_GPOCON_BPDSW;
 		else
@@ -512,12 +536,37 @@ static ssize_t ad7192_set(struct device *dev,
 		ad_sd_write_reg(&st->sd, AD7192_REG_GPOCON, 1, st->gpocon);
 		break;
 	case AD7192_REG_CONF:
+		ret = kstrtobool(buf, &val);
+		if (ret < 0)
+			return ret;
+
 		if (val)
 			st->conf |= AD7192_CONF_ACX;
 		else
 			st->conf &= ~AD7192_CONF_ACX;
 
 		ad_sd_write_reg(&st->sd, AD7192_REG_CONF, 3, st->conf);
+		break;
+	case AD7192_REG_MODE:
+		ret = kstrtou8(buf, 10, &val_avg_factor);
+		if (ret < 0)
+			return ret;
+
+		ret_einval = true;
+		for (i = 0; i < ARRAY_SIZE(st->avg_avail); i++) {
+			if (val_avg_factor == st->avg_avail[i]) {
+				st->mode &= ~AD7192_MODE_AVG_MASK;
+				st->mode |= FIELD_PREP(AD7192_MODE_AVG_MASK, i);
+				ret_einval = false;
+			}
+		}
+
+		if (ret_einval)
+			return -EINVAL;
+
+		ret = ad_sd_write_reg(&st->sd, AD7192_REG_MODE, 3, st->mode);
+		if (ret)
+			return ret;
 		break;
 	default:
 		ret = -EINVAL;
@@ -528,15 +577,22 @@ static ssize_t ad7192_set(struct device *dev,
 	return ret ? ret : len;
 }
 
-static int ad7192_compute_f_order(bool sinc3_en, bool chop_en)
+static int ad7192_compute_f_order(struct ad7192_state *st, bool sinc3_en, bool chop_en)
 {
-	if (!chop_en)
+	u8 avg_factor;
+	u8 avg_factor_selected;
+
+	avg_factor_selected = FIELD_GET(AD7192_MODE_AVG_MASK, st->mode);
+
+	if (!avg_factor_selected && !chop_en)
 		return 1;
 
-	if (sinc3_en)
-		return AD7192_SYNC3_FILTER;
+	avg_factor = st->avg_avail[avg_factor_selected];
 
-	return AD7192_SYNC4_FILTER;
+	if (sinc3_en)
+		return AD7192_SYNC3_FILTER + avg_factor - 1;
+
+	return AD7192_SYNC4_FILTER + avg_factor - 1;
 }
 
 static int ad7192_get_f_order(struct ad7192_state *st)
@@ -546,13 +602,13 @@ static int ad7192_get_f_order(struct ad7192_state *st)
 	sinc3_en = FIELD_GET(AD7192_MODE_SINC3, st->mode);
 	chop_en = FIELD_GET(AD7192_CONF_CHOP, st->conf);
 
-	return ad7192_compute_f_order(sinc3_en, chop_en);
+	return ad7192_compute_f_order(st, sinc3_en, chop_en);
 }
 
 static int ad7192_compute_f_adc(struct ad7192_state *st, bool sinc3_en,
 				bool chop_en)
 {
-	unsigned int f_order = ad7192_compute_f_order(sinc3_en, chop_en);
+	unsigned int f_order = ad7192_compute_f_order(st, sinc3_en, chop_en);
 
 	return DIV_ROUND_CLOSEST(st->fclk,
 				 f_order * FIELD_GET(AD7192_MODE_RATE_MASK, st->mode));
@@ -605,8 +661,28 @@ static ssize_t ad7192_show_filter_avail(struct device *dev,
 	return len;
 }
 
+static ssize_t ad7192_show_avg_factor_avail(struct device *dev,
+					    struct device_attribute *attr,
+					    char *buf)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct ad7192_state *st = iio_priv(indio_dev);
+	unsigned int i;
+	size_t len = 0;
+
+	for (i = 0; i < ARRAY_SIZE(st->avg_avail); i++)
+		len += sysfs_emit_at(buf, len, "%d ", st->avg_avail[i]);
+
+	buf[len - 1] = '\n';
+
+	return len;
+}
+
 static IIO_DEVICE_ATTR(filter_low_pass_3db_frequency_available,
 		       0444, ad7192_show_filter_avail, NULL, 0);
+
+static IIO_DEVICE_ATTR(fast_settling_average_factor_available,
+		       0444, ad7192_show_avg_factor_avail, NULL, 0);
 
 static IIO_DEVICE_ATTR(bridge_switch_en, 0644,
 		       ad7192_show_bridge_switch, ad7192_set,
@@ -616,6 +692,10 @@ static IIO_DEVICE_ATTR(ac_excitation_en, 0644,
 		       ad7192_show_ac_excitation, ad7192_set,
 		       AD7192_REG_CONF);
 
+static IIO_DEVICE_ATTR(fast_settling_average_factor, 0644,
+		       ad7192_show_average_factor, ad7192_set,
+		       AD7192_REG_MODE);
+
 static struct attribute *ad7192_attributes[] = {
 	&iio_dev_attr_filter_low_pass_3db_frequency_available.dev_attr.attr,
 	&iio_dev_attr_bridge_switch_en.dev_attr.attr,
@@ -624,6 +704,18 @@ static struct attribute *ad7192_attributes[] = {
 
 static const struct attribute_group ad7192_attribute_group = {
 	.attrs = ad7192_attributes,
+};
+
+static struct attribute *ad7193_attributes[] = {
+	&iio_dev_attr_filter_low_pass_3db_frequency_available.dev_attr.attr,
+	&iio_dev_attr_bridge_switch_en.dev_attr.attr,
+	&iio_dev_attr_fast_settling_average_factor.dev_attr.attr,
+	&iio_dev_attr_fast_settling_average_factor_available.dev_attr.attr,
+	NULL
+};
+
+static const struct attribute_group ad7193_attribute_group = {
+	.attrs = ad7193_attributes,
 };
 
 static struct attribute *ad7195_attributes[] = {
@@ -882,6 +974,16 @@ static const struct iio_info ad7192_info = {
 	.update_scan_mode = ad7192_update_scan_mode,
 };
 
+static const struct iio_info ad7193_info = {
+	.read_raw = ad7192_read_raw,
+	.write_raw = ad7192_write_raw,
+	.write_raw_get_fmt = ad7192_write_raw_get_fmt,
+	.read_avail = ad7192_read_avail,
+	.attrs = &ad7193_attribute_group,
+	.validate_trigger = ad_sd_validate_trigger,
+	.update_scan_mode = ad7192_update_scan_mode,
+};
+
 static const struct iio_info ad7195_info = {
 	.read_raw = ad7192_read_raw,
 	.write_raw = ad7192_write_raw,
@@ -1056,7 +1158,9 @@ static int ad7192_probe(struct spi_device *spi)
 	if (ret < 0)
 		return ret;
 
-	if (st->chip_info->chip_id == CHIPID_AD7195)
+	if (st->chip_info->chip_id == CHIPID_AD7193)
+		indio_dev->info = &ad7193_info;
+	else if (st->chip_info->chip_id == CHIPID_AD7195)
 		indio_dev->info = &ad7195_info;
 	else
 		indio_dev->info = &ad7192_info;
