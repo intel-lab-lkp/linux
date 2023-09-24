@@ -1,0 +1,147 @@
+// SPDX-License-Identifier: GPL-2.0
+
+//! Rust Asix PHYs driver
+use kernel::c_str;
+use kernel::net::phy::{self, DeviceId, Driver};
+use kernel::prelude::*;
+use kernel::uapi;
+
+kernel::module_phy_driver! {
+    drivers: [PhyAX88772A, PhyAX88772C, PhyAX88796B],
+    device_table: [
+        DeviceId::new_with_driver::<PhyAX88772A>(),
+        DeviceId::new_with_driver::<PhyAX88772C>(),
+        DeviceId::new_with_driver::<PhyAX88796B>()
+    ],
+    type: RustAsixPhy,
+    name: "rust_asix_phy",
+    author: "FUJITA Tomonori <fujita.tomonori@gmail.com>",
+    description: "Rust Asix PHYs driver",
+    license: "GPL",
+}
+
+struct PhyAX88772A;
+
+impl PhyAX88772A {
+    const PHY_ID: u32 = 0x003b1861;
+}
+
+#[vtable]
+impl phy::Driver for PhyAX88772A {
+    const FLAGS: u32 = phy::PHY_IS_INTERNAL;
+    const NAME: &'static CStr = c_str!("Asix Electronics AX88772A");
+    const PHY_ID: u32 = Self::PHY_ID;
+    const PHY_ID_MASK: u32 = !0;
+
+    // AX88772A is not working properly with some old switches (NETGEAR EN 108TP):
+    // after autoneg is done and the link status is reported as active, the MII_LPA
+    // register is 0. This issue is not reproducible on AX88772C.
+    fn read_status(dev: &mut phy::Device) -> Result<u16> {
+        dev.genphy_update_link()?;
+        if !dev.get_link() {
+            return Ok(0);
+        }
+        // If MII_LPA is 0, phy_resolve_aneg_linkmode() will fail to resolve
+        // linkmode so use MII_BMCR as default values.
+        let ret = dev.read(uapi::MII_BMCR as u16)?;
+
+        if ret as u32 & uapi::BMCR_SPEED100 != 0 {
+            dev.set_speed(100);
+        } else {
+            dev.set_speed(10);
+        }
+
+        let duplex = if ret as u32 & uapi::BMCR_FULLDPLX != 0 {
+            phy::DuplexMode::Full
+        } else {
+            phy::DuplexMode::Half
+        };
+        dev.set_duplex(duplex);
+
+        dev.genphy_read_lpa()?;
+
+        if dev.is_autoneg_enabled() && dev.is_autoneg_completed() {
+            dev.resolve_aneg_linkmode();
+        }
+
+        Ok(0)
+    }
+
+    fn suspend(dev: &mut phy::Device) -> Result {
+        dev.genphy_suspend()
+    }
+
+    fn resume(dev: &mut phy::Device) -> Result {
+        dev.genphy_resume()
+    }
+
+    fn soft_reset(dev: &mut phy::Device) -> Result {
+        RustAsixPhy::soft_reset(dev)
+    }
+
+    fn link_change_notify(dev: &mut phy::Device) {
+        // Reset PHY, otherwise MII_LPA will provide outdated information.
+        // This issue is reproducible only with some link partner PHYs.
+        if dev.state() == phy::DeviceState::NoLink {
+            let _ = dev.init_hw();
+            let _ = dev.start_aneg();
+        }
+    }
+}
+
+struct PhyAX88772C;
+
+impl PhyAX88772C {
+    const PHY_ID: u32 = 0x003b1881;
+}
+
+#[vtable]
+impl Driver for PhyAX88772C {
+    const FLAGS: u32 = phy::PHY_IS_INTERNAL;
+    const NAME: &'static CStr = c_str!("Asix Electronics AX88772C");
+    const PHY_ID: u32 = Self::PHY_ID;
+    const PHY_ID_MASK: u32 = !0;
+
+    fn suspend(dev: &mut phy::Device) -> Result {
+        dev.genphy_suspend()
+    }
+
+    fn resume(dev: &mut phy::Device) -> Result {
+        dev.genphy_resume()
+    }
+
+    fn soft_reset(dev: &mut phy::Device) -> Result {
+        RustAsixPhy::soft_reset(dev)
+    }
+}
+
+struct PhyAX88796B;
+
+impl PhyAX88796B {
+    const PHY_ID: u32 = 0x003b1841;
+    const PHY_ID_MASK: u32 = 0xfffffff0;
+}
+
+#[vtable]
+impl Driver for PhyAX88796B {
+    const NAME: &'static CStr = c_str!("Asix Electronics AX88796B");
+    const PHY_ID: u32 = Self::PHY_ID;
+    const PHY_ID_MASK: u32 = Self::PHY_ID_MASK;
+
+    fn soft_reset(dev: &mut phy::Device) -> Result {
+        RustAsixPhy::soft_reset(dev)
+    }
+}
+
+struct RustAsixPhy;
+
+impl RustAsixPhy {
+    // Performs a software PHY reset using the standard
+    // BMCR_RESET bit and poll for the reset bit to be cleared.
+    // Toggle BMCR_RESET bit off to accommodate broken AX8796B PHY implementation
+    // such as used on the Individual Computers' X-Surf 100 Zorro card.
+    fn soft_reset(dev: &mut phy::Device) -> Result {
+        dev.write(uapi::MII_BMCR as u16, 0)?;
+        dev.genphy_soft_reset()
+    }
+}
