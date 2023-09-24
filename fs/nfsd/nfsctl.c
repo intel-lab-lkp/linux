@@ -1695,6 +1695,145 @@ int nfsd_nl_rpc_status_get_done(struct netlink_callback *cb)
 }
 
 /**
+ * nfsd_nl_threads_set_doit - set the number of running threads
+ * @skb: reply buffer
+ * @info: netlink metadata and command arguments
+ *
+ * Return 0 on success or a negative errno.
+ */
+int nfsd_nl_threads_set_doit(struct sk_buff *skb, struct genl_info *info)
+{
+	u16 nthreads;
+	int ret;
+
+	if (!info->attrs[NFSD_A_SERVER_ATTR_THREADS])
+		return -EINVAL;
+
+	nthreads = nla_get_u32(info->attrs[NFSD_A_SERVER_ATTR_THREADS]);
+
+	ret = nfsd_svc(nthreads, genl_info_net(info), get_current_cred());
+	return ret == nthreads ? 0 : ret;
+}
+
+static int nfsd_nl_get_dump(struct sk_buff *skb, struct netlink_callback *cb,
+			    int cmd, int attr, u32 val)
+{
+	void *hdr;
+
+	if (cb->args[0]) /* already consumed */
+		return 0;
+
+	hdr = genlmsg_put(skb, NETLINK_CB(cb->skb).portid, cb->nlh->nlmsg_seq,
+			  &nfsd_nl_family, NLM_F_MULTI, cmd);
+	if (!hdr)
+		return -ENOBUFS;
+
+	if (nla_put_u32(skb, attr, val))
+		return -ENOBUFS;
+
+	genlmsg_end(skb, hdr);
+	cb->args[0] = 1;
+
+	return skb->len;
+}
+
+/**
+ * nfsd_nl_threads_get_dumpit - dump the number of running threads
+ * @skb: reply buffer
+ * @cb: netlink metadata and command arguments
+ *
+ * Returns the size of the reply or a negative errno.
+ */
+int nfsd_nl_threads_get_dumpit(struct sk_buff *skb, struct netlink_callback *cb)
+{
+	return nfsd_nl_get_dump(skb, cb, NFSD_CMD_THREADS_GET,
+				NFSD_A_SERVER_ATTR_THREADS,
+				nfsd_nrthreads(sock_net(skb->sk)));
+}
+
+/**
+ * nfsd_nl_max_blksize_set_doit - set the nfs block size
+ * @skb: reply buffer
+ * @info: netlink metadata and command arguments
+ *
+ * Return 0 on success or a negative errno.
+ */
+int nfsd_nl_max_blksize_set_doit(struct sk_buff *skb, struct genl_info *info)
+{
+	struct nfsd_net *nn = net_generic(genl_info_net(info), nfsd_net_id);
+	int ret = 0;
+
+	if (!info->attrs[NFSD_A_SERVER_ATTR_MAX_BLKSIZE])
+		return -EINVAL;
+
+	mutex_lock(&nfsd_mutex);
+	if (nn->nfsd_serv) {
+		ret = -EBUSY;
+		goto out;
+	}
+
+	nfsd_max_blksize = nla_get_u32(info->attrs[NFSD_A_SERVER_ATTR_MAX_BLKSIZE]);
+	nfsd_max_blksize = max_t(int, nfsd_max_blksize, 1024);
+	nfsd_max_blksize = min_t(int, nfsd_max_blksize, NFSSVC_MAXBLKSIZE);
+	nfsd_max_blksize &= ~1023;
+out:
+	mutex_unlock(&nfsd_mutex);
+
+	return ret;
+}
+
+/**
+ * nfsd_nl_max_blksize_get_dumpit - dump the nfs block size
+ * @skb: reply buffer
+ * @cb: netlink metadata and command arguments
+ *
+ * Returns the size of the reply or a negative errno.
+ */
+int nfsd_nl_max_blksize_get_dumpit(struct sk_buff *skb,
+				   struct netlink_callback *cb)
+{
+	return nfsd_nl_get_dump(skb, cb, NFSD_CMD_MAX_BLKSIZE_GET,
+				NFSD_A_SERVER_ATTR_MAX_BLKSIZE,
+				nfsd_max_blksize);
+}
+
+/**
+ * nfsd_nl_max_conn_set_doit - set the max number of connections
+ * @skb: reply buffer
+ * @info: netlink metadata and command arguments
+ *
+ * Return 0 on success or a negative errno.
+ */
+int nfsd_nl_max_conn_set_doit(struct sk_buff *skb, struct genl_info *info)
+{
+	struct nfsd_net *nn = net_generic(genl_info_net(info), nfsd_net_id);
+
+	if (!info->attrs[NFSD_A_SERVER_ATTR_MAX_CONN])
+		return -EINVAL;
+
+	nn->max_connections = nla_get_u32(info->attrs[NFSD_A_SERVER_ATTR_MAX_CONN]);
+
+	return 0;
+}
+
+/**
+ * nfsd_nl_max_conn_get_dumpit - dump the max number of connections
+ * @skb: reply buffer
+ * @cb: netlink metadata and command arguments
+ *
+ * Returns the size of the reply or a negative errno.
+ */
+int nfsd_nl_max_conn_get_dumpit(struct sk_buff *skb,
+				struct netlink_callback *cb)
+{
+	struct nfsd_net *nn = net_generic(sock_net(cb->skb->sk), nfsd_net_id);
+
+	return nfsd_nl_get_dump(skb, cb, NFSD_CMD_MAX_CONN_GET,
+				NFSD_A_SERVER_ATTR_MAX_CONN,
+				nn->max_connections);
+}
+
+/**
  * nfsd_net_init - Prepare the nfsd_net portion of a new net namespace
  * @net: a freshly-created network namespace
  *
