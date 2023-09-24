@@ -21,12 +21,25 @@
 #if IS_ENABLED(CONFIG_SMC_LO)
 #define SMC_LO_CHID 0xFFFF
 #define SMC_LODEV_MAX_DMBS 5000
+#define SMC_LODEV_DMBS_HASH_BITS 12
+
+struct smc_lo_dmb_node {
+	struct hlist_node list;
+	u64 token;
+	u32 len;
+	u32 sba_idx;
+	void *cpu_addr;
+	dma_addr_t dma_addr;
+};
 
 struct smc_lo_dev {
 	struct smcd_dev *smcd;
 	struct device dev;
 	u16 chid;
 	struct smcd_gid local_gid;
+	DECLARE_BITMAP(sba_idx_mask, SMC_LODEV_MAX_DMBS);
+	rwlock_t dmb_ht_lock;
+	DECLARE_HASHTABLE(dmb_ht, SMC_LODEV_DMBS_HASH_BITS);
 };
 #endif
 
