@@ -685,6 +685,24 @@ struct btrfs_fs_info {
 
 	/* If we allow backup superblocks writeback to fail. */
 	bool allow_backup_super_failure;
+
+	/*
+	 * Tolerance on how many devices can fail their superblock writeback.
+	 *
+	 * If the value >= 0, then the value itself is the tolerance.
+	 * If the value < 0, then it would be (rw_devices - value) as the tolerance.
+	 *
+	 * Default value is -1.
+	 *
+	 * E.g. 0 means we do not accept any device to fail its super blocks writeback.
+	 *
+	 * If there are 3 devices and the value is -1, then it means we allow up to 2
+	 * devices to fail its super blocks writeback.
+	 *
+	 * If there are 3 devices and the value is -3 or -4, we would allow all devices
+	 * to fail their super blocks writeback, which can be very DANGEROUS!
+	 */
+	s8 super_failure_tolerance;
 	u8 qgroup_drop_subtree_thres;
 
 	/*

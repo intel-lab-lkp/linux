@@ -641,6 +641,35 @@ static ssize_t allow_backup_super_failure_store(struct kobject *debug_kobj,
 BTRFS_ATTR_RW(debug, allow_backup_super_failure, allow_backup_super_failure_show,
 	      allow_backup_super_failure_store);
 
+static ssize_t super_failure_tolerance_show(struct kobject *debug_kobj,
+					    struct kobj_attribute *a,
+					    char *buf)
+{
+	struct btrfs_fs_info *fs_info = to_fs_info(debug_kobj->parent);
+
+	ASSERT(fs_info);
+	return sysfs_emit(buf, "%d\n",
+			  READ_ONCE(fs_info->super_failure_tolerance));
+}
+
+static ssize_t super_failure_tolerance_store(struct kobject *debug_kobj,
+					     struct kobj_attribute *a,
+					     const char *buf, size_t len)
+{
+	struct btrfs_fs_info *fs_info = to_fs_info(debug_kobj->parent);
+	u8 new_number;
+	int ret;
+
+	ASSERT(fs_info);
+
+	ret = kstrtos8(buf, 10, &new_number);
+	if (ret)
+		return -EINVAL;
+	WRITE_ONCE(fs_info->super_failure_tolerance, new_number);
+	return len;
+}
+BTRFS_ATTR_RW(debug, super_failure_tolerance, super_failure_tolerance_show,
+	      super_failure_tolerance_store);
 /*
  * Per-filesystem runtime debugging exported via sysfs.
  *
@@ -654,6 +683,7 @@ BTRFS_ATTR_RW(debug, allow_backup_super_failure, allow_backup_super_failure_show
  */
 static const struct attribute *btrfs_debug_mount_attrs[] = {
 	BTRFS_ATTR_PTR(debug, allow_backup_super_failure),
+	BTRFS_ATTR_PTR(debug, super_failure_tolerance),
 	NULL,
 };
 

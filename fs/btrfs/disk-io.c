@@ -2704,6 +2704,7 @@ void btrfs_init_fs_info(struct btrfs_fs_info *fs_info)
 	INIT_LIST_HEAD(&fs_info->allocated_ebs);
 	spin_lock_init(&fs_info->eb_leak_lock);
 	fs_info->allow_backup_super_failure = true;
+	fs_info->super_failure_tolerance = -1;
 #endif
 	extent_map_tree_init(&fs_info->mapping_tree);
 	btrfs_init_block_rsv(&fs_info->global_block_rsv,
@@ -4048,6 +4049,26 @@ int btrfs_get_num_tolerated_disk_barrier_failures(u64 flags)
 	return min_tolerated;
 }
 
+static int calculate_max_super_errors(struct btrfs_fs_info *fs_info)
+{
+	int num_devs = btrfs_super_num_devices(fs_info->super_copy);
+	int tolerance_value = READ_ONCE(fs_info->super_failure_tolerance);
+
+	if (tolerance_value >= 0)
+		return tolerance_value;
+
+	ASSERT(num_devs >= 0);
+
+	/*
+	 * Now tolerance_value is minus, check if
+	 * abs(@tolerance_value) is > @num_devices. If so we allow all devices
+	 * to fail.
+	 */
+	if (-tolerance_value >= num_devs)
+		return INT_MAX;
+	return num_devs + tolerance_value;
+}
+
 int write_all_supers(struct btrfs_fs_info *fs_info, int max_mirrors)
 {
 	struct list_head *head;
@@ -4075,7 +4096,7 @@ int write_all_supers(struct btrfs_fs_info *fs_info, int max_mirrors)
 
 	mutex_lock(&fs_info->fs_devices->device_list_mutex);
 	head = &fs_info->fs_devices->devices;
-	max_errors = btrfs_super_num_devices(fs_info->super_copy) - 1;
+	max_errors = calculate_max_super_errors(fs_info);
 
 	if (do_barriers) {
 		ret = barrier_all_devices(fs_info);
@@ -4153,8 +4174,8 @@ int write_all_supers(struct btrfs_fs_info *fs_info, int max_mirrors)
 	mutex_unlock(&fs_info->fs_devices->device_list_mutex);
 	if (total_errors > max_errors) {
 		btrfs_handle_fs_error(fs_info, -EIO,
-				      "%d errors while writing supers",
-				      total_errors);
+			"failed to write supers: errors %d tolerance %d",
+				      total_errors, max_errors);
 		return -EIO;
 	}
 	return 0;
