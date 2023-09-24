@@ -2586,6 +2586,10 @@ int tipc_nl_node_reset_link_stats(struct sk_buff *skb, struct genl_info *info)
 
 	link_name = nla_data(attrs[TIPC_NLA_LINK_NAME]);
 
+	if (link_name[strnlen(link_name,
+			      nla_len(attrs[TIPC_NLA_LINK_NAME]))] != '\0')
+		return -EINVAL;
+
 	err = -EINVAL;
 	if (!strcmp(link_name, tipc_bclink_name)) {
 		err = tipc_bclink_reset_stats(net, tipc_bc_sndlink(net));
