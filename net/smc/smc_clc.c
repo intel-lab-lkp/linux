@@ -426,6 +426,7 @@ static int smc_clc_fill_fce(struct smc_clc_first_contact_ext_v2x *fce,
 	memset(fce, 0, sizeof(*fce));
 	fce->fce_v2_base.os_type = SMC_CLC_OS_LINUX;
 	fce->fce_v2_base.release = ini->release_nr;
+	fce->fce_v2_base.feature_mask = htons(ini->feature_mask);
 	memcpy(fce->fce_v2_base.hostname, smc_hostname, sizeof(smc_hostname));
 	if (ini->is_smcd && ini->release_nr < SMC_RELEASE_1) {
 		ret = sizeof(struct smc_clc_first_contact_ext);
@@ -906,6 +907,7 @@ int smc_clc_send_proposal(struct smc_sock *smc, struct smc_init_info *ini)
 		pclc_smcd->v2_ext_offset = htons(v2_ext_offset);
 		plen += sizeof(*v2_ext);
 
+		v2_ext->feature_mask = htons(ini->feature_mask);
 		read_lock(&smc_clc_eid_table.lock);
 		v2_ext->hdr.eid_cnt = smc_clc_eid_table.ueid_cnt;
 		plen += smc_clc_eid_table.ueid_cnt * SMC_MAX_EID_LEN;
@@ -1219,6 +1221,7 @@ int smc_clc_clnt_v2x_features_validate(struct smc_clc_first_contact_ext *fce,
 			return SMC_CLC_DECL_MAXLINKERR;
 		ini->max_links = fce_v2x->max_links;
 	}
+	ini->feature_mask &= ntohs(fce->feature_mask);
 
 	return 0;
 }
@@ -1249,6 +1252,10 @@ int smc_clc_v2x_features_confirm_check(struct smc_clc_msg_accept_confirm *cclc,
 		if (fce_v2x->max_links != ini->max_links)
 			return SMC_CLC_DECL_MAXLINKERR;
 	}
+
+	if (~(ini->feature_mask) & ntohs(fce->feature_mask))
+		return SMC_CLC_DECL_FEATUNSUPP;
+	ini->feature_mask = ntohs(fce->feature_mask);
 
 	return 0;
 }
