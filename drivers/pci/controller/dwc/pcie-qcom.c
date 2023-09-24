@@ -1384,11 +1384,14 @@ static void qcom_pcie_icc_update(struct qcom_pcie *pcie)
 	case 2:
 		bw = MBps_to_icc(500);
 		break;
+	case 3:
+		bw = MBps_to_icc(985);
+		break;
 	default:
 		WARN_ON_ONCE(1);
 		fallthrough;
-	case 3:
-		bw = MBps_to_icc(985);
+	case 4:
+		bw = MBps_to_icc(1969);
 		break;
 	}
 
