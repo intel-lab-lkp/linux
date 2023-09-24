@@ -224,6 +224,9 @@ static int dw_hdmi_imx_probe(struct platform_device *pdev)
 	struct imx_hdmi *hdmi;
 	int ret;
 
+	if (!match)
+		return -ENODEV;
+
 	hdmi = devm_kzalloc(&pdev->dev, sizeof(*hdmi), GFP_KERNEL);
 	if (!hdmi)
 		return -ENOMEM;
