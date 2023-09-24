@@ -484,8 +484,14 @@ static void end_bio_extent_writepage(struct btrfs_bio *bbio)
 				   bvec->bv_offset, bvec->bv_len);
 
 		btrfs_finish_ordered_extent(bbio->ordered, page, start, len, !error);
-		if (error)
+		if (error) {
 			mapping_set_error(page->mapping, error);
+			if (!READ_ONCE(fs_info->allow_data_failure))
+				btrfs_handle_fs_error(fs_info, -EIO,
+		"data write back failed, root %lld ino %llu fileoff %llu",
+					BTRFS_I(inode)->root->root_key.objectid,
+					btrfs_ino(BTRFS_I(inode)), start);
+		}
 		btrfs_page_clear_writeback(fs_info, page, start, len);
 	}
 

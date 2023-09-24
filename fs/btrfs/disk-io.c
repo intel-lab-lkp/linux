@@ -2704,6 +2704,7 @@ void btrfs_init_fs_info(struct btrfs_fs_info *fs_info)
 	INIT_LIST_HEAD(&fs_info->allocated_ebs);
 	spin_lock_init(&fs_info->eb_leak_lock);
 	fs_info->allow_backup_super_failure = true;
+	fs_info->allow_data_failure = true;
 	fs_info->super_failure_tolerance = -1;
 #endif
 	extent_map_tree_init(&fs_info->mapping_tree);

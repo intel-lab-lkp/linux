@@ -686,6 +686,8 @@ struct btrfs_fs_info {
 	/* If we allow backup superblocks writeback to fail. */
 	bool allow_backup_super_failure;
 
+	/* If we allow data writeback to fail. */
+	bool allow_data_failure;
 	/*
 	 * Tolerance on how many devices can fail their superblock writeback.
 	 *

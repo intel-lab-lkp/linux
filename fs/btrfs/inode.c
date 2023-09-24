@@ -7693,13 +7693,20 @@ static void btrfs_dio_end_io(struct btrfs_bio *bbio)
 	struct btrfs_dio_private *dip =
 		container_of(bbio, struct btrfs_dio_private, bbio);
 	struct btrfs_inode *inode = bbio->inode;
+	struct btrfs_fs_info *fs_info = inode->root->fs_info;
 	struct bio *bio = &bbio->bio;
 
 	if (bio->bi_status) {
-		btrfs_warn(inode->root->fs_info,
+		btrfs_warn(fs_info,
 		"direct IO failed ino %llu op 0x%0x offset %#llx len %u err no %d",
 			   btrfs_ino(inode), bio->bi_opf,
 			   dip->file_offset, dip->bytes, bio->bi_status);
+		if (!READ_ONCE(fs_info->allow_data_failure))
+			btrfs_handle_fs_error(fs_info, -EIO,
+	"direct IO data write back failed, root %lld ino %llu fileoff %llu len %u",
+				inode->root->root_key.objectid,
+				btrfs_ino(inode), dip->file_offset,
+				dip->bytes);
 	}
 
 	if (btrfs_op(bio) == BTRFS_MAP_WRITE) {
