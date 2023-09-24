@@ -62,9 +62,13 @@ int mainloop_add(int fd, mainloop_callback_t cb, void *data)
 	struct mainloop_data *md;
 
 	if (fd >= nrhandler) {
-		mds = realloc(mds, sizeof(*mds) * (fd + 1));
-		if (!mds)
+		struct mainloop_data **mds_tmp =
+			realloc(mds, sizeof(*mds) * (fd + 1));
+		if (!mds_tmp) {
+			free(mds);
 			return -1;
+		}
+		mds = mds_tmp;
 		nrhandler = fd + 1;
 	}
 
