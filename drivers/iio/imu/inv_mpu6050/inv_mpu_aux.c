@@ -71,6 +71,11 @@ int inv_mpu_aux_init(const struct inv_mpu6050_state *st)
 	unsigned int val;
 	int ret;
 
+	ret = regmap_update_bits(st->map, 0x1, 0x80,
+				 st->level_shifter ? 0x80 : 0);
+	if (ret)
+		return ret;
+
 	/* configure i2c master */
 	val = INV_MPU6050_BITS_I2C_MST_CLK_400KHZ |
 			INV_MPU6050_BIT_WAIT_FOR_ES;
