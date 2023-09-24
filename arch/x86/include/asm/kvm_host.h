@@ -966,6 +966,7 @@ struct kvm_vcpu_arch {
 
 	/* set at EPT violation at this point */
 	unsigned long exit_qualification;
+	u32 ept_fault_error_code;
 
 	/* pv related host specific info */
 	struct {

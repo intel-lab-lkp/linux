@@ -5773,6 +5773,7 @@ static int handle_ept_violation(struct kvm_vcpu *vcpu)
 	       PFERR_GUEST_FINAL_MASK : PFERR_GUEST_PAGE_MASK;
 
 	vcpu->arch.exit_qualification = exit_qualification;
+	vcpu->arch.ept_fault_error_code = error_code;
 
 	/*
 	 * Check that the GPA doesn't exceed physical memory limits, as that is
