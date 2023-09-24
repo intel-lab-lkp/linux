@@ -138,7 +138,8 @@ class KernelDocDirective(Directive):
                     lineoffset = int(match.group(1)) - 1
                     # we must eat our comments since the upset the markup
                 else:
-                    doc = env.srcdir + "/" + env.docname + ":" + str(self.lineno)
+                    doc = os.path.join(env.srcdir, env.docname)
+                    doc_with_line = (doc + ":" + str(self.lineno))
                     result.append(line, doc + ": " + filename, lineoffset)
                     lineoffset += 1
 
