@@ -99,6 +99,9 @@ enum {
 	SMC_NLA_LGR_V2_OS,		/* u8 */
 	SMC_NLA_LGR_V2_NEG_EID,		/* string */
 	SMC_NLA_LGR_V2_PEER_HOST,	/* string */
+	SMC_NLA_LGR_V2_PAD,		/* flag */
+	SMC_NLA_LGR_V2_GID_EXT,		/* u64 */
+	SMC_NLA_LGR_V2_PEER_GID_EXT,	/* u64 */
 	__SMC_NLA_LGR_V2_MAX,
 	SMC_NLA_LGR_V2_MAX = __SMC_NLA_LGR_V2_MAX - 1
 };

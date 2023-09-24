@@ -281,8 +281,8 @@ struct smc_clc_msg_accept_confirm_v2 {	/* clc accept / confirm message */
 			struct smcd_clc_msg_accept_confirm_common d0;
 			__be16 chid;
 			u8 eid[SMC_MAX_EID_LEN];
-			u8 reserved5[8];
-		} d1;
+			__be64 gid_ext;
+		} __packed d1;
 	};
 };
 
