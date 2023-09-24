@@ -611,12 +611,49 @@ static const struct attribute *discard_attrs[] = {
 
 #ifdef CONFIG_BTRFS_DEBUG
 
+static ssize_t allow_backup_super_failure_show(struct kobject *debug_kobj,
+					       struct kobj_attribute *a,
+					       char *buf)
+{
+	struct btrfs_fs_info *fs_info = to_fs_info(debug_kobj->parent);
+
+	ASSERT(fs_info);
+	return sysfs_emit(buf, "%d\n",
+			  READ_ONCE(fs_info->allow_backup_super_failure));
+}
+
+static ssize_t allow_backup_super_failure_store(struct kobject *debug_kobj,
+						struct kobj_attribute *a,
+						const char *buf, size_t len)
+{
+	struct btrfs_fs_info *fs_info = to_fs_info(debug_kobj->parent);
+	u8 new_number;
+	int ret;
+
+	ASSERT(fs_info);
+
+	ret = kstrtos8(buf, 10, &new_number);
+	if (ret)
+		return -EINVAL;
+	WRITE_ONCE(fs_info->allow_backup_super_failure, !!new_number);
+	return len;
+}
+BTRFS_ATTR_RW(debug, allow_backup_super_failure, allow_backup_super_failure_show,
+	      allow_backup_super_failure_store);
+
 /*
  * Per-filesystem runtime debugging exported via sysfs.
  *
  * Path: /sys/fs/btrfs/UUID/debug/
+ *
+ * - allow_backup_super_failure
+ *   RW, binary (0/1), determins if we allow backup superblock writeback to fail.
+ *
+ *   NOTE: Even with this set to 1, btrfs may still allow some errors to
+ *	   happen as btrfs can tolerate up to "rw_devs - 1" failures.
  */
 static const struct attribute *btrfs_debug_mount_attrs[] = {
+	BTRFS_ATTR_PTR(debug, allow_backup_super_failure),
 	NULL,
 };
 

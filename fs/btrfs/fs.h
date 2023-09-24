@@ -682,6 +682,9 @@ struct btrfs_fs_info {
 	struct btrfs_work qgroup_rescan_work;
 	/* Protected by qgroup_rescan_lock */
 	bool qgroup_rescan_running;
+
+	/* If we allow backup superblocks writeback to fail. */
+	bool allow_backup_super_failure;
 	u8 qgroup_drop_subtree_thres;
 
 	/*

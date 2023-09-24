@@ -2703,6 +2703,7 @@ void btrfs_init_fs_info(struct btrfs_fs_info *fs_info)
 	INIT_LIST_HEAD(&fs_info->allocated_roots);
 	INIT_LIST_HEAD(&fs_info->allocated_ebs);
 	spin_lock_init(&fs_info->eb_leak_lock);
+	fs_info->allow_backup_super_failure = true;
 #endif
 	extent_map_tree_init(&fs_info->mapping_tree);
 	btrfs_init_block_rsv(&fs_info->global_block_rsv,
@@ -3839,8 +3840,10 @@ static int write_dev_supers(struct btrfs_device *device,
  */
 static int wait_dev_supers(struct btrfs_device *device, int max_mirrors)
 {
+	struct btrfs_fs_info *fs_info = device->fs_info;
 	int i;
 	int errors = 0;
+	bool allow_super_failure = READ_ONCE(fs_info->allow_backup_super_failure);
 	bool primary_failed = false;
 	int ret;
 	u64 bytenr;
@@ -3888,8 +3891,8 @@ static int wait_dev_supers(struct btrfs_device *device, int max_mirrors)
 	}
 
 	/* log error, force error return */
-	if (primary_failed) {
-		btrfs_err(device->fs_info, "error writing primary super block to device %llu",
+	if (primary_failed || (!allow_super_failure && errors)) {
+		btrfs_err(device->fs_info, "error writing super block to device %llu",
 			  device->devid);
 		return -1;
 	}
