@@ -19,3 +19,16 @@ config SMC_DIAG
 	  smcss.
 
 	  if unsure, say Y.
+
+config SMC_LO
+	bool "SMC_LO: virtual loopback-ism for SMC"
+	depends on SMC
+	default n
+	help
+	  SMC_LO provides a kind of virtual ISM device called loopback-ism
+	  for SMC-D to upgrade AF_INET TCP connections whose ends share the
+	  same kernel.
+	  loopback-ism is a software-implemented simulation device that does
+	  not depend on a specific architecture or hardware.
+
+	  if unsure, say N.
