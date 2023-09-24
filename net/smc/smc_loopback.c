@@ -304,18 +304,27 @@ static int smcd_lo_register_dev(struct smc_lo_dev *ldev)
 
 	ldev->smcd = smcd;
 	smcd->priv = ldev;
-
-	/* TODO:
-	 * register smc_lo to smcd_dev list.
-	 */
+	mutex_lock(&smcd_dev_list.mutex);
+	smc_ism_check_v2_capable(smcd);
+	list_add(&smcd->list, &smcd_dev_list.list);
+	mutex_unlock(&smcd_dev_list.mutex);
+	pr_warn_ratelimited("smc: adding smcd device %s with pnetid %.16s%s\n",
+			    smc_lo_dev_name, smcd->pnetid,
+			    smcd->pnetid_by_user ? " (user defined)" : "");
 	return 0;
 }
 
 static void smcd_lo_unregister_dev(struct smc_lo_dev *ldev)
 {
-	/* TODO:
-	 * unregister smc_lo from smcd_dev list.
-	 */
+	struct smcd_dev *smcd = ldev->smcd;
+
+	pr_warn_ratelimited("smc: removing smcd device %s\n",
+			    smc_lo_dev_name);
+	smcd->going_away = 1;
+	smc_smcd_terminate_all(smcd);
+	mutex_lock(&smcd_dev_list.mutex);
+	list_del_init(&smcd->list);
+	mutex_unlock(&smcd_dev_list.mutex);
 }
 
 static void smc_lo_dev_release(struct device *dev)
