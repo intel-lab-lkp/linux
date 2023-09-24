@@ -32,6 +32,6 @@ examples:
   - |
     crypto@10025000 {
         compatible = "fsl,imx27-sahara";
-        reg = < 0x10025000 0x800>;
+        reg = <0x10025000 0x800>;
         interrupts = <75>;
     };
