@@ -48,6 +48,8 @@ properties:
 
   mount-matrix: true
 
+  invensense,level-shifter: true
+
   i2c-gate:
     $ref: /schemas/i2c/i2c-controller.yaml
     unevaluatedProperties: false
