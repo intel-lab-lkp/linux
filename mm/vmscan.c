@@ -6638,7 +6638,9 @@ static bool kswapd_shrink_node(pg_data_t *pgdat,
 	int z;
 
 	/* Reclaim a number of pages proportional to the number of zones */
-	sc->nr_to_reclaim = 0;
+	if (sc->nr_to_reclaim > 0)
+		goto shrink;
+
 	for (z = 0; z <= sc->reclaim_idx; z++) {
 		zone = pgdat->node_zones + z;
 		if (!managed_zone(zone))
@@ -6647,6 +6649,7 @@ static bool kswapd_shrink_node(pg_data_t *pgdat,
 		sc->nr_to_reclaim += max(high_wmark_pages(zone), SWAP_CLUSTER_MAX);
 	}
 
+shrink:
 	/*
 	 * Historically care was taken to put equal pressure on all zones but
 	 * now pressure is applied based on node LRU order.
@@ -6725,6 +6728,7 @@ static int balance_pgdat(pg_data_t *pgdat, int order, int highest_zoneidx)
 		.gfp_mask = GFP_KERNEL,
 		.order = order,
 		.may_unmap = 1,
+		.nr_to_reclaim = 0,
 	};
 
 	set_task_reclaim_state(current, &sc.reclaim_state);
