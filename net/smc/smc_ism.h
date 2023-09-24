@@ -15,6 +15,9 @@
 
 #include "smc.h"
 
+#define SMC_VIRT_ISM_CHID_MAX		0xFFFF
+#define SMC_VIRT_ISM_CHID_MIN		0xFF00
+
 struct smcd_dev_list {	/* List of SMCD devices */
 	struct list_head list;
 	struct mutex mutex;	/* Protects list of devices */
@@ -55,6 +58,18 @@ static inline int smc_ism_write(struct smcd_dev *smcd, u64 dmb_tok,
 
 	rc = smcd->ops->move_data(smcd, dmb_tok, idx, sf, offset, data, len);
 	return rc < 0 ? rc : 0;
+}
+
+static inline bool __smc_ism_is_virtdev(u16 chid)
+{
+	return (chid >= SMC_VIRT_ISM_CHID_MIN && chid <= SMC_VIRT_ISM_CHID_MAX);
+}
+
+static inline bool smc_ism_is_virtdev(struct smcd_dev *smcd)
+{
+	u16 chid = smcd->ops->get_chid(smcd);
+
+	return __smc_ism_is_virtdev(chid);
 }
 
 #endif
