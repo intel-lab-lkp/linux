@@ -134,6 +134,7 @@ static void vb2_vmalloc_put_userptr(void *buf_priv)
 	if (!buf->vec->is_pfns) {
 		n_pages = frame_vector_count(buf->vec);
 		pages = frame_vector_pages(buf->vec);
+		BUG_ON(IS_ERR(pages));
 		if (vaddr)
 			vm_unmap_ram((void *)vaddr, n_pages);
 		if (buf->dma_dir == DMA_FROM_DEVICE ||
