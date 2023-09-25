@@ -86,6 +86,21 @@ struct metricgroup__event_info {
 };
 
 /**
+ * A node is the counter availability of a pmu.
+ * This info is built up at the beginning from JSON file and
+ * used as a reference in metric grouping process.
+*/
+struct metricgroup__pmu_counters {
+	struct list_head nd;
+	/** The name of the pmu the event collected on. */
+	const char *name;
+	//DECLARE_BITMAP(counter_bits, NR_COUNTERS);
+	/** The number of gp counters in the pmu. */
+	size_t size;
+	size_t fixed_size;
+};
+
+/**
  * Each group is one node in the group string list.
  */
 struct metricgroup__group_strs {

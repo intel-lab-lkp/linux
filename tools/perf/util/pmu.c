@@ -785,6 +785,11 @@ __weak const struct pmu_metrics_table *pmu_metrics_table__find(void)
 	return perf_pmu__find_metrics_table(NULL);
 }
 
+__weak const struct pmu_layouts_table *pmu_layouts_table__find(void)
+{
+	return perf_pmu__find_layouts_table(NULL);
+}
+
 /**
  * perf_pmu__match_ignoring_suffix - Does the pmu_name match tok ignoring any
  *                                   trailing suffix? The Suffix must be in form
