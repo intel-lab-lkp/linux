@@ -1895,6 +1895,95 @@ static int assign_event_grouping(struct metricgroup__event_info *e,
 	return ret;
 }
 
+static int hw_aware_metricgroup__build_event_string(struct list_head *group_strs,
+					   const char *modifier,
+					   struct list_head *groups)
+{
+	struct metricgroup__pmu_group_list *p;
+	struct metricgroup__group *g;
+	struct metricgroup__group_events *ge;
+	bool no_group = true;
+	int ret = 0;
+
+#define RETURN_IF_NON_ZERO(x) do { if (x) return x; } while (0)
+
+	list_for_each_entry(p, groups, nd) {
+		list_for_each_entry(g, &p->group_head, nd) {
+			struct strbuf *events;
+			struct metricgroup__group_strs *new_group_str = malloc(sizeof(struct metricgroup__group_strs));
+
+			if (!new_group_str)
+				return -ENOMEM;
+			strbuf_init(&new_group_str->grouping_str, 0);
+			events = &new_group_str->grouping_str;
+			ret = strbuf_addch(events, '{');
+			RETURN_IF_NON_ZERO(ret);
+			no_group = true;
+			list_for_each_entry(ge, &g->event_head, nd) {
+				const char *sep, *rsep, *id = ge->event_name;
+
+				pr_debug("found event %s\n", id);
+
+				/* Separate events with commas and open the group if necessary. */
+				if (!no_group) {
+					ret = strbuf_addch(events, ',');
+					RETURN_IF_NON_ZERO(ret);
+				}
+				/*
+				 * Encode the ID as an event string. Add a qualifier for
+				 * metric_id that is the original name except with characters
+				 * that parse-events can't parse replaced. For example,
+				 * 'msr@tsc@' gets added as msr/tsc,metric-id=msr!3tsc!3/
+				 */
+				sep = strchr(id, '@');
+				if (sep) {
+					ret = strbuf_add(events, id, sep - id);
+					RETURN_IF_NON_ZERO(ret);
+					ret = strbuf_addch(events, '/');
+					RETURN_IF_NON_ZERO(ret);
+					rsep = strrchr(sep, '@');
+					ret = strbuf_add(events, sep + 1, rsep - sep - 1);
+					RETURN_IF_NON_ZERO(ret);
+					ret = strbuf_addstr(events, ",metric-id=");
+					RETURN_IF_NON_ZERO(ret);
+					sep = rsep;
+				} else {
+					sep = strchr(id, ':');
+					if (sep) {
+						ret = strbuf_add(events, id, sep - id);
+						RETURN_IF_NON_ZERO(ret);
+					} else {
+						ret = strbuf_addstr(events, id);
+						RETURN_IF_NON_ZERO(ret);
+					}
+					ret = strbuf_addstr(events, "/metric-id=");
+					RETURN_IF_NON_ZERO(ret);
+				}
+				ret = encode_metric_id(events, id);
+				RETURN_IF_NON_ZERO(ret);
+				ret = strbuf_addstr(events, "/");
+				RETURN_IF_NON_ZERO(ret);
+
+				if (sep) {
+					ret = strbuf_addstr(events, sep + 1);
+					RETURN_IF_NON_ZERO(ret);
+				}
+				if (modifier) {
+					ret = strbuf_addstr(events, modifier);
+					RETURN_IF_NON_ZERO(ret);
+				}
+				no_group = false;
+			}
+			ret = strbuf_addf(events, "}:W");
+			RETURN_IF_NON_ZERO(ret);
+			pr_debug("events-buf: %s\n", events->buf);
+			list_add_tail(&new_group_str->nd, group_strs);
+		}
+	}
+	return ret;
+#undef RETURN_IF_NON_ZERO
+}
+
 /**
  * create_grouping - Create a list of groups and place all the events of
  * event_info_list into these groups.
@@ -1906,8 +1995,8 @@ static int assign_event_grouping(struct metricgroup__event_info *e,
  */
 static int create_grouping(struct list_head *pmu_info_list,
 			  struct list_head *event_info_list,
-			  struct list_head *groupings __maybe_unused,
-			  const char *modifier __maybe_unused)
+			  struct list_head *groupings,
+			  const char *modifier)
 {
 	int ret = 0;
 	struct metricgroup__event_info *e;
@@ -1923,6 +2012,7 @@ static int create_grouping(struct list_head *pmu_info_list,
 		if (ret)
 			goto out;
 	}
+	ret = hw_aware_metricgroup__build_event_string(groupings, modifier, &groups);
 out:
 	metricgroup__free_group_list(&groups);
 	return ret;
@@ -1951,9 +2041,19 @@ static int hw_aware_build_grouping(struct expr_parse_ctx *ctx __maybe_unused,
 #define RETURN_IF_NON_ZERO(x) do { if (x) return x; } while (0)
 	hashmap__for_each_entry(ctx->ids, cur, bkt) {
 		const char *id = cur->pkey;
+		const char *special_pattern = "topdown-";
 
 		pr_debug("found event %s\n", id);
-
+		if (!strncmp(id, special_pattern, strlen(special_pattern))) {
+			struct metricgroup__event_info *event;
+			event = event_info__new(id, "core", "0", true);
+			if (!event) {
+				ret = -ENOMEM;
+				goto err_out;
+			}
+			list_add(&event->nd, &event_info_list);
+			continue;
+		}
 		ret = get_metricgroup_events(id, etable, &event_info_list);
 		if (ret)
 			goto err_out;
