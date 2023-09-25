@@ -23,6 +23,14 @@ properties:
           - const: fsl,imx31-gpio
       - items:
           - enum:
+              - fsl,imx27-gpio
+          - const: fsl,imx21-gpio
+      - items:
+          - enum:
+              - fsl,imx25-gpio
+          - const: fsl,imx35-gpio
+      - items:
+          - enum:
               - fsl,imx50-gpio
               - fsl,imx51-gpio
               - fsl,imx53-gpio
