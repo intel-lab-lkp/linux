@@ -509,6 +509,21 @@ void __printf(2, 3) kunit_log_append(struct string_stream *log, const char *fmt,
 		kunit_try_catch_throw(&((test_or_suite)->try_catch));	\
 	} while (0)
 
+/* Currently supported test levels */
+enum {
+	KUNIT_LEVEL_SUITE = 0,
+	KUNIT_LEVEL_CASE,
+	KUNIT_LEVEL_CASE_PARAM,
+};
+
+#define kunit_level(test_or_suite)					\
+	_Generic((test_or_suite),					\
+		 struct kunit_suite * : KUNIT_LEVEL_SUITE,		\
+		 struct kunit * : KUNIT_LEVEL_CASE)
+
+#define kunit_indent_level(test_or_suite)				\
+	(KUNIT_INDENT_LEN * kunit_level(test_or_suite))
+
 /*
  * printk and log to per-test or per-suite log buffer.  Logging only done
  * if CONFIG_KUNIT_DEBUGFS is 'y'; if it is 'n', no log is allocated/used.
@@ -520,9 +535,14 @@ void __printf(2, 3) kunit_log_append(struct string_stream *log, const char *fmt,
 				 ##__VA_ARGS__);			\
 	} while (0)
 
+#define kunit_log_indent(lvl, test_or_suite, fmt, ...)			\
+	kunit_log(lvl, test_or_suite, "%*s" fmt,			\
+		  kunit_indent_level(test_or_suite), "",		\
+		  ##__VA_ARGS__)
+
 #define kunit_printk(lvl, test, fmt, ...)				\
-	kunit_log(lvl, test, KUNIT_SUBTEST_INDENT "# %s: " fmt,		\
-		  (test)->name,	##__VA_ARGS__)
+	kunit_log_indent(lvl, test, "# %s: " fmt,			\
+			 (test)->name, ##__VA_ARGS__)
 
 /**
  * kunit_info() - Prints an INFO level message associated with @test.
