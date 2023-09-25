@@ -32,6 +32,9 @@ configuration::
   CONFIG_ACPI_APEI
   CONFIG_ACPI_APEI_EINJ
 
+To use CXL error types ``CONFIG_CXL_ACPI`` needs to be set to the same
+value as ``CONFIG_ACPI_APEI_EINJ`` (either "y" or "m").
+
 The EINJ user interface is in <debugfs mount point>/apei/einj.
 
 The following files belong to it:
@@ -40,9 +43,9 @@ The following files belong to it:
 
   This file shows which error types are supported:
 
-  ================  ===================================
+  ================  =========================================
   Error Type Value	Error Description
-  ================  ===================================
+  ================  =========================================
   0x00000001        Processor Correctable
   0x00000002        Processor Uncorrectable non-fatal
   0x00000004        Processor Uncorrectable fatal
@@ -55,7 +58,13 @@ The following files belong to it:
   0x00000200        Platform Correctable
   0x00000400        Platform Uncorrectable non-fatal
   0x00000800        Platform Uncorrectable fatal
-  ================  ===================================
+  0x00001000        CXL.cache Protocol Correctable
+  0x00002000        CXL.cache Protocol Uncorrectable non-fatal
+  0x00004000        CXL.cache Protocol Uncorrectable fatal
+  0x00008000        CXL.mem Protocol Correctable
+  0x00010000        CXL.mem Protocol Uncorrectable non-fatal
+  0x00020000        CXL.mem Protocol Uncorrectable fatal
+  ================  =========================================
 
   The format of the file contents are as above, except present are only
   the available error types.
@@ -106,6 +115,7 @@ The following files belong to it:
   Used when the 0x1 bit is set in "flags" to specify the APIC id
 
 - param4
+
   Used when the 0x4 bit is set in "flags" to specify target PCIe device
 
 - notrigger
@@ -159,6 +169,13 @@ and param2 (1 = PROCESSOR, 2 = MEMORY, 4 = PCI). See your BIOS vendor
 documentation for details (and expect changes to this API if vendors
 creativity in using this feature expands beyond our expectations).
 
+CXL error types are supported from ACPI 6.5 onwards. To use these error
+types you need the MMIO address of a CXL 1.1 downstream port. You can
+find the address of dportY in /sys/bus/cxl/devices/portX/dportY/cxl_rcrb_addr
+(it's possible that the dport is under the CXL root, in that case the
+path would be /sys/us/cxl/devices/rootX/dportY/cxl_rcrb_addr).
+From there, write the address to param1 and continue as you would for a
+memory error type.
 
 An error injection example::
 
@@ -201,4 +218,4 @@ The following sequence can be used:
   7) Read from the virtual address. This will trigger the error
 
 For more information about EINJ, please refer to ACPI specification
-version 4.0, section 17.5 and ACPI 5.0, section 18.6.
+version 4.0, section 17.5 and ACPI 6.5, section 18.6.
