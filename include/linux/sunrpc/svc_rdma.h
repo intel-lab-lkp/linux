@@ -145,8 +145,6 @@ struct svc_rdma_chunk_ctxt {
 	struct list_head	cc_rwctxts;
 	ktime_t			cc_posttime;
 	int			cc_sqecount;
-	enum ib_wc_status	cc_status;
-	struct completion	cc_done;
 };
 
 struct svc_rdma_recv_ctxt {
@@ -166,6 +164,7 @@ struct svc_rdma_recv_ctxt {
 	unsigned int		rc_pageoff;
 	unsigned int		rc_curpage;
 	unsigned int		rc_readbytes;
+	struct xdr_buf		rc_saved_arg;
 	struct svc_rdma_chunk_ctxt	rc_cc;
 
 	struct svc_rdma_pcl	rc_call_pcl;
