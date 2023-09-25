@@ -4743,7 +4743,8 @@ struct cfg80211_ops {
 
 	int	(*channel_switch)(struct wiphy *wiphy,
 				  struct net_device *dev,
-				  struct cfg80211_csa_settings *params);
+				  struct cfg80211_csa_settings *params,
+				  unsigned int link_id);
 
 	int     (*set_qos_map)(struct wiphy *wiphy,
 			       struct net_device *dev,

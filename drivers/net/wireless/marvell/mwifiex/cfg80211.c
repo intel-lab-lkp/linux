@@ -3961,7 +3961,8 @@ mwifiex_cfg80211_add_station(struct wiphy *wiphy, struct net_device *dev,
 
 static int
 mwifiex_cfg80211_channel_switch(struct wiphy *wiphy, struct net_device *dev,
-				struct cfg80211_csa_settings *params)
+				struct cfg80211_csa_settings *params,
+				unsigned int link_id)
 {
 	struct ieee_types_header *chsw_ie;
 	struct ieee80211_channel_sw_ie *channel_sw;
