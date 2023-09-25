@@ -125,6 +125,11 @@ runtime static EM' (system property) design to a 'single EM which can be
 changed during runtime according e.g. to the workload' (system and workload
 property) design.
 
+It is possible also to modify the CPU performance values for each EM's
+performance state. Thus, the full power and performance profile (which
+is an exponential curve) can be changed according e.g. to the workload
+or system property.
+
 
 3. Core APIs
 ------------
@@ -326,18 +331,18 @@ EM framework::
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 This section provides a simple example of a thermal driver modifying the EM.
-The driver implements a foo_mod_power() function to be provided to the
+The driver implements a mod_power_perf() function to be provided to the
 EM framework. The driver is woken up periodically to check the temperature
 and modify the EM data if needed::
 
   -> drivers/thermal/foo_thermal.c
 
-  01	static int foo_mod_power(struct device *dev, unsigned long freq,
-  02			unsigned long *power, void *priv)
+  01	static int mod_power_perf(struct device *dev, unsigned long freq,
+  02			unsigned long *power, unsigned long *perf, void *priv)
   03	{
   04		struct foo_context *ctx = priv;
   05
-  06		/* Estimate power for the given frequency and temperature */
+  06		*perf = foo_estimate_performance(dev, freq);
   07		*power = foo_estimate_power(dev, freq, ctx->temperature);
   08		if (*power >= EM_MAX_POWER);
   09			return -EINVAL;
