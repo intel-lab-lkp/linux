@@ -3571,6 +3571,23 @@ static int shmem_fileattr_get(struct dentry *dentry, struct fileattr *fa)
 
 	fileattr_fill_flags(fa, info->fsflags & SHMEM_FL_USER_VISIBLE);
 
+	fa->fsx_projid = (u32)from_kprojid(&init_user_ns, info->i_projid);
+	return 0;
+}
+
+static int shmem_set_project(struct inode *inode, __u32 projid)
+{
+	int err = -EOPNOTSUPP;
+	kprojid_t kprojid = make_kprojid(&init_user_ns, (projid_t)projid);
+
+	if (projid_eq(kprojid, SHMEM_I(inode)->i_projid))
+		return 0;
+
+	err = dquot_initialize(inode);
+	if (err)
+		return err;
+
+	SHMEM_I(inode)->i_projid = kprojid;
 	return 0;
 }
 
@@ -3579,19 +3596,29 @@ static int shmem_fileattr_set(struct mnt_idmap *idmap,
 {
 	struct inode *inode = d_inode(dentry);
 	struct shmem_inode_info *info = SHMEM_I(inode);
+	int err = -EOPNOTSUPP;
 
-	if (fileattr_has_fsx(fa))
-		return -EOPNOTSUPP;
+	if (fa->fsx_valid &&
+	   ((fa->fsx_xflags & ~FS_XFLAG_COMMON) ||
+	   fa->fsx_extsize != 0 || fa->fsx_cowextsize != 0))
+		goto out;
+
 	if (fa->flags & ~SHMEM_FL_USER_MODIFIABLE)
-		return -EOPNOTSUPP;
+		goto out;
 
 	info->fsflags = (info->fsflags & ~SHMEM_FL_USER_MODIFIABLE) |
 		(fa->flags & SHMEM_FL_USER_MODIFIABLE);
 
 	shmem_set_inode_flags(inode, info->fsflags);
+	err = shmem_set_project(inode, fa->fsx_projid);
+		if (err)
+			goto out;
+
 	inode_set_ctime_current(inode);
 	inode_inc_iversion(inode);
-	return 0;
+
+out:
+	return err;
 }
 
 /*
