@@ -568,8 +568,8 @@ int kunit_run_tests(struct kunit_suite *suite)
 	if (suite->suite_init) {
 		suite->suite_init_err = suite->suite_init(suite);
 		if (suite->suite_init_err) {
-			kunit_err(suite, KUNIT_SUBTEST_INDENT
-				  "# failed to initialize (%d)", suite->suite_init_err);
+			kunit_err(suite, "failed to initialize (%pe)",
+				  ERR_PTR(suite->suite_init_err));
 			goto suite_end;
 		}
 	}
