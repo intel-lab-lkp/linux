@@ -1528,6 +1528,38 @@ static int parse_counter(const char *counter,
 	return 0;
 }
 
+static void group_event_list_free(struct metricgroup__group *groups)
+{
+	struct metricgroup__group_events *e, *tmp;
+
+	list_for_each_entry_safe (e, tmp, &groups->event_head, nd) {
+		list_del_init(&e->nd);
+		free(e);
+	}
+}
+
+static void group_list_free(struct metricgroup__pmu_group_list *groups)
+{
+	struct metricgroup__group *g, *tmp;
+
+	list_for_each_entry_safe (g, tmp, &groups->group_head, nd) {
+		list_del_init(&g->nd);
+		group_event_list_free(g);
+		free(g);
+	}
+}
+
+static void metricgroup__free_group_list(struct list_head *groups)
+{
+	struct metricgroup__pmu_group_list *g, *tmp;
+
+	list_for_each_entry_safe (g, tmp, groups, nd) {
+		list_del_init(&g->nd);
+		group_list_free(g);
+		free(g);
+	}
+}
+
 static void metricgroup__free_event_info(struct list_head
 					*event_info_list)
 {
@@ -1845,6 +1877,8 @@ static int assign_event_grouping(struct metricgroup__event_info *e,
 		struct metricgroup__pmu_counters *p;
 
 		pmu_group_head = malloc(sizeof(struct metricgroup__pmu_group_list));
+		if (!pmu_group_head)
+			return -ENOMEM;
 		INIT_LIST_HEAD(&pmu_group_head->group_head);
 		pr_debug("create new group for event %s in pmu %s\n", e->name, e->pmu_name);
 		pmu_group_head->pmu_name = e->pmu_name;
@@ -1886,8 +1920,11 @@ static int create_grouping(struct list_head *pmu_info_list,
 		pr_debug("Event name %s, [pmu]=%s, [counters]=%s\n", e->name,
 			e->pmu_name, bit_buf);
 		ret = assign_event_grouping(e, pmu_info_list, &groups);
+		if (ret)
+			goto out;
 	}
-
+out:
+	metricgroup__free_group_list(&groups);
 	return ret;
 };
 
