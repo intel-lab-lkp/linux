@@ -64,6 +64,19 @@ If the driver needs to perform more complex initialization like getting and
 configuring GPIOs it can get its ACPI handle and extract this information
 from ACPI tables.
 
+ACPI bus
+====================
+
+Historically some devices not connected to any bus were represented as ACPI
+devices, and had to implement ACPI driver. This is not a preferred way for new
+drivers. As explained above devices not connected to any bus should implement
+platform driver. ACPI device would be created during enumeration nonetheless,
+and would be accessible through ACPI_COMPANION() macro, and the ACPI handle would
+be accessible through ACPI_HANDLE() macro. ACPI device is meant to describe
+information related to ACPI entry e.g. handle of the ACPI entry. Think -
+ACPI device interfaces with the FW, and the platform device with the rest of
+the system.
+
 DMA support
 ===========
 
