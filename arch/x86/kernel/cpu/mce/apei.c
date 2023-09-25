@@ -20,6 +20,7 @@
 #include <linux/kernel.h>
 #include <linux/acpi.h>
 #include <linux/cper.h>
+#include <linux/pstore.h>
 #include <acpi/apei.h>
 #include <acpi/ghes.h>
 #include <asm/mce.h>
@@ -124,58 +125,45 @@ int apei_smca_report_x86_error(struct cper_ia_proc_ctx *ctx_info, u64 lapic_id)
 	return 0;
 }
 
-#define CPER_CREATOR_MCE						\
-	GUID_INIT(0x75a574e3, 0x5052, 0x4b29, 0x8a, 0x8e, 0xbe, 0x2c,	\
-		  0x64, 0x90, 0xb8, 0x9d)
-#define CPER_SECTION_TYPE_MCE						\
-	GUID_INIT(0xfe08ffbe, 0x95e4, 0x4be7, 0xbc, 0x73, 0x40, 0x96,	\
-		  0x04, 0x4a, 0x38, 0xfc)
-
-/*
- * CPER specification (in UEFI specification 2.3 appendix N) requires
- * byte-packed.
- */
-struct cper_mce_record {
-	struct cper_record_header hdr;
-	struct cper_section_descriptor sec_hdr;
-	struct mce mce;
-} __packed;
-
 int apei_write_mce(struct mce *m)
 {
-	struct cper_mce_record rcd;
+	struct cper_pstore_record *rcd;
+	int record_len = sizeof(*m) + sizeof(*rcd);
+	int data_len = sizeof(*m);
 
-	memset(&rcd, 0, sizeof(rcd));
-	memcpy(rcd.hdr.signature, CPER_SIG_RECORD, CPER_SIG_SIZE);
-	rcd.hdr.revision = CPER_RECORD_REV;
-	rcd.hdr.signature_end = CPER_SIG_END;
-	rcd.hdr.section_count = 1;
-	rcd.hdr.error_severity = CPER_SEV_FATAL;
+	rcd = kmalloc(record_len, GFP_KERNEL);
+	memset(rcd, 0, sizeof(*rcd));
+
+	memcpy(rcd->hdr.signature, CPER_SIG_RECORD, CPER_SIG_SIZE);
+	rcd->hdr.revision = CPER_RECORD_REV;
+	rcd->hdr.signature_end = CPER_SIG_END;
+	rcd->hdr.section_count = 1;
+	rcd->hdr.error_severity = CPER_SEV_FATAL;
 	/* timestamp, platform_id, partition_id are all invalid */
-	rcd.hdr.validation_bits = 0;
-	rcd.hdr.record_length = sizeof(rcd);
-	rcd.hdr.creator_id = CPER_CREATOR_MCE;
-	rcd.hdr.notification_type = CPER_NOTIFY_MCE;
-	rcd.hdr.record_id = cper_next_record_id();
-	rcd.hdr.flags = CPER_HW_ERROR_FLAGS_PREVERR;
+	rcd->hdr.validation_bits = 0;
+	rcd->hdr.record_length = record_len;
+	rcd->hdr.creator_id = CPER_CREATOR_PSTORE;
+	rcd->hdr.notification_type = CPER_NOTIFY_MCE;
+	rcd->hdr.record_id = cper_next_record_id();
+	rcd->hdr.flags = CPER_HW_ERROR_FLAGS_PREVERR;
 
-	rcd.sec_hdr.section_offset = (void *)&rcd.mce - (void *)&rcd;
-	rcd.sec_hdr.section_length = sizeof(rcd.mce);
-	rcd.sec_hdr.revision = CPER_SEC_REV;
-	/* fru_id and fru_text is invalid */
-	rcd.sec_hdr.validation_bits = 0;
-	rcd.sec_hdr.flags = CPER_SEC_PRIMARY;
-	rcd.sec_hdr.section_type = CPER_SECTION_TYPE_MCE;
-	rcd.sec_hdr.section_severity = CPER_SEV_FATAL;
+	rcd->sec_hdr.section_offset = (void *)&rcd->data - (void *)&rcd;
+	rcd->sec_hdr.section_length = data_len;
+	rcd->sec_hdr.revision = CPER_SEC_REV;
+	/* ->ru_id and fru_text is invalid */
+	rcd->sec_hdr.validation_bits = 0;
+	rcd->sec_hdr.flags = CPER_SEC_PRIMARY;
+	rcd->sec_hdr.section_type = CPER_SECTION_TYPE_MCE;
+	rcd->sec_hdr.section_severity = CPER_SEV_FATAL;
 
-	memcpy(&rcd.mce, m, sizeof(*m));
+	memcpy(rcd->data, m, data_len);
 
-	return erst_write(&rcd.hdr);
+	return erst_write(&rcd->hdr);
 }
 
 ssize_t apei_read_mce(struct mce *m, u64 *record_id)
 {
-	struct cper_mce_record rcd;
+	struct cper_pstore_record rcd;
 	int rc, pos;
 
 	rc = erst_get_record_id_begin(&pos);
@@ -189,14 +177,14 @@ retry:
 	if (*record_id == APEI_ERST_INVALID_RECORD_ID)
 		goto out;
 	rc = erst_read_record(*record_id, &rcd.hdr, sizeof(rcd), sizeof(rcd),
-			&CPER_CREATOR_MCE);
+			&CPER_CREATOR_PSTORE);
 	/* someone else has cleared the record, try next one */
 	if (rc == -ENOENT)
 		goto retry;
 	else if (rc < 0)
 		goto out;
 
-	memcpy(m, &rcd.mce, sizeof(*m));
+	memcpy(m, &rcd.data, sizeof(*m));
 	rc = sizeof(*m);
 out:
 	erst_get_record_id_end();
