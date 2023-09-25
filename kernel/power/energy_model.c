@@ -25,6 +25,9 @@ static DEFINE_MUTEX(em_pd_mutex);
 
 static void em_cpufreq_update_efficiencies(struct device *dev,
 					   struct em_perf_state *table);
+static void em_check_capacity_update(void);
+static void em_update_workfn(struct work_struct *work);
+static DECLARE_DELAYED_WORK(em_update_work, em_update_workfn);
 
 static bool _is_cpu_device(struct device *dev)
 {
@@ -591,6 +594,10 @@ int em_dev_register_perf_domain(struct device *dev, unsigned int nr_states,
 
 unlock:
 	mutex_unlock(&em_pd_mutex);
+
+	if (_is_cpu_device(dev))
+		em_check_capacity_update();
+
 	return ret;
 }
 EXPORT_SYMBOL_GPL(em_dev_register_perf_domain);
@@ -651,3 +658,104 @@ void em_dev_unregister_perf_domain(struct device *dev)
 	mutex_unlock(&em_pd_mutex);
 }
 EXPORT_SYMBOL_GPL(em_dev_unregister_perf_domain);
+
+/*
+ * Adjustment of CPU performance values after boot, when all CPUs capacites
+ * are correctly calculated.
+ */
+static int get_updated_perf(struct device *dev, unsigned long freq,
+				   unsigned long *power, unsigned long *perf,
+				   void *priv)
+{
+	struct em_perf_state *table = priv;
+	int i, cpu, nr_states;
+	u64 fmax, max_cap;
+
+	nr_states = dev->em_pd->nr_perf_states;
+
+	cpu = cpumask_first(em_span_cpus(dev->em_pd));
+
+	fmax = (u64) table[nr_states - 1].frequency;
+	max_cap = (u64) arch_scale_cpu_capacity(cpu);
+
+	for (i = 0; i < nr_states; i++) {
+		if (freq != table[i].frequency)
+			continue;
+
+		*power = table[i].power;
+		*perf = div64_u64(max_cap * freq, fmax);
+		break;
+	}
+
+	return 0;
+}
+
+static void em_check_capacity_update(void)
+{
+	struct em_data_callback em_cb = EM_UPDATE_CB(get_updated_perf);
+	struct em_perf_table *runtime_table;
+	struct em_perf_domain *em_pd;
+	cpumask_var_t cpu_done_mask;
+	unsigned long cpu_capacity;
+	struct em_perf_state *ps;
+	struct device *dev;
+	int cpu, ret;
+
+	if (!zalloc_cpumask_var(&cpu_done_mask, GFP_KERNEL)) {
+		pr_warn("EM: no free memory\n");
+		return;
+	}
+
+	/* Loop over all EMs and check if the CPU capacity has changed. */
+	for_each_possible_cpu(cpu) {
+		unsigned long em_max_performance;
+		struct cpufreq_policy *policy;
+
+		if (cpumask_test_cpu(cpu, cpu_done_mask))
+			continue;
+
+		policy = cpufreq_cpu_get(cpu);
+		if (!policy) {
+			pr_debug("EM: Accessing cpu%d policy failed\n", cpu);
+			schedule_delayed_work(&em_update_work,
+					      msecs_to_jiffies(1000));
+			break;
+		}
+
+		em_pd = em_cpu_get(cpu);
+		if (!em_pd || em_is_artificial(em_pd))
+			continue;
+
+		cpu_capacity = arch_scale_cpu_capacity(cpu);
+
+		rcu_read_lock();
+		runtime_table = rcu_dereference(em_pd->runtime_table);
+		ps = &runtime_table->state[em_pd->nr_perf_states - 1];
+		em_max_performance = ps->performance;
+		rcu_read_unlock();
+
+		/*
+		 * Check if the CPU capacity has been adjusted during boot
+		 * and trigger the update for new performance values.
+		 */
+		if (em_max_performance != cpu_capacity) {
+			dev = get_cpu_device(cpu);
+			ret = em_dev_update_perf_domain(dev, &em_cb,
+						em_pd->default_table->state);
+			if (ret)
+				dev_warn(dev, "EM: update failed %d\n", ret);
+			else
+				dev_info(dev, "EM: updated\n");
+		}
+
+		cpumask_or(cpu_done_mask, cpu_done_mask,
+			   em_span_cpus(em_pd));
+	}
+
+	free_cpumask_var(cpu_done_mask);
+}
+
+static void em_update_workfn(struct work_struct *work)
+{
+	em_check_capacity_update();
+}
