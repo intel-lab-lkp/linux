@@ -3695,18 +3695,32 @@ int kvm_set_msr_common(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 		break;
 	case MSR_EFER:
 		return set_efer(vcpu, msr_info);
-	case MSR_K7_HWCR:
+	case MSR_K7_HWCR: {
+		u64 allowed = BIT_ULL(18);	/* McStatusWrEn */
+
 		data &= ~(u64)0x40;	/* ignore flush filter disable */
 		data &= ~(u64)0x100;	/* ignore ignne emulation enable */
 		data &= ~(u64)0x8;	/* ignore TLB cache disable */
 
-		/* Handle McStatusWrEn */
-		if (data & ~BIT_ULL(18)) {
+		if (!msr_info->host_initiated)
+			data &= ~BIT_ULL(24);	/* ignore TscFreqSel */
+		else
+			allowed |= BIT_ULL(24);	/* TscFreqSel */
+
+		if (data & ~allowed) {
 			kvm_pr_unimpl_wrmsr(vcpu, msr, data);
 			return 1;
 		}
+
+		/*
+		 * TscFreqSel is read-only from within the
+		 * guest. Attempts to clear it are ignored.
+		 */
+		if (!msr_info->host_initiated)
+			data |= vcpu->arch.msr_hwcr & BIT_ULL(24);
 		vcpu->arch.msr_hwcr = data;
 		break;
+	}
 	case MSR_FAM10H_MMIO_CONF_BASE:
 		if (data != 0) {
 			kvm_pr_unimpl_wrmsr(vcpu, msr, data);
