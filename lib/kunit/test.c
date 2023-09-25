@@ -540,6 +540,20 @@ static void kunit_accumulate_stats(struct kunit_result_stats *total,
 	total->total += add.total;
 }
 
+static size_t count_test_case_params(struct kunit_case *test_case)
+{
+	char param_desc[KUNIT_PARAM_DESC_SIZE];
+	const void *param_value = NULL;
+	size_t num = 0;
+
+	if (test_case->generate_params)
+		while ((param_value = test_case->generate_params(param_value,
+								 param_desc)))
+			num++;
+
+	return num;
+}
+
 int kunit_run_tests(struct kunit_suite *suite)
 {
 	char param_desc[KUNIT_PARAM_DESC_SIZE];
@@ -585,6 +599,8 @@ int kunit_run_tests(struct kunit_suite *suite)
 			test_case->status = KUNIT_SKIPPED;
 			kunit_log_indent(KERN_INFO, &test, "KTAP version 1\n");
 			kunit_log_indent(KERN_INFO, &test, "# Subtest: %s", test_case->name);
+			kunit_log_indent(KERN_INFO, &test, "1..%zd\n",
+					 count_test_case_params(test_case));
 
 			while (test.param_value) {
 				kunit_run_case_catch_errors(suite, test_case, &test);
