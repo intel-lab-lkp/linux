@@ -3865,6 +3865,7 @@ enum shmem_param {
 	Opt_quota,
 	Opt_usrquota,
 	Opt_grpquota,
+	Opt_prjquota,
 	Opt_usrquota_block_hardlimit,
 	Opt_usrquota_inode_hardlimit,
 	Opt_grpquota_block_hardlimit,
@@ -3895,6 +3896,7 @@ const struct fs_parameter_spec shmem_fs_parameters[] = {
 	fsparam_flag  ("quota",		Opt_quota),
 	fsparam_flag  ("usrquota",	Opt_usrquota),
 	fsparam_flag  ("grpquota",	Opt_grpquota),
+	fsparam_flag  ("prjquota",	Opt_prjquota),
 	fsparam_string("usrquota_block_hardlimit", Opt_usrquota_block_hardlimit),
 	fsparam_string("usrquota_inode_hardlimit", Opt_usrquota_inode_hardlimit),
 	fsparam_string("grpquota_block_hardlimit", Opt_grpquota_block_hardlimit),
@@ -4028,6 +4030,12 @@ static int shmem_parse_one(struct fs_context *fc, struct fs_parameter *param)
 			return invalfc(fc, "Quotas in unprivileged tmpfs mounts are unsupported");
 		ctx->seen |= SHMEM_SEEN_QUOTA;
 		ctx->quota_types |= QTYPE_MASK_GRP;
+		break;
+	case Opt_prjquota:
+		if (fc->user_ns != &init_user_ns)
+			return invalfc(fc, "Quotas in unprivileged tmpfs mounts are unsupported");
+		ctx->seen |= SHMEM_SEEN_QUOTA;
+		ctx->quota_types |= QTYPE_MASK_PRJ;
 		break;
 	case Opt_usrquota_block_hardlimit:
 		size = memparse(param->string, &rest);
@@ -4363,7 +4371,8 @@ static int shmem_fill_super(struct super_block *sb, struct fs_context *fc)
 	if (ctx->seen & SHMEM_SEEN_QUOTA) {
 		sb->dq_op = &shmem_quota_operations;
 		sb->s_qcop = &dquot_quotactl_sysfile_ops;
-		sb->s_quota_types = QTYPE_MASK_USR | QTYPE_MASK_GRP;
+		sb->s_quota_types = QTYPE_MASK_USR | QTYPE_MASK_GRP |
+				    QTYPE_MASK_PRJ;
 
 		/* Copy the default limits from ctx into sbinfo */
 		memcpy(&sbinfo->qlimits, &ctx->qlimits,

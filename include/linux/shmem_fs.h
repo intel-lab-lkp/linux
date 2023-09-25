@@ -14,7 +14,7 @@
 /* inode in-kernel data */
 
 #ifdef CONFIG_TMPFS_QUOTA
-#define SHMEM_MAXQUOTAS 2
+#define SHMEM_MAXQUOTAS 3
 
 /* Default project ID */
 #define SHMEM_DEF_PROJID 0
