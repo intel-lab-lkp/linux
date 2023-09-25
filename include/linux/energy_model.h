@@ -174,24 +174,29 @@ struct em_data_callback {
 			unsigned long *cost);
 
 	/**
-	 * update_power() - Provide new power at the given performance state of
-	 *		a device
+	 * update_power_perf() - Provide new power and performance at the given
+	 *		performance state of a device
 	 * @dev		: Device for which we do this operation (can be a CPU)
 	 * @freq	: Frequency at the performance state in kHz
 	 * @power	: New power value at the performance state
 	 *		(modified)
+	 * @perf	: New performance value at the performance state
+	 *		(modified)
 	 * @priv	: Pointer to private data useful for tracking context
 	 *		during runtime modifications of EM.
 	 *
-	 * The update_power() is used by runtime modifiable EM. It aims to
-	 * provide updated power value for a given frequency, which is stored
-	 * in the performance state. The power value provided by this callback
-	 * should fit in the [0, EM_MAX_POWER] range.
+	 * The update_power_perf() is used by runtime modifiable EM. It aims to
+	 * provide updated power and performance value for a given frequency,
+	 * which is stored in the performance state. The power value provided
+	 * by this callback should fit in the [0, EM_MAX_POWER] range. The
+	 * performance value should be lower or equal to the CPU max capacity
+	 * (1024).
 	 *
 	 * Return 0 on success, or appropriate error value in case of failure.
 	 */
-	int (*update_power)(struct device *dev, unsigned long freq,
-			    unsigned long *power, void *priv);
+	int (*update_power_perf)(struct device *dev, unsigned long freq,
+				 unsigned long *power, unsigned long *perf,
+				 void *priv);
 };
 #define EM_SET_ACTIVE_POWER_CB(em_cb, cb) ((em_cb).active_power = cb)
 #define EM_ADV_DATA_CB(_active_power_cb, _cost_cb)	\
@@ -199,7 +204,8 @@ struct em_data_callback {
 	  .get_cost = _cost_cb }
 #define EM_DATA_CB(_active_power_cb)			\
 		EM_ADV_DATA_CB(_active_power_cb, NULL)
-#define EM_UPDATE_CB(_update_power_cb) { .update_power = &_update_power_cb }
+#define EM_UPDATE_CB(_update_pwr_perf_cb)		\
+	{ .update_power_perf = &_update_pwr_perf_cb }
 
 struct em_perf_domain *em_cpu_get(int cpu);
 struct em_perf_domain *em_pd_get(struct device *dev);

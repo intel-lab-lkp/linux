@@ -217,11 +217,11 @@ int em_dev_update_perf_domain(struct device *dev, struct em_data_callback *cb,
 			      void *priv)
 {
 	struct em_perf_table *runtime_table;
-	unsigned long power, freq;
+	unsigned long power, freq, perf;
 	struct em_perf_domain *pd;
 	int ret, i;
 
-	if (!cb || !cb->update_power)
+	if (!cb || !cb->update_power_perf)
 		return -EINVAL;
 
 	/*
@@ -262,13 +262,14 @@ int em_dev_update_perf_domain(struct device *dev, struct em_data_callback *cb,
 		 * Call driver callback to get a new power value for
 		 * a given frequency.
 		 */
-		ret = cb->update_power(dev, freq, &power, priv);
+		ret = cb->update_power_perf(dev, freq, &power, &perf, priv);
 		if (ret) {
 			dev_dbg(dev, "EM: runtime update error: %d\n", ret);
 			goto free_runtime_state_table;
 		}
 
 		runtime_table->state[i].power = power;
+		runtime_table->state[i].performance = perf;
 	}
 
 	ret = em_compute_costs(dev, runtime_table->state, cb,
