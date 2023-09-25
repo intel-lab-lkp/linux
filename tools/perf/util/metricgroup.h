@@ -101,6 +101,43 @@ struct metricgroup__pmu_counters {
 };
 
 /**
+ * A list of groups for this pmu.
+ * This is updated during the grouping.
+ */
+struct metricgroup__pmu_group_list {
+	struct list_head nd;
+	/** The name of the pmu(/core) the events collected on. */
+	const char *pmu_name;
+	/** The number of gp counters in the pmu(/core). */
+	size_t size;
+	/** The number of fixed counters in the pmu(/core) if applicable. */
+	size_t fixed_size;
+	/** Head to the list of groups using this pmu(/core)*/
+	struct list_head group_head;
+};
+
+/**
+ * This is one node in the metricgroup__pmu_group_list.
+ * It represents on group.
+ */
+struct metricgroup__group {
+	struct list_head nd;
+	/** The bitmaps represent availability of the counters.
+	 *  They are updated once the corresponding counter is used by
+	 *  an event (event inserted into the group).
+	 */
+	DECLARE_BITMAP(gp_counters, NR_COUNTERS);
+	DECLARE_BITMAP(fixed_counters, NR_COUNTERS);
+	/** Head to the list of event names in this group*/
+	struct list_head event_head;
+};
+
+struct metricgroup__group_events {
+	struct list_head nd;
+	const char *event_name;
+};
+
+/**
  * Each group is one node in the group string list.
  */
 struct metricgroup__group_strs {
