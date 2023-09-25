@@ -15,7 +15,10 @@
 
 #ifdef CONFIG_TMPFS_QUOTA
 #define SHMEM_MAXQUOTAS 2
-#endif
+
+/* Default project ID */
+#define SHMEM_DEF_PROJID 0
+#endif /* CONFIG_TMPFS_QUOTA */
 
 struct shmem_inode_info {
 	spinlock_t		lock;
@@ -33,14 +36,16 @@ struct shmem_inode_info {
 	unsigned int		fsflags;	/* flags for FS_IOC_[SG]ETFLAGS */
 #ifdef CONFIG_TMPFS_QUOTA
 	struct dquot		*i_dquot[MAXQUOTAS];
+	kprojid_t		i_projid;
 #endif
 	struct offset_ctx	dir_offsets;	/* stable entry offsets */
 	struct inode		vfs_inode;
 };
 
-#define SHMEM_FL_USER_VISIBLE		FS_FL_USER_VISIBLE
+#define SHMEM_FL_USER_VISIBLE		(FS_FL_USER_VISIBLE | FS_PROJINHERIT_FL)
 #define SHMEM_FL_USER_MODIFIABLE \
-	(FS_IMMUTABLE_FL | FS_APPEND_FL | FS_NODUMP_FL | FS_NOATIME_FL)
+	(FS_IMMUTABLE_FL | FS_APPEND_FL | FS_NODUMP_FL | \
+	 FS_NOATIME_FL | FS_PROJINHERIT_FL)
 #define SHMEM_FL_INHERITED		(FS_NODUMP_FL | FS_NOATIME_FL)
 
 struct shmem_quota_limits {

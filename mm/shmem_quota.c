@@ -325,6 +325,15 @@ static int shmem_dquot_write_info(struct super_block *sb, int type)
 	return 0;
 }
 
+static int shmem_get_projid(struct inode *inode, kprojid_t *projid)
+{
+	if (!sb_has_quota_active(inode->i_sb, PRJQUOTA))
+		return -EOPNOTSUPP;
+
+	*projid = SHMEM_I(inode)->i_projid;
+	return 0;
+}
+
 static const struct quota_format_ops shmem_format_ops = {
 	.check_quota_file	= shmem_check_quota_file,
 	.read_file_info		= shmem_read_file_info,
@@ -346,5 +355,6 @@ const struct dquot_operations shmem_quota_operations = {
 	.write_info		= shmem_dquot_write_info,
 	.mark_dirty		= shmem_mark_dquot_dirty,
 	.get_next_id		= shmem_get_next_id,
+	.get_projid		= shmem_get_projid,
 };
 #endif /* CONFIG_TMPFS_QUOTA */

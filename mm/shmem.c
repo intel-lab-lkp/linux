@@ -2539,6 +2539,12 @@ static struct inode *shmem_get_inode(struct mnt_idmap *idmap,
 	if (IS_ERR(inode))
 		return inode;
 
+	if (dir && sb_has_quota_active(sb, PRJQUOTA))
+		SHMEM_I(inode)->i_projid = SHMEM_I(dir)->i_projid;
+	else
+		SHMEM_I(inode)->i_projid = make_kprojid(&init_user_ns,
+							SHMEM_DEF_PROJID);
+
 	err = dquot_initialize(inode);
 	if (err)
 		goto errout;
