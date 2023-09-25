@@ -566,9 +566,10 @@ static void virtio_crypto_skcipher_finalize_req(
 					 AES_BLOCK_SIZE, 0);
 	kfree_sensitive(vc_sym_req->iv);
 	virtcrypto_clear_request(&vc_sym_req->base);
-
+	local_bh_disable();
 	crypto_finalize_skcipher_request(vc_sym_req->base.dataq->engine,
 					   req, err);
+	local_bh_enable();
 }
 
 static struct virtio_crypto_algo virtio_crypto_algs[] = { {

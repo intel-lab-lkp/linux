@@ -61,8 +61,9 @@ static void virtio_crypto_akcipher_finalize_req(
 	vc_akcipher_req->src_buf = NULL;
 	vc_akcipher_req->dst_buf = NULL;
 	virtcrypto_clear_request(&vc_akcipher_req->base);
-
+	local_bh_disable();
 	crypto_finalize_akcipher_request(vc_akcipher_req->base.dataq->engine, req, err);
+	local_bh_enable();
 }
 
 static void virtio_crypto_dataq_akcipher_callback(struct virtio_crypto_request *vc_req, int len)
