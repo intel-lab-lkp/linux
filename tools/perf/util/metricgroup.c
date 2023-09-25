@@ -2196,11 +2196,11 @@ static int hw_aware_parse_ids(struct perf_pmu *fake_pmu,
 	*out_evlist = NULL;
 	ret = hw_aware_build_grouping(ids, &grouping);
 	if (ret)
-		goto err_out;
+		goto out;
 	ret = hw_aware_metricgroup__build_event_string(&grouping_str, modifier,
 						      tool_events, &grouping);
 	if (ret)
-		goto err_out;
+		goto out;
 
 	parsed_evlist = evlist__new();
 	if (!parsed_evlist) {
@@ -2225,10 +2225,11 @@ static int hw_aware_parse_ids(struct perf_pmu *fake_pmu,
 	*out_evlist = parsed_evlist;
 	parsed_evlist = NULL;
 err_out:
-	metricgroup__free_group_list(&grouping);
-	metricgroup__free_grouping_strs(&grouping_str);
 	parse_events_error__exit(&parse_error);
 	evlist__delete(parsed_evlist);
+out:
+	metricgroup__free_group_list(&grouping);
+	metricgroup__free_grouping_strs(&grouping_str);
 	return ret;
 }
 
