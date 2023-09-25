@@ -2749,7 +2749,7 @@ void mpol_shared_policy_init(struct shared_policy *sp, struct mempolicy *mpol)
 	rwlock_init(&sp->lock);
 
 	if (mpol) {
-		struct vm_area_struct pvma;
+		struct sp_node *n;
 		struct mempolicy *new;
 		NODEMASK_SCRATCH(scratch);
 
@@ -2766,11 +2766,10 @@ void mpol_shared_policy_init(struct shared_policy *sp, struct mempolicy *mpol)
 		if (ret)
 			goto put_new;
 
-		/* Create pseudo-vma that contains just the policy */
-		vma_init(&pvma, NULL);
-		pvma.vm_end = TASK_SIZE;	/* policy covers entire file */
-		mpol_set_shared_policy(sp, &pvma, new); /* adds ref */
-
+		/* alloc node covering entire file; adds ref to new */
+		n = sp_alloc(0, MAX_LFS_FILESIZE >> PAGE_SHIFT, new);
+		if (n)
+			sp_insert(sp, n);
 put_new:
 		mpol_put(new);			/* drop initial ref */
 free_scratch:
