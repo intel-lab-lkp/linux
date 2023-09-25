@@ -141,6 +141,15 @@ unsigned long thp_get_unmapped_area(struct file *filp, unsigned long addr,
 		unsigned long len, unsigned long pgoff, unsigned long flags);
 
 void folio_prep_large_rmappable(struct folio *folio);
+static inline struct folio *page_rmappable_folio(struct page *page)
+{
+	struct folio *folio = (struct folio *)page;
+
+	if (folio && folio_order(folio) > 1)
+		folio_prep_large_rmappable(folio);
+	return folio;
+}
+
 bool can_split_folio(struct folio *folio, int *pextra_pins);
 int split_huge_page_to_list(struct page *page, struct list_head *list);
 static inline int split_huge_page(struct page *page)
@@ -281,6 +290,10 @@ static inline bool hugepage_vma_check(struct vm_area_struct *vma,
 }
 
 static inline void folio_prep_large_rmappable(struct folio *folio) {}
+static inline struct folio *page_rmappable_folio(struct page *page)
+{
+	return (struct folio *)page;
+}
 
 #define transparent_hugepage_flags 0UL
 
