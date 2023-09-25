@@ -877,6 +877,10 @@ static inline void detach_timer(struct timer_list *timer, bool clear_pending)
 
 	debug_deactivate(timer);
 
+	if (unlikely(entry->next == LIST_POISON2))
+		WARN_ONCE(1, "timer: list corruption, next is LIST_POISON2, entry:%pS, fn:%pS\n",
+			entry, timer->function);
+
 	__hlist_del(entry);
 	if (clear_pending)
 		entry->pprev = NULL;
