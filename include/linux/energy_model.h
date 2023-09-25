@@ -37,8 +37,18 @@ struct em_perf_state {
 #define EM_PERF_STATE_INEFFICIENT BIT(0)
 
 /**
+ * struct em_perf_table - Performance states table
+ * @state:	List of performance states, in ascending order
+ * @rcu:	RCU used for safe access and destruction
+ */
+struct em_perf_table {
+	struct em_perf_state *state;
+	struct rcu_head rcu;
+};
+
+/**
  * struct em_perf_domain - Performance domain
- * @table:		List of performance states, in ascending order
+ * @default_table:	Pointer to the default em_perf_table
  * @nr_perf_states:	Number of performance states
  * @flags:		See "em_perf_domain flags"
  * @cpus:		Cpumask covering the CPUs of the domain. It's here
@@ -53,7 +63,7 @@ struct em_perf_state {
  * field is unused.
  */
 struct em_perf_domain {
-	struct em_perf_state *table;
+	struct em_perf_table *default_table;
 	int nr_perf_states;
 	unsigned long flags;
 	unsigned long cpus[];
@@ -227,11 +237,13 @@ static inline unsigned long em_cpu_energy(struct em_perf_domain *pd,
 				unsigned long allowed_cpu_cap)
 {
 	unsigned long freq, scale_cpu;
-	struct em_perf_state *ps;
+	struct em_perf_state *table, *ps;
 	int cpu, i;
 
 	if (!sum_util)
 		return 0;
+
+	table = pd->default_table->state;
 
 	/*
 	 * In order to predict the performance state, map the utilization of
@@ -243,7 +255,7 @@ static inline unsigned long em_cpu_energy(struct em_perf_domain *pd,
 	 */
 	cpu = cpumask_first(to_cpumask(pd->cpus));
 	scale_cpu = arch_scale_cpu_capacity(cpu);
-	ps = &pd->table[pd->nr_perf_states - 1];
+	ps = &table[pd->nr_perf_states - 1];
 
 	max_util = map_util_perf(max_util);
 	max_util = min(max_util, allowed_cpu_cap);
@@ -253,9 +265,9 @@ static inline unsigned long em_cpu_energy(struct em_perf_domain *pd,
 	 * Find the lowest performance state of the Energy Model above the
 	 * requested frequency.
 	 */
-	i = em_pd_get_efficient_state(pd->table, pd->nr_perf_states, freq,
+	i = em_pd_get_efficient_state(table, pd->nr_perf_states, freq,
 				      pd->flags);
-	ps = &pd->table[i];
+	ps = &table[i];
 
 	/*
 	 * The capacity of a CPU in the domain at the performance state (ps)

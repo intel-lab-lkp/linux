@@ -37,11 +37,14 @@ static int update_pd_power_uw(struct dtpm *dtpm)
 	struct devfreq *devfreq = dtpm_devfreq->devfreq;
 	struct device *dev = devfreq->dev.parent;
 	struct em_perf_domain *pd = em_pd_get(dev);
+	struct em_perf_state *table;
 
-	dtpm->power_min = pd->table[0].power;
+	table = pd->default_table->state;
+
+	dtpm->power_min = table[0].power;
 	dtpm->power_min *= MICROWATT_PER_MILLIWATT;
 
-	dtpm->power_max = pd->table[pd->nr_perf_states - 1].power;
+	dtpm->power_max = table[pd->nr_perf_states - 1].power;
 	dtpm->power_max *= MICROWATT_PER_MILLIWATT;
 
 	return 0;
@@ -53,22 +56,25 @@ static u64 set_pd_power_limit(struct dtpm *dtpm, u64 power_limit)
 	struct devfreq *devfreq = dtpm_devfreq->devfreq;
 	struct device *dev = devfreq->dev.parent;
 	struct em_perf_domain *pd = em_pd_get(dev);
+	struct em_perf_state *table;
 	unsigned long freq;
 	u64 power;
 	int i;
 
+	table = pd->default_table->state;
+
 	for (i = 0; i < pd->nr_perf_states; i++) {
 
-		power = pd->table[i].power * MICROWATT_PER_MILLIWATT;
+		power = table[i].power * MICROWATT_PER_MILLIWATT;
 		if (power > power_limit)
 			break;
 	}
 
-	freq = pd->table[i - 1].frequency;
+	freq = table[i - 1].frequency;
 
 	dev_pm_qos_update_request(&dtpm_devfreq->qos_req, freq);
 
-	power_limit = pd->table[i - 1].power * MICROWATT_PER_MILLIWATT;
+	power_limit = table[i - 1].power * MICROWATT_PER_MILLIWATT;
 
 	return power_limit;
 }
@@ -94,6 +100,7 @@ static u64 get_pd_power_uw(struct dtpm *dtpm)
 	struct device *dev = devfreq->dev.parent;
 	struct em_perf_domain *pd = em_pd_get(dev);
 	struct devfreq_dev_status status;
+	struct em_perf_state *table;
 	unsigned long freq;
 	u64 power;
 	int i;
@@ -102,15 +109,17 @@ static u64 get_pd_power_uw(struct dtpm *dtpm)
 	status = devfreq->last_status;
 	mutex_unlock(&devfreq->lock);
 
+	table = pd->default_table->state;
+
 	freq = DIV_ROUND_UP(status.current_frequency, HZ_PER_KHZ);
 	_normalize_load(&status);
 
 	for (i = 0; i < pd->nr_perf_states; i++) {
 
-		if (pd->table[i].frequency < freq)
+		if (table[i].frequency < freq)
 			continue;
 
-		power = pd->table[i].power * MICROWATT_PER_MILLIWATT;
+		power = table[i].power * MICROWATT_PER_MILLIWATT;
 		power *= status.busy_time;
 		power >>= 10;
 

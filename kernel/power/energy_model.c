@@ -66,6 +66,7 @@ DEFINE_SHOW_ATTRIBUTE(em_debug_flags);
 
 static void em_debug_create_pd(struct device *dev)
 {
+	struct em_perf_table *table = dev->em_pd->default_table;
 	struct dentry *d;
 	int i;
 
@@ -81,7 +82,7 @@ static void em_debug_create_pd(struct device *dev)
 
 	/* Create a sub-directory for each performance state */
 	for (i = 0; i < dev->em_pd->nr_perf_states; i++)
-		em_debug_create_ps(&dev->em_pd->table[i], d);
+		em_debug_create_ps(&table->state[i], d);
 
 }
 
@@ -196,7 +197,7 @@ static int em_create_perf_table(struct device *dev, struct em_perf_domain *pd,
 	if (ret)
 		goto free_ps_table;
 
-	pd->table = table;
+	pd->default_table->state = table;
 	pd->nr_perf_states = nr_states;
 
 	return 0;
@@ -210,6 +211,7 @@ static int em_create_pd(struct device *dev, int nr_states,
 			struct em_data_callback *cb, cpumask_t *cpus,
 			unsigned long flags)
 {
+	struct em_perf_table *default_table;
 	struct em_perf_domain *pd;
 	struct device *cpu_dev;
 	int cpu, ret, num_cpus;
@@ -234,8 +236,17 @@ static int em_create_pd(struct device *dev, int nr_states,
 			return -ENOMEM;
 	}
 
+	default_table = kzalloc(sizeof(*default_table), GFP_KERNEL);
+	if (!default_table) {
+		kfree(pd);
+		return -ENOMEM;
+	}
+
+	pd->default_table = default_table;
+
 	ret = em_create_perf_table(dev, pd, nr_states, cb, flags);
 	if (ret) {
+		kfree(default_table);
 		kfree(pd);
 		return ret;
 	}
@@ -358,6 +369,7 @@ int em_dev_register_perf_domain(struct device *dev, unsigned int nr_states,
 				bool microwatts)
 {
 	unsigned long cap, prev_cap = 0;
+	struct em_perf_state *table;
 	unsigned long flags = 0;
 	int cpu, ret;
 
@@ -416,7 +428,8 @@ int em_dev_register_perf_domain(struct device *dev, unsigned int nr_states,
 
 	dev->em_pd->flags |= flags;
 
-	em_cpufreq_update_efficiencies(dev, dev->em_pd->table);
+	table = dev->em_pd->default_table->state;
+	em_cpufreq_update_efficiencies(dev, table);
 
 	em_debug_create_pd(dev);
 	dev_info(dev, "EM: created perf domain\n");
@@ -435,11 +448,15 @@ EXPORT_SYMBOL_GPL(em_dev_register_perf_domain);
  */
 void em_dev_unregister_perf_domain(struct device *dev)
 {
+	struct em_perf_domain *pd;
+
 	if (IS_ERR_OR_NULL(dev) || !dev->em_pd)
 		return;
 
 	if (_is_cpu_device(dev))
 		return;
+
+	pd = dev->em_pd;
 
 	/*
 	 * The mutex separates all register/unregister requests and protects
@@ -449,7 +466,8 @@ void em_dev_unregister_perf_domain(struct device *dev)
 	mutex_lock(&em_pd_mutex);
 	em_debug_remove_pd(dev);
 
-	kfree(dev->em_pd->table);
+	kfree(pd->default_table->state);
+	kfree(pd->default_table);
 	kfree(dev->em_pd);
 	dev->em_pd = NULL;
 	mutex_unlock(&em_pd_mutex);

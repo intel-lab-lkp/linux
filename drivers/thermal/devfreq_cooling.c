@@ -87,6 +87,7 @@ static int devfreq_cooling_set_cur_state(struct thermal_cooling_device *cdev,
 	struct devfreq_cooling_device *dfc = cdev->devdata;
 	struct devfreq *df = dfc->devfreq;
 	struct device *dev = df->dev.parent;
+	struct em_perf_state *table;
 	unsigned long freq;
 	int perf_idx;
 
@@ -99,8 +100,9 @@ static int devfreq_cooling_set_cur_state(struct thermal_cooling_device *cdev,
 		return -EINVAL;
 
 	if (dfc->em_pd) {
+		table = dfc->em_pd->default_table->state;
 		perf_idx = dfc->max_state - state;
-		freq = dfc->em_pd->table[perf_idx].frequency * 1000;
+		freq = table[perf_idx].frequency * 1000;
 	} else {
 		freq = dfc->freq_table[state];
 	}
@@ -123,10 +125,11 @@ static int devfreq_cooling_set_cur_state(struct thermal_cooling_device *cdev,
  */
 static int get_perf_idx(struct em_perf_domain *em_pd, unsigned long freq)
 {
+	struct em_perf_state *table = em_pd->default_table->state;
 	int i;
 
 	for (i = 0; i < em_pd->nr_perf_states; i++) {
-		if (em_pd->table[i].frequency == freq)
+		if (table[i].frequency == freq)
 			return i;
 	}
 
@@ -181,6 +184,7 @@ static int devfreq_cooling_get_requested_power(struct thermal_cooling_device *cd
 	struct devfreq_cooling_device *dfc = cdev->devdata;
 	struct devfreq *df = dfc->devfreq;
 	struct devfreq_dev_status status;
+	struct em_perf_state *table;
 	unsigned long state;
 	unsigned long freq;
 	unsigned long voltage;
@@ -191,6 +195,8 @@ static int devfreq_cooling_get_requested_power(struct thermal_cooling_device *cd
 	mutex_unlock(&df->lock);
 
 	freq = status.current_frequency;
+
+	table = dfc->em_pd->default_table->state;
 
 	if (dfc->power_ops && dfc->power_ops->get_real_power) {
 		voltage = get_voltage(df, freq);
@@ -204,7 +210,7 @@ static int devfreq_cooling_get_requested_power(struct thermal_cooling_device *cd
 			state = dfc->capped_state;
 
 			/* Convert EM power into milli-Watts first */
-			dfc->res_util = dfc->em_pd->table[state].power;
+			dfc->res_util = table[state].power;
 			dfc->res_util /= MICROWATT_PER_MILLIWATT;
 
 			dfc->res_util *= SCALE_ERROR_MITIGATION;
@@ -225,7 +231,7 @@ static int devfreq_cooling_get_requested_power(struct thermal_cooling_device *cd
 		_normalize_load(&status);
 
 		/* Convert EM power into milli-Watts first */
-		*power = dfc->em_pd->table[perf_idx].power;
+		*power = table[perf_idx].power;
 		*power /= MICROWATT_PER_MILLIWATT;
 		/* Scale power for utilization */
 		*power *= status.busy_time;
@@ -245,13 +251,15 @@ static int devfreq_cooling_state2power(struct thermal_cooling_device *cdev,
 				       unsigned long state, u32 *power)
 {
 	struct devfreq_cooling_device *dfc = cdev->devdata;
+	struct em_perf_state *table;
 	int perf_idx;
 
 	if (state > dfc->max_state)
 		return -EINVAL;
 
+	table = dfc->em_pd->default_table->state;
 	perf_idx = dfc->max_state - state;
-	*power = dfc->em_pd->table[perf_idx].power;
+	*power = table[perf_idx].power;
 	*power /= MICROWATT_PER_MILLIWATT;
 
 	return 0;
@@ -264,6 +272,7 @@ static int devfreq_cooling_power2state(struct thermal_cooling_device *cdev,
 	struct devfreq *df = dfc->devfreq;
 	struct devfreq_dev_status status;
 	unsigned long freq, em_power_mw;
+	struct em_perf_state *table;
 	s32 est_power;
 	int i;
 
@@ -272,6 +281,8 @@ static int devfreq_cooling_power2state(struct thermal_cooling_device *cdev,
 	mutex_unlock(&df->lock);
 
 	freq = status.current_frequency;
+
+	table = dfc->em_pd->default_table->state;
 
 	if (dfc->power_ops && dfc->power_ops->get_real_power) {
 		/* Scale for resource utilization */
@@ -290,7 +301,7 @@ static int devfreq_cooling_power2state(struct thermal_cooling_device *cdev,
 	 */
 	for (i = dfc->max_state; i > 0; i--) {
 		/* Convert EM power to milli-Watts to make safe comparison */
-		em_power_mw = dfc->em_pd->table[i].power;
+		em_power_mw = table[i].power;
 		em_power_mw /= MICROWATT_PER_MILLIWATT;
 		if (est_power >= em_power_mw)
 			break;
