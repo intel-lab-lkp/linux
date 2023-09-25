@@ -1702,6 +1702,19 @@ static int get_pmu_counter_layouts(struct list_head *pmu_info_list,
 	return ret;
 }
 
+static int fill_counter_bitmap(unsigned long *bitmap, int start, int size)
+{
+	int ret;
+	bitmap_zero(bitmap, NR_COUNTERS);
+
+	for (int pos = start; pos < start + size; pos++) {
+		ret = set_counter_bitmap(pos, bitmap);
+		if (ret)
+			return ret;
+	}
+	return 0;
+}
+
 /**
  * Find if there is a counter available for event e in current_group. If a
  * counter is available, use this counter by fill the bit in the correct counter
@@ -1751,6 +1764,21 @@ static int _insert_event(struct metricgroup__event_info *e,
 }
 
 /**
+ * Insert the new_group node at the end of the group list.
+ */
+static int insert_new_group(struct list_head *head,
+			   struct metricgroup__group *new_group,
+			   size_t size,
+			   size_t fixed_size)
+{
+	INIT_LIST_HEAD(&new_group->event_head);
+	fill_counter_bitmap(new_group->gp_counters, 0, size);
+	fill_counter_bitmap(new_group->fixed_counters, 0, fixed_size);
+	list_add_tail(&new_group->nd, head);
+	return 0;
+}
+
+/**
  * Insert event e into a group capable to include it
  *
  */
@@ -1759,7 +1787,7 @@ static int insert_event_to_group(struct metricgroup__event_info *e,
 {
 	struct metricgroup__group *g;
 	int ret;
-	//struct list_head *head;
+	struct list_head *head;
 
 	list_for_each_entry(g, &pmu_group_head->group_head, nd) {
 		ret = find_and_set_counters(e, g);
@@ -1774,13 +1802,14 @@ static int insert_event_to_group(struct metricgroup__event_info *e,
 	 */
 	{
 		struct metricgroup__group *current_group = malloc(sizeof(struct metricgroup__group));
+
 		if (!current_group)
 			return -ENOMEM;
 		pr_debug("create_new_group for [event] %s\n", e->name);
 
-		//head = &pmu_group_head->group_head;
-		//ret = create_new_group(head, current_group, pmu_group_head->size,
-		//			pmu_group_head->fixed_size);
+		head = &pmu_group_head->group_head;
+		ret = insert_new_group(head, current_group, pmu_group_head->size,
+				      pmu_group_head->fixed_size);
 		if (ret)
 			return ret;
 		ret = find_and_set_counters(e, current_group);
@@ -1817,7 +1846,7 @@ static int assign_event_grouping(struct metricgroup__event_info *e,
 
 		pmu_group_head = malloc(sizeof(struct metricgroup__pmu_group_list));
 		INIT_LIST_HEAD(&pmu_group_head->group_head);
-		pr_debug("create new group for event %s in pmu %s ", e->name, e->pmu_name);
+		pr_debug("create new group for event %s in pmu %s\n", e->name, e->pmu_name);
 		pmu_group_head->pmu_name = e->pmu_name;
 		list_for_each_entry(p, pmu_info_list, nd) {
 			if (!strcasecmp(p->name, e->pmu_name)) {
