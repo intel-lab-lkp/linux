@@ -276,6 +276,7 @@ struct kunit {
 	void *priv;
 
 	/* private: internal use only. */
+	unsigned int level; /* Helps in proper log indent */
 	const char *name; /* Read only after initialization! */
 	struct string_stream *log; /* Points at case log after initialization */
 	struct kunit_try_catch try_catch;
@@ -519,7 +520,7 @@ enum {
 #define kunit_level(test_or_suite)					\
 	_Generic((test_or_suite),					\
 		 struct kunit_suite * : KUNIT_LEVEL_SUITE,		\
-		 struct kunit * : KUNIT_LEVEL_CASE)
+		 struct kunit * : ((struct kunit *)(test_or_suite))->level)
 
 #define kunit_indent_level(test_or_suite)				\
 	(KUNIT_INDENT_LEN * kunit_level(test_or_suite))

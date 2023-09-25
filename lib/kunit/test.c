@@ -99,14 +99,13 @@ static void kunit_print_test_stats(struct kunit *test,
 	if (!kunit_should_print_stats(stats))
 		return;
 
-	kunit_log(KERN_INFO, test,
-		  KUNIT_SUBTEST_INDENT
-		  "# %s: pass:%lu fail:%lu skip:%lu total:%lu",
-		  test->name,
-		  stats.passed,
-		  stats.failed,
-		  stats.skipped,
-		  stats.total);
+	kunit_log_indent(KERN_INFO, test,
+			 "# %s: pass:%lu fail:%lu skip:%lu total:%lu",
+			 test->name,
+			 stats.passed,
+			 stats.failed,
+			 stats.skipped,
+			 stats.total);
 }
 
 /* Append formatted message to log. */
@@ -154,7 +153,6 @@ static void kunit_print_suite_start(struct kunit_suite *suite)
 }
 
 static void kunit_print_ok_not_ok(struct kunit *test,
-				  unsigned int test_level,
 				  enum kunit_status status,
 				  size_t test_number,
 				  const char *description,
@@ -162,12 +160,6 @@ static void kunit_print_ok_not_ok(struct kunit *test,
 {
 	const char *directive_header = (status == KUNIT_SKIPPED) ? " # SKIP " : "";
 	const char *directive_body = (status == KUNIT_SKIPPED) ? directive : "";
-
-	/*
-	 * When test is NULL assume that results are from the suite
-	 * and today suite results are expected at level 0 only.
-	 */
-	WARN(!test && test_level, "suite test level can't be %u!\n", test_level);
 
 	/*
 	 * We do not log the test suite results as doing so would
@@ -182,12 +174,11 @@ static void kunit_print_ok_not_ok(struct kunit *test,
 			test_number, description, directive_header,
 			directive_body);
 	else
-		kunit_log(KERN_INFO, test,
-			  "%*s%s %zd %s%s%s",
-			  KUNIT_INDENT_LEN * test_level, "",
-			  kunit_status_to_ok_not_ok(status),
-			  test_number, description, directive_header,
-			  directive_body);
+		kunit_log_indent(KERN_INFO, test,
+				 "%s %zd %s%s%s",
+				 kunit_status_to_ok_not_ok(status),
+				 test_number, description, directive_header,
+				 directive_body);
 }
 
 enum kunit_status kunit_suite_has_succeeded(struct kunit_suite *suite)
@@ -213,7 +204,7 @@ static size_t kunit_suite_counter = 1;
 
 static void kunit_print_suite_end(struct kunit_suite *suite)
 {
-	kunit_print_ok_not_ok(NULL, KUNIT_LEVEL_SUITE,
+	kunit_print_ok_not_ok(NULL,
 			      kunit_suite_has_succeeded(suite),
 			      kunit_suite_counter++,
 			      suite->name,
@@ -322,6 +313,7 @@ void kunit_init_test(struct kunit *test, const char *name, struct string_stream 
 {
 	spin_lock_init(&test->lock);
 	INIT_LIST_HEAD(&test->resources);
+	test->level = KUNIT_LEVEL_CASE;
 	test->name = name;
 	test->log = log;
 	if (test->log)
@@ -584,14 +576,15 @@ int kunit_run_tests(struct kunit_suite *suite)
 			kunit_run_case_catch_errors(suite, test_case, &test);
 			kunit_update_stats(&param_stats, test.status);
 		} else {
+			/* Parameterized test is one level up from simple test-case. */
+			test.level++;
+
 			/* Get initial param. */
 			param_desc[0] = '\0';
 			test.param_value = test_case->generate_params(NULL, param_desc);
 			test_case->status = KUNIT_SKIPPED;
-			kunit_log(KERN_INFO, &test, KUNIT_SUBTEST_INDENT KUNIT_SUBTEST_INDENT
-				  "KTAP version 1\n");
-			kunit_log(KERN_INFO, &test, KUNIT_SUBTEST_INDENT KUNIT_SUBTEST_INDENT
-				  "# Subtest: %s", test_case->name);
+			kunit_log_indent(KERN_INFO, &test, "KTAP version 1\n");
+			kunit_log_indent(KERN_INFO, &test, "# Subtest: %s", test_case->name);
 
 			while (test.param_value) {
 				kunit_run_case_catch_errors(suite, test_case, &test);
@@ -601,7 +594,7 @@ int kunit_run_tests(struct kunit_suite *suite)
 						 "param-%d", test.param_index);
 				}
 
-				kunit_print_ok_not_ok(&test, KUNIT_LEVEL_CASE_PARAM,
+				kunit_print_ok_not_ok(&test,
 						      test.status,
 						      test.param_index + 1,
 						      param_desc,
@@ -616,13 +609,16 @@ int kunit_run_tests(struct kunit_suite *suite)
 				test.status = KUNIT_SUCCESS;
 				test.status_comment[0] = '\0';
 			}
+
+			/* Return to parent (test-case) level. */
+			test.level--;
 		}
 
 		kunit_print_attr((void *)test_case, true, KUNIT_LEVEL_CASE);
 
 		kunit_print_test_stats(&test, param_stats);
 
-		kunit_print_ok_not_ok(&test, KUNIT_LEVEL_CASE, test_case->status,
+		kunit_print_ok_not_ok(&test, test_case->status,
 				      kunit_test_case_num(suite, test_case),
 				      test_case->name,
 				      test.status_comment);
