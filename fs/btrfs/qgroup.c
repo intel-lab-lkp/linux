@@ -3310,13 +3310,13 @@ out:
 		mutex_unlock(&fs_info->qgroup_ioctl_lock);
 	if (need_rescan)
 		qgroup_mark_inconsistent(fs_info);
-	if (free_inherit)
-		kfree(inherit);
 	if (qlist_prealloc) {
 		for (int i = 0; i < inherit->num_qgroups; i++)
 			kfree(qlist_prealloc[i]);
 		kfree(qlist_prealloc);
 	}
+	if (free_inherit)
+		kfree(inherit);
 	kfree(prealloc);
 	return ret;
 }
