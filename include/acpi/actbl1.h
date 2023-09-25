@@ -19,6 +19,7 @@
  *
  ******************************************************************************/
 
+#include <linux/uuid.h>
 /*
  * Values for description table header signatures for tables defined in this
  * file. Useful because they make it more difficult to inadvertently type in
@@ -1637,7 +1638,7 @@ struct acpi_hest_generic_status {
 /* Generic Error Data entry */
 
 struct acpi_hest_generic_data {
-	u8 section_type[16];
+	guid_t section_type;
 	u32 error_severity;
 	u16 revision;
 	u8 validation_bits;
@@ -1650,7 +1651,7 @@ struct acpi_hest_generic_data {
 /* Extension for revision 0x0300 */
 
 struct acpi_hest_generic_data_v300 {
-	u8 section_type[16];
+	guid_t section_type;
 	u32 error_severity;
 	u16 revision;
 	u8 validation_bits;
