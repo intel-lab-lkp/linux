@@ -191,7 +191,7 @@ of ftrace. Here is a list of some of the key files:
 	A few extra pages may be allocated to accommodate buffer management
 	meta-data. If the last page allocated has room for more bytes
 	than requested, the rest of the page will be used,
-	making the actual allocation bigger than requested or shown.
+	making the actual allocation bigger than requested.
 	( Note, the size may not be a multiple of the page size
 	due to buffer management meta-data. )
 
