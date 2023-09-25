@@ -1684,6 +1684,8 @@ static int metricgroup__add_metric_event_callback(const struct pmu_event *pe,
 	struct metricgroup__add_metric_event_data *d = data;
 
 	if (!strcasecmp(pe->name, d->event_name)) {
+		if (!pe->counter)
+			return -EINVAL;
 		event = event_info__new(d->event_id, pe->pmu, pe->counter,
 					pe->taken_alone, /*free_counter=*/false);
 		if (!event)
