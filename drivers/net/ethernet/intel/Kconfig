@@ -278,7 +278,7 @@ config ICE
 	tristate "Intel(R) Ethernet Connection E800 Series Support"
 	default n
 	depends on PCI_MSI
-	depends on PTP_1588_CLOCK_OPTIONAL
+	depends on PTP_1588_CLOCK
 	depends on GNSS || GNSS = n
 	select AUXILIARY_BUS
 	select DIMLIB
