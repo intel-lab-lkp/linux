@@ -1090,6 +1090,30 @@ static int xpcs_get_state_c37_1000basex(struct dw_xpcs *xpcs,
 	return 0;
 }
 
+static int xpcs_get_state_2500basex(struct dw_xpcs *xpcs,
+				    struct phylink_link_state *state)
+{
+	int sts, lpa;
+
+	sts = xpcs_read(xpcs, MDIO_MMD_VEND2, DW_VR_MII_MMD_STS);
+	lpa = xpcs_read(xpcs, MDIO_MMD_VEND2, DW_VR_MII_MMD_LP_BABL);
+	if (sts < 0 || lpa < 0) {
+		state->link = false;
+		return sts;
+	}
+
+	state->link = !!(sts & DW_VR_MII_MMD_STS_LINK_STS);
+	state->an_complete = !!(sts & DW_VR_MII_MMD_STS_AN_CMPL);
+	if (!state->link)
+		return 0;
+
+	state->speed = SPEED_2500;
+	state->pause |= MLO_PAUSE_TX | MLO_PAUSE_RX;
+	state->duplex = DUPLEX_FULL;
+
+	return 0;
+}
+
 static void xpcs_get_state(struct phylink_pcs *pcs,
 			   struct phylink_link_state *state)
 {
@@ -1124,6 +1148,13 @@ static void xpcs_get_state(struct phylink_pcs *pcs,
 		ret = xpcs_get_state_c37_1000basex(xpcs, state);
 		if (ret) {
 			pr_err("xpcs_get_state_c37_1000basex returned %pe\n",
+			       ERR_PTR(ret));
+		}
+		break;
+	case DW_2500BASEX:
+		ret = xpcs_get_state_2500basex(xpcs, state);
+		if (ret) {
+			pr_err("xpcs_get_state_2500basex returned %pe\n",
 			       ERR_PTR(ret));
 		}
 		break;
