@@ -2444,7 +2444,7 @@ bool __mpol_equal(struct mempolicy *a, struct mempolicy *b)
  * reading or for writing
  */
 static struct sp_node *
-sp_lookup(struct shared_policy *sp, unsigned long start, unsigned long end)
+sp_lookup(struct shared_policy *sp, pgoff_t start, pgoff_t end)
 {
 	struct rb_node *n = sp->root.rb_node;
 
@@ -2499,7 +2499,7 @@ static void sp_insert(struct shared_policy *sp, struct sp_node *new)
 
 /* Find shared policy intersecting idx */
 struct mempolicy *
-mpol_shared_policy_lookup(struct shared_policy *sp, unsigned long idx)
+mpol_shared_policy_lookup(struct shared_policy *sp, pgoff_t idx)
 {
 	struct mempolicy *pol = NULL;
 	struct sp_node *sn;
@@ -2665,8 +2665,8 @@ static struct sp_node *sp_alloc(unsigned long start, unsigned long end,
 }
 
 /* Replace a policy range. */
-static int shared_policy_replace(struct shared_policy *sp, unsigned long start,
-				 unsigned long end, struct sp_node *new)
+static int shared_policy_replace(struct shared_policy *sp, pgoff_t start,
+				 pgoff_t end, struct sp_node *new)
 {
 	struct sp_node *n;
 	struct sp_node *n_new = NULL;
