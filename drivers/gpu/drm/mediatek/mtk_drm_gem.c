@@ -62,6 +62,11 @@ struct mtk_drm_gem_obj *mtk_drm_gem_create(struct drm_device *dev,
 	struct drm_gem_object *obj;
 	int ret;
 
+	if (size == 0) {
+		DRM_ERROR("Invalid allocation size: %zu", size);
+		return ERR_PTR(-EINVAL);
+	}
+
 	mtk_gem = mtk_drm_gem_init(dev, size);
 	if (IS_ERR(mtk_gem))
 		return ERR_CAST(mtk_gem);
