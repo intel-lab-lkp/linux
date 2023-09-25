@@ -2085,7 +2085,7 @@ static int hw_aware_build_grouping(struct expr_parse_ctx *ctx __maybe_unused,
 		pr_debug("found event %s\n", id);
 		if (!strncmp(id, special_pattern, strlen(special_pattern))) {
 			struct metricgroup__event_info *event;
-			event = event_info__new(id, "core", "0", true);
+			event = event_info__new(id, "default_core", "0", true);
 			if (!event) {
 				ret = -ENOMEM;
 				goto err_out;
