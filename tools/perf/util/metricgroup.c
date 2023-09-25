@@ -1507,6 +1507,27 @@ static int parse_counter(const char *counter,
 	return 0;
 }
 
+static void metricgroup__free_event_info(struct list_head
+					*event_info_list)
+{
+	struct metricgroup__event_info *e, *tmp;
+
+	list_for_each_entry_safe(e, tmp, event_info_list, nd) {
+		list_del_init(&e->nd);
+		free(e);
+	}
+}
+
+static void metricgroup__free_pmu_info(struct list_head *pmu_info_list)
+{
+	struct metricgroup__pmu_counters *p, *tmp;
+
+	list_for_each_entry_safe(p, tmp, pmu_info_list, nd) {
+		list_del_init(&p->nd);
+		free(p);
+	}
+}
+
 static struct metricgroup__event_info *event_info__new(const char *name,
 						      const char *pmu_name,
 						      const char *counter,
@@ -1524,7 +1545,8 @@ static struct metricgroup__event_info *event_info__new(const char *name,
 	}
 	e->name = name;
 	e->free_counter = free_counter;
-	e->pmu_name = strdup(pmu_name);
+	//e->pmu_name = strdup(pmu_name);
+	e->pmu_name = pmu_name;
 	if (free_counter) {
 		ret = set_counter_bitmap(0, e->counters);
 		if (ret)
@@ -1687,13 +1709,15 @@ static int hw_aware_build_grouping(struct expr_parse_ctx *ctx __maybe_unused,
 
 		ret = get_metricgroup_events(id, etable, &event_info_list);
 		if (ret)
-			return ret;
+			goto err_out;
 	}
 	ret = get_pmu_counter_layouts(&pmu_info_list, ltable);
 	if (ret)
-		return ret;
+		goto err_out;
 
-
+err_out:
+	metricgroup__free_event_info(&event_info_list);
+	metricgroup__free_pmu_info(&pmu_info_list);
 	return ret;
 #undef RETURN_IF_NON_ZERO
 }
