@@ -45,6 +45,9 @@
 #define RCAR_NUM_SPEED_CHANGE_RETRIES	10
 #define RCAR_MAX_LINK_SPEED		4
 
+#define RCAR_GEN4_PCIE_EP_FUNC_DBI_OFFSET	0x1000
+#define RCAR_GEN4_PCIE_EP_FUNC_DBI2_OFFSET	0x800
+
 struct rcar_gen4_pcie {
 	struct dw_pcie dw;
 	void __iomem *base;
@@ -53,6 +56,7 @@ struct rcar_gen4_pcie {
 };
 #define to_rcar_gen4_pcie(_dw)	container_of(_dw, struct rcar_gen4_pcie, dw)
 
+/* Common */
 static void rcar_gen4_pcie_ltssm_enable(struct rcar_gen4_pcie *rcar,
 					bool enable)
 {
@@ -311,6 +315,9 @@ static int rcar_gen4_add_dw_pcie_rp(struct rcar_gen4_pcie *rcar)
 {
 	struct dw_pcie_rp *pp = &rcar->dw.pp;
 
+	if (!IS_ENABLED(CONFIG_PCIE_RCAR_GEN4_HOST))
+		return -ENODEV;
+
 	pp->num_vectors = MAX_MSI_IRQS;
 	pp->ops = &rcar_gen4_pcie_host_ops;
 	rcar->mode = DW_PCIE_RC_TYPE;
@@ -323,8 +330,114 @@ static void rcar_gen4_remove_dw_pcie_rp(struct rcar_gen4_pcie *rcar)
 	dw_pcie_host_deinit(&rcar->dw.pp);
 }
 
+/* Endpoind mode */
+static void rcar_gen4_pcie_ep_pre_init(struct dw_pcie_ep *ep)
+{
+	struct dw_pcie *dw = to_dw_pcie_from_ep(ep);
+	struct rcar_gen4_pcie *rcar = to_rcar_gen4_pcie(dw);
+	int ret;
+
+	ret = rcar_gen4_pcie_common_init(rcar);
+	if (ret)
+		return;
+
+	writel(PCIEDMAINTSTSEN_INIT, rcar->base + PCIEDMAINTSTSEN);
+}
+
+static void rcar_gen4_pcie_ep_init(struct dw_pcie_ep *ep)
+{
+	struct dw_pcie *pci = to_dw_pcie_from_ep(ep);
+	enum pci_barno bar;
+
+	for (bar = 0; bar < PCI_STD_NUM_BARS; bar++)
+		dw_pcie_ep_reset_bar(pci, bar);
+}
+
+static void rcar_gen4_pcie_ep_deinit(struct dw_pcie_ep *ep)
+{
+	struct dw_pcie *dw = to_dw_pcie_from_ep(ep);
+	struct rcar_gen4_pcie *rcar = to_rcar_gen4_pcie(dw);
+
+	writel(0, rcar->base + PCIEDMAINTSTSEN);
+	rcar_gen4_pcie_common_deinit(rcar);
+}
+
+static int rcar_gen4_pcie_ep_raise_irq(struct dw_pcie_ep *ep, u8 func_no,
+				       unsigned int type, u16 interrupt_num)
+{
+	struct dw_pcie *dw = to_dw_pcie_from_ep(ep);
+
+	switch (type) {
+	case PCI_IRQ_LEGACY:
+		return dw_pcie_ep_raise_legacy_irq(ep, func_no);
+	case PCI_IRQ_MSI:
+		return dw_pcie_ep_raise_msi_irq(ep, func_no, interrupt_num);
+	default:
+		dev_err(dw->dev, "Unknown IRQ type\n");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static const struct pci_epc_features rcar_gen4_pcie_epc_features = {
+	.linkup_notifier = false,
+	.msi_capable = true,
+	.msix_capable = false,
+	.reserved_bar = 1 << BAR_1 | 1 << BAR_3 | 1 << BAR_5,
+	.align = SZ_1M,
+};
+
+static const struct pci_epc_features*
+rcar_gen4_pcie_ep_get_features(struct dw_pcie_ep *ep)
+{
+	return &rcar_gen4_pcie_epc_features;
+}
+
+static unsigned int rcar_gen4_pcie_ep_func_conf_select(struct dw_pcie_ep *ep,
+						       u8 func_no)
+{
+	return func_no * RCAR_GEN4_PCIE_EP_FUNC_DBI_OFFSET;
+}
+
+static unsigned int rcar_gen4_pcie_ep_get_dbi2_offset(struct dw_pcie_ep *ep,
+						      u8 func_no)
+{
+	return func_no * RCAR_GEN4_PCIE_EP_FUNC_DBI2_OFFSET;
+}
+
+static const struct dw_pcie_ep_ops pcie_ep_ops = {
+	.pre_init = rcar_gen4_pcie_ep_pre_init,
+	.ep_init = rcar_gen4_pcie_ep_init,
+	.deinit = rcar_gen4_pcie_ep_deinit,
+	.raise_irq = rcar_gen4_pcie_ep_raise_irq,
+	.get_features = rcar_gen4_pcie_ep_get_features,
+	.func_conf_select = rcar_gen4_pcie_ep_func_conf_select,
+	.get_dbi2_offset = rcar_gen4_pcie_ep_get_dbi2_offset,
+};
+
+static int rcar_gen4_add_dw_pcie_ep(struct rcar_gen4_pcie *rcar)
+{
+	struct dw_pcie_ep *ep = &rcar->dw.ep;
+
+	if (!IS_ENABLED(CONFIG_PCIE_RCAR_GEN4_EP))
+		return -ENODEV;
+
+	rcar->mode = DW_PCIE_EP_TYPE;
+	ep->ops = &pcie_ep_ops;
+
+	return dw_pcie_ep_init(ep);
+}
+
+static void rcar_gen4_remove_dw_pcie_ep(struct rcar_gen4_pcie *rcar)
+{
+	dw_pcie_ep_exit(&rcar->dw.ep);
+}
+
+/* Common */
 static int rcar_gen4_pcie_probe(struct platform_device *pdev)
 {
+	enum dw_pcie_device_mode mode;
 	struct rcar_gen4_pcie *rcar;
 	int err;
 
@@ -340,7 +453,13 @@ static int rcar_gen4_pcie_probe(struct platform_device *pdev)
 	if (err)
 		return err;
 
-	err = rcar_gen4_add_dw_pcie_rp(rcar);
+	mode = (enum dw_pcie_device_mode)of_device_get_match_data(&pdev->dev);
+
+	if (mode == DW_PCIE_RC_TYPE)
+		err = rcar_gen4_add_dw_pcie_rp(rcar);
+	else if (mode == DW_PCIE_EP_TYPE)
+		err = rcar_gen4_add_dw_pcie_ep(rcar);
+
 	if (err)
 		goto err_unprepare;
 
@@ -356,12 +475,23 @@ static void rcar_gen4_pcie_remove(struct platform_device *pdev)
 {
 	struct rcar_gen4_pcie *rcar = platform_get_drvdata(pdev);
 
-	rcar_gen4_remove_dw_pcie_rp(rcar);
+	if (rcar->mode == DW_PCIE_RC_TYPE)
+		rcar_gen4_remove_dw_pcie_rp(rcar);
+	else if (rcar->mode == DW_PCIE_EP_TYPE)
+		rcar_gen4_remove_dw_pcie_ep(rcar);
+
 	rcar_gen4_pcie_unprepare(rcar);
 }
 
 static const struct of_device_id rcar_gen4_pcie_of_match[] = {
-	{ .compatible = "renesas,rcar-gen4-pcie", },
+	{
+		.compatible = "renesas,rcar-gen4-pcie",
+		.data = (void *)DW_PCIE_RC_TYPE,
+	},
+	{
+		.compatible = "renesas,rcar-gen4-pcie-ep",
+		.data = (void *)DW_PCIE_EP_TYPE,
+	},
 	{},
 };
 MODULE_DEVICE_TABLE(of, rcar_gen4_pcie_of_match);
