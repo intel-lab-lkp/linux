@@ -407,6 +407,10 @@ static void btrfs_orig_write_end_io(struct bio *bio)
 		btrfs_log_dev_io_error(bio, stripe->dev);
 	}
 
+	/* TODO: Add proper error handling for a single failed mirror case. */
+	if (bio_op(bio) == REQ_OP_ZONE_APPEND && !bio->bi_status)
+		stripe->physical = bio->bi_iter.bi_sector << SECTOR_SHIFT;
+
 	/*
 	 * Only send an error to the higher layers if it is beyond the tolerance
 	 * threshold.
@@ -415,9 +419,6 @@ static void btrfs_orig_write_end_io(struct bio *bio)
 		bio->bi_status = BLK_STS_IOERR;
 	else
 		bio->bi_status = BLK_STS_OK;
-
-	if (bio_op(bio) == REQ_OP_ZONE_APPEND && !bio->bi_status)
-		stripe->physical = bio->bi_iter.bi_sector << SECTOR_SHIFT;
 
 	btrfs_orig_bbio_end_io(bbio);
 	btrfs_put_bioc(bioc);
