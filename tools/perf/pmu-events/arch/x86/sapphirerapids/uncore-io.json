@@ -1,6 +1,7 @@
 [
     {
         "BriefDescription": "Free running counter that increments for every 32 bytes of data sent from the IO agent to the SOC",
+        "Counter": "1",
         "EventCode": "0xff",
         "EventName": "UNC_IIO_BANDWIDTH_IN.PART0_FREERUN",
         "PerPkg": "1",
@@ -9,6 +10,7 @@
     },
     {
         "BriefDescription": "Free running counter that increments for every 32 bytes of data sent from the IO agent to the SOC",
+        "Counter": "2",
         "EventCode": "0xff",
         "EventName": "UNC_IIO_BANDWIDTH_IN.PART1_FREERUN",
         "PerPkg": "1",
@@ -17,6 +19,7 @@
     },
     {
         "BriefDescription": "Free running counter that increments for every 32 bytes of data sent from the IO agent to the SOC",
+        "Counter": "3",
         "EventCode": "0xff",
         "EventName": "UNC_IIO_BANDWIDTH_IN.PART2_FREERUN",
         "PerPkg": "1",
@@ -25,6 +28,7 @@
     },
     {
         "BriefDescription": "Free running counter that increments for every 32 bytes of data sent from the IO agent to the SOC",
+        "Counter": "4",
         "EventCode": "0xff",
         "EventName": "UNC_IIO_BANDWIDTH_IN.PART3_FREERUN",
         "PerPkg": "1",
@@ -33,6 +37,7 @@
     },
     {
         "BriefDescription": "Free running counter that increments for every 32 bytes of data sent from the IO agent to the SOC",
+        "Counter": "5",
         "EventCode": "0xff",
         "EventName": "UNC_IIO_BANDWIDTH_IN.PART4_FREERUN",
         "PerPkg": "1",
@@ -41,6 +46,7 @@
     },
     {
         "BriefDescription": "Free running counter that increments for every 32 bytes of data sent from the IO agent to the SOC",
+        "Counter": "6",
         "EventCode": "0xff",
         "EventName": "UNC_IIO_BANDWIDTH_IN.PART5_FREERUN",
         "PerPkg": "1",
@@ -49,6 +55,7 @@
     },
     {
         "BriefDescription": "Free running counter that increments for every 32 bytes of data sent from the IO agent to the SOC",
+        "Counter": "7",
         "EventCode": "0xff",
         "EventName": "UNC_IIO_BANDWIDTH_IN.PART6_FREERUN",
         "PerPkg": "1",
@@ -57,6 +64,7 @@
     },
     {
         "BriefDescription": "Free running counter that increments for every 32 bytes of data sent from the IO agent to the SOC",
+        "Counter": "8",
         "EventCode": "0xff",
         "EventName": "UNC_IIO_BANDWIDTH_IN.PART7_FREERUN",
         "PerPkg": "1",
@@ -65,6 +73,7 @@
     },
     {
         "BriefDescription": "Free running counter that increments for every 32 bytes of data sent from the IO agent to the SOC",
+        "Counter": "9",
         "EventCode": "0xff",
         "EventName": "UNC_IIO_BANDWIDTH_OUT.PART0_FREERUN",
         "PerPkg": "1",
@@ -73,6 +82,7 @@
     },
     {
         "BriefDescription": "Free running counter that increments for every 32 bytes of data sent from the IO agent to the SOC",
+        "Counter": "10",
         "EventCode": "0xff",
         "EventName": "UNC_IIO_BANDWIDTH_OUT.PART1_FREERUN",
         "PerPkg": "1",
@@ -81,6 +91,7 @@
     },
     {
         "BriefDescription": "Free running counter that increments for every 32 bytes of data sent from the IO agent to the SOC",
+        "Counter": "11",
         "EventCode": "0xff",
         "EventName": "UNC_IIO_BANDWIDTH_OUT.PART2_FREERUN",
         "PerPkg": "1",
@@ -89,6 +100,7 @@
     },
     {
         "BriefDescription": "Free running counter that increments for every 32 bytes of data sent from the IO agent to the SOC",
+        "Counter": "12",
         "EventCode": "0xff",
         "EventName": "UNC_IIO_BANDWIDTH_OUT.PART3_FREERUN",
         "PerPkg": "1",
@@ -97,6 +109,7 @@
     },
     {
         "BriefDescription": "Free running counter that increments for every 32 bytes of data sent from the IO agent to the SOC",
+        "Counter": "13",
         "EventCode": "0xff",
         "EventName": "UNC_IIO_BANDWIDTH_OUT.PART4_FREERUN",
         "PerPkg": "1",
@@ -105,6 +118,7 @@
     },
     {
         "BriefDescription": "Free running counter that increments for every 32 bytes of data sent from the IO agent to the SOC",
+        "Counter": "14",
         "EventCode": "0xff",
         "EventName": "UNC_IIO_BANDWIDTH_OUT.PART5_FREERUN",
         "PerPkg": "1",
@@ -113,6 +127,7 @@
     },
     {
         "BriefDescription": "Free running counter that increments for every 32 bytes of data sent from the IO agent to the SOC",
+        "Counter": "15",
         "EventCode": "0xff",
         "EventName": "UNC_IIO_BANDWIDTH_OUT.PART6_FREERUN",
         "PerPkg": "1",
@@ -121,6 +136,7 @@
     },
     {
         "BriefDescription": "Free running counter that increments for every 32 bytes of data sent from the IO agent to the SOC",
+        "Counter": "16",
         "EventCode": "0xff",
         "EventName": "UNC_IIO_BANDWIDTH_OUT.PART7_FREERUN",
         "PerPkg": "1",
@@ -129,6 +145,7 @@
     },
     {
         "BriefDescription": "IIO Clockticks",
+        "Counter": "0,1,2,3",
         "EventCode": "0x01",
         "EventName": "UNC_IIO_CLOCKTICKS",
         "PerPkg": "1",
@@ -146,6 +163,7 @@
     },
     {
         "BriefDescription": "PCIe Completion Buffer Inserts of completions with data: Part 0-7",
+        "Counter": "0,1,2,3",
         "EventCode": "0xc2",
         "EventName": "UNC_IIO_COMP_BUF_INSERTS.CMPD.ALL_PARTS",
         "FCMask": "0x07",
@@ -157,6 +175,7 @@
     },
     {
         "BriefDescription": "PCIe Completion Buffer Inserts of completions with data: Part 0",
+        "Counter": "0,1,2,3",
         "EventCode": "0xc2",
         "EventName": "UNC_IIO_COMP_BUF_INSERTS.CMPD.PART0",
         "FCMask": "0x07",
@@ -168,6 +187,7 @@
     },
     {
         "BriefDescription": "PCIe Completion Buffer Inserts of completions with data: Part 1",
+        "Counter": "0,1,2,3",
         "EventCode": "0xc2",
         "EventName": "UNC_IIO_COMP_BUF_INSERTS.CMPD.PART1",
         "FCMask": "0x07",
@@ -179,6 +199,7 @@
     },
     {
         "BriefDescription": "PCIe Completion Buffer Inserts of completions with data: Part 2",
+        "Counter": "0,1,2,3",
         "EventCode": "0xc2",
         "EventName": "UNC_IIO_COMP_BUF_INSERTS.CMPD.PART2",
         "FCMask": "0x07",
@@ -190,6 +211,7 @@
     },
     {
         "BriefDescription": "PCIe Completion Buffer Inserts of completions with data: Part 3",
+        "Counter": "0,1,2,3",
         "EventCode": "0xc2",
         "EventName": "UNC_IIO_COMP_BUF_INSERTS.CMPD.PART3",
         "FCMask": "0x07",
@@ -201,6 +223,7 @@
     },
     {
         "BriefDescription": "PCIe Completion Buffer Inserts of completions with data: Part 4",
+        "Counter": "0,1,2,3",
         "EventCode": "0xc2",
         "EventName": "UNC_IIO_COMP_BUF_INSERTS.CMPD.PART4",
         "FCMask": "0x07",
@@ -212,6 +235,7 @@
     },
     {
         "BriefDescription": "PCIe Completion Buffer Inserts of completions with data: Part 5",
+        "Counter": "0,1,2,3",
         "EventCode": "0xc2",
         "EventName": "UNC_IIO_COMP_BUF_INSERTS.CMPD.PART5",
         "FCMask": "0x07",
@@ -223,6 +247,7 @@
     },
     {
         "BriefDescription": "PCIe Completion Buffer Inserts of completions with data: Part 6",
+        "Counter": "0,1,2,3",
         "EventCode": "0xc2",
         "EventName": "UNC_IIO_COMP_BUF_INSERTS.CMPD.PART6",
         "FCMask": "0x07",
@@ -234,6 +259,7 @@
     },
     {
         "BriefDescription": "PCIe Completion Buffer Inserts of completions with data: Part 7",
+        "Counter": "0,1,2,3",
         "EventCode": "0xc2",
         "EventName": "UNC_IIO_COMP_BUF_INSERTS.CMPD.PART7",
         "FCMask": "0x07",
@@ -245,6 +271,7 @@
     },
     {
         "BriefDescription": "UNC_IIO_COMP_BUF_OCCUPANCY.CMPD.ALL_PARTS",
+        "Counter": "2,3",
         "EventCode": "0xd5",
         "EventName": "UNC_IIO_COMP_BUF_OCCUPANCY.CMPD.ALL_PARTS",
         "FCMask": "0x07",
@@ -254,6 +281,7 @@
     },
     {
         "BriefDescription": "PCIe Completion Buffer Occupancy : Part 0",
+        "Counter": "2,3",
         "EventCode": "0xd5",
         "EventName": "UNC_IIO_COMP_BUF_OCCUPANCY.CMPD.PART0",
         "FCMask": "0x07",
@@ -265,6 +293,7 @@
     },
     {
         "BriefDescription": "PCIe Completion Buffer Occupancy : Part 1",
+        "Counter": "2,3",
         "EventCode": "0xd5",
         "EventName": "UNC_IIO_COMP_BUF_OCCUPANCY.CMPD.PART1",
         "FCMask": "0x07",
@@ -276,6 +305,7 @@
     },
     {
         "BriefDescription": "PCIe Completion Buffer Occupancy : Part 2",
+        "Counter": "2,3",
         "EventCode": "0xd5",
         "EventName": "UNC_IIO_COMP_BUF_OCCUPANCY.CMPD.PART2",
         "FCMask": "0x07",
@@ -287,6 +317,7 @@
     },
     {
         "BriefDescription": "PCIe Completion Buffer Occupancy : Part 3",
+        "Counter": "2,3",
         "EventCode": "0xd5",
         "EventName": "UNC_IIO_COMP_BUF_OCCUPANCY.CMPD.PART3",
         "FCMask": "0x07",
@@ -298,6 +329,7 @@
     },
     {
         "BriefDescription": "PCIe Completion Buffer Occupancy : Part 4",
+        "Counter": "2,3",
         "EventCode": "0xd5",
         "EventName": "UNC_IIO_COMP_BUF_OCCUPANCY.CMPD.PART4",
         "FCMask": "0x07",
@@ -309,6 +341,7 @@
     },
     {
         "BriefDescription": "PCIe Completion Buffer Occupancy : Part 5",
+        "Counter": "2,3",
         "EventCode": "0xd5",
         "EventName": "UNC_IIO_COMP_BUF_OCCUPANCY.CMPD.PART5",
         "FCMask": "0x07",
@@ -320,6 +353,7 @@
     },
     {
         "BriefDescription": "PCIe Completion Buffer Occupancy : Part 6",
+        "Counter": "2,3",
         "EventCode": "0xd5",
         "EventName": "UNC_IIO_COMP_BUF_OCCUPANCY.CMPD.PART6",
         "FCMask": "0x07",
@@ -331,6 +365,7 @@
     },
     {
         "BriefDescription": "PCIe Completion Buffer Occupancy : Part 7",
+        "Counter": "2,3",
         "EventCode": "0xd5",
         "EventName": "UNC_IIO_COMP_BUF_OCCUPANCY.CMPD.PART7",
         "FCMask": "0x07",
@@ -342,6 +377,7 @@
     },
     {
         "BriefDescription": "Read request for 4 bytes made by the CPU to IIO Part0-7",
+        "Counter": "2,3",
         "EventCode": "0xc0",
         "EventName": "UNC_IIO_DATA_REQ_BY_CPU.MEM_READ.ALL_PARTS",
         "FCMask": "0x07",
@@ -352,6 +388,7 @@
     },
     {
         "BriefDescription": "Read request for 4 bytes made by the CPU to IIO Part0",
+        "Counter": "2,3",
         "EventCode": "0xc0",
         "EventName": "UNC_IIO_DATA_REQ_BY_CPU.MEM_READ.PART0",
         "FCMask": "0x07",
@@ -363,6 +400,7 @@
     },
     {
         "BriefDescription": "Read request for 4 bytes made by the CPU to IIO Part1",
+        "Counter": "2,3",
         "EventCode": "0xc0",
         "EventName": "UNC_IIO_DATA_REQ_BY_CPU.MEM_READ.PART1",
         "FCMask": "0x07",
@@ -374,6 +412,7 @@
     },
     {
         "BriefDescription": "Read request for 4 bytes made by the CPU to IIO Part2",
+        "Counter": "2,3",
         "EventCode": "0xc0",
         "EventName": "UNC_IIO_DATA_REQ_BY_CPU.MEM_READ.PART2",
         "FCMask": "0x07",
@@ -385,6 +424,7 @@
     },
     {
         "BriefDescription": "Read request for 4 bytes made by the CPU to IIO Part3",
+        "Counter": "2,3",
         "EventCode": "0xc0",
         "EventName": "UNC_IIO_DATA_REQ_BY_CPU.MEM_READ.PART3",
         "FCMask": "0x07",
@@ -396,6 +436,7 @@
     },
     {
         "BriefDescription": "Data requested by the CPU : Core reading from Cards MMIO space",
+        "Counter": "2,3",
         "EventCode": "0xc0",
         "EventName": "UNC_IIO_DATA_REQ_BY_CPU.MEM_READ.PART4",
         "FCMask": "0x07",
@@ -407,6 +448,7 @@
     },
     {
         "BriefDescription": "Data requested by the CPU : Core reading from Cards MMIO space",
+        "Counter": "2,3",
         "EventCode": "0xc0",
         "EventName": "UNC_IIO_DATA_REQ_BY_CPU.MEM_READ.PART5",
         "FCMask": "0x07",
@@ -418,6 +460,7 @@
     },
     {
         "BriefDescription": "Data requested by the CPU : Core reading from Cards MMIO space",
+        "Counter": "2,3",
         "EventCode": "0xc0",
         "EventName": "UNC_IIO_DATA_REQ_BY_CPU.MEM_READ.PART6",
         "FCMask": "0x07",
@@ -429,6 +472,7 @@
     },
     {
         "BriefDescription": "Data requested by the CPU : Core reading from Cards MMIO space",
+        "Counter": "2,3",
         "EventCode": "0xc0",
         "EventName": "UNC_IIO_DATA_REQ_BY_CPU.MEM_READ.PART7",
         "FCMask": "0x07",
@@ -440,6 +484,7 @@
     },
     {
         "BriefDescription": "Write request of 4 bytes made to IIO Part0-7 by the CPU",
+        "Counter": "2,3",
         "EventCode": "0xc0",
         "EventName": "UNC_IIO_DATA_REQ_BY_CPU.MEM_WRITE.ALL_PARTS",
         "FCMask": "0x07",
@@ -450,6 +495,7 @@
     },
     {
         "BriefDescription": "Data requested by the CPU : Core writing to Cards MMIO space",
+        "Counter": "2,3",
         "EventCode": "0xc0",
         "EventName": "UNC_IIO_DATA_REQ_BY_CPU.MEM_WRITE.IOMMU0",
         "FCMask": "0x07",
@@ -461,6 +507,7 @@
     },
     {
         "BriefDescription": "Data requested by the CPU : Core writing to Cards MMIO space",
+        "Counter": "2,3",
         "EventCode": "0xc0",
         "EventName": "UNC_IIO_DATA_REQ_BY_CPU.MEM_WRITE.IOMMU1",
         "FCMask": "0x07",
@@ -472,6 +519,7 @@
     },
     {
         "BriefDescription": "Write request of 4 bytes made to IIO Part0 by the CPU",
+        "Counter": "2,3",
         "EventCode": "0xc0",
         "EventName": "UNC_IIO_DATA_REQ_BY_CPU.MEM_WRITE.PART0",
         "FCMask": "0x07",
@@ -483,6 +531,7 @@
     },
     {
         "BriefDescription": "Write request of 4 bytes made to IIO Part1 by the CPU",
+        "Counter": "2,3",
         "EventCode": "0xc0",
         "EventName": "UNC_IIO_DATA_REQ_BY_CPU.MEM_WRITE.PART1",
         "FCMask": "0x07",
@@ -494,6 +543,7 @@
     },
     {
         "BriefDescription": "Write request of 4 bytes made to IIO Part2 by the CPU",
+        "Counter": "2,3",
         "EventCode": "0xc0",
         "EventName": "UNC_IIO_DATA_REQ_BY_CPU.MEM_WRITE.PART2",
         "FCMask": "0x07",
@@ -505,6 +555,7 @@
     },
     {
         "BriefDescription": "Write request of 4 bytes made to IIO Part3 by the CPU",
+        "Counter": "2,3",
         "EventCode": "0xc0",
         "EventName": "UNC_IIO_DATA_REQ_BY_CPU.MEM_WRITE.PART3",
         "FCMask": "0x07",
@@ -516,6 +567,7 @@
     },
     {
         "BriefDescription": "Data requested by the CPU : Core writing to Cards MMIO space",
+        "Counter": "2,3",
         "EventCode": "0xc0",
         "EventName": "UNC_IIO_DATA_REQ_BY_CPU.MEM_WRITE.PART4",
         "FCMask": "0x07",
@@ -527,6 +579,7 @@
     },
     {
         "BriefDescription": "Data requested by the CPU : Core writing to Cards MMIO space",
+        "Counter": "2,3",
         "EventCode": "0xc0",
         "EventName": "UNC_IIO_DATA_REQ_BY_CPU.MEM_WRITE.PART5",
         "FCMask": "0x07",
@@ -538,6 +591,7 @@
     },
     {
         "BriefDescription": "Data requested by the CPU : Core writing to Cards MMIO space",
+        "Counter": "2,3",
         "EventCode": "0xc0",
         "EventName": "UNC_IIO_DATA_REQ_BY_CPU.MEM_WRITE.PART6",
         "FCMask": "0x07",
@@ -549,6 +603,7 @@
     },
     {
         "BriefDescription": "Data requested by the CPU : Core writing to Cards MMIO space",
+        "Counter": "2,3",
         "EventCode": "0xc0",
         "EventName": "UNC_IIO_DATA_REQ_BY_CPU.MEM_WRITE.PART7",
         "FCMask": "0x07",
@@ -560,6 +615,7 @@
     },
     {
         "BriefDescription": "Peer to peer read request for 4 bytes made by a different IIO unit to IIO Part0",
+        "Counter": "2,3",
         "EventCode": "0xc0",
         "EventName": "UNC_IIO_DATA_REQ_BY_CPU.PEER_READ.PART0",
         "FCMask": "0x07",
@@ -571,6 +627,7 @@
     },
     {
         "BriefDescription": "Peer to peer read request for 4 bytes made by a different IIO unit to IIO Part0",
+        "Counter": "2,3",
         "EventCode": "0xc0",
         "EventName": "UNC_IIO_DATA_REQ_BY_CPU.PEER_READ.PART1",
         "FCMask": "0x07",
@@ -582,6 +639,7 @@
     },
     {
         "BriefDescription": "Peer to peer read request for 4 bytes made by a different IIO unit to IIO Part0",
+        "Counter": "2,3",
         "EventCode": "0xc0",
         "EventName": "UNC_IIO_DATA_REQ_BY_CPU.PEER_READ.PART2",
         "FCMask": "0x07",
@@ -593,6 +651,7 @@
     },
     {
         "BriefDescription": "Peer to peer read request for 4 bytes made by a different IIO unit to IIO Part0",
+        "Counter": "2,3",
         "EventCode": "0xc0",
         "EventName": "UNC_IIO_DATA_REQ_BY_CPU.PEER_READ.PART3",
         "FCMask": "0x07",
@@ -604,6 +663,7 @@
     },
     {
         "BriefDescription": "Data requested by the CPU : Another card (different IIO stack) reading from this card.",
+        "Counter": "2,3",
         "EventCode": "0xc0",
         "EventName": "UNC_IIO_DATA_REQ_BY_CPU.PEER_READ.PART4",
         "FCMask": "0x07",
@@ -615,6 +675,7 @@
     },
     {
         "BriefDescription": "Data requested by the CPU : Another card (different IIO stack) reading from this card.",
+        "Counter": "2,3",
         "EventCode": "0xc0",
         "EventName": "UNC_IIO_DATA_REQ_BY_CPU.PEER_READ.PART5",
         "FCMask": "0x07",
@@ -626,6 +687,7 @@
     },
     {
         "BriefDescription": "Data requested by the CPU : Another card (different IIO stack) reading from this card.",
+        "Counter": "2,3",
         "EventCode": "0xc0",
         "EventName": "UNC_IIO_DATA_REQ_BY_CPU.PEER_READ.PART6",
         "FCMask": "0x07",
@@ -637,6 +699,7 @@
     },
     {
         "BriefDescription": "Data requested by the CPU : Another card (different IIO stack) reading from this card.",
+        "Counter": "2,3",
         "EventCode": "0xc0",
         "EventName": "UNC_IIO_DATA_REQ_BY_CPU.PEER_READ.PART7",
         "FCMask": "0x07",
@@ -648,6 +711,7 @@
     },
     {
         "BriefDescription": "Peer to peer write request of 4 bytes made to IIO Part0 by a different IIO unit",
+        "Counter": "2,3",
         "EventCode": "0xc0",
         "EventName": "UNC_IIO_DATA_REQ_BY_CPU.PEER_WRITE.PART0",
         "FCMask": "0x07",
@@ -659,6 +723,7 @@
     },
     {
         "BriefDescription": "Peer to peer write request of 4 bytes made to IIO Part0 by a different IIO unit",
+        "Counter": "2,3",
         "EventCode": "0xc0",
         "EventName": "UNC_IIO_DATA_REQ_BY_CPU.PEER_WRITE.PART1",
         "FCMask": "0x07",
@@ -670,6 +735,7 @@
     },
     {
         "BriefDescription": "Peer to peer write request of 4 bytes made to IIO Part0 by a different IIO unit",
+        "Counter": "2,3",
         "EventCode": "0xc0",
         "EventName": "UNC_IIO_DATA_REQ_BY_CPU.PEER_WRITE.PART2",
         "FCMask": "0x07",
@@ -681,6 +747,7 @@
     },
     {
         "BriefDescription": "Peer to peer write request of 4 bytes made to IIO Part0 by a different IIO unit",
+        "Counter": "2,3",
         "EventCode": "0xc0",
         "EventName": "UNC_IIO_DATA_REQ_BY_CPU.PEER_WRITE.PART3",
         "FCMask": "0x07",
@@ -692,6 +759,7 @@
     },
     {
         "BriefDescription": "Data requested by the CPU : Another card (different IIO stack) writing to this card.",
+        "Counter": "2,3",
         "EventCode": "0xc0",
         "EventName": "UNC_IIO_DATA_REQ_BY_CPU.PEER_WRITE.PART4",
         "FCMask": "0x07",
@@ -703,6 +771,7 @@
     },
     {
         "BriefDescription": "Data requested by the CPU : Another card (different IIO stack) writing to this card.",
+        "Counter": "2,3",
         "EventCode": "0xc0",
         "EventName": "UNC_IIO_DATA_REQ_BY_CPU.PEER_WRITE.PART5",
         "FCMask": "0x07",
@@ -714,6 +783,7 @@
     },
     {
         "BriefDescription": "Data requested by the CPU : Another card (different IIO stack) writing to this card.",
+        "Counter": "2,3",
         "EventCode": "0xc0",
         "EventName": "UNC_IIO_DATA_REQ_BY_CPU.PEER_WRITE.PART6",
         "FCMask": "0x07",
@@ -725,6 +795,7 @@
     },
     {
         "BriefDescription": "Data requested by the CPU : Another card (different IIO stack) writing to this card.",
+        "Counter": "2,3",
         "EventCode": "0xc0",
         "EventName": "UNC_IIO_DATA_REQ_BY_CPU.PEER_WRITE.PART7",
         "FCMask": "0x07",
@@ -736,6 +807,7 @@
     },
     {
         "BriefDescription": "Data requested of the CPU : CmpD - device sending completion to CPU request",
+        "Counter": "0,1",
         "EventCode": "0x83",
         "EventName": "UNC_IIO_DATA_REQ_OF_CPU.CMPD.ALL_PARTS",
         "FCMask": "0x07",
@@ -747,6 +819,7 @@
     },
     {
         "BriefDescription": "Data requested of the CPU : CmpD - device sending completion to CPU request",
+        "Counter": "0,1",
         "EventCode": "0x83",
         "EventName": "UNC_IIO_DATA_REQ_OF_CPU.CMPD.PART0",
         "FCMask": "0x07",
@@ -758,6 +831,7 @@
     },
     {
         "BriefDescription": "Data requested of the CPU : CmpD - device sending completion to CPU request",
+        "Counter": "0,1",
         "EventCode": "0x83",
         "EventName": "UNC_IIO_DATA_REQ_OF_CPU.CMPD.PART1",
         "FCMask": "0x07",
@@ -769,6 +843,7 @@
     },
     {
         "BriefDescription": "Data requested of the CPU : CmpD - device sending completion to CPU request",
+        "Counter": "0,1",
         "EventCode": "0x83",
         "EventName": "UNC_IIO_DATA_REQ_OF_CPU.CMPD.PART2",
         "FCMask": "0x07",
@@ -780,6 +855,7 @@
     },
     {
         "BriefDescription": "Data requested of the CPU : CmpD - device sending completion to CPU request",
+        "Counter": "0,1",
         "EventCode": "0x83",
         "EventName": "UNC_IIO_DATA_REQ_OF_CPU.CMPD.PART3",
         "FCMask": "0x07",
@@ -791,6 +867,7 @@
     },
     {
         "BriefDescription": "Data requested of the CPU : CmpD - device sending completion to CPU request",
+        "Counter": "0,1",
         "EventCode": "0x83",
         "EventName": "UNC_IIO_DATA_REQ_OF_CPU.CMPD.PART4",
         "FCMask": "0x07",
@@ -802,6 +879,7 @@
     },
     {
         "BriefDescription": "Data requested of the CPU : CmpD - device sending completion to CPU request",
+        "Counter": "0,1",
         "EventCode": "0x83",
         "EventName": "UNC_IIO_DATA_REQ_OF_CPU.CMPD.PART5",
         "FCMask": "0x07",
@@ -813,6 +891,7 @@
     },
     {
         "BriefDescription": "Data requested of the CPU : CmpD - device sending completion to CPU request",
+        "Counter": "0,1",
         "EventCode": "0x83",
         "EventName": "UNC_IIO_DATA_REQ_OF_CPU.CMPD.PART6",
         "FCMask": "0x07",
@@ -824,6 +903,7 @@
     },
     {
         "BriefDescription": "Data requested of the CPU : CmpD - device sending completion to CPU request",
+        "Counter": "0,1",
         "EventCode": "0x83",
         "EventName": "UNC_IIO_DATA_REQ_OF_CPU.CMPD.PART7",
         "FCMask": "0x07",
@@ -835,6 +915,7 @@
     },
     {
         "BriefDescription": "Read request for 4 bytes made by IIO Part0-7 to Memory",
+        "Counter": "0,1",
         "EventCode": "0x83",
         "EventName": "UNC_IIO_DATA_REQ_OF_CPU.MEM_READ.ALL_PARTS",
         "FCMask": "0x07",
@@ -845,6 +926,7 @@
     },
     {
         "BriefDescription": "Read request for 4 bytes made by IIO Part0 to Memory",
+        "Counter": "0,1",
         "EventCode": "0x83",
         "EventName": "UNC_IIO_DATA_REQ_OF_CPU.MEM_READ.PART0",
         "FCMask": "0x07",
@@ -856,6 +938,7 @@
     },
     {
         "BriefDescription": "Read request for 4 bytes made by IIO Part1 to Memory",
+        "Counter": "0,1",
         "EventCode": "0x83",
         "EventName": "UNC_IIO_DATA_REQ_OF_CPU.MEM_READ.PART1",
         "FCMask": "0x07",
@@ -867,6 +950,7 @@
     },
     {
         "BriefDescription": "Read request for 4 bytes made by IIO Part2 to Memory",
+        "Counter": "0,1",
         "EventCode": "0x83",
         "EventName": "UNC_IIO_DATA_REQ_OF_CPU.MEM_READ.PART2",
         "FCMask": "0x07",
@@ -878,6 +962,7 @@
     },
     {
         "BriefDescription": "Read request for 4 bytes made by IIO Part3 to Memory",
+        "Counter": "0,1",
         "EventCode": "0x83",
         "EventName": "UNC_IIO_DATA_REQ_OF_CPU.MEM_READ.PART3",
         "FCMask": "0x07",
@@ -889,6 +974,7 @@
     },
     {
         "BriefDescription": "Data requested of the CPU : Card reading from DRAM",
+        "Counter": "0,1",
         "EventCode": "0x83",
         "EventName": "UNC_IIO_DATA_REQ_OF_CPU.MEM_READ.PART4",
         "FCMask": "0x07",
@@ -900,6 +986,7 @@
     },
     {
         "BriefDescription": "Data requested of the CPU : Card reading from DRAM",
+        "Counter": "0,1",
         "EventCode": "0x83",
         "EventName": "UNC_IIO_DATA_REQ_OF_CPU.MEM_READ.PART5",
         "FCMask": "0x07",
@@ -911,6 +998,7 @@
     },
     {
         "BriefDescription": "Data requested of the CPU : Card reading from DRAM",
+        "Counter": "0,1",
         "EventCode": "0x83",
         "EventName": "UNC_IIO_DATA_REQ_OF_CPU.MEM_READ.PART6",
         "FCMask": "0x07",
@@ -922,6 +1010,7 @@
     },
     {
         "BriefDescription": "Data requested of the CPU : Card reading from DRAM",
+        "Counter": "0,1",
         "EventCode": "0x83",
         "EventName": "UNC_IIO_DATA_REQ_OF_CPU.MEM_READ.PART7",
         "FCMask": "0x07",
@@ -933,6 +1022,7 @@
     },
     {
         "BriefDescription": "Write request of 4 bytes made by IIO Part0-7 to Memory",
+        "Counter": "0,1",
         "EventCode": "0x83",
         "EventName": "UNC_IIO_DATA_REQ_OF_CPU.MEM_WRITE.ALL_PARTS",
         "FCMask": "0x07",
@@ -943,6 +1033,7 @@
     },
     {
         "BriefDescription": "Write request of 4 bytes made by IIO Part0 to Memory",
+        "Counter": "0,1",
         "EventCode": "0x83",
         "EventName": "UNC_IIO_DATA_REQ_OF_CPU.MEM_WRITE.PART0",
         "FCMask": "0x07",
@@ -954,6 +1045,7 @@
     },
     {
         "BriefDescription": "Write request of 4 bytes made by IIO Part1 to Memory",
+        "Counter": "0,1",
         "EventCode": "0x83",
         "EventName": "UNC_IIO_DATA_REQ_OF_CPU.MEM_WRITE.PART1",
         "FCMask": "0x07",
@@ -965,6 +1057,7 @@
     },
     {
         "BriefDescription": "Write request of 4 bytes made by IIO Part2 to Memory",
+        "Counter": "0,1",
         "EventCode": "0x83",
         "EventName": "UNC_IIO_DATA_REQ_OF_CPU.MEM_WRITE.PART2",
         "FCMask": "0x07",
@@ -976,6 +1069,7 @@
     },
     {
         "BriefDescription": "Write request of 4 bytes made by IIO Part3 to Memory",
+        "Counter": "0,1",
         "EventCode": "0x83",
         "EventName": "UNC_IIO_DATA_REQ_OF_CPU.MEM_WRITE.PART3",
         "FCMask": "0x07",
@@ -987,6 +1081,7 @@
     },
     {
         "BriefDescription": "Data requested of the CPU : Card writing to DRAM",
+        "Counter": "0,1",
         "EventCode": "0x83",
         "EventName": "UNC_IIO_DATA_REQ_OF_CPU.MEM_WRITE.PART4",
         "FCMask": "0x07",
@@ -998,6 +1093,7 @@
     },
     {
         "BriefDescription": "Data requested of the CPU : Card writing to DRAM",
+        "Counter": "0,1",
         "EventCode": "0x83",
         "EventName": "UNC_IIO_DATA_REQ_OF_CPU.MEM_WRITE.PART5",
         "FCMask": "0x07",
@@ -1009,6 +1105,7 @@
     },
     {
         "BriefDescription": "Data requested of the CPU : Card writing to DRAM",
+        "Counter": "0,1",
         "EventCode": "0x83",
         "EventName": "UNC_IIO_DATA_REQ_OF_CPU.MEM_WRITE.PART6",
         "FCMask": "0x07",
@@ -1020,6 +1117,7 @@
     },
     {
         "BriefDescription": "Data requested of the CPU : Card writing to DRAM",
+        "Counter": "0,1",
         "EventCode": "0x83",
         "EventName": "UNC_IIO_DATA_REQ_OF_CPU.MEM_WRITE.PART7",
         "FCMask": "0x07",
@@ -1031,6 +1129,7 @@
     },
     {
         "BriefDescription": "Peer to peer write request of 4 bytes made by IIO Part0 to an IIO target",
+        "Counter": "0,1",
         "EventCode": "0x83",
         "EventName": "UNC_IIO_DATA_REQ_OF_CPU.PEER_WRITE.PART0",
         "FCMask": "0x07",
@@ -1042,6 +1141,7 @@
     },
     {
         "BriefDescription": "Peer to peer write request of 4 bytes made by IIO Part0 to an IIO target",
+        "Counter": "0,1",
         "EventCode": "0x83",
         "EventName": "UNC_IIO_DATA_REQ_OF_CPU.PEER_WRITE.PART1",
         "FCMask": "0x07",
@@ -1053,6 +1153,7 @@
     },
     {
         "BriefDescription": "Peer to peer write request of 4 bytes made by IIO Part0 to an IIO target",
+        "Counter": "0,1",
         "EventCode": "0x83",
         "EventName": "UNC_IIO_DATA_REQ_OF_CPU.PEER_WRITE.PART2",
         "FCMask": "0x07",
@@ -1064,6 +1165,7 @@
     },
     {
         "BriefDescription": "Peer to peer write request of 4 bytes made by IIO Part0 to an IIO target",
+        "Counter": "0,1",
         "EventCode": "0x83",
         "EventName": "UNC_IIO_DATA_REQ_OF_CPU.PEER_WRITE.PART3",
         "FCMask": "0x07",
@@ -1075,6 +1177,7 @@
     },
     {
         "BriefDescription": "Data requested of the CPU : Card writing to another Card (same or different stack)",
+        "Counter": "0,1",
         "EventCode": "0x83",
         "EventName": "UNC_IIO_DATA_REQ_OF_CPU.PEER_WRITE.PART4",
         "FCMask": "0x07",
@@ -1086,6 +1189,7 @@
     },
     {
         "BriefDescription": "Data requested of the CPU : Card writing to another Card (same or different stack)",
+        "Counter": "0,1",
         "EventCode": "0x83",
         "EventName": "UNC_IIO_DATA_REQ_OF_CPU.PEER_WRITE.PART5",
         "FCMask": "0x07",
@@ -1097,6 +1201,7 @@
     },
     {
         "BriefDescription": "Data requested of the CPU : Card writing to another Card (same or different stack)",
+        "Counter": "0,1",
         "EventCode": "0x83",
         "EventName": "UNC_IIO_DATA_REQ_OF_CPU.PEER_WRITE.PART6",
         "FCMask": "0x07",
@@ -1108,6 +1213,7 @@
     },
     {
         "BriefDescription": "Data requested of the CPU : Card writing to another Card (same or different stack)",
+        "Counter": "0,1",
         "EventCode": "0x83",
         "EventName": "UNC_IIO_DATA_REQ_OF_CPU.PEER_WRITE.PART7",
         "FCMask": "0x07",
@@ -1119,6 +1225,7 @@
     },
     {
         "BriefDescription": "Incoming arbitration requests : Passing data to be written",
+        "Counter": "0,1,2,3",
         "EventCode": "0x86",
         "EventName": "UNC_IIO_INBOUND_ARB_REQ.DATA",
         "FCMask": "0x07",
@@ -1130,6 +1237,7 @@
     },
     {
         "BriefDescription": "Incoming arbitration requests : Issuing final read or write of line",
+        "Counter": "0,1,2,3",
         "EventCode": "0x86",
         "EventName": "UNC_IIO_INBOUND_ARB_REQ.FINAL_RD_WR",
         "FCMask": "0x07",
@@ -1141,6 +1249,7 @@
     },
     {
         "BriefDescription": "Incoming arbitration requests : Processing response from IOMMU",
+        "Counter": "0,1,2,3",
         "EventCode": "0x86",
         "EventName": "UNC_IIO_INBOUND_ARB_REQ.IOMMU_HIT",
         "FCMask": "0x07",
@@ -1152,6 +1261,7 @@
     },
     {
         "BriefDescription": "Incoming arbitration requests : Issuing to IOMMU",
+        "Counter": "0,1,2,3",
         "EventCode": "0x86",
         "EventName": "UNC_IIO_INBOUND_ARB_REQ.IOMMU_REQ",
         "FCMask": "0x07",
@@ -1163,6 +1273,7 @@
     },
     {
         "BriefDescription": "Incoming arbitration requests : Request Ownership",
+        "Counter": "0,1,2,3",
         "EventCode": "0x86",
         "EventName": "UNC_IIO_INBOUND_ARB_REQ.REQ_OWN",
         "FCMask": "0x07",
@@ -1174,6 +1285,7 @@
     },
     {
         "BriefDescription": "Incoming arbitration requests : Writing line",
+        "Counter": "0,1,2,3",
         "EventCode": "0x86",
         "EventName": "UNC_IIO_INBOUND_ARB_REQ.WR",
         "FCMask": "0x07",
@@ -1185,6 +1297,7 @@
     },
     {
         "BriefDescription": "Incoming arbitration requests granted : Passing data to be written",
+        "Counter": "0,1,2,3",
         "EventCode": "0x87",
         "EventName": "UNC_IIO_INBOUND_ARB_WON.DATA",
         "FCMask": "0x07",
@@ -1196,6 +1309,7 @@
     },
     {
         "BriefDescription": "Incoming arbitration requests granted : Issuing final read or write of line",
+        "Counter": "0,1,2,3",
         "EventCode": "0x87",
         "EventName": "UNC_IIO_INBOUND_ARB_WON.FINAL_RD_WR",
         "FCMask": "0x07",
@@ -1207,6 +1321,7 @@
     },
     {
         "BriefDescription": "Incoming arbitration requests granted : Processing response from IOMMU",
+        "Counter": "0,1,2,3",
         "EventCode": "0x87",
         "EventName": "UNC_IIO_INBOUND_ARB_WON.IOMMU_HIT",
         "FCMask": "0x07",
@@ -1218,6 +1333,7 @@
     },
     {
         "BriefDescription": "Incoming arbitration requests granted : Issuing to IOMMU",
+        "Counter": "0,1,2,3",
         "EventCode": "0x87",
         "EventName": "UNC_IIO_INBOUND_ARB_WON.IOMMU_REQ",
         "FCMask": "0x07",
@@ -1229,6 +1345,7 @@
     },
     {
         "BriefDescription": "Incoming arbitration requests granted : Request Ownership",
+        "Counter": "0,1,2,3",
         "EventCode": "0x87",
         "EventName": "UNC_IIO_INBOUND_ARB_WON.REQ_OWN",
         "FCMask": "0x07",
@@ -1240,6 +1357,7 @@
     },
     {
         "BriefDescription": "Incoming arbitration requests granted : Writing line",
+        "Counter": "0,1,2,3",
         "EventCode": "0x87",
         "EventName": "UNC_IIO_INBOUND_ARB_WON.WR",
         "FCMask": "0x07",
@@ -1300,6 +1418,7 @@
     },
     {
         "BriefDescription": ": PWC Hit to a 2M page",
+        "Counter": "0,1,2,3",
         "EventCode": "0x41",
         "EventName": "UNC_IIO_IOMMU1.PWC_1G_HITS",
         "PerPkg": "1",
@@ -1309,6 +1428,7 @@
     },
     {
         "BriefDescription": ": PWT Hit to a 256T page",
+        "Counter": "0,1,2,3",
         "EventCode": "0x41",
         "EventName": "UNC_IIO_IOMMU1.PWC_256T_HITS",
         "PerPkg": "1",
@@ -1318,6 +1438,7 @@
     },
     {
         "BriefDescription": ": PWC Hit to a 4K page",
+        "Counter": "0,1,2,3",
         "EventCode": "0x41",
         "EventName": "UNC_IIO_IOMMU1.PWC_2M_HITS",
         "PerPkg": "1",
@@ -1327,6 +1448,7 @@
     },
     {
         "BriefDescription": ": PWC Hit to a 1G page",
+        "Counter": "0,1,2,3",
         "EventCode": "0x41",
         "EventName": "UNC_IIO_IOMMU1.PWC_512G_HITS",
         "PerPkg": "1",
@@ -1336,6 +1458,7 @@
     },
     {
         "BriefDescription": ": PageWalk cache fill",
+        "Counter": "0,1,2,3",
         "EventCode": "0x41",
         "EventName": "UNC_IIO_IOMMU1.PWC_CACHE_FILLS",
         "PerPkg": "1",
@@ -1345,6 +1468,7 @@
     },
     {
         "BriefDescription": ": PageWalk cache lookup",
+        "Counter": "0,1,2,3",
         "EventCode": "0x41",
         "EventName": "UNC_IIO_IOMMU1.PWT_CACHE_LOOKUPS",
         "PerPkg": "1",
@@ -1354,6 +1478,7 @@
     },
     {
         "BriefDescription": ": PWC Hit to a 2M page",
+        "Counter": "0,1,2,3",
         "EventCode": "0x41",
         "EventName": "UNC_IIO_IOMMU1.SLPWC_1G_HITS",
         "PerPkg": "1",
@@ -1363,6 +1488,7 @@
     },
     {
         "BriefDescription": ": PWC Hit to a 2M page",
+        "Counter": "0,1,2,3",
         "EventCode": "0x41",
         "EventName": "UNC_IIO_IOMMU1.SLPWC_256T_HITS",
         "PerPkg": "1",
@@ -1372,6 +1498,7 @@
     },
     {
         "BriefDescription": ": PWC Hit to a 1G page",
+        "Counter": "0,1,2,3",
         "EventCode": "0x41",
         "EventName": "UNC_IIO_IOMMU1.SLPWC_512G_HITS",
         "PerPkg": "1",
@@ -1381,6 +1508,7 @@
     },
     {
         "BriefDescription": ": Global IOTLB invalidation cycles",
+        "Counter": "0,1,2,3",
         "EventCode": "0x43",
         "EventName": "UNC_IIO_IOMMU3.PWT_OCCUPANCY_MSB",
         "PerPkg": "1",
@@ -1391,6 +1519,7 @@
     },
     {
         "BriefDescription": "AND Mask/match for debug bus : Non-PCIE bus",
+        "Counter": "0,1",
         "EventCode": "0x02",
         "EventName": "UNC_IIO_MASK_MATCH_AND.BUS0",
         "PerPkg": "1",
@@ -1401,6 +1530,7 @@
     },
     {
         "BriefDescription": "AND Mask/match for debug bus : Non-PCIE bus and PCIE bus",
+        "Counter": "0,1",
         "EventCode": "0x02",
         "EventName": "UNC_IIO_MASK_MATCH_AND.BUS0_BUS1",
         "PerPkg": "1",
@@ -1411,6 +1541,7 @@
     },
     {
         "BriefDescription": "AND Mask/match for debug bus : Non-PCIE bus and !(PCIE bus)",
+        "Counter": "0,1",
         "EventCode": "0x02",
         "EventName": "UNC_IIO_MASK_MATCH_AND.BUS0_NOT_BUS1",
         "PerPkg": "1",
@@ -1421,6 +1552,7 @@
     },
     {
         "BriefDescription": "AND Mask/match for debug bus : PCIE bus",
+        "Counter": "0,1",
         "EventCode": "0x02",
         "EventName": "UNC_IIO_MASK_MATCH_AND.BUS1",
         "PerPkg": "1",
@@ -1431,6 +1563,7 @@
     },
     {
         "BriefDescription": "AND Mask/match for debug bus : !(Non-PCIE bus) and PCIE bus",
+        "Counter": "0,1",
         "EventCode": "0x02",
         "EventName": "UNC_IIO_MASK_MATCH_AND.NOT_BUS0_BUS1",
         "PerPkg": "1",
@@ -1441,6 +1574,7 @@
     },
     {
         "BriefDescription": "AND Mask/match for debug bus : !(Non-PCIE bus) and !(PCIE bus)",
+        "Counter": "0,1",
         "EventCode": "0x02",
         "EventName": "UNC_IIO_MASK_MATCH_AND.NOT_BUS0_NOT_BUS1",
         "PerPkg": "1",
@@ -1451,6 +1585,7 @@
     },
     {
         "BriefDescription": "OR Mask/match for debug bus : Non-PCIE bus",
+        "Counter": "0,1",
         "EventCode": "0x03",
         "EventName": "UNC_IIO_MASK_MATCH_OR.BUS0",
         "PerPkg": "1",
@@ -1461,6 +1596,7 @@
     },
     {
         "BriefDescription": "OR Mask/match for debug bus : Non-PCIE bus and PCIE bus",
+        "Counter": "0,1",
         "EventCode": "0x03",
         "EventName": "UNC_IIO_MASK_MATCH_OR.BUS0_BUS1",
         "PerPkg": "1",
@@ -1471,6 +1607,7 @@
     },
     {
         "BriefDescription": "OR Mask/match for debug bus : Non-PCIE bus and !(PCIE bus)",
+        "Counter": "0,1",
         "EventCode": "0x03",
         "EventName": "UNC_IIO_MASK_MATCH_OR.BUS0_NOT_BUS1",
         "PerPkg": "1",
@@ -1481,6 +1618,7 @@
     },
     {
         "BriefDescription": "OR Mask/match for debug bus : PCIE bus",
+        "Counter": "0,1",
         "EventCode": "0x03",
         "EventName": "UNC_IIO_MASK_MATCH_OR.BUS1",
         "PerPkg": "1",
@@ -1491,6 +1629,7 @@
     },
     {
         "BriefDescription": "OR Mask/match for debug bus : !(Non-PCIE bus) and PCIE bus",
+        "Counter": "0,1",
         "EventCode": "0x03",
         "EventName": "UNC_IIO_MASK_MATCH_OR.NOT_BUS0_BUS1",
         "PerPkg": "1",
@@ -1501,6 +1640,7 @@
     },
     {
         "BriefDescription": "OR Mask/match for debug bus : !(Non-PCIE bus) and !(PCIE bus)",
+        "Counter": "0,1",
         "EventCode": "0x03",
         "EventName": "UNC_IIO_MASK_MATCH_OR.NOT_BUS0_NOT_BUS1",
         "PerPkg": "1",
@@ -1511,6 +1651,7 @@
     },
     {
         "BriefDescription": "Number requests PCIe makes of the main die : All",
+        "Counter": "0,1,2,3",
         "EventCode": "0x85",
         "EventName": "UNC_IIO_NUM_REQ_OF_CPU.COMMIT.ALL",
         "FCMask": "0x07",
@@ -1522,6 +1663,7 @@
     },
     {
         "BriefDescription": "Num requests sent by PCIe - by target : Abort",
+        "Counter": "0,1,2,3",
         "EventCode": "0x8e",
         "EventName": "UNC_IIO_NUM_REQ_OF_CPU_BY_TGT.ABORT",
         "FCMask": "0x07",
@@ -1532,6 +1674,7 @@
     },
     {
         "BriefDescription": "Num requests sent by PCIe - by target : Confined P2P",
+        "Counter": "0,1,2,3",
         "EventCode": "0x8e",
         "EventName": "UNC_IIO_NUM_REQ_OF_CPU_BY_TGT.CONFINED_P2P",
         "FCMask": "0x07",
@@ -1542,6 +1685,7 @@
     },
     {
         "BriefDescription": "Num requests sent by PCIe - by target : Local P2P",
+        "Counter": "0,1,2,3",
         "EventCode": "0x8e",
         "EventName": "UNC_IIO_NUM_REQ_OF_CPU_BY_TGT.LOC_P2P",
         "FCMask": "0x07",
@@ -1552,6 +1696,7 @@
     },
     {
         "BriefDescription": "Num requests sent by PCIe - by target : Multi-cast",
+        "Counter": "0,1,2,3",
         "EventCode": "0x8e",
         "EventName": "UNC_IIO_NUM_REQ_OF_CPU_BY_TGT.MCAST",
         "FCMask": "0x07",
@@ -1562,6 +1707,7 @@
     },
     {
         "BriefDescription": "Num requests sent by PCIe - by target : Memory",
+        "Counter": "0,1,2,3",
         "EventCode": "0x8e",
         "EventName": "UNC_IIO_NUM_REQ_OF_CPU_BY_TGT.MEM",
         "FCMask": "0x07",
@@ -1572,6 +1718,7 @@
     },
     {
         "BriefDescription": "Num requests sent by PCIe - by target : MsgB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x8e",
         "EventName": "UNC_IIO_NUM_REQ_OF_CPU_BY_TGT.MSGB",
         "FCMask": "0x07",
@@ -1582,6 +1729,7 @@
     },
     {
         "BriefDescription": "Num requests sent by PCIe - by target : Remote P2P",
+        "Counter": "0,1,2,3",
         "EventCode": "0x8e",
         "EventName": "UNC_IIO_NUM_REQ_OF_CPU_BY_TGT.REM_P2P",
         "FCMask": "0x07",
@@ -1592,6 +1740,7 @@
     },
     {
         "BriefDescription": "Num requests sent by PCIe - by target : Ubox",
+        "Counter": "0,1,2,3",
         "EventCode": "0x8e",
         "EventName": "UNC_IIO_NUM_REQ_OF_CPU_BY_TGT.UBOX",
         "FCMask": "0x07",
@@ -1602,6 +1751,7 @@
     },
     {
         "BriefDescription": "ITC address map 1",
+        "Counter": "0,1,2,3",
         "EventCode": "0x8f",
         "EventName": "UNC_IIO_NUM_TGT_MATCHED_REQ_OF_CPU",
         "PerPkg": "1",
@@ -1611,6 +1761,7 @@
     },
     {
         "BriefDescription": "Outbound cacheline requests issued : 64B requests issued to device",
+        "Counter": "0,1,2,3",
         "EventCode": "0xd0",
         "EventName": "UNC_IIO_OUTBOUND_CL_REQS_ISSUED.TO_IO",
         "FCMask": "0x07",
@@ -1622,6 +1773,7 @@
     },
     {
         "BriefDescription": "Outbound TLP (transaction layer packet) requests issued : To device",
+        "Counter": "0,1,2,3",
         "EventCode": "0xd1",
         "EventName": "UNC_IIO_OUTBOUND_TLP_REQS_ISSUED.TO_IO",
         "FCMask": "0x07",
@@ -1633,6 +1785,7 @@
     },
     {
         "BriefDescription": "PWT occupancy.  Does not include 9th bit of occupancy (will undercount if PWT is greater than 255 per cycle).",
+        "Counter": "0,1,2,3",
         "EventCode": "0x42",
         "EventName": "UNC_IIO_PWT_OCCUPANCY",
         "PerPkg": "1",
@@ -1643,6 +1796,7 @@
     },
     {
         "BriefDescription": "Request Ownership : PCIe Request complete",
+        "Counter": "0,1,2,3",
         "EventCode": "0x91",
         "EventName": "UNC_IIO_REQ_FROM_PCIE_CL_CMPL.DATA",
         "FCMask": "0x07",
@@ -1654,6 +1808,7 @@
     },
     {
         "BriefDescription": "Request Ownership : Writing line",
+        "Counter": "0,1,2,3",
         "EventCode": "0x91",
         "EventName": "UNC_IIO_REQ_FROM_PCIE_CL_CMPL.FINAL_RD_WR",
         "FCMask": "0x07",
@@ -1665,6 +1820,7 @@
     },
     {
         "BriefDescription": "Request Ownership : Issuing final read or write of line",
+        "Counter": "0,1,2,3",
         "EventCode": "0x91",
         "EventName": "UNC_IIO_REQ_FROM_PCIE_CL_CMPL.REQ_OWN",
         "FCMask": "0x07",
@@ -1676,6 +1832,7 @@
     },
     {
         "BriefDescription": "Request Ownership : Passing data to be written",
+        "Counter": "0,1,2,3",
         "EventCode": "0x91",
         "EventName": "UNC_IIO_REQ_FROM_PCIE_CL_CMPL.WR",
         "FCMask": "0x07",
@@ -1687,6 +1844,7 @@
     },
     {
         "BriefDescription": "Processing response from IOMMU : Passing data to be written",
+        "Counter": "0,1,2,3",
         "EventCode": "0x92",
         "EventName": "UNC_IIO_REQ_FROM_PCIE_CMPL.FINAL_RD_WR",
         "FCMask": "0x07",
@@ -1698,6 +1856,7 @@
     },
     {
         "BriefDescription": "Processing response from IOMMU : Issuing final read or write of line",
+        "Counter": "0,1,2,3",
         "EventCode": "0x92",
         "EventName": "UNC_IIO_REQ_FROM_PCIE_CMPL.IOMMU_HIT",
         "FCMask": "0x07",
@@ -1708,6 +1867,7 @@
     },
     {
         "BriefDescription": "Processing response from IOMMU : Request Ownership",
+        "Counter": "0,1,2,3",
         "EventCode": "0x92",
         "EventName": "UNC_IIO_REQ_FROM_PCIE_CMPL.IOMMU_REQ",
         "FCMask": "0x07",
@@ -1719,6 +1879,7 @@
     },
     {
         "BriefDescription": "Processing response from IOMMU : Writing line",
+        "Counter": "0,1,2,3",
         "EventCode": "0x92",
         "EventName": "UNC_IIO_REQ_FROM_PCIE_CMPL.REQ_OWN",
         "FCMask": "0x07",
@@ -1730,6 +1891,7 @@
     },
     {
         "BriefDescription": "PCIe Request - pass complete : Passing data to be written",
+        "Counter": "0,1,2,3",
         "EventCode": "0x90",
         "EventName": "UNC_IIO_REQ_FROM_PCIE_PASS_CMPL.DATA",
         "FCMask": "0x07",
@@ -1741,6 +1903,7 @@
     },
     {
         "BriefDescription": "PCIe Request - pass complete : Issuing final read or write of line",
+        "Counter": "0,1,2,3",
         "EventCode": "0x90",
         "EventName": "UNC_IIO_REQ_FROM_PCIE_PASS_CMPL.FINAL_RD_WR",
         "FCMask": "0x07",
@@ -1752,6 +1915,7 @@
     },
     {
         "BriefDescription": "PCIe Request - pass complete : Request Ownership",
+        "Counter": "0,1,2,3",
         "EventCode": "0x90",
         "EventName": "UNC_IIO_REQ_FROM_PCIE_PASS_CMPL.REQ_OWN",
         "FCMask": "0x07",
@@ -1763,6 +1927,7 @@
     },
     {
         "BriefDescription": "PCIe Request - pass complete : Writing line",
+        "Counter": "0,1,2,3",
         "EventCode": "0x90",
         "EventName": "UNC_IIO_REQ_FROM_PCIE_PASS_CMPL.WR",
         "FCMask": "0x07",
@@ -1774,6 +1939,7 @@
     },
     {
         "BriefDescription": "Read request for up to a 64 byte transaction is made by the CPU to IIO Part0",
+        "Counter": "0,1,2,3",
         "EventCode": "0xc1",
         "EventName": "UNC_IIO_TXN_REQ_BY_CPU.MEM_READ.PART0",
         "FCMask": "0x07",
@@ -1785,6 +1951,7 @@
     },
     {
         "BriefDescription": "Read request for up to a 64 byte transaction is made by the CPU to IIO Part1",
+        "Counter": "0,1,2,3",
         "EventCode": "0xc1",
         "EventName": "UNC_IIO_TXN_REQ_BY_CPU.MEM_READ.PART1",
         "FCMask": "0x07",
@@ -1796,6 +1963,7 @@
     },
     {
         "BriefDescription": "Read request for up to a 64 byte transaction is made by the CPU to IIO Part2",
+        "Counter": "0,1,2,3",
         "EventCode": "0xc1",
         "EventName": "UNC_IIO_TXN_REQ_BY_CPU.MEM_READ.PART2",
         "FCMask": "0x07",
@@ -1807,6 +1975,7 @@
     },
     {
         "BriefDescription": "Read request for up to a 64 byte transaction is made by the CPU to IIO Part3",
+        "Counter": "0,1,2,3",
         "EventCode": "0xc1",
         "EventName": "UNC_IIO_TXN_REQ_BY_CPU.MEM_READ.PART3",
         "FCMask": "0x07",
@@ -1818,6 +1987,7 @@
     },
     {
         "BriefDescription": "Number Transactions requested by the CPU : Core reading from Cards MMIO space",
+        "Counter": "0,1,2,3",
         "EventCode": "0xc1",
         "EventName": "UNC_IIO_TXN_REQ_BY_CPU.MEM_READ.PART4",
         "FCMask": "0x07",
@@ -1829,6 +1999,7 @@
     },
     {
         "BriefDescription": "Number Transactions requested by the CPU : Core reading from Cards MMIO space",
+        "Counter": "0,1,2,3",
         "EventCode": "0xc1",
         "EventName": "UNC_IIO_TXN_REQ_BY_CPU.MEM_READ.PART5",
         "FCMask": "0x07",
@@ -1840,6 +2011,7 @@
     },
     {
         "BriefDescription": "Number Transactions requested by the CPU : Core reading from Cards MMIO space",
+        "Counter": "0,1,2,3",
         "EventCode": "0xc1",
         "EventName": "UNC_IIO_TXN_REQ_BY_CPU.MEM_READ.PART6",
         "FCMask": "0x07",
@@ -1851,6 +2023,7 @@
     },
     {
         "BriefDescription": "Number Transactions requested by the CPU : Core reading from Cards MMIO space",
+        "Counter": "0,1,2,3",
         "EventCode": "0xc1",
         "EventName": "UNC_IIO_TXN_REQ_BY_CPU.MEM_READ.PART7",
         "FCMask": "0x07",
@@ -1862,6 +2035,7 @@
     },
     {
         "BriefDescription": "Write request of up to a 64 byte transaction is made to IIO Part0 by the CPU",
+        "Counter": "0,1,2,3",
         "EventCode": "0xc1",
         "EventName": "UNC_IIO_TXN_REQ_BY_CPU.MEM_WRITE.PART0",
         "FCMask": "0x07",
@@ -1873,6 +2047,7 @@
     },
     {
         "BriefDescription": "Write request of up to a 64 byte transaction is made to IIO Part1 by the CPU",
+        "Counter": "0,1,2,3",
         "EventCode": "0xc1",
         "EventName": "UNC_IIO_TXN_REQ_BY_CPU.MEM_WRITE.PART1",
         "FCMask": "0x07",
@@ -1884,6 +2059,7 @@
     },
     {
         "BriefDescription": "Write request of up to a 64 byte transaction is made to IIO Part2 by the CPU",
+        "Counter": "0,1,2,3",
         "EventCode": "0xc1",
         "EventName": "UNC_IIO_TXN_REQ_BY_CPU.MEM_WRITE.PART2",
         "FCMask": "0x07",
@@ -1895,6 +2071,7 @@
     },
     {
         "BriefDescription": "Write request of up to a 64 byte transaction is made to IIO Part3 by the CPU",
+        "Counter": "0,1,2,3",
         "EventCode": "0xc1",
         "EventName": "UNC_IIO_TXN_REQ_BY_CPU.MEM_WRITE.PART3",
         "FCMask": "0x07",
@@ -1906,6 +2083,7 @@
     },
     {
         "BriefDescription": "Number Transactions requested by the CPU : Core writing to Cards MMIO space",
+        "Counter": "0,1,2,3",
         "EventCode": "0xc1",
         "EventName": "UNC_IIO_TXN_REQ_BY_CPU.MEM_WRITE.PART4",
         "FCMask": "0x07",
@@ -1917,6 +2095,7 @@
     },
     {
         "BriefDescription": "Number Transactions requested by the CPU : Core writing to Cards MMIO space",
+        "Counter": "0,1,2,3",
         "EventCode": "0xc1",
         "EventName": "UNC_IIO_TXN_REQ_BY_CPU.MEM_WRITE.PART5",
         "FCMask": "0x07",
@@ -1928,6 +2107,7 @@
     },
     {
         "BriefDescription": "Number Transactions requested by the CPU : Core writing to Cards MMIO space",
+        "Counter": "0,1,2,3",
         "EventCode": "0xc1",
         "EventName": "UNC_IIO_TXN_REQ_BY_CPU.MEM_WRITE.PART6",
         "FCMask": "0x07",
@@ -1939,6 +2119,7 @@
     },
     {
         "BriefDescription": "Number Transactions requested by the CPU : Core writing to Cards MMIO space",
+        "Counter": "0,1,2,3",
         "EventCode": "0xc1",
         "EventName": "UNC_IIO_TXN_REQ_BY_CPU.MEM_WRITE.PART7",
         "FCMask": "0x07",
@@ -1950,6 +2131,7 @@
     },
     {
         "BriefDescription": "Number Transactions requested by the CPU : Another card (different IIO stack) writing to this card.",
+        "Counter": "0,1,2,3",
         "EventCode": "0xc1",
         "EventName": "UNC_IIO_TXN_REQ_BY_CPU.PEER_WRITE.PART0",
         "FCMask": "0x07",
@@ -1961,6 +2143,7 @@
     },
     {
         "BriefDescription": "Number Transactions requested by the CPU : Another card (different IIO stack) writing to this card.",
+        "Counter": "0,1,2,3",
         "EventCode": "0xc1",
         "EventName": "UNC_IIO_TXN_REQ_BY_CPU.PEER_WRITE.PART1",
         "FCMask": "0x07",
@@ -1972,6 +2155,7 @@
     },
     {
         "BriefDescription": "Number Transactions requested by the CPU : Another card (different IIO stack) writing to this card.",
+        "Counter": "0,1,2,3",
         "EventCode": "0xc1",
         "EventName": "UNC_IIO_TXN_REQ_BY_CPU.PEER_WRITE.PART2",
         "FCMask": "0x07",
@@ -1983,6 +2167,7 @@
     },
     {
         "BriefDescription": "Number Transactions requested by the CPU : Another card (different IIO stack) writing to this card.",
+        "Counter": "0,1,2,3",
         "EventCode": "0xc1",
         "EventName": "UNC_IIO_TXN_REQ_BY_CPU.PEER_WRITE.PART3",
         "FCMask": "0x07",
@@ -1994,6 +2179,7 @@
     },
     {
         "BriefDescription": "Number Transactions requested by the CPU : Another card (different IIO stack) writing to this card.",
+        "Counter": "0,1,2,3",
         "EventCode": "0xc1",
         "EventName": "UNC_IIO_TXN_REQ_BY_CPU.PEER_WRITE.PART4",
         "FCMask": "0x07",
@@ -2005,6 +2191,7 @@
     },
     {
         "BriefDescription": "Number Transactions requested by the CPU : Another card (different IIO stack) writing to this card.",
+        "Counter": "0,1,2,3",
         "EventCode": "0xc1",
         "EventName": "UNC_IIO_TXN_REQ_BY_CPU.PEER_WRITE.PART5",
         "FCMask": "0x07",
@@ -2016,6 +2203,7 @@
     },
     {
         "BriefDescription": "Number Transactions requested by the CPU : Another card (different IIO stack) writing to this card.",
+        "Counter": "0,1,2,3",
         "EventCode": "0xc1",
         "EventName": "UNC_IIO_TXN_REQ_BY_CPU.PEER_WRITE.PART6",
         "FCMask": "0x07",
@@ -2027,6 +2215,7 @@
     },
     {
         "BriefDescription": "Number Transactions requested by the CPU : Another card (different IIO stack) writing to this card.",
+        "Counter": "0,1,2,3",
         "EventCode": "0xc1",
         "EventName": "UNC_IIO_TXN_REQ_BY_CPU.PEER_WRITE.PART7",
         "FCMask": "0x07",
@@ -2038,6 +2227,7 @@
     },
     {
         "BriefDescription": "Number Transactions requested of the CPU : CmpD - device sending completion to CPU request",
+        "Counter": "0,1,2,3",
         "EventCode": "0x84",
         "EventName": "UNC_IIO_TXN_REQ_OF_CPU.CMPD.PART0",
         "FCMask": "0x07",
@@ -2049,6 +2239,7 @@
     },
     {
         "BriefDescription": "Number Transactions requested of the CPU : CmpD - device sending completion to CPU request",
+        "Counter": "0,1,2,3",
         "EventCode": "0x84",
         "EventName": "UNC_IIO_TXN_REQ_OF_CPU.CMPD.PART1",
         "FCMask": "0x07",
@@ -2060,6 +2251,7 @@
     },
     {
         "BriefDescription": "Number Transactions requested of the CPU : CmpD - device sending completion to CPU request",
+        "Counter": "0,1,2,3",
         "EventCode": "0x84",
         "EventName": "UNC_IIO_TXN_REQ_OF_CPU.CMPD.PART2",
         "FCMask": "0x07",
@@ -2071,6 +2263,7 @@
     },
     {
         "BriefDescription": "Number Transactions requested of the CPU : CmpD - device sending completion to CPU request",
+        "Counter": "0,1,2,3",
         "EventCode": "0x84",
         "EventName": "UNC_IIO_TXN_REQ_OF_CPU.CMPD.PART3",
         "FCMask": "0x07",
@@ -2082,6 +2275,7 @@
     },
     {
         "BriefDescription": "Number Transactions requested of the CPU : CmpD - device sending completion to CPU request",
+        "Counter": "0,1,2,3",
         "EventCode": "0x84",
         "EventName": "UNC_IIO_TXN_REQ_OF_CPU.CMPD.PART4",
         "FCMask": "0x07",
@@ -2093,6 +2287,7 @@
     },
     {
         "BriefDescription": "Number Transactions requested of the CPU : CmpD - device sending completion to CPU request",
+        "Counter": "0,1,2,3",
         "EventCode": "0x84",
         "EventName": "UNC_IIO_TXN_REQ_OF_CPU.CMPD.PART5",
         "FCMask": "0x07",
@@ -2104,6 +2299,7 @@
     },
     {
         "BriefDescription": "Number Transactions requested of the CPU : CmpD - device sending completion to CPU request",
+        "Counter": "0,1,2,3",
         "EventCode": "0x84",
         "EventName": "UNC_IIO_TXN_REQ_OF_CPU.CMPD.PART6",
         "FCMask": "0x07",
@@ -2115,6 +2311,7 @@
     },
     {
         "BriefDescription": "Number Transactions requested of the CPU : CmpD - device sending completion to CPU request",
+        "Counter": "0,1,2,3",
         "EventCode": "0x84",
         "EventName": "UNC_IIO_TXN_REQ_OF_CPU.CMPD.PART7",
         "FCMask": "0x07",
@@ -2126,6 +2323,7 @@
     },
     {
         "BriefDescription": "Read request for up to a 64 byte transaction is made by IIO Part0 to Memory",
+        "Counter": "0,1,2,3",
         "EventCode": "0x84",
         "EventName": "UNC_IIO_TXN_REQ_OF_CPU.MEM_READ.PART0",
         "FCMask": "0x07",
@@ -2137,6 +2335,7 @@
     },
     {
         "BriefDescription": "Read request for up to a 64 byte transaction is  made by IIO Part1 to Memory",
+        "Counter": "0,1,2,3",
         "EventCode": "0x84",
         "EventName": "UNC_IIO_TXN_REQ_OF_CPU.MEM_READ.PART1",
         "FCMask": "0x07",
@@ -2148,6 +2347,7 @@
     },
     {
         "BriefDescription": "Read request for up to a 64 byte transaction is made by IIO Part2 to Memory",
+        "Counter": "0,1,2,3",
         "EventCode": "0x84",
         "EventName": "UNC_IIO_TXN_REQ_OF_CPU.MEM_READ.PART2",
         "FCMask": "0x07",
@@ -2159,6 +2359,7 @@
     },
     {
         "BriefDescription": "Read request for up to a 64 byte transaction is made by IIO Part3 to Memory",
+        "Counter": "0,1,2,3",
         "EventCode": "0x84",
         "EventName": "UNC_IIO_TXN_REQ_OF_CPU.MEM_READ.PART3",
         "FCMask": "0x07",
@@ -2170,6 +2371,7 @@
     },
     {
         "BriefDescription": "Number Transactions requested of the CPU : Card reading from DRAM",
+        "Counter": "0,1,2,3",
         "EventCode": "0x84",
         "EventName": "UNC_IIO_TXN_REQ_OF_CPU.MEM_READ.PART4",
         "FCMask": "0x07",
@@ -2181,6 +2383,7 @@
     },
     {
         "BriefDescription": "Number Transactions requested of the CPU : Card reading from DRAM",
+        "Counter": "0,1,2,3",
         "EventCode": "0x84",
         "EventName": "UNC_IIO_TXN_REQ_OF_CPU.MEM_READ.PART5",
         "FCMask": "0x07",
@@ -2192,6 +2395,7 @@
     },
     {
         "BriefDescription": "Number Transactions requested of the CPU : Card reading from DRAM",
+        "Counter": "0,1,2,3",
         "EventCode": "0x84",
         "EventName": "UNC_IIO_TXN_REQ_OF_CPU.MEM_READ.PART6",
         "FCMask": "0x07",
@@ -2203,6 +2407,7 @@
     },
     {
         "BriefDescription": "Number Transactions requested of the CPU : Card reading from DRAM",
+        "Counter": "0,1,2,3",
         "EventCode": "0x84",
         "EventName": "UNC_IIO_TXN_REQ_OF_CPU.MEM_READ.PART7",
         "FCMask": "0x07",
@@ -2214,6 +2419,7 @@
     },
     {
         "BriefDescription": "Write request of up to a 64 byte transaction is made by IIO Part0 to Memory",
+        "Counter": "0,1,2,3",
         "EventCode": "0x84",
         "EventName": "UNC_IIO_TXN_REQ_OF_CPU.MEM_WRITE.PART0",
         "FCMask": "0x07",
@@ -2225,6 +2431,7 @@
     },
     {
         "BriefDescription": "Write request of up to a 64 byte transaction is made by IIO Part1 to Memory",
+        "Counter": "0,1,2,3",
         "EventCode": "0x84",
         "EventName": "UNC_IIO_TXN_REQ_OF_CPU.MEM_WRITE.PART1",
         "FCMask": "0x07",
@@ -2236,6 +2443,7 @@
     },
     {
         "BriefDescription": "Write request of up to a 64 byte transaction is made by IIO Part2 to Memory",
+        "Counter": "0,1,2,3",
         "EventCode": "0x84",
         "EventName": "UNC_IIO_TXN_REQ_OF_CPU.MEM_WRITE.PART2",
         "FCMask": "0x07",
@@ -2247,6 +2455,7 @@
     },
     {
         "BriefDescription": "Write request of up to a 64 byte transaction is made by IIO Part3 to Memory",
+        "Counter": "0,1,2,3",
         "EventCode": "0x84",
         "EventName": "UNC_IIO_TXN_REQ_OF_CPU.MEM_WRITE.PART3",
         "FCMask": "0x07",
@@ -2258,6 +2467,7 @@
     },
     {
         "BriefDescription": "Number Transactions requested of the CPU : Card writing to DRAM",
+        "Counter": "0,1,2,3",
         "EventCode": "0x84",
         "EventName": "UNC_IIO_TXN_REQ_OF_CPU.MEM_WRITE.PART4",
         "FCMask": "0x07",
@@ -2269,6 +2479,7 @@
     },
     {
         "BriefDescription": "Number Transactions requested of the CPU : Card writing to DRAM",
+        "Counter": "0,1,2,3",
         "EventCode": "0x84",
         "EventName": "UNC_IIO_TXN_REQ_OF_CPU.MEM_WRITE.PART5",
         "FCMask": "0x07",
@@ -2280,6 +2491,7 @@
     },
     {
         "BriefDescription": "Number Transactions requested of the CPU : Card writing to DRAM",
+        "Counter": "0,1,2,3",
         "EventCode": "0x84",
         "EventName": "UNC_IIO_TXN_REQ_OF_CPU.MEM_WRITE.PART6",
         "FCMask": "0x07",
@@ -2291,6 +2503,7 @@
     },
     {
         "BriefDescription": "Number Transactions requested of the CPU : Card writing to DRAM",
+        "Counter": "0,1,2,3",
         "EventCode": "0x84",
         "EventName": "UNC_IIO_TXN_REQ_OF_CPU.MEM_WRITE.PART7",
         "FCMask": "0x07",
@@ -2302,6 +2515,7 @@
     },
     {
         "BriefDescription": "Number Transactions requested of the CPU : Card writing to another Card (same or different stack)",
+        "Counter": "0,1,2,3",
         "EventCode": "0x84",
         "EventName": "UNC_IIO_TXN_REQ_OF_CPU.PEER_WRITE.PART0",
         "FCMask": "0x07",
@@ -2313,6 +2527,7 @@
     },
     {
         "BriefDescription": "Number Transactions requested of the CPU : Card writing to another Card (same or different stack)",
+        "Counter": "0,1,2,3",
         "EventCode": "0x84",
         "EventName": "UNC_IIO_TXN_REQ_OF_CPU.PEER_WRITE.PART1",
         "FCMask": "0x07",
@@ -2324,6 +2539,7 @@
     },
     {
         "BriefDescription": "Number Transactions requested of the CPU : Card writing to another Card (same or different stack)",
+        "Counter": "0,1,2,3",
         "EventCode": "0x84",
         "EventName": "UNC_IIO_TXN_REQ_OF_CPU.PEER_WRITE.PART2",
         "FCMask": "0x07",
@@ -2335,6 +2551,7 @@
     },
     {
         "BriefDescription": "Number Transactions requested of the CPU : Card writing to another Card (same or different stack)",
+        "Counter": "0,1,2,3",
         "EventCode": "0x84",
         "EventName": "UNC_IIO_TXN_REQ_OF_CPU.PEER_WRITE.PART3",
         "FCMask": "0x07",
@@ -2346,6 +2563,7 @@
     },
     {
         "BriefDescription": "Number Transactions requested of the CPU : Card writing to another Card (same or different stack)",
+        "Counter": "0,1,2,3",
         "EventCode": "0x84",
         "EventName": "UNC_IIO_TXN_REQ_OF_CPU.PEER_WRITE.PART4",
         "FCMask": "0x07",
@@ -2357,6 +2575,7 @@
     },
     {
         "BriefDescription": "Number Transactions requested of the CPU : Card writing to another Card (same or different stack)",
+        "Counter": "0,1,2,3",
         "EventCode": "0x84",
         "EventName": "UNC_IIO_TXN_REQ_OF_CPU.PEER_WRITE.PART5",
         "FCMask": "0x07",
@@ -2368,6 +2587,7 @@
     },
     {
         "BriefDescription": "Number Transactions requested of the CPU : Card writing to another Card (same or different stack)",
+        "Counter": "0,1,2,3",
         "EventCode": "0x84",
         "EventName": "UNC_IIO_TXN_REQ_OF_CPU.PEER_WRITE.PART6",
         "FCMask": "0x07",
@@ -2379,6 +2599,7 @@
     },
     {
         "BriefDescription": "Number Transactions requested of the CPU : Card writing to another Card (same or different stack)",
+        "Counter": "0,1,2,3",
         "EventCode": "0x84",
         "EventName": "UNC_IIO_TXN_REQ_OF_CPU.PEER_WRITE.PART7",
         "FCMask": "0x07",
@@ -2390,6 +2611,7 @@
     },
     {
         "BriefDescription": "M2P Clockticks",
+        "Counter": "0,1,2,3",
         "EventCode": "0x01",
         "EventName": "UNC_M2P_CLOCKTICKS",
         "PerPkg": "1",
@@ -2398,6 +2620,7 @@
     },
     {
         "BriefDescription": "CMS Clockticks",
+        "Counter": "0,1,2,3",
         "EventCode": "0xc0",
         "EventName": "UNC_M2P_CMS_CLOCKTICKS",
         "PerPkg": "1",
@@ -2405,6 +2628,7 @@
     },
     {
         "BriefDescription": "Egress Blocking due to Ordering requirements : Down",
+        "Counter": "0,1,2,3",
         "EventCode": "0xba",
         "EventName": "UNC_M2P_EGRESS_ORDERING.IV_SNOOPGO_DN",
         "PerPkg": "1",
@@ -2414,6 +2638,7 @@
     },
     {
         "BriefDescription": "Egress Blocking due to Ordering requirements : Up",
+        "Counter": "0,1,2,3",
         "EventCode": "0xba",
         "EventName": "UNC_M2P_EGRESS_ORDERING.IV_SNOOPGO_UP",
         "PerPkg": "1",
@@ -2423,6 +2648,7 @@
     },
     {
         "BriefDescription": "M2PCIe IIO Credit Acquired : DRS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x33",
         "EventName": "UNC_M2P_IIO_CREDITS_ACQUIRED.DRS_0",
         "PerPkg": "1",
@@ -2432,6 +2658,7 @@
     },
     {
         "BriefDescription": "M2PCIe IIO Credit Acquired : DRS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x33",
         "EventName": "UNC_M2P_IIO_CREDITS_ACQUIRED.DRS_1",
         "PerPkg": "1",
@@ -2441,6 +2668,7 @@
     },
     {
         "BriefDescription": "M2PCIe IIO Credit Acquired : NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x33",
         "EventName": "UNC_M2P_IIO_CREDITS_ACQUIRED.NCB_0",
         "PerPkg": "1",
@@ -2450,6 +2678,7 @@
     },
     {
         "BriefDescription": "M2PCIe IIO Credit Acquired : NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x33",
         "EventName": "UNC_M2P_IIO_CREDITS_ACQUIRED.NCB_1",
         "PerPkg": "1",
@@ -2459,6 +2688,7 @@
     },
     {
         "BriefDescription": "M2PCIe IIO Credit Acquired : NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x33",
         "EventName": "UNC_M2P_IIO_CREDITS_ACQUIRED.NCS_0",
         "PerPkg": "1",
@@ -2468,6 +2698,7 @@
     },
     {
         "BriefDescription": "M2PCIe IIO Credit Acquired : NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x33",
         "EventName": "UNC_M2P_IIO_CREDITS_ACQUIRED.NCS_1",
         "PerPkg": "1",
@@ -2477,6 +2708,7 @@
     },
     {
         "BriefDescription": "M2PCIe IIO Failed to Acquire a Credit : DRS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x34",
         "EventName": "UNC_M2P_IIO_CREDITS_REJECT.DRS",
         "PerPkg": "1",
@@ -2486,6 +2718,7 @@
     },
     {
         "BriefDescription": "M2PCIe IIO Failed to Acquire a Credit : NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x34",
         "EventName": "UNC_M2P_IIO_CREDITS_REJECT.NCB",
         "PerPkg": "1",
@@ -2495,6 +2728,7 @@
     },
     {
         "BriefDescription": "M2PCIe IIO Failed to Acquire a Credit : NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x34",
         "EventName": "UNC_M2P_IIO_CREDITS_REJECT.NCS",
         "PerPkg": "1",
@@ -2504,6 +2738,7 @@
     },
     {
         "BriefDescription": "M2PCIe IIO Credits in Use : DRS to CMS Port 0",
+        "Counter": "0,1,2,3",
         "EventCode": "0x32",
         "EventName": "UNC_M2P_IIO_CREDITS_USED.DRS_0",
         "PerPkg": "1",
@@ -2513,6 +2748,7 @@
     },
     {
         "BriefDescription": "M2PCIe IIO Credits in Use : DRS to CMS Port 1",
+        "Counter": "0,1,2,3",
         "EventCode": "0x32",
         "EventName": "UNC_M2P_IIO_CREDITS_USED.DRS_1",
         "PerPkg": "1",
@@ -2522,6 +2758,7 @@
     },
     {
         "BriefDescription": "M2PCIe IIO Credits in Use : NCB to CMS Port 0",
+        "Counter": "0,1,2,3",
         "EventCode": "0x32",
         "EventName": "UNC_M2P_IIO_CREDITS_USED.NCB_0",
         "PerPkg": "1",
@@ -2531,6 +2768,7 @@
     },
     {
         "BriefDescription": "M2PCIe IIO Credits in Use : NCB to CMS Port 1",
+        "Counter": "0,1,2,3",
         "EventCode": "0x32",
         "EventName": "UNC_M2P_IIO_CREDITS_USED.NCB_1",
         "PerPkg": "1",
@@ -2540,6 +2778,7 @@
     },
     {
         "BriefDescription": "M2PCIe IIO Credits in Use : NCS to CMS Port 0",
+        "Counter": "0,1,2,3",
         "EventCode": "0x32",
         "EventName": "UNC_M2P_IIO_CREDITS_USED.NCS_0",
         "PerPkg": "1",
@@ -2549,6 +2788,7 @@
     },
     {
         "BriefDescription": "M2PCIe IIO Credits in Use : NCS to CMS Port 1",
+        "Counter": "0,1,2,3",
         "EventCode": "0x32",
         "EventName": "UNC_M2P_IIO_CREDITS_USED.NCS_1",
         "PerPkg": "1",
@@ -2558,6 +2798,7 @@
     },
     {
         "BriefDescription": "Local Dedicated P2P Credit Taken - 0 : M2IOSF0 - NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x46",
         "EventName": "UNC_M2P_LOCAL_DED_P2P_CRD_TAKEN_0.M2IOSF0_NCB",
         "PerPkg": "1",
@@ -2566,6 +2807,7 @@
     },
     {
         "BriefDescription": "Local Dedicated P2P Credit Taken - 0 : M2IOSF0 - NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x46",
         "EventName": "UNC_M2P_LOCAL_DED_P2P_CRD_TAKEN_0.M2IOSF0_NCS",
         "PerPkg": "1",
@@ -2574,6 +2816,7 @@
     },
     {
         "BriefDescription": "Local Dedicated P2P Credit Taken - 0 : M2IOSF1 - NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x46",
         "EventName": "UNC_M2P_LOCAL_DED_P2P_CRD_TAKEN_0.M2IOSF1_NCB",
         "PerPkg": "1",
@@ -2582,6 +2825,7 @@
     },
     {
         "BriefDescription": "Local Dedicated P2P Credit Taken - 0 : M2IOSF1 - NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x46",
         "EventName": "UNC_M2P_LOCAL_DED_P2P_CRD_TAKEN_0.M2IOSF1_NCS",
         "PerPkg": "1",
@@ -2590,6 +2834,7 @@
     },
     {
         "BriefDescription": "Local Dedicated P2P Credit Taken - 0 : M2IOSF2 - NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x46",
         "EventName": "UNC_M2P_LOCAL_DED_P2P_CRD_TAKEN_0.M2IOSF2_NCB",
         "PerPkg": "1",
@@ -2598,6 +2843,7 @@
     },
     {
         "BriefDescription": "Local Dedicated P2P Credit Taken - 0 : M2IOSF2 - NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x46",
         "EventName": "UNC_M2P_LOCAL_DED_P2P_CRD_TAKEN_0.M2IOSF2_NCS",
         "PerPkg": "1",
@@ -2606,6 +2852,7 @@
     },
     {
         "BriefDescription": "Local Dedicated P2P Credit Taken - 0 : M2IOSF3 - NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x46",
         "EventName": "UNC_M2P_LOCAL_DED_P2P_CRD_TAKEN_0.M2IOSF3_NCB",
         "PerPkg": "1",
@@ -2614,6 +2861,7 @@
     },
     {
         "BriefDescription": "Local Dedicated P2P Credit Taken - 0 : M2IOSF3 - NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x46",
         "EventName": "UNC_M2P_LOCAL_DED_P2P_CRD_TAKEN_0.M2IOSF3_NCS",
         "PerPkg": "1",
@@ -2622,6 +2870,7 @@
     },
     {
         "BriefDescription": "Local Dedicated P2P Credit Taken - 1 : M2IOSF4 - NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x47",
         "EventName": "UNC_M2P_LOCAL_DED_P2P_CRD_TAKEN_1.M2IOSF4_NCB",
         "PerPkg": "1",
@@ -2630,6 +2879,7 @@
     },
     {
         "BriefDescription": "Local Dedicated P2P Credit Taken - 1 : M2IOSF4 - NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x47",
         "EventName": "UNC_M2P_LOCAL_DED_P2P_CRD_TAKEN_1.M2IOSF4_NCS",
         "PerPkg": "1",
@@ -2638,6 +2888,7 @@
     },
     {
         "BriefDescription": "Local Dedicated P2P Credit Taken - 1 : M2IOSF5 - NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x47",
         "EventName": "UNC_M2P_LOCAL_DED_P2P_CRD_TAKEN_1.M2IOSF5_NCB",
         "PerPkg": "1",
@@ -2646,6 +2897,7 @@
     },
     {
         "BriefDescription": "Local Dedicated P2P Credit Taken - 1 : M2IOSF5 - NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x47",
         "EventName": "UNC_M2P_LOCAL_DED_P2P_CRD_TAKEN_1.M2IOSF5_NCS",
         "PerPkg": "1",
@@ -2654,6 +2906,7 @@
     },
     {
         "BriefDescription": "Local P2P Dedicated Credits Returned - 0 : M2IOSF0 - NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x19",
         "EventName": "UNC_M2P_LOCAL_P2P_DED_RETURNED_0.MS2IOSF0_NCB",
         "PerPkg": "1",
@@ -2662,6 +2915,7 @@
     },
     {
         "BriefDescription": "Local P2P Dedicated Credits Returned - 0 : M2IOSF0 - NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x19",
         "EventName": "UNC_M2P_LOCAL_P2P_DED_RETURNED_0.MS2IOSF0_NCS",
         "PerPkg": "1",
@@ -2670,6 +2924,7 @@
     },
     {
         "BriefDescription": "Local P2P Dedicated Credits Returned - 0 : M2IOSF1 - NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x19",
         "EventName": "UNC_M2P_LOCAL_P2P_DED_RETURNED_0.MS2IOSF1_NCB",
         "PerPkg": "1",
@@ -2678,6 +2933,7 @@
     },
     {
         "BriefDescription": "Local P2P Dedicated Credits Returned - 0 : M2IOSF1 - NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x19",
         "EventName": "UNC_M2P_LOCAL_P2P_DED_RETURNED_0.MS2IOSF1_NCS",
         "PerPkg": "1",
@@ -2686,6 +2942,7 @@
     },
     {
         "BriefDescription": "Local P2P Dedicated Credits Returned - 0 : M2IOSF2 - NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x19",
         "EventName": "UNC_M2P_LOCAL_P2P_DED_RETURNED_0.MS2IOSF2_NCB",
         "PerPkg": "1",
@@ -2694,6 +2951,7 @@
     },
     {
         "BriefDescription": "Local P2P Dedicated Credits Returned - 0 : M2IOSF2 - NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x19",
         "EventName": "UNC_M2P_LOCAL_P2P_DED_RETURNED_0.MS2IOSF2_NCS",
         "PerPkg": "1",
@@ -2702,6 +2960,7 @@
     },
     {
         "BriefDescription": "Local P2P Dedicated Credits Returned - 0 : M2IOSF3 - NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x19",
         "EventName": "UNC_M2P_LOCAL_P2P_DED_RETURNED_0.MS2IOSF3_NCB",
         "PerPkg": "1",
@@ -2710,6 +2969,7 @@
     },
     {
         "BriefDescription": "Local P2P Dedicated Credits Returned - 0 : M2IOSF3 - NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x19",
         "EventName": "UNC_M2P_LOCAL_P2P_DED_RETURNED_0.MS2IOSF3_NCS",
         "PerPkg": "1",
@@ -2718,6 +2978,7 @@
     },
     {
         "BriefDescription": "Local P2P Dedicated Credits Returned - 1 : M2IOSF4 - NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x1a",
         "EventName": "UNC_M2P_LOCAL_P2P_DED_RETURNED_1.MS2IOSF4_NCB",
         "PerPkg": "1",
@@ -2726,6 +2987,7 @@
     },
     {
         "BriefDescription": "Local P2P Dedicated Credits Returned - 1 : M2IOSF4 - NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x1a",
         "EventName": "UNC_M2P_LOCAL_P2P_DED_RETURNED_1.MS2IOSF4_NCS",
         "PerPkg": "1",
@@ -2734,6 +2996,7 @@
     },
     {
         "BriefDescription": "Local P2P Dedicated Credits Returned - 1 : M2IOSF5 - NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x1a",
         "EventName": "UNC_M2P_LOCAL_P2P_DED_RETURNED_1.MS2IOSF5_NCB",
         "PerPkg": "1",
@@ -2742,6 +3005,7 @@
     },
     {
         "BriefDescription": "Local P2P Dedicated Credits Returned - 1 : M2IOSF5 - NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x1a",
         "EventName": "UNC_M2P_LOCAL_P2P_DED_RETURNED_1.MS2IOSF5_NCS",
         "PerPkg": "1",
@@ -2750,6 +3014,7 @@
     },
     {
         "BriefDescription": "Local P2P Shared Credits Returned : Agent0",
+        "Counter": "0,1,2,3",
         "EventCode": "0x17",
         "EventName": "UNC_M2P_LOCAL_P2P_SHAR_RETURNED.AGENT_0",
         "PerPkg": "1",
@@ -2758,6 +3023,7 @@
     },
     {
         "BriefDescription": "Local P2P Shared Credits Returned : Agent1",
+        "Counter": "0,1,2,3",
         "EventCode": "0x17",
         "EventName": "UNC_M2P_LOCAL_P2P_SHAR_RETURNED.AGENT_1",
         "PerPkg": "1",
@@ -2766,6 +3032,7 @@
     },
     {
         "BriefDescription": "Local P2P Shared Credits Returned : Agent2",
+        "Counter": "0,1,2,3",
         "EventCode": "0x17",
         "EventName": "UNC_M2P_LOCAL_P2P_SHAR_RETURNED.AGENT_2",
         "PerPkg": "1",
@@ -2774,6 +3041,7 @@
     },
     {
         "BriefDescription": "Local Shared P2P Credit Returned to credit ring : Agent0",
+        "Counter": "0,1,2,3",
         "EventCode": "0x44",
         "EventName": "UNC_M2P_LOCAL_SHAR_P2P_CRD_RETURNED.AGENT_0",
         "PerPkg": "1",
@@ -2782,6 +3050,7 @@
     },
     {
         "BriefDescription": "Local Shared P2P Credit Returned to credit ring : Agent1",
+        "Counter": "0,1,2,3",
         "EventCode": "0x44",
         "EventName": "UNC_M2P_LOCAL_SHAR_P2P_CRD_RETURNED.AGENT_1",
         "PerPkg": "1",
@@ -2790,6 +3059,7 @@
     },
     {
         "BriefDescription": "Local Shared P2P Credit Returned to credit ring : Agent2",
+        "Counter": "0,1,2,3",
         "EventCode": "0x44",
         "EventName": "UNC_M2P_LOCAL_SHAR_P2P_CRD_RETURNED.AGENT_2",
         "PerPkg": "1",
@@ -2798,6 +3068,7 @@
     },
     {
         "BriefDescription": "Local Shared P2P Credit Returned to credit ring : Agent3",
+        "Counter": "0,1,2,3",
         "EventCode": "0x44",
         "EventName": "UNC_M2P_LOCAL_SHAR_P2P_CRD_RETURNED.AGENT_3",
         "PerPkg": "1",
@@ -2806,6 +3077,7 @@
     },
     {
         "BriefDescription": "Local Shared P2P Credit Returned to credit ring : Agent4",
+        "Counter": "0,1,2,3",
         "EventCode": "0x44",
         "EventName": "UNC_M2P_LOCAL_SHAR_P2P_CRD_RETURNED.AGENT_4",
         "PerPkg": "1",
@@ -2814,6 +3086,7 @@
     },
     {
         "BriefDescription": "Local Shared P2P Credit Returned to credit ring : Agent5",
+        "Counter": "0,1,2,3",
         "EventCode": "0x44",
         "EventName": "UNC_M2P_LOCAL_SHAR_P2P_CRD_RETURNED.AGENT_5",
         "PerPkg": "1",
@@ -2822,6 +3095,7 @@
     },
     {
         "BriefDescription": "Local Shared P2P Credit Taken - 0 : M2IOSF0 - NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x40",
         "EventName": "UNC_M2P_LOCAL_SHAR_P2P_CRD_TAKEN_0.M2IOSF0_NCB",
         "PerPkg": "1",
@@ -2830,6 +3104,7 @@
     },
     {
         "BriefDescription": "Local Shared P2P Credit Taken - 0 : M2IOSF0 - NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x40",
         "EventName": "UNC_M2P_LOCAL_SHAR_P2P_CRD_TAKEN_0.M2IOSF0_NCS",
         "PerPkg": "1",
@@ -2838,6 +3113,7 @@
     },
     {
         "BriefDescription": "Local Shared P2P Credit Taken - 0 : M2IOSF1 - NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x40",
         "EventName": "UNC_M2P_LOCAL_SHAR_P2P_CRD_TAKEN_0.M2IOSF1_NCB",
         "PerPkg": "1",
@@ -2846,6 +3122,7 @@
     },
     {
         "BriefDescription": "Local Shared P2P Credit Taken - 0 : M2IOSF1 - NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x40",
         "EventName": "UNC_M2P_LOCAL_SHAR_P2P_CRD_TAKEN_0.M2IOSF1_NCS",
         "PerPkg": "1",
@@ -2854,6 +3131,7 @@
     },
     {
         "BriefDescription": "Local Shared P2P Credit Taken - 0 : M2IOSF2 - NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x40",
         "EventName": "UNC_M2P_LOCAL_SHAR_P2P_CRD_TAKEN_0.M2IOSF2_NCB",
         "PerPkg": "1",
@@ -2862,6 +3140,7 @@
     },
     {
         "BriefDescription": "Local Shared P2P Credit Taken - 0 : M2IOSF2 - NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x40",
         "EventName": "UNC_M2P_LOCAL_SHAR_P2P_CRD_TAKEN_0.M2IOSF2_NCS",
         "PerPkg": "1",
@@ -2870,6 +3149,7 @@
     },
     {
         "BriefDescription": "Local Shared P2P Credit Taken - 0 : M2IOSF3 - NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x40",
         "EventName": "UNC_M2P_LOCAL_SHAR_P2P_CRD_TAKEN_0.M2IOSF3_NCB",
         "PerPkg": "1",
@@ -2878,6 +3158,7 @@
     },
     {
         "BriefDescription": "Local Shared P2P Credit Taken - 0 : M2IOSF3 - NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x40",
         "EventName": "UNC_M2P_LOCAL_SHAR_P2P_CRD_TAKEN_0.M2IOSF3_NCS",
         "PerPkg": "1",
@@ -2886,6 +3167,7 @@
     },
     {
         "BriefDescription": "Local Shared P2P Credit Taken - 1 : M2IOSF4 - NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x41",
         "EventName": "UNC_M2P_LOCAL_SHAR_P2P_CRD_TAKEN_1.M2IOSF4_NCB",
         "PerPkg": "1",
@@ -2894,6 +3176,7 @@
     },
     {
         "BriefDescription": "Local Shared P2P Credit Taken - 1 : M2IOSF4 - NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x41",
         "EventName": "UNC_M2P_LOCAL_SHAR_P2P_CRD_TAKEN_1.M2IOSF4_NCS",
         "PerPkg": "1",
@@ -2902,6 +3185,7 @@
     },
     {
         "BriefDescription": "Local Shared P2P Credit Taken - 1 : M2IOSF5 - NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x41",
         "EventName": "UNC_M2P_LOCAL_SHAR_P2P_CRD_TAKEN_1.M2IOSF5_NCB",
         "PerPkg": "1",
@@ -2910,6 +3194,7 @@
     },
     {
         "BriefDescription": "Local Shared P2P Credit Taken - 1 : M2IOSF5 - NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x41",
         "EventName": "UNC_M2P_LOCAL_SHAR_P2P_CRD_TAKEN_1.M2IOSF5_NCS",
         "PerPkg": "1",
@@ -2918,6 +3203,7 @@
     },
     {
         "BriefDescription": "Waiting on Local Shared P2P Credit - 0 : M2IOSF0 - NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x4a",
         "EventName": "UNC_M2P_LOCAL_SHAR_P2P_CRD_WAIT_0.M2IOSF0_NCB",
         "PerPkg": "1",
@@ -2926,6 +3212,7 @@
     },
     {
         "BriefDescription": "Waiting on Local Shared P2P Credit - 0 : M2IOSF0 - NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x4a",
         "EventName": "UNC_M2P_LOCAL_SHAR_P2P_CRD_WAIT_0.M2IOSF0_NCS",
         "PerPkg": "1",
@@ -2934,6 +3221,7 @@
     },
     {
         "BriefDescription": "Waiting on Local Shared P2P Credit - 0 : M2IOSF1 - NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x4a",
         "EventName": "UNC_M2P_LOCAL_SHAR_P2P_CRD_WAIT_0.M2IOSF1_NCB",
         "PerPkg": "1",
@@ -2942,6 +3230,7 @@
     },
     {
         "BriefDescription": "Waiting on Local Shared P2P Credit - 0 : M2IOSF1 - NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x4a",
         "EventName": "UNC_M2P_LOCAL_SHAR_P2P_CRD_WAIT_0.M2IOSF1_NCS",
         "PerPkg": "1",
@@ -2950,6 +3239,7 @@
     },
     {
         "BriefDescription": "Waiting on Local Shared P2P Credit - 0 : M2IOSF2 - NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x4a",
         "EventName": "UNC_M2P_LOCAL_SHAR_P2P_CRD_WAIT_0.M2IOSF2_NCB",
         "PerPkg": "1",
@@ -2958,6 +3248,7 @@
     },
     {
         "BriefDescription": "Waiting on Local Shared P2P Credit - 0 : M2IOSF2 - NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x4a",
         "EventName": "UNC_M2P_LOCAL_SHAR_P2P_CRD_WAIT_0.M2IOSF2_NCS",
         "PerPkg": "1",
@@ -2966,6 +3257,7 @@
     },
     {
         "BriefDescription": "Waiting on Local Shared P2P Credit - 0 : M2IOSF3 - NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x4a",
         "EventName": "UNC_M2P_LOCAL_SHAR_P2P_CRD_WAIT_0.M2IOSF3_NCB",
         "PerPkg": "1",
@@ -2974,6 +3266,7 @@
     },
     {
         "BriefDescription": "Waiting on Local Shared P2P Credit - 0 : M2IOSF3 - NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x4a",
         "EventName": "UNC_M2P_LOCAL_SHAR_P2P_CRD_WAIT_0.M2IOSF3_NCS",
         "PerPkg": "1",
@@ -2982,6 +3275,7 @@
     },
     {
         "BriefDescription": "Waiting on Local Shared P2P Credit - 1 : M2IOSF4 - NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x4b",
         "EventName": "UNC_M2P_LOCAL_SHAR_P2P_CRD_WAIT_1.M2IOSF4_NCB",
         "PerPkg": "1",
@@ -2990,6 +3284,7 @@
     },
     {
         "BriefDescription": "Waiting on Local Shared P2P Credit - 1 : M2IOSF4 - NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x4b",
         "EventName": "UNC_M2P_LOCAL_SHAR_P2P_CRD_WAIT_1.M2IOSF4_NCS",
         "PerPkg": "1",
@@ -2998,6 +3293,7 @@
     },
     {
         "BriefDescription": "Waiting on Local Shared P2P Credit - 1 : M2IOSF5 - NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x4b",
         "EventName": "UNC_M2P_LOCAL_SHAR_P2P_CRD_WAIT_1.M2IOSF5_NCB",
         "PerPkg": "1",
@@ -3006,6 +3302,7 @@
     },
     {
         "BriefDescription": "Waiting on Local Shared P2P Credit - 1 : M2IOSF5 - NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x4b",
         "EventName": "UNC_M2P_LOCAL_SHAR_P2P_CRD_WAIT_1.M2IOSF5_NCS",
         "PerPkg": "1",
@@ -3014,6 +3311,7 @@
     },
     {
         "BriefDescription": "P2P Credit Occupancy : All",
+        "Counter": "0,1",
         "EventCode": "0x14",
         "EventName": "UNC_M2P_P2P_CRD_OCCUPANCY.ALL",
         "PerPkg": "1",
@@ -3022,6 +3320,7 @@
     },
     {
         "BriefDescription": "P2P Credit Occupancy : Local NCB",
+        "Counter": "0,1",
         "EventCode": "0x14",
         "EventName": "UNC_M2P_P2P_CRD_OCCUPANCY.LOCAL_NCB",
         "PerPkg": "1",
@@ -3030,6 +3329,7 @@
     },
     {
         "BriefDescription": "P2P Credit Occupancy : Local NCS",
+        "Counter": "0,1",
         "EventCode": "0x14",
         "EventName": "UNC_M2P_P2P_CRD_OCCUPANCY.LOCAL_NCS",
         "PerPkg": "1",
@@ -3038,6 +3338,7 @@
     },
     {
         "BriefDescription": "P2P Credit Occupancy : Remote NCB",
+        "Counter": "0,1",
         "EventCode": "0x14",
         "EventName": "UNC_M2P_P2P_CRD_OCCUPANCY.REMOTE_NCB",
         "PerPkg": "1",
@@ -3046,6 +3347,7 @@
     },
     {
         "BriefDescription": "P2P Credit Occupancy : Remote NCS",
+        "Counter": "0,1",
         "EventCode": "0x14",
         "EventName": "UNC_M2P_P2P_CRD_OCCUPANCY.REMOTE_NCS",
         "PerPkg": "1",
@@ -3054,6 +3356,7 @@
     },
     {
         "BriefDescription": "Dedicated Credits Received : All",
+        "Counter": "0,1,2,3",
         "EventCode": "0x16",
         "EventName": "UNC_M2P_P2P_DED_RECEIVED.ALL",
         "PerPkg": "1",
@@ -3062,6 +3365,7 @@
     },
     {
         "BriefDescription": "Dedicated Credits Received : Local NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x16",
         "EventName": "UNC_M2P_P2P_DED_RECEIVED.LOCAL_NCB",
         "PerPkg": "1",
@@ -3070,6 +3374,7 @@
     },
     {
         "BriefDescription": "Dedicated Credits Received : Local NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x16",
         "EventName": "UNC_M2P_P2P_DED_RECEIVED.LOCAL_NCS",
         "PerPkg": "1",
@@ -3078,6 +3383,7 @@
     },
     {
         "BriefDescription": "Dedicated Credits Received : Remote NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x16",
         "EventName": "UNC_M2P_P2P_DED_RECEIVED.REMOTE_NCB",
         "PerPkg": "1",
@@ -3086,6 +3392,7 @@
     },
     {
         "BriefDescription": "Dedicated Credits Received : Remote NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x16",
         "EventName": "UNC_M2P_P2P_DED_RECEIVED.REMOTE_NCS",
         "PerPkg": "1",
@@ -3094,6 +3401,7 @@
     },
     {
         "BriefDescription": "Shared Credits  Received : All",
+        "Counter": "0,1,2,3",
         "EventCode": "0x15",
         "EventName": "UNC_M2P_P2P_SHAR_RECEIVED.ALL",
         "PerPkg": "1",
@@ -3102,6 +3410,7 @@
     },
     {
         "BriefDescription": "Shared Credits  Received : Local NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x15",
         "EventName": "UNC_M2P_P2P_SHAR_RECEIVED.LOCAL_NCB",
         "PerPkg": "1",
@@ -3110,6 +3419,7 @@
     },
     {
         "BriefDescription": "Shared Credits  Received : Local NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x15",
         "EventName": "UNC_M2P_P2P_SHAR_RECEIVED.LOCAL_NCS",
         "PerPkg": "1",
@@ -3118,6 +3428,7 @@
     },
     {
         "BriefDescription": "Shared Credits  Received : Remote NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x15",
         "EventName": "UNC_M2P_P2P_SHAR_RECEIVED.REMOTE_NCB",
         "PerPkg": "1",
@@ -3126,6 +3437,7 @@
     },
     {
         "BriefDescription": "Shared Credits  Received : Remote NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x15",
         "EventName": "UNC_M2P_P2P_SHAR_RECEIVED.REMOTE_NCS",
         "PerPkg": "1",
@@ -3134,6 +3446,7 @@
     },
     {
         "BriefDescription": "Remote Dedicated P2P Credit Taken - 0 : UPI0 - DRS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x48",
         "EventName": "UNC_M2P_REMOTE_DED_P2P_CRD_TAKEN_0.UPI0_DRS",
         "PerPkg": "1",
@@ -3142,6 +3455,7 @@
     },
     {
         "BriefDescription": "Remote Dedicated P2P Credit Taken - 0 : UPI0 - NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x48",
         "EventName": "UNC_M2P_REMOTE_DED_P2P_CRD_TAKEN_0.UPI0_NCB",
         "PerPkg": "1",
@@ -3150,6 +3464,7 @@
     },
     {
         "BriefDescription": "Remote Dedicated P2P Credit Taken - 0 : UPI0 - NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x48",
         "EventName": "UNC_M2P_REMOTE_DED_P2P_CRD_TAKEN_0.UPI0_NCS",
         "PerPkg": "1",
@@ -3158,6 +3473,7 @@
     },
     {
         "BriefDescription": "Remote Dedicated P2P Credit Taken - 0 : UPI1 - DRS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x48",
         "EventName": "UNC_M2P_REMOTE_DED_P2P_CRD_TAKEN_0.UPI1_DRS",
         "PerPkg": "1",
@@ -3166,6 +3482,7 @@
     },
     {
         "BriefDescription": "Remote Dedicated P2P Credit Taken - 0 : UPI1 - NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x48",
         "EventName": "UNC_M2P_REMOTE_DED_P2P_CRD_TAKEN_0.UPI1_NCB",
         "PerPkg": "1",
@@ -3174,6 +3491,7 @@
     },
     {
         "BriefDescription": "Remote Dedicated P2P Credit Taken - 0 : UPI1 - NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x48",
         "EventName": "UNC_M2P_REMOTE_DED_P2P_CRD_TAKEN_0.UPI1_NCS",
         "PerPkg": "1",
@@ -3182,6 +3500,7 @@
     },
     {
         "BriefDescription": "Remote Dedicated P2P Credit Taken - 1 : UPI2 - DRS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x49",
         "EventName": "UNC_M2P_REMOTE_DED_P2P_CRD_TAKEN_1.UPI2_DRS",
         "PerPkg": "1",
@@ -3190,6 +3509,7 @@
     },
     {
         "BriefDescription": "Remote Dedicated P2P Credit Taken - 1 : UPI2 - NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x49",
         "EventName": "UNC_M2P_REMOTE_DED_P2P_CRD_TAKEN_1.UPI2_NCB",
         "PerPkg": "1",
@@ -3198,6 +3518,7 @@
     },
     {
         "BriefDescription": "Remote Dedicated P2P Credit Taken - 1 : UPI2 - NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x49",
         "EventName": "UNC_M2P_REMOTE_DED_P2P_CRD_TAKEN_1.UPI2_NCS",
         "PerPkg": "1",
@@ -3206,6 +3527,7 @@
     },
     {
         "BriefDescription": "Remote P2P Dedicated Credits Returned : UPI0 - NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x1b",
         "EventName": "UNC_M2P_REMOTE_P2P_DED_RETURNED.UPI0_NCB",
         "PerPkg": "1",
@@ -3214,6 +3536,7 @@
     },
     {
         "BriefDescription": "Remote P2P Dedicated Credits Returned : UPI0 - NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x1b",
         "EventName": "UNC_M2P_REMOTE_P2P_DED_RETURNED.UPI0_NCS",
         "PerPkg": "1",
@@ -3222,6 +3545,7 @@
     },
     {
         "BriefDescription": "Remote P2P Dedicated Credits Returned : UPI1 - NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x1b",
         "EventName": "UNC_M2P_REMOTE_P2P_DED_RETURNED.UPI1_NCB",
         "PerPkg": "1",
@@ -3230,6 +3554,7 @@
     },
     {
         "BriefDescription": "Remote P2P Dedicated Credits Returned : UPI1 - NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x1b",
         "EventName": "UNC_M2P_REMOTE_P2P_DED_RETURNED.UPI1_NCS",
         "PerPkg": "1",
@@ -3238,6 +3563,7 @@
     },
     {
         "BriefDescription": "Remote P2P Dedicated Credits Returned : UPI2 - NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x1b",
         "EventName": "UNC_M2P_REMOTE_P2P_DED_RETURNED.UPI2_NCB",
         "PerPkg": "1",
@@ -3246,6 +3572,7 @@
     },
     {
         "BriefDescription": "Remote P2P Dedicated Credits Returned : UPI2 - NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x1b",
         "EventName": "UNC_M2P_REMOTE_P2P_DED_RETURNED.UPI2_NCS",
         "PerPkg": "1",
@@ -3254,6 +3581,7 @@
     },
     {
         "BriefDescription": "Remote P2P Shared Credits Returned : Agent0",
+        "Counter": "0,1,2,3",
         "EventCode": "0x18",
         "EventName": "UNC_M2P_REMOTE_P2P_SHAR_RETURNED.AGENT_0",
         "PerPkg": "1",
@@ -3262,6 +3590,7 @@
     },
     {
         "BriefDescription": "Remote P2P Shared Credits Returned : Agent1",
+        "Counter": "0,1,2,3",
         "EventCode": "0x18",
         "EventName": "UNC_M2P_REMOTE_P2P_SHAR_RETURNED.AGENT_1",
         "PerPkg": "1",
@@ -3270,6 +3599,7 @@
     },
     {
         "BriefDescription": "Remote P2P Shared Credits Returned : Agent2",
+        "Counter": "0,1,2,3",
         "EventCode": "0x18",
         "EventName": "UNC_M2P_REMOTE_P2P_SHAR_RETURNED.AGENT_2",
         "PerPkg": "1",
@@ -3278,6 +3608,7 @@
     },
     {
         "BriefDescription": "Remote Shared P2P Credit Returned to credit ring : Agent0",
+        "Counter": "0,1,2,3",
         "EventCode": "0x45",
         "EventName": "UNC_M2P_REMOTE_SHAR_P2P_CRD_RETURNED.AGENT_0",
         "PerPkg": "1",
@@ -3286,6 +3617,7 @@
     },
     {
         "BriefDescription": "Remote Shared P2P Credit Returned to credit ring : Agent1",
+        "Counter": "0,1,2,3",
         "EventCode": "0x45",
         "EventName": "UNC_M2P_REMOTE_SHAR_P2P_CRD_RETURNED.AGENT_1",
         "PerPkg": "1",
@@ -3294,6 +3626,7 @@
     },
     {
         "BriefDescription": "Remote Shared P2P Credit Returned to credit ring : Agent2",
+        "Counter": "0,1,2,3",
         "EventCode": "0x45",
         "EventName": "UNC_M2P_REMOTE_SHAR_P2P_CRD_RETURNED.AGENT_2",
         "PerPkg": "1",
@@ -3302,6 +3635,7 @@
     },
     {
         "BriefDescription": "Remote Shared P2P Credit Taken - 0 : UPI0 - DRS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x42",
         "EventName": "UNC_M2P_REMOTE_SHAR_P2P_CRD_TAKEN_0.UPI0_DRS",
         "PerPkg": "1",
@@ -3310,6 +3644,7 @@
     },
     {
         "BriefDescription": "Remote Shared P2P Credit Taken - 0 : UPI0 - NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x42",
         "EventName": "UNC_M2P_REMOTE_SHAR_P2P_CRD_TAKEN_0.UPI0_NCB",
         "PerPkg": "1",
@@ -3318,6 +3653,7 @@
     },
     {
         "BriefDescription": "Remote Shared P2P Credit Taken - 0 : UPI0 - NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x42",
         "EventName": "UNC_M2P_REMOTE_SHAR_P2P_CRD_TAKEN_0.UPI0_NCS",
         "PerPkg": "1",
@@ -3326,6 +3662,7 @@
     },
     {
         "BriefDescription": "Remote Shared P2P Credit Taken - 0 : UPI1 - DRS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x42",
         "EventName": "UNC_M2P_REMOTE_SHAR_P2P_CRD_TAKEN_0.UPI1_DRS",
         "PerPkg": "1",
@@ -3334,6 +3671,7 @@
     },
     {
         "BriefDescription": "Remote Shared P2P Credit Taken - 0 : UPI1 - NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x42",
         "EventName": "UNC_M2P_REMOTE_SHAR_P2P_CRD_TAKEN_0.UPI1_NCB",
         "PerPkg": "1",
@@ -3342,6 +3680,7 @@
     },
     {
         "BriefDescription": "Remote Shared P2P Credit Taken - 0 : UPI1 - NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x42",
         "EventName": "UNC_M2P_REMOTE_SHAR_P2P_CRD_TAKEN_0.UPI1_NCS",
         "PerPkg": "1",
@@ -3350,6 +3689,7 @@
     },
     {
         "BriefDescription": "Remote Shared P2P Credit Taken - 1 : UPI2 - DRS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x43",
         "EventName": "UNC_M2P_REMOTE_SHAR_P2P_CRD_TAKEN_1.UPI2_DRS",
         "PerPkg": "1",
@@ -3358,6 +3698,7 @@
     },
     {
         "BriefDescription": "Remote Shared P2P Credit Taken - 1 : UPI2 - NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x43",
         "EventName": "UNC_M2P_REMOTE_SHAR_P2P_CRD_TAKEN_1.UPI2_NCB",
         "PerPkg": "1",
@@ -3366,6 +3707,7 @@
     },
     {
         "BriefDescription": "Remote Shared P2P Credit Taken - 1 : UPI2 - NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x43",
         "EventName": "UNC_M2P_REMOTE_SHAR_P2P_CRD_TAKEN_1.UPI2_NCS",
         "PerPkg": "1",
@@ -3374,6 +3716,7 @@
     },
     {
         "BriefDescription": "Waiting on Remote Shared P2P Credit - 0 : UPI0 - DRS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x4c",
         "EventName": "UNC_M2P_REMOTE_SHAR_P2P_CRD_WAIT_0.UPI0_DRS",
         "PerPkg": "1",
@@ -3382,6 +3725,7 @@
     },
     {
         "BriefDescription": "Waiting on Remote Shared P2P Credit - 0 : UPI0 - NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x4c",
         "EventName": "UNC_M2P_REMOTE_SHAR_P2P_CRD_WAIT_0.UPI0_NCB",
         "PerPkg": "1",
@@ -3390,6 +3734,7 @@
     },
     {
         "BriefDescription": "Waiting on Remote Shared P2P Credit - 0 : UPI0 - NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x4c",
         "EventName": "UNC_M2P_REMOTE_SHAR_P2P_CRD_WAIT_0.UPI0_NCS",
         "PerPkg": "1",
@@ -3398,6 +3743,7 @@
     },
     {
         "BriefDescription": "Waiting on Remote Shared P2P Credit - 0 : UPI1 - DRS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x4c",
         "EventName": "UNC_M2P_REMOTE_SHAR_P2P_CRD_WAIT_0.UPI1_DRS",
         "PerPkg": "1",
@@ -3406,6 +3752,7 @@
     },
     {
         "BriefDescription": "Waiting on Remote Shared P2P Credit - 0 : UPI1 - NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x4c",
         "EventName": "UNC_M2P_REMOTE_SHAR_P2P_CRD_WAIT_0.UPI1_NCB",
         "PerPkg": "1",
@@ -3414,6 +3761,7 @@
     },
     {
         "BriefDescription": "Waiting on Remote Shared P2P Credit - 0 : UPI1 - NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x4c",
         "EventName": "UNC_M2P_REMOTE_SHAR_P2P_CRD_WAIT_0.UPI1_NCS",
         "PerPkg": "1",
@@ -3422,6 +3770,7 @@
     },
     {
         "BriefDescription": "Waiting on Remote Shared P2P Credit - 1 : UPI2 - DRS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x4d",
         "EventName": "UNC_M2P_REMOTE_SHAR_P2P_CRD_WAIT_1.UPI2_DRS",
         "PerPkg": "1",
@@ -3430,6 +3779,7 @@
     },
     {
         "BriefDescription": "Waiting on Remote Shared P2P Credit - 1 : UPI2 - NCB",
+        "Counter": "0,1,2,3",
         "EventCode": "0x4d",
         "EventName": "UNC_M2P_REMOTE_SHAR_P2P_CRD_WAIT_1.UPI2_NCB",
         "PerPkg": "1",
@@ -3438,6 +3788,7 @@
     },
     {
         "BriefDescription": "Waiting on Remote Shared P2P Credit - 1 : UPI2 - NCS",
+        "Counter": "0,1,2,3",
         "EventCode": "0x4d",
         "EventName": "UNC_M2P_REMOTE_SHAR_P2P_CRD_WAIT_1.UPI2_NCS",
         "PerPkg": "1",
@@ -3446,6 +3797,7 @@
     },
     {
         "BriefDescription": "Ingress (from CMS) Queue Cycles Not Empty",
+        "Counter": "0,1,2,3",
         "EventCode": "0x10",
         "EventName": "UNC_M2P_RxC_CYCLES_NE.ALL",
         "PerPkg": "1",
@@ -3455,6 +3807,7 @@
     },
     {
         "BriefDescription": "Ingress (from CMS) Queue Cycles Not Empty",
+        "Counter": "0,1,2,3",
         "EventCode": "0x10",
         "EventName": "UNC_M2P_RxC_CYCLES_NE.CHA_IDI",
         "PerPkg": "1",
@@ -3464,6 +3817,7 @@
     },
     {
         "BriefDescription": "Ingress (from CMS) Queue Cycles Not Empty",
+        "Counter": "0,1,2,3",
         "EventCode": "0x10",
         "EventName": "UNC_M2P_RxC_CYCLES_NE.CHA_NCB",
         "PerPkg": "1",
@@ -3473,6 +3827,7 @@
     },
     {
         "BriefDescription": "Ingress (from CMS) Queue Cycles Not Empty",
+        "Counter": "0,1,2,3",
         "EventCode": "0x10",
         "EventName": "UNC_M2P_RxC_CYCLES_NE.CHA_NCS",
         "PerPkg": "1",
@@ -3482,6 +3837,7 @@
     },
     {
         "BriefDescription": "Ingress (from CMS) Queue Cycles Not Empty",
+        "Counter": "0,1,2,3",
         "EventCode": "0x10",
         "EventName": "UNC_M2P_RxC_CYCLES_NE.IIO_NCB",
         "PerPkg": "1",
@@ -3491,6 +3847,7 @@
     },
     {
         "BriefDescription": "Ingress (from CMS) Queue Cycles Not Empty",
+        "Counter": "0,1,2,3",
         "EventCode": "0x10",
         "EventName": "UNC_M2P_RxC_CYCLES_NE.IIO_NCS",
         "PerPkg": "1",
@@ -3500,6 +3857,7 @@
     },
     {
         "BriefDescription": "Ingress (from CMS) Queue Cycles Not Empty",
+        "Counter": "0,1,2,3",
         "EventCode": "0x10",
         "EventName": "UNC_M2P_RxC_CYCLES_NE.UPI_NCB",
         "PerPkg": "1",
@@ -3509,6 +3867,7 @@
     },
     {
         "BriefDescription": "Ingress (from CMS) Queue Cycles Not Empty",
+        "Counter": "0,1,2,3",
         "EventCode": "0x10",
         "EventName": "UNC_M2P_RxC_CYCLES_NE.UPI_NCS",
         "PerPkg": "1",
@@ -3518,6 +3877,7 @@
     },
     {
         "BriefDescription": "Ingress (from CMS) Queue Inserts",
+        "Counter": "0,1,2,3",
         "EventCode": "0x11",
         "EventName": "UNC_M2P_RxC_INSERTS.ALL",
         "PerPkg": "1",
@@ -3527,6 +3887,7 @@
     },
     {
         "BriefDescription": "Ingress (from CMS) Queue Inserts",
+        "Counter": "0,1,2,3",
         "EventCode": "0x11",
         "EventName": "UNC_M2P_RxC_INSERTS.CHA_IDI",
         "PerPkg": "1",
@@ -3536,6 +3897,7 @@
     },
     {
         "BriefDescription": "Ingress (from CMS) Queue Inserts",
+        "Counter": "0,1,2,3",
         "EventCode": "0x11",
         "EventName": "UNC_M2P_RxC_INSERTS.CHA_NCB",
         "PerPkg": "1",
@@ -3545,6 +3907,7 @@
     },
     {
         "BriefDescription": "Ingress (from CMS) Queue Inserts",
+        "Counter": "0,1,2,3",
         "EventCode": "0x11",
         "EventName": "UNC_M2P_RxC_INSERTS.CHA_NCS",
         "PerPkg": "1",
@@ -3554,6 +3917,7 @@
     },
     {
         "BriefDescription": "Ingress (from CMS) Queue Inserts",
+        "Counter": "0,1,2,3",
         "EventCode": "0x11",
         "EventName": "UNC_M2P_RxC_INSERTS.IIO_NCB",
         "PerPkg": "1",
@@ -3563,6 +3927,7 @@
     },
     {
         "BriefDescription": "Ingress (from CMS) Queue Inserts",
+        "Counter": "0,1,2,3",
         "EventCode": "0x11",
         "EventName": "UNC_M2P_RxC_INSERTS.IIO_NCS",
         "PerPkg": "1",
@@ -3572,6 +3937,7 @@
     },
     {
         "BriefDescription": "Ingress (from CMS) Queue Inserts",
+        "Counter": "0,1,2,3",
         "EventCode": "0x11",
         "EventName": "UNC_M2P_RxC_INSERTS.UPI_NCB",
         "PerPkg": "1",
@@ -3581,6 +3947,7 @@
     },
     {
         "BriefDescription": "Ingress (from CMS) Queue Inserts",
+        "Counter": "0,1,2,3",
         "EventCode": "0x11",
         "EventName": "UNC_M2P_RxC_INSERTS.UPI_NCS",
         "PerPkg": "1",
@@ -3590,6 +3957,7 @@
     },
     {
         "BriefDescription": "UNC_M2P_TxC_CREDITS.PMM",
+        "Counter": "0,1",
         "EventCode": "0x2d",
         "EventName": "UNC_M2P_TxC_CREDITS.PMM",
         "PerPkg": "1",
@@ -3598,6 +3966,7 @@
     },
     {
         "BriefDescription": "UNC_M2P_TxC_CREDITS.PRQ",
+        "Counter": "0,1",
         "EventCode": "0x2d",
         "EventName": "UNC_M2P_TxC_CREDITS.PRQ",
         "PerPkg": "1",
@@ -3606,6 +3975,7 @@
     },
     {
         "BriefDescription": "Egress (to CMS) Cycles Full",
+        "Counter": "0,1,2,3",
         "EventCode": "0x25",
         "EventName": "UNC_M2P_TxC_CYCLES_FULL.PMM_BLOCK_0",
         "FCMask": "0x00000000",
@@ -3617,6 +3987,7 @@
     },
     {
         "BriefDescription": "Egress (to CMS) Cycles Full",
+        "Counter": "0,1,2,3",
         "EventCode": "0x25",
         "EventName": "UNC_M2P_TxC_CYCLES_FULL.PMM_BLOCK_1",
         "FCMask": "0x00000000",
@@ -3628,6 +3999,7 @@
     },
     {
         "BriefDescription": "Egress (to CMS) Cycles Not Empty",
+        "Counter": "0,1",
         "EventCode": "0x23",
         "EventName": "UNC_M2P_TxC_CYCLES_NE.PMM_DISTRESS_0",
         "FCMask": "0x00000000",
@@ -3639,6 +4011,7 @@
     },
     {
         "BriefDescription": "Egress (to CMS) Cycles Not Empty",
+        "Counter": "0,1",
         "EventCode": "0x23",
         "EventName": "UNC_M2P_TxC_CYCLES_NE.PMM_DISTRESS_1",
         "FCMask": "0x00000000",

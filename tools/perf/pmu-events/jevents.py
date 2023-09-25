@@ -655,7 +655,7 @@ def preprocess_one_file(parents: Sequence[str], item: os.DirEntry) -> None:
       _bcs.add(pmu_name, metric=True)
       _bcs.add(event.build_c_string(metric=True), metric=True)
     if event.size:
-      _bcs.add(event.build_c_string(metric=False, layout=True))
+      _bcs.add(event.build_c_string(metric=False, layout=True), metric=False)
 
 def process_one_file(parents: Sequence[str], item: os.DirEntry) -> None:
   """Process a JSON file during the main walk."""
