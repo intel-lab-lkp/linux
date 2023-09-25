@@ -40,6 +40,9 @@ enum pstore_type_id {
 	PSTORE_TYPE_PMSG	= 7,
 	PSTORE_TYPE_PPC_OPAL	= 8,
 
+	/* APEI section */
+	PSTORE_TYPE_CPER_MEM		= 9,
+
 	/* End of the list */
 	PSTORE_TYPE_MAX
 };

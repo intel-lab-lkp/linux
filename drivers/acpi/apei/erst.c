@@ -26,6 +26,7 @@
 #include <linux/vmalloc.h>
 #include <linux/mm.h> /* kvfree() */
 #include <acpi/apei.h>
+#include <acpi/ghes.h>
 #ifdef CONFIG_X86_MCE
 /* only define CREATE_TRACE_POINTS once */
 #include <trace/events/mce.h>
@@ -1072,6 +1073,10 @@ skip:
 		trace_mce_record((struct mce *)rcd->data);
 #endif
 		record->type = PSTORE_TYPE_MCE;
+	} else if (guid_equal(&rcd->sec_hdr.section_type, &CPER_SEC_PLATFORM_MEM)) {
+		record->type = PSTORE_TYPE_CPER_MEM;
+		arch_apei_report_mem_error(0x2, (struct cper_sec_mem_err *)rcd->data);
+		atomic_notifier_call_chain(&ghes_report_chain, 0x2, rcd->data);
 	}
 	else
 		record->type = PSTORE_TYPE_MAX;
