@@ -880,6 +880,14 @@ struct cxl_port *find_cxl_root(struct cxl_port *port)
 }
 EXPORT_SYMBOL_NS_GPL(find_cxl_root, CXL);
 
+static struct cxl_port *cxl_root;
+
+void set_cxl_root(struct cxl_port *root_port)
+{
+	cxl_root = root_port;
+}
+EXPORT_SYMBOL_NS_GPL(set_cxl_root, CXL);
+
 static struct cxl_dport *find_dport(struct cxl_port *port, int id)
 {
 	struct cxl_dport *dport;
@@ -935,10 +943,55 @@ static void cond_cxl_root_unlock(struct cxl_port *port)
 		device_unlock(&port->dev);
 }
 
+static ssize_t cxl_rcrb_addr_show(struct device *dev,
+				  struct device_attribute *attr, char *buf)
+{
+	struct cxl_dport *dport;
+
+	if (!cxl_root)
+		return -ENODEV;
+
+	dport = cxl_find_dport_by_dev(cxl_root, dev);
+	if (!dport)
+		return -ENODEV;
+
+	return sysfs_emit(buf, "0x%llx\n", (u64) dport->rcrb.base);
+}
+DEVICE_ATTR_RO(cxl_rcrb_addr);
+
+static umode_t cxl_rcrb_addr_is_visible(struct kobject *kobj,
+					struct attribute *a, int n)
+{
+	struct device *dev = kobj_to_dev(kobj);
+	struct cxl_dport *dport;
+
+	if (!IS_ENABLED(CONFIG_ACPI_APEI_EINJ) || !cxl_root)
+		return 0;
+
+	dport = cxl_find_dport_by_dev(cxl_root, dev);
+	if (!dport || !dport->rch || dport->rcrb.base == CXL_RESOURCE_NONE)
+		return 0;
+
+	return a->mode;
+}
+
+static struct attribute *cxl_rcrb_addr_attrs[] = {
+	&dev_attr_cxl_rcrb_addr.attr,
+	NULL,
+};
+
+static const struct attribute_group cxl_rcrb_addr_group = {
+	.attrs = cxl_rcrb_addr_attrs,
+	.is_visible = cxl_rcrb_addr_is_visible,
+};
+
 static void cxl_dport_remove(void *data)
 {
 	struct cxl_dport *dport = data;
 	struct cxl_port *port = dport->port;
+
+	if (dport->rch)
+		sysfs_remove_group(&dport->dport_dev->kobj, &cxl_rcrb_addr_group);
 
 	xa_erase(&port->dports, (unsigned long) dport->dport_dev);
 	put_device(dport->dport_dev);
@@ -1025,6 +1078,11 @@ __devm_cxl_add_dport(struct cxl_port *port, struct device *dport_dev,
 	rc = devm_add_action_or_reset(host, cxl_dport_unlink, dport);
 	if (rc)
 		return ERR_PTR(rc);
+
+	rc = sysfs_create_group(&dport_dev->kobj, &cxl_rcrb_addr_group);
+	if (rc)
+		dev_dbg(dport_dev, "Couldn't create cxl_rcrb_addr group: %d\n",
+			rc);
 
 	return dport;
 }

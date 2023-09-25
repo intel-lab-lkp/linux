@@ -177,6 +177,15 @@ Description:
 		integer reflects the hardware port unique-id used in the
 		hardware decoder target list.
 
+What:		/sys/bus/cxl/devices/portX/dportY/cxl_rcrb_addr
+What:		/sys/devices/pciX/cxl_rcrb_addr
+Date:		August, 2023
+KernelVersion:	v6.6
+Contact:	linux-cxl@vger.kernel.org
+Description:
+		(RO) The 'cxl_rcrb_addr' device file gives the MMIO base address
+		of the RCRB of the corresponding CXL 1.1 downstream port. Only
+		present for CXL 1.1 dports.
 
 What:		/sys/bus/cxl/devices/decoderX.Y
 Date:		June, 2021
