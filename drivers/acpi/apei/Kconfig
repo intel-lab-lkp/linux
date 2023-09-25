@@ -55,6 +55,8 @@ config ACPI_APEI_MEMORY_FAILURE
 config ACPI_APEI_EINJ
 	tristate "APEI Error INJection (EINJ)"
 	depends on ACPI_APEI && DEBUG_FS
+	imply CXL_BUS
+	imply CXL_ACPI
 	help
 	  EINJ provides a hardware error injection mechanism, it is
 	  mainly used for debugging and testing the other parts of

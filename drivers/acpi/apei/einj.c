@@ -21,6 +21,7 @@
 #include <linux/nmi.h>
 #include <linux/delay.h>
 #include <linux/mm.h>
+#include <linux/cxl.h>
 #include <asm/unaligned.h>
 
 #include "apei-internal.h"
@@ -36,6 +37,7 @@
 #define MEM_ERROR_MASK		(ACPI_EINJ_MEMORY_CORRECTABLE | \
 				ACPI_EINJ_MEMORY_UNCORRECTABLE | \
 				ACPI_EINJ_MEMORY_FATAL)
+#define CXL_ERROR_MASK		GENMASK(17, 12)
 
 /*
  * ACPI version 5 provides a SET_ERROR_TYPE_WITH_ADDRESS action.
@@ -512,6 +514,22 @@ static int __einj_error_inject(u32 type, u32 flags, u64 param1, u64 param2,
 	return rc;
 }
 
+static int is_valid_cxl_addr(u64 addr)
+{
+	struct cxl_dport *dport;
+
+	if (IS_REACHABLE(CONFIG_CXL_ACPI))
+		dport = cxl_find_rch_dport_by_rcrb((resource_size_t) addr);
+	else
+		return 0;
+
+	if (!IS_ERR_OR_NULL(dport))
+		return 1;
+
+	pr_info("Could not find dport with rcrb 0x%llx\n", addr);
+	return 0;
+}
+
 /* Inject the specified hardware error */
 static int einj_error_inject(u32 type, u32 flags, u64 param1, u64 param2,
 			     u64 param3, u64 param4)
@@ -537,8 +555,11 @@ static int einj_error_inject(u32 type, u32 flags, u64 param1, u64 param2,
 	if (type & ACPI5_VENDOR_BIT) {
 		if (vendor_flags != SETWA_FLAGS_MEM)
 			goto inject;
-	} else if (!(type & MEM_ERROR_MASK) && !(flags & SETWA_FLAGS_MEM))
+	} else if (!(type & MEM_ERROR_MASK) && !(flags & SETWA_FLAGS_MEM)) {
 		goto inject;
+	} else if (type & CXL_ERROR_MASK && is_valid_cxl_addr(param1)) {
+		goto inject;
+	}
 
 	/*
 	 * Disallow crazy address masks that give BIOS leeway to pick
@@ -807,3 +828,4 @@ module_exit(einj_exit);
 MODULE_AUTHOR("Huang Ying");
 MODULE_DESCRIPTION("APEI Error INJection support");
 MODULE_LICENSE("GPL");
+MODULE_IMPORT_NS(CXL);

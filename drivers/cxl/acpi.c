@@ -756,6 +756,7 @@ static void __exit cxl_acpi_exit(void)
 {
 	platform_driver_unregister(&cxl_acpi_driver);
 	cxl_bus_drain();
+	set_cxl_root(NULL);
 }
 
 /* load before dax_hmem sees 'Soft Reserved' CXL ranges */
