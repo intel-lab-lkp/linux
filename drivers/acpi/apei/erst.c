@@ -27,6 +27,8 @@
 #include <linux/mm.h> /* kvfree() */
 #include <acpi/apei.h>
 #include <acpi/ghes.h>
+#include <linux/aer.h>
+#include <linux/pci.h>
 #ifdef CONFIG_X86_MCE
 /* only define CREATE_TRACE_POINTS once */
 #include <trace/events/mce.h>
@@ -1077,6 +1079,19 @@ skip:
 		record->type = PSTORE_TYPE_CPER_MEM;
 		arch_apei_report_mem_error(0x2, (struct cper_sec_mem_err *)rcd->data);
 		atomic_notifier_call_chain(&ghes_report_chain, 0x2, rcd->data);
+	} else if (guid_equal(&rcd->sec_hdr.section_type, &CPER_SEC_PCIE)) {
+
+		struct cper_sec_pcie *pcie_err = (struct cper_sec_pcie *)rcd->data;
+		unsigned int devfn = PCI_DEVFN(pcie_err->device_id.device,
+				  pcie_err->device_id.function);
+		struct pci_dev *pdev = pci_get_domain_bus_and_slot(
+			pcie_err->device_id.segment, pcie_err->device_id.bus,
+			devfn);
+
+		record->type = PSTORE_TYPE_CPER_PCIE;
+		cper_print_aer(
+			pdev, AER_FATAL,
+			(struct aer_capability_regs *)pcie_err->aer_info);
 	}
 	else
 		record->type = PSTORE_TYPE_MAX;
