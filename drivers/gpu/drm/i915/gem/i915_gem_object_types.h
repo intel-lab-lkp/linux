@@ -225,6 +225,7 @@ struct i915_mmap_offset {
 	struct drm_vma_offset_node vma_node;
 	struct drm_i915_gem_object *obj;
 	enum i915_mmap_type mmap_type;
+	bool forward_mmap;
 
 	struct rb_node offset;
 };

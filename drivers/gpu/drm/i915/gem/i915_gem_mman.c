@@ -5,6 +5,7 @@
  */
 
 #include <linux/anon_inodes.h>
+#include <linux/dma-buf.h>
 #include <linux/mman.h>
 #include <linux/pfn_t.h>
 #include <linux/sizes.h>
@@ -664,6 +665,7 @@ insert_mmo(struct drm_i915_gem_object *obj, struct i915_mmap_offset *mmo)
 static struct i915_mmap_offset *
 mmap_offset_attach(struct drm_i915_gem_object *obj,
 		   enum i915_mmap_type mmap_type,
+		   bool forward_mmap,
 		   struct drm_file *file)
 {
 	struct drm_i915_private *i915 = to_i915(obj->base.dev);
@@ -682,6 +684,7 @@ mmap_offset_attach(struct drm_i915_gem_object *obj,
 
 	mmo->obj = obj;
 	mmo->mmap_type = mmap_type;
+	mmo->forward_mmap = forward_mmap;
 	drm_vma_node_reset(&mmo->vma_node);
 
 	err = drm_vma_offset_add(obj->base.dev->vma_offset_manager,
@@ -714,12 +717,25 @@ err:
 	return ERR_PTR(err);
 }
 
+static bool
+should_forward_mmap(struct drm_i915_gem_object *obj,
+		    enum i915_mmap_type mmap_type)
+{
+	if (!obj->base.import_attach)
+		return false;
+
+	return mmap_type == I915_MMAP_TYPE_WB ||
+	       mmap_type == I915_MMAP_TYPE_WC ||
+	       mmap_type == I915_MMAP_TYPE_UC;
+}
+
 static int
 __assign_mmap_offset(struct drm_i915_gem_object *obj,
 		     enum i915_mmap_type mmap_type,
 		     u64 *offset, struct drm_file *file)
 {
 	struct i915_mmap_offset *mmo;
+	bool should_forward;
 
 	if (i915_gem_object_never_mmap(obj))
 		return -ENODEV;
@@ -735,12 +751,15 @@ __assign_mmap_offset(struct drm_i915_gem_object *obj,
 	if (mmap_type == I915_MMAP_TYPE_FIXED)
 		return -ENODEV;
 
+	should_forward = should_forward_mmap(obj, mmap_type);
+
 	if (mmap_type != I915_MMAP_TYPE_GTT &&
 	    !i915_gem_object_has_struct_page(obj) &&
-	    !i915_gem_object_has_iomem(obj))
+	    !i915_gem_object_has_iomem(obj) &&
+	    !should_forward)
 		return -ENODEV;
 
-	mmo = mmap_offset_attach(obj, mmap_type, file);
+	mmo = mmap_offset_attach(obj, mmap_type, should_forward, file);
 	if (IS_ERR(mmo))
 		return PTR_ERR(mmo);
 
@@ -936,6 +955,32 @@ static struct file *mmap_singleton(struct drm_i915_private *i915)
 	return file;
 }
 
+static void
+__vma_mmap_pgprot(struct vm_area_struct *vma, enum i915_mmap_type mmap_type)
+{
+	const pgprot_t pgprot =vm_get_page_prot(vma->vm_flags);
+
+	switch (mmap_type) {
+	case I915_MMAP_TYPE_WC:
+		vma->vm_page_prot = pgprot_writecombine(pgprot);
+		break;
+	case I915_MMAP_TYPE_FIXED:
+		GEM_WARN_ON(1);
+		fallthrough;
+	case I915_MMAP_TYPE_WB:
+		vma->vm_page_prot = pgprot;
+		break;
+	case I915_MMAP_TYPE_UC:
+		vma->vm_page_prot = pgprot_noncached(pgprot);
+		break;
+	case I915_MMAP_TYPE_GTT:
+		vma->vm_page_prot = pgprot_writecombine(pgprot);
+		break;
+	}
+
+	vma->vm_page_prot = pgprot_decrypted(vma->vm_page_prot);
+}
+
 static int
 i915_gem_object_mmap(struct drm_i915_gem_object *obj,
 		     struct i915_mmap_offset *mmo,
@@ -951,6 +996,20 @@ i915_gem_object_mmap(struct drm_i915_gem_object *obj,
 			return -EINVAL;
 		}
 		vm_flags_clear(vma, VM_MAYWRITE);
+	}
+
+	/* dma-buf import */
+	if (mmo && mmo->forward_mmap) {
+		__vma_mmap_pgprot(vma, mmo->mmap_type);
+		vm_flags_set(vma, VM_PFNMAP | VM_DONTEXPAND | VM_DONTDUMP | VM_IO);
+
+		/*
+		 * Don't have our vm_ops to drop the reference in this case so
+		 * drop it now and if object goes away userspace will fault.
+		 */
+		i915_gem_object_put(mmo->obj);
+
+		return dma_buf_mmap(obj->base.dma_buf, vma, 0);
 	}
 
 	anon = mmap_singleton(to_i915(dev));
@@ -982,34 +1041,25 @@ i915_gem_object_mmap(struct drm_i915_gem_object *obj,
 
 	vma->vm_private_data = mmo;
 
+	__vma_mmap_pgprot(vma, mmo->mmap_type);
+
 	switch (mmo->mmap_type) {
 	case I915_MMAP_TYPE_WC:
-		vma->vm_page_prot =
-			pgprot_writecombine(vm_get_page_prot(vma->vm_flags));
 		vma->vm_ops = &vm_ops_cpu;
 		break;
-
 	case I915_MMAP_TYPE_FIXED:
 		GEM_WARN_ON(1);
 		fallthrough;
 	case I915_MMAP_TYPE_WB:
-		vma->vm_page_prot = vm_get_page_prot(vma->vm_flags);
 		vma->vm_ops = &vm_ops_cpu;
 		break;
-
 	case I915_MMAP_TYPE_UC:
-		vma->vm_page_prot =
-			pgprot_noncached(vm_get_page_prot(vma->vm_flags));
 		vma->vm_ops = &vm_ops_cpu;
 		break;
-
 	case I915_MMAP_TYPE_GTT:
-		vma->vm_page_prot =
-			pgprot_writecombine(vm_get_page_prot(vma->vm_flags));
 		vma->vm_ops = &vm_ops_gtt;
 		break;
 	}
-	vma->vm_page_prot = pgprot_decrypted(vma->vm_page_prot);
 
 	return 0;
 }
@@ -1084,7 +1134,7 @@ int i915_gem_fb_mmap(struct drm_i915_gem_object *obj, struct vm_area_struct *vma
 	} else {
 		/* handle stolen and smem objects */
 		mmap_type = i915_ggtt_has_aperture(ggtt) ? I915_MMAP_TYPE_GTT : I915_MMAP_TYPE_WC;
-		mmo = mmap_offset_attach(obj, mmap_type, NULL);
+		mmo = mmap_offset_attach(obj, mmap_type, false, NULL);
 		if (IS_ERR(mmo))
 			return PTR_ERR(mmo);
 	}
