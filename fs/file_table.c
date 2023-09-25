@@ -82,6 +82,16 @@ static inline void file_free(struct file *f)
 	call_rcu(&f->f_rcuhead, file_free_rcu);
 }
 
+static inline void file_free_badopen(struct file *f)
+{
+	BUG_ON(f->f_mode & (FMODE_BACKING | FMODE_OPENED));
+	security_file_free(f);
+	put_cred(f->f_cred);
+	if (likely(!(f->f_mode & FMODE_NOACCOUNT)))
+		percpu_counter_dec(&nr_files);
+	kmem_cache_free(filp_cachep, f);
+}
+
 /*
  * Return the total number of open files in the system
  */
@@ -467,6 +477,35 @@ void __fput_sync(struct file *file)
 
 EXPORT_SYMBOL(fput);
 EXPORT_SYMBOL(__fput_sync);
+
+/*
+ * Clean up after failing to open (e.g., open(2) returns with -ENOENT).
+ *
+ * This represents opportunities to shave on work in the common case compared
+ * to the usual fput:
+ * 1. vast majority of the time FMODE_OPENED is not set, meaning there is no
+ *    need to delegate to task_work
+ * 2. if the above holds then we are guaranteed we have the only reference with
+ *    nobody else seeing the file, thus no need to use atomics to release it
+ * 3. then there is no need to delegate freeing to RCU
+ */
+void fput_badopen(struct file *file)
+{
+	if (unlikely(file->f_mode & (FMODE_BACKING | FMODE_OPENED))) {
+		fput(file);
+		return;
+	}
+
+	if (WARN_ON(atomic_long_read(&file->f_count) != 1)) {
+		fput(file);
+		return;
+	}
+
+	/* zero out the ref count to appease possible asserts */
+	atomic_long_set(&file->f_count, 0);
+	file_free_badopen(file);
+}
+EXPORT_SYMBOL(fput_badopen);
 
 void __init files_init(void)
 {

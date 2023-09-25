@@ -15,6 +15,7 @@
 struct file;
 
 extern void fput(struct file *);
+extern void fput_badopen(struct file *);
 
 struct file_operations;
 struct task_struct;
