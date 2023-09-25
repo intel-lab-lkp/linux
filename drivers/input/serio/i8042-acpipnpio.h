@@ -831,6 +831,14 @@ static const struct dmi_system_id i8042_dmi_quirk_table[] __initconst = {
 		.driver_data = (void *)(SERIO_QUIRK_RESET_ALWAYS)
 	},
 	{
+		/* Lenovo ThinkPad T14 Gen 1*/
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "20S0002UUS")
+		},
+		.driver_data = (void *)(SERIO_QUIRK_NOPNP)
+	},
+	{
 		/* Lenovo ThinkPad Twist S230u */
 		.matches = {
 			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
