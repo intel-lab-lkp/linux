@@ -321,6 +321,14 @@ static int setup_metric_events(const char *pmu, struct hashmap *ids,
 		}
 	}
 	if (matched_events < ids_size) {
+		struct hashmap_entry *cur;
+		size_t bkt;
+
+		hashmap__for_each_entry(ids, cur, bkt) {
+			const char *id = cur->pkey;
+
+			pr_debug("Need event %s\n", id);
+		}
 		free(metric_events);
 		return -EINVAL;
 	}
@@ -2106,11 +2114,16 @@ static int hw_aware_build_grouping(struct expr_parse_ctx *ctx,
 #define RETURN_IF_NON_ZERO(x) do { if (x) return x; } while (0)
 	hashmap__for_each_entry(ctx->ids, cur, bkt) {
 		const char *id = cur->pkey;
-		const char *special_pattern = "topdown-";
+		const char *pattern1 = "topdown-";
+		const char *pattern2 = "TSC";
 
 		pr_debug("found event %s\n", id);
-		if (!strncmp(id, special_pattern, strlen(special_pattern))) {
+		if (!strncmp(id, pattern1, strlen(pattern1)) ||
+		    !strncmp(id, pattern2, strlen(pattern2))) {
 			struct metricgroup__event_info *event;
+			/* topdown-* and TSC use dedicated registers, set as free
+			 * counter here for grouping
+			 */
 			event = event_info__new(id, "default_core", "0", false,
 						/*free_counter=*/true);
 			if (!event) {
@@ -2602,8 +2615,10 @@ int metricgroup__parse_groups(struct evlist *perf_evlist,
 		ret = hw_aware_parse_groups(perf_evlist, pmu, str,
 			    metric_no_threshold, user_requested_cpu_list, system_wide,
 			    /*fake_pmu=*/NULL, metric_events, table);
-		if (!ret)
+		if (!ret) {
+			pr_info("Hardware aware grouping completed\n");
 			return 0;
+		}
 	}
 
 	return parse_groups(perf_evlist, pmu, str, metric_no_group, metric_no_merge,
