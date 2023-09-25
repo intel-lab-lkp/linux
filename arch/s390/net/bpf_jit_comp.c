@@ -2645,17 +2645,6 @@ int arch_prepare_bpf_trampoline(struct bpf_tramp_image *im, void *image,
 	struct bpf_tramp_jit tjit;
 	int ret;
 
-	ret = arch_bpf_trampoline_size(m, flags, tlinks, func_addr);
-	if (ret < 0)
-		return ret;
-
-	if (ret > (char *)image_end - (char *)image)
-		/*
-		 * Use the same error code as for exceeding
-		 * BPF_MAX_TRAMP_LINKS.
-		 */
-		return -E2BIG;
-
 	memset(&tjit, 0, sizeof(tjit));
 	tjit.common.prg_buf = image;
 	ret = __arch_prepare_bpf_trampoline(im, &tjit, m, flags,
