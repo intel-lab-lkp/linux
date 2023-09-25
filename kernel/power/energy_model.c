@@ -23,6 +23,9 @@
  */
 static DEFINE_MUTEX(em_pd_mutex);
 
+static void em_cpufreq_update_efficiencies(struct device *dev,
+					   struct em_perf_state *table);
+
 static bool _is_cpu_device(struct device *dev)
 {
 	return (dev->bus == &cpu_subsys);
@@ -103,6 +106,32 @@ fs_initcall(em_debug_init);
 static void em_debug_create_pd(struct device *dev) {}
 static void em_debug_remove_pd(struct device *dev) {}
 #endif
+
+static void em_destroy_rt_table_rcu(struct rcu_head *rp)
+{
+	struct em_perf_table *runtime_table;
+
+	runtime_table = container_of(rp, struct em_perf_table, rcu);
+	kfree(runtime_table->state);
+	kfree(runtime_table);
+}
+
+static void em_perf_runtime_table_set(struct device *dev,
+				      struct em_perf_table *runtime_table)
+{
+	struct em_perf_domain *pd = dev->em_pd;
+	struct em_perf_table *tmp;
+
+	tmp = pd->runtime_table;
+
+	rcu_assign_pointer(pd->runtime_table, runtime_table);
+
+	em_cpufreq_update_efficiencies(dev, runtime_table->state);
+
+	/* Don't free default table since it's used by other frameworks. */
+	if (tmp != pd->default_table)
+		call_rcu(&tmp->rcu, em_destroy_rt_table_rcu);
+}
 
 static int em_compute_costs(struct device *dev, struct em_perf_state *table,
 			    struct em_data_callback *cb, int nr_states,
