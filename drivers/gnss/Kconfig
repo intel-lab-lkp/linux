@@ -4,7 +4,7 @@
 #
 
 menuconfig GNSS
-	tristate "GNSS receiver support"
+	tristate "GNSS (Global Navigation Satellite System) receiver support"
 	help
 	  Say Y here if you have a GNSS receiver (e.g. a GPS receiver).
 
