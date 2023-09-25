@@ -1450,6 +1450,27 @@ static int set_counter_bitmap(int pos, unsigned long *bitmap)
 	return 0;
 }
 
+static int find_counter_bitmap(unsigned long *addr1,
+			      unsigned long *addr2,
+			      unsigned long *bit)
+{
+	unsigned long find_bit = find_next_and_bit(addr1, addr2, NR_COUNTERS, 0);
+
+	if (find_bit == NR_COUNTERS)
+		return -ERANGE;
+	*bit = find_bit;
+	return 0;
+}
+
+static int use_counter_bitmap(unsigned long *bitmap,
+			     unsigned long find_bit)
+{
+	if (find_bit >= NR_COUNTERS)
+		return -EINVAL;
+	bitmap_clear(bitmap, find_bit, 1);
+	return 0;
+}
+
 static int parse_fixed_counter(const char *counter,
 			      unsigned long *bitmap,
 			      bool *fixed)
@@ -1682,11 +1703,101 @@ static int get_pmu_counter_layouts(struct list_head *pmu_info_list,
 }
 
 /**
+ * Find if there is a counter available for event e in current_group. If a
+ * counter is available, use this counter by fill the bit in the correct counter
+ * bitmap. Otherwise, return error (-ERANGE).
+ */
+static int find_and_set_counters(struct metricgroup__event_info *e,
+				struct metricgroup__group *current_group)
+{
+	int ret;
+	unsigned long find_bit = 0;
+
+	if (e->free_counter)
+		return 0;
+	if (e->fixed_counter) {
+		ret = find_counter_bitmap(current_group->fixed_counters, e->counters,
+					 &find_bit);
+		if (ret)
+			return ret;
+		pr_debug("found counter for [event]=%s [e->fixed_counters]=%lu\n",
+			e->name, *current_group->fixed_counters);
+		ret = use_counter_bitmap(current_group->fixed_counters, find_bit);
+	} else {
+		ret = find_counter_bitmap(current_group->gp_counters, e->counters,
+					 &find_bit);
+		if (ret)
+			return ret;
+		pr_debug("found counter for [event]=%s [e->gp_counters]=%lu\n",
+			e->name, *current_group->gp_counters);
+		ret = use_counter_bitmap(current_group->gp_counters, find_bit);
+	}
+	return ret;
+}
+
+static int _insert_event(struct metricgroup__event_info *e,
+			struct metricgroup__group *group)
+{
+	struct metricgroup__group_events *event = malloc(sizeof(struct metricgroup__group_events));
+
+	if (!event)
+		return -ENOMEM;
+	event->event_name = e->name;
+	if (e->fixed_counter)
+		list_add(&event->nd, &group->event_head);
+	else
+		list_add_tail(&event->nd, &group->event_head);
+	return 0;
+}
+
+/**
+ * Insert event e into a group capable to include it
+ *
+ */
+static int insert_event_to_group(struct metricgroup__event_info *e,
+				struct metricgroup__pmu_group_list *pmu_group_head)
+{
+	struct metricgroup__group *g;
+	int ret;
+	//struct list_head *head;
+
+	list_for_each_entry(g, &pmu_group_head->group_head, nd) {
+		ret = find_and_set_counters(e, g);
+		if (!ret) { /* return if successfully find and set counter*/
+			ret = _insert_event(e, g);
+			return ret;
+		}
+	}
+	/*
+	 * We were not able to find an existing group to insert this event.
+	 * Continue to create a new group and insert the event in it.
+	 */
+	{
+		struct metricgroup__group *current_group = malloc(sizeof(struct metricgroup__group));
+		if (!current_group)
+			return -ENOMEM;
+		pr_debug("create_new_group for [event] %s\n", e->name);
+
+		//head = &pmu_group_head->group_head;
+		//ret = create_new_group(head, current_group, pmu_group_head->size,
+		//			pmu_group_head->fixed_size);
+		if (ret)
+			return ret;
+		ret = find_and_set_counters(e, current_group);
+		if (ret)
+			return ret;
+		ret = _insert_event(e, current_group);
+	}
+
+	return ret;
+}
+
+/**
  * assign_event_grouping - Assign an event into a group. If existing group
  * cannot include it, create a new group and insert the event to it.
  */
 static int assign_event_grouping(struct metricgroup__event_info *e,
-				struct list_head *pmu_info_list __maybe_unused,
+				struct list_head *pmu_info_list,
 				struct list_head *groups)
 {
 	int ret = 0;
@@ -1717,7 +1828,7 @@ static int assign_event_grouping(struct metricgroup__event_info *e,
 		list_add_tail(&pmu_group_head->nd, groups);
 	}
 
-	//ret = insert_event_to_group(e, pmu_group_head, pmu_info_list);
+	ret = insert_event_to_group(e, pmu_group_head);
 	return ret;
 }
 
