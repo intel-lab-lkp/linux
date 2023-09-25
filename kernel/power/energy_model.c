@@ -172,6 +172,101 @@ static int em_compute_costs(struct device *dev, struct em_perf_state *table,
 	return 0;
 }
 
+/**
+ * em_dev_update_perf_domain() - Update runtime EM table for a device
+ * @dev		: Device for which the EM is to be updated
+ * @cb		: Callback function providing the power data for the EM
+ * @priv	: Pointer to private data useful for passing context
+ *		which might be required while calling @cb
+ *
+ * Update EM runtime modifiable table for a @dev using the callback
+ * defined in @cb. The EM new power values are then used for calculating
+ * the em_perf_state::cost for associated performance state.
+ *
+ * This function uses mutex to serialize writers, so it must not be called
+ * from non-sleeping context.
+ *
+ * Return 0 on success or a proper error in case of failure.
+ */
+int em_dev_update_perf_domain(struct device *dev, struct em_data_callback *cb,
+			      void *priv)
+{
+	struct em_perf_table *runtime_table;
+	unsigned long power, freq;
+	struct em_perf_domain *pd;
+	int ret, i;
+
+	if (!cb || !cb->update_power)
+		return -EINVAL;
+
+	/*
+	 * The lock serializes update and unregister code paths. When the
+	 * EM has been unregistered in the meantime, we should capture that
+	 * when entering this critical section. It also makes sure that
+	 * two concurrent updates will be serialized.
+	 */
+	mutex_lock(&em_pd_mutex);
+
+	if (!dev || !dev->em_pd) {
+		ret = -EINVAL;
+		goto unlock_em;
+	}
+
+	pd = dev->em_pd;
+
+	runtime_table = kzalloc(sizeof(*runtime_table), GFP_KERNEL);
+	if (!runtime_table) {
+		ret = -ENOMEM;
+		goto unlock_em;
+	}
+
+	runtime_table->state = kcalloc(pd->nr_perf_states,
+				       sizeof(struct em_perf_state),
+				       GFP_KERNEL);
+	if (!runtime_table->state) {
+		ret = -ENOMEM;
+		goto free_runtime_table;
+	}
+
+	/* Populate runtime table with updated values using driver callback */
+	for (i = 0; i < pd->nr_perf_states; i++) {
+		freq = pd->default_table->state[i].frequency;
+		runtime_table->state[i].frequency = freq;
+
+		/*
+		 * Call driver callback to get a new power value for
+		 * a given frequency.
+		 */
+		ret = cb->update_power(dev, freq, &power, priv);
+		if (ret) {
+			dev_dbg(dev, "EM: runtime update error: %d\n", ret);
+			goto free_runtime_state_table;
+		}
+
+		runtime_table->state[i].power = power;
+	}
+
+	ret = em_compute_costs(dev, runtime_table->state, cb,
+			       pd->nr_perf_states, pd->flags);
+	if (ret)
+		goto free_runtime_state_table;
+
+	em_perf_runtime_table_set(dev, runtime_table);
+
+	mutex_unlock(&em_pd_mutex);
+	return 0;
+
+free_runtime_state_table:
+	kfree(runtime_table->state);
+free_runtime_table:
+	kfree(runtime_table);
+unlock_em:
+	mutex_unlock(&em_pd_mutex);
+
+	return -EINVAL;
+}
+EXPORT_SYMBOL_GPL(em_dev_update_perf_domain);
+
 static int em_create_perf_table(struct device *dev, struct em_perf_domain *pd,
 				int nr_states, struct em_data_callback *cb,
 				unsigned long flags)
@@ -494,6 +589,8 @@ void em_dev_unregister_perf_domain(struct device *dev)
 	 * The mutex separates all register/unregister requests and protects
 	 * from potential clean-up/setup issues in the debugfs directories.
 	 * The debugfs directory name is the same as device's name.
+	 * The lock also protects the updater of the runtime modifiable
+	 * EM and this remover.
 	 */
 	mutex_lock(&em_pd_mutex);
 
@@ -501,8 +598,22 @@ void em_dev_unregister_perf_domain(struct device *dev)
 
 	runtime_table = pd->runtime_table;
 
+	/*
+	 * Safely destroy runtime modifiable EM. By using the call
+	 * synchronize_rcu() we make sure we don't progress till last user
+	 * finished the RCU section and our update got applied.
+	 */
 	rcu_assign_pointer(pd->runtime_table, NULL);
 	synchronize_rcu();
+
+	/*
+	 * After the sync no updates will be in-flight, so free the
+	 * memory allocated for runtime table (if there was such).
+	 */
+	if (runtime_table != pd->default_table) {
+		kfree(runtime_table->state);
+		kfree(runtime_table);
+	}
 
 	kfree(pd->default_table->state);
 	kfree(pd->default_table);

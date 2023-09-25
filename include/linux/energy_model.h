@@ -201,6 +201,8 @@ struct em_data_callback {
 
 struct em_perf_domain *em_cpu_get(int cpu);
 struct em_perf_domain *em_pd_get(struct device *dev);
+int em_dev_update_perf_domain(struct device *dev, struct em_data_callback *cb,
+			      void *priv);
 int em_dev_register_perf_domain(struct device *dev, unsigned int nr_states,
 				struct em_data_callback *cb, cpumask_t *span,
 				bool microwatts);
@@ -383,6 +385,12 @@ static inline unsigned long em_cpu_energy(struct em_perf_domain *pd,
 static inline int em_pd_nr_perf_states(struct em_perf_domain *pd)
 {
 	return 0;
+}
+static inline
+int em_dev_update_perf_domain(struct device *dev, struct em_data_callback *cb,
+			      void *priv)
+{
+	return -EINVAL;
 }
 #endif
 
