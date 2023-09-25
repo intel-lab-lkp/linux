@@ -12,6 +12,7 @@
 
 #include "viif.h"
 #include "viif_common.h"
+#include "viif_controls.h"
 #include "viif_isp.h"
 #include "viif_regs.h"
 
@@ -762,12 +763,9 @@ int visconti_viif_isp_main_set_unit(struct viif_device *viif_dev)
 	hwd_viif_isp_set_regbuf_auto_transmission(viif_dev);
 
 	/* L2 UNDIST Enable through mode as default  */
-	/* this function is implemented in the next patch */
-	/*
-	 * ret = visconti_viif_l2_undist_through(viif_dev);
-	 * if (ret)
-	 *	dev_err(viif_dev->dev, "l2_set_undist error. %d\n", ret);
-	 */
+	ret = visconti_viif_l2_undist_through(viif_dev);
+	if (ret)
+		dev_err(viif_dev->dev, "l2_set_undist error. %d\n", ret);
 	return ret;
 }
 
@@ -1231,10 +1229,7 @@ int visconti_viif_isp_register(struct viif_device *viif_dev)
 
 	mutex_init(&viif_dev->isp_subdev.ops_lock);
 
-	/* this function is implemented in the next patch */
-/*
- *	visconti_viif_isp_init_controls(viif_dev);
- */
+	visconti_viif_isp_init_controls(viif_dev);
 
 	ret = media_entity_pads_init(&sd->entity, 4, pads);
 	if (ret) {

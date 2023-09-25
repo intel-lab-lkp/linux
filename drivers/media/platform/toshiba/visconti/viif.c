@@ -18,6 +18,7 @@
 
 #include "viif.h"
 #include "viif_capture.h"
+#include "viif_controls.h"
 #include "viif_csi2rx.h"
 #include "viif_common.h"
 #include "viif_isp.h"
@@ -173,12 +174,9 @@ static inline struct viif_device *v4l2_to_viif(struct v4l2_device *v4l2_dev)
 /* before a userland capture application is trigered by vb2_buffer_done() */
 static void visconti_viif_wthread_l1info(struct work_struct *work)
 {
-	/* called function is implemented by the next patch */
-/*
- *	struct viif_device *viif_dev = container_of(work, struct viif_device, work);
- *
- *	visconti_viif_save_l1_info(viif_dev);
- */
+	struct viif_device *viif_dev = container_of(work, struct viif_device, work);
+
+	visconti_viif_save_l1_info(viif_dev);
 }
 
 static void viif_vsync_irq_handler_w_isp(struct viif_device *viif_dev)

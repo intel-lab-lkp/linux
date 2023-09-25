@@ -367,7 +367,9 @@ void v4l2_ctrl_type_op_log(const struct v4l2_ctrl *ctrl)
 	case V4L2_CTRL_TYPE_AV1_FILM_GRAIN:
 		pr_cont("AV1_FILM_GRAIN");
 		break;
-
+	case V4L2_CTRL_TYPE_VISCONTI_ISP:
+		pr_cont("VISCONTI_ISP");
+		break;
 	default:
 		pr_cont("unknown type %d", ctrl->type);
 		break;
@@ -1162,6 +1164,9 @@ static int std_validate_compound(const struct v4l2_ctrl *ctrl, u32 idx,
 		break;
 	case V4L2_CTRL_TYPE_AV1_FILM_GRAIN:
 		return validate_av1_film_grain(p);
+
+	case V4L2_CTRL_TYPE_VISCONTI_ISP:
+		break;
 
 	case V4L2_CTRL_TYPE_AREA:
 		area = p;
