@@ -477,11 +477,19 @@ static int snp_cpuid_postprocess(struct ghcb *ghcb, struct es_em_ctxt *ctxt,
 		if (leaf->subfn == 1) {
 			/* Get XSS value if XSAVES is enabled. */
 			if (leaf->eax & BIT(3)) {
-				unsigned long lo, hi;
+				/*
+				 * Since we're here, it is SNP and rdmsr will trigger
+				 * another #VC and waste one of just two GHCB pages.
+				 * Skip the intercept and do direct hypercall.
+				 */
+				ghcb_set_rcx(ghcb, MSR_IA32_XSS);
+				if (sev_es_ghcb_hv_call(ghcb, ctxt, SVM_EXIT_MSR, 0, 0) != ES_OK)
+					return -EINVAL;
 
-				asm volatile("rdmsr" : "=a" (lo), "=d" (hi)
-						     : "c" (MSR_IA32_XSS));
-				xss = (hi << 32) | lo;
+				xss = (ghcb->save.rdx << 32) | ghcb->save.rax;
+
+				/* Invalidate qwords for likely another following GHCB call */
+				vc_ghcb_invalidate(ghcb);
 			}
 
 			/*
