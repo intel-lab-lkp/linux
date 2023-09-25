@@ -3478,7 +3478,7 @@ MODULE_DEVICE_TABLE(acpi, acpi_nfit_ids);
 static struct platform_driver acpi_nfit_driver = {
 	.probe = acpi_nfit_probe,
 	.driver = {
-		.name = KBUILD_MODNAME,
+		.name = "nfit",
 		.acpi_match_table = acpi_nfit_ids,
 	},
 };
