@@ -982,7 +982,6 @@ static int gic_iterate_rdists(int (*fn)(struct redist_region *, void __iomem *))
 		}
 
 		do {
-			typer = gic_read_typer(ptr + GICR_TYPER);
 			ret = fn(gic_data.redist_regions + i, ptr);
 			if (!ret)
 				return 0;
@@ -990,6 +989,7 @@ static int gic_iterate_rdists(int (*fn)(struct redist_region *, void __iomem *))
 			if (gic_data.redist_regions[i].single_redist)
 				break;
 
+			typer = gic_read_typer(ptr + GICR_TYPER);
 			if (gic_data.redist_stride) {
 				ptr += gic_data.redist_stride;
 			} else {
