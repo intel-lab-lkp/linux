@@ -41,6 +41,7 @@
 #include <linux/uuid.h>
 #include <linux/ras.h>
 #include <linux/task_work.h>
+#include <linux/pstore.h>
 
 #include <acpi/actbl1.h>
 #include <acpi/ghes.h>
@@ -636,6 +637,43 @@ static void ghes_defer_non_standard_event(struct acpi_hest_generic_data *gdata,
 	schedule_work(&entry->work);
 }
 
+static int ghes_serialize_estatus(struct acpi_hest_generic_data *gdata, u8 notify_type)
+{
+	void *err = acpi_hest_get_payload(gdata);
+	int data_len = gdata->error_data_length;
+	struct cper_pstore_record *rcd;
+	int record_len = data_len + sizeof(*rcd);
+
+	rcd = kmalloc(record_len, GFP_KERNEL);
+	memset(rcd, 0, sizeof(*rcd));
+
+	memcpy(rcd->hdr.signature, CPER_SIG_RECORD, CPER_SIG_SIZE);
+	rcd->hdr.revision = CPER_RECORD_REV;
+	rcd->hdr.signature_end = CPER_SIG_END;
+	rcd->hdr.section_count = 1;
+	rcd->hdr.error_severity = CPER_SEV_FATAL;
+	/* timestamp, platform_id, partition_id are all invalid */
+	rcd->hdr.validation_bits = 0;
+	rcd->hdr.record_length = record_len;
+	rcd->hdr.creator_id = CPER_CREATOR_PSTORE;
+	rcd->hdr.notification_type = CPER_NOTIFY_MCE;
+	rcd->hdr.record_id = cper_next_record_id();
+	rcd->hdr.flags = CPER_HW_ERROR_FLAGS_PREVERR;
+
+	rcd->sec_hdr.section_offset = (void *)&rcd->data - (void *)&rcd;
+	rcd->sec_hdr.section_length = data_len;
+	rcd->sec_hdr.revision = CPER_SEC_REV;
+	/* ->ru_id and fru_text is invalid */
+	rcd->sec_hdr.validation_bits = 0;
+	rcd->sec_hdr.flags = CPER_SEC_PRIMARY;
+	rcd->sec_hdr.section_type = gdata->section_type;
+	rcd->sec_hdr.section_severity = gdata->error_severity;
+
+	memcpy(&rcd->data, err, data_len);
+
+	return erst_write(&rcd->hdr);
+}
+
 static bool ghes_do_proc(struct ghes *ghes,
 			 const struct acpi_hest_generic_status *estatus)
 {
@@ -861,9 +899,15 @@ static void __ghes_panic(struct ghes *ghes,
 			 struct acpi_hest_generic_status *estatus,
 			 u64 buf_paddr, enum fixed_addresses fixmap_idx)
 {
+	struct acpi_hest_generic_data *gdata;
+	u8 notify_type = ghes->generic->notify.type;
+
 	__ghes_print_estatus(KERN_EMERG, ghes->generic, estatus);
 
 	ghes_clear_estatus(ghes, estatus, buf_paddr, fixmap_idx);
+
+	apei_estatus_for_each_section(estatus, gdata)
+		ghes_serialize_estatus(gdata, notify_type);
 
 	/* reboot to log the error! */
 	if (!panic_timeout)
