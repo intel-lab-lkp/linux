@@ -29,6 +29,7 @@
 #include <acpi/ghes.h>
 #include <linux/aer.h>
 #include <linux/pci.h>
+#include <linux/ras.h>
 #ifdef CONFIG_X86_MCE
 /* only define CREATE_TRACE_POINTS once */
 #include <trace/events/mce.h>
@@ -1092,6 +1093,11 @@ skip:
 		cper_print_aer(
 			pdev, AER_FATAL,
 			(struct aer_capability_regs *)pcie_err->aer_info);
+	} else if (guid_equal(&rcd->sec_hdr.section_type, &CPER_SEC_PROC_ARM)) {
+		struct cper_sec_proc_arm *err = (struct cper_sec_proc_arm *)rcd->data;
+
+		record->type = PSTORE_TYPE_CPER_PROC_ARM;
+		log_arm_hw_error(err);
 	}
 	else
 		record->type = PSTORE_TYPE_MAX;
