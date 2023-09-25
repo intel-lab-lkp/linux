@@ -251,6 +251,9 @@ static int em_create_pd(struct device *dev, int nr_states,
 		return ret;
 	}
 
+	/* Initialize runtime table as default table. */
+	rcu_assign_pointer(pd->runtime_table, default_table);
+
 	if (_is_cpu_device(dev))
 		for_each_cpu(cpu, cpus) {
 			cpu_dev = get_cpu_device(cpu);
@@ -448,6 +451,7 @@ EXPORT_SYMBOL_GPL(em_dev_register_perf_domain);
  */
 void em_dev_unregister_perf_domain(struct device *dev)
 {
+	struct em_perf_table __rcu *runtime_table;
 	struct em_perf_domain *pd;
 
 	if (IS_ERR_OR_NULL(dev) || !dev->em_pd)
@@ -457,18 +461,24 @@ void em_dev_unregister_perf_domain(struct device *dev)
 		return;
 
 	pd = dev->em_pd;
-
 	/*
 	 * The mutex separates all register/unregister requests and protects
 	 * from potential clean-up/setup issues in the debugfs directories.
 	 * The debugfs directory name is the same as device's name.
 	 */
 	mutex_lock(&em_pd_mutex);
+
 	em_debug_remove_pd(dev);
+
+	runtime_table = pd->runtime_table;
+
+	rcu_assign_pointer(pd->runtime_table, NULL);
+	synchronize_rcu();
 
 	kfree(pd->default_table->state);
 	kfree(pd->default_table);
 	kfree(dev->em_pd);
+
 	dev->em_pd = NULL;
 	mutex_unlock(&em_pd_mutex);
 }

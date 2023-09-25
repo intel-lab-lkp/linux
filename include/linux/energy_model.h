@@ -39,7 +39,7 @@ struct em_perf_state {
 /**
  * struct em_perf_table - Performance states table
  * @state:	List of performance states, in ascending order
- * @rcu:	RCU used for safe access and destruction
+ * @rcu:	RCU used only for runtime modifiable table
  */
 struct em_perf_table {
 	struct em_perf_state *state;
@@ -49,6 +49,7 @@ struct em_perf_table {
 /**
  * struct em_perf_domain - Performance domain
  * @default_table:	Pointer to the default em_perf_table
+ * @runtime_table:	Pointer to the runtime modifiable em_perf_table
  * @nr_perf_states:	Number of performance states
  * @flags:		See "em_perf_domain flags"
  * @cpus:		Cpumask covering the CPUs of the domain. It's here
@@ -64,6 +65,7 @@ struct em_perf_table {
  */
 struct em_perf_domain {
 	struct em_perf_table *default_table;
+	struct em_perf_table __rcu *runtime_table;
 	int nr_perf_states;
 	unsigned long flags;
 	unsigned long cpus[];
