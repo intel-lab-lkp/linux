@@ -3295,7 +3295,7 @@ static void acpi_nfit_remove_notify_handler(void *data)
 {
 	struct acpi_device *adev = data;
 
-	acpi_dev_remove_notify_handler(adev, ACPI_DEVICE_NOTIFY,
+	acpi_dev_remove_notify_handler(adev->handle, ACPI_DEVICE_NOTIFY,
 				       acpi_nfit_notify);
 }
 
@@ -3390,8 +3390,8 @@ static int acpi_nfit_add(struct acpi_device *adev)
 	if (rc)
 		return rc;
 
-	rc = acpi_dev_install_notify_handler(adev, ACPI_DEVICE_NOTIFY,
-					     acpi_nfit_notify);
+	rc = acpi_dev_install_notify_handler(adev->handle, ACPI_DEVICE_NOTIFY,
+					     acpi_nfit_notify, adev);
 	if (rc)
 		return rc;
 

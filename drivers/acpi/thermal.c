@@ -978,8 +978,8 @@ static int acpi_thermal_add(struct acpi_device *device)
 	pr_info("%s [%s] (%ld C)\n", acpi_device_name(device),
 		acpi_device_bid(device), deci_kelvin_to_celsius(tz->temperature));
 
-	result = acpi_dev_install_notify_handler(device, ACPI_DEVICE_NOTIFY,
-						 acpi_thermal_notify);
+	result = acpi_dev_install_notify_handler(device->handle, ACPI_DEVICE_NOTIFY,
+						 acpi_thermal_notify, device);
 	if (result)
 		goto flush_wq;
 
@@ -1005,7 +1005,7 @@ static void acpi_thermal_remove(struct acpi_device *device)
 
 	tz = acpi_driver_data(device);
 
-	acpi_dev_remove_notify_handler(device, ACPI_DEVICE_NOTIFY,
+	acpi_dev_remove_notify_handler(device->handle, ACPI_DEVICE_NOTIFY,
 				       acpi_thermal_notify);
 
 	flush_workqueue(acpi_thermal_pm_queue);

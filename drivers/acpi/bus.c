@@ -554,14 +554,13 @@ static void acpi_device_remove_notify_handler(struct acpi_device *device,
 	acpi_os_wait_events_complete();
 }
 
-int acpi_dev_install_notify_handler(struct acpi_device *adev,
-				    u32 handler_type,
-				    acpi_notify_handler handler)
+int acpi_dev_install_notify_handler(acpi_handle handle, u32 handler_type,
+				    acpi_notify_handler handler, void *context)
 {
 	acpi_status status;
 
-	status = acpi_install_notify_handler(adev->handle, handler_type,
-					     handler, adev);
+	status = acpi_install_notify_handler(handle, handler_type,
+					     handler, context);
 	if (ACPI_FAILURE(status))
 		return -ENODEV;
 
@@ -569,11 +568,10 @@ int acpi_dev_install_notify_handler(struct acpi_device *adev,
 }
 EXPORT_SYMBOL_GPL(acpi_dev_install_notify_handler);
 
-void acpi_dev_remove_notify_handler(struct acpi_device *adev,
-				    u32 handler_type,
+void acpi_dev_remove_notify_handler(acpi_handle handle, u32 handler_type,
 				    acpi_notify_handler handler)
 {
-	acpi_remove_notify_handler(adev->handle, handler_type, handler);
+	acpi_remove_notify_handler(handle, handler_type, handler);
 	acpi_os_wait_events_complete();
 }
 EXPORT_SYMBOL_GPL(acpi_dev_remove_notify_handler);

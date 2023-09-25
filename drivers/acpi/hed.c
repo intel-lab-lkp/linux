@@ -56,8 +56,8 @@ static int acpi_hed_add(struct acpi_device *device)
 		return -EINVAL;
 	hed_handle = device->handle;
 
-	err = acpi_dev_install_notify_handler(device, ACPI_DEVICE_NOTIFY,
-					      acpi_hed_notify);
+	err = acpi_dev_install_notify_handler(device->handle, ACPI_DEVICE_NOTIFY,
+					      acpi_hed_notify, device);
 	if (err)
 		hed_handle = NULL;
 
@@ -66,7 +66,7 @@ static int acpi_hed_add(struct acpi_device *device)
 
 static void acpi_hed_remove(struct acpi_device *device)
 {
-	acpi_dev_remove_notify_handler(device, ACPI_DEVICE_NOTIFY,
+	acpi_dev_remove_notify_handler(device->handle, ACPI_DEVICE_NOTIFY,
 				       acpi_hed_notify);
 	hed_handle = NULL;
 }

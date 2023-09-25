@@ -1213,8 +1213,8 @@ static int acpi_battery_add(struct acpi_device *device)
 
 	device_init_wakeup(&device->dev, 1);
 
-	result = acpi_dev_install_notify_handler(device, ACPI_ALL_NOTIFY,
-						 acpi_battery_notify);
+	result = acpi_dev_install_notify_handler(device->handle, ACPI_ALL_NOTIFY,
+						 acpi_battery_notify, device);
 	if (result)
 		goto fail_pm;
 
@@ -1241,7 +1241,7 @@ static void acpi_battery_remove(struct acpi_device *device)
 
 	battery = acpi_driver_data(device);
 
-	acpi_dev_remove_notify_handler(device, ACPI_ALL_NOTIFY,
+	acpi_dev_remove_notify_handler(device->handle, ACPI_ALL_NOTIFY,
 				       acpi_battery_notify);
 
 	device_init_wakeup(&device->dev, 0);
