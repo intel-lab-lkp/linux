@@ -32,25 +32,29 @@ properties:
     maxItems: 1
 
   interrupts:
-    description: |
-      There are 4 slots available in the IP, which the driver may use
-      If a certain slot is used, it should have an associated interrupt
-      The interrupt with index i is assumed to be for slot i
-    minItems: 1               # At least one slot is needed by the driver
-    maxItems: 4               # The IP has 4 slots available for use
+    description:
+      Interrupt number for slot
+    maxItems: 1
 
   power-domains:
     description:
       List of phandle and PM domain specifier as documented in
       Documentation/devicetree/bindings/power/power_domain.txt
-    minItems: 2               # Wrapper and 1 slot
-    maxItems: 5               # Wrapper and 4 slots
+    minItems: 1               # VPUMIX
+    maxItems: 2               # Wrapper and 1 slot
+
+  nxp,slot:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: Integer number of slot index used.
+    minimum: 0
+    maximum: 3
 
 required:
   - compatible
   - reg
   - interrupts
   - power-domains
+  - nxp,slot
 
 additionalProperties: false
 
@@ -62,28 +66,18 @@ examples:
     jpegdec: jpegdec@58400000 {
         compatible = "nxp,imx8qxp-jpgdec";
         reg = <0x58400000 0x00050000 >;
-        interrupts = <GIC_SPI 309 IRQ_TYPE_LEVEL_HIGH>,
-                     <GIC_SPI 310 IRQ_TYPE_LEVEL_HIGH>,
-                     <GIC_SPI 311 IRQ_TYPE_LEVEL_HIGH>,
-                     <GIC_SPI 312 IRQ_TYPE_LEVEL_HIGH>;
+        interrupts = <GIC_SPI 309 IRQ_TYPE_LEVEL_HIGH>;
         power-domains = <&pd IMX_SC_R_MJPEG_DEC_MP>,
-                        <&pd IMX_SC_R_MJPEG_DEC_S0>,
-                        <&pd IMX_SC_R_MJPEG_DEC_S1>,
-                        <&pd IMX_SC_R_MJPEG_DEC_S2>,
-                        <&pd IMX_SC_R_MJPEG_DEC_S3>;
+                        <&pd IMX_SC_R_MJPEG_DEC_S0>;
+        nxp,slot = <0>;
     };
 
     jpegenc: jpegenc@58450000 {
         compatible = "nxp,imx8qm-jpgenc", "nxp,imx8qxp-jpgenc";
         reg = <0x58450000 0x00050000 >;
-        interrupts = <GIC_SPI 305 IRQ_TYPE_LEVEL_HIGH>,
-                     <GIC_SPI 306 IRQ_TYPE_LEVEL_HIGH>,
-                     <GIC_SPI 307 IRQ_TYPE_LEVEL_HIGH>,
-                     <GIC_SPI 308 IRQ_TYPE_LEVEL_HIGH>;
+        interrupts = <GIC_SPI 305 IRQ_TYPE_LEVEL_HIGH>;
         power-domains = <&pd IMX_SC_R_MJPEG_ENC_MP>,
-                        <&pd IMX_SC_R_MJPEG_ENC_S0>,
-                        <&pd IMX_SC_R_MJPEG_ENC_S1>,
-                        <&pd IMX_SC_R_MJPEG_ENC_S2>,
-                        <&pd IMX_SC_R_MJPEG_ENC_S3>;
+                        <&pd IMX_SC_R_MJPEG_ENC_S0>;
+        nxp,slot = <0>;
     };
 ...
