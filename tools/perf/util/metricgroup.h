@@ -5,6 +5,7 @@
 #include <linux/list.h>
 #include <linux/rbtree.h>
 #include <stdbool.h>
+#include <linux/bitmap.h>
 #include "pmu-events/pmu-events.h"
 #include "strbuf.h"
 
@@ -65,6 +66,23 @@ struct metric_expr {
 	struct metric_ref *metric_refs;
 	/** A value substituted for '?' during parsing. */
 	int runtime;
+};
+
+/* Maximum number of counters per PMU*/
+#define NR_COUNTERS	16
+/**
+ * An event used in a metric. This info is for metric grouping.
+ */
+struct metricgroup__event_info {
+	struct list_head nd;
+	/** The name of the event. */
+	const char *name;
+	/** The name of the pmu the event be collected on. */
+	const char *pmu_name;
+	bool fixed_counter;
+	bool free_counter;
+	/** The counters the event allowed to be collected on. */
+	DECLARE_BITMAP(counters, NR_COUNTERS);
 };
 
 /**
