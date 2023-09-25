@@ -2760,6 +2760,7 @@ static int ca8210_register_ext_clock(struct spi_device *spi)
 	ret = of_clk_add_provider(np, of_clk_src_simple_get, priv->clk);
 	if (ret) {
 		clk_unregister(priv->clk);
+		priv->clk = NULL;
 		dev_crit(
 			&spi->dev,
 			"Failed to register external clock as clock provider\n"
@@ -2780,7 +2781,7 @@ static void ca8210_unregister_ext_clock(struct spi_device *spi)
 {
 	struct ca8210_priv *priv = spi_get_drvdata(spi);
 
-	if (!priv->clk)
+	if (IS_ERR_OR_NULL(priv->clk))
 		return
 
 	of_clk_del_provider(spi->dev.of_node);
