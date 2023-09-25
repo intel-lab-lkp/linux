@@ -81,6 +81,7 @@ struct metricgroup__event_info {
 	const char *pmu_name;
 	bool fixed_counter;
 	bool free_counter;
+	bool taken_alone;
 	/** The counters the event allowed to be collected on. */
 	DECLARE_BITMAP(counters, NR_COUNTERS);
 };
@@ -130,6 +131,7 @@ struct metricgroup__group {
 	DECLARE_BITMAP(fixed_counters, NR_COUNTERS);
 	/** Head to the list of event names in this group*/
 	struct list_head event_head;
+	bool taken_alone;
 };
 
 struct metricgroup__group_events {

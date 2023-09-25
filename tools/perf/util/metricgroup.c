@@ -1624,6 +1624,7 @@ static void metricgroup__free_pmu_info(struct list_head *pmu_info_list)
 static struct metricgroup__event_info *event_info__new(const char *name,
 						      const char *pmu_name,
 						      const char *counter,
+						      bool taken_alone,
 						      bool free_counter)
 {
 	int ret = 0;
@@ -1637,6 +1638,7 @@ static struct metricgroup__event_info *event_info__new(const char *name,
 		pmu_name = "core";
 	}
 	e->name = name;
+	e->taken_alone = taken_alone;
 	e->free_counter = free_counter;
 	//e->pmu_name = strdup(pmu_name);
 	e->pmu_name = pmu_name;
@@ -1674,7 +1676,8 @@ static int metricgroup__add_metric_event_callback(const struct pmu_event *pe,
 	struct metricgroup__add_metric_event_data *d = data;
 
 	if (!strcasecmp(pe->name, d->event_name)) {
-		event = event_info__new(d->event_id, pe->pmu, pe->counter, /*free_counter=*/false);
+		event = event_info__new(d->event_id, pe->pmu, pe->counter,
+					pe->taken_alone, /*free_counter=*/false);
 		if (!event)
 			return -ENOMEM;
 		list_add(&event->nd, d->list);
@@ -1797,6 +1800,8 @@ static int find_and_set_counters(struct metricgroup__event_info *e,
 	int ret;
 	unsigned long find_bit = 0;
 
+	if (e->taken_alone && current_group->taken_alone)
+		return -ENOSPC;
 	if (e->free_counter)
 		return 0;
 	if (e->fixed_counter) {
@@ -1831,11 +1836,13 @@ static int _insert_event(struct metricgroup__event_info *e,
 		list_add(&event->nd, &group->event_head);
 	else
 		list_add_tail(&event->nd, &group->event_head);
+	if (e->taken_alone)
+		group->taken_alone = true;
 	return 0;
 }
 
 /**
- * Insert the new_group node at the end of the group list.
+ * Initialize the new group and insert it to the end of the group list.
  */
 static int insert_new_group(struct list_head *head,
 			   struct metricgroup__group *new_group,
@@ -1845,6 +1852,7 @@ static int insert_new_group(struct list_head *head,
 	INIT_LIST_HEAD(&new_group->event_head);
 	fill_counter_bitmap(new_group->gp_counters, 0, size);
 	fill_counter_bitmap(new_group->fixed_counters, 0, fixed_size);
+	new_group->taken_alone = false;
 	list_add_tail(&new_group->nd, head);
 	return 0;
 }
@@ -2045,8 +2053,8 @@ static int create_grouping(struct list_head *pmu_info_list,
 	//TODO: for each new core group, we should consider to add events that uses fixed counters
 	list_for_each_entry(e, event_info_list, nd) {
 		bitmap_scnprintf(e->counters, NR_COUNTERS, bit_buf, NR_COUNTERS);
-		pr_debug("Event name %s, [pmu]=%s, [counters]=%s\n", e->name,
-			e->pmu_name, bit_buf);
+		pr_debug("Event name %s, [pmu]=%s, [counters]=%s, [taken_alone]=%d\n",
+			e->name, e->pmu_name, bit_buf, e->taken_alone);
 		ret = assign_event_grouping(e, pmu_info_list, &groups);
 		if (ret)
 			goto out;
@@ -2085,7 +2093,7 @@ static int hw_aware_build_grouping(struct expr_parse_ctx *ctx __maybe_unused,
 		pr_debug("found event %s\n", id);
 		if (!strncmp(id, special_pattern, strlen(special_pattern))) {
 			struct metricgroup__event_info *event;
-			event = event_info__new(id, "default_core", "0", true);
+			event = event_info__new(id, "default_core", "0", false, true);
 			if (!event) {
 				ret = -ENOMEM;
 				goto err_out;

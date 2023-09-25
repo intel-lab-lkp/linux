@@ -55,7 +55,9 @@ _json_event_attributes = [
     # Counter this event could use
     'counter',
     # Longer things (the last won't be iterated over during decompress).
-    'long_desc'
+    'long_desc',
+    # Taken alone event could not be collected in the same group with other taken alone event
+    'taken_alone'
 ]
 
 # Attributes that are in pmu_unit_layout.
@@ -71,7 +73,7 @@ _json_metric_attributes = [
 ]
 # Attributes that are bools or enum int values, encoded as '0', '1',...
 _json_enum_attributes = ['aggr_mode', 'deprecated', 'event_grouping', 'perpkg',
-    'size', 'fixed_size'
+    'size', 'fixed_size', 'taken_alone'
 ]
 
 def removesuffix(s: str, suffix: str) -> str:
@@ -330,6 +332,7 @@ class JsonEvent:
       extra_desc += '  Spec update: ' + jd['Errata']
     self.pmu = unit_to_pmu(jd.get('Unit'))
     self.counter = jd.get('Counter')
+    self.taken_alone = jd.get('TakenAlone')
     self.size = jd.get('Size')
     self.fixed_size = jd.get('FixedSize')
     filter = jd.get('Filter')
