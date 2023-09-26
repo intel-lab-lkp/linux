@@ -18,9 +18,12 @@
  * actual OS primitives
  */
 
+struct i40e_hw;
+struct device *i40e_hw_to_dev(struct i40e_hw *hw);
+
 #define hw_dbg(hw, S, A...)							\
 do {										\
-	dev_dbg(&((struct i40e_pf *)hw->back)->pdev->dev, S, ##A);		\
+	dev_dbg(i40e_hw_to_dev(hw), S, ##A);					\
 } while (0)
 
 #define wr32(a, reg, value)	writel((value), ((a)->hw_addr + (reg)))
