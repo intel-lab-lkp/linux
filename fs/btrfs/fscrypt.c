@@ -214,6 +214,54 @@ static struct block_device **btrfs_fscrypt_get_devices(struct super_block *sb,
 	return devs;
 }
 
+int btrfs_fscrypt_load_extent_info(struct btrfs_inode *inode,
+				   struct extent_map *em,
+				   struct btrfs_fscrypt_ctx *ctx)
+{
+	struct fscrypt_extent_info *info;
+	unsigned long nofs_flag;
+
+	if (ctx->size == 0)
+		return 0;
+
+	nofs_flag = memalloc_nofs_save();
+	info = fscrypt_load_extent_info(&inode->vfs_inode, ctx->ctx, ctx->size);
+	memalloc_nofs_restore(nofs_flag);
+	if (IS_ERR(info))
+		return PTR_ERR(info);
+	em->fscrypt_info = info;
+	return 0;
+}
+
+int btrfs_fscrypt_save_extent_info(struct btrfs_inode *inode,
+				   struct btrfs_path *path,
+				   struct fscrypt_extent_info *info)
+{
+	struct btrfs_file_extent_item *ei;
+	u8 ctx[BTRFS_MAX_EXTENT_CTX_SIZE];
+	ssize_t ctx_size;
+
+	ei = btrfs_item_ptr(path->nodes[0], path->slots[0],
+			    struct btrfs_file_extent_item);
+
+	ctx_size = fscrypt_set_extent_context(&inode->vfs_inode, info, ctx);
+	if (ctx_size < 0) {
+		btrfs_err_rl(inode->root->fs_info, "invalid encrypt context\n");
+		return (int)ctx_size;
+	}
+	write_extent_buffer(path->nodes[0], ctx,
+			    btrfs_file_extent_encryption_ctx_offset(ei),
+			    ctx_size);
+	btrfs_set_file_extent_encryption_ctx_size(path->nodes[0], ei, ctx_size);
+	return 0;
+}
+
+size_t btrfs_fscrypt_extent_context_size(struct btrfs_inode *inode)
+{
+	return sizeof(struct btrfs_encryption_info) +
+		fscrypt_extent_context_size(&inode->vfs_inode);
+}
+
 const struct fscrypt_operations btrfs_fscrypt_ops = {
 	.get_context = btrfs_fscrypt_get_context,
 	.set_context = btrfs_fscrypt_set_context,

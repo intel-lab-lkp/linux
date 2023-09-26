@@ -38,6 +38,7 @@
 #include "ioctl.h"
 #include "file.h"
 #include "super.h"
+#include "fscrypt.h"
 
 /* simple helper to fault in pages and copy.  This should go away
  * and be replaced with calls into generic code.
@@ -2276,6 +2277,14 @@ static int btrfs_insert_replace_extent(struct btrfs_trans_handle *trans,
 	btrfs_set_file_extent_num_bytes(leaf, extent, replace_len);
 	if (extent_info->is_new_extent)
 		btrfs_set_file_extent_generation(leaf, extent, trans->transid);
+	if (extent_info->fscrypt_info) {
+		ret = btrfs_fscrypt_save_extent_info(inode, path,
+						     extent_info->fscrypt_info);
+		if (ret) {
+			btrfs_release_path(path);
+			return ret;
+		}
+	}
 	btrfs_mark_buffer_dirty(trans, leaf);
 	btrfs_release_path(path);
 
