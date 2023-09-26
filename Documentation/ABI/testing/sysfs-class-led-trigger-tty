@@ -4,3 +4,57 @@ KernelVersion:	5.10
 Contact:	linux-leds@vger.kernel.org
 Description:
 		Specifies the tty device name of the triggering tty
+
+What:		/sys/class/leds/<led>/rx
+Date:		September 2023
+KernelVersion:	6.7
+Description:
+		Signal reception (rx) of data on the named tty device.
+		If set to 0, the LED will not blink on reception.
+		If set to 1 (default), the LED will blink on reception.
+
+What:		/sys/class/leds/<led>/tx
+Date:		September 2023
+KernelVersion:	6.7
+Description:
+		Signal transmission (tx) of data on the named tty device.
+		If set to 0, the LED will not blink on transmission.
+		If set to 1 (default), the LED will blink on transmission.
+
+car rng
+What:		/sys/class/leds/<led>/line_cts
+Date:		September 2023
+KernelVersion:	6.7
+Description:
+		DCE is ready to accept data from the DTE (Clear To Send). If
+		the line state is detected, the LED is switched on.
+		If set to 0 (default), the LED will not evaluate CTS.
+		If set to 1, the LED will evaluate CTS.
+
+What:		/sys/class/leds/<led>/line_dsr
+Date:		September 2023
+KernelVersion:	6.7
+Description:
+		DCE is ready to receive and send data (Data Set Ready). If
+		the line state is detected, the LED is switched on.
+		If set to 0 (default), the LED will not evaluate DSR.
+		If set to 1, the LED will evaluate DSR.
+
+What:		/sys/class/leds/<led>/line_car
+Date:		September 2023
+KernelVersion:	6.7
+Description:
+		DTE is receiving a carrier from the DCE (Data Carrier Detect).
+		If the line state is detected, the LED is switched on.
+		If set to 0 (default), the LED will not evaluate CAR (DCD).
+		If set to 1, the LED will evaluate CAR (DCD).
+
+What:		/sys/class/leds/<led>/line_cts
+Date:		September 2023
+KernelVersion:	6.7
+Description:
+		DCE has detected an incoming ring signal on the telephone
+		line (Ring Indicator). If the line state is detected, the
+		LED is switched on.
+		If set to 0 (default), the LED will not evaluate RNG (RI).
+		If set to 1, the LED will evaluate RNG (RI).
