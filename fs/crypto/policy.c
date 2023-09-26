@@ -764,6 +764,53 @@ int fscrypt_set_context(struct inode *inode, void *fs_data)
 EXPORT_SYMBOL_GPL(fscrypt_set_context);
 
 /**
+ * fscrypt_set_extent_context() - Set the fscrypt extent context of a new extent
+ * @inode: the inode this extent belongs to
+ * @ei: the fscrypt_extent_info for the given extent
+ * @buf: the buffer to copy the fscrypt extent context into
+ *
+ * This should be called after fscrypt_prepare_new_extent(), using the
+ * fscrypt_extent_info that was created at that point.
+ *
+ * Return: the size of the fscrypt_extent_context, errno if the inode has the
+ *	   wrong policy version.
+ */
+ssize_t fscrypt_set_extent_context(struct inode *inode,
+				   struct fscrypt_extent_info *ei, u8 *buf)
+{
+	struct fscrypt_extent_context *ctx = (struct fscrypt_extent_context *)buf;
+	const struct fscrypt_inode_info *ci = inode->i_crypt_info;
+
+	if (ci->ci_policy.version != 2)
+		return -EINVAL;
+
+	ctx->version = 1;
+	memcpy(ctx->master_key_identifier,
+	       ci->ci_policy.v2.master_key_identifier,
+	       sizeof(ctx->master_key_identifier));
+	memcpy(ctx->nonce, ei->nonce, FSCRYPT_FILE_NONCE_SIZE);
+	return sizeof(struct fscrypt_extent_context);
+}
+EXPORT_SYMBOL_GPL(fscrypt_set_extent_context);
+
+/**
+ * fscrypt_extent_context_size() - Return the size of the on-disk extent context
+ * @inode: the inode this extent belongs to.
+ *
+ * Return the size of the extent context for this inode.  Since there is only
+ * one extent context version currently this is just the size of the extent
+ * context if the inode is encrypted.
+ */
+size_t fscrypt_extent_context_size(struct inode *inode)
+{
+	if (!IS_ENCRYPTED(inode))
+		return 0;
+
+	return sizeof(struct fscrypt_extent_context);
+}
+EXPORT_SYMBOL_GPL(fscrypt_extent_context_size);
+
+/**
  * fscrypt_parse_test_dummy_encryption() - parse the test_dummy_encryption mount option
  * @param: the mount option
  * @dummy_policy: (input/output) the place to write the dummy policy that will
