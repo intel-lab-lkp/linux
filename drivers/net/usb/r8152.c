@@ -953,6 +953,10 @@ struct r8152 {
 	u8 version;
 	u8 duplex;
 	u8 autoneg;
+
+	bool reg_access_fail;
+	bool in_pre_reset;
+	unsigned int reg_access_reset_count;
 };
 
 /**
@@ -1210,13 +1214,21 @@ static unsigned int agg_buf_sz = 16384;
  */
 #define REGISTER_ACCESS_TRIES	3
 
+/* If register access fails too many times, stop trying to access the registers
+ * and issue a reset to fix the issue.
+ */
+#define REGISTER_ACCESS_MAX_RESETS	3
+
 static
 int r8152_control_msg(struct usb_device *udev, unsigned int pipe, __u8 request,
 		      __u8 requesttype, __u16 value, __u16 index, void *data,
-		      __u16 size, const char *msg_tag)
+		      __u16 size, const char *msg_tag, struct r8152 *tp)
 {
 	int i;
 	int ret;
+
+	if (tp && tp->reg_access_fail)
+		return -EIO;
 
 	for (i = 0; i < REGISTER_ACCESS_TRIES; i++) {
 		ret = usb_control_msg(udev, pipe, request, requesttype,
@@ -1233,14 +1245,54 @@ int r8152_control_msg(struct usb_device *udev, unsigned int pipe, __u8 request,
 			break;
 	}
 
-	if (ret < 0) {
+	if (ret >= 0) {
+		if (tp)
+			tp->reg_access_reset_count = 0;
+
+		if (i != 0)
+			dev_warn(&udev->dev,
+				 "Needed %d tries to %s %d bytes at %#06x/%#06x\n",
+				 i + 1, msg_tag, size, value, index);
+
+		return ret;
+	}
+
+	dev_err(&udev->dev,
+		"Failed to %s %d bytes at %#06x/%#06x (%d)\n",
+		msg_tag, size, value, index, ret);
+
+	/* If tp is NULL then we're called from early probe or from the
+	 * r8153_ecm module. In either case, the retries above are pretty much
+	 * all we can do. Bail.
+	 */
+	if (!tp)
+		return ret;
+
+	/* Block all future register access until we reset. This prevents the
+	 * parts of the driver that do read-modify-write without checking for
+	 * errors from writing back modified garbage to the adapter.
+	 */
+	tp->reg_access_fail = true;
+
+	/* Failing to access registers in pre-reset is not surprising since we
+	 * wouldn't be resetting if things were behaving normally. The register
+	 * access we do in pre-reset isn't truly mandatory--we're just reusing
+	 * the disable() function and trying to be nice by powering the
+	 * adapter down before resetting it.
+	 *
+	 * If we're in pre-reset, we'll return right away and not try to queue
+	 * up yet another reset. We know the post-reset is already coming.
+	 */
+	if (tp->in_pre_reset)
+		return ret;
+
+	if (tp->reg_access_reset_count < REGISTER_ACCESS_MAX_RESETS) {
+		usb_queue_reset_device(tp->intf);
+		tp->reg_access_reset_count++;
+	} else if (tp->reg_access_reset_count == REGISTER_ACCESS_MAX_RESETS) {
 		dev_err(&udev->dev,
-			"Failed to %s %d bytes at %#06x/%#06x (%d)\n",
-			msg_tag, size, value, index, ret);
-	} else if (i != 0) {
-		dev_warn(&udev->dev,
-			 "Needed %d tries to %s %d bytes at %#06x/%#06x\n",
-			 i + 1, msg_tag, size, value, index);
+			"Tried to reset %d times; giving up.\n",
+			REGISTER_ACCESS_MAX_RESETS);
 	}
 
 	return ret;
@@ -1258,7 +1310,7 @@ int get_registers(struct r8152 *tp, u16 value, u16 index, u16 size, void *data)
 
 	ret = r8152_control_msg(tp->udev, tp->pipe_ctrl_in,
 				RTL8152_REQ_GET_REGS, RTL8152_REQT_READ,
-				value, index, tmp, size, "read");
+				value, index, tmp, size, "read", tp);
 
 	if (ret < 0)
 		memset(data, 0xff, size);
@@ -1282,7 +1334,7 @@ int set_registers(struct r8152 *tp, u16 value, u16 index, u16 size, void *data)
 
 	ret = r8152_control_msg(tp->udev, tp->pipe_ctrl_out,
 				RTL8152_REQ_SET_REGS, RTL8152_REQT_WRITE,
-				value, index, tmp, size, "write");
+				value, index, tmp, size, "write", tp);
 
 	kfree(tmp);
 
@@ -8317,7 +8369,9 @@ static int rtl8152_pre_reset(struct usb_interface *intf)
 	napi_disable(&tp->napi);
 	if (netif_carrier_ok(netdev)) {
 		mutex_lock(&tp->control);
+		tp->in_pre_reset = true;
 		tp->rtl_ops.disable(tp);
+		tp->in_pre_reset = false;
 		mutex_unlock(&tp->control);
 	}
 
@@ -8332,6 +8386,10 @@ static int rtl8152_post_reset(struct usb_interface *intf)
 
 	if (!tp)
 		return 0;
+
+	mutex_lock(&tp->control);
+	tp->reg_access_fail = false;
+	mutex_unlock(&tp->control);
 
 	/* reset the MAC address in case of policy change */
 	if (determine_ethernet_addr(tp, &sa) >= 0) {
@@ -9542,7 +9600,7 @@ static u8 __rtl_get_hw_ver(struct usb_device *udev)
 	ret = r8152_control_msg(udev, usb_rcvctrlpipe(udev, 0),
 				RTL8152_REQ_GET_REGS, RTL8152_REQT_READ,
 				PLA_TCR0, MCU_TYPE_PLA, tmp, sizeof(*tmp),
-				"read");
+				"read", NULL);
 	if (ret > 0)
 		ocp_data = (__le32_to_cpu(*tmp) >> 16) & VERSION_MASK;
 
