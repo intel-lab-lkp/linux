@@ -163,7 +163,7 @@ int hfsplus_read_wrapper(struct super_block *sb)
 	struct hfsplus_sb_info *sbi = HFSPLUS_SB(sb);
 	struct hfsplus_wd wd;
 	sector_t part_start, part_size;
-	u32 blocksize;
+	u32 blocksize, bufsize;
 	int error = 0;
 
 	error = -EINVAL;
@@ -175,10 +175,11 @@ int hfsplus_read_wrapper(struct super_block *sb)
 		goto out;
 
 	error = -ENOMEM;
-	sbi->s_vhdr_buf = kmalloc(hfsplus_min_io_size(sb), GFP_KERNEL);
+	bufsize = max_t(u32, hfsplus_min_io_size(sb), PAGE_SIZE);
+	sbi->s_vhdr_buf = kmalloc(bufsize, GFP_KERNEL);
 	if (!sbi->s_vhdr_buf)
 		goto out;
-	sbi->s_backup_vhdr_buf = kmalloc(hfsplus_min_io_size(sb), GFP_KERNEL);
+	sbi->s_backup_vhdr_buf = kmalloc(bufsize, GFP_KERNEL);
 	if (!sbi->s_backup_vhdr_buf)
 		goto out_free_vhdr;
 
