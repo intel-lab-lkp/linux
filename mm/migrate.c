@@ -588,7 +588,7 @@ void folio_migrate_flags(struct folio *newfolio, struct folio *folio)
 	 * Copy NUMA information to the new page, to prevent over-eager
 	 * future migrations of this same page.
 	 */
-	cpupid = page_cpupid_xchg_last(&folio->page, -1);
+	cpupid = folio_cpupid_xchg_last(folio, -1);
 	/*
 	 * For memory tiering mode, when migrate between slow and fast
 	 * memory node, reset cpupid, because that is used to record
@@ -601,7 +601,7 @@ void folio_migrate_flags(struct folio *newfolio, struct folio *folio)
 		if (f_toptier != t_toptier)
 			cpupid = -1;
 	}
-	page_cpupid_xchg_last(&newfolio->page, cpupid);
+	folio_cpupid_xchg_last(newfolio, cpupid);
 
 	folio_migrate_ksm(newfolio, folio);
 	/*
