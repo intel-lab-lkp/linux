@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 #include "tests.h"
+#include <sched.h>
 #include <stdio.h>
 #include "cpumap.h"
 #include "event.h"
@@ -247,12 +248,34 @@ static int test__cpu_map_equal(struct test_suite *test __maybe_unused, int subte
 	return TEST_OK;
 }
 
+static int test__cpu_map_convert(struct test_suite *test __maybe_unused, int subtest __maybe_unused)
+{
+	struct perf_cpu_map *any = perf_cpu_map__dummy_new();
+	struct perf_cpu_map *cpus = perf_cpu_map__new("1-2");
+	cpu_set_t *cpu_set;
+	size_t setsize;
+
+	cpu_set = perf_cpu_map__2_cpuset(any, &setsize);
+	TEST_ASSERT_VAL("not equal", cpu_set == NULL);
+	CPU_FREE(cpu_set);
+
+	cpu_set = perf_cpu_map__2_cpuset(cpus, &setsize);
+	TEST_ASSERT_VAL("cpus", cpu_set != NULL);
+	TEST_ASSERT_VAL("bad cpuset", !CPU_ISSET_S(0, setsize, cpu_set));
+	TEST_ASSERT_VAL("bad cpuset", CPU_ISSET_S(1, setsize, cpu_set));
+	TEST_ASSERT_VAL("bad cpuset", CPU_ISSET_S(2, setsize, cpu_set));
+	CPU_FREE(cpu_set);
+
+	return TEST_OK;
+}
+
 static struct test_case tests__cpu_map[] = {
 	TEST_CASE("Synthesize cpu map", cpu_map_synthesize),
 	TEST_CASE("Print cpu map", cpu_map_print),
 	TEST_CASE("Merge cpu map", cpu_map_merge),
 	TEST_CASE("Intersect cpu map", cpu_map_intersect),
 	TEST_CASE("Equal cpu map", cpu_map_equal),
+	TEST_CASE("Convert cpu map", cpu_map_convert),
 	{	.name = NULL, }
 };
 

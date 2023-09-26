@@ -3,6 +3,7 @@
 #define __LIBPERF_CPUMAP_H
 
 #include <perf/core.h>
+#include <sched.h>
 #include <stdio.h>
 #include <stdbool.h>
 
@@ -23,6 +24,7 @@ struct perf_cpu_map;
  */
 LIBPERF_API struct perf_cpu_map *perf_cpu_map__dummy_new(void);
 LIBPERF_API struct perf_cpu_map *perf_cpu_map__default_new(void);
+LIBPERF_API struct perf_cpu_map *__perf_cpu_map__new(const char *cpu_list, char sep);
 LIBPERF_API struct perf_cpu_map *perf_cpu_map__new(const char *cpu_list);
 LIBPERF_API struct perf_cpu_map *perf_cpu_map__read(FILE *file);
 LIBPERF_API struct perf_cpu_map *perf_cpu_map__get(struct perf_cpu_map *map);
@@ -45,6 +47,8 @@ LIBPERF_API bool perf_cpu_map__equal(const struct perf_cpu_map *lhs,
  * perf_cpu_map__any_cpu - Does the map contain the "any CPU"/dummy -1 value?
  */
 LIBPERF_API bool perf_cpu_map__has_any_cpu(const struct perf_cpu_map *map);
+
+LIBPERF_API cpu_set_t *perf_cpu_map__2_cpuset(struct perf_cpu_map *cpus, size_t *cpuset_size);
 
 #define perf_cpu_map__for_each_cpu(cpu, idx, cpus)		\
 	for ((idx) = 0, (cpu) = perf_cpu_map__cpu(cpus, idx);	\

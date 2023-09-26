@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
+#define _GNU_SOURCE
 #include <perf/cpumap.h>
 #include <stdlib.h>
 #include <linux/refcount.h>
@@ -7,6 +8,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <sched.h>
 #include <ctype.h>
 #include <limits.h>
 
@@ -201,7 +203,7 @@ static struct perf_cpu_map *cpu_map__read_all_cpu_map(void)
 	return cpus;
 }
 
-struct perf_cpu_map *perf_cpu_map__new(const char *cpu_list)
+struct perf_cpu_map *__perf_cpu_map__new(const char *cpu_list, char sep)
 {
 	struct perf_cpu_map *cpus = NULL;
 	unsigned long start_cpu, end_cpu = 0;
@@ -225,7 +227,7 @@ struct perf_cpu_map *perf_cpu_map__new(const char *cpu_list)
 		p = NULL;
 		start_cpu = strtoul(cpu_list, &p, 0);
 		if (start_cpu >= INT_MAX
-		    || (*p != '\0' && *p != ',' && *p != '-'))
+		    || (*p != '\0' && *p != sep && *p != '-'))
 			goto invalid;
 
 		if (*p == '-') {
@@ -233,7 +235,7 @@ struct perf_cpu_map *perf_cpu_map__new(const char *cpu_list)
 			p = NULL;
 			end_cpu = strtoul(cpu_list, &p, 0);
 
-			if (end_cpu >= INT_MAX || (*p != '\0' && *p != ','))
+			if (end_cpu >= INT_MAX || (*p != '\0' && *p != sep))
 				goto invalid;
 
 			if (end_cpu < start_cpu)
@@ -276,6 +278,11 @@ invalid:
 	free(tmp_cpus);
 out:
 	return cpus;
+}
+
+struct perf_cpu_map *perf_cpu_map__new(const char *cpu_list)
+{
+	return __perf_cpu_map__new(cpu_list, ',');
 }
 
 static int __perf_cpu_map__nr(const struct perf_cpu_map *cpus)
@@ -478,4 +485,36 @@ struct perf_cpu_map *perf_cpu_map__intersect(struct perf_cpu_map *orig,
 		merged = cpu_map__trim_new(k, tmp_cpus);
 	free(tmp_cpus);
 	return merged;
+}
+
+/* The caller is responsible for freeing returned cpu_set_t with CPU_FREE(). */
+cpu_set_t *perf_cpu_map__2_cpuset(struct perf_cpu_map *cpus, size_t *cpuset_size)
+{
+	cpu_set_t *cpusetp;
+	int max_cpu;
+	struct perf_cpu cpu;
+	int idx;
+
+	if (perf_cpu_map__has_any_cpu(cpus))
+		return NULL;
+
+	max_cpu = perf_cpu_map__max(cpus).cpu;
+	if (max_cpu < 0)
+		return NULL;
+
+	cpusetp = CPU_ALLOC(max_cpu + 1);
+	if (cpusetp == NULL)
+		return NULL;
+
+	*cpuset_size = CPU_ALLOC_SIZE(max_cpu + 1);
+	CPU_ZERO_S(*cpuset_size, cpusetp);
+
+	perf_cpu_map__for_each_cpu(cpu, idx, cpus) {
+		if (cpu.cpu == -1)
+			continue;
+
+		CPU_SET_S(cpu.cpu, *cpuset_size, cpusetp);
+	}
+
+	return cpusetp;
 }
