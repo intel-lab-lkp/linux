@@ -4,6 +4,7 @@
 
 #include <stdbool.h>
 #include <sys/types.h>
+#include <sched.h>
 
 struct target {
 	const char   *pid;
@@ -19,6 +20,12 @@ struct target {
 	bool	     use_bpf;
 	int	     initial_delay;
 	const char   *attr_map;
+
+	struct {
+		int	 sched_policy;
+		int	 sched_priority;
+		struct perf_cpu_map *cpu_map;
+	} workload;
 };
 
 enum target_errno {
@@ -102,5 +109,7 @@ static inline bool target__uses_dummy_map(struct target *target)
 
 	return use_dummy;
 }
+
+extern const char record_workload_config_help[];
 
 #endif /* _PERF_TARGET_H */

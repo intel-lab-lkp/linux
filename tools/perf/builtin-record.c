@@ -3309,6 +3309,17 @@ static int parse_record_synth_option(const struct option *opt,
 	return 0;
 }
 
+static int record_parse_workload_attr_opt(const struct option *opt,
+					  const char *arg,
+					  int unset __maybe_unused)
+{
+	struct record_opts *opts = opt->value;
+
+	return evlist__parse_workload_config(arg, &opts->target.workload.sched_policy,
+					     &opts->target.workload.sched_priority,
+					     &opts->target.workload.cpu_map);
+}
+
 /*
  * XXX Ideally would be local to cmd_record() and passed to a record__new
  * because we need to have access to it in record__exit, that is called
@@ -3329,6 +3340,8 @@ static struct record record = {
 		.target		     = {
 			.uses_mmap   = true,
 			.default_per_cpu = true,
+			.workload.sched_policy = -1,
+			.workload.sched_priority = 0,
 		},
 		.mmap_flush          = MMAP_FLUSH_DEFAULT,
 		.nr_threads_synthesize = 1,
@@ -3352,6 +3365,12 @@ static struct record record = {
 
 const char record_callchain_help[] = CALLCHAIN_RECORD_HELP
 	"\n\t\t\t\tDefault: fp";
+
+const char record_workload_config_help[] =
+	"setup target workload (the <command>) attributes:\n\n"
+	HELP_PAD "sched_policy: other|fifo|rr|batch|idle\n"
+	HELP_PAD "sched_prio: scheduling priority for fifo|rr, nice value for other\n"
+	HELP_PAD "cpu-list: CPU affinity. e.g. 1-3:5 is processors #1, #2, #3 and #5";
 
 static bool dry_run;
 
@@ -3567,6 +3586,10 @@ static struct option __record_options[] = {
 			    "write collected trace data into several data files using parallel threads",
 			    record__parse_threads),
 	OPT_BOOLEAN(0, "off-cpu", &record.off_cpu, "Enable off-cpu analysis"),
+	OPT_CALLBACK(0, "workload-config", &record.opts,
+		     "[sched_policy=policy][,sched_prio=priority][,cpu-list=list]",
+		     record_workload_config_help,
+		     &record_parse_workload_attr_opt),
 	OPT_END()
 };
 
@@ -4259,6 +4282,10 @@ out_opts:
 	record__free_thread_masks(rec, rec->nr_threads);
 	rec->nr_threads = 0;
 	evlist__close_control(rec->opts.ctl_fd, rec->opts.ctl_fd_ack, &rec->opts.ctl_fd_close);
+	if (rec->opts.target.workload.cpu_map) {
+		perf_cpu_map__put(rec->opts.target.workload.cpu_map);
+		rec->opts.target.workload.cpu_map = NULL;
+	}
 	return err;
 }
 

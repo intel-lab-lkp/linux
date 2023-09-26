@@ -15,6 +15,7 @@
 #include <pthread.h>
 #include <signal.h>
 #include <unistd.h>
+#include <sched.h>
 
 struct pollfd;
 struct thread_map;
@@ -180,6 +181,8 @@ void evlist__set_id_pos(struct evlist *evlist);
 void evlist__config(struct evlist *evlist, struct record_opts *opts, struct callchain_param *callchain);
 int record_opts__config(struct record_opts *opts);
 
+int evlist__parse_workload_config(const char *str, int *sched_policy, int *sched_priority,
+				  struct perf_cpu_map **cpu_set);
 int evlist__prepare_workload(struct evlist *evlist, struct target *target,
 			     const char *argv[], bool pipe_output,
 			     void (*exec_error)(int signo, siginfo_t *info, void *ucontext));

@@ -33,6 +33,7 @@
 #include "util/bpf-filter.h"
 #include "util/stat.h"
 #include "util/util.h"
+#include "util/parse-sublevel-options.h"
 #include <signal.h>
 #include <unistd.h>
 #include <sched.h>
@@ -46,6 +47,7 @@
 #include <sys/mman.h>
 #include <sys/prctl.h>
 #include <sys/timerfd.h>
+#include <sys/resource.h>
 
 #include <linux/bitops.h>
 #include <linux/hash.h>
@@ -1398,6 +1400,109 @@ out_err:
 	return err;
 }
 
+int evlist__parse_workload_config(const char *str, int *sched_policy, int *sched_priority,
+				  struct perf_cpu_map **cpu_map)
+{
+	char *policy_str = NULL;
+	int priority = -1;
+	char *cpu_list = NULL;
+	int ret;
+	struct sublevel_option workload_conf_opts[] = {
+		{ .name = "sched_policy",	.str_ptr = &policy_str},
+		{ .name = "sched_prio",		.value_ptr = &priority},
+		{ .name = "cpu-list",		.str_ptr = &cpu_list},
+		{ .name = NULL, }
+	};
+
+	ret = perf_parse_sublevel_options(str, workload_conf_opts);
+	if (ret)
+		return ret;
+
+	/* sched policy, default to 'other'. */
+	if (!policy_str || !strncmp(policy_str, "other", sizeof("other")))
+		*sched_policy = SCHED_OTHER;
+	else if (!strncmp(policy_str, "fifo", sizeof("fifo")))
+		*sched_policy = SCHED_FIFO;
+	else if (!strncmp(policy_str, "rr", sizeof("rr")))
+		*sched_policy = SCHED_RR;
+	else if (!strncmp(policy_str, "batch", sizeof("batch")))
+		*sched_policy = SCHED_BATCH;
+	else if (!strncmp(policy_str, "idle", sizeof("idle")))
+		*sched_policy = SCHED_IDLE;
+	else {
+		pr_err("workload_attr: unknown sched policy %s\n", policy_str);
+		ret = -EINVAL;
+		goto out;
+	}
+
+	/* check sched priority and set default value */
+	if (*sched_policy == SCHED_FIFO || *sched_policy == SCHED_RR) {
+		if (priority == -1)
+			priority = 99; /* default to lowest priority */
+		else if (priority < 1 || priority > 99) {
+			pr_err("workload_attr: invalid priority %d for fifo and rr, allowed [1,99]\n",
+				priority);
+			ret = -EINVAL;
+			goto out;
+		}
+	} else if (*sched_policy == SCHED_OTHER && priority == -1)
+		priority = 0;
+	*sched_priority = priority;
+
+	/* allowed cpu list */
+	*cpu_map = __perf_cpu_map__new(cpu_list, ':');
+	if (!*cpu_map) {
+		pr_err("workload_attr: failed to get cpus map from %s\n", cpu_list);
+		ret = -EINVAL;
+	}
+
+out:
+	free(policy_str);
+	free(cpu_list);
+	return ret;
+}
+
+static int configurate_workload(struct target *target)
+{
+	struct sched_param param;
+	int policy = target->workload.sched_policy;
+	int priority = target->workload.sched_priority;
+
+	if (policy >= 0) {
+		param.sched_priority = (policy == SCHED_FIFO || policy == SCHED_RR) ?
+					priority : 0;
+		if (sched_setscheduler(0, policy, &param) != 0) {
+			pr_err("failed to set the sched policy %d: %s\n", policy, strerror(errno));
+			return -1;
+		}
+
+		if (policy == SCHED_OTHER) {
+			if (setpriority(PRIO_PROCESS, 0, priority) != 0) {
+				pr_err("failed to set the nice value %d: %s\n", priority, strerror(errno));
+				return -1;
+			}
+		}
+	}
+
+	if (target->workload.cpu_map) {
+		size_t cpuset_size = -1;
+		cpu_set_t *cpu_set;
+
+		cpu_set = perf_cpu_map__2_cpuset(target->workload.cpu_map, &cpuset_size);
+		if (!cpu_set)
+			return -1;
+
+		if (sched_setaffinity(0, cpuset_size, cpu_set) != 0) {
+			pr_err("failed to set the sched affinity: %s\n", strerror(errno));
+			CPU_FREE(cpu_set);
+			return -1;
+		}
+		CPU_FREE(cpu_set);
+	}
+
+	return 0;
+}
+
 int evlist__prepare_workload(struct evlist *evlist, struct target *target, const char *argv[],
 			     bool pipe_output, void (*exec_error)(int signo, siginfo_t *info, void *ucontext))
 {
@@ -1463,6 +1568,9 @@ int evlist__prepare_workload(struct evlist *evlist, struct target *target, const
 				perror("unable to read pipe");
 			exit(ret);
 		}
+
+		if (configurate_workload(target) != 0)
+			exit(-1);
 
 		execvp(argv[0], (char **)argv);
 

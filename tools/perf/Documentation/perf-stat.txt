@@ -262,6 +262,12 @@ disable events during measurements:
  wait -n ${perf_pid}
  exit $?
 
+--workload-config <[sched_policy=policy][,sched_prio=priority][,cpu-list=list]>::
+	setup target workload (the <command>) attributes:
+
+	  sched_policy: other|fifo|rr|batch|idle
+	  sched_prio: scheduling priority for fifo|rr, nice value for other
+	  cpu-list: CPU affinity. e.g. 1-3:5 is processors #1, #2, #3 and #5
 
 --pre::
 --post::

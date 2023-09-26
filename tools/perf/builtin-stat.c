@@ -108,6 +108,8 @@ static bool all_counters_use_bpf = true;
 
 static struct target target = {
 	.uid	= UINT_MAX,
+	.workload.sched_policy = -1,
+	.workload.sched_priority = 0,
 };
 
 #define METRIC_ONLY_LEN 20
@@ -1160,6 +1162,14 @@ out:
 	return 0;
 }
 
+static int parse_workload_attr_opt(const struct option *opt __maybe_unused, const char *arg,
+				   int unset __maybe_unused)
+{
+	return evlist__parse_workload_config(arg, &target.workload.sched_policy,
+					     &target.workload.sched_priority,
+					     &target.workload.cpu_map);
+}
+
 static struct option stat_options[] = {
 	OPT_BOOLEAN('T', "transaction", &transaction_run,
 		    "hardware transaction statistics"),
@@ -1220,6 +1230,10 @@ static struct option stat_options[] = {
 	OPT_BOOLEAN(0, "append", &append_file, "append to the output file"),
 	OPT_INTEGER(0, "log-fd", &output_fd,
 		    "log output to fd, instead of stderr"),
+	OPT_CALLBACK(0, "workload-config", &stat_config,
+		     "[sched_policy=policy][,sched_prio=priority][,cpu-list=list]",
+		     record_workload_config_help,
+		     &parse_workload_attr_opt),
 	OPT_STRING(0, "pre", &pre_cmd, "command",
 			"command to run prior to the measured command"),
 	OPT_STRING(0, "post", &post_cmd, "command",
@@ -2892,6 +2906,11 @@ out:
 
 	metricgroup__rblist_exit(&stat_config.metric_events);
 	evlist__close_control(stat_config.ctl_fd, stat_config.ctl_fd_ack, &stat_config.ctl_fd_close);
+
+	if (target.workload.cpu_map) {
+		perf_cpu_map__put(target.workload.cpu_map);
+		target.workload.cpu_map = NULL;
+	}
 
 	return status;
 }
