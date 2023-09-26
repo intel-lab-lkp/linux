@@ -2,6 +2,8 @@
 #ifndef _ASMARM_TRAP_H
 #define _ASMARM_TRAP_H
 
+#include <linux/init.h>
+#include <linux/linkage.h>
 #include <linux/list.h>
 
 struct pt_regs;
