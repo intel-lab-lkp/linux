@@ -135,6 +135,10 @@ static void vdev_info_init(struct vdev_info* dev, unsigned long long features)
 	dev->buf = malloc(dev->buf_size);
 	assert(dev->buf);
 	dev->control = open("/dev/vhost-test", O_RDWR);
+
+	if (dev->control < 0)
+		fprintf(stderr, "Install vhost_test module" \
+		"(./vhost_test/vhost_test.ko) firstly\n");
 	assert(dev->control >= 0);
 	r = ioctl(dev->control, VHOST_SET_OWNER, NULL);
 	assert(r >= 0);
