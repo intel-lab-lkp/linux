@@ -2561,11 +2561,11 @@ static int smu_v13_0_0_check_ecc_table_support(struct smu_context *smu)
 	if (ret)
 		return -EOPNOTSUPP;
 
-	if ((adev->ip_versions[MP1_HWIP][0] == IP_VERSION(13, 0, 10)) &&
-		(smu_version >= SUPPORT_ECCTABLE_SMU_13_0_10_VERSION))
-		return ret;
-	else
+	if ((adev->ip_versions[MP1_HWIP][0] != IP_VERSION(13, 0, 10)) &&
+		(smu_version < SUPPORT_ECCTABLE_SMU_13_0_10_VERSION))
 		return -EOPNOTSUPP;
+
+	return 0;
 }
 
 static ssize_t smu_v13_0_0_get_ecc_info(struct smu_context *smu,
