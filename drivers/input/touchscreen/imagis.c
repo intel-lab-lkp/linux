@@ -30,6 +30,7 @@
 #define IST30XXC_FINGER_COUNT_SHIFT	12
 #define IST30XXC_FINGER_STATUS_MASK	GENMASK(9, 0)
 
+#define IST3032C_WHOAMI			0x32c
 #define IST3038C_WHOAMI			0x38c
 
 struct imagis_ts {
@@ -295,6 +296,16 @@ static int imagis_probe(struct i2c_client *i2c)
 		return -EINVAL;
 	}
 
+	if (chip_id == IST3032C_WHOAMI) {
+		/*
+		 * if the regulator voltage is not set like this, the touchscreen
+		 * generates random touches without user interaction
+		 */
+		error = regulator_set_voltage(ts->supplies[0].consumer, 3100000, 3100000);
+		if (error)
+			dev_warn(dev, "failed to set regulator voltage\n");
+	}
+
 	error = devm_request_threaded_irq(dev, i2c->irq,
 					  NULL, imagis_interrupt,
 					  IRQF_ONESHOT | IRQF_NO_AUTOEN,
@@ -348,6 +359,7 @@ static DEFINE_SIMPLE_DEV_PM_OPS(imagis_pm_ops, imagis_suspend, imagis_resume);
 
 #ifdef CONFIG_OF
 static const struct of_device_id imagis_of_match[] = {
+	{ .compatible = "imagis,ist3032c", .data = (void *)IST3032C_WHOAMI, },
 	{ .compatible = "imagis,ist3038c", .data = (void *)IST3038C_WHOAMI, },
 	{ },
 };
@@ -355,6 +367,7 @@ MODULE_DEVICE_TABLE(of, imagis_of_match);
 #endif
 
 static const struct i2c_device_id imagis_ts_i2c_id[] = {
+	{ "ist3032c", IST3032C_WHOAMI, },
 	{ "ist3038c", IST3038C_WHOAMI, },
 	{ },
 };
