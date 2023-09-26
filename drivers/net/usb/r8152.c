@@ -1200,6 +1200,52 @@ static unsigned int agg_buf_sz = 16384;
 
 #define RTL_LIMITED_TSO_SIZE	(size_to_mtu(agg_buf_sz) - sizeof(struct tx_desc))
 
+/* If we get a failure and the USB device is still attached when trying to read
+ * or write registers then we'll retry a few times. Failures accessing registers
+ * shouldn't be common and this adds robustness. Much code in the driver doesn't
+ * check for errors. Notably, many parts of the driver do a read/modify/write
+ * of a register value without confirming that the read succeeded. Writing back
+ * modified garbage like this can fully wedge the adapter, requiring a power
+ * cycle.
+ */
+#define REGISTER_ACCESS_TRIES	3
+
+static
+int r8152_control_msg(struct usb_device *udev, unsigned int pipe, __u8 request,
+		      __u8 requesttype, __u16 value, __u16 index, void *data,
+		      __u16 size, const char *msg_tag)
+{
+	int i;
+	int ret;
+
+	for (i = 0; i < REGISTER_ACCESS_TRIES; i++) {
+		ret = usb_control_msg(udev, pipe, request, requesttype,
+				      value, index, data, size,
+				      USB_CTRL_GET_TIMEOUT);
+
+		/* No need to retry or spam errors if the USB device got
+		 * unplugged; just return immediately.
+		 */
+		if (udev->state == USB_STATE_NOTATTACHED)
+			return ret;
+
+		if (ret >= 0)
+			break;
+	}
+
+	if (ret < 0) {
+		dev_err(&udev->dev,
+			"Failed to %s %d bytes at %#06x/%#06x (%d)\n",
+			msg_tag, size, value, index, ret);
+	} else if (i != 0) {
+		dev_warn(&udev->dev,
+			 "Needed %d tries to %s %d bytes at %#06x/%#06x\n",
+			 i + 1, msg_tag, size, value, index);
+	}
+
+	return ret;
+}
+
 static
 int get_registers(struct r8152 *tp, u16 value, u16 index, u16 size, void *data)
 {
@@ -1210,9 +1256,10 @@ int get_registers(struct r8152 *tp, u16 value, u16 index, u16 size, void *data)
 	if (!tmp)
 		return -ENOMEM;
 
-	ret = usb_control_msg(tp->udev, tp->pipe_ctrl_in,
-			      RTL8152_REQ_GET_REGS, RTL8152_REQT_READ,
-			      value, index, tmp, size, USB_CTRL_GET_TIMEOUT);
+	ret = r8152_control_msg(tp->udev, tp->pipe_ctrl_in,
+				RTL8152_REQ_GET_REGS, RTL8152_REQT_READ,
+				value, index, tmp, size, "read");
+
 	if (ret < 0)
 		memset(data, 0xff, size);
 	else
@@ -1233,9 +1280,9 @@ int set_registers(struct r8152 *tp, u16 value, u16 index, u16 size, void *data)
 	if (!tmp)
 		return -ENOMEM;
 
-	ret = usb_control_msg(tp->udev, tp->pipe_ctrl_out,
-			      RTL8152_REQ_SET_REGS, RTL8152_REQT_WRITE,
-			      value, index, tmp, size, USB_CTRL_SET_TIMEOUT);
+	ret = r8152_control_msg(tp->udev, tp->pipe_ctrl_out,
+				RTL8152_REQ_SET_REGS, RTL8152_REQT_WRITE,
+				value, index, tmp, size, "write");
 
 	kfree(tmp);
 
@@ -9492,10 +9539,10 @@ static u8 __rtl_get_hw_ver(struct usb_device *udev)
 	if (!tmp)
 		return 0;
 
-	ret = usb_control_msg(udev, usb_rcvctrlpipe(udev, 0),
-			      RTL8152_REQ_GET_REGS, RTL8152_REQT_READ,
-			      PLA_TCR0, MCU_TYPE_PLA, tmp, sizeof(*tmp),
-			      USB_CTRL_GET_TIMEOUT);
+	ret = r8152_control_msg(udev, usb_rcvctrlpipe(udev, 0),
+				RTL8152_REQ_GET_REGS, RTL8152_REQT_READ,
+				PLA_TCR0, MCU_TYPE_PLA, tmp, sizeof(*tmp),
+				"read");
 	if (ret > 0)
 		ocp_data = (__le32_to_cpu(*tmp) >> 16) & VERSION_MASK;
 
