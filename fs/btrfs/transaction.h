@@ -222,8 +222,8 @@ do {								\
 			(error))) {					\
 			/* Stack trace printed. */			\
 		} else {						\
-			btrfs_debug((trans)->fs_info,			\
-				    "Transaction aborted (error %d)", \
+			btrfs_err((trans)->fs_info,			\
+				  "Transaction aborted (error %d)",     \
 				  (error));			\
 		}						\
 	}							\
