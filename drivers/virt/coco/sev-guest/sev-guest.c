@@ -16,10 +16,12 @@
 #include <linux/miscdevice.h>
 #include <linux/set_memory.h>
 #include <linux/fs.h>
+#include <linux/tsm.h>
 #include <crypto/aead.h>
 #include <linux/scatterlist.h>
 #include <linux/psp-sev.h>
 #include <linux/sockptr.h>
+#include <linux/cleanup.h>
 #include <uapi/linux/sev-guest.h>
 #include <uapi/linux/psp-sev.h>
 
@@ -759,6 +761,126 @@ static u8 *get_vmpck(int id, struct snp_secrets_page_layout *layout, u32 **seqno
 	return key;
 }
 
+struct snp_msg_report_resp_hdr {
+	u32 status;
+	u32 report_size;
+	u8 rsvd[24];
+};
+#define SNP_REPORT_INVALID_PARAM 0x16
+#define SNP_REPORT_INVALID_KEY_SEL 0x27
+
+struct snp_msg_cert_entry {
+	unsigned char guid[16];
+	u32 offset;
+	u32 length;
+};
+
+static int sev_report_new(struct tsm_report *report, void *data)
+{
+	static const struct snp_msg_cert_entry zero_ent = { 0 };
+	struct tsm_desc *desc = &report->desc;
+	struct snp_guest_dev *snp_dev = data;
+	struct snp_msg_report_resp_hdr hdr;
+	const int report_size = SZ_4K;
+	const int ext_size = SZ_16K;
+	int ret, size = report_size + ext_size;
+	int certs_size, cert_count, i, offset;
+	u8 *certs_address;
+
+	if (desc->inblob_len != 64)
+		return -EINVAL;
+
+	void *buf __free(kvfree) = kvzalloc(size, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	guard(mutex)(&snp_cmd_mutex);
+	certs_address = buf + report_size;
+	struct snp_ext_report_req ext_req = {
+		.data = { .vmpl = desc->privlevel },
+		.certs_address = (__u64)certs_address,
+		.certs_len = ext_size,
+	};
+	memcpy(&ext_req.data.user_data, desc->inblob, desc->inblob_len);
+
+	struct snp_guest_request_ioctl input = {
+		.msg_version = 1,
+		.req_data = (__u64)&ext_req,
+		.resp_data = (__u64)buf,
+	};
+	struct snp_req_resp io = {
+		.req_data = KERNEL_SOCKPTR(&ext_req),
+		.resp_data = KERNEL_SOCKPTR(buf),
+	};
+
+	ret = get_ext_report(snp_dev, &input, &io);
+
+	if (ret)
+		return ret;
+
+	memcpy(&hdr, buf, sizeof(hdr));
+	if (hdr.status == SNP_REPORT_INVALID_PARAM)
+		return -EINVAL;
+	if (hdr.status == SNP_REPORT_INVALID_KEY_SEL)
+		return -EINVAL;
+	if (hdr.status)
+		return -ENXIO;
+	if ((hdr.report_size + sizeof(hdr)) > report_size)
+		return -ENOMEM;
+
+	void *rbuf __free(kvfree) = kvzalloc(hdr.report_size, GFP_KERNEL);
+	if (!rbuf)
+		return -ENOMEM;
+
+	memcpy(rbuf, buf + sizeof(hdr), hdr.report_size);
+	report->outblob = no_free_ptr(rbuf);
+	report->outblob_len = hdr.report_size;
+
+	for (i = 0; i < ext_size / sizeof(struct snp_msg_cert_entry); i++) {
+		struct snp_msg_cert_entry *certs = buf + report_size;
+
+		if (memcmp(&certs[i], &zero_ent, sizeof(zero_ent)) == 0)
+			break;
+		certs_size += certs[i].length;
+	}
+	cert_count = i;
+
+	/* No certs to report */
+	if (cert_count == 0)
+		return 0;
+
+	/* sanity check that the entire certs table with metadata fits */
+	if ((cert_count + 1) * sizeof(zero_ent) + certs_size > ext_size)
+		return -ENXIO;
+
+	void *cbuf __free(kvfree) = kvzalloc(certs_size, GFP_KERNEL);
+	if (!cbuf)
+		return -ENOMEM;
+
+	/* Concatenate returned certs */
+	for (i = 0, offset = 0; i < cert_count; i++) {
+		struct snp_msg_cert_entry *certs = buf + report_size;
+
+		memcpy(cbuf + offset, certs_address + certs[i].offset, certs[i].length);
+		offset += certs[i].length;
+	}
+
+	report->certs = no_free_ptr(cbuf);
+	report->certs_len = certs_size;
+
+	return 0;
+}
+
+static const struct tsm_ops sev_tsm_ops = {
+	.name = KBUILD_MODNAME,
+	.report_new = sev_report_new,
+};
+
+static void unregister_sev_tsm(void *data)
+{
+	tsm_unregister(&sev_tsm_ops);
+}
+
 static int __init sev_guest_probe(struct platform_device *pdev)
 {
 	struct snp_secrets_page_layout *layout;
@@ -831,6 +953,14 @@ static int __init sev_guest_probe(struct platform_device *pdev)
 	snp_dev->input.req_gpa = __pa(snp_dev->request);
 	snp_dev->input.resp_gpa = __pa(snp_dev->response);
 	snp_dev->input.data_gpa = __pa(snp_dev->certs_data);
+
+	ret = tsm_register(&sev_tsm_ops, snp_dev, &tsm_report_ext_type);
+	if (ret)
+		goto e_free_cert_data;
+
+	ret = devm_add_action_or_reset(&pdev->dev, unregister_sev_tsm, NULL);
+	if (ret)
+		goto e_free_cert_data;
 
 	ret =  misc_register(misc);
 	if (ret)
