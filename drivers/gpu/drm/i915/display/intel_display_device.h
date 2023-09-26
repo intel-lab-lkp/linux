@@ -32,6 +32,10 @@ struct drm_printer;
 	func(overlay_needs_physical); \
 	func(supports_tv);
 
+#define _DISPLAY_INFO(display)		((display)->info.__device_info)
+#define _DISPLAY_RUNTIME_INFO(display)	(&(display)->info.__runtime_info)
+#define _HAS_DDI(display)		(_DISPLAY_INFO(display)->has_ddi)
+
 #define HAS_4TILE(i915)			(IS_DG2(i915) || DISPLAY_VER(i915) >= 14)
 #define HAS_ASYNC_FLIPS(i915)		(DISPLAY_VER(i915) >= 5)
 #define HAS_CDCLK_CRAWL(i915)		(DISPLAY_INFO(i915)->has_cdclk_crawl)

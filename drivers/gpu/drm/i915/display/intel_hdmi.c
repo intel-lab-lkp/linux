@@ -2583,9 +2583,9 @@ static const struct drm_connector_funcs intel_hdmi_connector_funcs = {
 static int intel_hdmi_connector_atomic_check(struct drm_connector *connector,
 					     struct drm_atomic_state *state)
 {
-	struct drm_i915_private *i915 = to_i915(state->dev);
+	struct intel_display *display = to_intel_display(state->dev);
 
-	if (HAS_DDI(i915))
+	if (_HAS_DDI(display))
 		return intel_digital_connector_atomic_check(connector, state);
 	else
 		return g4x_hdmi_connector_atomic_check(connector, state);
