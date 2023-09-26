@@ -11,7 +11,7 @@
 /plugin/;
 
 &{/} {
-	compatible = "gw,imx8mm-gw73xx-0x", "fsl,imx8mm";
+	compatible = "gw,imx8mm-gw72xx-0x", "fsl,imx8mm";
 
 	panel {
 		compatible = "powertip,ph800480t013-idf02";
