@@ -124,25 +124,25 @@ TC_INDIRECT_SCOPE int tcf_gate_act(struct sk_buff *skb,
 	tcf_lastuse_update(&gact->tcf_tm);
 	tcf_action_update_bstats(&gact->common, skb);
 
-	spin_lock(&gact->tcf_lock);
+	spin_lock_bh(&gact->tcf_lock);
 	if (unlikely(gact->current_gate_status & GATE_ACT_PENDING)) {
-		spin_unlock(&gact->tcf_lock);
+		spin_unlock_bh(&gact->tcf_lock);
 		return action;
 	}
 
 	if (!(gact->current_gate_status & GATE_ACT_GATE_OPEN)) {
-		spin_unlock(&gact->tcf_lock);
+		spin_unlock_bh(&gact->tcf_lock);
 		goto drop;
 	}
 
 	if (gact->current_max_octets >= 0) {
 		gact->current_entry_octets += qdisc_pkt_len(skb);
 		if (gact->current_entry_octets > gact->current_max_octets) {
-			spin_unlock(&gact->tcf_lock);
+			spin_unlock_bh(&gact->tcf_lock);
 			goto overlimit;
 		}
 	}
-	spin_unlock(&gact->tcf_lock);
+	spin_unlock_bh(&gact->tcf_lock);
 
 	return action;
 
