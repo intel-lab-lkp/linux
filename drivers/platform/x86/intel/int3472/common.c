@@ -2,6 +2,10 @@
 /* Author: Dan Scally <djrscally@gmail.com> */
 
 #include <linux/acpi.h>
+#include <linux/cleanup.h>
+#include <linux/device.h>
+#include <linux/gpio/machine.h>
+#include <linux/overflow.h>
 #include <linux/slab.h>
 
 #include "common.h"
@@ -79,4 +83,29 @@ int skl_int3472_get_sensor_adev_and_name(struct device *dev,
 		acpi_dev_put(sensor);
 
 	return ret;
+}
+
+/* This should *really* only be used when there's no other way... */
+struct gpio_desc *
+skl_int3472_gpiod_get_from_temp_lookup(struct device *dev,
+				       const char *chip_label, u16 hwnum,
+				       const char *con_id,
+				       enum gpio_lookup_flags lflags,
+				       enum gpiod_flags rflags)
+{
+	struct gpio_desc *desc;
+
+	struct gpiod_lookup_table *lookup __free(kfree) =
+			kzalloc(struct_size(lookup, table, 1), GFP_KERNEL);
+	if (!lookup)
+		return ERR_PTR(-ENOMEM);
+
+	lookup->dev_id = dev_name(dev);
+	lookup->table[0] = GPIO_LOOKUP(chip_label, hwnum, con_id, lflags);
+
+	gpiod_add_lookup_table(lookup);
+
+	desc = gpiod_get(dev, con_id, rflags);
+	gpiod_remove_lookup_table(lookup);
+	return desc;
 }

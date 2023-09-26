@@ -5,6 +5,8 @@
 #define _INTEL_SKL_INT3472_H
 
 #include <linux/clk-provider.h>
+#include <linux/device.h>
+#include <linux/gpio/consumer.h>
 #include <linux/gpio/machine.h>
 #include <linux/leds.h>
 #include <linux/regulator/driver.h>
@@ -128,5 +130,12 @@ void skl_int3472_unregister_regulator(struct int3472_discrete_device *int3472);
 int skl_int3472_register_pled(struct int3472_discrete_device *int3472,
 			      struct acpi_resource_gpio *agpio, u32 polarity);
 void skl_int3472_unregister_pled(struct int3472_discrete_device *int3472);
+
+struct gpio_desc *
+skl_int3472_gpiod_get_from_temp_lookup(struct device *dev,
+				       const char *chip_label, u16 hwnum,
+				       const char *con_id,
+				       enum gpio_lookup_flags lflags,
+				       enum gpiod_flags rflags);
 
 #endif
