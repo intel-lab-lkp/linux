@@ -16,6 +16,24 @@ test_default_stat() {
   echo "Basic stat command test [Success]"
 }
 
+test_stat_workload_config() {
+  echo "stat with --workload-config test"
+  if ! perf stat --workload-config cpu-list=1 -- bash -c 'taskset -pc $$' 2>&1 | grep -E -q "current affinity list: 1"
+  then
+    echo "stat with --workload-config test [Failed]"
+    err=1
+    return
+  fi
+
+  if ! perf stat --workload-config sched_policy=other,sched_prio=10 -- bash -c 'ps -o pid,cls,ni,cmd -p $$' 2>&1 | grep -E -q "TS\s+10"
+  then
+    echo "stat with --workload-config test [Failed]"
+    err=1
+    return
+  fi
+  echo "stat with --workload-config test [Success]"
+}
+
 test_stat_record_report() {
   echo "stat record and report test"
   if ! perf stat record -o - true | perf stat report -i - 2>&1 | \
@@ -147,6 +165,7 @@ test_cputype() {
 }
 
 test_default_stat
+test_stat_workload_config
 test_stat_record_report
 test_stat_record_script
 test_stat_repeat_weak_groups
