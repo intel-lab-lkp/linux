@@ -2055,10 +2055,9 @@ int drm_atomic_helper_commit(struct drm_device *dev,
 	 */
 
 	drm_atomic_state_get(state);
-	if (nonblock)
-		queue_work(system_unbound_wq, &state->commit_work);
-	else
-		commit_tail(state);
+	queue_work(system_unbound_wq, &state->commit_work);
+	if (!nonblock)
+		flush_work(&state->commit_work);
 
 	return 0;
 
