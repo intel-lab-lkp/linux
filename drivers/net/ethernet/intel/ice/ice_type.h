@@ -837,6 +837,8 @@ struct ice_hw {
 
 	u16 max_burst_size;	/* driver sets this value */
 
+	bool recp_reuse;	/* indicates whether FW supports recipe reuse */
+
 	/* Tx Scheduler values */
 	u8 num_tx_sched_layers;
 	u8 num_tx_sched_phys_layers;
