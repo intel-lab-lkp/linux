@@ -1870,6 +1870,63 @@ static int lan743x_tx_get_avail_desc(struct lan743x_tx *tx)
 		return last_head - last_tail - 1;
 }
 
+int lan743x_rx_set_tstamp_mode(struct lan743x_adapter *adapter,
+			       int rx_filter)
+{
+	int channel_number;
+	int index;
+	u32 data;
+
+	switch (rx_filter) {
+	case HWTSTAMP_FILTER_PTP_V2_SYNC:
+			data = lan743x_csr_read(adapter, PTP_RX_TS_CFG);
+			data &= ~PTP_RX_TS_CFG_EVENT_MSGS_;
+			data |= PTP_RX_TS_CFG_SYNC_MSG_;
+			lan743x_csr_write(adapter, PTP_RX_TS_CFG, data);
+			break;
+	case HWTSTAMP_FILTER_PTP_V2_DELAY_REQ:
+			data = lan743x_csr_read(adapter, PTP_RX_TS_CFG);
+			data &= ~PTP_RX_TS_CFG_EVENT_MSGS_;
+			data |= PTP_RX_TS_CFG_DELAY_REQ_MSG_;
+			lan743x_csr_write(adapter, PTP_RX_TS_CFG, data);
+			break;
+	case HWTSTAMP_FILTER_PTP_V2_EVENT:
+			data = lan743x_csr_read(adapter, PTP_RX_TS_CFG);
+			data |= PTP_RX_TS_CFG_EVENT_MSGS_;
+			lan743x_csr_write(adapter, PTP_RX_TS_CFG, data);
+			break;
+	case HWTSTAMP_FILTER_NONE:
+	case HWTSTAMP_FILTER_ALL:
+			break;
+	default:
+			netif_warn(adapter, drv, adapter->netdev,
+				   "rx timestamp = %d is not supported\n",
+				   rx_filter);
+			return -EINVAL;
+	}
+
+	for (index = 0; index < LAN743X_USED_RX_CHANNELS; index++) {
+		channel_number = adapter->rx[index].channel_number;
+		data = lan743x_csr_read(adapter, RX_CFG_B(channel_number));
+		if (rx_filter == HWTSTAMP_FILTER_NONE) {
+			data &= ~(RX_CFG_B_TS_ALL_RX_ |
+				  RX_CFG_B_TS_DESCR_EN_);
+		} else if (rx_filter == HWTSTAMP_FILTER_ALL) {
+			data |= RX_CFG_B_TS_ALL_RX_;
+		} else {
+			/* enable storing timestamping in extension descriptor
+			 * instead of timestamping all the packets
+			 */
+			data &= ~RX_CFG_B_TS_ALL_RX_;
+			data |= RX_CFG_B_TS_DESCR_EN_;
+		}
+		lan743x_csr_write(adapter, RX_CFG_B(channel_number),
+				  data);
+	}
+
+	return 0;
+}
+
 void lan743x_tx_set_timestamping_mode(struct lan743x_tx *tx,
 				      bool enable_timestamping,
 				      bool enable_onestep_sync)
@@ -2944,7 +3001,6 @@ static int lan743x_rx_open(struct lan743x_rx *rx)
 		data |= RX_CFG_B_RX_PAD_2_;
 	data &= ~RX_CFG_B_RX_RING_LEN_MASK_;
 	data |= ((rx->ring_size) & RX_CFG_B_RX_RING_LEN_MASK_);
-	data |= RX_CFG_B_TS_ALL_RX_;
 	if (!(adapter->csr.flags & LAN743X_CSR_FLAG_IS_A0))
 		data |= RX_CFG_B_RDMABL_512_;
 
