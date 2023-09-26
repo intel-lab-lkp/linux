@@ -34,10 +34,16 @@ static int parse_one_sublevel_option(const char *str,
 		return -1;
 	}
 
-	if (vstr)
-		v = atoi(vstr);
+	if (vstr) {
+		/* The value of option either is a integer or string. */
+		if (opt->value_ptr) {
+			v = atoi(vstr);
+			*opt->value_ptr = v;
+		} else {
+			*opt->str_ptr = strdup(vstr);
+		}
+	}
 
-	*opt->value_ptr = v;
 	free(s);
 	return 0;
 }
