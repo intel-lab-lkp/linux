@@ -9,11 +9,14 @@
 #include <linux/perf_event.h>
 #include <linux/irq.h>
 #include <linux/stringify.h>
+#include <linux/prctl.h>
 
 #include <asm/processor.h>
 #include <asm/ptrace.h>
 #include <asm/csr.h>
 #include <asm/entry-common.h>
+#include <asm/hwprobe.h>
+#include <asm/cpufeature.h>
 
 #define INSN_MATCH_LB			0x3
 #define INSN_MASK_LB			0x707f
@@ -396,8 +399,10 @@ union reg_data {
 	u64 data_u64;
 };
 
+static bool unaligned_ctl __read_mostly;
+
 /* sysctl hooks */
-int unaligned_enabled __read_mostly = 1;	/* Enabled by default */
+int unaligned_enabled __read_mostly;
 
 int handle_misaligned_load(struct pt_regs *regs)
 {
@@ -410,6 +415,9 @@ int handle_misaligned_load(struct pt_regs *regs)
 	perf_sw_event(PERF_COUNT_SW_ALIGNMENT_FAULTS, 1, regs, addr);
 
 	if (!unaligned_enabled)
+		return -1;
+
+	if (user_mode(regs) && (current->thread.align_ctl & PR_UNALIGN_SIGBUS))
 		return -1;
 
 	if (get_insn(regs, epc, &insn))
@@ -511,6 +519,9 @@ int handle_misaligned_store(struct pt_regs *regs)
 	if (!unaligned_enabled)
 		return -1;
 
+	if (user_mode(regs) && (current->thread.align_ctl & PR_UNALIGN_SIGBUS))
+		return -1;
+
 	if (get_insn(regs, epc, &insn))
 		return -1;
 
@@ -584,4 +595,54 @@ int handle_misaligned_store(struct pt_regs *regs)
 	regs->epc = epc + INSN_LEN(insn);
 
 	return 0;
+}
+
+bool check_unaligned_access_emulated(int cpu)
+{
+	unsigned long emulated = 1, tmp_var;
+
+	/* Use a fixup to detect if misaligned access triggered an exception */
+	__asm__ __volatile__ (
+		"1:\n"
+		"	"REG_L" %[tmp], 1(%[ptr])\n"
+		"	li %[emulated], 0\n"
+		"2:\n"
+		_ASM_EXTABLE(1b, 2b)
+	: [emulated] "+r" (emulated), [tmp] "=r" (tmp_var)
+	: [ptr] "r" (&tmp_var)
+	: "memory");
+
+	if (!emulated)
+		return false;
+
+	per_cpu(misaligned_access_speed, cpu) =
+		RISCV_HWPROBE_MISALIGNED_EMULATED;
+
+	return true;
+}
+
+void __init unaligned_emulation_finish(void)
+{
+	int cpu;
+
+	/*
+	 * We can only support PR_UNALIGN controls if all CPUs have misaligned
+	 * accesses emulated since tasks requesting such control can run on any
+	 * CPU.
+	 */
+	for_each_possible_cpu(cpu) {
+		if (per_cpu(misaligned_access_speed, cpu) !=
+		    RISCV_HWPROBE_MISALIGNED_EMULATED) {
+			goto out;
+		}
+	}
+	unaligned_ctl = true;
+
+out:
+	unaligned_enabled = 1;
+}
+
+bool unaligned_ctl_available(void)
+{
+	return unaligned_ctl;
 }

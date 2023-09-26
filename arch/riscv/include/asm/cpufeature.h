@@ -8,6 +8,7 @@
 
 #include <linux/bitmap.h>
 #include <asm/hwcap.h>
+#include <asm/hwprobe.h>
 
 /*
  * These are probed via a device_initcall(), via either the SBI or directly
@@ -31,5 +32,10 @@ DECLARE_PER_CPU(long, misaligned_access_speed);
 extern struct riscv_isainfo hart_isa[NR_CPUS];
 
 void check_unaligned_access(int cpu);
+
+bool unaligned_ctl_available(void);
+
+bool check_unaligned_access_emulated(int cpu);
+void unaligned_emulation_finish(void);
 
 #endif
