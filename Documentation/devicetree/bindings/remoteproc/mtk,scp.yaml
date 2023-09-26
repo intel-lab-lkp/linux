@@ -91,6 +91,7 @@ allOf:
 
 additionalProperties:
   type: object
+  additionalProperties: false
   description:
     Subnodes of the SCP represent rpmsg devices. The names of the devices
     are not important. The properties of these nodes are defined by the
