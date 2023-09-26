@@ -7350,6 +7350,7 @@ static struct extent_map *create_io_em(struct btrfs_inode *inode, u64 start,
 		set_bit(EXTENT_FLAG_COMPRESSED, &em->flags);
 		em->compress_type = compress_type;
 	}
+	em->encryption_type = BTRFS_ENCRYPTION_NONE;
 
 	ret = btrfs_replace_extent_map_range(inode, em, true);
 	if (ret) {
