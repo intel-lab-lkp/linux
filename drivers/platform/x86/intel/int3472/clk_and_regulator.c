@@ -174,19 +174,15 @@ int skl_int3472_register_gpio_clock(struct int3472_discrete_device *int3472,
 	if (int3472->clock.cl)
 		return -EBUSY;
 
-	int3472->clock.ena_gpio = acpi_get_and_request_gpiod(path, agpio->pin_table[0],
-							     "int3472,clk-enable");
+	int3472->clock.ena_gpio = skl_int3472_gpiod_get_from_temp_lookup(
+					int3472->dev, path, agpio->pin_table[0],
+					"int3472,clk-enable", polarity,
+					GPIOD_OUT_LOW);
 	if (IS_ERR(int3472->clock.ena_gpio)) {
 		ret = PTR_ERR(int3472->clock.ena_gpio);
 		int3472->clock.ena_gpio = NULL;
 		return dev_err_probe(int3472->dev, ret, "getting clk-enable GPIO\n");
 	}
-
-	if (polarity == GPIO_ACTIVE_LOW)
-		gpiod_toggle_active_low(int3472->clock.ena_gpio);
-
-	/* Ensure the pin is in output mode and non-active state */
-	gpiod_direction_output(int3472->clock.ena_gpio, 0);
 
 	init.name = kasprintf(GFP_KERNEL, "%s-clk",
 			      acpi_dev_name(int3472->adev));
@@ -314,16 +310,16 @@ int skl_int3472_register_regulator(struct int3472_discrete_device *int3472,
 						int3472->regulator.supply_name,
 						&int3472_gpio_regulator_ops);
 
-	int3472->regulator.gpio = acpi_get_and_request_gpiod(path, agpio->pin_table[0],
-							     "int3472,regulator");
+	/* Ensure the pin is in output mode and non-active state */
+	int3472->regulator.gpio = skl_int3472_gpiod_get_from_temp_lookup(
+					int3472->dev, path, agpio->pin_table[0],
+					"int3472,regulator", GPIO_ACTIVE_HIGH,
+					GPIOD_OUT_LOW);
 	if (IS_ERR(int3472->regulator.gpio)) {
 		ret = PTR_ERR(int3472->regulator.gpio);
 		int3472->regulator.gpio = NULL;
 		return dev_err_probe(int3472->dev, ret, "getting regulator GPIO\n");
 	}
-
-	/* Ensure the pin is in output mode and non-active state */
-	gpiod_direction_output(int3472->regulator.gpio, 0);
 
 	cfg.dev = &int3472->adev->dev;
 	cfg.init_data = &init_data;
