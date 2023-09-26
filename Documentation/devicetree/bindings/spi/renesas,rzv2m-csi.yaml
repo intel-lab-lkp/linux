@@ -39,6 +39,17 @@ properties:
   power-domains:
     maxItems: 1
 
+  renesas,csi-ss:
+    type: boolean
+    description:
+      Use CSI Slave Selection (SS) pin to enable transmission and reception when
+      in slave mode.
+
+  renesas,csi-ss-high:
+    type: boolean
+    description:
+      The SS pin is active high (by default the SS pin is active low).
+
 required:
   - compatible
   - reg
@@ -49,6 +60,10 @@ required:
   - power-domains
   - '#address-cells'
   - '#size-cells'
+
+dependencies:
+  renesas,csi-ss: [ spi-slave ]
+  renesas,csi-ss-high: [ 'renesas,csi-ss' ]
 
 unevaluatedProperties: false
 
