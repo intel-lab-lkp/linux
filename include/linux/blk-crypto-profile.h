@@ -100,6 +100,13 @@ struct blk_crypto_profile {
 	 */
 	struct device *dev;
 
+	/**
+	 * @process_bio_supported: Some things, like btrfs, require the
+	 * encrypted data for checksumming. Drivers set this to true if they can
+	 * handle the process_bio() callback.
+	 */
+	bool process_bio_supported;
+
 	/* private: The following fields shouldn't be accessed by drivers. */
 
 	/* Number of keyslots, or 0 if not applicable */

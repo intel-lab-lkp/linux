@@ -346,6 +346,15 @@ static bool blk_crypto_fallback_encrypt_bio(struct bio **bio_ptr)
 		}
 	}
 
+	/* Process the encrypted bio before we submit it. */
+	if (bc->bc_key->crypto_cfg.process_bio) {
+		blk_st = bc->bc_key->crypto_cfg.process_bio(src_bio, enc_bio);
+		if (blk_st != BLK_STS_OK) {
+			src_bio->bi_status = blk_st;
+			goto out_free_bounce_pages;
+		}
+	}
+
 	enc_bio->bi_private = src_bio;
 	enc_bio->bi_end_io = blk_crypto_fallback_encrypt_endio;
 	*bio_ptr = enc_bio;
@@ -390,6 +399,24 @@ static void blk_crypto_fallback_decrypt_bio(struct work_struct *work)
 	const int data_unit_size = bc->bc_key->crypto_cfg.data_unit_size;
 	unsigned int i;
 	blk_status_t blk_st;
+
+	/*
+	 * Process the bio first before trying to decrypt.
+	 *
+	 * NOTE: btrfs expects that this bio is the same that was submitted.  If
+	 * at any point this changes we will need to update process_bio to take
+	 * f_ctx->crypt_iter in order to make sure we can iterate the pages for
+	 * checksumming.  We're currently saving this in our btrfs_bio, so this
+	 * works, but if at any point in the future we start allocating a bounce
+	 * bio or something we need to update this callback.
+	 */
+	if (bc->bc_key->crypto_cfg.process_bio) {
+		blk_st = bc->bc_key->crypto_cfg.process_bio(bio, bio);
+		if (blk_st != BLK_STS_OK) {
+			bio->bi_status = blk_st;
+			goto out_no_keyslot;
+		}
+	}
 
 	/*
 	 * Get a blk-crypto-fallback keyslot that contains a crypto_skcipher for
@@ -560,6 +587,7 @@ static int blk_crypto_fallback_init(void)
 
 	blk_crypto_fallback_profile->ll_ops = blk_crypto_fallback_ll_ops;
 	blk_crypto_fallback_profile->max_dun_bytes_supported = BLK_CRYPTO_MAX_IV_SIZE;
+	blk_crypto_fallback_profile->process_bio_supported = true;
 
 	/* All blk-crypto modes have a crypto API fallback. */
 	for (i = 0; i < BLK_ENCRYPTION_MODE_MAX; i++)
