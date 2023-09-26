@@ -2,9 +2,9 @@
 /* Copyright(c) 2013 - 2018 Intel Corporation. */
 
 #include "i40e_alloc.h"
-#include "i40e_type.h"
+#include "i40e_debug.h"
 #include "i40e_lan_hmc.h"
-#include "i40e_osdep.h"
+#include "i40e_type.h"
 
 /* lan specific interface functions */
 

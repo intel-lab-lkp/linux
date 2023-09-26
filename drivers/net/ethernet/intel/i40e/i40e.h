@@ -12,7 +12,7 @@
 #include <net/pkt_cls.h>
 #include <net/udp_tunnel.h>
 #include "i40e_dcb.h"
-#include "i40e_osdep.h"
+#include "i40e_io.h"
 #include "i40e_prototype.h"
 #include "i40e_register.h"
 #include "i40e_txrx.h"

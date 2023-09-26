@@ -2,7 +2,7 @@
 /* Copyright(c) 2013 - 2018 Intel Corporation. */
 
 #include "i40e_diag.h"
-#include "i40e_osdep.h"
+#include "i40e_io.h"
 #include "i40e_prototype.h"
 
 /**

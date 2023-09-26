@@ -6,6 +6,7 @@
 
 #include <linux/ethtool.h>
 #include <linux/avf/virtchnl.h>
+#include "i40e_debug.h"
 #include "i40e_type.h"
 
 /* Prototypes for shared code functions that are not in
