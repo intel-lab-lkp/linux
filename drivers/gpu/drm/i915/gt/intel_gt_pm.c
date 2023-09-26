@@ -289,6 +289,13 @@ err_wedged:
 
 static void wait_for_suspend(struct intel_gt *gt)
 {
+	/*
+	 * On rare occasions, we've observed the fence completion trigger
+	 * free_engines asynchronously via rcu_call. Ensure those are done.
+	 * This path is only called on suspend, so it's an acceptable cost.
+	 */
+	rcu_barrier();
+
 	if (!intel_gt_pm_is_awake(gt))
 		return;
 
