@@ -10240,7 +10240,7 @@ skip_beacons:
 			goto free;
 	}
 
-	err = rdev_channel_switch(rdev, dev, &params);
+	err = rdev_channel_switch(rdev, dev, &params, link_id);
 
 free:
 	kfree(params.beacon_after.mbssid_ies);

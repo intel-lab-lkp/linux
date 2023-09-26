@@ -3844,7 +3844,8 @@ static void ieee80211_color_change_abort(struct ieee80211_sub_if_data  *sdata)
 
 static int
 __ieee80211_channel_switch(struct wiphy *wiphy, struct net_device *dev,
-			   struct cfg80211_csa_settings *params)
+			   struct cfg80211_csa_settings *params,
+			   unsigned int link_id)
 {
 	struct ieee80211_sub_if_data *sdata = IEEE80211_DEV_TO_SUB_IF(dev);
 	struct ieee80211_local *local = sdata->local;
@@ -3855,6 +3856,9 @@ __ieee80211_channel_switch(struct wiphy *wiphy, struct net_device *dev,
 	int err;
 
 	lockdep_assert_wiphy(local->hw.wiphy);
+
+	if (WARN_ON(link_id > IEEE80211_MLD_MAX_NUM_LINKS))
+		return -EINVAL;
 
 	if (!list_empty(&local->roc_list) || local->scanning)
 		return -EBUSY;
@@ -3949,14 +3953,15 @@ out:
 }
 
 int ieee80211_channel_switch(struct wiphy *wiphy, struct net_device *dev,
-			     struct cfg80211_csa_settings *params)
+			     struct cfg80211_csa_settings *params,
+			     unsigned int link_id)
 {
 	struct ieee80211_sub_if_data *sdata = IEEE80211_DEV_TO_SUB_IF(dev);
 	struct ieee80211_local *local = sdata->local;
 
 	lockdep_assert_wiphy(local->hw.wiphy);
 
-	return __ieee80211_channel_switch(wiphy, dev, params);
+	return __ieee80211_channel_switch(wiphy, dev, params, link_id);
 }
 
 u64 ieee80211_mgmt_tx_cookie(struct ieee80211_local *local)
