@@ -1514,6 +1514,28 @@ do {									       \
 		return NULL;									\
 	}
 
+/**
+ * KUNIT_ZERO_ARRAY_PARAM() - Define test parameter generator from a zero terminated array.
+ * @name:  prefix for the test parameter generator function.
+ * @array: zero terminated array of test parameters.
+ * @get_desc: function to convert param to description; NULL to use default
+ *
+ * Define function @name_gen_params which uses zero terminated @array to generate parameters.
+ */
+#define KUNIT_ZERO_ARRAY_PARAM(name, array, get_desc)						\
+	static const void *name##_gen_params(const void *prev, char *desc)			\
+	{											\
+		typeof((array)[0]) *__prev = prev;						\
+		typeof(__prev) __next = __prev ? __prev + 1 : (array);				\
+		void (*__get_desc)(typeof(__next), char *) = get_desc;				\
+		for (; memchr_inv(__next, 0, sizeof(*__next)); __prev = __next++) {		\
+			if (__get_desc)								\
+				__get_desc(__next, desc);					\
+			return __next;								\
+		}										\
+		return NULL;									\
+	}
+
 // TODO(dlatypov@google.com): consider eventually migrating users to explicitly
 // include resource.h themselves if they need it.
 #include <kunit/resource.h>

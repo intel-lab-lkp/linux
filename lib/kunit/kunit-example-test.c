@@ -202,6 +202,7 @@ static void example_param_get_desc(const struct example_param *p, char *desc)
 }
 
 KUNIT_ARRAY_PARAM(example, example_params_array, example_param_get_desc);
+KUNIT_ZERO_ARRAY_PARAM(example_zero, example_params_array, example_param_get_desc);
 
 /*
  * This test shows the use of params.
@@ -246,6 +247,7 @@ static struct kunit_case example_test_cases[] = {
 	KUNIT_CASE(example_all_expect_macros_test),
 	KUNIT_CASE(example_static_stub_test),
 	KUNIT_CASE_PARAM(example_params_test, example_gen_params),
+	KUNIT_CASE_PARAM(example_params_test, example_zero_gen_params),
 	KUNIT_CASE_SLOW(example_slow_test),
 	{}
 };
