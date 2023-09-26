@@ -1694,9 +1694,9 @@ static inline int folio_cpupid_last(struct folio *folio)
 {
 	return folio->_last_cpupid;
 }
-static inline void page_cpupid_reset_last(struct page *page)
+static inline void folio_cpupid_reset_last(struct folio *folio)
 {
-	page->_last_cpupid = -1 & LAST_CPUPID_MASK;
+	folio->_last_cpupid = -1 & LAST_CPUPID_MASK;
 }
 #else
 static inline int folio_cpupid_last(struct folio *folio)
@@ -1706,9 +1706,9 @@ static inline int folio_cpupid_last(struct folio *folio)
 
 extern int folio_cpupid_xchg_last(struct folio *folio, int cpupid);
 
-static inline void page_cpupid_reset_last(struct page *page)
+static inline void folio_cpupid_reset_last(struct folio *folio)
 {
-	page->flags |= LAST_CPUPID_MASK << LAST_CPUPID_PGSHIFT;
+	folio->flags |= LAST_CPUPID_MASK << LAST_CPUPID_PGSHIFT;
 }
 #endif /* LAST_CPUPID_NOT_IN_PAGE_FLAGS */
 
@@ -1771,7 +1771,7 @@ static inline bool cpupid_pid_unset(int cpupid)
 	return true;
 }
 
-static inline void page_cpupid_reset_last(struct page *page)
+static inline void folio_cpupid_reset_last(struct folio *folio)
 {
 }
 

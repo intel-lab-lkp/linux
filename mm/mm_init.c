@@ -563,7 +563,6 @@ void __meminit __init_single_page(struct page *page, unsigned long pfn,
 	set_page_links(page, zone, nid, pfn);
 	init_page_count(page);
 	page_mapcount_reset(page);
-	page_cpupid_reset_last(page);
 	page_kasan_tag_reset(page);
 
 	INIT_LIST_HEAD(&page->lru);

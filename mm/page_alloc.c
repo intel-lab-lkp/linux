@@ -1126,7 +1126,7 @@ static __always_inline bool free_pages_prepare(struct page *page,
 			return false;
 	}
 
-	page_cpupid_reset_last(page);
+	folio_cpupid_reset_last(folio);
 	page->flags &= ~PAGE_FLAGS_CHECK_AT_PREP;
 	reset_page_owner(page, order);
 	page_table_check_free(page, order);
