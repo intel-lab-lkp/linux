@@ -6463,6 +6463,24 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	struct sched_entity *se = &p->se;
 	int idle_h_nr_running = task_has_idle_policy(p);
 	int task_new = !(flags & ENQUEUE_WAKEUP);
+	u64 last_dequeue = p->se.prev_dequeue_time;
+	u64 now = sched_clock_cpu(task_cpu(p));
+
+	/*
+	 * If the task is a short-sleepting task, there is no need
+	 * to migrate it to other CPUs. Estimate the average short sleeping
+	 * time of the wakee. This sleep time is used as a hint to reserve
+	 * the dequeued task's previous CPU for a short while. During this
+	 * reservation period, select_idle_cpu() prevents other wakees from
+	 * choosing this CPU. This could bring a better cache locality.
+	 */
+	if ((flags & ENQUEUE_WAKEUP) && last_dequeue && cpu_online(task_cpu(p)) &&
+	    now > last_dequeue) {
+		if (now - last_dequeue < sysctl_sched_migration_cost)
+			update_avg(&p->se.sis_rsv_avg, now - last_dequeue);
+		else
+			p->se.sis_rsv_avg >>= 1;
+	}
 
 	/*
 	 * The code below (indirectly) updates schedutil which looks at
@@ -6557,6 +6575,7 @@ static void dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	int task_sleep = flags & DEQUEUE_SLEEP;
 	int idle_h_nr_running = task_has_idle_policy(p);
 	bool was_sched_idle = sched_idle_rq(rq);
+	u64 now;
 
 	util_est_dequeue(&rq->cfs, p);
 
@@ -6618,6 +6637,8 @@ static void dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 dequeue_throttle:
 	util_est_update(&rq->cfs, p, task_sleep);
 	hrtick_update(rq);
+	now = sched_clock_cpu(cpu_of(rq));
+	p->se.prev_dequeue_time = task_sleep ? now : 0;
 }
 
 #ifdef CONFIG_SMP
