@@ -1368,6 +1368,7 @@ enum {
 	IFLA_RMNET_UNSPEC,
 	IFLA_RMNET_MUX_ID,
 	IFLA_RMNET_FLAGS,
+	IFLA_RMNET_QUEUE,
 	__IFLA_RMNET_MAX,
 };
 
@@ -1376,6 +1377,21 @@ enum {
 struct ifla_rmnet_flags {
 	__u32	flags;
 	__u32	mask;
+};
+
+enum {
+	RMNET_QUEUE_OPERATION_UNSPEC,
+	RMNET_QUEUE_MAPPING_ADD,	/* Add new queue <-> mark mapping */
+	RMNET_QUEUE_MAPPING_REMOVE,	/* Remove queue <-> mark mapping */
+	RMNET_QUEUE_ENABLE,		/* Allow traffic on an existing queue */
+	RMNET_QUEUE_DISABLE,		/* Stop traffic on an existing queue */
+};
+
+struct rmnet_queue_mapping {
+	__u8	operation;
+	__u8	txqueue;
+	__u16	padding;
+	__u32	mark;
 };
 
 /* MCTP section */

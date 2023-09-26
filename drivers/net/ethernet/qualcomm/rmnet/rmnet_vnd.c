@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2013-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * RMNET Data virtual network driver
  */
@@ -158,6 +159,23 @@ static void rmnet_get_stats64(struct net_device *dev,
 	s->tx_dropped = total_stats.tx_drops;
 }
 
+static u16 rmnet_vnd_select_queue(struct net_device *dev,
+				  struct sk_buff *skb,
+				  struct net_device *sb_dev)
+{
+	struct rmnet_priv *priv = netdev_priv(dev);
+	void *p = xa_load(&priv->queue_map, skb->mark);
+	u8 txq;
+
+	if (!p || !xa_is_value(p))
+		return 0;
+
+	txq = xa_to_value(p);
+
+	netdev_dbg(dev, "mark %08x -> txq %02x\n", skb->mark, txq);
+	return txq;
+}
+
 static const struct net_device_ops rmnet_vnd_ops = {
 	.ndo_start_xmit = rmnet_vnd_start_xmit,
 	.ndo_change_mtu = rmnet_vnd_change_mtu,
@@ -167,6 +185,7 @@ static const struct net_device_ops rmnet_vnd_ops = {
 	.ndo_init       = rmnet_vnd_init,
 	.ndo_uninit     = rmnet_vnd_uninit,
 	.ndo_get_stats64 = rmnet_get_stats64,
+	.ndo_select_queue = rmnet_vnd_select_queue,
 };
 
 static const char rmnet_gstrings_stats[][ETH_GSTRING_LEN] = {
@@ -333,6 +352,8 @@ int rmnet_vnd_newlink(u8 id, struct net_device *rmnet_dev,
 		rmnet_dev->rtnl_link_ops = &rmnet_link_ops;
 
 		priv->mux_id = id;
+
+		xa_init(&priv->queue_map);
 
 		netdev_dbg(rmnet_dev, "rmnet dev created\n");
 	}
