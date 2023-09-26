@@ -361,6 +361,8 @@ ssize_t copy_splice_read(struct file *in, loff_t *ppos,
 	iov_iter_bvec(&to, ITER_DEST, bv, npages, len);
 	init_sync_kiocb(&kiocb, in);
 	kiocb.ki_pos = *ppos;
+	if (flags & SPLICE_F_NOWAIT)
+		kiocb.ki_flags |= IOCB_NOWAIT;
 	ret = call_read_iter(in, &kiocb, &to);
 
 	if (ret > 0) {
@@ -1069,6 +1071,18 @@ ssize_t splice_direct_to_actor(struct file *in, struct splice_desc *sd,
 		ret = vfs_splice_read(in, &pos, pipe, len, flags);
 		if (unlikely(ret <= 0))
 			goto read_failure;
+
+		/*
+		 * After at least one byte was read from the input
+		 * file, don't wait for blocking I/O in the following
+		 * loop iterations; instead of blocking for arbitrary
+		 * amounts of time in the kernel, let userspace decide
+		 * how to proceed.  This avoids excessive latency if
+		 * the output is being consumed faster than the input
+		 * file can fill it (e.g. sendfile() from a slow hard
+		 * disk to a fast network).
+		 */
+		flags |= SPLICE_F_NOWAIT;
 
 		read_len = ret;
 		sd->total_len = read_len;
