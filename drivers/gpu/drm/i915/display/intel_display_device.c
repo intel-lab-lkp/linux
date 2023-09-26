@@ -921,6 +921,19 @@ void intel_display_device_probe(struct drm_i915_private *i915)
 	const struct intel_display_device_info *info;
 	u16 ver, rel, step;
 
+	/*
+	 * These are here for now to do them as early as possible. i915 has just
+	 * been allocated, drm isn't even initialized yet, but we have the
+	 * pointer.
+	 *
+	 * Later on, the display probe would allocate struct intel_display
+	 * itself, and return the pointer to the caller, for whom struct
+	 * intel_display would be an opaque type, a cookie to be passed on to
+	 * display functions.
+	 */
+	i915->__intel_display_private = &i915->display;
+	i915->display.drm = &i915->drm;
+
 	if (HAS_GMD_ID(i915))
 		info = probe_gmdid_display(i915, &ver, &rel, &step);
 	else

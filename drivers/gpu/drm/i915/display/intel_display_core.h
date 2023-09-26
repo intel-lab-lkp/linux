@@ -14,6 +14,7 @@
 #include <linux/workqueue.h>
 
 #include <drm/drm_connector.h>
+#include <drm/drm_device.h>
 #include <drm/drm_modeset_lock.h>
 
 #include "intel_cdclk.h"
@@ -267,6 +268,9 @@ struct intel_wm {
 };
 
 struct intel_display {
+	/* drm device backpointer */
+	struct drm_device *drm;
+
 	/* Display functions */
 	struct {
 		/* Top level crtc-ish functions */
@@ -520,5 +524,17 @@ struct intel_display {
 	struct intel_vbt_data vbt;
 	struct intel_wm wm;
 };
+
+/* FIXME: could be placed somewhere else to avoid drm/drm_device.h include */
+static inline struct intel_display *to_intel_display(const struct drm_device *drm)
+{
+	/*
+	 * Assume there's a pointer to struct intel_display in memory right
+	 * after struct drm_device.
+	 */
+	struct intel_display **p = (struct intel_display **)(drm + 1);
+
+	return *p;
+}
 
 #endif /* __INTEL_DISPLAY_CORE_H__ */

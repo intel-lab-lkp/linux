@@ -193,7 +193,16 @@ struct i915_selftest_stash {
 };
 
 struct drm_i915_private {
-	struct drm_device drm;
+	struct {
+		struct drm_device drm;
+
+		/*
+		 * Display private data. Do *not* access directly. Must be
+		 * placed right after drm_device to facilitate getting to it
+		 * given a drm device pointer.
+		 */
+		struct intel_display *__intel_display_private;
+	} __packed;
 
 	struct intel_display display;
 
