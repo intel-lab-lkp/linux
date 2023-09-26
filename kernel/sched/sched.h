@@ -1068,6 +1068,7 @@ struct rq {
 #endif
 	u64			idle_stamp;
 	u64			avg_idle;
+	u64			cache_hot_timeout;
 
 	unsigned long		wake_stamp;
 	u64			wake_avg_idle;

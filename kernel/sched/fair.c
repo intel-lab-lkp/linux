@@ -6639,6 +6639,21 @@ dequeue_throttle:
 	hrtick_update(rq);
 	now = sched_clock_cpu(cpu_of(rq));
 	p->se.prev_dequeue_time = task_sleep ? now : 0;
+#ifdef CONFIG_SMP
+	/*
+	 * If this rq will become idle, and if the dequeued
+	 * task is a short sleeping one, check if we can reserve
+	 * this idle CPU for that task for a short while.
+	 * During this reservation period, other wakees will
+	 * skip this 'idle' CPU in select_idle_cpu(), and this
+	 * short sleeping task can pick its previous CPU in
+	 * select_idle_sibling(), which brings better cache
+	 * locality.
+	 */
+	if (sched_feat(SIS_CACHE) && task_sleep && !rq->nr_running &&
+	    p->se.sis_rsv_avg)
+		rq->cache_hot_timeout = max(rq->cache_hot_timeout, now + p->se.sis_rsv_avg);
+#endif
 }
 
 #ifdef CONFIG_SMP
@@ -6989,6 +7004,25 @@ static inline int find_idlest_cpu(struct sched_domain *sd, struct task_struct *p
 	return new_cpu;
 }
 
+/*
+ * If a short sleeping task has once run on this idle CPU
+ * not long ago, return 1 to indicate that the CPU is still
+ * cache-hot for that task, and no one except for that task
+ * should pick this cache-hot CPU during wakeup.
+ *
+ * The CPU is expected to be idle when invoking this function.
+ */
+static int cache_hot_cpu(int cpu)
+{
+	if (!sched_feat(SIS_CACHE))
+		return 0;
+
+	if (sched_clock_cpu(cpu) >= cpu_rq(cpu)->cache_hot_timeout)
+		return 0;
+
+	return 1;
+}
+
 static inline int __select_idle_cpu(int cpu, struct task_struct *p)
 {
 	if ((available_idle_cpu(cpu) || sched_idle_cpu(cpu)) &&
@@ -7132,7 +7166,7 @@ static inline int select_idle_smt(struct task_struct *p, int target)
 static int select_idle_cpu(struct task_struct *p, struct sched_domain *sd, bool has_idle_core, int target)
 {
 	struct cpumask *cpus = this_cpu_cpumask_var_ptr(select_rq_mask);
-	int i, cpu, idle_cpu = -1, nr = INT_MAX;
+	int i, cpu, idle_cpu = -1, nr = INT_MAX, first_hot_cpu = -1;
 	struct sched_domain_shared *sd_share;
 	struct rq *this_rq = this_rq();
 	int this = smp_processor_id();
@@ -7187,17 +7221,40 @@ static int select_idle_cpu(struct task_struct *p, struct sched_domain *sd, bool 
 	for_each_cpu_wrap(cpu, cpus, target + 1) {
 		if (has_idle_core) {
 			i = select_idle_core(p, cpu, cpus, &idle_cpu);
-			if ((unsigned int)i < nr_cpumask_bits)
+			/*
+			 * Only the cache-cold idle CPU is returned. If no
+			 * cache-cold CPU is found, choose the first idle cpu
+			 * stored in idle_cpu.
+			 */
+			if ((unsigned int)i < nr_cpumask_bits && !cache_hot_cpu(i))
 				return i;
 
 		} else {
 			if (!--nr)
 				return -1;
 			idle_cpu = __select_idle_cpu(cpu, p);
-			if ((unsigned int)idle_cpu < nr_cpumask_bits)
-				break;
+			if ((unsigned int)idle_cpu < nr_cpumask_bits) {
+				if (!cache_hot_cpu(idle_cpu)) {
+					first_hot_cpu = -1;
+					break;
+				}
+
+				/*
+				 * Record the first cache-hot idle CPU
+				 * as the last resort. This is to deal
+				 * with the case that, every CPU is
+				 * cache-hot, and we want to choose an
+				 * idle CPU over a non-idle target CPU.
+				 */
+				if (first_hot_cpu == -1)
+					first_hot_cpu = idle_cpu;
+			}
 		}
 	}
+
+	/* all idle CPUs are cache-hot, choose the first cache-hot one */
+	if (first_hot_cpu != -1)
+		idle_cpu = first_hot_cpu;
 
 	if (has_idle_core)
 		set_idle_cores(target, false);
