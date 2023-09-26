@@ -201,8 +201,16 @@ static void example_param_get_desc(const struct example_param *p, char *desc)
 	snprintf(desc, KUNIT_PARAM_DESC_SIZE, "example value %d", p->value);
 }
 
+static bool example_param_filter(const struct example_param *prev,
+				 const struct example_param *next)
+{
+	return next->value < 3;
+}
+
 KUNIT_ARRAY_PARAM(example, example_params_array, example_param_get_desc);
 KUNIT_ZERO_ARRAY_PARAM(example_zero, example_params_array, example_param_get_desc);
+KUNIT_FILTERED_ZERO_ARRAY_PARAM(example_filter, example_params_array, example_param_get_desc,
+				example_param_filter);
 
 /*
  * This test shows the use of params.
@@ -248,6 +256,7 @@ static struct kunit_case example_test_cases[] = {
 	KUNIT_CASE(example_static_stub_test),
 	KUNIT_CASE_PARAM(example_params_test, example_gen_params),
 	KUNIT_CASE_PARAM(example_params_test, example_zero_gen_params),
+	KUNIT_CASE_PARAM(example_params_test, example_filter_gen_params),
 	KUNIT_CASE_SLOW(example_slow_test),
 	{}
 };
