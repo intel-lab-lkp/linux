@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
 %YAML 1.2
 ---
-$id: http://devicetree.org/schemas/input/touchscreen/imagis,ist3038c.yaml#
+$id: http://devicetree.org/schemas/input/touchscreen/imagis,ist30xxc.yaml#
 $schema: http://devicetree.org/meta-schemas/core.yaml#
 
 title: Imagis IST30XXC family touchscreen controller

@@ -11,25 +11,26 @@
 #include <linux/property.h>
 #include <linux/regulator/consumer.h>
 
-#define IST3038C_HIB_ACCESS		(0x800B << 16)
-#define IST3038C_DIRECT_ACCESS		BIT(31)
-#define IST3038C_REG_CHIPID		0x40001000
-#define IST3038C_REG_HIB_BASE		0x30000100
-#define IST3038C_REG_TOUCH_STATUS	(IST3038C_REG_HIB_BASE | IST3038C_HIB_ACCESS)
-#define IST3038C_REG_TOUCH_COORD	(IST3038C_REG_HIB_BASE | IST3038C_HIB_ACCESS | 0x8)
-#define IST3038C_REG_INTR_MESSAGE	(IST3038C_REG_HIB_BASE | IST3038C_HIB_ACCESS | 0x4)
+#define IST30XXC_HIB_ACCESS		(0x800B << 16)
+#define IST30XXC_DIRECT_ACCESS		BIT(31)
+#define IST30XXC_REG_CHIPID		0x40001000
+#define IST30XXC_REG_HIB_BASE		0x30000100
+#define IST30XXC_REG_TOUCH_STATUS	(IST30XXC_REG_HIB_BASE | IST30XXC_HIB_ACCESS)
+#define IST30XXC_REG_TOUCH_COORD	(IST30XXC_REG_HIB_BASE | IST30XXC_HIB_ACCESS | 0x8)
+#define IST30XXC_REG_INTR_MESSAGE	(IST30XXC_REG_HIB_BASE | IST30XXC_HIB_ACCESS | 0x4)
+#define IST30XXC_CHIP_ON_DELAY_MS	60
+#define IST30XXC_I2C_RETRY_COUNT	3
+#define IST30XXC_MAX_FINGER_NUM		10
+#define IST30XXC_X_MASK			GENMASK(23, 12)
+#define IST30XXC_X_SHIFT		12
+#define IST30XXC_Y_MASK			GENMASK(11, 0)
+#define IST30XXC_AREA_MASK		GENMASK(27, 24)
+#define IST30XXC_AREA_SHIFT		24
+#define IST30XXC_FINGER_COUNT_MASK	GENMASK(15, 12)
+#define IST30XXC_FINGER_COUNT_SHIFT	12
+#define IST30XXC_FINGER_STATUS_MASK	GENMASK(9, 0)
+
 #define IST3038C_WHOAMI			0x38c
-#define IST3038C_CHIP_ON_DELAY_MS	60
-#define IST3038C_I2C_RETRY_COUNT	3
-#define IST3038C_MAX_FINGER_NUM		10
-#define IST3038C_X_MASK			GENMASK(23, 12)
-#define IST3038C_X_SHIFT		12
-#define IST3038C_Y_MASK			GENMASK(11, 0)
-#define IST3038C_AREA_MASK		GENMASK(27, 24)
-#define IST3038C_AREA_SHIFT		24
-#define IST3038C_FINGER_COUNT_MASK	GENMASK(15, 12)
-#define IST3038C_FINGER_COUNT_SHIFT	12
-#define IST3038C_FINGER_STATUS_MASK	GENMASK(9, 0)
 
 struct imagis_ts {
 	struct i2c_client *client;
@@ -57,7 +58,7 @@ static int imagis_i2c_read_reg(struct imagis_ts *ts,
 		},
 	};
 	int ret, error;
-	int retry = IST3038C_I2C_RETRY_COUNT;
+	int retry = IST30XXC_I2C_RETRY_COUNT;
 
 	/* Retry in case the controller fails to respond */
 	do {
@@ -84,7 +85,7 @@ static irqreturn_t imagis_interrupt(int irq, void *dev_id)
 	int i;
 	int error;
 
-	error = imagis_i2c_read_reg(ts, IST3038C_REG_INTR_MESSAGE,
+	error = imagis_i2c_read_reg(ts, IST30XXC_REG_INTR_MESSAGE,
 				    &intr_message);
 	if (error) {
 		dev_err(&ts->client->dev,
@@ -92,20 +93,20 @@ static irqreturn_t imagis_interrupt(int irq, void *dev_id)
 		goto out;
 	}
 
-	finger_count = (intr_message & IST3038C_FINGER_COUNT_MASK) >>
-				IST3038C_FINGER_COUNT_SHIFT;
-	if (finger_count > IST3038C_MAX_FINGER_NUM) {
+	finger_count = (intr_message & IST30XXC_FINGER_COUNT_MASK) >>
+				IST30XXC_FINGER_COUNT_SHIFT;
+	if (finger_count > IST30XXC_MAX_FINGER_NUM) {
 		dev_err(&ts->client->dev,
 			"finger count %d is more than maximum supported\n",
 			finger_count);
 		goto out;
 	}
 
-	finger_pressed = intr_message & IST3038C_FINGER_STATUS_MASK;
+	finger_pressed = intr_message & IST30XXC_FINGER_STATUS_MASK;
 
 	for (i = 0; i < finger_count; i++) {
 		error = imagis_i2c_read_reg(ts,
-					    IST3038C_REG_TOUCH_COORD + (i * 4),
+					    IST30XXC_REG_TOUCH_COORD + (i * 4),
 					    &finger_status);
 		if (error) {
 			dev_err(&ts->client->dev,
@@ -118,12 +119,12 @@ static irqreturn_t imagis_interrupt(int irq, void *dev_id)
 		input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER,
 					   finger_pressed & BIT(i));
 		touchscreen_report_pos(ts->input_dev, &ts->prop,
-				       (finger_status & IST3038C_X_MASK) >>
-						IST3038C_X_SHIFT,
-				       finger_status & IST3038C_Y_MASK, 1);
+				       (finger_status & IST30XXC_X_MASK) >>
+						IST30XXC_X_SHIFT,
+				       finger_status & IST30XXC_Y_MASK, 1);
 		input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR,
-				 (finger_status & IST3038C_AREA_MASK) >>
-					IST3038C_AREA_SHIFT);
+				 (finger_status & IST30XXC_AREA_MASK) >>
+					IST30XXC_AREA_SHIFT);
 	}
 
 	input_mt_sync_frame(ts->input_dev);
@@ -148,7 +149,7 @@ static int imagis_power_on(struct imagis_ts *ts)
 	if (error)
 		return error;
 
-	msleep(IST3038C_CHIP_ON_DELAY_MS);
+	msleep(IST30XXC_CHIP_ON_DELAY_MS);
 
 	return 0;
 }
@@ -220,7 +221,7 @@ static int imagis_init_input_dev(struct imagis_ts *ts)
 	}
 
 	error = input_mt_init_slots(input_dev,
-				    IST3038C_MAX_FINGER_NUM,
+				    IST30XXC_MAX_FINGER_NUM,
 				    INPUT_MT_DIRECT | INPUT_MT_DROP_UNUSED);
 	if (error) {
 		dev_err(&ts->client->dev,
@@ -253,13 +254,15 @@ static int imagis_probe(struct i2c_client *i2c)
 {
 	struct device *dev = &i2c->dev;
 	struct imagis_ts *ts;
-	int chip_id, error;
+	int chip_id, dt_chip_id, error;
 
 	ts = devm_kzalloc(dev, sizeof(*ts), GFP_KERNEL);
 	if (!ts)
 		return -ENOMEM;
 
 	ts->client = i2c;
+
+	dt_chip_id = (int)(uintptr_t)device_get_match_data(&i2c->dev);
 
 	error = imagis_init_regulators(ts);
 	if (error) {
@@ -280,15 +283,15 @@ static int imagis_probe(struct i2c_client *i2c)
 	}
 
 	error = imagis_i2c_read_reg(ts,
-			IST3038C_REG_CHIPID | IST3038C_DIRECT_ACCESS,
+			IST30XXC_REG_CHIPID | IST30XXC_DIRECT_ACCESS,
 			&chip_id);
 	if (error) {
 		dev_err(dev, "chip ID read failure: %d\n", error);
 		return error;
 	}
 
-	if (chip_id != IST3038C_WHOAMI) {
-		dev_err(dev, "unknown chip ID: 0x%x\n", chip_id);
+	if (chip_id != dt_chip_id) {
+		dev_err(dev, "unknown or misconfigured chip ID: 0x%x\n", chip_id);
 		return -EINVAL;
 	}
 
@@ -345,11 +348,17 @@ static DEFINE_SIMPLE_DEV_PM_OPS(imagis_pm_ops, imagis_suspend, imagis_resume);
 
 #ifdef CONFIG_OF
 static const struct of_device_id imagis_of_match[] = {
-	{ .compatible = "imagis,ist3038c", },
+	{ .compatible = "imagis,ist3038c", .data = (void *)IST3038C_WHOAMI, },
 	{ },
 };
 MODULE_DEVICE_TABLE(of, imagis_of_match);
 #endif
+
+static const struct i2c_device_id imagis_ts_i2c_id[] = {
+	{ "ist3038c", IST3038C_WHOAMI, },
+	{ },
+};
+MODULE_DEVICE_TABLE(i2c, imagis_ts_i2c_id);
 
 static struct i2c_driver imagis_ts_driver = {
 	.driver = {
@@ -358,10 +367,11 @@ static struct i2c_driver imagis_ts_driver = {
 		.of_match_table = of_match_ptr(imagis_of_match),
 	},
 	.probe = imagis_probe,
+	.id_table = imagis_ts_i2c_id,
 };
 
 module_i2c_driver(imagis_ts_driver);
 
-MODULE_DESCRIPTION("Imagis IST3038C Touchscreen Driver");
+MODULE_DESCRIPTION("Imagis IST30XXC Touchscreen Driver");
 MODULE_AUTHOR("Markuss Broks <markuss.broks@gmail.com>");
 MODULE_LICENSE("GPL");

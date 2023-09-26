@@ -665,10 +665,10 @@ config TOUCHSCREEN_NOVATEK_NVT_TS
 	  module will be called novatek-nvt-ts.
 
 config TOUCHSCREEN_IMAGIS
-	tristate "Imagis touchscreen support"
+	tristate "Imagis IST30XXC touchscreen support"
 	depends on I2C
 	help
-	  Say Y here if you have an Imagis IST30xxC touchscreen.
+	  Say Y here if you have an Imagis IST30XXC touchscreen.
 	  If unsure, say N.
 
 	  To compile this driver as a module, choose M here: the
