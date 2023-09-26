@@ -162,9 +162,9 @@ static void qedi_tmf_resp_work(struct work_struct *work)
 	if (rval)
 		goto exit_tmf_resp;
 
-	spin_lock(&session->back_lock);
+	spin_lock_bh(&session->back_lock);
 	__iscsi_complete_pdu(conn, (struct iscsi_hdr *)resp_hdr_ptr, NULL, 0);
-	spin_unlock(&session->back_lock);
+	spin_unlock_bh(&session->back_lock);
 
 exit_tmf_resp:
 	kfree(resp_hdr_ptr);
