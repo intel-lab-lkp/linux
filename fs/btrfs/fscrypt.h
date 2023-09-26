@@ -28,6 +28,13 @@ int btrfs_fscrypt_save_extent_info(struct btrfs_inode *inode,
 				   struct btrfs_path *path,
 				   struct fscrypt_extent_info *fi);
 size_t btrfs_fscrypt_extent_context_size(struct btrfs_inode *inode);
+void btrfs_set_bio_crypt_ctx_from_extent(struct bio *bio,
+					 struct btrfs_inode *inode,
+					 struct fscrypt_extent_info *fi,
+					 u64 logical_offset);
+bool btrfs_mergeable_encrypted_bio(struct bio *bio, struct inode *inode,
+				   struct fscrypt_extent_info *fi,
+				   u64 logical_offset);
 
 #else
 static inline int btrfs_fscrypt_save_extent_info(struct btrfs_inode *inode,
@@ -65,6 +72,21 @@ static inline bool btrfs_fscrypt_match_name(struct fscrypt_name *fname,
 static inline size_t btrfs_fscrypt_extent_context_size(struct btrfs_inode *inode)
 {
 	return 0;
+}
+
+static inline void btrfs_set_bio_crypt_ctx_from_extent(struct bio *bio,
+						       struct btrfs_inode *inode,
+						       struct fscrypt_extent_info *fi,
+						       u64 logical_offset)
+{
+}
+
+static inline bool btrfs_mergeable_encrypted_bio(struct bio *bio,
+						 struct inode *inode,
+						 struct fscrypt_extent_info *fi,
+						 u64 logical_offset)
+{
+	return true;
 }
 #endif /* CONFIG_FS_ENCRYPTION */
 
