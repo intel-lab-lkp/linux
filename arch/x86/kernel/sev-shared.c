@@ -479,8 +479,9 @@ static int snp_cpuid_postprocess(struct ghcb *ghcb, struct es_em_ctxt *ctxt,
 			if (leaf->eax & BIT(3)) {
 				unsigned long lo, hi;
 
-				asm volatile("rdmsr" : "=a" (lo), "=d" (hi)
-						     : "c" (MSR_IA32_XSS));
+				if (rdmsr_safe_GHCB(MSR_IA32_XSS, lo, hi, ghcb, ctxt) != ES_OK)
+					return -EINVAL;
+
 				xss = (hi << 32) | lo;
 			}
 

@@ -679,4 +679,18 @@ DEFINE_GHCB_ACCESSORS(sw_exit_info_2)
 DEFINE_GHCB_ACCESSORS(sw_scratch)
 DEFINE_GHCB_ACCESSORS(xcr0)
 
+/* Paravirt SEV-ES rdmsr which avoids extra #VC event */
+#define rdmsr_safe_GHCB(msr, low, high, ghcb, ctxt) ({				\
+	int __ret;								\
+										\
+	ghcb_set_rcx((ghcb), (msr));						\
+	__ret = sev_es_ghcb_hv_call((ghcb), (ctxt), SVM_EXIT_MSR, 0, 0);	\
+	if (__ret == ES_OK) {							\
+		low  = (ghcb)->save.rax;					\
+		high = (ghcb)->save.rdx;					\
+		/* Invalidate qwords for likely another following GHCB call */	\
+		vc_ghcb_invalidate(ghcb);					\
+	}									\
+	__ret; })
+
 #endif
