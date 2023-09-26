@@ -241,13 +241,14 @@ void qib_notify_error_qp(struct rvt_qp *qp)
 {
 	struct qib_qp_priv *priv = qp->priv;
 	struct qib_ibdev *dev = to_idev(qp->ibqp.device);
+	unsigned long flags;
 
-	spin_lock(&dev->rdi.pending_lock);
+	spin_lock_irqsave(&dev->rdi.pending_lock, flags);
 	if (!list_empty(&priv->iowait) && !(qp->s_flags & RVT_S_BUSY)) {
 		qp->s_flags &= ~RVT_S_ANY_WAIT_IO;
 		list_del_init(&priv->iowait);
 	}
-	spin_unlock(&dev->rdi.pending_lock);
+	spin_unlock_irqrestore(&dev->rdi.pending_lock, flags);
 
 	if (!(qp->s_flags & RVT_S_BUSY)) {
 		qp->s_hdrwords = 0;
@@ -367,11 +368,12 @@ void qib_flush_qp_waiters(struct rvt_qp *qp)
 {
 	struct qib_qp_priv *priv = qp->priv;
 	struct qib_ibdev *dev = to_idev(qp->ibqp.device);
+	unsigned long flags;
 
-	spin_lock(&dev->rdi.pending_lock);
+	spin_lock_irqsave(&dev->rdi.pending_lock, flags);
 	if (!list_empty(&priv->iowait))
 		list_del_init(&priv->iowait);
-	spin_unlock(&dev->rdi.pending_lock);
+	spin_unlock_irqrestore(&dev->rdi.pending_lock, flags);
 }
 
 /**
