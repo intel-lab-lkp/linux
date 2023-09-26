@@ -616,10 +616,15 @@ static inline struct mddev *mddev_get(struct mddev *mddev)
 
 static void mddev_delayed_delete(struct work_struct *ws);
 
-void mddev_put(struct mddev *mddev)
+static void __mddev_put(struct mddev *mddev, bool locked)
 {
-	if (!atomic_dec_and_lock(&mddev->active, &all_mddevs_lock))
+	if (locked) {
+		spin_lock(&all_mddevs_lock);
+		if (!atomic_dec_and_test(&mddev->active))
+			return;
+	} else if (!atomic_dec_and_lock(&mddev->active, &all_mddevs_lock))
 		return;
+
 	if (!mddev->raid_disks && list_empty(&mddev->disks) &&
 	    mddev->ctime == 0 && !mddev->hold_active) {
 		/* Array is not configured at all, and not held active,
@@ -633,7 +638,14 @@ void mddev_put(struct mddev *mddev)
 		 */
 		queue_work(md_misc_wq, &mddev->del_work);
 	}
-	spin_unlock(&all_mddevs_lock);
+
+	if (!locked)
+		spin_unlock(&all_mddevs_lock);
+}
+
+void mddev_put(struct mddev *mddev)
+{
+	__mddev_put(mddev, false);
 }
 
 static void md_safemode_timeout(struct timer_list *t);
