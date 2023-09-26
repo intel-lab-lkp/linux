@@ -776,6 +776,8 @@ int ips_eh_abort(struct scsi_cmnd *SC)
 {
 	ips_ha_t *ha;
 	ips_copp_wait_item_t *item;
+	unsigned long flags;
+
 	int ret;
 	struct Scsi_Host *host;
 
@@ -793,7 +795,7 @@ int ips_eh_abort(struct scsi_cmnd *SC)
 	if (!ha->active)
 		return (FAILED);
 
-	spin_lock(host->host_lock);
+	spin_lock_irqsave(host->host_lock, flags);
 
 	/* See if the command is on the copp queue */
 	item = ha->copp_waitlist.head;
@@ -814,7 +816,7 @@ int ips_eh_abort(struct scsi_cmnd *SC)
 		ret = (FAILED);
 	}
 
-	spin_unlock(host->host_lock);
+	spin_unlock_irqrestore(host->host_lock, flags);
 	return ret;
 }
 
