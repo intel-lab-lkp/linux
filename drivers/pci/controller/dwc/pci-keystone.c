@@ -1218,11 +1218,19 @@ static int __init ks_pcie_probe(struct platform_device *pdev)
 		goto err_link;
 	}
 
+	/* Obtain reference(s) to the phy(s) */
+	for (i = 0; i < num_lanes; i++)
+		phy_pm_runtime_get_sync(ks_pcie->phy[i]);
+
 	ret = ks_pcie_enable_phy(ks_pcie);
 	if (ret) {
 		dev_err(dev, "failed to enable phy\n");
 		goto err_link;
 	}
+
+	/* Release reference(s) to the phy(s) */
+	for (i = 0; i < num_lanes; i++)
+		phy_pm_runtime_put_sync(ks_pcie->phy[i]);
 
 	platform_set_drvdata(pdev, ks_pcie);
 	pm_runtime_enable(dev);
