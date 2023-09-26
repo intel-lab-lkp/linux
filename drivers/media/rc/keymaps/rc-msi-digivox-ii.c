@@ -53,3 +53,4 @@ module_exit(exit_rc_map_msi_digivox_ii)
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Antti Palosaari <crope@iki.fi>");
+MODULE_DESCRIPTION("msi-digivox-ii remote controller keytable");

@@ -75,3 +75,4 @@ module_exit(exit_rc_map_encore_enltv_fm53)
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Mauro Carvalho Chehab");
+MODULE_DESCRIPTION("encore-enltv-fm53 remote controller keytable");

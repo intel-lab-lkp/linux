@@ -88,3 +88,4 @@ module_exit(exit_rc_map_azurewave_ad_tu700)
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Antti Palosaari <crope@iki.fi>");
+MODULE_DESCRIPTION("azurewave-ad-tu700 remote controller keytable");

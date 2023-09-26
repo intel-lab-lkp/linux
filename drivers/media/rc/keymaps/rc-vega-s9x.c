@@ -52,3 +52,4 @@ module_exit(exit_rc_map_vega_s9x)
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Christian Hewitt <christianshewitt@gmail.com");
+MODULE_DESCRIPTION("vega-s9x remote controller keytable");

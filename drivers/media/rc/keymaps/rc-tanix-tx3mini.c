@@ -75,3 +75,4 @@ module_exit(exit_rc_map_tanix_tx3mini)
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Christian Hewitt <christianshewitt@gmail.com>");
+MODULE_DESCRIPTION("tanix-tx3mini remote controller keytable");

@@ -69,3 +69,4 @@ module_exit(exit_rc_map_su3000)
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Evgeny Plehov <Evgeny Plehov@ukr.net>");
+MODULE_DESCRIPTION("su3000 remote controller keytable");

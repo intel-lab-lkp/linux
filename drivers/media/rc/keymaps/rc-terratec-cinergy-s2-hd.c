@@ -80,3 +80,4 @@ module_init(init_rc_map_terratec_cinergy_s2_hd);
 module_exit(exit_rc_map_terratec_cinergy_s2_hd);
 
 MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("terratec-cinergy-s2-hd remote controller keytable");

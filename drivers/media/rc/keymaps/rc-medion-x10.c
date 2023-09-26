@@ -102,3 +102,4 @@ module_exit(exit_rc_map_medion_x10)
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Anssi Hannula <anssi.hannula@iki.fi>");
+MODULE_DESCRIPTION("medion-x10 remote controller keytable");

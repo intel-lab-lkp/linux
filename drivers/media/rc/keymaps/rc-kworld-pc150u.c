@@ -96,3 +96,4 @@ module_exit(exit_rc_map_kworld_pc150u)
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Kyle Strickland <kyle@kyle.strickland.name>");
+MODULE_DESCRIPTION("kworld-pc150u remote controller keytable");

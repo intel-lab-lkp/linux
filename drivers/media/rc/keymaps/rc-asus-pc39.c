@@ -85,3 +85,4 @@ module_exit(exit_rc_map_asus_pc39)
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Mauro Carvalho Chehab");
+MODULE_DESCRIPTION("asus-pc39 remote controller keytable");

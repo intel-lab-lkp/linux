@@ -63,3 +63,4 @@ module_exit(exit_rc_map_msi_tvanywhere)
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Mauro Carvalho Chehab");
+MODULE_DESCRIPTION("msi-tvanywhere remote controller keytable");
