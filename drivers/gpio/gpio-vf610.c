@@ -64,6 +64,10 @@ struct vf610_gpio_port {
 #define IMX8ULP_GPIO_BASE_OFF	0x40
 #define IMX8ULP_BASE_OFF	0x80
 
+static const struct fsl_gpio_soc_data vf610_data = {
+	.have_dual_base = true,
+};
+
 static const struct fsl_gpio_soc_data imx_data = {
 	.have_paddr = true,
 	.have_dual_base = true,
@@ -74,7 +78,7 @@ static const struct fsl_gpio_soc_data imx8ulp_data = {
 };
 
 static const struct of_device_id vf610_gpio_dt_ids[] = {
-	{ .compatible = "fsl,vf610-gpio",	.data = NULL, },
+	{ .compatible = "fsl,vf610-gpio",	.data = &vf610_data },
 	{ .compatible = "fsl,imx7ulp-gpio",	.data = &imx_data, },
 	{ .compatible = "fsl,imx8ulp-gpio",	.data = &imx8ulp_data, },
 	{ /* sentinel */ }
@@ -96,7 +100,7 @@ static int vf610_gpio_get(struct gpio_chip *gc, unsigned int gpio)
 	unsigned long mask = BIT(gpio);
 	unsigned long offset = GPIO_PDIR;
 
-	if (port->sdata && port->sdata->have_paddr) {
+	if (port->sdata->have_paddr) {
 		mask &= vf610_gpio_readl(port->gpio_base + GPIO_PDDR);
 		if (mask)
 			offset = GPIO_PDOR;
@@ -120,7 +124,7 @@ static int vf610_gpio_direction_input(struct gpio_chip *chip, unsigned gpio)
 	unsigned long mask = BIT(gpio);
 	u32 val;
 
-	if (port->sdata && port->sdata->have_paddr) {
+	if (port->sdata->have_paddr) {
 		val = vf610_gpio_readl(port->gpio_base + GPIO_PDDR);
 		val &= ~mask;
 		vf610_gpio_writel(val, port->gpio_base + GPIO_PDDR);
@@ -136,7 +140,7 @@ static int vf610_gpio_direction_output(struct gpio_chip *chip, unsigned gpio,
 	unsigned long mask = BIT(gpio);
 	u32 val;
 
-	if (port->sdata && port->sdata->have_paddr) {
+	if (port->sdata->have_paddr) {
 		val = vf610_gpio_readl(port->gpio_base + GPIO_PDDR);
 		val |= mask;
 		vf610_gpio_writel(val, port->gpio_base + GPIO_PDDR);
@@ -287,7 +291,7 @@ static int vf610_gpio_probe(struct platform_device *pdev)
 	    (device_is_compatible(dev, "fsl,imx8ulp-gpio"))))
 		dual_base = true;
 
-	if ((port->sdata && port->sdata->have_dual_base) || dual_base) {
+	if (port->sdata->have_dual_base || dual_base) {
 		port->base = devm_platform_ioremap_resource(pdev, 0);
 		if (IS_ERR(port->base))
 			return PTR_ERR(port->base);
