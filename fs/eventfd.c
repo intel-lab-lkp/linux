@@ -295,11 +295,13 @@ static ssize_t eventfd_write(struct file *file, const char __user *buf, size_t c
 static void eventfd_show_fdinfo(struct seq_file *m, struct file *f)
 {
 	struct eventfd_ctx *ctx = f->private_data;
+	unsigned long long count;
 
 	spin_lock_irq(&ctx->wqh.lock);
-	seq_printf(m, "eventfd-count: %16llx\n",
-		   (unsigned long long)ctx->count);
+	count = ctx->count;
 	spin_unlock_irq(&ctx->wqh.lock);
+
+	seq_printf(m, "eventfd-count: %16llx\n", count);
 	seq_printf(m, "eventfd-id: %d\n", ctx->id);
 	seq_printf(m, "eventfd-semaphore: %d\n",
 		   !!(ctx->flags & EFD_SEMAPHORE));
