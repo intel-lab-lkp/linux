@@ -360,13 +360,6 @@ static int i2c_gpio_init_generic_recovery(struct i2c_adapter *adap)
 		return 0;
 
 	/*
-	 * pins might be taken as GPIO, so we should inform pinctrl about
-	 * this and move the state to GPIO
-	 */
-	if (bri->pinctrl)
-		pinctrl_select_state(bri->pinctrl, bri->pins_gpio);
-
-	/*
 	 * if there is incomplete or no recovery information, see if generic
 	 * GPIO recovery is available
 	 */
