@@ -289,6 +289,7 @@ err_wedged:
 
 static void wait_for_suspend(struct intel_gt *gt)
 {
+	int timeout_ms = CONFIG_DRM_I915_MAX_REQUEST_BUSYWAIT ? : 10000;
 	/*
 	 * On rare occasions, we've observed the fence completion trigger
 	 * free_engines asynchronously via rcu_call. Ensure those are done.
@@ -308,7 +309,10 @@ static void wait_for_suspend(struct intel_gt *gt)
 		intel_gt_retire_requests(gt);
 	}
 
-	intel_gt_pm_wait_for_idle(gt);
+	/* we are suspending, so we shouldn't be waiting forever */
+	if (intel_gt_pm_wait_timeout_for_idle(gt, timeout_ms) == -ETIMEDOUT)
+		gt_warn(gt, "bailing from %s after %d milisec timeout\n",
+			__func__, timeout_ms);
 }
 
 void intel_gt_suspend_prepare(struct intel_gt *gt)
