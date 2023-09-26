@@ -597,6 +597,11 @@ static int h264_enc_init(struct mtk_vcodec_enc_ctx *ctx)
 	inst->hw_base = mtk_vcodec_get_reg_addr(inst->ctx->dev->reg_base, VENC_SYS);
 
 	ret = vpu_enc_init(&inst->vpu_inst);
+	if (!inst->vpu_inst.vsi) {
+		mtk_venc_err(ctx, "share buffer is NULL");
+		kfree(inst);
+		return -EFAULT;
+	}
 
 	if (MTK_ENC_IOVA_IS_34BIT(ctx))
 		inst->vsi_34 = (struct venc_h264_vsi_34 *)inst->vpu_inst.vsi;

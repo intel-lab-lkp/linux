@@ -326,6 +326,11 @@ static int vp8_enc_init(struct mtk_vcodec_enc_ctx *ctx)
 	inst->hw_base = mtk_vcodec_get_reg_addr(inst->ctx->dev->reg_base, VENC_LT_SYS);
 
 	ret = vpu_enc_init(&inst->vpu_inst);
+	if (!inst->vpu_inst.vsi) {
+		mtk_venc_err(ctx, "share buffer is NULL");
+		kfree(inst);
+		return -EFAULT;
+	}
 
 	inst->vsi = (struct venc_vp8_vsi *)inst->vpu_inst.vsi;
 
