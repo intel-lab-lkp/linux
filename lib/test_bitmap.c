@@ -50,6 +50,9 @@ static const unsigned long exp2[] __initconst = {
 static const unsigned long exp2_to_exp3_mask[] __initconst = {
 	BITMAP_FROM_U64(0x008000020020212eULL),
 };
+static const unsigned long exp2_to_exp3_maskg[] __initconst = {
+	BITMAP_FROM_U64(0x00000000000001ffULL),
+};
 /* exp3_0_1 = (exp2[0] & ~exp2_to_exp3_mask) | (exp2[1] & exp2_to_exp3_mask) */
 static const unsigned long exp3_0_1[] __initconst = {
 	BITMAP_FROM_U64(0x33b3333311313137ULL),
@@ -355,6 +358,25 @@ static void __init test_replace(void)
 	bitmap_fill(bmap, 1024);
 	bitmap_replace(bmap, &exp2[1 * nlongs], &exp2[0 * nlongs], exp2_to_exp3_mask, nbits);
 	expect_eq_bitmap(bmap, exp3_1_0, nbits);
+}
+
+static void __init test_bitmap_sg(void)
+{
+	unsigned int nbits = 64;
+	DECLARE_BITMAP(bmap, 1024);
+	unsigned int w;
+
+	bitmap_zero(bmap, 1024);
+	w = bitmap_gather(bmap, exp2_to_exp3_mask, exp2_to_exp3_mask, nbits);
+	expect_eq_uint(bitmap_weight(exp2_to_exp3_mask, nbits), w);
+	expect_eq_uint(bitmap_weight(bmap, 1024), w);
+	expect_eq_bitmap(bmap, exp2_to_exp3_maskg, nbits);
+
+	bitmap_zero(bmap, 1024);
+	w = bitmap_scatter(bmap, exp2_to_exp3_maskg, exp2_to_exp3_mask, nbits);
+	expect_eq_uint(bitmap_weight(exp2_to_exp3_maskg, nbits), w);
+	expect_eq_uint(bitmap_weight(bmap, 1024), w);
+	expect_eq_bitmap(bmap, exp2_to_exp3_mask, nbits);
 }
 
 #define PARSE_TIME	0x1
@@ -1228,6 +1250,7 @@ static void __init selftest(void)
 	test_fill_set();
 	test_copy();
 	test_replace();
+	test_bitmap_sg();
 	test_bitmap_arr32();
 	test_bitmap_arr64();
 	test_bitmap_parse();
