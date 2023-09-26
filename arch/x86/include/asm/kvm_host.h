@@ -1331,6 +1331,7 @@ struct kvm_arch {
 	u64 master_cycle_now;
 	struct delayed_work kvmclock_update_work;
 	struct delayed_work kvmclock_sync_work;
+	struct delayed_work masterclock_sync_work;
 
 	struct kvm_xen_hvm_config xen_hvm_config;
 

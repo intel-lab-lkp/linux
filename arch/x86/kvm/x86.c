@@ -157,6 +157,9 @@ module_param(min_timer_period_us, uint, S_IRUGO | S_IWUSR);
 static bool __read_mostly kvmclock_periodic_sync = true;
 module_param(kvmclock_periodic_sync, bool, S_IRUGO);
 
+unsigned int __read_mostly masterclock_sync_period;
+module_param(masterclock_sync_period, uint, 0444);
+
 /* tsc tolerance in parts per million - default to 1/2 of the NTP threshold */
 static u32 __read_mostly tsc_tolerance_ppm = 250;
 module_param(tsc_tolerance_ppm, uint, S_IRUGO | S_IWUSR);
@@ -3297,6 +3300,31 @@ static void kvmclock_sync_fn(struct work_struct *work)
 	schedule_delayed_work(&kvm->arch.kvmclock_sync_work,
 					KVMCLOCK_SYNC_PERIOD);
 }
+
+static void masterclock_sync_fn(struct work_struct *work)
+{
+	unsigned long i;
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct kvm_arch *ka = container_of(dwork, struct kvm_arch,
+					   masterclock_sync_work);
+	struct kvm *kvm = container_of(ka, struct kvm, arch);
+	struct kvm_vcpu *vcpu;
+
+	if (!masterclock_sync_period)
+		return;
+
+	kvm_for_each_vcpu(i, vcpu, kvm) {
+		/*
+		 * It is not required to kick the vcpu because it is not
+		 * expected to update the master clock immediately.
+		 */
+		kvm_make_request(KVM_REQ_MASTERCLOCK_UPDATE, vcpu);
+	}
+
+	schedule_delayed_work(&ka->masterclock_sync_work,
+			      masterclock_sync_period * HZ);
+}
+
 
 /* These helpers are safe iff @msr is known to be an MCx bank MSR. */
 static bool is_mci_control_msr(u32 msr)
@@ -11970,6 +11998,10 @@ void kvm_arch_vcpu_postcreate(struct kvm_vcpu *vcpu)
 	if (kvmclock_periodic_sync && vcpu->vcpu_idx == 0)
 		schedule_delayed_work(&kvm->arch.kvmclock_sync_work,
 						KVMCLOCK_SYNC_PERIOD);
+
+	if (masterclock_sync_period && vcpu->vcpu_idx == 0)
+		schedule_delayed_work(&kvm->arch.masterclock_sync_work,
+				      masterclock_sync_period * HZ);
 }
 
 void kvm_arch_vcpu_destroy(struct kvm_vcpu *vcpu)
@@ -12344,6 +12376,7 @@ int kvm_arch_init_vm(struct kvm *kvm, unsigned long type)
 
 	INIT_DELAYED_WORK(&kvm->arch.kvmclock_update_work, kvmclock_update_fn);
 	INIT_DELAYED_WORK(&kvm->arch.kvmclock_sync_work, kvmclock_sync_fn);
+	INIT_DELAYED_WORK(&kvm->arch.masterclock_sync_work, masterclock_sync_fn);
 
 	kvm_apicv_init(kvm);
 	kvm_hv_init_vm(kvm);
@@ -12383,6 +12416,7 @@ static void kvm_unload_vcpu_mmus(struct kvm *kvm)
 
 void kvm_arch_sync_events(struct kvm *kvm)
 {
+	cancel_delayed_work_sync(&kvm->arch.masterclock_sync_work);
 	cancel_delayed_work_sync(&kvm->arch.kvmclock_sync_work);
 	cancel_delayed_work_sync(&kvm->arch.kvmclock_update_work);
 	kvm_free_pit(kvm);
