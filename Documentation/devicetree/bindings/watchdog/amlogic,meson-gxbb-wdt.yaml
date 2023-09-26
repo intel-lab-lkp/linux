@@ -17,6 +17,7 @@ properties:
   compatible:
     enum:
       - amlogic,meson-gxbb-wdt
+      - amlogic,c3-wdt
       - amlogic,t7-wdt
 
   reg:
