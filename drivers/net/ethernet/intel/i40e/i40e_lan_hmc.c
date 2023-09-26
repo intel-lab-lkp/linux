@@ -4,6 +4,7 @@
 #include "i40e_alloc.h"
 #include "i40e_type.h"
 #include "i40e_lan_hmc.h"
+#include "i40e_osdep.h"
 
 /* lan specific interface functions */
 

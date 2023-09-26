@@ -4,7 +4,7 @@
 #ifndef _I40E_HMC_H_
 #define _I40E_HMC_H_
 
-#include "i40e_osdep.h"
+#include "i40e_alloc.h"
 #include "i40e_register.h"
 
 #define I40E_HMC_MAX_BP_COUNT 512

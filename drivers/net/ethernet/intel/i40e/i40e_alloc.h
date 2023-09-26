@@ -4,7 +4,7 @@
 #ifndef _I40E_ALLOC_H_
 #define _I40E_ALLOC_H_
 
-#include "i40e_osdep.h"
+#include <linux/types.h>
 
 struct i40e_hw;
 
@@ -20,6 +20,25 @@ enum i40e_memory_type {
 	i40e_mem_bp_jumbo = 7,		/* Backing Page - > 4KB */
 	i40e_mem_reserved
 };
+
+/* memory allocation tracking */
+struct i40e_dma_mem {
+	void *va;
+	dma_addr_t pa;
+	u32 size;
+};
+
+struct i40e_virt_mem {
+	void *va;
+	u32 size;
+};
+
+#define i40e_allocate_dma_mem(h, m, unused, s, a) \
+			i40e_allocate_dma_mem_d(h, m, s, a)
+#define i40e_free_dma_mem(h, m) i40e_free_dma_mem_d(h, m)
+
+#define i40e_allocate_virt_mem(h, m, s) i40e_allocate_virt_mem_d(h, m, s)
+#define i40e_free_virt_mem(h, m) i40e_free_virt_mem_d(h, m)
 
 /* prototype for functions used for dynamic memory allocation */
 int i40e_allocate_dma_mem(struct i40e_hw *hw,

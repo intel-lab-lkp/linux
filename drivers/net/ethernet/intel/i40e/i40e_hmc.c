@@ -3,6 +3,7 @@
 
 #include "i40e_alloc.h"
 #include "i40e_hmc.h"
+#include "i40e_osdep.h"
 #include "i40e_type.h"
 
 /**

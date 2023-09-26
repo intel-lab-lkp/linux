@@ -7,6 +7,7 @@
 #include <linux/pci.h>
 #include "i40e_adminq_cmd.h"
 #include "i40e_devids.h"
+#include "i40e_osdep.h"
 #include "i40e_prototype.h"
 #include "i40e_register.h"
 

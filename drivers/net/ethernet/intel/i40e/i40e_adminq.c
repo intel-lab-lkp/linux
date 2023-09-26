@@ -3,6 +3,7 @@
 
 #include <linux/delay.h>
 #include "i40e_alloc.h"
+#include "i40e_osdep.h"
 #include "i40e_register.h"
 #include "i40e_prototype.h"
 
