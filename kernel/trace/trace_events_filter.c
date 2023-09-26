@@ -1317,22 +1317,29 @@ void free_event_filter(struct event_filter *filter)
 	__free_filter(filter);
 }
 
-static inline void __remove_filter(struct trace_event_file *file)
+static inline int __remove_filter(struct trace_event_file *file)
 {
 	filter_disable(file);
-	remove_filter_string(file->filter);
+	if (file->filter)
+		remove_filter_string(file->filter);
+	else
+		return 0;
+
+	return 1;
 }
 
-static void filter_free_subsystem_preds(struct trace_subsystem_dir *dir,
+static int filter_free_subsystem_preds(struct trace_subsystem_dir *dir,
 					struct trace_array *tr)
 {
 	struct trace_event_file *file;
+	int i = 0;
 
 	list_for_each_entry(file, &tr->events, list) {
 		if (file->system != dir)
 			continue;
-		__remove_filter(file);
+		i += __remove_filter(file);
 	}
+	return i;
 }
 
 static inline void __free_subsystem_filter(struct trace_event_file *file)
@@ -2411,7 +2418,9 @@ int apply_subsystem_event_filter(struct trace_subsystem_dir *dir,
 	}
 
 	if (!strcmp(strstrip(filter_string), "0")) {
-		filter_free_subsystem_preds(dir, tr);
+		if (filter_free_subsystem_preds(dir, tr) == 0)
+			goto out_unlock;
+
 		remove_filter_string(system->filter);
 		filter = system->filter;
 		system->filter = NULL;
