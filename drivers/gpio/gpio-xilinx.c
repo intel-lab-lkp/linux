@@ -46,7 +46,6 @@
  * @gc: GPIO chip
  * @regs: register block
  * @hw_map: GPIO pin mapping on hardware side
- * @sw_map: GPIO pin mapping on software side
  * @state: GPIO write state shadow register
  * @last_irq_read: GPIO read state register from last interrupt
  * @dir: GPIO direction shadow register
@@ -62,7 +61,6 @@ struct xgpio_instance {
 	struct gpio_chip gc;
 	void __iomem *regs;
 	DECLARE_BITMAP(hw_map, 64);
-	DECLARE_BITMAP(sw_map, 64);
 	DECLARE_BITMAP(state, 64);
 	DECLARE_BITMAP(last_irq_read, 64);
 	DECLARE_BITMAP(dir, 64);
@@ -76,12 +74,12 @@ struct xgpio_instance {
 
 static inline int xgpio_from_bit(struct xgpio_instance *chip, int bit)
 {
-	return bitmap_bitremap(bit, chip->hw_map, chip->sw_map, 64);
+	return bitmap_weight(chip->hw_map, bit + 1);
 }
 
 static inline int xgpio_to_bit(struct xgpio_instance *chip, int gpio)
 {
-	return bitmap_bitremap(gpio, chip->sw_map, chip->hw_map, 64);
+	return find_nth_bit(chip->hw_map, 64, gpio);
 }
 
 static inline u32 xgpio_get_value32(const unsigned long *map, int bit)
@@ -618,9 +616,6 @@ static int xgpio_probe(struct platform_device *pdev)
 
 	if (width[1] > 32)
 		return -EINVAL;
-
-	/* Setup software pin mapping */
-	bitmap_set(chip->sw_map, 0, width[0] + width[1]);
 
 	/* Setup hardware pin mapping */
 	bitmap_set(chip->hw_map,  0, width[0]);
