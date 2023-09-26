@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0
  *
- * Copyright 2016-2021 HabanaLabs, Ltd.
+ * Copyright 2022-2023 HabanaLabs, Ltd.
  * All Rights Reserved.
  *
  */
@@ -209,3 +209,4 @@ DEFINE_EVENT(habanalabs_reg_access_template, habanalabs_elbi_write,
 
 /* This part must be outside protection */
 #include <trace/define_trace.h>
+
