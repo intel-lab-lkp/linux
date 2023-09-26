@@ -656,7 +656,7 @@ static int reallocate_resource(struct resource *root, struct resource *old,
 			       resource_size_t newsize,
 			       struct resource_constraint *constraint)
 {
-	int err=0;
+	int err;
 	struct resource new = *old;
 	struct resource *conflict;
 
@@ -1310,7 +1310,7 @@ EXPORT_SYMBOL(__release_region);
 void release_mem_region_adjustable(resource_size_t start, resource_size_t size)
 {
 	struct resource *parent = &iomem_resource;
-	struct resource *new_res = NULL;
+	struct resource *new_res;
 	bool alloc_nofail = false;
 	struct resource **p;
 	struct resource *res;
@@ -1556,7 +1556,7 @@ struct resource *
 __devm_request_region(struct device *dev, struct resource *parent,
 		      resource_size_t start, resource_size_t n, const char *name)
 {
-	struct region_devres *dr = NULL;
+	struct region_devres *dr;
 	struct resource *res;
 
 	dr = devres_alloc(devm_region_release, sizeof(struct region_devres),
