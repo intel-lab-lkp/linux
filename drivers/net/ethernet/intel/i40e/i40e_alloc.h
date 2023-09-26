@@ -4,6 +4,8 @@
 #ifndef _I40E_ALLOC_H_
 #define _I40E_ALLOC_H_
 
+#include "i40e_osdep.h"
+
 struct i40e_hw;
 
 /* Memory allocation types */

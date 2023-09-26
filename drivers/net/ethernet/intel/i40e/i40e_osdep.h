@@ -4,12 +4,8 @@
 #ifndef _I40E_OSDEP_H_
 #define _I40E_OSDEP_H_
 
+#include <linux/dev_printk.h>
 #include <linux/types.h>
-#include <linux/if_ether.h>
-#include <linux/if_vlan.h>
-#include <linux/tcp.h>
-#include <linux/pci.h>
-#include <linux/highuid.h>
 
 /* get readq/writeq support for 32 bit kernels, use the low-first version */
 #include <linux/io-64-nonatomic-lo-hi.h>
