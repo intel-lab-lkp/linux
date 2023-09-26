@@ -714,7 +714,8 @@ struct huge_bootmem_page {
 
 int isolate_or_dissolve_huge_page(struct page *page, struct list_head *list);
 struct folio *alloc_hugetlb_folio(struct vm_area_struct *vma,
-				unsigned long addr, int avoid_reserve);
+				unsigned long addr, int avoid_reserve,
+				bool restore_reserve_on_memcg_failure);
 struct folio *alloc_hugetlb_folio_nodemask(struct hstate *h, int preferred_nid,
 				nodemask_t *nmask, gfp_t gfp_mask);
 struct folio *alloc_hugetlb_folio_vma(struct hstate *h, struct vm_area_struct *vma,
@@ -1017,7 +1018,8 @@ static inline int isolate_or_dissolve_huge_page(struct page *page,
 
 static inline struct folio *alloc_hugetlb_folio(struct vm_area_struct *vma,
 					   unsigned long addr,
-					   int avoid_reserve)
+					   int avoid_reserve,
+					   bool restore_reserve_on_memcg_failure)
 {
 	return NULL;
 }

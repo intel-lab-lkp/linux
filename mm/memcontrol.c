@@ -7063,6 +7063,46 @@ int __mem_cgroup_charge(struct folio *folio, struct mm_struct *mm, gfp_t gfp)
 	return ret;
 }
 
+static struct mem_cgroup *get_mem_cgroup_from_current(void)
+{
+	struct mem_cgroup *memcg;
+
+again:
+	rcu_read_lock();
+	memcg = mem_cgroup_from_task(current);
+	if (!css_tryget(&memcg->css)) {
+		rcu_read_unlock();
+		goto again;
+	}
+	rcu_read_unlock();
+	return memcg;
+}
+
+/**
+ * mem_cgroup_hugetlb_charge_folio - Charge a newly allocated hugetlb folio.
+ * @folio: folio to charge.
+ * @gfp: reclaim mode
+ *
+ * This function charges an allocated hugetlbf folio to the memcg of the
+ * current task.
+ *
+ * Returns 0 on success. Otherwise, an error code is returned.
+ */
+int mem_cgroup_hugetlb_charge_folio(struct folio *folio, gfp_t gfp)
+{
+	struct mem_cgroup *memcg;
+	int ret;
+
+	if (mem_cgroup_disabled())
+		return 0;
+
+	memcg = get_mem_cgroup_from_current();
+	ret = charge_memcg(folio, memcg, gfp);
+	mem_cgroup_put(memcg);
+
+	return ret;
+}
+
 /**
  * mem_cgroup_swapin_charge_folio - Charge a newly allocated folio for swapin.
  * @folio: folio to charge.
