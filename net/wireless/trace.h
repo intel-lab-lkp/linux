@@ -2706,24 +2706,6 @@ DEFINE_EVENT(wiphy_wdev_cookie_evt, rdev_abort_pmsr,
 	TP_ARGS(wiphy, wdev, cookie)
 );
 
-TRACE_EVENT(rdev_set_fils_aad,
-	TP_PROTO(struct wiphy *wiphy, struct net_device *netdev,
-		 struct cfg80211_fils_aad *fils_aad),
-	TP_ARGS(wiphy, netdev, fils_aad),
-	TP_STRUCT__entry(WIPHY_ENTRY
-		NETDEV_ENTRY
-		__array(u8, macaddr, ETH_ALEN)
-		__field(u8, kek_len)
-	),
-	TP_fast_assign(WIPHY_ASSIGN;
-		NETDEV_ASSIGN;
-		FILS_AAD_ASSIGN(fils_aad);
-	),
-	TP_printk(WIPHY_PR_FMT ", " NETDEV_PR_FMT ", " FILS_AAD_PR_FMT,
-		  WIPHY_PR_ARG, NETDEV_PR_ARG, __entry->macaddr,
-		  __entry->kek_len)
-);
-
 TRACE_EVENT(rdev_update_owe_info,
 	    TP_PROTO(struct wiphy *wiphy, struct net_device *netdev,
 		     struct cfg80211_update_owe_info *owe_info),

@@ -4476,10 +4476,6 @@ struct mgmt_frame_regs {
  *
  * @color_change: Initiate a color change.
  *
- * @set_fils_aad: Set FILS AAD data to the AP driver so that the driver can use
- *	those to decrypt (Re)Association Request and encrypt (Re)Association
- *	Response frame.
- *
  * @set_radar_background: Configure dedicated offchannel chain available for
  *	radar/CAC detection on some hw. This chain can't be used to transmit
  *	or receive frames and it is bounded to a running wdev.
@@ -4840,8 +4836,6 @@ struct cfg80211_ops {
 	int	(*color_change)(struct wiphy *wiphy,
 				struct net_device *dev,
 				struct cfg80211_color_change_settings *params);
-	int     (*set_fils_aad)(struct wiphy *wiphy, struct net_device *dev,
-				struct cfg80211_fils_aad *fils_aad);
 	int	(*set_radar_background)(struct wiphy *wiphy,
 					struct cfg80211_chan_def *chandef);
 	int	(*add_link_station)(struct wiphy *wiphy, struct net_device *dev,
