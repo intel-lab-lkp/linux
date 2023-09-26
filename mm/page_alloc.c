@@ -1070,6 +1070,7 @@ static __always_inline bool free_pages_prepare(struct page *page,
 			unsigned int order, fpi_t fpi_flags)
 {
 	int bad = 0;
+	struct folio *folio = page_folio(page);
 	bool skip_kasan_poison = should_skip_kasan_poison(page, fpi_flags);
 	bool init = want_init_on_free();
 
@@ -1078,12 +1079,12 @@ static __always_inline bool free_pages_prepare(struct page *page,
 	trace_mm_page_free(page, order);
 	kmsan_free_page(page, order);
 
-	if (unlikely(PageHWPoison(page)) && !order) {
+	if (unlikely(folio_test_hwpoison(folio)) && !order) {
 		/*
 		 * Do not let hwpoison pages hit pcplists/buddy
 		 * Untie memcg state and reset page's owner
 		 */
-		if (memcg_kmem_online() && PageMemcgKmem(page))
+		if (memcg_kmem_online() && folio_memcg_kmem(folio))
 			__memcg_kmem_uncharge_page(page, order);
 		reset_page_owner(page, order);
 		page_table_check_free(page, order);
@@ -1095,10 +1096,10 @@ static __always_inline bool free_pages_prepare(struct page *page,
 	 * avoid checking PageCompound for order-0 pages.
 	 */
 	if (unlikely(order)) {
-		bool compound = PageCompound(page);
+		bool compound = folio_test_large(folio);
 		int i;
 
-		VM_BUG_ON_PAGE(compound && compound_order(page) != order, page);
+		VM_BUG_ON_FOLIO(compound && folio_order(folio) != order, folio);
 
 		if (compound)
 			page[1].flags &= ~PAGE_FLAGS_SECOND;
@@ -1114,9 +1115,9 @@ static __always_inline bool free_pages_prepare(struct page *page,
 			(page + i)->flags &= ~PAGE_FLAGS_CHECK_AT_PREP;
 		}
 	}
-	if (PageMappingFlags(page))
+	if (folio_mapping_flags(folio))
 		page->mapping = NULL;
-	if (memcg_kmem_online() && PageMemcgKmem(page))
+	if (memcg_kmem_online() && folio_memcg_kmem(folio))
 		__memcg_kmem_uncharge_page(page, order);
 	if (is_check_pages_enabled()) {
 		if (free_page_is_bad(page))
@@ -1130,7 +1131,7 @@ static __always_inline bool free_pages_prepare(struct page *page,
 	reset_page_owner(page, order);
 	page_table_check_free(page, order);
 
-	if (!PageHighMem(page)) {
+	if (!folio_test_highmem(folio)) {
 		debug_check_no_locks_freed(page_address(page),
 					   PAGE_SIZE << order);
 		debug_check_no_obj_freed(page_address(page),
