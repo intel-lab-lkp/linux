@@ -208,8 +208,8 @@ static void xgpio_set_multiple(struct gpio_chip *gc, unsigned long *mask,
 	unsigned long flags;
 	struct xgpio_instance *chip = gpiochip_get_data(gc);
 
-	bitmap_remap(hw_mask, mask, chip->sw_map, chip->hw_map, 64);
-	bitmap_remap(hw_bits, bits, chip->sw_map, chip->hw_map, 64);
+	bitmap_scatter(hw_mask, mask, chip->hw_map, 64);
+	bitmap_scatter(hw_bits, bits, chip->hw_map, 64);
 
 	spin_lock_irqsave(&chip->gpio_lock, flags);
 
