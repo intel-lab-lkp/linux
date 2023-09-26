@@ -51,7 +51,7 @@ record_touch_file() {
 	echo "Recording trace (only user mode) with path: CPU$2 => $1"
 	rm -f $file
 	perf record -o ${perfdata} -e cs_etm/@$1/u --per-thread \
-		-- taskset -c $2 touch $file > /dev/null 2>&1
+		--workload-attr cpu-list=$2 -- touch $file > /dev/null 2>&1
 }
 
 perf_script_branch_samples() {

@@ -50,7 +50,7 @@ echo "Recording workload..."
 # specific CPU and test in per-CPU mode.
 is_amd=$(grep -E -c 'vendor_id.*AuthenticAMD' /proc/cpuinfo)
 if (($is_amd >= 1)); then
-	perf mem record -o ${PERF_DATA} -C 0 -- taskset -c 0 $TEST_PROGRAM &
+	perf mem record -o ${PERF_DATA} -C 0 --workload-config cpu-list=0 -- $TEST_PROGRAM &
 else
 	perf mem record --all-user -o ${PERF_DATA} -- $TEST_PROGRAM &
 fi
