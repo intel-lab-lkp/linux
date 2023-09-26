@@ -1263,35 +1263,32 @@ static long linereq_get_values(struct linereq *lr, void __user *ip)
 {
 	struct gpio_v2_line_values lv;
 	DECLARE_BITMAP(vals, GPIO_V2_LINES_MAX);
+	DECLARE_BITMAP(mask, GPIO_V2_LINES_MAX);
+	DECLARE_BITMAP(bits, GPIO_V2_LINES_MAX);
 	struct gpio_desc **descs;
 	unsigned int i, didx, num_get;
-	bool val;
 	int ret;
 
 	/* NOTE: It's ok to read values of output lines. */
 	if (copy_from_user(&lv, ip, sizeof(lv)))
 		return -EFAULT;
 
-	for (num_get = 0, i = 0; i < lr->num_lines; i++) {
-		if (lv.mask & BIT_ULL(i)) {
-			num_get++;
-			descs = &lr->lines[i].desc;
-		}
-	}
+	bitmap_from_arr64(mask, &lv.mask, GPIO_V2_LINES_MAX);
 
+	num_get = bitmap_weight(mask, lr->num_lines);
 	if (num_get == 0)
 		return -EINVAL;
 
-	if (num_get != 1) {
+	if (num_get == 1) {
+		descs = &lr->lines[find_first_bit(mask, lr->num_lines)].desc;
+	} else {
 		descs = kmalloc_array(num_get, sizeof(*descs), GFP_KERNEL);
 		if (!descs)
 			return -ENOMEM;
-		for (didx = 0, i = 0; i < lr->num_lines; i++) {
-			if (lv.mask & BIT_ULL(i)) {
-				descs[didx] = lr->lines[i].desc;
-				didx++;
-			}
-		}
+
+		didx = 0;
+		for_each_set_bit(i, mask, lr->num_lines)
+			descs[didx++] = lr->lines[i].desc;
 	}
 	ret = gpiod_get_array_value_complex(false, true, num_get,
 					    descs, NULL, vals);
@@ -1301,18 +1298,14 @@ static long linereq_get_values(struct linereq *lr, void __user *ip)
 	if (ret)
 		return ret;
 
-	lv.bits = 0;
-	for (didx = 0, i = 0; i < lr->num_lines; i++) {
-		if (lv.mask & BIT_ULL(i)) {
-			if (lr->lines[i].sw_debounced)
-				val = debounced_value(&lr->lines[i]);
-			else
-				val = test_bit(didx, vals);
-			if (val)
-				lv.bits |= BIT_ULL(i);
-			didx++;
-		}
+	bitmap_scatter(bits, vals, mask, lr->num_lines);
+
+	for_each_set_bit(i, mask, lr->num_lines) {
+		if (lr->lines[i].sw_debounced)
+			__assign_bit(i, bits, debounced_value(&lr->lines[i]));
 	}
+
+	bitmap_to_arr64(&lv.bits, bits, GPIO_V2_LINES_MAX);
 
 	if (copy_to_user(ip, &lv, sizeof(lv)))
 		return -EFAULT;
@@ -1324,35 +1317,35 @@ static long linereq_set_values_unlocked(struct linereq *lr,
 					struct gpio_v2_line_values *lv)
 {
 	DECLARE_BITMAP(vals, GPIO_V2_LINES_MAX);
+	DECLARE_BITMAP(mask, GPIO_V2_LINES_MAX);
+	DECLARE_BITMAP(bits, GPIO_V2_LINES_MAX);
 	struct gpio_desc **descs;
 	unsigned int i, didx, num_set;
 	int ret;
 
-	bitmap_zero(vals, GPIO_V2_LINES_MAX);
-	for (num_set = 0, i = 0; i < lr->num_lines; i++) {
-		if (lv->mask & BIT_ULL(i)) {
-			if (!test_bit(FLAG_IS_OUT, &lr->lines[i].desc->flags))
-				return -EPERM;
-			if (lv->bits & BIT_ULL(i))
-				__set_bit(num_set, vals);
-			num_set++;
-			descs = &lr->lines[i].desc;
-		}
-	}
+	bitmap_from_arr64(mask, &lv->mask, GPIO_V2_LINES_MAX);
+	bitmap_from_arr64(bits, &lv->bits, GPIO_V2_LINES_MAX);
+
+	num_set = bitmap_gather(vals, bits, mask, lr->num_lines);
 	if (num_set == 0)
 		return -EINVAL;
 
-	if (num_set != 1) {
+	for_each_set_bit(i, mask, lr->num_lines) {
+		if (!test_bit(FLAG_IS_OUT, &lr->lines[i].desc->flags))
+			return -EPERM;
+	}
+
+	if (num_set == 1) {
+		descs = &lr->lines[find_first_bit(mask, lr->num_lines)].desc;
+	} else {
 		/* build compacted desc array and values */
 		descs = kmalloc_array(num_set, sizeof(*descs), GFP_KERNEL);
 		if (!descs)
 			return -ENOMEM;
-		for (didx = 0, i = 0; i < lr->num_lines; i++) {
-			if (lv->mask & BIT_ULL(i)) {
-				descs[didx] = lr->lines[i].desc;
-				didx++;
-			}
-		}
+
+		didx = 0;
+		for_each_set_bit(i, mask, lr->num_lines)
+			descs[didx++] = lr->lines[i].desc;
 	}
 	ret = gpiod_set_array_value_complex(false, true, num_set,
 					    descs, NULL, vals);
