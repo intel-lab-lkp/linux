@@ -276,8 +276,6 @@ static int dp_display_bind(struct device *dev, struct device *master,
 	dp->dp_display.drm_dev = drm;
 	priv->dp[dp->id] = &dp->dp_display;
 
-
-
 	dp->drm_dev = drm;
 	dp->aux->drm_dev = drm;
 	rc = dp_aux_register(dp->aux);
@@ -285,7 +283,6 @@ static int dp_display_bind(struct device *dev, struct device *master,
 		DRM_ERROR("DRM DP AUX register failed\n");
 		goto end;
 	}
-
 
 	rc = dp_register_audio_driver(dev, dp->audio);
 	if (rc) {
@@ -310,15 +307,10 @@ static void dp_display_unbind(struct device *dev, struct device *master,
 	struct dp_display_private *dp = dev_get_dp_display_private(dev);
 	struct msm_drm_private *priv = dev_get_drvdata(master);
 
-	/* disable all HPD interrupts */
-	if (dp->core_initialized)
-		dp_catalog_hpd_config_intr(dp->catalog, DP_DP_HPD_INT_MASK, false);
-
 	kthread_stop(dp->ev_tsk);
 
 	of_dp_aux_depopulate_bus(dp->aux);
 
-	dp_power_client_deinit(dp->power);
 	dp_unregister_audio_driver(dev, dp->audio);
 	dp_aux_unregister(dp->aux);
 	dp->drm_dev = NULL;
@@ -460,6 +452,16 @@ static void dp_display_host_deinit(struct dp_display_private *dp)
 static int dp_display_usbpd_configure_cb(struct device *dev)
 {
 	struct dp_display_private *dp = dev_get_dp_display_private(dev);
+	int ret;
+
+	if (!dp->dp_display.internal_hpd) {
+		/* hpd through gpio */
+		ret = pm_runtime_resume_and_get(&dp->pdev->dev);
+		if (ret) {
+			DRM_ERROR("failed to start power\n");
+			return ret;
+		}
+	}
 
 	dp_display_host_phy_init(dp);
 
@@ -1086,7 +1088,6 @@ static int hpd_event_thread(void *data)
 
 		switch (todo->event_id) {
 		case EV_HPD_INIT_SETUP:
-			dp_display_host_init(dp_priv);
 			break;
 		case EV_HPD_PLUG_INT:
 			dp_hpd_plug_handle(dp_priv, todo->data);
@@ -1263,6 +1264,13 @@ static int dp_display_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, &dp->dp_display);
 
+	rc = devm_pm_runtime_enable(&pdev->dev);
+	if (rc)
+		return rc;
+
+	pm_runtime_set_autosuspend_delay(&pdev->dev, 1000);
+	pm_runtime_use_autosuspend(&pdev->dev);
+
 	rc = dp_display_request_irq(dp);
 	if (rc)
 		return rc;
@@ -1284,6 +1292,34 @@ static int dp_display_remove(struct platform_device *pdev)
 	dp_display_deinit_sub_modules(dp);
 
 	platform_set_drvdata(pdev, NULL);
+
+	dp_display_deinit_sub_modules(dp);
+
+	return 0;
+}
+
+static int dp_pm_runtime_suspend(struct device *dev)
+{
+	struct dp_display_private *dp = dev_get_dp_display_private(dev);
+
+	if (dp->dp_display.is_edp) {
+		dp_display_host_phy_exit(dp);
+		dp_catalog_ctrl_hpd_disable(dp->catalog);
+	}
+	dp_display_host_deinit(dp);
+
+	return 0;
+}
+
+static int dp_pm_runtime_resume(struct device *dev)
+{
+	struct dp_display_private *dp = dev_get_dp_display_private(dev);
+
+	dp_display_host_init(dp);
+	if (dp->dp_display.is_edp) {
+		dp_catalog_ctrl_hpd_enable(dp->catalog);
+		dp_display_host_phy_init(dp);
+	}
 
 	return 0;
 }
@@ -1389,6 +1425,7 @@ static int dp_pm_suspend(struct device *dev)
 }
 
 static const struct dev_pm_ops dp_pm_ops = {
+	SET_RUNTIME_PM_OPS(dp_pm_runtime_suspend, dp_pm_runtime_resume, NULL)
 	.suspend = dp_pm_suspend,
 	.resume =  dp_pm_resume,
 };
@@ -1473,10 +1510,6 @@ static int dp_display_get_next_bridge(struct msm_dp *dp)
 	aux_bus = of_get_child_by_name(dev->of_node, "aux-bus");
 
 	if (aux_bus && dp->is_edp) {
-		dp_display_host_init(dp_priv);
-		dp_catalog_ctrl_hpd_enable(dp_priv->catalog);
-		dp_display_host_phy_init(dp_priv);
-
 		/*
 		 * The code below assumes that the panel will finish probing
 		 * by the time devm_of_dp_aux_populate_ep_devices() returns.
@@ -1578,6 +1611,11 @@ void dp_bridge_atomic_enable(struct drm_bridge *drm_bridge,
 		dp_hpd_plug_handle(dp_display, 0);
 
 	mutex_lock(&dp_display->event_mutex);
+	if (pm_runtime_resume_and_get(&dp_display->pdev->dev)) {
+		DRM_ERROR("failed to start power\n");
+		mutex_unlock(&dp_display->event_mutex);
+		return;
+	}
 
 	state = dp_display->hpd_state;
 	if (state != ST_DISPLAY_OFF && state != ST_MAINLINK_READY) {
@@ -1642,10 +1680,9 @@ void dp_bridge_atomic_post_disable(struct drm_bridge *drm_bridge,
 	mutex_lock(&dp_display->event_mutex);
 
 	state = dp_display->hpd_state;
-	if (state != ST_DISCONNECT_PENDING && state != ST_CONNECTED) {
-		mutex_unlock(&dp_display->event_mutex);
-		return;
-	}
+	if (state != ST_DISCONNECT_PENDING && state != ST_CONNECTED)
+		drm_dbg_dp(dp->drm_dev, "type=%d wrong hpd_state=%d\n",
+			   dp->connector_type, state);
 
 	dp_display_disable(dp_display);
 
@@ -1658,6 +1695,9 @@ void dp_bridge_atomic_post_disable(struct drm_bridge *drm_bridge,
 	}
 
 	drm_dbg_dp(dp->drm_dev, "type=%d Done\n", dp->connector_type);
+
+	pm_runtime_mark_last_busy(&dp_display->pdev->dev);
+	pm_runtime_put_autosuspend(&dp_display->pdev->dev);
 	mutex_unlock(&dp_display->event_mutex);
 }
 
@@ -1697,6 +1737,12 @@ void dp_bridge_hpd_enable(struct drm_bridge *bridge)
 	struct dp_display_private *dp = container_of(dp_display, struct dp_display_private, dp_display);
 
 	mutex_lock(&dp->event_mutex);
+	if (pm_runtime_resume_and_get(&dp->pdev->dev)) {
+		DRM_ERROR("failed to start power\n");
+		mutex_unlock(&dp->event_mutex);
+		return;
+	}
+
 	dp_catalog_ctrl_hpd_enable(dp->catalog);
 
 	/* enable HDP interrupts */
@@ -1718,6 +1764,9 @@ void dp_bridge_hpd_disable(struct drm_bridge *bridge)
 	dp_catalog_ctrl_hpd_disable(dp->catalog);
 
 	dp_display->internal_hpd = false;
+
+	pm_runtime_mark_last_busy(&dp->pdev->dev);
+	pm_runtime_put_autosuspend(&dp->pdev->dev);
 	mutex_unlock(&dp->event_mutex);
 }
 
@@ -1732,13 +1781,11 @@ void dp_bridge_hpd_notify(struct drm_bridge *bridge,
 	if (dp_display->internal_hpd)
 		return;
 
-	if (!dp->core_initialized) {
-		drm_dbg_dp(dp->drm_dev, "not initialized\n");
-		return;
-	}
-
-	if (!dp_display->link_ready && status == connector_status_connected)
+	/* hpd through gpio */
+	if (!dp_display->link_ready && status == connector_status_connected) {
+		dp->hpd_state = ST_DISCONNECTED;
 		dp_add_event(dp, EV_HPD_PLUG_INT, 0, 0);
-	else if (dp_display->link_ready && status == connector_status_disconnected)
+	} else if (dp_display->link_ready && status == connector_status_disconnected) {
 		dp_add_event(dp, EV_HPD_UNPLUG_INT, 0, 0);
+	}
 }
