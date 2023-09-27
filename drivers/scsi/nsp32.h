@@ -38,7 +38,7 @@ enum {
 	MODEL_PCI_MELCO     = 6,
 };
 
-static char * nsp32_model[] = {
+static char *nsp32_model[] = {
 	"I-O DATA CBSC-II CardBus card",
 	"KME SCSI CardBus card",
 	"Workbit duo SCSI CardBus card",
@@ -99,7 +99,7 @@ typedef u16 u16_le;
 # define IRQ_CONTROL_ALL_IRQ_MASK   (PCI_IRQ_MASK   | \
                                      TIMER_IRQ_MASK | \
                                      FIFO_IRQ_MASK  | \
-                                     SCSI_IRQ_MASK  )
+                                     SCSI_IRQ_MASK)
 # define IRQSTATUS_ANY_IRQ          (IRQSTATUS_RESELECT_OCCUER	| \
 				     IRQSTATUS_PHASE_CHANGE_IRQ	| \
 				     IRQSTATUS_SCSIRESET_IRQ	| \
@@ -107,7 +107,7 @@ typedef u16 u16_le;
 				     IRQSTATUS_FIFO_SHLD_IRQ	| \
 				     IRQSTATUS_PCI_IRQ		| \
 				     IRQSTATUS_BMCNTERR_IRQ	| \
-				     IRQSTATUS_AUTOSCSI_IRQ	)
+				     IRQSTATUS_AUTOSCSI_IRQ)
 
 #define TRANSFER_CONTROL	0x02	/* BASE+02, W, W */
 #define TRANSFER_STATUS		0x02	/* BASE+02, W, R */
@@ -171,7 +171,7 @@ typedef u16 u16_le;
                                 FIFO_HOST_POINTER_CLR | \
                                 FIFO_REST_COUNT_CLR   | \
                                 BM_COUNTER_CLR        | \
-                                SAVED_ACK_CLR         )
+                                SAVED_ACK_CLR)
 
 #define SCSI_BUS_MONITOR	0x12	/* BASE+12, B, R */
 # define BUSMON_MSG BIT(0)
@@ -413,22 +413,22 @@ typedef u16 u16_le;
  * Useful Bus Monitor status combinations.
  */
 #define BUSMON_BUS_FREE    0
-#define BUSMON_COMMAND     ( BUSMON_BSY |                          BUSMON_CD | BUSMON_REQ )
-#define BUSMON_MESSAGE_IN  ( BUSMON_BSY | BUSMON_MSG | BUSMON_IO | BUSMON_CD | BUSMON_REQ )
-#define BUSMON_MESSAGE_OUT ( BUSMON_BSY | BUSMON_MSG |             BUSMON_CD | BUSMON_REQ )
-#define BUSMON_DATA_IN     ( BUSMON_BSY |              BUSMON_IO |             BUSMON_REQ )
-#define BUSMON_DATA_OUT    ( BUSMON_BSY |                                      BUSMON_REQ )
-#define BUSMON_STATUS      ( BUSMON_BSY |              BUSMON_IO | BUSMON_CD | BUSMON_REQ )
-#define BUSMON_RESELECT    (                           BUSMON_IO                          | BUSMON_SEL)
-#define BUSMON_PHASE_MASK  (              BUSMON_MSG | BUSMON_IO | BUSMON_CD              | BUSMON_SEL)
+#define BUSMON_COMMAND     (BUSMON_BSY |                          BUSMON_CD | BUSMON_REQ)
+#define BUSMON_MESSAGE_IN  (BUSMON_BSY | BUSMON_MSG | BUSMON_IO | BUSMON_CD | BUSMON_REQ)
+#define BUSMON_MESSAGE_OUT (BUSMON_BSY | BUSMON_MSG |             BUSMON_CD | BUSMON_REQ)
+#define BUSMON_DATA_IN     (BUSMON_BSY |              BUSMON_IO |             BUSMON_REQ)
+#define BUSMON_DATA_OUT    (BUSMON_BSY |                                      BUSMON_REQ)
+#define BUSMON_STATUS      (BUSMON_BSY |              BUSMON_IO | BUSMON_CD | BUSMON_REQ)
+#define BUSMON_RESELECT    (BUSMON_IO                          | BUSMON_SEL)
+#define BUSMON_PHASE_MASK  (BUSMON_MSG | BUSMON_IO | BUSMON_CD              | BUSMON_SEL)
 
-#define BUSPHASE_COMMAND     ( BUSMON_COMMAND     & BUSMON_PHASE_MASK )
-#define BUSPHASE_MESSAGE_IN  ( BUSMON_MESSAGE_IN  & BUSMON_PHASE_MASK )
-#define BUSPHASE_MESSAGE_OUT ( BUSMON_MESSAGE_OUT & BUSMON_PHASE_MASK )
-#define BUSPHASE_DATA_IN     ( BUSMON_DATA_IN     & BUSMON_PHASE_MASK )
-#define BUSPHASE_DATA_OUT    ( BUSMON_DATA_OUT    & BUSMON_PHASE_MASK )
-#define BUSPHASE_STATUS      ( BUSMON_STATUS      & BUSMON_PHASE_MASK )
-#define BUSPHASE_SELECT      ( BUSMON_SEL | BUSMON_IO )
+#define BUSPHASE_COMMAND     (BUSMON_COMMAND     & BUSMON_PHASE_MASK)
+#define BUSPHASE_MESSAGE_IN  (BUSMON_MESSAGE_IN  & BUSMON_PHASE_MASK)
+#define BUSPHASE_MESSAGE_OUT (BUSMON_MESSAGE_OUT & BUSMON_PHASE_MASK)
+#define BUSPHASE_DATA_IN     (BUSMON_DATA_IN     & BUSMON_PHASE_MASK)
+#define BUSPHASE_DATA_OUT    (BUSMON_DATA_OUT    & BUSMON_PHASE_MASK)
+#define BUSPHASE_STATUS      (BUSMON_STATUS      & BUSMON_PHASE_MASK)
+#define BUSPHASE_SELECT      (BUSMON_SEL | BUSMON_IO)
 
 
 /************************************************************************
@@ -597,7 +597,7 @@ typedef struct _nsp32_hw_data {
 	/* message buffer */
 	unsigned char msgoutbuf[MSGOUTBUF_MAX]; /* msgout buffer    */
 	char	      msgout_len;		/* msgoutbuf length */
-	unsigned char msginbuf [MSGINBUF_MAX];	/* megin buffer     */
+	unsigned char msginbuf[MSGINBUF_MAX];	/* megin buffer     */
 	char	      msgin_len;		/* msginbuf length  */
 
 } nsp32_hw_data;
