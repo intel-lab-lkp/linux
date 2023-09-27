@@ -10072,6 +10072,9 @@ int register_netdevice(struct net_device *dev)
 	if (ret)
 		return ret;
 
+	/* rss ctx ID 0 is reserved for the default context, start from 1 */
+	xa_init_flags(&dev->ethtool->rss_ctx, XA_FLAGS_ALLOC1);
+
 	spin_lock_init(&dev->addr_list_lock);
 	netdev_set_addr_lockdep_class(dev);
 
@@ -10874,6 +10877,26 @@ void synchronize_net(void)
 }
 EXPORT_SYMBOL(synchronize_net);
 
+static void netdev_rss_contexts_free(struct net_device *dev)
+{
+	struct ethtool_rxfh_context *ctx;
+	unsigned long context;
+
+	if (dev->ethtool_ops->set_rxfh_context)
+		xa_for_each(&dev->ethtool->rss_ctx, context, ctx) {
+			u32 *indir = ethtool_rxfh_context_indir(ctx);
+			u8 *key = ethtool_rxfh_context_key(ctx);
+			u32 concast = context;
+
+			xa_erase(&dev->ethtool->rss_ctx, context);
+			dev->ethtool_ops->set_rxfh_context(dev, indir, key,
+							   ctx->hfunc, &concast,
+							   true);
+			kfree(ctx);
+		}
+	xa_destroy(&dev->ethtool->rss_ctx);
+}
+
 /**
  *	unregister_netdevice_queue - remove device from the kernel
  *	@dev: device
@@ -10977,6 +11000,8 @@ void unregister_netdevice_many_notify(struct list_head *head,
 
 		netdev_name_node_alt_flush(dev);
 		netdev_name_node_free(dev->name_node);
+
+		netdev_rss_contexts_free(dev);
 
 		call_netdevice_notifiers(NETDEV_PRE_UNINIT, dev);
 
