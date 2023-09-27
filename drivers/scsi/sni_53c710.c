@@ -86,7 +86,7 @@ static int snirm710_probe(struct platform_device *dev)
 	host->irq = rc = platform_get_irq(dev, 0);
 	if (rc < 0)
 		goto out_put_host;
-	if(request_irq(host->irq, NCR_700_intr, IRQF_SHARED, "snirm710", host)) {
+	if (request_irq(host->irq, NCR_700_intr, IRQF_SHARED, "snirm710", host)) {
 		printk(KERN_ERR "snirm710: request_irq failed!\n");
 		goto out_put_host;
 	}
