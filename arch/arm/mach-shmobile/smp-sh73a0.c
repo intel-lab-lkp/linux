@@ -49,7 +49,7 @@ static void __init sh73a0_smp_prepare_cpus(unsigned int max_cpus)
 	if (!request_mem_region(0, SZ_4K, "Boot Area")) {
 		pr_err("Failed to request boot area\n");
 		return;
-	};
+	}
 
 	/* Map the reset vector (in headsmp.S) */
 	ap = ioremap(AP_BASE, PAGE_SIZE);

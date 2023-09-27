@@ -43,7 +43,7 @@ static void __init r8a7779_smp_prepare_cpus(unsigned int max_cpus)
 	if (!request_mem_region(0, SZ_4K, "Boot Area")) {
 		pr_err("Failed to request boot area\n");
 		return;
-	};
+	}
 
 	base = ioremap(HPBREG_BASE, 0x1000);
 
