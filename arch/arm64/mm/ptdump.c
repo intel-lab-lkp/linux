@@ -430,6 +430,9 @@ static void note_page(struct ptdump_state *pt_st, unsigned long addr, int level,
 		const char *unit = units;
 		unsigned long delta;
 
+		if (st->start_address >= addr)
+			goto update_state;
+
 		if (st->current_prot) {
 			note_prot_uxn(st, addr);
 			note_prot_wx(st, addr);
@@ -455,6 +458,7 @@ static void note_page(struct ptdump_state *pt_st, unsigned long addr, int level,
 			pt_dump_seq_printf(st->seq, "---[ %s ]---\n", st->marker->name);
 		}
 
+update_state:
 		st->start_address = addr;
 		st->current_prot = prot;
 		st->level = level;
