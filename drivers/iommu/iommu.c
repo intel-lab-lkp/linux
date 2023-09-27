@@ -807,7 +807,7 @@ int iommu_get_group_resv_regions(struct iommu_group *group,
 
 	mutex_lock(&group->mutex);
 	for_each_group_device(group, device) {
-		struct list_head dev_resv_regions;
+		LIST_HEAD(dev_resv_regions);
 
 		/*
 		 * Non-API groups still expose reserved_regions in sysfs,
@@ -816,7 +816,6 @@ int iommu_get_group_resv_regions(struct iommu_group *group,
 		if (!device->dev->iommu)
 			break;
 
-		INIT_LIST_HEAD(&dev_resv_regions);
 		iommu_get_resv_regions(device->dev, &dev_resv_regions);
 		ret = iommu_insert_device_resv_regions(&dev_resv_regions, head);
 		iommu_put_resv_regions(device->dev, &dev_resv_regions);
@@ -1055,12 +1054,11 @@ static int iommu_create_device_direct_mappings(struct iommu_domain *domain,
 					       struct device *dev)
 {
 	struct iommu_resv_region *entry;
-	struct list_head mappings;
 	unsigned long pg_size;
+	LIST_HEAD(mappings);
 	int ret = 0;
 
 	pg_size = domain->pgsize_bitmap ? 1UL << __ffs(domain->pgsize_bitmap) : 0;
-	INIT_LIST_HEAD(&mappings);
 
 	if (WARN_ON_ONCE(iommu_is_dma_domain(domain) && !pg_size))
 		return -EINVAL;
@@ -2755,6 +2753,9 @@ EXPORT_SYMBOL_GPL(iommu_set_pgtable_quirks);
 void iommu_get_resv_regions(struct device *dev, struct list_head *list)
 {
 	const struct iommu_ops *ops = dev_iommu_ops(dev);
+
+	if (WARN_ON(!list_empty(list)))
+		return;
 
 	if (ops->get_resv_regions)
 		ops->get_resv_regions(dev, list);
