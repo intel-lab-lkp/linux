@@ -354,13 +354,13 @@ struct ahd_platform_data {
 void ahd_delay(long);
 
 /***************************** Low Level I/O **********************************/
-uint8_t ahd_inb(struct ahd_softc * ahd, long port);
-void ahd_outb(struct ahd_softc * ahd, long port, uint8_t val);
-void ahd_outw_atomic(struct ahd_softc * ahd,
+uint8_t ahd_inb(struct ahd_softc *ahd, long port);
+void ahd_outb(struct ahd_softc *ahd, long port, uint8_t val);
+void ahd_outw_atomic(struct ahd_softc *ahd,
 				     long port, uint16_t val);
-void ahd_outsb(struct ahd_softc * ahd, long port,
+void ahd_outsb(struct ahd_softc *ahd, long port,
 			       uint8_t *, int count);
-void ahd_insb(struct ahd_softc * ahd, long port,
+void ahd_insb(struct ahd_softc *ahd, long port,
 			       uint8_t *, int count);
 
 /**************************** Initialization **********************************/
@@ -438,8 +438,7 @@ ahd_unlock(struct ahd_softc *ahd, unsigned long *flags)
 #define PCIXM_STATUS_MAXCRDS	0x1C00	/* Maximum Cumulative Read Size */
 #define PCIXM_STATUS_RCVDSCEM	0x2000	/* Received a Split Comp w/Error msg */
 
-typedef enum
-{
+typedef enum {
 	AHD_POWER_STATE_D0,
 	AHD_POWER_STATE_D1,
 	AHD_POWER_STATE_D2,
@@ -465,21 +464,21 @@ static inline int ahd_get_pci_function(ahd_dev_softc_t);
 static inline int
 ahd_get_pci_function(ahd_dev_softc_t pci)
 {
-	return (PCI_FUNC(pci->devfn));
+	return PCI_FUNC(pci->devfn);
 }
 
 static inline int ahd_get_pci_slot(ahd_dev_softc_t);
 static inline int
 ahd_get_pci_slot(ahd_dev_softc_t pci)
 {
-	return (PCI_SLOT(pci->devfn));
+	return PCI_SLOT(pci->devfn);
 }
 
 static inline int ahd_get_pci_bus(ahd_dev_softc_t);
 static inline int
 ahd_get_pci_bus(ahd_dev_softc_t pci)
 {
-	return (pci->bus->number);
+	return pci->bus->number;
 }
 
 static inline void ahd_flush_device_writes(struct ahd_softc *);
@@ -492,7 +491,7 @@ ahd_flush_device_writes(struct ahd_softc *ahd)
 
 /**************************** Proc FS Support *********************************/
 int	ahd_proc_write_seeprom(struct Scsi_Host *, char *, int);
-int	ahd_linux_show_info(struct seq_file *,struct Scsi_Host *);
+int	ahd_linux_show_info(struct seq_file *, struct Scsi_Host *);
 
 /*********************** Transaction Access Wrappers **************************/
 
@@ -506,7 +505,7 @@ void ahd_cmd_set_transaction_status(struct scsi_cmnd *cmd, uint32_t status)
 static inline
 void ahd_set_transaction_status(struct scb *scb, uint32_t status)
 {
-	ahd_cmd_set_transaction_status(scb->io_ctx,status);
+	ahd_cmd_set_transaction_status(scb->io_ctx, status);
 }
 
 static inline
@@ -531,7 +530,7 @@ uint32_t ahd_cmd_get_transaction_status(struct scsi_cmnd *cmd)
 static inline
 uint32_t ahd_get_transaction_status(struct scb *scb)
 {
-	return (ahd_cmd_get_transaction_status(scb->io_ctx));
+	return ahd_cmd_get_transaction_status(scb->io_ctx);
 }
 
 static inline
@@ -543,7 +542,7 @@ uint32_t ahd_cmd_get_scsi_status(struct scsi_cmnd *cmd)
 static inline
 uint32_t ahd_get_scsi_status(struct scb *scb)
 {
-	return (ahd_cmd_get_scsi_status(scb->io_ctx));
+	return ahd_cmd_get_scsi_status(scb->io_ctx);
 }
 
 static inline
@@ -558,13 +557,13 @@ void ahd_set_transaction_tag(struct scb *scb, int enabled, u_int type)
 static inline
 u_long ahd_get_transfer_length(struct scb *scb)
 {
-	return (scb->platform_data->xfer_len);
+	return scb->platform_data->xfer_len;
 }
 
 static inline
 int ahd_get_transfer_dir(struct scb *scb)
 {
-	return (scb->io_ctx->sc_data_direction);
+	return scb->io_ctx->sc_data_direction;
 }
 
 static inline
@@ -588,7 +587,7 @@ u_long ahd_get_residual(struct scb *scb)
 static inline
 u_long ahd_get_sense_residual(struct scb *scb)
 {
-	return (scb->platform_data->sense_resid);
+	return scb->platform_data->sense_resid;
 }
 
 static inline
@@ -599,13 +598,13 @@ int ahd_perform_autosense(struct scb *scb)
 	 * On other platforms this is set on a
 	 * per-transaction basis.
 	 */
-	return (1);
+	return 1;
 }
 
 static inline uint32_t
 ahd_get_sense_bufsize(struct ahd_softc *ahd, struct scb *scb)
 {
-	return (sizeof(struct scsi_sense_data));
+	return sizeof(struct scsi_sense_data);
 }
 
 static inline void
