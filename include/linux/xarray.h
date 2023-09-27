@@ -297,7 +297,7 @@ struct xarray {
 	spinlock_t	xa_lock;
 /* private: The rest of the data structure is not to be used directly. */
 	gfp_t		xa_flags;
-	void __rcu *	xa_head;
+	void __rcu *xa_head;
 };
 
 #define XARRAY_INIT(name, flags) {				\
