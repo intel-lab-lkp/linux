@@ -1165,13 +1165,14 @@ static void imx_uart_dma_rx_callback(void *data)
 	unsigned int w_bytes = 0;
 	unsigned int r_bytes;
 	unsigned int bd_size;
+	unsigned long flags;
 
 	status = dmaengine_tx_status(chan, sport->rx_cookie, &state);
 
 	if (status == DMA_ERROR) {
-		spin_lock(&sport->port.lock);
+		spin_lock_irqsave(&sport->port.lock, flags);
 		imx_uart_clear_rx_errors(sport);
-		spin_unlock(&sport->port.lock);
+		spin_unlock_irqrestore(&sport->port.lock, flags);
 		return;
 	}
 
@@ -1200,9 +1201,9 @@ static void imx_uart_dma_rx_callback(void *data)
 		r_bytes = rx_ring->head - rx_ring->tail;
 
 		/* If we received something, check for 0xff flood */
-		spin_lock(&sport->port.lock);
+		spin_lock_irqsave(&sport->port.lock, flags);
 		imx_uart_check_flood(sport, imx_uart_readl(sport, USR2));
-		spin_unlock(&sport->port.lock);
+		spin_unlock_irqrestore(&sport->port.lock, flags);
 
 		if (!(sport->port.ignore_status_mask & URXD_DUMMY_READ)) {
 
