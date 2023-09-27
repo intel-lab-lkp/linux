@@ -712,7 +712,7 @@ static int cxl_port_setup_regs(struct cxl_port *port,
 {
 	if (dev_is_platform(port->uport_dev))
 		return 0;
-	return cxl_setup_comp_regs(&port->dev, &port->comp_map,
+	return cxl_setup_comp_regs(&port->dev, &port->reg_map,
 				   component_reg_phys);
 }
 
