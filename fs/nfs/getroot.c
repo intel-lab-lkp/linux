@@ -68,7 +68,7 @@ int nfs_get_root(struct super_block *s, struct fs_context *fc)
 {
 	struct nfs_fs_context *ctx = nfs_fc2context(fc);
 	struct nfs_server *server = NFS_SB(s), *clone_server;
-	struct nfs_fsinfo fsinfo;
+	struct nfs_fsinfo *fsinfo;
 	struct dentry *root;
 	struct inode *inode;
 	char *name;
@@ -79,19 +79,23 @@ int nfs_get_root(struct super_block *s, struct fs_context *fc)
 	if (!name)
 		goto out;
 
-	/* get the actual root for this mount */
-	fsinfo.fattr = nfs_alloc_fattr_with_label(server);
-	if (fsinfo.fattr == NULL)
+	fsinfo = kmalloc(sizeof(*fsinfo), GFP_KERNEL);
+	if (!fsinfo)
 		goto out_name;
 
-	error = server->nfs_client->rpc_ops->getroot(server, ctx->mntfh, &fsinfo);
+	/* get the actual root for this mount */
+	fsinfo->fattr = nfs_alloc_fattr_with_label(server);
+	if (fsinfo->fattr == NULL)
+		goto out_fsinfo;
+
+	error = server->nfs_client->rpc_ops->getroot(server, ctx->mntfh, fsinfo);
 	if (error < 0) {
 		dprintk("nfs_get_root: getattr error = %d\n", -error);
 		nfs_errorf(fc, "NFS: Couldn't getattr on root");
 		goto out_fattr;
 	}
 
-	inode = nfs_fhget(s, ctx->mntfh, fsinfo.fattr);
+	inode = nfs_fhget(s, ctx->mntfh, fsinfo->fattr);
 	if (IS_ERR(inode)) {
 		dprintk("nfs_get_root: get root inode failed\n");
 		error = PTR_ERR(inode);
@@ -148,11 +152,13 @@ int nfs_get_root(struct super_block *s, struct fs_context *fc)
 		!(kflags_out & SECURITY_LSM_NATIVE_LABELS))
 		server->caps &= ~NFS_CAP_SECURITY_LABEL;
 
-	nfs_setsecurity(inode, fsinfo.fattr);
+	nfs_setsecurity(inode, fsinfo->fattr);
 	error = 0;
 
 out_fattr:
-	nfs_free_fattr(fsinfo.fattr);
+	nfs_free_fattr(fsinfo->fattr);
+out_fsinfo:
+	kfree(fsinfo);
 out_name:
 	kfree(name);
 out:
