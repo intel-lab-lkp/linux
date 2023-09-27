@@ -91,8 +91,7 @@ scsi_nl_rcv_msg(struct sk_buff *skb)
 			if (err)
 				printk(KERN_WARNING "%s: Msgtype %d failed - err %d\n",
 				       __func__, hdr->msgtype, err);
-		}
-		else
+		} else
 			err = -ENOENT;
 
 next_msg:
