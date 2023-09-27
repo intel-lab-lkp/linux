@@ -41,6 +41,7 @@
 
 #include <drm/drm_aperture.h>
 #include <drm/drm_atomic_helper.h>
+#include <drm/drm_client.h>
 #include <drm/drm_ioctl.h>
 #include <drm/drm_managed.h>
 #include <drm/drm_probe_helper.h>
@@ -854,6 +855,8 @@ out_pci_disable:
 void i915_driver_remove(struct drm_i915_private *i915)
 {
 	intel_wakeref_t wakeref;
+
+	drm_client_dev_unregister(&i915->drm);
 
 	wakeref = intel_runtime_pm_get(&i915->runtime_pm);
 
