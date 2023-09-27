@@ -1290,13 +1290,17 @@ static noinline_for_stack int execute_push_nsh(struct sk_buff *skb,
 					       struct sw_flow_key *key,
 					       const struct nlattr *attr)
 {
-	u8 buffer[NSH_HDR_MAX_LEN];
-	struct nshhdr *nh = (struct nshhdr *)buffer;
+	struct nshhdr *nh;
 	int err;
+
+	nh = kmalloc(NSH_HDR_MAX_LEN, GFP_ATOMIC);
+	if (unlikely(!nh))
+		return -ENOMEM; /* XXX: should this skip action like clone? */
 
 	err = nsh_hdr_from_nlattr(attr, nh, NSH_HDR_MAX_LEN);
 	if (likely(!err))
 		err = push_nsh(skb, key, nh);
+	kfree(nh);
 
 	return err;
 }
