@@ -95,7 +95,7 @@ void wfx_hw_scan_work(struct work_struct *work)
 	int chan_cur, ret, err;
 
 	mutex_lock(&wvif->wdev->conf_mutex);
-	mutex_lock(&wvif->scan_lock);
+	mutex_lock(&wvif->wdev->scan_lock);
 	if (wvif->join_in_progress) {
 		dev_info(wvif->wdev->dev, "abort in-progress REQ_JOIN");
 		wfx_reset(wvif);
@@ -116,7 +116,7 @@ void wfx_hw_scan_work(struct work_struct *work)
 			ret = -ETIMEDOUT;
 		}
 	} while (ret >= 0 && chan_cur < hw_req->req.n_channels);
-	mutex_unlock(&wvif->scan_lock);
+	mutex_unlock(&wvif->wdev->scan_lock);
 	mutex_unlock(&wvif->wdev->conf_mutex);
 	wfx_ieee80211_scan_completed_compat(wvif->wdev->hw, ret < 0);
 }
@@ -155,7 +155,7 @@ void wfx_remain_on_channel_work(struct work_struct *work)
 
 	/* Hijack scan request to implement Remain-On-Channel */
 	mutex_lock(&wvif->wdev->conf_mutex);
-	mutex_lock(&wvif->scan_lock);
+	mutex_lock(&wvif->wdev->scan_lock);
 	if (wvif->join_in_progress) {
 		dev_info(wvif->wdev->dev, "abort in-progress REQ_JOIN");
 		wfx_reset(wvif);
@@ -178,7 +178,7 @@ void wfx_remain_on_channel_work(struct work_struct *work)
 		dev_err(wvif->wdev->dev, "roc didn't stop\n");
 	ieee80211_remain_on_channel_expired(wvif->wdev->hw);
 end:
-	mutex_unlock(&wvif->scan_lock);
+	mutex_unlock(&wvif->wdev->scan_lock);
 	mutex_unlock(&wvif->wdev->conf_mutex);
 	wfx_bh_request_tx(wvif->wdev);
 }
