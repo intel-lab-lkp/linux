@@ -616,6 +616,58 @@ static void stage2_ptdump_end_walk(struct ptdump_info *info)
 	free_pages_exact(snapshot, PAGE_SIZE);
 	info->priv = NULL;
 }
+
+static u32 stage2_get_max_pgd_index(u32 ipa_bits, u32 start_level)
+{
+	u64 end_ipa = BIT(ipa_bits) - 1;
+	u32 shift = ARM64_HW_PGTABLE_LEVEL_SHIFT(start_level - 1);
+
+	return end_ipa >> shift;
+}
+
+static void stage2_ptdump_walk(struct seq_file *s, struct ptdump_info *info)
+{
+	struct kvm_pgtable_snapshot *snapshot = info->priv;
+	struct pg_state st;
+	struct kvm_pgtable *pgtable;
+	u32 pgd_index, pgd_pages, pgd_shift;
+	u64 start_ipa = 0, end_ipa;
+	pgd_t *pgd;
+
+	if (snapshot == NULL || !snapshot->pgtable.pgd)
+		return;
+
+	pgtable = &snapshot->pgtable;
+	info->mm->pgd = phys_to_virt((phys_addr_t)pgtable->pgd);
+	pgd_shift = ARM64_HW_PGTABLE_LEVEL_SHIFT(pgtable->start_level - 1);
+	pgd_pages = stage2_get_max_pgd_index(pgtable->ia_bits,
+					     pgtable->start_level);
+
+	for (pgd_index = 0; pgd_index <= pgd_pages; pgd_index++) {
+		end_ipa = start_ipa + (1UL << pgd_shift);
+
+		st = (struct pg_state) {
+			.seq		= s,
+			.marker		= info->markers,
+			.level		= pgtable->start_level,
+			.pg_level	= &stage2_pg_level[0],
+			.ptdump		= {
+				.note_page	= note_page,
+				.range		= (struct ptdump_range[]) {
+					{start_ipa,	end_ipa},
+					{0,		0},
+				},
+			},
+		};
+
+		ipa_address_markers[0].start_address = start_ipa;
+		ipa_address_markers[1].start_address = end_ipa;
+
+		pgd = &info->mm->pgd[pgd_index * PTRS_PER_PTE];
+		ptdump_walk_pgd(&st.ptdump, info->mm, pgd);
+		start_ipa = end_ipa;
+	}
+}
 #endif /* CONFIG_NVHE_EL2_PTDUMP_DEBUGFS */
 
 static int __init ptdump_init(void)
@@ -634,6 +686,7 @@ static int __init ptdump_init(void)
 		.mc_len			= host_s2_pgtable_pages(),
 		.ptdump_prepare_walk	= stage2_ptdump_prepare_walk,
 		.ptdump_end_walk	= stage2_ptdump_end_walk,
+		.ptdump_walk		= stage2_ptdump_walk,
 	};
 
 	init_rwsem(&ipa_init_mm.mmap_lock);
