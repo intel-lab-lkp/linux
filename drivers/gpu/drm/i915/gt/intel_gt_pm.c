@@ -13,6 +13,7 @@
 #include "intel_engine_pm.h"
 #include "intel_gt.h"
 #include "intel_gt_clock_utils.h"
+#include "intel_gt_mcr.h"
 #include "intel_gt_pm.h"
 #include "intel_gt_print.h"
 #include "intel_gt_requests.h"
@@ -218,6 +219,17 @@ void intel_gt_pm_fini(struct intel_gt *gt)
 
 void intel_gt_resume_early(struct intel_gt *gt)
 {
+	/*
+	 * Reset the steer semaphore on GT1, as we have observed it
+	 * remaining held after a suspend operation. Confirmation
+	 * from the hardware team ensures the safety of resetting
+	 * the steer semaphore during driver load/resume, as there
+	 * are no lock acquisitions during this process by other
+	 * agents.
+	 */
+	if (MEDIA_VER(gt->i915) >= 13 && gt->type == GT_MEDIA)
+		intel_gt_mcr_lock_reset(gt);
+
 	intel_uncore_resume_early(gt->uncore);
 	intel_gt_check_and_clear_faults(gt);
 }
