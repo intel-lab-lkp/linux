@@ -2300,7 +2300,7 @@ struct net_device {
 
 	struct list_head	link_watch_list;
 
-	enum { NETREG_UNINITIALIZED=0,
+	enum { NETREG_UNINITIALIZED = 0,
 	       NETREG_REGISTERED,	/* completed register_netdevice */
 	       NETREG_UNREGISTERING,	/* called unregister_netdevice */
 	       NETREG_UNREGISTERED,	/* completed unregister todo */
@@ -2491,8 +2491,7 @@ struct netdev_queue *netdev_get_tx_queue(const struct net_device *dev,
 }
 
 static inline struct netdev_queue *skb_get_tx_queue(const struct net_device *dev,
-						    const struct sk_buff *skb)
-{
+						    const struct sk_buff *skb) {
 	return netdev_get_tx_queue(dev, skb_get_queue_mapping(skb));
 }
 
