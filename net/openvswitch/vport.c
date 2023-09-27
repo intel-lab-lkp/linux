@@ -494,8 +494,12 @@ u32 ovs_vport_find_upcall_portid(const struct vport *vport,
 int ovs_vport_receive(struct vport *vport, struct sk_buff *skb,
 		      const struct ip_tunnel_info *tun_info)
 {
-	struct sw_flow_key key;
+	struct sw_flow_key *key;
 	int error;
+
+	key = kmalloc(sizeof(*key), GFP_ATOMIC);
+	if (!key)
+		return -ENOMEM;
 
 	OVS_CB(skb)->input_vport = vport;
 	OVS_CB(skb)->mru = 0;
@@ -510,12 +514,16 @@ int ovs_vport_receive(struct vport *vport, struct sk_buff *skb,
 	}
 
 	/* Extract flow from 'skb' into 'key'. */
-	error = ovs_flow_key_extract(tun_info, skb, &key);
+	error = ovs_flow_key_extract(tun_info, skb, key);
 	if (unlikely(error)) {
 		kfree_skb(skb);
+		kfree(key);
 		return error;
 	}
-	ovs_dp_process_packet(skb, &key);
+	ovs_dp_process_packet(skb, key);
+
+	kfree(key);
+
 	return 0;
 }
 
