@@ -90,7 +90,8 @@ struct nft_flow_rule *nft_flow_rule_create(struct net *net,
 {
 	struct nft_offload_ctx *ctx;
 	struct nft_flow_rule *flow;
-	int num_actions = 0, err;
+	unsigned int num_actions = 0;
+	int err;
 	struct nft_expr *expr;
 
 	expr = nft_expr_first(rule);
@@ -98,6 +99,9 @@ struct nft_flow_rule *nft_flow_rule_create(struct net *net,
 		if (expr->ops->offload_action &&
 		    expr->ops->offload_action(expr))
 			num_actions++;
+
+		if (num_actions == UINT_MAX)
+			return ERR_PTR(-ENOMEM);
 
 		expr = nft_expr_next(expr);
 	}
