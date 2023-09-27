@@ -24,6 +24,7 @@
 #include <asm/memory.h>
 #include <asm/pgtable-hwdef.h>
 #include <asm/ptdump.h>
+#include <asm/kvm_pgtable.h>
 
 
 enum address_markers_idx {
@@ -171,6 +172,66 @@ static const struct prot_bits pte_bits[] = {
 	}
 };
 
+static const struct prot_bits stage2_pte_bits[] = {
+	{
+		.mask	= PTE_VALID,
+		.val	= PTE_VALID,
+		.set	= " ",
+		.clear	= "F",
+	}, {
+		.mask	= KVM_PTE_LEAF_ATTR_HI_S2_XN,
+		.val	= KVM_PTE_LEAF_ATTR_HI_S2_XN,
+		.set	= "XN",
+		.clear	= "  ",
+	}, {
+		.mask	= KVM_PTE_LEAF_ATTR_LO_S2_S2AP_R,
+		.val	= KVM_PTE_LEAF_ATTR_LO_S2_S2AP_R,
+		.set	= "R",
+		.clear	= " ",
+	}, {
+		.mask	= KVM_PTE_LEAF_ATTR_LO_S2_S2AP_W,
+		.val	= KVM_PTE_LEAF_ATTR_LO_S2_S2AP_W,
+		.set	= "W",
+		.clear	= " ",
+	}, {
+		.mask	= KVM_PTE_LEAF_ATTR_LO_S2_AF,
+		.val	= KVM_PTE_LEAF_ATTR_LO_S2_AF,
+		.set	= "AF",
+		.clear	= "  ",
+	}, {
+		.mask	= PTE_NG,
+		.val	= PTE_NG,
+		.set	= "FnXS",
+		.clear	= "  ",
+	}, {
+		.mask	= PTE_CONT,
+		.val	= PTE_CONT,
+		.set	= "CON",
+		.clear	= "   ",
+	}, {
+		.mask	= PTE_TABLE_BIT,
+		.val	= PTE_TABLE_BIT,
+		.set	= "   ",
+		.clear	= "BLK",
+	}, {
+		.mask	= KVM_PGTABLE_PROT_SW0,
+		.val	= KVM_PGTABLE_PROT_SW0,
+		.set	= "SW0", /* PKVM_PAGE_SHARED_OWNED */
+	}, {
+		.mask   = KVM_PGTABLE_PROT_SW1,
+		.val	= KVM_PGTABLE_PROT_SW1,
+		.set	= "SW1", /* PKVM_PAGE_SHARED_BORROWED */
+	}, {
+		.mask	= KVM_PGTABLE_PROT_SW2,
+		.val	= KVM_PGTABLE_PROT_SW2,
+		.set	= "SW2",
+	}, {
+		.mask   = KVM_PGTABLE_PROT_SW3,
+		.val	= KVM_PGTABLE_PROT_SW3,
+		.set	= "SW3",
+	},
+};
+
 struct pg_level {
 	const struct prot_bits *bits;
 	const char *name;
@@ -199,6 +260,30 @@ static struct pg_level pg_level[] = {
 		.name	= "PTE",
 		.bits	= pte_bits,
 		.num	= ARRAY_SIZE(pte_bits),
+	},
+};
+
+static struct pg_level stage2_pg_level[] = {
+	{ /* pgd */
+		.name	= "PGD",
+		.bits	= stage2_pte_bits,
+		.num	= ARRAY_SIZE(stage2_pte_bits),
+	}, { /* p4d */
+		.name	= "P4D",
+		.bits	= stage2_pte_bits,
+		.num	= ARRAY_SIZE(stage2_pte_bits),
+	}, { /* pud */
+		.name	= (CONFIG_PGTABLE_LEVELS > 3) ? "PUD" : "PGD",
+		.bits	= stage2_pte_bits,
+		.num	= ARRAY_SIZE(stage2_pte_bits),
+	}, { /* pmd */
+		.name	= (CONFIG_PGTABLE_LEVELS > 2) ? "PMD" : "PGD",
+		.bits	= stage2_pte_bits,
+		.num	= ARRAY_SIZE(stage2_pte_bits),
+	}, { /* pte */
+		.name	= "PTE",
+		.bits	= stage2_pte_bits,
+		.num	= ARRAY_SIZE(stage2_pte_bits),
 	},
 };
 
@@ -340,6 +425,12 @@ static void __init ptdump_initialize(void)
 		if (pg_level[i].bits)
 			for (j = 0; j < pg_level[i].num; j++)
 				pg_level[i].mask |= pg_level[i].bits[j].mask;
+
+	for (i = 0; i < ARRAY_SIZE(stage2_pg_level); i++)
+		if (stage2_pg_level[i].bits)
+			for (j = 0; j < stage2_pg_level[i].num; j++)
+				stage2_pg_level[i].mask |=
+					stage2_pg_level[i].bits[j].mask;
 }
 
 static struct ptdump_info kernel_ptdump_info = {
