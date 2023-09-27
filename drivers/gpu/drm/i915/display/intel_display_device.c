@@ -1070,6 +1070,12 @@ void intel_display_device_info_runtime_init(struct drm_i915_private *i915)
 
 		if (REG_FIELD_GET(XE2LPD_DE_CAP_DSC_MASK, cap) == 1)
 			display_runtime->has_dsc = 0;
+
+		if (REG_FIELD_GET(XE2LPD_DE_CAP_SCALER_MASK, cap) == 1) {
+			for_each_pipe(i915, pipe)
+				if (display_runtime->num_scalers[pipe])
+					display_runtime->num_scalers[pipe] = 1;
+		}
 	}
 
 	return;
