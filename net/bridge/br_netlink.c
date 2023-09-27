@@ -1559,6 +1559,9 @@ static int br_dev_newlink(struct net *src_net, struct net_device *dev,
 		spin_unlock_bh(&br->lock);
 	}
 
+	if (tb[IFLA_MTU])
+		br_opt_toggle(br, BROPT_MTU_SET_BY_USER, true);
+
 	err = br_changelink(dev, tb, data, extack);
 	if (err)
 		br_dev_delete(dev, NULL);
