@@ -71,4 +71,16 @@ config PROTECTED_NVHE_STACKTRACE
 
 	  If unsure, or not using protected nVHE (pKVM), say N.
 
+config NVHE_EL2_PTDUMP_DEBUGFS
+	bool "Present the stage-2 pagetables to debugfs"
+	depends on NVHE_EL2_DEBUG && PTDUMP_DEBUGFS
+	help
+	  Say Y here if you want to show the pKVM host stage-2 kernel pagetable
+	  layout in a debugfs file. This information is only useful for kernel developers
+	  who are working in architecture specific areas of the kernel.
+	  It is probably not a good idea to enable this feature in a production
+	  kernel.
+
+	  If in doubt, say N.
+
 endif # VIRTUALIZATION

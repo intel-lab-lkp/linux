@@ -469,6 +469,21 @@ void ptdump_check_wx(void)
 		pr_info("Checked W+X mappings: passed, no W+X pages found\n");
 }
 
+#ifdef CONFIG_NVHE_EL2_PTDUMP_DEBUGFS
+static struct ptdump_info stage2_kernel_ptdump_info;
+static struct addr_marker ipa_address_markers[] = {
+	{ 0,	"IPA start"},
+	{ -1,	"IPA end"},
+	{ -1,	NULL},
+};
+
+/* Initialize a memory structure used by ptdump to walk the no-VMA region */
+static struct mm_struct ipa_init_mm = {
+	.mm_mt		= MTREE_INIT_EXT(mm_mt, MM_MT_FLAGS,
+					 ipa_init_mm.mmap_lock),
+};
+#endif /* CONFIG_NVHE_EL2_PTDUMP_DEBUGFS */
+
 static int __init ptdump_init(void)
 {
 	address_markers[PAGE_END_NR].start_address = PAGE_END;
@@ -477,6 +492,17 @@ static int __init ptdump_init(void)
 #endif
 	ptdump_initialize();
 	ptdump_debugfs_register(&kernel_ptdump_info, "kernel_page_tables");
+
+#ifdef CONFIG_NVHE_EL2_PTDUMP_DEBUGFS
+	stage2_kernel_ptdump_info = (struct ptdump_info) {
+		.markers	= ipa_address_markers,
+		.mm		= &ipa_init_mm,
+	};
+
+	init_rwsem(&ipa_init_mm.mmap_lock);
+	ptdump_debugfs_register(&stage2_kernel_ptdump_info,
+				"host_stage2_kernel_page_tables");
+#endif
 	return 0;
 }
 device_initcall(ptdump_init);
