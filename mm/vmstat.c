@@ -496,7 +496,7 @@ void __dec_zone_state(struct zone *zone, enum zone_stat_item item)
 
 	v = __this_cpu_dec_return(*p);
 	t = __this_cpu_read(pcp->stat_threshold);
-	if (unlikely(v < - t)) {
+	if (unlikely(v < -t)) {
 		s8 overstep = t >> 1;
 
 		zone_page_state_add(v - overstep, zone, item);
@@ -519,7 +519,7 @@ void __dec_node_state(struct pglist_data *pgdat, enum node_stat_item item)
 
 	v = __this_cpu_dec_return(*p);
 	t = __this_cpu_read(pcp->stat_threshold);
-	if (unlikely(v < - t)) {
+	if (unlikely(v < -t)) {
 		s8 overstep = t >> 1;
 
 		node_page_state_add(v - overstep, pgdat, item);
