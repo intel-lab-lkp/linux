@@ -244,7 +244,7 @@ static inline int clcdfb_check(struct clcd_fb *fb, struct fb_var_screeninfo *var
 	var->xres_virtual = var->xres = (var->xres + 15) & ~15;
 	var->yres_virtual = var->yres = (var->yres + 1) & ~1;
 
-#define CHECK(e,l,h) (var->e < l || var->e > h)
+#define CHECK(e, l, h) (var->e < l || var->e > h)
 	if (CHECK(right_margin, (5+1), 256) ||	/* back porch */
 	    CHECK(left_margin, (5+1), 256) ||	/* front porch */
 	    CHECK(hsync_len, (5+1), 256) ||
