@@ -67,4 +67,6 @@ size_t drm_fb_build_fourcc_list(struct drm_device *dev,
 				const u32 *native_fourccs, size_t native_nfourccs,
 				u32 *fourccs_out, size_t nfourccs_out);
 
+
+void drm_fb_xrgb8888_to_rgb565_line(void *dbuf, const void *sbuf, unsigned int pixels);
 #endif /* __LINUX_DRM_FORMAT_HELPER_H */
