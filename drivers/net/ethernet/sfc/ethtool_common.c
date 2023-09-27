@@ -820,10 +820,10 @@ int efx_ethtool_get_rxnfc(struct net_device *net_dev,
 		return 0;
 
 	case ETHTOOL_GRXFH: {
-		struct efx_rss_context *ctx = &efx->rss_context;
+		struct efx_rss_context_priv *ctx = &efx->rss_context.priv;
 		__u64 data;
 
-		mutex_lock(&efx->rss_lock);
+		mutex_lock(&net_dev->ethtool->rss_lock);
 		if (info->flow_type & FLOW_RSS && info->rss_context) {
 			ctx = efx_find_rss_context_entry(efx, info->rss_context);
 			if (!ctx) {
@@ -864,7 +864,7 @@ int efx_ethtool_get_rxnfc(struct net_device *net_dev,
 out_setdata_unlock:
 		info->data = data;
 out_unlock:
-		mutex_unlock(&efx->rss_lock);
+		mutex_unlock(&net_dev->ethtool->rss_lock);
 		return rc;
 	}
 
@@ -1207,96 +1207,121 @@ int efx_ethtool_get_rxfh_context(struct net_device *net_dev, u32 *indir,
 				 u8 *key, u8 *hfunc, u32 rss_context)
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
-	struct efx_rss_context *ctx;
+	struct efx_rss_context_priv *ctx_priv;
+	struct efx_rss_context ctx;
 	int rc = 0;
 
 	if (!efx->type->rx_pull_rss_context_config)
 		return -EOPNOTSUPP;
 
-	mutex_lock(&efx->rss_lock);
-	ctx = efx_find_rss_context_entry(efx, rss_context);
-	if (!ctx) {
+	mutex_lock(&net_dev->ethtool->rss_lock);
+	ctx_priv = efx_find_rss_context_entry(efx, rss_context);
+	if (!ctx_priv) {
 		rc = -ENOENT;
 		goto out_unlock;
 	}
-	rc = efx->type->rx_pull_rss_context_config(efx, ctx);
+	ctx.priv = *ctx_priv;
+	rc = efx->type->rx_pull_rss_context_config(efx, &ctx);
 	if (rc)
 		goto out_unlock;
 
 	if (hfunc)
 		*hfunc = ETH_RSS_HASH_TOP;
 	if (indir)
-		memcpy(indir, ctx->rx_indir_table, sizeof(ctx->rx_indir_table));
+		memcpy(indir, ctx.rx_indir_table, sizeof(ctx.rx_indir_table));
 	if (key)
-		memcpy(key, ctx->rx_hash_key, efx->type->rx_hash_key_size);
+		memcpy(key, ctx.rx_hash_key, efx->type->rx_hash_key_size);
 out_unlock:
-	mutex_unlock(&efx->rss_lock);
+	mutex_unlock(&net_dev->ethtool->rss_lock);
 	return rc;
 }
 
-int efx_ethtool_set_rxfh_context(struct net_device *net_dev,
-				 const u32 *indir, const u8 *key,
-				 const u8 hfunc, u32 *rss_context,
-				 bool delete)
+int efx_ethtool_modify_rxfh_context(struct net_device *net_dev,
+				    struct ethtool_rxfh_context *ctx,
+				    const u32 *indir, const u8 *key,
+				    const u8 hfunc, u32 rss_context,
+				    struct netlink_ext_ack *extack)
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
-	struct efx_rss_context *ctx;
-	bool allocated = false;
-	int rc;
+	struct efx_rss_context_priv *priv;
 
-	if (!efx->type->rx_push_rss_context_config)
+	if (!efx->type->rx_push_rss_context_config) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "NIC type does not support custom contexts");
 		return -EOPNOTSUPP;
+	}
 	/* Hash function is Toeplitz, cannot be changed */
-	if (hfunc != ETH_RSS_HASH_NO_CHANGE && hfunc != ETH_RSS_HASH_TOP)
+	if (hfunc != ETH_RSS_HASH_NO_CHANGE && hfunc != ETH_RSS_HASH_TOP) {
+		NL_SET_ERR_MSG_MOD(extack, "Only Toeplitz hash is supported");
 		return -EOPNOTSUPP;
-
-	mutex_lock(&efx->rss_lock);
-
-	if (*rss_context == ETH_RXFH_CONTEXT_ALLOC) {
-		if (delete) {
-			/* alloc + delete == Nothing to do */
-			rc = -EINVAL;
-			goto out_unlock;
-		}
-		ctx = efx_alloc_rss_context_entry(efx);
-		if (!ctx) {
-			rc = -ENOMEM;
-			goto out_unlock;
-		}
-		ctx->context_id = EFX_MCDI_RSS_CONTEXT_INVALID;
-		/* Initialise indir table and key to defaults */
-		efx_set_default_rx_indir_table(efx, ctx);
-		netdev_rss_key_fill(ctx->rx_hash_key, sizeof(ctx->rx_hash_key));
-		allocated = true;
-	} else {
-		ctx = efx_find_rss_context_entry(efx, *rss_context);
-		if (!ctx) {
-			rc = -ENOENT;
-			goto out_unlock;
-		}
 	}
 
-	if (delete) {
-		/* delete this context */
-		rc = efx->type->rx_push_rss_context_config(efx, ctx, NULL, NULL);
-		if (!rc)
-			efx_free_rss_context_entry(ctx);
-		goto out_unlock;
-	}
+	priv = ethtool_rxfh_context_priv(ctx);
 
 	if (!key)
-		key = ctx->rx_hash_key;
+		key = ethtool_rxfh_context_key(ctx);
 	if (!indir)
-		indir = ctx->rx_indir_table;
+		indir = ethtool_rxfh_context_indir(ctx);
 
-	rc = efx->type->rx_push_rss_context_config(efx, ctx, indir, key);
-	if (rc && allocated)
-		efx_free_rss_context_entry(ctx);
-	else
-		*rss_context = ctx->user_id;
-out_unlock:
-	mutex_unlock(&efx->rss_lock);
-	return rc;
+	return efx->type->rx_push_rss_context_config(efx, priv, indir, key,
+						     false);
+}
+
+int efx_ethtool_create_rxfh_context(struct net_device *net_dev,
+				    struct ethtool_rxfh_context *ctx,
+				    const u32 *indir, const u8 *key,
+				    const u8 hfunc, u32 rss_context,
+				    struct netlink_ext_ack *extack)
+{
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
+	struct efx_rss_context_priv *priv;
+
+	if (!efx->type->rx_push_rss_context_config) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "NIC type does not support custom contexts");
+		return -EOPNOTSUPP;
+	}
+	/* Hash function is Toeplitz, cannot be changed */
+	if (hfunc != ETH_RSS_HASH_NO_CHANGE && hfunc != ETH_RSS_HASH_TOP) {
+		NL_SET_ERR_MSG_MOD(extack, "Only Toeplitz hash is supported");
+		return -EOPNOTSUPP;
+	}
+
+	priv = ethtool_rxfh_context_priv(ctx);
+
+	priv->context_id = EFX_MCDI_RSS_CONTEXT_INVALID;
+	priv->rx_hash_udp_4tuple = false;
+	/* Generate default indir table and/or key if not specified.
+	 * We use ctx as a place to store these; this is fine because
+	 * we're doing a create, so if we fail then the ctx will just
+	 * be deleted.
+	 */
+	if (!indir)
+		efx_set_default_rx_indir_table(efx, ethtool_rxfh_context_indir(ctx));
+	if (!key)
+		netdev_rss_key_fill(ethtool_rxfh_context_key(ctx),
+				    ctx->key_size);
+	return efx_ethtool_modify_rxfh_context(net_dev, ctx, indir, key, hfunc,
+					       rss_context, extack);
+}
+
+int efx_ethtool_remove_rxfh_context(struct net_device *net_dev,
+				    struct ethtool_rxfh_context *ctx,
+				    u32 rss_context,
+				    struct netlink_ext_ack *extack)
+{
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
+	struct efx_rss_context_priv *priv;
+
+	if (!efx->type->rx_push_rss_context_config) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "NIC type does not support custom contexts");
+		return -EOPNOTSUPP;
+	}
+
+	priv = ethtool_rxfh_context_priv(ctx);
+	return efx->type->rx_push_rss_context_config(efx, priv, NULL, NULL,
+						     true);
 }
 
 int efx_ethtool_reset(struct net_device *net_dev, u32 *flags)
