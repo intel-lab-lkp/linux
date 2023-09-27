@@ -8,6 +8,11 @@
 #include "nouveau_drv.h"
 #include "nouveau_sched.h"
 
+/* Divider to limit the number of IBs per job to half the size of the ring in
+ * order to avoid the ring running dry between submissions.
+ */
+#define NOUVEAU_EXEC_PUSH_MAX_DIV 2
+
 struct nouveau_exec_job_args {
 	struct drm_file *file_priv;
 	struct nouveau_sched_entity *sched_entity;
