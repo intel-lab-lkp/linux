@@ -1078,13 +1078,16 @@ error_unlock:
 static int ov9282_detect(struct ov9282 *ov9282)
 {
 	int ret;
-	u32 val;
+	u32 val = 0, id_msb = 0;
 
-	ret = ov9282_read_reg(ov9282, OV9282_REG_ID, 2, &val);
-	if (ret)
-		return ret;
+	// some firmware limits auto-increment register writes, so do it separately
+	ret = ov9282_read_reg(ov9282, OV9282_REG_ID + 1, 1, &val);
+	if (!ret)
+		ret = ov9282_read_reg(ov9282, OV9282_REG_ID, 1, &id_msb);
 
-	if (val != OV9282_ID) {
+	val |= (id_msb << 8);
+
+	if (ret || val != OV9282_ID) {
 		dev_err(ov9282->dev, "chip id mismatch: %x!=%x",
 			OV9282_ID, val);
 		return -ENXIO;
