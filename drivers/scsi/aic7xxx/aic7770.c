@@ -165,7 +165,7 @@ aic7770_config(struct ahc_softc *ahc, struct aic7770_identity *entry, u_int io)
 		break;
 	default:
 		printk("aic7770_config: invalid irq setting %d\n", intdef);
-		return (ENXIO);
+		return ENXIO;
 	}
 
 	if ((intdef & EDGE_TRIG) != 0)
