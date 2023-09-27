@@ -933,6 +933,7 @@ static int aspeed_i2c_init(struct aspeed_i2c_bus *bus,
 	/* If slave has already been registered, re-enable it. */
 	if (bus->slave)
 		__aspeed_i2c_reg_slave(bus, bus->slave->addr);
+	bus->slave_state = ASPEED_I2C_SLAVE_INACTIVE;
 #endif /* CONFIG_I2C_SLAVE */
 
 	/* Set interrupt generation of I2C controller */
