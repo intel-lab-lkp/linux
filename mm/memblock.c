@@ -400,6 +400,8 @@ void __init memblock_discard(void)
  * @type: memblock type of the regions array being doubled
  * @new_area_start: starting address of memory range to avoid overlap with
  * @new_area_size: size of memory range to avoid overlap with
+ * @new_reserve_base: starting address of new array
+ * @new_reserve_size: size of new array
  *
  * Double the size of the @type regions array. If memblock is being used to
  * allocate memory for a new reserved regions array and there is a previously
@@ -412,7 +414,9 @@ void __init memblock_discard(void)
  */
 static int __init_memblock memblock_double_array(struct memblock_type *type,
 						phys_addr_t new_area_start,
-						phys_addr_t new_area_size)
+						phys_addr_t new_area_size,
+						phys_addr_t *new_reserve_base,
+						phys_addr_t *new_reserve_size)
 {
 	struct memblock_region *new_array, *old_array;
 	phys_addr_t old_alloc_size, new_alloc_size;
@@ -490,11 +494,13 @@ static int __init_memblock memblock_double_array(struct memblock_type *type,
 		memblock_free(old_array, old_alloc_size);
 
 	/*
-	 * Reserve the new array if that comes from the memblock.  Otherwise, we
-	 * needn't do it
+	 * Keep the address and size if that comes from the memblock. Otherwise,
+	 * we needn't do it.
 	 */
-	if (!use_slab)
-		BUG_ON(memblock_reserve(addr, new_alloc_size));
+	if (!use_slab) {
+		*new_reserve_base = addr;
+		*new_reserve_size = new_alloc_size;
+	}
 
 	/* Update slab flag */
 	*in_slab = use_slab;
@@ -588,11 +594,12 @@ static int __init_memblock memblock_add_range(struct memblock_type *type,
 				phys_addr_t base, phys_addr_t size,
 				int nid, enum memblock_flags flags)
 {
-	bool insert = false;
 	phys_addr_t obase = base;
 	phys_addr_t end = base + memblock_cap_size(base, &size);
-	int idx, nr_new, start_rgn = -1, end_rgn;
+	phys_addr_t new_base = 0, new_size;
+	int idx, start_rgn = -1, end_rgn;
 	struct memblock_region *rgn;
+	unsigned long ocnt = type->cnt;
 
 	if (!size)
 		return 0;
@@ -607,25 +614,6 @@ static int __init_memblock memblock_add_range(struct memblock_type *type,
 		type->total_size = size;
 		return 0;
 	}
-
-	/*
-	 * The worst case is when new range overlaps all existing regions,
-	 * then we'll need type->cnt + 1 empty regions in @type. So if
-	 * type->cnt * 2 + 1 is less than or equal to type->max, we know
-	 * that there is enough empty regions in @type, and we can insert
-	 * regions directly.
-	 */
-	if (type->cnt * 2 + 1 <= type->max)
-		insert = true;
-
-repeat:
-	/*
-	 * The following is executed twice.  Once with %false @insert and
-	 * then with %true.  The first counts the number of regions needed
-	 * to accommodate the new area.  The second actually inserts them.
-	 */
-	base = obase;
-	nr_new = 0;
 
 	for_each_memblock_type(idx, type, rgn) {
 		phys_addr_t rbase = rgn->base;
@@ -644,15 +632,23 @@ repeat:
 			WARN_ON(nid != memblock_get_region_node(rgn));
 #endif
 			WARN_ON(flags != rgn->flags);
-			nr_new++;
-			if (insert) {
-				if (start_rgn == -1)
-					start_rgn = idx;
-				end_rgn = idx + 1;
-				memblock_insert_region(type, idx++, base,
-						       rbase - base, nid,
-						       flags);
-			}
+
+			/*
+			 * If type->cnt is equal to type->max, it means there's
+			 * not enough empty region and the array needs to be
+			 * resized. Otherwise, insert it directly.
+			 */
+			if ((type->cnt == type->max) &&
+			    memblock_double_array(type, obase, size,
+						  &new_base, &new_size))
+				return -ENOMEM;
+
+			if (start_rgn == -1)
+				start_rgn = idx;
+			end_rgn = idx + 1;
+			memblock_insert_region(type, idx++, base,
+					       rbase - base, nid,
+					       flags);
 		}
 		/* area below @rend is dealt with, forget about it */
 		base = min(rend, end);
@@ -660,33 +656,28 @@ repeat:
 
 	/* insert the remaining portion */
 	if (base < end) {
-		nr_new++;
-		if (insert) {
-			if (start_rgn == -1)
-				start_rgn = idx;
-			end_rgn = idx + 1;
-			memblock_insert_region(type, idx, base, end - base,
-					       nid, flags);
-		}
+		if ((type->cnt == type->max) &&
+		    memblock_double_array(type, obase, size,
+					  &new_base, &new_size))
+			return -ENOMEM;
+
+		if (start_rgn == -1)
+			start_rgn = idx;
+		end_rgn = idx + 1;
+		memblock_insert_region(type, idx, base, end - base,
+				       nid, flags);
 	}
 
-	if (!nr_new)
+	if (ocnt == type->cnt)
 		return 0;
 
-	/*
-	 * If this was the first round, resize array and repeat for actual
-	 * insertions; otherwise, merge and return.
-	 */
-	if (!insert) {
-		while (type->cnt + nr_new > type->max)
-			if (memblock_double_array(type, obase, size) < 0)
-				return -ENOMEM;
-		insert = true;
-		goto repeat;
-	} else {
-		memblock_merge_regions(type, start_rgn, end_rgn);
-		return 0;
-	}
+	memblock_merge_regions(type, start_rgn, end_rgn);
+
+	/* Reserve the new array */
+	if (new_base)
+		memblock_reserve(new_base, new_size);
+
+	return 0;
 }
 
 /**
@@ -755,6 +746,7 @@ static int __init_memblock memblock_isolate_range(struct memblock_type *type,
 					int *start_rgn, int *end_rgn)
 {
 	phys_addr_t end = base + memblock_cap_size(base, &size);
+	phys_addr_t new_base = 0, new_size;
 	int idx;
 	struct memblock_region *rgn;
 
@@ -764,9 +756,14 @@ static int __init_memblock memblock_isolate_range(struct memblock_type *type,
 		return 0;
 
 	/* we'll create at most two more regions */
-	while (type->cnt + 2 > type->max)
-		if (memblock_double_array(type, base, size) < 0)
+	if (type->cnt + 2 > type->max) {
+		if (memblock_double_array(type, base, size,
+					  &new_base, &new_size))
 			return -ENOMEM;
+
+		if (new_base)
+			memblock_reserve(new_base, new_size);
+	}
 
 	for_each_memblock_type(idx, type, rgn) {
 		phys_addr_t rbase = rgn->base;
