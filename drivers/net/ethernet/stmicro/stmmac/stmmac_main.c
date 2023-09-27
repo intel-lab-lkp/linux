@@ -3773,12 +3773,18 @@ stmmac_setup_dma_desc(struct stmmac_priv *priv, unsigned int mtu)
 		dma_conf->dma_rx_size = DMA_DEFAULT_RX_SIZE;
 
 	/* Earlier check for TBS */
-	for (chan = 0; chan < priv->plat->tx_queues_to_use; chan++) {
-		struct stmmac_tx_queue *tx_q = &dma_conf->tx_queue[chan];
-		int tbs_en = priv->plat->tx_queues_cfg[chan].tbs_en;
+	if (priv->dma_cap.tbssel) {
+		/* TBS is available only for tbs_ch_num of Tx DMA channels,
+		 * starting from the highest Tx DMA channel.
+		 */
+		chan = priv->dma_cap.number_tx_channel - priv->dma_cap.tbs_ch_num;
+		for (; chan < priv->plat->tx_queues_to_use; chan++) {
+			struct stmmac_tx_queue *tx_q = &dma_conf->tx_queue[chan];
+			int tbs_en = priv->plat->tx_queues_cfg[chan].tbs_en;
 
-		/* Setup per-TXQ tbs flag before TX descriptor alloc */
-		tx_q->tbs |= tbs_en ? STMMAC_TBS_AVAIL : 0;
+			/* Setup per-TXQ tbs flag before TX descriptor alloc */
+			tx_q->tbs |= tbs_en ? STMMAC_TBS_AVAIL : 0;
+		}
 	}
 
 	ret = alloc_dma_desc_resources(priv, dma_conf);
@@ -7504,6 +7510,15 @@ int stmmac_dvr_probe(struct device *device,
 			priv->dma_cap.host_dma_width = 32;
 		}
 	}
+
+	/* If TBS feature is supported(i.e. tbssel is true), then at least 1 Tx
+	 * DMA channel supports TBS. So if tbs_ch_num is 0 and tbssel is true,
+	 * assume all Tx DMA channels support TBS. TBS_CH field, which gives
+	 * number of Tx DMA channels with TBS support is only available only for
+	 * DW xGMAC IP. For other DWMAC IPs all Tx DMA channels can support TBS.
+	 */
+	if (priv->dma_cap.tbssel && !priv->dma_cap.tbs_ch_num)
+		priv->dma_cap.tbs_ch_num = priv->dma_cap.number_tx_channel;
 
 	ndev->features |= ndev->hw_features | NETIF_F_HIGHDMA;
 	ndev->watchdog_timeo = msecs_to_jiffies(watchdog);
