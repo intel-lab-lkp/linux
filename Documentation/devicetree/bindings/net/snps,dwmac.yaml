@@ -442,6 +442,12 @@ properties:
     description:
       Use Address-Aligned Beats
 
+  snps,arbit:
+    $ref: /schemas/types.yaml#/definitions/flag
+    description:
+      Program the DMA to use Arbitration scheme.
+      (Rx has priority over Tx)
+
   snps,fixed-burst:
     $ref: /schemas/types.yaml#/definitions/flag
     description:
