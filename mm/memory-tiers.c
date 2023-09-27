@@ -14,6 +14,11 @@ struct memory_tier {
 	/* list of all memory types part of this tier */
 	struct list_head memory_types;
 	/*
+	 * By default all tiers will have weight as 1, which means they
+	 * follow default standard allocation.
+	 */
+	unsigned short interleave_weight;
+	/*
 	 * start value of abstract distance. memory tier maps
 	 * an abstract distance  range,
 	 * adistance_start .. adistance_start + MEMTIER_CHUNK_SIZE
@@ -145,8 +150,45 @@ static ssize_t nodelist_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(nodelist);
 
+static ssize_t interleave_weight_show(struct device *dev,
+				      struct device_attribute *attr, char *buf)
+{
+	int ret;
+	struct memory_tier *tier = to_memory_tier(dev);
+
+	mutex_lock(&memory_tier_lock);
+	ret = sysfs_emit(buf, "%u\n", tier->interleave_weight);
+	mutex_unlock(&memory_tier_lock);
+
+	return ret;
+}
+
+static ssize_t interleave_weight_store(struct device *dev,
+				       struct device_attribute *attr,
+				       const char *buf, size_t size)
+{
+	unsigned short value;
+	int ret;
+	struct memory_tier *tier = to_memory_tier(dev);
+
+	ret = kstrtou16(buf, 0, &value);
+
+	if (ret)
+		return ret;
+	if (value > MAX_TIER_INTERLEAVE_WEIGHT)
+		return -EINVAL;
+
+	mutex_lock(&memory_tier_lock);
+	tier->interleave_weight = value;
+	mutex_unlock(&memory_tier_lock);
+
+	return size;
+}
+static DEVICE_ATTR_RW(interleave_weight);
+
 static struct attribute *memtier_dev_attrs[] = {
 	&dev_attr_nodelist.attr,
+	&dev_attr_interleave_weight.attr,
 	NULL
 };
 
@@ -489,8 +531,10 @@ static struct memory_tier *set_node_memory_tier(int node)
 	memtype = node_memory_types[node].memtype;
 	node_set(node, memtype->nodes);
 	memtier = find_create_memory_tier(memtype);
-	if (!IS_ERR(memtier))
+	if (!IS_ERR(memtier)) {
 		rcu_assign_pointer(pgdat->memtier, memtier);
+		memtier->interleave_weight = 1;
+	}
 	return memtier;
 }
 
