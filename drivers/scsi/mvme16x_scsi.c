@@ -37,7 +37,7 @@ static struct platform_device *mvme16x_scsi_device;
 
 static int mvme16x_probe(struct platform_device *dev)
 {
-	struct Scsi_Host * host = NULL;
+	struct Scsi_Host *host = NULL;
 	struct NCR_700_Host_Parameters *hostdata;
 
 	if (!MACH_IS_MVME16x)
