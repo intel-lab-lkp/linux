@@ -420,6 +420,35 @@ void intel_gt_mcr_unlock(struct intel_gt *gt, unsigned long flags)
 }
 
 /**
+ * intel_gt_mcr_lock_reset - Reset MCR steering lock
+ * @gt: GT structure
+ *
+ * Performs a steer semaphore reset operation. On MTL and beyond, a hardware
+ * lock will also be taken to serialize access not only for the driver,
+ * but also for external hardware and firmware agents.
+ * However, there may be situations where the driver must reset the semaphore
+ * but only when it is absolutely certain that no other agent should own the
+ * lock at that given time.
+ *
+ * Context: Takes gt->mcr_lock.  uncore->lock should *not* be held when this
+ *          function is called, although it may be acquired after this
+ *          function call.
+ */
+void intel_gt_mcr_lock_reset(struct intel_gt *gt)
+{
+	unsigned long __flags;
+
+	lockdep_assert_not_held(&gt->uncore->lock);
+
+	spin_lock_irqsave(&gt->mcr_lock, __flags);
+
+	if (GRAPHICS_VER_FULL(gt->i915) >= IP_VER(12, 70))
+		intel_uncore_write_fw(gt->uncore, MTL_STEER_SEMAPHORE, 0x1);
+
+	spin_unlock_irqrestore(&gt->mcr_lock, __flags);
+}
+
+/**
  * intel_gt_mcr_read - read a specific instance of an MCR register
  * @gt: GT structure
  * @reg: the MCR register to read
