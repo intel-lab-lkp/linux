@@ -576,6 +576,7 @@ stmmac_probe_config_dt(struct platform_device *pdev, u8 *mac)
 	dma_cfg->pblx8 = !of_property_read_bool(np, "snps,no-pbl-x8");
 
 	dma_cfg->aal = of_property_read_bool(np, "snps,aal");
+	dma_cfg->arbit = of_property_read_bool(np, "snps,arbit");
 	dma_cfg->fixed_burst = of_property_read_bool(np, "snps,fixed-burst");
 	dma_cfg->mixed_burst = of_property_read_bool(np, "snps,mixed-burst");
 
