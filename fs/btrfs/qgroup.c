@@ -1375,7 +1375,7 @@ int btrfs_quota_disable(struct btrfs_fs_info *fs_info)
 
 	ret = flush_reservations(fs_info);
 	if (ret)
-		goto out;
+		goto unlock_cleaner;
 
 	/*
 	 * 1 For the root item
@@ -1439,6 +1439,7 @@ out:
 		btrfs_end_transaction(trans);
 	else if (trans)
 		ret = btrfs_commit_transaction(trans);
+unlock_cleaner:
 	mutex_unlock(&fs_info->cleaner_mutex);
 
 	return ret;
