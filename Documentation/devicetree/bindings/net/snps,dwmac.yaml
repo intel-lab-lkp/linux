@@ -399,6 +399,14 @@ properties:
             type: boolean
             description: TX checksum offload is unsupported by the TX queue.
 
+          snps,tbs-enabled:
+            type: boolean
+            description:
+              Enable Time Based Scheduling(TBS) support for the TX queue. TSO and
+              TBS cannot be supported by a queue at the same time. If TSO support
+              is enabled, then default TX queue 0 for TSO and in that case don't
+              enable TX queue 0 for TBS.
+
         allOf:
           - if:
               required:
