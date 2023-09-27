@@ -62,6 +62,7 @@ struct rt_sigframe_user_layout {
 	unsigned long zt_offset;
 	unsigned long extra_offset;
 	unsigned long end_offset;
+	unsigned long poe_offset;
 };
 
 #define BASE_SIGFRAME_SIZE round_up(sizeof(struct rt_sigframe), 16)
@@ -182,6 +183,8 @@ struct user_ctxs {
 	u32 za_size;
 	struct zt_context __user *zt;
 	u32 zt_size;
+	struct poe_context __user *poe;
+	u32 poe_size;
 };
 
 static int preserve_fpsimd_context(struct fpsimd_context __user *ctx)
@@ -227,6 +230,20 @@ static int restore_fpsimd_context(struct user_ctxs *user)
 	return err ? -EFAULT : 0;
 }
 
+static int restore_poe_context(struct user_ctxs *user)
+{
+	u64 por_el0;
+	int err = 0;
+
+	if (user->poe_size != sizeof(*user->poe))
+		return -EINVAL;
+
+	__get_user_error(por_el0, &(user->poe->por_el0), err);
+	if (!err)
+		write_sysreg_s(por_el0, SYS_POR_EL0);
+
+	return err;
+}
 
 #ifdef CONFIG_ARM64_SVE
 
@@ -590,6 +607,7 @@ static int parse_user_sigframe(struct user_ctxs *user,
 	user->tpidr2 = NULL;
 	user->za = NULL;
 	user->zt = NULL;
+	user->poe = NULL;
 
 	if (!IS_ALIGNED((unsigned long)base, 16))
 		goto invalid;
@@ -638,6 +656,17 @@ static int parse_user_sigframe(struct user_ctxs *user,
 
 		case ESR_MAGIC:
 			/* ignore */
+			break;
+
+		case POE_MAGIC:
+			if (!cpus_have_final_cap(ARM64_HAS_S1POE))
+				goto invalid;
+
+			if (user->poe)
+				goto invalid;
+
+			user->poe = (struct poe_context __user *)head;
+			user->poe_size = size;
 			break;
 
 		case SVE_MAGIC:
@@ -812,6 +841,9 @@ static int restore_sigframe(struct pt_regs *regs,
 	if (err == 0 && system_supports_sme2() && user.zt)
 		err = restore_zt_context(&user);
 
+	if (err == 0 && cpus_have_final_cap(ARM64_HAS_S1POE) && user.poe)
+		err = restore_poe_context(&user);
+
 	return err;
 }
 
@@ -928,6 +960,13 @@ static int setup_sigframe_layout(struct rt_sigframe_user_layout *user,
 		}
 	}
 
+	if (cpus_have_const_cap(ARM64_HAS_S1POE)) {
+		err = sigframe_alloc(user, &user->poe_offset,
+				     sizeof(struct poe_context));
+		if (err)
+			return err;
+	}
+
 	return sigframe_alloc_end(user);
 }
 
@@ -966,6 +1005,15 @@ static int setup_sigframe(struct rt_sigframe_user_layout *user,
 		__put_user_error(ESR_MAGIC, &esr_ctx->head.magic, err);
 		__put_user_error(sizeof(*esr_ctx), &esr_ctx->head.size, err);
 		__put_user_error(current->thread.fault_code, &esr_ctx->esr, err);
+	}
+
+	if (cpus_have_final_cap(ARM64_HAS_S1POE) && err == 0 && user->poe_offset) {
+		struct poe_context __user *poe_ctx =
+			apply_user_offset(user, user->poe_offset);
+
+		__put_user_error(POE_MAGIC, &poe_ctx->head.magic, err);
+		__put_user_error(sizeof(*poe_ctx), &poe_ctx->head.size, err);
+		__put_user_error(read_sysreg_s(SYS_POR_EL0), &poe_ctx->por_el0, err);
 	}
 
 	/* Scalable Vector Extension state (including streaming), if present */
@@ -1118,6 +1166,9 @@ static void setup_return(struct pt_regs *regs, struct k_sigaction *ka,
 					  SVCR_SM_MASK);
 		sme_smstop();
 	}
+
+	if (cpus_have_final_cap(ARM64_HAS_S1POE))
+		write_sysreg_s(POR_EL0_INIT, SYS_POR_EL0);
 
 	if (ka->sa.sa_flags & SA_RESTORER)
 		sigtramp = ka->sa.sa_restorer;
