@@ -868,38 +868,53 @@ void ovs_fragment(struct net *net, struct vport *vport, struct sk_buff *skb,
 	}
 
 	if (key->eth.type == htons(ETH_P_IP)) {
-		struct rtable ovs_rt = { 0 };
+		struct rtable *ovs_rt;
 		unsigned long orig_dst;
+
+		ovs_rt = kzalloc(sizeof(*ovs_rt), GFP_ATOMIC);
+		if (!ovs_rt) {
+			OVS_NLERR(1, "No memory to fragment");
+			reason = OVS_DROP_NOMEM;
+			goto err;
+		}
 
 		prepare_frag(vport, skb, orig_network_offset,
 			     ovs_key_mac_proto(key));
-		dst_init(&ovs_rt.dst, &ovs_dst_ops, NULL, 1,
+		dst_init(&ovs_rt->dst, &ovs_dst_ops, NULL, 1,
 			 DST_OBSOLETE_NONE, DST_NOCOUNT);
-		ovs_rt.dst.dev = vport->dev;
+		ovs_rt->dst.dev = vport->dev;
 
 		orig_dst = skb->_skb_refdst;
-		skb_dst_set_noref(skb, &ovs_rt.dst);
+		skb_dst_set_noref(skb, &ovs_rt->dst);
 		IPCB(skb)->frag_max_size = mru;
 
 		ip_do_fragment(net, skb->sk, skb, ovs_vport_output);
 		refdst_drop(orig_dst);
+		kfree(ovs_rt);
 	} else if (key->eth.type == htons(ETH_P_IPV6)) {
 		unsigned long orig_dst;
-		struct rt6_info ovs_rt;
+		struct rt6_info *ovs_rt;
+
+		ovs_rt = kzalloc(sizeof(*ovs_rt), GFP_ATOMIC);
+		if (!ovs_rt) {
+			OVS_NLERR(1, "No memory to fragment");
+			reason = OVS_DROP_NOMEM;
+			goto err;
+		}
 
 		prepare_frag(vport, skb, orig_network_offset,
 			     ovs_key_mac_proto(key));
-		memset(&ovs_rt, 0, sizeof(ovs_rt));
-		dst_init(&ovs_rt.dst, &ovs_dst_ops, NULL, 1,
+		dst_init(&ovs_rt->dst, &ovs_dst_ops, NULL, 1,
 			 DST_OBSOLETE_NONE, DST_NOCOUNT);
-		ovs_rt.dst.dev = vport->dev;
+		ovs_rt->dst.dev = vport->dev;
 
 		orig_dst = skb->_skb_refdst;
-		skb_dst_set_noref(skb, &ovs_rt.dst);
+		skb_dst_set_noref(skb, &ovs_rt->dst);
 		IP6CB(skb)->frag_max_size = mru;
 
 		ipv6_stub->ipv6_fragment(net, skb->sk, skb, ovs_vport_output);
 		refdst_drop(orig_dst);
+		kfree(ovs_rt);
 	} else {
 		WARN_ONCE(1, "Failed fragment ->%s: eth=%04x, MRU=%d, MTU=%d.",
 			  ovs_vport_name(vport), ntohs(key->eth.type), mru,

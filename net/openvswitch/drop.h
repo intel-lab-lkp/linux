@@ -20,6 +20,7 @@
 	R(OVS_DROP_FRAG_INVALID_PROTO)		\
 	R(OVS_DROP_CONNTRACK)			\
 	R(OVS_DROP_IP_TTL)			\
+	R(OVS_DROP_NOMEM)			\
 	/* deliberate comment for trailing \ */
 
 enum ovs_drop_reason {
