@@ -1738,6 +1738,28 @@ config KALLSYMS_BASE_RELATIVE
 	  time constants, and no relocation pass is required at runtime to fix
 	  up the entries based on the runtime load address of the kernel.
 
+config KALLSYMS_ALIAS_SRCLINE
+	bool "Produces alias for duplicated text symbols" if EXPERT
+	depends on KALLSYMS && DEBUG_INFO && !DEBUG_INFO_SPLIT
+	help
+	  It is not uncommon for drivers or modules related to similar
+	  peripherals to have symbols with the exact same name.
+	  While this is not a problem for the kernel's binary itself, it
+	  becomes an issue when attempting to trace or probe specific
+	  functions using infrastructure like ftrace or kprobe.
+
+	  This option addresses this challenge, producing alias for text
+	  symbol names that include the file name and line where the symbols
+	  are defined in the source code.
+
+config KALLSYMS_ALIAS_SRCLINE_DATA
+	bool "Produces alias also for global variables names"
+	depends on KALLSYMS_ALIAS_SRCLINE
+	help
+	  Sometimes it can be useful to refer to global vars by name. Since
+	  they suffer the same issue as text symbols, this config option
+	  allows having aliases for global variables names too.
+
 # end of the "standard kernel features (expert users)" menu
 
 # syscall, maps, verifier
