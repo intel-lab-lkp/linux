@@ -462,16 +462,16 @@ void iscsi_tcp_cleanup_task(struct iscsi_task *task)
 
 	spin_lock_bh(&tcp_task->queue2pool);
 	/* flush task's r2t queues */
-	while (kfifo_out(&tcp_task->r2tqueue, (void*)&r2t, sizeof(void*))) {
-		kfifo_in(&tcp_task->r2tpool.queue, (void*)&r2t,
-			    sizeof(void*));
+	while (kfifo_out(&tcp_task->r2tqueue, (void *)&r2t, sizeof(void *))) {
+		kfifo_in(&tcp_task->r2tpool.queue, (void *)&r2t,
+			    sizeof(void *));
 		ISCSI_DBG_TCP(task->conn, "pending r2t dropped\n");
 	}
 
 	r2t = tcp_task->r2t;
 	if (r2t != NULL) {
-		kfifo_in(&tcp_task->r2tpool.queue, (void*)&r2t,
-			    sizeof(void*));
+		kfifo_in(&tcp_task->r2tpool.queue, (void *)&r2t,
+			    sizeof(void *));
 		tcp_task->r2t = NULL;
 	}
 	spin_unlock_bh(&tcp_task->queue2pool);
@@ -496,7 +496,7 @@ static int iscsi_tcp_data_in(struct iscsi_conn *conn, struct iscsi_task *task)
 	 * is status.
 	 */
 	if (!(rhdr->flags & ISCSI_FLAG_DATA_STATUS))
-		iscsi_update_cmdsn(conn->session, (struct iscsi_nopin*)rhdr);
+		iscsi_update_cmdsn(conn->session, (struct iscsi_nopin *)rhdr);
 
 	if (tcp_conn->in.datalen == 0)
 		return 0;
@@ -580,7 +580,7 @@ static int iscsi_tcp_r2t_rsp(struct iscsi_conn *conn, struct iscsi_hdr *hdr)
 
 	tcp_task = task->dd_data;
 	r2tsn = be32_to_cpu(rhdr->r2tsn);
-	if (tcp_task->exp_datasn != r2tsn){
+	if (tcp_task->exp_datasn != r2tsn) {
 		ISCSI_DBG_TCP(conn, "task->exp_datasn(%d) != rhdr->r2tsn(%d)\n",
 			      tcp_task->exp_datasn, r2tsn);
 		rc = ISCSI_ERR_R2TSN;
@@ -638,7 +638,7 @@ static int iscsi_tcp_r2t_rsp(struct iscsi_conn *conn, struct iscsi_hdr *hdr)
 	r2t->sent = 0;
 
 	tcp_task->exp_datasn = r2tsn + 1;
-	kfifo_in(&tcp_task->r2tqueue, (void*)&r2t, sizeof(void*));
+	kfifo_in(&tcp_task->r2tqueue, (void *)&r2t, sizeof(void *));
 	conn->r2t_pdus_cnt++;
 	spin_unlock(&tcp_task->pool2queue);
 
@@ -715,7 +715,7 @@ iscsi_tcp_hdr_dissect(struct iscsi_conn *conn, struct iscsi_hdr *hdr)
 	ISCSI_DBG_TCP(conn, "opcode 0x%x ahslen %d datalen %d\n",
 		      opcode, ahslen, tcp_conn->in.datalen);
 
-	switch(opcode) {
+	switch (opcode) {
 	case ISCSI_OP_SCSI_DATA_IN:
 		spin_lock(&conn->session->back_lock);
 		task = iscsi_itt_to_ctask(conn, hdr->itt);
@@ -1178,7 +1178,7 @@ int iscsi_tcp_r2tpool_alloc(struct iscsi_session *session)
 
 		/* R2T xmit queue */
 		if (kfifo_alloc(&tcp_task->r2tqueue,
-		      session->max_r2t * 4 * sizeof(void*), GFP_KERNEL)) {
+		      session->max_r2t * 4 * sizeof(void *), GFP_KERNEL)) {
 			iscsi_pool_free(&tcp_task->r2tpool);
 			goto r2t_alloc_fail;
 		}
