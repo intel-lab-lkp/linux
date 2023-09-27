@@ -228,7 +228,7 @@ ahd_proc_write_seeprom(struct Scsi_Host *shost, char *buffer, int length)
 		goto done;
 	}
 
-	have_seeprom = ahd_verify_cksum((struct seeprom_config*)buffer);
+	have_seeprom = ahd_verify_cksum((struct seeprom_config *)buffer);
 	if (have_seeprom == 0) {
 		printk("ahd_proc_write_seeprom: cksum verification failed\n");
 		goto done;
@@ -266,7 +266,7 @@ done:
 	if (!paused)
 		ahd_unpause(ahd);
 	ahd_unlock(ahd, &s);
-	return (written);
+	return written;
 }
 /*
  * Return information to handle /proc support for the driver.
@@ -298,7 +298,7 @@ ahd_linux_show_info(struct seq_file *m, struct Scsi_Host *shost)
 				seq_putc(m, '\n');
 			}
 			seq_printf(m, "0x%.4x ",
-				  ((uint16_t*)ahd->seep_config)[i]);
+				  ((uint16_t *)ahd->seep_config)[i]);
 		}
 		seq_putc(m, '\n');
 	}
