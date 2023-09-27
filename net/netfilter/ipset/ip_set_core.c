@@ -747,7 +747,9 @@ ip_set_test(ip_set_id_t index, const struct sk_buff *skb,
 	    !(opt->family == set->family || set->family == NFPROTO_UNSPEC))
 		return 0;
 
+	ip_set_lock(set);
 	ret = set->variant->kadt(set, skb, par, IPSET_TEST, opt);
+	ip_set_unlock(set);
 
 	if (ret == -EAGAIN) {
 		/* Type requests element to be completed */
