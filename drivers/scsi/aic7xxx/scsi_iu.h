@@ -4,8 +4,7 @@
 #ifndef	_SCSI_SCSI_IU_H
 #define _SCSI_SCSI_IU_H 1
 
-struct scsi_status_iu_header
-{
+struct scsi_status_iu_header {
 	u_int8_t reserved[2];
 	u_int8_t flags;
 #define	SIU_SNSVALID 0x2
