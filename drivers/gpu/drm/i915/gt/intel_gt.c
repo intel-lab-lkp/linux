@@ -1022,5 +1022,5 @@ enum i915_map_type intel_gt_coherent_map_type(struct intel_gt *gt,
 
 bool intel_gt_needs_wa_22016122933(struct intel_gt *gt)
 {
-	return MEDIA_VER_FULL(gt->i915) == IP_VER(13, 0) && gt->type == GT_MEDIA;
+	return MEDIA_VER_FULL(gt->i915) == IP_VER(13, 0);
 }
