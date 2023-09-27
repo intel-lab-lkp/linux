@@ -225,6 +225,7 @@ static const char * const phase_select_text[] = {
 	"180 degree",	"225 degree",	"270 degree",	"315 degree",
 };
 static const char * const dvdduv_select_text[] = { "1P4V", "1P5V", "2P1V", "2P3V" };
+static const char * const tdm_data_select_text[] = { "DATA1", "DATA2" };
 
 static const struct soc_enum rtq9128_ch1_si_enum =
 	SOC_ENUM_SINGLE(RTQ9128_REG_SDI_SEL, 6, ARRAY_SIZE(source_select_text), source_select_text);
@@ -246,6 +247,12 @@ static const struct soc_enum rtq9128_out3_phase_enum =
 static const struct soc_enum rtq9128_out4_phase_enum =
 	SOC_ENUM_SINGLE(RTQ9128_REG_PLLTRI_GEN2, 0, ARRAY_SIZE(phase_select_text),
 			phase_select_text);
+static const struct soc_enum rtq9128_ch12_tdm_data_select_enum =
+	SOC_ENUM_SINGLE(RTQ9128_REG_SDO_SEL, 5, ARRAY_SIZE(tdm_data_select_text),
+			tdm_data_select_text);
+static const struct soc_enum rtq9128_ch34_tdm_data_select_enum =
+	SOC_ENUM_SINGLE(RTQ9128_REG_SDO_SEL, 4, ARRAY_SIZE(tdm_data_select_text),
+			tdm_data_select_text);
 
 /*
  * In general usage, DVDD could be 1P8V, 3P0V or 3P3V.
@@ -277,6 +284,8 @@ static const struct snd_kcontrol_new rtq9128_snd_ctrls[] = {
 	SOC_ENUM("OUT3 Phase Select", rtq9128_out3_phase_enum),
 	SOC_ENUM("OUT4 Phase Select", rtq9128_out4_phase_enum),
 	SOC_ENUM("DVDD UV Threshold Select", rtq9128_dvdduv_select_enum),
+	SOC_ENUM("CH12 TDM Data Select", rtq9128_ch12_tdm_data_select_enum),
+	SOC_ENUM("CH34 TDM Data Select", rtq9128_ch34_tdm_data_select_enum),
 };
 
 static int rtq9128_dac_power_event(struct snd_soc_dapm_widget *w, struct snd_kcontrol *kcontrol,
