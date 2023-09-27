@@ -512,7 +512,7 @@ struct ahc_dma_seg {
 struct sg_map_node {
 	bus_dmamap_t		 sg_dmamap;
 	dma_addr_t		 sg_physaddr;
-	struct ahc_dma_seg*	 sg_vaddr;
+	struct ahc_dma_seg *sg_vaddr;
 	SLIST_ENTRY(sg_map_node) links;
 };
 
@@ -711,7 +711,7 @@ struct ahc_initiator_tinfo {
  * negotiation is the same regardless of role.
  */
 struct ahc_tmode_tstate {
-	struct ahc_tmode_lstate*	enabled_luns[AHC_NUM_LUNS];
+	struct ahc_tmode_lstate *enabled_luns[AHC_NUM_LUNS];
 	struct ahc_initiator_tinfo	transinfo[AHC_NUM_TARGETS];
 
 	/*
@@ -1132,7 +1132,7 @@ const struct ahc_pci_identity	*ahc_find_pci_device(ahc_dev_softc_t);
 int			 ahc_pci_config(struct ahc_softc *,
 					const struct ahc_pci_identity *);
 int			 ahc_pci_test_register_access(struct ahc_softc *);
-void __maybe_unused	 ahc_pci_resume(struct ahc_softc *ahc);
+void __maybe_unused ahc_pci_resume(struct ahc_softc *ahc);
 
 /*************************** EISA/VL Front End ********************************/
 struct aic7770_identity *aic7770_find_device(uint32_t);
