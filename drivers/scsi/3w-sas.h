@@ -46,8 +46,7 @@
 #define _3W_SAS_H
 
 /* AEN severity table */
-static char *twl_aen_severity_table[] =
-{
+static char *twl_aen_severity_table[] = {
 	"None", "ERROR", "WARNING", "INFO", "DEBUG", NULL
 };
 
@@ -152,11 +151,11 @@ static char *twl_aen_severity_table[] =
 /* Bitmask macros to eliminate bitfields */
 
 /* opcode: 5, reserved: 3 */
-#define TW_OPRES_IN(x,y) ((x << 5) | (y & 0x1f))
+#define TW_OPRES_IN(x, y) ((x << 5) | (y & 0x1f))
 #define TW_OP_OUT(x) (x & 0x1f)
 
 /* opcode: 5, sgloffset: 3 */
-#define TW_OPSGL_IN(x,y) ((x << 5) | (y & 0x1f))
+#define TW_OPSGL_IN(x, y) ((x << 5) | (y & 0x1f))
 #define TW_SGL_OUT(x) ((x >> 5) & 0x7)
 
 /* severity: 3, reserved: 5 */
@@ -204,11 +203,11 @@ static char *twl_aen_severity_table[] =
 	(writel(TWL_ISSUE_SOFT_RESET, TWL_HIBDB_REG_ADDR(tw_dev)))
 
 /* Macros */
-#define TW_PRINTK(h,a,b,c) { \
+#define TW_PRINTK(h, a, b, c) { \
 if (h) \
-printk(KERN_WARNING "3w-sas: scsi%d: ERROR: (0x%02X:0x%04X): %s.\n",h->host_no,a,b,c); \
+printk(KERN_WARNING "3w-sas: scsi%d: ERROR: (0x%02X:0x%04X): %s.\n", h->host_no, a, b, c); \
 else \
-printk(KERN_WARNING "3w-sas: ERROR: (0x%02X:0x%04X): %s.\n",a,b,c); \
+printk(KERN_WARNING "3w-sas: ERROR: (0x%02X:0x%04X): %s.\n", a, b, c); \
 }
 #define TW_MAX_LUNS 16
 #define TW_COMMAND_SIZE (sizeof(dma_addr_t) > 4 ? 6 : 4)
@@ -310,8 +309,7 @@ typedef struct TAG_TW_Initconnect {
 } TW_Initconnect;
 
 /* Event info structure */
-typedef struct TAG_TW_Event
-{
+typedef struct TAG_TW_Event {
 	unsigned int sequence_id;
 	unsigned int time_stamp_sec;
 	unsigned short aen_code;
@@ -348,8 +346,7 @@ typedef struct {
 } TW_Param_Apache;
 
 /* Compatibility information structure */
-typedef struct TAG_TW_Compatibility_Info
-{
+typedef struct TAG_TW_Compatibility_Info {
 	char driver_version[32];
 	unsigned short working_srl;
 	unsigned short working_branch;
