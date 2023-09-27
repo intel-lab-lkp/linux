@@ -13,7 +13,7 @@ struct atm_vcc;
 struct module;
 
 struct atm_tcp_ops {
-	int (*attach)(struct atm_vcc *vcc,int itf);
+	int (*attach)(struct atm_vcc *vcc, int itf);
 	int (*create_persistent)(int itf);
 	int (*remove_persistent)(int itf);
 	struct module *owner;
