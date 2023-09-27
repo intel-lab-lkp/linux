@@ -206,7 +206,7 @@ ahc_proc_write_seeprom(struct Scsi_Host *shost, char *buffer, int length)
 		goto done;
 	}
 
-	have_seeprom = ahc_verify_cksum((struct seeprom_config*)buffer);
+	have_seeprom = ahc_verify_cksum((struct seeprom_config *)buffer);
 	if (have_seeprom == 0) {
 		printk("ahc_proc_write_seeprom: cksum verification failed\n");
 		goto done;
@@ -280,7 +280,7 @@ done:
 	if (!paused)
 		ahc_unpause(ahc);
 	ahc_unlock(ahc, &s);
-	return (written);
+	return written;
 }
 
 /*
@@ -312,7 +312,7 @@ ahc_linux_show_info(struct seq_file *m, struct Scsi_Host *shost)
 				seq_putc(m, '\n');
 			}
 			seq_printf(m, "0x%.4x ",
-				  ((uint16_t*)ahc->seep_config)[i]);
+				  ((uint16_t *)ahc->seep_config)[i]);
 		}
 		seq_putc(m, '\n');
 	}
