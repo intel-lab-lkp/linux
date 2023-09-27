@@ -111,6 +111,8 @@ static int lwq_test(void)
 		threads[i] = kthread_run(lwq_exercise, &q, "lwq-test-%d", i);
 	for (i = 0; i < 100; i++) {
 		t = kmalloc(sizeof(*t), GFP_KERNEL);
+		if (!t)
+			break;
 		t->i = i;
 		t->c = 0;
 		if (lwq_enqueue(&t->n, &q))
@@ -127,7 +129,8 @@ static int lwq_test(void)
 			printk(KERN_INFO " lwq: ... ");
 		}
 		t = lwq_dequeue(&q, struct tnode, n);
-		printk(KERN_CONT " %d(%d)", t->i, t->c);
+		if (t)
+			printk(KERN_CONT " %d(%d)", t->i, t->c);
 		kfree(t);
 	}
 	printk(KERN_CONT "\n");
