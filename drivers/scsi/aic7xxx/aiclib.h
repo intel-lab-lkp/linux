@@ -57,8 +57,7 @@
 #ifndef	_AICLIB_H
 #define _AICLIB_H
 
-struct scsi_sense
-{
+struct scsi_sense {
 	uint8_t opcode;
 	uint8_t byte2;
 	uint8_t unused[2];
@@ -72,8 +71,7 @@ struct scsi_sense
 #define		SCSI_REV_SPC		3
 #define		SCSI_REV_SPC2		4
 
-struct scsi_sense_data
-{
+struct scsi_sense_data {
 	uint8_t error_code;
 #define	SSD_ERRCODE			0x7F
 #define		SSD_CURRENT_ERROR	0x70
@@ -135,7 +133,7 @@ scsi_4btoul(uint8_t *bytes)
 	     (bytes[1] << 16) |
 	     (bytes[2] << 8) |
 	     bytes[3];
-	return (rv);
+	return rv;
 }
 
 /* Macros for generating the elements of the PCI ID tables. */
@@ -144,7 +142,7 @@ scsi_4btoul(uint8_t *bytes)
 
 #define ID_C(x, c)						\
 {								\
-	GETID(x,32), GETID(x,48), GETID(x,0), GETID(x,16),	\
+	GETID(x, 32), GETID(x, 48), GETID(x, 0), GETID(x, 16),	\
 	(c) << 8, 0xFFFF00, 0					\
 }
 
