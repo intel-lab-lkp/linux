@@ -97,7 +97,7 @@ FILE *regdiagfile;
 int   src_mode;
 int   dst_mode;
 
-static STAILQ_HEAD(,instruction) seq_program;
+static STAILQ_HEAD(, instruction) seq_program;
 struct cs_tailq cs_tailq;
 struct scope_list scope_stack;
 symlist_t patch_functions;
@@ -144,7 +144,7 @@ main(int argc, char *argv[])
 	mmdebug = 0;
 #endif
 	while ((ch = getopt(argc, argv, "d:i:l:n:o:p:r:I:")) != -1) {
-		switch(ch) {
+		switch (ch) {
 		case 'd':
 #if DEBUG
 			if (strcmp(optarg, "s") == 0) {
@@ -301,7 +301,7 @@ main(int argc, char *argv[])
 
 	stop(NULL, 0);
 	/* NOTREACHED */
-	return (0);
+	return 0;
 }
 
 static void
@@ -674,9 +674,9 @@ check_patch(patch_t **start_patch, int start_instr,
 	*start_patch = cur_patch;
 	if (start_instr < *skip_addr)
 		/* Still skipping */
-		return (0);
+		return 0;
 
-	return (1);
+	return 1;
 }
 
 /*
