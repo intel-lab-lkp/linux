@@ -753,10 +753,13 @@ static bool is_san_consumer(struct platform_device *pdev, acpi_handle handle)
 	}
 
 	for (i = 0; i < dep_devices.count; i++) {
-		if (dep_devices.handles[i] == supplier)
+		if (dep_devices.handles[i] == supplier) {
+			kfree(dep_devices.handles);
 			return true;
+		}
 	}
 
+	kfree(dep_devices.handles);
 	return false;
 }
 

@@ -370,7 +370,8 @@ acpi_evaluate_reference(acpi_handle handle,
 		goto end;
 	}
 
-	if (package->package.count > ACPI_MAX_HANDLES) {
+	list->handles = kcalloc(package->package.count, sizeof(*list->handles), GFP_KERNEL);
+	if (!list->handles) {
 		kfree(package);
 		return AE_NO_MEMORY;
 	}
@@ -402,7 +403,7 @@ acpi_evaluate_reference(acpi_handle handle,
       end:
 	if (ACPI_FAILURE(status)) {
 		list->count = 0;
-		//kfree(list->handles);
+		kfree(list->handles);
 	}
 
 	kfree(buffer.pointer);
