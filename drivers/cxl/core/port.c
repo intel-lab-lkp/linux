@@ -1222,12 +1222,17 @@ static void delete_endpoint(void *data)
 	struct cxl_memdev *cxlmd = data;
 	struct cxl_port *endpoint = cxlmd->endpoint;
 	struct cxl_port *parent_port;
+	struct cxl_dport *dport;
 	struct device *parent;
 
-	parent_port = cxl_mem_find_port(cxlmd, NULL);
+	parent_port = cxl_mem_find_port(cxlmd, &dport);
 	if (!parent_port)
 		goto out;
-	parent = &parent_port->dev;
+
+	if (dport->rch)
+		parent = parent_port->uport_dev;
+	else
+		parent = &parent_port->dev;
 
 	device_lock(parent);
 	if (parent->driver && !endpoint->dead) {
