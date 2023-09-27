@@ -1005,6 +1005,7 @@ static void xenvif_tx_build_gops(struct xenvif_queue *queue,
 			break;
 		}
 
+		BUILD_BUG_ON(XEN_NETBK_LEGACY_SLOTS_MAX > MAX_SKB_FRAGS + 1);
 		if (ret >= XEN_NETBK_LEGACY_SLOTS_MAX - 1 && data_len < txreq.size)
 			data_len = txreq.size;
 
