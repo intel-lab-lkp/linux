@@ -110,7 +110,7 @@ static inline size_t ahd_sg_size(struct ahd_softc *ahd)
 {
 	if ((ahd->flags & AHD_64BIT_ADDRESSING) != 0)
 		return (sizeof(struct ahd_dma64_seg));
-	return (sizeof(struct ahd_dma_seg));
+	return sizeof(struct ahd_dma_seg);
 }
 
 /*********************** Miscellaneous Support Functions ***********************/
