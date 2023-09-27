@@ -10882,16 +10882,23 @@ static void netdev_rss_contexts_free(struct net_device *dev)
 	struct ethtool_rxfh_context *ctx;
 	unsigned long context;
 
-	if (dev->ethtool_ops->set_rxfh_context)
+	if (dev->ethtool_ops->create_rxfh_context ||
+	    dev->ethtool_ops->set_rxfh_context)
 		xa_for_each(&dev->ethtool->rss_ctx, context, ctx) {
 			u32 *indir = ethtool_rxfh_context_indir(ctx);
 			u8 *key = ethtool_rxfh_context_key(ctx);
 			u32 concast = context;
 
 			xa_erase(&dev->ethtool->rss_ctx, context);
-			dev->ethtool_ops->set_rxfh_context(dev, indir, key,
-							   ctx->hfunc, &concast,
-							   true);
+			if (dev->ethtool_ops->create_rxfh_context)
+				dev->ethtool_ops->remove_rxfh_context(dev, ctx,
+								      context);
+			else
+				dev->ethtool_ops->set_rxfh_context(dev, indir,
+								   key,
+								   ctx->hfunc,
+								   &concast,
+								   true);
 			kfree(ctx);
 		}
 	xa_destroy(&dev->ethtool->rss_ctx);
