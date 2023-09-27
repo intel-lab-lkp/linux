@@ -2,6 +2,7 @@
 #ifndef _LINUX_MEMORY_TIERS_H
 #define _LINUX_MEMORY_TIERS_H
 
+#include <linux/device.h>
 #include <linux/types.h>
 #include <linux/nodemask.h>
 #include <linux/kref.h>
@@ -21,7 +22,27 @@
 
 #define MAX_TIER_INTERLEAVE_WEIGHT 100
 
-struct memory_tier;
+struct memory_tier {
+	/* hierarchy of memory tiers */
+	struct list_head list;
+	/* list of all memory types part of this tier */
+	struct list_head memory_types;
+	/*
+	 * By default all tiers will have weight as 1, which means they
+	 * follow default standard allocation.
+	 */
+	unsigned short interleave_weight;
+	/*
+	 * start value of abstract distance. memory tier maps
+	 * an abstract distance  range,
+	 * adistance_start .. adistance_start + MEMTIER_CHUNK_SIZE
+	 */
+	int adistance_start;
+	struct device dev;
+	/* All the nodes that are part of all the lower memory tiers. */
+	nodemask_t lower_tier_mask;
+};
+
 struct memory_dev_type {
 	/* list of memory types that are part of same tier as this type */
 	struct list_head tier_sibiling;
@@ -38,6 +59,8 @@ struct memory_dev_type *alloc_memory_type(int adistance);
 void put_memory_type(struct memory_dev_type *memtype);
 void init_node_memory_type(int node, struct memory_dev_type *default_type);
 void clear_node_memory_type(int node, struct memory_dev_type *memtype);
+struct memory_tier *node_get_memory_tier(int node);
+nodemask_t get_memtier_nodemask(struct memory_tier *memtier);
 #ifdef CONFIG_MIGRATION
 int next_demotion_node(int node);
 void node_get_allowed_targets(pg_data_t *pgdat, nodemask_t *targets);

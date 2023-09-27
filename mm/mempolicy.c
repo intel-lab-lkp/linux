@@ -100,6 +100,8 @@
 #include <linux/ctype.h>
 #include <linux/mm_inline.h>
 #include <linux/mmu_notifier.h>
+#include <linux/memory-tiers.h>
+#include <linux/nodemask.h>
 #include <linux/printk.h>
 #include <linux/swapops.h>
 
@@ -886,8 +888,11 @@ static long do_set_mempolicy(unsigned short mode, unsigned short flags,
 
 	old = current->mempolicy;
 	current->mempolicy = new;
-	if (new && new->mode == MPOL_INTERLEAVE)
+	if (new && new->mode == MPOL_INTERLEAVE) {
 		current->il_prev = MAX_NUMNODES-1;
+		current->il_count = 0;
+		current->current_node = MAX_NUMNODES;
+	}
 	task_unlock(current);
 	mpol_put(old);
 	ret = 0;
@@ -1903,13 +1908,76 @@ static int policy_node(gfp_t gfp, struct mempolicy *policy, int nd)
 	return nd;
 }
 
+/* Return interleave weight of node from tier's weight */
+static unsigned short node_interleave_weight(int nid, nodemask_t pol_nodemask)
+{
+	struct memory_tier *memtier;
+	nodemask_t tier_nodes, tier_and_pol;
+	unsigned short avrg_weight = 0;
+	int node, nnodes, reminder;
+
+	memtier = node_get_memory_tier(nid);
+
+	if (!memtier)
+		return 0;
+
+	tier_nodes = get_memtier_nodemask(memtier);
+	nodes_and(tier_and_pol, tier_nodes, pol_nodemask);
+	nnodes = nodes_weight(tier_and_pol);
+	if (!nnodes)
+		return 0;
+
+	avrg_weight = memtier->interleave_weight / nnodes;
+	/* Set minimum weight of node as 1 so that at least one page
+	 * is allocated.
+	 */
+	if (!avrg_weight)
+		return 1;
+
+	reminder = memtier->interleave_weight % nnodes;
+	if (reminder) {
+		for_each_node_mask(node, tier_and_pol) {
+			/* Increment target node's weight by 1, if it falls
+			 * within remaining weightage 'reminder'.
+			 */
+			if (node == nid) {
+				if (reminder > 0)
+					avrg_weight = avrg_weight + 1;
+				break;
+			}
+			reminder--;
+		}
+	}
+	return avrg_weight;
+}
+
 /* Do dynamic interleaving for a process */
 static unsigned interleave_nodes(struct mempolicy *policy)
 {
 	unsigned next;
 	struct task_struct *me = current;
+	unsigned short node_weight = 0;
 
-	next = next_node_in(me->il_prev, policy->nodes);
+	/* select current node or next node from nodelist based on
+	 * available tier interleave weight.
+	 */
+	if (me->current_node == MAX_NUMNODES)
+		next = next_node_in(me->il_prev, policy->nodes);
+	else
+		next = me->current_node;
+	node_weight = node_interleave_weight(next, policy->nodes);
+	if (!node_weight)
+		goto set_il_prev;
+	if (me->il_count < node_weight) {
+		me->il_count++;
+		me->current_node = next;
+		if (me->il_count == node_weight) {
+			me->current_node = MAX_NUMNODES;
+			me->il_count = 0;
+		}
+	}
+
+set_il_prev:
 	if (next < MAX_NUMNODES)
 		me->il_prev = next;
 	return next;
@@ -1970,9 +2038,10 @@ unsigned int mempolicy_slab_node(void)
 static unsigned offset_il_node(struct mempolicy *pol, unsigned long n)
 {
 	nodemask_t nodemask = pol->nodes;
-	unsigned int target, nnodes;
-	int i;
-	int nid;
+	unsigned int target, nnodes, vnnodes = 0;
+	unsigned short node_weight = 0;
+	int nid, vtarget, i;
+
 	/*
 	 * The barrier will stabilize the nodemask in a register or on
 	 * the stack so that it will stop changing under the code.
@@ -1985,7 +2054,33 @@ static unsigned offset_il_node(struct mempolicy *pol, unsigned long n)
 	nnodes = nodes_weight(nodemask);
 	if (!nnodes)
 		return numa_node_id();
-	target = (unsigned int)n % nnodes;
+
+	/*
+	 * Calculate the virtual target for @n in a nodelist that is scaled
+	 * with interleave weights....
+	 */
+	for_each_node_mask(nid, nodemask) {
+		node_weight = node_interleave_weight(nid, nodemask);
+		if (!node_weight)
+			continue;
+		vnnodes += node_weight;
+	}
+	if (!vnnodes)
+		return numa_node_id();
+	vtarget = (int)((unsigned int)n % vnnodes);
+
+	/* ...then map it back to the physical nodelist */
+	target = 0;
+	for_each_node_mask(nid, nodemask) {
+		node_weight = node_interleave_weight(nid, nodemask);
+		if (!node_weight)
+			continue;
+		vtarget -= node_weight;
+		if (vtarget < 0)
+			break;
+		target++;
+	}
+
 	nid = first_node(nodemask);
 	for (i = 0; i < target; i++)
 		nid = next_node(nid, nodemask);

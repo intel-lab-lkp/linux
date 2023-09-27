@@ -8,27 +8,6 @@
 
 #include "internal.h"
 
-struct memory_tier {
-	/* hierarchy of memory tiers */
-	struct list_head list;
-	/* list of all memory types part of this tier */
-	struct list_head memory_types;
-	/*
-	 * By default all tiers will have weight as 1, which means they
-	 * follow default standard allocation.
-	 */
-	unsigned short interleave_weight;
-	/*
-	 * start value of abstract distance. memory tier maps
-	 * an abstract distance  range,
-	 * adistance_start .. adistance_start + MEMTIER_CHUNK_SIZE
-	 */
-	int adistance_start;
-	struct device dev;
-	/* All the nodes that are part of all the lower memory tiers. */
-	nodemask_t lower_tier_mask;
-};
-
 struct demotion_nodes {
 	nodemask_t preferred;
 };
@@ -115,7 +94,7 @@ static inline struct memory_tier *to_memory_tier(struct device *device)
 	return container_of(device, struct memory_tier, dev);
 }
 
-static __always_inline nodemask_t get_memtier_nodemask(struct memory_tier *memtier)
+nodemask_t get_memtier_nodemask(struct memory_tier *memtier)
 {
 	nodemask_t nodes = NODE_MASK_NONE;
 	struct memory_dev_type *memtype;
@@ -264,7 +243,7 @@ link_memtype:
 	return memtier;
 }
 
-static struct memory_tier *__node_get_memory_tier(int node)
+struct memory_tier *node_get_memory_tier(int node)
 {
 	pg_data_t *pgdat;
 
@@ -380,7 +359,7 @@ static void disable_all_demotion_targets(void)
 		 * We are holding memory_tier_lock, it is safe
 		 * to access pgda->memtier.
 		 */
-		memtier = __node_get_memory_tier(node);
+		memtier = node_get_memory_tier(node);
 		if (memtier)
 			memtier->lower_tier_mask = NODE_MASK_NONE;
 	}
@@ -417,7 +396,7 @@ static void establish_demotion_targets(void)
 		best_distance = -1;
 		nd = &node_demotion[node];
 
-		memtier = __node_get_memory_tier(node);
+		memtier = node_get_memory_tier(node);
 		if (!memtier || list_is_last(&memtier->list, &memory_tiers))
 			continue;
 		/*
@@ -562,7 +541,7 @@ static bool clear_node_memory_tier(int node)
 	 * This also enables us to free the destroyed memory tier
 	 * with kfree instead of kfree_rcu
 	 */
-	memtier = __node_get_memory_tier(node);
+	memtier = node_get_memory_tier(node);
 	if (memtier) {
 		struct memory_dev_type *memtype;
 
