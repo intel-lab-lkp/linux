@@ -2672,9 +2672,9 @@ int hci_register_dev(struct hci_dev *hdev)
 		hci_dev_set_flag(hdev, HCI_BREDR_ENABLED);
 	}
 
-	write_lock(&hci_dev_list_lock);
+	write_lock_bh(&hci_dev_list_lock);
 	list_add(&hdev->list, &hci_dev_list);
-	write_unlock(&hci_dev_list_lock);
+	write_unlock_bh(&hci_dev_list_lock);
 
 	/* Devices that are marked for raw-only usage are unconfigured
 	 * and should not be included in normal operation.
@@ -2722,9 +2722,9 @@ void hci_unregister_dev(struct hci_dev *hdev)
 	hci_dev_set_flag(hdev, HCI_UNREGISTER);
 	mutex_unlock(&hdev->unregister_lock);
 
-	write_lock(&hci_dev_list_lock);
+	write_lock_bh(&hci_dev_list_lock);
 	list_del(&hdev->list);
-	write_unlock(&hci_dev_list_lock);
+	write_unlock_bh(&hci_dev_list_lock);
 
 	cancel_work_sync(&hdev->power_on);
 
