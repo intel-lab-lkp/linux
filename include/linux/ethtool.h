@@ -927,14 +927,17 @@ struct ethtool_ops {
 	int	(*create_rxfh_context)(struct net_device *,
 				       struct ethtool_rxfh_context *ctx,
 				       const u32 *indir, const u8 *key,
-				       const u8 hfunc, u32 rss_context);
+				       const u8 hfunc, u32 rss_context,
+				       struct netlink_ext_ack *extack);
 	int	(*modify_rxfh_context)(struct net_device *,
 				       struct ethtool_rxfh_context *ctx,
 				       const u32 *indir, const u8 *key,
-				       const u8 hfunc, u32 rss_context);
+				       const u8 hfunc, u32 rss_context,
+				       struct netlink_ext_ack *extack);
 	int	(*remove_rxfh_context)(struct net_device *,
 				       struct ethtool_rxfh_context *ctx,
-				       u32 rss_context);
+				       u32 rss_context,
+				       struct netlink_ext_ack *extack);
 	int	(*set_rxfh_context)(struct net_device *, const u32 *indir,
 				    const u8 *key, const u8 hfunc,
 				    u32 *rss_context, bool delete);
