@@ -24,6 +24,7 @@
 #include <asm/memory.h>
 #include <asm/pgtable-hwdef.h>
 #include <asm/ptdump.h>
+#include <asm/kvm_pkvm.h>
 #include <asm/kvm_pgtable.h>
 
 
@@ -482,6 +483,139 @@ static struct mm_struct ipa_init_mm = {
 	.mm_mt		= MTREE_INIT_EXT(mm_mt, MM_MT_FLAGS,
 					 ipa_init_mm.mmap_lock),
 };
+
+static phys_addr_t ptdump_host_pa(void *addr)
+{
+	return __pa(addr);
+}
+
+static void *ptdump_host_va(phys_addr_t phys)
+{
+	return __va(phys);
+}
+
+static size_t stage2_get_pgd_len(void)
+{
+	u64 mmfr0, mmfr1, vtcr;
+	u32 phys_shift = get_kvm_ipa_limit();
+
+	mmfr0 = read_sanitised_ftr_reg(SYS_ID_AA64MMFR0_EL1);
+	mmfr1 = read_sanitised_ftr_reg(SYS_ID_AA64MMFR1_EL1);
+	vtcr = kvm_get_vtcr(mmfr0, mmfr1, phys_shift);
+
+	return kvm_pgtable_stage2_pgd_size(vtcr);
+}
+
+static void stage2_ptdump_prepare_walk(struct ptdump_info *info)
+{
+	struct kvm_pgtable_snapshot *snapshot;
+	int ret, pgd_index, mc_index, pgd_pages_sz;
+	void *page_hva;
+
+	snapshot = alloc_pages_exact(PAGE_SIZE, GFP_KERNEL_ACCOUNT);
+	if (!snapshot)
+		return;
+
+	memset(snapshot, 0, PAGE_SIZE);
+	ret = kvm_call_hyp_nvhe(__pkvm_host_share_hyp, virt_to_pfn(snapshot));
+	if (ret)
+		goto free_snapshot;
+
+	snapshot->pgd_len = stage2_get_pgd_len();
+	pgd_pages_sz = snapshot->pgd_len / PAGE_SIZE;
+	snapshot->pgd_hva = alloc_pages_exact(snapshot->pgd_len,
+					      GFP_KERNEL_ACCOUNT);
+	if (!snapshot->pgd_hva)
+		goto unshare_snapshot;
+
+	for (pgd_index = 0; pgd_index < pgd_pages_sz; pgd_index++) {
+		page_hva = snapshot->pgd_hva + pgd_index * PAGE_SIZE;
+		ret = kvm_call_hyp_nvhe(__pkvm_host_share_hyp,
+					virt_to_pfn(page_hva));
+		if (ret)
+			goto unshare_pgd_pages;
+	}
+
+	for (mc_index = 0; mc_index < info->mc_len; mc_index++) {
+		page_hva = alloc_pages_exact(PAGE_SIZE, GFP_KERNEL_ACCOUNT);
+		if (!page_hva)
+			goto free_memcache_pages;
+
+		push_hyp_memcache(&snapshot->mc, page_hva, ptdump_host_pa);
+		ret = kvm_call_hyp_nvhe(__pkvm_host_share_hyp,
+					virt_to_pfn(page_hva));
+		if (ret) {
+			pop_hyp_memcache(&snapshot->mc, ptdump_host_va);
+			free_pages_exact(page_hva, PAGE_SIZE);
+			goto free_memcache_pages;
+		}
+	}
+
+	ret = kvm_call_hyp_nvhe(__pkvm_copy_host_stage2, snapshot);
+	if (ret)
+		goto free_memcache_pages;
+
+	info->priv = snapshot;
+	return;
+
+free_memcache_pages:
+	page_hva = pop_hyp_memcache(&snapshot->mc, ptdump_host_va);
+	while (page_hva) {
+		ret = kvm_call_hyp_nvhe(__pkvm_host_unshare_hyp,
+					virt_to_pfn(page_hva));
+		WARN_ON(ret);
+		free_pages_exact(page_hva, PAGE_SIZE);
+		page_hva = pop_hyp_memcache(&snapshot->mc, ptdump_host_va);
+	}
+unshare_pgd_pages:
+	pgd_index = pgd_index - 1;
+	for (; pgd_index >= 0; pgd_index--) {
+		page_hva = snapshot->pgd_hva + pgd_index * PAGE_SIZE;
+		ret = kvm_call_hyp_nvhe(__pkvm_host_unshare_hyp,
+					virt_to_pfn(page_hva));
+		WARN_ON(ret);
+	}
+	free_pages_exact(snapshot->pgd_hva, snapshot->pgd_len);
+unshare_snapshot:
+	WARN_ON(kvm_call_hyp_nvhe(__pkvm_host_unshare_hyp,
+				  virt_to_pfn(snapshot)));
+free_snapshot:
+	free_pages_exact(snapshot, PAGE_SIZE);
+	info->priv = NULL;
+}
+
+static void stage2_ptdump_end_walk(struct ptdump_info *info)
+{
+	struct kvm_pgtable_snapshot *snapshot = info->priv;
+	void *page_hva;
+	int pgd_index, ret, pgd_pages_sz;
+
+	if (!snapshot)
+		return;
+
+	page_hva = pop_hyp_memcache(&snapshot->mc, ptdump_host_va);
+	while (page_hva) {
+		ret = kvm_call_hyp_nvhe(__pkvm_host_unshare_hyp,
+					virt_to_pfn(page_hva));
+		WARN_ON(ret);
+		free_pages_exact(page_hva, PAGE_SIZE);
+		page_hva = pop_hyp_memcache(&snapshot->mc, ptdump_host_va);
+	}
+
+	pgd_pages_sz = snapshot->pgd_len / PAGE_SIZE;
+	for (pgd_index = 0; pgd_index < pgd_pages_sz; pgd_index++) {
+		page_hva = snapshot->pgd_hva + pgd_index * PAGE_SIZE;
+		ret = kvm_call_hyp_nvhe(__pkvm_host_unshare_hyp,
+					virt_to_pfn(page_hva));
+		WARN_ON(ret);
+	}
+
+	free_pages_exact(snapshot->pgd_hva, snapshot->pgd_len);
+	WARN_ON(kvm_call_hyp_nvhe(__pkvm_host_unshare_hyp,
+				  virt_to_pfn(snapshot)));
+	free_pages_exact(snapshot, PAGE_SIZE);
+	info->priv = NULL;
+}
 #endif /* CONFIG_NVHE_EL2_PTDUMP_DEBUGFS */
 
 static int __init ptdump_init(void)
@@ -495,11 +629,16 @@ static int __init ptdump_init(void)
 
 #ifdef CONFIG_NVHE_EL2_PTDUMP_DEBUGFS
 	stage2_kernel_ptdump_info = (struct ptdump_info) {
-		.markers	= ipa_address_markers,
-		.mm		= &ipa_init_mm,
+		.markers		= ipa_address_markers,
+		.mm			= &ipa_init_mm,
+		.mc_len			= host_s2_pgtable_pages(),
+		.ptdump_prepare_walk	= stage2_ptdump_prepare_walk,
+		.ptdump_end_walk	= stage2_ptdump_end_walk,
 	};
 
 	init_rwsem(&ipa_init_mm.mmap_lock);
+	mutex_init(&stage2_kernel_ptdump_info.file_lock);
+
 	ptdump_debugfs_register(&stage2_kernel_ptdump_info,
 				"host_stage2_kernel_page_tables");
 #endif

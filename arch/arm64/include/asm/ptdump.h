@@ -19,7 +19,12 @@ struct ptdump_info {
 	struct mm_struct		*mm;
 	const struct addr_marker	*markers;
 	unsigned long			base_addr;
+	void (*ptdump_prepare_walk)(struct ptdump_info *info);
 	void (*ptdump_walk)(struct seq_file *s, struct ptdump_info *info);
+	void (*ptdump_end_walk)(struct ptdump_info *info);
+	struct mutex			file_lock;
+	size_t				mc_len;
+	void				*priv;
 };
 
 void ptdump_walk(struct seq_file *s, struct ptdump_info *info);
