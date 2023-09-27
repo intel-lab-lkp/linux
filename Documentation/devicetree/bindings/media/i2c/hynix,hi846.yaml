@@ -48,6 +48,10 @@ properties:
   vddd-supply:
     description: Definition of the regulator used for the VDDD power supply.
 
+  orientation: true
+
+  rotation: true
+
   port:
     $ref: /schemas/graph.yaml#/$defs/port-base
     unevaluatedProperties: false
