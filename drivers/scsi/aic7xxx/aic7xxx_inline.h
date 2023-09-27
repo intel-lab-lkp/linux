@@ -59,7 +59,7 @@ static inline char *ahc_name(struct ahc_softc *ahc);
 
 static inline char *ahc_name(struct ahc_softc *ahc)
 {
-	return (ahc->name);
+	return ahc->name;
 }
 
 /*********************** Miscellaneous Support Functions ***********************/
