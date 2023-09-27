@@ -110,19 +110,21 @@ static struct linux_binfmt elf_format = {
 
 #define BAD_ADDR(x) (unlikely((unsigned long)(x) >= TASK_SIZE))
 
-/* We need to explicitly zero any fractional pages
-   after the data section (i.e. bss).  This would
-   contain the junk from the file that should not
-   be in memory
+/*
+ * We need to explicitly zero any trailing portion of the page that follows
+ * p_filesz when it ends before the page ends (e.g. bss), otherwise this
+ * memory will contain the junk from the file that should not be present.
  */
-static int padzero(unsigned long elf_bss)
+static int padzero(unsigned long address, int prot)
 {
 	unsigned long nbyte;
 
-	nbyte = ELF_PAGEOFFSET(elf_bss);
+	nbyte = ELF_PAGEOFFSET(address);
 	if (nbyte) {
 		nbyte = ELF_MIN_ALIGN - nbyte;
-		if (clear_user((void __user *) elf_bss, nbyte))
+		/* Only report errors when the segment is writable. */
+		if (clear_user((void __user *)address, nbyte) &&
+		    prot & PROT_WRITE)
 			return -EFAULT;
 	}
 	return 0;
@@ -348,6 +350,11 @@ create_elf_tables(struct linux_binprm *bprm, const struct elfhdr *exec,
 	return 0;
 }
 
+/*
+ * Map "eppnt->p_filesz" bytes from "filep" offset "eppnt->p_offset"
+ * into memory at "addr". (Note that p_filesz is rounded up to the
+ * next page, so any extra bytes from the file must be wiped.)
+ */
 static unsigned long elf_map(struct file *filep, unsigned long addr,
 		const struct elf_phdr *eppnt, int prot, int type,
 		unsigned long total_size)
@@ -387,6 +394,11 @@ static unsigned long elf_map(struct file *filep, unsigned long addr,
 	return(map_addr);
 }
 
+/*
+ * Map "eppnt->p_filesz" bytes from "filep" offset "eppnt->p_offset"
+ * into memory at "addr". Memory from "p_filesz" through "p_memsz"
+ * rounded up to the next page is zeroed.
+ */
 static unsigned long elf_load(struct file *filep, unsigned long addr,
 		const struct elf_phdr *eppnt, int prot, int type,
 		unsigned long total_size)
@@ -405,7 +417,8 @@ static unsigned long elf_load(struct file *filep, unsigned long addr,
 				eppnt->p_memsz;
 
 			/* Zero the end of the last mapped page */
-			padzero(zero_start);
+			if (padzero(zero_start, prot))
+				return -EFAULT;
 		}
 	} else {
 		map_addr = zero_start = ELF_PAGESTART(addr);
@@ -712,7 +725,7 @@ static unsigned long load_elf_interp(struct elfhdr *interp_elf_ex,
 	 * the file up to the page boundary, and zero it from elf_bss
 	 * up to the end of the page.
 	 */
-	if (padzero(elf_bss)) {
+	if (padzero(elf_bss, bss_prot)) {
 		error = -EFAULT;
 		goto out;
 	}
@@ -1407,7 +1420,7 @@ static int load_elf_library(struct file *file)
 		goto out_free_ph;
 
 	elf_bss = eppnt->p_vaddr + eppnt->p_filesz;
-	if (padzero(elf_bss)) {
+	if (padzero(elf_bss, PROT_WRITE)) {
 		error = -EFAULT;
 		goto out_free_ph;
 	}
