@@ -88,8 +88,8 @@ typedef struct {
  * Decode Functions
  ****************************************************************************/
 
-int DecodeRasMessage(unsigned char *buf, size_t sz, RasMessage * ras);
-int DecodeQ931(unsigned char *buf, size_t sz, Q931 * q931);
+int DecodeRasMessage(unsigned char *buf, size_t sz, RasMessage *ras);
+int DecodeQ931(unsigned char *buf, size_t sz, Q931 *q931);
 int DecodeMultimediaSystemControlMessage(unsigned char *buf, size_t sz,
 					 MultimediaSystemControlMessage *
 					 mscm);
