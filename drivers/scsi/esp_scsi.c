@@ -114,7 +114,7 @@ do {   if (esp_debug & ESP_DEBUG_COMMAND)	\
 } while (0)
 
 #define esp_read8(REG)		esp->ops->esp_read8(esp, REG)
-#define esp_write8(VAL,REG)	esp->ops->esp_write8(esp, VAL, REG)
+#define esp_write8(VAL, REG)	esp->ops->esp_write8(esp, VAL, REG)
 
 static void esp_log_fill_regs(struct esp *esp,
 			      struct esp_event_ent *p)
@@ -543,7 +543,7 @@ static u32 esp_dma_length_limit(struct esp *esp, u32 dma_addr, u32 dma_len)
 		base = dma_addr & ((1U << 24) - 1U);
 		end = base + dma_len;
 		if (end > (1U << 24))
-			end = (1U <<24);
+			end = (1U << 24);
 		dma_len = end - base;
 	}
 	return dma_len;
