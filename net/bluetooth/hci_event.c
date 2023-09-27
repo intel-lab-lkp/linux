@@ -7020,12 +7020,26 @@ unlock:
 	hci_dev_unlock(hdev);
 }
 
+static int hci_iso_term_big_sync(struct hci_dev *hdev, void *data)
+{
+	__u8 *handle = data;
+
+	return hci_le_terminate_big_sync(hdev, *handle,
+					 HCI_ERROR_LOCAL_HOST_TERM);
+}
+
+static void hci_iso_term_big_destroy(struct hci_dev *hdev, void *data, int err)
+{
+	kfree(data);
+}
+
 static void hci_le_create_big_complete_evt(struct hci_dev *hdev, void *data,
 					   struct sk_buff *skb)
 {
 	struct hci_evt_le_create_big_complete *ev = data;
 	struct hci_conn *conn;
 	__u8 i = 0;
+	__u8 *big_handle;
 
 	BT_DBG("%s status 0x%2.2x", hdev->name, ev->status);
 
@@ -7064,16 +7078,25 @@ static void hci_le_create_big_complete_evt(struct hci_dev *hdev, void *data,
 		rcu_read_lock();
 	}
 
-	if (!ev->status && !i)
+	rcu_read_unlock();
+
+	if (!ev->status && !i) {
 		/* If no BISes have been connected for the BIG,
 		 * terminate. This is in case all bound connections
 		 * have been closed before the BIG creation
 		 * has completed.
 		 */
-		hci_le_terminate_big_sync(hdev, ev->handle,
-					  HCI_ERROR_LOCAL_HOST_TERM);
+		big_handle = kzalloc(sizeof(*big_handle), GFP_KERNEL);
+		if (!big_handle)
+			goto unlock;
 
-	rcu_read_unlock();
+		*big_handle = ev->handle;
+
+		hci_cmd_sync_queue(hdev, hci_iso_term_big_sync, big_handle,
+				   hci_iso_term_big_destroy);
+	}
+
+unlock:
 	hci_dev_unlock(hdev);
 }
 
