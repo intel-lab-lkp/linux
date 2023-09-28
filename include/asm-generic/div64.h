@@ -42,7 +42,7 @@
  * NOTE: macro parameter @n is evaluated multiple times,
  * beware of side effects!
  */
-# define do_div(n,base) ({					\
+# define do_div(n, base) ({					\
 	uint32_t __base = (base);				\
 	uint32_t __rem;						\
 	__rem = ((uint64_t)(n)) % __base;			\
@@ -216,7 +216,7 @@ extern uint32_t __div64_32(uint64_t *dividend, uint32_t divisor);
 /* The unnecessary pointer compare is there
  * to check for type safety (n must be 64bit)
  */
-# define do_div(n,base) ({				\
+# define do_div(n, base) ({				\
 	uint32_t __base = (base);			\
 	uint32_t __rem;					\
 	(void)(((typeof((n)) *)0) == ((uint64_t *)0));	\
