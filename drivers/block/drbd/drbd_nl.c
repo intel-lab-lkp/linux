@@ -365,7 +365,7 @@ int drbd_khelper(struct drbd_device *device, char *cmd)
 	struct sib_info sib;
 	int ret;
 
-	if (current == connection->worker.task)
+	if (current == connection->sender.task)
 		set_bit(CALLBACK_PENDING, &connection->flags);
 
 	snprintf(mb, 14, "minor-%d", device_to_minor(device));
@@ -394,7 +394,7 @@ int drbd_khelper(struct drbd_device *device, char *cmd)
 	drbd_bcast_event(device, &sib);
 	notify_helper(NOTIFY_RESPONSE, device, connection, cmd, ret);
 
-	if (current == connection->worker.task)
+	if (current == connection->sender.task)
 		clear_bit(CALLBACK_PENDING, &connection->flags);
 
 	if (ret < 0) /* Ignore any ERRNOs we got. */
@@ -1349,14 +1349,14 @@ void drbd_reconsider_queue_parameters(struct drbd_device *device, struct drbd_ba
 	drbd_setup_queue_param(device, bdev, new, o);
 }
 
-/* Starts the worker thread */
+/* Starts the sender thread */
 static void conn_reconfig_start(struct drbd_connection *connection)
 {
-	drbd_thread_start(&connection->worker);
+	drbd_thread_start(&connection->sender);
 	drbd_flush_workqueue(&connection->sender_work);
 }
 
-/* if still unconfigured, stops worker again. */
+/* if still unconfigured, stops sender again. */
 static void conn_reconfig_done(struct drbd_connection *connection)
 {
 	bool stop_threads;
@@ -1368,7 +1368,7 @@ static void conn_reconfig_done(struct drbd_connection *connection)
 		/* ack_receiver thread and ack_sender workqueue are implicitly
 		 * stopped by receiver in conn_disconnect() */
 		drbd_thread_stop(&connection->receiver);
-		drbd_thread_stop(&connection->worker);
+		drbd_thread_stop(&connection->sender);
 	}
 }
 
@@ -4362,7 +4362,7 @@ static enum drbd_ret_code adm_del_minor(struct drbd_device *device)
 		/* If the state engine hasn't stopped the sender thread yet, we
 		 * need to flush the sender work queue before generating the
 		 * DESTROY events here. */
-		if (get_t_state(&connection->worker) == RUNNING)
+		if (get_t_state(&connection->sender) == RUNNING)
 			drbd_flush_workqueue(&connection->sender_work);
 
 		mutex_lock(&notification_mutex);
@@ -4424,7 +4424,7 @@ static int adm_del_resource(struct drbd_resource *resource)
 	/* Make sure all threads have actually stopped: state handling only
 	 * does drbd_thread_stop_nowait(). */
 	list_for_each_entry(connection, &resource->connections, connections)
-		drbd_thread_stop(&connection->worker);
+		drbd_thread_stop(&connection->sender);
 	synchronize_rcu();
 	drbd_free_resource(resource);
 	return NO_ERROR;

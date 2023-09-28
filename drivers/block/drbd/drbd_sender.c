@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
-   drbd_worker.c
+   drbd_sender.c
 
    This file is part of DRBD by Philipp Reisner and Lars Ellenberg.
 
@@ -865,7 +865,7 @@ int drbd_resync_finished(struct drbd_peer_device *peer_device)
 	 * resync LRU would be wrong. */
 	if (drbd_rs_del_all(device)) {
 		/* In case this is not possible now, most probably because
-		 * there are P_RS_DATA_REPLY Packets lingering on the worker's
+		 * there are P_RS_DATA_REPLY Packets lingering on the sender's
 		 * queue (or even the read operations for those packets
 		 * is not finished by now).   Retry in 100ms. */
 
@@ -1587,7 +1587,7 @@ static bool drbd_pause_after(struct drbd_device *device)
  * drbd_resume_next() - Resume resync on all devices that may resync now
  * @device:	DRBD device.
  *
- * Called from process context only (admin command and worker).
+ * Called from process context only (admin command and sender).
  */
 static bool drbd_resume_next(struct drbd_device *device)
 {
@@ -1783,8 +1783,8 @@ void drbd_start_resync(struct drbd_device *device, enum drbd_conns side)
 		}
 	}
 
-	if (current == connection->worker.task) {
-		/* The worker should not sleep waiting for state_mutex,
+	if (current == connection->sender.task) {
+		/* The sender should not sleep waiting for state_mutex,
 		   that can take long */
 		if (!mutex_trylock(device->state_mutex)) {
 			set_bit(B_RS_H_DONE, &device->flags);
@@ -1977,7 +1977,7 @@ static void go_diskless(struct drbd_device *device)
 		 * while we detach.
 		 * Any modifications would not be expected anymore, though.
 		 */
-		if (drbd_bitmap_io_from_worker(device, drbd_bm_write,
+		if (drbd_bitmap_io_from_sender(device, drbd_bm_write,
 					"detach", BM_LOCKED_TEST_ALLOWED, peer_device)) {
 			if (test_bit(WAS_READ_ERROR, &device->flags)) {
 				drbd_md_set_flag(device, MDF_FULL_SYNC);
@@ -2142,7 +2142,7 @@ static void wait_for_work(struct drbd_connection *connection, struct list_head *
 			break;
 
 		/* drbd_send() may have called flush_signals() */
-		if (get_t_state(&connection->worker) != RUNNING)
+		if (get_t_state(&connection->sender) != RUNNING)
 			break;
 
 		schedule();
@@ -2167,7 +2167,7 @@ static void wait_for_work(struct drbd_connection *connection, struct list_head *
 	mutex_unlock(&connection->data.mutex);
 }
 
-int drbd_worker(struct drbd_thread *thi)
+int drbd_sender(struct drbd_thread *thi)
 {
 	struct drbd_connection *connection = thi->connection;
 	struct drbd_work *w = NULL;
@@ -2191,7 +2191,7 @@ int drbd_worker(struct drbd_thread *thi)
 		if (signal_pending(current)) {
 			flush_signals(current);
 			if (get_t_state(thi) == RUNNING) {
-				drbd_warn(connection, "Worker got an unexpected signal\n");
+				drbd_warn(connection, "Sender got an unexpected signal\n");
 				continue;
 			}
 			break;

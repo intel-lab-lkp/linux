@@ -665,7 +665,7 @@ struct drbd_connection {
 	/* empty member on older kernels without blk_start_plug() */
 	struct blk_plug receiver_plug;
 	struct drbd_thread receiver;
-	struct drbd_thread worker;
+	struct drbd_thread sender;
 	struct drbd_thread ack_receiver;
 	struct workqueue_struct *ack_sender;
 
@@ -1075,7 +1075,7 @@ extern int drbd_bitmap_io(struct drbd_device *device,
 		int (*io_fn)(struct drbd_device *, struct drbd_peer_device *),
 		char *why, enum bm_flag flags,
 		struct drbd_peer_device *peer_device);
-extern int drbd_bitmap_io_from_worker(struct drbd_device *device,
+extern int drbd_bitmap_io_from_sender(struct drbd_device *device,
 		int (*io_fn)(struct drbd_device *, struct drbd_peer_device *),
 		char *why, enum bm_flag flags,
 		struct drbd_peer_device *peer_device);
@@ -1422,12 +1422,12 @@ extern void conn_try_outdate_peer_async(struct drbd_connection *connection);
 extern enum drbd_peer_state conn_khelper(struct drbd_connection *connection, char *cmd);
 extern int drbd_khelper(struct drbd_device *device, char *cmd);
 
-/* drbd_worker.c */
+/* drbd_sender.c */
 /* bi_end_io handlers */
 extern void drbd_md_endio(struct bio *bio);
 extern void drbd_peer_request_endio(struct bio *bio);
 extern void drbd_request_endio(struct bio *bio);
-extern int drbd_worker(struct drbd_thread *thi);
+extern int drbd_sender(struct drbd_thread *thi);
 enum drbd_ret_code drbd_resync_after_valid(struct drbd_device *device, int o_minor);
 void drbd_resync_after_changed(struct drbd_device *device);
 extern void drbd_start_resync(struct drbd_device *device, enum drbd_conns side);
@@ -1912,7 +1912,7 @@ static inline void drbd_thread_restart_nowait(struct drbd_thread *thi)
  *  w_send_barrier
  *  _req_mod(req, QUEUE_FOR_NET_WRITE or QUEUE_FOR_NET_READ);
  *    it is much easier and equally valid to count what we queue for the
- *    worker, even before it actually was queued or send.
+ *    sender, even before it actually was queued or send.
  *    (drbd_make_request_common; recovery path on read io-error)
  * decreased:
  *  got_BarrierAck (respective tl_clear, tl_clear_barrier)
