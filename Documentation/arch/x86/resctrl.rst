@@ -345,9 +345,15 @@ When control is enabled all CTRL_MON groups will also contain:
 When monitoring is enabled all MON groups will also contain:
 
 "mon_data":
-	This contains a set of files organized by L3 domain and by
-	RDT event. E.g. on a system with two L3 domains there will
-	be subdirectories "mon_L3_00" and "mon_L3_01".	Each of these
+	This contains a set of files organized by L3 domain or by NUMA
+	node (depending on whether Sub-NUMA Cluster (SNC) mode is disabled
+	or enabled respectively) and by RDT event. E.g. on a system with
+	SNC mode disabled with two L3 domains there will be subdirectories
+	"mon_L3_00" and "mon_L3_01". The numerical suffix refers to the
+	L3 cache id.  With SNC enabled the directory names are the same,
+	but the numerical suffix refers to the node id.
+	Mappings from node ids to CPUs are available in the
+	/sys/devices/system/node/node*/cpulist files. Each of these
 	directories have one file per event (e.g. "llc_occupancy",
 	"mbm_total_bytes", and "mbm_local_bytes"). In a MON group these
 	files provide a read out of the current value of the event for
@@ -451,6 +457,28 @@ requires that these masks have all the '1' bits in a contiguous block. So
 and 0xA are not.  On a system with a 20-bit mask each bit represents 5%
 of the capacity of the cache. You could partition the cache into four
 equal parts with masks: 0x1f, 0x3e0, 0x7c00, 0xf8000.
+
+Notes on Sub-NUMA Cluster mode
+==============================
+When SNC mode is enabled the "llc_occupancy", "mbm_total_bytes", and
+"mbm_local_bytes" will only give meaningful results for well behaved NUMA
+applications. I.e. those that perform the majority of memory accesses
+to memory on the local NUMA node to the CPU where the task is executing.
+Note that Linux may load balance tasks between Sub-NUMA nodes much
+more readily than between regular NUMA nodes since the CPUs on SNC
+share the same L3 cache and the system may report the NUMA distance
+between SNC nodes with a lower value than used for regular NUMA nodes.
+Tasks that migrate between nodes will have their traffic recorded by the
+counters in different SNC nodes so a user will need to read mon_data
+files from each node on which the task executed to get the full
+view of traffic for which the task was the source.
+
+
+The cache allocation feature still provides the same number of
+bits in a mask to control allocation into the L3 cache. But each
+of those ways has its capacity reduced because the cache is divided
+between the SNC nodes. The values reported in the resctrl
+"size" files are adjusted accordingly.
 
 Memory bandwidth Allocation and monitoring
 ==========================================
