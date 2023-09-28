@@ -65,21 +65,21 @@ static void file_free_rcu(struct rcu_head *head)
 {
 	struct file *f = container_of(head, struct file, f_rcuhead);
 
-	put_cred(f->f_cred);
-	if (unlikely(f->f_mode & FMODE_BACKING))
-		kfree(backing_file(f));
-	else
-		kmem_cache_free(filp_cachep, f);
+	kfree(backing_file(f));
 }
 
 static inline void file_free(struct file *f)
 {
 	security_file_free(f);
-	if (unlikely(f->f_mode & FMODE_BACKING))
-		path_put(backing_file_real_path(f));
 	if (likely(!(f->f_mode & FMODE_NOACCOUNT)))
 		percpu_counter_dec(&nr_files);
-	call_rcu(&f->f_rcuhead, file_free_rcu);
+	put_cred(f->f_cred);
+	if (unlikely(f->f_mode & FMODE_BACKING)) {
+		path_put(backing_file_real_path(f));
+		call_rcu(&f->f_rcuhead, file_free_rcu);
+	} else {
+		kmem_cache_free(filp_cachep, f);
+	}
 }
 
 /*
@@ -468,10 +468,33 @@ void __fput_sync(struct file *file)
 EXPORT_SYMBOL(fput);
 EXPORT_SYMBOL(__fput_sync);
 
+/*
+ * Clean up after failing to open (e.g., open(2) returns with -ENOENT).
+ *
+ * In the common case this avoids delegating the free to task_work.
+ */
+void fput_badopen(struct file *file)
+{
+	if (unlikely(file->f_mode & FMODE_OPENED)) {
+		fput(file);
+		return;
+	}
+
+	/*
+	 * While we did not expose the file to anyone, we may be racing against
+	 * __fget_files_rcu refing a stale object. Should this happen it is
+	 * going to backpedal with fput, but it means we have to unref with an
+	 * atomic to synchronize against it.
+	 */
+	if (atomic_long_dec_and_test(&file->f_count))
+		file_free(file);
+}
+
 void __init files_init(void)
 {
 	filp_cachep = kmem_cache_create("filp", sizeof(struct file), 0,
-			SLAB_HWCACHE_ALIGN | SLAB_PANIC | SLAB_ACCOUNT, NULL);
+			SLAB_TYPESAFE_BY_RCU | SLAB_HWCACHE_ALIGN
+			| SLAB_PANIC | SLAB_ACCOUNT, NULL);
 	percpu_counter_init(&nr_files, 0, GFP_KERNEL);
 }
 
