@@ -149,9 +149,9 @@ lpfc_config_port_prep(struct lpfc_hba *phba)
 		}
 
 		lpfc_read_nv(phba, pmb);
-		memset((char*)mb->un.varRDnvp.rsvd3, 0,
+		memset((char *)mb->un.varRDnvp.rsvd3, 0,
 			sizeof (mb->un.varRDnvp.rsvd3));
-		memcpy((char*)mb->un.varRDnvp.rsvd3, licensed,
+		memcpy((char *)mb->un.varRDnvp.rsvd3, licensed,
 			 sizeof (licensed));
 
 		rc = lpfc_sli_issue_mbox(phba, pmb, MBX_POLL);
@@ -185,7 +185,7 @@ lpfc_config_port_prep(struct lpfc_hba *phba)
 				"0439 Adapter failed to init, mbxCmd x%x "
 				"READ_REV, mbxStatus x%x\n",
 				mb->mbxCommand, mb->mbxStatus);
-		mempool_free( pmb, phba->mbox_mem_pool);
+		mempool_free(pmb, phba->mbox_mem_pool);
 		return -ERESTART;
 	}
 
@@ -212,7 +212,7 @@ lpfc_config_port_prep(struct lpfc_hba *phba)
 	vp->rev.rBit = 1;
 	memcpy(&vp->sli3Feat, &mb->un.varRdRev.sli3Feat, sizeof(uint32_t));
 	vp->rev.sli1FwRev = mb->un.varRdRev.sli1FwRev;
-	memcpy(vp->rev.sli1FwName, (char*) mb->un.varRdRev.sli1FwName, 16);
+	memcpy(vp->rev.sli1FwName, (char *) mb->un.varRdRev.sli1FwName, 16);
 	vp->rev.sli2FwRev = mb->un.varRdRev.sli2FwRev;
 	memcpy(vp->rev.sli2FwName, (char *) mb->un.varRdRev.sli2FwName, 16);
 	vp->rev.biuRev = mb->un.varRdRev.biuRev;
@@ -285,7 +285,7 @@ out_free_mbox:
  * set internal async event support flag to 0.
  **/
 static void
-lpfc_config_async_cmpl(struct lpfc_hba * phba, LPFC_MBOXQ_t * pmboxq)
+lpfc_config_async_cmpl(struct lpfc_hba *phba, LPFC_MBOXQ_t *pmboxq)
 {
 	if (pmboxq->u.mb.mbxStatus == MBX_SUCCESS)
 		phba->temp_sensor_support = 1;
@@ -510,7 +510,7 @@ lpfc_config_port_post(struct lpfc_hba *phba)
 				"READ_CONFIG, mbxStatus x%x\n",
 				mb->mbxCommand, mb->mbxStatus);
 		phba->link_state = LPFC_HBA_ERROR;
-		mempool_free( pmb, phba->mbox_mem_pool);
+		mempool_free(pmb, phba->mbox_mem_pool);
 		return -EIO;
 	}
 
@@ -1258,7 +1258,7 @@ lpfc_rrq_timeout(struct timer_list *t)
  * heart-beat outstanding state set, the driver will put the HBA offline.
  **/
 static void
-lpfc_hb_mbox_cmpl(struct lpfc_hba * phba, LPFC_MBOXQ_t * pmboxq)
+lpfc_hb_mbox_cmpl(struct lpfc_hba *phba, LPFC_MBOXQ_t *pmboxq)
 {
 	unsigned long drvr_flag;
 
@@ -2414,7 +2414,7 @@ lpfc_parse_vpd(struct lpfc_hba *phba, uint8_t *vpd, int len)
 			finished = 1;
 			break;
 		default:
-			index ++;
+			index++;
 			break;
 		}
 	}
@@ -2754,7 +2754,7 @@ lpfc_get_hba_model_desc(struct lpfc_hba *phba, uint8_t *mdp, uint8_t *descp)
 	}
 
 	if (mdp && mdp[0] == '\0')
-		snprintf(mdp, 79,"%s", m.name);
+		snprintf(mdp, 79, "%s", m.name);
 	/*
 	 * oneConnect hba requires special processing, they are all initiators
 	 * and we put the port number on the end
@@ -2902,7 +2902,7 @@ lpfc_post_rcv_buf(struct lpfc_hba *phba)
 	return 0;
 }
 
-#define S(N,V) (((V)<<(N))|((V)>>(32-(N))))
+#define S(N, V) (((V)<<(N))|((V)>>(32-(N))))
 
 /**
  * lpfc_sha_init - Set up initial array of hash table entries
@@ -2912,7 +2912,7 @@ lpfc_post_rcv_buf(struct lpfc_hba *phba)
  * for the LC HBAs.
  **/
 static void
-lpfc_sha_init(uint32_t * HashResultPointer)
+lpfc_sha_init(uint32_t *HashResultPointer)
 {
 	HashResultPointer[0] = 0x67452301;
 	HashResultPointer[1] = 0xEFCDAB89;
@@ -2932,7 +2932,7 @@ lpfc_sha_init(uint32_t * HashResultPointer)
  * the @HashResultPointer as the result hash table.
  **/
 static void
-lpfc_sha_iterate(uint32_t * HashResultPointer, uint32_t * HashWorkingPointer)
+lpfc_sha_iterate(uint32_t *HashResultPointer, uint32_t *HashWorkingPointer)
 {
 	int t;
 	uint32_t TEMP;
@@ -2989,7 +2989,7 @@ lpfc_sha_iterate(uint32_t * HashResultPointer, uint32_t * HashWorkingPointer)
  * array and returned by reference through @HashWorking.
  **/
 static void
-lpfc_challenge_key(uint32_t * RandomChallenge, uint32_t * HashWorking)
+lpfc_challenge_key(uint32_t *RandomChallenge, uint32_t *HashWorking)
 {
 	*HashWorking = (*RandomChallenge ^ *HashWorking);
 }
@@ -3776,7 +3776,7 @@ lpfc_online(struct lpfc_hba *phba)
  * set to unblock the management interface afterwards.
  **/
 void
-lpfc_unblock_mgmt_io(struct lpfc_hba * phba)
+lpfc_unblock_mgmt_io(struct lpfc_hba *phba)
 {
 	unsigned long iflag;
 
