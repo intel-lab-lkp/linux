@@ -1480,8 +1480,7 @@ static __always_inline long __get_user_pages_locked(struct mm_struct *mm,
 			return -EAGAIN;
 		must_unlock = true;
 		*locked = 1;
-	}
-	else
+	} else
 		mmap_assert_locked(mm);
 
 	if (flags & FOLL_PIN)
