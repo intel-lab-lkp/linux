@@ -63,8 +63,8 @@
  * up in the PT_NOTE Program Header.
  */
 #ifdef EMITS_PT_NOTE
-#define NOTES_HEADERS		:text :note
-#define NOTES_HEADERS_RESTORE	__restore_ph : { *(.__restore_ph) } :text
+#define NOTES_HEADERS : text : note
+#define NOTES_HEADERS_RESTORE	__restore_ph : { *(.__restore_ph) } : text
 #else
 #define NOTES_HEADERS
 #define NOTES_HEADERS_RESTORE
@@ -98,10 +98,10 @@
  */
 #if defined(CONFIG_LD_DEAD_CODE_DATA_ELIMINATION) || defined(CONFIG_LTO_CLANG)
 #define TEXT_MAIN .text .text.[0-9a-zA-Z_]*
-#define DATA_MAIN .data .data.[0-9a-zA-Z_]* .data..L* .data..compoundliteral* .data.$__unnamed_* .data.$L*
+#define DATA_MAIN .data .data.[0-9a-zA-Z_] * .data..L * .data..compoundliteral * .data.$__unnamed_ * .data.$L*
 #define SDATA_MAIN .sdata .sdata.[0-9a-zA-Z_]*
-#define RODATA_MAIN .rodata .rodata.[0-9a-zA-Z_]* .rodata..L*
-#define BSS_MAIN .bss .bss.[0-9a-zA-Z_]* .bss..compoundliteral*
+#define RODATA_MAIN .rodata .rodata.[0-9a-zA-Z_] * .rodata..L*
+#define BSS_MAIN .bss .bss.[0-9a-zA-Z_] * .bss..compoundliteral*
 #define SBSS_MAIN .sbss .sbss.[0-9a-zA-Z_]*
 #else
 #define TEXT_MAIN .text
@@ -294,7 +294,7 @@
 #ifdef CONFIG_SERIAL_EARLYCON
 #define EARLYCON_TABLE()						\
 	. = ALIGN(8);							\
-	BOUNDED_SECTION_POST_LABEL(__earlycon_table, __earlycon_table, , _end)
+	BOUNDED_SECTION_POST_LABEL(__earlycon_table, __earlycon_table,, _end)
 #else
 #define EARLYCON_TABLE()
 #endif
@@ -462,7 +462,7 @@
 	. = ALIGN((align));						\
 	.rodata           : AT(ADDR(.rodata) - LOAD_OFFSET) {		\
 		__start_rodata = .;					\
-		*(.rodata) *(.rodata.*)					\
+		*(.rodata) * (.rodata.*)					\
 		SCHED_DATA						\
 		RO_AFTER_INIT_DATA	/* Read only after init */	\
 		. = ALIGN(8);						\
@@ -494,28 +494,28 @@
 	/* Kernel symbol table: Normal symbols */			\
 	__ksymtab         : AT(ADDR(__ksymtab) - LOAD_OFFSET) {		\
 		__start___ksymtab = .;					\
-		KEEP(*(SORT(___ksymtab+*)))				\
+		KEEP(*(SORT(___ksymtab+ *)))				\
 		__stop___ksymtab = .;					\
 	}								\
 									\
 	/* Kernel symbol table: GPL-only symbols */			\
 	__ksymtab_gpl     : AT(ADDR(__ksymtab_gpl) - LOAD_OFFSET) {	\
 		__start___ksymtab_gpl = .;				\
-		KEEP(*(SORT(___ksymtab_gpl+*)))				\
+		KEEP(*(SORT(___ksymtab_gpl+ *)))			\
 		__stop___ksymtab_gpl = .;				\
 	}								\
 									\
 	/* Kernel symbol table: Normal symbols */			\
 	__kcrctab         : AT(ADDR(__kcrctab) - LOAD_OFFSET) {		\
 		__start___kcrctab = .;					\
-		KEEP(*(SORT(___kcrctab+*)))				\
+		KEEP(*(SORT(___kcrctab+ *)))				\
 		__stop___kcrctab = .;					\
 	}								\
 									\
 	/* Kernel symbol table: GPL-only symbols */			\
 	__kcrctab_gpl     : AT(ADDR(__kcrctab_gpl) - LOAD_OFFSET) {	\
 		__start___kcrctab_gpl = .;				\
-		KEEP(*(SORT(___kcrctab_gpl+*)))				\
+		KEEP(*(SORT(___kcrctab_gpl+ *)))			\
 		__stop___kcrctab_gpl = .;				\
 	}								\
 									\
