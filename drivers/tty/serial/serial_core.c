@@ -3622,6 +3622,8 @@ int uart_get_rs485_mode(struct uart_port *port)
 		port->rs485_rx_during_tx_gpio = NULL;
 		return dev_err_probe(dev, ret, "Cannot get rs485-rx-during-tx-gpios\n");
 	}
+	if (port->rs485_rx_during_tx_gpio)
+		port->rs485_supported.flags |= SER_RS485_RX_DURING_TX;
 
 	return 0;
 }
