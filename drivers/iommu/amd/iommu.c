@@ -3774,6 +3774,15 @@ int amd_iommu_update_ga(int cpu, bool is_run, void *data)
 		entry->hi.fields.destination =
 					APICID_TO_IRTE_DEST_HI(cpu);
 	}
+
+	if (!is_run && !entry->lo.fields_vapic.is_run) {
+		/*
+		 * No need to notify the IOMMU about an entry which
+		 * already has is_run == False
+		 */
+		return 0;
+	}
+
 	entry->lo.fields_vapic.is_run = is_run;
 
 	return modify_irte_ga(ir_data->iommu, ir_data->irq_2_irte.devid,
