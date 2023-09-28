@@ -358,33 +358,26 @@ static void lcdif_enable_controller(struct lcdif_drm_private *lcdif)
 	writel(INT_ENABLE_D1_PLANE_PANIC_EN,
 	       lcdif->base + LCDC_V8_INT_ENABLE_D1);
 
-	reg = readl(lcdif->base + LCDC_V8_DISP_PARA);
-	reg |= DISP_PARA_DISP_ON;
-	writel(reg, lcdif->base + LCDC_V8_DISP_PARA);
-
 	reg = readl(lcdif->base + LCDC_V8_CTRLDESCL0_5);
 	reg |= CTRLDESCL0_5_EN;
 	writel(reg, lcdif->base + LCDC_V8_CTRLDESCL0_5);
+
+	reg = readl(lcdif->base + LCDC_V8_DISP_PARA);
+	reg |= DISP_PARA_DISP_ON;
+	writel(reg, lcdif->base + LCDC_V8_DISP_PARA);
 }
 
 static void lcdif_disable_controller(struct lcdif_drm_private *lcdif)
 {
 	u32 reg;
-	int ret;
-
-	reg = readl(lcdif->base + LCDC_V8_CTRLDESCL0_5);
-	reg &= ~CTRLDESCL0_5_EN;
-	writel(reg, lcdif->base + LCDC_V8_CTRLDESCL0_5);
-
-	ret = readl_poll_timeout(lcdif->base + LCDC_V8_CTRLDESCL0_5,
-				 reg, !(reg & CTRLDESCL0_5_EN),
-				 0, 36000);	/* Wait ~2 frame times max */
-	if (ret)
-		drm_err(lcdif->drm, "Failed to disable controller!\n");
 
 	reg = readl(lcdif->base + LCDC_V8_DISP_PARA);
 	reg &= ~DISP_PARA_DISP_ON;
 	writel(reg, lcdif->base + LCDC_V8_DISP_PARA);
+
+	reg = readl(lcdif->base + LCDC_V8_CTRLDESCL0_5);
+	reg &= ~CTRLDESCL0_5_EN;
+	writel(reg, lcdif->base + LCDC_V8_CTRLDESCL0_5);
 
 	/* Disable FIFO Panic NoC priority booster. */
 	writel(0, lcdif->base + LCDC_V8_INT_ENABLE_D1);
