@@ -2239,3 +2239,49 @@ int drbd_sender(struct drbd_thread *thi)
 
 	return 0;
 }
+
+int drbd_worker(struct drbd_thread *thi)
+{
+	LIST_HEAD(work_list);
+	struct drbd_resource *resource = thi->resource;
+	struct drbd_work *w;
+
+	while (get_t_state(thi) == RUNNING) {
+		drbd_thread_current_set_cpu(thi);
+
+		if (list_empty(&work_list)) {
+			wait_event_interruptible(resource->work.q_wait,
+				dequeue_work_batch(&resource->work, &work_list));
+		}
+
+		if (signal_pending(current)) {
+			flush_signals(current);
+			if (get_t_state(thi) == RUNNING) {
+				drbd_warn(resource, "Worker got an unexpected signal\n");
+				continue;
+			}
+			break;
+		}
+
+		if (get_t_state(thi) != RUNNING)
+			break;
+
+
+		while (!list_empty(&work_list)) {
+			w = list_first_entry(&work_list, struct drbd_work, list);
+			list_del_init(&w->list);
+			w->cb(w, 0);
+		}
+	}
+
+	do {
+		while (!list_empty(&work_list)) {
+			w = list_first_entry(&work_list, struct drbd_work, list);
+			list_del_init(&w->list);
+			w->cb(w, 1);
+		}
+		dequeue_work_batch(&resource->work, &work_list);
+	} while (!list_empty(&work_list));
+
+	return 0;
+}

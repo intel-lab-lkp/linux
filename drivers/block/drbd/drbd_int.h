@@ -603,6 +603,9 @@ struct drbd_resource {
 	enum write_ordering_e write_ordering;
 
 	cpumask_var_t cpu_mask;
+
+	struct drbd_work_queue work;
+	struct drbd_thread worker;
 };
 
 struct drbd_thread_timing_details
@@ -1428,6 +1431,7 @@ extern void drbd_md_endio(struct bio *bio);
 extern void drbd_peer_request_endio(struct bio *bio);
 extern void drbd_request_endio(struct bio *bio);
 extern int drbd_sender(struct drbd_thread *thi);
+extern int drbd_worker(struct drbd_thread *thi);
 enum drbd_ret_code drbd_resync_after_valid(struct drbd_device *device, int o_minor);
 void drbd_resync_after_changed(struct drbd_device *device);
 extern void drbd_start_resync(struct drbd_device *device, enum drbd_conns side);

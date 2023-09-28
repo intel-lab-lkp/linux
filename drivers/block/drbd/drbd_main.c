@@ -2329,6 +2329,8 @@ void drbd_free_resource(struct drbd_resource *resource)
 {
 	struct drbd_connection *connection, *tmp;
 
+	drbd_flush_workqueue(&resource->work);
+	drbd_thread_stop(&resource->worker);
 	for_each_connection_safe(connection, tmp, resource) {
 		list_del(&connection->connections);
 		drbd_debugfs_connection_cleanup(connection);
@@ -2564,6 +2566,9 @@ struct drbd_resource *drbd_create_resource(const char *name)
 	mutex_init(&resource->conf_update);
 	mutex_init(&resource->adm_mutex);
 	spin_lock_init(&resource->req_lock);
+	drbd_init_workqueue(&resource->work);
+	drbd_thread_init(resource, &resource->worker, drbd_worker, "worker");
+	drbd_thread_start(&resource->worker);
 	drbd_debugfs_resource_add(resource);
 	return resource;
 
