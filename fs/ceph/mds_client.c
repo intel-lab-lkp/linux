@@ -2160,6 +2160,7 @@ static int trim_caps_cb(struct inode *inode, int mds, void *arg)
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	int used, wanted, oissued, mine;
 	struct ceph_cap *cap;
+	bool check_cap = false;
 
 	if (*remaining <= 0)
 		return -1;
@@ -2180,9 +2181,6 @@ static int trim_caps_cb(struct inode *inode, int mds, void *arg)
 	      ceph_cap_string(oissued), ceph_cap_string(used),
 	      ceph_cap_string(wanted));
 	if (cap == ci->i_auth_cap) {
-		if (ci->i_dirty_caps || ci->i_flushing_caps ||
-		    !list_empty(&ci->i_cap_snaps))
-			goto out;
 		if ((used | wanted) & CEPH_CAP_ANY_WR)
 			goto out;
 		/* Note: it's possible that i_filelock_ref becomes non-zero
@@ -2190,6 +2188,8 @@ static int trim_caps_cb(struct inode *inode, int mds, void *arg)
 		 * of lock mds request will re-add auth caps. */
 		if (atomic_read(&ci->i_filelock_ref) > 0)
 			goto out;
+		if (ci->i_dirty_caps || !list_empty(&ci->i_cap_snaps))
+			check_cap = true;
 	}
 	/* The inode has cached pages, but it's no longer used.
 	 * we can safely drop it */
@@ -2202,7 +2202,7 @@ static int trim_caps_cb(struct inode *inode, int mds, void *arg)
 	if ((used | wanted) & ~oissued & mine)
 		goto out;   /* we need these caps */
 
-	if (oissued) {
+	if (oissued && cap != ci->i_auth_cap) {
 		/* we aren't the only cap.. just remove us */
 		ceph_remove_cap(mdsc, cap, true);
 		(*remaining)--;
@@ -2223,11 +2223,15 @@ static int trim_caps_cb(struct inode *inode, int mds, void *arg)
 		} else {
 			dput(dentry);
 		}
-		return 0;
+		goto unlocked;
 	}
 
 out:
 	spin_unlock(&ci->i_ceph_lock);
+
+unlocked:
+	if (check_cap)
+		ceph_check_caps(ci, CHECK_CAPS_FLUSH);
 	return 0;
 }
 
