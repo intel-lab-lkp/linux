@@ -1362,6 +1362,9 @@ static int cn10k_mdo_upd_txsa(struct macsec_context *ctx)
 		if (err)
 			return err;
 
+		if (!ctx->sa.update_pn)
+			return 0;
+
 		err = cn10k_mcs_link_tx_sa2sc(pfvf, secy, txsc,
 					      sa_num, sw_tx_sa->active);
 		if (err)
@@ -1528,6 +1531,9 @@ static int cn10k_mdo_upd_rxsa(struct macsec_context *ctx)
 		err = cn10k_mcs_write_rx_sa_plcy(pfvf, secy, rxsc, sa_num, sa_in_use);
 		if (err)
 			return err;
+
+		if (!ctx->sa.update_pn)
+			return 0;
 
 		err = cn10k_mcs_write_rx_sa_pn(pfvf, rxsc, sa_num,
 					       rx_sa->next_pn);
