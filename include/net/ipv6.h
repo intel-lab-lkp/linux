@@ -261,17 +261,17 @@ extern int sysctl_mld_qrv;
 
 /* MIBs */
 
-#define IP6_INC_STATS(net, idev,field)		\
+#define IP6_INC_STATS(net, idev, field)		\
 		_DEVINC(net, ipv6, , idev, field)
-#define __IP6_INC_STATS(net, idev,field)	\
+#define __IP6_INC_STATS(net, idev, field)	\
 		_DEVINC(net, ipv6, __, idev, field)
-#define IP6_ADD_STATS(net, idev,field,val)	\
+#define IP6_ADD_STATS(net, idev, field, val)	\
 		_DEVADD(net, ipv6, , idev, field, val)
-#define __IP6_ADD_STATS(net, idev,field,val)	\
+#define __IP6_ADD_STATS(net, idev, field, val)	\
 		_DEVADD(net, ipv6, __, idev, field, val)
-#define IP6_UPD_PO_STATS(net, idev,field,val)   \
+#define IP6_UPD_PO_STATS(net, idev, field, val)   \
 		_DEVUPD(net, ipv6, , idev, field, val)
-#define __IP6_UPD_PO_STATS(net, idev,field,val)   \
+#define __IP6_UPD_PO_STATS(net, idev, field, val)   \
 		_DEVUPD(net, ipv6, __, idev, field, val)
 #define ICMP6_INC_STATS(net, idev, field)	\
 		_DEVINCATOMIC(net, icmpv6, , idev, field)
