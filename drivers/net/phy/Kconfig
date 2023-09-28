@@ -107,6 +107,13 @@ config AX88796B_PHY
 	  Currently supports the Asix Electronics PHY found in the X-Surf 100
 	  AX88796B package.
 
+config AX88796B_RUST_PHY
+	bool "Rust reference driver"
+	depends on RUST && AX88796B_PHY
+	default n
+	help
+	  Uses the Rust version driver for Asix PHYs.
+
 config BROADCOM_PHY
 	tristate "Broadcom 54XX PHYs"
 	select BCM_NET_PHYLIB
