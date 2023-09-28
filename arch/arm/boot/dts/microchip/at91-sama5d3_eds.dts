@@ -284,6 +284,10 @@
 	};
 };
 
+&tdes {
+	status = "disabled";
+};
+
 &usb0 {	/* USB Device port with VBUS detection. */
 	atmel,vbus-gpio = <&pioE 9 GPIO_ACTIVE_HIGH>;
 	pinctrl-names = "default";
