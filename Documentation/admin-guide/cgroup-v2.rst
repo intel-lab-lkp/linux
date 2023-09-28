@@ -210,6 +210,15 @@ cgroup v2 currently supports the following mount options.
         relying on the original semantics (e.g. specifying bogusly
         high 'bypass' protection values at higher tree levels).
 
+  memory_hugetlb_accounting
+        Count hugetlb memory usage towards the cgroup's overall
+        memory usage for the memory controller. This is a new behavior
+        that could regress existing setups, so it must be explicitly
+        opted in with this mount option. Note that hugetlb pages
+        allocated while this option is not selected will not be
+        tracked by the memory controller (even if cgroup v2 is
+        remounted later on).
+
 
 Organizing Processes and Threads
 --------------------------------
