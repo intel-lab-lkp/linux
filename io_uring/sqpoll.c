@@ -11,6 +11,7 @@
 #include <linux/audit.h>
 #include <linux/security.h>
 #include <linux/io_uring.h>
+#include <linux/time.h>
 
 #include <uapi/linux/io_uring.h>
 
@@ -235,6 +236,10 @@ static int io_sq_thread(void *data)
 		set_cpus_allowed_ptr(current, cpu_online_mask);
 
 	mutex_lock(&sqd->lock);
+	bool first = true;
+	struct timespec64 ts_start, ts_end;
+	struct timespec64 ts_delta;
+	struct sched_entity *se = &sqd->thread->se;
 	while (1) {
 		bool cap_entries, sqt_spin = false;
 
@@ -243,7 +248,16 @@ static int io_sq_thread(void *data)
 				break;
 			timeout = jiffies + sqd->sq_thread_idle;
 		}
+		ktime_get_boottime_ts64(&ts_start);
+		ts_delta = timespec64_sub(ts_start, ts_end);
+		unsigned long long now = ts_delta.tv_sec * NSEC_PER_SEC + ts_delta.tv_nsec +
+		se->sq_avg.last_update_time;
 
+		if (first) {
+			now = 0;
+			first = false;
+		}
+		__update_sq_avg_block(now, se);
 		cap_entries = !list_is_singular(&sqd->ctx_list);
 		list_for_each_entry(ctx, &sqd->ctx_list, sqd_list) {
 			int ret = __io_sq_thread(ctx, cap_entries);
@@ -251,6 +265,16 @@ static int io_sq_thread(void *data)
 			if (!sqt_spin && (ret > 0 || !wq_list_empty(&ctx->iopoll_list)))
 				sqt_spin = true;
 		}
+
+		ktime_get_boottime_ts64(&ts_end);
+		ts_delta = timespec64_sub(ts_end, ts_start);
+		now = ts_delta.tv_sec * NSEC_PER_SEC + ts_delta.tv_nsec +
+		se->sq_avg.last_update_time;
+
+		if (sqt_spin)
+			__update_sq_avg(now, se);
+		else
+			__update_sq_avg_block(now, se);
 		if (io_run_task_work())
 			sqt_spin = true;
 
