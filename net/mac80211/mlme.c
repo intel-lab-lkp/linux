@@ -501,9 +501,9 @@ static int ieee80211_config_bw(struct ieee80211_link_data *link,
 	u32 vht_cap_info = 0;
 	int ret;
 
-	/* if HT was/is disabled, don't track any bandwidth changes */
-	if (link->u.mgd.conn_flags & IEEE80211_CONN_DISABLE_HT || !ht_oper)
-		return 0;
+	/* don't check HT if we associated as non-HT station */
+	if (link->u.mgd.conn_flags & IEEE80211_CONN_DISABLE_HT)
+		ht_oper = NULL;
 
 	/* don't check VHT if we associated as non-VHT station */
 	if (link->u.mgd.conn_flags & IEEE80211_CONN_DISABLE_VHT)
@@ -525,10 +525,12 @@ static int ieee80211_config_bw(struct ieee80211_link_data *link,
 	 * if bss configuration changed store the new one -
 	 * this may be applicable even if channel is identical
 	 */
-	ht_opmode = le16_to_cpu(ht_oper->operation_mode);
-	if (link->conf->ht_operation_mode != ht_opmode) {
-		*changed |= BSS_CHANGED_HT;
-		link->conf->ht_operation_mode = ht_opmode;
+	if (ht_oper) {
+		ht_opmode = le16_to_cpu(ht_oper->operation_mode);
+		if (link->conf->ht_operation_mode != ht_opmode) {
+			*changed |= BSS_CHANGED_HT;
+			link->conf->ht_operation_mode = ht_opmode;
+		}
 	}
 
 	if (vht_cap)
