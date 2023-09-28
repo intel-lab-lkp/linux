@@ -299,8 +299,7 @@ lpfc_debugfs_hbqinfo_data(struct lpfc_hba *phba, char *buf, int size)
 		 lpfc_debugfs_last_hbq++;
 		 if (lpfc_debugfs_last_hbq >= i)
 			lpfc_debugfs_last_hbq = 0;
-	}
-	else
+	} else
 		lpfc_debugfs_last_hbq = 0;
 
 	i = lpfc_debugfs_last_hbq;
@@ -326,7 +325,7 @@ lpfc_debugfs_hbqinfo_data(struct lpfc_hba *phba, char *buf, int size)
 		hbqs->next_hbqPutIdx, hbqs->local_hbqGetIdx, getidx);
 
 	hbqe = (struct lpfc_hbq_entry *) phba->hbqs[i].hbq_virt;
-	for (j=0; j<hbqs->entry_count; j++) {
+	for (j = 0; j < hbqs->entry_count; j++) {
 		len +=  scnprintf(buf+len, size-len,
 			"%03d: %08x %04x %05x ", j,
 			le32_to_cpu(hbqe->bde.addrLow),
@@ -343,8 +342,7 @@ lpfc_debugfs_hbqinfo_data(struct lpfc_hba *phba, char *buf, int size)
 						"Unused\n");
 				goto skipit;
 			}
-		}
-		else {
+		} else {
 			if ((j >= hbqs->hbqPutIdx) &&
 				(j < (hbqs->entry_count+low))) {
 				len +=  scnprintf(buf + len, size - len,
