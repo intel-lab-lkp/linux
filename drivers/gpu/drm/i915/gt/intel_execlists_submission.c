@@ -2222,31 +2222,13 @@ struct execlists_capture {
 static void execlists_capture_work(struct work_struct *work)
 {
 	struct execlists_capture *cap = container_of(work, typeof(*cap), work);
-	const gfp_t gfp = __GFP_KSWAPD_RECLAIM | __GFP_RETRY_MAYFAIL |
-		__GFP_NOWARN;
-	struct intel_engine_cs *engine = cap->rq->engine;
-	struct intel_gt_coredump *gt = cap->error->gt;
-	struct intel_engine_capture_vma *vma;
 
-	/* Compress all the objects attached to the request, slow! */
-	vma = intel_engine_coredump_add_request(gt->engine, cap->rq, gfp);
-	if (vma) {
-		struct i915_vma_compress *compress =
-			i915_vma_capture_prepare(gt);
+	i915_gpu_error_execlist_capture(cap->error, cap->rq);
 
-		intel_engine_coredump_add_vma(gt->engine, vma, compress);
-		i915_vma_capture_finish(gt, compress);
-	}
-
-	gt->simulated = gt->engine->simulated;
-	cap->error->simulated = gt->simulated;
-
-	/* Publish the error state, and announce it to the world */
-	i915_error_state_store(cap->error);
 	i915_gpu_coredump_put(cap->error);
 
 	/* Return this request and all that depend upon it for signaling */
-	execlists_unhold(engine, cap->rq);
+	execlists_unhold(cap->rq->engine, cap->rq);
 	i915_request_put(cap->rq);
 
 	kfree(cap);

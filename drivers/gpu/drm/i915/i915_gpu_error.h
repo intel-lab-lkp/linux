@@ -27,8 +27,6 @@
 #include "i915_scheduler.h"
 
 struct drm_i915_private;
-struct i915_vma_compress;
-struct intel_engine_capture_vma;
 struct intel_overlay_error_state;
 
 struct i915_vma_coredump {
@@ -282,22 +280,8 @@ void i915_capture_error_state(struct intel_gt *gt,
 struct i915_gpu_coredump *
 i915_gpu_coredump_alloc(struct intel_engine_cs *engine, gfp_t gfp);
 
-struct intel_engine_capture_vma *
-intel_engine_coredump_add_request(struct intel_engine_coredump *ee,
-				  struct i915_request *rq,
-				  gfp_t gfp);
-
-void intel_engine_coredump_add_vma(struct intel_engine_coredump *ee,
-				   struct intel_engine_capture_vma *capture,
-				   struct i915_vma_compress *compress);
-
-struct i915_vma_compress *
-i915_vma_capture_prepare(struct intel_gt_coredump *gt);
-
-void i915_vma_capture_finish(struct intel_gt_coredump *gt,
-			     struct i915_vma_compress *compress);
-
-void i915_error_state_store(struct i915_gpu_coredump *error);
+void i915_gpu_error_execlist_capture(struct i915_gpu_coredump *error,
+				     struct i915_request *rq);
 
 ssize_t
 i915_gpu_coredump_copy_to_buffer(struct i915_gpu_coredump *error,
@@ -331,35 +315,8 @@ i915_gpu_coredump_alloc(struct drm_i915_private *i915, gfp_t gfp)
 	return NULL;
 }
 
-static inline struct intel_engine_capture_vma *
-intel_engine_coredump_add_request(struct intel_engine_coredump *ee,
-				  struct i915_request *rq,
-				  gfp_t gfp)
-{
-	return NULL;
-}
-
-static inline void
-intel_engine_coredump_add_vma(struct intel_engine_coredump *ee,
-			      struct intel_engine_capture_vma *capture,
-			      struct i915_vma_compress *compress)
-{
-}
-
-static inline struct i915_vma_compress *
-i915_vma_capture_prepare(struct intel_gt_coredump *gt)
-{
-	return NULL;
-}
-
-static inline void
-i915_vma_capture_finish(struct intel_gt_coredump *gt,
-			struct i915_vma_compress *compress)
-{
-}
-
-static inline void
-i915_error_state_store(struct i915_gpu_coredump *error)
+static inline void i915_gpu_error_execlist_capture(struct i915_gpu_coredump *error,
+						   struct i915_request *rq)
 {
 }
 

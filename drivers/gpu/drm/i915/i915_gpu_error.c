@@ -1584,7 +1584,7 @@ engine_coredump_add_context(struct intel_engine_coredump *ee,
 	return vma;
 }
 
-struct intel_engine_capture_vma *
+static struct intel_engine_capture_vma *
 intel_engine_coredump_add_request(struct intel_engine_coredump *ee,
 				  struct i915_request *rq,
 				  gfp_t gfp)
@@ -1610,7 +1610,7 @@ intel_engine_coredump_add_request(struct intel_engine_coredump *ee,
 	return vma;
 }
 
-void
+static void
 intel_engine_coredump_add_vma(struct intel_engine_coredump *ee,
 			      struct intel_engine_capture_vma *capture,
 			      struct i915_vma_compress *compress)
@@ -2096,7 +2096,7 @@ intel_gt_coredump_alloc(struct intel_gt *gt, gfp_t gfp, u32 dump_flags)
 	return gc;
 }
 
-struct i915_vma_compress *
+static struct i915_vma_compress *
 i915_vma_capture_prepare(struct intel_gt_coredump *gt)
 {
 	struct i915_vma_compress *compress;
@@ -2113,8 +2113,8 @@ i915_vma_capture_prepare(struct intel_gt_coredump *gt)
 	return compress;
 }
 
-void i915_vma_capture_finish(struct intel_gt_coredump *gt,
-			     struct i915_vma_compress *compress)
+static void i915_vma_capture_finish(struct intel_gt_coredump *gt,
+				    struct i915_vma_compress *compress)
 {
 	if (!compress)
 		return;
@@ -2189,7 +2189,7 @@ i915_gpu_coredump(struct intel_gt *gt, intel_engine_mask_t engine_mask, u32 dump
 	return dump;
 }
 
-void i915_error_state_store(struct i915_gpu_coredump *error)
+static void i915_error_state_store(struct i915_gpu_coredump *error)
 {
 	struct drm_i915_private *i915;
 	static bool warned;
@@ -2242,6 +2242,30 @@ void i915_capture_error_state(struct intel_gt *gt,
 
 	i915_error_state_store(error);
 	i915_gpu_coredump_put(error);
+}
+
+void i915_gpu_error_execlist_capture(struct i915_gpu_coredump *error,
+				     struct i915_request *rq)
+{
+	struct intel_gt_coredump *gt = error->gt;
+	struct intel_engine_capture_vma *vma;
+	const gfp_t gfp = __GFP_KSWAPD_RECLAIM | __GFP_RETRY_MAYFAIL | __GFP_NOWARN;
+
+	/* Compress all the objects attached to the request, slow! */
+	vma = intel_engine_coredump_add_request(gt->engine, rq, gfp);
+	if (vma) {
+		struct i915_vma_compress *compress =
+			i915_vma_capture_prepare(gt);
+
+		intel_engine_coredump_add_vma(gt->engine, vma, compress);
+		i915_vma_capture_finish(gt, compress);
+	}
+
+	gt->simulated = gt->engine->simulated;
+	error->simulated = gt->simulated;
+
+	/* Publish the error state, and announce it to the world */
+	i915_error_state_store(error);
 }
 
 static struct i915_gpu_coredump *
