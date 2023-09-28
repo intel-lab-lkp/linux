@@ -1514,6 +1514,9 @@ static int i2c_register_adapter(struct i2c_adapter *adap)
 	res = device_register(&adap->dev);
 	if (res) {
 		pr_err("adapter '%s': can't register device (%d)\n", adap->name, res);
+		init_completion(&adap->dev_released);
+		put_device(&adap->dev);
+		wait_for_completion(&adap->dev_released);
 		goto out_list;
 	}
 
