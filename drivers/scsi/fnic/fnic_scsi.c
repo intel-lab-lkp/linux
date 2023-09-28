@@ -1019,22 +1019,22 @@ static void fnic_fcpio_icmnd_cmpl_handler(struct fnic *fnic,
 	io_duration_time = jiffies_to_msecs(jiffies) -
 						jiffies_to_msecs(start_time);
 
-	if(io_duration_time <= 10)
+	if (io_duration_time <= 10)
 		atomic64_inc(&fnic_stats->io_stats.io_btw_0_to_10_msec);
-	else if(io_duration_time <= 100)
+	else if (io_duration_time <= 100)
 		atomic64_inc(&fnic_stats->io_stats.io_btw_10_to_100_msec);
-	else if(io_duration_time <= 500)
+	else if (io_duration_time <= 500)
 		atomic64_inc(&fnic_stats->io_stats.io_btw_100_to_500_msec);
-	else if(io_duration_time <= 5000)
+	else if (io_duration_time <= 5000)
 		atomic64_inc(&fnic_stats->io_stats.io_btw_500_to_5000_msec);
-	else if(io_duration_time <= 10000)
+	else if (io_duration_time <= 10000)
 		atomic64_inc(&fnic_stats->io_stats.io_btw_5000_to_10000_msec);
-	else if(io_duration_time <= 30000)
+	else if (io_duration_time <= 30000)
 		atomic64_inc(&fnic_stats->io_stats.io_btw_10000_to_30000_msec);
 	else {
 		atomic64_inc(&fnic_stats->io_stats.io_greater_than_30000_msec);
 
-		if(io_duration_time > atomic64_read(&fnic_stats->io_stats.current_max_io_time))
+		if (io_duration_time > atomic64_read(&fnic_stats->io_stats.current_max_io_time))
 			atomic64_set(&fnic_stats->io_stats.current_max_io_time, io_duration_time);
 	}
 }
