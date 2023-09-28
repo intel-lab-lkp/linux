@@ -2486,6 +2486,32 @@ static int ath12k_mac_fils_discovery(struct ath12k_vif *arvif,
 	return ret;
 }
 
+static enum wmi_channel_width
+ath12k_mac_nlwidth_to_wmiwidth(enum nl80211_chan_width width)
+{
+	switch (width) {
+	case NL80211_CHAN_WIDTH_20:
+		return WMI_CHAN_WIDTH_20;
+	case NL80211_CHAN_WIDTH_40:
+		return WMI_CHAN_WIDTH_40;
+	case NL80211_CHAN_WIDTH_80:
+		return WMI_CHAN_WIDTH_80;
+	case NL80211_CHAN_WIDTH_160:
+		return WMI_CHAN_WIDTH_160;
+	case NL80211_CHAN_WIDTH_80P80:
+		return WMI_CHAN_WIDTH_80P80;
+	case NL80211_CHAN_WIDTH_5:
+		return WMI_CHAN_WIDTH_5;
+	case NL80211_CHAN_WIDTH_10:
+		return WMI_CHAN_WIDTH_10;
+	case NL80211_CHAN_WIDTH_320:
+		return WMI_CHAN_WIDTH_320;
+	default:
+		WARN_ON(1);
+		return WMI_CHAN_WIDTH_20;
+	}
+}
+
 static void ath12k_mac_op_bss_info_changed(struct ieee80211_hw *hw,
 					   struct ieee80211_vif *vif,
 					   struct ieee80211_bss_conf *info,
@@ -2506,6 +2532,27 @@ static void ath12k_mac_op_bss_info_changed(struct ieee80211_hw *hw,
 	u32 rate;
 
 	mutex_lock(&ar->conf_mutex);
+
+	if (changed & BSS_CHANGED_EHT_PUNCTURING) {
+		param_id = WMI_PEER_CHWIDTH_PUNCTURE_20MHZ_BITMAP;
+		param_value = ath12k_mac_nlwidth_to_wmiwidth(info->chandef.width) |
+			      u32_encode_bits((~info->eht_puncturing),
+					      WMI_PEER_PUNCTURE_BITMAP);
+
+		ret = ath12k_wmi_set_peer_param(ar, arvif->bssid,
+						arvif->vdev_id, param_id,
+						param_value);
+		if (ret)
+			ath12k_warn(ar->ab,
+				    "Failed to set puncturing bitmap %04x "
+				    "and bandwidth %d for VDEV: %d\n",
+				    info->eht_puncturing, info->chandef.width,
+				    arvif->vdev_id);
+		else
+			ath12k_dbg(ar->ab, ATH12K_DBG_MAC,
+				   "Set puncturing bitmap %04x and and bandwidth %d for VDEV: %d\n",
+				   info->eht_puncturing, info->chandef.width, arvif->vdev_id);
+	}
 
 	if (changed & BSS_CHANGED_BEACON_INT) {
 		arvif->beacon_interval = info->beacon_int;
@@ -3724,6 +3771,9 @@ static u32 ath12k_mac_ieee80211_sta_bw_to_wmi(struct ath12k *ar,
 		break;
 	case IEEE80211_STA_RX_BW_160:
 		bw = WMI_PEER_CHWIDTH_160MHZ;
+		break;
+	case IEEE80211_STA_RX_BW_320:
+		bw = WMI_PEER_CHWIDTH_320MHZ;
 		break;
 	default:
 		ath12k_warn(ar->ab, "Invalid bandwidth %d in rc update for %pM\n",
