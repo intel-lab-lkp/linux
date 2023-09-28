@@ -730,8 +730,10 @@ static u64 calculate_bytes_allowed(u64 bps_limit, unsigned long jiffy_elapsed)
 static inline void throtl_trim_slice(struct throtl_grp *tg, bool rw)
 {
 	unsigned long time_elapsed;
-	long long bytes_trim;
-	int io_trim;
+	long long bytes_trim = 0;
+	int io_trim = 0;
+	u64 bps_limit;
+	u32 iops_limit;
 
 	BUG_ON(time_before(tg->slice_end[rw], tg->slice_start[rw]));
 
@@ -758,11 +760,14 @@ static inline void throtl_trim_slice(struct throtl_grp *tg, bool rw)
 	if (!time_elapsed)
 		return;
 
-	bytes_trim = calculate_bytes_allowed(tg_bps_limit(tg, rw),
-					     time_elapsed) +
-		     tg->carryover_bytes[rw];
-	io_trim = calculate_io_allowed(tg_iops_limit(tg, rw), time_elapsed) +
-		  tg->carryover_ios[rw];
+	bps_limit = tg_bps_limit(tg, rw);
+	iops_limit = tg_iops_limit(tg, rw);
+	if (tg->bytes_disp[rw] > 0 && bps_limit != U64_MAX)
+		bytes_trim = calculate_bytes_allowed(bps_limit,
+			     time_elapsed) + tg->carryover_bytes[rw];
+	if (tg->io_disp[rw] > 0 && iops_limit != UINT_MAX)
+		io_trim = calculate_io_allowed(iops_limit, time_elapsed) +
+			  tg->carryover_ios[rw];
 	if (bytes_trim <= 0 && io_trim <= 0)
 		return;
 
