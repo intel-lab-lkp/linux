@@ -1060,7 +1060,7 @@ static void cleanup_gt(struct intel_gt_coredump *gt)
 	kfree(gt);
 }
 
-void __i915_gpu_coredump_free(struct kref *error_ref)
+static void i915_gpu_coredump_free(struct kref *error_ref)
 {
 	struct i915_gpu_coredump *error =
 		container_of(error_ref, typeof(*error), ref);
@@ -1078,6 +1078,18 @@ void __i915_gpu_coredump_free(struct kref *error_ref)
 
 	err_free_sgl(error->sgl);
 	kfree(error);
+}
+
+static struct i915_gpu_coredump *i915_gpu_coredump_get(struct i915_gpu_coredump *gpu)
+{
+	kref_get(&gpu->ref);
+	return gpu;
+}
+
+void i915_gpu_coredump_put(struct i915_gpu_coredump *gpu)
+{
+	if (gpu)
+		kref_put(&gpu->ref, i915_gpu_coredump_free);
 }
 
 static struct i915_vma_coredump *

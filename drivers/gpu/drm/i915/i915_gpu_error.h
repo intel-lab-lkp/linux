@@ -305,23 +305,11 @@ void i915_vma_capture_finish(struct intel_gt_coredump *gt,
 
 void i915_error_state_store(struct i915_gpu_coredump *error);
 
-static inline struct i915_gpu_coredump *
-i915_gpu_coredump_get(struct i915_gpu_coredump *gpu)
-{
-	kref_get(&gpu->ref);
-	return gpu;
-}
-
 ssize_t
 i915_gpu_coredump_copy_to_buffer(struct i915_gpu_coredump *error,
 				 char *buf, loff_t offset, size_t count);
 
-void __i915_gpu_coredump_free(struct kref *kref);
-static inline void i915_gpu_coredump_put(struct i915_gpu_coredump *gpu)
-{
-	if (gpu)
-		kref_put(&gpu->ref, __i915_gpu_coredump_free);
-}
+void i915_gpu_coredump_put(struct i915_gpu_coredump *gpu);
 
 void i915_reset_error_state(struct drm_i915_private *i915);
 void i915_disable_error_state(struct drm_i915_private *i915, int err);
