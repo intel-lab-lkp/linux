@@ -1415,7 +1415,8 @@ guc_capture_reg_to_str(const struct intel_guc *guc, u32 owner, u32 type,
 	} while (0)
 
 int intel_guc_capture_print_engine_node(struct drm_i915_error_state_buf *ebuf,
-					const struct intel_engine_coredump *ee)
+					struct __guc_capture_parsed_output *node,
+					struct intel_guc *guc)
 {
 	const char *grptype[GUC_STATE_CAPTURE_GROUP_TYPE_MAX] = {
 		"full-capture",
@@ -1426,31 +1427,14 @@ int intel_guc_capture_print_engine_node(struct drm_i915_error_state_buf *ebuf,
 		"Engine-Class",
 		"Engine-Instance"
 	};
-	struct intel_guc_state_capture *cap;
-	struct __guc_capture_parsed_output *node;
 	struct intel_engine_cs *eng;
 	struct guc_mmio_reg *regs;
-	struct intel_guc *guc;
 	const char *str;
 	int numregs, i, j;
 	u32 is_ext;
 
-	if (!ebuf || !ee)
+	if (!ebuf)
 		return -EINVAL;
-	cap = ee->guc_capture;
-	if (!cap || !ee->engine)
-		return -ENODEV;
-
-	guc = &ee->engine->gt->uc.guc;
-
-	i915_error_printf(ebuf, "global --- GuC Error Capture on %s command stream:\n",
-			  ee->engine->name);
-
-	node = ee->guc_capture_node;
-	if (!node) {
-		i915_error_printf(ebuf, "  No matching ee-node\n");
-		return 0;
-	}
 
 	i915_error_printf(ebuf, "Coverage:  %s\n", grptype[node->is_partial]);
 
@@ -1502,7 +1486,8 @@ int intel_guc_capture_print_engine_node(struct drm_i915_error_state_buf *ebuf,
 
 #endif //CONFIG_DRM_I915_CAPTURE_ERROR
 
-static void guc_capture_find_ecode(struct intel_engine_coredump *ee)
+static void guc_capture_find_ecode(struct __guc_capture_parsed_output *guc_capture_node,
+				   u32 *ipehr, u32 *instdone)
 {
 	struct gcap_reg_list_info *reginfo;
 	struct guc_mmio_reg *regs;
@@ -1510,27 +1495,26 @@ static void guc_capture_find_ecode(struct intel_engine_coredump *ee)
 	i915_reg_t reg_instdone = RING_INSTDONE(0);
 	int i;
 
-	if (!ee->guc_capture_node)
+	if (!guc_capture_node)
 		return;
 
-	reginfo = ee->guc_capture_node->reginfo + GUC_CAPTURE_LIST_TYPE_ENGINE_INSTANCE;
+	reginfo = guc_capture_node->reginfo + GUC_CAPTURE_LIST_TYPE_ENGINE_INSTANCE;
 	regs = reginfo->regs;
 	for (i = 0; i < reginfo->num_regs; i++) {
 		if (regs[i].offset == reg_ipehr.reg)
-			ee->ipehr = regs[i].value;
+			*ipehr = regs[i].value;
 		else if (regs[i].offset == reg_instdone.reg)
-			ee->instdone.instdone = regs[i].value;
+			*instdone = regs[i].value;
 	}
 }
 
-void intel_guc_capture_free_node(struct intel_engine_coredump *ee)
+void intel_guc_capture_free_node(struct intel_guc_state_capture *guc_capture,
+				 struct __guc_capture_parsed_output *guc_capture_node)
 {
-	if (!ee || !ee->guc_capture_node)
+	if (!guc_capture_node)
 		return;
 
-	guc_capture_add_node_to_cachelist(ee->guc_capture, ee->guc_capture_node);
-	ee->guc_capture = NULL;
-	ee->guc_capture_node = NULL;
+	guc_capture_add_node_to_cachelist(guc_capture, guc_capture_node);
 }
 
 bool intel_guc_capture_is_matching_engine(struct intel_gt *gt,
@@ -1564,20 +1548,23 @@ bool intel_guc_capture_is_matching_engine(struct intel_gt *gt,
 }
 
 void intel_guc_capture_get_matching_node(struct intel_gt *gt,
-					 struct intel_engine_coredump *ee,
-					 struct intel_context *ce)
+					 struct intel_context *ce,
+					 unsigned int guc_id,
+					 struct intel_guc_state_capture **guc_capture,
+					 struct __guc_capture_parsed_output **guc_capture_node,
+					 u32 *ipehr, u32 *instdone)
 {
 	struct __guc_capture_parsed_output *n, *ntmp;
 	struct intel_guc *guc;
 
-	if (!gt || !ee || !ce)
+	if (!gt || !ce)
 		return;
 
 	guc = &gt->uc.guc;
 	if (!guc->capture)
 		return;
 
-	GEM_BUG_ON(ee->guc_capture_node);
+	GEM_BUG_ON(*guc_capture_node);
 
 	/*
 	 * Look for a matching GuC reported error capture node from
@@ -1585,14 +1572,14 @@ void intel_guc_capture_get_matching_node(struct intel_gt *gt,
 	 * identification.
 	 */
 	list_for_each_entry_safe(n, ntmp, &guc->capture->outlist, link) {
-		if (n->eng_inst == GUC_ID_TO_ENGINE_INSTANCE(ee->engine->guc_id) &&
-		    n->eng_class == GUC_ID_TO_ENGINE_CLASS(ee->engine->guc_id) &&
+		if (n->eng_inst == GUC_ID_TO_ENGINE_INSTANCE(guc_id) &&
+		    n->eng_class == GUC_ID_TO_ENGINE_CLASS(guc_id) &&
 		    n->guc_id == ce->guc_id.id &&
 		    (n->lrca & CTX_GTT_ADDRESS_MASK) == (ce->lrc.lrca & CTX_GTT_ADDRESS_MASK)) {
 			list_del(&n->link);
-			ee->guc_capture_node = n;
-			ee->guc_capture = guc->capture;
-			guc_capture_find_ecode(ee);
+			*guc_capture_node = n;
+			*guc_capture = guc->capture;
+			guc_capture_find_ecode(n, ipehr, instdone);
 			return;
 		}
 	}

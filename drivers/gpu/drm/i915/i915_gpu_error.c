@@ -815,11 +815,16 @@ static void err_print_gt_engines(struct drm_i915_error_state_buf *m,
 		const struct i915_vma_coredump *vma;
 
 		if (gt->uc && gt->uc->guc.is_guc_capture) {
-			if (ee->guc_capture_node)
-				intel_guc_capture_print_engine_node(m, ee);
-			else
+			if (ee->guc_capture && ee->guc_capture_node && ee->engine) {
+				i915_error_printf(m, "global --- GuC Error Capture on %s command stream:\n",
+						  ee->engine->name);
+
+				intel_guc_capture_print_engine_node(m, ee->guc_capture_node,
+								    &ee->engine->gt->uc.guc);
+			} else {
 				err_printf(m, "  Missing GuC capture node for %s\n",
 					   ee->engine->name);
+			}
 		} else {
 			error_print_engine(m, ee);
 		}
@@ -1053,7 +1058,8 @@ static void cleanup_gt(struct intel_gt_coredump *gt)
 		gt->engine = ee->next;
 
 		i915_vma_coredump_free(ee->vma);
-		intel_guc_capture_free_node(ee);
+		intel_guc_capture_free_node(ee->guc_capture,
+					    ee->guc_capture_node);
 		kfree(ee);
 	}
 
@@ -1669,7 +1675,12 @@ capture_engine(struct intel_engine_cs *engine,
 		intel_engine_coredump_add_vma(ee, capture, compress);
 
 		if (dump_flags & CORE_DUMP_FLAG_IS_GUC_CAPTURE)
-			intel_guc_capture_get_matching_node(engine->gt, ee, ce);
+			intel_guc_capture_get_matching_node(engine->gt, ce,
+							    ee->engine->guc_id,
+							    &ee->guc_capture,
+							    &ee->guc_capture_node,
+							    &ee->ipehr,
+							    &ee->instdone.instdone);
 	} else {
 		kfree(ee);
 		ee = NULL;
@@ -1702,7 +1713,8 @@ gt_record_engines(struct intel_gt_coredump *gt,
 		gt->simulated |= ee->simulated;
 		if (ee->simulated) {
 			if (dump_flags & CORE_DUMP_FLAG_IS_GUC_CAPTURE)
-				intel_guc_capture_free_node(ee);
+				intel_guc_capture_free_node(ee->guc_capture,
+							    ee->guc_capture_node);
 			kfree(ee);
 			continue;
 		}
