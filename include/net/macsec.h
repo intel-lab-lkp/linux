@@ -254,6 +254,7 @@ struct macsec_secy {
  * @offload: MACsec offload status
  * @secy: pointer to a MACsec SecY
  * @rx_sc: pointer to a RX SC
+ * @update_pn: when updating the SA, update the next PN
  * @assoc_num: association number of the target SA
  * @key: key of the target SA
  * @rx_sa: pointer to an RX SA if a RX SA is added/updated/removed
@@ -274,6 +275,7 @@ struct macsec_context {
 	struct macsec_secy *secy;
 	struct macsec_rx_sc *rx_sc;
 	struct {
+		bool update_pn;
 		unsigned char assoc_num;
 		u8 key[MACSEC_MAX_KEY_LEN];
 		union {
