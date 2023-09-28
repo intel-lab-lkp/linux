@@ -5,10 +5,11 @@
 
 #include <uapi/drm/i915_drm.h>
 
-#include "intel_memory_region.h"
-#include "gem/i915_gem_region.h"
 #include "gem/i915_gem_lmem.h"
+#include "gem/i915_gem_object.h"
+#include "gem/i915_gem_region.h"
 #include "i915_drv.h"
+#include "intel_memory_region.h"
 
 void __iomem *
 i915_gem_object_lmem_io_map(struct drm_i915_gem_object *obj,

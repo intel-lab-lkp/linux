@@ -5,6 +5,7 @@
 
 #include "gen7_renderclear.h"
 #include "i915_drv.h"
+#include "i915_vma.h"
 #include "intel_gpu_commands.h"
 #include "intel_gt_regs.h"
 

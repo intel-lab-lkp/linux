@@ -45,7 +45,6 @@
 
 #include "gt/intel_region_lmem.h"
 #include "gt/intel_workarounds.h"
-#include "gt/uc/intel_uc.h"
 
 #include "soc/intel_pch.h"
 

@@ -11,8 +11,10 @@
 
 #include "intel_region_ttm.h"
 
+#include "gem/i915_gem_object.h"
 #include "gem/i915_gem_region.h"
 #include "gem/i915_gem_ttm.h" /* For the funcs/ops export only */
+
 /**
  * DOC: TTM support structure
  *

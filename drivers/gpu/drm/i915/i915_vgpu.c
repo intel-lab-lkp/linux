@@ -21,7 +21,9 @@
  * SOFTWARE.
  */
 
+#include "gt/intel_gtt.h"
 #include "i915_drv.h"
+#include "i915_gem_gtt.h"
 #include "i915_pvinfo.h"
 #include "i915_vgpu.h"
 
