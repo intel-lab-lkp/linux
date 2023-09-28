@@ -166,6 +166,7 @@ static void lcdif_set_formats(struct lcdif_drm_private *lcdif,
 	const u32 format = plane_state->fb->format->format;
 	bool in_yuv = false;
 	bool out_yuv = false;
+	u32 ctrl_desc_5;
 
 	switch (bus_format) {
 	case MEDIA_BUS_FMT_RGB565_1X16:
@@ -186,52 +187,49 @@ static void lcdif_set_formats(struct lcdif_drm_private *lcdif,
 		break;
 	}
 
+	ctrl_desc_5 = readl(lcdif->base + LCDC_V8_CTRLDESCL0_5) &
+		      ~(CTRLDESCL0_5_BPP_MASK | CTRLDESCL0_5_YUV_FORMAT_MASK);
+
 	switch (format) {
 	/* RGB Formats */
 	case DRM_FORMAT_RGB565:
-		writel(CTRLDESCL0_5_BPP_16_RGB565,
-		       lcdif->base + LCDC_V8_CTRLDESCL0_5);
+		ctrl_desc_5 |= CTRLDESCL0_5_BPP_16_RGB565;
 		break;
 	case DRM_FORMAT_RGB888:
-		writel(CTRLDESCL0_5_BPP_24_RGB888,
-		       lcdif->base + LCDC_V8_CTRLDESCL0_5);
+		ctrl_desc_5 |= CTRLDESCL0_5_BPP_24_RGB888;
 		break;
 	case DRM_FORMAT_XRGB1555:
-		writel(CTRLDESCL0_5_BPP_16_ARGB1555,
-		       lcdif->base + LCDC_V8_CTRLDESCL0_5);
+		ctrl_desc_5 |= CTRLDESCL0_5_BPP_16_ARGB1555;
 		break;
 	case DRM_FORMAT_XRGB4444:
-		writel(CTRLDESCL0_5_BPP_16_ARGB4444,
-		       lcdif->base + LCDC_V8_CTRLDESCL0_5);
+		ctrl_desc_5 |= CTRLDESCL0_5_BPP_16_ARGB4444;
 		break;
 	case DRM_FORMAT_XBGR8888:
-		writel(CTRLDESCL0_5_BPP_32_ABGR8888,
-		       lcdif->base + LCDC_V8_CTRLDESCL0_5);
+		ctrl_desc_5 |= CTRLDESCL0_5_BPP_32_ABGR8888;
 		break;
 	case DRM_FORMAT_XRGB8888:
-		writel(CTRLDESCL0_5_BPP_32_ARGB8888,
-		       lcdif->base + LCDC_V8_CTRLDESCL0_5);
+		ctrl_desc_5 |= CTRLDESCL0_5_BPP_32_ARGB8888;
 		break;
 
 	/* YUV Formats */
 	case DRM_FORMAT_YUYV:
-		writel(CTRLDESCL0_5_BPP_YCbCr422 | CTRLDESCL0_5_YUV_FORMAT_VY2UY1,
-		       lcdif->base + LCDC_V8_CTRLDESCL0_5);
+		ctrl_desc_5 |= CTRLDESCL0_5_BPP_YCbCr422 |
+			       CTRLDESCL0_5_YUV_FORMAT_VY2UY1;
 		in_yuv = true;
 		break;
 	case DRM_FORMAT_YVYU:
-		writel(CTRLDESCL0_5_BPP_YCbCr422 | CTRLDESCL0_5_YUV_FORMAT_UY2VY1,
-		       lcdif->base + LCDC_V8_CTRLDESCL0_5);
+		ctrl_desc_5 |= CTRLDESCL0_5_BPP_YCbCr422 |
+			       CTRLDESCL0_5_YUV_FORMAT_UY2VY1;
 		in_yuv = true;
 		break;
 	case DRM_FORMAT_UYVY:
-		writel(CTRLDESCL0_5_BPP_YCbCr422 | CTRLDESCL0_5_YUV_FORMAT_Y2VY1U,
-		       lcdif->base + LCDC_V8_CTRLDESCL0_5);
+		ctrl_desc_5 |= CTRLDESCL0_5_BPP_YCbCr422 |
+			       CTRLDESCL0_5_YUV_FORMAT_Y2VY1U;
 		in_yuv = true;
 		break;
 	case DRM_FORMAT_VYUY:
-		writel(CTRLDESCL0_5_BPP_YCbCr422 | CTRLDESCL0_5_YUV_FORMAT_Y2UY1V,
-		       lcdif->base + LCDC_V8_CTRLDESCL0_5);
+		ctrl_desc_5 |= CTRLDESCL0_5_BPP_YCbCr422 |
+			       CTRLDESCL0_5_YUV_FORMAT_Y2UY1V;
 		in_yuv = true;
 		break;
 
@@ -239,6 +237,8 @@ static void lcdif_set_formats(struct lcdif_drm_private *lcdif,
 		dev_err(drm->dev, "Unknown pixel format 0x%x\n", format);
 		break;
 	}
+
+	writel(ctrl_desc_5, lcdif->base + LCDC_V8_CTRLDESCL0_5);
 
 	/*
 	 * The CSC differentiates between "YCbCr" and "YUV", but the reference
