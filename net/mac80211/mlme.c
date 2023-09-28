@@ -5670,11 +5670,33 @@ static bool ieee80211_rx_our_beacon(const u8 *tx_bssid,
 	return ether_addr_equal(tx_bssid, bss->transmitted_bss->bssid);
 }
 
+static enum nl80211_chan_width
+ieee80211_rx_bw_to_nlwidth(enum ieee80211_sta_rx_bandwidth bw)
+{
+	switch (bw) {
+	case IEEE80211_STA_RX_BW_20:
+		return NL80211_CHAN_WIDTH_20;
+	case IEEE80211_STA_RX_BW_40:
+		return NL80211_CHAN_WIDTH_40;
+	case IEEE80211_STA_RX_BW_80:
+		return NL80211_CHAN_WIDTH_80;
+	case IEEE80211_STA_RX_BW_160:
+		return NL80211_CHAN_WIDTH_160;
+	case IEEE80211_STA_RX_BW_320:
+		return NL80211_CHAN_WIDTH_320;
+	default:
+		WARN_ON(1);
+		return NL80211_CHAN_WIDTH_20;
+	}
+}
+
 static bool ieee80211_config_puncturing(struct ieee80211_link_data *link,
 					const struct ieee80211_eht_operation *eht_oper,
 					u64 *changed)
 {
+	struct cfg80211_chan_def rx_chandef = link->conf->chandef;
 	u16 bitmap = 0, extracted;
+	u8 bw = 0;
 
 	if ((eht_oper->params & IEEE80211_EHT_OPER_INFO_PRESENT) &&
 	    (eht_oper->params &
@@ -5684,6 +5706,28 @@ static bool ieee80211_config_puncturing(struct ieee80211_link_data *link,
 		const u8 *disable_subchannel_bitmap = info->optional;
 
 		bitmap = get_unaligned_le16(disable_subchannel_bitmap);
+		bw = u8_get_bits(info->control, IEEE80211_EHT_OPER_CHAN_WIDTH);
+		rx_chandef.width = ieee80211_rx_bw_to_nlwidth(bw);
+
+		if (rx_chandef.width == NL80211_CHAN_WIDTH_80)
+			rx_chandef.center_freq1 =
+				ieee80211_channel_to_frequency(info->ccfs0,
+							       rx_chandef.chan->band);
+		else if (rx_chandef.width == NL80211_CHAN_WIDTH_160 ||
+			 rx_chandef.width == NL80211_CHAN_WIDTH_320)
+			rx_chandef.center_freq1 =
+				ieee80211_channel_to_frequency(info->ccfs1,
+							       rx_chandef.chan->band);
+	}
+
+	if (!cfg80211_valid_disable_subchannel_bitmap(&bitmap,
+						      &rx_chandef)) {
+		link_info(link,
+			  "Got an invalid disable subchannel bitmap from AP %pM: bitmap = 0x%x, bw = 0x%x. disconnect\n",
+			  link->u.mgd.bssid,
+			  bitmap,
+			  rx_chandef.width);
+		return false;
 	}
 
 	extracted = ieee80211_extract_dis_subch_bmap(eht_oper,
@@ -5694,16 +5738,6 @@ static bool ieee80211_config_puncturing(struct ieee80211_link_data *link,
 	if (!(*changed & BSS_CHANGED_BANDWIDTH) &&
 	    extracted == link->conf->eht_puncturing)
 		return true;
-
-	if (!cfg80211_valid_disable_subchannel_bitmap(&bitmap,
-						      &link->conf->chandef)) {
-		link_info(link,
-			  "Got an invalid disable subchannel bitmap from AP %pM: bitmap = 0x%x, bw = 0x%x. disconnect\n",
-			  link->u.mgd.bssid,
-			  bitmap,
-			  link->conf->chandef.width);
-		return false;
-	}
 
 	ieee80211_handle_puncturing_bitmap(link, eht_oper, bitmap, changed);
 	return true;
