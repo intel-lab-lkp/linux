@@ -16,6 +16,7 @@
 #include <linux/ptp_clock_kernel.h>
 #include <linux/time.h>
 #include <linux/list.h>
+#include <linux/idr.h>
 
 #define PTP_MAX_TIMESTAMPS 128
 #define PTP_BUF_TIMESTAMPS 30
@@ -26,7 +27,12 @@ struct timestamp_event_queue {
 	int head;
 	int tail;
 	spinlock_t lock;
+	struct posix_clock_user *pcreader;
 	struct list_head qlist;
+	pid_t reader_pid;
+	struct ida *ida;
+	int oid;
+	bool close_req;
 };
 
 struct ptp_clock {
@@ -38,7 +44,8 @@ struct ptp_clock {
 	struct pps_device *pps_source;
 	long dialed_frequency; /* remembers the frequency adjustment */
 	struct list_head tsevqs; /* timestamp fifo list */
-	struct mutex tsevq_mux; /* one process at a time reading the fifo */
+	struct list_head closed_tsevqs; /* close pending timestamp fifo lists */
+	struct mutex close_mux; /* protect user clean procecdures */
 	struct mutex pincfg_mux; /* protect concurrent info->pin_config access */
 	wait_queue_head_t tsev_wq;
 	int defunct; /* tells readers to go away when clock is being removed */
@@ -109,6 +116,17 @@ static inline bool ptp_clock_freerun(struct ptp_clock *ptp)
 	return ptp_vclock_in_use(ptp);
 }
 
+/* Find the tsevq object id handler */
+static inline struct ida *ptp_get_tsevq_ida(struct ptp_clock *ptp)
+{
+	struct timestamp_event_queue *queue;
+
+	queue = list_first_entry(&ptp->tsevqs, struct timestamp_event_queue,
+				 qlist);
+
+	return queue->ida;
+}
+
 extern struct class *ptp_class;
 
 /*
@@ -119,16 +137,20 @@ extern struct class *ptp_class;
 int ptp_set_pinfunc(struct ptp_clock *ptp, unsigned int pin,
 		    enum ptp_pin_function func, unsigned int chan);
 
-long ptp_ioctl(struct posix_clock *pc,
-	       unsigned int cmd, unsigned long arg);
+long ptp_ioctl(struct posix_clock_user *pcuser, unsigned int cmd,
+	       unsigned long arg);
 
-int ptp_open(struct posix_clock *pc, fmode_t fmode);
+int ptp_open(struct posix_clock_user *pcuser, fmode_t fmode);
 
-ssize_t ptp_read(struct posix_clock *pc,
-		 uint flags, char __user *buf, size_t cnt);
+int ptp_release(struct posix_clock_user *pcuser);
 
-__poll_t ptp_poll(struct posix_clock *pc,
-	      struct file *fp, poll_table *wait);
+void ptp_flush_users(struct posix_clock *pc);
+
+ssize_t ptp_read(struct posix_clock_user *pcuser, uint flags, char __user *buf,
+		 size_t cnt);
+
+__poll_t ptp_poll(struct posix_clock_user *pcuser, struct file *fp,
+		  poll_table *wait);
 
 /*
  * see ptp_sysfs.c

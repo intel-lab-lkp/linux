@@ -15,6 +15,7 @@
 #include <linux/slab.h>
 #include <linux/syscalls.h>
 #include <linux/uaccess.h>
+#include <linux/delay.h>
 #include <uapi/linux/sched/types.h>
 
 #include "ptp_private.h"
@@ -162,20 +163,51 @@ static struct posix_clock_operations ptp_clock_ops = {
 	.clock_settime	= ptp_clock_settime,
 	.ioctl		= ptp_ioctl,
 	.open		= ptp_open,
+	.release	= ptp_release,
+	.flush_users	= ptp_flush_users,
 	.poll		= ptp_poll,
 	.read		= ptp_read,
 };
 
 static void ptp_clean_queue_list(struct ptp_clock *ptp)
 {
-	struct timestamp_event_queue *element;
-	struct list_head *pos, *next;
+	struct timestamp_event_queue *tsevq;
+	struct ptp_clock_event event;
+	unsigned long flags;
+	int cnt;
 
-	list_for_each_safe(pos, next, &ptp->tsevqs) {
-		element = list_entry(pos, struct timestamp_event_queue, qlist);
-		list_del(pos);
-		kfree(element);
+	memset(&event, 0, sizeof(event));
+	/* Request close of all open files */
+	list_for_each_entry(tsevq, &ptp->tsevqs, qlist) {
+		tsevq->close_req = true;
+		/* Make sure the queue is fed so that the reader is notified */
+		enqueue_external_timestamp(tsevq, &event);
 	}
+	wake_up_interruptible(&ptp->tsev_wq);
+
+	/* Wait for all to close */
+	cnt = list_count_nodes(&ptp->tsevqs);
+	while (cnt > 1) {
+		msleep(20);
+		cnt = list_count_nodes(&ptp->tsevqs);
+	}
+	cnt = list_count_nodes(&ptp->closed_tsevqs);
+	while (cnt > 1) {
+		msleep(20);
+		cnt = list_count_nodes(&ptp->closed_tsevqs);
+	}
+
+	/* Delete first entry */
+	tsevq = list_first_entry(&ptp->tsevqs, struct timestamp_event_queue,
+				 qlist);
+
+	spin_lock_irqsave(&tsevq->lock, flags);
+	ida_destroy(tsevq->ida);
+	kfree(tsevq->ida);
+	tsevq->ida = NULL;
+	list_del(&tsevq->qlist);
+	spin_unlock_irqrestore(&tsevq->lock, flags);
+	kfree(tsevq);
 }
 
 static void ptp_clock_release(struct device *dev)
@@ -184,11 +216,11 @@ static void ptp_clock_release(struct device *dev)
 
 	ptp_cleanup_pin_groups(ptp);
 	kfree(ptp->vclock_index);
-	mutex_destroy(&ptp->tsevq_mux);
 	mutex_destroy(&ptp->pincfg_mux);
 	mutex_destroy(&ptp->n_vclocks_mux);
 	ptp_clean_queue_list(ptp);
 	ida_free(&ptp_clocks_map, ptp->index);
+	mutex_destroy(&ptp->close_mux);
 	kfree(ptp);
 }
 
@@ -243,15 +275,23 @@ struct ptp_clock *ptp_clock_register(struct ptp_clock_info *info,
 	ptp->devid = MKDEV(major, index);
 	ptp->index = index;
 	INIT_LIST_HEAD(&ptp->tsevqs);
+	INIT_LIST_HEAD(&ptp->closed_tsevqs);
 	queue = kzalloc(sizeof(*queue), GFP_KERNEL);
 	if (!queue)
 		goto no_memory_queue;
+	queue->close_req = false;
+	queue->ida = kzalloc(sizeof(*queue->ida), GFP_KERNEL);
+	if (!queue->ida)
+		goto no_memory_queue;
+	ida_init(queue->ida);
 	spin_lock_init(&queue->lock);
 	list_add_tail(&queue->qlist, &ptp->tsevqs);
-	/* TODO - Transform or delete this mutex */
-	mutex_init(&ptp->tsevq_mux);
+	queue->oid = ida_alloc(queue->ida, GFP_KERNEL);
+	if (queue->oid < 0)
+		goto ida_err;
 	mutex_init(&ptp->pincfg_mux);
 	mutex_init(&ptp->n_vclocks_mux);
+	mutex_init(&ptp->close_mux);
 	init_waitqueue_head(&ptp->tsev_wq);
 
 	if (ptp->info->getcycles64 || ptp->info->getcyclesx64) {
@@ -350,9 +390,10 @@ no_mem_for_vclocks:
 	if (ptp->kworker)
 		kthread_destroy_worker(ptp->kworker);
 kworker_err:
-	mutex_destroy(&ptp->tsevq_mux);
 	mutex_destroy(&ptp->pincfg_mux);
 	mutex_destroy(&ptp->n_vclocks_mux);
+	mutex_destroy(&ptp->close_mux);
+ida_err:
 	ptp_clean_queue_list(ptp);
 no_memory_queue:
 	ida_free(&ptp_clocks_map, index);

@@ -101,14 +101,74 @@ int ptp_set_pinfunc(struct ptp_clock *ptp, unsigned int pin,
 	return 0;
 }
 
-int ptp_open(struct posix_clock *pc, fmode_t fmode)
+int ptp_open(struct posix_clock_user *pcuser, fmode_t fmode)
 {
+	struct ptp_clock *ptp =
+		container_of(pcuser->clk, struct ptp_clock, clock);
+	struct ida *ida = ptp_get_tsevq_ida(ptp);
+	struct timestamp_event_queue *queue;
+
+	if (!ida)
+		return -EINVAL;
+	queue = kzalloc(sizeof(*queue), GFP_KERNEL);
+	if (!queue)
+		return -EINVAL;
+	queue->close_req = false;
+	queue->reader_pid = task_pid_nr(current);
+	spin_lock_init(&queue->lock);
+	queue->ida = ida;
+	queue->oid = ida_alloc(ida, GFP_KERNEL);
+	if (queue->oid < 0) {
+		kfree(queue);
+		return queue->oid;
+	}
+	list_add_tail(&queue->qlist, &ptp->tsevqs);
+	pcuser->private_clkdata = queue;
+
 	return 0;
 }
 
-long ptp_ioctl(struct posix_clock *pc, unsigned int cmd, unsigned long arg)
+int ptp_release(struct posix_clock_user *pcuser)
+{
+	struct ptp_clock *ptp =
+		container_of(pcuser->clk, struct ptp_clock, clock);
+	struct timestamp_event_queue *queue = pcuser->private_clkdata;
+
+	if (queue) {
+		queue->close_req = true;
+		list_move_tail(&queue->qlist, &ptp->closed_tsevqs);
+		pcuser->private_clkdata = NULL;
+	}
+	return 0;
+}
+
+void ptp_flush_users(struct posix_clock *pc)
 {
 	struct ptp_clock *ptp = container_of(pc, struct ptp_clock, clock);
+	struct timestamp_event_queue *tsevq, *tsevq_nxt;
+	unsigned long flags;
+
+	if (mutex_lock_interruptible(&ptp->close_mux))
+		return;
+
+	list_for_each_entry_safe(tsevq, tsevq_nxt, &ptp->closed_tsevqs, qlist) {
+		spin_lock_irqsave(&tsevq->lock, flags);
+		if (tsevq->ida)
+			ida_free(tsevq->ida, (unsigned int)tsevq->oid);
+		tsevq->ida = NULL;
+		list_del(&tsevq->qlist);
+		spin_unlock_irqrestore(&tsevq->lock, flags);
+		kfree(tsevq);
+	}
+
+	mutex_unlock(&ptp->close_mux);
+}
+
+long ptp_ioctl(struct posix_clock_user *pcuser, unsigned int cmd,
+	       unsigned long arg)
+{
+	struct ptp_clock *ptp =
+		container_of(pcuser->clk, struct ptp_clock, clock);
 	struct ptp_sys_offset_extended *extoff = NULL;
 	struct ptp_sys_offset_precise precise_offset;
 	struct system_device_crosststamp xtstamp;
@@ -432,65 +492,75 @@ out:
 	return err;
 }
 
-__poll_t ptp_poll(struct posix_clock *pc, struct file *fp, poll_table *wait)
+__poll_t ptp_poll(struct posix_clock_user *pcuser, struct file *fp,
+		  poll_table *wait)
 {
-	struct ptp_clock *ptp = container_of(pc, struct ptp_clock, clock);
+	struct ptp_clock *ptp =
+		container_of(pcuser->clk, struct ptp_clock, clock);
 	struct timestamp_event_queue *queue;
 
-	poll_wait(fp, &ptp->tsev_wq, wait);
+	queue = pcuser->private_clkdata;
+	if (!queue)
+		return EPOLLERR;
 
-	/* Extract only the first element in the queue list
-	 * TODO: Identify the relevant queue
-	 */
-	queue = list_entry(&ptp->tsevqs, struct timestamp_event_queue, qlist);
+	poll_wait(fp, &ptp->tsev_wq, wait);
 
 	return queue_cnt(queue) ? EPOLLIN : 0;
 }
 
 #define EXTTS_BUFSIZE (PTP_BUF_TIMESTAMPS * sizeof(struct ptp_extts_event))
 
-ssize_t ptp_read(struct posix_clock *pc,
-		 uint rdflags, char __user *buf, size_t cnt)
+ssize_t ptp_read(struct posix_clock_user *pcuser, uint rdflags,
+		 char __user *buf, size_t cnt)
 {
-	struct ptp_clock *ptp = container_of(pc, struct ptp_clock, clock);
+	struct ptp_clock *ptp =
+		container_of(pcuser->clk, struct ptp_clock, clock);
 	struct timestamp_event_queue *queue;
 	struct ptp_extts_event *event;
 	unsigned long flags;
 	size_t qcnt, i;
 	int result;
 
-	/* Extract only the first element in the queue list
-	 * TODO: Identify the relevant queue
-	 */
-	queue = list_first_entry(&ptp->tsevqs, struct timestamp_event_queue,
-				 qlist);
+	queue = pcuser->private_clkdata;
+	if (!queue) {
+		result = -EINVAL;
+		goto exit;
+	}
 
-	if (cnt % sizeof(struct ptp_extts_event) != 0)
-		return -EINVAL;
+	if (queue->close_req) {
+		result = -EPIPE;
+		goto exit;
+	}
+
+	if (!queue->ida) {
+		result = -ENODEV;
+		goto exit;
+	}
+
+	if (cnt % sizeof(struct ptp_extts_event) != 0) {
+		result = -EINVAL;
+		goto exit;
+	}
 
 	if (cnt > EXTTS_BUFSIZE)
 		cnt = EXTTS_BUFSIZE;
 
 	cnt = cnt / sizeof(struct ptp_extts_event);
 
-	if (mutex_lock_interruptible(&ptp->tsevq_mux))
-		return -ERESTARTSYS;
-
 	if (wait_event_interruptible(ptp->tsev_wq,
 				     ptp->defunct || queue_cnt(queue))) {
-		mutex_unlock(&ptp->tsevq_mux);
 		return -ERESTARTSYS;
 	}
 
 	if (ptp->defunct) {
-		mutex_unlock(&ptp->tsevq_mux);
-		return -ENODEV;
+		result = -ENODEV;
+		goto exit;
 	}
 
 	event = kmalloc(EXTTS_BUFSIZE, GFP_KERNEL);
 	if (!event) {
-		mutex_unlock(&ptp->tsevq_mux);
-		return -ENOMEM;
+		result = -ENOMEM;
+		goto exit;
 	}
 
 	spin_lock_irqsave(&queue->lock, flags);
@@ -509,12 +579,16 @@ ssize_t ptp_read(struct posix_clock *pc,
 
 	cnt = cnt * sizeof(struct ptp_extts_event);
 
-	mutex_unlock(&ptp->tsevq_mux);
-
 	result = cnt;
-	if (copy_to_user(buf, event, cnt))
+	if (copy_to_user(buf, event, cnt)) {
 		result = -EFAULT;
+		goto free_event;
+	}
 
+free_event:
 	kfree(event);
+exit:
+	if (result < 0)
+		ptp_release(pcuser);
 	return result;
 }
