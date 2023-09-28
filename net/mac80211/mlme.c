@@ -145,7 +145,7 @@ ieee80211_handle_puncturing_bitmap(struct ieee80211_link_data *link,
 			ieee80211_extract_dis_subch_bmap(eht_oper, chandef,
 							 bitmap);
 
-		if (cfg80211_valid_disable_subchannel_bitmap(&bitmap,
+		if (cfg80211_valid_disable_subchannel_bitmap(&extracted,
 							     chandef))
 			break;
 		link->u.mgd.conn_flags |=
