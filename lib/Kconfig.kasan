@@ -153,6 +153,14 @@ config KASAN_INLINE
 
 endchoice
 
+config KASAN_WHITELIST_ONLY
+	bool "Whitelist only KASAN"
+	depends on KASAN && !KASAN_HW_TAGS
+	default n
+	help
+	  Say Y here to only enable KASAN for module or files which has explicitly
+	  set KASAN_SANITIZE:=y which is helpful especially for memory limited devices.
+
 config KASAN_STACK
 	bool "Stack instrumentation (unsafe)" if CC_IS_CLANG && !COMPILE_TEST
 	depends on KASAN_GENERIC || KASAN_SW_TAGS

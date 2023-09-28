@@ -158,6 +158,9 @@ endif
 #
 ifeq ($(CONFIG_KASAN),y)
 ifneq ($(CONFIG_KASAN_HW_TAGS),y)
+ifeq ($(CONFIG_KASAN_WHITELIST_ONLY),y)
+KASAN_SANITIZE ?= n
+endif
 _c_flags += $(if $(patsubst n%,, \
 		$(KASAN_SANITIZE_$(basetarget).o)$(KASAN_SANITIZE)y), \
 		$(CFLAGS_KASAN), $(CFLAGS_KASAN_NOSANITIZE))
