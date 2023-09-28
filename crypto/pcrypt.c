@@ -70,8 +70,6 @@ static void pcrypt_aead_done(void *data, int err)
 	struct padata_priv *padata = pcrypt_request_padata(preq);
 
 	padata->info = err;
-
-	padata_do_serial(padata);
 }
 
 static void pcrypt_aead_enc(struct padata_priv *padata)
@@ -86,7 +84,6 @@ static void pcrypt_aead_enc(struct padata_priv *padata)
 		return;
 
 	padata->info = ret;
-	padata_do_serial(padata);
 }
 
 static int pcrypt_aead_encrypt(struct aead_request *req)
@@ -114,7 +111,7 @@ static int pcrypt_aead_encrypt(struct aead_request *req)
 			       req->cryptlen, req->iv);
 	aead_request_set_ad(creq, req->assoclen);
 
-	err = padata_do_parallel(ictx->psenc, padata, &ctx->cb_cpu);
+	err = padata_do_parallel(ictx->psenc, padata);
 	if (!err)
 		return -EINPROGRESS;
 
@@ -133,7 +130,6 @@ static void pcrypt_aead_dec(struct padata_priv *padata)
 		return;
 
 	padata->info = ret;
-	padata_do_serial(padata);
 }
 
 static int pcrypt_aead_decrypt(struct aead_request *req)
@@ -161,7 +157,7 @@ static int pcrypt_aead_decrypt(struct aead_request *req)
 			       req->cryptlen, req->iv);
 	aead_request_set_ad(creq, req->assoclen);
 
-	err = padata_do_parallel(ictx->psdec, padata, &ctx->cb_cpu);
+	err = padata_do_parallel(ictx->psdec, padata);
 	if (!err)
 		return -EINPROGRESS;
 
@@ -304,31 +300,18 @@ static int pcrypt_create(struct crypto_template *tmpl, struct rtattr **tb)
 	return -EINVAL;
 }
 
-static int pcrypt_sysfs_add(struct padata_instance *pinst, const char *name)
-{
-	int ret;
-
-	pinst->kobj.kset = pcrypt_kset;
-	ret = kobject_add(&pinst->kobj, NULL, "%s", name);
-	if (!ret)
-		kobject_uevent(&pinst->kobj, KOBJ_ADD);
-
-	return ret;
-}
-
 static int pcrypt_init_padata(struct padata_instance **pinst, const char *name)
 {
 	int ret = -ENOMEM;
+	pr_info("%s:%d %s\n", __FILE__, __LINE__, __func__);
 
 	*pinst = padata_alloc(name);
+	pr_info("%s:%d %s\n", __FILE__, __LINE__, __func__);
+	pr_info("%s:%d %s *pinst=%p\n", __FILE__, __LINE__, __func__, *pinst);
+
 	if (!*pinst)
 		return ret;
-
-	ret = pcrypt_sysfs_add(*pinst, name);
-	if (ret)
-		padata_free(*pinst);
-
-	return ret;
+	return 0;
 }
 
 static struct crypto_template pcrypt_tmpl = {
@@ -344,15 +327,18 @@ static int __init pcrypt_init(void)
 	pcrypt_kset = kset_create_and_add("pcrypt", NULL, kernel_kobj);
 	if (!pcrypt_kset)
 		goto err;
+	pr_info("%s:%d %s\n", __FILE__, __LINE__, __func__);
 
 	err = pcrypt_init_padata(&pencrypt, "pencrypt");
 	if (err)
 		goto err_unreg_kset;
 
+	pr_info("%s:%d %s\n", __FILE__, __LINE__, __func__);
 	err = pcrypt_init_padata(&pdecrypt, "pdecrypt");
 	if (err)
 		goto err_deinit_pencrypt;
 
+	pr_info("%s:%d %s\n", __FILE__, __LINE__, __func__);
 	return crypto_register_template(&pcrypt_tmpl);
 
 err_deinit_pencrypt:
