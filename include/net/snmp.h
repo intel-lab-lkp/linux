@@ -31,7 +31,7 @@ struct snmp_mib {
 	int entry;
 };
 
-#define SNMP_MIB_ITEM(_name,_entry)	{	\
+#define SNMP_MIB_ITEM(_name, _entry)	{	\
 	.name = _name,				\
 	.entry = _entry,			\
 }
@@ -155,7 +155,7 @@ struct linux_tls_mib {
 	} while (0)
 
 
-#if BITS_PER_LONG==32
+#if BITS_PER_LONG == 32
 
 #define __SNMP_ADD_STATS64(mib, field, addend) 				\
 	do {								\
