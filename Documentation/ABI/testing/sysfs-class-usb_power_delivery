@@ -124,6 +124,37 @@ Contact:	Heikki Krogerus <heikki.krogerus@linux.intel.com>
 Description:
 		The voltage the supply supports in millivolts.
 
+What:		/sys/class/usb_power_delivery/.../source-capabilities/<position>:fixed_supply/peak_current
+Date:		October 2023
+Contact:	Heikki Krogerus <heikki.krogerus@linux.intel.com>
+Description:
+		Fixed Power Source Peak Current Capability
+		(IOC: Negotiated current as defined in IEC 63002):
+		==  ===========================================================
+		0   Peak current equals IOC (default)
+		1   Overload Capabilities:
+		    1. Peak current equals 150% IOC for 1ms @ 5% duty cycle
+		       (low current equals 97% IOC for 19ms)
+		    2. Peak current equals 125% IOC for 2ms @ 10% duty cycle
+		       (low current equals 97% IOC for 18ms)
+		    3. Peak current equals 110% IOC for 10ms @ 50% duty cycle
+		       (low current equals 90% IOC for 10ms)
+		2   Overload Capabilities:
+		    1. Peak current equals 200% IOC for 1ms @ 5% duty cycle
+		       (low current equals 95% IOC for 19ms)
+		    2. Peak current equals 150% IOC for 2ms @ 10% duty cycle
+		       (low current equals 94% IOC for 18ms)
+		    3. Peak current equals 125% IOC for 10ms @ 50% duty cycle
+		       (low current equals 75% IOC for 10ms)
+		3   Overload Capabilities:
+		    1. Peak current equals 200% IOC for 1ms @ 5% duty cycle
+		       (low current equals 95% IOC for 19ms)
+		    2. Peak current equals 175% IOC for 2ms @ 10% duty cycle
+		       (low current equals 92% IOC for 18ms)
+		    3. Peak current equals 150% IOC for 10ms @ 50% duty cycle
+		       (low current equals 50% IOC for 10ms)
+		==  ===========================================================
+
 What:		/sys/class/usb_power_delivery/.../source-capabilities/<position>:fixed_supply/maximum_current
 Date:		May 2022
 Contact:	Heikki Krogerus <heikki.krogerus@linux.intel.com>
