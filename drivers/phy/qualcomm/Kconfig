@@ -42,6 +42,20 @@ config PHY_QCOM_IPQ806X_SATA
 	depends on OF
 	select GENERIC_PHY
 
+config PHY_QCOM_HDMI
+	tristate "Qualcomm MSM8x60/MSM8960/MSM8974 HDMI PHY driver"
+	depends on ARCH_QCOM || COMPILE_TEST
+	depends on OF
+	depends on COMMON_CLK
+	default DRM_MSM_HDMI && ARCH_QCOM && ARM
+	select GENERIC_PHY
+	help
+	  Enable this to support the Qualcomm HDMI PHY presend on 32-bit platforms:
+	  MSM8260, MSM8660, MSM8960, APQ8060 and APQ8064.
+
+	  Note, this driver is not used on MSM899x platforms, which use
+	  PHY_QCOM_QMP_HDMI instead.
+
 config PHY_QCOM_PCIE2
 	tristate "Qualcomm PCIe Gen2 PHY Driver"
 	depends on OF && COMMON_CLK && (ARCH_QCOM || COMPILE_TEST)
