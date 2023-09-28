@@ -399,7 +399,7 @@ acpi_evaluate_reference(acpi_handle handle,
 		acpi_handle_debug(list->handles[i], "Found in reference list\n");
 	}
 
-      end:
+end:
 	if (ACPI_FAILURE(status)) {
 		list->count = 0;
 		//kfree(list->handles);
@@ -523,7 +523,7 @@ acpi_handle_printk(const char *level, acpi_handle handle, const char *fmt, ...)
 	vaf.va = &args;
 
 	path = acpi_handle_path(handle);
-	printk("%sACPI: %s: %pV", level, path ? path : "<n/a>" , &vaf);
+	printk("%sACPI: %s: %pV", level, path ? path : "<n/a>", &vaf);
 
 	va_end(args);
 	kfree(path);
