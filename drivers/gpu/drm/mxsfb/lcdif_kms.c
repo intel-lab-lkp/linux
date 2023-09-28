@@ -545,6 +545,9 @@ static void lcdif_crtc_atomic_enable(struct drm_crtc *crtc,
 		writel(CTRLDESCL_HIGH0_4_ADDR_HIGH(upper_32_bits(paddr)),
 		       lcdif->base + LCDC_V8_CTRLDESCL_HIGH0_4);
 	}
+
+	clk_prepare_enable(lcdif->clk);
+
 	lcdif_enable_controller(lcdif);
 
 	drm_crtc_vblank_on(crtc);
@@ -560,6 +563,8 @@ static void lcdif_crtc_atomic_disable(struct drm_crtc *crtc,
 	drm_crtc_vblank_off(crtc);
 
 	lcdif_disable_controller(lcdif);
+
+	clk_disable_unprepare(lcdif->clk);
 
 	spin_lock_irq(&drm->event_lock);
 	event = crtc->state->event;
