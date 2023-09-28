@@ -370,15 +370,15 @@ fpga_bridge_register(struct device *parent, const char *name,
 		goto error_device;
 
 	ret = device_register(&bridge->dev);
-	if (ret) {
-		put_device(&bridge->dev);
-		return ERR_PTR(ret);
-	}
+	if (ret)
+		goto error_put_device;
 
 	of_platform_populate(bridge->dev.of_node, NULL, NULL, &bridge->dev);
 
 	return bridge;
 
+error_put_device:
+	put_device(&bridge->dev);
 error_device:
 	ida_free(&fpga_bridge_ida, id);
 error_kfree:
