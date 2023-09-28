@@ -5038,7 +5038,7 @@ F:	Documentation/kbuild/llvm.rst
 F:	include/linux/compiler-clang.h
 F:	scripts/Makefile.clang
 F:	scripts/clang-tools/
-K:	\b(?i:clang|llvm)\b
+D:	\b(?i:clang|llvm)\b
 
 CLK API
 M:	Russell King <linux@armlinux.org.uk>
@@ -8149,7 +8149,7 @@ F:	lib/strcat_kunit.c
 F:	lib/strscpy_kunit.c
 F:	lib/test_fortify/*
 F:	scripts/test_fortify.sh
-K:	\b__NO_FORTIFY\b
+D:	\b__NO_FORTIFY\b
 
 FPGA DFL DRIVERS
 M:	Wu Hao <hao.wu@intel.com>
@@ -11405,8 +11405,10 @@ F:	Documentation/ABI/testing/sysfs-kernel-warn_count
 F:	include/linux/overflow.h
 F:	include/linux/randomize_kstack.h
 F:	mm/usercopy.c
-K:	\b(add|choose)_random_kstack_offset\b
-K:	\b__check_(object_size|heap_object)\b
+D:	\b(add|choose)_random_kstack_offset\b
+D:	\b__check_(object_size|heap_object)\b
+D:	\b__counted_by\b
+
 
 KERNEL JANITORS
 L:	kernel-janitors@vger.kernel.org
@@ -17290,7 +17292,7 @@ F:	drivers/acpi/apei/erst.c
 F:	drivers/firmware/efi/efi-pstore.c
 F:	fs/pstore/
 F:	include/linux/pstore*
-K:	\b(pstore|ramoops)
+D:	\b(pstore|ramoops)
 
 PTP HARDWARE CLOCK SUPPORT
 M:	Richard Cochran <richardcochran@gmail.com>
@@ -19231,8 +19233,8 @@ F:	include/uapi/linux/seccomp.h
 F:	kernel/seccomp.c
 F:	tools/testing/selftests/kselftest_harness.h
 F:	tools/testing/selftests/seccomp/*
-K:	\bsecure_computing
-K:	\bTIF_SECCOMP\b
+D:	\bsecure_computing
+D:	\bTIF_SECCOMP\b
 
 SECURE DIGITAL HOST CONTROLLER INTERFACE (SDHCI) Broadcom BRCMSTB DRIVER
 M:	Kamal Dasu <kamal.dasu@broadcom.com>
