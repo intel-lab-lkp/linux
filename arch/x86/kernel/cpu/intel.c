@@ -184,18 +184,22 @@ static bool bad_spectre_microcode(struct cpuinfo_x86 *c)
 	return false;
 }
 
-#define MSR_IA32_TME_ACTIVATE		0x982
-
 /* Helpers to access TME_ACTIVATE MSR */
-#define TME_ACTIVATE_LOCKED(x)		(x & 0x1)
-#define TME_ACTIVATE_ENABLED(x)		(x & 0x2)
+#define TME_ACTIVATE_IS_LOCKED(x)	(x & MSR_IA32_TME_ACTIVATE_LOCKED)
+#define TME_ACTIVATE_IS_ENABLED(x)	(x & MSR_IA32_TME_ACTIVATE_ENABLED)
 
-#define TME_ACTIVATE_POLICY(x)		((x >> 4) & 0xf)	/* Bits 7:4 */
+#define TME_ACTIVATE_POLICY(x)	\
+	((x >> MSR_IA32_TME_ACTIVATE_POLICY_OFFSET)	\
+	 & MSR_IA32_TME_ACTIVATE_POLICY_MASK)
 #define TME_ACTIVATE_POLICY_AES_XTS_128	0
 
-#define TME_ACTIVATE_KEYID_BITS(x)	((x >> 32) & 0xf)	/* Bits 35:32 */
+#define TME_ACTIVATE_KEYID_BITS(x)			\
+	((x >> MSR_IA32_TME_ACTIVATE_KEYID_BITS_OFFSET)	\
+	 & MSR_IA32_TME_ACTIVATE_KEYID_BITS_MASK)
 
-#define TME_ACTIVATE_CRYPTO_ALGS(x)	((x >> 48) & 0xffff)	/* Bits 63:48 */
+#define TME_ACTIVATE_CRYPTO_ALGS(x)			\
+	((x >> MSR_IA32_TME_ACTIVATE_CRYPTO_ALG_OFFSET)	\
+	 & MSR_IA32_TME_ACTIVATE_CRYPTO_ALG_MASK)
 #define TME_ACTIVATE_CRYPTO_AES_XTS_128	1
 
 /* Values for mktme_status (SW only construct) */
@@ -225,7 +229,8 @@ static void detect_tme(struct cpuinfo_x86 *c)
 		tme_activate_cpu0 = tme_activate;
 	}
 
-	if (!TME_ACTIVATE_LOCKED(tme_activate) || !TME_ACTIVATE_ENABLED(tme_activate)) {
+	if (!TME_ACTIVATE_IS_LOCKED(tme_activate) ||
+	    !TME_ACTIVATE_IS_ENABLED(tme_activate)) {
 		pr_info_once("x86/tme: not enabled by BIOS\n");
 		mktme_status = MKTME_DISABLED;
 		return;
