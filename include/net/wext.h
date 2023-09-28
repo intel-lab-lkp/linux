@@ -48,10 +48,10 @@ int ioctl_private_call(struct net_device *dev, struct iwreq *iwr,
 int compat_private_call(struct net_device *dev, struct iwreq *iwr,
 			unsigned int cmd, struct iw_request_info *info,
 			iw_handler handler);
-int iw_handler_get_private(struct net_device *		dev,
-			   struct iw_request_info *	info,
-			   union iwreq_data *		wrqu,
-			   char *			extra);
+int iw_handler_get_private(struct net_device *dev,
+			   struct iw_request_info *info,
+			   union iwreq_data *wrqu,
+			   char *extra);
 #else
 #define ioctl_private_call NULL
 #define compat_private_call NULL
