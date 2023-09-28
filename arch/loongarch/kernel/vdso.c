@@ -148,16 +148,44 @@ int vdso_join_timens(struct task_struct *task, struct time_namespace *ns)
 }
 #endif
 
-static unsigned long vdso_base(void)
+/*
+ * Put the vdso above the (randomized) stack with another randomized
+ * offset.  This way there is no hole in the middle of address space.
+ * To save memory make sure it is still in the same PTE as the stack
+ * top.  This doesn't give that many random bits.
+ *
+ * Note that this algorithm is imperfect: the distribution of the vdso
+ * start address within a PMD is biased toward the end.
+ */
+static unsigned long vdso_addr(unsigned long start, unsigned int len)
 {
-	unsigned long base = STACK_TOP;
+	unsigned long addr, end;
+	unsigned long offset;
 
-	if (current->flags & PF_RANDOMIZE) {
-		base += get_random_u32_below(VDSO_RANDOMIZE_SIZE);
-		base = PAGE_ALIGN(base);
-	}
+	/*
+	 * Round up the start address.  It can start out unaligned as a result
+	 * of stack start randomization.
+	 */
+	start = PAGE_ALIGN(start);
 
-	return base;
+	/* Round the lowest possible end address up to a PMD boundary. */
+	end = (start + len + PMD_SIZE - 1) & PMD_MASK;
+	if (end >= TASK_SIZE)
+		end = TASK_SIZE;
+	end -= len;
+
+	if (end > start) {
+		offset = get_random_u32_below((end - start) >> PAGE_SHIFT);
+		addr = start + (offset << PAGE_SHIFT);
+	} else
+		addr = start;
+
+	return addr;
+}
+
+static inline unsigned long vdso_base(unsigned int len)
+{
+	return vdso_addr(current->mm->start_stack, len);
 }
 
 int arch_setup_additional_pages(struct linux_binprm *bprm, int uses_interp)
@@ -177,7 +205,7 @@ int arch_setup_additional_pages(struct linux_binprm *bprm, int uses_interp)
 	 */
 	size = VVAR_SIZE + info->size;
 
-	data_addr = get_unmapped_area(NULL, vdso_base(), size, 0, 0);
+	data_addr = get_unmapped_area(NULL, vdso_base(size), size, 0, 0);
 	if (IS_ERR_VALUE(data_addr)) {
 		ret = data_addr;
 		goto out;
