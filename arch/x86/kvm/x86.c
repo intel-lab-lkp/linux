@@ -3700,11 +3700,26 @@ int kvm_set_msr_common(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 		data &= ~(u64)0x100;	/* ignore ignne emulation enable */
 		data &= ~(u64)0x8;	/* ignore TLB cache disable */
 
-		/* Handle McStatusWrEn */
-		if (data & ~BIT_ULL(18)) {
+		/*
+		 * Ignore guest attempts to set TscFreqSel.
+		 */
+		if (!msr_info->host_initiated)
+			data &= ~BIT_ULL(24);
+
+		/*
+		 * Allow McStatusWrEn and (from the host) TscFreqSel.
+		 */
+		if (data & ~(BIT_ULL(18) | BIT_ULL(24))) {
 			kvm_pr_unimpl_wrmsr(vcpu, msr, data);
 			return 1;
 		}
+
+		/*
+		 * TscFreqSel is read-only from within the
+		 * guest. Attempts to clear it are ignored.
+		 */
+		if (!msr_info->host_initiated)
+			data |= vcpu->arch.msr_hwcr & BIT_ULL(24);
 		vcpu->arch.msr_hwcr = data;
 		break;
 	case MSR_FAM10H_MMIO_CONF_BASE:
