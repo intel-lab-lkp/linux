@@ -3382,7 +3382,9 @@ static void qla4xxx_task_work(struct work_struct *wdata)
 		hdr->itt = itt;
 		data = task_data->resp_buffer + hdr_len;
 		data_len = task_data->resp_len - hdr_len;
+		local_bh_disable();
 		iscsi_complete_pdu(conn, hdr, data, data_len);
+		local_bh_enable();
 		break;
 	default:
 		ql4_printk(KERN_ERR, ha, "Passthru failed status = 0x%x\n",
