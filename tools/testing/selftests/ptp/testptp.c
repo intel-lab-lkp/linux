@@ -22,6 +22,7 @@
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
+#include <stdbool.h>
 
 #include <linux/ptp_clock.h>
 
@@ -117,35 +118,36 @@ static void usage(char *progname)
 {
 	fprintf(stderr,
 		"usage: %s [options]\n"
-		" -c         query the ptp clock's capabilities\n"
-		" -d name    device to open\n"
-		" -e val     read 'val' external time stamp events\n"
-		" -f val     adjust the ptp clock frequency by 'val' ppb\n"
-		" -g         get the ptp clock time\n"
-		" -h         prints this message\n"
-		" -i val     index for event/trigger\n"
-		" -k val     measure the time offset between system and phc clock\n"
-		"            for 'val' times (Maximum 25)\n"
-		" -l         list the current pin configuration\n"
-		" -L pin,val configure pin index 'pin' with function 'val'\n"
-		"            the channel index is taken from the '-i' option\n"
-		"            'val' specifies the auxiliary function:\n"
-		"            0 - none\n"
-		"            1 - external time stamp\n"
-		"            2 - periodic output\n"
-		" -n val     shift the ptp clock time by 'val' nanoseconds\n"
-		" -o val     phase offset (in nanoseconds) to be provided to the PHC servo\n"
-		" -p val     enable output with a period of 'val' nanoseconds\n"
-		" -H val     set output phase to 'val' nanoseconds (requires -p)\n"
-		" -w val     set output pulse width to 'val' nanoseconds (requires -p)\n"
-		" -P val     enable or disable (val=1|0) the system clock PPS\n"
-		" -s         set the ptp clock time from the system time\n"
-		" -S         set the system time from the ptp clock time\n"
-		" -t val     shift the ptp clock time by 'val' seconds\n"
-		" -T val     set the ptp clock time to 'val' seconds\n"
-		" -x val     get an extended ptp clock time with the desired number of samples (up to %d)\n"
-		" -X         get a ptp clock cross timestamp\n"
-		" -z         test combinations of rising/falling external time stamp flags\n",
+		" -c           query the ptp clock's capabilities\n"
+		" -d name      device to open\n"
+		" -e val       read 'val' external time stamp events\n"
+		" -f val       adjust the ptp clock frequency by 'val' ppb\n"
+		" -F [oid,msk] with no arguments, list the users of the device\n"
+		" -g           get the ptp clock time\n"
+		" -h           prints this message\n"
+		" -i val       index for event/trigger\n"
+		" -k val       measure the time offset between system and phc clock\n"
+		"              for 'val' times (Maximum 25)\n"
+		" -l           list the current pin configuration\n"
+		" -L pin,val   configure pin index 'pin' with function 'val'\n"
+		"              the channel index is taken from the '-i' option\n"
+		"              'val' specifies the auxiliary function:\n"
+		"              0 - none\n"
+		"              1 - external time stamp\n"
+		"              2 - periodic output\n"
+		" -n val       shift the ptp clock time by 'val' nanoseconds\n"
+		" -o val       phase offset (in nanoseconds) to be provided to the PHC servo\n"
+		" -p val       enable output with a period of 'val' nanoseconds\n"
+		" -H val       set output phase to 'val' nanoseconds (requires -p)\n"
+		" -w val       set output pulse width to 'val' nanoseconds (requires -p)\n"
+		" -P val       enable or disable (val=1|0) the system clock PPS\n"
+		" -s           set the ptp clock time from the system time\n"
+		" -S           set the system time from the ptp clock time\n"
+		" -t val       shift the ptp clock time by 'val' seconds\n"
+		" -T val       set the ptp clock time to 'val' seconds\n"
+		" -x val       get an extended ptp clock time with the desired number of samples (up to %d)\n"
+		" -X           get a ptp clock cross timestamp\n"
+		" -z           test combinations of rising/falling external time stamp flags\n",
 		progname, PTP_MAX_SAMPLES);
 }
 
@@ -162,6 +164,7 @@ int main(int argc, char *argv[])
 	struct ptp_sys_offset *sysoff;
 	struct ptp_sys_offset_extended *soe;
 	struct ptp_sys_offset_precise *xts;
+	struct ptp_tsfilter tsfilter, *tsfilter_read;
 
 	char *progname;
 	unsigned int i;
@@ -187,6 +190,7 @@ int main(int argc, char *argv[])
 	int pps = -1;
 	int seconds = 0;
 	int settime = 0;
+	int rvalue = 0;
 
 	int64_t t1, t2, tp;
 	int64_t interval, offset;
@@ -194,9 +198,17 @@ int main(int argc, char *argv[])
 	int64_t pulsewidth = -1;
 	int64_t perout = -1;
 
+	tsfilter_read = NULL;
+	tsfilter.ndevusers = 0;
+	tsfilter.reader_oid = 0;
+	tsfilter.mask = 0xFFFFFFFF;
+	bool opt_tsfilter = false;
+
 	progname = strrchr(argv[0], '/');
 	progname = progname ? 1+progname : argv[0];
-	while (EOF != (c = getopt(argc, argv, "cd:e:f:ghH:i:k:lL:n:o:p:P:sSt:T:w:x:Xz"))) {
+	while (EOF !=
+	       (c = getopt(argc, argv,
+			   "cd:e:f:F:ghH:i:k:lL:n:o:p:P:sSt:T:w:x:Xz"))) {
 		switch (c) {
 		case 'c':
 			capabilities = 1;
@@ -209,6 +221,15 @@ int main(int argc, char *argv[])
 			break;
 		case 'f':
 			adjfreq = atoi(optarg);
+			break;
+		case 'F':
+			opt_tsfilter = true;
+			cnt = sscanf(optarg, "%d,%X", &tsfilter.reader_oid,
+				     &tsfilter.mask);
+			if (cnt != 2 && cnt != 0) {
+				usage(progname);
+				return -1;
+			}
 			break;
 		case 'g':
 			gettime = 1;
@@ -295,7 +316,8 @@ int main(int argc, char *argv[])
 	clkid = get_clockid(fd);
 	if (CLOCK_INVALID == clkid) {
 		fprintf(stderr, "failed to read clock id\n");
-		return -1;
+		rvalue = -1;
+		goto exit;
 	}
 
 	if (capabilities) {
@@ -464,18 +486,21 @@ int main(int argc, char *argv[])
 
 	if (pulsewidth >= 0 && perout < 0) {
 		puts("-w can only be specified together with -p");
-		return -1;
+		rvalue = -1;
+		goto exit;
 	}
 
 	if (perout_phase >= 0 && perout < 0) {
 		puts("-H can only be specified together with -p");
-		return -1;
+		rvalue = -1;
+		goto exit;
 	}
 
 	if (perout >= 0) {
 		if (clock_gettime(clkid, &ts)) {
 			perror("clock_gettime");
-			return -1;
+			rvalue = -1;
+			goto exit;
 		}
 		memset(&perout_request, 0, sizeof(perout_request));
 		perout_request.index = index;
@@ -516,13 +541,15 @@ int main(int argc, char *argv[])
 		if (n_samples <= 0 || n_samples > 25) {
 			puts("n_samples should be between 1 and 25");
 			usage(progname);
-			return -1;
+			rvalue = -1;
+			goto exit;
 		}
 
 		sysoff = calloc(1, sizeof(*sysoff));
 		if (!sysoff) {
 			perror("calloc");
-			return -1;
+			rvalue = -1;
+			goto exit;
 		}
 		sysoff->n_samples = n_samples;
 
@@ -604,6 +631,63 @@ int main(int argc, char *argv[])
 		free(xts);
 	}
 
+	if (opt_tsfilter) {
+		if (tsfilter.reader_oid) {
+			/* Set a filter for a specific object id */
+			if (ioctl(fd, PTP_FILTERTS_SET_REQUEST, &tsfilter)) {
+				perror("PTP_FILTERTS_SET_REQUEST");
+				rvalue = -1;
+				goto exit;
+			}
+			printf("Timestamp event queue mask 0x%X applied to reader with oid: %d\n",
+			       (int)tsfilter.mask, tsfilter.reader_oid);
+
+		} else {
+			/* List all filters */
+			if (ioctl(fd, PTP_FILTERCOUNT_REQUEST,
+				  &tsfilter.ndevusers)) {
+				perror("PTP_FILTERTS_SET_REQUEST");
+				rvalue = -1;
+				goto exit;
+			}
+			tsfilter_read = calloc(tsfilter.ndevusers,
+					       sizeof(*tsfilter_read));
+			/*
+			 * Get a variable length result from the IOCTL. We use a value
+			 * inside the structure we are willing to read to communicate the
+			 * IOCTL how many elements we are expecting to get.
+			 * It's ok if the size of the list changed between these two operations,
+			 * this is just an approximation to be able to test the concept.
+			 */
+			tsfilter_read[0].ndevusers = tsfilter.ndevusers;
+			if (!tsfilter_read) {
+				perror("tsfilter_read calloc");
+				rvalue = -1;
+				goto exit;
+			}
+			if (ioctl(fd, PTP_FILTERTS_GET_REQUEST,
+				  tsfilter_read)) {
+				perror("PTP_FILTERTS_GET_REQUEST");
+				rvalue = -1;
+				goto exit;
+			}
+			printf("(USER PID)\tTSEVQ FILTER ID:MASK\n");
+			for (i = 0; i < tsfilter.ndevusers; i++) {
+				if (tsfilter_read[i].reader_oid)
+					printf("(%d)\t\t%5d:0x%08X\n",
+					       tsfilter_read[i].reader_rpid,
+					       tsfilter_read[i].reader_oid,
+					       tsfilter_read[i].mask);
+			}
+		}
+	}
+
+exit:
+	if (tsfilter_read) {
+		free(tsfilter_read);
+		tsfilter_read = NULL;
+	}
+
 	close(fd);
-	return 0;
+	return rvalue;
 }

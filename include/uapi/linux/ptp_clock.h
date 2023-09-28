@@ -105,6 +105,15 @@ struct ptp_extts_request {
 	unsigned int rsv[2]; /* Reserved for future use. */
 };
 
+struct ptp_tsfilter {
+	union {
+		unsigned int reader_rpid; /* PID of device user */
+		unsigned int ndevusers; /* Device user count */
+	};
+	int reader_oid; /* Object ID of the timestamp event queue */
+	unsigned int mask; /* Channel mask. LSB = channel 0 */
+};
+
 struct ptp_perout_request {
 	union {
 		/*
@@ -224,6 +233,9 @@ struct ptp_pin_desc {
 	_IOWR(PTP_CLK_MAGIC, 17, struct ptp_sys_offset_precise)
 #define PTP_SYS_OFFSET_EXTENDED2 \
 	_IOWR(PTP_CLK_MAGIC, 18, struct ptp_sys_offset_extended)
+#define PTP_FILTERTS_SET_REQUEST _IOW(PTP_CLK_MAGIC, 19, struct ptp_tsfilter)
+#define PTP_FILTERCOUNT_REQUEST _IOR(PTP_CLK_MAGIC, 20, int)
+#define PTP_FILTERTS_GET_REQUEST _IOWR(PTP_CLK_MAGIC, 21, struct ptp_tsfilter)
 
 struct ptp_extts_event {
 	struct ptp_clock_time t; /* Time event occured. */

@@ -280,6 +280,7 @@ struct ptp_clock *ptp_clock_register(struct ptp_clock_info *info,
 	if (!queue)
 		goto no_memory_queue;
 	queue->close_req = false;
+	queue->mask = 0xFFFFFFFF;
 	queue->ida = kzalloc(sizeof(*queue->ida), GFP_KERNEL);
 	if (!queue->ida)
 		goto no_memory_queue;
@@ -449,7 +450,8 @@ void ptp_clock_event(struct ptp_clock *ptp, struct ptp_clock_event *event)
 	case PTP_CLOCK_EXTTS:
 		/* Enqueue timestamp on all other queues */
 		list_for_each_entry(tsevq, &ptp->tsevqs, qlist) {
-			enqueue_external_timestamp(tsevq, event);
+			if (tsevq->mask & (0x1 << event->index))
+				enqueue_external_timestamp(tsevq, event);
 		}
 		wake_up_interruptible(&ptp->tsev_wq);
 		break;

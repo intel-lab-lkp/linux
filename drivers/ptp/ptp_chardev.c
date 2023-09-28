@@ -114,6 +114,7 @@ int ptp_open(struct posix_clock_user *pcuser, fmode_t fmode)
 	if (!queue)
 		return -EINVAL;
 	queue->close_req = false;
+	queue->mask = 0xFFFFFFFF;
 	queue->reader_pid = task_pid_nr(current);
 	spin_lock_init(&queue->lock);
 	queue->ida = ida;
@@ -169,19 +170,28 @@ long ptp_ioctl(struct posix_clock_user *pcuser, unsigned int cmd,
 {
 	struct ptp_clock *ptp =
 		container_of(pcuser->clk, struct ptp_clock, clock);
+	struct ptp_tsfilter tsfilter_set, *tsfilter_get = NULL;
 	struct ptp_sys_offset_extended *extoff = NULL;
 	struct ptp_sys_offset_precise precise_offset;
 	struct system_device_crosststamp xtstamp;
 	struct ptp_clock_info *ops = ptp->info;
 	struct ptp_sys_offset *sysoff = NULL;
+	struct timestamp_event_queue *tsevq;
 	struct ptp_system_timestamp sts;
 	struct ptp_clock_request req;
 	struct ptp_clock_caps caps;
 	struct ptp_clock_time *pct;
+	int lsize, enable, err = 0;
 	unsigned int i, pin_index;
 	struct ptp_pin_desc pd;
 	struct timespec64 ts;
-	int enable, err = 0;
+
+	tsevq = pcuser->private_clkdata;
+
+	if (tsevq->close_req) {
+		err = -EPIPE;
+		return err;
+	}
 
 	switch (cmd) {
 
@@ -479,6 +489,79 @@ long ptp_ioctl(struct posix_clock_user *pcuser, unsigned int cmd,
 			return -ERESTARTSYS;
 		err = ptp_set_pinfunc(ptp, pin_index, pd.func, pd.chan);
 		mutex_unlock(&ptp->pincfg_mux);
+		break;
+
+	case PTP_FILTERCOUNT_REQUEST:
+		/* Calculate amount of device users */
+		if (tsevq) {
+			lsize = list_count_nodes(&tsevq->qlist);
+			if (copy_to_user((void __user *)arg, &lsize,
+					 sizeof(lsize)))
+				err = -EFAULT;
+		}
+		break;
+	case PTP_FILTERTS_GET_REQUEST:
+		/* Read operation */
+		/* Read amount of entries expected */
+		if (copy_from_user(&tsfilter_set, (void __user *)arg,
+				   sizeof(tsfilter_set))) {
+			err = -EFAULT;
+			break;
+		}
+		if (tsfilter_set.ndevusers <= 0) {
+			err = -EINVAL;
+			break;
+		}
+		/* Allocate the necessary memory space to dump the requested filter
+		 * list
+		 */
+		tsfilter_get = kzalloc(tsfilter_set.ndevusers *
+					       sizeof(struct ptp_tsfilter),
+				       GFP_KERNEL);
+		if (!tsfilter_get) {
+			err = -ENOMEM;
+			break;
+		}
+		if (!tsevq) {
+			err = -EFAULT;
+			break;
+		}
+		/* Set the whole region to 0 in case the current list is shorter than
+		 * anticipated
+		 */
+		memset(tsfilter_get, 0,
+		       tsfilter_set.ndevusers * sizeof(struct ptp_tsfilter));
+		i = 0;
+		/* Format data */
+		list_for_each_entry(tsevq, &ptp->tsevqs, qlist) {
+			tsfilter_get[i].reader_rpid = tsevq->reader_pid;
+			tsfilter_get[i].reader_oid = tsevq->oid;
+			tsfilter_get[i].mask = tsevq->mask;
+			i++;
+			/* Current list is longer than anticipated */
+			if (i >= tsfilter_set.ndevusers)
+				break;
+		}
+		/* Dump data */
+		if (copy_to_user((void __user *)arg, tsfilter_get,
+				 tsfilter_set.ndevusers *
+					 sizeof(struct ptp_tsfilter)))
+			err = -EFAULT;
+		break;
+
+	case PTP_FILTERTS_SET_REQUEST:
+		/* Write Operation */
+		if (copy_from_user(&tsfilter_set, (void __user *)arg,
+				   sizeof(tsfilter_set))) {
+			err = -EFAULT;
+			break;
+		}
+		if (tsevq) {
+			list_for_each_entry(tsevq, &ptp->tsevqs, qlist) {
+				if (tsevq->oid == tsfilter_set.reader_oid)
+					tsevq->mask = tsfilter_set.mask;
+			}
+		}
 		break;
 
 	default:

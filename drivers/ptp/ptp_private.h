@@ -32,6 +32,7 @@ struct timestamp_event_queue {
 	pid_t reader_pid;
 	struct ida *ida;
 	int oid;
+	int mask;
 	bool close_req;
 };
 
