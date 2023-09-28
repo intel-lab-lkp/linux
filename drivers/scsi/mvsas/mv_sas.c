@@ -1534,6 +1534,7 @@ int mvs_slot_complete(struct mvs_info *mvi, u32 rx_desc, u32 flags)
 	struct mvs_device *mvi_dev = NULL;
 	struct task_status_struct *tstat;
 	struct domain_device *dev;
+	unsigned long flags;
 	u32 aborted;
 
 	void *to;
@@ -1546,12 +1547,12 @@ int mvs_slot_complete(struct mvs_info *mvi, u32 rx_desc, u32 flags)
 	dev = task->dev;
 	mvi_dev = dev->lldd_dev;
 
-	spin_lock(&task->task_state_lock);
+	spin_lock_irqsave(&task->task_state_lock, flags);
 	task->task_state_flags &= ~SAS_TASK_STATE_PENDING;
 	task->task_state_flags |= SAS_TASK_STATE_DONE;
 	/* race condition*/
 	aborted = task->task_state_flags & SAS_TASK_STATE_ABORTED;
-	spin_unlock(&task->task_state_lock);
+	spin_unlock_irqrestore(&task->task_state_lock, flags);
 
 	memset(tstat, 0, sizeof(*tstat));
 	tstat->resp = SAS_TASK_COMPLETE;
