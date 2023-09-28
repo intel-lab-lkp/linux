@@ -51,7 +51,7 @@ config PHY_QCOM_HDMI
 	select GENERIC_PHY
 	help
 	  Enable this to support the Qualcomm HDMI PHY presend on 32-bit platforms:
-	  MSM8260, MSM8660, MSM8960, APQ8060 and APQ8064.
+	  MSM8260, MSM8660, MSM8960, MSM8974, APQ8060, APQ8064, APQ8074 and APQ8084.
 
 	  Note, this driver is not used on MSM899x platforms, which use
 	  PHY_QCOM_QMP_HDMI instead.

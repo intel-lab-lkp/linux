@@ -8,6 +8,7 @@ obj-$(CONFIG_PHY_QCOM_HDMI)		+= phy-qcom-hdmi.o
 
 phy-qcom-hdmi-y := \
 	phy-qcom-hdmi-preqmp.o \
+	phy-qcom-hdmi-28hpm.o \
 	phy-qcom-hdmi-28lpm.o \
 
 obj-$(CONFIG_PHY_QCOM_M31_USB)		+= phy-qcom-m31.o

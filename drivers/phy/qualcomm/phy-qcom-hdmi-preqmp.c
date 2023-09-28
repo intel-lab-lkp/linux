@@ -181,6 +181,7 @@ err:
 
 static const struct of_device_id qcom_hdmi_preqmp_of_match_table[] = {
 	{ .compatible = "qcom,hdmi-phy-8960", .data = &msm8960_hdmi_phy_cfg, },
+	{ .compatible = "qcom,hdmi-phy-8974", .data = &msm8974_hdmi_phy_cfg, },
 	{ },
 };
 MODULE_DEVICE_TABLE(of, qcom_hdmi_preqmp_of_match_table);
