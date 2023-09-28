@@ -228,12 +228,13 @@ fpga_region_register_full(struct device *parent, const struct fpga_region_info *
 
 	ret = device_register(&region->dev);
 	if (ret) {
-		put_device(&region->dev);
-		return ERR_PTR(ret);
+		goto err_put_device;
 	}
 
 	return region;
 
+err_put_device:
+	put_device(&region->dev);
 err_remove:
 	ida_free(&fpga_region_ida, id);
 err_free:
