@@ -51,8 +51,6 @@
 
 #define RX_BUF_SIZE (1522 + 1)
 
-#define IVEC_NAME_SIZE IFNAMSIZ + 10
-
 /*****************************************************************************/
 enum rtase_registers {
 	RTASE_MAC0   = 0x0000,
@@ -260,6 +258,8 @@ union rx_desc {
 #define RTASE_1T_POWER            10000000
 #define RTASE_IDLESLOPE_INT_SHIFT 25
 #define RTASE_IDLESLOPE_INT_MASK  GENMASK(31, 25)
+
+#define IVEC_NAME_SIZE IFNAMSIZ + 10
 
 struct rtase_int_vector {
 	struct rtase_private *tp;
