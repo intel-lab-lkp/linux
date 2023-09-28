@@ -74,6 +74,7 @@ static inline u32 hdmi_pll_read(struct qcom_hdmi_preqmp_phy *phy, int offset)
 	return readl(phy->pll_reg + offset);
 }
 
+extern const struct qcom_hdmi_preqmp_cfg msm8x60_hdmi_phy_cfg;
 extern const struct qcom_hdmi_preqmp_cfg msm8960_hdmi_phy_cfg;
 extern const struct qcom_hdmi_preqmp_cfg msm8974_hdmi_phy_cfg;
 

@@ -10,6 +10,7 @@ phy-qcom-hdmi-y := \
 	phy-qcom-hdmi-preqmp.o \
 	phy-qcom-hdmi-28hpm.o \
 	phy-qcom-hdmi-28lpm.o \
+	phy-qcom-hdmi-45nm.o \
 
 obj-$(CONFIG_PHY_QCOM_M31_USB)		+= phy-qcom-m31.o
 obj-$(CONFIG_PHY_QCOM_PCIE2)		+= phy-qcom-pcie2.o

@@ -147,20 +147,23 @@ static int qcom_hdmi_preqmp_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	init.name = "hdmipll";
-	init.ops = cfg->pll_ops;
-	init.flags = CLK_GET_RATE_NOCACHE;
-	init.parent_data = cfg->pll_parent;
-	init.num_parents = 1;
+	/* FIXME: msm8x60 doesn't yet have PLL ops */
+	if (cfg->pll_ops) {
+		init.name = "hdmipll";
+		init.ops = cfg->pll_ops;
+		init.flags = CLK_GET_RATE_NOCACHE;
+		init.parent_data = cfg->pll_parent;
+		init.num_parents = 1;
 
-	hdmi_phy->pll_hw.init = &init;
-	ret = devm_clk_hw_register(hdmi_phy->dev, &hdmi_phy->pll_hw);
-	if (ret)
-		goto err;
+		hdmi_phy->pll_hw.init = &init;
+		ret = devm_clk_hw_register(hdmi_phy->dev, &hdmi_phy->pll_hw);
+		if (ret)
+			goto err;
 
-	ret = devm_of_clk_add_hw_provider(hdmi_phy->dev, of_clk_hw_simple_get, &hdmi_phy->pll_hw);
-	if (ret)
-		goto err;
+		ret = devm_of_clk_add_hw_provider(hdmi_phy->dev, of_clk_hw_simple_get, &hdmi_phy->pll_hw);
+		if (ret)
+			goto err;
+	}
 
 	hdmi_phy->phy = devm_phy_create(dev, pdev->dev.of_node, &qcom_hdmi_preqmp_phy_ops);
 	if (IS_ERR(hdmi_phy->phy)) {
@@ -180,6 +183,7 @@ err:
 }
 
 static const struct of_device_id qcom_hdmi_preqmp_of_match_table[] = {
+	{ .compatible = "qcom,hdmi-phy-8x60", .data = &msm8x60_hdmi_phy_cfg, },
 	{ .compatible = "qcom,hdmi-phy-8960", .data = &msm8960_hdmi_phy_cfg, },
 	{ .compatible = "qcom,hdmi-phy-8974", .data = &msm8974_hdmi_phy_cfg, },
 	{ },
