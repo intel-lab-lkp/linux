@@ -63,6 +63,12 @@ patternProperties:
           5:  MSM8996SG, speedbin 1
           6:  MSM8996SG, speedbin 2
           7-31:  unused
+
+          Bitmap for IPQ806X SoC:
+          0:  IPQ8062
+          1:  IPQ8064/IPQ8066/IPQ8068
+          2:  IPQ8065/IPQ8069
+          3-31:  unused
         enum: [0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7,
                0x9, 0xd, 0xe, 0xf,
                0x10, 0x20, 0x30, 0x70]
@@ -70,6 +76,22 @@ patternProperties:
       clock-latency-ns: true
 
       required-opps: true
+
+    patternProperties:
+      '^opp-microvolt-speed[0-9]+-pvs[0-9]+$':
+        description: |
+          Named opp-microvolt property following the same generic
+          binding for named opp-microvolt.
+
+          The correct voltage range is selected based on the values
+          in the efuse for the speed and the pvs (power variable
+          scaling).
+        minItems: 1
+        maxItems: 4 # Up to 4 regulators: Core, Mem, Dig and HFPLL
+        items:
+          - description: nominal voltage
+          - description: minimum voltage
+          - description: maximum voltage
 
     required:
       - opp-hz
@@ -253,6 +275,22 @@ examples:
                 opp-supported-hw = <0x1>;
                 clock-latency-ns = <200000>;
                 required-opps = <&cpr_opp6>;
+            };
+        };
+
+        /* Dummy opp table to give example for named opp-microvolt */
+        opp-table-2 {
+            compatible = "operating-points-v2-kryo-cpu";
+            nvmem-cells = <&speedbin_efuse>;
+
+            opp-384000000 {
+                opp-hz = /bits/ 64 <384000000>;
+                opp-microvolt-speed0-pvs0 = <1000000 950000 1050000>;
+                opp-microvolt-speed0-pvs1 = <925000 878750 971250>;
+                opp-microvolt-speed0-pvs2 = <875000 831250 918750>;
+                opp-microvolt-speed0-pvs3 = <800000 760000 840000>;
+                opp-supported-hw = <0x7>;
+                clock-latency-ns = <100000>;
             };
         };
 
