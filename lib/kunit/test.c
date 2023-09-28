@@ -734,7 +734,7 @@ void __kunit_test_suites_exit(struct kunit_suite **suites, int num_suites)
 EXPORT_SYMBOL_GPL(__kunit_test_suites_exit);
 
 #ifdef CONFIG_MODULES
-static void kunit_module_init(struct module *mod)
+static int kunit_module_init(struct module *mod)
 {
 	struct kunit_suite_set suite_set = {
 		mod->kunit_suites, mod->kunit_suites + mod->num_kunit_suites,
@@ -760,6 +760,8 @@ static void kunit_module_init(struct module *mod)
 		kunit_exec_list_tests(&suite_set, true);
 	else
 		pr_err("kunit: unknown action '%s'\n", action);
+
+	return err;
 }
 
 static void kunit_module_exit(struct module *mod)
@@ -773,18 +775,18 @@ static void kunit_module_exit(struct module *mod)
 		__kunit_test_suites_exit(mod->kunit_suites,
 					 mod->num_kunit_suites);
 
-	if (suite_set.start)
-		kunit_free_suite_set(suite_set);
+	kunit_free_suite_set(suite_set);
 }
 
 static int kunit_module_notify(struct notifier_block *nb, unsigned long val,
 			       void *data)
 {
 	struct module *mod = data;
+	int ret = 0;
 
 	switch (val) {
 	case MODULE_STATE_COMING:
-		kunit_module_init(mod);
+		ret = kunit_module_init(mod);
 		break;
 	case MODULE_STATE_LIVE:
 		break;
@@ -795,7 +797,7 @@ static int kunit_module_notify(struct notifier_block *nb, unsigned long val,
 		break;
 	}
 
-	return 0;
+	return notifier_from_errno(ret);
 }
 
 static struct notifier_block kunit_mod_nb = {
