@@ -376,7 +376,7 @@ struct lpfc_sli {
 					   cmd */
 
 #define LPFC_IOCBQ_LOOKUP_INCREMENT  1024
-	struct lpfc_iocbq ** iocbq_lookup; /* array to lookup IOCB by IOTAG */
+	struct lpfc_iocbq **iocbq_lookup; /* array to lookup IOCB by IOTAG */
 	size_t iocbq_lookup_len;           /* current lengs of the array */
 	uint16_t  last_iotag;              /* last allocated IOTAG */
 	time64_t  stats_start;		   /* in seconds */
