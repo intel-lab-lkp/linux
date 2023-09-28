@@ -226,17 +226,14 @@ static int query_perf_config_data(struct drm_i915_private *i915,
 				  struct drm_i915_query_item *query_item,
 				  bool use_uuid)
 {
-	struct drm_i915_query_perf_config __user *user_query_config_ptr =
-		u64_to_user_ptr(query_item->data_ptr);
 	struct drm_i915_perf_oa_config __user *user_config_ptr =
 		u64_to_user_ptr(query_item->data_ptr +
 				sizeof(struct drm_i915_query_perf_config));
+	struct drm_i915_query_perf_config query_config;
 	struct drm_i915_perf_oa_config user_config;
 	struct i915_perf *perf = &i915->perf;
 	struct i915_oa_config *oa_config;
-	char uuid[UUID_STRING_LEN + 1];
-	u64 config_id;
-	u32 flags, total_size;
+	u32 total_size;
 	int ret;
 
 	if (!perf->i915)
@@ -246,47 +243,29 @@ static int query_perf_config_data(struct drm_i915_private *i915,
 		sizeof(struct drm_i915_query_perf_config) +
 		sizeof(struct drm_i915_perf_oa_config);
 
-	if (query_item->length == 0)
-		return total_size;
+	ret = copy_query_item(&query_config, sizeof(query_config), total_size,
+			      query_item);
+	if (ret != 0)
+		return ret;
 
-	if (query_item->length < total_size) {
-		drm_dbg(&i915->drm,
-			"Invalid query config data item size=%u expected=%u\n",
-			query_item->length, total_size);
-		return -EINVAL;
-	}
-
-	if (get_user(flags, &user_query_config_ptr->flags))
-		return -EFAULT;
-
-	if (flags != 0)
+	if (query_config.flags != 0)
 		return -EINVAL;
 
 	if (use_uuid) {
 		struct i915_oa_config *tmp;
 		int id;
 
-		BUILD_BUG_ON(sizeof(user_query_config_ptr->uuid) >= sizeof(uuid));
-
-		memset(&uuid, 0, sizeof(uuid));
-		if (copy_from_user(uuid, user_query_config_ptr->uuid,
-				     sizeof(user_query_config_ptr->uuid)))
-			return -EFAULT;
-
 		oa_config = NULL;
 		rcu_read_lock();
 		idr_for_each_entry(&perf->metrics_idr, tmp, id) {
-			if (!strcmp(tmp->uuid, uuid)) {
+			if (!strcmp(tmp->uuid, query_config.uuid)) {
 				oa_config = i915_oa_config_get(tmp);
 				break;
 			}
 		}
 		rcu_read_unlock();
 	} else {
-		if (get_user(config_id, &user_query_config_ptr->config))
-			return -EFAULT;
-
-		oa_config = i915_perf_get_oa_config(perf, config_id);
+		oa_config = i915_perf_get_oa_config(perf, query_config.config);
 	}
 	if (!oa_config)
 		return -ENOENT;
@@ -354,7 +333,7 @@ static size_t sizeof_perf_config_list(size_t count)
 	return sizeof(struct drm_i915_query_perf_config) + sizeof(u64) * count;
 }
 
-static size_t sizeof_perf_metrics(struct i915_perf *perf)
+static size_t sizeof_perf_metrics(struct i915_perf *perf, u64 *n_configs)
 {
 	struct i915_oa_config *tmp;
 	size_t i;
@@ -366,6 +345,8 @@ static size_t sizeof_perf_metrics(struct i915_perf *perf)
 		i++;
 	rcu_read_unlock();
 
+	*n_configs = i;
+
 	return sizeof_perf_config_list(i);
 }
 
@@ -374,72 +355,59 @@ static int query_perf_config_list(struct drm_i915_private *i915,
 {
 	struct drm_i915_query_perf_config __user *user_query_config_ptr =
 		u64_to_user_ptr(query_item->data_ptr);
+	struct drm_i915_query_perf_config query_config;
 	struct i915_perf *perf = &i915->perf;
-	u64 *oa_config_ids = NULL;
-	int alloc, n_configs;
-	u32 flags;
-	int ret;
+	u64 *oa_config_ids, *ids, n_configs;
+	struct i915_oa_config *tmp;
+	u32 total_size;
+	int ret, id;
 
 	if (!perf->i915)
 		return -ENODEV;
 
-	if (query_item->length == 0)
-		return sizeof_perf_metrics(perf);
+	total_size = sizeof_perf_metrics(perf, &n_configs);
 
-	if (get_user(flags, &user_query_config_ptr->flags))
-		return -EFAULT;
+	ret = copy_query_item(&query_config, sizeof(query_config), total_size,
+			      query_item);
+	if (ret != 0)
+		return ret;
 
-	if (flags != 0)
+	if (query_config.flags != 0)
 		return -EINVAL;
 
-	n_configs = 1;
-	do {
-		struct i915_oa_config *tmp;
-		u64 *ids;
-		int id;
+	oa_config_ids = kcalloc(n_configs, sizeof(*oa_config_ids), GFP_KERNEL);
+	if (!oa_config_ids)
+		return -ENOMEM;
 
-		ids = krealloc(oa_config_ids,
-			       n_configs * sizeof(*oa_config_ids),
-			       GFP_KERNEL);
-		if (!ids)
-			return -ENOMEM;
-
-		alloc = fetch_and_zero(&n_configs);
-
-		ids[n_configs++] = 1ull; /* reserved for test_config */
-		rcu_read_lock();
-		idr_for_each_entry(&perf->metrics_idr, tmp, id) {
-			if (n_configs < alloc)
-				ids[n_configs] = id;
-			n_configs++;
+	ids = oa_config_ids;
+	*ids++ = 1ull; /* reserved for test_config */
+	ret = 1;
+	rcu_read_lock();
+	idr_for_each_entry(&perf->metrics_idr, tmp, id) {
+		if (ret++ >= n_configs) {
+			ret = -EINVAL; /* Try again, array grew since sizeof_perf_metrics() */
+			rcu_read_unlock();
+			goto out;
 		}
-		rcu_read_unlock();
-
-		oa_config_ids = ids;
-	} while (n_configs > alloc);
-
-	if (query_item->length < sizeof_perf_config_list(n_configs)) {
-		drm_dbg(&i915->drm,
-			"Invalid query config list item size=%u expected=%zu\n",
-			query_item->length,
-			sizeof_perf_config_list(n_configs));
-		kfree(oa_config_ids);
-		return -EINVAL;
+		*ids++ = id;
 	}
+	rcu_read_unlock();
 
 	if (put_user(n_configs, &user_query_config_ptr->config)) {
-		kfree(oa_config_ids);
-		return -EFAULT;
+		ret = -EFAULT;
+		goto out;
 	}
 
 	ret = copy_to_user(user_query_config_ptr + 1,
 			   oa_config_ids,
 			   n_configs * sizeof(*oa_config_ids));
-	kfree(oa_config_ids);
 	if (ret)
-		return -EFAULT;
+		ret = -EFAULT;
 
-	return sizeof_perf_config_list(n_configs);
+out:
+	kfree(oa_config_ids);
+
+	return ret ?: total_size;
 }
 
 static int query_perf_config(struct drm_i915_private *i915,
