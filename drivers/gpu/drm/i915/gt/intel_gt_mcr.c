@@ -371,14 +371,34 @@ void intel_gt_mcr_lock(struct intel_gt *gt, unsigned long *flags)
 
 	lockdep_assert_not_held(&gt->uncore->lock);
 
-	/*
-	 * Starting with MTL, we need to coordinate not only with other
-	 * driver threads, but also with hardware/firmware agents.  A dedicated
-	 * locking register is used.
-	 */
-	if (GRAPHICS_VER_FULL(gt->i915) >= IP_VER(12, 70))
-		err = wait_for(intel_uncore_read_fw(gt->uncore,
-						    MTL_STEER_SEMAPHORE) == 0x1, 100);
+	do {
+		/*
+		 * Starting with MTL, we need to coordinate not only with other
+		 * driver threads, but also with hardware/firmware agents.  A
+		 * dedicated locking register is used.
+		 */
+		if (GRAPHICS_VER_FULL(gt->i915) >= IP_VER(12, 70))
+			err = wait_for(intel_uncore_read_fw(gt->uncore,
+					      MTL_STEER_SEMAPHORE) == 0x1, 100);
+		else
+			break;
+
+		/*
+		 * In theory we should never fail to acquire the HW semaphore;
+		 * this would indicate some hardware/firmware is misbehaving and
+		 * not releasing it properly.
+		 */
+		if (err == -ETIMEDOUT) {
+			gt_warn(gt,
+				"hardware MCR steering semaphore timed out "
+				"forcing lock takeover\n");
+			/*
+			 * Force lock takeover
+			 */
+			intel_uncore_write_fw(gt->uncore,
+					      MTL_STEER_SEMAPHORE, 0x1);
+		}
+	} while (err != -ETIMEDOUT);
 
 	/*
 	 * Even on platforms with a hardware lock, we'll continue to grab
@@ -389,16 +409,6 @@ void intel_gt_mcr_lock(struct intel_gt *gt, unsigned long *flags)
 	spin_lock_irqsave(&gt->mcr_lock, __flags);
 
 	*flags = __flags;
-
-	/*
-	 * In theory we should never fail to acquire the HW semaphore; this
-	 * would indicate some hardware/firmware is misbehaving and not
-	 * releasing it properly.
-	 */
-	if (err == -ETIMEDOUT) {
-		gt_err_ratelimited(gt, "hardware MCR steering semaphore timed out");
-		add_taint_for_CI(gt->i915, TAINT_WARN);  /* CI is now unreliable */
-	}
 }
 
 /**
