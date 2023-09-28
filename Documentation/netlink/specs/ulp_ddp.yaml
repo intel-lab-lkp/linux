@@ -1,0 +1,183 @@
+# SPDX-License-Identifier: ((GPL-2.0 WITH Linux-syscall-note) OR BSD-3-Clause)
+#
+# Author: Aurelien Aptel <aaptel@nvidia.com>
+#
+# Copyright (c) 2023, NVIDIA CORPORATION & AFFILIATES.  All rights reserved.
+#
+
+name: ulp_ddp
+
+protocol: genetlink
+
+doc: Netlink protocol to manage ULP DPP on network devices.
+
+definitions:
+  -
+    type: enum
+    name: cap
+    entries:
+      - nvme-tcp
+      - nvme-tcp-ddgst-rx
+
+uapi-header: linux/ulp_ddp_nl.h
+
+attribute-sets:
+  -
+    name: stat
+    attributes:
+      -
+        name: ifindex
+        doc: interface index of the net device.
+        type: u32
+      -
+        name: pad
+        type: pad
+      -
+        name: rx-nvmeotcp-sk-add
+        doc: Sockets successfully configured for NVMeTCP offloading.
+        type: u64
+      -
+        name: rx-nvmeotcp-sk-add-fail
+        doc: Sockets failed to be configured for NVMeTCP offloading.
+        type: u64
+      -
+        name: rx-nvmeotcp-sk-del
+        doc: Sockets with NVMeTCP offloading configuration removed.
+        type: u64
+      -
+        name: rx-nvmeotcp-setup
+        doc: NVMe-TCP IOs successfully configured for Rx Direct Data Placement.
+        type: u64
+      -
+        name: rx-nvmeotcp-setup-fail
+        doc: NVMe-TCP IOs failed to be configured for Rx Direct Data Placement.
+        type: u64
+      -
+        name: rx-nvmeotcp-teardown
+        doc: NVMe-TCP IOs with Rx Direct Data Placement configuration removed.
+        type: u64
+      -
+        name: rx-nvmeotcp-drop
+        doc: Packets failed the NVMeTCP offload validation.
+        type: u64
+      -
+        name: rx-nvmeotcp-resync
+        doc: >
+          NVMe-TCP resync operations were processed due to Rx TCP packets
+          re-ordering.
+        type: u64
+      -
+        name: rx-nvmeotcp-packets
+        doc: TCP packets successfully processed by the NVMeTCP offload.
+        type: u64
+      -
+        name: rx-nvmeotcp-bytes
+        doc: Bytes were successfully processed by the NVMeTCP offload.
+        type: u64
+  -
+    name: dev
+    attributes:
+      -
+        name: ifindex
+        doc: interface index of the net device.
+        type: u32
+      -
+        name: hw
+        doc: bitmask of the capabilities supported by the device.
+        type: u64
+        enum: cap
+        enum-as-flags: true
+      -
+        name: active
+        doc: bitmask of the capabilities currently enabled on the device.
+        type: u64
+        enum: cap
+        enum-as-flags: true
+      -
+        name: wanted
+        doc: >
+          new active bit values of the capabilities we want to set on the
+          device.
+        type: u64
+        enum: cap
+        enum-as-flags: true
+      -
+        name: wanted_mask
+        doc: bitmask of the meaningful bits in the wanted field.
+        type: u64
+        enum: cap
+        enum-as-flags: true
+      -
+        name: pad
+        type: pad
+
+operations:
+  list:
+    -
+      name: get
+      doc: Get ULP DDP capabilities.
+      attribute-set: dev
+      do:
+        request:
+          attributes:
+            - ifindex
+        reply: &dev-all
+          attributes:
+            - ifindex
+            - hw
+            - active
+        pre: ulp_ddp_get_netdev
+        post: ulp_ddp_put_netdev
+      dump:
+        reply: *dev-all
+    -
+      name: stats
+      doc: Get ULP DDP stats.
+      attribute-set: stat
+      do:
+        request:
+          attributes:
+            - ifindex
+        reply: &stats-all
+          attributes:
+            - ifindex
+            - rx-nvmeotcp-sk-add
+            - rx-nvmeotcp-sk-add-fail
+            - rx-nvmeotcp-sk-del
+            - rx-nvmeotcp-setup
+            - rx-nvmeotcp-setup-fail
+            - rx-nvmeotcp-teardown
+            - rx-nvmeotcp-drop
+            - rx-nvmeotcp-resync
+            - rx-nvmeotcp-packets
+            - rx-nvmeotcp-bytes
+        pre: ulp_ddp_get_netdev
+        post: ulp_ddp_put_netdev
+      dump:
+        reply: *stats-all
+    -
+      name: set
+      doc: Set ULP DDP capabilities.
+      attribute-set: dev
+      do:
+        request:
+          attributes:
+            - ifindex
+            - wanted
+            - wanted_mask
+        reply:
+          attributes:
+            - ifindex
+            - hw
+            - active
+        pre: ulp_ddp_get_netdev
+        post: ulp_ddp_put_netdev
+    -
+      name: set-ntf
+      doc: Notification for change in ULP DDP capabilities.
+      notify: get
+
+mcast-groups:
+  list:
+    -
+      name: mgmt
