@@ -827,13 +827,13 @@ fpga_mgr_register_full(struct device *parent, const struct fpga_manager_info *in
 	mgr->state = fpga_mgr_state(mgr);
 
 	ret = device_register(&mgr->dev);
-	if (ret) {
-		put_device(&mgr->dev);
-		return ERR_PTR(ret);
-	}
+	if (ret)
+		goto error_put_device;
 
 	return mgr;
 
+error_put_device:
+	put_device(&mgr->dev);
 error_device:
 	ida_free(&fpga_mgr_ida, id);
 error_kfree:
