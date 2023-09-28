@@ -24,3 +24,4 @@ Interfaces
     dev-event
     dev-subdev
     dev-meta
+    dev-audio-mem2mem
