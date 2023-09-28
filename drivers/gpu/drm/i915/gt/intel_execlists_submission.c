@@ -2261,26 +2261,12 @@ static struct execlists_capture *capture_regs(struct intel_engine_cs *engine)
 	if (!cap)
 		return NULL;
 
-	cap->error = i915_gpu_coredump_alloc(engine->i915, gfp);
+	cap->error = i915_gpu_coredump_alloc(engine, gfp);
 	if (!cap->error)
 		goto err_cap;
 
-	cap->error->gt = intel_gt_coredump_alloc(engine->gt, gfp, CORE_DUMP_FLAG_NONE);
-	if (!cap->error->gt)
-		goto err_gpu;
-
-	cap->error->gt->engine = intel_engine_coredump_alloc(engine, gfp, CORE_DUMP_FLAG_NONE);
-	if (!cap->error->gt->engine)
-		goto err_gt;
-
-	cap->error->gt->engine->hung = true;
-
 	return cap;
 
-err_gt:
-	kfree(cap->error->gt);
-err_gpu:
-	kfree(cap->error);
 err_cap:
 	kfree(cap);
 	return NULL;

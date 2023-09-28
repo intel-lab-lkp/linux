@@ -63,6 +63,9 @@
 #define ALLOW_FAIL (__GFP_KSWAPD_RECLAIM | __GFP_RETRY_MAYFAIL | __GFP_NOWARN)
 #define ATOMIC_MAYFAIL (GFP_ATOMIC | __GFP_NOWARN)
 
+struct intel_gt_coredump *
+intel_gt_coredump_alloc(struct intel_gt *gt, gfp_t gfp, u32 dump_flags);
+
 static void __sg_set_buf(struct scatterlist *sg,
 			 void *addr, unsigned int len, loff_t it)
 {
@@ -2005,8 +2008,8 @@ static void capture_gen(struct i915_gpu_coredump *error)
 	error->driver_caps = i915->caps;
 }
 
-struct i915_gpu_coredump *
-i915_gpu_coredump_alloc(struct drm_i915_private *i915, gfp_t gfp)
+static struct i915_gpu_coredump *
+__i915_gpu_coredump_alloc(struct drm_i915_private *i915, gfp_t gfp)
 {
 	struct i915_gpu_coredump *error;
 
@@ -2028,6 +2031,35 @@ i915_gpu_coredump_alloc(struct drm_i915_private *i915, gfp_t gfp)
 	capture_gen(error);
 
 	return error;
+}
+
+struct i915_gpu_coredump *
+i915_gpu_coredump_alloc(struct intel_engine_cs *engine, gfp_t gfp)
+{
+	struct i915_gpu_coredump *error;
+
+	error = __i915_gpu_coredump_alloc(engine->i915, gfp);
+	if (!error)
+		return NULL;
+
+	error->gt = intel_gt_coredump_alloc(engine->gt, gfp, CORE_DUMP_FLAG_NONE);
+	if (!error->gt)
+		goto err_gpu;
+
+	error->gt->engine = intel_engine_coredump_alloc(engine, gfp, CORE_DUMP_FLAG_NONE);
+	if (!error->gt->engine)
+		goto err_gt;
+
+	error->gt->engine->hung = true;
+
+	return error;
+
+err_gt:
+	kfree(error->gt);
+err_gpu:
+	kfree(error);
+
+	return NULL;
 }
 
 #define DAY_AS_SECONDS(x) (24 * 60 * 60 * (x))
@@ -2102,7 +2134,7 @@ __i915_gpu_coredump(struct intel_gt *gt, intel_engine_mask_t engine_mask, u32 du
 	if (IS_ERR(error))
 		return error;
 
-	error = i915_gpu_coredump_alloc(i915, ALLOW_FAIL);
+	error = __i915_gpu_coredump_alloc(i915, ALLOW_FAIL);
 	if (!error)
 		return ERR_PTR(-ENOMEM);
 
