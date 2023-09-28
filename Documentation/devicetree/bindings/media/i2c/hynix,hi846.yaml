@@ -14,6 +14,9 @@ description: |-
   interface and CCI (I2C compatible) control bus. The output format
   is raw Bayer.
 
+allOf:
+  - $ref: /schemas/media/video-interface-devices.yaml#
+
 properties:
   compatible:
     const: hynix,hi846
@@ -47,6 +50,10 @@ properties:
 
   vddd-supply:
     description: Definition of the regulator used for the VDDD power supply.
+
+  orientation: true
+
+  rotation: true
 
   port:
     $ref: /schemas/graph.yaml#/$defs/port-base
