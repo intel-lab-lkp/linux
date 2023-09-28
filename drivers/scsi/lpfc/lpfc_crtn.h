@@ -281,7 +281,7 @@ int lpfc_check_pending_fcoe_event(struct lpfc_hba *, uint8_t);
 void lpfc_issue_init_vpi(struct lpfc_vport *);
 
 void lpfc_config_hbq(struct lpfc_hba *, uint32_t, struct lpfc_hbq_init *,
-	uint32_t , LPFC_MBOXQ_t *);
+	uint32_t, LPFC_MBOXQ_t *);
 struct hbq_dmabuf *lpfc_els_hbq_alloc(struct lpfc_hba *);
 void lpfc_els_hbq_free(struct lpfc_hba *, struct hbq_dmabuf *);
 struct hbq_dmabuf *lpfc_sli4_rb_alloc(struct lpfc_hba *);
@@ -327,7 +327,7 @@ lpfc_sli_handle_fast_ring_event(struct lpfc_hba *,
 			struct lpfc_sli_ring *, uint32_t);
 
 struct lpfc_iocbq *__lpfc_sli_get_iocbq(struct lpfc_hba *);
-struct lpfc_iocbq * lpfc_sli_get_iocbq(struct lpfc_hba *);
+struct lpfc_iocbq *lpfc_sli_get_iocbq(struct lpfc_hba *);
 void lpfc_sli_release_iocbq(struct lpfc_hba *, struct lpfc_iocbq *);
 uint16_t lpfc_sli_next_iotag(struct lpfc_hba *, struct lpfc_iocbq *);
 void lpfc_sli_cancel_iocbs(struct lpfc_hba *, struct list_head *, uint32_t,
@@ -395,8 +395,8 @@ struct lpfc_dmabuf *lpfc_sli_ringpostbuf_get(struct lpfc_hba *,
 					     dma_addr_t);
 
 uint32_t lpfc_sli_get_buffer_tag(struct lpfc_hba *);
-struct lpfc_dmabuf * lpfc_sli_ring_taggedbuf_get(struct lpfc_hba *,
-			struct lpfc_sli_ring *, uint32_t );
+struct lpfc_dmabuf *lpfc_sli_ring_taggedbuf_get(struct lpfc_hba *,
+			struct lpfc_sli_ring *, uint32_t);
 
 int lpfc_sli_hbq_count(void);
 int lpfc_sli_hbqbuf_add_hbqs(struct lpfc_hba *, uint32_t);
@@ -445,7 +445,7 @@ int lpfc_link_reset(struct lpfc_vport *vport);
 
 /* Function prototypes. */
 int lpfc_check_pci_resettable(struct lpfc_hba *phba);
-const char* lpfc_info(struct Scsi_Host *);
+const char *lpfc_info(struct Scsi_Host *);
 int lpfc_scan_finished(struct Scsi_Host *, unsigned long);
 
 int lpfc_init_api_table_setup(struct lpfc_hba *, uint8_t);
