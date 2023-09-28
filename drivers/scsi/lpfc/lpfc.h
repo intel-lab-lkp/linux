@@ -89,7 +89,7 @@ struct lpfc_sli2_slim;
 #define putPaddrLow(addr)    ((uint32_t) (0xffffffff & (u64)(addr)))
 #define putPaddrHigh(addr)   ((uint32_t) (0xffffffff & (((u64)(addr))>>32)))
 #define getPaddr(high, low)  ((dma_addr_t)( \
-			     (( (u64)(high)<<16 ) << 16)|( (u64)(low))))
+			     (((u64)(high)<<16) << 16)|((u64)(low))))
 /* Provide maximum configuration definitions. */
 #define LPFC_DRVR_TIMEOUT	16	/* driver iocb timeout value in sec */
 #define FC_MAX_ADPTMSG		64
