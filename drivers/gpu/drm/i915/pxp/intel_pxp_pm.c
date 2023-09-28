@@ -3,6 +3,7 @@
  * Copyright(c) 2020 Intel Corporation.
  */
 
+#include "gt/intel_gt_types.h"
 #include "i915_drv.h"
 
 #include "intel_pxp.h"

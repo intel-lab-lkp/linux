@@ -5,6 +5,7 @@
 
 #include <drm/drm_atomic_helper.h>
 
+#include "gt/intel_gt_types.h"
 #include "i915_drv.h"
 #include "intel_clock_gating.h"
 #include "intel_display_driver.h"

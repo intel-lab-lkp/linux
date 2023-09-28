@@ -43,8 +43,6 @@
 #include "gem/i915_gem_shrinker.h"
 #include "gem/i915_gem_stolen.h"
 
-#include "gt/intel_engine.h"
-#include "gt/intel_gt_types.h"
 #include "gt/intel_region_lmem.h"
 #include "gt/intel_workarounds.h"
 #include "gt/uc/intel_uc.h"

@@ -6,11 +6,13 @@
 
 #include <linux/nospec.h>
 
+#include <uapi/drm/i915_drm.h>
+
+#include "gt/intel_engine_user.h"
+#include "gt/intel_gt_types.h"
 #include "i915_drv.h"
 #include "i915_perf.h"
 #include "i915_query.h"
-#include "gt/intel_engine_user.h"
-#include <uapi/drm/i915_drm.h>
 
 static int copy_query_item(void *query_hdr, size_t query_sz,
 			   u32 total_length,

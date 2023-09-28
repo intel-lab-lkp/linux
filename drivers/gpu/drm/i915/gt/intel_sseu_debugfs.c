@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-
 /*
  * Copyright © 2020 Intel Corporation
  */
@@ -10,6 +9,7 @@
 #include "i915_drv.h"
 #include "intel_gt_debugfs.h"
 #include "intel_gt_regs.h"
+#include "intel_gt_types.h"
 #include "intel_sseu_debugfs.h"
 
 static void cherryview_sseu_device_status(struct intel_gt *gt,

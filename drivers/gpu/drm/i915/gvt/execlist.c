@@ -32,8 +32,9 @@
  *
  */
 
-#include "i915_drv.h"
+#include "gt/intel_engine.h"
 #include "gvt.h"
+#include "i915_drv.h"
 
 #define _EL_OFFSET_STATUS       0x234
 #define _EL_OFFSET_STATUS_BUF   0x370

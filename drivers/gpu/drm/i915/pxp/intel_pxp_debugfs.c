@@ -9,6 +9,7 @@
 #include <drm/drm_print.h>
 
 #include "gt/intel_gt_debugfs.h"
+#include "gt/intel_gt_types.h"
 
 #include "i915_drv.h"
 

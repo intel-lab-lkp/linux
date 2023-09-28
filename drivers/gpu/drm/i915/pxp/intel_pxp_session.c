@@ -3,15 +3,16 @@
  * Copyright(c) 2020, Intel Corporation. All rights reserved.
  */
 
+#include "gt/intel_gt_types.h"
 #include "i915_drv.h"
 
 #include "intel_pxp.h"
 #include "intel_pxp_cmd.h"
 #include "intel_pxp_gsccs.h"
+#include "intel_pxp_regs.h"
 #include "intel_pxp_session.h"
 #include "intel_pxp_tee.h"
 #include "intel_pxp_types.h"
-#include "intel_pxp_regs.h"
 
 #define ARB_SESSION I915_PROTECTED_CONTENT_DEFAULT_SESSION /* shorter define */
 

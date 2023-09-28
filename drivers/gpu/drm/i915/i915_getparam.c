@@ -4,6 +4,7 @@
 
 #include "gem/i915_gem_mman.h"
 #include "gt/intel_engine_user.h"
+#include "gt/intel_gt_types.h"
 
 #include "pxp/intel_pxp.h"
 

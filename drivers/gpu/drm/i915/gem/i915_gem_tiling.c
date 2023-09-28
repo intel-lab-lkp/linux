@@ -7,6 +7,7 @@
 #include <linux/string.h>
 #include <linux/bitops.h>
 
+#include "gt/intel_gt_types.h"
 #include "i915_drv.h"
 #include "i915_gem.h"
 #include "i915_gem_ioctls.h"

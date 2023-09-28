@@ -4,6 +4,7 @@
  */
 
 #include "gem/i915_gem_region.h"
+#include "gt/intel_gt_types.h"
 #include "i915_drv.h"
 #include "intel_atomic_plane.h"
 #include "intel_display.h"

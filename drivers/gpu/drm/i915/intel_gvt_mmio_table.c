@@ -16,6 +16,7 @@
 #include "display/skl_watermark_regs.h"
 #include "display/vlv_dsi_pll_regs.h"
 #include "gt/intel_gt_regs.h"
+#include "gt/intel_gt_types.h"
 #include "gvt/gvt.h"
 
 #include "i915_drv.h"

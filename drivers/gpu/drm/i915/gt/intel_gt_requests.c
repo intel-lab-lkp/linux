@@ -7,6 +7,7 @@
 
 #include "i915_drv.h" /* for_each_engine() */
 #include "i915_request.h"
+#include "intel_engine.h"
 #include "intel_engine_heartbeat.h"
 #include "intel_execlists_submission.h"
 #include "intel_gt.h"

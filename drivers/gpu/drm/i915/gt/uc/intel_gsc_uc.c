@@ -5,13 +5,14 @@
 
 #include <linux/types.h>
 
+#include "gt/intel_engine.h"
 #include "gt/intel_gt.h"
 #include "gt/intel_gt_print.h"
+#include "i915_drv.h"
+#include "i915_reg.h"
 #include "intel_gsc_fw.h"
 #include "intel_gsc_proxy.h"
 #include "intel_gsc_uc.h"
-#include "i915_drv.h"
-#include "i915_reg.h"
 
 static void gsc_work(struct work_struct *work)
 {

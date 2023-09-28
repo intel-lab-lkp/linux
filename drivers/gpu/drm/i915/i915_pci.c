@@ -28,9 +28,10 @@
 
 #include "display/intel_display.h"
 #include "display/intel_display_driver.h"
-#include "gt/intel_gt_regs.h"
-#include "gt/intel_sa_media.h"
 #include "gem/i915_gem_object_types.h"
+#include "gt/intel_gt_regs.h"
+#include "gt/intel_gt_types.h"
+#include "gt/intel_sa_media.h"
 
 #include "i915_driver.h"
 #include "i915_drv.h"

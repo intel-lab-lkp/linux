@@ -39,6 +39,7 @@
 #include <linux/swap.h>
 #include <linux/sched/mm.h>
 
+#include "gt/intel_gt_types.h"
 #include "i915_drv.h"
 #include "i915_gem_ioctls.h"
 #include "i915_gem_object.h"

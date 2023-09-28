@@ -3,8 +3,9 @@
  * Copyright © 2017-2019 Intel Corporation
  */
 
-#include "intel_wopcm.h"
 #include "i915_drv.h"
+#include "intel_gt_types.h"
+#include "intel_wopcm.h"
 
 /**
  * DOC: WOPCM Layout

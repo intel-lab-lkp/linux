@@ -39,6 +39,7 @@
 
 #include <asm/kvm_page_track.h>
 
+#include "gt/intel_gt_types.h"
 #include "i915_drv.h"
 #include "intel_gvt.h"
 

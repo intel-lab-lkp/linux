@@ -3,7 +3,7 @@
  * Copyright © 2021 Intel Corporation
  */
 
-//#include "gt/intel_engine_user.h"
+#include "gt/intel_engine.h"
 #include "gt/intel_gt.h"
 #include "i915_drv.h"
 #include "i915_selftest.h"

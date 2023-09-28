@@ -6,6 +6,7 @@
 #include <drm/drm_crtc.h>
 #include <drm/drm_vblank.h>
 
+#include "gt/intel_gt_types.h"
 #include "gt/intel_rps.h"
 #include "i915_drv.h"
 #include "intel_display_rps.h"
