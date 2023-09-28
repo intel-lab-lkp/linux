@@ -329,12 +329,12 @@ static void lcdif_set_mode(struct lcdif_drm_private *lcdif, u32 bus_flags)
 	       lcdif->base + LCDC_V8_CTRLDESCL0_1);
 
 	/*
-	 * Undocumented P_SIZE and T_SIZE register but those written in the
-	 * downstream kernel those registers control the AXI burst size. As of
-	 * now there are two known values:
+	 * The P_SIZE and T_SIZE bitfields are only documented in the
+	 * downstream driver. Those bitfields control the AXI burst size.
+	 * As of now there are two known values:
 	 *  1 - 128Byte
 	 *  2 - 256Byte
-	 * Downstream set it to 256B burst size to improve the memory
+	 * Downstream sets this to 256B burst size to improve the memory access
 	 * efficiency so set it here too.
 	 */
 	ctrl = CTRLDESCL0_3_P_SIZE(2) | CTRLDESCL0_3_T_SIZE(2) |
