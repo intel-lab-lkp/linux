@@ -44,7 +44,6 @@
 #include "gem/i915_gem_stolen.h"
 
 #include "gt/intel_region_lmem.h"
-#include "gt/intel_workarounds.h"
 
 #include "soc/intel_pch.h"
 
