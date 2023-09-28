@@ -823,8 +823,7 @@ int __req_mod(struct drbd_request *req, enum drbd_req_event what,
 
 		get_ldev(device); /* always succeeds in this call path */
 		req->w.cb = w_restart_disk_io;
-		drbd_queue_work(&connection->sender_work,
-				&req->w);
+		drbd_queue_work(&device->resource->work, &req->w);
 		break;
 
 	case RESEND:

@@ -5890,7 +5890,7 @@ static int got_OVResult(struct drbd_connection *connection, struct packet_info *
 		if (dw) {
 			dw->w.cb = w_ov_finished;
 			dw->device = device;
-			drbd_queue_work(&peer_device->connection->sender_work, &dw->w);
+			drbd_queue_work(&device->resource->work, &dw->w);
 		} else {
 			drbd_err(device, "kmalloc(dw) failed.");
 			ov_out_of_sync_print(peer_device);
