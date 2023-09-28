@@ -172,7 +172,7 @@ int kmem_cache_alloc_bulk(struct kmem_cache *cachep, gfp_t gfp, size_t size,
 			if (cachep->ctor)
 				cachep->ctor(p[i]);
 			else if (gfp & __GFP_ZERO)
-				memset(p[i], 0, cachep->size);
+				memset(p[i], 0, cachep->size * size);
 		}
 	}
 
