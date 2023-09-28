@@ -1168,6 +1168,8 @@ static int std_validate_compound(const struct v4l2_ctrl *ctrl, u32 idx,
 		if (!area->width || !area->height)
 			return -EINVAL;
 		break;
+	case V4L2_CTRL_TYPE_ASRC_RATE:
+		break;
 
 	default:
 		return -EINVAL;
@@ -1867,6 +1869,9 @@ static struct v4l2_ctrl *v4l2_ctrl_new(struct v4l2_ctrl_handler *hdl,
 		break;
 	case V4L2_CTRL_TYPE_AREA:
 		elem_size = sizeof(struct v4l2_area);
+		break;
+	case V4L2_CTRL_TYPE_ASRC_RATE:
+		elem_size = sizeof(struct v4l2_ctrl_asrc_rate);
 		break;
 	default:
 		if (type < V4L2_CTRL_COMPOUND_TYPES)

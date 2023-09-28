@@ -1840,6 +1840,7 @@ struct v4l2_ext_control {
 		struct v4l2_ctrl_av1_tile_group_entry __user *p_av1_tile_group_entry;
 		struct v4l2_ctrl_av1_frame __user *p_av1_frame;
 		struct v4l2_ctrl_av1_film_grain __user *p_av1_film_grain;
+		struct v4l2_ctrl_asrc_rate __user *p_asrc_rate;
 		void __user *ptr;
 	};
 } __attribute__ ((packed));
