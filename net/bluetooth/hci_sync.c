@@ -681,6 +681,13 @@ void hci_cmd_sync_cancel(struct hci_dev *hdev, int err)
 }
 EXPORT_SYMBOL(hci_cmd_sync_cancel);
 
+/* Wait for all pending HCI commands to complete.
+ */
+void hci_cmd_sync_flush(struct hci_dev *hdev)
+{
+	flush_work(&hdev->cmd_sync_work);
+}
+
 /* Submit HCI command to be run in as cmd_sync_work:
  *
  * - hdev must _not_ be unregistered

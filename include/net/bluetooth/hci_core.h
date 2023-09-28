@@ -916,6 +916,11 @@ static inline void hci_discovery_filter_clear(struct hci_dev *hdev)
 
 bool hci_discovery_active(struct hci_dev *hdev);
 
+static inline bool hci_discovery_starting(struct hci_dev *hdev)
+{
+	return hdev->discovery.state == DISCOVERY_STARTING;
+}
+
 void hci_discovery_set_state(struct hci_dev *hdev, int state);
 
 static inline int inquiry_cache_empty(struct hci_dev *hdev)

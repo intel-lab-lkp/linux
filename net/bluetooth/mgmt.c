@@ -10374,18 +10374,31 @@ void mgmt_device_found(struct hci_dev *hdev, bdaddr_t *bdaddr, u8 link_type,
 {
 	struct sk_buff *skb;
 	struct mgmt_ev_device_found *ev;
-	bool report_device = hci_discovery_active(hdev);
+	bool report_device;
 
 	if (hci_dev_test_flag(hdev, HCI_MESH) && link_type == LE_LINK)
 		mesh_device_found(hdev, bdaddr, addr_type, rssi, flags,
 				  eir, eir_len, scan_rsp, scan_rsp_len,
 				  instant);
 
+	/* Discovery start procedure is perfomed on a workqueue in an
+	 * asynchronous manner. This procedure is finished when the scan
+	 * enabled signal is received from the controller. Just after
+	 * this signal, the controller might send another event (e.g. LE
+	 * Meta). In such case, we need to make sure that the discovery
+	 * procedure is finished, because otherwise we might omit some
+	 * scan results.
+	 */
+	if (hci_discovery_starting(hdev))
+		hci_cmd_sync_flush(hdev);
+
+	report_device = hci_discovery_active(hdev);
+
 	/* Don't send events for a non-kernel initiated discovery. With
 	 * LE one exception is if we have pend_le_reports > 0 in which
 	 * case we're doing passive scanning and want these events.
 	 */
-	if (!hci_discovery_active(hdev)) {
+	if (!report_device) {
 		if (link_type == ACL_LINK)
 			return;
 		if (link_type == LE_LINK && !list_empty(&hdev->pend_le_reports))
