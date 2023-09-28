@@ -783,13 +783,13 @@ static int kunit_module_notify(struct notifier_block *nb, unsigned long val,
 	struct module *mod = data;
 
 	switch (val) {
+	case MODULE_STATE_COMING:
+		kunit_module_init(mod);
+		break;
 	case MODULE_STATE_LIVE:
 		break;
 	case MODULE_STATE_GOING:
 		kunit_module_exit(mod);
-		break;
-	case MODULE_STATE_COMING:
-		kunit_module_init(mod);
 		break;
 	case MODULE_STATE_UNFORMED:
 		break;
