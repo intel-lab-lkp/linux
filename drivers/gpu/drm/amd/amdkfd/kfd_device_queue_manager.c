@@ -407,7 +407,14 @@ static int allocate_doorbell(struct qcm_process_device *qpd,
 
 	q->properties.doorbell_off = amdgpu_doorbell_index_on_bar(dev->adev,
 								  qpd->proc_doorbells,
-								  q->doorbell_id);
+								  0);
+
+	/* Adjust the absolute doorbell offset against the doorbell id considering
+	 * the doorbell size of 32/64 bit.
+	 */
+	q->properties.doorbell_off += q->doorbell_id *
+				      dev->kfd->device_info.doorbell_size / 4;
+
 	return 0;
 }
 
