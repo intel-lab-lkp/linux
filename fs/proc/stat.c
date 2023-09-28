@@ -79,6 +79,29 @@ static void show_all_irqs(struct seq_file *p)
 	show_irq_gap(p, nr_irqs - next);
 }
 
+static void show_sqthread_util(struct seq_file *p)
+{
+	int i, j;
+
+	for_each_online_cpu(i) {
+		struct kernel_cpustat kcpustat;
+
+		kcpustat_cpu_fetch(&kcpustat, i);
+		struct task_struct **sqstat = kcpustat.sq_util;
+
+		for (j = 0; j < MAX_SQ_NUM; j++) {
+			if (sqstat[j]) {
+				seq_printf(p, "%d %s", sqstat[j]->pid, sqstat[j]->comm);
+				seq_put_decimal_ull(p, " pelt ",
+				(unsigned long long)sqstat[j]->se.avg.util_avg);
+				seq_put_decimal_ull(p, " real ",
+				(unsigned long long)sqstat[j]->se.sq_avg.util_avg);
+				seq_putc(p, '\n');
+			}
+		}
+	}
+}
+
 static int show_stat(struct seq_file *p, void *v)
 {
 	int i, j;
@@ -187,7 +210,7 @@ static int show_stat(struct seq_file *p, void *v)
 	for (i = 0; i < NR_SOFTIRQS; i++)
 		seq_put_decimal_ull(p, " ", per_softirq_sums[i]);
 	seq_putc(p, '\n');
-
+	show_sqthread_util(p);
 	return 0;
 }
 

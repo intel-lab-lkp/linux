@@ -11,6 +11,7 @@
 #include <linux/vtime.h>
 #include <asm/irq.h>
 
+#define MAX_SQ_NUM 16
 /*
  * 'kernel_stat.h' contains the definitions needed for doing
  * some kernel statistics (CPU usage, context switches ...),
@@ -36,6 +37,8 @@ enum cpu_usage_stat {
 
 struct kernel_cpustat {
 	u64 cpustat[NR_STATS];
+	bool flag;
+	struct task_struct *sq_util[MAX_SQ_NUM];
 };
 
 struct kernel_stat {
