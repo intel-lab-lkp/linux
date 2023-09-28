@@ -93,7 +93,7 @@ static void hptiop_drain_outbound_queue_itl(struct hptiop_hba *hba)
 		if (req & IOPMU_QUEUE_MASK_HOST_BITS)
 			hptiop_request_callback_itl(hba, req);
 		else {
-			struct hpt_iop_request_header __iomem * p;
+			struct hpt_iop_request_header __iomem *p;
 
 			p = (struct hpt_iop_request_header __iomem *)
 				((char __iomem *)hba->u.itl.iop + req);
@@ -103,8 +103,7 @@ static void hptiop_drain_outbound_queue_itl(struct hptiop_hba *hba)
 					hptiop_request_callback_itl(hba, req);
 				else
 					writel(1, &p->context);
-			}
-			else
+			} else
 				hptiop_request_callback_itl(hba, req);
 		}
 	}
@@ -394,7 +393,7 @@ static int iop_send_sync_msg(struct hptiop_hba *hba, u32 msg, u32 millisec)
 	}
 
 	hba->ops->enable_intr(hba);
-	return hba->msg_done? 0 : -1;
+	return hba->msg_done ? 0 : -1;
 }
 
 static int iop_get_config_itl(struct hptiop_hba *hba,
@@ -688,8 +687,7 @@ static void hptiop_message_callback(struct hptiop_hba *hba, u32 msg)
 	if (msg == IOPMU_INBOUND_MSG0_RESET) {
 		atomic_set(&hba->resetting, 0);
 		wake_up(&hba->reset_wq);
-	}
-	else if (msg <= IOPMU_INBOUND_MSG0_MAX)
+	} else if (msg <= IOPMU_INBOUND_MSG0_MAX)
 		hba->msg_done = 1;
 }
 
@@ -817,13 +815,12 @@ static void hptiop_iop_request_callback_itl(struct hptiop_hba *hba, u32 tag)
 
 		if (arg->outbuf_size)
 			memcpy_fromio(arg->outbuf,
-				&p->buf[(readl(&p->inbuf_size) + 3)& ~3],
+				&p->buf[(readl(&p->inbuf_size) + 3) & ~3],
 				arg->outbuf_size);
 
 		if (arg->bytes_returned)
 			*arg->bytes_returned = arg->outbuf_size;
-	}
-	else
+	} else
 		arg->result = HPT_IOCTL_RESULT_FAILED;
 
 	arg->done(arg);
@@ -1090,12 +1087,12 @@ static int hptiop_reset_hba(struct hptiop_hba *hba)
 
 static int hptiop_reset(struct scsi_cmnd *scp)
 {
-	struct hptiop_hba * hba = (struct hptiop_hba *)scp->device->host->hostdata;
+	struct hptiop_hba *hba = (struct hptiop_hba *)scp->device->host->hostdata;
 
 	printk(KERN_WARNING "hptiop_reset(%d/%d/%d)\n",
 	       scp->device->host->host_no, -1, -1);
 
-	return hptiop_reset_hba(hba)? FAILED : SUCCESS;
+	return hptiop_reset_hba(hba) ? FAILED : SUCCESS;
 }
 
 static int hptiop_adjust_disk_queue_depth(struct scsi_device *sdev,
