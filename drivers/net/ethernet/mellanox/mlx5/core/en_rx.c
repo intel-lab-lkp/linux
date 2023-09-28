@@ -298,6 +298,16 @@ static void mlx5e_page_release_fragmented(struct mlx5e_rq *rq,
 	u16 drain_count = MLX5E_PAGECNT_BIAS_MAX - frag_page->frags;
 	struct page *page = frag_page->page;
 
+	if (!page)
+		return;
+
+	/*
+	 * we're dropping all of our counts on this page, make sure we
+	 * don't do it again the next time we process this frag
+	 */
+	frag_page->frags = 0;
+	frag_page->page = NULL;
+
 	if (page_pool_defrag_page(page, drain_count) == 0)
 		page_pool_put_defragged_page(rq->page_pool, page, -1, true);
 }
