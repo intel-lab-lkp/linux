@@ -81,4 +81,27 @@ config RPMSG_VIRTIO
 	select RPMSG_NS
 	select VIRTIO
 
+config RPMSG_VIRTIO_MAX_BUF_SIZE
+	int "Virtio RPMSG max buffer size (in bytes)"
+	default 512
+	depends on RPMSG_VIRTIO
+	help
+	  This option allows you to configure the maximum buffer size (in bytes)
+	  for Virtio RPMSG communications. The number of buffers will be computed
+	  based on the number of buffers (CONFIG_RPMSG_VIRTIO_MAX_NUM_BUFS)
+	  supported by the vring. By default, it supports up to a maximum of 512
+	  buffers (256 in each direction). Each buffer consists of 16 bytes for the
+	  message header and the remaining bytes for the payload.The default values
+	  will utilize a maximum total space of 256KB for the buffers.
+
+config RPMSG_VIRTIO_MAX_NUM_BUFS
+	int "Virtio RPMSG max buffer count (even number for TX and Rx)"
+	default 512
+	depends on RPMSG_VIRTIO
+	help
+	  This option allows you to configure the maximum number of buffers used
+	  for Virtio RPMSG communication. By default, it supports up to a maximum
+	  of 512 buffers (256 in each direction). Please note that this value
+	  should be an even number, as it accounts for both transmit (TX) and
+	  receive (Rx) buffers.
 endmenu
