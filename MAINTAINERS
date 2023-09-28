@@ -59,6 +59,11 @@ Descriptions of section entries and preferred order
 	      matches patches or files that contain one or more of the words
 	      printk, pr_info or pr_err
 	   One regex pattern per line.  Multiple K: lines acceptable.
+  D: *Diff content regex* (perl extended) pattern match that applies only to
+     patches and not entire files (e.g. when using the get_maintainers.pl
+     script).
+     Usage same as K:.
+
 
 Maintainers List
 ----------------

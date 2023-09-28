@@ -342,6 +342,7 @@ if ($tree && !top_of_kernel_tree($lk_path)) {
 
 my @typevalue = ();
 my %keyword_hash;
+my %patch_keyword_hash;
 my @mfiles = ();
 my @self_test_info = ();
 
@@ -369,8 +370,10 @@ sub read_maintainer_file {
 		    $value =~ s@([^/])$@$1/@;
 		}
 	    } elsif ($type eq "K") {
-		$keyword_hash{@typevalue} = $value;
-	    }
+          $keyword_hash{@typevalue} = $value;
+	    } elsif ($type eq "D") {
+          $patch_keyword_hash{@typevalue} = $value;
+      }
 	    push(@typevalue, "$type:$value");
 	} elsif (!(/^\s*$/ || /^\s*\#/)) {
 	    push(@typevalue, $line);
@@ -607,6 +610,11 @@ foreach my $file (@ARGV) {
 			push(@keyword_tvi, $line);
 		    }
 		}
+    foreach my $line(keys %patch_keyword_hash) {
+      if ($patch_line =~ m/${patch_prefix}$patch_keyword_hash{$line}/x) {
+        push(@keyword_tvi, $line);
+      }
+    }
 	    }
 	}
 	close($patch);
