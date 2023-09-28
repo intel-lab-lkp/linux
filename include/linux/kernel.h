@@ -37,7 +37,8 @@
 #include <uapi/linux/kernel.h>
 
 #define STACK_MAGIC	0xdeadbeef
-
+struct cfs_rq;
+struct sched_entity;
 /**
  * REPEAT_BYTE - repeat the value @x multiple times as an unsigned long value
  * @x: value to repeat
@@ -102,6 +103,10 @@ extern int __cond_resched(void);
 # define might_resched() __cond_resched()
 
 #elif defined(CONFIG_PREEMPT_DYNAMIC) && defined(CONFIG_HAVE_PREEMPT_DYNAMIC_CALL)
+
+extern void __update_sq_avg_block(u64 now, struct sched_entity *se);
+
+extern void __update_sq_avg(u64 now, struct sched_entity *se);
 
 extern int __cond_resched(void);
 

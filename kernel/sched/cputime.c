@@ -479,6 +479,40 @@ void thread_group_cputime_adjusted(struct task_struct *p, u64 *ut, u64 *st)
 
 #else /* !CONFIG_VIRT_CPU_ACCOUNTING_NATIVE: */
 
+void get_sqthread_util(struct task_struct *p)
+{
+	struct task_struct **sqstat = kcpustat_this_cpu->sq_util;
+
+	for (int i = 0; i < MAX_SQ_NUM; i++) {
+		if (sqstat[i] && (task_cpu(sqstat[i]) != task_cpu(p)
+		|| sqstat[i]->__state == TASK_DEAD))
+			sqstat[i] = NULL;
+	}
+
+	if (strncmp(p->comm, "iou-sqp", 7))
+		return;
+
+	if (!kcpustat_this_cpu->flag) {
+		for (int j = 0; j < MAX_SQ_NUM; j++)
+			kcpustat_this_cpu->sq_util[j] = NULL;
+		kcpustat_this_cpu->flag = true;
+	}
+	int index = MAX_SQ_NUM;
+	bool flag = true;
+
+	for (int i = 0; i < MAX_SQ_NUM; i++) {
+		if (sqstat[i] == p)
+			flag = false;
+		if (!sqstat[i] || task_cpu(sqstat[i]) != task_cpu(p)) {
+			sqstat[i] = NULL;
+			if (i < index)
+				index = i;
+		}
+	}
+	if (flag && index < MAX_SQ_NUM)
+		sqstat[index] = p;
+}
+
 /*
  * Account a single tick of CPU time.
  * @p: the process that the CPU time gets accounted to
@@ -487,7 +521,7 @@ void thread_group_cputime_adjusted(struct task_struct *p, u64 *ut, u64 *st)
 void account_process_tick(struct task_struct *p, int user_tick)
 {
 	u64 cputime, steal;
-
+	get_sqthread_util(p);
 	if (vtime_accounting_enabled_this_cpu())
 		return;
 

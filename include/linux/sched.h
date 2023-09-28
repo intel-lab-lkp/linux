@@ -583,6 +583,7 @@ struct sched_entity {
 	 * collide with read-mostly values above.
 	 */
 	struct sched_avg		avg;
+	struct sched_avg		sq_avg;
 #endif
 };
 

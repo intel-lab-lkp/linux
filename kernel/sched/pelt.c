@@ -266,6 +266,20 @@ ___update_load_avg(struct sched_avg *sa, unsigned long load)
 	WRITE_ONCE(sa->util_avg, sa->util_sum / divider);
 }
 
+void __update_sq_avg_block(u64 now, struct sched_entity *se)
+{
+	if (___update_load_sum(now, &se->sq_avg, 0, 0, 0))
+		___update_load_avg(&se->sq_avg, se_weight(se));
+}
+
+void __update_sq_avg(u64 now, struct sched_entity *se)
+{
+	struct cfs_rq *qcfs_rq = cfs_rq_of(se);
+
+	if (___update_load_sum(now, &se->sq_avg, !!se->on_rq, se_runnable(se), qcfs_rq->curr == se))
+		___update_load_avg(&se->sq_avg, se_weight(se));
+}
+
 /*
  * sched_entity:
  *
