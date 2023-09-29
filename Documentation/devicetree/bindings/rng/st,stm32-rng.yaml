@@ -30,6 +30,10 @@ properties:
     type: boolean
     description: If set enable the clock detection management
 
+  access-controller:
+    minItems: 1
+    maxItems: 2
+
 required:
   - compatible
   - reg

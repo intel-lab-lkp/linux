@@ -29,6 +29,10 @@ properties:
       - const: cec
       - const: hdmi-cec
 
+  access-controller:
+    minItems: 1
+    maxItems: 2
+
 required:
   - compatible
   - reg

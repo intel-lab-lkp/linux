@@ -36,6 +36,10 @@ properties:
   resets:
     maxItems: 1
 
+  access-controller:
+    minItems: 1
+    maxItems: 2
+
   port:
     $ref: /schemas/graph.yaml#/$defs/port-base
     unevaluatedProperties: false

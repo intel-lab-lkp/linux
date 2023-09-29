@@ -46,6 +46,10 @@ properties:
       - const: tx
       - const: rx
 
+  access-controller:
+    minItems: 1
+    maxItems: 2
+
 required:
   - compatible
   - reg
