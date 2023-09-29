@@ -19,7 +19,6 @@ struct nft_rbtree {
 	struct rb_root		root;
 	rwlock_t		lock;
 	seqcount_rwlock_t	count;
-	struct delayed_work	gc_work;
 };
 
 struct nft_rbtree_elem {
@@ -626,89 +625,6 @@ cont:
 	read_unlock_bh(&priv->lock);
 }
 
-static void nft_rbtree_gc(struct work_struct *work)
-{
-	struct nft_rbtree_elem *rbe, *rbe_end = NULL;
-	struct nftables_pernet *nft_net;
-	struct nft_rbtree *priv;
-	struct nft_trans_gc *gc;
-	struct rb_node *node;
-	struct nft_set *set;
-	unsigned int gc_seq;
-	struct net *net;
-
-	priv = container_of(work, struct nft_rbtree, gc_work.work);
-	set  = nft_set_container_of(priv);
-	net  = read_pnet(&set->net);
-	nft_net = nft_pernet(net);
-	gc_seq  = READ_ONCE(nft_net->gc_seq);
-
-	if (nft_set_gc_is_pending(set))
-		goto done;
-
-	gc = nft_trans_gc_alloc(set, gc_seq, GFP_KERNEL);
-	if (!gc)
-		goto done;
-
-	read_lock_bh(&priv->lock);
-	for (node = rb_first(&priv->root); node != NULL; node = rb_next(node)) {
-
-		/* Ruleset has been updated, try later. */
-		if (READ_ONCE(nft_net->gc_seq) != gc_seq) {
-			nft_trans_gc_destroy(gc);
-			gc = NULL;
-			goto try_later;
-		}
-
-		rbe = rb_entry(node, struct nft_rbtree_elem, node);
-
-		if (nft_set_elem_is_dead(&rbe->ext))
-			goto dead_elem;
-
-		/* elements are reversed in the rbtree for historical reasons,
-		 * from highest to lowest value, that is why end element is
-		 * always visited before the start element.
-		 */
-		if (nft_rbtree_interval_end(rbe)) {
-			rbe_end = rbe;
-			continue;
-		}
-		if (!nft_set_elem_expired(&rbe->ext))
-			continue;
-
-		nft_set_elem_dead(&rbe->ext);
-
-		if (!rbe_end)
-			continue;
-
-		nft_set_elem_dead(&rbe_end->ext);
-
-		gc = nft_trans_gc_queue_async(gc, gc_seq, GFP_ATOMIC);
-		if (!gc)
-			goto try_later;
-
-		nft_trans_gc_elem_add(gc, rbe_end);
-		rbe_end = NULL;
-dead_elem:
-		gc = nft_trans_gc_queue_async(gc, gc_seq, GFP_ATOMIC);
-		if (!gc)
-			goto try_later;
-
-		nft_trans_gc_elem_add(gc, rbe);
-	}
-
-	gc = nft_trans_gc_catchall_async(gc, gc_seq);
-
-try_later:
-	read_unlock_bh(&priv->lock);
-
-	if (gc)
-		nft_trans_gc_queue_async_done(gc);
-done:
-	queue_delayed_work(system_power_efficient_wq, &priv->gc_work,
-			   nft_set_gc_interval(set));
-}
-
 static u64 nft_rbtree_privsize(const struct nlattr * const nla[],
 			       const struct nft_set_desc *desc)
 {
@@ -725,11 +641,6 @@ static int nft_rbtree_init(const struct nft_set *set,
 	seqcount_rwlock_init(&priv->count, &priv->lock);
 	priv->root = RB_ROOT;
 
-	INIT_DEFERRABLE_WORK(&priv->gc_work, nft_rbtree_gc);
-	if (set->flags & NFT_SET_TIMEOUT)
-		queue_delayed_work(system_power_efficient_wq, &priv->gc_work,
-				   nft_set_gc_interval(set));
-
 	return 0;
 }
 
@@ -740,7 +651,6 @@ static void nft_rbtree_destroy(const struct nft_ctx *ctx,
 	struct nft_rbtree_elem *rbe;
 	struct rb_node *node;
 
-	cancel_delayed_work_sync(&priv->gc_work);
 	rcu_barrier();
 	while ((node = priv->root.rb_node) != NULL) {
 		rb_erase(node, &priv->root);
