@@ -19,4 +19,8 @@ int xfs_vn_setattr_size(struct mnt_idmap *idmap,
 int xfs_inode_init_security(struct inode *inode, struct inode *dir,
 		const struct qstr *qstr);
 
+void xfs_ip_atomic_write_attr(struct xfs_inode *ip,
+			xfs_filblks_t *unit_min_fsb,
+			xfs_filblks_t *unit_max_fsb);
+
 #endif /* __XFS_IOPS_H__ */

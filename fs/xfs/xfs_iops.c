@@ -546,6 +546,46 @@ xfs_stat_blksize(
 	return PAGE_SIZE;
 }
 
+void xfs_ip_atomic_write_attr(struct xfs_inode *ip,
+			xfs_filblks_t *unit_min_fsb,
+			xfs_filblks_t *unit_max_fsb)
+{
+	xfs_extlen_t		extsz_hint = xfs_get_extsz_hint(ip);
+	struct xfs_buftarg	*target = xfs_inode_buftarg(ip);
+	struct block_device	*bdev = target->bt_bdev;
+	struct xfs_mount	*mp = ip->i_mount;
+	xfs_filblks_t		atomic_write_unit_min,
+				atomic_write_unit_max,
+				align;
+
+	atomic_write_unit_min = XFS_B_TO_FSB(mp,
+		queue_atomic_write_unit_min_bytes(bdev->bd_queue));
+	atomic_write_unit_max = XFS_B_TO_FSB(mp,
+		queue_atomic_write_unit_max_bytes(bdev->bd_queue));
+
+	/* for RT, unset extsize gives hint of 1 */
+	/* for !RT, unset extsize gives hint of 0 */
+	if (extsz_hint && (XFS_IS_REALTIME_INODE(ip) ||
+	    (ip->i_diflags2 & XFS_DIFLAG2_FORCEALIGN)))
+		align = extsz_hint;
+	else
+		align = 1;
+
+	if (atomic_write_unit_max == 0) {
+		*unit_min_fsb = 0;
+		*unit_max_fsb = 0;
+	} else if (atomic_write_unit_min == 0) {
+		*unit_min_fsb = 1;
+		*unit_max_fsb = min_t(xfs_filblks_t, atomic_write_unit_max,
+					align);
+	} else {
+		*unit_min_fsb = min_t(xfs_filblks_t, atomic_write_unit_min,
+					align);
+		*unit_max_fsb = min_t(xfs_filblks_t, atomic_write_unit_max,
+					align);
+	}
+}
+
 STATIC int
 xfs_vn_getattr(
 	struct mnt_idmap	*idmap,
@@ -613,6 +653,17 @@ xfs_vn_getattr(
 			stat->result_mask |= STATX_DIOALIGN;
 			stat->dio_mem_align = bdev_dma_alignment(bdev) + 1;
 			stat->dio_offset_align = bdev_logical_block_size(bdev);
+		}
+		if (request_mask & STATX_WRITE_ATOMIC) {
+			xfs_filblks_t unit_min_fsb, unit_max_fsb;
+
+			xfs_ip_atomic_write_attr(ip, &unit_min_fsb,
+				&unit_max_fsb);
+			stat->atomic_write_unit_min = XFS_FSB_TO_B(mp, unit_min_fsb);
+			stat->atomic_write_unit_max = XFS_FSB_TO_B(mp, unit_max_fsb);
+			stat->attributes |= STATX_ATTR_WRITE_ATOMIC;
+			stat->attributes_mask |= STATX_ATTR_WRITE_ATOMIC;
+			stat->result_mask |= STATX_WRITE_ATOMIC;
 		}
 		fallthrough;
 	default:
