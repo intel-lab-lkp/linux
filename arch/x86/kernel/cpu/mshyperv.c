@@ -347,13 +347,26 @@ static void __init reduced_hw_init(void)
 	x86_init.irqs.pre_vector_init	= x86_init_noop;
 }
 
+int hv_get_hypervisor_version(union hv_hypervisor_version_info *info)
+{
+	unsigned int hv_max_functions;
+
+	hv_max_functions = cpuid_eax(HYPERV_CPUID_VENDOR_AND_MAX_FUNCTIONS);
+	if (hv_max_functions < HYPERV_CPUID_VERSION) {
+		pr_err("%s: Could not detect Hyper-V version\n", __func__);
+		return -ENODEV;
+	}
+
+	cpuid(HYPERV_CPUID_VERSION, &info->eax, &info->ebx, &info->ecx, &info->edx);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(hv_get_hypervisor_version);
+
 static void __init ms_hyperv_init_platform(void)
 {
 	int hv_max_functions_eax;
-	int hv_host_info_eax;
-	int hv_host_info_ebx;
-	int hv_host_info_ecx;
-	int hv_host_info_edx;
+	union hv_hypervisor_version_info version;
 
 #ifdef CONFIG_PARAVIRT
 	pv_info.name = "Hyper-V";
@@ -407,16 +420,11 @@ static void __init ms_hyperv_init_platform(void)
 	/*
 	 * Extract host information.
 	 */
-	if (hv_max_functions_eax >= HYPERV_CPUID_VERSION) {
-		hv_host_info_eax = cpuid_eax(HYPERV_CPUID_VERSION);
-		hv_host_info_ebx = cpuid_ebx(HYPERV_CPUID_VERSION);
-		hv_host_info_ecx = cpuid_ecx(HYPERV_CPUID_VERSION);
-		hv_host_info_edx = cpuid_edx(HYPERV_CPUID_VERSION);
-
-		pr_info("Hyper-V: Host Build %d.%d.%d.%d-%d-%d\n",
-			hv_host_info_ebx >> 16, hv_host_info_ebx & 0xFFFF,
-			hv_host_info_eax, hv_host_info_edx & 0xFFFFFF,
-			hv_host_info_ecx, hv_host_info_edx >> 24);
+	if (hv_get_hypervisor_version(&version) == 0) {
+		pr_info("Hyper-V Host Build:%d-%d.%d-%d-%d.%d\n",
+			version.build_number, version.major_version,
+			version.minor_version, version.service_pack,
+			version.service_branch, version.service_number);
 	}
 
 	if (ms_hyperv.features & HV_ACCESS_FREQUENCY_MSRS &&

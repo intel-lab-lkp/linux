@@ -19,10 +19,19 @@
 
 static bool hyperv_initialized;
 
+int hv_get_hypervisor_version(union hv_hypervisor_version_info *info)
+{
+	hv_get_vpreg_128(HV_REGISTER_HYPERVISOR_VERSION,
+			 (struct hv_get_vp_registers_output *)info);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(hv_get_hypervisor_version);
+
 static int __init hyperv_init(void)
 {
-	struct hv_get_vp_registers_output	result;
-	u32	a, b, c, d;
+	struct hv_get_vp_registers_output result;
+	union hv_hypervisor_version_info version;
 	u64	guest_id;
 	int	ret;
 
@@ -55,13 +64,11 @@ static int __init hyperv_init(void)
 		ms_hyperv.misc_features);
 
 	/* Get information about the Hyper-V host version */
-	hv_get_vpreg_128(HV_REGISTER_HYPERVISOR_VERSION, &result);
-	a = result.as32.a;
-	b = result.as32.b;
-	c = result.as32.c;
-	d = result.as32.d;
+	hv_get_hypervisor_version(&version);
 	pr_info("Hyper-V: Host Build %d.%d.%d.%d-%d-%d\n",
-		b >> 16, b & 0xFFFF, a,	d & 0xFFFFFF, c, d >> 24);
+		version.major_version, version.minor_version,
+		version.build_number, version.service_number,
+		version.service_pack, version.service_branch);
 
 	ret = hv_common_init();
 	if (ret)
