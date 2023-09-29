@@ -1926,6 +1926,35 @@ static void nvme_update_disk_info(struct gendisk *disk,
 	blk_queue_io_min(disk->queue, phys_bs);
 	blk_queue_io_opt(disk->queue, io_opt);
 
+	atomic_bs = rounddown_pow_of_two(atomic_bs);
+	if (id->nsfeat & NVME_NS_FEAT_ATOMICS && id->nawupf) {
+		if (id->nabo) {
+			dev_err(ns->ctrl->device, "Support atomic NABO=%x\n",
+				id->nabo);
+		} else {
+			u32 boundary = 0;
+
+			if (le16_to_cpu(id->nabspf))
+				boundary = (le16_to_cpu(id->nabspf) + 1) * bs;
+
+			if (is_power_of_2(boundary) || !boundary) {
+				blk_queue_atomic_write_max_bytes(disk->queue, atomic_bs);
+				blk_queue_atomic_write_unit_min_sectors(disk->queue, 1);
+				blk_queue_atomic_write_unit_max_sectors(disk->queue,
+									atomic_bs / bs);
+				blk_queue_atomic_write_boundary_bytes(disk->queue, boundary);
+			} else {
+				dev_err(ns->ctrl->device, "Unsupported atomic boundary=0x%x\n",
+					boundary);
+			}
+		}
+	} else if (ns->ctrl->subsys->awupf) {
+		blk_queue_atomic_write_max_bytes(disk->queue, atomic_bs);
+		blk_queue_atomic_write_unit_min_sectors(disk->queue, 1);
+		blk_queue_atomic_write_unit_max_sectors(disk->queue, atomic_bs / bs);
+		blk_queue_atomic_write_boundary_bytes(disk->queue, 0);
+	}
+
 	/*
 	 * Register a metadata profile for PI, or the plain non-integrity NVMe
 	 * metadata masquerading as Type 0 if supported, otherwise reject block
