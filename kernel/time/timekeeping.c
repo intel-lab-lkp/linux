@@ -990,6 +990,30 @@ void ktime_get_ts64(struct timespec64 *ts)
 EXPORT_SYMBOL_GPL(ktime_get_ts64);
 
 /**
+ * ktime_get_cycles64 - get the raw clock cycles in timespec64 format
+ * @ts:		pointer to timespec variable
+ *
+ * This function converts the raw clock cycles into timespce64 format
+ * in the varibale pointed to by @ts
+ */
+void ktime_get_cycles64(struct timespec64 *ts)
+{
+	struct timekeeper *tk = &tk_core.timekeeper;
+	unsigned int seq;
+	u64 now;
+
+	WARN_ON_ONCE(timekeeping_suspended);
+
+	do {
+		seq = read_seqcount_begin(&tk_core.seq);
+		now = tk_clock_read(&tk->tkr_mono);
+	} while (read_seqcount_retry(&tk_core.seq, seq));
+
+	*ts = ns_to_timespec64(now);
+}
+EXPORT_SYMBOL_GPL(ktime_get_cycles64);
+
+/**
  * ktime_get_seconds - Get the seconds portion of CLOCK_MONOTONIC
  *
  * Returns the seconds portion of CLOCK_MONOTONIC with a single non
