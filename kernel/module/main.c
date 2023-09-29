@@ -1787,21 +1787,21 @@ static int elf_validity_cache_copy(struct load_info *info, int flags)
 					i, shdr->sh_type);
 				return err;
 			}
-			if (strcmp(info->secstrings + shdr->sh_name,
-				   ".gnu.linkonce.this_module") == 0) {
-				num_mod_secs++;
-				mod_idx = i;
-			} else if (strcmp(info->secstrings + shdr->sh_name,
-				   ".modinfo") == 0) {
-				num_info_secs++;
-				info_idx = i;
-			}
 
 			if (shdr->sh_flags & SHF_ALLOC) {
 				if (shdr->sh_name >= strhdr->sh_size) {
 					pr_err("Invalid ELF section name in module (section %u type %u)\n",
 					       i, shdr->sh_type);
 					return -ENOEXEC;
+				}
+				if (strcmp(info->secstrings + shdr->sh_name,
+					   ".gnu.linkonce.this_module") == 0) {
+					num_mod_secs++;
+					mod_idx = i;
+				} else if (strcmp(info->secstrings + shdr->sh_name,
+					   ".modinfo") == 0) {
+					num_info_secs++;
+					info_idx = i;
 				}
 			}
 			break;
