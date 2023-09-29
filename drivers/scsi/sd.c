@@ -837,6 +837,33 @@ static blk_status_t sd_setup_unmap_cmnd(struct scsi_cmnd *cmd)
 	return scsi_alloc_sgtables(cmd);
 }
 
+static void sd_config_atomic(struct scsi_disk *sdkp)
+{
+	unsigned int logical_block_size = sdkp->device->sector_size;
+	struct request_queue *q = sdkp->disk->queue;
+
+	if (sdkp->max_atomic) {
+		unsigned int physical_block_size_sectors =
+			sdkp->physical_block_size / sdkp->device->sector_size;
+		unsigned int max_atomic = max_t(unsigned int,
+			rounddown_pow_of_two(sdkp->max_atomic),
+			rounddown_pow_of_two(sdkp->max_atomic_with_boundary));
+		unsigned int unit_min = sdkp->atomic_granularity ?
+			rounddown_pow_of_two(sdkp->atomic_granularity) :
+			physical_block_size_sectors;
+		unsigned int unit_max = max_atomic;
+
+		if (sdkp->max_atomic_boundary)
+			unit_max = min_t(unsigned int, unit_max,
+				rounddown_pow_of_two(sdkp->max_atomic_boundary));
+
+		blk_queue_atomic_write_max_bytes(q, max_atomic * logical_block_size);
+		blk_queue_atomic_write_unit_min_sectors(q, unit_min);
+		blk_queue_atomic_write_unit_max_sectors(q, unit_max);
+		blk_queue_atomic_write_boundary_bytes(q, 0);
+	}
+}
+
 static blk_status_t sd_setup_write_same16_cmnd(struct scsi_cmnd *cmd,
 		bool unmap)
 {
@@ -2982,7 +3009,7 @@ static void sd_read_block_limits(struct scsi_disk *sdkp)
 		sdkp->max_ws_blocks = (u32)get_unaligned_be64(&vpd->data[36]);
 
 		if (!sdkp->lbpme)
-			goto out;
+			goto read_atomics;
 
 		lba_count = get_unaligned_be32(&vpd->data[20]);
 		desc_count = get_unaligned_be32(&vpd->data[24]);
@@ -3013,6 +3040,14 @@ static void sd_read_block_limits(struct scsi_disk *sdkp)
 			else
 				sd_config_discard(sdkp, SD_LBP_DISABLE);
 		}
+read_atomics:
+		sdkp->max_atomic = get_unaligned_be32(&vpd->data[44]);
+		sdkp->atomic_alignment  = get_unaligned_be32(&vpd->data[48]);
+		sdkp->atomic_granularity  = get_unaligned_be32(&vpd->data[52]);
+		sdkp->max_atomic_with_boundary  = get_unaligned_be32(&vpd->data[56]);
+		sdkp->max_atomic_boundary = get_unaligned_be32(&vpd->data[60]);
+
+		sd_config_atomic(sdkp);
 	}
 
  out:
