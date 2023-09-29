@@ -54,6 +54,14 @@
 		      <0xfffec100 0x100>;
 	};
 
+	base_fpga_region {
+		compatible = "fpga-region";
+		fpga-mgr = <&fpgamgr0>;
+
+		#address-cells = <0x1>;
+		#size-cells = <0x1>;
+	};
+
 	soc {
 		#address-cells = <1>;
 		#size-cells = <1>;
@@ -85,14 +93,6 @@
 				resets = <&rst DMA_RESET>;
 				reset-names = "dma";
 			};
-		};
-
-		base_fpga_region {
-			compatible = "fpga-region";
-			fpga-mgr = <&fpgamgr0>;
-
-			#address-cells = <0x1>;
-			#size-cells = <0x1>;
 		};
 
 		can0: can@ffc00000 {
