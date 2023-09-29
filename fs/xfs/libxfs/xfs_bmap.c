@@ -3328,6 +3328,19 @@ xfs_bmap_compute_alignments(
 		align = xfs_get_cowextsz_hint(ap->ip);
 	else if (ap->datatype & XFS_ALLOC_USERDATA)
 		align = xfs_get_extsz_hint(ap->ip);
+
+	/*
+	 * xfs_get_cowextsz_hint() returns extsz_hint for when forcealign is
+	 * set as forcealign and cowextsz_hint are mutually exclusive
+	 */
+	if (xfs_inode_forcealign(ap->ip) && align) {
+		args->alignment = align;
+		if (stripe_align % align)
+			stripe_align = align;
+	} else {
+		args->alignment = 1;
+	}
+
 	if (align) {
 		if (xfs_bmap_extsize_align(mp, &ap->got, &ap->prev, align, 0,
 					ap->eof, 0, ap->conv, &ap->offset,
@@ -3423,7 +3436,6 @@ xfs_bmap_exact_minlen_extent_alloc(
 	args.minlen = args.maxlen = ap->minlen;
 	args.total = ap->total;
 
-	args.alignment = 1;
 	args.minalignslop = 0;
 
 	args.minleft = ap->minleft;
@@ -3469,6 +3481,7 @@ xfs_bmap_btalloc_at_eof(
 {
 	struct xfs_mount	*mp = args->mp;
 	struct xfs_perag	*caller_pag = args->pag;
+	int			orig_alignment = args->alignment;
 	int			error;
 
 	/*
@@ -3543,10 +3556,10 @@ xfs_bmap_btalloc_at_eof(
 
 	/*
 	 * Allocation failed, so turn return the allocation args to their
-	 * original non-aligned state so the caller can proceed on allocation
-	 * failure as if this function was never called.
+	 * original state so the caller can proceed on allocation failure as
+	 * if this function was never called.
 	 */
-	args->alignment = 1;
+	args->alignment = orig_alignment;
 	return 0;
 }
 
@@ -3694,7 +3707,6 @@ xfs_bmap_btalloc(
 		.wasdel		= ap->wasdel,
 		.resv		= XFS_AG_RESV_NONE,
 		.datatype	= ap->datatype,
-		.alignment	= 1,
 		.minalignslop	= 0,
 	};
 	xfs_fileoff_t		orig_offset;
