@@ -154,6 +154,25 @@ allOf:
         compatible:
           contains:
             enum:
+              - qcom,ipq5332-dwc3
+    then:
+      properties:
+        clocks:
+          maxItems: 6
+        clock-names:
+          items:
+            - const: core
+            - const: iface
+            - const: sleep
+            - const: mock_utmi
+            - const: aux
+            - const: lfps
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
               - qcom,ipq8064-dwc3
     then:
       properties:
@@ -238,7 +257,6 @@ allOf:
         compatible:
           contains:
             enum:
-              - qcom,ipq5332-dwc3
               - qcom,msm8994-dwc3
               - qcom,qcs404-dwc3
     then:
