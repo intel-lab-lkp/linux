@@ -2131,14 +2131,17 @@ int set_memory_global(unsigned long addr, int numpages)
 }
 
 /*
- * __set_memory_enc_pgtable() is used for the hypervisors that get
+ * __set_memory_enc_dec() is used for the hypervisors that get
  * informed about "encryption" status via page tables.
  */
-static int __set_memory_enc_pgtable(unsigned long addr, int numpages, bool enc)
+static int __set_memory_enc_dec(unsigned long addr, int numpages, bool enc)
 {
 	pgprot_t empty = __pgprot(0);
 	struct cpa_data cpa;
 	int ret;
+
+	if (!cc_platform_has(CC_ATTR_MEM_ENCRYPT))
+		return 0;
 
 	/* Should not be working on unaligned addresses */
 	if (WARN_ONCE(addr & ~PAGE_MASK, "misaligned address: %#lx\n", addr))
@@ -2198,14 +2201,6 @@ static int __set_memory_enc_pgtable(unsigned long addr, int numpages, bool enc)
 	 * the TLB.
 	 */
 	return set_memory_p(&addr, numpages);
-}
-
-static int __set_memory_enc_dec(unsigned long addr, int numpages, bool enc)
-{
-	if (cc_platform_has(CC_ATTR_MEM_ENCRYPT))
-		return __set_memory_enc_pgtable(addr, numpages, enc);
-
-	return 0;
 }
 
 int set_memory_encrypted(unsigned long addr, int numpages)
