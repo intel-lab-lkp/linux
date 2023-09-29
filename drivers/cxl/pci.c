@@ -165,6 +165,49 @@ static void cxl_mbox_sanitize_work(struct work_struct *work)
 	mutex_unlock(&mds->mbox_mutex);
 }
 
+static void cxl_sanitize_teardown_notifier(void *data)
+{
+	struct cxl_memdev_state *mds = data;
+	struct kernfs_node *state;
+
+	/*
+	 * Prevent new irq triggered invocations of the workqueue and
+	 * flush inflight invocations.
+	 */
+	mutex_lock(&mds->mbox_mutex);
+	state = mds->security.sanitize_node;
+	mds->security.sanitize_node = NULL;
+	mutex_unlock(&mds->mbox_mutex);
+
+	cancel_delayed_work_sync(&mds->security.poll_dwork);
+	sysfs_put(state);
+}
+
+static int cxl_sanitize_setup_notifier(struct cxl_memdev *cxlmd)
+{
+	struct cxl_dev_state *cxlds = cxlmd->cxlds;
+	struct cxl_memdev_state *mds = to_cxl_memdev_state(cxlds);
+	struct device *dev = cxlds->dev;
+	struct kernfs_node *sec;
+
+	if (!test_bit(CXL_SEC_ENABLED_SANITIZE, mds->security.enabled_cmds))
+		return 0;
+
+	sec = sysfs_get_dirent(dev->kobj.sd, "security");
+	if (!sec) {
+		dev_err(dev, "sanitize notification setup failure\n");
+		return -ENOENT;
+	}
+	mds->security.sanitize_node = sysfs_get_dirent(sec, "state");
+	sysfs_put(sec);
+	if (!mds->security.sanitize_node) {
+		dev_err(dev, "sanitize notification setup failure\n");
+		return -ENOENT;
+	}
+
+	return devm_add_action_or_reset(dev, cxl_sanitize_teardown_notifier, mds);
+}
+
 /**
  * __cxl_pci_mbox_send_cmd() - Execute a mailbox command
  * @mds: The memory device driver data
@@ -872,6 +915,10 @@ static int cxl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		return PTR_ERR(cxlmd);
 
 	rc = cxl_memdev_setup_fw_upload(mds);
+	if (rc)
+		return rc;
+
+	rc = cxl_sanitize_setup_notifier(cxlmd);
 	if (rc)
 		return rc;
 

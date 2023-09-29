@@ -556,20 +556,11 @@ void clear_exclusive_cxl_commands(struct cxl_memdev_state *mds,
 }
 EXPORT_SYMBOL_NS_GPL(clear_exclusive_cxl_commands, CXL);
 
-static void cxl_memdev_security_shutdown(struct device *dev)
-{
-	struct cxl_memdev *cxlmd = to_cxl_memdev(dev);
-	struct cxl_memdev_state *mds = to_cxl_memdev_state(cxlmd->cxlds);
-
-	cancel_delayed_work_sync(&mds->security.poll_dwork);
-}
-
 static void cxl_memdev_shutdown(struct device *dev)
 {
 	struct cxl_memdev *cxlmd = to_cxl_memdev(dev);
 
 	down_write(&cxl_memdev_rwsem);
-	cxl_memdev_security_shutdown(dev);
 	cxlmd->cxlds = NULL;
 	up_write(&cxl_memdev_rwsem);
 }
@@ -1001,35 +992,6 @@ static const struct file_operations cxl_memdev_fops = {
 	.llseek = noop_llseek,
 };
 
-static void put_sanitize(void *data)
-{
-	struct cxl_memdev_state *mds = data;
-
-	sysfs_put(mds->security.sanitize_node);
-}
-
-static int cxl_memdev_security_init(struct cxl_memdev *cxlmd)
-{
-	struct cxl_dev_state *cxlds = cxlmd->cxlds;
-	struct cxl_memdev_state *mds = to_cxl_memdev_state(cxlds);
-	struct device *dev = &cxlmd->dev;
-	struct kernfs_node *sec;
-
-	sec = sysfs_get_dirent(dev->kobj.sd, "security");
-	if (!sec) {
-		dev_err(dev, "sysfs_get_dirent 'security' failed\n");
-		return -ENODEV;
-	}
-	mds->security.sanitize_node = sysfs_get_dirent(sec, "state");
-	sysfs_put(sec);
-	if (!mds->security.sanitize_node) {
-		dev_err(dev, "sysfs_get_dirent 'state' failed\n");
-		return -ENODEV;
-	}
-
-	return devm_add_action_or_reset(cxlds->dev, put_sanitize, mds);
- }
-
 struct cxl_memdev *devm_cxl_add_memdev(struct cxl_dev_state *cxlds)
 {
 	struct cxl_memdev *cxlmd;
@@ -1055,10 +1017,6 @@ struct cxl_memdev *devm_cxl_add_memdev(struct cxl_dev_state *cxlds)
 
 	cdev = &cxlmd->cdev;
 	rc = cdev_device_add(cdev, dev);
-	if (rc)
-		goto err;
-
-	rc = cxl_memdev_security_init(cxlmd);
 	if (rc)
 		goto err;
 
