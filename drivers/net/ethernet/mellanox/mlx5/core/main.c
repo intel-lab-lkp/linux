@@ -250,7 +250,7 @@ static void mlx5_set_driver_version(struct mlx5_core_dev *dev)
 	mlx5_cmd_exec_in(dev, set_driver_version, in);
 }
 
-static int set_dma_caps(struct pci_dev *pdev)
+static int mlx5_dma_init(struct pci_dev *pdev)
 {
 	int err;
 
@@ -904,12 +904,6 @@ static int mlx5_pci_init(struct mlx5_core_dev *dev, struct pci_dev *pdev,
 	}
 
 	pci_set_master(pdev);
-
-	err = set_dma_caps(pdev);
-	if (err) {
-		mlx5_core_err(dev, "Failed setting DMA capabilities mask, aborting\n");
-		goto err_clr_master;
-	}
 
 	if (pci_enable_atomic_ops_to_root(pdev, PCI_EXP_DEVCAP2_ATOMIC_COMP32) &&
 	    pci_enable_atomic_ops_to_root(pdev, PCI_EXP_DEVCAP2_ATOMIC_COMP64) &&
@@ -1908,9 +1902,15 @@ static int probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 		goto adev_init_err;
 	}
 
+	err = mlx5_dma_init(pdev);
+	if (err) {
+		mlx5_core_err(dev, "Failed setting DMA capabilities mask, aborting\n");
+		goto dma_init_err;
+	}
+
 	err = mlx5_mdev_init(dev, prof_sel);
 	if (err)
-		goto mdev_init_err;
+		goto dma_init_err;
 
 	err = mlx5_pci_init(dev, pdev, id);
 	if (err) {
@@ -1942,7 +1942,7 @@ err_init_one:
 	mlx5_pci_close(dev);
 pci_init_err:
 	mlx5_mdev_uninit(dev);
-mdev_init_err:
+dma_init_err:
 	mlx5_adev_idx_free(dev->priv.adev_idx);
 adev_init_err:
 	mlx5_devlink_free(devlink);
