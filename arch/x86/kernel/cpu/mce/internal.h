@@ -54,7 +54,44 @@ static inline void intel_clear_lmce(void) { }
 static inline bool intel_filter_mce(struct mce *m) { return false; }
 #endif
 
-void mce_timer_kick(unsigned long interval);
+void mce_timer_kick(bool storm);
+void cmci_storm_begin(unsigned int bank);
+void cmci_storm_end(unsigned int bank);
+void mce_track_storm(struct mce *mce);
+
+/*
+ * history:	bitmask tracking whether errors were seen or not seen in
+ *		the most recent polls of a bank.
+ * timestamp:	last time (in jiffies) that the bank was polled
+ * storm:	Is this bank in storm mode?
+ */
+struct storm_bank {
+	u64 history;
+	u64 timestamp;
+	bool storm;
+};
+
+/*
+ * banks:		per-cpu, per-bank details
+ * stormy_bank_count:	count of MC banks in storm state
+ * poll_mode:		CPU is in poll mode
+ */
+struct mca_storm_desc {
+	struct storm_bank	banks[MAX_NR_BANKS];
+	u8			stormy_bank_count;
+	bool			poll_mode;
+};
+DECLARE_PER_CPU(struct mca_storm_desc, storm_desc);
+
+/* How many errors within the history buffer mark the start of a storm. */
+#define STORM_BEGIN_THRESHOLD	5
+
+/*
+ * How many polls of machine check bank without an error before declaring
+ * the storm is over. Since it is tracked by the bitmaks in the history
+ * field of struct storm_bank the mask is 30 bits [0 ... 29].
+ */
+#define STORM_END_POLL_THRESHOLD	29
 
 #ifdef CONFIG_ACPI_APEI
 int apei_write_mce(struct mce *m);
