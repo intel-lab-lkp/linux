@@ -2133,6 +2133,24 @@ int set_memory_global(unsigned long addr, int numpages)
 /*
  * __set_memory_enc_dec() is used for the hypervisors that get
  * informed about "encryption" status via page tables.
+ *
+ * If an error occurs in making the transition between encrypted and
+ * decrypted, the transitioned memory is left in an indeterminate state.
+ * The encryption status in the guest page tables may not match the
+ * hypervisor's view of the encryption status, making the memory unusable.
+ * If the memory consists of multiple pages, different pages may be in
+ * different indeterminate states.
+ *
+ * It is difficult to recover from errors such that we can ensure
+ * consistency between the page tables and hypervisor view of the encryption
+ * state. It may not be possible to back out of changes, particularly if the
+ * failure occurs in communicating with the hypervisor. Given this limitation,
+ * further work on the error handling is not likely to meaningfully improve
+ * the reliablity or usability of the system.
+ *
+ * Any errors are likely to soon render the VM inoperable, but we return
+ * an error rather than panic'ing so that the caller can decide how best
+ * to shutdown cleanly.
  */
 static int __set_memory_enc_dec(unsigned long addr, int numpages, bool enc)
 {
@@ -2203,6 +2221,14 @@ static int __set_memory_enc_dec(unsigned long addr, int numpages, bool enc)
 	return set_memory_p(&addr, numpages);
 }
 
+/*
+ * If set_memory_encrypted()/decrypted() returns an error, the input memory
+ * range is left in an indeterminate state.  The encryption status of pages
+ * may be inconsistent, so the memory is unusable.  The caller should not try
+ * to do further operations on the memory, or return it to the free list.
+ * The memory must be leaked, and the caller should take steps to shutdown
+ * the system as cleanly as possible as something is seriously wrong.
+ */
 int set_memory_encrypted(unsigned long addr, int numpages)
 {
 	return __set_memory_enc_dec(addr, numpages, true);
