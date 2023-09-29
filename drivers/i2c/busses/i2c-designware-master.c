@@ -525,6 +525,13 @@ i2c_dw_xfer_msg(struct dw_i2c_dev *dev)
 		if (buf_len > 0 || flags & I2C_M_RECV_LEN) {
 			/* more bytes to be written */
 			dev->status |= STATUS_WRITE_IN_PROGRESS;
+			/*
+			 * In I2C_FUNC_SMBUS_BLOCK_DATA case, there is no data
+			 * to send before receiving data length from slave.
+			 * Disable TX_EMPTY while waiting for data length byte
+			 */
+			if (flags & I2C_M_RECV_LEN)
+				intr_mask &= ~DW_IC_INTR_TX_EMPTY;
 			break;
 		} else
 			dev->status &= ~STATUS_WRITE_IN_PROGRESS;
@@ -548,6 +555,7 @@ i2c_dw_recv_len(struct dw_i2c_dev *dev, u8 len)
 {
 	struct i2c_msg *msgs = dev->msgs;
 	u32 flags = msgs[dev->msg_read_idx].flags;
+	u32 intr_mask;
 
 	/*
 	 * Adjust the buffer length and mask the flag
@@ -557,6 +565,11 @@ i2c_dw_recv_len(struct dw_i2c_dev *dev, u8 len)
 	dev->tx_buf_len = len - min_t(u8, len, dev->rx_outstanding);
 	msgs[dev->msg_read_idx].len = len;
 	msgs[dev->msg_read_idx].flags &= ~I2C_M_RECV_LEN;
+
+	/* Re-enable TX_EMPTY interrupt. */
+	regmap_read(dev->map, DW_IC_INTR_MASK, &intr_mask);
+	intr_mask |= DW_IC_INTR_TX_EMPTY;
+	regmap_write(dev->map, DW_IC_INTR_MASK, intr_mask);
 
 	return len;
 }
