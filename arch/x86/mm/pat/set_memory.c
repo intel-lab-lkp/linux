@@ -2147,40 +2147,57 @@ static int __set_memory_enc_pgtable(unsigned long addr, int numpages, bool enc)
 	memset(&cpa, 0, sizeof(cpa));
 	cpa.vaddr = &addr;
 	cpa.numpages = numpages;
+
+	/*
+	 * The caller must ensure that the memory being transitioned between
+	 * encrypted and decrypted is not being accessed.  But if
+	 * load_unaligned_zeropad() touches the "next" page, it may generate a
+	 * read access the caller has no control over. To ensure such accesses
+	 * cause a normal page fault for the load_unaligned_zeropad() handler,
+	 * mark the pages not present until the transition is complete.  We
+	 * don't want a #VE or #VC fault due to a mismatch in the memory
+	 * encryption status, since paravisor configurations can't cleanly do
+	 * the load_unaligned_zeropad() handling in the paravisor.
+	 *
+	 * There's no requirement to do so, but for efficiency we can clear
+	 * _PAGE_PRESENT and set/clr encryption attr as a single operation.
+	 */
 	cpa.mask_set = enc ? pgprot_encrypted(empty) : pgprot_decrypted(empty);
-	cpa.mask_clr = enc ? pgprot_decrypted(empty) : pgprot_encrypted(empty);
+	cpa.mask_clr = enc ? pgprot_decrypted(__pgprot(_PAGE_PRESENT)) :
+				pgprot_encrypted(__pgprot(_PAGE_PRESENT));
 	cpa.pgd = init_mm.pgd;
 
 	/* Must avoid aliasing mappings in the highmem code */
 	kmap_flush_unused();
 	vm_unmap_aliases();
 
-	/* Flush the caches as needed before changing the encryption attribute. */
-	if (x86_platform.guest.enc_tlb_flush_required(enc))
-		cpa_flush(&cpa, x86_platform.guest.enc_cache_flush_required());
-
-	/* Notify hypervisor that we are about to set/clr encryption attribute. */
-	if (!x86_platform.guest.enc_status_change_prepare(addr, numpages, enc))
-		return -EIO;
+	/* Flush the caches as needed before changing the encryption attr. */
+	if (x86_platform.guest.enc_cache_flush_required())
+		cpa_flush(&cpa, 1);
 
 	ret = __change_page_attr_set_clr(&cpa, 1);
+	if (ret)
+		return ret;
 
 	/*
-	 * After changing the encryption attribute, we need to flush TLBs again
-	 * in case any speculative TLB caching occurred (but no need to flush
-	 * caches again).  We could just use cpa_flush_all(), but in case TLB
-	 * flushing gets optimized in the cpa_flush() path use the same logic
-	 * as above.
+	 * After clearing _PAGE_PRESENT and changing the encryption attribute,
+	 * we need to flush TLBs to ensure no further accesses to the memory can
+	 * be made with the old encryption attribute (but no need to flush caches
+	 * again).  We could just use cpa_flush_all(), but in case TLB flushing
+	 * gets optimized in the cpa_flush() path use the same logic as above.
 	 */
 	cpa_flush(&cpa, 0);
 
-	/* Notify hypervisor that we have successfully set/clr encryption attribute. */
-	if (!ret) {
-		if (!x86_platform.guest.enc_status_change_finish(addr, numpages, enc))
-			ret = -EIO;
-	}
+	/* Notify hypervisor that we have successfully set/clr encryption attr. */
+	if (!x86_platform.guest.enc_status_change_finish(addr, numpages, enc))
+		return -EIO;
 
-	return ret;
+	/*
+	 * Now that the hypervisor is sync'ed with the page table changes
+	 * made here, add back _PAGE_PRESENT. set_memory_p() does not flush
+	 * the TLB.
+	 */
+	return set_memory_p(&addr, numpages);
 }
 
 static int __set_memory_enc_dec(unsigned long addr, int numpages, bool enc)

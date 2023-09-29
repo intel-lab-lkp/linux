@@ -278,11 +278,6 @@ static unsigned long pg_level_to_pfn(int level, pte_t *kpte, pgprot_t *ret_prot)
 	return pfn;
 }
 
-static bool amd_enc_tlb_flush_required(bool enc)
-{
-	return true;
-}
-
 static bool amd_enc_cache_flush_required(void)
 {
 	return !cpu_feature_enabled(X86_FEATURE_SME_COHERENT);
@@ -318,18 +313,6 @@ static void enc_dec_hypercall(unsigned long vaddr, unsigned long size, bool enc)
 #endif
 }
 
-static bool amd_enc_status_change_prepare(unsigned long vaddr, int npages, bool enc)
-{
-	/*
-	 * To maintain the security guarantees of SEV-SNP guests, make sure
-	 * to invalidate the memory before encryption attribute is cleared.
-	 */
-	if (cc_platform_has(CC_ATTR_GUEST_SEV_SNP) && !enc)
-		snp_set_memory_shared(vaddr, npages);
-
-	return true;
-}
-
 /* Return true unconditionally: return value doesn't matter for the SEV side */
 static bool amd_enc_status_change_finish(unsigned long vaddr, int npages, bool enc)
 {
@@ -337,8 +320,12 @@ static bool amd_enc_status_change_finish(unsigned long vaddr, int npages, bool e
 	 * After memory is mapped encrypted in the page table, validate it
 	 * so that it is consistent with the page table updates.
 	 */
-	if (cc_platform_has(CC_ATTR_GUEST_SEV_SNP) && enc)
-		snp_set_memory_private(vaddr, npages);
+	if (cc_platform_has(CC_ATTR_GUEST_SEV_SNP)) {
+		if (enc)
+			snp_set_memory_private(vaddr, npages);
+		else
+			snp_set_memory_shared(vaddr, npages);
+	}
 
 	if (!cc_platform_has(CC_ATTR_HOST_MEM_ENCRYPT))
 		enc_dec_hypercall(vaddr, npages << PAGE_SHIFT, enc);
@@ -498,9 +485,7 @@ void __init sme_early_init(void)
 	/* Update the protection map with memory encryption mask */
 	add_encrypt_protection_map();
 
-	x86_platform.guest.enc_status_change_prepare = amd_enc_status_change_prepare;
 	x86_platform.guest.enc_status_change_finish  = amd_enc_status_change_finish;
-	x86_platform.guest.enc_tlb_flush_required    = amd_enc_tlb_flush_required;
 	x86_platform.guest.enc_cache_flush_required  = amd_enc_cache_flush_required;
 
 	/*

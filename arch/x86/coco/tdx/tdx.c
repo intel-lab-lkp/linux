@@ -676,24 +676,6 @@ bool tdx_handle_virt_exception(struct pt_regs *regs, struct ve_info *ve)
 	return true;
 }
 
-static bool tdx_tlb_flush_required(bool private)
-{
-	/*
-	 * TDX guest is responsible for flushing TLB on private->shared
-	 * transition. VMM is responsible for flushing on shared->private.
-	 *
-	 * The VMM _can't_ flush private addresses as it can't generate PAs
-	 * with the guest's HKID.  Shared memory isn't subject to integrity
-	 * checking, i.e. the VMM doesn't need to flush for its own protection.
-	 *
-	 * There's no need to flush when converting from shared to private,
-	 * as flushing is the VMM's responsibility in this case, e.g. it must
-	 * flush to avoid integrity failures in the face of a buggy or
-	 * malicious guest.
-	 */
-	return !private;
-}
-
 static bool tdx_cache_flush_required(void)
 {
 	/*
@@ -776,30 +758,6 @@ static bool tdx_enc_status_changed(unsigned long vaddr, int numpages, bool enc)
 	return true;
 }
 
-static bool tdx_enc_status_change_prepare(unsigned long vaddr, int numpages,
-					  bool enc)
-{
-	/*
-	 * Only handle shared->private conversion here.
-	 * See the comment in tdx_early_init().
-	 */
-	if (enc)
-		return tdx_enc_status_changed(vaddr, numpages, enc);
-	return true;
-}
-
-static bool tdx_enc_status_change_finish(unsigned long vaddr, int numpages,
-					 bool enc)
-{
-	/*
-	 * Only handle private->shared conversion here.
-	 * See the comment in tdx_early_init().
-	 */
-	if (!enc)
-		return tdx_enc_status_changed(vaddr, numpages, enc);
-	return true;
-}
-
 void __init tdx_early_init(void)
 {
 	struct tdx_module_args args = {
@@ -831,30 +789,8 @@ void __init tdx_early_init(void)
 	 */
 	physical_mask &= cc_mask - 1;
 
-	/*
-	 * The kernel mapping should match the TDX metadata for the page.
-	 * load_unaligned_zeropad() can touch memory *adjacent* to that which is
-	 * owned by the caller and can catch even _momentary_ mismatches.  Bad
-	 * things happen on mismatch:
-	 *
-	 *   - Private mapping => Shared Page  == Guest shutdown
-         *   - Shared mapping  => Private Page == Recoverable #VE
-	 *
-	 * guest.enc_status_change_prepare() converts the page from
-	 * shared=>private before the mapping becomes private.
-	 *
-	 * guest.enc_status_change_finish() converts the page from
-	 * private=>shared after the mapping becomes private.
-	 *
-	 * In both cases there is a temporary shared mapping to a private page,
-	 * which can result in a #VE.  But, there is never a private mapping to
-	 * a shared page.
-	 */
-	x86_platform.guest.enc_status_change_prepare = tdx_enc_status_change_prepare;
-	x86_platform.guest.enc_status_change_finish  = tdx_enc_status_change_finish;
-
+	x86_platform.guest.enc_status_change_finish  = tdx_enc_status_changed;
 	x86_platform.guest.enc_cache_flush_required  = tdx_cache_flush_required;
-	x86_platform.guest.enc_tlb_flush_required    = tdx_tlb_flush_required;
 
 	/*
 	 * TDX intercepts the RDMSR to read the X2APIC ID in the parallel

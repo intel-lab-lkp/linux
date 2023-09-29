@@ -550,11 +550,6 @@ static bool hv_vtom_set_host_visibility(unsigned long kbuffer, int pagecount, bo
 	return result;
 }
 
-static bool hv_vtom_tlb_flush_required(bool private)
-{
-	return true;
-}
-
 static bool hv_vtom_cache_flush_required(void)
 {
 	return false;
@@ -614,7 +609,6 @@ void __init hv_vtom_init(void)
 
 	x86_platform.hyper.is_private_mmio = hv_is_private_mmio;
 	x86_platform.guest.enc_cache_flush_required = hv_vtom_cache_flush_required;
-	x86_platform.guest.enc_tlb_flush_required = hv_vtom_tlb_flush_required;
 	x86_platform.guest.enc_status_change_finish = hv_vtom_set_host_visibility;
 
 	/* Set WB as the default cache mode. */

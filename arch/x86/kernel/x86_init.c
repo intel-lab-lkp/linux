@@ -131,9 +131,7 @@ struct x86_cpuinit_ops x86_cpuinit = {
 
 static void default_nmi_init(void) { };
 
-static bool enc_status_change_prepare_noop(unsigned long vaddr, int npages, bool enc) { return true; }
 static bool enc_status_change_finish_noop(unsigned long vaddr, int npages, bool enc) { return true; }
-static bool enc_tlb_flush_required_noop(bool enc) { return false; }
 static bool enc_cache_flush_required_noop(void) { return false; }
 static bool is_private_mmio_noop(u64 addr) {return false; }
 
@@ -154,9 +152,7 @@ struct x86_platform_ops x86_platform __ro_after_init = {
 	.hyper.is_private_mmio		= is_private_mmio_noop,
 
 	.guest = {
-		.enc_status_change_prepare = enc_status_change_prepare_noop,
 		.enc_status_change_finish  = enc_status_change_finish_noop,
-		.enc_tlb_flush_required	   = enc_tlb_flush_required_noop,
 		.enc_cache_flush_required  = enc_cache_flush_required_noop,
 	},
 };
