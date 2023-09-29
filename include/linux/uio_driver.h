@@ -36,11 +36,18 @@ struct uio_map;
  */
 struct uio_mem {
 	const char		*name;
-	phys_addr_t		addr;
+	union {
+		phys_addr_t	addr;
+		dma_addr_t	dma_addr;
+	};
 	unsigned long		offs;
 	resource_size_t		size;
 	int			memtype;
-	void __iomem		*internal_addr;
+	union {
+		void __iomem	*internal_addr;
+		void 		*virtual_addr;
+	};
+	struct device		*dma_device;
 	struct uio_map		*map;
 };
 
@@ -158,6 +165,7 @@ extern int __must_check
 #define UIO_MEM_LOGICAL	2
 #define UIO_MEM_VIRTUAL 3
 #define UIO_MEM_IOVA	4
+#define UIO_MEM_DMA_COHERENT	5
 
 /* defines for uio_port->porttype */
 #define UIO_PORT_NONE	0
