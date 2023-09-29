@@ -1025,6 +1025,14 @@ int xdp_do_redirect_frame(struct net_device *dev,
 			  struct bpf_prog *prog);
 void xdp_do_flush(void);
 
+#ifdef CONFIG_DEBUG_NET
+void xdp_do_check_flushed(struct napi_struct *napi);
+
+#else
+static inline void xdp_do_check_flushed(struct napi_struct *napi) { }
+
+#endif
+
 /* The xdp_do_flush_map() helper has been renamed to drop the _map suffix, as
  * it is no longer only flushing maps. Keep this define for compatibility
  * until all drivers are updated - do not use xdp_do_flush_map() in new code!

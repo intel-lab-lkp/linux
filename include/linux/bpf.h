@@ -2730,6 +2730,22 @@ static inline void bpf_dynptr_set_rdonly(struct bpf_dynptr_kern *ptr)
 }
 #endif /* CONFIG_BPF_SYSCALL */
 
+#if defined(CONFIG_BPF_SYSCALL) && defined(CONFIG_DEBUG_NET)
+bool __dev_check_flush(void);
+bool __cpu_map_check_flush(void);
+
+#else
+static inline bool __dev_check_flush(void)
+{
+	return false;
+}
+
+static inline bool __cpu_map_check_flush(void)
+{
+	return false;
+}
+#endif
+
 static __always_inline int
 bpf_probe_read_kernel_common(void *dst, u32 size, const void *unsafe_ptr)
 {
