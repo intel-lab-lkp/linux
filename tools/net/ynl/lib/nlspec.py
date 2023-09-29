@@ -208,6 +208,8 @@ class SpecAttrSet(SpecElement):
                 attr = real_set[elem['name']]
                 self.attrs[attr.name] = attr
                 self.attrs_by_val[attr.value] = attr
+                if (len(elem.keys()) > 1):
+                    raise Exception(f"Subset attribute '{elem['name']}' contains other keys")
 
     def new_attr(self, elem, value):
         return SpecAttr(self.family, self, elem, value)
