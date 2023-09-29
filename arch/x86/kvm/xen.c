@@ -115,6 +115,8 @@ out:
 
 void kvm_xen_inject_timer_irqs(struct kvm_vcpu *vcpu)
 {
+	WARN_ON_ONCE(vcpu != kvm_get_running_vcpu());
+
 	if (atomic_read(&vcpu->arch.xen.timer_pending) > 0) {
 		struct kvm_xen_evtchn e;
 
@@ -134,18 +136,41 @@ static enum hrtimer_restart xen_timer_callback(struct hrtimer *timer)
 {
 	struct kvm_vcpu *vcpu = container_of(timer, struct kvm_vcpu,
 					     arch.xen.timer);
+	struct kvm_xen_evtchn e;
+	int rc;
+
 	if (atomic_read(&vcpu->arch.xen.timer_pending))
 		return HRTIMER_NORESTART;
 
-	atomic_inc(&vcpu->arch.xen.timer_pending);
-	kvm_make_request(KVM_REQ_UNBLOCK, vcpu);
-	kvm_vcpu_kick(vcpu);
+	e.vcpu_id = vcpu->vcpu_id;
+	e.vcpu_idx = vcpu->vcpu_idx;
+	e.port = vcpu->arch.xen.timer_virq;
+	e.priority = KVM_IRQ_ROUTING_XEN_EVTCHN_PRIO_2LEVEL;
+
+	rc = kvm_xen_set_evtchn_fast(&e, vcpu->kvm);
+	if (rc == -EWOULDBLOCK) {
+		atomic_inc(&vcpu->arch.xen.timer_pending);
+		kvm_make_request(KVM_REQ_UNBLOCK, vcpu);
+		kvm_vcpu_kick(vcpu);
+	} else {
+		vcpu->arch.xen.timer_expires = 0;
+	}
 
 	return HRTIMER_NORESTART;
 }
 
 static void kvm_xen_start_timer(struct kvm_vcpu *vcpu, u64 guest_abs, s64 delta_ns)
 {
+	WARN_ON_ONCE(vcpu != kvm_get_running_vcpu());
+
+	/*
+	 * Avoid races with the old timer firing. Checking timer_expires
+	 * to avoid calling hrtimer_cancel() will only have false positives
+	 * so is fine.
+	 */
+	if (vcpu->arch.xen.timer_expires)
+		hrtimer_cancel(&vcpu->arch.xen.timer);
+
 	atomic_set(&vcpu->arch.xen.timer_pending, 0);
 	vcpu->arch.xen.timer_expires = guest_abs;
 
@@ -161,6 +186,8 @@ static void kvm_xen_start_timer(struct kvm_vcpu *vcpu, u64 guest_abs, s64 delta_
 
 static void kvm_xen_stop_timer(struct kvm_vcpu *vcpu)
 {
+	WARN_ON_ONCE(vcpu != kvm_get_running_vcpu());
+
 	hrtimer_cancel(&vcpu->arch.xen.timer);
 	vcpu->arch.xen.timer_expires = 0;
 	atomic_set(&vcpu->arch.xen.timer_pending, 0);
@@ -1018,13 +1045,38 @@ int kvm_xen_vcpu_get_attr(struct kvm_vcpu *vcpu, struct kvm_xen_vcpu_attr *data)
 		r = 0;
 		break;
 
-	case KVM_XEN_VCPU_ATTR_TYPE_TIMER:
+	case KVM_XEN_VCPU_ATTR_TYPE_TIMER: {
+		bool pending = false;
+
+		/*
+		 * Ensure a consistent snapshot of state is captures, with a
+		 * timer either being pending, or fully delivered. Not still
+		 * lurking in the timer_pending flag for deferred delivery.
+		 */
+		if (vcpu->arch.xen.timer_expires) {
+			pending = hrtimer_cancel(&vcpu->arch.xen.timer);
+			kvm_xen_inject_timer_irqs(vcpu);
+		}
+
 		data->u.timer.port = vcpu->arch.xen.timer_virq;
 		data->u.timer.priority = KVM_IRQ_ROUTING_XEN_EVTCHN_PRIO_2LEVEL;
 		data->u.timer.expires_ns = vcpu->arch.xen.timer_expires;
+
+		/*
+		 * The timer may be delivered immediately, while the returned
+		 * state causes it to be set up and delivered again on the
+		 * destination system after migration. That's fine, as the
+		 * guest will not even have had a chance to run and process
+		 * the interrupt by that point, so it won't even notice the
+		 * duplicate IRQ.
+		 */
+		if (pending)
+			hrtimer_start_expires(&vcpu->arch.xen.timer,
+					      HRTIMER_MODE_ABS_HARD);
+
 		r = 0;
 		break;
-
+	}
 	case KVM_XEN_VCPU_ATTR_TYPE_UPCALL_VECTOR:
 		data->u.vector = vcpu->arch.xen.upcall_vector;
 		r = 0;
@@ -2070,7 +2122,7 @@ void kvm_xen_init_vcpu(struct kvm_vcpu *vcpu)
 void kvm_xen_destroy_vcpu(struct kvm_vcpu *vcpu)
 {
 	if (kvm_xen_timer_enabled(vcpu))
-		kvm_xen_stop_timer(vcpu);
+		hrtimer_cancel(&vcpu->arch.xen.timer);
 
 	kvm_gpc_deactivate(&vcpu->arch.xen.runstate_cache);
 	kvm_gpc_deactivate(&vcpu->arch.xen.runstate2_cache);
