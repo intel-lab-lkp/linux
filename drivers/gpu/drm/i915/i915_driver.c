@@ -72,6 +72,7 @@
 #include "gt/intel_gt.h"
 #include "gt/intel_gt_pm.h"
 #include "gt/intel_rc6.h"
+#include "gt/uc/intel_guc.h"
 
 #include "pxp/intel_pxp.h"
 #include "pxp/intel_pxp_debugfs.h"
@@ -1076,6 +1077,8 @@ static int i915_drm_suspend(struct drm_device *dev)
 	struct drm_i915_private *dev_priv = to_i915(dev);
 	struct pci_dev *pdev = to_pci_dev(dev_priv->drm.dev);
 	pci_power_t opregion_target_state;
+	struct intel_gt *gt;
+	int i;
 
 	disable_rpm_wakeref_asserts(&dev_priv->runtime_pm);
 
@@ -1092,6 +1095,10 @@ static int i915_drm_suspend(struct drm_device *dev)
 	intel_dp_mst_suspend(dev_priv);
 
 	intel_runtime_pm_disable_interrupts(dev_priv);
+
+	for_each_gt(gt, dev_priv, i)
+		wake_up_all_tlb_invalidate(&gt->uc.guc);
+
 	intel_hpd_cancel_work(dev_priv);
 
 	intel_suspend_encoders(dev_priv);
@@ -1262,6 +1269,11 @@ static int i915_drm_resume(struct drm_device *dev)
 	intel_power_domains_enable(dev_priv);
 
 	intel_gvt_resume(dev_priv);
+
+	for_each_gt(gt, dev_priv, i) {
+		intel_guc_invalidate_tlb_full(&gt->uc.guc);
+		intel_guc_invalidate_tlb(&gt->uc.guc);
+	}
 
 	enable_rpm_wakeref_asserts(&dev_priv->runtime_pm);
 
