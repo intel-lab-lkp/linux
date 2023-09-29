@@ -235,8 +235,7 @@ static void nft_rbtree_gc_remove(struct net *net, struct nft_set *set,
 
 static int nft_rbtree_gc_elem(const struct nft_set *__set,
 			      struct nft_rbtree *priv,
-			      struct nft_rbtree_elem *rbe,
-			      u8 genmask)
+			      struct nft_rbtree_elem *rbe)
 {
 	struct nft_set *set = (struct nft_set *)__set;
 	struct rb_node *prev = rb_prev(&rbe->node);
@@ -254,8 +253,7 @@ static int nft_rbtree_gc_elem(const struct nft_set *__set,
 	 */
 	while (prev) {
 		rbe_prev = rb_entry(prev, struct nft_rbtree_elem, node);
-		if (nft_rbtree_interval_end(rbe_prev) &&
-		    nft_set_elem_active(&rbe_prev->ext, genmask))
+		if (nft_rbtree_interval_end(rbe_prev))
 			break;
 
 		prev = rb_prev(prev);
@@ -289,6 +287,34 @@ static int nft_rbtree_gc_elem(const struct nft_set *__set,
 	return 0;
 }
 
+static void nft_rbtree_commit(const struct nft_set *set)
+{
+	struct nft_rbtree *priv = nft_set_priv(set);
+	struct rb_node *node, *next, *first;
+	struct nft_rbtree_elem *rbe;
+
+	if (!(set->flags & NFT_SET_TIMEOUT))
+		return;
+
+	/* ignore GC interval here, unless two copies of the tree are
+	 * maintained, it is not possible to postpone removal of expired
+	 * elements.
+	 */
+
+	first = rb_first(&priv->root);
+
+	for (node = first; node != NULL; node = next) {
+		next = rb_next(node);
+
+		rbe = rb_entry(node, struct nft_rbtree_elem, node);
+
+		if (!nft_set_elem_expired(&rbe->ext))
+			continue;
+
+		nft_rbtree_gc_elem(set, priv, rbe);
+	}
+}
+
 static bool nft_rbtree_update_first(const struct nft_set *set,
 				    struct nft_rbtree_elem *rbe,
 				    struct rb_node *first)
@@ -312,9 +338,8 @@ static int __nft_rbtree_insert(const struct net *net, const struct nft_set *set,
 	struct nft_rbtree_elem *rbe, *rbe_le = NULL, *rbe_ge = NULL;
 	struct rb_node *node, *next, *parent, **p, *first = NULL;
 	struct nft_rbtree *priv = nft_set_priv(set);
-	u8 cur_genmask = nft_genmask_cur(net);
 	u8 genmask = nft_genmask_next(net);
-	int d, err;
+	int d;
 
 	/* Descend the tree to search for an existing element greater than the
 	 * key value to insert that is greater than the new element. This is the
@@ -358,16 +383,19 @@ static int __nft_rbtree_insert(const struct net *net, const struct nft_set *set,
 		if (!nft_set_elem_active(&rbe->ext, genmask))
 			continue;
 
-		/* perform garbage collection to avoid bogus overlap reports
-		 * but skip new elements in this transaction.
+		/* skip expired intervals to avoid bogus overlap reports:
+		 * end element has no expiration, check next start element.
 		 */
-		if (nft_set_elem_expired(&rbe->ext) &&
-		    nft_set_elem_active(&rbe->ext, cur_genmask)) {
-			err = nft_rbtree_gc_elem(set, priv, rbe, genmask);
-			if (err < 0)
-				return err;
+		if (nft_rbtree_interval_end(rbe) && next) {
+			struct nft_rbtree_elem *rbe_next;
 
-			continue;
+			rbe_next = rb_entry(next, struct nft_rbtree_elem, node);
+
+			if (nft_set_elem_expired(&rbe_next->ext)) {
+				/* skip expired next start element. */
+				next = rb_next(next);
+				continue;
+			}
 		}
 
 		d = nft_rbtree_cmp(set, rbe, new);
@@ -755,5 +783,6 @@ const struct nft_set_type nft_set_rbtree_type = {
 		.lookup		= nft_rbtree_lookup,
 		.walk		= nft_rbtree_walk,
 		.get		= nft_rbtree_get,
+		.commit		= nft_rbtree_commit,
 	},
 };
