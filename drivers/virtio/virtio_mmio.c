@@ -39,11 +39,12 @@
  * 3. Kernel module (or command line) parameter. Can be used more than once -
  *    one device will be created for each one. Syntax:
  *
- *		[virtio_mmio.]device=<size>@<baseaddr>:<irq>[:<id>]
+ *		[virtio_mmio.]device=<size>@<baseaddr>:<irq>[-<irq last>][:<id>]
  *    where:
  *		<size>     := size (can use standard suffixes like K, M or G)
  *		<baseaddr> := physical base address
- *		<irq>      := interrupt number (as passed to request_irq())
+ *		<irq>      := first interrupt number (as passed to request_irq())
+ *		<irq last> := (optional) last interrupt number
  *		<id>       := (optional) platform device id
  *    eg.:
  *		virtio_mmio.device=0x100@0x100b0000:48 \
@@ -712,35 +713,37 @@ static int vm_cmdline_set(const char *device,
 		const struct kernel_param *kp)
 {
 	int err;
-	struct resource resources[2] = {};
 	char *str;
 	long long base, size;
-	unsigned int irq;
+	unsigned int irq, irq_last;
 	int processed, consumed = 0;
 	struct platform_device *pdev;
+	struct resource *resources, *res;
+	size_t num_resources;
 
 	/* Consume "size" part of the command line parameter */
 	size = memparse(device, &str);
 
-	/* Get "@<base>:<irq>[:<id>]" chunks */
-	processed = sscanf(str, "@%lli:%u%n:%d%n",
-			&base, &irq, &consumed,
-			&vm_cmdline_id, &consumed);
+	/* Get "@<base>:<irq>-<irq last>[:<id>]" chunks */
+	processed = sscanf(str, "@%lli:%u-%u%n:%d%n",
+			   &base, &irq, &irq_last, &consumed,
+			   &vm_cmdline_id, &consumed);
+	/* Fall back to "@<base>:<irq>[:<id>]" */
+	if (processed < 3) {
+		processed = sscanf(str, "@%lli:%u%n:%d%n",
+				   &base, &irq, &consumed,
+				   &vm_cmdline_id, &consumed);
+		irq_last = irq;
+	}
 
 	/*
 	 * sscanf() must process at least 2 chunks; also there
 	 * must be no extra characters after the last chunk, so
 	 * str[consumed] must be '\0'
 	 */
-	if (processed < 2 || str[consumed] || irq == 0)
+	if (processed < 2 || str[consumed] ||
+	    irq == 0 || irq_last == 0 || irq > irq_last)
 		return -EINVAL;
-
-	resources[0].flags = IORESOURCE_MEM;
-	resources[0].start = base;
-	resources[0].end = base + size - 1;
-
-	resources[1].flags = IORESOURCE_IRQ;
-	resources[1].start = resources[1].end = irq;
 
 	if (!vm_cmdline_parent_registered) {
 		err = device_register(&vm_cmdline_parent);
@@ -752,16 +755,34 @@ static int vm_cmdline_set(const char *device,
 		vm_cmdline_parent_registered = 1;
 	}
 
-	pr_info("Registering device virtio-mmio.%d at 0x%llx-0x%llx, IRQ %d.\n",
-		       vm_cmdline_id,
-		       (unsigned long long)resources[0].start,
-		       (unsigned long long)resources[0].end,
-		       (int)resources[1].start);
+	num_resources = 1; /* mem */
+	num_resources += irq_last - irq + 1;
+	resources = devm_kcalloc(&vm_cmdline_parent, num_resources,
+				 sizeof(*resources), GFP_KERNEL);
+	if (!resources)
+		return -ENOMEM;
+
+	resources[0].flags = IORESOURCE_MEM;
+	resources[0].start = base;
+	resources[0].end = base + size - 1;
+
+	for (res = &resources[1]; irq <= irq_last; irq++, res++) {
+		res->flags = IORESOURCE_IRQ;
+		res->start = irq;
+		res->end = irq;
+	}
+
+	pr_info("Registering device virtio-mmio.%d at 0x%llx-0x%llx, IRQs %u-%u.\n",
+		vm_cmdline_id,
+		(unsigned long long)resources[0].start,
+		(unsigned long long)resources[0].end,
+		irq, irq_last);
 
 	pdev = platform_device_register_resndata(&vm_cmdline_parent,
 			"virtio-mmio", vm_cmdline_id++,
-			resources, ARRAY_SIZE(resources), NULL, 0);
+			resources, num_resources, NULL, 0);
 
+	devm_kfree(&vm_cmdline_parent, resources);
 	return PTR_ERR_OR_ZERO(pdev);
 }
 
@@ -770,12 +791,18 @@ static int vm_cmdline_get_device(struct device *dev, void *data)
 	char *buffer = data;
 	unsigned int len = strlen(buffer);
 	struct platform_device *pdev = to_platform_device(dev);
+	size_t nres = pdev->num_resources;
+	bool irq_range = nres > 2;
 
-	snprintf(buffer + len, PAGE_SIZE - len, "0x%llx@0x%llx:%llu:%d\n",
+	len += snprintf(buffer + len, PAGE_SIZE - len, "0x%llx@0x%llx:%llu",
 			pdev->resource[0].end - pdev->resource[0].start + 1ULL,
 			(unsigned long long)pdev->resource[0].start,
-			(unsigned long long)pdev->resource[1].start,
-			pdev->id);
+			(unsigned long long)pdev->resource[1].start);
+	if (irq_range)
+		len += snprintf(buffer + len, PAGE_SIZE - len, "-%llu",
+				(unsigned long long)pdev->resource[nres - 1].start);
+	snprintf(buffer + len, PAGE_SIZE - len, ":%d\n", pdev->id);
+
 	return 0;
 }
 
