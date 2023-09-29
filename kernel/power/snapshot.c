@@ -2628,13 +2628,23 @@ static int prepare_image(struct memory_bitmap *new_bm, struct memory_bitmap *bm,
 		struct memory_bitmap *zero_bm)
 {
 	unsigned int nr_pages, nr_highmem;
-	struct memory_bitmap tmp;
+	struct memory_bitmap tmp_zero_bm;
 	struct linked_page *lp;
 	int error;
 
 	/* If there is no highmem, the buffer will not be necessary */
 	free_image_page(buffer, PG_UNSAFE_CLEAR);
 	buffer = NULL;
+
+	/*
+	 * Allocate a temporary bitmap to create a copy of zero_bm in
+	 * safe pages. This allocation needs to be done before marking
+	 * unsafe pages below so that it can be freed without altering
+	 * the state of unsafe pages.
+	 */
+	error = memory_bm_create(&tmp_zero_bm, GFP_ATOMIC, PG_ANY);
+	if (error)
+		goto Free;
 
 	nr_highmem = count_highmem_image_pages(bm);
 	mark_unsafe_pages(bm);
@@ -2646,12 +2656,7 @@ static int prepare_image(struct memory_bitmap *new_bm, struct memory_bitmap *bm,
 	duplicate_memory_bitmap(new_bm, bm);
 	memory_bm_free(bm, PG_UNSAFE_KEEP);
 
-	/* Make a copy of zero_bm so it can be created in safe pages */
-	error = memory_bm_create(&tmp, GFP_ATOMIC, PG_ANY);
-	if (error)
-		goto Free;
-
-	duplicate_memory_bitmap(&tmp, zero_bm);
+	duplicate_memory_bitmap(&tmp_zero_bm, zero_bm);
 	memory_bm_free(zero_bm, PG_UNSAFE_KEEP);
 
 	/* Recreate zero_bm in safe pages */
@@ -2659,8 +2664,8 @@ static int prepare_image(struct memory_bitmap *new_bm, struct memory_bitmap *bm,
 	if (error)
 		goto Free;
 
-	duplicate_memory_bitmap(zero_bm, &tmp);
-	memory_bm_free(&tmp, PG_UNSAFE_KEEP);
+	duplicate_memory_bitmap(zero_bm, &tmp_zero_bm);
+	memory_bm_free(&tmp_zero_bm, PG_UNSAFE_KEEP);
 	/* At this point zero_bm is in safe pages and it can be used for restoring. */
 
 	if (nr_highmem > 0) {
