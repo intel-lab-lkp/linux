@@ -4562,7 +4562,7 @@
 			reg = <0 0x22000000 0 0x1000>;
 			reg-names = "mdss";
 
-			clocks = <&gcc GCC_DISP_AHB_CLK>,
+			clocks = <&gcc GCC_DISP1_AHB_CLK>,
 				 <&dispcc1 DISP_CC_MDSS_AHB_CLK>,
 				 <&dispcc1 DISP_CC_MDSS_MDP_CLK>;
 			clock-names = "iface",
@@ -5002,7 +5002,7 @@
 			compatible = "qcom,sc8280xp-dispcc1";
 			reg = <0 0x22100000 0 0x20000>;
 
-			clocks = <&gcc GCC_DISP_AHB_CLK>,
+			clocks = <&gcc GCC_DISP1_AHB_CLK>,
 				 <&rpmhcc RPMH_CXO_CLK>,
 				 <0>,
 				 <&mdss1_dp0_phy 0>,
