@@ -69,6 +69,7 @@
 #include <linux/spinlock.h>
 #include <linux/virtio.h>
 #include <linux/virtio_config.h>
+#include <uapi/linux/virtio_ids.h>
 #include <uapi/linux/virtio_mmio.h>
 #include <linux/virtio_ring.h>
 
@@ -93,6 +94,10 @@ struct virtio_mmio_device {
 	/* a list of queues so we can dispatch IRQs */
 	spinlock_t lock;
 	struct list_head virtqueues;
+
+	/* IRQ range allocated to the device */
+	unsigned int irq_base;
+	unsigned int num_irqs;
 };
 
 struct virtio_mmio_vq_info {
@@ -101,6 +106,9 @@ struct virtio_mmio_vq_info {
 
 	/* the list node for the virtqueues list */
 	struct list_head node;
+
+	/* IRQ mapped to virtqueue */
+	unsigned int irq;
 };
 
 
@@ -297,7 +305,7 @@ static bool vm_notify_with_data(struct virtqueue *vq)
 	return true;
 }
 
-/* Notify all virtqueues on an interrupt. */
+/* Notify all or some virtqueues on an interrupt. */
 static irqreturn_t vm_interrupt(int irq, void *opaque)
 {
 	struct virtio_mmio_device *vm_dev = opaque;
@@ -308,17 +316,28 @@ static irqreturn_t vm_interrupt(int irq, void *opaque)
 
 	/* Read and acknowledge interrupts */
 	status = readl(vm_dev->base + VIRTIO_MMIO_INTERRUPT_STATUS);
-	writel(status, vm_dev->base + VIRTIO_MMIO_INTERRUPT_ACK);
 
 	if (unlikely(status & VIRTIO_MMIO_INT_CONFIG)) {
+		writel(status & VIRTIO_MMIO_INT_CONFIG, vm_dev->base + VIRTIO_MMIO_INTERRUPT_ACK);
 		virtio_config_changed(&vm_dev->vdev);
 		ret = IRQ_HANDLED;
 	}
 
 	if (likely(status & VIRTIO_MMIO_INT_VRING)) {
+		writel(status & VIRTIO_MMIO_INT_VRING, vm_dev->base + VIRTIO_MMIO_INTERRUPT_ACK);
 		spin_lock_irqsave(&vm_dev->lock, flags);
 		list_for_each_entry(info, &vm_dev->virtqueues, node)
 			ret |= vring_interrupt(irq, info->vq);
+		spin_unlock_irqrestore(&vm_dev->lock, flags);
+	}
+
+	/* Notify only affected vrings if device uses multiple interrupts */
+	if (vm_dev->num_irqs > 1) {
+		spin_lock_irqsave(&vm_dev->lock, flags);
+		list_for_each_entry(info, &vm_dev->virtqueues, node) {
+			if (info->irq == irq)
+				ret |= vring_interrupt(irq, info->vq);
+		}
 		spin_unlock_irqrestore(&vm_dev->lock, flags);
 	}
 
@@ -356,11 +375,15 @@ static void vm_del_vqs(struct virtio_device *vdev)
 {
 	struct virtio_mmio_device *vm_dev = to_virtio_mmio_device(vdev);
 	struct virtqueue *vq, *n;
+	int i, irq;
+
+	for (i = 0; i < vm_dev->num_irqs; i++) {
+		irq = vm_dev->irq_base + i;
+		devm_free_irq(&vdev->dev, irq, vm_dev);
+	}
 
 	list_for_each_entry_safe(vq, n, &vdev->vqs, list)
 		vm_del_vq(vq);
-
-	free_irq(platform_get_irq(vm_dev->pdev, 0), vm_dev);
 }
 
 static void vm_synchronize_cbs(struct virtio_device *vdev)
@@ -488,6 +511,18 @@ error_available:
 	return ERR_PTR(err);
 }
 
+/* Map virtqueue to zero-based interrupt number */
+static unsigned int vq2irq(const struct virtqueue *vq)
+{
+	switch (vq->vdev->id.device) {
+	case VIRTIO_ID_NET:
+		/* interrupt shared by rx/tx virtqueue pair */
+		return vq->index / 2;
+	default:
+		return 0;
+	}
+}
+
 static int vm_find_vqs(struct virtio_device *vdev, unsigned int nvqs,
 		       struct virtqueue *vqs[],
 		       vq_callback_t *callbacks[],
@@ -496,19 +531,9 @@ static int vm_find_vqs(struct virtio_device *vdev, unsigned int nvqs,
 		       struct irq_affinity *desc)
 {
 	struct virtio_mmio_device *vm_dev = to_virtio_mmio_device(vdev);
-	int irq = platform_get_irq(vm_dev->pdev, 0);
-	int i, err, queue_idx = 0;
-
-	if (irq < 0)
-		return irq;
-
-	err = request_irq(irq, vm_interrupt, IRQF_SHARED,
-			dev_name(&vdev->dev), vm_dev);
-	if (err)
-		return err;
-
-	if (of_property_read_bool(vm_dev->pdev->dev.of_node, "wakeup-source"))
-		enable_irq_wake(irq);
+	struct virtio_mmio_vq_info *info;
+	int i, err, irq, nirqs, queue_idx = 0;
+	unsigned int irq_base = UINT_MAX;
 
 	for (i = 0; i < nvqs; ++i) {
 		if (!names[i]) {
@@ -519,12 +544,51 @@ static int vm_find_vqs(struct virtio_device *vdev, unsigned int nvqs,
 		vqs[i] = vm_setup_vq(vdev, queue_idx++, callbacks[i], names[i],
 				     ctx ? ctx[i] : false);
 		if (IS_ERR(vqs[i])) {
-			vm_del_vqs(vdev);
-			return PTR_ERR(vqs[i]);
+			err = PTR_ERR(vqs[i]);
+			goto fail_vq;
 		}
 	}
 
+	nirqs = platform_irq_count(vm_dev->pdev);
+	if (nirqs < 0) {
+		err = nirqs;
+		goto fail_vq;
+	}
+
+	for (i = 0; i < nirqs; i++) {
+		irq = platform_get_irq(vm_dev->pdev, i);
+		if (irq < 0)
+			goto fail_irq;
+		if (irq < irq_base)
+			irq_base = irq;
+
+		err = devm_request_irq(&vdev->dev, irq, vm_interrupt,
+				       IRQF_SHARED, NULL, vm_dev);
+		if (err)
+			goto fail_irq;
+
+		if (of_property_read_bool(vm_dev->pdev->dev.of_node, "wakeup-source"))
+			enable_irq_wake(irq);
+	}
+
+	for (i = 0; i < nvqs; i++) {
+		irq = vq2irq(vqs[i]);
+		info = vqs[i]->priv;
+		info->irq = irq_base + (irq % nirqs);
+	}
+
+	vm_dev->irq_base = irq_base;
+	vm_dev->num_irqs = nirqs;
+
 	return 0;
+
+fail_irq:
+	while (i--)
+		devm_free_irq(&vdev->dev, irq_base + i, vm_dev);
+fail_vq:
+	vm_del_vqs(vdev);
+
+	return err;
 }
 
 static const char *vm_bus_name(struct virtio_device *vdev)
