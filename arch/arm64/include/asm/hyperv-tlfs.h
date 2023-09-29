@@ -64,6 +64,31 @@
 #define HV_REGISTER_STIMER0_CONFIG	0x000B0000
 #define HV_REGISTER_STIMER0_COUNT	0x000B0001
 
+/*
+ * To support non-arch-specific code calling hv_set/get_register:
+ * - On x86, HV_MSR_ indicates an MSR accessed via rdmsrl/wrmsrl
+ * - On ARM, HV_MSR_ indicates a VP register accessed via hypercall
+ */
+#define HV_MSR_VP_INDEX		(HV_REGISTER_VP_INDEX)
+#define HV_MSR_TIME_REF_COUNT	(HV_REGISTER_TIME_REF_COUNT)
+#define HV_MSR_REFERENCE_TS	(HV_REGISTER_REFERENCE_TSC)
+
+#define HV_MSR_STIMER0_CONFIG	(HV_REGISTER_STIMER0_CONFIG)
+#define HV_MSR_STIMER0_COUNT	(HV_REGISTER_STIMER0_COUNT)
+
+#define HV_MSR_SCONTROL		(HV_REGISTER_SCONTROL)
+#define HV_MSR_SIEFP		(HV_REGISTER_SIEFP)
+#define HV_MSR_SIMP		(HV_REGISTER_SIMP)
+#define HV_MSR_EOM		(HV_REGISTER_EOM)
+#define HV_MSR_SINT0		(HV_REGISTER_SINT0)
+
+#define HV_MSR_CRASH_P0		(HV_REGISTER_CRASH_P0)
+#define HV_MSR_CRASH_P1		(HV_REGISTER_CRASH_P1)
+#define HV_MSR_CRASH_P2		(HV_REGISTER_CRASH_P2)
+#define HV_MSR_CRASH_P3		(HV_REGISTER_CRASH_P3)
+#define HV_MSR_CRASH_P4		(HV_REGISTER_CRASH_P4)
+#define HV_MSR_CRASH_CTL	(HV_REGISTER_CRASH_CTL)
+
 union hv_msi_entry {
 	u64 as_uint64[2];
 	struct {
