@@ -26,6 +26,12 @@ SCHED_FEAT(CACHE_HOT_BUDDY, true)
  */
 SCHED_FEAT(WAKEUP_PREEMPTION, true)
 
+/*
+ * Bias runqueue selection towards previous runqueue if it is almost
+ * idle.
+ */
+SCHED_FEAT(WAKEUP_BIAS_PREV_IDLE, true)
+
 SCHED_FEAT(HRTICK, false)
 SCHED_FEAT(HRTICK_DL, false)
 SCHED_FEAT(DOUBLE_TICK, false)
