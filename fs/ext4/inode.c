@@ -3659,6 +3659,10 @@ static int __ext4_block_zero_page_range(handle_t *handle,
 		BUFFER_TRACE(bh, "freed: skip");
 		goto unlock;
 	}
+	if (buffer_unwritten(bh) && !buffer_dirty(bh)) {
+		BUFFER_TRACE(bh, "unwritten and non-dirty: skip");
+		goto unlock;
+	}
 	if (!buffer_mapped(bh)) {
 		BUFFER_TRACE(bh, "unmapped");
 		ext4_get_block(inode, iblock, bh, 0);
