@@ -21,6 +21,7 @@
 #include <linux/types.h>
 
 #include <linux/iio/buffer.h>
+#include <linux/iio/events.h>
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
 #include <linux/iio/trigger_consumer.h>
@@ -34,6 +35,16 @@
 #define AD2S1210_ENABLE_HYSTERESIS	BIT(4)
 #define AD2S1210_SET_ENRES		GENMASK(3, 2)
 #define AD2S1210_SET_RES		GENMASK(1, 0)
+
+/* fault register flags */
+#define AD2S1210_FAULT_CLIP		BIT(7)
+#define AD2S1210_FAULT_LOS		BIT(6)
+#define AD2S1210_FAULT_DOS_OVR		BIT(5)
+#define AD2S1210_FAULT_DOS_MIS		BIT(4)
+#define AD2S1210_FAULT_LOT		BIT(3)
+#define AD2S1210_FAULT_VELOCITY		BIT(2)
+#define AD2S1210_FAULT_PHASE		BIT(1)
+#define AD2S1210_FAULT_CONFIG_PARITY	BIT(0)
 
 #define AD2S1210_REG_POSITION_MSB	0x80
 #define AD2S1210_REG_POSITION_LSB	0x81
@@ -71,6 +82,8 @@
 /* max voltage for threshold registers is 0x7F * 38 mV */
 #define THRESHOLD_RANGE_STR "[0 38 4826]"
 
+#define FAULT_ONESHOT(bit, new, old) (new & bit && !(old & bit))
+
 enum ad2s1210_mode {
 	MOD_POS = 0b00,
 	MOD_VEL = 0b01,
@@ -98,8 +111,13 @@ struct ad2s1210_state {
 	unsigned long clkin_hz;
 	/** The selected resolution */
 	enum ad2s1210_resolution resolution;
+	/** Copy of fault register from the previous read. */
+	u8 prev_fault_flags;
 	/** For reading raw sample value via SPI. */
-	__be16 sample __aligned(IIO_DMA_MINALIGN);
+	struct {
+		__be16 raw;
+		u8 fault;
+	} sample __aligned(IIO_DMA_MINALIGN);;
 	/** Scan buffer */
 	struct {
 		__be16 chan[2];
@@ -158,7 +176,15 @@ static int ad2s1210_regmap_reg_write(void *context, unsigned int reg,
 	if (ret < 0)
 		return ret;
 
-	return spi_sync_transfer(st->sdev, xfers, ARRAY_SIZE(xfers));
+	ret = spi_sync_transfer(st->sdev, xfers, ARRAY_SIZE(xfers));
+	if (ret < 0)
+		return ret;
+
+	/* soft reset also clears the fault register */
+	if (reg == AD2S1210_REG_SOFT_RESET)
+		st->prev_fault_flags = 0;
+
+	return 0;
 }
 
 /*
@@ -199,6 +225,10 @@ static int ad2s1210_regmap_reg_read(void *context, unsigned int reg,
 	ret = spi_sync_transfer(st->sdev, xfers, ARRAY_SIZE(xfers));
 	if (ret < 0)
 		return ret;
+
+	/* reading the fault register also clears it */
+	if (reg == AD2S1210_REG_FAULT)
+		st->prev_fault_flags = 0;
 
 	/*
 	 * If the D7 bit is set on any read/write register, it indicates a
@@ -283,14 +313,92 @@ error_ret:
 	return ret < 0 ? ret : len;
 }
 
-static int ad2s1210_single_conversion(struct ad2s1210_state *st,
+static void ad2s1210_push_events(struct iio_dev *indio_dev,
+				 u8 flags, s64 timestamp)
+{
+	struct ad2s1210_state *st = iio_priv(indio_dev);
+
+	/* Sine/cosine inputs clipped */
+	if (FAULT_ONESHOT(AD2S1210_FAULT_CLIP, flags, st->prev_fault_flags))
+		iio_push_event(indio_dev,
+			       IIO_MOD_EVENT_CODE(IIO_ALTVOLTAGE, 1,
+			       			  IIO_MOD_X_OR_Y,
+						  IIO_EV_TYPE_MAG,
+						  IIO_EV_DIR_NONE),
+			       timestamp);
+
+	/* Sine/cosine inputs below LOS threshold */
+	if (FAULT_ONESHOT(AD2S1210_FAULT_LOS, flags, st->prev_fault_flags))
+		iio_push_event(indio_dev,
+			       IIO_UNMOD_EVENT_CODE(IIO_ALTVOLTAGE, 0,
+						    IIO_EV_TYPE_THRESH,
+						    IIO_EV_DIR_FALLING),
+			       timestamp);
+
+	/* Sine/cosine inputs exceed DOS overrange threshold */
+	if (FAULT_ONESHOT(AD2S1210_FAULT_DOS_OVR, flags, st->prev_fault_flags))
+		iio_push_event(indio_dev,
+			       IIO_UNMOD_EVENT_CODE(IIO_ALTVOLTAGE, 0,
+						    IIO_EV_TYPE_THRESH,
+						    IIO_EV_DIR_RISING),
+			       timestamp);
+
+	/* Sine/cosine inputs exceed DOS mismatch threshold */
+	if (FAULT_ONESHOT(AD2S1210_FAULT_DOS_MIS, flags, st->prev_fault_flags))
+		iio_push_event(indio_dev,
+			       IIO_UNMOD_EVENT_CODE(IIO_ALTVOLTAGE, 0,
+						    IIO_EV_TYPE_MAG,
+						    IIO_EV_DIR_NONE),
+			       timestamp);
+
+	/* Tracking error exceeds LOT threshold */
+	if (FAULT_ONESHOT(AD2S1210_FAULT_LOT, flags, st->prev_fault_flags))
+		iio_push_event(indio_dev,
+			       IIO_UNMOD_EVENT_CODE(IIO_ANGL, 1,
+						    IIO_EV_TYPE_THRESH,
+						    IIO_EV_DIR_RISING),
+			       timestamp);
+
+	/* Velocity exceeds maximum tracking rate */
+	if (FAULT_ONESHOT(AD2S1210_FAULT_VELOCITY, flags, st->prev_fault_flags))
+		iio_push_event(indio_dev,
+			       IIO_UNMOD_EVENT_CODE(IIO_ANGL_VEL, 0,
+						    IIO_EV_TYPE_THRESH,
+						    IIO_EV_DIR_RISING),
+			       timestamp);
+
+	/* Phase error exceeds phase lock range */
+	if (FAULT_ONESHOT(AD2S1210_FAULT_PHASE, flags, st->prev_fault_flags))
+		iio_push_event(indio_dev,
+			       IIO_UNMOD_EVENT_CODE(IIO_PHASE, 0,
+						    IIO_EV_TYPE_MAG,
+						    IIO_EV_DIR_NONE),
+			       timestamp);
+
+	/* Configuration parity error */
+	if (FAULT_ONESHOT(AD2S1210_FAULT_CONFIG_PARITY, flags,
+			  st->prev_fault_flags))
+		/*
+		 * Userspace should also get notified of this via error return
+		 * when trying to write to any attribute that writes a register.
+		 */
+		dev_err_ratelimited(&indio_dev->dev,
+				    "Configuration parity error\n");
+
+	st->prev_fault_flags = flags;
+}
+
+static int ad2s1210_single_conversion(struct iio_dev *indio_dev,
 				      struct iio_chan_spec const *chan,
 				      int *val)
 {
+	struct ad2s1210_state *st = iio_priv(indio_dev);
+	s64 timestamp;
 	int ret;
 
 	mutex_lock(&st->lock);
 	gpiod_set_value(st->sample_gpio, 1);
+	timestamp = iio_get_time_ns(indio_dev);
 	/* delay (6 * tck + 20) nano seconds */
 	udelay(1);
 
@@ -307,23 +415,25 @@ static int ad2s1210_single_conversion(struct ad2s1210_state *st,
 	}
 	if (ret < 0)
 		goto error_ret;
-	ret = spi_read(st->sdev, &st->sample, 2);
+	ret = spi_read(st->sdev, &st->sample, 3);
 	if (ret < 0)
 		goto error_ret;
 
 	switch (chan->type) {
 	case IIO_ANGL:
-		*val = be16_to_cpu(st->sample);
+		*val = be16_to_cpu(st->sample.raw);
 		ret = IIO_VAL_INT;
 		break;
 	case IIO_ANGL_VEL:
-		*val = (s16)be16_to_cpu(st->sample);
+		*val = (s16)be16_to_cpu(st->sample.raw);
 		ret = IIO_VAL_INT;
 		break;
 	default:
 		ret = -EINVAL;
 		break;
 	}
+
+	ad2s1210_push_events(indio_dev, st->rx[2], timestamp);
 
 error_ret:
 	gpiod_set_value(st->sample_gpio, 0);
@@ -608,7 +718,7 @@ static int ad2s1210_read_raw(struct iio_dev *indio_dev,
 
 	switch (mask) {
 	case IIO_CHAN_INFO_RAW:
-		return ad2s1210_single_conversion(st, chan, val);
+		return ad2s1210_single_conversion(indio_dev, chan, val);
 	case IIO_CHAN_INFO_SCALE:
 		switch (chan->type) {
 		case IIO_ANGL:
@@ -721,6 +831,14 @@ static const struct iio_event_spec ad2s1210_position_event_spec[] = {
 	},
 };
 
+static const struct iio_event_spec ad2s1210_velocity_event_spec[] = {
+	{
+		/* Velocity exceeds maximum tracking rate fault. */
+		.type = IIO_EV_TYPE_THRESH,
+		.dir = IIO_EV_DIR_RISING,
+	},
+};
+
 static const struct iio_event_spec ad2s1210_phase_event_spec[] = {
 	{
 		/* Phase error fault. */
@@ -754,6 +872,14 @@ static const struct iio_event_spec ad2s1210_monitor_signal_event_spec[] = {
 	},
 };
 
+static const struct iio_event_spec ad2s1210_sin_cos_event_spec[] = {
+	{
+		/* Sine/cosine clipping fault. */
+		.type = IIO_EV_TYPE_MAG,
+		.dir = IIO_EV_DIR_NONE,
+	},
+};
+
 static const struct iio_chan_spec ad2s1210_channels[] = {
 	{
 		.type = IIO_ANGL,
@@ -784,6 +910,8 @@ static const struct iio_chan_spec ad2s1210_channels[] = {
 		},
 		.info_mask_separate = BIT(IIO_CHAN_INFO_RAW) |
 				      BIT(IIO_CHAN_INFO_SCALE),
+		.event_spec = ad2s1210_velocity_event_spec,
+		.num_event_specs = ARRAY_SIZE(ad2s1210_velocity_event_spec),
 	},
 	IIO_CHAN_SOFT_TIMESTAMP(2),
 	{
@@ -820,6 +948,26 @@ static const struct iio_chan_spec ad2s1210_channels[] = {
 		.scan_index = -1,
 		.event_spec = ad2s1210_monitor_signal_event_spec,
 		.num_event_specs = ARRAY_SIZE(ad2s1210_monitor_signal_event_spec),
+	}, {
+		/* sine input */
+		.type = IIO_ALTVOLTAGE,
+		.indexed = 1,
+		.channel = 1,
+		.modified = 1,
+		.channel2 = IIO_MOD_Y,
+		.scan_index = -1,
+		.event_spec = ad2s1210_sin_cos_event_spec,
+		.num_event_specs = ARRAY_SIZE(ad2s1210_sin_cos_event_spec),
+	}, {
+		/* cosine input */
+		.type = IIO_ALTVOLTAGE,
+		.indexed = 1,
+		.channel = 1,
+		.modified = 1,
+		.channel2 = IIO_MOD_X,
+		.scan_index = -1,
+		.event_spec = ad2s1210_sin_cos_event_spec,
+		.num_event_specs = ARRAY_SIZE(ad2s1210_sin_cos_event_spec),
 	},
 };
 
@@ -936,7 +1084,7 @@ static const struct attribute_group ad2s1210_event_attribute_group = {
 
 static int ad2s1210_initial(struct ad2s1210_state *st)
 {
-	unsigned char data;
+	unsigned int data;
 	int ret;
 
 	mutex_lock(&st->lock);
@@ -1073,12 +1221,11 @@ static irqreturn_t ad2s1210_trigger_handler(int irq, void *p)
 		if (ret < 0)
 			goto error_ret;
 
-		/* REVIST: we can read 3 bytes here and also get fault flags */
-		ret = spi_read(st->sdev, st->rx, 2);
+		ret = spi_read(st->sdev, &st->sample, 3);
 		if (ret < 0)
 			goto error_ret;
 
-		memcpy(&st->scan.chan[chan++], st->rx, 2);
+		memcpy(&st->scan.chan[chan++], &st->sample.raw, 2);
 	}
 
 	if (test_bit(1, indio_dev->active_scan_mask)) {
@@ -1086,14 +1233,14 @@ static irqreturn_t ad2s1210_trigger_handler(int irq, void *p)
 		if (ret < 0)
 			goto error_ret;
 
-		/* REVIST: we can read 3 bytes here and also get fault flags */
-		ret = spi_read(st->sdev, st->rx, 2);
+		ret = spi_read(st->sdev, &st->sample, 3);
 		if (ret < 0)
 			goto error_ret;
 
-		memcpy(&st->scan.chan[chan++], st->rx, 2);
+		memcpy(&st->scan.chan[chan++], &st->sample.raw, 2);
 	}
 
+	ad2s1210_push_events(indio_dev, st->sample.fault, pf->timestamp);
 	iio_push_to_buffers_with_timestamp(indio_dev, &st->scan, pf->timestamp);
 
 error_ret:
