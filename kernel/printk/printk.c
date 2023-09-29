@@ -3740,12 +3740,18 @@ static bool __pr_flush(struct console *con, int timeout_ms, bool reset_on_progre
 
 	seq = prb_next_seq(prb);
 
+	/* Flush the consoles so that records up to @seq are printed. */
+	console_lock();
+	console_unlock();
+
 	for (;;) {
 		diff = 0;
 
 		/*
 		 * Hold the console_lock to guarantee safe access to
-		 * console->seq.
+		 * console->seq. Releasing console_lock flushes more
+		 * records in case @seq is still not printed on all
+		 * usable consoles.
 		 */
 		console_lock();
 
@@ -3775,16 +3781,11 @@ static bool __pr_flush(struct console *con, int timeout_ms, bool reset_on_progre
 		if (diff == 0 || remaining == 0)
 			break;
 
-		if (remaining < 0) {
-			/* no timeout limit */
-			msleep(100);
-		} else if (remaining < 100) {
-			msleep(remaining);
-			remaining = 0;
-		} else {
-			msleep(100);
-			remaining -= 100;
-		}
+		msleep(1);
+
+		/* If @remaining < 0, there is no timeout limit. */
+		if (remaining > 0)
+			remaining--;
 
 		last_diff = diff;
 	}
