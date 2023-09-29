@@ -4582,9 +4582,6 @@ static long ext4_zero_range(struct file *file, loff_t offset,
 
 	/* Zero range excluding the unaligned edges */
 	if (max_blocks > 0) {
-		flags |= (EXT4_GET_BLOCKS_CONVERT_UNWRITTEN |
-			  EXT4_EX_NOCACHE);
-
 		/*
 		 * Prevent page faults from reinstantiating pages we have
 		 * released from page cache.
@@ -4609,17 +4606,25 @@ static long ext4_zero_range(struct file *file, loff_t offset,
 		 * disk in case of crash before zeroing trans is committed.
 		 */
 		if (ext4_should_journal_data(inode)) {
-			ret = filemap_write_and_wait_range(mapping, start, end - 1);
+			ret = filemap_write_and_wait_range(mapping, start,
+							   end - 1);
 			if (ret) {
 				filemap_invalidate_unlock(mapping);
 				goto out_mutex;
 			}
 		}
+	}
 
-		/* Now release the pages and zero block aligned part of pages */
-		truncate_pagecache_range(inode, start, end - 1);
+	/*
+	 * Now truncate the pagecache and zero out non page aligned edges of the
+	 * range (if any)
+	 */
+	truncate_pagecache_range(inode, offset, offset + len - 1);
+
+	if (max_blocks > 0) {
 		inode->i_mtime = inode->i_ctime = current_time(inode);
 
+		flags |= (EXT4_GET_BLOCKS_CONVERT_UNWRITTEN | EXT4_EX_NOCACHE);
 		ret = ext4_alloc_file_blocks(file, lblk, max_blocks, new_size,
 					     flags);
 		filemap_invalidate_unlock(mapping);
