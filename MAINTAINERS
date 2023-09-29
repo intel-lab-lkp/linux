@@ -15104,6 +15104,7 @@ L:	linux-kernel@vger.kernel.org
 L:	The AWS Nitro Enclaves Team <aws-nitro-enclaves-devel@amazon.com>
 S:	Supported
 W:	https://aws.amazon.com/ec2/nitro/nitro-enclaves/
+F:	drivers/char/hw_random/nsm-rng.c
 F:	drivers/misc/nsm.c
 F:	include/linux/nsm.h
 F:	include/uapi/linux/nsm.h
