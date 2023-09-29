@@ -783,6 +783,7 @@ xfs_direct_write_iomap_begin(
 {
 	struct xfs_inode	*ip = XFS_I(inode);
 	struct xfs_mount	*mp = ip->i_mount;
+	struct xfs_sb		*m_sb = &mp->m_sb;
 	struct xfs_bmbt_irec	imap, cmap;
 	xfs_fileoff_t		offset_fsb = XFS_B_TO_FSBT(mp, offset);
 	xfs_fileoff_t		end_fsb = xfs_iomap_end_fsb(mp, offset, length);
@@ -813,6 +814,41 @@ xfs_direct_write_iomap_begin(
 			       &nimaps, 0);
 	if (error)
 		goto out_unlock;
+
+	if (flags & IOMAP_ATOMIC_WRITE) {
+		xfs_filblks_t unit_min_fsb, unit_max_fsb;
+
+		xfs_ip_atomic_write_attr(ip, &unit_min_fsb, &unit_max_fsb);
+
+		if (!imap_spans_range(&imap, offset_fsb, end_fsb)) {
+			error = -EIO;
+			goto out_unlock;
+		}
+
+		if (offset % m_sb->sb_blocksize ||
+		    length % m_sb->sb_blocksize) {
+			error = -EIO;
+			goto out_unlock;
+		}
+
+		if (imap.br_blockcount == unit_min_fsb ||
+		    imap.br_blockcount == unit_max_fsb) {
+			/* min and max must be a power-of-2 */
+		} else if (imap.br_blockcount < unit_min_fsb ||
+			   imap.br_blockcount > unit_max_fsb) {
+			error = -EIO;
+			goto out_unlock;
+		} else if (!is_power_of_2(imap.br_blockcount)) {
+			error = -EIO;
+			goto out_unlock;
+		}
+
+		if (imap.br_startoff &&
+		    imap.br_startoff % imap.br_blockcount) {
+			error =  -EIO;
+			goto out_unlock;
+		}
+	}
 
 	if (imap_needs_cow(ip, flags, &imap, nimaps)) {
 		error = -EAGAIN;
