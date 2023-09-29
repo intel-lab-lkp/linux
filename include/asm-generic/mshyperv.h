@@ -21,12 +21,27 @@
 #include <linux/types.h>
 #include <linux/atomic.h>
 #include <linux/bitops.h>
+#include <acpi/acpi_numa.h>
 #include <linux/cpumask.h>
 #include <linux/nmi.h>
 #include <asm/ptrace.h>
 #include <asm/hyperv-tlfs.h>
 
 #define VTPM_BASE_ADDRESS 0xfed40000
+
+static inline struct hv_proximity_domain_info
+numa_node_to_proximity_domain_info(int node)
+{
+	struct hv_proximity_domain_info proximity_domain_info = {};
+
+	if (node != NUMA_NO_NODE) {
+		proximity_domain_info.domain_id = node_to_pxm(node);
+		proximity_domain_info.flags.proximity_info_valid = 1;
+		proximity_domain_info.flags.proximity_preferred = 1;
+	}
+
+	return proximity_domain_info;
+}
 
 struct ms_hyperv_info {
 	u32 features;
