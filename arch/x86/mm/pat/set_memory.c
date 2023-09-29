@@ -755,10 +755,15 @@ pmd_t *lookup_pmd_address(unsigned long address)
  * areas on 32-bit NUMA systems.  The percpu areas can
  * end up in this kind of memory, for instance.
  *
- * This could be optimized, but it is only intended to be
- * used at initialization time, and keeping it
- * unoptimized should increase the testing coverage for
- * the more obscure platforms.
+ * It is also used in callbacks for CoCo VM page transitions between private
+ * and shared because it works when the PRESENT bit is not set in the leaf
+ * PTE. In such cases, the state of the PTEs, including the PFN, is otherwise
+ * known to be valid, so the returned physical address is correct. The similar
+ * function vmalloc_to_pfn() can't be used because it requires the PRESENT bit.
+ *
+ * This could be optimized, but it is only used in paths that are not perf
+ * sensitive, and keeping it unoptimized should increase the testing coverage
+ * for the more obscure platforms.
  */
 phys_addr_t slow_virt_to_phys(void *__virt_addr)
 {

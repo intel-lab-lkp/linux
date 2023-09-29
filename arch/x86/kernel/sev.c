@@ -784,7 +784,13 @@ static unsigned long __set_pages_state(struct snp_psc_desc *data, unsigned long 
 		hdr->end_entry = i;
 
 		if (is_vmalloc_addr((void *)vaddr)) {
-			pfn = vmalloc_to_pfn((void *)vaddr);
+			/*
+			 * Use slow_virt_to_phys() because the PRESENT bit has been
+			 * temporarily cleared in the PTEs.  slow_virt_to_phys() works
+			 * without the PRESENT bit while vmalloc_to_pfn() or similar
+			 * does not.
+			 */
+			pfn = slow_virt_to_phys((void *)vaddr) >> PAGE_SHIFT;
 			use_large_entry = false;
 		} else {
 			pfn = __pa(vaddr) >> PAGE_SHIFT;
