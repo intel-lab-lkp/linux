@@ -130,6 +130,13 @@
 		compatible = "usb-nop-xceiv";
 	};
 
+	base_fpga_region {
+		#address-cells = <0x2>;
+		#size-cells = <0x2>;
+		compatible = "fpga-region";
+		fpga-mgr = <&fpga_mgr>;
+	};
+
 	soc {
 		#address-cells = <1>;
 		#size-cells = <1>;
@@ -137,13 +144,6 @@
 		device_type = "soc";
 		interrupt-parent = <&intc>;
 		ranges = <0 0 0 0xffffffff>;
-
-		base_fpga_region {
-			#address-cells = <0x2>;
-			#size-cells = <0x2>;
-			compatible = "fpga-region";
-			fpga-mgr = <&fpga_mgr>;
-		};
 
 		clkmgr: clock-controller@ffd10000 {
 			compatible = "intel,agilex-clkmgr";
