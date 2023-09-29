@@ -1109,6 +1109,8 @@ xfs_flags2diflags2(
 		di_flags2 |= XFS_DIFLAG2_DAX;
 	if (xflags & FS_XFLAG_COWEXTSIZE)
 		di_flags2 |= XFS_DIFLAG2_COWEXTSIZE;
+	if (xflags & FS_XFLAG_FORCEALIGN)
+		di_flags2 |= XFS_DIFLAG2_FORCEALIGN;
 
 	return di_flags2;
 }
@@ -1142,6 +1144,22 @@ xfs_ioctl_setattr_xflags(
 	i_flags2 = xfs_flags2diflags2(ip, fa->fsx_xflags);
 	if (i_flags2 && !xfs_has_v3inodes(mp))
 		return -EINVAL;
+
+	/*
+	 * Force-align requires a nonzero extent size hint and a zero cow
+	 * extent size hint.  It doesn't apply to realtime files.
+	 */
+	if (fa->fsx_xflags & FS_XFLAG_FORCEALIGN) {
+		if (!xfs_has_forcealign(mp))
+			return -EINVAL;
+		if (fa->fsx_xflags & FS_XFLAG_COWEXTSIZE)
+			return -EINVAL;
+		if (!(fa->fsx_xflags & (FS_XFLAG_EXTSIZE |
+					FS_XFLAG_EXTSZINHERIT)))
+			return -EINVAL;
+		if (fa->fsx_xflags & FS_XFLAG_REALTIME)
+			return -EINVAL;
+	}
 
 	ip->i_diflags = xfs_flags2diflags(ip, fa->fsx_xflags);
 	ip->i_diflags2 = i_flags2;

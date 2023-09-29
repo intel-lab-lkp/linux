@@ -305,6 +305,11 @@ static inline bool xfs_inode_has_large_extent_counts(struct xfs_inode *ip)
 	return ip->i_diflags2 & XFS_DIFLAG2_NREXT64;
 }
 
+static inline bool xfs_inode_forcealign(struct xfs_inode *ip)
+{
+	return ip->i_diflags2 & XFS_DIFLAG2_FORCEALIGN;
+}
+
 /*
  * Return the buftarg used for data allocations on a given inode.
  */
