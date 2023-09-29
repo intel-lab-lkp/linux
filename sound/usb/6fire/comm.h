@@ -19,7 +19,6 @@ enum /* settings for comm */
 struct comm_runtime {
 	struct sfire_chip *chip;
 
-	struct urb receiver;
 	u8 *receiver_buffer;
 
 	u8 serial; /* urb serial */
@@ -30,6 +29,7 @@ struct comm_runtime {
 	int (*write8)(struct comm_runtime *rt, u8 request, u8 reg, u8 value);
 	int (*write16)(struct comm_runtime *rt, u8 request, u8 reg,
 			u8 vh, u8 vl);
+	struct urb receiver;
 };
 
 int usb6fire_comm_init(struct sfire_chip *chip);
