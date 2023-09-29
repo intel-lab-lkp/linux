@@ -115,7 +115,7 @@ properties:
           type: array
           items:
             type: object
-            required: [ name, type ]
+            required: [ name ]
             additionalProperties: False
             properties:
               name:
