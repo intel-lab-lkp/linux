@@ -102,3 +102,9 @@
 
 	status = "okay";
 };
+
+&usbphy1 {
+	vdd-supply = <&regulator_fixed_5p0>;
+
+	status = "okay";
+};
