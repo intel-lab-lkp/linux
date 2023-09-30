@@ -55,7 +55,8 @@ static const char cxacru_driver_name[] = "cxacru";
 #define POLL_INTERVAL	1	/* secs */
 
 /* commands for interaction with the modem through the control channel before
- * firmware is loaded  */
+ * firmware is loaded
+ */
 enum cxacru_fw_request {
 	FW_CMD_ERR,
 	FW_GET_VER,
@@ -67,7 +68,8 @@ enum cxacru_fw_request {
 };
 
 /* commands for interaction with the modem through the control channel once
- * firmware is loaded  */
+ * firmware is loaded
+ */
 enum cxacru_cm_request {
 	CM_REQUEST_UNDEFINED = 0x80,
 	CM_REQUEST_TEST,
@@ -369,7 +371,8 @@ static ssize_t adsl_state_store(struct device *dev,
 	/* Line status is only updated every second
 	 * and the device appears to only react to
 	 * START/STOP every second too. Wait 1.5s to
-	 * be sure that restart will have an effect. */
+	 * be sure that restart will have an effect.
+	 */
 	if (!strcmp(str_cmd, "restart"))
 		msleep(1500);
 
@@ -1237,7 +1240,8 @@ static void cxacru_unbind(struct usbatm_data *usbatm_instance,
 	BUG_ON(instance->poll_state == CXPOLL_SHUTDOWN);
 
 	/* ensure that status polling continues unless
-	 * it has already stopped */
+	 * it has already stopped
+	 */
 	if (instance->poll_state == CXPOLL_STOPPED)
 		is_polling = 0;
 
