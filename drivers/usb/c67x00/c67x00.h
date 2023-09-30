@@ -193,7 +193,7 @@ struct c67x00_sie {
 	/* Entries to be used by the subdrivers */
 	spinlock_t lock;	/* protect this structure */
 	void *private_data;
-	void (*irq) (struct c67x00_sie *sie, u16 int_status, u16 msg);
+	void (*irq)(struct c67x00_sie *sie, u16 int_status, u16 msg);
 
 	/* Read only: */
 	struct c67x00_device *dev;
