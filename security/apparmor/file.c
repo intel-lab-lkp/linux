@@ -409,8 +409,8 @@ int aa_path_link(struct aa_label *label, struct dentry *old_dentry,
 	struct path link = { .mnt = new_dir->mnt, .dentry = new_dentry };
 	struct path target = { .mnt = new_dir->mnt, .dentry = old_dentry };
 	struct path_cond cond = {
-		d_backing_inode(old_dentry)->i_uid,
-		d_backing_inode(old_dentry)->i_mode
+		d_inode(old_dentry)->i_uid,
+		d_inode(old_dentry)->i_mode
 	};
 	char *buffer = NULL, *buffer2 = NULL;
 	struct aa_profile *profile;

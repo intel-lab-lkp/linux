@@ -406,7 +406,7 @@ static struct sock *unix_find_socket_byinode(struct inode *i)
 	sk_for_each_bound(s, &bsd_socket_buckets[hash]) {
 		struct dentry *dentry = unix_sk(s)->path.dentry;
 
-		if (dentry && d_backing_inode(dentry) == i) {
+		if (dentry && d_inode(dentry) == i) {
 			sock_hold(s);
 			spin_unlock(&bsd_socket_locks[hash]);
 			return s;
@@ -1086,7 +1086,7 @@ static struct sock *unix_find_bsd(struct sockaddr_un *sunaddr, int addr_len,
 		goto path_put;
 
 	err = -ECONNREFUSED;
-	inode = d_backing_inode(path.dentry);
+	inode = d_inode(path.dentry);
 	if (!S_ISSOCK(inode->i_mode))
 		goto path_put;
 
@@ -1250,7 +1250,7 @@ static int unix_bind_bsd(struct sock *sk, struct sockaddr_un *sunaddr,
 	if (u->addr)
 		goto out_unlock;
 
-	new_hash = unix_bsd_hash(d_backing_inode(dentry));
+	new_hash = unix_bsd_hash(d_inode(dentry));
 	unix_table_double_lock(net, old_hash, new_hash);
 	u->path.mnt = mntget(parent.mnt);
 	u->path.dentry = dget(dentry);

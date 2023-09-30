@@ -143,7 +143,7 @@ int vfs_getattr_nosec(const struct path *path, struct kstat *stat,
 		      u32 request_mask, unsigned int query_flags)
 {
 	struct mnt_idmap *idmap;
-	struct inode *inode = d_backing_inode(path->dentry);
+	struct inode *inode = d_inode(path->dentry);
 
 	memset(stat, 0, sizeof(*stat));
 	stat->result_mask |= STATX_BASIC_STATS;
@@ -289,7 +289,7 @@ retry:
 
 	/* Handle STATX_DIOALIGN for block devices. */
 	if (request_mask & STATX_DIOALIGN) {
-		struct inode *inode = d_backing_inode(path.dentry);
+		struct inode *inode = d_inode(path.dentry);
 
 		if (S_ISBLK(inode->i_mode))
 			bdev_statx_dioalign(inode, stat);
@@ -532,7 +532,7 @@ static int do_readlinkat(int dfd, const char __user *pathname,
 retry:
 	error = user_path_at_empty(dfd, pathname, lookup_flags, &path, &empty);
 	if (!error) {
-		struct inode *inode = d_backing_inode(path.dentry);
+		struct inode *inode = d_inode(path.dentry);
 
 		error = empty ? -ENOENT : -EINVAL;
 		/*

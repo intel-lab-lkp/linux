@@ -173,7 +173,7 @@ int fs_lookup_param(struct fs_context *fc,
 	}
 
 	if (want_bdev &&
-	    !S_ISBLK(d_backing_inode(_path->dentry)->i_mode)) {
+	    !S_ISBLK(d_inode(_path->dentry)->i_mode)) {
 		path_put(_path);
 		_path->dentry = NULL;
 		_path->mnt = NULL;

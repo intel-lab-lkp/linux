@@ -985,7 +985,7 @@ int posix_acl_listxattr(struct inode *inode, char **buffer,
 static bool
 posix_acl_xattr_list(struct dentry *dentry)
 {
-	return IS_POSIXACL(d_backing_inode(dentry));
+	return IS_POSIXACL(d_inode(dentry));
 }
 
 /*

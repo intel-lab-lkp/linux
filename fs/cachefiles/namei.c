@@ -103,7 +103,7 @@ retry:
 		subdir = ERR_PTR(ret);
 	trace_cachefiles_lookup(NULL, dir, subdir);
 	if (IS_ERR(subdir)) {
-		trace_cachefiles_vfs_error(NULL, d_backing_inode(dir),
+		trace_cachefiles_vfs_error(NULL, d_inode(dir),
 					   PTR_ERR(subdir),
 					   cachefiles_trace_lookup_error);
 		if (PTR_ERR(subdir) == -ENOMEM)
@@ -112,7 +112,7 @@ retry:
 	}
 
 	_debug("subdir -> %pd %s",
-	       subdir, d_backing_inode(subdir) ? "positive" : "negative");
+	       subdir, d_inode(subdir) ? "positive" : "negative");
 
 	/* we need to create the subdir if it doesn't exist yet */
 	if (d_is_negative(subdir)) {
@@ -142,10 +142,10 @@ retry:
 			cachefiles_put_directory(subdir);
 			goto retry;
 		}
-		ASSERT(d_backing_inode(subdir));
+		ASSERT(d_inode(subdir));
 
 		_debug("mkdir -> %pd{ino=%lu}",
-		       subdir, d_backing_inode(subdir)->i_ino);
+		       subdir, d_inode(subdir)->i_ino);
 		if (_is_new)
 			*_is_new = true;
 	}
@@ -163,7 +163,7 @@ retry:
 	inode_unlock(d_inode(subdir));
 
 	/* we need to make sure the subdir is a directory */
-	ASSERT(d_backing_inode(subdir));
+	ASSERT(d_inode(subdir));
 
 	if (!d_can_lookup(subdir)) {
 		pr_err("%s is not a directory\n", dirname);
@@ -172,15 +172,15 @@ retry:
 	}
 
 	ret = -EPERM;
-	if (!(d_backing_inode(subdir)->i_opflags & IOP_XATTR) ||
-	    !d_backing_inode(subdir)->i_op->lookup ||
-	    !d_backing_inode(subdir)->i_op->mkdir ||
-	    !d_backing_inode(subdir)->i_op->rename ||
-	    !d_backing_inode(subdir)->i_op->rmdir ||
-	    !d_backing_inode(subdir)->i_op->unlink)
+	if (!(d_inode(subdir)->i_opflags & IOP_XATTR) ||
+	    !d_inode(subdir)->i_op->lookup ||
+	    !d_inode(subdir)->i_op->mkdir ||
+	    !d_inode(subdir)->i_op->rename ||
+	    !d_inode(subdir)->i_op->rmdir ||
+	    !d_inode(subdir)->i_op->unlink)
 		goto check_error;
 
-	_leave(" = [%lu]", d_backing_inode(subdir)->i_ino);
+	_leave(" = [%lu]", d_inode(subdir)->i_ino);
 	return subdir;
 
 check_error:
@@ -245,12 +245,12 @@ static int cachefiles_unlink(struct cachefiles_cache *cache,
 
 	ret = cachefiles_inject_remove_error();
 	if (ret == 0) {
-		ret = vfs_unlink(&nop_mnt_idmap, d_backing_inode(dir), dentry, NULL);
+		ret = vfs_unlink(&nop_mnt_idmap, d_inode(dir), dentry, NULL);
 		if (ret == -EIO)
 			cachefiles_io_error(cache, "Unlink failed");
 	}
 	if (ret != 0)
-		trace_cachefiles_vfs_error(object, d_backing_inode(dir), ret,
+		trace_cachefiles_vfs_error(object, d_inode(dir), ret,
 					   cachefiles_trace_unlink_error);
 	return ret;
 }
@@ -424,9 +424,9 @@ int cachefiles_delete_object(struct cachefiles_object *object,
 	/* Stop the dentry being negated if it's only pinned by a file struct. */
 	dget(dentry);
 
-	inode_lock_nested(d_backing_inode(fan), I_MUTEX_PARENT);
+	inode_lock_nested(d_inode(fan), I_MUTEX_PARENT);
 	ret = cachefiles_unlink(volume->cache, object, fan, dentry, why);
-	inode_unlock(d_backing_inode(fan));
+	inode_unlock(d_inode(fan));
 	dput(dentry);
 	return ret;
 }
@@ -562,9 +562,9 @@ static bool cachefiles_open_file(struct cachefiles_object *object,
 	path.mnt = cache->mnt;
 	path.dentry = dentry;
 	file = kernel_file_open(&path, O_RDWR | O_LARGEFILE | O_DIRECT,
-				d_backing_inode(dentry), cache->cache_cred);
+				d_inode(dentry), cache->cache_cred);
 	if (IS_ERR(file)) {
-		trace_cachefiles_vfs_error(object, d_backing_inode(dentry),
+		trace_cachefiles_vfs_error(object, d_inode(dentry),
 					   PTR_ERR(file),
 					   cachefiles_trace_open_error);
 		goto error;
@@ -691,7 +691,7 @@ bool cachefiles_commit_tmpfile(struct cachefiles_cache *cache,
 	}
 
 	if (!d_is_negative(dentry)) {
-		if (d_backing_inode(dentry) == file_inode(object->file)) {
+		if (d_inode(dentry) == file_inode(object->file)) {
 			success = true;
 			goto out_dput;
 		}

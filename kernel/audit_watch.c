@@ -135,7 +135,7 @@ int audit_watch_compare(struct audit_watch *watch, unsigned long ino, dev_t dev)
 /* Initialize a parent watch entry. */
 static struct audit_parent *audit_init_parent(const struct path *path)
 {
-	struct inode *inode = d_backing_inode(path->dentry);
+	struct inode *inode = d_inode(path->dentry);
 	struct audit_parent *parent;
 	int ret;
 
@@ -353,9 +353,9 @@ static int audit_get_nd(struct audit_watch *watch, struct path *parent)
 	if (d_is_positive(d)) {
 		/* update watch filter fields */
 		watch->dev = d->d_sb->s_dev;
-		watch->ino = d_backing_inode(d)->i_ino;
+		watch->ino = d_inode(d)->i_ino;
 	}
-	inode_unlock(d_backing_inode(parent->dentry));
+	inode_unlock(d_inode(parent->dentry));
 	dput(d);
 	return 0;
 }
@@ -425,7 +425,7 @@ int audit_add_watch(struct audit_krule *krule, struct list_head **list)
 	}
 
 	/* either find an old parent or attach a new one */
-	parent = audit_find_parent(d_backing_inode(parent_path.dentry));
+	parent = audit_find_parent(d_inode(parent_path.dentry));
 	if (!parent) {
 		parent = audit_init_parent(&parent_path);
 		if (IS_ERR(parent)) {

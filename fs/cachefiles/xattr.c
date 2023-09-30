@@ -160,7 +160,7 @@ int cachefiles_remove_object_xattr(struct cachefiles_cache *cache,
 			cachefiles_io_error(cache,
 					    "Can't remove xattr from %lu"
 					    " (error %d)",
-					    d_backing_inode(dentry)->i_ino, -ret);
+					    d_inode(dentry)->i_ino, -ret);
 	}
 
 	_leave(" = %d", ret);

@@ -927,7 +927,7 @@ int lookup_bdev(const char *pathname, dev_t *dev)
 	if (error)
 		return error;
 
-	inode = d_backing_inode(path.dentry);
+	inode = d_inode(path.dentry);
 	error = -ENOTBLK;
 	if (!S_ISBLK(inode->i_mode))
 		goto out_path_put;

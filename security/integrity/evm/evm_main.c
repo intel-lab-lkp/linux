@@ -131,7 +131,7 @@ static bool evm_hmac_disabled(void)
 
 static int evm_find_protected_xattrs(struct dentry *dentry)
 {
-	struct inode *inode = d_backing_inode(dentry);
+	struct inode *inode = d_inode(dentry);
 	struct xattr_list *xattr;
 	int error;
 	int count = 0;
@@ -241,7 +241,7 @@ static enum integrity_status evm_verify_hmac(struct dentry *dentry,
 					(const char *)xattr_data, xattr_len,
 					digest.digest, digest.hdr.length);
 		if (!rc) {
-			inode = d_backing_inode(dentry);
+			inode = d_inode(dentry);
 
 			if (xattr_data->type == EVM_XATTR_PORTABLE_DIGSIG) {
 				if (iint)
@@ -337,7 +337,7 @@ int evm_read_protected_xattrs(struct dentry *dentry, u8 *buffer,
 	int rc, size, total_size = 0;
 
 	list_for_each_entry_lockless(xattr, &evm_config_xattrnames, list) {
-		rc = __vfs_getxattr(dentry, d_backing_inode(dentry),
+		rc = __vfs_getxattr(dentry, d_inode(dentry),
 				    xattr->name, NULL, 0);
 		if (rc < 0 && rc == -ENODATA)
 			continue;
@@ -367,7 +367,7 @@ int evm_read_protected_xattrs(struct dentry *dentry, u8 *buffer,
 			size = rc;
 			if (buffer) {
 				rc = __vfs_getxattr(dentry,
-					d_backing_inode(dentry), xattr->name,
+					d_inode(dentry), xattr->name,
 					buffer + total_size,
 					buffer_size - total_size);
 				if (rc < 0)
@@ -410,7 +410,7 @@ enum integrity_status evm_verifyxattr(struct dentry *dentry,
 		return INTEGRITY_UNKNOWN;
 
 	if (!iint) {
-		iint = integrity_iint_find(d_backing_inode(dentry));
+		iint = integrity_iint_find(d_inode(dentry));
 		if (!iint)
 			return INTEGRITY_UNKNOWN;
 	}
@@ -428,7 +428,7 @@ EXPORT_SYMBOL_GPL(evm_verifyxattr);
  */
 static enum integrity_status evm_verify_current_integrity(struct dentry *dentry)
 {
-	struct inode *inode = d_backing_inode(dentry);
+	struct inode *inode = d_inode(dentry);
 
 	if (!evm_key_loaded() || !S_ISREG(inode->i_mode) || evm_fixmode)
 		return INTEGRITY_PASS;
@@ -510,7 +510,7 @@ static int evm_protect_xattr(struct mnt_idmap *idmap,
 		if (evm_hmac_disabled())
 			return 0;
 
-		iint = integrity_iint_find(d_backing_inode(dentry));
+		iint = integrity_iint_find(d_inode(dentry));
 		if (iint && (iint->flags & IMA_NEW_FILE))
 			return 0;
 
@@ -545,7 +545,7 @@ out:
 
 	if (evm_status != INTEGRITY_PASS &&
 	    evm_status != INTEGRITY_PASS_IMMUTABLE)
-		integrity_audit_msg(AUDIT_INTEGRITY_METADATA, d_backing_inode(dentry),
+		integrity_audit_msg(AUDIT_INTEGRITY_METADATA, d_inode(dentry),
 				    dentry->d_name.name, "appraise_metadata",
 				    integrity_status_msg[evm_status],
 				    -EPERM, 0);
@@ -618,7 +618,7 @@ static int evm_inode_set_acl_change(struct mnt_idmap *idmap,
 	int rc;
 
 	umode_t mode;
-	struct inode *inode = d_backing_inode(dentry);
+	struct inode *inode = d_inode(dentry);
 
 	if (!kacl)
 		return 1;
@@ -683,7 +683,7 @@ int evm_inode_set_acl(struct mnt_idmap *idmap, struct dentry *dentry,
 		return 0;
 
 	if (evm_status != INTEGRITY_PASS_IMMUTABLE)
-		integrity_audit_msg(AUDIT_INTEGRITY_METADATA, d_backing_inode(dentry),
+		integrity_audit_msg(AUDIT_INTEGRITY_METADATA, d_inode(dentry),
 				    dentry->d_name.name, "appraise_metadata",
 				    integrity_status_msg[evm_status],
 				    -EPERM, 0);
@@ -783,7 +783,7 @@ void evm_inode_post_removexattr(struct dentry *dentry, const char *xattr_name)
 static int evm_attr_change(struct mnt_idmap *idmap,
 			   struct dentry *dentry, struct iattr *attr)
 {
-	struct inode *inode = d_backing_inode(dentry);
+	struct inode *inode = d_inode(dentry);
 	unsigned int ia_valid = attr->ia_valid;
 
 	if (!i_uid_needs_update(idmap, attr, inode) &&
@@ -833,7 +833,7 @@ int evm_inode_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 	    !evm_attr_change(idmap, dentry, attr))
 		return 0;
 
-	integrity_audit_msg(AUDIT_INTEGRITY_METADATA, d_backing_inode(dentry),
+	integrity_audit_msg(AUDIT_INTEGRITY_METADATA, d_inode(dentry),
 			    dentry->d_name.name, "appraise_metadata",
 			    integrity_status_msg[evm_status], -EPERM, 0);
 	return -EPERM;

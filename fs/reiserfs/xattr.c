@@ -776,7 +776,7 @@ static inline bool reiserfs_posix_acl_list(const char *name,
 					   struct dentry *dentry)
 {
 	return (posix_acl_type(name) >= 0) &&
-	       IS_POSIXACL(d_backing_inode(dentry));
+	       IS_POSIXACL(d_inode(dentry));
 }
 
 /* This is the implementation for the xattr plugin infrastructure */

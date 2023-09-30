@@ -146,7 +146,7 @@ static int udf_symlink_getattr(struct mnt_idmap *idmap,
 			       u32 request_mask, unsigned int flags)
 {
 	struct dentry *dentry = path->dentry;
-	struct inode *inode = d_backing_inode(dentry);
+	struct inode *inode = d_inode(dentry);
 	struct page *page;
 
 	generic_fillattr(&nop_mnt_idmap, request_mask, inode, stat);

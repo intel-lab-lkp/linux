@@ -2707,7 +2707,7 @@ static int ublk_char_dev_permission(struct ublk_device *ub,
 		goto exit;
 
 	err = inode_permission(&nop_mnt_idmap,
-			d_backing_inode(path.dentry), mask);
+			d_inode(path.dentry), mask);
 exit:
 	path_put(&path);
 	return err;

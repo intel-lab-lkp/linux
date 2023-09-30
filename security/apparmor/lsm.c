@@ -228,10 +228,10 @@ static int common_perm(const char *op, const struct path *path, u32 mask,
 static int common_perm_cond(const char *op, const struct path *path, u32 mask)
 {
 	vfsuid_t vfsuid = i_uid_into_vfsuid(mnt_idmap(path->mnt),
-					    d_backing_inode(path->dentry));
+					    d_inode(path->dentry));
 	struct path_cond cond = {
 		vfsuid_into_kuid(vfsuid),
-		d_backing_inode(path->dentry)->i_mode
+		d_inode(path->dentry)->i_mode
 	};
 
 	if (!path_mediated_fs(path->dentry))
@@ -271,7 +271,7 @@ static int common_perm_dir_dentry(const char *op, const struct path *dir,
 static int common_perm_rm(const char *op, const struct path *dir,
 			  struct dentry *dentry, u32 mask)
 {
-	struct inode *inode = d_backing_inode(dentry);
+	struct inode *inode = d_inode(dentry);
 	struct path_cond cond = { };
 	vfsuid_t vfsuid;
 
@@ -384,16 +384,16 @@ static int apparmor_path_rename(const struct path *old_dir, struct dentry *old_d
 		struct path new_path = { .mnt = new_dir->mnt,
 					 .dentry = new_dentry };
 		struct path_cond cond = {
-			.mode = d_backing_inode(old_dentry)->i_mode
+			.mode = d_inode(old_dentry)->i_mode
 		};
-		vfsuid = i_uid_into_vfsuid(idmap, d_backing_inode(old_dentry));
+		vfsuid = i_uid_into_vfsuid(idmap, d_inode(old_dentry));
 		cond.uid = vfsuid_into_kuid(vfsuid);
 
 		if (flags & RENAME_EXCHANGE) {
 			struct path_cond cond_exchange = {
-				.mode = d_backing_inode(new_dentry)->i_mode,
+				.mode = d_inode(new_dentry)->i_mode,
 			};
-			vfsuid = i_uid_into_vfsuid(idmap, d_backing_inode(old_dentry));
+			vfsuid = i_uid_into_vfsuid(idmap, d_inode(old_dentry));
 			cond_exchange.uid = vfsuid_into_kuid(vfsuid);
 
 			error = aa_path_perm(OP_RENAME_SRC, label, &new_path, 0,

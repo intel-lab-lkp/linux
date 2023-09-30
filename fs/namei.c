@@ -2950,7 +2950,7 @@ EXPORT_SYMBOL(__check_sticky);
 static int may_delete(struct mnt_idmap *idmap, struct inode *dir,
 		      struct dentry *victim, bool isdir)
 {
-	struct inode *inode = d_backing_inode(victim);
+	struct inode *inode = d_inode(victim);
 	int error;
 
 	if (d_is_negative(victim))
@@ -3615,7 +3615,7 @@ static int do_open(struct nameidata *nd,
 		if (d_is_dir(nd->path.dentry))
 			return -EISDIR;
 		error = may_create_in_sticky(idmap, nd,
-					     d_backing_inode(nd->path.dentry));
+					     d_inode(nd->path.dentry));
 		if (unlikely(error))
 			return error;
 	}

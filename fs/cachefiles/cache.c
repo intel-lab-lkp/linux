@@ -59,10 +59,10 @@ int cachefiles_add_cache(struct cachefiles_cache *cache)
 	 */
 	ret = -EOPNOTSUPP;
 	if (d_is_negative(root) ||
-	    !d_backing_inode(root)->i_op->lookup ||
-	    !d_backing_inode(root)->i_op->mkdir ||
-	    !d_backing_inode(root)->i_op->tmpfile ||
-	    !(d_backing_inode(root)->i_opflags & IOP_XATTR) ||
+	    !d_inode(root)->i_op->lookup ||
+	    !d_inode(root)->i_op->mkdir ||
+	    !d_inode(root)->i_op->tmpfile ||
+	    !(d_inode(root)->i_opflags & IOP_XATTR) ||
 	    !root->d_sb->s_op->statfs ||
 	    !root->d_sb->s_op->sync_fs ||
 	    root->d_sb->s_blocksize > PAGE_SIZE)

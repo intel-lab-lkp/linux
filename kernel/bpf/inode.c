@@ -504,7 +504,7 @@ static void *bpf_obj_do_get(int path_fd, const char __user *pathname,
 	if (ret)
 		return ERR_PTR(ret);
 
-	inode = d_backing_inode(path.dentry);
+	inode = d_inode(path.dentry);
 	ret = path_permission(&path, ACC_MODE(flags));
 	if (ret)
 		goto out;
@@ -587,7 +587,7 @@ struct bpf_prog *bpf_prog_get_type_path(const char *name, enum bpf_prog_type typ
 	int ret = kern_path(name, LOOKUP_FOLLOW, &path);
 	if (ret)
 		return ERR_PTR(ret);
-	prog = __get_prog_inode(d_backing_inode(path.dentry), type);
+	prog = __get_prog_inode(d_inode(path.dentry), type);
 	if (!IS_ERR(prog))
 		touch_atime(&path);
 	path_put(&path);

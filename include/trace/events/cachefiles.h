@@ -251,9 +251,9 @@ TRACE_EVENT(cachefiles_lookup,
 
 	    TP_fast_assign(
 		    __entry->obj	= obj ? obj->debug_id : 0;
-		    __entry->dino	= d_backing_inode(dir)->i_ino;
-		    __entry->ino	= (!IS_ERR(de) && d_backing_inode(de) ?
-					   d_backing_inode(de)->i_ino : 0);
+		    __entry->dino	= d_inode(dir)->i_ino;
+		    __entry->ino	= (!IS_ERR(de) && d_inode(de) ?
+					   d_inode(de)->i_ino : 0);
 		    __entry->error	= IS_ERR(de) ? PTR_ERR(de) : 0;
 			   ),
 
@@ -272,8 +272,8 @@ TRACE_EVENT(cachefiles_mkdir,
 			     ),
 
 	    TP_fast_assign(
-		    __entry->dir	= d_backing_inode(dir)->i_ino;
-		    __entry->subdir	= d_backing_inode(subdir)->i_ino;
+		    __entry->dir	= d_inode(dir)->i_ino;
+		    __entry->subdir	= d_inode(subdir)->i_ino;
 			   ),
 
 	    TP_printk("dB=%x sB=%x",

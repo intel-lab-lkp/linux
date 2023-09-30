@@ -2129,7 +2129,7 @@ retry:
 	rcu_read_lock();
 	seq = read_seqbegin(&rename_lock);
 	for (;;) {
-		struct inode *inode = d_backing_inode(d);
+		struct inode *inode = d_inode(d);
 
 		if (inode && unlikely(inode->i_fsnotify_marks)) {
 			struct audit_chunk *chunk;
@@ -2296,7 +2296,7 @@ void __audit_inode(struct filename *name, const struct dentry *dentry,
 		   unsigned int flags)
 {
 	struct audit_context *context = audit_context();
-	struct inode *inode = d_backing_inode(dentry);
+	struct inode *inode = d_inode(dentry);
 	struct audit_names *n;
 	bool parent = flags & AUDIT_INODE_PARENT;
 	struct audit_entry *e;
@@ -2414,7 +2414,7 @@ void __audit_inode_child(struct inode *parent,
 			 const unsigned char type)
 {
 	struct audit_context *context = audit_context();
-	struct inode *inode = d_backing_inode(dentry);
+	struct inode *inode = d_inode(dentry);
 	const struct qstr *dname = &dentry->d_name;
 	struct audit_names *n, *found_parent = NULL, *found_child = NULL;
 	struct audit_entry *e;

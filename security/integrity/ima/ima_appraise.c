@@ -486,7 +486,7 @@ int ima_appraise_measurement(enum ima_hooks func,
 	static const char op[] = "appraise_data";
 	const char *cause = "unknown";
 	struct dentry *dentry = file_dentry(file);
-	struct inode *inode = d_backing_inode(dentry);
+	struct inode *inode = d_inode(dentry);
 	enum integrity_status status = INTEGRITY_UNKNOWN;
 	int rc = xattr_len;
 	bool try_modsig = iint->flags & IMA_MODSIG_ALLOWED && modsig;
@@ -638,7 +638,7 @@ void ima_update_xattr(struct integrity_iint_cache *iint, struct file *file)
 void ima_inode_post_setattr(struct mnt_idmap *idmap,
 			    struct dentry *dentry)
 {
-	struct inode *inode = d_backing_inode(dentry);
+	struct inode *inode = d_inode(dentry);
 	struct integrity_iint_cache *iint;
 	int action;
 
@@ -772,7 +772,7 @@ int ima_inode_setxattr(struct dentry *dentry, const char *xattr_name,
 		digsig = (xvalue->type == EVM_XATTR_PORTABLE_DIGSIG);
 	}
 	if (result == 1 || evm_revalidate_status(xattr_name)) {
-		ima_reset_appraise_flags(d_backing_inode(dentry), digsig);
+		ima_reset_appraise_flags(d_inode(dentry), digsig);
 		if (result == 1)
 			result = 0;
 	}
@@ -783,7 +783,7 @@ int ima_inode_set_acl(struct mnt_idmap *idmap, struct dentry *dentry,
 		      const char *acl_name, struct posix_acl *kacl)
 {
 	if (evm_revalidate_status(acl_name))
-		ima_reset_appraise_flags(d_backing_inode(dentry), 0);
+		ima_reset_appraise_flags(d_inode(dentry), 0);
 
 	return 0;
 }
@@ -794,7 +794,7 @@ int ima_inode_removexattr(struct dentry *dentry, const char *xattr_name)
 
 	result = ima_protect_xattr(dentry, xattr_name, NULL, 0);
 	if (result == 1 || evm_revalidate_status(xattr_name)) {
-		ima_reset_appraise_flags(d_backing_inode(dentry), 0);
+		ima_reset_appraise_flags(d_inode(dentry), 0);
 		if (result == 1)
 			result = 0;
 	}

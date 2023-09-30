@@ -229,7 +229,7 @@ int exfat_getattr(struct mnt_idmap *idmap, const struct path *path,
 		  struct kstat *stat, unsigned int request_mask,
 		  unsigned int query_flags)
 {
-	struct inode *inode = d_backing_inode(path->dentry);
+	struct inode *inode = d_inode(path->dentry);
 	struct exfat_inode_info *ei = EXFAT_I(inode);
 
 	generic_fillattr(&nop_mnt_idmap, request_mask, inode, stat);

@@ -262,7 +262,7 @@ static int get_path_from_fd(const s32 fd, struct path *const path)
 	    (f.file->f_path.mnt->mnt_flags & MNT_INTERNAL) ||
 	    (f.file->f_path.dentry->d_sb->s_flags & SB_NOUSER) ||
 	    d_is_negative(f.file->f_path.dentry) ||
-	    IS_PRIVATE(d_backing_inode(f.file->f_path.dentry))) {
+	    IS_PRIVATE(d_inode(f.file->f_path.dentry))) {
 		err = -EBADFD;
 		goto out_fdput;
 	}

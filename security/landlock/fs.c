@@ -181,7 +181,7 @@ int landlock_append_fs_rule(struct landlock_ruleset *const ruleset,
 	access_rights |=
 		LANDLOCK_MASK_ACCESS_FS &
 		~(ruleset->fs_access_masks[0] | ACCESS_INITIALLY_DENIED);
-	object = get_inode_object(d_backing_inode(path->dentry));
+	object = get_inode_object(d_inode(path->dentry));
 	if (IS_ERR(object))
 		return PTR_ERR(object);
 	mutex_lock(&ruleset->lock);
@@ -213,7 +213,7 @@ find_rule(const struct landlock_ruleset *const domain,
 	if (d_is_negative(dentry))
 		return NULL;
 
-	inode = d_backing_inode(dentry);
+	inode = d_inode(dentry);
 	rcu_read_lock();
 	rule = landlock_find_rule(
 		domain, rcu_dereference(landlock_inode(inode)->object));
@@ -284,7 +284,7 @@ static inline bool is_nouser_or_private(const struct dentry *dentry)
 {
 	return (dentry->d_sb->s_flags & SB_NOUSER) ||
 	       (d_is_positive(dentry) &&
-		unlikely(IS_PRIVATE(d_backing_inode(dentry))));
+		unlikely(IS_PRIVATE(d_inode(dentry))));
 }
 
 static inline access_mask_t
@@ -833,12 +833,12 @@ static int current_check_refer_path(struct dentry *const old_dentry,
 		if (unlikely(d_is_negative(new_dentry)))
 			return -ENOENT;
 		access_request_parent1 =
-			get_mode_access(d_backing_inode(new_dentry)->i_mode);
+			get_mode_access(d_inode(new_dentry)->i_mode);
 	} else {
 		access_request_parent1 = 0;
 	}
 	access_request_parent2 =
-		get_mode_access(d_backing_inode(old_dentry)->i_mode);
+		get_mode_access(d_inode(old_dentry)->i_mode);
 	if (removable) {
 		access_request_parent1 |= maybe_remove(old_dentry);
 		access_request_parent2 |= maybe_remove(new_dentry);
