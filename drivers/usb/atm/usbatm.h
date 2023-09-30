@@ -65,10 +65,10 @@
 struct usbatm_data;
 
 /*
-*  Assuming all methods exist and succeed, they are called in this order:
-*
-*	bind, heavy_init, atm_start, ..., atm_stop, unbind
-*/
+ *  Assuming all methods exist and succeed, they are called in this order:
+ *
+ *	bind, heavy_init, atm_start, ..., atm_stop, unbind
+ */
 
 struct usbatm_driver {
 	const char *driver_name;
