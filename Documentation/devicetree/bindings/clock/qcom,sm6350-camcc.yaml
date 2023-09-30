@@ -15,6 +15,9 @@ description: |
 
   See also:: include/dt-bindings/clock/qcom,sm6350-camcc.h
 
+allOf:
+  - $ref: qcom,camcc-common.yaml#
+
 properties:
   compatible:
     const: qcom,sm6350-camcc
@@ -22,16 +25,6 @@ properties:
   clocks:
     items:
       - description: Board XO source
-
-  reg:
-    maxItems: 1
-
-required:
-  - compatible
-  - clocks
-
-allOf:
-  - $ref: qcom,gcc.yaml#
 
 unevaluatedProperties: false
 
