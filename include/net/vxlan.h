@@ -329,6 +329,7 @@ struct vxlan_dev {
 #define VXLAN_F_VNIFILTER               0x20000
 #define VXLAN_F_MDB			0x40000
 #define VXLAN_F_LOCALBYPASS		0x80000
+#define VXLAN_F_LABEL_INHERIT		0x100000
 
 /* Flags that are used in the receive path. These flags must match in
  * order for a socket to be shareable
@@ -534,6 +535,7 @@ static inline void vxlan_flag_attr_error(int attrtype,
 		break
 	switch (attrtype) {
 	VXLAN_FLAG(TTL_INHERIT);
+	VXLAN_FLAG(LABEL_INHERIT);
 	VXLAN_FLAG(LEARNING);
 	VXLAN_FLAG(PROXY);
 	VXLAN_FLAG(RSC);
