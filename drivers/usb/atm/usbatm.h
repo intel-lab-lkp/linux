@@ -74,20 +74,20 @@ struct usbatm_driver {
 	const char *driver_name;
 
 	/* init device ... can sleep, or cause probe() failure */
-	int (*bind) (struct usbatm_data *, struct usb_interface *,
+	int (*bind)(struct usbatm_data *, struct usb_interface *,
 		     const struct usb_device_id *id);
 
 	/* additional device initialization that is too slow to be done in probe() */
-	int (*heavy_init) (struct usbatm_data *, struct usb_interface *);
+	int (*heavy_init)(struct usbatm_data *, struct usb_interface *);
 
 	/* cleanup device ... can sleep, but can't fail */
-	void (*unbind) (struct usbatm_data *, struct usb_interface *);
+	void (*unbind)(struct usbatm_data *, struct usb_interface *);
 
 	/* init ATM device ... can sleep, or cause ATM initialization failure */
-	int (*atm_start) (struct usbatm_data *, struct atm_dev *);
+	int (*atm_start)(struct usbatm_data *, struct atm_dev *);
 
 	/* cleanup ATM device ... can sleep, but can't fail */
-	void (*atm_stop) (struct usbatm_data *, struct atm_dev *);
+	void (*atm_stop)(struct usbatm_data *, struct atm_dev *);
 
 	int bulk_in;	/* bulk rx endpoint */
 	int isoc_in;	/* isochronous rx endpoint */
