@@ -675,7 +675,7 @@ static int ld_usb_probe(struct usb_interface *intf, const struct usb_device_id *
 		if (!buffer)
 			goto error;
 		/* usb_string makes SETUP+STALL to leave always ControlReadLoop */
-		usb_string(udev, 255, buffer, 256);
+		utf16le_to_utf8(udev, 255, buffer, 256);
 		kfree(buffer);
 	}
 

@@ -1879,7 +1879,7 @@ static inline int usb_get_ptm_status(struct usb_device *dev, void *data)
 		0, data);
 }
 
-extern int usb_string(struct usb_device *dev, int index,
+extern int utf16le_to_utf8(struct usb_device *dev, int index,
 	char *buf, size_t size);
 extern char *usb_cache_string(struct usb_device *udev, int index);
 

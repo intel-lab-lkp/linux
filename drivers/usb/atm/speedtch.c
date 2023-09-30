@@ -655,7 +655,7 @@ static int speedtch_atm_start(struct usbatm_data *usbatm, struct atm_dev *atm_de
 
 	/* Set MAC address, it is stored in the serial number */
 	memset(atm_dev->esi, 0, sizeof(atm_dev->esi));
-	if (usb_string(usb_dev, usb_dev->descriptor.iSerialNumber, mac_str, sizeof(mac_str)) == 12) {
+	if (utf16le_to_utf8(usb_dev, usb_dev->descriptor.iSerialNumber, mac_str, sizeof(mac_str)) == 12) {
 		for (i = 0; i < 6; i++)
 			atm_dev->esi[i] = (hex_to_bin(mac_str[i * 2]) << 4) +
 				hex_to_bin(mac_str[i * 2 + 1]);

@@ -2416,7 +2416,7 @@ static int uea_getesi(struct uea_softc *sc, u_char *esi)
 {
 	unsigned char mac_str[2 * ETH_ALEN + 1];
 	int i;
-	if (usb_string
+	if (utf16le_to_utf8
 	    (sc->usb_dev, sc->usb_dev->descriptor.iSerialNumber, mac_str,
 	     sizeof(mac_str)) != 2 * ETH_ALEN)
 		return 1;

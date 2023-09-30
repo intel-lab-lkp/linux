@@ -1352,7 +1352,7 @@ static int cxacru_usb_probe(struct usb_interface *intf,
 	 * Abort if bDeviceClass is 0xff and iProduct is "USB NET CARD".
 	 */
 	if (usb_dev->descriptor.bDeviceClass == USB_CLASS_VENDOR_SPEC
-			&& usb_string(usb_dev, usb_dev->descriptor.iProduct,
+			&& utf16le_to_utf8(usb_dev, usb_dev->descriptor.iProduct,
 				buf, sizeof(buf)) > 0) {
 		if (!strcmp(buf, "USB NET CARD")) {
 			dev_info(&intf->dev, "ignoring cx82310_eth device\n");

@@ -840,7 +840,7 @@ static int iowarrior_probe(struct usb_interface *interface,
 		goto error;
 	/* Get the serial-number of the chip */
 	memset(dev->chip_serial, 0x00, sizeof(dev->chip_serial));
-	usb_string(udev, udev->descriptor.iSerialNumber, dev->chip_serial,
+	utf16le_to_utf8(udev, udev->descriptor.iSerialNumber, dev->chip_serial,
 		   sizeof(dev->chip_serial));
 	if (strlen(dev->chip_serial) != 8)
 		memset(dev->chip_serial, 0x00, sizeof(dev->chip_serial));

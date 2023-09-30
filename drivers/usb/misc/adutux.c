@@ -717,7 +717,7 @@ static int adu_probe(struct usb_interface *interface,
 	if (!dev->interrupt_out_urb)
 		goto error;
 
-	if (!usb_string(udev, udev->descriptor.iSerialNumber, dev->serial_number,
+	if (!utf16le_to_utf8(udev, udev->descriptor.iSerialNumber, dev->serial_number,
 			sizeof(dev->serial_number))) {
 		dev_err(&interface->dev, "Could not retrieve serial number\n");
 		retval = -EIO;

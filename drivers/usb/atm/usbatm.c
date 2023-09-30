@@ -1035,7 +1035,7 @@ int usbatm_usb_probe(struct usb_interface *intf, const struct usb_device_id *id,
 	buf = instance->description;
 	length = sizeof(instance->description);
 
-	if ((i = usb_string(usb_dev, usb_dev->descriptor.iProduct, buf, length)) < 0)
+	if ((i = utf16le_to_utf8(usb_dev, usb_dev->descriptor.iProduct, buf, length)) < 0)
 		goto bind;
 
 	buf += i;

@@ -2723,12 +2723,12 @@ static int edge_startup(struct usb_serial *serial)
 	usb_set_serial_data(serial, edge_serial);
 
 	/* get the name for the device from the device */
-	i = usb_string(dev, dev->descriptor.iManufacturer,
+	i = utf16le_to_utf8(dev, dev->descriptor.iManufacturer,
 	    &edge_serial->name[0], MAX_NAME_LEN+1);
 	if (i < 0)
 		i = 0;
 	edge_serial->name[i++] = ' ';
-	usb_string(dev, dev->descriptor.iProduct,
+	utf16le_to_utf8(dev, dev->descriptor.iProduct,
 	    &edge_serial->name[i], MAX_NAME_LEN+2 - i);
 
 	dev_info(&serial->dev->dev, "%s detected\n", edge_serial->name);

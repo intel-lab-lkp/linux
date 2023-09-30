@@ -767,7 +767,7 @@ EXPORT_SYMBOL_GPL(usb_sg_cancel);
  *
  * Gets a USB descriptor.  Convenience functions exist to simplify
  * getting some types of descriptors.  Use
- * usb_get_string() or usb_string() for USB_DT_STRING.
+ * usb_get_string() or utf16le_to_utf8() for USB_DT_STRING.
  * Device (USB_DT_DEVICE) and configuration descriptors (USB_DT_CONFIG)
  * are part of the device structure.
  * In addition to a number of USB-standard descriptors, some
@@ -819,7 +819,7 @@ EXPORT_SYMBOL_GPL(usb_get_descriptor);
  *
  * Retrieves a string, encoded using UTF-16LE (Unicode, 16 bits per character,
  * in little-endian byte order).
- * The usb_string() function will often be a convenient way to turn
+ * The utf16le_to_utf8() function will often be a convenient way to turn
  * these strings into kernel-printable form.
  *
  * Strings may be referenced in device, configuration, interface, or other
@@ -948,7 +948,7 @@ static int usb_get_langid(struct usb_device *dev, unsigned char *tbuf)
 }
 
 /**
- * usb_string - returns UTF-8 version of a string descriptor
+ * utf16le_to_utf8 - returns UTF-8 version of a string descriptor
  * @dev: the device whose string descriptor is being retrieved
  * @index: the number of the descriptor
  * @buf: where to put the string
@@ -965,7 +965,7 @@ static int usb_get_langid(struct usb_device *dev, unsigned char *tbuf)
  *
  * Return: length of the string (>= 0) or usb_control_msg status (< 0).
  */
-int usb_string(struct usb_device *dev, int index, char *buf, size_t size)
+int utf16le_to_utf8(struct usb_device *dev, int index, char *buf, size_t size)
 {
 	unsigned char *tbuf;
 	int err;
@@ -1003,7 +1003,7 @@ int usb_string(struct usb_device *dev, int index, char *buf, size_t size)
 	kfree(tbuf);
 	return err;
 }
-EXPORT_SYMBOL_GPL(usb_string);
+EXPORT_SYMBOL_GPL(utf16le_to_utf8);
 
 /* one UTF-8-encoded 16-bit character has at most three bytes */
 #define MAX_USB_STRING_SIZE (127 * 3 + 1)
@@ -1027,7 +1027,7 @@ char *usb_cache_string(struct usb_device *udev, int index)
 
 	buf = kmalloc(MAX_USB_STRING_SIZE, GFP_NOIO);
 	if (buf) {
-		len = usb_string(udev, index, buf, MAX_USB_STRING_SIZE);
+		len = utf16le_to_utf8(udev, index, buf, MAX_USB_STRING_SIZE);
 		if (len > 0) {
 			smallbuf = kmalloc(++len, GFP_NOIO);
 			if (!smallbuf)
