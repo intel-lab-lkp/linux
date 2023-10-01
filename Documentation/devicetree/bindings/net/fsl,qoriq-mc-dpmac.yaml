@@ -24,6 +24,10 @@ properties:
     maxItems: 1
     description: The DPMAC number
 
+  phys:
+    maxItems: 1
+    description: Generic PHY for SerDes runtime configuration.
+
   phy-handle: true
 
   phy-connection-type: true
