@@ -910,8 +910,10 @@ int ieee80211_key_link(struct ieee80211_key *key,
 	 * Silently accept key re-installation without really installing the
 	 * new version of the key to avoid nonce reuse or replay issues.
 	 */
-	if (ieee80211_key_identical(sdata, old_key, key))
-		return -EALREADY;
+	if (ieee80211_key_identical(sdata, old_key, key)) {
+		ret = -EALREADY;
+		goto out;
+	}
 
 	key->local = sdata->local;
 	key->sdata = sdata;
