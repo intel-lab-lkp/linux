@@ -251,10 +251,8 @@ static int xgene_allocate_domains(struct xgene_msi *msi)
 						    &xgene_msi_domain_info,
 						    msi->inner_domain);
 
-	if (!msi->msi_domain) {
-		irq_domain_remove(msi->inner_domain);
+	if (!msi->msi_domain)
 		return -ENOMEM;
-	}
 
 	return 0;
 }
