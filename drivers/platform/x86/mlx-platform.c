@@ -6598,6 +6598,7 @@ static int mlxplat_probe(struct platform_device *pdev)
 fail_register_reboot_notifier:
 fail_regcache_sync:
 	mlxplat_pre_exit(priv);
+	mlxplat_i2c_main_exit(priv);
 fail_mlxplat_i2c_main_init:
 fail_regmap_write:
 fail_alloc:
