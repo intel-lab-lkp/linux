@@ -2940,7 +2940,36 @@ static void __exit ublk_exit(void)
 module_init(ublk_init);
 module_exit(ublk_exit);
 
-module_param(ublks_max, int, 0444);
+static int ublk_set_max_ublks(const char *buf, const struct kernel_param *kp)
+{
+	unsigned int max;
+	int ret;
+
+	ret = kstrtouint(buf, 10, &max);
+	if (ret)
+		return ret;
+
+	if (max > UBLK_MAX_UBLKS) {
+		pr_warn("Invalid ublks_max. Max supported is %d\n",
+			UBLK_MAX_UBLKS);
+		return -EINVAL;
+	}
+
+	ublks_max = max;
+	return ret;
+}
+
+static int ublk_get_max_ublks(char *buf, const struct kernel_param *kp)
+{
+	return sysfs_emit(buf, "%d\n", ublks_max);
+}
+
+static const struct kernel_param_ops ublk_max_ublks_ops = {
+	.set = ublk_set_max_ublks,
+	.get = ublk_get_max_ublks,
+};
+
+module_param_cb(ublks_max, &ublk_max_ublks_ops, NULL, 0644);
 MODULE_PARM_DESC(ublks_max, "max number of ublk devices allowed to add(default: 64)");
 
 MODULE_AUTHOR("Ming Lei <ming.lei@redhat.com>");
