@@ -313,20 +313,35 @@ static void handle_non_critical_trips(struct thermal_zone_device *tz, int trip)
 		       def_governor->throttle(tz, trip);
 }
 
-void thermal_zone_device_critical(struct thermal_zone_device *tz)
+static void thermal_zone_device_shutdown(struct thermal_zone_device *tz, bool shutdown)
 {
 	/*
 	 * poweroff_delay_ms must be a carefully profiled positive value.
 	 * Its a must for forced_emergency_poweroff_work to be scheduled.
 	 */
 	int poweroff_delay_ms = CONFIG_THERMAL_EMERGENCY_POWEROFF_DELAY_MS;
+	static const char *msg = "Temperature too high";
 
 	dev_emerg(&tz->device, "%s: critical temperature reached, "
 		  "shutting down\n", tz->type);
 
-	hw_protection_shutdown("Temperature too high", poweroff_delay_ms);
+	if (shutdown)
+		hw_protection_shutdown(msg, poweroff_delay_ms);
+	else
+		hw_protection_reboot(msg, poweroff_delay_ms);
+}
+
+void thermal_zone_device_critical(struct thermal_zone_device *tz)
+{
+	thermal_zone_device_shutdown(tz, true);
 }
 EXPORT_SYMBOL(thermal_zone_device_critical);
+
+void thermal_zone_device_critical_reboot(struct thermal_zone_device *tz)
+{
+	thermal_zone_device_shutdown(tz, false);
+}
+EXPORT_SYMBOL(thermal_zone_device_critical_reboot);
 
 static void handle_critical_trips(struct thermal_zone_device *tz,
 				  int trip, int trip_temp, enum thermal_trip_type trip_type)
