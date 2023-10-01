@@ -137,12 +137,6 @@ enum aspeed_rsa_key_mode {
 	ASPEED_RSA_DATA_MODE,
 };
 
-static inline struct akcipher_request *
-	akcipher_request_cast(struct crypto_async_request *req)
-{
-	return container_of(req, struct akcipher_request, base);
-}
-
 static int aspeed_acry_do_fallback(struct akcipher_request *req)
 {
 	struct crypto_akcipher *cipher = crypto_akcipher_reqtfm(req);
