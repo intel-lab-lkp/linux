@@ -10,6 +10,8 @@
 #include <linux/slab.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/hrtimer.h>
+#include <linux/completion.h>
 #include <media/rc-core.h>
 
 #define DRIVER_NAME	"pwm-ir-tx"
@@ -17,8 +19,13 @@
 
 struct pwm_ir {
 	struct pwm_device *pwm;
-	unsigned int carrier;
-	unsigned int duty_cycle;
+	struct hrtimer timer;
+	struct completion completion;
+	uint carrier;
+	uint duty_cycle;
+	uint *txbuf;
+	uint txbuf_len;
+	uint txbuf_index;
 };
 
 static const struct of_device_id pwm_ir_of_match[] = {
@@ -54,31 +61,63 @@ static int pwm_ir_tx(struct rc_dev *dev, unsigned int *txbuf,
 	struct pwm_ir *pwm_ir = dev->priv;
 	struct pwm_device *pwm = pwm_ir->pwm;
 	struct pwm_state state;
-	int i;
-	ktime_t edge;
-	long delta;
+
+	reinit_completion(&pwm_ir->completion);
 
 	pwm_init_state(pwm, &state);
 
 	state.period = DIV_ROUND_CLOSEST(NSEC_PER_SEC, pwm_ir->carrier);
 	pwm_set_relative_duty_cycle(&state, pwm_ir->duty_cycle, 100);
-
-	edge = ktime_get();
-
-	for (i = 0; i < count; i++) {
-		state.enabled = !(i % 2);
-		pwm_apply_state(pwm, &state);
-
-		edge = ktime_add_us(edge, txbuf[i]);
-		delta = ktime_us_delta(edge, ktime_get());
-		if (delta > 0)
-			usleep_range(delta, delta + 10);
-	}
-
 	state.enabled = false;
+
+	pwm_ir->txbuf = txbuf;
+	pwm_ir->txbuf_len = count;
+	pwm_ir->txbuf_index = 0;
+
 	pwm_apply_state(pwm, &state);
 
+	hrtimer_start(&pwm_ir->timer, 1000, HRTIMER_MODE_REL);
+
+	wait_for_completion(&pwm_ir->completion);
+
 	return count;
+}
+
+static enum hrtimer_restart pwm_ir_timer(struct hrtimer *timer)
+{
+	struct pwm_ir *pwm_ir = container_of(timer, struct pwm_ir, timer);
+	ktime_t now;
+
+	/*
+	 * If we happen to hit an odd latency spike, loop through the
+	 * pulses until we catch up.
+	 */
+	do {
+		u64 ns;
+
+		if (pwm_ir->txbuf_index >= pwm_ir->txbuf_len) {
+			/* Stop TX here */
+			pwm_disable(pwm_ir->pwm);
+
+			complete(&pwm_ir->completion);
+
+			return HRTIMER_NORESTART;
+		}
+
+		if (pwm_ir->txbuf_index % 2)
+			pwm_disable(pwm_ir->pwm);
+		else
+			pwm_enable(pwm_ir->pwm);
+
+		ns = US_TO_NS(pwm_ir->txbuf[pwm_ir->txbuf_index]);
+		hrtimer_add_expires_ns(timer, ns);
+
+		pwm_ir->txbuf_index++;
+
+		now = timer->base->get_time();
+	} while (hrtimer_get_expires_tv64(timer) < now);
+
+	return HRTIMER_RESTART;
 }
 
 static int pwm_ir_probe(struct platform_device *pdev)
@@ -95,8 +134,16 @@ static int pwm_ir_probe(struct platform_device *pdev)
 	if (IS_ERR(pwm_ir->pwm))
 		return PTR_ERR(pwm_ir->pwm);
 
+	if (pwm_can_sleep(pwm_ir->pwm)) {
+		dev_err(&pdev->dev, "unsupported pwm device: driver can sleep\n");
+		return -ENODEV;
+	}
+
 	pwm_ir->carrier = 38000;
 	pwm_ir->duty_cycle = 50;
+	init_completion(&pwm_ir->completion);
+	hrtimer_init(&pwm_ir->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	pwm_ir->timer.function = pwm_ir_timer;
 
 	rcdev = devm_rc_allocate_device(&pdev->dev, RC_DRIVER_IR_RAW_TX);
 	if (!rcdev)
