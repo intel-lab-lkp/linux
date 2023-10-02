@@ -372,6 +372,7 @@ static int imx8_acm_clk_probe(struct platform_device *pdev)
 										0, NULL, NULL);
 		if (IS_ERR(hws[sels[i].clkid])) {
 			pm_runtime_disable(&pdev->dev);
+			ret = PTR_ERR(hws[sels[i].clkid]);
 			goto err_clk_register;
 		}
 	}
