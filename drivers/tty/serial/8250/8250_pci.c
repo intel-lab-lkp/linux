@@ -1898,6 +1898,10 @@ pci_sunix_setup(struct serial_private *priv,
 
 #define MOXA_GPIO_SET_ALL_OUTPUT	0x0F
 
+static const struct serial_rs485 pci_moxa_rs485_supported = {
+	.flags = SER_RS485_ENABLED | SER_RS485_RX_DURING_TX | SER_RS422_ENABLED,
+};
+
 static int pci_moxa_set_interface(struct pci_dev *dev,
 				  unsigned int port_idx,
 				  unsigned char mode)
@@ -1919,6 +1923,30 @@ static int pci_moxa_set_interface(struct pci_dev *dev,
 	outb(val, UIR_addr);
 
 	return 0;
+}
+
+static int pci_moxa_rs485_config(struct uart_port *port,
+				 struct ktermios *termios,
+				 struct serial_rs485 *rs485)
+{
+	struct pci_dev *dev = to_pci_dev(port->dev);
+	unsigned short device = dev->device;
+	unsigned char mode = MOXA_RS232;
+
+	if (rs485->flags & SER_RS485_ENABLED) {
+		if (rs485->flags & SER_RS485_RX_DURING_TX)
+			mode = MOXA_RS485_4W;
+		else
+			mode = MOXA_RS485_2W;
+	} else if (rs485->flags & SER_RS422_ENABLED) {
+		mode = MOXA_RS422;
+	} else {
+		if ((device & 0x0F00) == 0x0300) {
+			pci_warn(dev, "RS232 interface is not supported.");
+			return -EINVAL;
+		}
+	}
+	return pci_moxa_set_interface(dev, port->line, mode);
 }
 
 static int pci_moxa_init(struct pci_dev *dev)
@@ -1965,9 +1993,22 @@ static int pci_moxa_setup(struct serial_private *priv,
 			  struct uart_8250_port *port,
 			  int idx)
 {
+	struct pci_dev *dev = priv->dev;
+	unsigned short device = dev->device;
 	unsigned int bar = FL_GET_BASE(board->flags);
 	int offset;
 
+	/*
+	 * For the device IDs of MOXA PCIe boards match the pattern 0x*3** and 0x*1**,
+	 * these boards support switching interface between RS422/RS485 using TIOCSRS485.
+	 */
+	if ((device & 0x0F00) == 0x0100 || (device & 0x0F00) == 0x0300) {
+		port->port.rs485_config = pci_moxa_rs485_config;
+		port->port.rs485_supported = pci_moxa_rs485_supported;
+
+		if ((device & 0x0F00) == 0x0300)
+			port->port.rs485.flags = SER_RE422_ENABLED;
+	}
 	if (board->num_ports == 4 && idx == 3)
 		offset = 7 * board->uart_offset;
 	else
