@@ -103,9 +103,10 @@
 	status = "okay";
 	vmmc-supply = <&mmc_vcard>;
 	cd-gpios = <&gpioc 13 GPIO_ACTIVE_LOW>;
-	pinctrl-names = "default", "opendrain";
+	pinctrl-names = "default", "opendrain", "sleep";
 	pinctrl-0 = <&sdio_pins_a>;
 	pinctrl-1 = <&sdio_pins_od_a>;
+	pinctrl-2 = <&sdio_pins_sleep_a>;
 	bus-width = <4>;
 };
 
