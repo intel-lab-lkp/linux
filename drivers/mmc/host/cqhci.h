@@ -217,6 +217,7 @@ struct cqhci_host_ops;
 struct mmc_host;
 struct mmc_request;
 struct cqhci_slot;
+struct mmc_data;
 
 struct cqhci_host {
 	const struct cqhci_host_ops *ops;
@@ -293,6 +294,9 @@ struct cqhci_host_ops {
 	int (*program_key)(struct cqhci_host *cq_host,
 			   const union cqhci_crypto_cfg_entry *cfg, int slot);
 #endif
+	void (*prep_tran_desc)(struct mmc_data *data, struct cqhci_host *cq_host,
+			       u8 *desc, int sg_count);
+
 };
 
 static inline void cqhci_writel(struct cqhci_host *host, u32 val, int reg)
