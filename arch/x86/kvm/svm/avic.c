@@ -62,6 +62,9 @@ static_assert(__AVIC_GATAG(AVIC_VM_ID_MASK, AVIC_VCPU_ID_MASK) == -1u);
 static bool force_avic;
 module_param_unsafe(force_avic, bool, 0444);
 
+static int enable_ipiv = -1;
+module_param(enable_ipiv, int, 0444);
+
 /* Note:
  * This hash table is used to map VM_ID to a struct kvm_svm,
  * when handling AMD IOMMU GALOG notification to schedule in
@@ -1024,7 +1027,6 @@ avic_update_iommu_vcpu_affinity(struct kvm_vcpu *vcpu, int cpu, bool r)
 
 void avic_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
 {
-	u64 entry;
 	int h_physical_id = kvm_cpu_get_apicid(cpu);
 	struct vcpu_svm *svm = to_svm(vcpu);
 	unsigned long flags;
@@ -1053,14 +1055,22 @@ void avic_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
 	 */
 	spin_lock_irqsave(&svm->ir_list_lock, flags);
 
-	entry = READ_ONCE(*(svm->avic_physical_id_cache));
-	WARN_ON_ONCE(entry & AVIC_PHYSICAL_ID_ENTRY_IS_RUNNING_MASK);
+	/*
+	 * Do not update the actual physical id table entry, if the IPI
+	 * virtualization portion of AVIC is not enabled.
+	 * In this case all ICR writes except Self IPIs will be intercepted.
+	 */
 
-	entry &= ~AVIC_PHYSICAL_ID_ENTRY_HOST_PHYSICAL_ID_MASK;
-	entry |= (h_physical_id & AVIC_PHYSICAL_ID_ENTRY_HOST_PHYSICAL_ID_MASK);
-	entry |= AVIC_PHYSICAL_ID_ENTRY_IS_RUNNING_MASK;
+	if (enable_ipiv) {
+		u64 entry = READ_ONCE(*svm->avic_physical_id_cache);
 
-	WRITE_ONCE(*(svm->avic_physical_id_cache), entry);
+		WARN_ON_ONCE(entry & AVIC_PHYSICAL_ID_ENTRY_IS_RUNNING_MASK);
+		entry &= ~AVIC_PHYSICAL_ID_ENTRY_HOST_PHYSICAL_ID_MASK;
+		entry |= (h_physical_id & AVIC_PHYSICAL_ID_ENTRY_HOST_PHYSICAL_ID_MASK);
+		entry |= AVIC_PHYSICAL_ID_ENTRY_IS_RUNNING_MASK;
+		WRITE_ONCE(*(svm->avic_physical_id_cache), entry);
+	}
+
 	avic_update_iommu_vcpu_affinity(vcpu, h_physical_id, true);
 
 	spin_unlock_irqrestore(&svm->ir_list_lock, flags);
@@ -1068,7 +1078,6 @@ void avic_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
 
 void avic_vcpu_put(struct kvm_vcpu *vcpu)
 {
-	u64 entry;
 	struct vcpu_svm *svm = to_svm(vcpu);
 	unsigned long flags;
 
@@ -1093,11 +1102,17 @@ void avic_vcpu_put(struct kvm_vcpu *vcpu)
 
 	avic_update_iommu_vcpu_affinity(vcpu, -1, 0);
 
-	entry = READ_ONCE(*(svm->avic_physical_id_cache));
-	WARN_ON_ONCE(!(entry & AVIC_PHYSICAL_ID_ENTRY_IS_RUNNING_MASK));
+	/*
+	 * Do not update the actual physical id table entry if the IPI
+	 * virtualization is disabled. See explanation in avic_vcpu_load().
+	 */
+	if (enable_ipiv) {
+		u64 entry = READ_ONCE(*svm->avic_physical_id_cache);
 
-	entry &= ~AVIC_PHYSICAL_ID_ENTRY_IS_RUNNING_MASK;
-	WRITE_ONCE(*(svm->avic_physical_id_cache), entry);
+		WARN_ON_ONCE(!(entry & AVIC_PHYSICAL_ID_ENTRY_IS_RUNNING_MASK));
+		entry &= ~AVIC_PHYSICAL_ID_ENTRY_IS_RUNNING_MASK;
+		WRITE_ONCE(*(svm->avic_physical_id_cache), entry);
+	}
 
 	spin_unlock_irqrestore(&svm->ir_list_lock, flags);
 
@@ -1210,6 +1225,18 @@ bool avic_hardware_setup(void)
 		pr_info("x2AVIC enabled\n");
 
 	amd_iommu_register_ga_log_notifier(&avic_ga_log_notifier);
+
+	if (enable_ipiv == -1) {
+		enable_ipiv = 1;
+		/* Assume that Zen1 and Zen2 have errata #1235 */
+		if (boot_cpu_data.x86 == 0x17) {
+			pr_info("AVIC's IPI virtualization disabled due to errata #1235\n");
+			enable_ipiv = 0;
+		}
+	}
+
+	if (enable_ipiv)
+		pr_info("AVIC's IPI virtualization enabled\n");
 
 	return true;
 }
