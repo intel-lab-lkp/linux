@@ -95,8 +95,8 @@ static const char * const iommu_group_resv_type_string[] = {
 static int iommu_bus_notifier(struct notifier_block *nb,
 			      unsigned long action, void *data);
 static void iommu_release_device(struct device *dev);
-static struct iommu_domain *
-__iommu_group_domain_alloc(struct iommu_group *group, unsigned int type);
+static struct iommu_domain *__iommu_domain_alloc(struct device *dev,
+						 unsigned type);
 static int __iommu_attach_device(struct iommu_domain *domain,
 				 struct device *dev);
 static int __iommu_attach_group(struct iommu_domain *domain,
@@ -1763,7 +1763,7 @@ __iommu_group_alloc_default_domain(struct iommu_group *group, int req_type)
 {
 	if (group->default_domain && group->default_domain->type == req_type)
 		return group->default_domain;
-	return __iommu_group_domain_alloc(group, req_type);
+	return __iommu_domain_alloc(iommu_group_first_dev(group), req_type);
 }
 
 /*
@@ -2082,10 +2082,10 @@ void iommu_set_fault_handler(struct iommu_domain *domain,
 }
 EXPORT_SYMBOL_GPL(iommu_set_fault_handler);
 
-static struct iommu_domain *__iommu_domain_alloc(const struct iommu_ops *ops,
-						 struct device *dev,
-						 unsigned int type)
+static struct iommu_domain *__iommu_domain_alloc(struct device *dev,
+						 unsigned type)
 {
+	const struct iommu_ops *ops = dev_iommu_ops(dev);
 	struct iommu_domain *domain;
 	unsigned int alloc_type = type & IOMMU_DOMAIN_ALLOC_FLAGS;
 
@@ -2120,20 +2120,30 @@ static struct iommu_domain *__iommu_domain_alloc(const struct iommu_ops *ops,
 	return domain;
 }
 
-static struct iommu_domain *
-__iommu_group_domain_alloc(struct iommu_group *group, unsigned int type)
+static int __iommu_domain_alloc_dev(struct device *dev, void *data)
 {
-	struct device *dev = iommu_group_first_dev(group);
+	struct device **alloc_dev = data;
 
-	return __iommu_domain_alloc(dev_iommu_ops(dev), dev, type);
+	if (!dev_has_iommu(dev))
+		return 0;
+
+	WARN_ONCE(*alloc_dev && dev_iommu_ops(dev) != dev_iommu_ops(*alloc_dev),
+		  "Multiple IOMMU drivers present, which the public IOMMU API can't fully support yet. You may still need to disable one or more to get the expected result here, sorry!\n");
+
+	*alloc_dev = dev;
+	return 0;
 }
 
 struct iommu_domain *iommu_domain_alloc(const struct bus_type *bus)
 {
-	if (bus == NULL || bus->iommu_ops == NULL)
+	struct device *dev = NULL;
+
+	/* We always check the whole bus, so the return value isn't useful */
+	bus_for_each_dev(bus, NULL, &dev, __iommu_domain_alloc_dev);
+	if (!dev)
 		return NULL;
-	return __iommu_domain_alloc(bus->iommu_ops, NULL,
-				    IOMMU_DOMAIN_UNMANAGED);
+
+	return __iommu_domain_alloc(dev, IOMMU_DOMAIN_UNMANAGED);
 }
 EXPORT_SYMBOL_GPL(iommu_domain_alloc);
 
@@ -3256,18 +3266,22 @@ void iommu_device_unuse_default_domain(struct device *dev)
 
 static int __iommu_group_alloc_blocking_domain(struct iommu_group *group)
 {
+	struct device *dev = iommu_group_first_dev(group);
+
 	if (group->blocking_domain)
 		return 0;
 
-	group->blocking_domain =
-		__iommu_group_domain_alloc(group, IOMMU_DOMAIN_BLOCKED);
+	/* noiommu groups should never be here */
+	if (WARN_ON(!dev_has_iommu(dev)))
+		return -ENODEV;
+
+	group->blocking_domain = __iommu_domain_alloc(dev, IOMMU_DOMAIN_BLOCKED);
 	if (!group->blocking_domain) {
 		/*
 		 * For drivers that do not yet understand IOMMU_DOMAIN_BLOCKED
 		 * create an empty domain instead.
 		 */
-		group->blocking_domain = __iommu_group_domain_alloc(
-			group, IOMMU_DOMAIN_UNMANAGED);
+		group->blocking_domain = __iommu_domain_alloc(dev, IOMMU_DOMAIN_UNMANAGED);
 		if (!group->blocking_domain)
 			return -EINVAL;
 	}
