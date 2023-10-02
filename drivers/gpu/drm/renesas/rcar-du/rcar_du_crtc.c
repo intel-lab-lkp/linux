@@ -565,17 +565,13 @@ static int rcar_du_crtc_get(struct rcar_du_crtc *rcrtc)
 	if (ret < 0)
 		goto error_clock;
 
-	ret = rcar_du_group_get(rcrtc->group);
-	if (ret < 0)
-		goto error_group;
+	rcar_du_group_get(rcrtc->group);
 
 	rcar_du_crtc_setup(rcrtc);
 	rcrtc->initialized = true;
 
 	return 0;
 
-error_group:
-	clk_disable_unprepare(rcrtc->extclock);
 error_clock:
 	clk_disable_unprepare(rcrtc->clock);
 	return ret;

@@ -199,10 +199,8 @@ static void rcar_du_group_setup(struct rcar_du_group *rgrp)
  * before accessing any hardware registers.
  *
  * This function must be called with the DRM mode_config lock held.
- *
- * Return 0 in case of success or a negative error code otherwise.
  */
-int rcar_du_group_get(struct rcar_du_group *rgrp)
+void rcar_du_group_get(struct rcar_du_group *rgrp)
 {
 	if (rgrp->use_count)
 		goto done;
@@ -211,7 +209,6 @@ int rcar_du_group_get(struct rcar_du_group *rgrp)
 
 done:
 	rgrp->use_count++;
-	return 0;
 }
 
 /*
