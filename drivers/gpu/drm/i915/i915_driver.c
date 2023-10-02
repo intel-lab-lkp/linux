@@ -1077,6 +1077,8 @@ static int i915_drm_suspend(struct drm_device *dev)
 	struct drm_i915_private *dev_priv = to_i915(dev);
 	struct pci_dev *pdev = to_pci_dev(dev_priv->drm.dev);
 	pci_power_t opregion_target_state;
+	struct intel_gt *gt;
+	int i;
 
 	disable_rpm_wakeref_asserts(&dev_priv->runtime_pm);
 
@@ -1094,7 +1096,8 @@ static int i915_drm_suspend(struct drm_device *dev)
 
 	intel_runtime_pm_disable_interrupts(dev_priv);
 
-	wake_up_all_tlb_invalidate(&to_gt(dev_priv)->uc.guc);
+	for_each_gt(gt, dev_priv, i)
+		wake_up_all_tlb_invalidate(&gt->uc.guc);
 
 	intel_hpd_cancel_work(dev_priv);
 
@@ -1267,9 +1270,11 @@ static int i915_drm_resume(struct drm_device *dev)
 
 	intel_gvt_resume(dev_priv);
 
-	if (INTEL_GUC_SUPPORTS_TLB_INVALIDATION(&to_gt(dev_priv)->uc.guc)) {
-		intel_guc_invalidate_tlb_full(&to_gt(dev_priv)->uc.guc);
-		intel_guc_invalidate_tlb(&to_gt(dev_priv)->uc.guc);
+	for_each_gt(gt, dev_priv, i) {
+		if (!INTEL_GUC_SUPPORTS_TLB_INVALIDATION(&gt->uc.guc))
+			continue;
+		intel_guc_invalidate_tlb_full(&gt->uc.guc);
+		intel_guc_invalidate_tlb(&gt->uc.guc);
 	}
 
 	enable_rpm_wakeref_asserts(&dev_priv->runtime_pm);
