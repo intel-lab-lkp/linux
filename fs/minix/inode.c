@@ -154,7 +154,11 @@ static bool minix_check_superblock(struct super_block *sb)
 {
 	struct minix_sb_info *sbi = minix_sb(sb);
 
-	if (sbi->s_imap_blocks == 0 || sbi->s_zmap_blocks == 0)
+	if (sbi->s_imap_blocks < 1 || sbi->s_zmap_blocks < 1 ||
+		sbi->s_ninodes < 1 || sbi->s_nzones < 1 ||
+		sbi->s_firstdatazone <= 4 ||
+		sbi->s_firstdatazone >= sbi->s_nzones ||
+		sbi->s_log_zone_size > 4)
 		return false;
 
 	/*
