@@ -774,6 +774,7 @@ static void sun6i_spi_remove(struct platform_device *pdev)
 		dma_release_channel(master->dma_tx);
 	if (master->dma_rx)
 		dma_release_channel(master->dma_rx);
+	spi_master_put(master);
 }
 
 static const struct sun6i_spi_cfg sun6i_a31_spi_cfg = {
