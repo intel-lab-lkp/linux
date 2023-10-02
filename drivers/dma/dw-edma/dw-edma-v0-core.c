@@ -346,6 +346,25 @@ static void dw_edma_v0_core_write_chunk(struct dw_edma_chunk *chunk)
 	dw_edma_v0_write_ll_link(chunk, i, control, chunk->ll_region.paddr);
 }
 
+/**
+ * dw_edma_v0_sync_ll_data() - sync the ll data write
+ * @chunk: dma chunk
+ *
+ * In case of remote eDMA engine setup, the DW PCIe RP/EP internals
+ * configuration registers and Application memory are normally accesse
+ * over different buses. We need to insure ll data has been written before
+ * toggling the doorbell register.
+ */
+static void dw_edma_v0_sync_ll_data(struct dw_edma_chunk *chunk)
+{
+	if (!(chunk->chan->dw->chip->flags & DW_EDMA_CHIP_LOCAL))
+		/* Linux memory barriers don't cater for what's required here.
+		 * What's required is what's here - a read of the linked
+		 * list region.
+		 */
+		readl(chunk->ll_region.vaddr.io);
+}
+
 static void dw_edma_v0_core_start(struct dw_edma_chunk *chunk, bool first)
 {
 	struct dw_edma_chan *chan = chunk->chan;
@@ -412,6 +431,9 @@ static void dw_edma_v0_core_start(struct dw_edma_chunk *chunk, bool first)
 		SET_CH_32(dw, chan->dir, chan->id, llp.msb,
 			  upper_32_bits(chunk->ll_region.paddr));
 	}
+
+	dw_edma_v0_sync_ll_data(chunk);
+
 	/* Doorbell */
 	SET_RW_32(dw, chan->dir, doorbell,
 		  FIELD_PREP(EDMA_V0_DOORBELL_CH_MASK, chan->id));
