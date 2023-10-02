@@ -761,6 +761,11 @@ struct intel_plane_state {
 
 	struct drm_rect psr2_sel_fetch_area;
 
+	/*
+	 * Unpin work for cursor fb updates.
+	 */
+	struct drm_vblank_work unpin_work;
+
 	/* Clear Color Value */
 	u64 ccval;
 

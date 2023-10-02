@@ -1153,6 +1153,9 @@ intel_cleanup_plane_fb(struct drm_plane *plane,
 	intel_display_rps_mark_interactive(dev_priv, state, false);
 
 	/* Should only be called after a successful intel_prepare_plane_fb()! */
+	if (old_plane_state->unpin_work.vblank)
+		drm_vblank_work_flush(&old_plane_state->unpin_work);
+
 	intel_plane_unpin_fb(old_plane_state);
 }
 
@@ -1164,4 +1167,19 @@ static const struct drm_plane_helper_funcs intel_plane_helper_funcs = {
 void intel_plane_helper_add(struct intel_plane *plane)
 {
 	drm_plane_helper_add(&plane->base, &intel_plane_helper_funcs);
+}
+
+/* Completion is enough */
+static void intel_plane_cursor_vblank_work(struct kthread_work *base)
+{ }
+
+void intel_plane_init_cursor_vblank_work(struct intel_plane_state *old_plane_state,
+					 struct intel_plane_state *new_plane_state)
+{
+	if (!old_plane_state->ggtt_vma ||
+	    old_plane_state->ggtt_vma == new_plane_state->ggtt_vma)
+		return;
+
+	drm_vblank_work_init(&old_plane_state->unpin_work, old_plane_state->uapi.crtc,
+			     intel_plane_cursor_vblank_work);
 }
