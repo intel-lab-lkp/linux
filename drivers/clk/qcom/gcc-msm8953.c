@@ -3645,7 +3645,7 @@ static struct clk_branch gcc_usb30_master_clk = {
 		.hw.init = &(struct clk_init_data) {
 			.name = "gcc_usb30_master_clk",
 			.parent_hws = (const struct clk_hw*[]){
-				&usb30_master_clk_src.clkr.hw,
+				&gcc_pcnoc_usb3_axi_clk.clkr.hw,
 			},
 			.num_parents = 1,
 			.ops = &clk_branch2_ops,
