@@ -1317,22 +1317,29 @@ void free_event_filter(struct event_filter *filter)
 	__free_filter(filter);
 }
 
-static inline void __remove_filter(struct trace_event_file *file)
+static inline bool __remove_filter(struct trace_event_file *file)
 {
 	filter_disable(file);
+	if (!file->filter)
+		return false;
+
 	remove_filter_string(file->filter);
+	return true;
 }
 
-static void filter_free_subsystem_preds(struct trace_subsystem_dir *dir,
+static bool filter_free_subsystem_preds(struct trace_subsystem_dir *dir,
 					struct trace_array *tr)
 {
 	struct trace_event_file *file;
+	bool do_sync = false;
 
 	list_for_each_entry(file, &tr->events, list) {
 		if (file->system != dir)
 			continue;
-		__remove_filter(file);
+		if (__remove_filter(file))
+			do_sync = true;
 	}
+	return do_sync;
 }
 
 static inline void __free_subsystem_filter(struct trace_event_file *file)
@@ -2411,7 +2418,12 @@ int apply_subsystem_event_filter(struct trace_subsystem_dir *dir,
 	}
 
 	if (!strcmp(strstrip(filter_string), "0")) {
-		filter_free_subsystem_preds(dir, tr);
+		/* If nothing was freed, we do not need to sync */
+		if (!filter_free_subsystem_preds(dir, tr)) {
+			if(!(WARN_ON_ONCE(system->filter)))
+				goto out_unlock;
+		}
+
 		remove_filter_string(system->filter);
 		filter = system->filter;
 		system->filter = NULL;
