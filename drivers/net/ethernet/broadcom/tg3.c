@@ -6507,7 +6507,9 @@ static void tg3_tx_recover(struct tg3 *tp)
 		    "Please report the problem to the driver maintainer "
 		    "and include system chipset information.\n");
 
+	tg3_full_lock(tp, 0);
 	tg3_flag_set(tp, TX_RECOVERY_PENDING);
+	tg3_full_unlock(tp);
 }
 
 static inline u32 tg3_tx_avail(struct tg3_napi *tnapi)
@@ -7210,7 +7212,10 @@ static inline void tg3_reset_task_cancel(struct tg3 *tp)
 {
 	if (test_and_clear_bit(TG3_FLAG_RESET_TASK_PENDING, tp->tg3_flags))
 		cancel_work_sync(&tp->reset_task);
+
+	tg3_full_lock(tp, 0);
 	tg3_flag_clear(tp, TX_RECOVERY_PENDING);
+	tg3_full_unlock(tp);
 }
 
 static int tg3_poll_msix(struct napi_struct *napi, int budget)
