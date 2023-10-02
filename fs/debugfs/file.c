@@ -15,6 +15,7 @@
 #include <linux/pagemap.h>
 #include <linux/debugfs.h>
 #include <linux/io.h>
+#include <linux/io-64-nonatomic-hi-lo.h>
 #include <linux/slab.h>
 #include <linux/atomic.h>
 #include <linux/device.h>
