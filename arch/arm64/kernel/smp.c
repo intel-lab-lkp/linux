@@ -87,6 +87,7 @@ enum ipi_msg_type {
 static int ipi_irq_base __ro_after_init;
 static int nr_ipi __ro_after_init = NR_IPI;
 static struct irq_desc *ipi_desc[MAX_IPI] __ro_after_init;
+DECLARE_BITMAP(ipi_is_nmi, MAX_IPI);
 
 static void ipi_setup(int cpu);
 
@@ -986,7 +987,7 @@ static void ipi_setup(int cpu)
 		return;
 
 	for (i = 0; i < nr_ipi; i++) {
-		if (ipi_should_be_nmi(i)) {
+		if (test_bit(i, ipi_is_nmi)) {
 			prepare_percpu_nmi(ipi_irq_base + i);
 			enable_percpu_nmi(ipi_irq_base + i, 0);
 		} else {
@@ -1004,7 +1005,7 @@ static void ipi_teardown(int cpu)
 		return;
 
 	for (i = 0; i < nr_ipi; i++) {
-		if (ipi_should_be_nmi(i)) {
+		if (test_bit(i, ipi_is_nmi)) {
 			disable_percpu_nmi(ipi_irq_base + i);
 			teardown_percpu_nmi(ipi_irq_base + i);
 		} else {
@@ -1022,17 +1023,21 @@ void __init set_smp_ipi_range(int ipi_base, int n)
 	nr_ipi = min(n, MAX_IPI);
 
 	for (i = 0; i < nr_ipi; i++) {
-		int err;
+		int err = -EINVAL;
 
 		if (ipi_should_be_nmi(i)) {
 			err = request_percpu_nmi(ipi_base + i, ipi_handler,
 						 "IPI", &cpu_number);
-			WARN(err, "Could not request IPI %d as NMI, err=%d\n",
-			     i, err);
-		} else {
+			if (err)
+				pr_info_once("NMI unavailable; fallback to IRQ\n");
+			else
+				set_bit(i, ipi_is_nmi);
+		}
+
+		if (err) {
 			err = request_percpu_irq(ipi_base + i, ipi_handler,
 						 "IPI", &cpu_number);
-			WARN(err, "Could not request IPI %d as IRQ, err=%d\n",
+			WARN(err, "Could not request IPI %d, err=%d\n",
 			     i, err);
 		}
 
