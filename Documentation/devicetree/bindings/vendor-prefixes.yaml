@@ -1211,6 +1211,8 @@ patternProperties:
     description: Si-En Technology Ltd.
   "^si-linux,.*":
     description: Silicon Linux Corporation
+  "^sie,.*":
+    description: Sony Interactive Entertainment LLC
   "^siemens,.*":
     description: Siemens AG
   "^sifive,.*":
