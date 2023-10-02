@@ -137,7 +137,7 @@ pte_tlbinv(struct intel_context *ce,
 	i915_request_add(rq);
 
 	/* Short sleep to sanitycheck the batch is spinning before we begin */
-	msleep(10);
+	msleep(200);
 	if (va == vb) {
 		if (!i915_request_completed(rq)) {
 			pr_err("%s(%s): Semaphore sanitycheck failed %llx, with alignment %llx, using PTE size %x (phys %x, sg %x)\n",
