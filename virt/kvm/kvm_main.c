@@ -214,6 +214,10 @@ void vcpu_load(struct kvm_vcpu *vcpu)
 	__this_cpu_write(kvm_running_vcpu, vcpu);
 	preempt_notifier_register(&vcpu->preempt_notifier);
 	kvm_arch_vcpu_load(vcpu, cpu);
+
+	/* Ensure that vcpu->cpu is visible before vcpu->loaded is set to true */
+	smp_wmb();
+	WRITE_ONCE(vcpu->loaded, true);
 	put_cpu();
 }
 EXPORT_SYMBOL_GPL(vcpu_load);
@@ -221,6 +225,12 @@ EXPORT_SYMBOL_GPL(vcpu_load);
 void vcpu_put(struct kvm_vcpu *vcpu)
 {
 	preempt_disable();
+	WRITE_ONCE(vcpu->loaded, false);
+	/*
+	 * Ensure that vcpu->loaded is set and visible,
+	 * before KVM actually unloads the vCPU.
+	 */
+	smp_wmb();
 	kvm_arch_vcpu_put(vcpu);
 	preempt_notifier_unregister(&vcpu->preempt_notifier);
 	__this_cpu_write(kvm_running_vcpu, NULL);
