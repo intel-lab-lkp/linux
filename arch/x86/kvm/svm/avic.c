@@ -1075,16 +1075,10 @@ void avic_vcpu_put(struct kvm_vcpu *vcpu)
 	lockdep_assert_preemption_disabled();
 
 	/*
-	 * Note, reading the Physical ID entry outside of ir_list_lock is safe
-	 * as only the pCPU that has loaded (or is loading) the vCPU is allowed
-	 * to modify the entry, and preemption is disabled.  I.e. the vCPU
-	 * can't be scheduled out and thus avic_vcpu_{put,load}() can't run
-	 * recursively.
+	 * If the vcpu is blocking, there is no need to do anything.
+	 * See the comment in avic_vcpu_load().
 	 */
-	entry = READ_ONCE(*(svm->avic_physical_id_cache));
-
-	/* Nothing to do if IsRunning == '0' due to vCPU blocking. */
-	if (!(entry & AVIC_PHYSICAL_ID_ENTRY_IS_RUNNING_MASK))
+	if (kvm_vcpu_is_blocking(vcpu))
 		return;
 
 	/*
@@ -1098,6 +1092,9 @@ void avic_vcpu_put(struct kvm_vcpu *vcpu)
 	spin_lock_irqsave(&svm->ir_list_lock, flags);
 
 	avic_update_iommu_vcpu_affinity(vcpu, -1, 0);
+
+	entry = READ_ONCE(*(svm->avic_physical_id_cache));
+	WARN_ON_ONCE(!(entry & AVIC_PHYSICAL_ID_ENTRY_IS_RUNNING_MASK));
 
 	entry &= ~AVIC_PHYSICAL_ID_ENTRY_IS_RUNNING_MASK;
 	WRITE_ONCE(*(svm->avic_physical_id_cache), entry);
