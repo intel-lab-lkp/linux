@@ -518,7 +518,10 @@ err_free_master:
 
 static void sun4i_spi_remove(struct platform_device *pdev)
 {
+	struct spi_master *master = dev_get_drvdata(&pdev->dev);
+
 	pm_runtime_force_suspend(&pdev->dev);
+	spi_master_put(master);
 }
 
 static const struct of_device_id sun4i_spi_match[] = {
