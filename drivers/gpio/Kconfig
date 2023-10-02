@@ -566,6 +566,14 @@ config GPIO_SAMA5D2_PIOBU
 	  The difference from regular GPIOs is that they
 	  maintain their value during backup/self-refresh.
 
+config GPIO_SCMI
+	tristate "GPIO support based on SCMI pinctrl"
+	depends on OF_GPIO
+	depends on PINCTRL_SCMI
+	help
+	  Select this option to support GPIO devices based on SCMI pin
+	  control protocol.
+
 config GPIO_SIFIVE
 	tristate "SiFive GPIO support"
 	depends on OF_GPIO
