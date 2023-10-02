@@ -375,12 +375,12 @@ void xa_destroy(struct xarray *);
  *
  * Context: Any context.
  */
-static inline void xa_init_flags(struct xarray *xa, gfp_t flags)
-{
-	spin_lock_init(&xa->xa_lock);
-	xa->xa_flags = flags;
-	xa->xa_head = NULL;
-}
+#define xa_init_flags(_xa, _flags)	\
+do {					\
+	spin_lock_init(&(_xa)->xa_lock);\
+	(_xa)->xa_flags = (_flags);	\
+	(_xa)->xa_head = NULL;		\
+} while (0)
 
 /**
  * xa_init() - Initialise an empty XArray.
@@ -390,10 +390,7 @@ static inline void xa_init_flags(struct xarray *xa, gfp_t flags)
  *
  * Context: Any context.
  */
-static inline void xa_init(struct xarray *xa)
-{
-	xa_init_flags(xa, 0);
-}
+#define xa_init(xa) xa_init_flags(xa, 0)
 
 /**
  * xa_empty() - Determine if an array has any present entries.
