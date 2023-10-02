@@ -1697,12 +1697,6 @@ static void __init stm32f4_rcc_init(struct device_node *np)
 		return;
 	}
 
-	pdrm = syscon_regmap_lookup_by_phandle(np, "st,syscfg");
-	if (IS_ERR(pdrm)) {
-		pdrm = NULL;
-		pr_warn("%s: Unable to get syscfg\n", __func__);
-	}
-
 	match = of_match_node(stm32f4_of_match, np);
 	if (WARN_ON(!match))
 		return;
@@ -1893,6 +1887,12 @@ static void __init stm32f4_rcc_init(struct device_node *np)
 	}
 
 	of_clk_add_hw_provider(np, stm32f4_rcc_lookup_clk, NULL);
+
+	pdrm = syscon_regmap_lookup_by_phandle(np, "st,syscfg");
+	if (IS_ERR(pdrm)) {
+		pdrm = NULL;
+		pr_warn("%s: Unable to get syscfg\n", __func__);
+	}
 
 	return;
 fail:
