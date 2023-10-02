@@ -1,0 +1,67 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+# Copyright 2023 Raptor Engineering, LLC
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/mfd/sie,cronos-cpld.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: SIE Cronos Platform Controller CPLD multi-function device
+
+maintainers:
+  - Timothy Pearson <tpearson@raptorengineering.com>
+
+description: |
+  The SIE Cronos Platform Controller CPLD is a multi-purpose platform controller
+  that provides both a watchdog timer and an LED controller. As both functions
+  are provided by the same CPLD, a multi-function device is exposed as the
+  parent of both functions.
+
+properties:
+  compatible:
+    const: sie,cronos-cpld
+
+  reg:
+    maxItems: 1
+
+  '#address-cells':
+    const: 1
+
+  '#size-cells':
+    const: 1
+
+  leds:
+    type: object
+    description: Cronos Platform Status LEDs
+
+    properties:
+      compatible:
+        const: sie,cronos-leds
+
+  watchdog:
+    type: object
+    description: Cronos Platform Watchdog Timer
+
+    properties:
+      compatible:
+        const: sie,cronos-watchdog
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    cpld: cpld@3f {
+      compatible = "sie,cronos-cpld";
+      reg = <0x3f>;
+
+      watchdog {
+        compatible = "sie,cronos-watchdog";
+      };
+
+      leds {
+        compatible = "sie,cronos-leds";
+      };
+    };
