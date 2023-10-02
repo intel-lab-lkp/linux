@@ -2174,6 +2174,116 @@ static int acpi_scan_attach_handler(struct acpi_device *device)
 	return ret;
 }
 
+static const struct acpi_device_id gpe_block_ids[] = {
+	{"ACPI0006"},
+	{}
+};
+
+static int acpi_gpe_fill_address(struct acpi_generic_address *gpe_block_address,
+				 u8 type,
+				 int *register_count,
+				 struct resource_entry *rentry)
+{
+	if (gpe_block_address->address)
+		return -EINVAL;
+
+	gpe_block_address->address = rentry->res->start;
+	gpe_block_address->space_id = type;
+	*register_count = (rentry->res->end - rentry->res->start);
+	*register_count /= ACPI_GPE_REGISTER_WIDTH;
+
+	return 0;
+}
+
+static int acpi_gpe_block_attach(struct acpi_device *adev,
+				 const struct acpi_device_id *not_used)
+{
+	struct acpi_generic_address gpe_block_address = {};
+	struct list_head resource_list;
+	struct resource_entry *rentry;
+	int register_count;
+	acpi_status status;
+	u32 irq = 0;
+	int ret;
+
+	if (!acpi_has_method(adev->handle, METHOD_NAME__CRS) &&
+	    !acpi_has_method(adev->handle, METHOD_NAME__PRS))
+		/* It's not a block GPE if it doesn't contain _CRS or _PRS.
+		 * Specification says that ACPI0006 _HID can also refer to
+		 * FADT described GPE's. It's not an error, so it's reasonable
+		 * to return 0.
+		 */
+		return 0;
+
+	INIT_LIST_HEAD(&resource_list);
+	ret = acpi_dev_get_resources(adev, &resource_list, NULL, NULL);
+	if (ret)
+		return ret;
+
+	list_for_each_entry(rentry, &resource_list, node) {
+		switch (resource_type(rentry->res)) {
+		case IORESOURCE_IO:
+			ret = acpi_gpe_fill_address(&gpe_block_address,
+						    ACPI_ADR_SPACE_SYSTEM_IO,
+						    &register_count,
+						    rentry);
+			if (ret) {
+				acpi_handle_err(adev->handle,
+						"Multiple IO blocks in GPE block\n");
+				return ret;
+			}
+			break;
+		case IORESOURCE_MEM:
+			ret = acpi_gpe_fill_address(&gpe_block_address,
+						    ACPI_ADR_SPACE_SYSTEM_MEMORY,
+						    &register_count,
+						    rentry);
+			if (ret) {
+				acpi_handle_err(adev->handle,
+						"Multiple MEM blocks in GPE block\n");
+				return ret;
+			}
+			break;
+		case IORESOURCE_IRQ:
+			if (irq) {
+				acpi_handle_err(adev->handle,
+						"Multiple IRQ blocks in GPE block\n");
+				return -EINVAL;
+			}
+			irq = rentry->res->start;
+			break;
+		default:
+			break;
+		}
+	}
+
+	acpi_dev_free_resource_list(&resource_list);
+
+	/* GPE block needs to define one address range and one irq line */
+	if (!gpe_block_address.address || !irq)
+		return -ENODEV;
+
+	status = acpi_install_gpe_block(adev->handle,
+					&gpe_block_address,
+					register_count,
+					irq);
+	if (ACPI_FAILURE(status))
+		return -EINVAL;
+
+	status = acpi_update_all_gpes();
+	if (ACPI_FAILURE(status)) {
+		acpi_remove_gpe_block(adev->handle);
+		return -ENODEV;
+	}
+
+	return 1;
+}
+
+static struct acpi_scan_handler gpe_block_device_handler = {
+	.ids = gpe_block_ids,
+	.attach = acpi_gpe_block_attach,
+};
+
 static int acpi_bus_attach(struct acpi_device *device, void *first_pass)
 {
 	bool skip = !first_pass && device->flags.visited;
@@ -2623,6 +2733,7 @@ void __init acpi_scan_init(void)
 	acpi_init_lpit();
 
 	acpi_scan_add_handler(&generic_device_handler);
+	acpi_scan_add_handler(&gpe_block_device_handler);
 
 	/*
 	 * If there is STAO table, check whether it needs to ignore the UART
