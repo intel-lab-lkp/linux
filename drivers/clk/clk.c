@@ -68,6 +68,7 @@ struct clk_core {
 	u8			new_parent_index;
 	unsigned long		rate;
 	unsigned long		req_rate;
+	unsigned long		req_rate_tmp;
 	unsigned long		new_rate;
 	struct clk_core		*new_parent;
 	struct clk_core		*new_child;
@@ -2168,6 +2169,7 @@ static void clk_reset_temp_rates(struct clk_core *core)
 	struct clk_core *child;
 
 	core->new_rate = CLK_RATE_UNSET;
+	core->req_rate_tmp = CLK_RATE_UNSET;
 
 	hlist_for_each_entry(child, &core->children, child_node) {
 		clk_reset_temp_rates(child);
@@ -2256,8 +2258,17 @@ static struct clk_core *clk_calc_new_rates(struct clk_core *core,
 
 out:
 	/* only set new_rates if we found a valid change path */
-	if (top)
+	if (top) {
+		/*
+		 * The current clock is an ancestor of the trigger and therefore
+		 * is a clock which needs to be changed in this run. Clocks
+		 * with new_rate set but req_rate_tmp unset are changed "by
+		 * accident". On these clocks, the new_rate potentially
+		 * conflicts with req_rate.
+		 */
+		core->req_rate_tmp = new_rate;
 		clk_calc_subtree(core, new_rate, parent, p_index);
+	}
 
 	return top;
 }
@@ -3917,7 +3928,7 @@ static int __clk_core_init(struct clk_core *core)
 	else
 		rate = 0;
 	core->rate = rate;
-	core->req_rate = CLK_RATE_UNSET;
+	core->req_rate = core->req_rate_tmp = CLK_RATE_UNSET;
 	core->new_rate = CLK_RATE_UNSET;
 
 	/*
