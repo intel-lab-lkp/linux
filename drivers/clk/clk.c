@@ -24,6 +24,8 @@
 
 #include "clk.h"
 
+#define CLK_RATE_UNSET -1UL
+
 static DEFINE_SPINLOCK(enable_lock);
 static DEFINE_MUTEX(prepare_lock);
 
@@ -1832,7 +1834,6 @@ static unsigned long clk_recalc(struct clk_core *core,
 /**
  * __clk_recalc_rates
  * @core: first clk in the subtree
- * @update_req: Whether req_rate should be updated with the new rate
  * @msg: notification type (see include/linux/clk.h)
  *
  * Walks the subtree of clks starting with clk and recalculates rates as it
@@ -1842,8 +1843,7 @@ static unsigned long clk_recalc(struct clk_core *core,
  * clk_recalc_rates also propagates the POST_RATE_CHANGE notification,
  * if necessary.
  */
-static void __clk_recalc_rates(struct clk_core *core, bool update_req,
-			       unsigned long msg)
+static void __clk_recalc_rates(struct clk_core *core, unsigned long msg)
 {
 	unsigned long old_rate;
 	unsigned long parent_rate = 0;
@@ -1857,8 +1857,6 @@ static void __clk_recalc_rates(struct clk_core *core, bool update_req,
 		parent_rate = core->parent->rate;
 
 	core->rate = clk_recalc(core, parent_rate);
-	if (update_req)
-		core->req_rate = core->rate;
 
 	/*
 	 * ignore NOTIFY_STOP and NOTIFY_BAD return values for POST_RATE_CHANGE
@@ -1868,13 +1866,13 @@ static void __clk_recalc_rates(struct clk_core *core, bool update_req,
 		__clk_notify(core, msg, old_rate, core->rate);
 
 	hlist_for_each_entry(child, &core->children, child_node)
-		__clk_recalc_rates(child, update_req, msg);
+		__clk_recalc_rates(child, msg);
 }
 
 static unsigned long clk_core_get_rate_recalc(struct clk_core *core)
 {
 	if (core && (core->flags & CLK_GET_RATE_NOCACHE))
-		__clk_recalc_rates(core, false, 0);
+		__clk_recalc_rates(core, 0);
 
 	return clk_core_get_rate_nolock(core);
 }
@@ -2455,7 +2453,6 @@ static int clk_core_set_rate_nolock(struct clk_core *core,
 	/* change the rates */
 	clk_change_rate(top);
 
-	core->req_rate = req_rate;
 err:
 	clk_pm_runtime_put(core);
 
@@ -2485,6 +2482,7 @@ err:
  */
 int clk_set_rate(struct clk *clk, unsigned long rate)
 {
+	unsigned long old_req_rate;
 	int ret;
 
 	if (!clk)
@@ -2493,6 +2491,9 @@ int clk_set_rate(struct clk *clk, unsigned long rate)
 	/* prevent racing with updates to the clock topology */
 	clk_prepare_lock();
 
+	old_req_rate = clk->core->req_rate;
+	clk->core->req_rate = rate;
+
 	if (clk->exclusive_count)
 		clk_core_rate_unprotect(clk->core);
 
@@ -2500,6 +2501,9 @@ int clk_set_rate(struct clk *clk, unsigned long rate)
 
 	if (clk->exclusive_count)
 		clk_core_rate_protect(clk->core);
+
+	if (ret)
+		clk->core->req_rate = old_req_rate;
 
 	clk_prepare_unlock();
 
@@ -2528,6 +2532,7 @@ EXPORT_SYMBOL_GPL(clk_set_rate);
  */
 int clk_set_rate_exclusive(struct clk *clk, unsigned long rate)
 {
+	unsigned long old_req_rate;
 	int ret;
 
 	if (!clk)
@@ -2535,6 +2540,9 @@ int clk_set_rate_exclusive(struct clk *clk, unsigned long rate)
 
 	/* prevent racing with updates to the clock topology */
 	clk_prepare_lock();
+
+	old_req_rate = clk->core->req_rate;
+	clk->core->req_rate = rate;
 
 	/*
 	 * The temporary protection removal is not here, on purpose
@@ -2546,6 +2554,8 @@ int clk_set_rate_exclusive(struct clk *clk, unsigned long rate)
 	if (!ret) {
 		clk_core_rate_protect(clk->core);
 		clk->exclusive_count++;
+	} else {
+		clk->core->req_rate = old_req_rate;
 	}
 
 	clk_prepare_unlock();
@@ -2723,7 +2733,7 @@ static void clk_core_reparent(struct clk_core *core,
 {
 	clk_reparent(core, new_parent);
 	__clk_recalc_accuracies(core);
-	__clk_recalc_rates(core, true, POST_RATE_CHANGE);
+	__clk_recalc_rates(core, POST_RATE_CHANGE);
 }
 
 void clk_hw_reparent(struct clk_hw *hw, struct clk_hw *new_parent)
@@ -2807,9 +2817,9 @@ static int clk_core_set_parent_nolock(struct clk_core *core,
 
 	/* propagate rate an accuracy recalculation accordingly */
 	if (ret) {
-		__clk_recalc_rates(core, true, ABORT_RATE_CHANGE);
+		__clk_recalc_rates(core, ABORT_RATE_CHANGE);
 	} else {
-		__clk_recalc_rates(core, true, POST_RATE_CHANGE);
+		__clk_recalc_rates(core, POST_RATE_CHANGE);
 		__clk_recalc_accuracies(core);
 	}
 
@@ -3706,7 +3716,7 @@ static void clk_core_reparent_orphans_nolock(void)
 			__clk_set_parent_before(orphan, parent);
 			__clk_set_parent_after(orphan, parent, NULL);
 			__clk_recalc_accuracies(orphan);
-			__clk_recalc_rates(orphan, true, 0);
+			__clk_recalc_rates(orphan, 0);
 
 			/*
 			 * __clk_init_parent() will set the initial req_rate to
@@ -3888,7 +3898,8 @@ static int __clk_core_init(struct clk_core *core)
 		rate = parent->rate;
 	else
 		rate = 0;
-	core->rate = core->req_rate = rate;
+	core->rate = rate;
+	core->req_rate = CLK_RATE_UNSET;
 
 	/*
 	 * Enable CLK_IS_CRITICAL clocks so newly added critical clocks
