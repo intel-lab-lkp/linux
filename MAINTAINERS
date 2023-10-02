@@ -19546,6 +19546,13 @@ F:	drivers/media/mmc/siano/
 F:	drivers/media/usb/siano/
 F:	drivers/media/usb/siano/
 
+SIE CRONOS CPLD DRIVER
+M:	Georgy Yakovlev <Georgy.Yakovlev@sony.com>
+S:	Maintained
+F:	Documentation/devicetree/bindings/mfd/sie,cronos-cpld.yaml
+F:	drivers/mfd/sie-cronos-cpld.c
+F:	include/linux/mfd/sie/cronos/
+
 SIEMENS IPC LED DRIVERS
 M:	Gerd Haeussler <gerd.haeussler.ext@siemens.com>
 M:	Xing Tong Wu <xingtong.wu@siemens.com>
