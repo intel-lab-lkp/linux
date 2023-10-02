@@ -1887,6 +1887,42 @@ pci_sunix_setup(struct serial_private *priv,
 	return setup_port(priv, port, bar, offset, 0);
 }
 
+#define MOXA_PUART_GPIO_EN	0x09
+#define MOXA_PUART_GPIO_OUT	0x0A
+
+#define MOXA_GPIO_SET_ALL_OUTPUT	0x0F
+
+static int pci_moxa_init(struct pci_dev *dev)
+{
+	unsigned short device = dev->device;
+	unsigned long iobar_addr = pci_resource_start(dev, 2);
+	int num_ports = (device & 0x00F0) >> 4;
+	unsigned char val;
+
+	outb(MOXA_GPIO_SET_ALL_OUTPUT, iobar_addr + MOXA_PUART_GPIO_EN);
+
+	/*
+	 * Enable hardware buffer to prevent break signal output when system boot up.
+	 * This hardware buffer is only supported on Mini PCIe series.
+	 */
+	if (device == 0x1027 ||	/* MOXA_CP102N */
+	    device == 0x1046 ||	/* MOXA_CP104N */
+	    device == 0x1121 ||	/* MOXA_CP112N */
+	    device == 0x1145 ||	/* MOXA_CP114N */
+	    device == 0x1323 ||	/* MOXA_CP132N */
+	    device == 0x1343) {	/* MOXA_CP134N */
+		/* Set GPIO direction */
+		val = inb(iobar_addr + MOXA_PUART_GPIO_EN);
+		val |= (1 << 2);
+		outb(val, iobar_addr + MOXA_PUART_GPIO_EN);
+		/* Enable low GPIO */
+		val = inb(iobar_addr + MOXA_PUART_GPIO_OUT);
+		val &= ~(1 << 2);
+		outb(val, iobar_addr + MOXA_PUART_GPIO_OUT);
+	}
+	return num_ports;
+}
+
 static int pci_moxa_setup(struct serial_private *priv,
 			  const struct pciserial_board *board,
 			  struct uart_8250_port *port,
@@ -1973,6 +2009,13 @@ static int pci_moxa_setup(struct serial_private *priv,
 #define	PCI_DEVICE_ID_MOXA_CP134EL_A	0x1342
 #define	PCI_DEVICE_ID_MOXA_CP138E_A	0x1381
 #define	PCI_DEVICE_ID_MOXA_CP168EL_A	0x1683
+/* MOXA Mini PCIe */
+#define PCI_DEVICE_ID_MOXA_CP102N	0x1027
+#define PCI_DEVICE_ID_MOXA_CP104N	0x1046
+#define PCI_DEVICE_ID_MOXA_CP112N	0x1121
+#define PCI_DEVICE_ID_MOXA_CP114N	0x1145
+#define PCI_DEVICE_ID_MOXA_CP132N	0x1323
+#define PCI_DEVICE_ID_MOXA_CP134N	0x1343
 
 /* Unknown vendors/cards - this should not be in linux/pci_ids.h */
 #define PCI_SUBDEVICE_ID_UNKNOWN_0x1584	0x1584
@@ -2638,6 +2681,7 @@ static struct pci_serial_quirk pci_serial_quirks[] = {
 		.device		= PCI_ANY_ID,
 		.subvendor	= PCI_ANY_ID,
 		.subdevice	= PCI_ANY_ID,
+		.init		= pci_moxa_init,
 		.setup		= pci_moxa_setup,
 	},
 	{
@@ -5364,6 +5408,16 @@ static const struct pci_device_id serial_pci_tbl[] = {
 	{ PCI_DEVICE(PCI_VENDOR_ID_MOXA, PCI_DEVICE_ID_MOXA_CP134EL_A),	 0, 0, pbn_moxa_4 },
 	{ PCI_DEVICE(PCI_VENDOR_ID_MOXA, PCI_DEVICE_ID_MOXA_CP138E_A),	 0, 0, pbn_moxa_8 },
 	{ PCI_DEVICE(PCI_VENDOR_ID_MOXA, PCI_DEVICE_ID_MOXA_CP168EL_A),	 0, 0, pbn_moxa_8 },
+
+	/*
+	 * MOXA Mini PCIe
+	 */
+	{ PCI_DEVICE(PCI_VENDOR_ID_MOXA, PCI_DEVICE_ID_MOXA_CP102N), 0, 0, pbn_moxa_2 },
+	{ PCI_DEVICE(PCI_VENDOR_ID_MOXA, PCI_DEVICE_ID_MOXA_CP104N), 0, 0, pbn_moxa_4 },
+	{ PCI_DEVICE(PCI_VENDOR_ID_MOXA, PCI_DEVICE_ID_MOXA_CP112N), 0, 0, pbn_moxa_2 },
+	{ PCI_DEVICE(PCI_VENDOR_ID_MOXA, PCI_DEVICE_ID_MOXA_CP114N), 0, 0, pbn_moxa_4 },
+	{ PCI_DEVICE(PCI_VENDOR_ID_MOXA, PCI_DEVICE_ID_MOXA_CP132N), 0, 0, pbn_moxa_2 },
+	{ PCI_DEVICE(PCI_VENDOR_ID_MOXA, PCI_DEVICE_ID_MOXA_CP134N), 0, 0, pbn_moxa_4 },
 
 	/*
 	* ADDI-DATA GmbH communication cards <info@addi-data.com>
