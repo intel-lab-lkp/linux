@@ -2145,7 +2145,10 @@ out:
 	return ret;
 }
 
-static void clk_calc_subtree(struct clk_core *core, unsigned long new_rate,
+static struct clk_core *clk_calc_new_rates(struct clk_core *core,
+					   unsigned long rate);
+
+static int clk_calc_subtree(struct clk_core *core, unsigned long new_rate,
 			     struct clk_core *new_parent, u8 p_index)
 {
 	struct clk_core *child;
@@ -2160,8 +2163,28 @@ static void clk_calc_subtree(struct clk_core *core, unsigned long new_rate,
 
 	hlist_for_each_entry(child, &core->children, child_node) {
 		child->new_rate = clk_recalc(child, new_rate);
-		clk_calc_subtree(child, child->new_rate, NULL, 0);
+
+		/*
+		 * A new rate of a shared parent clock might clash with a
+		 * required rate of a sibling. Ensure that the new rates are as
+		 * close as possible to the required ones. During this process,
+		 * the shared parent clock is not allowed to be changed again,
+		 * meaning it should have found the optimal rate already in the
+		 * initial clk_core_determine_round_nolock().
+		 */
+		if (child->req_rate != CLK_RATE_UNSET &&
+		    child->req_rate != child->new_rate) {
+			pr_debug("%s: set back to req=%lu\n", child->name,
+				 child->req_rate);
+			if (!clk_calc_new_rates(child, child->req_rate))
+				return -EINVAL;
+		}
+
+		if (clk_calc_subtree(child, child->new_rate, NULL, 0))
+			return -EINVAL;
 	}
+
+	return 0;
 }
 
 static void clk_reset_temp_rates(struct clk_core *core)
@@ -2260,6 +2283,22 @@ out:
 	/* only set new_rates if we found a valid change path */
 	if (top) {
 		/*
+		 * If req_rate_tmp is set, the current clock is already required
+		 * to be changed in this run. However, if the new rate is not
+		 * the same as the temporary required one, the driver did not
+		 * consider its active rate (which is required by at least one
+		 * of its descendants from a previous run).
+		 */
+		if (core->req_rate_tmp != CLK_RATE_UNSET &&
+		    core->req_rate_tmp != new_rate) {
+			pr_warn("%s: %s: conflict: req=%lu new=%lu\n", __func__,
+				core->name, core->req_rate_tmp, new_rate);
+			pr_err(".{determine,round}_rate() of %s requires fix\n",
+			       core->name);
+			return NULL;
+		}
+
+		/*
 		 * The current clock is an ancestor of the trigger and therefore
 		 * is a clock which needs to be changed in this run. Clocks
 		 * with new_rate set but req_rate_tmp unset are changed "by
@@ -2267,7 +2306,16 @@ out:
 		 * conflicts with req_rate.
 		 */
 		core->req_rate_tmp = new_rate;
-		clk_calc_subtree(core, new_rate, parent, p_index);
+
+		/*
+		 * Calculating the subtree potentially leads to a re-entrance
+		 * into clk_calc_new_rates(). This is required to set accidently
+		 * changed consumer-required clocks, back to their required
+		 * rate. This can fail in case of a conflict (shared parent
+		 * needs to be changed again).
+		 */
+		if (clk_calc_subtree(core, new_rate, parent, p_index))
+			return NULL;
 	}
 
 	return top;
