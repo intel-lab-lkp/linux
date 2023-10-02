@@ -93,11 +93,11 @@ struct udf_fileident_iter {
 	sector_t loffset;		/* Block offset of 'pos' within above
 					 * extent */
 	struct extent_position epos;	/* Position after the above extent */
-	struct fileIdentDesc fi;	/* Copied directory entry */
 	uint8_t *name;			/* Pointer to entry name */
 	uint8_t *namebuf;		/* Storage for entry name in case
 					 * the name is split between two blocks
 					 */
+	struct fileIdentDesc fi;	/* Copied directory entry */
 };
 
 struct udf_vds_record {
