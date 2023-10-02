@@ -26,17 +26,23 @@ struct debugfs_blob_wrapper {
 	unsigned long size;
 };
 
-struct debugfs_reg32 {
+struct debugfs_reg {
 	char *name;
+	int size;
+	int bigendian;
 	unsigned long offset;
 };
 
-struct debugfs_regset32 {
+#define debugfs_reg32 debugfs_reg
+
+struct debugfs_regset {
 	const struct debugfs_reg32 *regs;
 	int nregs;
 	void __iomem *base;
 	struct device *dev;	/* Optional device for Runtime PM */
 };
+
+#define debugfs_regset32 debugfs_regset
 
 struct debugfs_u32_array {
 	u32 *array;
@@ -145,12 +151,15 @@ struct dentry *debugfs_create_blob(const char *name, umode_t mode,
 				  struct dentry *parent,
 				  struct debugfs_blob_wrapper *blob);
 
-void debugfs_create_regset32(const char *name, umode_t mode,
+void debugfs_create_regset(const char *name, umode_t mode,
 			     struct dentry *parent,
 			     struct debugfs_regset32 *regset);
 
-void debugfs_print_regs32(struct seq_file *s, const struct debugfs_reg32 *regs,
+#define debugfs_create_regset32 debugfs_create_regset
+
+void debugfs_print_regs(struct seq_file *s, const struct debugfs_reg32 *regs,
 			  int nregs, void __iomem *base, char *prefix);
+#define debugfs_print_regs32 debugfs_print_regs
 
 void debugfs_create_u32_array(const char *name, umode_t mode,
 			      struct dentry *parent,

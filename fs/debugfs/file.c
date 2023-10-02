@@ -1137,15 +1137,15 @@ EXPORT_SYMBOL_GPL(debugfs_create_u32_array);
 #ifdef CONFIG_HAS_IOMEM
 
 /*
- * The regset32 stuff is used to print 32-bit registers using the
+ * The regset stuff is used to print 32-bit registers using the
  * seq_file utilities. We offer printing a register set in an already-opened
- * sequential file or create a debugfs file that only prints a regset32.
+ * sequential file or create a debugfs file that only prints a regset.
  */
 
 /**
- * debugfs_print_regs32 - use seq_print to describe a set of registers
+ * debugfs_print_regs - use seq_print to describe a set of registers
  * @s: the seq_file structure being used to generate output
- * @regs: an array if struct debugfs_reg32 structures
+ * @regs: an array if struct debugfs_reg structures
  * @nregs: the length of the above array
  * @base: the base address to be used in reading the registers
  * @prefix: a string to be prefixed to every output line
@@ -1157,30 +1157,47 @@ EXPORT_SYMBOL_GPL(debugfs_create_u32_array);
  * because some peripherals have several blocks of identical registers,
  * for example configuration of dma channels
  */
-void debugfs_print_regs32(struct seq_file *s, const struct debugfs_reg32 *regs,
+void debugfs_print_regs(struct seq_file *s, const struct debugfs_reg *regs,
 			  int nregs, void __iomem *base, char *prefix)
 {
+	void __iomem *reg;
+	bool b;
 	int i;
 
 	for (i = 0; i < nregs; i++, regs++) {
 		if (prefix)
 			seq_printf(s, "%s", prefix);
-		seq_printf(s, "%s = 0x%08x\n", regs->name,
-			   readl(base + regs->offset));
+
+		b = regs->bigendian;
+		reg = base + regs->offset;
+
+		switch (regs->size) {
+		case sizeof(u8):
+			seq_printf(s, "%s = 0x%02x\n", regs->name, ioread8(reg));
+			break;
+		case sizeof(u16):
+			seq_printf(s, "%s = 0x%04x\n", regs->name,
+				  b ? ioread16be(reg) : ioread16(reg));
+			break;
+		default:
+			seq_printf(s, "%s = 0x%08x\n", regs->name,
+				   b ? ioread32be(reg) : ioread32(reg));
+		}
+
 		if (seq_has_overflowed(s))
 			break;
 	}
 }
-EXPORT_SYMBOL_GPL(debugfs_print_regs32);
+EXPORT_SYMBOL_GPL(debugfs_print_regs);
 
-static int debugfs_regset32_show(struct seq_file *s, void *data)
+static int debugfs_regset_show(struct seq_file *s, void *data)
 {
-	struct debugfs_regset32 *regset = s->private;
+	struct debugfs_regset *regset = s->private;
 
 	if (regset->dev)
 		pm_runtime_get_sync(regset->dev);
 
-	debugfs_print_regs32(s, regset->regs, regset->nregs, regset->base, "");
+	debugfs_print_regs(s, regset->regs, regset->nregs, regset->base, "");
 
 	if (regset->dev)
 		pm_runtime_put(regset->dev);
@@ -1188,16 +1205,16 @@ static int debugfs_regset32_show(struct seq_file *s, void *data)
 	return 0;
 }
 
-DEFINE_SHOW_ATTRIBUTE(debugfs_regset32);
+DEFINE_SHOW_ATTRIBUTE(debugfs_regset);
 
 /**
- * debugfs_create_regset32 - create a debugfs file that returns register values
+ * debugfs_create_regset - create a debugfs file that returns register values
  * @name: a pointer to a string containing the name of the file to create.
  * @mode: the permission that the file should have
  * @parent: a pointer to the parent dentry for this file.  This should be a
  *          directory dentry if set.  If this parameter is %NULL, then the
  *          file will be created in the root of the debugfs filesystem.
- * @regset: a pointer to a struct debugfs_regset32, which contains a pointer
+ * @regset: a pointer to a struct debugfs_regset, which contains a pointer
  *          to an array of register definitions, the array size and the base
  *          address where the register bank is to be found.
  *
@@ -1205,13 +1222,13 @@ DEFINE_SHOW_ATTRIBUTE(debugfs_regset32);
  * the names and values of a set of 32-bit registers. If the @mode variable
  * is so set it can be read from. Writing is not supported.
  */
-void debugfs_create_regset32(const char *name, umode_t mode,
+void debugfs_create_regset(const char *name, umode_t mode,
 			     struct dentry *parent,
-			     struct debugfs_regset32 *regset)
+			     struct debugfs_regset *regset)
 {
-	debugfs_create_file(name, mode, parent, regset, &debugfs_regset32_fops);
+	debugfs_create_file(name, mode, parent, regset, &debugfs_regset_fops);
 }
-EXPORT_SYMBOL_GPL(debugfs_create_regset32);
+EXPORT_SYMBOL_GPL(debugfs_create_regset);
 
 #endif /* CONFIG_HAS_IOMEM */
 
