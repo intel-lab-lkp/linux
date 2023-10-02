@@ -101,7 +101,7 @@ find_syscall_meta(unsigned long syscall)
 	return NULL;
 }
 
-static struct syscall_metadata *syscall_nr_to_meta(int nr)
+static struct syscall_metadata *syscall_nr_to_meta(long nr)
 {
 	if (IS_ENABLED(CONFIG_HAVE_SPARSE_SYSCALL_NR))
 		return xa_load(&syscalls_metadata_sparse, (unsigned long)nr);
@@ -132,7 +132,8 @@ print_syscall_enter(struct trace_iterator *iter, int flags,
 	struct trace_entry *ent = iter->ent;
 	struct syscall_trace_enter *trace;
 	struct syscall_metadata *entry;
-	int i, syscall;
+	int i;
+	long syscall;
 
 	trace = (typeof(trace))ent;
 	syscall = trace->nr;
@@ -177,7 +178,7 @@ print_syscall_exit(struct trace_iterator *iter, int flags,
 	struct trace_seq *s = &iter->seq;
 	struct trace_entry *ent = iter->ent;
 	struct syscall_trace_exit *trace;
-	int syscall;
+	long syscall;
 	struct syscall_metadata *entry;
 
 	trace = (typeof(trace))ent;
