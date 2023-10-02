@@ -2163,6 +2163,17 @@ static void clk_calc_subtree(struct clk_core *core, unsigned long new_rate,
 	}
 }
 
+static void clk_reset_temp_rates(struct clk_core *core)
+{
+	struct clk_core *child;
+
+	core->new_rate = CLK_RATE_UNSET;
+
+	hlist_for_each_entry(child, &core->children, child_node) {
+		clk_reset_temp_rates(child);
+	}
+}
+
 /*
  * calculate the new rates returning the topmost clock that has to be
  * changed.
@@ -2244,7 +2255,9 @@ static struct clk_core *clk_calc_new_rates(struct clk_core *core,
 		top = clk_calc_new_rates(parent, best_parent_rate);
 
 out:
-	clk_calc_subtree(core, new_rate, parent, p_index);
+	/* only set new_rates if we found a valid change path */
+	if (top)
+		clk_calc_subtree(core, new_rate, parent, p_index);
 
 	return top;
 }
@@ -2347,6 +2360,7 @@ static void clk_change_rate(struct clk_core *core)
 
 	trace_clk_set_rate_complete(core, core->new_rate);
 
+	core->new_rate = CLK_RATE_UNSET;
 	core->rate = clk_recalc(core, best_parent_rate);
 
 	if (core->flags & CLK_SET_RATE_UNGATE) {
@@ -2361,7 +2375,7 @@ static void clk_change_rate(struct clk_core *core)
 		__clk_notify(core, POST_RATE_CHANGE, old_rate, core->rate);
 
 	if (core->flags & CLK_RECALC_NEW_RATES)
-		(void)clk_calc_new_rates(core, core->new_rate);
+		(void)clk_calc_new_rates(core, core->rate);
 
 	/*
 	 * Use safe iteration, as change_rate can actually swap parents
@@ -2437,8 +2451,10 @@ static int clk_core_set_rate_nolock(struct clk_core *core,
 		return -EINVAL;
 
 	ret = clk_pm_runtime_get(core);
-	if (ret)
+	if (ret) {
+		clk_reset_temp_rates(top);
 		return ret;
+	}
 
 	/* notify that we are about to change rates */
 	fail_clk = clk_propagate_rate_change(top, PRE_RATE_CHANGE);
@@ -2454,6 +2470,8 @@ static int clk_core_set_rate_nolock(struct clk_core *core,
 	clk_change_rate(top);
 
 err:
+	clk_reset_temp_rates(top);
+
 	clk_pm_runtime_put(core);
 
 	return ret;
@@ -3900,6 +3918,7 @@ static int __clk_core_init(struct clk_core *core)
 		rate = 0;
 	core->rate = rate;
 	core->req_rate = CLK_RATE_UNSET;
+	core->new_rate = CLK_RATE_UNSET;
 
 	/*
 	 * Enable CLK_IS_CRITICAL clocks so newly added critical clocks
