@@ -1172,6 +1172,9 @@ int g_audio_setup(struct g_audio *g_audio, const char *pcm_name,
 	g_audio->uac = uac;
 	uac->audio_dev = g_audio;
 
+	spin_lock_init(&uac->c_prm.lock);
+	spin_lock_init(&uac->p_prm.lock);
+
 	params = &g_audio->params;
 	p_chmask = params->p_chmask;
 	c_chmask = params->c_chmask;
