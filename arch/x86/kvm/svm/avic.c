@@ -791,7 +791,6 @@ static int svm_ir_list_add(struct vcpu_svm *svm, struct amd_iommu_pi_data *pi)
 	int ret = 0;
 	unsigned long flags;
 	struct amd_svm_iommu_ir *ir;
-	u64 entry;
 
 	/**
 	 * In some cases, the existing irte is updated and re-set,
@@ -832,10 +831,11 @@ static int svm_ir_list_add(struct vcpu_svm *svm, struct amd_iommu_pi_data *pi)
 	 * will update the pCPU info when the vCPU awkened and/or scheduled in.
 	 * See also avic_vcpu_load().
 	 */
-	entry = READ_ONCE(*(svm->avic_physical_id_cache));
-	if (entry & AVIC_PHYSICAL_ID_ENTRY_IS_RUNNING_MASK)
-		amd_iommu_update_ga(entry & AVIC_PHYSICAL_ID_ENTRY_HOST_PHYSICAL_ID_MASK,
-				    true, pi->ir_data);
+	if (READ_ONCE(svm->vcpu.loaded)) {
+		/* Ensure that the vcpu->loaded is read before the vcpu->cpu */
+		smp_rmb();
+		amd_iommu_update_ga(READ_ONCE(svm->vcpu.cpu), true, pi->ir_data);
+	}
 
 	list_add(&ir->node, &svm->ir_list);
 	spin_unlock_irqrestore(&svm->ir_list_lock, flags);
