@@ -567,6 +567,7 @@
 		pwrcfg: power-config@40007000 {
 			compatible = "st,stm32-power-config", "syscon";
 			reg = <0x40007000 0x400>;
+			clocks = <&rcc 0 STM32F7_APB1_CLOCK(PWR)>;
 		};
 
 		crc: crc@40023000 {
