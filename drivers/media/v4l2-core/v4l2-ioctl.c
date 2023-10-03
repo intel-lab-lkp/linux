@@ -3419,7 +3419,8 @@ video_usercopy(struct file *file, unsigned int orig_cmd, unsigned long arg,
 	 * in case of failure, but it is not defined here as part of the
 	 * 'v4l2_ioctls' array, insert an ad-hoc check to address that.
 	 */
-	if (err < 0 && !always_copy && cmd != VIDIOC_SUBDEV_G_ROUTING)
+	if (err < 0 && !always_copy && cmd != VIDIOC_SUBDEV_G_ROUTING &&
+	    cmd != VIDIOC_SUBDEV_S_ROUTING)
 		goto out;
 
 	if (has_array_args) {
