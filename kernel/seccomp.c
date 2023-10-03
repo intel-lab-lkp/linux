@@ -1996,9 +1996,68 @@ out_free:
 	seccomp_filter_free(prepared);
 	return ret;
 }
+
+static long seccomp_load_filter(const char __user *filter)
+{
+	struct sock_fprog fprog;
+	struct bpf_prog *prog;
+	int ret = -EFAULT;
+	const bool save_orig =
+#if defined(CONFIG_CHECKPOINT_RESTORE) || defined(SECCOMP_ARCH_NATIVE)
+		true;
+#else
+		false;
+#endif
+
+#ifdef CONFIG_COMPAT
+	if (in_compat_syscall()) {
+		struct compat_sock_fprog fprog32;
+		if (copy_from_user(&fprog32, filter, sizeof(fprog32)))
+			goto out;
+		fprog.len = fprog32.len;
+		fprog.filter = compat_ptr(fprog32.filter);
+	} else /* falls through to the if below. */
+#endif
+	if (copy_from_user(&fprog, filter, sizeof(fprog)))
+		goto out;
+
+	ret = -EINVAL;
+	if (fprog.len == 0 || fprog.len > BPF_MAXINSNS)
+		goto out;
+
+	BUG_ON(INT_MAX / fprog.len < sizeof(struct sock_filter));
+
+	ret = bpf_prog_create_from_user(&prog, &fprog, seccomp_check_filter, save_orig);
+	if (ret < 0)
+		goto out;
+
+	ret = security_bpf_prog_alloc(prog->aux);
+	if (ret) {
+		ret = -EINVAL;
+		goto prog_free;
+	}
+
+	prog->aux->user = get_current_user();
+	atomic64_set(&prog->aux->refcnt, 1);
+
+	ret = bpf_prog_new_fd(prog);
+	if (ret < 0)
+		bpf_prog_put(prog);
+	return ret;
+
+prog_free:
+	bpf_prog_free(prog);
+out:
+	return ret;
+}
 #else
 static inline long seccomp_set_mode_filter(unsigned int flags,
 					   const char __user *filter)
+{
+	return -EINVAL;
+}
+
+static inline long seccomp_load_filter(const char __user *filter)
 {
 	return -EINVAL;
 }
@@ -2063,6 +2122,11 @@ static long do_seccomp(unsigned int op, unsigned int flags,
 			return -EINVAL;
 
 		return seccomp_get_notif_sizes(uargs);
+	case SECCOMP_LOAD_FILTER:
+		if (flags != 0)
+			return -EINVAL;
+
+		return seccomp_load_filter(uargs);
 	default:
 		return -EINVAL;
 	}
