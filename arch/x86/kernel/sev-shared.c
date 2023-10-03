@@ -880,6 +880,9 @@ static enum es_result vc_handle_cpuid(struct ghcb *ghcb,
 	if (snp_cpuid_ret != -EOPNOTSUPP)
 		return ES_VMM_ERROR;
 
+	if (regs->ax == 0xD && regs->cx == 0x1)
+		ghcb_set_xss(ghcb, 0);
+
 	ghcb_set_rax(ghcb, regs->ax);
 	ghcb_set_rcx(ghcb, regs->cx);
 
