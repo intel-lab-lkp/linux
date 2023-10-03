@@ -1573,19 +1573,57 @@ v4l2_subdev_init_stream_configs(struct v4l2_subdev_stream_configs *stream_config
 	return 0;
 }
 
+struct v4l2_mbus_framefmt
+*v4l2_subdev_get_fmt_ptr(struct v4l2_subdev *sd,
+			 struct v4l2_subdev_state *state, unsigned int pad,
+			 unsigned int stream)
+{
+	if (sd->flags & V4L2_SUBDEV_FL_STREAMS)
+		return v4l2_subdev_state_get_stream_format(state, pad, stream);
+
+	if (pad < sd->entity.num_pads && stream == 0)
+		return v4l2_subdev_get_pad_format(sd, state, pad);
+
+	return NULL;
+}
+EXPORT_SYMBOL_GPL(v4l2_subdev_get_fmt_ptr);
+
+struct v4l2_rect
+*v4l2_subdev_get_crop_ptr(struct v4l2_subdev *sd,
+			  struct v4l2_subdev_state *state, unsigned int pad,
+			  unsigned int stream)
+{
+	if (sd->flags & V4L2_SUBDEV_FL_STREAMS)
+		return v4l2_subdev_state_get_stream_crop(state, pad, stream);
+
+	if (pad < sd->entity.num_pads && stream == 0)
+		return v4l2_subdev_get_pad_crop(sd, state, pad);
+
+	return NULL;
+}
+EXPORT_SYMBOL_GPL(v4l2_subdev_get_crop_ptr);
+
+struct v4l2_rect
+*v4l2_subdev_get_compose_ptr(struct v4l2_subdev *sd,
+			     struct v4l2_subdev_state *state, unsigned int pad,
+			     unsigned int stream)
+{
+	if (sd->flags & V4L2_SUBDEV_FL_STREAMS)
+		return v4l2_subdev_state_get_stream_compose(state, pad, stream);
+
+	if (pad < sd->entity.num_pads && stream == 0)
+		return v4l2_subdev_get_pad_compose(sd, state, pad);
+
+	return NULL;
+}
+EXPORT_SYMBOL_GPL(v4l2_subdev_get_compose_ptr);
+
 int v4l2_subdev_get_fmt(struct v4l2_subdev *sd, struct v4l2_subdev_state *state,
 			struct v4l2_subdev_format *format)
 {
 	struct v4l2_mbus_framefmt *fmt;
 
-	if (sd->flags & V4L2_SUBDEV_FL_STREAMS)
-		fmt = v4l2_subdev_state_get_stream_format(state, format->pad,
-							  format->stream);
-	else if (format->pad < sd->entity.num_pads && format->stream == 0)
-		fmt = v4l2_subdev_get_pad_format(sd, state, format->pad);
-	else
-		fmt = NULL;
-
+	fmt = v4l2_subdev_get_fmt_ptr(sd, state, format->pad, format->stream);
 	if (!fmt)
 		return -EINVAL;
 

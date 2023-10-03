@@ -1480,6 +1480,62 @@ v4l2_subdev_lock_and_get_active_state(struct v4l2_subdev *sd)
 #if defined(CONFIG_VIDEO_V4L2_SUBDEV_API)
 
 /**
+ * v4l2_subdev_get_fmt_ptr - Obtain a pointer to V4L2 sub-device format for pad
+ *			     and stream
+ * @sd: subdevice
+ * @state: subdevice state
+ * @pad: the pad on the sub-device
+ * @stream: stream in the pad
+ *
+ * For given pad and stream, obtain a pointer to the mbus format from the
+ * sub-device.
+ *
+ * Returns NULL if the format is not found or the parameters are invalid.
+ */
+struct v4l2_mbus_framefmt *
+v4l2_subdev_get_fmt_ptr(struct v4l2_subdev *sd,
+			struct v4l2_subdev_state *state, unsigned int pad,
+			unsigned int stream);
+
+/**
+ * v4l2_subdev_get_crop_ptr - Obtain a pointer to V4L2 sub-device crop
+ *			      rectangle for pad and stream
+ * @sd: subdevice
+ * @state: subdevice state
+ * @pad: the pad on the sub-device
+ * @stream: stream in the pad
+ *
+ * For given pad and stream, obtain a pointer to the crop selection rectangle
+ * from the sub-device.
+ *
+ * Returns NULL if the selection rectangle is not found or the parameters are
+ * invalid.
+ */
+struct v4l2_rect *
+v4l2_subdev_get_crop_ptr(struct v4l2_subdev *sd,
+			 struct v4l2_subdev_state *state, unsigned int pad,
+			 unsigned int stream);
+
+/**
+ * v4l2_subdev_get_compose_ptr - Obtain a pointer to V4L2 sub-device compose
+ *				 rectangle for pad and stream
+ * @sd: subdevice
+ * @state: subdevice state
+ * @pad: the pad on the sub-device
+ * @stream: stream in the pad
+ *
+ * For given pad and stream, obtain a pointer to the compose selection rectangle
+ * from the sub-device.
+ *
+ * Returns NULL if the selection rectangle is not found or the parameters are
+ * invalid.
+ */
+struct v4l2_rect *
+v4l2_subdev_get_compose_ptr(struct v4l2_subdev *sd,
+			    struct v4l2_subdev_state *state, unsigned int pad,
+			    unsigned int stream);
+
+/**
  * v4l2_subdev_get_fmt() - Fill format based on state
  * @sd: subdevice
  * @state: subdevice state
