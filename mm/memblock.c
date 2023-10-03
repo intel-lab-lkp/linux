@@ -588,11 +588,12 @@ static int __init_memblock memblock_add_range(struct memblock_type *type,
 				phys_addr_t base, phys_addr_t size,
 				int nid, enum memblock_flags flags)
 {
-	bool insert = false;
 	phys_addr_t obase = base;
 	phys_addr_t end = base + memblock_cap_size(base, &size);
-	int idx, nr_new, start_rgn = -1, end_rgn;
+	int idx, start_rgn = -1, end_rgn;
 	struct memblock_region *rgn;
+	int use_slab = slab_is_available();
+	unsigned long ocnt = type->cnt;
 
 	if (!size)
 		return 0;
@@ -607,25 +608,6 @@ static int __init_memblock memblock_add_range(struct memblock_type *type,
 		type->total_size = size;
 		return 0;
 	}
-
-	/*
-	 * The worst case is when new range overlaps all existing regions,
-	 * then we'll need type->cnt + 1 empty regions in @type. So if
-	 * type->cnt * 2 + 1 is less than or equal to type->max, we know
-	 * that there is enough empty regions in @type, and we can insert
-	 * regions directly.
-	 */
-	if (type->cnt * 2 + 1 <= type->max)
-		insert = true;
-
-repeat:
-	/*
-	 * The following is executed twice.  Once with %false @insert and
-	 * then with %true.  The first counts the number of regions needed
-	 * to accommodate the new area.  The second actually inserts them.
-	 */
-	base = obase;
-	nr_new = 0;
 
 	for_each_memblock_type(idx, type, rgn) {
 		phys_addr_t rbase = rgn->base;
@@ -644,15 +626,30 @@ repeat:
 			WARN_ON(nid != memblock_get_region_node(rgn));
 #endif
 			WARN_ON(flags != rgn->flags);
-			nr_new++;
-			if (insert) {
-				if (start_rgn == -1)
-					start_rgn = idx;
-				end_rgn = idx + 1;
-				memblock_insert_region(type, idx++, base,
-						       rbase - base, nid,
-						       flags);
+
+			/*
+			 * If type->cnt is equal to type->max, it means there's
+			 * not enough empty region and the array needs to be
+			 * resized. Otherwise, insert it directly.
+			 *
+			 * If slab is unavailable, it means a new array was reserved
+			 * in memblock_double_array. There is a nested call here, We
+			 * need to reserve the current array now if its type is
+			 * reserved.
+			 */
+			if (type->cnt == type->max) {
+				if (memblock_double_array(type, obase, size))
+					return -ENOMEM;
+				else if (!use_slab && type == &memblock.reserved)
+					return memblock_reserve(obase, size);
 			}
+
+			if (start_rgn == -1)
+				start_rgn = idx;
+			end_rgn = idx + 1;
+			memblock_insert_region(type, idx++, base,
+					       rbase - base, nid,
+					       flags);
 		}
 		/* area below @rend is dealt with, forget about it */
 		base = min(rend, end);
@@ -660,33 +657,25 @@ repeat:
 
 	/* insert the remaining portion */
 	if (base < end) {
-		nr_new++;
-		if (insert) {
-			if (start_rgn == -1)
-				start_rgn = idx;
-			end_rgn = idx + 1;
-			memblock_insert_region(type, idx, base, end - base,
-					       nid, flags);
-		}
-	}
 
-	if (!nr_new)
-		return 0;
-
-	/*
-	 * If this was the first round, resize array and repeat for actual
-	 * insertions; otherwise, merge and return.
-	 */
-	if (!insert) {
-		while (type->cnt + nr_new > type->max)
-			if (memblock_double_array(type, obase, size) < 0)
+		if (type->cnt == type->max) {
+			if (memblock_double_array(type, obase, size))
 				return -ENOMEM;
-		insert = true;
-		goto repeat;
-	} else {
-		memblock_merge_regions(type, start_rgn, end_rgn);
-		return 0;
+			else if (!use_slab && type == &memblock.reserved)
+				return memblock_reserve(obase, size);
+		}
+
+		if (start_rgn == -1)
+			start_rgn = idx;
+		end_rgn = idx + 1;
+		memblock_insert_region(type, idx, base, end - base,
+				       nid, flags);
 	}
+
+	if (ocnt != type->cnt)
+		memblock_merge_regions(type, start_rgn, end_rgn);
+
+	return 0;
 }
 
 /**
