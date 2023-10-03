@@ -69,6 +69,13 @@
  */
 #define PTP_PEROUT_V1_VALID_FLAGS	(0)
 
+enum ptp_ts_types {
+	PTP_TS_REAL = 0,
+	PTP_TS_MONO,
+	PTP_TS_RAW,
+	PTP_TS_MAX,
+};
+
 /*
  * struct ptp_clock_time - represents a time value
  *
