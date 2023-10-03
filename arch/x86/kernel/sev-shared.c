@@ -241,6 +241,25 @@ static enum es_result sev_es_ghcb_hv_call(struct ghcb *ghcb,
 	return verify_exception_info(ghcb, ctxt);
 }
 
+
+/* Paravirt SEV-ES rdmsr which avoids extra #VC event */
+static unsigned long long ghcb_prot_read_msr(unsigned int msr, struct ghcb *ghcb,
+					     struct es_em_ctxt *ctxt, int *err)
+{
+	unsigned long long ret = 0;
+
+	ghcb_set_rcx(ghcb, msr);
+
+	*err = sev_es_ghcb_hv_call(ghcb, ctxt, SVM_EXIT_MSR, 0, 0);
+	if (*err == ES_OK)
+		ret = (ghcb->save.rdx << 32) | ghcb->save.rax;
+
+	/* Invalidate qwords for likely another following GHCB call */
+	vc_ghcb_invalidate(ghcb);
+
+	return ret;
+}
+
 static int __sev_cpuid_hv(u32 fn, int reg_idx, u32 *reg)
 {
 	u64 val;
@@ -437,11 +456,11 @@ static int snp_cpuid_postprocess(struct cpuid_leaf *leaf)
 		if (leaf->subfn == 1) {
 			/* Get XSS value if XSAVES is enabled. */
 			if (leaf->eax & BIT(3)) {
-				unsigned long lo, hi;
+				int err = 0;
 
-				asm volatile("rdmsr" : "=a" (lo), "=d" (hi)
-						     : "c" (MSR_IA32_XSS));
-				xss = (hi << 32) | lo;
+				xss = ghcb_prot_read_msr(MSR_IA32_XSS, ghcb, ctxt, &err);
+				if (err != ES_OK)
+					return -EINVAL;
 			}
 
 			/*
