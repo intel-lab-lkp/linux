@@ -29,6 +29,13 @@
 		enable-gpios = <&gpio GPIOH_5 GPIO_ACTIVE_HIGH>;
 	};
 
+	spdif_dit: audio-codec {
+		#sound-dai-cells = <0>;
+		compatible = "linux,spdif-dit";
+		status = "okay";
+		sound-name-prefix = "9J1";
+	};
+
 	chosen {
 		stdout-path = "serial0:115200n8";
 	};
@@ -183,6 +190,14 @@
 				sound-dai = <&acodec>;
 			};
 		};
+
+		dai-link-4 {
+			sound-dai = <&aiu AIU_CPU CPU_SPDIF_ENCODER>;
+
+			codec-0 {
+				sound-dai = <&spdif_dit>;
+			};
+		};
 	};
 };
 
@@ -193,6 +208,8 @@
 
 &aiu {
 	status = "okay";
+	pinctrl-0 = <&spdif_out_h_pins>;
+	pinctrl-names = "default";
 };
 
 &cec_AO {
