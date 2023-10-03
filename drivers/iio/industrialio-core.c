@@ -1896,6 +1896,53 @@ static int iio_check_extended_name(const struct iio_dev *indio_dev)
 
 static const struct iio_buffer_setup_ops noop_ring_setup_ops;
 
+static void iio_sanity_check_avail_scan_masks(struct iio_dev *indio_dev)
+{
+	unsigned int num_masks, masklength, longs_per_mask;
+	const unsigned long *av_masks;
+	int i;
+
+	av_masks = indio_dev->available_scan_masks;
+	masklength = indio_dev->masklength;
+	longs_per_mask = BITS_TO_LONGS(masklength);
+
+	if (bitmap_empty(av_masks, masklength))
+		dev_warn(indio_dev->dev.parent, "empty scan mask\n");
+
+	for (num_masks = 0; *av_masks; num_masks++)
+		av_masks += longs_per_mask;
+
+	if (num_masks < 2)
+		return;
+
+	av_masks = indio_dev->available_scan_masks;
+
+	/*
+	 * Go through all the masks from first to one before the last, and see
+	 * that no mask found later from the available_scan_masks array is a
+	 * subset of mask found earlier. If this happens, then the mask found
+	 * later will never get used because scanning the array is stopped when
+	 * the first suitable mask is found. Drivers should order the array of
+	 * available masks in the order of preference (presumably the least
+	 * costy to access masks first).
+	 */
+	for (i = 0; i < num_masks - 1; i++) {
+		const unsigned long *mask1;
+		int j;
+
+		mask1 = av_masks + i * longs_per_mask;
+		for (j = i + 1; j < num_masks; j++) {
+			const unsigned long *mask2;
+
+			mask2 = av_masks + j * longs_per_mask;
+			if (bitmap_subset(mask2, mask1, masklength))
+				dev_warn(indio_dev->dev.parent,
+					 "available_scan_mask %d subset of %d. Never used\n",
+					 j, i);
+		}
+	}
+}
+
 int __iio_device_register(struct iio_dev *indio_dev, struct module *this_mod)
 {
 	struct iio_dev_opaque *iio_dev_opaque = to_iio_dev_opaque(indio_dev);
@@ -1933,6 +1980,16 @@ int __iio_device_register(struct iio_dev *indio_dev, struct module *this_mod)
 			"Failed to create buffer sysfs interfaces\n");
 		goto error_unreg_debugfs;
 	}
+
+	/*
+	 * In order to not wreck utter havoc we just warn for now. Might want
+	 * to convert this to a failure after people have had time to act upon
+	 * the warning. It'd be nice to check this earlier, but we need the
+	 * iio_buffers_alloc_sysfs_and_mask() to have the masklength set.
+	 */
+	if (indio_dev->available_scan_masks)
+		iio_sanity_check_avail_scan_masks(indio_dev);
+
 
 	ret = iio_device_register_sysfs(indio_dev);
 	if (ret) {
