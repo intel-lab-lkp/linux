@@ -4589,6 +4589,7 @@ static int disas_funcs(const char *funcs)
 	/* real snprintf() */
 	snprintf(cmd, size, objdump_str, cross_compile, objname, funcs);
 	ret = system(cmd);
+	free(cmd);
 	if (ret) {
 		WARN("disassembly failed: %d", ret);
 		return -1;
