@@ -26,19 +26,13 @@ struct pinctrl_state;
 #ifdef CONFIG_PINCTRL
 
 /* External interface to pin control */
-bool pinctrl_gpio_can_use_line(unsigned gpio);
 bool pinctrl_gpio_can_use_line_new(struct gpio_chip *gc, unsigned int offset);
-int pinctrl_gpio_request(unsigned gpio);
 int pinctrl_gpio_request_new(struct gpio_chip *gc, unsigned int offset);
-void pinctrl_gpio_free(unsigned gpio);
 void pinctrl_gpio_free_new(struct gpio_chip *gc, unsigned int offset);
-int pinctrl_gpio_direction_input(unsigned gpio);
 int pinctrl_gpio_direction_input_new(struct gpio_chip *gc,
 				     unsigned int offset);
-int pinctrl_gpio_direction_output(unsigned gpio);
 int pinctrl_gpio_direction_output_new(struct gpio_chip *gc,
 				      unsigned int offset);
-int pinctrl_gpio_set_config(unsigned gpio, unsigned long config);
 int pinctrl_gpio_set_config_new(struct gpio_chip *gc, unsigned int offset,
 				unsigned long config);
 
@@ -73,20 +67,10 @@ static inline int pinctrl_pm_select_idle_state(struct device *dev)
 
 #else /* !CONFIG_PINCTRL */
 
-static inline bool pinctrl_gpio_can_use_line(unsigned gpio)
-{
-	return true;
-}
-
 static inline bool
 pinctrl_gpio_can_use_line_new(struct gpio_chip *gc, unsigned int offset)
 {
 	return true;
-}
-
-static inline int pinctrl_gpio_request(unsigned gpio)
-{
-	return 0;
 }
 
 static inline int
@@ -95,18 +79,9 @@ pinctrl_gpio_request_new(struct gpio_chip *gc, unsigned int offset)
 	return 0;
 }
 
-static inline void pinctrl_gpio_free(unsigned gpio)
-{
-}
-
 static inline void
 pinctrl_gpio_free_new(struct gpio_chip *gc, unsigned int offset)
 {
-}
-
-static inline int pinctrl_gpio_direction_input(unsigned gpio)
-{
-	return 0;
 }
 
 static inline int
@@ -115,18 +90,8 @@ pinctrl_gpio_direction_input_new(struct gpio_chip *gc, unsigned int offset)
 	return 0;
 }
 
-static inline int pinctrl_gpio_direction_output(unsigned gpio)
-{
-	return 0;
-}
-
 static inline int
 pinctrl_gpio_direction_output_new(struct gpio_chip *gc, unsigned int offset)
-{
-	return 0;
-}
-
-static inline int pinctrl_gpio_set_config(unsigned gpio, unsigned long config)
 {
 	return 0;
 }
