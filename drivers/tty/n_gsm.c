@@ -270,6 +270,7 @@ struct gsm_mux {
 	struct tty_struct *tty;		/* The tty our ldisc is bound to */
 	spinlock_t lock;
 	struct mutex mutex;
+	bool busy;
 	unsigned int num;
 	struct kref ref;
 
@@ -3253,6 +3254,7 @@ static struct gsm_mux *gsm_alloc_mux(void)
 	gsm->dead = true;	/* Avoid early tty opens */
 	gsm->wait_config = false; /* Disabled */
 	gsm->keep_alive = 0;	/* Disabled */
+	gsm->busy = false;
 
 	/* Store the instance to the mux array or abort if no space is
 	 * available.
@@ -3718,11 +3720,21 @@ static ssize_t gsmld_write(struct tty_struct *tty, struct file *file,
 
 	ret = -ENOBUFS;
 	spin_lock_irqsave(&gsm->tx_lock, flags);
+	if (gsm->busy) {
+		spin_unlock_irqrestore(&gsm->tx_lock, flags);
+		return -EBUSY;
+	}
+	gsm->busy = true;
+	spin_unlock_irqrestore(&gsm->tx_lock, flags);
+
 	space = tty_write_room(tty);
 	if (space >= nr)
 		ret = tty->ops->write(tty, buf, nr);
 	else
 		set_bit(TTY_DO_WRITE_WAKEUP, &tty->flags);
+
+	spin_lock_irqsave(&gsm->tx_lock, flags);
+	gsm->busy = false;
 	spin_unlock_irqrestore(&gsm->tx_lock, flags);
 
 	return ret;
