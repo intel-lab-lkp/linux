@@ -100,6 +100,58 @@ static unsigned int of_bus_default_get_flags(const __be32 *addr)
 	return IORESOURCE_MEM;
 }
 
+static bool of_addr_is_equal(const __be32 *addr1, const __be32 *addr2, int na)
+{
+	int i;
+	u32 a1;
+	u32 a2;
+
+	for (i = 0; i < na; i++) {
+		a1 = be32_to_cpup(addr1 + i);
+		a2 = be32_to_cpup(addr2 + i);
+		if (a1 == a2)
+			continue;
+		return false;
+	}
+	return true;
+}
+
+static u64 of_bus_default_flags_map(__be32 *addr, const __be32 *range, int na,
+				    int ns, int pna)
+{
+	u64 cp, s, da;
+	int extra = 0;
+
+	if (na > 2) {
+		/*
+		 * Given address contains more than 2 cells.
+		 * The address high extra part must match the range extra part
+		 * and must be filtered-out from 64bit offset computation.
+		 */
+		extra = na - 2;
+		if (!of_addr_is_equal(addr, range, extra))
+			return OF_BAD_ADDR;
+
+		cp = of_read_number(range + extra, na - extra);
+		s  = of_read_number(range + na + pna, ns);
+		da = of_read_number(addr + extra, na - extra);
+	} else {
+		cp = of_read_number(range, na);
+		s  = of_read_number(range + na + pna, ns);
+		da = of_read_number(addr, na);
+	}
+	pr_debug("default flags map, extra=%d cp=%llx, s=%llx, da=%llx\n", extra, cp, s, da);
+
+	if (da < cp || da >= (cp + s))
+		return OF_BAD_ADDR;
+	return da - cp;
+}
+
+static int of_bus_default_flags_translate(__be32 *addr, u64 offset, int na)
+{
+	/* Keep "flags" part in translated address */
+	return of_bus_default_translate(addr + 1, offset, na - 1);
+}
 
 #ifdef CONFIG_PCI
 static unsigned int of_bus_pci_get_flags(const __be32 *addr)
@@ -374,8 +426,8 @@ static struct of_bus of_busses[] = {
 		.addresses = "reg",
 		.match = of_bus_default_flags_match,
 		.count_cells = of_bus_default_count_cells,
-		.map = of_bus_default_map,
-		.translate = of_bus_default_translate,
+		.map = of_bus_default_flags_map,
+		.translate = of_bus_default_flags_translate,
 		.has_flags = true,
 		.get_flags = of_bus_default_flags_get_flags,
 	},
