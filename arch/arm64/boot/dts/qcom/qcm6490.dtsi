@@ -1,0 +1,94 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ */
+
+#include "sc7280.dtsi"
+
+/*
+ * Delete unused sc7280 memory nodes and define the memory regions
+ * required by qcm6490
+ */
+/delete-node/ &rmtfs_mem;
+/delete-node/ &wlan_ce_mem;
+
+/{
+	reserved-memory {
+		cdsp_secure_heap_mem: cdsp-secure-heap@81800000 {
+			reg = <0x0 0x81800000 0x0 0x1e00000>;
+			no-map;
+		};
+
+		camera_mem: camera@84300000 {
+			reg = <0x0 0x84300000 0x0 0x500000>;
+			no-map;
+		};
+
+		wpss_mem: wpss@0x84800000 {
+			reg = <0x0 0x84800000 0x0 0x1900000>;
+			no-map;
+		};
+
+		adsp_mem: adsp@86100000 {
+			reg = <0x0 0x86100000 0x0 0x2800000>;
+			no-map;
+		};
+
+		cdsp_mem: cdsp@88900000 {
+			reg = <0x0 0x88900000 0x0 0x1e00000>;
+			no-map;
+		};
+
+		cvp_mem: cvp@8ac00000 {
+			reg = <0x0 0x8ac00000 0x0 0x500000>;
+			no-map;
+		};
+
+		ipa_gsi_mem: ipa-gsi@8b110000 {
+			reg = <0x0 0x8b110000 0x0 0xa000>;
+			no-map;
+		};
+
+		gpu_microcode_mem: gpu-microcode@8b11a000 {
+			reg = <0x0 0x8b11a000 0x0 0x2000>;
+			no-map;
+		};
+
+		mpss_mem: mpss@8b800000 {
+			reg = <0x0 0x8b800000 0x0 0xf600000>;
+			no-map;
+		};
+
+		tz_stat_mem: tz-stat@c0000000 {
+			reg = <0x0 0xc0000000 0x0 0x100000>;
+			no-map;
+		};
+
+		tags_mem: tags@c0100000 {
+			reg = <0x0 0xc0100000 0x0 0x1200000>;
+			no-map;
+		};
+
+		qtee_mem: qtee@c1300000 {
+			reg = <0x0 0xc1300000 0x0 0x500000>;
+			no-map;
+		};
+
+		trusted_apps_mem: trusted_apps@c1800000 {
+			reg = <0x0 0xc1800000 0x0 0x3900000>;
+			no-map;
+		};
+	};
+};
+
+&video_mem {
+	reg = <0x0 0x8a700000 0x0 0x500000>;
+};
+
+&wifi {
+	memory-region = <&wlan_fw_mem>;
+};
+
+&xbl_mem {
+	reg = <0x0 0x80700000 0x0 0x100000>;
+};
