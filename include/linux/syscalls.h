@@ -813,6 +813,10 @@ asmlinkage long sys_get_mempolicy(int __user *policy,
 				unsigned long addr, unsigned long flags);
 asmlinkage long sys_set_mempolicy(int mode, const unsigned long __user *nmask,
 				unsigned long maxnode);
+asmlinkage long sys_get_mempolicy2(struct mempolicy_args __user *args,
+				   size_t size);
+asmlinkage long sys_set_mempolicy2(struct mempolicy_args __user *args,
+				   size_t size);
 asmlinkage long sys_migrate_pages(pid_t pid, unsigned long maxnode,
 				const unsigned long __user *from,
 				const unsigned long __user *to);

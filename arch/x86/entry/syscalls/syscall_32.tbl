@@ -457,3 +457,5 @@
 450	i386	set_mempolicy_home_node		sys_set_mempolicy_home_node
 451	i386	cachestat		sys_cachestat
 452	i386	fchmodat2		sys_fchmodat2
+454	i386	set_mempolicy2		sys_set_mempolicy2
+455	i386	get_mempolicy2		sys_get_mempolicy2
