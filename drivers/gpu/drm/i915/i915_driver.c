@@ -1092,6 +1092,9 @@ static int i915_drm_suspend(struct drm_device *dev)
 	intel_dp_mst_suspend(dev_priv);
 
 	intel_runtime_pm_disable_interrupts(dev_priv);
+
+	intel_tlb_suspend(dev_priv);
+
 	intel_hpd_cancel_work(dev_priv);
 
 	intel_suspend_encoders(dev_priv);
@@ -1262,6 +1265,8 @@ static int i915_drm_resume(struct drm_device *dev)
 	intel_power_domains_enable(dev_priv);
 
 	intel_gvt_resume(dev_priv);
+
+	intel_tlb_resume(dev_priv);
 
 	enable_rpm_wakeref_asserts(&dev_priv->runtime_pm);
 

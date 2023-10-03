@@ -9,6 +9,7 @@
 #include "intel_engine_types.h"
 #include "intel_gt_types.h"
 #include "intel_reset.h"
+#include "i915_drv.h"
 
 struct drm_i915_private;
 struct drm_printer;
@@ -179,4 +180,29 @@ enum i915_map_type intel_gt_coherent_map_type(struct intel_gt *gt,
 void intel_gt_bind_context_set_ready(struct intel_gt *gt);
 void intel_gt_bind_context_set_unready(struct intel_gt *gt);
 bool intel_gt_is_bind_context_ready(struct intel_gt *gt);
+
+static inline void intel_tlb_suspend(struct drm_i915_private *i915)
+{
+	struct intel_gt *gt;
+	int i;
+
+	if (!HAS_GUC_TLB_INVALIDATION(i915))
+		return;
+	for_each_gt(gt, i915, i)
+		wake_up_all_tlb_invalidate(&gt->uc.guc);
+}
+
+static inline void intel_tlb_resume(struct drm_i915_private *i915)
+{
+	struct intel_gt *gt;
+	int i;
+
+	if (!HAS_GUC_TLB_INVALIDATION(i915))
+		return;
+	for_each_gt(gt, i915, i) {
+		intel_guc_invalidate_tlb_full(&gt->uc.guc);
+		intel_guc_invalidate_tlb(&gt->uc.guc);
+	}
+}
+
 #endif /* __INTEL_GT_H__ */
