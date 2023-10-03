@@ -378,7 +378,7 @@ void intel_gt_mcr_lock(struct intel_gt *gt, unsigned long *flags)
 	 */
 	if (GRAPHICS_VER_FULL(gt->i915) >= IP_VER(12, 70))
 		err = wait_for(intel_uncore_read_fw(gt->uncore,
-						    MTL_STEER_SEMAPHORE) == 0x1, 100);
+						    MTL_STEER_SEMAPHORE) == 0x1, 1000);
 
 	/*
 	 * Even on platforms with a hardware lock, we'll continue to grab
