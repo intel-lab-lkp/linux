@@ -270,7 +270,30 @@ void drm_fb_swab(struct iosys_map *dst, const unsigned int *dst_pitch,
 
 	drm_fb_xfrm(dst, dst_pitch, &cpp, src, fb, clip, cached, swab_line);
 }
-EXPORT_SYMBOL(drm_fb_swab);
+
+/**
+ * drm_fb_r1_to_32bit_line - Convert one line from monochrome to any 32bit pixel format
+ * @dbuf: Pointer to the destination line (in any 32bit format)
+ * @sbuf: Pointer to the source line (in monochrome)
+ * @pixels: Number of pixels to convert.
+ * @fg_color: Foreground color, applied when R1 is 1
+ * @bg_color: Background color, applied when R1 is 0
+ *
+ * Convert monochrome to any format with 32bit pixel.
+ * There is a limitation, as sbuf is a pointer, it can only points to a multiple
+ * of 8 pixels in the source buffer.
+ */
+void drm_fb_r1_to_32bit_line(void *dbuf, const void *sbuf, unsigned int pixels,
+				u32 fg_color, u32 bg_color)
+{
+	unsigned int x;
+	const u8 *sbuf8 = sbuf;
+	u32 *dubf32 = dbuf;
+
+	for (x = 0; x < pixels; x++)
+		dubf32[x] = (sbuf8[x / 8] & (0x80 >> (x % 8))) ? fg_color : bg_color;
+}
+EXPORT_SYMBOL(drm_fb_r1_to_32bit_line);
 
 static void drm_fb_xrgb8888_to_rgb332_line(void *dbuf, const void *sbuf, unsigned int pixels)
 {
@@ -320,7 +343,13 @@ void drm_fb_xrgb8888_to_rgb332(struct iosys_map *dst, const unsigned int *dst_pi
 }
 EXPORT_SYMBOL(drm_fb_xrgb8888_to_rgb332);
 
-static void drm_fb_xrgb8888_to_rgb565_line(void *dbuf, const void *sbuf, unsigned int pixels)
+/**
+ * drm_fb_xrgb8888_to_rgb565_line - Convert one line from XRGB8888 to RGB565
+ * @dbuf: Pointer to the destination line (in RGB565)
+ * @sbuf: Pointer to the source line (in XRGB8888)
+ * @pixels: Number of pixels to convert.
+ */
+void drm_fb_xrgb8888_to_rgb565_line(void *dbuf, const void *sbuf, unsigned int pixels)
 {
 	__le16 *dbuf16 = dbuf;
 	const __le32 *sbuf32 = sbuf;
@@ -336,6 +365,7 @@ static void drm_fb_xrgb8888_to_rgb565_line(void *dbuf, const void *sbuf, unsigne
 		dbuf16[x] = cpu_to_le16(val16);
 	}
 }
+EXPORT_SYMBOL(drm_fb_xrgb8888_to_rgb565_line);
 
 /* TODO: implement this helper as conversion to RGB565|BIG_ENDIAN */
 static void drm_fb_xrgb8888_to_rgb565_swab_line(void *dbuf, const void *sbuf,
@@ -396,7 +426,13 @@ void drm_fb_xrgb8888_to_rgb565(struct iosys_map *dst, const unsigned int *dst_pi
 }
 EXPORT_SYMBOL(drm_fb_xrgb8888_to_rgb565);
 
-static void drm_fb_xrgb8888_to_xrgb1555_line(void *dbuf, const void *sbuf, unsigned int pixels)
+/**
+ * drm_fb_xrgb8888_to_rgb565_line - Convert one line from XRGB8888 to XRGB1555
+ * @dbuf: Pointer to the destination line (in XRGB1555)
+ * @sbuf: Pointer to the source line (in XRGB8888)
+ * @pixels: Number of pixels to convert.
+ */
+void drm_fb_xrgb8888_to_xrgb1555_line(void *dbuf, const void *sbuf, unsigned int pixels)
 {
 	__le16 *dbuf16 = dbuf;
 	const __le32 *sbuf32 = sbuf;
@@ -412,6 +448,7 @@ static void drm_fb_xrgb8888_to_xrgb1555_line(void *dbuf, const void *sbuf, unsig
 		dbuf16[x] = cpu_to_le16(val16);
 	}
 }
+EXPORT_SYMBOL(drm_fb_xrgb8888_to_xrgb1555_line);
 
 /**
  * drm_fb_xrgb8888_to_xrgb1555 - Convert XRGB8888 to XRGB1555 clip buffer
@@ -447,7 +484,13 @@ void drm_fb_xrgb8888_to_xrgb1555(struct iosys_map *dst, const unsigned int *dst_
 }
 EXPORT_SYMBOL(drm_fb_xrgb8888_to_xrgb1555);
 
-static void drm_fb_xrgb8888_to_argb1555_line(void *dbuf, const void *sbuf, unsigned int pixels)
+/**
+ * drm_fb_xrgb8888_to_rgb565_line - Convert one line from XRGB8888 to ARGB1555
+ * @dbuf: Pointer to the destination line (in ARGB1555)
+ * @sbuf: Pointer to the source line (in XRGB8888)
+ * @pixels: Number of pixels to convert.
+ */
+void drm_fb_xrgb8888_to_argb1555_line(void *dbuf, const void *sbuf, unsigned int pixels)
 {
 	__le16 *dbuf16 = dbuf;
 	const __le32 *sbuf32 = sbuf;
@@ -464,6 +507,7 @@ static void drm_fb_xrgb8888_to_argb1555_line(void *dbuf, const void *sbuf, unsig
 		dbuf16[x] = cpu_to_le16(val16);
 	}
 }
+EXPORT_SYMBOL(drm_fb_xrgb8888_to_argb1555_line);
 
 /**
  * drm_fb_xrgb8888_to_argb1555 - Convert XRGB8888 to ARGB1555 clip buffer
@@ -499,7 +543,13 @@ void drm_fb_xrgb8888_to_argb1555(struct iosys_map *dst, const unsigned int *dst_
 }
 EXPORT_SYMBOL(drm_fb_xrgb8888_to_argb1555);
 
-static void drm_fb_xrgb8888_to_rgba5551_line(void *dbuf, const void *sbuf, unsigned int pixels)
+/**
+ * drm_fb_xrgb8888_to_rgba5551_line - Convert one line from XRGB8888 to ARGB5551
+ * @dbuf: Pointer to the destination line (in ARGB5551)
+ * @sbuf: Pointer to the source line (in XRGB8888)
+ * @pixels: Number of pixels to convert.
+ */
+void drm_fb_xrgb8888_to_rgba5551_line(void *dbuf, const void *sbuf, unsigned int pixels)
 {
 	__le16 *dbuf16 = dbuf;
 	const __le32 *sbuf32 = sbuf;
@@ -516,6 +566,7 @@ static void drm_fb_xrgb8888_to_rgba5551_line(void *dbuf, const void *sbuf, unsig
 		dbuf16[x] = cpu_to_le16(val16);
 	}
 }
+EXPORT_SYMBOL(drm_fb_xrgb8888_to_rgba5551_line);
 
 /**
  * drm_fb_xrgb8888_to_rgba5551 - Convert XRGB8888 to RGBA5551 clip buffer
@@ -551,7 +602,13 @@ void drm_fb_xrgb8888_to_rgba5551(struct iosys_map *dst, const unsigned int *dst_
 }
 EXPORT_SYMBOL(drm_fb_xrgb8888_to_rgba5551);
 
-static void drm_fb_xrgb8888_to_rgb888_line(void *dbuf, const void *sbuf, unsigned int pixels)
+/**
+ * drm_fb_xrgb8888_to_rgb888_line - Convert one line from XRGB8888 to RGB888
+ * @dbuf: Pointer to the destination line (in RGB888)
+ * @sbuf: Pointer to the source line (in XRGB8888)
+ * @pixels: Number of pixels to convert.
+ */
+void drm_fb_xrgb8888_to_rgb888_line(void *dbuf, const void *sbuf, unsigned int pixels)
 {
 	u8 *dbuf8 = dbuf;
 	const __le32 *sbuf32 = sbuf;
@@ -566,6 +623,7 @@ static void drm_fb_xrgb8888_to_rgb888_line(void *dbuf, const void *sbuf, unsigne
 		*dbuf8++ = (pix & 0x00FF0000) >> 16;
 	}
 }
+EXPORT_SYMBOL(drm_fb_xrgb8888_to_rgb888_line);
 
 /**
  * drm_fb_xrgb8888_to_rgb888 - Convert XRGB8888 to RGB888 clip buffer
@@ -709,7 +767,13 @@ static void drm_fb_xrgb8888_to_xbgr8888(struct iosys_map *dst, const unsigned in
 		    drm_fb_xrgb8888_to_xbgr8888_line);
 }
 
-static void drm_fb_xrgb8888_to_xrgb2101010_line(void *dbuf, const void *sbuf, unsigned int pixels)
+/**
+ * drm_fb_xrgb8888_to_rgb888_line - Convert one line from XRGB8888 to XRGB2101010
+ * @dbuf: Pointer to the destination line (in XRGB2101010)
+ * @sbuf: Pointer to the source line (in XRGB8888)
+ * @pixels: Number of pixels to convert.
+ */
+void drm_fb_xrgb8888_to_xrgb2101010_line(void *dbuf, const void *sbuf, unsigned int pixels)
 {
 	__le32 *dbuf32 = dbuf;
 	const __le32 *sbuf32 = sbuf;
@@ -726,6 +790,7 @@ static void drm_fb_xrgb8888_to_xrgb2101010_line(void *dbuf, const void *sbuf, un
 		*dbuf32++ = cpu_to_le32(pix);
 	}
 }
+EXPORT_SYMBOL(drm_fb_xrgb8888_to_xrgb2101010_line);
 
 /**
  * drm_fb_xrgb8888_to_xrgb2101010 - Convert XRGB8888 to XRGB2101010 clip buffer
@@ -761,7 +826,13 @@ void drm_fb_xrgb8888_to_xrgb2101010(struct iosys_map *dst, const unsigned int *d
 }
 EXPORT_SYMBOL(drm_fb_xrgb8888_to_xrgb2101010);
 
-static void drm_fb_xrgb8888_to_argb2101010_line(void *dbuf, const void *sbuf, unsigned int pixels)
+/**
+ * drm_fb_xrgb8888_to_rgb888_line - Convert one line from XRGB8888 to ARGB2101010
+ * @dbuf: Pointer to the destination line (in ARGB2101010)
+ * @sbuf: Pointer to the source line (in XRGB8888)
+ * @pixels: Number of pixels to convert.
+ */
+void drm_fb_xrgb8888_to_argb2101010_line(void *dbuf, const void *sbuf, unsigned int pixels)
 {
 	__le32 *dbuf32 = dbuf;
 	const __le32 *sbuf32 = sbuf;
@@ -779,6 +850,7 @@ static void drm_fb_xrgb8888_to_argb2101010_line(void *dbuf, const void *sbuf, un
 		*dbuf32++ = cpu_to_le32(pix);
 	}
 }
+EXPORT_SYMBOL(drm_fb_xrgb8888_to_argb2101010_line);
 
 /**
  * drm_fb_xrgb8888_to_argb2101010 - Convert XRGB8888 to ARGB2101010 clip buffer
