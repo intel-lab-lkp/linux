@@ -87,7 +87,7 @@ run_gitsource()
 	printf "Make and test gitsource for $1 #$2 make_cpus: $MAKE_CPUS\n"
 	BACKUP_DIR=$(pwd)
 	cd $SCRIPTDIR/$git_name
-	perf stat -a --per-socket -I 1000 -e power/energy-pkg/ /usr/bin/time -o $BACKUP_DIR/$OUTFILE_GIT.time-gitsource-$1-$2.log make test -j$MAKE_CPUS > $BACKUP_DIR/$OUTFILE_GIT-perf-$1-$2.log 2>&1
+	$PERF stat -a --per-socket -I 1000 -e power/energy-pkg/ /usr/bin/time -o $BACKUP_DIR/$OUTFILE_GIT.time-gitsource-$1-$2.log make test -j$MAKE_CPUS > $BACKUP_DIR/$OUTFILE_GIT-perf-$1-$2.log 2>&1
 	cd $BACKUP_DIR
 
 	for job in `jobs -p`
