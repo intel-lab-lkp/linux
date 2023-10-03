@@ -894,6 +894,9 @@ static long subdev_do_ioctl(struct file *file, unsigned int cmd, void *arg,
 		struct v4l2_subdev_krouting krouting = {};
 		unsigned int i;
 
+		if (!v4l2_subdev_has_op(sd, pad, set_routing))
+			goto do_vidioc_subdev_g_routing;
+
 		if (!v4l2_subdev_enable_streams_api)
 			return -ENOIOCTLCMD;
 
@@ -939,6 +942,8 @@ static long subdev_do_ioctl(struct file *file, unsigned int cmd, void *arg,
 					routing->which, &krouting);
 		if (rval < 0)
 			return rval;
+do_vidioc_subdev_g_routing:
+		;
 	}
 		fallthrough;
 
