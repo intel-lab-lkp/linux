@@ -399,6 +399,10 @@ static const struct mempolicy_operations mpol_ops[MPOL_MAX] = {
 		.create = mpol_new_nodemask,
 		.rebind = mpol_rebind_nodemask,
 	},
+	[MPOL_PREFERRED_INTERLEAVE] = {
+		.create = mpol_new_nodemask,
+		.rebind = mpol_rebind_nodemask,
+	},
 	[MPOL_PREFERRED] = {
 		.create = mpol_new_preferred,
 		.rebind = mpol_rebind_preferred,
@@ -873,7 +877,8 @@ static long replace_mempolicy(struct mempolicy *new, nodemask_t *nodes)
 
 	old = current->mempolicy;
 	current->mempolicy = new;
-	if (new && new->mode == MPOL_INTERLEAVE)
+	if (new && (new->mode == MPOL_INTERLEAVE ||
+		    new->mode == MPOL_PREFERRED_INTERLEAVE))
 		current->il_prev = MAX_NUMNODES-1;
 out:
 	task_unlock(current);
@@ -915,6 +920,7 @@ static void get_policy_nodemask(struct mempolicy *p, nodemask_t *nodes)
 	switch (p->mode) {
 	case MPOL_BIND:
 	case MPOL_INTERLEAVE:
+	case MPOL_PREFERRED_INTERLEAVE:
 	case MPOL_PREFERRED:
 	case MPOL_PREFERRED_MANY:
 		*nodes = p->nodes;
@@ -1611,6 +1617,23 @@ SYSCALL_DEFINE3(set_mempolicy, int, mode, const unsigned long __user *, nmask,
 	return kernel_set_mempolicy(mode, nmask, maxnode);
 }
 
+static long do_set_preferred_interleave(struct mempolicy_args *args,
+					struct mempolicy *new,
+					nodemask_t *nodes)
+{
+	/* Preferred interleave cannot be done with no nodemask */
+	if (nodes_empty(*nodes))
+		return -EINVAL;
+
+	/* Preferred interleave weight cannot be <= 0 */
+	if (args->pil.weight <= 0)
+		return -EINVAL;
+
+	new->pil.weight = args->pil.weight;
+	new->pil.count = 0;
+	return 0;
+}
+
 static long do_set_mempolicy2(struct mempolicy_args *args)
 {
 	struct mempolicy *new = NULL;
@@ -1632,6 +1655,9 @@ static long do_set_mempolicy2(struct mempolicy_args *args)
 		return PTR_ERR(new);
 
 	switch (args->mode) {
+	case MPOL_PREFERRED_INTERLEAVE:
+		err = do_set_preferred_interleave(args, new, &nodes);
+		break;
 	default:
 		BUG();
 	}
@@ -1767,6 +1793,12 @@ static long do_get_mempolicy2(struct mempolicy_args *kargs)
 	case MPOL_INTERLEAVE:
 		kargs->interleave.next_node = next_node_in(current->il_prev,
 							   pol->nodes);
+		rc = 0;
+		break;
+	case MPOL_PREFERRED_INTERLEAVE:
+		kargs->pil.next_node = next_node_in(current->il_prev,
+						    pol->nodes);
+		kargs->pil.weight = pol->pil.weight;
 		rc = 0;
 		break;
 	default:
@@ -2104,11 +2136,40 @@ static int policy_node(gfp_t gfp, struct mempolicy *policy, int nd)
 	return nd;
 }
 
+static unsigned int preferred_interleave_nodes(struct mempolicy *policy)
+{
+	int mynode = numa_node_id();
+	struct task_struct *me = current;
+	int next;
+
+	/*
+	 * If the local node is not in the node mask, we treat the
+	 * lowest node as the preferred node. This can happen if the
+	 * cpu is bound to a node that is not present in the mempolicy
+	 */
+	if (!node_isset(mynode, policy->nodes))
+		mynode = first_node(policy->nodes);
+
+	next = next_node_in(me->il_prev, policy->nodes);
+	if (next == mynode) {
+		if (++policy->pil.count >= policy->pil.weight) {
+			policy->pil.count = 0;
+			me->il_prev = next;
+		}
+	} else if (next < MAX_NUMNODES) {
+		me->il_prev = next;
+	}
+	return next;
+}
+
 /* Do dynamic interleaving for a process */
 static unsigned interleave_nodes(struct mempolicy *policy)
 {
 	unsigned next;
 	struct task_struct *me = current;
+
+	if (policy->mode == MPOL_PREFERRED_INTERLEAVE)
+		return preferred_interleave_nodes(policy);
 
 	next = next_node_in(me->il_prev, policy->nodes);
 	if (next < MAX_NUMNODES)
@@ -2137,6 +2198,7 @@ unsigned int mempolicy_slab_node(void)
 		return first_node(policy->nodes);
 
 	case MPOL_INTERLEAVE:
+	case MPOL_PREFERRED_INTERLEAVE:
 		return interleave_nodes(policy);
 
 	case MPOL_BIND:
@@ -2163,6 +2225,56 @@ unsigned int mempolicy_slab_node(void)
 	}
 }
 
+static unsigned int offset_pil_node(struct mempolicy *pol, unsigned long n)
+{
+	nodemask_t nodemask = pol->nodes;
+	unsigned int target, nnodes;
+	int i;
+	int nid = MAX_NUMNODES;
+	int weight = pol->pil.weight;
+
+	/*
+	 * The barrier will stabilize the nodemask in a register or on
+	 * the stack so that it will stop changing under the code.
+	 *
+	 * Between first_node() and next_node(), pol->nodes could be changed
+	 * by other threads. So we put pol->nodes in a local stack.
+	 */
+	barrier();
+
+	nnodes = nodes_weight(nodemask);
+
+	/*
+	 * If the local node ID is not set (cpu is bound to a node
+	 * but that node is not set in the memory nodemask), interleave
+	 * based on the lowest set node.
+	 */
+	nid = numa_node_id();
+	if (!node_isset(nid, nodemask))
+		nid = first_node(nodemask);
+	/*
+	 * Mode or weight can change so default to basic interleave
+	 * if the weight has become invalid.  Basic interleave is
+	 * equivalent to weight=1. Don't double-count the base node
+	 */
+	if (weight == 0)
+		weight = 1;
+	weight -= 1;
+
+	/* If target <= the weight, no need to call next_node */
+	target = ((unsigned int)n % (nnodes + weight));
+	target -= (target > weight) ? weight : target;
+	target %= MAX_NUMNODES;
+
+	/* Target may not be the first node, so use next_node_in to wrap */
+	for (i = 0; i < target; i++) {
+		nid = next_node_in(nid, nodemask);
+		if (nid == MAX_NUMNODES)
+			nid = first_node(nodemask);
+	}
+	return nid;
+}
+
 /*
  * Do static interleaving for a VMA with known offset @n.  Returns the n'th
  * node in pol->nodes (starting from n=0), wrapping around if n exceeds the
@@ -2170,10 +2282,16 @@ unsigned int mempolicy_slab_node(void)
  */
 static unsigned offset_il_node(struct mempolicy *pol, unsigned long n)
 {
-	nodemask_t nodemask = pol->nodes;
+	nodemask_t nodemask;
 	unsigned int target, nnodes;
 	int i;
 	int nid;
+
+	if (pol->mode == MPOL_PREFERRED_INTERLEAVE)
+		return offset_pil_node(pol, n);
+
+	nodemask = pol->nodes;
+
 	/*
 	 * The barrier will stabilize the nodemask in a register or on
 	 * the stack so that it will stop changing under the code.
@@ -2241,7 +2359,8 @@ int huge_node(struct vm_area_struct *vma, unsigned long addr, gfp_t gfp_flags,
 	*nodemask = NULL;
 	mode = (*mpol)->mode;
 
-	if (unlikely(mode == MPOL_INTERLEAVE)) {
+	if (unlikely(mode == MPOL_INTERLEAVE) ||
+	    unlikely(mode == MPOL_PREFERRED_INTERLEAVE)) {
 		nid = interleave_nid(*mpol, vma, addr,
 					huge_page_shift(hstate_vma(vma)));
 	} else {
@@ -2282,6 +2401,7 @@ bool init_nodemask_of_mempolicy(nodemask_t *mask)
 	case MPOL_PREFERRED_MANY:
 	case MPOL_BIND:
 	case MPOL_INTERLEAVE:
+	case MPOL_PREFERRED_INTERLEAVE:
 		*mask = mempolicy->nodes;
 		break;
 
@@ -2392,7 +2512,8 @@ struct folio *vma_alloc_folio(gfp_t gfp, int order, struct vm_area_struct *vma,
 
 	pol = get_vma_policy(vma, addr);
 
-	if (pol->mode == MPOL_INTERLEAVE) {
+	if (pol->mode == MPOL_INTERLEAVE ||
+	    pol->mode == MPOL_PREFERRED_INTERLEAVE) {
 		struct page *page;
 		unsigned nid;
 
@@ -2494,7 +2615,8 @@ struct page *alloc_pages(gfp_t gfp, unsigned order)
 	 * No reference counting needed for current->mempolicy
 	 * nor system default_policy
 	 */
-	if (pol->mode == MPOL_INTERLEAVE)
+	if (pol->mode == MPOL_INTERLEAVE ||
+	    pol->mode == MPOL_PREFERRED_INTERLEAVE)
 		page = alloc_page_interleave(gfp, order, interleave_nodes(pol));
 	else if (pol->mode == MPOL_PREFERRED_MANY)
 		page = alloc_pages_preferred_many(gfp, order,
@@ -2554,6 +2676,69 @@ static unsigned long alloc_pages_bulk_array_interleave(gfp_t gfp,
 	return total_allocated;
 }
 
+static unsigned long alloc_pages_bulk_array_pil(gfp_t gfp,
+						struct mempolicy *pol,
+						unsigned long nr_pages,
+						struct page **page_array)
+{
+	nodemask_t nodemask = pol->nodes;
+	unsigned long nr_pages_main;
+	unsigned long nr_pages_other;
+	unsigned long total_cycle;
+	unsigned long delta;
+	unsigned long weight;
+	int allocated = 0;
+	int start_nid;
+	int nnodes;
+	int prev, next;
+	int i;
+
+	/* This stabilizes nodes on the stack incase pol->nodes changes */
+	barrier();
+
+	nnodes = nodes_weight(nodemask);
+	start_nid = numa_node_id();
+
+	if (!node_isset(start_nid, nodemask))
+		start_nid = first_node(nodemask);
+
+	if (nnodes == 1) {
+		allocated = __alloc_pages_bulk(gfp, start_nid,
+					       NULL, nr_pages_main,
+					       NULL, page_array);
+		return allocated;
+	}
+	/* We don't want to double-count the main node in calculations */
+	nnodes--;
+
+	weight = pol->pil.weight;
+	total_cycle = (weight + nnodes);
+	/* Number of pages on main node: (cycles*weight + up to weight) */
+	nr_pages_main = ((nr_pages / total_cycle) * weight);
+	nr_pages_main += (nr_pages % total_cycle % (weight + 1));
+	/* Number of pages on others: (remaining/nodes) + 1 page if delta  */
+	nr_pages_other = (nr_pages - nr_pages_main) / nnodes;
+	nr_pages_other /= nnodes;
+	/* Delta is number of pages beyond weight up to full cycle */
+	delta = nr_pages - (nr_pages_main + (nr_pages_other * nnodes));
+
+	/* start by allocating for the main node, then interleave rest */
+	prev = start_nid;
+	allocated = __alloc_pages_bulk(gfp, start_nid, NULL, nr_pages_main,
+				       NULL, page_array);
+	for (i = 0; i < nnodes; i++) {
+		int pages = nr_pages_other + (delta-- ? 1 : 0);
+
+		next = next_node_in(prev, nodemask);
+		if (next < MAX_NUMNODES)
+			prev = next;
+		allocated += __alloc_pages_bulk(gfp, next, NULL, pages,
+						NULL, page_array);
+	}
+
+	return allocated;
+}
+
 static unsigned long alloc_pages_bulk_array_preferred_many(gfp_t gfp, int nid,
 		struct mempolicy *pol, unsigned long nr_pages,
 		struct page **page_array)
@@ -2591,6 +2776,10 @@ unsigned long alloc_pages_bulk_array_mempolicy(gfp_t gfp,
 	if (pol->mode == MPOL_INTERLEAVE)
 		return alloc_pages_bulk_array_interleave(gfp, pol,
 							 nr_pages, page_array);
+
+	if (pol->mode == MPOL_PREFERRED_INTERLEAVE)
+		return alloc_pages_bulk_array_pil(gfp, pol, nr_pages,
+						  page_array);
 
 	if (pol->mode == MPOL_PREFERRED_MANY)
 		return alloc_pages_bulk_array_preferred_many(gfp,
@@ -2664,6 +2853,7 @@ bool __mpol_equal(struct mempolicy *a, struct mempolicy *b)
 	switch (a->mode) {
 	case MPOL_BIND:
 	case MPOL_INTERLEAVE:
+	case MPOL_PREFERRED_INTERLEAVE:
 	case MPOL_PREFERRED:
 	case MPOL_PREFERRED_MANY:
 		return !!nodes_equal(a->nodes, b->nodes);
@@ -2801,6 +2991,7 @@ int mpol_misplaced(struct folio *folio, struct vm_area_struct *vma,
 
 	switch (pol->mode) {
 	case MPOL_INTERLEAVE:
+	case MPOL_PREFERRED_INTERLEAVE:
 		pgoff = vma->vm_pgoff;
 		pgoff += (addr - vma->vm_start) >> PAGE_SHIFT;
 		polnid = offset_il_node(pol, pgoff);
@@ -3189,6 +3380,7 @@ static const char * const policy_modes[] =
 	[MPOL_PREFERRED]  = "prefer",
 	[MPOL_BIND]       = "bind",
 	[MPOL_INTERLEAVE] = "interleave",
+	[MPOL_PREFERRED_INTERLEAVE] = "preferred interleave",
 	[MPOL_LOCAL]      = "local",
 	[MPOL_PREFERRED_MANY]  = "prefer (many)",
 };
@@ -3359,6 +3551,7 @@ void mpol_to_str(char *buffer, int maxlen, struct mempolicy *pol)
 	case MPOL_PREFERRED_MANY:
 	case MPOL_BIND:
 	case MPOL_INTERLEAVE:
+	case MPOL_PREFERRED_INTERLEAVE:
 		nodes = pol->nodes;
 		break;
 	default:
