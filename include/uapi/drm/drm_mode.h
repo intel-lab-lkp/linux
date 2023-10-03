@@ -36,10 +36,10 @@ extern "C" {
 /**
  * DOC: overview
  *
- * DRM exposes many UAPI and structure definition to have a consistent
- * and standardized interface with user.
+ * DRM exposes many UAPI and structure definitions to have a consistent
+ * and standardized interface with the user.
  * Userspace can refer to these structure definitions and UAPI formats
- * to communicate to driver
+ * to communicate to the driver.
  */
 
 #define DRM_CONNECTOR_NAME_LEN	32
