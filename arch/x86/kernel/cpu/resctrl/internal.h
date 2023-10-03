@@ -299,6 +299,9 @@ struct rdtgroup {
  *		--> RFTYPE_CTRL (Files for CTRL group)
  *		    Files: mode, schemata, size
  *
+ *			--> RFTYPE_DEBUG (Files to help resctrl debugging)
+ *			    File: ctrl_hw_id
+ *
  */
 #define RFTYPE_INFO			BIT(0)
 #define RFTYPE_BASE			BIT(1)
