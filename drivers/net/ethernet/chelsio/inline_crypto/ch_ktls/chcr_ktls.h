@@ -68,8 +68,8 @@ struct chcr_ktls_info {
 };
 
 struct chcr_ktls_ofld_ctx_tx {
-	struct tls_offload_context_tx base;
 	struct chcr_ktls_info *chcr_info;
+	struct tls_offload_context_tx base;
 };
 
 struct chcr_ktls_uld_ctx {
