@@ -1186,7 +1186,22 @@ static int ct_handle_event(struct intel_guc_ct *ct, struct ct_incoming_msg *requ
 	switch (action) {
 	case INTEL_GUC_ACTION_SCHED_CONTEXT_MODE_DONE:
 	case INTEL_GUC_ACTION_DEREGISTER_CONTEXT_DONE:
+	case INTEL_GUC_ACTION_TLB_INVALIDATION_DONE:
 		g2h_release_space(ct, request->size);
+	}
+
+	/* 
+	 * Handle tlb invalidation response in interrupt context.
+	 * This is processed separately here because this is a cleanup step
+	 * after processing a done action, so there is no followup request
+	 * to process the additional cleanup under as all other done actions
+	 * call g2h_release_space.
+	 */
+	if (action == INTEL_GUC_ACTION_TLB_INVALIDATION_DONE) {
+		int ret = intel_guc_tlb_invalidation_done(ct_to_guc(ct), hxg, request->size);
+
+		ct_free_msg(request);
+		return ret;
 	}
 
 	spin_lock_irqsave(&ct->requests.lock, flags);
