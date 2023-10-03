@@ -43,6 +43,7 @@ struct dma_buf_attachment;
 struct drm_display_mode;
 struct drm_mode_create_dumb;
 struct drm_printer;
+struct drm_scanout_buffer;
 struct sg_table;
 
 /**
@@ -407,6 +408,19 @@ struct drm_driver {
 	 * Print device specific fdinfo.  See Documentation/gpu/drm-usage-stats.rst.
 	 */
 	void (*show_fdinfo)(struct drm_printer *p, struct drm_file *f);
+
+	/**
+	 * @get_scanout_buffer:
+	 *
+	 * Get the current scanout buffer, to display a panic message with drm_panic.
+	 * It is called from a panic callback, and must follow its restrictions.
+	 *
+	 * Returns:
+	 *
+	 * Zero on success, negative errno on failure.
+	 */
+	int (*get_scanout_buffer)(struct drm_device *dev,
+				  struct drm_scanout_buffer *sb);
 
 	/** @major: driver major number */
 	int major;
