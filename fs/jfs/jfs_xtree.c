@@ -356,6 +356,8 @@ static int xtSearch(struct inode *ip, s64 xoff,	s64 *nextp,
 		 */
 		for (base = XTENTRYSTART; lim; lim >>= 1) {
 			index = base + (lim >> 1);
+			if (index >= XTROOTMAXSLOT)
+				break;
 
 			XT_CMP(cmp, xoff, &p->xad[index], t64);
 			if (cmp == 0) {
