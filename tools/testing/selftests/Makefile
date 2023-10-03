@@ -67,6 +67,7 @@ TARGETS += powerpc
 TARGETS += prctl
 TARGETS += proc
 TARGETS += pstore
+TARGETS += ptp
 TARGETS += ptrace
 TARGETS += openat2
 TARGETS += resctrl

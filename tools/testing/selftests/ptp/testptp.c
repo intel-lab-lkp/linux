@@ -37,6 +37,12 @@
 
 #define NSEC_PER_SEC 1000000000LL
 
+static char *time_base_arr[PTP_TS_MAX] = {
+	"system time",
+	"monotonic time",
+	"raw-monotonic time",
+};
+
 /* clock_adjtime is not available in GLIBC < 2.14 */
 #if !__GLIBC_PREREQ(2, 14)
 #include <sys/syscall.h>
@@ -145,8 +151,10 @@ static void usage(char *progname)
 		" -T val     set the ptp clock time to 'val' seconds\n"
 		" -x val     get an extended ptp clock time with the desired number of samples (up to %d)\n"
 		" -X         get a ptp clock cross timestamp\n"
+		" -y val     get an extended-any ptp clock time with the desired number of samples (up to %d) with given time-base for sandwich (with -Y opt)\n"
+		" -Y val     sandwich timebase to use {real|mono|raw}\n"
 		" -z         test combinations of rising/falling external time stamp flags\n",
-		progname, PTP_MAX_SAMPLES);
+		progname, PTP_MAX_SAMPLES, PTP_MAX_SAMPLES);
 }
 
 int main(int argc, char *argv[])
@@ -162,6 +170,7 @@ int main(int argc, char *argv[])
 	struct ptp_sys_offset *sysoff;
 	struct ptp_sys_offset_extended *soe;
 	struct ptp_sys_offset_precise *xts;
+	struct ptp_sys_offset_any *ats;
 
 	char *progname;
 	unsigned int i;
@@ -182,6 +191,8 @@ int main(int argc, char *argv[])
 	int pct_offset = 0;
 	int getextended = 0;
 	int getcross = 0;
+	int get_ext_any = 0;
+	int ext_any_type = -1;
 	int n_samples = 0;
 	int pin_index = -1, pin_func;
 	int pps = -1;
@@ -196,7 +207,7 @@ int main(int argc, char *argv[])
 
 	progname = strrchr(argv[0], '/');
 	progname = progname ? 1+progname : argv[0];
-	while (EOF != (c = getopt(argc, argv, "cd:e:f:ghH:i:k:lL:n:o:p:P:sSt:T:w:x:Xz"))) {
+	while (EOF != (c = getopt(argc, argv, "cd:e:f:ghH:i:k:lL:n:o:p:P:sSt:T:w:x:Xy:Y:z"))) {
 		switch (c) {
 		case 'c':
 			capabilities = 1;
@@ -273,6 +284,29 @@ int main(int argc, char *argv[])
 		case 'X':
 			getcross = 1;
 			break;
+		case 'y':
+			get_ext_any = atoi(optarg);
+			if (get_ext_any < 1 || get_ext_any > PTP_MAX_SAMPLES) {
+				fprintf(stderr,
+					"number of extended-any timestamp samples must be between 1 and %d; was asked for %d\n",
+					PTP_MAX_SAMPLES, get_ext_any);
+				return -1;
+			}
+			break;
+		case 'Y':
+			if (!strcasecmp(optarg, "real"))
+				ext_any_type = PTP_TS_REAL;
+			else if (!strcasecmp(optarg, "mono"))
+				ext_any_type = PTP_TS_MONO;
+			else if (!strcasecmp(optarg, "raw"))
+				ext_any_type = PTP_TS_RAW;
+			else {
+				fprintf(stderr,
+					"type needs to be one of real,mono,raw only; was given %s\n",
+					optarg);
+				return -1;
+			}
+			break;
 		case 'z':
 			flagtest = 1;
 			break;
@@ -284,6 +318,14 @@ int main(int argc, char *argv[])
 			usage(progname);
 			return -1;
 		}
+	}
+
+	/* For ptp_sys_offset_any both options 'y' and 'Y' must be given */
+	if (get_ext_any > 0 && ext_any_type == -1) {
+		fprintf(stderr,
+			"For extended-any TS both options -y, and -Y are required.\n");
+		usage(progname);
+		return -1;
 	}
 
 	fd = open(device, O_RDWR);
@@ -604,6 +646,36 @@ int main(int argc, char *argv[])
 		free(xts);
 	}
 
+	if (get_ext_any) {
+		ats = calloc(1, sizeof(*ats));
+		if (!ats) {
+			perror("calloc");
+			return -1;
+		}
+
+		ats->n_samples = get_ext_any;
+		ats->ts_type = ext_any_type;
+
+		if (ioctl(fd, PTP_SYS_OFFSET_ANY2, ats)) {
+			perror("PTP_SYS_OFFSET_ANY2");
+		} else {
+			printf("extended-any timestamp request returned %d samples\n",
+			       get_ext_any);
+
+			for (i = 0; i < get_ext_any; i++) {
+				printf("sample #%2d: %s before: %lld.%09u\n",
+				       i, time_base_arr[ext_any_type],
+				       ats->ts[i][0].sec, ats->ts[i][0].nsec);
+				printf("            phc time: %lld.%09u\n",
+				       ats->ts[i][1].sec, ats->ts[i][1].nsec);
+				printf("            %s after: %lld.%09u\n",
+				       time_base_arr[ext_any_type],
+				       ats->ts[i][2].sec, ats->ts[i][2].nsec);
+			}
+		}
+
+		free(ats);
+	}
 	close(fd);
 	return 0;
 }
