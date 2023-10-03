@@ -1654,6 +1654,9 @@ static void *nvmem_cell_prepare_write_buffer(struct nvmem_cell_entry *cell,
 	int i, rc, nbits, bit_offset = cell->bit_offset;
 	u8 v, *p, *buf, *b, pbyte, pbits;
 
+	if (len > cell->bytes)
+		return ERR_PTR(-EINVAL);
+
 	nbits = cell->nbits;
 	buf = kzalloc(cell->bytes, GFP_KERNEL);
 	if (!buf)
