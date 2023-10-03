@@ -25,6 +25,7 @@
 #include <linux/poll.h>
 #include <linux/dma-resv.h>
 #include <linux/mm.h>
+#include <linux/mman.h>
 #include <linux/mount.h>
 #include <linux/pseudo_fs.h>
 
@@ -127,6 +128,19 @@ static struct file_system_type dma_buf_fs_type = {
 	.init_fs_context = dma_buf_fs_init_context,
 	.kill_sb = kill_anon_super,
 };
+
+static unsigned long
+dma_buf_get_unmapped_area(struct file *file,
+			  unsigned long addr,
+			  unsigned long len,
+			  unsigned long pgoff,
+			  unsigned long flags)
+{
+	if ((flags & MAP_TYPE) == MAP_PRIVATE)
+		return -EINVAL;
+
+	return current->mm->get_unmapped_area(file, addr, len, pgoff, flags);
+}
 
 static int dma_buf_mmap_internal(struct file *file, struct vm_area_struct *vma)
 {
@@ -508,6 +522,7 @@ static void dma_buf_show_fdinfo(struct seq_file *m, struct file *file)
 
 static const struct file_operations dma_buf_fops = {
 	.release	= dma_buf_file_release,
+	.get_unmapped_area = dma_buf_get_unmapped_area,
 	.mmap		= dma_buf_mmap_internal,
 	.llseek		= dma_buf_llseek,
 	.poll		= dma_buf_poll,
