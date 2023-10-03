@@ -146,8 +146,8 @@ run_cmd_parmap() {
                 echo $@>>$DEBUG_FILE
                 $@ 2>>$DEBUG_FILE
         else
-                echo $@
-                $@ 2>&1
+                echo $@ >&2
+                $@
 	fi
 
 	err=$?
