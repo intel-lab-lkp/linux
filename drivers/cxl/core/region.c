@@ -1691,6 +1691,11 @@ static int cxl_region_attach(struct cxl_region *cxlr,
 		return -EINVAL;
 	}
 
+	/* Set root decoder's granularity now, so that we can use it to calculate
+	 * granularity for the downstream targets in cxl_region_setup_targets().
+	 */
+	cxlrd->cxlsd.cxld.interleave_granularity = cxlr->params.interleave_granularity;
+
 	if (test_bit(CXL_REGION_F_AUTO, &cxlr->flags)) {
 		int i;
 
