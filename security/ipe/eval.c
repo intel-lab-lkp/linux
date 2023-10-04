@@ -19,6 +19,7 @@
 
 struct ipe_policy __rcu *ipe_active_policy;
 bool success_audit;
+bool enforce = true;
 
 static const struct super_block *pinned_sb;
 static DEFINE_SPINLOCK(pin_lock);
@@ -114,12 +115,14 @@ static bool evaluate_property(const struct ipe_eval_ctx *const ctx,
 int ipe_evaluate_event(const struct ipe_eval_ctx *const ctx)
 {
 	bool match = false;
+	bool enforcing = true;
 	enum ipe_action_type action;
 	enum ipe_match match_type;
 	struct ipe_policy *pol = NULL;
 	const struct ipe_rule *rule = NULL;
 	const struct ipe_op_table *rules = NULL;
 	struct ipe_prop *prop = NULL;
+	int rc = 0;
 
 	rcu_read_lock();
 
@@ -128,6 +131,8 @@ int ipe_evaluate_event(const struct ipe_eval_ctx *const ctx)
 		rcu_read_unlock();
 		return 0;
 	}
+
+	enforcing = READ_ONCE(enforce);
 
 	if (ctx->op == IPE_OP_INVALID) {
 		rcu_read_unlock();
@@ -167,9 +172,12 @@ eval:
 	ipe_audit_match(ctx, match_type, action, rule);
 
 	if (action == IPE_ACTION_DENY)
-		return -EACCES;
+		rc = -EACCES;
 
-	return 0;
+	if (!enforcing)
+		rc = 0;
+
+	return rc;
 }
 
 /**
@@ -198,3 +206,5 @@ void ipe_invalidate_pinned_sb(const struct super_block *mnt_sb)
 
 module_param(success_audit, bool, 0400);
 MODULE_PARM_DESC(success_audit, "Start IPE with success auditing enabled");
+module_param(enforce, bool, 0400);
+MODULE_PARM_DESC(enforce, "Start IPE in enforce or permissive mode");
