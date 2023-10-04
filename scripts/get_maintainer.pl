@@ -548,19 +548,6 @@ foreach my $file (@ARGV) {
 	$file =~ s/^\Q${cur_path}\E//;	#strip any absolute path
 	$file =~ s/^\Q${lk_path}\E//;	#or the path to the lk tree
 	push(@files, $file);
-	if ($file ne "MAINTAINERS" && -f $file && $keywords) {
-	    open(my $f, '<', $file)
-		or die "$P: Can't open $file: $!\n";
-	    my $text = do { local($/) ; <$f> };
-	    close($f);
-	    if ($keywords) {
-		foreach my $line (keys %keyword_hash) {
-		    if ($text =~ m/$keyword_hash{$line}/x) {
-			push(@keyword_tvi, $line);
-		    }
-		}
-	    }
-	}
     } else {
 	my $file_cnt = @files;
 	my $lastfile;

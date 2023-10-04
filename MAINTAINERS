@@ -51,13 +51,13 @@ Descriptions of section entries and preferred order
 	   get_maintainer will not look at git log history when an F: pattern
 	   match occurs.  When an N: match occurs, git log history is used
 	   to also notify the people that have git commit signatures.
-	K: *Content regex* (perl extended) pattern match in a patch or file.
+	K: *Content regex* (perl extended) pattern match patch content
 	   For instance:
 	   K: of_get_profile
-	      matches patches or files that contain "of_get_profile"
+	      matches patches that contain "of_get_profile"
 	   K: \b(printk|pr_(info|err))\b
-	      matches patches or files that contain one or more of the words
-	      printk, pr_info or pr_err
+	      matches patches that contain one or more of the words printk,
+        pr_info or pr_err
 	   One regex pattern per line.  Multiple K: lines acceptable.
 
 Maintainers List
