@@ -1,0 +1,26 @@
+drm drm-fixes 8a749fd1a8720d4619c91c8b6e7528c0a355c0aa
+	Linux 6.6-rc4
+drm-misc drm-misc-fixes d59e75eef52d89201aaf5342a3ac23ddf3e9b112
+	drm/nouveau: exec: report max pushs through getparam
+drm-intel drm-intel-fixes 8a749fd1a8720d4619c91c8b6e7528c0a355c0aa
+	Linux 6.6-rc4
+drm drm-next caacbdc28f545744770fb2caf347b3c4be9a6299
+	Merge tag 'drm-intel-gt-next-2023-09-28' of git://anongit.freedesktop.org/drm/drm-intel into drm-next
+drm-misc drm-misc-next-fixes d20b484c674d2eae816978a98fa38b4054aeca3b
+	drm/drm_exec: Work around a WW mutex lockdep oddity
+drm-intel drm-intel-next-fixes 0bb80ecc33a8fb5a682236443c1e740d5c917d1d
+	Linux 6.6-rc1
+drm-misc drm-misc-next 653e2486450a0d973d15f6ae870cfdfad1b8fe17
+	drm/vblank: Warn when silently cancelling vblank works
+drm-intel drm-intel-next f2a7b9cd5b06eba8cf12153507ff77cc80c7b45f
+	drm/i915/lnl: update the supported plane formats with FBC
+drm-intel drm-intel-gt-next 6a3ecfd4a04d800e291e1652ce1f22eff613e8ec
+	drm/i915/guc: Suppress 'ignoring reset notification' message
+drm-intel topic/core-for-CI 4dfdf656708ee83de89dfb6289c290012212e4c6
+	PCI/ASPM: pci_enable_link_state: Add argument to acquire bus lock
+drm-misc topic/i915-ttm 1e3944578b749449bd7fa6bf0bae4c3d3f5f1733
+	Merge tag 'amd-drm-next-5.16-2021-09-27' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm topic/nouveau-misc dfc4005f8c172eea359f9db08c3b2b0ff0153699
+	drm/nouveau/disp: move DAC load detection method
+drm topic/drm-ci ad6bfe1b66a5c146ec236847eca7af4c8806d666
+	drm: ci: docs: fix build warning - add missing escape
