@@ -882,22 +882,34 @@ static int rapl_read_pl_data(struct rapl_domain *rd, int pl,
 	return rapl_read_data_raw(rd, prim, xlate, data);
 }
 
-static int rapl_write_pl_data(struct rapl_domain *rd, int pl,
-			       enum pl_prims pl_prim,
-			       unsigned long long value)
+static int rapl_write_pl_data_nowarn(struct rapl_domain *rd, int pl,
+				     enum pl_prims pl_prim,
+				     unsigned long long value)
 {
 	enum rapl_primitives prim = get_pl_prim(rd, pl, pl_prim);
 
 	if (!is_pl_valid(rd, pl))
 		return -EINVAL;
 
-	if (rd->rpl[pl].locked) {
-		pr_warn("%s:%s:%s locked by BIOS\n", rd->rp->name, rd->name, pl_names[pl]);
+	if (rd->rpl[pl].locked)
 		return -EACCES;
-	}
 
 	return rapl_write_data_raw(rd, prim, value);
 }
+
+static int rapl_write_pl_data(struct rapl_domain *rd, int pl,
+			      enum pl_prims pl_prim,
+			      unsigned long long value)
+{
+	int ret;
+
+	ret = rapl_write_pl_data_nowarn(rd, pl, pl_prim, value);
+	if (ret == -EACCES)
+		pr_warn("%s:%s:%s locked by BIOS\n", rd->rp->name, rd->name, pl_names[pl]);
+
+	return ret;
+}
+
 /*
  * Raw RAPL data stored in MSRs are in certain scales. We need to
  * convert them into standard units based on the units reported in
@@ -1634,8 +1646,8 @@ static void power_limit_state_restore(void)
 		rd = power_zone_to_rapl_domain(rp->power_zone);
 		for (i = POWER_LIMIT1; i < NR_POWER_LIMITS; i++)
 			if (rd->rpl[i].last_power_limit)
-				rapl_write_pl_data(rd, i, PL_LIMIT,
-					       rd->rpl[i].last_power_limit);
+				rapl_write_pl_data_nowarn(rd, i, PL_LIMIT,
+							  rd->rpl[i].last_power_limit);
 	}
 	cpus_read_unlock();
 }
