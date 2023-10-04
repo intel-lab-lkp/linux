@@ -14,12 +14,20 @@
 #define IPE_EVAL_CTX_INIT ((struct ipe_eval_ctx){ 0 })
 
 extern struct ipe_policy __rcu *ipe_active_policy;
+extern bool success_audit;
 
 struct ipe_eval_ctx {
 	enum ipe_op_type op;
 
 	const struct file *file;
 	bool from_init_sb;
+};
+
+enum ipe_match {
+	IPE_MATCH_RULE = 0,
+	IPE_MATCH_TABLE,
+	IPE_MATCH_GLOBAL,
+	__IPE_MATCH_MAX
 };
 
 void build_eval_ctx(struct ipe_eval_ctx *ctx, const struct file *file, enum ipe_op_type op);
