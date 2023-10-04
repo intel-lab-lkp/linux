@@ -2410,6 +2410,10 @@ static int __add_preferred_console(char *name, int idx, char *options,
 	struct console_cmdline *c;
 	int i;
 
+	/* See struct console */
+	if (idx > SHRT_MAX)
+		return -EINVAL;
+
 	/*
 	 *	See if this tty is not yet registered, and
 	 *	if we have a slot free.
