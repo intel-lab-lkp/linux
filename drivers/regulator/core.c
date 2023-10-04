@@ -6207,8 +6207,13 @@ static int regulator_late_cleanup(struct device *dev, void *data)
 	if (rdev->use_count)
 		goto unlock;
 
-	/* If reading the status failed, assume that it's off. */
-	if (_regulator_is_enabled(rdev) <= 0)
+	/*
+	 * If reading the status failed, assume that it's off.
+	 * If the current status is unknown (-EINVAL), assume that the
+	 * regulator might be on and try to explicitly disable it.
+	 */
+	ret = _regulator_is_enabled(rdev);
+	if (ret <= 0 && ret != -EINVAL)
 		goto unlock;
 
 	if (have_full_constraints()) {
