@@ -3233,6 +3233,8 @@ xfs_bmap_btalloc_select_lengths(
 	struct xfs_mount	*mp = args->mp;
 	struct xfs_perag	*pag;
 	xfs_agnumber_t		agno, startag;
+	xfs_agnumber_t		max_blen_agno;
+	xfs_extlen_t		max_blen = 0;
 	int			error = 0;
 
 	if (ap->tp->t_flags & XFS_TRANS_LOWMODE) {
@@ -3264,9 +3266,21 @@ xfs_bmap_btalloc_select_lengths(
 			}
 			break;
 		}
+		if (*blen > max_blen) {
+			max_blen = *blen;
+			max_blen_agno = agno;
+		}
 	}
 	if (pag)
 		xfs_perag_rele(pag);
+
+	if (max_blen > *blen) {
+		if (max_blen_agno != startag) {
+			ap->blkno = XFS_AGB_TO_FSB(mp, max_blen_agno, 0);
+			ap->aeof = false;
+		}
+		*blen = max_blen;
+	}
 
 	args->minlen = xfs_bmap_select_minlen(ap, args, *blen);
 	return error;
