@@ -21,13 +21,13 @@ properties:
   compatible:
     const: regulator-output
 
-  vout-supply:
+patternProperties:
+  ".*-supply":
     description:
       Phandle of the regulator supplying the output.
 
 required:
   - compatible
-  - vout-supply
 
 additionalProperties: false
 
@@ -36,4 +36,9 @@ examples:
       output {
           compatible = "regulator-output";
           vout-supply = <&output_reg>;
+      };
+      output1 {
+          compatible = "regulator-output";
+          sw0-supply = <&output_reg0>;
+          sw1-supply = <&output_reg2>;
       };
