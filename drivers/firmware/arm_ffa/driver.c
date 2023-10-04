@@ -1013,7 +1013,7 @@ static int ffa_notify_relinquish(struct ffa_device *dev, int notify_id)
 
 	rc = update_notifier_cb(notify_id, type, NULL, NULL, false);
 	if (rc) {
-		pr_err("Could not unregister notifcation callback\n");
+		pr_err("Could not unregister notification callback\n");
 		mutex_unlock(&drv_info->notify_lock);
 		return rc;
 	}
