@@ -346,6 +346,7 @@ static int allocate_doorbell(struct qcm_process_device *qpd,
 			     uint32_t const *restore_id)
 {
 	struct kfd_node *dev = qpd->dqm->dev;
+	uint32_t doorbell_size;
 
 	if (!KFD_IS_SOC15(dev)) {
 		/* On pre-SOC15 chips we need to use the queue ID to
@@ -405,9 +406,12 @@ static int allocate_doorbell(struct qcm_process_device *qpd,
 		}
 	}
 
+	doorbell_size = dev->kfd->device_info.doorbell_size;
+
 	q->properties.doorbell_off = amdgpu_doorbell_index_on_bar(dev->adev,
 								  qpd->proc_doorbells,
-								  q->doorbell_id);
+								  q->doorbell_id,
+								  doorbell_size);
 	return 0;
 }
 
