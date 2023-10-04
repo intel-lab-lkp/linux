@@ -3252,8 +3252,18 @@ xfs_bmap_btalloc_select_lengths(
 		if (error && error != -EAGAIN)
 			break;
 		error = 0;
-		if (*blen >= args->maxlen)
+		if (*blen >= args->maxlen) {
+			/*
+			 * We are going to target a different AG than the
+			 * incoming target, so we need to reset the target and
+			 * skip exact EOF allocation attempts.
+			 */
+			if (agno != startag) {
+				ap->blkno = XFS_AGB_TO_FSB(mp, agno, 0);
+				ap->aeof = false;
+			}
 			break;
+		}
 	}
 	if (pag)
 		xfs_perag_rele(pag);
@@ -3514,10 +3524,10 @@ xfs_bmap_btalloc_aligned(
 	int			error;
 
 	/*
-	 * If we failed an exact EOF allocation already, stripe
-	 * alignment will have already been taken into account in
-	 * args->minlen. Hence we only adjust minlen to try to preserve
-	 * alignment if no slop has been reserved for alignment
+	 * If we failed an exact EOF allocation already, stripe alignment will
+	 * have already been taken into account in args->minlen. Hence we only
+	 * adjust minlen to try to preserve alignment if no slop has been
+	 * reserved for alignment
 	 */
 	if (args->minalignslop == 0) {
 		if (blen > stripe_align &&
@@ -3654,6 +3664,16 @@ xfs_bmap_btalloc_best_length(
 	xfs_bmap_adjacent(ap);
 
 	/*
+	 * We only use stripe alignment for EOF allocations. Hence if it isn't
+	 * an EOF allocation, clear the stripe alignment. This allows us to
+	 * skip exact block EOF allocation yet still do stripe aligned
+	 * allocation if we select a different AG to the
+	 * exact target block due to a lack of contiguous free space.
+	 */
+	if (!ap->aeof)
+		stripe_align = 0;
+
+	/*
 	 * Search for an allocation group with a single extent large enough for
 	 * the request.  If one isn't found, then adjust the minimum allocation
 	 * size to the largest space found.
@@ -3675,7 +3695,7 @@ xfs_bmap_btalloc_best_length(
 	}
 
 	/* attempt aligned allocation for new EOF extents */
-	if (ap->aeof)
+	if (stripe_align)
 		error = xfs_bmap_btalloc_aligned(ap, args, blen, stripe_align,
 				false);
 	if (error || args->fsbno != NULLFSBLOCK)
