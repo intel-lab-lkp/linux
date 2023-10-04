@@ -220,9 +220,12 @@ static u8 __intel_cx0_read(struct drm_i915_private *i915, enum port port,
 	/* 3 tries is assumed to be enough to read successfully */
 	for (i = 0; i < 3; i++) {
 		status = __intel_cx0_read_once(i915, port, lane, addr);
+		intel_cx0_bus_reset(i915, port, lane);
 
 		if (status >= 0)
 			return status;
+
+		usleep_range(200, 300);
 	}
 
 	drm_err_once(&i915->drm, "PHY %c Read %04x failed after %d retries.\n",
@@ -299,9 +302,12 @@ static void __intel_cx0_write(struct drm_i915_private *i915, enum port port,
 	/* 3 tries is assumed to be enough to write successfully */
 	for (i = 0; i < 3; i++) {
 		status = __intel_cx0_write_once(i915, port, lane, addr, data, committed);
+		intel_cx0_bus_reset(i915, port, lane);
 
 		if (status == 0)
 			return;
+
+		usleep_range(200, 300);
 	}
 
 	drm_err_once(&i915->drm,
