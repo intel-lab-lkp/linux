@@ -395,10 +395,8 @@ void intel_gt_mcr_lock(struct intel_gt *gt, unsigned long *flags)
 	 * would indicate some hardware/firmware is misbehaving and not
 	 * releasing it properly.
 	 */
-	if (err == -ETIMEDOUT) {
-		gt_err_ratelimited(gt, "hardware MCR steering semaphore timed out");
-		add_taint_for_CI(gt->i915, TAINT_WARN);  /* CI is now unreliable */
-	}
+	if (err == -ETIMEDOUT)
+		gt_dbg(gt, "hardware MCR steering semaphore timed out");
 }
 
 /**
