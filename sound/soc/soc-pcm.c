@@ -2787,9 +2787,10 @@ static int soc_get_playback_capture(struct snd_soc_pcm_runtime *rtd,
 		if (dai_link->dpcm_playback) {
 			stream = SNDRV_PCM_STREAM_PLAYBACK;
 
+			has_playback = (dai_link->num_cpus > 0);
 			for_each_rtd_cpu_dais(rtd, i, cpu_dai) {
-				if (snd_soc_dai_stream_valid(cpu_dai, stream)) {
-					has_playback = 1;
+				if (!snd_soc_dai_stream_valid(cpu_dai, stream)) {
+					has_playback = 0;
 					break;
 				}
 			}
@@ -2803,9 +2804,10 @@ static int soc_get_playback_capture(struct snd_soc_pcm_runtime *rtd,
 		if (dai_link->dpcm_capture) {
 			stream = SNDRV_PCM_STREAM_CAPTURE;
 
+			has_capture = (dai_link->num_cpus > 0);
 			for_each_rtd_cpu_dais(rtd, i, cpu_dai) {
-				if (snd_soc_dai_stream_valid(cpu_dai, stream)) {
-					has_capture = 1;
+				if (!snd_soc_dai_stream_valid(cpu_dai, stream)) {
+					has_capture = 0;
 					break;
 				}
 			}
@@ -2824,6 +2826,8 @@ static int soc_get_playback_capture(struct snd_soc_pcm_runtime *rtd,
 		int cpu_capture  = snd_soc_get_stream_cpu(dai_link, SNDRV_PCM_STREAM_CAPTURE);
 		int cpu_playback = snd_soc_get_stream_cpu(dai_link, SNDRV_PCM_STREAM_PLAYBACK);
 
+		has_playback = (dai_link->num_codecs > 0);
+		has_capture  = (dai_link->num_codecs > 0);
 		for_each_rtd_codec_dais(rtd, i, codec_dai) {
 			if (dai_link->num_cpus == 1) {
 				cpu_dai = snd_soc_rtd_to_cpu(rtd, 0);
@@ -2848,12 +2852,12 @@ static int soc_get_playback_capture(struct snd_soc_pcm_runtime *rtd,
 				return -EINVAL;
 			}
 
-			if (snd_soc_dai_stream_valid(codec_dai, SNDRV_PCM_STREAM_PLAYBACK) &&
-			    snd_soc_dai_stream_valid(cpu_dai,   cpu_playback))
-				has_playback = 1;
-			if (snd_soc_dai_stream_valid(codec_dai, SNDRV_PCM_STREAM_CAPTURE) &&
-			    snd_soc_dai_stream_valid(cpu_dai,   cpu_capture))
-				has_capture = 1;
+			if (!(snd_soc_dai_stream_valid(codec_dai, SNDRV_PCM_STREAM_PLAYBACK) &&
+			      snd_soc_dai_stream_valid(cpu_dai,   cpu_playback)))
+				has_playback = 0;
+			if (!(snd_soc_dai_stream_valid(codec_dai, SNDRV_PCM_STREAM_CAPTURE) &&
+			      snd_soc_dai_stream_valid(cpu_dai,   cpu_capture)))
+				has_capture = 0;
 		}
 	}
 
