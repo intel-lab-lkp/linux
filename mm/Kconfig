@@ -922,6 +922,14 @@ config CMA_AREAS
 
 	  If unsure, leave the default value "7" in UMA and "19" in NUMA.
 
+config PMPOOL
+	bool "Persistent memory pool support"
+	select CMA
+	help
+	  This option adds support for CMA-based persistent memory pool
+	  feature, which provides pages allocation and freeing from a set of
+	  persistent memory ranges, deposited to the memory pool.
+
 config MEM_SOFT_DIRTY
 	bool "Track memory changes"
 	depends on CHECKPOINT_RESTORE && HAVE_ARCH_SOFT_DIRTY && PROC_FS
