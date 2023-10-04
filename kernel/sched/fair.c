@@ -4312,17 +4312,22 @@ static inline int
 update_cfs_rq_load_avg(u64 now, struct cfs_rq *cfs_rq)
 {
 	unsigned long removed_load = 0, removed_util = 0, removed_runnable = 0;
+	unsigned int removed_root_util = 0;
 	struct sched_avg *sa = &cfs_rq->avg;
 	int decayed = 0;
 
 	if (cfs_rq->removed.nr) {
 		unsigned long r;
+		struct rq *rq = rq_of(cfs_rq);
 		u32 divider = get_pelt_divider(&cfs_rq->avg);
 
 		raw_spin_lock(&cfs_rq->removed.lock);
 		swap(cfs_rq->removed.util_avg, removed_util);
 		swap(cfs_rq->removed.load_avg, removed_load);
 		swap(cfs_rq->removed.runnable_avg, removed_runnable);
+#ifdef CONFIG_UCLAMP_TASK
+		swap(rq->root_cfs_util_uclamp_removed, removed_root_util);
+#endif
 		cfs_rq->removed.nr = 0;
 		raw_spin_unlock(&cfs_rq->removed.lock);
 
@@ -4347,6 +4352,12 @@ update_cfs_rq_load_avg(u64 now, struct cfs_rq *cfs_rq)
 		 *    util_avg * minimum possible divider
 		 */
 		sa->util_sum = max_t(u32, sa->util_sum, sa->util_avg * PELT_MIN_DIVIDER);
+#ifdef CONFIG_UCLAMP_TASK
+		r = removed_root_util;
+		sub_positive(&rq->root_cfs_util_uclamp, r);
+		rq->root_cfs_util_uclamp =
+			max(rq->root_cfs_util_uclamp, rq->cfs.avg.util_avg_uclamp);
+#endif
 
 		r = removed_runnable;
 		sub_positive(&sa->runnable_avg, r);
@@ -4528,6 +4539,7 @@ static void sync_entity_load_avg(struct sched_entity *se)
 static void remove_entity_load_avg(struct sched_entity *se)
 {
 	struct cfs_rq *cfs_rq = cfs_rq_of(se);
+	struct rq *rq = rq_of(cfs_rq);
 	unsigned long flags;
 
 	/*
@@ -4543,6 +4555,9 @@ static void remove_entity_load_avg(struct sched_entity *se)
 	cfs_rq->removed.util_avg	+= se->avg.util_avg;
 	cfs_rq->removed.load_avg	+= se->avg.load_avg;
 	cfs_rq->removed.runnable_avg	+= se->avg.runnable_avg;
+#ifdef CONFIG_UCLAMP_TASK
+	rq->root_cfs_util_uclamp_removed += se->avg.util_avg_uclamp;
+#endif
 	raw_spin_unlock_irqrestore(&cfs_rq->removed.lock, flags);
 }
 
@@ -6462,6 +6477,11 @@ static void update_se_chain(struct task_struct *p)
 		struct cfs_rq *cfs_rq = cfs_rq_of(se);
 
 		___update_util_avg_uclamp(&cfs_rq->avg, se);
+		if (&rq->cfs == cfs_rq) {
+			rq->root_cfs_util_uclamp = max(rq->root_cfs_util_uclamp,
+						       cfs_rq->avg.util_avg_uclamp);
+			cfs_rq_util_change(cfs_rq, 0);
+		}
 	}
 #endif
 }

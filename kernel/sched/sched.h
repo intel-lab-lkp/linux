@@ -992,6 +992,8 @@ struct rq {
 	/* Utilization clamp values based on CPU's RUNNABLE tasks */
 	struct uclamp_rq	uclamp[UCLAMP_CNT] ____cacheline_aligned;
 	unsigned int		uclamp_flags;
+	unsigned int		root_cfs_util_uclamp;
+	unsigned int		root_cfs_util_uclamp_removed;
 #define UCLAMP_FLAG_IDLE 0x01
 #endif
 

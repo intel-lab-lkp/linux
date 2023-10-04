@@ -267,6 +267,57 @@ ___update_load_avg(struct sched_avg *sa, unsigned long load)
 }
 
 #ifdef CONFIG_UCLAMP_TASK
+static void ___decay_util_avg_uclamp_towards(u64 now,
+					     u64 last_update_time,
+					     u32 period_contrib,
+					     unsigned int *old,
+					     unsigned int new_val)
+{
+	unsigned int old_val = READ_ONCE(*old);
+	u64 delta, periods;
+
+	if (old_val <= new_val) {
+		WRITE_ONCE(*old, new_val);
+		return;
+	}
+
+	if (!last_update_time)
+		return;
+	delta = now - last_update_time;
+	if ((s64)delta < 0)
+		return;
+	delta >>= 10;
+	if (!delta)
+		return;
+
+	delta += period_contrib;
+	periods = delta / 1024;
+	if (periods) {
+		u64 diff = old_val - new_val;
+
+		/*
+		 * Let's assume 3 tasks, A, B and C. A is still on rq but B and
+		 * C have just been dequeued. The cfs.avg.util_avg_uclamp has
+		 * become A but root_cfs_util_uclamp just starts to decay and is
+		 * now still A + B + C.
+		 *
+		 * After p periods with y being the decay factor, the new
+		 * root_cfs_util_uclamp should become
+		 *
+		 * A + B * y^p + C * y^p == A + (A + B + C - A) * y^p
+		 *     == cfs.avg.util_avg_uclamp +
+		 *        (root_cfs_util_uclamp_at_the_start - cfs.avg.util_avg_uclamp) * y^p
+		 *     == cfs.avg.util_avg_uclamp + diff * y^p
+		 *
+		 * So, instead of summing up each individual decayed values, we
+		 * could just decay the diff and not bother with the summation
+		 * at all. This is why we decay the diff here.
+		 */
+		diff = decay_load(diff, periods);
+		WRITE_ONCE(*old, new_val + diff);
+	}
+}
+
 /* avg must belong to the queue this se is on. */
 void ___update_util_avg_uclamp(struct sched_avg *avg, struct sched_entity *se)
 {
@@ -336,17 +387,33 @@ ___update_util_avg_uclamp(struct sched_avg *avg, struct sched_entity *se)
 
 int __update_load_avg_blocked_se(u64 now, struct sched_entity *se)
 {
+	u64 last_update_time = se->avg.last_update_time;
+	u32 period_contrib = se->avg.period_contrib;
+	int ret = 0;
+
 	if (___update_load_sum(now, &se->avg, 0, 0, 0)) {
 		___update_load_avg(&se->avg, se_weight(se));
 		trace_pelt_se_tp(se);
-		return 1;
+		ret = 1;
 	}
 
-	return 0;
+#ifdef CONFIG_UCLAMP_TASK
+	if (entity_is_task(se))
+		___decay_util_avg_uclamp_towards(now,
+						 last_update_time,
+						 period_contrib,
+						 &se->avg.util_avg_uclamp,
+						 0);
+#endif
+	return ret;
 }
 
 int __update_load_avg_se(u64 now, struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
+	u64 last_update_time = se->avg.last_update_time;
+	u32 period_contrib = se->avg.period_contrib;
+	int ret = 0;
+
 	if (___update_load_sum(now, &se->avg, !!se->on_rq, se_runnable(se),
 				cfs_rq->curr == se)) {
 
@@ -354,14 +421,26 @@ int __update_load_avg_se(u64 now, struct cfs_rq *cfs_rq, struct sched_entity *se
 		___update_util_avg_uclamp(&cfs_rq->avg, se);
 		cfs_se_util_change(&se->avg);
 		trace_pelt_se_tp(se);
-		return 1;
+		ret = 1;
 	}
 
-	return 0;
+#ifdef CONFIG_UCLAMP_TASK
+	if (!se->on_rq && entity_is_task(se))
+		___decay_util_avg_uclamp_towards(now,
+						 last_update_time,
+						 period_contrib,
+						 &se->avg.util_avg_uclamp,
+						 0);
+#endif
+	return ret;
 }
 
 int __update_load_avg_cfs_rq(u64 now, struct cfs_rq *cfs_rq)
 {
+	u64 last_update_time = cfs_rq->avg.last_update_time;
+	u32 period_contrib = cfs_rq->avg.period_contrib;
+	int ret = 0;
+
 	if (___update_load_sum(now, &cfs_rq->avg,
 				scale_load_down(cfs_rq->load.weight),
 				cfs_rq->h_nr_running,
@@ -369,10 +448,22 @@ int __update_load_avg_cfs_rq(u64 now, struct cfs_rq *cfs_rq)
 
 		___update_load_avg(&cfs_rq->avg, 1);
 		trace_pelt_cfs_tp(cfs_rq);
-		return 1;
+		ret = 1;
 	}
 
-	return 0;
+#ifdef CONFIG_UCLAMP_TASK
+	if (&rq_of(cfs_rq)->cfs == cfs_rq) {
+		unsigned int target = READ_ONCE(cfs_rq->avg.util_avg_uclamp);
+
+		___decay_util_avg_uclamp_towards(now,
+				last_update_time,
+				period_contrib,
+				&rq_of(cfs_rq)->root_cfs_util_uclamp,
+				target);
+	}
+#endif
+
+	return ret;
 }
 
 /*
