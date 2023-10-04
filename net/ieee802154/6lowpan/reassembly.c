@@ -313,7 +313,6 @@ int lowpan_frag_rcv(struct sk_buff *skb, u8 frag_type)
 	}
 
 err:
-	kfree_skb(skb);
 	return -1;
 }
 
