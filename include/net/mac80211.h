@@ -4854,6 +4854,16 @@ ieee80211_create_tpt_led_trigger(struct ieee80211_hw *hw, unsigned int flags,
 }
 
 /**
+ * ieee80211_tpt_led_trig_trx - report traffic to throughput LED
+ *
+ * @hw: the hardware to count bytes for tpt_led
+ * @tx_bytes: bytes to add to tx
+ * @rx_bytes: bytes to add to rx
+ */
+void ieee80211_tpt_led_trig_trx(struct ieee80211_hw *hw,
+				int tx_bytes, int rx_bytes);
+
+/**
  * ieee80211_unregister_hw - Unregister a hardware device
  *
  * This function instructs mac80211 to free allocated resources

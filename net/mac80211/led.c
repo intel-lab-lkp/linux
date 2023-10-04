@@ -319,6 +319,13 @@ __ieee80211_create_tpt_led_trigger(struct ieee80211_hw *hw,
 }
 EXPORT_SYMBOL(__ieee80211_create_tpt_led_trigger);
 
+void ieee80211_tpt_led_trig_trx(struct ieee80211_hw *hw,
+				int tx_bytes, int rx_bytes)
+{
+	__ieee80211_tpt_led_trig_trx(hw_to_local(hw), tx_bytes, rx_bytes);
+}
+EXPORT_SYMBOL(ieee80211_tpt_led_trig_trx);
+
 static void ieee80211_start_tpt_led_trig(struct ieee80211_local *local)
 {
 	struct tpt_led_trigger *tpt_trig = local->tpt_led_trigger;

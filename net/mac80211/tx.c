@@ -4334,7 +4334,7 @@ void __ieee80211_subif_start_xmit(struct sk_buff *skb,
 	len = 0;
  out:
 	if (len)
-		ieee80211_tpt_led_trig_tx(local, len);
+		ieee80211_tpt_led_trig_trx(&local->hw, len, 0);
 	rcu_read_unlock();
 }
 
@@ -4665,7 +4665,7 @@ static void ieee80211_8023_xmit(struct ieee80211_sub_if_data *sdata,
 	sta->deflink.tx_stats.packets[queue] += skbs;
 	sta->deflink.tx_stats.bytes[queue] += len;
 
-	ieee80211_tpt_led_trig_tx(local, len);
+	ieee80211_tpt_led_trig_trx(&local->hw, len, 0);
 
 	ieee80211_tx_8023(sdata, skb, sta, false);
 
