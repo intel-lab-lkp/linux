@@ -237,15 +237,7 @@ int btrfs_get_raid_extent_offset(struct btrfs_fs_info *fs_info,
 	for (int i = 0; i < num_stripes; i++) {
 		struct btrfs_raid_stride *stride = &stripe_extent->strides[i];
 		u64 devid = btrfs_raid_stride_devid(leaf, stride);
-		u64 len = btrfs_raid_stride_length(leaf, stride);
 		u64 physical = btrfs_raid_stride_physical(leaf, stride);
-
-		if (offset >= len) {
-			offset -= len;
-
-			if (offset >= BTRFS_STRIPE_LEN)
-				continue;
-		}
 
 		if (devid != stripe->dev->devid)
 			continue;
