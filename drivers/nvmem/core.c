@@ -743,6 +743,9 @@ static int nvmem_add_cells_from_dt(struct nvmem_device *nvmem, struct device_nod
 
 static int nvmem_add_cells_from_legacy_of(struct nvmem_device *nvmem)
 {
+	if (!nvmem->dev.of_node)
+		return 0;
+
 	return nvmem_add_cells_from_dt(nvmem, nvmem->dev.of_node);
 }
 
