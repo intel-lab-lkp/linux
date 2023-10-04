@@ -16,9 +16,6 @@
  * bits. Some difficulty arises as the pin's function bit masks for each
  * priority level are frequently not the same (i.e. cannot just flip a bit to
  * change from a high to low priority signal), or even in the same register.
- * Further, not all signals can be unmuxed, as some expressions depend on
- * values in the hardware strapping register (which may be treated as
- * read-only).
  *
  * SoC Multi-function Pin Expression Examples
  * ------------------------------------------
