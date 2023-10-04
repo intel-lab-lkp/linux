@@ -16,6 +16,15 @@
 				clocks = <&ck_icn_p_vdec>;
 				clock-names = "vdec-clk";
 			};
+
+			venc: venc@480e0000 {
+				compatible = "st,stm32mp25-venc";
+				reg = <0x480e0000 0x800>;
+				interrupt-names = "venc";
+				interrupts = <GIC_SPI 167 IRQ_TYPE_LEVEL_HIGH>;
+				clock-names = "venc-clk";
+				clocks = <&ck_icn_ls_mcu>;
+			};
 		};
 	};
 };
