@@ -303,6 +303,10 @@ ifdef CONFIG_64BIT
     endif
   endif
 
+  ifdef CONFIG_USE_XKPHYS
+      KBUILD_SYM32 = n
+  endif
+
   ifeq ($(KBUILD_SYM32), y)
     cflags-$(KBUILD_SYM32) += -msym32 -DKBUILD_64BIT_SYM32
   else

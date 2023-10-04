@@ -65,10 +65,15 @@
 #define XKSSEG			_CONST64_(0x4000000000000000)
 #define XKPHYS			_CONST64_(0x8000000000000000)
 #define XKSEG			_CONST64_(0xc000000000000000)
+#if !defined(CONFIG_USE_XKPHYS)
 #define CKSEG0			_CONST64_(0xffffffff80000000)
 #define CKSEG1			_CONST64_(0xffffffffa0000000)
 #define CKSSEG			_CONST64_(0xffffffffc0000000)
 #define CKSEG3			_CONST64_(0xffffffffe0000000)
+#else
+#define CKSEG0			XKPHYS_CM_CACHED
+#define CKSEG1			XKPHYS_CM_UNCACHED
+#endif /* !defined(CONFIG_USE_XKPHYS) */
 
 #define CKSEG0ADDR(a)		(CPHYSADDR(a) | CKSEG0)
 #define CKSEG1ADDR(a)		(CPHYSADDR(a) | CKSEG1)
@@ -126,8 +131,11 @@
 #define PHYS_TO_XKSEG_UNCACHED(p)	PHYS_TO_XKPHYS(K_CALG_UNCACHED, (p))
 #define PHYS_TO_XKSEG_CACHED(p)		PHYS_TO_XKPHYS(K_CALG_COH_SHAREABLE, (p))
 #define XKPHYS_TO_PHYS(p)		((p) & TO_PHYS_MASK)
-#define PHYS_TO_XKPHYS(cm, a)		(XKPHYS | (_ACAST64_(cm) << 59) | (a))
-
+#define XKPHYS_CM(cm)			(XKPHYS | (_ACAST64_(cm) << 59))
+#define PHYS_TO_XKPHYS(cm, a)		(XKPHYS_CM(cm) | (a))
+#define XKPHYS_CM_CACHED		(XKPHYS_CM(K_CALG_COH_SHAREABLE))
+#define XKPHYS_CM_UNCACHED		(XKPHYS_CM(K_CALG_UNCACHED))
+#define IS_XKPHYS(a)			(((a) >> 62) == 2)
 /*
  * The ultimate limited of the 64-bit MIPS architecture:  2 bits for selecting
  * the region, 3 bits for the CCA mode.  This leaves 59 bits of which the

@@ -16,7 +16,11 @@
  *	access the videoram directly without any black magic.
  */
 
+#if defined(CONFIG_USE_XKPHYS)
+#define VGA_MAP_MEM(x, s)	UNCAC_ADDR(0x10000000L + (unsigned long)(x))
+#else
 #define VGA_MAP_MEM(x, s)	CKSEG1ADDR(0x10000000L + (unsigned long)(x))
+#endif
 
 #define vga_readb(x)	(*(x))
 #define vga_writeb(x, y)	(*(y) = (x))

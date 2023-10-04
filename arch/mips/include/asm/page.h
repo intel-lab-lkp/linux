@@ -176,7 +176,11 @@ static inline unsigned long ___pa(unsigned long x)
 		 * the compatibility segements ckseg0 or ckseg1, or it may
 		 * be in xkphys.
 		 */
+#if defined(CONFIG_USE_XKPHYS)
+		return XPHYSADDR(x);
+#else
 		return x < CKSEG0 ? XPHYSADDR(x) : CPHYSADDR(x);
+#endif
 	}
 
 	if (!IS_ENABLED(CONFIG_EVA)) {
@@ -196,7 +200,11 @@ static inline unsigned long ___pa(unsigned long x)
 	return x - PAGE_OFFSET + PHYS_OFFSET;
 }
 #define __pa(x)		___pa((unsigned long)(x))
+#if IS_ENABLED(CONFIG_64BIT) && IS_ENABLED(CONFIG_USE_XKPHYS)
+#define __va(x)		((void *)PHYS_TO_XKSEG_CACHED(x))
+#else
 #define __va(x)		((void *)((unsigned long)(x) + PAGE_OFFSET - PHYS_OFFSET))
+#endif
 #include <asm/io.h>
 
 /*
@@ -238,6 +246,8 @@ static inline unsigned long kaslr_offset(void)
 {
 	return __kaslr_offset;
 }
+
+#define UNCAC_ADDR(addr)       (UNCAC_BASE + __pa(addr))
 
 #include <asm-generic/memory_model.h>
 #include <asm-generic/getorder.h>

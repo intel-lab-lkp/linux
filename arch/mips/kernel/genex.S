@@ -272,11 +272,25 @@ NESTED(except_vec_vi, 0, sp)
 	.set	push
 	.set	noreorder
 	PTR_LA	v1, except_vec_vi_handler
+#if defined(CONFIG_USE_XKPHYS)
+FEXPORT(except_vec_vi_63_48)
+	lui	v0, 0		/* Patched - bits 63:48 */
+FEXPORT(except_vec_vi_47_32)
+	ori	v0, 0		/* Patched - bits 47:32 */
+	dsll	v0, v0, 0x10
+FEXPORT(except_vec_vi_31_16)
+	ori	v0, 0		/* Patched - bits 31:16 */
+	dsll	v0, v0, 0x10
+	jr	v1
+FEXPORT(except_vec_vi_15_0)
+	ori	v0, 0		/* Patched - bits 15:0 */
+#else /* defined(CONFIG_USE_XKPHYS) */
 FEXPORT(except_vec_vi_lui)
 	lui	v0, 0		/* Patched */
 	jr	v1
 FEXPORT(except_vec_vi_ori)
 	 ori	v0, 0		/* Patched */
+#endif /* defined(CONFIG_USE_XKPHYS) */
 	.set	pop
 	END(except_vec_vi)
 EXPORT(except_vec_vi_end)

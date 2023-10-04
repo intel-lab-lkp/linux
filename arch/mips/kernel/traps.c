@@ -2091,11 +2091,20 @@ static void *set_vi_srs_handler(int n, vi_handler_t addr, int srs)
 		 * If no shadow set is selected then use the default handler
 		 * that does normal register saving and standard interrupt exit
 		 */
-		extern const u8 except_vec_vi[], except_vec_vi_lui[];
-		extern const u8 except_vec_vi_ori[], except_vec_vi_end[];
+		extern const u8 except_vec_vi[], except_vec_vi_end[];
 		extern const u8 rollback_except_vec_vi[];
 		const u8 *vec_start = using_rollback_handler() ?
 				      rollback_except_vec_vi : except_vec_vi;
+		const int handler_len = except_vec_vi_end - vec_start;
+#if defined(CONFIG_USE_XKPHYS)
+		extern const u8 except_vec_vi_63_48[], except_vec_vi_47_32[];
+		extern const u8 except_vec_vi_31_16[], except_vec_vi_15_0[];
+		const int offset_63_48 = except_vec_vi_63_48 - vec_start;
+		const int offset_47_32 = except_vec_vi_47_32 - vec_start;
+		const int offset_31_16 = except_vec_vi_31_16 - vec_start;
+		const int offset_15_0  = except_vec_vi_15_0  - vec_start;
+#else /* defined(CONFIG_USE_XKPHYS) */
+		extern const u8 except_vec_vi_lui[], except_vec_vi_ori[];
 #if defined(CONFIG_CPU_MICROMIPS) || defined(CONFIG_CPU_BIG_ENDIAN)
 		const int lui_offset = except_vec_vi_lui - vec_start + 2;
 		const int ori_offset = except_vec_vi_ori - vec_start + 2;
@@ -2103,7 +2112,7 @@ static void *set_vi_srs_handler(int n, vi_handler_t addr, int srs)
 		const int lui_offset = except_vec_vi_lui - vec_start;
 		const int ori_offset = except_vec_vi_ori - vec_start;
 #endif
-		const int handler_len = except_vec_vi_end - vec_start;
+#endif /* defined(CONFIG_USE_XKPHYS) */
 
 		if (handler_len > VECTORSPACING) {
 			/*
@@ -2119,10 +2128,21 @@ static void *set_vi_srs_handler(int n, vi_handler_t addr, int srs)
 #else
 				handler_len);
 #endif
+#if defined(CONFIG_USE_XKPHYS)
+		h = (u16 *)(b + offset_63_48);
+		*h = (handler >> 48) & 0xffff;
+		h = (u16 *)(b + offset_47_32);
+		*h = (handler >> 32) & 0xffff;
+		h = (u16 *)(b + offset_31_16);
+		*h = (handler >> 16) & 0xffff;
+		h = (u16 *)(b + offset_15_0);
+		*h = (handler >> 0) & 0xffff;
+#else /* defined(CONFIG_USE_XKPHYS) */
 		h = (u16 *)(b + lui_offset);
 		*h = (handler >> 16) & 0xffff;
 		h = (u16 *)(b + ori_offset);
 		*h = (handler & 0xffff);
+#endif /* defined(CONFIG_USE_XKPHYS) */
 		local_flush_icache_range((unsigned long)b,
 					 (unsigned long)(b+handler_len));
 	}
@@ -2332,7 +2352,11 @@ static const char panic_null_cerr[] =
 void set_uncached_handler(unsigned long offset, void *addr,
 	unsigned long size)
 {
+#if IS_ENABLED(CONFIG_64BIT) && IS_ENABLED(CONFIG_USE_XKPHYS)
+	unsigned long uncached_ebase = UNCAC_ADDR(ebase);
+#else
 	unsigned long uncached_ebase = CKSEG1ADDR(ebase);
+#endif
 
 	if (!addr)
 		panic(panic_null_cerr);
@@ -2384,9 +2408,11 @@ void __init trap_init(void)
 		 * EVA is special though as it allows segments to be rearranged
 		 * and to become uncached during cache error handling.
 		 */
+#if !defined(CONFIG_USE_XKPHYS)
 		if (!IS_ENABLED(CONFIG_EVA) && !WARN_ON(ebase_pa >= 0x20000000))
 			ebase = CKSEG0ADDR(ebase_pa);
 		else
+#endif
 			ebase = (unsigned long)phys_to_virt(ebase_pa);
 	}
 

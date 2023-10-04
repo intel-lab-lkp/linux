@@ -554,7 +554,11 @@ LEAF(mips_cps_cache_init)
 	mul	t1, t1, t0
 	mul	t1, t1, t2
 
+#if defined(CONFIG_USE_XKPHYS)
+	PTR_LI	a0, XKPHYS_CM_CACHED
+#else
 	li	a0, CKSEG0
+#endif
 	PTR_ADD	a1, a0, t1
 1:	cache	Index_Store_Tag_I, 0(a0)
 	PTR_ADD	a0, a0, t0
@@ -581,7 +585,11 @@ icache_done:
 	mul	t1, t1, t0
 	mul	t1, t1, t2
 
+#if defined(CONFIG_USE_XKPHYS)
+	PTR_LI	a0, XKPHYS_CM_CACHED
+#else
 	li	a0, CKSEG0
+#endif
 	PTR_ADDU a1, a0, t1
 	PTR_SUBU a1, a1, t0
 1:	cache	Index_Store_Tag_D, 0(a0)

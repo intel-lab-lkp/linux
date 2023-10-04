@@ -427,7 +427,7 @@ void __init paging_init(void)
 	free_area_init(max_zone_pfns);
 }
 
-#ifdef CONFIG_64BIT
+#if defined(CONFIG_64BIT) && !defined(CONFIG_USE_XKPHYS)
 static struct kcore_list kcore_kseg0;
 #endif
 
@@ -470,7 +470,7 @@ void __init mem_init(void)
 	setup_zero_pages();	/* Setup zeroed pages.  */
 	mem_init_free_highmem();
 
-#ifdef CONFIG_64BIT
+#if defined(CONFIG_64BIT) && !defined(CONFIG_USE_XKPHYS)
 	if ((unsigned long) &_text > (unsigned long) CKSEG0)
 		/* The -4 is a hack so that user tools don't have to handle
 		   the overflow.  */

@@ -44,6 +44,10 @@ unsigned long run_uncached(void *func)
 
 	__asm__("move %0, $sp" : "=r" (sp));
 
+#if defined(CONFIG_USE_XKPHYS)
+	if (IS_XKPHYS(sp))
+		usp = UNCAC_ADDR(sp);
+#else /* defined(CONFIG_USE_XKPHYS) */
 	if (sp >= (long)CKSEG0 && sp < (long)CKSEG2)
 		usp = CKSEG1ADDR(sp);
 #ifdef CONFIG_64BIT
@@ -52,10 +56,15 @@ unsigned long run_uncached(void *func)
 		usp = PHYS_TO_XKPHYS(K_CALG_UNCACHED,
 				     XKPHYS_TO_PHYS((long long)sp));
 #endif
+#endif /* defined(CONFIG_USE_XKPHYS) */
 	else {
 		BUG();
 		usp = sp;
 	}
+#if defined(CONFIG_USE_XKPHYS)
+	if (IS_XKPHYS(lfunc))
+		ufunc = UNCAC_ADDR(lfunc);
+#else /* defined(CONFIG_USE_XKPHYS) */
 	if (lfunc >= (long)CKSEG0 && lfunc < (long)CKSEG2)
 		ufunc = CKSEG1ADDR(lfunc);
 #ifdef CONFIG_64BIT
@@ -64,6 +73,7 @@ unsigned long run_uncached(void *func)
 		ufunc = PHYS_TO_XKPHYS(K_CALG_UNCACHED,
 				       XKPHYS_TO_PHYS((long long)lfunc));
 #endif
+#endif /* defined(CONFIG_USE_XKPHYS) */
 	else {
 		BUG();
 		ufunc = lfunc;

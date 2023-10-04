@@ -2026,6 +2026,21 @@ config 64BIT
 
 endchoice
 
+config USE_XKPHYS
+	bool "use virtual address from XKPHYS"
+	depends on 64BIT
+	default n
+	help
+	 By default, MIPS uses 32-bit compatible segments KSEG0 and KSEG1
+	 to trivially map first 1/2 GByte of physical memory. This mean,
+	 one should have memory installed in this area in order for Linux to
+	 work. With this option selected, kernel uses virtual addresses from
+	 the XKPHYS segment for both cached and uncached access. XKPHYS allows
+	 to access 2^48 bytes of memory, thus allowing to work with any memory
+	 configuration.
+
+	 Say N if not sure
+
 config MIPS_VA_BITS_48
 	bool "48 bits virtual memory"
 	depends on 64BIT

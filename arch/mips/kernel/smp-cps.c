@@ -34,10 +34,33 @@ static unsigned __init core_vpe_count(unsigned int cluster, unsigned core)
 	return min(smp_max_threads, mips_cps_numvps(cluster, core));
 }
 
+/**
+ * plat_core_entry - query reset vector for NMI/reset
+ *
+ * Returns low 32 bits of the reset vector
+ *
+ * This is used to fill 2 registers:
+ * - BEV Base (GCR_BEV_BASE) Offset: 0x0680
+ * - VP Local Reset Exception Base (GCR_CL_RESET_BASE,GCR_CO_RESET_BASE)
+ *   Offset: 0x0020 (0x2020 relative to GCR_BASE_ADDR)
+ *
+ * In both registers, BIT(1) should be set in case it uses address in XKPHYS
+ * (as opposed to KSEG1). This bit defined as CM_GCR_Cx_RESET_BASE_MODE,
+ * using it unconditionally because for GCR_BEV_BASE its value is the same
+ */
+static u32 plat_core_entry(void)
+{
+#if defined(CONFIG_USE_XKPHYS)
+	return (UNCAC_ADDR(mips_cps_core_entry) & 0xffffffff)
+			| CM_GCR_Cx_RESET_BASE_MODE;
+#else
+	return CKSEG1ADDR((unsigned long)mips_cps_core_entry);
+#endif
+}
+
 static void __init cps_smp_setup(void)
 {
 	unsigned int nclusters, ncores, nvpes, core_vpes;
-	unsigned long core_entry;
 	int cl, c, v;
 
 	/* Detect & record VPE topology */
@@ -94,10 +117,8 @@ static void __init cps_smp_setup(void)
 	/* Make core 0 coherent with everything */
 	write_gcr_cl_coherence(0xff);
 
-	if (mips_cm_revision() >= CM_REV_CM3) {
-		core_entry = CKSEG1ADDR((unsigned long)mips_cps_core_entry);
-		write_gcr_bev_base(core_entry);
-	}
+	if (mips_cm_revision() >= CM_REV_CM3)
+		write_gcr_bev_base(plat_core_entry());
 
 #ifdef CONFIG_MIPS_MT_FPAFF
 	/* If we have an FPU, enroll ourselves in the FPU-full mask */
@@ -213,7 +234,7 @@ static void boot_core(unsigned int core, unsigned int vpe_id)
 	mips_cm_lock_other(0, core, 0, CM_GCR_Cx_OTHER_BLOCK_LOCAL);
 
 	/* Set its reset vector */
-	write_gcr_co_reset_base(CKSEG1ADDR((unsigned long)mips_cps_core_entry));
+	write_gcr_co_reset_base(plat_core_entry());
 
 	/* Ensure its coherency is disabled */
 	write_gcr_co_coherence(0);
@@ -290,7 +311,6 @@ static int cps_boot_secondary(int cpu, struct task_struct *idle)
 	unsigned vpe_id = cpu_vpe_id(&cpu_data[cpu]);
 	struct core_boot_config *core_cfg = &mips_cps_core_bootcfg[core];
 	struct vpe_boot_config *vpe_cfg = &core_cfg->vpe_config[vpe_id];
-	unsigned long core_entry;
 	unsigned int remote;
 	int err;
 
@@ -314,8 +334,7 @@ static int cps_boot_secondary(int cpu, struct task_struct *idle)
 
 	if (cpu_has_vp) {
 		mips_cm_lock_other(0, core, vpe_id, CM_GCR_Cx_OTHER_BLOCK_LOCAL);
-		core_entry = CKSEG1ADDR((unsigned long)mips_cps_core_entry);
-		write_gcr_co_reset_base(core_entry);
+		write_gcr_co_reset_base(plat_core_entry());
 		mips_cm_unlock_other();
 	}
 

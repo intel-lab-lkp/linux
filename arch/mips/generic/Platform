@@ -12,7 +12,12 @@
 cflags-$(CONFIG_MACH_INGENIC_SOC)	+= -I$(srctree)/arch/mips/include/asm/mach-ingenic
 cflags-$(CONFIG_MIPS_GENERIC)	+= -I$(srctree)/arch/mips/include/asm/mach-generic
 
+ifndef (CONFIG_USE_XKPHYS)
 load-$(CONFIG_MIPS_GENERIC)	+= 0xffffffff80100000
+else
+load-$(CONFIG_MIPS_GENERIC)	+= 0xa800000080100000
+endif
+
 all-$(CONFIG_MIPS_GENERIC)	+= vmlinux.gz.itb
 
 its-y					:= vmlinux.its.S
