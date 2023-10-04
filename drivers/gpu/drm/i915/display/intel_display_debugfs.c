@@ -43,11 +43,15 @@ static int i915_frontbuffer_tracking(struct seq_file *m, void *unused)
 {
 	struct drm_i915_private *dev_priv = node_to_i915(m->private);
 
+	spin_lock(&dev_priv->display.fb_tracking.lock);
+
 	seq_printf(m, "FB tracking busy bits: 0x%08x\n",
 		   dev_priv->display.fb_tracking.busy_bits);
 
 	seq_printf(m, "FB tracking flip bits: 0x%08x\n",
 		   dev_priv->display.fb_tracking.flip_bits);
+
+	spin_unlock(&dev_priv->display.fb_tracking.lock);
 
 	return 0;
 }
@@ -641,6 +645,7 @@ static int i915_display_info(struct seq_file *m, void *unused)
 static int i915_shared_dplls_info(struct seq_file *m, void *unused)
 {
 	struct drm_i915_private *dev_priv = node_to_i915(m->private);
+	struct intel_shared_dpll *pll;
 	int i;
 
 	drm_modeset_lock_all(&dev_priv->drm);
@@ -649,11 +654,9 @@ static int i915_shared_dplls_info(struct seq_file *m, void *unused)
 		   dev_priv->display.dpll.ref_clks.nssc,
 		   dev_priv->display.dpll.ref_clks.ssc);
 
-	for (i = 0; i < dev_priv->display.dpll.num_shared_dpll; i++) {
-		struct intel_shared_dpll *pll = &dev_priv->display.dpll.shared_dplls[i];
-
-		seq_printf(m, "DPLL%i: %s, id: %i\n", i, pll->info->name,
-			   pll->info->id);
+	for_each_shared_dpll(dev_priv, pll, i) {
+		seq_printf(m, "DPLL%i: %s, id: %i\n", pll->index,
+			   pll->info->name, pll->info->id);
 		seq_printf(m, " pipe_mask: 0x%x, active: 0x%x, on: %s\n",
 			   pll->state.pipe_mask, pll->active_mask,
 			   str_yes_no(pll->on));
