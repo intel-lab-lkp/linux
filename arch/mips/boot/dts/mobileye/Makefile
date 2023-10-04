@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-only
 # Copyright 2023 Mobileye Vision Technologies Ltd.
 
+dtb-$(CONFIG_SOC_EYEQ5)		+= eyeq5-epm5.dtb
+
 obj-$(CONFIG_BUILTIN_DTB)	+= $(addsuffix .o, $(dtb-y))
