@@ -972,6 +972,10 @@ struct perf_cpu_pmu_context {
 	struct perf_event_pmu_context	epc;
 	struct perf_event_pmu_context	*task_epc;
 
+#ifdef CONFIG_CGROUP_PERF
+	struct list_head		cgrp_ctx_entry;
+#endif
+
 	struct list_head		sched_cb_entry;
 	int				sched_cb_usage;
 
@@ -994,6 +998,7 @@ struct perf_cpu_context {
 
 #ifdef CONFIG_CGROUP_PERF
 	struct perf_cgroup		*cgrp;
+	struct list_head		cgrp_ctx_list;
 #endif
 
 	/*

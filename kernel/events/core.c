@@ -700,10 +700,72 @@ static void perf_ctx_enable(struct perf_event_context *ctx)
 		perf_pmu_enable(pmu_ctx->pmu);
 }
 
+static int __ctx_sched_out(struct perf_event_context *ctx, enum event_type_t event_type);
 static void ctx_sched_out(struct perf_event_context *ctx, enum event_type_t event_type);
+static int __ctx_sched_in(struct perf_event_context *ctx, enum event_type_t event_type);
 static void ctx_sched_in(struct perf_event_context *ctx, enum event_type_t event_type);
+static void __pmu_ctx_sched_out(struct perf_event_pmu_context *pmu_ctx,
+				enum event_type_t event_type);
+static void ctx_pinned_sched_in(struct perf_event_context *ctx, struct pmu *pmu);
+static void ctx_flexible_sched_in(struct perf_event_context *ctx, struct pmu *pmu);
 
 #ifdef CONFIG_CGROUP_PERF
+
+static void perf_cgrp_ctx_disable(struct perf_event_context *ctx)
+{
+	struct perf_cpu_context *cpuctx;
+	struct perf_cpu_pmu_context *cpc;
+
+	cpuctx = container_of(ctx, struct perf_cpu_context, ctx);
+	list_for_each_entry(cpc, &cpuctx->cgrp_ctx_list, cgrp_ctx_entry)
+		perf_pmu_disable(cpc->epc.pmu);
+}
+
+static void perf_cgrp_ctx_enable(struct perf_event_context *ctx)
+{
+	struct perf_cpu_context *cpuctx;
+	struct perf_cpu_pmu_context *cpc;
+
+	cpuctx = container_of(ctx, struct perf_cpu_context, ctx);
+	list_for_each_entry(cpc, &cpuctx->cgrp_ctx_list, cgrp_ctx_entry)
+		perf_pmu_enable(cpc->epc.pmu);
+}
+
+static void cgrp_ctx_sched_out(struct perf_cpu_context *cpuctx,
+			       enum event_type_t event_type)
+{
+	struct perf_cpu_pmu_context *cpc;
+	int is_active = __ctx_sched_out(&cpuctx->ctx, event_type);
+
+	if (is_active < 0)
+		return;
+
+	list_for_each_entry(cpc, &cpuctx->cgrp_ctx_list, cgrp_ctx_entry)
+		__pmu_ctx_sched_out(&cpc->epc, is_active);
+}
+
+static void cgrp_ctx_sched_in(struct perf_cpu_context *cpuctx,
+			      enum event_type_t event_type)
+{
+	struct perf_cpu_pmu_context *cpc;
+	int is_active = __ctx_sched_in(&cpuctx->ctx, event_type);
+
+	if (is_active < 0)
+		return;
+
+	list_for_each_entry(cpc, &cpuctx->cgrp_ctx_list, cgrp_ctx_entry) {
+		/*
+		 * First go through the list and put on any pinned groups
+		 * in order to give them the best chance of going on.
+		 */
+		if (is_active & EVENT_PINNED)
+			ctx_pinned_sched_in(&cpuctx->ctx, cpc->epc.pmu);
+
+		/* Then walk through the lower prio flexible groups */
+		if (is_active & EVENT_FLEXIBLE)
+			ctx_flexible_sched_in(&cpuctx->ctx, cpc->epc.pmu);
+	}
+}
 
 static inline bool
 perf_cgroup_match(struct perf_event *event)
@@ -856,9 +918,9 @@ static void perf_cgroup_switch(struct task_struct *task)
 		return;
 
 	perf_ctx_lock(cpuctx, cpuctx->task_ctx);
-	perf_ctx_disable(&cpuctx->ctx);
+	perf_cgrp_ctx_disable(&cpuctx->ctx);
 
-	ctx_sched_out(&cpuctx->ctx, EVENT_ALL);
+	cgrp_ctx_sched_out(cpuctx, EVENT_ALL);
 	/*
 	 * must not be done before ctxswout due
 	 * to update_cgrp_time_from_cpuctx() in
@@ -870,9 +932,9 @@ static void perf_cgroup_switch(struct task_struct *task)
 	 * perf_cgroup_set_timestamp() in ctx_sched_in()
 	 * to not have to pass task around
 	 */
-	ctx_sched_in(&cpuctx->ctx, EVENT_ALL);
+	cgrp_ctx_sched_in(cpuctx, EVENT_ALL);
 
-	perf_ctx_enable(&cpuctx->ctx);
+	perf_cgrp_ctx_enable(&cpuctx->ctx);
 	perf_ctx_unlock(cpuctx, cpuctx->task_ctx);
 }
 
@@ -961,6 +1023,7 @@ static inline void
 perf_cgroup_event_enable(struct perf_event *event, struct perf_event_context *ctx)
 {
 	struct perf_cpu_context *cpuctx;
+	struct perf_cpu_pmu_context *cpc;
 
 	if (!is_cgroup_event(event))
 		return;
@@ -975,12 +1038,16 @@ perf_cgroup_event_enable(struct perf_event *event, struct perf_event_context *ct
 		return;
 
 	cpuctx->cgrp = perf_cgroup_from_task(current, ctx);
+
+	cpc = container_of(event->pmu_ctx, struct perf_cpu_pmu_context, epc);
+	list_add(&cpc->cgrp_ctx_entry, &cpuctx->cgrp_ctx_list);
 }
 
 static inline void
 perf_cgroup_event_disable(struct perf_event *event, struct perf_event_context *ctx)
 {
 	struct perf_cpu_context *cpuctx;
+	struct perf_cpu_pmu_context *cpc;
 
 	if (!is_cgroup_event(event))
 		return;
@@ -995,6 +1062,9 @@ perf_cgroup_event_disable(struct perf_event *event, struct perf_event_context *c
 		return;
 
 	cpuctx->cgrp = NULL;
+
+	cpc = container_of(event->pmu_ctx, struct perf_cpu_pmu_context, epc);
+	list_del(&cpc->cgrp_ctx_entry);
 }
 
 #else /* !CONFIG_CGROUP_PERF */
@@ -3238,11 +3308,10 @@ static void __pmu_ctx_sched_out(struct perf_event_pmu_context *pmu_ctx,
 	perf_pmu_enable(pmu);
 }
 
-static void
-ctx_sched_out(struct perf_event_context *ctx, enum event_type_t event_type)
+static int
+__ctx_sched_out(struct perf_event_context *ctx, enum event_type_t event_type)
 {
 	struct perf_cpu_context *cpuctx = this_cpu_ptr(&perf_cpu_context);
-	struct perf_event_pmu_context *pmu_ctx;
 	int is_active = ctx->is_active;
 
 	lockdep_assert_held(&ctx->lock);
@@ -3254,7 +3323,7 @@ ctx_sched_out(struct perf_event_context *ctx, enum event_type_t event_type)
 		WARN_ON_ONCE(ctx->is_active);
 		if (ctx->task)
 			WARN_ON_ONCE(cpuctx->task_ctx);
-		return;
+		return -1;
 	}
 
 	/*
@@ -3289,6 +3358,18 @@ ctx_sched_out(struct perf_event_context *ctx, enum event_type_t event_type)
 	}
 
 	is_active ^= ctx->is_active; /* changed bits */
+
+	return is_active;
+}
+
+static void
+ctx_sched_out(struct perf_event_context *ctx, enum event_type_t event_type)
+{
+	struct perf_event_pmu_context *pmu_ctx;
+	int is_active = __ctx_sched_out(ctx, event_type);
+
+	if (is_active < 0)
+		return;
 
 	list_for_each_entry(pmu_ctx, &ctx->pmu_ctx_list, pmu_ctx_entry)
 		__pmu_ctx_sched_out(pmu_ctx, is_active);
@@ -3861,8 +3942,8 @@ static void __pmu_ctx_sched_in(struct perf_event_context *ctx, struct pmu *pmu)
 	ctx_flexible_sched_in(ctx, pmu);
 }
 
-static void
-ctx_sched_in(struct perf_event_context *ctx, enum event_type_t event_type)
+static int
+__ctx_sched_in(struct perf_event_context *ctx, enum event_type_t event_type)
 {
 	struct perf_cpu_context *cpuctx = this_cpu_ptr(&perf_cpu_context);
 	int is_active = ctx->is_active;
@@ -3870,7 +3951,7 @@ ctx_sched_in(struct perf_event_context *ctx, enum event_type_t event_type)
 	lockdep_assert_held(&ctx->lock);
 
 	if (likely(!ctx->nr_events))
-		return;
+		return -1;
 
 	if (!(is_active & EVENT_TIME)) {
 		/* start ctx time */
@@ -3892,6 +3973,17 @@ ctx_sched_in(struct perf_event_context *ctx, enum event_type_t event_type)
 	}
 
 	is_active ^= ctx->is_active; /* changed bits */
+
+	return is_active;
+}
+
+static void
+ctx_sched_in(struct perf_event_context *ctx, enum event_type_t event_type)
+{
+	int is_active = __ctx_sched_in(ctx, event_type);
+
+	if (is_active < 0)
+		return;
 
 	/*
 	 * First go through the list and put on any pinned groups
@@ -13541,6 +13633,9 @@ static void __init perf_event_init_all_cpus(void)
 		cpuctx->online = cpumask_test_cpu(cpu, perf_online_mask);
 		cpuctx->heap_size = ARRAY_SIZE(cpuctx->heap_default);
 		cpuctx->heap = cpuctx->heap_default;
+#ifdef CONFIG_CGROUP_PERF
+		INIT_LIST_HEAD(&cpuctx->cgrp_ctx_list);
+#endif
 	}
 }
 
