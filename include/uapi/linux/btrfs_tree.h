@@ -737,8 +737,6 @@ struct btrfs_raid_stride {
 	__le64 devid;
 	/* The physical location on disk. */
 	__le64 physical;
-	/* The length of stride on this disk. */
-	__le64 length;
 } __attribute__ ((__packed__));
 
 /* The stripe_extent::encoding, 1:1 mapping of enum btrfs_raid_types. */
