@@ -26,4 +26,7 @@ static inline u32 intel_gt_next_invalidate_tlb_full(const struct intel_gt *gt)
 	return intel_gt_tlb_seqno(gt) | 1;
 }
 
+void intel_gt_tlb_suspend_all(struct drm_i915_private *i915);
+void intel_gt_tlb_resume_all(struct drm_i915_private *i915);
+
 #endif /* INTEL_TLB_H */
