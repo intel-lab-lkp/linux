@@ -429,6 +429,20 @@ config GDB_SCRIPTS
 	  instance. See Documentation/dev-tools/gdb-kernel-debugging.rst
 	  for further details.
 
+config DEBUG_INFO_IKCONFIG
+	bool "Embed KConfig in debuginfo, if not already present"
+	depends on IKCONFIG!=y
+	help
+	  This provides the gzip-compressed KConfig information in an ELF
+	  section called .ikconfig which will be stripped out of the final
+	  bootable image, but remain in the debuginfo. Debuggers that are aware
+	  of this can use this to customize their behavior to the kernel
+	  configuration, without requiring the configuration information to be
+	  stored in the kernel like CONFIG_IKCONFIG does. This configuration is
+	  unnecessary when CONFIG_IKCONFIG is enabled, since the data can be
+	  found in the .rodata section in that case (see
+	  scripts/extract-ikconfig).
+
 endif # DEBUG_INFO
 
 config FRAME_WARN

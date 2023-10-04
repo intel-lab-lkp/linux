@@ -138,6 +138,7 @@ KCSAN_SANITIZE_stackleak.o := n
 KCOV_INSTRUMENT_stackleak.o := n
 
 obj-$(CONFIG_SCF_TORTURE_TEST) += scftorture.o
+obj-$(CONFIG_DEBUG_INFO_IKCONFIG) += configs-debug.o
 
 $(obj)/configs.o: $(obj)/config_data.gz
 
