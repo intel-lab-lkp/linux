@@ -7401,10 +7401,12 @@ int sched_core_idle_cpu(int cpu)
  * The DL bandwidth number otoh is not a measured metric but a value computed
  * based on the task model parameters and gives the minimal utilization
  * required to meet deadlines.
+ *
+ * The util_cfs parameter has already taken uclamp into account (unless uclamp
+ * support is not compiled in).
  */
 unsigned long effective_cpu_util(int cpu, unsigned long util_cfs,
-				 enum cpu_util_type type,
-				 struct task_struct *p)
+				 enum cpu_util_type type)
 {
 	unsigned long dl_util, util, irq, max;
 	struct rq *rq = cpu_rq(cpu);
@@ -7438,8 +7440,6 @@ unsigned long effective_cpu_util(int cpu, unsigned long util_cfs,
 	 * frequency will be gracefully reduced with the utilization decay.
 	 */
 	util = util_cfs + cpu_util_rt(rq);
-	if (type == FREQUENCY_UTIL)
-		util = uclamp_rq_util_with(rq, util, p);
 
 	dl_util = cpu_util_dl(rq);
 
@@ -7492,7 +7492,7 @@ unsigned long effective_cpu_util(int cpu, unsigned long util_cfs,
 
 unsigned long sched_cpu_util(int cpu)
 {
-	return effective_cpu_util(cpu, cpu_util_cfs(cpu), ENERGY_UTIL, NULL);
+	return effective_cpu_util(cpu, cpu_util_cfs(cpu), ENERGY_UTIL);
 }
 #endif /* CONFIG_SMP */
 

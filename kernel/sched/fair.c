@@ -4573,10 +4573,17 @@ static inline unsigned long cfs_rq_load_avg(struct cfs_rq *cfs_rq)
 
 static int newidle_balance(struct rq *this_rq, struct rq_flags *rf);
 
+#ifdef CONFIG_UCLAMP_TASK
+static inline unsigned long task_util(struct task_struct *p)
+{
+	return READ_ONCE(p->se.avg.util_avg_uclamp);
+}
+#else
 static inline unsigned long task_util(struct task_struct *p)
 {
 	return READ_ONCE(p->se.avg.util_avg);
 }
+#endif
 
 static inline unsigned long _task_util_est(struct task_struct *p)
 {
@@ -4589,22 +4596,6 @@ static inline unsigned long task_util_est(struct task_struct *p)
 {
 	return max(task_util(p), _task_util_est(p));
 }
-
-#ifdef CONFIG_UCLAMP_TASK
-static inline unsigned long uclamp_task_util(struct task_struct *p,
-					     unsigned long uclamp_min,
-					     unsigned long uclamp_max)
-{
-	return clamp(task_util_est(p), uclamp_min, uclamp_max);
-}
-#else
-static inline unsigned long uclamp_task_util(struct task_struct *p,
-					     unsigned long uclamp_min,
-					     unsigned long uclamp_max)
-{
-	return task_util_est(p);
-}
-#endif
 
 static inline void util_est_enqueue(struct cfs_rq *cfs_rq,
 				    struct task_struct *p)
@@ -7469,11 +7460,13 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
 static unsigned long
 cpu_util(int cpu, struct task_struct *p, int dst_cpu, int boost)
 {
-	struct cfs_rq *cfs_rq = &cpu_rq(cpu)->cfs;
-	unsigned long util = READ_ONCE(cfs_rq->avg.util_avg);
+	struct rq *rq = cpu_rq(cpu);
+	struct cfs_rq *cfs_rq = &rq->cfs;
+	unsigned long util = root_cfs_util(rq);
+	bool capped = uclamp_rq_is_capped(rq);
 	unsigned long runnable;
 
-	if (boost) {
+	if (boost && !capped) {
 		runnable = READ_ONCE(cfs_rq->avg.runnable_avg);
 		util = max(util, runnable);
 	}
@@ -7630,7 +7623,7 @@ static inline void eenv_pd_busy_time(struct energy_env *eenv,
 	for_each_cpu(cpu, pd_cpus) {
 		unsigned long util = cpu_util(cpu, p, -1, 0);
 
-		busy_time += effective_cpu_util(cpu, util, ENERGY_UTIL, NULL);
+		busy_time += effective_cpu_util(cpu, util, ENERGY_UTIL);
 	}
 
 	eenv->pd_busy_time = min(eenv->pd_cap, busy_time);
@@ -7651,7 +7644,6 @@ eenv_pd_max_util(struct energy_env *eenv, struct cpumask *pd_cpus,
 	int cpu;
 
 	for_each_cpu(cpu, pd_cpus) {
-		struct task_struct *tsk = (cpu == dst_cpu) ? p : NULL;
 		unsigned long util = cpu_util(cpu, p, dst_cpu, 1);
 		unsigned long eff_util;
 
@@ -7662,7 +7654,7 @@ eenv_pd_max_util(struct energy_env *eenv, struct cpumask *pd_cpus,
 		 * NOTE: in case RT tasks are running, by default the
 		 * FREQUENCY_UTIL's utilization can be max OPP.
 		 */
-		eff_util = effective_cpu_util(cpu, util, FREQUENCY_UTIL, tsk);
+		eff_util = effective_cpu_util(cpu, util, FREQUENCY_UTIL);
 		max_util = max(max_util, eff_util);
 	}
 
@@ -7759,7 +7751,7 @@ static int find_energy_efficient_cpu(struct task_struct *p, int prev_cpu)
 	target = prev_cpu;
 
 	sync_entity_load_avg(&p->se);
-	if (!uclamp_task_util(p, p_util_min, p_util_max))
+	if (!task_util_est(p))
 		goto unlock;
 
 	eenv_task_busy_time(&eenv, p, prev_cpu);

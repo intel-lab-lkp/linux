@@ -159,8 +159,7 @@ static void sugov_get_util(struct sugov_cpu *sg_cpu)
 	struct rq *rq = cpu_rq(sg_cpu->cpu);
 
 	sg_cpu->bw_dl = cpu_bw_dl(rq);
-	sg_cpu->util = effective_cpu_util(sg_cpu->cpu, util,
-					  FREQUENCY_UTIL, NULL);
+	sg_cpu->util = effective_cpu_util(sg_cpu->cpu, util, FREQUENCY_UTIL);
 }
 
 /**
@@ -282,7 +281,11 @@ static void sugov_iowait_apply(struct sugov_cpu *sg_cpu, u64 time,
 	 * into the same scale so we can compare.
 	 */
 	boost = (sg_cpu->iowait_boost * max_cap) >> SCHED_CAPACITY_SHIFT;
-	boost = uclamp_rq_util_with(cpu_rq(sg_cpu->cpu), boost, NULL);
+	/*
+	 * TODO: Investigate what should be done here. In sum aggregation there
+	 * is no such thing as uclamp_max on a rq, so how do we cap the boost
+	 * value, or do we want to cap the boost frequency here at all?
+	 */
 	if (sg_cpu->util < boost)
 		sg_cpu->util = boost;
 }
@@ -346,11 +349,8 @@ static void sugov_update_single_freq(struct update_util_data *hook, u64 time,
 	/*
 	 * Do not reduce the frequency if the CPU has not been idle
 	 * recently, as the reduction is likely to be premature then.
-	 *
-	 * Except when the rq is capped by uclamp_max.
 	 */
-	if (!uclamp_rq_is_capped(cpu_rq(sg_cpu->cpu)) &&
-	    sugov_cpu_is_busy(sg_cpu) && next_f < sg_policy->next_freq) {
+	if (sugov_cpu_is_busy(sg_cpu) && next_f < sg_policy->next_freq) {
 		next_f = sg_policy->next_freq;
 
 		/* Restore cached freq as next_freq has changed */
@@ -399,11 +399,8 @@ static void sugov_update_single_perf(struct update_util_data *hook, u64 time,
 	/*
 	 * Do not reduce the target performance level if the CPU has not been
 	 * idle recently, as the reduction is likely to be premature then.
-	 *
-	 * Except when the rq is capped by uclamp_max.
 	 */
-	if (!uclamp_rq_is_capped(cpu_rq(sg_cpu->cpu)) &&
-	    sugov_cpu_is_busy(sg_cpu) && sg_cpu->util < prev_util)
+	if (sugov_cpu_is_busy(sg_cpu) && sg_cpu->util < prev_util)
 		sg_cpu->util = prev_util;
 
 	cpufreq_driver_adjust_perf(sg_cpu->cpu, map_util_perf(sg_cpu->bw_dl),
