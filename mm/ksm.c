@@ -415,6 +415,8 @@ static void scan_time_advisor(s64 scan_time)
 	advisor_ctx.change = change;
 	advisor_ctx.scan_time = scan_time;
 	ksm_thread_pages_to_scan = pages;
+
+	trace_ksm_advisor(scan_time, pages);
 }
 
 static void run_advisor(void)
