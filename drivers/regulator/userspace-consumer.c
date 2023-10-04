@@ -159,6 +159,7 @@ static int regulator_userspace_consumer_probe(struct platform_device *pdev)
 		pdata = &tmpdata;
 		memset(pdata, 0, sizeof(*pdata));
 
+		pdata->name = devm_kstrdup(&pdev->dev, pdev->dev.of_node->name, GFP_KERNEL);
 		pdata->no_autoswitch = true;
 		pdata->num_supplies = get_num_supplies(pdev);
 
