@@ -122,6 +122,7 @@ static const char * const qcom_scm_convention_names[] = {
 };
 
 static struct qcom_scm *__scm;
+static DEFINE_SPINLOCK(lock);
 
 static int qcom_scm_clk_enable(void)
 {
@@ -480,6 +481,25 @@ static int qcom_scm_disable_sdi(void)
 
 	return ret ? : res.result[0];
 }
+
+int qcom_scm_io_update_field(phys_addr_t addr, unsigned int mask, unsigned int val)
+{
+	unsigned int old, new;
+	int ret;
+
+	spin_lock(&lock);
+	ret = qcom_scm_io_readl(addr, &old);
+	if (ret)
+		goto unlock;
+
+	new = (old & ~mask) | (val & mask);
+
+	ret = qcom_scm_io_writel(addr, new);
+unlock:
+	spin_unlock(&lock);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(qcom_scm_io_update_field);
 
 static int __qcom_scm_set_dload_mode(struct device *dev, bool enable)
 {
