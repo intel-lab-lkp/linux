@@ -532,13 +532,12 @@ u64 __init e820__range_update(u64 start, u64 size, enum e820_type old_type, enum
 	return __e820__range_update(e820_table, start, size, old_type, new_type);
 }
 
-static u64 __init e820__range_update_kexec(u64 start, u64 size, enum e820_type old_type, enum e820_type  new_type)
+u64 __init e820__range_update_kexec(u64 start, u64 size, enum e820_type old_type, enum e820_type  new_type)
 {
 	return __e820__range_update(e820_table_kexec, start, size, old_type, new_type);
 }
 
-/* Remove a range of memory from the E820 table: */
-u64 __init e820__range_remove(u64 start, u64 size, enum e820_type old_type, bool check_type)
+u64 __init __e820__range_remove(struct e820_table *table, u64 start, u64 size, enum e820_type old_type, bool check_type)
 {
 	int i;
 	u64 end;
@@ -553,8 +552,8 @@ u64 __init e820__range_remove(u64 start, u64 size, enum e820_type old_type, bool
 		e820_print_type(old_type);
 	pr_cont("\n");
 
-	for (i = 0; i < e820_table->nr_entries; i++) {
-		struct e820_entry *entry = &e820_table->entries[i];
+	for (i = 0; i < table->nr_entries; i++) {
+		struct e820_entry *entry = &table->entries[i];
 		u64 final_start, final_end;
 		u64 entry_end;
 
@@ -599,6 +598,16 @@ u64 __init e820__range_remove(u64 start, u64 size, enum e820_type old_type, bool
 	return real_removed_size;
 }
 
+u64 __init e820__range_remove(u64 start, u64 size, enum e820_type old_type, bool check_type)
+{
+	return __e820__range_remove(e820_table, start, size, old_type, check_type);
+}
+
+u64 __init e820__range_remove_kexec(u64 start, u64 size, enum e820_type old_type, bool check_type)
+{
+	return __e820__range_remove(e820_table_kexec, start, size, old_type, check_type);
+}
+
 void __init e820__update_table_print(void)
 {
 	if (e820__update_table(e820_table))
@@ -608,7 +617,7 @@ void __init e820__update_table_print(void)
 	e820__print_table("modified");
 }
 
-static void __init e820__update_table_kexec(void)
+void __init e820__update_table_kexec(void)
 {
 	e820__update_table(e820_table_kexec);
 }

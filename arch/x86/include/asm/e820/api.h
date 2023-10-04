@@ -22,6 +22,10 @@ extern void e820__print_table(char *who);
 extern int  e820__update_table(struct e820_table *table);
 extern void e820__update_table_print(void);
 
+extern u64  e820__range_update_kexec(u64 start, u64 size, enum e820_type old_type, enum e820_type new_type);
+extern u64  e820__range_remove_kexec(u64 start, u64 size, enum e820_type old_type, bool check_type);
+extern void e820__update_table_kexec(void);
+
 extern unsigned long e820__end_of_ram_pfn(void);
 extern unsigned long e820__end_of_low_ram_pfn(void);
 
