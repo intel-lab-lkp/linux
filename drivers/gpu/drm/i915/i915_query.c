@@ -551,6 +551,47 @@ static int query_hwconfig_blob(struct drm_i915_private *i915,
 	return hwconfig->size;
 }
 
+static int
+query_uc_fw_version(struct drm_i915_private *i915, struct drm_i915_query_item *query)
+{
+	struct drm_i915_query_uc_fw_version __user *query_ptr = u64_to_user_ptr(query->data_ptr);
+	size_t size = sizeof(struct drm_i915_query_uc_fw_version);
+	struct drm_i915_query_uc_fw_version resp;
+	int ret;
+
+	ret = copy_query_item(&resp, size, size, query);
+	if (ret == size) {
+		query->length = size;
+		return 0;
+	} else if (ret != 0)
+		return ret;
+
+	if (resp.pad || resp.pad2 || resp.reserved) {
+		drm_dbg(&i915->drm,
+			"Invalid input fw version query structure parameters received");
+		return -EINVAL;
+	}
+
+	switch (resp.uc_type) {
+	case I915_QUERY_UC_TYPE_GUC_SUBMISSION: {
+		struct intel_guc *guc = &i915->gt0.uc.guc;
+
+		resp.major_ver = guc->submission_version.major;
+		resp.minor_ver = guc->submission_version.minor;
+		resp.patch_ver = guc->submission_version.patch;
+		resp.branch_ver = 0;
+		break;
+	}
+	default:
+		return -EINVAL;
+	}
+
+	if (copy_to_user(query_ptr, &resp, size))
+		return -EFAULT;
+
+	return 0;
+}
+
 static int (* const i915_query_funcs[])(struct drm_i915_private *dev_priv,
 					struct drm_i915_query_item *query_item) = {
 	query_topology_info,
@@ -559,6 +600,7 @@ static int (* const i915_query_funcs[])(struct drm_i915_private *dev_priv,
 	query_memregion_info,
 	query_hwconfig_blob,
 	query_geometry_subslices,
+	query_uc_fw_version,
 };
 
 int i915_query_ioctl(struct drm_device *dev, void *data, struct drm_file *file)

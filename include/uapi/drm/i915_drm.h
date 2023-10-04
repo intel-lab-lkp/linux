@@ -3013,6 +3013,7 @@ struct drm_i915_query_item {
 	 *  - %DRM_I915_QUERY_MEMORY_REGIONS (see struct drm_i915_query_memory_regions)
 	 *  - %DRM_I915_QUERY_HWCONFIG_BLOB (see `GuC HWCONFIG blob uAPI`)
 	 *  - %DRM_I915_QUERY_GEOMETRY_SUBSLICES (see struct drm_i915_query_topology_info)
+	 *  - %DRM_I915_QUERY_UC_FW_VERSION (see struct drm_i915_query_uc_fw_version)
 	 */
 	__u64 query_id;
 #define DRM_I915_QUERY_TOPOLOGY_INFO		1
@@ -3021,6 +3022,7 @@ struct drm_i915_query_item {
 #define DRM_I915_QUERY_MEMORY_REGIONS		4
 #define DRM_I915_QUERY_HWCONFIG_BLOB		5
 #define DRM_I915_QUERY_GEOMETRY_SUBSLICES	6
+#define DRM_I915_QUERY_UC_FW_VERSION        7
 /* Must be kept compact -- no holes and well documented */
 
 	/**
@@ -3211,6 +3213,36 @@ struct drm_i915_query_topology_info {
 	 *       ] >> (Z % 8)) & 1
 	 */
 	__u8 data[];
+};
+
+/**
+* struct drm_i915_query_uc_fw_version - query a micro-controller firmware version
+*
+* Given a uc_type this will return the major, minor, patch and branch version
+* of the micro-controller firmware.
+*/
+struct drm_i915_query_uc_fw_version {
+	/** @uc: The micro-controller type to query firmware version */
+#define I915_QUERY_UC_TYPE_GUC_SUBMISSION 0
+	__u16 uc_type;
+
+	/** @pad: MBZ */
+	__u16 pad;
+
+	/* @major_ver: major uc fw version */
+	__u32 major_ver;
+	/* @minor_ver: minor uc fw version */
+	__u32 minor_ver;
+	/* @patch_ver: patch uc fw version */
+	__u32 patch_ver;
+	/* @branch_ver: branch uc fw version */
+	__u32 branch_ver;
+
+	/** @pad2: MBZ */
+	__u32 pad2;
+
+	/** @reserved: Reserved */
+	__u64 reserved;
 };
 
 /**
