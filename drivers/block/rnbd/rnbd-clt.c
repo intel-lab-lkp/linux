@@ -463,7 +463,12 @@ static int send_msg_close(struct rnbd_clt_dev *dev, u32 device_id,
 	msg.hdr.type	= cpu_to_le16(RNBD_MSG_CLOSE);
 	msg.device_id	= cpu_to_le32(device_id);
 
-	WARN_ON(!rnbd_clt_get_dev(dev));
+	if (WARN_ON(!rnbd_clt_get_dev(dev))) {
+		rnbd_put_iu(sess, iu);
+		err = -ENODEV;
+		goto exit;
+	}
+
 	err = send_usr_msg(sess->rtrs, WRITE, iu, &vec, 0, NULL, 0,
 			   msg_close_conf, &errno, wait);
 	if (err) {
@@ -472,7 +477,7 @@ static int send_msg_close(struct rnbd_clt_dev *dev, u32 device_id,
 	} else {
 		err = errno;
 	}
-
+exit:
 	rnbd_put_iu(sess, iu);
 	return err;
 }
@@ -558,7 +563,13 @@ static int send_msg_open(struct rnbd_clt_dev *dev, enum wait_type wait)
 	msg.access_mode	= dev->access_mode;
 	strscpy(msg.dev_name, dev->pathname, sizeof(msg.dev_name));
 
-	WARN_ON(!rnbd_clt_get_dev(dev));
+	if (WARN_ON(!rnbd_clt_get_dev(dev))) {
+		rnbd_put_iu(sess, iu);
+		kfree(rsp);
+		err = -ENODEV;
+		goto exit;
+	}
+
 	err = send_usr_msg(sess->rtrs, READ, iu,
 			   &vec, sizeof(*rsp), iu->sgt.sgl, 1,
 			   msg_open_conf, &errno, wait);
@@ -569,7 +580,7 @@ static int send_msg_open(struct rnbd_clt_dev *dev, enum wait_type wait)
 	} else {
 		err = errno;
 	}
-
+exit:
 	rnbd_put_iu(sess, iu);
 	return err;
 }
@@ -1597,7 +1608,12 @@ struct rnbd_clt_dev *rnbd_clt_map_device(const char *sessname,
 	msg.access_mode = dev->access_mode;
 	strscpy(msg.dev_name, dev->pathname, sizeof(msg.dev_name));
 
-	WARN_ON(!rnbd_clt_get_dev(dev));
+	if (WARN_ON(!rnbd_clt_get_dev(dev))) {
+		rnbd_put_iu(sess, iu);
+		ret = -ENODEV;
+		goto put_iu;
+	}
+
 	ret = send_usr_msg(sess->rtrs, READ, iu,
 			   &vec, sizeof(*rsp), iu->sgt.sgl, 1,
 			   msg_open_conf, &errno, RTRS_PERMIT_WAIT);
