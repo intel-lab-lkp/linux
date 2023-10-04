@@ -686,6 +686,7 @@ xfs_ialloc_ag_alloc(
 		     igeo->ialloc_blks;
 	if (do_sparse)
 		goto sparse_alloc;
+	error = -ENOSPC;
 	if (likely(newino != NULLAGINO &&
 		  (args.agbno < be32_to_cpu(agi->agi_length)))) {
 		args.prod = 1;
@@ -711,7 +712,7 @@ xfs_ialloc_ag_alloc(
 		error = xfs_alloc_vextent_exact_bno(&args,
 				XFS_AGB_TO_FSB(args.mp, pag->pag_agno,
 						args.agbno));
-		if (error)
+		if (error && error != -ENOSPC)
 			return error;
 
 		/*
@@ -727,7 +728,7 @@ xfs_ialloc_ag_alloc(
 		args.minalignslop = 0;
 	}
 
-	if (unlikely(args.fsbno == NULLFSBLOCK)) {
+	if (error == -ENOSPC) {
 		/*
 		 * Set the alignment for the allocation.
 		 * If stripe alignment is turned on then align at stripe unit
@@ -754,7 +755,7 @@ xfs_ialloc_ag_alloc(
 		error = xfs_alloc_vextent_near_bno(&args,
 				XFS_AGB_TO_FSB(args.mp, pag->pag_agno,
 						be32_to_cpu(agi->agi_root)));
-		if (error)
+		if (error && error != -ENOSPC)
 			return error;
 	}
 
@@ -762,12 +763,12 @@ xfs_ialloc_ag_alloc(
 	 * If stripe alignment is turned on, then try again with cluster
 	 * alignment.
 	 */
-	if (isaligned && args.fsbno == NULLFSBLOCK) {
+	if (error == -ENOSPC && isaligned) {
 		args.alignment = igeo->cluster_align;
 		error = xfs_alloc_vextent_near_bno(&args,
 				XFS_AGB_TO_FSB(args.mp, pag->pag_agno,
 						be32_to_cpu(agi->agi_root)));
-		if (error)
+		if (error && error != -ENOSPC)
 			return error;
 	}
 
@@ -775,9 +776,9 @@ xfs_ialloc_ag_alloc(
 	 * Finally, try a sparse allocation if the filesystem supports it and
 	 * the sparse allocation length is smaller than a full chunk.
 	 */
-	if (xfs_has_sparseinodes(args.mp) &&
-	    igeo->ialloc_min_blks < igeo->ialloc_blks &&
-	    args.fsbno == NULLFSBLOCK) {
+	if (error == -ENOSPC &&
+	    xfs_has_sparseinodes(args.mp) &&
+	    igeo->ialloc_min_blks < igeo->ialloc_blks) {
 sparse_alloc:
 		args.alignment = args.mp->m_sb.sb_spino_align;
 		args.prod = 1;
@@ -803,7 +804,7 @@ sparse_alloc:
 		error = xfs_alloc_vextent_near_bno(&args,
 				XFS_AGB_TO_FSB(args.mp, pag->pag_agno,
 						be32_to_cpu(agi->agi_root)));
-		if (error)
+		if (error && error != -ENOSPC)
 			return error;
 
 		newlen = XFS_AGB_TO_AGINO(args.mp, args.len);
@@ -811,7 +812,12 @@ sparse_alloc:
 		allocmask = (1 << (newlen / XFS_INODES_PER_HOLEMASK_BIT)) - 1;
 	}
 
-	if (args.fsbno == NULLFSBLOCK)
+	/*
+	 * There really is not available space for inode allocation in this AG,
+	 * so return a -EAGAIN error to the caller to tell it to try a different
+	 * AG.
+	 */
+	if (error == -ENOSPC)
 		return -EAGAIN;
 
 	ASSERT(args.len == args.minlen);

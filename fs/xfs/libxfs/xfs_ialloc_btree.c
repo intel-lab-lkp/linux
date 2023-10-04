@@ -112,13 +112,13 @@ __xfs_inobt_alloc_block(
 
 	error = xfs_alloc_vextent_near_bno(&args,
 			XFS_AGB_TO_FSB(args.mp, args.pag->pag_agno, sbno));
-	if (error)
-		return error;
-
-	if (args.fsbno == NULLFSBLOCK) {
+	if (error == -ENOSPC) {
 		*stat = 0;
 		return 0;
 	}
+	if (error)
+		return error;
+
 	ASSERT(args.len == 1);
 
 	new->s = cpu_to_be32(XFS_FSB_TO_AGBNO(args.mp, args.fsbno));

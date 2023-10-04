@@ -75,14 +75,14 @@ xfs_refcountbt_alloc_block(
 	error = xfs_alloc_vextent_near_bno(&args,
 			XFS_AGB_TO_FSB(args.mp, args.pag->pag_agno,
 					xfs_refc_block(args.mp)));
+	if (error == -ENOSPC) {
+		*stat = 0;
+		return 0;
+	}
 	if (error)
 		goto out_error;
 	trace_xfs_refcountbt_alloc_block(cur->bc_mp, cur->bc_ag.pag->pag_agno,
 			args.agbno, 1);
-	if (args.fsbno == NULLFSBLOCK) {
-		*stat = 0;
-		return 0;
-	}
 	ASSERT(args.agno == cur->bc_ag.pag->pag_agno);
 	ASSERT(args.len == 1);
 

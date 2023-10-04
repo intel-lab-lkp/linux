@@ -1157,9 +1157,9 @@ out:
 	 * Can't do the allocation, give up.
 	 */
 	if (flen < args->minlen) {
-		args->agbno = NULLAGBLOCK;
 		trace_xfs_alloc_small_notenough(args);
-		flen = 0;
+		error = -ENOSPC;
+		goto error;
 	}
 	*fbnop = fbno;
 	*flenp = flen;
@@ -1279,9 +1279,8 @@ xfs_alloc_ag_vextent_exact(
 not_found:
 	/* Didn't find it, return null. */
 	xfs_btree_del_cursor(bno_cur, XFS_BTREE_NOERROR);
-	args->agbno = NULLAGBLOCK;
 	trace_xfs_alloc_exact_notfound(args);
-	return 0;
+	return -ENOSPC;
 
 error0:
 	xfs_btree_del_cursor(bno_cur, XFS_BTREE_ERROR);
@@ -1630,7 +1629,7 @@ restart:
 			goto restart;
 		}
 		trace_xfs_alloc_size_neither(args);
-		args->agbno = NULLAGBLOCK;
+		error = -ENOSPC;
 		goto out;
 	}
 
@@ -1882,8 +1881,7 @@ error0:
 out_nominleft:
 	xfs_btree_del_cursor(cnt_cur, XFS_BTREE_NOERROR);
 	trace_xfs_alloc_size_nominleft(args);
-	args->agbno = NULLAGBLOCK;
-	return 0;
+	return -ENOSPC;
 }
 
 /*
@@ -2742,16 +2740,15 @@ xfs_alloc_fix_freelist(
 
 		/* Allocate as many blocks as possible at once. */
 		error = xfs_alloc_ag_vextent_size(&targs, alloc_flags);
-		if (error)
-			goto out_agflbp_relse;
 
-		/*
-		 * Stop if we run out.  Won't happen if callers are obeying
-		 * the restrictions correctly.  Can happen for free calls
-		 * on a completely full ag.
-		 */
-		if (targs.agbno == NULLAGBLOCK) {
-			if (alloc_flags & XFS_ALLOC_FLAG_FREEING)
+		if (error) {
+			/*
+			 * Stop if we run out.  Won't happen if callers are
+			 * obeying the restrictions correctly.  Can happen for
+			 * free calls on a completely full ag.
+			 */
+			if (error == -ENOSPC &&
+			    (alloc_flags & XFS_ALLOC_FLAG_FREEING))
 				break;
 			goto out_agflbp_relse;
 		}
@@ -3324,14 +3321,12 @@ xfs_alloc_vextent_prepare_ag(
 		trace_xfs_alloc_vextent_nofix(args);
 		if (need_pag)
 			xfs_perag_put(args->pag);
-		args->agbno = NULLAGBLOCK;
 		return error;
 	}
 	if (!args->agbp) {
 		/* cannot allocate in this AG at all */
 		trace_xfs_alloc_vextent_noagbp(args);
-		args->agbno = NULLAGBLOCK;
-		return 0;
+		return -ENOSPC;
 	}
 	args->wasfromfl = 0;
 	return 0;
@@ -3375,14 +3370,7 @@ xfs_alloc_vextent_finish(
 	     args->agno > minimum_agno))
 		args->tp->t_highest_agno = args->agno;
 
-	/*
-	 * If the allocation failed with an error or we had an ENOSPC result,
-	 * preserve the returned error whilst also marking the allocation result
-	 * as "no extent allocated". This ensures that callers that fail to
-	 * capture the error will still treat it as a failed allocation.
-	 */
-	if (alloc_error || args->agbno == NULLAGBLOCK) {
-		args->fsbno = NULLFSBLOCK;
+	if (alloc_error) {
 		error = alloc_error;
 		goto out_drop_perag;
 	}
@@ -3452,11 +3440,8 @@ xfs_alloc_vextent_this_ag(
 	trace_xfs_alloc_vextent_this_ag(args);
 
 	error = xfs_alloc_vextent_check_args(args, agno, 0, &minimum_agno);
-	if (error) {
-		if (error == -ENOSPC)
-			return 0;
+	if (error)
 		return error;
-	}
 
 	error = xfs_alloc_vextent_prepare_ag(args, alloc_flags);
 	if (!error && args->agbp)
@@ -3503,7 +3488,7 @@ restart:
 			mp->m_sb.sb_agcount, agno, args->pag) {
 		args->agno = agno;
 		error = xfs_alloc_vextent_prepare_ag(args, alloc_flags);
-		if (error)
+		if (error && error != -ENOSPC)
 			break;
 		if (!args->agbp) {
 			trace_xfs_alloc_vextent_loopfailed(args);
@@ -3523,13 +3508,13 @@ restart:
 		}
 		break;
 	}
-	if (error) {
+	if (error && error != -ENOSPC) {
 		xfs_perag_rele(args->pag);
 		args->pag = NULL;
 		return error;
 	}
 	if (args->agbp)
-		return 0;
+		return error;
 
 	/*
 	 * We didn't find an AG we can alloation from. If we were given
@@ -3544,7 +3529,7 @@ restart:
 
 	ASSERT(args->pag == NULL);
 	trace_xfs_alloc_vextent_allfailed(args);
-	return 0;
+	return -ENOSPC;
 }
 
 /*
@@ -3580,11 +3565,8 @@ xfs_alloc_vextent_start_ag(
 	target_agbno = XFS_FSB_TO_AGBNO(mp, target);
 	error = xfs_alloc_vextent_check_args(args, target_agno, target_agbno,
 			&minimum_agno);
-	if (error) {
-		if (error == -ENOSPC)
-			return 0;
+	if (error)
 		return error;
-	}
 
 	if ((args->datatype & XFS_ALLOC_INITIAL_USER_DATA) &&
 	    xfs_is_inode32(mp)) {
@@ -3637,11 +3619,8 @@ xfs_alloc_vextent_first_ag(
 	target_agbno = XFS_FSB_TO_AGBNO(mp, target);
 	error = xfs_alloc_vextent_check_args(args, target_agno, target_agbno,
 			&minimum_agno);
-	if (error) {
-		if (error == -ENOSPC)
-			return 0;
+	if (error)
 		return error;
-	}
 
 	target_agno = max(minimum_agno, target_agno);
 	error = xfs_alloc_vextent_iterate_ags(args, minimum_agno, target_agno,
@@ -3669,11 +3648,8 @@ xfs_alloc_vextent_bno(
 
 	error = xfs_alloc_vextent_check_args(args, args->agno, args->agbno,
 			&minimum_agno);
-	if (error) {
-		if (error == -ENOSPC)
-			return 0;
+	if (error)
 		return error;
-	}
 
 	error = xfs_alloc_vextent_prepare_ag(args, 0);
 	if (!error && args->agbp) {
@@ -3688,7 +3664,8 @@ xfs_alloc_vextent_bno(
 
 /*
  * Allocate at the exact block target or fail. Caller is expected to hold a
- * perag reference in args->pag.
+ * perag reference in args->pag. If the exact block required cannot be
+ * allocated, this will return -ENOSPC.
  */
 int
 xfs_alloc_vextent_exact_bno(

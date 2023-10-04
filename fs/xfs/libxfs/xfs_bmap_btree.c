@@ -225,25 +225,24 @@ xfs_bmbt_alloc_block(
 					cur->bc_ino.whichfork);
 
 	error = xfs_alloc_vextent_start_ag(&args, be64_to_cpu(start->l));
-	if (error)
-		return error;
-
-	if (args.fsbno == NULLFSBLOCK && args.minleft) {
+	if (error == -ENOSPC && args.minleft) {
 		/*
-		 * Could not find an AG with enough free space to satisfy
-		 * a full btree split.  Try again and if
-		 * successful activate the lowspace algorithm.
+		 * Could not find an AG with enough free space to satisfy a full
+		 * btree split.  Try again and then activate the lowspace
+		 * algorithm.
 		 */
 		args.minleft = 0;
 		error = xfs_alloc_vextent_start_ag(&args, 0);
-		if (error)
-			return error;
 		cur->bc_tp->t_flags |= XFS_TRANS_LOWMODE;
 	}
-	if (WARN_ON_ONCE(args.fsbno == NULLFSBLOCK)) {
+
+	/* This allocation really should not fail. */
+	if (WARN_ON_ONCE(error == -ENOSPC)) {
 		*stat = 0;
 		return 0;
 	}
+	if (error)
+		return error;
 
 	ASSERT(args.len == 1);
 	cur->bc_ino.allocated++;

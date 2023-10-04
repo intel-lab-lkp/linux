@@ -659,14 +659,6 @@ xfs_bmap_extents_to_btree(
 	if (error)
 		goto out_root_realloc;
 
-	/*
-	 * Allocation can't fail, the space was reserved.
-	 */
-	if (WARN_ON_ONCE(args.fsbno == NULLFSBLOCK)) {
-		error = -ENOSPC;
-		goto out_root_realloc;
-	}
-
 	cur->bc_ino.allocated++;
 	ip->i_nblocks++;
 	xfs_trans_mod_dquot_byino(tp, ip, XFS_TRANS_DQ_BCOUNT, 1L);
@@ -724,6 +716,8 @@ out_root_realloc:
 	ASSERT(ifp->if_broot == NULL);
 	xfs_btree_del_cursor(cur, XFS_BTREE_ERROR);
 
+	/* Allocation shouldn't fail with -ENOSPC because space was reserved. */
+	WARN_ON_ONCE(error == -ENOSPC);
 	return error;
 }
 
@@ -808,8 +802,6 @@ xfs_bmap_local_to_extents(
 	if (error)
 		goto done;
 
-	/* Can't fail, the space was reserved. */
-	ASSERT(args.fsbno != NULLFSBLOCK);
 	ASSERT(args.len == 1);
 	error = xfs_trans_get_buf(tp, args.mp->m_ddev_targp,
 			XFS_FSB_TO_DADDR(args.mp, args.fsbno),
@@ -849,6 +841,9 @@ xfs_bmap_local_to_extents(
 
 done:
 	*logflagsp = flags;
+
+	/* Allocation shouldn't fail with -ENOSPC because space was reserved. */
+	ASSERT(error != -ENOSPC);
 	return error;
 }
 
@@ -3435,11 +3430,8 @@ xfs_bmap_exact_minlen_extent_alloc(
 
 	ASSERT(ap->length);
 
-	if (ap->minlen != 1) {
-		ap->blkno = NULLFSBLOCK;
-		ap->length = 0;
-		return 0;
-	}
+	if (ap->minlen != 1)
+		return -ENOSPC;
 
 	orig_offset = ap->offset;
 	orig_length = ap->length;
@@ -3474,14 +3466,7 @@ xfs_bmap_exact_minlen_extent_alloc(
 	if (error)
 		return error;
 
-	if (args.fsbno != NULLFSBLOCK) {
-		xfs_bmap_process_allocated_extent(ap, &args, orig_offset,
-			orig_length);
-	} else {
-		ap->blkno = NULLFSBLOCK;
-		ap->length = 0;
-	}
-
+	xfs_bmap_process_allocated_extent(ap, &args, orig_offset, orig_length);
 	return 0;
 }
 #else
@@ -3520,17 +3505,14 @@ xfs_bmap_exact_minlen_extent_alloc(
 		args->minalignslop = 0;
 
 	error = xfs_alloc_vextent_exact_bno(args, ap->blkno);
-	if (error)
-		return error;
-
-	if (args->fsbno != NULLFSBLOCK)
-		return 0;
-	/*
-	 * Exact allocation failed. Reset to try an aligned allocation
-	 * according to the original allocation specification.
-	 */
-	args->minlen = nextminlen;
-	return 0;
+	if (error == -ENOSPC) {
+		/*
+		 * Exact allocation failed. Reset to try an aligned allocation
+		 * according to the original allocation specification.
+		 */
+		args->minlen = nextminlen;
+	}
+	return error;
 }
 
 static int
@@ -3557,19 +3539,15 @@ xfs_bmap_btalloc_aligned(
 	args->minalignslop = 0;
 
 	error = xfs_alloc_vextent_near_bno(args, ap->blkno);
-	if (error)
-		return error;
-
-	if (args->fsbno != NULLFSBLOCK)
-		return 0;
-
-	/*
-	 * Allocation failed, so turn return the allocation args to their
-	 * original non-aligned state so the caller can proceed on allocation
-	 * failure as if this function was never called.
-	 */
-	args->alignment = 1;
-	return 0;
+	if (error == -ENOSPC) {
+		/*
+		 * Allocation failed, so turn return the allocation args to
+		 * their original non-aligned state so the caller can proceed on
+		 * allocation failure as if this function was never called.
+		 */
+		args->alignment = 1;
+	}
+	return error;
 }
 
 /*
@@ -3594,17 +3572,15 @@ xfs_bmap_btalloc_low_space(
 	if (args->minlen > ap->minlen) {
 		args->minlen = ap->minlen;
 		error = xfs_alloc_vextent_start_ag(args, ap->blkno);
-		if (error || args->fsbno != NULLFSBLOCK)
+		if (error != -ENOSPC)
 			return error;
 	}
 
 	/* Last ditch attempt before failure is declared. */
 	args->total = ap->minlen;
 	error = xfs_alloc_vextent_first_ag(args, 0);
-	if (error)
-		return error;
 	ap->tp->t_flags |= XFS_TRANS_LOWMODE;
-	return 0;
+	return error;
 }
 
 static int
@@ -3633,17 +3609,18 @@ xfs_bmap_btalloc_filestreams(
 		goto out_low_space;
 	}
 
+	error = -ENOSPC;
 	args->minlen = xfs_bmap_select_minlen(ap, args, blen);
 	if (ap->aeof && ap->offset)
 		error = xfs_bmap_btalloc_at_eof(ap, args, blen, stripe_align);
 
-	if (error || args->fsbno != NULLFSBLOCK)
+	if (error != -ENOSPC)
 		goto out_low_space;
 
 	if (ap->aeof)
 		error = xfs_bmap_btalloc_aligned(ap, args, blen, stripe_align);
 
-	if (!error && args->fsbno == NULLFSBLOCK)
+	if (error == -ENOSPC)
 		error = xfs_alloc_vextent_near_bno(args, ap->blkno);
 
 out_low_space:
@@ -3656,7 +3633,7 @@ out_low_space:
 	 */
 	xfs_perag_rele(args->pag);
 	args->pag = NULL;
-	if (error || args->fsbno != NULLFSBLOCK)
+	if (error != -ENOSPC)
 		return error;
 
 	return xfs_bmap_btalloc_low_space(ap, args);
@@ -3705,10 +3682,11 @@ xfs_bmap_btalloc_best_length(
 		return error;
 	ASSERT(args->pag);
 
+	error = -ENOSPC;
 	if (ap->aeof && ap->offset)
 		error = xfs_bmap_btalloc_at_eof(ap, args, blen, stripe_align);
 
-	if (error || args->fsbno != NULLFSBLOCK)
+	if (error != -ENOSPC)
 		goto out_perag_rele;
 
 
@@ -3726,12 +3704,12 @@ xfs_bmap_btalloc_best_length(
 out_perag_rele:
 	xfs_perag_rele(args->pag);
 	args->pag = NULL;
-	if (error || args->fsbno != NULLFSBLOCK)
+	if (error != -ENOSPC)
 		return error;
 
 	/* attempt unaligned allocation */
 	error = xfs_alloc_vextent_start_ag(args, ap->blkno);
-	if (error || args->fsbno != NULLFSBLOCK)
+	if (error != -ENOSPC)
 		return error;
 
 	return xfs_bmap_btalloc_low_space(ap, args);
@@ -3773,17 +3751,10 @@ xfs_bmap_btalloc(
 		error = xfs_bmap_btalloc_filestreams(ap, &args, stripe_align);
 	else
 		error = xfs_bmap_btalloc_best_length(ap, &args, stripe_align);
-	if (error)
-		return error;
-
-	if (args.fsbno != NULLFSBLOCK) {
+	if (!error)
 		xfs_bmap_process_allocated_extent(ap, &args, orig_offset,
 			orig_length);
-	} else {
-		ap->blkno = NULLFSBLOCK;
-		ap->length = 0;
-	}
-	return 0;
+	return error;
 }
 
 /* Trim extent to fit a logical block range. */
@@ -4189,7 +4160,7 @@ xfs_bmapi_allocate(
 	} else {
 		error = xfs_bmap_alloc_userdata(bma);
 	}
-	if (error || bma->blkno == NULLFSBLOCK)
+	if (error)
 		return error;
 
 	if (bma->flags & XFS_BMAPI_ZERO) {
@@ -4497,10 +4468,10 @@ xfs_bmapi_write(
 			ASSERT(len > 0);
 			ASSERT(bma.length > 0);
 			error = xfs_bmapi_allocate(&bma);
+			if (error == -ENOSPC)
+				break;
 			if (error)
 				goto error0;
-			if (bma.blkno == NULLFSBLOCK)
-				break;
 
 			/*
 			 * If this is a CoW allocation, record the data in
@@ -4656,9 +4627,6 @@ xfs_bmapi_convert_delalloc(
 	if (error)
 		goto out_finish;
 
-	error = -ENOSPC;
-	if (WARN_ON_ONCE(bma.blkno == NULLFSBLOCK))
-		goto out_finish;
 	error = -EFSCORRUPTED;
 	if (WARN_ON_ONCE(!xfs_valid_startblock(ip, bma.got.br_startblock)))
 		goto out_finish;
