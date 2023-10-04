@@ -1023,7 +1023,7 @@ static int receive_pkts(struct test_spec *test, struct pollfd *fds)
 	pkt = pkt_stream_get_next_rx_pkt(pkt_stream, &pkts_sent);
 	while (pkt) {
 		u32 frags_processed = 0, nb_frags = 0, pkt_len = 0;
-		u64 first_addr;
+		u64 first_addr = 0;
 
 		ret = gettimeofday(&tv_now, NULL);
 		if (ret)
