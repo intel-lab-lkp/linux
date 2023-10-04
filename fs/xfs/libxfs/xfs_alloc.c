@@ -3686,7 +3686,7 @@ xfs_alloc_vextent_exact_bno(
  * Allocate an extent as close to the target as possible. If there are not
  * viable candidates in the AG, then fail the allocation.
  *
- * Caller may or may not have a per-ag reference in args->pag.
+ * Caller is expected to hold a per-ag reference in args->pag.
  */
 int
 xfs_alloc_vextent_near_bno(
@@ -3695,14 +3695,12 @@ xfs_alloc_vextent_near_bno(
 {
 	struct xfs_mount	*mp = args->mp;
 	xfs_agnumber_t		minimum_agno;
-	bool			needs_perag = args->pag == NULL;
 	uint32_t		alloc_flags = 0;
 	int			error;
 
-	if (!needs_perag)
-		ASSERT(args->pag->pag_agno == XFS_FSB_TO_AGNO(mp, target));
+	ASSERT(args->pag->pag_agno == XFS_FSB_TO_AGNO(mp, target));
 
-	args->agno = XFS_FSB_TO_AGNO(mp, target);
+	args->agno = args->pag->pag_agno;
 	args->agbno = XFS_FSB_TO_AGBNO(mp, target);
 
 	trace_xfs_alloc_vextent_near_bno(args);
@@ -3715,14 +3713,11 @@ xfs_alloc_vextent_near_bno(
 		return error;
 	}
 
-	if (needs_perag)
-		args->pag = xfs_perag_grab(mp, args->agno);
-
 	error = xfs_alloc_vextent_prepare_ag(args, alloc_flags);
 	if (!error && args->agbp)
 		error = xfs_alloc_ag_vextent_near(args, alloc_flags);
 
-	return xfs_alloc_vextent_finish(args, minimum_agno, error, needs_perag);
+	return xfs_alloc_vextent_finish(args, minimum_agno, error, false);
 }
 
 /* Ensure that the freelist is at full capacity. */
