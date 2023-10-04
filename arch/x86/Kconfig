@@ -2449,6 +2449,13 @@ source "kernel/livepatch/Kconfig"
 
 endmenu
 
+config CC_HAS_NAMED_AS
+	def_bool CC_IS_GCC && GCC_VERSION >= 130100
+
+config USE_X86_SEG_SUPPORT
+	def_bool y
+	depends on CC_HAS_NAMED_AS && SMP
+
 config CC_HAS_SLS
 	def_bool $(cc-option,-mharden-sls=all)
 
