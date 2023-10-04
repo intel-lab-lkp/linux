@@ -3649,23 +3649,23 @@ xfs_alloc_vextent_first_ag(
 	return xfs_alloc_vextent_finish(args, minimum_agno, error, true);
 }
 
-/*
- * Allocate at the exact block target or fail. Caller is expected to hold a
- * perag reference in args->pag.
- */
-int
-xfs_alloc_vextent_exact_bno(
+static int
+xfs_alloc_vextent_bno(
 	struct xfs_alloc_arg	*args,
-	xfs_fsblock_t		target)
+	xfs_fsblock_t		target,
+	bool			exact)
 {
 	struct xfs_mount	*mp = args->mp;
 	xfs_agnumber_t		minimum_agno;
 	int			error;
 
+	ASSERT(args->pag != NULL);
+	ASSERT(args->pag->pag_agno == XFS_FSB_TO_AGNO(mp, target));
+
 	args->agno = args->pag->pag_agno;
 	args->agbno = XFS_FSB_TO_AGBNO(mp, target);
 
-	trace_xfs_alloc_vextent_exact_bno(args);
+	trace_xfs_alloc_vextent_bno(args);
 
 	error = xfs_alloc_vextent_check_args(args, args->agno, args->agbno,
 			&minimum_agno);
@@ -3676,10 +3676,27 @@ xfs_alloc_vextent_exact_bno(
 	}
 
 	error = xfs_alloc_vextent_prepare_ag(args, 0);
-	if (!error && args->agbp)
-		error = xfs_alloc_ag_vextent_exact(args);
+	if (!error && args->agbp) {
+		if (exact)
+			error = xfs_alloc_ag_vextent_exact(args);
+		else
+			error = xfs_alloc_ag_vextent_near(args, 0);
+	}
 
 	return xfs_alloc_vextent_finish(args, minimum_agno, error, false);
+}
+
+/*
+ * Allocate at the exact block target or fail. Caller is expected to hold a
+ * perag reference in args->pag.
+ */
+int
+xfs_alloc_vextent_exact_bno(
+	struct xfs_alloc_arg	*args,
+	xfs_fsblock_t		target)
+{
+	trace_xfs_alloc_vextent_exact_bno(args);
+	return xfs_alloc_vextent_bno(args, target, true);
 }
 
 /*
@@ -3693,31 +3710,8 @@ xfs_alloc_vextent_near_bno(
 	struct xfs_alloc_arg	*args,
 	xfs_fsblock_t		target)
 {
-	struct xfs_mount	*mp = args->mp;
-	xfs_agnumber_t		minimum_agno;
-	uint32_t		alloc_flags = 0;
-	int			error;
-
-	ASSERT(args->pag->pag_agno == XFS_FSB_TO_AGNO(mp, target));
-
-	args->agno = args->pag->pag_agno;
-	args->agbno = XFS_FSB_TO_AGBNO(mp, target);
-
 	trace_xfs_alloc_vextent_near_bno(args);
-
-	error = xfs_alloc_vextent_check_args(args, args->agno, args->agbno,
-			&minimum_agno);
-	if (error) {
-		if (error == -ENOSPC)
-			return 0;
-		return error;
-	}
-
-	error = xfs_alloc_vextent_prepare_ag(args, alloc_flags);
-	if (!error && args->agbp)
-		error = xfs_alloc_ag_vextent_near(args, alloc_flags);
-
-	return xfs_alloc_vextent_finish(args, minimum_agno, error, false);
+	return xfs_alloc_vextent_bno(args, target, false);
 }
 
 /* Ensure that the freelist is at full capacity. */

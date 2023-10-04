@@ -1884,6 +1884,7 @@ DEFINE_ALLOC_EVENT(xfs_alloc_vextent_start_ag);
 DEFINE_ALLOC_EVENT(xfs_alloc_vextent_first_ag);
 DEFINE_ALLOC_EVENT(xfs_alloc_vextent_exact_bno);
 DEFINE_ALLOC_EVENT(xfs_alloc_vextent_near_bno);
+DEFINE_ALLOC_EVENT(xfs_alloc_vextent_bno);
 DEFINE_ALLOC_EVENT(xfs_alloc_vextent_finish);
 
 TRACE_EVENT(xfs_alloc_cur_check,
