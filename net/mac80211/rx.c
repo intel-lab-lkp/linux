@@ -1868,10 +1868,13 @@ ieee80211_rx_get_bigtk(struct ieee80211_rx_data *rx, int idx)
 		key = rcu_dereference(rx->link_sta->gtk[idx]);
 	if (!key)
 		key = rcu_dereference(rx->link->gtk[idx]);
-	if (!key && rx->link_sta)
-		key = rcu_dereference(rx->link_sta->gtk[idx2]);
-	if (!key)
-		key = rcu_dereference(rx->link->gtk[idx2]);
+
+	if (idx2 >= 0) {
+		if (!key && rx->link_sta)
+			key = rcu_dereference(rx->link_sta->gtk[idx2]);
+		if (!key)
+			key = rcu_dereference(rx->link->gtk[idx2]);
+	}
 
 	return key;
 }
