@@ -5,6 +5,7 @@
 #include <linux/nvmem-consumer.h>
 #include <linux/nvmem-provider.h>
 #include <linux/of.h>
+#include <linux/platform_device.h>
 #include <uapi/linux/if_ether.h>
 
 #define SL28VPD_MAGIC 'V'
@@ -135,16 +136,44 @@ static int sl28vpd_add_cells(struct device *dev, struct nvmem_device *nvmem,
 	return 0;
 }
 
+static int sl28vpd_probe(struct device *dev)
+{
+	struct nvmem_layout *layout;
+
+	layout = devm_kzalloc(dev, sizeof(*layout), GFP_KERNEL);
+	if (!layout)
+		return -ENOMEM;
+
+	layout->add_cells = sl28vpd_add_cells;
+	layout->dev = dev;
+
+	dev_set_drvdata(dev, layout);
+
+	return nvmem_layout_register(layout);
+}
+
+static int sl28vpd_remove(struct device *dev)
+{
+	struct nvmem_layout *layout = dev_get_drvdata(dev);
+
+	nvmem_layout_unregister(layout);
+
+	return 0;
+}
+
 static const struct of_device_id sl28vpd_of_match_table[] = {
 	{ .compatible = "kontron,sl28-vpd" },
 	{},
 };
 MODULE_DEVICE_TABLE(of, sl28vpd_of_match_table);
 
-static struct nvmem_layout sl28vpd_layout = {
-	.name = "sl28-vpd",
-	.of_match_table = sl28vpd_of_match_table,
-	.add_cells = sl28vpd_add_cells,
+static struct nvmem_layout_driver sl28vpd_layout = {
+	.driver = {
+		.name = "kontron-sl28vpd-layout",
+		.of_match_table = sl28vpd_of_match_table,
+		.probe = sl28vpd_probe,
+		.remove = sl28vpd_remove,
+	},
 };
 module_nvmem_layout_driver(sl28vpd_layout);
 

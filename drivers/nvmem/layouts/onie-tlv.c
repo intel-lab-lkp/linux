@@ -13,6 +13,7 @@
 #include <linux/nvmem-consumer.h>
 #include <linux/nvmem-provider.h>
 #include <linux/of.h>
+#include <linux/platform_device.h>
 
 #define ONIE_TLV_MAX_LEN 2048
 #define ONIE_TLV_CRC_FIELD_SZ 6
@@ -226,16 +227,44 @@ static int onie_tlv_parse_table(struct device *dev, struct nvmem_device *nvmem,
 	return 0;
 }
 
+static int onie_tlv_probe(struct device *dev)
+{
+	struct nvmem_layout *layout;
+
+	layout = devm_kzalloc(dev, sizeof(*layout), GFP_KERNEL);
+	if (!layout)
+		return -ENOMEM;
+
+	layout->add_cells = onie_tlv_parse_table;
+	layout->dev = dev;
+
+	dev_set_drvdata(dev, layout);
+
+	return nvmem_layout_register(layout);
+}
+
+static int onie_tlv_remove(struct device *dev)
+{
+	struct nvmem_layout *layout = dev_get_drvdata(dev);
+
+	nvmem_layout_unregister(layout);
+
+	return 0;
+}
+
 static const struct of_device_id onie_tlv_of_match_table[] = {
 	{ .compatible = "onie,tlv-layout", },
 	{},
 };
 MODULE_DEVICE_TABLE(of, onie_tlv_of_match_table);
 
-static struct nvmem_layout onie_tlv_layout = {
-	.name = "ONIE tlv layout",
-	.of_match_table = onie_tlv_of_match_table,
-	.add_cells = onie_tlv_parse_table,
+static struct nvmem_layout_driver onie_tlv_layout = {
+	.driver = {
+		.name = "onie-tlv-layout",
+		.of_match_table = onie_tlv_of_match_table,
+		.probe = onie_tlv_probe,
+		.remove = onie_tlv_remove,
+	},
 };
 module_nvmem_layout_driver(onie_tlv_layout);
 

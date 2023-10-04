@@ -53,6 +53,7 @@ static LIST_HEAD(nvmem_cell_tables);
 static DEFINE_MUTEX(nvmem_lookup_mutex);
 static LIST_HEAD(nvmem_lookup_list);
 
+struct notifier_block nvmem_nb;
 static BLOCKING_NOTIFIER_HEAD(nvmem_notifier);
 
 static DEFINE_SPINLOCK(nvmem_layout_lock);
@@ -771,23 +772,16 @@ EXPORT_SYMBOL_GPL(nvmem_layout_unregister);
 static struct nvmem_layout *nvmem_layout_get(struct nvmem_device *nvmem)
 {
 	struct device_node *layout_np;
-	struct nvmem_layout *l, *layout = ERR_PTR(-EPROBE_DEFER);
+	struct nvmem_layout *l, *layout = NULL;
 
 	layout_np = of_nvmem_layout_get_container(nvmem);
 	if (!layout_np)
 		return NULL;
 
-	/*
-	 * In case the nvmem device was built-in while the layout was built as a
-	 * module, we shall manually request the layout driver loading otherwise
-	 * we'll never have any match.
-	 */
-	of_request_module(layout_np);
-
 	spin_lock(&nvmem_layout_lock);
 
 	list_for_each_entry(l, &nvmem_layouts, node) {
-		if (of_match_node(l->of_match_table, layout_np)) {
+		if (of_match_node(l->dev->driver->of_match_table, layout_np)) {
 			if (try_module_get(l->owner))
 				layout = l;
 
@@ -821,14 +815,6 @@ static int nvmem_add_cells_from_layout(struct nvmem_device *nvmem)
 	return 0;
 }
 
-#if IS_ENABLED(CONFIG_OF)
-struct device_node *of_nvmem_layout_get_container(struct nvmem_device *nvmem)
-{
-	return of_get_child_by_name(nvmem->dev.of_node, "nvmem-layout");
-}
-EXPORT_SYMBOL_GPL(of_nvmem_layout_get_container);
-#endif
-
 const void *nvmem_layout_get_match_data(struct nvmem_device *nvmem,
 					struct nvmem_layout *layout)
 {
@@ -836,7 +822,7 @@ const void *nvmem_layout_get_match_data(struct nvmem_device *nvmem,
 	const struct of_device_id *match;
 
 	layout_np = of_nvmem_layout_get_container(nvmem);
-	match = of_match_node(layout->of_match_table, layout_np);
+	match = of_match_node(layout->dev->driver->of_match_table, layout_np);
 
 	return match ? match->data : NULL;
 }
@@ -947,19 +933,6 @@ struct nvmem_device *nvmem_register(const struct nvmem_config *config)
 			goto err_put_device;
 	}
 
-	/*
-	 * If the driver supplied a layout by config->layout, the module
-	 * pointer will be NULL and nvmem_layout_put() will be a noop.
-	 */
-	nvmem->layout = config->layout ?: nvmem_layout_get(nvmem);
-	if (IS_ERR(nvmem->layout)) {
-		rval = PTR_ERR(nvmem->layout);
-		nvmem->layout = NULL;
-
-		if (rval == -EPROBE_DEFER)
-			goto err_teardown_compat;
-	}
-
 	if (config->cells) {
 		rval = nvmem_add_cells(nvmem, config->cells, config->ncells);
 		if (rval)
@@ -978,13 +951,14 @@ struct nvmem_device *nvmem_register(const struct nvmem_config *config)
 	if (rval)
 		goto err_remove_cells;
 
-	rval = nvmem_add_cells_from_layout(nvmem);
-	if (rval)
-		goto err_remove_cells;
-
 	dev_dbg(&nvmem->dev, "Registering nvmem device %s\n", config->name);
 
 	rval = device_add(&nvmem->dev);
+	if (rval)
+		goto err_remove_cells;
+
+	/* Populate the layout bus */
+	rval = nvmem_populate_layout(nvmem);
 	if (rval)
 		goto err_remove_cells;
 
@@ -994,8 +968,6 @@ struct nvmem_device *nvmem_register(const struct nvmem_config *config)
 
 err_remove_cells:
 	nvmem_device_remove_all_cells(nvmem);
-	nvmem_layout_put(nvmem->layout);
-err_teardown_compat:
 	if (config->compat)
 		nvmem_sysfs_remove_compat(nvmem, config);
 err_put_device:
@@ -2097,13 +2069,122 @@ const char *nvmem_dev_name(struct nvmem_device *nvmem)
 }
 EXPORT_SYMBOL_GPL(nvmem_dev_name);
 
+static void nvmem_try_loading_layout_driver(struct nvmem_device *nvmem)
+{
+	struct device_node *layout_np;
+
+	layout_np = of_nvmem_layout_get_container(nvmem);
+	if (layout_np) {
+		of_request_module(layout_np);
+		of_node_put(layout_np);
+	}
+}
+
+static int nvmem_match_available_layout(struct nvmem_device *nvmem)
+{
+	int ret;
+
+	if (nvmem->layout)
+		return 0;
+
+	nvmem->layout = nvmem_layout_get(nvmem);
+	if (!nvmem->layout)
+		return 0;
+
+	ret = nvmem_add_cells_from_layout(nvmem);
+	if (ret) {
+		nvmem_layout_put(nvmem->layout);
+		nvmem->layout = NULL;
+		return ret;
+	}
+
+	return 0;
+}
+
+static int nvmem_dev_match_available_layout(struct device *dev, void *data)
+{
+	struct nvmem_device *nvmem = to_nvmem_device(dev);
+
+	return nvmem_match_available_layout(nvmem);
+}
+
+static int nvmem_for_each_dev(int (*fn)(struct device *dev, void *data))
+{
+	return bus_for_each_dev(&nvmem_bus_type, NULL, NULL, fn);
+}
+
+/*
+ * When an NVMEM device is registered, try to match against a layout and
+ * populate the cells. When an NVMEM layout is probed, ensure all NVMEM devices
+ * which could use it properly expose their cells.
+ */
+static int nvmem_notifier_call(struct notifier_block *notifier,
+			       unsigned long event_flags, void *context)
+{
+	struct nvmem_device *nvmem = NULL;
+	int ret;
+
+	switch (event_flags) {
+	case NVMEM_ADD:
+		nvmem = context;
+		break;
+	case NVMEM_LAYOUT_ADD:
+		break;
+	default:
+		return NOTIFY_DONE;
+	}
+
+	if (nvmem) {
+		/*
+		 * In case the nvmem device was built-in while the layout was
+		 * built as a module, manually request loading the layout driver.
+		 */
+		nvmem_try_loading_layout_driver(nvmem);
+
+		/* Populate the cells of the new nvmem device from its layout, if any */
+		ret = nvmem_match_available_layout(nvmem);
+	} else {
+		/* NVMEM devices might be "waiting" for this layout */
+		ret = nvmem_for_each_dev(nvmem_dev_match_available_layout);
+	}
+
+	if (ret)
+		return notifier_from_errno(ret);
+
+	return NOTIFY_OK;
+}
+
 static int __init nvmem_init(void)
 {
-	return bus_register(&nvmem_bus_type);
+	int ret;
+
+	ret = bus_register(&nvmem_bus_type);
+	if (ret)
+		return ret;
+
+	ret = nvmem_layout_bus_register();
+	if (ret)
+		goto unregister_nvmem_bus;
+
+	nvmem_nb.notifier_call = &nvmem_notifier_call;
+	ret = nvmem_register_notifier(&nvmem_nb);
+	if (ret)
+		goto unregister_nvmem_layout_bus;
+
+	return 0;
+
+unregister_nvmem_layout_bus:
+	nvmem_layout_bus_unregister();
+unregister_nvmem_bus:
+	bus_unregister(&nvmem_bus_type);
+
+	return ret;
 }
 
 static void __exit nvmem_exit(void)
 {
+	nvmem_unregister_notifier(&nvmem_nb);
+	nvmem_layout_bus_unregister();
 	bus_unregister(&nvmem_bus_type);
 }
 

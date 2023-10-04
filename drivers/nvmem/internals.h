@@ -32,4 +32,8 @@ struct nvmem_device {
 	void *priv;
 };
 
+int nvmem_layout_bus_register(void);
+void nvmem_layout_bus_unregister(void);
+int nvmem_populate_layout(struct nvmem_device *nvmem);
+
 #endif  /* ifndef _LINUX_NVMEM_INTERNALS_H */
