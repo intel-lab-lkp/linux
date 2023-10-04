@@ -152,7 +152,7 @@ static int cmd_db_get_header(const char *id, const struct entry_header **eh,
 	 * query string is not necessarily '\0' terminated if it bumps up
 	 * against the max size. That's OK and expected.
 	 */
-	strncpy(query, id, sizeof(query));
+	strscpy_pad(query, id, sizeof(query));
 
 	for (i = 0; i < MAX_SLV_ID; i++) {
 		rsc_hdr = &cmd_db_header->header[i];
