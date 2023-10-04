@@ -52,15 +52,13 @@ static void mmio_invalidate_full(struct intel_gt *gt)
 	struct intel_engine_cs *engine;
 	intel_engine_mask_t awake, tmp;
 	enum intel_engine_id id;
-	unsigned long flags;
 
 	if (GRAPHICS_VER(i915) < 8)
 		return;
 
 	intel_uncore_forcewake_get(uncore, FORCEWAKE_ALL);
 
-	intel_gt_mcr_lock(gt, &flags);
-	spin_lock(&uncore->lock); /* serialise invalidate with GT reset */
+	mutex_lock(&gt->reset.mutex);/* serialise invalidate with GT reset */
 
 	awake = 0;
 	for_each_engine(engine, gt, id) {
@@ -68,9 +66,9 @@ static void mmio_invalidate_full(struct intel_gt *gt)
 			continue;
 
 		if (engine->tlb_inv.mcr)
-			intel_gt_mcr_multicast_write_fw(gt,
-							engine->tlb_inv.reg.mcr_reg,
-							engine->tlb_inv.request);
+			intel_gt_mcr_multicast_write(gt,
+						     engine->tlb_inv.reg.mcr_reg,
+						     engine->tlb_inv.request);
 		else
 			intel_uncore_write_fw(uncore,
 					      engine->tlb_inv.reg.reg,
@@ -90,8 +88,7 @@ static void mmio_invalidate_full(struct intel_gt *gt)
 	     IS_ALDERLAKE_P(i915)))
 		intel_uncore_write_fw(uncore, GEN12_OA_TLB_INV_CR, 1);
 
-	spin_unlock(&uncore->lock);
-	intel_gt_mcr_unlock(gt, flags);
+	mutex_unlock(&gt->reset.mutex);
 
 	for_each_engine_masked(engine, gt, awake, tmp) {
 		if (wait_for_invalidate(engine))
