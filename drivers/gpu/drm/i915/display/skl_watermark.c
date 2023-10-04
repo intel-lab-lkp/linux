@@ -3134,9 +3134,9 @@ static void skl_wm_get_hw_state_and_sanitize(struct drm_i915_private *i915)
 	skl_wm_sanitize(i915);
 }
 
-void intel_wm_state_verify(struct intel_crtc *crtc,
-			   const struct intel_crtc_state *new_crtc_state)
+void intel_wm_state_verify(const struct intel_crtc_state *new_crtc_state)
 {
+	struct intel_crtc *crtc = to_intel_crtc(new_crtc_state->uapi.crtc);
 	struct drm_i915_private *i915 = to_i915(crtc->base.dev);
 	struct skl_hw_state {
 		struct skl_ddb_entry ddb[I915_MAX_PLANES];
