@@ -1078,6 +1078,9 @@ void post_init_entity_util_avg(struct task_struct *p)
 	}
 
 	sa->runnable_avg = sa->util_avg;
+#ifdef CONFIG_UCLAMP_TASK
+	sa->util_avg_uclamp = sa->util_avg;
+#endif
 }
 
 #else /* !CONFIG_SMP */
@@ -5069,6 +5072,7 @@ enqueue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 	update_stats_enqueue_fair(cfs_rq, se, flags);
 	if (!curr)
 		__enqueue_entity(cfs_rq, se);
+	enqueue_util_avg_uclamp(cfs_rq, se);
 	se->on_rq = 1;
 
 	if (cfs_rq->nr_running == 1) {
@@ -5139,6 +5143,7 @@ dequeue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 	update_entity_lag(cfs_rq, se);
 	if (se != cfs_rq->curr)
 		__dequeue_entity(cfs_rq, se);
+	dequeue_util_avg_uclamp(cfs_rq, se);
 	se->on_rq = 0;
 	account_entity_dequeue(cfs_rq, se);
 
@@ -6445,6 +6450,21 @@ static int sched_idle_cpu(int cpu)
 }
 #endif
 
+void ___update_util_avg_uclamp(struct sched_avg *avg, struct sched_entity *se);
+
+static void update_se_chain(struct task_struct *p)
+{
+#ifdef CONFIG_UCLAMP_TASK
+	struct sched_entity *se = &p->se;
+	struct rq *rq = task_rq(p);
+
+	for_each_sched_entity(se) {
+		struct cfs_rq *cfs_rq = cfs_rq_of(se);
+
+		___update_util_avg_uclamp(&cfs_rq->avg, se);
+	}
+#endif
+}
 /*
  * The enqueue_task method is called before nr_running is
  * increased. Here we update the fair scheduling stats and
@@ -6510,6 +6530,16 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 		if (cfs_rq_throttled(cfs_rq))
 			goto enqueue_throttle;
 	}
+
+	/*
+	 * Re-evaluate the se hierarchy now that on_rq is true. This is
+	 * important to enforce uclamp the moment a task with uclamp is
+	 * enqueued, rather than waiting a timer tick for uclamp to kick in.
+	 *
+	 * XXX: This duplicates some of the work already done in the above for
+	 * loops.
+	 */
+	update_se_chain(p);
 
 	/* At this point se is NULL and we are at root level*/
 	add_nr_running(rq, 1);
@@ -6612,6 +6642,15 @@ static void dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 dequeue_throttle:
 	util_est_update(&rq->cfs, p, task_sleep);
 	hrtick_update(rq);
+
+#ifdef CONFIG_UCLAMP_TASK
+	if (rq->cfs.h_nr_running == 0) {
+		WARN_ONCE(rq->cfs.avg.util_avg_uclamp,
+			"0 tasks on CFS of CPU %d, but util_avg_uclamp is %u\n",
+			rq->cpu, rq->cfs.avg.util_avg_uclamp);
+		WRITE_ONCE(rq->cfs.avg.util_avg_uclamp, 0);
+	}
+#endif
 }
 
 #ifdef CONFIG_SMP

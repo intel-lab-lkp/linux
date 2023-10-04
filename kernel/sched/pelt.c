@@ -266,6 +266,48 @@ ___update_load_avg(struct sched_avg *sa, unsigned long load)
 	WRITE_ONCE(sa->util_avg, sa->util_sum / divider);
 }
 
+#ifdef CONFIG_UCLAMP_TASK
+/* avg must belong to the queue this se is on. */
+void ___update_util_avg_uclamp(struct sched_avg *avg, struct sched_entity *se)
+{
+	unsigned int util;
+	int delta;
+
+	if (entity_is_task(se)) {
+		unsigned int uclamp_min, uclamp_max;
+
+		if (!se->on_rq)
+			return;
+
+		util = READ_ONCE(se->avg.util_avg);
+		uclamp_min = uclamp_eff_value(task_of(se), UCLAMP_MIN);
+		uclamp_max = uclamp_eff_value(task_of(se), UCLAMP_MAX);
+		util = clamp(util, uclamp_min, uclamp_max);
+	} else {
+		util = READ_ONCE(group_cfs_rq(se)->avg.util_avg_uclamp);
+
+		if (!se->on_rq) {
+			WRITE_ONCE(se->avg.util_avg_uclamp, util);
+			return;
+		}
+	}
+
+	delta = util - READ_ONCE(se->avg.util_avg_uclamp);
+	if (delta == 0)
+		return;
+
+	WRITE_ONCE(se->avg.util_avg_uclamp, util);
+	util = READ_ONCE(avg->util_avg_uclamp);
+	util += delta;
+	WRITE_ONCE(avg->util_avg_uclamp, util);
+}
+#else /* !CONFIG_UCLAMP_TASK */
+static void
+___update_util_avg_uclamp(struct sched_avg *avg, struct sched_entity *se)
+{
+}
+#endif
+
 /*
  * sched_entity:
  *
@@ -309,6 +351,7 @@ int __update_load_avg_se(u64 now, struct cfs_rq *cfs_rq, struct sched_entity *se
 				cfs_rq->curr == se)) {
 
 		___update_load_avg(&se->avg, se_weight(se));
+		___update_util_avg_uclamp(&cfs_rq->avg, se);
 		cfs_se_util_change(&se->avg);
 		trace_pelt_se_tp(se);
 		return 1;

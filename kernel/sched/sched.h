@@ -3136,6 +3136,33 @@ static inline bool uclamp_is_used(void)
 {
 	return static_branch_likely(&sched_uclamp_used);
 }
+
+static inline void enqueue_util_avg_uclamp(struct cfs_rq *cfs_rq,
+					   struct sched_entity *se)
+{
+	unsigned int cfs_val = READ_ONCE(cfs_rq->avg.util_avg_uclamp);
+	unsigned int se_val = READ_ONCE(se->avg.util_avg_uclamp);
+
+	WRITE_ONCE(cfs_rq->avg.util_avg_uclamp, cfs_val + se_val);
+}
+
+static inline void dequeue_util_avg_uclamp(struct cfs_rq *cfs_rq,
+					   struct sched_entity *se)
+{
+	unsigned int cfs_val = READ_ONCE(cfs_rq->avg.util_avg_uclamp);
+	unsigned int se_val = READ_ONCE(se->avg.util_avg_uclamp), new_val;
+
+	if (cfs_val > se_val)
+		new_val = cfs_val - se_val;
+	else {
+		WARN_ONCE(cfs_val < se_val,
+			"CPU %d. cfs_rq %p, cfs_val %u is even less than se_val %u before subtraction\n",
+			rq_of(cfs_rq)->cpu, cfs_rq, cfs_val, se_val);
+		new_val = 0;
+	}
+
+	WRITE_ONCE(cfs_rq->avg.util_avg_uclamp, new_val);
+}
 #else /* CONFIG_UCLAMP_TASK */
 static inline unsigned long uclamp_eff_value(struct task_struct *p,
 					     enum uclamp_id clamp_id)
@@ -3177,6 +3204,16 @@ static inline void uclamp_rq_set(struct rq *rq, enum uclamp_id clamp_id,
 static inline bool uclamp_rq_is_idle(struct rq *rq)
 {
 	return false;
+}
+
+static inline void enqueue_util_avg_uclamp(struct cfs_rq *cfs_rq,
+					   struct sched_entity *se)
+{
+}
+
+static inline void dequeue_util_avg_uclamp(struct cfs_rq *cfs_rq,
+					   struct sched_entity *se)
+{
 }
 #endif /* CONFIG_UCLAMP_TASK */
 
