@@ -341,6 +341,14 @@ static void init_advisor(void)
 	advisor_ctx.change = 0;
 }
 
+static void set_advisor_defaults(void)
+{
+	if (ksm_advisor == KSM_ADVISOR_NONE)
+		ksm_thread_pages_to_scan = DEFAULT_PAGES_TO_SCAN;
+	else if (ksm_advisor == KSM_ADVISOR_SCAN_TIME)
+		ksm_thread_pages_to_scan = ksm_advisor_min_pages;
+}
+
 /*
  * Use previous scan time if available, otherwise use current scan time as an
  * approximation for the previous scan time.
@@ -3692,6 +3700,102 @@ static ssize_t smart_scan_store(struct kobject *kobj,
 }
 KSM_ATTR(smart_scan);
 
+static ssize_t advisor_mode_show(struct kobject *kobj,
+				 struct kobj_attribute *attr, char *buf)
+{
+	return sysfs_emit(buf, "%u\n", ksm_advisor);
+}
+
+static ssize_t advisor_mode_store(struct kobject *kobj,
+				  struct kobj_attribute *attr, const char *buf,
+				  size_t count)
+{
+	unsigned int mode;
+	int err;
+
+	err = kstrtouint(buf, 10, &mode);
+	if (err)
+		return -EINVAL;
+	if (mode > KSM_ADVISOR_LAST)
+		return -EINVAL;
+
+	/* Set advisor default values */
+	ksm_advisor = mode;
+	init_advisor();
+	set_advisor_defaults();
+
+	return count;
+}
+KSM_ATTR(advisor_mode);
+
+static ssize_t advisor_min_pages_show(struct kobject *kobj,
+				      struct kobj_attribute *attr, char *buf)
+{
+	return sysfs_emit(buf, "%lu\n", ksm_advisor_min_pages);
+}
+
+static ssize_t advisor_min_pages_store(struct kobject *kobj,
+				       struct kobj_attribute *attr,
+				       const char *buf, size_t count)
+{
+	int err;
+	unsigned long value;
+
+	err = kstrtoul(buf, 10, &value);
+	if (err)
+		return -EINVAL;
+
+	ksm_advisor_min_pages = value;
+	return count;
+}
+KSM_ATTR(advisor_min_pages);
+
+static ssize_t advisor_max_pages_show(struct kobject *kobj,
+				      struct kobj_attribute *attr, char *buf)
+{
+	return sysfs_emit(buf, "%lu\n", ksm_advisor_max_pages);
+}
+
+static ssize_t advisor_max_pages_store(struct kobject *kobj,
+				       struct kobj_attribute *attr,
+				       const char *buf, size_t count)
+{
+	int err;
+	unsigned long value;
+
+	err = kstrtoul(buf, 10, &value);
+	if (err)
+		return -EINVAL;
+
+	ksm_advisor_max_pages = value;
+	return count;
+}
+KSM_ATTR(advisor_max_pages);
+
+static ssize_t advisor_target_scan_time_show(struct kobject *kobj,
+					     struct kobj_attribute *attr, char *buf)
+{
+	return sysfs_emit(buf, "%lu\n", ksm_advisor_target_scan_time);
+}
+
+static ssize_t advisor_target_scan_time_store(struct kobject *kobj,
+					      struct kobj_attribute *attr,
+					      const char *buf, size_t count)
+{
+	int err;
+	unsigned long value;
+
+	err = kstrtoul(buf, 10, &value);
+	if (err)
+		return -EINVAL;
+	if (value < 1)
+		return -EINVAL;
+
+	ksm_advisor_target_scan_time = value;
+	return count;
+}
+KSM_ATTR(advisor_target_scan_time);
+
 static struct attribute *ksm_attrs[] = {
 	&sleep_millisecs_attr.attr,
 	&pages_to_scan_attr.attr,
@@ -3714,6 +3818,10 @@ static struct attribute *ksm_attrs[] = {
 	&use_zero_pages_attr.attr,
 	&general_profit_attr.attr,
 	&smart_scan_attr.attr,
+	&advisor_mode_attr.attr,
+	&advisor_min_pages_attr.attr,
+	&advisor_max_pages_attr.attr,
+	&advisor_target_scan_time_attr.attr,
 	NULL,
 };
 
