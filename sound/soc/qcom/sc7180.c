@@ -4,6 +4,7 @@
 //
 // sc7180.c -- ALSA SoC Machine driver for SC7180
 
+#include <dt-bindings/sound/qcom,lpass.h>
 #include <dt-bindings/sound/sc7180-lpass.h>
 #include <linux/gpio.h>
 #include <linux/gpio/consumer.h>
@@ -19,7 +20,6 @@
 #include "../codecs/rt5682.h"
 #include "../codecs/rt5682s.h"
 #include "common.h"
-#include "lpass.h"
 
 #define DEFAULT_MCLK_RATE		19200000
 #define RT5682_PLL1_FREQ (48000 * 512)
