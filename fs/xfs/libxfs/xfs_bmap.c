@@ -3538,10 +3538,8 @@ xfs_bmap_btalloc_aligned(
 	struct xfs_bmalloca	*ap,
 	struct xfs_alloc_arg	*args,
 	xfs_extlen_t		blen,
-	int			stripe_align,
-	bool			ag_only)
+	int			stripe_align)
 {
-	struct xfs_perag        *caller_pag = args->pag;
 	int			error;
 
 	/*
@@ -3558,14 +3556,7 @@ xfs_bmap_btalloc_aligned(
 	args->alignment = stripe_align;
 	args->minalignslop = 0;
 
-	if (ag_only) {
-		error = xfs_alloc_vextent_near_bno(args, ap->blkno);
-	} else {
-		args->pag = NULL;
-		error = xfs_alloc_vextent_start_ag(args, ap->blkno);
-		ASSERT(args->pag == NULL);
-		args->pag = caller_pag;
-	}
+	error = xfs_alloc_vextent_near_bno(args, ap->blkno);
 	if (error)
 		return error;
 
@@ -3650,8 +3641,7 @@ xfs_bmap_btalloc_filestreams(
 		goto out_low_space;
 
 	if (ap->aeof)
-		error = xfs_bmap_btalloc_aligned(ap, args, blen, stripe_align,
-				true);
+		error = xfs_bmap_btalloc_aligned(ap, args, blen, stripe_align);
 
 	if (!error && args->fsbno == NULLFSBLOCK)
 		error = xfs_alloc_vextent_near_bno(args, ap->blkno);
@@ -3715,9 +3705,16 @@ xfs_bmap_btalloc_best_length(
 		return error;
 	ASSERT(args->pag);
 
-	if (ap->aeof && ap->offset) {
+	if (ap->aeof && ap->offset)
 		error = xfs_bmap_btalloc_at_eof(ap, args, blen, stripe_align);
-	}
+
+	if (error || args->fsbno != NULLFSBLOCK)
+		goto out_perag_rele;
+
+
+	/* attempt aligned allocation for new EOF extents */
+	if (stripe_align)
+		error = xfs_bmap_btalloc_aligned(ap, args, blen, stripe_align);
 
 	/*
 	 * We are now done with the perag reference for the optimal allocation
@@ -3725,21 +3722,10 @@ xfs_bmap_btalloc_best_length(
 	 * now as we've either succeeded, had a fatal error or we are out of
 	 * space and need to do a full filesystem scan for free space which will
 	 * take it's own references.
-	 *
-	 * XXX: now that xfs_bmap_btalloc_select_lengths() selects an AG with
-	 * enough contiguous free space in it for an aligned allocation, we
-	 * can change the aligned allocation at EOF to just be a single AG
-	 * allocation.
 	 */
+out_perag_rele:
 	xfs_perag_rele(args->pag);
 	args->pag = NULL;
-	if (error || args->fsbno != NULLFSBLOCK)
-		return error;
-
-	/* attempt aligned allocation for new EOF extents */
-	if (stripe_align)
-		error = xfs_bmap_btalloc_aligned(ap, args, blen, stripe_align,
-				false);
 	if (error || args->fsbno != NULLFSBLOCK)
 		return error;
 
