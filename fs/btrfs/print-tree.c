@@ -215,10 +215,9 @@ static void print_raid_stripe_key(const struct extent_buffer *eb, u32 item_size,
 		btrfs_raid_array[encoding].raid_name : "unknown");
 
 	for (int i = 0; i < num_stripes; i++)
-		pr_info("\t\t\tstride %d devid %llu physical %llu length %llu\n",
+		pr_info("\t\t\tstride %d devid %llu physical %llu\n",
 			i, btrfs_raid_stride_devid(eb, &stripe->strides[i]),
-			btrfs_raid_stride_physical(eb, &stripe->strides[i]),
-			btrfs_raid_stride_length(eb, &stripe->strides[i]));
+			btrfs_raid_stride_physical(eb, &stripe->strides[i]));
 }
 
 /*
