@@ -1838,18 +1838,24 @@ static int em_push(struct x86_emulate_ctxt *ctxt)
 }
 
 static int emulate_pop(struct x86_emulate_ctxt *ctxt,
-		       void *dest, int len)
+		       unsigned long *dest, u8 op_bytes)
 {
 	int rc;
 	struct segmented_address addr;
 
+	/*
+	 * segmented_read below will only partially initialize dest when
+	 * we are not in 64-bit mode.
+	 */
+	*dest = 0;
+
 	addr.ea = reg_read(ctxt, VCPU_REGS_RSP) & stack_mask(ctxt);
 	addr.seg = VCPU_SREG_SS;
-	rc = segmented_read(ctxt, addr, dest, len);
+	rc = segmented_read(ctxt, addr, dest, op_bytes);
 	if (rc != X86EMUL_CONTINUE)
 		return rc;
 
-	rsp_increment(ctxt, len);
+	rsp_increment(ctxt, op_bytes);
 	return rc;
 }
 
@@ -1999,7 +2005,7 @@ static int em_popa(struct x86_emulate_ctxt *ctxt)
 {
 	int rc = X86EMUL_CONTINUE;
 	int reg = VCPU_REGS_RDI;
-	u32 val;
+	unsigned long val;
 
 	while (reg >= VCPU_REGS_RAX) {
 		if (reg == VCPU_REGS_RSP) {
