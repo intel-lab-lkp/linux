@@ -2820,43 +2820,28 @@ static int soc_get_playback_capture(struct snd_soc_pcm_runtime *rtd,
 			}
 		}
 	} else {
-		struct snd_soc_dai *codec_dai;
+		struct snd_soc_dai *dai;
 
 		/* Adapt stream for codec2codec links */
 		int cpu_capture  = snd_soc_get_stream_cpu(dai_link, SNDRV_PCM_STREAM_CAPTURE);
 		int cpu_playback = snd_soc_get_stream_cpu(dai_link, SNDRV_PCM_STREAM_PLAYBACK);
 
-		has_playback = (dai_link->num_codecs > 0);
-		has_capture  = (dai_link->num_codecs > 0);
-		for_each_rtd_codec_dais(rtd, i, codec_dai) {
-			if (dai_link->num_cpus == 1) {
-				cpu_dai = snd_soc_rtd_to_cpu(rtd, 0);
-			} else if (dai_link->num_cpus == dai_link->num_codecs) {
-				cpu_dai = snd_soc_rtd_to_cpu(rtd, i);
-			} else if (rtd->dai_link->num_codecs > rtd->dai_link->num_cpus) {
-				int cpu_id;
+		has_playback =
+		has_capture  = (dai_link->num_cpus > 0 && dai_link->num_codecs > 0);
 
-				if (!rtd->dai_link->codec_ch_maps) {
-					dev_err(rtd->card->dev, "%s: no codec channel mapping table provided\n",
-						__func__);
-					return -EINVAL;
-				}
-
-				cpu_id = rtd->dai_link->codec_ch_maps[i].connected_cpu_id;
-				cpu_dai = snd_soc_rtd_to_cpu(rtd, cpu_id);
-			} else {
-				dev_err(rtd->card->dev,
-					"%s codec number %d < cpu number %d is not supported\n",
-					__func__, rtd->dai_link->num_codecs,
-					rtd->dai_link->num_cpus);
-				return -EINVAL;
-			}
-
-			if (!(snd_soc_dai_stream_valid(codec_dai, SNDRV_PCM_STREAM_PLAYBACK) &&
-			      snd_soc_dai_stream_valid(cpu_dai,   cpu_playback)))
+		/* CPU validation check */
+		for_each_rtd_cpu_dais(rtd, i, dai) {
+			if (!snd_soc_dai_stream_valid(dai, cpu_playback))
 				has_playback = 0;
-			if (!(snd_soc_dai_stream_valid(codec_dai, SNDRV_PCM_STREAM_CAPTURE) &&
-			      snd_soc_dai_stream_valid(cpu_dai,   cpu_capture)))
+			if (!snd_soc_dai_stream_valid(dai, cpu_capture))
+				has_capture = 0;
+		}
+
+		/* Codec validation check */
+		for_each_rtd_codec_dais(rtd, i, dai) {
+			if (!snd_soc_dai_stream_valid(dai, SNDRV_PCM_STREAM_PLAYBACK))
+				has_playback = 0;
+			if (!snd_soc_dai_stream_valid(dai, SNDRV_PCM_STREAM_CAPTURE))
 				has_capture = 0;
 		}
 	}
