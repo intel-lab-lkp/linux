@@ -2989,8 +2989,6 @@ static inline unsigned long cpu_util_rt(struct rq *rq)
 #endif
 
 #ifdef CONFIG_UCLAMP_TASK
-unsigned long uclamp_eff_value(struct task_struct *p, enum uclamp_id clamp_id);
-
 /*
  * When uclamp is compiled in, the aggregation at rq level is 'turned off'
  * by default in the fast path and only gets turned on once userspace performs
@@ -3002,6 +3000,18 @@ unsigned long uclamp_eff_value(struct task_struct *p, enum uclamp_id clamp_id);
 static inline bool uclamp_is_used(void)
 {
 	return static_branch_likely(&sched_uclamp_used);
+}
+
+static inline unsigned long uclamp_eff_value(struct task_struct *p,
+					     enum uclamp_id clamp_id)
+{
+	if (uclamp_is_used() && p->uclamp[clamp_id].active)
+		return p->uclamp[clamp_id].value;
+
+	if (clamp_id == UCLAMP_MIN)
+		return 0;
+
+	return SCHED_CAPACITY_SCALE;
 }
 
 static inline unsigned long root_cfs_util(struct rq *rq)
