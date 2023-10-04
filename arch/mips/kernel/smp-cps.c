@@ -34,6 +34,16 @@ static unsigned __init core_vpe_count(unsigned int cluster, unsigned core)
 	return min(smp_max_threads, mips_cps_numvps(cluster, core));
 }
 
+static int ddr32_alias;
+
+static int __init ddr32_alias_setup(char *str)
+{
+	get_option(&str, &ddr32_alias);
+
+	return 0;
+}
+early_param("ddr32_alias", ddr32_alias_setup);
+
 /**
  * plat_core_entry - query reset vector for NMI/reset
  *
@@ -52,7 +62,7 @@ static u32 plat_core_entry(void)
 {
 #if defined(CONFIG_USE_XKPHYS)
 	return (UNCAC_ADDR(mips_cps_core_entry) & 0xffffffff)
-			| CM_GCR_Cx_RESET_BASE_MODE;
+			| ddr32_alias | CM_GCR_Cx_RESET_BASE_MODE;
 #else
 	return CKSEG1ADDR((unsigned long)mips_cps_core_entry);
 #endif
