@@ -53,14 +53,14 @@ static int rpm_reg_write_active(struct qcom_rpm_reg *vreg)
 		reqlen++;
 	}
 
-	if (vreg->uv_updated && vreg->is_enabled) {
+	if (vreg->uv_updated && vreg->is_enabled > 0) {
 		req[reqlen].key = cpu_to_le32(RPM_KEY_UV);
 		req[reqlen].nbytes = cpu_to_le32(sizeof(u32));
 		req[reqlen].value = cpu_to_le32(vreg->uV);
 		reqlen++;
 	}
 
-	if (vreg->load_updated && vreg->is_enabled) {
+	if (vreg->load_updated && vreg->is_enabled > 0) {
 		req[reqlen].key = cpu_to_le32(RPM_KEY_MA);
 		req[reqlen].nbytes = cpu_to_le32(sizeof(u32));
 		req[reqlen].value = cpu_to_le32(vreg->load / 1000);
@@ -1377,6 +1377,7 @@ static int rpm_regulator_init_vreg(struct qcom_rpm_reg *vreg, struct device *dev
 	vreg->rpm	= rpm;
 	vreg->type	= rpm_data->type;
 	vreg->id	= rpm_data->id;
+	vreg->is_enabled = -EINVAL;
 
 	memcpy(&vreg->desc, rpm_data->desc, sizeof(vreg->desc));
 	vreg->desc.name = rpm_data->name;
