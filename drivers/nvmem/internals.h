@@ -31,6 +31,7 @@ struct nvmem_device {
 	struct device		*layout_dev;
 	struct nvmem_layout	*layout;
 	void *priv;
+	bool			sysfs_cells_populated;
 };
 
 #if IS_ENABLED(CONFIG_OF)
