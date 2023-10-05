@@ -2943,7 +2943,8 @@ static void bio_set_ioprio(struct bio *bio)
 {
 	/* Nobody set ioprio so far? Initialize it based on task's nice value */
 	if (IOPRIO_PRIO_CLASS(bio->bi_ioprio) == IOPRIO_CLASS_NONE)
-		bio->bi_ioprio = get_current_ioprio();
+		ioprio_set_class_and_level(&bio->bi_ioprio,
+					   get_current_ioprio());
 	blkcg_set_ioprio(bio);
 }
 

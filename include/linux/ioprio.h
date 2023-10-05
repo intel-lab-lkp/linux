@@ -71,4 +71,14 @@ static inline int ioprio_check_cap(int ioprio)
 }
 #endif /* CONFIG_BLOCK */
 
+#define IOPRIO_CLASS_LEVEL_MASK ((IOPRIO_CLASS_MASK << IOPRIO_CLASS_SHIFT) | \
+				 (IOPRIO_LEVEL_MASK << 0))
+
+static inline void ioprio_set_class_and_level(u16 *prio, u16 class_level)
+{
+	WARN_ON_ONCE(class_level & ~IOPRIO_CLASS_LEVEL_MASK);
+	*prio &= ~IOPRIO_CLASS_LEVEL_MASK;
+	*prio |= class_level;
+}
+
 #endif
