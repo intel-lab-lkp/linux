@@ -202,7 +202,8 @@ void blkcg_set_ioprio(struct bio *bio)
 		 * to achieve this.
 		 */
 		if (IOPRIO_PRIO_CLASS(bio->bi_ioprio) != IOPRIO_CLASS_RT)
-			bio->bi_ioprio = IOPRIO_PRIO_VALUE(IOPRIO_CLASS_RT, 4);
+			ioprio_set_class_and_level(&bio->bi_ioprio,
+					IOPRIO_PRIO_VALUE(IOPRIO_CLASS_RT, 4));
 		return;
 	}
 
@@ -213,10 +214,10 @@ void blkcg_set_ioprio(struct bio *bio)
 	 * If the bio I/O priority equals IOPRIO_CLASS_NONE, the cgroup I/O
 	 * priority is assigned to the bio.
 	 */
-	prio = max_t(u16, bio->bi_ioprio,
+	prio = max_t(u16, bio->bi_ioprio & IOPRIO_CLASS_LEVEL_MASK,
 			IOPRIO_PRIO_VALUE(blkcg->prio_policy, 0));
-	if (prio > bio->bi_ioprio)
-		bio->bi_ioprio = prio;
+	if (prio > (bio->bi_ioprio & IOPRIO_CLASS_LEVEL_MASK))
+		ioprio_set_class_and_level(&bio->bi_ioprio, prio);
 }
 
 void blk_ioprio_exit(struct gendisk *disk)
