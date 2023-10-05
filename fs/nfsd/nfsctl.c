@@ -1527,8 +1527,7 @@ static int nfsd_genl_rpc_status_compose_msg(struct sk_buff *skb,
 	u32 i;
 
 	hdr = genlmsg_put(skb, NETLINK_CB(cb->skb).portid, cb->nlh->nlmsg_seq,
-			  &nfsd_nl_family, NLM_F_MULTI,
-			  NFSD_CMD_RPC_STATUS_GET);
+			  &nfsd_nl_family, 0, NFSD_CMD_RPC_STATUS_GET);
 	if (!hdr)
 		return -ENOBUFS;
 
