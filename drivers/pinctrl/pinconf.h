@@ -31,13 +31,13 @@ int pinconf_apply_setting(const struct pinctrl_setting *setting);
 
 int pinconf_set_config(struct pinctrl_dev *pctldev, unsigned pin,
 		       unsigned long *configs, size_t nconfigs);
+int pin_config_get_for_pin(struct pinctrl_dev *pctldev, unsigned pin,
+			   unsigned long *config);
 
 /*
  * You will only be interested in these if you're using PINCONF
  * so don't supply any stubs for these.
  */
-int pin_config_get_for_pin(struct pinctrl_dev *pctldev, unsigned pin,
-			   unsigned long *config);
 int pin_config_group_get(const char *dev_name, const char *pin_group,
 			 unsigned long *config);
 
@@ -70,6 +70,12 @@ static inline int pinconf_apply_setting(const struct pinctrl_setting *setting)
 
 static inline int pinconf_set_config(struct pinctrl_dev *pctldev, unsigned pin,
 				     unsigned long *configs, size_t nconfigs)
+{
+	return -ENOTSUPP;
+}
+
+static inline int pin_config_get_for_pin(struct pinctrl_dev *pctldev,
+					 unsigned pin, unsigned long *config)
 {
 	return -ENOTSUPP;
 }
