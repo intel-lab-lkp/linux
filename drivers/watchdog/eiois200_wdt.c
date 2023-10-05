@@ -18,13 +18,21 @@
 
 /* Support Flags */
 #define SUPPORT_AVAILABLE	BIT(0)
+#define SUPPORT_PWRBTN		BIT(3)
+#define SUPPORT_IRQ		BIT(4)
+#define SUPPORT_SCI		BIT(5)
+#define SUPPORT_PIN		BIT(6)
 #define SUPPORT_RESET		BIT(7)
 
 /* PMC registers */
 #define REG_STATUS		0x00
 #define REG_CONTROL		0x02
 #define REG_EVENT		0x10
+#define REG_PWR_EVENT_TIME	0x12
+#define REG_IRQ_EVENT_TIME	0x13
 #define REG_RESET_EVENT_TIME	0x14
+#define REG_PIN_EVENT_TIME	0x15
+#define REG_SCI_EVENT_TIME	0x16
 #define REG_IRQ_NUMBER		0x17
 
 /* PMC command and control */
@@ -50,20 +58,53 @@
 #define PMC_WRITE(cmd, data)	pmc(CMD_WDT_WRITE, cmd, data)
 #define PMC_READ(cmd, data)	pmc(CMD_WDT_READ, cmd, data)
 
+/* Mapping event type to supported bit */
+#define EVENT_BIT(type)   	BIT(type + 2)
+
+enum event_type {
+	EVENT_NONE,
+	EVENT_PWRBTN,
+	EVENT_IRQ,
+	EVENT_SCI,
+	EVENT_PIN
+};
+
 static struct _wdt {
+	u32	event_type;
 	u32	support;
 	long	last_time;
 	struct	regmap  *iomap;
 	struct	device *dev;
 } wdt;
 
+static char * const type_strs[] = {
+	"NONE",
+	"PWRBTN",
+	"IRQ",
+	"SCI",
+	"PIN",
+};
+
+static u32 type_regs[] = {
+	REG_RESET_EVENT_TIME,
+	REG_PWR_EVENT_TIME,
+	REG_IRQ_EVENT_TIME,
+	REG_SCI_EVENT_TIME,
+	REG_PIN_EVENT_TIME,
+};
+
 /* Pointer to the eiois200_core device structure */
 static struct eiois200_dev *eiois200_dev;
 
+/* Specify the pin triggered on pretimeout or timeout */
+static char *event_type = "NONE";
+module_param(event_type, charp, 0);
+MODULE_PARM_DESC(event_type,
+		 "Watchdog timeout event type (RESET, PWRBTN, SCI, IRQ, GPIO)");
 static struct watchdog_info wdinfo = {
 	.identity = KBUILD_MODNAME,
 	.options  = WDIOF_SETTIMEOUT | WDIOF_KEEPALIVEPING |
-		    WDIOF_MAGICCLOSE,
+		    WDIOF_PRETIMEOUT | WDIOF_MAGICCLOSE,
 };
 
 static struct watchdog_device wddev = {
@@ -76,8 +117,42 @@ static int wdt_set_timeout(struct watchdog_device *dev,
 			   unsigned int _timeout)
 {
 	dev->timeout = _timeout;
-	dev_dbg(wdt.dev, "Set timeout: %d\n", _timeout);
+	dev_info(wdt.dev, "Set timeout: %d\n", _timeout);
 
+	return 0;
+}
+
+static int wdt_set_pretimeout(struct watchdog_device *dev,
+			      unsigned int _pretimeout)
+{
+	dev->pretimeout = _pretimeout;
+
+	dev_info(wdt.dev, "Set pretimeout: %d\n", _pretimeout);
+
+	return 0;
+}
+
+static int wdt_get_type(void)
+{
+	int i;
+
+	for (i = 1; i < ARRAY_SIZE(type_strs); i++)
+		if (strcasecmp(event_type, type_strs[i]) == 0) {
+			if ((wdt.support & EVENT_BIT(i)) == 0) {
+				dev_err(wdt.dev,
+					"This board doesn't support %s trigger type\n",
+					event_type);
+				return -EINVAL;
+			}
+
+			dev_info(wdt.dev, "Trigger type is %d:%s\n", 
+					  i, type_strs[i]);
+			wdt.event_type = i;
+
+			return 0;
+		}
+
+	dev_info(wdt.dev, "Event type: %s\n", type_strs[wdt.event_type]);
 	return 0;
 }
 
@@ -116,33 +191,98 @@ static int set_time(u8 ctl, u32 time)
 
 static int wdt_set_config(void)
 {
-	int ret;
+	int ret, type;
+	u32 event_time = 0;
 	u32 reset_time = 0;
 
-	reset_time = wddev.timeout;
+	/* event_type should never out of range */
+	if (wdt.event_type > EVENT_PIN)
+		return -EFAULT;
 
+	/* Calculate event time and reset time */
+	if (wddev.pretimeout && wddev.timeout) {
+		if (wddev.timeout < wddev.pretimeout)
+			return -EINVAL;
+
+	reset_time = wddev.timeout;
+		event_time = wddev.timeout - wddev.pretimeout;
+
+	} else if (wddev.timeout) {
+		reset_time = wdt.event_type ? 0	: wddev.timeout;
+		event_time = wdt.event_type ? wddev.timeout : 0;
+	}
+
+	/* Set reset time */
 	ret = set_time(REG_RESET_EVENT_TIME, reset_time);
 	if (ret)
 		return ret;
 
-	dev_info(wdt.dev, "Config wdt reset time %d\n", reset_time);
+	/* Set every other times */
+	for (type = 1; type < ARRAY_SIZE(type_regs); type++) {
+		ret = set_time(type_regs[type],
+			       wdt.event_type == type ? event_time : 0);
+		if (ret)
+			return ret;
+	}
+
+	dev_dbg(wdt.dev, "Config wdt reset time %d\n", reset_time);
+	dev_dbg(wdt.dev, "Config wdt event time %d\n", event_time);
+	dev_dbg(wdt.dev, "Config wdt event type %s\n",
+			  type_strs[wdt.event_type]);
 
 	return ret;
 }
 
 static int wdt_get_config(void)
 {
-	int ret;
-	u32 reset_time;
+	int ret, type;
+	u32 event_time, reset_time;
 
 	/* Get Reset Time */
 	ret = get_time(REG_RESET_EVENT_TIME, &reset_time);
 	if (ret)
 		return ret;
 
-	dev_info(wdt.dev, "Timeout H/W default timeout: %d secs\n", reset_time);
-	wddev.timeout	 = reset_time;
+	dev_dbg(wdt.dev, "Timeout H/W default timeout: %d secs\n", reset_time);
 
+	/* Get every other times **/
+	for (type = 1; type < ARRAY_SIZE(type_regs); type++) {
+		if ((wdt.support & EVENT_BIT(type)) == 0)
+			continue;
+
+		ret = get_time(type_regs[type], &event_time);
+		if (ret)
+			return ret;
+
+		if (event_time == 0)
+			continue;
+
+		if (reset_time) {
+			if (reset_time < event_time)
+				continue;
+
+	wddev.timeout	 = reset_time;
+			wddev.pretimeout = reset_time - event_time;
+
+			dev_dbg(wdt.dev, "Pretimeout H/W enabled with event %s of %d secs\n",
+				 type_strs[type], wddev.pretimeout);
+		} else {
+			wddev.timeout = event_time;
+			wddev.pretimeout = 0;
+		}
+
+		wdt.event_type = type;
+
+		dev_dbg(wdt.dev, "Timeout H/W enabled of %d secs\n",
+				  wddev.timeout);
+		return 0;
+	}
+
+	wdt.event_type	 = EVENT_NONE;
+	wddev.pretimeout = reset_time ? 0	   : WATCHDOG_PRETIMEOUT;
+	wddev.timeout	 = reset_time ? reset_time : WATCHDOG_TIMEOUT;
+
+	dev_dbg(wdt.dev, "Pretimeout H/W disabled");
 	return 0;
 }
 
@@ -218,6 +358,7 @@ static int wdt_support(void)
 
 	return 0;
 }
+
 static int wdt_init(struct device *dev)
 {
 	int ret = 0;
@@ -230,6 +371,9 @@ static int wdt_init(struct device *dev)
 	if (ret)
 		return ret;
 
+	ret = wdt_get_type();
+	if (ret)
+		return ret;
 	return ret;
 }
 
@@ -240,6 +384,7 @@ static const struct watchdog_ops wdt_ops = {
 	.ping		= wdt_ping,
 	.set_timeout	= wdt_set_timeout,
 	.get_timeleft	= wdt_get_timeleft,
+	.set_pretimeout = wdt_set_pretimeout,
 };
 
 static int wdt_probe(struct platform_device *pdev)
