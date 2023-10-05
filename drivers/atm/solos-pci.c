@@ -447,11 +447,12 @@ static ssize_t console_show(struct device *dev, struct device_attribute *attr,
 	struct atm_dev *atmdev = container_of(dev, struct atm_dev, class_dev);
 	struct solos_card *card = atmdev->dev_data;
 	struct sk_buff *skb;
+	unsigned long flags;
 	unsigned int len;
 
-	spin_lock(&card->cli_queue_lock);
+	spin_lock_irqsave(&card->cli_queue_lock, flags);
 	skb = skb_dequeue(&card->cli_queue[SOLOS_CHAN(atmdev)]);
-	spin_unlock(&card->cli_queue_lock);
+	spin_unlock_irqrestore(&card->cli_queue_lock, flags);
 	if(skb == NULL)
 		return sprintf(buf, "No data.\n");
 
