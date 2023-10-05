@@ -439,6 +439,8 @@ enum vcpu_sysreg {
 	CNTHP_CVAL_EL2,
 	CNTHV_CTL_EL2,
 	CNTHV_CVAL_EL2,
+	PMSCR_EL1,	/* Statistical profiling extension */
+	TRFCR_EL1,	/* Self-hosted trace filters */
 
 	NR_SYS_REGS	/* Nothing after this line! */
 };
@@ -572,10 +574,6 @@ struct kvm_vcpu_arch {
 	struct {
 		/* {Break,watch}point registers */
 		struct kvm_guest_debug_arch regs;
-		/* Statistical profiling extension */
-		u64 pmscr_el1;
-		/* Self-hosted trace */
-		u64 trfcr_el1;
 	} host_debug_state;
 
 	/* VGIC state */
