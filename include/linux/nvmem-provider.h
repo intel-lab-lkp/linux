@@ -154,8 +154,7 @@ struct nvmem_cell_table {
 /**
  * struct nvmem_layout - NVMEM layout definitions
  *
- * @name:		Layout name.
- * @of_match_table:	Open firmware match table.
+ * @dev:		Device-model layout device.
  * @add_cells:		Will be called if a nvmem device is found which
  *			has this layout. The function will add layout
  *			specific cells with nvmem_add_one_cell().
@@ -170,8 +169,7 @@ struct nvmem_cell_table {
  * cells.
  */
 struct nvmem_layout {
-	const char *name;
-	const struct of_device_id *of_match_table;
+	struct device *dev;
 	int (*add_cells)(struct device *dev, struct nvmem_device *nvmem,
 			 struct nvmem_layout *layout);
 	void (*fixup_cell_info)(struct nvmem_device *nvmem,
@@ -181,6 +179,10 @@ struct nvmem_layout {
 	/* private */
 	struct module *owner;
 	struct list_head node;
+};
+
+struct nvmem_layout_driver {
+	struct device_driver driver;
 };
 
 #if IS_ENABLED(CONFIG_NVMEM)
@@ -197,10 +199,14 @@ void nvmem_del_cell_table(struct nvmem_cell_table *table);
 int nvmem_add_one_cell(struct nvmem_device *nvmem,
 		       const struct nvmem_cell_info *info);
 
-int __nvmem_layout_register(struct nvmem_layout *layout, struct module *owner);
-#define nvmem_layout_register(layout) \
-	__nvmem_layout_register(layout, THIS_MODULE)
+int nvmem_layout_register(struct nvmem_layout *layout);
 void nvmem_layout_unregister(struct nvmem_layout *layout);
+
+int nvmem_layout_driver_register(struct nvmem_layout_driver *drv);
+void nvmem_layout_driver_unregister(struct nvmem_layout_driver *drv);
+#define module_nvmem_layout_driver(__nvmem_layout_driver)		\
+	module_driver(__nvmem_layout_driver, nvmem_layout_driver_register, \
+		      nvmem_layout_driver_unregister)
 
 const void *nvmem_layout_get_match_data(struct nvmem_device *nvmem,
 					struct nvmem_layout *layout);
@@ -257,9 +263,4 @@ static inline struct device_node *of_nvmem_layout_get_container(struct nvmem_dev
 	return NULL;
 }
 #endif /* CONFIG_NVMEM */
-
-#define module_nvmem_layout_driver(__layout_driver)		\
-	module_driver(__layout_driver, nvmem_layout_register,	\
-		      nvmem_layout_unregister)
-
 #endif  /* ifndef _LINUX_NVMEM_PROVIDER_H */
