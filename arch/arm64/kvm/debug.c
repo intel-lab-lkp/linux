@@ -23,6 +23,12 @@
 
 static DEFINE_PER_CPU(u64, mdcr_el2);
 
+/*
+ * Per CPU value for TRFCR that should be applied to any guest vcpu that may
+ * run on that core in the future.
+ */
+static DEFINE_PER_CPU(u64, guest_trfcr);
+
 /**
  * save/restore_guest_debug_regs
  *
@@ -341,4 +347,24 @@ void kvm_arch_vcpu_put_debug_state_flags(struct kvm_vcpu *vcpu)
 {
 	vcpu_clear_flag(vcpu, DEBUG_STATE_SAVE_SPE);
 	vcpu_clear_flag(vcpu, DEBUG_STATE_SAVE_TRFCR);
+}
+
+void kvm_etm_set_guest_trfcr(u64 trfcr_guest)
+{
+	if (has_vhe())
+		write_sysreg_s(trfcr_guest, SYS_TRFCR_EL12);
+	else
+		*this_cpu_ptr(&guest_trfcr) = trfcr_guest;
+}
+EXPORT_SYMBOL_GPL(kvm_etm_set_guest_trfcr);
+
+/*
+ * Updates the vcpu's view of the etm events for this cpu. Must be
+ * called before every vcpu run after disabling interrupts, to ensure
+ * that an interrupt cannot fire and update the structure.
+ */
+void kvm_etm_update_vcpu_events(struct kvm_vcpu *vcpu)
+{
+	if (!has_vhe() && vcpu_get_flag(vcpu, DEBUG_STATE_SAVE_TRFCR))
+		ctxt_sys_reg(&vcpu->arch.ctxt, TRFCR_EL1) = *this_cpu_ptr(&guest_trfcr);
 }
