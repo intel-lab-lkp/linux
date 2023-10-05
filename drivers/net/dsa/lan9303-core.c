@@ -1013,8 +1013,8 @@ static void lan9303_get_strings(struct dsa_switch *ds, int port,
 		return;
 
 	for (u = 0; u < ARRAY_SIZE(lan9303_mib); u++) {
-		strncpy(data + u * ETH_GSTRING_LEN, lan9303_mib[u].name,
-			ETH_GSTRING_LEN);
+		memcpy(data + u * ETH_GSTRING_LEN, lan9303_mib[u].name,
+		       ETH_GSTRING_LEN);
 	}
 }
 
