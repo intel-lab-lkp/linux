@@ -106,6 +106,29 @@ static int get_time(u8 ctrl, u32 *val)
 	return ret;
 }
 
+static int set_time(u8 ctl, u32 time)
+{
+	/* sec to sec */
+	time *= 1000;
+
+	return PMC_WRITE(ctl, &time);
+}
+
+static int wdt_set_config(void)
+{
+	int ret;
+	u32 reset_time = 0;
+
+	reset_time = wddev.timeout;
+
+	ret = set_time(REG_RESET_EVENT_TIME, reset_time);
+	if (ret)
+		return ret;
+
+	dev_info(wdt.dev, "Config wdt reset time %d\n", reset_time);
+
+	return ret;
+}
 
 static int wdt_get_config(void)
 {
@@ -123,24 +146,57 @@ static int wdt_get_config(void)
 	return 0;
 }
 
+static int set_ctrl(u8 data)
+{
+	return PMC_WRITE(REG_CONTROL, &data);
+}
+
 static int wdt_start(struct watchdog_device *dev)
 {
-	return 0;
+	int ret;
+
+	ret = wdt_set_config();
+	if (ret)
+		return ret;
+
+	ret = set_ctrl(CTRL_START);
+	if (ret == 0) {
+		wdt.last_time = jiffies;
+		dev_dbg(wdt.dev, "Watchdog started\n");
+	}
+
+	return ret;
 }
 
 static int wdt_stop(struct watchdog_device *dev)
 {
-	return 0;
+	dev_dbg(wdt.dev, "Watchdog stopped\n");
+	wdt.last_time = 0;
+
+	return set_ctrl(CTRL_STOP);
 }
 
 static int wdt_ping(struct watchdog_device *dev)
 {
-	return 0;
+	int ret;
+
+	dev_dbg(wdt.dev, "Watchdog pings\n");
+
+	ret = set_ctrl(CTRL_TRIGGER);
+	if (ret == 0)
+		wdt.last_time = jiffies;
+
+	return ret;
 }
 
 static unsigned int wdt_get_timeleft(struct watchdog_device *dev)
 {
-	return 0;
+	unsigned int timeleft = 0;
+
+	if (wdt.last_time != 0)
+		timeleft = wddev.timeout - ((jiffies - wdt.last_time) / HZ);
+
+	return timeleft;
 }
 
 static int wdt_support(void)
