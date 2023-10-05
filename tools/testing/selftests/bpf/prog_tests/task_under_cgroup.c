@@ -30,8 +30,12 @@ void test_task_under_cgroup(void)
 	if (!ASSERT_OK(ret, "test_task_under_cgroup__load"))
 		goto cleanup;
 
-	ret = test_task_under_cgroup__attach(skel);
-	if (!ASSERT_OK(ret, "test_task_under_cgroup__attach"))
+	skel->links.lsm_run = bpf_program__attach_lsm(skel->progs.lsm_run);
+	if (!ASSERT_OK_PTR(skel->links.lsm_run, "attach_lsm"))
+		goto cleanup;
+
+	skel->links.tp_btf_run = bpf_program__attach_trace(skel->progs.tp_btf_run);
+	if (!ASSERT_OK_PTR(skel->links.tp_btf_run, "attach_tp_btf"))
 		goto cleanup;
 
 	pid = fork();
