@@ -4326,7 +4326,7 @@ static int intel_hdmi_reset_link(struct intel_encoder *encoder,
 	struct drm_i915_private *dev_priv = to_i915(encoder->base.dev);
 	struct intel_hdmi *hdmi = enc_to_intel_hdmi(encoder);
 	struct intel_connector *connector = hdmi->attached_connector;
-	struct i2c_adapter *ddc = connector->base.ddc;
+	struct i2c_adapter *ddc;
 	struct drm_connector_state *conn_state;
 	struct intel_crtc_state *crtc_state;
 	struct intel_crtc *crtc;
@@ -4335,6 +4335,8 @@ static int intel_hdmi_reset_link(struct intel_encoder *encoder,
 
 	if (!connector || connector->base.status != connector_status_connected)
 		return 0;
+
+	ddc = connector->base.ddc;
 
 	ret = drm_modeset_lock(&dev_priv->drm.mode_config.connection_mutex,
 			       ctx);
