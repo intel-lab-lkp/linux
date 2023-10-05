@@ -1185,6 +1185,24 @@ ip_set_destroy_set(struct ip_set *set)
 	kfree(set);
 }
 
+static void wait_xt_recseq(void)
+{
+	unsigned int cpu;
+
+	/* wait for even xt_recseq on all cpus */
+	for_each_possible_cpu(cpu) {
+		seqcount_t *s = &per_cpu(xt_recseq, cpu);
+		u32 seq = raw_read_seqcount(s);
+
+		if (seq & 1) {
+			do {
+				cond_resched();
+				cpu_relax();
+			} while (seq == raw_read_seqcount(s));
+		}
+	}
+}
+
 static int ip_set_destroy(struct sk_buff *skb, const struct nfnl_info *info,
 			  const struct nlattr * const attr[])
 {
@@ -1223,6 +1241,7 @@ static int ip_set_destroy(struct sk_buff *skb, const struct nfnl_info *info,
 		for (i = 0; i < inst->ip_set_max; i++) {
 			s = ip_set(inst, i);
 			if (s) {
+				wait_xt_recseq();
 				ip_set(inst, i) = NULL;
 				ip_set_destroy_set(s);
 			}
@@ -1241,6 +1260,7 @@ static int ip_set_destroy(struct sk_buff *skb, const struct nfnl_info *info,
 			ret = -IPSET_ERR_BUSY;
 			goto out;
 		}
+		wait_xt_recseq();
 		ip_set(inst, i) = NULL;
 		read_unlock_bh(&ip_set_ref_lock);
 
