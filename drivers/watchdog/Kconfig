@@ -1079,6 +1079,20 @@ config ADVANTECH_EC_WDT
 		This driver supports Advantech products with ITE based Embedded Controller.
 		It does not support Advantech products with other ECs or without EC.
 
+config EIOIS200_WDT
+	tristate "Advantech EIO IS-200 Watchdog Timer"
+	depends on X86 && m
+	default m
+	select MFD_EIOIS200
+	help
+	  This is the driver for the hardware watchdog on the EIO IS-200 EC
+	  chip as used in Advantech boards (and likely others).
+
+	  To compile this driver as a module, choose M here: the module will
+	  be called eiois200_wdt.
+
+	  Most people will say M.
+
 config ALIM1535_WDT
 	tristate "ALi M1535 PMU Watchdog Timer"
 	depends on X86 && PCI
