@@ -3805,6 +3805,26 @@ static struct nft_rule *nft_rule_lookup_byid(const struct net *net,
 					     const struct nft_chain *chain,
 					     const struct nlattr *nla);
 
+/* nft <= 1.0.6 appends rules to anon chains after they have been bound */
+static bool nft_rule_work_around_old_version(const struct nfnl_info *info,
+					     struct nft_chain *chain)
+{
+	/* bound (anonymous) chain is already used */
+	if (nft_is_active(info->net, chain))
+		return false;
+
+	/* nft never asks to replace rules here */
+	if (info->nlh->nlmsg_flags & (NLM_F_REPLACE | NLM_F_EXCL))
+		return false;
+
+	/* nft and it only ever appends. */
+	if ((info->nlh->nlmsg_flags & NLM_F_APPEND) == 0)
+		return false;
+
+	pr_warn_once("enabling workaround for nftables 1.0.6 and older\n");
+	return true;
+}
+
 #define NFT_RULE_MAXEXPRS	128
 
 static int nf_tables_newrule(struct sk_buff *skb, const struct nfnl_info *info,
@@ -3818,6 +3838,7 @@ static int nf_tables_newrule(struct sk_buff *skb, const struct nfnl_info *info,
 	struct nft_expr_info *expr_info = NULL;
 	u8 family = info->nfmsg->nfgen_family;
 	struct nft_flow_rule *flow = NULL;
+	bool add_after_bind = false;
 	struct net *net = info->net;
 	struct nft_userdata *udata;
 	struct nft_table *table;
@@ -3857,8 +3878,12 @@ static int nf_tables_newrule(struct sk_buff *skb, const struct nfnl_info *info,
 		return -EINVAL;
 	}
 
-	if (nft_chain_is_bound(chain))
-		return -EOPNOTSUPP;
+	if (nft_chain_is_bound(chain)) {
+		if (!nft_rule_work_around_old_version(info, chain))
+			return -EOPNOTSUPP;
+
+		add_after_bind = true;
+	}
 
 	if (nla[NFTA_RULE_HANDLE]) {
 		handle = be64_to_cpu(nla_get_be64(nla[NFTA_RULE_HANDLE]));
@@ -4002,6 +4027,10 @@ static int nf_tables_newrule(struct sk_buff *skb, const struct nfnl_info *info,
 			err = -ENOMEM;
 			goto err_destroy_flow_rule;
 		}
+
+		/* work around nftables versions <= 1.0.5 that append rules after bind. */
+		if (add_after_bind)
+			nft_trans_rule_bound(trans) = true;
 
 		if (info->nlh->nlmsg_flags & NLM_F_APPEND) {
 			if (old_rule)
