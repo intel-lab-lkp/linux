@@ -1300,7 +1300,7 @@ static ssize_t memmap_on_memory_store(struct device *dev,
 	dev_dax->memmap_on_memory = val;
 
 	device_unlock(dax_region->dev);
-	return rc == 0 ? len : rc;
+	return len;
 }
 static DEVICE_ATTR_RW(memmap_on_memory);
 
