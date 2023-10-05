@@ -741,8 +741,8 @@ struct kvm_vcpu_arch {
 #define DEBUG_DIRTY		__vcpu_single_flag(iflags, BIT(4))
 /* Save SPE context if active  */
 #define DEBUG_STATE_SAVE_SPE	__vcpu_single_flag(iflags, BIT(5))
-/* Save TRBE context if active  */
-#define DEBUG_STATE_SAVE_TRBE	__vcpu_single_flag(iflags, BIT(6))
+/* Save TRFCR and disable TRBE if necessary */
+#define DEBUG_STATE_SAVE_TRFCR	__vcpu_single_flag(iflags, BIT(6))
 /* vcpu running in HYP context */
 #define VCPU_HYP_CONTEXT	__vcpu_single_flag(iflags, BIT(7))
 
