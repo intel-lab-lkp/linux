@@ -300,4 +300,18 @@ static inline enum dpu_crtc_client_type dpu_crtc_get_client_type(
 	return crtc && crtc->state ? RT_CLIENT : NRT_CLIENT;
 }
 
+/**
+ * dpu_crtc_frame_event_cb - crtc frame event callback API
+ * @crtc: Pointer to crtc
+ * @event: Event to process
+ *
+ * CRTC module registers this API to encoder for all frame event callbacks like
+ * frame_error, frame_done, idle_timeout, etc. Encoder may call different events
+ * from different context - IRQ, user thread, commit_thread, etc. Each event
+ * should be carefully reviewed and should be processed in proper task context
+ * to avoid schedulin delay or properly manage the irq context's bottom half
+ * processing.
+ */
+void dpu_crtc_frame_event_cb(struct drm_crtc *crtc, u32 event);
+
 #endif /* _DPU_CRTC_H_ */
