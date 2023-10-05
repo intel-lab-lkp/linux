@@ -412,6 +412,13 @@ static const struct platform_device_id max77693_haptic_id[] = {
 };
 MODULE_DEVICE_TABLE(platform, max77693_haptic_id);
 
+static const struct of_device_id of_max77693_haptic_dt_match[] = {
+	{ .compatible = "maxim,max77693-haptic", },
+	{ .compatible = "maxim,max77843-haptic", },
+	{ /* sentinel */ },
+};
+MODULE_DEVICE_TABLE(of, of_max77693_haptic_dt_match);
+
 static struct platform_driver max77693_haptic_driver = {
 	.driver		= {
 		.name	= "max77693-haptic",
