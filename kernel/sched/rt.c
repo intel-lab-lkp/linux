@@ -520,6 +520,9 @@ static inline struct task_group *next_task_group(struct task_group *tg)
 #define for_each_sched_rt_entity(rt_se) \
 	for (; rt_se; rt_se = rt_se->parent)
 
+#define for_each_sched_rt_entity_back(rt_se) \
+	for (; rt_se; rt_se = rt_se->back)
+
 static inline struct rt_rq *group_rt_rq(struct sched_rt_entity *rt_se)
 {
 	return rt_se->my_q;
@@ -624,6 +627,9 @@ typedef struct rt_rq *rt_rq_iter_t;
 
 #define for_each_sched_rt_entity(rt_se) \
 	for (; rt_se; rt_se = NULL)
+
+#define for_each_sched_rt_entity_back(rt_se) \
+	for_each_sched_rt_entity(rt_se)
 
 static inline struct rt_rq *group_rt_rq(struct sched_rt_entity *rt_se)
 {
@@ -1445,7 +1451,8 @@ static void dequeue_rt_stack(struct sched_rt_entity *rt_se, unsigned int flags)
 
 	rt_nr_running = rt_rq_of_se(back)->rt_nr_running;
 
-	for (rt_se = back; rt_se; rt_se = rt_se->back) {
+	rt_se = back;
+	for_each_sched_rt_entity_back(rt_se) {
 		if (on_rt_rq(rt_se))
 			__dequeue_rt_entity(rt_se, flags);
 	}
