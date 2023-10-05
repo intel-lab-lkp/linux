@@ -8,6 +8,7 @@
 #define _GNU_SOURCE /* for program_invocation_short_name */
 #include <sys/ioctl.h>
 
+#include "kselftest_harness.h"
 #include "test_util.h"
 #include "kvm_util.h"
 #include "vmx.h"
@@ -527,7 +528,7 @@ static void run_guest_then_process_ucall_done(struct kvm_vcpu *vcpu)
 	process_ucall_done(vcpu);
 }
 
-static void test_msr_filter_allow(void)
+TEST(msr_filter_allow)
 {
 	struct kvm_vcpu *vcpu;
 	struct kvm_vm *vm;
@@ -646,7 +647,7 @@ static void handle_wrmsr(struct kvm_run *run)
 	}
 }
 
-static void test_msr_filter_deny(void)
+TEST(msr_filter_deny)
 {
 	struct kvm_vcpu *vcpu;
 	struct kvm_vm *vm;
@@ -693,7 +694,7 @@ done:
 	kvm_vm_free(vm);
 }
 
-static void test_msr_permission_bitmap(void)
+TEST(msr_permission_bitmap)
 {
 	struct kvm_vcpu *vcpu;
 	struct kvm_vm *vm;
@@ -786,7 +787,7 @@ static void run_msr_filter_flag_test(struct kvm_vm *vm)
 }
 
 /* Test that attempts to write to the unused bits in a flag fails. */
-static void test_user_exit_msr_flags(void)
+TEST(user_exit_msr_flags)
 {
 	struct kvm_vcpu *vcpu;
 	struct kvm_vm *vm;
@@ -804,13 +805,5 @@ static void test_user_exit_msr_flags(void)
 
 int main(int argc, char *argv[])
 {
-	test_msr_filter_allow();
-
-	test_msr_filter_deny();
-
-	test_msr_permission_bitmap();
-
-	test_user_exit_msr_flags();
-
-	return 0;
+	return test_harness_run(argc, argv);
 }
