@@ -1064,7 +1064,7 @@ err_iomap:
 err_dac:
 	pci_release_regions(dev);
 err_request_regions:
-/*	pci_disable_device(dev); */
+	pci_disable_device(dev);
 err_enable_device:
 	framebuffer_release(info);
 	return rc;
@@ -1085,7 +1085,7 @@ static void ark_pci_remove(struct pci_dev *dev)
 
 		pci_iounmap(dev, info->screen_base);
 		pci_release_regions(dev);
-/*		pci_disable_device(dev); */
+		pci_disable_device(dev);
 
 		framebuffer_release(info);
 	}
