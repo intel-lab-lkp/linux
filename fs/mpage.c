@@ -20,6 +20,7 @@
 #include <linux/gfp.h>
 #include <linux/bio.h>
 #include <linux/fs.h>
+#include <linux/fs-lifetime.h>
 #include <linux/buffer_head.h>
 #include <linux/blkdev.h>
 #include <linux/highmem.h>
@@ -612,6 +613,7 @@ alloc_new:
 				GFP_NOFS);
 		bio->bi_iter.bi_sector = blocks[0] << (blkbits - 9);
 		wbc_init_bio(wbc, bio);
+		bio_set_data_lifetime(bio, inode->i_write_hint);
 	}
 
 	/*

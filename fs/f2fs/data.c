@@ -6,6 +6,7 @@
  *             http://www.samsung.com/
  */
 #include <linux/fs.h>
+#include <linux/fs-lifetime.h>
 #include <linux/f2fs_fs.h>
 #include <linux/buffer_head.h>
 #include <linux/sched/mm.h>
@@ -478,6 +479,8 @@ static struct bio *__bio_alloc(struct f2fs_io_info *fio, int npages)
 	} else {
 		bio->bi_end_io = f2fs_write_end_io;
 		bio->bi_private = sbi;
+		bio_set_data_lifetime(bio,
+			f2fs_io_type_to_rw_hint(sbi, fio->type, fio->temp));
 	}
 	iostat_alloc_and_bind_ctx(sbi, bio, NULL);
 
