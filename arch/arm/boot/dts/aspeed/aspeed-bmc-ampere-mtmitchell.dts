@@ -51,6 +51,19 @@
 		};
 	};
 
+	leds {
+		compatible = "gpio-leds";
+
+		bmc-ready {
+			gpios = <&gpio0 ASPEED_GPIO(W, 5) (GPIO_ACTIVE_HIGH |
+			 GPIO_TRANSITORY)>;
+		};
+
+		identify {
+			gpios = <&gpio0 ASPEED_GPIO(S, 3) GPIO_ACTIVE_HIGH>;
+		};
+	};
+
 	voltage_mon_reg: voltage-mon-regulator {
 		compatible = "regulator-fixed";
 		regulator-name = "ltc2497_reg";
