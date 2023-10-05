@@ -276,7 +276,7 @@ int __kvm_vcpu_run(struct kvm_vcpu *vcpu)
 	 * translation regime to EL2 (via MDCR_EL2_E2PB == 0) and
 	 * before we load guest Stage1.
 	 */
-	__debug_save_host_buffers_nvhe(host_ctxt);
+	__debug_save_host_buffers_nvhe(host_ctxt, guest_ctxt);
 
 	/*
 	 * We're about to restore some new MMU state. Make sure
@@ -343,7 +343,7 @@ int __kvm_vcpu_run(struct kvm_vcpu *vcpu)
 	 * This must come after restoring the host sysregs, since a non-VHE
 	 * system may enable SPE here and make use of the TTBRs.
 	 */
-	__debug_restore_host_buffers_nvhe(host_ctxt);
+	__debug_restore_host_buffers_nvhe(host_ctxt, guest_ctxt);
 
 	if (pmu_switch_needed)
 		__pmu_switch_to_host(vcpu);
