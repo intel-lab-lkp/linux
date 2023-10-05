@@ -595,8 +595,8 @@ static void mlxbf_tmfifo_rxtx_word(struct mlxbf_tmfifo_vring *vring,
 {
 	struct virtio_device *vdev = vring->vq->vdev;
 	struct mlxbf_tmfifo *fifo = vring->fifo;
+	u64 data = 0;
 	void *addr;
-	u64 data;
 
 	/* Get the buffer address of this desc. */
 	addr = phys_to_virt(virtio64_to_cpu(vdev, desc->addr));
