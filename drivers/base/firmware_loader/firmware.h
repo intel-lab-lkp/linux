@@ -86,6 +86,7 @@ struct fw_priv {
 
 extern struct mutex fw_lock;
 extern struct firmware_cache fw_cache;
+extern bool fw_abort_load;
 
 static inline bool __fw_state_check(struct fw_priv *fw_priv,
 				    enum fw_status status)

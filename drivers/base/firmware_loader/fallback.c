@@ -57,6 +57,10 @@ void kill_pending_fw_fallback_reqs(bool only_kill_custom)
 		if (!fw_priv->need_uevent || !only_kill_custom)
 			 __fw_load_abort(fw_priv);
 	}
+
+	if (!only_kill_custom)
+		fw_abort_load = true;
+
 	mutex_unlock(&fw_lock);
 }
 
@@ -86,7 +90,7 @@ static int fw_load_sysfs_fallback(struct fw_sysfs *fw_sysfs, long timeout)
 	}
 
 	mutex_lock(&fw_lock);
-	if (fw_state_is_aborted(fw_priv)) {
+	if (fw_abort_load || fw_state_is_aborted(fw_priv)) {
 		mutex_unlock(&fw_lock);
 		retval = -EINTR;
 		goto out;
