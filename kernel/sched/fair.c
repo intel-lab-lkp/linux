@@ -11786,13 +11786,12 @@ void nohz_balance_enter_idle(int cpu)
 	/*
 	 * Ensures that if nohz_idle_balance() fails to observe our
 	 * @idle_cpus_mask store, it must observe the @has_blocked
-	 * and @needs_update stores.
+	 * stores.
 	 */
 	smp_mb__after_atomic();
 
 	set_cpu_sd_state_idle(cpu);
 
-	WRITE_ONCE(nohz.needs_update, 1);
 out:
 	/*
 	 * Each time a cpu enter idle, we assume that it has blocked load and
@@ -11945,21 +11944,25 @@ static bool nohz_idle_balance(struct rq *this_rq, enum cpu_idle_type idle)
 }
 
 /*
- * Check if we need to run the ILB for updating blocked load before entering
- * idle state.
+ * Check if we need to run the ILB for updating blocked load and/or updating
+ * nohz.next_balance before entering idle state.
  */
 void nohz_run_idle_balance(int cpu)
 {
 	unsigned int flags;
 
-	flags = atomic_fetch_andnot(NOHZ_NEWILB_KICK, nohz_flags(cpu));
+	flags = atomic_fetch_andnot(NOHZ_NEWILB_KICK | NOHZ_NEXT_KICK, nohz_flags(cpu));
+
+	if (!flags)
+		return;
 
 	/*
 	 * Update the blocked load only if no SCHED_SOFTIRQ is about to happen
 	 * (ie NOHZ_STATS_KICK set) and will do the same.
 	 */
-	if ((flags == NOHZ_NEWILB_KICK) && !need_resched())
-		_nohz_idle_balance(cpu_rq(cpu), NOHZ_STATS_KICK);
+	if ((flags == (flags & (NOHZ_NEXT_KICK | NOHZ_NEWILB_KICK))) &&
+	    !need_resched())
+		_nohz_idle_balance(cpu_rq(cpu), flags);
 }
 
 static void nohz_newidle_balance(struct rq *this_rq)
@@ -11976,6 +11979,10 @@ static void nohz_newidle_balance(struct rq *this_rq)
 	/* Will wake up very soon. No time for doing anything else*/
 	if (this_rq->avg_idle < sysctl_sched_migration_cost)
 		return;
+
+	/* If rq->next_balance before nohz.next_balance, trigger ILB */
+	if (time_before(this_rq->next_balance, READ_ONCE(nohz.next_balance)))
+		atomic_or(NOHZ_NEXT_KICK, nohz_flags(this_cpu));
 
 	/* Don't need to update blocked load of idle CPUs*/
 	if (!READ_ONCE(nohz.has_blocked) ||
