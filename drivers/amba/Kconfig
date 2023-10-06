@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0
 config ARM_AMBA
-	bool
+	bool "Arm (AMBA) Primecell Device bus" if COMPILE_TEST
 
 if ARM_AMBA
 
