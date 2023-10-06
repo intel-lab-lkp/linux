@@ -183,7 +183,7 @@ verify_data_block(struct inode *inode, struct fsverity_info *vi,
 			memcpy(_want_hash, haddr + hoffset, hsize);
 			want_hash = _want_hash;
 			kunmap_local(haddr);
-			put_page(hpage);
+			fsverity_drop_page(inode, hpage);
 			goto descend;
 		}
 		hblocks[level].page = hpage;
@@ -218,7 +218,7 @@ descend:
 		memcpy(_want_hash, haddr + hoffset, hsize);
 		want_hash = _want_hash;
 		kunmap_local(haddr);
-		put_page(hpage);
+		fsverity_drop_page(inode, hpage);
 	}
 
 	/* Finally, verify the data block. */
@@ -237,7 +237,7 @@ corrupted:
 error:
 	for (; level > 0; level--) {
 		kunmap_local(hblocks[level - 1].addr);
-		put_page(hblocks[level - 1].page);
+		fsverity_drop_page(inode, hblocks[level - 1].page);
 	}
 	return false;
 }

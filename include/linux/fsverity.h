@@ -120,6 +120,16 @@ struct fsverity_operations {
 	 */
 	int (*write_merkle_tree_block)(struct inode *inode, const void *buf,
 				       u64 pos, unsigned int size);
+
+	/**
+	 * Release the reference to a Merkle tree page
+	 *
+	 * @page: the page to release
+	 *
+	 * This is called when fs-verity is done with a page obtained with
+	 * ->read_merkle_tree_page().
+	 */
+	void (*drop_page)(struct page *page);
 };
 
 #ifdef CONFIG_FS_VERITY
@@ -173,6 +183,24 @@ int fsverity_ioctl_read_metadata(struct file *filp, const void __user *uarg);
 bool fsverity_verify_blocks(struct folio *folio, size_t len, size_t offset);
 void fsverity_verify_bio(struct bio *bio);
 void fsverity_enqueue_verify_work(struct work_struct *work);
+
+/**
+ * fsverity_drop_page() - drop page obtained with ->read_merkle_tree_page()
+ * @inode: inode in use for verification or metadata reading
+ * @page: page to be dropped
+ *
+ * Generic put_page() method. Calls out back to filesystem if ->drop_page() is
+ * set, otherwise just drops the reference to a page.
+ *
+ */
+static inline void fsverity_drop_page(struct inode *inode, struct page *page)
+{
+	if (inode->i_sb->s_vop->drop_page)
+		inode->i_sb->s_vop->drop_page(page);
+	else
+		put_page(page);
+}
+
 
 #else /* !CONFIG_FS_VERITY */
 
@@ -247,6 +275,11 @@ static inline void fsverity_verify_bio(struct bio *bio)
 }
 
 static inline void fsverity_enqueue_verify_work(struct work_struct *work)
+{
+	WARN_ON_ONCE(1);
+}
+
+static inline void fsverity_drop_page(struct inode *inode, struct page *page)
 {
 	WARN_ON_ONCE(1);
 }
