@@ -53,14 +53,18 @@ multi-search = $(sort $(foreach m, $1, $(if $(call suffix-search, $m, $2, $3 -),
 real-search = $(foreach m, $1, $(if $(call suffix-search, $m, $2, $3 -), $(call suffix-search, $m, $2, $3), $m))
 
 # If $(foo-objs), $(foo-y), $(foo-m), or $(foo-) exists, foo.o is a composite object
-multi-obj-y := $(call multi-search, $(obj-y), .o, -objs -y)
-multi-obj-m := $(call multi-search, $(obj-m), .o, -objs -y -m)
+multi-obj-y := $(call multi-search, $(obj-y), .o, -objs -y) \
+	$(call multi-search, $(obj-y), .rlib, -objs -y)
+multi-obj-m := $(call multi-search, $(obj-m), .o, -objs -y -m) \
+	$(call multi-search, $(obj-m), .rlib, -objs -y -m)
 multi-obj-ym := $(multi-obj-y) $(multi-obj-m)
 
 # Replace multi-part objects by their individual parts,
 # including built-in.a from subdirectories
-real-obj-y := $(call real-search, $(obj-y), .o, -objs -y)
-real-obj-m := $(call real-search, $(obj-m), .o, -objs -y -m)
+real-obj-y := $(call real-search, $(obj-y), .o, -objs -y) \
+	$(call real-search, $(obj-y), .rlib, -objs -y)
+real-obj-m := $(call real-search, $(obj-m), .o, -objs -y -m) \
+	$(call real-search, $(obj-m), .rlib, -objs -y -m)
 
 always-y += $(always-m)
 
@@ -107,7 +111,8 @@ endif
 # Finds the multi-part object the current object will be linked into.
 # If the object belongs to two or more multi-part objects, list them all.
 modname-multi = $(sort $(foreach m,$(multi-obj-ym),\
-		$(if $(filter $*.o, $(call suffix-search, $m, .o, -objs -y -m)),$(m:.o=))))
+		$(if $(filter $*.o, $(call suffix-search, $m, .o, -objs -y -m)),$(m:.o=)) \
+		$(if $(filter $*.rlib, $(call suffix-search, $m, .rlib, -objs -y -m)),$(m:.rlib=))))
 
 __modname = $(or $(modname-multi),$(basetarget))
 
@@ -210,7 +215,9 @@ _cpp_flags += -I $(srctree)/$(src) -I $(objtree)/$(obj)
 endif
 endif
 
-part-of-module = $(if $(filter $(basename $@).o, $(real-obj-m)),y)
+part-of-module =                                             \
+	$(if $(or $(filter $(basename $@).o, $(real-obj-m)), \
+		$(filter $(basename $@).rlib, $(real-obj-m))),y)
 quiet_modtag = $(if $(part-of-module),[M],   )
 
 modkern_cflags =                                          \
