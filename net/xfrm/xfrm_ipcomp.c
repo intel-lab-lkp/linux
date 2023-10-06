@@ -144,7 +144,9 @@ static int ipcomp_compress(struct xfrm_state *x, struct sk_buff *skb)
 	memcpy(start + sizeof(struct ip_comp_hdr), scratch, dlen);
 	local_bh_enable();
 
-	pskb_trim(skb, dlen + sizeof(struct ip_comp_hdr));
+	err = pskb_trim(skb, dlen + sizeof(struct ip_comp_hdr));
+	if (unlikely(err))
+		goto out;
 	return 0;
 
 out:
