@@ -27,6 +27,12 @@ variables:
 
   LAVA_JOB_PRIORITY: 30
 
+  # Default to UART logging.  Mesa uses ssh by default, as that is more
+  # reliable if you have a stable kernel.  But kernel CI is more likely
+  # to encounter unstable kernels (and has lower volume of CI jobs so is
+  # less likely to be troubled by occasional UART flakes)
+  LAVA_FORCE_UART: 1
+
 default:
   before_script:
     - export SCRIPTS_DIR=$(mktemp -d)
