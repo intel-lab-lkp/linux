@@ -441,6 +441,49 @@ in a way which would break what would normally be considered uAPI.
 new ``netdevsim`` features must be accompanied by selftests under
 ``tools/testing/selftests/``.
 
+Reviewer guidance
+-----------------
+
+Reviewing other people's patches on the list is highly encouraged,
+regardless of the level of expertise. Code reviews not only help
+the maintainers but also help reviewers themselves to learn and
+become part of the community.
+
+Reviewers can interact with the submissions by: asking questions
+about the code, sharing relevant experience, suggesting changes, etc.
+Asking questions is a particularly useful technique, for example rather
+than stating:
+
+``I think there can be a deadlock between A and B here.``
+
+it may be better to phrase the feedback as a question:
+
+``Could you explain what prevents deadlocks between A and B?``
+
+After all, patch submissions should be clear both in terms of the code and
+the commit message.
+
+Another technique useful in case of a disagreement is to ask for others
+to chime in. I.e. if a discussion reaches a stalemate after a few exchanges,
+calling for opinions of other reviewers or maintainers. Often those in
+agreement with a reviewer remain silent unless called upon.
+Opinion of multiple people carries exponentially more weight.
+
+There is no strict requirement to use specific tags like ``Reviewed-by``.
+In fact reviews in plain English are more informative and encouraged
+even when a tag is provided (e.g. "I looked at aspects A, B and C of this
+submission and it looks good to me.")
+Some form of a review message / reply is obviously necessary otherwise
+maintainers will not know that the reviewer has looked at the patch at all!
+
+It's safe to assume that the maintainers know the community and the level
+of expertise of the reviewers. The reviewers should not be concerned about
+their comments impeding or derailing the patch flow.
+
+Last but not least patch review may become a negative process, focused
+on pointing out problems. Please throw in a complement once in a while,
+particularly for newbies!
+
 Testimonials / feedback
 -----------------------
 
