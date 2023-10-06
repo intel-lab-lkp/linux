@@ -2094,9 +2094,30 @@ static int __init early_enable_pseudo_nmi(char *p)
 }
 early_param("irqchip.gicv3_pseudo_nmi", early_enable_pseudo_nmi);
 
+static bool are_gic_priorities_broken(void)
+{
+	bool is_broken = false;
+	struct device_node *np;
+
+	/*
+	 * Detect broken Mediatek firmware that doesn't properly save and
+	 * restore GIC priorities.
+	 */
+	np = of_find_compatible_node(NULL, NULL, "arm,gic-v3");
+	if (np) {
+		is_broken = of_property_read_bool(np, "mediatek,broken-save-restore-fw");
+		of_node_put(np);
+	}
+
+	return is_broken;
+}
+
 static bool can_use_gic_priorities(const struct arm64_cpu_capabilities *entry,
 				   int scope)
 {
+	if (are_gic_priorities_broken())
+		return false;
+
 	/*
 	 * ARM64_HAS_GIC_CPUIF_SYSREGS has a lower index, and is a boot CPU
 	 * feature, so will be detected earlier.
