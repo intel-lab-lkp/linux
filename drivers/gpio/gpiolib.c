@@ -782,6 +782,7 @@ int gpiochip_add_data_with_key(struct gpio_chip *gc, void *data,
 			       struct lock_class_key *lock_key,
 			       struct lock_class_key *request_key)
 {
+	struct fwnode_handle *parent_fwnode;
 	struct gpio_device *gdev;
 	unsigned long flags;
 	unsigned int i;
@@ -806,10 +807,13 @@ int gpiochip_add_data_with_key(struct gpio_chip *gc, void *data,
 	 * If the calling driver did not initialize firmware node,
 	 * do it here using the parent device, if any.
 	 */
-	if (gc->fwnode)
+	if (gc->fwnode) {
 		device_set_node(&gdev->dev, gc->fwnode);
-	else if (gc->parent)
-		device_set_node(&gdev->dev, dev_fwnode(gc->parent));
+	} else if (gc->parent) {
+		parent_fwnode = dev_fwnode(gc->parent);
+		device_set_node(&gdev->dev, parent_fwnode);
+		gc->fwnode = parent_fwnode;
+	}
 
 	gdev->id = ida_alloc(&gpio_ida, GFP_KERNEL);
 	if (gdev->id < 0) {
