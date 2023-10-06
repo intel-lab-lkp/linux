@@ -2375,11 +2375,17 @@ init_xfs_fs(void)
 	if (error)
 		goto out_remove_dbg_kobj;
 
-	error = register_filesystem(&xfs_fs_type);
+	error = xfs_init_iomap_bioset();
 	if (error)
 		goto out_qm_exit;
+
+	error = register_filesystem(&xfs_fs_type);
+	if (error)
+		goto out_iomap_bioset;
 	return 0;
 
+ out_iomap_bioset:
+	xfs_free_iomap_bioset();
  out_qm_exit:
 	xfs_qm_exit();
  out_remove_dbg_kobj:
@@ -2412,6 +2418,7 @@ init_xfs_fs(void)
 STATIC void __exit
 exit_xfs_fs(void)
 {
+	xfs_free_iomap_bioset();
 	xfs_qm_exit();
 	unregister_filesystem(&xfs_fs_type);
 #ifdef DEBUG

@@ -26,6 +26,8 @@ struct xfs_writepage_ctx {
 	unsigned int		cow_seq;
 };
 
+static struct bio_set xfs_read_ioend_bioset;
+
 static inline struct xfs_writepage_ctx *
 XFS_WPC(struct iomap_writepage_ctx *ctx)
 {
@@ -548,19 +550,97 @@ xfs_vm_bmap(
 	return iomap_bmap(mapping, block, &xfs_read_iomap_ops);
 }
 
+static void
+xfs_read_work_end_io(
+	struct work_struct *work)
+{
+	struct iomap_read_ioend *ioend =
+		container_of(work, struct iomap_read_ioend, work);
+	struct bio *bio = &ioend->read_inline_bio;
+
+	fsverity_verify_bio(bio);
+	iomap_read_end_io(bio);
+	/*
+	 * The iomap_read_ioend has been freed by bio_put() in
+	 * iomap_read_end_io()
+	 */
+}
+
+static void
+xfs_read_end_io(
+	struct bio *bio)
+{
+	struct iomap_read_ioend *ioend =
+		container_of(bio, struct iomap_read_ioend, read_inline_bio);
+	struct xfs_inode	*ip = XFS_I(ioend->io_inode);
+
+	WARN_ON_ONCE(!queue_work(ip->i_mount->m_postread_workqueue,
+					&ioend->work));
+}
+
+static int
+xfs_verify_folio(
+	struct folio	*folio,
+	loff_t		pos,
+	unsigned int	len)
+{
+	if (fsverity_verify_blocks(folio, len, pos))
+		return 0;
+	return -EFSCORRUPTED;
+}
+
+int
+xfs_init_iomap_bioset(void)
+{
+	return bioset_init(&xfs_read_ioend_bioset,
+			   4 * (PAGE_SIZE / SECTOR_SIZE),
+			   offsetof(struct iomap_read_ioend, read_inline_bio),
+			   BIOSET_NEED_BVECS);
+}
+
+void
+xfs_free_iomap_bioset(void)
+{
+	bioset_exit(&xfs_read_ioend_bioset);
+}
+
+static void
+xfs_submit_read_bio(
+	const struct iomap_iter *iter,
+	struct bio *bio,
+	loff_t file_offset)
+{
+	struct iomap_read_ioend *ioend;
+
+	ioend = container_of(bio, struct iomap_read_ioend, read_inline_bio);
+	ioend->io_inode = iter->inode;
+	if (fsverity_active(ioend->io_inode)) {
+		INIT_WORK(&ioend->work, &xfs_read_work_end_io);
+		ioend->read_inline_bio.bi_end_io = &xfs_read_end_io;
+	}
+
+	submit_bio(bio);
+}
+
+static const struct iomap_readpage_ops xfs_readpage_ops = {
+	.verify_folio		= &xfs_verify_folio,
+	.submit_io		= &xfs_submit_read_bio,
+	.bio_set		= &xfs_read_ioend_bioset,
+};
+
 STATIC int
 xfs_vm_read_folio(
 	struct file		*unused,
 	struct folio		*folio)
 {
-	return iomap_read_folio(folio, &xfs_read_iomap_ops, NULL);
+	return iomap_read_folio(folio, &xfs_read_iomap_ops, &xfs_readpage_ops);
 }
 
 STATIC void
 xfs_vm_readahead(
 	struct readahead_control	*rac)
 {
-	iomap_readahead(rac, &xfs_read_iomap_ops, NULL);
+	iomap_readahead(rac, &xfs_read_iomap_ops, &xfs_readpage_ops);
 }
 
 static int
