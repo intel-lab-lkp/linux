@@ -159,5 +159,8 @@ size_t mtk_mdp_rdma_get_num_formats(struct device *dev);
 
 int mtk_padding_clk_enable(struct device *dev);
 void mtk_padding_clk_disable(struct device *dev);
-void mtk_padding_config(struct device *dev, struct cmdq_pkt *cmdq_pkt);
+void mtk_padding_start(struct device *dev);
+void mtk_padding_stop(struct device *dev);
+void mtk_padding_config(struct device *dev, struct cmdq_pkt *cmdq_pkt,
+			u32 width, u32 height, u32 right, u32 bottom, u32 color);
 #endif
