@@ -37,13 +37,16 @@ static inline void set_64bit(volatile u64 *ptr, u64 value)
 
 #ifdef CONFIG_X86_CMPXCHG64
 #define arch_cmpxchg64(ptr, o, n)					\
-	((__typeof__(*(ptr)))__cmpxchg64((ptr), (unsigned long long)(o), \
+	((__typeof__(*(ptr)))__cmpxchg64((unsigned long long *)(ptr),	\
+					 (unsigned long long)(o),	\
 					 (unsigned long long)(n)))
-#define arch_cmpxchg64_local(ptr, o, n)					\
-	((__typeof__(*(ptr)))__cmpxchg64_local((ptr), (unsigned long long)(o), \
+#define arch_cmpxchg64_local(ptr, o, n)						\
+	((__typeof__(*(ptr)))__cmpxchg64_local((unsigned long long *)(ptr),	\
+					       (unsigned long long)(o),		\
 					       (unsigned long long)(n)))
-#define arch_try_cmpxchg64(ptr, po, n)					\
-	__try_cmpxchg64((ptr), (unsigned long long *)(po), \
+#define arch_try_cmpxchg64(ptr, po, n)			\
+	__try_cmpxchg64((unsigned long long *)(ptr),	\
+			(unsigned long long *)(po),	\
 			(unsigned long long)(n))
 #endif
 
