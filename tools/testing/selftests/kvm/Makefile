@@ -60,7 +60,8 @@ LIBKVM_riscv += lib/riscv/ucall.c
 TEST_PROGS_x86_64 += x86_64/nx_huge_pages_test.sh
 
 # Compiled test targets
-TEST_GEN_PROGS_x86_64 = x86_64/cpuid_test
+TEST_GEN_PROGS_x86_64 = x86_64/boottime_wallclock
+TEST_GEN_PROGS_x86_64 += x86_64/cpuid_test
 TEST_GEN_PROGS_x86_64 += x86_64/cr4_cpuid_sync_test
 TEST_GEN_PROGS_x86_64 += x86_64/dirty_log_page_splitting_test
 TEST_GEN_PROGS_x86_64 += x86_64/get_msr_index_features
