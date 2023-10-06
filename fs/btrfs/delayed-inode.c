@@ -19,6 +19,7 @@
 #include "space-info.h"
 #include "accessors.h"
 #include "file-item.h"
+#include "print-tree.h"
 
 #define BTRFS_DELAYED_WRITEBACK		512
 #define BTRFS_DELAYED_BACKGROUND	128
@@ -1021,10 +1022,16 @@ static int __btrfs_update_delayed_inode(struct btrfs_trans_handle *trans,
 		mod = 1;
 
 	ret = btrfs_lookup_inode(trans, root, path, &key, mod);
-	if (ret > 0)
+	if (ret > 0) {
+		btrfs_print_leaf(path->nodes[0]);
 		ret = -ENOENT;
-	if (ret < 0)
+	}
+	if (ret < 0) {
+		btrfs_err(fs_info,
+			"failed to locate inode item for root %lld ino %lld: %d",
+			root->root_key.objectid, node->inode_id, ret);
 		goto out;
+	}
 
 	leaf = path->nodes[0];
 	inode_item = btrfs_item_ptr(leaf, path->slots[0],
@@ -1054,6 +1061,12 @@ again:
 	 * in the same item doesn't exist.
 	 */
 	ret = btrfs_del_item(trans, root, path);
+	if (ret < 0) {
+		btrfs_print_leaf(path->nodes[0]);
+		btrfs_err(fs_info,
+		"failed to delete inode ref item, key (%llu %u %llu): %d",
+			  key.objectid, key.type, key.offset, ret);
+	}
 out:
 	btrfs_release_delayed_iref(node);
 	btrfs_release_path(path);
@@ -1114,14 +1127,23 @@ __btrfs_commit_inode_delayed_items(struct btrfs_trans_handle *trans,
 	int ret;
 
 	ret = btrfs_insert_delayed_items(trans, path, node->root, node);
-	if (ret)
+	if (ret) {
+		btrfs_err(trans->fs_info, "failedd to insert delayed items: %d",
+			  ret);
 		return ret;
+	}
 
 	ret = btrfs_delete_delayed_items(trans, path, node->root, node);
-	if (ret)
+	if (ret) {
+		btrfs_err(trans->fs_info, "failedd to delete delayed items: %d",
+			  ret);
 		return ret;
+	}
 
 	ret = btrfs_update_delayed_inode(trans, node->root, path, node);
+	if (ret)
+		btrfs_err(trans->fs_info, "failedd to update delayed items: %d",
+			  ret);
 	return ret;
 }
 
