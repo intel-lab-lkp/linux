@@ -635,7 +635,7 @@ static int eth_stop(struct net_device *net)
 	unsigned long	flags;
 
 	VDBG(dev, "%s\n", __func__);
-	netif_stop_queue(net);
+	netif_device_detach(dev->net);
 
 	DBG(dev, "stop stats: rx/tx %ld/%ld, errs %ld/%ld\n",
 		dev->net->stats.rx_packets, dev->net->stats.tx_packets,
