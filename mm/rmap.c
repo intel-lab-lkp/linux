@@ -1129,7 +1129,7 @@ int folio_total_mapcount(struct folio *folio)
 
 /**
  * folio_move_anon_rmap - move a folio to our anon_vma
- * @page:	The folio to move to our anon_vma
+ * @folio:  struct folio - Represents a contiguous set of bytes.
  * @vma:	The vma the folio belongs to
  *
  * When a folio belongs exclusively to one process after a COW event,
