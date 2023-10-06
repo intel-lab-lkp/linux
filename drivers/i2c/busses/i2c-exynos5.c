@@ -162,7 +162,8 @@
 #define HSI2C_MASTER_ID(x)			((x & 0xff) << 24)
 #define MASTER_ID(x)				((x & 0x7) + 0x08)
 
-#define EXYNOS5_I2C_TIMEOUT (msecs_to_jiffies(100))
+#define EXYNOS5_I2C_TIMEOUT_MS (100)
+#define EXYNOS5_I2C_TIMEOUT (msecs_to_jiffies(EXYNOS5_I2C_TIMEOUT_MS))
 
 enum i2c_type_exynos {
 	I2C_TYPE_EXYNOS5,
@@ -193,6 +194,11 @@ struct exynos5_i2c {
 	 * state here.
 	 */
 	int			trans_done;
+
+	/*
+	 * Called from atomic context, don't use interrupts.
+	 */
+	int			no_irqs;
 
 	/* Controller operating frequency */
 	unsigned int		op_clock;
@@ -711,6 +717,24 @@ static void exynos5_i2c_message_start(struct exynos5_i2c *i2c, int stop)
 	spin_unlock_irqrestore(&i2c->lock, flags);
 }
 
+static bool exynos5_i2c_poll_irqs_timeout(struct exynos5_i2c *i2c,
+					  unsigned long timeout_ms)
+{
+	ktime_t start, now;
+
+	start = now = ktime_get();
+	while (ktime_ms_delta(now, start) < timeout_ms &&
+	       !((i2c->trans_done && (i2c->msg->len == i2c->msg_ptr)) ||
+	         (i2c->state < 0))) {
+		while (readl(i2c->regs + HSI2C_INT_ENABLE) &
+		       readl(i2c->regs + HSI2C_INT_STATUS))
+			exynos5_i2c_irq(i2c->irq, i2c);
+		usleep_range(100, 200);
+		now = ktime_get();
+	}
+	return ktime_ms_delta(now, start) < timeout_ms;
+}
+
 static int exynos5_i2c_xfer_msg(struct exynos5_i2c *i2c,
 			      struct i2c_msg *msgs, int stop)
 {
@@ -725,8 +749,13 @@ static int exynos5_i2c_xfer_msg(struct exynos5_i2c *i2c,
 
 	exynos5_i2c_message_start(i2c, stop);
 
-	timeout = wait_for_completion_timeout(&i2c->msg_complete,
-					      EXYNOS5_I2C_TIMEOUT);
+	if (!i2c->no_irqs)
+		timeout = wait_for_completion_timeout(&i2c->msg_complete,
+						      EXYNOS5_I2C_TIMEOUT);
+	else
+		timeout = exynos5_i2c_poll_irqs_timeout(i2c,
+							EXYNOS5_I2C_TIMEOUT_MS);
+
 	if (timeout == 0)
 		ret = -ETIMEDOUT;
 	else
@@ -777,6 +806,21 @@ err_pclk:
 	return ret ?: num;
 }
 
+static int exynos5_i2c_xfer_atomic(struct i2c_adapter *adap,
+				   struct i2c_msg *msgs, int num)
+{
+	struct exynos5_i2c *i2c = adap->algo_data;
+	int ret;
+
+	disable_irq(i2c->irq);
+	i2c->no_irqs = true;
+	ret = exynos5_i2c_xfer(adap, msgs, num);
+	i2c->no_irqs = false;
+	enable_irq(i2c->irq);
+
+	return ret;
+}
+
 static u32 exynos5_i2c_func(struct i2c_adapter *adap)
 {
 	return I2C_FUNC_I2C | (I2C_FUNC_SMBUS_EMUL & ~I2C_FUNC_SMBUS_QUICK);
@@ -784,6 +828,7 @@ static u32 exynos5_i2c_func(struct i2c_adapter *adap)
 
 static const struct i2c_algorithm exynos5_i2c_algorithm = {
 	.master_xfer		= exynos5_i2c_xfer,
+	.master_xfer_atomic	= exynos5_i2c_xfer_atomic,
 	.functionality		= exynos5_i2c_func,
 };
 
