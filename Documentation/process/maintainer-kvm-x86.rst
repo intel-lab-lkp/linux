@@ -243,7 +243,7 @@ context and disambiguate the reference.
 Testing
 -------
 At a bare minimum, *all* patches in a series must build cleanly for KVM_INTEL=m
-KVM_AMD=m, and KVM_WERROR=y.  Building every possible combination of Kconfigs
+KVM_AMD=m, and WERROR=y.  Building every possible combination of Kconfigs
 isn't feasible, but the more the merrier.  KVM_SMM, KVM_XEN, PROVE_LOCKING, and
 X86_64 are particularly interesting knobs to turn.
 

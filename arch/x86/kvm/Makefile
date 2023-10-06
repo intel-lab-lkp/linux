@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0
 
 ccflags-y += -I $(srctree)/arch/x86/kvm
-ccflags-$(CONFIG_KVM_WERROR) += -Werror
 
 ifeq ($(CONFIG_FRAME_POINTER),y)
 OBJECT_FILES_NON_STANDARD_vmenter.o := y
