@@ -148,13 +148,9 @@ static int asus_wireless_add(struct acpi_device *adev)
 	if (err)
 		return err;
 
-	for (id = device_ids; id->id[0]; id++) {
-		if (!strcmp((char *) id->id, acpi_device_hid(adev))) {
-			data->hswc_params =
-				(const struct hswc_params *)id->driver_data;
-			break;
-		}
-	}
+	id = acpi_match_device(device_ids, adev);
+	if (id)
+		data->hswc_params = (const struct hswc_params *)id->driver_data;
 	if (!data->hswc_params)
 		return 0;
 
