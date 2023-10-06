@@ -645,6 +645,8 @@ struct netdev_queue {
 #ifdef CONFIG_XDP_SOCKETS
 	struct xsk_buff_pool    *pool;
 #endif
+	/* NAPI instance for the queue */
+	struct napi_struct      *napi;
 /*
  * write-mostly part
  */
@@ -2618,6 +2620,9 @@ static inline void *netdev_priv(const struct net_device *dev)
  * example Ethernet, Wireless LAN, Bluetooth, WiMAX etc.
  */
 #define SET_NETDEV_DEVTYPE(net, devtype)	((net)->dev.type = (devtype))
+
+int netif_queue_set_napi(unsigned int queue_index, enum netdev_queue_type type,
+			 struct napi_struct *napi);
 
 /* Default NAPI poll() weight
  * Device drivers are strongly advised to not use bigger value
