@@ -324,7 +324,6 @@ struct Qdisc_ops {
 	struct module		*owner;
 };
 
-
 struct tcf_result {
 	union {
 		struct {
@@ -332,8 +331,8 @@ struct tcf_result {
 			u32		classid;
 		};
 		const struct tcf_proto *goto_tp;
-
 	};
+	enum skb_drop_reason		drop_reason;
 };
 
 struct tcf_chain;
@@ -665,6 +664,12 @@ static inline int tc_classid_to_hwtc(struct net_device *dev, u32 classid)
 	u32 hwtc = TC_H_MIN(classid) - TC_H_MIN_PRIORITY;
 
 	return (hwtc < netdev_get_num_tc(dev)) ? hwtc : -EINVAL;
+}
+
+static inline void tc_set_drop_reason(struct tcf_result *res,
+				      enum skb_drop_reason reason)
+{
+	res->drop_reason = reason;
 }
 
 int qdisc_class_hash_init(struct Qdisc_class_hash *);
