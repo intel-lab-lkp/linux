@@ -70,7 +70,7 @@
 			function = LED_FUNCTION_ACTIVITY;
 			linux,default-trigger = "heartbeat";
 			max-brightness = <255>;
-			pwms = <&pwm_cd 1 1250 0>;
+			pwms = <&pwm_ab 1 1250 0>;
 			active-low;
 		};
 	};
@@ -83,7 +83,7 @@
 			function = LED_FUNCTION_STATUS;
 			linux,default-trigger = "default-on";
 			max-brightness = <255>;
-			pwms = <&pwm_ab 1 1250 0>;
+			pwms = <&pwm_cd 1 1250 0>;
 			active-low;
 		};
 	};
