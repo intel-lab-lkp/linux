@@ -37,6 +37,7 @@
 #include <asm/machdep.h>
 #include <asm/mmu.h>
 #include <asm/page.h>
+#include <asm/papr-vpd.h>
 #include <asm/rtas-work-area.h>
 #include <asm/rtas.h>
 #include <asm/time.h>
@@ -1861,6 +1862,28 @@ SYSCALL_DEFINE1(rtas, struct rtas_args __user *, uargs)
 		goto copy_return;
 	}
 
+	if (token == rtas_function_token(RTAS_FN_IBM_GET_VPD)) {
+		/*
+		 * ibm,get-vpd potentially needs to be invoked
+		 * multiple times to obtain complete results.
+		 * Interleaved ibm,get-vpd sequences disrupt each
+		 * other.
+		 *
+		 * /dev/papr-vpd doesn't have this problem and users
+		 * do not need to be aware of each other to use it
+		 * safely.
+		 *
+		 * We can prevent this call from disrupting a
+		 * /dev/papr-vpd-initiated sequence in progress by
+		 * reaching into the driver to take its internal
+		 * lock. Unfortunately there is no way to prevent
+		 * interference in the other direction without
+		 * resorting to even worse hacks.
+		 */
+		pr_notice_once("Calling ibm,get-vpd via sys_rtas is allowed but deprecated. Use /dev/papr-vpd instead.\n");
+		papr_vpd_mutex_lock();
+	}
+
 	buff_copy = get_errorlog_buffer();
 
 	raw_spin_lock_irqsave(&rtas_lock, flags);
@@ -1869,6 +1892,9 @@ SYSCALL_DEFINE1(rtas, struct rtas_args __user *, uargs)
 	rtas_args = args;
 	do_enter_rtas(&rtas_args);
 	args = rtas_args;
+
+	if (token == rtas_function_token(RTAS_FN_IBM_GET_VPD))
+		papr_vpd_mutex_unlock();
 
 	/* A -1 return code indicates that the last command couldn't
 	   be completed due to a hardware error. */
