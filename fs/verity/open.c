@@ -126,19 +126,16 @@ int fsverity_init_merkle_tree_params(struct merkle_tree_params *params,
 	}
 
 	/*
-	 * With block_size != PAGE_SIZE, an in-memory bitmap will need to be
-	 * allocated to track the "verified" status of hash blocks.  Don't allow
-	 * this bitmap to get too large.  For now, limit it to 1 MiB, which
-	 * limits the file size to about 4.4 TB with SHA-256 and 4K blocks.
+	 * An in-memory bitmap will need to be allocated to track the "verified"
+	 * status of hash blocks.  Don't allow this bitmap to get too large.
+	 * For now, limit it to 1 MiB, which limits the file size to
+	 * about 4.4 TB with SHA-256 and 4K blocks.
 	 *
 	 * Together with the fact that the data, and thus also the Merkle tree,
 	 * cannot have more than ULONG_MAX pages, this implies that hash block
-	 * indices can always fit in an 'unsigned long'.  But to be safe, we
-	 * explicitly check for that too.  Note, this is only for hash block
-	 * indices; data block indices might not fit in an 'unsigned long'.
+	 * indices can always fit in an 'unsigned long'.
 	 */
-	if ((params->block_size != PAGE_SIZE && offset > 1 << 23) ||
-	    offset > ULONG_MAX) {
+	if (offset > (1 << 23)) {
 		fsverity_err(inode, "Too many blocks in Merkle tree");
 		err = -EFBIG;
 		goto out_err;

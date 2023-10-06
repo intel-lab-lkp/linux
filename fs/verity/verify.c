@@ -44,15 +44,15 @@ verify_data_block(struct inode *inode, struct fsverity_info *vi,
 	const struct merkle_tree_params *params = &vi->tree_params;
 	const unsigned int hsize = params->digest_size;
 	int level;
+	int err;
+	int num_ra_pages;
 	u8 _want_hash[FS_VERITY_MAX_DIGEST_SIZE];
 	const u8 *want_hash;
 	u8 real_hash[FS_VERITY_MAX_DIGEST_SIZE];
 	/* The hash blocks that are traversed, indexed by level */
 	struct {
-		/* Page containing the hash block */
-		struct page *page;
-		/* Mapped address of the hash block (will be within @page) */
-		const void *addr;
+		/* Block containing the hash block */
+		struct fsverity_block block;
 		/* Index of the hash block in the tree overall */
 		unsigned long index;
 		/* Byte offset of the wanted hash relative to @addr */
@@ -93,10 +93,8 @@ verify_data_block(struct inode *inode, struct fsverity_info *vi,
 		unsigned long next_hidx;
 		unsigned long hblock_idx;
 		pgoff_t hpage_idx;
-		unsigned int hblock_offset_in_page;
 		unsigned int hoffset;
-		struct page *hpage;
-		const void *haddr;
+		struct fsverity_block *block = &hblocks[level].block;
 
 		/*
 		 * The index of the block in the current level; also the index
@@ -110,34 +108,28 @@ verify_data_block(struct inode *inode, struct fsverity_info *vi,
 		/* Index of the hash page in the tree overall */
 		hpage_idx = hblock_idx >> params->log_blocks_per_page;
 
-		/* Byte offset of the hash block within the page */
-		hblock_offset_in_page =
-			(hblock_idx << params->log_blocksize) & ~PAGE_MASK;
-
 		/* Byte offset of the hash within the block */
 		hoffset = (hidx << params->log_digestsize) &
 			  (params->block_size - 1);
 
-		hpage = inode->i_sb->s_vop->read_merkle_tree_page(inode,
-				hpage_idx, level == 0 ? min(max_ra_pages,
-					params->tree_pages - hpage_idx) : 0,
-				params->log_blocksize);
-		if (IS_ERR(hpage)) {
+		block->len = params->block_size;
+		num_ra_pages = level == 0 ?
+			min(max_ra_pages, params->tree_pages - hpage_idx) : 0;
+		err = fsverity_read_merkle_tree_block(
+			inode, hblock_idx << params->log_blocksize, block,
+			num_ra_pages);
+		if (err) {
 			fsverity_err(inode,
-				     "Error %ld reading Merkle tree page %lu",
-				     PTR_ERR(hpage), hpage_idx);
+				     "Error %d reading Merkle tree block %lu",
+				     err, hblock_idx);
 			goto error;
 		}
-		haddr = kmap_local_page(hpage) + hblock_offset_in_page;
-		if (is_hash_block_verified(vi, hblock_idx, PageChecked(hpage))) {
-			memcpy(_want_hash, haddr + hoffset, hsize);
+		if (is_hash_block_verified(vi, hblock_idx, block->cached)) {
+			memcpy(_want_hash, block->kaddr + hoffset, hsize);
 			want_hash = _want_hash;
-			kunmap_local(haddr);
-			fsverity_drop_page(inode, hpage);
+			fsverity_drop_block(inode, block);
 			goto descend;
 		}
-		hblocks[level].page = hpage;
-		hblocks[level].addr = haddr;
 		hblocks[level].index = hblock_idx;
 		hblocks[level].hoffset = hoffset;
 		hidx = next_hidx;
@@ -147,8 +139,8 @@ verify_data_block(struct inode *inode, struct fsverity_info *vi,
 descend:
 	/* Descend the tree verifying hash blocks. */
 	for (; level > 0; level--) {
-		struct page *hpage = hblocks[level - 1].page;
-		const void *haddr = hblocks[level - 1].addr;
+		struct fsverity_block *block = &hblocks[level - 1].block;
+		const void *haddr = block->kaddr;
 		unsigned long hblock_idx = hblocks[level - 1].index;
 		unsigned int hoffset = hblocks[level - 1].hoffset;
 
@@ -161,14 +153,11 @@ descend:
 		 * idempotent, as the same hash block might be verified by
 		 * multiple threads concurrently.
 		 */
-		if (vi->hash_block_verified)
-			set_bit(hblock_idx, vi->hash_block_verified);
-		else
-			SetPageChecked(hpage);
+		set_bit(hblock_idx, vi->hash_block_verified);
+		block->verified = true;
 		memcpy(_want_hash, haddr + hoffset, hsize);
 		want_hash = _want_hash;
-		kunmap_local(haddr);
-		fsverity_drop_page(inode, hpage);
+		fsverity_drop_block(inode, block);
 	}
 
 	/* Finally, verify the data block. */
@@ -186,8 +175,7 @@ corrupted:
 		     params->hash_alg->name, hsize, real_hash);
 error:
 	for (; level > 0; level--) {
-		kunmap_local(hblocks[level - 1].addr);
-		fsverity_drop_page(inode, hblocks[level - 1].page);
+		fsverity_drop_block(inode, &hblocks[level - 1].block);
 	}
 	return false;
 }
