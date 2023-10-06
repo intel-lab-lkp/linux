@@ -5023,15 +5023,6 @@ static inline bool cfs_bandwidth_used(void);
 static void
 enqueue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 {
-	bool curr = cfs_rq->curr == se;
-
-	/*
-	 * If we're the current task, we must renormalise before calling
-	 * update_curr().
-	 */
-	if (curr)
-		place_entity(cfs_rq, se, flags);
-
 	update_curr(cfs_rq);
 
 	/*
@@ -5056,8 +5047,7 @@ enqueue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 	 * XXX now that the entity has been re-weighted, and it's lag adjusted,
 	 * we can place the entity.
 	 */
-	if (!curr)
-		place_entity(cfs_rq, se, flags);
+	place_entity(cfs_rq, se, flags);
 
 	account_entity_enqueue(cfs_rq, se);
 
@@ -5067,7 +5057,7 @@ enqueue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 
 	check_schedstat_required();
 	update_stats_enqueue_fair(cfs_rq, se, flags);
-	if (!curr)
+	if (cfs_rq->curr != se)
 		__enqueue_entity(cfs_rq, se);
 	se->on_rq = 1;
 
