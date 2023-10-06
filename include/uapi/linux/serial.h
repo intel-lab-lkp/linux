@@ -47,6 +47,8 @@ struct serial_struct {
 /*
  * These are the supported serial types.
  */
+/* Generic type identifier for ports which type is not important to userspace. */
+#define PORT_ANY	(-1)
 #define PORT_UNKNOWN	0
 #define PORT_8250	1
 #define PORT_16450	2
