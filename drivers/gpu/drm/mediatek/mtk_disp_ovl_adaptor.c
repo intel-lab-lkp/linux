@@ -242,6 +242,55 @@ void mtk_ovl_adaptor_stop(struct device *dev)
 	}
 }
 
+/**
+ * mtk_ovl_adaptor_power_on - Power on devices in OVL adaptor
+ * @dev: device to be powered on
+ *
+ * Different from OVL, OVL adaptor is a pseudo device so
+ * we didn't define it in the device tree, pm_runtime_resume_and_get()
+ * called by .atomic_enable() power on no device in OVL adaptor,
+ * we have to implement a function to do the job instead.
+ *
+ * returns:
+ * zero on success, errno on failure.
+ */
+int mtk_ovl_adaptor_power_on(struct device *dev)
+{
+	int i, ret;
+	struct device *comp;
+	struct mtk_disp_ovl_adaptor *ovl_adaptor = dev_get_drvdata(dev);
+
+	for (i = 0; i < OVL_ADAPTOR_ID_MAX; i++) {
+		comp = ovl_adaptor->ovl_adaptor_comp[i];
+
+		if (!comp)
+			continue;
+
+		if (comp_matches[i].type != OVL_ADAPTOR_TYPE_MDP_RDMA)
+			continue;
+
+		ret = pm_runtime_resume_and_get(comp);
+		if (ret < 0) {
+			dev_err(dev, "Failed to power on comp(%u): %d\n", i, ret);
+			goto error;
+		}
+	}
+	return 0;
+error:
+	while (--i >= 0) {
+		comp = ovl_adaptor->ovl_adaptor_comp[i];
+
+		if (!comp)
+			continue;
+
+		if (comp_matches[i].type != OVL_ADAPTOR_TYPE_MDP_RDMA)
+			continue;
+
+		pm_runtime_put(comp);
+	}
+	return ret;
+}
+
 int mtk_ovl_adaptor_clk_enable(struct device *dev)
 {
 	int i;

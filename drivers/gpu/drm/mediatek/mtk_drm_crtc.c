@@ -364,6 +364,15 @@ static int mtk_crtc_ddp_hw_init(struct mtk_drm_crtc *mtk_crtc)
 		return ret;
 	}
 
+	for (i = 0; i < mtk_crtc->ddp_comp_nr; i++) {
+		ret = mtk_ddp_comp_power_on(mtk_crtc->ddp_comp[i]);
+		if (ret) {
+			DRM_ERROR("Failed to power on %s: %d\n",
+				  dev_name(mtk_crtc->ddp_comp[i]->dev), ret);
+			return ret;
+		}
+	}
+
 	ret = mtk_mutex_prepare(mtk_crtc->mutex);
 	if (ret < 0) {
 		DRM_ERROR("Failed to enable mutex clock: %d\n", ret);
