@@ -27,7 +27,11 @@ MODULE_DESCRIPTION(HL_DRIVER_DESC);
 MODULE_LICENSE("GPL v2");
 
 static int hl_major;
-static struct class *hl_class;
+
+static const struct class hl_class = {
+	.name = HL_NAME,
+};
+
 static DEFINE_IDR(hl_devs_idr);
 static DEFINE_MUTEX(hl_devs_idr_lock);
 
@@ -317,7 +321,7 @@ static void copy_kernel_module_params_to_device(struct hl_device *hdev)
 	hdev->asic_prop.fw_security_enabled = is_asic_secured(hdev->asic_type);
 
 	hdev->major = hl_major;
-	hdev->hclass = hl_class;
+	hdev->hclass = &hl_class;
 	hdev->memory_scrub = memory_scrub;
 	hdev->reset_on_lockup = reset_on_lockup;
 	hdev->boot_error_status_mask = boot_error_status_mask;
@@ -691,10 +695,9 @@ static int __init hl_init(void)
 
 	hl_major = MAJOR(dev);
 
-	hl_class = class_create(HL_NAME);
-	if (IS_ERR(hl_class)) {
+	rc = class_register(&hl_class);
+	if (rc) {
 		pr_err("failed to allocate class\n");
-		rc = PTR_ERR(hl_class);
 		goto remove_major;
 	}
 
@@ -712,7 +715,7 @@ static int __init hl_init(void)
 
 remove_debugfs:
 	hl_debugfs_fini();
-	class_destroy(hl_class);
+	class_unregister(&hl_class);
 remove_major:
 	unregister_chrdev_region(MKDEV(hl_major, 0), HL_MAX_MINORS);
 	return rc;
@@ -732,7 +735,7 @@ static void __exit hl_exit(void)
 	 */
 	hl_debugfs_fini();
 
-	class_destroy(hl_class);
+	class_unregister(&hl_class);
 	unregister_chrdev_region(MKDEV(hl_major, 0), HL_MAX_MINORS);
 
 	idr_destroy(&hl_devs_idr);
