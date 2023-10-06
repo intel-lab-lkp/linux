@@ -95,14 +95,14 @@ MODULE_DEVICE_TABLE(of, exynos_usi_dt_match);
 /**
  * exynos_usi_set_sw_conf - Set USI block configuration mode
  * @usi: USI driver object
- * @mode: Mode index
  *
  * Select underlying serial protocol (UART/SPI/I2C) in USI IP-core.
  *
  * Return: 0 on success, or negative error code on failure.
  */
-static int exynos_usi_set_sw_conf(struct exynos_usi *usi, size_t mode)
+static int exynos_usi_set_sw_conf(struct exynos_usi *usi)
 {
+	size_t mode = usi->mode;
 	unsigned int val;
 	int ret;
 
@@ -115,8 +115,7 @@ static int exynos_usi_set_sw_conf(struct exynos_usi *usi, size_t mode)
 	if (ret)
 		return ret;
 
-	usi->mode = mode;
-	dev_dbg(usi->dev, "protocol: %s\n", exynos_usi_modes[usi->mode].name);
+	dev_dbg(usi->dev, "protocol: %s\n", exynos_usi_modes[mode].name);
 
 	return 0;
 }
@@ -164,7 +163,7 @@ static int exynos_usi_configure(struct exynos_usi *usi)
 {
 	int ret;
 
-	ret = exynos_usi_set_sw_conf(usi, usi->mode);
+	ret = exynos_usi_set_sw_conf(usi);
 	if (ret)
 		return ret;
 
