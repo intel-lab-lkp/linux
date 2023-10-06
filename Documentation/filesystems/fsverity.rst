@@ -326,6 +326,15 @@ the file has fs-verity enabled.  This can perform better than
 FS_IOC_GETFLAGS and FS_IOC_MEASURE_VERITY because it doesn't require
 opening the file, and opening verity files can be expensive.
 
+Extended file attributes
+------------------------
+
+For fs-verity sealed files the FS_XFLAG_VERITY extended file
+attribute is set. The attribute can be observed via lsattr.
+
+    [root@vm:~]# lsattr /mnt/test/foo
+    --------------------V- /mnt/test/foo
+
 .. _accessing_verity_files:
 
 Accessing verity files
