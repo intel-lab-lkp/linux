@@ -595,6 +595,9 @@ static int mipi_csis_calculate_params(struct mipi_csis_device *csis,
 	s64 link_freq;
 	u32 lane_rate;
 
+	if (!csis->src_sd)
+		return -EINVAL;
+
 	/* Calculate the line rate from the pixel rate. */
 	link_freq = v4l2_get_link_freq(csis->src_sd->ctrl_handler,
 				       csis_fmt->width,
