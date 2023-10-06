@@ -215,6 +215,27 @@ phys_cpuid_t __init acpi_map_madt_entry(u32 acpi_id)
 	return rv;
 }
 
+u8 __init acpi_get_madt_revision(void)
+{
+	static u8 madt_revision __initdata;
+	static bool madt_read __initdata;
+	struct acpi_table_header *madt = NULL;
+
+	if (!madt_read) {
+		madt_read = true;
+
+		acpi_get_table(ACPI_SIG_MADT, 0, &madt);
+		if (!madt)
+			return madt_revision;
+
+		madt_revision = madt->revision;
+
+		acpi_put_table(madt);
+	}
+
+	return madt_revision;
+}
+
 static phys_cpuid_t map_mat_entry(acpi_handle handle, int type, u32 acpi_id)
 {
 	struct acpi_buffer buffer = { ACPI_ALLOCATE_BUFFER, NULL };

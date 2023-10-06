@@ -6,6 +6,7 @@
 #ifndef _IRQ_GIC_COMMON_H
 #define _IRQ_GIC_COMMON_H
 
+#include <linux/acpi.h>
 #include <linux/of.h>
 #include <linux/irqdomain.h>
 #include <linux/irqchip/arm-gic-common.h>
@@ -28,6 +29,13 @@ void gic_enable_quirks(u32 iidr, const struct gic_quirk *quirks,
 		void *data);
 void gic_enable_of_quirks(const struct device_node *np,
 			  const struct gic_quirk *quirks, void *data);
+
+#ifdef CONFIG_ACPI
+static inline bool gic_acpi_non_coherent_flag(u32 flags, u32 mask)
+{
+	return (acpi_get_madt_revision() >= 7) && (flags & mask);
+}
+#endif
 
 #define RDIST_FLAGS_PROPBASE_NEEDS_FLUSHING    (1 << 0)
 #define RDIST_FLAGS_RD_TABLES_PREALLOCATED     (1 << 1)
