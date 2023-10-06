@@ -43,6 +43,12 @@
 	status = "okay";
 };
 
+&pwm {
+	pinctrl-0 = <&pwm_pins>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
 &rpm_requests {
 	regulators {
 		compatible = "qcom,rpm-mp5496-regulators";
@@ -79,6 +85,12 @@
 };
 
 &tlmm {
+	pwm_pins: pwm-state {
+		pins = "gpio57";
+		function = "pwm";
+		drive-strength = <8>;
+	};
+
 	sdc_default_state: sdc-default-state {
 		clk-pins {
 			pins = "gpio5";
