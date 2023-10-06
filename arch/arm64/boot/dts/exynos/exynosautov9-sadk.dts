@@ -9,6 +9,7 @@
 /dts-v1/;
 #include "exynosautov9.dtsi"
 #include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/soc/samsung,exynos-usi.h>
 
 / {
 	model = "Samsung ExynosAuto v9 SADK board";
@@ -79,6 +80,7 @@
 };
 
 &usi_0 {
+	samsung,mode = <USI_V2_UART>;
 	samsung,clkreq-on; /* needed for UART mode */
 	status = "okay";
 };

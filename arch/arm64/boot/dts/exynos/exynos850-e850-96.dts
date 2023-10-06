@@ -15,6 +15,7 @@
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/input/input.h>
 #include <dt-bindings/leds/common.h>
+#include <dt-bindings/soc/samsung,exynos-usi.h>
 
 / {
 	model = "WinLink E850-96 board";
@@ -245,6 +246,7 @@
 };
 
 &usi_uart {
+	samsung,mode = <USI_V2_UART>;
 	samsung,clkreq-on; /* needed for UART mode */
 	status = "okay";
 };

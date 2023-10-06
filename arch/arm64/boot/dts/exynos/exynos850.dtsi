@@ -12,7 +12,6 @@
 
 #include <dt-bindings/clock/exynos850.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
-#include <dt-bindings/soc/samsung,exynos-usi.h>
 
 / {
 	/* Also known under engineering name Exynos3830 */
@@ -604,7 +603,6 @@
 			compatible = "samsung,exynos850-usi";
 			reg = <0x138200c0 0x20>;
 			samsung,sysreg = <&sysreg_peri 0x1010>;
-			samsung,mode = <USI_V2_UART>;
 			#address-cells = <1>;
 			#size-cells = <1>;
 			ranges;
@@ -630,7 +628,6 @@
 			compatible = "samsung,exynos850-usi";
 			reg = <0x138a00c0 0x20>;
 			samsung,sysreg = <&sysreg_peri 0x1020>;
-			samsung,mode = <USI_V2_I2C>;
 			#address-cells = <1>;
 			#size-cells = <1>;
 			ranges;
@@ -658,7 +655,6 @@
 			compatible = "samsung,exynos850-usi";
 			reg = <0x138b00c0 0x20>;
 			samsung,sysreg = <&sysreg_peri 0x1030>;
-			samsung,mode = <USI_V2_I2C>;
 			#address-cells = <1>;
 			#size-cells = <1>;
 			ranges;
@@ -686,7 +682,6 @@
 			compatible = "samsung,exynos850-usi";
 			reg = <0x138c00c0 0x20>;
 			samsung,sysreg = <&sysreg_peri 0x1040>;
-			samsung,mode = <USI_V2_I2C>;
 			#address-cells = <1>;
 			#size-cells = <1>;
 			ranges;
@@ -714,7 +709,6 @@
 			compatible = "samsung,exynos850-usi";
 			reg = <0x139400c0 0x20>;
 			samsung,sysreg = <&sysreg_peri 0x1050>;
-			samsung,mode = <USI_V2_SPI>;
 			#address-cells = <1>;
 			#size-cells = <1>;
 			ranges;
@@ -728,7 +722,6 @@
 			compatible = "samsung,exynos850-usi";
 			reg = <0x11d000c0 0x20>;
 			samsung,sysreg = <&sysreg_cmgp 0x2000>;
-			samsung,mode = <USI_V2_I2C>;
 			#address-cells = <1>;
 			#size-cells = <1>;
 			ranges;
@@ -768,7 +761,6 @@
 			compatible = "samsung,exynos850-usi";
 			reg = <0x11d200c0 0x20>;
 			samsung,sysreg = <&sysreg_cmgp 0x2010>;
-			samsung,mode = <USI_V2_I2C>;
 			#address-cells = <1>;
 			#size-cells = <1>;
 			ranges;
