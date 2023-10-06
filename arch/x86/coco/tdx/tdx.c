@@ -757,6 +757,33 @@ static bool tdx_enc_status_change_finish(unsigned long vaddr, int numpages,
 	return true;
 }
 
+/**
+ * Determine TSC frequency via CPUID, else return 0.
+ */
+static unsigned long tdx_calibrate_tsc(void)
+{
+	unsigned int eax_denominator = 0, ebx_numerator = 0, ecx_hz = 0, edx = 0;
+	unsigned int crystal_khz;
+
+	/* CPUID 15H TSC/Crystal ratio, plus optionally Crystal Hz */
+	cpuid(0x15, &eax_denominator, &ebx_numerator, &ecx_hz, &edx);
+
+	if (ebx_numerator == 0 || eax_denominator == 0)
+		return 0;
+
+	crystal_khz = ecx_hz / 1000;
+
+	/*
+	 * TSC frequency reported directly by CPUID is a "hardware reported"
+	 * frequency and is the most accurate one so far we have. This
+	 * is considered a known frequency.
+	 */
+	if (crystal_khz != 0)
+		setup_force_cpu_cap(X86_FEATURE_TSC_KNOWN_FREQ);
+
+	return crystal_khz * ebx_numerator / eax_denominator;
+}
+
 void __init tdx_early_init(void)
 {
 	u64 cc_mask;
@@ -808,6 +835,7 @@ void __init tdx_early_init(void)
 
 	x86_platform.guest.enc_cache_flush_required  = tdx_cache_flush_required;
 	x86_platform.guest.enc_tlb_flush_required    = tdx_tlb_flush_required;
+	x86_platform.calibrate_tsc = tdx_calibrate_tsc;
 
 	/*
 	 * TDX intercepts the RDMSR to read the X2APIC ID in the parallel
