@@ -13,69 +13,18 @@
 static struct workqueue_struct *fsverity_read_workqueue;
 
 /*
- * Returns true if the hash block with index @hblock_idx in the tree, located in
- * @hpage, has already been verified.
+ * Returns true if the hash block with index @hblock_idx in the tree has
+ * already been verified.
  */
-static bool is_hash_block_verified(struct fsverity_info *vi, struct page *hpage,
-				   unsigned long hblock_idx)
+static bool is_hash_block_verified(struct fsverity_info *vi,
+				   unsigned long hblock_idx,
+				   bool block_cached)
 {
-	bool verified;
-	unsigned int blocks_per_page;
-	unsigned int i;
-
-	/*
-	 * When the Merkle tree block size and page size are the same, then the
-	 * ->hash_block_verified bitmap isn't allocated, and we use PG_checked
-	 * to directly indicate whether the page's block has been verified.
-	 *
-	 * Using PG_checked also guarantees that we re-verify hash pages that
-	 * get evicted and re-instantiated from the backing storage, as new
-	 * pages always start out with PG_checked cleared.
-	 */
-	if (!vi->hash_block_verified)
-		return PageChecked(hpage);
-
-	/*
-	 * When the Merkle tree block size and page size differ, we use a bitmap
-	 * to indicate whether each hash block has been verified.
-	 *
-	 * However, we still need to ensure that hash pages that get evicted and
-	 * re-instantiated from the backing storage are re-verified.  To do
-	 * this, we use PG_checked again, but now it doesn't really mean
-	 * "checked".  Instead, now it just serves as an indicator for whether
-	 * the hash page is newly instantiated or not.
-	 *
-	 * The first thread that sees PG_checked=0 must clear the corresponding
-	 * bitmap bits, then set PG_checked=1.  This requires a spinlock.  To
-	 * avoid having to take this spinlock in the common case of
-	 * PG_checked=1, we start with an opportunistic lockless read.
-	 */
-	if (PageChecked(hpage)) {
-		/*
-		 * A read memory barrier is needed here to give ACQUIRE
-		 * semantics to the above PageChecked() test.
-		 */
-		smp_rmb();
+	if (block_cached)
 		return test_bit(hblock_idx, vi->hash_block_verified);
-	}
-	spin_lock(&vi->hash_page_init_lock);
-	if (PageChecked(hpage)) {
-		verified = test_bit(hblock_idx, vi->hash_block_verified);
-	} else {
-		blocks_per_page = vi->tree_params.blocks_per_page;
-		hblock_idx = round_down(hblock_idx, blocks_per_page);
-		for (i = 0; i < blocks_per_page; i++)
-			clear_bit(hblock_idx + i, vi->hash_block_verified);
-		/*
-		 * A write memory barrier is needed here to give RELEASE
-		 * semantics to the below SetPageChecked() operation.
-		 */
-		smp_wmb();
-		SetPageChecked(hpage);
-		verified = false;
-	}
-	spin_unlock(&vi->hash_page_init_lock);
-	return verified;
+
+	clear_bit(hblock_idx, vi->hash_block_verified);
+	return false;
 }
 
 /*
@@ -179,7 +128,7 @@ verify_data_block(struct inode *inode, struct fsverity_info *vi,
 			goto error;
 		}
 		haddr = kmap_local_page(hpage) + hblock_offset_in_page;
-		if (is_hash_block_verified(vi, hpage, hblock_idx)) {
+		if (is_hash_block_verified(vi, hblock_idx, PageChecked(hpage))) {
 			memcpy(_want_hash, haddr + hoffset, hsize);
 			want_hash = _want_hash;
 			kunmap_local(haddr);

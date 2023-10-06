@@ -182,6 +182,7 @@ struct fsverity_info *fsverity_create_info(const struct inode *inode,
 {
 	struct fsverity_info *vi;
 	int err;
+	unsigned long num_bits;
 
 	vi = kmem_cache_zalloc(fsverity_info_cachep, GFP_KERNEL);
 	if (!vi)
@@ -213,33 +214,29 @@ struct fsverity_info *fsverity_create_info(const struct inode *inode,
 	if (err)
 		goto fail;
 
-	if (vi->tree_params.block_size != PAGE_SIZE) {
-		/*
-		 * When the Merkle tree block size and page size differ, we use
-		 * a bitmap to keep track of which hash blocks have been
-		 * verified.  This bitmap must contain one bit per hash block,
-		 * including alignment to a page boundary at the end.
-		 *
-		 * Eventually, to support extremely large files in an efficient
-		 * way, it might be necessary to make pages of this bitmap
-		 * reclaimable.  But for now, simply allocating the whole bitmap
-		 * is a simple solution that works well on the files on which
-		 * fsverity is realistically used.  E.g., with SHA-256 and 4K
-		 * blocks, a 100MB file only needs a 24-byte bitmap, and the
-		 * bitmap for any file under 17GB fits in a 4K page.
-		 */
-		unsigned long num_bits =
-			vi->tree_params.tree_pages <<
-			vi->tree_params.log_blocks_per_page;
+	/*
+	 * We use a bitmap to keep track of which hash blocks have been
+	 * verified.  This bitmap must contain one bit per hash block,
+	 * including alignment to a page boundary at the end.
+	 *
+	 * Eventually, to support extremely large files in an efficient
+	 * way, it might be necessary to make pages of this bitmap
+	 * reclaimable.  But for now, simply allocating the whole bitmap
+	 * is a simple solution that works well on the files on which
+	 * fsverity is realistically used.  E.g., with SHA-256 and 4K
+	 * blocks, a 100MB file only needs a 24-byte bitmap, and the
+	 * bitmap for any file under 17GB fits in a 4K page.
+	 */
+	num_bits =
+		vi->tree_params.tree_pages <<
+		vi->tree_params.log_blocks_per_page;
 
-		vi->hash_block_verified = kvcalloc(BITS_TO_LONGS(num_bits),
-						   sizeof(unsigned long),
-						   GFP_KERNEL);
-		if (!vi->hash_block_verified) {
-			err = -ENOMEM;
-			goto fail;
-		}
-		spin_lock_init(&vi->hash_page_init_lock);
+	vi->hash_block_verified = kvcalloc(BITS_TO_LONGS(num_bits),
+					   sizeof(unsigned long),
+					   GFP_KERNEL);
+	if (!vi->hash_block_verified) {
+		err = -ENOMEM;
+		goto fail;
 	}
 
 	return vi;
