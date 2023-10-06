@@ -489,7 +489,6 @@ static bool arm_smmu_cmdq_shared_tryunlock(struct arm_smmu_cmdq *cmdq)
 	local_irq_restore(flags);					\
 })
 
-
 /*
  * Command queue insertion.
  * This is made fiddly by our attempts to achieve some sort of scalability
@@ -1446,23 +1445,13 @@ static int arm_smmu_init_l2_strtab(struct arm_smmu_device *smmu, u32 sid)
 static struct arm_smmu_master *
 arm_smmu_find_master(struct arm_smmu_device *smmu, u32 sid)
 {
-	struct rb_node *node;
 	struct arm_smmu_stream *stream;
 
 	lockdep_assert_held(&smmu->streams_mutex);
 
-	node = smmu->streams.rb_node;
-	while (node) {
-		stream = rb_entry(node, struct arm_smmu_stream, node);
-		if (stream->id < sid)
-			node = node->rb_right;
-		else if (stream->id > sid)
-			node = node->rb_left;
-		else
-			return stream->master;
-	}
+	stream = xa_load(&smmu->streams, sid);
 
-	return NULL;
+	return stream ? stream->master : NULL;
 }
 
 /* IRQ and event handlers */
@@ -2568,11 +2557,10 @@ static int arm_smmu_init_sid_strtab(struct arm_smmu_device *smmu, u32 sid)
 static int arm_smmu_insert_master(struct arm_smmu_device *smmu,
 				  struct arm_smmu_master *master)
 {
-	int i;
-	int ret = 0;
-	struct arm_smmu_stream *new_stream, *cur_stream;
-	struct rb_node **new_node, *parent_node = NULL;
 	struct iommu_fwspec *fwspec = dev_iommu_fwspec_get(master->dev);
+	struct arm_smmu_stream *new_stream;
+	int ret = 0;
+	int i;
 
 	master->streams = kcalloc(fwspec->num_ids, sizeof(*master->streams),
 				  GFP_KERNEL);
@@ -2592,34 +2580,18 @@ static int arm_smmu_insert_master(struct arm_smmu_device *smmu,
 		if (ret)
 			break;
 
-		/* Insert into SID tree */
-		new_node = &(smmu->streams.rb_node);
-		while (*new_node) {
-			cur_stream = rb_entry(*new_node, struct arm_smmu_stream,
-					      node);
-			parent_node = *new_node;
-			if (cur_stream->id > new_stream->id) {
-				new_node = &((*new_node)->rb_left);
-			} else if (cur_stream->id < new_stream->id) {
-				new_node = &((*new_node)->rb_right);
-			} else {
-				dev_warn(master->dev,
-					 "stream %u already in tree\n",
-					 cur_stream->id);
-				ret = -EINVAL;
-				break;
-			}
-		}
-		if (ret)
+		ret = xa_insert(&smmu->streams, sid, new_stream, GFP_KERNEL);
+		if (ret) {
+			if (ret == -EBUSY)
+				dev_warn(master->dev, "stream %u already binded\n",
+					 sid);
 			break;
-
-		rb_link_node(&new_stream->node, parent_node, new_node);
-		rb_insert_color(&new_stream->node, &smmu->streams);
+		}
 	}
 
 	if (ret) {
 		for (i--; i >= 0; i--)
-			rb_erase(&master->streams[i].node, &smmu->streams);
+			xa_erase(&smmu->streams, master->streams[i].id);
 		kfree(master->streams);
 	}
 	mutex_unlock(&smmu->streams_mutex);
@@ -2638,7 +2610,7 @@ static void arm_smmu_remove_master(struct arm_smmu_master *master)
 
 	mutex_lock(&smmu->streams_mutex);
 	for (i = 0; i < fwspec->num_ids; i++)
-		rb_erase(&master->streams[i].node, &smmu->streams);
+		xa_erase(&smmu->streams, master->streams[i].id);
 	mutex_unlock(&smmu->streams_mutex);
 
 	kfree(master->streams);
@@ -3092,7 +3064,7 @@ static int arm_smmu_init_structures(struct arm_smmu_device *smmu)
 	int ret;
 
 	mutex_init(&smmu->streams_mutex);
-	smmu->streams = RB_ROOT;
+	xa_init(&smmu->streams);
 
 	ret = arm_smmu_init_queues(smmu);
 	if (ret)
@@ -3908,6 +3880,7 @@ static void arm_smmu_device_remove(struct platform_device *pdev)
 	arm_smmu_device_disable(smmu);
 	iopf_queue_free(smmu->evtq.iopf);
 	ida_destroy(&smmu->vmid_map);
+	xa_destroy(&smmu->streams);
 }
 
 static void arm_smmu_device_shutdown(struct platform_device *pdev)

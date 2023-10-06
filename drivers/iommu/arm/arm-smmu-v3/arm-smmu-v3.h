@@ -680,14 +680,13 @@ struct arm_smmu_device {
 	/* IOMMU core code handle */
 	struct iommu_device		iommu;
 
-	struct rb_root			streams;
+	struct xarray			streams;
 	struct mutex			streams_mutex;
 };
 
 struct arm_smmu_stream {
 	u32				id;
 	struct arm_smmu_master		*master;
-	struct rb_node			node;
 };
 
 /* SMMU private data for each master */
