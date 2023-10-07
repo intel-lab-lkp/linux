@@ -65,6 +65,11 @@
  */
 #define VIRTIO_GPU_F_CONTEXT_INIT        4
 
+/*
+ * VIRTIO_GPU_CMD_SUBMIT_3D
+ */
+#define VIRTIO_GPU_F_FENCE_PASSING       5
+
 enum virtio_gpu_ctrl_type {
 	VIRTIO_GPU_UNDEFINED = 0,
 
@@ -133,6 +138,10 @@ enum virtio_gpu_shm_id {
  * of the command ring that needs to used when creating the fence
  */
 #define VIRTIO_GPU_FLAG_INFO_RING_IDX (1 << 1)
+/*
+ * The fence is shareable between host contexts if flag is set.
+ */
+#define VIRTIO_GPU_FLAG_FENCE_SHAREABLE (1 << 2)
 
 struct virtio_gpu_ctrl_hdr {
 	__le32 type;
@@ -304,7 +313,7 @@ struct virtio_gpu_ctx_resource {
 struct virtio_gpu_cmd_submit {
 	struct virtio_gpu_ctrl_hdr hdr;
 	__le32 size;
-	__le32 padding;
+	__le32 num_in_fences;
 };
 
 #define VIRTIO_GPU_CAPSET_VIRGL 1

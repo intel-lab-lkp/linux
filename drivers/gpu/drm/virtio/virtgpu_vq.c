@@ -1079,7 +1079,9 @@ void virtio_gpu_cmd_submit(struct virtio_gpu_device *vgdev,
 			   void *data, uint32_t data_size,
 			   uint32_t ctx_id,
 			   struct virtio_gpu_object_array *objs,
-			   struct virtio_gpu_fence *fence)
+			   struct virtio_gpu_fence *fence,
+			   uint32_t cmd_size,
+			   unsigned int num_in_fences)
 {
 	struct virtio_gpu_cmd_submit *cmd_p;
 	struct virtio_gpu_vbuffer *vbuf;
@@ -1093,7 +1095,8 @@ void virtio_gpu_cmd_submit(struct virtio_gpu_device *vgdev,
 
 	cmd_p->hdr.type = cpu_to_le32(VIRTIO_GPU_CMD_SUBMIT_3D);
 	cmd_p->hdr.ctx_id = cpu_to_le32(ctx_id);
-	cmd_p->size = cpu_to_le32(data_size);
+	cmd_p->size = cpu_to_le32(cmd_size);
+	cmd_p->num_in_fences = cpu_to_le32(num_in_fences);
 
 	virtio_gpu_queue_fenced_ctrl_buffer(vgdev, vbuf, fence);
 }

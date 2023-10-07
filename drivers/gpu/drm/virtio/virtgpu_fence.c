@@ -27,9 +27,6 @@
 
 #include "virtgpu_drv.h"
 
-#define to_virtio_gpu_fence(x) \
-	container_of(x, struct virtio_gpu_fence, f)
-
 static const char *virtio_gpu_get_driver_name(struct dma_fence *f)
 {
 	return "virtio_gpu";
@@ -70,6 +67,14 @@ static const struct dma_fence_ops virtio_gpu_fence_ops = {
 	.fence_value_str     = virtio_gpu_fence_value_str,
 	.timeline_value_str  = virtio_gpu_timeline_value_str,
 };
+
+struct virtio_gpu_fence *to_virtio_gpu_fence(struct dma_fence *dma_fence)
+{
+	if (dma_fence->ops != &virtio_gpu_fence_ops)
+		return NULL;
+
+	return container_of(dma_fence, struct virtio_gpu_fence, f);
+}
 
 struct virtio_gpu_fence *virtio_gpu_fence_alloc(struct virtio_gpu_device *vgdev,
 						uint64_t base_fence_ctx,
@@ -122,6 +127,10 @@ void virtio_gpu_fence_emit(struct virtio_gpu_device *vgdev,
 			cpu_to_le32(VIRTIO_GPU_FLAG_INFO_RING_IDX);
 		cmd_hdr->ring_idx = (u8)fence->ring_idx;
 	}
+
+	if (fence->host_shareable)
+		cmd_hdr->flags |=
+			cpu_to_le32(VIRTIO_GPU_FLAG_FENCE_SHAREABLE);
 }
 
 void virtio_gpu_fence_event_process(struct virtio_gpu_device *vgdev,

@@ -149,6 +149,7 @@ struct virtio_gpu_fence {
 	struct virtio_gpu_fence_event *e;
 	struct virtio_gpu_fence_driver *drv;
 	struct list_head node;
+	bool host_shareable;
 };
 
 struct virtio_gpu_vbuffer {
@@ -246,6 +247,7 @@ struct virtio_gpu_device {
 	bool has_resource_blob;
 	bool has_host_visible;
 	bool has_context_init;
+	bool has_fence_passing;
 	struct virtio_shm_region host_visible_region;
 	struct drm_mm host_visible_mm;
 
@@ -273,6 +275,7 @@ struct virtio_gpu_fpriv {
 	uint32_t num_rings;
 	uint64_t base_fence_ctx;
 	uint64_t ring_idx_mask;
+	bool fence_passing_enabled;
 	struct mutex context_lock;
 };
 
@@ -367,7 +370,9 @@ void virtio_gpu_cmd_submit(struct virtio_gpu_device *vgdev,
 			   void *data, uint32_t data_size,
 			   uint32_t ctx_id,
 			   struct virtio_gpu_object_array *objs,
-			   struct virtio_gpu_fence *fence);
+			   struct virtio_gpu_fence *fence,
+			   uint32_t cmd_size,
+			   unsigned int num_in_fences);
 void virtio_gpu_cmd_transfer_from_host_3d(struct virtio_gpu_device *vgdev,
 					  uint32_t ctx_id,
 					  uint64_t offset, uint32_t level,
@@ -420,6 +425,9 @@ virtio_gpu_cmd_set_scanout_blob(struct virtio_gpu_device *vgdev,
 				uint32_t width, uint32_t height,
 				uint32_t x, uint32_t y);
 
+void virtio_gpu_cmd_in_fence(struct virtio_gpu_device *vgdev,
+			     uint32_t ctx_id, uint64_t fence_id);
+
 /* virtgpu_display.c */
 int virtio_gpu_modeset_init(struct virtio_gpu_device *vgdev);
 void virtio_gpu_modeset_fini(struct virtio_gpu_device *vgdev);
@@ -439,6 +447,7 @@ void virtio_gpu_fence_emit(struct virtio_gpu_device *vgdev,
 			  struct virtio_gpu_fence *fence);
 void virtio_gpu_fence_event_process(struct virtio_gpu_device *vdev,
 				    u64 fence_id);
+struct virtio_gpu_fence *to_virtio_gpu_fence(struct dma_fence *dma_fence);
 
 /* virtgpu_object.c */
 void virtio_gpu_cleanup_object(struct virtio_gpu_object *bo);

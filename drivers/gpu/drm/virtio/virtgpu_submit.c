@@ -25,12 +25,20 @@ struct virtio_gpu_submit_post_dep {
 	u64 point;
 };
 
+struct virtio_gpu_in_fence {
+	u64 id;
+	u32 context;
+};
+
 struct virtio_gpu_submit {
 	struct virtio_gpu_submit_post_dep *post_deps;
 	unsigned int num_out_syncobjs;
 
 	struct drm_syncobj **in_syncobjs;
 	unsigned int num_in_syncobjs;
+
+	struct virtio_gpu_in_fence *in_fences;
+	unsigned int num_in_fences;
 
 	struct virtio_gpu_object_array *buflist;
 	struct drm_virtgpu_execbuffer *exbuf;
@@ -41,6 +49,8 @@ struct virtio_gpu_submit {
 	struct drm_file *file;
 	int out_fence_fd;
 	u64 fence_ctx;
+	u32 data_size;
+	u32 cmd_size;
 	u32 ring_idx;
 	void *buf;
 };
@@ -48,10 +58,43 @@ struct virtio_gpu_submit {
 static int virtio_gpu_do_fence_wait(struct virtio_gpu_submit *submit,
 				    struct dma_fence *in_fence)
 {
+	struct virtio_gpu_fence *fence = to_virtio_gpu_fence(in_fence);
 	u32 context = submit->fence_ctx + submit->ring_idx;
+	struct virtio_gpu_in_fence *vfence, *in_fences;
+	u32 i;
 
 	if (dma_fence_match_context(in_fence, context))
 		return 0;
+
+	if (fence && fence->host_shareable &&
+	    submit->vfpriv->fence_passing_enabled) {
+		/*
+		 * Merge sync_file + syncobj in-fences to avoid sending more
+		 * than one fence per-context to host. Use latest fence from
+		 * the same context.
+		 */
+		for (i = 0; i < submit->num_in_fences; i++) {
+			vfence = &submit->in_fences[i];
+
+			if (dma_fence_match_context(in_fence, vfence->context)) {
+				vfence->id = max(vfence->id, fence->fence_id);
+				return 0;
+			}
+		}
+
+		in_fences = krealloc_array(submit->in_fences,
+					   submit->num_in_fences + 1,
+					   sizeof(*in_fences), GFP_KERNEL);
+		if (!in_fences)
+			return -ENOMEM;
+
+		in_fences[submit->num_in_fences].id = fence->fence_id;
+		in_fences[submit->num_in_fences].context = context;
+		submit->in_fences = in_fences;
+		submit->num_in_fences++;
+
+		return 0;
+	}
 
 	return dma_fence_wait(in_fence, true);
 }
@@ -331,6 +374,7 @@ static void virtio_gpu_cleanup_submit(struct virtio_gpu_submit *submit)
 	virtio_gpu_reset_syncobjs(submit->in_syncobjs, submit->num_in_syncobjs);
 	virtio_gpu_free_syncobjs(submit->in_syncobjs, submit->num_in_syncobjs);
 	virtio_gpu_free_post_deps(submit->post_deps, submit->num_out_syncobjs);
+	kfree(submit->in_fences);
 
 	if (!IS_ERR(submit->buf))
 		kvfree(submit->buf);
@@ -348,12 +392,51 @@ static void virtio_gpu_cleanup_submit(struct virtio_gpu_submit *submit)
 		fput(submit->sync_file->file);
 }
 
-static void virtio_gpu_submit(struct virtio_gpu_submit *submit)
+static int virtio_gpu_attach_in_fences(struct virtio_gpu_submit *submit)
 {
-	virtio_gpu_cmd_submit(submit->vgdev, submit->buf, submit->exbuf->size,
+	size_t in_fences_size = sizeof(u64) * submit->num_in_fences;
+	size_t new_data_size = submit->data_size + in_fences_size;
+	void *buf = submit->buf;
+	u64 *in_fences;
+	unsigned int i;
+
+	if (new_data_size < submit->data_size)
+		return -EINVAL;
+
+	buf = kvrealloc(buf, submit->data_size, new_data_size, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	memmove(buf + in_fences_size, buf, submit->data_size);
+	in_fences = buf;
+
+	for (i = 0; i < submit->num_in_fences; i++)
+		in_fences[i] = cpu_to_le64(submit->in_fences[i].id);
+
+	submit->data_size = new_data_size;
+	submit->buf = buf;
+
+	return 0;
+}
+
+static int virtio_gpu_submit(struct virtio_gpu_submit *submit)
+{
+	int err;
+
+	if (submit->num_in_fences) {
+		err = virtio_gpu_attach_in_fences(submit);
+		if (err)
+			return err;
+	}
+
+	virtio_gpu_cmd_submit(submit->vgdev, submit->buf, submit->data_size,
 			      submit->vfpriv->ctx_id, submit->buflist,
-			      submit->out_fence);
+			      submit->out_fence, submit->cmd_size,
+			      submit->num_in_fences);
+
 	virtio_gpu_notify(submit->vgdev);
+
+	return 0;
 }
 
 static void virtio_gpu_complete_submit(struct virtio_gpu_submit *submit)
@@ -401,6 +484,12 @@ static int virtio_gpu_init_submit(struct virtio_gpu_submit *submit,
 		}
 	}
 
+	if ((exbuf->flags & VIRTGPU_EXECBUF_SHARED_FENCE) &&
+	    vfpriv->fence_passing_enabled && out_fence)
+		out_fence->host_shareable = true;
+
+	submit->data_size = exbuf->size;
+	submit->cmd_size = exbuf->size;
 	submit->out_fence = out_fence;
 	submit->fence_ctx = fence_ctx;
 	submit->ring_idx = ring_idx;
@@ -527,7 +616,9 @@ int virtio_gpu_execbuffer_ioctl(struct drm_device *dev, void *data,
 	if (ret)
 		goto cleanup;
 
-	virtio_gpu_submit(&submit);
+	ret = virtio_gpu_submit(&submit);
+	if (ret)
+		goto cleanup;
 
 	/*
 	 * Set up usr-out data after submitting the job to optimize
