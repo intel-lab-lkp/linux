@@ -66,15 +66,30 @@ lifted, in perpetuity.
 Coordination with other groups
 ------------------------------
 
-The kernel security team strongly recommends that reporters of potential
-security issues NEVER contact the "linux-distros" mailing list until
-AFTER discussing it with the kernel security team.  Do not Cc: both
-lists at once.  You may contact the linux-distros mailing list after a
-fix has been agreed on and you fully understand the requirements that
-doing so will impose on you and the kernel community.
+While the kernel security team solely focuses on getting bugs fixed,
+other groups focus on fixing issues in distros and coordinating
+disclosure between operating system vendors.  Coordination is usually
+handled by the "linux-distros" mailing list and disclosure by the
+public "oss-security" mailing list, both of which are closely related
+and presented in the linux-distros wiki:
+<https://oss-security.openwall.org/wiki/mailing-lists/distros>
 
-The different lists have different goals and the linux-distros rules do
-not contribute to actually fixing any potential security problems.
+Please note that the respective policies and rules are different since
+the 3 lists pursue different goals.  Coordinating between the kernel
+security team and other teams is difficult since occasional embargoes
+start from the availability of a fix for the kernel security team, while
+for other lists they generally start from the initial post to the list,
+regardless of the availability of a fix.
+
+As such, the kernel security team strongly recommends that reporters of
+potential security issues DO NOT contact the "linux-distros" mailing
+list BEFORE a fix is accepted by the affected code's maintainers and you
+have read the linux-distros wiki page above and you fully understand the
+requirements that doing so will impose on you and the kernel community.
+This also means that in general it doesn't make sense to Cc: both lists
+at once, except for coordination if a fix remains under embargo. And in
+general, please do not Cc: the kernel security list about fixes that
+have already been merged.
 
 CVE assignment
 --------------
