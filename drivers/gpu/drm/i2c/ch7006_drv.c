@@ -236,8 +236,10 @@ static int ch7006_encoder_get_modes(struct drm_encoder *encoder,
 		    ~mode->valid_norms & 1<<priv->norm)
 			continue;
 
-		drm_mode_probed_add(connector,
-				drm_mode_duplicate(encoder->dev, &mode->mode));
+		struct drm_display_mode *encoder_mode;
+		encoder_mode = drm_mode_duplicate(encoder->dev, &mode->mode);
+		if (!mode)
+			continue;
 
 		n++;
 	}
