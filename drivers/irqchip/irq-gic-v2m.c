@@ -427,6 +427,7 @@ static int __init gicv2m_of_init(struct fwnode_handle *parent_handle,
 		ret = of_address_to_resource(child, 0, &res);
 		if (ret) {
 			pr_err("Failed to allocate v2m resource.\n");
+			of_node_put(child);
 			break;
 		}
 
