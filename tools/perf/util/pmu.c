@@ -156,7 +156,7 @@ static void __perf_pmu_format__load(struct perf_pmu_format *format, FILE *file)
 	format->loaded = true;
 }
 
-static void perf_pmu_format__load(struct perf_pmu *pmu, struct perf_pmu_format *format)
+static void perf_pmu_format__load(const struct perf_pmu *pmu, struct perf_pmu_format *format)
 {
 	char path[PATH_MAX];
 	FILE *file = NULL;
@@ -1132,7 +1132,7 @@ void evsel__set_config_if_unset(struct perf_pmu *pmu, struct evsel *evsel,
 }
 
 static struct perf_pmu_format *
-pmu_find_format(struct list_head *formats, const char *name)
+pmu_find_format(const struct list_head *formats, const char *name)
 {
 	struct perf_pmu_format *format;
 
@@ -1230,7 +1230,7 @@ static int pmu_resolve_param_term(struct parse_events_term *term,
 	return -1;
 }
 
-static char *pmu_formats_string(struct list_head *formats)
+static char *pmu_formats_string(const struct list_head *formats)
 {
 	struct perf_pmu_format *format;
 	char *str = NULL;
@@ -1256,7 +1256,7 @@ error:
  * Setup one of config[12] attr members based on the
  * user input data - term parameter.
  */
-static int pmu_config_term(struct perf_pmu *pmu,
+static int pmu_config_term(const struct perf_pmu *pmu,
 			   struct perf_event_attr *attr,
 			   struct parse_events_term *term,
 			   struct parse_events_terms *head_terms,
@@ -1379,7 +1379,7 @@ static int pmu_config_term(struct perf_pmu *pmu,
 	return 0;
 }
 
-int perf_pmu__config_terms(struct perf_pmu *pmu,
+int perf_pmu__config_terms(const struct perf_pmu *pmu,
 			   struct perf_event_attr *attr,
 			   struct parse_events_terms *terms,
 			   bool zero, struct parse_events_error *err)
