@@ -350,6 +350,8 @@ struct hci_dev {
 	struct list_head list;
 	struct mutex	lock;
 
+	struct ida	unset_handle_ida;
+
 	char		name[8];
 	unsigned long	flags;
 	__u16		id;
@@ -969,6 +971,7 @@ enum {
 	HCI_CONN_AUTH_INITIATOR,
 	HCI_CONN_DROP,
 	HCI_CONN_CANCEL,
+	HCI_CONN_DISC,
 	HCI_CONN_PARAM_REMOVAL_PEND,
 	HCI_CONN_NEW_LINK_KEY,
 	HCI_CONN_SCANNING,
@@ -1174,7 +1177,8 @@ static inline struct hci_conn *hci_conn_hash_lookup_ba(struct hci_dev *hdev,
 	rcu_read_lock();
 
 	list_for_each_entry_rcu(c, &h->list, list) {
-		if (c->type == type && !bacmp(&c->dst, ba)) {
+		if (c->type == type && !bacmp(&c->dst, ba) &&
+		    !test_bit(HCI_CONN_DISC, &c->flags)) {
 			rcu_read_unlock();
 			return c;
 		}
@@ -1195,8 +1199,9 @@ static inline struct hci_conn *hci_conn_hash_lookup_le(struct hci_dev *hdev,
 	rcu_read_lock();
 
 	list_for_each_entry_rcu(c, &h->list, list) {
-		if (c->type != LE_LINK)
-		       continue;
+		if (c->type != LE_LINK ||
+		    test_bit(HCI_CONN_DISC, &c->flags))
+			continue;
 
 		if (ba_type == c->dst_type && !bacmp(&c->dst, ba)) {
 			rcu_read_unlock();
@@ -1386,7 +1391,8 @@ static inline struct hci_conn *hci_lookup_le_connect(struct hci_dev *hdev)
 
 	list_for_each_entry_rcu(c, &h->list, list) {
 		if (c->type == LE_LINK && c->state == BT_CONNECT &&
-		    !test_bit(HCI_CONN_SCANNING, &c->flags)) {
+		    !test_bit(HCI_CONN_SCANNING, &c->flags) &&
+		    !test_bit(HCI_CONN_DISC, &c->flags)) {
 			rcu_read_unlock();
 			return c;
 		}
@@ -1520,7 +1526,8 @@ static inline void hci_conn_drop(struct hci_conn *conn)
 {
 	BT_DBG("hcon %p orig refcnt %d", conn, atomic_read(&conn->refcnt));
 
-	if (atomic_dec_and_test(&conn->refcnt)) {
+	if (atomic_dec_and_test(&conn->refcnt) &&
+	    !test_bit(HCI_CONN_DISC, &conn->flags)) {
 		unsigned long timeo;
 
 		switch (conn->type) {
