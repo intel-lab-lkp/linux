@@ -102,6 +102,7 @@ static void int3472_get_func_and_polarity(u8 type, const char **func, u32 *polar
 		*func = "clk-enable";
 		*polarity = GPIO_ACTIVE_HIGH;
 		break;
+	case INT3472_GPIO_TYPE_STROBE:
 	case INT3472_GPIO_TYPE_PRIVACY_LED:
 		*func = "privacy-led";
 		*polarity = GPIO_ACTIVE_HIGH;
@@ -211,6 +212,7 @@ static int skl_int3472_handle_gpio_resources(struct acpi_resource *ares,
 			err_msg = "Failed to register clock\n";
 
 		break;
+	case INT3472_GPIO_TYPE_STROBE:
 	case INT3472_GPIO_TYPE_PRIVACY_LED:
 		ret = skl_int3472_register_pled(int3472, agpio, polarity);
 		if (ret)
