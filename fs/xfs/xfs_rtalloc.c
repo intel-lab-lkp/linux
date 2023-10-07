@@ -1188,7 +1188,7 @@ xfs_rtallocate_extent(
 	xfs_fsblock_t	sb;		/* summary file block number */
 	struct xfs_buf	*sumbp;		/* summary file block buffer */
 
-	ASSERT(xfs_isilocked(mp->m_rbmip, XFS_ILOCK_EXCL));
+	xfs_assert_ilocked(mp->m_rbmip, XFS_ILOCK_EXCL);
 	ASSERT(minlen > 0 && minlen <= maxlen);
 
 	/*
@@ -1431,7 +1431,7 @@ xfs_rtpick_extent(
 	uint64_t	seq;		/* sequence number of file creation */
 	uint64_t	*seqp;		/* pointer to seqno in inode */
 
-	ASSERT(xfs_isilocked(mp->m_rbmip, XFS_ILOCK_EXCL));
+	xfs_assert_ilocked(mp->m_rbmip, XFS_ILOCK_EXCL);
 
 	seqp = (uint64_t *)&VFS_I(mp->m_rbmip)->i_atime;
 	if (!(mp->m_rbmip->i_diflags & XFS_DIFLAG_NEWRTBM)) {
