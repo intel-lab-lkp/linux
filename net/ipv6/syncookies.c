@@ -162,8 +162,8 @@ struct sock *cookie_v6_check(struct sock *sk, struct sk_buff *skb)
 
 	if (tcp_opt.saw_tstamp && tcp_opt.rcv_tsecr) {
 		tsoff = secure_tcpv6_ts_off(sock_net(sk),
-					    ipv6_hdr(skb)->daddr.s6_addr32,
-					    ipv6_hdr(skb)->saddr.s6_addr32);
+					    ipv6_hdr(skb)->saddr.s6_addr32,
+					    ipv6_hdr(skb)->daddr.s6_addr32);
 		tcp_opt.rcv_tsecr -= tsoff;
 	}
 
