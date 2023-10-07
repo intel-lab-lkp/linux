@@ -1200,7 +1200,6 @@ static inline void nft_use_inc_restore(u32 *use)
  *	@use: number of chain references to this table
  *	@flags: table flag (see enum nft_table_flags)
  *	@genmask: generation mask
- *	@afinfo: address family info
  *	@name: name of the table
  *	@validate_state: internal, set when transaction adds jumps
  */
