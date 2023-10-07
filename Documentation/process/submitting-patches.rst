@@ -522,7 +522,7 @@ Example of a patch submitted by a Co-developed-by: author::
 	Signed-off-by: Submitting Co-Author <sub@coauthor.example.org>
 
 
-Using Reported-by:, Tested-by:, Reviewed-by:, Suggested-by: and Fixes:
+Using informative tags:
 ----------------------------------------------------------------------
 
 The Reported-by tag gives credit to people who find bugs and report them and it
@@ -599,6 +599,22 @@ Note: Attaching a Fixes: tag does not subvert the stable kernel rules
 process nor the requirement to Cc: stable@vger.kernel.org on all stable
 patch candidates. For more information, please read
 Documentation/process/stable-kernel-rules.rst.
+
+A Test: tag confirms that the patch was actually tested by the submitter and
+helps reviewers determine whether the testing procedure made sense for a given
+changeset. The latter in particular, may bring attention to errors in the
+testing procedure and prompt a more in-depth examination of a patch.
+
+Commonly, ``Test: Smoke test on [device name]`` may be used to signify that:
+
+	 (a) The kernel compiled successfully with the default defconfig.
+
+	 (b) The device has successfully booted the image from point (a), with
+	     no apparent loss in functionality compared to the state before this
+	     patch was applied.
+
+	 (c) The submitter believes in good faith, that such simple test is
+	     enough, given the scope of the patch.
 
 .. _the_canonical_patch_format:
 
