@@ -956,6 +956,8 @@ static void intel_post_plane_update(struct intel_atomic_state *state,
 		intel_atomic_get_new_crtc_state(state, crtc);
 	enum pipe pipe = crtc->pipe;
 
+	intel_psr_post_plane_update(state, crtc);
+
 	intel_frontbuffer_flip(dev_priv, new_crtc_state->fb_bits);
 
 	if (new_crtc_state->update_wm_post && new_crtc_state->hw.active)
@@ -7216,7 +7218,7 @@ static void intel_atomic_commit_tail(struct intel_atomic_state *state)
 
 		intel_set_cdclk_pre_plane_update(state);
 
-		intel_modeset_verify_disabled(dev_priv, state);
+		intel_modeset_verify_disabled(state);
 	}
 
 	intel_sagv_pre_plane_update(state);
@@ -7296,14 +7298,13 @@ static void intel_atomic_commit_tail(struct intel_atomic_state *state)
 	}
 
 	intel_dbuf_post_plane_update(state);
-	intel_psr_post_plane_update(state);
 
 	for_each_oldnew_intel_crtc_in_state(state, crtc, old_crtc_state, new_crtc_state, i) {
 		intel_post_plane_update(state, crtc);
 
 		intel_modeset_put_crtc_power_domains(crtc, &put_domains[crtc->pipe]);
 
-		intel_modeset_verify_crtc(crtc, state, old_crtc_state, new_crtc_state);
+		intel_modeset_verify_crtc(state, crtc);
 
 		/* Must be done after gamma readout due to HSW split gamma vs. IPS w/a */
 		hsw_ips_post_update(state, crtc);
