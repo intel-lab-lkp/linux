@@ -548,6 +548,7 @@ static int cci_probe(void)
 	}
 	if (ret || !cci_ctrl_base) {
 		WARN(1, "unable to ioremap CCI ctrl\n");
+		of_node_put(np);
 		return -ENXIO;
 	}
 
