@@ -1248,7 +1248,7 @@ void hci_conn_failed(struct hci_conn *conn, u8 status)
 	}
 
 	conn->state = BT_CLOSED;
-	hci_connect_cfm(conn, status);
+	hci_disconn_cfm(conn, status);
 	hci_conn_del(conn);
 }
 
