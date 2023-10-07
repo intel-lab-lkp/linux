@@ -233,7 +233,7 @@ static int iter_clk_possible_parents_update_state(struct scmi_iterator_state *st
 		}
 
 		st->max_resources = st->num_returned + st->num_remaining;
-	};
+	}
 
 	return 0;
 }
