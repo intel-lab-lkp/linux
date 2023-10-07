@@ -978,28 +978,32 @@ int pmu_metrics_table__for_each_metric(const struct pmu_metrics_table *table,
 
 const struct pmu_events_table *perf_pmu__find_events_table(struct perf_pmu *pmu)
 {
-        const struct pmu_events_table *table = NULL;
-        char *cpuid = perf_pmu__getcpuid(pmu);
+        static const struct pmu_events_table *table;
         size_t i;
 
-        /* on some platforms which uses cpus map, cpuid can be NULL for
-         * PMUs other than CORE PMUs.
-         */
-        if (!cpuid)
-                return NULL;
+        if (!table) {
+                char *cpuid = perf_pmu__getcpuid(pmu);
 
-        i = 0;
-        for (;;) {
-                const struct pmu_events_map *map = &pmu_events_map[i++];
-                if (!map->arch)
-                        break;
+                /*
+                 * On some platforms which uses cpus map, cpuid can be NULL for
+                 * PMUs other than CORE PMUs.
+                 */
+                if (!cpuid)
+                        return NULL;
 
-                if (!strcmp_cpuid_str(map->cpuid, cpuid)) {
-                        table = &map->event_table;
-                        break;
+                i = 0;
+                for (;;) {
+                        const struct pmu_events_map *map = &pmu_events_map[i++];
+                        if (!map->arch)
+                                break;
+
+                        if (!strcmp_cpuid_str(map->cpuid, cpuid)) {
+                                table = &map->event_table;
+                                break;
+                        }
                 }
+                free(cpuid);
         }
-        free(cpuid);
         if (!pmu)
                 return table;
 
@@ -1015,13 +1019,17 @@ const struct pmu_events_table *perf_pmu__find_events_table(struct perf_pmu *pmu)
 
 const struct pmu_metrics_table *perf_pmu__find_metrics_table(struct perf_pmu *pmu)
 {
-        const struct pmu_metrics_table *table = NULL;
-        char *cpuid = perf_pmu__getcpuid(pmu);
+        static const struct pmu_metrics_table *table;
+        char *cpuid;
         int i;
+
+        if (table)
+                return table;
 
         /* on some platforms which uses cpus map, cpuid can be NULL for
          * PMUs other than CORE PMUs.
          */
+        cpuid = perf_pmu__getcpuid(pmu);
         if (!cpuid)
                 return NULL;
 
