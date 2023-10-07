@@ -1366,7 +1366,7 @@ static __initconst const struct x86_pmu p4_pmu = {
 
 __init int p4_pmu_init(void)
 {
-	unsigned int low, high;
+	unsigned int low, __maybe_unused high;
 	int i, reg;
 
 	/* If we get stripped -- indexing fails */
