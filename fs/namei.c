@@ -2708,7 +2708,7 @@ struct dentry *try_lookup_one_len(const char *name, struct dentry *base, int len
 	struct qstr this;
 	int err;
 
-	WARN_ON_ONCE(!inode_is_locked(base->d_inode));
+	inode_assert_locked(base->d_inode);
 
 	err = lookup_one_common(&nop_mnt_idmap, name, base, len, &this);
 	if (err)
@@ -2735,7 +2735,7 @@ struct dentry *lookup_one_len(const char *name, struct dentry *base, int len)
 	struct qstr this;
 	int err;
 
-	WARN_ON_ONCE(!inode_is_locked(base->d_inode));
+	inode_assert_locked(base->d_inode);
 
 	err = lookup_one_common(&nop_mnt_idmap, name, base, len, &this);
 	if (err)
@@ -2765,7 +2765,7 @@ struct dentry *lookup_one(struct mnt_idmap *idmap, const char *name,
 	struct qstr this;
 	int err;
 
-	WARN_ON_ONCE(!inode_is_locked(base->d_inode));
+	inode_assert_locked(base->d_inode);
 
 	err = lookup_one_common(idmap, name, base, len, &this);
 	if (err)

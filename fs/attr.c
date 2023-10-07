@@ -387,7 +387,7 @@ int notify_change(struct mnt_idmap *idmap, struct dentry *dentry,
 	struct timespec64 now;
 	unsigned int ia_valid = attr->ia_valid;
 
-	WARN_ON_ONCE(!inode_is_locked(inode));
+	inode_assert_locked_excl(inode);
 
 	error = may_setattr(idmap, inode, ia_valid);
 	if (error)

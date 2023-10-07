@@ -832,6 +832,16 @@ static inline int inode_is_locked(struct inode *inode)
 	return rwsem_is_locked(&inode->i_rwsem);
 }
 
+static inline void inode_assert_locked(const struct inode *inode)
+{
+	rwsem_assert_held(&inode->i_rwsem);
+}
+
+static inline void inode_assert_locked_excl(const struct inode *inode)
+{
+	rwsem_assert_held_write(&inode->i_rwsem);
+}
+
 static inline void inode_lock_nested(struct inode *inode, unsigned subclass)
 {
 	down_write_nested(&inode->i_rwsem, subclass);
