@@ -624,6 +624,21 @@ static inline int mem_cgroup_swappiness(struct mem_cgroup *mem)
 }
 #endif
 
+#ifdef CONFIG_MEMCG
+static inline int mem_cgroup_swap_force_disable(struct mem_cgroup *memcg)
+{
+	if (mem_cgroup_disabled() || mem_cgroup_is_root(memcg))
+		return 0;
+
+	return memcg->swap_force_disable;
+}
+#else
+static inline int mem_cgroup_swap_force_disable(struct mem_cgroup *memcg)
+{
+	return 0;
+}
+#endif
+
 #if defined(CONFIG_SWAP) && defined(CONFIG_MEMCG) && defined(CONFIG_BLK_CGROUP)
 void __folio_throttle_swaprate(struct folio *folio, gfp_t gfp);
 static inline void folio_throttle_swaprate(struct folio *folio, gfp_t gfp)

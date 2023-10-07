@@ -237,6 +237,7 @@ struct mem_cgroup {
 	int		under_oom;
 
 	int	swappiness;
+	int	swap_force_disable;
 	/* OOM-Killer disable */
 	int		oom_kill_disable;
 

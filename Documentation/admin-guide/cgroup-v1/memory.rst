@@ -86,6 +86,7 @@ Brief summary of control files.
  memory.pressure_level		     set memory pressure notifications
  memory.swappiness		     set/show swappiness parameter of vmscan
 				     (See sysctl's vm.swappiness)
+ memory.swap_force_disable           set/show force disable swap
  memory.move_charge_at_immigrate     set/show controls of moving charges
                                      This knob is deprecated and shouldn't be
                                      used.
@@ -615,6 +616,20 @@ Please note that unlike during the global reclaim, limit reclaim
 enforces that 0 swappiness really prevents from any swapping even if
 there is a swap storage available. This might lead to memcg OOM killer
 if there are no file pages to reclaim.
+
+swap_force_disable is used to allow control group to disable swap even if swap
+storage is available. This feature is disabled by default. If you want to
+disable swap for specified processes, swap_force_disable can be setup by
+following commands::
+
+	# cd /sys/fs/cgroup/memory/
+	# mkdir test
+	# cd test
+	# echo 1 > memory.swap_force_disable
+	# echo <PID> > cgroup.procs
+
+.. note::
+	swap_force_disable only take effect for non-root cgroups.
 
 5.4 failcnt
 -----------
