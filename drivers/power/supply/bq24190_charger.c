@@ -36,10 +36,16 @@
 #define BQ24190_REG_POC_WDT_RESET_SHIFT		6
 #define BQ24190_REG_POC_CHG_CONFIG_MASK		(BIT(5) | BIT(4))
 #define BQ24190_REG_POC_CHG_CONFIG_SHIFT	4
-#define BQ24190_REG_POC_CHG_CONFIG_DISABLE		0x0
-#define BQ24190_REG_POC_CHG_CONFIG_CHARGE		0x1
-#define BQ24190_REG_POC_CHG_CONFIG_OTG			0x2
-#define BQ24190_REG_POC_CHG_CONFIG_OTG_ALT		0x3
+#define BQ24190_REG_POC_CHG_CONFIG_DISABLE	0x0
+#define BQ24190_REG_POC_CHG_CONFIG_CHARGE	0x1
+#define BQ24190_REG_POC_CHG_CONFIG_OTG		0x2
+#define BQ24190_REG_POC_CHG_CONFIG_OTG_ALT	0x3
+#define BQ24296_REG_POC_OTG_CONFIG_MASK		BIT(5)
+#define BQ24296_REG_POC_OTG_CONFIG_SHIFT	5
+#define BQ24296_REG_POC_CHG_CONFIG_MASK		BIT(4)
+#define BQ24296_REG_POC_CHG_CONFIG_SHIFT	4
+#define BQ24296_REG_POC_OTG_CONFIG_DISABLE	0x0
+#define BQ24296_REG_POC_OTG_CONFIG_OTG		0x1
 #define BQ24190_REG_POC_SYS_MIN_MASK		(BIT(3) | BIT(2) | BIT(1))
 #define BQ24190_REG_POC_SYS_MIN_SHIFT		1
 #define BQ24190_REG_POC_SYS_MIN_MIN			3000
@@ -134,17 +140,30 @@
 #define BQ24190_REG_F_BAT_FAULT_SHIFT		3
 #define BQ24190_REG_F_NTC_FAULT_MASK		(BIT(2) | BIT(1) | BIT(0))
 #define BQ24190_REG_F_NTC_FAULT_SHIFT		0
+#define BQ24296_REG_F_NTC_FAULT_MASK		(BIT(1) | BIT(0))
+#define BQ24296_REG_F_NTC_FAULT_SHIFT		0
 
 #define BQ24190_REG_VPRS	0x0A /* Vendor/Part/Revision Status */
 #define BQ24190_REG_VPRS_PN_MASK		(BIT(5) | BIT(4) | BIT(3))
 #define BQ24190_REG_VPRS_PN_SHIFT		3
-#define BQ24190_REG_VPRS_PN_24190			0x4
-#define BQ24190_REG_VPRS_PN_24192			0x5 /* Also 24193, 24196 */
-#define BQ24190_REG_VPRS_PN_24192I			0x3
+#define BQ24190_REG_VPRS_PN_24190		0x4
+#define BQ24190_REG_VPRS_PN_24192		0x5 /* Also 24193, 24196 */
+#define BQ24190_REG_VPRS_PN_24192I		0x3
+#define BQ24296_REG_VPRS_PN_MASK		(BIT(7) | BIT(6) | BIT(5))
+#define BQ24296_REG_VPRS_PN_SHIFT		5
+#define BQ24296_REG_VPRS_PN_24296		0x1
 #define BQ24190_REG_VPRS_TS_PROFILE_MASK	BIT(2)
 #define BQ24190_REG_VPRS_TS_PROFILE_SHIFT	2
 #define BQ24190_REG_VPRS_DEV_REG_MASK		(BIT(1) | BIT(0))
 #define BQ24190_REG_VPRS_DEV_REG_SHIFT		0
+
+enum bq24190_chip {
+	BQ24190,
+	BQ24192,
+	BQ24192i,
+	BQ24196,
+	BQ24296,
+};
 
 /*
  * The FAULT register is latched by the bq24190 (except for NTC_FAULT)
@@ -176,6 +195,7 @@ struct bq24190_dev_info {
 	u8				f_reg;
 	u8				ss_reg;
 	u8				watchdog;
+	enum bq24190_chip		chip;
 };
 
 static int bq24190_charger_set_charge_type(struct bq24190_dev_info *bdi,
@@ -210,6 +230,9 @@ static const int bq24190_ccc_ichg_values[] = {
 	3584000, 3648000, 3712000, 3776000, 3840000, 3904000, 3968000, 4032000,
 	4096000, 4160000, 4224000, 4288000, 4352000, 4416000, 4480000, 4544000
 };
+
+/* ICHG higher than 3008mA is not supported in BQ24296 */
+#define BQ24296_CCC_ICHG_VALUES_LEN	40
 
 /* REG04[7:2] (VREG) in uV */
 static const int bq24190_cvc_vreg_values[] = {
@@ -515,14 +538,39 @@ static int bq24190_set_otg_vbus(struct bq24190_dev_info *bdi, bool enable)
 	}
 
 	bdi->otg_vbus_enabled = enable;
-	if (enable)
-		ret = bq24190_write_mask(bdi, BQ24190_REG_POC,
-					 BQ24190_REG_POC_CHG_CONFIG_MASK,
-					 BQ24190_REG_POC_CHG_CONFIG_SHIFT,
-					 BQ24190_REG_POC_CHG_CONFIG_OTG);
-	else
-		ret = bq24190_charger_set_charge_type(bdi, &val);
+	if (enable) {
+		if (bdi->chip == BQ24296) {
+			ret = bq24190_write_mask(bdi, BQ24190_REG_POC,
+					BQ24296_REG_POC_CHG_CONFIG_MASK,
+					BQ24296_REG_POC_CHG_CONFIG_SHIFT,
+					BQ24190_REG_POC_CHG_CONFIG_DISABLE);
+			if (ret < 0)
+				goto out;
 
+			ret = bq24190_write_mask(bdi, BQ24190_REG_POC,
+					BQ24296_REG_POC_OTG_CONFIG_MASK,
+					BQ24296_REG_POC_CHG_CONFIG_SHIFT,
+					BQ24296_REG_POC_OTG_CONFIG_OTG);
+		} else {
+			ret = bq24190_write_mask(bdi, BQ24190_REG_POC,
+					BQ24190_REG_POC_CHG_CONFIG_MASK,
+					BQ24190_REG_POC_CHG_CONFIG_SHIFT,
+					BQ24190_REG_POC_CHG_CONFIG_OTG);
+		}
+	} else {
+		if (bdi->chip == BQ24296) {
+			ret = bq24190_write_mask(bdi, BQ24190_REG_POC,
+					BQ24296_REG_POC_OTG_CONFIG_MASK,
+					BQ24296_REG_POC_CHG_CONFIG_SHIFT,
+					BQ24296_REG_POC_OTG_CONFIG_DISABLE);
+			if (ret < 0)
+				goto out;
+		}
+
+		ret = bq24190_charger_set_charge_type(bdi, &val);
+	}
+
+out:
 	pm_runtime_mark_last_busy(bdi->dev);
 	pm_runtime_put_autosuspend(bdi->dev);
 
@@ -552,9 +600,15 @@ static int bq24190_vbus_is_enabled(struct regulator_dev *dev)
 		return ret;
 	}
 
-	ret = bq24190_read_mask(bdi, BQ24190_REG_POC,
+	if (bdi->chip == BQ24296) {
+		ret = bq24190_read_mask(bdi, BQ24190_REG_POC,
+				BQ24296_REG_POC_OTG_CONFIG_MASK,
+				BQ24296_REG_POC_OTG_CONFIG_SHIFT, &val);
+	} else {
+		ret = bq24190_read_mask(bdi, BQ24190_REG_POC,
 				BQ24190_REG_POC_CHG_CONFIG_MASK,
 				BQ24190_REG_POC_CHG_CONFIG_SHIFT, &val);
+	}
 
 	pm_runtime_mark_last_busy(bdi->dev);
 	pm_runtime_put_autosuspend(bdi->dev);
@@ -562,8 +616,12 @@ static int bq24190_vbus_is_enabled(struct regulator_dev *dev)
 	if (ret)
 		return ret;
 
-	bdi->otg_vbus_enabled = (val == BQ24190_REG_POC_CHG_CONFIG_OTG ||
-				 val == BQ24190_REG_POC_CHG_CONFIG_OTG_ALT);
+	if (bdi->chip == BQ24296) {
+		bdi->otg_vbus_enabled = (val == BQ24296_REG_POC_OTG_CONFIG_OTG);
+	} else {
+		bdi->otg_vbus_enabled = (val == BQ24190_REG_POC_CHG_CONFIG_OTG ||
+					val == BQ24190_REG_POC_CHG_CONFIG_OTG_ALT);
+	}
 	return bdi->otg_vbus_enabled;
 }
 
@@ -621,6 +679,7 @@ static int bq24190_set_config(struct bq24190_dev_info *bdi)
 {
 	int ret;
 	u8 v;
+	int ichg_array_size = ARRAY_SIZE(bq24190_ccc_ichg_values);
 
 	ret = bq24190_read(bdi, BQ24190_REG_CTTC, &v);
 	if (ret < 0)
@@ -674,11 +733,14 @@ static int bq24190_set_config(struct bq24190_dev_info *bdi)
 	}
 
 	if (bdi->ichg) {
+		if (bdi->chip == BQ24296)
+			ichg_array_size = BQ24296_CCC_ICHG_VALUES_LEN;
+
 		ret = bq24190_set_field_val(bdi, BQ24190_REG_CCC,
 					    BQ24190_REG_CCC_ICHG_MASK,
 					    BQ24190_REG_CCC_ICHG_SHIFT,
 					    bq24190_ccc_ichg_values,
-					    ARRAY_SIZE(bq24190_ccc_ichg_values),
+					    ichg_array_size,
 					    bdi->ichg);
 		if (ret < 0)
 			return ret;
@@ -835,9 +897,17 @@ static int bq24190_charger_set_charge_type(struct bq24190_dev_info *bdi,
 			return ret;
 	}
 
-	return bq24190_write_mask(bdi, BQ24190_REG_POC,
-			BQ24190_REG_POC_CHG_CONFIG_MASK,
-			BQ24190_REG_POC_CHG_CONFIG_SHIFT, chg_config);
+	if (bdi->chip == BQ24296) {
+		return bq24190_write_mask(bdi, BQ24190_REG_POC,
+				BQ24296_REG_POC_CHG_CONFIG_MASK,
+				BQ24296_REG_POC_CHG_CONFIG_SHIFT,
+				chg_config);
+	} else {
+		return bq24190_write_mask(bdi, BQ24190_REG_POC,
+				BQ24190_REG_POC_CHG_CONFIG_MASK,
+				BQ24190_REG_POC_CHG_CONFIG_SHIFT,
+				chg_config);
+	}
 }
 
 static int bq24190_charger_get_health(struct bq24190_dev_info *bdi,
@@ -850,7 +920,7 @@ static int bq24190_charger_get_health(struct bq24190_dev_info *bdi,
 	v = bdi->f_reg;
 	mutex_unlock(&bdi->f_reg_lock);
 
-	if (v & BQ24190_REG_F_NTC_FAULT_MASK) {
+	if ((bdi->chip != BQ24296) && (v & BQ24190_REG_F_NTC_FAULT_MASK)) {
 		switch (v >> BQ24190_REG_F_NTC_FAULT_SHIFT & 0x7) {
 		case 0x1: /* TS1  Cold */
 		case 0x3: /* TS2  Cold */
@@ -861,6 +931,17 @@ static int bq24190_charger_get_health(struct bq24190_dev_info *bdi,
 		case 0x4: /* TS2  Hot */
 		case 0x6: /* Both Hot */
 			health = POWER_SUPPLY_HEALTH_OVERHEAT;
+			break;
+		default:
+			health = POWER_SUPPLY_HEALTH_UNKNOWN;
+		}
+	} else if ((bdi->chip == BQ24296) && (v & BQ24296_REG_F_NTC_FAULT_MASK)) {
+		switch (v >> BQ24296_REG_F_NTC_FAULT_SHIFT & 0x3) {
+		case 0x1: /* Hot */
+			health = POWER_SUPPLY_HEALTH_OVERHEAT;
+			break;
+		case 0x2: /* Cold */
+			health = POWER_SUPPLY_HEALTH_COLD;
 			break;
 		default:
 			health = POWER_SUPPLY_HEALTH_UNKNOWN;
@@ -1011,11 +1092,15 @@ static int bq24190_charger_get_current(struct bq24190_dev_info *bdi,
 {
 	u8 v;
 	int curr, ret;
+	int ichg_array_size = ARRAY_SIZE(bq24190_ccc_ichg_values);
+
+	if (bdi->chip == BQ24296)
+		ichg_array_size = BQ24296_CCC_ICHG_VALUES_LEN;
 
 	ret = bq24190_get_field_val(bdi, BQ24190_REG_CCC,
 			BQ24190_REG_CCC_ICHG_MASK, BQ24190_REG_CCC_ICHG_SHIFT,
 			bq24190_ccc_ichg_values,
-			ARRAY_SIZE(bq24190_ccc_ichg_values), &curr);
+			ichg_array_size, &curr);
 	if (ret < 0)
 		return ret;
 
@@ -1038,6 +1123,7 @@ static int bq24190_charger_set_current(struct bq24190_dev_info *bdi,
 {
 	u8 v;
 	int ret, curr = val->intval;
+	int ichg_array_size = ARRAY_SIZE(bq24190_ccc_ichg_values);
 
 	ret = bq24190_read_mask(bdi, BQ24190_REG_CCC,
 			BQ24190_REG_CCC_FORCE_20PCT_MASK,
@@ -1052,10 +1138,13 @@ static int bq24190_charger_set_current(struct bq24190_dev_info *bdi,
 	if (curr > bdi->ichg_max)
 		return -EINVAL;
 
+	if (bdi->chip == BQ24296)
+		ichg_array_size = BQ24296_CCC_ICHG_VALUES_LEN;
+
 	ret = bq24190_set_field_val(bdi, BQ24190_REG_CCC,
 			BQ24190_REG_CCC_ICHG_MASK, BQ24190_REG_CCC_ICHG_SHIFT,
 			bq24190_ccc_ichg_values,
-			ARRAY_SIZE(bq24190_ccc_ichg_values), curr);
+			ichg_array_size, curr);
 	if (ret < 0)
 		return ret;
 
@@ -1395,25 +1484,44 @@ static int bq24190_battery_get_health(struct bq24190_dev_info *bdi,
 	if (v & BQ24190_REG_F_BAT_FAULT_MASK) {
 		health = POWER_SUPPLY_HEALTH_OVERVOLTAGE;
 	} else {
-		v &= BQ24190_REG_F_NTC_FAULT_MASK;
-		v >>= BQ24190_REG_F_NTC_FAULT_SHIFT;
+		if (bdi->chip == BQ24296) {
+			v &= BQ24296_REG_F_NTC_FAULT_MASK;
+			v >>= BQ24296_REG_F_NTC_FAULT_SHIFT;
 
-		switch (v) {
-		case 0x0: /* Normal */
-			health = POWER_SUPPLY_HEALTH_GOOD;
-			break;
-		case 0x1: /* TS1 Cold */
-		case 0x3: /* TS2 Cold */
-		case 0x5: /* Both Cold */
-			health = POWER_SUPPLY_HEALTH_COLD;
-			break;
-		case 0x2: /* TS1 Hot */
-		case 0x4: /* TS2 Hot */
-		case 0x6: /* Both Hot */
-			health = POWER_SUPPLY_HEALTH_OVERHEAT;
-			break;
-		default:
-			health = POWER_SUPPLY_HEALTH_UNKNOWN;
+			switch (v) {
+			case 0x0: /* Normal */
+				health = POWER_SUPPLY_HEALTH_GOOD;
+				break;
+			case 0x1: /* Hot */
+				health = POWER_SUPPLY_HEALTH_OVERHEAT;
+				break;
+			case 0x2: /* Cold */
+				health = POWER_SUPPLY_HEALTH_COLD;
+				break;
+			default:
+				health = POWER_SUPPLY_HEALTH_UNKNOWN;
+			}
+		} else {
+			v &= BQ24190_REG_F_NTC_FAULT_MASK;
+			v >>= BQ24190_REG_F_NTC_FAULT_SHIFT;
+
+			switch (v) {
+			case 0x0: /* Normal */
+				health = POWER_SUPPLY_HEALTH_GOOD;
+				break;
+			case 0x1: /* TS1 Cold */
+			case 0x3: /* TS2 Cold */
+			case 0x5: /* Both Cold */
+				health = POWER_SUPPLY_HEALTH_COLD;
+				break;
+			case 0x2: /* TS1 Hot */
+			case 0x4: /* TS2 Hot */
+			case 0x6: /* Both Hot */
+				health = POWER_SUPPLY_HEALTH_OVERHEAT;
+				break;
+			default:
+				health = POWER_SUPPLY_HEALTH_UNKNOWN;
+			}
 		}
 	}
 
@@ -1601,11 +1709,16 @@ static int bq24190_configure_usb_otg(struct bq24190_dev_info *bdi, u8 ss_reg)
 static void bq24190_check_status(struct bq24190_dev_info *bdi)
 {
 	const u8 battery_mask_ss = BQ24190_REG_SS_CHRG_STAT_MASK;
-	const u8 battery_mask_f = BQ24190_REG_F_BAT_FAULT_MASK
-				| BQ24190_REG_F_NTC_FAULT_MASK;
+	u8 battery_mask_f = BQ24190_REG_F_BAT_FAULT_MASK;
+	u8 ntc_fault_mask = BQ24190_REG_F_NTC_FAULT_MASK;
 	bool alert_charger = false, alert_battery = false;
 	u8 ss_reg = 0, f_reg = 0;
 	int i, ret;
+
+	if (bdi->chip == BQ24296)
+		ntc_fault_mask = BQ24296_REG_F_NTC_FAULT_MASK;
+
+	battery_mask_f |= ntc_fault_mask;
 
 	ret = bq24190_read(bdi, BQ24190_REG_SS, &ss_reg);
 	if (ret < 0) {
@@ -1633,7 +1746,7 @@ static void bq24190_check_status(struct bq24190_dev_info *bdi)
 			!!(f_reg & BQ24190_REG_F_BOOST_FAULT_MASK),
 			!!(f_reg & BQ24190_REG_F_CHRG_FAULT_MASK),
 			!!(f_reg & BQ24190_REG_F_BAT_FAULT_MASK),
-			!!(f_reg & BQ24190_REG_F_NTC_FAULT_MASK));
+			!!(f_reg & ntc_fault_mask));
 
 		mutex_lock(&bdi->f_reg_lock);
 		if ((bdi->f_reg & battery_mask_f) != (f_reg & battery_mask_f))
@@ -1696,12 +1809,11 @@ static irqreturn_t bq24190_irq_handler_thread(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
-static int bq24190_hw_init(struct bq24190_dev_info *bdi)
+static int bq24190_check_chip(struct bq24190_dev_info *bdi)
 {
 	u8 v;
 	int ret;
 
-	/* First check that the device really is what its supposed to be */
 	ret = bq24190_read_mask(bdi, BQ24190_REG_VPRS,
 			BQ24190_REG_VPRS_PN_MASK,
 			BQ24190_REG_VPRS_PN_SHIFT,
@@ -1717,6 +1829,52 @@ static int bq24190_hw_init(struct bq24190_dev_info *bdi)
 	default:
 		dev_err(bdi->dev, "Error unknown model: 0x%02x\n", v);
 		return -ENODEV;
+	}
+
+	return 0;
+}
+
+static int bq24296_check_chip(struct bq24190_dev_info *bdi)
+{
+	u8 v;
+	int ret;
+
+	ret = bq24190_read_mask(bdi, BQ24190_REG_VPRS,
+			BQ24296_REG_VPRS_PN_MASK,
+			BQ24296_REG_VPRS_PN_SHIFT,
+			&v);
+	if (ret < 0)
+		return ret;
+
+	switch (v) {
+	case BQ24296_REG_VPRS_PN_24296:
+		break;
+	default:
+		dev_err(bdi->dev, "Error unknown model: 0x%02x\n", v);
+		return -ENODEV;
+	}
+
+	return 0;
+}
+
+static int bq24190_hw_init(struct bq24190_dev_info *bdi)
+{
+	int ret;
+
+	/* First check that the device really is what its supposed to be */
+	switch (bdi->chip) {
+	case BQ24190:
+	case BQ24192:
+	case BQ24192i:
+	case BQ24196:
+		ret = bq24190_check_chip(bdi);
+		break;
+	case BQ24296:
+		ret = bq24296_check_chip(bdi);
+		break;
+	default:
+		dev_err(bdi->dev, "Error unsupported model: %d\n", bdi->chip);
+		return -EINVAL;
 	}
 
 	ret = bq24190_register_reset(bdi);
@@ -1736,7 +1894,11 @@ static int bq24190_get_config(struct bq24190_dev_info *bdi)
 	struct power_supply_battery_info *info;
 	int v, idx;
 
-	idx = ARRAY_SIZE(bq24190_ccc_ichg_values) - 1;
+	if (bdi->chip == BQ24296)
+		idx = BQ24296_CCC_ICHG_VALUES_LEN - 1;
+	else
+		idx = ARRAY_SIZE(bq24190_ccc_ichg_values) - 1;
+
 	bdi->ichg_max = bq24190_ccc_ichg_values[idx];
 
 	idx = ARRAY_SIZE(bq24190_cvc_vreg_values) - 1;
@@ -1804,6 +1966,7 @@ static int bq24190_probe(struct i2c_client *client)
 	bdi->client = client;
 	bdi->dev = dev;
 	strncpy(bdi->model_name, id->name, I2C_NAME_SIZE);
+	bdi->chip = id->driver_data;
 	mutex_init(&bdi->f_reg_lock);
 	bdi->charge_type = POWER_SUPPLY_CHARGE_TYPE_FAST;
 	bdi->f_reg = 0;
@@ -2029,10 +2192,11 @@ static const struct dev_pm_ops bq24190_pm_ops = {
 };
 
 static const struct i2c_device_id bq24190_i2c_ids[] = {
-	{ "bq24190" },
-	{ "bq24192" },
-	{ "bq24192i" },
-	{ "bq24196" },
+	{ "bq24190", BQ24190 },
+	{ "bq24192", BQ24192 },
+	{ "bq24192i", BQ24192i },
+	{ "bq24196", BQ24196 },
+	{ "bq24296", BQ24296 },
 	{ },
 };
 MODULE_DEVICE_TABLE(i2c, bq24190_i2c_ids);
@@ -2042,6 +2206,7 @@ static const struct of_device_id bq24190_of_match[] = {
 	{ .compatible = "ti,bq24192", },
 	{ .compatible = "ti,bq24192i", },
 	{ .compatible = "ti,bq24196", },
+	{ .compatible = "ti,bq24296", },
 	{ },
 };
 MODULE_DEVICE_TABLE(of, bq24190_of_match);
