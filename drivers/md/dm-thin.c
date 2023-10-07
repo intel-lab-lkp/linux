@@ -280,6 +280,7 @@ struct pool {
 
 	process_mapping_fn process_prepared_mapping;
 	process_mapping_fn process_prepared_discard;
+	process_mapping_fn process_prepared_trim;
 	process_mapping_fn process_prepared_discard_pt2;
 
 	struct dm_bio_prison_cell **cell_sort_array;
@@ -379,17 +380,17 @@ static sector_t block_to_sectors(struct pool *pool, dm_block_t b)
 /*----------------------------------------------------------------*/
 
 struct discard_op {
-	struct thin_c *tc;
+	struct pool *pool;
 	struct blk_plug plug;
 	struct bio *parent_bio;
 	struct bio *bio;
 };
 
-static void begin_discard(struct discard_op *op, struct thin_c *tc, struct bio *parent)
+static void begin_discard(struct discard_op *op, struct pool *pool, struct bio *parent)
 {
 	BUG_ON(!parent);
 
-	op->tc = tc;
+	op->pool = pool;
 	blk_start_plug(&op->plug);
 	op->parent_bio = parent;
 	op->bio = NULL;
@@ -397,11 +398,11 @@ static void begin_discard(struct discard_op *op, struct thin_c *tc, struct bio *
 
 static int issue_discard(struct discard_op *op, dm_block_t data_b, dm_block_t data_e)
 {
-	struct thin_c *tc = op->tc;
-	sector_t s = block_to_sectors(tc->pool, data_b);
-	sector_t len = block_to_sectors(tc->pool, data_e - data_b);
+	struct pool *pool = op->pool;
+	sector_t s = block_to_sectors(pool, data_b);
+	sector_t len = block_to_sectors(pool, data_e - data_b);
 
-	return __blkdev_issue_discard(tc->pool_dev->bdev, s, len, GFP_NOIO, &op->bio);
+	return __blkdev_issue_discard(pool->data_dev, s, len, GFP_NOIO, &op->bio);
 }
 
 static void end_discard(struct discard_op *op, int r)
@@ -813,6 +814,7 @@ struct dm_thin_new_mapping {
 
 	blk_status_t status;
 	struct thin_c *tc;
+	struct pool *pool;
 	dm_block_t virt_begin, virt_end;
 	dm_block_t data_block;
 	struct dm_bio_prison_cell *cell;
@@ -829,7 +831,7 @@ struct dm_thin_new_mapping {
 
 static void __complete_mapping_preparation(struct dm_thin_new_mapping *m)
 {
-	struct pool *pool = m->tc->pool;
+	struct pool *pool = m->pool;
 
 	if (atomic_dec_and_test(&m->prepare_actions)) {
 		list_add_tail(&m->list, &pool->prepared_mappings);
@@ -840,7 +842,7 @@ static void __complete_mapping_preparation(struct dm_thin_new_mapping *m)
 static void complete_mapping_preparation(struct dm_thin_new_mapping *m)
 {
 	unsigned long flags;
-	struct pool *pool = m->tc->pool;
+	struct pool *pool = m->pool;
 
 	spin_lock_irqsave(&pool->lock, flags);
 	__complete_mapping_preparation(m);
@@ -955,9 +957,9 @@ static void inc_remap_and_issue_cell(struct thin_c *tc,
 
 static void process_prepared_mapping_fail(struct dm_thin_new_mapping *m)
 {
-	cell_error(m->tc->pool, m->cell);
+	cell_error(m->pool, m->cell);
 	list_del(&m->list);
-	mempool_free(m, &m->tc->pool->mapping_pool);
+	mempool_free(m, &m->pool->mapping_pool);
 }
 
 static void complete_overwrite_bio(struct thin_c *tc, struct bio *bio)
@@ -995,7 +997,7 @@ static void complete_overwrite_bio(struct thin_c *tc, struct bio *bio)
 static void process_prepared_mapping(struct dm_thin_new_mapping *m)
 {
 	struct thin_c *tc = m->tc;
-	struct pool *pool = tc->pool;
+	struct pool *pool = m->pool;
 	struct bio *bio = m->bio;
 	int r;
 
@@ -1041,10 +1043,11 @@ out:
 static void free_discard_mapping(struct dm_thin_new_mapping *m)
 {
 	struct thin_c *tc = m->tc;
+	struct pool *pool = m->pool;
 
-	if (m->cell)
+	if (m->cell && tc)
 		cell_defer_no_holder(tc, m->cell);
-	mempool_free(m, &tc->pool->mapping_pool);
+	mempool_free(m, &pool->mapping_pool);
 }
 
 static void process_prepared_discard_fail(struct dm_thin_new_mapping *m)
@@ -1066,13 +1069,13 @@ static void process_prepared_discard_no_passdown(struct dm_thin_new_mapping *m)
 
 	r = dm_thin_remove_range(tc->td, m->cell->key.block_begin, m->cell->key.block_end);
 	if (r) {
-		metadata_operation_failed(tc->pool, "dm_thin_remove_range", r);
+		metadata_operation_failed(m->pool, "dm_thin_remove_range", r);
 		bio_io_error(m->bio);
 	} else
 		bio_endio(m->bio);
 
 	cell_defer_no_holder(tc, m->cell);
-	mempool_free(m, &tc->pool->mapping_pool);
+	mempool_free(m, &m->pool->mapping_pool);
 }
 
 /*----------------------------------------------------------------*/
@@ -1086,12 +1089,11 @@ static void passdown_double_checking_shared_status(struct dm_thin_new_mapping *m
 	 */
 	int r = 0;
 	bool shared = true;
-	struct thin_c *tc = m->tc;
-	struct pool *pool = tc->pool;
+	struct pool *pool = m->pool;
 	dm_block_t b = m->data_block, e, end = m->data_block + m->virt_end - m->virt_begin;
 	struct discard_op op;
 
-	begin_discard(&op, tc, discard_parent);
+	begin_discard(&op, pool, discard_parent);
 	while (b != end) {
 		/* find start of unmapped run */
 		for (; b < end; b++) {
@@ -1129,7 +1131,7 @@ out:
 static void queue_passdown_pt2(struct dm_thin_new_mapping *m)
 {
 	unsigned long flags;
-	struct pool *pool = m->tc->pool;
+	struct pool *pool = m->pool;
 
 	spin_lock_irqsave(&pool->lock, flags);
 	list_add_tail(&m->list, &pool->prepared_discards_pt2);
@@ -1151,7 +1153,7 @@ static void process_prepared_discard_passdown_pt1(struct dm_thin_new_mapping *m)
 {
 	int r;
 	struct thin_c *tc = m->tc;
-	struct pool *pool = tc->pool;
+	struct pool *pool = m->pool;
 	struct bio *discard_parent;
 	dm_block_t data_end = m->data_block + (m->virt_end - m->virt_begin);
 
@@ -1160,13 +1162,15 @@ static void process_prepared_discard_passdown_pt1(struct dm_thin_new_mapping *m)
 	 * newly unmapped blocks will not be allocated before the end of
 	 * the function.
 	 */
-	r = dm_thin_remove_range(tc->td, m->virt_begin, m->virt_end);
-	if (r) {
-		metadata_operation_failed(pool, "dm_thin_remove_range", r);
-		bio_io_error(m->bio);
-		cell_defer_no_holder(tc, m->cell);
-		mempool_free(m, &pool->mapping_pool);
-		return;
+	if (tc) {
+		r = dm_thin_remove_range(tc->td, m->virt_begin, m->virt_end);
+		if (r) {
+			metadata_operation_failed(pool, "dm_thin_remove_range", r);
+			bio_io_error(m->bio);
+			cell_defer_no_holder(tc, m->cell);
+			mempool_free(m, &pool->mapping_pool);
+			return;
+		}
 	}
 
 	/*
@@ -1176,8 +1180,10 @@ static void process_prepared_discard_passdown_pt1(struct dm_thin_new_mapping *m)
 	r = dm_pool_inc_data_range(pool->pmd, m->data_block, data_end);
 	if (r) {
 		metadata_operation_failed(pool, "dm_pool_inc_data_range", r);
-		bio_io_error(m->bio);
-		cell_defer_no_holder(tc, m->cell);
+		if (m->bio)
+			bio_io_error(m->bio);
+		if (tc)
+			cell_defer_no_holder(tc, m->cell);
 		mempool_free(m, &pool->mapping_pool);
 		return;
 	}
@@ -1190,7 +1196,7 @@ static void process_prepared_discard_passdown_pt1(struct dm_thin_new_mapping *m)
 	else {
 		struct discard_op op;
 
-		begin_discard(&op, tc, discard_parent);
+		begin_discard(&op, pool, discard_parent);
 		r = issue_discard(&op, m->data_block, data_end);
 		end_discard(&op, r);
 	}
@@ -1200,7 +1206,7 @@ static void process_prepared_discard_passdown_pt2(struct dm_thin_new_mapping *m)
 {
 	int r;
 	struct thin_c *tc = m->tc;
-	struct pool *pool = tc->pool;
+	struct pool *pool = m->pool;
 
 	/*
 	 * The passdown has completed, so now we can decrement all those
@@ -1210,11 +1216,14 @@ static void process_prepared_discard_passdown_pt2(struct dm_thin_new_mapping *m)
 				   m->data_block + (m->virt_end - m->virt_begin));
 	if (r) {
 		metadata_operation_failed(pool, "dm_pool_dec_data_range", r);
-		bio_io_error(m->bio);
+		if (m->bio)
+			bio_io_error(m->bio);
 	} else
-		bio_endio(m->bio);
+		if (m->bio)
+			bio_endio(m->bio);
 
-	cell_defer_no_holder(tc, m->cell);
+	if (tc)
+		cell_defer_no_holder(tc, m->cell);
 	mempool_free(m, &pool->mapping_pool);
 }
 
@@ -1319,6 +1328,7 @@ static void schedule_copy(struct thin_c *tc, dm_block_t virt_block,
 	struct dm_thin_new_mapping *m = get_next_mapping(pool);
 
 	m->tc = tc;
+	m->pool = pool;
 	m->virt_begin = virt_block;
 	m->virt_end = virt_block + 1u;
 	m->data_block = data_dest;
@@ -1388,6 +1398,7 @@ static void schedule_zero(struct thin_c *tc, dm_block_t virt_block,
 
 	atomic_set(&m->prepare_actions, 1); /* no need to quiesce */
 	m->tc = tc;
+	m->pool = pool;
 	m->virt_begin = virt_block;
 	m->virt_end = virt_block + 1u;
 	m->data_block = data_block;
@@ -1656,6 +1667,7 @@ static void process_discard_cell_no_passdown(struct thin_c *tc,
 	 * passdown.  We only lock data blocks for allocation and breaking sharing.
 	 */
 	m->tc = tc;
+	m->pool = pool;
 	m->virt_begin = virt_cell->key.block_begin;
 	m->virt_end = virt_cell->key.block_end;
 	m->cell = virt_cell;
@@ -1717,6 +1729,7 @@ static void break_up_discard_bio(struct thin_c *tc, dm_block_t begin, dm_block_t
 			 */
 			m = get_next_mapping(pool);
 			m->tc = tc;
+			m->pool = pool;
 			m->maybe_shared = maybe_shared;
 			m->virt_begin = virt_begin;
 			m->virt_end = virt_begin + len;
@@ -1826,6 +1839,27 @@ static void break_sharing(struct thin_c *tc, struct bio *bio, dm_block_t block,
 		cell_error(pool, cell);
 		break;
 	}
+}
+
+static void process_trim(struct pool *pool, dm_block_t begin, dm_block_t end)
+{
+	int r;
+	struct dm_thin_new_mapping *m;
+
+
+	r = ensure_next_mapping(pool);
+	if (r)
+		return;
+
+	m = get_next_mapping(pool);
+
+	m->pool = pool;
+	m->maybe_shared = true;
+	m->virt_begin = 0;
+	m->virt_end = end;
+	m->data_block = begin;
+
+	pool->process_prepared_trim(m);
 }
 
 static void __remap_and_issue_shared_cell(void *context,
@@ -2538,6 +2572,8 @@ static void set_discard_callbacks(struct pool *pool)
 	} else {
 		pool->process_discard_cell = process_discard_cell_no_passdown;
 		pool->process_prepared_discard = process_prepared_discard_no_passdown;
+		pool->process_prepared_trim = process_prepared_discard_passdown_pt1;
+		pool->process_prepared_discard_pt2 = process_prepared_discard_passdown_pt2;
 	}
 }
 
@@ -2577,6 +2613,7 @@ static void set_pool_mode(struct pool *pool, enum pool_mode new_mode)
 		pool->process_discard_cell = process_cell_fail;
 		pool->process_prepared_mapping = process_prepared_mapping_fail;
 		pool->process_prepared_discard = process_prepared_discard_fail;
+		pool->process_prepared_trim = process_prepared_discard_fail;
 
 		error_retry_list(pool);
 		break;
@@ -2590,6 +2627,7 @@ static void set_pool_mode(struct pool *pool, enum pool_mode new_mode)
 		pool->process_discard_cell = process_cell_success;
 		pool->process_prepared_mapping = process_prepared_mapping_fail;
 		pool->process_prepared_discard = process_prepared_discard_success;
+		pool->process_prepared_trim = process_prepared_discard_success;
 
 		error_retry_list(pool);
 		break;
@@ -3834,6 +3872,50 @@ static int process_release_metadata_snap_mesg(unsigned int argc, char **argv, st
 	return r;
 }
 
+static int process_trim_mesg(unsigned int argc, char **argv, struct pool *pool)
+{
+	uint64_t begin, end;
+	int r;
+
+	/* Allow trim only in no_passdown mode */
+	if (!pool->pf.discard_enabled || pool->pf.discard_passdown)
+		return -EINVAL;
+
+	r = check_arg_count(argc, 3);
+	if (r)
+		return r;
+
+	if (kstrtoull(argv[1], 10, (unsigned long long *)&begin)) {
+		DMWARN("trim message: invalid 'begin' %s", argv[1]);
+		return -EINVAL;
+	}
+
+	if (kstrtoull(argv[2], 10, (unsigned long long *)&end)) {
+		DMWARN("trim message: invalid 'end' %s", argv[2]);
+		return -EINVAL;
+	}
+
+	sector_t b = begin >> SECTOR_SHIFT;
+	sector_t e = end >> SECTOR_SHIFT;
+
+	b += pool->sectors_per_block - 1ull; /* so we round up */
+
+	if (block_size_is_power_of_two(pool)) {
+		b >>= pool->sectors_per_block_shift;
+		e >>= pool->sectors_per_block_shift;
+	} else {
+		(void) sector_div(b, pool->sectors_per_block);
+		(void) sector_div(e, pool->sectors_per_block);
+	}
+
+	if (e < b)
+		e = b;
+
+	process_trim(pool, b, e);
+
+	return 0;
+}
+
 /*
  * Messages supported:
  *   create_thin	<dev_id>
@@ -3842,6 +3924,7 @@ static int process_release_metadata_snap_mesg(unsigned int argc, char **argv, st
  *   set_transaction_id <current_trans_id> <new_trans_id>
  *   reserve_metadata_snap
  *   release_metadata_snap
+ *   trim <start> <end>
  */
 static int pool_message(struct dm_target *ti, unsigned int argc, char **argv,
 			char *result, unsigned int maxlen)
@@ -3873,6 +3956,9 @@ static int pool_message(struct dm_target *ti, unsigned int argc, char **argv,
 
 	else if (!strcasecmp(argv[0], "release_metadata_snap"))
 		r = process_release_metadata_snap_mesg(argc, argv, pool);
+
+	else if (!strcasecmp(argv[0], "trim"))
+		r = process_trim_mesg(argc, argv, pool);
 
 	else
 		DMWARN("Unrecognised thin pool target message received: %s", argv[0]);
