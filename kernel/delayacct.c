@@ -15,22 +15,18 @@
 #include <linux/module.h>
 
 DEFINE_STATIC_KEY_FALSE(delayacct_key);
-int delayacct_on __read_mostly;	/* Delay accounting turned on/off */
 
 static void set_delayacct(bool enabled)
 {
-	if (enabled) {
+	if (enabled)
 		static_branch_enable(&delayacct_key);
-		delayacct_on = 1;
-	} else {
-		delayacct_on = 0;
+	else
 		static_branch_disable(&delayacct_key);
-	}
 }
 
 static int __init delayacct_setup_enable(char *str)
 {
-	delayacct_on = 1;
+	set_delayacct(true);
 	return 1;
 }
 __setup("delayacct", delayacct_setup_enable);
@@ -38,16 +34,14 @@ __setup("delayacct", delayacct_setup_enable);
 void delayacct_init(void)
 {
 	delayacct_tsk_init(&init_task);
-	set_delayacct(delayacct_on);
 }
 
 #ifdef CONFIG_PROC_SYSCTL
 static int sysctl_delayacct(struct ctl_table *table, int write, void *buffer,
 		     size_t *lenp, loff_t *ppos)
 {
-	int state = delayacct_on;
 	struct ctl_table t;
-	int err;
+	int err, state;
 
 	if (write && !capable(CAP_SYS_ADMIN))
 		return -EPERM;

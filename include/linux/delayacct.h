@@ -64,7 +64,6 @@ struct task_delay_info {
 
 #ifdef CONFIG_TASK_DELAY_ACCT
 DECLARE_STATIC_KEY_FALSE(delayacct_key);
-extern int delayacct_on;	/* Delay accounting turned on/off */
 extern void delayacct_init(void);
 
 extern void __delayacct_tsk_init(struct task_struct *);
