@@ -15,7 +15,7 @@
 #define _UAPI_LINUX_HASH_INFO_H
 
 enum hash_algo {
-	HASH_ALGO_MD4,
+	__REMOVED_HASH_ALGO_MD4, /* deprecated and removed */
 	HASH_ALGO_MD5,
 	HASH_ALGO_SHA1,
 	HASH_ALGO_RIPE_MD_160,

@@ -9,7 +9,7 @@
 #include <crypto/hash_info.h>
 
 const char *const hash_algo_name[HASH_ALGO__LAST] = {
-	[HASH_ALGO_MD4]		= "md4",
+	[__REMOVED_HASH_ALGO_MD4] = "",
 	[HASH_ALGO_MD5]		= "md5",
 	[HASH_ALGO_SHA1]	= "sha1",
 	[HASH_ALGO_RIPE_MD_160]	= "rmd160",
@@ -33,7 +33,7 @@ const char *const hash_algo_name[HASH_ALGO__LAST] = {
 EXPORT_SYMBOL_GPL(hash_algo_name);
 
 const int hash_digest_size[HASH_ALGO__LAST] = {
-	[HASH_ALGO_MD4]		= MD5_DIGEST_SIZE,
+	[__REMOVED_HASH_ALGO_MD4] = 0,
 	[HASH_ALGO_MD5]		= MD5_DIGEST_SIZE,
 	[HASH_ALGO_SHA1]	= SHA1_DIGEST_SIZE,
 	[HASH_ALGO_RIPE_MD_160]	= RMD160_DIGEST_SIZE,

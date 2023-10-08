@@ -1487,10 +1487,6 @@ static int do_test(const char *alg, u32 type, u32 mask, int m, u32 num_mb)
 		ret = min(ret, tcrypt_test("ctr(des3_ede)"));
 		break;
 
-	case 5:
-		ret = min(ret, tcrypt_test("md4"));
-		break;
-
 	case 6:
 		ret = min(ret, tcrypt_test("sha256"));
 		break;
@@ -2228,10 +2224,6 @@ static int do_test(const char *alg, u32 type, u32 mask, int m, u32 num_mb)
 			break;
 		}
 		fallthrough;
-	case 301:
-		test_hash_speed("md4", sec, generic_hash_speed_template);
-		if (mode > 300 && mode < 400) break;
-		fallthrough;
 	case 302:
 		test_hash_speed("md5", sec, generic_hash_speed_template);
 		if (mode > 300 && mode < 400) break;
@@ -2335,10 +2327,6 @@ static int do_test(const char *alg, u32 type, u32 mask, int m, u32 num_mb)
 			test_ahash_speed(alg, sec, generic_hash_speed_template);
 			break;
 		}
-		fallthrough;
-	case 401:
-		test_ahash_speed("md4", sec, generic_hash_speed_template);
-		if (mode > 400 && mode < 500) break;
 		fallthrough;
 	case 402:
 		test_ahash_speed("md5", sec, generic_hash_speed_template);
