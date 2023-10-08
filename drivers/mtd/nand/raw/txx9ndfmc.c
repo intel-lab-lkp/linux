@@ -369,7 +369,7 @@ static int __init txx9ndfmc_probe(struct platform_device *dev)
 	return 0;
 }
 
-static int __exit txx9ndfmc_remove(struct platform_device *dev)
+static void __exit txx9ndfmc_remove(struct platform_device *dev)
 {
 	struct txx9ndfmc_drvdata *drvdata = platform_get_drvdata(dev);
 	int ret, i;
@@ -390,7 +390,6 @@ static int __exit txx9ndfmc_remove(struct platform_device *dev)
 		kfree(txx9_priv->mtdname);
 		kfree(txx9_priv);
 	}
-	return 0;
 }
 
 #ifdef CONFIG_PM
@@ -411,7 +410,7 @@ static int txx9ndfmc_resume(struct platform_device *dev)
  * triggering a section mismatch warning.
  */
 static struct platform_driver txx9ndfmc_driver __refdata = {
-	.remove		= __exit_p(txx9ndfmc_remove),
+	.remove_new	= __exit_p(txx9ndfmc_remove),
 	.resume		= txx9ndfmc_resume,
 	.driver		= {
 		.name	= "txx9ndfmc",
