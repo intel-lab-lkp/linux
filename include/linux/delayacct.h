@@ -94,137 +94,103 @@ static inline void delayacct_tsk_init(struct task_struct *tsk)
 		__delayacct_tsk_init(tsk);
 }
 
+static inline bool delayacct_enabled(void)
+{
+	return static_branch_unlikely(&delayacct_key);
+}
+
 /* Free tsk->delays. Called from bad fork and __put_task_struct
  * where there's no risk of tsk->delays being accessed elsewhere
  */
 static inline void delayacct_tsk_free(struct task_struct *tsk)
 {
-	if (tsk->delays)
+	if (delayacct_enabled())
 		kmem_cache_free(delayacct_cache, tsk->delays);
 	tsk->delays = NULL;
 }
 
 static inline void delayacct_blkio_start(void)
 {
-	if (!static_branch_unlikely(&delayacct_key))
-		return;
-
-	if (current->delays)
+	if (delayacct_enabled())
 		__delayacct_blkio_start();
 }
 
 static inline void delayacct_blkio_end(struct task_struct *p)
 {
-	if (!static_branch_unlikely(&delayacct_key))
-		return;
-
-	if (p->delays)
+	if (delayacct_enabled())
 		__delayacct_blkio_end(p);
 }
 
 static inline __u64 delayacct_blkio_ticks(struct task_struct *tsk)
 {
-	if (tsk->delays)
+	if (delayacct_enabled())
 		return __delayacct_blkio_ticks(tsk);
 	return 0;
 }
 
 static inline void delayacct_freepages_start(void)
 {
-	if (!static_branch_unlikely(&delayacct_key))
-		return;
-
-	if (current->delays)
+	if (delayacct_enabled())
 		__delayacct_freepages_start();
 }
 
 static inline void delayacct_freepages_end(void)
 {
-	if (!static_branch_unlikely(&delayacct_key))
-		return;
-
-	if (current->delays)
+	if (delayacct_enabled())
 		__delayacct_freepages_end();
 }
 
 static inline void delayacct_thrashing_start(bool *in_thrashing)
 {
-	if (!static_branch_unlikely(&delayacct_key))
-		return;
-
-	if (current->delays)
+	if (delayacct_enabled())
 		__delayacct_thrashing_start(in_thrashing);
 }
 
 static inline void delayacct_thrashing_end(bool *in_thrashing)
 {
-	if (!static_branch_unlikely(&delayacct_key))
-		return;
-
-	if (current->delays)
+	if (delayacct_enabled())
 		__delayacct_thrashing_end(in_thrashing);
 }
 
 static inline void delayacct_swapin_start(void)
 {
-	if (!static_branch_unlikely(&delayacct_key))
-		return;
-
-	if (current->delays)
+	if (delayacct_enabled())
 		__delayacct_swapin_start();
 }
 
 static inline void delayacct_swapin_end(void)
 {
-	if (!static_branch_unlikely(&delayacct_key))
-		return;
-
-	if (current->delays)
+	if (delayacct_enabled())
 		__delayacct_swapin_end();
 }
 
 static inline void delayacct_compact_start(void)
 {
-	if (!static_branch_unlikely(&delayacct_key))
-		return;
-
-	if (current->delays)
+	if (delayacct_enabled())
 		__delayacct_compact_start();
 }
 
 static inline void delayacct_compact_end(void)
 {
-	if (!static_branch_unlikely(&delayacct_key))
-		return;
-
-	if (current->delays)
+	if (delayacct_enabled())
 		__delayacct_compact_end();
 }
 
 static inline void delayacct_wpcopy_start(void)
 {
-	if (!static_branch_unlikely(&delayacct_key))
-		return;
-
-	if (current->delays)
+	if (delayacct_enabled())
 		__delayacct_wpcopy_start();
 }
 
 static inline void delayacct_wpcopy_end(void)
 {
-	if (!static_branch_unlikely(&delayacct_key))
-		return;
-
-	if (current->delays)
+	if (delayacct_enabled())
 		__delayacct_wpcopy_end();
 }
 
 static inline void delayacct_irq(struct task_struct *task, u32 delta)
 {
-	if (!static_branch_unlikely(&delayacct_key))
-		return;
-
-	if (task->delays)
+	if (delayacct_enabled())
 		__delayacct_irq(task, delta);
 }
 

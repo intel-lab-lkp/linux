@@ -161,7 +161,7 @@ int delayacct_add_tsk(struct taskstats *d, struct task_struct *tsk)
 	d->cpu_run_virtual_total =
 		(tmp < (s64)d->cpu_run_virtual_total) ?	0 : tmp;
 
-	if (!tsk->delays)
+	if (!delayacct_enabled())
 		return 0;
 
 	/* zero XXX_total, non-zero XXX_count implies XXX stat overflowed */
