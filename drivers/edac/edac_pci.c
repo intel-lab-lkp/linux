@@ -40,6 +40,7 @@ struct edac_pci_ctl_info *edac_pci_alloc_ctl_info(unsigned int sz_pvt,
 		pci->pvt_info = kzalloc(sz_pvt, GFP_KERNEL);
 		if (!pci->pvt_info)
 			goto free;
+		pci->pvt_managed_by_edac_core = true;
 	}
 
 	pci->op_state = OP_ALLOC;

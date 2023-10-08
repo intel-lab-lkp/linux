@@ -83,6 +83,8 @@ static void edac_pci_instance_release(struct kobject *kobj)
 	/* decrement reference count on top main kobj */
 	kobject_put(edac_pci_top_main_kobj);
 
+	if (pci->pvt_managed_by_edac_core)
+		kfree(pci->pvt_info);
 	kfree(pci);	/* Free the control struct */
 }
 

@@ -69,6 +69,11 @@ struct edac_pci_ctl_info {
 	const char *dev_name;	/* pci/platform/etc... name */
 
 	void *pvt_info;		/* pointer to 'private driver' info */
+	/*
+	 * Indicate whether the resource pointed by pvt_info is managed by
+	 * EDAC core
+	 */
+	bool pvt_managed_by_edac_core;
 
 	unsigned long start_time;	/* edac_pci load start time (jiffies) */
 
