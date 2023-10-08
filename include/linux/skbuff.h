@@ -837,6 +837,7 @@ typedef unsigned char *sk_buff_data_t;
  *	@truesize: Buffer size
  *	@users: User count - see {datagram,tcp}.c
  *	@extensions: allocated extensions, valid if active_extensions is nonzero
+ *	@tun_vnet_hash: tun stored virtio-net hash cache to cb
  */
 
 struct sk_buff {
@@ -989,6 +990,7 @@ struct sk_buff {
 #if IS_ENABLED(CONFIG_IP_SCTP)
 	__u8			csum_not_inet:1;
 #endif
+	__u8			tun_vnet_hash:1;
 
 #if defined(CONFIG_NET_SCHED) || defined(CONFIG_NET_XGRESS)
 	__u16			tc_index;	/* traffic control index */
