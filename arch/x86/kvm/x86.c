@@ -12904,6 +12904,24 @@ unsigned long kvm_arch_vcpu_get_ip(struct kvm_vcpu *vcpu)
 	return kvm_rip_read(vcpu);
 }
 
+unsigned long kvm_arch_vcpu_get_frame_pointer(struct kvm_vcpu *vcpu)
+{
+	return kvm_register_read_raw(vcpu, VCPU_REGS_RBP);
+}
+
+bool kvm_arch_vcpu_read_virt(struct kvm_vcpu *vcpu, void *addr, void *dest, unsigned int length)
+{
+	struct x86_exception e;
+
+	/* Return true on success */
+	return kvm_read_guest_virt(vcpu, addr, dest, length, &e) == X86EMUL_CONTINUE;
+}
+
+bool kvm_arch_vcpu_is_64bit(struct kvm_vcpu *vcpu)
+{
+	return is_64_bit_mode(vcpu);
+}
+
 int kvm_arch_vcpu_should_kick(struct kvm_vcpu *vcpu)
 {
 	return kvm_vcpu_exiting_guest_mode(vcpu) == IN_GUEST_MODE;

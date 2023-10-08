@@ -571,6 +571,23 @@ unsigned long kvm_arch_vcpu_get_ip(struct kvm_vcpu *vcpu)
 {
 	return *vcpu_pc(vcpu);
 }
+
+unsigned long kvm_arch_vcpu_get_frame_pointer(struct kvm_vcpu *vcpu)
+{
+	/* TODO: implement */
+	return NULL;
+}
+
+bool kvm_arch_vcpu_read_virt(struct kvm_vcpu *vcpu, void *addr, void *dest, unsigned int length)
+{
+	/* TODO: implement */
+	return false;
+}
+
+bool kvm_arch_vcpu_is_64bit(struct kvm_vcpu *vcpu)
+{
+	return !vcpu_mode_is_32bit(vcpu);
+}
 #endif
 
 static int kvm_vcpu_initialized(struct kvm_vcpu *vcpu)

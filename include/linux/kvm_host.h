@@ -1595,6 +1595,10 @@ static inline bool kvm_arch_intc_initialized(struct kvm *kvm)
 
 #ifdef CONFIG_GUEST_PERF_EVENTS
 unsigned long kvm_arch_vcpu_get_ip(struct kvm_vcpu *vcpu);
+unsigned long kvm_arch_vcpu_get_frame_pointer(struct kvm_vcpu *vcpu);
+bool kvm_arch_vcpu_read_virt(struct kvm_vcpu *vcpu, void *addr, void *dest,
+			     unsigned int length);
+bool kvm_arch_vcpu_is_64bit(struct kvm_vcpu *vcpu);
 
 void kvm_register_perf_callbacks(unsigned int (*pt_intr_handler)(void));
 void kvm_unregister_perf_callbacks(void);
