@@ -208,6 +208,8 @@ static struct rb_root object_tree_root = RB_ROOT;
 static struct rb_root object_phys_tree_root = RB_ROOT;
 /* protecting the access to object_list, object_tree_root (or object_phys_tree_root) */
 static DEFINE_RAW_SPINLOCK(kmemleak_lock);
+/* Serial delete_object_part() to ensure all objects are deleted correctly */
+static DEFINE_MUTEX(delete_object_part_mutex);
 
 /* allocation caches for kmemleak internal data */
 static struct kmem_cache *object_cache;
@@ -785,13 +787,15 @@ static void delete_object_part(unsigned long ptr, size_t size, bool is_phys)
 	struct kmemleak_object *object;
 	unsigned long start, end;
 
+	mutex_lock(&delete_object_part_mutex);
+
 	object = find_and_remove_object(ptr, 1, is_phys);
 	if (!object) {
 #ifdef DEBUG
 		kmemleak_warn("Partially freeing unknown object at 0x%08lx (size %zu)\n",
 			      ptr, size);
 #endif
-		return;
+		goto unlock;
 	}
 
 	/*
@@ -809,6 +813,9 @@ static void delete_object_part(unsigned long ptr, size_t size, bool is_phys)
 			      GFP_KERNEL, is_phys);
 
 	__delete_object(object);
+
+unlock:
+	mutex_unlock(&delete_object_part_mutex);
 }
 
 static void __paint_it(struct kmemleak_object *object, int color)
