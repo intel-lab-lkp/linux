@@ -479,13 +479,6 @@ pipe_write(struct kiocb *iocb, struct iov_iter *from)
 	}
 
 	for (;;) {
-		if (!pipe->readers) {
-			send_sig(SIGPIPE, current, 0);
-			if (!ret)
-				ret = -EPIPE;
-			break;
-		}
-
 		head = pipe->head;
 		if (!pipe_full(head, pipe->tail, pipe->max_usage)) {
 			unsigned int mask = pipe->ring_size - 1;
@@ -572,6 +565,12 @@ pipe_write(struct kiocb *iocb, struct iov_iter *from)
 		__pipe_lock(pipe);
 		was_empty = pipe_empty(pipe->head, pipe->tail);
 		wake_next_writer = true;
+		if (!pipe->readers) {
+			send_sig(SIGPIPE, current, 0);
+			if (!ret)
+				ret = -EPIPE;
+			break;
+		}
 	}
 out:
 	if (pipe_full(pipe->head, pipe->tail, pipe->max_usage))
