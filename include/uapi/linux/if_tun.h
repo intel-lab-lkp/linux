@@ -61,6 +61,8 @@
 #define TUNSETFILTEREBPF _IOR('T', 225, int)
 #define TUNSETCARRIER _IOW('T', 226, int)
 #define TUNGETDEVNETNS _IO('T', 227)
+#define TUNGETVNETHASHCAP _IO('T', 228)
+#define TUNSETVNETHASH _IOW('T', 229, unsigned int)
 
 /* TUNSETIFF ifr flags */
 #define IFF_TUN		0x0001
@@ -113,6 +115,20 @@ struct tun_filter {
 	__u16  flags; /* TUN_FLT_ flags see above */
 	__u16  count; /* Number of addresses */
 	__u8   addr[][ETH_ALEN];
+};
+
+struct tun_vnet_hash_cap {
+	__u16 max_indirection_table_length;
+	__u32 types;
+};
+
+#define TUN_VNET_HASH_RSS	0x01
+#define TUN_VNET_HASH_REPORT	0x02
+struct tun_vnet_hash {
+	__u8 flags;
+	__u32 types;
+	__u16 indirection_table_mask;
+	__u16 unclassified_queue;
 };
 
 #endif /* _UAPI__IF_TUN_H */

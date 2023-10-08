@@ -171,6 +171,9 @@ struct tun_prog {
 	struct bpf_prog *prog;
 };
 
+#define TUN_VNET_HASH_MAX_KEY_SIZE 40
+#define TUN_VNET_HASH_MAX_INDIRECTION_TABLE_LENGTH 128
+
 /* Since the socket were moved to tun_file, to preserve the behavior of persist
  * device, socket filter, sndbuf and vnet header size were restore when the
  * file were attached to a persist device.
@@ -209,6 +212,9 @@ struct tun_struct {
 	struct tun_prog __rcu *steering_prog;
 	struct tun_prog __rcu *filter_prog;
 	struct ethtool_link_ksettings link_ksettings;
+	struct tun_vnet_hash vnet_hash;
+	u16 vnet_hash_indirection_table[TUN_VNET_HASH_MAX_INDIRECTION_TABLE_LENGTH];
+	u32 vnet_hash_key[TUN_VNET_HASH_MAX_KEY_SIZE / 4];
 	/* init args */
 	struct file *file;
 	struct ifreq *ifr;
@@ -217,6 +223,13 @@ struct tun_struct {
 struct veth {
 	__be16 h_vlan_proto;
 	__be16 h_vlan_TCI;
+};
+
+static const struct tun_vnet_hash_cap tun_vnet_hash_cap = {
+	.max_indirection_table_length =
+		TUN_VNET_HASH_MAX_INDIRECTION_TABLE_LENGTH,
+
+	.types = VIRTIO_NET_SUPPORTED_HASH_TYPES
 };
 
 static void tun_flow_init(struct tun_struct *tun);
@@ -320,10 +333,16 @@ static long tun_set_vnet_be(struct tun_struct *tun, int __user *argp)
 	if (get_user(be, argp))
 		return -EFAULT;
 
-	if (be)
+	if (be) {
+		if (!(tun->flags & TUN_VNET_LE) &&
+		    (tun->vnet_hash.flags & TUN_VNET_HASH_REPORT)) {
+			return -EINVAL;
+		}
+
 		tun->flags |= TUN_VNET_BE;
-	else
+	} else {
 		tun->flags &= ~TUN_VNET_BE;
+	}
 
 	return 0;
 }
@@ -558,15 +577,47 @@ static u16 tun_ebpf_select_queue(struct tun_struct *tun, struct sk_buff *skb)
 	return ret % numqueues;
 }
 
+static u16 tun_vnet_select_queue(struct tun_struct *tun, struct sk_buff *skb)
+{
+	u32 value = qdisc_skb_cb(skb)->tun_vnet_hash_value;
+	u32 numqueues;
+	u32 index;
+	u16 queue;
+
+	numqueues = READ_ONCE(tun->numqueues);
+	if (!numqueues)
+		return 0;
+
+	index = value & READ_ONCE(tun->vnet_hash.indirection_table_mask);
+	queue = READ_ONCE(tun->vnet_hash_indirection_table[index]);
+	if (!queue)
+		queue = READ_ONCE(tun->vnet_hash.unclassified_queue);
+
+	return queue % numqueues;
+}
+
 static u16 tun_select_queue(struct net_device *dev, struct sk_buff *skb,
 			    struct net_device *sb_dev)
 {
 	struct tun_struct *tun = netdev_priv(dev);
+	u8 vnet_hash_flags = READ_ONCE(tun->vnet_hash.flags);
+	struct virtio_net_hash hash;
 	u16 ret;
+
+	if (vnet_hash_flags & (TUN_VNET_HASH_RSS | TUN_VNET_HASH_REPORT)) {
+		virtio_net_hash(skb, READ_ONCE(tun->vnet_hash.types),
+				tun->vnet_hash_key, &hash);
+
+		skb->tun_vnet_hash = true;
+		qdisc_skb_cb(skb)->tun_vnet_hash_value = hash.value;
+		qdisc_skb_cb(skb)->tun_vnet_hash_report = hash.report;
+	}
 
 	rcu_read_lock();
 	if (rcu_dereference(tun->steering_prog))
 		ret = tun_ebpf_select_queue(tun, skb);
+	else if (vnet_hash_flags & TUN_VNET_HASH_RSS)
+		ret = tun_vnet_select_queue(tun, skb);
 	else
 		ret = tun_automq_select_queue(tun, skb);
 	rcu_read_unlock();
@@ -2088,10 +2139,15 @@ static ssize_t tun_put_user(struct tun_struct *tun,
 			    struct iov_iter *iter)
 {
 	struct tun_pi pi = { 0, skb->protocol };
+	struct virtio_net_hash vnet_hash = {
+		.value = qdisc_skb_cb(skb)->tun_vnet_hash_value,
+		.report = qdisc_skb_cb(skb)->tun_vnet_hash_report
+	};
 	ssize_t total;
 	int vlan_offset = 0;
 	int vlan_hlen = 0;
 	int vnet_hdr_sz = 0;
+	size_t vnet_hdr_content_sz;
 
 	if (skb_vlan_tag_present(skb))
 		vlan_hlen = VLAN_HLEN;
@@ -2116,31 +2172,49 @@ static ssize_t tun_put_user(struct tun_struct *tun,
 	}
 
 	if (vnet_hdr_sz) {
-		struct virtio_net_hdr gso;
+		union {
+			struct virtio_net_hdr hdr;
+			struct virtio_net_hdr_v1_hash v1_hash_hdr;
+		} hdr;
+		int ret;
 
 		if (iov_iter_count(iter) < vnet_hdr_sz)
 			return -EINVAL;
 
-		if (virtio_net_hdr_from_skb(skb, &gso,
-					    tun_is_little_endian(tun), true,
-					    vlan_hlen)) {
+		if ((READ_ONCE(tun->vnet_hash.flags) & TUN_VNET_HASH_REPORT) &&
+		    vnet_hdr_sz >= sizeof(hdr.v1_hash_hdr) &&
+		    skb->tun_vnet_hash) {
+			vnet_hdr_content_sz = sizeof(hdr.v1_hash_hdr);
+			ret = virtio_net_hdr_v1_hash_from_skb(skb,
+							      &hdr.v1_hash_hdr,
+							      true,
+							      vlan_hlen,
+							      &vnet_hash);
+		} else {
+			vnet_hdr_content_sz = sizeof(hdr.hdr);
+			ret = virtio_net_hdr_from_skb(skb, &hdr.hdr,
+						      tun_is_little_endian(tun),
+						      true, vlan_hlen);
+		}
+
+		if (ret) {
 			struct skb_shared_info *sinfo = skb_shinfo(skb);
 			pr_err("unexpected GSO type: "
 			       "0x%x, gso_size %d, hdr_len %d\n",
-			       sinfo->gso_type, tun16_to_cpu(tun, gso.gso_size),
-			       tun16_to_cpu(tun, gso.hdr_len));
+			       sinfo->gso_type, tun16_to_cpu(tun, hdr.hdr.gso_size),
+			       tun16_to_cpu(tun, hdr.hdr.hdr_len));
 			print_hex_dump(KERN_ERR, "tun: ",
 				       DUMP_PREFIX_NONE,
 				       16, 1, skb->head,
-				       min((int)tun16_to_cpu(tun, gso.hdr_len), 64), true);
+				       min((int)tun16_to_cpu(tun, hdr.hdr.hdr_len), 64), true);
 			WARN_ON_ONCE(1);
 			return -EINVAL;
 		}
 
-		if (copy_to_iter(&gso, sizeof(gso), iter) != sizeof(gso))
+		if (copy_to_iter(&hdr, vnet_hdr_content_sz, iter) != vnet_hdr_content_sz)
 			return -EFAULT;
 
-		iov_iter_advance(iter, vnet_hdr_sz - sizeof(gso));
+		iov_iter_advance(iter, vnet_hdr_sz - vnet_hdr_content_sz);
 	}
 
 	if (vlan_hlen) {
@@ -3007,24 +3081,27 @@ unlock:
 	return ret;
 }
 
-static int tun_set_ebpf(struct tun_struct *tun, struct tun_prog __rcu **prog_p,
-			void __user *data)
+static struct bpf_prog *tun_set_ebpf(struct tun_struct *tun,
+				     struct tun_prog __rcu **prog_p,
+				     void __user *data)
 {
 	struct bpf_prog *prog;
 	int fd;
+	int ret;
 
 	if (copy_from_user(&fd, data, sizeof(fd)))
-		return -EFAULT;
+		return ERR_PTR(-EFAULT);
 
 	if (fd == -1) {
 		prog = NULL;
 	} else {
 		prog = bpf_prog_get_type(fd, BPF_PROG_TYPE_SOCKET_FILTER);
 		if (IS_ERR(prog))
-			return PTR_ERR(prog);
+			return prog;
 	}
 
-	return __tun_set_ebpf(tun, prog_p, prog);
+	ret = __tun_set_ebpf(tun, prog_p, prog);
+	return ret ? ERR_PTR(ret) : prog;
 }
 
 /* Return correct value for tun->dev->addr_len based on tun->dev->type. */
@@ -3082,6 +3159,11 @@ static long __tun_chr_ioctl(struct file *file, unsigned int cmd,
 	int le;
 	int ret;
 	bool do_notify = false;
+	struct bpf_prog *bpf_ret;
+	struct tun_vnet_hash vnet_hash;
+	u16 vnet_hash_indirection_table[TUN_VNET_HASH_MAX_INDIRECTION_TABLE_LENGTH];
+	u8 vnet_hash_key[TUN_VNET_HASH_MAX_KEY_SIZE];
+	size_t len;
 
 	if (cmd == TUNSETIFF || cmd == TUNSETQUEUE ||
 	    (_IOC_TYPE(cmd) == SOCK_IOC_TYPE && cmd != SIOCGSKNS)) {
@@ -3295,7 +3377,10 @@ static long __tun_chr_ioctl(struct file *file, unsigned int cmd,
 			ret = -EFAULT;
 			break;
 		}
-		if (vnet_hdr_sz < (int)sizeof(struct virtio_net_hdr)) {
+		if (vnet_hdr_sz <
+		    (int)((tun->vnet_hash.flags & TUN_VNET_HASH_REPORT) ?
+			  sizeof(struct virtio_net_hdr_v1_hash) :
+			  sizeof(struct virtio_net_hdr))) {
 			ret = -EINVAL;
 			break;
 		}
@@ -3314,10 +3399,16 @@ static long __tun_chr_ioctl(struct file *file, unsigned int cmd,
 			ret = -EFAULT;
 			break;
 		}
-		if (le)
+		if (le) {
 			tun->flags |= TUN_VNET_LE;
-		else
+		} else {
+			if (!tun_legacy_is_little_endian(tun)) {
+				ret = -EINVAL;
+				break;
+			}
+
 			tun->flags &= ~TUN_VNET_LE;
+		}
 		break;
 
 	case TUNGETVNETBE:
@@ -3360,11 +3451,17 @@ static long __tun_chr_ioctl(struct file *file, unsigned int cmd,
 		break;
 
 	case TUNSETSTEERINGEBPF:
-		ret = tun_set_ebpf(tun, &tun->steering_prog, argp);
+		bpf_ret = tun_set_ebpf(tun, &tun->steering_prog, argp);
+		if (IS_ERR(bpf_ret))
+			ret = PTR_ERR(bpf_ret);
+		else if (bpf_ret)
+			tun->vnet_hash.flags &= ~TUN_VNET_HASH_RSS;
 		break;
 
 	case TUNSETFILTEREBPF:
-		ret = tun_set_ebpf(tun, &tun->filter_prog, argp);
+		bpf_ret = tun_set_ebpf(tun, &tun->filter_prog, argp);
+		if (IS_ERR(bpf_ret))
+			ret = PTR_ERR(bpf_ret);
 		break;
 
 	case TUNSETCARRIER:
@@ -3380,6 +3477,54 @@ static long __tun_chr_ioctl(struct file *file, unsigned int cmd,
 		if (!ns_capable(net->user_ns, CAP_NET_ADMIN))
 			goto unlock;
 		ret = open_related_ns(&net->ns, get_net_ns);
+		break;
+
+	case TUNGETVNETHASHCAP:
+		if (copy_to_user(argp, &tun_vnet_hash_cap,
+				 sizeof(tun_vnet_hash_cap)))
+			ret = -EFAULT;
+		break;
+
+	case TUNSETVNETHASH:
+		len = sizeof(vnet_hash);
+		if (copy_from_user(&vnet_hash, argp, len)) {
+			ret = -EFAULT;
+			break;
+		}
+
+		if (((vnet_hash.flags & TUN_VNET_HASH_REPORT) &&
+		     (tun->vnet_hdr_sz < sizeof(struct virtio_net_hdr_v1_hash) ||
+		      !tun_is_little_endian(tun))) ||
+		     vnet_hash.indirection_table_mask >=
+		     TUN_VNET_HASH_MAX_INDIRECTION_TABLE_LENGTH) {
+			ret = -EINVAL;
+			break;
+		}
+
+		argp = (u8 __user *)argp + len;
+		len = (vnet_hash.indirection_table_mask + 1) * 2;
+		if (copy_from_user(vnet_hash_indirection_table, argp, len)) {
+			ret = -EFAULT;
+			break;
+		}
+
+		argp = (u8 __user *)argp + len;
+		len = virtio_net_hash_key_length(vnet_hash.types);
+
+		if (copy_from_user(vnet_hash_key, argp, len)) {
+			ret = -EFAULT;
+			break;
+		}
+
+		tun->vnet_hash = vnet_hash;
+		memcpy(tun->vnet_hash_indirection_table,
+		       vnet_hash_indirection_table,
+		       (vnet_hash.indirection_table_mask + 1) * 2);
+		memcpy(tun->vnet_hash_key, vnet_hash_key, len);
+
+		if (vnet_hash.flags & TUN_VNET_HASH_RSS)
+			__tun_set_ebpf(tun, &tun->steering_prog, NULL);
+
 		break;
 
 	default:
