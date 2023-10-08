@@ -2346,6 +2346,12 @@ static int add_callchain_ip(struct thread *thread,
 			case PERF_CONTEXT_USER:
 				*cpumode = PERF_RECORD_MISC_USER;
 				break;
+			case PERF_CONTEXT_GUEST_KERNEL:
+				*cpumode = PERF_RECORD_MISC_GUEST_KERNEL;
+				break;
+			case PERF_CONTEXT_GUEST_USER:
+				*cpumode = PERF_RECORD_MISC_GUEST_USER;
+				break;
 			default:
 				pr_debug("invalid callchain context: "
 					 "%"PRId64"\n", (s64) ip);
