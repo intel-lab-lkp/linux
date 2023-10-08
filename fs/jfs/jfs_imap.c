@@ -747,7 +747,8 @@ int diWrite(tid_t tid, struct inode *ip)
 		xp = (dtpage_t *) & dp->di_dtroot;
 		lv = ilinelock->lv;
 		for (n = 0; n < ilinelock->index; n++, lv++) {
-			memcpy(&xp->slot[lv->offset], &p->slot[lv->offset],
+			if (lv->offset < 128)
+				memcpy(&xp->slot[lv->offset], &p->slot[lv->offset],
 			       lv->length << L2DTSLOTSIZE);
 		}
 	} else {
