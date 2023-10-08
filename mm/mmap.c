@@ -2438,6 +2438,99 @@ int split_vma(struct vma_iterator *vmi, struct vm_area_struct *vma,
 }
 
 /*
+ * We are about to modify one or multiple of a VMA's flags, policy, userfaultfd
+ * context and anonymous VMA name within the range [start, end).
+ *
+ * As a result, we might be able to merge the newly modified VMA range with an
+ * adjacent VMA with identical properties.
+ *
+ * If no merge is possible and the range does not span the entirety of the VMA,
+ * we then need to split the VMA to accommodate the change.
+ */
+static struct vm_area_struct *vma_modify(struct vma_iterator *vmi,
+					 struct vm_area_struct *prev,
+					 struct vm_area_struct *vma,
+					 unsigned long start, unsigned long end,
+					 unsigned long vm_flags,
+					 struct mempolicy *policy,
+					 struct vm_userfaultfd_ctx uffd_ctx,
+					 struct anon_vma_name *anon_name)
+{
+	pgoff_t pgoff = vma->vm_pgoff + ((start - vma->vm_start) >> PAGE_SHIFT);
+	struct vm_area_struct *merged;
+
+	merged = vma_merge(vmi, vma->vm_mm, prev, start, end, vm_flags,
+			   vma->anon_vma, vma->vm_file, pgoff, policy,
+			   uffd_ctx, anon_name);
+	if (merged)
+		return merged;
+
+	if (vma->vm_start < start) {
+		int err = split_vma(vmi, vma, start, 1);
+
+		if (err)
+			return ERR_PTR(err);
+	}
+
+	if (vma->vm_end > end) {
+		int err = split_vma(vmi, vma, end, 0);
+
+		if (err)
+			return ERR_PTR(err);
+	}
+
+	return NULL;
+}
+
+/* We are about to modify the VMA's flags. */
+struct vm_area_struct *vma_modify_flags(struct vma_iterator *vmi,
+					struct vm_area_struct *prev,
+					struct vm_area_struct *vma,
+					unsigned long start, unsigned long end,
+					unsigned long new_flags)
+{
+	return vma_modify(vmi, prev, vma, start, end, new_flags,
+			  vma_policy(vma), vma->vm_userfaultfd_ctx,
+			  anon_vma_name(vma));
+}
+
+/* We are about to modify the VMA's flags and/or anon_name. */
+struct vm_area_struct *vma_modify_flags_name(struct vma_iterator *vmi,
+					     struct vm_area_struct *prev,
+					     struct vm_area_struct *vma,
+					     unsigned long start,
+					     unsigned long end,
+					     unsigned long new_flags,
+					     struct anon_vma_name *new_name)
+{
+	return vma_modify(vmi, prev, vma, start, end, new_flags,
+			  vma_policy(vma), vma->vm_userfaultfd_ctx, new_name);
+}
+
+/* We are about to modify the VMA's flags memory policy. */
+struct vm_area_struct *vma_modify_policy(struct vma_iterator *vmi,
+					 struct vm_area_struct *prev,
+					 struct vm_area_struct *vma,
+					 unsigned long start, unsigned long end,
+					 struct mempolicy *new_pol)
+{
+	return vma_modify(vmi, prev, vma, start, end, vma->vm_flags,
+			  new_pol, vma->vm_userfaultfd_ctx, anon_vma_name(vma));
+}
+
+/* We are about to modify the VMA's uffd context and/or flags. */
+struct vm_area_struct *vma_modify_uffd(struct vma_iterator *vmi,
+				       struct vm_area_struct *prev,
+				       struct vm_area_struct *vma,
+				       unsigned long start, unsigned long end,
+				       unsigned long new_flags,
+				       struct vm_userfaultfd_ctx new_ctx)
+{
+	return vma_modify(vmi, prev, vma, start, end, new_flags,
+			  vma_policy(vma), new_ctx, anon_vma_name(vma));
+}
+
+/*
  * do_vmi_align_munmap() - munmap the aligned region from @start to @end.
  * @vmi: The vma iterator
  * @vma: The starting vm_area_struct

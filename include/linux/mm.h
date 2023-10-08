@@ -3253,6 +3253,29 @@ extern struct vm_area_struct *copy_vma(struct vm_area_struct **,
 	unsigned long addr, unsigned long len, pgoff_t pgoff,
 	bool *need_rmap_locks);
 extern void exit_mmap(struct mm_struct *);
+struct vm_area_struct *vma_modify_flags(struct vma_iterator *vmi,
+					struct vm_area_struct *prev,
+					struct vm_area_struct *vma,
+					unsigned long start, unsigned long end,
+					unsigned long new_flags);
+struct vm_area_struct *vma_modify_flags_name(struct vma_iterator *vmi,
+					     struct vm_area_struct *prev,
+					     struct vm_area_struct *vma,
+					     unsigned long start,
+					     unsigned long end,
+					     unsigned long new_flags,
+					     struct anon_vma_name *new_name);
+struct vm_area_struct *vma_modify_policy(struct vma_iterator *vmi,
+					 struct vm_area_struct *prev,
+					 struct vm_area_struct *vma,
+					 unsigned long start, unsigned long end,
+					 struct mempolicy *new_pol);
+struct vm_area_struct *vma_modify_uffd(struct vma_iterator *vmi,
+				       struct vm_area_struct *prev,
+				       struct vm_area_struct *vma,
+				       unsigned long start, unsigned long end,
+				       unsigned long new_flags,
+				       struct vm_userfaultfd_ctx new_ctx);
 
 static inline int check_data_rlimit(unsigned long rlim,
 				    unsigned long new,
