@@ -7,6 +7,143 @@
 #include <uapi/linux/udp.h>
 #include <uapi/linux/virtio_net.h>
 
+struct virtio_net_hash {
+	u32 value;
+	u16 report;
+};
+
+struct virtio_net_toeplitz_state {
+	u32 hash;
+	u32 key_buffer;
+	const u32 *key;
+};
+
+#define VIRTIO_NET_SUPPORTED_HASH_TYPES (VIRTIO_NET_RSS_HASH_TYPE_IPv4 | \
+					 VIRTIO_NET_RSS_HASH_TYPE_TCPv4 | \
+					 VIRTIO_NET_RSS_HASH_TYPE_UDPv4 | \
+					 VIRTIO_NET_RSS_HASH_TYPE_IPv6 | \
+					 VIRTIO_NET_RSS_HASH_TYPE_TCPv6 | \
+					 VIRTIO_NET_RSS_HASH_TYPE_UDPv6)
+
+static inline void virtio_net_toeplitz(struct virtio_net_toeplitz_state *state,
+				       const u32 *input, size_t len)
+{
+	u32 key;
+
+	while (len) {
+		state->key++;
+		key = ntohl(*state->key);
+
+		for (u32 bit = BIT(31); bit; bit >>= 1) {
+			if (*input & bit)
+				state->hash ^= state->key_buffer;
+
+			state->key_buffer =
+				(state->key_buffer << 1) | !!(key & bit);
+		}
+
+		input++;
+		len--;
+	}
+}
+
+static inline u8 virtio_net_hash_key_length(u32 types)
+{
+	size_t len = 0;
+
+	if (types & VIRTIO_NET_HASH_REPORT_IPv4)
+		len = max(len,
+			  sizeof(struct flow_dissector_key_ipv4_addrs));
+
+	if (types &
+	    (VIRTIO_NET_HASH_REPORT_TCPv4 | VIRTIO_NET_HASH_REPORT_UDPv4))
+		len = max(len,
+			  sizeof(struct flow_dissector_key_ipv4_addrs) +
+			  sizeof(struct flow_dissector_key_ports));
+
+	if (types & VIRTIO_NET_HASH_REPORT_IPv6)
+		len = max(len,
+			  sizeof(struct flow_dissector_key_ipv6_addrs));
+
+	if (types &
+	    (VIRTIO_NET_HASH_REPORT_TCPv6 | VIRTIO_NET_HASH_REPORT_UDPv6))
+		len = max(len,
+			  sizeof(struct flow_dissector_key_ipv6_addrs) +
+			  sizeof(struct flow_dissector_key_ports));
+
+	return 4 + len;
+}
+
+static inline void virtio_net_hash(const struct sk_buff *skb,
+				   u32 types, const u32 *key,
+				   struct virtio_net_hash *hash)
+{
+	u16 report = VIRTIO_NET_HASH_REPORT_NONE;
+	struct virtio_net_toeplitz_state toeplitz_state = {
+		.key_buffer = ntohl(*key),
+		.key = key
+	};
+	struct flow_keys flow;
+
+	if (!skb_flow_dissect_flow_keys(skb, &flow, 0))
+		return;
+
+	switch (flow.basic.n_proto) {
+	case htons(ETH_P_IP):
+		if (flow.basic.ip_proto == IPPROTO_TCP &&
+		    (types & VIRTIO_NET_RSS_HASH_TYPE_TCPv4)) {
+			report = VIRTIO_NET_HASH_REPORT_TCPv4;
+			virtio_net_toeplitz(&toeplitz_state,
+					    (u32 *)&flow.addrs.v4addrs,
+					    sizeof(flow.addrs.v4addrs) / 4);
+			virtio_net_toeplitz(&toeplitz_state, &flow.ports.ports,
+					    1);
+		} else if (flow.basic.ip_proto == IPPROTO_UDP &&
+			   (types & VIRTIO_NET_RSS_HASH_TYPE_UDPv4)) {
+			report = VIRTIO_NET_HASH_REPORT_UDPv4;
+			virtio_net_toeplitz(&toeplitz_state,
+					    (u32 *)&flow.addrs.v4addrs,
+					    sizeof(flow.addrs.v4addrs) / 4);
+			virtio_net_toeplitz(&toeplitz_state, &flow.ports.ports,
+					    1);
+		} else if (types & VIRTIO_NET_RSS_HASH_TYPE_IPv4) {
+			report = VIRTIO_NET_HASH_REPORT_IPv4;
+			virtio_net_toeplitz(&toeplitz_state,
+					    (u32 *)&flow.addrs.v4addrs,
+					    sizeof(flow.addrs.v4addrs) / 4);
+		}
+		break;
+
+	case htons(ETH_P_IPV6):
+		if (flow.basic.ip_proto == IPPROTO_TCP &&
+		    (types & VIRTIO_NET_RSS_HASH_TYPE_TCPv6)) {
+			report = VIRTIO_NET_HASH_REPORT_TCPv6;
+			virtio_net_toeplitz(&toeplitz_state,
+					    (u32 *)&flow.addrs.v6addrs,
+					    sizeof(flow.addrs.v6addrs) / 4);
+			virtio_net_toeplitz(&toeplitz_state, &flow.ports.ports,
+					    1);
+		} else if (flow.basic.ip_proto == IPPROTO_UDP &&
+			   (types & VIRTIO_NET_RSS_HASH_TYPE_UDPv6)) {
+			report = VIRTIO_NET_HASH_REPORT_UDPv6;
+			virtio_net_toeplitz(&toeplitz_state,
+					    (u32 *)&flow.addrs.v6addrs,
+					    sizeof(flow.addrs.v6addrs) / 4);
+			virtio_net_toeplitz(&toeplitz_state, &flow.ports.ports,
+					    1);
+		} else if (types & VIRTIO_NET_RSS_HASH_TYPE_IPv6) {
+			report = VIRTIO_NET_HASH_REPORT_IPv6;
+			virtio_net_toeplitz(&toeplitz_state,
+					    (u32 *)&flow.addrs.v6addrs,
+					    sizeof(flow.addrs.v6addrs) / 4);
+		}
+		break;
+	}
+
+	hash->value = toeplitz_state.hash;
+	hash->report = report;
+}
+
 static inline bool virtio_net_hdr_match_proto(__be16 protocol, __u8 gso_type)
 {
 	switch (gso_type & ~VIRTIO_NET_HDR_GSO_ECN) {
@@ -214,6 +351,26 @@ static inline int virtio_net_hdr_from_skb(const struct sk_buff *skb,
 	} /* else everything is zero */
 
 	return 0;
+}
+
+static inline int virtio_net_hdr_v1_hash_from_skb(const struct sk_buff *skb,
+						  struct virtio_net_hdr_v1_hash *hdr,
+						  bool has_data_valid,
+						  int vlan_hlen,
+						  const struct virtio_net_hash *hash)
+{
+	int ret;
+
+	memset(hdr, 0, sizeof(*hdr));
+
+	ret = virtio_net_hdr_from_skb(skb, (struct virtio_net_hdr *)hdr,
+				      true, has_data_valid, vlan_hlen);
+	if (!ret) {
+		hdr->hash_value = cpu_to_le32(hash->value);
+		hdr->hash_report = cpu_to_le16(hash->report);
+	}
+
+	return ret;
 }
 
 #endif /* _LINUX_VIRTIO_NET_H */
