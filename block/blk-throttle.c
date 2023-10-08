@@ -1489,8 +1489,8 @@ static u64 tg_prfill_limit(struct seq_file *sf, struct blkg_policy_data *pd,
 	char bufs[4][21] = { "max", "max", "max", "max" };
 	u64 bps_dft;
 	unsigned int iops_dft;
-	char idle_time[26] = "";
-	char latency_time[26] = "";
+	char idle_time[27] = "";
+	char latency_time[30] = "";
 
 	if (!dname)
 		return 0;
