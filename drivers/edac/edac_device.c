@@ -100,6 +100,7 @@ edac_device_alloc_ctl_info(unsigned pvt_sz, char *dev_name, unsigned nr_instance
 			goto free;
 
 		dev_ctl->pvt_info = pvt;
+		dev_ctl->pvt_managed_by_edac_core = true;
 	}
 
 	dev_ctl->dev_idx	= device_index;

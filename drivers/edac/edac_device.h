@@ -197,6 +197,11 @@ struct edac_device_ctl_info {
 	const char *dev_name;	/* pci/platform/etc... name */
 
 	void *pvt_info;		/* pointer to 'private driver' info */
+	/*
+	 * Indicate whether the resource pointed by pvt_info is managed by
+	 * the EDAC core.
+	 */
+	bool pvt_managed_by_edac_core;
 
 	unsigned long start_time;	/* edac_device load start time (jiffies) */
 
@@ -355,7 +360,8 @@ extern const char *edac_layer_name[];
 static inline void __edac_device_free_ctl_info(struct edac_device_ctl_info *ci)
 {
 	if (ci) {
-		kfree(ci->pvt_info);
+		if (ci->pvt_managed_by_edac_core)
+			kfree(ci->pvt_info);
 		kfree(ci->attribs);
 		kfree(ci->blocks);
 		kfree(ci->instances);
