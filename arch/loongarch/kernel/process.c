@@ -296,10 +296,6 @@ unsigned long stack_top(void)
 	top -= PAGE_ALIGN(current->thread.vdso->size);
 	top -= VVAR_SIZE;
 
-	/* Space to randomize the VDSO base */
-	if (current->flags & PF_RANDOMIZE)
-		top -= VDSO_RANDOMIZE_SIZE;
-
 	return top;
 }
 

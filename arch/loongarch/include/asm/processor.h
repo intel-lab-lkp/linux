@@ -43,8 +43,6 @@
 
 #endif
 
-#define VDSO_RANDOMIZE_SIZE	(TASK_IS_32BIT_ADDR ? SZ_1M : SZ_64M)
-
 unsigned long stack_top(void);
 #define STACK_TOP stack_top()
 

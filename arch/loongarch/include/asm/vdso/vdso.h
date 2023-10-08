@@ -12,7 +12,7 @@
 
 struct vdso_pcpu_data {
 	u32 node;
-} ____cacheline_aligned_in_smp;
+};
 
 struct loongarch_vdso_data {
 	struct vdso_pcpu_data pdata[NR_CPUS];
