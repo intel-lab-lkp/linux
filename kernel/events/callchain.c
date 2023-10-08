@@ -45,6 +45,10 @@ __weak void perf_callchain_user(struct perf_callchain_entry_ctx *entry,
 {
 }
 
+__weak void perf_callchain_guest(struct perf_callchain_entry_ctx *entry)
+{
+}
+
 static void release_callchain_buffers_rcu(struct rcu_head *head)
 {
 	struct callchain_cpus_entries *entries;
@@ -178,11 +182,12 @@ put_callchain_entry(int rctx)
 
 struct perf_callchain_entry *
 get_perf_callchain(struct pt_regs *regs, u32 init_nr, bool kernel, bool user,
-		   u32 max_stack, bool crosstask, bool add_mark)
+		   bool host, bool guest, u32 max_stack, bool crosstask, bool add_mark)
 {
 	struct perf_callchain_entry *entry;
 	struct perf_callchain_entry_ctx ctx;
 	int rctx;
+	unsigned int guest_state;
 
 	entry = get_callchain_entry(&rctx);
 	if (!entry)
@@ -193,6 +198,26 @@ get_perf_callchain(struct pt_regs *regs, u32 init_nr, bool kernel, bool user,
 	ctx.nr	      = entry->nr = init_nr;
 	ctx.contexts       = 0;
 	ctx.contexts_maxed = false;
+
+	guest_state = perf_guest_state();
+	if (guest_state) {
+		if (!guest)
+			goto exit_put;
+		if (user && (guest_state & PERF_GUEST_USER)) {
+			if (add_mark)
+				perf_callchain_store_context(&ctx, PERF_CONTEXT_GUEST_USER);
+			perf_callchain_guest(&ctx);
+		}
+		if (kernel && !(guest_state & PERF_GUEST_USER)) {
+			if (add_mark)
+				perf_callchain_store_context(&ctx, PERF_CONTEXT_GUEST_KERNEL);
+			perf_callchain_guest(&ctx);
+		}
+		goto exit_put;
+	}
+
+	if (unlikely(!host))
+		goto exit_put;
 
 	if (kernel && !user_mode(regs)) {
 		if (add_mark)
