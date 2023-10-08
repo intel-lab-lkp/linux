@@ -201,7 +201,14 @@ static void mci_release(struct device *dev)
 		}
 		kfree(mci->csrows);
 	}
-	kfree(mci->pvt_info);
+
+	/*
+	 * if !pvt_managed_by_edac_core, the resource, e.g. memory or MMIO-mapped
+	 * registers pointed by pvt_info is managed by the EDAC	driver. The EDAC
+	 * core shouldn't kfree it.
+	 */
+	if (mci->pvt_managed_by_edac_core)
+		kfree(mci->pvt_info);
 	kfree(mci->layers);
 	kfree(mci);
 }
@@ -369,9 +376,13 @@ struct mem_ctl_info *edac_mc_alloc(unsigned int mc_num,
 	if (!mci->layers)
 		goto error;
 
-	mci->pvt_info = kzalloc(sz_pvt, GFP_KERNEL);
-	if (!mci->pvt_info)
-		goto error;
+	if (sz_pvt) {
+		mci->pvt_info = kzalloc(sz_pvt, GFP_KERNEL);
+		if (!mci->pvt_info)
+			goto error;
+
+		mci->pvt_managed_by_edac_core = true;
+	}
 
 	mci->dev.release = mci_release;
 	device_initialize(&mci->dev);

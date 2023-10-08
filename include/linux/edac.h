@@ -567,6 +567,11 @@ struct mem_ctl_info {
 	const char *ctl_name;
 	const char *dev_name;
 	void *pvt_info;
+	/*
+	 * Indicate whether the resource pointed by pvt_info is managed by
+	 * the EDAC core.
+	 */
+	bool pvt_managed_by_edac_core;
 	unsigned long start_time;	/* mci load start time (in jiffies) */
 
 	/*
