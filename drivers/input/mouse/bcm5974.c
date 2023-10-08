@@ -891,6 +891,26 @@ static int bcm5974_resume(struct usb_interface *iface)
 	return error;
 }
 
+static int bcm5974_int_in_endpoint(struct usb_host_interface *iface, int addr)
+{
+	struct usb_endpoint_descriptor *endpoint;
+	bool int_in_endpoint = false;
+	int i;
+
+	for (i = 0; i < iface->desc.bNumEndpoints; i++) {
+		endpoint = &iface->endpoint[i].desc;
+		if (endpoint->bEndpointAddress == addr) {
+			if (usb_endpoint_is_int_in(endpoint))
+				int_in_endpoint = true;
+			break;
+		}
+	}
+	if (!int_in_endpoint)
+		return -ENODEV;
+
+	return 0;
+}
+
 static int bcm5974_probe(struct usb_interface *iface,
 			 const struct usb_device_id *id)
 {
@@ -898,16 +918,31 @@ static int bcm5974_probe(struct usb_interface *iface,
 	const struct bcm5974_config *cfg;
 	struct bcm5974 *dev;
 	struct input_dev *input_dev;
-	int error = -ENOMEM;
+	int error;
 
 	/* find the product index */
 	cfg = bcm5974_get_config(udev);
+
+	if (cfg->tp_type == TYPE1) {
+		error = bcm5974_int_in_endpoint(iface->cur_altsetting, cfg->bt_ep);
+		if (error) {
+			dev_err(&iface->dev, "No int-in endpoint for the button\n");
+			return error;
+		}
+	}
+
+	error = bcm5974_int_in_endpoint(iface->cur_altsetting, cfg->tp_ep);
+	if (error) {
+		dev_err(&iface->dev, "No int-in endpoint for the trackpad\n");
+		return error;
+	}
 
 	/* allocate memory for our device state and initialize it */
 	dev = kzalloc(sizeof(struct bcm5974), GFP_KERNEL);
 	input_dev = input_allocate_device();
 	if (!dev || !input_dev) {
 		dev_err(&iface->dev, "out of memory\n");
+		error = -ENOMEM;
 		goto err_free_devs;
 	}
 
