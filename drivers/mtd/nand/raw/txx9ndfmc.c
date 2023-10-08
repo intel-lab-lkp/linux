@@ -406,7 +406,13 @@ static int txx9ndfmc_resume(struct platform_device *dev)
 #define txx9ndfmc_resume NULL
 #endif
 
-static struct platform_driver txx9ndfmc_driver = {
+/*
+ * txx9ndfmc_remove() lives in .exit.text. For drivers registered via
+ * module_platform_driver_probe() this is ok because they cannot get unbound at
+ * runtime. So mark the driver struct with __refdata to prevent modpost
+ * triggering a section mismatch warning.
+ */
+static struct platform_driver txx9ndfmc_driver __refdata = {
 	.remove		= __exit_p(txx9ndfmc_remove),
 	.resume		= txx9ndfmc_resume,
 	.driver		= {
