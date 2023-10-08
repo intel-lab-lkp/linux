@@ -3622,6 +3622,7 @@ static struct sk_buff *validate_xmit_skb(struct sk_buff *skb, struct net_device 
 	if (netif_needs_gso(skb, features)) {
 		struct sk_buff *segs;
 
+		BUILD_BUG_ON(sizeof(struct qdisc_skb_cb) > SKB_GSO_CB_OFFSET);
 		segs = skb_gso_segment(skb, features);
 		if (IS_ERR(segs)) {
 			goto out_kfree_skb;
