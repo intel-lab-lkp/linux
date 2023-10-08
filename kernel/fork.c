@@ -975,7 +975,6 @@ void __put_task_struct(struct task_struct *tsk)
 	task_numa_free(tsk, true);
 	security_task_free(tsk);
 	exit_creds(tsk);
-	delayacct_tsk_free(tsk);
 	put_signal_struct(tsk->signal);
 	sched_core_free(tsk);
 	free_task(tsk);
@@ -2426,14 +2425,14 @@ __latent_entropy struct task_struct *copy_process(
 	cgroup_fork(p);
 	if (args->kthread) {
 		if (!set_kthread_struct(p))
-			goto bad_fork_cleanup_delayacct;
+			goto bad_fork_cleanup_count;
 	}
 #ifdef CONFIG_NUMA
 	p->mempolicy = mpol_dup(p->mempolicy);
 	if (IS_ERR(p->mempolicy)) {
 		retval = PTR_ERR(p->mempolicy);
 		p->mempolicy = NULL;
-		goto bad_fork_cleanup_delayacct;
+		goto bad_fork_cleanup_count;
 	}
 #endif
 #ifdef CONFIG_CPUSETS
@@ -2781,8 +2780,6 @@ bad_fork_cleanup_policy:
 #ifdef CONFIG_NUMA
 	mpol_put(p->mempolicy);
 #endif
-bad_fork_cleanup_delayacct:
-	delayacct_tsk_free(p);
 bad_fork_cleanup_count:
 	dec_rlimit_ucounts(task_ucounts(p), UCOUNT_RLIMIT_NPROC, 1);
 	exit_creds(p);

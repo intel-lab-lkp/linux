@@ -65,7 +65,6 @@ struct task_delay_info {
 #ifdef CONFIG_TASK_DELAY_ACCT
 DECLARE_STATIC_KEY_FALSE(delayacct_key);
 extern int delayacct_on;	/* Delay accounting turned on/off */
-extern struct kmem_cache *delayacct_cache;
 extern void delayacct_init(void);
 
 extern void __delayacct_tsk_init(struct task_struct *);
@@ -88,25 +87,12 @@ extern void __delayacct_irq(struct task_struct *task, u32 delta);
 
 static inline void delayacct_tsk_init(struct task_struct *tsk)
 {
-	/* reinitialize in case parent's non-null pointer was dup'ed*/
-	tsk->delays = NULL;
-	if (delayacct_on)
-		__delayacct_tsk_init(tsk);
+	__delayacct_tsk_init(tsk);
 }
 
 static inline bool delayacct_enabled(void)
 {
 	return static_branch_unlikely(&delayacct_key);
-}
-
-/* Free tsk->delays. Called from bad fork and __put_task_struct
- * where there's no risk of tsk->delays being accessed elsewhere
- */
-static inline void delayacct_tsk_free(struct task_struct *tsk)
-{
-	if (delayacct_enabled())
-		kmem_cache_free(delayacct_cache, tsk->delays);
-	tsk->delays = NULL;
 }
 
 static inline void delayacct_blkio_start(void)

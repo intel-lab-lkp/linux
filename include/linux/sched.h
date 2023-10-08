@@ -37,6 +37,7 @@
 #include <linux/kcsan.h>
 #include <linux/rv.h>
 #include <linux/livepatch_sched.h>
+#include <linux/delayacct.h>
 #include <asm/kmap_size.h>
 
 /* task_struct member predeclarations (sorted alphabetically): */
@@ -1332,7 +1333,7 @@ struct task_struct {
 	struct page_frag		task_frag;
 
 #ifdef CONFIG_TASK_DELAY_ACCT
-	struct task_delay_info		*delays;
+	struct task_delay_info		delays;
 #endif
 
 #ifdef CONFIG_FAULT_INJECTION
