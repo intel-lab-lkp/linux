@@ -1640,6 +1640,7 @@ static void scrub_submit_extent_sector_read(struct scrub_ctx *sctx,
 {
 	struct btrfs_fs_info *fs_info = stripe->bg->fs_info;
 	struct btrfs_bio *bbio = NULL;
+	u64 stripe_len = BTRFS_STRIPE_LEN;
 	int mirror = stripe->mirror_num;
 	int i;
 
@@ -1651,8 +1652,9 @@ static void scrub_submit_extent_sector_read(struct scrub_ctx *sctx,
 
 		/* The current sector cannot be merged, submit the bio. */
 		if (bbio &&
-		    ((i > 0 && !test_bit(i - 1, &stripe->extent_sector_bitmap)) ||
-		     bbio->bio.bi_iter.bi_size >= BTRFS_STRIPE_LEN)) {
+		    ((i > 0 &&
+		      !test_bit(i - 1, &stripe->extent_sector_bitmap)) ||
+		     bbio->bio.bi_iter.bi_size >= stripe_len)) {
 			ASSERT(bbio->bio.bi_iter.bi_size);
 			atomic_inc(&stripe->pending_io);
 			btrfs_submit_bio(bbio, mirror);
@@ -1660,10 +1662,26 @@ static void scrub_submit_extent_sector_read(struct scrub_ctx *sctx,
 		}
 
 		if (!bbio) {
+			struct btrfs_io_stripe io_stripe = {};
+			struct btrfs_io_context *bioc = NULL;
+			const u64 logical = stripe->logical +
+					    (i << fs_info->sectorsize_bits);
+			int err;
+
 			bbio = btrfs_bio_alloc(stripe->nr_sectors, REQ_OP_READ,
 					       fs_info, scrub_read_endio, stripe);
-			bbio->bio.bi_iter.bi_sector = (stripe->logical +
-				(i << fs_info->sectorsize_bits)) >> SECTOR_SHIFT;
+			bbio->bio.bi_iter.bi_sector = logical >> SECTOR_SHIFT;
+
+			io_stripe.is_scrub = true;
+			err = btrfs_map_block(fs_info, BTRFS_MAP_READ, logical,
+					      &stripe_len, &bioc, &io_stripe,
+					      &mirror);
+			btrfs_put_bioc(bioc);
+			if (err) {
+				btrfs_bio_end_io(bbio,
+						 errno_to_blk_status(err));
+				return;
+			}
 		}
 
 		__bio_add_page(&bbio->bio, page, fs_info->sectorsize, pgoff);
