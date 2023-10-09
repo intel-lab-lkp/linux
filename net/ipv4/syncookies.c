@@ -360,8 +360,8 @@ struct sock *cookie_v4_check(struct sock *sk, struct sk_buff *skb)
 
 	if (tcp_opt.saw_tstamp && tcp_opt.rcv_tsecr) {
 		tsoff = secure_tcp_ts_off(sock_net(sk),
-					  ip_hdr(skb)->daddr,
-					  ip_hdr(skb)->saddr);
+					  ip_hdr(skb)->saddr,
+					  ip_hdr(skb)->daddr);
 		tcp_opt.rcv_tsecr -= tsoff;
 	}
 
