@@ -389,6 +389,7 @@ struct pci_dev {
 						   bit manually */
 	unsigned int	d3hot_delay;	/* D3hot->D0 transition time in ms */
 	unsigned int	d3cold_delay;	/* D3cold->D0 transition time in ms */
+	unsigned int	driver_d3;	/* Driver D3 request preference */
 
 #ifdef CONFIG_PCIEASPM
 	struct pcie_link_state	*link_state;	/* ASPM link state */
@@ -1430,6 +1431,59 @@ void pci_d3cold_disable(struct pci_dev *dev);
 bool pcie_relaxed_ordering_enabled(struct pci_dev *dev);
 void pci_resume_bus(struct pci_bus *bus);
 void pci_bus_set_current_state(struct pci_bus *bus, pci_power_t state);
+
+/**
+ * enum bridge_d3_pref - D3 preference of a bridge
+ * @BRIDGE_PREF_UNSET: Not configured by driver
+ * @BRIDGE_PREF_NONE: Driver does not care
+ * @BRIDGE_PREF_DRIVER_D3: Driver prefers D3
+ * @BRIDGE_PREF_DRIVER_D0: Driver prefers D0
+ */
+enum bridge_d3_pref {
+	BRIDGE_PREF_UNSET,
+	BRIDGE_PREF_NONE,
+	BRIDGE_PREF_DRIVER_D3,
+	BRIDGE_PREF_DRIVER_D0,
+};
+
+/**
+ * pci_d3_driver_ops - Operations provided by a driver to evaluate D3 policy
+ * @list_node: the linked list node
+ * @priority: the priority of the callback
+ * @check: the callback to evaluate D3 policy
+ *
+ * For the callback drivers are expected to return:
+ *  BRIDGE_PREF_NONE if they can't evaluate the decision whether to support D3
+ *  BRIDGE_PREF_DRIVER_D0 if they decide the device should not support D3
+ *  BRIDGE_PREF_DRIVER_D3 if they decide the device should support D3
+ */
+struct pci_d3_driver_ops {
+	struct list_head list_node;
+	int priority;
+	enum bridge_d3_pref (*check)(struct pci_dev *pdev);
+};
+
+/**
+ * pci_register_driver_d3_policy_cb - Register a driver callback for configuring D3 policy
+ * @arg: driver provided structure with function pointer and priority
+ *
+ * This function can be used by drivers to register a callback that can be used
+ * to delegate the decision of whether a device should be used for D3 to that
+ * driver.
+ *
+ * Returns 0 on success, error code on failure.
+ */
+int pci_register_driver_d3_policy_cb(struct pci_d3_driver_ops *arg);
+
+/**
+ * pci_unregister_driver_d3_policy_cb - Unregister a driver callback for configuring D3 policy
+ * @arg: driver provided structure with function pointer and priority
+ *
+ * This function can be used by drivers to unregister a callback that can be used
+ * to delegate the decision of whether a device should be used for D3 to that
+ * driver.
+ */
+void pci_unregister_driver_d3_policy_cb(struct pci_d3_driver_ops *arg);
 
 /* For use by arch with custom probe code */
 void set_pcie_port_type(struct pci_dev *pdev);

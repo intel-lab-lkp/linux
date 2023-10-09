@@ -21,6 +21,7 @@
 #include <linux/module.h>
 #include <linux/spinlock.h>
 #include <linux/string.h>
+#include <linux/list_sort.h>
 #include <linux/log2.h>
 #include <linux/logic_pio.h>
 #include <linux/pm_wakeup.h>
@@ -54,6 +55,8 @@ unsigned int pci_pm_d3hot_delay;
 static void pci_pme_list_scan(struct work_struct *work);
 
 static LIST_HEAD(pci_pme_list);
+static LIST_HEAD(d3_possible_list);
+static DEFINE_MUTEX(d3_possible_list_mutex);
 static DEFINE_MUTEX(pci_pme_list_mutex);
 static DECLARE_DELAYED_WORK(pci_pme_work, pci_pme_list_scan);
 
@@ -3031,6 +3034,16 @@ bool pci_bridge_d3_possible(struct pci_dev *bridge)
 		if (pci_bridge_d3_force)
 			return true;
 
+		/* check for any preferences for the bridge */
+		switch (bridge->driver_d3) {
+		case BRIDGE_PREF_DRIVER_D3:
+			return true;
+		case BRIDGE_PREF_DRIVER_D0:
+			return false;
+		default:
+			break;
+		}
+
 		/* Even the oldest 2010 Thunderbolt controller supports D3. */
 		if (bridge->is_thunderbolt)
 			return true;
@@ -3167,6 +3180,112 @@ void pci_d3cold_disable(struct pci_dev *dev)
 	}
 }
 EXPORT_SYMBOL_GPL(pci_d3cold_disable);
+
+static struct pci_dev *pci_get_upstream_port(struct pci_dev *pci_dev)
+{
+	struct pci_dev *bridge;
+
+	bridge = pci_upstream_bridge(pci_dev);
+	if (!bridge)
+		return NULL;
+
+	if (!pci_is_pcie(bridge))
+		return NULL;
+
+	switch (pci_pcie_type(bridge)) {
+	case PCI_EXP_TYPE_ROOT_PORT:
+	case PCI_EXP_TYPE_UPSTREAM:
+	case PCI_EXP_TYPE_DOWNSTREAM:
+		return bridge;
+	default:
+		break;
+	};
+
+	return NULL;
+}
+
+static void pci_refresh_driver_d3(void)
+{
+	struct pci_d3_driver_ops *driver;
+	struct pci_dev *pci_dev = NULL;
+	struct pci_dev *bridge;
+
+	/* 1st pass: unset any preferences set a previous invocation */
+	while ((pci_dev = pci_get_device(PCI_ANY_ID, PCI_ANY_ID, pci_dev))) {
+		bridge = pci_get_upstream_port(pci_dev);
+		if (!bridge)
+			continue;
+
+		if (bridge->driver_d3 != BRIDGE_PREF_UNSET)
+			bridge->driver_d3 = BRIDGE_PREF_UNSET;
+	}
+
+	pci_dev = NULL;
+
+	/* 2nd pass: update the preference and refresh bridge_d3 */
+	while ((pci_dev = pci_get_device(PCI_ANY_ID, PCI_ANY_ID, pci_dev))) {
+		bridge = pci_get_upstream_port(pci_dev);
+		if (!bridge)
+			continue;
+
+		/* don't make multiple passes on the same device */
+		if (bridge->driver_d3 != BRIDGE_PREF_UNSET)
+			continue;
+
+		/* the list is pre-sorted by highest priority */
+		mutex_lock(&d3_possible_list_mutex);
+		list_for_each_entry(driver, &d3_possible_list, list_node) {
+			/* another higher priority driver already set preference */
+			if (bridge->driver_d3 != BRIDGE_PREF_UNSET)
+				break;
+			if (!driver->check)
+				continue;
+			bridge->driver_d3 = driver->check(bridge);
+		}
+		mutex_unlock(&d3_possible_list_mutex);
+
+		/* no driver set a preference */
+		if (bridge->driver_d3 == BRIDGE_PREF_UNSET)
+			bridge->driver_d3 = BRIDGE_PREF_NONE;
+
+		/* update bridge_d3 */
+		pci_bridge_d3_update(pci_dev);
+	}
+}
+
+static int pci_d3_driver_cmp(void *priv, const struct list_head *_a,
+			   const struct list_head *_b)
+{
+	struct pci_d3_driver_ops *a = container_of(_a, typeof(*a), list_node);
+	struct pci_d3_driver_ops *b = container_of(_b, typeof(*b), list_node);
+
+	if (a->priority < b->priority)
+		return -1;
+	else if (a->priority > b->priority)
+		return 1;
+	return 0;
+}
+
+int pci_register_driver_d3_policy_cb(struct pci_d3_driver_ops *arg)
+{
+	mutex_lock(&d3_possible_list_mutex);
+	list_add(&arg->list_node, &d3_possible_list);
+	list_sort(NULL, &d3_possible_list, pci_d3_driver_cmp);
+	mutex_unlock(&d3_possible_list_mutex);
+	pci_refresh_driver_d3();
+	return 0;
+}
+EXPORT_SYMBOL_GPL(pci_register_driver_d3_policy_cb);
+
+void pci_unregister_driver_d3_policy_cb(struct pci_d3_driver_ops *arg)
+{
+	mutex_lock(&d3_possible_list_mutex);
+	list_del(&arg->list_node);
+	list_sort(NULL, &d3_possible_list, pci_d3_driver_cmp);
+	mutex_unlock(&d3_possible_list_mutex);
+	pci_refresh_driver_d3();
+}
+EXPORT_SYMBOL_GPL(pci_unregister_driver_d3_policy_cb);
 
 /**
  * pci_pm_init - Initialize PM functions of given PCI device
