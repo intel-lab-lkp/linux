@@ -2791,6 +2791,17 @@ config SIPHASH_KUNIT_TEST
 	  This is intended to help people writing architecture-specific
 	  optimized versions.  If unsure, say N.
 
+config WORDATATIME_KUNIT_TEST
+	tristate "KUnit test word-at-a-time implementation at runtime" if !KUNIT_ALL_TESTS
+	depends on KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  Enable this option to test the kernel's word-at-a-time (<asm/word-at-a-time.h>)
+	  functions on boot (or module load).
+
+	  This is intended to help people writing architecture-specific
+	  optimized versions.  If unsure, say N.
+
 config TEST_UDELAY
 	tristate "udelay test driver"
 	help
