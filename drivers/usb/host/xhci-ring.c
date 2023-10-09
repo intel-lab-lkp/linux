@@ -4301,7 +4301,8 @@ static int queue_command(struct xhci_hcd *xhci, struct xhci_command *cmd,
 	/* if there are no other commands queued we start the timeout timer */
 	if (list_empty(&xhci->cmd_list)) {
 		xhci->current_cmd = cmd;
-		xhci_mod_cmd_timer(xhci, XHCI_CMD_DEFAULT_TIMEOUT);
+		xhci_mod_cmd_timer(xhci, (cmd->timeout) ? cmd->timeout :
+				XHCI_CMD_DEFAULT_TIMEOUT);
 	}
 
 	list_add_tail(&cmd->cmd_list, &xhci->cmd_list);

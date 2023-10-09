@@ -1729,6 +1729,7 @@ struct xhci_command *xhci_alloc_command(struct xhci_hcd *xhci,
 	}
 
 	command->status = 0;
+	command->timeout = 0;
 	INIT_LIST_HEAD(&command->cmd_list);
 	return command;
 }

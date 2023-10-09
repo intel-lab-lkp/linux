@@ -791,6 +791,7 @@ struct xhci_command {
 	struct completion		*completion;
 	union xhci_trb			*command_trb;
 	struct list_head		cmd_list;
+	int				timeout;
 };
 
 /* drop context bitmasks */
