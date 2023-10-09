@@ -432,49 +432,18 @@ static struct atalk_addr *__aarp_proxy_find(struct net_device *dev,
 	return a ? sa : NULL;
 }
 
-/*
- * Probe a Phase 1 device or a device that requires its Net:Node to
- * be set via an ioctl.
- */
-static void aarp_send_probe_phase1(struct atalk_iface *iface)
-{
-	struct ifreq atreq;
-	struct sockaddr_at *sa = (struct sockaddr_at *)&atreq.ifr_addr;
-	const struct net_device_ops *ops = iface->dev->netdev_ops;
-
-	sa->sat_addr.s_node = iface->address.s_node;
-	sa->sat_addr.s_net = ntohs(iface->address.s_net);
-
-	/* We pass the Net:Node to the drivers/cards by a Device ioctl. */
-	if (!(ops->ndo_do_ioctl(iface->dev, &atreq, SIOCSIFADDR))) {
-		ops->ndo_do_ioctl(iface->dev, &atreq, SIOCGIFADDR);
-		if (iface->address.s_net != htons(sa->sat_addr.s_net) ||
-		    iface->address.s_node != sa->sat_addr.s_node)
-			iface->status |= ATIF_PROBE_FAIL;
-
-		iface->address.s_net  = htons(sa->sat_addr.s_net);
-		iface->address.s_node = sa->sat_addr.s_node;
-	}
-}
-
-
 void aarp_probe_network(struct atalk_iface *atif)
 {
-	if (atif->dev->type == ARPHRD_LOCALTLK ||
-	    atif->dev->type == ARPHRD_PPP)
-		aarp_send_probe_phase1(atif);
-	else {
-		unsigned int count;
+	unsigned int count;
 
-		for (count = 0; count < AARP_RETRANSMIT_LIMIT; count++) {
-			aarp_send_probe(atif->dev, &atif->address);
+	for (count = 0; count < AARP_RETRANSMIT_LIMIT; count++) {
+		aarp_send_probe(atif->dev, &atif->address);
 
-			/* Defer 1/10th */
-			msleep(100);
+		/* Defer 1/10th */
+		msleep(100);
 
-			if (atif->status & ATIF_PROBE_FAIL)
-				break;
-		}
+		if (atif->status & ATIF_PROBE_FAIL)
+			break;
 	}
 }
 
@@ -483,14 +452,6 @@ int aarp_proxy_probe_network(struct atalk_iface *atif, struct atalk_addr *sa)
 	int hash, retval = -EPROTONOSUPPORT;
 	struct aarp_entry *entry;
 	unsigned int count;
-
-	/*
-	 * we don't currently support LocalTalk or PPP for proxy AARP;
-	 * if someone wants to try and add it, have fun
-	 */
-	if (atif->dev->type == ARPHRD_LOCALTLK ||
-	    atif->dev->type == ARPHRD_PPP)
-		goto out;
 
 	/*
 	 * create a new AARP entry with the flags set to be published --
@@ -548,51 +509,6 @@ int aarp_send_ddp(struct net_device *dev, struct sk_buff *skb,
 	struct aarp_entry *a;
 
 	skb_reset_network_header(skb);
-
-	/* Check for LocalTalk first */
-	if (dev->type == ARPHRD_LOCALTLK) {
-		struct atalk_addr *at = atalk_find_dev_addr(dev);
-		struct ddpehdr *ddp = (struct ddpehdr *)skb->data;
-		int ft = 2;
-
-		/*
-		 * Compressible ?
-		 *
-		 * IFF: src_net == dest_net == device_net
-		 * (zero matches anything)
-		 */
-
-		if ((!ddp->deh_snet || at->s_net == ddp->deh_snet) &&
-		    (!ddp->deh_dnet || at->s_net == ddp->deh_dnet)) {
-			skb_pull(skb, sizeof(*ddp) - 4);
-
-			/*
-			 *	The upper two remaining bytes are the port
-			 *	numbers	we just happen to need. Now put the
-			 *	length in the lower two.
-			 */
-			*((__be16 *)skb->data) = htons(skb->len);
-			ft = 1;
-		}
-		/*
-		 * Nice and easy. No AARP type protocols occur here so we can
-		 * just shovel it out with a 3 byte LLAP header
-		 */
-
-		skb_push(skb, 3);
-		skb->data[0] = sa->s_node;
-		skb->data[1] = at->s_node;
-		skb->data[2] = ft;
-		skb->dev     = dev;
-		goto sendit;
-	}
-
-	/* On a PPP link we neither compress nor aarp.  */
-	if (dev->type == ARPHRD_PPP) {
-		skb->protocol = htons(ETH_P_PPPTALK);
-		skb->dev = dev;
-		goto sendit;
-	}
 
 	/* Non ELAP we cannot do. */
 	if (dev->type != ARPHRD_ETHER)
@@ -659,22 +575,12 @@ int aarp_send_ddp(struct net_device *dev, struct sk_buff *skb,
 out_unlock:
 	write_unlock_bh(&aarp_lock);
 
-	/* Tell the ddp layer we have taken over for this frame. */
-	goto sent;
-
-sendit:
-	if (skb->sk)
-		skb->priority = READ_ONCE(skb->sk->sk_priority);
-	if (dev_queue_xmit(skb))
-		goto drop;
 sent:
 	return NET_XMIT_SUCCESS;
 free_it:
 	kfree_skb(skb);
-drop:
 	return NET_XMIT_DROP;
 }
-EXPORT_SYMBOL(aarp_send_ddp);
 
 /*
  *	An entry in the aarp unresolved queue has become resolved. Send

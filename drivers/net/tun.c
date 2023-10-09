@@ -70,7 +70,6 @@
 #include <linux/bpf_trace.h>
 #include <linux/mutex.h>
 #include <linux/ieee802154.h>
-#include <linux/if_ltalk.h>
 #include <uapi/linux/if_fddi.h>
 #include <uapi/linux/if_hippi.h>
 #include <uapi/linux/if_fc.h>
@@ -3059,8 +3058,6 @@ static unsigned char tun_get_addr_len(unsigned short type)
 		return ROSE_ADDR_LEN;
 	case ARPHRD_NETROM:
 		return AX25_ADDR_LEN;
-	case ARPHRD_LOCALTLK:
-		return LTALK_ALEN;
 	default:
 		return 0;
 	}

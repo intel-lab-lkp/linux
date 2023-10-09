@@ -473,7 +473,7 @@ out:
  * Given an AppleTalk network, find the device to use. This can be
  * a simple lookup.
  */
-struct net_device *atrtr_get_dev(struct atalk_addr *sa)
+static struct net_device *atrtr_get_dev(struct atalk_addr *sa)
 {
 	struct atalk_route *atr = atrtr_find(sa);
 	return atr ? atr->dev : NULL;
@@ -683,9 +683,7 @@ static int atif_ioctl(int cmd, void __user *arg)
 		if (sa->sat_family != AF_APPLETALK)
 			return -EINVAL;
 		if (dev->type != ARPHRD_ETHER &&
-		    dev->type != ARPHRD_LOOPBACK &&
-		    dev->type != ARPHRD_LOCALTLK &&
-		    dev->type != ARPHRD_PPP)
+		    dev->type != ARPHRD_LOOPBACK)
 			return -EPROTONOSUPPORT;
 
 		nr = (struct atalk_netrange *)&sa->sat_zero[0];
@@ -1327,18 +1325,8 @@ static int atalk_route_packet(struct sk_buff *skb, struct net_device *dev,
 	 * Don't route multicast, etc., packets, or packets sent to "this
 	 * network"
 	 */
-	if (skb->pkt_type != PACKET_HOST || !ddp->deh_dnet) {
-		/*
-		 * FIXME:
-		 *
-		 * Can it ever happen that a packet is from a PPP iface and
-		 * needs to be broadcast onto the default network?
-		 */
-		if (dev->type == ARPHRD_PPP)
-			printk(KERN_DEBUG "AppleTalk: didn't forward broadcast "
-					  "packet received from PPP iface\n");
+	if (skb->pkt_type != PACKET_HOST || !ddp->deh_dnet)
 		goto free_it;
-	}
 
 	ta.s_net  = ddp->deh_dnet;
 	ta.s_node = ddp->deh_dnode;
@@ -1506,64 +1494,6 @@ drop:
 out:
 	return NET_RX_DROP;
 
-}
-
-/*
- * Receive a LocalTalk frame. We make some demands on the caller here.
- * Caller must provide enough headroom on the packet to pull the short
- * header and append a long one.
- */
-static int ltalk_rcv(struct sk_buff *skb, struct net_device *dev,
-		     struct packet_type *pt, struct net_device *orig_dev)
-{
-	if (!net_eq(dev_net(dev), &init_net))
-		goto freeit;
-
-	/* Expand any short form frames */
-	if (skb_mac_header(skb)[2] == 1) {
-		struct ddpehdr *ddp;
-		/* Find our address */
-		struct atalk_addr *ap = atalk_find_dev_addr(dev);
-
-		if (!ap || skb->len < sizeof(__be16) || skb->len > 1023)
-			goto freeit;
-
-		/* Don't mangle buffer if shared */
-		if (!(skb = skb_share_check(skb, GFP_ATOMIC)))
-			return 0;
-
-		/*
-		 * The push leaves us with a ddephdr not an shdr, and
-		 * handily the port bytes in the right place preset.
-		 */
-		ddp = skb_push(skb, sizeof(*ddp) - 4);
-
-		/* Now fill in the long header */
-
-		/*
-		 * These two first. The mac overlays the new source/dest
-		 * network information so we MUST copy these before
-		 * we write the network numbers !
-		 */
-
-		ddp->deh_dnode = skb_mac_header(skb)[0];     /* From physical header */
-		ddp->deh_snode = skb_mac_header(skb)[1];     /* From physical header */
-
-		ddp->deh_dnet  = ap->s_net;	/* Network number */
-		ddp->deh_snet  = ap->s_net;
-		ddp->deh_sum   = 0;		/* No checksum */
-		/*
-		 * Not sure about this bit...
-		 */
-		/* Non routable, so force a drop if we slip up later */
-		ddp->deh_len_hops = htons(skb->len + (DDP_MAXHOPS << 10));
-	}
-	skb_reset_transport_header(skb);
-
-	return atalk_rcv(skb, dev, pt, orig_dev);
-freeit:
-	kfree_skb(skb);
-	return 0;
 }
 
 static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
@@ -1935,21 +1865,7 @@ static struct notifier_block ddp_notifier = {
 	.notifier_call	= ddp_device_event,
 };
 
-static struct packet_type ltalk_packet_type __read_mostly = {
-	.type		= cpu_to_be16(ETH_P_LOCALTALK),
-	.func		= ltalk_rcv,
-};
-
-static struct packet_type ppptalk_packet_type __read_mostly = {
-	.type		= cpu_to_be16(ETH_P_PPPTALK),
-	.func		= atalk_rcv,
-};
-
 static unsigned char ddp_snap_id[] = { 0x08, 0x00, 0x07, 0x80, 0x9B };
-
-/* Export symbols for use by drivers when AppleTalk is a module */
-EXPORT_SYMBOL(atrtr_get_dev);
-EXPORT_SYMBOL(atalk_find_dev_addr);
 
 /* Called by proto.c on kernel start up */
 static int __init atalk_init(void)
@@ -1970,9 +1886,6 @@ static int __init atalk_init(void)
 		rc = -ENOMEM;
 		goto out_sock;
 	}
-
-	dev_add_pack(&ltalk_packet_type);
-	dev_add_pack(&ppptalk_packet_type);
 
 	rc = register_netdevice_notifier(&ddp_notifier);
 	if (rc)
@@ -1998,8 +1911,6 @@ out_aarp:
 out_dev:
 	unregister_netdevice_notifier(&ddp_notifier);
 out_snap:
-	dev_remove_pack(&ppptalk_packet_type);
-	dev_remove_pack(&ltalk_packet_type);
 	unregister_snap_client(ddp_dl);
 out_sock:
 	sock_unregister(PF_APPLETALK);
@@ -2026,8 +1937,6 @@ static void __exit atalk_exit(void)
 	atalk_proc_exit();
 	aarp_cleanup_module();	/* General aarp clean-up. */
 	unregister_netdevice_notifier(&ddp_notifier);
-	dev_remove_pack(&ltalk_packet_type);
-	dev_remove_pack(&ppptalk_packet_type);
 	unregister_snap_client(ddp_dl);
 	sock_unregister(PF_APPLETALK);
 	proto_unregister(&ddp_proto);
