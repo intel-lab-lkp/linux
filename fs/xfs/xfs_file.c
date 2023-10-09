@@ -554,6 +554,15 @@ xfs_file_dio_write_aligned(
 	ret = xfs_ilock_iocb(iocb, iolock);
 	if (ret)
 		return ret;
+
+	if (xfs_iflags_test(ip, XFS_IREMAPPING)) {
+		xfs_iunlock(ip, iolock);
+		iolock = XFS_IOLOCK_EXCL;
+		ret = xfs_ilock_iocb(iocb, iolock);
+		if (ret)
+			return ret;
+	}
+
 	ret = xfs_file_write_checks(iocb, from, &iolock);
 	if (ret)
 		goto out_unlock;
@@ -563,7 +572,7 @@ xfs_file_dio_write_aligned(
 	 * the iolock back to shared if we had to take the exclusive lock in
 	 * xfs_file_write_checks() for other reasons.
 	 */
-	if (iolock == XFS_IOLOCK_EXCL) {
+	if (iolock == XFS_IOLOCK_EXCL && !xfs_iflags_test(ip, XFS_IREMAPPING)) {
 		xfs_ilock_demote(ip, XFS_IOLOCK_EXCL);
 		iolock = XFS_IOLOCK_SHARED;
 	}
@@ -621,6 +630,14 @@ retry_exclusive:
 	ret = xfs_ilock_iocb(iocb, iolock);
 	if (ret)
 		return ret;
+
+	if (iolock != XFS_IOLOCK_EXCL && xfs_iflags_test(ip, XFS_IREMAPPING)) {
+		xfs_iunlock(ip, iolock);
+		iolock = XFS_IOLOCK_EXCL;
+		ret = xfs_ilock_iocb(iocb, iolock);
+		if (ret)
+			return ret;
+	}
 
 	/*
 	 * We can't properly handle unaligned direct I/O to reflink files yet,
@@ -1180,7 +1197,8 @@ xfs_file_remap_range(
 	if (xfs_file_sync_writes(file_in) || xfs_file_sync_writes(file_out))
 		xfs_log_force_inode(dest);
 out_unlock:
-	xfs_iunlock2_io_mmap(src, dest);
+	xfs_iflags_clear(src, XFS_IREMAPPING);
+	xfs_reflink_unlock(src, dest);
 	if (ret)
 		trace_xfs_reflink_remap_range_error(dest, ret, _RET_IP_);
 	return remapped > 0 ? remapped : ret;
@@ -1328,6 +1346,7 @@ __xfs_filemap_fault(
 	struct inode		*inode = file_inode(vmf->vma->vm_file);
 	struct xfs_inode	*ip = XFS_I(inode);
 	vm_fault_t		ret;
+	uint                    mmaplock = XFS_MMAPLOCK_SHARED;
 
 	trace_xfs_filemap_fault(ip, order, write_fault);
 
@@ -1339,17 +1358,27 @@ __xfs_filemap_fault(
 	if (IS_DAX(inode)) {
 		pfn_t pfn;
 
-		xfs_ilock(XFS_I(inode), XFS_MMAPLOCK_SHARED);
+		xfs_ilock(XFS_I(inode), mmaplock);
+		if (xfs_iflags_test(ip, XFS_IREMAPPING)) {
+			xfs_iunlock(ip, mmaplock);
+			mmaplock = XFS_MMAPLOCK_EXCL;
+			xfs_ilock(XFS_I(inode), mmaplock);
+		}
 		ret = xfs_dax_fault(vmf, order, write_fault, &pfn);
 		if (ret & VM_FAULT_NEEDDSYNC)
 			ret = dax_finish_sync_fault(vmf, order, pfn);
-		xfs_iunlock(XFS_I(inode), XFS_MMAPLOCK_SHARED);
+		xfs_iunlock(XFS_I(inode), mmaplock);
 	} else {
 		if (write_fault) {
-			xfs_ilock(XFS_I(inode), XFS_MMAPLOCK_SHARED);
+			xfs_ilock(XFS_I(inode), mmaplock);
+			if (xfs_iflags_test(ip, XFS_IREMAPPING)) {
+				xfs_iunlock(ip, mmaplock);
+				mmaplock = XFS_MMAPLOCK_EXCL;
+				xfs_ilock(XFS_I(inode), mmaplock);
+			}
 			ret = iomap_page_mkwrite(vmf,
 					&xfs_page_mkwrite_iomap_ops);
-			xfs_iunlock(XFS_I(inode), XFS_MMAPLOCK_SHARED);
+			xfs_iunlock(XFS_I(inode), mmaplock);
 		} else {
 			ret = filemap_fault(vmf);
 		}
