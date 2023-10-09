@@ -3284,114 +3284,6 @@ static int r8192_set_mac_adr(struct net_device *dev, void *mac)
 	return 0;
 }
 
-/* based on ipw2200 driver */
-static int rtl8192_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
-{
-	struct r8192_priv *priv = (struct r8192_priv *)ieee80211_priv(dev);
-	struct iwreq *wrq = (struct iwreq *)rq;
-	int ret = -1;
-	struct ieee80211_device *ieee = priv->ieee80211;
-	u32 key[4];
-	u8 broadcast_addr[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
-	struct iw_point *p = &wrq->u.data;
-	struct ieee_param *ipw = NULL;
-
-	mutex_lock(&priv->wx_mutex);
-
-	if (p->length < sizeof(struct ieee_param) || !p->pointer) {
-		ret = -EINVAL;
-		goto out;
-	}
-
-	ipw = memdup_user(p->pointer, p->length);
-	if (IS_ERR(ipw)) {
-		ret = PTR_ERR(ipw);
-		goto out;
-	}
-
-	switch (cmd) {
-	case RTL_IOCTL_WPA_SUPPLICANT:
-		/* parse here for HW security */
-		if (ipw->cmd == IEEE_CMD_SET_ENCRYPTION) {
-			if (ipw->u.crypt.set_tx) {
-				if (strcmp(ipw->u.crypt.alg, "CCMP") == 0) {
-					ieee->pairwise_key_type = KEY_TYPE_CCMP;
-				} else if (strcmp(ipw->u.crypt.alg, "TKIP") == 0) {
-					ieee->pairwise_key_type = KEY_TYPE_TKIP;
-				} else if (strcmp(ipw->u.crypt.alg, "WEP") == 0) {
-					if (ipw->u.crypt.key_len == 13)
-						ieee->pairwise_key_type = KEY_TYPE_WEP104;
-					else if (ipw->u.crypt.key_len == 5)
-						ieee->pairwise_key_type = KEY_TYPE_WEP40;
-				} else {
-					ieee->pairwise_key_type = KEY_TYPE_NA;
-				}
-
-				if (ieee->pairwise_key_type) {
-					memcpy((u8 *)key, ipw->u.crypt.key, 16);
-					EnableHWSecurityConfig8192(dev);
-					/* We fill both index entry and 4th
-					 * entry for pairwise key as in IPW
-					 * interface, adhoc will only get here,
-					 * so we need index entry for its
-					 * default key serching!
-					 */
-					setKey(dev, 4, ipw->u.crypt.idx,
-					       ieee->pairwise_key_type,
-					       (u8 *)ieee->ap_mac_addr,
-					       0, key);
-					if (ieee->auth_mode != 2)
-						setKey(dev, ipw->u.crypt.idx,
-						       ipw->u.crypt.idx,
-						       ieee->pairwise_key_type,
-						       (u8 *)ieee->ap_mac_addr,
-						       0, key);
-				}
-			} else {
-				memcpy((u8 *)key, ipw->u.crypt.key, 16);
-				if (strcmp(ipw->u.crypt.alg, "CCMP") == 0) {
-					ieee->group_key_type = KEY_TYPE_CCMP;
-				} else if (strcmp(ipw->u.crypt.alg, "TKIP") == 0) {
-					ieee->group_key_type = KEY_TYPE_TKIP;
-				} else if (strcmp(ipw->u.crypt.alg, "WEP") == 0) {
-					if (ipw->u.crypt.key_len == 13)
-						ieee->group_key_type = KEY_TYPE_WEP104;
-					else if (ipw->u.crypt.key_len == 5)
-						ieee->group_key_type = KEY_TYPE_WEP40;
-				} else {
-					ieee->group_key_type = KEY_TYPE_NA;
-				}
-
-				if (ieee->group_key_type) {
-					setKey(dev, ipw->u.crypt.idx,
-					       /* KeyIndex */
-					       ipw->u.crypt.idx,
-					       /* KeyType */
-					       ieee->group_key_type,
-					       /* MacAddr */
-					       broadcast_addr,
-					       /* DefaultKey */
-					       0,
-					       /* KeyContent */
-					       key);
-				}
-			}
-		}
-		ret = ieee80211_wpa_supplicant_ioctl(priv->ieee80211,
-						     &wrq->u.data);
-		break;
-
-	default:
-		ret = -EOPNOTSUPP;
-		break;
-	}
-	kfree(ipw);
-	ipw = NULL;
-out:
-	mutex_unlock(&priv->wx_mutex);
-	return ret;
-}
-
 static u8 HwRateToMRate90(bool bIsHT, u8 rate)
 {
 	u8  ret_rate = 0xff;
@@ -4496,7 +4388,6 @@ static const struct net_device_ops rtl8192_netdev_ops = {
 	.ndo_stop               = rtl8192_close,
 	.ndo_get_stats          = rtl8192_stats,
 	.ndo_tx_timeout         = tx_timeout,
-	.ndo_do_ioctl           = rtl8192_ioctl,
 	.ndo_set_rx_mode	= r8192_set_multicast,
 	.ndo_set_mac_address    = r8192_set_mac_adr,
 	.ndo_validate_addr      = eth_validate_addr,

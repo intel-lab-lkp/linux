@@ -453,8 +453,6 @@ typedef enum _WIRELESS_MODE {
 	WIRELESS_MODE_N_5G = 0x20
 } WIRELESS_MODE;
 
-#define RTL_IOCTL_WPA_SUPPLICANT		(SIOCIWFIRSTPRIV + 30)
-
 typedef struct buffer {
 	struct buffer *next;
 	u32 *buf;

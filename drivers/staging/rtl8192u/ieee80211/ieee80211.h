@@ -223,11 +223,7 @@ struct cb_desc {
 #define MAX_IE_LEN  0xff
 
 // added for kernel conflict
-#define ieee80211_wake_queue		ieee80211_wake_queue_rsl
-#define ieee80211_stop_queue		ieee80211_stop_queue_rsl
 #define notify_wx_assoc_event		notify_wx_assoc_event_rsl
-#define SendDisassociation		SendDisassociation_rsl
-
 
 struct ieee_param {
 	u32 cmd;
@@ -2152,7 +2148,6 @@ int ieee80211_wx_set_gen_ie(struct ieee80211_device *ieee, u8 *ie, size_t len);
 
 /* ieee80211_softmac.c */
 short ieee80211_is_54g(const struct ieee80211_network *net);
-short ieee80211_is_shortslot(const struct ieee80211_network *net);
 int ieee80211_rx_frame_softmac(struct ieee80211_device *ieee,
 			       struct sk_buff *skb,
 			       struct ieee80211_rx_stats *rx_stats,
@@ -2160,7 +2155,6 @@ int ieee80211_rx_frame_softmac(struct ieee80211_device *ieee,
 void ieee80211_softmac_new_net(struct ieee80211_device *ieee,
 			       struct ieee80211_network *net);
 
-void SendDisassociation(struct ieee80211_device *ieee, u8 *asSta, u8 asRsn);
 void ieee80211_softmac_xmit(struct ieee80211_txb *txb,
 			    struct ieee80211_device *ieee);
 
@@ -2182,13 +2176,7 @@ void ieee80211_stop_protocol(struct ieee80211_device *ieee);
 void ieee80211_softmac_start_protocol(struct ieee80211_device *ieee);
 void ieee80211_softmac_stop_protocol(struct ieee80211_device *ieee);
 void ieee80211_reset_queue(struct ieee80211_device *ieee);
-void ieee80211_wake_queue(struct ieee80211_device *ieee);
-void ieee80211_stop_queue(struct ieee80211_device *ieee);
-struct sk_buff *ieee80211_get_beacon(struct ieee80211_device *ieee);
 void ieee80211_start_send_beacons(struct ieee80211_device *ieee);
-int ieee80211_wpa_supplicant_ioctl(struct ieee80211_device *ieee,
-				   struct iw_point *p);
-void ieee80211_ps_tx_ack(struct ieee80211_device *ieee, short success);
 
 void softmac_mgmt_xmit(struct sk_buff *skb, struct ieee80211_device *ieee);
 

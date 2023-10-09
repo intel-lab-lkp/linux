@@ -97,22 +97,6 @@ void dot11d_update_country_ie(struct ieee80211_device *dev, u8 *pTaddr,
 }
 EXPORT_SYMBOL(dot11d_update_country_ie);
 
-u8 dot11d_get_max_tx_pwr_in_dbm(struct ieee80211_device *dev, u8 Channel)
-{
-	struct rt_dot11d_info *dot11d_info = GET_DOT11D_INFO(dev);
-	u8 MaxTxPwrInDbm = 255;
-
-	if (Channel > MAX_CHANNEL_NUMBER) {
-		netdev_err(dev->dev, "%s: Invalid Channel\n", __func__);
-		return MaxTxPwrInDbm;
-	}
-	if (dot11d_info->channel_map[Channel])
-		MaxTxPwrInDbm = dot11d_info->max_tx_pwr_dbm_list[Channel];
-
-	return MaxTxPwrInDbm;
-}
-EXPORT_SYMBOL(dot11d_get_max_tx_pwr_in_dbm);
-
 void dot11d_scan_complete(struct ieee80211_device *dev)
 {
 	struct rt_dot11d_info *dot11d_info = GET_DOT11D_INFO(dev);
@@ -147,28 +131,3 @@ int is_legal_channel(struct ieee80211_device *dev, u8 channel)
 	return 0;
 }
 EXPORT_SYMBOL(is_legal_channel);
-
-int to_legal_channel(struct ieee80211_device *dev, u8 channel)
-{
-	struct rt_dot11d_info *dot11d_info = GET_DOT11D_INFO(dev);
-	u8 default_chn = 0;
-	u32 i = 0;
-
-	for (i = 1; i <= MAX_CHANNEL_NUMBER; i++) {
-		if (dot11d_info->channel_map[i] > 0) {
-			default_chn = i;
-			break;
-		}
-	}
-
-	if (channel > MAX_CHANNEL_NUMBER) {
-		netdev_err(dev->dev, "%s: Invalid Channel\n", __func__);
-		return default_chn;
-	}
-
-	if (dot11d_info->channel_map[channel] > 0)
-		return channel;
-
-	return default_chn;
-}
-EXPORT_SYMBOL(to_legal_channel);
