@@ -2714,7 +2714,7 @@ int journal_init(struct super_block *sb, const char *j_dev_name,
 	struct reiserfs_journal_header *jh;
 	struct reiserfs_journal *journal;
 	struct reiserfs_journal_list *jl;
-	int ret;
+	int ret = 1;
 
 	journal = SB_JOURNAL(sb) = vzalloc(sizeof(struct reiserfs_journal));
 	if (!journal) {
@@ -2727,6 +2727,13 @@ int journal_init(struct super_block *sb, const char *j_dev_name,
 	INIT_LIST_HEAD(&journal->j_working_list);
 	INIT_LIST_HEAD(&journal->j_journal_list);
 	journal->j_persistent_trans = 0;
+
+	/*
+	 * blkdev_put() can't be called under s_umount, see the comment
+	 * in get_tree_bdev() for more details
+	 */
+	up_write(&sb->s_umount);
+
 	if (reiserfs_allocate_list_bitmaps(sb, journal->j_list_bitmap,
 					   reiserfs_bmap_count(sb)))
 		goto free_and_return;
@@ -2891,8 +2898,7 @@ int journal_init(struct super_block *sb, const char *j_dev_name,
 		goto free_and_return;
 	}
 
-	ret = journal_read(sb);
-	if (ret < 0) {
+	if (journal_read(sb) < 0) {
 		reiserfs_warning(sb, "reiserfs-2006",
 				 "Replay Failure, unable to mount");
 		goto free_and_return;
@@ -2900,10 +2906,14 @@ int journal_init(struct super_block *sb, const char *j_dev_name,
 
 	INIT_DELAYED_WORK(&journal->j_work, flush_async_commits);
 	journal->j_work_sb = sb;
-	return 0;
+	ret = 0;
+
 free_and_return:
-	free_journal_ram(sb);
-	return 1;
+	if (ret)
+		free_journal_ram(sb);
+
+	down_write(&sb->s_umount);
+	return ret;
 }
 
 /*
