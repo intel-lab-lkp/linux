@@ -549,7 +549,9 @@ int remove_save_link(struct inode *inode, int truncate)
 
 static void reiserfs_kill_sb(struct super_block *s)
 {
-	if (REISERFS_SB(s)) {
+	struct reiserfs_sb_info *sbi = REISERFS_SB(s);
+
+	if (sbi) {
 		reiserfs_proc_info_done(s);
 		/*
 		 * Force any pending inode evictions to occur now. Any
@@ -561,13 +563,16 @@ static void reiserfs_kill_sb(struct super_block *s)
 		 */
 		shrink_dcache_sb(s);
 
-		dput(REISERFS_SB(s)->xattr_root);
-		REISERFS_SB(s)->xattr_root = NULL;
-		dput(REISERFS_SB(s)->priv_root);
-		REISERFS_SB(s)->priv_root = NULL;
+		dput(sbi->xattr_root);
+		sbi->xattr_root = NULL;
+		dput(sbi->priv_root);
+		sbi->priv_root = NULL;
 	}
 
 	kill_block_super(s);
+
+	kfree(sbi);
+	s->s_fs_info = NULL;
 }
 
 #ifdef CONFIG_QUOTA
@@ -630,8 +635,6 @@ static void reiserfs_put_super(struct super_block *s)
 	mutex_destroy(&REISERFS_SB(s)->lock);
 	destroy_workqueue(REISERFS_SB(s)->commit_wq);
 	kfree(REISERFS_SB(s)->s_jdev);
-	kfree(s->s_fs_info);
-	s->s_fs_info = NULL;
 }
 
 static struct kmem_cache *reiserfs_inode_cachep;
@@ -2240,9 +2243,6 @@ error_unlocked:
 	}
 #endif
 	kfree(sbi->s_jdev);
-	kfree(sbi);
-
-	s->s_fs_info = NULL;
 	return errval;
 }
 
