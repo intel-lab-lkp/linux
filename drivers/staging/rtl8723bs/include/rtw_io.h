@@ -72,7 +72,6 @@
 
 #define _INTF_ASYNC_	BIT(0)	/* support async io */
 
-struct intf_priv;
 struct intf_hdl;
 struct io_queue;
 

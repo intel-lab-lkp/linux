@@ -383,7 +383,6 @@ static int rtw_drv_init(
 	if (sdio_alloc_irq(dvobj) != _SUCCESS)
 		goto free_if1;
 
-	rtw_ndev_notifier_register();
 	status = _SUCCESS;
 
 free_if1:
@@ -483,24 +482,4 @@ static int rtw_sdio_resume(struct device *dev)
 	return ret;
 }
 
-static int __init rtw_drv_entry(void)
-{
-	int ret;
-
-	ret = sdio_register_driver(&rtl8723bs_sdio_driver);
-	if (ret != 0)
-		rtw_ndev_notifier_unregister();
-
-	return ret;
-}
-
-static void __exit rtw_drv_halt(void)
-{
-	sdio_unregister_driver(&rtl8723bs_sdio_driver);
-
-	rtw_ndev_notifier_unregister();
-}
-
-
-module_init(rtw_drv_entry);
-module_exit(rtw_drv_halt);
+module_sdio_driver(rtl8723bs_sdio_driver);
