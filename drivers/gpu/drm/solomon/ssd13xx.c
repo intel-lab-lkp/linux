@@ -44,18 +44,24 @@
 
 #define SSD130X_PAGE_HEIGHT 8
 
+/* ssd13xx commands */
+#define SSD13XX_CONTRAST			0x81
+#define SSD13XX_SET_SEG_REMAP			0xa0
+#define SSD13XX_SET_MULTIPLEX_RATIO		0xa8
+#define SSD13XX_DISPLAY_OFF			0xae
+#define SSD13XX_DISPLAY_ON			0xaf
+
+#define SSD13XX_SET_SEG_REMAP_MASK		GENMASK(0, 0)
+#define SSD13XX_SET_SEG_REMAP_SET(val)		FIELD_PREP(SSD13XX_SET_SEG_REMAP_MASK, (val))
+
+/* ssd130x commands */
 #define SSD130X_PAGE_COL_START_LOW		0x00
 #define SSD130X_PAGE_COL_START_HIGH		0x10
 #define SSD130X_SET_ADDRESS_MODE		0x20
 #define SSD130X_SET_COL_RANGE			0x21
 #define SSD130X_SET_PAGE_RANGE			0x22
-#define SSD130X_CONTRAST			0x81
 #define SSD130X_SET_LOOKUP_TABLE		0x91
 #define SSD130X_CHARGE_PUMP			0x8d
-#define SSD130X_SET_SEG_REMAP			0xa0
-#define SSD130X_DISPLAY_OFF			0xae
-#define SSD130X_SET_MULTIPLEX_RATIO		0xa8
-#define SSD130X_DISPLAY_ON			0xaf
 #define SSD130X_START_PAGE_ADDRESS		0xb0
 #define SSD130X_SET_COM_SCAN_DIR		0xc0
 #define SSD130X_SET_DISPLAY_OFFSET		0xd3
@@ -65,13 +71,12 @@
 #define SSD130X_SET_COM_PINS_CONFIG		0xda
 #define SSD130X_SET_VCOMH			0xdb
 
+/* ssd130x commands accessors */
 #define SSD130X_PAGE_COL_START_MASK		GENMASK(3, 0)
 #define SSD130X_PAGE_COL_START_HIGH_SET(val)	FIELD_PREP(SSD130X_PAGE_COL_START_MASK, (val) >> 4)
 #define SSD130X_PAGE_COL_START_LOW_SET(val)	FIELD_PREP(SSD130X_PAGE_COL_START_MASK, (val))
 #define SSD130X_START_PAGE_ADDRESS_MASK		GENMASK(2, 0)
 #define SSD130X_START_PAGE_ADDRESS_SET(val)	FIELD_PREP(SSD130X_START_PAGE_ADDRESS_MASK, (val))
-#define SSD130X_SET_SEG_REMAP_MASK		GENMASK(0, 0)
-#define SSD130X_SET_SEG_REMAP_SET(val)		FIELD_PREP(SSD130X_SET_SEG_REMAP_MASK, (val))
 #define SSD130X_SET_COM_SCAN_DIR_MASK		GENMASK(3, 3)
 #define SSD130X_SET_COM_SCAN_DIR_SET(val)	FIELD_PREP(SSD130X_SET_COM_SCAN_DIR_MASK, (val))
 #define SSD130X_SET_CLOCK_DIV_MASK		GENMASK(3, 0)
@@ -171,20 +176,20 @@ static inline struct ssd13xx_device *drm_to_ssd13xx(struct drm_device *drm)
 }
 
 /*
- * Helper to write data (SSD130X_DATA) to the device.
+ * Helper to write data (SSD13XX_DATA) to the device.
  */
 static int ssd13xx_write_data(struct ssd13xx_device *ssd13xx, u8 *values, int count)
 {
-	return regmap_bulk_write(ssd13xx->regmap, SSD130X_DATA, values, count);
+	return regmap_bulk_write(ssd13xx->regmap, SSD13XX_DATA, values, count);
 }
 
 /*
- * Helper to write command (SSD130X_COMMAND). The fist variadic argument
+ * Helper to write command (SSD13XX_COMMAND). The fist variadic argument
  * is the command to write and the following are the command options.
  *
  * Note that the ssd13xx protocol requires each command and option to be
- * written as a SSD130X_COMMAND device register value. That is why a call
- * to regmap_write(..., SSD130X_COMMAND, ...) is done for each argument.
+ * written as a SSD13XX_COMMAND device register value. That is why a call
+ * to regmap_write(..., SSD13XX_COMMAND, ...) is done for each argument.
  */
 static int ssd13xx_write_cmd(struct ssd13xx_device *ssd13xx, int count,
 			     /* u8 cmd, u8 option, ... */...)
@@ -197,7 +202,7 @@ static int ssd13xx_write_cmd(struct ssd13xx_device *ssd13xx, int count,
 
 	do {
 		value = va_arg(ap, int);
-		ret = regmap_write(ssd13xx->regmap, SSD130X_COMMAND, value);
+		ret = regmap_write(ssd13xx->regmap, SSD13XX_COMMAND, value);
 		if (ret)
 			goto out_end;
 	} while (--count);
@@ -341,13 +346,13 @@ static int ssd130x_init(struct ssd13xx_device *ssd13xx)
 	int ret;
 
 	/* Set initial contrast */
-	ret = ssd13xx_write_cmd(ssd13xx, 2, SSD130X_CONTRAST, ssd13xx->contrast);
+	ret = ssd13xx_write_cmd(ssd13xx, 2, SSD13XX_CONTRAST, ssd13xx->contrast);
 	if (ret < 0)
 		return ret;
 
 	/* Set segment re-map */
-	seg_remap = (SSD130X_SET_SEG_REMAP |
-		     SSD130X_SET_SEG_REMAP_SET(ssd13xx->seg_remap));
+	seg_remap = (SSD13XX_SET_SEG_REMAP |
+		     SSD13XX_SET_SEG_REMAP_SET(ssd13xx->seg_remap));
 	ret = ssd13xx_write_cmd(ssd13xx, 1, seg_remap);
 	if (ret < 0)
 		return ret;
@@ -360,7 +365,7 @@ static int ssd130x_init(struct ssd13xx_device *ssd13xx)
 		return ret;
 
 	/* Set multiplex ratio value */
-	ret = ssd13xx_write_cmd(ssd13xx, 2, SSD130X_SET_MULTIPLEX_RATIO, ssd13xx->height - 1);
+	ret = ssd13xx_write_cmd(ssd13xx, 2, SSD13XX_SET_MULTIPLEX_RATIO, ssd13xx->height - 1);
 	if (ret < 0)
 		return ret;
 
@@ -918,7 +923,7 @@ static void ssd13xx_encoder_atomic_enable(struct drm_encoder *encoder,
 	if (ret)
 		goto power_off;
 
-	ssd13xx_write_cmd(ssd13xx, 1, SSD130X_DISPLAY_ON);
+	ssd13xx_write_cmd(ssd13xx, 1, SSD13XX_DISPLAY_ON);
 
 	backlight_enable(ssd13xx->bl_dev);
 
@@ -937,7 +942,7 @@ static void ssd13xx_encoder_atomic_disable(struct drm_encoder *encoder,
 
 	backlight_disable(ssd13xx->bl_dev);
 
-	ssd13xx_write_cmd(ssd13xx, 1, SSD130X_DISPLAY_OFF);
+	ssd13xx_write_cmd(ssd13xx, 1, SSD13XX_DISPLAY_OFF);
 
 	ssd13xx_power_off(ssd13xx);
 }
@@ -1013,7 +1018,7 @@ static int ssd13xx_update_bl(struct backlight_device *bdev)
 
 	ssd13xx->contrast = brightness;
 
-	ret = ssd13xx_write_cmd(ssd13xx, 1, SSD130X_CONTRAST);
+	ret = ssd13xx_write_cmd(ssd13xx, 1, SSD13XX_CONTRAST);
 	if (ret < 0)
 		return ret;
 

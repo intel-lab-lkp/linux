@@ -22,8 +22,8 @@
 #include <linux/regmap.h>
 #include <linux/iosys-map.h>
 
-#define SSD130X_DATA				0x40
-#define SSD130X_COMMAND				0x80
+#define SSD13XX_DATA				0x40
+#define SSD13XX_COMMAND				0x80
 
 enum ssd13xx_family_ids {
 	SSD130X_FAMILY,
