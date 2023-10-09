@@ -17,6 +17,12 @@ int jfs_init_acl(tid_t, struct inode *, struct inode *);
 static inline int jfs_init_acl(tid_t tid, struct inode *inode,
 			       struct inode *dir)
 {
+	/* usually, the umask is applied by posix_acl_create(), but if
+	 * ACL support is disabled at compile time, we need to do it
+	 * here, because posix_acl_create() will never be called
+	 */
+	inode->i_mode &= ~current_umask();
+
 	return 0;
 }
 

@@ -1203,6 +1203,12 @@ static inline void ceph_forget_all_cached_acls(struct inode *inode)
 static inline int ceph_pre_init_acls(struct inode *dir, umode_t *mode,
 				     struct ceph_acl_sec_ctx *as_ctx)
 {
+	/* usually, the umask is applied by posix_acl_create(), but if
+	 * ACL support is disabled at compile time, we need to do it
+	 * here, because posix_acl_create() will never be called
+	 */
+	*mode &= ~current_umask();
+
 	return 0;
 }
 static inline void ceph_init_inode_acls(struct inode *inode,
