@@ -135,7 +135,7 @@ static void tegra234_set_cpu_ndiv(struct cpufreq_policy *policy, u64 ndiv)
 	u32 cpu, cpuid, clusterid;
 	u64 mpidr_id;
 
-	for_each_cpu_and(cpu, policy->cpus, cpu_online_mask) {
+	for_each_cpu(cpu, policy->cpus) {
 		data->soc->ops->get_cpu_cluster_id(cpu, &cpuid, &clusterid);
 
 		/* use physical id to get address of per core frequency register */
