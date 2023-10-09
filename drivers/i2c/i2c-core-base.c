@@ -931,12 +931,16 @@ int i2c_dev_irq_from_resources(const struct resource *resources,
 struct i2c_client *
 i2c_new_client_device(struct i2c_adapter *adap, struct i2c_board_info const *info)
 {
+	struct i2c_client_priv	*priv;
 	struct i2c_client	*client;
 	int			status;
 
-	client = kzalloc(sizeof *client, GFP_KERNEL);
-	if (!client)
+	priv = kzalloc(sizeof *priv, GFP_KERNEL);
+	if (!priv)
 		return ERR_PTR(-ENOMEM);
+
+	mutex_init(&priv->throttle_lock);
+	client = &priv->client;
 
 	client->adapter = adap;
 
