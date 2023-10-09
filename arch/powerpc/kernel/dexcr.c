@@ -1,6 +1,8 @@
+#include <linux/cache.h>
 #include <linux/capability.h>
 #include <linux/cpu.h>
 #include <linux/init.h>
+#include <linux/kconfig.h>
 #include <linux/prctl.h>
 #include <linux/sched.h>
 #include <linux/sysctl.h>
@@ -14,7 +16,7 @@
 #define DEXCR_PRCTL_EDITABLE ( \
 	DEXCR_PR_IBRTPD | \
 	DEXCR_PR_SRAPD | \
-	DEXCR_PR_NPHIE)
+	(!IS_ENABLED(CONFIG_PPC_USER_ENFORCE_ROP_PROTECT) ? DEXCR_PR_NPHIE : 0))
 
 static unsigned long dexcr_supported __ro_after_init = 0;
 
@@ -44,6 +46,9 @@ early_initcall(dexcr_init);
 unsigned long get_thread_dexcr(struct thread_struct const *thread)
 {
 	unsigned long dexcr = thread->dexcr_enabled;
+
+	if (IS_ENABLED(CONFIG_PPC_USER_ENFORCE_ROP_PROTECT))
+		dexcr |= DEXCR_PR_NPHIE;
 
 	/* 
 	 * spec_branch_hint_enable may be written to concurrently via sysctl.

@@ -473,6 +473,11 @@ config PGTABLE_LEVELS
 	default 2 if !PPC64
 	default 4
 
+config PPC_USER_ENFORCE_ROP_PROTECT
+	bool
+	depends on PPC_BOOK3S_64
+	default y
+
 source "arch/powerpc/sysdev/Kconfig"
 source "arch/powerpc/platforms/Kconfig"
 
