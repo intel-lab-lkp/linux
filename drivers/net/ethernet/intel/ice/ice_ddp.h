@@ -100,8 +100,9 @@ struct ice_pkg_hdr {
 
 /* generic segment */
 struct ice_generic_seg_hdr {
-#define SEGMENT_TYPE_METADATA 0x00000001
-#define SEGMENT_TYPE_ICE 0x00000010
+#define SEGMENT_TYPE_METADATA		0x00000001
+#define SEGMENT_TYPE_ICE		0x00000010
+#define SEGMENT_TYPE_ICE_RUN_TIME_CFG	0x00000020
 	__le32 seg_type;
 	struct ice_pkg_ver seg_format_ver;
 	__le32 seg_size;
@@ -430,5 +431,7 @@ int ice_pkg_buf_reserve_section(struct ice_buf_build *bld, u16 count);
 u16 ice_pkg_buf_get_active_sections(struct ice_buf_build *bld);
 void *ice_pkg_enum_section(struct ice_seg *ice_seg, struct ice_pkg_enum *state,
 			   u32 sect_type);
+
+int ice_cfg_tx_topo(struct ice_hw *hw, u8 *buf, u32 len);
 
 #endif
