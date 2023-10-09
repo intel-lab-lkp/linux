@@ -260,6 +260,9 @@ struct thread_struct {
 	unsigned long   sier2;
 	unsigned long   sier3;
 	unsigned long	hashkeyr;
+	unsigned int	dexcr;		/* Temporary value saved during thread switch */
+	unsigned int	dexcr_enabled;	/* Bitmask of aspects enabled by this thread */
+	unsigned int	dexcr_inherit;	/* Bitmask of aspects to inherit across exec */
 
 #endif
 };
@@ -447,6 +450,15 @@ int enter_vmx_usercopy(void);
 int exit_vmx_usercopy(void);
 int enter_vmx_ops(void);
 void *exit_vmx_ops(void *dest);
+
+static inline unsigned long get_thread_dexcr(struct thread_struct const *thread)
+{
+#ifdef CONFIG_PPC_BOOK3S_64
+	return thread->dexcr_enabled;
+#else
+	return 0;
+#endif
+}
 
 #endif /* __KERNEL__ */
 #endif /* __ASSEMBLY__ */
