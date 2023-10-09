@@ -359,11 +359,11 @@ static inline bool bdaddr_type_is_le(u8 type)
 #define BDADDR_NONE (&(bdaddr_t) {{0xff, 0xff, 0xff, 0xff, 0xff, 0xff}})
 
 /* Copy, swap, convert BD Address */
-static inline int bacmp(const bdaddr_t *ba1, const bdaddr_t *ba2)
+static __always_inline int bacmp(const bdaddr_t *ba1, const bdaddr_t *ba2)
 {
 	return memcmp(ba1, ba2, sizeof(bdaddr_t));
 }
-static inline void bacpy(bdaddr_t *dst, const bdaddr_t *src)
+static __always_inline void bacpy(bdaddr_t *dst, const bdaddr_t *src)
 {
 	memcpy(dst, src, sizeof(bdaddr_t));
 }
