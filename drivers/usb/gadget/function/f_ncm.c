@@ -103,6 +103,8 @@ static inline struct f_ncm *func_to_ncm(struct usb_function *f)
 /* Delay for the transmit to wait before sending an unfilled NTB frame. */
 #define TX_TIMEOUT_NSECS	300000
 
+#define MAX_DATAGRAM_SIZE	15014
+
 #define FORMATS_SUPPORTED	(USB_CDC_NCM_NTB16_SUPPORTED |	\
 				 USB_CDC_NCM_NTB32_SUPPORTED)
 
@@ -1408,6 +1410,7 @@ static int ncm_bind(struct usb_configuration *c, struct usb_function *f)
 	ncm_opts = container_of(f->fi, struct f_ncm_opts, func_inst);
 
 	if (cdev->use_os_string) {
+		ncm_opts->net->mtu = (ncm_opts->max_segment_size - ETH_HLEN);
 		f->os_desc_table = kzalloc(sizeof(*f->os_desc_table),
 					   GFP_KERNEL);
 		if (!f->os_desc_table)
@@ -1468,6 +1471,8 @@ static int ncm_bind(struct usb_configuration *c, struct usb_function *f)
 	ncm_union_desc.bSlaveInterface0 = status;
 
 	status = -ENODEV;
+
+	ecm_desc.wMaxSegmentSize = ncm_opts->max_segment_size;
 
 	/* allocate instance-specific endpoints */
 	ep = usb_ep_autoconfig(cdev->gadget, &fs_ncm_in_desc);
@@ -1569,11 +1574,56 @@ USB_ETHERNET_CONFIGFS_ITEM_ATTR_QMULT(ncm);
 /* f_ncm_opts_ifname */
 USB_ETHERNET_CONFIGFS_ITEM_ATTR_IFNAME(ncm);
 
+static ssize_t ncm_opts_max_segment_size_show(struct config_item *item,
+					      char *page)
+{
+	struct f_ncm_opts *opts = to_f_ncm_opts(item);
+	u32 segment_size;
+
+	mutex_lock(&opts->lock);
+	segment_size = opts->max_segment_size;
+	mutex_unlock(&opts->lock);
+
+	return sprintf(page, "%u\n", segment_size);
+}
+
+static ssize_t ncm_opts_max_segment_size_store(struct config_item *item,
+					       const char *page, size_t len)
+{
+	struct f_ncm_opts *opts = to_f_ncm_opts(item);
+	int ret;
+	u32 segment_size;
+
+	mutex_lock(&opts->lock);
+	if (opts->refcnt) {
+		ret = -EBUSY;
+		goto out;
+	}
+
+	ret = kstrtou32(page, 0, &segment_size);
+	if (ret)
+		goto out;
+
+	if (segment_size > MAX_DATAGRAM_SIZE) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	opts->max_segment_size = segment_size;
+	ret = len;
+out:
+	mutex_unlock(&opts->lock);
+	return ret;
+}
+
+CONFIGFS_ATTR(ncm_opts_, max_segment_size);
+
 static struct configfs_attribute *ncm_attrs[] = {
 	&ncm_opts_attr_dev_addr,
 	&ncm_opts_attr_host_addr,
 	&ncm_opts_attr_qmult,
 	&ncm_opts_attr_ifname,
+	&ncm_opts_attr_max_segment_size,
 	NULL,
 };
 
@@ -1616,6 +1666,7 @@ static struct usb_function_instance *ncm_alloc_inst(void)
 		kfree(opts);
 		return ERR_CAST(net);
 	}
+	opts->max_segment_size = cpu_to_le16(ETH_FRAME_LEN);
 	INIT_LIST_HEAD(&opts->ncm_os_desc.ext_prop);
 
 	descs[0] = &opts->ncm_os_desc;
