@@ -6728,12 +6728,12 @@ T:	git git://anongit.freedesktop.org/drm/drm-misc
 F:	Documentation/devicetree/bindings/display/sitronix,st7735r.yaml
 F:	drivers/gpu/drm/tiny/st7735r.c
 
-DRM DRIVER FOR SOLOMON SSD130X OLED DISPLAYS
+DRM DRIVER FOR SOLOMON SSD13XX OLED DISPLAYS
 M:	Javier Martinez Canillas <javierm@redhat.com>
 S:	Maintained
 T:	git git://anongit.freedesktop.org/drm/drm-misc
-F:	Documentation/devicetree/bindings/display/solomon,ssd1307fb.yaml
-F:	drivers/gpu/drm/solomon/ssd130x*
+F:	Documentation/devicetree/bindings/display/solomon,ssd13*.yaml
+F:	drivers/gpu/drm/solomon/ssd13*
 
 DRM DRIVER FOR ST-ERICSSON MCDE
 M:	Linus Walleij <linus.walleij@linaro.org>

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * DRM driver for Solomon SSD130x OLED displays
+ * DRM driver for Solomon SSD13xx OLED displays
  *
  * Copyright 2022 Red Hat Inc.
  * Author: Javier Martinez Canillas <javierm@redhat.com>
@@ -34,10 +34,10 @@
 #include <drm/drm_rect.h>
 #include <drm/drm_probe_helper.h>
 
-#include "ssd130x.h"
+#include "ssd13xx.h"
 
-#define DRIVER_NAME	"ssd130x"
-#define DRIVER_DESC	"DRM driver for Solomon SSD130x OLED displays"
+#define DRIVER_NAME	"ssd13xx"
+#define DRIVER_DESC	"DRM driver for Solomon SSD13xx OLED displays"
 #define DRIVER_DATE	"20220131"
 #define DRIVER_MAJOR	1
 #define DRIVER_MINOR	0
@@ -139,7 +139,7 @@ const struct ssd130x_deviceinfo ssd130x_variants[] = {
 		.page_height = 8,
 	}
 };
-EXPORT_SYMBOL_NS_GPL(ssd130x_variants, DRM_SSD130X);
+EXPORT_SYMBOL_NS_GPL(ssd130x_variants, DRM_SSD13XX);
 
 struct ssd130x_crtc_state {
 	struct drm_crtc_state base;

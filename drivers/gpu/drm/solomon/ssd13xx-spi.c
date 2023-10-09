@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * DRM driver for Solomon SSD130X OLED displays (SPI bus)
+ * DRM driver for Solomon SSD13xx OLED displays (SPI bus)
  *
  * Copyright 2022 Red Hat Inc.
  * Authors: Javier Martinez Canillas <javierm@redhat.com>
@@ -8,10 +8,10 @@
 #include <linux/spi/spi.h>
 #include <linux/module.h>
 
-#include "ssd130x.h"
+#include "ssd13xx.h"
 
-#define DRIVER_NAME	"ssd130x-spi"
-#define DRIVER_DESC	"DRM driver for Solomon SSD130X OLED displays (SPI)"
+#define DRIVER_NAME	"ssd13xx-spi"
+#define DRIVER_DESC	"DRM driver for Solomon SSD13xx OLED displays (SPI)"
 
 struct ssd130x_spi_transport {
 	struct spi_device *spi;
@@ -25,7 +25,7 @@ struct ssd130x_spi_transport {
  * prior to every data byte, that contains a bit with the D/C# value.
  *
  * These control bytes are considered registers by the ssd130x core driver
- * and can be used by the ssd130x SPI driver to determine if the data sent
+ * and can be used by the ssd13xx SPI driver to determine if the data sent
  * is for a command register or for the Graphic Display Data RAM (GDDRAM).
  */
 static int ssd130x_spi_write(void *context, const void *data, size_t count)
@@ -132,7 +132,7 @@ static const struct of_device_id ssd130x_of_match[] = {
 };
 MODULE_DEVICE_TABLE(of, ssd130x_of_match);
 
-#if IS_MODULE(CONFIG_DRM_SSD130X_SPI)
+#if IS_MODULE(CONFIG_DRM_SSD13XX_SPI)
 /*
  * The SPI core always reports a MODALIAS uevent of the form "spi:<dev>", even
  * if the device was registered via OF. This means that the module will not be
@@ -166,4 +166,4 @@ module_spi_driver(ssd130x_spi_driver);
 MODULE_DESCRIPTION(DRIVER_DESC);
 MODULE_AUTHOR("Javier Martinez Canillas <javierm@redhat.com>");
 MODULE_LICENSE("GPL");
-MODULE_IMPORT_NS(DRM_SSD130X);
+MODULE_IMPORT_NS(DRM_SSD13XX);

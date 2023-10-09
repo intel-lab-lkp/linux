@@ -1,3 +1,3 @@
-obj-$(CONFIG_DRM_SSD130X)	+= ssd130x.o
-obj-$(CONFIG_DRM_SSD130X_I2C)	+= ssd130x-i2c.o
-obj-$(CONFIG_DRM_SSD130X_SPI)	+= ssd130x-spi.o
+obj-$(CONFIG_DRM_SSD13XX)	+= ssd13xx.o
+obj-$(CONFIG_DRM_SSD13XX_I2C)	+= ssd13xx-i2c.o
+obj-$(CONFIG_DRM_SSD13XX_SPI)	+= ssd13xx-spi.o
