@@ -53,13 +53,11 @@ struct siw_mem *siw_mem_id2obj(struct siw_device *sdev, int stag_index)
 
 	rcu_read_lock();
 	mem = xa_load(&sdev->mem_xa, stag_index);
-	if (likely(mem && kref_get_unless_zero(&mem->ref))) {
-		rcu_read_unlock();
-		return mem;
-	}
+	if (likely(mem && !kref_get_unless_zero(&mem->ref)))
+		mem = NULL;
 	rcu_read_unlock();
 
-	return NULL;
+	return mem;
 }
 
 static void siw_free_plist(struct siw_page_chunk *chunk, int num_pages,
