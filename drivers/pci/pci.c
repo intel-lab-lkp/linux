@@ -3094,6 +3094,14 @@ static int pci_dev_check_d3cold(struct pci_dev *dev, void *data)
 	return !*d3cold_ok;
 }
 
+static void pci_bridge_d3_propagate(struct pci_dev *bridge, bool d3_ok)
+{
+	if (bridge->bridge_d3 != d3_ok) {
+		bridge->bridge_d3 = d3_ok;
+		pci_bridge_d3_propagate(bridge, d3_ok);
+	}
+}
+
 /*
  * pci_bridge_d3_update - Update bridge D3 capabilities
  * @dev: PCI device which is changed
@@ -3106,11 +3114,15 @@ void pci_bridge_d3_update(struct pci_dev *dev)
 {
 	bool remove = !device_is_registered(&dev->dev);
 	struct pci_dev *bridge;
-	bool d3cold_ok = true;
+	bool d3_ok = true;
 
 	bridge = pci_upstream_bridge(dev);
-	if (!bridge || !pci_bridge_d3_possible(bridge))
+	if (!bridge)
 		return;
+
+	/* Propagate change to upstream bridges */
+	d3_ok = pci_bridge_d3_possible(bridge);
+	pci_bridge_d3_propagate(bridge, d3_ok);
 
 	/*
 	 * If D3 is currently allowed for the bridge, removing one of its
@@ -3128,7 +3140,7 @@ void pci_bridge_d3_update(struct pci_dev *dev)
 	 * first may allow us to skip checking its siblings.
 	 */
 	if (!remove)
-		pci_dev_check_d3cold(dev, &d3cold_ok);
+		pci_dev_check_d3cold(dev, &d3_ok);
 
 	/*
 	 * If D3 is currently not allowed for the bridge, this may be caused
@@ -3136,15 +3148,12 @@ void pci_bridge_d3_update(struct pci_dev *dev)
 	 * so we need to go through all children to find out if one of them
 	 * continues to block D3.
 	 */
-	if (d3cold_ok && !bridge->bridge_d3)
+	if (d3_ok && !bridge->bridge_d3)
 		pci_walk_bus(bridge->subordinate, pci_dev_check_d3cold,
-			     &d3cold_ok);
+			     &d3_ok);
 
-	if (bridge->bridge_d3 != d3cold_ok) {
-		bridge->bridge_d3 = d3cold_ok;
-		/* Propagate change to upstream bridges */
-		pci_bridge_d3_update(bridge);
-	}
+	/* Propagate change to upstream bridges */
+	pci_bridge_d3_propagate(bridge, d3_ok);
 }
 
 /**
