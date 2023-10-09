@@ -24,6 +24,7 @@
 #include "hal_rx.h"
 #include "reg.h"
 #include "dbring.h"
+#include "acpi.h"
 
 #define SM(_v, _f) (((_v) << _f##_LSB) & _f##_MASK)
 
@@ -792,6 +793,13 @@ struct ath12k_base {
 	struct work_struct rfkill_work;
 	/* true means radio is on */
 	bool rfkill_radio_on;
+
+	struct {
+		u32 func_bit;
+		bool acpi_tas_enable;
+		u8 tas_cfg[ATH12K_ACPI_DSM_TAS_CFG_SIZE];
+		u8 tas_sar_power_table[ATH12K_ACPI_DSM_TAS_DATA_SIZE];
+	} *acdata;
 
 	/* must be last */
 	u8 drv_priv[] __aligned(sizeof(void *));

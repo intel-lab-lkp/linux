@@ -628,6 +628,12 @@ static int ath12k_core_start(struct ath12k_base *ab,
 		goto err_reo_cleanup;
 	}
 
+	if (ab->hw_params->acpi_guid) {
+		ret = ath12k_get_acpi_all_data(ab);
+		if (!ret)
+			ath12k_info(ab, "success to get acpi cfg data\n");
+	}
+
 	return 0;
 
 err_reo_cleanup:

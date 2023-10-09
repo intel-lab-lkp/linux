@@ -1340,6 +1340,12 @@ qmi_fail:
 
 	ath12k_hal_srng_deinit(ab);
 	ath12k_ce_free_pipes(ab);
+	if (ab->hw_params->acpi_guid && ab->acdata) {
+		acpi_remove_notify_handler(ACPI_HANDLE(ab->dev),
+					   ACPI_DEVICE_NOTIFY,
+					   acpi_dsm_notify);
+		kfree(ab->acdata);
+	}
 	ath12k_core_free(ab);
 }
 
