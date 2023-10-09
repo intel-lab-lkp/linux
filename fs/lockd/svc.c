@@ -345,10 +345,10 @@ static int lockd_get(void)
 
 	serv->sv_maxconn = nlm_max_connections;
 	error = svc_set_num_threads(serv, NULL, 1);
-	/* The thread now holds the only reference */
-	svc_put(serv);
-	if (error < 0)
+	if (error < 0) {
+		svc_put(serv);
 		return error;
+	}
 
 	nlmsvc_serv = serv;
 	register_inetaddr_notifier(&lockd_inetaddr_notifier);
@@ -374,6 +374,7 @@ static void lockd_put(void)
 
 	svc_set_num_threads(nlmsvc_serv, NULL, 0);
 	timer_delete_sync(&nlmsvc_retry);
+	svc_put(nlmsvc_serv);
 	nlmsvc_serv = NULL;
 	dprintk("lockd_down: service destroyed\n");
 }
