@@ -11350,6 +11350,7 @@ static void scsih_remove(struct pci_dev *pdev)
 	}
 
 	mpt3sas_base_detach(ioc);
+	mpt3sas_ctl_exit(hbas_to_enumerate);
 	spin_lock(&gioc_lock);
 	list_del(&ioc->list);
 	spin_unlock(&gioc_lock);
@@ -12930,8 +12931,6 @@ _mpt3sas_exit(void)
 				MPT3SAS_DRIVER_VERSION);
 
 	pci_unregister_driver(&mpt3sas_driver);
-
-	mpt3sas_ctl_exit(hbas_to_enumerate);
 
 	scsih_exit();
 }
