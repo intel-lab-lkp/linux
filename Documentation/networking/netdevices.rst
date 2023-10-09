@@ -218,14 +218,6 @@ ndo_stop:
 	Context: process
 	Note: netif_running() is guaranteed false
 
-ndo_do_ioctl:
-	Synchronization: rtnl_lock() semaphore.
-	Context: process
-
-        This is only called by network subsystems internally,
-        not by user space calling ioctl as it was in before
-        linux-5.14.
-
 ndo_siocbond:
         Synchronization: rtnl_lock() semaphore.
         Context: process
