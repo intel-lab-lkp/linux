@@ -1187,10 +1187,7 @@ static void armv8_pmu_register_sysctl_table(void)
 }
 
 static int armv8_pmu_init(struct arm_pmu *cpu_pmu, char *name,
-			  int (*map_event)(struct perf_event *event),
-			  const struct attribute_group *events,
-			  const struct attribute_group *format,
-			  const struct attribute_group *caps)
+			  int (*map_event)(struct perf_event *event))
 {
 	int ret = armv8pmu_probe_pmu(cpu_pmu);
 	if (ret)
@@ -1212,13 +1209,9 @@ static int armv8_pmu_init(struct arm_pmu *cpu_pmu, char *name,
 
 	cpu_pmu->name			= name;
 	cpu_pmu->map_event		= map_event;
-	cpu_pmu->attr_groups[ARMPMU_ATTR_GROUP_EVENTS] = events ?
-			events : &armv8_pmuv3_events_attr_group;
-	cpu_pmu->attr_groups[ARMPMU_ATTR_GROUP_FORMATS] = format ?
-			format : &armv8_pmuv3_format_attr_group;
-	cpu_pmu->attr_groups[ARMPMU_ATTR_GROUP_CAPS] = caps ?
-			caps : &armv8_pmuv3_caps_attr_group;
-
+	cpu_pmu->attr_groups[ARMPMU_ATTR_GROUP_EVENTS] = &armv8_pmuv3_events_attr_group;
+	cpu_pmu->attr_groups[ARMPMU_ATTR_GROUP_FORMATS] = &armv8_pmuv3_format_attr_group;
+	cpu_pmu->attr_groups[ARMPMU_ATTR_GROUP_CAPS] = &armv8_pmuv3_caps_attr_group;
 	armv8_pmu_register_sysctl_table();
 	return 0;
 }
@@ -1226,7 +1219,7 @@ static int armv8_pmu_init(struct arm_pmu *cpu_pmu, char *name,
 static int armv8_pmu_init_nogroups(struct arm_pmu *cpu_pmu, char *name,
 				   int (*map_event)(struct perf_event *event))
 {
-	return armv8_pmu_init(cpu_pmu, name, map_event, NULL, NULL, NULL);
+	return armv8_pmu_init(cpu_pmu, name, map_event);
 }
 
 #define PMUV3_INIT_SIMPLE(name)						\
