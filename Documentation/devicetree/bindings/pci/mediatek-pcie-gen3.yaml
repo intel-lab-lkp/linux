@@ -84,6 +84,26 @@ properties:
     items:
       enum: [ phy, mac ]
 
+  pcie1v8-supply:
+    description:
+      The regulator phandle that provides 1.8V power from root port to a
+      downstream component.
+
+  pcie3v3-supply:
+    description:
+      The regulator phandle that provides 3.3V power from root port to a
+      downstream component.
+
+  pcie12v-supply:
+    description:
+      The regulator phandle that provides 12V power from root port to a
+      downstream component.
+
+  dsc-reset-gpios:
+    description:
+      The extra reset pin other than PERST# required by a downstream component.
+    maxItems: 1
+
   clocks:
     minItems: 4
     maxItems: 6
@@ -237,6 +257,16 @@ examples:
                       #address-cells = <0>;
                       #interrupt-cells = <1>;
                       interrupt-controller;
+            };
+
+            pcie@0 {
+                device_type = "pci";
+                reg = <0x0 0x0 0x0 0x0 0x0>;
+                pcie-3v3-supply = <&pcie3v3_regulator>;
+
+                #address-cells = <3>;
+                #size-cells = <2>;
+                ranges;
             };
         };
     };
