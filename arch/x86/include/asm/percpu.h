@@ -39,15 +39,22 @@
 
 #define __percpu_prefix		""
 
+/*
+ * Efficient implementation for cases in which the compiler supports
+ * named address spaces.  Allows the compiler to perform additional
+ * optimizations that can save more instructions.
+ */
+#define arch_raw_cpu_ptr(ptr)					\
+({								\
+	unsigned long tcp_ptr__;				\
+	tcp_ptr__ = __raw_cpu_read(, this_cpu_off) + (unsigned long)(ptr); \
+	(typeof(*(ptr)) __kernel __force *)tcp_ptr__;		\
+})
+
 #else /* CONFIG_CC_HAS_NAMED_AS */
 
 #define __percpu_seg_override
 #define __percpu_prefix		"%%"__stringify(__percpu_seg)":"
-
-#endif /* CONFIG_CC_HAS_NAMED_AS */
-
-#define __force_percpu_prefix	"%%"__stringify(__percpu_seg)":"
-#define __my_cpu_offset		this_cpu_read(this_cpu_off)
 
 /*
  * Compared to the generic __my_cpu_offset version, the following
@@ -61,6 +68,12 @@
 	     : "m" (__my_cpu_var(this_cpu_off)), "0" (ptr));	\
 	(typeof(*(ptr)) __kernel __force *)tcp_ptr__;		\
 })
+
+#endif /* CONFIG_CC_HAS_NAMED_AS */
+
+#define __force_percpu_prefix	"%%"__stringify(__percpu_seg)":"
+#define __my_cpu_offset		this_cpu_read(this_cpu_off)
+
 #else /* CONFIG_SMP */
 #define __percpu_seg_override
 #define __percpu_prefix		""
