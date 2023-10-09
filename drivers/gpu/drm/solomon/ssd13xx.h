@@ -20,11 +20,17 @@
 #include <drm/drm_plane_helper.h>
 
 #include <linux/regmap.h>
+#include <linux/iosys-map.h>
 
 #define SSD130X_DATA				0x40
 #define SSD130X_COMMAND				0x80
 
+enum ssd13xx_family_ids {
+	SSD130X_FAMILY,
+};
+
 enum ssd13xx_variants {
+	/* ssd130x family */
 	SH1106_ID,
 	SSD1305_ID,
 	SSD1306_ID,
@@ -39,6 +45,7 @@ struct ssd13xx_deviceinfo {
 	u32 default_dclk_frq;
 	u32 default_width;
 	u32 default_height;
+	enum ssd13xx_family_ids family_id;
 	bool need_pwm;
 	bool need_chargepump;
 	bool page_mode_only;
@@ -76,6 +83,12 @@ struct ssd13xx_device {
 	u32 col_offset;
 	u32 prechargep1;
 	u32 prechargep2;
+	/* HW format buffer size */
+	u32 data_array_size;
+	/* Intermediate buffer size */
+	u32 buffer_size;
+	/* Pixel format info for the intermediate buffer */
+	const struct drm_format_info *buffer_fi;
 
 	struct backlight_device *bl_dev;
 	struct pwm_device *pwm;
@@ -88,6 +101,20 @@ struct ssd13xx_device {
 	u8 col_end;
 	u8 page_start;
 	u8 page_end;
+
+	/* Chip family specific operations */
+	const struct ssd13xx_funcs *funcs;
+};
+
+struct ssd13xx_funcs {
+	int (*init)(struct ssd13xx_device *ssd130x);
+	int (*update_rect)(struct ssd13xx_device *ssd13xx, struct drm_rect *rect,
+			   u8 *buf, u8 *data_array);
+	void (*clear_screen)(struct ssd13xx_device *ssd13xx,
+			     u8 *data_array);
+	void (*fmt_convert)(struct iosys_map *dst, const unsigned int *dst_pitch,
+			    const struct iosys_map *src, const struct drm_framebuffer *fb,
+			    const struct drm_rect *clip);
 };
 
 extern const struct ssd13xx_deviceinfo ssd13xx_variants[];
