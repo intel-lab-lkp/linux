@@ -461,14 +461,14 @@ int exit_vmx_usercopy(void);
 int enter_vmx_ops(void);
 void *exit_vmx_ops(void *dest);
 
+#ifdef CONFIG_PPC_BOOK3S_64
+unsigned long get_thread_dexcr(struct thread_struct const *thread);
+#else
 static inline unsigned long get_thread_dexcr(struct thread_struct const *thread)
 {
-#ifdef CONFIG_PPC_BOOK3S_64
-	return thread->dexcr_enabled;
-#else
 	return 0;
-#endif
 }
+#endif
 
 #endif /* __KERNEL__ */
 #endif /* __ASSEMBLY__ */
