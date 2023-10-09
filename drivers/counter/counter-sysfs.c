@@ -1122,6 +1122,7 @@ int counter_sysfs_add(struct counter_device *const counter)
 	struct counter_attribute_group *cattr_groups;
 	size_t i, j;
 	int err;
+	const struct attribute_group **dev_groups;
 	struct attribute_group *groups;
 	struct counter_attribute *p;
 
@@ -1141,9 +1142,9 @@ int counter_sysfs_add(struct counter_device *const counter)
 		return err;
 
 	/* Allocate attribute group pointers for association with device */
-	dev->groups = devm_kcalloc(dev, num_groups + 1, sizeof(*dev->groups),
+	dev->groups = dev_groups = devm_kcalloc(dev, num_groups + 1, sizeof(*dev_groups),
 				   GFP_KERNEL);
-	if (!dev->groups)
+	if (!dev_groups)
 		return -ENOMEM;
 
 	/* Allocate space for attribute groups */
@@ -1169,7 +1170,7 @@ int counter_sysfs_add(struct counter_device *const counter)
 			groups[i].attrs[j++] = &p->dev_attr.attr;
 
 		/* Associate attribute group */
-		dev->groups[i] = &groups[i];
+		dev_groups[i] = &groups[i];
 	}
 
 	return 0;
