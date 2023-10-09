@@ -1382,6 +1382,10 @@ void arch_perf_update_userpage(struct perf_event *event,
 	if (userpg->cap_user_rdpmc) {
 		if (event->hw.flags & ARMPMU_EVT_64BIT)
 			userpg->pmc_width = 64;
+		else if (event->hw.flags & ARMPMU_EVT_63BIT)
+			userpg->pmc_width = 63;
+		else if (event->hw.flags & ARMPMU_EVT_47BIT)
+			userpg->pmc_width = 47;
 		else
 			userpg->pmc_width = 32;
 	}
