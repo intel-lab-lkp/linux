@@ -6191,6 +6191,7 @@ void *mas_erase(struct ma_state *mas)
 {
 	void *entry;
 	MA_WR_STATE(wr_mas, mas, NULL);
+	int request;
 
 	if (mas_is_none(mas) || mas_is_paused(mas))
 		mas->node = MAS_START;
@@ -6200,14 +6201,30 @@ void *mas_erase(struct ma_state *mas)
 	if (!entry)
 		return NULL;
 
-write_retry:
 	/* Must reset to ensure spanning writes of last slot are detected */
 	mas_reset(mas);
 	mas_wr_store_setup(&wr_mas);
+	wr_mas.content = mas_start(mas);
+
+	request = mas_prealloc_calc(&wr_mas);
+	if (!request)
+		goto store_entry;
+
+	mas_node_count_gfp(mas, request, GFP_KERNEL);
+	if (unlikely(mas_is_err(mas))) {
+		mas_set_alloc_req(mas, 0);
+		mas_destroy(mas);
+		mas_reset(mas);
+		return NULL;
+	}
+	mas->mas_flags |= MA_STATE_PREALLOC;
+
+store_entry:
 	mas_wr_store_entry(&wr_mas);
 	if (mas_nomem(mas, GFP_KERNEL))
-		goto write_retry;
+		goto store_entry;
 
+	trace_ma_write(__func__, mas, 0, entry);
 	return entry;
 }
 EXPORT_SYMBOL_GPL(mas_erase);
