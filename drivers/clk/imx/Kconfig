@@ -6,6 +6,7 @@ config MXC_CLK
 
 config MXC_CLK_SCU
 	tristate
+	select MXC_CLK
 
 config CLK_IMX1
 	def_bool SOC_IMX1
