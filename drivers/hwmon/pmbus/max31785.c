@@ -5,6 +5,7 @@
 
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/moduleparam.h>
 #include <linux/init.h>
 #include <linux/err.h>
 #include <linux/i2c.h>
@@ -23,6 +24,9 @@ enum max31785_regs {
 
 #define MAX31785_NR_PAGES		23
 #define MAX31785_NR_FAN_PAGES		6
+
+static unsigned long throttle_delay_us = 250;
+module_param(throttle_delay_us, ulong, 0664);
 
 static int max31785_read_byte_data(struct i2c_client *client, int page,
 				   int reg)
@@ -336,6 +340,10 @@ static int max31785_probe(struct i2c_client *client)
 				     I2C_FUNC_SMBUS_BYTE_DATA |
 				     I2C_FUNC_SMBUS_WORD_DATA))
 		return -ENODEV;
+
+	ret = i2c_smbus_throttle_client(client, throttle_delay_us);
+	if (ret)
+		return ret;
 
 	info = devm_kzalloc(dev, sizeof(struct pmbus_driver_info), GFP_KERNEL);
 	if (!info)
