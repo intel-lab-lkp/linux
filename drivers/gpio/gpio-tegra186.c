@@ -989,6 +989,12 @@ static int tegra186_gpio_probe(struct platform_device *pdev)
 		offset += port->pins;
 	}
 
+	/*
+	 * This is needed for driver using gpio device matching where it
+	 * has to use gpio_chip fwnode to match the gpio controller.
+	 */
+	gpio->gpio.fwnode = of_node_to_fwnode(pdev->dev.of_node);
+
 	return devm_gpiochip_add_data(&pdev->dev, &gpio->gpio, gpio);
 }
 
