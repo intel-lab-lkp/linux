@@ -621,11 +621,11 @@ static int bcm_sf2_mdio_register(struct dsa_switch *ds)
 		return -EPROBE_DEFER;
 	}
 
-	get_device(&priv->master_mii_bus->dev);
 	priv->master_mii_dn = dn;
 
 	priv->slave_mii_bus = mdiobus_alloc();
 	if (!priv->slave_mii_bus) {
+		put_device(&priv->master_mii_bus->dev);
 		of_node_put(dn);
 		return -ENOMEM;
 	}
@@ -686,6 +686,7 @@ static int bcm_sf2_mdio_register(struct dsa_switch *ds)
 	err = mdiobus_register(priv->slave_mii_bus);
 	if (err && dn) {
 		mdiobus_free(priv->slave_mii_bus);
+		put_device(&priv->master_mii_bus->dev);
 		of_node_put(dn);
 	}
 
@@ -696,6 +697,7 @@ static void bcm_sf2_mdio_unregister(struct bcm_sf2_priv *priv)
 {
 	mdiobus_unregister(priv->slave_mii_bus);
 	mdiobus_free(priv->slave_mii_bus);
+	put_device(&priv->master_mii_bus->dev);
 	of_node_put(priv->master_mii_dn);
 }
 
