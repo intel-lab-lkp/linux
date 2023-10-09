@@ -1539,4 +1539,13 @@ static inline void acpi_device_notify(struct device *dev) { }
 static inline void acpi_device_notify_remove(struct device *dev) { }
 #endif
 
+#ifdef CONFIG_HAVE_ARM_SMCCC_DISCOVERY
+int acpi_thermal_cpufreq_pctg(void);
+#else
+inline int acpi_thermal_cpufreq_pctg(void)
+{
+	return 0;
+}
+#endif
+
 #endif	/*_LINUX_ACPI_H*/
