@@ -5,7 +5,7 @@
 #include <linux/sched/coredump.h> /* MMF_VM_HUGEPAGE */
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
-extern struct attribute_group khugepaged_attr_group;
+extern const struct attribute_group khugepaged_attr_group;
 
 extern int khugepaged_init(void);
 extern void khugepaged_destroy(void);

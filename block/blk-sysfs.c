@@ -699,12 +699,12 @@ static umode_t blk_mq_queue_attr_visible(struct kobject *kobj,
 	return attr->mode;
 }
 
-static struct attribute_group queue_attr_group = {
+static const struct attribute_group queue_attr_group = {
 	.attrs = queue_attrs,
 	.is_visible = queue_attr_visible,
 };
 
-static struct attribute_group blk_mq_queue_attr_group = {
+static const struct attribute_group blk_mq_queue_attr_group = {
 	.attrs = blk_mq_queue_attrs,
 	.is_visible = blk_mq_queue_attr_visible,
 };
@@ -750,7 +750,7 @@ static const struct sysfs_ops queue_sysfs_ops = {
 	.store	= queue_attr_store,
 };
 
-static const struct attribute_group *blk_queue_attr_groups[] = {
+static const struct attribute_group *const blk_queue_attr_groups[] = {
 	&queue_attr_group,
 	&blk_mq_queue_attr_group,
 	NULL

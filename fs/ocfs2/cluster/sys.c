@@ -31,7 +31,7 @@ static struct attribute *o2cb_attrs[] = {
 	NULL,
 };
 
-static struct attribute_group o2cb_attr_group = {
+static const struct attribute_group o2cb_attr_group = {
 	.attrs = o2cb_attrs,
 };
 

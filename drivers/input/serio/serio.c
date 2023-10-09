@@ -474,7 +474,7 @@ static const struct attribute_group serio_device_attr_group = {
 	.attrs	= serio_device_attrs,
 };
 
-static const struct attribute_group *serio_device_attr_groups[] = {
+static const struct attribute_group *const serio_device_attr_groups[] = {
 	&serio_id_attr_group,
 	&serio_device_attr_group,
 	NULL

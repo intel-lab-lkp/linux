@@ -93,7 +93,7 @@ static const struct attribute_group pps_group = {
 	.attrs = pps_attrs,
 };
 
-const struct attribute_group *pps_groups[] = {
+const struct attribute_group *const pps_groups[] = {
 	&pps_group,
 	NULL,
 };

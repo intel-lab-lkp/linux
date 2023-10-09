@@ -5246,11 +5246,11 @@ static struct attribute *rbd_attrs[] = {
 	NULL
 };
 
-static struct attribute_group rbd_attr_group = {
+static const struct attribute_group rbd_attr_group = {
 	.attrs = rbd_attrs,
 };
 
-static const struct attribute_group *rbd_attr_groups[] = {
+static const struct attribute_group *const rbd_attr_groups[] = {
 	&rbd_attr_group,
 	NULL
 };

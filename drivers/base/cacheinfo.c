@@ -786,7 +786,7 @@ static const struct attribute_group cache_default_group = {
 	.is_visible = cache_default_attrs_is_visible,
 };
 
-static const struct attribute_group *cache_default_groups[] = {
+static const struct attribute_group *const cache_default_groups[] = {
 	&cache_default_group,
 	NULL,
 };

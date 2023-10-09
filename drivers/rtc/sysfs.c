@@ -303,7 +303,7 @@ static struct attribute_group rtc_attr_group = {
 	.attrs		= rtc_attrs,
 };
 
-static const struct attribute_group *rtc_attr_groups[] = {
+static const struct attribute_group *const rtc_attr_groups[] = {
 	&rtc_attr_group,
 	NULL
 };

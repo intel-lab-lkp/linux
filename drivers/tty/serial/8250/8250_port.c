@@ -3187,7 +3187,7 @@ static struct attribute *serial8250_dev_attrs[] = {
 	NULL
 };
 
-static struct attribute_group serial8250_dev_attr_group = {
+static const struct attribute_group serial8250_dev_attr_group = {
 	.attrs = serial8250_dev_attrs,
 };
 

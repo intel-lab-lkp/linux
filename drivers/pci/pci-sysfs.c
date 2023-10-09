@@ -455,7 +455,7 @@ static const struct attribute_group pci_bus_group = {
 	.attrs = pci_bus_attrs,
 };
 
-const struct attribute_group *pci_bus_groups[] = {
+const struct attribute_group *const pci_bus_groups[] = {
 	&pci_bus_group,
 	NULL,
 };
@@ -647,7 +647,7 @@ static const struct attribute_group pcibus_group = {
 	.attrs = pcibus_attrs,
 };
 
-const struct attribute_group *pcibus_groups[] = {
+const struct attribute_group *const pcibus_groups[] = {
 	&pcibus_group,
 	NULL,
 };
@@ -1628,7 +1628,7 @@ static const struct attribute_group pci_dev_group = {
 	.attrs = pci_dev_attrs,
 };
 
-const struct attribute_group *pci_dev_groups[] = {
+const struct attribute_group *const pci_dev_groups[] = {
 	&pci_dev_group,
 	&pci_dev_config_attr_group,
 	&pci_dev_rom_attr_group,
@@ -1665,7 +1665,7 @@ static const struct attribute_group pcie_dev_attr_group = {
 	.is_visible = pcie_dev_attrs_are_visible,
 };
 
-static const struct attribute_group *pci_dev_attr_groups[] = {
+static const struct attribute_group *const pci_dev_attr_groups[] = {
 	&pci_dev_attr_group,
 	&pci_dev_hp_attr_group,
 #ifdef CONFIG_PCI_IOV

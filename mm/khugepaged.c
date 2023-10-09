@@ -339,7 +339,7 @@ static struct attribute *khugepaged_attr[] = {
 	NULL,
 };
 
-struct attribute_group khugepaged_attr_group = {
+const struct attribute_group khugepaged_attr_group = {
 	.attrs = khugepaged_attr,
 	.name = "khugepaged",
 };
