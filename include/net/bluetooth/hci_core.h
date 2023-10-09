@@ -350,6 +350,8 @@ struct hci_dev {
 	struct list_head list;
 	struct mutex	lock;
 
+	struct ida	unset_handle_ida;
+
 	const char	*name;
 	unsigned long	flags;
 	__u16		id;
@@ -969,6 +971,7 @@ enum {
 	HCI_CONN_AUTH_INITIATOR,
 	HCI_CONN_DROP,
 	HCI_CONN_CANCEL,
+	HCI_CONN_DISC,
 	HCI_CONN_PARAM_REMOVAL_PEND,
 	HCI_CONN_NEW_LINK_KEY,
 	HCI_CONN_SCANNING,
@@ -1520,7 +1523,8 @@ static inline void hci_conn_drop(struct hci_conn *conn)
 {
 	BT_DBG("hcon %p orig refcnt %d", conn, atomic_read(&conn->refcnt));
 
-	if (atomic_dec_and_test(&conn->refcnt)) {
+	if (atomic_dec_and_test(&conn->refcnt) &&
+	    !test_bit(HCI_CONN_DISC, &conn->flags)) {
 		unsigned long timeo;
 
 		switch (conn->type) {
