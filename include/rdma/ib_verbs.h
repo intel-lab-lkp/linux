@@ -2343,7 +2343,7 @@ struct ib_device_ops {
 	 * mechanism exists only for existing drivers.
 	 */
 	const struct attribute_group *device_group;
-	const struct attribute_group **port_groups;
+	const struct attribute_group *const*port_groups;
 
 	int (*post_send)(struct ib_qp *qp, const struct ib_send_wr *send_wr,
 			 const struct ib_send_wr **bad_send_wr);

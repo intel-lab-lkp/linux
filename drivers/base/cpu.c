@@ -434,7 +434,7 @@ static void device_create_release(struct device *dev)
 __printf(4, 0)
 static struct device *
 __cpu_device_create(struct device *parent, void *drvdata,
-		    const struct attribute_group **groups,
+		    const struct attribute_group *const*groups,
 		    const char *fmt, va_list args)
 {
 	struct device *dev = NULL;
@@ -467,7 +467,7 @@ error:
 }
 
 struct device *cpu_device_create(struct device *parent, void *drvdata,
-				 const struct attribute_group **groups,
+				 const struct attribute_group *const*groups,
 				 const char *fmt, ...)
 {
 	va_list vargs;

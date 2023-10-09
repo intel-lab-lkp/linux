@@ -441,7 +441,7 @@ int iommu_device_register(struct iommu_device *iommu,
 void iommu_device_unregister(struct iommu_device *iommu);
 int  iommu_device_sysfs_add(struct iommu_device *iommu,
 			    struct device *parent,
-			    const struct attribute_group **groups,
+			    const struct attribute_group *const*groups,
 			    const char *fmt, ...) __printf(4, 5);
 void iommu_device_sysfs_remove(struct iommu_device *iommu);
 int  iommu_device_link(struct iommu_device   *iommu, struct device *link);
@@ -975,7 +975,7 @@ static inline void iommu_device_unregister(struct iommu_device *iommu)
 
 static inline int  iommu_device_sysfs_add(struct iommu_device *iommu,
 					  struct device *parent,
-					  const struct attribute_group **groups,
+					  const struct attribute_group *const*groups,
 					  const char *fmt, ...)
 {
 	return -ENODEV;

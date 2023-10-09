@@ -598,7 +598,7 @@ EXPORT_SYMBOL_GPL(edac_get_owner);
 
 /* FIXME - should a warning be printed if no error detection? correction? */
 int edac_mc_add_mc_with_groups(struct mem_ctl_info *mci,
-			       const struct attribute_group **groups)
+			       const struct attribute_group *const*groups)
 {
 	int ret = -EINVAL;
 	edac_dbg(0, "\n");

@@ -166,7 +166,7 @@ struct led_classdev {
 	int (*pattern_clear)(struct led_classdev *led_cdev);
 
 	struct device		*dev;
-	const struct attribute_group	**groups;
+	const struct attribute_group	*const*groups;
 
 	struct list_head	 node;			/* LED Device list */
 	const char		*default_trigger;	/* Trigger to use */
@@ -484,7 +484,7 @@ struct led_trigger {
 	/* Link to next registered trigger */
 	struct list_head  next_trig;
 
-	const struct attribute_group **groups;
+	const struct attribute_group *const*groups;
 };
 
 /*

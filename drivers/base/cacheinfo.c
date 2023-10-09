@@ -803,7 +803,7 @@ __weak cache_get_priv_group(struct cacheinfo *this_leaf)
 	return NULL;
 }
 
-static const struct attribute_group **
+static const struct attribute_group *const*
 cache_get_attribute_groups(struct cacheinfo *this_leaf)
 {
 	const struct attribute_group *priv_group =
@@ -868,7 +868,7 @@ static int cache_add_dev(unsigned int cpu)
 	int rc;
 	struct device *ci_dev, *parent;
 	struct cacheinfo *this_leaf;
-	const struct attribute_group **cache_groups;
+	const struct attribute_group *const*cache_groups;
 
 	rc = cpu_cache_sysfs_init(cpu);
 	if (unlikely(rc < 0))

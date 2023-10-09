@@ -37,7 +37,7 @@ struct hwmon_device {
 	const struct hwmon_chip_info *chip;
 	struct list_head tzdata;
 	struct attribute_group group;
-	const struct attribute_group **groups;
+	const struct attribute_group *const*groups;
 };
 
 #define to_hwmon_device(d) container_of(d, struct hwmon_device, dev)
@@ -756,7 +756,7 @@ __hwmon_create_attrs(const void *drvdata, const struct hwmon_chip_info *chip)
 static struct device *
 __hwmon_device_register(struct device *dev, const char *name, void *drvdata,
 			const struct hwmon_chip_info *chip,
-			const struct attribute_group **groups)
+			const struct attribute_group *const*groups)
 {
 	struct hwmon_device *hwdev;
 	const char *label;
@@ -884,7 +884,7 @@ ida_remove:
 struct device *
 hwmon_device_register_with_groups(struct device *dev, const char *name,
 				  void *drvdata,
-				  const struct attribute_group **groups)
+				  const struct attribute_group *const*groups)
 {
 	if (!name)
 		return ERR_PTR(-EINVAL);
@@ -911,7 +911,7 @@ struct device *
 hwmon_device_register_with_info(struct device *dev, const char *name,
 				void *drvdata,
 				const struct hwmon_chip_info *chip,
-				const struct attribute_group **extra_groups)
+				const struct attribute_group *const*extra_groups)
 {
 	if (!dev || !name || !chip)
 		return ERR_PTR(-EINVAL);
@@ -1004,7 +1004,7 @@ static void devm_hwmon_release(struct device *dev, void *res)
 struct device *
 devm_hwmon_device_register_with_groups(struct device *dev, const char *name,
 				       void *drvdata,
-				       const struct attribute_group **groups)
+				       const struct attribute_group *const*groups)
 {
 	struct device **ptr, *hwdev;
 
@@ -1044,7 +1044,7 @@ struct device *
 devm_hwmon_device_register_with_info(struct device *dev, const char *name,
 				     void *drvdata,
 				     const struct hwmon_chip_info *chip,
-				     const struct attribute_group **extra_groups)
+				     const struct attribute_group *const*extra_groups)
 {
 	struct device **ptr, *hwdev;
 

@@ -53,7 +53,7 @@ postcore_initcall(iommu_dev_init);
  */
 int iommu_device_sysfs_add(struct iommu_device *iommu,
 			   struct device *parent,
-			   const struct attribute_group **groups,
+			   const struct attribute_group *const*groups,
 			   const char *fmt, ...)
 {
 	va_list vargs;

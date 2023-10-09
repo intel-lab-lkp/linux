@@ -2722,14 +2722,14 @@ static ssize_t removable_show(struct device *dev, struct device_attribute *attr,
 }
 static DEVICE_ATTR_RO(removable);
 
-int device_add_groups(struct device *dev, const struct attribute_group **groups)
+int device_add_groups(struct device *dev, const struct attribute_group *const*groups)
 {
 	return sysfs_create_groups(&dev->kobj, groups);
 }
 EXPORT_SYMBOL_GPL(device_add_groups);
 
 void device_remove_groups(struct device *dev,
-			  const struct attribute_group **groups)
+			  const struct attribute_group *const*groups)
 {
 	sysfs_remove_groups(&dev->kobj, groups);
 }
@@ -2737,7 +2737,7 @@ EXPORT_SYMBOL_GPL(device_remove_groups);
 
 union device_attr_group_devres {
 	const struct attribute_group *group;
-	const struct attribute_group **groups;
+	const struct attribute_group *const*groups;
 };
 
 static void devm_attr_group_remove(struct device *dev, void *res)
@@ -2752,7 +2752,7 @@ static void devm_attr_group_remove(struct device *dev, void *res)
 static void devm_attr_groups_remove(struct device *dev, void *res)
 {
 	union device_attr_group_devres *devres = res;
-	const struct attribute_group **groups = devres->groups;
+	const struct attribute_group *const*groups = devres->groups;
 
 	dev_dbg(dev, "%s: removing groups %p\n", __func__, groups);
 	sysfs_remove_groups(&dev->kobj, groups);
@@ -2804,7 +2804,7 @@ EXPORT_SYMBOL_GPL(devm_device_add_group);
  * Returns 0 on success or error code from sysfs_create_group on failure.
  */
 int devm_device_add_groups(struct device *dev,
-			   const struct attribute_group **groups)
+			   const struct attribute_group *const*groups)
 {
 	union device_attr_group_devres *devres;
 	int error;
@@ -4282,7 +4282,7 @@ static void device_create_release(struct device *dev)
 static __printf(6, 0) struct device *
 device_create_groups_vargs(const struct class *class, struct device *parent,
 			   dev_t devt, void *drvdata,
-			   const struct attribute_group **groups,
+			   const struct attribute_group *const*groups,
 			   const char *fmt, va_list args)
 {
 	struct device *dev = NULL;
@@ -4382,7 +4382,7 @@ EXPORT_SYMBOL_GPL(device_create);
 struct device *device_create_with_groups(const struct class *class,
 					 struct device *parent, dev_t devt,
 					 void *drvdata,
-					 const struct attribute_group **groups,
+					 const struct attribute_group *const*groups,
 					 const char *fmt, ...)
 {
 	va_list vargs;

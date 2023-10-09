@@ -478,13 +478,13 @@ struct scsi_host_template {
 	/*
 	 * Pointer to the SCSI host sysfs attribute groups, NULL terminated.
 	 */
-	const struct attribute_group **shost_groups;
+	const struct attribute_group *const*shost_groups;
 
 	/*
 	 * Pointer to the SCSI device attribute groups for this host,
 	 * NULL terminated.
 	 */
-	const struct attribute_group **sdev_groups;
+	const struct attribute_group *const*sdev_groups;
 
 	/*
 	 * Vendor Identifier associated with the host

@@ -394,7 +394,7 @@ int disk_scan_partitions(struct gendisk *disk, blk_mode_t mode)
  * with the kernel.
  */
 int __must_check device_add_disk(struct device *parent, struct gendisk *disk,
-				 const struct attribute_group **groups)
+				 const struct attribute_group *const*groups)
 
 {
 	struct device *ddev = disk_to_dev(disk);

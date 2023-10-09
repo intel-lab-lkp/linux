@@ -1195,7 +1195,7 @@ static void system_root_device_release(struct device *dev)
 }
 
 static int subsys_register(struct bus_type *subsys,
-			   const struct attribute_group **groups,
+			   const struct attribute_group *const*groups,
 			   struct kobject *parent_of_root)
 {
 	struct subsys_private *sp;
@@ -1265,7 +1265,7 @@ err_sp:
  * /sys/devices/system/<name>.
  */
 int subsys_system_register(struct bus_type *subsys,
-			   const struct attribute_group **groups)
+			   const struct attribute_group *const*groups)
 {
 	return subsys_register(subsys, groups, &system_kset->kobj);
 }
@@ -1283,7 +1283,7 @@ EXPORT_SYMBOL_GPL(subsys_system_register);
  * constructs which need sysfs interface.
  */
 int subsys_virtual_register(struct bus_type *subsys,
-			    const struct attribute_group **groups)
+			    const struct attribute_group *const*groups)
 {
 	struct kobject *virtual_dir;
 

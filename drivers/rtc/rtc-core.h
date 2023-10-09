@@ -34,9 +34,9 @@ static inline void rtc_proc_del_device(struct rtc_device *rtc)
 #endif
 
 #ifdef CONFIG_RTC_INTF_SYSFS
-const struct attribute_group **rtc_get_dev_attribute_groups(void);
+const struct attribute_group *const*rtc_get_dev_attribute_groups(void);
 #else
-static inline const struct attribute_group **rtc_get_dev_attribute_groups(void)
+static inline const struct attribute_group *const*rtc_get_dev_attribute_groups(void)
 {
 	return NULL;
 }

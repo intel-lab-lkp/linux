@@ -82,7 +82,7 @@ typedef int (*ndctl_fn)(struct nvdimm_bus_descriptor *nd_desc,
 
 struct device_node;
 struct nvdimm_bus_descriptor {
-	const struct attribute_group **attr_groups;
+	const struct attribute_group *const*attr_groups;
 	unsigned long cmd_mask;
 	unsigned long dimm_family_mask;
 	unsigned long bus_family_mask;
@@ -126,7 +126,7 @@ struct nd_region_desc {
 	struct resource *res;
 	struct nd_mapping_desc *mapping;
 	u16 num_mappings;
-	const struct attribute_group **attr_groups;
+	const struct attribute_group *const*attr_groups;
 	struct nd_interleave_set *nd_set;
 	void *provider_data;
 	int num_lanes;
@@ -259,13 +259,13 @@ struct kobject *nvdimm_kobj(struct nvdimm *nvdimm);
 unsigned long nvdimm_cmd_mask(struct nvdimm *nvdimm);
 void *nvdimm_provider_data(struct nvdimm *nvdimm);
 struct nvdimm *__nvdimm_create(struct nvdimm_bus *nvdimm_bus,
-		void *provider_data, const struct attribute_group **groups,
+		void *provider_data, const struct attribute_group *const*groups,
 		unsigned long flags, unsigned long cmd_mask, int num_flush,
 		struct resource *flush_wpq, const char *dimm_id,
 		const struct nvdimm_security_ops *sec_ops,
 		const struct nvdimm_fw_ops *fw_ops);
 static inline struct nvdimm *nvdimm_create(struct nvdimm_bus *nvdimm_bus,
-		void *provider_data, const struct attribute_group **groups,
+		void *provider_data, const struct attribute_group *const*groups,
 		unsigned long flags, unsigned long cmd_mask, int num_flush,
 		struct resource *flush_wpq)
 {

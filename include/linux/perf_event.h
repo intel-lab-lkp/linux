@@ -306,7 +306,7 @@ struct pmu {
 	struct device			*dev;
 	struct device			*parent;
 	const struct attribute_group	**attr_groups;
-	const struct attribute_group	**attr_update;
+	const struct attribute_group	*const*attr_update;
 	const char			*name;
 	int				type;
 

@@ -453,16 +453,16 @@ struct device *hwmon_device_register(struct device *dev);
 struct device *
 hwmon_device_register_with_groups(struct device *dev, const char *name,
 				  void *drvdata,
-				  const struct attribute_group **groups);
+				  const struct attribute_group *const*groups);
 struct device *
 devm_hwmon_device_register_with_groups(struct device *dev, const char *name,
 				       void *drvdata,
-				       const struct attribute_group **groups);
+				       const struct attribute_group *const*groups);
 struct device *
 hwmon_device_register_with_info(struct device *dev,
 				const char *name, void *drvdata,
 				const struct hwmon_chip_info *info,
-				const struct attribute_group **extra_groups);
+				const struct attribute_group *const*extra_groups);
 struct device *
 hwmon_device_register_for_thermal(struct device *dev, const char *name,
 				  void *drvdata);
@@ -470,7 +470,7 @@ struct device *
 devm_hwmon_device_register_with_info(struct device *dev,
 				const char *name, void *drvdata,
 				const struct hwmon_chip_info *info,
-				const struct attribute_group **extra_groups);
+				const struct attribute_group *const*extra_groups);
 
 void hwmon_device_unregister(struct device *dev);
 void devm_hwmon_device_unregister(struct device *dev);

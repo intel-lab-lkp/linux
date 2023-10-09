@@ -94,7 +94,7 @@ struct watchdog_ops {
 struct watchdog_device {
 	int id;
 	struct device *parent;
-	const struct attribute_group **groups;
+	const struct attribute_group *const*groups;
 	const struct watchdog_info *info;
 	const struct watchdog_ops *ops;
 	const struct watchdog_governor *gov;

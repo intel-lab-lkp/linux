@@ -232,7 +232,7 @@ struct power_supply_config {
 	void *drv_data;
 
 	/* Device specific sysfs attributes */
-	const struct attribute_group **attr_grp;
+	const struct attribute_group *const*attr_grp;
 
 	char **supplied_to;
 	size_t num_supplicants;

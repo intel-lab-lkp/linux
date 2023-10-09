@@ -78,7 +78,7 @@ extern ssize_t cpu_show_gds(struct device *dev,
 
 extern __printf(4, 5)
 struct device *cpu_device_create(struct device *parent, void *drvdata,
-				 const struct attribute_group **groups,
+				 const struct attribute_group *const*groups,
 				 const char *fmt, ...);
 #ifdef CONFIG_HOTPLUG_CPU
 extern void unregister_cpu(struct cpu *cpu);

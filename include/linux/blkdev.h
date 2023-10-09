@@ -729,7 +729,7 @@ static inline unsigned int blk_queue_depth(struct request_queue *q)
 	for (; _bio; _bio = _bio->bi_next)
 
 int __must_check device_add_disk(struct device *parent, struct gendisk *disk,
-				 const struct attribute_group **groups);
+				 const struct attribute_group *const*groups);
 static inline int __must_check add_disk(struct gendisk *disk)
 {
 	return device_add_disk(NULL, disk, NULL);

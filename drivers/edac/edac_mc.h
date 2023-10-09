@@ -146,7 +146,7 @@ extern const char *edac_get_owner(void);
  *	0 on Success, or an error code on failure
  */
 extern int edac_mc_add_mc_with_groups(struct mem_ctl_info *mci,
-				      const struct attribute_group **groups);
+				      const struct attribute_group *const*groups);
 #define edac_mc_add_mc(mci)	edac_mc_add_mc_with_groups(mci, NULL)
 
 /**

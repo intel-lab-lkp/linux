@@ -158,7 +158,7 @@ EXPORT_SYMBOL_GPL(tty_port_register_device);
 struct device *tty_port_register_device_attr(struct tty_port *port,
 		struct tty_driver *driver, unsigned index,
 		struct device *device, void *drvdata,
-		const struct attribute_group **attr_grp)
+		const struct attribute_group *const*attr_grp)
 {
 	tty_port_link_device(port, driver, index);
 	return tty_register_device_attr(driver, index, device, drvdata,
@@ -181,7 +181,7 @@ EXPORT_SYMBOL_GPL(tty_port_register_device_attr);
 struct device *tty_port_register_device_attr_serdev(struct tty_port *port,
 		struct tty_driver *driver, unsigned index,
 		struct device *device, void *drvdata,
-		const struct attribute_group **attr_grp)
+		const struct attribute_group *const*attr_grp)
 {
 	struct device *dev;
 

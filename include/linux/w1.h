@@ -253,7 +253,7 @@ void w1_remove_master_device(struct w1_bus_master *master);
 struct w1_family_ops {
 	int  (*add_slave)(struct w1_slave *sl);
 	void (*remove_slave)(struct w1_slave *sl);
-	const struct attribute_group **groups;
+	const struct attribute_group *const*groups;
 	const struct hwmon_chip_info *chip_info;
 };
 

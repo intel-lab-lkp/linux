@@ -580,7 +580,7 @@ bool is_nvdimm(const struct device *dev)
 static struct lock_class_key nvdimm_key;
 
 struct nvdimm *__nvdimm_create(struct nvdimm_bus *nvdimm_bus,
-		void *provider_data, const struct attribute_group **groups,
+		void *provider_data, const struct attribute_group *const*groups,
 		unsigned long flags, unsigned long cmd_mask, int num_flush,
 		struct resource *flush_wpq, const char *dimm_id,
 		const struct nvdimm_security_ops *sec_ops,

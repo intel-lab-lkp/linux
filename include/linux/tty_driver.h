@@ -571,7 +571,7 @@ struct device *tty_register_device(struct tty_driver *driver, unsigned index,
 		struct device *dev);
 struct device *tty_register_device_attr(struct tty_driver *driver,
 		unsigned index, struct device *device, void *drvdata,
-		const struct attribute_group **attr_grp);
+		const struct attribute_group *const*attr_grp);
 void tty_unregister_device(struct tty_driver *driver, unsigned index);
 
 #ifdef CONFIG_PROC_FS

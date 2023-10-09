@@ -3212,7 +3212,7 @@ static void tty_device_create_release(struct device *dev)
 struct device *tty_register_device_attr(struct tty_driver *driver,
 				   unsigned index, struct device *device,
 				   void *drvdata,
-				   const struct attribute_group **attr_grp)
+				   const struct attribute_group *const*attr_grp)
 {
 	char name[64];
 	dev_t devt = MKDEV(driver->major, driver->minor_start) + index;

@@ -524,7 +524,7 @@ struct nvme_ctrl_ops {
 #define NVME_F_METADATA_SUPPORTED	(1 << 1)
 #define NVME_F_BLOCKING			(1 << 2)
 
-	const struct attribute_group **dev_attr_groups;
+	const struct attribute_group *const*dev_attr_groups;
 	int (*reg_read32)(struct nvme_ctrl *ctrl, u32 off, u32 *val);
 	int (*reg_write32)(struct nvme_ctrl *ctrl, u32 off, u32 val);
 	int (*reg_read64)(struct nvme_ctrl *ctrl, u32 off, u64 *val);

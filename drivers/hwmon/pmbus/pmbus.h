@@ -456,7 +456,7 @@ struct pmbus_driver_info {
 	const struct regulator_desc *reg_desc;
 
 	/* custom attributes */
-	const struct attribute_group **groups;
+	const struct attribute_group *const*groups;
 };
 
 /* Regulator ops */

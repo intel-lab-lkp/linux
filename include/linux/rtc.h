@@ -247,7 +247,7 @@ static inline int devm_rtc_nvmem_register(struct rtc_device *rtc,
 
 #ifdef CONFIG_RTC_INTF_SYSFS
 int rtc_add_group(struct rtc_device *rtc, const struct attribute_group *grp);
-int rtc_add_groups(struct rtc_device *rtc, const struct attribute_group **grps);
+int rtc_add_groups(struct rtc_device *rtc, const struct attribute_group *const*grps);
 #else
 static inline
 int rtc_add_group(struct rtc_device *rtc, const struct attribute_group *grp)
@@ -256,7 +256,7 @@ int rtc_add_group(struct rtc_device *rtc, const struct attribute_group *grp)
 }
 
 static inline
-int rtc_add_groups(struct rtc_device *rtc, const struct attribute_group **grps)
+int rtc_add_groups(struct rtc_device *rtc, const struct attribute_group *const*grps)
 {
 	return 0;
 }

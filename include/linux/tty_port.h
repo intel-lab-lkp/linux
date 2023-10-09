@@ -146,14 +146,14 @@ struct device *tty_port_register_device(struct tty_port *port,
 struct device *tty_port_register_device_attr(struct tty_port *port,
 		struct tty_driver *driver, unsigned index,
 		struct device *device, void *drvdata,
-		const struct attribute_group **attr_grp);
+		const struct attribute_group *const*attr_grp);
 struct device *tty_port_register_device_serdev(struct tty_port *port,
 		struct tty_driver *driver, unsigned index,
 		struct device *device);
 struct device *tty_port_register_device_attr_serdev(struct tty_port *port,
 		struct tty_driver *driver, unsigned index,
 		struct device *device, void *drvdata,
-		const struct attribute_group **attr_grp);
+		const struct attribute_group *const*attr_grp);
 void tty_port_unregister_device(struct tty_port *port,
 		struct tty_driver *driver, unsigned index);
 int tty_port_alloc_xmit_buf(struct tty_port *port);

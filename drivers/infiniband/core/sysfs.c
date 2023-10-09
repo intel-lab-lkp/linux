@@ -1464,7 +1464,7 @@ err_put:
  * Do not use. Only for legacy sysfs compatibility.
  */
 int ib_port_register_client_groups(struct ib_device *ibdev, u32 port_num,
-				   const struct attribute_group **groups)
+				   const struct attribute_group *const*groups)
 {
 	return sysfs_create_groups(&ibdev->port_data[port_num].sysfs->kobj,
 				   groups);
@@ -1472,7 +1472,7 @@ int ib_port_register_client_groups(struct ib_device *ibdev, u32 port_num,
 EXPORT_SYMBOL(ib_port_register_client_groups);
 
 void ib_port_unregister_client_groups(struct ib_device *ibdev, u32 port_num,
-				      const struct attribute_group **groups)
+				      const struct attribute_group *const*groups)
 {
 	return sysfs_remove_groups(&ibdev->port_data[port_num].sysfs->kobj,
 				   groups);

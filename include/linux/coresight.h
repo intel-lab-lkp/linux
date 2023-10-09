@@ -157,7 +157,7 @@ struct coresight_desc {
 	const struct coresight_ops *ops;
 	struct coresight_platform_data *pdata;
 	struct device *dev;
-	const struct attribute_group **groups;
+	const struct attribute_group *const*groups;
 	const char *name;
 	struct csdev_access access;
 };

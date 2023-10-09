@@ -83,7 +83,7 @@ struct miscdevice  {
 	struct list_head list;
 	struct device *parent;
 	struct device *this_device;
-	const struct attribute_group **groups;
+	const struct attribute_group *const*groups;
 	const char *nodename;
 	umode_t mode;
 };

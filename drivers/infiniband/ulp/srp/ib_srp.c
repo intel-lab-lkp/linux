@@ -1021,7 +1021,7 @@ out:
  */
 static void srp_del_scsi_host_attr(struct Scsi_Host *shost)
 {
-	const struct attribute_group **g;
+	const struct attribute_group *const*g;
 	struct attribute **attr;
 
 	for (g = shost->hostt->shost_groups; *g; ++g) {

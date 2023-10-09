@@ -931,7 +931,7 @@ static const struct device_type mci_attr_type = {
  *	!0	Failure
  */
 int edac_create_sysfs_mci_device(struct mem_ctl_info *mci,
-				 const struct attribute_group **groups)
+				 const struct attribute_group *const*groups)
 {
 	struct dimm_info *dimm;
 	int err;

@@ -73,9 +73,9 @@ int subsys_interface_register(struct subsys_interface *sif);
 void subsys_interface_unregister(struct subsys_interface *sif);
 
 int subsys_system_register(struct bus_type *subsys,
-			   const struct attribute_group **groups);
+			   const struct attribute_group *const*groups);
 int subsys_virtual_register(struct bus_type *subsys,
-			    const struct attribute_group **groups);
+			    const struct attribute_group *const*groups);
 
 /*
  * The type of device, "struct device" is embedded in. A class
@@ -88,7 +88,7 @@ int subsys_virtual_register(struct bus_type *subsys,
  */
 struct device_type {
 	const char *name;
-	const struct attribute_group **groups;
+	const struct attribute_group *const*groups;
 	int (*uevent)(const struct device *dev, struct kobj_uevent_env *env);
 	char *(*devnode)(const struct device *dev, umode_t *mode,
 			 kuid_t *uid, kgid_t *gid);
@@ -782,7 +782,7 @@ struct device {
 	struct list_head	devres_head;
 
 	const struct class	*class;
-	const struct attribute_group **groups;	/* optional groups */
+	const struct attribute_group *const*groups;	/* optional groups */
 
 	void	(*release)(struct device *dev);
 	struct iommu_group	*iommu_group;
@@ -1177,14 +1177,14 @@ device_create(const struct class *cls, struct device *parent, dev_t devt,
 	      void *drvdata, const char *fmt, ...);
 __printf(6, 7) struct device *
 device_create_with_groups(const struct class *cls, struct device *parent, dev_t devt,
-			  void *drvdata, const struct attribute_group **groups,
+			  void *drvdata, const struct attribute_group *const*groups,
 			  const char *fmt, ...);
 void device_destroy(const struct class *cls, dev_t devt);
 
 int __must_check device_add_groups(struct device *dev,
-				   const struct attribute_group **groups);
+				   const struct attribute_group *const*groups);
 void device_remove_groups(struct device *dev,
-			  const struct attribute_group **groups);
+			  const struct attribute_group *const*groups);
 
 static inline int __must_check device_add_group(struct device *dev,
 					const struct attribute_group *grp)
@@ -1203,7 +1203,7 @@ static inline void device_remove_group(struct device *dev,
 }
 
 int __must_check devm_device_add_groups(struct device *dev,
-					const struct attribute_group **groups);
+					const struct attribute_group *const*groups);
 int __must_check devm_device_add_group(struct device *dev,
 				       const struct attribute_group *grp);
 

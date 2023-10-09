@@ -308,7 +308,7 @@ static const struct attribute_group *rtc_attr_groups[] = {
 	NULL
 };
 
-const struct attribute_group **rtc_get_dev_attribute_groups(void)
+const struct attribute_group *const*rtc_get_dev_attribute_groups(void)
 {
 	return rtc_attr_groups;
 }
@@ -322,10 +322,10 @@ static size_t count_attribute_groups(const struct attribute_group *const*groups)
 	return count;
 }
 
-int rtc_add_groups(struct rtc_device *rtc, const struct attribute_group **grps)
+int rtc_add_groups(struct rtc_device *rtc, const struct attribute_group *const*grps)
 {
 	size_t old_cnt, add_cnt, new_cnt;
-	const struct attribute_group **groups, **old;
+	const struct attribute_group **groups, *const *old;
 
 	if (!grps)
 		return -EINVAL;

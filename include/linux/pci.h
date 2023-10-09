@@ -928,8 +928,8 @@ struct pci_driver {
 	int  (*sriov_set_msix_vec_count)(struct pci_dev *vf, int msix_vec_count); /* On PF */
 	u32  (*sriov_get_vf_total_msix)(struct pci_dev *pf);
 	const struct pci_error_handlers *err_handler;
-	const struct attribute_group **groups;
-	const struct attribute_group **dev_groups;
+	const struct attribute_group *const*groups;
+	const struct attribute_group *const*dev_groups;
 	struct device_driver	driver;
 	struct pci_dynids	dynids;
 	bool driver_managed_dma;
