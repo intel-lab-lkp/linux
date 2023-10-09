@@ -31,19 +31,13 @@ static int ts_prepare_data(const struct ethnl_req_info *req_base,
 {
 	struct ts_reply_data *data = TS_REPDATA(reply_base);
 	struct net_device *dev = reply_base->dev;
-	const struct ethtool_ops *ops = dev->ethtool_ops;
 	int ret;
 
 	ret = ethnl_ops_begin(dev);
 	if (ret < 0)
 		return ret;
 
-	if (phy_has_tsinfo(dev->phydev))
-		data->ts_layer = PHYLIB_TIMESTAMPING;
-	else if (ops->get_ts_info)
-		data->ts_layer = NETDEV_TIMESTAMPING;
-	else
-		data->ts_layer = NO_TIMESTAMPING;
+	data->ts_layer = dev->ts_layer;
 
 	ethnl_ops_complete(dev);
 
