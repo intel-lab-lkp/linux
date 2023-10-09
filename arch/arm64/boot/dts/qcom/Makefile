@@ -1,4 +1,8 @@
 # SPDX-License-Identifier: GPL-2.0
+
+# pad DT allowing bootloader to populate several extra nodes
+DTC_FLAGS += --pad 4096
+
 dtb-$(CONFIG_ARCH_QCOM)	+= apq8016-sbc.dtb
 
 apq8016-sbc-usb-host-dtbs	:= apq8016-sbc.dtb apq8016-sbc-usb-host.dtbo
