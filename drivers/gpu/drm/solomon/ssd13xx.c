@@ -148,6 +148,8 @@ struct ssd13xx_plane_state {
 	struct drm_shadow_plane_state base;
 	/* Intermediate buffer to convert pixels from XRGB8888 to HW format */
 	u8 *buffer;
+	/* Pixel format info for the intermediate buffer */
+	const struct drm_format_info *fi;
 };
 
 static inline struct ssd13xx_crtc_state *to_ssd13xx_crtc_state(struct drm_crtc_state *state)
@@ -602,8 +604,9 @@ static void ssd13xx_clear_screen(struct ssd13xx_device *ssd13xx, u8 *data_array)
 
 static int ssd13xx_fb_blit_rect(struct drm_framebuffer *fb,
 				const struct iosys_map *vmap,
-				struct drm_rect *rect,
-				u8 *buf, u8 *data_array)
+				struct drm_rect *rect, u8 *buf,
+				const struct drm_format_info *fi,
+				u8 *data_array)
 {
 	struct ssd13xx_device *ssd13xx = drm_to_ssd13xx(fb->dev);
 	struct iosys_map dst;
@@ -614,7 +617,7 @@ static int ssd13xx_fb_blit_rect(struct drm_framebuffer *fb,
 	rect->y1 = round_down(rect->y1, SSD130X_PAGE_HEIGHT);
 	rect->y2 = min_t(unsigned int, round_up(rect->y2, SSD130X_PAGE_HEIGHT), ssd13xx->height);
 
-	dst_pitch = DIV_ROUND_UP(drm_rect_width(rect), 8);
+	dst_pitch = drm_format_info_min_pitch(fi, 0, drm_rect_width(rect));
 
 	ret = drm_gem_fb_begin_cpu_access(fb, DMA_FROM_DEVICE);
 	if (ret)
@@ -664,6 +667,8 @@ static int ssd13xx_primary_plane_atomic_check(struct drm_plane *plane,
 	if (!ssd13xx_state->buffer)
 		return -ENOMEM;
 
+	ssd13xx_state->fi = fi;
+
 	return 0;
 }
 
@@ -695,6 +700,7 @@ static void ssd13xx_primary_plane_atomic_update(struct drm_plane *plane,
 
 		ssd13xx_fb_blit_rect(fb, &shadow_plane_state->data[0], &dst_clip,
 				     ssd13xx_plane_state->buffer,
+				     ssd13xx_plane_state->fi,
 				     ssd13xx_crtc_state->data_array);
 	}
 
