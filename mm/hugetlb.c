@@ -1606,7 +1606,7 @@ static void __update_and_free_hugetlb_folio(struct hstate *h,
 	 * is no longer identified as a hugetlb page.  hugetlb_vmemmap_restore
 	 * can only be passed hugetlb pages and will BUG otherwise.
 	 */
-	if (clear_dtor && hugetlb_vmemmap_restore(h, &folio->page)) {
+	if (clear_dtor && hugetlb_vmemmap_restore(h, folio)) {
 		spin_lock_irq(&hugetlb_lock);
 		/*
 		 * If we cannot allocate vmemmap pages, just refuse to free the
@@ -1749,7 +1749,7 @@ static void bulk_vmemmap_restore_error(struct hstate *h,
 		 * quit processing the list to retry the bulk operation.
 		 */
 		list_for_each_entry_safe(folio, t_folio, folio_list, lru)
-			if (hugetlb_vmemmap_restore(h, &folio->page)) {
+			if (hugetlb_vmemmap_restore(h, folio)) {
 				list_del(&folio->lru);
 				spin_lock_irq(&hugetlb_lock);
 				add_hugetlb_folio(h, folio, true);
@@ -1907,7 +1907,7 @@ static void init_new_hugetlb_folio(struct hstate *h, struct folio *folio)
 static void __prep_new_hugetlb_folio(struct hstate *h, struct folio *folio)
 {
 	init_new_hugetlb_folio(h, folio);
-	hugetlb_vmemmap_optimize(h, &folio->page);
+	hugetlb_vmemmap_optimize(h, folio);
 }
 
 static void prep_new_hugetlb_folio(struct hstate *h, struct folio *folio, int nid)
@@ -2312,7 +2312,7 @@ retry:
 		 * Attempt to allocate vmemmmap here so that we can take
 		 * appropriate action on failure.
 		 */
-		rc = hugetlb_vmemmap_restore(h, &folio->page);
+		rc = hugetlb_vmemmap_restore(h, folio);
 		if (!rc) {
 			update_and_free_hugetlb_folio(h, folio, false);
 		} else {
@@ -3720,7 +3720,7 @@ static int demote_free_hugetlb_folio(struct hstate *h, struct folio *folio)
 	 * passed hugetlb folios and will BUG otherwise.
 	 */
 	if (folio_test_hugetlb(folio)) {
-		rc = hugetlb_vmemmap_restore(h, &folio->page);
+		rc = hugetlb_vmemmap_restore(h, folio);
 		if (rc) {
 			/* Allocation of vmemmmap failed, we can not demote folio */
 			spin_lock_irq(&hugetlb_lock);
