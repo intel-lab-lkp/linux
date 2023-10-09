@@ -21,8 +21,8 @@
 #include "rdev-ops.h"
 
 
-void cfg80211_rx_assoc_resp(struct net_device *dev,
-			    struct cfg80211_rx_assoc_resp *data)
+void cfg80211_rx_assoc_response(struct net_device *dev,
+				struct cfg80211_rx_assoc_resp *data)
 {
 	struct wireless_dev *wdev = dev->ieee80211_ptr;
 	struct wiphy *wiphy = wdev->wiphy;
@@ -94,7 +94,7 @@ void cfg80211_rx_assoc_resp(struct net_device *dev,
 	/* update current_bss etc., consumes the bss reference */
 	__cfg80211_connect_result(dev, &cr, cr.status == WLAN_STATUS_SUCCESS);
 }
-EXPORT_SYMBOL(cfg80211_rx_assoc_resp);
+EXPORT_SYMBOL(cfg80211_rx_assoc_response);
 
 static void cfg80211_process_auth(struct wireless_dev *wdev,
 				  const u8 *buf, size_t len)

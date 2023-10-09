@@ -7271,7 +7271,7 @@ void cfg80211_auth_timeout(struct net_device *dev, const u8 *addr);
 /**
  * struct cfg80211_rx_assoc_resp - association response data
  * @bss: the BSS that association was requested with, ownership of the pointer
- *	moves to cfg80211 in the call to cfg80211_rx_assoc_resp()
+ *	moves to cfg80211 in the call to cfg80211_rx_assoc_response()
  * @buf: (Re)Association Response frame (header + body)
  * @len: length of the frame data
  * @uapsd_queues: bitmap of queues configured for uapsd. Same format
@@ -7299,7 +7299,7 @@ struct cfg80211_rx_assoc_resp {
 };
 
 /**
- * cfg80211_rx_assoc_resp - notification of processed association response
+ * cfg80211_rx_assoc_response - notification of processed association response
  * @dev: network device
  * @data: association response data, &struct cfg80211_rx_assoc_resp
  *
@@ -7308,8 +7308,8 @@ struct cfg80211_rx_assoc_resp {
  *
  * This function may sleep. The caller must hold the corresponding wdev's mutex.
  */
-void cfg80211_rx_assoc_resp(struct net_device *dev,
-			    struct cfg80211_rx_assoc_resp *data);
+void cfg80211_rx_assoc_response(struct net_device *dev,
+				struct cfg80211_rx_assoc_resp *data);
 
 /**
  * struct cfg80211_assoc_failure - association failure data

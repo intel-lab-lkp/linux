@@ -73,7 +73,7 @@ Actions and configuration
 	cfg80211_pmksa
 	cfg80211_rx_mlme_mgmt
 	cfg80211_auth_timeout
-	cfg80211_rx_assoc_resp
+	cfg80211_rx_assoc_response
 	cfg80211_assoc_timeout
 	cfg80211_tx_mlme_mgmt
 	cfg80211_ibss_joined
