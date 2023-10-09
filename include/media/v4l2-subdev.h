@@ -1645,6 +1645,14 @@ v4l2_subdev_state_get_opposite_stream_format(struct v4l2_subdev_state *state,
 u64 v4l2_subdev_state_xlate_streams(const struct v4l2_subdev_state *state,
 				    u32 pad0, u32 pad1, u64 *streams);
 
+static inline enum v4l2_subdev_format_whence
+v4l2_subdev_state_whence(struct v4l2_subdev *sd,
+			 struct v4l2_subdev_state *state)
+{
+	return sd->active_state == state ?
+		V4L2_SUBDEV_FORMAT_ACTIVE : V4L2_SUBDEV_FORMAT_TRY;
+}
+
 /**
  * enum v4l2_subdev_routing_restriction - Subdevice internal routing restrictions
  *
