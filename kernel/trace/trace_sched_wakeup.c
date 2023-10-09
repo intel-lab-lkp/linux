@@ -10,6 +10,9 @@
  *  Copyright (C) 2004-2006 Ingo Molnar
  *  Copyright (C) 2004 Nadia Yvette Chambers
  */
+#include <linux/fs.h>
+#include <linux/workqueue.h>
+#include <linux/spinlock.h>
 #include <linux/module.h>
 #include <linux/kallsyms.h>
 #include <linux/uaccess.h>
@@ -17,6 +20,7 @@
 #include <linux/sched/rt.h>
 #include <linux/sched/deadline.h>
 #include <trace/events/sched.h>
+#include <linux/tracefs.h>
 #include "trace.h"
 
 static struct trace_array	*wakeup_trace;
@@ -361,6 +365,169 @@ static bool report_latency(struct trace_array *tr, u64 delta)
 	return true;
 }
 
+DEFINE_MUTEX(sched_wakeup_mutex);
+static void *
+p_next(struct seq_file *m, void *v, loff_t *pos)
+{
+	struct trace_array *tr = m->private;
+	struct trace_pid_list *pid_list = rcu_dereference_sched(tr->wakeup_pids);
+
+	return trace_pid_next(pid_list, v, pos);
+}
+
+static void *p_start(struct seq_file *m, loff_t *pos)
+	__acquires(RCU)
+{
+	struct trace_pid_list *pid_list;
+	struct trace_array *tr = m->private;
+
+	/*
+	 * Grab the mutex, to keep calls to p_next() having the same
+	 * tr->wakeup_pids as p_start() has.
+	 * If we just passed the tr->wakeup_pids around, then RCU would
+	 * have been enough, but doing that makes things more complex.
+	 */
+	mutex_lock(&sched_wakeup_mutex);
+	rcu_read_lock_sched();
+
+	pid_list = rcu_dereference_sched(tr->wakeup_pids);
+
+	if (!pid_list)
+		return NULL;
+
+	return trace_pid_start(pid_list, pos);
+}
+
+static void p_stop(struct seq_file *m, void *p)
+	__releases(RCU)
+{
+	rcu_read_unlock_sched();
+	mutex_unlock(&sched_wakeup_mutex);
+}
+
+static const struct seq_operations show_set_pid_seq_ops = {
+	.start = p_start,
+	.next = p_next,
+	.show = trace_pid_show,
+	.stop = p_stop,
+};
+
+static int
+ftrace_wakeup_open(struct inode *inode, struct file *file,
+		  const struct seq_operations *seq_ops)
+{
+	struct seq_file *m;
+	int ret;
+
+	ret = seq_open(file, seq_ops);
+	if (ret < 0)
+		return ret;
+	m = file->private_data;
+	/* copy tr over to seq ops */
+	m->private = inode->i_private;
+
+	return ret;
+}
+
+static void __clear_wakeup_pids(struct trace_array *tr)
+{
+	struct trace_pid_list *pid_list;
+
+	pid_list = rcu_dereference_protected(tr->wakeup_pids,
+					     lockdep_is_held(&sched_wakeup_mutex));
+	if (!pid_list)
+		return;
+
+	rcu_assign_pointer(tr->wakeup_pids, NULL);
+
+	synchronize_rcu();
+	trace_pid_list_free(pid_list);
+}
+
+static void clear_wakeup_pids(struct trace_array *tr)
+{
+	mutex_lock(&sched_wakeup_mutex);
+	__clear_wakeup_pids(tr);
+	mutex_unlock(&sched_wakeup_mutex);
+
+}
+
+static int
+ftrace_set_wakeup_pid_open(struct inode *inode, struct file *file)
+{
+	const struct seq_operations *seq_ops = &show_set_pid_seq_ops;
+	struct trace_array *tr = inode->i_private;
+	int ret;
+
+	if (trace_array_get(tr) < 0)
+		return -ENODEV;
+
+	if ((file->f_mode & FMODE_WRITE) &&
+	    (file->f_flags & O_TRUNC))
+		clear_wakeup_pids(tr);
+
+	ret = ftrace_wakeup_open(inode, file, seq_ops);
+
+	if (ret < 0)
+		trace_array_put(tr);
+	return ret;
+}
+
+static ssize_t
+ftrace_set_wakeup_pid_write(struct file *filp, const char __user *ubuf,
+		       size_t cnt, loff_t *ppos)
+{
+	struct seq_file *m = filp->private_data;
+	struct trace_array *tr = m->private;
+	struct trace_pid_list *filtered_pids = NULL;
+	struct trace_pid_list *pid_list;
+	ssize_t ret;
+
+	if (!cnt)
+		return 0;
+
+	mutex_lock(&sched_wakeup_mutex);
+
+	filtered_pids = rcu_dereference_protected(tr->wakeup_pids,
+					     lockdep_is_held(&sched_wakeup_mutex));
+
+	ret = trace_pid_write(filtered_pids, &pid_list, ubuf, cnt);
+	if (ret < 0)
+		goto out;
+
+	rcu_assign_pointer(tr->wakeup_pids, pid_list);
+
+	if (filtered_pids) {
+		synchronize_rcu();
+		trace_pid_list_free(filtered_pids);
+	}
+
+ out:
+	mutex_unlock(&sched_wakeup_mutex);
+
+	if (ret > 0)
+		*ppos += ret;
+
+	return ret;
+}
+
+static int ftrace_set_wakeup_pid_release(struct inode *inode, struct file *file)
+{
+	struct trace_array *tr = inode->i_private;
+
+	trace_array_put(tr);
+
+	return seq_release(inode, file);
+}
+
+static const struct file_operations ftrace_set_wakeup_pid_fops = {
+	.open = ftrace_set_wakeup_pid_open,
+	.read = seq_read,
+	.write = ftrace_set_wakeup_pid_write,
+	.llseek = seq_lseek,
+	.release = ftrace_set_wakeup_pid_release,
+};
+
 static void
 probe_wakeup_migrate_task(void *ignore, struct task_struct *task, int cpu)
 {
@@ -437,6 +604,7 @@ probe_wakeup_sched_switch(void *ignore, bool preempt,
 	long disabled;
 	int cpu;
 	unsigned int trace_ctx;
+	struct trace_pid_list *pid_list;
 
 	tracing_record_cmdline(prev);
 
@@ -465,6 +633,14 @@ probe_wakeup_sched_switch(void *ignore, bool preempt,
 	trace_ctx = tracing_gen_ctx_flags(flags);
 
 	arch_spin_lock(&wakeup_lock);
+
+	rcu_read_lock_sched();
+	pid_list = rcu_dereference_sched(wakeup_trace->wakeup_pids);
+	rcu_read_unlock_sched();
+
+	/* We could race with grabbing wakeup_lock */
+	if (likely(trace_ignore_this_task(pid_list, NULL, next)))
+		goto out_unlock;
 
 	/* We could race with grabbing wakeup_lock */
 	if (unlikely(!tracer_enabled || next != wakeup_task))
@@ -673,6 +849,9 @@ static int __wakeup_tracer_init(struct trace_array *tr)
 	/* non overwrite screws up the latency tracers */
 	set_tracer_flag(tr, TRACE_ITER_OVERWRITE, 1);
 	set_tracer_flag(tr, TRACE_ITER_LATENCY_FMT, 1);
+
+	tracefs_create_file("set_wakeup_pid", 0644, NULL,
+				    tr, &ftrace_set_wakeup_pid_fops);
 
 	tr->max_latency = 0;
 	wakeup_trace = tr;

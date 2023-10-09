@@ -404,6 +404,9 @@ struct trace_array {
 	/* function tracing enabled */
 	int			function_enabled;
 #endif
+#ifdef CONFIG_SCHED_TRACER
+	struct trace_pid_list	__rcu *wakeup_pids;
+#endif
 	int			no_filter_buffering_ref;
 	struct list_head	hist_vars;
 #ifdef CONFIG_TRACER_SNAPSHOT
