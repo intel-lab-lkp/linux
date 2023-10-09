@@ -160,3 +160,13 @@ cold pages because of the overestimation, it retries on the next
 server according to the ranking result obtained from the working set
 estimation step. This less forceful approach limits the impacts on the
 existing jobs.
+
+Per memcg lru gen node
+-----------------
+In each memcg's dir, it contains ``lru_gen`` node. you can type upon cmd
+without input memcg_id to do the same thing.
+
+    ``+ node_id max_gen_nr [can_swap [force_scan]]``
+    ``- node_id min_gen_nr [swappiness [nr_to_reclaim]]``
+
+For show info, memcg's node always show the full info.
