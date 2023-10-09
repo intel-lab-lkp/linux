@@ -3414,3 +3414,5 @@ long reiserfs_ioctl(struct file *filp, unsigned int cmd, unsigned long arg);
 long reiserfs_compat_ioctl(struct file *filp,
 		   unsigned int cmd, unsigned long arg);
 int reiserfs_unpack(struct inode *inode);
+void reiserfs_release_journal_dev(struct super_block *super,
+				  struct reiserfs_journal *journal);

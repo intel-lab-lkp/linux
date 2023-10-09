@@ -550,6 +550,7 @@ int remove_save_link(struct inode *inode, int truncate)
 static void reiserfs_kill_sb(struct super_block *s)
 {
 	struct reiserfs_sb_info *sbi = REISERFS_SB(s);
+	struct reiserfs_journal *journal = NULL;
 
 	if (sbi) {
 		reiserfs_proc_info_done(s);
@@ -567,10 +568,13 @@ static void reiserfs_kill_sb(struct super_block *s)
 		sbi->xattr_root = NULL;
 		dput(sbi->priv_root);
 		sbi->priv_root = NULL;
+		journal = SB_JOURNAL(s);
 	}
 
 	kill_block_super(s);
 
+	if (journal)
+		reiserfs_release_journal_dev(s, journal);
 	kfree(sbi);
 	s->s_fs_info = NULL;
 }

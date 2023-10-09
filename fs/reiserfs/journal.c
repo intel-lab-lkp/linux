@@ -90,8 +90,6 @@ static int flush_commit_list(struct super_block *s,
 static int can_dirty(struct reiserfs_journal_cnode *cn);
 static int journal_join(struct reiserfs_transaction_handle *th,
 			struct super_block *sb);
-static void release_journal_dev(struct super_block *super,
-			       struct reiserfs_journal *journal);
 static void dirty_one_transaction(struct super_block *s,
 				 struct reiserfs_journal_list *jl);
 static void flush_async_commits(struct work_struct *work);
@@ -1889,12 +1887,6 @@ static void free_journal_ram(struct super_block *sb)
 	if (journal->j_header_bh) {
 		brelse(journal->j_header_bh);
 	}
-	/*
-	 * j_header_bh is on the journal dev, make sure
-	 * not to release the journal dev until we brelse j_header_bh
-	 */
-	release_journal_dev(sb, journal);
-	vfree(journal);
 }
 
 /*
@@ -2587,13 +2579,19 @@ static void journal_list_init(struct super_block *sb)
 	SB_JOURNAL(sb)->j_current_jl = alloc_journal_list(sb);
 }
 
-static void release_journal_dev(struct super_block *super,
-			       struct reiserfs_journal *journal)
+void reiserfs_release_journal_dev(struct super_block *super,
+				  struct reiserfs_journal *journal)
 {
 	if (journal->j_dev_bd != NULL) {
 		blkdev_put(journal->j_dev_bd, super);
 		journal->j_dev_bd = NULL;
 	}
+
+	/*
+	 * j_header_bh is on the journal dev, make sure not to release
+	 * the journal dev until we brelse j_header_bh
+	 */
+	vfree(journal);
 }
 
 static int journal_init_dev(struct super_block *super,
