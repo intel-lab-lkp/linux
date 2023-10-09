@@ -129,6 +129,19 @@ static const struct of_device_id ssd13xx_of_match[] = {
 		.compatible = "solomon,ssd1309",
 		.data = &ssd13xx_variants[SSD1309_ID],
 	},
+	/* ssd1302x family */
+	{
+		.compatible = "solomon,ssd1322",
+		.data = &ssd13xx_variants[SSD1322_ID],
+	},
+	{
+		.compatible = "solomon,ssd1325",
+		.data = &ssd13xx_variants[SSD1325_ID],
+	},
+	{
+		.compatible = "solomon,ssd1327",
+		.data = &ssd13xx_variants[SSD1327_ID],
+	},
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, ssd13xx_of_match);

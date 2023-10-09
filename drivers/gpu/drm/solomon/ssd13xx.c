@@ -99,6 +99,24 @@
 #define SSD130X_SET_AREA_COLOR_MODE_ENABLE	0x1e
 #define SSD130X_SET_AREA_COLOR_MODE_LOW_POWER	0x05
 
+/* ssd132x commands */
+#define SSD132X_SET_COL_RANGE			0x15
+#define SSD132X_SET_DEACTIVATE_SCROLL		0x2e
+#define SSD132X_SET_ROW_RANGE			0x75
+#define SSD132X_SET_DISPLAY_START		0xa1
+#define SSD132X_SET_DISPLAY_OFFSET		0xa2
+#define SSD132X_SET_DISPLAY_NORMAL		0xa4
+#define SSD132X_SET_FUNCTION_SELECT_A		0xab
+#define SSD132X_SET_PHASE_LENGTH		0xb1
+#define SSD132X_SET_CLOCK_FREQ			0xb3
+#define SSD132X_SET_GPIO			0xb5
+#define SSD132X_SET_PRECHARGE_PERIOD		0xb6
+#define SSD132X_SET_GRAY_SCALE_TABLE		0xb8
+#define SSD132X_SELECT_DEFAULT_TABLE		0xb9
+#define SSD132X_SET_PRECHARGE_VOLTAGE		0xbc
+#define SSD130X_SET_VCOMH_VOLTAGE		0xbe
+#define SSD132X_SET_FUNCTION_SELECT_B		0xd5
+
 #define MAX_CONTRAST 255
 
 const struct ssd13xx_deviceinfo ssd13xx_variants[] = {
@@ -144,6 +162,22 @@ const struct ssd13xx_deviceinfo ssd13xx_variants[] = {
 		.default_width = 128,
 		.default_height = 64,
 		.family_id = SSD130X_FAMILY,
+	},
+	/* ssd132x family */
+	[SSD1322_ID] = {
+		.default_width = 480,
+		.default_height = 128,
+		.family_id = SSD132X_FAMILY,
+	},
+	[SSD1325_ID] = {
+		.default_width = 128,
+		.default_height = 80,
+		.family_id = SSD132X_FAMILY,
+	},
+	[SSD1327_ID] = {
+		.default_width = 128,
+		.default_height = 128,
+		.family_id = SSD132X_FAMILY,
 	}
 };
 EXPORT_SYMBOL_NS_GPL(ssd13xx_variants, DRM_SSD13XX);
@@ -610,6 +644,156 @@ static void ssd130x_clear_screen(struct ssd13xx_device *ssd13xx, u8 *data_array)
 	}
 }
 
+static int ssd132x_init(struct ssd13xx_device *ssd13xx)
+{
+	int ret;
+
+	/* Set initial contrast */
+	ret = ssd13xx_write_cmd(ssd13xx, 2, SSD13XX_CONTRAST, 0x80);
+	if (ret < 0)
+		return ret;
+
+	/* Set column start and end */
+	ret = ssd13xx_write_cmd(ssd13xx, 3, SSD132X_SET_COL_RANGE, 0x00, ssd13xx->width / 2 - 1);
+	if (ret < 0)
+		return ret;
+
+	/* Set row start and end */
+	ret = ssd13xx_write_cmd(ssd13xx, 3, SSD132X_SET_ROW_RANGE, 0x00, ssd13xx->height - 1);
+	if (ret < 0)
+		return ret;
+	/*
+	 * Horizontal Address Increment
+	 * Re-map for Column Address, Nibble and COM
+	 * COM Split Odd Even
+	 */
+	ret = ssd13xx_write_cmd(ssd13xx, 2, SSD13XX_SET_SEG_REMAP, 0x53);
+	if (ret < 0)
+		return ret;
+
+	/* Set display start and offset */
+	ret = ssd13xx_write_cmd(ssd13xx, 2, SSD132X_SET_DISPLAY_START, 0x00);
+	if (ret < 0)
+		return ret;
+
+	ret = ssd13xx_write_cmd(ssd13xx, 2, SSD132X_SET_DISPLAY_OFFSET, 0x00);
+	if (ret < 0)
+		return ret;
+
+	/* Set display mode normal */
+	ret = ssd13xx_write_cmd(ssd13xx, 1, SSD132X_SET_DISPLAY_NORMAL);
+	if (ret < 0)
+		return ret;
+
+	/* Set multiplex ratio value */
+	ret = ssd13xx_write_cmd(ssd13xx, 2, SSD13XX_SET_MULTIPLEX_RATIO, ssd13xx->height - 1);
+	if (ret < 0)
+		return ret;
+
+	/* Set phase length */
+	ret = ssd13xx_write_cmd(ssd13xx, 2, SSD132X_SET_PHASE_LENGTH, 0x55);
+	if (ret < 0)
+		return ret;
+
+	/* Select default linear gray scale table */
+	ret = ssd13xx_write_cmd(ssd13xx, 1, SSD132X_SELECT_DEFAULT_TABLE);
+	if (ret < 0)
+		return ret;
+
+	/* Set clock frequency */
+	ret = ssd13xx_write_cmd(ssd13xx, 2, SSD132X_SET_CLOCK_FREQ, 0x01);
+	if (ret < 0)
+		return ret;
+
+	/* Enable internal VDD regulator */
+	ret = ssd13xx_write_cmd(ssd13xx, 2, SSD132X_SET_FUNCTION_SELECT_A, 0x1);
+	if (ret < 0)
+		return ret;
+
+	/* Set pre-charge period */
+	ret = ssd13xx_write_cmd(ssd13xx, 2, SSD132X_SET_PRECHARGE_PERIOD, 0x01);
+	if (ret < 0)
+		return ret;
+
+	/* Set pre-charge voltage */
+	ret = ssd13xx_write_cmd(ssd13xx, 2, SSD132X_SET_PRECHARGE_VOLTAGE, 0x08);
+	if (ret < 0)
+		return ret;
+
+	/* Set VCOMH voltage */
+	ret = ssd13xx_write_cmd(ssd13xx, 2, SSD130X_SET_VCOMH_VOLTAGE, 0x07);
+	if (ret < 0)
+		return ret;
+
+	/* Enable second pre-charge and internal VSL */
+	ret = ssd13xx_write_cmd(ssd13xx, 2, SSD132X_SET_FUNCTION_SELECT_B, 0x62);
+	if (ret < 0)
+		return ret;
+
+	return 0;
+}
+
+static int ssd132x_update_rect(struct ssd13xx_device *ssd13xx,
+			       struct drm_rect *rect, u8 *buf,
+			       u8 *data_array)
+{
+	unsigned int x = rect->x1 / 2;
+	unsigned int y = rect->y1;
+	unsigned int width = drm_rect_width(rect);
+	unsigned int height = drm_rect_height(rect);
+	unsigned int columns = DIV_ROUND_UP(width, 2);
+	unsigned int rows = height;
+	u32 array_idx = 0;
+	int ret, i, j;
+
+	/*
+	 * The screen is divided in Segment and Common outputs, where
+	 * COM0 to COM[N - 1] are the rows and SEG0 to SEG[M - 1] are
+	 * the columns.
+	 *
+	 * Each Segment has a 4-bit pixel and each Common output has a
+	 * row of pixels. When using the (default) horizontal address
+	 * increment mode, each byte of data sent to the controller has
+	 * two Segments (e.g: SEG0 and SEG1) that are stored in the lower
+	 * and higher nibbles of a single byte representing one column.
+	 * That is, the first byte are SEG0 (D0[3:0]) and SEG1 (D0[7:4]),
+	 * the second byte are SEG2 (D1[3:0]) and SEG3 (D1[7:4]) and so on.
+	 */
+
+	/* Set column start and end */
+	ret = ssd13xx_write_cmd(ssd13xx, 3, SSD132X_SET_COL_RANGE, x, columns - 1);
+	if (ret < 0)
+		return ret;
+
+	/* Set row start and end */
+	ret = ssd13xx_write_cmd(ssd13xx, 3, SSD132X_SET_ROW_RANGE, y, rows - 1);
+	if (ret < 0)
+		return ret;
+
+	for (i = 0; i < height; i++) {
+		/* Process pair of pixels and combine them into a single byte */
+		for (j = 0; j < width; j += 2) {
+			u8 n1 = buf[i * width + j];
+			u8 n2 = buf[i * width + j + 1];
+
+			data_array[array_idx++] = (n2 << 4) | n1;
+		}
+	}
+
+	/* Write out update in one go since horizontal addressing mode is used */
+	ret = ssd13xx_write_data(ssd13xx, data_array, columns * rows);
+
+	return ret;
+}
+
+static void ssd132x_clear_screen(struct ssd13xx_device *ssd13xx, u8 *data_array)
+{
+	memset(data_array, 0, ssd13xx->data_array_size);
+
+	/* Write out update in one go since horizontal addressing mode is used */
+	ssd13xx_write_data(ssd13xx, data_array, ssd13xx->data_array_size);
+}
+
 static const struct ssd13xx_funcs ssd13xx_family_funcs[] = {
 	[SSD130X_FAMILY] = {
 		.init = ssd130x_init,
@@ -617,6 +801,12 @@ static const struct ssd13xx_funcs ssd13xx_family_funcs[] = {
 		.clear_screen = ssd130x_clear_screen,
 		.fmt_convert = drm_fb_xrgb8888_to_mono,
 	},
+	[SSD132X_FAMILY] = {
+		.init = ssd132x_init,
+		.update_rect = ssd132x_update_rect,
+		.clear_screen = ssd132x_clear_screen,
+		.fmt_convert = drm_fb_xrgb8888_to_gray8,
+	}
 };
 
 static int ssd13xx_fb_blit_rect(struct drm_framebuffer *fb,
@@ -631,9 +821,12 @@ static int ssd13xx_fb_blit_rect(struct drm_framebuffer *fb,
 	unsigned int dst_pitch;
 	int ret = 0;
 
-	/* Align y to display page boundaries */
-	rect->y1 = round_down(rect->y1, SSD130X_PAGE_HEIGHT);
-	rect->y2 = min_t(unsigned int, round_up(rect->y2, SSD130X_PAGE_HEIGHT), ssd13xx->height);
+	if (ssd13xx->device_info->family_id == SSD130X_FAMILY) {
+		/* Align y to display page boundaries */
+		rect->y1 = round_down(rect->y1, SSD130X_PAGE_HEIGHT);
+		rect->y2 = min_t(unsigned int, round_up(rect->y2, SSD130X_PAGE_HEIGHT),
+				 ssd13xx->height);
+	}
 
 	dst_pitch = drm_format_info_min_pitch(fi, 0, drm_rect_width(rect));
 
@@ -1217,6 +1410,13 @@ static int ssd13xx_set_buffer_sizes(struct ssd13xx_device *ssd13xx,
 
 		fi = drm_format_info(DRM_FORMAT_R1);
 		break;
+	case SSD132X_FAMILY:
+		unsigned int columns = DIV_ROUND_UP(ssd13xx->width, 2);
+		unsigned int rows = ssd13xx->height;
+
+		ssd13xx->data_array_size = columns * rows;
+
+		fi = drm_format_info(DRM_FORMAT_R8);
 	}
 
 	if (!fi)

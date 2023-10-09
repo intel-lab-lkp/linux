@@ -27,6 +27,7 @@
 
 enum ssd13xx_family_ids {
 	SSD130X_FAMILY,
+	SSD132X_FAMILY,
 };
 
 enum ssd13xx_variants {
@@ -36,6 +37,10 @@ enum ssd13xx_variants {
 	SSD1306_ID,
 	SSD1307_ID,
 	SSD1309_ID,
+	/* ssd132x family */
+	SSD1322_ID,
+	SSD1325_ID,
+	SSD1327_ID,
 	NR_SSD13XX_VARIANTS
 };
 
