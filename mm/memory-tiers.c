@@ -5,6 +5,7 @@
 #include <linux/kobject.h>
 #include <linux/memory.h>
 #include <linux/memory-tiers.h>
+#include <linux/rwsem.h>
 
 #include "internal.h"
 
@@ -33,7 +34,7 @@ struct node_memory_type_map {
 	int map_count;
 };
 
-static DEFINE_MUTEX(memory_tier_lock);
+static DECLARE_RWSEM(memory_tier_sem);
 static LIST_HEAD(memory_tiers);
 static struct node_memory_type_map node_memory_types[MAX_NUMNODES];
 static struct memory_dev_type *default_dram_type;
@@ -137,10 +138,10 @@ static ssize_t nodelist_show(struct device *dev,
 	int ret;
 	nodemask_t nmask;
 
-	mutex_lock(&memory_tier_lock);
+	down_read(&memory_tier_sem);
 	nmask = get_memtier_nodemask(to_memory_tier(dev));
 	ret = sysfs_emit(buf, "%*pbl\n", nodemask_pr_args(&nmask));
-	mutex_unlock(&memory_tier_lock);
+	up_read(&memory_tier_sem);
 	return ret;
 }
 static DEVICE_ATTR_RO(nodelist);
@@ -167,7 +168,7 @@ static struct memory_tier *find_create_memory_tier(struct memory_dev_type *memty
 	int adistance = memtype->adistance;
 	unsigned int memtier_adistance_chunk_size = MEMTIER_CHUNK_SIZE;
 
-	lockdep_assert_held_once(&memory_tier_lock);
+	lockdep_assert_held_write(&memory_tier_sem);
 
 	adistance = round_down(adistance, memtier_adistance_chunk_size);
 	/*
@@ -230,12 +231,12 @@ static struct memory_tier *__node_get_memory_tier(int node)
 	if (!pgdat)
 		return NULL;
 	/*
-	 * Since we hold memory_tier_lock, we can avoid
+	 * Since we hold memory_tier_sem, we can avoid
 	 * RCU read locks when accessing the details. No
 	 * parallel updates are possible here.
 	 */
 	return rcu_dereference_check(pgdat->memtier,
-				     lockdep_is_held(&memory_tier_lock));
+				     lockdep_is_held(&memory_tier_sem));
 }
 
 #ifdef CONFIG_MIGRATION
@@ -335,7 +336,7 @@ static void disable_all_demotion_targets(void)
 	for_each_node_state(node, N_MEMORY) {
 		node_demotion[node].preferred = NODE_MASK_NONE;
 		/*
-		 * We are holding memory_tier_lock, it is safe
+		 * We are holding memory_tier_sem, it is safe
 		 * to access pgda->memtier.
 		 */
 		memtier = __node_get_memory_tier(node);
@@ -364,7 +365,7 @@ static void establish_demotion_targets(void)
 	int distance, best_distance;
 	nodemask_t tier_nodes, lower_tier;
 
-	lockdep_assert_held_once(&memory_tier_lock);
+	lockdep_assert_held_write(&memory_tier_sem);
 
 	if (!node_demotion)
 		return;
@@ -479,7 +480,7 @@ static struct memory_tier *set_node_memory_tier(int node)
 	pg_data_t *pgdat = NODE_DATA(node);
 
 
-	lockdep_assert_held_once(&memory_tier_lock);
+	lockdep_assert_held_write(&memory_tier_sem);
 
 	if (!node_state(node, N_MEMORY))
 		return ERR_PTR(-EINVAL);
@@ -569,15 +570,15 @@ EXPORT_SYMBOL_GPL(put_memory_type);
 void init_node_memory_type(int node, struct memory_dev_type *memtype)
 {
 
-	mutex_lock(&memory_tier_lock);
+	down_write(&memory_tier_sem);
 	__init_node_memory_type(node, memtype);
-	mutex_unlock(&memory_tier_lock);
+	up_write(&memory_tier_sem);
 }
 EXPORT_SYMBOL_GPL(init_node_memory_type);
 
 void clear_node_memory_type(int node, struct memory_dev_type *memtype)
 {
-	mutex_lock(&memory_tier_lock);
+	down_write(&memory_tier_sem);
 	if (node_memory_types[node].memtype == memtype)
 		node_memory_types[node].map_count--;
 	/*
@@ -588,7 +589,7 @@ void clear_node_memory_type(int node, struct memory_dev_type *memtype)
 		node_memory_types[node].memtype = NULL;
 		put_memory_type(memtype);
 	}
-	mutex_unlock(&memory_tier_lock);
+	up_write(&memory_tier_sem);
 }
 EXPORT_SYMBOL_GPL(clear_node_memory_type);
 
@@ -607,17 +608,17 @@ static int __meminit memtier_hotplug_callback(struct notifier_block *self,
 
 	switch (action) {
 	case MEM_OFFLINE:
-		mutex_lock(&memory_tier_lock);
+		down_write(&memory_tier_sem);
 		if (clear_node_memory_tier(arg->status_change_nid))
 			establish_demotion_targets();
-		mutex_unlock(&memory_tier_lock);
+		up_write(&memory_tier_sem);
 		break;
 	case MEM_ONLINE:
-		mutex_lock(&memory_tier_lock);
+		down_write(&memory_tier_sem);
 		memtier = set_node_memory_tier(arg->status_change_nid);
 		if (!IS_ERR(memtier))
 			establish_demotion_targets();
-		mutex_unlock(&memory_tier_lock);
+		up_write(&memory_tier_sem);
 		break;
 	}
 
@@ -638,7 +639,7 @@ static int __init memory_tier_init(void)
 				GFP_KERNEL);
 	WARN_ON(!node_demotion);
 #endif
-	mutex_lock(&memory_tier_lock);
+	down_write(&memory_tier_sem);
 	/*
 	 * For now we can have 4 faster memory tiers with smaller adistance
 	 * than default DRAM tier.
@@ -661,7 +662,7 @@ static int __init memory_tier_init(void)
 			break;
 	}
 	establish_demotion_targets();
-	mutex_unlock(&memory_tier_lock);
+	up_write(&memory_tier_sem);
 
 	hotplug_memory_notifier(memtier_hotplug_callback, MEMTIER_HOTPLUG_PRI);
 	return 0;
