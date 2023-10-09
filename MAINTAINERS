@@ -4662,6 +4662,14 @@ S:	Odd Fixes
 F:	Documentation/devicetree/bindings/arm/cavium-thunder2.txt
 F:	arch/arm64/boot/dts/cavium/thunder2-99xx*
 
+CBOR LIBRARY
+M:	Alexander Graf <graf@amazon.com>
+L:	linux-kernel@vger.kernel.org
+L:	The AWS Nitro Enclaves Team <aws-nitro-enclaves-devel@amazon.com>
+S:	Supported
+F:	include/linux/cbor/
+F:	lib/cbor/
+
 CBS/ETF/TAPRIO QDISCS
 M:	Vinicius Costa Gomes <vinicius.gomes@intel.com>
 L:	netdev@vger.kernel.org
