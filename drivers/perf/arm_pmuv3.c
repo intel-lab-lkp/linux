@@ -298,16 +298,19 @@ PMU_FORMAT_ATTR(event, "config:0-15");
 PMU_FORMAT_ATTR(long, "config1:0");
 PMU_FORMAT_ATTR(rdpmc, "config1:1");
 
+#define ARM_PMUV3_ATTR_LONG	0x01
+#define ARM_PMUV3_ATTR_RDPMC	0x02
+
 static int sysctl_perf_user_access __read_mostly;
 
 static inline bool armv8pmu_event_is_64bit(struct perf_event *event)
 {
-	return event->attr.config1 & 0x1;
+	return event->attr.config1 & ARM_PMUV3_ATTR_LONG;
 }
 
 static inline bool armv8pmu_event_want_user_access(struct perf_event *event)
 {
-	return event->attr.config1 & 0x2;
+	return event->attr.config1 & ARM_PMUV3_ATTR_RDPMC;
 }
 
 static struct attribute *armv8_pmuv3_format_attrs[] = {
