@@ -52,6 +52,26 @@ static int ath12k_acpi_dsm_get_data(struct ath12k_base *ab, int func)
 			memcpy(&ab->acdata->tas_sar_power_table, obj->buffer.pointer,
 			       obj->buffer.length);
 			break;
+		case ATH12K_ACPI_DSM_FUNC_INDEX_BIOS_SAR:
+			if (obj->buffer.length != ATH12K_ACPI_DSM_BIOS_SAR_DATA_SIZE) {
+				ath12k_err(ab, "Invalid BIOS SAR data size %d\n",
+					   obj->buffer.length);
+				ret = -EINVAL;
+				goto out;
+			}
+			memcpy(&ab->acdata->bios_sar_data, obj->buffer.pointer,
+			       obj->buffer.length);
+			break;
+		case ATH12K_ACPI_DSM_FUNC_INDEX_GEO_OFFSET:
+			if (obj->buffer.length != ATH12K_ACPI_DSM_GEO_OFFSET_DATA_SIZE) {
+				ath12k_err(ab, "Invalid GEO OFFSET data size %d\n",
+					   obj->buffer.length);
+				ret = -EINVAL;
+				goto out;
+			}
+			memcpy(&ab->acdata->geo_offset_data, obj->buffer.pointer,
+			       obj->buffer.length);
+			break;
 		}
 	} else {
 		ath12k_err(ab,
@@ -83,6 +103,24 @@ static int ath12k_set_tas_power_limit_data(struct ath12k_base *ab)
 	return ret;
 }
 
+static int ath12k_set_bios_sar_power_limit_data(struct ath12k_base *ab)
+{
+	int ret;
+
+	if (ab->acdata->bios_sar_data[0] == ATH12K_ACPI_POWER_LIMIT_VERSION &&
+	    ab->acdata->bios_sar_data[1] == ATH12K_ACPI_POWER_LIMIT_ENABLE_FLAG) {
+		ret = ath12k_wmi_pdev_set_bios_sar_table_param(ab,
+							       ab->acdata->bios_sar_data);
+		if (ret)
+			ath12k_err(ab, "failed to pass bios sar table %d\n", ret);
+	} else {
+		ath12k_err(ab, "the latest bios sar data is invalid\n");
+		ret = -EINVAL;
+	}
+
+	return ret;
+}
+
 void acpi_dsm_notify(acpi_handle handle, u32 event, void *data)
 {
 	int ret;
@@ -101,6 +139,20 @@ void acpi_dsm_notify(acpi_handle handle, u32 event, void *data)
 			if (ret)
 				return;
 		}
+
+		if (ab->acdata->acpi_bios_sar_enable) {
+			ret = ath12k_acpi_dsm_get_data(ab,
+						       ATH12K_ACPI_DSM_FUNC_INDEX_BIOS_SAR);
+			if (ret) {
+				ath12k_err(ab, "failed to update bios sar %d\n", ret);
+				return;
+			}
+
+			ret = ath12k_set_bios_sar_power_limit_data(ab);
+			if (ret)
+				return;
+		}
+
 	} else {
 		ath12k_err(ab, "unknown acpi notify %u\n", event);
 	}
@@ -111,6 +163,27 @@ void ath12k_acpi_remove_notify(struct ath12k_base *ab)
 	acpi_remove_notify_handler(ACPI_HANDLE(ab->dev),
 				   ACPI_DEVICE_NOTIFY,
 				   acpi_dsm_notify);
+}
+
+static int ath12k_pass_acpi_bios_sar_and_geo_to_fw(struct ath12k_base *ab)
+{
+	int ret;
+
+	ret = ath12k_wmi_pdev_set_bios_sar_table_param(ab,
+						       ab->acdata->bios_sar_data);
+
+	if (ret) {
+		ath12k_err(ab, "failed to pass bios sar table to fw %d\n", ret);
+		return ret;
+	}
+
+	ret = ath12k_wmi_pdev_set_bios_geo_table_param(ab,
+						       ab->acdata->geo_offset_data);
+
+	if (ret)
+		ath12k_err(ab, "failed to pass bios geo table to fw %d\n", ret);
+
+	return ret;
 }
 
 static int ath12k_pass_acpi_cfg_and_data_to_fw(struct ath12k_base *ab)
@@ -172,8 +245,38 @@ int ath12k_get_acpi_all_data(struct ath12k_base *ab)
 			ab->acdata->acpi_tas_enable = true;
 	}
 
+	if (ATH12K_ACPI_FUNC_BIT_VALID(ab->acdata, ATH12K_ACPI_FUNC_BIT_BIOS_SAR)) {
+		ret = ath12k_acpi_dsm_get_data(ab,
+					       ATH12K_ACPI_DSM_FUNC_INDEX_BIOS_SAR);
+		if (ret) {
+			ath12k_err(ab, "failed to get bios sar data %d\n", ret);
+			goto err_free_acdata;
+		}
+	}
+
+	if (ATH12K_ACPI_FUNC_BIT_VALID(ab->acdata, ATH12K_ACPI_FUNC_BIT_GEO_OFFSET)) {
+		ret = ath12k_acpi_dsm_get_data(ab,
+					       ATH12K_ACPI_DSM_FUNC_INDEX_GEO_OFFSET);
+		if (ret) {
+			ath12k_err(ab, "failed to get geo offset data %d\n", ret);
+			goto err_free_acdata;
+		}
+
+		if (ATH12K_ACPI_FUNC_BIT_VALID(ab->acdata, ATH12K_ACPI_FUNC_BIT_BIOS_SAR) &&
+		    ab->acdata->bios_sar_data[0] == ATH12K_ACPI_POWER_LIMIT_VERSION &&
+		    ab->acdata->bios_sar_data[1] == ATH12K_ACPI_POWER_LIMIT_ENABLE_FLAG &&
+		    !ab->acdata->acpi_tas_enable)
+			ab->acdata->acpi_bios_sar_enable = true;
+	}
+
 	if (ab->acdata->acpi_tas_enable) {
 		ret = ath12k_pass_acpi_cfg_and_data_to_fw(ab);
+		if (ret)
+			goto err_free_acdata;
+	}
+
+	if (ab->acdata->acpi_bios_sar_enable) {
+		ret = ath12k_pass_acpi_bios_sar_and_geo_to_fw(ab);
 		if (ret)
 			goto err_free_acdata;
 	}
