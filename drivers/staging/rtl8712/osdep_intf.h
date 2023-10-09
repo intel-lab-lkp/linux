@@ -27,6 +27,4 @@ struct intf_priv {
 	struct completion io_retevt_comp;
 };
 
-int r871x_ioctl(struct net_device *dev, struct ifreq *rq, int cmd);
-
 #endif	/*_OSDEP_INTF_H_*/

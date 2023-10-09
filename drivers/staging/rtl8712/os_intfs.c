@@ -191,7 +191,6 @@ static const struct net_device_ops rtl8712_netdev_ops = {
 	.ndo_start_xmit = r8712_xmit_entry,
 	.ndo_set_mac_address = r871x_net_set_mac_address,
 	.ndo_get_stats = r871x_net_get_stats,
-	.ndo_do_ioctl = r871x_ioctl,
 };
 
 struct net_device *r8712_init_netdev(void)
