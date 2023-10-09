@@ -2337,7 +2337,7 @@ static void unmap_region(struct mm_struct *mm, struct ma_state *mas,
 	mas_set(mas, mt_start);
 	free_pgtables(&tlb, mas, vma, prev ? prev->vm_end : FIRST_USER_ADDRESS,
 				 next ? next->vm_start : USER_PGTABLES_CEILING,
-				 mm_wr_locked);
+				 tree_end, mm_wr_locked);
 	tlb_finish_mmu(&tlb);
 }
 
@@ -3197,6 +3197,52 @@ limits_failed:
 }
 EXPORT_SYMBOL(vm_brk_flags);
 
+void undo_dup_mmap(struct mm_struct *mm, struct vm_area_struct *vma_end)
+{
+	unsigned long tree_end = USER_PGTABLES_CEILING;
+	VMA_ITERATOR(vmi, mm, 0);
+	struct vm_area_struct *vma;
+	unsigned long nr_accounted = 0;
+	int count = 0;
+
+	/*
+	 * vma_end points to the first VMA that has not been duplicated. We need
+	 * to unmap all VMAs before it.
+	 * If vma_end is NULL, it means that all VMAs in the maple tree have
+	 * been duplicated, so setting tree_end to USER_PGTABLES_CEILING will
+	 * unmap all VMAs in the maple tree.
+	 */
+	if (vma_end) {
+		tree_end = vma_end->vm_start;
+		if (tree_end == 0)
+			goto destroy;
+	}
+
+	vma = vma_find(&vmi, tree_end);
+	if (!vma)
+		goto destroy;
+
+	arch_unmap(mm, vma->vm_start, tree_end);
+
+	vma_iter_set(&vmi, vma->vm_end);
+	unmap_region(mm, &vmi.mas, vma, NULL, NULL, 0, tree_end, tree_end, true);
+
+	vma_iter_set(&vmi, vma->vm_end);
+	do {
+		if (vma->vm_flags & VM_ACCOUNT)
+			nr_accounted += vma_pages(vma);
+		remove_vma(vma, true);
+		count++;
+		cond_resched();
+	} for_each_vma_range(vmi, vma, tree_end);
+
+	BUG_ON(count != mm->map_count);
+	vm_unacct_memory(nr_accounted);
+
+destroy:
+	__mt_destroy(&mm->mm_mt);
+}
+
 /* Release all mmaps. */
 void exit_mmap(struct mm_struct *mm)
 {
@@ -3236,7 +3282,7 @@ void exit_mmap(struct mm_struct *mm)
 	mt_clear_in_rcu(&mm->mm_mt);
 	mas_set(&mas, vma->vm_end);
 	free_pgtables(&tlb, &mas, vma, FIRST_USER_ADDRESS,
-		      USER_PGTABLES_CEILING, true);
+		      USER_PGTABLES_CEILING, USER_PGTABLES_CEILING, true);
 	tlb_finish_mmu(&tlb);
 
 	/*
