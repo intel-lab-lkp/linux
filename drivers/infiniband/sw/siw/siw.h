@@ -601,12 +601,10 @@ static inline struct siw_qp *siw_qp_id2obj(struct siw_device *sdev, int id)
 
 	rcu_read_lock();
 	qp = xa_load(&sdev->qp_xa, id);
-	if (likely(qp && kref_get_unless_zero(&qp->ref))) {
-		rcu_read_unlock();
-		return qp;
-	}
+	if (likely(qp && !kref_get_unless_zero(&qp->ref)))
+		qp = NULL;
 	rcu_read_unlock();
-	return NULL;
+	return qp;
 }
 
 static inline u32 qp_id(struct siw_qp *qp)
