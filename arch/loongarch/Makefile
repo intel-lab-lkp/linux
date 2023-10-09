@@ -25,6 +25,29 @@ endif
 32bit-emul		= elf32loongarch
 64bit-emul		= elf64loongarch
 
+ifdef CONFIG_OBJTOOL
+# https://sourceware.org/git/?p=binutils-gdb.git;a=commit;h=ecb802d02eeb
+# https://sourceware.org/git/?p=binutils-gdb.git;a=commit;h=816029e06768
+ifeq ($(shell as --help 2>&1 | grep -e '-mthin-add-sub'),)
+  $(error Sorry, you need a newer gas version with -mthin-add-sub option)
+endif
+KBUILD_AFLAGS	+= $(call cc-option,-mthin-add-sub) $(call cc-option,-Wa$(comma)-mthin-add-sub)
+KBUILD_CFLAGS	+= $(call cc-option,-mthin-add-sub) $(call cc-option,-Wa$(comma)-mthin-add-sub)
+KBUILD_CFLAGS	+= -fno-optimize-sibling-calls -fno-jump-tables -falign-functions=4
+endif
+
+ifdef CONFIG_UNWINDER_ORC
+orc_hash_h := arch/$(SRCARCH)/include/generated/asm/orc_hash.h
+orc_hash_sh := $(srctree)/scripts/orc_hash.sh
+targets += $(orc_hash_h)
+quiet_cmd_orc_hash = GEN     $@
+      cmd_orc_hash = mkdir -p $(dir $@); \
+		     $(CONFIG_SHELL) $(orc_hash_sh) < $< > $@
+$(orc_hash_h): $(srctree)/arch/loongarch/include/asm/orc_types.h $(orc_hash_sh) FORCE
+	$(call if_changed,orc_hash)
+archprepare: $(orc_hash_h)
+endif
+
 ifdef CONFIG_DYNAMIC_FTRACE
 KBUILD_CPPFLAGS += -DCC_USING_PATCHABLE_FUNCTION_ENTRY
 CC_FLAGS_FTRACE := -fpatchable-function-entry=2

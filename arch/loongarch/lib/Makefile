@@ -3,6 +3,8 @@
 # Makefile for LoongArch-specific library files.
 #
 
+OBJECT_FILES_NON_STANDARD := y
+
 lib-y	+= delay.o memset.o memcpy.o memmove.o \
 	   clear_user.o copy_user.o csum.o dump_tlb.o unaligned.o
 

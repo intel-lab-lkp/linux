@@ -43,6 +43,7 @@ SYM_DATA(kernel_offset, .long _kernel_offset);
 	.align 12
 
 SYM_CODE_START(kernel_entry)			# kernel entry point
+	UNWIND_HINT_EMPTY
 
 	/* Config direct window and set PG */
 	li.d		t0, CSR_DMW0_INIT	# UC, PLV0, 0x8000 xxxx xxxx xxxx
