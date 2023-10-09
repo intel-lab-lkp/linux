@@ -1903,6 +1903,14 @@ config RUST
 
 	  If unsure, say N.
 
+config RUST_PHYLIB_BINDINGS
+        bool "PHYLIB bindings support"
+        depends on RUST
+        depends on PHYLIB=y
+        help
+          Adds support needed for PHY drivers written in Rust. It provides
+          a wrapper around the C phlib core.
+
 config RUSTC_VERSION_TEXT
 	string
 	depends on RUST
