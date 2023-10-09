@@ -1202,6 +1202,7 @@ static int extcon_alloc_muex(struct extcon_dev *edev)
  */
 static int extcon_alloc_groups(struct extcon_dev *edev)
 {
+	const struct attribute_group **groups;
 	int index;
 
 	if (!edev)
@@ -1210,20 +1211,20 @@ static int extcon_alloc_groups(struct extcon_dev *edev)
 	if (!edev->max_supported)
 		return 0;
 
-	edev->extcon_dev_type.groups = kcalloc(edev->max_supported + 2,
-					  sizeof(*edev->extcon_dev_type.groups),
+	edev->extcon_dev_type.groups = groups = kcalloc(edev->max_supported + 2,
+					  sizeof(*groups),
 					  GFP_KERNEL);
-	if (!edev->extcon_dev_type.groups)
+	if (!groups)
 		return -ENOMEM;
 
 	edev->extcon_dev_type.name = dev_name(&edev->dev);
 	edev->extcon_dev_type.release = dummy_sysfs_dev_release;
 
 	for (index = 0; index < edev->max_supported; index++)
-		edev->extcon_dev_type.groups[index] = &edev->cables[index].attr_g;
+		groups[index] = &edev->cables[index].attr_g;
 
 	if (edev->mutually_exclusive)
-		edev->extcon_dev_type.groups[index] = &edev->attr_g_muex;
+		groups[index] = &edev->attr_g_muex;
 
 	edev->dev.type = &edev->extcon_dev_type;
 
