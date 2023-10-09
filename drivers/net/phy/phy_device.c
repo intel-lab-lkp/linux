@@ -1411,6 +1411,68 @@ int phy_sfp_probe(struct phy_device *phydev,
 }
 EXPORT_SYMBOL(phy_sfp_probe);
 
+/* An allowlist for PHYs selected as default timesetamping.
+ * Its use is to keep compatibility with old PTP API which is selecting
+ * these PHYs as default timestamping.
+ * The new API is selecting the MAC as default timestamping.
+ */
+const char * const phy_timestamping_allowlist[] = {
+	"Broadcom BCM5411",
+	"Broadcom BCM5421",
+	"Broadcom BCM54210E",
+	"Broadcom BCM5461",
+	"Broadcom BCM54612E",
+	"Broadcom BCM5464",
+	"Broadcom BCM5481",
+	"Broadcom BCM54810",
+	"Broadcom BCM54811",
+	"Broadcom BCM5482",
+	"Broadcom BCM50610",
+	"Broadcom BCM50610M",
+	"Broadcom BCM57780",
+	"Broadcom BCM5395",
+	"Broadcom BCM53125",
+	"Broadcom BCM53128",
+	"Broadcom BCM89610",
+	"NatSemi DP83640",
+	"Microchip LAN8841 Gigabit PHY",
+	"Microchip INDY Gigabit Quad PHY",
+	"Microsemi GE VSC856X SyncE",
+	"Microsemi GE VSC8575 SyncE",
+	"Microsemi GE VSC8582 SyncE",
+	"Microsemi GE VSC8584 SyncE",
+	"NXP C45 TJA1103",
+	NULL,
+};
+
+/**
+ * phy_set_timestamp - set the default selected timestamping device
+ * @dev: Pointer to net_device
+ * @phydev: Pointer to phy_device
+ *
+ * This is used to set default timestamping device taking into account
+ * the new API choice, which is selecting the timestamping from MAC by
+ * default.
+ */
+static void phy_set_timestamp(struct net_device *dev, struct phy_device *phydev)
+{
+	const struct ethtool_ops *ops = dev->ethtool_ops;
+	int i;
+
+	/* Backward compatibility to old timestamping API */
+	for (i = 0; phy_timestamping_allowlist[i]; i++) {
+		if (!strcmp(phy_timestamping_allowlist[i],
+			    phydev->drv->name)) {
+			if (phy_has_tsinfo(phydev))
+				dev->ts_layer = PHYLIB_TIMESTAMPING;
+			return;
+		}
+	}
+
+	if (phy_has_tsinfo(phydev) && !ops->get_ts_info)
+		dev->ts_layer = PHYLIB_TIMESTAMPING;
+}
+
 /**
  * phy_attach_direct - attach a network device to a given PHY device pointer
  * @dev: network device to attach
@@ -1484,6 +1546,7 @@ int phy_attach_direct(struct net_device *dev, struct phy_device *phydev,
 
 	phydev->phy_link_change = phy_link_change;
 	if (dev) {
+		phy_set_timestamp(dev, phydev);
 		phydev->attached_dev = dev;
 		dev->phydev = phydev;
 
@@ -1794,6 +1857,7 @@ EXPORT_SYMBOL_GPL(devm_phy_package_join);
 void phy_detach(struct phy_device *phydev)
 {
 	struct net_device *dev = phydev->attached_dev;
+	const struct ethtool_ops *ops = dev->ethtool_ops;
 	struct module *ndev_owner = NULL;
 	struct mii_bus *bus;
 
@@ -1812,6 +1876,10 @@ void phy_detach(struct phy_device *phydev)
 
 	phy_suspend(phydev);
 	if (dev) {
+		if (ops->get_ts_info)
+			dev->ts_layer = NETDEV_TIMESTAMPING;
+		else
+			dev->ts_layer = NO_TIMESTAMPING;
 		phydev->attached_dev->phydev = NULL;
 		phydev->attached_dev = NULL;
 	}
