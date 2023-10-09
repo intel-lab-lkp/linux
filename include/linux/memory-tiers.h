@@ -19,6 +19,8 @@
  */
 #define MEMTIER_ADISTANCE_DRAM	((4 * MEMTIER_CHUNK_SIZE) + (MEMTIER_CHUNK_SIZE >> 1))
 
+#define MAX_TIER_INTERLEAVE_WEIGHT 100
+
 struct memory_tier;
 struct memory_dev_type {
 	/* list of memory types that are part of same tier as this type */
@@ -36,6 +38,9 @@ struct memory_dev_type *alloc_memory_type(int adistance);
 void put_memory_type(struct memory_dev_type *memtype);
 void init_node_memory_type(int node, struct memory_dev_type *default_type);
 void clear_node_memory_type(int node, struct memory_dev_type *memtype);
+unsigned char memtier_get_node_weight(int from_node, int target_node,
+				      nodemask_t *pol_nodes);
+unsigned int memtier_get_total_weight(int from_node, nodemask_t *pol_nodes);
 #ifdef CONFIG_MIGRATION
 int next_demotion_node(int node);
 void node_get_allowed_targets(pg_data_t *pgdat, nodemask_t *targets);
@@ -96,6 +101,17 @@ static inline void node_get_allowed_targets(pg_data_t *pgdat, nodemask_t *target
 static inline bool node_is_toptier(int node)
 {
 	return true;
+}
+
+unsigned char memtier_get_node_weight(int from_node, int target_node,
+				      nodemask_t *pol_nodes)
+{
+	return 0;
+}
+
+unsigned int memtier_get_total_weight(int from_node, nodemask_t *pol_nodes)
+{
+	return 0;
 }
 #endif	/* CONFIG_NUMA */
 #endif  /* _LINUX_MEMORY_TIERS_H */
