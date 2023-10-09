@@ -5478,17 +5478,33 @@ int mas_prealloc_calc(struct ma_wr_state *wr_mas)
 int mas_store_gfp(struct ma_state *mas, void *entry, gfp_t gfp)
 {
 	MA_WR_STATE(wr_mas, mas, entry);
+	int request;
 
 	mas_wr_store_setup(&wr_mas);
-	trace_ma_write(__func__, mas, 0, entry);
-retry:
+	wr_mas.content = mas_start(mas);
+
+	request = mas_prealloc_calc(&wr_mas);
+	if (!request)
+		goto store_entry;
+
+	mas_node_count_gfp(mas, request, gfp);
+	if (unlikely(mas_is_err(mas))) {
+		mas_set_alloc_req(mas, 0);
+		mas_destroy(mas);
+		mas_reset(mas);
+		return xa_err(mas->node);
+	}
+	mas->mas_flags |= MA_STATE_PREALLOC;
+
+store_entry:
 	mas_wr_store_entry(&wr_mas);
 	if (unlikely(mas_nomem(mas, gfp)))
-		goto retry;
+		goto store_entry;
 
 	if (unlikely(mas_is_err(mas)))
 		return xa_err(mas->node);
 
+	trace_ma_write(__func__, mas, 0, entry);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(mas_store_gfp);
