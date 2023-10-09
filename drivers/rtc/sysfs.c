@@ -313,21 +313,25 @@ const struct attribute_group **rtc_get_dev_attribute_groups(void)
 	return rtc_attr_groups;
 }
 
+static size_t count_attribute_groups(const struct attribute_group *const*groups)
+{
+	size_t count = 0;
+
+	for (; *groups; ++groups)
+		++count;
+	return count;
+}
+
 int rtc_add_groups(struct rtc_device *rtc, const struct attribute_group **grps)
 {
-	size_t old_cnt = 0, add_cnt = 0, new_cnt;
+	size_t old_cnt, add_cnt, new_cnt;
 	const struct attribute_group **groups, **old;
 
 	if (!grps)
 		return -EINVAL;
 
-	groups = rtc->dev.groups;
-	if (groups)
-		for (; *groups; groups++)
-			old_cnt++;
-
-	for (groups = grps; *groups; groups++)
-		add_cnt++;
+	old_cnt = rtc->dev.groups ? count_attribute_groups(rtc->dev.groups) : 0;
+	add_cnt = count_attribute_groups(grps);
 
 	new_cnt = old_cnt + add_cnt + 1;
 	groups = devm_kcalloc(&rtc->dev, new_cnt, sizeof(*groups), GFP_KERNEL);
