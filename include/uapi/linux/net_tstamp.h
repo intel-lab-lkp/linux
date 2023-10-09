@@ -13,6 +13,20 @@
 #include <linux/types.h>
 #include <linux/socket.h>   /* for SO_TIMESTAMPING */
 
+/*
+ * Hardware layer of the TIMESTAMPING provider
+ * New description layer should have the NETDEV_TIMESTAMPING or
+ * PHYLIB_TIMESTAMPING bit set to know which API to use for timestamping.
+ */
+enum {
+	NO_TIMESTAMPING = 0,
+	NETDEV_TIMESTAMPING = (1 << 0),
+	PHYLIB_TIMESTAMPING = (1 << 1),
+	SOFTWARE_TIMESTAMPING = (1 << 2) | (1 << 0),
+
+	__TIMESTAMPING_COUNT,
+};
+
 /* SO_TIMESTAMPING flags */
 enum {
 	SOF_TIMESTAMPING_TX_HARDWARE = (1<<0),
