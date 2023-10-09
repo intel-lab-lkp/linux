@@ -783,6 +783,7 @@ __hwmon_device_register(struct device *dev, const char *name, void *drvdata,
 	hdev = &hwdev->dev;
 
 	if (chip) {
+		const struct attribute_group **new_groups;
 		struct attribute **attrs;
 		int ngroups = 2; /* terminating NULL plus &hwdev->groups */
 
@@ -790,8 +791,8 @@ __hwmon_device_register(struct device *dev, const char *name, void *drvdata,
 			for (i = 0; groups[i]; i++)
 				ngroups++;
 
-		hwdev->groups = kcalloc(ngroups, sizeof(*groups), GFP_KERNEL);
-		if (!hwdev->groups) {
+		hwdev->groups = new_groups = kcalloc(ngroups, sizeof(*new_groups), GFP_KERNEL);
+		if (!new_groups) {
 			err = -ENOMEM;
 			goto free_hwmon;
 		}
@@ -804,14 +805,14 @@ __hwmon_device_register(struct device *dev, const char *name, void *drvdata,
 
 		hwdev->group.attrs = attrs;
 		ngroups = 0;
-		hwdev->groups[ngroups++] = &hwdev->group;
+		new_groups[ngroups++] = &hwdev->group;
 
 		if (groups) {
 			for (i = 0; groups[i]; i++)
-				hwdev->groups[ngroups++] = groups[i];
+				new_groups[ngroups++] = groups[i];
 		}
 
-		hdev->groups = hwdev->groups;
+		hdev->groups = new_groups;
 	} else {
 		hdev->groups = groups;
 	}
