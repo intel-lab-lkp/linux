@@ -3082,6 +3082,7 @@ static int serial_core_add_one_port(struct uart_driver *drv, struct uart_port *u
 	struct uart_state *state;
 	struct tty_port *port;
 	int ret = 0;
+	const struct attribute_group **tty_groups;
 	struct device *tty_dev;
 	int num_groups;
 
@@ -3132,22 +3133,22 @@ static int serial_core_add_one_port(struct uart_driver *drv, struct uart_port *u
 	if (uport->attr_group)
 		num_groups++;
 
-	uport->tty_groups = kcalloc(num_groups, sizeof(*uport->tty_groups),
+	uport->tty_groups = tty_groups = kcalloc(num_groups, sizeof(*tty_groups),
 				    GFP_KERNEL);
-	if (!uport->tty_groups) {
+	if (!tty_groups) {
 		ret = -ENOMEM;
 		goto out;
 	}
-	uport->tty_groups[0] = &tty_dev_attr_group;
+	tty_groups[0] = &tty_dev_attr_group;
 	if (uport->attr_group)
-		uport->tty_groups[1] = uport->attr_group;
+		tty_groups[1] = uport->attr_group;
 
 	/*
 	 * Register the port whether it's detected or not.  This allows
 	 * setserial to be used to alter this port's parameters.
 	 */
 	tty_dev = tty_port_register_device_attr_serdev(port, drv->tty_driver,
-			uport->line, uport->dev, port, uport->tty_groups);
+			uport->line, uport->dev, port, tty_groups);
 	if (!IS_ERR(tty_dev)) {
 		device_set_wakeup_capable(tty_dev, 1);
 	} else {

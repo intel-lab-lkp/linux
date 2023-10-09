@@ -578,8 +578,8 @@ struct uart_port {
 	unsigned char		suspended;
 	unsigned char		console_reinit;
 	const char		*name;			/* port name */
-	struct attribute_group	*attr_group;		/* port specific attributes */
-	const struct attribute_group **tty_groups;	/* all attributes (serial core use only) */
+	const struct attribute_group *attr_group;	/* port specific attributes */
+	const struct attribute_group *const*tty_groups;	/* all attributes (serial core use only) */
 	struct serial_rs485     rs485;
 	struct serial_rs485	rs485_supported;	/* Supported mask for serial_rs485 */
 	struct gpio_desc	*rs485_term_gpio;	/* enable RS485 bus termination */
