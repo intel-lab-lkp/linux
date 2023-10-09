@@ -59,6 +59,69 @@ static int ts_fill_reply(struct sk_buff *skb,
 	return nla_put_u32(skb, ETHTOOL_A_TS_LAYER, data->ts_layer);
 }
 
+/* TS_SET */
+const struct nla_policy ethnl_ts_set_policy[] = {
+	[ETHTOOL_A_TS_HEADER]	= NLA_POLICY_NESTED(ethnl_header_policy),
+	[ETHTOOL_A_TS_LAYER]	= NLA_POLICY_RANGE(NLA_U32, 0,
+						   __TIMESTAMPING_COUNT - 1)
+};
+
+static int ethnl_set_ts_validate(struct ethnl_req_info *req_info,
+				 struct genl_info *info)
+{
+	struct nlattr **tb = info->attrs;
+	const struct net_device_ops *ops = req_info->dev->netdev_ops;
+
+	if (!tb[ETHTOOL_A_TS_LAYER])
+		return 0;
+
+	if (!ops->ndo_hwtstamp_set)
+		return -EOPNOTSUPP;
+
+	return 1;
+}
+
+static int ethnl_set_ts(struct ethnl_req_info *req_info, struct genl_info *info)
+{
+	struct net_device *dev = req_info->dev;
+	const struct ethtool_ops *ops = dev->ethtool_ops;
+	struct kernel_hwtstamp_config config = {0};
+	struct nlattr **tb = info->attrs;
+	bool mod = false;
+	u32 ts_layer;
+	int ret;
+
+	ts_layer = dev->ts_layer;
+	ethnl_update_u32(&ts_layer, tb[ETHTOOL_A_TS_LAYER], &mod);
+
+	if (!mod)
+		return 0;
+
+	if (ts_layer & NETDEV_TIMESTAMPING && !ops->get_ts_info) {
+		NL_SET_ERR_MSG_ATTR(info->extack, tb[ETHTOOL_A_TS_LAYER],
+				    "this device cannot support timestamping");
+		return -EINVAL;
+	}
+
+	if (ts_layer & PHYLIB_TIMESTAMPING && !phy_has_tsinfo(dev->phydev)) {
+		NL_SET_ERR_MSG_ATTR(info->extack, tb[ETHTOOL_A_TS_LAYER],
+				    "this device cannot support timestamping");
+		return -EINVAL;
+	}
+
+	/* Disable time stamping in the current layer. */
+	if (netif_device_present(dev) &&
+	    dev->ts_layer & (PHYLIB_TIMESTAMPING | NETDEV_TIMESTAMPING)) {
+		ret = dev_set_hwtstamp_phylib(dev, &config, info->extack);
+		if (ret < 0)
+			return ret;
+	}
+
+	dev->ts_layer = ts_layer;
+
+	return 1;
+}
+
 const struct ethnl_request_ops ethnl_ts_request_ops = {
 	.request_cmd		= ETHTOOL_MSG_TS_GET,
 	.reply_cmd		= ETHTOOL_MSG_TS_GET_REPLY,
@@ -69,6 +132,9 @@ const struct ethnl_request_ops ethnl_ts_request_ops = {
 	.prepare_data		= ts_prepare_data,
 	.reply_size		= ts_reply_size,
 	.fill_reply		= ts_fill_reply,
+
+	.set_validate		= ethnl_set_ts_validate,
+	.set			= ethnl_set_ts,
 };
 
 /* TS_LIST_GET */
