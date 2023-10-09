@@ -2593,11 +2593,17 @@ static noinline int do_init_module(struct module *mod)
 	 * be cleaned up needs to sync with the queued work - ie
 	 * rcu_barrier()
 	 */
+#ifdef CONFIG_MODULE_LOAD_IN_SEQUENCE
+	llist_add(&freeinit->node, &init_free_list);
+#else
 	if (llist_add(&freeinit->node, &init_free_list))
 		schedule_work(&init_free_wq);
+#endif
 
 	mutex_unlock(&module_mutex);
+#ifdef CONFIG_MODULE_LOAD_IN_SEQUENCE
 	wake_up_all(&module_wq);
+#endif
 
 	mod_stat_add_long(text_size, &total_text_size);
 	mod_stat_add_long(total_size, &total_mod_size);

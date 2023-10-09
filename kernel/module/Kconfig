@@ -389,4 +389,15 @@ config MODULES_TREE_LOOKUP
 	def_bool y
 	depends on PERF_EVENTS || TRACING || CFI_CLANG
 
+config MODULE_LOAD_IN_SEQUENCE
+	bool "Load module in sequence"
+	default n
+	help
+	  By default, modules are loaded in random sequence depending on when modprobe
+	  is executed.
+
+	  This option allows modules to be loaded in sequence if modprobe cmds are
+	  executed one by one in sequence. This option is helpful during syzkaller fuzzing
+	  to make sure module is loaded into fixed address across device reboot.
+
 endif # MODULES
