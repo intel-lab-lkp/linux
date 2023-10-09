@@ -1346,7 +1346,8 @@ bool v4l2_subdev_has_pad_interdep(struct media_entity *entity,
  */
 struct v4l2_subdev_state *__v4l2_subdev_state_alloc(struct v4l2_subdev *sd,
 						    const char *lock_name,
-						    struct lock_class_key *key);
+						    struct lock_class_key *key,
+						    bool active);
 
 /**
  * __v4l2_subdev_state_free - free a v4l2_subdev_state

@@ -450,7 +450,7 @@ static int __tegra_channel_try_format(struct tegra_vi_channel *chan,
 	 * __v4l2_subdev_state_alloc().
 	 */
 	sd_state = __v4l2_subdev_state_alloc(subdev, "tegra:state->lock",
-					     &key);
+					     &key, false);
 	if (IS_ERR(sd_state))
 		return PTR_ERR(sd_state);
 	/*

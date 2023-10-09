@@ -266,7 +266,8 @@ static int rvin_try_format(struct rvin_dev *vin, u32 which,
 	 * FIXME: Drop this call, drivers are not supposed to use
 	 * __v4l2_subdev_state_alloc().
 	 */
-	sd_state = __v4l2_subdev_state_alloc(sd, "rvin:state->lock", &key);
+	sd_state = __v4l2_subdev_state_alloc(sd, "rvin:state->lock", &key,
+					     false);
 	if (IS_ERR(sd_state))
 		return PTR_ERR(sd_state);
 

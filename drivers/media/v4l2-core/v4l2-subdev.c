@@ -53,7 +53,7 @@ static int subdev_fh_init(struct v4l2_subdev_fh *fh, struct v4l2_subdev *sd)
 	struct v4l2_subdev_state *state;
 	static struct lock_class_key key;
 
-	state = __v4l2_subdev_state_alloc(sd, "fh->state->lock", &key);
+	state = __v4l2_subdev_state_alloc(sd, "fh->state->lock", &key, false);
 	if (IS_ERR(state))
 		return PTR_ERR(state);
 
@@ -1426,7 +1426,7 @@ EXPORT_SYMBOL_GPL(v4l2_subdev_has_pad_interdep);
 
 struct v4l2_subdev_state *
 __v4l2_subdev_state_alloc(struct v4l2_subdev *sd, const char *lock_name,
-			  struct lock_class_key *lock_key)
+			  struct lock_class_key *lock_key, bool active)
 {
 	struct v4l2_subdev_state *state;
 	int ret;
@@ -1451,6 +1451,9 @@ __v4l2_subdev_state_alloc(struct v4l2_subdev *sd, const char *lock_name,
 		}
 	}
 
+	if (active)
+		sd->active_state = state;
+
 	/*
 	 * There can be no race at this point, but we lock the state anyway to
 	 * satisfy lockdep checks.
@@ -1469,6 +1472,9 @@ err:
 		kvfree(state->pads);
 
 	kfree(state);
+
+	if (active)
+		sd->active_state = NULL;
 
 	return ERR_PTR(ret);
 }
@@ -1493,11 +1499,9 @@ int __v4l2_subdev_init_finalize(struct v4l2_subdev *sd, const char *name,
 {
 	struct v4l2_subdev_state *state;
 
-	state = __v4l2_subdev_state_alloc(sd, name, key);
+	state = __v4l2_subdev_state_alloc(sd, name, key, true);
 	if (IS_ERR(state))
 		return PTR_ERR(state);
-
-	sd->active_state = state;
 
 	return 0;
 }
