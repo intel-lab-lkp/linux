@@ -66,7 +66,7 @@ struct arch_timer {
 	struct clock_event_device evt;
 };
 
-static struct arch_timer *arch_timer_mem __ro_after_init;
+static struct arch_timer *arch_timer_mem;
 
 #define to_arch_timer(e) container_of(e, struct arch_timer, evt)
 
@@ -888,15 +888,16 @@ static void __arch_timer_setup_cp15(struct clock_event_device *clk)
 	clockevents_config_and_register(clk, arch_timer_rate, 0xf, max_delta);
 }
 
-static void __arch_timer_setup_mem(struct clock_event_device *clk)
+static void __arch_timer_setup_mem(struct clock_event_device *clk,
+				   bool irq_virtual, const char *name)
 {
 	u64 max_delta;
 
 	clk->features = CLOCK_EVT_FEAT_ONESHOT | CLOCK_EVT_FEAT_DYNIRQ;
-	clk->name = "arch_mem_timer";
+	clk->name = name;
 	clk->rating = 400;
 	clk->cpumask = cpu_possible_mask;
-	if (arch_timer_mem_use_virtual) {
+	if (irq_virtual) {
 		clk->set_state_shutdown = arch_timer_shutdown_virt_mem;
 		clk->set_state_oneshot_stopped = arch_timer_shutdown_virt_mem;
 		clk->set_next_event =
@@ -1286,10 +1287,15 @@ out:
 	return err;
 }
 
-static int __init arch_timer_mem_register(void __iomem *base, unsigned int irq)
+int arch_timer_mem_register(void __iomem *base, unsigned int irq,
+			    bool irq_virtual, const char *name)
 {
 	int ret;
 	irq_handler_t func;
+
+	/* If we've already register a memory timer, fail the registration */
+	if (arch_timer_mem)
+		return -EEXIST;
 
 	arch_timer_mem = kzalloc(sizeof(*arch_timer_mem), GFP_KERNEL);
 	if (!arch_timer_mem)
@@ -1297,14 +1303,14 @@ static int __init arch_timer_mem_register(void __iomem *base, unsigned int irq)
 
 	arch_timer_mem->base = base;
 	arch_timer_mem->evt.irq = irq;
-	__arch_timer_setup_mem(&arch_timer_mem->evt);
+	__arch_timer_setup_mem(&arch_timer_mem->evt, irq_virtual, name);
 
-	if (arch_timer_mem_use_virtual)
+	if (irq_virtual)
 		func = arch_timer_handler_virt_mem;
 	else
 		func = arch_timer_handler_phys_mem;
 
-	ret = request_irq(irq, func, IRQF_TIMER, "arch_mem_timer", &arch_timer_mem->evt);
+	ret = request_irq(irq, func, IRQF_TIMER, name, &arch_timer_mem->evt);
 	if (ret) {
 		pr_err("Failed to request mem timer irq\n");
 		kfree(arch_timer_mem);
@@ -1313,6 +1319,7 @@ static int __init arch_timer_mem_register(void __iomem *base, unsigned int irq)
 
 	return ret;
 }
+EXPORT_SYMBOL_GPL(arch_timer_mem_register);
 
 static const struct of_device_id arch_timer_of_match[] __initconst = {
 	{ .compatible   = "arm,armv7-timer",    },
@@ -1560,7 +1567,8 @@ arch_timer_mem_frame_register(struct arch_timer_mem_frame *frame)
 		return -ENXIO;
 	}
 
-	ret = arch_timer_mem_register(base, irq);
+	ret = arch_timer_mem_register(base, irq, arch_timer_mem_use_virtual,
+				      "arch_mem_timer");
 	if (ret) {
 		iounmap(base);
 		return ret;

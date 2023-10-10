@@ -89,6 +89,8 @@ extern u32 arch_timer_get_rate(void);
 extern u64 (*arch_timer_read_counter)(void);
 extern struct arch_timer_kvm_info *arch_timer_get_kvm_info(void);
 extern bool arch_timer_evtstrm_available(void);
+extern int arch_timer_mem_register(void __iomem *base, unsigned int irq,
+				   bool irq_virtual, const char *name);
 
 #else
 
