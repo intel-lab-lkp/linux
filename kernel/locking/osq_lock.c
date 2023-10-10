@@ -3,10 +3,13 @@
 #include <linux/sched.h>
 #include <linux/osq_lock.h>
 
+struct optimistic_spin_node {
+	struct optimistic_spin_node *next, *prev;
+	int locked; /* 1 if lock acquired */
+	int cpu; /* encoded CPU # + 1 value */
+};
+
 /*
- * An MCS like lock especially tailored for optimistic spinning for sleeping
- * lock implementations (mutex, rwsem, etc).
- *
  * Using a single mcs node per CPU is safe because sleeping locks should not be
  * called from interrupt context and we have preemption disabled while
  * spinning.
