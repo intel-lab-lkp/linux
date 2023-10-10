@@ -395,6 +395,19 @@ static int amd_pmf_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	dev->dev = &pdev->dev;
+	err = apmf_check_smart_pc(dev);
+	if (!err) {
+		/*
+		 * In order for Smart PC solution to work it has a hard dependency
+		 * on the amdtee driver to be loaded first even before the PMF driver
+		 * loads. PMF ASL has a _CRS method that advertises the existence
+		 * of Smart PC bit. If this information is present, use this to
+		 * explicitly probe the amdtee driver, so that "tee" plumbing is done
+		 * before the PMF Smart PC init happens.
+		 */
+		if (request_module("amdtee"))
+			pr_err("Failed to load amdtee. PMF Smart PC not enabled!\n");
+	}
 
 	rdev = pci_get_domain_bus_and_slot(0, 0, PCI_DEVFN(0, 0));
 	if (!rdev || !pci_match_id(pmf_pci_ids, rdev)) {
