@@ -597,7 +597,6 @@ fail_unlock:
 	}
 	if (head2_lock_acquired)
 		spin_unlock(&head2->lock);
-	spin_unlock_bh(&head->lock);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(inet_csk_get_port);
