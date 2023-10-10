@@ -1562,7 +1562,7 @@ vm_fault_t do_huge_pmd_numa_page(struct vm_fault *vmf)
 	 * to record page access time.  So use default value.
 	 */
 	if (node_is_toptier(nid))
-		last_cpupid = page_cpupid_last(&folio->page);
+		last_cpupid = folio_cpupid_last(folio);
 	target_nid = numa_migrate_prep(folio, vma, haddr, nid, &flags);
 	if (target_nid == NUMA_NO_NODE) {
 		folio_put(folio);
@@ -2515,7 +2515,7 @@ static void __split_huge_page_tail(struct folio *folio, int tail,
 	if (page_is_idle(head))
 		set_page_idle(page_tail);
 
-	page_cpupid_xchg_last(page_tail, page_cpupid_last(head));
+	page_cpupid_xchg_last(page_tail, folio_cpupid_last(folio));
 
 	/*
 	 * always add to the tail because some iterators expect new
