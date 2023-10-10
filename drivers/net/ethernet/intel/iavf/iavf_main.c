@@ -3016,8 +3016,7 @@ static void iavf_reset_task(struct work_struct *work)
 		return;
 	}
 
-	while (!mutex_trylock(&adapter->client_lock))
-		usleep_range(500, 1000);
+	mutex_lock(&adapter->client_lock);
 	if (CLIENT_ENABLED(adapter)) {
 		adapter->flags &= ~(IAVF_FLAG_CLIENT_NEEDS_OPEN |
 				    IAVF_FLAG_CLIENT_NEEDS_CLOSE |
@@ -5069,8 +5068,7 @@ static int __maybe_unused iavf_suspend(struct device *dev_d)
 
 	netif_device_detach(netdev);
 
-	while (!mutex_trylock(&adapter->crit_lock))
-		usleep_range(500, 1000);
+	mutex_lock(&adapter->crit_lock);
 
 	if (netif_running(netdev)) {
 		rtnl_lock();
