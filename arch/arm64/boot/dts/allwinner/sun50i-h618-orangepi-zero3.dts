@@ -13,10 +13,14 @@
 };
 
 &emac0 {
+	allwinner,rx-delay-ps = <1800>;
+	allwinner,tx-delay-ps = <700>;
 	phy-supply = <&reg_dldo1>;
 };
 
 &ext_rgmii_phy {
+	motorcomm,keep-pll-enabled;
+	motorcomm,auto-sleep-disabled;
 	motorcomm,clk-out-frequency-hz = <125000000>;
 };
 
