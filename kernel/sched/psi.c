@@ -700,12 +700,12 @@ static void psi_rtpoll_work(struct psi_group *group)
 	}
 
 	if (now >= group->rtpoll_next_update) {
-		group->rtpoll_next_update = now + group->rtpoll_min_period;
 		if (changed_states & group->rtpoll_states) {
 			update_triggers(group, now, &update_total, PSI_POLL);
 			memcpy(group->rtpoll_total, group->total[PSI_POLL],
 				   sizeof(group->rtpoll_total));
 		}
+		group->rtpoll_next_update = now + group->rtpoll_min_period;
 	}
 
 	psi_schedule_rtpoll_work(group,
