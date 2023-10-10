@@ -140,6 +140,19 @@ config COMMON_CLK_C3_PLL
 	  Say Y if you want the board to work, because PLLs are the parent of most
 	  peripherals.
 
+config COMMON_CLK_C3_PERIPHERALS
+	tristate "Amlogic C3 peripherals clock controller"
+	default y
+	select COMMON_CLK_MESON_REGMAP
+	select COMMON_CLK_MESON_DUALDIV
+	select COMMON_CLK_MESON_CLKC_UTILS
+	select COMMON_CLK_C3_PLL
+	help
+	  Support for the Peripherals clock controller on Amlogic C302X and
+	  C308L devices, AKA c3. Amlogic C302X and C308L devices include
+	  AW402, AW409 and AW419. Say Y if you want the peripherals clock
+	  to work.
+
 config COMMON_CLK_G12A
 	tristate "G12 and SM1 SoC clock controllers support"
 	depends on ARM64
