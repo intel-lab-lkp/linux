@@ -227,162 +227,67 @@ mlx5e_tx_reporter_build_diagnose_output_sq_common(struct devlink_fmsg *fmsg,
 	bool stopped = netif_xmit_stopped(sq->txq);
 	struct mlx5e_priv *priv = sq->priv;
 	u8 state;
-	int err;
 
-	err = mlx5_core_query_sq_state(priv->mdev, sq->sqn, &state);
-	if (err)
-		return err;
-
-	err = devlink_fmsg_u32_pair_put(fmsg, "tc", tc);
-	if (err)
-		return err;
-
-	err = devlink_fmsg_u32_pair_put(fmsg, "txq ix", sq->txq_ix);
-	if (err)
-		return err;
-
-	err = devlink_fmsg_u32_pair_put(fmsg, "sqn", sq->sqn);
-	if (err)
-		return err;
-
-	err = devlink_fmsg_u8_pair_put(fmsg, "HW state", state);
-	if (err)
-		return err;
-
-	err = devlink_fmsg_bool_pair_put(fmsg, "stopped", stopped);
-	if (err)
-		return err;
-
-	err = devlink_fmsg_u32_pair_put(fmsg, "cc", sq->cc);
-	if (err)
-		return err;
-
-	err = devlink_fmsg_u32_pair_put(fmsg, "pc", sq->pc);
-	if (err)
-		return err;
-
-	err = mlx5e_health_sq_put_sw_state(fmsg, sq);
-	if (err)
-		return err;
-
-	err = mlx5e_health_cq_diag_fmsg(&sq->cq, fmsg);
-	if (err)
-		return err;
-
+	mlx5_core_query_sq_state(priv->mdev, sq->sqn, &state);
+	devlink_fmsg_u32_pair_put(fmsg, "tc", tc);
+	devlink_fmsg_u32_pair_put(fmsg, "txq ix", sq->txq_ix);
+	devlink_fmsg_u32_pair_put(fmsg, "sqn", sq->sqn);
+	devlink_fmsg_u8_pair_put(fmsg, "HW state", state);
+	devlink_fmsg_bool_pair_put(fmsg, "stopped", stopped);
+	devlink_fmsg_u32_pair_put(fmsg, "cc", sq->cc);
+	devlink_fmsg_u32_pair_put(fmsg, "pc", sq->pc);
+	mlx5e_health_sq_put_sw_state(fmsg, sq);
+	mlx5e_health_cq_diag_fmsg(&sq->cq, fmsg);
 	return mlx5e_health_eq_diag_fmsg(sq->cq.mcq.eq, fmsg);
+
 }
 
 static int
 mlx5e_tx_reporter_build_diagnose_output(struct devlink_fmsg *fmsg,
 					struct mlx5e_txqsq *sq, int tc)
 {
-	int err;
-
-	err = devlink_fmsg_obj_nest_start(fmsg);
-	if (err)
-		return err;
-
-	err = devlink_fmsg_u32_pair_put(fmsg, "channel ix", sq->ch_ix);
-	if (err)
-		return err;
-
-	err = mlx5e_tx_reporter_build_diagnose_output_sq_common(fmsg, sq, tc);
-	if (err)
-		return err;
-
-	err = devlink_fmsg_obj_nest_end(fmsg);
-	if (err)
-		return err;
-
-	return 0;
+	devlink_fmsg_obj_nest_start(fmsg);
+	devlink_fmsg_u32_pair_put(fmsg, "channel ix", sq->ch_ix);
+	mlx5e_tx_reporter_build_diagnose_output_sq_common(fmsg, sq, tc);
+	return devlink_fmsg_obj_nest_end(fmsg);
 }
 
 static int
 mlx5e_tx_reporter_build_diagnose_output_ptpsq(struct devlink_fmsg *fmsg,
 					      struct mlx5e_ptpsq *ptpsq, int tc)
 {
-	int err;
-
-	err = devlink_fmsg_obj_nest_start(fmsg);
-	if (err)
-		return err;
-
-	err = devlink_fmsg_string_pair_put(fmsg, "channel", "ptp");
-	if (err)
-		return err;
-
-	err = mlx5e_tx_reporter_build_diagnose_output_sq_common(fmsg, &ptpsq->txqsq, tc);
-	if (err)
-		return err;
-
-	err = mlx5e_health_fmsg_named_obj_nest_start(fmsg, "Port TS");
-	if (err)
-		return err;
-
-	err = mlx5e_health_cq_diag_fmsg(&ptpsq->ts_cq, fmsg);
-	if (err)
-		return err;
-
-	err = mlx5e_health_fmsg_named_obj_nest_end(fmsg);
-	if (err)
-		return err;
-
-	err = devlink_fmsg_obj_nest_end(fmsg);
-	if (err)
-		return err;
-
-	return 0;
+	devlink_fmsg_obj_nest_start(fmsg);
+	devlink_fmsg_string_pair_put(fmsg, "channel", "ptp");
+	mlx5e_tx_reporter_build_diagnose_output_sq_common(fmsg, &ptpsq->txqsq, tc);
+	mlx5e_health_fmsg_named_obj_nest_start(fmsg, "Port TS");
+	mlx5e_health_cq_diag_fmsg(&ptpsq->ts_cq, fmsg);
+	mlx5e_health_fmsg_named_obj_nest_end(fmsg);
+	return devlink_fmsg_obj_nest_end(fmsg);
 }
 
 static int
 mlx5e_tx_reporter_diagnose_generic_txqsq(struct devlink_fmsg *fmsg,
 					 struct mlx5e_txqsq *txqsq)
 {
-	u32 sq_stride, sq_sz;
-	bool real_time;
-	int err;
+	bool real_time =  mlx5_is_real_time_sq(txqsq->mdev);
+	u32 sq_sz = mlx5_wq_cyc_get_size(&txqsq->wq);
+	u32 sq_stride = MLX5_SEND_WQE_BB;
 
-	err = mlx5e_health_fmsg_named_obj_nest_start(fmsg, "SQ");
-	if (err)
-		return err;
-
-	real_time =  mlx5_is_real_time_sq(txqsq->mdev);
-	sq_sz = mlx5_wq_cyc_get_size(&txqsq->wq);
-	sq_stride = MLX5_SEND_WQE_BB;
-
-	err = devlink_fmsg_u64_pair_put(fmsg, "stride size", sq_stride);
-	if (err)
-		return err;
-
-	err = devlink_fmsg_u32_pair_put(fmsg, "size", sq_sz);
-	if (err)
-		return err;
-
-	err = devlink_fmsg_string_pair_put(fmsg, "ts_format", real_time ? "RT" : "FRC");
-	if (err)
-		return err;
-
-	err = mlx5e_health_cq_common_diag_fmsg(&txqsq->cq, fmsg);
-	if (err)
-		return err;
-
+	mlx5e_health_fmsg_named_obj_nest_start(fmsg, "SQ");
+	devlink_fmsg_u64_pair_put(fmsg, "stride size", sq_stride);
+	devlink_fmsg_u32_pair_put(fmsg, "size", sq_sz);
+	devlink_fmsg_string_pair_put(fmsg, "ts_format", real_time ? "RT" : "FRC");
+	mlx5e_health_cq_common_diag_fmsg(&txqsq->cq, fmsg);
 	return mlx5e_health_fmsg_named_obj_nest_end(fmsg);
+
 }
 
 static int
 mlx5e_tx_reporter_diagnose_generic_tx_port_ts(struct devlink_fmsg *fmsg,
 					      struct mlx5e_ptpsq *ptpsq)
 {
-	int err;
-
-	err = mlx5e_health_fmsg_named_obj_nest_start(fmsg, "Port TS");
-	if (err)
-		return err;
-
-	err = mlx5e_health_cq_common_diag_fmsg(&ptpsq->ts_cq, fmsg);
-	if (err)
-		return err;
-
+	mlx5e_health_fmsg_named_obj_nest_start(fmsg, "Port TS");
+	mlx5e_health_cq_common_diag_fmsg(&ptpsq->ts_cq, fmsg);
 	return mlx5e_health_fmsg_named_obj_nest_end(fmsg);
 }
 
@@ -394,37 +299,18 @@ mlx5e_tx_reporter_diagnose_common_config(struct devlink_health_reporter *reporte
 	struct mlx5e_txqsq *generic_sq = priv->txq2sq[0];
 	struct mlx5e_ptp *ptp_ch = priv->channels.ptp;
 	struct mlx5e_ptpsq *generic_ptpsq;
-	int err;
 
-	err = mlx5e_health_fmsg_named_obj_nest_start(fmsg, "Common Config");
-	if (err)
-		return err;
-
-	err = mlx5e_tx_reporter_diagnose_generic_txqsq(fmsg, generic_sq);
-	if (err)
-		return err;
+	mlx5e_health_fmsg_named_obj_nest_start(fmsg, "Common Config");
+	mlx5e_tx_reporter_diagnose_generic_txqsq(fmsg, generic_sq);
 
 	if (!ptp_ch || !test_bit(MLX5E_PTP_STATE_TX, ptp_ch->state))
 		goto out;
 
 	generic_ptpsq = &ptp_ch->ptpsq[0];
-
-	err = mlx5e_health_fmsg_named_obj_nest_start(fmsg, "PTP");
-	if (err)
-		return err;
-
-	err = mlx5e_tx_reporter_diagnose_generic_txqsq(fmsg, &generic_ptpsq->txqsq);
-	if (err)
-		return err;
-
-	err = mlx5e_tx_reporter_diagnose_generic_tx_port_ts(fmsg, generic_ptpsq);
-	if (err)
-		return err;
-
-	err = mlx5e_health_fmsg_named_obj_nest_end(fmsg);
-	if (err)
-		return err;
-
+	mlx5e_health_fmsg_named_obj_nest_start(fmsg, "PTP");
+	mlx5e_tx_reporter_diagnose_generic_txqsq(fmsg, &generic_ptpsq->txqsq);
+	mlx5e_tx_reporter_diagnose_generic_tx_port_ts(fmsg, generic_ptpsq);
+	mlx5e_health_fmsg_named_obj_nest_end(fmsg);
 out:
 	return mlx5e_health_fmsg_named_obj_nest_end(fmsg);
 }
@@ -443,13 +329,8 @@ static int mlx5e_tx_reporter_diagnose(struct devlink_health_reporter *reporter,
 	if (!test_bit(MLX5E_STATE_OPENED, &priv->state))
 		goto unlock;
 
-	err = mlx5e_tx_reporter_diagnose_common_config(reporter, fmsg);
-	if (err)
-		goto unlock;
-
-	err = devlink_fmsg_arr_pair_nest_start(fmsg, "SQs");
-	if (err)
-		goto unlock;
+	mlx5e_tx_reporter_diagnose_common_config(reporter, fmsg);
+	devlink_fmsg_arr_pair_nest_start(fmsg, "SQs");
 
 	for (i = 0; i < priv->channels.num; i++) {
 		struct mlx5e_channel *c = priv->channels.c[i];
@@ -476,9 +357,6 @@ static int mlx5e_tx_reporter_diagnose(struct devlink_health_reporter *reporter,
 
 close_sqs_nest:
 	err = devlink_fmsg_arr_pair_nest_end(fmsg);
-	if (err)
-		goto unlock;
-
 unlock:
 	mutex_unlock(&priv->state_lock);
 	return err;
@@ -489,60 +367,32 @@ static int mlx5e_tx_reporter_dump_sq(struct mlx5e_priv *priv, struct devlink_fms
 {
 	struct mlx5_rsc_key key = {};
 	struct mlx5e_txqsq *sq = ctx;
-	int err;
 
 	if (!test_bit(MLX5E_STATE_OPENED, &priv->state))
 		return 0;
 
-	err = mlx5e_health_fmsg_named_obj_nest_start(fmsg, "SX Slice");
-	if (err)
-		return err;
-
+	mlx5e_health_fmsg_named_obj_nest_start(fmsg, "SX Slice");
 	key.size = PAGE_SIZE;
 	key.rsc = MLX5_SGMT_TYPE_SX_SLICE_ALL;
-	err = mlx5e_health_rsc_fmsg_dump(priv, &key, fmsg);
-	if (err)
-		return err;
+	mlx5e_health_rsc_fmsg_dump(priv, &key, fmsg);
+	mlx5e_health_fmsg_named_obj_nest_end(fmsg);
 
-	err = mlx5e_health_fmsg_named_obj_nest_end(fmsg);
-	if (err)
-		return err;
-
-	err = mlx5e_health_fmsg_named_obj_nest_start(fmsg, "SQ");
-	if (err)
-		return err;
-
-	err = mlx5e_health_fmsg_named_obj_nest_start(fmsg, "QPC");
-	if (err)
-		return err;
-
+	mlx5e_health_fmsg_named_obj_nest_start(fmsg, "SQ");
+	mlx5e_health_fmsg_named_obj_nest_start(fmsg, "QPC");
 	key.rsc = MLX5_SGMT_TYPE_FULL_QPC;
 	key.index1 = sq->sqn;
 	key.num_of_obj1 = 1;
+	mlx5e_health_rsc_fmsg_dump(priv, &key, fmsg);
+	mlx5e_health_fmsg_named_obj_nest_end(fmsg);
 
-	err = mlx5e_health_rsc_fmsg_dump(priv, &key, fmsg);
-	if (err)
-		return err;
-
-	err = mlx5e_health_fmsg_named_obj_nest_end(fmsg);
-	if (err)
-		return err;
-
-	err = mlx5e_health_fmsg_named_obj_nest_start(fmsg, "send_buff");
-	if (err)
-		return err;
-
+	mlx5e_health_fmsg_named_obj_nest_start(fmsg, "send_buff");
 	key.rsc = MLX5_SGMT_TYPE_SND_BUFF;
 	key.num_of_obj2 = MLX5_RSC_DUMP_ALL;
-	err = mlx5e_health_rsc_fmsg_dump(priv, &key, fmsg);
-	if (err)
-		return err;
-
-	err = mlx5e_health_fmsg_named_obj_nest_end(fmsg);
-	if (err)
-		return err;
+	mlx5e_health_rsc_fmsg_dump(priv, &key, fmsg);
+	mlx5e_health_fmsg_named_obj_nest_end(fmsg);
 
 	return mlx5e_health_fmsg_named_obj_nest_end(fmsg);
+
 }
 
 static int mlx5e_tx_reporter_timeout_dump(struct mlx5e_priv *priv, struct devlink_fmsg *fmsg,
@@ -572,23 +422,12 @@ static int mlx5e_tx_reporter_dump_all_sqs(struct mlx5e_priv *priv,
 	if (!test_bit(MLX5E_STATE_OPENED, &priv->state))
 		return 0;
 
-	err = mlx5e_health_fmsg_named_obj_nest_start(fmsg, "SX Slice");
-	if (err)
-		return err;
-
+	mlx5e_health_fmsg_named_obj_nest_start(fmsg, "SX Slice");
 	key.size = PAGE_SIZE;
 	key.rsc = MLX5_SGMT_TYPE_SX_SLICE_ALL;
-	err = mlx5e_health_rsc_fmsg_dump(priv, &key, fmsg);
-	if (err)
-		return err;
-
-	err = mlx5e_health_fmsg_named_obj_nest_end(fmsg);
-	if (err)
-		return err;
-
-	err = devlink_fmsg_arr_pair_nest_start(fmsg, "SQs");
-	if (err)
-		return err;
+	mlx5e_health_rsc_fmsg_dump(priv, &key, fmsg);
+	mlx5e_health_fmsg_named_obj_nest_end(fmsg);
+	devlink_fmsg_arr_pair_nest_start(fmsg, "SQs");
 
 	for (i = 0; i < priv->channels.num; i++) {
 		struct mlx5e_channel *c = priv->channels.c[i];

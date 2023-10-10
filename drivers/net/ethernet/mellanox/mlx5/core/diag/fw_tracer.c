@@ -893,32 +893,12 @@ static int
 mlx5_devlink_fmsg_fill_trace(struct devlink_fmsg *fmsg,
 			     struct mlx5_fw_trace_data *trace_data)
 {
-	int err;
-
-	err = devlink_fmsg_obj_nest_start(fmsg);
-	if (err)
-		return err;
-
-	err = devlink_fmsg_u64_pair_put(fmsg, "timestamp", trace_data->timestamp);
-	if (err)
-		return err;
-
-	err = devlink_fmsg_bool_pair_put(fmsg, "lost", trace_data->lost);
-	if (err)
-		return err;
-
-	err = devlink_fmsg_u8_pair_put(fmsg, "event_id", trace_data->event_id);
-	if (err)
-		return err;
-
-	err = devlink_fmsg_string_pair_put(fmsg, "msg", trace_data->msg);
-	if (err)
-		return err;
-
-	err = devlink_fmsg_obj_nest_end(fmsg);
-	if (err)
-		return err;
-	return 0;
+	devlink_fmsg_obj_nest_start(fmsg);
+	devlink_fmsg_u64_pair_put(fmsg, "timestamp", trace_data->timestamp);
+	devlink_fmsg_bool_pair_put(fmsg, "lost", trace_data->lost);
+	devlink_fmsg_u8_pair_put(fmsg, "event_id", trace_data->event_id);
+	devlink_fmsg_string_pair_put(fmsg, "msg", trace_data->msg);
+	return devlink_fmsg_obj_nest_end(fmsg);
 }
 
 int mlx5_fw_tracer_get_saved_traces_objects(struct mlx5_fw_tracer *tracer,
