@@ -7,6 +7,7 @@
  */
 #include <linux/memblock.h> /* for max_pfn */
 #include <linux/acpi.h>
+#include <linux/dma-direct.h> /* for bus_dma_region */
 #include <linux/dma-map-ops.h>
 #include <linux/export.h>
 #include <linux/gfp.h>
@@ -818,6 +819,47 @@ size_t dma_opt_mapping_size(struct device *dev)
 	return min(dma_max_mapping_size(dev), size);
 }
 EXPORT_SYMBOL_GPL(dma_opt_mapping_size);
+
+/*
+ * To check whether all ram resource ranges are mapped in dma range map
+ * Returns 0 when continuous check is needed
+ * Returns 1 if there is some ram range can't be mapped to dma_range_map
+ */
+static int check_ram_in_range_map(unsigned long start_pfn,
+				  unsigned long nr_pages, void *data)
+{
+	unsigned long end_pfn = start_pfn + nr_pages;
+	struct device *dev = (struct device *)data;
+	struct bus_dma_region *region = NULL;
+	const struct bus_dma_region *m;
+
+	while (start_pfn < end_pfn) {
+		for (m = dev->dma_range_map; PFN_DOWN(m->size); m++) {
+			unsigned long cpu_start_pfn = PFN_DOWN(m->cpu_start);
+
+			if (start_pfn >= cpu_start_pfn
+			    && start_pfn - cpu_start_pfn < PFN_DOWN(m->size)) {
+				region = (struct bus_dma_region *)m;
+				break;
+			}
+		}
+		if (!region)
+			return 1;
+
+		start_pfn = PFN_DOWN(region->cpu_start) + PFN_DOWN(region->size);
+	}
+
+	return 0;
+}
+
+bool all_ram_in_dma_range_map(struct device *dev)
+{
+	if (!dev->dma_range_map)
+		return 1;
+
+	return !walk_system_ram_range(0, ULONG_MAX, dev, check_ram_in_range_map);
+}
+EXPORT_SYMBOL_GPL(all_ram_in_dma_range_map);
 
 bool dma_need_sync(struct device *dev, dma_addr_t dma_addr)
 {
