@@ -10,10 +10,10 @@ obj-$(CONFIG_NET_DSA) += dsa_core.o
 dsa_core-y += \
 	devlink.o \
 	dsa.o \
-	master.o \
+	conduit.o \
 	netlink.o \
 	port.o \
-	slave.o \
+	user.o \
 	switch.o \
 	tag.o \
 	tag_8021q.o \

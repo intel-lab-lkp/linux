@@ -106,8 +106,8 @@ struct dsa_notifier_tag_8021q_vlan_info {
 };
 
 /* DSA_NOTIFIER_MASTER_STATE_CHANGE */
-struct dsa_notifier_master_state_info {
-	const struct net_device *master;
+struct dsa_notifier_conduit_state_info {
+	const struct net_device *conduit;
 	bool operational;
 };
 
