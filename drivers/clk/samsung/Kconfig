@@ -12,6 +12,7 @@ config COMMON_CLK_SAMSUNG
 	select EXYNOS_5410_COMMON_CLK if ARM && SOC_EXYNOS5410
 	select EXYNOS_5420_COMMON_CLK if ARM && SOC_EXYNOS5420
 	select EXYNOS_ARM64_COMMON_CLK if ARM64 && ARCH_EXYNOS
+	select GOOGLE_GS101_COMMON_CLK if ARM64 && ARCH_GOOGLE_TENSOR
 	select TESLA_FSD_COMMON_CLK if ARM64 && ARCH_TESLA_FSD
 
 config S3C64XX_COMMON_CLK
@@ -94,6 +95,14 @@ config EXYNOS_CLKOUT
 	  Exynos SoC variants. Usually the XCLKOUT is used to monitor the
 	  status of the certains clocks from SoC, but it could also be tied to
 	  other devices as an input clock.
+
+config GOOGLE_GS101_COMMON_CLK
+	bool "Google gs101 clock controller support" if COMPILE_TEST
+	depends on COMMON_CLK_SAMSUNG
+	depends on EXYNOS_ARM64_COMMON_CLK
+	help
+	  Support for the clock controller present on the Google gs101 SoC.
+	  Choose Y here only if you build for this SoC.
 
 config TESLA_FSD_COMMON_CLK
 	bool "Tesla FSD clock controller support" if COMPILE_TEST
