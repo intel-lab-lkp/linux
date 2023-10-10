@@ -1396,6 +1396,10 @@ int ksz8_setup(struct dsa_switch *ds)
 	for (i = 0; i < (dev->info->num_vlans / 4); i++)
 		ksz8_r_vlan_entries(dev, i);
 
+	if (ksz_is_ksz88x3(dev) && dev->rmii_clk_internal)
+		ksz_cfg(dev, KSZ8863_REG_FVID_AND_HOST_MODE,
+			KSZ8863_PORT3_RMII_CLK_INTERNAL, true);
+
 	return ksz8_handle_global_errata(ds);
 }
 
