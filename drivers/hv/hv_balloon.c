@@ -1097,6 +1097,10 @@ static void process_info(struct hv_dynmem_device *dm, struct dm_info_msg *msg)
 	}
 }
 
+unsigned long balloon_floor;
+module_param(balloon_floor, ulong, 0644);
+MODULE_PARM_DESC(balloon_floor, "Memory level (in megabytes) that ballooning will not remove");
+
 static unsigned long compute_balloon_floor(void)
 {
 	unsigned long min_pages;
@@ -1113,6 +1117,9 @@ static unsigned long compute_balloon_floor(void)
 	 *    8192       744    (1/16)
 	 *   32768      1512	(1/32)
 	 */
+	if (balloon_floor)
+		return MB2PAGES(balloon_floor);
+
 	if (nr_pages < MB2PAGES(128))
 		min_pages = MB2PAGES(8) + (nr_pages >> 1);
 	else if (nr_pages < MB2PAGES(512))
