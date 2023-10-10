@@ -1007,9 +1007,12 @@ void __vm_userspace_mem_region_add(struct kvm_vm *vm,
 		region->mmap_size += alignment;
 
 	region->fd = -1;
-	if (backing_src_is_shared(src_type))
+	if (backing_src_is_shared(src_type) ||
+		src_type == VM_MEM_SRC_ANONYMOUS_MEMFD ||
+		src_type == VM_MEM_SRC_ANONYMOUS_MEMFD_HUGETLB)
 		region->fd = kvm_memfd_alloc(region->mmap_size,
-					     src_type == VM_MEM_SRC_SHARED_HUGETLB);
+					     src_type == VM_MEM_SRC_SHARED_HUGETLB ||
+					     src_type == VM_MEM_SRC_ANONYMOUS_MEMFD_HUGETLB);
 
 	region->mmap_start = mmap(NULL, region->mmap_size,
 				  PROT_READ | PROT_WRITE,
