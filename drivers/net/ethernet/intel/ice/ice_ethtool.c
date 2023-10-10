@@ -2538,7 +2538,9 @@ ice_set_rss_hash_opt(struct ice_vsi *vsi, struct ethtool_rxnfc *nfc)
 	cfg.hash_flds = hashed_flds;
 	cfg.addl_hdrs = hdrs;
 	cfg.hdr_type = ICE_RSS_ANY_HEADERS;
-	status = ice_add_rss_cfg(&pf->hw, vsi->idx, &cfg);
+	cfg.symm = !!(nfc->data & RXH_SYMMETRIC_XOR);
+
+	status = ice_add_rss_cfg(&pf->hw, vsi, &cfg);
 	if (status) {
 		dev_dbg(dev, "ice_add_rss_cfg failed, vsi num = %d, error = %d\n",
 			vsi->vsi_num, status);
@@ -2559,6 +2561,7 @@ ice_get_rss_hash_opt(struct ice_vsi *vsi, struct ethtool_rxnfc *nfc)
 	struct ice_pf *pf = vsi->back;
 	struct device *dev;
 	u64 hash_flds;
+	bool symm;
 	u32 hdrs;
 
 	dev = ice_pf_to_dev(pf);
@@ -2577,7 +2580,7 @@ ice_get_rss_hash_opt(struct ice_vsi *vsi, struct ethtool_rxnfc *nfc)
 		return;
 	}
 
-	hash_flds = ice_get_rss_cfg(&pf->hw, vsi->idx, hdrs);
+	hash_flds = ice_get_rss_cfg(&pf->hw, vsi->idx, hdrs, &symm);
 	if (hash_flds == ICE_HASH_INVALID) {
 		dev_dbg(dev, "No hash fields found for the given header type, vsi num = %d\n",
 			vsi->vsi_num);
@@ -2601,6 +2604,9 @@ ice_get_rss_hash_opt(struct ice_vsi *vsi, struct ethtool_rxnfc *nfc)
 	    hash_flds & ICE_FLOW_HASH_FLD_UDP_DST_PORT ||
 	    hash_flds & ICE_FLOW_HASH_FLD_SCTP_DST_PORT)
 		nfc->data |= (u64)RXH_L4_B_2_3;
+
+	if (symm)
+		nfc->data |= (u64)RXH_SYMMETRIC_XOR;
 }
 
 /**

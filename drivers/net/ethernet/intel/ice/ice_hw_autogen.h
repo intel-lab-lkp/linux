@@ -389,6 +389,10 @@
 #define GLQF_HMASK_SEL(_i)			(0x00410000 + ((_i) * 4))
 #define GLQF_HMASK_SEL_MAX_INDEX		127
 #define GLQF_HMASK_SEL_MASK_SEL_S		0
+#define GLQF_HSYMM(_i, _j)			(0x0040F000 + ((_i) * 4 + (_j) * 512))
+#define GLQF_HSYMM_REG_SIZE			4
+#define GLQF_HSYMM_REG_PER_PROF			6
+#define GLQF_HSYMM_ENABLE_BIT			BIT(7)
 #define PFQF_FD_ENA				0x0043A000
 #define PFQF_FD_ENA_FD_ENA_M			BIT(0)
 #define PFQF_FD_SIZE				0x00460100

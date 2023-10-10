@@ -7683,6 +7683,50 @@ int ice_get_rss_key(struct ice_vsi *vsi, u8 *seed)
 }
 
 /**
+ * ice_set_rss_hfunc - Set RSS HASH function
+ * @vsi: Pointer to VSI structure
+ * @hfunc: hash function (ICE_AQ_VSI_Q_OPT_RSS_*)
+ *
+ * Returns 0 on success, negative on failure
+ */
+int ice_set_rss_hfunc(struct ice_vsi *vsi, u8 hfunc)
+{
+	struct ice_vsi_ctx *ctx;
+	int err;
+
+	if (hfunc == vsi->rss_hfunc)
+		return 0;
+
+	if (hfunc != ICE_AQ_VSI_Q_OPT_RSS_HASH_TPLZ &&
+	    hfunc != ICE_AQ_VSI_Q_OPT_RSS_HASH_SYM_TPLZ)
+		return -EOPNOTSUPP;
+
+	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
+	if (!ctx)
+		return -ENOMEM;
+
+	ctx->info.valid_sections = cpu_to_le16(ICE_AQ_VSI_PROP_Q_OPT_VALID);
+	ctx->info.q_opt_rss = vsi->info.q_opt_rss;
+	ctx->info.q_opt_rss &= ~ICE_AQ_VSI_Q_OPT_RSS_HASH_M;
+	ctx->info.q_opt_rss |=
+		FIELD_PREP(ICE_AQ_VSI_Q_OPT_RSS_HASH_M, hfunc);
+	ctx->info.q_opt_tc = vsi->info.q_opt_tc;
+	ctx->info.q_opt_flags = vsi->info.q_opt_rss;
+
+	err = ice_update_vsi(&vsi->back->hw, vsi->idx, ctx, NULL);
+	if (err) {
+		dev_err(ice_pf_to_dev(vsi->back), "Failed to configure RSS hash for VSI %d, error %d\n",
+			vsi->vsi_num, err);
+	} else {
+		vsi->info.q_opt_rss = ctx->info.q_opt_rss;
+		vsi->rss_hfunc = hfunc;
+	}
+
+	kfree(ctx);
+	return err;
+}
+
+/**
  * ice_bridge_getlink - Get the hardware bridge mode
  * @skb: skb buff
  * @pid: process ID
