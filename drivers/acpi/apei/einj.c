@@ -21,9 +21,11 @@
 #include <linux/nmi.h>
 #include <linux/delay.h>
 #include <linux/mm.h>
+#include <linux/pci.h>
 #include <asm/unaligned.h>
 
 #include "apei-internal.h"
+#include "../../cxl/cxl.h"
 
 #undef pr_fmt
 #define pr_fmt(fmt) "EINJ: " fmt
@@ -627,6 +629,22 @@ static int available_error_type_show(struct seq_file *m, void *v)
 
 DEFINE_SHOW_ATTRIBUTE(available_error_type);
 
+static int cxl_einj_available_error_type(struct seq_file *m, void *v)
+{
+	int rc;
+	u32 available_error_type = 0;
+
+	rc = einj_get_available_error_type(&available_error_type);
+	if (rc)
+		return rc;
+
+	for (int pos = 0; pos < ARRAY_SIZE(einj_cxl_error_type_string); pos++)
+		if (available_error_type & BIT(pos + 12))
+			seq_puts(m, einj_cxl_error_type_string[pos]);
+
+	return 0;
+}
+
 static int validate_error_type(u64 type)
 {
 	u32 tval, vendor, available_error_type = 0;
@@ -657,6 +675,69 @@ static int validate_error_type(u64 type)
 	return 0;
 }
 
+static int cxl_dport_get_sbdf(struct cxl_dport *dport, u64 *sbdf)
+{
+	struct pci_dev *pdev;
+	struct pci_bus *pbus;
+	struct pci_host_bridge *bridge;
+	u64 seg = 0, bus, devfn;
+
+	if (!dev_is_pci(dport->dport_dev))
+		return -EINVAL;
+
+	pdev = to_pci_dev(dport->dport_dev);
+	pbus = pdev->bus;
+	bridge = pci_find_host_bridge(pbus);
+
+	if (!bridge)
+		return -ENODEV;
+
+	if (bridge->domain_nr != PCI_DOMAIN_NR_NOT_SET)
+		seg = bridge->domain_nr << 24;
+
+	bus = pbus->number << 16;
+	devfn = (PCI_DEVFN(PCI_SLOT(pdev->devfn),PCI_FUNC(pdev->devfn)) << 8);
+	*sbdf = seg | bus | devfn;
+
+	return 0;
+}
+
+static int cxl_einj_inject_error(struct cxl_dport *dport, u64 type)
+{
+	u64 param1 = 0, param2 = 0, param4 = 0;
+	u32 flags;
+	int rc;
+
+	/* Only CXL error types can be specified */
+	if (type & ~CXL_ERROR_MASK || (type & ACPI5_VENDOR_BIT))
+		return -EINVAL;
+
+	rc = validate_error_type(type);
+	if (rc)
+		return rc;
+
+	/*
+	 * If dport is in restricted mode, inject a CXL 1.1 error,
+	 * otherwise inject a CXL 2.0 error
+	 */
+	if (dport->rch) {
+		if (dport->rcrb.base == CXL_RESOURCE_NONE)
+			return -EINVAL;
+
+		param1 = (u64) dport->rcrb.base;
+		param2 = 0xfffffffffffff000;
+		flags = 0x2;
+	} else {
+		rc = cxl_dport_get_sbdf(dport, &param4);
+		if (rc)
+			return rc;
+
+		flags = 0x4;
+	}
+
+	return einj_error_inject(type, flags, param1, param2, 0, param4);
+}
+
 static int error_type_get(void *data, u64 *val)
 {
 	*val = error_type;
@@ -668,6 +749,7 @@ static int error_type_set(void *data, u64 val)
 {
 	int rc;
 
+	/* CXL error types have to be injected from cxl debugfs */
 	if (val & CXL_ERROR_MASK && !(val & ACPI5_VENDOR_BIT))
 		return -EINVAL;
 
@@ -714,6 +796,7 @@ static int __init einj_init(void)
 {
 	int rc;
 	acpi_status status;
+	struct cxl_einj_ops cxl_ops;
 	struct apei_exec_context ctx;
 
 	if (acpi_disabled) {
@@ -793,6 +876,15 @@ static int __init einj_init(void)
 				   einj_debug_dir, &vendor_flags);
 	}
 
+	if (IS_REACHABLE(CONFIG_CXL_ACPI) || IS_REACHABLE(CONFIG_CXL_PORT)) {
+		cxl_ops = (struct cxl_einj_ops) {
+			.einj_type = cxl_einj_available_error_type,
+			.einj_inject = cxl_einj_inject_error,
+		};
+
+		cxl_einj_set_ops_cbs(&cxl_ops);
+	}
+
 	pr_info("Error INJection is initialized.\n");
 
 	return 0;
@@ -810,7 +902,17 @@ err_put_table:
 
 static void __exit einj_exit(void)
 {
+	struct cxl_einj_ops cxl_ops;
 	struct apei_exec_context ctx;
+
+	if (IS_REACHABLE(CONFIG_CXL_ACPI) || IS_REACHABLE(CONFIG_CXL_PORT)) {
+		cxl_ops = (struct cxl_einj_ops) {
+			.einj_type = NULL,
+			.einj_inject = NULL,
+		};
+
+		cxl_einj_set_ops_cbs(&cxl_ops);
+	}
 
 	if (einj_param) {
 		acpi_size size = (acpi5) ?
@@ -832,4 +934,5 @@ module_exit(einj_exit);
 
 MODULE_AUTHOR("Huang Ying");
 MODULE_DESCRIPTION("APEI Error INJection support");
+MODULE_IMPORT_NS(CXL);
 MODULE_LICENSE("GPL");
