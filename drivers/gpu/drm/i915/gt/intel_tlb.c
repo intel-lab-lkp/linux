@@ -157,6 +157,58 @@ unlock:
 	}
 }
 
+static u64 tlb_page_selective_size(u64 *addr, u64 length)
+{
+	const u64 end = *addr + length;
+	u64 start;
+
+	/*
+	 * Minimum invalidation size for a 2MB page that the hardware expects is
+	 * 16MB
+	 */
+	length = max_t(u64, roundup_pow_of_two(length), SZ_4K);
+	if (length >= SZ_2M)
+		length = max_t(u64, SZ_16M, length);
+
+	/*
+	 * We need to invalidate a higher granularity if start address is not
+	 * aligned to length. When start is not aligned with length we need to
+	 * find the length large enough to create an address mask covering the
+	 * required range.
+	 */
+	start = round_down(*addr, length);
+	while (start + length < end) {
+		length <<= 1;
+		start = round_down(*addr, length);
+	}
+
+	*addr = start;
+	return length;
+}
+
+bool intel_gt_invalidate_tlb_range(struct intel_gt *gt,
+				   u64 start, u64 length)
+{
+	struct intel_guc *guc = &gt->uc.guc;
+	intel_wakeref_t wakeref;
+	u64 size, vm_total;
+	bool ret = true;
+
+	if (intel_gt_is_wedged(gt))
+		return true;
+
+	vm_total = BIT_ULL(RUNTIME_INFO(gt->i915)->ppgtt_size);
+	/* Align start and length */
+	size =  min_t(u64, vm_total, tlb_page_selective_size(&start, length));
+
+	with_intel_gt_pm_if_awake(gt, wakeref)
+		ret = intel_guc_invalidate_tlb_page_selective(guc,
+							      INTEL_GUC_TLB_INVAL_MODE_HEAVY,
+							      start, size) == 0;
+
+	return ret;
+}
+
 void intel_gt_init_tlb(struct intel_gt *gt)
 {
 	mutex_init(&gt->tlb.invalidate_lock);

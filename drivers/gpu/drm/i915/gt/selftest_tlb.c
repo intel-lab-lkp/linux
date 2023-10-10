@@ -382,10 +382,45 @@ static int invalidate_full(void *arg)
 	return err;
 }
 
+static void tlbinv_range(struct i915_address_space *vm, u64 addr, u64 length)
+{
+	if (!intel_gt_invalidate_tlb_range(vm->gt, addr, length))
+		pr_err("range invalidate failed\n");
+}
+
+static bool has_invalidate_range(struct intel_gt *gt)
+{
+	intel_wakeref_t wf;
+	bool result = false;
+
+	with_intel_gt_pm(gt, wf)
+		result = intel_gt_invalidate_tlb_range(gt, 0, gt->vm->total);
+
+	return result;
+}
+
+static int invalidate_range(void *arg)
+{
+	struct intel_gt *gt = arg;
+	int err;
+
+	if (!has_invalidate_range(gt))
+		return 0;
+
+	err = mem_tlbinv(gt, create_smem, tlbinv_range);
+	if (err == 0)
+		err = mem_tlbinv(gt, create_lmem, tlbinv_range);
+	if (err == -ENODEV || err == -ENXIO)
+		err = 0;
+
+	return err;
+}
+
 int intel_tlb_live_selftests(struct drm_i915_private *i915)
 {
 	static const struct i915_subtest tests[] = {
 		SUBTEST(invalidate_full),
+		SUBTEST(invalidate_range),
 	};
 	struct intel_gt *gt;
 	unsigned int i;
@@ -402,4 +437,57 @@ int intel_tlb_live_selftests(struct drm_i915_private *i915)
 	}
 
 	return 0;
+}
+
+static int tlb_page_size(void *arg)
+{
+	int start, size, offset;
+
+	for (start = 0; start < 57; start++) {
+		for (size = 0; size <= 57 - start; size++) {
+			for (offset = 0; offset <= size; offset++) {
+				u64 len = BIT(size);
+				u64 addr = BIT(start) + len - BIT(offset);
+				u64 expected_start = addr;
+				u64 expected_end = addr + len - 1;
+				int err = 0;
+
+				if (addr + len < addr)
+					continue;
+
+				len = tlb_page_selective_size(&addr, len);
+				if (addr > expected_start) {
+					pr_err("(start:%d, size:%d, offset:%d, range:[%llx, %llx]) invalidate range:[%llx + %llx] after start:%llx\n",
+					       start, size, offset,
+					       expected_start, expected_end,
+					       addr, len,
+					       expected_start);
+					err = -EINVAL;
+				}
+
+				if (addr + len < expected_end) {
+					pr_err("(start:%d, size:%d, offset:%d, range:[%llx, %llx]) invalidate range:[%llx + %llx] before end:%llx\n",
+					       start, size, offset,
+					       expected_start, expected_end,
+					       addr, len,
+					       expected_end);
+					err = -EINVAL;
+				}
+
+				if (err)
+					return err;
+			}
+		}
+	}
+
+	return 0;
+}
+
+int intel_tlb_mock_selftests(void)
+{
+	static const struct i915_subtest tests[] = {
+		SUBTEST(tlb_page_size),
+	};
+
+	return i915_subtests(tests, NULL);
 }
