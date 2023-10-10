@@ -122,18 +122,18 @@ u64 stable_page_flags(struct page *page)
 	k = page->flags;
 	u = 0;
 
-	/*
-	 * pseudo flags for the well known (anonymous) memory mapped pages
-	 *
-	 * Note that page->_mapcount is overloaded in SLAB, so the
-	 * simple test in page_mapped() is not enough.
-	 */
-	if (!PageSlab(page) && page_mapped(page))
-		u |= 1 << KPF_MMAP;
-	if (PageAnon(page))
-		u |= 1 << KPF_ANON;
-	if (PageKsm(page))
-		u |= 1 << KPF_KSM;
+#ifdef CONFIG_MEMORY_FAILURE
+	u |= kpf_copy_bit(k, KPF_HWPOISON, PG_hwpoison);
+#endif
+
+	if (PageSlab(page)) {
+		u |= 1 << KPF_SLAB;
+		if (PageHead(page))
+			u |= 1 << KPF_COMPOUND_HEAD;
+		if (PageTail(page))
+			u |= 1 << KPF_COMPOUND_TAIL;
+		return u;
+	}
 
 	if (PageHuge(page)) {
 		u |= 1 << KPF_HUGE;
@@ -173,9 +173,18 @@ u64 stable_page_flags(struct page *page)
 	} else if (is_zero_pfn(page_to_pfn(page)))
 		u |= 1 << KPF_ZERO_PAGE;
 
+	/*
+	 * pseudo flags for the well known (anonymous) memory mapped pages
+	 */
+	if (page_mapped(page))
+		u |= 1 << KPF_MMAP;
+	if (PageAnon(page))
+		u |= 1 << KPF_ANON;
+	if (PageKsm(page))
+		u |= 1 << KPF_KSM;
 
 	/*
-	 * Caveats on high order pages: PG_buddy and PG_slab will only be set
+	 * Caveats on high order pages: PG_buddy will only be set
 	 * on the head page.
 	 */
 	if (PageBuddy(page))
@@ -192,11 +201,6 @@ u64 stable_page_flags(struct page *page)
 		u |= 1 << KPF_IDLE;
 
 	u |= kpf_copy_bit(k, KPF_LOCKED,	PG_locked);
-
-	u |= kpf_copy_bit(k, KPF_SLAB,		PG_slab);
-	if (PageTail(page) && PageSlab(page))
-		u |= 1 << KPF_SLAB;
-
 	u |= kpf_copy_bit(k, KPF_ERROR,		PG_error);
 	u |= kpf_copy_bit(k, KPF_DIRTY,		PG_dirty);
 	u |= kpf_copy_bit(k, KPF_UPTODATE,	PG_uptodate);
@@ -213,10 +217,6 @@ u64 stable_page_flags(struct page *page)
 
 	u |= kpf_copy_bit(k, KPF_UNEVICTABLE,	PG_unevictable);
 	u |= kpf_copy_bit(k, KPF_MLOCKED,	PG_mlocked);
-
-#ifdef CONFIG_MEMORY_FAILURE
-	u |= kpf_copy_bit(k, KPF_HWPOISON,	PG_hwpoison);
-#endif
 
 #ifdef CONFIG_ARCH_USES_PG_UNCACHED
 	u |= kpf_copy_bit(k, KPF_UNCACHED,	PG_uncached);
