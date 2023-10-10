@@ -508,7 +508,7 @@ static uint64_t well_known_flags(uint64_t flags)
 
 	/* hide non-hugeTLB compound pages */
 	if ((flags & BITS_COMPOUND) && !(flags & BIT(HUGE)))
-		flags &= ~BITS_COMPOUND;
+		flags &= ~(BITS_COMPOUND|BIT(THP)|BIT(FOLIO));
 
 	return flags;
 }
