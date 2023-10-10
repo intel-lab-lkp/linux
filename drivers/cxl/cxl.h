@@ -581,6 +581,7 @@ struct cxl_dax_region {
  * @depth: How deep this port is relative to the root. depth 0 is the root.
  * @cdat: Cached CDAT data
  * @cdat_available: Should a CDAT attribute be available in sysfs
+ * @debug_dir: dentry for port in cxl debugfs (optional)
  */
 struct cxl_port {
 	struct device dev;
@@ -604,6 +605,7 @@ struct cxl_port {
 		size_t length;
 	} cdat;
 	bool cdat_available;
+	struct dentry *debug_dir;
 };
 
 static inline struct cxl_dport *
@@ -794,6 +796,14 @@ bool is_cxl_nvdimm(struct device *dev);
 bool is_cxl_nvdimm_bridge(struct device *dev);
 int devm_cxl_add_nvdimm(struct cxl_memdev *cxlmd);
 struct cxl_nvdimm_bridge *cxl_find_nvdimm_bridge(struct cxl_memdev *cxlmd);
+
+struct cxl_einj_ops {
+	int (*einj_type)(struct seq_file *f, void *data);
+	int (*einj_inject)(struct cxl_dport *dport, u64 type);
+};
+
+void cxl_einj_set_ops_cbs(struct cxl_einj_ops *ops);
+
 
 #ifdef CONFIG_CXL_REGION
 bool is_cxl_pmem_region(struct device *dev);

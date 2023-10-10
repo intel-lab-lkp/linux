@@ -33,3 +33,30 @@ Description:
 		device cannot clear poison from the address, -ENXIO is returned.
 		The clear_poison attribute is only visible for devices
 		supporting the capability.
+
+What:		/sys/kernel/debug/cxl/portX/dportY/einj_types
+Date:		October, 2023
+KernelVersion:	v6.7
+Contact:	linux-cxl@vger.kernel.org
+Description:
+		(RO) Prints the CXL protocol error types made available by
+		the platform in the format "0x<error number>	<error type>".
+		The <error number> can be written to einj_inject to inject
+		<error type> into dportY. This file is only visible if
+		CONFIG_ACPI_APEI_EINJ is enabled, and the EINJ module must
+		be able to reach one (or both) of the CXL_ACPI or CXL_PORT
+		modules to be functional.
+
+What:		/sys/kernel/debug/cxl/portX/dportY/einj_inject
+Date:		October, 2023
+KernelVersion:	v6.7
+Contact:	linux-cxl@vger.kernel.org
+Description:
+		(WO) Writing an integer to this file injects the corresponding
+		CXL protocol error into dportY (integer to type mapping is
+		available by reading from einj_types). If the dport was
+		enumerated in RCH mode, a CXL 1.1 error is injected, otherwise
+		a CXL 2.0 error is injected. This file is only visible if
+		CONFIG_ACPI_APEI_EINJ is enabled, and the EINJ module must
+		be able to reach one (or both) of the CXL_ACPI or CXL_PORT
+		modules to be functional.

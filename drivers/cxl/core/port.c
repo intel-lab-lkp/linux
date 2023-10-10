@@ -725,6 +725,72 @@ static int cxl_dport_setup_regs(struct cxl_dport *dport,
 				   component_reg_phys);
 }
 
+static struct cxl_einj_ops einj_ops;
+void cxl_einj_set_ops_cbs(struct cxl_einj_ops *ops)
+{
+	if (!IS_REACHABLE(CONFIG_ACPI_APEI_EINJ) || !ops)
+		return;
+
+	einj_ops = *ops;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_einj_set_ops_cbs, CXL);
+
+static int cxl_einj_type_show(struct seq_file *f, void *data)
+{
+	if (!einj_ops.einj_type)
+		return -ENODEV;
+
+	return einj_ops.einj_type(f, data);
+}
+
+static int cxl_einj_inject(void *data, u64 type)
+{
+	struct cxl_dport *dport = data;
+
+	if (!einj_ops.einj_inject)
+		return -ENODEV;
+
+	return einj_ops.einj_inject(dport, type);
+}
+DEFINE_DEBUGFS_ATTRIBUTE(cxl_einj_inject_fops, NULL, cxl_einj_inject, "%llx\n");
+
+static int cxl_debugfs_create_dport_dir(struct dentry *port_dir,
+						   struct cxl_dport *dport)
+{
+	struct dentry *dir;
+	char dir_name[32];
+
+	snprintf(dir_name, 31, "dport%d", dport->port_id);
+	dir = debugfs_create_dir(dir_name, port_dir);
+	if (IS_ERR(dir))
+		return PTR_ERR(dir);
+
+	debugfs_create_devm_seqfile(dport->dport_dev, "einj_types", dir,
+				    cxl_einj_type_show);
+
+	debugfs_create_file("einj_inject", 0x200, dir, dport,
+			    &cxl_einj_inject_fops);
+	return 0;
+}
+
+static struct dentry *cxl_debugfs_create_port_dir(struct cxl_port *port)
+{
+	const char *dir_name = dev_name(&port->dev);
+	struct dentry *dir;
+
+	if (!IS_ENABLED(CONFIG_ACPI_APEI_EINJ))
+		return ERR_PTR(-ENODEV);
+
+	dir = cxl_debugfs_create_dir(dir_name);
+	if (IS_ERR(dir)) {
+		dev_dbg(&port->dev, "Failed to create port debugfs dir: %ld\n",
+			PTR_ERR(dir));
+		return dir;
+	}
+
+	return dir;
+}
+
 static struct cxl_port *__devm_cxl_add_port(struct device *host,
 					    struct device *uport_dev,
 					    resource_size_t component_reg_phys,
@@ -788,6 +854,7 @@ struct cxl_port *devm_cxl_add_port(struct device *host,
 				   struct cxl_dport *parent_dport)
 {
 	struct cxl_port *port, *parent_port;
+	struct dentry *dir;
 
 	port = __devm_cxl_add_port(host, uport_dev, component_reg_phys,
 				   parent_dport);
@@ -805,6 +872,10 @@ struct cxl_port *devm_cxl_add_port(struct device *host,
 			parent_port ? " to " : "",
 			parent_port ? dev_name(&parent_port->dev) : "",
 			parent_port ? "" : " (root port)");
+
+		dir = cxl_debugfs_create_port_dir(port);
+		if (!IS_ERR(dir))
+			port->debug_dir = dir;
 	}
 
 	return port;
@@ -1045,6 +1116,7 @@ struct cxl_dport *devm_cxl_add_dport(struct cxl_port *port,
 				     resource_size_t component_reg_phys)
 {
 	struct cxl_dport *dport;
+	int rc;
 
 	dport = __devm_cxl_add_dport(port, dport_dev, port_id,
 				     component_reg_phys, CXL_RESOURCE_NONE);
@@ -1054,6 +1126,11 @@ struct cxl_dport *devm_cxl_add_dport(struct cxl_port *port,
 	} else {
 		dev_dbg(dport_dev, "dport added to %s\n",
 			dev_name(&port->dev));
+
+		rc = cxl_debugfs_create_dport_dir(port->debug_dir, dport);
+		if (rc)
+			dev_dbg(dport_dev,
+				"Failed to create dport debugfs dir: %d\n", rc);
 	}
 
 	return dport;
@@ -1074,6 +1151,7 @@ struct cxl_dport *devm_cxl_add_rch_dport(struct cxl_port *port,
 					 resource_size_t rcrb)
 {
 	struct cxl_dport *dport;
+	int rc;
 
 	if (rcrb == CXL_RESOURCE_NONE) {
 		dev_dbg(&port->dev, "failed to add RCH dport, missing RCRB\n");
@@ -1088,6 +1166,12 @@ struct cxl_dport *devm_cxl_add_rch_dport(struct cxl_port *port,
 	} else {
 		dev_dbg(dport_dev, "RCH dport added to %s\n",
 			dev_name(&port->dev));
+
+		rc = cxl_debugfs_create_dport_dir(port->debug_dir, dport);
+		if (rc)
+			dev_dbg(dport_dev,
+				"Failed to create rch dport debugfs dir: %d\n",
+				rc);
 	}
 
 	return dport;
