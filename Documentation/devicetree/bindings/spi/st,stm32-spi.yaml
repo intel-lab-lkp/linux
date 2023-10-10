@@ -59,6 +59,10 @@ properties:
       - const: rx
       - const: tx
 
+  access-controllers:
+    minItems: 1
+    maxItems: 2
+
 patternProperties:
   "^[a-zA-Z][a-zA-Z0-9,+\\-._]{0,63}@[0-9a-f]+$":
     type: object
