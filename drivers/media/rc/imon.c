@@ -1770,6 +1770,8 @@ static void usb_rx_callback_intf0(struct urb *urb)
 	default:
 		dev_warn(ictx->dev, "imon %s: status(%d): ignored\n",
 			 __func__, urb->status);
+		if (urb->status == -EPROTO)
+			return;
 		break;
 	}
 
