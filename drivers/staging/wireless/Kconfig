@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: GPL-2.0
+if WIRELESS
+
+source "drivers/staging/wireless/atmel/Kconfig"
+source "drivers/staging/wireless/cisco/Kconfig"
+source "drivers/staging/wireless/hostap/Kconfig"
+source "drivers/staging/wireless/legacy/Kconfig"
+source "drivers/staging/wireless/orinoco/Kconfig"
+source "drivers/staging/wireless/zydas/Kconfig"
+
+endif

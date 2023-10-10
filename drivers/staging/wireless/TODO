@@ -1,0 +1,11 @@
+TODO (Oct. 2023)
+
+These 802.11(b) wireless drivers are likely all unused and can be removed
+in the near future, unless we find a reason to keep them.
+
+All except the rndis_wlan driver still rely on the deprecated wireless
+extension ioctl interface, which in modern drivers is only provided
+as an emulation layer on top of the cfg80211 interface.
+
+Ideally, any drivers we want to keep around should be converted to no
+longer require iw_handler_def.

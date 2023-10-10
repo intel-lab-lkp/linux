@@ -2374,7 +2374,7 @@ F:	drivers/memory/atmel*
 F:	drivers/watchdog/sama5d4_wdt.c
 F:	include/soc/at91/
 X:	drivers/input/touchscreen/atmel_mxt_ts.c
-X:	drivers/net/wireless/atmel/
+X:	drivers/staging/wireless/atmel/
 N:	at91
 N:	atmel
 
@@ -3271,7 +3271,7 @@ L:	linux-wireless@vger.kernel.org
 S:	Orphan
 W:	http://www.thekelleys.org.uk/atmel
 W:	http://atmelwlandriver.sourceforge.net/
-F:	drivers/net/wireless/atmel/atmel*
+F:	drivers/staging/wireless/atmel/atmel*
 
 ATOMIC INFRASTRUCTURE
 M:	Will Deacon <will@kernel.org>
@@ -9537,7 +9537,7 @@ F:	drivers/iio/pressure/mprls0025pa.c
 HOST AP DRIVER
 L:	linux-wireless@vger.kernel.org
 S:	Obsolete
-F:	drivers/net/wireless/intersil/hostap/
+F:	drivers/staging/wireless/hostap/
 
 HP BIOSCFG DRIVER
 M:	Jorge Lopez <jorge.lopez2@hp.com>
@@ -16078,7 +16078,7 @@ L:	linux-wireless@vger.kernel.org
 S:	Orphan
 W:	https://wireless.wiki.kernel.org/en/users/Drivers/orinoco
 W:	http://www.nongnu.org/orinoco/
-F:	drivers/net/wireless/intersil/orinoco/
+F:	drivers/staging/wireless/orinoco/
 
 OV2659 OMNIVISION SENSOR DRIVER
 M:	"Lad, Prabhakar" <prabhakar.csengg@gmail.com>
@@ -17977,7 +17977,7 @@ F:	include/ras/ras_event.h
 RAYLINK/WEBGEAR 802.11 WIRELESS LAN DRIVER
 L:	linux-wireless@vger.kernel.org
 S:	Orphan
-F:	drivers/net/wireless/legacy/ray*
+F:	drivers/staging/wireless/legacy/ray*
 
 RC-CORE / LIRC FRAMEWORK
 M:	Sean Young <sean@mess.org>
@@ -22437,7 +22437,7 @@ F:	include/uapi/linux/usb/g_uvc.h
 USB WIRELESS RNDIS DRIVER (rndis_wlan)
 L:	linux-wireless@vger.kernel.org
 S:	Orphan
-F:	drivers/net/wireless/legacy/rndis_wlan.c
+F:	drivers/staging/wireless/legacy/rndis_wlan.c
 
 USB XHCI DRIVER
 M:	Mathias Nyman <mathias.nyman@intel.com>
@@ -22450,7 +22450,7 @@ USB ZD1201 DRIVER
 L:	linux-wireless@vger.kernel.org
 S:	Orphan
 W:	http://linux-lc100020.sourceforge.net
-F:	drivers/net/wireless/zydas/zd1201.*
+F:	drivers/staging/wireless/zydas/zd1201.*
 
 USER DATAGRAM PROTOCOL (UDP)
 M:	Willem de Bruijn <willemdebruijn.kernel@gmail.com>
@@ -23262,7 +23262,7 @@ F:	drivers/input/misc/wistron_btns.c
 WL3501 WIRELESS PCMCIA CARD DRIVER
 L:	linux-wireless@vger.kernel.org
 S:	Orphan
-F:	drivers/net/wireless/legacy/wl3501*
+F:	drivers/staging/wireless/legacy/wl3501*
 
 WMI BINARY MOF DRIVER
 M:	Armin Wolf <W_Armin@gmx.de>

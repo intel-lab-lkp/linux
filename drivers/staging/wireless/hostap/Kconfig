@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-only
 config HOSTAP
 	tristate "IEEE 802.11 for Host AP (Prism2/2.5/3 and WEP/TKIP/CCMP)"
+	depends on (PCMCIA || PCI) && HAS_IOPORT
 	select WIRELESS_EXT
 	select WEXT_SPY
 	select WEXT_PRIV

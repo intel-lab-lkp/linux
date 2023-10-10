@@ -1,2 +1,3 @@
 # SPDX-License-Identifier: GPL-2.0-only
-obj-$(CONFIG_P54_COMMON)	+= p54/
+
+obj-$(CONFIG_USB_ZD1201)	+= zd1201.o
