@@ -935,11 +935,11 @@ static void cxl_fw_cancel(struct fw_upload *fwl)
 }
 
 static const struct fw_upload_ops cxl_memdev_fw_ops = {
-        .prepare = cxl_fw_prepare,
-        .write = cxl_fw_write,
-        .poll_complete = cxl_fw_poll_complete,
-        .cancel = cxl_fw_cancel,
-        .cleanup = cxl_fw_cleanup,
+	.prepare = cxl_fw_prepare,
+	.write = cxl_fw_write,
+	.poll_complete = cxl_fw_poll_complete,
+	.cancel = cxl_fw_cancel,
+	.cleanup = cxl_fw_cleanup,
 };
 
 static void devm_cxl_remove_fw_upload(void *fwl)
