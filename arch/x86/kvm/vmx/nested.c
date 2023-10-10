@@ -226,6 +226,7 @@ static void vmx_disable_shadow_vmcs(struct vcpu_vmx *vmx)
 
 static inline void nested_release_evmcs(struct kvm_vcpu *vcpu)
 {
+#ifdef CONFIG_KVM_HYPERV
 	struct kvm_vcpu_hv *hv_vcpu = to_hv_vcpu(vcpu);
 	struct vcpu_vmx *vmx = to_vmx(vcpu);
 
@@ -241,6 +242,7 @@ static inline void nested_release_evmcs(struct kvm_vcpu *vcpu)
 		hv_vcpu->nested.vm_id = 0;
 		hv_vcpu->nested.vp_id = 0;
 	}
+#endif
 }
 
 static void vmx_sync_vmcs_host_state(struct vcpu_vmx *vmx,
@@ -1139,6 +1141,7 @@ static void nested_vmx_transition_tlb_flush(struct kvm_vcpu *vcpu,
 {
 	struct vcpu_vmx *vmx = to_vmx(vcpu);
 
+#ifdef CONFIG_KVM_HYPERV
 	/*
 	 * KVM_REQ_HV_TLB_FLUSH flushes entries from either L1's VP_ID or
 	 * L2's VP_ID upon request from the guest. Make sure we check for
@@ -1147,6 +1150,7 @@ static void nested_vmx_transition_tlb_flush(struct kvm_vcpu *vcpu,
 	 */
 	if (to_hv_vcpu(vcpu) && enable_ept)
 		kvm_make_request(KVM_REQ_HV_TLB_FLUSH, vcpu);
+#endif
 
 	/*
 	 * If vmcs12 doesn't use VPID, L1 expects linear and combined mappings
@@ -1576,6 +1580,7 @@ static void copy_vmcs12_to_shadow(struct vcpu_vmx *vmx)
 	vmcs_load(vmx->loaded_vmcs->vmcs);
 }
 
+#ifdef CONFIG_KVM_HYPERV
 static void copy_enlightened_to_vmcs12(struct vcpu_vmx *vmx, u32 hv_clean_fields)
 {
 	struct vmcs12 *vmcs12 = vmx->nested.cached_vmcs12;
@@ -2083,6 +2088,10 @@ static enum nested_evmptrld_status nested_vmx_handle_enlightened_vmptrld(
 
 	return EVMPTRLD_SUCCEEDED;
 }
+#else /* CONFIG_KVM_HYPERV */
+static inline void copy_enlightened_to_vmcs12(struct vcpu_vmx *vmx, u32 hv_clean_fields) {}
+static inline void copy_vmcs12_to_enlightened(struct vcpu_vmx *vmx) {}
+#endif /* CONFIG_KVM_HYPERV */
 
 void nested_sync_vmcs12_to_shadow(struct kvm_vcpu *vcpu)
 {
@@ -3161,6 +3170,7 @@ static int nested_vmx_check_vmentry_hw(struct kvm_vcpu *vcpu)
 	return 0;
 }
 
+#ifdef CONFIG_KVM_HYPERV
 static bool nested_get_evmcs_page(struct kvm_vcpu *vcpu)
 {
 	struct vcpu_vmx *vmx = to_vmx(vcpu);
@@ -3188,6 +3198,9 @@ static bool nested_get_evmcs_page(struct kvm_vcpu *vcpu)
 
 	return true;
 }
+#else
+static bool nested_get_evmcs_page(struct kvm_vcpu *vcpu) { return true; }
+#endif
 
 static bool nested_get_vmcs12_pages(struct kvm_vcpu *vcpu)
 {
@@ -3558,11 +3571,13 @@ static int nested_vmx_run(struct kvm_vcpu *vcpu, bool launch)
 	if (!nested_vmx_check_permission(vcpu))
 		return 1;
 
+#ifdef CONFIG_KVM_HYPERV
 	evmptrld_status = nested_vmx_handle_enlightened_vmptrld(vcpu, launch);
 	if (evmptrld_status == EVMPTRLD_ERROR) {
 		kvm_queue_exception(vcpu, UD_VECTOR);
 		return 1;
 	}
+#endif
 
 	kvm_pmu_trigger_event(vcpu, PERF_COUNT_HW_BRANCH_INSTRUCTIONS);
 
@@ -7096,7 +7111,9 @@ struct kvm_x86_nested_ops vmx_nested_ops = {
 	.set_state = vmx_set_nested_state,
 	.get_nested_state_pages = vmx_get_nested_state_pages,
 	.write_log_dirty = nested_vmx_write_pml_buffer,
+#ifdef CONFIG_KVM_HYPERV
 	.enable_evmcs = nested_enable_evmcs,
 	.get_evmcs_version = nested_get_evmcs_version,
 	.hv_inject_synthetic_vmexit_post_tlb_flush = vmx_hv_inject_synthetic_vmexit_post_tlb_flush,
+#endif
 };

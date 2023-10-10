@@ -129,6 +129,15 @@ config KVM_SMM
 
 	  If unsure, say Y.
 
+config KVM_HYPERV
+	bool "Support for Microsoft Hyper-V emulation"
+	depends on KVM
+	default y
+	help
+	  Provides KVM support for emulating Microsoft Hypervisor (Hyper-V).
+
+	  If unsure, say "Y".
+
 config KVM_XEN
 	bool "Support for Xen hypercall interface"
 	depends on KVM
