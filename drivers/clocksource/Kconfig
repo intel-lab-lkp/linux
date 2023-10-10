@@ -732,4 +732,14 @@ config GOLDFISH_TIMER
 	help
 	  Support for the timer/counter of goldfish-rtc
 
+config HISI_SYS_TIMER
+	tristate "HiSilicon system timer driver"
+	depends on ARM_ARCH_TIMER && ARM64 && ACPI
+	help
+	  Support for HiSilicon system timer which used as a clockevent
+	  device.
+
+	  This driver can also be built as a module. If so, the module
+	  will be called timer_hisi_sys.
+
 endmenu
