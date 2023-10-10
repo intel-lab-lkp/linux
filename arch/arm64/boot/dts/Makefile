@@ -13,6 +13,7 @@ subdir-y += broadcom
 subdir-y += cavium
 subdir-y += exynos
 subdir-y += freescale
+subdir-y += google
 subdir-y += hisilicon
 subdir-y += intel
 subdir-y += lg
