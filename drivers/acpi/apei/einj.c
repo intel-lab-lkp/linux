@@ -36,6 +36,12 @@
 #define MEM_ERROR_MASK		(ACPI_EINJ_MEMORY_CORRECTABLE | \
 				ACPI_EINJ_MEMORY_UNCORRECTABLE | \
 				ACPI_EINJ_MEMORY_FATAL)
+#define CXL_ERROR_MASK		(ACPI_EINJ_CXL_CACHE_CORRECTABLE | \
+				ACPI_EINJ_CXL_CACHE_UNCORRECTABLE | \
+				ACPI_EINJ_CXL_CACHE_FATAL | \
+				ACPI_EINJ_CXL_MEM_CORRECTABLE | \
+				ACPI_EINJ_CXL_MEM_UNCORRECTABLE | \
+				ACPI_EINJ_CXL_MEM_FATAL)
 
 /*
  * ACPI version 5 provides a SET_ERROR_TYPE_WITH_ADDRESS action.
@@ -537,8 +543,11 @@ static int einj_error_inject(u32 type, u32 flags, u64 param1, u64 param2,
 	if (type & ACPI5_VENDOR_BIT) {
 		if (vendor_flags != SETWA_FLAGS_MEM)
 			goto inject;
-	} else if (!(type & MEM_ERROR_MASK) && !(flags & SETWA_FLAGS_MEM))
+	} else if (!(type & MEM_ERROR_MASK) && !(flags & SETWA_FLAGS_MEM)) {
 		goto inject;
+	} else if ((type & CXL_ERROR_MASK) && (flags & SETWA_FLAGS_MEM)) {
+		goto inject;
+	}
 
 	/*
 	 * Disallow crazy address masks that give BIOS leeway to pick
@@ -590,6 +599,9 @@ static const char * const einj_error_type_string[] = {
 	"0x00000200\tPlatform Correctable\n",
 	"0x00000400\tPlatform Uncorrectable non-fatal\n",
 	"0x00000800\tPlatform Uncorrectable fatal\n",
+};
+
+static const char * const einj_cxl_error_type_string[] = {
 	"0x00001000\tCXL.cache Protocol Correctable\n",
 	"0x00002000\tCXL.cache Protocol Uncorrectable non-fatal\n",
 	"0x00004000\tCXL.cache Protocol Uncorrectable fatal\n",
@@ -615,6 +627,36 @@ static int available_error_type_show(struct seq_file *m, void *v)
 
 DEFINE_SHOW_ATTRIBUTE(available_error_type);
 
+static int validate_error_type(u64 type)
+{
+	u32 tval, vendor, available_error_type = 0;
+	int rc;
+
+	/* Only low 32 bits for error type are valid */
+	if (type & GENMASK_ULL(63, 32))
+		return -EINVAL;
+
+	/*
+	 * Vendor defined types have 0x80000000 bit set, and
+	 * are not enumerated by ACPI_EINJ_GET_ERROR_TYPE
+	 */
+	vendor = type & ACPI5_VENDOR_BIT;
+	tval = type & 0x7fffffff;
+
+	/* Only one error type can be specified */
+	if (tval & (tval - 1))
+		return -EINVAL;
+	if (!vendor) {
+		rc = einj_get_available_error_type(&available_error_type);
+		if (rc)
+			return rc;
+		if (!(type & available_error_type))
+			return -EINVAL;
+	}
+
+	return 0;
+}
+
 static int error_type_get(void *data, u64 *val)
 {
 	*val = error_type;
@@ -625,30 +667,14 @@ static int error_type_get(void *data, u64 *val)
 static int error_type_set(void *data, u64 val)
 {
 	int rc;
-	u32 available_error_type = 0;
-	u32 tval, vendor;
 
-	/* Only low 32 bits for error type are valid */
-	if (val & GENMASK_ULL(63, 32))
+	if (val & CXL_ERROR_MASK && !(val & ACPI5_VENDOR_BIT))
 		return -EINVAL;
 
-	/*
-	 * Vendor defined types have 0x80000000 bit set, and
-	 * are not enumerated by ACPI_EINJ_GET_ERROR_TYPE
-	 */
-	vendor = val & ACPI5_VENDOR_BIT;
-	tval = val & 0x7fffffff;
+	rc = validate_error_type(val);
+	if (rc)
+		return rc;
 
-	/* Only one error type can be specified */
-	if (tval & (tval - 1))
-		return -EINVAL;
-	if (!vendor) {
-		rc = einj_get_available_error_type(&available_error_type);
-		if (rc)
-			return rc;
-		if (!(val & available_error_type))
-			return -EINVAL;
-	}
 	error_type = val;
 
 	return 0;
