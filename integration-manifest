@@ -1,0 +1,28 @@
+drm drm-fixes 94f6f0550c625fab1f373bb86a6669b45e9748b3
+	Linux 6.6-rc5
+drm-misc drm-misc-fixes 2b7947bd32e243c52870d54141d3b4ea6775e63d
+	drm/atomic-helper: relax unregistered connector check
+drm-intel drm-intel-fixes 94f6f0550c625fab1f373bb86a6669b45e9748b3
+	Linux 6.6-rc5
+drm drm-next 389af786f92ecdff35883551d54bf4e507ffcccb
+	Merge tag 'drm-intel-next-2023-09-29' of git://anongit.freedesktop.org/drm/drm-intel into drm-next
+drm-misc drm-misc-next-fixes d20b484c674d2eae816978a98fa38b4054aeca3b
+	drm/drm_exec: Work around a WW mutex lockdep oddity
+drm-intel drm-intel-next-fixes 0bb80ecc33a8fb5a682236443c1e740d5c917d1d
+	Linux 6.6-rc1
+drm-misc drm-misc-next e5f9d543419c78ac58f3b3557bc5a76b20ff600b
+	drm/panel: ltk050h3146w: add support for Leadtek LTK050H3148W-CTA6 variant
+drm-intel drm-intel-next 85c477011dd3f601ed050a859e74fe82d414a123
+	drm/i915/display: Free crtc_state in verify_crtc_state
+drm-intel drm-intel-gt-next 039adf3947252693f7c882607dac2dc67e7f7ab2
+	drm/i915: More use of GT specific print helpers
+drm-intel topic/core-for-CI 4dfdf656708ee83de89dfb6289c290012212e4c6
+	PCI/ASPM: pci_enable_link_state: Add argument to acquire bus lock
+drm-misc topic/i915-ttm 1e3944578b749449bd7fa6bf0bae4c3d3f5f1733
+	Merge tag 'amd-drm-next-5.16-2021-09-27' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm topic/nouveau-misc dfc4005f8c172eea359f9db08c3b2b0ff0153699
+	drm/nouveau/disp: move DAC load detection method
+drm topic/drm-ci ad6bfe1b66a5c146ec236847eca7af4c8806d666
+	drm: ci: docs: fix build warning - add missing escape
+drm topic/vmemdup-user-array 06ab64a0d836ac430c5f94669710a78aa43942cb
+	drm: vmwgfx_surface.c: copy user-array safely
