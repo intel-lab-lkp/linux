@@ -369,6 +369,10 @@ When monitoring is enabled all MON groups will also contain:
 	the sum for all tasks in the CTRL_MON group and all tasks in
 	MON groups. Please see example section for more details on usage.
 
+"mon_hw_id":
+	Available only with debug option. The identifier used by hardware
+	for the monitor group. On x86 this is the RMID.
+
 RESCTRL filesystem implementation notes
 =======================================
 RESCTRL filesystem has two main components
@@ -425,6 +429,11 @@ RESCTRL filesystem has two main components
 	---------------------------------------------------------------
 	--> RFTYPE_BASE (Files common for both MON and CTRL groups)
 	    Files: cpus, cpus_list, tasks
+
+		--> RFTYPE_MON (Files for MON group)
+
+			--> RFTYPE_DEBUG (Files to help resctrl debugging)
+			    File: mon_hw_id
 
 		--> RFTYPE_CTRL (Files for CTRL group)
 		    Files: mode, schemata, size
