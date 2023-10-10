@@ -938,6 +938,12 @@ int kvm_xen_vcpu_set_attr(struct kvm_vcpu *vcpu, struct kvm_xen_vcpu_attr *data)
 		}
 		break;
 
+	case KVM_XEN_VCPU_ATTR_TYPE_PVCLOCK:
+		vcpu->arch.xen.tsc_is_unstable = data->u.flags & KVM_XEN_PVCLOCK_TSC_UNSTABLE;
+		kvm_make_request(KVM_REQ_CLOCK_UPDATE, vcpu);
+		r = 0;
+		break;
+
 	default:
 		break;
 	}
@@ -1027,6 +1033,13 @@ int kvm_xen_vcpu_get_attr(struct kvm_vcpu *vcpu, struct kvm_xen_vcpu_attr *data)
 
 	case KVM_XEN_VCPU_ATTR_TYPE_UPCALL_VECTOR:
 		data->u.vector = vcpu->arch.xen.upcall_vector;
+		r = 0;
+		break;
+
+	case KVM_XEN_VCPU_ATTR_TYPE_PVCLOCK:
+		data->u.flags = 0;
+		if (vcpu->arch.xen.tsc_is_unstable)
+			data->u.flags |= KVM_XEN_PVCLOCK_TSC_UNSTABLE;
 		r = 0;
 		break;
 

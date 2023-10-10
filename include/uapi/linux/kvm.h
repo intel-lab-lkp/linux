@@ -1282,6 +1282,7 @@ struct kvm_x86_mce {
 #define KVM_XEN_HVM_CONFIG_EVTCHN_2LEVEL	(1 << 4)
 #define KVM_XEN_HVM_CONFIG_EVTCHN_SEND		(1 << 5)
 #define KVM_XEN_HVM_CONFIG_RUNSTATE_UPDATE_FLAG	(1 << 6)
+#define KVM_XEN_HVM_CONFIG_PVCLOCK		(1 << 7)
 
 struct kvm_xen_hvm_config {
 	__u32 flags;
@@ -1870,6 +1871,8 @@ struct kvm_xen_vcpu_attr {
 			__u64 expires_ns;
 		} timer;
 		__u8 vector;
+		__u32 flags;
+#define KVM_XEN_PVCLOCK_TSC_UNSTABLE (1 << 0)
 	} u;
 };
 
@@ -1884,6 +1887,8 @@ struct kvm_xen_vcpu_attr {
 #define KVM_XEN_VCPU_ATTR_TYPE_VCPU_ID		0x6
 #define KVM_XEN_VCPU_ATTR_TYPE_TIMER		0x7
 #define KVM_XEN_VCPU_ATTR_TYPE_UPCALL_VECTOR	0x8
+/* Available with KVM_CAP_XEN_HVM / KVM_XEN_HVM_CONFIG_PVCLOCK */
+#define KVM_XEN_VCPU_ATTR_TYPE_PVCLOCK		0x9
 
 /* Secure Encrypted Virtualization command */
 enum sev_cmd_id {

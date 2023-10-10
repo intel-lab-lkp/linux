@@ -5544,6 +5544,7 @@ attribute cannot be read.
 			__u64 expires_ns;
 		} timer;
 		__u8 vector;
+		__u32 flags;
 	} u;
   };
 
@@ -5610,6 +5611,14 @@ KVM_XEN_VCPU_ATTR_TYPE_UPCALL_VECTOR
   vector configured with HVM_PARAM_CALLBACK_IRQ. It is disabled by
   setting the vector to zero.
 
+KVM_XEN_VCPU_ATTR_TYPE_PVCLOCK
+  This attribute is available when the KVM_CAP_XEN_HVM ioctl indicates
+  support for KVM_XEN_HVM_CONFIG_PVCLOCK feature. It modifies the
+  pvclock information available to the guest. Currently the only defined
+  flag is KVM_XEN_PVCLOCK_TSC_UNSTABLE. If this flag is set then the
+  PVCLOCK_TSC_STABLE_BIT flag will not be set in any of the Xen pvclock
+  sources. This aligns with Xen's behaviour when it is not using TSC
+  as its clock source, which is the default behaviour.
 
 4.129 KVM_XEN_VCPU_GET_ATTR
 ---------------------------
