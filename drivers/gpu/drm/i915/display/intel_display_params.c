@@ -72,6 +72,11 @@ intel_display_param_named_unsafe(edp_vswing, int, 0400,
 	"(0=use value from vbt [default], 1=low power swing(200mV),"
 	"2=default swing(400mV))");
 
+intel_display_param_named(fastboot, int, 0400,
+	"Try to skip unnecessary mode sets at boot time "
+	"(0=disabled, 1=enabled) "
+	"Default: -1 (use per-chip default)");
+
 intel_display_param_named_unsafe(enable_fbc, int, 0400,
 	"Enable frame buffer compression for power savings "
 	"(default: -1 (use per-chip default))");
