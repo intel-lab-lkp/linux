@@ -77,8 +77,10 @@ static int amd_pmf_update_uevents(struct amd_pmf_dev *dev, u16 event)
 	return 0;
 }
 
-static void amd_pmf_apply_policies(struct amd_pmf_dev *dev, struct ta_pmf_enact_result *out)
+static int amd_pmf_apply_policies(struct amd_pmf_dev *dev, struct ta_pmf_enact_result *out)
 {
+	struct thermal_cooling_device *cdev = dev->gfx_data.cooling_dev;
+	unsigned long state;
 	u32 val, event = 0;
 	int idx;
 
@@ -154,8 +156,21 @@ static void amd_pmf_apply_policies(struct amd_pmf_dev *dev, struct ta_pmf_enact_
 			dev_dbg(dev->dev, "update SYSTEM_STATE : %s\n",
 				amd_pmf_uevent_as_str(event));
 			break;
+
+		case PMF_POLICY_DISPLAY_BRIGHTNESS:
+			if (!dev->gfx_data.gpu_dev_en)
+				return -ENODEV;
+
+			cdev->ops->get_cur_state(cdev, &state);
+			if (state != val) {
+				cdev->ops->set_cur_state(cdev, val);
+				dev_dbg(dev->dev, "update DISPLAY_BRIGHTNESS : %u\n", val);
+			}
+			break;
 		}
 	}
+
+	return 0;
 }
 
 static int amd_pmf_invoke_cmd_enact(struct amd_pmf_dev *dev)
@@ -192,7 +207,9 @@ static int amd_pmf_invoke_cmd_enact(struct amd_pmf_dev *dev)
 		amd_pmf_dump_ta_inputs(dev, in);
 		dev_dbg(dev->dev, "action count:%u result:%x\n", out->actions_count,
 			ta_sm->pmf_result);
-		amd_pmf_apply_policies(dev, out);
+		ret = amd_pmf_apply_policies(dev, out);
+		if (ret)
+			return ret;
 	}
 
 	return 0;

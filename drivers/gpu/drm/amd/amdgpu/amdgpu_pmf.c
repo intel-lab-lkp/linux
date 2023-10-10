@@ -61,6 +61,23 @@ int amd_pmf_get_gfx_data(struct amd_gpu_pmf_data *pmf)
 }
 EXPORT_SYMBOL_GPL(amd_pmf_get_gfx_data);
 
+static int amd_pmf_gpu_set_cur_state(struct thermal_cooling_device *cooling_dev,
+				     unsigned long state)
+{
+	struct backlight_device *bd;
+
+	if (!acpi_video_backlight_use_native())
+		return -ENODEV;
+
+	bd = backlight_device_get_by_type(BACKLIGHT_RAW);
+	if (!bd)
+		return -ENODEV;
+
+	backlight_device_set_brightness(bd, state);
+
+	return 0;
+}
+
 static int amd_pmf_gpu_get_cur_state(struct thermal_cooling_device *cooling_dev,
 				     unsigned long *state)
 {
@@ -101,6 +118,7 @@ static int amd_pmf_gpu_get_max_state(struct thermal_cooling_device *cooling_dev,
 static const struct thermal_cooling_device_ops bd_cooling_ops = {
 	.get_max_state = amd_pmf_gpu_get_max_state,
 	.get_cur_state = amd_pmf_gpu_get_cur_state,
+	.set_cur_state = amd_pmf_gpu_set_cur_state,
 };
 
 int amd_pmf_gpu_init(struct amd_gpu_pmf_data *pmf)
