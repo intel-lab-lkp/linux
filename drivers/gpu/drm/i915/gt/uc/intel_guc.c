@@ -780,8 +780,11 @@ struct i915_vma *intel_guc_allocate_vma(struct intel_guc *guc, u32 size)
 	 * Wa_22016122933: For Media version 13.0, all Media GT shared
 	 * memory needs to be mapped as WC on CPU side and UC (PAT
 	 * index 2) on GPU side.
+	 *
+	 * FIXME: CAT errors are cropping up on MTL.  This removes them,
+	 * but the real root cause must still be diagnosed.
 	 */
-	if (intel_gt_needs_wa_22016122933(gt))
+	if (intel_gt_needs_wa_22016122933(gt) || IS_METEORLAKE(gt->i915))
 		i915_gem_object_set_cache_coherency(obj, I915_CACHE_NONE);
 
 	vma = i915_vma_instance(obj, &gt->ggtt->vm, NULL);

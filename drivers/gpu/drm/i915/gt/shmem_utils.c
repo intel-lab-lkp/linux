@@ -43,7 +43,13 @@ struct file *shmem_create_from_object(struct drm_i915_gem_object *obj)
 		return file;
 	}
 
-	map_type = i915_gem_object_is_lmem(obj) ? I915_MAP_WC : I915_MAP_WB;
+	/*
+	 * FIXME: CAT errors are cropping up on MTL.  This removes them,
+	 * but the real root cause must still be diagnosed.
+	 */
+	map_type = i915_gem_object_is_lmem(obj) ||
+		   IS_METEORLAKE(to_i915(obj->base.dev)) ?
+		   I915_MAP_WC : I915_MAP_WB;
 	ptr = i915_gem_object_pin_map_unlocked(obj, map_type);
 	if (IS_ERR(ptr))
 		return ERR_CAST(ptr);
