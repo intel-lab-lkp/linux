@@ -849,65 +849,68 @@ static u64 __arch_timer_check_delta(void)
 	return CLOCKSOURCE_MASK(arch_counter_get_width());
 }
 
-static void __arch_timer_setup(unsigned type,
-			       struct clock_event_device *clk)
+static void __arch_timer_setup_cp15(struct clock_event_device *clk)
 {
+	typeof(clk->set_next_event) sne;
 	u64 max_delta;
 
 	clk->features = CLOCK_EVT_FEAT_ONESHOT;
 
-	if (type == ARCH_TIMER_TYPE_CP15) {
-		typeof(clk->set_next_event) sne;
+	arch_timer_check_ool_workaround(ate_match_local_cap_id, NULL);
 
-		arch_timer_check_ool_workaround(ate_match_local_cap_id, NULL);
-
-		if (arch_timer_c3stop)
-			clk->features |= CLOCK_EVT_FEAT_C3STOP;
-		clk->name = "arch_sys_timer";
-		clk->rating = 450;
-		clk->cpumask = cpumask_of(smp_processor_id());
-		clk->irq = arch_timer_ppi[arch_timer_uses_ppi];
-		switch (arch_timer_uses_ppi) {
-		case ARCH_TIMER_VIRT_PPI:
-			clk->set_state_shutdown = arch_timer_shutdown_virt;
-			clk->set_state_oneshot_stopped = arch_timer_shutdown_virt;
-			sne = erratum_handler(set_next_event_virt);
-			break;
-		case ARCH_TIMER_PHYS_SECURE_PPI:
-		case ARCH_TIMER_PHYS_NONSECURE_PPI:
-		case ARCH_TIMER_HYP_PPI:
-			clk->set_state_shutdown = arch_timer_shutdown_phys;
-			clk->set_state_oneshot_stopped = arch_timer_shutdown_phys;
-			sne = erratum_handler(set_next_event_phys);
-			break;
-		default:
-			BUG();
-		}
-
-		clk->set_next_event = sne;
-		max_delta = __arch_timer_check_delta();
-	} else {
-		clk->features |= CLOCK_EVT_FEAT_DYNIRQ;
-		clk->name = "arch_mem_timer";
-		clk->rating = 400;
-		clk->cpumask = cpu_possible_mask;
-		if (arch_timer_mem_use_virtual) {
-			clk->set_state_shutdown = arch_timer_shutdown_virt_mem;
-			clk->set_state_oneshot_stopped = arch_timer_shutdown_virt_mem;
-			clk->set_next_event =
-				arch_timer_set_next_event_virt_mem;
-		} else {
-			clk->set_state_shutdown = arch_timer_shutdown_phys_mem;
-			clk->set_state_oneshot_stopped = arch_timer_shutdown_phys_mem;
-			clk->set_next_event =
-				arch_timer_set_next_event_phys_mem;
-		}
-
-		max_delta = CLOCKSOURCE_MASK(56);
+	if (arch_timer_c3stop)
+		clk->features |= CLOCK_EVT_FEAT_C3STOP;
+	clk->name = "arch_sys_timer";
+	clk->rating = 450;
+	clk->cpumask = cpumask_of(smp_processor_id());
+	clk->irq = arch_timer_ppi[arch_timer_uses_ppi];
+	switch (arch_timer_uses_ppi) {
+	case ARCH_TIMER_VIRT_PPI:
+		clk->set_state_shutdown = arch_timer_shutdown_virt;
+		clk->set_state_oneshot_stopped = arch_timer_shutdown_virt;
+		sne = erratum_handler(set_next_event_virt);
+		break;
+	case ARCH_TIMER_PHYS_SECURE_PPI:
+	case ARCH_TIMER_PHYS_NONSECURE_PPI:
+	case ARCH_TIMER_HYP_PPI:
+		clk->set_state_shutdown = arch_timer_shutdown_phys;
+		clk->set_state_oneshot_stopped = arch_timer_shutdown_phys;
+		sne = erratum_handler(set_next_event_phys);
+		break;
+	default:
+		BUG();
 	}
 
-	clk->set_state_shutdown(clk);
+	clk->set_next_event = sne;
+	max_delta = __arch_timer_check_delta();
 
+	clk->set_state_shutdown(clk);
+	clockevents_config_and_register(clk, arch_timer_rate, 0xf, max_delta);
+}
+
+static void __arch_timer_setup_mem(struct clock_event_device *clk)
+{
+	u64 max_delta;
+
+	clk->features = CLOCK_EVT_FEAT_ONESHOT | CLOCK_EVT_FEAT_DYNIRQ;
+	clk->name = "arch_mem_timer";
+	clk->rating = 400;
+	clk->cpumask = cpu_possible_mask;
+	if (arch_timer_mem_use_virtual) {
+		clk->set_state_shutdown = arch_timer_shutdown_virt_mem;
+		clk->set_state_oneshot_stopped = arch_timer_shutdown_virt_mem;
+		clk->set_next_event =
+			arch_timer_set_next_event_virt_mem;
+	} else {
+		clk->set_state_shutdown = arch_timer_shutdown_phys_mem;
+		clk->set_state_oneshot_stopped = arch_timer_shutdown_phys_mem;
+		clk->set_next_event =
+			arch_timer_set_next_event_phys_mem;
+	}
+
+	max_delta = CLOCKSOURCE_MASK(56);
+
+	clk->set_state_shutdown(clk);
 	clockevents_config_and_register(clk, arch_timer_rate, 0xf, max_delta);
 }
 
@@ -1004,7 +1007,7 @@ static int arch_timer_starting_cpu(unsigned int cpu)
 	struct clock_event_device *clk = this_cpu_ptr(arch_timer_evt);
 	u32 flags;
 
-	__arch_timer_setup(ARCH_TIMER_TYPE_CP15, clk);
+	__arch_timer_setup_cp15(clk);
 
 	flags = check_ppi_trigger(arch_timer_ppi[arch_timer_uses_ppi]);
 	enable_percpu_irq(arch_timer_ppi[arch_timer_uses_ppi], flags);
@@ -1294,7 +1297,7 @@ static int __init arch_timer_mem_register(void __iomem *base, unsigned int irq)
 
 	arch_timer_mem->base = base;
 	arch_timer_mem->evt.irq = irq;
-	__arch_timer_setup(ARCH_TIMER_TYPE_MEM, &arch_timer_mem->evt);
+	__arch_timer_setup_mem(&arch_timer_mem->evt);
 
 	if (arch_timer_mem_use_virtual)
 		func = arch_timer_handler_virt_mem;
