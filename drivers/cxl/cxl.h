@@ -334,7 +334,7 @@ enum cxl_decoder_type {
  * @flags: memory type capabilities and locking
  * @commit: device/decoder-type specific callback to commit settings to hw
  * @reset: device/decoder-type specific callback to reset hw settings
-*/
+ */
 struct cxl_decoder {
 	struct device dev;
 	int id;
