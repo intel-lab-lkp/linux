@@ -76,6 +76,14 @@ properties:
     $ref: /schemas/types.yaml#/definitions/phandle
     description: phandle to the Inline Crypto Engine node
 
+  qos:
+    minItems: 2
+    maxItems: 2
+    cpumask:
+     description: list of CPUs under CPU group
+    vote:
+     description: vote value for QoS CPU group
+
   reg:
     minItems: 1
     maxItems: 2
@@ -318,5 +326,13 @@ examples:
                             <0 0>,
                             <0 0>;
             qcom,ice = <&ice>;
+            qos0 {
+                cpumask = <0x0f>;
+                vote = <44>;
+            };
+            qos1 {
+                cpumask = <0xf0>;
+                vote = <44>;
+            };
         };
     };
