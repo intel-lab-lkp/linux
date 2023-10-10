@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef UFS_QCOM_H_
@@ -7,6 +8,7 @@
 
 #include <linux/reset-controller.h>
 #include <linux/reset.h>
+#include <linux/pm_qos.h>
 #include <soc/qcom/ice.h>
 #include <ufs/ufshcd.h>
 
@@ -135,6 +137,31 @@ enum {
 #define PA_VS_CORE_CLK_40NS_CYCLES			0x9007
 #define PA_VS_CORE_CLK_40NS_CYCLES_MASK			GENMASK(6, 0)
 
+/**
+ * struct ufs_qcom_qcg - context of QoS cpu group
+ * @qos_req:	pointer to per cpu pm qos request
+ * @host:	pointer to QCOM host controller instance
+ * @list:	helper for linked list
+ * @mask:	parsed cpumask value from device tree
+ * @vote:	parsed vote value from device tree
+ */
+struct ufs_qcom_qcg {
+	struct dev_pm_qos_request *qos_req;
+	struct ufs_qcom_host *host;
+	struct list_head list;
+	cpumask_t mask;
+	u32 vote;
+};
+
+/**
+ * enum constraint - defines QoS constraint type
+ * @QOS_PERF:	QoS performance mode
+ * @QOS_POWER:	QoS power save mode
+ */
+enum constraint {
+	QOS_PERF,
+	QOS_POWER,
+};
 
 /* QCOM UFS host controller core clk frequencies */
 #define UNIPRO_CORE_CLK_FREQ_37_5_MHZ          38
@@ -239,6 +266,8 @@ struct ufs_qcom_host {
 	struct reset_controller_dev rcdev;
 
 	struct gpio_desc *device_reset;
+	/* QoS list head */
+	struct list_head qos_list_head;
 
 	u32 phy_gear;
 

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2013-2016, Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/acpi.h>
@@ -15,6 +16,7 @@
 #include <linux/gpio/consumer.h>
 #include <linux/reset-controller.h>
 #include <linux/devfreq.h>
+#include <linux/cpu.h>
 
 #include <soc/qcom/ice.h>
 
@@ -736,6 +738,53 @@ static void ufs_qcom_device_reset_ctrl(struct ufs_hba *hba, bool asserted)
 	gpiod_set_value_cansleep(host->device_reset, asserted);
 }
 
+/**
+ * ufs_qcom_qos_add_cpu_group - inserts QoS CPU group requests into the QoS list
+ * @qcg: pointer to QoS CPU group
+ * @type: defines the qos request
+ *
+ * Returns 0 for success and non-zero for failure.
+ */
+static int ufs_qcom_qos_add_cpu_group(struct ufs_qcom_qcg *qcg,
+				      enum constraint type)
+{
+	struct dev_pm_qos_request *qos_req = qcg->qos_req;
+	struct device *dev = qcg->host->hba->dev;
+	int cpu;
+	int ret;
+
+	for_each_cpu(cpu, &qcg->mask) {
+		dev_dbg(dev, "cpu: %d | assoc-qos-req: 0x%p\n",
+			cpu, qos_req);
+		ret = dev_pm_qos_add_request(get_cpu_device(cpu),
+					     qos_req,
+					     DEV_PM_QOS_RESUME_LATENCY,
+					     type);
+		if (ret < 0) {
+			dev_err(dev, "Add qos request has failed %d\n",
+				ret);
+			return ret;
+		}
+
+		qos_req++;
+	}
+
+	return 0;
+}
+
+/**
+ * ufs_qcom_qos_remove_cpu_group - removes QoS CPU group requests in QoS list
+ * @qcg: pointer to QoS CPU group
+ */
+static void ufs_qcom_qos_remove_cpu_group(struct ufs_qcom_qcg *qcg)
+{
+	struct dev_pm_qos_request *qos_req = qcg->qos_req;
+	int cpu;
+
+	for_each_cpu(cpu, &qcg->mask)
+		dev_pm_qos_remove_request(qos_req++);
+}
+
 static int ufs_qcom_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op,
 	enum ufs_notify_change_status status)
 {
@@ -1175,6 +1224,107 @@ static int ufs_qcom_icc_init(struct ufs_qcom_host *host)
 }
 
 /**
+ * ufs_qcom_qos_exit - de-allocate QoS instances
+ * @hba: per adapter instance
+ */
+static void ufs_qcom_qos_exit(struct ufs_hba *hba)
+{
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+	struct list_head *head = &host->qos_list_head;
+	struct ufs_qcom_qcg *qcg;
+	struct ufs_qcom_qcg *tmp;
+
+	if (list_empty(head))
+		return;
+
+	list_for_each_entry_safe(qcg, tmp, head, list) {
+		if (qcg->qos_req) {
+			ufs_qcom_qos_remove_cpu_group(qcg);
+			kfree(qcg->qos_req);
+		}
+
+		list_del(&qcg->list);
+		kfree(qcg);
+	}
+}
+
+/**
+ * ufs_qcom_qos_init - initialize QoS instances
+ * @hba: host controller instance
+ *
+ * This function parses all QoS CPU group dt entries, allocates memory for
+ * each individual groups and initiates a qos request for each bit of CPU
+ * mask. As part of init all qos requests are initialized with the maximum
+ * delay aggregated constraint value.
+ */
+static void ufs_qcom_qos_init(struct ufs_hba *hba)
+{
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+	struct device *dev = hba->dev;
+	struct device_node *np = dev->of_node;
+	struct device_node *group_node;
+	struct ufs_qcom_qcg *qcg;
+	cpumask_t mask;
+	char buf[10];
+	u32 cpumask = 0;
+	u32 vote = 0;
+	int ret;
+
+	INIT_LIST_HEAD(&host->qos_list_head);
+
+	for_each_available_child_of_node(np, group_node) {
+		if (!strstr(group_node->name, "qos"))
+			continue;
+
+		of_property_read_u32(group_node, "cpumask", &cpumask);
+		sprintf(buf, "%x", cpumask);
+		cpumask_parse(buf, &mask);
+		if (!cpumask || !cpumask_subset(&mask, cpu_possible_mask)) {
+			dev_err(dev, "Invalid group mask\n");
+			goto out_err;
+		}
+
+		of_property_read_u32(group_node, "vote", &vote);
+		if (!vote) {
+			dev_err(dev, "1 vote is needed, bailing out: %u\n",
+				vote);
+			goto out_err;
+		}
+
+		qcg = kzalloc(sizeof(*qcg), GFP_KERNEL);
+		if (!qcg)
+			goto out_err;
+
+		list_add_tail(&qcg->list, &host->qos_list_head);
+		cpumask_copy(&qcg->mask, &mask);
+		qcg->vote = vote;
+		qcg->host = host;
+		qcg->qos_req = kcalloc(cpumask_weight(&qcg->mask),
+				       sizeof(struct dev_pm_qos_request),
+				       GFP_KERNEL);
+		if (!qcg->qos_req)
+			goto out_err;
+
+		dev_dbg(dev, "qcg: 0x%p | mask-wt: %u | qos_req: 0x%p | vote: %u\n",
+			qcg, cpumask_weight(&qcg->mask),
+			qcg->qos_req, qcg->vote);
+
+		ret = ufs_qcom_qos_add_cpu_group(qcg, S32_MAX);
+		if (ret < 0)
+			goto out_err;
+	}
+
+	if (list_empty(&host->qos_list_head)) {
+		dev_info(dev, "QoS groups undefined\n");
+		return;
+	}
+	return;
+
+out_err:
+	ufs_qcom_qos_exit(hba);
+}
+
+/**
  * ufs_qcom_init - bind phy with controller
  * @hba: host controller instance
  *
@@ -1298,6 +1448,7 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 	 */
 	host->phy_gear = UFS_HS_G2;
 
+	ufs_qcom_qos_init(hba);
 	return 0;
 
 out_variant_clear:
@@ -2032,6 +2183,7 @@ static void ufs_qcom_remove(struct platform_device *pdev)
 	struct ufs_hba *hba =  platform_get_drvdata(pdev);
 
 	pm_runtime_get_sync(&(pdev)->dev);
+	ufs_qcom_qos_exit(hba);
 	ufshcd_remove(hba);
 	platform_msi_domain_free_irqs(hba->dev);
 }
