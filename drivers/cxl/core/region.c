@@ -1043,10 +1043,10 @@ static void cxl_port_detach_region(struct cxl_port *port,
 }
 
 static int check_last_peer(struct cxl_endpoint_decoder *cxled,
-			   struct cxl_ep *ep, struct cxl_region_ref *cxl_rr,
-			   int distance)
+			   struct cxl_ep *ep, struct cxl_region_ref *cxl_rr)
 {
 	struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
+	int switch_iw = cxl_rr->decoder->interleave_ways;
 	struct cxl_region *cxlr = cxl_rr->region;
 	struct cxl_region_params *p = &cxlr->params;
 	struct cxl_endpoint_decoder *cxled_peer;
@@ -1057,16 +1057,16 @@ static int check_last_peer(struct cxl_endpoint_decoder *cxled,
 
 	/*
 	 * If this position wants to share a dport with the last endpoint mapped
-	 * then that endpoint, at index 'position - distance', must also be
+	 * then that endpoint, at index 'position - switch_iw', must also be
 	 * mapped by this dport.
 	 */
-	if (pos < distance) {
+	if (pos < switch_iw) {
 		dev_dbg(&cxlr->dev, "%s:%s: cannot host %s:%s at %d\n",
 			dev_name(port->uport_dev), dev_name(&port->dev),
 			dev_name(&cxlmd->dev), dev_name(&cxled->cxld.dev), pos);
 		return -ENXIO;
 	}
-	cxled_peer = p->targets[pos - distance];
+	cxled_peer = p->targets[pos - switch_iw];
 	cxlmd_peer = cxled_to_memdev(cxled_peer);
 	ep_peer = cxl_ep_load(port, cxlmd_peer);
 	if (ep->dport != ep_peer->dport) {
@@ -1111,20 +1111,17 @@ static int cxl_port_setup_targets(struct cxl_port *port,
 
 	cxlsd = to_cxl_switch_decoder(&cxld->dev);
 	if (cxl_rr->nr_targets_set) {
-		int i, distance;
+		int i;
 
 		/*
-		 * Passthrough decoders impose no distance requirements between
-		 * peers
+		 * Check if this endpoint's dport is already in the
+		 * switch decoder's target list, and if so check that
+		 * it is positioned correctly based on the switch's
+		 * interleave.
 		 */
-		if (cxl_rr->nr_targets == 1)
-			distance = 0;
-		else
-			distance = p->nr_targets / cxl_rr->nr_targets;
 		for (i = 0; i < cxl_rr->nr_targets_set; i++)
 			if (ep->dport == cxlsd->target[i]) {
-				rc = check_last_peer(cxled, ep, cxl_rr,
-						     distance);
+				rc = check_last_peer(cxled, ep, cxl_rr);
 				if (rc)
 					return rc;
 				goto out_target_set;
