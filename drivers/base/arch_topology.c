@@ -729,6 +729,75 @@ const struct cpumask *cpu_clustergroup_mask(int cpu)
 	return &cpu_topology[cpu].cluster_sibling;
 }
 
+#ifdef CONFIG_HOTPLUG_SMT
+static int topology_smt_num_threads = 1;
+
+void __init topology_smt_set_num_threads(void)
+{
+	int cpu, sibling, threads;
+	cpumask_var_t to_visit;
+
+	if (!alloc_cpumask_var(&to_visit, GFP_KERNEL)) {
+		pr_err("Failed to update the SMT info\n");
+		return;
+	}
+
+	cpumask_or(to_visit, to_visit, cpu_possible_mask);
+
+	/*
+	 * Walk all the CPUs to find the largest thread number, in case we're
+	 * on a heterogeneous platform with only part of the CPU cores support
+	 * SMT.
+	 *
+	 * Get the thread number by checking the CPUs with same core id
+	 * rather than checking the topology_sibling_cpumask(), since the
+	 * sibling mask will not cover all the CPUs if there's CPU offline.
+	 */
+	for_each_cpu(cpu, to_visit) {
+		threads = 1;
+
+		cpumask_clear_cpu(cpu, to_visit);
+
+		/* Invalid thread id, this CPU is not in a SMT core */
+		if (cpu_topology[cpu].thread_id == -1)
+			continue;
+
+		for_each_cpu(sibling, to_visit) {
+			if (cpu_topology[sibling].thread_id != -1 &&
+			    cpu_topology[cpu].core_id == cpu_topology[sibling].core_id)
+				threads++;
+
+			cpumask_clear_cpu(sibling, to_visit);
+		}
+
+		if (threads > topology_smt_num_threads)
+			topology_smt_num_threads = threads;
+	}
+
+	free_cpumask_var(to_visit);
+
+	/*
+	 * We don't support CONFIG_SMT_NUM_THREADS_DYNAMIC so make the
+	 * max_threads == num_threads.
+	 */
+	cpu_smt_set_num_threads(topology_smt_num_threads, topology_smt_num_threads);
+}
+
+/*
+ * On SMT Hotplug the primary thread of the SMT won't be disabled. For x86 they
+ * seem to have a primary thread for special purpose. For other arthitectures
+ * like arm64 there's no such restriction for a primary thread, so make the
+ * first thread in the SMT as the primary thread.
+ */
+bool topology_is_primary_thread(unsigned int cpu)
+{
+	if (cpu == cpumask_first(topology_sibling_cpumask(cpu)))
+		return true;
+
+	return false;
+}
+#endif
+
 void update_siblings_masks(unsigned int cpuid)
 {
 	struct cpu_topology *cpu_topo, *cpuid_topo = &cpu_topology[cpuid];
@@ -840,6 +909,12 @@ void __init init_cpu_topology(void)
 		 */
 		reset_cpu_topology();
 	}
+
+	/*
+	 * By this stage we get to know whether we support SMT or not, update
+	 * the information for the core.
+	 */
+	topology_smt_set_num_threads();
 
 	for_each_possible_cpu(cpu) {
 		ret = fetch_cache_info(cpu);
