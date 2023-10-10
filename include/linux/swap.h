@@ -320,6 +320,13 @@ struct swap_info_struct {
 					 */
 	struct work_struct discard_work; /* discard worker */
 	struct swap_cluster_list discard_clusters; /* discard clusters list */
+	unsigned int large_next[PMD_ORDER]; /*
+					     * next free offset within current
+					     * allocation cluster for large
+					     * folios, or UINT_MAX if no current
+					     * cluster. Index is (order - 1).
+					     * Only when cluster_info is used.
+					     */
 	struct plist_node avail_lists[]; /*
 					   * entries in swap_avail_heads, one
 					   * entry per node.

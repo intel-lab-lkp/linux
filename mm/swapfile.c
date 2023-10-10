@@ -987,8 +987,10 @@ no_page:
 	return n_ret;
 }
 
-static int swap_alloc_cluster(struct swap_info_struct *si, swp_entry_t *slot)
+static int swap_alloc_large(struct swap_info_struct *si, swp_entry_t *slot,
+			    unsigned int nr_pages)
 {
+	int order;
 	unsigned long idx;
 	struct swap_cluster_info *ci;
 	unsigned long offset;
@@ -1002,19 +1004,46 @@ static int swap_alloc_cluster(struct swap_info_struct *si, swp_entry_t *slot)
 		return 0;
 	}
 
-	if (cluster_list_empty(&si->free_clusters))
-		return 0;
+	VM_WARN_ON(nr_pages < 2);
+	VM_WARN_ON(nr_pages > SWAPFILE_CLUSTER);
+	VM_WARN_ON(!is_power_of_2(nr_pages));
 
-	idx = cluster_list_first(&si->free_clusters);
-	offset = idx * SWAPFILE_CLUSTER;
-	ci = lock_cluster(si, offset);
-	alloc_cluster(si, idx);
-	cluster_set_count_flag(ci, SWAPFILE_CLUSTER, 0);
+	order = ilog2(nr_pages);
+	offset = si->large_next[order - 1];
 
-	memset(si->swap_map + offset, SWAP_HAS_CACHE, SWAPFILE_CLUSTER);
+	if (offset == UINT_MAX) {
+		if (cluster_list_empty(&si->free_clusters))
+			return 0;
+
+		idx = cluster_list_first(&si->free_clusters);
+		offset = idx * SWAPFILE_CLUSTER;
+
+		ci = lock_cluster(si, offset);
+		alloc_cluster(si, idx);
+		cluster_set_count_flag(ci, SWAPFILE_CLUSTER, 0);
+
+		/*
+		 * If scan_swap_map_slots() can't find a free cluster, it will
+		 * check si->swap_map directly. To make sure this standby
+		 * cluster isn't taken by scan_swap_map_slots(), mark the swap
+		 * entries bad (occupied). (same approach as discard).
+		 */
+		memset(si->swap_map + offset + nr_pages, SWAP_MAP_BAD,
+			SWAPFILE_CLUSTER - nr_pages);
+	} else {
+		idx = offset / SWAPFILE_CLUSTER;
+		ci = lock_cluster(si, offset);
+	}
+
+	memset(si->swap_map + offset, SWAP_HAS_CACHE, nr_pages);
 	unlock_cluster(ci);
-	swap_range_alloc(si, offset, SWAPFILE_CLUSTER);
+	swap_range_alloc(si, offset, nr_pages);
 	*slot = swp_entry(si->type, offset);
+
+	offset += nr_pages;
+	if (idx != offset / SWAPFILE_CLUSTER)
+		offset = UINT_MAX;
+	si->large_next[order - 1] = offset;
 
 	return 1;
 }
@@ -1041,7 +1070,7 @@ int get_swap_pages(int n_goal, swp_entry_t swp_entries[], int entry_size)
 	int node;
 
 	/* Only single cluster request supported */
-	WARN_ON_ONCE(n_goal > 1 && size == SWAPFILE_CLUSTER);
+	WARN_ON_ONCE(n_goal > 1 && size > 1);
 
 	spin_lock(&swap_avail_lock);
 
@@ -1078,14 +1107,14 @@ start_over:
 			spin_unlock(&si->lock);
 			goto nextsi;
 		}
-		if (size == SWAPFILE_CLUSTER) {
+		if (size > 1) {
 			if (si->flags & SWP_BLKDEV)
-				n_ret = swap_alloc_cluster(si, swp_entries);
+				n_ret = swap_alloc_large(si, swp_entries, size);
 		} else
 			n_ret = scan_swap_map_slots(si, SWAP_HAS_CACHE,
 						    n_goal, swp_entries);
 		spin_unlock(&si->lock);
-		if (n_ret || size == SWAPFILE_CLUSTER)
+		if (n_ret || size > 1)
 			goto check_out;
 		cond_resched();
 
@@ -2724,6 +2753,9 @@ static struct swap_info_struct *alloc_swap_info(void)
 	spin_lock_init(&p->lock);
 	spin_lock_init(&p->cont_lock);
 	init_completion(&p->comp);
+
+	for (i = 0; i < ARRAY_SIZE(p->large_next); i++)
+		p->large_next[i] = UINT_MAX;
 
 	return p;
 }
