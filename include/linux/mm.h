@@ -1724,11 +1724,12 @@ static inline void page_cpupid_reset_last(struct page *page)
 }
 #endif /* LAST_CPUPID_NOT_IN_PAGE_FLAGS */
 
-static inline int xchg_page_access_time(struct page *page, int time)
+static inline int xchg_folio_access_time(struct folio *folio, int time)
 {
 	int last_time;
 
-	last_time = page_cpupid_xchg_last(page, time >> PAGE_ACCESS_TIME_BUCKETS);
+	last_time = page_cpupid_xchg_last(&folio->page,
+					  time >> PAGE_ACCESS_TIME_BUCKETS);
 	return last_time << PAGE_ACCESS_TIME_BUCKETS;
 }
 
@@ -1747,7 +1748,7 @@ static inline int page_cpupid_xchg_last(struct page *page, int cpupid)
 	return page_to_nid(page); /* XXX */
 }
 
-static inline int xchg_page_access_time(struct page *page, int time)
+static inline int xchg_folio_access_time(struct folio *folio, int time)
 {
 	return 0;
 }
