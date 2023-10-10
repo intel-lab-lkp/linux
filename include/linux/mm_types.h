@@ -183,6 +183,9 @@ struct page {
 #ifdef CONFIG_MEMCG
 	unsigned long memcg_data;
 #endif
+#ifdef LAST_CPUPID_NOT_IN_PAGE_FLAGS
+	int _last_cpupid;
+#endif
 
 	/*
 	 * On machines where all RAM is mapped into kernel address space,
@@ -209,10 +212,6 @@ struct page {
 	 */
 	struct page *kmsan_shadow;
 	struct page *kmsan_origin;
-#endif
-
-#ifdef LAST_CPUPID_NOT_IN_PAGE_FLAGS
-	int _last_cpupid;
 #endif
 } _struct_page_alignment;
 
@@ -318,6 +317,9 @@ struct folio {
 #ifdef CONFIG_MEMCG
 			unsigned long memcg_data;
 #endif
+#ifdef LAST_CPUPID_NOT_IN_PAGE_FLAGS
+			int _last_cpupid;
+#endif
 	/* private: the union with struct page is transitional */
 		};
 		struct page page;
@@ -372,6 +374,9 @@ FOLIO_MATCH(_mapcount, _mapcount);
 FOLIO_MATCH(_refcount, _refcount);
 #ifdef CONFIG_MEMCG
 FOLIO_MATCH(memcg_data, memcg_data);
+#endif
+#ifdef LAST_CPUPID_NOT_IN_PAGE_FLAGS
+FOLIO_MATCH(_last_cpupid, _last_cpupid);
 #endif
 #undef FOLIO_MATCH
 #define FOLIO_MATCH(pg, fl)						\
