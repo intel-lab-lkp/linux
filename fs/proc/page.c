@@ -154,11 +154,24 @@ u64 stable_page_flags(struct page *page)
 	else if (PageTransCompound(page)) {
 		struct page *head = compound_head(page);
 
-		if (PageLRU(head) || PageAnon(head))
-			u |= 1 << KPF_THP;
-		else if (is_huge_zero_page(head)) {
+		/*
+		 * We need to check PageLRU/PageAnon to make sure a given page
+		 * is a thp, not a huge zero page or a generic compound page
+		 * (allocated by drivers with __GFP_COMP).
+		 */
+		if (PageLRU(head) || PageAnon(head)) {
+			if (compound_order(head) == HPAGE_PMD_ORDER)
+				u |= 1 << KPF_THP;
+			else
+				u |= 1 << KPF_FOLIO;
+		} else if (is_huge_zero_page(head))
 			u |= 1 << KPF_ZERO_PAGE;
-			u |= 1 << KPF_THP;
+
+		if (PageHead(page))
+			u |= 1 << KPF_COMPOUND_HEAD;
+		if (PageTail(page)) {
+			u |= 1 << KPF_COMPOUND_TAIL;
+			return u;
 		}
 	} else if (is_zero_pfn(page_to_pfn(page)))
 		u |= 1 << KPF_ZERO_PAGE;
