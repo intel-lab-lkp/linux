@@ -3034,7 +3034,7 @@ static inline void wp_page_reuse(struct vm_fault *vmf, struct folio *folio)
 		 * information potentially belongs to a now completely
 		 * unrelated process.
 		 */
-		page_cpupid_xchg_last(vmf->page, (1 << LAST_CPUPID_SHIFT) - 1);
+		folio_cpupid_xchg_last(folio, (1 << LAST_CPUPID_SHIFT) - 1);
 	}
 
 	flush_cache_page(vma, vmf->address, pte_pfn(vmf->orig_pte));
