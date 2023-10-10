@@ -450,7 +450,9 @@ void __init_or_module noinline apply_alternatives(struct alt_instr *start,
 		DUMP_BYTES(ALT, replacement, a->replacementlen, "%px:   rpl_insn: ", replacement);
 		DUMP_BYTES(ALT, insn_buff, insn_buff_sz, "%px: final_insn: ", instr);
 
+		kasan_disable_current();
 		text_poke_early(instr, insn_buff, insn_buff_sz);
+		kasan_enable_current();
 	}
 }
 
