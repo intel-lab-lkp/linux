@@ -38,13 +38,9 @@
  * this file are not used but this file still gets compiled into the KVM AMD
  * module.
  *
- * We will not have MISC_CG_RES_SEV and MISC_CG_RES_SEV_ES entries in the enum
- * misc_res_type {} defined in linux/misc_cgroup.h.
- *
  * Below macros allow compilation to succeed.
  */
 #define MISC_CG_RES_SEV MISC_CG_RES_TYPES
-#define MISC_CG_RES_SEV_ES MISC_CG_RES_TYPES
 #endif
 
 #ifdef CONFIG_KVM_AMD_SEV
@@ -131,13 +127,13 @@ static bool __sev_recycle_asids(int min_asid, int max_asid)
 
 static int sev_misc_cg_try_charge(struct kvm_sev_info *sev)
 {
-	enum misc_res_type type = sev->es_active ? MISC_CG_RES_SEV_ES : MISC_CG_RES_SEV;
+	enum misc_res_type type = MISC_CG_RES_SEV;
 	return misc_cg_try_charge(type, sev->misc_cg, 1);
 }
 
 static void sev_misc_cg_uncharge(struct kvm_sev_info *sev)
 {
-	enum misc_res_type type = sev->es_active ? MISC_CG_RES_SEV_ES : MISC_CG_RES_SEV;
+	enum misc_res_type type = MISC_CG_RES_SEV;
 	misc_cg_uncharge(type, sev->misc_cg, 1);
 }
 
@@ -2181,7 +2177,7 @@ void __init sev_set_cpu_caps(void)
 void __init sev_hardware_setup(void)
 {
 #ifdef CONFIG_KVM_AMD_SEV
-	unsigned int eax, ebx, ecx, edx, sev_asid_count, sev_es_asid_count;
+	unsigned int eax, ebx, ecx, edx, sev_asid_count;
 	bool sev_es_supported = false;
 	bool sev_supported = false;
 
@@ -2250,14 +2246,7 @@ void __init sev_hardware_setup(void)
 	if (!boot_cpu_has(X86_FEATURE_SEV_ES))
 		goto out;
 
-	/* Has the system been allocated ASIDs for SEV-ES? */
-	if (min_sev_asid == 1)
-		goto out;
-
-	sev_es_asid_count = min_sev_asid - 1;
-	WARN_ON_ONCE(misc_cg_set_capacity(MISC_CG_RES_SEV_ES, sev_es_asid_count));
 	sev_es_supported = true;
-
 out:
 	if (boot_cpu_has(X86_FEATURE_SEV))
 		pr_info("SEV %s (ASIDs %u - %u)\n",
@@ -2288,7 +2277,6 @@ void sev_hardware_unsetup(void)
 	bitmap_free(sev_reclaim_asid_bitmap);
 
 	misc_cg_set_capacity(MISC_CG_RES_SEV, 0);
-	misc_cg_set_capacity(MISC_CG_RES_SEV_ES, 0);
 }
 
 int sev_cpu_init(struct svm_cpu_data *sd)
