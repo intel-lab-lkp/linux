@@ -3254,7 +3254,7 @@ static int may_open(struct mnt_idmap *idmap, const struct path *path,
 		fallthrough;
 	case S_IFIFO:
 	case S_IFSOCK:
-		if (acc_mode & MAY_EXEC)
+		if ((inode->i_mode & S_IFMT) != S_IFBLK && (acc_mode & MAY_EXEC))
 			return -EACCES;
 		flag &= ~O_TRUNC;
 		break;
