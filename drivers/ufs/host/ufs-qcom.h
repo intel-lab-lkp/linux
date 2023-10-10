@@ -141,16 +141,22 @@ enum {
  * struct ufs_qcom_qcg - context of QoS cpu group
  * @qos_req:	pointer to per cpu pm qos request
  * @host:	pointer to QCOM host controller instance
+ * @vwork:	qos vote work handle
  * @list:	helper for linked list
  * @mask:	parsed cpumask value from device tree
+ * @curr_vote:	current vote value for group
  * @vote:	parsed vote value from device tree
+ * @voted:	vote status
  */
 struct ufs_qcom_qcg {
 	struct dev_pm_qos_request *qos_req;
 	struct ufs_qcom_host *host;
+	struct work_struct vwork;
 	struct list_head list;
 	cpumask_t mask;
+	u32 curr_vote;
 	u32 vote;
+	bool voted;
 };
 
 /**
@@ -268,6 +274,8 @@ struct ufs_qcom_host {
 	struct gpio_desc *device_reset;
 	/* QoS list head */
 	struct list_head qos_list_head;
+	/* QoS workqueue */
+	struct workqueue_struct *qos_workq;
 
 	u32 phy_gear;
 

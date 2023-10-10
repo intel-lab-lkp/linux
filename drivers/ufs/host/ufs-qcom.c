@@ -17,6 +17,7 @@
 #include <linux/reset-controller.h>
 #include <linux/devfreq.h>
 #include <linux/cpu.h>
+#include <linux/blk-mq.h>
 
 #include <soc/qcom/ice.h>
 
@@ -26,6 +27,8 @@
 #include "ufs-qcom.h"
 #include <ufs/ufshci.h>
 #include <ufs/ufs_quirks.h>
+
+#include <scsi/scsi_cmnd.h>
 
 #define MCQ_QCFGPTR_MASK	GENMASK(7, 0)
 #define MCQ_QCFGPTR_UNIT	0x200
@@ -96,6 +99,9 @@ static struct ufs_qcom_host *ufs_qcom_hosts[MAX_UFS_QCOM_HOSTS];
 
 static void ufs_qcom_get_default_testbus_cfg(struct ufs_qcom_host *host);
 static int ufs_qcom_set_core_clk_ctrl(struct ufs_hba *hba, bool is_scale_up);
+static int ufs_qcom_update_qos_constraints(struct ufs_qcom_qcg *qcg,
+					   enum constraint type);
+static int ufs_qcom_qos_unvote_all(struct ufs_qcom_host *host);
 
 static struct ufs_qcom_host *rcdev_to_ufs_host(struct reset_controller_dev *rcd)
 {
@@ -790,6 +796,7 @@ static int ufs_qcom_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op,
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 	struct phy *phy = host->generic_phy;
+	int ret;
 
 	if (status == PRE_CHANGE)
 		return 0;
@@ -810,7 +817,11 @@ static int ufs_qcom_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op,
 		ufs_qcom_disable_lane_clks(host);
 	}
 
-	return ufs_qcom_ice_suspend(host);
+	ret = ufs_qcom_ice_suspend(host);
+	if (ret)
+		return ret;
+
+	return ufs_qcom_qos_unvote_all(host);
 }
 
 static int ufs_qcom_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
@@ -838,6 +849,33 @@ static int ufs_qcom_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 	}
 
 	return ufs_qcom_ice_resume(host);
+}
+
+/**
+ * ufs_qcom_qos_unvote_all - unvote QoS for all cpu groups
+ * @host: qcom host controller instance
+ */
+static int ufs_qcom_qos_unvote_all(struct ufs_qcom_host *host)
+{
+	struct list_head *head = &host->qos_list_head;
+	struct ufs_qcom_qcg *qcg;
+	int ret = 0;
+
+	if (list_empty(head))
+		return ret;
+
+	list_for_each_entry(qcg, head, list) {
+		flush_work(&qcg->vwork);
+		if (!qcg->voted)
+			continue;
+
+		ret = ufs_qcom_update_qos_constraints(qcg, QOS_POWER);
+		if (ret)
+			dev_err(host->hba->dev, "Failed to update qos constraints, %d\n",
+				ret);
+	}
+
+	return ret;
 }
 
 static void ufs_qcom_dev_ref_clk_ctrl(struct ufs_qcom_host *host, bool enable)
@@ -1157,6 +1195,7 @@ static int ufs_qcom_setup_clocks(struct ufs_hba *hba, bool on,
 		} else {
 			ufs_qcom_icc_set_bw(host, ufs_qcom_bw_table[MODE_MIN][0][0].mem_bw,
 					    ufs_qcom_bw_table[MODE_MIN][0][0].cfg_bw);
+			ufs_qcom_qos_unvote_all(host);
 		}
 		break;
 	}
@@ -1221,6 +1260,144 @@ static int ufs_qcom_icc_init(struct ufs_qcom_host *host)
 		return dev_err_probe(dev, ret, "failed to set bandwidth request\n");
 
 	return 0;
+}
+
+/**
+ * ufs_qcom_tag_to_cpu - get CPU number for given request tag
+ * @hba: host controller instance
+ * @tag: defines block request id
+ *
+ * Returns 0 or posstive value for success and negative value
+ * for failure.
+ */
+static int ufs_qcom_tag_to_cpu(struct ufs_hba *hba, unsigned int tag)
+{
+	struct ufshcd_lrb *lrbp = &hba->lrb[tag];
+
+	if (lrbp && lrbp->cmd && scsi_cmd_to_rq(lrbp->cmd))
+		return blk_mq_rq_cpu(scsi_cmd_to_rq(lrbp->cmd));
+
+	return -EINVAL;
+}
+
+/**
+ * ufs_qcom_cpu_to_qos_group - returns QoS group address for given CPU number
+ * @host: qcom host controller instance
+ * @cpu: stores CPU number
+ *
+ * Returns ufs_qcom_qcg address for success and NULL for failure.
+ */
+static struct ufs_qcom_qcg *ufs_qcom_cpu_to_qos_group(struct ufs_qcom_host *host,
+						      unsigned int cpu)
+{
+	struct list_head *head = &host->qos_list_head;
+	struct ufs_qcom_qcg *qcg;
+
+	if (cpu > num_possible_cpus())
+		return NULL;
+
+	list_for_each_entry(qcg, head, list) {
+		if (cpumask_test_cpu(cpu, &qcg->mask))
+			return qcg;
+	}
+
+	return NULL;
+}
+
+/**
+ * ufs_qcom_update_qos_constraints - update constraints for QoS group
+ * @qcg: pointer to QoS CPU group
+ * @type: defines the qos request
+ *
+ * Returns 0 for success and non-zero for failure.
+ */
+static int ufs_qcom_update_qos_constraints(struct ufs_qcom_qcg *qcg,
+					   enum constraint type)
+{
+	struct dev_pm_qos_request *qos_req = qcg->qos_req;
+	struct device *dev = qcg->host->hba->dev;
+	unsigned int vote;
+	int cpu;
+	int ret;
+
+	if (type == QOS_POWER)
+		vote = S32_MAX;
+	else
+		vote = qcg->vote;
+
+	if (qcg->curr_vote == vote)
+		return 0;
+
+	for_each_cpu(cpu, &qcg->mask) {
+		dev_dbg(dev, "%s: vote: %d | cpu: %d | qos_req: 0x%p\n",
+			__func__, vote, cpu, qos_req);
+		ret = dev_pm_qos_update_request(qos_req, vote);
+		if (ret < 0)
+			return ret;
+
+		++qos_req;
+	}
+
+	if (type == QOS_POWER)
+		qcg->voted = false;
+	else
+		qcg->voted = true;
+	qcg->curr_vote = vote;
+
+	return 0;
+}
+
+/**
+ * ufs_qcom_setup_xfer_req - setup QoS before transfer request is issued
+ *			and initiates QoS vote process for given tag
+ * @hba: host controller instance
+ * @tag: defines block request id
+ * @is_scsi_cmd: tells scsi cmd or not
+ *
+ * Returns 0 for success and non-zero for failure.
+ */
+static void ufs_qcom_setup_xfer_req(struct ufs_hba *hba, int tag, bool is_scsi_cmd)
+{
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+	struct list_head *head = &host->qos_list_head;
+	struct ufs_qcom_qcg *qcg;
+	int cpu;
+
+	if (list_empty(head))
+		return;
+
+	cpu = ufs_qcom_tag_to_cpu(hba, tag);
+	if (cpu < 0)
+		return;
+
+	qcg = ufs_qcom_cpu_to_qos_group(host, cpu);
+	if (!qcg)
+		return;
+
+	if (qcg->voted) {
+		dev_dbg(hba->dev, "%s: qcg: 0x%p | cpu: %d\n",
+			__func__, qcg, cpu);
+		return;
+	}
+
+	queue_work(host->qos_workq, &qcg->vwork);
+	dev_dbg(hba->dev, "Queued QoS work- cpu: %d\n", cpu);
+}
+
+/**
+ * ufs_qcom_qos_vote_work - starts QoS perf mode vote work
+ * @work: pointer to QoS work
+ */
+static void ufs_qcom_qos_vote_work(struct work_struct *work)
+{
+	struct ufs_qcom_qcg *qcg = container_of(work, struct ufs_qcom_qcg,
+						 vwork);
+	int ret;
+
+	ret = ufs_qcom_update_qos_constraints(qcg, QOS_PERF);
+	if (ret)
+		dev_err(qcg->host->hba->dev, "%s: update qos - failed: %d\n",
+			__func__, ret);
 }
 
 /**
@@ -1312,11 +1489,19 @@ static void ufs_qcom_qos_init(struct ufs_hba *hba)
 		ret = ufs_qcom_qos_add_cpu_group(qcg, S32_MAX);
 		if (ret < 0)
 			goto out_err;
+
+		INIT_WORK(&qcg->vwork, ufs_qcom_qos_vote_work);
 	}
 
 	if (list_empty(&host->qos_list_head)) {
 		dev_info(dev, "QoS groups undefined\n");
 		return;
+	}
+
+	host->qos_workq = create_singlethread_workqueue("qc_ufs_qos_swq");
+	if (!host->qos_workq) {
+		dev_err(dev, "Failed to create qos workqueue\n");
+		goto out_err;
 	}
 	return;
 
@@ -2144,6 +2329,7 @@ static const struct ufs_hba_variant_ops ufs_hba_qcom_vops = {
 	.dbg_register_dump	= ufs_qcom_dump_dbg_regs,
 	.device_reset		= ufs_qcom_device_reset,
 	.config_scaling_param = ufs_qcom_config_scaling_param,
+	.setup_xfer_req         = ufs_qcom_setup_xfer_req,
 	.program_key		= ufs_qcom_ice_program_key,
 	.reinit_notify		= ufs_qcom_reinit_notify,
 	.mcq_config_resource	= ufs_qcom_mcq_config_resource,
