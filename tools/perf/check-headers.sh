@@ -183,6 +183,10 @@ done
 check_2 tools/perf/util/hashmap.h tools/lib/bpf/hashmap.h
 check_2 tools/perf/util/hashmap.c tools/lib/bpf/hashmap.c
 
+# check duplicated scripts
+check_2 tools/arch/arm64/tools/sysreg arch/arm64/tools/sysreg
+check_2 tools/arch/arm64/tools/gen-sysreg.awk arch/arm64/tools/gen-sysreg.awk
+
 cd tools/perf || exit
 
 if [ ${#FAILURES[@]} -gt 0 ]
