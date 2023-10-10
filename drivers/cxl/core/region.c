@@ -127,21 +127,15 @@ static struct cxl_region_ref *cxl_rr_load(struct cxl_port *port,
 
 static int cxl_region_invalidate_memregion(struct cxl_region *cxlr)
 {
-	if (!cpu_cache_has_invalidate_memregion()) {
-		if (IS_ENABLED(CONFIG_CXL_REGION_INVALIDATION_TEST)) {
-			dev_warn_once(
-				&cxlr->dev,
-				"Bypassing cpu_cache_invalidate_memregion() for testing!\n");
-			return 0;
-		} else {
-			dev_err(&cxlr->dev,
-				"Failed to synchronize CPU cache state\n");
-			return -ENXIO;
-		}
+	if (IS_ENABLED(CONFIG_CXL_REGION_INVALIDATION_TEST)
+			&& cpu_cache_has_invalidate_memregion()) {
+		dev_warn_once(
+			&cxlr->dev,
+			"Bypassing cpu_cache_invalidate_memregion() for testing!\n");
+		return 0;
 	}
 
-	cpu_cache_invalidate_memregion(IORES_DESC_CXL);
-	return 0;
+	return cpu_cache_invalidate_memregion(IORES_DESC_CXL);
 }
 
 static int cxl_region_decode_reset(struct cxl_region *cxlr, int count)
