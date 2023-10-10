@@ -1940,6 +1940,15 @@
 			qcom,ice = <&ice>;
 
 			status = "disabled";
+
+			qos0 {
+				cpumask = <0x0f>;
+				vote = <44>;
+			};
+			qos1 {
+				cpumask = <0xf0>;
+				vote = <44>;
+			};
 		};
 
 		ice: crypto@1d88000 {
