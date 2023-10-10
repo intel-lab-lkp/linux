@@ -135,23 +135,20 @@ u64 stable_page_flags(struct page *page)
 	if (PageKsm(page))
 		u |= 1 << KPF_KSM;
 
-	/*
-	 * compound pages: export both head/tail info
-	 * they together define a compound page's start/end pos and order
-	 */
-	if (PageHead(page))
-		u |= 1 << KPF_COMPOUND_HEAD;
-	if (PageTail(page))
-		u |= 1 << KPF_COMPOUND_TAIL;
-	if (PageHuge(page))
+	if (PageHuge(page)) {
 		u |= 1 << KPF_HUGE;
+		if (PageHead(page))
+			u |= 1 << KPF_COMPOUND_HEAD;
+		if (PageTail(page)) {
+			u |= 1 << KPF_COMPOUND_TAIL;
+			return u;
+		}
 	/*
-	 * PageTransCompound can be true for non-huge compound pages (slab
-	 * pages or pages allocated by drivers with __GFP_COMP) because it
-	 * just checks PG_head/PG_tail, so we need to check PageLRU/PageAnon
-	 * to make sure a given page is a thp, not a non-huge compound page.
+	 * PageTransCompound can be true for any types of compound pages,
+	 * because it just checks PG_head and PageTail, but at this point
+	 * PageSlab and PageHuge are already checked to be false.
 	 */
-	else if (PageTransCompound(page)) {
+	} else if (PageTransCompound(page)) {
 		struct page *head = compound_head(page);
 
 		/*
