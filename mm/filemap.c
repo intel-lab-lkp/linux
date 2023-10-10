@@ -1135,7 +1135,7 @@ static void folio_wake_bit(struct folio *folio, int bit_nr)
 	wait_queue_head_t *q = folio_waitqueue(folio);
 	struct wait_page_key key;
 	unsigned long flags;
-	wait_queue_entry_t bookmark;
+	wait_queue_entry_t bookmark, endmark;
 
 	key.folio = folio;
 	key.bit_nr = bit_nr;
@@ -1146,8 +1146,13 @@ static void folio_wake_bit(struct folio *folio, int bit_nr)
 	bookmark.func = NULL;
 	INIT_LIST_HEAD(&bookmark.entry);
 
+	endmark.flags = 0;
+	endmark.private = NULL;
+	endmark.func = NULL;
+	INIT_LIST_HEAD(&endmark.entry);
+
 	spin_lock_irqsave(&q->lock, flags);
-	__wake_up_locked_key_bookmark(q, TASK_NORMAL, &key, &bookmark);
+	__wake_up_locked_key_bookmark(q, TASK_NORMAL, &key, &bookmark, &endmark);
 
 	while (bookmark.flags & WQ_FLAG_BOOKMARK) {
 		/*
@@ -1159,7 +1164,7 @@ static void folio_wake_bit(struct folio *folio, int bit_nr)
 		spin_unlock_irqrestore(&q->lock, flags);
 		cpu_relax();
 		spin_lock_irqsave(&q->lock, flags);
-		__wake_up_locked_key_bookmark(q, TASK_NORMAL, &key, &bookmark);
+		__wake_up_locked_key_bookmark(q, TASK_NORMAL, &key, &bookmark, &endmark);
 	}
 
 	/*

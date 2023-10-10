@@ -79,10 +79,11 @@ EXPORT_SYMBOL(remove_wait_queue);
  */
 static int __wake_up_common(struct wait_queue_head *wq_head, unsigned int mode,
 			int nr_exclusive, int wake_flags, void *key,
-			wait_queue_entry_t *bookmark)
+			wait_queue_entry_t *bookmark,
+			wait_queue_entry_t *endmark)
 {
 	wait_queue_entry_t *curr, *next;
-	int cnt = 0;
+	int cnt = 0, touch_endmark = 0;
 
 	lockdep_assert_held(&wq_head->lock);
 
@@ -95,11 +96,16 @@ static int __wake_up_common(struct wait_queue_head *wq_head, unsigned int mode,
 		curr = list_first_entry(&wq_head->head, wait_queue_entry_t, entry);
 
 	if (&curr->entry == &wq_head->head)
-		return nr_exclusive;
+		goto out;
 
 	list_for_each_entry_safe_from(curr, next, &wq_head->head, entry) {
 		unsigned flags = curr->flags;
 		int ret;
+
+		if (curr == endmark) {
+			touch_endmark = 1;
+			continue;
+		}
 
 		if (flags & WQ_FLAG_BOOKMARK)
 			continue;
@@ -110,13 +116,23 @@ static int __wake_up_common(struct wait_queue_head *wq_head, unsigned int mode,
 		if (ret && (flags & WQ_FLAG_EXCLUSIVE) && !--nr_exclusive)
 			break;
 
-		if (bookmark && (++cnt > WAITQUEUE_WALK_BREAK_CNT) &&
+		if (bookmark && !touch_endmark && (++cnt > WAITQUEUE_WALK_BREAK_CNT) &&
 				(&next->entry != &wq_head->head)) {
 			bookmark->flags = WQ_FLAG_BOOKMARK;
 			list_add_tail(&bookmark->entry, &next->entry);
-			break;
+
+			if (endmark && !(endmark->flags & WQ_FLAG_BOOKMARK)) {
+				endmark->flags = WQ_FLAG_BOOKMARK;
+				list_add_tail(&endmark->entry, &wq_head->head);
+			}
+
+			return nr_exclusive;
 		}
 	}
+
+out:
+	if (endmark && (endmark->flags & WQ_FLAG_BOOKMARK))
+		list_del(&endmark->entry);
 
 	return nr_exclusive;
 }
@@ -125,7 +141,7 @@ static int __wake_up_common_lock(struct wait_queue_head *wq_head, unsigned int m
 			int nr_exclusive, int wake_flags, void *key)
 {
 	unsigned long flags;
-	wait_queue_entry_t bookmark;
+	wait_queue_entry_t bookmark, endmark;
 	int remaining = nr_exclusive;
 
 	bookmark.flags = 0;
@@ -133,10 +149,15 @@ static int __wake_up_common_lock(struct wait_queue_head *wq_head, unsigned int m
 	bookmark.func = NULL;
 	INIT_LIST_HEAD(&bookmark.entry);
 
+	endmark.flags = 0;
+	endmark.private = NULL;
+	endmark.func = NULL;
+	INIT_LIST_HEAD(&endmark.entry);
+
 	do {
 		spin_lock_irqsave(&wq_head->lock, flags);
 		remaining = __wake_up_common(wq_head, mode, remaining,
-						wake_flags, key, &bookmark);
+					     wake_flags, key, &bookmark, &endmark);
 		spin_unlock_irqrestore(&wq_head->lock, flags);
 	} while (bookmark.flags & WQ_FLAG_BOOKMARK);
 
@@ -171,20 +192,21 @@ void __wake_up_on_current_cpu(struct wait_queue_head *wq_head, unsigned int mode
  */
 void __wake_up_locked(struct wait_queue_head *wq_head, unsigned int mode, int nr)
 {
-	__wake_up_common(wq_head, mode, nr, 0, NULL, NULL);
+	__wake_up_common(wq_head, mode, nr, 0, NULL, NULL, NULL);
 }
 EXPORT_SYMBOL_GPL(__wake_up_locked);
 
 void __wake_up_locked_key(struct wait_queue_head *wq_head, unsigned int mode, void *key)
 {
-	__wake_up_common(wq_head, mode, 1, 0, key, NULL);
+	__wake_up_common(wq_head, mode, 1, 0, key, NULL, NULL);
 }
 EXPORT_SYMBOL_GPL(__wake_up_locked_key);
 
 void __wake_up_locked_key_bookmark(struct wait_queue_head *wq_head,
-		unsigned int mode, void *key, wait_queue_entry_t *bookmark)
+		unsigned int mode, void *key, wait_queue_entry_t *bookmark,
+		wait_queue_entry_t *endmark)
 {
-	__wake_up_common(wq_head, mode, 1, 0, key, bookmark);
+	__wake_up_common(wq_head, mode, 1, 0, key, bookmark, endmark);
 }
 EXPORT_SYMBOL_GPL(__wake_up_locked_key_bookmark);
 
@@ -233,7 +255,7 @@ EXPORT_SYMBOL_GPL(__wake_up_sync_key);
 void __wake_up_locked_sync_key(struct wait_queue_head *wq_head,
 			       unsigned int mode, void *key)
 {
-        __wake_up_common(wq_head, mode, 1, WF_SYNC, key, NULL);
+	__wake_up_common(wq_head, mode, 1, WF_SYNC, key, NULL, NULL);
 }
 EXPORT_SYMBOL_GPL(__wake_up_locked_sync_key);
 
