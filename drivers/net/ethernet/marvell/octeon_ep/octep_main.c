@@ -718,6 +718,7 @@ static netdev_tx_t octep_start_xmit(struct sk_buff *skb,
 	/* Flush the hw descriptor before writing to doorbell */
 	wmb();
 
+	netdev_tx_sent_queue(iq->netdev_q, skb->len);
 	/* Ring Doorbell to notify the NIC there is a new packet */
 	writel(1, iq->doorbell_reg);
 	atomic_inc(&iq->instr_pending);
@@ -726,7 +727,6 @@ static netdev_tx_t octep_start_xmit(struct sk_buff *skb,
 		wi = 0;
 	iq->host_write_index = wi;
 
-	netdev_tx_sent_queue(iq->netdev_q, skb->len);
 	iq->stats.instr_posted++;
 	skb_tx_timestamp(skb);
 	return NETDEV_TX_OK;
