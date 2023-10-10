@@ -325,10 +325,10 @@ dm9000_phy_write(struct net_device *dev,
 	unsigned long reg_save;
 
 	dm9000_dbg(db, 5, "phy_write[%02x] = %04x\n", reg, value);
-	if (!db->in_timeout)
+	if (!db->in_timeout) {
 		mutex_lock(&db->addr_lock);
-
-	spin_lock_irqsave(&db->lock, flags);
+		spin_lock_irqsave(&db->lock, flags);
+	}
 
 	/* Save previous register address */
 	reg_save = readb(db->io_addr);
@@ -344,11 +344,13 @@ dm9000_phy_write(struct net_device *dev,
 	iow(db, DM9000_EPCR, EPCR_EPOS | EPCR_ERPRW);
 
 	writeb(reg_save, db->io_addr);
-	spin_unlock_irqrestore(&db->lock, flags);
+	if (!db->in_timeout)
+		spin_unlock_irqrestore(&db->lock, flags);
 
 	dm9000_msleep(db, 1);		/* Wait write complete */
 
-	spin_lock_irqsave(&db->lock, flags);
+	if (!db->in_timeout)
+		spin_lock_irqsave(&db->lock, flags);
 	reg_save = readb(db->io_addr);
 
 	iow(db, DM9000_EPCR, 0x0);	/* Clear phyxcer write command */
@@ -356,9 +358,10 @@ dm9000_phy_write(struct net_device *dev,
 	/* restore the previous address */
 	writeb(reg_save, db->io_addr);
 
-	spin_unlock_irqrestore(&db->lock, flags);
-	if (!db->in_timeout)
+	if (!db->in_timeout) {
+		spin_unlock_irqrestore(&db->lock, flags);
 		mutex_unlock(&db->addr_lock);
+	}
 }
 
 /* dm9000_set_io
