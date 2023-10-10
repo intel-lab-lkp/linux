@@ -691,12 +691,14 @@ static void __vm_mem_region_delete(struct kvm_vm *vm,
 	sparsebit_free(&region->unused_phy_pages);
 	ret = munmap(region->mmap_start, region->mmap_size);
 	TEST_ASSERT(!ret, __KVM_SYSCALL_ERROR("munmap()", ret));
-	if (region->fd >= 0) {
-		/* There's an extra map when using shared memory. */
+
+	/* There's an extra map when using shared memory. */
+	if (region->mmap_alias) {
 		ret = munmap(region->mmap_alias, region->mmap_size);
 		TEST_ASSERT(!ret, __KVM_SYSCALL_ERROR("munmap()", ret));
-		close(region->fd);
 	}
+	if (region->fd >= 0)
+		close(region->fd);
 
 	free(region);
 }
@@ -920,10 +922,10 @@ void vm_set_user_memory_region(struct kvm_vm *vm, uint32_t slot, uint32_t flags,
  * given by slot, which must be unique and < KVM_MEM_SLOTS_NUM.  The
  * region is created with the flags given by flags.
  */
-void vm_userspace_mem_region_add(struct kvm_vm *vm,
+void __vm_userspace_mem_region_add(struct kvm_vm *vm,
 	enum vm_mem_backing_src_type src_type,
 	uint64_t guest_paddr, uint32_t slot, uint64_t npages,
-	uint32_t flags)
+	uint32_t flags, bool create_alias)
 {
 	int ret;
 	struct userspace_mem_region *region;
@@ -1057,7 +1059,7 @@ void vm_userspace_mem_region_add(struct kvm_vm *vm,
 	hash_add(vm->regions.slot_hash, &region->slot_node, slot);
 
 	/* If shared memory, create an alias. */
-	if (region->fd >= 0) {
+	if (region->fd >= 0 && create_alias) {
 		region->mmap_alias = mmap(NULL, region->mmap_size,
 					  PROT_READ | PROT_WRITE,
 					  vm_mem_backing_src_alias(src_type)->flag,
@@ -1068,6 +1070,15 @@ void vm_userspace_mem_region_add(struct kvm_vm *vm,
 		/* Align host alias address */
 		region->host_alias = align_ptr_up(region->mmap_alias, alignment);
 	}
+}
+
+void vm_userspace_mem_region_add(struct kvm_vm *vm,
+	enum vm_mem_backing_src_type src_type,
+	uint64_t guest_paddr, uint32_t slot, uint64_t npages,
+	uint32_t flags)
+{
+	__vm_userspace_mem_region_add(vm, src_type, guest_paddr, slot, npages,
+				      flags, true);
 }
 
 /*
