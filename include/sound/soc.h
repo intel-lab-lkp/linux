@@ -655,8 +655,50 @@ struct snd_soc_dai_link_component {
 	struct of_phandle_args *dai_args;
 };
 
-struct snd_soc_dai_link_codec_ch_map {
-	unsigned int connected_cpu_id;
+/*
+ * [dai_link->ch_maps Image sample]
+ *
+ * CPU0 <---> Codec0
+ *
+ *	.ch_maps is from CPU
+ *
+ *	.num_cpus   = 1;
+ *	.num_codecs = 1;
+ *	.connected_node = [0];
+ *
+ * CPU0 <---> Codec_x
+ * CPU1 <---> Codec_y
+ * CPU2 <---> Codec_z
+ *
+ *	.ch_maps is from CPU
+ *
+ *	.num_cpus   = 3;
+ *	.num_codecs = 3;
+ *	.connected_node = [x, y, z];
+ *
+ * CPU0 <---> Codec_x
+ * CPU1 <-+-> Codec_y
+ * CPU2 <-/
+ *
+ *	.ch_maps is from CPU
+ *
+ *	.num_cpus   = 3;
+ *	.num_codecs = 2;
+ *	.connected_node = [x, y, y];
+ *
+ *
+ * CPU_x <---> Codec0
+ * CPU_y <-+-> Codec1
+ *	   \-> Codec2
+ *
+ *	.ch_maps is from Codec
+ *
+ *	.num_cpus   = 2;
+ *	.num_codecs = 3;
+ *	.connected_node = [x, y, y];
+ */
+struct snd_soc_dai_link_ch_map {
+	unsigned int connected_node;
 	unsigned int ch_mask;
 };
 
@@ -688,7 +730,7 @@ struct snd_soc_dai_link {
 	struct snd_soc_dai_link_component *codecs;
 	unsigned int num_codecs;
 
-	struct snd_soc_dai_link_codec_ch_map *codec_ch_maps;
+	struct snd_soc_dai_link_ch_map *ch_maps;
 	/*
 	 * You MAY specify the link's platform/PCM/DMA driver, either by
 	 * device name, or by DT/OF node, but not both. Some forms of link
