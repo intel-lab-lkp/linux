@@ -1176,6 +1176,14 @@ tcp_plb_cong_thresh - INTEGER
 
 	Default: 128
 
+tcp_pingpong_thresh - INTEGER
+	TCP pingpong threshold is 1 by default, but some application may need a
+	higher threshold for optimal performance.
+
+	Possible Values: 1 - 255
+
+	Default: 1
+
 UDP variables
 =============
 
