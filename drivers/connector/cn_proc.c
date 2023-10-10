@@ -104,12 +104,12 @@ static inline void send_msg(struct cn_msg *msg)
 	if (filter_data[0] == PROC_EVENT_EXIT) {
 		filter_data[1] =
 		((struct proc_event *)msg->data)->event_data.exit.exit_code;
+		cn_netlink_send_mult(msg, msg->len, 0, CN_IDX_PROC, GFP_NOWAIT,
+				     cn_filter, (void *)filter_data);
 	} else {
-		filter_data[1] = 0;
+		cn_netlink_send_mult(msg, msg->len, 0, CN_IDX_PROC, GFP_NOWAIT,
+				     NULL, NULL);
 	}
-
-	cn_netlink_send_mult(msg, msg->len, 0, CN_IDX_PROC, GFP_NOWAIT,
-			     cn_filter, (void *)filter_data);
 
 	local_unlock(&local_event.lock);
 }
