@@ -29,6 +29,7 @@
 #include <linux/prefetch.h>
 #include <linux/blk-crypto.h>
 #include <linux/part_stat.h>
+#include <linux/sched/isolation.h>
 
 #include <trace/events/block.h>
 
@@ -41,6 +42,13 @@
 #include "blk-mq-sched.h"
 #include "blk-rq-qos.h"
 #include "blk-ioprio.h"
+
+static bool respect_cpu_isolation;
+module_param(respect_cpu_isolation, bool, 0444);
+MODULE_PARM_DESC(respect_cpu_isolation,
+		"Don't schedule blk-mq worker on isolated CPUs passed in "
+		"isolcpus= or nohz_full=. User need to guarantee to not run "
+		"block IO on isolated CPUs (default: false)");
 
 static DEFINE_PER_CPU(struct llist_head, blk_cpu_done);
 static DEFINE_PER_CPU(call_single_data_t, blk_cpu_csd);
@@ -3908,6 +3916,13 @@ static void blk_mq_map_swqueue(struct request_queue *q)
 		 * over all possibly mapped software queues.
 		 */
 		sbitmap_resize(&hctx->ctx_map, hctx->nr_ctx);
+
+		if (respect_cpu_isolation) {
+			cpumask_and(hctx->cpumask, hctx->cpumask,
+					housekeeping_cpumask(HK_TYPE_DOMAIN));
+			cpumask_and(hctx->cpumask, hctx->cpumask,
+					housekeeping_cpumask(HK_TYPE_WQ));
+		}
 
 		/*
 		 * Initialize batch roundrobin counts
