@@ -182,6 +182,10 @@ static const struct clk_ops scmi_clk_ops = {
 	.determine_rate = scmi_clk_determine_rate,
 };
 
+static const struct clk_ops scmi_fixed_rate_clk_ops = {
+	.recalc_rate = scmi_clk_recalc_rate,
+};
+
 static const struct clk_ops scmi_atomic_clk_ops = {
 	.recalc_rate = scmi_clk_recalc_rate,
 	.round_rate = scmi_clk_round_rate,
@@ -293,6 +297,8 @@ static int scmi_clocks_probe(struct scmi_device *sdev)
 		if (is_atomic &&
 		    sclk->info->enable_latency <= atomic_threshold)
 			scmi_ops = &scmi_atomic_clk_ops;
+		else if (sclk->info->rate_fixed)
+			scmi_ops = &scmi_fixed_rate_clk_ops;
 		else
 			scmi_ops = &scmi_clk_ops;
 
