@@ -3882,10 +3882,12 @@ static void free_receive_page_frags(struct virtnet_info *vi)
 
 void virtnet_sq_free_unused_buf(struct virtqueue *vq, void *buf)
 {
-	if (!virtnet_is_xdp_frame(buf))
+	if (virtnet_is_skb_ptr(buf))
 		dev_kfree_skb(buf);
-	else
+	else if (virtnet_is_xdp_frame(buf))
 		xdp_return_frame(virtnet_ptr_to_xdp(buf));
+
+	/* xsk buffer do not need handle. */
 }
 
 void virtnet_rq_free_unused_buf(struct virtqueue *vq, void *buf)
