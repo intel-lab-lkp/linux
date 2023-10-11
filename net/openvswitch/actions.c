@@ -60,7 +60,7 @@ struct ovs_frag_data {
 static DEFINE_PER_CPU(struct ovs_frag_data, ovs_frag_data_storage);
 
 #define OVS_RECURSION_LIMIT 5
-#define NR_FLOW_KEYS 5
+#define NR_FLOW_KEYS 10
 #define DEFERRED_ACTION_FIFO_SIZE 10
 
 struct action_fifo {
@@ -85,7 +85,7 @@ static struct action_fifo __percpu *action_fifos;
  * ovs_flow_key_alloc provides a per-CPU sw_flow_key allocator. keys must be
  * freed in the reverse order that they were allocated in (i.e., a stack).
  */
-static struct sw_flow_key *ovs_flow_key_alloc(void)
+struct sw_flow_key *ovs_flow_key_alloc(void)
 {
 	struct flow_key_stack *keys = this_cpu_ptr(flow_key_stack);
 	int level = this_cpu_read(flow_keys_allocated);
@@ -98,7 +98,7 @@ static struct sw_flow_key *ovs_flow_key_alloc(void)
 	return &keys->key[level];
 }
 
-static void ovs_flow_key_free(struct sw_flow_key *key)
+void ovs_flow_key_free(struct sw_flow_key *key)
 {
 	struct flow_key_stack *keys = this_cpu_ptr(flow_key_stack);
 	int level = this_cpu_read(flow_keys_allocated);
