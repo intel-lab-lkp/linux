@@ -827,7 +827,8 @@ EXPORT_SYMBOL_GPL(bcm_phy_cable_test_get_status_rdb);
 					 WAKE_MCAST | \
 					 WAKE_BCAST | \
 					 WAKE_MAGIC | \
-					 WAKE_MAGICSECURE)
+					 WAKE_MAGICSECURE | \
+					 WAKE_MDA)
 
 int bcm_phy_set_wol(struct phy_device *phydev, struct ethtool_wolinfo *wol)
 {
@@ -908,6 +909,8 @@ int bcm_phy_set_wol(struct phy_device *phydev, struct ethtool_wolinfo *wol)
 			eth_broadcast_addr(da);
 		} else if (wol->wolopts & WAKE_MAGICSECURE) {
 			ether_addr_copy(da, wol->sopass);
+		} else if (wol->wolopts & WAKE_MDA) {
+			ether_addr_copy(da, wol->mac_da);
 		} else if (wol->wolopts & WAKE_MAGIC) {
 			memset(da, 0, sizeof(da));
 			memset(mask, 0xff, sizeof(mask));
@@ -1010,6 +1013,8 @@ void bcm_phy_get_wol(struct phy_device *phydev, struct ethtool_wolinfo *wol)
 	}
 
 	if (ctl & BCM54XX_WOL_DIR_PKT_EN) {
+		memcpy(wol->mac_da, da, sizeof(da));
+		wol->wolopts |= WAKE_MDA;
 		if (is_broadcast_ether_addr(da))
 			wol->wolopts |= WAKE_BCAST;
 		else if (is_multicast_ether_addr(da))
