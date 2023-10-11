@@ -115,6 +115,60 @@ bool virtnet_xsk_xmit(struct virtnet_sq *sq, struct xsk_buff_pool *pool,
 	return sent == budget;
 }
 
+static void virtnet_remote_napi_schedule(void *info)
+{
+	struct virtnet_sq *sq = info;
+
+	virtnet_vq_napi_schedule(&sq->napi, sq->vq);
+}
+
+static void virtnet_remote_raise_napi(struct virtnet_sq *sq)
+{
+	u32 last_cpu, cur_cpu;
+
+	last_cpu = sq->xsk.last_cpu;
+	cur_cpu = get_cpu();
+
+	/* On remote cpu, softirq will run automatically when ipi irq exit. On
+	 * local cpu, smp_call_xxx will not trigger ipi interrupt, then softirq
+	 * cannot be triggered automatically. So Call local_bh_enable after to
+	 * trigger softIRQ processing.
+	 */
+	if (last_cpu == cur_cpu) {
+		local_bh_disable();
+		virtnet_vq_napi_schedule(&sq->napi, sq->vq);
+		local_bh_enable();
+	} else {
+		if (spin_trylock(&sq->xsk.ipi_lock)) {
+			smp_call_function_single_async(last_cpu, &sq->xsk.csd);
+			spin_unlock(&sq->xsk.ipi_lock);
+		}
+	}
+
+	put_cpu();
+}
+
+int virtnet_xsk_wakeup(struct net_device *dev, u32 qid, u32 flag)
+{
+	struct virtnet_info *vi = netdev_priv(dev);
+	struct virtnet_sq *sq;
+
+	if (!netif_running(dev))
+		return -ENETDOWN;
+
+	if (qid >= vi->curr_queue_pairs)
+		return -EINVAL;
+
+	sq = &vi->sq[qid];
+
+	if (napi_if_scheduled_mark_missed(&sq->napi))
+		return 0;
+
+	virtnet_remote_raise_napi(sq);
+
+	return 0;
+}
+
 static int virtnet_rq_bind_xsk_pool(struct virtnet_info *vi, struct virtnet_rq *rq,
 				    struct xsk_buff_pool *pool)
 {
@@ -243,6 +297,9 @@ static int virtnet_xsk_pool_enable(struct net_device *dev,
 		goto err_sq;
 
 	sq->xsk.hdr_dma_address = hdr_dma;
+
+	INIT_CSD(&sq->xsk.csd, virtnet_remote_napi_schedule, sq);
+	spin_lock_init(&sq->xsk.ipi_lock);
 
 	return 0;
 
