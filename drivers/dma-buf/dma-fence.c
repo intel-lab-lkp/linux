@@ -607,14 +607,21 @@ static bool __dma_fence_enable_signaling(struct dma_fence *fence)
  * This will request for sw signaling to be enabled, to make the fence
  * complete as soon as possible. This calls &dma_fence_ops.enable_signaling
  * internally.
+ *
+ * Returns 0 on success and a negative error value when @fence is NULL.
  */
-void dma_fence_enable_sw_signaling(struct dma_fence *fence)
+int dma_fence_enable_sw_signaling(struct dma_fence *fence)
 {
 	unsigned long flags;
+
+	if (!fence)
+		return -EINVAL;
 
 	spin_lock_irqsave(fence->lock, flags);
 	__dma_fence_enable_signaling(fence);
 	spin_unlock_irqrestore(fence->lock, flags);
+
+	return 0;
 }
 EXPORT_SYMBOL(dma_fence_enable_sw_signaling);
 
