@@ -153,6 +153,15 @@ attribute, e. g.::
 
 Setting this parameter to 100 will disable the hysteresis.
 
+When there is a lot of cold memory according to the store time in the zswap,
+it can be swapout and save memory in userspace proactively. User can write
+writeback time threshold in second to enable it, e.g.::
+
+  echo 600 > /sys/module/zswap/parameters/writeback_time_threshold
+
+If zswap_entrys have not been accessed for more than 600 seconds, they will be
+swapout. if set to 0, all of them will be swapout.
+
 A debugfs interface is provided for various statistic about pool size, number
 of pages stored, same-value filled pages and various counters for the reasons
 pages are rejected.
