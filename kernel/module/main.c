@@ -2594,7 +2594,8 @@ static noinline int do_init_module(struct module *mod)
 	 * rcu_barrier()
 	 */
 	if (llist_add(&freeinit->node, &init_free_list))
-		schedule_work(&init_free_wq);
+		if (!IS_ENABLED(CONFIG_MODULE_LOAD_IN_SEQUENCE)) {
+			schedule_work(&init_free_wq);
 
 	mutex_unlock(&module_mutex);
 	wake_up_all(&module_wq);
