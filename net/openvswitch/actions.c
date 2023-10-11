@@ -349,12 +349,18 @@ static int push_eth(struct sk_buff *skb, struct sw_flow_key *key,
 	return 0;
 }
 
+struct tmp_nsh_hdr {
+	u8 data[NSH_HDR_MAX_LEN];
+};
+
+static DEFINE_PER_CPU(struct tmp_nsh_hdr, tmp_nsh_hdr);
+
 static noinline_for_stack int push_nsh(struct sk_buff *skb,
 				       struct sw_flow_key *key,
 				       const struct nlattr *a)
 {
-	u8 buffer[NSH_HDR_MAX_LEN];
-	struct nshhdr *nh = (struct nshhdr *)buffer;
+	struct tmp_nsh_hdr *hdr = this_cpu_ptr(&tmp_nsh_hdr);
+	struct nshhdr *nh = (struct nshhdr *)&hdr->data[0];
 	int err;
 
 	err = nsh_hdr_from_nlattr(a, nh, NSH_HDR_MAX_LEN);
