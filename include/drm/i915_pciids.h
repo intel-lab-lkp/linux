@@ -692,7 +692,7 @@
 	INTEL_VGA_DEVICE(0xA7A9, info), \
 	INTEL_VGA_DEVICE(0xA7AC, info), \
 	INTEL_VGA_DEVICE(0xA7AD, info)
-
+h
 /* RPL-P */
 #define INTEL_RPLP_IDS(info) \
 	INTEL_RPLU_IDS(info), \
@@ -718,7 +718,11 @@
 	INTEL_VGA_DEVICE(0x56A5, info), \
 	INTEL_VGA_DEVICE(0x56A6, info), \
 	INTEL_VGA_DEVICE(0x56B0, info), \
-	INTEL_VGA_DEVICE(0x56B1, info)
+	INTEL_VGA_DEVICE(0x56B1, info), \
+	INTEL_VGA_DEVICE(0x56BA, info), \
+	INTEL_VGA_DEVICE(0x56BB, info), \
+	INTEL_VGA_DEVICE(0x56BC, info), \
+	INTEL_VGA_DEVICE(0x56BD, info)
 
 #define INTEL_DG2_G12_IDS(info) \
 	INTEL_VGA_DEVICE(0x5696, info), \
