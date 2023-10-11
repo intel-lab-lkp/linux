@@ -256,7 +256,16 @@ static int xenkbd_probe(struct xenbus_device *dev,
 		__set_bit(EV_KEY, kbd->evbit);
 		for (i = KEY_ESC; i < KEY_UNKNOWN; i++)
 			__set_bit(i, kbd->keybit);
-		for (i = KEY_OK; i < KEY_MAX; i++)
+		/*
+		 * In theory we want to go KEY_OK..KEY_MAX, but that grows the
+		 * modalias line too long.  There is a gap of buttons from
+		 * BTN_DPAD_UP..BTN_DPAD_RIGHT and KEY_ALS_TOGGLE is the next
+		 * defined. Then continue up to KEY_BRIGHTNESS_MENU as an upper
+		 * limit.
+		 */
+		for (i = KEY_OK; i < BTN_DPAD_UP; i++)
+			__set_bit(i, kbd->keybit);
+		for (i = KEY_ALS_TOGGLE; i <= KEY_BRIGHTNESS_MENU; i++)
 			__set_bit(i, kbd->keybit);
 
 		ret = input_register_device(kbd);
