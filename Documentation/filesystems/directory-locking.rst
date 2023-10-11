@@ -67,9 +67,8 @@ If no directory is its own ancestor, the scheme above is deadlock-free.
 
 Proof:
 
-	First of all, at any moment we have a linear ordering of the
-	objects - A < B iff (A is an ancestor of B) or (B is not an ancestor
-        of A and ptr(A) < ptr(B)).
+	First of all, at any moment we have a partial ordering of the
+	objects - A < B iff A is an ancestor of B.
 
 	That ordering can change.  However, the following is true:
 
