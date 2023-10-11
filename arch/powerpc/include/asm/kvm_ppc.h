@@ -943,18 +943,18 @@ static inline void kvmppc_set_##reg(struct kvm_vcpu *vcpu, ulong val)	\
 static inline u##size kvmppc_get_##reg(struct kvm_vcpu *vcpu)		\
 {									\
 	if (kvmppc_shared_big_endian(vcpu))				\
-	       return be##size##_to_cpu(vcpu->arch.shared->reg);	\
+		return be##size##_to_cpu((__be##size __force)vcpu->arch.shared->reg);	\
 	else								\
-	       return le##size##_to_cpu(vcpu->arch.shared->reg);	\
+		return le##size##_to_cpu((__le##size __force)vcpu->arch.shared->reg);	\
 }									\
 
 #define SHARED_WRAPPER_SET(reg, size)					\
 static inline void kvmppc_set_##reg(struct kvm_vcpu *vcpu, u##size val)	\
 {									\
 	if (kvmppc_shared_big_endian(vcpu))				\
-	       vcpu->arch.shared->reg = cpu_to_be##size(val);		\
+		vcpu->arch.shared->reg = (u##size __force)cpu_to_be##size(val);	\
 	else								\
-	       vcpu->arch.shared->reg = cpu_to_le##size(val);		\
+		vcpu->arch.shared->reg = (u##size __force)cpu_to_le##size(val);	\
 }									\
 
 #define SHARED_WRAPPER(reg, size)					\
