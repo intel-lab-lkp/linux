@@ -46,6 +46,11 @@ properties:
   power-domains:
     maxItems: 1
 
+  xlnx,phy-ctrl-gpios:
+    description: Optional GPIO to control transmit/receive on RS485 phy
+      in halfduplex mode.
+    maxItems: 1
+
 required:
   - compatible
   - reg
@@ -55,6 +60,7 @@ required:
 
 allOf:
   - $ref: serial.yaml#
+  - $ref: rs485.yaml#
   - if:
       properties:
         compatible:
