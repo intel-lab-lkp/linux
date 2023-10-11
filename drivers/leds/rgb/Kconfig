@@ -51,4 +51,13 @@ config LEDS_MT6370_RGB
 	  This driver can also be built as a module. If so, the module
 	  will be called "leds-mt6370-rgb".
 
+config LEDS_TUXEDO_ITE8291
+	tristate "KBL Support for TUXEDO devices using ite8291"
+	help
+	  Say Y here to enable keyboard backlight support for TUXEDO devices
+	  using ite8291.
+
+	  This driver can also be built as a module. If so, the module
+	  will be called "leds-tuxedo-ite8291".
+
 endif # LEDS_CLASS_MULTICOLOR
