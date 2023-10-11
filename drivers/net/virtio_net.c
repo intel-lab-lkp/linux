@@ -737,7 +737,7 @@ static void virtnet_rq_set_premapped(struct virtnet_info *vi)
 		return;
 
 	for (i = 0; i < vi->max_queue_pairs; i++) {
-		if (virtqueue_set_dma_premapped(vi->rq[i].vq))
+		if (virtqueue_set_dma_premapped(vi->rq[i].vq, true))
 			continue;
 
 		vi->rq[i].do_dma = true;
