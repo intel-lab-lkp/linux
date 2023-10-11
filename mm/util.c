@@ -136,6 +136,40 @@ void *kmemdup(const void *src, size_t len, gfp_t gfp)
 EXPORT_SYMBOL(kmemdup);
 
 /**
+ * kmemdup_array - duplicate a given array.
+ *
+ * @dst: reference to the pointer to store address of duplicated array.
+ * @dst_count: number of elements in the duplicated array.
+ * @src: array to duplicate.
+ * @element_size: size of each element of array.
+ * @count: number of elements to duplicate from array.
+ * @gfp: GFP mask to use.
+ *
+ * Return: Returns 0 on success, on failure this returns a negative error value.
+ */
+int kmemdup_array(void **dst, size_t *dst_count, const void *src, size_t element_size, size_t count,
+		  gfp_t gfp)
+{
+	size_t size;
+
+	*dst_count = 0;
+
+	if (!src || !element_size || !count)
+		return -EINVAL;
+
+	size = size_mul(element_size, count);
+
+	*dst = kmemdup(src, size, gfp);
+	if (*dst)
+		return -ENOMEM;
+
+	*dst_count = size / element_size;
+
+	return 0;
+}
+EXPORT_SYMBOL(kmemdup_array);
+
+/**
  * kvmemdup - duplicate region of memory
  *
  * @src: memory region to duplicate
