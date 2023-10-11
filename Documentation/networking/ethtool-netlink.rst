@@ -708,11 +708,13 @@ Kernel response contents:
   ``ETHTOOL_A_WOL_HEADER``              nested  reply header
   ``ETHTOOL_A_WOL_MODES``               bitset  mask of enabled WoL modes
   ``ETHTOOL_A_WOL_SOPASS``              binary  SecureOn(tm) password
+  ``ETHTOOL_A_WOL_MAC_DA``              binary  Destination matching MAC address
   ====================================  ======  ==========================
 
 In reply, ``ETHTOOL_A_WOL_MODES`` mask consists of modes supported by the
 device, value of modes which are enabled. ``ETHTOOL_A_WOL_SOPASS`` is only
-included in reply if ``WAKE_MAGICSECURE`` mode is supported.
+included in reply if ``WAKE_MAGICSECURE`` mode is supported. ``ETHTOOL_A_WOL_MAC_DA``
+is only included in reply if ``WAKE_MDA`` mode is supported.
 
 
 WOL_SET
@@ -726,10 +728,13 @@ Request contents:
   ``ETHTOOL_A_WOL_HEADER``              nested  request header
   ``ETHTOOL_A_WOL_MODES``               bitset  enabled WoL modes
   ``ETHTOOL_A_WOL_SOPASS``              binary  SecureOn(tm) password
+  ``ETHTOOL_A_WOL_MAC_DA``              binary  Destination matching MAC address
   ====================================  ======  ==========================
 
 ``ETHTOOL_A_WOL_SOPASS`` is only allowed for devices supporting
 ``WAKE_MAGICSECURE`` mode.
+``ETHTOOL_A_WOL_MAC_DA`` is only allowed for devices supporting
+``WAKE_MDA`` mode.
 
 
 FEATURES_GET

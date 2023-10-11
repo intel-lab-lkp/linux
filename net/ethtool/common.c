@@ -405,6 +405,7 @@ const char wol_mode_names[][ETH_GSTRING_LEN] = {
 	[const_ilog2(WAKE_MAGIC)]	= "magic",
 	[const_ilog2(WAKE_MAGICSECURE)]	= "magicsecure",
 	[const_ilog2(WAKE_FILTER)]	= "filter",
+	[const_ilog2(WAKE_MDA)]		= "mac-da",
 };
 static_assert(ARRAY_SIZE(wol_mode_names) == WOL_MODE_COUNT);
 

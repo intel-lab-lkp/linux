@@ -12,6 +12,7 @@ struct wol_reply_data {
 	struct ethnl_reply_data		base;
 	struct ethtool_wolinfo		wol;
 	bool				show_sopass;
+	bool				show_mac_da;
 };
 
 #define WOL_REPDATA(__reply_base) \
@@ -41,6 +42,8 @@ static int wol_prepare_data(const struct ethnl_req_info *req_base,
 	/* do not include password in notifications */
 	data->show_sopass = !genl_info_is_ntf(info) &&
 		(data->wol.supported & WAKE_MAGICSECURE);
+	data->show_mac_da = !genl_info_is_ntf(info) &&
+		(data->wol.supported & WAKE_MDA);
 
 	return 0;
 }
@@ -58,6 +61,8 @@ static int wol_reply_size(const struct ethnl_req_info *req_base,
 		return len;
 	if (data->show_sopass)
 		len += nla_total_size(sizeof(data->wol.sopass));
+	if (data->show_mac_da)
+		len += nla_total_size(sizeof(data->wol.mac_da));
 
 	return len;
 }
@@ -79,6 +84,10 @@ static int wol_fill_reply(struct sk_buff *skb,
 	    nla_put(skb, ETHTOOL_A_WOL_SOPASS, sizeof(data->wol.sopass),
 		    data->wol.sopass))
 		return -EMSGSIZE;
+	if (data->show_mac_da &&
+	    nla_put(skb, ETHTOOL_A_WOL_MAC_DA, sizeof(data->wol.mac_da),
+		    data->wol.mac_da))
+		return -EMSGSIZE;
 
 	return 0;
 }
@@ -91,6 +100,8 @@ const struct nla_policy ethnl_wol_set_policy[] = {
 	[ETHTOOL_A_WOL_MODES]		= { .type = NLA_NESTED },
 	[ETHTOOL_A_WOL_SOPASS]		= { .type = NLA_BINARY,
 					    .len = SOPASS_MAX },
+	[ETHTOOL_A_WOL_MAC_DA]		= { .type = NLA_BINARY,
+					    .len = ETH_ALEN }
 };
 
 static int
@@ -130,6 +141,16 @@ ethnl_set_wol(struct ethnl_req_info *req_info, struct genl_info *info)
 		}
 		ethnl_update_binary(wol.sopass, sizeof(wol.sopass),
 				    tb[ETHTOOL_A_WOL_SOPASS], &mod);
+	}
+	if (tb[ETHTOOL_A_WOL_MAC_DA]) {
+		if (!(wol.supported & WAKE_MDA)) {
+			NL_SET_ERR_MSG_ATTR(info->extack,
+					    tb[ETHTOOL_A_WOL_MAC_DA],
+					    "mac-da not supported, cannot set MAC");
+			return -EINVAL;
+		}
+		ethnl_update_binary(wol.mac_da, sizeof(wol.mac_da),
+				    tb[ETHTOOL_A_WOL_MAC_DA], &mod);
 	}
 
 	if (!mod)

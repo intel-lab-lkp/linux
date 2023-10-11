@@ -300,6 +300,7 @@ enum {
 	ETHTOOL_A_WOL_HEADER,			/* nest - _A_HEADER_* */
 	ETHTOOL_A_WOL_MODES,			/* bitset */
 	ETHTOOL_A_WOL_SOPASS,			/* binary */
+	ETHTOOL_A_WOL_MAC_DA,			/* binary */
 
 	/* add new constants above here */
 	__ETHTOOL_A_WOL_CNT,

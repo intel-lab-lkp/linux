@@ -407,7 +407,7 @@ extern const struct nla_policy ethnl_linkstate_get_policy[ETHTOOL_A_LINKSTATE_HE
 extern const struct nla_policy ethnl_debug_get_policy[ETHTOOL_A_DEBUG_HEADER + 1];
 extern const struct nla_policy ethnl_debug_set_policy[ETHTOOL_A_DEBUG_MSGMASK + 1];
 extern const struct nla_policy ethnl_wol_get_policy[ETHTOOL_A_WOL_HEADER + 1];
-extern const struct nla_policy ethnl_wol_set_policy[ETHTOOL_A_WOL_SOPASS + 1];
+extern const struct nla_policy ethnl_wol_set_policy[ETHTOOL_A_WOL_MAC_DA + 1];
 extern const struct nla_policy ethnl_features_get_policy[ETHTOOL_A_FEATURES_HEADER + 1];
 extern const struct nla_policy ethnl_features_set_policy[ETHTOOL_A_FEATURES_WANTED + 1];
 extern const struct nla_policy ethnl_privflags_get_policy[ETHTOOL_A_PRIVFLAGS_HEADER + 1];

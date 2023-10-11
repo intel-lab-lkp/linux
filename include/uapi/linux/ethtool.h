@@ -207,12 +207,17 @@ struct ethtool_drvinfo {
  * @wolopts: Bitmask of %WAKE_* flags for enabled Wake-On-Lan modes.
  * @sopass: SecureOn(tm) password; meaningful only if %WAKE_MAGICSECURE
  *	is set in @wolopts.
+ * @mac_da: Destination MAC address to match; meaningful only if
+ *	%WAKE_MDA is set in @wolopts.
  */
 struct ethtool_wolinfo {
 	__u32	cmd;
 	__u32	supported;
 	__u32	wolopts;
-	__u8	sopass[SOPASS_MAX];
+	union {
+		__u8	sopass[SOPASS_MAX];
+		__u8	mac_da[ETH_ALEN];
+	};
 };
 
 /* for passing single values */
@@ -1989,8 +1994,9 @@ static inline int ethtool_validate_duplex(__u8 duplex)
 #define WAKE_MAGIC		(1 << 5)
 #define WAKE_MAGICSECURE	(1 << 6) /* only meaningful if WAKE_MAGIC */
 #define WAKE_FILTER		(1 << 7)
+#define WAKE_MDA		(1 << 8)
 
-#define WOL_MODE_COUNT		8
+#define WOL_MODE_COUNT		9
 
 /* L2-L4 network traffic flow types */
 #define	TCP_V4_FLOW	0x01	/* hash or spec (tcp_ip4_spec) */
