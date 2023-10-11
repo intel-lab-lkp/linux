@@ -389,7 +389,7 @@ static int pidns_install(struct nsset *nsset, struct ns_common *ns)
 {
 	struct nsproxy *nsproxy = nsset->nsproxy;
 	struct pid_namespace *active = task_active_pid_ns(current);
-	struct pid_namespace *ancestor, *new = to_pid_ns(ns);
+	struct pid_namespace *new = to_pid_ns(ns);
 
 	if (!ns_capable(new->user_ns, CAP_SYS_ADMIN) ||
 	    !ns_capable(nsset->cred->user_ns, CAP_SYS_ADMIN))
@@ -404,12 +404,6 @@ static int pidns_install(struct nsset *nsset, struct ns_common *ns)
 	 * children can not escape their current pid namespace.
 	 */
 	if (new->level < active->level)
-		return -EINVAL;
-
-	ancestor = new;
-	while (ancestor->level > active->level)
-		ancestor = ancestor->parent;
-	if (ancestor != active)
 		return -EINVAL;
 
 	put_pid_ns(nsproxy->pid_ns_for_children);
