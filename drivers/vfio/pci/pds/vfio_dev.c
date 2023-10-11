@@ -31,15 +31,17 @@ void pds_vfio_state_mutex_unlock(struct pds_vfio_pci_device *pds_vfio)
 again:
 	spin_lock(&pds_vfio->reset_lock);
 	if (pds_vfio->deferred_reset) {
+		enum vfio_device_mig_state current_state = pds_vfio->state;
+
 		pds_vfio->deferred_reset = false;
-		if (pds_vfio->state == VFIO_DEVICE_STATE_ERROR) {
+		pds_vfio->state = pds_vfio->deferred_reset_state;
+		pds_vfio->deferred_reset_state = VFIO_DEVICE_STATE_RUNNING;
+		spin_unlock(&pds_vfio->reset_lock);
+		if (current_state == VFIO_DEVICE_STATE_ERROR) {
 			pds_vfio_put_restore_file(pds_vfio);
 			pds_vfio_put_save_file(pds_vfio);
 			pds_vfio_dirty_disable(pds_vfio, false);
 		}
-		pds_vfio->state = pds_vfio->deferred_reset_state;
-		pds_vfio->deferred_reset_state = VFIO_DEVICE_STATE_RUNNING;
-		spin_unlock(&pds_vfio->reset_lock);
 		goto again;
 	}
 	mutex_unlock(&pds_vfio->state_mutex);
