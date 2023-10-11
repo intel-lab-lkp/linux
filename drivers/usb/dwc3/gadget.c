@@ -2634,7 +2634,7 @@ static void dwc3_gadget_disable_irq(struct dwc3 *dwc);
 static void __dwc3_gadget_stop(struct dwc3 *dwc);
 static int __dwc3_gadget_start(struct dwc3 *dwc);
 
-static int dwc3_gadget_soft_disconnect(struct dwc3 *dwc)
+int dwc3_gadget_soft_disconnect(struct dwc3 *dwc)
 {
 	unsigned long flags;
 	int ret;
@@ -2701,7 +2701,7 @@ static int dwc3_gadget_soft_disconnect(struct dwc3 *dwc)
 	return ret;
 }
 
-static int dwc3_gadget_soft_connect(struct dwc3 *dwc)
+int dwc3_gadget_soft_connect(struct dwc3 *dwc)
 {
 	int ret;
 
@@ -3963,6 +3963,7 @@ static void dwc3_gadget_disconnect_interrupt(struct dwc3 *dwc)
 	dwc3_gadget_dctl_write_safe(dwc, reg);
 
 	dwc->connected = false;
+	dwc->cable_disconnected = true;
 
 	dwc3_disconnect_gadget(dwc);
 
@@ -4038,6 +4039,7 @@ static void dwc3_gadget_reset_interrupt(struct dwc3 *dwc)
 	 */
 	dwc3_stop_active_transfers(dwc);
 	dwc->connected = true;
+	dwc->cable_disconnected = false;
 
 	reg = dwc3_readl(dwc->regs, DWC3_DCTL);
 	reg &= ~DWC3_DCTL_TSTCTRL_MASK;

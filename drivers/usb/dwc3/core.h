@@ -1355,6 +1355,7 @@ struct dwc3 {
 	int			last_fifo_depth;
 	int			num_ep_resized;
 	struct dentry		*debug_root;
+	bool			cable_disconnected;
 };
 
 #define INCRX_BURST_MODE 0
@@ -1567,6 +1568,9 @@ int dwc3_event_buffers_setup(struct dwc3 *dwc);
 void dwc3_event_buffers_cleanup(struct dwc3 *dwc);
 
 int dwc3_core_soft_reset(struct dwc3 *dwc);
+
+int dwc3_gadget_soft_disconnect(struct dwc3 *dwc);
+int dwc3_gadget_soft_connect(struct dwc3 *dwc);
 
 #if IS_ENABLED(CONFIG_USB_DWC3_HOST) || IS_ENABLED(CONFIG_USB_DWC3_DUAL_ROLE)
 int dwc3_host_init(struct dwc3 *dwc);

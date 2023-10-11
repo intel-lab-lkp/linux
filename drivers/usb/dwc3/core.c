@@ -122,6 +122,7 @@ static void __dwc3_set_mode(struct work_struct *work)
 	unsigned long flags;
 	int ret;
 	u32 reg;
+	u8 timeout = 100;
 	u32 desired_dr_role;
 
 	mutex_lock(&dwc->mutex);
@@ -136,6 +137,25 @@ static void __dwc3_set_mode(struct work_struct *work)
 
 	if (!desired_dr_role)
 		goto out;
+
+	/*
+	 * STAR 5001544 - If cable disconnect doesn't generate
+	 * disconnect event in device mode, then re-initialize the
+	 * controller.
+	 */
+	if ((dwc->cable_disconnected == true) &&
+		(dwc->current_dr_role == DWC3_GCTL_PRTCAP_DEVICE)) {
+		while (dwc->connected == true && timeout != 0) {
+			mdelay(10);
+			timeout--;
+		}
+
+		if (timeout == 0) {
+			dwc3_gadget_soft_disconnect(dwc);
+			udelay(100);
+			dwc3_gadget_soft_connect(dwc);
+		}
+	}
 
 	if (desired_dr_role == dwc->current_dr_role)
 		goto out;
