@@ -26,4 +26,8 @@ int lsdc_create_i2c_chan(struct drm_device *ddev,
 			 struct lsdc_display_pipe *dispipe,
 			 unsigned int index);
 
+int ls2k1000_get_i2c(struct drm_device *ddev,
+		     struct lsdc_display_pipe *dispipe,
+		     unsigned int index);
+
 #endif

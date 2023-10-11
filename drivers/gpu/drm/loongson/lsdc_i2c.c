@@ -177,3 +177,44 @@ int lsdc_create_i2c_chan(struct drm_device *ddev,
 
 	return 0;
 }
+
+static void ls2k1000_put_i2c(struct drm_device *ddev, void *data)
+{
+	struct i2c_adapter *adapter = (struct i2c_adapter *)data;
+
+	if (adapter)
+		i2c_put_adapter(adapter);
+}
+
+int ls2k1000_get_i2c(struct drm_device *ddev,
+		     struct lsdc_display_pipe *dispipe,
+		     unsigned int index)
+{
+	struct i2c_adapter *adapter;
+	int ret;
+
+	/*
+	 * On ls2k1000, display-pipe-0 use i2c-0 and display-pipe-1 use i2c-1
+	 * by default. We will add more complete DT support for this in the
+	 * future.
+	 */
+	adapter = i2c_get_adapter(index);
+	if (!adapter) {
+		drm_dbg(ddev, "DDC drivers are not ready\n");
+		/*
+		 * Should return -EPROBE_DEFER here, but we want to do so when
+		 * the DT support is added. Current we are focus on bring up,
+		 * For embedded platform, the i2c adapter is not strictly
+		 * required to be able to display something on the screen.
+		 */
+		return 0;
+	}
+
+	ret = drmm_add_action_or_reset(ddev, ls2k1000_put_i2c, adapter);
+	if (ret)
+		return ret;
+
+	dispipe->adapter = adapter;
+
+	return 0;
+}

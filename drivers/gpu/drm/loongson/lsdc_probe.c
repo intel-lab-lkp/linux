@@ -54,3 +54,30 @@ unsigned int loongson_cpu_get_prid(u8 *imp, u8 *rev)
 
 	return prid;
 }
+
+enum loongson_chip_id loongson_chip_id_fixup(enum loongson_chip_id chip_id)
+{
+	u8 impl;
+
+	if (loongson_cpu_get_prid(&impl, NULL)) {
+		/*
+		 * LS2K1000 has the LoongArch edition(with two LA264 CPU core)
+		 * and the Mips edition(with two mips64r2 CPU core), Only the
+		 * instruction set of the CPU are changed, the peripheral
+		 * devices are basically same.
+		 */
+		if (chip_id == CHIP_LS7A1000) {
+#if defined(__loongarch__)
+			if (impl == LOONGARCH_CPU_IMP_LS2K1000)
+				return CHIP_LS2K1000;
+#endif
+
+#if defined(__mips__)
+			if (impl == LOONGSON_CPU_MIPS_IMP_LS2K)
+				return CHIP_LS2K1000;
+#endif
+		}
+	}
+
+	return chip_id;
+}

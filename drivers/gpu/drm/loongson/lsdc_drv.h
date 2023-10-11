@@ -41,6 +41,7 @@
 enum loongson_chip_id {
 	CHIP_LS7A1000 = 0,
 	CHIP_LS7A2000 = 1,
+	CHIP_LS2K1000 = 2,
 	CHIP_LS_LAST,
 };
 
@@ -61,6 +62,7 @@ struct lsdc_desc {
 	u32 hw_cursor_h;
 	u32 pitch_align;         /* CRTC DMA alignment constraint */
 	bool has_vblank_counter; /* 32 bit hw vsync counter */
+	bool has_dedicated_vram;
 
 	/* device dependent ops, dc side */
 	const struct lsdc_kms_funcs *funcs;
@@ -78,12 +80,14 @@ struct loongson_gfx_desc {
 		u32 reg_offset;
 		u32 reg_size;
 	} gfxpll;
+	const struct loongson_gfxpll_funcs *gfxpll_funcs;
 
 	/* Pixel PLL, per display pipe */
 	struct {
 		u32 reg_offset;
 		u32 reg_size;
 	} pixpll[LSDC_NUM_CRTC];
+	const struct lsdc_pixpll_funcs *pixpll_funcs;
 
 	enum loongson_chip_id chip_id;
 	char model[64];
@@ -189,6 +193,11 @@ struct lsdc_display_pipe {
 	struct lsdc_primary primary;
 	struct lsdc_cursor cursor;
 	struct lsdc_output output;
+	/*
+	 * For device which don't has built-in GPIO hardware, such as ls2k1000,
+	 * we will get a i2c adapter from other module or subsystem.
+	 */
+	struct i2c_adapter *adapter;
 	struct lsdc_i2c *li2c;
 	unsigned int index;
 };

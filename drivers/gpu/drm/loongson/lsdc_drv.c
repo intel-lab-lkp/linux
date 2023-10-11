@@ -5,6 +5,7 @@
 
 #include <linux/pci.h>
 #include <linux/vgaarb.h>
+#include <linux/of_address.h>
 
 #include <drm/drm_aperture.h>
 #include <drm/drm_atomic.h>
@@ -84,6 +85,8 @@ static int lsdc_modeset_init(struct lsdc_device *ldev,
 		dispipe = &ldev->dispipe[i];
 		if (dispipe->li2c)
 			ddc = &dispipe->li2c->adapter;
+		else
+			ddc = dispipe->adapter;
 
 		ret = funcs->output_init(ddev, dispipe, ddc, i);
 		if (ret)
@@ -155,8 +158,7 @@ static int lsdc_mode_config_init(struct drm_device *ddev,
  * the DC could access the on-board VRAM.
  */
 static int lsdc_get_dedicated_vram(struct lsdc_device *ldev,
-				   struct pci_dev *pdev_dc,
-				   const struct lsdc_desc *descp)
+				   struct pci_dev *pdev_dc)
 {
 	struct drm_device *ddev = &ldev->base;
 	struct pci_dev *pdev_gpu;
@@ -187,6 +189,38 @@ static int lsdc_get_dedicated_vram(struct lsdc_device *ldev,
 	return 0;
 }
 
+static int lsdc_of_get_reserved_mem(struct lsdc_device *ldev)
+{
+	struct drm_device *ddev = &ldev->base;
+	unsigned long size = 0;
+	struct device_node *node;
+	struct resource r;
+	int ret;
+
+	if (!ddev->dev->of_node)
+		return -ENOENT;
+
+	node = of_parse_phandle(ddev->dev->of_node, "memory-region", 0);
+	if (!node) {
+		drm_err(ddev, "No memory-region property\n");
+		return -ENOENT;
+	}
+
+	ret = of_address_to_resource(node, 0, &r);
+	of_node_put(node);
+	if (ret)
+		return ret;
+
+	size = r.end - r.start + 1;
+
+	ldev->vram_base = r.start;
+	ldev->vram_size = size;
+
+	drm_info(ddev, "Using of reserved mem: %lx@%pa\n", size, &r.start);
+
+	return 0;
+}
+
 static struct lsdc_device *
 lsdc_create_device(struct pci_dev *pdev,
 		   const struct lsdc_desc *descp,
@@ -207,7 +241,11 @@ lsdc_create_device(struct pci_dev *pdev,
 
 	loongson_gfxpll_create(ddev, &ldev->gfxpll);
 
-	ret = lsdc_get_dedicated_vram(ldev, pdev, descp);
+	if (descp->has_dedicated_vram)
+		ret = lsdc_get_dedicated_vram(ldev, pdev);
+	else
+		ret = lsdc_of_get_reserved_mem(ldev);
+
 	if (ret) {
 		drm_err(ddev, "Init VRAM failed: %d\n", ret);
 		return ERR_PTR(ret);

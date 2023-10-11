@@ -39,6 +39,42 @@
 
 #define LS7A2000_CONF_REG_BASE          0x10010000
 
+/*
+ * The display controller in LS2K1000 SoC is basically same with the display
+ * controller in LS7A1000, except that there no built-in gpio hardware unit
+ * and no dedicated VRAM.
+ *       ___________________                                     _________
+ *      |            -------|                                   |         |
+ *      |  CRTC0 --> | DVO0 ----> Encoder0 ---> Connector0 ---> | Display |
+ *      |  _   _     -------|        ^              ^           |_________|
+ *      | | | | |           |        |              |
+ *      | |_| |_|           |     +------+          |
+ *      |                   <---->| i2c0 |<---------+
+ *      |  DC in LS2K1000   |     +------+
+ *      |  _   _            |     +------+
+ *      | | | | |           <---->| i2c1 |----------+
+ *      | |_| |_|           |     +------+          |            _________
+ *      |            -------|        |              |           |         |
+ *      |  CRTC1 --> | DVO1 ----> Encoder1 ---> Connector1 ---> |  Panel  |
+ *      |            -------|                                   |_________|
+ *      |___________________|
+ *
+ */
+
+#if defined(__mips__)
+#define LS2K1000_CONF_REG_BASE           0x1fe10000    /* mips64r2 edition */
+#else
+#define LS2K1000_CONF_REG_BASE           0x1fe00000    /* LoongArch edition */
+#endif
+
+/* The HDA, GPU, DDR share the single DDR PLL */
+#define LS2K1000_DDR_PLL_REG             0x0490
+/* The DC and GMAC share the same PLL */
+#define LS2K1000_DC_PLL_REG              0x04A0
+
+#define LS2K1000_PIX0_PLL_REG            0x04B0
+#define LS2K1000_PIX1_PLL_REG            0x04C0
+
 /* For LSDC_CRTCx_CFG_REG */
 #define CFG_PIX_FMT_MASK                GENMASK(2, 0)
 

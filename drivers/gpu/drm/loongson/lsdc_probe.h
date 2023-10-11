@@ -9,4 +9,6 @@
 /* Helpers for chip detection */
 unsigned int loongson_cpu_get_prid(u8 *impl, u8 *rev);
 
+enum loongson_chip_id loongson_chip_id_fixup(enum loongson_chip_id chip_id);
+
 #endif

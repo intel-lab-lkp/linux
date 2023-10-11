@@ -41,6 +41,132 @@ union lsdc_pixpll_reg_bitmap {
 	u64 d;
 };
 
+/*
+ * The pixel PLL structure of ls2k1000 is defferent than ls7a2000/ls2k2000.
+ * it take up 16 bytes, but only a few bits are useful. Sounds like a little
+ * bit of wasting register space, but this is the hardware already have been
+ * tapped.
+ */
+union ls2k1000_pixpll_reg_bitmap {
+	struct ls2k1000_pixpll_reg {
+		/* Byte 0 ~ Byte 3 */
+		unsigned sel_out      :  1;  /*  0    select this PLL        */
+		unsigned _reserved_1_ :  1;  /*  1                           */
+		unsigned sw_adj_en    :  1;  /*  2    allow software adjust  */
+		unsigned bypass       :  1;  /*  3    bypass L1 PLL          */
+		unsigned _reserved_2_ :  3;  /*  4:6                         */
+		unsigned lock_en      :  1;  /*  7    enable lock L1 PLL     */
+		unsigned _reserved_3_ :  2;  /*  8:9                         */
+		unsigned lock_check   :  2;  /* 10:11 precision check        */
+		unsigned _reserved_4_ :  4;  /* 12:15                        */
+
+		unsigned locked       :  1;  /* 16    PLL locked flag bit    */
+		unsigned _reserved_5_ :  2;  /* 17:18                        */
+		unsigned powerdown    :  1;  /* 19    powerdown the pll      */
+		unsigned _reserved_6_ :  6;  /* 20:25                        */
+		unsigned div_ref      :  6;  /* 26:31 L1 Prescaler           */
+
+		/* Byte 4 ~ Byte 7 */
+		unsigned loopc        : 10;  /* 32:41 Clock Multiplier       */
+		unsigned l1_div       :  6;  /* 42:47 no use                 */
+		unsigned _reserved_7_ : 16;  /* 48:63                        */
+
+		/* Byte 8 ~ Byte 15 */
+		unsigned div_out      :  6;  /* 64 : 69   output clk divider */
+		unsigned _reserved_8_ : 26;  /* 70 : 127  no use             */
+	} bitmap;
+
+	u32 w[4];
+	u64 d[2];
+};
+
+/*
+ * Update the pll parameters to hardware, target to the pixpll in ls2k1000
+ *
+ * @this: point to the object from which this function is called
+ * @pin: point to the struct of lsdc_pll_parms passed in
+ *
+ * return 0 if successful.
+ */
+static int ls2k1000_pixpll_param_update(struct lsdc_pixpll * const this,
+					struct lsdc_pixpll_parms const *pin)
+{
+	void __iomem *reg = this->mmio;
+	unsigned int counter = 0;
+	bool locked = false;
+	u32 val;
+
+	val = readl(reg);
+	/* Bypass the software configured PLL, using refclk directly */
+	val &= ~(1 << 0);
+	writel(val, reg);
+
+	/* Powerdown the PLL */
+	val |= (1 << 19);
+	writel(val, reg);
+
+	/* Allow the software configuration */
+	val &= ~(1 << 2);
+	writel(val, reg);
+
+	/* allow L1 PLL lock */
+	val = (1L << 7) | (3L << 10);
+	writel(val, reg);
+
+	/* clear div_ref bit field */
+	val &= ~(0x3f << 26);
+	/* set div_ref bit field */
+	val |= pin->div_ref << 26;
+	writel(val, reg);
+
+	val = readl(reg + 4);
+	/* clear loopc bit field */
+	val &= ~0x0fff;
+	/* set loopc bit field */
+	val |= pin->loopc;
+	writel(val, reg + 4);
+
+	/* set div_out */
+	writel(pin->div_out, reg + 8);
+
+	val = readl(reg);
+	/* use this parms configured just now */
+	val |= (1 << 2);
+	/* powerup the PLL */
+	val &= ~(1 << 19);
+	writel(val, reg);
+
+	/* wait pll setup and locked */
+	do {
+		val = readl(reg);
+		locked = val & 0x10000;
+		counter++;
+	} while (!locked && (counter < 2000));
+
+	drm_dbg(this->ddev, "%u loop waited\n", counter);
+
+	/* Switch to software configured PLL instead of refclk */
+	val |= 1;
+	writel(val, reg);
+
+	return 0;
+}
+
+static unsigned int
+ls2k1000_pixpll_get_clock_rate(struct lsdc_pixpll * const this)
+{
+	struct lsdc_pixpll_parms *ppar = this->priv;
+	union ls2k1000_pixpll_reg_bitmap reg_bitmap;
+	struct ls2k1000_pixpll_reg *obj = &reg_bitmap.bitmap;
+
+	reg_bitmap.w[0] = readl(this->mmio);
+	reg_bitmap.w[1] = readl(this->mmio + 4);
+	reg_bitmap.w[2] = readl(this->mmio + 8);
+	reg_bitmap.w[3] = readl(this->mmio + 12);
+
+	return ppar->ref_clock / obj->div_ref * obj->loopc / obj->div_out;
+}
+
 struct clk_to_pixpll_parms_lookup_t {
 	unsigned int clock;        /* kHz */
 
@@ -452,15 +578,36 @@ static void lsdc_pixpll_print(struct lsdc_pixpll * const this,
 }
 
 /*
- * LS7A1000, LS7A2000 and ls2k2000's pixel pll setting register is same,
+ * LS7A1000, LS7A2000 and LS2K2000's pixel PLL register layout is same,
  * we take this as default, create a new instance if a different model is
  * introduced.
  */
-static const struct lsdc_pixpll_funcs __pixpll_default_funcs = {
+const struct lsdc_pixpll_funcs ls7a1000_pixpll_funcs = {
 	.setup = lsdc_pixel_pll_setup,
 	.compute = lsdc_pixel_pll_compute,
 	.update = lsdc_pixpll_update,
 	.get_rate = lsdc_pixpll_get_freq,
+	.print = lsdc_pixpll_print,
+};
+
+const struct lsdc_pixpll_funcs ls7a2000_pixpll_funcs = {
+	.setup = lsdc_pixel_pll_setup,
+	.compute = lsdc_pixel_pll_compute,
+	.update = lsdc_pixpll_update,
+	.get_rate = lsdc_pixpll_get_freq,
+	.print = lsdc_pixpll_print,
+};
+
+/*
+ * The bit fileds of LS2K1000's pixel PLL register are different from other
+ * model, due to hardware update(revision). So we introduce a new instance
+ * of lsdc_pixpll_funcs object function to gear the control.
+ */
+const struct lsdc_pixpll_funcs ls2k1000_pixpll_funcs = {
+	.setup = lsdc_pixel_pll_setup,
+	.compute = lsdc_pixel_pll_compute,
+	.update = ls2k1000_pixpll_param_update,
+	.get_rate = ls2k1000_pixpll_get_clock_rate,
 	.print = lsdc_pixpll_print,
 };
 
@@ -477,7 +624,7 @@ int lsdc_pixpll_init(struct lsdc_pixpll * const this,
 	this->ddev = ddev;
 	this->reg_size = 8;
 	this->reg_base = gfx->conf_reg_base + gfx->pixpll[index].reg_offset;
-	this->funcs = &__pixpll_default_funcs;
+	this->funcs = gfx->pixpll_funcs;
 
 	return this->funcs->setup(this);
 }
