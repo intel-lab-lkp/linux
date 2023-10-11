@@ -433,6 +433,15 @@ static int validate_nla(const struct nlattr *nla, int maxtype,
 			goto out_err;
 		break;
 
+	case NLA_SINT:
+	case NLA_UINT:
+		if (attrlen != sizeof(u32) && attrlen != sizeof(u64)) {
+			NL_SET_ERR_MSG_ATTR_POL(extack, nla, pt,
+						"invalid attribute length");
+			return -EINVAL;
+		}
+		break;
+
 	case NLA_BITFIELD32:
 		if (attrlen != sizeof(struct nla_bitfield32))
 			goto out_err;

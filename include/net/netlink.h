@@ -183,6 +183,8 @@ enum {
 	NLA_REJECT,
 	NLA_BE16,
 	NLA_BE32,
+	NLA_SINT,
+	NLA_UINT,
 	__NLA_TYPE_MAX,
 };
 
@@ -377,9 +379,11 @@ struct nla_policy {
 
 #define __NLA_IS_UINT_TYPE(tp)					\
 	(tp == NLA_U8 || tp == NLA_U16 || tp == NLA_U32 ||	\
-	 tp == NLA_U64 || tp == NLA_BE16 || tp == NLA_BE32)
+	 tp == NLA_U64 || tp == NLA_UINT ||			\
+	 tp == NLA_BE16 || tp == NLA_BE32)
 #define __NLA_IS_SINT_TYPE(tp)						\
-	(tp == NLA_S8 || tp == NLA_S16 || tp == NLA_S32 || tp == NLA_S64)
+	(tp == NLA_S8 || tp == NLA_S16 || tp == NLA_S32 || tp == NLA_S64 || \
+	 tp == NLA_SINT)
 
 #define __NLA_ENSURE(condition) BUILD_BUG_ON_ZERO(!(condition))
 #define NLA_ENSURE_UINT_TYPE(tp)			\
@@ -1358,6 +1362,22 @@ static inline int nla_put_u32(struct sk_buff *skb, int attrtype, u32 value)
 }
 
 /**
+ * nla_put_uint - Add a variable-size unsigned int to a socket buffer
+ * @skb: socket buffer to add attribute to
+ * @attrtype: attribute type
+ * @value: numeric value
+ */
+static inline int nla_put_uint(struct sk_buff *skb, int attrtype, u64 value)
+{
+	u64 tmp64 = value;
+	u32 tmp32 = value;
+
+	if (tmp64 == tmp32)
+		return nla_put_u32(skb, attrtype, tmp32);
+	return nla_put(skb, attrtype, sizeof(u64), &tmp64);
+}
+
+/**
  * nla_put_be32 - Add a __be32 netlink attribute to a socket buffer
  * @skb: socket buffer to add attribute to
  * @attrtype: attribute type
@@ -1512,6 +1532,22 @@ static inline int nla_put_s64(struct sk_buff *skb, int attrtype, s64 value,
 }
 
 /**
+ * nla_put_sint - Add a variable-size signed int to a socket buffer
+ * @skb: socket buffer to add attribute to
+ * @attrtype: attribute type
+ * @value: numeric value
+ */
+static inline int nla_put_sint(struct sk_buff *skb, int attrtype, s64 value)
+{
+	s64 tmp64 = value;
+	s32 tmp32 = value;
+
+	if (tmp64 == tmp32)
+		return nla_put_s32(skb, attrtype, tmp32);
+	return nla_put(skb, attrtype, sizeof(s64), &tmp64);
+}
+
+/**
  * nla_put_string - Add a string netlink attribute to a socket buffer
  * @skb: socket buffer to add attribute to
  * @attrtype: attribute type
@@ -1598,6 +1634,17 @@ static inline int nla_put_bitfield32(struct sk_buff *skb, int attrtype,
 static inline u32 nla_get_u32(const struct nlattr *nla)
 {
 	return *(u32 *) nla_data(nla);
+}
+
+/**
+ * nla_get_uint - return payload of uint attribute
+ * @nla: uint netlink attribute
+ */
+static inline u64 nla_get_uint(const struct nlattr *nla)
+{
+	if (nla_len(nla) == sizeof(u32))
+		return nla_get_u32(nla);
+	return nla_get_u64(nla);
 }
 
 /**
@@ -1727,6 +1774,17 @@ static inline s64 nla_get_s64(const struct nlattr *nla)
 	nla_memcpy(&tmp, nla, sizeof(tmp));
 
 	return tmp;
+}
+
+/**
+ * nla_get_sint - return payload of uint attribute
+ * @nla: uint netlink attribute
+ */
+static inline s64 nla_get_sint(const struct nlattr *nla)
+{
+	if (nla_len(nla) == sizeof(s32))
+		return nla_get_s32(nla);
+	return nla_get_s64(nla);
 }
 
 /**
