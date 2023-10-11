@@ -2324,6 +2324,36 @@ int ice_phy_cfg_rx_offset_e822(struct ice_hw *hw, u8 port)
 }
 
 /**
+ * ice_ptp_clear_phy_offset_ready_e822 - Clear PHY TX_/RX_OFFSET_READY registers
+ * @hw: pointer to the HW struct
+ *
+ * Clear PHY TX_/RX_OFFSET_READY registers, effectively marking all transmitted
+ * and received timestamps as invalid.
+ */
+static int ice_ptp_clear_phy_offset_ready_e822(struct ice_hw *hw)
+{
+	u8 port;
+
+	for (port = 0; port < hw->phy_ports; port++) {
+		int err;
+
+		err = ice_write_phy_reg_e822(hw, port, P_REG_TX_OR, 0);
+		if (err) {
+			ice_warn(hw, "Failed to clear PHY TX_OFFSET_READY register\n");
+			return err;
+		}
+
+		err = ice_write_phy_reg_e822(hw, port, P_REG_RX_OR, 0);
+		if (err) {
+			ice_warn(hw, "Failed to clear PHY RX_OFFSET_READY register\n");
+			return err;
+		}
+	}
+
+	return 0;
+}
+
+/**
  * ice_read_phy_and_phc_time_e822 - Simultaneously capture PHC and PHY time
  * @hw: pointer to the HW struct
  * @port: the PHY port to read
@@ -3503,6 +3533,25 @@ int ice_ptp_adj_clock(struct ice_hw *hw, s32 adj)
 		return err;
 
 	return ice_ptp_tmr_cmd(hw, ICE_PTP_ADJ_TIME);
+}
+
+/**
+ * ice_ptp_clear_phy_offset_ready - Clear PHY TX_/RX_OFFSET_READY registers
+ * @hw: pointer to the HW struct
+ *
+ * Clear PHY TX_/RX_OFFSET_READY registers, effectively marking all transmitted
+ * and received timestamps as invalid.
+ */
+int ice_ptp_clear_phy_offset_ready(struct ice_hw *hw)
+{
+	switch (hw->phy_model) {
+	case ICE_PHY_E810:
+		return 0;
+	case ICE_PHY_E822:
+		return ice_ptp_clear_phy_offset_ready_e822(hw);
+	default:
+		return -EOPNOTSUPP;
+	}
 }
 
 /**

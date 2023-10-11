@@ -1796,10 +1796,11 @@ ice_ptp_settime64(struct ptp_clock_info *info, const struct timespec64 *ts)
 	int err;
 
 	/* For Vernier mode, we need to recalibrate after new settime
-	 * Start with disabling timestamp block
+	 * Start with marking timestamps as invalid.
 	 */
-	if (pf->ptp.port.link_up)
-		ice_ptp_port_phy_stop(&pf->ptp.port);
+	err = ice_ptp_clear_phy_offset_ready(hw);
+	if (err)
+		dev_warn(ice_pf_to_dev(pf), "Failed to mark timestamps as invalid before settime\n");
 
 	if (!ice_ptp_lock(hw)) {
 		err = -EBUSY;
