@@ -1793,8 +1793,19 @@ static int add_recvbuf_mergeable(struct virtnet_info *vi,
 static bool try_fill_recv(struct virtnet_info *vi, struct virtnet_rq *rq,
 			  gfp_t gfp)
 {
+	struct xsk_buff_pool *pool;
 	int err;
 	bool oom;
+
+	rcu_read_lock();
+	pool = rcu_dereference(rq->xsk.pool);
+	if (pool) {
+		err = virtnet_add_recvbuf_xsk(vi, rq, pool, gfp);
+		oom = err == -ENOMEM;
+		rcu_read_unlock();
+		goto kick;
+	}
+	rcu_read_unlock();
 
 	do {
 		if (vi->mergeable_rx_bufs)
@@ -1808,6 +1819,8 @@ static bool try_fill_recv(struct virtnet_info *vi, struct virtnet_rq *rq,
 		if (err)
 			break;
 	} while (rq->vq->num_free);
+
+kick:
 	if (virtqueue_kick_prepare(rq->vq) && virtqueue_notify(rq->vq)) {
 		unsigned long flags;
 
