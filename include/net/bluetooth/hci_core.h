@@ -350,6 +350,8 @@ struct hci_dev {
 	struct list_head list;
 	struct mutex	lock;
 
+	struct ida	unset_handle_ida;
+
 	const char	*name;
 	unsigned long	flags;
 	__u16		id;
