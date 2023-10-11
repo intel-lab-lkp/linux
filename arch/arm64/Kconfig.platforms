@@ -107,6 +107,12 @@ config ARCH_EXYNOS
 	help
 	  This enables support for ARMv8 based Samsung Exynos SoC family.
 
+config ARCH_GOOGLE_TENSOR
+	bool "Google Tensor SoC fmaily"
+	depends on ARCH_EXYNOS
+	help
+	  Support for ARMv8 based Google Tensor platforms.
+
 config ARCH_SPARX5
 	bool "Microchip Sparx5 SoC family"
 	select PINCTRL
