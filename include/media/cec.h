@@ -262,7 +262,12 @@ struct cec_adapter {
 	struct cec_log_addrs log_addrs;
 	struct cec_connector_info conn_info;
 
-	u32 tx_timeouts;
+	u32 tx_timeout_cnt;
+	u32 tx_low_drive_cnt;
+	u32 tx_error_cnt;
+	u32 tx_arb_lost_cnt;
+	u32 tx_low_drive_log_cnt;
+	u32 tx_error_log_cnt;
 
 #ifdef CONFIG_CEC_NOTIFIER
 	struct cec_notifier *notifier;
