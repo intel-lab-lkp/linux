@@ -17,9 +17,9 @@
  *
  * This memory pool is only to be used to save MCE records in MCE context.
  * MCE events are rare, so a fixed size memory pool should be enough. Use
- * 2 pages to save MCE events for now (~80 MCE records at most).
+ * 8 pages to save MCE events for now (~320 MCE records at most).
  */
-#define MCE_POOLSZ	(2 * PAGE_SIZE)
+#define MCE_POOLSZ	(8 * PAGE_SIZE)
 
 static struct gen_pool *mce_evt_pool;
 static LLIST_HEAD(mce_event_llist);
