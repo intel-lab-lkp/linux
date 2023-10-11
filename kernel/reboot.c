@@ -940,6 +940,7 @@ static DECLARE_DELAYED_WORK(hw_failure_emergency_poweroff_work,
 
 /**
  * hw_failure_emergency_poweroff - Trigger an emergency system poweroff
+ * @poweroff_delay_ms: Time after which the system is rebooted. In milliseconds.
  *
  * This may be called from any critical situation to trigger a system shutdown
  * after a given period of time. If time is negative this is not scheduled.
