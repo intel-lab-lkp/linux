@@ -552,11 +552,6 @@ out:
 	return ret;
 }
 
-static int cy8c95x0_gpio_direction_input(struct gpio_chip *gc, unsigned int off)
-{
-	return pinctrl_gpio_direction_input(gc, off);
-}
-
 static int cy8c95x0_gpio_direction_output(struct gpio_chip *gc,
 					  unsigned int off, int val)
 {
@@ -814,7 +809,7 @@ static int cy8c95x0_setup_gpiochip(struct cy8c95x0_pinctrl *chip)
 
 	gc->request = gpiochip_generic_request;
 	gc->free = gpiochip_generic_free;
-	gc->direction_input  = cy8c95x0_gpio_direction_input;
+	gc->direction_input = pinctrl_gpio_direction_input;
 	gc->direction_output = cy8c95x0_gpio_direction_output;
 	gc->get = cy8c95x0_gpio_get_value;
 	gc->set = cy8c95x0_gpio_set_value;
