@@ -1729,9 +1729,35 @@ static int ksz886x_config_aneg(struct phy_device *phydev)
 {
 	int ret;
 
-	ret = genphy_config_aneg(phydev);
-	if (ret)
-		return ret;
+	if (phydev->autoneg != AUTONEG_ENABLE) {
+		ret = genphy_setup_forced(phydev);
+		if (ret)
+			return ret;
+
+		/* When autonegotation is disabled, we need to manually force
+		 * the link state. If we don't do this, the PHY will keep
+		 * sending Fast Link Pulses (FLPs) which are part of the
+		 * autonegotiation process. This is not desired when
+		 * autonegotiation is off.
+		 */
+		ret = phy_set_bits(phydev, MII_KSZPHY_CTRL,
+				   KSZ886X_CTRL_FORCE_LINK);
+		if (ret)
+			return ret;
+	} else {
+		/* Make sure, the link state is not forced.
+		 * Otherwise, the PHY we create a link by skipping the
+		 * autonegotiation process.
+		 */
+		ret = phy_clear_bits(phydev, MII_KSZPHY_CTRL,
+				     KSZ886X_CTRL_FORCE_LINK);
+		if (ret)
+			return ret;
+
+		ret = genphy_config_aneg(phydev);
+		if (ret)
+			return ret;
+	}
 
 	/* The MDI-X configuration is automatically changed by the PHY after
 	 * switching from autoneg off to on. So, take MDI-X configuration under
