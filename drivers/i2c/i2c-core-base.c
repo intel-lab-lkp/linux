@@ -1487,6 +1487,10 @@ static int i2c_register_adapter(struct i2c_adapter *adap)
 		goto out_list;
 	}
 
+	if (adap->class & I2C_CLASS_DDC)
+		pr_warn_once("adapter '%s': Probing for class DDC devices is deprecated\n",
+			     adap->name);
+
 	if (!adap->lock_ops)
 		adap->lock_ops = &i2c_adapter_lock_ops;
 
