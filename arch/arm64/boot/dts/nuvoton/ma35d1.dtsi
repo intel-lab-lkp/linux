@@ -10,6 +10,7 @@
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/clock/nuvoton,ma35d1-clk.h>
 #include <dt-bindings/reset/nuvoton,ma35d1-reset.h>
+#include <dt-bindings/pinctrl/ma35d1-pinfunc.h>
 
 / {
 	compatible = "nuvoton,ma35d1";
@@ -83,7 +84,7 @@
 		ranges;
 
 		sys: system-management@40460000 {
-			compatible = "nuvoton,ma35d1-reset";
+			compatible = "nuvoton,ma35d1-reset", "syscon";
 			reg = <0x0 0x40460000 0x0 0x200>;
 			#reset-cells = <1>;
 		};
@@ -93,6 +94,178 @@
 			reg = <0x00000000 0x40460200 0x0 0x100>;
 			#clock-cells = <1>;
 			clocks = <&clk_hxt>;
+		};
+
+		pinctrl: pinctrl@40040000 {
+			compatible = "nuvoton,ma35d1-pinctrl";
+			#address-cells = <1>;
+			#size-cells = <1>;
+			nuvoton,sys = <&sys>;
+			ranges = <0x0 0x0 0x40040000 0xc00>;
+
+			gpioa: gpioa@40040000 {
+				reg = <0x0 0x40>;
+				interrupts = <GIC_SPI  14 IRQ_TYPE_LEVEL_HIGH>;
+				clocks = <&clk GPA_GATE>;
+				gpio-controller;
+				#gpio-cells = <2>;
+				interrupt-controller;
+				#interrupt-cells = <2>;
+			};
+
+			gpiob: gpiob@40040040 {
+				reg = <0x40 0x40>;
+				interrupts = <GIC_SPI  15 IRQ_TYPE_LEVEL_HIGH>;
+				clocks = <&clk GPB_GATE>;
+				gpio-controller;
+				#gpio-cells = <2>;
+				interrupt-controller;
+				#interrupt-cells = <2>;
+			};
+
+			gpioc: gpioc@40040080 {
+				reg = <0x80 0x40>;
+				interrupts = <GIC_SPI  16 IRQ_TYPE_LEVEL_HIGH>;
+				clocks = <&clk GPC_GATE>;
+				gpio-controller;
+				#gpio-cells = <2>;
+				interrupt-controller;
+				#interrupt-cells = <2>;
+			};
+
+			gpiod: gpiod@400400c0 {
+				reg = <0xc0 0x40>;
+				interrupts = <GIC_SPI  17 IRQ_TYPE_LEVEL_HIGH>;
+				clocks = <&clk GPD_GATE>;
+				gpio-controller;
+				#gpio-cells = <2>;
+				interrupt-controller;
+				#interrupt-cells = <2>;
+			};
+
+			gpioe: gpioe@40040100 {
+				reg = <0x100 0x40>;
+				interrupts = <GIC_SPI  73 IRQ_TYPE_LEVEL_HIGH>;
+				clocks = <&clk GPE_GATE>;
+				#gpio-cells = <2>;
+				gpio-controller;
+				interrupt-controller;
+				#interrupt-cells = <2>;
+			};
+
+			gpiof: gpiof@40040140 {
+				reg = <0x140 0x40>;
+				interrupts = <GIC_SPI  74 IRQ_TYPE_LEVEL_HIGH>;
+				clocks = <&clk GPF_GATE>;
+				gpio-controller;
+				#gpio-cells = <2>;
+				interrupt-controller;
+				#interrupt-cells = <2>;
+			};
+
+			gpiog: gpiog@40040180 {
+				reg = <0x180 0x40>;
+				interrupts = <GIC_SPI  75 IRQ_TYPE_LEVEL_HIGH>;
+				clocks = <&clk GPG_GATE>;
+				#gpio-cells = <2>;
+				gpio-controller;
+				interrupt-controller;
+				#interrupt-cells = <2>;
+			};
+
+			gpioh: gpioh@400401c0 {
+				reg = <0x1c0 0x40>;
+				interrupts = <GIC_SPI  76 IRQ_TYPE_LEVEL_HIGH>;
+				clocks = <&clk GPH_GATE>;
+				gpio-controller;
+				#gpio-cells = <2>;
+				interrupt-controller;
+				#interrupt-cells = <2>;
+			};
+
+			gpioi: gpioi@40040200 {
+				reg = <0x200 0x40>;
+				interrupts = <GIC_SPI  77 IRQ_TYPE_LEVEL_HIGH>;
+				clocks = <&clk GPI_GATE>;
+				gpio-controller;
+				#gpio-cells = <2>;
+				interrupt-controller;
+				#interrupt-cells = <2>;
+			};
+
+			gpioj: gpioj@40040240 {
+				reg = <0x240 0x40>;
+				interrupts = <GIC_SPI  78 IRQ_TYPE_LEVEL_HIGH>;
+				clocks = <&clk GPJ_GATE>;
+				gpio-controller;
+				#gpio-cells = <2>;
+				interrupt-controller;
+				#interrupt-cells = <2>;
+			};
+
+			gpiok: gpiok@40040280 {
+				reg = <0x280 0x40>;
+				interrupts = <GIC_SPI  102 IRQ_TYPE_LEVEL_HIGH>;
+				clocks = <&clk GPK_GATE>;
+				gpio-controller;
+				#gpio-cells = <2>;
+				interrupt-controller;
+				#interrupt-cells = <2>;
+			};
+
+			gpiol: gpiol@400402c0 {
+				reg = <0x2c0 0x40>;
+				interrupts = <GIC_SPI  103 IRQ_TYPE_LEVEL_HIGH>;
+				clocks = <&clk GPL_GATE>;
+				gpio-controller;
+				#gpio-cells = <2>;
+				interrupt-controller;
+				#interrupt-cells = <2>;
+			};
+
+			gpiom: gpiom@40040300 {
+				reg = <0x300 0x40>;
+				interrupts = <GIC_SPI  104 IRQ_TYPE_LEVEL_HIGH>;
+				clocks = <&clk GPM_GATE>;
+				gpio-controller;
+				#gpio-cells = <2>;
+				interrupt-controller;
+				#interrupt-cells = <2>;
+			};
+
+			gpion: gpion@40040340 {
+				reg = <0x340 0x40>;
+				interrupts = <GIC_SPI  105 IRQ_TYPE_LEVEL_HIGH>;
+				clocks = <&clk GPN_GATE>;
+				gpio-controller;
+				#gpio-cells = <2>;
+				interrupt-controller;
+				#interrupt-cells = <2>;
+			};
+
+			pcfg_default: pcfg-default {
+				slew-rate = <0>;
+				input-schmitt-disable;
+				bias-disable;
+				power-source = <3300>;
+				drive-strength = <0>;
+			};
+
+			pcfg_emac_3_3v: pcfg-emac-3.3v {
+				slew-rate = <0>;
+				input-schmitt-enable;
+				bias-disable;
+				power-source = <3300>;
+				drive-strength = <1>;
+			};
+
+			pcfg_emac_1_8v: pcfg-emac-1.8v {
+				slew-rate = <0>;
+				input-schmitt-enable;
+				bias-disable;
+				power-source = <1800>;
+				drive-strength = <1>;
+			};
 		};
 
 		uart0: serial@40700000 {

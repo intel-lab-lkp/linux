@@ -14,6 +14,10 @@
 
 	aliases {
 		serial0 = &uart0;
+		serial11 = &uart11;
+		serial12 = &uart12;
+		serial14 = &uart14;
+		serial16 = &uart16;
 	};
 
 	chosen {
@@ -33,10 +37,6 @@
 	};
 };
 
-&uart0 {
-	status = "okay";
-};
-
 &clk {
 	assigned-clocks = <&clk CAPLL>,
 			  <&clk DDRPLL>,
@@ -53,4 +53,82 @@
 			   "integer",
 			   "integer",
 			   "integer";
+};
+
+&pinctrl {
+	uart0 {
+		pinctrl_uart0: uart0grp {
+			nuvoton,pins =
+				<MA35_SYS_REG_GPE_H 24 1 &pcfg_default>,
+				<MA35_SYS_REG_GPE_H 28 1 &pcfg_default>;
+		};
+	};
+
+	uart11 {
+		pinctrl_uart11: uart11grp {
+			nuvoton,pins =
+				<MA35_SYS_REG_GPL_L 0 2 &pcfg_default>,
+				<MA35_SYS_REG_GPL_L 4 2 &pcfg_default>,
+				<MA35_SYS_REG_GPL_L 8 2 &pcfg_default>,
+				<MA35_SYS_REG_GPL_L 12 2 &pcfg_default>;
+		};
+	};
+
+	uart12 {
+		pinctrl_uart12: uart12grp {
+			nuvoton,pins =
+				<MA35_SYS_REG_GPI_L 4 2 &pcfg_default>,
+				<MA35_SYS_REG_GPI_L 8 2 &pcfg_default>,
+				<MA35_SYS_REG_GPI_L 12 2 &pcfg_default>;
+		};
+	};
+
+	uart14 {
+		pinctrl_uart14: uart14grp {
+			nuvoton,pins =
+				<MA35_SYS_REG_GPI_L 20 2 &pcfg_default>,
+				<MA35_SYS_REG_GPI_L 24 2 &pcfg_default>,
+				<MA35_SYS_REG_GPI_L 28 2 &pcfg_default>;
+		};
+	};
+
+	uart16 {
+		pinctrl_uart16: uart16grp {
+			nuvoton,pins =
+				<MA35_SYS_REG_GPK_L 0 2 &pcfg_default>,
+				<MA35_SYS_REG_GPK_L 4 2 &pcfg_default>,
+				<MA35_SYS_REG_GPK_L 8 2 &pcfg_default>,
+				<MA35_SYS_REG_GPK_L 12 2 &pcfg_default>;
+		};
+	};
+};
+
+&uart0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_uart0>;
+	status = "okay";
+};
+
+&uart11 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_uart11>;
+	status = "okay";
+};
+
+&uart12 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_uart12>;
+	status = "okay";
+};
+
+&uart14 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_uart14>;
+	status = "okay";
+};
+
+&uart16 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_uart16>;
+	status = "okay";
 };
