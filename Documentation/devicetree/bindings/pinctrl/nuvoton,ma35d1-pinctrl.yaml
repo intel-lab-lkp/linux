@@ -1,0 +1,180 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/pinctrl/nuvoton,ma35d1-pinctrl.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Nuvoton MA35D1 pin control and GPIO
+
+maintainers:
+  - Shan-Chun Hung <schung@nuvoton.com>
+
+properties:
+  compatible:
+    enum:
+      - nuvoton,ma35d1-pinctrl
+
+  '#address-cells':
+    const: 1
+
+  '#size-cells':
+    const: 1
+
+  nuvoton,sys:
+    description:
+      phandle to the syscon node
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+    items:
+      maxItems: 1
+
+  ranges: true
+
+allOf:
+  - $ref: pinctrl.yaml#
+
+patternProperties:
+  "gpio[a-n]@[0-9a-f]+$":
+    type: object
+    additionalProperties: false
+    properties:
+
+      gpio-controller: true
+
+      '#gpio-cells':
+        const: 2
+
+      reg:
+        maxItems: 1
+
+      clocks:
+        maxItems: 1
+
+      interrupt-controller: true
+
+      '#interrupt-cells':
+        const: 2
+
+      interrupts:
+        description:
+          The interrupt outputs to sysirq.
+        maxItems: 1
+
+    required:
+      - reg
+      - interrupts
+      - interrupt-controller
+      - '#interrupt-cells'
+      - gpio-controller
+      - '#gpio-cells'
+
+  "pcfg-[a-z0-9-.]+$":
+    type: object
+    description:
+      A pinctrl node should contain at least one subnodes representing the
+      pinctrl groups available on the machine. Each subnode will list the
+      pins it needs, and how they should be configured, with regard to muxer
+      configuration, pullups, drive strength, input enable/disable and input
+      schmitt.
+
+    allOf:
+      - $ref: pincfg-node.yaml#
+
+    properties:
+      bias-disable: true
+
+      bias-pull-down: true
+
+      bias-pull-up: true
+
+      drive-strength:
+        minimum: 0
+        maximum: 7
+
+      input-enable: true
+
+      input-schmitt-enable: true
+
+      power-source:
+        description:
+          I/O voltage in millivolt.
+        enum: [ 1800, 3300 ]
+
+additionalProperties:
+  type: object
+  additionalProperties:
+    type: object
+    properties:
+      nuvoton,pin:
+        description:
+          Each entry consists of 4 parameters and represents the mux and config
+          setting for one pin.
+        $ref: /schemas/types.yaml#/definitions/uint32-matrix
+        minItems: 1
+        items:
+          items:
+            - minimum: 0x80
+              maximum: 0xec
+              description:
+                The pinctrl register offset in syscon registers.
+            - minimum: 0
+              maximum: 30
+              description:
+                The bit offset in the pinctrl register.
+            - minimum: 0
+              maximum: 15
+              description:
+                The multi-function pin value.
+            - description:
+                The phandle of a node contains the generic pinconfig options
+                to use as described in pinctrl-bindings.txt.
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    #include <dt-bindings/gpio/gpio.h>
+    #include <dt-bindings/clock/nuvoton,ma35d1-clk.h>
+    #include <dt-bindings/pinctrl/ma35d1-pinfunc.h>
+
+    pinctrl@40040000 {
+        compatible = "nuvoton,ma35d1-pinctrl";
+        #address-cells = <1>;
+        #size-cells = <1>;
+        nuvoton,sys = <&sys>;
+        ranges = <0 0x40040000 0xc00>;
+
+        gpioa@40040000 {
+                reg = <0x0 0x40>;
+                interrupts = <GIC_SPI 14 IRQ_TYPE_LEVEL_HIGH>;
+                clocks = <&clk GPA_GATE>;
+                gpio-controller;
+                #gpio-cells = <2>;
+                interrupt-controller;
+                #interrupt-cells = <2>;
+        };
+
+        pcfg_default: pcfg-default {
+                slew-rate = <0>;
+                input-schmitt-disable;
+                bias-disable;
+                power-source = <3300>;
+                drive-strength = <0>;
+        };
+    };
+
+    pinctrl {
+        uart13 {
+                pinctrl_uart13: uart13grp {
+                        nuvoton,pins =
+                                <MA35_SYS_REG_GPH_H 24 2 &pcfg_default>,
+                                <MA35_SYS_REG_GPH_H 28 2 &pcfg_default>;
+                };
+        };
+    };
+
+    serial@407d0000 {
+        compatible = "nuvoton,ma35d1-uart";
+        reg = <0x407d0000 0x100>;
+        interrupts = <GIC_SPI 119 IRQ_TYPE_LEVEL_HIGH>;
+        clocks = <&clk UART13_GATE>;
+        pinctrl-0 = <&pinctrl_uart13>;
+    };
