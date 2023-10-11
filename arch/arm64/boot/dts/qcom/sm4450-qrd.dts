@@ -23,6 +23,11 @@
 	status = "okay";
 };
 
+&tlmm {
+	/* Reserved for other subsystems */
+	gpio-reserved-ranges = <0 4>, <136 1>;
+};
+
 &uart7 {
 	status = "okay";
 };
