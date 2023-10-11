@@ -242,6 +242,37 @@ void ovs_dp_detach_port(struct vport *p)
 	ovs_vport_del(p);
 }
 
+static noinline_for_stack
+void do_packet_upcall(struct sk_buff *skb, struct sw_flow_key *key,
+		      const struct vport *p, struct datapath *dp)
+{
+	struct dp_upcall_info upcall;
+	int error;
+
+	memset(&upcall, 0, sizeof(upcall));
+	upcall.cmd = OVS_PACKET_CMD_MISS;
+
+	if (dp->user_features & OVS_DP_F_DISPATCH_UPCALL_PER_CPU)
+		upcall.portid =
+		    ovs_dp_get_upcall_portid(dp, smp_processor_id());
+	else
+		upcall.portid = ovs_vport_find_upcall_portid(p, skb);
+
+	upcall.mru = OVS_CB(skb)->mru;
+	error = ovs_dp_upcall(dp, skb, key, &upcall, 0);
+	switch (error) {
+	case 0:
+	case -EAGAIN:
+	case -ERESTARTSYS:
+	case -EINTR:
+		consume_skb(skb);
+		break;
+	default:
+		kfree_skb(skb);
+		break;
+	}
+}
+
 /* Must be called with rcu_read_lock. */
 void ovs_dp_process_packet(struct sk_buff *skb, struct sw_flow_key *key)
 {
@@ -261,30 +292,7 @@ void ovs_dp_process_packet(struct sk_buff *skb, struct sw_flow_key *key)
 	flow = ovs_flow_tbl_lookup_stats(&dp->table, key, skb_get_hash(skb),
 					 &n_mask_hit, &n_cache_hit);
 	if (unlikely(!flow)) {
-		struct dp_upcall_info upcall;
-
-		memset(&upcall, 0, sizeof(upcall));
-		upcall.cmd = OVS_PACKET_CMD_MISS;
-
-		if (dp->user_features & OVS_DP_F_DISPATCH_UPCALL_PER_CPU)
-			upcall.portid =
-			    ovs_dp_get_upcall_portid(dp, smp_processor_id());
-		else
-			upcall.portid = ovs_vport_find_upcall_portid(p, skb);
-
-		upcall.mru = OVS_CB(skb)->mru;
-		error = ovs_dp_upcall(dp, skb, key, &upcall, 0);
-		switch (error) {
-		case 0:
-		case -EAGAIN:
-		case -ERESTARTSYS:
-		case -EINTR:
-			consume_skb(skb);
-			break;
-		default:
-			kfree_skb(skb);
-			break;
-		}
+		do_packet_upcall(skb, key, p, dp);
 		stats_counter = &stats->n_missed;
 		goto out;
 	}
