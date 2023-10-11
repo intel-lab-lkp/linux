@@ -2944,7 +2944,7 @@ static int gcc_sdx75_probe(struct platform_device *pdev)
 	regmap_update_bits(regmap, 0x3e004, BIT(0), BIT(0));
 	regmap_update_bits(regmap, 0x3e008, BIT(0), BIT(0));
 
-	return qcom_cc_really_probe(pdev, &gcc_sdx75_desc, regmap);
+	return qcom_cc_really_probe(&pdev->dev, &gcc_sdx75_desc, regmap);
 }
 
 static struct platform_driver gcc_sdx75_driver = {

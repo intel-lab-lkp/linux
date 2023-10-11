@@ -1793,7 +1793,7 @@ static int disp_cc_sm8450_probe(struct platform_device *pdev)
 	 */
 	regmap_update_bits(regmap, 0xe05c, BIT(0), BIT(0));
 
-	ret = qcom_cc_really_probe(pdev, &disp_cc_sm8450_desc, regmap);
+	ret = qcom_cc_really_probe(&pdev->dev, &disp_cc_sm8450_desc, regmap);
 	if (ret)
 		goto err_put_rpm;
 
