@@ -900,9 +900,9 @@ static void prepare_frag(struct vport *vport, struct sk_buff *skb,
 	skb_pull(skb, hlen);
 }
 
-static void ovs_fragment(struct net *net, struct vport *vport,
-			 struct sk_buff *skb, u16 mru,
-			 struct sw_flow_key *key)
+static noinline_for_stack
+void ovs_fragment(struct net *net, struct vport *vport, struct sk_buff *skb,
+		  u16 mru, struct sw_flow_key *key)
 {
 	enum ovs_drop_reason reason;
 	u16 orig_network_offset = 0;
