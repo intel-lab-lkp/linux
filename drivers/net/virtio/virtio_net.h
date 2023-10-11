@@ -5,6 +5,8 @@
 
 #include <linux/ethtool.h>
 #include <linux/average.h>
+#include <linux/virtio_net.h>
+#include <net/xdp_sock_drv.h>
 
 #define VIRTIO_XDP_FLAG	BIT(0)
 #define VIRTIO_XMIT_DATA_MASK (VIRTIO_XDP_FLAG)
@@ -94,6 +96,11 @@ struct virtnet_sq {
 	bool do_dma;
 
 	struct virtnet_sq_dma_head dmainfo;
+	struct {
+		struct xsk_buff_pool __rcu *pool;
+
+		dma_addr_t hdr_dma_address;
+	} xsk;
 };
 
 /* Internal representation of a receive virtqueue */
@@ -134,6 +141,13 @@ struct virtnet_rq {
 
 	/* Do dma by self */
 	bool do_dma;
+
+	struct {
+		struct xsk_buff_pool __rcu *pool;
+
+		/* xdp rxq used by xsk */
+		struct xdp_rxq_info xdp_rxq;
+	} xsk;
 };
 
 struct virtnet_info {
@@ -217,6 +231,8 @@ struct virtnet_info {
 	/* failover when STANDBY feature enabled */
 	struct failover *failover;
 };
+
+#include "xsk.h"
 
 static inline bool virtnet_is_xdp_frame(void *ptr)
 {
@@ -309,4 +325,6 @@ void virtnet_tx_pause(struct virtnet_info *vi, struct virtnet_sq *sq);
 void virtnet_tx_resume(struct virtnet_info *vi, struct virtnet_sq *sq);
 int virtnet_sq_set_premapped(struct virtnet_sq *sq);
 void virtnet_sq_unset_premapped(struct virtnet_sq *sq);
+void virtnet_rq_free_unused_buf(struct virtqueue *vq, void *buf);
+void virtnet_sq_free_unused_buf(struct virtqueue *vq, void *buf);
 #endif
