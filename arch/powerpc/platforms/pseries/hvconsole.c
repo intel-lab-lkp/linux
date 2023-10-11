@@ -29,11 +29,11 @@ int hvc_get_chars(uint32_t vtermno, char *buf, int count)
 {
 	long ret;
 	unsigned long retbuf[PLPAR_HCALL_BUFSIZE];
-	unsigned long *lbuf = (unsigned long *)buf;
+	__be64 *lbuf = (__be64 __force *)buf;
 
 	ret = plpar_hcall(H_GET_TERM_CHAR, retbuf, vtermno);
-	lbuf[0] = be64_to_cpu(retbuf[1]);
-	lbuf[1] = be64_to_cpu(retbuf[2]);
+	lbuf[0] = cpu_to_be64(retbuf[1]);
+	lbuf[1] = cpu_to_be64(retbuf[2]);
 
 	if (ret == H_SUCCESS)
 		return retbuf[0];
