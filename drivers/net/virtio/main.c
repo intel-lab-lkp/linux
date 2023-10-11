@@ -3910,7 +3910,20 @@ void virtnet_sq_free_unused_buf(struct virtqueue *vq, void *buf)
 void virtnet_rq_free_unused_buf(struct virtqueue *vq, void *buf)
 {
 	struct virtnet_info *vi = vq->vdev->priv;
+	struct xsk_buff_pool *pool;
 	int i = vq2rxq(vq);
+
+	rcu_read_lock();
+	pool = rcu_dereference(vi->rq[i].xsk.pool);
+	if (pool) {
+		struct xdp_buff *xdp;
+
+		xdp = (struct xdp_buff *)buf;
+		xsk_buff_free(xdp);
+		rcu_read_unlock();
+		return;
+	}
+	rcu_read_unlock();
 
 	if (vi->mergeable_rx_bufs)
 		put_page(virt_to_head_page(buf));
