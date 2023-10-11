@@ -59,9 +59,10 @@ struct ovs_frag_data {
 
 static DEFINE_PER_CPU(struct ovs_frag_data, ovs_frag_data_storage);
 
-#define DEFERRED_ACTION_FIFO_SIZE 10
 #define OVS_RECURSION_LIMIT 5
-#define OVS_DEFERRED_ACTION_THRESHOLD (OVS_RECURSION_LIMIT - 2)
+#define NR_FLOW_KEYS 5
+#define DEFERRED_ACTION_FIFO_SIZE 10
+
 struct action_fifo {
 	int head;
 	int tail;
@@ -69,27 +70,64 @@ struct action_fifo {
 	struct deferred_action fifo[DEFERRED_ACTION_FIFO_SIZE];
 };
 
-struct action_flow_keys {
-	struct sw_flow_key key[OVS_DEFERRED_ACTION_THRESHOLD];
+struct flow_key_stack {
+	struct sw_flow_key key[NR_FLOW_KEYS];
 };
 
-static struct action_fifo __percpu *action_fifos;
-static struct action_flow_keys __percpu *flow_keys;
 static DEFINE_PER_CPU(int, exec_actions_level);
+
+static struct flow_key_stack __percpu *flow_key_stack;
+static DEFINE_PER_CPU(int, flow_keys_allocated);
+
+static struct action_fifo __percpu *action_fifos;
+
+/*
+ * ovs_flow_key_alloc provides a per-CPU sw_flow_key allocator. keys must be
+ * freed in the reverse order that they were allocated in (i.e., a stack).
+ */
+static struct sw_flow_key *ovs_flow_key_alloc(void)
+{
+	struct flow_key_stack *keys = this_cpu_ptr(flow_key_stack);
+	int level = this_cpu_read(flow_keys_allocated);
+
+	if (unlikely(level >= NR_FLOW_KEYS))
+		return NULL;
+
+	__this_cpu_inc(flow_keys_allocated);
+
+	return &keys->key[level];
+}
+
+static void ovs_flow_key_free(struct sw_flow_key *key)
+{
+	struct flow_key_stack *keys = this_cpu_ptr(flow_key_stack);
+	int level = this_cpu_read(flow_keys_allocated);
+
+	/*
+	 * If these debug checks fire then keys will cease being freed
+	 * and the allocator will become exhausted and stop working. This
+	 * gives a graceful failure mode for programming errors.
+	 */
+
+	if (WARN_ON_ONCE(level == 0))
+		return; /* Underflow */
+
+	if (WARN_ON_ONCE(key != &keys->key[level - 1]))
+		return; /* Mismatched alloc/free order */
+
+	__this_cpu_dec(flow_keys_allocated);
+}
 
 /* Make a clone of the 'key', using the pre-allocated percpu 'flow_keys'
  * space. Return NULL if out of key spaces.
  */
 static struct sw_flow_key *clone_key(const struct sw_flow_key *key_)
 {
-	struct action_flow_keys *keys = this_cpu_ptr(flow_keys);
-	int level = this_cpu_read(exec_actions_level);
-	struct sw_flow_key *key = NULL;
+	struct sw_flow_key *key;
 
-	if (level <= OVS_DEFERRED_ACTION_THRESHOLD) {
-		key = &keys->key[level - 1];
+	key = ovs_flow_key_alloc();
+	if (likely(key))
 		*key = *key_;
-	}
 
 	return key;
 }
@@ -1522,9 +1560,10 @@ static int clone_execute(struct datapath *dp, struct sk_buff *skb,
 {
 	struct deferred_action *da;
 	struct sw_flow_key *clone;
+	int err = 0;
 
 	skb = last ? skb : skb_clone(skb, GFP_ATOMIC);
-	if (!skb) {
+	if (unlikely(!skb)) {
 		/* Out of memory, skip this action.
 		 */
 		return 0;
@@ -1536,26 +1575,27 @@ static int clone_execute(struct datapath *dp, struct sk_buff *skb,
 	 * 'flow_keys'. If clone is successful, execute the actions
 	 * without deferring.
 	 */
-	clone = clone_flow_key ? clone_key(key) : key;
-	if (clone) {
-		int err = 0;
-
-		if (actions) { /* Sample action */
-			if (clone_flow_key)
-				__this_cpu_inc(exec_actions_level);
-
-			err = do_execute_actions(dp, skb, clone,
-						 actions, len);
-
-			if (clone_flow_key)
-				__this_cpu_dec(exec_actions_level);
-		} else { /* Recirc action */
-			clone->recirc_id = recirc_id;
-			ovs_dp_process_packet(skb, clone);
-		}
-		return err;
+	if (clone_flow_key) {
+		clone = clone_key(key);
+		if (unlikely(!clone))
+			goto defer;
+	} else {
+		clone = key;
 	}
 
+	if (actions) { /* Sample action */
+		err = do_execute_actions(dp, skb, clone, actions, len);
+	} else { /* Recirc action */
+		clone->recirc_id = recirc_id;
+		ovs_dp_process_packet(skb, clone);
+	}
+
+	if (clone_flow_key)
+		ovs_flow_key_free(clone);
+
+	return err;
+
+defer:
 	/* Out of 'flow_keys' space. Defer actions */
 	da = add_deferred_actions(skb, key, actions, len);
 	if (da) {
@@ -1642,8 +1682,8 @@ int action_fifos_init(void)
 	if (!action_fifos)
 		return -ENOMEM;
 
-	flow_keys = alloc_percpu(struct action_flow_keys);
-	if (!flow_keys) {
+	flow_key_stack = alloc_percpu(struct flow_key_stack);
+	if (!flow_key_stack) {
 		free_percpu(action_fifos);
 		return -ENOMEM;
 	}
@@ -1654,5 +1694,5 @@ int action_fifos_init(void)
 void action_fifos_exit(void)
 {
 	free_percpu(action_fifos);
-	free_percpu(flow_keys);
+	free_percpu(flow_key_stack);
 }
