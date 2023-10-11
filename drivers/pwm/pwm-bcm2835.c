@@ -182,6 +182,25 @@ static void bcm2835_pwm_remove(struct platform_device *pdev)
 	clk_disable_unprepare(pc->clk);
 }
 
+static int bcm2835_pwm_suspend(struct device *dev)
+{
+	struct bcm2835_pwm *pc = dev_get_drvdata(dev);
+
+	clk_disable_unprepare(pc->clk);
+
+	return 0;
+}
+
+static int bcm2835_pwm_resume(struct device *dev)
+{
+	struct bcm2835_pwm *pc = dev_get_drvdata(dev);
+
+	return clk_prepare_enable(pc->clk);
+}
+
+static DEFINE_SIMPLE_DEV_PM_OPS(bcm2835_pwm_pm_ops, bcm2835_pwm_suspend,
+				bcm2835_pwm_resume);
+
 static const struct of_device_id bcm2835_pwm_of_match[] = {
 	{ .compatible = "brcm,bcm2835-pwm", },
 	{ /* sentinel */ }
@@ -192,6 +211,7 @@ static struct platform_driver bcm2835_pwm_driver = {
 	.driver = {
 		.name = "bcm2835-pwm",
 		.of_match_table = bcm2835_pwm_of_match,
+		.pm = pm_ptr(&bcm2835_pwm_pm_ops),
 	},
 	.probe = bcm2835_pwm_probe,
 	.remove_new = bcm2835_pwm_remove,
