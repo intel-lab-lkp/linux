@@ -1976,6 +1976,7 @@ static int virtnet_poll_tx(struct napi_struct *napi, int budget)
 	struct virtnet_info *vi = sq->vq->vdev->priv;
 	unsigned int index = vq2txq(sq->vq);
 	struct netdev_queue *txq;
+	int busy = 0;
 	int opaque;
 	bool done;
 
@@ -1992,6 +1993,11 @@ static int virtnet_poll_tx(struct napi_struct *napi, int budget)
 
 	if (sq->vq->num_free >= 2 + MAX_SKB_FRAGS)
 		netif_tx_wake_queue(txq);
+
+	if (busy) {
+		__netif_tx_unlock(txq);
+		return budget;
+	}
 
 	opaque = virtqueue_enable_cb_prepare(sq->vq);
 
