@@ -13,36 +13,28 @@ properties:
   compatible:
     oneOf:
       - enum:
+          - qcom,sa8775p-pcie-ep
           - qcom,sdx55-pcie-ep
           - qcom,sm8450-pcie-ep
       - items:
+          - const: qcom,sa8775p-pcie-ep
           - const: qcom,sdx65-pcie-ep
           - const: qcom,sdx55-pcie-ep
 
   reg:
-    items:
-      - description: Qualcomm-specific PARF configuration registers
-      - description: DesignWare PCIe registers
-      - description: External local bus interface registers
-      - description: Address Translation Unit (ATU) registers
-      - description: Memory region used to map remote RC address space
-      - description: BAR memory region
+    minItems: 6
+    maxItems: 7
 
   reg-names:
-    items:
-      - const: parf
-      - const: dbi
-      - const: elbi
-      - const: atu
-      - const: addr_space
-      - const: mmio
+    minItems: 6
+    maxItems: 7
 
   clocks:
-    minItems: 7
+    minItems: 5
     maxItems: 8
 
   clock-names:
-    minItems: 7
+    minItems: 5
     maxItems: 8
 
   qcom,perst-regs:
@@ -57,14 +49,12 @@ properties:
           - description: Perst separation enable offset
 
   interrupts:
-    items:
-      - description: PCIe Global interrupt
-      - description: PCIe Doorbell interrupt
+    minItems: 2
+    maxItems: 3
 
   interrupt-names:
-    items:
-      - const: global
-      - const: doorbell
+    minItems: 2
+    maxItems: 3
 
   reset-gpios:
     description: GPIO used as PERST# input signal
@@ -122,6 +112,51 @@ allOf:
         compatible:
           contains:
             enum:
+              - qcom,sa8775p-pcie-ep
+    then:
+      properties:
+        reg:
+          items:
+            - description: Qualcomm-specific PARF configuration registers
+            - description: DesignWare PCIe registers
+            - description: External local bus interface registers
+            - description: Address Translation Unit (ATU) registers
+            - description: Memory region used to map remote RC address space
+            - description: BAR memory region
+            - description: DMA register space
+        reg-names:
+          items:
+            - const: parf
+            - const: dbi
+            - const: elbi
+            - const: atu
+            - const: addr_space
+            - const: mmio
+            - const: dma
+    else:
+      properties:
+        reg:
+          items:
+            - description: Qualcomm-specific PARF configuration registers
+            - description: DesignWare PCIe registers
+            - description: External local bus interface registers
+            - description: Address Translation Unit (ATU) registers
+            - description: Memory region used to map remote RC address space
+            - description: BAR memory region
+        reg-names:
+          items:
+            - const: parf
+            - const: dbi
+            - const: elbi
+            - const: atu
+            - const: addr_space
+            - const: mmio
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
               - qcom,sdx55-pcie-ep
     then:
       properties:
@@ -172,6 +207,58 @@ allOf:
             - const: ref
             - const: ddrss_sf_tbu
             - const: aggre_noc_axi
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - qcom,sa8775-pcie-ep
+    then:
+      properties:
+        clocks:
+          items:
+            - description: PCIe Auxiliary clock
+            - description: PCIe CFG AHB clock
+            - description: PCIe Master AXI clock
+            - description: PCIe Slave AXI clock
+            - description: PCIe Slave Q2A AXI clock
+        clock-names:
+          items:
+            - const: aux
+            - const: cfg
+            - const: bus_master
+            - const: bus_slave
+            - const: slave_q2a
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - qcom,sa8775p-pcie-ep
+    then:
+      properties:
+        interrupts:
+          items:
+            - description: PCIe Global interrupt
+            - description: PCIe Doorbell interrupt
+            - description: DMA interrupt
+        interrupt-names:
+          items:
+            - const: global
+            - const: doorbell
+            - const: dma
+    else:
+      properties:
+        interrupts:
+          items:
+            - description: PCIe Global interrupt
+            - description: PCIe Doorbell interrupt
+        interrupt-names:
+          items:
+            - const: global
+            - const: doorbell
 
 unevaluatedProperties: false
 
