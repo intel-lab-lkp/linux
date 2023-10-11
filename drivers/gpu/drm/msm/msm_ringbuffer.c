@@ -97,7 +97,7 @@ struct msm_ringbuffer *msm_ringbuffer_new(struct msm_gpu *gpu, int id,
 	ret = drm_sched_init(&ring->sched, &msm_sched_ops, NULL,
 			     num_hw_submissions, 0, sched_timeout,
 			     NULL, NULL, to_msm_bo(ring->bo)->name,
-			     gpu->dev->dev);
+			     DRM_SCHED_POLICY_UNSET, gpu->dev->dev);
 	if (ret) {
 		goto fail;
 	}
