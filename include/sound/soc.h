@@ -655,8 +655,68 @@ struct snd_soc_dai_link_component {
 	struct of_phandle_args *dai_args;
 };
 
-struct snd_soc_dai_link_codec_ch_map {
-	unsigned int connected_cpu_id;
+/*
+ * [dai_link->ch_maps Image sample]
+ *
+ * if (num_cpus >= num_codecs)
+ *	.ch_maps is [CPU] base
+ * else
+ *	.ch_maps is [Codec] base
+ *
+ *-------------------------
+ * CPU0 <---> CodecX
+ *
+ *	Because [num_cpus >= num_codecs]
+ *	.ch_maps is [CPU] base
+ *
+ *	.num_cpus   = 1;
+ *	.num_codecs = 1;
+ *	.ch_maps[] = {{.connected_node = X; }}; CPU0 <-> CodecX
+ *
+ *-------------------------
+ * CPU0 <---> CodecX
+ * CPU1 <---> CodecY
+ * CPU2 <---> CodecZ
+ *
+ *	Because [num_cpus >= num_codecs]
+ *	.ch_maps is [CPU] base
+ *
+ *	.num_cpus   = 3;
+ *	.num_codecs = 3;
+ *	.ch_maps[] = {{.connected_node = X; },	CPU0 <-> CodecX
+ *		      {.connected_node = Y; },	CPU1 <-> CodecY
+ *		      {.connected_node = Z; }};	CPU2 <-> CodecZ
+ *
+ *-------------------------
+ * CPU0 <---> CodecX
+ * CPU1 <-+-> CodecY
+ * CPU2 <-/
+ *
+ *	Because [num_cpus >= num_codecs]
+ *	.ch_maps is [CPU] base
+ *
+ *	.num_cpus   = 3;
+ *	.num_codecs = 2;
+ *	.ch_maps[] = {{.connected_node = X; },	CPU0 <-> CodecX
+ *		      {.connected_node = Y; },	CPU1 <-> CodecY
+ *		      {.connected_node = Y; }};	CPU2 <-> CodecY
+ *
+ *-------------------------
+ * CPU_X <---> Codec0
+ * CPU_Y <-+-> Codec1
+ *	   \-> Codec2
+ *
+ *	Because [num_cpus < num_codecs]
+ *	.ch_maps is [Codec] base
+ *
+ *	.num_cpus   = 2;
+ *	.num_codecs = 3;
+ *	.ch_maps[] = {{.connected_node = X; },	Codec0 <-> CPU_X
+ *		      {.connected_node = Y; },	Codec1 <-> CPU_Y
+ *		      {.connected_node = Y; }};	Codec2 <-> CPU_Y
+ */
+struct snd_soc_dai_link_ch_map {
+	unsigned int connected_node;
 	unsigned int ch_mask;
 };
 
@@ -688,7 +748,7 @@ struct snd_soc_dai_link {
 	struct snd_soc_dai_link_component *codecs;
 	unsigned int num_codecs;
 
-	struct snd_soc_dai_link_codec_ch_map *codec_ch_maps;
+	struct snd_soc_dai_link_ch_map *ch_maps;
 	/*
 	 * You MAY specify the link's platform/PCM/DMA driver, either by
 	 * device name, or by DT/OF node, but not both. Some forms of link
