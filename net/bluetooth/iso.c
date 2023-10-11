@@ -1560,6 +1560,16 @@ struct iso_list_data {
 	int count;
 };
 
+static bool iso_match_big_flag(struct sock *sk, void *data)
+{
+	struct hci_evt_le_big_sync_estabilished *ev = data;
+
+	if (!test_bit(BT_SK_PA_SYNC, &iso_pi(sk)->flags))
+		return false;
+
+	return ev->handle == iso_pi(sk)->qos.bcast.big;
+}
+
 static bool iso_match_big(struct sock *sk, void *data)
 {
 	struct hci_evt_le_big_sync_estabilished *ev = data;
@@ -1567,15 +1577,28 @@ static bool iso_match_big(struct sock *sk, void *data)
 	return ev->handle == iso_pi(sk)->qos.bcast.big;
 }
 
-static bool iso_match_pa_sync_flag(struct sock *sk, void *data)
+static bool iso_match_conn_big_flag(struct sock *sk, void *data)
 {
-	return test_bit(BT_SK_PA_SYNC, &iso_pi(sk)->flags);
+	struct hci_conn *hcon = data;
+
+	if (!test_bit(BT_SK_PA_SYNC, &iso_pi(sk)->flags))
+		return false;
+
+	return hcon->iso_qos.bcast.big == iso_pi(sk)->qos.bcast.big;
+}
+
+static bool iso_match_conn_big(struct sock *sk, void *data)
+{
+	struct hci_conn *hcon = data;
+
+	return hcon->iso_qos.bcast.big == iso_pi(sk)->qos.bcast.big;
 }
 
 static void iso_conn_ready(struct iso_conn *conn)
 {
 	struct sock *parent = NULL;
 	struct sock *sk = conn->sk;
+	struct hci_rp_le_setup_iso_path *rp = NULL;
 	struct hci_ev_le_big_sync_estabilished *ev = NULL;
 	struct hci_ev_le_pa_sync_established *ev2 = NULL;
 	struct hci_evt_le_big_info_adv_report *ev3 = NULL;
@@ -1590,29 +1613,56 @@ static void iso_conn_ready(struct iso_conn *conn)
 		if (!hcon)
 			return;
 
-		if (test_bit(HCI_CONN_BIG_SYNC, &hcon->flags) ||
-		    test_bit(HCI_CONN_BIG_SYNC_FAILED, &hcon->flags)) {
-			ev = hci_recv_event_data(hcon->hdev,
-						 HCI_EVT_LE_BIG_SYNC_ESTABILISHED);
+		if (test_bit(HCI_CONN_BIG_SYNC, &hcon->flags)) {
+			rp = hci_cmd_complete_data(hcon->hdev,
+						   HCI_OP_LE_SETUP_ISO_PATH);
 
-			/* Get reference to PA sync parent socket, if it exists */
-			parent = iso_get_sock_listen(&hcon->src,
-						     &hcon->dst,
-						     iso_match_pa_sync_flag, NULL);
-			if (!parent && ev)
+			if (rp) {
+				/* If defer setup was used to listen for this
+				 * event, get reference to the socket marked
+				 * with the BT_SK_PA_SYNC flag.
+				 */
 				parent = iso_get_sock_listen(&hcon->src,
 							     &hcon->dst,
-							     iso_match_big, ev);
+							     iso_match_conn_big_flag,
+							     hcon);
+
+				if (!parent)
+					parent = iso_get_sock_listen(&hcon->src,
+								     &hcon->dst,
+								     iso_match_conn_big,
+								     hcon);
+			}
+		} else if (test_bit(HCI_CONN_BIG_SYNC_FAILED, &hcon->flags)) {
+			ev = hci_le_meta_evt_data(hcon->hdev,
+						  HCI_EVT_LE_BIG_SYNC_ESTABILISHED);
+
+			if (ev) {
+				/* If defer setup was used to listen for this
+				 * event, get reference to the socket marked
+				 * with the BT_SK_PA_SYNC flag.
+				 */
+				parent = iso_get_sock_listen(&hcon->src,
+							     &hcon->dst,
+							     iso_match_big_flag,
+							     ev);
+
+				if (!parent)
+					parent = iso_get_sock_listen(&hcon->src,
+								     &hcon->dst,
+								     iso_match_big,
+								     ev);
+			}
 		} else if (test_bit(HCI_CONN_PA_SYNC_FAILED, &hcon->flags)) {
-			ev2 = hci_recv_event_data(hcon->hdev,
-						  HCI_EV_LE_PA_SYNC_ESTABLISHED);
+			ev2 = hci_le_meta_evt_data(hcon->hdev,
+						   HCI_EV_LE_PA_SYNC_ESTABLISHED);
 			if (ev2)
 				parent = iso_get_sock_listen(&hcon->src,
 							     &hcon->dst,
 							     iso_match_sid, ev2);
 		} else if (test_bit(HCI_CONN_PA_SYNC, &hcon->flags)) {
-			ev3 = hci_recv_event_data(hcon->hdev,
-						  HCI_EVT_LE_BIG_INFO_ADV_REPORT);
+			ev3 = hci_le_meta_evt_data(hcon->hdev,
+						   HCI_EVT_LE_BIG_INFO_ADV_REPORT);
 			if (ev3)
 				parent = iso_get_sock_listen(&hcon->src,
 							     &hcon->dst,
@@ -1700,6 +1750,16 @@ static bool iso_match_sid(struct sock *sk, void *data)
 	return ev->sid == iso_pi(sk)->bc_sid;
 }
 
+static bool iso_match_sync_handle_flag(struct sock *sk, void *data)
+{
+	struct hci_evt_le_big_info_adv_report *ev = data;
+
+	if (!test_bit(BT_SK_PA_SYNC, &iso_pi(sk)->flags))
+		return false;
+
+	return le16_to_cpu(ev->sync_handle) == iso_pi(sk)->sync_handle;
+}
+
 static bool iso_match_sync_handle(struct sock *sk, void *data)
 {
 	struct hci_evt_le_big_info_adv_report *ev = data;
@@ -1740,7 +1800,7 @@ int iso_connect_ind(struct hci_dev *hdev, bdaddr_t *bdaddr, __u8 *flags)
 	 * in iso_pi(sk)->base so it can be passed up to user, in the case of a
 	 * broadcast sink.
 	 */
-	ev1 = hci_recv_event_data(hdev, HCI_EV_LE_PA_SYNC_ESTABLISHED);
+	ev1 = hci_le_meta_evt_data(hdev, HCI_EV_LE_PA_SYNC_ESTABLISHED);
 	if (ev1) {
 		sk = iso_get_sock_listen(&hdev->bdaddr, bdaddr, iso_match_sid,
 					 ev1);
@@ -1750,11 +1810,12 @@ int iso_connect_ind(struct hci_dev *hdev, bdaddr_t *bdaddr, __u8 *flags)
 		goto done;
 	}
 
-	ev2 = hci_recv_event_data(hdev, HCI_EVT_LE_BIG_INFO_ADV_REPORT);
+	ev2 = hci_le_meta_evt_data(hdev, HCI_EVT_LE_BIG_INFO_ADV_REPORT);
 	if (ev2) {
 		/* Try to get PA sync listening socket, if it exists */
 		sk = iso_get_sock_listen(&hdev->bdaddr, bdaddr,
-						iso_match_pa_sync_flag, NULL);
+						iso_match_sync_handle_flag,
+						ev2);
 		if (!sk)
 			sk = iso_get_sock_listen(&hdev->bdaddr, bdaddr,
 						 iso_match_sync_handle, ev2);
@@ -1780,7 +1841,7 @@ int iso_connect_ind(struct hci_dev *hdev, bdaddr_t *bdaddr, __u8 *flags)
 		}
 	}
 
-	ev3 = hci_recv_event_data(hdev, HCI_EV_LE_PER_ADV_REPORT);
+	ev3 = hci_le_meta_evt_data(hdev, HCI_EV_LE_PER_ADV_REPORT);
 	if (ev3) {
 		sk = iso_get_sock_listen(&hdev->bdaddr, bdaddr,
 					 iso_match_sync_handle_pa_report, ev3);

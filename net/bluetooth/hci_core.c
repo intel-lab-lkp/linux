@@ -3120,10 +3120,11 @@ void *hci_sent_cmd_data(struct hci_dev *hdev, __u16 opcode)
 	return hdev->sent_cmd->data + HCI_COMMAND_HDR_SIZE;
 }
 
-/* Get data from last received event */
-void *hci_recv_event_data(struct hci_dev *hdev, __u8 event)
+/* Get data from last received LE Meta event */
+void *hci_le_meta_evt_data(struct hci_dev *hdev, __u8 subevent)
 {
 	struct hci_event_hdr *hdr;
+	struct hci_ev_le_meta *ev;
 	int offset;
 
 	if (!hdev->recv_event)
@@ -3132,21 +3133,42 @@ void *hci_recv_event_data(struct hci_dev *hdev, __u8 event)
 	hdr = (void *)hdev->recv_event->data;
 	offset = sizeof(*hdr);
 
-	if (hdr->evt != event) {
-		/* In case of LE metaevent check the subevent match */
-		if (hdr->evt == HCI_EV_LE_META) {
-			struct hci_ev_le_meta *ev;
-
-			ev = (void *)hdev->recv_event->data + offset;
-			offset += sizeof(*ev);
-			if (ev->subevent == event)
-				goto found;
-		}
+	if (hdr->evt != HCI_EV_LE_META)
 		return NULL;
-	}
 
-found:
-	bt_dev_dbg(hdev, "event 0x%2.2x", event);
+	ev = (void *)hdev->recv_event->data + offset;
+	offset += sizeof(*ev);
+	if (ev->subevent != subevent)
+		return NULL;
+
+	bt_dev_dbg(hdev, "subevent 0x%2.2x", subevent);
+
+	return hdev->recv_event->data + offset;
+}
+
+/* Get data from last received Command Complete event */
+void *hci_cmd_complete_data(struct hci_dev *hdev, __u16 opcode)
+{
+	struct hci_event_hdr *hdr;
+	struct hci_ev_cmd_complete *ev;
+	int offset;
+
+	if (!hdev->recv_event)
+		return NULL;
+
+	hdr = (void *)hdev->recv_event->data;
+	offset = sizeof(*hdr);
+
+	if (hdr->evt != HCI_EV_CMD_COMPLETE)
+		return NULL;
+
+	ev = (void *)hdev->recv_event->data + offset;
+	offset += sizeof(*ev);
+
+	if (__le16_to_cpu(ev->opcode) != opcode)
+		return NULL;
+
+	bt_dev_dbg(hdev, "command complete event for 0x%4.4x", opcode);
 
 	return hdev->recv_event->data + offset;
 }
