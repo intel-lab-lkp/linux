@@ -1718,15 +1718,6 @@ static inline unsigned int xas_find_chunk(struct xa_state *xas, bool advance,
 
 	if (advance)
 		offset++;
-	if (XA_CHUNK_SIZE == BITS_PER_LONG) {
-		if (offset < XA_CHUNK_SIZE) {
-			unsigned long data = *addr & (~0UL << offset);
-			if (data)
-				return __ffs(data);
-		}
-		return XA_CHUNK_SIZE;
-	}
-
 	return find_next_bit(addr, XA_CHUNK_SIZE, offset);
 }
 
