@@ -155,45 +155,47 @@ unsigned int cpumask_local_spread(unsigned int i, int node)
 }
 EXPORT_SYMBOL(cpumask_local_spread);
 
-static DEFINE_PER_CPU(int, distribute_cpu_mask_prev);
-
 /**
  * cpumask_any_and_distribute - Return an arbitrary cpu within src1p & src2p.
  * @src1p: first &cpumask for intersection
  * @src2p: second &cpumask for intersection
  *
- * Iterated calls using the same srcp1 and srcp2 will be distributed within
- * their intersection.
+ * Iterated calls using the same srcp1 and srcp2 will be randomly distributed
+ * within their intersection.
  *
  * Returns >= nr_cpu_ids if the intersection is empty.
  */
 unsigned int cpumask_any_and_distribute(const struct cpumask *src1p,
 			       const struct cpumask *src2p)
 {
-	unsigned int next, prev;
+	unsigned int n_cpus, nth_cpu;
 
-	/* NOTE: our first selection will skip 0. */
-	prev = __this_cpu_read(distribute_cpu_mask_prev);
+	n_cpus = cpumask_weight_and(src1p, src2p);
+	if (n_cpus == 0)
+		return nr_cpu_ids;
 
-	next = find_next_and_bit_wrap(cpumask_bits(src1p), cpumask_bits(src2p),
-					nr_cpumask_bits, prev + 1);
-	if (next < nr_cpu_ids)
-		__this_cpu_write(distribute_cpu_mask_prev, next);
+	nth_cpu = get_random_u32_below(n_cpus);
 
-	return next;
+	return find_nth_and_bit(cpumask_bits(src1p), cpumask_bits(src2p),
+					nr_cpumask_bits, nth_cpu);
 }
 EXPORT_SYMBOL(cpumask_any_and_distribute);
 
+/**
+ * Returns an arbitrary cpu within srcp.
+ *
+ * Iterated calls using the same srcp will be randomly distributed
+ */
 unsigned int cpumask_any_distribute(const struct cpumask *srcp)
 {
-	unsigned int next, prev;
+	unsigned int n_cpus, nth_cpu;
 
-	/* NOTE: our first selection will skip 0. */
-	prev = __this_cpu_read(distribute_cpu_mask_prev);
-	next = find_next_bit_wrap(cpumask_bits(srcp), nr_cpumask_bits, prev + 1);
-	if (next < nr_cpu_ids)
-		__this_cpu_write(distribute_cpu_mask_prev, next);
+	n_cpus = cpumask_weight(srcp);
+	if (n_cpus == 0)
+		return nr_cpu_ids;
 
-	return next;
+	nth_cpu = get_random_u32_below(n_cpus);
+
+	return find_nth_bit(cpumask_bits(srcp), nr_cpumask_bits, nth_cpu);
 }
 EXPORT_SYMBOL(cpumask_any_distribute);
