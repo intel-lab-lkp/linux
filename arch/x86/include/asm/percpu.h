@@ -49,18 +49,32 @@
 #define __force_percpu_prefix	"%%"__stringify(__percpu_seg)":"
 #define __my_cpu_offset		this_cpu_read(this_cpu_off)
 
-/*
- * Compared to the generic __my_cpu_offset version, the following
- * saves one instruction and avoids clobbering a temp register.
- */
+#ifdef CONFIG_X86_64
 #define arch_raw_cpu_ptr(ptr)					\
 ({								\
 	unsigned long tcp_ptr__;				\
-	asm ("add " __percpu_arg(1) ", %0"			\
+	asm (ALTERNATIVE("movq " __percpu_arg(1) ", %0",	\
+			 "rdgsbase %0",				\
+			 X86_FEATURE_FSGSBASE)			\
 	     : "=r" (tcp_ptr__)					\
-	     : "m" (__my_cpu_var(this_cpu_off)), "0" (ptr));	\
+	     : "m" (__my_cpu_var(this_cpu_off)));		\
+								\
+	tcp_ptr__ += (unsigned long)(ptr);			\
 	(typeof(*(ptr)) __kernel __force *)tcp_ptr__;		\
 })
+#else /* CONFIG_X86_64 */
+#define arch_raw_cpu_ptr(ptr)					\
+({								\
+	unsigned long tcp_ptr__;				\
+	asm ("movl " __percpu_arg(1) ", %0"			\
+	     : "=r" (tcp_ptr__)					\
+	     : "m" (__my_cpu_var(this_cpu_off)));		\
+								\
+	tcp_ptr__ += (unsigned long)(ptr);			\
+	(typeof(*(ptr)) __kernel __force *)tcp_ptr__;		\
+})
+#endif /* CONFIG_X86_64 */
+
 #else /* CONFIG_SMP */
 #define __percpu_seg_override
 #define __percpu_prefix		""
