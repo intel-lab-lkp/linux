@@ -2122,8 +2122,7 @@ static bool gen12_plane_format_mod_supported(struct drm_plane *_plane,
 	case DRM_FORMAT_Y216:
 	case DRM_FORMAT_XVYU12_16161616:
 	case DRM_FORMAT_XVYU16161616:
-		if (!intel_fb_is_ccs_modifier(modifier))
-			return true;
+		return true;
 		fallthrough;
 	default:
 		return false;
