@@ -17,6 +17,20 @@ properties:
       pair of strings, the first being the connection's sink, the second
       being the connection's source.
 
+  lpa-widgets:
+    $ref: /schemas/types.yaml#/definitions/non-unique-string-array
+    description: |
+      A list of DAPM endpoints which mark paths between these endpoints should
+      not be disabled when system enters in suspend state. LPA means low power
+      audio case. For example on asymmetric multiprocessor, there are Cortex-A
+      core and Cortex-M core, Linux is running on Cortex-A core, RTOS or other
+      OS is running on Cortex-M core. The audio hardware devices can be
+      controlled by Cortex-M. LPA can be explained as a mechanism that Cortex-A
+      allocates a large buffer and fill audio data, then Cortex-A can enter
+      into suspend for the purpose of power saving. Cortex-M continues to play
+      the sound during suspend phase of Cortex-A. LPA requires some audio paths
+      still enabled when Cortex-A enters into suspend.
+
   model:
     $ref: /schemas/types.yaml#/definitions/string
     description: User specified audio sound card name
