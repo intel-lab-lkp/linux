@@ -3381,6 +3381,8 @@ static struct drm_display_mode *drm_mode_std(struct drm_connector *connector,
 				    false);
 		break;
 	}
+	if (!mode)
+		return NULL;
 	return mode;
 }
 
