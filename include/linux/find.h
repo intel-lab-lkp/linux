@@ -60,7 +60,7 @@ unsigned long find_next_bit(const unsigned long *addr, unsigned long size,
 		if (unlikely(offset >= size))
 			return size;
 
-		val = *addr & GENMASK(size - 1, offset);
+		val = READ_ONCE(*addr) & GENMASK(size - 1, offset);
 		return val ? __ffs(val) : size;
 	}
 
@@ -90,7 +90,8 @@ unsigned long find_next_and_bit(const unsigned long *addr1,
 		if (unlikely(offset >= size))
 			return size;
 
-		val = *addr1 & *addr2 & GENMASK(size - 1, offset);
+		val = READ_ONCE(*addr1) & READ_ONCE(*addr2) &
+						GENMASK(size - 1, offset);
 		return val ? __ffs(val) : size;
 	}
 
@@ -121,7 +122,8 @@ unsigned long find_next_andnot_bit(const unsigned long *addr1,
 		if (unlikely(offset >= size))
 			return size;
 
-		val = *addr1 & ~*addr2 & GENMASK(size - 1, offset);
+		val = READ_ONCE(*addr1) & ~READ_ONCE(*addr2) &
+						GENMASK(size - 1, offset);
 		return val ? __ffs(val) : size;
 	}
 
@@ -151,7 +153,8 @@ unsigned long find_next_or_bit(const unsigned long *addr1,
 		if (unlikely(offset >= size))
 			return size;
 
-		val = (*addr1 | *addr2) & GENMASK(size - 1, offset);
+		val = (READ_ONCE(*addr1) | READ_ONCE(*addr2)) &
+						GENMASK(size - 1, offset);
 		return val ? __ffs(val) : size;
 	}
 
@@ -179,7 +182,7 @@ unsigned long find_next_zero_bit(const unsigned long *addr, unsigned long size,
 		if (unlikely(offset >= size))
 			return size;
 
-		val = *addr | ~GENMASK(size - 1, offset);
+		val = READ_ONCE(*addr) | ~GENMASK(size - 1, offset);
 		return val == ~0UL ? size : ffz(val);
 	}
 
@@ -200,7 +203,7 @@ static inline
 unsigned long find_first_bit(const unsigned long *addr, unsigned long size)
 {
 	if (small_const_nbits(size)) {
-		unsigned long val = *addr & GENMASK(size - 1, 0);
+		unsigned long val = READ_ONCE(*addr) & GENMASK(size - 1, 0);
 
 		return val ? __ffs(val) : size;
 	}
@@ -229,7 +232,7 @@ unsigned long find_nth_bit(const unsigned long *addr, unsigned long size, unsign
 		return size;
 
 	if (small_const_nbits(size)) {
-		unsigned long val =  *addr & GENMASK(size - 1, 0);
+		unsigned long val = READ_ONCE(*addr) & GENMASK(size - 1, 0);
 
 		return val ? fns(val, n) : size;
 	}
@@ -255,7 +258,8 @@ unsigned long find_nth_and_bit(const unsigned long *addr1, const unsigned long *
 		return size;
 
 	if (small_const_nbits(size)) {
-		unsigned long val =  *addr1 & *addr2 & GENMASK(size - 1, 0);
+		unsigned long val = READ_ONCE(*addr1) & READ_ONCE(*addr2)
+							& GENMASK(size - 1, 0);
 
 		return val ? fns(val, n) : size;
 	}
@@ -282,7 +286,8 @@ unsigned long find_nth_andnot_bit(const unsigned long *addr1, const unsigned lon
 		return size;
 
 	if (small_const_nbits(size)) {
-		unsigned long val =  *addr1 & (~*addr2) & GENMASK(size - 1, 0);
+		unsigned long val = READ_ONCE(*addr1) & ~READ_ONCE(*addr2) &
+							GENMASK(size - 1, 0);
 
 		return val ? fns(val, n) : size;
 	}
@@ -312,7 +317,8 @@ unsigned long find_nth_and_andnot_bit(const unsigned long *addr1,
 		return size;
 
 	if (small_const_nbits(size)) {
-		unsigned long val =  *addr1 & *addr2 & (~*addr3) & GENMASK(size - 1, 0);
+		unsigned long val = READ_ONCE(*addr1) & READ_ONCE(*addr2) &
+				~READ_ONCE(*addr3) & GENMASK(size - 1, 0);
 
 		return val ? fns(val, n) : size;
 	}
@@ -336,7 +342,8 @@ unsigned long find_first_and_bit(const unsigned long *addr1,
 				 unsigned long size)
 {
 	if (small_const_nbits(size)) {
-		unsigned long val = *addr1 & *addr2 & GENMASK(size - 1, 0);
+		unsigned long val = READ_ONCE(*addr1) & READ_ONCE(*addr2) &
+							GENMASK(size - 1, 0);
 
 		return val ? __ffs(val) : size;
 	}
@@ -358,7 +365,7 @@ static inline
 unsigned long find_first_zero_bit(const unsigned long *addr, unsigned long size)
 {
 	if (small_const_nbits(size)) {
-		unsigned long val = *addr | ~GENMASK(size - 1, 0);
+		unsigned long val = READ_ONCE(*addr) | ~GENMASK(size - 1, 0);
 
 		return val == ~0UL ? size : ffz(val);
 	}
@@ -379,7 +386,7 @@ static inline
 unsigned long find_last_bit(const unsigned long *addr, unsigned long size)
 {
 	if (small_const_nbits(size)) {
-		unsigned long val = *addr & GENMASK(size - 1, 0);
+		unsigned long val = READ_ONCE(*addr) & GENMASK(size - 1, 0);
 
 		return val ? __fls(val) : size;
 	}
@@ -505,7 +512,7 @@ unsigned long find_next_zero_bit_le(const void *addr, unsigned
 		long size, unsigned long offset)
 {
 	if (small_const_nbits(size)) {
-		unsigned long val = *(const unsigned long *)addr;
+		unsigned long val = READ_ONCE(*(const unsigned long *)addr);
 
 		if (unlikely(offset >= size))
 			return size;
@@ -523,7 +530,8 @@ static inline
 unsigned long find_first_zero_bit_le(const void *addr, unsigned long size)
 {
 	if (small_const_nbits(size)) {
-		unsigned long val = swab(*(const unsigned long *)addr) | ~GENMASK(size - 1, 0);
+		unsigned long val = swab(READ_ONCE(*(const unsigned long *)addr))
+						| ~GENMASK(size - 1, 0);
 
 		return val == ~0UL ? size : ffz(val);
 	}
@@ -538,7 +546,7 @@ unsigned long find_next_bit_le(const void *addr, unsigned
 		long size, unsigned long offset)
 {
 	if (small_const_nbits(size)) {
-		unsigned long val = *(const unsigned long *)addr;
+		unsigned long val = READ_ONCE(*(const unsigned long *)addr);
 
 		if (unlikely(offset >= size))
 			return size;

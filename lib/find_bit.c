@@ -98,7 +98,7 @@ out:										\
  */
 unsigned long _find_first_bit(const unsigned long *addr, unsigned long size)
 {
-	return FIND_FIRST_BIT(addr[idx], /* nop */, size);
+	return FIND_FIRST_BIT(READ_ONCE(addr[idx]), /* nop */, size);
 }
 EXPORT_SYMBOL(_find_first_bit);
 #endif
@@ -111,7 +111,8 @@ unsigned long _find_first_and_bit(const unsigned long *addr1,
 				  const unsigned long *addr2,
 				  unsigned long size)
 {
-	return FIND_FIRST_BIT(addr1[idx] & addr2[idx], /* nop */, size);
+	return FIND_FIRST_BIT(READ_ONCE(addr1[idx]) & READ_ONCE(addr2[idx]),
+				/* nop */, size);
 }
 EXPORT_SYMBOL(_find_first_and_bit);
 #endif
@@ -122,7 +123,7 @@ EXPORT_SYMBOL(_find_first_and_bit);
  */
 unsigned long _find_first_zero_bit(const unsigned long *addr, unsigned long size)
 {
-	return FIND_FIRST_BIT(~addr[idx], /* nop */, size);
+	return FIND_FIRST_BIT(~READ_ONCE(addr[idx]), /* nop */, size);
 }
 EXPORT_SYMBOL(_find_first_zero_bit);
 #endif
@@ -130,28 +131,30 @@ EXPORT_SYMBOL(_find_first_zero_bit);
 #ifndef find_next_bit
 unsigned long _find_next_bit(const unsigned long *addr, unsigned long nbits, unsigned long start)
 {
-	return FIND_NEXT_BIT(addr[idx], /* nop */, nbits, start);
+	return FIND_NEXT_BIT(READ_ONCE(addr[idx]), /* nop */, nbits, start);
 }
 EXPORT_SYMBOL(_find_next_bit);
 #endif
 
 unsigned long __find_nth_bit(const unsigned long *addr, unsigned long size, unsigned long n)
 {
-	return FIND_NTH_BIT(addr[idx], size, n);
+	return FIND_NTH_BIT(READ_ONCE(addr[idx]), size, n);
 }
 EXPORT_SYMBOL(__find_nth_bit);
 
 unsigned long __find_nth_and_bit(const unsigned long *addr1, const unsigned long *addr2,
 				 unsigned long size, unsigned long n)
 {
-	return FIND_NTH_BIT(addr1[idx] & addr2[idx], size, n);
+	return FIND_NTH_BIT(READ_ONCE(addr1[idx]) & READ_ONCE(addr2[idx]),
+			    size, n);
 }
 EXPORT_SYMBOL(__find_nth_and_bit);
 
 unsigned long __find_nth_andnot_bit(const unsigned long *addr1, const unsigned long *addr2,
 				 unsigned long size, unsigned long n)
 {
-	return FIND_NTH_BIT(addr1[idx] & ~addr2[idx], size, n);
+	return FIND_NTH_BIT(READ_ONCE(addr1[idx]) & ~READ_ONCE(addr2[idx]),
+			    size, n);
 }
 EXPORT_SYMBOL(__find_nth_andnot_bit);
 
@@ -160,7 +163,8 @@ unsigned long __find_nth_and_andnot_bit(const unsigned long *addr1,
 					const unsigned long *addr3,
 					unsigned long size, unsigned long n)
 {
-	return FIND_NTH_BIT(addr1[idx] & addr2[idx] & ~addr3[idx], size, n);
+	return FIND_NTH_BIT(READ_ONCE(addr1[idx]) & READ_ONCE(addr2[idx]) &
+			    ~READ_ONCE(addr3[idx]), size, n);
 }
 EXPORT_SYMBOL(__find_nth_and_andnot_bit);
 
@@ -168,7 +172,8 @@ EXPORT_SYMBOL(__find_nth_and_andnot_bit);
 unsigned long _find_next_and_bit(const unsigned long *addr1, const unsigned long *addr2,
 					unsigned long nbits, unsigned long start)
 {
-	return FIND_NEXT_BIT(addr1[idx] & addr2[idx], /* nop */, nbits, start);
+	return FIND_NEXT_BIT(READ_ONCE(addr1[idx]) & READ_ONCE(addr2[idx]),
+			     /* nop */, nbits, start);
 }
 EXPORT_SYMBOL(_find_next_and_bit);
 #endif
@@ -177,7 +182,8 @@ EXPORT_SYMBOL(_find_next_and_bit);
 unsigned long _find_next_andnot_bit(const unsigned long *addr1, const unsigned long *addr2,
 					unsigned long nbits, unsigned long start)
 {
-	return FIND_NEXT_BIT(addr1[idx] & ~addr2[idx], /* nop */, nbits, start);
+	return FIND_NEXT_BIT(READ_ONCE(addr1[idx]) & ~READ_ONCE(addr2[idx]),
+			     /* nop */, nbits, start);
 }
 EXPORT_SYMBOL(_find_next_andnot_bit);
 #endif
@@ -186,7 +192,8 @@ EXPORT_SYMBOL(_find_next_andnot_bit);
 unsigned long _find_next_or_bit(const unsigned long *addr1, const unsigned long *addr2,
 					unsigned long nbits, unsigned long start)
 {
-	return FIND_NEXT_BIT(addr1[idx] | addr2[idx], /* nop */, nbits, start);
+	return FIND_NEXT_BIT(READ_ONCE(addr1[idx]) | READ_ONCE(addr2[idx]),
+			     /* nop */, nbits, start);
 }
 EXPORT_SYMBOL(_find_next_or_bit);
 #endif
@@ -195,7 +202,7 @@ EXPORT_SYMBOL(_find_next_or_bit);
 unsigned long _find_next_zero_bit(const unsigned long *addr, unsigned long nbits,
 					 unsigned long start)
 {
-	return FIND_NEXT_BIT(~addr[idx], /* nop */, nbits, start);
+	return FIND_NEXT_BIT(~READ_ONCE(addr[idx]), /* nop */, nbits, start);
 }
 EXPORT_SYMBOL(_find_next_zero_bit);
 #endif
@@ -208,7 +215,7 @@ unsigned long _find_last_bit(const unsigned long *addr, unsigned long size)
 		unsigned long idx = (size-1) / BITS_PER_LONG;
 
 		do {
-			val &= addr[idx];
+			val &= READ_ONCE(addr[idx]);
 			if (val)
 				return idx * BITS_PER_LONG + __fls(val);
 
@@ -242,7 +249,7 @@ EXPORT_SYMBOL(find_next_clump8);
  */
 unsigned long _find_first_zero_bit_le(const unsigned long *addr, unsigned long size)
 {
-	return FIND_FIRST_BIT(~addr[idx], swab, size);
+	return FIND_FIRST_BIT(~READ_ONCE(addr[idx]), swab, size);
 }
 EXPORT_SYMBOL(_find_first_zero_bit_le);
 
@@ -252,7 +259,7 @@ EXPORT_SYMBOL(_find_first_zero_bit_le);
 unsigned long _find_next_zero_bit_le(const unsigned long *addr,
 					unsigned long size, unsigned long offset)
 {
-	return FIND_NEXT_BIT(~addr[idx], swab, size, offset);
+	return FIND_NEXT_BIT(~READ_ONCE(addr[idx]), swab, size, offset);
 }
 EXPORT_SYMBOL(_find_next_zero_bit_le);
 #endif
@@ -261,7 +268,7 @@ EXPORT_SYMBOL(_find_next_zero_bit_le);
 unsigned long _find_next_bit_le(const unsigned long *addr,
 				unsigned long size, unsigned long offset)
 {
-	return FIND_NEXT_BIT(addr[idx], swab, size, offset);
+	return FIND_NEXT_BIT(READ_ONCE(addr[idx]), swab, size, offset);
 }
 EXPORT_SYMBOL(_find_next_bit_le);
 
