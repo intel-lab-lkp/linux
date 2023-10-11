@@ -43,6 +43,7 @@
 #include "intel_dpio_phy.h"
 #include "intel_hdcp.h"
 #include "intel_hotplug.h"
+#include "intel_psr.h"
 #include "skl_scaler.h"
 
 static int intel_dp_mst_check_constraints(struct drm_i915_private *i915, int bpp,
@@ -421,6 +422,8 @@ static int intel_dp_mst_compute_config(struct intel_encoder *encoder,
 	intel_dp_audio_compute_config(encoder, pipe_config, conn_state);
 
 	intel_ddi_compute_min_voltage_level(dev_priv, pipe_config);
+
+	intel_psr_compute_config(intel_dp, pipe_config, conn_state);
 
 	return 0;
 }
