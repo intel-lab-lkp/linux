@@ -411,6 +411,8 @@ static int imx_gpc_probe(struct platform_device *pdev)
 	void __iomem *base;
 	int ret;
 
+	device_set_node(&pdev->dev, dev_fwnode(pdev->dev.parent));
+
 	pgc_node = of_get_child_by_name(pdev->dev.of_node, "pgc");
 
 	/* bail out if DT too old and doesn't provide the necessary info */
