@@ -496,6 +496,7 @@ static int iwl_parse_v1_v2_firmware(struct iwl_drv *drv,
 	u32 api_ver, hdr_size, build;
 	char buildstr[25];
 	const u8 *src;
+	int len;
 
 	drv->fw.ucode_ver = le32_to_cpu(ucode->ver);
 	api_ver = IWL_UCODE_API(drv->fw.ucode_ver);
@@ -544,14 +545,16 @@ static int iwl_parse_v1_v2_firmware(struct iwl_drv *drv,
 	else
 		buildstr[0] = '\0';
 
-	snprintf(drv->fw.fw_version,
-		 sizeof(drv->fw.fw_version),
-		 "%u.%u.%u.%u%s %s",
-		 IWL_UCODE_MAJOR(drv->fw.ucode_ver),
-		 IWL_UCODE_MINOR(drv->fw.ucode_ver),
-		 IWL_UCODE_API(drv->fw.ucode_ver),
-		 IWL_UCODE_SERIAL(drv->fw.ucode_ver),
-		 buildstr, iwl_reduced_fw_name(drv));
+	len = snprintf(drv->fw.fw_version,
+		       sizeof(drv->fw.fw_version),
+		       "%u.%u.%u.%u%s %s",
+		       IWL_UCODE_MAJOR(drv->fw.ucode_ver),
+		       IWL_UCODE_MINOR(drv->fw.ucode_ver),
+		       IWL_UCODE_API(drv->fw.ucode_ver),
+		       IWL_UCODE_SERIAL(drv->fw.ucode_ver),
+		       buildstr, iwl_reduced_fw_name(drv));
+	if (len)
+		printk("FIXME");
 
 	/* Verify size of file vs. image size info in file's header */
 
@@ -700,7 +703,7 @@ static int iwl_parse_tlv_firmware(struct iwl_drv *drv,
 	const u8 *tlv_data;
 	char buildstr[25];
 	u32 build, paging_mem_size;
-	int num_of_cpus;
+	int num_of_cpus, l;
 	bool usniffer_req = false;
 
 	if (len < sizeof(*ucode)) {
@@ -724,14 +727,16 @@ static int iwl_parse_tlv_firmware(struct iwl_drv *drv,
 	else
 		buildstr[0] = '\0';
 
-	snprintf(drv->fw.fw_version,
-		 sizeof(drv->fw.fw_version),
-		 "%u.%u.%u.%u%s %s",
-		 IWL_UCODE_MAJOR(drv->fw.ucode_ver),
-		 IWL_UCODE_MINOR(drv->fw.ucode_ver),
-		 IWL_UCODE_API(drv->fw.ucode_ver),
-		 IWL_UCODE_SERIAL(drv->fw.ucode_ver),
-		 buildstr, iwl_reduced_fw_name(drv));
+	l = snprintf(drv->fw.fw_version,
+		       sizeof(drv->fw.fw_version),
+		       "%u.%u.%u.%u%s %s",
+		       IWL_UCODE_MAJOR(drv->fw.ucode_ver),
+		       IWL_UCODE_MINOR(drv->fw.ucode_ver),
+		       IWL_UCODE_API(drv->fw.ucode_ver),
+		       IWL_UCODE_SERIAL(drv->fw.ucode_ver),
+		       buildstr, iwl_reduced_fw_name(drv));
+	if (l)
+		printk("FIXME");
 
 	data = ucode->data;
 
@@ -978,16 +983,21 @@ static int iwl_parse_tlv_firmware(struct iwl_drv *drv,
 			minor = le32_to_cpup(ptr++);
 			local_comp = le32_to_cpup(ptr);
 
-			if (major >= 35)
-				snprintf(drv->fw.fw_version,
-					 sizeof(drv->fw.fw_version),
-					"%u.%08x.%u %s", major, minor,
-					local_comp, iwl_reduced_fw_name(drv));
-			else
-				snprintf(drv->fw.fw_version,
-					 sizeof(drv->fw.fw_version),
-					"%u.%u.%u %s", major, minor,
-					local_comp, iwl_reduced_fw_name(drv));
+			if (major >= 35) {
+				l = snprintf(drv->fw.fw_version,
+					     sizeof(drv->fw.fw_version),
+					     "%u.%08x.%u %s", major, minor,
+					     local_comp, iwl_reduced_fw_name(drv));
+				if (l)
+					printk("FIXME");
+			} else {
+				l = snprintf(drv->fw.fw_version,
+					     sizeof(drv->fw.fw_version),
+					     "%u.%u.%u %s", major, minor,
+					     local_comp, iwl_reduced_fw_name(drv));
+				if (l)
+					printk("FIXME");
+			}
 			break;
 			}
 		case IWL_UCODE_TLV_FW_DBG_DEST: {

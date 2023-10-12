@@ -1462,9 +1462,8 @@ static struct iwl_op_mode *iwl_op_mode_dvm_start(struct iwl_trans *trans,
 	iwl_power_initialize(priv);
 	iwl_tt_initialize(priv);
 
-	snprintf(priv->hw->wiphy->fw_version,
-		 sizeof(priv->hw->wiphy->fw_version),
-		 "%s", fw->fw_version);
+	strscpy(priv->hw->wiphy->fw_version, fw->fw_version,
+		sizeof(priv->hw->wiphy->fw_version));
 
 	priv->new_scan_threshold_behaviour =
 		!!(ucode_flags & IWL_UCODE_TLV_FLAGS_NEWSCAN);
