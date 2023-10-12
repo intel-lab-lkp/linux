@@ -1068,7 +1068,7 @@ static int cpmac_probe(struct platform_device *pdev)
 	pdata = dev_get_platdata(&pdev->dev);
 
 	if (external_switch || dumb_switch) {
-		strncpy(mdio_bus_id, "fixed-0", MII_BUS_ID_SIZE); /* fixed phys bus */
+		strscpy(mdio_bus_id, "fixed-0", sizeof(mdio_bus_id)); /* fixed phys bus */
 		phy_id = pdev->id;
 	} else {
 		for (phy_id = 0; phy_id < PHY_MAX_ADDR; phy_id++) {
@@ -1076,7 +1076,8 @@ static int cpmac_probe(struct platform_device *pdev)
 				continue;
 			if (!mdiobus_get_phy(cpmac_mii, phy_id))
 				continue;
-			strncpy(mdio_bus_id, cpmac_mii->id, MII_BUS_ID_SIZE);
+			strscpy(mdio_bus_id, cpmac_mii->id,
+				sizeof(mdio_bus_id));
 			break;
 		}
 	}
@@ -1084,10 +1085,9 @@ static int cpmac_probe(struct platform_device *pdev)
 	if (phy_id == PHY_MAX_ADDR) {
 		dev_err(&pdev->dev, "no PHY present, falling back "
 			"to switch on MDIO bus 0\n");
-		strncpy(mdio_bus_id, "fixed-0", MII_BUS_ID_SIZE); /* fixed phys bus */
+		strscpy(mdio_bus_id, "fixed-0", sizeof(mdio_bus_id)); /* fixed phys bus */
 		phy_id = pdev->id;
 	}
-	mdio_bus_id[sizeof(mdio_bus_id) - 1] = '\0';
 
 	dev = alloc_etherdev_mq(sizeof(*priv), CPMAC_QUEUES);
 	if (!dev)
