@@ -4,19 +4,21 @@
 
 #ifdef CONFIG_X86_64
 #define __percpu_seg		gs
+#define __percpu_rel		(%rip)
 #else
 #define __percpu_seg		fs
+#define __percpu_rel
 #endif
 
 #ifdef __ASSEMBLY__
 
 #ifdef CONFIG_SMP
 #define PER_CPU_ARG(arg)	%__percpu_seg:arg
-#define PER_CPU_VAR(var)	%__percpu_seg:var
+#define PER_CPU_VAR(var)	%__percpu_seg:(var)##__percpu_rel
 #else /* ! SMP */
 #define PER_CPU_ARG(arg)	arg
-#define PER_CPU_VAR(var)	var
-#endif	/* SMP */
+#define PER_CPU_VAR(var)	(var)##__percpu_rel
+#endif /* SMP */
 
 #ifdef CONFIG_X86_64_SMP
 #define INIT_PER_CPU_VAR(var)  init_per_cpu__##var
