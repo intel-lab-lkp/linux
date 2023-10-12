@@ -238,6 +238,11 @@ static int virtsnd_pcm_hw_params(struct snd_pcm_substream *substream,
 	 */
 	virtsnd_pcm_msg_free(vss);
 
+	vss->buffer_sz = params_buffer_bytes(hw_params);
+	vss->buffer = alloc_pages_exact(vss->buffer_sz, GFP_KERNEL);
+	if (!vss->buffer)
+		return -ENOMEM;
+
 	return virtsnd_pcm_msg_alloc(vss, params_periods(hw_params),
 				     params_period_bytes(hw_params));
 }
@@ -256,6 +261,11 @@ static int virtsnd_pcm_hw_free(struct snd_pcm_substream *substream)
 	/* If the queue is flushed, we can safely free the messages here. */
 	if (!virtsnd_pcm_msg_pending_num(vss))
 		virtsnd_pcm_msg_free(vss);
+
+	if (vss->buffer) {
+		free_pages_exact(vss->buffer, vss->buffer_sz);
+		vss->buffer = NULL;
+	}
 
 	return 0;
 }
@@ -331,15 +341,18 @@ static int virtsnd_pcm_trigger(struct snd_pcm_substream *substream, int command)
 	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
 		queue = virtsnd_pcm_queue(vss);
 
-		spin_lock_irqsave(&queue->lock, flags);
-		spin_lock(&vss->lock);
-		rc = virtsnd_pcm_msg_send(vss);
-		if (!rc)
-			vss->xfer_enabled = true;
-		spin_unlock(&vss->lock);
-		spin_unlock_irqrestore(&queue->lock, flags);
-		if (rc)
-			return rc;
+		// The buffers should be exposed first during capturing so that
+		// the device can consume them. Capturing cannot begin
+		// otherwise.
+		if (vss->direction == SNDRV_PCM_STREAM_CAPTURE) {
+			rc = virtsnd_pcm_msg_send_locked(vss, false);
+			if (rc)
+				return rc;
+		}
+
+		spin_lock_irqsave(&vss->lock, flags);
+		vss->xfer_enabled = true;
+		spin_unlock_irqrestore(&vss->lock, flags);
 
 		msg = virtsnd_pcm_ctl_msg_alloc(vss, VIRTIO_SND_R_PCM_START,
 						GFP_KERNEL);
@@ -450,8 +463,51 @@ virtsnd_pcm_pointer(struct snd_pcm_substream *substream)
 	return hw_ptr;
 }
 
-/* PCM substream operators map. */
-const struct snd_pcm_ops virtsnd_pcm_ops = {
+static int virtsnd_pcm_pb_copy(struct snd_pcm_substream *substream,
+			       int channel, unsigned long pos, struct iov_iter
+			       *src, unsigned long count)
+{
+	struct virtio_pcm_substream *vss = snd_pcm_substream_chip(substream);
+
+	if (unlikely(pos + count > vss->buffer_sz))
+		return -EINVAL;
+
+	if (copy_from_iter(vss->buffer + pos, count, src) != count)
+		return -EFAULT;
+
+	return virtsnd_pcm_msg_send_locked(vss, true);
+}
+
+static int virtsnd_pcm_cap_copy(struct snd_pcm_substream *substream,
+				int channel, unsigned long pos, struct iov_iter
+				*dst, unsigned long count)
+{
+	struct virtio_pcm_substream *vss = snd_pcm_substream_chip(substream);
+
+	if (unlikely(pos + count > vss->buffer_sz))
+		return -EINVAL;
+
+	if (copy_to_iter(vss->buffer + pos, count, dst) != count)
+		return -EFAULT;
+
+	return virtsnd_pcm_msg_send_locked(vss, true);
+}
+
+static int virtsnd_pcm_pb_silence(struct snd_pcm_substream *substream, int channel,
+				  unsigned long pos, unsigned long count)
+{
+	struct virtio_pcm_substream *vss = snd_pcm_substream_chip(substream);
+
+	if (unlikely(pos + count > vss->buffer_sz))
+		return -EINVAL;
+
+	memset(vss->buffer + pos, 0, count);
+
+	return virtsnd_pcm_msg_send_locked(vss, true);
+}
+
+/* PCM substream operators map for playback. */
+const struct snd_pcm_ops virtsnd_pcm_playback_ops = {
 	.open = virtsnd_pcm_open,
 	.close = virtsnd_pcm_close,
 	.ioctl = snd_pcm_lib_ioctl,
@@ -461,4 +517,20 @@ const struct snd_pcm_ops virtsnd_pcm_ops = {
 	.trigger = virtsnd_pcm_trigger,
 	.sync_stop = virtsnd_pcm_sync_stop,
 	.pointer = virtsnd_pcm_pointer,
+	.copy = virtsnd_pcm_pb_copy,
+	.fill_silence = virtsnd_pcm_pb_silence,
+};
+
+/* PCM substream operators map for capturing. */
+const struct snd_pcm_ops virtsnd_pcm_capture_ops = {
+	.open = virtsnd_pcm_open,
+	.close = virtsnd_pcm_close,
+	.ioctl = snd_pcm_lib_ioctl,
+	.hw_params = virtsnd_pcm_hw_params,
+	.hw_free = virtsnd_pcm_hw_free,
+	.prepare = virtsnd_pcm_prepare,
+	.trigger = virtsnd_pcm_trigger,
+	.sync_stop = virtsnd_pcm_sync_stop,
+	.pointer = virtsnd_pcm_pointer,
+	.copy = virtsnd_pcm_cap_copy,
 };

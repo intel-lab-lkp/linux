@@ -50,6 +50,8 @@ struct virtio_pcm_substream {
 	struct work_struct elapsed_period;
 	spinlock_t lock;
 	size_t buffer_bytes;
+	u8 *buffer;
+	size_t buffer_sz;
 	size_t hw_ptr;
 	bool xfer_enabled;
 	bool xfer_xrun;
@@ -90,7 +92,8 @@ struct virtio_pcm {
 	struct virtio_pcm_stream streams[SNDRV_PCM_STREAM_LAST + 1];
 };
 
-extern const struct snd_pcm_ops virtsnd_pcm_ops;
+extern const struct snd_pcm_ops virtsnd_pcm_playback_ops;
+extern const struct snd_pcm_ops virtsnd_pcm_capture_ops;
 
 int virtsnd_pcm_validate(struct virtio_device *vdev);
 
@@ -117,7 +120,9 @@ int virtsnd_pcm_msg_alloc(struct virtio_pcm_substream *vss,
 
 void virtsnd_pcm_msg_free(struct virtio_pcm_substream *vss);
 
-int virtsnd_pcm_msg_send(struct virtio_pcm_substream *vss);
+int virtsnd_pcm_msg_send(struct virtio_pcm_substream *vss, bool single);
+
+int virtsnd_pcm_msg_send_locked(struct virtio_pcm_substream *vss, bool single);
 
 unsigned int virtsnd_pcm_msg_pending_num(struct virtio_pcm_substream *vss);
 

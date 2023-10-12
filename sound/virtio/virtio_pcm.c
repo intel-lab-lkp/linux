@@ -104,8 +104,6 @@ static int virtsnd_pcm_build_hw(struct virtio_pcm_substream *vss,
 	 * only message-based transport.
 	 */
 	vss->hw.info =
-		SNDRV_PCM_INFO_MMAP |
-		SNDRV_PCM_INFO_MMAP_VALID |
 		SNDRV_PCM_INFO_BATCH |
 		SNDRV_PCM_INFO_BLOCK_TRANSFER |
 		SNDRV_PCM_INFO_INTERLEAVED |
@@ -471,12 +469,11 @@ int virtsnd_pcm_build_devs(struct virtio_snd *snd)
 			for (kss = ks->substream; kss; kss = kss->next)
 				vs->substreams[kss->number]->substream = kss;
 
-			snd_pcm_set_ops(vpcm->pcm, i, &virtsnd_pcm_ops);
+			if (i == SNDRV_PCM_STREAM_CAPTURE)
+				snd_pcm_set_ops(vpcm->pcm, i, &virtsnd_pcm_capture_ops);
+			else
+				snd_pcm_set_ops(vpcm->pcm, i, &virtsnd_pcm_playback_ops);
 		}
-
-		snd_pcm_set_managed_buffer_all(vpcm->pcm,
-					       SNDRV_DMA_TYPE_VMALLOC, NULL,
-					       0, 0);
 	}
 
 	return 0;

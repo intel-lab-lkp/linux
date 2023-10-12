@@ -132,7 +132,6 @@ static void virtsnd_pcm_sg_from(struct scatterlist *sgs, int nsgs, u8 *data,
 int virtsnd_pcm_msg_alloc(struct virtio_pcm_substream *vss,
 			  unsigned int periods, unsigned int period_bytes)
 {
-	struct snd_pcm_runtime *runtime = vss->substream->runtime;
 	unsigned int i;
 
 	vss->msgs = kcalloc(periods, sizeof(*vss->msgs), GFP_KERNEL);
@@ -142,7 +141,7 @@ int virtsnd_pcm_msg_alloc(struct virtio_pcm_substream *vss,
 	vss->nmsgs = periods;
 
 	for (i = 0; i < periods; ++i) {
-		u8 *data = runtime->dma_area + period_bytes * i;
+		u8 *data = vss->buffer + period_bytes * i;
 		int sg_num = virtsnd_pcm_sg_num(data, period_bytes);
 		struct virtio_pcm_msg *msg;
 
@@ -186,10 +185,12 @@ void virtsnd_pcm_msg_free(struct virtio_pcm_substream *vss)
 /**
  * virtsnd_pcm_msg_send() - Send asynchronous I/O messages.
  * @vss: VirtIO PCM substream.
+ * @single: true to enqueue a single message, false to enqueue all of them.
  *
  * All messages are organized in an ordered circular list. Each time the
- * function is called, all currently non-enqueued messages are added to the
- * virtqueue. For this, the function keeps track of two values:
+ * function is called, first non-enqueued message is added to the virtqueue.
+ * When single is True, only the first message is enqueued. When False, all the
+ * available messages are enqueued.  The function keeps track of two values:
  *
  *   msg_last_enqueued = index of the last enqueued message,
  *   msg_count = # of pending messages in the virtqueue.
@@ -198,7 +199,7 @@ void virtsnd_pcm_msg_free(struct virtio_pcm_substream *vss)
  *          spinlocks to be held by caller.
  * Return: 0 on success, -errno on failure.
  */
-int virtsnd_pcm_msg_send(struct virtio_pcm_substream *vss)
+int virtsnd_pcm_msg_send(struct virtio_pcm_substream *vss, bool single)
 {
 	struct snd_pcm_runtime *runtime = vss->substream->runtime;
 	struct virtio_snd *snd = vss->snd;
@@ -210,6 +211,13 @@ int virtsnd_pcm_msg_send(struct virtio_pcm_substream *vss)
 
 	i = (vss->msg_last_enqueued + 1) % runtime->periods;
 	n = runtime->periods - vss->msg_count;
+
+	if (single) {
+		if (n < 1)
+			return -EFAULT;
+
+		n = 1;
+	}
 
 	for (; n; --n, i = (i + 1) % runtime->periods) {
 		struct virtio_pcm_msg *msg = vss->msgs[i];
@@ -248,6 +256,36 @@ int virtsnd_pcm_msg_send(struct virtio_pcm_substream *vss)
 		virtqueue_notify(vqueue);
 
 	return 0;
+}
+
+/**
+ * virtsnd_pcm_msg_send_locked() - Send asynchronous I/O messages.
+ * @vss: VirtIO PCM substream.
+ * @single: true to enqueue a single message, false to enqueue all of them.
+ *
+ * This function holds the tx/rx queue and the VirtIO substream spinlocks
+ * before calling virtsnd_pcm_msg_send(). This is a wrapper function to ease
+ * the invocation of virtsnd_pcm_msg_send().
+ *
+ * Context: Any context.
+ * Return: 0 on success, -errno on failure.
+ */
+
+int virtsnd_pcm_msg_send_locked(struct virtio_pcm_substream *vss, bool single)
+{
+	struct virtio_snd_queue *queue;
+	int rc;
+	unsigned long flags;
+
+	queue = virtsnd_pcm_queue(vss);
+
+	spin_lock_irqsave(&queue->lock, flags);
+	spin_lock(&vss->lock);
+	rc = virtsnd_pcm_msg_send(vss, single);
+	spin_unlock(&vss->lock);
+	spin_unlock_irqrestore(&queue->lock, flags);
+
+	return rc;
 }
 
 /**
@@ -320,8 +358,6 @@ static void virtsnd_pcm_msg_complete(struct virtio_pcm_msg *msg,
 					le32_to_cpu(msg->status.latency_bytes));
 
 		schedule_work(&vss->elapsed_period);
-
-		virtsnd_pcm_msg_send(vss);
 	} else if (!vss->msg_count) {
 		wake_up_all(&vss->msg_empty);
 	}
