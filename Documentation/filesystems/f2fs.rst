@@ -367,6 +367,9 @@ errors=%s		 Specify f2fs behavior on critical errors. This supports modes:
 			 pending node write	drop		keep		N/A
 			 pending meta write	keep		keep		N/A
 			 ====================== =============== =============== ========
+prefer_data_victim	 When selecting victims in foreground GC, victims of data type
+			 are prioritized. This option minimizes GC victim threshing
+			 in the node section to reduce WAF.
 ======================== ============================================================
 
 Debugfs Entries
