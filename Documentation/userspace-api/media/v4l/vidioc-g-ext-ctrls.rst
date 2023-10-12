@@ -297,6 +297,10 @@ still cause this situation.
         of type ``V4L2_CTRL_TYPE_AV1_FILM_GRAIN``.
     * - void *
       - ``ptr``
+      - A pointer to Visconti ISP control specific structure. Valid if this control is
+        of type ``V4L2_CTRL_TYPE_VISCONTI_ISP``
+    * - void *
+      - ``ptr``
       - A pointer to a compound type which can be an N-dimensional array
 	and/or a compound type (the control's type is >=
 	``V4L2_CTRL_COMPOUND_TYPES``). Valid if
