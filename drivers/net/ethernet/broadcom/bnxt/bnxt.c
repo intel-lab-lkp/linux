@@ -5854,6 +5854,19 @@ exit:
 	return rc;
 }
 
+/* Older devices can only support req length of 128.
+ * Requests which don't need fields starting at num_quic_tx_key_ctxs
+ * can use this helper to avoid getting -E2BIG.
+ */
+static int bnxt_hwrm_func_cfg_short_req_init(struct bnxt *bp,
+					     struct hwrm_func_cfg_input **req)
+{
+	u32 req_len;
+
+	req_len = min_t(u32, sizeof(**req), bp->hwrm_max_ext_req_len);
+	return __hwrm_req_init(bp, (void **)req, HWRM_FUNC_CFG, req_len);
+}
+
 static int bnxt_hwrm_set_async_event_cr(struct bnxt *bp, int idx)
 {
 	int rc;
@@ -5861,7 +5874,7 @@ static int bnxt_hwrm_set_async_event_cr(struct bnxt *bp, int idx)
 	if (BNXT_PF(bp)) {
 		struct hwrm_func_cfg_input *req;
 
-		rc = hwrm_req_init(bp, req, HWRM_FUNC_CFG);
+		rc = bnxt_hwrm_func_cfg_short_req_init(bp, &req);
 		if (rc)
 			return rc;
 
@@ -6272,7 +6285,7 @@ __bnxt_hwrm_reserve_pf_rings(struct bnxt *bp, int tx_rings, int rx_rings,
 	struct hwrm_func_cfg_input *req;
 	u32 enables = 0;
 
-	if (hwrm_req_init(bp, req, HWRM_FUNC_CFG))
+	if (bnxt_hwrm_func_cfg_short_req_init(bp, &req))
 		return NULL;
 
 	req->fid = cpu_to_le16(0xffff);
@@ -8617,7 +8630,7 @@ static int bnxt_hwrm_set_br_mode(struct bnxt *bp, u16 br_mode)
 	else
 		return -EINVAL;
 
-	rc = hwrm_req_init(bp, req, HWRM_FUNC_CFG);
+	rc = bnxt_hwrm_func_cfg_short_req_init(bp, &req);
 	if (rc)
 		return rc;
 
@@ -8635,7 +8648,7 @@ static int bnxt_hwrm_set_cache_line_size(struct bnxt *bp, int size)
 	if (BNXT_VF(bp) || bp->hwrm_spec_code < 0x10803)
 		return 0;
 
-	rc = hwrm_req_init(bp, req, HWRM_FUNC_CFG);
+	rc = bnxt_hwrm_func_cfg_short_req_init(bp, &req);
 	if (rc)
 		return rc;
 
