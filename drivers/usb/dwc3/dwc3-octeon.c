@@ -122,8 +122,32 @@
 #define USBDRD_UCTL_INTSTAT			0x30
 #define USBDRD_UCTL_PORT_CFG_HS(port)		(0x40 + (0x20 * port))
 #define USBDRD_UCTL_PORT_CFG_SS(port)		(0x48 + (0x20 * port))
+
+/*
+ * UCTL Port Debug Configuration Registers
+ */
 #define USBDRD_UCTL_PORT_CR_DBG_CFG(port)	(0x50 + (0x20 * port))
+/* Rising edge triggers a register write operation of the captured
+ * address with the captured data
+ */
+# define USBDRD_UCTL_PORT_CR_DBG_CFG_WRITE	BIT_ULL(0)
+/* Rising edge triggers a register read operation of the capture address */
+# define USBDRD_UCTL_PORT_CR_DBG_CFG_READ	BIT_ULL(1)
+/* Rising edge triggers the [DATA_IN] field to be captured as the write data */
+# define USBDRD_UCTL_PORT_CR_DBG_CFG_CAP_DATA	BIT_ULL(2)
+/* Rising edge triggers the [DATA_IN] field to be captured as the address */
+# define USBDRD_UCTL_PORT_CR_DBG_CFG_CAP_ADDR	BIT_ULL(3)
+/* Address or data to be written to the CR interface */
+# define USBDRD_UCTL_PORT_CR_DBG_CFG_DATA_IN	GENMASK_ULL(47, 32)
+
+/*
+ * UCTL Port Debug Status Registers
+ */
 #define USBDRD_UCTL_PORT_CR_DBG_STATUS(port)	(0x58 + (0x20 * port))
+/* Acknowledge that the CAP_ADDR, CAP_DATA, READ, WRITE commands have completed */
+# define USBDRD_UCTL_PORT_CR_DBG_STATUS_ACK	BIT_ULL(0)
+/* Last data read from the CR interface */
+# define USBDRD_UCTL_PORT_CR_DBG_STATUS_DATA_OUT GENMASK_ULL(47, 32)
 
 /*
  * UCTL Configuration Register
@@ -410,6 +434,252 @@ static void dwc3_octeon_phy_reset(struct dwc3_octeon *octeon)
 	dwc3_octeon_writeq(uctl_ctl_reg, val);
 }
 
+/* Internal indirect register that reports if the phy PLL has lock.
+ * This will be 1 if lock, 0 if no lock.
+ */
+#define DWC3_INT_IND_PLL_LOCK_REG			0x200b
+
+/* Internal indirect UPHY register that controls the power to the UPHY PLL. */
+#define DWC3_INT_IND_UPHY_PLL_PU			0x2012
+/* Write enable bit for DWC3_INT_IND_PLL_POWER_CTL */
+# define DWC3_INT_IND_UPHY_PLL_PU_WE			BIT(5)
+/* Power enable bit for DWC3_INT_IND_PLL_POWER_CTL */
+# define DWC3_INT_IND_UPHY_PLL_PU_POWER_EN		BIT(2)
+
+/* Internal indirect UPHY PLL register */
+#define DWC3_INT_IND_UPHY_PLL_RESET			0x201C
+/* Write enable bit */
+# define DWC3_INT_IND_UPHY_PLL_RESET_WE			BIT(4)
+/* VCO reset bit */
+# define DWC3_INT_IND_UPHY_PLL_RESET_VCO_RST		BIT(0)
+
+static int dwc3_octeon_indirect_read(struct dwc3_octeon *octeon, u32 addr)
+{
+	int ret;
+	u64 val;
+	unsigned long timeout;
+	struct device *dev = octeon->dev;
+	void __iomem *cfg_reg = octeon->base + USBDRD_UCTL_PORT_CR_DBG_CFG(0);
+	void __iomem *status_reg = octeon->base + USBDRD_UCTL_PORT_CR_DBG_STATUS(0);
+
+	/* 1 */
+	val = FIELD_PREP(USBDRD_UCTL_PORT_CR_DBG_CFG_DATA_IN, addr);
+	dwc3_octeon_writeq(cfg_reg, val);
+	/* 2 */
+	val |= USBDRD_UCTL_PORT_CR_DBG_CFG_CAP_ADDR;
+	dwc3_octeon_writeq(cfg_reg, val);
+	/* 3 */
+	timeout = jiffies + msecs_to_jiffies(1000);
+	while (!(dwc3_octeon_readq(status_reg) & USBDRD_UCTL_PORT_CR_DBG_STATUS_ACK)) {
+                if (time_after(jiffies, timeout)) {
+			dev_warn(dev, "set read address timeout (%x)\n", addr);
+                        return -ETIMEDOUT;
+		}
+                cpu_relax();
+        }
+	/* 4 */
+	dwc3_octeon_writeq(cfg_reg, 0);
+	/* 5 */
+	timeout = jiffies + msecs_to_jiffies(1000);
+	while (dwc3_octeon_readq(status_reg) & USBDRD_UCTL_PORT_CR_DBG_STATUS_ACK) {
+                if (time_after(jiffies, timeout)) {
+			dev_warn(dev, "read ack address clear timeout (%x)\n", addr);
+                        return -ETIMEDOUT;
+		}
+                cpu_relax();
+        }
+	/* 6 */
+	dwc3_octeon_writeq(cfg_reg, USBDRD_UCTL_PORT_CR_DBG_CFG_READ);
+	/* 7 */
+	timeout = jiffies + msecs_to_jiffies(1000);
+	while (!((val = dwc3_octeon_readq(status_reg)) & USBDRD_UCTL_PORT_CR_DBG_STATUS_ACK)) {
+                if (time_after(jiffies, timeout)) {
+			dev_warn(dev, "read data timeout (%x)\n", addr);
+                        return -ETIMEDOUT;
+		}
+                cpu_relax();
+        }
+	/* 8 */
+	ret = FIELD_GET(USBDRD_UCTL_PORT_CR_DBG_STATUS_DATA_OUT, val);
+	/* 9 */
+	dwc3_octeon_writeq(cfg_reg, 0);
+	/* 10 */
+	while (dwc3_octeon_readq(status_reg) & USBDRD_UCTL_PORT_CR_DBG_STATUS_ACK) {
+                if (time_after(jiffies, timeout)) {
+			dev_warn(dev, "read ack data clear timeout (%x)\n", addr);
+                        return -ETIMEDOUT;
+		}
+                cpu_relax();
+        }
+
+	return ret;
+}
+
+static int dwc3_octeon_indirect_write(struct dwc3_octeon *octeon, u32 addr, u16 value)
+{
+	u64 val;
+	unsigned long timeout;
+	struct device *dev = octeon->dev;
+	void __iomem *cfg_reg = octeon->base + USBDRD_UCTL_PORT_CR_DBG_CFG(0);
+	void __iomem *status_reg = octeon->base + USBDRD_UCTL_PORT_CR_DBG_STATUS(0);
+
+	/* 1 */
+	val = FIELD_PREP(USBDRD_UCTL_PORT_CR_DBG_CFG_DATA_IN, addr);
+	dwc3_octeon_writeq(cfg_reg, val);
+	/* 2 */
+	val |= USBDRD_UCTL_PORT_CR_DBG_CFG_CAP_ADDR;
+	dwc3_octeon_writeq(cfg_reg, val);
+	/* 3 */
+	timeout = jiffies + msecs_to_jiffies(1000);
+	while (!(dwc3_octeon_readq(status_reg) & USBDRD_UCTL_PORT_CR_DBG_STATUS_ACK)) {
+                if (time_after(jiffies, timeout)) {
+			dev_warn(dev, "set write address timeout (%x)\n", addr);
+                        return -ETIMEDOUT;
+		}
+                cpu_relax();
+        }
+	/* 4 */
+	dwc3_octeon_writeq(cfg_reg, 0);
+	/* 5 */
+	timeout = jiffies + msecs_to_jiffies(1000);
+	while (dwc3_octeon_readq(status_reg) & USBDRD_UCTL_PORT_CR_DBG_STATUS_ACK) {
+                if (time_after(jiffies, timeout)) {
+			dev_warn(dev, "write ack address clear timeout (%x)\n", addr);
+                        return -ETIMEDOUT;
+		}
+                cpu_relax();
+        }
+	/* 6 */
+	val = FIELD_PREP(USBDRD_UCTL_PORT_CR_DBG_CFG_DATA_IN, value);
+	dwc3_octeon_writeq(cfg_reg, FIELD_PREP(USBDRD_UCTL_PORT_CR_DBG_CFG_DATA_IN, value));
+	/* 7 */
+	val |= USBDRD_UCTL_PORT_CR_DBG_CFG_CAP_DATA;
+	dwc3_octeon_writeq(cfg_reg, val);
+	/* 8 */
+	timeout = jiffies + msecs_to_jiffies(1000);
+	while (!(dwc3_octeon_readq(status_reg) & USBDRD_UCTL_PORT_CR_DBG_STATUS_ACK)) {
+                if (time_after(jiffies, timeout)) {
+			dev_warn(dev, "write set data timeout (%x)\n", addr);
+                        return -ETIMEDOUT;
+		}
+                cpu_relax();
+        }
+	/* 9 */
+	dwc3_octeon_writeq(cfg_reg, 0);
+	/* 10 */
+	timeout = jiffies + msecs_to_jiffies(1000);
+	while (dwc3_octeon_readq(status_reg) & USBDRD_UCTL_PORT_CR_DBG_STATUS_ACK) {
+                if (time_after(jiffies, timeout)) {
+			dev_warn(dev, "write ack clear timeout (%x)\n", addr);
+                        return -ETIMEDOUT;
+		}
+                cpu_relax();
+        }
+	/* 11 */
+	dwc3_octeon_writeq(cfg_reg, USBDRD_UCTL_PORT_CR_DBG_CFG_WRITE);
+	/* 12 */
+	timeout = jiffies + msecs_to_jiffies(1000);
+	while (!(dwc3_octeon_readq(status_reg) & USBDRD_UCTL_PORT_CR_DBG_STATUS_ACK)) {
+                if (time_after(jiffies, timeout)) {
+			dev_warn(dev, "write data timeout (%x)\n", addr);
+                        return -ETIMEDOUT;
+		}
+                cpu_relax();
+        }
+	/* 13 */
+	dwc3_octeon_writeq(cfg_reg, 0);
+	/* 14 */
+	timeout = jiffies + msecs_to_jiffies(1000);
+	while (dwc3_octeon_readq(status_reg) & USBDRD_UCTL_PORT_CR_DBG_STATUS_ACK) {
+                if (time_after(jiffies, timeout)) {
+			dev_warn(dev, "write ack clear timeout (%x)\n", addr);
+                        return -ETIMEDOUT;
+		}
+                cpu_relax();
+        }
+
+	return 0;
+}
+
+static int dwc3_octeon_pll_locked(struct dwc3_octeon *octeon)
+{
+	int ret = dwc3_octeon_indirect_read(octeon, DWC3_INT_IND_PLL_LOCK_REG);
+
+	if (ret < 0)
+		return ret;
+	return ret & 1;
+}
+
+/**
+ * Performs a full reset of the UPHY PLL. Note that this is normally done
+ * internally by a state machine when the UPHY is brought out of reset but this
+ * version gives far more time for things to settle before continuing.
+ */
+static int dwc3_uphy_pll_reset(struct dwc3_octeon *octeon)
+{
+	u16 ctrl, pwr;
+
+	/* 1. Turn on write enable so we can assert reset to the PLL VCO */
+	ctrl = dwc3_octeon_indirect_read(octeon, DWC3_INT_IND_UPHY_PLL_RESET);
+	ctrl |= DWC3_INT_IND_UPHY_PLL_RESET_WE;
+	dwc3_octeon_indirect_write(octeon, DWC3_INT_IND_UPHY_PLL_RESET, ctrl);
+
+	/* 2. Turn on write enable for PLL power control */
+	pwr = dwc3_octeon_indirect_read(octeon, DWC3_INT_IND_UPHY_PLL_PU);
+	pwr |= DWC3_INT_IND_UPHY_PLL_PU_WE;
+	dwc3_octeon_indirect_write(octeon, DWC3_INT_IND_UPHY_PLL_PU, pwr);
+
+	/* 3. Assert VCO reset */
+	ctrl |= DWC3_INT_IND_UPHY_PLL_RESET_VCO_RST;
+	dwc3_octeon_indirect_write(octeon, DWC3_INT_IND_UPHY_PLL_RESET, ctrl);
+
+	/* 4. Power off the PLL */
+	pwr &= ~DWC3_INT_IND_UPHY_PLL_PU_POWER_EN;
+	dwc3_octeon_indirect_write(octeon, DWC3_INT_IND_UPHY_PLL_PU, pwr);
+	usleep_range(1000, 2000);
+
+	/* 5. Power on the PLL while VCO is held in reset */
+	pwr |= DWC3_INT_IND_UPHY_PLL_PU_POWER_EN;
+	dwc3_octeon_indirect_write(octeon, DWC3_INT_IND_UPHY_PLL_PU, pwr);
+
+	/* Wait for things to stabilize before taking VCO out of reset */
+	usleep_range(1000, 2000);
+
+	/* 6. Take the VCO out of reset */
+	ctrl &= ~DWC3_INT_IND_UPHY_PLL_RESET_VCO_RST;
+	dwc3_octeon_indirect_write(octeon, DWC3_INT_IND_UPHY_PLL_RESET, ctrl);
+	usleep_range(1000, 2000);
+
+	/* 7. Put the VCO back in reset */
+	ctrl |= ~DWC3_INT_IND_UPHY_PLL_RESET_VCO_RST;
+	dwc3_octeon_indirect_write(octeon, DWC3_INT_IND_UPHY_PLL_RESET, ctrl);
+
+	/* 8. Power off the PLL */
+	pwr &= ~DWC3_INT_IND_UPHY_PLL_PU_POWER_EN;
+	dwc3_octeon_indirect_write(octeon, DWC3_INT_IND_UPHY_PLL_PU, pwr);
+	usleep_range(1000, 2000);
+
+	/* 9. Power on the PLL while VCO is held in reset */
+	pwr |= DWC3_INT_IND_UPHY_PLL_PU_POWER_EN;
+	dwc3_octeon_indirect_write(octeon, DWC3_INT_IND_UPHY_PLL_PU, pwr);
+
+	/* 10. Take the VCO out of reset */
+	ctrl &= ~DWC3_INT_IND_UPHY_PLL_RESET_VCO_RST;
+	dwc3_octeon_indirect_write(octeon, DWC3_INT_IND_UPHY_PLL_RESET, ctrl);
+
+	/* 11. Turn off write enables */
+	pwr &= ~DWC3_INT_IND_UPHY_PLL_PU_WE;
+	dwc3_octeon_indirect_write(octeon, DWC3_INT_IND_UPHY_PLL_PU, pwr);
+
+	ctrl &= ~DWC3_INT_IND_UPHY_PLL_RESET_WE;
+	dwc3_octeon_indirect_write(octeon, DWC3_INT_IND_UPHY_PLL_RESET, ctrl);
+
+	usleep_range(1000, 2000);
+
+	/* Return if we have lock or not */
+	return dwc3_octeon_pll_locked(octeon);
+}
+
 static int dwc3_octeon_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -418,7 +688,7 @@ static int dwc3_octeon_probe(struct platform_device *pdev)
 	const char *hs_clock_type, *ss_clock_type;
 	int ref_clk_sel, ref_clk_fsel, mpll_mul;
 	int power_active_low, power_gpio;
-	int err, len;
+	int err, len, tries = 0;
 	u32 clock_rate;
 
 	if (of_property_read_u32(node, "refclk-frequency", &clock_rate)) {
@@ -503,6 +773,7 @@ static int dwc3_octeon_probe(struct platform_device *pdev)
 	if (IS_ERR(octeon->base))
 		return PTR_ERR(octeon->base);
 
+retry:
 	err = dwc3_octeon_setup(octeon, ref_clk_sel, ref_clk_fsel, mpll_mul,
 				power_gpio, power_active_low);
 	if (err)
@@ -510,6 +781,18 @@ static int dwc3_octeon_probe(struct platform_device *pdev)
 
 	dwc3_octeon_set_endian_mode(octeon);
 	dwc3_octeon_phy_reset(octeon);
+
+	usleep_range(50, 100);
+	if (dwc3_octeon_pll_locked(octeon) == 0) {
+		dev_warn(dev, "PLL unlocked, reseting (%d of 3)\n", ++tries);
+		err = dwc3_uphy_pll_reset(octeon);
+		if (err < 0)
+			return err;
+		if (tries < 3)
+			goto retry;
+		dev_err(dev, "PLL lock failed\n");
+		return -EIO;
+	}
 
 	platform_set_drvdata(pdev, octeon);
 
