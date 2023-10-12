@@ -861,6 +861,50 @@ out:
 }
 
 /*
+ * Check if the @options has any invalid ones.
+ *
+ * NOTE: this can only be called after security_sb_eat_lsm_opts().
+ *
+ * Return -ENOMEM if we failed to allocate the memory for the string
+ * Return -EINVAL if we found invalid mount options
+ * Return 0 otherwise.
+ */
+static int btrfs_check_invalid_options(const char *options)
+{
+	substring_t args[MAX_OPT_ARGS];
+	char *opts, *orig, *p;
+	int ret = 0;
+
+	if (!options)
+		return 0;
+
+	opts = kstrdup(options, GFP_KERNEL);
+	if (!opts)
+		return -ENOMEM;
+	orig = opts;
+
+	while ((p = strsep(&opts, ",")) != NULL) {
+		int token;
+
+		if (!*p)
+			continue;
+
+		token = match_token(p, tokens, args);
+		switch (token) {
+		case Opt_err:
+			btrfs_err(NULL, "unrecognized mount option '%s'", p);
+			ret = -EINVAL;
+			goto out;
+		default:
+			break;
+		}
+	}
+out:
+	kfree(orig);
+	return ret;
+}
+
+/*
  * Parse mount options that are related to subvolume id
  *
  * The value is later passed to mount_subvol()
@@ -1470,6 +1514,8 @@ static struct dentry *btrfs_mount_root(struct file_system_type *fs_type,
 		btrfs_free_fs_info(fs_info);
 		if ((flags ^ s->s_flags) & SB_RDONLY)
 			error = -EBUSY;
+		if (!error)
+			error = btrfs_check_invalid_options(data);
 	} else {
 		snprintf(s->s_id, sizeof(s->s_id), "%pg", bdev);
 		shrinker_debugfs_rename(&s->s_shrink, "sb-%s:%s", fs_type->name,
