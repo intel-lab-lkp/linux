@@ -55,6 +55,7 @@ struct numa_meminfo {
 #define FAKE_NODE_MIN_HASH_MASK	(~(FAKE_NODE_MIN_SIZE - 1UL))
 
 extern struct numa_meminfo numa_meminfo;
+extern int emu_nid_to_phys[MAX_NUMNODES];
 extern char *emu_cmdline __initdata;
 
 int numa_emu_cmdline(char *str);
@@ -62,6 +63,8 @@ int __init numa_register_memblks(struct numa_meminfo *mi);
 int __init numa_cleanup_meminfo(struct numa_meminfo *mi);
 void __init numa_emulation(struct numa_meminfo *numa_meminfo,
 			   int numa_dist_cnt);
+int __init numa_add_memblk_to(int nid, u64 start, u64 end,
+			      struct numa_meminfo *mi);
 #else
 static inline int numa_emu_cmdline(char *str)
 {
