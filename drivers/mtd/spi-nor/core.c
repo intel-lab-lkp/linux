@@ -3690,6 +3690,9 @@ static void spi_nor_shutdown(struct spi_mem *spimem)
 {
 	struct spi_nor *nor = spi_mem_get_drvdata(spimem);
 
+	/* Ensure no pending spi operation in progress */
+	spi_nor_wait_till_ready(nor);
+
 	spi_nor_restore(nor);
 }
 
