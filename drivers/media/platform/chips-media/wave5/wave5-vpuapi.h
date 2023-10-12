@@ -794,7 +794,6 @@ struct vpu_instance {
 	struct frame_buffer frame_buf[MAX_REG_FRAME];
 	struct vpu_buf frame_vbuf[MAX_REG_FRAME];
 	u32 fbc_buf_count;
-	u32 dst_buf_count;
 	u32 queued_src_buf_num;
 	u32 queued_dst_buf_num;
 	struct list_head avail_src_bufs;
@@ -811,7 +810,6 @@ struct vpu_instance {
 	bool needs_reallocation;
 
 	unsigned int min_src_buf_count;
-	unsigned int src_buf_count;
 	unsigned int rot_angle;
 	unsigned int mirror_direction;
 	unsigned int bit_depth;
