@@ -7316,6 +7316,23 @@ static inline bool asym_fits_cpu(unsigned long util,
 	return true;
 }
 
+static unsigned long cpu_util_without(int cpu, struct task_struct *p);
+
+/*
+ * A runqueue is considered almost idle if:
+ *
+ *   cpu_util_without(cpu, p) / 1024 <= 1% * capacity_of(cpu)
+ *
+ * This inequality is transformed as follows to minimize arithmetic:
+ *
+ *   cpu_util_without(cpu, p) <= 10 * capacity_of(cpu)
+ */
+static bool
+almost_idle_cpu(int cpu, struct task_struct *p)
+{
+	return cpu_util_without(cpu, p) <= 10 * capacity_of(cpu);
+}
+
 /*
  * Try and locate an idle core/thread in the LLC cache domain.
  */
@@ -7342,17 +7359,32 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
 	 */
 	lockdep_assert_irqs_disabled();
 
+	/*
+	 * With the WAKEUP_BIAS_PREV_IDLE feature, if the previous CPU
+	 * is cache affine and almost idle, prefer the previous CPU to
+	 * the target CPU to inhibit costly task migration.
+	 */
+	if (sched_feat(WAKEUP_BIAS_PREV_IDLE) &&
+	    (prev == target || cpus_share_cache(prev, target)) &&
+	    (available_idle_cpu(prev) || sched_idle_cpu(prev) || almost_idle_cpu(prev, p)) &&
+	    asym_fits_cpu(task_util, util_min, util_max, prev))
+		return prev;
+
 	if ((available_idle_cpu(target) || sched_idle_cpu(target)) &&
 	    asym_fits_cpu(task_util, util_min, util_max, target))
 		return target;
 
 	/*
-	 * If the previous CPU is cache affine and idle, don't be stupid:
+	 * Without the WAKEUP_BIAS_PREV_IDLE feature, use the previous
+	 * CPU if it is cache affine and idle if the target cpu is not
+	 * idle.
 	 */
-	if (prev != target && cpus_share_cache(prev, target) &&
+	if (!sched_feat(WAKEUP_BIAS_PREV_IDLE) &&
+	    prev != target && cpus_share_cache(prev, target) &&
 	    (available_idle_cpu(prev) || sched_idle_cpu(prev)) &&
 	    asym_fits_cpu(task_util, util_min, util_max, prev))
 		return prev;
+
 
 	/*
 	 * Allow a per-cpu kthread to stack with the wakee if the
@@ -7419,6 +7451,15 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
 	i = select_idle_cpu(p, sd, has_idle_core, target);
 	if ((unsigned)i < nr_cpumask_bits)
 		return i;
+
+	/*
+	 * With the WAKEUP_BIAS_PREV_IDLE feature, if the previous CPU
+	 * is cache affine, prefer the previous CPU when all CPUs are
+	 * busy to inhibit migration.
+	 */
+	if (sched_feat(WAKEUP_BIAS_PREV_IDLE) &&
+	    prev != target && cpus_share_cache(prev, target))
+		return prev;
 
 	return target;
 }
