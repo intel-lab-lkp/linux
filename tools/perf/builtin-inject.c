@@ -2265,6 +2265,10 @@ int cmd_inject(int argc, const char **argv)
 		"perf inject [<options>]",
 		NULL
 	};
+
+	/* Disable eager loading of kernel symbols that adds overhead to perf inject. */
+	symbol_conf.lazy_load_kernel_maps = true;
+
 #ifndef HAVE_JITDUMP
 	set_option_nobuild(options, 'j', "jit", "NO_LIBELF=1", true);
 #endif
