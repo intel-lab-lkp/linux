@@ -53,7 +53,7 @@
  *   - (NOM / DEN) fits in (32 - LSH) bits.
  *   - (NOM % DEN) fits in (32 - LSH) bits.
  */
-#define SH_DIV(NOM,DEN,LSH) (   (((NOM) / (DEN)) << (LSH))              \
+#define SH_DIV(NOM, DEN, LSH) ((((NOM) / (DEN)) << (LSH))              \
                              + ((((NOM) % (DEN)) << (LSH)) + (DEN) / 2) / (DEN))
 
 /* LATCH is used in the interval timer and ftape setup. */
