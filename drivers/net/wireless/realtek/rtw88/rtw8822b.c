@@ -820,8 +820,10 @@ static void rtw8822b_config_trx_mode(struct rtw_dev *rtwdev, u8 tx_path,
 			break;
 	}
 
-	if (WARN(counter <= 0, "write RF mode table fail\n"))
+	if (counter <= 0) {
+		rtw_warn(rtwdev, "write RF mode table fail\n");
 		return;
+	}
 
 	rtw_write_rf(rtwdev, RF_PATH_A, RF_LUTWE, RFREG_MASK, 0x80000);
 	rtw_write_rf(rtwdev, RF_PATH_A, RF_LUTWA, RFREG_MASK, 0x00001);
