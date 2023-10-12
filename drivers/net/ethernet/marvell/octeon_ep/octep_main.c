@@ -715,6 +715,7 @@ static netdev_tx_t octep_start_xmit(struct sk_buff *skb,
 		hw_desc->dptr = tx_buffer->sglist_dma;
 	}
 
+	netdev_tx_sent_queue(iq->netdev_q, skb->len);
 	/* Flush the hw descriptor before writing to doorbell */
 	wmb();
 
@@ -726,7 +727,6 @@ static netdev_tx_t octep_start_xmit(struct sk_buff *skb,
 		wi = 0;
 	iq->host_write_index = wi;
 
-	netdev_tx_sent_queue(iq->netdev_q, skb->len);
 	iq->stats.instr_posted++;
 	skb_tx_timestamp(skb);
 	return NETDEV_TX_OK;
