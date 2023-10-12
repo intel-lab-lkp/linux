@@ -404,10 +404,11 @@ class GenlProtocol(NetlinkProtocol):
 
 
 class YnlFamily(SpecFamily):
-    def __init__(self, def_path, schema=None):
+    def __init__(self, def_path, schema=None, ignore_unknown=False):
         super().__init__(def_path, schema)
 
         self.include_raw = False
+        self.ignore_unknown = ignore_unknown
 
         try:
             if self.proto == "netlink-raw":
@@ -519,6 +520,8 @@ class YnlFamily(SpecFamily):
             try:
                 attr_spec = attr_space.attrs_by_val[attr.type]
             except KeyError:
+                if self.ignore_unknown:
+                    continue
                 raise Exception(f"Space '{space}' has no attribute with value '{attr.type}'")
             if attr_spec["type"] == 'nest':
                 subdict = self._decode(NlAttrs(attr.raw), attr_spec['nested-attributes'])
@@ -534,6 +537,8 @@ class YnlFamily(SpecFamily):
             elif attr_spec["type"] == 'array-nest':
                 decoded = self._decode_array_nest(attr, attr_spec)
             else:
+                if self.ignore_unknown:
+                    continue
                 raise Exception(f'Unknown {attr_spec["type"]} with name {attr_spec["name"]}')
 
             if 'enum' in attr_spec:
