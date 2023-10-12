@@ -1998,13 +1998,14 @@ static struct evsel *read_event_desc(struct feat_fd *ff)
 			id++;
 		}
 	}
-out:
-	free(buf);
-	return events;
+goto out;
 error:
 	free_event_desc(events);
 	events = NULL;
-	goto out;
+
+out:
+	free(buf);
+	return events;
 }
 
 static int __desc_attr__fprintf(FILE *fp, const char *name, const char *val,
