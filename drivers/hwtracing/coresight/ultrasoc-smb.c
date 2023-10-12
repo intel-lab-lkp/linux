@@ -127,19 +127,14 @@ static ssize_t smb_read(struct file *file, char __user *data, size_t len,
 					struct smb_drv_data, miscdev);
 	struct smb_data_buffer *sdb = &drvdata->sdb;
 	struct device *dev = &drvdata->csdev->dev;
-	ssize_t to_copy = 0;
-
-	if (!len)
-		return 0;
-
-	if (!sdb->data_size)
-		return 0;
-
-	to_copy = min(sdb->data_size, len);
+	ssize_t to_copy = min(sdb->data_size, len);
 
 	/* Copy parts of trace data when read pointer wrap around SMB buffer */
 	if (sdb->buf_rdptr + to_copy > sdb->buf_size)
 		to_copy = sdb->buf_size - sdb->buf_rdptr;
+
+	if (!to_copy)
+		return 0;
 
 	if (copy_to_user(data, sdb->buf_base + sdb->buf_rdptr, to_copy)) {
 		dev_dbg(dev, "Failed to copy data to user\n");
