@@ -9,9 +9,6 @@
 #include <asm/apicdef.h>
 
 #ifdef CONFIG_NUMA
-
-#define NR_NODE_MEMBLKS		(MAX_NUMNODES*2)
-
 /*
  * Too small node sizes may confuse the VM badly. Usually they
  * result from BIOS bugs. So dont recognize nodes as standalone
