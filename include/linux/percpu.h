@@ -100,7 +100,7 @@ extern const char * const pcpu_fc_names[PCPU_FC_NR];
 
 extern enum pcpu_fc pcpu_chosen_fc;
 
-typedef int (pcpu_fc_cpu_to_node_fn_t)(int cpu);
+typedef int (pcpu_fc_cpu_to_node_fn_t)(unsigned int cpu);
 typedef int (pcpu_fc_cpu_distance_fn_t)(unsigned int from, unsigned int to);
 
 extern struct pcpu_alloc_info * __init pcpu_alloc_alloc_info(int nr_groups,
