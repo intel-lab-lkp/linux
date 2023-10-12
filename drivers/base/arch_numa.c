@@ -64,6 +64,7 @@ EXPORT_SYMBOL(cpumask_of_node);
 
 #endif
 
+#ifndef CONFIG_NUMA_EMU
 static void numa_update_cpu(unsigned int cpu, bool remove)
 {
 	int nid = cpu_to_node(cpu);
@@ -92,6 +93,7 @@ void numa_clear_node(unsigned int cpu)
 	numa_remove_cpu(cpu);
 	set_cpu_numa_node(cpu, NUMA_NO_NODE);
 }
+#endif
 
 /*
  * Allocate node_to_cpumask_map based on number of available nodes
