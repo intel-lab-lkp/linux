@@ -15,6 +15,7 @@
 
 #include <linux/auxiliary_bus.h>
 #include <linux/bits.h>
+#include <linux/cleanup.h>
 #include <linux/delay.h>
 #include <linux/kernel.h>
 #include <linux/idr.h>
@@ -155,10 +156,10 @@ EXPORT_SYMBOL_NS_GPL(intel_vsec_add_aux, INTEL_VSEC);
 static int intel_vsec_add_dev(struct pci_dev *pdev, struct intel_vsec_header *header,
 			      struct intel_vsec_platform_info *info)
 {
-	struct intel_vsec_device *intel_vsec_dev;
+	struct intel_vsec_device __free(kfree) *intel_vsec_dev = NULL;
 	struct resource *res, *tmp;
 	unsigned long quirks = info->quirks;
-	int i;
+	int ret, i;
 
 	if (!intel_vsec_supported(header->id, info->caps))
 		return -EINVAL;
@@ -178,10 +179,8 @@ static int intel_vsec_add_dev(struct pci_dev *pdev, struct intel_vsec_header *he
 		return -ENOMEM;
 
 	res = kcalloc(header->num_entries, sizeof(*res), GFP_KERNEL);
-	if (!res) {
-		kfree(intel_vsec_dev);
+	if (!res)
 		return -ENOMEM;
-	}
 
 	if (quirks & VSEC_QUIRK_TABLE_SHIFT)
 		header->offset >>= TABLE_OFFSET_SHIFT;
@@ -208,8 +207,12 @@ static int intel_vsec_add_dev(struct pci_dev *pdev, struct intel_vsec_header *he
 	else
 		intel_vsec_dev->ida = &intel_vsec_ida;
 
-	return intel_vsec_add_aux(pdev, NULL, intel_vsec_dev,
-				  intel_vsec_name(header->id));
+	ret = intel_vsec_add_aux(pdev, NULL, intel_vsec_dev,
+				 intel_vsec_name(header->id));
+
+	no_free_ptr(intel_vsec_dev);
+
+	return ret;
 }
 
 static bool intel_vsec_walk_header(struct pci_dev *pdev,
