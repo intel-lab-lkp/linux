@@ -11,11 +11,11 @@
 #include <linux/slab.h>
 #include <linux/thermal.h>
 
-#define CREATE_TRACE_POINTS
-#include "thermal_trace_ipa.h"
-
 #define THERMAL_CORE_SUBSYS
 #include "thermal_core.h"
+
+#define CREATE_TRACE_POINTS
+#include "thermal_trace_ipa.h" 
 
 #define INVALID_TRIP -1
 
