@@ -38,7 +38,7 @@ static inline void arch_enter_lazy_mmu_mode(void)
 	 */
 	preempt_disable();
 	batch = this_cpu_ptr(&ppc64_tlb_batch);
-	batch->active = 1;
+	batch->active++;
 }
 
 static inline void arch_leave_lazy_mmu_mode(void)
@@ -49,9 +49,8 @@ static inline void arch_leave_lazy_mmu_mode(void)
 		return;
 	batch = this_cpu_ptr(&ppc64_tlb_batch);
 
-	if (batch->index)
+	if ((--batch->active == 0) && batch->index)
 		__flush_tlb_pending(batch);
-	batch->active = 0;
 	preempt_enable();
 }
 
