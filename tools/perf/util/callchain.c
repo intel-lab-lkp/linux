@@ -1496,16 +1496,14 @@ static void free_callchain_node(struct callchain_node *node)
 
 	list_for_each_entry_safe(list, tmp, &node->parent_val, list) {
 		list_del_init(&list->list);
-		map__zput(list->ms.map);
-		maps__zput(list->ms.maps);
+		map_symbol__exit(&list->ms);
 		zfree(&list->brtype_stat);
 		free(list);
 	}
 
 	list_for_each_entry_safe(list, tmp, &node->val, list) {
 		list_del_init(&list->list);
-		map__zput(list->ms.map);
-		maps__zput(list->ms.maps);
+		map_symbol__exit(&list->ms);
 		zfree(&list->brtype_stat);
 		free(list);
 	}
@@ -1591,8 +1589,7 @@ int callchain_node__make_parent_list(struct callchain_node *node)
 out:
 	list_for_each_entry_safe(chain, new, &head, list) {
 		list_del_init(&chain->list);
-		map__zput(chain->ms.map);
-		maps__zput(chain->ms.maps);
+		map_symbol__exit(&chain->ms);
 		zfree(&chain->brtype_stat);
 		free(chain);
 	}
@@ -1676,10 +1673,8 @@ void callchain_cursor_reset(struct callchain_cursor *cursor)
 	cursor->nr = 0;
 	cursor->last = &cursor->first;
 
-	for (node = cursor->first; node != NULL; node = node->next) {
-		map__zput(node->ms.map);
-		maps__zput(node->ms.maps);
-	}
+	for (node = cursor->first; node != NULL; node = node->next)
+		map_symbol__exit(&node->ms);
 }
 
 void callchain_param_setup(u64 sample_type, const char *arch)

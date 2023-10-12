@@ -524,8 +524,7 @@ err_infos:
 		map__put(he->mem_info->daddr.ms.map);
 	}
 err:
-	maps__zput(he->ms.maps);
-	map__zput(he->ms.map);
+	map_symbol__exit(&he->ms);
 	zfree(&he->stat_acc);
 	return -ENOMEM;
 }
@@ -1317,8 +1316,7 @@ void hist_entry__delete(struct hist_entry *he)
 	struct hist_entry_ops *ops = he->ops;
 
 	thread__zput(he->thread);
-	maps__zput(he->ms.maps);
-	map__zput(he->ms.map);
+	map_symbol__exit(&he->ms);
 
 	if (he->branch_info) {
 		map__zput(he->branch_info->from.ms.map);
