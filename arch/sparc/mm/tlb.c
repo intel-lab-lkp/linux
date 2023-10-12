@@ -54,16 +54,15 @@ void arch_enter_lazy_mmu_mode(void)
 {
 	struct tlb_batch *tb = this_cpu_ptr(&tlb_batch);
 
-	tb->active = 1;
+	tb->active++;
 }
 
 void arch_leave_lazy_mmu_mode(void)
 {
 	struct tlb_batch *tb = this_cpu_ptr(&tlb_batch);
 
-	if (tb->tlb_nr)
+	if ((--tb->active == 0) && tb->tlb_nr)
 		flush_tlb_pending();
-	tb->active = 0;
 }
 
 static void tlb_batch_add_one(struct mm_struct *mm, unsigned long vaddr,
