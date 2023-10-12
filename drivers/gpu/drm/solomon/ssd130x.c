@@ -96,6 +96,12 @@
 
 #define MAX_CONTRAST 255
 
+enum ssd130x_family_ids {
+	SSD130X_FAMILY
+};
+
+static const struct ssd130x_funcs ssd130x_family_funcs[];
+
 const struct ssd130x_deviceinfo ssd130x_variants[] = {
 	[SH1106_ID] = {
 		.default_vcomh = 0x40,
@@ -104,6 +110,7 @@ const struct ssd130x_deviceinfo ssd130x_variants[] = {
 		.default_width = 132,
 		.default_height = 64,
 		.page_mode_only = 1,
+		.funcs = &ssd130x_family_funcs[SSD130X_FAMILY],
 	},
 	[SSD1305_ID] = {
 		.default_vcomh = 0x34,
@@ -111,6 +118,7 @@ const struct ssd130x_deviceinfo ssd130x_variants[] = {
 		.default_dclk_frq = 7,
 		.default_width = 132,
 		.default_height = 64,
+		.funcs = &ssd130x_family_funcs[SSD130X_FAMILY],
 	},
 	[SSD1306_ID] = {
 		.default_vcomh = 0x20,
@@ -119,6 +127,7 @@ const struct ssd130x_deviceinfo ssd130x_variants[] = {
 		.need_chargepump = 1,
 		.default_width = 128,
 		.default_height = 64,
+		.funcs = &ssd130x_family_funcs[SSD130X_FAMILY],
 	},
 	[SSD1307_ID] = {
 		.default_vcomh = 0x20,
@@ -127,6 +136,7 @@ const struct ssd130x_deviceinfo ssd130x_variants[] = {
 		.need_pwm = 1,
 		.default_width = 128,
 		.default_height = 39,
+		.funcs = &ssd130x_family_funcs[SSD130X_FAMILY],
 	},
 	[SSD1309_ID] = {
 		.default_vcomh = 0x34,
@@ -134,6 +144,7 @@ const struct ssd130x_deviceinfo ssd130x_variants[] = {
 		.default_dclk_frq = 10,
 		.default_width = 128,
 		.default_height = 64,
+		.funcs = &ssd130x_family_funcs[SSD130X_FAMILY],
 	}
 };
 EXPORT_SYMBOL_NS_GPL(ssd130x_variants, DRM_SSD130X);
@@ -453,6 +464,33 @@ static int ssd130x_init(struct ssd130x_device *ssd130x)
 				 SSD130X_SET_ADDRESS_MODE_HORIZONTAL);
 }
 
+static int ssd130x_set_buffer_sizes(struct ssd130x_device *ssd130x)
+{
+	unsigned int buffer_pitch;
+	unsigned int pages = DIV_ROUND_UP(ssd130x->height, SSD130X_PAGE_HEIGHT);
+
+	ssd130x->data_array_size = ssd130x->width * pages;
+
+	ssd130x->buffer_fi = drm_format_info(DRM_FORMAT_R1);
+
+	if (!ssd130x->buffer_fi)
+		return -EINVAL;
+
+	buffer_pitch = drm_format_info_min_pitch(ssd130x->buffer_fi, 0, ssd130x->width);
+	ssd130x->buffer_size = buffer_pitch * ssd130x->height;
+
+	return 0;
+}
+
+static void ssd130x_align_rect(struct ssd130x_device *ssd130x,
+			       struct drm_rect *rect)
+{
+	/* Align y to display page boundaries */
+	rect->y1 = round_down(rect->y1, SSD130X_PAGE_HEIGHT);
+	rect->y2 = min_t(unsigned int, round_up(rect->y2, SSD130X_PAGE_HEIGHT),
+			 ssd130x->height);
+}
+
 static int ssd130x_update_rect(struct ssd130x_device *ssd130x,
 			       struct drm_rect *rect, u8 *buf,
 			       u8 *data_array)
@@ -600,34 +638,43 @@ static void ssd130x_clear_screen(struct ssd130x_device *ssd130x, u8 *data_array)
 	}
 }
 
+static const struct ssd130x_funcs ssd130x_family_funcs[] = {
+	[SSD130X_FAMILY] = {
+		.init = ssd130x_init,
+		.set_buffer_sizes = ssd130x_set_buffer_sizes,
+		.align_rect = ssd130x_align_rect,
+		.update_rect = ssd130x_update_rect,
+		.clear_screen = ssd130x_clear_screen,
+		.fmt_convert = drm_fb_xrgb8888_to_mono,
+	},
+};
+
 static int ssd130x_fb_blit_rect(struct drm_framebuffer *fb,
 				const struct iosys_map *vmap,
-				struct drm_rect *rect,
-				u8 *buf, u8 *data_array)
+				struct drm_rect *rect, u8 *buf,
+				const struct drm_format_info *fi,
+				u8 *data_array)
 {
 	struct ssd130x_device *ssd130x = drm_to_ssd130x(fb->dev);
+	const struct ssd130x_funcs *ssd130x_funcs = ssd130x->device_info->funcs;
 	struct iosys_map dst;
 	unsigned int dst_pitch;
 	int ret = 0;
 
-	/* Align y to display page boundaries */
-	rect->y1 = round_down(rect->y1, SSD130X_PAGE_HEIGHT);
-	rect->y2 = min_t(unsigned int, round_up(rect->y2, SSD130X_PAGE_HEIGHT), ssd130x->height);
+	ssd130x_funcs->align_rect(ssd130x, rect);
 
-	dst_pitch = DIV_ROUND_UP(drm_rect_width(rect), 8);
+	dst_pitch = drm_format_info_min_pitch(fi, 0, drm_rect_width(rect));
 
 	ret = drm_gem_fb_begin_cpu_access(fb, DMA_FROM_DEVICE);
 	if (ret)
 		return ret;
 
 	iosys_map_set_vaddr(&dst, buf);
-	drm_fb_xrgb8888_to_mono(&dst, &dst_pitch, vmap, fb, rect);
+	ssd130x_funcs->fmt_convert(&dst, &dst_pitch, vmap, fb, rect);
 
 	drm_gem_fb_end_cpu_access(fb, DMA_FROM_DEVICE);
 
-	ssd130x_update_rect(ssd130x, rect, buf, data_array);
-
-	return ret;
+	return ssd130x_funcs->update_rect(ssd130x, rect, buf, data_array);
 }
 
 static int ssd130x_primary_plane_atomic_check(struct drm_plane *plane,
@@ -639,8 +686,6 @@ static int ssd130x_primary_plane_atomic_check(struct drm_plane *plane,
 	struct ssd130x_plane_state *ssd130x_state = to_ssd130x_plane_state(plane_state);
 	struct drm_crtc *crtc = plane_state->crtc;
 	struct drm_crtc_state *crtc_state;
-	const struct drm_format_info *fi;
-	unsigned int pitch;
 	int ret;
 
 	if (!crtc)
@@ -654,13 +699,7 @@ static int ssd130x_primary_plane_atomic_check(struct drm_plane *plane,
 	if (ret)
 		return ret;
 
-	fi = drm_format_info(DRM_FORMAT_R1);
-	if (!fi)
-		return -EINVAL;
-
-	pitch = drm_format_info_min_pitch(fi, 0, ssd130x->width);
-
-	ssd130x_state->buffer = kcalloc(pitch, ssd130x->height, GFP_KERNEL);
+	ssd130x_state->buffer = kzalloc(ssd130x->buffer_size, GFP_KERNEL);
 	if (!ssd130x_state->buffer)
 		return -ENOMEM;
 
@@ -679,6 +718,7 @@ static void ssd130x_primary_plane_atomic_update(struct drm_plane *plane,
 	struct drm_framebuffer *fb = plane_state->fb;
 	struct drm_atomic_helper_damage_iter iter;
 	struct drm_device *drm = plane->dev;
+	struct ssd130x_device *ssd130x = drm_to_ssd130x(drm);
 	struct drm_rect dst_clip;
 	struct drm_rect damage;
 	int idx;
@@ -695,6 +735,7 @@ static void ssd130x_primary_plane_atomic_update(struct drm_plane *plane,
 
 		ssd130x_fb_blit_rect(fb, &shadow_plane_state->data[0], &dst_clip,
 				     ssd130x_plane_state->buffer,
+				     ssd130x->buffer_fi,
 				     ssd130x_crtc_state->data_array);
 	}
 
@@ -706,6 +747,7 @@ static void ssd130x_primary_plane_atomic_disable(struct drm_plane *plane,
 {
 	struct drm_device *drm = plane->dev;
 	struct ssd130x_device *ssd130x = drm_to_ssd130x(drm);
+	const struct ssd130x_funcs *ssd130x_funcs = ssd130x->device_info->funcs;
 	struct drm_plane_state *plane_state = drm_atomic_get_new_plane_state(state, plane);
 	struct drm_crtc_state *crtc_state;
 	struct ssd130x_crtc_state *ssd130x_crtc_state;
@@ -720,7 +762,7 @@ static void ssd130x_primary_plane_atomic_disable(struct drm_plane *plane,
 	if (!drm_dev_enter(drm, &idx))
 		return;
 
-	ssd130x_clear_screen(ssd130x, ssd130x_crtc_state->data_array);
+	ssd130x_funcs->clear_screen(ssd130x, ssd130x_crtc_state->data_array);
 
 	drm_dev_exit(idx);
 }
@@ -814,14 +856,13 @@ static int ssd130x_crtc_atomic_check(struct drm_crtc *crtc,
 	struct ssd130x_device *ssd130x = drm_to_ssd130x(drm);
 	struct drm_crtc_state *crtc_state = drm_atomic_get_new_crtc_state(state, crtc);
 	struct ssd130x_crtc_state *ssd130x_state = to_ssd130x_crtc_state(crtc_state);
-	unsigned int pages = DIV_ROUND_UP(ssd130x->height, SSD130X_PAGE_HEIGHT);
 	int ret;
 
 	ret = drm_crtc_helper_atomic_check(crtc, state);
 	if (ret)
 		return ret;
 
-	ssd130x_state->data_array = kmalloc(ssd130x->width * pages, GFP_KERNEL);
+	ssd130x_state->data_array = kmalloc(ssd130x->data_array_size, GFP_KERNEL);
 	if (!ssd130x_state->data_array)
 		return -ENOMEM;
 
@@ -899,13 +940,14 @@ static void ssd130x_encoder_atomic_enable(struct drm_encoder *encoder,
 {
 	struct drm_device *drm = encoder->dev;
 	struct ssd130x_device *ssd130x = drm_to_ssd130x(drm);
+	const struct ssd130x_funcs *ssd130x_funcs = ssd130x->device_info->funcs;
 	int ret;
 
 	ret = ssd130x_power_on(ssd130x);
 	if (ret)
 		return;
 
-	ret = ssd130x_init(ssd130x);
+	ret = ssd130x_funcs->init(ssd130x);
 	if (ret)
 		goto power_off;
 
@@ -1191,6 +1233,7 @@ static int ssd130x_get_resources(struct ssd130x_device *ssd130x)
 
 struct ssd130x_device *ssd130x_probe(struct device *dev, struct regmap *regmap)
 {
+	const struct ssd130x_funcs *ssd130x_funcs;
 	struct ssd130x_device *ssd130x;
 	struct backlight_device *bl;
 	struct drm_device *drm;
@@ -1212,6 +1255,12 @@ struct ssd130x_device *ssd130x_probe(struct device *dev, struct regmap *regmap)
 		ssd130x->page_address_mode = 1;
 
 	ssd130x_parse_properties(ssd130x);
+
+	ssd130x_funcs = ssd130x->device_info->funcs;
+
+	ret = ssd130x_funcs->set_buffer_sizes(ssd130x);
+	if (ret)
+		return ERR_PTR(ret);
 
 	ret = ssd130x_get_resources(ssd130x);
 	if (ret)
