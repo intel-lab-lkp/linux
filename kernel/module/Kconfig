@@ -389,4 +389,12 @@ config MODULES_TREE_LOOKUP
 	def_bool y
 	depends on PERF_EVENTS || TRACING || CFI_CLANG
 
+config MODULE_DISABLE_INIT_FREE
+	bool "Disable freeing of init sections"
+	default n
+	help
+	  Allows users to prevent the freeing of init sections. This option is
+	  particularly helpful for syzkaller fuzzing, ensuring that the module
+	  consistently loads into the same address across reboots.
+
 endif # MODULES

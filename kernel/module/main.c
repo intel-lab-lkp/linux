@@ -2593,8 +2593,9 @@ static noinline int do_init_module(struct module *mod)
 	 * be cleaned up needs to sync with the queued work - ie
 	 * rcu_barrier()
 	 */
-	if (llist_add(&freeinit->node, &init_free_list))
-		schedule_work(&init_free_wq);
+	if (llist_add(&freeinit->node, &init_free_list) &&
+		!IS_ENABLED(CONFIG_MODULE_DISABLE_INIT_FREE))
+			schedule_work(&init_free_wq);
 
 	mutex_unlock(&module_mutex);
 	wake_up_all(&module_wq);
