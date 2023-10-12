@@ -623,6 +623,14 @@ cper_estatus_print_section(const char *pfx, struct acpi_hest_generic_data *gdata
 			cper_print_dram(newpfx, dram);
 		else
 			goto err_section_too_small;
+	} else if (guid_equal(sec_type, &CPER_SEC_CXL_MM_MODULE)) {
+		struct cper_sec_comp_event *mm_module = acpi_hest_get_payload(gdata);
+
+		printk("%ssection_type: CXL Memory Module Event\n", newpfx);
+		if (gdata->error_data_length >= sizeof(*mm_module))
+			cper_print_mm_module(newpfx, mm_module);
+		else
+			goto err_section_too_small;
 	} else {
 		const void *err = acpi_hest_get_payload(gdata);
 

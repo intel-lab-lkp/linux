@@ -25,6 +25,11 @@
 	GUID_INIT(0x601DCBB3, 0x9C06, 0x4EAB, 0xB8, 0xAF, 0x4E, 0x9B,	\
 		  0xFB, 0x5C, 0x96, 0x24)
 
+/* CXL Memory Module Event Section */
+#define CPER_SEC_CXL_MM_MODULE						\
+	GUID_INIT(0xFE927475, 0xDD59, 0x4339, 0xA5, 0x86, 0x79, 0xBA,	\
+		  0xB1, 0x13, 0xB7, 0x74)
+
 #pragma pack(1)
 
 /* Compute Express Link Protocol Error Section, UEFI v2.10 sec N.2.13 */
@@ -147,10 +152,37 @@ struct cper_sec_dram {
 	u8 reserved[23];
 };
 
+/*
+ * CXL Memory Module Event
+ * Device Health Information - DHI
+ * CXL rev 3.0 sec 8.2.9.8.3.1; Table 8-100
+ */
+struct dev_health_info {
+	u8 health_status;
+	u8 media_status;
+	u8 add_status;
+	u8 life_used;
+	u16 device_temp;
+	u32 dirty_shutdown_cnt;
+	u32 cor_vol_err_cnt;
+	u32 cor_per_err_cnt;
+};
+
+/* CXL Memory Module Event Record
+ * CXL rev 3.0 sec 8.2.9.2.1.3; Table 8-45
+ */
+struct cper_sec_mm_module {
+	struct common_event_record record;
+	u8 event_type;
+	struct dev_health_info dhi;
+	u8 reserved[61];
+};
+
 #pragma pack()
 
 void cper_print_prot_err(const char *pfx, const struct cper_sec_prot_err *prot_err);
 void cper_print_gen_media(const char *pfx, const struct cper_sec_comp_event *event);
 void cper_print_dram(const char *pfx, const struct cper_sec_comp_event *event);
+void cper_print_mm_module(const char *pfx, const struct cper_sec_comp_event *event);
 
 #endif //__CPER_CXL_

@@ -39,6 +39,11 @@
 #define DRAM_VALID_COLUMN			BIT_ULL(6)
 #define DRAM_VALID_CORRECTION_MASK		BIT_ULL(7)
 
+#define DHI_AS_LIFE_USED(as)			(as & GENMASK(1, 0))
+#define DHI_AS_DEV_TEMP(as)			(((as) & GENMASK(3, 2)) >> 2)
+#define DHI_AS_COR_VOL_ERR_CNT(as)		(((as) & GENMASK(4, 4)) >> 4)
+#define DHI_AS_COR_PER_ERR_CNT(as)		(((as) & GENMASK(5, 5)) >> 5)
+
 /* CXL RAS Capability Structure, CXL v3.0 sec 8.2.4.16 */
 struct cxl_ras_capability_regs {
 	u32 uncor_status;
@@ -117,6 +122,45 @@ static const char * const dram_mem_type_strs[] = {
 	"scrub media ECC error",
 	"invalid address",
 	"data path error",
+};
+
+static const char * const mm_module_event_type_strs[] = {
+	"health status change",
+	"media status change",
+	"life used change",
+	"temperature change",
+	"data path error",
+	"lsa error",
+};
+
+static const char * const dhi_health_status_strs[] = {
+	"maintenance needed",
+	"performance degraded",
+	"hardware replacement needed",
+};
+
+static const char * const dhi_media_status_strs[] = {
+	"normal",
+	"not ready",
+	"write persistency lost",
+	"all data lost",
+	"write persistency loss in the event of power loss",
+	"write persistency loss in event of shutdown",
+	"write persistency loss imminent",
+	"all data loss in the event of power loss",
+	"all data loss in the event of shutdown",
+	"all data loss imminent",
+};
+
+static const char * const dhi_two_bit_status_strs[] = {
+	"normal",
+	"warning",
+	"critical",
+};
+
+static const char * const dhi_one_bit_status_strs[] = {
+	"normal",
+	"warning",
 };
 
 void cper_print_prot_err(const char *pfx, const struct cper_sec_prot_err *prot_err)
@@ -408,4 +452,70 @@ void cper_print_dram(const char *pfx, const struct cper_sec_comp_event *event)
 		print_hex_dump(pfx, "", DUMP_PREFIX_OFFSET, 16, 4,
 			       dram->cor_mask, sizeof(dram->cor_mask), 0);
 	}
+}
+
+static void cper_print_mm_module_dhi(const char *pfx, const struct dev_health_info *dhi)
+{
+	pr_info("%s health status: 0x%02x\n", pfx, dhi->health_status);
+	cper_print_bits(pfx, dhi->health_status, dhi_health_status_strs,
+			ARRAY_SIZE(dhi_health_status_strs));
+
+	pr_info("%s media status: %d, %s\n", pfx, dhi->media_status,
+		dhi->media_status < ARRAY_SIZE(dhi_media_status_strs)
+		? dhi_media_status_strs[dhi->media_status] : "unknown");
+
+	pr_info("%s current life used: %ld, %s\n", pfx,
+		DHI_AS_LIFE_USED(dhi->add_status),
+		DHI_AS_LIFE_USED(dhi->add_status) < ARRAY_SIZE(dhi_two_bit_status_strs)
+		? dhi_two_bit_status_strs[DHI_AS_LIFE_USED(dhi->add_status)]
+		: "unknown");
+
+	pr_info("%s current device temperature: %ld, %s\n", pfx,
+		DHI_AS_DEV_TEMP(dhi->add_status),
+		DHI_AS_DEV_TEMP(dhi->add_status) < ARRAY_SIZE(dhi_two_bit_status_strs)
+		? dhi_two_bit_status_strs[DHI_AS_DEV_TEMP(dhi->add_status)]
+		: "unknown");
+
+	pr_info("%s current corrected volatile err count: %ld, %s\n", pfx,
+		DHI_AS_COR_VOL_ERR_CNT(dhi->add_status),
+		DHI_AS_COR_VOL_ERR_CNT(dhi->add_status) < ARRAY_SIZE(dhi_one_bit_status_strs)
+		? dhi_one_bit_status_strs[DHI_AS_COR_VOL_ERR_CNT(dhi->add_status)]
+		: "unknown");
+
+	pr_info("%s current corrected persistent err count: %ld, %s\n", pfx,
+		DHI_AS_COR_PER_ERR_CNT(dhi->add_status),
+		DHI_AS_COR_PER_ERR_CNT(dhi->add_status) < ARRAY_SIZE(dhi_one_bit_status_strs)
+		? dhi_one_bit_status_strs[DHI_AS_COR_PER_ERR_CNT(dhi->add_status)]
+		: "unknown");
+
+	pr_info("%s life used percent: 0x%02x\n", pfx, dhi->life_used);
+	pr_info("%s device temperature degree celsius: 0x%04x\n", pfx,
+		dhi->device_temp);
+	pr_info("%s dirty shutdown count: 0x%08x\n", pfx,
+		dhi->dirty_shutdown_cnt);
+	pr_info("%s total corrected volatile error count: 0x%08x\n", pfx,
+		dhi->cor_vol_err_cnt);
+	pr_info("%s total corrected persistent error count: 0x%08x\n", pfx,
+		dhi->cor_per_err_cnt);
+}
+
+void cper_print_mm_module(const char *pfx, const struct cper_sec_comp_event *event)
+{
+	struct cper_sec_mm_module *mm_module;
+
+	cper_print_comp_event(pfx, event);
+
+	if (!(event->valid_bits & COMP_EVENT_VALID_EVENT_LOG))
+		return;
+
+	mm_module = (struct cper_sec_mm_module *)(event + 1);
+
+	cper_print_event_record(pfx, &mm_module->record);
+
+	pr_info("%s device event type: %d, %s\n", pfx, mm_module->event_type,
+		mm_module->event_type < ARRAY_SIZE(mm_module_event_type_strs)
+		? mm_module_event_type_strs[mm_module->event_type]
+		: "unknown");
+
+	cper_print_mm_module_dhi(pfx, &mm_module->dhi);
 }
