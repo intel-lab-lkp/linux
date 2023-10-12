@@ -150,6 +150,7 @@ struct mv64xxx_i2c_data {
 	bool			clk_n_base_0;
 	struct i2c_bus_recovery_info	rinfo;
 	bool			atomic;
+	struct gpio_desc	*reset_gpio;
 };
 
 static struct mv64xxx_i2c_regs mv64xxx_i2c_regs_mv64xxx = {
@@ -1024,6 +1025,10 @@ mv64xxx_i2c_probe(struct platform_device *pd)
 	if (drv_data->irq < 0)
 		return drv_data->irq;
 
+	drv_data->reset_gpio = devm_gpiod_get_optional(&pd->dev, "reset", GPIOD_OUT_HIGH);
+	if (IS_ERR(drv_data->reset_gpio))
+		return PTR_ERR(drv_data->reset_gpio);
+
 	if (pdata) {
 		drv_data->freq_m = pdata->freq_m;
 		drv_data->freq_n = pdata->freq_n;
@@ -1056,6 +1061,12 @@ mv64xxx_i2c_probe(struct platform_device *pd)
 		rc = mv64xxx_i2c_runtime_resume(&pd->dev);
 		if (rc)
 			goto exit_disable_pm;
+	}
+
+	if (drv_data->reset_gpio) {
+		udelay(1);
+		gpiod_set_value_cansleep(drv_data->reset_gpio, 0);
+		udelay(1);
 	}
 
 	rc = request_irq(drv_data->irq, mv64xxx_i2c_intr, 0,
