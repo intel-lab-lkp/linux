@@ -34,13 +34,13 @@
 
 #include <linux/mm.h>
 #include <linux/dma-mapping.h>
-#include <linux/sched/signal.h>
 #include <linux/sched/mm.h>
 #include <linux/hugetlb.h>
 #include <linux/iommu.h>
 #include <linux/workqueue.h>
 #include <linux/list.h>
 #include <rdma/ib_verbs.h>
+#include <rdma/ib_umem.h>
 
 #include "usnic_log.h"
 #include "usnic_uiom.h"
@@ -90,7 +90,6 @@ static int usnic_uiom_get_pages(unsigned long addr, size_t size, int writable,
 	struct scatterlist *sg;
 	struct usnic_uiom_chunk *chunk;
 	unsigned long locked;
-	unsigned long lock_limit;
 	unsigned long cur_base;
 	unsigned long npages;
 	int ret;
@@ -124,9 +123,8 @@ static int usnic_uiom_get_pages(unsigned long addr, size_t size, int writable,
 	mmap_read_lock(mm);
 
 	locked = atomic64_add_return(npages, &current->mm->pinned_vm);
-	lock_limit = rlimit(RLIMIT_MEMLOCK) >> PAGE_SHIFT;
 
-	if ((locked > lock_limit) && !capable(CAP_IPC_LOCK)) {
+	if (!ib_umem_check_rlimit_memlock(locked)) {
 		ret = -ENOMEM;
 		goto out;
 	}

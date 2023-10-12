@@ -12,6 +12,7 @@
 
 #include <rdma/iw_cm.h>
 #include <rdma/ib_verbs.h>
+#include <rdma/ib_umem.h>
 #include <rdma/ib_user_verbs.h>
 #include <rdma/uverbs_ioctl.h>
 
@@ -1321,8 +1322,8 @@ struct ib_mr *siw_reg_user_mr(struct ib_pd *pd, u64 start, u64 len,
 	struct siw_umem *umem = NULL;
 	struct siw_ureq_reg_mr ureq;
 	struct siw_device *sdev = to_siw_dev(pd->device);
-
-	unsigned long mem_limit = rlimit(RLIMIT_MEMLOCK);
+	unsigned long num_pages =
+		(PAGE_ALIGN(len + (start & ~PAGE_MASK))) >> PAGE_SHIFT;
 	int rv;
 
 	siw_dbg_pd(pd, "start: 0x%pK, va: 0x%pK, len: %llu\n",
@@ -1338,19 +1339,15 @@ struct ib_mr *siw_reg_user_mr(struct ib_pd *pd, u64 start, u64 len,
 		rv = -EINVAL;
 		goto err_out;
 	}
-	if (mem_limit != RLIM_INFINITY) {
-		unsigned long num_pages =
-			(PAGE_ALIGN(len + (start & ~PAGE_MASK))) >> PAGE_SHIFT;
-		mem_limit >>= PAGE_SHIFT;
 
-		if (num_pages > mem_limit - current->mm->locked_vm) {
-			siw_dbg_pd(pd, "pages req %lu, max %lu, lock %lu\n",
-				   num_pages, mem_limit,
-				   current->mm->locked_vm);
-			rv = -ENOMEM;
-			goto err_out;
-		}
+	if (!ib_umem_check_rlimit_memlock(num_pages + current->mm->locked_vm)) {
+		siw_dbg_pd(pd, "pages req %lu, max %lu, lock %lu\n",
+				num_pages, rlimit(RLIMIT_MEMLOCK),
+				current->mm->locked_vm);
+		rv = -ENOMEM;
+		goto err_out;
 	}
+
 	umem = siw_umem_get(start, len, ib_access_writable(rights));
 	if (IS_ERR(umem)) {
 		rv = PTR_ERR(umem);

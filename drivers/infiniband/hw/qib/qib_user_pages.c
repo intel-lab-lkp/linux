@@ -32,8 +32,8 @@
  */
 
 #include <linux/mm.h>
-#include <linux/sched/signal.h>
 #include <linux/device.h>
+#include <rdma/ib_umem.h>
 
 #include "qib.h"
 
@@ -94,14 +94,13 @@ int qib_map_page(struct pci_dev *hwdev, struct page *page, dma_addr_t *daddr)
 int qib_get_user_pages(unsigned long start_page, size_t num_pages,
 		       struct page **p)
 {
-	unsigned long locked, lock_limit;
+	unsigned long locked;
 	size_t got;
 	int ret;
 
-	lock_limit = rlimit(RLIMIT_MEMLOCK) >> PAGE_SHIFT;
 	locked = atomic64_add_return(num_pages, &current->mm->pinned_vm);
 
-	if (locked > lock_limit && !capable(CAP_IPC_LOCK)) {
+	if (!ib_umem_check_rlimit_memlock(locked)) {
 		ret = -ENOMEM;
 		goto bail;
 	}

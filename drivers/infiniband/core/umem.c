@@ -35,12 +35,12 @@
 
 #include <linux/mm.h>
 #include <linux/dma-mapping.h>
-#include <linux/sched/signal.h>
 #include <linux/sched/mm.h>
 #include <linux/export.h>
 #include <linux/slab.h>
 #include <linux/pagemap.h>
 #include <linux/count_zeros.h>
+#include <rdma/ib_umem.h>
 #include <rdma/ib_umem_odp.h>
 
 #include "uverbs.h"
@@ -150,7 +150,6 @@ struct ib_umem *ib_umem_get(struct ib_device *device, unsigned long addr,
 {
 	struct ib_umem *umem;
 	struct page **page_list;
-	unsigned long lock_limit;
 	unsigned long new_pinned;
 	unsigned long cur_base;
 	unsigned long dma_attr = 0;
@@ -200,10 +199,8 @@ struct ib_umem *ib_umem_get(struct ib_device *device, unsigned long addr,
 		goto out;
 	}
 
-	lock_limit = rlimit(RLIMIT_MEMLOCK) >> PAGE_SHIFT;
-
 	new_pinned = atomic64_add_return(npages, &mm->pinned_vm);
-	if (new_pinned > lock_limit && !capable(CAP_IPC_LOCK)) {
+	if (!ib_umem_check_rlimit_memlock(new_pinned)) {
 		atomic64_sub(npages, &mm->pinned_vm);
 		ret = -ENOMEM;
 		goto out;
