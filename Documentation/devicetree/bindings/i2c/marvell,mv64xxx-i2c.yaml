@@ -67,6 +67,9 @@ properties:
   resets:
     maxItems: 1
 
+  reset-gpios:
+    maxItems: 1
+
   dmas:
     items:
       - description: RX DMA Channel
