@@ -50,12 +50,24 @@ struct numa_meminfo {
 	struct numa_memblk	blk[NR_NODE_MEMBLKS];
 };
 
-extern struct numa_meminfo numa_meminfo;
+#ifdef CONFIG_NUMA_EMU
+#define FAKE_NODE_MIN_SIZE	((u64)32 << 20)
+#define FAKE_NODE_MIN_HASH_MASK	(~(FAKE_NODE_MIN_SIZE - 1UL))
 
+extern struct numa_meminfo numa_meminfo;
+extern char *emu_cmdline __initdata;
+
+int numa_emu_cmdline(char *str);
 int __init numa_register_memblks(struct numa_meminfo *mi);
 int __init numa_cleanup_meminfo(struct numa_meminfo *mi);
 void __init numa_emulation(struct numa_meminfo *numa_meminfo,
 			   int numa_dist_cnt);
+#else
+static inline int numa_emu_cmdline(char *str)
+{
+	return -EINVAL;
+}
+#endif
 
 #else	/* CONFIG_NUMA */
 
