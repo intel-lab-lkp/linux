@@ -16,6 +16,10 @@
 struct numa_meminfo numa_meminfo __initdata_or_meminfo;
 struct numa_meminfo numa_reserved_meminfo __initdata_or_meminfo;
 
+#ifdef CONFIG_NUMA_EMU
+char *emu_cmdline __initdata;
+#endif
+
 /*
  * Set nodes, which have memory in @mi, in *@nodemask.
  */
@@ -296,3 +300,11 @@ int __weak __init numa_register_memblks(struct numa_meminfo *mi)
 
 	return 0;
 }
+
+#ifdef CONFIG_NUMA_EMU
+int __init numa_emu_cmdline(char *str)
+{
+	emu_cmdline = str;
+	return 0;
+}
+#endif
