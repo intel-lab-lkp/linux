@@ -4160,6 +4160,9 @@ int ksz_switch_register(struct ksz_device *dev)
 		}
 	}
 
+	dev->rmii_clk_internal = of_property_read_bool(dev->dev->of_node,
+						       "microchip,rmii-clk-internal");
+
 	ret = dsa_register_switch(dev->ds);
 	if (ret) {
 		dev->dev_ops->exit(dev);
