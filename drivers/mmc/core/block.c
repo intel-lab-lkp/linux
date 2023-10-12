@@ -114,6 +114,8 @@ struct mmc_blk_data {
 	unsigned int	flags;
 #define MMC_BLK_CMD23	(1 << 0)	/* Can do SET_BLOCK_COUNT for multiblock */
 #define MMC_BLK_REL_WR	(1 << 1)	/* MMC Reliable write support */
+#define MMC_BLK_FFU	(1 << 2)	/* FFU in progress */
+#define MMC_BLK_CE	(1 << 3)	/* close-ended FFU in progress */
 
 	struct kref	kref;
 	unsigned int	read_only;
@@ -546,6 +548,29 @@ static int __mmc_blk_ioctl_cmd(struct mmc_card *card, struct mmc_blk_data *md,
 	if ((MMC_EXTRACT_INDEX_FROM_ARG(cmd.arg) == EXT_CSD_SANITIZE_START) &&
 	    (cmd.opcode == MMC_SWITCH))
 		return mmc_sanitize(card, idata->ic.cmd_timeout_ms);
+
+	if ((MMC_EXTRACT_INDEX_FROM_ARG(cmd.arg) == EXT_CSD_MODE_CONFIG) &&
+	    (cmd.opcode == MMC_SWITCH)) {
+		u8 value = MMC_EXTRACT_VALUE_FROM_ARG(cmd.arg);
+
+		if (value == 1) {
+			md->flags |= MMC_BLK_FFU;
+		} else if (value == 0) {
+			/* switch back to normal mode is always happening */
+			md->flags &= ~MMC_BLK_FFU;
+			md->flags &= ~MMC_BLK_CE;
+		}
+	}
+
+	if ((md->flags & MMC_BLK_FFU) && cmd.opcode == MMC_SET_BLOCK_COUNT) {
+		md->flags &= ~MMC_BLK_FFU;
+		md->flags |= MMC_BLK_CE;
+	}
+
+	if ((md->flags & MMC_BLK_CE) && mmc_op_multi(cmd.opcode)) {
+		mrq.ffu = true;
+		md->flags &= ~MMC_BLK_CE;
+	}
 
 	/* If it's an R1B response we need some more preparations. */
 	busy_timeout_ms = idata->ic.cmd_timeout_ms ? : MMC_BLK_TIMEOUT_MS;
