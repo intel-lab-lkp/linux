@@ -30,6 +30,15 @@
 #define GMER_VALID_DEVICE			BIT_ULL(2)
 #define GMER_VALID_COMP_ID			BIT_ULL(3)
 
+#define DRAM_VALID_CHANNEL			BIT_ULL(0)
+#define DRAM_VALID_RANK				BIT_ULL(1)
+#define DRAM_VALID_NIBBLE_MASK			BIT_ULL(2)
+#define DRAM_VALID_BANK_GROUP			BIT_ULL(3)
+#define DRAM_VALID_BANK				BIT_ULL(4)
+#define DRAM_VALID_ROW				BIT_ULL(5)
+#define DRAM_VALID_COLUMN			BIT_ULL(6)
+#define DRAM_VALID_CORRECTION_MASK		BIT_ULL(7)
+
 /* CXL RAS Capability Structure, CXL v3.0 sec 8.2.4.16 */
 struct cxl_ras_capability_regs {
 	u32 uncor_status;
@@ -101,6 +110,13 @@ static const char * const transaction_type_strs[] = {
 	"host inject poison",
 	"internal media scrub",
 	"internal media management",
+};
+
+static const char * const dram_mem_type_strs[] = {
+	"media ECC error",
+	"scrub media ECC error",
+	"invalid address",
+	"data path error",
 };
 
 void cper_print_prot_err(const char *pfx, const struct cper_sec_prot_err *prot_err)
@@ -328,5 +344,68 @@ void cper_print_gen_media(const char *pfx, const struct cper_sec_comp_event *eve
 		pr_info("%s component identifer :\n", pfx);
 		print_hex_dump(pfx, "", DUMP_PREFIX_OFFSET, 16, 4, gmer->comp_id,
 			       sizeof(gmer->comp_id), 0);
+	}
+}
+
+void cper_print_dram(const char *pfx, const struct cper_sec_comp_event *event)
+{
+	struct cper_sec_dram *dram;
+
+	cper_print_comp_event(pfx, event);
+
+	if (!(event->valid_bits & COMP_EVENT_VALID_EVENT_LOG))
+		return;
+
+	dram = (struct cper_sec_dram *)(event + 1);
+
+	cper_print_event_record(pfx, &dram->record);
+
+	pr_info("%s device physical address: 0x%016llx\n", pfx, dram->dpa);
+	pr_info("%s memory event descriptor: 0x%02x\n", pfx, dram->descriptor);
+	cper_print_bits(pfx, dram->descriptor, mem_evt_descriptor_strs,
+			ARRAY_SIZE(mem_evt_descriptor_strs));
+
+	pr_info("%s memory event type: %d, %s\n", pfx, dram->type,
+		dram->type < ARRAY_SIZE(dram_mem_type_strs)
+		? dram_mem_type_strs[dram->type] : "unknown");
+
+	pr_info("%s transaction type: %d, %s\n", pfx, dram->transaction_type,
+		dram->transaction_type < ARRAY_SIZE(transaction_type_strs)
+		? transaction_type_strs[dram->transaction_type] : "unknown");
+
+	if (dram->validity_flags & DRAM_VALID_CHANNEL)
+		pr_info("%s channel: 0x%02x\n", pfx, dram->channel);
+
+	if (dram->validity_flags & DRAM_VALID_RANK)
+		pr_info("%s rank: 0x%02x\n", pfx, dram->rank);
+
+	if (dram->validity_flags & DRAM_VALID_NIBBLE_MASK) {
+		const __u8 *nibble;
+
+		nibble = dram->nibble_mask;
+		pr_info("%s nibble mask: %02x%02x%02x\n", pfx, nibble[2],
+			nibble[1], nibble[0]);
+	}
+
+	if (dram->validity_flags & DRAM_VALID_BANK_GROUP)
+		pr_info("%s bank group: 0x%02x\n", pfx, dram->bank_group);
+
+	if (dram->validity_flags & DRAM_VALID_BANK)
+		pr_info("%s bank: 0x%02x\n", pfx, dram->bank);
+
+	if (dram->validity_flags & DRAM_VALID_ROW) {
+		const __u8 *row;
+
+		row = dram->row;
+		pr_info("%s row: %02x%02x%02x\n", pfx, row[2], row[1], row[0]);
+	}
+
+	if (dram->validity_flags & DRAM_VALID_COLUMN)
+		pr_info("%s column: 0x%04x\n", pfx, dram->column);
+
+	if (dram->validity_flags & DRAM_VALID_CORRECTION_MASK) {
+		pr_info("%s correction mask :\n", pfx);
+		print_hex_dump(pfx, "", DUMP_PREFIX_OFFSET, 16, 4,
+			       dram->cor_mask, sizeof(dram->cor_mask), 0);
 	}
 }

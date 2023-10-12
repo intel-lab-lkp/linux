@@ -615,6 +615,14 @@ cper_estatus_print_section(const char *pfx, struct acpi_hest_generic_data *gdata
 			cper_print_gen_media(newpfx, gmer);
 		else
 			goto err_section_too_small;
+	} else if (guid_equal(sec_type, &CPER_SEC_CXL_DRAM)) {
+		struct cper_sec_comp_event *dram = acpi_hest_get_payload(gdata);
+
+		printk("%ssection_type: CXL DRAM Event\n", newpfx);
+		if (gdata->error_data_length >= sizeof(*dram))
+			cper_print_dram(newpfx, dram);
+		else
+			goto err_section_too_small;
 	} else {
 		const void *err = acpi_hest_get_payload(gdata);
 
