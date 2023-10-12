@@ -1389,11 +1389,17 @@ void sdhci_switch_external_dma(struct sdhci_host *host, bool en)
 }
 EXPORT_SYMBOL_GPL(sdhci_switch_external_dma);
 
+static inline bool sdhci_dont_auto_cmd12_ffu(struct sdhci_host *host,
+					     struct mmc_request *mrq) {
+	return (host->quirks2 & SDHCI_QUIRK2_FFU_ACMD12) && mrq->ffu;
+}
+
 static inline bool sdhci_auto_cmd12(struct sdhci_host *host,
 				    struct mmc_request *mrq)
 {
 	return !mrq->sbc && (host->flags & SDHCI_AUTO_CMD12) &&
-	       !mrq->cap_cmd_during_tfr;
+	       !mrq->cap_cmd_during_tfr &&
+	       !sdhci_dont_auto_cmd12_ffu(host, mrq);
 }
 
 static inline bool sdhci_auto_cmd23(struct sdhci_host *host,
