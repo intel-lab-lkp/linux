@@ -176,7 +176,7 @@ static struct platform_driver xlnx_pr_decoupler_driver = {
 	.remove = xlnx_pr_decoupler_remove,
 	.driver = {
 		.name = "xlnx_pr_decoupler",
-		.of_match_table = of_match_ptr(xlnx_pr_decoupler_of_match),
+		.of_match_table = xlnx_pr_decoupler_of_match,
 	},
 };
 
