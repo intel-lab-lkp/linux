@@ -14,6 +14,10 @@
 
 #include "thermal_netlink.h"
 
+#ifndef THERMAL_CORE_SUBSYS
+#warning This header can only be included by the thermal core code
+#endif
+
 /* Default Thermal Governor */
 #if defined(CONFIG_THERMAL_DEFAULT_GOV_STEP_WISE)
 #define DEFAULT_THERMAL_GOVERNOR       "step_wise"

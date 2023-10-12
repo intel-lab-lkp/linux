@@ -17,6 +17,7 @@
 #include <linux/thermal.h>
 
 #include "thermal_hwmon.h"
+#define THERMAL_CORE_SUBSYS
 #include "thermal_core.h"
 
 /* hwmon sys I/F */

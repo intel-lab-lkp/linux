@@ -24,6 +24,7 @@
 #define CREATE_TRACE_POINTS
 #include "thermal_trace.h"
 
+#define THERMAL_CORE_SUBSYS
 #include "thermal_core.h"
 #include "thermal_hwmon.h"
 

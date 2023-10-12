@@ -19,6 +19,7 @@
 #include <linux/string.h>
 #include <linux/sysfs.h>
 
+#define THERMAL_CORE_SUBSYS
 #include "thermal_core.h"
 #include "thermal_trace.h"
 

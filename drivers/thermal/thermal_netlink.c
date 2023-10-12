@@ -11,6 +11,7 @@
 #include <net/genetlink.h>
 #include <uapi/linux/thermal.h>
 
+#define THERMAL_CORE_SUBSYS
 #include "thermal_core.h"
 
 static const struct genl_multicast_group thermal_genl_mcgrps[] = {

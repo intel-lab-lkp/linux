@@ -16,6 +16,7 @@
 #include <linux/types.h>
 #include <linux/string.h>
 
+#define THERMAL_CORE_SUBSYS
 #include "thermal_core.h"
 
 /***   functions parsing device tree nodes   ***/

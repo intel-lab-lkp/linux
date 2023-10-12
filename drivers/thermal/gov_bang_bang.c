@@ -11,6 +11,7 @@
 
 #include <linux/thermal.h>
 
+#define THERMAL_CORE_SUBSYS
 #include "thermal_core.h"
 
 static int thermal_zone_trip_update(struct thermal_zone_device *tz, int trip_id)

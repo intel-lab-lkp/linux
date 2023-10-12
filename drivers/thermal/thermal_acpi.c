@@ -9,6 +9,7 @@
 #include <linux/acpi.h>
 #include <linux/units.h>
 
+#define THERMAL_CORE_SUBSYS
 #include "thermal_core.h"
 
 /*

@@ -19,6 +19,7 @@
 #include <linux/string.h>
 #include <linux/jiffies.h>
 
+#define THERMAL_CORE_SUBSYS
 #include "thermal_core.h"
 
 /* sys I/F for thermal zone */

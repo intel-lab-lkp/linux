@@ -7,6 +7,7 @@
  *
  * Thermal trips handling
  */
+#define THERMAL_CORE_SUBSYS
 #include "thermal_core.h"
 
 int for_each_thermal_trip(struct thermal_zone_device *tz,
