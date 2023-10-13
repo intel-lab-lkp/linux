@@ -1073,6 +1073,7 @@ R:	Thomas Delev <thomas.delev@amd.com>
 R:	Michal Simek <michal.simek@amd.com>
 S:	Maintained
 F:	Documentation/devicetree/bindings/w1/amd,axi-1wire-master.yaml
+F:	drivers/w1/masters/amd_w1.c
 
 AMD XGBE DRIVER
 M:	"Shyam Sundar S K" <Shyam-sundar.S-k@amd.com>
