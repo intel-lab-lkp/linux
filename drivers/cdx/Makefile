@@ -6,3 +6,7 @@
 #
 
 obj-$(CONFIG_CDX_BUS) += cdx.o controller/
+
+ifdef CONFIG_CDX_BUS
+obj-$(CONFIG_GENERIC_MSI_IRQ) += cdx_msi.o
+endif
