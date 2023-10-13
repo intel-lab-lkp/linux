@@ -1540,11 +1540,7 @@ static void nft_pipapo_gc_deactivate(struct net *net, struct nft_set *set,
 				     struct nft_pipapo_elem *e)
 
 {
-	struct nft_set_elem elem = {
-		.priv	= e,
-	};
-
-	nft_setelem_data_deactivate(net, set, &elem);
+	nft_setelem_data_deactivate(net, set, e);
 }
 
 /**
@@ -1740,10 +1736,9 @@ static void nft_pipapo_abort(const struct nft_set *set)
  * element, hence we can't purpose either one as a real commit operation.
  */
 static void nft_pipapo_activate(const struct net *net,
-				const struct nft_set *set,
-				const struct nft_set_elem *elem)
+				const struct nft_set *set, void *elem_priv)
 {
-	struct nft_pipapo_elem *e = elem->priv;
+	struct nft_pipapo_elem *e = elem_priv;
 
 	nft_set_elem_change_active(net, set, &e->ext);
 }
@@ -1947,11 +1942,11 @@ static bool pipapo_match_field(struct nft_pipapo_field *f,
  * the matched element here, if any, and commit the updated matching data.
  */
 static void nft_pipapo_remove(const struct net *net, const struct nft_set *set,
-			      const struct nft_set_elem *elem)
+			      void *elem_priv)
 {
 	struct nft_pipapo *priv = nft_set_priv(set);
 	struct nft_pipapo_match *m = priv->clone;
-	struct nft_pipapo_elem *e = elem->priv;
+	struct nft_pipapo_elem *e = elem_priv;
 	int rules_f0, first_rule = 0;
 	const u8 *data;
 
@@ -2031,7 +2026,6 @@ static void nft_pipapo_walk(const struct nft_ctx *ctx, struct nft_set *set,
 
 	for (r = 0; r < f->rules; r++) {
 		struct nft_pipapo_elem *e;
-		struct nft_set_elem elem;
 
 		if (r < f->rules - 1 && f->mt[r + 1].e == f->mt[r].e)
 			continue;
@@ -2041,9 +2035,7 @@ static void nft_pipapo_walk(const struct nft_ctx *ctx, struct nft_set *set,
 
 		e = f->mt[r].e;
 
-		elem.priv = e;
-
-		iter->err = iter->fn(ctx, set, iter, &elem);
+		iter->err = iter->fn(ctx, set, iter, e);
 		if (iter->err < 0)
 			goto out;
 

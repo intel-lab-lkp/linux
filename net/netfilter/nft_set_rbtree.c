@@ -225,11 +225,9 @@ static void nft_rbtree_gc_remove(struct net *net, struct nft_set *set,
 				 struct nft_rbtree *priv,
 				 struct nft_rbtree_elem *rbe)
 {
-	struct nft_set_elem elem = {
-		.priv	= rbe,
-	};
+	void *elem_priv = (void *)rbe;
 
-	nft_setelem_data_deactivate(net, set, &elem);
+	nft_setelem_data_deactivate(net, set, elem_priv);
 	rb_erase(&rbe->node, &priv->root);
 }
 
@@ -508,11 +506,10 @@ static int nft_rbtree_insert(const struct net *net, const struct nft_set *set,
 }
 
 static void nft_rbtree_remove(const struct net *net,
-			      const struct nft_set *set,
-			      const struct nft_set_elem *elem)
+			      const struct nft_set *set, void *elem_priv)
 {
 	struct nft_rbtree *priv = nft_set_priv(set);
-	struct nft_rbtree_elem *rbe = elem->priv;
+	struct nft_rbtree_elem *rbe = elem_priv;
 
 	write_lock_bh(&priv->lock);
 	write_seqcount_begin(&priv->count);
@@ -522,10 +519,9 @@ static void nft_rbtree_remove(const struct net *net,
 }
 
 static void nft_rbtree_activate(const struct net *net,
-				const struct nft_set *set,
-				const struct nft_set_elem *elem)
+				const struct nft_set *set, void *elem_priv)
 {
-	struct nft_rbtree_elem *rbe = elem->priv;
+	struct nft_rbtree_elem *rbe = elem_priv;
 
 	nft_set_elem_change_active(net, set, &rbe->ext);
 }
@@ -585,7 +581,6 @@ static void nft_rbtree_walk(const struct nft_ctx *ctx,
 {
 	struct nft_rbtree *priv = nft_set_priv(set);
 	struct nft_rbtree_elem *rbe;
-	struct nft_set_elem elem;
 	struct rb_node *node;
 
 	read_lock_bh(&priv->lock);
@@ -597,9 +592,7 @@ static void nft_rbtree_walk(const struct nft_ctx *ctx,
 		if (!nft_set_elem_active(&rbe->ext, iter->genmask))
 			goto cont;
 
-		elem.priv = rbe;
-
-		iter->err = iter->fn(ctx, set, iter, &elem);
+		iter->err = iter->fn(ctx, set, iter, rbe);
 		if (iter->err < 0) {
 			read_unlock_bh(&priv->lock);
 			return;
