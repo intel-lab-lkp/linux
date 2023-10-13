@@ -1428,7 +1428,7 @@ acpi_graph_get_remote_endpoint(const struct fwnode_handle *fwnode,
 }
 
 #define ACPI_DECLARE_PROBE_ENTRY(table, name, table_id, subtable, valid, data, fn) \
-	static const void * __acpi_table_##name[]			\
+	static const void *__acpi_table_##name[]			\
 		__attribute__((unused))					\
 		 = { (void *) table_id,					\
 		     (void *) subtable,					\
@@ -1436,7 +1436,7 @@ acpi_graph_get_remote_endpoint(const struct fwnode_handle *fwnode,
 		     (void *) fn,					\
 		     (void *) data }
 
-#define acpi_probe_device_table(t)	({ int __r = 0; __r;})
+#define acpi_probe_device_table(t)	({ int __r = 0; __r; })
 #endif
 
 #ifdef CONFIG_ACPI_TABLE_UPGRADE
