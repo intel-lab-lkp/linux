@@ -3719,7 +3719,7 @@ static int mv88e6xxx_setup(struct dsa_switch *ds)
 		return err;
 
 	chip->ds = ds;
-	ds->slave_mii_bus = mv88e6xxx_default_mdio_bus(chip);
+	ds->user_mii_bus = mv88e6xxx_default_mdio_bus(chip);
 
 	/* Since virtual bridges are mapped in the PVT, the number we support
 	 * depends on the physical switch topology. We need to let DSA figure
