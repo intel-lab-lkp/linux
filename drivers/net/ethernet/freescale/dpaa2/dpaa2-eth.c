@@ -1081,6 +1081,8 @@ static int dpaa2_eth_build_single_fd(struct dpaa2_eth_priv *priv,
 				  DPAA2_ETH_TX_BUF_ALIGN);
 	if (aligned_start >= skb->head)
 		buffer_start = aligned_start;
+	else
+		return -ENOMEM;
 
 	/* Store a backpointer to the skb at the beginning of the buffer
 	 * (in the private data area) such that we can release it
@@ -1412,7 +1414,7 @@ static netdev_tx_t __dpaa2_eth_tx(struct sk_buff *skb,
 	percpu_extras = this_cpu_ptr(priv->percpu_extras);
 	fd = (this_cpu_ptr(priv->fd))->array;
 
-	needed_headroom = dpaa2_eth_needed_headroom(skb);
+	needed_headroom = dpaa2_eth_needed_headroom(skb) + DPAA2_ETH_TX_BUF_ALIGN;
 
 	/* We'll be holding a back-reference to the skb until Tx Confirmation;
 	 * we don't want that overwritten by a concurrent Tx with a cloned skb.
@@ -4966,6 +4968,8 @@ static int dpaa2_eth_probe(struct fsl_mc_device *dpni_dev)
 	err = dpaa2_eth_dl_port_add(priv);
 	if (err)
 		goto err_dl_port_add;
+
+	net_dev->needed_headroom = DPAA2_ETH_SWA_SIZE + DPAA2_ETH_TX_HWA_SIZE + DPAA2_ETH_TX_BUF_ALIGN;
 
 	err = register_netdev(net_dev);
 	if (err < 0) {
