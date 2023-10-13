@@ -112,7 +112,7 @@ void ksz9477_get_wol(struct ksz_device *dev, int port,
 	if (!(pme_conf & PME_ENABLE))
 		return;
 
-	wol->supported = WAKE_MAGIC;
+	wol->supported = WAKE_PHY | WAKE_MAGIC;
 
 	ret = ksz_pread8(dev, port, REG_PORT_PME_CTRL, &pme_ctrl);
 	if (ret)
@@ -120,6 +120,8 @@ void ksz9477_get_wol(struct ksz_device *dev, int port,
 
 	if (pme_ctrl & PME_WOL_MAGICPKT)
 		wol->wolopts |= WAKE_MAGIC;
+	if (pme_ctrl & (PME_WOL_LINKUP | PME_WOL_ENERGY))
+		wol->wolopts |= WAKE_PHY;
 }
 
 /**
@@ -142,7 +144,7 @@ int ksz9477_set_wol(struct ksz_device *dev, int port,
 	u8 pme_conf, pme_ctrl = 0;
 	int ret;
 
-	if (wol->wolopts & ~WAKE_MAGIC)
+	if (wol->wolopts & ~(WAKE_PHY | WAKE_MAGIC))
 		return -EINVAL;
 
 	ret = ksz_read8(dev, REG_SW_PME_CTRL, &pme_conf);
@@ -158,6 +160,8 @@ int ksz9477_set_wol(struct ksz_device *dev, int port,
 
 	if (wol->wolopts & WAKE_MAGIC)
 		pme_ctrl |= PME_WOL_MAGICPKT;
+	if (wol->wolopts & WAKE_PHY)
+		pme_ctrl |= PME_WOL_LINKUP | PME_WOL_ENERGY;
 
 	return ksz_pwrite8(dev, port, REG_PORT_PME_CTRL, pme_ctrl);
 }
