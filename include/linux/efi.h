@@ -1365,5 +1365,6 @@ extern struct blocking_notifier_head efivar_ops_nh;
 
 void efivars_generic_ops_register(void);
 void efivars_generic_ops_unregister(void);
+void tee_stmm_restore_efivars_generic_ops(void);
 
 #endif /* _LINUX_EFI_H */

@@ -3,6 +3,7 @@
  * Copyright (c) 2015, Linaro Limited
  */
 #include <linux/device.h>
+#include <linux/efi.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 #include "optee_private.h"
@@ -57,6 +58,9 @@ void optee_supp_release(struct optee_supp *supp)
 		req->ret = TEEC_ERROR_COMMUNICATION;
 		complete(&req->c);
 	}
+
+	if (IS_REACHABLE(CONFIG_TEE_STMM_EFI))
+		tee_stmm_restore_efivars_generic_ops();
 
 	supp->ctx = NULL;
 	supp->req_id = -1;

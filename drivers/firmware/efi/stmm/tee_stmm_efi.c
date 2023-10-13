@@ -572,10 +572,16 @@ static int tee_stmm_efi_probe(struct device *dev)
 	return 0;
 }
 
-static int tee_stmm_efi_remove(struct device *dev)
+void tee_stmm_restore_efivars_generic_ops(void)
 {
 	efivars_unregister(&tee_efivars);
 	efivars_generic_ops_register();
+}
+EXPORT_SYMBOL_GPL(tee_stmm_restore_efivars_generic_ops);
+
+static int tee_stmm_efi_remove(struct device *dev)
+{
+	tee_stmm_restore_efivars_generic_ops();
 
 	return 0;
 }
