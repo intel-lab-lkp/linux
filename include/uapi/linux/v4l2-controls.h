@@ -112,6 +112,8 @@ enum v4l2_colorfx {
 
 /* last CID + 1 */
 #define V4L2_CID_LASTP1                         (V4L2_CID_BASE+44)
+#define V4L2_CID_ASRC_SOURCE_RATE		(V4L2_CID_BASE + 45)
+#define V4L2_CID_ASRC_DEST_RATE			(V4L2_CID_BASE + 46)
 
 /* USER-class private control IDs */
 
@@ -3487,5 +3489,16 @@ struct v4l2_ctrl_av1_film_grain {
 #define V4L2_CID_MPEG_CX2341X_BASE      V4L2_CID_CODEC_CX2341X_BASE
 #define V4L2_CID_MPEG_MFC51_BASE        V4L2_CID_CODEC_MFC51_BASE
 #endif
+
+/**
+ * struct v4l2_ctrl_fixed_point - fixed point parameter.
+ *
+ * @rate_integer: integer part of fixed point value.
+ * @rate_fractional: fractional part of fixed point value
+ */
+struct v4l2_ctrl_fixed_point {
+	__u32 integer;
+	__u32 fractional;
+};
 
 #endif
