@@ -515,24 +515,24 @@ struct mem_ctl_info {
 	   internal representation and configures whatever else needs
 	   to be configured.
 	 */
-	int (*set_sdram_scrub_rate) (struct mem_ctl_info * mci, u32 bw);
+	int (*set_sdram_scrub_rate) (struct mem_ctl_info *mci, u32 bw);
 
 	/* Get the current sdram memory scrub rate from the internal
 	   representation and converts it to the closest matching
 	   bandwidth in bytes/sec.
 	 */
-	int (*get_sdram_scrub_rate) (struct mem_ctl_info * mci);
+	int (*get_sdram_scrub_rate) (struct mem_ctl_info *mci);
 
 
 	/* pointer to edac checking routine */
-	void (*edac_check) (struct mem_ctl_info * mci);
+	void (*edac_check) (struct mem_ctl_info *mci);
 
 	/*
 	 * Remaps memory pages: controller pages to physical pages.
 	 * For most MC's, this will be NULL.
 	 */
 	/* FIXME - why not send the phys page to begin with? */
-	unsigned long (*ctl_page_to_phys) (struct mem_ctl_info * mci,
+	unsigned long (*ctl_page_to_phys) (struct mem_ctl_info *mci,
 					   unsigned long page);
 	int mc_idx;
 	struct csrow_info **csrows;
