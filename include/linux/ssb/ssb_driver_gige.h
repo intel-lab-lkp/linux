@@ -55,7 +55,7 @@ struct ssb_gige {
 extern bool pdev_is_ssb_gige_core(struct pci_dev *pdev);
 
 /* Convert a pci_dev pointer to a ssb_gige pointer. */
-static inline struct ssb_gige * pdev_to_ssb_gige(struct pci_dev *pdev)
+static inline struct ssb_gige *pdev_to_ssb_gige(struct pci_dev *pdev)
 {
 	if (!pdev_is_ssb_gige_core(pdev))
 		return NULL;
@@ -66,7 +66,7 @@ static inline struct ssb_gige * pdev_to_ssb_gige(struct pci_dev *pdev)
 static inline bool ssb_gige_is_rgmii(struct pci_dev *pdev)
 {
 	struct ssb_gige *dev = pdev_to_ssb_gige(pdev);
-	return (dev ? dev->has_rgmii : 0);
+	return dev ? dev->has_rgmii : 0;
 }
 
 /* Returns whether we have a Roboswitch. */
@@ -161,7 +161,7 @@ static inline bool pdev_is_ssb_gige_core(struct pci_dev *pdev)
 {
 	return false;
 }
-static inline struct ssb_gige * pdev_to_ssb_gige(struct pci_dev *pdev)
+static inline struct ssb_gige *pdev_to_ssb_gige(struct pci_dev *pdev)
 {
 	return NULL;
 }
