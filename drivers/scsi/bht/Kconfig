@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: GPL-2.0-only
+config SCSI_BHT
+	tristate "Bayhub's SD/MMC Card Interface Driver"
+	depends on PCI && SCSI
+	help
+	  This driver supports the Bayhub's SD/MMC host controllers.
+
+	  If you have the Bayhub's SD/MMC host controllers, say Y or M here.
+
+	  If unsure, say N.
