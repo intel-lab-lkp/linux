@@ -418,6 +418,14 @@ static int nvme_auth_set_dhchap_failure2_data(struct nvme_ctrl *ctrl,
 	return size;
 }
 
+static int nvme_auth_dhchap_transformed_key_len(struct nvme_dhchap_key *key)
+{
+	if (key->hash)
+		return nvme_auth_hmac_hash_len(key->hash);
+
+	return key->len;
+}
+
 static int nvme_auth_dhchap_setup_host_response(struct nvme_ctrl *ctrl,
 		struct nvme_dhchap_queue_context *chap)
 {
@@ -442,7 +450,8 @@ static int nvme_auth_dhchap_setup_host_response(struct nvme_ctrl *ctrl,
 	}
 
 	ret = crypto_shash_setkey(chap->shash_tfm,
-			chap->host_response, ctrl->host_key->len);
+			chap->host_response,
+			nvme_auth_dhchap_transformed_key_len(ctrl->host_key));
 	if (ret) {
 		dev_warn(ctrl->device, "qid %d: failed to set key, error %d\n",
 			 chap->qid, ret);
