@@ -464,8 +464,6 @@ static int __uc_init_hw(struct intel_uc *uc)
 	struct drm_i915_private *i915 = gt->i915;
 	struct intel_guc *guc = &uc->guc;
 	struct intel_huc *huc = &uc->huc;
-	struct intel_guc_tlb_wait *wait;
-	long unsigned int i;
 	int ret, attempts;
 	bool pl1en = false;
 
@@ -566,12 +564,7 @@ static int __uc_init_hw(struct intel_uc *uc)
 	 * The full GT reset will have cleared the TLB caches and flushed the
 	 * G2H message queue; we can release all the blocked waiters.
 	 */
-	if (intel_guc_tlb_invalidation_is_available(guc)) {
-		xa_lock_irq(&guc->tlb_lookup);
-		xa_for_each(&guc->tlb_lookup, i, wait)
-			wake_up(&wait->wq);
-		xa_unlock_irq(&guc->tlb_lookup);
-	}
+	wake_up_all_tlb_invalidate(guc);
 
 	return 0;
 
@@ -701,6 +694,8 @@ void intel_uc_suspend(struct intel_uc *uc)
 	/* flush the GSC worker */
 	intel_gsc_uc_flush_work(&uc->gsc);
 
+	wake_up_all_tlb_invalidate(guc);
+
 	if (!intel_guc_is_ready(guc)) {
 		guc->interrupts.enabled = false;
 		return;
@@ -748,6 +743,11 @@ static int __uc_resume(struct intel_uc *uc, bool enable_communication)
 	}
 
 	intel_gsc_uc_resume(&uc->gsc);
+
+	if (intel_guc_tlb_invalidation_is_available(guc)) {
+		intel_guc_invalidate_tlb_engines(guc);
+		intel_guc_invalidate_tlb_guc(guc);
+	}
 
 	return 0;
 }
