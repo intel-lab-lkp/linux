@@ -3,9 +3,9 @@
 
 CFLAGS = -Wall -Wextra
 
-all: cgroup_event_listener
+all: cgroup_event_listener cgroup_v2_event_listener
 %: %.c
 	$(CC) $(CFLAGS) -o $@ $^
 
 clean:
-	$(RM) cgroup_event_listener
+	$(RM) cgroup_event_listener cgroup_v2_event_listener
