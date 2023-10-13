@@ -246,6 +246,11 @@ static void *mhi_to_virtual(struct mhi_ring *ring, dma_addr_t addr)
 	return (addr - ring->iommu_base) + ring->base;
 }
 
+dma_addr_t mhi_to_physical(struct mhi_ring *ring, void *addr)
+{
+	return (addr - ring->base) + ring->iommu_base;
+}
+
 static void mhi_add_ring_element(struct mhi_controller *mhi_cntrl,
 				 struct mhi_ring *ring)
 {
@@ -491,11 +496,9 @@ irqreturn_t mhi_intvec_threaded_handler(int irq_number, void *priv)
 
 	state = mhi_get_mhi_state(mhi_cntrl);
 	ee = mhi_get_exec_env(mhi_cntrl);
-	dev_dbg(dev, "local ee: %s state: %s device ee: %s state: %s\n",
-		TO_MHI_EXEC_STR(mhi_cntrl->ee),
-		mhi_state_str(mhi_cntrl->dev_state),
-		TO_MHI_EXEC_STR(ee), mhi_state_str(state));
 
+	trace_mhi_intvec_threaded_handler(mhi_cntrl->mhi_dev->name, mhi_cntrl->ee,
+					  mhi_cntrl->dev_state, ee, state);
 	if (state == MHI_STATE_SYS_ERR) {
 		dev_dbg(dev, "System error detected\n");
 		pm_state = mhi_tryset_pm_state(mhi_cntrl,
@@ -832,6 +835,12 @@ int mhi_process_ctrl_ev_ring(struct mhi_controller *mhi_cntrl,
 	while (dev_rp != local_rp) {
 		enum mhi_pkt_type type = MHI_TRE_GET_EV_TYPE(local_rp);
 
+		trace_mhi_process_ctrl_ev_ring(mhi_cntrl->mhi_dev->name,
+					       mhi_to_physical(ev_ring, local_rp),
+					       local_rp->ptr, local_rp->dword[0],
+					       local_rp->dword[1],
+					       MHI_TRE_GET_EV_STATE(local_rp));
+
 		switch (type) {
 		case MHI_PKT_TYPE_BW_REQ_EVENT:
 		{
@@ -996,6 +1005,9 @@ int mhi_process_data_event_ring(struct mhi_controller *mhi_cntrl,
 
 	while (dev_rp != local_rp && event_quota > 0) {
 		enum mhi_pkt_type type = MHI_TRE_GET_EV_TYPE(local_rp);
+
+		trace_mhi_process_data_event_ring(mhi_cntrl->mhi_dev->name, local_rp->ptr,
+						  local_rp->dword[0], local_rp->dword[1]);
 
 		chan = MHI_TRE_GET_EV_CHID(local_rp);
 
@@ -1235,6 +1247,9 @@ int mhi_gen_tre(struct mhi_controller *mhi_cntrl, struct mhi_chan *mhi_chan,
 	mhi_tre->dword[0] = MHI_TRE_DATA_DWORD0(info->len);
 	mhi_tre->dword[1] = MHI_TRE_DATA_DWORD1(bei, eot, eob, chain);
 
+	trace_mhi_gen_tre(mhi_cntrl->mhi_dev->name, mhi_chan->chan,
+			  mhi_to_physical(tre_ring, mhi_tre),
+			  mhi_tre->ptr, mhi_tre->dword[0], mhi_tre->dword[1]);
 	/* increment WP */
 	mhi_add_ring_element(mhi_cntrl, tre_ring);
 	mhi_add_ring_element(mhi_cntrl, buf_ring);
@@ -1327,9 +1342,8 @@ static int mhi_update_channel_state(struct mhi_controller *mhi_cntrl,
 	enum mhi_cmd_type cmd = MHI_CMD_NOP;
 	int ret;
 
-	dev_dbg(dev, "%d: Updating channel state to: %s\n", mhi_chan->chan,
-		TO_CH_STATE_TYPE_STR(to_state));
-
+	trace_mhi_update_channel_state_start(mhi_cntrl->mhi_dev->name, mhi_chan->chan,
+					     to_state);
 	switch (to_state) {
 	case MHI_CH_STATE_TYPE_RESET:
 		write_lock_irq(&mhi_chan->lock);
@@ -1396,9 +1410,7 @@ static int mhi_update_channel_state(struct mhi_controller *mhi_cntrl,
 		write_unlock_irq(&mhi_chan->lock);
 	}
 
-	dev_dbg(dev, "%d: Channel state change to %s successful\n",
-		mhi_chan->chan, TO_CH_STATE_TYPE_STR(to_state));
-
+	trace_mhi_update_channel_state_end(mhi_cntrl->mhi_dev->name, mhi_chan->chan, to_state);
 exit_channel_update:
 	mhi_cntrl->runtime_put(mhi_cntrl);
 	mhi_device_put(mhi_cntrl->mhi_dev);
