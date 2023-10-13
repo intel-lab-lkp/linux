@@ -438,6 +438,12 @@ enum v4l2_buf_type
     * - ``V4L2_BUF_TYPE_META_OUTPUT``
       - 14
       - Buffer for metadata output, see :ref:`metadata`.
+    * - ``V4L2_BUF_TYPE_AUDIO_CAPTURE``
+      - 15
+      - Buffer for audio capture, see :ref:`audio`.
+    * - ``V4L2_BUF_TYPE_AUDIO_OUTPUT``
+      - 16
+      - Buffer for audio output, see :ref:`audio`.
 
 
 .. _buffer-flags:
