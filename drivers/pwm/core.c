@@ -489,23 +489,14 @@ static void pwm_apply_state_debug(struct pwm_device *pwm,
 }
 
 /**
- * pwm_apply_state() - atomically apply a new state to a PWM device
+ * pwm_apply_state_unchecked() - atomically apply a new state to a PWM device
  * @pwm: PWM device
  * @state: new state to apply
  */
-int pwm_apply_state(struct pwm_device *pwm, const struct pwm_state *state)
+static int pwm_apply_state_unchecked(struct pwm_device *pwm, const struct pwm_state *state)
 {
 	struct pwm_chip *chip;
 	int err;
-
-	/*
-	 * Some lowlevel driver's implementations of .apply() make use of
-	 * mutexes, also with some drivers only returning when the new
-	 * configuration is active calling pwm_apply_state() from atomic context
-	 * is a bad idea. So make it explicit that calling this function might
-	 * sleep.
-	 */
-	might_sleep();
 
 	if (!pwm || !state || !state->period ||
 	    state->duty_cycle > state->period)
@@ -535,7 +526,56 @@ int pwm_apply_state(struct pwm_device *pwm, const struct pwm_state *state)
 
 	return 0;
 }
+
+/**
+ * pwm_apply_state() - atomically apply a new state to a PWM device
+ * Cannot be used in atomic context.
+ * @pwm: PWM device
+ * @state: new state to apply
+ */
+int pwm_apply_state(struct pwm_device *pwm, const struct pwm_state *state)
+{
+	/*
+	 * Some lowlevel driver's implementations of .apply() make use of
+	 * mutexes, also with some drivers only returning when the new
+	 * configuration is active calling pwm_apply_state() from atomic context
+	 * is a bad idea. So make it explicit that calling this function might
+	 * sleep.
+	 */
+	might_sleep();
+
+	if (IS_ENABLED(CONFIG_PWM_DEBUG) && pwm->chip->ops->atomic) {
+		int err;
+
+		/*
+		 * Catch any sleeping drivers when atomic is set.
+		 */
+		non_block_start();
+		err = pwm_apply_state_unchecked(pwm, state);
+		non_block_end();
+
+		return err;
+	}
+
+	return pwm_apply_state_unchecked(pwm, state);
+}
 EXPORT_SYMBOL_GPL(pwm_apply_state);
+
+/**
+ * pwm_apply_state_atomic() - atomically apply a new state to a PWM device
+ * Can be used from atomic context.
+ * @pwm: PWM device
+ * @state: new state to apply
+ */
+int pwm_apply_state_atomic(struct pwm_device *pwm,
+			   const struct pwm_state *state)
+{
+	WARN_ONCE(!pwm->chip->ops->atomic,
+		  "sleeping pwm driver used in atomic context");
+
+	return pwm_apply_state_unchecked(pwm, state);
+}
+EXPORT_SYMBOL_GPL(pwm_apply_state_atomic);
 
 /**
  * pwm_capture() - capture and report a PWM signal
