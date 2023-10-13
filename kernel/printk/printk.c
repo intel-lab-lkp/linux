@@ -2813,8 +2813,19 @@ static bool printk_get_next_message(struct printk_message *pmsg, u64 seq,
 	else
 		prb_rec_init_rd(&r, &info, outbuf, outbuf_sz);
 
-	if (!prb_read_valid(prb, seq, &r))
-		return false;
+	while (!prb_read_valid(prb, seq, &r)) {
+		if (this_cpu_in_panic() && seq < prb_next_seq(prb)) {
+			/*
+			 * The record @seq is not finalized and there may be
+			 * more records in the ringbuffer. Since this is the
+			 * panic CPU, skip over the unfinalized record and
+			 * try to read a finalized record that may follow.
+			 */
+			seq++;
+		} else {
+			return false;
+		}
+	}
 
 	pmsg->seq = r.info->seq;
 	pmsg->dropped = r.info->seq - seq;
