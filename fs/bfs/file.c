@@ -53,7 +53,7 @@ static int bfs_move_blocks(struct super_block *sb, unsigned long start,
 
 	dprintf("%08lx-%08lx->%08lx\n", start, end, where);
 	for (i = start; i <= end; i++)
-		if(bfs_move_block(i, where + i, sb)) {
+		if (bfs_move_block(i, where + i, sb)) {
 			dprintf("failed to move block %08lx -> %08lx\n", i,
 								where + i);
 			return -EIO;
