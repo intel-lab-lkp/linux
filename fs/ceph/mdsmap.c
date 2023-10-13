@@ -83,7 +83,7 @@ int ceph_mdsmap_get_random_mds(struct ceph_mdsmap *m)
 	} while (0)
 
 
-static int __decode_and_drop_compat_set(void **p, void* end)
+static int __decode_and_drop_compat_set(void **p, void *end)
 {
 	int i;
 	/* compat, ro_compat, incompat*/
@@ -189,7 +189,7 @@ struct ceph_mdsmap *ceph_mdsmap_decode(struct ceph_mds_client *mdsc, void **p,
 
 		ceph_decode_need(p, end, sizeof(u64) + 1, bad);
 		global_id = ceph_decode_64(p);
-		info_v= ceph_decode_8(p);
+		info_v = ceph_decode_8(p);
 		if (info_v >= 4) {
 			u32 info_len;
 			ceph_decode_need(p, end, 1 + sizeof(u32), bad);
