@@ -8,7 +8,7 @@ title: Zynq UltraScale+ MPSoC Non Volatile Memory interface
 
 description: |
     The ZynqMP MPSoC provides access to the hardware related data
-    like SOC revision, IDCODE.
+    like SOC revision, IDCODE and specific purpose efuses.
 
 maintainers:
   - Kalyani Akula <kalyani.akula@amd.com>
@@ -43,6 +43,140 @@ patternProperties:
     required:
       - reg
 
+  "^efuse_dna@c$":
+    type: object
+    description:
+      This node is used to read DNA of ZynqMP SOC. Read-only.
+
+    properties:
+      reg:
+        maxItems: 1
+
+    required:
+      - reg
+
+  "^efuse_usr(0@20|1@24|2@28|3@2c|4@30|5@34|6@38|7@3c)$":
+    type: object
+    description:
+      Eight 32-bit user efuses. Read and Write is supported.
+
+    properties:
+      reg:
+        maxItems: 1
+
+    required:
+      - reg
+
+  "^efuse_miscusr@40$":
+    type: object
+    description:
+      32-bit MISC user efuse space. Read and Write is supported.
+
+    properties:
+      reg:
+        maxItems: 1
+
+    required:
+      - reg
+
+  "^efuse_chash@50$":
+    type: object
+    description:
+      32-bit PUF chash space. Read and Write is supported.
+
+    properties:
+      reg:
+        maxItems: 1
+
+    required:
+      - reg
+
+  "^efuse_pufmisc@54$":
+    type: object
+    description:
+      32-bit PUF MISC control space. Read and Write is supported.
+
+    properties:
+      reg:
+        maxItems: 1
+
+    required:
+      - reg
+
+  "^efuse_sec@58$":
+    type: object
+    description:
+      32-bit secure control space. Read and Write is supported.
+
+    properties:
+      reg:
+        maxItems: 1
+
+    required:
+      - reg
+
+  "^efuse_spkid@5c$":
+    type: object
+    description:
+      32-bit SPK ID. Read and Write is supported.
+
+    properties:
+      reg:
+        maxItems: 1
+
+    required:
+      - reg
+
+  "^efuse_aeskey@60$":
+    type: object
+    description:
+      256-bit aes key. Only Write is supported.
+
+    properties:
+      reg:
+        maxItems: 1
+
+    required:
+      - reg
+
+  "^efuse_ppk0hash@a0$":
+    type: object
+    description:
+      384-bit PPK0 hash. Read and Write is supported.
+
+    properties:
+      reg:
+        maxItems: 1
+
+    required:
+      - reg
+
+  "^efuse_ppk1hash@d0$":
+    type: object
+    description:
+      384-bit PPK1 hash. Read and Write is supported.
+
+    properties:
+      reg:
+        maxItems: 1
+
+    required:
+      - reg
+
+  "^efuse_pufuser@100$":
+    type: object
+    description:
+      This node represents the 127(0x7F) 32-bit PUF(Physical Unclonable Function)
+      helper data efuses which are repurposed as user fuses.
+      Read and Write is supported.
+
+    properties:
+      reg:
+        maxItems: 1
+
+    required:
+      - reg
+
 additionalProperties: false
 
 examples:
@@ -55,5 +189,82 @@ examples:
         /* Data cells */
         soc_revision: soc_revision@0 {
             reg = <0x0 0x4>;
+        };
+        /*
+        * efuse memory access:
+        * all the efuse fields need to be read
+        * with the exact size specified in the node
+        */
+        /* DNA */
+        efuse_dna: efuse_dna@c {
+            reg = <0xc 0xc>;
+        };
+        /* User 0 */
+        efuse_usr0: efuse_usr0@20 {
+            reg = <0x20 0x4>;
+        };
+        /* User 1 */
+        efuse_usr1: efuse_usr1@24 {
+            reg = <0x24 0x4>;
+        };
+        /* User 2 */
+        efuse_usr2: efuse_usr2@28 {
+            reg = <0x28 0x4>;
+        };
+        /* User 3 */
+        efuse_usr3: efuse_usr3@2c {
+            reg = <0x2c 0x4>;
+        };
+        /* User 4 */
+        efuse_usr4: efuse_usr4@30 {
+            reg = <0x30 0x4>;
+        };
+        /* User 5 */
+        efuse_usr5: efuse_usr5@34 {
+            reg = <0x34 0x4>;
+        };
+        /* User 6 */
+        efuse_usr6: efuse_usr6@38 {
+            reg = <0x38 0x4>;
+        };
+        /* User 7 */
+        efuse_usr7: efuse_usr7@3c {
+            reg = <0x3c 0x4>;
+        };
+        /* Misc user control bits */
+        efuse_miscusr: efuse_miscusr@40 {
+            reg = <0x40 0x4>;
+        };
+        /* PUF chash */
+        efuse_chash: efuse_chash@50 {
+            reg = <0x50 0x4>;
+        };
+        /* PUF misc */
+        efuse_pufmisc: efuse_pufmisc@54 {
+            reg = <0x54 0x4>;
+        };
+        /* SEC_CTRL */
+        efuse_sec: efuse_sec@58 {
+            reg = <0x58 0x4>;
+        };
+        /* SPK ID */
+        efuse_spkid: efuse_spkid@5c {
+            reg = <0x5c 0x4>;
+        };
+        /* AES Key */
+        efuse_aeskey: efuse_aeskey@60 {
+            reg = <0x60 0x20>;
+        };
+        /* PPK0 hash */
+        efuse_ppk0hash: efuse_ppk0hash@a0 {
+            reg = <0xa0 0x30>;
+        };
+        /* PPK1 hash */
+        efuse_ppk1hash: efuse_ppk1hash@d0 {
+            reg = <0xd0 0x30>;
+        };
+        /* PUF user fuses */
+        efuse_pufuser: efuse_pufuser@100  {
+            reg = <0x100 0x7F>;
         };
     };
