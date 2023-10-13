@@ -1,0 +1,59 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/nvmem/xlnx,zynqmp-nvmem.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Zynq UltraScale+ MPSoC Non Volatile Memory interface
+
+description: |
+    The ZynqMP MPSoC provides access to the hardware related data
+    like SOC revision, IDCODE.
+
+maintainers:
+  - Kalyani Akula <kalyani.akula@amd.com>
+  - Praveen Teja Kundanala <praveen.teja.kundanala@amd.com>
+
+allOf:
+  - $ref: "nvmem.yaml#"
+
+properties:
+  compatible:
+    const: xlnx,zynqmp-nvmem-fw
+
+  '#address-cells':
+    const: 1
+
+  '#size-cells':
+    const: 1
+
+required:
+  - compatible
+
+patternProperties:
+  "^soc_revision@0$":
+    type: object
+    description:
+      This node is used to read SOC version and IDCODE of ZynqMP. Read-only.
+
+    properties:
+      reg:
+        maxItems: 1
+
+    required:
+      - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    nvmem_firmware {
+        compatible = "xlnx,zynqmp-nvmem-fw";
+        #address-cells = <1>;
+        #size-cells = <1>;
+
+        /* Data cells */
+        soc_revision: soc_revision@0 {
+            reg = <0x0 0x4>;
+        };
+    };
