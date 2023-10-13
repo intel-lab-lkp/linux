@@ -405,8 +405,9 @@ static void clocksource_watchdog(struct timer_list *unused)
 	enum wd_read_status read_ret;
 	unsigned long extra_wait = 0;
 	u32 md;
+	unsigned long flags;
 
-	spin_lock(&watchdog_lock);
+	spin_lock_irqsave(&watchdog_lock, flags);
 	if (!watchdog_running)
 		goto out;
 
@@ -554,7 +555,7 @@ static void clocksource_watchdog(struct timer_list *unused)
 		add_timer_on(&watchdog_timer, next_cpu);
 	}
 out:
-	spin_unlock(&watchdog_lock);
+	spin_unlock_irqrestore(&watchdog_lock, flags);
 }
 
 static inline void clocksource_start_watchdog(void)
