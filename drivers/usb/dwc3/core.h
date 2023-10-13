@@ -173,6 +173,11 @@
 #define DWC3_OSTS		0xcc10
 
 /* Bit fields */
+/* Global SoC Bus Configuration Register: AHB-prot/AXI-cache/OCP-ReqInfo */
+#define DWC3_GSBUSCFG0_DATRDREQINFO_MASK	GENMASK(31, 28)
+#define DWC3_GSBUSCFG0_DESRDREQINFO_MASK	GENMASK(27, 24)
+#define DWC3_GSBUSCFG0_DATWRREQINFO_MASK	GENMASK(23, 20)
+#define DWC3_GSBUSCFG0_DESWRREQINFO_MASK	GENMASK(19, 16)
 
 /* Global SoC Bus Configuration INCRx Register 0 */
 #define DWC3_GSBUSCFG0_INCR256BRSTENA	(1 << 7) /* INCR256 burst */
