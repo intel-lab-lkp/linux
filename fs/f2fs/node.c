@@ -2499,12 +2499,15 @@ static int __f2fs_build_free_nids(struct f2fs_sb_info *sbi,
 				ret = PTR_ERR(page);
 			} else {
 				ret = scan_nat_page(sbi, page, nid);
+				if (ret && !mount) {
+					set_sbi_flag(sbi, SBI_NEED_FSCK);
+					f2fs_err(sbi, "NAT is corrupt, run fsck to fix it");
+				}
 				f2fs_put_page(page, 1);
 			}
 
 			if (ret) {
 				f2fs_up_read(&nm_i->nat_tree_lock);
-				f2fs_err(sbi, "NAT is corrupt, run fsck to fix it");
 				return ret;
 			}
 		}
