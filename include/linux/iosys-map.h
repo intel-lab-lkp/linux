@@ -349,29 +349,29 @@ static inline void iosys_map_memset(struct iosys_map *dst, size_t offset,
 
 #ifdef CONFIG_64BIT
 #define __iosys_map_rd_io_u64_case(val_, vaddr_iomem_)				\
-	u64: val_ = readq(vaddr_iomem_)
+	u64 : val_ = readq(vaddr_iomem_)
 #define __iosys_map_wr_io_u64_case(val_, vaddr_iomem_)				\
-	u64: writeq(val_, vaddr_iomem_)
+	u64 : writeq(val_, vaddr_iomem_)
 #else
 #define __iosys_map_rd_io_u64_case(val_, vaddr_iomem_)				\
-	u64: memcpy_fromio(&(val_), vaddr_iomem_, sizeof(u64))
+	u64 : memcpy_fromio(&(val_), vaddr_iomem_, sizeof(u64))
 #define __iosys_map_wr_io_u64_case(val_, vaddr_iomem_)				\
-	u64: memcpy_toio(vaddr_iomem_, &(val_), sizeof(u64))
+	u64 : memcpy_toio(vaddr_iomem_, &(val_), sizeof(u64))
 #endif
 
 #define __iosys_map_rd_io(val__, vaddr_iomem__, type__) _Generic(val__,		\
-	u8: val__ = readb(vaddr_iomem__),					\
-	u16: val__ = readw(vaddr_iomem__),					\
-	u32: val__ = readl(vaddr_iomem__),					\
+	u8 : val__ = readb(vaddr_iomem__),					\
+	u16 : val__ = readw(vaddr_iomem__),					\
+	u32 : val__ = readl(vaddr_iomem__),					\
 	__iosys_map_rd_io_u64_case(val__, vaddr_iomem__))
 
 #define __iosys_map_rd_sys(val__, vaddr__, type__)				\
 	val__ = READ_ONCE(*(type__ *)(vaddr__))
 
 #define __iosys_map_wr_io(val__, vaddr_iomem__, type__) _Generic(val__,		\
-	u8: writeb(val__, vaddr_iomem__),					\
-	u16: writew(val__, vaddr_iomem__),					\
-	u32: writel(val__, vaddr_iomem__),					\
+	u8 : writeb(val__, vaddr_iomem__),					\
+	u16 : writew(val__, vaddr_iomem__),					\
+	u32 : writel(val__, vaddr_iomem__),					\
 	__iosys_map_wr_io_u64_case(val__, vaddr_iomem__))
 
 #define __iosys_map_wr_sys(val__, vaddr__, type__)				\
