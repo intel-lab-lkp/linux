@@ -45,8 +45,7 @@ void scaler_settings_calculation(struct dcn_bw_internal_vars *v)
 			if (v->source_scan[k] == dcn_bw_hor) {
 				v->h_ratio[k] = v->viewport_width[k] / v->scaler_rec_out_width[k];
 				v->v_ratio[k] = v->viewport_height[k] / v->scaler_recout_height[k];
-			}
-			else {
+			} else {
 				v->h_ratio[k] = v->viewport_height[k] / v->scaler_rec_out_width[k];
 				v->v_ratio[k] = v->viewport_width[k] / v->scaler_recout_height[k];
 			}
