@@ -142,7 +142,7 @@ static int ceph_lock_message(u8 lock_type, u16 operation, struct inode *inode,
 		length = le64_to_cpu(req->r_reply_info.filelock_reply->start) +
 						 le64_to_cpu(req->r_reply_info.filelock_reply->length);
 		if (length >= 1)
-			fl->fl_end = length -1;
+			fl->fl_end = length - 1;
 		else
 			fl->fl_end = 0;
 
