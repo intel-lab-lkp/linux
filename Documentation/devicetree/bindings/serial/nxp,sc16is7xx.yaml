@@ -28,13 +28,6 @@ properties:
   clocks:
     maxItems: 1
 
-  clock-frequency:
-    description:
-      When there is no clock provider visible to the platform, this
-      is the source crystal or external clock frequency for the IC in Hz.
-    minimum: 1
-    maximum: 80000000
-
   gpio-controller: true
 
   "#gpio-cells":
@@ -74,17 +67,12 @@ required:
   - compatible
   - reg
   - interrupts
+  - clocks
 
 allOf:
   - $ref: /schemas/spi/spi-peripheral-props.yaml#
   - $ref: /schemas/serial/serial.yaml#
   - $ref: /schemas/serial/rs485.yaml#
-
-oneOf:
-  - required:
-      - clocks
-  - required:
-      - clock-frequency
 
 unevaluatedProperties: false
 
