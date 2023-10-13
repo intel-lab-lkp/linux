@@ -2798,6 +2798,8 @@ static int pl011_probe(struct amba_device *dev, const struct amba_id *id)
 	int portnr, ret;
 	u32 val;
 
+	device_set_node(&dev->dev, dev_fwnode(dev->dev.parent));
+
 	portnr = pl011_find_free_port();
 	if (portnr < 0)
 		return portnr;
