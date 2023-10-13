@@ -139,7 +139,7 @@ enum drbd_ret_code {
 	ERR_CSUMS_ALG_ND	= 145, /* DRBD 8.2 only */
 	ERR_VERIFY_ALG		= 146, /* DRBD 8.2 only */
 	ERR_VERIFY_ALG_ND	= 147, /* DRBD 8.2 only */
-	ERR_CSUMS_RESYNC_RUNNING= 148, /* DRBD 8.2 only */
+	ERR_CSUMS_RESYNC_RUNNING = 148, /* DRBD 8.2 only */
 	ERR_VERIFY_RUNNING	= 149, /* DRBD 8.2 only */
 	ERR_DATA_NOT_CURRENT	= 150,
 	ERR_CONNECTED		= 151, /* DRBD 8.3 only */
