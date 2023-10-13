@@ -184,8 +184,8 @@ static enum dlm_status dlmunlock_common(struct dlm_ctxt *dlm,
 			mlog(0, "%s:%.*s: clearing actions, %s\n",
 			     dlm->name, res->lockname.len,
 			     res->lockname.name,
-			     status==DLM_RECOVERING?"recovering":
-			     (status==DLM_MIGRATING?"migrating":
+			     status == DLM_RECOVERING ? "recovering" :
+			     (status == DLM_MIGRATING ? "migrating" :
 				(status == DLM_FORWARD ? "forward" :
 						"nolockmanager")));
 			actions = 0;
@@ -436,7 +436,7 @@ int dlm_unlock_lock_handler(struct o2net_msg *msg, u32 len, void *data,
 		goto not_found;
 	}
 
-	queue=&res->granted;
+	queue = &res->granted;
 	spin_lock(&res->spinlock);
 	if (res->state & DLM_LOCK_RES_RECOVERING) {
 		spin_unlock(&res->spinlock);
@@ -459,7 +459,7 @@ int dlm_unlock_lock_handler(struct o2net_msg *msg, u32 len, void *data,
 		goto leave;
 	}
 
-	for (i=0; i<3; i++) {
+	for (i = 0; i < 3; i++) {
 		list_for_each_entry(iter, queue, list) {
 			if (iter->ml.cookie == unlock->cookie &&
 			    iter->ml.node == unlock->node_idx) {
