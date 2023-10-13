@@ -114,6 +114,9 @@ static void ksz_spi_shutdown(struct spi_device *spi)
 	if (!dev)
 		return;
 
+	if (ksz_wol_is_active(dev))
+		return;
+
 	if (dev->dev_ops->reset)
 		dev->dev_ops->reset(dev);
 

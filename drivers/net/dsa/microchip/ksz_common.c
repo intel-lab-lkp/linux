@@ -2959,6 +2959,24 @@ static int ksz_set_wol(struct dsa_switch *ds, int port,
 	return -EOPNOTSUPP;
 }
 
+bool ksz_wol_is_active(struct ksz_device *dev)
+{
+	struct dsa_port *dp;
+
+	if (!dev->wakeup_source)
+		return false;
+
+	dsa_switch_for_each_user_port(dp, dev->ds) {
+		struct ethtool_wolinfo wol;
+
+		ksz_get_wol(dev->ds, dp->index, &wol);
+		if (wol.wolopts)
+			return true;
+	}
+
+	return false;
+}
+
 static void ksz_set_xmii(struct ksz_device *dev, int port,
 			 phy_interface_t interface)
 {

@@ -66,6 +66,9 @@ static void ksz9477_i2c_shutdown(struct i2c_client *i2c)
 	if (!dev)
 		return;
 
+	if (ksz_wol_is_active(dev))
+		return;
+
 	if (dev->dev_ops->reset)
 		dev->dev_ops->reset(dev);
 
