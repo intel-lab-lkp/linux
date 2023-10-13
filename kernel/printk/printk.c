@@ -1904,7 +1904,8 @@ static int console_lock_spinning_disable_and_check(int cookie)
 	console_owner = NULL;
 	raw_spin_unlock(&console_owner_lock);
 
-	if (!waiter) {
+	/* Waiters are ignored by the panic CPU. */
+	if (!waiter || this_cpu_in_panic()) {
 		spin_release(&console_owner_dep_map, _THIS_IP_);
 		return 0;
 	}
