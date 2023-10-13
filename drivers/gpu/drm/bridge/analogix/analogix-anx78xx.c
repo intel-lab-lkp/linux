@@ -537,6 +537,10 @@ static int anx78xx_start(struct anx78xx *anx78xx)
 				 SP_POWERDOWN_CTRL_REG,
 				 SP_HDCP_PD | SP_AUDIO_PD | SP_VIDEO_PD |
 				 SP_LINK_PD);
+	if (err) {
+		DRM_ERROR("Failed to clear bits: %d\n", err);
+		goto err_poweroff;
+	}
 
 	err = anx78xx_enable_interrupts(anx78xx);
 	if (err) {
