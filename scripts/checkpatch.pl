@@ -3524,6 +3524,8 @@ sub process {
 
 				next if (lc($first) ne lc($second));
 				next if ($first eq 'long');
+				# syzbot reports contain "Hardware name: Google Google Compute Engine"
+				next if ($first eq 'Google');
 
 				# check for character before and after the word matches
 				my $start_char = '';
