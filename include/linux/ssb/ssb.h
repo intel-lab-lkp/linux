@@ -285,7 +285,7 @@ struct ssb_device {
 
 /* Go from struct device to struct ssb_device. */
 static inline
-struct ssb_device * dev_to_ssb_dev(const struct device *dev)
+struct ssb_device *dev_to_ssb_dev(const struct device *dev)
 {
 	struct __ssb_dev_wrapper *wrap;
 	wrap = container_of(dev, struct __ssb_dev_wrapper, dev);
@@ -299,7 +299,7 @@ void ssb_set_drvdata(struct ssb_device *dev, void *data)
 	dev->drvdata = data;
 }
 static inline
-void * ssb_get_drvdata(struct ssb_device *dev)
+void *ssb_get_drvdata(struct ssb_device *dev)
 {
 	return dev->drvdata;
 }
@@ -307,7 +307,7 @@ void * ssb_get_drvdata(struct ssb_device *dev)
 /* Devicetype specific user data. This is per device-type (not per device) */
 void ssb_set_devtypedata(struct ssb_device *dev, void *data);
 static inline
-void * ssb_get_devtypedata(struct ssb_device *dev)
+void *ssb_get_devtypedata(struct ssb_device *dev)
 {
 	return dev->devtypedata;
 }
