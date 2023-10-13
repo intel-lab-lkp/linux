@@ -1361,7 +1361,7 @@ static int udf_load_sparable_map(struct super_block *sb,
 		return -EIO;
 	}
 
-	for (i = 0; i < spm->numSparingTables; i++) {
+	for (i = 0; i < spm->numSparingTables && i < 4; i++) {
 		loc = le32_to_cpu(spm->locSparingTable[i]);
 		bh = udf_read_tagged(sb, loc, loc, &ident);
 		if (!bh)
