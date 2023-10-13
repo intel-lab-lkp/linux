@@ -115,23 +115,23 @@ static int dlm_pre_master_reco_lockres(struct dlm_ctxt *dlm,
 int dlm_is_host_down(int errno)
 {
 	switch (errno) {
-		case -EBADF:
-		case -ECONNREFUSED:
-		case -ENOTCONN:
-		case -ECONNRESET:
-		case -EPIPE:
-		case -EHOSTDOWN:
-		case -EHOSTUNREACH:
-		case -ETIMEDOUT:
-		case -ECONNABORTED:
-		case -ENETDOWN:
-		case -ENETUNREACH:
-		case -ENETRESET:
-		case -ESHUTDOWN:
-		case -ENOPROTOOPT:
-		case -EINVAL:   /* if returned from our tcp code,
+	case -EBADF:
+	case -ECONNREFUSED:
+	case -ENOTCONN:
+	case -ECONNRESET:
+	case -EPIPE:
+	case -EHOSTDOWN:
+	case -EHOSTUNREACH:
+	case -ETIMEDOUT:
+	case -ECONNABORTED:
+	case -ENETDOWN:
+	case -ENETUNREACH:
+	case -ENETRESET:
+	case -ESHUTDOWN:
+	case -ENOPROTOOPT:
+	case -EINVAL:   /* if returned from our tcp code,
 				   this means there is no socket */
-			return 1;
+		return 1;
 	}
 	return 0;
 }
@@ -698,12 +698,12 @@ static void dlm_lockres_drop_inflight_worker(struct dlm_ctxt *dlm,
  * to assert_master (or die).
  *
  */
-struct dlm_lock_resource * dlm_get_lock_resource(struct dlm_ctxt *dlm,
+struct dlm_lock_resource *dlm_get_lock_resource(struct dlm_ctxt *dlm,
 					  const char *lockid,
 					  int namelen,
 					  int flags)
 {
-	struct dlm_lock_resource *tmpres=NULL, *res=NULL;
+	struct dlm_lock_resource *tmpres = NULL, *res = NULL;
 	struct dlm_master_list_entry *mle = NULL;
 	struct dlm_master_list_entry *alloc_mle = NULL;
 	int blocked = 0;
@@ -1144,16 +1144,14 @@ leave:
 	return ret;
 }
 
-struct dlm_bitmap_diff_iter
-{
+struct dlm_bitmap_diff_iter {
 	int curnode;
 	unsigned long *orig_bm;
 	unsigned long *cur_bm;
 	unsigned long diff_bm[BITS_TO_LONGS(O2NM_MAX_NODES)];
 };
 
-enum dlm_node_state_change
-{
+enum dlm_node_state_change {
 	NODE_DOWN = -1,
 	NODE_NO_CHANGE = 0,
 	NODE_UP
@@ -1308,7 +1306,7 @@ static int dlm_do_master_request(struct dlm_lock_resource *res,
 {
 	struct dlm_ctxt *dlm = mle->dlm;
 	struct dlm_master_request request;
-	int ret, response=0, resend;
+	int ret, response = 0, resend;
 
 	memset(&request, 0, sizeof(request));
 	request.node_idx = dlm->node_num;
@@ -1351,31 +1349,31 @@ again:
 	resend = 0;
 	spin_lock(&mle->spinlock);
 	switch (response) {
-		case DLM_MASTER_RESP_YES:
-			set_bit(to, mle->response_map);
-			mlog(0, "node %u is the master, response=YES\n", to);
-			mlog(0, "%s:%.*s: master node %u now knows I have a "
-			     "reference\n", dlm->name, res->lockname.len,
-			     res->lockname.name, to);
-			mle->master = to;
-			break;
-		case DLM_MASTER_RESP_NO:
-			mlog(0, "node %u not master, response=NO\n", to);
-			set_bit(to, mle->response_map);
-			break;
-		case DLM_MASTER_RESP_MAYBE:
-			mlog(0, "node %u not master, response=MAYBE\n", to);
-			set_bit(to, mle->response_map);
-			set_bit(to, mle->maybe_map);
-			break;
-		case DLM_MASTER_RESP_ERROR:
-			mlog(0, "node %u hit an error, resending\n", to);
-			resend = 1;
-			response = 0;
-			break;
-		default:
-			mlog(ML_ERROR, "bad response! %u\n", response);
-			BUG();
+	case DLM_MASTER_RESP_YES:
+		set_bit(to, mle->response_map);
+		mlog(0, "node %u is the master, response=YES\n", to);
+		mlog(0, "%s:%.*s: master node %u now knows I have a "
+			"reference\n", dlm->name, res->lockname.len,
+			res->lockname.name, to);
+		mle->master = to;
+		break;
+	case DLM_MASTER_RESP_NO:
+		mlog(0, "node %u not master, response=NO\n", to);
+		set_bit(to, mle->response_map);
+		break;
+	case DLM_MASTER_RESP_MAYBE:
+		mlog(0, "node %u not master, response=MAYBE\n", to);
+		set_bit(to, mle->response_map);
+		set_bit(to, mle->maybe_map);
+		break;
+	case DLM_MASTER_RESP_ERROR:
+		mlog(0, "node %u hit an error, resending\n", to);
+		resend = 1;
+		response = 0;
+		break;
+	default:
+		mlog(ML_ERROR, "bad response! %u\n", response);
+		BUG();
 	}
 	spin_unlock(&mle->spinlock);
 	if (resend) {
@@ -1699,7 +1697,7 @@ again:
 			r = 0;
 		} else if (r < 0) {
 			/* ok, something horribly messed.  kill thyself. */
-			mlog(ML_ERROR,"during assert master of %.*s to %u, "
+			mlog(ML_ERROR, "during assert master of %.*s to %u, "
 			     "got %d.\n", namelen, lockname, to, r);
 			spin_lock(&dlm->spinlock);
 			spin_lock(&dlm->master_lock);
@@ -2930,7 +2928,7 @@ static void dlm_remove_nonlocal_locks(struct dlm_ctxt *dlm,
 
 	BUG_ON(res->owner == dlm->node_num);
 
-	for (i=0; i<3; i++) {
+	for (i = 0; i < 3; i++) {
 		list_for_each_entry_safe(lock, next, queue, list) {
 			if (lock->ml.node != dlm->node_num) {
 				mlog(0, "putting lock for node %u\n",
