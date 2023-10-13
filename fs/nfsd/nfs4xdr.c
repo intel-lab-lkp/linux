@@ -2432,7 +2432,7 @@ nfsd4_decode_compound(struct nfsd4_compoundargs *argp)
 {
 	struct nfsd4_op *op;
 	bool cachethis = false;
-	int auth_slack= argp->rqstp->rq_auth_slack;
+	int auth_slack = argp->rqstp->rq_auth_slack;
 	int max_reply = auth_slack + 8; /* opcnt, status */
 	int readcount = 0;
 	int readbytes = 0;
@@ -2602,7 +2602,7 @@ static __be32 nfsd4_encode_components_esc(struct xdr_stream *xdr, char sep,
 	__be32 *p;
 	__be32 pathlen;
 	int pathlen_offset;
-	int strlen, count=0;
+	int strlen, count = 0;
 	char *str, *end, *next;
 
 	dprintk("nfsd4_encode_components(%s)\n", components);
@@ -2639,8 +2639,7 @@ static __be32 nfsd4_encode_components_esc(struct xdr_stream *xdr, char sep,
 				return nfserr_resource;
 			p = xdr_encode_opaque(p, str, strlen);
 			count++;
-		}
-		else
+		} else
 			end++;
 		if (found_esc)
 			end = next;
