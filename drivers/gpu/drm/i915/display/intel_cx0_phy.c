@@ -221,6 +221,14 @@ static u8 __intel_cx0_read(struct drm_i915_private *i915, enum port port,
 	for (i = 0; i < 3; i++) {
 		status = __intel_cx0_read_once(i915, port, lane, addr);
 
+		/*
+		 * FIXME: Workaround to let HW to settle
+		 * down and let the message bus to end up
+		 * in a known state
+		 */
+		intel_cx0_bus_reset(i915, port, lane);
+		usleep_range(200, 300);
+
 		if (status >= 0)
 			return status;
 	}
@@ -299,6 +307,14 @@ static void __intel_cx0_write(struct drm_i915_private *i915, enum port port,
 	/* 3 tries is assumed to be enough to write successfully */
 	for (i = 0; i < 3; i++) {
 		status = __intel_cx0_write_once(i915, port, lane, addr, data, committed);
+
+		/*
+		 * FIXME: Workaround to let HW to settle
+		 * down and let the message bus to end up
+		 * in a known state
+		 */
+		intel_cx0_bus_reset(i915, port, lane);
+		usleep_range(200, 300);
 
 		if (status == 0)
 			return;
