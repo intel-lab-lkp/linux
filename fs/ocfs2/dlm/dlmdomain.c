@@ -76,7 +76,8 @@ static void **dlm_alloc_pagevec(int pages)
 		return NULL;
 
 	for (i = 0; i < pages; i++)
-		if (!(vec[i] = (void *)__get_free_page(GFP_KERNEL)))
+		vec[i] = (void *)__get_free_page(GFP_KERNEL);
+		if (!(vec[i]))
 			goto out_free;
 
 	mlog(0, "Allocated DLM hash pagevec; %d pages (%lu expected), %lu buckets per page\n",
@@ -170,7 +171,7 @@ void __dlm_insert_lockres(struct dlm_ctxt *dlm, struct dlm_lock_resource *res)
 	     res->lockname.name);
 }
 
-struct dlm_lock_resource * __dlm_lookup_lockres_full(struct dlm_ctxt *dlm,
+struct dlm_lock_resource *__dlm_lookup_lockres_full(struct dlm_ctxt *dlm,
 						     const char *name,
 						     unsigned int len,
 						     unsigned int hash)
@@ -203,7 +204,7 @@ struct dlm_lock_resource * __dlm_lookup_lockres_full(struct dlm_ctxt *dlm,
  * currently in the process of dropping its mastery reference.
  * use __dlm_lookup_lockres_full when you need the lock resource
  * regardless (e.g. dlm_get_lock_resource) */
-struct dlm_lock_resource * __dlm_lookup_lockres(struct dlm_ctxt *dlm,
+struct dlm_lock_resource *__dlm_lookup_lockres(struct dlm_ctxt *dlm,
 						const char *name,
 						unsigned int len,
 						unsigned int hash)
@@ -228,7 +229,7 @@ struct dlm_lock_resource * __dlm_lookup_lockres(struct dlm_ctxt *dlm,
 	return res;
 }
 
-struct dlm_lock_resource * dlm_lookup_lockres(struct dlm_ctxt *dlm,
+struct dlm_lock_resource *dlm_lookup_lockres(struct dlm_ctxt *dlm,
 				    const char *name,
 				    unsigned int len)
 {
@@ -241,7 +242,7 @@ struct dlm_lock_resource * dlm_lookup_lockres(struct dlm_ctxt *dlm,
 	return res;
 }
 
-static struct dlm_ctxt * __dlm_lookup_domain_full(const char *domain, int len)
+static struct dlm_ctxt *__dlm_lookup_domain_full(const char *domain, int len)
 {
 	struct dlm_ctxt *tmp;
 
@@ -251,7 +252,7 @@ static struct dlm_ctxt * __dlm_lookup_domain_full(const char *domain, int len)
 	 * but domain may not be! */
 	list_for_each_entry(tmp, &dlm_domains, list) {
 		if (strlen(tmp->name) == len &&
-		    memcmp(tmp->name, domain, len)==0)
+		    memcmp(tmp->name, domain, len) == 0)
 			return tmp;
 	}
 
@@ -259,7 +260,7 @@ static struct dlm_ctxt * __dlm_lookup_domain_full(const char *domain, int len)
 }
 
 /* For null terminated domain strings ONLY */
-static struct dlm_ctxt * __dlm_lookup_domain(const char *domain)
+static struct dlm_ctxt *__dlm_lookup_domain(const char *domain)
 {
 	assert_spin_locked(&dlm_domain_lock);
 
@@ -827,7 +828,7 @@ static int dlm_query_join_handler(struct o2net_msg *msg, u32 len, void *data,
 	 * node(s) that just left but still part of the cluster. DISALLOW
 	 * join request if joining node has different node map.
 	 */
-	nodenum=0;
+	nodenum = 0;
 	while (nodenum < O2NM_MAX_NODES) {
 		if (test_bit(nodenum, dlm->domain_map)) {
 			if (!byte_test_bit(nodenum, query->node_map)) {
@@ -2095,7 +2096,7 @@ static int dlm_protocol_compare(struct dlm_protocol_version *existing,
  * If registration was successful, proto will contain the negotiated
  * locking protocol.
  */
-struct dlm_ctxt * dlm_register_domain(const char *domain,
+struct dlm_ctxt *dlm_register_domain(const char *domain,
 			       u32 key,
 			       struct dlm_protocol_version *fs_proto)
 {
