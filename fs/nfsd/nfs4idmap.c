@@ -212,7 +212,7 @@ idtoname_parse(struct cache_detail *cd, char *buf, int buflen)
 
 	if (buf[buflen - 1] != '\n')
 		return (-EINVAL);
-	buf[buflen - 1]= '\0';
+	buf[buflen - 1] = '\0';
 
 	buf1 = kmalloc(PAGE_SIZE, GFP_KERNEL);
 	if (buf1 == NULL)
@@ -313,7 +313,7 @@ static void
 nametoid_request(struct cache_detail *cd, struct cache_head *ch, char **bpp,
     int *blen)
 {
- 	struct ent *ent = container_of(ch, struct ent, h);
+	struct ent *ent = container_of(ch, struct ent, h);
 
 	qword_add(bpp, blen, ent->authname);
 	qword_add(bpp, blen, ent->type == IDMAP_TYPE_GROUP ? "group" : "user");
@@ -381,7 +381,7 @@ nametoid_parse(struct cache_detail *cd, char *buf, int buflen)
 
 	if (buf[buflen - 1] != '\n')
 		return (-EINVAL);
-	buf[buflen - 1]= '\0';
+	buf[buflen - 1] = '\0';
 
 	buf1 = kmalloc(PAGE_SIZE, GFP_KERNEL);
 	if (buf1 == NULL)
@@ -431,7 +431,7 @@ nametoid_parse(struct cache_detail *cd, char *buf, int buflen)
 	error = 0;
 out:
 	kfree(buf1);
-	return (error);
+	return error;
 }
 
 
