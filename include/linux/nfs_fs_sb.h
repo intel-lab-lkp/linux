@@ -51,20 +51,20 @@ struct nfs_client {
 #define NFS_CS_PNFS		9		/* - Server used for pnfs */
 	struct sockaddr_storage	cl_addr;	/* server identifier */
 	size_t			cl_addrlen;
-	char *			cl_hostname;	/* hostname of server */
-	char *			cl_acceptor;	/* GSSAPI acceptor name */
+	char                   *cl_hostname;	/* hostname of server */
+	char                   *cl_acceptor;	/* GSSAPI acceptor name */
 	struct list_head	cl_share_link;	/* link in global client list */
 	struct list_head	cl_superblocks;	/* List of nfs_server structs */
 
-	struct rpc_clnt *	cl_rpcclient;
+	struct rpc_clnt        *cl_rpcclient;
 	const struct nfs_rpc_ops *rpc_ops;	/* NFS protocol vector */
 	int			cl_proto;	/* Network transport protocol */
-	struct nfs_subversion *	cl_nfs_mod;	/* pointer to nfs version module */
+	struct nfs_subversion  *cl_nfs_mod;	/* pointer to nfs version module */
 
 	u32			cl_minorversion;/* NFSv4 minorversion */
 	unsigned int		cl_nconnect;	/* Number of connections */
 	unsigned int		cl_max_connect; /* max number of xprts allowed */
-	const char *		cl_principal;	/* used for machine cred */
+	const char             *cl_principal;	/* used for machine cred */
 	struct xprtsec_parms	cl_xprtsec;	/* xprt security policy */
 
 #if IS_ENABLED(CONFIG_NFS_V4)
@@ -82,10 +82,10 @@ struct nfs_client {
 	struct rpc_wait_queue	cl_rpcwaitq;
 
 	/* idmapper */
-	struct idmap *		cl_idmap;
+	struct idmap           *cl_idmap;
 
 	/* Client owner identifier */
-	const char *		cl_owner_id;
+	const char             *cl_owner_id;
 
 	u32			cl_cb_ident;	/* v4.0 callback identifier */
 	const struct nfs4_minor_version_ops *cl_mvops;
@@ -130,14 +130,14 @@ struct nfs_client {
  * NFS client parameters stored in the superblock.
  */
 struct nfs_server {
-	struct nfs_client *	nfs_client;	/* shared client and NFS4 state */
+	struct nfs_client      *nfs_client;	/* shared client and NFS4 state */
 	struct list_head	client_link;	/* List of other nfs_server structs
 						 * that share the same client
 						 */
 	struct list_head	master_link;	/* link in master servers list */
-	struct rpc_clnt *	client;		/* RPC client handle */
-	struct rpc_clnt *	client_acl;	/* ACL RPC client handle */
-	struct nlm_host		*nlm_host;	/* NLM client handle */
+	struct rpc_clnt        *client;		/* RPC client handle */
+	struct rpc_clnt        *client_acl;	/* ACL RPC client handle */
+	struct nlm_host	       *nlm_host;	/* NLM client handle */
 	struct nfs_iostats __percpu *io_stats;	/* I/O statistics */
 	atomic_long_t		writeback;	/* number of writeback pages */
 	unsigned int		write_congested;/* flag set when writeback gets too high */
