@@ -445,6 +445,18 @@ restart:
 		if (!folio || folio_is_zone_device(folio))
 			continue;
 
+		if (lru_gen_enabled() && pageout) {
+			int gen = folio_lru_gen(folio);
+			struct lruvec *lruvec = folio_lruvec(folio);
+			int type = folio_is_file_lru(folio);
+			int refs = folio_lru_refs(folio);
+			int tier = lru_tier_from_refs(refs);
+			int tier_st = get_tier_idx(lruvec, type);
+
+			if (gen > lru_gen_from_seq(lruvec->lrugen.min_seq[type]) + 1
+				|| tier > tier_st)
+				continue;
+		}
 		/*
 		 * Creating a THP page is expensive so split it only if we
 		 * are sure it's worth. Split it if we are only owner.

@@ -4400,7 +4400,7 @@ static int scan_folios(struct lruvec *lruvec, struct scan_control *sc,
 	return isolated || !remaining ? scanned : 0;
 }
 
-static int get_tier_idx(struct lruvec *lruvec, int type)
+int get_tier_idx(struct lruvec *lruvec, int type)
 {
 	int tier;
 	struct ctrl_pos sp, pv;
@@ -4419,6 +4419,7 @@ static int get_tier_idx(struct lruvec *lruvec, int type)
 
 	return tier - 1;
 }
+EXPORT_SYMBOL_GPL(get_tier_idx);
 
 static int get_type_to_scan(struct lruvec *lruvec, int swappiness, int *tier_idx)
 {

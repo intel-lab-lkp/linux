@@ -496,6 +496,7 @@ extern int init_swap_address_space(unsigned int type, unsigned long nr_pages);
 extern void exit_swap_address_space(unsigned int type);
 extern struct swap_info_struct *get_swap_device(swp_entry_t entry);
 sector_t swap_page_sector(struct page *page);
+extern int get_tier_idx(struct lruvec *lruvec, int type);
 
 static inline void put_swap_device(struct swap_info_struct *si)
 {
