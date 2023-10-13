@@ -1211,13 +1211,13 @@ v4l2_subdev_get_pad_compose(struct v4l2_subdev *sd,
  * renamed
  */
 #define v4l2_subdev_get_try_format(sd, state, pad) \
-	v4l2_subdev_get_pad_format(sd, state, pad)
+	v4l2_subdev_get_format(state, pad, 0)
 
 #define v4l2_subdev_get_try_crop(sd, state, pad) \
-	v4l2_subdev_get_pad_crop(sd, state, pad)
+	v4l2_subdev_get_crop(state, pad, 0)
 
 #define v4l2_subdev_get_try_compose(sd, state, pad) \
-	v4l2_subdev_get_pad_compose(sd, state, pad)
+	v4l2_subdev_get_compose(state, pad, 0)
 
 #endif /* CONFIG_VIDEO_V4L2_SUBDEV_API */
 

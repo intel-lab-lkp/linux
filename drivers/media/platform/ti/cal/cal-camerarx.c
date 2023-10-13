@@ -57,7 +57,7 @@ static s64 cal_camerarx_get_ext_link_freq(struct cal_camerarx *phy)
 
 	state = v4l2_subdev_get_locked_active_state(&phy->subdev);
 
-	fmt = v4l2_subdev_get_pad_format(&phy->subdev, state, CAL_CAMERARX_PAD_SINK);
+	fmt = v4l2_subdev_get_format(state, CAL_CAMERARX_PAD_SINK, 0);
 
 	fmtinfo = cal_format_by_code(fmt->code);
 	if (!fmtinfo)
@@ -630,8 +630,7 @@ static int cal_camerarx_sd_enum_mbus_code(struct v4l2_subdev *sd,
 		if (code->index > 0)
 			return -EINVAL;
 
-		fmt = v4l2_subdev_get_pad_format(&phy->subdev, state,
-						 CAL_CAMERARX_PAD_SINK);
+		fmt = v4l2_subdev_get_format(state, CAL_CAMERARX_PAD_SINK, 0);
 		code->code = fmt->code;
 	} else {
 		if (code->index >= cal_num_formats)
@@ -656,8 +655,7 @@ static int cal_camerarx_sd_enum_frame_size(struct v4l2_subdev *sd,
 	if (cal_rx_pad_is_source(fse->pad)) {
 		struct v4l2_mbus_framefmt *fmt;
 
-		fmt = v4l2_subdev_get_pad_format(sd, state,
-						 CAL_CAMERARX_PAD_SINK);
+		fmt = v4l2_subdev_get_format(state, CAL_CAMERARX_PAD_SINK, 0);
 		if (fse->code != fmt->code)
 			return -EINVAL;
 
@@ -713,11 +711,10 @@ static int cal_camerarx_sd_set_fmt(struct v4l2_subdev *sd,
 
 	/* Store the format and propagate it to the source pad. */
 
-	fmt = v4l2_subdev_get_pad_format(sd, state, CAL_CAMERARX_PAD_SINK);
+	fmt = v4l2_subdev_get_format(state, CAL_CAMERARX_PAD_SINK, 0);
 	*fmt = format->format;
 
-	fmt = v4l2_subdev_get_pad_format(sd, state,
-					 CAL_CAMERARX_PAD_FIRST_SOURCE);
+	fmt = v4l2_subdev_get_format(state, CAL_CAMERARX_PAD_FIRST_SOURCE, 0);
 	*fmt = format->format;
 
 	return 0;

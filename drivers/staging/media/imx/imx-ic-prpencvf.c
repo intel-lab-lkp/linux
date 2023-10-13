@@ -793,7 +793,7 @@ __prp_get_fmt(struct prp_priv *priv, struct v4l2_subdev_state *sd_state,
 	struct imx_ic_priv *ic_priv = priv->ic_priv;
 
 	if (which == V4L2_SUBDEV_FORMAT_TRY)
-		return v4l2_subdev_get_try_format(&ic_priv->sd, sd_state, pad);
+		return v4l2_subdev_get_format(sd_state, pad, 0);
 	else
 		return &priv->format_mbus[pad];
 }

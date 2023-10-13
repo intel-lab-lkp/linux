@@ -1273,7 +1273,7 @@ static int s5k5baf_get_fmt(struct v4l2_subdev *sd,
 	struct v4l2_mbus_framefmt *mf;
 
 	if (fmt->which == V4L2_SUBDEV_FORMAT_TRY) {
-		mf = v4l2_subdev_get_try_format(sd, sd_state, fmt->pad);
+		mf = v4l2_subdev_get_format(sd_state, fmt->pad, 0);
 		fmt->format = *mf;
 		return 0;
 	}
@@ -1307,7 +1307,7 @@ static int s5k5baf_set_fmt(struct v4l2_subdev *sd,
 	mf->field = V4L2_FIELD_NONE;
 
 	if (fmt->which == V4L2_SUBDEV_FORMAT_TRY) {
-		*v4l2_subdev_get_try_format(sd, sd_state, fmt->pad) = *mf;
+		*v4l2_subdev_get_format(sd_state, fmt->pad, 0) = *mf;
 		return 0;
 	}
 
@@ -1379,11 +1379,10 @@ static int s5k5baf_get_selection(struct v4l2_subdev *sd,
 
 	if (sel->which == V4L2_SUBDEV_FORMAT_TRY) {
 		if (rtype == R_COMPOSE)
-			sel->r = *v4l2_subdev_get_try_compose(sd, sd_state,
-							      sel->pad);
+			sel->r = *v4l2_subdev_get_compose(sd_state, sel->pad,
+							  0);
 		else
-			sel->r = *v4l2_subdev_get_try_crop(sd, sd_state,
-							   sel->pad);
+			sel->r = *v4l2_subdev_get_crop(sd_state, sel->pad, 0);
 		return 0;
 	}
 
@@ -1473,12 +1472,9 @@ static int s5k5baf_set_selection(struct v4l2_subdev *sd,
 	if (sel->which == V4L2_SUBDEV_FORMAT_TRY) {
 		rects = (struct v4l2_rect * []) {
 				&s5k5baf_cis_rect,
-				v4l2_subdev_get_try_crop(sd, sd_state,
-							 PAD_CIS),
-				v4l2_subdev_get_try_compose(sd, sd_state,
-							    PAD_CIS),
-				v4l2_subdev_get_try_crop(sd, sd_state,
-							 PAD_OUT)
+				v4l2_subdev_get_crop(sd_state, PAD_CIS, 0),
+				v4l2_subdev_get_compose(sd_state, PAD_CIS, 0),
+				v4l2_subdev_get_crop(sd_state, PAD_OUT, 0)
 			};
 		s5k5baf_set_rect_and_adjust(rects, rtype, &sel->r);
 		return 0;
@@ -1696,22 +1692,22 @@ static int s5k5baf_open(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 {
 	struct v4l2_mbus_framefmt *mf;
 
-	mf = v4l2_subdev_get_try_format(sd, fh->state, PAD_CIS);
+	mf = v4l2_subdev_get_format(fh->state, PAD_CIS, 0);
 	s5k5baf_try_cis_format(mf);
 
 	if (s5k5baf_is_cis_subdev(sd))
 		return 0;
 
-	mf = v4l2_subdev_get_try_format(sd, fh->state, PAD_OUT);
+	mf = v4l2_subdev_get_format(fh->state, PAD_OUT, 0);
 	mf->colorspace = s5k5baf_formats[0].colorspace;
 	mf->code = s5k5baf_formats[0].code;
 	mf->width = s5k5baf_cis_rect.width;
 	mf->height = s5k5baf_cis_rect.height;
 	mf->field = V4L2_FIELD_NONE;
 
-	*v4l2_subdev_get_try_crop(sd, fh->state, PAD_CIS) = s5k5baf_cis_rect;
-	*v4l2_subdev_get_try_compose(sd, fh->state, PAD_CIS) = s5k5baf_cis_rect;
-	*v4l2_subdev_get_try_crop(sd, fh->state, PAD_OUT) = s5k5baf_cis_rect;
+	*v4l2_subdev_get_crop(fh->state, PAD_CIS, 0) = s5k5baf_cis_rect;
+	*v4l2_subdev_get_compose(fh->state, PAD_CIS, 0) = s5k5baf_cis_rect;
+	*v4l2_subdev_get_crop(fh->state, PAD_OUT, 0) = s5k5baf_cis_rect;
 
 	return 0;
 }
