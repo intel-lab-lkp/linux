@@ -4308,6 +4308,12 @@ D: ZyXEL omni.net lcd plus driver
 D: RTC subsystem
 S: Italy
 
+
+N: M Chetan Kumar
+E: <m.chetan.kumar@intel.com>
+D: Intel WWAN IOSM driver
+D: Mediatek T7XX 5G WWAN reviewer
+
 N: Marc Zyngier
 E: maz@wild-wind.fr.eu.org
 W: http://www.misterjones.org
