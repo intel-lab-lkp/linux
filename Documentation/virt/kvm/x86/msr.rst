@@ -192,9 +192,9 @@ MSR_KVM_ASYNC_PF_EN:
 data:
 	Asynchronous page fault (APF) control MSR.
 
-	Bits 63-6 hold 64-byte aligned physical address of a 64 byte memory area
-	which must be in guest RAM and must be zeroed. This memory is expected
-	to hold a copy of the following structure::
+	Bits 63-6 hold 64-byte aligned physical address of a 68 bytes memory
+	area which must be in guest RAM. This memory is expected to hold a copy
+	of the following structure::
 
 	  struct kvm_vcpu_pv_apf_data {
 		/* Used for 'page not present' events delivered via #PF */
@@ -220,7 +220,7 @@ data:
 	#PF exception. During delivery of these events APF CR2 register contains
 	a token that will be used to notify the guest when missing page becomes
 	available. Also, to make it possible to distinguish between real #PF and
-	APF, first 4 bytes of 64 byte memory location ('flags') will be written
+	APF, first 4 bytes of 68 byte memory location ('flags') will be written
 	to by the hypervisor at the time of injection. Only first bit of 'flags'
 	is currently supported, when set, it indicates that the guest is dealing
 	with asynchronous 'page not present' event. If during a page fault APF
@@ -232,14 +232,14 @@ data:
 	as regular page fault, guest must reset 'flags' to '0' before it does
 	something that can generate normal page fault.
 
-	Bytes 5-7 of 64 byte memory location ('token') will be written to by the
+	Bytes 4-7 of 68 byte memory location ('token') will be written to by the
 	hypervisor at the time of APF 'page ready' event injection. The content
-	of these bytes is a token which was previously delivered as 'page not
-	present' event. The event indicates the page in now available. Guest is
-	supposed to write '0' to 'token' when it is done handling 'page ready'
-	event and to write 1' to MSR_KVM_ASYNC_PF_ACK after clearing the location;
-	writing to the MSR forces KVM to re-scan its queue and deliver the next
-	pending notification.
+	of these bytes is a token which was previously delivered in CR2 as
+	'page not present' event. The event indicates the page is now available.
+	Guest is supposed to write '0' to 'token' when it is done handling
+	'page ready' event and to write '1' to MSR_KVM_ASYNC_PF_ACK after
+	clearing the location; writing to the MSR forces KVM to re-scan its
+	queue and deliver the next pending notification.
 
 	Note, MSR_KVM_ASYNC_PF_INT MSR specifying the interrupt vector for 'page
 	ready' APF delivery needs to be written to before enabling APF mechanism
