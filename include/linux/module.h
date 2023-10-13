@@ -152,7 +152,7 @@ extern void cleanup_module(void);
 #define __initconst_or_module
 #define __INIT_OR_MODULE	.text
 #define __INITDATA_OR_MODULE	.data
-#define __INITRODATA_OR_MODULE	.section ".rodata","a",%progbits
+#define __INITRODATA_OR_MODULE	.section ".rodata", "a", %progbits
 #else
 #define __init_or_module __init
 #define __initdata_or_module __initdata
@@ -802,7 +802,7 @@ static inline bool within_module(unsigned long addr, const struct module *mod)
 }
 
 /* Get/put a kernel symbol (calls should be symmetric) */
-#define symbol_get(x) ({ extern typeof(x) x __attribute__((weak,visibility("hidden"))); &(x); })
+#define symbol_get(x) ({ extern typeof(x) x __attribute__((weak, visibility("hidden"))); &(x); })
 #define symbol_put(x) do { } while (0)
 #define symbol_put_addr(x) do { } while (0)
 
