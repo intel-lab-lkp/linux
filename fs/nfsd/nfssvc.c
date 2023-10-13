@@ -208,7 +208,7 @@ int nfsd_vers(struct nfsd_net *nn, int vers, enum vers_op change)
 {
 	if (vers < NFSD_MINVERS || vers >= NFSD_NRVERS)
 		return 0;
-	switch(change) {
+	switch (change) {
 	case NFSD_SET:
 		if (nn->nfsd_versions)
 			nn->nfsd_versions[vers] = nfsd_support_version(vers);
@@ -246,7 +246,7 @@ int nfsd_minorversion(struct nfsd_net *nn, u32 minorversion, enum vers_op change
 	    change != NFSD_AVAIL)
 		return -1;
 
-	switch(change) {
+	switch (change) {
 	case NFSD_SET:
 		if (nn->nfsd4_minorversions) {
 			nfsd_vers(nn, 4, NFSD_SET);
@@ -310,7 +310,7 @@ static int nfsd_init_socks(struct net *net, const struct cred *cred)
 	return 0;
 }
 
-static int nfsd_users = 0;
+static int nfsd_users;
 
 static int nfsd_startup_generic(void)
 {
