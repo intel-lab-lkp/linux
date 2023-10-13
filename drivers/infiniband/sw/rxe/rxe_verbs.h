@@ -319,11 +319,6 @@ struct rxe_mr {
 	struct xarray		page_list;
 };
 
-static inline unsigned int mr_page_size(struct rxe_mr *mr)
-{
-	return mr ? mr->ibmr.page_size : PAGE_SIZE;
-}
-
 enum rxe_mw_state {
 	RXE_MW_STATE_INVALID	= RXE_MR_STATE_INVALID,
 	RXE_MW_STATE_FREE	= RXE_MR_STATE_FREE,

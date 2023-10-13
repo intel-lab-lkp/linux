@@ -58,7 +58,6 @@ static void rxe_mr_init(int access, struct rxe_mr *mr)
 	mr->rkey = mr->ibmr.rkey = key;
 
 	mr->access = access;
-	mr->ibmr.page_size = PAGE_SIZE;
 	mr->page_mask = PAGE_MASK;
 	mr->page_shift = PAGE_SHIFT;
 	mr->state = RXE_MR_STATE_INVALID;
@@ -79,7 +78,7 @@ static unsigned long rxe_mr_iova_to_index(struct rxe_mr *mr, u64 iova)
 
 static unsigned long rxe_mr_iova_to_page_offset(struct rxe_mr *mr, u64 iova)
 {
-	return iova & (mr_page_size(mr) - 1);
+	return iova & (PAGE_SIZE - 1);
 }
 
 static bool is_pmem_page(struct page *pg)
@@ -232,7 +231,7 @@ int rxe_map_mr_sg(struct ib_mr *ibmr, struct scatterlist *sgl,
 		  int sg_nents, unsigned int *sg_offset)
 {
 	struct rxe_mr *mr = to_rmr(ibmr);
-	unsigned int page_size = mr_page_size(mr);
+	unsigned int page_size = ibmr->page_size;
 
 	mr->nbuf = 0;
 	mr->page_shift = ilog2(page_size);
@@ -256,8 +255,7 @@ static int rxe_mr_copy_xarray(struct rxe_mr *mr, u64 iova, void *addr,
 		if (!page)
 			return -EFAULT;
 
-		bytes = min_t(unsigned int, length,
-				mr_page_size(mr) - page_offset);
+		bytes = min_t(unsigned int, length, PAGE_SIZE - page_offset);
 		va = kmap_local_page(page);
 		if (dir == RXE_FROM_MR_OBJ)
 			memcpy(addr, va + page_offset, bytes);
@@ -450,8 +448,7 @@ int rxe_flush_pmem_iova(struct rxe_mr *mr, u64 iova, unsigned int length)
 		page_offset = rxe_mr_iova_to_page_offset(mr, iova);
 		if (!page)
 			return -EFAULT;
-		bytes = min_t(unsigned int, length,
-				mr_page_size(mr) - page_offset);
+		bytes = min_t(unsigned int, length, PAGE_SIZE - page_offset);
 
 		va = kmap_local_page(page);
 		arch_wb_cache_pmem(va + page_offset, bytes);
