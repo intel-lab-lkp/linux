@@ -2173,6 +2173,57 @@ static int ksz_pirq_setup(struct ksz_device *dev, u8 p)
 	return ksz_irq_common_setup(dev, pirq);
 }
 
+/**
+ * ksz_cmn_write_global_mac_addr - Write global MAC address to switch.
+ * @dev: The device structure.
+ * @addr: Pointer to MAC address.
+ *
+ * This function programs the switch's MAC address register with the given
+ * MAC address. The global MAC address is used as the source address in MAC
+ * pause control frames, for HSR self-address filtering, Wake-on-LAN (WoL),
+ * and for self-address filtering purposes.
+ *
+ * Return: 0 on success, or an error code on failure.
+ */
+static int ksz_cmn_write_global_mac_addr(struct ksz_device *dev,
+					 const unsigned char *addr)
+{
+	const u16 *regs = dev->info->regs;
+	int i, ret;
+
+	for (i = 0; i < ETH_ALEN; i++) {
+		ret = ksz_write8(dev, regs[REG_SW_MAC_ADDR] + i, addr[i]);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
+/**
+ * ksz_cmn_set_default_switch_mac_addr - Set the switch's global MAC address
+ *                                       from master port.
+ * @dev: The device structure.
+ *
+ * This function retrieves the MAC address from the master network device
+ * associated with the CPU port and writes it to the switch's global MAC
+ * address register.
+ *
+ * Return: 0 on success, or an error code on failure.
+ */
+static int ksz_cmn_set_default_switch_mac_addr(struct ksz_device *dev)
+{
+	struct dsa_switch *ds = dev->ds;
+	struct net_device *master;
+
+	/* use CPU port to get master net device because it is guaranteed
+	 * to be a valid port
+	 */
+	master = dsa_port_to_master(dsa_to_port(ds, dev->cpu_port));
+
+	return ksz_cmn_write_global_mac_addr(dev, master->dev_addr);
+}
+
 static int ksz_setup(struct dsa_switch *ds)
 {
 	struct ksz_device *dev = ds->priv;
@@ -2193,6 +2244,16 @@ static int ksz_setup(struct dsa_switch *ds)
 		dev_err(ds->dev, "failed to reset switch\n");
 		return ret;
 	}
+
+	/* Set switch MAC address from master port.
+	 * In the current implementation, this operation is only
+	 * performed during system start and will not sync if the master
+	 * Ethernet address changes dynamically thereafter. The global MAC
+	 * address still can be overwritten for HSR use cases.
+	 */
+	ret = ksz_cmn_set_default_switch_mac_addr(dev);
+	if (ret)
+		return ret;
 
 	/* set broadcast storm protection 10% rate */
 	regmap_update_bits(ksz_regmap_16(dev), regs[S_BROADCAST_CTRL],
@@ -3572,8 +3633,6 @@ static int ksz_switch_macaddr_get(struct dsa_switch *ds, int port,
 	const unsigned char *addr = slave->dev_addr;
 	struct ksz_switch_macaddr *switch_macaddr;
 	struct ksz_device *dev = ds->priv;
-	const u16 *regs = dev->info->regs;
-	int i;
 
 	/* Make sure concurrent MAC address changes are blocked */
 	ASSERT_RTNL();
@@ -3599,11 +3658,7 @@ static int ksz_switch_macaddr_get(struct dsa_switch *ds, int port,
 	refcount_set(&switch_macaddr->refcount, 1);
 	dev->switch_macaddr = switch_macaddr;
 
-	/* Program the switch MAC address to hardware */
-	for (i = 0; i < ETH_ALEN; i++)
-		ksz_write8(dev, regs[REG_SW_MAC_ADDR] + i, addr[i]);
-
-	return 0;
+	return ksz_cmn_write_global_mac_addr(dev, addr);
 }
 
 static void ksz_switch_macaddr_put(struct dsa_switch *ds)
