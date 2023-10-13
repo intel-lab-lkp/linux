@@ -1797,9 +1797,18 @@ static void check_graph_child_address(struct check *c, struct dt_info *dti,
 		cnt++;
 	}
 
-	if (cnt == 1 && node->addr_cells != -1)
+	if (cnt == 1 && node->addr_cells != -1) {
+		/*
+		 * The graph node "ports" are exempt from this rule, because
+		 * certain hardware do need to be described as only having a
+		 * signle port with reg = 0.
+		 */
+		if (!strcmp(node->name, "ports"))
+			return;
+
 		FAIL(c, dti, node, "graph node has single child node '%s', #address-cells/#size-cells are not necessary",
 		     node->children->name);
+	}
 }
 WARNING(graph_child_address, check_graph_child_address, NULL, &graph_nodes);
 
