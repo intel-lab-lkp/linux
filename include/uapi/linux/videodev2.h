@@ -842,6 +842,54 @@ struct v4l2_pix_format {
 #define V4L2_META_FMT_RK_ISP1_PARAMS	v4l2_fourcc('R', 'K', '1', 'P') /* Rockchip ISP1 3A Parameters */
 #define V4L2_META_FMT_RK_ISP1_STAT_3A	v4l2_fourcc('R', 'K', '1', 'S') /* Rockchip ISP1 3A Statistics */
 
+/*
+ * Audio-data formats
+ * All these audio formats use a fourcc starting with 'AU'
+ * followed by the SNDRV_PCM_FORMAT_ value from asound.h.
+ */
+#define V4L2_AUDIO_FMT_S8			v4l2_fourcc('A', 'U', '0', '0')
+#define V4L2_AUDIO_FMT_U8			v4l2_fourcc('A', 'U', '0', '1')
+#define V4L2_AUDIO_FMT_S16_LE			v4l2_fourcc('A', 'U', '0', '2')
+#define V4L2_AUDIO_FMT_S16_BE			v4l2_fourcc('A', 'U', '0', '3')
+#define V4L2_AUDIO_FMT_U16_LE			v4l2_fourcc('A', 'U', '0', '4')
+#define V4L2_AUDIO_FMT_U16_BE			v4l2_fourcc('A', 'U', '0', '5')
+#define V4L2_AUDIO_FMT_S24_LE			v4l2_fourcc('A', 'U', '0', '6')
+#define V4L2_AUDIO_FMT_S24_BE			v4l2_fourcc('A', 'U', '0', '7')
+#define V4L2_AUDIO_FMT_U24_LE			v4l2_fourcc('A', 'U', '0', '8')
+#define V4L2_AUDIO_FMT_U24_BE			v4l2_fourcc('A', 'U', '0', '9')
+
+#define V4L2_AUDIO_FMT_S32_LE			v4l2_fourcc('A', 'U', '1', '0')
+#define V4L2_AUDIO_FMT_S32_BE			v4l2_fourcc('A', 'U', '1', '1')
+#define V4L2_AUDIO_FMT_U32_LE			v4l2_fourcc('A', 'U', '1', '2')
+#define V4L2_AUDIO_FMT_U32_BE			v4l2_fourcc('A', 'U', '1', '3')
+#define V4L2_AUDIO_FMT_FLOAT_LE			v4l2_fourcc('A', 'U', '1', '4')
+#define V4L2_AUDIO_FMT_FLOAT_BE			v4l2_fourcc('A', 'U', '1', '5')
+#define V4L2_AUDIO_FMT_FLOAT64_LE		v4l2_fourcc('A', 'U', '1', '6')
+#define V4L2_AUDIO_FMT_FLOAT64_BE		v4l2_fourcc('A', 'U', '1', '7')
+#define V4L2_AUDIO_FMT_IEC958_SUBFRAME_LE	v4l2_fourcc('A', 'U', '1', '8')
+#define V4L2_AUDIO_FMT_IEC958_SUBFRAME_BE	v4l2_fourcc('A', 'U', '1', '9')
+
+#define V4L2_AUDIO_FMT_S20_LE			v4l2_fourcc('A', 'U', '2', '5')
+#define V4L2_AUDIO_FMT_S20_BE			v4l2_fourcc('A', 'U', '2', '6')
+#define V4L2_AUDIO_FMT_U20_LE			v4l2_fourcc('A', 'U', '2', '7')
+#define V4L2_AUDIO_FMT_U20_BE			v4l2_fourcc('A', 'U', '2', '8')
+
+#define V4L2_AUDIO_FMT_S24_3LE			v4l2_fourcc('A', 'U', '3', '2')
+#define V4L2_AUDIO_FMT_S24_3BE			v4l2_fourcc('A', 'U', '3', '3')
+#define V4L2_AUDIO_FMT_U24_3LE			v4l2_fourcc('A', 'U', '3', '4')
+#define V4L2_AUDIO_FMT_U24_3BE			v4l2_fourcc('A', 'U', '3', '5')
+#define V4L2_AUDIO_FMT_S20_3LE			v4l2_fourcc('A', 'U', '3', '6')
+#define V4L2_AUDIO_FMT_S20_3BE			v4l2_fourcc('A', 'U', '3', '7')
+#define V4L2_AUDIO_FMT_U20_3LE			v4l2_fourcc('A', 'U', '3', '8')
+#define V4L2_AUDIO_FMT_U20_3BE			v4l2_fourcc('A', 'U', '3', '9')
+#define V4L2_AUDIO_FMT_S18_3LE			v4l2_fourcc('A', 'U', '4', '0')
+#define V4L2_AUDIO_FMT_S18_3BE			v4l2_fourcc('A', 'U', '4', '1')
+#define V4L2_AUDIO_FMT_U18_3LE			v4l2_fourcc('A', 'U', '4', '2')
+#define V4L2_AUDIO_FMT_U18_3BE			v4l2_fourcc('A', 'U', '4', '3')
+
+#define v4l2_fourcc_to_audfmt(X)	\
+	(((((X) >> 16) & 0xFF) - '0') * 10 + ((((X) >> 24) & 0xFF) - '0'))
+
 /* priv field value to indicates that subsequent fields are valid. */
 #define V4L2_PIX_FMT_PRIV_MAGIC		0xfeedcafe
 
