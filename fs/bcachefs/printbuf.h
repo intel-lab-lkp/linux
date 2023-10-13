@@ -56,7 +56,7 @@
  * next tabstop - right justifying it.
  *
  * Make sure you use prt_newline() instead of \n in the format string for indent
- * level and tabstops to work corretly.
+ * level and tabstops to work correctly.
  *
  * Output units: printbuf->units exists to tell pretty-printers how to output
  * numbers: a raw value (e.g. directly from a superblock field), as bytes, or as
