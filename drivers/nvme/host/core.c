@@ -4078,6 +4078,20 @@ static void nvme_get_fw_slot_info(struct nvme_ctrl *ctrl)
 	kfree(log);
 }
 
+static void nvme_update_firmware_rev(struct nvme_ctrl *ctrl)
+{
+	struct nvme_id_ctrl *id;
+	int ret;
+
+	ret = nvme_identify_ctrl(ctrl, &id);
+	if (ret) {
+		dev_warn(ctrl->device, "Identify Controller failed (%d)\n", ret);
+		return;
+	}
+	memcpy(ctrl->subsys->firmware_rev, id->fr,
+	       sizeof(ctrl->subsys->firmware_rev));
+}
+
 static void nvme_fw_act_work(struct work_struct *work)
 {
 	struct nvme_ctrl *ctrl = container_of(work,
@@ -4108,6 +4122,7 @@ static void nvme_fw_act_work(struct work_struct *work)
 	nvme_unquiesce_io_queues(ctrl);
 	/* read FW slot information to clear the AER */
 	nvme_get_fw_slot_info(ctrl);
+	nvme_update_firmware_rev(ctrl);
 
 	queue_work(nvme_wq, &ctrl->async_event_work);
 }
