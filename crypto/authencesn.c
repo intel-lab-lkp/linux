@@ -52,6 +52,8 @@ static int crypto_authenc_esn_setauthsize(struct crypto_aead *authenc_esn,
 	if (authsize > 0 && authsize < 4)
 		return -EINVAL;
 
+	authenc_esn->authsize = authsize;
+
 	return 0;
 }
 
