@@ -5180,7 +5180,7 @@ static const struct pci_device_id serial_pci_tbl[] = {
 	{	PCI_VENDOR_ID_INTASHIELD, 0x4015,
 		PCI_ANY_ID, PCI_ANY_ID,
 		0, 0,
-		pbn_oxsemi_4_15625000 },
+		pbn_oxsemi_2_15625000 },
 	/*
 	 * Brainboxes PX-260/PX-701
 	 */
@@ -5188,6 +5188,13 @@ static const struct pci_device_id serial_pci_tbl[] = {
 		PCI_ANY_ID, PCI_ANY_ID,
 		0, 0,
 		pbn_oxsemi_4_15625000 },
+	/*
+	 * Brainboxes PX-275/279
+	 */
+	{	PCI_VENDOR_ID_INTASHIELD, 0x0E41,
+		PCI_ANY_ID, PCI_ANY_ID,
+		0, 0,
+		pbn_b2_8_115200 },
 	/*
 	 * Brainboxes PX-310
 	 */
@@ -5235,18 +5242,39 @@ static const struct pci_device_id serial_pci_tbl[] = {
 		0, 0,
 		pbn_oxsemi_4_15625000 },
 	/*
-	 * Brainboxes PX-803
+	 * Brainboxes PX-475
 	 */
-	{	PCI_VENDOR_ID_INTASHIELD, 0x4009,
-		PCI_ANY_ID, PCI_ANY_ID,
-		0, 0,
-		pbn_b0_1_115200 },
-	{	PCI_VENDOR_ID_INTASHIELD, 0x401E,
+	{	PCI_VENDOR_ID_INTASHIELD, 0x401D,
 		PCI_ANY_ID, PCI_ANY_ID,
 		0, 0,
 		pbn_oxsemi_1_15625000 },
 	/*
-	 * Brainboxes PX-846
+	 * Brainboxes PX-803/PX-857
+	 */
+	{	PCI_VENDOR_ID_INTASHIELD, 0x4009,
+		PCI_ANY_ID, PCI_ANY_ID,
+		0, 0,
+		pbn_b0_2_115200 },
+	{	PCI_VENDOR_ID_INTASHIELD, 0x4018,
+		PCI_ANY_ID, PCI_ANY_ID,
+		0, 0,
+		pbn_oxsemi_2_15625000 },
+	{	PCI_VENDOR_ID_INTASHIELD, 0x401E,
+		PCI_ANY_ID, PCI_ANY_ID,
+		0, 0,
+		pbn_oxsemi_2_15625000 },
+	/*
+	 * Brainboxes PX-820
+	 */
+	{	PCI_VENDOR_ID_INTASHIELD, 0x4002,
+		PCI_ANY_ID, PCI_ANY_ID,
+		0, 0,
+		pbn_b0_4_115200 },
+	{	PCI_VENDOR_ID_INTASHIELD, 0x4013,
+		PCI_ANY_ID, PCI_ANY_ID, 0, 0,
+		pbn_oxsemi_4_15625000 },
+	/*
+	 * Brainboxes PX-835/PX-846
 	 */
 	{	PCI_VENDOR_ID_INTASHIELD, 0x4008,
 		PCI_ANY_ID, PCI_ANY_ID,
