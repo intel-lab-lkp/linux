@@ -13,7 +13,7 @@ struct k_sonet_stats {
 #undef __HANDLE_ITEM
 };
 
-extern void sonet_copy_stats(struct k_sonet_stats *from,struct sonet_stats *to);
+extern void sonet_copy_stats(struct k_sonet_stats *from, struct sonet_stats *to);
 extern void sonet_subtract_stats(struct k_sonet_stats *from,
     struct sonet_stats *to);
 
