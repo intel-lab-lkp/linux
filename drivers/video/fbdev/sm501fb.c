@@ -1928,6 +1928,82 @@ static int sm501fb_start_one(struct sm501fb_info *info,
 	return 0;
 }
 
+#if defined(CONFIG_OF)
+static struct sm501_platdata_fbsub *read_fbsub(struct device_node *np, const char *ch_name)
+{
+	struct device_node *child;
+	struct sm501_platdata_fbsub *fbsub = NULL;
+	struct fb_videomode *def_mode;
+	u32 bpp;
+	u32 max_mem;
+	u32 flags = 0;
+	static const char * const flag_str[] = {
+		"use_init_mode",
+		"disable_at_exit",
+		"use_hwcursor",
+		"use_hwaccel",
+		"panel_no_fpen",
+		"panel_no_vbiasen",
+		"panel_inv_fpen",
+		"panel_inv_vbiasen",
+	};
+	const char *flag_value;
+	const char *prop;
+	int nr_flags;
+	int i, j;
+	int len;
+
+	child = of_get_child_by_name(np, ch_name);
+	if (child == NULL)
+		return NULL;
+
+	prop = of_get_property(child, "edid", &len);
+	if (prop && len == EDID_LENGTH) {
+		struct fb_monspecs *specs;
+		u8 *edid;
+
+		edid = kmemdup(prop, EDID_LENGTH, GFP_KERNEL);
+		if (edid) {
+			specs = kzalloc(sizeof(*specs), GFP_KERNEL);
+			if (specs) {
+				fb_edid_to_monspecs(edid, specs);
+				def_mode = specs->modedb;
+			}
+			kfree(specs);
+		}
+		kfree(edid);
+	}
+
+	if (of_property_read_u32(child, "bpp", &bpp))
+		bpp = 0;
+	if (of_property_read_u32(child, "max-mem", &max_mem))
+		max_mem = 0;
+
+	nr_flags = of_property_count_strings(child, "flags");
+	for (i = 0; i < nr_flags; i++) {
+		if (of_property_read_string_index(child, "flags", i, &flag_value) < 0)
+			break;
+		for (j = 0; j < ARRAY_SIZE(flag_str); j++) {
+			if (strcasecmp(flag_value, flag_str[j]) == 0) {
+				flags |= 1 << j;
+				break;
+			}
+		}
+	}
+
+	if (def_mode || bpp || max_mem || flags) {
+		fbsub = kzalloc(sizeof(*fbsub), GFP_KERNEL);
+		if (fbsub) {
+			fbsub->def_mode = def_mode;
+			fbsub->def_bpp = bpp;
+			fbsub->max_mem = max_mem;
+			fbsub->flags = flags;
+		}
+	}
+	return fbsub;
+}
+#endif
+
 static int sm501fb_probe(struct platform_device *pdev)
 {
 	struct sm501fb_info *info;
@@ -1956,6 +2032,7 @@ static int sm501fb_probe(struct platform_device *pdev)
 		const u8 *prop;
 		const char *cp;
 		int len;
+		struct sm501_platdata_fbsub *sub;
 
 		info->pdata = &sm501fb_def_pdata;
 		if (np) {
@@ -1970,6 +2047,21 @@ static int sm501fb_probe(struct platform_device *pdev)
 				if (info->edid_data)
 					found = 1;
 			}
+			cp = of_get_property(np, "route", &len);
+			if (cp) {
+				if (strcasecmp(cp, "own") == 0)
+					info->pdata->fb_route = SM501_FB_OWN;
+				else if (strcasecmp(cp, "crt-panel") == 0)
+					info->pdata->fb_route = SM501_FB_CRT_PANEL;
+			}
+			if (of_property_read_bool(np, "swap-fb-endian"))
+				info->pdata->flags |= SM501_FBPD_SWAP_FB_ENDIAN;
+			sub = read_fbsub(np, "crt");
+			if (sub)
+				info->pdata->fb_crt = sub;
+			sub = read_fbsub(np, "panel");
+			if (sub)
+				info->pdata->fb_pnl = sub;
 		}
 #endif
 		if (!found) {

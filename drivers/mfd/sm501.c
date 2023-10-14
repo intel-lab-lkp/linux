@@ -1370,6 +1370,113 @@ static int sm501_init_dev(struct sm501_devdata *sm)
 	return 0;
 }
 
+#ifdef CONFIG_OF
+static unsigned int sm501_parse_devices_str(struct device_node *np)
+{
+	unsigned int device = 0;
+	unsigned int i, j;
+	unsigned int nstr;
+	const char *devstr;
+	static const struct {
+		char *devname;
+		unsigned int devid;
+	} devlist[] = {
+		{ "usb-host", SM501_USE_USB_HOST },
+		{ "usb-gadget", SM501_USE_USB_SLAVE },
+		{ "ssp0", SM501_USE_SSP0 },
+		{ "ssp1", SM501_USE_SSP1 },
+		{ "uart0", SM501_USE_UART0 },
+		{ "uart1", SM501_USE_UART1 },
+		{ "accel", SM501_USE_FBACCEL },
+		{ "ac97", SM501_USE_AC97 },
+		{ "i2s", SM501_USE_I2S },
+		{ "gpio", SM501_USE_GPIO },
+		{ "all", SM501_USE_ALL },
+	};
+
+	nstr = of_property_count_strings(np, "smi,devices");
+	for (i = 0; i < nstr; i++) {
+		if (of_property_read_string_index(np, "smi,devices", i, &devstr))
+			break;
+		for (j = 0; j < ARRAY_SIZE(devlist); j++) {
+			if (strcmp(devstr, devlist[j].devname) == 0) {
+				device |= devlist[j].devid;
+				goto next;
+			}
+		}
+next:
+	}
+	return device;
+}
+
+static void sm501_of_read_reg_init(struct device_node *np,
+				   const char *propname, struct sm501_reg_init *val)
+{
+	u32 u32_val[2];
+
+	if (!of_property_read_u32_array(np, propname, u32_val, sizeof(u32_val))) {
+		val->set = u32_val[0];
+		val->mask = u32_val[1];
+	} else {
+		val->set = 0;
+		val->mask = 0;
+	}
+}
+
+static int sm501_parse_dt(struct sm501_devdata *sm, struct device_node *np)
+{
+	struct sm501_platdata *plat;
+	u32 u32_val;
+
+	plat = devm_kzalloc(sm->dev, sizeof(*plat), GFP_KERNEL);
+	if (!plat)
+		return -ENOMEM;
+
+	plat->init = devm_kzalloc(sm->dev, sizeof(*plat->init), GFP_KERNEL);
+	if (!plat->init)
+		return -ENOMEM;
+
+	plat->init->devices = sm501_parse_devices_str(np);
+
+	if (!of_property_read_u32_index(np, "smi,mclk", 0, &u32_val))
+		plat->init->mclk = u32_val;
+	else
+		plat->init->mclk = 0;
+
+	if (!of_property_read_u32_index(np, "smi,m1xclk", 0, &u32_val))
+		plat->init->m1xclk = u32_val;
+	else
+		plat->init->m1xclk = 0;
+
+	sm501_of_read_reg_init(np, "smi,misc-timing", &plat->init->misc_timing);
+	sm501_of_read_reg_init(np, "smi,misc-control", &plat->init->misc_control);
+	sm501_of_read_reg_init(np, "smi,gpio-low", &plat->init->gpio_low);
+	sm501_of_read_reg_init(np, "smi,gpio-high", &plat->init->gpio_high);
+
+#ifdef CONFIG_MFD_SM501_GPIO
+	if (plat->init->devices & SM501_USE_GPIO) {
+		if (!of_property_read_u32_index(np, "smi,num-i2c", 0, &u32_val))
+			plat->gpio_i2c_nr = u32_val;
+		else
+			plat->gpio_i2c_nr = 0;
+	}
+	if (plat->gpio_i2c_nr > 0) {
+		int sz_gpio;
+
+		sz_gpio = sizeof(struct sm501_platdata_gpio_i2c) * plat->gpio_i2c_nr;
+		plat->gpio_i2c = devm_kzalloc(sm->dev, sz_gpio, GFP_KERNEL);
+		if (plat->gpio_i2c == NULL)
+			return -ENOMEM;
+
+		of_property_read_variable_u32(np, "smi,gpio-i2c",
+					      plat->gpio_i2c, plat->gpio_i2c_nr * 5);
+	}
+#endif	/* CONFIG_MFD_SM501_GPIO */
+	sm->platdata = plat;
+	return 0;
+}
+#endif	/* CONFIG_OF */
+
 static int sm501_plat_probe(struct platform_device *dev)
 {
 	struct sm501_devdata *sm;
@@ -1404,6 +1511,12 @@ static int sm501_plat_probe(struct platform_device *dev)
 		dev_err(&dev->dev, "cannot claim registers\n");
 		ret = -EBUSY;
 		goto err_res;
+	}
+
+	if (IS_ENABLED(CONFIG_OF) && dev->dev.of_node) {
+		ret = sm501_parse_dt(sm, dev->dev.of_node);
+		if (ret)
+			goto err_res;
 	}
 
 	platform_set_drvdata(dev, sm);
