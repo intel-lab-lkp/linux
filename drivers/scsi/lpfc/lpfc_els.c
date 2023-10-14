@@ -1650,7 +1650,7 @@ lpfc_more_plogi(struct lpfc_vport *vport)
 			 vport->fc_flag, vport->port_state);
 	/* Check to see if there are more PLOGIs to be sent */
 	if (vport->fc_flag & FC_NLP_MORE)
-		/* go thru NPR nodes and issue any remaining ELS PLOGIs */
+		/* go through NPR nodes and issue any remaining ELS PLOGIs */
 		lpfc_els_disc_plogi(vport);
 
 	return;
@@ -2495,7 +2495,7 @@ lpfc_issue_els_prli(struct lpfc_vport *vport, struct lpfc_nodelist *ndlp,
 	 * If we are in RSCN mode, the FC4 types supported from a
 	 * previous GFT_ID command may not be accurate. So, if we
 	 * are a NVME Initiator, always look for the possibility of
-	 * the remote NPort beng a NVME Target.
+	 * the remote NPort being a NVME Target.
 	 */
 	if (phba->sli_rev == LPFC_SLI_REV4 &&
 	    vport->fc_flag & FC_RSCN_MODE &&
@@ -2674,7 +2674,7 @@ lpfc_rscn_disc(struct lpfc_vport *vport)
 	lpfc_can_disctmo(vport);
 
 	/* RSCN discovery */
-	/* go thru NPR nodes and issue ELS PLOGIs */
+	/* go through NPR nodes and issue ELS PLOGIs */
 	if (vport->fc_npr_cnt)
 		if (lpfc_els_disc_plogi(vport))
 			return;
@@ -2734,7 +2734,7 @@ lpfc_adisc_done(struct lpfc_vport *vport)
 		lpfc_issue_clear_la(phba, vport);
 		if (!(vport->fc_flag & FC_ABORT_DISCOVERY)) {
 			vport->num_disc_nodes = 0;
-			/* go thru NPR list, issue ELS PLOGIs */
+			/* go through NPR list, issue ELS PLOGIs */
 			if (vport->fc_npr_cnt)
 				lpfc_els_disc_plogi(vport);
 			if (!vport->num_disc_nodes) {
@@ -2773,7 +2773,7 @@ lpfc_more_adisc(struct lpfc_vport *vport)
 	/* Check to see if there are more ADISCs to be sent */
 	if (vport->fc_flag & FC_NLP_MORE) {
 		lpfc_set_disctmo(vport);
-		/* go thru NPR nodes and issue any remaining ELS ADISCs */
+		/* go through NPR nodes and issue any remaining ELS ADISCs */
 		lpfc_els_disc_adisc(vport);
 	}
 	if (!vport->num_disc_nodes)
@@ -6542,7 +6542,7 @@ lpfc_els_disc_adisc(struct lpfc_vport *vport)
 	struct lpfc_nodelist *ndlp, *next_ndlp;
 	int sentadisc = 0;
 
-	/* go thru NPR nodes and issue any remaining ELS ADISCs */
+	/* go through NPR nodes and issue any remaining ELS ADISCs */
 	list_for_each_entry_safe(ndlp, next_ndlp, &vport->fc_nodes, nlp_listp) {
 
 		if (ndlp->nlp_state != NLP_STE_NPR_NODE ||
@@ -6614,7 +6614,7 @@ lpfc_els_disc_plogi(struct lpfc_vport *vport)
 	struct lpfc_nodelist *ndlp, *next_ndlp;
 	int sentplogi = 0;
 
-	/* go thru NPR nodes and issue any remaining ELS PLOGIs */
+	/* go through NPR nodes and issue any remaining ELS PLOGIs */
 	list_for_each_entry_safe(ndlp, next_ndlp, &vport->fc_nodes, nlp_listp) {
 		if (ndlp->nlp_state == NLP_STE_NPR_NODE &&
 				(ndlp->nlp_flag & NLP_NPR_2B_DISC) != 0 &&
@@ -9460,7 +9460,7 @@ out:
 }
 
 /**
- * lpfc_els_timeout - Handler funciton to the els timer
+ * lpfc_els_timeout - Handler function to the els timer
  * @t: timer context used to obtain the vport.
  *
  * This routine is invoked by the ELS timer after timeout. It posts the ELS

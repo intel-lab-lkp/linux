@@ -1162,7 +1162,7 @@ lpfc_test_rrq_active(struct lpfc_hba *phba, struct lpfc_nodelist *ndlp,
  * The active bit is always set in the active rrq xri_bitmap even
  * if there is no slot avaiable for the other rrq information.
  *
- * returns 0 rrq actived for this xri
+ * returns 0 rrq activated for this xri
  *         < 0 No memory or invalid ndlp.
  **/
 int
@@ -6150,7 +6150,7 @@ lpfc_sli4_arm_cqeq_intr(struct lpfc_hba *phba)
 					   LPFC_QUEUE_REARM);
 
 	if (sli4_hba->hdwq) {
-		/* Loop thru all Hardware Queues */
+		/* Loop through all Hardware Queues */
 		for (qidx = 0; qidx < phba->cfg_hdw_queue; qidx++) {
 			qp = &sli4_hba->hdwq[qidx];
 			/* ARM the corresponding CQ */
@@ -6158,7 +6158,7 @@ lpfc_sli4_arm_cqeq_intr(struct lpfc_hba *phba)
 						LPFC_QUEUE_REARM);
 		}
 
-		/* Loop thru all IRQ vectors */
+		/* Loop through all IRQ vectors */
 		for (qidx = 0; qidx < phba->cfg_irq_chann; qidx++) {
 			eq = sli4_hba->hba_eq_hdl[qidx].eq;
 			/* ARM the corresponding EQ */
@@ -15742,7 +15742,7 @@ __lpfc_sli4_switch_eqmode(struct lpfc_queue *eq, uint8_t mode)
 	 * try to process the eq _but_ that's fine.  We have a
 	 * synchronization mechanism in place (queue_claimed) to
 	 * deal with it.  This is just a draining phase for int-
-	 * errupt handler (not eq's) as we have guranteed through
+	 * errupt handler (not eq's) as we have guaranteed through
 	 * barrier that all the CPUs have seen the new CQ_POLLED
 	 * state. which will effectively disable the REARMING of
 	 * the EQ.  The whole idea is eq's die off eventually as

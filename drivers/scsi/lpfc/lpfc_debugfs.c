@@ -3152,7 +3152,7 @@ static int lpfc_idiag_cmd_get(const char __user *buf, size_t nbytes,
 	memset(mybuf, 0, sizeof(mybuf));
 	memset(idiag_cmd, 0, sizeof(*idiag_cmd));
 	bsize = min(nbytes, (sizeof(mybuf)-1));
-
+.
 	if (copy_from_user(mybuf, buf, bsize))
 		return -EFAULT;
 	pbuf = &mybuf[0];
@@ -6655,7 +6655,7 @@ lpfc_debugfs_terminate(struct lpfc_vport *vport)
  * lpfc_debug_dump_all_queues - dump all the queues with a hba
  * @phba: Pointer to HBA context object.
  *
- * This function dumps entries of all the queues asociated with the @phba.
+ * This function dumps entries of all the queues associated with the @phba.
  **/
 void
 lpfc_debug_dump_all_queues(struct lpfc_hba *phba)

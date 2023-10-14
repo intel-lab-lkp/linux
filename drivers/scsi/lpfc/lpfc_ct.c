@@ -2356,7 +2356,7 @@ lpfc_cmpl_ct_disc_fdmi(struct lpfc_hba *phba, struct lpfc_iocbq *cmdiocb,
 	}
 
 	/*
-	 * On success, need to cycle thru FDMI registration for discovery
+	 * On success, need to cycle through FDMI registration for discovery
 	 * DHBA -> DPRT -> RHBA -> RPA  (physical port)
 	 * DPRT -> RPRT (vports)
 	 */
@@ -2468,7 +2468,7 @@ lpfc_fdmi_change_check(struct lpfc_vport *vport)
 		lpfc_ns_cmd(vport, SLI_CTNS_RSNN_NN, 0, 0);
 
 		/* Since this effects multiple HBA and PORT attributes, we need
-		 * de-register and go thru the whole FDMI registration cycle.
+		 * de-register and go through the whole FDMI registration cycle.
 		 * DHBA -> DPRT -> RHBA -> RPA  (physical port)
 		 * DPRT -> RPRT (vports)
 		 */

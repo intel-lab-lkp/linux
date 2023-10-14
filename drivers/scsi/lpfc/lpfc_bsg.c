@@ -2057,7 +2057,7 @@ lpfc_sli4_bsg_diag_loopback_mode(struct lpfc_hba *phba, struct bsg_job *job)
 	phba->link_flag |= LS_LOOPBACK_MODE;
 	spin_unlock_irq(&phba->hbalock);
 
-	/* reset port to start frome scratch */
+	/* reset port to start from scratch */
 	rc = lpfc_selective_reset(phba);
 	if (rc)
 		goto job_done;
@@ -2328,7 +2328,7 @@ loopback_mode_end_exit:
  * @job: LPFC_BSG_VENDOR_DIAG_LINK_TEST
  *
  * This function is to perform SLI4 diag link test request from the user
- * applicaiton.
+ * application.
  */
 static int
 lpfc_sli4_bsg_link_diag_test(struct bsg_job *job)
@@ -4804,7 +4804,7 @@ lpfc_bsg_issue_mbox(struct lpfc_hba *phba, struct bsg_job *job,
 	} else if (phba->sli_rev == LPFC_SLI_REV4) {
 		/* Let type 4 (well known data) through because the data is
 		 * returned in varwords[4-8]
-		 * otherwise check the recieve length and fetch the buffer addr
+		 * otherwise check the receive length and fetch the buffer addr
 		 */
 		if ((pmb->mbxCommand == MBX_DUMP_MEMORY) &&
 			(pmb->un.varDmp.type != DMP_WELL_KNOWN)) {

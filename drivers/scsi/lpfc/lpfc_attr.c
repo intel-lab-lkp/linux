@@ -3985,7 +3985,7 @@ lpfc_tgt_queue_depth_set(struct lpfc_vport *vport, uint val)
 	spin_lock_irq(shost->host_lock);
 	vport->cfg_tgt_queue_depth = val;
 
-	/* Next loop thru nodelist and change cmd_qdepth */
+	/* Next loop through nodelist and change cmd_qdepth */
 	list_for_each_entry(ndlp, &vport->fc_nodes, nlp_listp)
 		ndlp->cmd_qdepth = vport->cfg_tgt_queue_depth;
 

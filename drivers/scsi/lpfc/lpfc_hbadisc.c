@@ -3896,7 +3896,7 @@ lpfc_mbx_cmpl_reg_login(struct lpfc_hba *phba, LPFC_MBOXQ_t *pmb)
 		 * mbox reg login, we may have cycled
 		 * back through the state and be
 		 * back at reg login state so this
-		 * mbox needs to be ignored becase
+		 * mbox needs to be ignored because
 		 * there is another reg login in
 		 * process.
 		 */
@@ -3906,7 +3906,7 @@ lpfc_mbx_cmpl_reg_login(struct lpfc_hba *phba, LPFC_MBOXQ_t *pmb)
 
 		/*
 		 * We cannot leave the RPI registered because
-		 * if we go thru discovery again for this ndlp
+		 * if we go through discovery again for this ndlp
 		 * a subsequent REG_RPI will fail.
 		 */
 		ndlp->nlp_flag |= NLP_RPI_REGISTERED;
@@ -4022,7 +4022,7 @@ lpfc_mbx_cmpl_reg_vpi(struct lpfc_hba *phba, LPFC_MBOXQ_t *pmb)
 	vport->fc_flag &= ~FC_VPORT_NEEDS_REG_VPI;
 	spin_unlock_irq(shost->host_lock);
 	vport->num_disc_nodes = 0;
-	/* go thru NPR list and issue ELS PLOGIs */
+	/* go through NPR list and issue ELS PLOGIs */
 	if (vport->fc_npr_cnt)
 		lpfc_els_disc_plogi(vport);
 
@@ -5988,7 +5988,7 @@ lpfc_disc_start(struct lpfc_vport *vport)
 
 		if (!(vport->fc_flag & FC_ABORT_DISCOVERY)) {
 			vport->num_disc_nodes = 0;
-			/* go thru NPR nodes and issue ELS PLOGIs */
+			/* go through NPR nodes and issue ELS PLOGIs */
 			if (vport->fc_npr_cnt)
 				lpfc_els_disc_plogi(vport);
 
