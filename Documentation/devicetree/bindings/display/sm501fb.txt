@@ -20,6 +20,23 @@ Optional properties:
   set different foreign endian.
 - big-endian: available on little endian systems, to
   set different foreign endian.
+- route: Framebuffer output route
+  "own": CRT=>CRT, Panel=>Panel
+  "crt-panel": Panel=>CRT, Panel=>Panel
+- swap-fb-endian: swap framebuffer byteorder
+- crt: CRT output control
+- panel: Panel output control
+- smi,devices: select peripheral functions.
+  available usb-host, usb-gadget, ssp0, ssp,1 uart0, uart1, accel,
+            ac97, i2s, gpio and all.
+- smi,mclk: SM501 mclk frequency.
+- smi,m1xclk: SM501 m1xclk frequency.
+- smi,misc-timing: SM501 Miscellaneous Timing reg value.
+- smi,misc-control: SM501 Miscellaneous Control reg value.
+- smi,gpio-low: SM501 GPIO31-0 Control reg value.
+- smi,gpio-high: SM501 GPIO63-32 Control reg value.
+- smi,num-i2c: I2C channel number.
+- smi,gpio-i2c: I2C assigned GPIO.
 
 Example for MPC5200:
 	display@1,0 {
