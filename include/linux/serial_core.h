@@ -558,7 +558,7 @@ struct uart_port {
 
 	bool			hw_stopped;		/* sw-assisted CTS flow state */
 	unsigned int		mctrl;			/* current modem ctrl settings */
-	unsigned int		frame_time;		/* frame timing in ns */
+	unsigned long		frame_time;		/* frame timing in ns */
 	unsigned int		type;			/* port type */
 	const struct uart_ops	*ops;
 	unsigned int		custom_divisor;
@@ -843,7 +843,7 @@ unsigned int uart_get_divisor(struct uart_port *port, unsigned int baud);
  */
 static inline unsigned long uart_fifo_timeout(struct uart_port *port)
 {
-	u64 fifo_timeout = (u64)READ_ONCE(port->frame_time) * port->fifosize;
+	u64 fifo_timeout = READ_ONCE(port->frame_time) * port->fifosize;
 
 	/* Add .02 seconds of slop */
 	fifo_timeout += 20 * NSEC_PER_MSEC;
