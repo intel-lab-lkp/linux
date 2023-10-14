@@ -2559,7 +2559,22 @@ EXPORT_SYMBOL(rproc_free);
  */
 void rproc_put(struct rproc *rproc)
 {
-	module_put(rproc->dev.parent->driver->owner);
+	struct platform_device *cluster_pdev;
+
+	if (rproc->dev.parent->driver) {
+		module_put(rproc->dev.parent->driver->owner);
+	} else {
+		/*
+		 * If the remoteproc's parent does not have a driver,
+		 * driver is associated with the cluster.
+		 */
+		cluster_pdev = of_find_device_by_node(rproc->dev.parent->of_node->parent);
+		if (cluster_pdev) {
+			module_put(cluster_pdev->dev.driver->owner);
+			put_device(&cluster_pdev->dev);
+		}
+	}
+
 	put_device(&rproc->dev);
 }
 EXPORT_SYMBOL(rproc_put);
