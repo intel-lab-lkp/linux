@@ -988,6 +988,20 @@ config TOUCHSCREEN_DMI
 	  the OS-image for the device. This option supplies the missing info.
 	  Enable this for x86 tablets with Silead or Chipone touchscreens.
 
+config INSPUR_WMI
+	tristate "Inspur WMI hotkeys driver"
+	depends on ACPI_WMI
+	depends on INPUT
+	help
+	This driver provides support for Inspur WMI hotkeys.
+	User used Fn+Q to change the power mode. If desktop applications
+	receive hotkeys(Fn+Q) event, then it get the currently power mode
+	and change the power mode. The desktop applications modify brightness
+	and cpufreq based on power mode.
+
+	To compile this driver as a module, choose M here: the module
+	will be called inspur-wmi.
+
 source "drivers/platform/x86/x86-android-tablets/Kconfig"
 
 config FW_ATTR_CLASS
