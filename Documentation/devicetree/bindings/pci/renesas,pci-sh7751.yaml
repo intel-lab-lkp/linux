@@ -1,0 +1,123 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/pci/renesas,pci-sh7751.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Renesas SH7751 PCI Host controller
+
+maintainers:
+  - Yoshinori Sato <ysato@users.sourceforge.jp>
+
+allOf:
+  - $ref: /schemas/pci/pci-bus.yaml#
+
+properties:
+  compatible:
+    items:
+      - enum:
+          - renesas,pci-sh7751
+
+  reg:
+    minItems: 3
+
+  "#interrupt-cells":
+    const: 1
+
+  "#address-cells":
+    const: 3
+
+  "#size-cells":
+    const: 2
+
+  ranges:
+    description: |
+      The PCI bus memory area and I/O area.
+
+  interrupt-controller: true
+
+  renesas,bcr1:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: |
+      SH7751 PCIC PCIBCR1 value. This value makes add the value of BSC's BCR1.
+
+  renesas,mcrmask:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: |
+      SH7751 PCIC PCIMCR value. This value makes clear bit in the value of BSC's MCR.
+
+  renesas,intm:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: |
+      SH7751 PCIC PCIINTM value.
+
+  renesas,aintm:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: |
+      SH7751 PCIC PCIIANTM value.
+
+  renesas,lsr:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: |
+      SH7751 PCIC PCILSR0 and PCILSR1 values.
+      First word is PCILSR0, Second word is PCILSR1.
+
+  renesas,lar:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: |
+      SH7751 PCIC PCILSA0 and PCILAR1 values.
+      First word is PCILAR0, Second word is PCILAR1.
+
+  renesas,dmabt:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: |
+      SH7751 PCIC PCIDMABT value.
+
+  renesas,pintm:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: |
+      SH7751 PCIC PCIPINTM value.
+
+  renesas,config:
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    description: |
+      SH7751 PCIC PCICONFIG values array. Register Number and value pair list.
+
+required:
+  - compatible
+  - reg
+  - "#interrupt-cells"
+  - "#address-cells"
+  - "#size-cells"
+  - ranges
+  - interrupt-map
+  - interrupt-map-mask
+
+unevaluatedProperties: false
+
+examples:
+  - |
+        pci@fe200000 {
+                compatible = "renesas,pci-sh7751";
+                #address-cells = <3>;
+                #size-cells = <2>;
+                ranges = <0x02000000 0 0xfd000000 0xfd000000 0 0x01000000>,
+                         <0x01000000 0 0x00000000 0xfe240000 0 0x00040000>;
+                reg = <0xfe200000 0x0400>,
+                      <0x0c000000 0x04000000>,
+                      <0xff800000 0x0030>;
+                #interrupt-cells = <1>;
+                interrupt-map = <0x0000 0 0 1 &julianintc 5>,
+                                <0x0000 0 0 2 &julianintc 6>,
+                                <0x0000 0 0 3 &julianintc 7>,
+                                <0x0000 0 0 4 &julianintc 8>,
+                                <0x0800 0 0 1 &julianintc 6>,
+                                <0x0800 0 0 2 &julianintc 7>,
+                                <0x0800 0 0 3 &julianintc 8>,
+                                <0x0800 0 0 4 &julianintc 5>,
+                                <0x1000 0 0 1 &julianintc 7>,
+                                <0x1000 0 0 2 &julianintc 8>,
+                                <0x1000 0 0 3 &julianintc 5>,
+                                <0x1000 0 0 4 &julianintc 6>;
+                interrupt-map-mask = <0x1800 0 0 7>;
+        };
