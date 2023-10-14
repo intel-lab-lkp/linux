@@ -31,6 +31,7 @@
 #include <linux/memblock.h>
 #include <linux/of.h>
 #include <linux/of_fdt.h>
+#include <linux/libfdt.h>
 #include <linux/uaccess.h>
 #include <uapi/linux/mount.h>
 #include <asm/io.h>
@@ -79,7 +80,13 @@ extern int root_mountflags;
 #define RAMDISK_PROMPT_FLAG		0x8000
 #define RAMDISK_LOAD_FLAG		0x4000
 
+#if defined(CONFIG_OF) || !defined(USE_BUILTIN_DTB)
+#define CHOSEN_BOOTARGS
+#endif
+
+#ifndef CHOSEN_BOOTARGS
 static char __initdata command_line[COMMAND_LINE_SIZE] = { 0, };
+#endif
 
 static struct resource code_resource = {
 	.name = "Kernel code",
@@ -103,6 +110,8 @@ EXPORT_SYMBOL(memory_end);
 unsigned long memory_limit = 0;
 
 static struct resource mem_resources[MAX_NUMNODES];
+
+static void *dt_virt;
 
 int l1i_cache_shape, l1d_cache_shape, l2_cache_shape;
 
@@ -249,7 +258,6 @@ void __init __weak plat_early_device_setup(void)
 void __ref sh_fdt_init(phys_addr_t dt_phys)
 {
 	static int done = 0;
-	void *dt_virt;
 
 	/* Avoid calling an __init function on secondary cpus. */
 	if (done) return;
@@ -274,8 +282,17 @@ void __ref sh_fdt_init(phys_addr_t dt_phys)
 
 void __init setup_arch(char **cmdline_p)
 {
+#ifdef CONFIG_OF
+#ifdef CONFIG_USE_BUILTIN_DTB
+	unflatten_and_copy_device_tree();
+#else
+	memblock_reserve(__pa(dt_virt), fdt_totalsize(dt_virt));
+	unflatten_device_tree();
+#endif
+#endif
 	enable_mmu();
 
+#ifndef CONFIG_OF
 	ROOT_DEV = old_decode_dev(ORIG_ROOT_DEV);
 
 	printk(KERN_NOTICE "Boot params:\n"
@@ -304,6 +321,9 @@ void __init setup_arch(char **cmdline_p)
 	bss_resource.start = virt_to_phys(__bss_start);
 	bss_resource.end = virt_to_phys(__bss_stop)-1;
 
+#endif
+
+#ifndef CHOSEN_BOOTARGS
 #ifdef CONFIG_CMDLINE_OVERWRITE
 	strscpy(command_line, CONFIG_CMDLINE, sizeof(command_line));
 #else
@@ -312,11 +332,13 @@ void __init setup_arch(char **cmdline_p)
 	strlcat(command_line, " ", sizeof(command_line));
 	strlcat(command_line, CONFIG_CMDLINE, sizeof(command_line));
 #endif
-#endif
-
+#endif  /* CONFIG_CMDLINE_OVERWRITE */
 	/* Save unparsed command line copy for /proc/cmdline */
 	memcpy(boot_command_line, command_line, COMMAND_LINE_SIZE);
 	*cmdline_p = command_line;
+#else
+	*cmdline_p = boot_command_line;
+#endif
 
 	parse_early_param();
 
@@ -326,14 +348,6 @@ void __init setup_arch(char **cmdline_p)
 
 	/* Let earlyprintk output early console messages */
 	sh_early_platform_driver_probe("earlyprintk", 1, 1);
-
-#ifdef CONFIG_OF_EARLY_FLATTREE
-#ifdef CONFIG_USE_BUILTIN_DTB
-	unflatten_and_copy_device_tree();
-#else
-	unflatten_device_tree();
-#endif
-#endif
 
 	paging_init();
 
