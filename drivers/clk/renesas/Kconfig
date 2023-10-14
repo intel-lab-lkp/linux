@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-2.0
 
 config CLK_RENESAS
-	bool "Renesas SoC clock support" if COMPILE_TEST && !ARCH_RENESAS
-	default y if ARCH_RENESAS
+	bool "Renesas SoC clock support" if COMPILE_TEST && !ARCH_RENESAS && SUPERH
+	default y if ARCH_RENESAS || SUPERH
 	select CLK_EMEV2 if ARCH_EMEV2
 	select CLK_RZA1 if ARCH_R7S72100
 	select CLK_R7S9210 if ARCH_R7S9210
@@ -39,6 +39,11 @@ config CLK_RENESAS
 	select CLK_R9A07G054 if ARCH_R9A07G054
 	select CLK_R9A09G011 if ARCH_R9A09G011
 	select CLK_SH73A0 if ARCH_SH73A0
+	select CLK_SH7750 if CPU_SUBTYPE_SH7750
+	select CLK_SH7750 if CPU_SUBTYPE_SH7750S
+	select CLK_SH7750 if CPU_SUBTYPE_SH7750R
+	select CLK_SH7750 if CPU_SUBTYPE_SH7751
+	select CLK_SH7750 if CPU_SUBTYPE_SH7751R
 
 if CLK_RENESAS
 
@@ -188,6 +193,10 @@ config CLK_SH73A0
 	select CLK_RENESAS_CPG_MSTP
 	select CLK_RENESAS_DIV6
 
+config CLK_SH7750
+	bool "SH7750/7751 family clock support" if COMPILE_TEST
+	help
+	  This is a driver for SH7750 / SH7751 CPG.
 
 # Family
 config CLK_RCAR_CPG_LIB
@@ -217,6 +226,14 @@ config CLK_RCAR_USB2_CLOCK_SEL
 config CLK_RZG2L
 	bool "Renesas RZ/{G2L,G2UL,V2L} family clock support" if COMPILE_TEST
 	select RESET_CONTROLLER
+
+config CLK_SH7750
+	bool "Renesas SH7750/7751 family clock support"
+	depends on CPU_SUBTYPE_SH7750 || CPU_SUBTYPE_SH7750S || \
+	           CPU_SUBTYPE_SH7750R || \
+	           CPU_SUBTYPE_SH7751 || CPU_SUBTYPE_SH7751R || COMPILE_TEST
+	help
+	  This is a driver for SH7750 / SH7751 CPG.
 
 # Generic
 config CLK_RENESAS_CPG_MSSR
