@@ -6,6 +6,7 @@
 #include <linux/rbtree.h>
 #include <stdbool.h>
 #include "pmu-events/pmu-events.h"
+#include "strbuf.h"
 
 struct evlist;
 struct evsel;
@@ -64,6 +65,14 @@ struct metric_expr {
 	struct metric_ref *metric_refs;
 	/** A value substituted for '?' during parsing. */
 	int runtime;
+};
+
+/**
+ * Each group is one node in the group string list.
+ */
+struct metricgroup__group_strs {
+	struct list_head nd;
+	struct strbuf grouping_str;
 };
 
 struct metric_event *metricgroup__lookup(struct rblist *metric_events,
