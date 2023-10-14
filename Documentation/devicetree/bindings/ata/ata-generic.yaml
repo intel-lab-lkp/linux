@@ -18,6 +18,8 @@ properties:
       - enum:
           - arm,vexpress-cf
           - fsl,mpc8349emitx-pata
+          - iodata,usl-5p-ata
+          - renesas,rts7751r2d-ata
       - const: ata-generic
 
   reg:
