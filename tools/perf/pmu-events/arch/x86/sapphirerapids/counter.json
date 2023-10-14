@@ -1,0 +1,17 @@
+[
+  {
+      "Unit": "Core",
+      "Size": "8",
+      "FixedSize": "4"
+  },
+  {
+      "Unit": "UBOX",
+      "Size": "2",
+      "FixedSize": "0"
+  },
+  {
+      "Unit": "IRP",
+      "Size": "2",
+      "FixedSize": "0"
+  }
+]
