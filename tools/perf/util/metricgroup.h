@@ -79,6 +79,21 @@ struct metric_expr {
 #define TRANSFER_FIRST_BYTE(pos) (7 - pos)
 #define TRANSFER_SEC_BYTE(pos) (23 - pos)
 
+/* Special events that are not described in pmu-event JSON files.
+ * topdown-* and TSC use dedicated registers, set as free
+ * counter for grouping purpose
+ */
+enum special_events {
+	TOPDOWN	= 0,
+	TSC	= 1,
+	SPECIAL_EVENT_MAX,
+};
+
+static const char *const special_event_names[SPECIAL_EVENT_MAX] = {
+	"topdown-",
+	"TSC",
+};
+
 /**
  * An event used in a metric. This info is for metric grouping.
  */
