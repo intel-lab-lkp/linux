@@ -1,0 +1,79 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Device Tree Source for the IO DATA DEVICE LANDISK
+ */
+
+/dts-v1/;
+
+#include <dt-bindings/clock/sh7750.h>
+#include "sh7751r.dtsi"
+
+/ {
+	model = "IO DATA Device LANDISK";
+	compatible = "iodata,landisk", "renesas,sh7751r";
+
+	aliases {
+		serial0 = &scif1;
+	};
+
+	chosen {
+		stdout-path = "serial0:9600n8";
+	};
+
+	memory@c000000 {
+		device_type = "memory";
+		reg = <0x0c000000 0x4000000>;
+	};
+
+	julianintc: sh7751irl_encoder@b0000005 {
+		compatible = "renesas,sh7751-irl-ext";
+		reg = <0xb0000005 0x01>;
+		interrupt-controller;
+		#interrupt-cells = <1>;
+		renesas,width = <8>;
+		renesas,regtype = "enable";
+		renesas,irqbit = <0xffffffff>,	/* Not use */
+				 <0xffffffff>,
+				 <0xffffffff>,
+				 <0xffffffff>,
+				 <0xffffffff>,
+				 <0>,		/* PCI INTA */
+				 <1>,		/* PCI INTB */
+				 <2>,		/* PCI INTC */
+				 <3>,		/* PCI INTD */
+				 <4>,		/* ATA */
+				 <5>,		/* CF */
+				 <6>,		/* Power Switch */
+				 <7>;		/* Button */
+	};
+
+	oscillator {
+		clock-frequency = <22222222>;
+	};
+
+	soc {
+		clock-controller@ffc00000 {
+			renesas,mode = <5>;
+		};
+
+		pci@fe200000 {
+			compatible = "renesas,pci-sh7751";
+			renesas,bcr1 = <0x00080000>;
+			renesas,config = <6 0xd0000000>;
+			renesas,mcrmask = <0x40000004>;
+			interrupt-map = <0x0000 0 0 1 &julianintc 5>,
+					<0x0000 0 0 2 &julianintc 6>,
+					<0x0000 0 0 3 &julianintc 7>,
+					<0x0000 0 0 4 &julianintc 8>,
+					<0x0800 0 0 1 &julianintc 6>,
+					<0x0800 0 0 2 &julianintc 7>,
+					<0x0800 0 0 3 &julianintc 8>,
+					<0x0800 0 0 4 &julianintc 5>,
+					<0x1000 0 0 1 &julianintc 7>,
+					<0x1000 0 0 2 &julianintc 8>,
+					<0x1000 0 0 3 &julianintc 5>,
+					<0x1000 0 0 4 &julianintc 6>;
+			interrupt-map-mask = <0x1800 0 0 7>;
+		};
+	};
+};
