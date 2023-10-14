@@ -122,8 +122,13 @@ typec_retimer_register(struct device *parent, const struct typec_retimer_desc *d
 	retimer->dev.class = &retimer_class;
 	retimer->dev.type = &typec_retimer_dev_type;
 	retimer->dev.driver_data = desc->drvdata;
-	dev_set_name(&retimer->dev, "%s-retimer",
+	ret = dev_set_name(&retimer->dev, "%s-retimer",
 		     desc->name ? desc->name : dev_name(parent));
+	if (ret) {
+		dev_err(parent, "failed to register retimer (%d)\n", ret);
+		put_device(&retimer->dev);
+		return ERR_PTR(ret);
+	}
 
 	ret = device_add(&retimer->dev);
 	if (ret) {
