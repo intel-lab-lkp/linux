@@ -254,12 +254,11 @@ static bool sfb_rate_limit(struct sk_buff *skb, struct sfb_sched_data *q)
 static bool sfb_classify(struct sk_buff *skb, struct tcf_proto *fl,
 			 int *qerr, u32 *salt)
 {
-	struct tcf_result res;
+	struct tcf_result res = {0};
 	int result;
 
 	result = tcf_classify(skb, NULL, fl, &res, false);
 	if (result >= 0) {
-#ifdef CONFIG_NET_CLS_ACT
 		switch (result) {
 		case TC_ACT_STOLEN:
 		case TC_ACT_QUEUED:
@@ -269,7 +268,6 @@ static bool sfb_classify(struct sk_buff *skb, struct tcf_proto *fl,
 		case TC_ACT_SHOT:
 			return false;
 		}
-#endif
 		*salt = TC_H_MIN(res.classid);
 		return true;
 	}

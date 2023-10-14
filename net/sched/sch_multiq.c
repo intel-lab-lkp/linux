@@ -30,14 +30,13 @@ static struct Qdisc *
 multiq_classify(struct sk_buff *skb, struct Qdisc *sch, int *qerr)
 {
 	struct multiq_sched_data *q = qdisc_priv(sch);
+	struct tcf_result res = {0};
 	u32 band;
-	struct tcf_result res;
 	struct tcf_proto *fl = rcu_dereference_bh(q->filter_list);
 	int err;
 
 	*qerr = NET_XMIT_SUCCESS | __NET_XMIT_BYPASS;
 	err = tcf_classify(skb, NULL, fl, &res, false);
-#ifdef CONFIG_NET_CLS_ACT
 	switch (err) {
 	case TC_ACT_STOLEN:
 	case TC_ACT_QUEUED:
@@ -47,7 +46,6 @@ multiq_classify(struct sk_buff *skb, struct Qdisc *sch, int *qerr)
 	case TC_ACT_SHOT:
 		return NULL;
 	}
-#endif
 	band = skb_get_queue_mapping(skb);
 
 	if (band >= q->bands)
@@ -64,7 +62,6 @@ multiq_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 	int ret;
 
 	qdisc = multiq_classify(skb, sch, &ret);
-#ifdef CONFIG_NET_CLS_ACT
 	if (qdisc == NULL) {
 
 		if (ret & __NET_XMIT_BYPASS)
@@ -72,7 +69,6 @@ multiq_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 		__qdisc_drop(skb, to_free);
 		return ret;
 	}
-#endif
 
 	ret = qdisc_enqueue(skb, qdisc, to_free);
 	if (ret == NET_XMIT_SUCCESS) {

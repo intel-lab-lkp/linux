@@ -31,8 +31,8 @@ static struct Qdisc *
 prio_classify(struct sk_buff *skb, struct Qdisc *sch, int *qerr)
 {
 	struct prio_sched_data *q = qdisc_priv(sch);
+	struct tcf_result res = {0};
 	u32 band = skb->priority;
-	struct tcf_result res;
 	struct tcf_proto *fl;
 	int err;
 
@@ -40,7 +40,6 @@ prio_classify(struct sk_buff *skb, struct Qdisc *sch, int *qerr)
 	if (TC_H_MAJ(skb->priority) != sch->handle) {
 		fl = rcu_dereference_bh(q->filter_list);
 		err = tcf_classify(skb, NULL, fl, &res, false);
-#ifdef CONFIG_NET_CLS_ACT
 		switch (err) {
 		case TC_ACT_STOLEN:
 		case TC_ACT_QUEUED:
@@ -50,7 +49,6 @@ prio_classify(struct sk_buff *skb, struct Qdisc *sch, int *qerr)
 		case TC_ACT_SHOT:
 			return NULL;
 		}
-#endif
 		if (!fl || err < 0) {
 			if (TC_H_MAJ(band))
 				band = 0;
@@ -73,7 +71,6 @@ prio_enqueue(struct sk_buff *skb, struct Qdisc *sch, struct sk_buff **to_free)
 	int ret;
 
 	qdisc = prio_classify(skb, sch, &ret);
-#ifdef CONFIG_NET_CLS_ACT
 	if (qdisc == NULL) {
 
 		if (ret & __NET_XMIT_BYPASS)
@@ -81,7 +78,6 @@ prio_enqueue(struct sk_buff *skb, struct Qdisc *sch, struct sk_buff **to_free)
 		__qdisc_drop(skb, to_free);
 		return ret;
 	}
-#endif
 
 	ret = qdisc_enqueue(skb, qdisc, to_free);
 	if (ret == NET_XMIT_SUCCESS) {
