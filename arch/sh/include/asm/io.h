@@ -311,10 +311,20 @@ unsigned long long poke_real_address_q(unsigned long long addr,
 #define xlate_dev_mem_ptr(p)	__va(p)
 #define unxlate_dev_mem_ptr(p, v) do { } while (0)
 
-#include <asm-generic/io.h>
-
 #define ARCH_HAS_VALID_PHYS_ADDR_RANGE
 int valid_phys_addr_range(phys_addr_t addr, size_t size);
 int valid_mmap_phys_addr_range(unsigned long pfn, size_t size);
+
+
+#ifdef __KERNEL__
+#define PCI_IOBASE	0xfe240000UL
+
+#define HAVE_ARCH_PIO_SIZE
+#define PIO_OFFSET	PCI_IOBASE
+#define PIO_MASK	0x3ffffUL
+#define PIO_RESERVED	0x40000UL
+#endif /* __KERNEL__ */
+
+#include <asm-generic/io.h>
 
 #endif /* __ASM_SH_IO_H */
