@@ -1,0 +1,102 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/interrupt-controller/renesas,sh7751-intc.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Renesas SH7751 Interrupt Controller
+
+maintainers:
+  - Yoshinori Sato <ysato@users.sourceforge.jp>
+
+properties:
+  compatible:
+    items:
+      - const: renesas,sh7751-intc
+
+  '#interrupt-cells':
+    # an interrupt index and flags, as defined in interrupts.txt in
+    # this directory
+    const: 2
+
+  interrupt-controller: true
+
+  reg:
+    maxItems: 2
+
+  reg-names:
+    items:
+      - const: ICR
+      - const: INTPRI00
+
+  renesas,icr-irlm:
+    type: boolean
+    description: Use ICR.IRLM=1
+
+  renesas,ipr-map:
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    description: |
+      IRQ to IPR mapping definition.
+
+required:
+  - compatible
+  - '#interrupt-cells'
+  - interrupt-controller
+  - reg
+  - reg-names
+  - renesas,ipr-map
+
+additionalProperties: false
+
+examples:
+  - |
+        shintc: interrupt-controller@ffd00000 {
+                compatible = "renesas,sh7751-intc";
+                #interrupt-cells = <2>;
+                interrupt-controller;
+                reg = <0xffd00000 14>, <0xfe080000 128>;
+                renesas,ipr-map = IPRDEF(0x240, IPRD, IPR_B12), /* IRL0 */
+                                  IPRDEF(0x2a0, IPRD, IPR_B8),  /* IRL1 */
+                                  IPRDEF(0x300, IPRD, IPR_B4),  /* IRL2 */
+                                  IPRDEF(0x360, IPRD, IPR_B0),  /* IRL3 */
+                                  IPRDEF(0x400, IPRA, IPR_B12), /* TMU0 */
+                                  IPRDEF(0x420, IPRA, IPR_B8),  /* TMU1 */
+                                  IPRDEF(0x440, IPRA, IPR_B4),  /* TMU2 TNUI */
+                                  IPRDEF(0x460, IPRA, IPR_B4),  /* TMU2 TICPI */
+                                  IPRDEF(0x480, IPRA, IPR_B0),  /* RTC ATI */
+                                  IPRDEF(0x4a0, IPRA, IPR_B0),  /* RTC PRI */
+                                  IPRDEF(0x4c0, IPRA, IPR_B0),  /* RTC CUI */
+                                  IPRDEF(0x4e0, IPRB, IPR_B4),  /* SCI ERI */
+                                  IPRDEF(0x500, IPRB, IPR_B4),  /* SCI RXI */
+                                  IPRDEF(0x520, IPRB, IPR_B4),  /* SCI TXI */
+                                  IPRDEF(0x540, IPRB, IPR_B4),  /* SCI TEI */
+                                  IPRDEF(0x560, IPRB, IPR_B12), /* WDT */
+                                  IPRDEF(0x580, IPRB, IPR_B8),  /* REF RCMI */
+                                  IPRDEF(0x5a0, IPRB, IPR_B4),  /* REF ROVI */
+                                  IPRDEF(0x600, IPRC, IPR_B0),  /* H-UDI */
+                                  IPRDEF(0x620, IPRC, IPR_B12), /* GPIO */
+                                  IPRDEF(0x640, IPRC, IPR_B8),  /* DMAC DMTE0 */
+                                  IPRDEF(0x660, IPRC, IPR_B8),  /* DMAC DMTE1 */
+                                  IPRDEF(0x680, IPRC, IPR_B8),  /* DMAC DMTE2 */
+                                  IPRDEF(0x6a0, IPRC, IPR_B8),  /* DMAC DMTE3 */
+                                  IPRDEF(0x6c0, IPRC, IPR_B8),  /* DMAC DMAE */
+                                  IPRDEF(0x700, IPRC, IPR_B4),  /* SCIF ERI */
+                                  IPRDEF(0x720, IPRC, IPR_B4),  /* SCIF RXI */
+                                  IPRDEF(0x740, IPRC, IPR_B4),  /* SCIF BRI */
+                                  IPRDEF(0x760, IPRC, IPR_B4),  /* SCIF TXI */
+                                  IPRDEF(0x780, IPRC, IPR_B8),  /* DMAC DMTE4 */
+                                  IPRDEF(0x7a0, IPRC, IPR_B8),  /* DMAC DMTE5 */
+                                  IPRDEF(0x7c0, IPRC, IPR_B8),  /* DMAC DMTE6 */
+                                  IPRDEF(0x7e0, IPRC, IPR_B8),  /* DMAC DMTE7 */
+                                  IPRDEF(0xa00, INTPRI00, IPR_B0),      /* PCIC PCISERR */
+                                  IPRDEF(0xa20, INTPRI00, IPR_B4),      /* PCIC CIDMA3 */
+                                  IPRDEF(0xa40, INTPRI00, IPR_B4),      /* PCIC CIDMA2 */
+                                  IPRDEF(0xa60, INTPRI00, IPR_B4),      /* PCIC PCIDMA1 */
+                                  IPRDEF(0xa80, INTPRI00, IPR_B4),      /* PCIC PCIDMA0 */
+                                  IPRDEF(0xaa0, INTPRI00, IPR_B4),      /* PCIC PCIPWON */
+                                  IPRDEF(0xac0, INTPRI00, IPR_B4),      /* PCIC PCIPWDWN */
+                                  IPRDEF(0xae0, INTPRI00, IPR_B4),      /* PCIC PCIERR */
+                                  IPRDEF(0xb00, INTPRI00, IPR_B8),      /* TMU3 */
+                                  IPRDEF(0xb80, INTPRI00, IPR_B12);     /* TMU4 */
+        };
+...
