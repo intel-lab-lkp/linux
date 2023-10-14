@@ -830,6 +830,7 @@ enum {
 	IFLA_VXLAN_DF,
 	IFLA_VXLAN_VNIFILTER, /* only applicable with COLLECT_METADATA mode */
 	IFLA_VXLAN_LOCALBYPASS,
+	IFLA_VXLAN_LABEL_POLICY,
 	__IFLA_VXLAN_MAX
 };
 #define IFLA_VXLAN_MAX	(__IFLA_VXLAN_MAX - 1)
@@ -845,6 +846,13 @@ enum ifla_vxlan_df {
 	VXLAN_DF_INHERIT,
 	__VXLAN_DF_END,
 	VXLAN_DF_MAX = __VXLAN_DF_END - 1,
+};
+
+enum ifla_vxlan_label_policy {
+	VXLAN_LABEL_INHERIT = 0,
+	VXLAN_LABEL_FIXED = 1,
+	__VXLAN_LABEL_END,
+	VXLAN_LABEL_MAX = __VXLAN_LABEL_END - 1,
 };
 
 /* GENEVE section */
