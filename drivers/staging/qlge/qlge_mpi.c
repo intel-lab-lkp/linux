@@ -909,6 +909,7 @@ int qlge_mb_wol_set_magic(struct qlge_adapter *qdev, u32 enable_wol)
 static int qlge_idc_wait(struct qlge_adapter *qdev)
 {
 	int status = -ETIMEDOUT;
+	bool s_sig = false;
 	struct mbox_params *mbcp = &qdev->idc_mbc;
 	long wait_time;
 
@@ -934,14 +935,17 @@ static int qlge_idc_wait(struct qlge_adapter *qdev)
 		} else if (mbcp->mbox_out[0] == AEN_IDC_CMPLT) {
 			netif_err(qdev, drv, qdev->ndev, "IDC Success.\n");
 			status = 0;
-			break;
+			s_sig = true;
 		} else {
 			netif_err(qdev, drv, qdev->ndev,
 				  "IDC: Invalid State 0x%.04x.\n",
 				  mbcp->mbox_out[0]);
 			status = -EIO;
-			break;
+			s_sig = true;
 		}
+
+		if (s_sig)
+			break;
 	}
 
 	return status;

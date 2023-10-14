@@ -11,6 +11,7 @@
 #include <linux/netdevice.h>
 #include <linux/rtnetlink.h>
 #include <linux/if_vlan.h>
+#include <linux/types.h>
 
 /*
  * General definitions...
