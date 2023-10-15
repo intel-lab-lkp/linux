@@ -77,6 +77,9 @@ bool page_pool_get_stats(struct page_pool *pool,
 	if (!stats)
 		return false;
 
+	if (!pool)
+		return false;
+
 	/* The caller is responsible to initialize stats. */
 	stats->alloc_stats.fast += pool->alloc_stats.fast;
 	stats->alloc_stats.slow += pool->alloc_stats.slow;
