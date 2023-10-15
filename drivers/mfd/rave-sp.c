@@ -9,7 +9,7 @@
  */
 
 #include <linux/atomic.h>
-#include <linux/crc-ccitt.h>
+#include <linux/crc-itu-t.h>
 #include <linux/delay.h>
 #include <linux/export.h>
 #include <linux/init.h>
@@ -251,11 +251,11 @@ static void csum_8b2c(const u8 *buf, size_t size, u8 *crc)
 
 static void csum_ccitt(const u8 *buf, size_t size, u8 *crc)
 {
-	const u16 calculated = crc_ccitt_false(0xffff, buf, size);
+	const u16 calculated = crc_itu_t(0xffff, buf, size);
 
 	/*
 	 * While the rest of the wire protocol is little-endian,
-	 * CCITT-16 CRC in RDU2 device is sent out in big-endian order.
+	 * ITU-T-16 CRC in RDU2 device is sent out in big-endian order.
 	 */
 	put_unaligned_be16(calculated, crc);
 }
