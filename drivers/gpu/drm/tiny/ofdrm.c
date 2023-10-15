@@ -1208,13 +1208,13 @@ static struct ofdrm_device *ofdrm_device_create(struct drm_driver *drv,
 
 	ret = devm_aperture_acquire_from_firmware(dev, fb_pgbase, fb_pgsize);
 	if (ret) {
-		drm_err(dev, "could not acquire memory range %pr: error %d\n", &res, ret);
+		drm_err(dev, "could not acquire memory range %pr: error %d\n", res, ret);
 		return ERR_PTR(ret);
 	}
 
 	mem = devm_request_mem_region(&pdev->dev, fb_pgbase, fb_pgsize, drv->name);
 	if (!mem) {
-		drm_warn(dev, "could not acquire memory region %pr\n", &res);
+		drm_warn(dev, "could not acquire memory region %pr\n", res);
 		return ERR_PTR(-ENOMEM);
 	}
 
