@@ -331,7 +331,7 @@ static void dm_check_rate_adaptive(struct net_device *dev)
 		if (pra->ping_rssi_enable) {
 			if (priv->undecorated_smoothed_pwdb < (long)(pra->ping_rssi_thresh_for_ra+5)) {
 				if ((priv->undecorated_smoothed_pwdb < (long)pra->ping_rssi_thresh_for_ra) ||
-					ping_rssi_state) {
+				    ping_rssi_state) {
 					pra->ratr_state = DM_RATR_STA_LOW;
 					targetRATR = pra->ping_rssi_ratr;
 					ping_rssi_state = 1;
@@ -612,7 +612,7 @@ static void dm_TXPowerTrackingCallback_ThermalMeter(struct net_device *dev)
 			if (tmpRegA == OFDMSwingTable[i]) {
 				priv->OFDM_index = (u8)i;
 				RT_TRACE(COMP_POWER_TRACKING, "Initial reg0x%x = 0x%x, OFDM_index=0x%x\n",
-					rOFDM0_XATxIQImbalance, tmpRegA, priv->OFDM_index);
+					 rOFDM0_XATxIQImbalance, tmpRegA, priv->OFDM_index);
 			}
 		}
 
@@ -622,7 +622,7 @@ static void dm_TXPowerTrackingCallback_ThermalMeter(struct net_device *dev)
 			if (TempCCk == (u32)CCKSwingTable_Ch1_Ch13[i][0]) {
 				priv->CCK_index = (u8) i;
 				RT_TRACE(COMP_POWER_TRACKING, "Initial reg0x%x = 0x%x, CCK_index=0x%x\n",
-					rCCK0_TxFilter1, TempCCk, priv->CCK_index);
+					 rCCK0_TxFilter1, TempCCk, priv->CCK_index);
 				break;
 			}
 		}
@@ -695,7 +695,7 @@ static void dm_TXPowerTrackingCallback_ThermalMeter(struct net_device *dev)
 		priv->OFDM_index = tmpOFDMindex;
 		rtl8192_setBBreg(dev, rOFDM0_XATxIQImbalance, bMaskDWord, OFDMSwingTable[priv->OFDM_index]);
 		RT_TRACE(COMP_POWER_TRACKING, "Update OFDMSwing[%d] = 0x%x\n",
-			priv->OFDM_index, OFDMSwingTable[priv->OFDM_index]);
+			 priv->OFDM_index, OFDMSwingTable[priv->OFDM_index]);
 	}
 	priv->txpower_count = 0;
 }
@@ -1352,7 +1352,7 @@ static void dm_CCKTxPowerAdjust_ThermalMeter(struct net_device *dev, bool  bInCH
 					(CCKSwingTable_Ch1_Ch13[priv->CCK_index][1]<<8);
 		rtl8192_setBBreg(dev, rCCK0_TxFilter1, bMaskHWord, TempVal);
 		RT_TRACE(COMP_POWER_TRACKING, "CCK not chnl 14, reg 0x%x = 0x%x\n",
-			rCCK0_TxFilter1, TempVal);
+			 rCCK0_TxFilter1, TempVal);
 		/* Write 0xa24 ~ 0xa27 */
 		TempVal =	CCKSwingTable_Ch1_Ch13[priv->CCK_index][2] +
 					(CCKSwingTable_Ch1_Ch13[priv->CCK_index][3]<<8) +
@@ -1360,14 +1360,14 @@ static void dm_CCKTxPowerAdjust_ThermalMeter(struct net_device *dev, bool  bInCH
 					(CCKSwingTable_Ch1_Ch13[priv->CCK_index][5]<<24);
 		rtl8192_setBBreg(dev, rCCK0_TxFilter2, bMaskDWord, TempVal);
 		RT_TRACE(COMP_POWER_TRACKING, "CCK not chnl 14, reg 0x%x = 0x%x\n",
-			rCCK0_TxFilter2, TempVal);
+			 rCCK0_TxFilter2, TempVal);
 		/* Write 0xa28  0xa29 */
 		TempVal =	CCKSwingTable_Ch1_Ch13[priv->CCK_index][6] +
 					(CCKSwingTable_Ch1_Ch13[priv->CCK_index][7]<<8);
 
 		rtl8192_setBBreg(dev, rCCK0_DebugPort, bMaskLWord, TempVal);
 		RT_TRACE(COMP_POWER_TRACKING, "CCK not chnl 14, reg 0x%x = 0x%x\n",
-			rCCK0_DebugPort, TempVal);
+			 rCCK0_DebugPort, TempVal);
 	} else {
 		/* Write 0xa22 0xa23 */
 		TempVal =	CCKSwingTable_Ch14[priv->CCK_index][0] +
@@ -1764,7 +1764,7 @@ static void dm_ctrl_initgain_byrssi_highpwr(
 
 	/*  For smooth, we can not change high power DIG state in the range. */
 	if ((priv->undecorated_smoothed_pwdb > dm_digtable.rssi_high_power_lowthresh) &&
-		(priv->undecorated_smoothed_pwdb < dm_digtable.rssi_high_power_highthresh))
+	    (priv->undecorated_smoothed_pwdb < dm_digtable.rssi_high_power_highthresh))
 		return;
 
 	/* 3. When RSSI >75% or <70%, it is a high power issue. We have to judge if
@@ -1790,7 +1790,7 @@ static void dm_ctrl_initgain_byrssi_highpwr(
 		dm_digtable.dig_highpwr_state = DM_STA_DIG_OFF;
 
 		if (priv->undecorated_smoothed_pwdb < dm_digtable.rssi_high_power_lowthresh &&
-			 priv->undecorated_smoothed_pwdb >= dm_digtable.rssi_high_thresh) {
+		    priv->undecorated_smoothed_pwdb >= dm_digtable.rssi_high_thresh) {
 			/*  3.2 Recover PD_TH for OFDM for normal power region. */
 			if (priv->CurrentChannelBW != HT_CHANNEL_WIDTH_20) {
 				write_nic_byte(dev, (rOFDM0_XATxAFE+3), 0x20);
@@ -1881,7 +1881,7 @@ static void dm_pd_th(
 			else if (dm_digtable.rssi_val <= dm_digtable.rssi_low_thresh)
 				dm_digtable.curpd_thstate = DIG_PD_AT_LOW_POWER;
 			else if ((dm_digtable.rssi_val >= dm_digtable.rssi_high_thresh) &&
-					(dm_digtable.rssi_val < dm_digtable.rssi_high_power_lowthresh))
+				 (dm_digtable.rssi_val < dm_digtable.rssi_high_power_lowthresh))
 				dm_digtable.curpd_thstate = DIG_PD_AT_NORMAL_POWER;
 			else
 				dm_digtable.curpd_thstate = dm_digtable.prepd_thstate;
@@ -2620,7 +2620,7 @@ void dm_check_fsync(struct net_device *dev)
 	RT_TRACE(COMP_HALDM, "RateBitmap 0x%x FirstDiffRateThreshold %d SecondDiffRateThreshold %d\n", priv->ieee80211->fsync_rate_bitmap, priv->ieee80211->fsync_firstdiff_ratethreshold, priv->ieee80211->fsync_seconddiff_ratethreshold);
 
 	if (priv->ieee80211->state == IEEE80211_LINKED &&
-		(priv->ieee80211->pHTInfo->IOTAction & HT_IOT_ACT_CDD_FSYNC)) {
+	    (priv->ieee80211->pHTInfo->IOTAction & HT_IOT_ACT_CDD_FSYNC)) {
 		if (priv->ieee80211->bfsync_enable == 0) {
 			switch (priv->ieee80211->fsync_state) {
 			case Default_Fsync:
@@ -2779,7 +2779,7 @@ static void dm_dynamic_txpower(struct net_device *dev)
 	}
 
 	if ((priv->bDynamicTxHighPower != priv->bLastDTPFlag_High) ||
-		(priv->bDynamicTxLowPower != priv->bLastDTPFlag_Low)) {
+	    (priv->bDynamicTxLowPower != priv->bLastDTPFlag_Low)) {
 		RT_TRACE(COMP_TXAGC, "SetTxPowerLevel8190()  channel = %d\n", priv->ieee80211->current_network.channel);
 
 #if  defined(RTL8190P) || defined(RTL8192E)
