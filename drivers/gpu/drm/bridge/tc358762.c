@@ -72,6 +72,7 @@ struct tc358762 {
 	struct device *dev;
 	struct drm_bridge bridge;
 	struct regulator *regulator;
+	struct mipi_dsi_host *dsi_host;
 	struct drm_bridge *panel_bridge;
 	struct gpio_desc *reset_gpio;
 	struct drm_display_mode mode;
@@ -163,6 +164,8 @@ static void tc358762_post_disable(struct drm_bridge *bridge, struct drm_bridge_s
 
 	ctx->pre_enabled = false;
 
+	mipi_dsi_host_power_down(ctx->dsi_host);
+
 	if (ctx->reset_gpio)
 		gpiod_set_value_cansleep(ctx->reset_gpio, 0);
 
@@ -184,6 +187,10 @@ static void tc358762_pre_enable(struct drm_bridge *bridge, struct drm_bridge_sta
 		gpiod_set_value_cansleep(ctx->reset_gpio, 1);
 		usleep_range(5000, 10000);
 	}
+
+	ret = mipi_dsi_host_power_up(ctx->dsi_host);
+	if (ret < 0)
+		dev_err(ctx->dev, "error powering up the DSI host (%d)\n", ret);
 
 	ret = tc358762_init(ctx);
 	if (ret < 0)
@@ -277,10 +284,16 @@ static int tc358762_probe(struct mipi_dsi_device *dsi)
 	if (ret < 0)
 		return ret;
 
+	ctx->dsi_host = dsi->host;
+
 	ctx->bridge.funcs = &tc358762_bridge_funcs;
 	ctx->bridge.type = DRM_MODE_CONNECTOR_DPI;
 	ctx->bridge.of_node = dev->of_node;
-	ctx->bridge.pre_enable_prev_first = true;
+
+	if (mipi_dsi_host_power_control_available(dsi->host))
+		dsi->mode_flags |= MIPI_DSI_MANUAL_POWERUP;
+	else
+		ctx->bridge.pre_enable_prev_first = true;
 
 	drm_bridge_add(&ctx->bridge);
 
