@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Persistent-Across-Kexec memory feature (prmem) - Allocator.
+ * Persistent-Across-Kexec memory (prmem) - Allocator.
  *
  * Copyright (C) 2023 Microsoft Corporation
  * Author: Madhavan T. Venkataraman (madvenka@linux.microsoft.com)
@@ -72,3 +72,113 @@ void prmem_free_pages(struct page *pages, unsigned int order)
 	spin_unlock(&prmem_lock);
 }
 EXPORT_SYMBOL_GPL(prmem_free_pages);
+
+/* Buffer allocation functions. */
+
+#if PAGE_SIZE > 65536
+#error "Page size is too big"
+#endif
+
+static size_t	prmem_cache_sizes[PRMEM_MAX_CACHES] = {
+	8, 16, 32, 64, 128, 256, 512,
+	1024, 2048, 4096, 8192, 16384, 32768, 65536,
+};
+
+static int prmem_cache_index(size_t size)
+{
+	int	i;
+
+	for (i = 0; i < PRMEM_MAX_CACHES; i++) {
+		if (size <= prmem_cache_sizes[i])
+			return i;
+	}
+	BUG();
+}
+
+static void prmem_refill(void **cache, size_t size)
+{
+	void		*va;
+	int		i, n = PAGE_SIZE / size;
+
+	/* Allocate a page. */
+	va = prmem_alloc_pages_locked(0);
+	if (!va)
+		return;
+
+	/* Break up the page into pieces and put them in the cache. */
+	for (i = 0; i < n; i++, va += size) {
+		*((void **) va) = *cache;
+		*cache = va;
+	}
+}
+
+void *prmem_alloc_locked(size_t size)
+{
+	void		*va;
+	int		index;
+	void		**cache;
+
+	index = prmem_cache_index(size);
+	size = prmem_cache_sizes[index];
+
+	cache = &prmem->caches[index];
+	if (!*cache) {
+		/* Refill the cache. */
+		prmem_refill(cache, size);
+	}
+
+	/* Allocate one from the cache. */
+	va = *cache;
+	if (va)
+		*cache = *((void **) va);
+	return va;
+}
+
+void *prmem_alloc(size_t size, gfp_t gfp)
+{
+	void		*va;
+	bool		zero = !!(gfp & __GFP_ZERO);
+
+	if (!prmem_inited || !size)
+		return NULL;
+
+	/* This function is only for sizes up to a PAGE_SIZE. */
+	if (size > PAGE_SIZE)
+		return NULL;
+
+	spin_lock(&prmem_lock);
+	va = prmem_alloc_locked(size);
+	spin_unlock(&prmem_lock);
+
+	if (va && zero)
+		memset(va, 0, size);
+	return va;
+}
+EXPORT_SYMBOL_GPL(prmem_alloc);
+
+void prmem_free_locked(void *va, size_t size)
+{
+	int		index;
+	void		**cache;
+
+	/* Free the object into its cache. */
+	index = prmem_cache_index(size);
+	cache = &prmem->caches[index];
+	*((void **) va) = *cache;
+	*cache = va;
+}
+
+void prmem_free(void *va, size_t size)
+{
+	if (!prmem_inited || !va || !size)
+		return;
+
+	/* This function is only for sizes up to a PAGE_SIZE. */
+	if (size > PAGE_SIZE)
+		return;
+
+	spin_lock(&prmem_lock);
+	prmem_free_locked(va, size);
+	spin_unlock(&prmem_lock);
+}
+EXPORT_SYMBOL_GPL(prmem_free);

@@ -50,6 +50,8 @@ struct prmem_region {
 	struct gen_pool_chunk	*chunk;
 };
 
+#define PRMEM_MAX_CACHES	14
+
 /*
  * PRMEM metadata.
  *
@@ -60,6 +62,9 @@ struct prmem_region {
  * size		Size of initial memory allocated to prmem.
  *
  * regions	List of memory regions.
+ *
+ * caches	Caches for different object sizes. For allocations smaller than
+ *		PAGE_SIZE, these caches are used.
  */
 struct prmem {
 	unsigned long		checksum;
@@ -68,6 +73,9 @@ struct prmem {
 
 	/* Persistent Regions. */
 	struct list_head	regions;
+
+	/* Allocation caches. */
+	void			*caches[PRMEM_MAX_CACHES];
 };
 
 extern struct prmem		*prmem;
@@ -87,6 +95,8 @@ int  prmem_cmdline_size(void);
 /* Allocator API. */
 struct page *prmem_alloc_pages(unsigned int order, gfp_t gfp);
 void prmem_free_pages(struct page *pages, unsigned int order);
+void *prmem_alloc(size_t size, gfp_t gfp);
+void prmem_free(void *va, size_t size);
 
 /* Internal functions. */
 struct prmem_region *prmem_add_region(unsigned long pa, size_t size);
@@ -95,6 +105,8 @@ void *prmem_alloc_pool(struct prmem_region *region, size_t size, int align);
 void prmem_free_pool(struct prmem_region *region, void *va, size_t size);
 void *prmem_alloc_pages_locked(unsigned int order);
 void prmem_free_pages_locked(void *va, unsigned int order);
+void *prmem_alloc_locked(size_t size);
+void prmem_free_locked(void *va, size_t size);
 unsigned long prmem_checksum(void *start, size_t size);
 bool __init prmem_validate(void);
 void prmem_cmdline(char *cmdline);
