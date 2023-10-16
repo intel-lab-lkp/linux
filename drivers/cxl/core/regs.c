@@ -244,7 +244,6 @@ int cxl_map_device_regs(const struct cxl_register_map *map,
 		void __iomem **addr;
 	} mapinfo[] = {
 		{ &map->device_map.status, &regs->status, },
-		{ &map->device_map.mbox, &regs->mbox, },
 		{ &map->device_map.memdev, &regs->memdev, },
 	};
 	int i;
@@ -267,6 +266,38 @@ int cxl_map_device_regs(const struct cxl_register_map *map,
 	return 0;
 }
 EXPORT_SYMBOL_NS_GPL(cxl_map_device_regs, CXL);
+
+int cxl_map_mbox_regs(const struct cxl_register_map *map,
+		      void __iomem **mbox_regs)
+{
+	struct device *dev = map->dev;
+	resource_size_t phys_addr = map->resource;
+	struct mapinfo {
+		const struct cxl_reg_map *rmap;
+		void __iomem **addr;
+	} mapinfo[] = {
+		{ &map->device_map.mbox, mbox_regs, },
+	};
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(mapinfo); i++) {
+		struct mapinfo *mi = &mapinfo[i];
+		resource_size_t length;
+		resource_size_t addr;
+
+		if (!mi->rmap || !mi->rmap->valid)
+			continue;
+
+		addr = phys_addr + mi->rmap->offset;
+		length = mi->rmap->size;
+		*(mi->addr) = devm_cxl_iomap_block(dev, addr, length);
+		if (!*(mi->addr))
+			return -ENOMEM;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_map_mbox_regs, CXL);
 
 static bool cxl_decode_regblock(struct pci_dev *pdev, u32 reg_lo, u32 reg_hi,
 				struct cxl_register_map *map)

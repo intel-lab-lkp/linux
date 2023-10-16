@@ -110,7 +110,7 @@ static int cxl_pmem_get_config_size(struct cxl_memdev_state *mds,
 	*cmd = (struct nd_cmd_get_config_size){
 		.config_size = mds->lsa_size,
 		.max_xfer =
-			mds->payload_size - sizeof(struct cxl_mbox_set_lsa),
+			mds->mbox.payload_size - sizeof(struct cxl_mbox_set_lsa),
 	};
 
 	return 0;
@@ -141,7 +141,7 @@ static int cxl_pmem_get_config_data(struct cxl_memdev_state *mds,
 		.payload_out = cmd->out_buf,
 	};
 
-	rc = cxl_internal_send_cmd(mds, &mbox_cmd);
+	rc = cxl_internal_send_cmd(&mds->mbox, &mbox_cmd);
 	cmd->status = 0;
 
 	return rc;
@@ -177,7 +177,7 @@ static int cxl_pmem_set_config_data(struct cxl_memdev_state *mds,
 		.size_in = struct_size(set_lsa, data, cmd->in_length),
 	};
 
-	rc = cxl_internal_send_cmd(mds, &mbox_cmd);
+	rc = cxl_internal_send_cmd(&mds->mbox, &mbox_cmd);
 
 	/*
 	 * Set "firmware" status (4-packed bytes at the end of the input

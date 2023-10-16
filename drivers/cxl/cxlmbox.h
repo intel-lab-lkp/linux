@@ -3,9 +3,59 @@
 #ifndef __CXLMBOX_H__
 #define __CXLMBOX_H__
 
-struct cxl_dev_state;
-int cxl_pci_mbox_wait_for_doorbell(struct cxl_dev_state *cxlds);
-bool cxl_mbox_background_complete(struct cxl_dev_state *cxlds);
+#include <linux/irqreturn.h>
+#include <linux/export.h>
+#include <linux/io.h>
+
+#include <uapi/linux/cxl_mem.h>
+
+struct device;
+
+/**
+ * struct cxl_mbox - State of a CXL mailbox
+ *
+ * @dev: A parent device used for debug prints only
+ * @payload_size: Maximum payload in bytes.
+ * @mbox_mutex: Protect the mailbox registers from concurrent access.
+ * @enabled_cmds: Bitmap of which commands are available for use.
+ * @exclusive_cmds: Bitmap of which commands are only to be used in the  kernel.
+ * @mbox_wait: rcuwait structure on which the command issuing call can wait.
+ * @special_irq: Callback to let a specific mailbox instance add a condition to
+ *               whether to call the rcuwait_wake_up() on @mbox_wait to indicate
+ *               we are done.
+ * @get_status: Used to get a memory device status value to use in debug messages.
+ * @can_run: Devices incorporating CXL mailboxes may have additional constraints
+ *           on what commands may run at a given time. This lets that information
+ *           be conveyed to the generic mailbox code.
+ * @extra_cmds: When a mailbox is first enumerated the command effects log is
+ *              parsed. Some commands detected are specific to particular
+ *              CXL components and so are controlled and tracked at that level
+ *              rather than in the generic code. This provides the component
+ *              specific code with information on which op codes are supported.
+ *		Returns if a command was part of such an 'extra' set.
+ * @status: Status register used to discover if the mailbox is ready after power
+ *          up and similar.
+ * @mbox: Mailbox registers.
+ */
+struct cxl_mbox {
+	struct device *dev; /* Used for debug prints */
+	size_t payload_size;
+	struct mutex mbox_mutex; /* Protects device mailbox and firmware */
+	DECLARE_BITMAP(enabled_cmds, CXL_MEM_COMMAND_ID_MAX);
+	DECLARE_BITMAP(exclusive_cmds, CXL_MEM_COMMAND_ID_MAX);
+	struct rcuwait mbox_wait;
+	bool (*special_irq)(struct cxl_mbox *mbox, u16 opcode);
+	bool (*special_bg)(struct cxl_mbox *mbox, u16 opcode);
+	u64 (*get_status)(struct cxl_mbox *mbox);
+	bool (*can_run)(struct cxl_mbox *mbox, u16 opcode);
+	bool (*extra_cmds)(struct cxl_mbox *mbox, u16 opcode);
+	/* Also needs access to registers */
+	void __iomem *status, *mbox;
+};
+
+irqreturn_t cxl_mbox_irq(int irq, struct cxl_mbox *mbox);
+int cxl_pci_mbox_wait_for_doorbell(struct cxl_mbox *mbox);
+bool cxl_mbox_background_complete(struct cxl_mbox *mbox);
 
 /**
  * struct cxl_mbox_cmd - A command to be submitted to hardware.
@@ -143,4 +193,8 @@ enum cxl_opcode {
 	CXL_MBOX_OP_MAX			= 0x10000
 };
 
+int cxl_internal_send_cmd(struct cxl_mbox *mbox, struct cxl_mbox_cmd *cmd);
+int cxl_enumerate_cmds(struct cxl_mbox *mbox);
+
 #endif /* __CXLMBOX_H__ */
+

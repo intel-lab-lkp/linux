@@ -215,7 +215,7 @@ struct cxl_regs {
 	 * @memdev: CXL 2.0 8.2.8.5 Memory Device Registers
 	 */
 	struct_group_tagged(cxl_device_regs, device_regs,
-		void __iomem *status, *mbox, *memdev;
+		void __iomem *status, *memdev;
 	);
 
 	struct_group_tagged(cxl_pmu_regs, pmu_regs,
@@ -278,6 +278,8 @@ int cxl_map_component_regs(const struct cxl_register_map *map,
 			   unsigned long map_mask);
 int cxl_map_device_regs(const struct cxl_register_map *map,
 			struct cxl_device_regs *regs);
+int cxl_map_mbox_regs(const struct cxl_register_map *map,
+		      void __iomem **mbox_reg);
 int cxl_map_pmu_regs(struct pci_dev *pdev, struct cxl_pmu_regs *regs,
 		     struct cxl_register_map *map);
 
