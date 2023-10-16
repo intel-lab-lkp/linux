@@ -101,6 +101,14 @@ struct virtnet_sq {
 		struct xsk_buff_pool __rcu *pool;
 
 		dma_addr_t hdr_dma_address;
+
+		u32 last_cpu;
+		struct __call_single_data csd;
+
+		/* The lock to prevent the repeat of calling
+		 * smp_call_function_single_async().
+		 */
+		spinlock_t ipi_lock;
 	} xsk;
 };
 
