@@ -233,20 +233,21 @@ void nvme_auth_free_key(struct nvme_dhchap_key *key)
 }
 EXPORT_SYMBOL_GPL(nvme_auth_free_key);
 
-u8 *nvme_auth_transform_key(struct nvme_dhchap_key *key, char *nqn)
+struct nvme_dhchap_key *nvme_auth_transform_key(struct nvme_dhchap_key *key, char *nqn)
 {
 	const char *hmac_name;
 	struct crypto_shash *key_tfm;
 	struct shash_desc *shash;
-	u8 *transformed_key;
-	int ret;
+	struct nvme_dhchap_key *transformed_key;
+	int ret, key_len;
 
 	if (!key || !key->key) {
 		pr_warn("No key specified\n");
 		return ERR_PTR(-ENOKEY);
 	}
 	if (key->hash == 0) {
-		transformed_key = kmemdup(key->key, key->len, GFP_KERNEL);
+		key_len = sizeof(*key) + key->len;
+		transformed_key = kmemdup(key, key_len, GFP_KERNEL);
 		return transformed_key ? transformed_key : ERR_PTR(-ENOMEM);
 	}
 	hmac_name = nvme_auth_hmac_name(key->hash);
@@ -257,7 +258,7 @@ u8 *nvme_auth_transform_key(struct nvme_dhchap_key *key, char *nqn)
 
 	key_tfm = crypto_alloc_shash(hmac_name, 0, 0);
 	if (IS_ERR(key_tfm))
-		return (u8 *)key_tfm;
+		return (void *)key_tfm;
 
 	shash = kmalloc(sizeof(struct shash_desc) +
 			crypto_shash_descsize(key_tfm),
@@ -267,7 +268,8 @@ u8 *nvme_auth_transform_key(struct nvme_dhchap_key *key, char *nqn)
 		goto out_free_key;
 	}
 
-	transformed_key = kzalloc(crypto_shash_digestsize(key_tfm), GFP_KERNEL);
+	key_len = crypto_shash_digestsize(key_tfm);
+	transformed_key = nvme_auth_alloc_key(key_len, key->hash);
 	if (!transformed_key) {
 		ret = -ENOMEM;
 		goto out_free_shash;
@@ -286,7 +288,7 @@ u8 *nvme_auth_transform_key(struct nvme_dhchap_key *key, char *nqn)
 	ret = crypto_shash_update(shash, "NVMe-over-Fabrics", 17);
 	if (ret < 0)
 		goto out_free_transformed_key;
-	ret = crypto_shash_final(shash, transformed_key);
+	ret = crypto_shash_final(shash, transformed_key->key);
 	if (ret < 0)
 		goto out_free_transformed_key;
 
@@ -296,7 +298,7 @@ u8 *nvme_auth_transform_key(struct nvme_dhchap_key *key, char *nqn)
 	return transformed_key;
 
 out_free_transformed_key:
-	kfree_sensitive(transformed_key);
+	nvme_auth_free_key(transformed_key);
 out_free_shash:
 	kfree(shash);
 out_free_key:
