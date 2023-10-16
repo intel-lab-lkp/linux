@@ -18,8 +18,17 @@
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/pci.h>
+#include <linux/pm_runtime.h>
 #include "../pci.h"
 #include "pciehp.h"
+
+int pci_dev_disconnect(struct pci_dev *pdev, void *unused)
+{
+	pm_runtime_barrier(&pdev->dev);
+	pci_dev_set_disconnected(pdev, NULL);
+
+	return 0;
+}
 
 /**
  * pciehp_configure_device() - enumerate PCI devices below a hotplug bridge
@@ -98,7 +107,7 @@ void pciehp_unconfigure_device(struct controller *ctrl, bool presence)
 		 __func__, pci_domain_nr(parent), parent->number);
 
 	if (!presence)
-		pci_walk_bus(parent, pci_dev_set_disconnected, NULL);
+		pci_walk_bus(parent, pci_dev_disconnect, NULL);
 
 	pci_lock_rescan_remove();
 
