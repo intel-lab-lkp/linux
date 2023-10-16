@@ -403,11 +403,24 @@ class GenlProtocol(NetlinkProtocol):
 #
 
 
+class FakeSpecAttr:
+    def __init__(self, name):
+        self.dict = {"name": name, "type": None}
+        self.is_multi = False
+
+    def __getitem__(self, key):
+        return self.dict[key]
+
+    def __contains__(self, key):
+        return key in self.dict
+
+
 class YnlFamily(SpecFamily):
-    def __init__(self, def_path, schema=None):
+    def __init__(self, def_path, schema=None, process_unknown=False):
         super().__init__(def_path, schema)
 
         self.include_raw = False
+        self.process_unknown = process_unknown
 
         try:
             if self.proto == "netlink-raw":
@@ -513,13 +526,16 @@ class YnlFamily(SpecFamily):
         return decoded
 
     def _decode(self, attrs, space):
-        attr_space = self.attr_sets[space]
+        if space:
+            attr_space = self.attr_sets[space]
         rsp = dict()
         for attr in attrs:
             try:
                 attr_spec = attr_space.attrs_by_val[attr.type]
-            except KeyError:
-                raise Exception(f"Space '{space}' has no attribute with value '{attr.type}'")
+            except (KeyError, UnboundLocalError):
+                if not self.process_unknown:
+                    raise Exception(f"Space '{space}' has no attribute with value '{attr.type}'")
+                attr_spec = FakeSpecAttr(str(attr.type))
             if attr_spec["type"] == 'nest':
                 subdict = self._decode(NlAttrs(attr.raw), attr_spec['nested-attributes'])
                 decoded = subdict
@@ -534,7 +550,13 @@ class YnlFamily(SpecFamily):
             elif attr_spec["type"] == 'array-nest':
                 decoded = self._decode_array_nest(attr, attr_spec)
             else:
-                raise Exception(f'Unknown {attr_spec["type"]} with name {attr_spec["name"]}')
+                if not self.process_unknown:
+                    raise Exception(f'Unknown {attr_spec["type"]} with name {attr_spec["name"]}')
+                if attr._type & Netlink.NLA_F_NESTED:
+                    subdict = self._decode(NlAttrs(attr.raw), None)
+                    decoded = subdict
+                else:
+                    decoded = attr.as_bin()
 
             if 'enum' in attr_spec:
                 decoded = self._decode_enum(decoded, attr_spec)
