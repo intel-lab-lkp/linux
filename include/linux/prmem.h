@@ -50,6 +50,28 @@ struct prmem_region {
 	struct gen_pool_chunk	*chunk;
 };
 
+#define PRMEM_MAX_NAME		32
+
+/*
+ * To persist any data, a persistent instance is created for it and the data is
+ * "remembered" in the instance.
+ *
+ * node		List node
+ * subsystem	Subsystem/driver/module that created the instance. E.g.,
+ *		"ramdisk" for the ramdisk driver.
+ * name		Instance name within the subsystem/driver/module. E.g., "pram0"
+ *		for a persistent ramdisk instance.
+ * data		Pointer to data. E.g., the radix tree of pages in a ram disk.
+ * size		Size of data.
+ */
+struct prmem_instance {
+	struct list_head	node;
+	char			subsystem[PRMEM_MAX_NAME];
+	char			name[PRMEM_MAX_NAME];
+	void			*data;
+	size_t			size;
+};
+
 #define PRMEM_MAX_CACHES	14
 
 /*
@@ -63,6 +85,8 @@ struct prmem_region {
  *
  * regions	List of memory regions.
  *
+ * instances	Persistent instances.
+ *
  * caches	Caches for different object sizes. For allocations smaller than
  *		PAGE_SIZE, these caches are used.
  */
@@ -74,6 +98,9 @@ struct prmem {
 	/* Persistent Regions. */
 	struct list_head	regions;
 
+	/* Persistent Instances. */
+	struct list_head	instances;
+
 	/* Allocation caches. */
 	void			*caches[PRMEM_MAX_CACHES];
 };
@@ -84,6 +111,8 @@ extern unsigned long		prmem_pa;
 extern size_t			prmem_size;
 extern bool			prmem_inited;
 extern spinlock_t		prmem_lock;
+
+typedef int (*prmem_list_func_t)(struct prmem_instance *instance, void *arg);
 
 /* Kernel API. */
 void prmem_reserve_early(void);
@@ -97,6 +126,13 @@ struct page *prmem_alloc_pages(unsigned int order, gfp_t gfp);
 void prmem_free_pages(struct page *pages, unsigned int order);
 void *prmem_alloc(size_t size, gfp_t gfp);
 void prmem_free(void *va, size_t size);
+
+/* Persistent Instance API. */
+void *prmem_get(char *subsystem, char *name, bool create);
+void prmem_set_data(struct prmem_instance *instance, void *data, size_t size);
+void prmem_get_data(struct prmem_instance *instance, void **data, size_t *size);
+bool prmem_put(struct prmem_instance *instance);
+int prmem_list(char *subsystem, prmem_list_func_t func, void *arg);
 
 /* Internal functions. */
 struct prmem_region *prmem_add_region(unsigned long pa, size_t size);

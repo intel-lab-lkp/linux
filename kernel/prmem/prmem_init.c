@@ -21,6 +21,7 @@ void __init prmem_init(void)
 		prmem->metadata = prmem_metadata;
 		prmem->size = prmem_size;
 		INIT_LIST_HEAD(&prmem->regions);
+		INIT_LIST_HEAD(&prmem->instances);
 
 		if (!prmem_add_region(prmem_pa, prmem_size))
 			return;
