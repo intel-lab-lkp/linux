@@ -25,6 +25,9 @@
 #include <linux/backing-dev.h>
 #include <linux/debugfs.h>
 #include <linux/prmem.h>
+#include <linux/pfn_t.h>
+#include <linux/dax.h>
+#include <linux/uio.h>
 
 #include <linux/uaccess.h>
 
@@ -42,6 +45,7 @@ struct brd_device {
 	enum brd_type		brd_type;
 	struct gendisk		*brd_disk;
 	struct list_head	brd_list;
+	struct dax_device	*brd_dax;
 
 	/*
 	 * Backing store of pages. This is the contents of the block device.
@@ -58,6 +62,8 @@ static void brd_free_page(struct brd_device *brd, struct page *page);
 static void brd_xa_init(struct brd_device *brd);
 static void brd_init_name(struct brd_device *brd, char *name);
 static void brd_set_capacity(struct brd_device *brd);
+static int brd_dax_init(struct brd_device *brd);
+static void brd_dax_cleanup(struct brd_device *brd);
 
 /*
  * Look up and return a brd's page for a given sector.
@@ -408,6 +414,9 @@ static int brd_alloc(int i)
 	strscpy(disk->disk_name, buf, DISK_NAME_LEN);
 	brd_set_capacity(brd);
 	
+	if (brd_dax_init(brd))
+		goto out_clean_dax;
+
 	/*
 	 * This is so fdisk will align partitions on 4k, because of
 	 * direct_access API needing 4k alignment, returning a PFN
@@ -421,6 +430,8 @@ static int brd_alloc(int i)
 	blk_queue_flag_set(QUEUE_FLAG_NONROT, disk->queue);
 	blk_queue_flag_set(QUEUE_FLAG_SYNCHRONOUS, disk->queue);
 	blk_queue_flag_set(QUEUE_FLAG_NOWAIT, disk->queue);
+	if (brd->brd_dax)
+		blk_queue_flag_set(QUEUE_FLAG_DAX, disk->queue);
 	err = add_disk(disk);
 	if (err)
 		goto out_cleanup_disk;
@@ -429,6 +440,8 @@ static int brd_alloc(int i)
 
 out_cleanup_disk:
 	put_disk(disk);
+out_clean_dax:
+	brd_dax_cleanup(brd);
 out_free_dev:
 	list_del(&brd->brd_list);
 	brd_free_device(brd);
@@ -447,6 +460,7 @@ static void brd_cleanup(void)
 	debugfs_remove_recursive(brd_debugfs_dir);
 
 	list_for_each_entry_safe(brd, next, &brd_devices, brd_list) {
+		brd_dax_cleanup(brd);
 		del_gendisk(brd->brd_disk);
 		put_disk(brd->brd_disk);
 		brd_free_pages(brd);
@@ -658,4 +672,96 @@ static void brd_set_capacity(struct brd_device *brd)
 	else
 		disksize = prd_data[brd->brd_number].size;
 	set_capacity(brd->brd_disk, disksize * 2);
+}
+
+static bool		prd_dax_enabled = IS_ENABLED(CONFIG_FS_DAX);
+
+static long brd_dax_direct_access(struct dax_device *dax_dev,
+				  pgoff_t pgoff, long nr_pages,
+				  enum dax_access_mode mode,
+				  void **kaddr, pfn_t *pfn);
+static int brd_dax_zero_page_range(struct dax_device *dax_dev,
+				   pgoff_t pgoff, size_t nr_pages);
+
+static const struct dax_operations brd_dax_ops = {
+	.direct_access = brd_dax_direct_access,
+	.zero_page_range = brd_dax_zero_page_range,
+};
+
+static int brd_dax_init(struct brd_device *brd)
+{
+	if (!prd_dax_enabled || brd->brd_type == BRD_NORMAL)
+		return 0;
+
+	brd->brd_dax = alloc_dax(brd, &brd_dax_ops);
+	if (IS_ERR(brd->brd_dax)) {
+		pr_warn("%s: DAX failed\n", __func__);
+		brd->brd_dax = NULL;
+		return -ENOMEM;
+	}
+
+	if (dax_add_host(brd->brd_dax, brd->brd_disk)) {
+		pr_warn("%s: DAX add failed\n", __func__);
+		return -ENOMEM;
+	}
+	return 0;
+}
+
+static void brd_dax_cleanup(struct brd_device *brd)
+{
+	if (!prd_dax_enabled || brd->brd_type == BRD_NORMAL)
+		return;
+
+	if (brd->brd_dax) {
+		dax_remove_host(brd->brd_disk);
+		kill_dax(brd->brd_dax);
+		put_dax(brd->brd_dax);
+	}
+}
+static int brd_dax_zero_page_range(struct dax_device *dax_dev,
+				   pgoff_t pgoff, size_t nr_pages)
+{
+	long rc;
+	void *kaddr;
+
+	rc = dax_direct_access(dax_dev, pgoff, nr_pages, DAX_ACCESS,
+			&kaddr, NULL);
+	if (rc < 0)
+		return rc;
+	memset(kaddr, 0, nr_pages << PAGE_SHIFT);
+	return 0;
+}
+
+static long __brd_direct_access(struct brd_device *brd, pgoff_t pgoff,
+		long nr_pages, void **kaddr, pfn_t *pfn)
+{
+	struct page *page;
+	sector_t sector = (sector_t) pgoff << PAGE_SECTORS_SHIFT;
+	int ret;
+
+	if (!brd)
+		return -ENODEV;
+
+	ret = brd_insert_page(brd, sector, GFP_NOWAIT);
+	if (ret)
+		return ret;
+
+	page = brd_lookup_page(brd, sector);
+	if (!page)
+		return -ENOSPC;
+
+	*kaddr = page_address(page);
+	if (pfn)
+		*pfn = page_to_pfn_t(page);
+
+	return 1;
+}
+
+static long brd_dax_direct_access(struct dax_device *dax_dev,
+		pgoff_t pgoff, long nr_pages, enum dax_access_mode mode,
+		void **kaddr, pfn_t *pfn)
+{
+	struct brd_device *brd = dax_get_private(dax_dev);
+
+	return __brd_direct_access(brd, pgoff, nr_pages, kaddr, pfn);
 }
