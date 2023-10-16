@@ -247,6 +247,7 @@ static int mtl_dummy_pipe_control(struct i915_request *rq)
 int gen12_emit_flush_rcs(struct i915_request *rq, u32 mode)
 {
 	struct intel_engine_cs *engine = rq->engine;
+	struct intel_gt *gt = rq->engine->gt;
 
 	/*
 	 * On Aux CCS platforms the invalidation of the Aux
@@ -278,7 +279,8 @@ int gen12_emit_flush_rcs(struct i915_request *rq, u32 mode)
 		 * deals with Protected Memory which is not needed for
 		 * AUX CCS invalidation and lead to unwanted side effects.
 		 */
-		if (mode & EMIT_FLUSH)
+		if ((mode & EMIT_FLUSH) &&
+		    !(IS_GFX_GT_IP_RANGE(gt, IP_VER(12, 70), IP_VER(12, 71))))
 			bit_group_1 |= PIPE_CONTROL_FLUSH_L3;
 
 		bit_group_1 |= PIPE_CONTROL_TILE_CACHE_FLUSH;
@@ -812,11 +814,13 @@ u32 *gen12_emit_fini_breadcrumb_rcs(struct i915_request *rq, u32 *cs)
 	u32 flags = (PIPE_CONTROL_CS_STALL |
 		     PIPE_CONTROL_TLB_INVALIDATE |
 		     PIPE_CONTROL_TILE_CACHE_FLUSH |
-		     PIPE_CONTROL_FLUSH_L3 |
 		     PIPE_CONTROL_RENDER_TARGET_CACHE_FLUSH |
 		     PIPE_CONTROL_DEPTH_CACHE_FLUSH |
 		     PIPE_CONTROL_DC_FLUSH_ENABLE |
 		     PIPE_CONTROL_FLUSH_ENABLE);
+
+	if (!(IS_GFX_GT_IP_RANGE(gt, IP_VER(12, 70), IP_VER(12, 71))))
+		flags |= PIPE_CONTROL_FLUSH_L3;
 
 	/* Wa_14016712196 */
 	if (IS_GFX_GT_IP_RANGE(gt, IP_VER(12, 70), IP_VER(12, 71)) || IS_DG2(i915))
