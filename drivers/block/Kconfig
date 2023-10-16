@@ -256,6 +256,17 @@ config BLK_DEV_RAM_SIZE
 	  The default value is 4096 kilobytes. Only change this if you know
 	  what you are doing.
 
+config BLK_DEV_PRAM_MAX
+	int "Maximum number of Persistent RAM disks"
+	default "0"
+	depends on BLK_DEV_RAM
+	help
+	  This allows the creation of persistent RAM disks. Persistent RAM
+	  disks are used to remember data across a kexec reboot. The default
+	  value is 0 Persistent RAM disks. Change this if you know what you
+	  are doing. The sizes of the ram disks are specified via the boot
+	  arg "prd_sizes" as a comma-separated list of sizes.
+
 config CDROM_PKTCDVD
 	tristate "Packet writing on CD/DVD media (DEPRECATED)"
 	depends on !UML
