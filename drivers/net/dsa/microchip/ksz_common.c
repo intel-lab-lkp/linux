@@ -3565,6 +3565,33 @@ static int ksz_set_wol(struct dsa_switch *ds, int port,
 	return -EOPNOTSUPP;
 }
 
+/**
+ * ksz_wol_is_active - Check if Wake-on-LAN is active on any port.
+ * @dev: The device structure.
+ *
+ * This function iterates through each user port on the switch, checking if
+ * Wake-on-LAN (WoL) is active on any of them.
+ *
+ * Return: true if WoL is active on any port, false otherwise.
+ */
+static bool ksz_wol_is_active(struct ksz_device *dev)
+{
+	struct dsa_port *dp;
+
+	if (!dev->wakeup_source)
+		return false;
+
+	dsa_switch_for_each_user_port(dp, dev->ds) {
+		struct ethtool_wolinfo wol;
+
+		ksz_get_wol(dev->ds, dp->index, &wol);
+		if (wol.wolopts)
+			return true;
+	}
+
+	return false;
+}
+
 static int ksz_port_set_mac_address(struct dsa_switch *ds, int port,
 				    const unsigned char *addr)
 {
@@ -3822,7 +3849,7 @@ EXPORT_SYMBOL(ksz_switch_alloc);
  */
 void ksz_switch_shutdown(struct ksz_device *dev)
 {
-	if (dev->dev_ops->reset)
+	if (dev->dev_ops->reset && !ksz_wol_is_active(dev))
 		dev->dev_ops->reset(dev);
 
 	dsa_switch_shutdown(dev->ds);
