@@ -198,28 +198,11 @@ static int dsi_mgr_bridge_get_id(struct drm_bridge *bridge)
 	return dsi_bridge->id;
 }
 
-/*
- * If the next bridge in the chain is the Parade ps8640 bridge chip then don't
- * power on early since it seems to violate the expectations of the firmware
- * that the bridge chip is running.
- */
-static bool dsi_mgr_next_is_ps8640(struct drm_bridge *bridge)
-{
-	struct drm_bridge *next_bridge = drm_bridge_get_next_bridge(bridge);
-
-	return next_bridge &&
-		next_bridge->of_node &&
-		of_device_is_compatible(next_bridge->of_node, "parade,ps8640");
-}
-
 static bool dsi_mgr_auto_powerup(struct drm_bridge *bridge)
 {
 	int id = dsi_mgr_bridge_get_id(bridge);
 	struct msm_dsi *msm_dsi = dsi_mgr_get_dsi(id);
 	struct mipi_dsi_host *host = msm_dsi->host;
-
-	if (dsi_mgr_next_is_ps8640(bridge))
-		return true;
 
 	return msm_dsi_host_auto_powerup(host);
 }
@@ -229,9 +212,6 @@ static bool dsi_mgr_early_powerup(struct drm_bridge *bridge)
 	int id = dsi_mgr_bridge_get_id(bridge);
 	struct msm_dsi *msm_dsi = dsi_mgr_get_dsi(id);
 	struct mipi_dsi_host *host = msm_dsi->host;
-
-	if (dsi_mgr_next_is_ps8640(bridge))
-		return false;
 
 	return msm_dsi_host_early_powerup(host);
 }
