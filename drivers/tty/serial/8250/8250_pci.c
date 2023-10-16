@@ -1976,6 +1976,10 @@ pci_sunix_setup(struct serial_private *priv,
 #define MOXA_RS485_2W	0x0F
 #define MOXA_UIR_OFFSET	0x04
 
+static const struct serial_rs485 pci_moxa_rs485_supported = {
+	.flags = SER_RS485_ENABLED | SER_RS485_RX_DURING_TX | SER_RS485_TERMINATE_BUS,
+};
+
 static bool pci_moxa_is_mini_pcie(unsigned short device)
 {
 	if (device == PCI_DEVICE_ID_MOXA_CP102N	||
@@ -1987,6 +1991,11 @@ static bool pci_moxa_is_mini_pcie(unsigned short device)
 		return true;
 
 	return false;
+}
+
+static bool pci_moxa_match_x1xx(unsigned short device)
+{
+	return (device & 0x0F00) == 0x0100;
 }
 
 static bool pci_moxa_match_x3xx(unsigned short device)
@@ -2014,6 +2023,36 @@ static int pci_moxa_set_interface(const struct pci_dev *dev,
 	outb(val, UIR_addr);
 
 	return 0;
+}
+
+static int pci_moxa_rs485_config(struct uart_port *port,
+				 struct ktermios *termios,
+				 struct serial_rs485 *rs485)
+{
+	struct pci_dev *dev = to_pci_dev(port->dev);
+	unsigned short device = dev->device;
+	u8 mode = MOXA_RS232;
+
+	if (rs485->flags & SER_RS485_ENABLED) {
+		/* Use SER_RS485_TERMINATE_BUS to represent RS422 as a workaround. */
+		if (rs485->flags & SER_RS485_TERMINATE_BUS) {
+			mode = MOXA_RS422;
+		} else {
+			if (rs485->flags & SER_RS485_RX_DURING_TX)
+				mode = MOXA_RS485_4W;
+			else
+				mode = MOXA_RS485_2W;
+		}
+	} else {
+		/*
+		 * RS232 is not supported for those device IDs of
+		 * MOXA PCIe boards match the pattern 0x*3**.
+		 */
+		if (pci_moxa_match_x3xx(device))
+			return -EINVAL;
+	}
+
+	return pci_moxa_set_interface(dev, port->port_id, mode);
 }
 
 static int pci_moxa_init(struct pci_dev *dev)
@@ -2055,9 +2094,22 @@ pci_moxa_setup(struct serial_private *priv,
 		const struct pciserial_board *board,
 		struct uart_8250_port *port, int idx)
 {
+	struct pci_dev *dev = priv->dev;
+	unsigned short device = dev->device;
 	unsigned int bar = FL_GET_BASE(board->flags);
 	int offset;
 
+	/*
+	 * For the device IDs of MOXA PCIe boards match the pattern 0x*1** and 0x*3**,
+	 * these boards support switching interface between RS422/RS485 using TIOCSRS485.
+	 */
+	if (pci_moxa_match_x1xx(device) || pci_moxa_match_x3xx(device)) {
+		port->port.rs485_config = pci_moxa_rs485_config;
+		port->port.rs485_supported = pci_moxa_rs485_supported;
+
+		if (pci_moxa_match_x3xx(device))
+			port->port.rs485.flags |= SER_RS485_ENABLED | SER_RS485_TERMINATE_BUS;
+	}
 	if (board->num_ports == 4 && idx == 3)
 		offset = 7 * board->uart_offset;
 	else
