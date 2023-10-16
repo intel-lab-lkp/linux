@@ -247,6 +247,7 @@ properties:
       - items:
           - enum:
               - mediatek,mt8365-evk
+              - ologic,pumpkin-i350
           - const: mediatek,mt8365
       - items:
           - enum:
