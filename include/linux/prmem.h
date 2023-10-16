@@ -48,12 +48,16 @@ struct prmem_region {
 /*
  * PRMEM metadata.
  *
+ * checksum	Just before reboot, a checksum is computed on the metadata. On
+ *		the next kexec reboot, the metadata is validated with the
+ *		checksum to make sure that the metadata has not been corrupted.
  * metadata	Physical address of the metadata page.
  * size		Size of initial memory allocated to prmem.
  *
  * regions	List of memory regions.
  */
 struct prmem {
+	unsigned long		checksum;
 	unsigned long		metadata;
 	size_t			size;
 
@@ -65,12 +69,19 @@ extern struct prmem		*prmem;
 extern unsigned long		prmem_metadata;
 extern unsigned long		prmem_pa;
 extern size_t			prmem_size;
+extern bool			prmem_inited;
 
 /* Kernel API. */
+void prmem_reserve_early(void);
 void prmem_reserve(void);
 void prmem_init(void);
+void prmem_fini(void);
+int  prmem_cmdline_size(void);
 
 /* Internal functions. */
 struct prmem_region *prmem_add_region(unsigned long pa, size_t size);
+unsigned long prmem_checksum(void *start, size_t size);
+bool __init prmem_validate(void);
+void prmem_cmdline(char *cmdline);
 
 #endif /* _LINUX_PRMEM_H */

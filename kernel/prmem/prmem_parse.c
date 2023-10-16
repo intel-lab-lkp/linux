@@ -31,3 +31,32 @@ static int __init prmem_size_parse(char *cmdline)
 	return 0;
 }
 early_param("prmem", prmem_size_parse);
+
+/*
+ * Syntax: prmem_meta=metadata_address
+ *
+ *	Specifies the address of a single page where the prmem metadata resides.
+ *
+ * On a kexec, the following will be appended to the kernel command line -
+ * "prmem_meta=metadata_address". This is so that the metadata can be located
+ * easily on kexec reboots.
+ */
+static int __init prmem_meta_parse(char *cmdline)
+{
+	char			*tmp, *cur = cmdline;
+	unsigned long		addr;
+
+	if (!cur)
+		return -EINVAL;
+
+	/* Get metadata address. */
+	addr = memparse(cur, &tmp);
+	if (cur == tmp || addr & (PAGE_SIZE - 1)) {
+		pr_warn("%s: Incorrect address %lx\n", __func__, addr);
+		return -EINVAL;
+	}
+
+	prmem_metadata = addr;
+	return 0;
+}
+early_param("prmem_meta", prmem_meta_parse);

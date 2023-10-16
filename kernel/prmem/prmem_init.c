@@ -25,3 +25,12 @@ void __init prmem_init(void)
 	}
 	prmem_inited = true;
 }
+
+void prmem_fini(void)
+{
+	if (!prmem_inited)
+		return;
+
+	/* Compute checksum over the metadata. */
+	prmem->checksum = prmem_checksum(prmem, sizeof(*prmem));
+}

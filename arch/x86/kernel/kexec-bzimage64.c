@@ -18,6 +18,7 @@
 #include <linux/mm.h>
 #include <linux/efi.h>
 #include <linux/random.h>
+#include <linux/prmem.h>
 
 #include <asm/bootparam.h>
 #include <asm/setup.h>
@@ -81,6 +82,8 @@ static int setup_cmdline(struct kimage *image, struct boot_params *params,
 	cmdline_len += len;
 
 	cmdline_ptr[cmdline_len - 1] = '\0';
+
+	prmem_cmdline(cmdline_ptr);
 
 	pr_debug("Final command line is: %s\n", cmdline_ptr);
 	cmdline_ptr_phys = bootparams_load_addr + cmdline_offset;
@@ -458,7 +461,7 @@ static void *bzImage64_load(struct kimage *image, char *kernel,
 	 */
 	efi_map_sz = efi_get_runtime_map_size();
 	params_cmdline_sz = sizeof(struct boot_params) + cmdline_len +
-				MAX_ELFCOREHDR_STR_LEN;
+				MAX_ELFCOREHDR_STR_LEN + prmem_cmdline_size();
 	params_cmdline_sz = ALIGN(params_cmdline_sz, 16);
 	kbuf.bufsz = params_cmdline_sz + ALIGN(efi_map_sz, 16) +
 				sizeof(struct setup_data) +

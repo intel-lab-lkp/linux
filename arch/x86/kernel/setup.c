@@ -1137,6 +1137,8 @@ void __init setup_arch(char **cmdline_p)
 	 */
 	efi_reserve_boot_services();
 
+	prmem_reserve_early();
+
 	/* preallocate 4k for mptable mpc */
 	e820__memblock_alloc_reserved_mpc_new();
 
