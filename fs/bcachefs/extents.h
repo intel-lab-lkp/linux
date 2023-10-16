@@ -642,7 +642,7 @@ static inline void bch2_bkey_append_ptr(struct bkey_i *k, struct bch_extent_ptr 
 
 		ptr.type = 1 << BCH_EXTENT_ENTRY_ptr;
 
-		memcpy((void *) &k->v + bkey_val_bytes(&k->k),
+		memcpy(&k->v_bytes[bkey_val_bytes(&k->k)],
 		       &ptr,
 		       sizeof(ptr));
 		k->k.u64s++;

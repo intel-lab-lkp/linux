@@ -300,7 +300,10 @@ struct bkey_i {
 	__u64			_data[0];
 
 	struct bkey	k;
-	struct bch_val	v;
+	union {
+		struct bch_val	v;
+		DECLARE_FLEX_ARRAY(__u8, v_bytes);
+	};
 };
 
 #define KEY(_inode, _offset, _size)					\
