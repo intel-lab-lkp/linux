@@ -30,7 +30,8 @@ BTF_ID(struct, p4tc_ext_bpf_params)
 BTF_ID(struct, p4tc_ext_bpf_res)
 
 static struct p4tc_table_entry_act_bpf *
-__bpf_p4tc_tbl_read(struct net *caller_net,
+__bpf_p4tc_tbl_read(struct p4tc_table_counters *counters,
+		    struct net *caller_net,
 		    struct p4tc_table_entry_act_bpf_params *params,
 		    void *key, const u32 key__sz)
 {
@@ -58,6 +59,9 @@ __bpf_p4tc_tbl_read(struct net *caller_net,
 
 	value = p4tc_table_entry_value(entry);
 
+	if (value->counter && value->counter->ops->exec)
+		value->counter->ops->exec(value->counter, counters);
+
 	return value->acts ? p4tc_table_entry_act_bpf(value->acts[0]) : NULL;
 }
 
@@ -70,11 +74,16 @@ bpf_p4tc_tbl_read(struct __sk_buff *skb_ctx,
 		  void *key, const u32 key__sz)
 {
 	struct sk_buff *skb = (struct sk_buff *)skb_ctx;
+	struct p4tc_table_counters counters = {0};
 	struct net *caller_net;
+
+	counters.pkts = skb_is_gso(skb) ? skb_shinfo(skb)->gso_segs : 1;
+	counters.bytes = qdisc_pkt_len(skb);
 
 	caller_net = skb->dev ? dev_net(skb->dev) : sock_net(skb->sk);
 
-	return __bpf_p4tc_tbl_read(caller_net, params, key, key__sz);
+	return __bpf_p4tc_tbl_read(&counters, caller_net, params, key,
+				   key__sz);
 }
 
 __bpf_kfunc struct p4tc_table_entry_act_bpf *
@@ -83,11 +92,12 @@ xdp_p4tc_tbl_read(struct xdp_md *xdp_ctx,
 		  void *key, const u32 key__sz)
 {
 	struct xdp_buff *ctx = (struct xdp_buff *)xdp_ctx;
+	struct p4tc_table_counters counters = {0};
 	struct net *caller_net;
 
 	caller_net = dev_net(ctx->rxq->dev);
 
-	return __bpf_p4tc_tbl_read(caller_net, params, key, key__sz);
+	return __bpf_p4tc_tbl_read(&counters, caller_net, params, key, key__sz);
 }
 
 static int
