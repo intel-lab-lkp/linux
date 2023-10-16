@@ -428,6 +428,37 @@ int devm_mipi_dsi_attach(struct device *dev,
 }
 EXPORT_SYMBOL_GPL(devm_mipi_dsi_attach);
 
+bool mipi_dsi_host_power_control_available(struct mipi_dsi_host *host)
+{
+	const struct mipi_dsi_host_ops *ops = host->ops;
+
+	return ops && ops->power_up;
+}
+EXPORT_SYMBOL_GPL(mipi_dsi_host_power_control_available);
+
+int mipi_dsi_host_power_up(struct mipi_dsi_host *host)
+{
+	const struct mipi_dsi_host_ops *ops = host->ops;
+
+	if (!mipi_dsi_host_power_control_available(host))
+		return -EOPNOTSUPP;
+
+	return ops->power_up ? ops->power_up(host) : 0;
+}
+EXPORT_SYMBOL_GPL(mipi_dsi_host_power_up);
+
+void mipi_dsi_host_power_down(struct mipi_dsi_host *host)
+{
+	const struct mipi_dsi_host_ops *ops = host->ops;
+
+	if (!mipi_dsi_host_power_control_available(host))
+		return;
+
+	if (ops->power_down)
+		ops->power_down(host);
+}
+EXPORT_SYMBOL_GPL(mipi_dsi_host_power_down);
+
 static ssize_t mipi_dsi_device_transfer(struct mipi_dsi_device *dsi,
 					struct mipi_dsi_msg *msg)
 {

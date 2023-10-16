@@ -68,6 +68,8 @@ int mipi_dsi_create_packet(struct mipi_dsi_packet *packet,
  * @attach: attach DSI device to DSI host
  * @detach: detach DSI device from DSI host
  * @transfer: transmit a DSI packet
+ * @power_up: enable DSI link and bring it to the LP-11 state
+ * @power_down: fully disable DSI link
  *
  * DSI packets transmitted by .transfer() are passed in as mipi_dsi_msg
  * structures. This structure contains information about the type of packet
@@ -81,10 +83,18 @@ int mipi_dsi_create_packet(struct mipi_dsi_packet *packet,
  * function will seldomly return anything other than the number of bytes
  * contained in the transmit buffer on success.
  *
- * Also note that those callbacks can be called no matter the state the
- * host is in. Drivers that need the underlying device to be powered to
- * perform these operations will first need to make sure it's been
- * properly enabled.
+ * Note: currently there are two modes of DSI power control. Legacy drivers
+ * will call those callbacks no matter the state the host is in. DSI host
+ * drivers that need the underlying device to be powered to perform these
+ * operations will first need to make sure it's been properly enabled.
+ *
+ * Newer drivers will set the @MIPI_DSI_MANUAL_POWERUP flag to indicate that
+ * they will call @mipi_dsi_power_up() and @mipi_dsi_power_down() to control
+ * the link state of the DSI host or they will set @MIPI_DSI_AUTO_POWERUP to
+ * indicate that the driver is fine with the link being powered up in DSI
+ * host's (atomic_)pre_enable() callback and then being disabled in the
+ * (atomic_)post_disable() callback. The transfer callback must only be called
+ * if the DSI host has been powered up and was not brought down.
  *
  * Note: some hosts (sunxi) can not send LP commands between HS video
  * packets. Thus all DSI transfers sent in LP mode should be limited to the
@@ -97,6 +107,8 @@ struct mipi_dsi_host_ops {
 		      struct mipi_dsi_device *dsi);
 	ssize_t (*transfer)(struct mipi_dsi_host *host,
 			    const struct mipi_dsi_msg *msg);
+	int (*power_up)(struct mipi_dsi_host *host);
+	void (*power_down)(struct mipi_dsi_host *host);
 };
 
 /**
@@ -143,6 +155,10 @@ struct mipi_dsi_host *of_find_mipi_dsi_host_by_node(struct device_node *node);
 #define MIPI_DSI_MODE_LPM		BIT(11)
 /* transmit data ending at the same time for all lanes within one hsync */
 #define MIPI_DSI_HS_PKT_END_ALIGNED	BIT(12)
+/* DSI peripheral driver manually controls DSI link powerup */
+#define MIPI_DSI_MANUAL_POWERUP		BIT(13)
+/* DSI peripheral driver is fine with automatic DSI link power control */
+#define MIPI_DSI_AUTO_POWERUP		BIT(14)
 
 enum mipi_dsi_pixel_format {
 	MIPI_DSI_FMT_RGB888,
@@ -235,6 +251,11 @@ void mipi_dsi_device_unregister(struct mipi_dsi_device *dsi);
 struct mipi_dsi_device *
 devm_mipi_dsi_device_register_full(struct device *dev, struct mipi_dsi_host *host,
 				   const struct mipi_dsi_device_info *info);
+
+bool mipi_dsi_host_power_control_available(struct mipi_dsi_host *host);
+int mipi_dsi_host_power_up(struct mipi_dsi_host *host);
+void mipi_dsi_host_power_down(struct mipi_dsi_host *host);
+
 struct mipi_dsi_device *of_find_mipi_dsi_device_by_node(struct device_node *np);
 int mipi_dsi_attach(struct mipi_dsi_device *dsi);
 int mipi_dsi_detach(struct mipi_dsi_device *dsi);
