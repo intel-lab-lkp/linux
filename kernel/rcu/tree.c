@@ -1386,6 +1386,122 @@ static void rcu_poll_gp_seq_end_unlocked(unsigned long *snap)
 }
 
 /*
+ * There are three lists for handling synchronize_rcu() users.
+ * A first list corresponds to new coming users, second for users
+ * which wait for a grace period and third is for which a grace
+ * period is passed.
+ */
+static struct sr_normal_state {
+	struct llist_head curr;	/* request a GP users. */
+	struct llist_head wait;	/* wait for GP users. */
+	struct llist_head done;	/* ready for GP users. */
+	struct llist_node *curr_tail;
+	struct llist_node *wait_tail;
+	atomic_t active;
+} sr;
+
+/* Disable it by default. */
+static int rcu_normal_wake_from_gp = 0;
+module_param(rcu_normal_wake_from_gp, int, 0644);
+
+static void rcu_sr_normal_complete(struct llist_node *node)
+{
+	struct rcu_synchronize *rs = container_of(
+		(struct rcu_head *) node, struct rcu_synchronize, head);
+	unsigned long oldstate = (unsigned long) rs->head.func;
+
+	if (!poll_state_synchronize_rcu(oldstate))
+		WARN_ONCE(1, "A full grace period is not passed yet: %lu",
+			rcu_seq_diff(get_state_synchronize_rcu(), oldstate));
+
+	/* Finally. */
+	complete(&rs->completion);
+}
+
+static void rcu_sr_normal_gp_cleanup_work(struct work_struct *work)
+{
+	struct llist_node *done, *rcu, *next;
+
+	done = llist_del_all(&sr.done);
+	if (!done)
+		return;
+
+	llist_for_each_safe(rcu, next, done)
+		rcu_sr_normal_complete(rcu);
+}
+static DECLARE_WORK(sr_normal_gp_cleanup, rcu_sr_normal_gp_cleanup_work);
+
+/*
+ * Helper function for rcu_gp_cleanup().
+ */
+static void rcu_sr_normal_gp_cleanup(void)
+{
+	struct llist_node *first, *tail;
+
+	tail = READ_ONCE(sr.wait_tail);
+	first = llist_del_all(&sr.wait);
+	if (!first)
+		return;
+
+	/* Only one user? */
+	if (!first->next) {
+		rcu_sr_normal_complete(first);
+		return;
+	}
+
+	/* Can be not empty. */
+	llist_add_batch(first, tail, &sr.done);
+	queue_work(system_highpri_wq, &sr_normal_gp_cleanup);
+}
+
+/*
+ * Helper function for rcu_gp_init().
+ */
+static void rcu_sr_normal_gp_init(void)
+{
+	struct llist_node *llnode, *rcu;
+	int ret;
+
+	if (llist_empty(&sr.curr))
+		return;
+
+	/*
+	 * A waiting list of GP should be empty on this step,
+	 * since a GP-kthread, rcu_gp_init() -> gp_cleanup(),
+	 * rolls it over. If not, it is a BUG, warn a user.
+	 */
+	WARN_ON_ONCE(!llist_empty(&sr.wait));
+
+	/*
+	 * Obtain a tail of current active users. It is guaranteed
+	 * that if we are only one active user and the list is not
+	 * empty, the tail has already been updated.
+	 */
+	ret = atomic_inc_return(&sr.active);
+	WRITE_ONCE(sr.wait_tail, (ret == 1) ? READ_ONCE(sr.curr_tail):NULL);
+	llnode = llist_del_all(&sr.curr);
+	atomic_dec(&sr.active);
+
+	if (ret != 1) {
+		llist_for_each(rcu, llnode) {
+			if (!rcu->next)
+				WRITE_ONCE(sr.wait_tail, rcu);
+		}
+	}
+
+	llist_add_batch(llnode, READ_ONCE(sr.wait_tail), &sr.wait);
+}
+
+static void rcu_sr_normal_add_req(struct rcu_synchronize *rs)
+{
+	atomic_inc(&sr.active);
+	if (llist_add((struct llist_node *) &rs->head, &sr.curr))
+		/* Set the tail. Only first and one user can do that. */
+		WRITE_ONCE(sr.curr_tail, (struct llist_node *) &rs->head);
+	atomic_dec(&sr.active);
+}
+
+/*
  * Initialize a new grace period.  Return false if no grace period required.
  */
 static noinline_for_stack bool rcu_gp_init(void)
@@ -1419,6 +1535,7 @@ static noinline_for_stack bool rcu_gp_init(void)
 	/* Record GP times before starting GP, hence rcu_seq_start(). */
 	rcu_seq_start(&rcu_state.gp_seq);
 	ASSERT_EXCLUSIVE_WRITER(rcu_state.gp_seq);
+	rcu_sr_normal_gp_init();
 	trace_rcu_grace_period(rcu_state.name, rcu_state.gp_seq, TPS("start"));
 	rcu_poll_gp_seq_start(&rcu_state.gp_seq_polled_snap);
 	raw_spin_unlock_irq_rcu_node(rnp);
@@ -1787,6 +1904,9 @@ static noinline void rcu_gp_cleanup(void)
 		WRITE_ONCE(rcu_state.gp_flags, rcu_state.gp_flags & RCU_GP_FLAG_INIT);
 	}
 	raw_spin_unlock_irq_rcu_node(rnp);
+
+	// Make synchronize_rcu() users aware of the end of old grace period.
+	rcu_sr_normal_gp_cleanup();
 
 	// If strict, make all CPUs aware of the end of the old grace period.
 	if (IS_ENABLED(CONFIG_RCU_STRICT_GRACE_PERIOD))
@@ -3509,6 +3629,35 @@ static int rcu_blocking_is_gp(void)
 	return true;
 }
 
+/*
+ * Helper function for the synchronize_rcu() API.
+ */
+static void synchronize_rcu_normal(void)
+{
+	struct rcu_synchronize rs;
+
+	if (READ_ONCE(rcu_normal_wake_from_gp)) {
+		init_rcu_head_on_stack(&rs.head);
+		init_completion(&rs.completion);
+
+		/*
+		 * This code might be preempted, therefore take a GP
+		 * snapshot before adding a request.
+		 */
+		rs.head.func = (void *) get_state_synchronize_rcu();
+		rcu_sr_normal_add_req(&rs);
+
+		/* Kick a GP and start waiting. */
+		(void) start_poll_synchronize_rcu();
+
+		/* Now we can wait. */
+		wait_for_completion(&rs.completion);
+		destroy_rcu_head_on_stack(&rs.head);
+	} else {
+		wait_rcu_gp(call_rcu_hurry);
+	}
+}
+
 /**
  * synchronize_rcu - wait until a grace period has elapsed.
  *
@@ -3560,7 +3709,7 @@ void synchronize_rcu(void)
 		if (rcu_gp_is_expedited())
 			synchronize_rcu_expedited();
 		else
-			wait_rcu_gp(call_rcu_hurry);
+			synchronize_rcu_normal();
 		return;
 	}
 
