@@ -86,6 +86,27 @@ rb_add_augmented_cached(struct rb_node *node, struct rb_root_cached *tree,
 	return leftmost ? node : NULL;
 }
 
+static __always_inline void
+rb_add_augmented(struct rb_node *node, struct rb_root *tree,
+			bool (*less)(struct rb_node *, const struct rb_node *),
+			const struct rb_augment_callbacks *augment)
+{
+	struct rb_node **link = &tree->rb_node;
+	struct rb_node *parent = NULL;
+
+	while (*link) {
+		parent = *link;
+		if (less(node, parent))
+			link = &parent->rb_left;
+		else
+			link = &parent->rb_right;
+	}
+
+	rb_link_node(node, parent, link);
+	augment->propagate(parent, NULL);
+	rb_insert_augmented(node, tree, augment);
+}
+
 /*
  * Template for declaring augmented rbtree callbacks (generic case)
  *
