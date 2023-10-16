@@ -156,8 +156,6 @@ static int raid6_idx_to_slot(int idx, struct stripe_head *sh,
 	return slot;
 }
 
-static void print_raid5_conf (struct r5conf *conf);
-
 static int stripe_operations_active(struct stripe_head *sh)
 {
 	return sh->check_state || sh->reconstruct_state ||
@@ -8017,8 +8015,6 @@ static int raid5_run(struct mddev *mddev)
 		mddev->raid_disks-mddev->degraded, mddev->raid_disks,
 		mddev->new_layout);
 
-	print_raid5_conf(conf);
-
 	if (conf->reshape_progress != MaxSector) {
 		conf->reshape_safe = conf->reshape_progress;
 		atomic_set(&conf->reshape_stripes, 0);
@@ -8109,7 +8105,6 @@ static int raid5_run(struct mddev *mddev)
 	return 0;
 abort:
 	md_unregister_thread(mddev, &mddev->thread);
-	print_raid5_conf(conf);
 	free_conf(conf);
 	mddev->private = NULL;
 	pr_warn("md/raid:%s: failed to run raid set.\n", mdname(mddev));
@@ -8139,31 +8134,6 @@ static void raid5_status(struct seq_file *seq, struct mddev *mddev)
 	}
 	rcu_read_unlock();
 	seq_printf (seq, "]");
-}
-
-static void print_raid5_conf (struct r5conf *conf)
-{
-	struct md_rdev *rdev;
-	int i;
-
-	pr_debug("RAID conf printout:\n");
-	if (!conf) {
-		pr_debug("(conf==NULL)\n");
-		return;
-	}
-	pr_debug(" --- level:%d rd:%d wd:%d\n", conf->level,
-	       conf->raid_disks,
-	       conf->raid_disks - conf->mddev->degraded);
-
-	rcu_read_lock();
-	for (i = 0; i < conf->raid_disks; i++) {
-		rdev = rcu_dereference(conf->disks[i].rdev);
-		if (rdev)
-			pr_debug(" disk %d, o:%d, dev:%pg\n",
-			       i, !test_bit(Faulty, &rdev->flags),
-			       rdev->bdev);
-	}
-	rcu_read_unlock();
 }
 
 static int raid5_spare_active(struct mddev *mddev)
@@ -8207,7 +8177,6 @@ static int raid5_spare_active(struct mddev *mddev)
 	spin_lock_irqsave(&conf->device_lock, flags);
 	mddev->degraded = raid5_calc_degraded(conf);
 	spin_unlock_irqrestore(&conf->device_lock, flags);
-	print_raid5_conf(conf);
 	return count;
 }
 
@@ -8220,7 +8189,6 @@ static int raid5_remove_disk(struct mddev *mddev, struct md_rdev *rdev)
 	struct disk_info *p;
 	struct md_rdev *tmp;
 
-	print_raid5_conf(conf);
 	if (test_bit(Journal, &rdev->flags) && conf->log) {
 		/*
 		 * we can't wait pending write here, as this is called in
@@ -8300,7 +8268,6 @@ static int raid5_remove_disk(struct mddev *mddev, struct md_rdev *rdev)
 	clear_bit(WantReplacement, &rdev->flags);
 abort:
 
-	print_raid5_conf(conf);
 	return err;
 }
 
@@ -8382,7 +8349,6 @@ static int raid5_add_disk(struct mddev *mddev, struct md_rdev *rdev)
 		}
 	}
 out:
-	print_raid5_conf(conf);
 	return err;
 }
 
