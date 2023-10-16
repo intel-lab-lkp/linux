@@ -1543,6 +1543,38 @@ abort:
 	return false;
 }
 
+static bool svdm_port_supports_svid(struct tcpm_port *port, u16 svid)
+{
+	int i;
+
+	for (i = 0; i < ALTMODE_DISCOVERY_MAX; i++) {
+		struct typec_altmode *altmode = port->port_altmode[i];
+
+		if (!altmode)
+			return false;
+		if (altmode->svid == svid)
+			return true;
+	}
+	return false;
+}
+
+/*
+ * This helper will continue to return the next supported SVID that the port
+ * needs to send DISCOVER_MODES to until the pmdata->svid_index is incremented after
+ * svdm_consume_modes() in tcpm_pd_svdm().
+ */
+static int svdm_get_next_supported_svid(struct tcpm_port *port, struct pd_mode_data *pmdata)
+{
+	while (pmdata->svid_index < pmdata->nsvids) {
+		u16 svid = pmdata->svids[pmdata->svid_index];
+
+		if (svdm_port_supports_svid(port, svid))
+			return svid;
+		pmdata->svid_index++;
+	}
+	return 0;
+}
+
 static void svdm_consume_modes(struct tcpm_port *port, const u32 *p, int cnt)
 {
 	struct pd_mode_data *pmdata = &port->mode_data;
@@ -1705,9 +1737,11 @@ static int tcpm_pd_svdm(struct tcpm_port *port, struct typec_altmode *adev,
 			if (svdm_consume_svids(port, p, cnt)) {
 				response[0] = VDO(USB_SID_PD, 1, svdm_version, CMD_DISCOVER_SVID);
 				rlen = 1;
-			} else if (modep->nsvids && supports_modal(port)) {
-				response[0] = VDO(modep->svids[0], 1, svdm_version,
-						  CMD_DISCOVER_MODES);
+			} else if (modep->nsvids && supports_modal(port) &&
+				   svdm_get_next_supported_svid(port, modep)) {
+				u16 svid = svdm_get_next_supported_svid(port, modep);
+
+				response[0] = VDO(svid, 1, svdm_version, CMD_DISCOVER_MODES);
 				rlen = 1;
 			}
 			break;
@@ -1715,8 +1749,10 @@ static int tcpm_pd_svdm(struct tcpm_port *port, struct typec_altmode *adev,
 			/* 6.4.4.3.3 */
 			svdm_consume_modes(port, p, cnt);
 			modep->svid_index++;
-			if (modep->svid_index < modep->nsvids) {
-				u16 svid = modep->svids[modep->svid_index];
+			if (modep->svid_index < modep->nsvids &&
+			    svdm_get_next_supported_svid(port, modep)) {
+				u16 svid = svdm_get_next_supported_svid(port, modep);
+
 				response[0] = VDO(svid, 1, svdm_version, CMD_DISCOVER_MODES);
 				rlen = 1;
 			} else {
