@@ -813,6 +813,40 @@ static int iso_sock_bind_bc(struct socket *sock, struct sockaddr *addr,
 	return 0;
 }
 
+static int iso_sock_bind_pa_sk(struct sock *sk, struct sockaddr_iso *sa,
+			       int addr_len)
+{
+	int err = 0;
+
+	lock_sock(sk);
+
+	if (sk->sk_type != SOCK_SEQPACKET) {
+		err = -EINVAL;
+		goto done;
+	}
+
+	if (addr_len <= sizeof(*sa)) {
+		err = -EINVAL;
+		goto done;
+	}
+
+	iso_pi(sk)->bc_num_bis = sa->iso_bc->bc_num_bis;
+
+	for (int i = 0; i < iso_pi(sk)->bc_num_bis; i++)
+		if (sa->iso_bc->bc_bis[i] < 0x01 ||
+		    sa->iso_bc->bc_bis[i] > 0x1f) {
+			err = -EINVAL;
+			goto done;
+		}
+
+	memcpy(iso_pi(sk)->bc_bis, sa->iso_bc->bc_bis,
+	       iso_pi(sk)->bc_num_bis);
+
+done:
+	release_sock(sk);
+	return err;
+}
+
 static int iso_sock_bind(struct socket *sock, struct sockaddr *addr,
 			 int addr_len)
 {
@@ -825,6 +859,13 @@ static int iso_sock_bind(struct socket *sock, struct sockaddr *addr,
 	if (!addr || addr_len < sizeof(struct sockaddr_iso) ||
 	    addr->sa_family != AF_BLUETOOTH)
 		return -EINVAL;
+
+	/* Allow the user to bind a PA sync socket to a number
+	 * of BISes to sync to.
+	 */
+	if (sk->sk_state == BT_CONNECT2 &&
+	    test_bit(BT_SK_PA_SYNC, &iso_pi(sk)->flags))
+		return iso_sock_bind_pa_sk(sk, sa, addr_len);
 
 	lock_sock(sk);
 
