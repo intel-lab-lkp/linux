@@ -1,0 +1,14 @@
+config VIDEO_ROCKCHIP_VIP
+	tristate "Rockchip VIP (Video InPut) Camera Interface"
+	depends on VIDEO_DEV
+	depends on ARCH_ROCKCHIP || COMPILE_TEST
+	select VIDEOBUF2_DMA_SG
+	select VIDEOBUF2_DMA_CONTIG
+	select V4L2_FWNODE
+	select V4L2_MEM2MEM_DEV
+	help
+	  This is a v4l2 driver for Rockchip SOC Camera interface. It supports
+	  BT.656 and CSI2 inputs.
+
+	  To compile this driver as a module choose m here : the module will
+	  be called video_rkvip.
