@@ -82,5 +82,6 @@ struct prmem_region *prmem_add_region(unsigned long pa, size_t size)
 		return NULL;
 
 	list_add_tail(&region->node, &prmem->regions);
+	prmem->cur_size += size;
 	return region;
 }

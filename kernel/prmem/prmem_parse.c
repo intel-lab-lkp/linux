@@ -8,9 +8,11 @@
 #include <linux/prmem.h>
 
 /*
- * Syntax: prmem=size[KMG]
+ * Syntax: prmem=size[KMG][,max_size[KMG]]
  *
  *	Specifies the size of the initial memory to be allocated to prmem.
+ *	Optionally, specifies the maximum amount of memory to be allocated to
+ *	prmem. prmem will expand dynamically between size and max_size.
  */
 static int __init prmem_size_parse(char *cmdline)
 {
@@ -28,6 +30,22 @@ static int __init prmem_size_parse(char *cmdline)
 	}
 
 	prmem_size = size;
+	prmem_max_size = size;
+
+	cur = tmp;
+	if (*cur++ == ',') {
+		/* Get max size. */
+		size = memparse(cur, &tmp);
+		if (cur == tmp || !size || size & (PAGE_SIZE - 1) ||
+		    size <= prmem_size) {
+			prmem_size = 0;
+			prmem_max_size = 0;
+			pr_warn("%s: Incorrect max size %lx\n", __func__, size);
+			return -EINVAL;
+		}
+		prmem_max_size = size;
+	}
+
 	return 0;
 }
 early_param("prmem", prmem_size_parse);

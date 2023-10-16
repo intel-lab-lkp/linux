@@ -68,7 +68,8 @@ bool __init prmem_validate(void)
 	unsigned long		checksum;
 
 	/* Sanity check the boot parameter. */
-	if (prmem_metadata != prmem->metadata || prmem_size != prmem->size) {
+	if (prmem_metadata != prmem->metadata || prmem_size != prmem->size ||
+	    prmem_max_size != prmem->max_size) {
 		pr_warn("%s: Boot parameter mismatch\n", __func__);
 		return false;
 	}

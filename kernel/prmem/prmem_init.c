@@ -20,6 +20,7 @@ void __init prmem_init(void)
 		/* Cold boot. */
 		prmem->metadata = prmem_metadata;
 		prmem->size = prmem_size;
+		prmem->max_size = prmem_max_size;
 		INIT_LIST_HEAD(&prmem->regions);
 		INIT_LIST_HEAD(&prmem->instances);
 

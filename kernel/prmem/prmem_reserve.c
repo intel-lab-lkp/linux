@@ -11,6 +11,7 @@ struct prmem		*prmem;
 unsigned long		prmem_metadata;
 unsigned long		prmem_pa;
 unsigned long		prmem_size;
+unsigned long		prmem_max_size;
 
 void __init prmem_reserve_early(void)
 {

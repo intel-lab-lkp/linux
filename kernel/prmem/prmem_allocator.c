@@ -9,16 +9,54 @@
 
 /* Page Allocation functions. */
 
+static void prmem_expand(void)
+{
+	struct prmem_region	*region;
+	struct page		*pages;
+	unsigned int		order = MAX_ORDER;
+	size_t			size = (1UL << order) << PAGE_SHIFT;
+
+	if (prmem->cur_size + size > prmem->max_size)
+		return;
+
+	spin_unlock(&prmem_lock);
+	pages = alloc_pages(GFP_NOWAIT, order);
+	spin_lock(&prmem_lock);
+
+	if (!pages)
+		return;
+
+	/* cur_size may have changed. Recheck. */
+	if (prmem->cur_size + size > prmem->max_size)
+		goto free;
+
+	region = prmem_add_region(page_to_phys(pages), size);
+	if (!region)
+		goto free;
+
+	pr_warn("%s: prmem expanded by %ld\n", __func__, size);
+	return;
+free:
+	__free_pages(pages, order);
+}
+
 void *prmem_alloc_pages_locked(unsigned int order)
 {
 	struct prmem_region	*region;
 	void			*va;
 	size_t			size = (1UL << order) << PAGE_SHIFT;
+	bool			expand = true;
 
+retry:
 	list_for_each_entry(region, &prmem->regions, node) {
 		va = prmem_alloc_pool(region, size, size);
 		if (va)
 			return va;
+	}
+	if (expand) {
+		expand = false;
+		prmem_expand();
+		goto retry;
 	}
 	return NULL;
 }

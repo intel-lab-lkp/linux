@@ -83,6 +83,9 @@ struct prmem_instance {
  * metadata	Physical address of the metadata page.
  * size		Size of initial memory allocated to prmem.
  *
+ * cur_size	Current amount of memory allocated to prmem.
+ * max_size	Maximum amount of memory that can be allocated to prmem.
+ *
  * regions	List of memory regions.
  *
  * instances	Persistent instances.
@@ -94,6 +97,10 @@ struct prmem {
 	unsigned long		checksum;
 	unsigned long		metadata;
 	size_t			size;
+
+	/* Dynamic expansion. */
+	size_t			cur_size;
+	size_t			max_size;
 
 	/* Persistent Regions. */
 	struct list_head	regions;
@@ -109,6 +116,7 @@ extern struct prmem		*prmem;
 extern unsigned long		prmem_metadata;
 extern unsigned long		prmem_pa;
 extern size_t			prmem_size;
+extern size_t			prmem_max_size;
 extern bool			prmem_inited;
 extern spinlock_t		prmem_lock;
 
