@@ -66,6 +66,7 @@ struct i3c_priv_xfer {
 		void *in;
 		const void *out;
 	} data;
+	u16 actual;
 	enum i3c_error_code err;
 };
 
