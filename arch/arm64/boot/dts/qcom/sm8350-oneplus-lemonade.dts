@@ -1,0 +1,82 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) 2023 Igalia S.L.
+ * Authors:
+ *	Nia Espera <nespera@igalia.com>
+ */
+
+/dts-v1/;
+
+#include "sm8350-oneplus-common.dtsi"
+
+/ {
+	model = "OnePlus 9";
+	compatible = "oneplus,lemonade", "qcom,sm8350";
+};
+
+&i2c4 {
+	touchscreen@48 {
+		compatible = "samsung,s6sy761";
+		reg = <0x48>;
+		interrupts-extended = <&tlmm 23 0x2008>;
+
+		vdd-supply = <&pm8350c_l8>;
+		avdd-supply = <&pm8350c_l13>;
+
+		pinctrl-names = "default", "sleep";
+		pinctrl-0 = <&tp_rst_active &tp_irq_active>;
+		pinctrl-1 = <&tp_rst_suspend &tp_irq_suspend>;
+	};
+};
+
+&tlmm {
+	tp_rst_suspend: tp_rst_suspend {
+		pins = "gpio22";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-down;
+	};
+
+	tp_enable_2v8: tp_enable_2v8 {
+		pins = "gpio74";
+		function = "gpio";
+		drive-strength = <8>;
+		bias-pull-up;
+		output-high;
+	};
+
+	/* Modem antenna pins exclusive to lemonade */
+	rf_cable_ant1_active: rf_cable_ant1_active {
+		pins = "gpio27";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-up;
+	};
+	rf_cable_ant2_active: rf_cable_ant2_active {
+		pins = "gpio92";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-up;
+	};
+	rf_cable_ant3_active: rf_cable_ant3_active {
+		pins = "gpio44";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-up;
+	};
+	rf_cable_ant7_active: rf_cable_ant7_active {
+		pins = "gpio155";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-up;
+	};
+};
+
+&mpss {
+	pinctrl-names = "default";
+	pinctrl-1 = <&rf_cable_ant0_active
+		     &rf_cable_ant1_active
+		     &rf_cable_ant2_active
+		     &rf_cable_ant3_active
+		     &rf_cable_ant7_active>;
+};
