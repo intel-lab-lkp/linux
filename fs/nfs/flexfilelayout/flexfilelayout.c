@@ -1017,8 +1017,7 @@ static void ff_layout_reset_write(struct nfs_pgio_header *hdr, bool retry_pnfs)
 	if (retry_pnfs) {
 		dprintk("%s Reset task %5u for i/o through pNFS "
 			"(req %s/%llu, %u bytes @ offset %llu)\n", __func__,
-			hdr->task.tk_pid,
-			hdr->inode->i_sb->s_id,
+			rpc_tk_pid(task), hdr->inode->i_sb->s_id,
 			(unsigned long long)NFS_FILEID(hdr->inode),
 			hdr->args.count,
 			(unsigned long long)hdr->args.offset);
@@ -1030,8 +1029,7 @@ static void ff_layout_reset_write(struct nfs_pgio_header *hdr, bool retry_pnfs)
 	if (!test_and_set_bit(NFS_IOHDR_REDO, &hdr->flags)) {
 		dprintk("%s Reset task %5u for i/o through MDS "
 			"(req %s/%llu, %u bytes @ offset %llu)\n", __func__,
-			hdr->task.tk_pid,
-			hdr->inode->i_sb->s_id,
+			rpc_tk_pid(task), hdr->inode->i_sb->s_id,
 			(unsigned long long)NFS_FILEID(hdr->inode),
 			hdr->args.count,
 			(unsigned long long)hdr->args.offset);
@@ -1066,8 +1064,7 @@ static void ff_layout_reset_read(struct nfs_pgio_header *hdr)
 	if (!test_and_set_bit(NFS_IOHDR_REDO, &hdr->flags)) {
 		dprintk("%s Reset task %5u for i/o through MDS "
 			"(req %s/%llu, %u bytes @ offset %llu)\n", __func__,
-			hdr->task.tk_pid,
-			hdr->inode->i_sb->s_id,
+			rpc_tk_pid(task), hdr->inode->i_sb->s_id,
 			(unsigned long long)NFS_FILEID(hdr->inode),
 			hdr->args.count,
 			(unsigned long long)hdr->args.offset);

@@ -270,6 +270,11 @@ void		rpc_prepare_task(struct rpc_task *task);
 gfp_t		rpc_task_gfp_mask(void);
 
 #if IS_ENABLED(CONFIG_SUNRPC_DEBUG) || IS_ENABLED(CONFIG_TRACEPOINTS)
+static inline unsigned short rpc_tk_pid(const struct rpc_task *task)
+{
+	return task->tk_pid;
+}
+
 static inline const char * rpc_qname(const struct rpc_wait_queue *q)
 {
 	return ((q && q->name) ? q->name : "unknown");
@@ -281,6 +286,11 @@ static inline void rpc_assign_waitqueue_name(struct rpc_wait_queue *q,
 	q->name = name;
 }
 #else
+static inline unsigned short rpc_tk_pid(const struct rpc_task *task)
+{
+	return 0;
+}
+
 static inline void rpc_assign_waitqueue_name(struct rpc_wait_queue *q,
 		const char *name)
 {

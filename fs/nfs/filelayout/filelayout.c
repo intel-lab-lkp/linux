@@ -93,8 +93,7 @@ static void filelayout_reset_write(struct nfs_pgio_header *hdr)
 	if (!test_and_set_bit(NFS_IOHDR_REDO, &hdr->flags)) {
 		dprintk("%s Reset task %5u for i/o through MDS "
 			"(req %s/%llu, %u bytes @ offset %llu)\n", __func__,
-			hdr->task.tk_pid,
-			hdr->inode->i_sb->s_id,
+			rpc_tk_pid(task), hdr->inode->i_sb->s_id,
 			(unsigned long long)NFS_FILEID(hdr->inode),
 			hdr->args.count,
 			(unsigned long long)hdr->args.offset);
@@ -110,8 +109,7 @@ static void filelayout_reset_read(struct nfs_pgio_header *hdr)
 	if (!test_and_set_bit(NFS_IOHDR_REDO, &hdr->flags)) {
 		dprintk("%s Reset task %5u for i/o through MDS "
 			"(req %s/%llu, %u bytes @ offset %llu)\n", __func__,
-			hdr->task.tk_pid,
-			hdr->inode->i_sb->s_id,
+			rpc_tk_pid(task), hdr->inode->i_sb->s_id,
 			(unsigned long long)NFS_FILEID(hdr->inode),
 			hdr->args.count,
 			(unsigned long long)hdr->args.offset);
@@ -274,7 +272,8 @@ static void filelayout_read_prepare(struct rpc_task *task, void *data)
 		return;
 	}
 	if (filelayout_reset_to_mds(hdr->lseg)) {
-		dprintk("%s task %u reset io to MDS\n", __func__, task->tk_pid);
+		dprintk("%s task %u reset io to MDS\n", __func__,
+			rpc_tk_pid(task));
 		filelayout_reset_read(hdr);
 		rpc_exit(task, 0);
 		return;
@@ -372,7 +371,8 @@ static void filelayout_write_prepare(struct rpc_task *task, void *data)
 		return;
 	}
 	if (filelayout_reset_to_mds(hdr->lseg)) {
-		dprintk("%s task %u reset io to MDS\n", __func__, task->tk_pid);
+		dprintk("%s task %u reset io to MDS\n", __func__,
+			rpc_tk_pid(task));
 		filelayout_reset_write(hdr);
 		rpc_exit(task, 0);
 		return;
