@@ -1033,7 +1033,8 @@ struct perf_pmu *perf_pmu__lookup(struct list_head *pmus, int dirfd, const char 
 		pmu->id = pmu_id(name);
 	pmu->max_precise = pmu_max_precise(dirfd, pmu);
 	pmu->alias_name = pmu_find_alias_name(pmu, dirfd);
-	pmu->events_table = perf_pmu__find_events_table(pmu);
+	if (!perf_pmu__is_software(pmu))
+		pmu->events_table = perf_pmu__find_events_table(pmu);
 	pmu_add_sys_aliases(pmu);
 	list_add_tail(&pmu->list, pmus);
 
