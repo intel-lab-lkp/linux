@@ -741,8 +741,9 @@ static int txgbe_probe(struct pci_dev *pdev,
 	/* First try to read PBA as a string */
 	err = txgbe_read_pba_string(wx, part_str, TXGBE_PBANUM_LENGTH);
 	if (err)
-		strncpy(part_str, "Unknown", TXGBE_PBANUM_LENGTH);
+		strscpy(part_str, "Unknown", sizeof(part_str));
 
+	netif_info(wx, probe, netdev, "PBA No: %s\n", part_str);
 	netif_info(wx, probe, netdev, "%pM\n", netdev->dev_addr);
 
 	return 0;
