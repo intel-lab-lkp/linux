@@ -458,6 +458,10 @@ static void ps8640_atomic_pre_enable(struct drm_bridge *bridge,
 
 	ps8640_bridge_vdo_control(ps_bridge, ENABLE);
 
+	ret = mipi_dsi_host_power_up(ps_bridge->dsi->host);
+	if (ret < 0)
+		dev_warn(dev, "failed to power up DSI host: %d\n", ret);
+
 	ps_bridge->pre_enabled = true;
 }
 
@@ -467,6 +471,8 @@ static void ps8640_atomic_post_disable(struct drm_bridge *bridge,
 	struct ps8640 *ps_bridge = bridge_to_ps8640(bridge);
 
 	ps_bridge->pre_enabled = false;
+
+	mipi_dsi_host_power_down(ps_bridge->dsi->host);
 
 	ps8640_bridge_vdo_control(ps_bridge, DISABLE);
 	pm_runtime_put_sync_suspend(&ps_bridge->page[PAGE0_DP_CNTL]->dev);
@@ -562,6 +568,11 @@ static int ps8640_bridge_get_dsi_resources(struct device *dev, struct ps8640 *ps
 	if (!host)
 		return -EPROBE_DEFER;
 
+	if (!mipi_dsi_host_power_control_available(host)) {
+		dev_err(dev, "MIPI DSI host doesn't provide tight power control\n");
+		return -ENODEV;
+	}
+
 	dsi = devm_mipi_dsi_device_register_full(dev, host, &info);
 	if (IS_ERR(dsi)) {
 		dev_err(dev, "failed to create dsi device\n");
@@ -572,7 +583,8 @@ static int ps8640_bridge_get_dsi_resources(struct device *dev, struct ps8640 *ps
 
 	dsi->host = host;
 	dsi->mode_flags = MIPI_DSI_MODE_VIDEO |
-			  MIPI_DSI_MODE_VIDEO_SYNC_PULSE;
+			  MIPI_DSI_MODE_VIDEO_SYNC_PULSE |
+			  MIPI_DSI_MANUAL_POWERUP;
 	dsi->format = MIPI_DSI_FMT_RGB888;
 	dsi->lanes = NUM_MIPI_LANES;
 
