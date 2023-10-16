@@ -4297,6 +4297,7 @@ fec_probe(struct platform_device *pdev)
 	char irq_name[8];
 	int irq_cnt;
 	const struct fec_devinfo *dev_info;
+	const struct platform_device_id *plat_dev_id;
 
 	fec_enet_get_queue_num(pdev, &num_tx_qs, &num_rx_qs);
 
@@ -4311,9 +4312,10 @@ fec_probe(struct platform_device *pdev)
 	/* setup board info structure */
 	fep = netdev_priv(ndev);
 
-	dev_info = device_get_match_data(&pdev->dev);
-	if (!dev_info)
-		dev_info = (const struct fec_devinfo *)pdev->id_entry->driver_data;
+	plat_dev_id = device_get_match_data(&pdev->dev);
+	if (plat_dev_id)
+		pdev->id_entry = plat_dev_id;
+	dev_info = (const struct fec_devinfo *)pdev->id_entry->driver_data;
 	if (dev_info)
 		fep->quirks = dev_info->quirks;
 
