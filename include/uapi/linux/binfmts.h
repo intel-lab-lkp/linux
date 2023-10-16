@@ -8,11 +8,11 @@ struct pt_regs;
 
 /*
  * These are the maximum length and maximum number of strings passed to the
- * execve() system call.  MAX_ARG_STRLEN is essentially random but serves to
- * prevent the kernel from being unduly impacted by misaddressed pointers.
+ * execve() system call.  MAX_ARG_STRLEN is as large as Linux allows new
+ * stack to grow.  Currently it's `_STK_LIM / 4 * 3 = 6MB` (see fs/exec.c).
  * MAX_ARG_STRINGS is chosen to fit in a signed 32-bit integer.
  */
-#define MAX_ARG_STRLEN (PAGE_SIZE * 32)
+#define MAX_ARG_STRLEN (6 * 1024 * 1024)
 #define MAX_ARG_STRINGS 0x7FFFFFFF
 
 /* sizeof(linux_binprm->buf) */
