@@ -75,6 +75,39 @@ int patch_branch(u32 *addr, unsigned long target, int flags);
 int patch_instruction(u32 *addr, ppc_inst_t instr);
 int raw_patch_instruction(u32 *addr, ppc_inst_t instr);
 
+/*
+ * patch_uint() and patch_ulong() should only be called on addresses where the
+ * patch does not cross a cacheline, otherwise it may not be flushed properly
+ * and mixes of new and stale data may be observed. It cannot cross a page
+ * boundary, as only the target page is mapped as writable.
+ *
+ * patch_instruction() and other instruction patchers automatically satisfy this
+ * requirement due to instruction alignment requirements.
+ */
+
+#ifdef CONFIG_PPC64
+
+int patch_uint(void *addr, unsigned int val);
+int patch_ulong(void *addr, unsigned long val);
+
+#define patch_u64 patch_ulong
+
+#else
+
+static inline int patch_uint(u32 *addr, unsigned int val)
+{
+	return patch_instruction(addr, ppc_inst(val));
+}
+
+static inline int patch_ulong(void *addr, unsigned long val)
+{
+	return patch_instruction(addr, ppc_inst(val));
+}
+
+#endif
+
+#define patch_u32 patch_uint
+
 static inline unsigned long patch_site_addr(s32 *site)
 {
 	return (unsigned long)site + *site;
