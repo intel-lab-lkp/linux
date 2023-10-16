@@ -64,6 +64,8 @@ bool msm_dsi_manager_cmd_xfer_trigger(int id, u32 dma_base, u32 len);
 int msm_dsi_manager_register(struct msm_dsi *msm_dsi);
 void msm_dsi_manager_unregister(struct msm_dsi *msm_dsi);
 void msm_dsi_manager_tpg_enable(void);
+int msm_dsi_manager_power_up(int id);
+void msm_dsi_manager_power_down(int id);
 
 /* msm dsi */
 static inline bool msm_dsi_device_connected(struct msm_dsi *msm_dsi)
@@ -109,6 +111,8 @@ void msm_dsi_host_get_phy_clk_req(struct mipi_dsi_host *host,
 void msm_dsi_host_destroy(struct mipi_dsi_host *host);
 int msm_dsi_host_modeset_init(struct mipi_dsi_host *host,
 					struct drm_device *dev);
+bool msm_dsi_host_auto_powerup(struct mipi_dsi_host *host);
+bool msm_dsi_host_early_powerup(struct mipi_dsi_host *host);
 int msm_dsi_host_init(struct msm_dsi *msm_dsi);
 int msm_dsi_runtime_suspend(struct device *dev);
 int msm_dsi_runtime_resume(struct device *dev);

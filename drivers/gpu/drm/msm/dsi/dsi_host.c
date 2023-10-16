@@ -1636,10 +1636,54 @@ static ssize_t dsi_host_transfer(struct mipi_dsi_host *host,
 	return ret;
 }
 
+static bool msm_dsi_host_manual_powerup(struct mipi_dsi_host *host)
+{
+	struct msm_dsi_host *msm_host = to_msm_dsi_host(host);
+
+	return msm_host->mode_flags & MIPI_DSI_MANUAL_POWERUP;
+}
+
+bool msm_dsi_host_auto_powerup(struct mipi_dsi_host *host)
+{
+	struct msm_dsi_host *msm_host = to_msm_dsi_host(host);
+
+	return msm_host->mode_flags & MIPI_DSI_AUTO_POWERUP;
+}
+
+bool msm_dsi_host_early_powerup(struct mipi_dsi_host *host)
+{
+	struct msm_dsi_host *msm_host = to_msm_dsi_host(host);
+
+	return !msm_dsi_host_manual_powerup(host) &&
+		!msm_dsi_host_auto_powerup(host);
+}
+
+static int msm_dsi_host_power_up(struct mipi_dsi_host *host)
+{
+	struct msm_dsi_host *msm_host = to_msm_dsi_host(host);
+
+	if (msm_dsi_host_auto_powerup(host))
+		return 0;
+
+	return msm_dsi_manager_power_up(msm_host->id);
+}
+
+static void msm_dsi_host_power_down(struct mipi_dsi_host *host)
+{
+	struct msm_dsi_host *msm_host = to_msm_dsi_host(host);
+
+	if (!msm_dsi_host_manual_powerup(host))
+		return;
+
+	msm_dsi_manager_power_down(msm_host->id);
+}
+
 static const struct mipi_dsi_host_ops dsi_host_ops = {
 	.attach = dsi_host_attach,
 	.detach = dsi_host_detach,
 	.transfer = dsi_host_transfer,
+	.power_up = msm_dsi_host_power_up,
+	.power_down = msm_dsi_host_power_down,
 };
 
 /*

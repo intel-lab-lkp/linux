@@ -198,6 +198,44 @@ static int dsi_mgr_bridge_get_id(struct drm_bridge *bridge)
 	return dsi_bridge->id;
 }
 
+/*
+ * If the next bridge in the chain is the Parade ps8640 bridge chip then don't
+ * power on early since it seems to violate the expectations of the firmware
+ * that the bridge chip is running.
+ */
+static bool dsi_mgr_next_is_ps8640(struct drm_bridge *bridge)
+{
+	struct drm_bridge *next_bridge = drm_bridge_get_next_bridge(bridge);
+
+	return next_bridge &&
+		next_bridge->of_node &&
+		of_device_is_compatible(next_bridge->of_node, "parade,ps8640");
+}
+
+static bool dsi_mgr_auto_powerup(struct drm_bridge *bridge)
+{
+	int id = dsi_mgr_bridge_get_id(bridge);
+	struct msm_dsi *msm_dsi = dsi_mgr_get_dsi(id);
+	struct mipi_dsi_host *host = msm_dsi->host;
+
+	if (dsi_mgr_next_is_ps8640(bridge))
+		return true;
+
+	return msm_dsi_host_auto_powerup(host);
+}
+
+static bool dsi_mgr_early_powerup(struct drm_bridge *bridge)
+{
+	int id = dsi_mgr_bridge_get_id(bridge);
+	struct msm_dsi *msm_dsi = dsi_mgr_get_dsi(id);
+	struct mipi_dsi_host *host = msm_dsi->host;
+
+	if (dsi_mgr_next_is_ps8640(bridge))
+		return false;
+
+	return msm_dsi_host_early_powerup(host);
+}
+
 static void msm_dsi_manager_set_split_display(u8 id)
 {
 	struct msm_dsi *msm_dsi = dsi_mgr_get_dsi(id);
@@ -228,9 +266,8 @@ static void msm_dsi_manager_set_split_display(u8 id)
 	}
 }
 
-static int dsi_mgr_bridge_power_on(struct drm_bridge *bridge)
+int msm_dsi_manager_power_up(int id)
 {
-	int id = dsi_mgr_bridge_get_id(bridge);
 	struct msm_dsi *msm_dsi = dsi_mgr_get_dsi(id);
 	struct msm_dsi *msm_dsi1 = dsi_mgr_get_dsi(DSI_1);
 	struct mipi_dsi_host *host = msm_dsi->host;
@@ -239,6 +276,10 @@ static int dsi_mgr_bridge_power_on(struct drm_bridge *bridge)
 	int ret;
 
 	DBG("id=%d", id);
+
+	/* Do nothing with the host if it is slave-DSI in case of bonded DSI */
+	if (is_bonded_dsi && !IS_MASTER_DSI_LINK(id))
+		return 0;
 
 	ret = dsi_mgr_phy_enable(id, phy_shared_timings);
 	if (ret)
@@ -278,9 +319,8 @@ phy_en_fail:
 	return ret;
 }
 
-static void dsi_mgr_bridge_power_off(struct drm_bridge *bridge)
+void msm_dsi_manager_power_down(int id)
 {
-	int id = dsi_mgr_bridge_get_id(bridge);
 	struct msm_dsi *msm_dsi = dsi_mgr_get_dsi(id);
 	struct msm_dsi *msm_dsi1 = dsi_mgr_get_dsi(DSI_1);
 	struct mipi_dsi_host *host = msm_dsi->host;
@@ -312,10 +352,12 @@ static void dsi_mgr_bridge_pre_enable(struct drm_bridge *bridge)
 	if (is_bonded_dsi && !IS_MASTER_DSI_LINK(id))
 		return;
 
-	ret = dsi_mgr_bridge_power_on(bridge);
-	if (ret) {
-		dev_err(&msm_dsi->pdev->dev, "Power on failed: %d\n", ret);
-		return;
+	if (dsi_mgr_auto_powerup(bridge)) {
+		ret = msm_dsi_manager_power_up(id);
+		if (ret) {
+			dev_err(&msm_dsi->pdev->dev, "Power on failed: %d\n", ret);
+			return;
+		}
 	}
 
 	ret = msm_dsi_host_enable(host);
@@ -337,7 +379,8 @@ static void dsi_mgr_bridge_pre_enable(struct drm_bridge *bridge)
 host1_en_fail:
 	msm_dsi_host_disable(host);
 host_en_fail:
-	dsi_mgr_bridge_power_off(bridge);
+	if (dsi_mgr_auto_powerup(bridge))
+		msm_dsi_manager_power_down(id);
 }
 
 void msm_dsi_manager_tpg_enable(void)
@@ -390,7 +433,9 @@ static void dsi_mgr_bridge_post_disable(struct drm_bridge *bridge)
 	/* Save PHY status if it is a clock source */
 	msm_dsi_phy_pll_save_state(msm_dsi->phy);
 
-	dsi_mgr_bridge_power_off(bridge);
+	if (dsi_mgr_auto_powerup(bridge) ||
+	    dsi_mgr_early_powerup(bridge))
+		msm_dsi_manager_power_down(id);
 }
 
 static void dsi_mgr_bridge_mode_set(struct drm_bridge *bridge,
@@ -411,6 +456,9 @@ static void dsi_mgr_bridge_mode_set(struct drm_bridge *bridge,
 	msm_dsi_host_set_display_mode(host, adjusted_mode);
 	if (is_bonded_dsi && other_dsi)
 		msm_dsi_host_set_display_mode(other_dsi->host, adjusted_mode);
+
+	if (dsi_mgr_early_powerup(bridge))
+		msm_dsi_manager_power_up(id);
 }
 
 static enum drm_mode_status dsi_mgr_bridge_mode_valid(struct drm_bridge *bridge,
