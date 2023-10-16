@@ -298,7 +298,7 @@ int nvmet_auth_host_hash(struct nvmet_req *req, u8 *response,
 	}
 
 	ret = crypto_shash_setkey(shash_tfm, host_response,
-				  ctrl->host_key->len);
+				  ctrl->host_key->transformed_len);
 	if (ret)
 		goto out_free_response;
 
@@ -410,7 +410,7 @@ int nvmet_auth_ctrl_hash(struct nvmet_req *req, u8 *response,
 	}
 
 	ret = crypto_shash_setkey(shash_tfm, ctrl_response,
-				  ctrl->ctrl_key->len);
+				  ctrl->ctrl_key->transformed_len);
 	if (ret)
 		goto out_free_response;
 

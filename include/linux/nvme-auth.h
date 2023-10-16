@@ -10,8 +10,9 @@
 
 struct nvme_dhchap_key {
 	u8 *key;
-	size_t len;
 	u8 hash;
+	size_t len;
+	size_t transformed_len;
 };
 
 u32 nvme_auth_get_seqnum(void);

@@ -243,6 +243,8 @@ u8 *nvme_auth_transform_key(struct nvme_dhchap_key *key, char *nqn)
 	}
 	if (key->hash == 0) {
 		transformed_key = kmemdup(key->key, key->len, GFP_KERNEL);
+		if (transformed_key)
+			key->transformed_len = key->len;
 		return transformed_key ? transformed_key : ERR_PTR(-ENOMEM);
 	}
 	hmac_name = nvme_auth_hmac_name(key->hash);
@@ -263,7 +265,8 @@ u8 *nvme_auth_transform_key(struct nvme_dhchap_key *key, char *nqn)
 		goto out_free_key;
 	}
 
-	transformed_key = kzalloc(crypto_shash_digestsize(key_tfm), GFP_KERNEL);
+	key->transformed_len = crypto_shash_digestsize(key_tfm);
+	transformed_key = kzalloc(key->transformed_len, GFP_KERNEL);
 	if (!transformed_key) {
 		ret = -ENOMEM;
 		goto out_free_shash;
@@ -297,6 +300,7 @@ out_free_shash:
 	kfree(shash);
 out_free_key:
 	crypto_free_shash(key_tfm);
+	key->transformed_len = 0;
 
 	return ERR_PTR(ret);
 }
