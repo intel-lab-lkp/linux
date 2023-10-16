@@ -114,6 +114,12 @@ properties:
       register. Define this if your serial port does not use this pin.
     type: boolean
 
+  drain-before-lcr-change:
+    description: Force TX buffer flush before LCR change. Make sure all
+    characters in the buffer are sent before reconfiguring. Define this if
+    the UART drops its FIFO when reconfiguring.
+    type: boolean
+
 required:
   - compatible
   - reg
