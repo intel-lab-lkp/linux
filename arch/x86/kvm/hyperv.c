@@ -729,7 +729,7 @@ static int stimer_set_count(struct kvm_vcpu_hv_stimer *stimer, u64 count,
 	stimer->count = count;
 	if (stimer->count == 0)
 		stimer->config.enable = 0;
-	else if (stimer->config.auto_enable)
+	else if (stimer->config.auto_enable && !host)
 		stimer->config.enable = 1;
 
 	if (stimer->config.enable)
