@@ -99,7 +99,7 @@ static const __u8 cxl_deprecated_commands[]
  * @id: ID number for the command.
  * @flags: Flags that specify command behavior.
  *
- *         CXL_MEM_COMMAND_FLAG_USER_ENABLED
+ *         CXL_MEM_COMMAND_FLAG_ENABLED
  *
  *         The given command id is supported by the driver and is supported by
  *         a related opcode on the device.
