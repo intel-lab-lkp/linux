@@ -19,7 +19,13 @@ definitions:
     properties:
       mclk-fs:
         $ref: simple-card.yaml#/definitions/mclk-fs
-
+      ch-maps:
+        description: It indicates how CPU / Codec DAIs are related if number of CPU(N) / Codec(M)
+          DAIs were not same in one dai-link. ch-maps is not needed if the numbers were 1:M or N:1
+          or N=M. If N <= M case, ch-maps indicates connection from CPU, if N > M case,ch-maps
+          indicates connection from Codec.
+          ${LINUX}/sound/soc/generic/audio-graph-card2-custom-sample.dtsi is good sample.
+        $ref: /schemas/types.yaml#/definitions/uint32-array
   endpoint-base:
     allOf:
       - $ref: /schemas/graph.yaml#/$defs/endpoint-base
