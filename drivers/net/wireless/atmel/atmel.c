@@ -2011,7 +2011,7 @@ static int atmel_get_name(struct net_device *dev,
 			  union iwreq_data *wrqu,
 			  char *extra)
 {
-	strcpy(wrqu->name, "IEEE 802.11-DS");
+	strscpy(wrqu->name, "IEEE 802.11-DS", sizeof(wrqu->name));
 	return 0;
 }
 
@@ -2651,8 +2651,7 @@ static int atmel_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 
 		priv->firmware = new_firmware;
 		priv->firmware_length = com.len;
-		strncpy(priv->firmware_id, com.id, 31);
-		priv->firmware_id[31] = '\0';
+		strscpy(priv->firmware_id, com.id, sizeof(priv->firmware_id));
 		break;
 
 	case ATMELRD:
@@ -3889,7 +3888,8 @@ static int reset_atmel_card(struct net_device *dev)
 					printk(KERN_INFO
 					       "%s: if not, use the firmware= module parameter.\n",
 					       dev->name);
-					strcpy(priv->firmware_id, "atmel_at76c502.bin");
+					strscpy(priv->firmware_id, "atmel_at76c502.bin",
+						sizeof(priv->firmware_id));
 				}
 				err = request_firmware(&fw_entry, priv->firmware_id, priv->sys_dev);
 				if (err != 0) {
