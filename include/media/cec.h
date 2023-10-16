@@ -207,7 +207,12 @@ struct cec_adap_ops {
  *	passthrough mode.
  * @log_addrs:		current logical addresses
  * @conn_info:		current connector info
- * @tx_timeouts:	number of transmit timeouts
+ * @tx_timeout_cnt:	number of Time Out transmits
+ * @tx_low_drive_cnt:	number of Low Drive transmits
+ * @tx_error_cnt:	number of Error transmits
+ * @tx_arb_lost_cnt:	number of Arbitration Lost transmits
+ * @tx_low_drive_log_cnt: number of logged Low Drive transmits
+ * @tx_error_log_cnt:	number of logged Error transmits
  * @notifier:		CEC notifier
  * @pin:		CEC pin status struct
  * @cec_dir:		debugfs cec directory
@@ -262,7 +267,12 @@ struct cec_adapter {
 	struct cec_log_addrs log_addrs;
 	struct cec_connector_info conn_info;
 
-	u32 tx_timeouts;
+	u32 tx_timeout_cnt;
+	u32 tx_low_drive_cnt;
+	u32 tx_error_cnt;
+	u32 tx_arb_lost_cnt;
+	u32 tx_low_drive_log_cnt;
+	u32 tx_error_log_cnt;
 
 #ifdef CONFIG_CEC_NOTIFIER
 	struct cec_notifier *notifier;
