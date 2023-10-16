@@ -128,6 +128,9 @@
 /* This parameter depends on the implementation and may be tuned */
 #define SVC_I3C_FIFO_SIZE 16
 
+static bool hotjoin = true;
+module_param(hotjoin, bool, S_IRUGO | S_IWUSR);
+
 struct svc_i3c_cmd {
 	u8 addr;
 	bool rnw;
@@ -1624,8 +1627,12 @@ static int svc_i3c_master_probe(struct platform_device *pdev)
 	if (ret)
 		goto rpm_disable;
 
-	pm_runtime_mark_last_busy(&pdev->dev);
-	pm_runtime_put_autosuspend(&pdev->dev);
+	if (hotjoin) {
+		svc_i3c_master_enable_interrupts(master, SVC_I3C_MINT_SLVSTART);
+	} else {
+		pm_runtime_mark_last_busy(&pdev->dev);
+		pm_runtime_put_autosuspend(&pdev->dev);
+	}
 
 	return 0;
 
