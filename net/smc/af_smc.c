@@ -2121,7 +2121,7 @@ static void smc_check_ism_v2_match(struct smc_init_info *ini,
 	}
 }
 
-static void smc_find_ism_store_rc(u32 rc, struct smc_init_info *ini)
+static void smc_find_device_store_rc(u32 rc, struct smc_init_info *ini)
 {
 	if (!ini->rc)
 		ini->rc = rc;
@@ -2162,10 +2162,8 @@ static void smc_find_ism_v2_device_serv(struct smc_sock *new_smc,
 	}
 	mutex_unlock(&smcd_dev_list.mutex);
 
-	if (!ini->ism_dev[0]) {
-		smc_find_ism_store_rc(SMC_CLC_DECL_NOSMCD2DEV, ini);
+	if (!ini->ism_dev[0])
 		goto not_found;
-	}
 
 	smc_ism_get_system_eid(&eid);
 	if (!smc_clc_match_eid(ini->negotiated_eid, smc_v2_ext,
@@ -2180,7 +2178,7 @@ static void smc_find_ism_v2_device_serv(struct smc_sock *new_smc,
 		ini->ism_selected = i;
 		rc = smc_listen_ism_init(new_smc, ini);
 		if (rc) {
-			smc_find_ism_store_rc(rc, ini);
+			smc_find_device_store_rc(rc, ini);
 			/* try next active ISM device */
 			continue;
 		}
@@ -2213,11 +2211,12 @@ static void smc_find_ism_v1_device_serv(struct smc_sock *new_smc,
 		goto not_found;
 	ini->ism_selected = 0;
 	rc = smc_listen_ism_init(new_smc, ini);
-	if (!rc)
+	if (!rc) {
+		smc_find_device_store_rc(rc, ini);
 		return;		/* V1 ISM device found */
+	}
 
 not_found:
-	smc_find_ism_store_rc(rc, ini);
 	ini->smcd_version &= ~SMC_V1;
 	ini->ism_dev[0] = NULL;
 	ini->is_smcd = false;
@@ -2266,10 +2265,8 @@ static void smc_find_rdma_v2_device_serv(struct smc_sock *new_smc,
 	ini->smcrv2.saddr = new_smc->clcsock->sk->sk_rcv_saddr;
 	ini->smcrv2.daddr = smc_ib_gid_to_ipv4(smc_v2_ext->roce);
 	rc = smc_find_rdma_device(new_smc, ini);
-	if (rc) {
-		smc_find_ism_store_rc(rc, ini);
+	if (rc)
 		goto not_found;
-	}
 	if (!ini->smcrv2.uses_gateway)
 		memcpy(ini->smcrv2.nexthop_mac, pclc->lcl.mac, ETH_ALEN);
 
@@ -2284,7 +2281,7 @@ static void smc_find_rdma_v2_device_serv(struct smc_sock *new_smc,
 	if (!rc)
 		return;
 	ini->smcr_version = smcr_version;
-	smc_find_ism_store_rc(rc, ini);
+	smc_find_device_store_rc(rc, ini);
 
 not_found:
 	ini->smcr_version &= ~SMC_V2;
@@ -2330,8 +2327,6 @@ static int smc_listen_find_device(struct smc_sock *new_smc,
 
 	/* check for matching IP prefix and subnet length (V1) */
 	prfx_rc = smc_listen_prfx_check(new_smc, pclc);
-	if (prfx_rc)
-		smc_find_ism_store_rc(prfx_rc, ini);
 
 	/* get vlan id from IP device */
 	if (smc_vlan_by_tcpsk(new_smc->clcsock, ini))
@@ -2358,7 +2353,7 @@ static int smc_listen_find_device(struct smc_sock *new_smc,
 		int rc;
 
 		rc = smc_find_rdma_v1_device_serv(new_smc, pclc, ini);
-		smc_find_ism_store_rc(rc, ini);
+		smc_find_device_store_rc(rc, ini);
 		return (!rc) ? 0 : ini->rc;
 	}
 	return SMC_CLC_DECL_NOSMCDEV;
