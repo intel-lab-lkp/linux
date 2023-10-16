@@ -59,7 +59,7 @@ MODULE_ALIAS_NFNL_SUBSYS(NFNL_SUBSYS_IPSET);
 		lockdep_is_held(&ip_set_ref_lock))
 #define ip_set(inst, id)		\
 	ip_set_dereference((inst)->ip_set_list)[id]
-#define ip_set_ref_netlink(inst,id)	\
+#define ip_set_ref_swapping(inst, id)	\
 	rcu_dereference_raw((inst)->ip_set_list)[id]
 
 /* The set types are implemented in modules and registered set types
@@ -683,19 +683,19 @@ __ip_set_put(struct ip_set *set)
  * a separate reference counter
  */
 static void
-__ip_set_get_netlink(struct ip_set *set)
+__ip_set_get_swapping(struct ip_set *set)
 {
 	write_lock_bh(&ip_set_ref_lock);
-	set->ref_netlink++;
+	set->ref_swapping++;
 	write_unlock_bh(&ip_set_ref_lock);
 }
 
 static void
-__ip_set_put_netlink(struct ip_set *set)
+__ip_set_put_swapping(struct ip_set *set)
 {
 	write_lock_bh(&ip_set_ref_lock);
-	BUG_ON(set->ref_netlink == 0);
-	set->ref_netlink--;
+	BUG_ON(set->ref_swapping == 0);
+	set->ref_swapping--;
 	write_unlock_bh(&ip_set_ref_lock);
 }
 
@@ -1213,7 +1213,7 @@ static int ip_set_destroy(struct sk_buff *skb, const struct nfnl_info *info,
 	if (!attr[IPSET_ATTR_SETNAME]) {
 		for (i = 0; i < inst->ip_set_max; i++) {
 			s = ip_set(inst, i);
-			if (s && (s->ref || s->ref_netlink)) {
+			if (s && (s->ref || s->ref_swapping)) {
 				ret = -IPSET_ERR_BUSY;
 				goto out;
 			}
@@ -1237,7 +1237,7 @@ static int ip_set_destroy(struct sk_buff *skb, const struct nfnl_info *info,
 			if (!(flags & IPSET_FLAG_EXIST))
 				ret = -ENOENT;
 			goto out;
-		} else if (s->ref || s->ref_netlink) {
+		} else if (s->ref || s->ref_swapping) {
 			ret = -IPSET_ERR_BUSY;
 			goto out;
 		}
@@ -1321,7 +1321,7 @@ static int ip_set_rename(struct sk_buff *skb, const struct nfnl_info *info,
 		return -ENOENT;
 
 	write_lock_bh(&ip_set_ref_lock);
-	if (set->ref != 0 || set->ref_netlink != 0) {
+	if (set->ref != 0 || set->ref_swapping != 0) {
 		ret = -IPSET_ERR_REFERENCED;
 		goto out;
 	}
@@ -1383,7 +1383,7 @@ static int ip_set_swap(struct sk_buff *skb, const struct nfnl_info *info,
 
 	write_lock_bh(&ip_set_ref_lock);
 
-	if (from->ref_netlink || to->ref_netlink) {
+	if (from->ref_swapping || to->ref_swapping) {
 		write_unlock_bh(&ip_set_ref_lock);
 		return -EBUSY;
 	}
@@ -1441,12 +1441,12 @@ ip_set_dump_done(struct netlink_callback *cb)
 		struct ip_set_net *inst =
 			(struct ip_set_net *)cb->args[IPSET_CB_NET];
 		ip_set_id_t index = (ip_set_id_t)cb->args[IPSET_CB_INDEX];
-		struct ip_set *set = ip_set_ref_netlink(inst, index);
+		struct ip_set *set = ip_set_ref_swapping(inst, index);
 
 		if (set->variant->uref)
 			set->variant->uref(set, cb, false);
 		pr_debug("release set %s\n", set->name);
-		__ip_set_put_netlink(set);
+		__ip_set_put_swapping(set);
 	}
 	return 0;
 }
@@ -1580,7 +1580,7 @@ dump_last:
 		if (!cb->args[IPSET_CB_ARG0]) {
 			/* Start listing: make sure set won't be destroyed */
 			pr_debug("reference set\n");
-			set->ref_netlink++;
+			set->ref_swapping++;
 		}
 		write_unlock_bh(&ip_set_ref_lock);
 		nlh = start_msg(skb, NETLINK_CB(cb->skb).portid,
@@ -1646,11 +1646,11 @@ next_set:
 release_refcount:
 	/* If there was an error or set is done, release set */
 	if (ret || !cb->args[IPSET_CB_ARG0]) {
-		set = ip_set_ref_netlink(inst, index);
+		set = ip_set_ref_swapping(inst, index);
 		if (set->variant->uref)
 			set->variant->uref(set, cb, false);
 		pr_debug("release set %s\n", set->name);
-		__ip_set_put_netlink(set);
+		__ip_set_put_swapping(set);
 		cb->args[IPSET_CB_ARG0] = 0;
 	}
 out:
@@ -1701,11 +1701,11 @@ call_ad(struct net *net, struct sock *ctnl, struct sk_buff *skb,
 
 	do {
 		if (retried) {
-			__ip_set_get_netlink(set);
+			__ip_set_get_swapping(set);
 			nfnl_unlock(NFNL_SUBSYS_IPSET);
 			cond_resched();
 			nfnl_lock(NFNL_SUBSYS_IPSET);
-			__ip_set_put_netlink(set);
+			__ip_set_put_swapping(set);
 		}
 
 		ip_set_lock(set);
