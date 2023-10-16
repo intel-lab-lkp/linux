@@ -59,8 +59,8 @@ struct virtnet_rq_dma {
 };
 
 /* Internal representation of a send virtqueue */
-struct send_queue {
-	/* Virtqueue associated with this send _queue */
+struct virtnet_sq {
+	/* Virtqueue associated with this virtnet_sq */
 	struct virtqueue *vq;
 
 	/* TX: fragments + linear part + virtio header */
@@ -80,8 +80,8 @@ struct send_queue {
 };
 
 /* Internal representation of a receive virtqueue */
-struct receive_queue {
-	/* Virtqueue associated with this receive_queue */
+struct virtnet_rq {
+	/* Virtqueue associated with this virtnet_rq */
 	struct virtqueue *vq;
 
 	struct napi_struct napi;
@@ -123,8 +123,8 @@ struct virtnet_info {
 	struct virtio_device *vdev;
 	struct virtqueue *cvq;
 	struct net_device *dev;
-	struct send_queue *sq;
-	struct receive_queue *rq;
+	struct virtnet_sq *sq;
+	struct virtnet_rq *rq;
 	unsigned int status;
 
 	/* Max # of queue pairs supported by the device */
@@ -201,24 +201,24 @@ struct virtnet_info {
 	struct failover *failover;
 };
 
-static inline bool is_xdp_frame(void *ptr)
+static inline bool virtnet_is_xdp_frame(void *ptr)
 {
 	return (unsigned long)ptr & VIRTIO_XDP_FLAG;
 }
 
-static inline struct xdp_frame *ptr_to_xdp(void *ptr)
+static inline struct xdp_frame *virtnet_ptr_to_xdp(void *ptr)
 {
 	return (struct xdp_frame *)((unsigned long)ptr & ~VIRTIO_XDP_FLAG);
 }
 
-static inline void __free_old_xmit(struct send_queue *sq, bool in_napi,
-				   struct virtnet_sq_stats *stats)
+static inline void virtnet_free_old_xmit(struct virtnet_sq *sq, bool in_napi,
+					 struct virtnet_sq_stats *stats)
 {
 	unsigned int len;
 	void *ptr;
 
 	while ((ptr = virtqueue_get_buf(sq->vq, &len)) != NULL) {
-		if (!is_xdp_frame(ptr)) {
+		if (!virtnet_is_xdp_frame(ptr)) {
 			struct sk_buff *skb = ptr;
 
 			pr_debug("Sent skb %p\n", skb);
@@ -226,7 +226,7 @@ static inline void __free_old_xmit(struct send_queue *sq, bool in_napi,
 			stats->bytes += skb->len;
 			napi_consume_skb(skb, in_napi);
 		} else {
-			struct xdp_frame *frame = ptr_to_xdp(ptr);
+			struct xdp_frame *frame = virtnet_ptr_to_xdp(ptr);
 
 			stats->bytes += xdp_get_frame_len(frame);
 			xdp_return_frame(frame);
@@ -235,8 +235,8 @@ static inline void __free_old_xmit(struct send_queue *sq, bool in_napi,
 	}
 }
 
-static inline void virtqueue_napi_schedule(struct napi_struct *napi,
-					   struct virtqueue *vq)
+static inline void virtnet_vq_napi_schedule(struct napi_struct *napi,
+					    struct virtqueue *vq)
 {
 	if (napi_schedule_prep(napi)) {
 		virtqueue_disable_cb(vq);
@@ -244,7 +244,7 @@ static inline void virtqueue_napi_schedule(struct napi_struct *napi,
 	}
 }
 
-static inline bool is_xdp_raw_buffer_queue(struct virtnet_info *vi, int q)
+static inline bool virtnet_is_xdp_raw_buffer_queue(struct virtnet_info *vi, int q)
 {
 	if (q < (vi->curr_queue_pairs - vi->xdp_queue_pairs))
 		return false;
