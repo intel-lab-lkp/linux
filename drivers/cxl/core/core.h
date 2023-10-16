@@ -87,4 +87,13 @@ enum cxl_poison_trace_type {
 	CXL_POISON_TRACE_CLEAR,
 };
 
+/*
+ * An entire PCI topology full of devices should be enough for any
+ * config
+ */
+#define CXL_MEM_MAX_DEVS 65536
+
+extern int cxl_mem_major;
+extern struct ida cxl_memdev_ida;
+extern struct rw_semaphore cxl_memdev_rwsem;
 #endif /* __CXL_CORE_H__ */

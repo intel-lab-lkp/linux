@@ -11,16 +11,10 @@
 #include "trace.h"
 #include "core.h"
 
-static DECLARE_RWSEM(cxl_memdev_rwsem);
+DECLARE_RWSEM(cxl_memdev_rwsem);
 
-/*
- * An entire PCI topology full of devices should be enough for any
- * config
- */
-#define CXL_MEM_MAX_DEVS 65536
-
-static int cxl_mem_major;
-static DEFINE_IDA(cxl_memdev_ida);
+int cxl_mem_major;
+DEFINE_IDA(cxl_memdev_ida);
 
 static void cxl_memdev_release(struct device *dev)
 {

@@ -279,7 +279,7 @@ int cxl_map_component_regs(const struct cxl_register_map *map,
 int cxl_map_device_regs(const struct cxl_register_map *map,
 			struct cxl_device_regs *regs);
 int cxl_map_mbox_regs(const struct cxl_register_map *map,
-		      void __iomem **mbox_reg);
+		      void __iomem **mbox_reg, void __iomem **status_reg);
 int cxl_map_pmu_regs(struct pci_dev *pdev, struct cxl_pmu_regs *regs,
 		     struct cxl_register_map *map);
 

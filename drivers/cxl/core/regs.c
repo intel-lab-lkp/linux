@@ -268,7 +268,7 @@ int cxl_map_device_regs(const struct cxl_register_map *map,
 EXPORT_SYMBOL_NS_GPL(cxl_map_device_regs, CXL);
 
 int cxl_map_mbox_regs(const struct cxl_register_map *map,
-		      void __iomem **mbox_regs)
+		      void __iomem **mbox_regs, void __iomem **status_regs)
 {
 	struct device *dev = map->dev;
 	resource_size_t phys_addr = map->resource;
@@ -277,10 +277,12 @@ int cxl_map_mbox_regs(const struct cxl_register_map *map,
 		void __iomem **addr;
 	} mapinfo[] = {
 		{ &map->device_map.mbox, mbox_regs, },
+		{ &map->device_map.status, status_regs, },
 	};
+	int limit = status_regs ? ARRAY_SIZE(mapinfo) : 1;
 	int i;
 
-	for (i = 0; i < ARRAY_SIZE(mapinfo); i++) {
+	for (i = 0; i < limit; i++) {
 		struct mapinfo *mi = &mapinfo[i];
 		resource_size_t length;
 		resource_size_t addr;

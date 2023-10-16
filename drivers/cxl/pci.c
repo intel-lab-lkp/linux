@@ -632,9 +632,14 @@ static int cxl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (rc)
 		return rc;
 
-	rc = cxl_map_mbox_regs(&map, &mds->mbox.mbox);
+	/* Status register already mapped */
+	rc = cxl_map_mbox_regs(&map, &mds->mbox.mbox, NULL);
 	if (rc)
 		return rc;
+
+	/* Connect up the status register access for the mbox */
+	mds->mbox.status = cxlds->regs.status;
+
 	/*
 	 * If the component registers can't be found, the cxl_pci driver may
 	 * still be useful for management functions so don't return an error.
