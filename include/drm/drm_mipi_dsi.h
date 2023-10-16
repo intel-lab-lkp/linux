@@ -85,6 +85,10 @@ int mipi_dsi_create_packet(struct mipi_dsi_packet *packet,
  * host is in. Drivers that need the underlying device to be powered to
  * perform these operations will first need to make sure it's been
  * properly enabled.
+ *
+ * Note: some hosts (sunxi) can not send LP commands between HS video
+ * packets. Thus all DSI transfers sent in LP mode should be limited to the
+ * drm_bridge_funcs::pre_enable() and drm_panel_funcs::prepare() callbacks.
  */
 struct mipi_dsi_host_ops {
 	int (*attach)(struct mipi_dsi_host *host,
