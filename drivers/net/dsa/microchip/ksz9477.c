@@ -81,7 +81,8 @@ static int ksz9477_handle_wake_reason(struct ksz_device *dev, int port)
 	if (!pme_status)
 		return 0;
 
-	dev_dbg(dev->dev, "Wake event on port %d due to: %s %s\n", port,
+	dev_dbg(dev->dev, "Wake event on port %d due to: %s %s %s\n", port,
+		pme_status & PME_WOL_MAGICPKT ? "\"Magic Packet\"" : "",
 		pme_status & PME_WOL_LINKUP ? "\"Link Up\"" : "",
 		pme_status & PME_WOL_ENERGY ? "\"Enery detect\"" : "");
 
@@ -111,12 +112,14 @@ void ksz9477_get_wol(struct ksz_device *dev, int port,
 	if (!(pme_conf & PME_ENABLE))
 		return;
 
-	wol->supported = WAKE_PHY;
+	wol->supported = WAKE_PHY | WAKE_MAGIC;
 
 	ret = ksz_pread8(dev, port, REG_PORT_PME_CTRL, &pme_ctrl);
 	if (ret)
 		return;
 
+	if (pme_ctrl & PME_WOL_MAGICPKT)
+		wol->wolopts |= WAKE_MAGIC;
 	if (pme_ctrl & (PME_WOL_LINKUP | PME_WOL_ENERGY))
 		wol->wolopts |= WAKE_PHY;
 }
@@ -141,7 +144,7 @@ int ksz9477_set_wol(struct ksz_device *dev, int port,
 	u8 pme_conf, pme_ctrl = 0;
 	int ret;
 
-	if (wol->wolopts & ~WAKE_PHY)
+	if (wol->wolopts & ~(WAKE_PHY | WAKE_MAGIC))
 		return -EINVAL;
 
 	ret = ksz_read8(dev, REG_SW_PME_CTRL, &pme_conf);
@@ -154,6 +157,14 @@ int ksz9477_set_wol(struct ksz_device *dev, int port,
 	ret = ksz9477_handle_wake_reason(dev, port);
 	if (ret)
 		return ret;
+
+	if (wol->wolopts & WAKE_MAGIC) {
+		ret = ksz_switch_macaddr_get(dev->ds, port, NULL);
+		if (ret)
+			return ret;
+
+		pme_ctrl |= PME_WOL_MAGICPKT;
+	}
 
 	if (wol->wolopts & WAKE_PHY)
 		pme_ctrl |= PME_WOL_LINKUP | PME_WOL_ENERGY;
