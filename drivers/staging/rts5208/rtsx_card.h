@@ -338,7 +338,7 @@
 #define DMA_DIR_FROM_CARD		0x02
 #define DMA_EN				0x01
 #define DMA_128				(0 << 4)
-#define DMA_256				(1 << 4)
+#define DMA_256				BIT(4)
 #define DMA_512				(2 << 4)
 #define DMA_1024			(3 << 4)
 #define DMA_PACK_SIZE_MASK		0x30
@@ -542,7 +542,7 @@
 
 #define BLINK_EN			0x08
 #define LED_GPIO0			(0 << 4)
-#define LED_GPIO1			(1 << 4)
+#define LED_GPIO1			BIT(4)
 #define LED_GPIO2			(2 << 4)
 
 #define SDIO_BUS_CTRL		0x01
