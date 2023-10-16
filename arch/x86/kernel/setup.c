@@ -25,6 +25,7 @@
 #include <linux/static_call.h>
 #include <linux/swiotlb.h>
 #include <linux/random.h>
+#include <linux/prmem.h>
 
 #include <uapi/linux/mount.h>
 
@@ -1231,6 +1232,7 @@ void __init setup_arch(char **cmdline_p)
 	 * won't consume hotpluggable memory.
 	 */
 	reserve_crashkernel();
+	prmem_reserve();
 
 	memblock_find_dma_reserve();
 

@@ -24,6 +24,7 @@
 #include <linux/page_ext.h>
 #include <linux/pti.h>
 #include <linux/pgtable.h>
+#include <linux/prmem.h>
 #include <linux/swap.h>
 #include <linux/cma.h>
 #include "internal.h"
@@ -2804,4 +2805,5 @@ void __init mm_core_init(void)
 	pti_init();
 	kmsan_init_runtime();
 	mm_cache_init();
+	prmem_init();
 }
