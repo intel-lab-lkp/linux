@@ -295,6 +295,7 @@ enum xa_lock_type {
  */
 struct xarray {
 	spinlock_t	xa_lock;
+	bool		xa_persistent;
 /* private: The rest of the data structure is not to be used directly. */
 	gfp_t		xa_flags;
 	void __rcu *	xa_head;
@@ -302,6 +303,7 @@ struct xarray {
 
 #define XARRAY_INIT(name, flags) {				\
 	.xa_lock = __SPIN_LOCK_UNLOCKED(name.xa_lock),		\
+	.xa_persistent = false,					\
 	.xa_flags = flags,					\
 	.xa_head = NULL,					\
 }
@@ -378,6 +380,7 @@ void xa_destroy(struct xarray *);
 static inline void xa_init_flags(struct xarray *xa, gfp_t flags)
 {
 	spin_lock_init(&xa->xa_lock);
+	xa->xa_persistent = false;
 	xa->xa_flags = flags;
 	xa->xa_head = NULL;
 }
@@ -393,6 +396,17 @@ static inline void xa_init_flags(struct xarray *xa, gfp_t flags)
 static inline void xa_init(struct xarray *xa)
 {
 	xa_init_flags(xa, 0);
+}
+
+/**
+ * xa_peristent() - xa_root and xa_node allocated from persistent memory.
+ * @xa: XArray.
+ *
+ * Context: Any context.
+ */
+static inline void xa_persistent(struct xarray *xa)
+{
+	xa->xa_persistent = true;
 }
 
 /**
@@ -1142,6 +1156,7 @@ struct xa_node {
 	unsigned char	offset;		/* Slot offset in parent */
 	unsigned char	count;		/* Total entry count */
 	unsigned char	nr_values;	/* Value entry count */
+	bool		persistent;	/* Allocated from persistent memory. */
 	struct xa_node __rcu *parent;	/* NULL at top of tree */
 	struct xarray	*array;		/* The array we belong to */
 	union {

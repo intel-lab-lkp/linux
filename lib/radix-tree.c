@@ -21,6 +21,7 @@
 #include <linux/kmemleak.h>
 #include <linux/percpu.h>
 #include <linux/preempt.h>		/* in_interrupt() */
+#include <linux/prmem.h>
 #include <linux/radix-tree.h>
 #include <linux/rcupdate.h>
 #include <linux/slab.h>
@@ -225,6 +226,36 @@ static unsigned long next_index(unsigned long index,
 	return (index & ~node_maxindex(node)) + (offset << node->shift);
 }
 
+static void radix_tree_node_ctor(void *arg);
+
+struct radix_tree_node *
+radix_node_alloc(struct radix_tree_root *root, struct list_lru *lru, gfp_t gfp)
+{
+	struct radix_tree_node *node;
+
+	if (root && root->xa_persistent) {
+		node = prmem_alloc(sizeof(struct radix_tree_node), gfp);
+		if (node) {
+			radix_tree_node_ctor(node);
+			node->persistent = true;
+		}
+	} else {
+		node = kmem_cache_alloc_lru(radix_tree_node_cachep, lru, gfp);
+		if (node)
+			node->persistent = false;
+	}
+	return node;
+}
+
+void radix_node_free(struct radix_tree_node *node)
+{
+	if (node->persistent) {
+		prmem_free(node, sizeof(*node));
+		return;
+	}
+	kmem_cache_free(radix_tree_node_cachep, node);
+}
+
 /*
  * This assumes that the caller has performed appropriate preallocation, and
  * that the caller has pinned this thread of control to the current CPU.
@@ -241,8 +272,11 @@ radix_tree_node_alloc(gfp_t gfp_mask, struct radix_tree_node *parent,
 	 * Preload code isn't irq safe and it doesn't make sense to use
 	 * preloading during an interrupt anyway as all the allocations have
 	 * to be atomic. So just do normal allocation when in interrupt.
+	 *
+	 * Also, there is no preloading for persistent trees.
 	 */
-	if (!gfpflags_allow_blocking(gfp_mask) && !in_interrupt()) {
+	if (!gfpflags_allow_blocking(gfp_mask) && !in_interrupt() &&
+	    !root->xa_persistent) {
 		struct radix_tree_preload *rtp;
 
 		/*
@@ -250,8 +284,7 @@ radix_tree_node_alloc(gfp_t gfp_mask, struct radix_tree_node *parent,
 		 * cache first for the new node to get accounted to the memory
 		 * cgroup.
 		 */
-		ret = kmem_cache_alloc(radix_tree_node_cachep,
-				       gfp_mask | __GFP_NOWARN);
+		ret = radix_node_alloc(root, NULL, gfp_mask | __GFP_NOWARN);
 		if (ret)
 			goto out;
 
@@ -273,7 +306,7 @@ radix_tree_node_alloc(gfp_t gfp_mask, struct radix_tree_node *parent,
 		kmemleak_update_trace(ret);
 		goto out;
 	}
-	ret = kmem_cache_alloc(radix_tree_node_cachep, gfp_mask);
+	ret = radix_node_alloc(root, NULL, gfp_mask);
 out:
 	BUG_ON(radix_tree_is_internal_node(ret));
 	if (ret) {
@@ -301,7 +334,7 @@ void radix_tree_node_rcu_free(struct rcu_head *head)
 	memset(node->tags, 0, sizeof(node->tags));
 	INIT_LIST_HEAD(&node->private_list);
 
-	kmem_cache_free(radix_tree_node_cachep, node);
+	radix_node_free(node);
 }
 
 static inline void
@@ -335,7 +368,7 @@ static __must_check int __radix_tree_preload(gfp_t gfp_mask, unsigned nr)
 	rtp = this_cpu_ptr(&radix_tree_preloads);
 	while (rtp->nr < nr) {
 		local_unlock(&radix_tree_preloads.lock);
-		node = kmem_cache_alloc(radix_tree_node_cachep, gfp_mask);
+		node = radix_node_alloc(NULL, NULL, gfp_mask);
 		if (node == NULL)
 			goto out;
 		local_lock(&radix_tree_preloads.lock);
@@ -345,7 +378,7 @@ static __must_check int __radix_tree_preload(gfp_t gfp_mask, unsigned nr)
 			rtp->nodes = node;
 			rtp->nr++;
 		} else {
-			kmem_cache_free(radix_tree_node_cachep, node);
+			radix_node_free(node);
 		}
 	}
 	ret = 0;
@@ -1585,7 +1618,7 @@ static int radix_tree_cpu_dead(unsigned int cpu)
 	while (rtp->nr) {
 		node = rtp->nodes;
 		rtp->nodes = node->parent;
-		kmem_cache_free(radix_tree_node_cachep, node);
+		radix_node_free(node);
 		rtp->nr--;
 	}
 	return 0;

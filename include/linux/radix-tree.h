@@ -82,6 +82,7 @@ static inline bool radix_tree_is_internal_node(void *ptr)
 	struct radix_tree_root name = RADIX_TREE_INIT(name, mask)
 
 #define INIT_RADIX_TREE(root, mask) xa_init_flags(root, mask)
+#define PERSIST_RADIX_TREE(root) xa_persistent(root)
 
 static inline bool radix_tree_empty(const struct radix_tree_root *root)
 {
@@ -254,6 +255,9 @@ unsigned int radix_tree_gang_lookup_tag_slot(const struct radix_tree_root *,
 		void __rcu ***results, unsigned long first_index,
 		unsigned int max_items, unsigned int tag);
 int radix_tree_tagged(const struct radix_tree_root *, unsigned int tag);
+struct radix_tree_node *radix_node_alloc(struct radix_tree_root *root,
+		struct list_lru *lru, gfp_t gfp);
+void radix_node_free(struct radix_tree_node *node);
 
 static inline void radix_tree_preload_end(void)
 {
