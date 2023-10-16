@@ -1,4 +1,11 @@
 #
+# Network
+#
+
+CONFIG_DUMMY=y
+CONFIG_VETH=y
+
+#
 # Core Netfilter Configuration
 #
 CONFIG_NF_CONNTRACK=m
