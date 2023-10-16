@@ -161,6 +161,10 @@ static void dw8250_serial_out(struct uart_port *p, int offset, int value)
 {
 	struct dw8250_data *d = to_dw8250_data(p->private_data);
 
+	/* Allow the TX to drain before we reconfigure */
+	if (offset == UART_LCR && d->drain_before_lcr_change)
+		dw8250_tx_wait_empty(p);
+
 	writeb(value, p->membase + (offset << p->regshift));
 
 	if (offset == UART_LCR && !d->uart_16550_compatible)
@@ -197,6 +201,10 @@ static void dw8250_serial_outq(struct uart_port *p, int offset, int value)
 {
 	struct dw8250_data *d = to_dw8250_data(p->private_data);
 
+	/* Allow the TX to drain before we reconfigure */
+	if (offset == UART_LCR && d->drain_before_lcr_change)
+		dw8250_tx_wait_empty(p);
+
 	value &= 0xff;
 	__raw_writeq(value, p->membase + (offset << p->regshift));
 	/* Read back to ensure register write ordering. */
@@ -210,6 +218,10 @@ static void dw8250_serial_outq(struct uart_port *p, int offset, int value)
 static void dw8250_serial_out32(struct uart_port *p, int offset, int value)
 {
 	struct dw8250_data *d = to_dw8250_data(p->private_data);
+
+	/* Allow the TX to drain before we reconfigure */
+	if (offset == UART_LCR && d->drain_before_lcr_change)
+		dw8250_tx_wait_empty(p);
 
 	writel(value, p->membase + (offset << p->regshift));
 
@@ -227,6 +239,10 @@ static unsigned int dw8250_serial_in32(struct uart_port *p, int offset)
 static void dw8250_serial_out32be(struct uart_port *p, int offset, int value)
 {
 	struct dw8250_data *d = to_dw8250_data(p->private_data);
+
+	/* Allow the TX to drain before we reconfigure */
+	if (offset == UART_LCR && d->drain_before_lcr_change)
+		dw8250_tx_wait_empty(p);
 
 	iowrite32be(value, p->membase + (offset << p->regshift));
 
@@ -596,6 +612,8 @@ static int dw8250_probe(struct platform_device *pdev)
 
 	/* Always ask for fixed clock rate from a property. */
 	device_property_read_u32(dev, "clock-frequency", &p->uartclk);
+
+	data->drain_before_lcr_change = device_property_read_bool(dev, "drain-before-lcr-change");
 
 	/* If there is separate baudclk, get the rate from it. */
 	data->clk = devm_clk_get_optional(dev, "baudclk");
