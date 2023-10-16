@@ -82,6 +82,7 @@ static void ledtrig_tty_work(struct work_struct *work)
 {
 	struct ledtrig_tty_data *trigger_data =
 		container_of(work, struct ledtrig_tty_data, dwork.work);
+	unsigned long interval = LEDTRIG_TTY_INTERVAL;
 	struct serial_icounter_struct icount;
 	int ret;
 
@@ -124,8 +125,6 @@ static void ledtrig_tty_work(struct work_struct *work)
 
 	if (icount.rx != trigger_data->rx ||
 	    icount.tx != trigger_data->tx) {
-		unsigned long interval = LEDTRIG_TTY_INTERVAL;
-
 		led_blink_set_oneshot(trigger_data->led_cdev, &interval,
 				      &interval, 0);
 
