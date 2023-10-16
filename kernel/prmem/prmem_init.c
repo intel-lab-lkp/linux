@@ -9,6 +9,8 @@
 
 bool			prmem_inited;
 
+DEFINE_SPINLOCK(prmem_lock);
+
 void __init prmem_init(void)
 {
 	if (!prmem)

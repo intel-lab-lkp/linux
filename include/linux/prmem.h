@@ -75,6 +75,7 @@ extern unsigned long		prmem_metadata;
 extern unsigned long		prmem_pa;
 extern size_t			prmem_size;
 extern bool			prmem_inited;
+extern spinlock_t		prmem_lock;
 
 /* Kernel API. */
 void prmem_reserve_early(void);
@@ -83,11 +84,17 @@ void prmem_init(void);
 void prmem_fini(void);
 int  prmem_cmdline_size(void);
 
+/* Allocator API. */
+struct page *prmem_alloc_pages(unsigned int order, gfp_t gfp);
+void prmem_free_pages(struct page *pages, unsigned int order);
+
 /* Internal functions. */
 struct prmem_region *prmem_add_region(unsigned long pa, size_t size);
 bool prmem_create_pool(struct prmem_region *region, bool new_region);
 void *prmem_alloc_pool(struct prmem_region *region, size_t size, int align);
 void prmem_free_pool(struct prmem_region *region, void *va, size_t size);
+void *prmem_alloc_pages_locked(unsigned int order);
+void prmem_free_pages_locked(void *va, unsigned int order);
 unsigned long prmem_checksum(void *start, size_t size);
 bool __init prmem_validate(void);
 void prmem_cmdline(char *cmdline);
