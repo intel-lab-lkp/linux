@@ -372,8 +372,10 @@ static void dsi_mgr_bridge_post_disable(struct drm_bridge *bridge)
 	 * It is safe to call dsi_mgr_phy_disable() here because a single PHY
 	 * won't be diabled until both PHYs request disable.
 	 */
-	if (is_bonded_dsi && !IS_MASTER_DSI_LINK(id))
-		goto disable_phy;
+	if (is_bonded_dsi && !IS_MASTER_DSI_LINK(id)) {
+		dsi_mgr_phy_disable(id);
+		return;
+	}
 
 	ret = msm_dsi_host_disable(host);
 	if (ret)
@@ -385,26 +387,10 @@ static void dsi_mgr_bridge_post_disable(struct drm_bridge *bridge)
 			pr_err("%s: host1 disable failed, %d\n", __func__, ret);
 	}
 
-	msm_dsi_host_disable_irq(host);
-	if (is_bonded_dsi && msm_dsi1)
-		msm_dsi_host_disable_irq(msm_dsi1->host);
-
 	/* Save PHY status if it is a clock source */
 	msm_dsi_phy_pll_save_state(msm_dsi->phy);
 
-	ret = msm_dsi_host_power_off(host);
-	if (ret)
-		pr_err("%s: host %d power off failed,%d\n", __func__, id, ret);
-
-	if (is_bonded_dsi && msm_dsi1) {
-		ret = msm_dsi_host_power_off(msm_dsi1->host);
-		if (ret)
-			pr_err("%s: host1 power off failed, %d\n",
-								__func__, ret);
-	}
-
-disable_phy:
-	dsi_mgr_phy_disable(id);
+	dsi_mgr_bridge_power_off(bridge);
 }
 
 static void dsi_mgr_bridge_mode_set(struct drm_bridge *bridge,
