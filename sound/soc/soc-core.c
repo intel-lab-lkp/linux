@@ -1833,6 +1833,86 @@ int snd_soc_set_dmi_name(struct snd_soc_card *card, const char *flavour)
 EXPORT_SYMBOL_GPL(snd_soc_set_dmi_name);
 #endif /* CONFIG_DMI */
 
+#define MAX_DEFAULT_CONNECTION_MAP_SIZE 7
+static struct snd_soc_dai_link_ch_map default_connection_map1[MAX_DEFAULT_CONNECTION_MAP_SIZE] = {
+	{ .connected_node = 0 },
+	{ .connected_node = 1 },
+	{ .connected_node = 2 },
+	{ .connected_node = 3 },
+	{ .connected_node = 4 },
+	{ .connected_node = 5 },
+	{ .connected_node = 6 },
+};
+static struct snd_soc_dai_link_ch_map default_connection_map2[MAX_DEFAULT_CONNECTION_MAP_SIZE] = {
+	{ .connected_node = 0 },
+	{ .connected_node = 0 },
+	{ .connected_node = 0 },
+	{ .connected_node = 0 },
+	{ .connected_node = 0 },
+	{ .connected_node = 0 },
+	{ .connected_node = 0 },
+};
+
+static int snd_soc_compensate_connection_map(struct snd_soc_card *card)
+{
+	struct snd_soc_dai_link *dai_link;
+	int i, j, n, max;
+
+	/*
+	 * dai_link->ch_maps indicates how CPU/Codec are connected.
+	 * It will be a map seen from a larger number of DAI.
+	 * see
+	 *	soc.h :: [dai_link->ch_maps Image sample]
+	 */
+	for_each_card_prelinks(card, i, dai_link) {
+
+		/* it should have ch_maps if connection was N:M */
+		if (dai_link->num_cpus > 1 && dai_link->num_codecs > 1 &&
+		    dai_link->num_cpus != dai_link->num_codecs && !dai_link->ch_maps) {
+			dev_err(card->dev, "need to have ch_maps when N:M connction (%s)",
+				dai_link->name);
+			return -EINVAL;
+		}
+
+		/* do nothing if it has own maps */
+		if (dai_link->ch_maps)
+			goto sanity_check;
+
+		/* check default map size */
+		if (dai_link->num_cpus   > MAX_DEFAULT_CONNECTION_MAP_SIZE ||
+		    dai_link->num_codecs > MAX_DEFAULT_CONNECTION_MAP_SIZE) {
+			dev_err(card->dev, "soc-core.c needs update default_connection_maps");
+			return -EINVAL;
+		}
+
+		/* Compensate missing map for ... */
+		if (dai_link->num_cpus == dai_link->num_codecs)
+			dai_link->ch_maps = default_connection_map1; /* for 1:1 or N:N */
+		else
+			dai_link->ch_maps = default_connection_map2; /* for 1:N or N:1 */
+
+sanity_check:
+		if (dai_link->num_cpus >= dai_link->num_codecs) {
+			n   = dai_link->num_cpus;
+			max = dai_link->num_codecs;
+		} else {
+			n   = dai_link->num_codecs;
+			max = dai_link->num_cpus;
+		}
+
+		for (j = 0; j < n; j++)
+			if (dai_link->ch_maps[j].connected_node >= max) {
+				dev_err(card->dev,
+					"dai_link->ch_maps[%d].connected_node (= %d) is "
+					"larger than max (= %d)",
+					j, dai_link->ch_maps[j].connected_node, max);
+				return -EINVAL;
+			}
+	}
+
+	return 0;
+}
+
 static void soc_check_tplg_fes(struct snd_soc_card *card)
 {
 	struct snd_soc_component *component;
@@ -2039,6 +2119,11 @@ static int snd_soc_bind_card(struct snd_soc_card *card)
 	snd_soc_card_mutex_lock_root(card);
 
 	snd_soc_dapm_init(&card->dapm, card, NULL);
+
+	/* for keeping compatibility */
+	ret = snd_soc_compensate_connection_map(card);
+	if (ret < 0)
+		goto probe_end;
 
 	/* check whether any platform is ignore machine FE and using topology */
 	soc_check_tplg_fes(card);
