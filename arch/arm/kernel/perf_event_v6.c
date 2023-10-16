@@ -268,7 +268,7 @@ static inline void armv6pmu_write_counter(struct perf_event *event, u64 value)
 
 static void armv6pmu_enable_event(struct perf_event *event)
 {
-	unsigned long val, mask, evt, flags;
+	unsigned long val, mask, evt;
 	struct arm_pmu *cpu_pmu = to_arm_pmu(event->pmu);
 	struct hw_perf_event *hwc = &event->hw;
 	struct pmu_hw_events *events = this_cpu_ptr(cpu_pmu->hw_events);
@@ -294,12 +294,10 @@ static void armv6pmu_enable_event(struct perf_event *event)
 	 * Mask out the current event and set the counter to count the event
 	 * that we're interested in.
 	 */
-	raw_spin_lock_irqsave(&events->pmu_lock, flags);
 	val = armv6_pmcr_read();
 	val &= ~mask;
 	val |= evt;
 	armv6_pmcr_write(val);
-	raw_spin_unlock_irqrestore(&events->pmu_lock, flags);
 }
 
 static irqreturn_t
@@ -362,26 +360,22 @@ armv6pmu_handle_irq(struct arm_pmu *cpu_pmu)
 
 static void armv6pmu_start(struct arm_pmu *cpu_pmu)
 {
-	unsigned long flags, val;
+	unsigned long val;
 	struct pmu_hw_events *events = this_cpu_ptr(cpu_pmu->hw_events);
 
-	raw_spin_lock_irqsave(&events->pmu_lock, flags);
 	val = armv6_pmcr_read();
 	val |= ARMV6_PMCR_ENABLE;
 	armv6_pmcr_write(val);
-	raw_spin_unlock_irqrestore(&events->pmu_lock, flags);
 }
 
 static void armv6pmu_stop(struct arm_pmu *cpu_pmu)
 {
-	unsigned long flags, val;
+	unsigned long val;
 	struct pmu_hw_events *events = this_cpu_ptr(cpu_pmu->hw_events);
 
-	raw_spin_lock_irqsave(&events->pmu_lock, flags);
 	val = armv6_pmcr_read();
 	val &= ~ARMV6_PMCR_ENABLE;
 	armv6_pmcr_write(val);
-	raw_spin_unlock_irqrestore(&events->pmu_lock, flags);
 }
 
 static int
@@ -419,7 +413,7 @@ static void armv6pmu_clear_event_idx(struct pmu_hw_events *cpuc,
 
 static void armv6pmu_disable_event(struct perf_event *event)
 {
-	unsigned long val, mask, evt, flags;
+	unsigned long val, mask, evt;
 	struct arm_pmu *cpu_pmu = to_arm_pmu(event->pmu);
 	struct hw_perf_event *hwc = &event->hw;
 	struct pmu_hw_events *events = this_cpu_ptr(cpu_pmu->hw_events);
@@ -444,17 +438,15 @@ static void armv6pmu_disable_event(struct perf_event *event)
 	 * of ETM bus signal assertion cycles. The external reporting should
 	 * be disabled and so this should never increment.
 	 */
-	raw_spin_lock_irqsave(&events->pmu_lock, flags);
 	val = armv6_pmcr_read();
 	val &= ~mask;
 	val |= evt;
 	armv6_pmcr_write(val);
-	raw_spin_unlock_irqrestore(&events->pmu_lock, flags);
 }
 
 static void armv6mpcore_pmu_disable_event(struct perf_event *event)
 {
-	unsigned long val, mask, flags, evt = 0;
+	unsigned long val, mask, evt = 0;
 	struct arm_pmu *cpu_pmu = to_arm_pmu(event->pmu);
 	struct hw_perf_event *hwc = &event->hw;
 	struct pmu_hw_events *events = this_cpu_ptr(cpu_pmu->hw_events);
@@ -475,12 +467,10 @@ static void armv6mpcore_pmu_disable_event(struct perf_event *event)
 	 * Unlike UP ARMv6, we don't have a way of stopping the counters. We
 	 * simply disable the interrupt reporting.
 	 */
-	raw_spin_lock_irqsave(&events->pmu_lock, flags);
 	val = armv6_pmcr_read();
 	val &= ~mask;
 	val |= evt;
 	armv6_pmcr_write(val);
-	raw_spin_unlock_irqrestore(&events->pmu_lock, flags);
 }
 
 static int armv6_map_event(struct perf_event *event)
