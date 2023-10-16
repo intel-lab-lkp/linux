@@ -73,6 +73,7 @@ struct gen_pool_chunk {
 	struct list_head next_chunk;	/* next chunk in pool */
 	atomic_long_t avail;
 	phys_addr_t phys_addr;		/* physical starting address of memory chunk */
+	bool external;			/* Chunk is passed by caller. */
 	void *owner;			/* private data to retrieve at alloc time */
 	unsigned long start_addr;	/* start address of memory chunk */
 	unsigned long end_addr;		/* end address of memory chunk (inclusive) */
@@ -121,6 +122,11 @@ static inline int gen_pool_add(struct gen_pool *pool, unsigned long addr,
 {
 	return gen_pool_add_virt(pool, addr, -1, size, nid);
 }
+extern unsigned long gen_pool_chunk_size(size_t size, int min_alloc_order);
+extern void gen_pool_init_chunk(struct gen_pool_chunk *chunk,
+				unsigned long addr, phys_addr_t phys,
+				size_t size, bool external, void *owner);
+void gen_pool_add_chunk(struct gen_pool *pool, struct gen_pool_chunk *chunk);
 extern void gen_pool_destroy(struct gen_pool *);
 unsigned long gen_pool_alloc_algo_owner(struct gen_pool *pool, size_t size,
 		genpool_algo_t algo, void *data, void **owner);

@@ -24,6 +24,7 @@
  * non-volatile storage is too slow.
  */
 #include <linux/types.h>
+#include <linux/genalloc.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/memblock.h>
@@ -38,11 +39,15 @@
  * node		List node.
  * pa		Physical address of the region.
  * size		Size of the region in bytes.
+ * pool		Gen Pool to manage region memory.
+ * chunk	Persistent Gen Pool chunk.
  */
 struct prmem_region {
 	struct list_head	node;
 	unsigned long		pa;
 	size_t			size;
+	struct gen_pool		*pool;
+	struct gen_pool_chunk	*chunk;
 };
 
 /*
@@ -80,6 +85,9 @@ int  prmem_cmdline_size(void);
 
 /* Internal functions. */
 struct prmem_region *prmem_add_region(unsigned long pa, size_t size);
+bool prmem_create_pool(struct prmem_region *region, bool new_region);
+void *prmem_alloc_pool(struct prmem_region *region, size_t size, int align);
+void prmem_free_pool(struct prmem_region *region, void *va, size_t size);
 unsigned long prmem_checksum(void *start, size_t size);
 bool __init prmem_validate(void);
 void prmem_cmdline(char *cmdline);

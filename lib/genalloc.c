@@ -165,6 +165,33 @@ struct gen_pool *gen_pool_create(int min_alloc_order, int nid)
 }
 EXPORT_SYMBOL(gen_pool_create);
 
+size_t gen_pool_chunk_size(size_t size, int min_alloc_order)
+{
+	unsigned long nbits = size >> min_alloc_order;
+	unsigned long nbytes = sizeof(struct gen_pool_chunk) +
+				BITS_TO_LONGS(nbits) * sizeof(long);
+	return nbytes;
+}
+
+void gen_pool_init_chunk(struct gen_pool_chunk *chunk, unsigned long virt,
+			 phys_addr_t phys, size_t size, bool external,
+			 void *owner)
+{
+	chunk->phys_addr = phys;
+	chunk->start_addr = virt;
+	chunk->end_addr = virt + size - 1;
+	chunk->external = external;
+	chunk->owner = owner;
+	atomic_long_set(&chunk->avail, size);
+}
+
+void gen_pool_add_chunk(struct gen_pool *pool, struct gen_pool_chunk *chunk)
+{
+	spin_lock(&pool->lock);
+	list_add_rcu(&chunk->next_chunk, &pool->chunks);
+	spin_unlock(&pool->lock);
+}
+
 /**
  * gen_pool_add_owner- add a new chunk of special memory to the pool
  * @pool: pool to add new memory chunk to
@@ -183,23 +210,14 @@ int gen_pool_add_owner(struct gen_pool *pool, unsigned long virt, phys_addr_t ph
 		 size_t size, int nid, void *owner)
 {
 	struct gen_pool_chunk *chunk;
-	unsigned long nbits = size >> pool->min_alloc_order;
-	unsigned long nbytes = sizeof(struct gen_pool_chunk) +
-				BITS_TO_LONGS(nbits) * sizeof(long);
+	unsigned long nbytes = gen_pool_chunk_size(size, pool->min_alloc_order);
 
 	chunk = vzalloc_node(nbytes, nid);
 	if (unlikely(chunk == NULL))
 		return -ENOMEM;
 
-	chunk->phys_addr = phys;
-	chunk->start_addr = virt;
-	chunk->end_addr = virt + size - 1;
-	chunk->owner = owner;
-	atomic_long_set(&chunk->avail, size);
-
-	spin_lock(&pool->lock);
-	list_add_rcu(&chunk->next_chunk, &pool->chunks);
-	spin_unlock(&pool->lock);
+	gen_pool_init_chunk(chunk, virt, phys, size, false, owner);
+	gen_pool_add_chunk(pool, chunk);
 
 	return 0;
 }
@@ -247,6 +265,9 @@ void gen_pool_destroy(struct gen_pool *pool)
 	list_for_each_safe(_chunk, _next_chunk, &pool->chunks) {
 		chunk = list_entry(_chunk, struct gen_pool_chunk, next_chunk);
 		list_del(&chunk->next_chunk);
+
+		if (chunk->external)
+			continue;
 
 		end_bit = chunk_size(chunk) >> order;
 		bit = find_first_bit(chunk->bits, end_bit);

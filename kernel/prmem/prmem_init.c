@@ -22,6 +22,14 @@ void __init prmem_init(void)
 
 		if (!prmem_add_region(prmem_pa, prmem_size))
 			return;
+	} else {
+		/* Warm boot. */
+		struct prmem_region	*region;
+
+		list_for_each_entry(region, &prmem->regions, node) {
+			if (!prmem_create_pool(region, false))
+				return;
+		}
 	}
 	prmem_inited = true;
 }
