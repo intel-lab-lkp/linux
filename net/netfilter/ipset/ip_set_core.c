@@ -741,11 +741,13 @@ ip_set_test(ip_set_id_t index, const struct sk_buff *skb,
 	int ret = 0;
 
 	BUG_ON(!set);
+
+	__ip_set_get_swapping(set);
 	pr_debug("set %s, index %u\n", set->name, index);
 
 	if (opt->dim < set->type->dimension ||
 	    !(opt->family == set->family || set->family == NFPROTO_UNSPEC))
-		return 0;
+		goto out;
 
 	ret = set->variant->kadt(set, skb, par, IPSET_TEST, opt);
 
@@ -764,6 +766,8 @@ ip_set_test(ip_set_id_t index, const struct sk_buff *skb,
 			ret = -ret;
 	}
 
+out:
+	__ip_set_put_swapping(set);
 	/* Convert error codes to nomatch */
 	return (ret < 0 ? 0 : ret);
 }
