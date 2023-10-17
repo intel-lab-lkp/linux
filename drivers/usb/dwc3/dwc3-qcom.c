@@ -68,7 +68,6 @@ struct dwc3_qcom {
 	struct device		*dev;
 	void __iomem		*qscratch_base;
 	struct platform_device	*dwc_dev;
-	struct platform_device	*urs_usb;
 	struct clk		**clks;
 	int			num_clocks;
 	struct reset_control	*resets;
@@ -522,15 +521,13 @@ static void dwc3_qcom_select_utmi_clk(struct dwc3_qcom *qcom)
 static int dwc3_qcom_get_irq(struct platform_device *pdev,
 			     const char *name, int num)
 {
-	struct dwc3_qcom *qcom = platform_get_drvdata(pdev);
-	struct platform_device *pdev_irq = qcom->urs_usb ? qcom->urs_usb : pdev;
 	struct device_node *np = pdev->dev.of_node;
 	int ret;
 
 	if (np)
-		ret = platform_get_irq_byname_optional(pdev_irq, name);
+		ret = platform_get_irq_byname_optional(pdev, name);
 	else
-		ret = platform_get_irq_optional(pdev_irq, num);
+		ret = platform_get_irq_optional(pdev, num);
 
 	return ret;
 }
@@ -667,8 +664,6 @@ static int dwc3_qcom_acpi_register_core(struct platform_device *pdev)
 	struct dwc3_qcom	*qcom = platform_get_drvdata(pdev);
 	struct device		*dev = &pdev->dev;
 	struct resource		*res, *child_res = NULL;
-	struct platform_device	*pdev_irq = qcom->urs_usb ? qcom->urs_usb :
-							    pdev;
 	int			irq;
 	int			ret;
 
@@ -700,7 +695,7 @@ static int dwc3_qcom_acpi_register_core(struct platform_device *pdev)
 	child_res[0].end = child_res[0].start +
 		qcom->acpi_pdata->dwc3_core_base_size;
 
-	irq = platform_get_irq(pdev_irq, 0);
+	irq = platform_get_irq(pdev, 0);
 	if (irq < 0) {
 		ret = irq;
 		goto out;
@@ -766,31 +761,72 @@ node_put:
 	return ret;
 }
 
-static struct platform_device *
-dwc3_qcom_create_urs_usb_platdev(struct device *dev)
+static int dwc3_qcom_acpi_merge_urs_resources(struct platform_device *pdev)
 {
+	struct device *dev = &pdev->dev;
+	struct list_head resource_list;
+	struct resource_entry *rentry;
+	struct resource *resources;
 	struct fwnode_handle *fwh;
 	struct acpi_device *adev;
 	char name[8];
+	int count;
 	int ret;
 	int id;
+	int i;
 
 	/* Figure out device id */
 	ret = sscanf(fwnode_get_name(dev->fwnode), "URS%d", &id);
 	if (!ret)
-		return NULL;
+		return -EINVAL;
 
 	/* Find the child using name */
 	snprintf(name, sizeof(name), "USB%d", id);
 	fwh = fwnode_get_named_child_node(dev->fwnode, name);
 	if (!fwh)
-		return NULL;
+		return 0;
 
 	adev = to_acpi_device_node(fwh);
 	if (!adev)
-		return NULL;
+		return -EINVAL;
 
-	return acpi_create_platform_device(adev, NULL);
+	INIT_LIST_HEAD(&resource_list);
+
+	count = acpi_dev_get_resources(adev, &resource_list, NULL, NULL);
+	if (count <= 0)
+		return count;
+
+	count += pdev->num_resources;
+
+	resources = kcalloc(count, sizeof(*resources), GFP_KERNEL);
+	if (!resources) {
+		acpi_dev_free_resource_list(&resource_list);
+		return -ENOMEM;
+	}
+
+	memcpy(resources, pdev->resource, sizeof(struct resource) * pdev->num_resources);
+	count = pdev->num_resources;
+	list_for_each_entry(rentry, &resource_list, node) {
+		/* Avoid inserting duplicate entries, in case this is called more than once */
+		for (i = 0; i < count; i++) {
+			if (resource_type(&resources[i]) == resource_type(rentry->res) &&
+			    resources[i].start == rentry->res->start &&
+			    resources[i].end == rentry->res->end)
+				break;
+		}
+
+		if (i == count)
+			resources[count++] = *rentry->res;
+	}
+
+	ret = platform_device_add_resources(pdev, resources, count);
+	if (ret)
+		dev_err(&pdev->dev, "failed to add resources\n");
+
+	acpi_dev_free_resource_list(&resource_list);
+	kfree(resources);
+
+	return ret;
 }
 
 static int dwc3_qcom_probe(struct platform_device *pdev)
@@ -816,6 +852,12 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
 		if (!qcom->acpi_pdata) {
 			dev_err(&pdev->dev, "no supporting ACPI device data\n");
 			return -EINVAL;
+		}
+
+		if (qcom->acpi_pdata->is_urs) {
+			ret = dwc3_qcom_acpi_merge_urs_resources(pdev);
+			if (ret < 0)
+				goto clk_disable;
 		}
 	}
 
@@ -857,18 +899,6 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
 			qcom->acpi_pdata->qscratch_base_offset;
 		parent_res->end = parent_res->start +
 			qcom->acpi_pdata->qscratch_base_size;
-
-		if (qcom->acpi_pdata->is_urs) {
-			qcom->urs_usb = dwc3_qcom_create_urs_usb_platdev(dev);
-			if (IS_ERR_OR_NULL(qcom->urs_usb)) {
-				dev_err(dev, "failed to create URS USB platdev\n");
-				if (!qcom->urs_usb)
-					ret = -ENODEV;
-				else
-					ret = PTR_ERR(qcom->urs_usb);
-				goto clk_disable;
-			}
-		}
 	}
 
 	qcom->qscratch_base = devm_ioremap_resource(dev, parent_res);
