@@ -3064,6 +3064,68 @@ static inline void *get_freelist(struct kmem_cache *s, struct slab *slab)
 	return freelist;
 }
 
+#ifdef CONFIG_SLUB_CPU_PARTIAL
+
+static void *get_cpu_partial(struct kmem_cache *s, struct kmem_cache_cpu *c,
+			     struct slab **slabptr, int node, gfp_t gfpflags)
+{
+	unsigned long flags;
+	struct slab *slab;
+	struct slab new;
+	unsigned long counters;
+	void *freelist;
+
+	while (slub_percpu_partial(c)) {
+		local_lock_irqsave(&s->cpu_slab->lock, flags);
+		if (unlikely(!slub_percpu_partial(c))) {
+			local_unlock_irqrestore(&s->cpu_slab->lock, flags);
+			/* we were preempted and partial list got empty */
+			return NULL;
+		}
+
+		slab = slub_percpu_partial(c);
+		slub_set_percpu_partial(c, slab);
+		local_unlock_irqrestore(&s->cpu_slab->lock, flags);
+		stat(s, CPU_PARTIAL_ALLOC);
+
+		if (unlikely(!node_match(slab, node) ||
+			     !pfmemalloc_match(slab, gfpflags))) {
+			slab->next = NULL;
+			__unfreeze_partials(s, slab);
+			continue;
+		}
+
+		do {
+			freelist = slab->freelist;
+			counters = slab->counters;
+
+			new.counters = counters;
+			VM_BUG_ON(new.frozen);
+
+			new.inuse = slab->objects;
+			new.frozen = 1;
+		} while (!__slab_update_freelist(s, slab,
+			freelist, counters,
+			NULL, new.counters,
+			"get_cpu_partial"));
+
+		*slabptr = slab;
+		return freelist;
+	}
+
+	return NULL;
+}
+
+#else /* CONFIG_SLUB_CPU_PARTIAL */
+
+static void *get_cpu_partial(struct kmem_cache *s, struct kmem_cache_cpu *c,
+			     struct slab **slabptr, int node, gfp_t gfpflags)
+{
+	return NULL;
+}
+
+#endif
+
 /*
  * Slow path. The lockless freelist is empty or we need to perform
  * debugging duties.
@@ -3106,7 +3168,6 @@ reread_slab:
 			node = NUMA_NO_NODE;
 		goto new_slab;
 	}
-redo:
 
 	if (unlikely(!node_match(slab, node))) {
 		/*
@@ -3182,24 +3243,9 @@ deactivate_slab:
 
 new_slab:
 
-	if (slub_percpu_partial(c)) {
-		local_lock_irqsave(&s->cpu_slab->lock, flags);
-		if (unlikely(c->slab)) {
-			local_unlock_irqrestore(&s->cpu_slab->lock, flags);
-			goto reread_slab;
-		}
-		if (unlikely(!slub_percpu_partial(c))) {
-			local_unlock_irqrestore(&s->cpu_slab->lock, flags);
-			/* we were preempted and partial list got empty */
-			goto new_objects;
-		}
-
-		slab = c->slab = slub_percpu_partial(c);
-		slub_set_percpu_partial(c, slab);
-		local_unlock_irqrestore(&s->cpu_slab->lock, flags);
-		stat(s, CPU_PARTIAL_ALLOC);
-		goto redo;
-	}
+	freelist = get_cpu_partial(s, c, &slab, node, gfpflags);
+	if (freelist)
+		goto retry_load_slab;
 
 new_objects:
 
@@ -3209,6 +3255,9 @@ new_objects:
 	freelist = get_partial(s, node, &pc);
 	if (freelist)
 		goto check_new_slab;
+
+	if (slub_percpu_partial(c))
+		goto new_slab;
 
 	slub_put_cpu_ptr(s->cpu_slab);
 	slab = new_slab(s, gfpflags, node);
