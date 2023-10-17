@@ -987,34 +987,69 @@ no_page:
 	return n_ret;
 }
 
-static int swap_alloc_cluster(struct swap_info_struct *si, swp_entry_t *slot)
+static int swap_alloc_large(struct swap_info_struct *si, swp_entry_t *slot,
+			    unsigned int nr_pages)
 {
+	int order_idx;
 	unsigned long idx;
 	struct swap_cluster_info *ci;
+	struct percpu_cluster *cluster;
 	unsigned long offset;
 
 	/*
 	 * Should not even be attempting cluster allocations when huge
 	 * page swap is disabled.  Warn and fail the allocation.
 	 */
-	if (!IS_ENABLED(CONFIG_THP_SWAP)) {
+	if (!IS_ENABLED(CONFIG_THP_SWAP) ||
+	    nr_pages < 4 || nr_pages > SWAPFILE_CLUSTER ||
+	    !is_power_of_2(nr_pages)) {
 		VM_WARN_ON_ONCE(1);
 		return 0;
 	}
 
-	if (cluster_list_empty(&si->free_clusters))
+	/*
+	 * Not using clusters so unable to allocate large entries.
+	 */
+	if (!si->cluster_info)
 		return 0;
 
-	idx = cluster_list_first(&si->free_clusters);
-	offset = idx * SWAPFILE_CLUSTER;
-	ci = lock_cluster(si, offset);
-	alloc_cluster(si, idx);
-	cluster_set_count(ci, SWAPFILE_CLUSTER);
+	order_idx = ilog2(nr_pages) - 2;
+	cluster = this_cpu_ptr(si->percpu_cluster);
+	offset = cluster->large_next[order_idx];
 
-	memset(si->swap_map + offset, SWAP_HAS_CACHE, SWAPFILE_CLUSTER);
+	if (offset == UINT_MAX) {
+		if (cluster_list_empty(&si->free_clusters))
+			return 0;
+
+		idx = cluster_list_first(&si->free_clusters);
+		offset = idx * SWAPFILE_CLUSTER;
+
+		ci = lock_cluster(si, offset);
+		alloc_cluster(si, idx);
+		cluster_set_count(ci, SWAPFILE_CLUSTER);
+
+		/*
+		 * If scan_swap_map_slots() can't find a free cluster, it will
+		 * check si->swap_map directly. To make sure this standby
+		 * cluster isn't taken by scan_swap_map_slots(), mark the swap
+		 * entries bad (occupied). (same approach as discard).
+		 */
+		memset(si->swap_map + offset + nr_pages, SWAP_MAP_BAD,
+			SWAPFILE_CLUSTER - nr_pages);
+	} else {
+		idx = offset / SWAPFILE_CLUSTER;
+		ci = lock_cluster(si, offset);
+	}
+
+	memset(si->swap_map + offset, SWAP_HAS_CACHE, nr_pages);
 	unlock_cluster(ci);
-	swap_range_alloc(si, offset, SWAPFILE_CLUSTER);
+	swap_range_alloc(si, offset, nr_pages);
 	*slot = swp_entry(si->type, offset);
+
+	offset += nr_pages;
+	if (idx != offset / SWAPFILE_CLUSTER)
+		offset = UINT_MAX;
+	cluster->large_next[order_idx] = offset;
 
 	return 1;
 }
@@ -1041,7 +1076,7 @@ int get_swap_pages(int n_goal, swp_entry_t swp_entries[], int entry_size)
 	int node;
 
 	/* Only single cluster request supported */
-	WARN_ON_ONCE(n_goal > 1 && size == SWAPFILE_CLUSTER);
+	WARN_ON_ONCE(n_goal > 1 && size > 1);
 
 	spin_lock(&swap_avail_lock);
 
@@ -1078,14 +1113,14 @@ start_over:
 			spin_unlock(&si->lock);
 			goto nextsi;
 		}
-		if (size == SWAPFILE_CLUSTER) {
+		if (size > 1) {
 			if (si->flags & SWP_BLKDEV)
-				n_ret = swap_alloc_cluster(si, swp_entries);
+				n_ret = swap_alloc_large(si, swp_entries, size);
 		} else
 			n_ret = scan_swap_map_slots(si, SWAP_HAS_CACHE,
 						    n_goal, swp_entries);
 		spin_unlock(&si->lock);
-		if (n_ret || size == SWAPFILE_CLUSTER)
+		if (n_ret || size > 1)
 			goto check_out;
 		cond_resched();
 
@@ -3046,6 +3081,8 @@ SYSCALL_DEFINE2(swapon, const char __user *, specialfile, int, swap_flags)
 	if (p->bdev && bdev_nonrot(p->bdev)) {
 		int cpu;
 		unsigned long ci, nr_cluster;
+		int nr_order;
+		int i;
 
 		p->flags |= SWP_SOLIDSTATE;
 		p->cluster_next_cpu = alloc_percpu(unsigned int);
@@ -3073,7 +3110,12 @@ SYSCALL_DEFINE2(swapon, const char __user *, specialfile, int, swap_flags)
 		for (ci = 0; ci < nr_cluster; ci++)
 			spin_lock_init(&((cluster_info + ci)->lock));
 
-		p->percpu_cluster = alloc_percpu(struct percpu_cluster);
+		nr_order = IS_ENABLED(CONFIG_THP_SWAP) ? PMD_ORDER - 1 : 0;
+		p->percpu_cluster = __alloc_percpu(
+					struct_size(p->percpu_cluster,
+						    large_next,
+						    nr_order),
+					__alignof__(struct percpu_cluster));
 		if (!p->percpu_cluster) {
 			error = -ENOMEM;
 			goto bad_swap_unlock_inode;
@@ -3082,6 +3124,8 @@ SYSCALL_DEFINE2(swapon, const char __user *, specialfile, int, swap_flags)
 			struct percpu_cluster *cluster;
 			cluster = per_cpu_ptr(p->percpu_cluster, cpu);
 			cluster_set_null(&cluster->index);
+			for (i = 0; i < nr_order; i++)
+				cluster->large_next[i] = UINT_MAX;
 		}
 	} else {
 		atomic_inc(&nr_rotate_swap);

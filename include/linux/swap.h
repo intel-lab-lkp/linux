@@ -268,6 +268,12 @@ struct swap_cluster_info {
 struct percpu_cluster {
 	struct swap_cluster_info index; /* Current cluster index */
 	unsigned int next; /* Likely next allocation offset */
+	unsigned int large_next[];	/*
+					 * next free offset within current
+					 * allocation cluster for large folios,
+					 * or UINT_MAX if no current cluster.
+					 * Index is (order - 1).
+					 */
 };
 
 struct swap_cluster_list {
