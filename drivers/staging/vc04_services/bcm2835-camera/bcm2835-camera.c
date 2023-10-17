@@ -1995,9 +1995,15 @@ static void bcm2835_mmal_remove(struct vchiq_device *device)
 	vchiq_mmal_finalise(instance);
 }
 
+static const struct vchiq_bus_device_id id_table[] = {
+	{ .name = "bcm2835-camera" }
+};
+MODULE_DEVICE_TABLE(vchiq_bus, id_table);
+
 static struct vchiq_driver bcm2835_camera_driver = {
 	.probe		= bcm2835_mmal_probe,
 	.remove		= bcm2835_mmal_remove,
+	.id_table	= id_table,
 	.driver		= {
 		.name	= "bcm2835-camera",
 	},
@@ -2008,4 +2014,3 @@ module_vchiq_driver(bcm2835_camera_driver)
 MODULE_DESCRIPTION("Broadcom 2835 MMAL video capture");
 MODULE_AUTHOR("Vincent Sanders");
 MODULE_LICENSE("GPL");
-MODULE_ALIAS("bcm2835-camera");
