@@ -56,7 +56,6 @@
 struct dwc3_acpi_pdata {
 	u32			qscratch_base_offset;
 	u32			qscratch_base_size;
-	u32			dwc3_core_base_size;
 	int			hs_phy_irq_index;
 	int			dp_hs_phy_irq_index;
 	int			dm_hs_phy_irq_index;
@@ -676,75 +675,17 @@ static const struct software_node dwc3_qcom_swnode = {
 	.properties = dwc3_qcom_acpi_properties,
 };
 
-static int dwc3_qcom_acpi_register_core(struct platform_device *pdev)
+static int dwc3_qcom_probe_core(struct platform_device *pdev, struct dwc3_qcom *qcom)
 {
-	struct dwc3_qcom	*qcom = platform_get_drvdata(pdev);
-	struct device		*dev = &pdev->dev;
-	struct resource		*res, *child_res = NULL;
-	int			irq;
-	int			ret;
+	struct dwc3 *dwc;
 
-	qcom->dwc_dev = platform_device_alloc("dwc3", PLATFORM_DEVID_AUTO);
-	if (!qcom->dwc_dev)
-		return -ENOMEM;
+	dwc = dwc3_probe(pdev);
+	if (IS_ERR(dwc))
+		return PTR_ERR(dwc);
 
-	qcom->dwc_dev->dev.parent = dev;
-	qcom->dwc_dev->dev.type = dev->type;
-	qcom->dwc_dev->dev.dma_mask = dev->dma_mask;
-	qcom->dwc_dev->dev.dma_parms = dev->dma_parms;
-	qcom->dwc_dev->dev.coherent_dma_mask = dev->coherent_dma_mask;
+	qcom->dwc = dwc;
 
-	child_res = kcalloc(2, sizeof(*child_res), GFP_KERNEL);
-	if (!child_res) {
-		platform_device_put(qcom->dwc_dev);
-		return -ENOMEM;
-	}
-
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!res) {
-		dev_err(&pdev->dev, "failed to get memory resource\n");
-		ret = -ENODEV;
-		goto out;
-	}
-
-	child_res[0].flags = res->flags;
-	child_res[0].start = res->start;
-	child_res[0].end = child_res[0].start +
-		qcom->acpi_pdata->dwc3_core_base_size;
-
-	irq = platform_get_irq(pdev, 0);
-	if (irq < 0) {
-		ret = irq;
-		goto out;
-	}
-	child_res[1].flags = IORESOURCE_IRQ;
-	child_res[1].start = child_res[1].end = irq;
-
-	ret = platform_device_add_resources(qcom->dwc_dev, child_res, 2);
-	if (ret) {
-		dev_err(&pdev->dev, "failed to add resources\n");
-		goto out;
-	}
-
-	ret = device_add_software_node(&qcom->dwc_dev->dev, &dwc3_qcom_swnode);
-	if (ret < 0) {
-		dev_err(&pdev->dev, "failed to add properties\n");
-		goto out;
-	}
-
-	ret = platform_device_add(qcom->dwc_dev);
-	if (ret) {
-		dev_err(&pdev->dev, "failed to add device\n");
-		device_remove_software_node(&qcom->dwc_dev->dev);
-		goto out;
-	}
-	kfree(child_res);
 	return 0;
-
-out:
-	platform_device_put(qcom->dwc_dev);
-	kfree(child_res);
-	return ret;
 }
 
 static int dwc3_qcom_of_register_core(struct platform_device *pdev)
@@ -871,6 +812,12 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
 			return -EINVAL;
 		}
 
+		ret = device_add_software_node(&pdev->dev, &dwc3_qcom_swnode);
+		if (ret < 0) {
+			dev_err(&pdev->dev, "failed to add properties\n");
+			return ret;
+		}
+
 		if (qcom->acpi_pdata->is_urs) {
 			ret = dwc3_qcom_acpi_merge_urs_resources(pdev);
 			if (ret < 0)
@@ -942,7 +889,7 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
 	if (np)
 		ret = dwc3_qcom_of_register_core(pdev);
 	else
-		ret = dwc3_qcom_acpi_register_core(pdev);
+		ret = dwc3_qcom_probe_core(pdev, qcom);
 
 	if (ret) {
 		dev_err(dev, "failed to register DWC3 Core, err=%d\n", ret);
@@ -986,10 +933,10 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
 interconnect_exit:
 	dwc3_qcom_interconnect_exit(qcom);
 depopulate:
-	if (np)
+	if (qcom->dwc_dev)
 		of_platform_depopulate(&pdev->dev);
 	else
-		platform_device_put(pdev);
+		dwc3_remove(qcom->dwc);
 clk_disable:
 	for (i = qcom->num_clocks - 1; i >= 0; i--) {
 		clk_disable_unprepare(qcom->clks[i]);
@@ -1128,7 +1075,6 @@ MODULE_DEVICE_TABLE(of, dwc3_qcom_of_match);
 static const struct dwc3_acpi_pdata sdm845_acpi_pdata = {
 	.qscratch_base_offset = SDM845_QSCRATCH_BASE_OFFSET,
 	.qscratch_base_size = SDM845_QSCRATCH_SIZE,
-	.dwc3_core_base_size = SDM845_DWC3_CORE_SIZE,
 	.hs_phy_irq_index = 1,
 	.dp_hs_phy_irq_index = 4,
 	.dm_hs_phy_irq_index = 3,
@@ -1138,7 +1084,6 @@ static const struct dwc3_acpi_pdata sdm845_acpi_pdata = {
 static const struct dwc3_acpi_pdata sdm845_acpi_urs_pdata = {
 	.qscratch_base_offset = SDM845_QSCRATCH_BASE_OFFSET,
 	.qscratch_base_size = SDM845_QSCRATCH_SIZE,
-	.dwc3_core_base_size = SDM845_DWC3_CORE_SIZE,
 	.hs_phy_irq_index = 1,
 	.dp_hs_phy_irq_index = 4,
 	.dm_hs_phy_irq_index = 3,
