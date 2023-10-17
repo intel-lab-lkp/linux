@@ -52,6 +52,8 @@ config LAN743X
 	select I2C_PCI1XXXX
 	select GP_PCI1XXXX
 	select SFP
+	select PCS_XPCS
+	select PHYLINK
 	help
 	  Support for the Microchip LAN743x and PCI11x1x families of PCI
 	  Express Ethernet devices
