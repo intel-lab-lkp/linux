@@ -9652,7 +9652,7 @@ static void cik_pcie_gen3_enable(struct radeon_device *rdev)
 static void cik_program_aspm(struct radeon_device *rdev)
 {
 	u32 data, orig;
-	bool disable_l0s = false, disable_l1 = false, disable_plloff_in_l1 = false;
+	bool disable_l0s = false, disable_l1 = false;
 	bool disable_clkreq = false;
 
 	if (radeon_aspm == 0)
@@ -9693,86 +9693,84 @@ static void cik_program_aspm(struct radeon_device *rdev)
 		if (orig != data)
 			WREG32_PCIE_PORT(PCIE_LC_CNTL, data);
 
-		if (!disable_plloff_in_l1) {
-			bool clk_req_support;
+		bool clk_req_support;
 
-			orig = data = RREG32_PCIE_PORT(PB0_PIF_PWRDOWN_0);
-			data &= ~(PLL_POWER_STATE_IN_OFF_0_MASK | PLL_POWER_STATE_IN_TXS2_0_MASK);
-			data |= PLL_POWER_STATE_IN_OFF_0(7) | PLL_POWER_STATE_IN_TXS2_0(7);
+		orig = data = RREG32_PCIE_PORT(PB0_PIF_PWRDOWN_0);
+		data &= ~(PLL_POWER_STATE_IN_OFF_0_MASK | PLL_POWER_STATE_IN_TXS2_0_MASK);
+		data |= PLL_POWER_STATE_IN_OFF_0(7) | PLL_POWER_STATE_IN_TXS2_0(7);
+		if (orig != data)
+			WREG32_PCIE_PORT(PB0_PIF_PWRDOWN_0, data);
+
+		orig = data = RREG32_PCIE_PORT(PB0_PIF_PWRDOWN_1);
+		data &= ~(PLL_POWER_STATE_IN_OFF_1_MASK | PLL_POWER_STATE_IN_TXS2_1_MASK);
+		data |= PLL_POWER_STATE_IN_OFF_1(7) | PLL_POWER_STATE_IN_TXS2_1(7);
+		if (orig != data)
+			WREG32_PCIE_PORT(PB0_PIF_PWRDOWN_1, data);
+
+		orig = data = RREG32_PCIE_PORT(PB1_PIF_PWRDOWN_0);
+		data &= ~(PLL_POWER_STATE_IN_OFF_0_MASK | PLL_POWER_STATE_IN_TXS2_0_MASK);
+		data |= PLL_POWER_STATE_IN_OFF_0(7) | PLL_POWER_STATE_IN_TXS2_0(7);
+		if (orig != data)
+			WREG32_PCIE_PORT(PB1_PIF_PWRDOWN_0, data);
+
+		orig = data = RREG32_PCIE_PORT(PB1_PIF_PWRDOWN_1);
+		data &= ~(PLL_POWER_STATE_IN_OFF_1_MASK | PLL_POWER_STATE_IN_TXS2_1_MASK);
+		data |= PLL_POWER_STATE_IN_OFF_1(7) | PLL_POWER_STATE_IN_TXS2_1(7);
+		if (orig != data)
+			WREG32_PCIE_PORT(PB1_PIF_PWRDOWN_1, data);
+
+		orig = data = RREG32_PCIE_PORT(PCIE_LC_LINK_WIDTH_CNTL);
+		data &= ~LC_DYN_LANES_PWR_STATE_MASK;
+		data |= LC_DYN_LANES_PWR_STATE(3);
+		if (orig != data)
+			WREG32_PCIE_PORT(PCIE_LC_LINK_WIDTH_CNTL, data);
+
+		if (!disable_clkreq &&
+			!pci_is_root_bus(rdev->pdev->bus)) {
+			struct pci_dev *root = rdev->pdev->bus->self;
+			u32 lnkcap;
+
+			clk_req_support = false;
+			pcie_capability_read_dword(root, PCI_EXP_LNKCAP, &lnkcap);
+			if (lnkcap & PCI_EXP_LNKCAP_CLKPM)
+				clk_req_support = true;
+		} else {
+			clk_req_support = false;
+		}
+
+		if (clk_req_support) {
+			orig = data = RREG32_PCIE_PORT(PCIE_LC_CNTL2);
+			data |= LC_ALLOW_PDWN_IN_L1 | LC_ALLOW_PDWN_IN_L23;
 			if (orig != data)
-				WREG32_PCIE_PORT(PB0_PIF_PWRDOWN_0, data);
+				WREG32_PCIE_PORT(PCIE_LC_CNTL2, data);
 
-			orig = data = RREG32_PCIE_PORT(PB0_PIF_PWRDOWN_1);
-			data &= ~(PLL_POWER_STATE_IN_OFF_1_MASK | PLL_POWER_STATE_IN_TXS2_1_MASK);
-			data |= PLL_POWER_STATE_IN_OFF_1(7) | PLL_POWER_STATE_IN_TXS2_1(7);
+			orig = data = RREG32_SMC(THM_CLK_CNTL);
+			data &= ~(CMON_CLK_SEL_MASK | TMON_CLK_SEL_MASK);
+			data |= CMON_CLK_SEL(1) | TMON_CLK_SEL(1);
 			if (orig != data)
-				WREG32_PCIE_PORT(PB0_PIF_PWRDOWN_1, data);
+				WREG32_SMC(THM_CLK_CNTL, data);
 
-			orig = data = RREG32_PCIE_PORT(PB1_PIF_PWRDOWN_0);
-			data &= ~(PLL_POWER_STATE_IN_OFF_0_MASK | PLL_POWER_STATE_IN_TXS2_0_MASK);
-			data |= PLL_POWER_STATE_IN_OFF_0(7) | PLL_POWER_STATE_IN_TXS2_0(7);
+			orig = data = RREG32_SMC(MISC_CLK_CTRL);
+			data &= ~(DEEP_SLEEP_CLK_SEL_MASK | ZCLK_SEL_MASK);
+			data |= DEEP_SLEEP_CLK_SEL(1) | ZCLK_SEL(1);
 			if (orig != data)
-				WREG32_PCIE_PORT(PB1_PIF_PWRDOWN_0, data);
+				WREG32_SMC(MISC_CLK_CTRL, data);
 
-			orig = data = RREG32_PCIE_PORT(PB1_PIF_PWRDOWN_1);
-			data &= ~(PLL_POWER_STATE_IN_OFF_1_MASK | PLL_POWER_STATE_IN_TXS2_1_MASK);
-			data |= PLL_POWER_STATE_IN_OFF_1(7) | PLL_POWER_STATE_IN_TXS2_1(7);
+			orig = data = RREG32_SMC(CG_CLKPIN_CNTL);
+			data &= ~BCLK_AS_XCLK;
 			if (orig != data)
-				WREG32_PCIE_PORT(PB1_PIF_PWRDOWN_1, data);
+				WREG32_SMC(CG_CLKPIN_CNTL, data);
 
-			orig = data = RREG32_PCIE_PORT(PCIE_LC_LINK_WIDTH_CNTL);
-			data &= ~LC_DYN_LANES_PWR_STATE_MASK;
-			data |= LC_DYN_LANES_PWR_STATE(3);
+			orig = data = RREG32_SMC(CG_CLKPIN_CNTL_2);
+			data &= ~FORCE_BIF_REFCLK_EN;
 			if (orig != data)
-				WREG32_PCIE_PORT(PCIE_LC_LINK_WIDTH_CNTL, data);
+				WREG32_SMC(CG_CLKPIN_CNTL_2, data);
 
-			if (!disable_clkreq &&
-			    !pci_is_root_bus(rdev->pdev->bus)) {
-				struct pci_dev *root = rdev->pdev->bus->self;
-				u32 lnkcap;
-
-				clk_req_support = false;
-				pcie_capability_read_dword(root, PCI_EXP_LNKCAP, &lnkcap);
-				if (lnkcap & PCI_EXP_LNKCAP_CLKPM)
-					clk_req_support = true;
-			} else {
-				clk_req_support = false;
-			}
-
-			if (clk_req_support) {
-				orig = data = RREG32_PCIE_PORT(PCIE_LC_CNTL2);
-				data |= LC_ALLOW_PDWN_IN_L1 | LC_ALLOW_PDWN_IN_L23;
-				if (orig != data)
-					WREG32_PCIE_PORT(PCIE_LC_CNTL2, data);
-
-				orig = data = RREG32_SMC(THM_CLK_CNTL);
-				data &= ~(CMON_CLK_SEL_MASK | TMON_CLK_SEL_MASK);
-				data |= CMON_CLK_SEL(1) | TMON_CLK_SEL(1);
-				if (orig != data)
-					WREG32_SMC(THM_CLK_CNTL, data);
-
-				orig = data = RREG32_SMC(MISC_CLK_CTRL);
-				data &= ~(DEEP_SLEEP_CLK_SEL_MASK | ZCLK_SEL_MASK);
-				data |= DEEP_SLEEP_CLK_SEL(1) | ZCLK_SEL(1);
-				if (orig != data)
-					WREG32_SMC(MISC_CLK_CTRL, data);
-
-				orig = data = RREG32_SMC(CG_CLKPIN_CNTL);
-				data &= ~BCLK_AS_XCLK;
-				if (orig != data)
-					WREG32_SMC(CG_CLKPIN_CNTL, data);
-
-				orig = data = RREG32_SMC(CG_CLKPIN_CNTL_2);
-				data &= ~FORCE_BIF_REFCLK_EN;
-				if (orig != data)
-					WREG32_SMC(CG_CLKPIN_CNTL_2, data);
-
-				orig = data = RREG32_SMC(MPLL_BYPASSCLK_SEL);
-				data &= ~MPLL_CLKOUT_SEL_MASK;
-				data |= MPLL_CLKOUT_SEL(4);
-				if (orig != data)
-					WREG32_SMC(MPLL_BYPASSCLK_SEL, data);
-			}
+			orig = data = RREG32_SMC(MPLL_BYPASSCLK_SEL);
+			data &= ~MPLL_CLKOUT_SEL_MASK;
+			data |= MPLL_CLKOUT_SEL(4);
+			if (orig != data)
+				WREG32_SMC(MPLL_BYPASSCLK_SEL, data);
 		}
 	} else {
 		if (orig != data)
