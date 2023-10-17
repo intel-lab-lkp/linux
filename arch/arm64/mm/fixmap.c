@@ -18,10 +18,11 @@
 
 #define NR_BM_PTE_TABLES \
 	SPAN_NR_ENTRIES(FIXADDR_TOT_START, FIXADDR_TOP, PMD_SHIFT)
+#if CONFIG_PGTABLE_LEVELS > 2
 #define NR_BM_PMD_TABLES \
 	SPAN_NR_ENTRIES(FIXADDR_TOT_START, FIXADDR_TOP, PUD_SHIFT)
-
 static_assert(NR_BM_PMD_TABLES == 1);
+#endif
 
 #define __BM_TABLE_IDX(addr, shift) \
 	(((addr) >> (shift)) - (FIXADDR_TOT_START >> (shift)))
