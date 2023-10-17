@@ -162,6 +162,13 @@ in memory) as follows:
 
 Note that swapping due to writeback is not disabled with this option.
 
+Compression could also fail during a zswap store attempt. In many cases, it is
+nevertheless beneficial to store the page in the zswap pool (in its
+uncompressed form) for the sake of maintaining the LRU ordering, which will
+be useful for reclaim. This can be enabled as follows:
+
+	echo Y > /sys/module/zswap/parameters/uncompressed_pages_enabled
+
 When there is a sizable amount of cold memory residing in the zswap pool, it
 can be advantageous to proactively write these cold pages to swap and reclaim
 the memory for other use cases. By default, the zswap shrinker is disabled.

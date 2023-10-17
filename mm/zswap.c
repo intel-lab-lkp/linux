@@ -62,6 +62,8 @@ static u64 zswap_pool_limit_hit;
 static u64 zswap_written_back_pages;
 /* Store failed due to a reclaim failure after pool limit was reached */
 static u64 zswap_reject_reclaim_fail;
+/* Compression step fails during store attempt */
+static u64 zswap_reject_compress_fail;
 /* Compressed page was too big for the allocator to (optimally) store */
 static u64 zswap_reject_compress_poor;
 /* Store failed because underlying allocator could not get memory */
@@ -141,6 +143,10 @@ module_param_named(non_same_filled_pages_enabled, zswap_non_same_filled_pages_en
 bool zswap_bypass_swap_when_store_fail_enabled;
 module_param_named(bypass_swap_when_store_fail_enabled,
 		   zswap_bypass_swap_when_store_fail_enabled, bool, 0644);
+
+static bool zswap_uncompressed_pages_enabled;
+module_param_named(uncompressed_pages_enabled,
+		   zswap_uncompressed_pages_enabled, bool, 0644);
 
 static bool zswap_exclusive_loads_enabled = IS_ENABLED(
 		CONFIG_ZSWAP_EXCLUSIVE_LOADS_DEFAULT_ON);
@@ -224,6 +230,7 @@ struct zswap_pool {
  * value - value of the same-value filled pages which have same content
  * objcg - the obj_cgroup that the compressed memory is charged to
  * lru - handle to the pool's lru used to evict pages.
+ * is_uncompressed - whether the page is stored in its uncompressed form.
  */
 struct zswap_entry {
 	struct rb_node rbnode;
@@ -238,6 +245,7 @@ struct zswap_entry {
 	struct obj_cgroup *objcg;
 	int nid;
 	struct list_head lru;
+	bool is_uncompressed;
 };
 
 /*
@@ -1307,7 +1315,7 @@ static int zswap_writeback_entry(struct zswap_entry *entry,
 	struct crypto_acomp_ctx *acomp_ctx;
 	struct zpool *pool = zswap_find_zpool(entry);
 	bool page_was_allocated;
-	u8 *src, *tmp = NULL;
+	u8 *src, *dst, *tmp = NULL;
 	unsigned int dlen;
 	int ret;
 	struct writeback_control wbc = {
@@ -1356,6 +1364,19 @@ static int zswap_writeback_entry(struct zswap_entry *entry,
 	dlen = PAGE_SIZE;
 
 	src = zpool_map_handle(pool, entry->handle, ZPOOL_MM_RO);
+	if (entry->is_uncompressed) {
+		if (!zpool_can_sleep_mapped(pool))
+			kfree(tmp);
+
+		dst = kmap_local_page(page);
+		copy_page(dst, src);
+		kunmap_local(dst);
+		zpool_unmap_handle(pool, entry->handle);
+
+		ret = 0;
+		goto success;
+	}
+
 	if (!zpool_can_sleep_mapped(pool)) {
 		memcpy(tmp, src, entry->length);
 		src = tmp;
@@ -1376,6 +1397,7 @@ static int zswap_writeback_entry(struct zswap_entry *entry,
 	else
 		zpool_unmap_handle(pool, entry->handle);
 
+success:
 	BUG_ON(ret);
 	BUG_ON(dlen != PAGE_SIZE);
 
@@ -1454,7 +1476,7 @@ bool zswap_store(struct folio *folio)
 	char *buf;
 	u8 *src, *dst;
 	gfp_t gfp;
-	int ret;
+	int ret, compress_ret;
 
 	VM_WARN_ON_ONCE(!folio_test_locked(folio));
 	VM_WARN_ON_ONCE(!folio_test_swapcache(folio));
@@ -1569,11 +1591,15 @@ bool zswap_store(struct folio *folio)
 	 * but in different threads running on different cpu, we have different
 	 * acomp instance, so multiple threads can do (de)compression in parallel.
 	 */
-	ret = crypto_wait_req(crypto_acomp_compress(acomp_ctx->req), &acomp_ctx->wait);
+	compress_ret = crypto_wait_req(crypto_acomp_compress(acomp_ctx->req),
+						&acomp_ctx->wait);
 	dlen = acomp_ctx->req->dlen;
 
-	if (ret)
-		goto put_dstmem;
+	if (compress_ret) {
+		zswap_reject_compress_fail++;
+		if (!zswap_uncompressed_pages_enabled)
+			goto put_dstmem;
+	}
 
 	/* store */
 	zpool = zswap_find_zpool(entry);
@@ -1590,7 +1616,15 @@ bool zswap_store(struct folio *folio)
 		goto put_dstmem;
 	}
 	buf = zpool_map_handle(zpool, handle, ZPOOL_MM_WO);
-	memcpy(buf, dst, dlen);
+
+	/* Compressor failed. Store the page in its uncompressed form. */
+	if (compress_ret) {
+		dlen = PAGE_SIZE;
+		src = kmap_local_page(page);
+		copy_page(buf, src);
+		kunmap_local(src);
+	} else
+		memcpy(buf, dst, dlen);
 	zpool_unmap_handle(zpool, handle);
 	mutex_unlock(acomp_ctx->mutex);
 
@@ -1598,6 +1632,7 @@ bool zswap_store(struct folio *folio)
 	entry->swpentry = swp_entry(type, offset);
 	entry->handle = handle;
 	entry->length = dlen;
+	entry->is_uncompressed = compress_ret;
 
 insert_entry:
 	entry->objcg = objcg;
@@ -1687,6 +1722,17 @@ bool zswap_load(struct folio *folio)
 	}
 
 	zpool = zswap_find_zpool(entry);
+
+	if (entry->is_uncompressed) {
+		src = zpool_map_handle(zpool, entry->handle, ZPOOL_MM_RO);
+		dst = kmap_local_page(page);
+		copy_page(dst, src);
+		kunmap_local(dst);
+		zpool_unmap_handle(zpool, entry->handle);
+		ret = true;
+		goto stats;
+	}
+
 	if (!zpool_can_sleep_mapped(zpool)) {
 		tmp = kmalloc(entry->length, GFP_KERNEL);
 		if (!tmp) {
@@ -1855,6 +1901,8 @@ static int zswap_debugfs_init(void)
 			   zswap_debugfs_root, &zswap_reject_alloc_fail);
 	debugfs_create_u64("reject_kmemcache_fail", 0444,
 			   zswap_debugfs_root, &zswap_reject_kmemcache_fail);
+	debugfs_create_u64("reject_compress_fail", 0444,
+			   zswap_debugfs_root, &zswap_reject_compress_fail);
 	debugfs_create_u64("reject_compress_poor", 0444,
 			   zswap_debugfs_root, &zswap_reject_compress_poor);
 	debugfs_create_u64("written_back_pages", 0444,
