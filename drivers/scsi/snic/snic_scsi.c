@@ -952,13 +952,13 @@ ioctl_dev_rst:
 
 
 static void
-snic_hba_reset_scsi_cleanup(struct snic *snic, struct scsi_cmnd *sc)
+snic_hba_reset_scsi_cleanup(struct snic *snic)
 {
 	struct snic_stats *st = &snic->s_stats;
 	long act_ios = 0, act_fwreqs = 0;
 
 	SNIC_SCSI_DBG(snic->shost, "HBA Reset scsi cleanup.\n");
-	snic_scsi_cleanup(snic, snic_cmd_tag(sc));
+	snic_scsi_cleanup(snic, snic->max_tag_id);
 
 	/* Update stats on pending IOs */
 	act_ios = atomic64_read(&st->io.active);
@@ -984,7 +984,6 @@ snic_hba_reset_cmpl_handler(struct snic *snic, struct snic_fw_req *fwreq)
 	u32 hid;
 	u8 typ;
 	u8 hdr_stat;
-	struct scsi_cmnd *sc = NULL;
 	struct snic_req_info *rqi = NULL;
 	spinlock_t *io_lock = NULL;
 	unsigned long flags, gflags;
@@ -999,18 +998,9 @@ snic_hba_reset_cmpl_handler(struct snic *snic, struct snic_fw_req *fwreq)
 		      "reset_cmpl: type = %x, hdr_stat = %x, cmnd_id = %x, hid = %x, ctx = %lx\n",
 		      typ, hdr_stat, cmnd_id, hid, ctx);
 
-	/* spl case, host reset issued through ioctl */
-	if (cmnd_id == SCSI_NO_TAG) {
-		rqi = (struct snic_req_info *) ctx;
-		SNIC_HOST_INFO(snic->shost,
-			       "reset_cmpl:Tag %d ctx %lx cmpl stat %s\n",
-			       cmnd_id, ctx, snic_io_status_to_str(hdr_stat));
-		sc = rqi->sc;
+	rqi = (struct snic_req_info *) ctx;
 
-		goto ioctl_hba_rst;
-	}
-
-	if (cmnd_id >= snic->max_tag_id) {
+	if (cmnd_id != snic->max_tag_id) {
 		SNIC_HOST_ERR(snic->shost,
 			      "reset_cmpl: Tag 0x%x out of Range,HdrStat %s\n",
 			      cmnd_id, snic_io_status_to_str(hdr_stat));
@@ -1019,55 +1009,35 @@ snic_hba_reset_cmpl_handler(struct snic *snic, struct snic_fw_req *fwreq)
 		return 1;
 	}
 
-	sc = scsi_host_find_tag(snic->shost, cmnd_id);
-ioctl_hba_rst:
-	if (!sc) {
-		atomic64_inc(&snic->s_stats.io.sc_null);
-		SNIC_HOST_ERR(snic->shost,
-			      "reset_cmpl: sc is NULL - Hdr Stat %s Tag 0x%x\n",
-			      snic_io_status_to_str(hdr_stat), cmnd_id);
-		ret = 1;
-
-		return ret;
-	}
-
 	SNIC_HOST_INFO(snic->shost,
-		       "reset_cmpl: sc %p rqi %p Tag %d flags 0x%llx\n",
-		       sc, rqi, cmnd_id, CMD_FLAGS(sc));
+		       "reset_cmpl: rqi %p Tag %d\n", rqi, cmnd_id);
 
-	io_lock = snic_io_lock_hash(snic, sc);
+	io_lock = snic_io_lock_tag(snic, cmnd_id);
 	spin_lock_irqsave(io_lock, flags);
 
 	if (!snic->remove_wait) {
 		spin_unlock_irqrestore(io_lock, flags);
 		SNIC_HOST_ERR(snic->shost,
 			      "reset_cmpl:host reset completed after timeout\n");
-		ret = 1;
-
-		return ret;
+		return 1;
 	}
 
-	rqi = (struct snic_req_info *) CMD_SP(sc);
 	WARN_ON_ONCE(!rqi);
 
 	if (!rqi) {
 		atomic64_inc(&snic->s_stats.io.req_null);
 		spin_unlock_irqrestore(io_lock, flags);
-		CMD_FLAGS(sc) |= SNIC_IO_ABTS_TERM_REQ_NULL;
 		SNIC_HOST_ERR(snic->shost,
-			      "reset_cmpl: rqi is null,Hdr stat %s Tag 0x%x sc 0x%p flags 0x%llx\n",
-			      snic_io_status_to_str(hdr_stat), cmnd_id, sc,
-			      CMD_FLAGS(sc));
+			      "reset_cmpl: rqi is null,Hdr stat %s Tag 0x%x\n",
+			      snic_io_status_to_str(hdr_stat), cmnd_id);
 
-		ret = 1;
-
-		return ret;
+		return 1;
 	}
 	/* stats */
 	spin_unlock_irqrestore(io_lock, flags);
 
 	/* scsi cleanup */
-	snic_hba_reset_scsi_cleanup(snic, sc);
+	snic_hba_reset_scsi_cleanup(snic);
 
 	SNIC_BUG_ON(snic_get_state(snic) != SNIC_OFFLINE &&
 		    snic_get_state(snic) != SNIC_FWRESET);
@@ -2203,7 +2173,7 @@ dev_rst_end:
  * snic_issue_hba_reset : Queues FW Reset Request.
  */
 static int
-snic_issue_hba_reset(struct snic *snic, struct scsi_cmnd *sc)
+snic_issue_hba_reset(struct snic *snic)
 {
 	struct snic_req_info *rqi = NULL;
 	struct snic_host_req *req = NULL;
@@ -2219,26 +2189,15 @@ snic_issue_hba_reset(struct snic *snic, struct scsi_cmnd *sc)
 		goto hba_rst_end;
 	}
 
-	if (snic_cmd_tag(sc) == SCSI_NO_TAG) {
-		memset(scsi_cmd_priv(sc), 0,
-			sizeof(struct snic_internal_io_state));
-		SNIC_HOST_INFO(snic->shost, "issu_hr:Host reset thru ioctl.\n");
-		rqi->sc = sc;
-	}
-
 	req = rqi_to_req(rqi);
 
-	io_lock = snic_io_lock_hash(snic, sc);
+	io_lock = snic_io_lock_tag(snic, snic->max_tag_id);
 	spin_lock_irqsave(io_lock, flags);
-	SNIC_BUG_ON(CMD_SP(sc) != NULL);
-	CMD_STATE(sc) = SNIC_IOREQ_PENDING;
-	CMD_SP(sc) = (char *) rqi;
-	CMD_FLAGS(sc) |= SNIC_IO_INITIALIZED;
 	snic->remove_wait = &wait;
 	spin_unlock_irqrestore(io_lock, flags);
 
 	/* Initialize Request */
-	snic_io_hdr_enc(&req->hdr, SNIC_REQ_HBA_RESET, 0, snic_cmd_tag(sc),
+	snic_io_hdr_enc(&req->hdr, SNIC_REQ_HBA_RESET, 0, snic->max_tag_id,
 			snic->config.hid, 0, (ulong) rqi);
 
 	req->u.reset.flags = 0;
@@ -2252,9 +2211,6 @@ snic_issue_hba_reset(struct snic *snic, struct scsi_cmnd *sc)
 		goto hba_rst_err;
 	}
 
-	spin_lock_irqsave(io_lock, flags);
-	CMD_FLAGS(sc) |= SNIC_HOST_RESET_ISSUED;
-	spin_unlock_irqrestore(io_lock, flags);
 	atomic64_inc(&snic->s_stats.reset.hba_resets);
 	SNIC_HOST_INFO(snic->shost, "Queued HBA Reset Successfully.\n");
 
@@ -2270,8 +2226,6 @@ snic_issue_hba_reset(struct snic *snic, struct scsi_cmnd *sc)
 
 	spin_lock_irqsave(io_lock, flags);
 	snic->remove_wait = NULL;
-	rqi = (struct snic_req_info *) CMD_SP(sc);
-	CMD_SP(sc) = NULL;
 	spin_unlock_irqrestore(io_lock, flags);
 
 	if (rqi)
@@ -2284,8 +2238,6 @@ snic_issue_hba_reset(struct snic *snic, struct scsi_cmnd *sc)
 hba_rst_err:
 	spin_lock_irqsave(io_lock, flags);
 	snic->remove_wait = NULL;
-	rqi = (struct snic_req_info *) CMD_SP(sc);
-	CMD_SP(sc) = NULL;
 	spin_unlock_irqrestore(io_lock, flags);
 
 	if (rqi)
@@ -2300,7 +2252,7 @@ hba_rst_end:
 } /* end of snic_issue_hba_reset */
 
 int
-snic_reset(struct Scsi_Host *shost, struct scsi_cmnd *sc)
+snic_reset(struct Scsi_Host *shost)
 {
 	struct snic *snic = shost_priv(shost);
 	enum snic_state sv_state;
@@ -2329,7 +2281,7 @@ snic_reset(struct Scsi_Host *shost, struct scsi_cmnd *sc)
 	while (atomic_read(&snic->ios_inflight))
 		schedule_timeout(msecs_to_jiffies(1));
 
-	ret = snic_issue_hba_reset(snic, sc);
+	ret = snic_issue_hba_reset(snic);
 	if (ret) {
 		SNIC_HOST_ERR(shost,
 			      "reset:Host Reset Failed w/ err %d.\n",
@@ -2368,7 +2320,7 @@ snic_host_reset(struct scsi_cmnd *sc)
 		      sc, sc->cmnd[0], scsi_cmd_to_rq(sc),
 		      snic_cmd_tag(sc), CMD_FLAGS(sc));
 
-	ret = snic_reset(shost, sc);
+	ret = snic_reset(shost);
 
 	SNIC_TRC(shost->host_no, snic_cmd_tag(sc), (ulong) sc,
 		 jiffies_to_msecs(jiffies - start_time),

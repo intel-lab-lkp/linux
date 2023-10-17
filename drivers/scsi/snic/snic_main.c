@@ -494,9 +494,10 @@ snic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	/* Configure Maximum Outstanding IO reqs */
 	max_ios = snic->config.io_throttle_count;
 	if (max_ios != SNIC_UCSM_DFLT_THROTTLE_CNT_BLD)
-		shost->can_queue = min_t(u32, SNIC_MAX_IO_REQ,
+		max_ios = min_t(u32, SNIC_MAX_IO_REQ,
 					 max_t(u32, SNIC_MIN_IO_REQ, max_ios));
-
+	/* Reserve one tag for HBA reset */
+	shost->can_queue = max_ios - 1;
 	snic->max_tag_id = shost->can_queue;
 
 	shost->max_lun = snic->config.luns_per_tgt;
