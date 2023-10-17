@@ -406,7 +406,7 @@ err:
 
 static int cgroupstats_user_cmd(struct sk_buff *skb, struct genl_info *info)
 {
-	int rc = 0;
+	int rc;
 	struct sk_buff *rep_skb;
 	struct cgroupstats *stats;
 	struct nlattr *na;
