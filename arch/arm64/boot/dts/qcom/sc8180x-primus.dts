@@ -684,11 +684,9 @@
 };
 
 &usb_sec {
-	status = "okay";
-};
-
-&usb_sec_dwc3 {
 	dr_mode = "host";
+
+	status = "okay";
 };
 
 &wifi {
