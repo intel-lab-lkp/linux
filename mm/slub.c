@@ -3636,6 +3636,7 @@ static void __slab_free(struct kmem_cache *s, struct slab *slab,
 	unsigned long counters;
 	struct kmem_cache_node *n = NULL;
 	unsigned long flags;
+	bool on_node_partial;
 
 	stat(s, FREE_SLOWPATH);
 
@@ -3683,6 +3684,7 @@ static void __slab_free(struct kmem_cache *s, struct slab *slab,
 				 */
 				spin_lock_irqsave(&n->list_lock, flags);
 
+				on_node_partial = on_partial(n, slab);
 			}
 		}
 
@@ -3708,6 +3710,15 @@ static void __slab_free(struct kmem_cache *s, struct slab *slab,
 			stat(s, CPU_PARTIAL_FREE);
 		}
 
+		return;
+	}
+
+	/*
+	 * This slab was not on node partial list and not full either,
+	 * in which case we shouldn't manipulate its list, early return.
+	 */
+	if (!on_node_partial && prior) {
+		spin_unlock_irqrestore(&n->list_lock, flags);
 		return;
 	}
 
