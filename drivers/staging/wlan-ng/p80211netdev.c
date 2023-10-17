@@ -77,10 +77,11 @@ static int p80211knetdev_stop(struct net_device *netdev);
 static netdev_tx_t p80211knetdev_hard_start_xmit(struct sk_buff *skb,
 						 struct net_device *netdev);
 static void p80211knetdev_set_multicast_list(struct net_device *dev);
-static int p80211knetdev_siocdevprivate(struct net_device *dev, struct ifreq *ifr,
-					void __user *data, int cmd);
+static int p80211knetdev_siocdevprivate(struct net_device *dev,
+					struct ifreq *ifr, void __user *data, int cmd);
 static int p80211knetdev_set_mac_address(struct net_device *dev, void *addr);
-static void p80211knetdev_tx_timeout(struct net_device *netdev, unsigned int txqueue);
+static void p80211knetdev_tx_timeout(struct net_device *netdev,
+				     unsigned int txqueue);
 static int p80211_rx_typedrop(struct wlandevice *wlandev, u16 fc);
 
 int wlan_watchdog = 5000;
@@ -343,7 +344,8 @@ static netdev_tx_t p80211knetdev_hard_start_xmit(struct sk_buff *skb,
 		 */
 		if (be16_to_cpu(skb->protocol) != ETH_P_80211_RAW) {
 			netif_start_queue(wlandev->netdev);
-			netdev_notice(netdev, "Tx attempt prior to association, frame dropped.\n");
+			netdev_notice(netdev,
+				      "Tx attempt prior to association, frame dropped.\n");
 			netdev->stats.tx_dropped++;
 			result = 0;
 			goto failed;
@@ -591,7 +593,8 @@ static int p80211knetdev_set_mac_address(struct net_device *dev, void *addr)
 	 * change the netdev address
 	 */
 	if (result != 0 || resultcode->data != P80211ENUM_resultcode_success) {
-		netdev_err(dev, "Low-level driver failed dot11req_mibset(dot11MACAddress).\n");
+		netdev_err(dev,
+			   "Low-level driver failed dot11req_mibset(dot11MACAddress).\n");
 		result = -EADDRNOTAVAIL;
 	} else {
 		/* everything's ok, change the addr in netdev */
@@ -974,7 +977,8 @@ static int p80211_rx_typedrop(struct wlandevice *wlandev, u16 fc)
 	return drop;
 }
 
-static void p80211knetdev_tx_timeout(struct net_device *netdev, unsigned int txqueue)
+static void p80211knetdev_tx_timeout(struct net_device *netdev,
+				     unsigned int txqueue)
 {
 	struct wlandevice *wlandev = netdev->ml_priv;
 
