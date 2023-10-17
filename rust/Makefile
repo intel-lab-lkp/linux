@@ -15,6 +15,7 @@ always-$(CONFIG_RUST) += libmacros.so
 no-clean-files += libmacros.so
 
 always-$(CONFIG_RUST) += bindings/bindings_generated.rs bindings/bindings_helpers_generated.rs
+always-$(CONFIG_RUST) += bindings/bindings_generated_enum_check.rs
 obj-$(CONFIG_RUST) += alloc.o bindings.o kernel.o
 always-$(CONFIG_RUST) += exports_alloc_generated.h exports_bindings_generated.h \
     exports_kernel_generated.h
@@ -339,6 +340,19 @@ $(obj)/bindings/bindings_generated.rs: private bindgen_target_flags = \
     $(shell grep -v '^#\|^$$' $(srctree)/$(src)/bindgen_parameters)
 $(obj)/bindings/bindings_generated.rs: $(src)/bindings/bindings_helper.h \
     $(src)/bindgen_parameters FORCE
+	$(call if_changed_dep,bindgen)
+
+$(obj)/bindings/bindings_generated_enum_check.rs: private bindgen_target_flags = \
+    $(shell grep -v '^#\|^$$' $(srctree)/$(src)/bindgen_parameters) \
+    --default-enum-style rust
+$(obj)/bindings/bindings_generated_enum_check.rs: private bindgen_target_extra = ; \
+    OBJTREE=$(abspath $(objtree)) $(RUSTC_OR_CLIPPY) $(rust_flags) $(rustc_target_flags) \
+        --crate-type rlib -L$(objtree)/$(obj) \
+        --emit=dep-info=$(obj)/bindings/.bindings_enum_check.rs.d \
+        --emit=metadata=$(obj)/bindings/libbindings_enum_check.rmeta \
+        --crate-name enum_check $(obj)/bindings/bindings_enum_check.rs
+$(obj)/bindings/bindings_generated_enum_check.rs: $(src)/bindings/bindings_helper.h \
+    $(src)/bindings/bindings_enum_check.rs $(src)/bindgen_parameters FORCE
 	$(call if_changed_dep,bindgen)
 
 $(obj)/uapi/uapi_generated.rs: private bindgen_target_flags = \
