@@ -1777,9 +1777,12 @@ static int sdhci_esdhc_imx_probe(struct platform_device *pdev)
 	/*
 	 * Setup the wakeup capability here, let user to decide
 	 * whether need to enable this wakeup through sysfs interface.
+	 * First check the SDIO device, second check the gpio CD pin.
 	 */
-	if ((host->mmc->pm_caps & MMC_PM_KEEP_POWER) &&
-			(host->mmc->pm_caps & MMC_PM_WAKE_SDIO_IRQ))
+	if (((host->mmc->pm_caps & MMC_PM_KEEP_POWER) &&
+			(host->mmc->pm_caps & MMC_PM_WAKE_SDIO_IRQ)) ||
+	    ((host->mmc->caps & MMC_CAP_CD_WAKE) &&
+			 host->mmc->slot.cd_irq >= 0))
 		device_set_wakeup_capable(&pdev->dev, true);
 
 	pm_runtime_set_active(&pdev->dev);
@@ -1858,7 +1861,8 @@ static int sdhci_esdhc_suspend(struct device *dev)
 	if (ret)
 		return ret;
 
-	ret = mmc_gpio_set_cd_wake(host->mmc, true);
+	if (device_may_wakeup(dev))
+		ret = mmc_gpio_set_cd_wake(host->mmc, true);
 
 	return ret;
 }
@@ -1881,8 +1885,10 @@ static int sdhci_esdhc_resume(struct device *dev)
 
 	if (host->mmc->caps2 & MMC_CAP2_CQE)
 		ret = cqhci_resume(host->mmc);
+	if (ret)
+		return ret;
 
-	if (!ret)
+	if (device_may_wakeup(dev))
 		ret = mmc_gpio_set_cd_wake(host->mmc, false);
 
 	return ret;
