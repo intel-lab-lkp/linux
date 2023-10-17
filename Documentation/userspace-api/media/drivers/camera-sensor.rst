@@ -54,6 +54,8 @@ less all modern raw camera sensors.
 
 The frame interval is calculated using the following equation::
 
+.. _media_camera_raw_frame_interval:
+
 	frame interval = (analogue crop width + horizontal blanking) *
 			 (analogue crop height + vertical blanking) / pixel rate
 
