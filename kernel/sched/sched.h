@@ -167,6 +167,12 @@ extern int sched_rr_timeslice;
  */
 #define RUNTIME_INF		((u64)~0ULL)
 
+/*
+ * Spare capacity threshold (value out of 1024) used to bias runqueue
+ * selection towards previous runqueue.
+ */
+#define SPARE_CAPACITY_THRESHOLD	256
+
 static inline int idle_policy(int policy)
 {
 	return policy == SCHED_IDLE;
