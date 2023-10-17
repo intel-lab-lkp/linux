@@ -1478,6 +1478,14 @@ static int do_cdx_entry(const char *filename, void *symval,
 	return 1;
 }
 
+static int do_vchiq_bus_entry(const char *filename, void *symval, char *alias)
+{
+	DEF_FIELD_ADDR(symval, vchiq_bus_device_id, name);
+	sprintf(alias, "vchiq_bus:%s", *name);
+
+	return 1;
+}
+
 /* Does namelen bytes of name exactly match the symbol? */
 static bool sym_is(const char *name, unsigned namelen, const char *symbol)
 {
@@ -1558,6 +1566,7 @@ static const struct devtable devtable[] = {
 	{"dfl", SIZE_dfl_device_id, do_dfl_entry},
 	{"ishtp", SIZE_ishtp_device_id, do_ishtp_entry},
 	{"cdx", SIZE_cdx_device_id, do_cdx_entry},
+	{"vchiq_bus", SIZE_vchiq_bus_device_id, do_vchiq_bus_entry},
 };
 
 /* Create MODULE_ALIAS() statements.
