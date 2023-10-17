@@ -15,6 +15,7 @@
 #include <linux/errno.h>
 #include <linux/err.h>
 #include <linux/init.h>
+#include <linux/idr.h>
 #include <linux/export.h>
 #include <linux/slab.h>
 #include <linux/stat.h>
@@ -56,6 +57,8 @@ static const char timer_name[][DEVFREQ_NAME_LEN] = {
 	[DEVFREQ_TIMER_DEFERRABLE] = { "deferrable" },
 	[DEVFREQ_TIMER_DELAYED] = { "delayed" },
 };
+
+static DEFINE_IDA(devfreq_ida);
 
 /**
  * find_device_devfreq() - find devfreq struct using device pointer
@@ -727,11 +730,14 @@ static int qos_max_notifier_call(struct notifier_block *nb,
 static void devfreq_dev_release(struct device *dev)
 {
 	struct devfreq *devfreq = to_devfreq(dev);
-	int err;
+	int id, err;
 
 	mutex_lock(&devfreq_list_lock);
 	list_del(&devfreq->node);
 	mutex_unlock(&devfreq_list_lock);
+
+	if (sscanf(dev_name(dev), "df%d", &id))
+		ida_free(&devfreq_ida, id);
 
 	err = dev_pm_qos_remove_notifier(devfreq->dev.parent, &devfreq->nb_max,
 					 DEV_PM_QOS_MAX_FREQUENCY);
@@ -788,17 +794,26 @@ struct devfreq *devfreq_add_device(struct device *dev,
 	struct devfreq *devfreq;
 	struct devfreq_governor *governor;
 	unsigned long min_freq, max_freq;
-	int err = 0;
+	int id, err = 0;
 
 	if (!dev || !profile || !governor_name) {
 		dev_err(dev, "%s: Invalid parameters.\n", __func__);
 		return ERR_PTR(-EINVAL);
 	}
 
+	id = ida_alloc(&devfreq_ida, GFP_KERNEL);
+	if (id < 0) {
+	        err = -ENOMEM;
+		goto err_ida;
+	}
+
 	mutex_lock(&devfreq_list_lock);
 	devfreq = find_device_devfreq(dev);
 	mutex_unlock(&devfreq_list_lock);
-	if (!IS_ERR(devfreq)) {
+	if (!IS_ERR(devfreq) &&
+	    (!profile->name ||
+	     (profile->name && devfreq->profile->name &&
+	      !strcmp(profile->name, devfreq->profile->name)))) {
 		dev_err(dev, "%s: devfreq device already exists!\n",
 			__func__);
 		err = -EINVAL;
@@ -864,7 +879,10 @@ struct devfreq *devfreq_add_device(struct device *dev,
 
 	atomic_set(&devfreq->suspend_count, 0);
 
-	dev_set_name(&devfreq->dev, "%s", dev_name(dev));
+	if (profile->name)
+		dev_set_name(&devfreq->dev, "df%d", id);
+	else
+		dev_set_name(&devfreq->dev, "%s", dev_name(dev));
 	err = device_register(&devfreq->dev);
 	if (err) {
 		mutex_unlock(&devfreq->lock);
@@ -955,6 +973,8 @@ struct devfreq *devfreq_add_device(struct device *dev,
 
 	return devfreq;
 
+err_ida:
+	ida_free(&devfreq_ida, id);
 err_init:
 	mutex_unlock(&devfreq_list_lock);
 err_devfreq:
@@ -1394,7 +1414,8 @@ static ssize_t name_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
 	struct devfreq *df = to_devfreq(dev);
-	return sprintf(buf, "%s\n", dev_name(df->dev.parent));
+	return sprintf(buf, "%s\n", df->profile->name ? :
+		       dev_name(df->dev.parent));
 }
 static DEVICE_ATTR_RO(name);
 

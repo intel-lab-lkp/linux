@@ -100,6 +100,13 @@ struct devfreq_dev_status {
  * @freq_table:		Optional list of frequencies to support statistics
  *			and freq_table must be generated in ascending order.
  * @max_state:		The size of freq_table.
+ * @name:		Optional name string. When a name is given, the device
+ *			itself is named with a generic 'df<n>' where 'n' is the
+ *			global devfreq's device counter. The given name is only
+ *			visible at /sys/class/devfreq/df<n>/name. When no name
+ *			is given both the device name and the name file uses the
+ *			the parent's device dev_name() and it is limited to a
+ *			single devfreq device per parent-device.
  *
  * @is_cooling_device: A self-explanatory boolean giving the device a
  *                     cooling effect property.
@@ -117,6 +124,7 @@ struct devfreq_dev_profile {
 
 	unsigned long *freq_table;
 	unsigned int max_state;
+	char *name;
 
 	bool is_cooling_device;
 };
