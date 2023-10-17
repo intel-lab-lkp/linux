@@ -44,6 +44,8 @@ There are two different methods for obtaining possibilities for different frame
 intervals as well as configuring the frame interval. Which one to implement
 depends on the type of the device.
 
+.. _media_camera_raw_frame_interval:
+
 Raw camera sensors
 ~~~~~~~~~~~~~~~~~~
 

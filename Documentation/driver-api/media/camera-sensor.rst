@@ -29,6 +29,20 @@ used in the system. Using another frequency may cause harmful effects
 elsewhere. Therefore only the pre-determined frequencies are configurable by the
 user.
 
+On choosing link frequencies
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Choosing link frequencies for a board is generally a part of the hardware design
+process as one needs to ensure an EMC-safe frequency the sensor supports with
+the given external clock frequency exists. On development systems this may be
+less than an immediate concern, so more or less anything that sensor and the
+rest of the applicable hardware supports can be used.
+
+If the sensor's PLL tree is not documented and all that is available are
+register lists, even knowing the frequency a driver uses may be difficult. This
+could still be :ref:`calculated from the number of lanes, sensor's output image
+size, blanking values and frame rate <media_camera_raw_frame_interval>`.
+
 ACPI
 ~~~~
 
