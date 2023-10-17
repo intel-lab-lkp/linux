@@ -1993,6 +1993,12 @@ static inline bool shuffle_freelist(struct kmem_cache *s, struct slab *slab)
 }
 #endif /* CONFIG_SLAB_FREELIST_RANDOM */
 
+enum SLUB_FLAGS {
+	SF_INIT_VALUE = 0,
+	SF_EXIT_VALUE = -1,
+	SF_NODE_PARTIAL = 1 << 0,
+};
+
 static struct slab *allocate_slab(struct kmem_cache *s, gfp_t flags, int node)
 {
 	struct slab *slab;
@@ -2031,6 +2037,7 @@ static struct slab *allocate_slab(struct kmem_cache *s, gfp_t flags, int node)
 	slab->objects = oo_objects(oo);
 	slab->inuse = 0;
 	slab->frozen = 0;
+	slab->flags = SF_INIT_VALUE;
 
 	account_slab(slab, oo_order(oo), s, flags);
 
@@ -2077,6 +2084,7 @@ static void __free_slab(struct kmem_cache *s, struct slab *slab)
 	int order = folio_order(folio);
 	int pages = 1 << order;
 
+	slab->flags = SF_EXIT_VALUE;
 	__slab_clear_pfmemalloc(slab);
 	folio->mapping = NULL;
 	/* Make the mapping reset visible before clearing the flag */
@@ -2119,9 +2127,28 @@ static void discard_slab(struct kmem_cache *s, struct slab *slab)
 /*
  * Management of partially allocated slabs.
  */
+static void ___add_partial(struct kmem_cache_node *n, struct slab *slab)
+{
+	lockdep_assert_held(&n->list_lock);
+	slab->flags |= SF_NODE_PARTIAL;
+}
+
+static void ___remove_partial(struct kmem_cache_node *n, struct slab *slab)
+{
+	lockdep_assert_held(&n->list_lock);
+	slab->flags &= ~SF_NODE_PARTIAL;
+}
+
+static inline bool on_partial(struct kmem_cache_node *n, struct slab *slab)
+{
+	lockdep_assert_held(&n->list_lock);
+	return slab->flags & SF_NODE_PARTIAL;
+}
+
 static inline void
 __add_partial(struct kmem_cache_node *n, struct slab *slab, int tail)
 {
+	___add_partial(n, slab);
 	n->nr_partial++;
 	if (tail == DEACTIVATE_TO_TAIL)
 		list_add_tail(&slab->slab_list, &n->partial);
@@ -2142,6 +2169,7 @@ static inline void remove_partial(struct kmem_cache_node *n,
 	lockdep_assert_held(&n->list_lock);
 	list_del(&slab->slab_list);
 	n->nr_partial--;
+	___remove_partial(n, slab);
 }
 
 /*

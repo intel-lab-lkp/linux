@@ -89,7 +89,7 @@ struct slab {
 		};
 		struct rcu_head rcu_head;
 	};
-	unsigned int __unused;
+	unsigned int flags;
 
 #else
 #error "Unexpected slab allocator configured"
