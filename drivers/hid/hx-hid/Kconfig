@@ -1,0 +1,43 @@
+config HX_HID
+	tristate "Himax HID simulator for SPI"
+	default n
+	depends on SPI && INPUT
+	select HID
+	help
+	  Say Y here if you have Himax touch chipset,
+	  which is connected to your computer via SPI
+	  and you want to use it as a HID device.
+	  Revalent Firmware is required, whether from
+	  Firmware binary or in IC's flash memory.
+
+	  If unsure, say N.
+
+	  This support is also available as a module.
+
+config HX_HID_IC_83102J
+	bool "Himax IC_83012J for Himax HID simulator"
+	default y
+	depends on HX_HID
+	help
+	  Say Y here if you have Himax touch IC HX83102J,
+	  which is connected to your computer via SPI
+	  and you want to use it as a HID device. Please
+	  note only one type of IC can be initiated at
+	  the same time.
+
+	  If unsure, say Y.
+
+config HX_HID_HEATMAP
+	bool "Transferring HEATMAP after coordinate data"
+	default y
+	depends on HX_HID
+	help
+	  Say Y here if you need heatmap after coord
+	  data. The data can be acquired from hidraw
+	  interface. The firmware bundled need to
+	  have the ability to send heatmap to make
+	  this driver act normally. When enabled,
+	  all HX_HID_IC modules are effected.
+
+	  If unsure, say Y.
+
