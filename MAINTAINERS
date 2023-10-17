@@ -9327,6 +9327,7 @@ M:	Tylor Yang <tylor_yang@himax.corp-partner.google.com>
 L:	linux-input@vger.kernel.org
 S:	Supported
 F:	Documentation/devicetree/bindings/input/himax,hid.yaml
+F:	drivers/hid/hx-hid/
 
 HIMAX HX83112B TOUCHSCREEN SUPPORT
 M:	Job Noorman <job@noorman.info>
