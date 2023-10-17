@@ -16,6 +16,7 @@
 #define FASTRPC_IOCTL_INIT_CREATE_STATIC _IOWR('R', 9, struct fastrpc_init_create_static)
 #define FASTRPC_IOCTL_MEM_MAP		_IOWR('R', 10, struct fastrpc_mem_map)
 #define FASTRPC_IOCTL_MEM_UNMAP		_IOWR('R', 11, struct fastrpc_mem_unmap)
+#define FASTRPC_IOCTL_MULTIMODE_INVOKE	_IOWR('R', 12, struct fastrpc_ioctl_multimode_invoke)
 #define FASTRPC_IOCTL_GET_DSP_INFO	_IOWR('R', 13, struct fastrpc_ioctl_capability)
 
 /**
@@ -78,6 +79,31 @@ struct fastrpc_invoke {
 	__u32 handle;
 	__u32 sc;
 	__u64 args;
+};
+
+struct fastrpc_enhanced_invoke {
+	struct fastrpc_invoke inv;
+	__u64 crc;
+	__u64 perf_kernel;
+	__u64 perf_dsp;
+	__u32 reserved[8];	// keeping reserved bits for new requirements
+};
+
+struct fastrpc_ioctl_multimode_invoke {
+	__u32 req;
+	__u32 rsvd;			// padding field
+	__u64 invparam;
+	__u64 size;
+	__u32 reserved[8];	// keeping reserved bits for new requirements
+};
+
+enum fastrpc_multimode_invoke_type {
+	FASTRPC_INVOKE			= 1,
+	FASTRPC_INVOKE_ENHANCED	= 2,
+	FASTRPC_INVOKE_CONTROL = 3,
+	FASTRPC_INVOKE_DSPSIGNAL = 4,
+	FASTRPC_INVOKE_NOTIF = 5,
+	FASTRPC_INVOKE_MULTISESSION = 6,
 };
 
 struct fastrpc_init_create {
