@@ -1532,8 +1532,17 @@ static bool has_32bit_el0(const struct arm64_cpu_capabilities *entry, int scope)
 	if (!has_cpuid_feature(entry, scope))
 		return allow_mismatched_32bit_el0;
 
-	if (scope == SCOPE_SYSTEM)
-		pr_info("detected: 32-bit EL0 Support\n");
+	if (scope == SCOPE_SYSTEM) {
+		struct arm64_cpu_capabilities *has_32bit;
+
+		has_32bit = (struct arm64_cpu_capabilities *)entry;
+
+		has_32bit->cpus = system_32bit_el0_cpumask();
+		if (has_32bit->cpus == cpu_possible_mask)
+			has_32bit->cpus = cpu_online_mask;
+		if (has_32bit->cpus == cpu_none_mask)
+			has_32bit->cpus = NULL;
+	}
 
 	return true;
 }
@@ -2306,9 +2315,11 @@ static const struct arm64_cpu_capabilities arm64_features[] = {
 		ARM64_CPUID_FIELDS(ID_AA64MMFR2_EL1, NV, IMP)
 	},
 	{
+		.desc = "32-bit EL0 Support",
 		.capability = ARM64_HAS_32BIT_EL0_DO_NOT_USE,
 		.type = ARM64_CPUCAP_SYSTEM_FEATURE,
 		.matches = has_32bit_el0,
+		.cpus = cpu_none_mask,
 		ARM64_CPUID_FIELDS(ID_AA64PFR0_EL1, EL0, AARCH32)
 	},
 #ifdef CONFIG_KVM
