@@ -191,7 +191,7 @@ static void set_state(struct multi_stop_data *msdata,
 static void ack_state(struct multi_stop_data *msdata)
 {
 	if (atomic_dec_and_test(&msdata->thread_ack))
-		set_state(msdata, msdata->state + 1);
+		set_state(msdata, READ_ONCE(msdata->state) + 1);
 }
 
 notrace void __weak stop_machine_yield(const struct cpumask *cpumask)
