@@ -138,6 +138,10 @@ static bool zswap_non_same_filled_pages_enabled = true;
 module_param_named(non_same_filled_pages_enabled, zswap_non_same_filled_pages_enabled,
 		   bool, 0644);
 
+bool zswap_bypass_swap_when_store_fail_enabled;
+module_param_named(bypass_swap_when_store_fail_enabled,
+		   zswap_bypass_swap_when_store_fail_enabled, bool, 0644);
+
 static bool zswap_exclusive_loads_enabled = IS_ENABLED(
 		CONFIG_ZSWAP_EXCLUSIVE_LOADS_DEFAULT_ON);
 module_param_named(exclusive_loads, zswap_exclusive_loads_enabled, bool, 0644);

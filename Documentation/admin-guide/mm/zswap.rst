@@ -153,6 +153,15 @@ attribute, e. g.::
 
 Setting this parameter to 100 will disable the hysteresis.
 
+Many users cannot tolerate the swapping that comes with zswap store failures,
+due to the IO incurred if these pages are needed later on. In this scenario,
+users can bypass swapping when zswap store attempts fail (and keep the pages
+in memory) as follows:
+
+	echo Y > /sys/module/zswap/parameters/bypass_swap_when_store_fail_enabled
+
+Note that swapping due to writeback is not disabled with this option.
+
 When there is a sizable amount of cold memory residing in the zswap pool, it
 can be advantageous to proactively write these cold pages to swap and reclaim
 the memory for other use cases. By default, the zswap shrinker is disabled.

@@ -7,6 +7,7 @@
 
 extern u64 zswap_pool_total_size;
 extern atomic_t zswap_stored_pages;
+extern bool zswap_bypass_swap_when_store_fail_enabled;
 
 #ifdef CONFIG_ZSWAP
 
@@ -18,6 +19,10 @@ void zswap_swapoff(int type);
 bool zswap_remove_swpentry_from_lru(swp_entry_t swpentry);
 void zswap_insert_swpentry_into_lru(swp_entry_t swpentry);
 
+static inline bool zswap_bypass_swap_when_store_fail(void)
+{
+	return zswap_bypass_swap_when_store_fail_enabled;
+}
 #else
 
 static inline bool zswap_store(struct folio *folio)
@@ -41,6 +46,10 @@ static inline bool zswap_remove_swpentry_from_lru(swp_entry_t swpentry)
 
 static inline void zswap_insert_swpentry_into_lru(swp_entry_t swpentry) {}
 
+static inline bool zswap_bypass_swap_when_store_fail(void)
+{
+	return false;
+}
 #endif
 
 #endif /* _LINUX_ZSWAP_H */
