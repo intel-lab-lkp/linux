@@ -318,7 +318,8 @@ static bool ili210x_report_events(struct ili210x *priv, u8 *touchdata)
 			if (priv->chip->has_pressure_reg)
 				input_report_abs(input, ABS_MT_PRESSURE, z);
 			contact = true;
-		}
+		} else if (priv->chip->has_pressure_reg)
+			input_report_abs(input, ABS_MT_PRESSURE, 0);
 	}
 
 	input_mt_report_pointer_emulation(input, false);
