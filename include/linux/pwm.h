@@ -95,8 +95,8 @@ struct pwm_device {
  * @state: state to fill with the current PWM state
  *
  * The returned PWM state represents the state that was applied by a previous call to
- * pwm_apply_state(). Drivers may have to slightly tweak that state before programming it to
- * hardware. If pwm_apply_state() was never called, this returns either the current hardware
+ * pwm_apply_cansleep(). Drivers may have to slightly tweak that state before programming it to
+ * hardware. If pwm_apply_cansleep() was never called, this returns either the current hardware
  * state (if supported) or the default settings.
  */
 static inline void pwm_get_state(const struct pwm_device *pwm,
@@ -160,20 +160,20 @@ static inline void pwm_get_args(const struct pwm_device *pwm,
 }
 
 /**
- * pwm_init_state() - prepare a new state to be applied with pwm_apply_state()
+ * pwm_init_state() - prepare a new state to be applied with pwm_apply_cansleep()
  * @pwm: PWM device
  * @state: state to fill with the prepared PWM state
  *
  * This functions prepares a state that can later be tweaked and applied
- * to the PWM device with pwm_apply_state(). This is a convenient function
+ * to the PWM device with pwm_apply_cansleep(). This is a convenient function
  * that first retrieves the current PWM state and the replaces the period
  * and polarity fields with the reference values defined in pwm->args.
  * Once the function returns, you can adjust the ->enabled and ->duty_cycle
- * fields according to your needs before calling pwm_apply_state().
+ * fields according to your needs before calling pwm_apply_cansleep().
  *
  * ->duty_cycle is initially set to zero to avoid cases where the current
  * ->duty_cycle value exceed the pwm_args->period one, which would trigger
- * an error if the user calls pwm_apply_state() without adjusting ->duty_cycle
+ * an error if the user calls pwm_apply_cansleep() without adjusting ->duty_cycle
  * first.
  */
 static inline void pwm_init_state(const struct pwm_device *pwm,
@@ -229,7 +229,7 @@ pwm_get_relative_duty_cycle(const struct pwm_state *state, unsigned int scale)
  *
  * pwm_init_state(pwm, &state);
  * pwm_set_relative_duty_cycle(&state, 50, 100);
- * pwm_apply_state(pwm, &state);
+ * pwm_apply_cansleep(pwm, &state);
  *
  * This functions returns -EINVAL if @duty_cycle and/or @scale are
  * inconsistent (@scale == 0 or @duty_cycle > @scale).
@@ -289,6 +289,7 @@ struct pwm_ops {
  * @npwm: number of PWMs controlled by this chip
  * @of_xlate: request a PWM device given a device tree PWM specifier
  * @of_pwm_n_cells: number of cells expected in the device tree PWM specifier
+ * @atomic: can the driver execute pwm_apply_cansleep in atomic context
  * @list: list node for internal use
  * @pwms: array of PWM devices allocated by the framework
  */
@@ -301,6 +302,7 @@ struct pwm_chip {
 	struct pwm_device * (*of_xlate)(struct pwm_chip *chip,
 					const struct of_phandle_args *args);
 	unsigned int of_pwm_n_cells;
+	bool atomic;
 
 	/* only used internally by the PWM framework */
 	struct list_head list;
@@ -309,7 +311,8 @@ struct pwm_chip {
 
 #if IS_ENABLED(CONFIG_PWM)
 /* PWM user APIs */
-int pwm_apply_state(struct pwm_device *pwm, const struct pwm_state *state);
+int pwm_apply_cansleep(struct pwm_device *pwm, const struct pwm_state *state);
+int pwm_apply(struct pwm_device *pwm, const struct pwm_state *state);
 int pwm_adjust_config(struct pwm_device *pwm);
 
 /**
@@ -337,7 +340,7 @@ static inline int pwm_config(struct pwm_device *pwm, int duty_ns,
 
 	state.duty_cycle = duty_ns;
 	state.period = period_ns;
-	return pwm_apply_state(pwm, &state);
+	return pwm_apply_cansleep(pwm, &state);
 }
 
 /**
@@ -358,7 +361,7 @@ static inline int pwm_enable(struct pwm_device *pwm)
 		return 0;
 
 	state.enabled = true;
-	return pwm_apply_state(pwm, &state);
+	return pwm_apply_cansleep(pwm, &state);
 }
 
 /**
@@ -377,7 +380,18 @@ static inline void pwm_disable(struct pwm_device *pwm)
 		return;
 
 	state.enabled = false;
-	pwm_apply_state(pwm, &state);
+	pwm_apply_cansleep(pwm, &state);
+}
+
+/**
+ * pwm_is_atomic() - is pwm_apply() supported?
+ * @pwm: PWM device
+ *
+ * Returns: true pwm_apply() can be called from atomic context.
+ */
+static inline bool pwm_is_atomic(struct pwm_device *pwm)
+{
+	return pwm->chip->atomic;
 }
 
 /* PWM provider APIs */
@@ -408,16 +422,27 @@ struct pwm_device *devm_fwnode_pwm_get(struct device *dev,
 				       struct fwnode_handle *fwnode,
 				       const char *con_id);
 #else
-static inline int pwm_apply_state(struct pwm_device *pwm,
-				  const struct pwm_state *state)
+static inline bool pwm_is_atomic(struct pwm_device *pwm)
+{
+	return false;
+}
+
+static inline int pwm_apply_cansleep(struct pwm_device *pwm,
+				     const struct pwm_state *state)
 {
 	might_sleep();
-	return -ENOTSUPP;
+	return -EOPNOTSUPP;
+}
+
+static inline int pwm_apply(struct pwm_device *pwm,
+			    const struct pwm_state *state)
+{
+	return -EOPNOTSUPP;
 }
 
 static inline int pwm_adjust_config(struct pwm_device *pwm)
 {
-	return -ENOTSUPP;
+	return -EOPNOTSUPP;
 }
 
 static inline int pwm_config(struct pwm_device *pwm, int duty_ns,
@@ -536,7 +561,7 @@ static inline void pwm_apply_args(struct pwm_device *pwm)
 	state.period = pwm->args.period;
 	state.usage_power = false;
 
-	pwm_apply_state(pwm, &state);
+	pwm_apply_cansleep(pwm, &state);
 }
 
 struct pwm_lookup {
