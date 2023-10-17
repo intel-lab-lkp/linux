@@ -1358,6 +1358,21 @@ int ktime_convert_real_to_system_counter(ktime_t sys_realtime,
 EXPORT_SYMBOL_GPL(ktime_convert_real_to_system_counter);
 
 /**
+ * is_current_clocksource - Checks if the supplied clock source matches with the
+ * MONOTONIC clock.
+ *
+ * @clock: pointer to the clocksource to be checked
+ *
+ * Return: true if the clocks match, false otherwise.
+ */
+bool is_current_clocksource(struct clocksource *clock)
+{
+	struct tk_read_base *tkr = &tk_core.timekeeper.tkr_mono;
+	return clock == READ_ONCE(tkr->clock);
+}
+EXPORT_SYMBOL_GPL(is_current_clocksource);
+
+/**
  * do_settimeofday64 - Sets the time of day.
  * @ts:     pointer to the timespec64 variable containing the new time
  *

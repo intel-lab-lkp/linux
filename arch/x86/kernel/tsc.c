@@ -16,6 +16,7 @@
 #include <linux/timex.h>
 #include <linux/static_key.h>
 #include <linux/static_call.h>
+#include <linux/timekeeping.h>
 
 #include <asm/hpet.h>
 #include <asm/timer.h>
@@ -1294,6 +1295,17 @@ int unsynchronized_tsc(void)
 
 	return 0;
 }
+
+/*
+ * Checks if the current clocksource is ART related clocksource
+ *
+ * Return: 1 on success, 0 on failure.
+ */
+bool is_current_clocksource_art_related(void)
+{
+	return is_current_clocksource(art_related_clocksource);
+}
+EXPORT_SYMBOL_GPL(is_current_clocksource_art_related);
 
 /*
  * Converts input TSC to the corresponding ART value using conversion

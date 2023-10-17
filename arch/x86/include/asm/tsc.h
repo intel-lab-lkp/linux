@@ -32,6 +32,7 @@ static inline cycles_t get_cycles(void)
 extern int convert_tsc_to_art(const struct system_counterval_t *tsc, u64 *art);
 extern struct system_counterval_t convert_art_to_tsc(u64 art);
 extern struct system_counterval_t convert_art_ns_to_tsc(u64 art_ns);
+extern bool is_current_clocksource_art_related(void);
 
 extern void tsc_early_init(void);
 extern void tsc_init(void);
