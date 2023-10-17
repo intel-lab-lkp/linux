@@ -138,6 +138,7 @@ struct request {
 #endif
 
 	unsigned short ioprio;
+	enum rw_hint lifetime;
 
 	enum mq_rq_state state;
 	atomic_t ref;
@@ -959,6 +960,7 @@ static inline void blk_rq_bio_prep(struct request *rq, struct bio *bio,
 	rq->__data_len = bio->bi_iter.bi_size;
 	rq->bio = rq->biotail = bio;
 	rq->ioprio = bio_prio(bio);
+	rq->lifetime = bio->bi_lifetime;
 }
 
 void blk_mq_hctx_set_fq_lock_class(struct blk_mq_hw_ctx *hctx,

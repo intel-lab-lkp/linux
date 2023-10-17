@@ -814,6 +814,9 @@ static struct request *attempt_merge(struct request_queue *q,
 	if (rq_data_dir(req) != rq_data_dir(next))
 		return NULL;
 
+	if (req->lifetime != next->lifetime)
+		return NULL;
+
 	if (req->ioprio != next->ioprio)
 		return NULL;
 
@@ -940,6 +943,9 @@ bool blk_rq_merge_ok(struct request *rq, struct bio *bio)
 	/* Only merge if the crypt contexts are compatible */
 	if (!bio_crypt_rq_ctx_compatible(rq, bio))
 		return false;
+
+	if (rq->lifetime != bio->bi_lifetime)
+		return NULL;
 
 	if (rq->ioprio != bio_prio(bio))
 		return false;
