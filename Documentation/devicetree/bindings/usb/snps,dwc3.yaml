@@ -44,14 +44,18 @@ properties:
       It's either a single common DWC3 interrupt (dwc_usb3) or individual
       interrupts for the host, gadget and DRD modes.
     minItems: 1
-    maxItems: 4
+    maxItems: 5
 
   interrupt-names:
-    minItems: 1
-    maxItems: 4
     oneOf:
-      - const: dwc_usb3
-      - items:
+      - minItems: 1
+        maxItems: 5
+        items:
+          - const: dwc_usb3
+        additionalItems: true
+      - minItems: 1
+        maxItems: 4
+        items:
           enum: [host, peripheral, otg, wakeup]
 
   clocks:
