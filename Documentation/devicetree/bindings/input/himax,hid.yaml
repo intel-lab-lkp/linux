@@ -1,0 +1,123 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/input/himax,hid.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Himax TDDI devices using SPI to send HID packets
+
+maintainers:
+  - Tylor Yang <tylor_yang@himax.corp-partner.google.com>
+
+description: |
+  Support the Himax TDDI devices which using SPI interface to acquire
+  HID packets from the device. The device needs to be initialized using
+  Himax protocol before it start sending HID packets.
+
+properties:
+  compatible:
+    const: himax,hid
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  reset:
+    maxItems: 1
+    description: Reset device, active low signal.
+
+  vccd-supply:
+    description:
+      Optional regulator for the 1.8V voltage.
+
+  vcca-supply:
+    description:
+      Optional regulator for the analog 3.3V voltage.
+
+  himax,id-gpios:
+    maxItems: 8
+    description: GPIOs to read physical Panel ID. Optional.
+
+  spi-cpha: true
+  spi-cpol: true
+
+  himax,ic-det-delay-ms:
+    description:
+      Due to TDDI properties, the TPIC detection timing must after the
+      display panel initialized. This property is used to specify the
+      delay time when TPIC detection and display panel initialization
+      timing are overlapped. How much milliseconds to delay before TPIC
+      detection start.
+
+  himax,ic-resume-delay-ms:
+    description:
+      Due to TDDI properties, the TPIC resume timing must after the
+      display panel resumed. This property is used to specify the
+      delay time when TPIC resume and display panel resume
+      timing are overlapped. How much milliseconds to delay before TPIC
+      resume start.
+
+  panel:
+    description:
+      The node of the display panel device. The driver will use this
+      node to get the project ID of the display panel. Optional.
+    type: object
+    additionalProperties: false
+
+    properties:
+      himax,pid:
+        $ref: /schemas/types.yaml#/definitions/uint32-array
+        minItems: 1
+        maxItems: 8
+        items:
+          minimum: 0
+          maximum: 65535
+        description:
+          When only one value exist, represent Project ID of the device.
+          When multiple values exist, order in event number value represnet
+          id value from id-gpios and odd number value represent Project ID
+          relatives to prior id value. This is used to specify the firmware
+          for the device.
+
+    required:
+      - himax,pid
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - reset
+
+unevaluatedProperties: false
+
+allOf:
+  - $ref: /schemas/spi/spi-peripheral-props.yaml#
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+    #include <dt-bindings/gpio/gpio.h>
+
+    spi {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        touchscreen@0 {
+            compatible = "himax,hid";
+            reg = <0x0>;
+            interrupt-parent = <&gpio1>;
+            interrupts = <7 IRQ_TYPE_LEVEL_LOW>;
+            pinctrl-0 = <&touch_pins>;
+            pinctrl-names = "default";
+
+            spi-max-frequency = <12500000>;
+            spi-cpha;
+            spi-cpol;
+
+            reset = <&gpio1 8 GPIO_ACTIVE_LOW>;
+            himax,ic-det-delay-ms = <500>;
+            himax,ic-resume-delay-ms = <100>;
+        };
+    };
