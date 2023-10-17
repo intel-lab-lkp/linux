@@ -18,6 +18,7 @@
 #include <linux/i2c.h>
 #include <linux/gpio/machine.h>
 #include <linux/auxiliary_bus.h>
+#include <linux/platform_device.h>
 #include "lan743x_main.h"
 #include "lan743x_ethtool.h"
 
@@ -3257,6 +3258,31 @@ static int lan743x_swnodes_register(struct lan743x_adapter *adapter)
 	return software_node_register_node_group(nodes->group);
 }
 
+static int lan743x_sfp_register(struct lan743x_adapter *adapter)
+{
+	struct pci_dev *pdev = adapter->pdev;
+	struct platform_device_info sfp_info;
+	struct platform_device *sfp_dev;
+
+	memset(&sfp_info, 0, sizeof(sfp_info));
+	sfp_info.parent = &adapter->pdev->dev;
+	sfp_info.fwnode = software_node_fwnode(adapter->nodes->group[SWNODE_SFP]);
+	sfp_info.name = "sfp";
+	sfp_info.id = (pdev->bus->number << 8) | pdev->devfn;
+	sfp_dev = platform_device_register_full(&sfp_info);
+	if (IS_ERR(sfp_dev)) {
+		netif_err(adapter, drv, adapter->netdev,
+			  "Failed to register SFP device\n");
+		return PTR_ERR(sfp_dev);
+	}
+
+	adapter->sfp_dev = sfp_dev;
+	netif_dbg(adapter, drv, adapter->netdev,
+		  "SFP platform device registered");
+
+	return 0;
+}
+
 static int lan743x_netdev_close(struct net_device *netdev)
 {
 	struct lan743x_adapter *adapter = netdev_priv(netdev);
@@ -3471,6 +3497,9 @@ static void lan743x_mdiobus_cleanup(struct lan743x_adapter *adapter)
 static void lan743x_full_cleanup(struct lan743x_adapter *adapter)
 {
 	unregister_netdev(adapter->netdev);
+
+	if (adapter->sfp_dev)
+		platform_device_unregister(adapter->sfp_dev);
 
 	if (adapter->i2c_adap)
 		adapter->i2c_adap = NULL;
@@ -3688,6 +3717,18 @@ static int lan743x_pcidev_probe(struct pci_dev *pdev,
 	adapter->netdev->features = NETIF_F_SG | NETIF_F_TSO |
 				    NETIF_F_HW_CSUM | NETIF_F_RXCSUM;
 	adapter->netdev->hw_features = adapter->netdev->features;
+
+	if (adapter->is_sfp_support_en) {
+		adapter->i2c_adap->dev.fwnode =
+			software_node_fwnode(adapter->nodes->group[SWNODE_I2C]);
+
+		ret = lan743x_sfp_register(adapter);
+		if (ret < 0) {
+			netif_err(adapter, probe, netdev,
+				  "failed to sfp register (%d)\n", ret);
+			goto cleanup_hardware;
+		}
+	}
 
 	/* carrier off reporting is important to ethtool even BEFORE open */
 	netif_carrier_off(netdev);

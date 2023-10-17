@@ -46,12 +46,12 @@ config LAN743X
 	tristate "LAN743x support"
 	depends on PCI
 	depends on PTP_1588_CLOCK_OPTIONAL
-	select PHYLIB
 	select FIXED_PHY
 	select CRC16
 	select CRC32
 	select I2C_PCI1XXXX
 	select GP_PCI1XXXX
+	select SFP
 	help
 	  Support for the Microchip LAN743x and PCI11x1x families of PCI
 	  Express Ethernet devices
