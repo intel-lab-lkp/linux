@@ -922,6 +922,8 @@ void nfs_server_copy_userdata(struct nfs_server *target, struct nfs_server *sour
 	target->options = source->options;
 	target->auth_info = source->auth_info;
 	target->port = source->port;
+	memcpy(target->readdir_attrs, source->readdir_attrs,
+			sizeof(target->readdir_attrs));
 }
 EXPORT_SYMBOL_GPL(nfs_server_copy_userdata);
 
