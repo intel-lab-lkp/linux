@@ -54,8 +54,6 @@
 #define APPS_USB_PEAK_BW MBps_to_icc(40)
 
 struct dwc3_acpi_pdata {
-	u32			qscratch_base_offset;
-	u32			qscratch_base_size;
 	int			hs_phy_irq_index;
 	int			dp_hs_phy_irq_index;
 	int			dm_hs_phy_irq_index;
@@ -859,10 +857,8 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
 		memcpy(&local_res, res, sizeof(struct resource));
 		parent_res = &local_res;
 
-		parent_res->start = res->start +
-			qcom->acpi_pdata->qscratch_base_offset;
-		parent_res->end = parent_res->start +
-			qcom->acpi_pdata->qscratch_base_size;
+		parent_res->start = res->start + SDM845_QSCRATCH_BASE_OFFSET;
+		parent_res->end = parent_res->start + SDM845_QSCRATCH_SIZE;
 	}
 
 	qcom->qscratch_base = devm_ioremap_resource(dev, parent_res);
@@ -1073,8 +1069,6 @@ MODULE_DEVICE_TABLE(of, dwc3_qcom_of_match);
 
 #ifdef CONFIG_ACPI
 static const struct dwc3_acpi_pdata sdm845_acpi_pdata = {
-	.qscratch_base_offset = SDM845_QSCRATCH_BASE_OFFSET,
-	.qscratch_base_size = SDM845_QSCRATCH_SIZE,
 	.hs_phy_irq_index = 1,
 	.dp_hs_phy_irq_index = 4,
 	.dm_hs_phy_irq_index = 3,
@@ -1082,8 +1076,6 @@ static const struct dwc3_acpi_pdata sdm845_acpi_pdata = {
 };
 
 static const struct dwc3_acpi_pdata sdm845_acpi_urs_pdata = {
-	.qscratch_base_offset = SDM845_QSCRATCH_BASE_OFFSET,
-	.qscratch_base_size = SDM845_QSCRATCH_SIZE,
 	.hs_phy_irq_index = 1,
 	.dp_hs_phy_irq_index = 4,
 	.dm_hs_phy_irq_index = 3,
