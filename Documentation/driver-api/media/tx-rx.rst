@@ -25,9 +25,8 @@ the host SoC. It is defined by the `MIPI alliance`_.
 Parallel
 ^^^^^^^^
 
-`BT.601`_ and `BT.656`_ are the most common parallel busses.
+The parallel bus and its `BT.656`_ variant are the most common parallel busses.
 
-.. _`BT.601`: https://en.wikipedia.org/wiki/Rec._601
 .. _`BT.656`: https://en.wikipedia.org/wiki/ITU-R_BT.656
 
 Transmitter drivers
