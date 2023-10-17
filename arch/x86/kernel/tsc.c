@@ -2,6 +2,7 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/kernel.h>
+#include <linux/math.h>
 #include <linux/sched.h>
 #include <linux/sched/clock.h>
 #include <linux/init.h>
@@ -1293,6 +1294,37 @@ int unsynchronized_tsc(void)
 
 	return 0;
 }
+
+/*
+ * Converts input TSC to the corresponding ART value using conversion
+ * factors discovered by detect_art().
+ *
+ * Return: 0 on success, -errno on failure.
+ */
+int convert_tsc_to_art(const struct system_counterval_t *system_counter,
+		       u64 *art)
+{
+	u64 tmp, res, rem;
+	/* ART = TSC * tsc_to_art_denominator / tsc_to_art_numerator */
+	struct u32_fract tsc_to_art = {
+		.numerator = art_to_tsc_denominator,
+		.denominator = art_to_tsc_numerator,
+	};
+
+	if (system_counter->cs != art_related_clocksource)
+		return -EINVAL;
+
+	res = system_counter->cycles - art_to_tsc_offset;
+	rem = do_div(res, tsc_to_art.denominator);
+
+	tmp = rem * tsc_to_art.numerator;
+	do_div(tmp, tsc_to_art.denominator);
+
+	*art = res * tsc_to_art.numerator + tmp;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(convert_tsc_to_art);
 
 /*
  * Convert ART to TSC given numerator/denominator found in detect_art()
