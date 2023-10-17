@@ -21,7 +21,7 @@ static int blkpg_do_ioctl(struct block_device *bdev,
 	long long start, length;
 
 	if (disk->flags & GENHD_FL_NO_PART)
-		return -EINVAL;
+		return -ENXIO;
 	if (!capable(CAP_SYS_ADMIN))
 		return -EACCES;
 	if (copy_from_user(&p, upart, sizeof(struct blkpg_partition)))
