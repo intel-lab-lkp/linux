@@ -1388,7 +1388,8 @@ static int vlv_setup_backlight(struct intel_connector *connector, enum pipe pipe
 	ctl = intel_de_read(i915, VLV_BLC_PWM_CTL(pipe));
 	panel->backlight.pwm_level_max = ctl >> 16;
 
-	if (!panel->backlight.pwm_level_max)
+	if (!panel->backlight.pwm_level_max ||
+	    intel_has_quirk(i915, QUIRK_IGNORE_DEFAULT_PWM_FREQUENCY))
 		panel->backlight.pwm_level_max = get_backlight_max_vbt(connector);
 
 	if (!panel->backlight.pwm_level_max)
