@@ -2367,7 +2367,7 @@ snic_cmpl_pending_tmreq(struct snic *snic, struct scsi_cmnd *sc)
 }
 
 static bool
-snic_scsi_cleanup_iter(struct scsi_cmnd *sc, void *data, bool reserved)
+snic_scsi_cleanup_iter(struct scsi_cmnd *sc, void *data)
 {
 	struct snic *snic = data;
 	struct snic_req_info *rqi = NULL;
@@ -2541,8 +2541,7 @@ struct snic_tgt_scsi_abort_io_data {
 	int abt_cnt;
 };
 
-static bool snic_tgt_scsi_abort_io_iter(struct scsi_cmnd *sc, void *data,
-					bool reserved)
+static bool snic_tgt_scsi_abort_io_iter(struct scsi_cmnd *sc, void *data)
 {
 	struct snic_tgt_scsi_abort_io_data *iter_data = data;
 	struct snic *snic = iter_data->snic;
