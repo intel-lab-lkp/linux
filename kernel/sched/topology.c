@@ -1825,7 +1825,7 @@ void sched_init_numa(int offline_node)
 {
 	struct sched_domain_topology_level *tl;
 	unsigned long *distance_map;
-	int nr_levels = 0;
+	int nr_levels;
 	int i, j;
 	int *distances;
 	struct cpumask ***masks;
