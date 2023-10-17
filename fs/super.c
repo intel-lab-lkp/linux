@@ -1443,6 +1443,7 @@ static void fs_bdev_mark_dead(struct block_device *bdev, bool surprise)
 
 	/* bd_holder_lock ensures that the sb isn't freed */
 	lockdep_assert_held(&bdev->bd_holder_lock);
+	lockdep_assert_not_held(&bdev->bd_disk->open_mutex);
 
 	if (!super_lock_shared_active(sb))
 		return;
@@ -1462,6 +1463,7 @@ static void fs_bdev_sync(struct block_device *bdev)
 	struct super_block *sb = bdev->bd_holder;
 
 	lockdep_assert_held(&bdev->bd_holder_lock);
+	lockdep_assert_not_held(&bdev->bd_disk->open_mutex);
 
 	if (!super_lock_shared_active(sb))
 		return;
