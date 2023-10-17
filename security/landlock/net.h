@@ -24,7 +24,7 @@ static inline void landlock_add_net_hooks(void)
 
 static inline int
 landlock_append_net_rule(struct landlock_ruleset *const ruleset, const u16 port,
-			 access_mask_t access_rights);
+			 access_mask_t access_rights)
 {
 	return -EAFNOSUPPORT;
 }
