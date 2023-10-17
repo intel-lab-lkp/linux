@@ -5894,7 +5894,7 @@ static void ipw_ethtool_get_drvinfo(struct net_device *dev,
 				    struct ethtool_drvinfo *info)
 {
 	struct ipw2100_priv *priv = libipw_priv(dev);
-	char fw_ver[64], ucode_ver[64];
+	char fw_ver[16], ucode_ver[10];
 
 	strscpy(info->driver, DRV_NAME, sizeof(info->driver));
 	strscpy(info->version, DRV_VERSION, sizeof(info->version));

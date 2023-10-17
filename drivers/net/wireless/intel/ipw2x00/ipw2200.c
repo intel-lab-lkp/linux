@@ -10377,8 +10377,8 @@ static void ipw_ethtool_get_drvinfo(struct net_device *dev,
 				    struct ethtool_drvinfo *info)
 {
 	struct ipw_priv *p = libipw_priv(dev);
-	char vers[64];
-	char date[32];
+	char vers[16];
+	char date[12];
 	u32 len;
 
 	strscpy(info->driver, DRV_NAME, sizeof(info->driver));
