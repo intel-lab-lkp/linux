@@ -712,11 +712,16 @@ ip_set_rcu_get(struct net *net, ip_set_id_t index)
 	struct ip_set_net *inst = ip_set_pernet(net);
 
 	rcu_read_lock();
-	/* ip_set_list itself needs to be protected */
+	/* ip_set_list and the set pointer need to be protected */
 	set = rcu_dereference(inst->ip_set_list)[index];
-	rcu_read_unlock();
 
 	return set;
+}
+
+static inline void
+ip_set_rcu_put(struct ip_set *set __always_unused)
+{
+	rcu_read_unlock();
 }
 
 static inline void
@@ -744,8 +749,10 @@ ip_set_test(ip_set_id_t index, const struct sk_buff *skb,
 	pr_debug("set %s, index %u\n", set->name, index);
 
 	if (opt->dim < set->type->dimension ||
-	    !(opt->family == set->family || set->family == NFPROTO_UNSPEC))
+	    !(opt->family == set->family || set->family == NFPROTO_UNSPEC)) {
+		ip_set_rcu_put(set);
 		return 0;
+	}
 
 	ret = set->variant->kadt(set, skb, par, IPSET_TEST, opt);
 
@@ -764,6 +771,7 @@ ip_set_test(ip_set_id_t index, const struct sk_buff *skb,
 			ret = -ret;
 	}
 
+	ip_set_rcu_put(set);
 	/* Convert error codes to nomatch */
 	return (ret < 0 ? 0 : ret);
 }
@@ -780,12 +788,15 @@ ip_set_add(ip_set_id_t index, const struct sk_buff *skb,
 	pr_debug("set %s, index %u\n", set->name, index);
 
 	if (opt->dim < set->type->dimension ||
-	    !(opt->family == set->family || set->family == NFPROTO_UNSPEC))
+	    !(opt->family == set->family || set->family == NFPROTO_UNSPEC)) {
+		ip_set_rcu_put(set);
 		return -IPSET_ERR_TYPE_MISMATCH;
+	}
 
 	ip_set_lock(set);
 	ret = set->variant->kadt(set, skb, par, IPSET_ADD, opt);
 	ip_set_unlock(set);
+	ip_set_rcu_put(set);
 
 	return ret;
 }
@@ -802,12 +813,15 @@ ip_set_del(ip_set_id_t index, const struct sk_buff *skb,
 	pr_debug("set %s, index %u\n", set->name, index);
 
 	if (opt->dim < set->type->dimension ||
-	    !(opt->family == set->family || set->family == NFPROTO_UNSPEC))
+	    !(opt->family == set->family || set->family == NFPROTO_UNSPEC)) {
+		ip_set_rcu_put(set);
 		return -IPSET_ERR_TYPE_MISMATCH;
+	}
 
 	ip_set_lock(set);
 	ret = set->variant->kadt(set, skb, par, IPSET_DEL, opt);
 	ip_set_unlock(set);
+	ip_set_rcu_put(set);
 
 	return ret;
 }
@@ -882,6 +896,7 @@ ip_set_name_byindex(struct net *net, ip_set_id_t index, char *name)
 	read_lock_bh(&ip_set_ref_lock);
 	strscpy_pad(name, set->name, IPSET_MAXNAMELEN);
 	read_unlock_bh(&ip_set_ref_lock);
+	ip_set_rcu_put(set);
 }
 EXPORT_SYMBOL_GPL(ip_set_name_byindex);
 
@@ -1348,6 +1363,9 @@ out:
  * protected by the ip_set_ref_lock. The kernel interfaces
  * do not hold the mutex but the pointer settings are atomic
  * so the ip_set_list always contains valid pointers to the sets.
+ * However after swapping, a userspace set destroy command could
+ * remove a set still processed by kernel side add/del/test.
+ * Therefore we need to wait for the ongoing operations to be finished.
  */
 
 static int ip_set_swap(struct sk_buff *skb, const struct nfnl_info *info,
@@ -1396,6 +1414,9 @@ static int ip_set_swap(struct sk_buff *skb, const struct nfnl_info *info,
 	ip_set(inst, from_id) = to;
 	ip_set(inst, to_id) = from;
 	write_unlock_bh(&ip_set_ref_lock);
+
+	/* Make sure all readers of the old set pointers are completed. */
+	synchronize_rcu();
 
 	return 0;
 }
