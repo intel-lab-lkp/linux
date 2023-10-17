@@ -124,6 +124,7 @@
 
 /* ELBI registers */
 #define ELBI_SYS_STTS				0x08
+#define ELBI_CS2_ENABLE				0xa4
 
 /* DBI registers */
 #define DBI_CON_STATUS				0x44
@@ -260,6 +261,18 @@ static void qcom_pcie_dw_stop_link(struct dw_pcie *pci)
 	struct qcom_pcie_ep *pcie_ep = to_pcie_ep(pci);
 
 	disable_irq(pcie_ep->perst_irq);
+}
+
+static void qcom_pcie_dbi_cs2_access(struct dw_pcie *pci, bool enable)
+{
+	struct qcom_pcie_ep *pcie_ep = to_pcie_ep(pci);
+
+	writel_relaxed(enable, pcie_ep->elbi + ELBI_CS2_ENABLE);
+	/*
+	 * Do a dummy read to make sure that the previous write has reached the
+	 * memory before returning.
+	 */
+	readl_relaxed(pcie_ep->elbi + ELBI_CS2_ENABLE);
 }
 
 static void qcom_pcie_ep_icc_update(struct qcom_pcie_ep *pcie_ep)
@@ -500,6 +513,7 @@ static const struct dw_pcie_ops pci_ops = {
 	.link_up = qcom_pcie_dw_link_up,
 	.start_link = qcom_pcie_dw_start_link,
 	.stop_link = qcom_pcie_dw_stop_link,
+	.dbi_cs2_access = qcom_pcie_dbi_cs2_access,
 };
 
 static int qcom_pcie_ep_get_io_resources(struct platform_device *pdev,
