@@ -735,6 +735,40 @@ int __init_memblock memblock_add(phys_addr_t base, phys_addr_t size)
 }
 
 /**
+ * memblock_validate_numa_coverage - calculating memory with no node id assigned by firmware
+ * @threshold_pages: threshold memory of no node id assigned
+ *
+ * calculating memory with no node id assigned by firmware,
+ * If the number is less than the @threshold_pages, it returns true,
+ * otherwise it returns false.
+ *
+ * Return:
+ * true on success, false on failure.
+ */
+bool __init_memblock memblock_validate_numa_coverage(const u64 threshold_pages)
+{
+	unsigned long nr_pages = 0;
+	unsigned long start_pfn, end_pfn, mem_size_mb;
+	int nid, i;
+
+	/* calculate lose page */
+	for_each_mem_pfn_range(i, MAX_NUMNODES, &start_pfn, &end_pfn, &nid) {
+		if (nid == NUMA_NO_NODE)
+			nr_pages += end_pfn - start_pfn;
+	}
+
+	if (nr_pages >= threshold_pages) {
+		mem_size_mb = memblock_phys_mem_size() >> 20;
+		pr_err("NUMA: no nodes coverage for %luMB of %luMB RAM\n",
+		       (nr_pages << PAGE_SHIFT) >> 20, mem_size_mb);
+		return false;
+	}
+
+	return true;
+}
+
+
+/**
  * memblock_isolate_range - isolate given range into disjoint memblocks
  * @type: memblock type to isolate range for
  * @base: base of range to isolate
