@@ -367,8 +367,7 @@ static inline void enable_msgout_abort(struct AdapterCtlBlk *acb,
 		struct ScsiReqBlk *srb);
 static void build_srb(struct scsi_cmnd *cmd, struct DeviceCtlBlk *dcb,
 		struct ScsiReqBlk *srb);
-static void doing_srb_done(struct AdapterCtlBlk *acb, u8 did_code,
-		struct scsi_cmnd *cmd, u8 force);
+static void doing_srb_done(struct AdapterCtlBlk *acb, u8 did_code, u8 force);
 static void scsi_reset_detect(struct AdapterCtlBlk *acb);
 static void pci_unmap_srb(struct AdapterCtlBlk *acb, struct ScsiReqBlk *srb);
 static void pci_unmap_srb_sense(struct AdapterCtlBlk *acb,
@@ -1182,7 +1181,7 @@ static int __dc395x_eh_bus_reset(struct scsi_cmnd *cmd)
 	set_basic_config(acb);
 
 	reset_dev_param(acb);
-	doing_srb_done(acb, DID_RESET, cmd, 0);
+	doing_srb_done(acb, DID_RESET, 0);
 	acb->active_dcb = NULL;
 	acb->acb_flag = 0;	/* RESET_DETECT, RESET_DONE ,RESET_DEV */
 	waiting_process_next(acb);
@@ -2896,7 +2895,7 @@ static void disconnect(struct AdapterCtlBlk *acb)
 		dcb->flag &= ~ABORT_DEV_;
 		acb->last_reset = jiffies + HZ / 2 + 1;
 		dprintkl(KERN_ERR, "disconnect: SRB_ABORT_SENT\n");
-		doing_srb_done(acb, DID_ABORT, srb->cmd, 1);
+		doing_srb_done(acb, DID_ABORT, 1);
 		waiting_process_next(acb);
 	} else {
 		if ((srb->state & (SRB_START_ + SRB_MSGOUT))
@@ -3337,8 +3336,7 @@ static void srb_done(struct AdapterCtlBlk *acb, struct DeviceCtlBlk *dcb,
 
 
 /* abort all cmds in our queues */
-static void doing_srb_done(struct AdapterCtlBlk *acb, u8 did_flag,
-		struct scsi_cmnd *cmd, u8 force)
+static void doing_srb_done(struct AdapterCtlBlk *acb, u8 did_flag, u8 force)
 {
 	struct DeviceCtlBlk *dcb;
 	dprintkl(KERN_INFO, "doing_srb_done: pids ");
@@ -3389,7 +3387,7 @@ static void doing_srb_done(struct AdapterCtlBlk *acb, u8 did_flag,
 			if (force) {
 				/* For new EH, we normally don't need to give commands back,
 				 * as they all complete or all time out */
-				scsi_done(cmd);
+				scsi_done(p);
 			}
 		}
 		if (!list_empty(&dcb->srb_waiting_list))
@@ -3475,7 +3473,7 @@ static void scsi_reset_detect(struct AdapterCtlBlk *acb)
 	} else {
 		acb->acb_flag |= RESET_DETECT;
 		reset_dev_param(acb);
-		doing_srb_done(acb, DID_RESET, NULL, 1);
+		doing_srb_done(acb, DID_RESET, 1);
 		/*DC395x_RecoverSRB( acb ); */
 		acb->active_dcb = NULL;
 		acb->acb_flag = 0;
