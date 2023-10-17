@@ -1966,7 +1966,6 @@ static int prepare_sparse_read_cont(struct ceph_connection *con)
 				bv.bv_offset = 0;
 			}
 			set_in_bvec(con, &bv);
-			con->v2.data_len_remain -= bv.bv_len;
 			return 0;
 		}
 	} else if (iov_iter_is_kvec(&con->v2.in_iter)) {
