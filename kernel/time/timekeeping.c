@@ -371,6 +371,19 @@ static void tk_setup_internals(struct timekeeper *tk, struct clocksource *clock)
 
 /* Timekeeper helper functions. */
 
+static inline int timekeeping_ns_to_delta(const struct tk_read_base *tkr, u64 nsec,
+					  u64 *cycles)
+{
+	if (BITS_TO_BYTES(fls64(nsec) + tkr->shift) > sizeof(nsec))
+		return -ERANGE;
+
+	*cycles = nsec << tkr->shift;
+	*cycles -= tkr->xtime_nsec;
+	do_div(*cycles, tkr->mult);
+
+	return 0;
+}
+
 static inline u64 timekeeping_delta_to_ns(const struct tk_read_base *tkr, u64 delta)
 {
 	u64 nsec;
@@ -1302,6 +1315,47 @@ int get_device_system_crosststamp(int (*get_time_fn)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(get_device_system_crosststamp);
+
+/**
+ * ktime_convert_real_to_system_counter - Convert system time to system counter
+ * value
+ * @sys_realtime:	realtime clock value to convert
+ * @ret:		Computed system counter value with clocksource pointer
+ *
+ * Converts a supplied, future realtime clock value to the corresponding
+ * system counter value.
+ *
+ * Return: 0 on success, -errno on failure.
+ */
+int ktime_convert_real_to_system_counter(ktime_t sys_realtime,
+					 struct system_counterval_t *ret)
+{
+	struct timekeeper *tk = &tk_core.timekeeper;
+	ktime_t base_real;
+	unsigned int seq;
+	u64 ns_delta;
+	int err;
+
+	do {
+		seq = read_seqcount_begin(&tk_core.seq);
+
+		base_real = ktime_add(tk->tkr_mono.base,
+				      tk_core.timekeeper.offs_real);
+		if (ktime_compare(sys_realtime, base_real) < 0)
+			return -EINVAL;
+
+		ret->cs = tk->tkr_mono.clock;
+		ns_delta = ktime_to_ns(ktime_sub(sys_realtime, base_real));
+		err = timekeeping_ns_to_delta(&tk->tkr_mono, ns_delta, &ret->cycles);
+		if (err < 0)
+			return err;
+
+		ret->cycles += tk->tkr_mono.cycle_last;
+	} while (read_seqcount_retry(&tk_core.seq, seq));
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(ktime_convert_real_to_system_counter);
 
 /**
  * do_settimeofday64 - Sets the time of day.

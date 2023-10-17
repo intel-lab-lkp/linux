@@ -289,6 +289,9 @@ extern int get_device_system_crosststamp(
 			struct system_time_snapshot *history,
 			struct system_device_crosststamp *xtstamp);
 
+extern int ktime_convert_real_to_system_counter(ktime_t sys_realtime,
+						struct system_counterval_t *ret);
+
 /*
  * Simultaneously snapshot realtime and monotonic raw clocks
  */
