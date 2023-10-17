@@ -529,12 +529,12 @@ static void imx7_csi_configure(struct imx7_csi *csi,
 		stride = out_pix->width;
 	}
 
+	cr18 |= BIT_BASEADDR_SWITCH_EN | BIT_BASEADDR_SWITCH_SEL |
+		BIT_BASEADDR_CHG_ERR_EN;
+
 	if (!csi->is_csi2) {
 		cr1 = BIT_SOF_POL | BIT_REDGE | BIT_GCLK_MODE | BIT_HSYNC_POL
 		    | BIT_FCC | BIT_MCLKDIV(1) | BIT_MCLKEN;
-
-		cr18 |= BIT_BASEADDR_SWITCH_EN | BIT_BASEADDR_SWITCH_SEL |
-			BIT_BASEADDR_CHG_ERR_EN;
 
 		if (out_pix->pixelformat == V4L2_PIX_FMT_UYVY ||
 		    out_pix->pixelformat == V4L2_PIX_FMT_YUYV)
