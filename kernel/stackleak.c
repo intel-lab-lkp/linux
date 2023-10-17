@@ -24,7 +24,7 @@ static DEFINE_STATIC_KEY_FALSE(stack_erasing_bypass);
 static int stack_erasing_sysctl(struct ctl_table *table, int write,
 			void __user *buffer, size_t *lenp, loff_t *ppos)
 {
-	int ret = 0;
+	int ret;
 	int state = !static_branch_unlikely(&stack_erasing_bypass);
 	int prev_state = state;
 
