@@ -379,6 +379,7 @@ struct dw_pcie_ops {
 			     size_t size, u32 val);
 	void    (*write_dbi2)(struct dw_pcie *pcie, void __iomem *base, u32 reg,
 			      size_t size, u32 val);
+	void	(*dbi_cs2_access)(struct dw_pcie *pcie, bool enable);
 	int	(*link_up)(struct dw_pcie *pcie);
 	enum dw_pcie_ltssm (*get_ltssm)(struct dw_pcie *pcie);
 	int	(*start_link)(struct dw_pcie *pcie);
@@ -506,6 +507,18 @@ static inline void dw_pcie_dbi_ro_wr_dis(struct dw_pcie *pci)
 	val = dw_pcie_readl_dbi(pci, reg);
 	val &= ~PCIE_DBI_RO_WR_EN;
 	dw_pcie_writel_dbi(pci, reg, val);
+}
+
+static inline void dw_pcie_dbi_cs2_en(struct dw_pcie *pci)
+{
+	if (pci->ops && pci->ops->dbi_cs2_access)
+		pci->ops->dbi_cs2_access(pci, true);
+}
+
+static inline void dw_pcie_dbi_cs2_dis(struct dw_pcie *pci)
+{
+	if (pci->ops && pci->ops->dbi_cs2_access)
+		pci->ops->dbi_cs2_access(pci, false);
 }
 
 static inline int dw_pcie_start_link(struct dw_pcie *pci)

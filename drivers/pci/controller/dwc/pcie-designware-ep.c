@@ -269,11 +269,17 @@ static int dw_pcie_ep_set_bar(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
 
 	dw_pcie_dbi_ro_wr_en(pci);
 
+	dw_pcie_dbi_cs2_en(pci);
 	dw_pcie_writel_dbi2(pci, reg_dbi2, lower_32_bits(size - 1));
+	dw_pcie_dbi_cs2_dis(pci);
+
 	dw_pcie_writel_dbi(pci, reg, flags);
 
 	if (flags & PCI_BASE_ADDRESS_MEM_TYPE_64) {
+		dw_pcie_dbi_cs2_en(pci);
 		dw_pcie_writel_dbi2(pci, reg_dbi2 + 4, upper_32_bits(size - 1));
+		dw_pcie_dbi_cs2_dis(pci);
+
 		dw_pcie_writel_dbi(pci, reg + 4, 0);
 	}
 
