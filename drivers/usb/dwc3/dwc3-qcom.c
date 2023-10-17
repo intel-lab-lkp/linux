@@ -686,6 +686,16 @@ static int dwc3_qcom_probe_core(struct platform_device *pdev, struct dwc3_qcom *
 	return 0;
 }
 
+static bool dwc3_qcom_has_separate_dwc3_of_node(struct device *dev)
+{
+	struct device_node *np;
+
+	np = of_get_compatible_child(dev->of_node, "snps,dwc3");
+	of_node_put(np);
+
+	return !!np;
+}
+
 static int dwc3_qcom_of_register_core(struct platform_device *pdev)
 {
 	struct dwc3_qcom	*qcom = platform_get_drvdata(pdev);
@@ -795,10 +805,13 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
 	int			ret, i;
 	bool			ignore_pipe_clk;
 	bool			wakeup_source;
+	bool			legacy_binding;
 
 	qcom = devm_kzalloc(&pdev->dev, sizeof(*qcom), GFP_KERNEL);
 	if (!qcom)
 		return -ENOMEM;
+
+	legacy_binding = dwc3_qcom_has_separate_dwc3_of_node(dev);
 
 	platform_set_drvdata(pdev, qcom);
 	qcom->dev = &pdev->dev;
@@ -823,24 +836,26 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
 		}
 	}
 
-	qcom->resets = devm_reset_control_array_get_optional_exclusive(dev);
-	if (IS_ERR(qcom->resets)) {
-		return dev_err_probe(&pdev->dev, PTR_ERR(qcom->resets),
-				     "failed to get resets\n");
-	}
+	if (legacy_binding) {
+		qcom->resets = devm_reset_control_array_get_optional_exclusive(dev);
+		if (IS_ERR(qcom->resets)) {
+			return dev_err_probe(&pdev->dev, PTR_ERR(qcom->resets),
+					     "failed to get resets\n");
+		}
 
-	ret = reset_control_assert(qcom->resets);
-	if (ret) {
-		dev_err(&pdev->dev, "failed to assert resets, err=%d\n", ret);
-		return ret;
-	}
+		ret = reset_control_assert(qcom->resets);
+		if (ret) {
+			dev_err(&pdev->dev, "failed to assert resets, err=%d\n", ret);
+			return ret;
+		}
 
-	usleep_range(10, 1000);
+		usleep_range(10, 1000);
 
-	ret = reset_control_deassert(qcom->resets);
-	if (ret) {
-		dev_err(&pdev->dev, "failed to deassert resets, err=%d\n", ret);
-		goto reset_assert;
+		ret = reset_control_deassert(qcom->resets);
+		if (ret) {
+			dev_err(&pdev->dev, "failed to deassert resets, err=%d\n", ret);
+			goto reset_assert;
+		}
 	}
 
 	ret = dwc3_qcom_clk_init(qcom, of_clk_get_parent_count(np));
@@ -851,7 +866,7 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 
-	if (np) {
+	if (legacy_binding) {
 		parent_res = res;
 	} else {
 		memcpy(&local_res, res, sizeof(struct resource));
@@ -882,7 +897,7 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
 	if (ignore_pipe_clk)
 		dwc3_qcom_select_utmi_clk(qcom);
 
-	if (np)
+	if (legacy_binding)
 		ret = dwc3_qcom_of_register_core(pdev);
 	else
 		ret = dwc3_qcom_probe_core(pdev, qcom);
