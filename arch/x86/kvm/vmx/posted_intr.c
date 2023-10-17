@@ -4,7 +4,6 @@
 #include <linux/kvm_host.h>
 
 #include <asm/irq_remapping.h>
-#include <asm/cpu.h>
 
 #include "lapic.h"
 #include "irq.h"

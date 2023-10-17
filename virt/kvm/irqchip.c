@@ -15,7 +15,6 @@
 #include <linux/kvm_host.h>
 #include <linux/slab.h>
 #include <linux/srcu.h>
-#include <linux/export.h>
 #include <trace/events/kvm.h>
 
 int kvm_irq_map_gsi(struct kvm *kvm,

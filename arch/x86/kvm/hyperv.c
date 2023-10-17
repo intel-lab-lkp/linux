@@ -21,15 +21,12 @@
 
 #include "x86.h"
 #include "lapic.h"
-#include "ioapic.h"
 #include "cpuid.h"
 #include "hyperv.h"
 #include "mmu.h"
 #include "xen.h"
 
-#include <linux/cpu.h>
 #include <linux/kvm_host.h>
-#include <linux/highmem.h>
 #include <linux/sched/cputime.h>
 #include <linux/spinlock.h>
 #include <linux/eventfd.h>

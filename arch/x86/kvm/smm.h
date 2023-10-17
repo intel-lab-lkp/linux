@@ -2,10 +2,7 @@
 #ifndef ASM_KVM_SMM_H
 #define ASM_KVM_SMM_H
 
-#include <linux/build_bug.h>
-
 #ifdef CONFIG_KVM_SMM
-
 
 /*
  * 32 bit KVM's emulated SMM layout. Based on Intel P6 layout

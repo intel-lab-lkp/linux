@@ -29,18 +29,8 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/kvm_host.h>
-#include <linux/kvm.h>
-#include <linux/mm.h>
-#include <linux/highmem.h>
-#include <linux/smp.h>
-#include <linux/hrtimer.h>
-#include <linux/io.h>
 #include <linux/slab.h>
-#include <linux/export.h>
 #include <linux/nospec.h>
-#include <asm/processor.h>
-#include <asm/page.h>
-#include <asm/current.h>
 #include <trace/events/kvm.h>
 
 #include "ioapic.h"

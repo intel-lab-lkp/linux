@@ -8,9 +8,6 @@
 #include "tdp_mmu.h"
 #include "spte.h"
 
-#include <asm/cmpxchg.h>
-#include <trace/events/kvm.h>
-
 /* Initializes the TDP MMU for the VM, if enabled. */
 void kvm_mmu_init_tdp_mmu(struct kvm *kvm)
 {

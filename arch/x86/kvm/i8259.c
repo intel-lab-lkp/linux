@@ -28,7 +28,6 @@
  */
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
-#include <linux/mm.h>
 #include <linux/slab.h>
 #include <linux/bitops.h>
 #include "irq.h"

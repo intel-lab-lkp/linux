@@ -12,7 +12,6 @@
 #include <linux/kvm_host.h>
 #include "mmu.h"
 #include "mmu_internal.h"
-#include "x86.h"
 #include "spte.h"
 
 #include <asm/e820/api.h>

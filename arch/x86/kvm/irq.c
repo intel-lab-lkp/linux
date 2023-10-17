@@ -9,12 +9,9 @@
  */
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
-#include <linux/export.h>
 #include <linux/kvm_host.h>
 
 #include "irq.h"
-#include "i8254.h"
-#include "x86.h"
 #include "xen.h"
 
 /*

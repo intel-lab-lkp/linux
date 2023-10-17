@@ -16,7 +16,6 @@
 #include <linux/kvm_host.h>
 #include <linux/sched/stat.h>
 
-#include <trace/events/kvm.h>
 #include <xen/interface/xen.h>
 #include <xen/interface/vcpu.h>
 #include <xen/interface/version.h>

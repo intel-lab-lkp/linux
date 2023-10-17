@@ -5,7 +5,6 @@
 
 #include <linux/kvm_host.h>
 
-#include "mmu.h"
 #include "spte.h"
 
 /*

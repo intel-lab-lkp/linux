@@ -10,8 +10,6 @@
 
 #include <linux/kvm_host.h>
 #include <linux/slab.h>
-#include <linux/module.h>
-#include <linux/mmu_context.h>
 #include <linux/sched/mm.h>
 
 #include "async_pf.h"

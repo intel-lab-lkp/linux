@@ -16,10 +16,8 @@
 
 #include <linux/kvm_types.h>
 #include <linux/kvm_host.h>
-#include <linux/kernel.h>
 
 #include <asm/msr-index.h>
-#include <asm/debugreg.h>
 
 #include "kvm_emulate.h"
 #include "trace.h"

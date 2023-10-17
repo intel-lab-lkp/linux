@@ -13,8 +13,6 @@
 
 #ifdef CONFIG_KVM_MMIO
 
-#include <linux/list.h>
-
 struct kvm_coalesced_mmio_dev {
 	struct list_head list;
 	struct kvm_io_device dev;

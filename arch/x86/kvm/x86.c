@@ -22,7 +22,6 @@
 #include "ioapic.h"
 #include "mmu.h"
 #include "i8254.h"
-#include "tss.h"
 #include "kvm_cache_regs.h"
 #include "kvm_emulate.h"
 #include "mmu/page_track.h"
@@ -35,33 +34,22 @@
 #include "smm.h"
 
 #include <linux/clocksource.h>
-#include <linux/interrupt.h>
 #include <linux/kvm.h>
 #include <linux/fs.h>
-#include <linux/vmalloc.h>
-#include <linux/export.h>
 #include <linux/moduleparam.h>
 #include <linux/mman.h>
 #include <linux/highmem.h>
-#include <linux/iommu.h>
 #include <linux/cpufreq.h>
 #include <linux/user-return-notifier.h>
-#include <linux/srcu.h>
-#include <linux/slab.h>
 #include <linux/perf_event.h>
-#include <linux/uaccess.h>
 #include <linux/hash.h>
 #include <linux/pci.h>
 #include <linux/timekeeper_internal.h>
-#include <linux/pvclock_gtod.h>
 #include <linux/kvm_irqfd.h>
 #include <linux/irqbypass.h>
-#include <linux/sched/stat.h>
 #include <linux/sched/isolation.h>
-#include <linux/mem_encrypt.h>
 #include <linux/entry-kvm.h>
 #include <linux/suspend.h>
-#include <linux/smp.h>
 
 #include <trace/events/ipi.h>
 #include <trace/events/kvm.h>
@@ -71,18 +59,13 @@
 #include <asm/desc.h>
 #include <asm/mce.h>
 #include <asm/pkru.h>
-#include <linux/kernel_stat.h>
 #include <asm/fpu/api.h>
 #include <asm/fpu/xcr.h>
-#include <asm/fpu/xstate.h>
 #include <asm/pvclock.h>
-#include <asm/div64.h>
 #include <asm/irq_remapping.h>
 #include <asm/mshyperv.h>
 #include <asm/hypervisor.h>
-#include <asm/tlbflush.h>
 #include <asm/intel_pt.h>
-#include <asm/emulate_prefix.h>
 #include <asm/sgx.h>
 #include <clocksource/hyperv_timer.h>
 

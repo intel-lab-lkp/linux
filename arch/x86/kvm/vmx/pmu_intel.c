@@ -16,7 +16,6 @@
 #include <asm/perf_event.h>
 #include "x86.h"
 #include "cpuid.h"
-#include "lapic.h"
 #include "nested.h"
 #include "pmu.h"
 

@@ -14,7 +14,6 @@
  */
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
-#include <linux/highmem.h>
 #include <linux/hrtimer.h>
 #include <linux/kernel.h>
 #include <linux/kvm_host.h>
@@ -22,12 +21,8 @@
 #include <linux/moduleparam.h>
 #include <linux/mod_devicetable.h>
 #include <linux/mm.h>
-#include <linux/objtool.h>
 #include <linux/sched.h>
 #include <linux/sched/smt.h>
-#include <linux/slab.h>
-#include <linux/tboot.h>
-#include <linux/trace_events.h>
 #include <linux/entry-kvm.h>
 
 #include <asm/apic.h>
@@ -36,17 +31,11 @@
 #include <asm/cpu_device_id.h>
 #include <asm/debugreg.h>
 #include <asm/desc.h>
-#include <asm/fpu/api.h>
-#include <asm/fpu/xstate.h>
-#include <asm/idtentry.h>
 #include <asm/io.h>
-#include <asm/irq_remapping.h>
 #include <asm/reboot.h>
 #include <asm/perf_event.h>
 #include <asm/mmu_context.h>
 #include <asm/mshyperv.h>
-#include <asm/mwait.h>
-#include <asm/spec-ctrl.h>
 #include <asm/vmx.h>
 
 #include "capabilities.h"

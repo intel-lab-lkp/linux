@@ -2,15 +2,8 @@
 #ifndef __KVM_X86_VMX_HYPERV_H
 #define __KVM_X86_VMX_HYPERV_H
 
-#include <linux/jump_label.h>
-
-#include <asm/hyperv-tlfs.h>
 #include <asm/mshyperv.h>
-#include <asm/vmx.h>
 
-#include "../hyperv.h"
-
-#include "capabilities.h"
 #include "vmcs.h"
 #include "vmcs12.h"
 

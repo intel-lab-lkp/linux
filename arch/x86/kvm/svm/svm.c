@@ -9,46 +9,17 @@
 #include "smm.h"
 #include "cpuid.h"
 #include "pmu.h"
-
-#include <linux/module.h>
-#include <linux/mod_devicetable.h>
-#include <linux/kernel.h>
-#include <linux/vmalloc.h>
-#include <linux/highmem.h>
-#include <linux/amd-iommu.h>
-#include <linux/sched.h>
-#include <linux/trace_events.h>
-#include <linux/slab.h>
-#include <linux/hashtable.h>
-#include <linux/objtool.h>
-#include <linux/psp-sev.h>
-#include <linux/file.h>
-#include <linux/pagemap.h>
-#include <linux/swap.h>
 #include <linux/rwsem.h>
-#include <linux/cc_platform.h>
-#include <linux/smp.h>
-
-#include <asm/apic.h>
-#include <asm/perf_event.h>
-#include <asm/tlbflush.h>
-#include <asm/desc.h>
-#include <asm/debugreg.h>
-#include <asm/kvm_para.h>
-#include <asm/irq_remapping.h>
 #include <asm/spec-ctrl.h>
 #include <asm/cpu_device_id.h>
 #include <asm/traps.h>
 #include <asm/reboot.h>
-#include <asm/fpu/api.h>
 
 #include <trace/events/ipi.h>
 
 #include "trace.h"
-
 #include "svm.h"
 #include "svm_ops.h"
-
 #include "kvm_onhyperv.h"
 #include "svm_onhyperv.h"
 

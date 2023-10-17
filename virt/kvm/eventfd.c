@@ -13,13 +13,11 @@
 #include <linux/kvm.h>
 #include <linux/kvm_irqfd.h>
 #include <linux/workqueue.h>
-#include <linux/syscalls.h>
 #include <linux/wait.h>
 #include <linux/poll.h>
 #include <linux/file.h>
 #include <linux/list.h>
 #include <linux/eventfd.h>
-#include <linux/kernel.h>
 #include <linux/srcu.h>
 #include <linux/slab.h>
 #include <linux/seqlock.h>

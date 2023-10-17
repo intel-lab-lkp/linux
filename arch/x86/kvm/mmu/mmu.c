@@ -16,8 +16,6 @@
  */
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
-#include "irq.h"
-#include "ioapic.h"
 #include "mmu.h"
 #include "mmu_internal.h"
 #include "tdp_mmu.h"
@@ -33,25 +31,16 @@
 #include <linux/types.h>
 #include <linux/string.h>
 #include <linux/mm.h>
-#include <linux/highmem.h>
 #include <linux/moduleparam.h>
-#include <linux/export.h>
-#include <linux/swap.h>
-#include <linux/hugetlb.h>
-#include <linux/compiler.h>
 #include <linux/srcu.h>
 #include <linux/slab.h>
 #include <linux/sched/signal.h>
-#include <linux/uaccess.h>
 #include <linux/hash.h>
-#include <linux/kern_levels.h>
 #include <linux/kstrtox.h>
 #include <linux/kthread.h>
 
 #include <asm/page.h>
-#include <asm/memtype.h>
 #include <asm/cmpxchg.h>
-#include <asm/io.h>
 #include <asm/set_memory.h>
 #include <asm/vmx.h>
 

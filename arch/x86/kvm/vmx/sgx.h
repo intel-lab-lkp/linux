@@ -2,11 +2,6 @@
 #ifndef __KVM_X86_SGX_H
 #define __KVM_X86_SGX_H
 
-#include <linux/kvm_host.h>
-
-#include "capabilities.h"
-#include "vmx_ops.h"
-
 #ifdef CONFIG_X86_SGX_KVM
 extern bool __read_mostly enable_sgx;
 
