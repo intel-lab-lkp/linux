@@ -159,7 +159,7 @@
 
 		key-ok {
 			gpios = <&gpx0 1 GPIO_ACTIVE_LOW>;
-			linux,code = <139>;
+			linux,code = <0x160>;
 			label = "ok";
 			debounce-interval = <10>;
 			wakeup-source;
