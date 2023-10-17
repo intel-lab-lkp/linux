@@ -5,6 +5,7 @@
  * Copyright 2016 Freescale Semiconductor, Inc.
  */
 
+#include <linux/atomic.h>
 #include <linux/clk.h>
 #include <linux/completion.h>
 #include <linux/delay.h>
@@ -99,6 +100,8 @@ struct lpi2c_imx_struct {
 	__u8			*rx_buf;
 	__u8			*tx_buf;
 	struct completion	complete;
+	struct notifier_block	clk_change_nb;
+	atomic_t		rate_per;
 	unsigned int		msglen;
 	unsigned int		delivered;
 	unsigned int		block_data;
@@ -197,6 +200,20 @@ static void lpi2c_imx_stop(struct lpi2c_imx_struct *lpi2c_imx)
 	} while (1);
 }
 
+static int lpi2c_imx_clk_change_cb(struct notifier_block *nb,
+				   unsigned long action, void *data)
+{
+	struct clk_notifier_data *ndata = data;
+	struct lpi2c_imx_struct *lpi2c_imx = container_of(nb,
+							  struct lpi2c_imx_struct,
+							  clk_change_nb);
+
+	if (action & POST_RATE_CHANGE)
+		atomic_set(&lpi2c_imx->rate_per, ndata->new_rate);
+
+	return NOTIFY_OK;
+}
+
 /* CLKLO = I2C_CLK_RATIO * CLKHI, SETHOLD = CLKHI, DATAVD = CLKHI/2 */
 static int lpi2c_imx_config(struct lpi2c_imx_struct *lpi2c_imx)
 {
@@ -207,7 +224,7 @@ static int lpi2c_imx_config(struct lpi2c_imx_struct *lpi2c_imx)
 
 	lpi2c_imx_set_mode(lpi2c_imx);
 
-	clk_rate = clk_get_rate(lpi2c_imx->clks[0].clk);
+	clk_rate = atomic_read(&lpi2c_imx->rate_per);
 	if (!clk_rate)
 		return -EINVAL;
 
@@ -589,6 +606,28 @@ static int lpi2c_imx_probe(struct platform_device *pdev)
 	ret = clk_bulk_prepare_enable(lpi2c_imx->num_clks, lpi2c_imx->clks);
 	if (ret)
 		return ret;
+
+	lpi2c_imx->clk_change_nb.notifier_call = lpi2c_imx_clk_change_cb;
+	ret = devm_clk_notifier_register(&pdev->dev, lpi2c_imx->clks[0].clk,
+					 &lpi2c_imx->clk_change_nb);
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret,
+				     "can't register peripheral clock notifier\n");
+	/*
+	 * Lock the clock rate to avoid rate change between clk_get_rate() and
+	 * atomic_set()
+	 */
+	ret = clk_rate_exclusive_get(lpi2c_imx->clks[0].clk);
+	if (ret) {
+		dev_err(&pdev->dev, "can't lock I2C peripheral clock rate\n");
+		return ret;
+	}
+	atomic_set(&lpi2c_imx->rate_per, clk_get_rate(lpi2c_imx->clks[0].clk));
+	clk_rate_exclusive_put(lpi2c_imx->clks[0].clk);
+	if (!atomic_read(&lpi2c_imx->rate_per)) {
+		dev_err(&pdev->dev, "can't get I2C peripheral clock rate\n");
+		return -EINVAL;
+	}
 
 	pm_runtime_set_autosuspend_delay(&pdev->dev, I2C_PM_TIMEOUT);
 	pm_runtime_use_autosuspend(&pdev->dev);
