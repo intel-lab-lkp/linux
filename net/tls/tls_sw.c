@@ -441,6 +441,7 @@ static void tls_encrypt_done(void *data, int err)
 	struct sk_msg *msg_en;
 	bool ready = false;
 	struct sock *sk;
+	int async_notify;
 	int pending;
 
 	msg_en = &rec->msg_encrypted;
@@ -482,10 +483,13 @@ static void tls_encrypt_done(void *data, int err)
 
 	spin_lock_bh(&ctx->encrypt_compl_lock);
 	pending = atomic_dec_return(&ctx->encrypt_pending);
-
-	if (!pending && ctx->async_notify)
-		complete(&ctx->async_wait.completion);
+	async_notify = ctx->async_notify;
 	spin_unlock_bh(&ctx->encrypt_compl_lock);
+
+	if (!pending && async_notify) {
+		complete(&ctx->async_wait.completion);
+		return;
+	}
 
 	if (!ready)
 		return;
