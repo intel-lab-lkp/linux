@@ -695,6 +695,8 @@ static void fill_buf_caps(struct vb2_queue *q, u32 *caps)
 	if (q->supports_requests)
 		*caps |= V4L2_BUF_CAP_SUPPORTS_REQUESTS;
 #endif
+	if (q->supports_delete_bufs)
+		*caps |= V4L2_BUF_CAP_SUPPORTS_DELETE_BUFS;
 }
 
 static void validate_memory_flags(struct vb2_queue *q,
@@ -751,6 +753,12 @@ int vb2_prepare_buf(struct vb2_queue *q, struct media_device *mdev,
 	return ret ? ret : vb2_core_prepare_buf(q, vb, b);
 }
 EXPORT_SYMBOL_GPL(vb2_prepare_buf);
+
+int vb2_delete_bufs(struct vb2_queue *q, struct v4l2_delete_buffers *d)
+{
+	return vb2_core_delete_bufs(q, d->index, d->count);
+}
+EXPORT_SYMBOL_GPL(vb2_delete_bufs);
 
 int vb2_create_bufs(struct vb2_queue *q, struct v4l2_create_buffers *create)
 {
@@ -1011,6 +1019,18 @@ EXPORT_SYMBOL_GPL(vb2_poll);
  */
 
 /* vb2 ioctl helpers */
+
+int vb2_ioctl_delete_bufs(struct file *file, void *priv,
+			  struct v4l2_delete_buffers *p)
+{
+	struct video_device *vdev = video_devdata(file);
+
+	if (vb2_queue_is_busy(vdev->queue, file))
+		return -EBUSY;
+
+	return vb2_delete_bufs(vdev->queue, p);
+}
+EXPORT_SYMBOL_GPL(vb2_ioctl_delete_bufs);
 
 int vb2_ioctl_reqbufs(struct file *file, void *priv,
 			  struct v4l2_requestbuffers *p)
