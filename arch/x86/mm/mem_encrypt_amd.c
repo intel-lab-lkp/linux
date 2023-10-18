@@ -231,6 +231,10 @@ static unsigned long pg_level_to_pfn(int level, pte_t *kpte, pgprot_t *ret_prot)
 		pfn = pud_pfn(*(pud_t *)kpte);
 		prot = pud_pgprot(*(pud_t *)kpte);
 		break;
+	case PG_LEVEL_512G:
+		pfn = p4d_pfn(*(p4d_t *)kpte);
+		prot = p4d_pgprot(*(p4d_t *)kpte);
+		break;
 	default:
 		WARN_ONCE(1, "Invalid level for kpte\n");
 		return 0;
