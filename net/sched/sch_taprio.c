@@ -102,6 +102,7 @@ struct taprio_sched {
 	u32 max_sdu[TC_MAX_QUEUE]; /* save info from the user */
 	u32 fp[TC_QOPT_MAX_QUEUE]; /* only for dump and offloading */
 	u32 txtime_delay;
+	u8 num_tc;
 };
 
 struct __tc_taprio_qopt_offload {
@@ -1063,6 +1064,11 @@ static int fill_sched_entry(struct taprio_sched *q, struct nlattr **tb,
 		return -EINVAL;
 	}
 
+	if (entry->gate_mask >= q->num_tc) {
+		NL_SET_ERR_MSG(extack, "Traffic Class defined less than gatemask");
+		return -EINVAL;
+	}
+
 	entry->interval = interval;
 
 	return 0;
@@ -1913,6 +1919,8 @@ static int taprio_change(struct Qdisc *sch, struct nlattr *opt,
 		for (i = 0; i <= TC_BITMASK; i++)
 			netdev_set_prio_tc_map(dev, i,
 					       mqprio->prio_tc_map[i]);
+
+		q->num_tc = mqprio->num_tc;
 	}
 
 	err = parse_taprio_schedule(q, tb, new_admin, extack);
