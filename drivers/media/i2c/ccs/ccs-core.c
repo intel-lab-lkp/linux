@@ -734,9 +734,11 @@ static int ccs_set_ctrl(struct v4l2_ctrl *ctrl)
 
 		break;
 	case V4L2_CID_HBLANK:
-		rval = ccs_write(sensor, LINE_LENGTH_PCK,
-				 sensor->pixel_array->crop[CCS_PA_PAD_SRC].width
-				 + ctrl->val);
+		/* LINE_LENGTH_PCK units are in VT pixel clocks. */
+		u16 line_length_pck =
+			sensor->pll.vt_bk.pix_clk_freq_hz /
+			(sensor->pixel_array->crop[CCS_PA_PAD_SRC].width + ctrl->val);
+		rval = ccs_write(sensor, LINE_LENGTH_PCK, line_length_pck);
 
 		break;
 	case V4L2_CID_TEST_PATTERN:
