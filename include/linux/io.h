@@ -6,6 +6,7 @@
 #ifndef _LINUX_IO_H
 #define _LINUX_IO_H
 
+#include <linux/cleanup.h>
 #include <linux/types.h>
 #include <linux/init.h>
 #include <linux/bug.h>
@@ -19,6 +20,9 @@ struct resource;
 __visible void __iowrite32_copy(void __iomem *to, const void *from, size_t count);
 void __ioread32_copy(void *to, const void __iomem *from, size_t count);
 void __iowrite64_copy(void __iomem *to, const void *from, size_t count);
+
+DEFINE_FREE(iounmap, void __iomem *, iounmap(_T));
+DEFINE_FREE(ioport_unmap, void __iomem *, ioport_unmap(_T));
 
 #ifdef CONFIG_MMU
 int ioremap_page_range(unsigned long addr, unsigned long end,
