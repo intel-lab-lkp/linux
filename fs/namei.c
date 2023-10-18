@@ -4185,6 +4185,11 @@ int vfs_rmdir(struct mnt_idmap *idmap, struct inode *dir,
 	if (error)
 		goto out;
 
+	if (unlikely(dir->i_nlink == 0) ||
+	    unlikely(dentry->d_inode->i_nlink == 0)) {
+		error = -EUCLEAN;
+		goto out;
+	}
 	error = dir->i_op->rmdir(dir, dentry);
 	if (error)
 		goto out;
@@ -4314,6 +4319,10 @@ int vfs_unlink(struct mnt_idmap *idmap, struct inode *dir,
 			error = try_break_deleg(target, delegated_inode);
 			if (error)
 				goto out;
+			if (unlikely(target->i_nlink == 0)) {
+				error = -EUCLEAN;
+				goto out;
+			}
 			error = dir->i_op->unlink(dir, dentry);
 			if (!error) {
 				dont_mount(dentry);
