@@ -4285,6 +4285,7 @@ out:
 static int
 fec_probe(struct platform_device *pdev)
 {
+	const struct platform_device_id *pd_id;
 	struct fec_enet_private *fep;
 	struct fec_platform_data *pdata;
 	phy_interface_t interface;
@@ -4311,9 +4312,10 @@ fec_probe(struct platform_device *pdev)
 	/* setup board info structure */
 	fep = netdev_priv(ndev);
 
-	dev_info = device_get_match_data(&pdev->dev);
-	if (!dev_info)
-		dev_info = (const struct fec_devinfo *)pdev->id_entry->driver_data;
+	pd_id = device_get_match_data(&pdev->dev);
+	if (pd_id)
+		pdev->id_entry = pd_id;
+	dev_info = (const struct fec_devinfo *)pdev->id_entry->driver_data;
 	if (dev_info)
 		fep->quirks = dev_info->quirks;
 
