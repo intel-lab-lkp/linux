@@ -48,3 +48,6 @@ config I3C_SLAVE_CONFIGFS
 	  the slave function and used to bind the function with a slave
 	  controller.
 
+if I3C_SLAVE
+source "drivers/i3c/slave/Kconfig"
+endif # I3C_SLAVE
