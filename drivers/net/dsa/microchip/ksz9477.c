@@ -81,7 +81,8 @@ static int ksz9477_handle_wake_reason(struct ksz_device *dev, int port)
 	if (!pme_status)
 		return 0;
 
-	dev_dbg(dev->dev, "Wake event on port %d due to: %s %s\n", port,
+	dev_dbg(dev->dev, "Wake event on port %d due to: %s %s %s\n", port,
+		pme_status & PME_WOL_MAGICPKT ? "\"Magic Packet\"" : "",
 		pme_status & PME_WOL_LINKUP ? "\"Link Up\"" : "",
 		pme_status & PME_WOL_ENERGY ? "\"Enery detect\"" : "");
 
@@ -109,10 +110,22 @@ void ksz9477_get_wol(struct ksz_device *dev, int port,
 
 	wol->supported = WAKE_PHY;
 
+	/* Check if at this moment we would be able to get the MAC address
+	 * and use it for WAKE_MAGIC support. This result may change dynamically
+	 * depending on configuration of other ports.
+	 */
+	ret = ksz_switch_macaddr_get(dev->ds, port, NULL);
+	if (!ret) {
+		wol->supported |= WAKE_MAGIC;
+		ksz_switch_macaddr_put(dev->ds);
+	}
+
 	ret = ksz_pread8(dev, port, REG_PORT_PME_CTRL, &pme_ctrl);
 	if (ret)
 		return;
 
+	if (pme_ctrl & PME_WOL_MAGICPKT)
+		wol->wolopts |= WAKE_MAGIC;
 	if (pme_ctrl & (PME_WOL_LINKUP | PME_WOL_ENERGY))
 		wol->wolopts |= WAKE_PHY;
 }
@@ -134,10 +147,10 @@ void ksz9477_get_wol(struct ksz_device *dev, int port,
 int ksz9477_set_wol(struct ksz_device *dev, int port,
 		    struct ethtool_wolinfo *wol)
 {
-	u8 pme_ctrl = 0;
+	u8 pme_ctrl = 0, pme_ctrl_old = 0;
 	int ret;
 
-	if (wol->wolopts & ~WAKE_PHY)
+	if (wol->wolopts & ~(WAKE_PHY | WAKE_MAGIC))
 		return -EINVAL;
 
 	if (!dev->wakeup_source)
@@ -147,10 +160,40 @@ int ksz9477_set_wol(struct ksz_device *dev, int port,
 	if (ret)
 		return ret;
 
+	if (wol->wolopts & WAKE_MAGIC)
+		pme_ctrl |= PME_WOL_MAGICPKT;
 	if (wol->wolopts & WAKE_PHY)
 		pme_ctrl |= PME_WOL_LINKUP | PME_WOL_ENERGY;
 
-	return ksz_pwrite8(dev, port, REG_PORT_PME_CTRL, pme_ctrl);
+	ret = ksz_pread8(dev, port, REG_PORT_PME_CTRL, &pme_ctrl_old);
+	if (ret)
+		return ret;
+
+	if (pme_ctrl_old == pme_ctrl)
+		return 0;
+
+	/* To keep reference count of MAC address, we should do this
+	 * operation only on change of WOL settings.
+	 */
+	if (!(pme_ctrl_old & PME_WOL_MAGICPKT) &&
+	    (pme_ctrl & PME_WOL_MAGICPKT)) {
+		ret = ksz_switch_macaddr_get(dev->ds, port, NULL);
+		if (ret)
+			return ret;
+	} else if ((pme_ctrl_old & PME_WOL_MAGICPKT) &&
+		   !(pme_ctrl & PME_WOL_MAGICPKT)) {
+		ksz_switch_macaddr_put(dev->ds);
+	}
+
+	ret = ksz_pwrite8(dev, port, REG_PORT_PME_CTRL, pme_ctrl);
+	if (ret) {
+		if (!(pme_ctrl_old & PME_WOL_MAGICPKT) &&
+		    (pme_ctrl & PME_WOL_MAGICPKT))
+			ksz_switch_macaddr_put(dev->ds);
+		return ret;
+	}
+
+	return 0;
 }
 
 static int ksz9477_wait_vlan_ctrl_ready(struct ksz_device *dev)
@@ -1106,6 +1149,11 @@ void ksz9477_port_setup(struct ksz_device *dev, int port, bool cpu_port)
 
 	/* clear pending wake flags */
 	ksz9477_handle_wake_reason(dev, port);
+
+	/* Disable all WoL options by default. Otherwise
+	 * ksz_switch_macaddr_get/put logic will not work properly.
+	 */
+	ksz_pwrite8(dev, port, REG_PORT_PME_CTRL, 0);
 }
 
 void ksz9477_config_cpu_port(struct dsa_switch *ds)
