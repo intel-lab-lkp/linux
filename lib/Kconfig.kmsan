@@ -13,6 +13,7 @@ config KMSAN
 	depends on HAVE_ARCH_KMSAN && HAVE_KMSAN_COMPILER
 	depends on SLUB && DEBUG_KERNEL && !KASAN && !KCSAN
 	depends on !PREEMPT_RT
+	depends on !COMPILE_TEST
 	select STACKDEPOT
 	select STACKDEPOT_ALWAYS_INIT
 	help
