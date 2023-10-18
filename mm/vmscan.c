@@ -1261,6 +1261,43 @@ retry:
 			enum ttu_flags flags = TTU_BATCH_FLUSH;
 			bool was_swapbacked = folio_test_swapbacked(folio);
 
+			if (folio_test_dirty(folio)) {
+				/*
+				 * Only kswapd can writeback filesystem folios
+				 * to avoid risk of stack overflow. But avoid
+				 * injecting inefficient single-folio I/O into
+				 * flusher writeback as much as possible: only
+				 * write folios when we've encountered many
+				 * dirty folios, and when we've already scanned
+				 * the rest of the LRU for clean folios and see
+				 * the same dirty folios again (with the reclaim
+				 * flag set).
+				 */
+				if (folio_is_file_lru(folio) &&
+					(!current_is_kswapd() ||
+					 !folio_test_reclaim(folio) ||
+					 !test_bit(PGDAT_DIRTY, &pgdat->flags))) {
+					/*
+					 * Immediately reclaim when written back.
+					 * Similar in principle to folio_deactivate()
+					 * except we already have the folio isolated
+					 * and know it's dirty
+					 */
+					node_stat_mod_folio(folio, NR_VMSCAN_IMMEDIATE,
+							nr_pages);
+					folio_set_reclaim(folio);
+
+					goto activate_locked;
+				}
+
+				if (references == FOLIOREF_RECLAIM_CLEAN)
+					goto keep_locked;
+				if (!may_enter_fs(folio, sc->gfp_mask))
+					goto keep_locked;
+				if (!sc->may_writepage)
+					goto keep_locked;
+			}
+
 			if (folio_test_pmd_mappable(folio))
 				flags |= TTU_SPLIT_HUGE_PMD;
 
@@ -1286,41 +1323,6 @@ retry:
 
 		mapping = folio_mapping(folio);
 		if (folio_test_dirty(folio)) {
-			/*
-			 * Only kswapd can writeback filesystem folios
-			 * to avoid risk of stack overflow. But avoid
-			 * injecting inefficient single-folio I/O into
-			 * flusher writeback as much as possible: only
-			 * write folios when we've encountered many
-			 * dirty folios, and when we've already scanned
-			 * the rest of the LRU for clean folios and see
-			 * the same dirty folios again (with the reclaim
-			 * flag set).
-			 */
-			if (folio_is_file_lru(folio) &&
-			    (!current_is_kswapd() ||
-			     !folio_test_reclaim(folio) ||
-			     !test_bit(PGDAT_DIRTY, &pgdat->flags))) {
-				/*
-				 * Immediately reclaim when written back.
-				 * Similar in principle to folio_deactivate()
-				 * except we already have the folio isolated
-				 * and know it's dirty
-				 */
-				node_stat_mod_folio(folio, NR_VMSCAN_IMMEDIATE,
-						nr_pages);
-				folio_set_reclaim(folio);
-
-				goto activate_locked;
-			}
-
-			if (references == FOLIOREF_RECLAIM_CLEAN)
-				goto keep_locked;
-			if (!may_enter_fs(folio, sc->gfp_mask))
-				goto keep_locked;
-			if (!sc->may_writepage)
-				goto keep_locked;
-
 			/*
 			 * Folio is dirty. Flush the TLB if a writable entry
 			 * potentially exists to avoid CPU writes after I/O
