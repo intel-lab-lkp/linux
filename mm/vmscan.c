@@ -1063,8 +1063,10 @@ retry:
 
 		/* folio_update_gen() tried to promote this page? */
 		if (lru_gen_enabled() && !ignore_references &&
-		    folio_mapped(folio) && folio_test_referenced(folio))
+		    folio_mapped(folio) && folio_test_referenced(folio)) {
+			stat->nr_promote += nr_pages;
 			goto keep_locked;
+		}
 
 		/*
 		 * The number of dirty pages determines if a node is marked
@@ -1193,6 +1195,7 @@ retry:
 		    (thp_migration_supported() || !folio_test_large(folio))) {
 			list_add(&folio->lru, &demote_folios);
 			folio_unlock(folio);
+			stat->nr_demote += nr_pages;
 			continue;
 		}
 
@@ -4495,6 +4498,8 @@ static int evict_folios(struct lruvec *lruvec, struct scan_control *sc, int swap
 	int type;
 	int scanned;
 	int reclaimed;
+	unsigned long nr_taken = sc->nr_scanned;
+	unsigned int total_reclaimed = 0;
 	LIST_HEAD(list);
 	LIST_HEAD(clean);
 	struct folio *folio;
@@ -4521,10 +4526,7 @@ static int evict_folios(struct lruvec *lruvec, struct scan_control *sc, int swap
 		return scanned;
 retry:
 	reclaimed = shrink_folio_list(&list, pgdat, sc, &stat, false);
-	sc->nr_reclaimed += reclaimed;
-	trace_mm_vmscan_lru_shrink_inactive(pgdat->node_id,
-			scanned, reclaimed, &stat, sc->priority,
-			type ? LRU_INACTIVE_FILE : LRU_INACTIVE_ANON);
+	total_reclaimed += reclaimed;
 
 	list_for_each_entry_safe_reverse(folio, next, &list, lru) {
 		if (!folio_evictable(folio)) {
@@ -4581,6 +4583,20 @@ retry:
 		skip_retry = true;
 		goto retry;
 	}
+
+	/**
+	 * MGLRU scan_folios return nr_scanned no only contains
+	 * isolated folios. To get actually touched folios in
+	 * shrink_folios_list, we can record last nr_scanned which
+	 * sc saved, and sc nr_scanned will update for each folios
+	 * which we touched. New count sub last can get right nr_taken
+	 */
+	nr_taken = sc->nr_scanned - nr_taken;
+
+	sc->nr_reclaimed += total_reclaimed;
+	trace_mm_vmscan_lru_shrink_inactive(pgdat->node_id, nr_taken,
+					     total_reclaimed, &stat,
+					     sc->priority, type);
 
 	return scanned;
 }
