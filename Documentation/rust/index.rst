@@ -6,6 +6,23 @@ Rust
 Documentation related to Rust within the kernel. To start using Rust
 in the kernel, please read the quick-start.rst guide.
 
+
+The Rust experiment
+-------------------
+
+The Rust support was merged in v6.1 into mainline in order to help in
+determining whether Rust as a language was suitable for the kernel, i.e. worth
+the tradeoffs.
+
+Currently, the Rust support is primarily intended for kernel developers and
+maintainers interested in the Rust support, so that they can start working on
+abstractions and drivers, as well as helping the development of infrastructure
+and tools.
+
+In particular, if you are an end user, please note that there are no in-tree
+drivers/modules suitable or intended for production use yet.
+
+
 .. only:: rustdoc and html
 
 	You can also browse `rustdoc documentation <rustdoc/kernel/index.html>`_.
