@@ -601,7 +601,7 @@ unsigned long arch_align_stack(unsigned long sp)
 #ifdef CONFIG_COMPAT
 int compat_elf_check_arch(const struct elf32_hdr *hdr)
 {
-	if (!system_supports_32bit_el0())
+	if (!system_supports_32bit_el0() || !aarch32_enabled())
 		return false;
 
 	if ((hdr)->e_machine != EM_ARM)
