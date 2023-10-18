@@ -13,6 +13,7 @@
 
 #include <linux/acpi.h>
 #include <linux/platform_profile.h>
+#include <linux/amd-pmf-io.h>
 
 #define POLICY_BUF_MAX_SZ		0x4b000
 #define POLICY_SIGN_COOKIE		0x31535024
@@ -228,9 +229,11 @@ struct amd_pmf_dev {
 	void *shbuf;
 	struct delayed_work pb_work;
 	struct pmf_action_table *prev_data;
+	struct amd_gpu_pmf_data gfx_data;
 	u64 policy_addr;
 	void *policy_base;
 	bool smart_pc_enabled;
+	struct pci_dev *root;
 };
 
 struct apmf_sps_prop_granular {
