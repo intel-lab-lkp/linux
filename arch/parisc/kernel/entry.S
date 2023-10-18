@@ -36,6 +36,24 @@
 	.level 2.0
 #endif
 
+/*
+ * We need seven instructions after a TLB insert for it to take effect.
+ * The PA8800/PA8900 processors are an exception and need 12 instructions.
+ * The RFI changes both IAOQ_Back and IAOQ_Front, so it counts as one.
+ */
+#ifdef CONFIG_64BIT
+#define NUM_PIPELINE_INSNS    12
+#else
+#define NUM_PIPELINE_INSNS    7
+#endif
+
+	/* Insert num nops */
+	.macro	insert_nops num
+	.rept \num
+	nop
+	.endr
+	.endm
+
 	/* Get aligned page_table_lock address for this mm from cr28/tr4 */
 	.macro  get_ptl reg
 	mfctl	%cr28,\reg
@@ -415,25 +433,38 @@
 3:
 	.endm
 
-	/* Release page_table_lock without reloading lock address.
-	   We use an ordered store to ensure all prior accesses are
-	   performed prior to releasing the lock. */
-	.macro		ptl_unlock0	spc,tmp,tmp2
-#ifdef CONFIG_TLB_PTLOCK
-98:	ldi		__ARCH_SPIN_LOCK_UNLOCKED_VAL, \tmp2
+	/* Release page_table_lock if for user space. We use an ordered
+	   store to ensure all prior accesses are performed prior to
+	   releasing the lock. */
+	.macro		ptl_unlock	spc,tmp,tmp2
+	ldi		__ARCH_SPIN_LOCK_UNLOCKED_VAL, \tmp2
 	or,COND(=)	%r0,\spc,%r0
 	stw,ma		\tmp2,0(\tmp)
-99:	ALTERNATIVE(98b, 99b, ALT_COND_NO_SMP, INSN_NOP)
-#endif
 	.endm
 
-	/* Release page_table_lock. */
+	/* Release page_table_lock without reloading lock address. */
+	.macro		ptl_unlock0	spc,tmp,tmp2
+#ifdef CONFIG_TLB_PTLOCK
+98:	ptl_unlock	\spc,\tmp,\tmp2
+99:	ALTERNATIVE(98b, 99b, ALT_COND_NO_SMP, INSN_NOP)
+#else
+	insert_nops	3
+#endif
+	/* Insert nops so we don't return before TLB insert takes effect. */
+	insert_nops	NUM_PIPELINE_INSNS - 4
+	.endm
+
+	/* Reload lock address and release page_table_lock. */
 	.macro		ptl_unlock1	spc,tmp,tmp2
 #ifdef CONFIG_TLB_PTLOCK
 98:	get_ptl		\tmp
-	ptl_unlock0	\spc,\tmp,\tmp2
+	ptl_unlock	\spc,\tmp,\tmp2
 99:	ALTERNATIVE(98b, 99b, ALT_COND_NO_SMP, INSN_NOP)
+#else
+	insert_nops	4
 #endif
+	/* Insert nops so we don't return before TLB insert takes effect. */
+	insert_nops	NUM_PIPELINE_INSNS - 5
 	.endm
 
 	/* Set the _PAGE_ACCESSED bit of the PTE.  Be clever and
@@ -1133,6 +1164,7 @@ dtlb_check_alias_20w:
 
 	idtlbt          pte,prot
 
+	insert_nops	NUM_PIPELINE_INSNS - 1
 	rfir
 	nop
 
@@ -1159,6 +1191,7 @@ nadtlb_check_alias_20w:
 
 	idtlbt          pte,prot
 
+	insert_nops	NUM_PIPELINE_INSNS - 1
 	rfir
 	nop
 
@@ -1194,6 +1227,7 @@ dtlb_check_alias_11:
 	idtlba          pte,(va)
 	idtlbp          prot,(va)
 
+	insert_nops	NUM_PIPELINE_INSNS - 1
 	rfir
 	nop
 
@@ -1227,6 +1261,7 @@ nadtlb_check_alias_11:
 	idtlba          pte,(va)
 	idtlbp          prot,(va)
 
+	insert_nops	NUM_PIPELINE_INSNS - 1
 	rfir
 	nop
 
@@ -1252,9 +1287,10 @@ dtlb_miss_20:
 
 dtlb_check_alias_20:
 	do_alias	spc,t0,t1,va,pte,prot,dtlb_fault,20
-	
+
 	idtlbt          pte,prot
 
+	insert_nops	NUM_PIPELINE_INSNS - 1
 	rfir
 	nop
 
@@ -1271,7 +1307,7 @@ nadtlb_miss_20:
 	make_insert_tlb	spc,pte,prot,t1
 
 	f_extend	pte,t1
-	
+
 	idtlbt		pte,prot
 
 	ptl_unlock1	spc,t0,t1
@@ -1283,6 +1319,7 @@ nadtlb_check_alias_20:
 
 	idtlbt          pte,prot
 
+	insert_nops	NUM_PIPELINE_INSNS - 1
 	rfir
 	nop
 
@@ -1316,7 +1353,7 @@ itlb_miss_20w:
 	update_accessed	ptp,pte,t0,t1
 
 	make_insert_tlb	spc,pte,prot,t1
-	
+
 	iitlbt          pte,prot
 
 	ptl_unlock1	spc,t0,t1
@@ -1352,6 +1389,7 @@ naitlb_check_alias_20w:
 
 	iitlbt		pte,prot
 
+	insert_nops	NUM_PIPELINE_INSNS - 1
 	rfir
 	nop
 
@@ -1411,6 +1449,7 @@ naitlb_check_alias_11:
 	iitlba          pte,(%sr0, va)
 	iitlbp          prot,(%sr0, va)
 
+	insert_nops	NUM_PIPELINE_INSNS - 1
 	rfir
 	nop
 
@@ -1460,6 +1499,7 @@ naitlb_check_alias_20:
 
 	iitlbt          pte,prot
 
+	insert_nops	NUM_PIPELINE_INSNS - 1
 	rfir
 	nop
 
@@ -1478,7 +1518,7 @@ dbit_trap_20w:
 	update_dirty	ptp,pte,t1
 
 	make_insert_tlb	spc,pte,prot,t1
-		
+
 	idtlbt          pte,prot
 
 	ptl_unlock0	spc,t0,t1
@@ -1524,7 +1564,7 @@ dbit_trap_20:
 	make_insert_tlb	spc,pte,prot,t1
 
 	f_extend	pte,t1
-	
+
 	idtlbt		pte,prot
 
 	ptl_unlock0	spc,t0,t1
