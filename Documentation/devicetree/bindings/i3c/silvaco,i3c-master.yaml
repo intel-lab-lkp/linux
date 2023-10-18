@@ -4,7 +4,7 @@
 $id: http://devicetree.org/schemas/i3c/silvaco,i3c-master.yaml#
 $schema: http://devicetree.org/meta-schemas/core.yaml#
 
-title: Silvaco I3C master
+title: Silvaco I3C master/slave
 
 maintainers:
   - Conor Culhane <conor.culhane@silvaco.com>
@@ -14,8 +14,10 @@ allOf:
 
 properties:
   compatible:
-    const: silvaco,i3c-master-v1
-
+    const:
+      enum:
+        - silvaco,i3c-master-v1
+        - silvaco,i3c-slave-v1
   reg:
     maxItems: 1
 
