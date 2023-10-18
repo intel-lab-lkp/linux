@@ -215,7 +215,13 @@ enum {
 	MLX5_INTERFACE_PROTOCOL_MPIB,
 
 	MLX5_INTERFACE_PROTOCOL_VNET,
+	MLX5_INTERFACE_PROTOCOL_CTL,
 };
+
+static bool is_ctl_supported(struct mlx5_core_dev *dev)
+{
+	return MLX5_CAP_GEN(dev, uctx_cap);
+}
 
 static const struct mlx5_adev_device {
 	const char *suffix;
@@ -237,6 +243,8 @@ static const struct mlx5_adev_device {
 					   .is_supported = &is_ib_rep_supported },
 	[MLX5_INTERFACE_PROTOCOL_MPIB] = { .suffix = "multiport",
 					   .is_supported = &is_mp_supported },
+	[MLX5_INTERFACE_PROTOCOL_CTL] = { .suffix = "ctl",
+					  .is_supported = &is_ctl_supported },
 };
 
 int mlx5_adev_idx_alloc(void)
