@@ -679,6 +679,11 @@ properties:
           - const: powkiddy,rgb30
           - const: rockchip,rk3566
 
+      - description: Powkiddy RK2023
+        items:
+          - const: powkiddy,rk2023
+          - const: rockchip,rk3566
+
       - description: Radxa Compute Module 3(CM3)
         items:
           - enum:
