@@ -1027,22 +1027,32 @@ union migration_ptr {
 	struct anon_vma *anon_vma;
 	struct address_space *mapping;
 };
+
+enum {
+	PAGE_WAS_MAPPED = 1 << 0,
+	PAGE_WAS_MLOCKED = 1 << 1,
+};
+
 static void __migrate_folio_record(struct folio *dst,
-				   unsigned long page_was_mapped,
+				   unsigned long page_flags,
 				   struct anon_vma *anon_vma)
 {
 	union migration_ptr ptr = { .anon_vma = anon_vma };
 	dst->mapping = ptr.mapping;
-	dst->private = (void *)page_was_mapped;
+	dst->private = (void *)page_flags;
 }
 
 static void __migrate_folio_extract(struct folio *dst,
 				   int *page_was_mappedp,
+				   int *page_was_mlocked,
 				   struct anon_vma **anon_vmap)
 {
 	union migration_ptr ptr = { .mapping = dst->mapping };
+	unsigned long page_flags = (unsigned long)dst->private;
+
 	*anon_vmap = ptr.anon_vma;
-	*page_was_mappedp = (unsigned long)dst->private;
+	*page_was_mappedp = page_flags & PAGE_WAS_MAPPED ? 1 : 0;
+	*page_was_mlocked = page_flags & PAGE_WAS_MLOCKED ? 1 : 0;
 	dst->mapping = NULL;
 	dst->private = NULL;
 }
@@ -1103,7 +1113,7 @@ static int migrate_folio_unmap(new_folio_t get_new_folio,
 {
 	struct folio *dst;
 	int rc = -EAGAIN;
-	int page_was_mapped = 0;
+	int page_was_mapped = 0, page_was_mlocked = 0;
 	struct anon_vma *anon_vma = NULL;
 	bool is_lru = !__folio_test_movable(src);
 	bool locked = false;
@@ -1157,6 +1167,7 @@ static int migrate_folio_unmap(new_folio_t get_new_folio,
 		folio_lock(src);
 	}
 	locked = true;
+	page_was_mlocked = folio_test_mlocked(src);
 
 	if (folio_test_writeback(src)) {
 		/*
@@ -1206,7 +1217,7 @@ static int migrate_folio_unmap(new_folio_t get_new_folio,
 	dst_locked = true;
 
 	if (unlikely(!is_lru)) {
-		__migrate_folio_record(dst, page_was_mapped, anon_vma);
+		__migrate_folio_record(dst, 0, anon_vma);
 		return MIGRATEPAGE_UNMAP;
 	}
 
@@ -1236,7 +1247,13 @@ static int migrate_folio_unmap(new_folio_t get_new_folio,
 	}
 
 	if (!folio_mapped(src)) {
-		__migrate_folio_record(dst, page_was_mapped, anon_vma);
+		unsigned int page_flags = 0;
+
+		if (page_was_mapped)
+			page_flags |= PAGE_WAS_MAPPED;
+		if (page_was_mlocked)
+			page_flags |= PAGE_WAS_MLOCKED;
+		__migrate_folio_record(dst, page_flags, anon_vma);
 		return MIGRATEPAGE_UNMAP;
 	}
 
@@ -1261,12 +1278,13 @@ static int migrate_folio_move(free_folio_t put_new_folio, unsigned long private,
 			      struct list_head *ret)
 {
 	int rc;
-	int page_was_mapped = 0;
+	int page_was_mapped = 0, page_was_mlocked = 0;
 	struct anon_vma *anon_vma = NULL;
 	bool is_lru = !__folio_test_movable(src);
 	struct list_head *prev;
 
-	__migrate_folio_extract(dst, &page_was_mapped, &anon_vma);
+	__migrate_folio_extract(dst, &page_was_mapped,
+				&page_was_mlocked, &anon_vma);
 	prev = dst->lru.prev;
 	list_del(&dst->lru);
 
@@ -1287,7 +1305,7 @@ static int migrate_folio_move(free_folio_t put_new_folio, unsigned long private,
 	 * isolated from the unevictable LRU: but this case is the easiest.
 	 */
 	folio_add_lru(dst);
-	if (page_was_mapped)
+	if (page_was_mlocked)
 		lru_add_drain();
 
 	if (page_was_mapped)
@@ -1321,8 +1339,15 @@ out:
 	 * right list unless we want to retry.
 	 */
 	if (rc == -EAGAIN) {
+		unsigned int page_flags = 0;
+
+		if (page_was_mapped)
+			page_flags |= PAGE_WAS_MAPPED;
+		if (page_was_mlocked)
+			page_flags |= PAGE_WAS_MLOCKED;
+
 		list_add(&dst->lru, prev);
-		__migrate_folio_record(dst, page_was_mapped, anon_vma);
+		__migrate_folio_record(dst, page_flags, anon_vma);
 		return rc;
 	}
 
@@ -1799,10 +1824,11 @@ out:
 	dst = list_first_entry(&dst_folios, struct folio, lru);
 	dst2 = list_next_entry(dst, lru);
 	list_for_each_entry_safe(folio, folio2, &unmap_folios, lru) {
-		int page_was_mapped = 0;
+		int page_was_mapped = 0, page_was_mlocked = 0;
 		struct anon_vma *anon_vma = NULL;
 
-		__migrate_folio_extract(dst, &page_was_mapped, &anon_vma);
+		__migrate_folio_extract(dst, &page_was_mapped,
+					&page_was_mlocked, &anon_vma);
 		migrate_folio_undo_src(folio, page_was_mapped, anon_vma,
 				       true, ret_folios);
 		list_del(&dst->lru);
