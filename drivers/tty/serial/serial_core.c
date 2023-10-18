@@ -1443,6 +1443,9 @@ static int uart_get_rs485_config(struct uart_port *port,
 	unsigned long flags;
 	struct serial_rs485 aux;
 
+	if (!(port->rs485_supported.flags & SER_RS485_ENABLED))
+		return -ENOTTY;
+
 	spin_lock_irqsave(&port->lock, flags);
 	aux = port->rs485;
 	spin_unlock_irqrestore(&port->lock, flags);
@@ -1460,7 +1463,7 @@ static int uart_set_rs485_config(struct tty_struct *tty, struct uart_port *port,
 	int ret;
 	unsigned long flags;
 
-	if (!port->rs485_config)
+	if (!(port->rs485_supported.flags & SER_RS485_ENABLED))
 		return -ENOTTY;
 
 	if (copy_from_user(&rs485, rs485_user, sizeof(*rs485_user)))
