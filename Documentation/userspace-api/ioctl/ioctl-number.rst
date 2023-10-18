@@ -89,6 +89,7 @@ Code  Seq#    Include File                                           Comments
 0x20  all    drivers/cdrom/cm206.h
 0x22  all    scsi/sg.h
 0x3E  00-0F  linux/counter.h                                         <mailto:linux-iio@vger.kernel.org>
+0x5c  all    uapi/misc/mlx5ctl.h                                     Nvidia ConnectX control
 '!'   00-1F  uapi/linux/seccomp.h
 '#'   00-3F                                                          IEEE 1394 Subsystem
                                                                      Block for the entire subsystem
