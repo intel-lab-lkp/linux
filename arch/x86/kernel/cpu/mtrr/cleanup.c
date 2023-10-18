@@ -939,8 +939,6 @@ int __init mtrr_trim_uncached_memory(unsigned long end_pfn)
 	if (mtrr_tom2) {
 		range[nr_range].start = (1ULL<<(32 - PAGE_SHIFT));
 		range[nr_range].end = mtrr_tom2 >> PAGE_SHIFT;
-		if (highest_pfn < range[nr_range].end)
-			highest_pfn = range[nr_range].end;
 		nr_range++;
 	}
 	nr_range = x86_get_mtrr_mem_range(range, nr_range, 0, 0);
