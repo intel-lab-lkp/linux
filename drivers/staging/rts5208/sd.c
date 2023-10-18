@@ -865,7 +865,7 @@ static int sd_change_phase(struct rtsx_chip *chip, u8 sample_point, u8 tune_dir)
 						     PHASE_CHANGE);
 			if (retval)
 				return retval;
-			udelay(50);
+			usleep_range(50);
 			retval = rtsx_write_register(chip, SD_VP_CTL, 0xFF,
 						     PHASE_CHANGE |
 						     PHASE_NOT_RESET |
@@ -877,14 +877,14 @@ static int sd_change_phase(struct rtsx_chip *chip, u8 sample_point, u8 tune_dir)
 						     CHANGE_CLK, CHANGE_CLK);
 			if (retval)
 				return retval;
-			udelay(50);
+			usleep_range(50);
 			retval = rtsx_write_register(chip, SD_VP_CTL, 0xFF,
 						     PHASE_NOT_RESET |
 						     sample_point);
 			if (retval)
 				return retval;
 		}
-		udelay(100);
+		usleep_range(100);
 
 		rtsx_init_cmd(chip);
 		rtsx_add_cmd(chip, WRITE_REG_CMD, SD_DCMPS_CTL, DCMPS_CHANGE,
@@ -918,7 +918,7 @@ static int sd_change_phase(struct rtsx_chip *chip, u8 sample_point, u8 tune_dir)
 				return retval;
 		}
 
-		udelay(50);
+		usleep_range(50);
 	}
 
 	retval = rtsx_write_register(chip, SD_CFG1, SD_ASYNC_FIFO_NOT_RST, 0);
@@ -1416,7 +1416,7 @@ static int sd_wait_data_idle(struct rtsx_chip *chip)
 			retval = STATUS_SUCCESS;
 			break;
 		}
-		udelay(100);
+		usleep_range(100);
 	}
 	dev_dbg(rtsx_dev(chip), "SD_DATA_STATE: 0x%02x\n", val);
 
