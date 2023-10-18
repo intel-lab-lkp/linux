@@ -567,8 +567,8 @@ lpfc_nvmet_ktime(struct lpfc_hba *phba,
 	 * TRSP cmpl is passed to NVME Layer.
 	 * Segment 10 - Time from FCP command received by
 	 * MSI-X ISR to command is completed on wire.
-	 * (Segments 1 thru 8) for READDATA / WRITEDATA
-	 * (Segments 1 thru 4) for READDATA_RSP
+	 * (Segments 1 through 8) for READDATA / WRITEDATA
+	 * (Segments 1 through 4) for READDATA_RSP
 	 */
 	seg1 = ctxp->ts_cmd_nvme - ctxp->ts_isr_cmd;
 	segsum = seg1;
@@ -598,7 +598,7 @@ lpfc_nvmet_ktime(struct lpfc_hba *phba,
 	segsum += seg5;
 
 
-	/* For auto rsp commands seg6 thru seg10 will be 0 */
+	/* For auto rsp commands seg6 through seg10 will be 0 */
 	if (ctxp->ts_nvme_status > ctxp->ts_data_nvme) {
 		seg6 = ctxp->ts_nvme_status - ctxp->ts_isr_cmd;
 		if (segsum > seg6)
@@ -1534,8 +1534,8 @@ lpfc_nvmet_setup_io_context(struct lpfc_hba *phba)
 
 	/*
 	 * Setup the next CPU context info ptr for each MRQ.
-	 * MRQ 0 will cycle thru CPUs 0 - X separately from
-	 * MRQ 1 cycling thru CPUs 0 - X, and so on.
+	 * MRQ 0 will cycle through CPUs 0 - X separately from
+	 * MRQ 1 cycling through CPUs 0 - X, and so on.
 	 */
 	for (j = 0; j < phba->cfg_nvmet_mrq; j++) {
 		last_infop = lpfc_get_ctx_list(phba,
@@ -2129,7 +2129,7 @@ lpfc_nvmet_destroy_targetport(struct lpfc_hba *phba)
  * @phba: pointer to lpfc hba data structure.
  * @axchg: pointer to exchange context for the NVME LS request
  *
- * This routine is used for processing an asychronously received NVME LS
+ * This routine is used for processing an asynchronously received NVME LS
  * request. Any remaining validation is done and the LS is then forwarded
  * to the nvmet-fc transport via nvmet_fc_rcv_ls_req().
  *

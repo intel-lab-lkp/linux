@@ -6655,7 +6655,7 @@ lpfc_debugfs_terminate(struct lpfc_vport *vport)
  * lpfc_debug_dump_all_queues - dump all the queues with a hba
  * @phba: Pointer to HBA context object.
  *
- * This function dumps entries of all the queues asociated with the @phba.
+ * This function dumps entries of all the queues associated with the @phba.
  **/
 void
 lpfc_debug_dump_all_queues(struct lpfc_hba *phba)

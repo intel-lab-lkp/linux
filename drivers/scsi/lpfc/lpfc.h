@@ -1208,7 +1208,7 @@ struct lpfc_hba {
 
 	uint32_t hbq_in_use;		/* HBQs in use flag */
 	uint32_t hbq_count;	        /* Count of configured HBQs */
-	struct hbq_s hbqs[LPFC_MAX_HBQS]; /* local copy of hbq indicies  */
+	struct hbq_s hbqs[LPFC_MAX_HBQS]; /* local copy of hbq indices  */
 
 	atomic_t fcp_qidx;         /* next FCP WQ (RR Policy) */
 	atomic_t nvme_qidx;        /* next NVME WQ (RR Policy) */

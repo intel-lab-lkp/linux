@@ -2960,13 +2960,13 @@ lpfc_device_recov_npr_node(struct lpfc_vport *vport, struct lpfc_nodelist *ndlp,
  * the PLOGI or ADISC lists. Once the PLOGI and ADISC lists are populated,
  * we will first process the ADISC list.  32 entries are processed initially and
  * ADISC is initited for each one.  Completions / Events for each node are
- * funnelled thru the state machine.  As each node finishes ADISC processing, it
+ * funnelled through the state machine.  As each node finishes ADISC processing, it
  * starts ADISC for any nodes waiting for ADISC processing. If no nodes are
  * waiting, and the ADISC list count is identically 0, then we are done. For
  * Link Up discovery, since all nodes on the PLOGI list are UNREG_LOGIN'ed, we
  * can issue a CLEAR_LA and reenable Link Events. Next we will process the PLOGI
  * list.  32 entries are processed initially and PLOGI is initited for each one.
- * Completions / Events for each node are funnelled thru the state machine.  As
+ * Completions / Events for each node are funnelled through the state machine.  As
  * each node finishes PLOGI processing, it starts PLOGI for any nodes waiting
  * for PLOGI processing. If no nodes are waiting, and the PLOGI list count is
  * indentically 0, then we are done. We have now completed discovery / RSCN

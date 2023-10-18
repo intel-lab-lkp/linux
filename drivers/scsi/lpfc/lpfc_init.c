@@ -4117,7 +4117,7 @@ lpfc_sli4_els_sgl_update(struct lpfc_hba *phba)
 				 &phba->sli4_hba.lpfc_els_sgl_list);
 		spin_unlock_irq(&phba->sli4_hba.sgl_list_lock);
 	} else if (els_xri_cnt < phba->sli4_hba.els_xri_cnt) {
-		/* els xri-sgl shrinked */
+		/* els xri-sgl shrunk */
 		xri_cnt = phba->sli4_hba.els_xri_cnt - els_xri_cnt;
 		lpfc_printf_log(phba, KERN_INFO, LOG_SLI,
 				"3158 ELS xri-sgl count decreased from "
@@ -10430,7 +10430,7 @@ lpfc_alloc_io_wq_cq(struct lpfc_hba *phba, int idx)
  *
  * Return codes
  *      0 - successful
- *      -ENOMEM - No availble memory
+ *      -ENOMEM - No available memory
  *      -EIO - The mailbox failed to complete successfully.
  **/
 int
@@ -10835,7 +10835,7 @@ lpfc_sli4_release_hdwq(struct lpfc_hba *phba)
 
 	hdwq = phba->sli4_hba.hdwq;
 
-	/* Loop thru all Hardware Queues */
+	/* Loop through all Hardware Queues */
 	for (idx = 0; idx < phba->cfg_hdw_queue; idx++) {
 		/* Free the CQ/WQ corresponding to the Hardware Queue */
 		lpfc_sli4_queue_free(hdwq[idx].io_cq);
@@ -10847,7 +10847,7 @@ lpfc_sli4_release_hdwq(struct lpfc_hba *phba)
 			lpfc_free_sgl_per_hdwq(phba, &hdwq[idx]);
 		lpfc_free_cmd_rsp_buf_per_hdwq(phba, &hdwq[idx]);
 	}
-	/* Loop thru all IRQ vectors */
+	/* Loop through all IRQ vectors */
 	for (idx = 0; idx < phba->cfg_irq_chann; idx++) {
 		/* Free the EQ corresponding to the IRQ vector */
 		eq = phba->sli4_hba.hba_eq_hdl[idx].eq;
@@ -11037,7 +11037,7 @@ lpfc_setup_cq_lookup(struct lpfc_hba *phba)
 
 	memset(phba->sli4_hba.cq_lookup, 0,
 	       (sizeof(struct lpfc_queue *) * (phba->sli4_hba.cq_max + 1)));
-	/* Loop thru all IRQ vectors */
+	/* Loop through all IRQ vectors */
 	for (qidx = 0; qidx < phba->cfg_irq_chann; qidx++) {
 		/* Get the EQ corresponding to the IRQ vector */
 		eq = phba->sli4_hba.hba_eq_hdl[qidx].eq;
@@ -11134,7 +11134,7 @@ lpfc_sli4_queue_setup(struct lpfc_hba *phba)
 		goto out_error;
 	}
 
-	/* Loop thru all IRQ vectors */
+	/* Loop through all IRQ vectors */
 	for (qidx = 0; qidx < phba->cfg_irq_chann; qidx++) {
 		/* Create HBA Event Queues (EQs) in order */
 		for_each_present_cpu(cpu) {
@@ -11170,7 +11170,7 @@ lpfc_sli4_queue_setup(struct lpfc_hba *phba)
 		}
 	}
 
-	/* Loop thru all Hardware Queues */
+	/* Loop through all Hardware Queues */
 	for (qidx = 0; qidx < phba->cfg_hdw_queue; qidx++) {
 		cpu = lpfc_find_cpu_handle(phba, qidx, LPFC_FIND_BY_HDWQ);
 		cpup = &phba->sli4_hba.cpu_map[cpu];
@@ -11482,14 +11482,14 @@ lpfc_sli4_queue_unset(struct lpfc_hba *phba)
 
 	/* Unset fast-path SLI4 queues */
 	if (phba->sli4_hba.hdwq) {
-		/* Loop thru all Hardware Queues */
+		/* Loop through all Hardware Queues */
 		for (qidx = 0; qidx < phba->cfg_hdw_queue; qidx++) {
 			/* Destroy the CQ/WQ corresponding to Hardware Queue */
 			qp = &phba->sli4_hba.hdwq[qidx];
 			lpfc_wq_destroy(phba, qp->io_wq);
 			lpfc_cq_destroy(phba, qp->io_cq);
 		}
-		/* Loop thru all IRQ vectors */
+		/* Loop through all IRQ vectors */
 		for (qidx = 0; qidx < phba->cfg_irq_chann; qidx++) {
 			/* Destroy the EQ corresponding to the IRQ vector */
 			eq = phba->sli4_hba.hba_eq_hdl[qidx].eq;
@@ -12253,7 +12253,7 @@ lpfc_sli_enable_intr(struct lpfc_hba *phba, uint32_t cfg_mode)
 		}
 	}
 
-	/* Fallback to INTx if both MSI-X/MSI initalization failed */
+	/* Fallback to INTx if both MSI-X/MSI initialization failed */
 	if (phba->intr_type == NONE) {
 		retval = request_irq(phba->pcidev->irq, lpfc_sli_intr_handler,
 				     IRQF_SHARED, LPFC_DRIVER_NAME, phba);
@@ -13242,7 +13242,7 @@ lpfc_sli4_enable_intr(struct lpfc_hba *phba, uint32_t cfg_mode)
 		}
 	}
 
-	/* Fallback to INTx if both MSI-X/MSI initalization failed */
+	/* Fallback to INTx if both MSI-X/MSI initialization failed */
 	if (phba->intr_type == NONE) {
 		retval = request_irq(phba->pcidev->irq, lpfc_sli4_intr_handler,
 				     IRQF_SHARED, LPFC_DRIVER_NAME, phba);
