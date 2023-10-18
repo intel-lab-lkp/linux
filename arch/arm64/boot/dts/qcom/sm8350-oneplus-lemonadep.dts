@@ -1,0 +1,20 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) 2023 Igalia S.L.
+ * Authors:
+ *	Nia Espera <nespera@igalia.com>
+ */
+
+/dts-v1/;
+
+#include "sm8350-oneplus-common.dtsi"
+
+/ {
+	compatible = "oneplus,lemonadep", "qcom,sm8350";
+	model = "OnePlus 9 Pro";
+};
+
+&mpss {
+	pinctrl-names = "default";
+	pinctrl-0 = <&rf_cable_ant0_active>;
+};
