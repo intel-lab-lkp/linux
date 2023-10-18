@@ -1035,7 +1035,7 @@ static int __init amd_uncore_init(void)
 			ret = -ENOMEM;
 			goto fail;
 		}
-	};
+	}
 
 	/*
 	 * Install callbacks. Core will call them for each online cpu.
