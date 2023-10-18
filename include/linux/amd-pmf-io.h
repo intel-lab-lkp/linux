@@ -5,7 +5,8 @@
  * Copyright (c) 2023, Advanced Micro Devices, Inc.
  * All Rights Reserved.
  *
- * Author: Shyam Sundar S K <Shyam-sundar.S-k@amd.com>
+ * Authors: Shyam Sundar S K <Shyam-sundar.S-k@amd.com>
+ *          Basavaraj Natikar <Basavaraj.Natikar@amd.com>
  */
 
 #ifndef AMD_PMF_IO_H
@@ -32,4 +33,21 @@ struct amd_gpu_pmf_data {
 int amd_pmf_get_gfx_data(struct amd_gpu_pmf_data *pmf);
 int amd_pmf_gpu_init(struct amd_gpu_pmf_data *pmf);
 void amd_pmf_gpu_deinit(struct amd_gpu_pmf_data *pmf);
+
+/* amd-sfh */
+enum sfh_message_type {
+	MT_HPD,
+};
+
+enum hpd_info {
+	SFH_NOT_DETECTED,
+	SFH_USER_PRESENT,
+	SFH_USER_AWAY,
+};
+
+struct amd_sfh_info {
+	u8 user_present;
+};
+
+int amd_get_sfh_info(struct amd_sfh_info *sfh_info, enum sfh_message_type op);
 #endif
