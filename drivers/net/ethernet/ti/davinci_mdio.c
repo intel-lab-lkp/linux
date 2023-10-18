@@ -519,7 +519,7 @@ static const struct soc_device_attribute k3_mdio_socinfo[] = {
 	{ .family = "J7200", .revision = "SR1.0", .data = &am65_mdio_soc_data },
 	{ .family = "J7200", .revision = "SR2.0", .data = &am65_mdio_soc_data },
 	{ .family = "J721E", .revision = "SR1.0", .data = &am65_mdio_soc_data },
-	{ .family = "J721E", .revision = "SR2.0", .data = &am65_mdio_soc_data },
+	{ .family = "J721E", .revision = "SR1.1", .data = &am65_mdio_soc_data },
 	{ .family = "J721S2", .revision = "SR1.0", .data = &am65_mdio_soc_data},
 	{ /* sentinel */ },
 };
