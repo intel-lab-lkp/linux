@@ -33,13 +33,13 @@ enum vme_resource_type {
 #define VME_SCT		0x1
 #define VME_BLT		0x2
 #define VME_MBLT	0x4
-#define VME_2eVME	0x8
-#define VME_2eSST	0x10
-#define VME_2eSSTB	0x20
+#define VME_2EVME	0x8
+#define VME_2ESST	0x10
+#define VME_2ESSTB	0x20
 
-#define VME_2eSST160	0x100
-#define VME_2eSST267	0x200
-#define VME_2eSST320	0x400
+#define VME_2ESST160	0x100
+#define VME_2ESST267	0x200
+#define VME_2ESST320	0x400
 
 #define	VME_SUPER	0x1000
 #define	VME_USER	0x2000

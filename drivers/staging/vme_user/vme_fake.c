@@ -1108,8 +1108,8 @@ static int __init fake_init(void)
 		master_image->address_attr = VME_A16 | VME_A24 | VME_A32 |
 			VME_A64;
 		master_image->cycle_attr = VME_SCT | VME_BLT | VME_MBLT |
-			VME_2eVME | VME_2eSST | VME_2eSSTB | VME_2eSST160 |
-			VME_2eSST267 | VME_2eSST320 | VME_SUPER | VME_USER |
+			VME_2EVME | VME_2ESST | VME_2ESSTB | VME_2ESST160 |
+			VME_2ESST267 | VME_2ESST320 | VME_SUPER | VME_USER |
 			VME_PROG | VME_DATA;
 		master_image->width_attr = VME_D16 | VME_D32;
 		memset(&master_image->bus_resource, 0,
@@ -1135,8 +1135,8 @@ static int __init fake_init(void)
 			VME_A64 | VME_CRCSR | VME_USER1 | VME_USER2 |
 			VME_USER3 | VME_USER4;
 		slave_image->cycle_attr = VME_SCT | VME_BLT | VME_MBLT |
-			VME_2eVME | VME_2eSST | VME_2eSSTB | VME_2eSST160 |
-			VME_2eSST267 | VME_2eSST320 | VME_SUPER | VME_USER |
+			VME_2EVME | VME_2ESST | VME_2ESSTB | VME_2ESST160 |
+			VME_2ESST267 | VME_2ESST320 | VME_SUPER | VME_USER |
 			VME_PROG | VME_DATA;
 		list_add_tail(&slave_image->list,
 			      &fake_bridge->slave_resources);

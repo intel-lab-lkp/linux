@@ -551,14 +551,14 @@ static int tsi148_slave_set(struct vme_slave_resource *image, int enabled,
 
 	/* Setup 2eSST speeds */
 	temp_ctl &= ~TSI148_LCSR_ITAT_2eSSTM_M;
-	switch (cycle & (VME_2eSST160 | VME_2eSST267 | VME_2eSST320)) {
-	case VME_2eSST160:
+	switch (cycle & (VME_2ESST160 | VME_2ESST267 | VME_2ESST320)) {
+	case VME_2ESST160:
 		temp_ctl |= TSI148_LCSR_ITAT_2eSSTM_160;
 		break;
-	case VME_2eSST267:
+	case VME_2ESST267:
 		temp_ctl |= TSI148_LCSR_ITAT_2eSSTM_267;
 		break;
-	case VME_2eSST320:
+	case VME_2ESST320:
 		temp_ctl |= TSI148_LCSR_ITAT_2eSSTM_320;
 		break;
 	}
@@ -569,11 +569,11 @@ static int tsi148_slave_set(struct vme_slave_resource *image, int enabled,
 		temp_ctl |= TSI148_LCSR_ITAT_BLT;
 	if (cycle & VME_MBLT)
 		temp_ctl |= TSI148_LCSR_ITAT_MBLT;
-	if (cycle & VME_2eVME)
+	if (cycle & VME_2EVME)
 		temp_ctl |= TSI148_LCSR_ITAT_2eVME;
-	if (cycle & VME_2eSST)
+	if (cycle & VME_2ESST)
 		temp_ctl |= TSI148_LCSR_ITAT_2eSST;
-	if (cycle & VME_2eSSTB)
+	if (cycle & VME_2ESSTB)
 		temp_ctl |= TSI148_LCSR_ITAT_2eSSTB;
 
 	/* Setup address space */
@@ -673,22 +673,22 @@ static int tsi148_slave_get(struct vme_slave_resource *image, int *enabled,
 	*size = (unsigned long long)((vme_bound - *vme_base) + granularity);
 
 	if ((ctl & TSI148_LCSR_ITAT_2eSSTM_M) == TSI148_LCSR_ITAT_2eSSTM_160)
-		*cycle |= VME_2eSST160;
+		*cycle |= VME_2ESST160;
 	if ((ctl & TSI148_LCSR_ITAT_2eSSTM_M) == TSI148_LCSR_ITAT_2eSSTM_267)
-		*cycle |= VME_2eSST267;
+		*cycle |= VME_2ESST267;
 	if ((ctl & TSI148_LCSR_ITAT_2eSSTM_M) == TSI148_LCSR_ITAT_2eSSTM_320)
-		*cycle |= VME_2eSST320;
+		*cycle |= VME_2ESST320;
 
 	if (ctl & TSI148_LCSR_ITAT_BLT)
 		*cycle |= VME_BLT;
 	if (ctl & TSI148_LCSR_ITAT_MBLT)
 		*cycle |= VME_MBLT;
 	if (ctl & TSI148_LCSR_ITAT_2eVME)
-		*cycle |= VME_2eVME;
+		*cycle |= VME_2EVME;
 	if (ctl & TSI148_LCSR_ITAT_2eSST)
-		*cycle |= VME_2eSST;
+		*cycle |= VME_2ESST;
 	if (ctl & TSI148_LCSR_ITAT_2eSSTB)
-		*cycle |= VME_2eSSTB;
+		*cycle |= VME_2ESSTB;
 
 	if (ctl & TSI148_LCSR_ITAT_SUPR)
 		*cycle |= VME_SUPER;
@@ -895,14 +895,14 @@ static int tsi148_master_set(struct vme_master_resource *image, int enabled,
 
 	/* Setup 2eSST speeds */
 	temp_ctl &= ~TSI148_LCSR_OTAT_2eSSTM_M;
-	switch (cycle & (VME_2eSST160 | VME_2eSST267 | VME_2eSST320)) {
-	case VME_2eSST160:
+	switch (cycle & (VME_2ESST160 | VME_2ESST267 | VME_2ESST320)) {
+	case VME_2ESST160:
 		temp_ctl |= TSI148_LCSR_OTAT_2eSSTM_160;
 		break;
-	case VME_2eSST267:
+	case VME_2ESST267:
 		temp_ctl |= TSI148_LCSR_OTAT_2eSSTM_267;
 		break;
-	case VME_2eSST320:
+	case VME_2ESST320:
 		temp_ctl |= TSI148_LCSR_OTAT_2eSSTM_320;
 		break;
 	}
@@ -916,15 +916,15 @@ static int tsi148_master_set(struct vme_master_resource *image, int enabled,
 		temp_ctl &= ~TSI148_LCSR_OTAT_TM_M;
 		temp_ctl |= TSI148_LCSR_OTAT_TM_MBLT;
 	}
-	if (cycle & VME_2eVME) {
+	if (cycle & VME_2EVME) {
 		temp_ctl &= ~TSI148_LCSR_OTAT_TM_M;
 		temp_ctl |= TSI148_LCSR_OTAT_TM_2eVME;
 	}
-	if (cycle & VME_2eSST) {
+	if (cycle & VME_2ESST) {
 		temp_ctl &= ~TSI148_LCSR_OTAT_TM_M;
 		temp_ctl |= TSI148_LCSR_OTAT_TM_2eSST;
 	}
-	if (cycle & VME_2eSSTB) {
+	if (cycle & VME_2ESSTB) {
 		dev_warn(tsi148_bridge->parent, "Currently not setting Broadcast Select Registers\n");
 		temp_ctl &= ~TSI148_LCSR_OTAT_TM_M;
 		temp_ctl |= TSI148_LCSR_OTAT_TM_2eSSTB;
@@ -1100,11 +1100,11 @@ static int __tsi148_master_get(struct vme_master_resource *image, int *enabled,
 
 	/* Setup 2eSST speeds */
 	if ((ctl & TSI148_LCSR_OTAT_2eSSTM_M) == TSI148_LCSR_OTAT_2eSSTM_160)
-		*cycle |= VME_2eSST160;
+		*cycle |= VME_2ESST160;
 	if ((ctl & TSI148_LCSR_OTAT_2eSSTM_M) == TSI148_LCSR_OTAT_2eSSTM_267)
-		*cycle |= VME_2eSST267;
+		*cycle |= VME_2ESST267;
 	if ((ctl & TSI148_LCSR_OTAT_2eSSTM_M) == TSI148_LCSR_OTAT_2eSSTM_320)
-		*cycle |= VME_2eSST320;
+		*cycle |= VME_2ESST320;
 
 	/* Setup cycle types */
 	if ((ctl & TSI148_LCSR_OTAT_TM_M) == TSI148_LCSR_OTAT_TM_SCT)
@@ -1114,11 +1114,11 @@ static int __tsi148_master_get(struct vme_master_resource *image, int *enabled,
 	if ((ctl & TSI148_LCSR_OTAT_TM_M) == TSI148_LCSR_OTAT_TM_MBLT)
 		*cycle |= VME_MBLT;
 	if ((ctl & TSI148_LCSR_OTAT_TM_M) == TSI148_LCSR_OTAT_TM_2eVME)
-		*cycle |= VME_2eVME;
+		*cycle |= VME_2EVME;
 	if ((ctl & TSI148_LCSR_OTAT_TM_M) == TSI148_LCSR_OTAT_TM_2eSST)
-		*cycle |= VME_2eSST;
+		*cycle |= VME_2ESST;
 	if ((ctl & TSI148_LCSR_OTAT_TM_M) == TSI148_LCSR_OTAT_TM_2eSSTB)
-		*cycle |= VME_2eSSTB;
+		*cycle |= VME_2ESSTB;
 
 	if (ctl & TSI148_LCSR_OTAT_SUP)
 		*cycle |= VME_SUPER;
@@ -1406,14 +1406,14 @@ static int tsi148_dma_set_vme_src_attributes(struct device *dev, __be32 *attr,
 	val = be32_to_cpu(*attr);
 
 	/* Setup 2eSST speeds */
-	switch (cycle & (VME_2eSST160 | VME_2eSST267 | VME_2eSST320)) {
-	case VME_2eSST160:
+	switch (cycle & (VME_2ESST160 | VME_2ESST267 | VME_2ESST320)) {
+	case VME_2ESST160:
 		val |= TSI148_LCSR_DSAT_2eSSTM_160;
 		break;
-	case VME_2eSST267:
+	case VME_2ESST267:
 		val |= TSI148_LCSR_DSAT_2eSSTM_267;
 		break;
-	case VME_2eSST320:
+	case VME_2ESST320:
 		val |= TSI148_LCSR_DSAT_2eSSTM_320;
 		break;
 	}
@@ -1428,13 +1428,13 @@ static int tsi148_dma_set_vme_src_attributes(struct device *dev, __be32 *attr,
 	if (cycle & VME_MBLT)
 		val |= TSI148_LCSR_DSAT_TM_MBLT;
 
-	if (cycle & VME_2eVME)
+	if (cycle & VME_2EVME)
 		val |= TSI148_LCSR_DSAT_TM_2eVME;
 
-	if (cycle & VME_2eSST)
+	if (cycle & VME_2ESST)
 		val |= TSI148_LCSR_DSAT_TM_2eSST;
 
-	if (cycle & VME_2eSSTB) {
+	if (cycle & VME_2ESSTB) {
 		dev_err(dev, "Currently not setting Broadcast Select Registers\n");
 		val |= TSI148_LCSR_DSAT_TM_2eSSTB;
 	}
@@ -1504,14 +1504,14 @@ static int tsi148_dma_set_vme_dest_attributes(struct device *dev, __be32 *attr,
 	val = be32_to_cpu(*attr);
 
 	/* Setup 2eSST speeds */
-	switch (cycle & (VME_2eSST160 | VME_2eSST267 | VME_2eSST320)) {
-	case VME_2eSST160:
+	switch (cycle & (VME_2ESST160 | VME_2ESST267 | VME_2ESST320)) {
+	case VME_2ESST160:
 		val |= TSI148_LCSR_DDAT_2eSSTM_160;
 		break;
-	case VME_2eSST267:
+	case VME_2ESST267:
 		val |= TSI148_LCSR_DDAT_2eSSTM_267;
 		break;
-	case VME_2eSST320:
+	case VME_2ESST320:
 		val |= TSI148_LCSR_DDAT_2eSSTM_320;
 		break;
 	}
@@ -1526,13 +1526,13 @@ static int tsi148_dma_set_vme_dest_attributes(struct device *dev, __be32 *attr,
 	if (cycle & VME_MBLT)
 		val |= TSI148_LCSR_DDAT_TM_MBLT;
 
-	if (cycle & VME_2eVME)
+	if (cycle & VME_2EVME)
 		val |= TSI148_LCSR_DDAT_TM_2eVME;
 
-	if (cycle & VME_2eSST)
+	if (cycle & VME_2ESST)
 		val |= TSI148_LCSR_DDAT_TM_2eSST;
 
-	if (cycle & VME_2eSSTB) {
+	if (cycle & VME_2ESSTB) {
 		dev_err(dev, "Currently not setting Broadcast Select Registers\n");
 		val |= TSI148_LCSR_DDAT_TM_2eSSTB;
 	}
@@ -2359,8 +2359,8 @@ static int tsi148_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 			VME_A64 | VME_CRCSR | VME_USER1 | VME_USER2 |
 			VME_USER3 | VME_USER4;
 		master_image->cycle_attr = VME_SCT | VME_BLT | VME_MBLT |
-			VME_2eVME | VME_2eSST | VME_2eSSTB | VME_2eSST160 |
-			VME_2eSST267 | VME_2eSST320 | VME_SUPER | VME_USER |
+			VME_2EVME | VME_2ESST | VME_2ESSTB | VME_2ESST160 |
+			VME_2ESST267 | VME_2ESST320 | VME_SUPER | VME_USER |
 			VME_PROG | VME_DATA;
 		master_image->width_attr = VME_D16 | VME_D32;
 		memset(&master_image->bus_resource, 0,
@@ -2384,8 +2384,8 @@ static int tsi148_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		slave_image->address_attr = VME_A16 | VME_A24 | VME_A32 |
 			VME_A64;
 		slave_image->cycle_attr = VME_SCT | VME_BLT | VME_MBLT |
-			VME_2eVME | VME_2eSST | VME_2eSSTB | VME_2eSST160 |
-			VME_2eSST267 | VME_2eSST320 | VME_SUPER | VME_USER |
+			VME_2EVME | VME_2ESST | VME_2ESSTB | VME_2ESST160 |
+			VME_2ESST267 | VME_2ESST320 | VME_SUPER | VME_USER |
 			VME_PROG | VME_DATA;
 		list_add_tail(&slave_image->list,
 			&tsi148_bridge->slave_resources);
