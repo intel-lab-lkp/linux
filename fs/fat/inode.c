@@ -888,9 +888,9 @@ retry:
 		raw_entry->size = cpu_to_le32(inode->i_size);
 	raw_entry->attr = fat_make_attrs(inode);
 	fat_set_start(raw_entry, MSDOS_I(inode)->i_logstart);
+	mtime = inode_get_mtime(inode);
 	fat_time_unix2fat(sbi, &mtime, &raw_entry->time,
 			  &raw_entry->date, NULL);
-	inode_set_mtime_to_ts(inode, mtime);
 	if (sbi->options.isvfat) {
 		struct timespec64 ts = inode_get_atime(inode);
 		__le16 atime;
