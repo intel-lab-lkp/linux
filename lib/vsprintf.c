@@ -1406,10 +1406,9 @@ char *ip6_compressed_string(char *p, const char *addr)
 			i += longest - 1;
 			continue;
 		}
-		if (needcolon) {
+		if (needcolon)
 			*p++ = ':';
-			needcolon = false;
-		}
+
 		/* hex u16 without leading 0s */
 		word = ntohs(in6.s6_addr16[i]);
 		hi = word >> 8;
