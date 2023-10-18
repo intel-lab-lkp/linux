@@ -869,6 +869,7 @@ static loff_t iomap_write_iter(struct iomap_iter *iter, struct iov_iter *i)
 {
 	loff_t length = iomap_length(iter);
 	size_t chunk = PAGE_SIZE << MAX_PAGECACHE_ORDER;
+	size_t retry_bytes = 0;
 	loff_t pos = iter->pos;
 	ssize_t written = 0;
 	long status = 0;
@@ -883,6 +884,10 @@ static loff_t iomap_write_iter(struct iomap_iter *iter, struct iov_iter *i)
 
 		offset = pos & (chunk - 1);
 		bytes = min(chunk - offset, iov_iter_count(i));
+		if (retry_bytes) {
+			bytes = min(bytes, retry_bytes);
+			retry_bytes = 0;
+		}
 		status = balance_dirty_pages_ratelimited_flags(mapping,
 							       bdp_flags);
 		if (unlikely(status))
@@ -934,7 +939,7 @@ static loff_t iomap_write_iter(struct iomap_iter *iter, struct iov_iter *i)
 			 * might be severe memory pressure.
 			 */
 			if (copied)
-				bytes = copied;
+				retry_bytes = copied;
 			if (chunk > PAGE_SIZE)
 				chunk /= 2;
 		} else {
