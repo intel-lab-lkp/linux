@@ -2255,6 +2255,9 @@ void scsi_call_prepare_resubmit(struct list_head *done_q)
 		list_splice(&uld_cmd_list, prev);
 	}
 }
+#if IS_MODULE(CONFIG_SCSI_ERROR_TEST)
+EXPORT_SYMBOL_GPL(scsi_call_prepare_resubmit);
+#endif
 
 /**
  * scsi_eh_flush_done_q - finish processed commands or retry them.
