@@ -307,7 +307,7 @@ int ovl_permission(struct mnt_idmap *idmap,
 	 * with creds of mounter
 	 */
 	err = generic_permission(&nop_mnt_idmap, inode, mask);
-	if (err)
+	if (err || ovl_test_flag(OVL_FASTPERM, inode))
 		return err;
 
 	old_cred = ovl_override_creds(inode->i_sb);
@@ -318,6 +318,9 @@ int ovl_permission(struct mnt_idmap *idmap,
 		mask |= MAY_READ;
 	}
 	err = inode_permission(mnt_idmap(realpath.mnt), realinode, mask);
+	if (err == 0 && upperinode)
+		/* This gets set once for the upper inode lifetime */
+		ovl_set_flag(OVL_FASTPERM, inode);
 	revert_creds(old_cred);
 
 	return err;

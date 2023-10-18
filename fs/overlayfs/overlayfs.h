@@ -53,6 +53,7 @@ enum ovl_inode_flag {
 	OVL_CONST_INO,
 	OVL_HAS_DIGEST,
 	OVL_VERIFIED_DIGEST,
+	OVL_FASTPERM,
 };
 
 enum ovl_entry_flag {
