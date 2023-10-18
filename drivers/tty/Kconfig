@@ -412,6 +412,14 @@ config RPMSG_TTY
 	  To compile this driver as a module, choose M here: the module will be
 	  called rpmsg_tty.
 
+config I3C_TTY
+	tristate "tty over i3c"
+	depends on I3C
+	help
+	  Select this options if you'd like use tty over I3C master controller
+
+	  If unsure, say N
+
 endif # TTY
 
 source "drivers/tty/serdev/Kconfig"
