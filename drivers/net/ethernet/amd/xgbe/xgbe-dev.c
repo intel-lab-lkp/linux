@@ -1176,8 +1176,17 @@ static int xgbe_read_mmd_regs_v2(struct xgbe_prv_data *pdata, int prtad,
 	offset = pdata->xpcs_window + (mmd_address & pdata->xpcs_window_mask);
 
 	spin_lock_irqsave(&pdata->xpcs_lock, flags);
-	XPCS32_IOWRITE(pdata, pdata->xpcs_window_sel_reg, index);
-	mmd_data = XPCS16_IOREAD(pdata, offset);
+	if (pdata->vdata->is_crater) {
+		amd_smn_write(0,
+			      (pdata->xphy_base + pdata->xpcs_window_sel_reg),
+			      index);
+		amd_smn_read(0, pdata->xphy_base + offset, &mmd_data);
+		mmd_data = (offset % ALIGNMENT_VAL) ?
+			   ((mmd_data >> 16) & 0xffff) : (mmd_data & 0xffff);
+	} else {
+		XPCS32_IOWRITE(pdata, pdata->xpcs_window_sel_reg, index);
+		mmd_data = XPCS16_IOREAD(pdata, offset);
+	}
 	spin_unlock_irqrestore(&pdata->xpcs_lock, flags);
 
 	return mmd_data;
@@ -1186,8 +1195,8 @@ static int xgbe_read_mmd_regs_v2(struct xgbe_prv_data *pdata, int prtad,
 static void xgbe_write_mmd_regs_v2(struct xgbe_prv_data *pdata, int prtad,
 				   int mmd_reg, int mmd_data)
 {
+	unsigned int mmd_address, index, offset, crtr_mmd_data;
 	unsigned long flags;
-	unsigned int mmd_address, index, offset;
 
 	if (mmd_reg & XGBE_ADDR_C45)
 		mmd_address = mmd_reg & ~XGBE_ADDR_C45;
@@ -1208,8 +1217,22 @@ static void xgbe_write_mmd_regs_v2(struct xgbe_prv_data *pdata, int prtad,
 	offset = pdata->xpcs_window + (mmd_address & pdata->xpcs_window_mask);
 
 	spin_lock_irqsave(&pdata->xpcs_lock, flags);
-	XPCS32_IOWRITE(pdata, pdata->xpcs_window_sel_reg, index);
-	XPCS16_IOWRITE(pdata, offset, mmd_data);
+	if (pdata->vdata->is_crater) {
+		amd_smn_write(0, (pdata->xphy_base + pdata->xpcs_window_sel_reg), index);
+		amd_smn_read(0, pdata->xphy_base + offset, &crtr_mmd_data);
+		if (offset % ALIGNMENT_VAL) {
+			crtr_mmd_data &= ~GENMASK(31, 16);
+			crtr_mmd_data |=  (mmd_data << 16);
+		} else {
+			crtr_mmd_data &= ~GENMASK(15, 0);
+			crtr_mmd_data |=  (mmd_data);
+		}
+		amd_smn_write(0, (pdata->xphy_base + pdata->xpcs_window_sel_reg), index);
+		amd_smn_write(0, (pdata->xphy_base + offset), crtr_mmd_data);
+	} else {
+		XPCS32_IOWRITE(pdata, pdata->xpcs_window_sel_reg, index);
+		XPCS16_IOWRITE(pdata, offset, mmd_data);
+	}
 	spin_unlock_irqrestore(&pdata->xpcs_lock, flags);
 }
 

@@ -133,6 +133,7 @@
 #include <linux/dcache.h>
 #include <linux/ethtool.h>
 #include <linux/list.h>
+#include <asm/amd_nb.h>
 
 #define XGBE_DRV_NAME		"amd-xgbe"
 #define XGBE_DRV_DESC		"AMD 10 Gigabit Ethernet Driver"
@@ -304,6 +305,9 @@
 
 /* MDIO port types */
 #define XGMAC_MAX_C22_PORT		3
+
+ /* offset alignment */
+#define ALIGNMENT_VAL			4
 
 /* Link mode bit operations */
 #define XGBE_ZERO_SUP(_ls)		\
@@ -1046,6 +1050,7 @@ struct xgbe_version_data {
 	unsigned int rx_desc_prefetch;
 	unsigned int an_cdr_workaround;
 	unsigned int enable_rrc;
+	bool is_crater;
 };
 
 struct xgbe_prv_data {
@@ -1056,6 +1061,7 @@ struct xgbe_prv_data {
 	struct device *dev;
 	struct platform_device *phy_platdev;
 	struct device *phy_dev;
+	unsigned int xphy_base;
 
 	/* Version related data */
 	struct xgbe_version_data *vdata;

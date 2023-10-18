@@ -279,15 +279,21 @@ static int xgbe_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		pdata->xpcs_window_def_reg = PCS_V2_RV_WINDOW_DEF;
 		pdata->xpcs_window_sel_reg = PCS_V2_RV_WINDOW_SELECT;
 	} else if (rdev && (rdev->vendor == PCI_VENDOR_ID_AMD) &&
-		   (rdev->device == 0x14b5)) {
-		pdata->xpcs_window_def_reg = PCS_V2_YC_WINDOW_DEF;
-		pdata->xpcs_window_sel_reg = PCS_V2_YC_WINDOW_SELECT;
-
-		/* Yellow Carp devices do not need cdr workaround */
+		   ((rdev->device == 0x14b5) || (rdev->device == 0x1630))) {
+		/* Yellow Carp and Crater devices
+		 * do not need cdr workaround and RRC
+		 */
 		pdata->vdata->an_cdr_workaround = 0;
-
-		/* Yellow Carp devices do not need rrc */
 		pdata->vdata->enable_rrc = 0;
+
+		if (rdev->device == 0x1630) {
+			pdata->xpcs_window_def_reg = PCS_V2_RN_WINDOW_DEF;
+			pdata->xpcs_window_sel_reg = PCS_V2_RN_WINDOW_SELECT;
+			pdata->vdata->is_crater = true;
+		} else {
+			pdata->xpcs_window_def_reg = PCS_V2_YC_WINDOW_DEF;
+			pdata->xpcs_window_sel_reg = PCS_V2_YC_WINDOW_SELECT;
+		}
 	} else {
 		pdata->xpcs_window_def_reg = PCS_V2_WINDOW_DEF;
 		pdata->xpcs_window_sel_reg = PCS_V2_WINDOW_SELECT;
@@ -295,7 +301,17 @@ static int xgbe_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	pci_dev_put(rdev);
 
 	/* Configure the PCS indirect addressing support */
-	reg = XPCS32_IOREAD(pdata, pdata->xpcs_window_def_reg);
+	if (pdata->vdata->is_crater) {
+		reg = XP_IOREAD(pdata, XP_PROP_0);
+		pdata->xphy_base = PCS_RN_SMN_BASE_ADDR +
+				   (PCS_RN_PORT_ADDR_SIZE *
+				    XP_GET_BITS(reg, XP_PROP_0, PORT_ID));
+		if (netif_msg_probe(pdata))
+			dev_dbg(dev, "xphy_base = %#08x\n", pdata->xphy_base);
+		amd_smn_read(0, pdata->xphy_base + (pdata->xpcs_window_def_reg), &reg);
+	} else {
+		reg = XPCS32_IOREAD(pdata, pdata->xpcs_window_def_reg);
+	}
 	pdata->xpcs_window = XPCS_GET_BITS(reg, PCS_V2_WINDOW_DEF, OFFSET);
 	pdata->xpcs_window <<= 6;
 	pdata->xpcs_window_size = XPCS_GET_BITS(reg, PCS_V2_WINDOW_DEF, SIZE);
