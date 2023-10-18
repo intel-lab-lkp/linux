@@ -141,14 +141,14 @@ void mpls_stats_inc_outucastpkts(struct net_device *dev,
 					   tx_packets,
 					   tx_bytes);
 	} else if (skb->protocol == htons(ETH_P_IP)) {
-		IP_UPD_PO_STATS(dev_net(dev), IPSTATS_MIB_OUT, skb->len);
+		IP_INC_STATS(dev_net(dev), IPSTATS_MIB_OUTREQUESTS);
 #if IS_ENABLED(CONFIG_IPV6)
 	} else if (skb->protocol == htons(ETH_P_IPV6)) {
 		struct inet6_dev *in6dev = __in6_dev_get(dev);
 
 		if (in6dev)
-			IP6_UPD_PO_STATS(dev_net(dev), in6dev,
-					 IPSTATS_MIB_OUT, skb->len);
+			IP6_INC_STATS(dev_net(dev), in6dev,
+				      IPSTATS_MIB_OUTREQUESTS);
 #endif
 	}
 }
