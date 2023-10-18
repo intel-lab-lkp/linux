@@ -1485,7 +1485,9 @@ static void blk_mq_requeue_work(struct work_struct *work)
 			blk_mq_request_bypass_insert(rq, 0);
 		} else {
 			list_del_init(&rq->queuelist);
-			blk_mq_insert_request(rq, BLK_MQ_INSERT_AT_HEAD);
+			blk_mq_insert_request(rq,
+					      !blk_rq_is_seq_zoned_write(rq) ?
+					      BLK_MQ_INSERT_AT_HEAD : 0);
 		}
 	}
 
