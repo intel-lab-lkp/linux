@@ -118,9 +118,25 @@ static u64 native_steal_clock(int cpu)
 DEFINE_STATIC_CALL(pv_steal_clock, native_steal_clock);
 DEFINE_STATIC_CALL(pv_sched_clock, native_sched_clock);
 
-void paravirt_set_sched_clock(u64 (*func)(void))
+static bool no_pv_sched_clock;
+
+static int __init parse_no_pv_sched_clock(char *arg)
 {
+	no_pv_sched_clock = true;
+	return 0;
+}
+early_param("no_pv_sched_clock", parse_no_pv_sched_clock);
+
+int paravirt_set_sched_clock(u64 (*func)(void))
+{
+	if (no_pv_sched_clock) {
+		pr_info("sched_clock: not configurable\n");
+		return -EPERM;
+	}
+
 	static_call_update(pv_sched_clock, func);
+
+	return 0;
 }
 
 /* These are in entry.S */
