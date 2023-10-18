@@ -311,8 +311,8 @@ static int coproc_ioc_tx_win_open(struct file *fp, unsigned long arg)
 	txwin = cp_inst->coproc->vops->open_win(uattr.vas_id, uattr.flags,
 						cp_inst->coproc->cop_type);
 	if (IS_ERR(txwin)) {
-		pr_err("%s() VAS window open failed, %ld\n", __func__,
-				PTR_ERR(txwin));
+		pr_err_ratelimited("%s() VAS window open failed, %ld\n",
+				__func__, PTR_ERR(txwin));
 		return PTR_ERR(txwin);
 	}
 
