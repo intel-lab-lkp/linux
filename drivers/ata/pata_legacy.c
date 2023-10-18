@@ -579,12 +579,19 @@ static void opti82c46x_set_piomode(struct ata_port *ap, struct ata_device *adev)
 	clock = 1000000000 / khz[sysclk];
 
 	/* Get the timing data in cycles */
-	ata_timing_compute(adev, adev->pio_mode, &t, clock, 1000);
+	if (ata_timing_compute(adev, adev->pio_mode, &t, clock, 1000)) {
+		dev_err(ap->dev, "adev: unknown mode %d\n", adev->pio_mode);
+		return;
+	}
 
 	/* Setup timing is shared */
 	if (pair) {
 		struct ata_timing tp;
-		ata_timing_compute(pair, pair->pio_mode, &tp, clock, 1000);
+
+		if (ata_timing_compute(pair, pair->pio_mode, &tp, clock, 1000)) {
+			dev_err(ap->dev, "pair: unknown mode %d\n", pair->pio_mode);
+			return;
+		}
 
 		ata_timing_merge(&t, &tp, &t, ATA_TIMING_SETUP);
 	}
