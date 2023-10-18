@@ -658,12 +658,13 @@ static int virtio_vsock_probe(struct virtio_device *vdev)
 		vsock->seqpacket_allow = true;
 
 	vdev->priv = vsock;
+	rcu_assign_pointer(the_virtio_vsock, vsock);
 
 	ret = virtio_vsock_vqs_init(vsock);
-	if (ret < 0)
+	if (ret < 0) {
+		rcu_assign_pointer(the_virtio_vsock, NULL);
 		goto out;
-
-	rcu_assign_pointer(the_virtio_vsock, vsock);
+	}
 
 	mutex_unlock(&the_virtio_vsock_mutex);
 
