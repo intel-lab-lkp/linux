@@ -191,28 +191,35 @@ void set_ptes(struct mm_struct *mm, unsigned long addr, pte_t *ptep,
 		pte_t pte, unsigned int nr)
 {
 	/*
-	 * Make sure hardware valid bit is not set. We don't do
-	 * tlb flush for this update.
+	 * We don't need to call arch_enter/leave_lazy_mmu_mode()
+	 * because we expect set_ptes to be only be used on not present
+	 * and not hw_valid ptes. Hence there is not translation cache flush
+	 * involved that need to be batched.
 	 */
-	VM_WARN_ON(pte_hw_valid(*ptep) && !pte_protnone(*ptep));
-
-	/* Note: mm->context.id might not yet have been assigned as
-	 * this context might not have been activated yet when this
-	 * is called.
-	 */
-	pte = set_pte_filter(pte);
-
-	/* Perform the setting of the PTE */
-	arch_enter_lazy_mmu_mode();
 	for (;;) {
+
+		/*
+		 * Make sure hardware valid bit is not set. We don't do
+		 * tlb flush for this update.
+		 */
+		VM_WARN_ON(pte_hw_valid(*ptep) && !pte_protnone(*ptep));
+
+		/* Note: mm->context.id might not yet have been assigned as
+		 * this context might not have been activated yet when this
+		 * is called.
+		 */
+		pte = set_pte_filter(pte);
+
+		/* Perform the setting of the PTE */
 		__set_pte_at(mm, addr, ptep, pte, 0);
 		if (--nr == 0)
 			break;
 		ptep++;
-		pte = __pte(pte_val(pte) + (1UL << PTE_RPN_SHIFT));
 		addr += PAGE_SIZE;
+		/* increment the pfn */
+		pte = __pte(pte_val(pte) + PAGE_SIZE);
+
 	}
-	arch_leave_lazy_mmu_mode();
 }
 
 void unmap_kernel_page(unsigned long va)
