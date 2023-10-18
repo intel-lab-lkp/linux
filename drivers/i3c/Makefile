@@ -5,3 +5,4 @@ obj-$(CONFIG_I3C)		+= master/
 obj-$(CONFIG_I3C_SLAVE)		+= slave.o
 obj-$(CONFIG_I3C_SLAVE_CONFIGFS)	+= i3c-cfs.o
 obj-$(CONFIG_I3C_SLAVE)		+= slave/
+obj-$(CONFIG_I3C_SLAVE)		+= func/

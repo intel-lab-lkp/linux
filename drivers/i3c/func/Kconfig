@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: GPL-2.0
+
+config I3C_SLAVE_FUNC_TTY
+	tristate "PCI Endpoint Test driver"
+	depends on I3C_SLAVE
+	help
+	  I3C Slave TTY Function Driver.
+
+	  General TTY over I3C slave controller function drivers.
