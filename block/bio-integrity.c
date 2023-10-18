@@ -91,6 +91,19 @@ err:
 }
 EXPORT_SYMBOL(bio_integrity_alloc);
 
+static void bio_integrity_unmap_user(struct bio_integrity_payload *bip)
+{
+	bool dirty = bio_data_dir(bip->bip_bio) == READ;
+	struct bvec_iter iter;
+	struct bio_vec bv;
+
+	bip_for_each_vec(bv, bip, iter) {
+		if (dirty && !PageCompound(bv.bv_page))
+			set_page_dirty_lock(bv.bv_page);
+		unpin_user_page(bv.bv_page);
+	}
+}
+
 /**
  * bio_integrity_free - Free bio integrity payload
  * @bio:	bio containing bip to be freed
@@ -105,6 +118,8 @@ void bio_integrity_free(struct bio *bio)
 
 	if (bip->bip_flags & BIP_BLOCK_INTEGRITY)
 		kfree(bvec_virt(bip->bip_vec));
+	else if (bip->bip_flags & BIP_INTEGRITY_USER)
+		bio_integrity_unmap_user(bip);;
 
 	__bio_integrity_free(bs, bip);
 	bio->bi_integrity = NULL;
@@ -159,6 +174,58 @@ int bio_integrity_add_page(struct bio *bio, struct page *page,
 	return len;
 }
 EXPORT_SYMBOL(bio_integrity_add_page);
+
+int bio_integrity_map_user(struct bio *bio, void __user *ubuf, unsigned int len,
+			   u32 seed, u32 maxvecs)
+{
+	struct request_queue *q = bdev_get_queue(bio->bi_bdev);
+	unsigned long align = q->dma_pad_mask | queue_dma_alignment(q);
+	struct page *stack_pages[UIO_FASTIOV];
+	size_t offset = offset_in_page(ubuf);
+	unsigned long ptr = (uintptr_t)ubuf;
+	struct page **pages = stack_pages;
+	struct bio_integrity_payload *bip;
+	int npages, ret, i;
+
+	if (bio_integrity(bio) || ptr & align || maxvecs > UIO_FASTIOV)
+		return -EINVAL;
+
+	bip = bio_integrity_alloc(bio, GFP_KERNEL, maxvecs);
+	if (IS_ERR(bip))
+		return PTR_ERR(bip);
+
+	ret = pin_user_pages_fast(ptr, UIO_FASTIOV, FOLL_WRITE, pages);
+	if (unlikely(ret < 0))
+		goto free_bip;
+
+	npages = ret;
+	for (i = 0; i < npages; i++) {
+		u32 bytes = min_t(u32, len, PAGE_SIZE - offset);
+		ret = bio_integrity_add_page(bio, pages[i], bytes, offset);
+		if (ret != bytes) {
+			ret = -EINVAL;
+			goto release_pages;
+		}
+		len -= ret;
+		offset = 0;
+	}
+
+	if (len) {
+		ret = -EINVAL;
+		goto release_pages;
+	}
+
+	bip->bip_iter.bi_sector = seed;
+	bip->bip_flags |= BIP_INTEGRITY_USER;
+	return 0;
+
+release_pages:
+	unpin_user_pages(pages, npages);
+free_bip:
+	bio_integrity_free(bio);
+	return ret;
+}
+EXPORT_SYMBOL(bio_integrity_map_user);
 
 /**
  * bio_integrity_process - Process integrity metadata for a bio
