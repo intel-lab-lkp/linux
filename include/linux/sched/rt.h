@@ -54,6 +54,6 @@ extern void normalize_rt_tasks(void);
  * default timeslice is 100 msecs (used only for SCHED_RR tasks).
  * Timeslices get refilled after they expire.
  */
-#define RR_TIMESLICE		(100 * HZ / 1000)
+#define RR_TIMESLICE		(100)
 
 #endif /* _LINUX_SCHED_RT_H */

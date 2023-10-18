@@ -93,7 +93,7 @@ struct task_struct init_task
 	},
 	.rt		= {
 		.run_list	= LIST_HEAD_INIT(init_task.rt.run_list),
-		.time_slice	= RR_TIMESLICE,
+		.time_slice	= (RR_TIMESLICE * HZ) / MSEC_PER_SEC,
 	},
 	.tasks		= LIST_HEAD_INIT(init_task.tasks),
 #ifdef CONFIG_SMP
