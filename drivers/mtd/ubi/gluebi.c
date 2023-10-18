@@ -85,6 +85,7 @@ static int gluebi_get_device(struct mtd_info *mtd)
 {
 	struct gluebi_device *gluebi;
 	int ubi_mode = UBI_READONLY;
+	struct ubi_volume_desc *vdesc;
 
 	if (mtd->flags & MTD_WRITEABLE)
 		ubi_mode = UBI_READWRITE;
@@ -109,12 +110,14 @@ static int gluebi_get_device(struct mtd_info *mtd)
 	 * This is the first reference to this UBI volume via the MTD device
 	 * interface. Open the corresponding volume in read-write mode.
 	 */
-	gluebi->desc = ubi_open_volume(gluebi->ubi_num, gluebi->vol_id,
+	vdesc = ubi_open_volume(gluebi->ubi_num, gluebi->vol_id,
 				       ubi_mode);
-	if (IS_ERR(gluebi->desc)) {
+	if (IS_ERR(vdesc)) {
+		gluebi->desc = NULL;
 		mutex_unlock(&devices_mutex);
-		return PTR_ERR(gluebi->desc);
+		return PTR_ERR(vdesc);
 	}
+	gluebi->desc = vdesc;
 	gluebi->refcnt += 1;
 	mutex_unlock(&devices_mutex);
 	return 0;
@@ -134,8 +137,10 @@ static void gluebi_put_device(struct mtd_info *mtd)
 	gluebi = container_of(mtd, struct gluebi_device, mtd);
 	mutex_lock(&devices_mutex);
 	gluebi->refcnt -= 1;
-	if (gluebi->refcnt == 0)
+	if (gluebi->refcnt == 0) {
 		ubi_close_volume(gluebi->desc);
+		gluebi->desc = NULL;
+	}
 	mutex_unlock(&devices_mutex);
 }
 
@@ -154,9 +159,26 @@ static int gluebi_read(struct mtd_info *mtd, loff_t from, size_t len,
 		       size_t *retlen, unsigned char *buf)
 {
 	int err = 0, lnum, offs, bytes_left;
-	struct gluebi_device *gluebi;
+	struct gluebi_device *gluebi = container_of(mtd, struct gluebi_device,
+						    mtd);
+	int no_desc = gluebi->desc == NULL ? 1 : 0;
 
-	gluebi = container_of(mtd, struct gluebi_device, mtd);
+	/**
+	 * In normal case, the UBI volume desc has been initialized by
+	 * ->_get_device(). However, in the ftl notifier process, the
+	 * ->_get_device() is not executed in advance and the MTD device
+	 * is directly scanned which cause NULL pointer dereference.
+	 * Therefore, try to get the MTD device here.
+	 */
+	if (unlikely(no_desc)) {
+		err = __get_mtd_device(mtd);
+		if (err) {
+			err_msg("cannot get MTD device %d, UBI device %d, volume %d, error %d",
+				mtd->index, gluebi->ubi_num, gluebi->vol_id, err);
+			return err;
+		}
+	}
+
 	lnum = div_u64_rem(from, mtd->erasesize, &offs);
 	bytes_left = len;
 	while (bytes_left) {
@@ -176,6 +198,9 @@ static int gluebi_read(struct mtd_info *mtd, loff_t from, size_t len,
 	}
 
 	*retlen = len - bytes_left;
+
+	if (unlikely(no_desc))
+		__put_mtd_device(mtd);
 	return err;
 }
 
