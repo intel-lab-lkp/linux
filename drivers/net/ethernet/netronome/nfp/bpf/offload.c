@@ -598,8 +598,7 @@ int nfp_net_bpf_offload(struct nfp_net *nn, struct bpf_prog *prog,
 	if (old_prog && !prog)
 		return nfp_net_bpf_stop(nn);
 
-	err = nfp_net_bpf_load(nn, prog, extack);
-	if (err)
+	if (prog && (err = nfp_net_bpf_load(nn, prog, extack)))
 		return err;
 
 	if (!old_prog)
