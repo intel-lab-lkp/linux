@@ -897,7 +897,13 @@ asmlinkage void noinstr el0t_32_error_handler(struct pt_regs *regs)
 		__el0_error_handler_common(regs);
 }
 
-bool __aarch32_enabled __ro_after_init = true;
+bool __aarch32_enabled __ro_after_init = !IS_ENABLED(CONFIG_AARCH32_EMULATION_DEFAULT_DISABLED);
+
+static int aarch32_emulation_override_cmdline(char *arg)
+{
+	return kstrtobool(arg, &__aarch32_enabled);
+}
+early_param("aarch32_emulation", aarch32_emulation_override_cmdline);
 #else /* CONFIG_COMPAT */
 UNHANDLED(el0t, 32, sync)
 UNHANDLED(el0t, 32, irq)

@@ -1725,6 +1725,15 @@ config SETEND_EMULATION
 	  If unsure, say Y
 endif # ARMV8_DEPRECATED
 
+config AARCH32_EMULATION_DEFAULT_DISABLED
+	bool "Aarch32 emulation disabled by default"
+	default n
+	depends on COMPAT
+	help
+	  Make Aarch32 emulation disabled by default. This prevents loading 32-bit
+	  processes and access to 32-bit syscalls.
+
+	  If unsure, leave it to its default value.
 endif # COMPAT
 
 menu "ARMv8.1 architectural features"

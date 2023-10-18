@@ -1,3 +1,10 @@
+	aarch32_emulation=	[ARM64]
+			Format: <bool>
+			When true, allows loading 32-bit programs and executing
+			32-bit syscalls, essentially overriding
+			AARCH32_EMULATION_DEFAULT_DISABLED at boot time. when false,
+			unconditionally disables AARCH32 emulation.
+
 	acpi=		[HW,ACPI,X86,ARM64,RISCV64]
 			Advanced Configuration and Power Interface
 			Format: { force | on | off | strict | noirq | rsdt |
