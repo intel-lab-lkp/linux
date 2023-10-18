@@ -877,6 +877,8 @@ asmlinkage void noinstr el0t_32_error_handler(struct pt_regs *regs)
 {
 	__el0_error_handler_common(regs);
 }
+
+bool __aarch32_enabled __ro_after_init = true;
 #else /* CONFIG_COMPAT */
 UNHANDLED(el0t, 32, sync)
 UNHANDLED(el0t, 32, irq)

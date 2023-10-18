@@ -98,11 +98,23 @@ static inline int is_compat_thread(struct thread_info *thread)
 
 long compat_arm_syscall(struct pt_regs *regs, int scno);
 
+extern bool __aarch32_enabled;
+
+static inline bool aarch32_enabled(void)
+{
+	return __aarch32_enabled;
+}
+
 #else /* !CONFIG_COMPAT */
 
 static inline int is_compat_thread(struct thread_info *thread)
 {
 	return 0;
+}
+
+static inline bool aarch32_enabled(void)
+{
+	return false;
 }
 
 #endif /* CONFIG_COMPAT */
