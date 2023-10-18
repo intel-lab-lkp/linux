@@ -384,6 +384,30 @@ int generic_encode_ino32_fh(struct inode *inode, __u32 *fh, int *max_len,
 EXPORT_SYMBOL_GPL(generic_encode_ino32_fh);
 
 /**
+ * exportfs_encode_ino64_fid - encode non-decodeable 64bit ino file id
+ * @inode:   the object to encode
+ * @fid:     where to store the file handle fragment
+ * @max_len: maximum length to store there
+ *
+ * This generic function is used to encode a non-decodeable file id for
+ * fanotify for filesystems that do not support NFS export.
+ */
+static int exportfs_encode_ino64_fid(struct inode *inode, struct fid *fid,
+				     int *max_len)
+{
+	if (*max_len < 3) {
+		*max_len = 3;
+		return FILEID_INVALID;
+	}
+
+	fid->i64.ino = inode->i_ino;
+	fid->i64.gen = inode->i_generation;
+	*max_len = 3;
+
+	return FILEID_INO64_GEN;
+}
+
+/**
  * exportfs_encode_inode_fh - encode a file handle from inode
  * @inode:   the object to encode
  * @fid:     where to store the file handle fragment
@@ -401,10 +425,10 @@ int exportfs_encode_inode_fh(struct inode *inode, struct fid *fid,
 	if (!exportfs_can_encode_fh(nop, flags))
 		return -EOPNOTSUPP;
 
-	if (nop && nop->encode_fh)
-		return nop->encode_fh(inode, fid->raw, max_len, parent);
+	if (!nop && (flags & EXPORT_FH_FID))
+		return exportfs_encode_ino64_fid(inode, fid, max_len);
 
-	return -EOPNOTSUPP;
+	return nop->encode_fh(inode, fid->raw, max_len, parent);
 }
 EXPORT_SYMBOL_GPL(exportfs_encode_inode_fh);
 
