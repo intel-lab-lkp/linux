@@ -2,3 +2,8 @@ config SCSI_ERROR_TEST
 	tristate "scsi_error.c unit tests" if !KUNIT_ALL_TESTS
 	depends on SCSI && KUNIT
 	default KUNIT_ALL_TESTS
+
+config SD_TEST
+	tristate "sd.c unit tests" if !KUNIT_ALL_TESTS
+	depends on SCSI && BLK_DEV_SD && KUNIT
+	default KUNIT_ALL_TESTS
