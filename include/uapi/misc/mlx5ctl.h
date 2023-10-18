@@ -24,6 +24,14 @@ struct mlx5ctl_cmdrpc {
 	__aligned_u64 flags;
 };
 
+struct mlx5ctl_umem_reg {
+	__aligned_u64 addr; /* user address */
+	__aligned_u64 len; /* user buffer length */
+	__aligned_u64 flags;
+	__u32 umem_id; /* returned device's umem ID */
+	__u32 reserved[7];
+};
+
 #define MLX5CTL_MAX_RPC_SIZE 8192
 
 #define MLX5CTL_IOCTL_MAGIC 0x5c
@@ -33,5 +41,11 @@ struct mlx5ctl_cmdrpc {
 
 #define MLX5CTL_IOCTL_CMDRPC \
 	_IOWR(MLX5CTL_IOCTL_MAGIC, 0x1, struct mlx5ctl_cmdrpc)
+
+#define MLX5CTL_IOCTL_UMEM_REG \
+	_IOWR(MLX5CTL_IOCTL_MAGIC, 0x2, struct mlx5ctl_umem_reg)
+
+#define MLX5CTL_IOCTL_UMEM_UNREG \
+	_IOWR(MLX5CTL_IOCTL_MAGIC, 0x3, unsigned long)
 
 #endif /* __MLX5CTL_IOCTL_H__ */

@@ -12,6 +12,8 @@
 #include <linux/atomic.h>
 #include <linux/refcount.h>
 
+#include "umem.h"
+
 MODULE_DESCRIPTION("mlx5 ConnectX control misc driver");
 MODULE_AUTHOR("Saeed Mahameed <saeedm@nvidia.com>");
 MODULE_LICENSE("Dual BSD/GPL");
@@ -30,6 +32,8 @@ struct mlx5ctl_fd {
 	u16 uctx_uid;
 	u32 uctx_cap;
 	u32 ucap; /* user cap */
+
+	struct mlx5ctl_umem_db *umem_db;
 	struct mlx5ctl_dev *mcdev;
 	struct list_head list;
 };
@@ -115,6 +119,12 @@ static int mlx5ctl_open_mfd(struct mlx5ctl_fd *mfd)
 	if (uid < 0)
 		return uid;
 
+	mfd->umem_db = mlx5ctl_umem_db_create(mdev, uid);
+	if (IS_ERR(mfd->umem_db)) {
+		mlx5ctl_release_uid(mcdev, uid);
+		return PTR_ERR(mfd->umem_db);
+	}
+
 	mfd->uctx_uid = uid;
 	mfd->uctx_cap = cap;
 	mfd->ucap = ucap;
@@ -129,6 +139,7 @@ static void mlx5ctl_release_mfd(struct mlx5ctl_fd *mfd)
 {
 	struct mlx5ctl_dev *mcdev = mfd->mcdev;
 
+	mlx5ctl_umem_db_destroy(mfd->umem_db);
 	mlx5ctl_release_uid(mcdev,  mfd->uctx_uid);
 }
 
@@ -322,6 +333,36 @@ out:
 	return err;
 }
 
+static ssize_t mlx5ctl_ioctl_umem_reg(struct file *file, unsigned long arg)
+{
+	struct mlx5ctl_fd *mfd = file->private_data;
+	struct mlx5ctl_umem_reg umem_reg;
+	int umem_id;
+
+	if (copy_from_user(&umem_reg, (void __user *)arg, sizeof(umem_reg)))
+		return -EFAULT;
+
+	umem_id = mlx5ctl_umem_reg(mfd->umem_db, (unsigned long)umem_reg.addr, umem_reg.len);
+	if (umem_id < 0)
+		return umem_id;
+
+	umem_reg.umem_id = umem_id;
+
+	if (copy_to_user((void __user *)arg, &umem_reg, sizeof(umem_reg))) {
+		mlx5ctl_umem_unreg(mfd->umem_db, umem_id);
+		return -EFAULT;
+	}
+
+	return 0;
+}
+
+static size_t mlx5ctl_ioctl_umem_unreg(struct file *file, unsigned long arg)
+{
+	struct mlx5ctl_fd *mfd = file->private_data;
+
+	return mlx5ctl_umem_unreg(mfd->umem_db, (u32)arg);
+}
+
 static ssize_t mlx5ctl_ioctl(struct file *file, unsigned int cmd,
 			     unsigned long arg)
 {
@@ -350,6 +391,14 @@ static ssize_t mlx5ctl_ioctl(struct file *file, unsigned int cmd,
 
 	case MLX5CTL_IOCTL_CMDRPC:
 		err = mlx5ctl_cmdrpc_ioctl(file, argp, size);
+		break;
+
+	case MLX5CTL_IOCTL_UMEM_REG:
+		err = mlx5ctl_ioctl_umem_reg(file, arg);
+		break;
+
+	case MLX5CTL_IOCTL_UMEM_UNREG:
+		err = mlx5ctl_ioctl_umem_unreg(file, arg);
 		break;
 
 	default:
