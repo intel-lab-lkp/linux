@@ -409,6 +409,24 @@ static void icl_get_stolen_reserved(struct drm_i915_private *i915,
 		*base -= *size;
 	else
 		*base = reg_val & GEN11_STOLEN_RESERVED_ADDR_MASK;
+
+	/* Wa_14019821291*/
+	if (IS_MEDIA_GT_IP_STEP(i915->media_gt, IP_VER(13, 0), STEP_A0, STEP_C0)) {
+		/*
+		 * This workaround is primarily implemented by the BIOS.  We
+		 * just need to figure out whether the BIOS has applied the
+		 * workaround (meaning the programmed address falls within
+		 * the DSM) and, if so, reserve that part of the DSM to
+		 * prevent accidental reuse.  The DSM location should be just
+		 * below the WOPCM.
+		 */
+
+		u64 gscpsmi_base = intel_uncore_read64_2x32(uncore,
+							    MTL_GSCPSMI_BASEADDR_LSB,
+							    MTL_GSCPSMI_BASEADDR_MSB);
+		if (gscpsmi_base >= *base && gscpsmi_base < *base + *size)
+			*size = gscpsmi_base - *base;
+	}
 }
 
 /*
