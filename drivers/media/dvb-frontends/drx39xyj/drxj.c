@@ -2136,9 +2136,13 @@ int drxj_dap_atomic_read_write_block(struct i2c_device_addr *dev_addr,
 
 			word = ((u16) data[2 * i]);
 			word += (((u16) data[(2 * i) + 1]) << 8);
-			drxj_dap_write_reg16(dev_addr,
-					     (DRXJ_HI_ATOMIC_BUF_START + i),
-					    word, 0);
+			rc = drxj_dap_write_reg16(dev_addr,
+						 (DRXJ_HI_ATOMIC_BUF_START + i),
+						  word, 0);
+			if (rc < 0) {
+				pr_err("error %d\n", rc);
+				goto rw_error;
+			}
 		}
 	}
 
