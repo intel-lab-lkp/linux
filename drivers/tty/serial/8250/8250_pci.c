@@ -1970,6 +1970,12 @@ pci_sunix_setup(struct serial_private *priv,
 
 #define MOXA_GPIO_PIN2	BIT(2)
 
+#define MOXA_RS232	0x00
+#define MOXA_RS422	0x01
+#define MOXA_RS485_4W	0x0B
+#define MOXA_RS485_2W	0x0F
+#define MOXA_UIR_OFFSET	0x04
+
 static bool pci_moxa_is_mini_pcie(unsigned short device)
 {
 	if (device == PCI_DEVICE_ID_MOXA_CP102N	||
@@ -1983,13 +1989,59 @@ static bool pci_moxa_is_mini_pcie(unsigned short device)
 	return false;
 }
 
+/*
+ * The second digit of the MOXA PCIe device ID in hexadecimal indicates
+ * which serial interface modes this board supports:
+ *
+ *	0x*0** - RS232
+ *	0x*1** - RS232/RS422/RS485
+ *	0x*3** - RS422/RS485
+ *	0x*6** - RS232
+ */
+static bool pci_moxa_match_second_digit(unsigned short device,
+					unsigned short pattern)
+{
+	return (device & 0x0F00) == pattern;
+}
+
+static int pci_moxa_set_interface(const struct pci_dev *dev,
+				  unsigned int port_idx,
+				  u8 mode)
+{
+	resource_size_t iobar_addr = pci_resource_start(dev, 2);
+	resource_size_t UIR_addr = iobar_addr + MOXA_UIR_OFFSET + port_idx / 2;
+	u8 val;
+
+	val = inb(UIR_addr);
+
+	if (port_idx % 2) {
+		val &= 0x0F;
+		val |= mode << 4;
+	} else {
+		val &= 0xF0;
+		val |= mode;
+	}
+	outb(val, UIR_addr);
+
+	return 0;
+}
+
 static int pci_moxa_init(struct pci_dev *dev)
 {
 	unsigned short device = dev->device;
 	resource_size_t iobar_addr = pci_resource_start(dev, 2);
+	unsigned int i;
 	unsigned int num_ports = (device & 0x00F0) >> 4;
 	u8 val;
 
+	/*
+	 * For the device IDs of MOXA PCIe boards match the pattern 0x*3**,
+	 * the initial default serial interface mode should be set to RS422.
+	 */
+	if (pci_moxa_match_second_digit(device, 0x0300)) {
+		for (i = 0; i < num_ports; ++i)
+			pci_moxa_set_interface(dev, i, MOXA_RS422);
+	}
 	/*
 	 * Enable hardware buffer to prevent break signal output when system boots up.
 	 * This hardware buffer is only supported on Mini PCIe series.
