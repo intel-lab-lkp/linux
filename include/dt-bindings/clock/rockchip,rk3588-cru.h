@@ -36,7 +36,7 @@
 #define PCLK_DSU			21
 #define PCLK_S_DAPLITE			22
 #define PCLK_M_DAPLITE			23
-#define MBIST_MCLK_PDM1			24
+#define PCLK_VO1GRF			24
 #define MBIST_CLK_ACDCDIG		25
 #define HCLK_I2S2_2CH			26
 #define HCLK_I2S3_2CH			27
