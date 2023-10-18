@@ -22,3 +22,29 @@ menuconfig I3C
 if I3C
 source "drivers/i3c/master/Kconfig"
 endif # I3C
+
+config I3C_SLAVE
+	bool "I3C Slave Support"
+	help
+	  Support I3C Slave Mode.
+
+	  Enable this configuration option to support configurable I3C slave.
+	  This should be enabled if the platform has a I3C controller that can
+	  operate in slave mode.
+
+	  Enabling this option will build the I3C slave library, which includes
+	  slave controller library and slave function library.
+
+	  If in doubt, say "N" to disable slave support.
+
+config I3C_SLAVE_CONFIGFS
+	bool "I3C Slave Configfs Support"
+	depends on I3C_SLAVE
+	select CONFIGFS_FS
+	help
+	  Configfs entry for slave function and controller.
+
+	  This will enable the configfs entry that can be used to configure
+	  the slave function and used to bind the function with a slave
+	  controller.
+
