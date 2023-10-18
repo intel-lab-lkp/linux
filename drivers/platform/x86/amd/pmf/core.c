@@ -395,6 +395,14 @@ static int amd_pmf_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	dev->dev = &pdev->dev;
+	err = apmf_check_smart_pc(dev);
+	if (err)
+		/*
+		 * Lets not return from here if Smart PC bit is not advertised in
+		 * the BIOS. This way, there will be some amount of power savings
+		 * to the user with static slider (if enabled).
+		 */
+		pr_err("PMF Smart PC not advertised in BIOS!:%d\n", err);
 
 	rdev = pci_get_domain_bus_and_slot(0, 0, PCI_DEVFN(0, 0));
 	if (!rdev || !pci_match_id(pmf_pci_ids, rdev)) {
@@ -474,3 +482,4 @@ module_platform_driver(amd_pmf_driver);
 
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("AMD Platform Management Framework Driver");
+MODULE_SOFTDEP("pre: amdtee");
