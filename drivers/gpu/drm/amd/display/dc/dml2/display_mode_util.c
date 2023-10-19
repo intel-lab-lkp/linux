@@ -147,7 +147,7 @@ dml_float_t dml_max(dml_float_t x, dml_float_t y)
 		return y;
 	if (y != y)
 		return x;
-if (x > y)
+	if (x > y)
 		return x;
 	else
 		return y;
