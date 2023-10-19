@@ -183,15 +183,15 @@ static void set_state(struct multi_stop_data *msdata,
 {
 	/* Reset ack counter. */
 	atomic_set(&msdata->thread_ack, msdata->num_threads);
-	smp_wmb();
-	WRITE_ONCE(msdata->state, newstate);
+	smp_store_release(&msdata->state, newstate);
 }
 
 /* Last one to ack a state moves to the next state. */
-static void ack_state(struct multi_stop_data *msdata)
+static void ack_state(struct multi_stop_data *msdata,
+		      enum multi_stop_state curstate)
 {
 	if (atomic_dec_and_test(&msdata->thread_ack))
-		set_state(msdata, msdata->state + 1);
+		set_state(msdata, curstate + 1);
 }
 
 notrace void __weak stop_machine_yield(const struct cpumask *cpumask)
@@ -242,7 +242,7 @@ static int multi_cpu_stop(void *data)
 			default:
 				break;
 			}
-			ack_state(msdata);
+			ack_state(msdata, curstate);
 		} else if (curstate > MULTI_STOP_PREPARE) {
 			/*
 			 * At this stage all other CPUs we depend on must spin
