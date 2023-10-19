@@ -27,7 +27,10 @@
 #include "of_private.h"
 
 #define MAX_RESERVED_REGIONS	64
-static struct reserved_mem reserved_mem[MAX_RESERVED_REGIONS];
+static struct reserved_mem reserved_mem_array[MAX_RESERVED_REGIONS];
+static struct reserved_mem *reserved_mem __refdata = reserved_mem_array;
+
+static int total_reserved_mem_cnt = MAX_RESERVED_REGIONS;
 static int reserved_mem_count;
 
 static int __init early_init_dt_alloc_reserved_memory_arch(phys_addr_t size,
@@ -55,6 +58,45 @@ static int __init early_init_dt_alloc_reserved_memory_arch(phys_addr_t size,
 	return err;
 }
 
+void __init update_reserved_mem_max_cnt(int max_count)
+{
+	total_reserved_mem_cnt = max_count;
+}
+
+static int alloc_reserved_mem_array(void)
+{
+	struct reserved_mem *new_array;
+	size_t alloc_size, copy_size, memset_size;
+
+	alloc_size = array_size(total_reserved_mem_cnt, sizeof(*new_array));
+	if (alloc_size == SIZE_MAX)
+		return -1;
+
+	new_array = memblock_alloc(alloc_size, SMP_CACHE_BYTES);
+	if (!new_array)
+		return -ENOMEM;
+
+	copy_size = array_size(reserved_mem_count, sizeof(*new_array));
+	if (copy_size == SIZE_MAX)
+		goto overlow_err;
+
+	if (total_reserved_mem_cnt >= reserved_mem_count)
+		memset_size = alloc_size - copy_size;
+	else
+		memset_size = copy_size - alloc_size;
+
+	memcpy(new_array, reserved_mem, copy_size);
+	memset(new_array + reserved_mem_count, 0, memset_size);
+
+	reserved_mem = new_array;
+	return 0;
+
+overlow_err:
+	memblock_free(new_array, alloc_size);
+	total_reserved_mem_cnt = MAX_RESERVED_REGIONS;
+	return -1;
+}
+
 /*
  * fdt_reserved_mem_save_node() - save fdt node for second pass initialization
  */
@@ -63,7 +105,7 @@ void __init fdt_reserved_mem_save_node(unsigned long node, const char *uname,
 {
 	struct reserved_mem *rmem = &reserved_mem[reserved_mem_count];
 
-	if (reserved_mem_count == ARRAY_SIZE(reserved_mem)) {
+	if (reserved_mem_count == total_reserved_mem_cnt) {
 		pr_err("not enough space for all defined regions.\n");
 		return;
 	}
@@ -304,9 +346,14 @@ static void __init __rmem_check_for_overlap(void)
  */
 void __init fdt_init_reserved_mem(void)
 {
-	int i;
+	int i, ret = 0;
 	bool save_only = true;
 
+	ret = alloc_reserved_mem_array();
+	if (ret) {
+		pr_err("Failed to store reserved_mem nodes in array with err: %d", ret);
+		return;
+	}
 	fdt_scan_reserved_mem(save_only);
 
 	/* check for overlapping reserved regions */

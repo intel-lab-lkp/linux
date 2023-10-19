@@ -598,7 +598,7 @@ static void save_reserved_mem_reg_nodes(unsigned long node, const char *uname)
  */
 int __init fdt_scan_reserved_mem(bool save_only)
 {
-	int node, child;
+	int node, child, count = 0;
 	const void *fdt = initial_boot_params;
 
 	node = fdt_path_offset(fdt, "/reserved-memory");
@@ -626,8 +626,13 @@ int __init fdt_scan_reserved_mem(bool save_only)
 
 		err = __reserved_mem_reserve_reg(child, uname);
 		if (err == -ENOENT && of_get_flat_dt_prop(child, "size", NULL))
-			__reserved_mem_alloc_size(child, uname);
+			err = __reserved_mem_alloc_size(child, uname);
+
+		if (err == 0)
+			count++;
 	}
+	if (!save_only)
+		update_reserved_mem_max_cnt(count);
 	return 0;
 }
 
