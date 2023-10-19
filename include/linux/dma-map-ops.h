@@ -75,6 +75,10 @@ struct dma_map_ops {
 			int nents, enum dma_data_direction dir);
 	void (*sync_sg_for_device)(struct device *dev, struct scatterlist *sg,
 			int nents, enum dma_data_direction dir);
+	void (*sync_bvecs_for_cpu)(struct device *dev, struct bio_vec *bvecs,
+			int nents, enum dma_data_direction dir);
+	void (*sync_bvecs_for_device)(struct device *dev, struct bio_vec *bvecs,
+			int nents, enum dma_data_direction dir);
 	void (*cache_sync)(struct device *dev, void *vaddr, size_t size,
 			enum dma_data_direction direction);
 	int (*dma_supported)(struct device *dev, u64 mask);

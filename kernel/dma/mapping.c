@@ -385,6 +385,34 @@ void dma_sync_sg_for_device(struct device *dev, struct scatterlist *sg,
 }
 EXPORT_SYMBOL(dma_sync_sg_for_device);
 
+void dma_sync_bvecs_for_cpu(struct device *dev, struct bio_vec *bvecs,
+			    int nelems, enum dma_data_direction dir)
+{
+	const struct dma_map_ops *ops = get_dma_ops(dev);
+
+	BUG_ON(!valid_dma_direction(dir));
+	if (dma_map_direct(dev, ops))
+		dma_direct_sync_bvecs_for_cpu(dev, bvecs, nelems, dir);
+	else if (ops->sync_bvecs_for_cpu)
+		ops->sync_bvecs_for_cpu(dev, bvecs, nelems, dir);
+	debug_dma_sync_bvecs_for_cpu(dev, bvecs, nelems, dir);
+}
+EXPORT_SYMBOL(dma_sync_bvecs_for_cpu);
+
+void dma_sync_bvecs_for_device(struct device *dev, struct bio_vec *bvecs,
+			       int nelems, enum dma_data_direction dir)
+{
+	const struct dma_map_ops *ops = get_dma_ops(dev);
+
+	BUG_ON(!valid_dma_direction(dir));
+	if (dma_map_direct(dev, ops))
+		dma_direct_sync_bvecs_for_device(dev, bvecs, nelems, dir);
+	else if (ops->sync_bvecs_for_device)
+		ops->sync_bvecs_for_device(dev, bvecs, nelems, dir);
+	debug_dma_sync_bvecs_for_device(dev, bvecs, nelems, dir);
+}
+EXPORT_SYMBOL(dma_sync_bvecs_for_device);
+
 /*
  * The whole dma_get_sgtable() idea is fundamentally unsafe - it seems
  * that the intention is to allow exporting memory allocated via the

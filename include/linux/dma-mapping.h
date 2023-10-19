@@ -126,6 +126,10 @@ void dma_sync_sg_for_cpu(struct device *dev, struct scatterlist *sg,
 		    int nelems, enum dma_data_direction dir);
 void dma_sync_sg_for_device(struct device *dev, struct scatterlist *sg,
 		       int nelems, enum dma_data_direction dir);
+void dma_sync_bvecs_for_cpu(struct device *dev, struct bio_vec *bvecs,
+			    int nelems, enum dma_data_direction dir);
+void dma_sync_bvecs_for_device(struct device *dev, struct bio_vec *bvecs,
+			       int nelems, enum dma_data_direction dir);
 void *dma_alloc_attrs(struct device *dev, size_t size, dma_addr_t *dma_handle,
 		gfp_t flag, unsigned long attrs);
 void dma_free_attrs(struct device *dev, size_t size, void *cpu_addr,
