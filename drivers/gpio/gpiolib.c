@@ -3946,18 +3946,15 @@ static struct gpio_desc *gpiod_find_by_fwnode(struct fwnode_handle *fwnode,
 	struct gpio_desc *desc = ERR_PTR(-ENOENT);
 
 	if (is_of_node(fwnode)) {
-		dev_dbg(consumer, "using DT '%pfw' for '%s' GPIO lookup\n",
-			fwnode, con_id);
+		dev_dbg(consumer, "using DT '%pfw' for GPIO lookup\n", fwnode);
 		desc = of_find_gpio(to_of_node(fwnode), con_id, idx, propname, propsize,
 				    lookupflags);
 	} else if (is_acpi_node(fwnode)) {
-		dev_dbg(consumer, "using ACPI '%pfw' for '%s' GPIO lookup\n",
-			fwnode, con_id);
+		dev_dbg(consumer, "using ACPI '%pfw' for GPIO lookup\n", fwnode);
 		desc = acpi_find_gpio(fwnode, con_id, idx, propname, propsize,
 				      flags, lookupflags);
 	} else if (is_software_node(fwnode)) {
-		dev_dbg(consumer, "using swnode '%pfw' for '%s' GPIO lookup\n",
-			fwnode, con_id);
+		dev_dbg(consumer, "using swnode '%pfw' for GPIO lookup\n", fwnode);
 		desc = swnode_find_gpio(fwnode, con_id, idx, propname, propsize,
 					lookupflags);
 	}
@@ -3993,9 +3990,11 @@ static struct gpio_desc *gpiod_find_and_request(struct device *consumer,
 	}
 
 	if (IS_ERR(desc)) {
-		dev_dbg(consumer, "No GPIO consumer %s found\n", con_id);
+		dev_dbg(consumer, "No GPIO descriptor for '%s' found\n", funcname);
 		return desc;
 	}
+
+	dev_dbg(consumer, "Found GPIO descriptor for '%s'\n", funcname);
 
 	/*
 	 * If a connection label was passed use that, else attempt to use
@@ -4015,13 +4014,13 @@ static struct gpio_desc *gpiod_find_and_request(struct device *consumer,
 		 * FIXME: Make this more sane and safe.
 		 */
 		dev_info(consumer,
-			 "nonexclusive access to GPIO for %s\n", con_id);
+			 "nonexclusive access to GPIO for %s\n", funcname);
 		return desc;
 	}
 
 	ret = gpiod_configure_flags(desc, funcname, lookupflags, flags);
 	if (ret < 0) {
-		dev_dbg(consumer, "setup of GPIO %s failed\n", con_id);
+		dev_dbg(consumer, "setup of GPIO %s failed\n", funcname);
 		gpiod_put(desc);
 		return ERR_PTR(ret);
 	}
