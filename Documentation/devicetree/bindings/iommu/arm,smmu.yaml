@@ -230,6 +230,19 @@ properties:
       enabled for any given device.
     $ref: /schemas/types.yaml#/definitions/phandle
 
+  '#address-cells':
+    const: 2
+
+  '#size-cells':
+    const: 2
+
+  ranges: true
+
+patternProperties:
+  "^tbu@[0-9a-f]+$":
+    $ref: qcom,qsmmuv500-tbu.yaml
+    description: The SMMU may include Translation Buffer Units (TBU) as subnodes
+
 required:
   - compatible
   - reg
