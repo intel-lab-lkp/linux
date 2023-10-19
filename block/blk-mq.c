@@ -1144,7 +1144,7 @@ static int blk_softirq_cpu_dead(unsigned int cpu)
 
 static void __blk_mq_complete_request_remote(void *data)
 {
-	__raise_softirq_irqoff(BLOCK_SOFTIRQ);
+	raise_softirq_no_wake(BLOCK_SOFTIRQ);
 }
 
 static inline bool blk_mq_complete_need_ipi(struct request *rq)

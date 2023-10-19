@@ -130,7 +130,7 @@ static void __latent_entropy irq_poll_softirq(struct softirq_action *h)
 	}
 
 	if (rearm)
-		__raise_softirq_irqoff(IRQ_POLL_SOFTIRQ);
+		raise_softirq_no_wake(IRQ_POLL_SOFTIRQ);
 
 	local_irq_enable();
 }
@@ -197,7 +197,7 @@ static int irq_poll_cpu_dead(unsigned int cpu)
 	local_irq_disable();
 	list_splice_init(&per_cpu(blk_cpu_iopoll, cpu),
 			 this_cpu_ptr(&blk_cpu_iopoll));
-	__raise_softirq_irqoff(IRQ_POLL_SOFTIRQ);
+	raise_softirq_no_wake(IRQ_POLL_SOFTIRQ);
 	local_irq_enable();
 	local_bh_enable();
 
