@@ -13,6 +13,7 @@
 #include <linux/limits.h>
 #include <linux/minmax.h>
 #include <linux/types.h>
+#include <asm/io.h>
 
 struct page;
 
@@ -32,6 +33,13 @@ struct bio_vec {
 	struct page	*bv_page;
 	unsigned int	bv_len;
 	unsigned int	bv_offset;
+	dma_addr_t	bv_dma_address;
+#ifdef CONFIG_NEED_SG_DMA_LENGTH
+	unsigned int	bv_dma_length;
+#endif
+#ifdef CONFIG_NEED_SG_DMA_FLAGS
+	unsigned int	bv_dma_flags;
+#endif
 };
 
 /**
@@ -72,6 +80,24 @@ static inline void bvec_set_virt(struct bio_vec *bv, void *vaddr,
 		unsigned int len)
 {
 	bvec_set_page(bv, virt_to_page(vaddr), len, offset_in_page(vaddr));
+}
+
+/**
+ * bv_phys - return physical address of a bio_vec
+ * @bv:		bio_vec
+ */
+static inline dma_addr_t bv_phys(struct bio_vec *bv)
+{
+	return page_to_phys(bv->bv_page) + bv->bv_offset;
+}
+
+/**
+ * bv_virt - return virtual address of a bio_vec
+ * @bv:		bio_vec
+ */
+static inline void *bv_virt(struct bio_vec *bv)
+{
+	return page_address(bv->bv_page) + bv->bv_offset;
 }
 
 struct bvec_iter {
@@ -279,5 +305,122 @@ static inline void *bvec_virt(struct bio_vec *bvec)
 	WARN_ON_ONCE(PageHighMem(bvec->bv_page));
 	return page_address(bvec->bv_page) + bvec->bv_offset;
 }
+
+/*
+ * These macros should be used after a dma_map_bvecs call has been done
+ * to get bus addresses of each of the bio_vec array entries and their
+ * lengths. You should work only with the number of bio_vec array entries
+ * dma_map_bvecs returns, or alternatively stop on the first bv_dma_len(bv)
+ * which is 0.
+ */
+#define bv_dma_address(bv)	((bv)->bv_dma_address)
+
+#ifdef CONFIG_NEED_SG_DMA_LENGTH
+#define bv_dma_len(bv)		((bv)->bv_dma_length)
+#else
+#define bv_dma_len(bv)		((bv)->bv_len)
+#endif
+
+/*
+ * On 64-bit architectures there is a 4-byte padding in struct scatterlist
+ * (assuming also CONFIG_NEED_SG_DMA_LENGTH is set). Use this padding for DMA
+ * flags bits to indicate when a specific dma address is a bus address or the
+ * buffer may have been bounced via SWIOTLB.
+ */
+#ifdef CONFIG_NEED_SG_DMA_FLAGS
+
+#define BV_DMA_BUS_ADDRESS	BIT(0)
+#define BV_DMA_SWIOTLB		BIT(1)
+
+/**
+ * bv_dma_is_bus_address - Return whether a given segment was marked
+ *			   as a bus address
+ * @bv:		 bio_vec array entry
+ *
+ * Description:
+ *   Returns true if bv_dma_mark_bus_address() has been called on
+ *   this bio_vec.
+ **/
+static inline bool bv_dma_is_bus_address(struct bio_vec *bv)
+{
+	return bv->bv_dma_flags & BV_DMA_BUS_ADDRESS;
+}
+
+/**
+ * bv_dma_mark_bus_address - Mark the bio_vec entry as a bus address
+ * @bv:		 bio_vec array entry
+ *
+ * Description:
+ *   Marks the passed-in bv entry to indicate that the dma_address is
+ *   a bus address and doesn't need to be unmapped. This should only be
+ *   used by dma_map_bvecs() implementations to mark bus addresses
+ *   so they can be properly cleaned up in dma_unmap_bvecs().
+ **/
+static inline void bv_dma_mark_bus_address(struct bio_vec *bv)
+{
+	bv->bv_dma_flags |= BV_DMA_BUS_ADDRESS;
+}
+
+/**
+ * bv_unmark_bus_address - Unmark the bio_vec entry as a bus address
+ * @bv:		 bio_vec array entry
+ *
+ * Description:
+ *   Clears the bus address mark.
+ **/
+static inline void bv_dma_unmark_bus_address(struct bio_vec *bv)
+{
+	bv->bv_dma_flags &= ~BV_DMA_BUS_ADDRESS;
+}
+
+/**
+ * bv_dma_is_swiotlb - Return whether the bio_vec was marked for SWIOTLB
+ *		       bouncing
+ * @bv:		bio_vec array entry
+ *
+ * Description:
+ *   Returns true if the bio_vec was marked for SWIOTLB bouncing. Not all
+ *   elements may have been bounced, so the caller would have to check
+ *   individual BV entries with is_swiotlb_buffer().
+ */
+static inline bool bv_dma_is_swiotlb(struct bio_vec *bv)
+{
+	return bv->bv_dma_flags & BV_DMA_SWIOTLB;
+}
+
+/**
+ * bv_dma_mark_swiotlb - Mark the bio_vec for SWIOTLB bouncing
+ * @bv:		bio_vec array entry
+ *
+ * Description:
+ *   Marks a a bio_vec for SWIOTLB bounce. Not all bio_vec entries may
+ *   be bounced.
+ */
+static inline void bv_dma_mark_swiotlb(struct bio_vec *bv)
+{
+	bv->bv_dma_flags |= BV_DMA_SWIOTLB;
+}
+
+#else
+
+static inline bool bv_dma_is_bus_address(struct bio_vec *bv)
+{
+	return false;
+}
+static inline void bv_dma_mark_bus_address(struct bio_vec *bv)
+{
+}
+static inline void bv_dma_unmark_bus_address(struct bio_vec *bv)
+{
+}
+static inline bool bv_dma_is_swiotlb(struct bio_vec *bv)
+{
+	return false;
+}
+static inline void bv_dma_mark_swiotlb(struct bio_vec *bv)
+{
+}
+
+#endif	/* CONFIG_NEED_SG_DMA_FLAGS */
 
 #endif /* __LINUX_BVEC_H */
