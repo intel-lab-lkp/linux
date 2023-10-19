@@ -36,6 +36,11 @@ static const struct drm_prop_enum_list drm_colorop_type_enum_list[] = {
 	{ DRM_COLOROP_1D_CURVE, "1D Curve" },
 };
 
+static const struct drm_prop_enum_list drm_colorop_curve_1d_type_enum_list[] = {
+	{ DRM_COLOROP_1D_CURVE_SRGB_EOTF, "sRGB EOTF" },
+	{ DRM_COLOROP_1D_CURVE_SRGB_INV_EOTF, "sRGB Inverse EOTF" },
+};
+
 /* Init Helpers */
 
 int drm_colorop_init(struct drm_device *dev, struct drm_colorop *colorop,
@@ -72,6 +77,20 @@ int drm_colorop_init(struct drm_device *dev, struct drm_colorop *colorop,
 	drm_object_attach_property(&colorop->base,
 				   colorop->type_property,
 				   colorop->type);
+
+	/* curve_1d_type */
+	/* TODO move to mode_config? */
+	prop = drm_property_create_enum(dev, DRM_MODE_PROP_ATOMIC,
+					"CURVE_1D_TYPE",
+					drm_colorop_curve_1d_type_enum_list,
+					ARRAY_SIZE(drm_colorop_curve_1d_type_enum_list));
+	if (!prop)
+		return -ENOMEM;
+
+	colorop->curve_1d_type_property = prop;
+	drm_object_attach_property(&colorop->base,
+				   colorop->curve_1d_type_property,
+				   0);
 
 	return ret;
 }
@@ -194,6 +213,11 @@ static const char * const colorop_type_name[] = {
 	[DRM_COLOROP_1D_CURVE] = "1D Curve",
 };
 
+static const char * const colorop_curve_1d_type_name[] = {
+	[DRM_COLOROP_1D_CURVE_SRGB_EOTF] = "sRGB EOTF",
+	[DRM_COLOROP_1D_CURVE_SRGB_INV_EOTF] = "sRGB Inverse EOTF",
+};
+
 /**
  * drm_get_colorop_type_name - return a string for colorop type
  * @range: colorop type to compute name of
@@ -207,4 +231,19 @@ const char *drm_get_colorop_type_name(enum drm_colorop_type type)
 		return "unknown";
 
 	return colorop_type_name[type];
+}
+
+/**
+ * drm_get_colorop_curve_1d_type_name - return a string for 1D curve type
+ * @range: 1d curve type to compute name of
+ *
+ * In contrast to the other drm_get_*_name functions this one here returns a
+ * const pointer and hence is threadsafe.
+ */
+const char *drm_get_colorop_curve_1d_type_name(enum drm_colorop_curve_1d_type type)
+{
+	if (WARN_ON(type >= ARRAY_SIZE(colorop_curve_1d_type_name)))
+		return "unknown";
+
+	return colorop_curve_1d_type_name[type];
 }
