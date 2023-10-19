@@ -507,6 +507,7 @@ struct vb2_buf_ops {
  * @supports_requests: this queue supports the Request API.
  * @requires_requests: this queue requires the Request API. If this is set to 1,
  *		then supports_requests must be set to 1 as well.
+ * @supports_delete_bufs: this queue supports DELETE_BUFS ioctl.
  * @uses_qbuf:	qbuf was used directly for this queue. Set to 1 the first
  *		time this is called. Set to 0 when the queue is canceled.
  *		If this is 1, then you cannot queue buffers from a request.
@@ -595,6 +596,7 @@ struct vb2_queue {
 	unsigned int		   quirk_poll_must_check_waiting_for_buffers:1;
 	unsigned int			supports_requests:1;
 	unsigned int			requires_requests:1;
+	unsigned int			supports_delete_bufs:1;
 	unsigned int			uses_qbuf:1;
 	unsigned int			uses_requests:1;
 	unsigned int			allow_cache_hints:1;
@@ -845,6 +847,16 @@ int vb2_core_create_bufs(struct vb2_queue *q, enum vb2_memory memory,
  * Return: returns zero on success; an error code otherwise.
  */
 int vb2_core_prepare_buf(struct vb2_queue *q, struct vb2_buffer *vb, void *pb);
+
+/**
+ * vb2_core_delete_bufs() -
+ * @q:		pointer to &struct vb2_queue with videobuf2 queue.
+ * @start:	first index of the range of buffers to delete.
+ * @count:	number of buffers to delete.
+ *
+ *  Return: returns zero on success; an error code otherwise.
+ */
+int vb2_core_delete_bufs(struct vb2_queue *q, unsigned int start, unsigned int count);
 
 /**
  * vb2_core_qbuf() - Queue a buffer from userspace
