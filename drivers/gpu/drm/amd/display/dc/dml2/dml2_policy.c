@@ -203,7 +203,7 @@ int dml2_policy_build_synthetic_soc_states(struct dml2_policy_build_synthetic_so
 			s->entry.fabricclk_mhz = p->in_states->state_array[i].fabricclk_mhz;
 			s->entry.dram_speed_mts = 0;
 
-		insert_entry_into_table_sorted(p->in_bbox, p->out_states, &s->entry);
+			insert_entry_into_table_sorted(p->in_bbox, p->out_states, &s->entry);
 		}
 	}
 	// Add max FCLK
