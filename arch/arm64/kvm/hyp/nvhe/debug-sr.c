@@ -14,12 +14,12 @@
 #include <asm/kvm_hyp.h>
 #include <asm/kvm_mmu.h>
 
-static void __debug_save_spe(u64 *pmscr_el1)
+static void __debug_save_spe(struct kvm_cpu_context *host_ctxt)
 {
 	u64 reg;
 
 	/* Clear pmscr in case of early return */
-	*pmscr_el1 = 0;
+	ctxt_sys_reg(host_ctxt, PMSCR_EL1) = 0;
 
 	/*
 	 * At this point, we know that this CPU implements
@@ -31,7 +31,7 @@ static void __debug_save_spe(u64 *pmscr_el1)
 		return;
 
 	/* Yes; save the control register and disable data generation */
-	*pmscr_el1 = read_sysreg_s(SYS_PMSCR_EL1);
+	ctxt_sys_reg(host_ctxt, PMSCR_EL1) = read_sysreg_s(SYS_PMSCR_EL1);
 	write_sysreg_s(0, SYS_PMSCR_EL1);
 	isb();
 
@@ -39,21 +39,21 @@ static void __debug_save_spe(u64 *pmscr_el1)
 	psb_csync();
 }
 
-static void __debug_restore_spe(u64 pmscr_el1)
+static void __debug_restore_spe(struct kvm_cpu_context *host_ctxt)
 {
-	if (!pmscr_el1)
+	if (!ctxt_sys_reg(host_ctxt, PMSCR_EL1))
 		return;
 
 	/* The host page table is installed, but not yet synchronised */
 	isb();
 
 	/* Re-enable data generation */
-	write_sysreg_s(pmscr_el1, SYS_PMSCR_EL1);
+	write_sysreg_s(ctxt_sys_reg(host_ctxt, PMSCR_EL1), SYS_PMSCR_EL1);
 }
 
-static void __debug_save_trace(u64 *trfcr_el1)
+static void __debug_save_trace(struct kvm_cpu_context *host_ctxt)
 {
-	*trfcr_el1 = 0;
+	ctxt_sys_reg(host_ctxt, TRFCR_EL1) = 0;
 
 	/* Check if the TRBE is enabled */
 	if (!(read_sysreg_s(SYS_TRBLIMITR_EL1) & TRBLIMITR_EL1_E))
@@ -63,30 +63,30 @@ static void __debug_save_trace(u64 *trfcr_el1)
 	 * Since access to TRFCR_EL1 is trapped, the guest can't
 	 * modify the filtering set by the host.
 	 */
-	*trfcr_el1 = read_sysreg_s(SYS_TRFCR_EL1);
+	ctxt_sys_reg(host_ctxt, TRFCR_EL1) = read_sysreg_s(SYS_TRFCR_EL1);
 	write_sysreg_s(0, SYS_TRFCR_EL1);
 	isb();
 	/* Drain the trace buffer to memory */
 	tsb_csync();
 }
 
-static void __debug_restore_trace(u64 trfcr_el1)
+static void __debug_restore_trace(struct kvm_cpu_context *host_ctxt)
 {
-	if (!trfcr_el1)
+	if (!ctxt_sys_reg(host_ctxt, TRFCR_EL1))
 		return;
 
 	/* Restore trace filter controls */
-	write_sysreg_s(trfcr_el1, SYS_TRFCR_EL1);
+	write_sysreg_s(ctxt_sys_reg(host_ctxt, TRFCR_EL1), SYS_TRFCR_EL1);
 }
 
-void __debug_save_host_buffers_nvhe(struct kvm_vcpu *vcpu)
+void __debug_save_host_buffers_nvhe(struct kvm_cpu_context *host_ctxt)
 {
 	/* Disable and flush SPE data generation */
-	if (vcpu_get_flag(vcpu, DEBUG_STATE_SAVE_SPE))
-		__debug_save_spe(&vcpu->arch.host_debug_state.pmscr_el1);
+	if (vcpu_get_flag(host_ctxt->__hyp_running_vcpu, DEBUG_STATE_SAVE_SPE))
+		__debug_save_spe(host_ctxt);
 	/* Disable and flush Self-Hosted Trace generation */
-	if (vcpu_get_flag(vcpu, DEBUG_STATE_SAVE_TRBE))
-		__debug_save_trace(&vcpu->arch.host_debug_state.trfcr_el1);
+	if (vcpu_get_flag(host_ctxt->__hyp_running_vcpu, DEBUG_STATE_SAVE_TRBE))
+		__debug_save_trace(host_ctxt);
 }
 
 void __debug_switch_to_guest(struct kvm_vcpu *vcpu)
@@ -94,12 +94,12 @@ void __debug_switch_to_guest(struct kvm_vcpu *vcpu)
 	__debug_switch_to_guest_common(vcpu);
 }
 
-void __debug_restore_host_buffers_nvhe(struct kvm_vcpu *vcpu)
+void __debug_restore_host_buffers_nvhe(struct kvm_cpu_context *host_ctxt)
 {
-	if (vcpu_get_flag(vcpu, DEBUG_STATE_SAVE_SPE))
-		__debug_restore_spe(vcpu->arch.host_debug_state.pmscr_el1);
-	if (vcpu_get_flag(vcpu, DEBUG_STATE_SAVE_TRBE))
-		__debug_restore_trace(vcpu->arch.host_debug_state.trfcr_el1);
+	if (vcpu_get_flag(host_ctxt->__hyp_running_vcpu, DEBUG_STATE_SAVE_SPE))
+		__debug_restore_spe(host_ctxt);
+	if (vcpu_get_flag(host_ctxt->__hyp_running_vcpu, DEBUG_STATE_SAVE_TRBE))
+		__debug_restore_trace(host_ctxt);
 }
 
 void __debug_switch_to_host(struct kvm_vcpu *vcpu)
