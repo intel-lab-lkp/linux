@@ -114,6 +114,10 @@ void dma_unmap_sg_attrs(struct device *dev, struct scatterlist *sg,
 				      unsigned long attrs);
 int dma_map_sgtable(struct device *dev, struct sg_table *sgt,
 		enum dma_data_direction dir, unsigned long attrs);
+unsigned int dma_map_bvecs_attrs(struct device *dev, struct bio_vec *bvecs,
+		int nents, enum dma_data_direction dir, unsigned long attrs);
+void dma_unmap_bvecs_attrs(struct device *dev, struct bio_vec *bvecs,
+		int nents, enum dma_data_direction dir, unsigned long attrs);
 dma_addr_t dma_map_resource(struct device *dev, phys_addr_t phys_addr,
 		size_t size, enum dma_data_direction dir, unsigned long attrs);
 void dma_unmap_resource(struct device *dev, dma_addr_t addr, size_t size,

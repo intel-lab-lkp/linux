@@ -296,6 +296,71 @@ void dma_unmap_sg_attrs(struct device *dev, struct scatterlist *sg,
 }
 EXPORT_SYMBOL(dma_unmap_sg_attrs);
 
+/**
+ * dma_map_sg_attrs - Map the given buffer for DMA
+ * @dev:	The device for which to perform the DMA operation
+ * @bvecs:	The bio_vec array describing the buffer
+ * @nents:	Number of bio_vecs to map
+ * @dir:	DMA direction
+ * @attrs:	Optional DMA attributes for the map operation
+ *
+ * Maps a buffer described by a bio_vec array passed in the bvecs
+ * argument with nents segments for the @dir DMA operation by the
+ * @dev device.
+ *
+ * Returns the number of mapped entries (which can be less than nents)
+ * on success. Zero is returned for any error.
+ *
+ * dma_unmap_bvecs_attrs() should be used to unmap the buffer with the
+ * original bvecs and original nents (not the value returned by this
+ * function).
+ */
+unsigned int dma_map_bvecs_attrs(struct device *dev, struct bio_vec *bvecs,
+				 int nents, enum dma_data_direction dir,
+				 unsigned long attrs)
+{
+	const struct dma_map_ops *ops = get_dma_ops(dev);
+	int ents;
+
+	BUG_ON(!valid_dma_direction(dir));
+
+	if (WARN_ON_ONCE(!dev->dma_mask))
+		return 0;
+
+	if (dma_map_direct(dev, ops))
+		ents = dma_direct_map_bvecs(dev, bvecs, nents, dir, attrs);
+	else
+		ents = ops->map_bvecs(dev, bvecs, nents, dir, attrs);
+
+	if (ents > 0) {
+		kmsan_handle_dma_bvecs(bvecs, nents, dir);
+		debug_dma_map_bvecs(dev, bvecs, nents, ents, dir, attrs);
+	} else if (WARN_ON_ONCE(ents != -EINVAL && ents != -ENOMEM &&
+				ents != -EIO && ents != -EREMOTEIO)) {
+		return -EIO;
+	}
+
+	return ents;
+}
+EXPORT_SYMBOL_GPL(dma_map_bvecs_attrs);
+
+void dma_unmap_bvecs_attrs(struct device *dev, struct bio_vec *bvecs,
+			   int nents, enum dma_data_direction dir,
+			   unsigned long attrs)
+{
+	const struct dma_map_ops *ops = get_dma_ops(dev);
+
+	BUG_ON(!valid_dma_direction(dir));
+
+	debug_dma_unmap_bvecs(dev, bvecs, nents, dir);
+
+	if (dma_map_direct(dev, ops))
+		dma_direct_unmap_bvecs(dev, bvecs, nents, dir, attrs);
+	else if (ops->unmap_bvecs)
+		ops->unmap_bvecs(dev, bvecs, nents, dir, attrs);
+}
+EXPORT_SYMBOL(dma_unmap_bvecs_attrs);
+
 dma_addr_t dma_map_resource(struct device *dev, phys_addr_t phys_addr,
 		size_t size, enum dma_data_direction dir, unsigned long attrs)
 {
