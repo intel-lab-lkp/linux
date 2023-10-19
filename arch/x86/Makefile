@@ -204,7 +204,7 @@ ifdef CONFIG_MITIGATION_RETPOLINE
   endif
 endif
 
-ifdef CONFIG_SLS
+ifdef CONFIG_MITIGATION_SLS
   KBUILD_CFLAGS += -mharden-sls=all
 endif
 
