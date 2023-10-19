@@ -55,6 +55,10 @@ definitions:
         name: hash
         doc:
           Device is capable of exposing receive packet hash via bpf_xdp_metadata_rx_hash().
+  -
+    name: queue-type
+    type: enum
+    entries: [ rx, tx ]
 
 attribute-sets:
   -
@@ -86,6 +90,29 @@ attribute-sets:
              See Documentation/networking/xdp-rx-metadata.rst for more details.
         type: u64
         enum: xdp-rx-metadata
+
+  -
+    name: queue
+    attributes:
+      -
+        name: queue-id
+        doc: queue index
+        type: u32
+      -
+        name: ifindex
+        doc: netdev ifindex
+        type: u32
+        checks:
+          min: 1
+      -
+        name: queue-type
+        doc: queue type as rx, tx
+        type: u32
+        enum: queue-type
+      -
+        name: napi-id
+        doc: napi id
+        type: u32
 
 operations:
   list:
@@ -120,6 +147,27 @@ operations:
       doc: Notification about device configuration being changed.
       notify: dev-get
       mcgrp: mgmt
+    -
+      name: queue-get
+      doc: queue information
+      attribute-set: queue
+      do:
+        request:
+          attributes:
+            - ifindex
+            - queue-type
+            - queue-id
+        reply: &queue-get-op
+          attributes:
+            - queue-id
+            - queue-type
+            - napi-id
+            - ifindex
+      dump:
+        request:
+          attributes:
+            - ifindex
+        reply: *queue-get-op
 
 mcast-groups:
   list:

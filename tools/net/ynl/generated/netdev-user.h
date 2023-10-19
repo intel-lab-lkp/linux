@@ -19,6 +19,7 @@ extern const struct ynl_family ynl_netdev_family;
 const char *netdev_op_str(int op);
 const char *netdev_xdp_act_str(enum netdev_xdp_act value);
 const char *netdev_xdp_rx_metadata_str(enum netdev_xdp_rx_metadata value);
+const char *netdev_queue_type_str(enum netdev_queue_type value);
 
 /* Common nested types */
 /* ============== NETDEV_CMD_DEV_GET ============== */
@@ -86,5 +87,104 @@ struct netdev_dev_get_ntf {
 };
 
 void netdev_dev_get_ntf_free(struct netdev_dev_get_ntf *rsp);
+
+/* ============== NETDEV_CMD_QUEUE_GET ============== */
+/* NETDEV_CMD_QUEUE_GET - do */
+struct netdev_queue_get_req {
+	struct {
+		__u32 ifindex:1;
+		__u32 queue_type:1;
+		__u32 queue_id:1;
+	} _present;
+
+	__u32 ifindex;
+	enum netdev_queue_type queue_type;
+	__u32 queue_id;
+};
+
+static inline struct netdev_queue_get_req *netdev_queue_get_req_alloc(void)
+{
+	return calloc(1, sizeof(struct netdev_queue_get_req));
+}
+void netdev_queue_get_req_free(struct netdev_queue_get_req *req);
+
+static inline void
+netdev_queue_get_req_set_ifindex(struct netdev_queue_get_req *req,
+				 __u32 ifindex)
+{
+	req->_present.ifindex = 1;
+	req->ifindex = ifindex;
+}
+static inline void
+netdev_queue_get_req_set_queue_type(struct netdev_queue_get_req *req,
+				    enum netdev_queue_type queue_type)
+{
+	req->_present.queue_type = 1;
+	req->queue_type = queue_type;
+}
+static inline void
+netdev_queue_get_req_set_queue_id(struct netdev_queue_get_req *req,
+				  __u32 queue_id)
+{
+	req->_present.queue_id = 1;
+	req->queue_id = queue_id;
+}
+
+struct netdev_queue_get_rsp {
+	struct {
+		__u32 queue_id:1;
+		__u32 queue_type:1;
+		__u32 napi_id:1;
+		__u32 ifindex:1;
+	} _present;
+
+	__u32 queue_id;
+	enum netdev_queue_type queue_type;
+	__u32 napi_id;
+	__u32 ifindex;
+};
+
+void netdev_queue_get_rsp_free(struct netdev_queue_get_rsp *rsp);
+
+/*
+ * queue information
+ */
+struct netdev_queue_get_rsp *
+netdev_queue_get(struct ynl_sock *ys, struct netdev_queue_get_req *req);
+
+/* NETDEV_CMD_QUEUE_GET - dump */
+struct netdev_queue_get_req_dump {
+	struct {
+		__u32 ifindex:1;
+	} _present;
+
+	__u32 ifindex;
+};
+
+static inline struct netdev_queue_get_req_dump *
+netdev_queue_get_req_dump_alloc(void)
+{
+	return calloc(1, sizeof(struct netdev_queue_get_req_dump));
+}
+void netdev_queue_get_req_dump_free(struct netdev_queue_get_req_dump *req);
+
+static inline void
+netdev_queue_get_req_dump_set_ifindex(struct netdev_queue_get_req_dump *req,
+				      __u32 ifindex)
+{
+	req->_present.ifindex = 1;
+	req->ifindex = ifindex;
+}
+
+struct netdev_queue_get_list {
+	struct netdev_queue_get_list *next;
+	struct netdev_queue_get_rsp obj __attribute__ ((aligned (8)));
+};
+
+void netdev_queue_get_list_free(struct netdev_queue_get_list *rsp);
+
+struct netdev_queue_get_list *
+netdev_queue_get_dump(struct ynl_sock *ys,
+		      struct netdev_queue_get_req_dump *req);
 
 #endif /* _LINUX_NETDEV_GEN_H */
