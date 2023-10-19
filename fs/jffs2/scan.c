@@ -113,7 +113,7 @@ int jffs2_scan_medium(struct jffs2_sb_info *c)
 	if (!flashbuf) {
 		/* For NAND it's quicker to read a whole eraseblock at a time,
 		   apparently */
-		if (jffs2_cleanmarker_oob(c))
+		if (jffs2_nandflash(c))
 			try_size = c->sector_size;
 		else
 			try_size = PAGE_SIZE;
