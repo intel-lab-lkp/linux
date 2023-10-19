@@ -6482,6 +6482,7 @@ void netif_napi_add_weight(struct net_device *dev, struct napi_struct *napi,
 	 */
 	if (dev->threaded && napi_kthread_create(napi))
 		dev->threaded = 0;
+	napi->irq = -1;
 }
 EXPORT_SYMBOL(netif_napi_add_weight);
 
