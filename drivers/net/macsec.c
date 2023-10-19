@@ -3599,11 +3599,27 @@ static void macsec_dev_set_rx_mode(struct net_device *dev)
 	dev_uc_sync(real_dev, dev);
 }
 
-static int macsec_set_mac_address(struct net_device *dev, void *p)
+static int macsec_dev_uc_update(struct net_device *dev, u8 *new_addr)
 {
 	struct macsec_dev *macsec = macsec_priv(dev);
 	struct net_device *real_dev = macsec->real_dev;
+	int err;
+
+	err = dev_uc_add(real_dev, new_addr);
+	if (err < 0)
+		return err;
+
+	dev_uc_del(real_dev, dev->dev_addr);
+
+	return 0;
+}
+
+static int macsec_set_mac_address(struct net_device *dev, void *p)
+{
+	struct macsec_dev *macsec = macsec_priv(dev);
+	bool offloaded = macsec_is_offloaded(macsec);
 	struct sockaddr *addr = p;
+	u8  old_addr[ETH_ALEN];
 	int err;
 
 	if (!is_valid_ether_addr(addr->sa_data))
@@ -3612,28 +3628,46 @@ static int macsec_set_mac_address(struct net_device *dev, void *p)
 	if (!(dev->flags & IFF_UP))
 		goto out;
 
-	err = dev_uc_add(real_dev, addr->sa_data);
-	if (err < 0)
+	err = macsec_dev_uc_update(dev, addr->sa_data);
+	if (err)
 		return err;
 
-	dev_uc_del(real_dev, dev->dev_addr);
-
 out:
+	if (offloaded)
+		ether_addr_copy(old_addr, dev->dev_addr);
 	eth_hw_addr_set(dev, addr->sa_data);
 
 	/* If h/w offloading is available, propagate to the device */
-	if (macsec_is_offloaded(macsec)) {
+	if (offloaded) {
 		const struct macsec_ops *ops;
 		struct macsec_context ctx;
 
 		ops = macsec_get_ops(macsec, &ctx);
-		if (ops) {
-			ctx.secy = &macsec->secy;
-			macsec_offload(ops->mdo_upd_secy, &ctx);
+		if (!ops) {
+			err = -EINVAL;
+			goto restore_old_addr;
 		}
+
+		ctx.secy = &macsec->secy;
+		err = macsec_offload(ops->mdo_upd_secy, &ctx);
+		if (err)
+			goto restore_old_addr;
 	}
 
 	return 0;
+
+restore_old_addr:
+	if (dev->flags & IFF_UP) {
+		int err;
+
+		err = macsec_dev_uc_update(dev, old_addr);
+		if (err)
+			return err;
+	}
+
+	eth_hw_addr_set(dev, old_addr);
+
+	return err;
 }
 
 static int macsec_change_mtu(struct net_device *dev, int new_mtu)
