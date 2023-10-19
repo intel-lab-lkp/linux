@@ -162,9 +162,19 @@ struct drm_colorop {
 	 */
 	struct drm_property *curve_1d_type_property;
 
+	/**
+	 * @next_property
+	 *
+	 * Read-only property to next colorop in the pipeline
+	 */
+	struct drm_property *next_property;
+
 };
 
 #define obj_to_colorop(x) container_of(x, struct drm_colorop, base)
+
+
+
 
 /**
  * drm_crtc_find - look up a Colorop object from its ID
@@ -211,6 +221,8 @@ static inline unsigned int drm_colorop_index(const struct drm_colorop *colorop)
 
 #define drm_for_each_colorop(colorop, dev) \
 	list_for_each_entry(colorop, &(dev)->mode_config.colorop_list, head)
+
+void drm_colorop_set_next_property(struct drm_colorop *colorop, struct drm_colorop *next);
 
 
 #endif /* __DRM_COLOROP_H__ */
