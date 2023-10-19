@@ -18,6 +18,15 @@ struct syscalls_exit_open_args {
 	long ret;
 };
 
+struct syscalls_enter_open_at_args {
+	unsigned long long unused;
+	long syscall_nr;
+	long long dfd;
+	long filename_ptr;
+	long flags;
+	long mode;
+};
+
 struct {
 	__uint(type, BPF_MAP_TYPE_ARRAY);
 	__type(key, u32);
@@ -54,14 +63,14 @@ int trace_enter_open(struct syscalls_enter_open_args *ctx)
 #endif
 
 SEC("tracepoint/syscalls/sys_enter_openat")
-int trace_enter_open_at(struct syscalls_enter_open_args *ctx)
+int trace_enter_open_at(struct syscalls_enter_open_at_args *ctx)
 {
 	count(&enter_open_map);
 	return 0;
 }
 
 SEC("tracepoint/syscalls/sys_enter_openat2")
-int trace_enter_open_at2(struct syscalls_enter_open_args *ctx)
+int trace_enter_open_at2(struct syscalls_enter_open_at_args *ctx)
 {
 	count(&enter_open_map);
 	return 0;
