@@ -372,6 +372,21 @@ void intel_gt_mcr_lock(struct intel_gt *gt, unsigned long *flags)
 	lockdep_assert_not_held(&gt->uncore->lock);
 
 	/*
+	 * The steering control and semaphore registers are inside an
+	 * "always on" power domain with respect to RC6.  However there are
+	 * some issues if higher-level platform sleep states are
+	 * entering/exiting at the same time these registers are accessed.
+	 * Grabbing GT forcewake and holding it over the entire
+	 * lock/steer/unlock cycle ensures that those sleep states have been
+	 * fully exited before we access these registers.  This
+	 * wakeref will be released in the unlock routine.
+	 *
+	 * This is expected to become a formally documented/numbered workaround
+	 * soon.
+	 */
+	intel_uncore_forcewake_get(gt->uncore, FORCEWAKE_GT);
+
+	/*
 	 * Starting with MTL, we need to coordinate not only with other
 	 * driver threads, but also with hardware/firmware agents.  A dedicated
 	 * locking register is used.
@@ -417,6 +432,8 @@ void intel_gt_mcr_unlock(struct intel_gt *gt, unsigned long flags)
 
 	if (GRAPHICS_VER_FULL(gt->i915) >= IP_VER(12, 70))
 		intel_uncore_write_fw(gt->uncore, MTL_STEER_SEMAPHORE, 0x1);
+
+	intel_uncore_forcewake_put(gt->uncore, FORCEWAKE_GT);
 }
 
 /**
