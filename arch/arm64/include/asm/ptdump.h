@@ -5,6 +5,8 @@
 #ifndef __ASM_PTDUMP_H
 #define __ASM_PTDUMP_H
 
+#include <asm/kvm_pgtable.h>
+
 #ifdef CONFIG_PTDUMP_CORE
 
 #include <linux/mm_types.h>
@@ -30,13 +32,26 @@ struct ptdump_info {
 void ptdump_walk(struct seq_file *s, struct ptdump_info *info);
 #ifdef CONFIG_PTDUMP_DEBUGFS
 #define EFI_RUNTIME_MAP_END	DEFAULT_MAP_WINDOW_64
-void __init ptdump_debugfs_register(struct ptdump_info *info, const char *name);
+struct dentry *ptdump_debugfs_register(struct ptdump_info *info,
+				       const char *name);
 #else
-static inline void ptdump_debugfs_register(struct ptdump_info *info,
-					   const char *name) { }
+static inline struct dentry *ptdump_debugfs_register(struct ptdump_info *info,
+						     const char *name)
+{
+	return NULL;
+}
 #endif
 void ptdump_check_wx(void);
 #endif /* CONFIG_PTDUMP_CORE */
+
+#ifdef CONFIG_NVHE_EL2_PTDUMP_DEBUGFS
+void ptdump_register_guest_stage2(struct kvm_pgtable *pgt, void *lock);
+void ptdump_unregister_guest_stage2(struct kvm_pgtable *pgt);
+#else
+static inline void ptdump_register_guest_stage2(struct kvm_pgtable *pgt,
+						void *lock) { }
+static inline void ptdump_unregister_guest_stage2(struct kvm_pgtable *pgt) { }
+#endif /* CONFIG_NVHE_EL2_PTDUMP_DEBUGFS */
 
 #ifdef CONFIG_DEBUG_WX
 #define debug_checkwx()	ptdump_check_wx()

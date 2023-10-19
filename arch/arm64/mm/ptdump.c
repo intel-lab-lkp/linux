@@ -26,6 +26,7 @@
 #include <asm/ptdump.h>
 #include <asm/kvm_pkvm.h>
 #include <asm/kvm_pgtable.h>
+#include <asm/kvm_host.h>
 
 
 enum address_markers_idx {
@@ -543,6 +544,22 @@ void ptdump_check_wx(void)
 #ifdef CONFIG_NVHE_EL2_PTDUMP_DEBUGFS
 static struct ptdump_info stage2_kernel_ptdump_info;
 
+#define GUEST_NAME_LEN	(32U)
+
+struct ptdump_registered_guest {
+	struct list_head		reg_list;
+	struct ptdump_info		info;
+	struct mm_struct		mem;
+	struct kvm_pgtable_snapshot	snapshot;
+	struct dentry			*dentry;
+	rwlock_t			*lock;
+	char				reg_name[GUEST_NAME_LEN];
+};
+
+static LIST_HEAD(ptdump_guest_list);
+static DEFINE_MUTEX(ptdump_list_lock);
+static u16 guest_no;
+
 static phys_addr_t ptdump_host_pa(void *addr)
 {
 	return __pa(addr);
@@ -739,6 +756,73 @@ static void stage2_ptdump_walk(struct seq_file *s, struct ptdump_info *info)
 	};
 
 	kvm_pgtable_walk(pgtable, start_ipa, end_ipa, &walker);
+}
+
+static void guest_stage2_ptdump_walk(struct seq_file *s,
+				     struct ptdump_info *info)
+{
+	struct kvm_pgtable_snapshot *snapshot = info->priv;
+	struct ptdump_registered_guest *guest;
+
+	guest = container_of(snapshot, struct ptdump_registered_guest,
+			     snapshot);
+	read_lock(guest->lock);
+	stage2_ptdump_walk(s, info);
+	read_unlock(guest->lock);
+}
+
+void ptdump_register_guest_stage2(struct kvm_pgtable *pgt, void *lock)
+{
+	struct ptdump_registered_guest *guest;
+	struct dentry *d;
+
+	if (pgt == NULL || lock == NULL)
+		return;
+
+	guest = kzalloc(sizeof(struct ptdump_registered_guest), GFP_KERNEL);
+	if (!guest)
+		return;
+
+	memcpy(&guest->snapshot.pgtable, pgt, sizeof(struct kvm_pgtable));
+	guest->info = (struct ptdump_info) {
+		.ptdump_walk		= guest_stage2_ptdump_walk,
+		.priv			= &guest->snapshot
+	};
+
+	mutex_init(&guest->info.file_lock);
+	guest->lock = lock;
+	mutex_lock(&ptdump_list_lock);
+	snprintf(guest->reg_name, GUEST_NAME_LEN,
+		 "%u_guest_stage2_page_tables", guest_no++);
+	d = ptdump_debugfs_register(&guest->info, guest->reg_name);
+	if (!d) {
+		mutex_unlock(&ptdump_list_lock);
+		goto free_entry;
+	}
+
+	guest->dentry = d;
+	list_add(&guest->reg_list, &ptdump_guest_list);
+	mutex_unlock(&ptdump_list_lock);
+	return;
+
+free_entry:
+	kfree(guest);
+}
+
+void ptdump_unregister_guest_stage2(struct kvm_pgtable *pgt)
+{
+	struct ptdump_registered_guest *guest;
+
+	mutex_lock(&ptdump_list_lock);
+	list_for_each_entry(guest, &ptdump_guest_list, reg_list) {
+		if (guest->snapshot.pgtable.pgd == pgt->pgd) {
+			list_del(&guest->reg_list);
+			debugfs_remove(guest->dentry);
+			kfree(guest);
+			break;
+		}
+	}
+	mutex_unlock(&ptdump_list_lock);
 }
 #endif /* CONFIG_NVHE_EL2_PTDUMP_DEBUGFS */
 
