@@ -110,18 +110,7 @@ s64 get_lut_index(const struct vkms_color_lut *lut, u16 channel_value)
 	return drm_fixp_mul(color_channel_fp, lut->channel_value2index_ratio);
 }
 
-/*
- * This enum is related to the positions of the variables inside
- * `struct drm_color_lut`, so the order of both needs to be the same.
- */
-enum lut_channel {
-	LUT_RED = 0,
-	LUT_GREEN,
-	LUT_BLUE,
-	LUT_RESERVED
-};
-
-static u16 apply_lut_to_channel_value(const struct vkms_color_lut *lut, u16 channel_value,
+u16 apply_lut_to_channel_value(const struct vkms_color_lut *lut, u16 channel_value,
 				      enum lut_channel channel)
 {
 	s64 lut_index = get_lut_index(lut, channel_value);
