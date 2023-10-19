@@ -32,12 +32,17 @@
 
 /* TODO big colorop doc, including properties, etc. */
 
+static const struct drm_prop_enum_list drm_colorop_type_enum_list[] = {
+	{ DRM_COLOROP_1D_CURVE, "1D Curve" },
+};
+
 /* Init Helpers */
 
 int drm_colorop_init(struct drm_device *dev, struct drm_colorop *colorop,
-		     struct drm_plane *plane)
+		     struct drm_plane *plane, enum drm_colorop_type type)
 {
 	struct drm_mode_config *config = &dev->mode_config;
+	struct drm_property *prop;
 	int ret = 0;
 
 	ret = drm_mode_object_add(dev, &colorop->base, DRM_MODE_OBJECT_COLOROP);
@@ -46,12 +51,28 @@ int drm_colorop_init(struct drm_device *dev, struct drm_colorop *colorop,
 
 	colorop->base.properties = &colorop->properties;
 	colorop->dev = dev;
+	colorop->type = type;
 	colorop->plane = plane;
 
 	list_add_tail(&colorop->head, &config->colorop_list);
 	colorop->index = config->num_colorop++;
 
 	/* add properties */
+
+	/* type */
+	prop = drm_property_create_enum(dev,
+					DRM_MODE_PROP_IMMUTABLE | DRM_MODE_PROP_ATOMIC,
+					"TYPE", drm_colorop_type_enum_list,
+					ARRAY_SIZE(drm_colorop_type_enum_list));
+	if (!prop)
+		return -ENOMEM;
+
+	colorop->type_property = prop;
+
+	drm_object_attach_property(&colorop->base,
+				   colorop->type_property,
+				   colorop->type);
+
 	return ret;
 }
 EXPORT_SYMBOL(drm_colorop_init);
@@ -167,3 +188,23 @@ void drm_colorop_reset(struct drm_colorop *colorop)
 		__drm_colorop_reset(colorop, colorop->state);
 }
 EXPORT_SYMBOL(drm_colorop_reset);
+
+
+static const char * const colorop_type_name[] = {
+	[DRM_COLOROP_1D_CURVE] = "1D Curve",
+};
+
+/**
+ * drm_get_colorop_type_name - return a string for colorop type
+ * @range: colorop type to compute name of
+ *
+ * In contrast to the other drm_get_*_name functions this one here returns a
+ * const pointer and hence is threadsafe.
+ */
+const char *drm_get_colorop_type_name(enum drm_colorop_type type)
+{
+	if (WARN_ON(type >= ARRAY_SIZE(colorop_type_name)))
+		return "unknown";
+
+	return colorop_type_name[type];
+}
