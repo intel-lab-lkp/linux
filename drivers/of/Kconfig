@@ -102,4 +102,17 @@ config OF_OVERLAY
 config OF_NUMA
 	bool
 
+config OF_MAX_RESERVED_REGIONS
+	int "OF resvered_mem array size"
+	default "64"
+	range 1 64
+	help
+	  The reserved_mem_array is used to store information about the dynamically
+	  placed reserved memory regions before we are able to allocate the memory
+	  needed to store all the reserved memory regions defined in the DT.
+	  Because the amount of memory needed initially for this array could vary,
+	  make the size of the reserved_mem_array configurable in an attempt to
+	  save some memory when possible.
+	  if unsure, leave as default value.
+
 endif # OF

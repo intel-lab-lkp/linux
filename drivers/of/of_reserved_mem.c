@@ -26,11 +26,10 @@
 
 #include "of_private.h"
 
-#define MAX_RESERVED_REGIONS	64
-static struct reserved_mem reserved_mem_array[MAX_RESERVED_REGIONS];
-static struct reserved_mem *reserved_mem __refdata = reserved_mem_array;
+static struct reserved_mem reserved_mem_array[CONFIG_OF_MAX_RESERVED_REGIONS];
+static struct reserved_mem *reserved_mem = reserved_mem_array;
 
-static int total_reserved_mem_cnt = MAX_RESERVED_REGIONS;
+static int total_reserved_mem_cnt = CONFIG_OF_MAX_RESERVED_REGIONS;
 static int reserved_mem_count;
 
 static int __init early_init_dt_alloc_reserved_memory_arch(phys_addr_t size,
@@ -93,7 +92,7 @@ static int alloc_reserved_mem_array(void)
 
 overlow_err:
 	memblock_free(new_array, alloc_size);
-	total_reserved_mem_cnt = MAX_RESERVED_REGIONS;
+	total_reserved_mem_cnt = CONFIG_OF_MAX_RESERVED_REGIONS;
 	return -1;
 }
 
