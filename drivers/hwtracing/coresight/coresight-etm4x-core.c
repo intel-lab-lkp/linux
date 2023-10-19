@@ -645,6 +645,7 @@ static int etm4_parse_event_config(struct coresight_device *csdev,
 	struct perf_event_attr *attr = &event->attr;
 	unsigned long cfg_hash;
 	int preset;
+	u64 cyc_threadhold;
 
 	/* Clear configuration from previous run */
 	memset(config, 0, sizeof(struct etmv4_config));
@@ -667,7 +668,10 @@ static int etm4_parse_event_config(struct coresight_device *csdev,
 	if (attr->config & BIT(ETM_OPT_CYCACC)) {
 		config->cfg |= TRCCONFIGR_CCI;
 		/* TRM: Must program this for cycacc to work */
-		config->ccctlr = ETM_CYC_THRESHOLD_DEFAULT;
+		cyc_threshold = ((attr->config >> ETM_OPT_CYC_THRESHOLD_SHIFT) &
+				 ETM_OPT_CYC_THRESHOLD_MASK;
+		config->ccctlr = cyc_threshold ? cyc_threshold :
+				 ETM_CYC_THRESHOLD_DEFAULT;
 	}
 	if (attr->config & BIT(ETM_OPT_TS)) {
 		/*

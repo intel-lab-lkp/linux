@@ -29,12 +29,14 @@
  * ETMv3.5/PTM doesn't define ETMCR config bits with prefix "ETM3_" and
  * directly use below macros as config bits.
  */
-#define ETM_OPT_BRANCH_BROADCAST 8
-#define ETM_OPT_CYCACC		12
-#define ETM_OPT_CTXTID		14
-#define ETM_OPT_CTXTID2		15
-#define ETM_OPT_TS		28
-#define ETM_OPT_RETSTK		29
+#define ETM_OPT_BRANCH_BROADCAST	8
+#define ETM_OPT_CYCACC			12
+#define ETM_OPT_CTXTID			14
+#define ETM_OPT_CTXTID2			15
+#define ETM_OPT_TS			28
+#define ETM_OPT_RETSTK			29
+#define ETM_OPT_CYC_THRESHOLD_SHIFT	52
+#define ETM_OPT_CYC_THRESHOLD_MASK	0xfff
 
 /* ETMv4 CONFIGR programming bits for the ETM OPTs */
 #define ETM4_CFG_BIT_BB         3
