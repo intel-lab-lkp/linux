@@ -16,16 +16,16 @@ struct gpio_device;
 
 #ifdef CONFIG_OF_GPIO
 struct gpio_desc *of_find_gpio(struct device_node *np,
-			       const char *con_id,
-			       unsigned int idx,
+			       const char *con_id, unsigned int idx,
+			       char *propname, size_t propsize,
 			       unsigned long *lookupflags);
 int of_gpiochip_add(struct gpio_chip *gc);
 void of_gpiochip_remove(struct gpio_chip *gc);
 int of_gpio_get_count(struct device *dev, const char *con_id);
 #else
 static inline struct gpio_desc *of_find_gpio(struct device_node *np,
-					     const char *con_id,
-					     unsigned int idx,
+					     const char *con_id, unsigned int idx,
+					     char *propname, size_t propsize,
 					     unsigned long *lookupflags)
 {
 	return ERR_PTR(-ENOENT);

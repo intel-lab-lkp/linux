@@ -28,8 +28,8 @@ void acpi_gpiochip_request_interrupts(struct gpio_chip *chip);
 void acpi_gpiochip_free_interrupts(struct gpio_chip *chip);
 
 struct gpio_desc *acpi_find_gpio(struct fwnode_handle *fwnode,
-				 const char *con_id,
-				 unsigned int idx,
+				 const char *con_id, unsigned int idx,
+				 char *propname, size_t propsize,
 				 enum gpiod_flags *dflags,
 				 unsigned long *lookupflags);
 
@@ -44,10 +44,11 @@ acpi_gpiochip_request_interrupts(struct gpio_chip *chip) { }
 static inline void
 acpi_gpiochip_free_interrupts(struct gpio_chip *chip) { }
 
-static inline struct gpio_desc *
-acpi_find_gpio(struct fwnode_handle *fwnode, const char *con_id,
-	       unsigned int idx, enum gpiod_flags *dflags,
-	       unsigned long *lookupflags)
+static inline struct gpio_desc *acpi_find_gpio(struct fwnode_handle *fwnode,
+					       const char *con_id, unsigned int idx,
+					       char *propname, size_t propsize,
+					       enum gpiod_flags *dflags,
+					       unsigned long *lookupflags)
 {
 	return ERR_PTR(-ENOENT);
 }

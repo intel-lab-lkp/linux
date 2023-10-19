@@ -8,6 +8,7 @@ struct gpio_desc;
 
 struct gpio_desc *swnode_find_gpio(struct fwnode_handle *fwnode,
 				   const char *con_id, unsigned int idx,
+				   char *propname, size_t propsize,
 				   unsigned long *flags);
 int swnode_gpio_count(const struct fwnode_handle *fwnode, const char *con_id);
 

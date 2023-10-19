@@ -3938,8 +3938,8 @@ static int platform_gpio_count(struct device *dev, const char *con_id)
 
 static struct gpio_desc *gpiod_find_by_fwnode(struct fwnode_handle *fwnode,
 					      struct device *consumer,
-					      const char *con_id,
-					      unsigned int idx,
+					      const char *con_id, unsigned int idx,
+					      char *propname, size_t propsize,
 					      enum gpiod_flags *flags,
 					      unsigned long *lookupflags)
 {
@@ -3948,15 +3948,18 @@ static struct gpio_desc *gpiod_find_by_fwnode(struct fwnode_handle *fwnode,
 	if (is_of_node(fwnode)) {
 		dev_dbg(consumer, "using DT '%pfw' for '%s' GPIO lookup\n",
 			fwnode, con_id);
-		desc = of_find_gpio(to_of_node(fwnode), con_id, idx, lookupflags);
+		desc = of_find_gpio(to_of_node(fwnode), con_id, idx, propname, propsize,
+				    lookupflags);
 	} else if (is_acpi_node(fwnode)) {
 		dev_dbg(consumer, "using ACPI '%pfw' for '%s' GPIO lookup\n",
 			fwnode, con_id);
-		desc = acpi_find_gpio(fwnode, con_id, idx, flags, lookupflags);
+		desc = acpi_find_gpio(fwnode, con_id, idx, propname, propsize,
+				      flags, lookupflags);
 	} else if (is_software_node(fwnode)) {
 		dev_dbg(consumer, "using swnode '%pfw' for '%s' GPIO lookup\n",
 			fwnode, con_id);
-		desc = swnode_find_gpio(fwnode, con_id, idx, lookupflags);
+		desc = swnode_find_gpio(fwnode, con_id, idx, propname, propsize,
+					lookupflags);
 	}
 
 	return desc;
@@ -3970,11 +3973,15 @@ static struct gpio_desc *gpiod_find_and_request(struct device *consumer,
 						const char *label,
 						bool platform_lookup_allowed)
 {
+	char propname[32] = ""; /* 32 is max size of property name */
+	const char *funcname = con_id ?: propname;
 	unsigned long lookupflags = GPIO_LOOKUP_FLAGS_DEFAULT;
 	struct gpio_desc *desc;
 	int ret;
 
-	desc = gpiod_find_by_fwnode(fwnode, consumer, con_id, idx, &flags, &lookupflags);
+	desc = gpiod_find_by_fwnode(fwnode, consumer, con_id, idx,
+				    propname, sizeof(propname),
+				    &flags, &lookupflags);
 	if (gpiod_not_found(desc) && platform_lookup_allowed) {
 		/*
 		 * Either we are not using DT or ACPI, or their lookup did not
@@ -4012,7 +4019,7 @@ static struct gpio_desc *gpiod_find_and_request(struct device *consumer,
 		return desc;
 	}
 
-	ret = gpiod_configure_flags(desc, con_id, lookupflags, flags);
+	ret = gpiod_configure_flags(desc, funcname, lookupflags, flags);
 	if (ret < 0) {
 		dev_dbg(consumer, "setup of GPIO %s failed\n", con_id);
 		gpiod_put(desc);

@@ -621,10 +621,11 @@ static const of_find_gpio_quirk of_find_gpio_quirks[] = {
 	NULL
 };
 
-struct gpio_desc *of_find_gpio(struct device_node *np, const char *con_id,
-			       unsigned int idx, unsigned long *flags)
+struct gpio_desc *of_find_gpio(struct device_node *np,
+			       const char *con_id, unsigned int idx,
+			       char *propname, size_t propsize,
+			       unsigned long *flags)
 {
-	char prop_name[32]; /* 32 is max size of property name */
 	enum of_gpio_flags of_flags;
 	const of_find_gpio_quirk *q;
 	struct gpio_desc *desc;
@@ -633,13 +634,13 @@ struct gpio_desc *of_find_gpio(struct device_node *np, const char *con_id,
 	/* Try GPIO property "foo-gpios" and "foo-gpio" */
 	for (i = 0; i < ARRAY_SIZE(gpio_suffixes); i++) {
 		if (con_id)
-			snprintf(prop_name, sizeof(prop_name), "%s-%s", con_id,
+			snprintf(propname, propsize, "%s-%s", con_id,
 				 gpio_suffixes[i]);
 		else
-			snprintf(prop_name, sizeof(prop_name), "%s",
+			snprintf(propname, propsize, "%s",
 				 gpio_suffixes[i]);
 
-		desc = of_get_named_gpiod_flags(np, prop_name, idx, &of_flags);
+		desc = of_get_named_gpiod_flags(np, propname, idx, &of_flags);
 
 		if (!gpiod_not_found(desc))
 			break;

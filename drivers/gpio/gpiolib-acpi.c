@@ -973,24 +973,23 @@ static bool acpi_can_fallback_to_crs(struct acpi_device *adev,
 }
 
 struct gpio_desc *acpi_find_gpio(struct fwnode_handle *fwnode,
-				 const char *con_id,
-				 unsigned int idx,
+				 const char *con_id, unsigned int idx,
+				 char *propname, size_t propsize,
 				 enum gpiod_flags *dflags,
 				 unsigned long *lookupflags)
 {
 	struct acpi_device *adev = to_acpi_device_node(fwnode);
 	struct acpi_gpio_info info;
 	struct gpio_desc *desc;
-	char propname[32];
 	int i;
 
 	/* Try first from _DSD */
 	for (i = 0; i < ARRAY_SIZE(gpio_suffixes); i++) {
 		if (con_id) {
-			snprintf(propname, sizeof(propname), "%s-%s",
+			snprintf(propname, propsize, "%s-%s",
 				 con_id, gpio_suffixes[i]);
 		} else {
-			snprintf(propname, sizeof(propname), "%s",
+			snprintf(propname, propsize, "%s",
 				 gpio_suffixes[i]);
 		}
 

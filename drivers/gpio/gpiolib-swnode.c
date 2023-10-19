@@ -51,20 +51,20 @@ static struct gpio_chip *swnode_get_chip(struct fwnode_handle *fwnode)
 
 struct gpio_desc *swnode_find_gpio(struct fwnode_handle *fwnode,
 				   const char *con_id, unsigned int idx,
+				   char *propname, size_t propsize,
 				   unsigned long *flags)
 {
 	const struct software_node *swnode;
 	struct fwnode_reference_args args;
 	struct gpio_chip *chip;
 	struct gpio_desc *desc;
-	char propname[32]; /* 32 is max size of property name */
 	int error;
 
 	swnode = to_software_node(fwnode);
 	if (!swnode)
 		return ERR_PTR(-EINVAL);
 
-	swnode_format_propname(con_id, propname, sizeof(propname));
+	swnode_format_propname(con_id, propname, propsize);
 
 	/*
 	 * We expect all swnode-described GPIOs have GPIO number and
