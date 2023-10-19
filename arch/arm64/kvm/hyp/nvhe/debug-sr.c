@@ -51,42 +51,57 @@ static void __debug_restore_spe(struct kvm_cpu_context *host_ctxt)
 	write_sysreg_s(ctxt_sys_reg(host_ctxt, PMSCR_EL1), SYS_PMSCR_EL1);
 }
 
-static void __debug_save_trace(struct kvm_cpu_context *host_ctxt)
+/*
+ * Save TRFCR and disable trace completely if TRBE is being used, otherwise
+ * apply required guest TRFCR value.
+ */
+static void __debug_save_trace(struct kvm_cpu_context *host_ctxt,
+			       struct kvm_cpu_context *guest_ctxt)
 {
-	ctxt_sys_reg(host_ctxt, TRFCR_EL1) = 0;
+	ctxt_sys_reg(host_ctxt, TRFCR_EL1) = read_sysreg_s(SYS_TRFCR_EL1);
 
 	/* Check if the TRBE is enabled */
-	if (!(read_sysreg_s(SYS_TRBLIMITR_EL1) & TRBLIMITR_EL1_E))
-		return;
-	/*
-	 * Prohibit trace generation while we are in guest.
-	 * Since access to TRFCR_EL1 is trapped, the guest can't
-	 * modify the filtering set by the host.
-	 */
-	ctxt_sys_reg(host_ctxt, TRFCR_EL1) = read_sysreg_s(SYS_TRFCR_EL1);
-	write_sysreg_s(0, SYS_TRFCR_EL1);
-	isb();
-	/* Drain the trace buffer to memory */
-	tsb_csync();
+	if (vcpu_get_flag(host_ctxt->__hyp_running_vcpu, DEBUG_STATE_SAVE_TRBE) &&
+	    (read_sysreg_s(SYS_TRBLIMITR_EL1) & TRBLIMITR_EL1_E)) {
+		/*
+		 * Prohibit trace generation while we are in guest. Since access
+		 * to TRFCR_EL1 is trapped, the guest can't modify the filtering
+		 * set by the host.
+		 */
+		ctxt_sys_reg(guest_ctxt, TRFCR_EL1) = 0;
+		write_sysreg_s(0, SYS_TRFCR_EL1);
+		isb();
+		/* Drain the trace buffer to memory */
+		tsb_csync();
+	} else {
+		/*
+		 * Not using TRBE, so guest trace works. Apply the guest filters
+		 * provided by the Coresight driver, if different.
+		 */
+		if (ctxt_sys_reg(host_ctxt, TRFCR_EL1) !=
+		    ctxt_sys_reg(guest_ctxt, TRFCR_EL1))
+			write_sysreg_s(ctxt_sys_reg(guest_ctxt, TRFCR_EL1),
+				       SYS_TRFCR_EL1);
+	}
 }
 
-static void __debug_restore_trace(struct kvm_cpu_context *host_ctxt)
+static void __debug_restore_trace(struct kvm_cpu_context *host_ctxt,
+				  struct kvm_cpu_context *guest_ctxt)
 {
-	if (!ctxt_sys_reg(host_ctxt, TRFCR_EL1))
-		return;
-
 	/* Restore trace filter controls */
-	write_sysreg_s(ctxt_sys_reg(host_ctxt, TRFCR_EL1), SYS_TRFCR_EL1);
+	if (ctxt_sys_reg(host_ctxt, TRFCR_EL1) != ctxt_sys_reg(guest_ctxt, TRFCR_EL1))
+		write_sysreg_s(ctxt_sys_reg(host_ctxt, TRFCR_EL1), SYS_TRFCR_EL1);
 }
 
-void __debug_save_host_buffers_nvhe(struct kvm_cpu_context *host_ctxt)
+void __debug_save_host_buffers_nvhe(struct kvm_cpu_context *host_ctxt,
+				    struct kvm_cpu_context *guest_ctxt)
 {
 	/* Disable and flush SPE data generation */
 	if (vcpu_get_flag(host_ctxt->__hyp_running_vcpu, DEBUG_STATE_SAVE_SPE))
 		__debug_save_spe(host_ctxt);
-	/* Disable and flush Self-Hosted Trace generation */
-	if (vcpu_get_flag(host_ctxt->__hyp_running_vcpu, DEBUG_STATE_SAVE_TRBE))
-		__debug_save_trace(host_ctxt);
+
+	if (vcpu_get_flag(host_ctxt->__hyp_running_vcpu, DEBUG_STATE_SAVE_TRFCR))
+		__debug_save_trace(host_ctxt, guest_ctxt);
 }
 
 void __debug_switch_to_guest(struct kvm_vcpu *vcpu)
@@ -94,12 +109,13 @@ void __debug_switch_to_guest(struct kvm_vcpu *vcpu)
 	__debug_switch_to_guest_common(vcpu);
 }
 
-void __debug_restore_host_buffers_nvhe(struct kvm_cpu_context *host_ctxt)
+void __debug_restore_host_buffers_nvhe(struct kvm_cpu_context *host_ctxt,
+				       struct kvm_cpu_context *guest_ctxt)
 {
 	if (vcpu_get_flag(host_ctxt->__hyp_running_vcpu, DEBUG_STATE_SAVE_SPE))
 		__debug_restore_spe(host_ctxt);
-	if (vcpu_get_flag(host_ctxt->__hyp_running_vcpu, DEBUG_STATE_SAVE_TRBE))
-		__debug_restore_trace(host_ctxt);
+	if (vcpu_get_flag(host_ctxt->__hyp_running_vcpu, DEBUG_STATE_SAVE_TRFCR))
+		__debug_restore_trace(host_ctxt, guest_ctxt);
 }
 
 void __debug_switch_to_host(struct kvm_vcpu *vcpu)
