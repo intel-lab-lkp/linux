@@ -423,6 +423,26 @@ void dma_direct_sync_sg_for_device(struct device *dev,
 					dir);
 	}
 }
+
+void dma_direct_sync_bvecs_for_device(struct device *dev,
+		struct bio_vec *bvecs, int nents, enum dma_data_direction dir)
+{
+	struct bio_vec *bv;
+	int i;
+
+	for (i = 0; i < nents; i++) {
+		bv = &bvecs[i];
+		phys_addr_t paddr = dma_to_phys(dev, bv_dma_address(bv));
+
+		if (unlikely(is_swiotlb_buffer(dev, paddr)))
+			swiotlb_sync_single_for_device(dev, paddr, bv->bv_len,
+						       dir);
+
+		if (!dev_is_dma_coherent(dev))
+			arch_sync_dma_for_device(paddr, bv->bv_len,
+					dir);
+	}
+}
 #endif
 
 #if defined(CONFIG_ARCH_HAS_SYNC_DMA_FOR_CPU) || \
@@ -514,6 +534,78 @@ int dma_direct_map_sg(struct device *dev, struct scatterlist *sgl, int nents,
 out_unmap:
 	dma_direct_unmap_sg(dev, sgl, i, dir, attrs | DMA_ATTR_SKIP_CPU_SYNC);
 	return ret;
+}
+
+void dma_direct_sync_bvecs_for_cpu(struct device *dev,
+		struct bio_vec *bvecs, int nents, enum dma_data_direction dir)
+{
+	struct bio_vec *bv;
+	int i;
+
+	for (i = 0; i < nents; i++) {
+		phys_addr_t paddr;
+
+		bv = &bvecs[i];
+		paddr = dma_to_phys(dev, bv_dma_address(bv));
+
+		if (!dev_is_dma_coherent(dev))
+			arch_sync_dma_for_cpu(paddr, bv->bv_len, dir);
+
+		if (unlikely(is_swiotlb_buffer(dev, paddr)))
+			swiotlb_sync_single_for_cpu(dev, paddr, bv->bv_len,
+						    dir);
+
+		if (dir == DMA_FROM_DEVICE)
+			arch_dma_mark_clean(paddr, bv->bv_len);
+	}
+
+	if (!dev_is_dma_coherent(dev))
+		arch_sync_dma_for_cpu_all();
+}
+
+/*
+ * Unmaps segments, except for ones marked as pci_p2pdma which do not
+ * require any further action as they contain a bus address.
+ */
+void dma_direct_unmap_bvecs(struct device *dev, struct bio_vec *bvecs,
+			    int nents, enum dma_data_direction dir,
+			    unsigned long attrs)
+{
+	struct bio_vec *bv;
+	int i;
+
+	for (i = 0; i < nents; i++) {
+		bv = &bvecs[i];
+		if (bv_dma_is_bus_address(bv))
+			bv_dma_unmark_bus_address(bv);
+		else
+			dma_direct_unmap_page(dev, bv_dma_address(bv),
+					      bv_dma_len(bv), dir, attrs);
+	}
+
+}
+
+int dma_direct_map_bvecs(struct device *dev, struct bio_vec *bvecs, int nents,
+			 enum dma_data_direction dir, unsigned long attrs)
+{
+	struct bio_vec *bv;
+	int i;
+
+	/* p2p DMA mapping support can be added later */
+	for (i = 0; i < nents; i++) {
+		bv = &bvecs[i];
+		bv->bv_dma_address = dma_direct_map_page(dev, bv->bv_page,
+				bv->bv_offset, bv->bv_len, dir, attrs);
+		if (bv->bv_dma_address == DMA_MAPPING_ERROR)
+			goto out_unmap;
+		bv_dma_len(bv) = bv->bv_len;
+	}
+
+	return nents;
+
+out_unmap:
+	dma_direct_unmap_bvecs(dev, bvecs, i, dir, attrs | DMA_ATTR_SKIP_CPU_SYNC);
+	return -EIO;
 }
 
 dma_addr_t dma_direct_map_resource(struct device *dev, phys_addr_t paddr,
