@@ -9,3 +9,5 @@ vkms-y := \
 	vkms_writeback.o
 
 obj-$(CONFIG_DRM_VKMS) += vkms.o
+
+obj-y += tests/
