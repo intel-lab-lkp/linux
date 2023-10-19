@@ -18,6 +18,7 @@ struct page;
 struct kmem_cache;
 struct task_struct;
 struct scatterlist;
+struct bio_vec;
 struct urb;
 
 #ifdef CONFIG_KMSAN
@@ -210,6 +211,20 @@ void kmsan_handle_dma_sg(struct scatterlist *sg, int nents,
 			 enum dma_data_direction dir);
 
 /**
+ * kmsan_handle_dma_bvecs() - Handle a DMA transfer using bio_vec array.
+ * @bvecs: bio_vec array holding DMA buffers.
+ * @nents: number of scatterlist entries.
+ * @dir:   one of possible dma_data_direction values.
+ *
+ * Depending on @direction, KMSAN:
+ * * checks the buffers in the bio_vec array, if they are copied to device;
+ * * initializes the buffers, if they are copied from device;
+ * * does both, if this is a DMA_BIDIRECTIONAL transfer.
+ */
+void kmsan_handle_dma_bvecs(struct bio_vec *bv, int nents,
+			    enum dma_data_direction dir);
+
+/**
  * kmsan_handle_urb() - Handle a USB data transfer.
  * @urb:    struct urb pointer.
  * @is_out: data transfer direction (true means output to hardware).
@@ -318,6 +333,11 @@ static inline void kmsan_handle_dma(struct page *page, size_t offset,
 
 static inline void kmsan_handle_dma_sg(struct scatterlist *sg, int nents,
 				       enum dma_data_direction dir)
+{
+}
+
+static inline void kmsan_handle_dma_bvecs(struct bio_vec *bv, int nents,
+					  enum dma_data_direction dir)
 {
 }
 

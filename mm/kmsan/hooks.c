@@ -358,6 +358,19 @@ void kmsan_handle_dma_sg(struct scatterlist *sg, int nents,
 				 dir);
 }
 
+void kmsan_handle_dma_bvecs(struct bio_vec *bvecs, int nents,
+			    enum dma_data_direction dir)
+{
+	struct bio_vec *item;
+	int i;
+
+	for (i = 0; i < nents; i++) {
+		item = &bvecs[i];
+		kmsan_handle_dma(bv_page(item), item->bv_offset, item->bv_len,
+				 dir);
+	}
+}
+
 /* Functions from kmsan-checks.h follow. */
 void kmsan_poison_memory(const void *address, size_t size, gfp_t flags)
 {
