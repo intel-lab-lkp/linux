@@ -136,4 +136,6 @@ static inline void netif_set_gro_ipv4_max_size(struct net_device *dev,
 }
 
 int rps_cpumask_housekeeping(struct cpumask *mask);
+
+struct napi_struct *napi_by_id(unsigned int napi_id);
 #endif
