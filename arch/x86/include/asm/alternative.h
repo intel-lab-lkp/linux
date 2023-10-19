@@ -10,6 +10,9 @@
 
 #define ALT_FLAG_NOT		(1 << 0)
 #define ALT_NOT(feature)	((ALT_FLAG_NOT << ALT_FLAGS_SHIFT) | (feature))
+#define ALT_FLAG_CALL		(1 << 1)
+#define ALT_CALL(feature)	((ALT_FLAG_CALL << ALT_FLAGS_SHIFT) | (feature))
+#define ALT_CALL_ALWAYS		ALT_CALL(X86_FEATURE_ALWAYS)
 
 #ifndef __ASSEMBLY__
 
@@ -149,6 +152,8 @@ static inline int alternatives_text_reserved(void *start, void *end)
 	return 0;
 }
 #endif	/* CONFIG_SMP */
+
+#define ALT_CALL_INSTR		"call x86_BUG"
 
 #define b_replacement(num)	"664"#num
 #define e_replacement(num)	"665"#num
