@@ -351,7 +351,8 @@ static int __drm_object_property_get_value(struct drm_mode_object *obj,
 int drm_object_property_get_value(struct drm_mode_object *obj,
 				  struct drm_property *property, uint64_t *val)
 {
-	WARN_ON(drm_drv_uses_atomic_modeset(property->dev));
+	WARN_ON(drm_drv_uses_atomic_modeset(property->dev) &&
+		!(property->flags & DRM_MODE_PROP_IMMUTABLE));
 
 	return __drm_object_property_get_value(obj, property, val);
 }
