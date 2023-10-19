@@ -242,7 +242,7 @@ void vp_del_vqs(struct virtio_device *vdev)
 			if (v != VIRTIO_MSI_NO_VECTOR) {
 				int irq = pci_irq_vector(vp_dev->pci_dev, v);
 
-				irq_set_affinity_hint(irq, NULL);
+				irq_update_affinity_hint(irq, NULL);
 				free_irq(irq, vq);
 			}
 		}
@@ -440,7 +440,7 @@ int vp_set_vq_affinity(struct virtqueue *vq, const struct cpumask *cpu_mask)
 
 	if (vp_dev->msix_enabled) {
 		irq = pci_irq_vector(vp_dev->pci_dev, info->msix_vector);
-		irq_set_affinity_hint(irq, cpu_mask);
+		irq_set_affinity_and_hint(irq, cpu_mask);
 	}
 	return 0;
 }
