@@ -190,12 +190,15 @@ void call_rcu(struct rcu_head *head, rcu_callback_t func)
 	local_irq_save(flags);
 	*rcu_ctrlblk.curtail = head;
 	rcu_ctrlblk.curtail = &head->next;
-	local_irq_restore(flags);
 
 	if (unlikely(is_idle_task(current))) {
-		/* force scheduling for rcu_qs() */
-		resched_cpu(0);
+		/*
+		 * Force resched to trigger a QS and handle callbacks right after.
+		 * This also takes care of avoiding too early rescheduling on boot.
+		 */
+		raise_ksoftirqd_irqoff(RCU_SOFTIRQ);
 	}
+	local_irq_restore(flags);
 }
 EXPORT_SYMBOL_GPL(call_rcu);
 
@@ -228,8 +231,16 @@ unsigned long start_poll_synchronize_rcu(void)
 	unsigned long gp_seq = get_state_synchronize_rcu();
 
 	if (unlikely(is_idle_task(current))) {
-		/* force scheduling for rcu_qs() */
-		resched_cpu(0);
+		unsigned long flags;
+
+		/*
+		 * Force resched to trigger a QS. This also takes care of avoiding
+		 * too early rescheduling on boot. It's suboptimized but GP
+		 * polling on idle isn't expected much as a usecase.
+		 */
+		local_irq_save(flags);
+		raise_ksoftirqd_irqoff(RCU_SOFTIRQ);
+		local_irq_restore(flags);
 	}
 	return gp_seq;
 }
