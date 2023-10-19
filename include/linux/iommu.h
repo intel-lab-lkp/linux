@@ -8,6 +8,7 @@
 #define __LINUX_IOMMU_H
 
 #include <linux/scatterlist.h>
+#include <linux/bvec.h>
 #include <linux/device.h>
 #include <linux/types.h>
 #include <linux/errno.h>
@@ -485,6 +486,9 @@ extern size_t iommu_unmap_fast(struct iommu_domain *domain,
 extern ssize_t iommu_map_sg(struct iommu_domain *domain, unsigned long iova,
 			    struct scatterlist *sg, unsigned int nents,
 			    int prot, gfp_t gfp);
+extern ssize_t iommu_map_bvecs(struct iommu_domain *domain, unsigned long iova,
+			       struct bio_vec *bvecs, unsigned int nents,
+			       int prot, gfp_t gfp);
 extern phys_addr_t iommu_iova_to_phys(struct iommu_domain *domain, dma_addr_t iova);
 extern void iommu_set_fault_handler(struct iommu_domain *domain,
 			iommu_fault_handler_t handler, void *token);

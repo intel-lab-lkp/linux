@@ -2669,6 +2669,64 @@ out_err:
 }
 EXPORT_SYMBOL_GPL(iommu_map_sg);
 
+ssize_t iommu_map_bvecs(struct iommu_domain *domain, unsigned long iova,
+			struct bio_vec *bv, unsigned int nents, int prot,
+			 gfp_t gfp)
+{
+	const struct iommu_domain_ops *ops = domain->ops;
+	size_t len = 0, mapped = 0;
+	unsigned int i = 0;
+	phys_addr_t start;
+	int ret;
+
+	might_sleep_if(gfpflags_allow_blocking(gfp));
+
+	/* Discourage passing strange GFP flags */
+	if (WARN_ON_ONCE(gfp & (__GFP_COMP | __GFP_DMA | __GFP_DMA32 |
+				__GFP_HIGHMEM)))
+		return -EINVAL;
+
+	while (i <= nents) {
+		phys_addr_t b_phys = bv_phys(bv);
+
+		if (len && b_phys != start + len) {
+			ret = __iommu_map(domain, iova + mapped, start,
+					len, prot, gfp);
+
+			if (ret)
+				goto out_err;
+
+			mapped += len;
+			len = 0;
+		}
+
+		if (bv_dma_is_bus_address(bv))
+			goto next;
+
+		if (len) {
+			len += bv->bv_len;
+		} else {
+			len = bv->bv_len;
+			start = b_phys;
+		}
+
+next:
+		if (++i < nents)
+			bv++;
+	}
+
+	if (ops->iotlb_sync_map)
+		ops->iotlb_sync_map(domain, iova, mapped);
+	return mapped;
+
+out_err:
+	/* undo mappings already done */
+	iommu_unmap(domain, iova, mapped);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(iommu_map_bvecs);
+
 /**
  * report_iommu_fault() - report about an IOMMU fault to the IOMMU framework
  * @domain: the iommu domain where the fault has happened
