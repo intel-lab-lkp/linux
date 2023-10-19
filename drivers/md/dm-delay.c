@@ -13,6 +13,7 @@
 #include <linux/blkdev.h>
 #include <linux/bio.h>
 #include <linux/slab.h>
+#include <linux/kthread.h>
 
 #include <linux/device-mapper.h>
 
@@ -26,11 +27,9 @@ struct delay_class {
 };
 
 struct delay_c {
-	struct timer_list delay_timer;
-	struct mutex timer_lock;
-	struct workqueue_struct *kdelayd_wq;
 	struct work_struct flush_expired_bios;
 	struct list_head delayed_bios;
+	struct task_struct *worker;
 	atomic_t may_delay;
 
 	struct delay_class read;
@@ -48,42 +47,25 @@ struct dm_delay_info {
 };
 
 static DEFINE_MUTEX(delayed_bios_lock);
+static void flush_delayed_bios(struct delay_c *dc, int flush_all);
 
-static void handle_delayed_timer(struct timer_list *t)
+static int flush_worker_fn(void *data)
 {
-	struct delay_c *dc = from_timer(dc, t, delay_timer);
+	struct delay_c *dc = (struct delay_c *)data;
 
-	queue_work(dc->kdelayd_wq, &dc->flush_expired_bios);
-}
-
-static void queue_timeout(struct delay_c *dc, unsigned long expires)
-{
-	mutex_lock(&dc->timer_lock);
-
-	if (!timer_pending(&dc->delay_timer) || expires < dc->delay_timer.expires)
-		mod_timer(&dc->delay_timer, expires);
-
-	mutex_unlock(&dc->timer_lock);
-}
-
-static void flush_bios(struct bio *bio)
-{
-	struct bio *n;
-
-	while (bio) {
-		n = bio->bi_next;
-		bio->bi_next = NULL;
-		dm_submit_bio_remap(bio, NULL);
-		bio = n;
+	while (1) {
+		flush_delayed_bios(dc, 0);
+		if (unlikely(list_empty(&dc->delayed_bios)))
+			set_current_state(TASK_INTERRUPTIBLE);
+		schedule();
 	}
+
+	return 0;
 }
 
-static struct bio *flush_delayed_bios(struct delay_c *dc, int flush_all)
+static void flush_delayed_bios(struct delay_c *dc, int flush_all)
 {
 	struct dm_delay_info *delayed, *next;
-	unsigned long next_expires = 0;
-	unsigned long start_timer = 0;
-	struct bio_list flush_bios = { };
 
 	mutex_lock(&delayed_bios_lock);
 	list_for_each_entry_safe(delayed, next, &dc->delayed_bios, list) {
@@ -91,23 +73,12 @@ static struct bio *flush_delayed_bios(struct delay_c *dc, int flush_all)
 			struct bio *bio = dm_bio_from_per_bio_data(delayed,
 						sizeof(struct dm_delay_info));
 			list_del(&delayed->list);
-			bio_list_add(&flush_bios, bio);
+			dm_submit_bio_remap(bio, NULL);
 			delayed->class->ops--;
-			continue;
 		}
-
-		if (!start_timer) {
-			start_timer = 1;
-			next_expires = delayed->expires;
-		} else
-			next_expires = min(next_expires, delayed->expires);
 	}
 	mutex_unlock(&delayed_bios_lock);
 
-	if (start_timer)
-		queue_timeout(dc, next_expires);
-
-	return bio_list_get(&flush_bios);
 }
 
 static void flush_expired_bios(struct work_struct *work)
@@ -115,15 +86,12 @@ static void flush_expired_bios(struct work_struct *work)
 	struct delay_c *dc;
 
 	dc = container_of(work, struct delay_c, flush_expired_bios);
-	flush_bios(flush_delayed_bios(dc, 0));
+	flush_delayed_bios(dc, 0);
 }
 
 static void delay_dtr(struct dm_target *ti)
 {
 	struct delay_c *dc = ti->private;
-
-	if (dc->kdelayd_wq)
-		destroy_workqueue(dc->kdelayd_wq);
 
 	if (dc->read.dev)
 		dm_put_device(ti, dc->read.dev);
@@ -131,8 +99,8 @@ static void delay_dtr(struct dm_target *ti)
 		dm_put_device(ti, dc->write.dev);
 	if (dc->flush.dev)
 		dm_put_device(ti, dc->flush.dev);
-
-	mutex_destroy(&dc->timer_lock);
+	if (dc->worker)
+		kthread_stop(dc->worker);
 
 	kfree(dc);
 }
@@ -188,10 +156,11 @@ static int delay_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 	}
 
 	ti->private = dc;
-	timer_setup(&dc->delay_timer, handle_delayed_timer, 0);
 	INIT_WORK(&dc->flush_expired_bios, flush_expired_bios);
 	INIT_LIST_HEAD(&dc->delayed_bios);
-	mutex_init(&dc->timer_lock);
+	dc->worker = kthread_create(&flush_worker_fn, dc, "dm-delay-flush-worker");
+	if (!dc->worker)
+		goto bad;
 	atomic_set(&dc->may_delay, 1);
 	dc->argc = argc;
 
@@ -224,13 +193,6 @@ static int delay_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 		goto bad;
 
 out:
-	dc->kdelayd_wq = alloc_workqueue("kdelayd", WQ_MEM_RECLAIM, 0);
-	if (!dc->kdelayd_wq) {
-		ret = -EINVAL;
-		DMERR("Couldn't start kdelayd");
-		goto bad;
-	}
-
 	ti->num_flush_bios = 1;
 	ti->num_discard_bios = 1;
 	ti->accounts_remapped_io = true;
@@ -260,7 +222,7 @@ static int delay_bio(struct delay_c *dc, struct delay_class *c, struct bio *bio)
 	list_add_tail(&delayed->list, &dc->delayed_bios);
 	mutex_unlock(&delayed_bios_lock);
 
-	queue_timeout(dc, expires);
+	wake_up_process(dc->worker);
 
 	return DM_MAPIO_SUBMITTED;
 }
@@ -270,8 +232,7 @@ static void delay_presuspend(struct dm_target *ti)
 	struct delay_c *dc = ti->private;
 
 	atomic_set(&dc->may_delay, 0);
-	del_timer_sync(&dc->delay_timer);
-	flush_bios(flush_delayed_bios(dc, 1));
+	flush_delayed_bios(dc, 1);
 }
 
 static void delay_resume(struct dm_target *ti)
