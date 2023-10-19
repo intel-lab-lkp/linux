@@ -108,15 +108,16 @@ ethnl_set_wol(struct ethnl_req_info *req_info, struct genl_info *info)
 	struct net_device *dev = req_info->dev;
 	struct nlattr **tb = info->attrs;
 	bool mod = false;
+	u32 wolopts = 0;
 	int ret;
 
 	dev->ethtool_ops->get_wol(dev, &wol);
-	ret = ethnl_update_bitset32(&wol.wolopts, WOL_MODE_COUNT,
+	ret = ethnl_update_bitset32(&wolopts, WOL_MODE_COUNT,
 				    tb[ETHTOOL_A_WOL_MODES], wol_mode_names,
 				    info->extack, &mod);
 	if (ret < 0)
 		return ret;
-	if (wol.wolopts & ~wol.supported) {
+	if (wolopts & ~wol.supported) {
 		NL_SET_ERR_MSG_ATTR(info->extack, tb[ETHTOOL_A_WOL_MODES],
 				    "cannot enable unsupported WoL mode");
 		return -EINVAL;
@@ -132,8 +133,9 @@ ethnl_set_wol(struct ethnl_req_info *req_info, struct genl_info *info)
 				    tb[ETHTOOL_A_WOL_SOPASS], &mod);
 	}
 
-	if (!mod)
+	if (!mod && wolopts == wol.wolopts)
 		return 0;
+	wol.wolopts = wolopts;
 	ret = dev->ethtool_ops->set_wol(dev, &wol);
 	if (ret)
 		return ret;
