@@ -479,6 +479,11 @@ static void *ptdump_host_va(phys_addr_t phys)
 	return __va(phys);
 }
 
+static struct kvm_pgtable_mm_ops host_mmops = {
+	.phys_to_virt	=	ptdump_host_va,
+	.virt_to_phys	=	ptdump_host_pa,
+};
+
 static size_t stage2_get_pgd_len(void)
 {
 	u64 mmfr0, mmfr1, vtcr;
@@ -604,6 +609,63 @@ static void stage2_ptdump_end_walk(struct ptdump_info *info)
 	free_pages_exact(snapshot, PAGE_SIZE);
 	info->priv = NULL;
 }
+
+static int stage2_ptdump_visitor(const struct kvm_pgtable_visit_ctx *ctx,
+				 enum kvm_pgtable_walk_flags visit)
+{
+	struct pg_state *st = ctx->arg;
+	struct ptdump_state *pt_st = &st->ptdump;
+
+	if (st->pg_level[ctx->level].mask & ctx->old)
+		pt_st->note_page(pt_st, ctx->addr, ctx->level, ctx->old);
+
+	return 0;
+}
+
+static void stage2_ptdump_walk(struct seq_file *s, struct ptdump_info *info)
+{
+	struct kvm_pgtable_snapshot *snapshot = info->priv;
+	struct pg_state st;
+	struct kvm_pgtable *pgtable;
+	u64 start_ipa = 0, end_ipa;
+	struct addr_marker ipa_address_markers[3];
+	struct kvm_pgtable_walker walker = (struct kvm_pgtable_walker) {
+		.cb	= stage2_ptdump_visitor,
+		.arg	= &st,
+		.flags	= KVM_PGTABLE_WALK_LEAF,
+	};
+
+	if (snapshot == NULL || !snapshot->pgtable.pgd)
+		return;
+
+	pgtable = &snapshot->pgtable;
+	pgtable->mm_ops = &host_mmops;
+	end_ipa = BIT(pgtable->ia_bits) - 1;
+
+	memset(&ipa_address_markers[0], 0, sizeof(ipa_address_markers));
+
+	ipa_address_markers[0].start_address = start_ipa;
+	ipa_address_markers[0].name = "IPA start";
+
+	ipa_address_markers[1].start_address = end_ipa;
+	ipa_address_markers[1].name = "IPA end";
+
+	st = (struct pg_state) {
+		.seq		= s,
+		.marker		= &ipa_address_markers[0],
+		.level		= pgtable->start_level - 1,
+		.pg_level	= &stage2_pg_level[0],
+		.ptdump		= {
+			.note_page	= note_page,
+			.range		= (struct ptdump_range[]) {
+				{start_ipa,	end_ipa},
+				{0,		0},
+			},
+		},
+	};
+
+	kvm_pgtable_walk(pgtable, start_ipa, end_ipa, &walker);
+}
 #endif /* CONFIG_NVHE_EL2_PTDUMP_DEBUGFS */
 
 static void __init ptdump_register_host_stage2(void)
@@ -616,6 +678,7 @@ static void __init ptdump_register_host_stage2(void)
 		.mc_len			= host_s2_pgtable_pages(),
 		.ptdump_prepare_walk	= stage2_ptdump_prepare_walk,
 		.ptdump_end_walk	= stage2_ptdump_end_walk,
+		.ptdump_walk		= stage2_ptdump_walk,
 	};
 
 	mutex_init(&stage2_kernel_ptdump_info.file_lock);
