@@ -504,7 +504,6 @@ static int __init __reserved_mem_reserve_reg(unsigned long node,
 	phys_addr_t base, size;
 	int len;
 	const __be32 *prop;
-	int first = 1;
 	bool nomap;
 
 	prop = of_get_flat_dt_prop(node, "reg", &len);
@@ -532,10 +531,6 @@ static int __init __reserved_mem_reserve_reg(unsigned long node,
 			       uname, &base, (unsigned long)(size / SZ_1M));
 
 		len -= t_len;
-		if (first) {
-			fdt_reserved_mem_save_node(node, uname, base, size);
-			first = 0;
-		}
 	}
 	return 0;
 }
@@ -564,9 +559,44 @@ static int __init __reserved_mem_check_root(unsigned long node)
 }
 
 /*
- * fdt_scan_reserved_mem() - scan a single FDT node for reserved memory
+ * Save the reserved_mem reg nodes in the reserved_mem array
  */
-static int __init fdt_scan_reserved_mem(void)
+static void save_reserved_mem_reg_nodes(unsigned long node, const char *uname)
+
+{
+	int t_len = (dt_root_addr_cells + dt_root_size_cells) * sizeof(__be32);
+	phys_addr_t base, size;
+	int len;
+	const __be32 *prop;
+
+	prop = of_get_flat_dt_prop(node, "reg", &len);
+	if (!prop)
+		return;
+
+	if (len && len % t_len != 0) {
+		pr_err("Reserved memory: invalid reg property in '%s', skipping node.\n",
+		       uname);
+		return;
+	}
+	base = dt_mem_next_cell(dt_root_addr_cells, &prop);
+	size = dt_mem_next_cell(dt_root_size_cells, &prop);
+
+	if (size)
+		fdt_reserved_mem_save_node(node, uname, base, size);
+}
+
+/*
+ * fdt_scan_reserved_mem() - scan a single FDT node for reserved memory.
+ * @save_only: Option to determine what kind of fdt scan the caller is
+ * requesting.
+ *
+ * The fdt is scanned twice here during device bootup. The first scan
+ * is used to save the dynamically allocated reserved memory regions to
+ * the reserved_mem array. The second scan is used to save the 'reg'
+ * defined regions to the array. @save_only indicates which of the scans
+ * the caller is requesting.
+ */
+int __init fdt_scan_reserved_mem(bool save_only)
 {
 	int node, child;
 	const void *fdt = initial_boot_params;
@@ -589,9 +619,14 @@ static int __init fdt_scan_reserved_mem(void)
 
 		uname = fdt_get_name(fdt, child, NULL);
 
+		if (save_only) {
+			save_reserved_mem_reg_nodes(child, uname);
+			continue;
+		}
+
 		err = __reserved_mem_reserve_reg(child, uname);
 		if (err == -ENOENT && of_get_flat_dt_prop(child, "size", NULL))
-			fdt_reserved_mem_save_node(child, uname, 0, 0);
+			__reserved_mem_alloc_size(child, uname);
 	}
 	return 0;
 }
@@ -631,11 +666,12 @@ void __init early_init_fdt_scan_reserved_mem(void)
 {
 	int n;
 	u64 base, size;
+	bool save_only = false;
 
 	if (!initial_boot_params)
 		return;
 
-	fdt_scan_reserved_mem();
+	fdt_scan_reserved_mem(save_only);
 	fdt_reserve_elfcorehdr();
 
 	/* Process header /memreserve/ fields */
@@ -645,8 +681,6 @@ void __init early_init_fdt_scan_reserved_mem(void)
 			break;
 		memblock_reserve(base, size);
 	}
-
-	fdt_init_reserved_mem();
 }
 
 /**

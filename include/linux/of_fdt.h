@@ -77,6 +77,7 @@ extern void early_init_dt_scan_nodes(void);
 extern const char *of_flat_dt_get_machine_name(void);
 extern const void *of_flat_dt_match_machine(const void *default_match,
 		const void * (*get_next_compat)(const char * const**));
+extern int fdt_scan_reserved_mem(bool save_only);
 
 /* Other Prototypes */
 extern void unflatten_device_tree(void);
