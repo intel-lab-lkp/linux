@@ -385,6 +385,16 @@ apply_relocation(u8 *buf, size_t len, u8 *dest, u8 *src, size_t src_len)
 	}
 }
 
+/* Low-level backend functions usable from alternative code replacements. */
+DEFINE_ASM_FUNC(x86_nop, "", .entry.text);
+EXPORT_SYMBOL_GPL(x86_nop);
+
+noinstr void x86_BUG(void)
+{
+	BUG();
+}
+EXPORT_SYMBOL_GPL(x86_BUG);
+
 /*
  * Replace instructions with better alternatives for this CPU type. This runs
  * before SMP is initialized to avoid SMP problems with self modifying code.
