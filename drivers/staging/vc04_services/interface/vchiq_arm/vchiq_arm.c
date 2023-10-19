@@ -1806,8 +1806,6 @@ static int vchiq_probe(struct platform_device *pdev)
 	if (err)
 		goto failed_platform_init;
 
-	vchiq_debugfs_init();
-
 	vchiq_log_info(vchiq_arm_log_level,
 		       "vchiq: platform initialised - version %d (min %d)",
 		       VCHIQ_VERSION, VCHIQ_VERSION_MIN);
@@ -1838,7 +1836,6 @@ static void vchiq_remove(struct platform_device *pdev)
 {
 	vchiq_device_unregister(bcm2835_audio);
 	vchiq_device_unregister(bcm2835_camera);
-	vchiq_debugfs_deinit();
 	vchiq_deregister_chrdev();
 }
 

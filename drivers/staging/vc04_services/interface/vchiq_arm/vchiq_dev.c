@@ -1185,8 +1185,6 @@ static int vchiq_open(struct inode *inode, struct file *file)
 	instance->state = state;
 	instance->pid = current->tgid;
 
-	vchiq_debugfs_add_instance(instance);
-
 	init_completion(&instance->insert_event);
 	init_completion(&instance->remove_event);
 	mutex_init(&instance->completion_mutex);
@@ -1296,8 +1294,6 @@ static int vchiq_release(struct inode *inode, struct file *file)
 	vchiq_release_internal(instance->state, NULL);
 
 	free_bulk_waiter(instance);
-
-	vchiq_debugfs_remove_instance(instance);
 
 	kfree(instance);
 	file->private_data = NULL;

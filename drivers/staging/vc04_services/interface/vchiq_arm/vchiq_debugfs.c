@@ -228,20 +228,4 @@ void vchiq_debugfs_deinit(void)
 
 #else /* CONFIG_DEBUG_FS */
 
-void vchiq_debugfs_init(void)
-{
-}
-
-void vchiq_debugfs_deinit(void)
-{
-}
-
-void vchiq_debugfs_add_instance(struct vchiq_instance *instance)
-{
-}
-
-void vchiq_debugfs_remove_instance(struct vchiq_instance *instance)
-{
-}
-
 #endif /* CONFIG_DEBUG_FS */
