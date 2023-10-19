@@ -487,6 +487,12 @@ static struct pci_ops ks_pcie_ops = {
 	.add_bus = ks_pcie_v3_65_add_bus,
 };
 
+static struct pci_ops ks_pcie_am6_ops = {
+	.map_bus = dw_pcie_own_conf_map_bus,
+	.read = pci_generic_config_read,
+	.write = pci_generic_config_write,
+};
+
 /**
  * ks_pcie_link_up() - Check if link up
  * @pci: A pointer to the dw_pcie structure which holds the DesignWare PCIe host
@@ -804,9 +810,12 @@ static int __init ks_pcie_host_init(struct dw_pcie_rp *pp)
 	struct keystone_pcie *ks_pcie = to_keystone_pcie(pci);
 	int ret;
 
-	pp->bridge->ops = &ks_pcie_ops;
-	if (!ks_pcie->is_am6)
+	if (ks_pcie->is_am6) {
+		pp->bridge->ops = &ks_pcie_am6_ops;
+	} else {
+		pp->bridge->ops = &ks_pcie_ops;
 		pp->bridge->child_ops = &ks_child_pcie_ops;
+	}
 
 	ret = ks_pcie_config_legacy_irq(ks_pcie);
 	if (ret)
