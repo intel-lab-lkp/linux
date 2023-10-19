@@ -1188,18 +1188,17 @@ static void zswap_fill_page(void *ptr, unsigned long value)
 	memset_l(page, value, PAGE_SIZE / sizeof(unsigned long));
 }
 
-bool zswap_store(struct folio *folio)
+static bool zswap_store_page(struct folio *folio, long index,
+			     struct obj_cgroup *objcg, struct zswap_pool *pool)
 {
 	swp_entry_t swp = folio->swap;
 	int type = swp_type(swp);
-	pgoff_t offset = swp_offset(swp);
-	struct page *page = &folio->page;
+	pgoff_t offset = swp_offset(swp) + index;
+	struct page *page = folio_page(folio, index);
 	struct zswap_tree *tree = zswap_trees[type];
 	struct zswap_entry *entry, *dupentry;
 	struct scatterlist input, output;
 	struct crypto_acomp_ctx *acomp_ctx;
-	struct obj_cgroup *objcg = NULL;
-	struct zswap_pool *pool;
 	struct zpool *zpool;
 	unsigned int dlen = PAGE_SIZE;
 	unsigned long handle, value;
@@ -1208,51 +1207,11 @@ bool zswap_store(struct folio *folio)
 	gfp_t gfp;
 	int ret;
 
-	VM_WARN_ON_ONCE(!folio_test_locked(folio));
-	VM_WARN_ON_ONCE(!folio_test_swapcache(folio));
-
-	/* Large folios aren't supported */
-	if (folio_test_large(folio))
+	/* entry keeps the references if successfully stored. */
+	if (!zswap_pool_get(pool))
 		return false;
-
-	if (!zswap_enabled || !tree)
-		return false;
-
-	/*
-	 * If this is a duplicate, it must be removed before attempting to store
-	 * it, otherwise, if the store fails the old page won't be removed from
-	 * the tree, and it might be written back overriding the new data.
-	 */
-	spin_lock(&tree->lock);
-	dupentry = zswap_rb_search(&tree->rbroot, offset);
-	if (dupentry) {
-		zswap_duplicate_entry++;
-		zswap_invalidate_entry(tree, dupentry);
-	}
-	spin_unlock(&tree->lock);
-
-	/*
-	 * XXX: zswap reclaim does not work with cgroups yet. Without a
-	 * cgroup-aware entry LRU, we will push out entries system-wide based on
-	 * local cgroup limits.
-	 */
-	objcg = get_obj_cgroup_from_folio(folio);
-	if (objcg && !obj_cgroup_may_zswap(objcg))
-		goto reject;
-
-	/* reclaim space if needed */
-	if (zswap_is_full()) {
-		zswap_pool_limit_hit++;
-		zswap_pool_reached_full = true;
-		goto shrink;
-	}
-
-	if (zswap_pool_reached_full) {
-	       if (!zswap_can_accept())
-			goto shrink;
-		else
-			zswap_pool_reached_full = false;
-	}
+	if (objcg)
+		obj_cgroup_get(objcg);
 
 	/* allocate entry */
 	entry = zswap_entry_cache_alloc(GFP_KERNEL);
@@ -1260,6 +1219,8 @@ bool zswap_store(struct folio *folio)
 		zswap_reject_kmemcache_fail++;
 		goto reject;
 	}
+	entry->objcg = objcg;
+	entry->pool = pool;
 
 	if (zswap_same_filled_pages_enabled) {
 		src = kmap_atomic(page);
@@ -1275,11 +1236,6 @@ bool zswap_store(struct folio *folio)
 	}
 
 	if (!zswap_non_same_filled_pages_enabled)
-		goto freepage;
-
-	/* if entry is successfully added, it keeps the reference */
-	entry->pool = zswap_pool_current_get();
-	if (!entry->pool)
 		goto freepage;
 
 	/* compress */
@@ -1337,7 +1293,6 @@ bool zswap_store(struct folio *folio)
 	entry->length = dlen;
 
 insert_entry:
-	entry->objcg = objcg;
 	if (objcg) {
 		obj_cgroup_charge_zswap(objcg, entry->length);
 		/* Account before objcg ref is moved to tree */
@@ -1373,19 +1328,105 @@ insert_entry:
 
 put_dstmem:
 	mutex_unlock(acomp_ctx->mutex);
-	zswap_pool_put(entry->pool);
 freepage:
 	zswap_entry_cache_free(entry);
 reject:
 	if (objcg)
 		obj_cgroup_put(objcg);
+	zswap_pool_put(pool);
 	return false;
+}
 
+bool zswap_store(struct folio *folio)
+{
+	long nr_pages = folio_nr_pages(folio);
+	swp_entry_t swp = folio->swap;
+	int type = swp_type(swp);
+	pgoff_t offset = swp_offset(swp);
+	struct zswap_tree *tree = zswap_trees[type];
+	struct zswap_entry *entry;
+	struct obj_cgroup *objcg = NULL;
+	struct zswap_pool *pool;
+	bool ret = false;
+	long i;
+
+	VM_WARN_ON_ONCE(!folio_test_locked(folio));
+	VM_WARN_ON_ONCE(!folio_test_swapcache(folio));
+
+	if (!zswap_enabled || !tree)
+		return false;
+
+	/*
+	 * If this is a duplicate, it must be removed before attempting to store
+	 * it, otherwise, if the store fails the old page won't be removed from
+	 * the tree, and it might be written back overriding the new data.
+	 */
+	spin_lock(&tree->lock);
+	for (i = 0; i < nr_pages; i++) {
+		entry = zswap_rb_search(&tree->rbroot, offset + i);
+		if (entry) {
+			zswap_duplicate_entry++;
+			zswap_invalidate_entry(tree, entry);
+		}
+	}
+	spin_unlock(&tree->lock);
+
+	/*
+	 * XXX: zswap reclaim does not work with cgroups yet. Without a
+	 * cgroup-aware entry LRU, we will push out entries system-wide based on
+	 * local cgroup limits.
+	 */
+	objcg = get_obj_cgroup_from_folio(folio);
+	if (objcg && !obj_cgroup_may_zswap(objcg))
+		goto put_objcg;
+
+	/* reclaim space if needed */
+	if (zswap_is_full()) {
+		zswap_pool_limit_hit++;
+		zswap_pool_reached_full = true;
+		goto shrink;
+	}
+
+	if (zswap_pool_reached_full) {
+		if (!zswap_can_accept())
+			goto shrink;
+		else
+			zswap_pool_reached_full = false;
+	}
+
+	pool = zswap_pool_current_get();
+	if (!pool)
+		goto put_objcg;
+
+	/*
+	 * Store each page of the folio as a separate entry. If we fail to store
+	 * a page, unwind by removing all the previous pages we stored.
+	 */
+	for (i = 0; i < nr_pages; i++) {
+		if (!zswap_store_page(folio, i, objcg, pool)) {
+			spin_lock(&tree->lock);
+			for (i--; i >= 0; i--) {
+				entry = zswap_rb_search(&tree->rbroot, offset + i);
+				if (entry)
+					zswap_invalidate_entry(tree, entry);
+			}
+			spin_unlock(&tree->lock);
+			goto put_pool;
+		}
+	}
+
+	ret = true;
+put_pool:
+	zswap_pool_put(pool);
+put_objcg:
+	if (objcg)
+		obj_cgroup_put(objcg);
+	return ret;
 shrink:
 	pool = zswap_pool_last_get();
 	if (pool && !queue_work(shrink_wq, &pool->shrink_work))
 		zswap_pool_put(pool);
-	goto reject;
+	goto put_objcg;
 }
 
 bool zswap_load(struct folio *folio)
