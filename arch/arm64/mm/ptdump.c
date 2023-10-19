@@ -346,6 +346,7 @@ static struct ptdump_info kernel_ptdump_info = {
 	.mm		= &init_mm,
 	.markers	= address_markers,
 	.base_addr	= PAGE_OFFSET,
+	.ptdump_walk	= &ptdump_walk,
 };
 
 void ptdump_check_wx(void)
