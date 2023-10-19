@@ -717,6 +717,11 @@ static const struct drm_ioctl_desc drm_ioctls[] = {
 	DRM_IOCTL_DEF(DRM_IOCTL_MODE_LIST_LESSEES, drm_mode_list_lessees_ioctl, DRM_MASTER),
 	DRM_IOCTL_DEF(DRM_IOCTL_MODE_GET_LEASE, drm_mode_get_lease_ioctl, DRM_MASTER),
 	DRM_IOCTL_DEF(DRM_IOCTL_MODE_REVOKE_LEASE, drm_mode_revoke_lease_ioctl, DRM_MASTER),
+
+	DRM_IOCTL_DEF(DRM_IOCTL_MODE_GETCOLOROPRESOURCES, drm_mode_getcolorop_res, 0),
+	/* TODO do we need GETCOLOROP? */
+	DRM_IOCTL_DEF(DRM_IOCTL_MODE_GETCOLOROP, drm_mode_getcolorop, 0),
+
 };
 
 #define DRM_CORE_IOCTL_COUNT	ARRAY_SIZE(drm_ioctls)

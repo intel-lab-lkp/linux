@@ -32,6 +32,57 @@
 
 /* TODO big colorop doc, including properties, etc. */
 
+/* IOCTLs */
+
+int drm_mode_getcolorop_res(struct drm_device *dev, void *data,
+			    struct drm_file *file_priv)
+{
+	struct drm_mode_get_colorop_res *colorop_resp = data;
+	struct drm_colorop *colorop;
+	uint32_t __user *colorop_ptr;
+	int count = 0;
+
+	if (!drm_core_check_feature(dev, DRIVER_MODESET))
+		return -EOPNOTSUPP;
+
+	colorop_ptr = u64_to_user_ptr(colorop_resp->colorop_id_ptr);
+
+	/*
+	 * This ioctl is called twice, once to determine how much space is
+	 * needed, and the 2nd time to fill it.
+	 */
+	drm_for_each_colorop(colorop, dev) {
+		if (drm_lease_held(file_priv, colorop->base.id)) {
+			if (count < colorop_resp->count_colorops &&
+			    put_user(colorop->base.id, colorop_ptr + count))
+				return -EFAULT;
+			count++;
+		}
+	}
+	colorop_resp->count_colorops = count;
+
+	return 0;
+}
+
+int drm_mode_getcolorop(struct drm_device *dev, void *data,
+		        struct drm_file *file_priv)
+{
+	struct drm_mode_get_colorop *colorop_resp = data;
+	struct drm_colorop *colorop;
+
+	if (!drm_core_check_feature(dev, DRIVER_MODESET))
+		return -EOPNOTSUPP;
+
+	colorop = drm_colorop_find(dev, file_priv, colorop_resp->colorop_id);
+	if (!colorop)
+		return -ENOENT;
+
+	colorop_resp->colorop_id = colorop->base.id;
+	colorop_resp->plane_id = colorop->plane ? colorop->plane->base.id : 0;
+
+	return 0;
+}
+
 static const struct drm_prop_enum_list drm_colorop_type_enum_list[] = {
 	{ DRM_COLOROP_1D_CURVE, "1D Curve" },
 };

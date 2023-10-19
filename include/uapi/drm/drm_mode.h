@@ -357,6 +357,27 @@ struct drm_mode_get_plane {
 	__u64 format_type_ptr;
 };
 
+struct drm_mode_get_colorop_res {
+	__u64 colorop_id_ptr;
+	__u32 count_colorops;
+};
+
+
+/**
+ * struct drm_mode_get_colorop - Get colorop metadata.
+ *
+ * Userspace can perform a GETCOLOROP ioctl to retrieve information about a
+ * colorop.
+ */
+struct drm_mode_get_colorop {
+	/**
+	 * @colorop_id: Object ID of the colorop whose information should be
+	 * retrieved. Set by caller.
+	 */
+	__u32 colorop_id;
+	__u32 plane_id;
+};
+
 struct drm_mode_get_plane_res {
 	__u64 plane_id_ptr;
 	__u32 count_planes;

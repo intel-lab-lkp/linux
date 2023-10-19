@@ -278,6 +278,10 @@ int drm_mode_getplane(struct drm_device *dev,
 		      void *data, struct drm_file *file_priv);
 int drm_mode_setplane(struct drm_device *dev,
 		      void *data, struct drm_file *file_priv);
+int drm_mode_getcolorop_res(struct drm_device *dev, void *data,
+			    struct drm_file *file_priv);
+int drm_mode_getcolorop(struct drm_device *dev, void *data,
+		        struct drm_file *file_priv);
 int drm_mode_cursor_ioctl(struct drm_device *dev,
 			  void *data, struct drm_file *file_priv);
 int drm_mode_cursor2_ioctl(struct drm_device *dev,
