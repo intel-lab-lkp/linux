@@ -340,3 +340,45 @@ void drm_colorop_set_next_property(struct drm_colorop *colorop, struct drm_color
 				      next->base.id);
 }
 EXPORT_SYMBOL(drm_colorop_set_next_property);
+
+/**
+ * drm_colorop_set_next_property - gets the next colorop ID
+ * @colorop: drm colorop
+ *
+ * Returns:
+ * The DRM object ID of the next colorop
+ */
+uint32_t drm_colorop_get_next_property(struct drm_colorop *colorop)
+{
+	uint64_t next_id = 0;
+
+	if (!colorop->next_property)
+		return 0;
+
+	drm_object_property_get_value(&colorop->base,
+				      colorop->next_property,
+				      &next_id);
+
+	return (uint32_t) next_id;
+}
+EXPORT_SYMBOL(drm_colorop_get_next_property);
+
+
+/**
+ * drm_colorop_set_next_property - gets the next colorop ID
+ * @colorop: drm colorop
+ *
+ * Returns:
+ * The DRM object ID of the next colorop
+ */
+struct drm_colorop *drm_colorop_get_next(struct drm_colorop *colorop)
+{
+	uint64_t next_id = drm_colorop_get_next_property(colorop);
+
+	if (!next_id)
+		return NULL;
+
+	return drm_colorop_find(colorop->dev, NULL, next_id);
+
+}
+EXPORT_SYMBOL(drm_colorop_get_next);
