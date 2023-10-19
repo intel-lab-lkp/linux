@@ -29,6 +29,16 @@ config JFFS2_FS_DEBUG
 	  If reporting bugs, please try to have available a full dump of the
 	  messages at debug level 1 while the misbehaviour was occurring.
 
+config JFFS2_FS_NOCLEANMARKER
+	bool "Disable cleanmarkers JFFS2 feature"
+	depends on JFFS2_FS_WRITEBUFFER
+	depends on MTD_NAND || MTD_SPI_NAND
+	default n
+	help
+	  Do not write 'CLEANMARKER' nodes to the beginning of each erase block.
+	  This option can be useful on NAND flash where there is no free
+	  space in the OOB area or the entire OOB area is protected by ECC.
+
 config JFFS2_FS_WRITEBUFFER
 	bool "JFFS2 write-buffering support"
 	depends on JFFS2_FS
