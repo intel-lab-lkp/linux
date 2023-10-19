@@ -127,7 +127,7 @@ SYM_CODE_END(__x86_indirect_jump_thunk_array)
 #undef GEN
 #endif
 
-#ifdef CONFIG_RETHUNK
+#ifdef CONFIG_MITIGATION_RETHUNK
 
 #ifdef CONFIG_MITIGATION_SRSO
 
@@ -371,4 +371,4 @@ SYM_CODE_START(__x86_return_thunk)
 SYM_CODE_END(__x86_return_thunk)
 EXPORT_SYMBOL(__x86_return_thunk)
 
-#endif /* CONFIG_RETHUNK */
+#endif /* CONFIG_MITIGATION_RETHUNK */
