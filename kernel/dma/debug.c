@@ -39,6 +39,7 @@ enum {
 	dma_debug_sg,
 	dma_debug_coherent,
 	dma_debug_resource,
+	dma_debug_bv,
 };
 
 enum map_err_types {
@@ -142,6 +143,7 @@ static const char *type2name[] = {
 	[dma_debug_sg] = "scatter-gather",
 	[dma_debug_coherent] = "coherent",
 	[dma_debug_resource] = "resource",
+	[dma_debug_bv] = "bio-vec",
 };
 
 static const char *dir2name[] = {
@@ -1189,6 +1191,32 @@ static void check_sg_segment(struct device *dev, struct scatterlist *sg)
 #endif
 }
 
+static void check_bv_segment(struct device *dev, struct bio_vec *bv)
+{
+#ifdef CONFIG_DMA_API_DEBUG_SG
+	unsigned int max_seg = dma_get_max_seg_size(dev);
+	u64 start, end, boundary = dma_get_seg_boundary(dev);
+
+	/*
+	 * Either the driver forgot to set dma_parms appropriately, or
+	 * whoever generated the list forgot to check them.
+	 */
+	if (bv->length > max_seg)
+		err_printk(dev, NULL, "mapping bv entry longer than device claims to support [len=%u] [max=%u]\n",
+			   bv->length, max_seg);
+	/*
+	 * In some cases this could potentially be the DMA API
+	 * implementation's fault, but it would usually imply that
+	 * the scatterlist was built inappropriately to begin with.
+	 */
+	start = bv_dma_address(bv);
+	end = start + bv_dma_len(bv) - 1;
+	if ((start ^ end) & ~boundary)
+		err_printk(dev, NULL, "mapping bv entry across boundary [start=0x%016llx] [end=0x%016llx] [boundary=0x%016llx]\n",
+			   start, end, boundary);
+#endif
+}
+
 void debug_dma_map_single(struct device *dev, const void *addr,
 			    unsigned long len)
 {
@@ -1333,6 +1361,47 @@ void debug_dma_map_sg(struct device *dev, struct scatterlist *sg,
 	}
 }
 
+void debug_dma_map_bvecs(struct device *dev, struct bio_vec *bvecs,
+			 int nents, int mapped_ents, int direction,
+			 unsigned long attrs)
+{
+	struct dma_debug_entry *entry;
+	struct bio_vec *bv;
+	int i;
+
+	if (unlikely(dma_debug_disabled()))
+		return;
+
+	for (i = 0; i < nents; i++) {
+		bv = &bvecs[i];
+		check_for_stack(dev, bv_page(bv), bv->offset);
+		if (!PageHighMem(bv_page(bv)))
+			check_for_illegal_area(dev, bv_virt(bv), bv->length);
+	}
+
+	for (i = 0; i < nents; i++) {
+		bv = &bvecs[i];
+
+		entry = dma_entry_alloc();
+		if (!entry)
+			return;
+
+		entry->type           = dma_debug_bv;
+		entry->dev            = dev;
+		entry->pfn	      = page_to_pfn(bv_page(bv));
+		entry->offset	      = bv->offset;
+		entry->size           = bv_dma_len(bv);
+		entry->dev_addr       = bv_dma_address(bv);
+		entry->direction      = direction;
+		entry->sg_call_ents   = nents;
+		entry->sg_mapped_ents = mapped_ents;
+
+		check_bv_segment(dev, bv);
+
+		add_dma_entry(entry, attrs);
+	}
+}
+
 static int get_nr_mapped_entries(struct device *dev,
 				 struct dma_debug_entry *ref)
 {
@@ -1370,6 +1439,37 @@ void debug_dma_unmap_sg(struct device *dev, struct scatterlist *sglist,
 			.offset		= s->offset,
 			.dev_addr       = sg_dma_address(s),
 			.size           = sg_dma_len(s),
+			.direction      = dir,
+			.sg_call_ents   = nelems,
+		};
+
+		if (mapped_ents && i >= mapped_ents)
+			break;
+
+		if (!i)
+			mapped_ents = get_nr_mapped_entries(dev, &ref);
+
+		check_unmap(&ref);
+	}
+}
+
+void debug_dma_unmap_bvecs(struct device *dev, struct bio_vec *bvecs,
+			   int nelems, int dir)
+{
+	int mapped_ents = 0, i;
+
+	if (unlikely(dma_debug_disabled()))
+		return;
+
+	for (i = 0; i < nents; i++) {
+		struct bio_vec *bv = &bvecs[i];
+		struct dma_debug_entry ref = {
+			.type           = dma_debug_bv,
+			.dev            = dev,
+			.pfn		= page_to_pfn(bv_page(bv)),
+			.offset		= bv->offset,
+			.dev_addr       = bv_dma_address(bv),
+			.size           = bv_dma_len(bv),
 			.direction      = dir,
 			.sg_call_ents   = nelems,
 		};
@@ -1575,6 +1675,69 @@ void debug_dma_sync_sg_for_device(struct device *dev, struct scatterlist *sg,
 			.offset		= s->offset,
 			.dev_addr       = sg_dma_address(s),
 			.size           = sg_dma_len(s),
+			.direction      = direction,
+			.sg_call_ents   = nelems,
+		};
+		if (!i)
+			mapped_ents = get_nr_mapped_entries(dev, &ref);
+
+		if (i >= mapped_ents)
+			break;
+
+		check_sync(dev, &ref, false);
+	}
+}
+
+void debug_dma_sync_bvecs_for_cpu(struct device *dev, struct bio_vec *bvecs,
+				  int nelems, int direction)
+{
+	int mapped_ents = 0, i;
+	struct bio_vec *bv;
+
+	if (unlikely(dma_debug_disabled()))
+		return;
+
+	for (i = 0; i < nents; i++) {
+		struct bio_vec *bv = &bvecs[i];
+		struct dma_debug_entry ref = {
+			.type           = dma_debug_bv,
+			.dev            = dev,
+			.pfn		= page_to_pfn(bv->bv_page),
+			.offset		= bv->bv_offset,
+			.dev_addr       = bv_dma_address(bv),
+			.size           = bv_dma_len(bv),
+			.direction      = direction,
+			.sg_call_ents   = nelems,
+		};
+
+		if (!i)
+			mapped_ents = get_nr_mapped_entries(dev, &ref);
+
+		if (i >= mapped_ents)
+			break;
+
+		check_sync(dev, &ref, true);
+	}
+}
+
+void debug_dma_sync_bvecs_for_device(struct device *dev, struct bio_vec *bvecs,
+				     int nelems, int direction)
+{
+	int mapped_ents = 0, i;
+	struct bio_vec *bv;
+
+	if (unlikely(dma_debug_disabled()))
+		return;
+
+	for (i = 0; i < nents; i++) {
+		struct bio_vec *bv = &bvecs[i];
+		struct dma_debug_entry ref = {
+			.type           = dma_debug_bv,
+			.dev            = dev,
+			.pfn		= page_to_pfn(bv->bv_page),
+			.offset		= bv->bv_offset,
+			.dev_addr       = bv_dma_address(bv),
+			.size           = bv_dma_len(bv),
 			.direction      = direction,
 			.sg_call_ents   = nelems,
 		};

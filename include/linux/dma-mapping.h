@@ -9,6 +9,7 @@
 #include <linux/err.h>
 #include <linux/dma-direction.h>
 #include <linux/scatterlist.h>
+#include <linux/bvec.h>
 #include <linux/bug.h>
 #include <linux/mem_encrypt.h>
 

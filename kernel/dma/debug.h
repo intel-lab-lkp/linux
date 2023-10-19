@@ -24,6 +24,13 @@ extern void debug_dma_map_sg(struct device *dev, struct scatterlist *sg,
 extern void debug_dma_unmap_sg(struct device *dev, struct scatterlist *sglist,
 			       int nelems, int dir);
 
+extern void debug_dma_map_bvecs(struct device *dev, struct bio_vec *bvecs,
+				int nents, int mapped_ents, int direction,
+				unsigned long attrs);
+
+extern void debug_dma_unmap_bvecs(struct device *dev, struct bio_vec *bvecs,
+				  int nelems, int dir);
+
 extern void debug_dma_alloc_coherent(struct device *dev, size_t size,
 				     dma_addr_t dma_addr, void *virt,
 				     unsigned long attrs);
@@ -54,6 +61,14 @@ extern void debug_dma_sync_sg_for_cpu(struct device *dev,
 extern void debug_dma_sync_sg_for_device(struct device *dev,
 					 struct scatterlist *sg,
 					 int nelems, int direction);
+
+extern void debug_dma_sync_bvecs_for_cpu(struct device *dev,
+					 struct bio_vec *bvecs,
+					 int nelems, int direction);
+
+extern void debug_dma_sync_bvecs_for_device(struct device *dev,
+					    struct bio_vec *bvecs,
+					    int nelems, int direction);
 #else /* CONFIG_DMA_API_DEBUG */
 static inline void debug_dma_map_page(struct device *dev, struct page *page,
 				      size_t offset, size_t size,
@@ -76,6 +91,17 @@ static inline void debug_dma_map_sg(struct device *dev, struct scatterlist *sg,
 static inline void debug_dma_unmap_sg(struct device *dev,
 				      struct scatterlist *sglist,
 				      int nelems, int dir)
+{
+}
+
+static inline void debug_dma_map_bvecs(struct device *dev, struct bio_vec *bvecs,
+				       int nents, int mapped_ents, int direction,
+				       unsigned long attrs)
+{
+}
+
+static inline void debug_dma_unmap_bvecs(struct device *dev, struct bio_vec *bvecs,
+					 int nelems, int dir)
 {
 }
 
@@ -124,6 +150,18 @@ static inline void debug_dma_sync_sg_for_cpu(struct device *dev,
 static inline void debug_dma_sync_sg_for_device(struct device *dev,
 						struct scatterlist *sg,
 						int nelems, int direction)
+{
+}
+
+static inline void debug_dma_sync_bvecs_for_cpu(struct device *dev,
+						struct bio_vec *bvecs,
+						int nelems, int direction)
+{
+}
+
+static inline void debug_dma_sync_bvecs_for_device(struct device *dev,
+						   struct bio_vec *bvecs,
+						   int nelems, int direction)
 {
 }
 #endif /* CONFIG_DMA_API_DEBUG */
