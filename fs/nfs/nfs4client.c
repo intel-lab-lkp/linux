@@ -1115,6 +1115,10 @@ static int nfs4_server_common_setup(struct nfs_server *server,
 
 	nfs4_server_set_init_caps(server);
 
+	/* Default (non-plus) v4 readdir attributes */
+	server->readdir_attrs[0] = FATTR4_WORD0_TYPE|FATTR4_WORD0_RDATTR_ERROR;
+	server->readdir_attrs[1] = FATTR4_WORD1_MOUNTED_ON_FILEID;
+
 	/* Probe the root fh to retrieve its FSID and filehandle */
 	error = nfs4_get_rootfh(server, mntfh, auth_probe);
 	if (error < 0)

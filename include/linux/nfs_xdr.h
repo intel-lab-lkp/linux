@@ -1142,6 +1142,7 @@ struct nfs4_readdir_arg {
 	struct page **			pages;	/* zero-copy data */
 	unsigned int			pgbase;	/* zero-copy data */
 	const u32 *			bitmask;
+	const struct nfs_server		*server;
 	bool				plus;
 };
 
