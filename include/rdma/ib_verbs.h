@@ -4221,6 +4221,35 @@ static inline void ib_dma_unmap_sg(struct ib_device *dev,
 }
 
 /**
+ * ib_dma_map_sg - Map an array of bio_vecs to DMA addresses
+ * @dev: The device for which the DMA addresses are to be created
+ * @bvecs: The array of bio_vec entries to map
+ * @nents: The number of entries in the array
+ * @direction: The direction of the DMA
+ */
+static inline int ib_dma_map_bvecs(struct ib_device *dev,
+				   struct bio_vec *bvecs, int nents,
+				   enum dma_data_direction direction)
+{
+	return dma_map_bvecs_attrs(dev->dma_device, bvecs, nents, direction, 0);
+}
+
+/**
+ * ib_dma_unmap_bvecs - Unmap a DMA-mapped bio_vec array
+ * @dev: The device for which the DMA addresses were created
+ * @bvecs: The array of bio_vec entries to unmap
+ * @nents: The number of entries in the array
+ * @direction: The direction of the DMA
+ */
+static inline void ib_dma_unmap_bvec(struct ib_device *dev,
+				     struct bio_vec *bvecs, int nents,
+				     enum dma_data_direction direction)
+{
+	if (!ib_uses_virt_dma(dev))
+		dma_unmap_bvecs_attrs(dev->dma_device, bvecs, nents, direction);
+}
+
+/**
  * ib_dma_max_seg_size - Return the size limit of a single DMA transfer
  * @dev: The device to query
  *
