@@ -664,7 +664,7 @@ void irq_exit(void)
  */
 inline void raise_softirq_irqoff(unsigned int nr)
 {
-	__raise_softirq_irqoff(nr);
+	raise_softirq_no_wake(nr);
 
 	/*
 	 * If we're in an interrupt or softirq, we're done
@@ -688,7 +688,7 @@ void raise_softirq(unsigned int nr)
 	local_irq_restore(flags);
 }
 
-void __raise_softirq_irqoff(unsigned int nr)
+void raise_softirq_no_wake(unsigned int nr)
 {
 	lockdep_assert_irqs_disabled();
 	trace_softirq_raise(nr);
@@ -795,7 +795,7 @@ static void tasklet_action_common(struct softirq_action *a,
 		t->next = NULL;
 		*tl_head->tail = t;
 		tl_head->tail = &t->next;
-		__raise_softirq_irqoff(softirq_nr);
+		raise_softirq_no_wake(softirq_nr);
 		local_irq_enable();
 	}
 }

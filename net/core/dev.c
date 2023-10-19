@@ -4459,7 +4459,7 @@ static inline void ____napi_schedule(struct softnet_data *sd,
 	 * we have to raise NET_RX_SOFTIRQ.
 	 */
 	if (!sd->in_net_rx_action)
-		__raise_softirq_irqoff(NET_RX_SOFTIRQ);
+		raise_softirq_no_wake(NET_RX_SOFTIRQ);
 }
 
 #ifdef CONFIG_RPS
@@ -4678,7 +4678,7 @@ static void trigger_rx_softirq(void *data)
 {
 	struct softnet_data *sd = data;
 
-	__raise_softirq_irqoff(NET_RX_SOFTIRQ);
+	raise_softirq_no_wake(NET_RX_SOFTIRQ);
 	smp_store_release(&sd->defer_ipi_scheduled, 0);
 }
 
@@ -4705,7 +4705,7 @@ static void napi_schedule_rps(struct softnet_data *sd)
 		 * we have to raise NET_RX_SOFTIRQ.
 		 */
 		if (!mysd->in_net_rx_action && !mysd->in_napi_threaded_poll)
-			__raise_softirq_irqoff(NET_RX_SOFTIRQ);
+			raise_softirq_no_wake(NET_RX_SOFTIRQ);
 		return;
 	}
 #endif /* CONFIG_RPS */
@@ -6743,7 +6743,7 @@ start:
 	list_splice_tail(&repoll, &list);
 	list_splice(&list, &sd->poll_list);
 	if (!list_empty(&sd->poll_list))
-		__raise_softirq_irqoff(NET_RX_SOFTIRQ);
+		raise_softirq_no_wake(NET_RX_SOFTIRQ);
 	else
 		sd->in_net_rx_action = false;
 

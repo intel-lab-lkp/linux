@@ -604,7 +604,7 @@ static inline void do_softirq_post_smp_call_flush(unsigned int unused)
 
 extern void open_softirq(int nr, void (*action)(struct softirq_action *));
 extern void softirq_init(void);
-extern void __raise_softirq_irqoff(unsigned int nr);
+extern void raise_softirq_no_wake(unsigned int nr);
 
 extern void raise_softirq_irqoff(unsigned int nr);
 extern void raise_softirq(unsigned int nr);
