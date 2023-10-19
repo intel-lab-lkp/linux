@@ -87,27 +87,41 @@ pub fn module(ts: TokenStream) -> TokenStream {
 /// implementation could just return `Error::EINVAL`); Linux typically use C
 /// `NULL` pointers to represent these functions.
 ///
-/// This attribute is intended to close the gap. Traits can be declared and
-/// implemented with the `#[vtable]` attribute, and a `HAS_*` associated constant
-/// will be generated for each method in the trait, indicating if the implementor
-/// has overridden a method.
+/// This attribute closes that gap. A trait can be annotated with the `#[vtable]` attribute.
+/// Implementers of the trait will then also have to annotate the trait with `#[vtable]`. This
+/// attribute generates a `HAS_*` associated constant bool for each method in the trait that is set
+/// to true if the implementer has overridden the associated method.
 ///
-/// This attribute is not needed if all methods are required.
+/// For a function to be optional, it must have a default implementation. But this default
+/// implementation will never be executed, since these functions are exclusively called from
+/// callbacks from the C side. This is because the vtable will have a `NULL` entry and the C side
+/// will execute the default behavior. Since it is not maintainable to replicate the default
+/// behavior in Rust, the default implementation should be:
+///
+/// ```compile_fail
+/// # use kernel::error::VTABLE_DEFAULT_ERROR;
+/// kernel::build_error(VTABLE_DEFAULT_ERROR)
+/// ```
+///
+/// note that you might need to import [`kernel::error::VTABLE_DEFAULT_ERROR`].
+///
+/// This macro should not be used when all function are required.
 ///
 /// # Examples
 ///
 /// ```ignore
+/// # use kernel::error::VTABLE_DEFAULT_ERROR;
 /// use kernel::prelude::*;
 ///
 /// // Declares a `#[vtable]` trait
 /// #[vtable]
-/// pub trait Operations: Send + Sync + Sized {
+/// pub trait Operations {
 ///     fn foo(&self) -> Result<()> {
-///         Err(EINVAL)
+///         kernel::build_error(VTABLE_DEFAULT_ERROR)
 ///     }
 ///
 ///     fn bar(&self) -> Result<()> {
-///         Err(EINVAL)
+///         kernel::build_error(VTABLE_DEFAULT_ERROR)
 ///     }
 /// }
 ///
@@ -125,6 +139,8 @@ pub fn module(ts: TokenStream) -> TokenStream {
 /// assert_eq!(<Foo as Operations>::HAS_FOO, true);
 /// assert_eq!(<Foo as Operations>::HAS_BAR, false);
 /// ```
+///
+/// [`kernel::error::VTABLE_DEFAULT_ERROR`]: ../kernel/error/constant.VTABLE_DEFAULT_ERROR.html
 #[proc_macro_attribute]
 pub fn vtable(attr: TokenStream, ts: TokenStream) -> TokenStream {
     vtable::vtable(attr, ts)
