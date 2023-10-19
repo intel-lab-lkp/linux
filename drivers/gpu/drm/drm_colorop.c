@@ -78,6 +78,18 @@ int drm_colorop_init(struct drm_device *dev, struct drm_colorop *colorop,
 				   colorop->type_property,
 				   colorop->type);
 
+	/* bypass */
+	/* TODO can we reuse the mode_config->active_prop? */
+	prop = drm_property_create_bool(dev, DRM_MODE_PROP_ATOMIC,
+					"BYPASS");
+	if (!prop)
+		return -ENOMEM;
+
+	colorop->bypass_property = prop;
+	drm_object_attach_property(&colorop->base,
+				   colorop->bypass_property,
+				   1);
+
 	/* curve_1d_type */
 	/* TODO move to mode_config? */
 	prop = drm_property_create_enum(dev, DRM_MODE_PROP_ATOMIC,
@@ -100,6 +112,8 @@ void __drm_atomic_helper_colorop_duplicate_state(struct drm_colorop *colorop,
 						 struct drm_colorop_state *state)
 {
 	memcpy(state, colorop->state, sizeof(*state));
+
+	state->bypass = true;
 }
 
 struct drm_colorop_state *
@@ -164,6 +178,7 @@ void __drm_colorop_state_reset(struct drm_colorop_state *colorop_state,
 					   struct drm_colorop *colorop)
 {
 	colorop_state->colorop = colorop;
+	colorop_state->bypass = true;
 }
 EXPORT_SYMBOL(__drm_colorop_state_reset);
 
