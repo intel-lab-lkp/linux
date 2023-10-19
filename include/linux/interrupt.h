@@ -608,6 +608,7 @@ extern void raise_softirq_no_wake(unsigned int nr);
 
 extern void raise_softirq_irqoff(unsigned int nr);
 extern void raise_softirq(unsigned int nr);
+extern void raise_ksoftirqd_irqoff(unsigned int nr);
 
 DECLARE_PER_CPU(struct task_struct *, ksoftirqd);
 

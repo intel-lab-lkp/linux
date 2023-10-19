@@ -659,24 +659,39 @@ void irq_exit(void)
 	lockdep_hardirq_exit();
 }
 
+void raise_softirq_no_wake(unsigned int nr)
+{
+	lockdep_assert_irqs_disabled();
+	trace_softirq_raise(nr);
+	or_softirq_pending(1UL << nr);
+}
+
+/*
+ * This function must run with irqs disabled!
+ */
+static inline void __raise_softirq_irqoff(unsigned int nr, bool threaded)
+{
+	raise_softirq_no_wake(nr);
+
+	if (threaded && should_wake_ksoftirqd())
+		wakeup_softirqd();
+}
+
 /*
  * This function must run with irqs disabled!
  */
 inline void raise_softirq_irqoff(unsigned int nr)
 {
-	raise_softirq_no_wake(nr);
-
+	bool threaded;
 	/*
-	 * If we're in an interrupt or softirq, we're done
-	 * (this also catches softirq-disabled code). We will
-	 * actually run the softirq once we return from
-	 * the irq or softirq.
-	 *
-	 * Otherwise we wake up ksoftirqd to make sure we
-	 * schedule the softirq soon.
+	 * If in an interrupt or softirq (servicing or disabled
+	 * section), the vector will be handled at the end of
+	 * the interrupt or softirq servicing/disabled section.
+	 * Otherwise the vector must rely on ksoftirqd.
 	 */
-	if (!in_interrupt() && should_wake_ksoftirqd())
-		wakeup_softirqd();
+	threaded = !in_interrupt();
+
+	__raise_softirq_irqoff(nr, threaded);
 }
 
 void raise_softirq(unsigned int nr)
@@ -688,11 +703,9 @@ void raise_softirq(unsigned int nr)
 	local_irq_restore(flags);
 }
 
-void raise_softirq_no_wake(unsigned int nr)
+void raise_ksoftirqd_irqoff(unsigned int nr)
 {
-	lockdep_assert_irqs_disabled();
-	trace_softirq_raise(nr);
-	or_softirq_pending(1UL << nr);
+	__raise_softirq_irqoff(nr, true);
 }
 
 void open_softirq(int nr, void (*action)(struct softirq_action *))
