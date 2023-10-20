@@ -659,11 +659,11 @@ struct jffs2_raw_node_ref *jffs2_link_node_ref(struct jffs2_sb_info *c,
 }
 
 /* No locking, no reservation of 'ref'. Do not use on a live file system */
-int jffs2_scan_dirty_space(struct jffs2_sb_info *c, struct jffs2_eraseblock *jeb,
+void jffs2_scan_dirty_space(struct jffs2_sb_info *c, struct jffs2_eraseblock *jeb,
 			   uint32_t size)
 {
 	if (!size)
-		return 0;
+		return;
 	if (unlikely(size > jeb->free_size)) {
 		pr_crit("Dirty space 0x%x larger then free_size 0x%x (wasted 0x%x)\n",
 			size, jeb->free_size, jeb->wasted_size);
@@ -685,7 +685,7 @@ int jffs2_scan_dirty_space(struct jffs2_sb_info *c, struct jffs2_eraseblock *jeb
 		jffs2_link_node_ref(c, jeb, ofs, size, NULL);
 	}
 
-	return 0;
+	return;
 }
 
 /* Calculate totlen from surrounding nodes or eraseblock */
