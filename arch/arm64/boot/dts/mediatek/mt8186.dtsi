@@ -1224,8 +1224,9 @@
 			      <0 0x10200200 0 0x100>;
 			interrupts = <GIC_SPI 106 IRQ_TYPE_LEVEL_HIGH 0>;
 			clocks = <&imp_iic_wrap CLK_IMP_IIC_WRAP_AP_CLOCK_I2C1>,
-				 <&infracfg_ao CLK_INFRA_AO_AP_DMA>;
-			clock-names = "main", "dma";
+				 <&infracfg_ao CLK_INFRA_AO_AP_DMA>,
+				 <&infracfg_ao CLK_INFRA_AO_I2C1_ARBITER>;
+			clock-names = "main", "dma", "arb";
 			clock-div = <1>;
 			#address-cells = <1>;
 			#size-cells = <0>;
@@ -1238,8 +1239,9 @@
 			      <0 0x10200300 0 0x180>;
 			interrupts = <GIC_SPI 107 IRQ_TYPE_LEVEL_HIGH 0>;
 			clocks = <&imp_iic_wrap CLK_IMP_IIC_WRAP_AP_CLOCK_I2C2>,
-				 <&infracfg_ao CLK_INFRA_AO_AP_DMA>;
-			clock-names = "main", "dma";
+				 <&infracfg_ao CLK_INFRA_AO_AP_DMA>,
+				 <&infracfg_ao CLK_INFRA_AO_I2C2_ARBITER>;
+			clock-names = "main", "dma", "arb";
 			clock-div = <1>;
 			#address-cells = <1>;
 			#size-cells = <0>;
@@ -1280,8 +1282,9 @@
 			      <0 0x10200700 0 0x100>;
 			interrupts = <GIC_SPI 354 IRQ_TYPE_LEVEL_HIGH 0>;
 			clocks = <&imp_iic_wrap CLK_IMP_IIC_WRAP_AP_CLOCK_I2C5>,
-				 <&infracfg_ao CLK_INFRA_AO_AP_DMA>;
-			clock-names = "main", "dma";
+				 <&infracfg_ao CLK_INFRA_AO_AP_DMA>,
+				 <&infracfg_ao CLK_INFRA_AO_I2C5_ARBITER>;
+			clock-names = "main", "dma", "arb";
 			clock-div = <1>;
 			#address-cells = <1>;
 			#size-cells = <0>;
