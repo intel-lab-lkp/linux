@@ -112,6 +112,24 @@
 #endif
 
 /*
+ * Macro to execute VERW instruction to mitigate transient data sampling
+ * attacks such as MDS. On affected systems a microcode update overloaded VERW
+ * instruction to also clear the CPU buffers.
+ *
+ * Note: Only the memory operand variant of VERW clears the CPU buffers. To
+ * handle the case when VERW is executed after user registers are restored, use
+ * RIP to point the memory operand to a part NOPL instruction that contains
+ * __KERNEL_DS.
+ */
+#define __EXEC_VERW(m)	verw _ASM_RIP(m)
+
+#define EXEC_VERW				\
+	__EXEC_VERW(551f);			\
+	/* nopl __KERNEL_DS(%rax) */		\
+	.byte 0x0f, 0x1f, 0x80, 0x00, 0x00;	\
+551:	.word __KERNEL_DS;			\
+
+/*
  * Fill the CPU return stack buffer.
  *
  * Each entry in the RSB, if used for a speculative 'ret', contains an
@@ -327,6 +345,13 @@
 	ALTERNATIVE "",							\
 		    __stringify(ASM_INCREMENT_CALL_DEPTH), X86_FEATURE_CALL_DEPTH
 #endif
+.endm
+
+/* Clear CPU buffers before returning to user */
+.macro USER_CLEAR_CPU_BUFFERS
+	ALTERNATIVE "jmp .Lskip_verw_\@;", "", X86_FEATURE_USER_CLEAR_CPU_BUF
+	EXEC_VERW
+.Lskip_verw_\@:
 .endm
 
 #else /* __ASSEMBLY__ */
