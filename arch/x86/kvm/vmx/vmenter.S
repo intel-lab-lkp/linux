@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 #include <linux/linkage.h>
 #include <asm/asm.h>
+#include <asm/segment.h>
 #include <asm/bitsperlong.h>
 #include <asm/kvm_vcpu_regs.h>
 #include <asm/nospec-branch.h>
@@ -30,6 +31,8 @@
 #define VCPU_R14	__VCPU_REGS_R14 * WORD_SIZE
 #define VCPU_R15	__VCPU_REGS_R15 * WORD_SIZE
 #endif
+
+#define GUEST_CLEAR_CPU_BUFFERS		USER_CLEAR_CPU_BUFFERS
 
 .macro VMX_DO_EVENT_IRQOFF call_insn call_target
 	/*
@@ -177,10 +180,16 @@ SYM_FUNC_START(__vmx_vcpu_run)
  * the 'vmx_vmexit' label below.
  */
 .Lvmresume:
+	/* Mitigate CPU data sampling attacks .e.g. MDS */
+	GUEST_CLEAR_CPU_BUFFERS
+
 	vmresume
 	jmp .Lvmfail
 
 .Lvmlaunch:
+	/* Mitigate CPU data sampling attacks .e.g. MDS */
+	GUEST_CLEAR_CPU_BUFFERS
+
 	vmlaunch
 	jmp .Lvmfail
 
