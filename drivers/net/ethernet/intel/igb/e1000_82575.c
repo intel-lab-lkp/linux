@@ -978,6 +978,9 @@ static s32 igb_set_d0_lplu_state_82575(struct e1000_hw *hw, bool active)
 		/* When LPLU is enabled, we should disable SmartSpeed */
 		ret_val = phy->ops.read_reg(hw, IGP01E1000_PHY_PORT_CONFIG,
 						&data);
+		if (ret_val)
+			goto out;
+
 		data &= ~IGP01E1000_PSCFR_SMART_SPEED;
 		ret_val = phy->ops.write_reg(hw, IGP01E1000_PHY_PORT_CONFIG,
 						 data);
