@@ -410,7 +410,7 @@ static ssize_t last_failed_step_show(struct kobject *kobj,
 {
 	int index;
 	enum suspend_stat_step step;
-	char *last_failed_step = NULL;
+	char *last_failed_step;
 
 	index = suspend_stats.last_failed_step + REC_FAILED_NUM - 1;
 	index %= REC_FAILED_NUM;
