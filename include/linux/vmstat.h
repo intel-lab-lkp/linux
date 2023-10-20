@@ -32,7 +32,6 @@ struct reclaim_stat {
 	unsigned nr_ref_keep;
 	unsigned nr_unmap_fail;
 	unsigned nr_lazyfree_fail;
-	unsigned nr_promote;
 };
 
 enum writeback_stat_item {

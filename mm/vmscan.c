@@ -1045,6 +1045,11 @@ retry:
 		folio = lru_to_folio(folio_list);
 		list_del(&folio->lru);
 
+		/* folio_update_gen() tried to promote this page? */
+		if (lru_gen_enabled() && !ignore_references &&
+		    folio_mapped(folio) && folio_test_referenced(folio))
+			goto keep;
+
 		if (!folio_trylock(folio))
 			goto keep;
 
@@ -1060,13 +1065,6 @@ retry:
 
 		if (!sc->may_unmap && folio_mapped(folio))
 			goto keep_locked;
-
-		/* folio_update_gen() tried to promote this page? */
-		if (lru_gen_enabled() && !ignore_references &&
-		    folio_mapped(folio) && folio_test_referenced(folio)) {
-			stat->nr_promote += nr_pages;
-			goto keep_locked;
-		}
 
 		/*
 		 * The number of dirty pages determines if a node is marked
