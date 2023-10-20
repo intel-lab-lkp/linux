@@ -241,8 +241,8 @@ int av7110_pes_play(void *dest, struct dvb_ringbuffer *buf, int dlen)
 		sync |= DVB_RINGBUFFER_PEEK(buf, 2) << 8;
 		sync |= DVB_RINGBUFFER_PEEK(buf, 3);
 
-		if (((sync &~0x0f) == 0x000001e0) ||
-		    ((sync &~0x1f) == 0x000001c0) ||
+		if (((sync & ~0x0f) == 0x000001e0) ||
+		    ((sync & ~0x1f) == 0x000001c0) ||
 		    (sync == 0x000001bd))
 			break;
 		printk("resync\n");
@@ -297,10 +297,10 @@ int av7110_set_volume(struct av7110 *av7110, unsigned int volleft,
 		return 0;
 
 	case DVB_ADAC_MSP34x0:
-		vol  = (volleft > volright) ? volleft : volright;
-		val	= (vol * 0x73 / 255) << 8;
+		vol = (volleft > volright) ? volleft : volright;
+		val = (vol * 0x73 / 255) << 8;
 		if (vol > 0)
-		       balance = ((volright - volleft) * 127) / vol;
+			balance = ((volright - volleft) * 127) / vol;
 		msp_writereg(av7110, MSP_WR_DSP, 0x0001, balance << 8);
 		msp_writereg(av7110, MSP_WR_DSP, 0x0000, val); /* loudspeaker */
 		msp_writereg(av7110, MSP_WR_DSP, 0x0006, val); /* headphonesr */
@@ -367,8 +367,8 @@ static int get_video_format(struct av7110 *av7110, u8 *buf, int count)
 		if (p[0] || p[1] || p[2] != 0x01 || p[3] != 0xb3)
 			continue;
 		p += 4;
-		hsize = ((p[1] &0xF0) >> 4) | (p[0] << 4);
-		vsize = ((p[1] &0x0F) << 8) | (p[2]);
+		hsize = ((p[1] & 0xF0) >> 4) | (p[0] << 4);
+		vsize = ((p[1] & 0x0F) << 8) | (p[2]);
 		sw = (p[3] & 0x0F);
 		ret = av7110_set_vidmode(av7110, sw2mode[sw]);
 		if (!ret) {
@@ -1059,13 +1059,16 @@ static int play_iframe(struct av7110 *av7110, char __user *buf, unsigned int len
 			continue;
 		}
 		switch (match++) {
-		case 2: if (c == 0x01)
+		case 2:
+			if (c == 0x01)
 				continue;
 			break;
-		case 3: if (c == 0xb5)
+		case 3:
+			if (c == 0xb5)
 				continue;
 			break;
-		case 4: if ((c & 0xf0) == 0x10)
+		case 4:
+			if ((c & 0xf0) == 0x10)
 				continue;
 			break;
 		}
@@ -1073,7 +1076,8 @@ static int play_iframe(struct av7110 *av7110, char __user *buf, unsigned int len
 	}
 
 	/* setting n always > 1, fixes problems when playing stillframes
-	   consisting of I- and P-Frames */
+	 * consisting of I- and P-Frames
+	 */
 	n = MIN_IFRAME / len + 1;
 
 	/* FIXME: nonblock? */
@@ -1542,9 +1546,8 @@ static int dvb_video_release(struct inode *inode, struct file *file)
 
 	dprintk(2, "av7110:%p,\n", av7110);
 
-	if ((file->f_flags & O_ACCMODE) != O_RDONLY) {
+	if ((file->f_flags & O_ACCMODE) != O_RDONLY)
 		av7110_av_stop(av7110, RP_VIDEO);
-	}
 
 	return dvb_generic_release(inode, file);
 }
