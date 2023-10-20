@@ -71,7 +71,7 @@
 #define SEAM_SPLICE	 0x20
 
 
-static void p_to_t(u8 const *buf, long int length, u16 pid,
+static void p_to_t(u8 const *buf, long length, u16 pid,
 		   u8 *counter, struct dvb_demux_feed *feed);
 static int write_ts_to_decoder(struct av7110 *av7110, int type, const u8 *buf, size_t len);
 
@@ -589,7 +589,7 @@ static void clear_p2t(struct av7110_p2t *p)
 }
 
 
-static int find_pes_header(u8 const *buf, long int length, int *frags)
+static int find_pes_header(u8 const *buf, long length, int *frags)
 {
 	int c = 0;
 	int found = 0;
@@ -637,7 +637,7 @@ static int find_pes_header(u8 const *buf, long int length, int *frags)
 	return c;
 }
 
-void av7110_p2t_write(u8 const *buf, long int length, u16 pid, struct av7110_p2t *p)
+void av7110_p2t_write(u8 const *buf, long length, u16 pid, struct av7110_p2t *p)
 {
 	int c, c2, l, add;
 	int check, rest;
@@ -767,7 +767,7 @@ static int write_ts_header2(u16 pid, u8 *counter, int pes_start, u8 *buf, u8 len
 }
 
 
-static void p_to_t(u8 const *buf, long int length, u16 pid, u8 *counter,
+static void p_to_t(u8 const *buf, long length, u16 pid, u8 *counter,
 		   struct dvb_demux_feed *feed)
 {
 	int l, pes_start;
@@ -1030,7 +1030,7 @@ static u8 iframe_header[] = { 0x00, 0x00, 0x01, 0xe0, 0x00, 0x00, 0x80, 0x00, 0x
 
 static int play_iframe(struct av7110 *av7110, char __user *buf, unsigned int len, int nonblock)
 {
-	unsigned i, n;
+	unsigned int i, n;
 	int progressive = 0;
 	int match = 0;
 
