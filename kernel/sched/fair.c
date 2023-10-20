@@ -6682,7 +6682,6 @@ static struct {
 	cpumask_var_t idle_cpus_mask;
 	atomic_t nr_cpus;
 	int has_blocked;		/* Idle CPUS has blocked load */
-	int needs_update;		/* Newly idle CPUs need their next_balance collated */
 	unsigned long next_balance;     /* in jiffy units */
 	unsigned long next_blocked;	/* Next update of blocked load in jiffies */
 } nohz ____cacheline_aligned;
@@ -11747,9 +11746,6 @@ static void nohz_balancer_kick(struct rq *rq)
 unlock:
 	rcu_read_unlock();
 out:
-	if (READ_ONCE(nohz.needs_update))
-		flags |= NOHZ_NEXT_KICK;
-
 	if (flags)
 		kick_ilb(flags);
 }
@@ -11800,6 +11796,20 @@ unlock:
 	rcu_read_unlock();
 }
 
+static inline void
+update_nohz_next_balance(unsigned long next_balance)
+{
+	unsigned long nohz_next_balance;
+
+	/* In event of a race, only update with the earliest next_balance. */
+	do {
+		nohz_next_balance = READ_ONCE(nohz.next_balance);
+		if (!time_after(nohz_next_balance, next_balance))
+			break;
+	} while (!try_cmpxchg(&nohz.next_balance, &nohz_next_balance,
+			     next_balance));
+}
+
 /*
  * This routine will record that the CPU is going idle with tick stopped.
  * This info will be used in performing idle load balancing in the future.
@@ -11846,13 +11856,13 @@ void nohz_balance_enter_idle(int cpu)
 	/*
 	 * Ensures that if nohz_idle_balance() fails to observe our
 	 * @idle_cpus_mask store, it must observe the @has_blocked
-	 * and @needs_update stores.
+	 * store.
 	 */
 	smp_mb__after_atomic();
 
 	set_cpu_sd_state_idle(cpu);
 
-	WRITE_ONCE(nohz.needs_update, 1);
+	update_nohz_next_balance(rq->next_balance);
 out:
 	/*
 	 * Each time a cpu enter idle, we assume that it has blocked load and
@@ -11889,6 +11899,7 @@ static void _nohz_idle_balance(struct rq *this_rq, unsigned int flags)
 	/* Earliest time when we have to do rebalance again */
 	unsigned long now = jiffies;
 	unsigned long next_balance = now + 60*HZ;
+	unsigned long old_nohz_next_balance;
 	bool has_blocked_load = false;
 	int update_next_balance = 0;
 	int this_cpu = this_rq->cpu;
@@ -11897,6 +11908,8 @@ static void _nohz_idle_balance(struct rq *this_rq, unsigned int flags)
 
 	SCHED_WARN_ON((flags & NOHZ_KICK_MASK) == NOHZ_BALANCE_KICK);
 
+	old_nohz_next_balance = READ_ONCE(nohz.next_balance);
+
 	/*
 	 * We assume there will be no idle load after this update and clear
 	 * the has_blocked flag. If a cpu enters idle in the mean time, it will
@@ -11904,13 +11917,9 @@ static void _nohz_idle_balance(struct rq *this_rq, unsigned int flags)
 	 * Because a cpu that becomes idle, is added to idle_cpus_mask before
 	 * setting the flag, we are sure to not clear the state and not
 	 * check the load of an idle cpu.
-	 *
-	 * Same applies to idle_cpus_mask vs needs_update.
 	 */
 	if (flags & NOHZ_STATS_KICK)
 		WRITE_ONCE(nohz.has_blocked, 0);
-	if (flags & NOHZ_NEXT_KICK)
-		WRITE_ONCE(nohz.needs_update, 0);
 
 	/*
 	 * Ensures that if we miss the CPU, we must see the has_blocked
@@ -11934,8 +11943,6 @@ static void _nohz_idle_balance(struct rq *this_rq, unsigned int flags)
 		if (need_resched()) {
 			if (flags & NOHZ_STATS_KICK)
 				has_blocked_load = true;
-			if (flags & NOHZ_NEXT_KICK)
-				WRITE_ONCE(nohz.needs_update, 1);
 			goto abort;
 		}
 
@@ -11966,12 +11973,19 @@ static void _nohz_idle_balance(struct rq *this_rq, unsigned int flags)
 	}
 
 	/*
-	 * next_balance will be updated only when there is a need.
+	 * nohz.next_balance will be updated only when there is a need.
 	 * When the CPU is attached to null domain for ex, it will not be
 	 * updated.
+	 *
+	 * Also, if it changed since we scanned the nohz CPUs above, do nothing as:
+	 * 1. A concurrent call to _nohz_idle_balance() moved nohz.next_balance forward.
+	 * 2. nohz_balance_enter_idle moved it backward.
 	 */
-	if (likely(update_next_balance))
-		nohz.next_balance = next_balance;
+	if (likely(update_next_balance)) {
+		/* Pairs with the smp_mb() above. */
+		cmpxchg_release(&nohz.next_balance, old_nohz_next_balance,
+				next_balance);
+	}
 
 	if (flags & NOHZ_STATS_KICK)
 		WRITE_ONCE(nohz.next_blocked,
