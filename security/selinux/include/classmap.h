@@ -256,6 +256,8 @@ const struct security_class_mapping secclass_map[] = {
 	  { "override_creds", "sqpoll", "cmd", NULL } },
 	{ "user_namespace",
 	  { "create", NULL } },
+	{ "vduse",
+	  { "devcreate", "devdestroy", "devopen", "net", "block", NULL} },
 	{ NULL }
   };
 

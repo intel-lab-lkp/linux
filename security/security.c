@@ -5337,3 +5337,45 @@ int security_uring_cmd(struct io_uring_cmd *ioucmd)
 	return call_int_hook(uring_cmd, 0, ioucmd);
 }
 #endif /* CONFIG_IO_URING */
+
+/**
+ * security_vduse_dev_create() - Check if a VDUSE device type creation is allowed
+ * @device_id: the Virtio device ID
+ *
+ * Check whether the Virtio device creation is allowed
+ *
+ * Return: Returns 0 if permission is granted.
+ */
+int security_vduse_dev_create(u32 device_id)
+{
+	return call_int_hook(vduse_dev_create, 0, device_id);
+}
+EXPORT_SYMBOL(security_vduse_dev_create);
+
+/**
+ * security_vduse_dev_destroy() - Check if a VDUSE device type destruction is allowed
+ * @device_id: the Virtio device ID
+ *
+ * Check whether the Virtio device destruction is allowed
+ *
+ * Return: Returns 0 if permission is granted.
+ */
+int security_vduse_dev_destroy(u32 device_id)
+{
+	return call_int_hook(vduse_dev_destroy, 0, device_id);
+}
+EXPORT_SYMBOL(security_vduse_dev_destroy);
+
+/**
+ * security_vduse_dev_open() - Check if a VDUSE device type opening is allowed
+ * @device_id: the Virtio device ID
+ *
+ * Check whether the Virtio device opening is allowed
+ *
+ * Return: Returns 0 if permission is granted.
+ */
+int security_vduse_dev_open(u32 device_id)
+{
+	return call_int_hook(vduse_dev_open, 0, device_id);
+}
+EXPORT_SYMBOL(security_vduse_dev_open);

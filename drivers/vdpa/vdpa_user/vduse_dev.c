@@ -8,6 +8,7 @@
  *
  */
 
+#include "linux/security.h"
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/cdev.h>
@@ -1443,6 +1444,10 @@ static int vduse_dev_open(struct inode *inode, struct file *file)
 	if (dev->connected)
 		goto unlock;
 
+	ret = -EPERM;
+	if (security_vduse_dev_open(dev->device_id))
+		goto unlock;
+
 	ret = 0;
 	dev->connected = true;
 	file->private_data = dev;
@@ -1655,6 +1660,9 @@ static int vduse_destroy_dev(char *name)
 	if (!dev)
 		return -EINVAL;
 
+	if (security_vduse_dev_destroy(dev->device_id))
+		return -EPERM;
+
 	mutex_lock(&dev->lock);
 	if (dev->vdev || dev->connected) {
 		mutex_unlock(&dev->lock);
@@ -1818,6 +1826,10 @@ static int vduse_create_dev(struct vduse_dev_config *config,
 {
 	int ret;
 	struct vduse_dev *dev;
+
+	ret = -EPERM;
+	if (security_vduse_dev_create(config->device_id))
+		goto err;
 
 	ret = -EEXIST;
 	if (vduse_find_dev(config->name))

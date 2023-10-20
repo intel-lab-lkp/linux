@@ -21,6 +21,7 @@
  *  Copyright (C) 2016 Mellanox Technologies
  */
 
+#include "av_permissions.h"
 #include <linux/init.h>
 #include <linux/kd.h>
 #include <linux/kernel.h>
@@ -92,6 +93,7 @@
 #include <linux/fsnotify.h>
 #include <linux/fanotify.h>
 #include <linux/io_uring.h>
+#include <uapi/linux/virtio_ids.h>
 
 #include "avc.h"
 #include "objsec.h"
@@ -6944,6 +6946,56 @@ static int selinux_uring_cmd(struct io_uring_cmd *ioucmd)
 }
 #endif /* CONFIG_IO_URING */
 
+static int vduse_check_device_type(u32 sid, u32 device_id)
+{
+	u32 requested;
+
+	if (device_id == VIRTIO_ID_NET)
+		requested = VDUSE__NET;
+	else if (device_id == VIRTIO_ID_BLOCK)
+		requested = VDUSE__BLOCK;
+	else
+		return -EINVAL;
+
+	return avc_has_perm(sid, sid, SECCLASS_VDUSE, requested, NULL);
+}
+
+static int selinux_vduse_dev_create(u32 device_id)
+{
+	u32 sid = current_sid();
+	int ret;
+
+	ret = avc_has_perm(sid, sid, SECCLASS_VDUSE, VDUSE__DEVCREATE, NULL);
+	if (ret)
+		return ret;
+
+	return vduse_check_device_type(sid, device_id);
+}
+
+static int selinux_vduse_dev_destroy(u32 device_id)
+{
+	u32 sid = current_sid();
+	int ret;
+
+	ret = avc_has_perm(sid, sid, SECCLASS_VDUSE, VDUSE__DEVDESTROY, NULL);
+	if (ret)
+		return ret;
+
+	return vduse_check_device_type(sid, device_id);
+}
+
+static int selinux_vduse_dev_open(u32 device_id)
+{
+	u32 sid = current_sid();
+	int ret;
+
+	ret = avc_has_perm(sid, sid, SECCLASS_VDUSE, VDUSE__DEVOPEN, NULL);
+	if (ret)
+		return ret;
+
+	return vduse_check_device_type(sid, device_id);
+}
+
 /*
  * IMPORTANT NOTE: When adding new hooks, please be careful to keep this order:
  * 1. any hooks that don't belong to (2.) or (3.) below,
@@ -7237,6 +7289,9 @@ static struct security_hook_list selinux_hooks[] __ro_after_init = {
 #ifdef CONFIG_PERF_EVENTS
 	LSM_HOOK_INIT(perf_event_alloc, selinux_perf_event_alloc),
 #endif
+	LSM_HOOK_INIT(vduse_dev_create, selinux_vduse_dev_create),
+	LSM_HOOK_INIT(vduse_dev_destroy, selinux_vduse_dev_destroy),
+	LSM_HOOK_INIT(vduse_dev_open, selinux_vduse_dev_open),
 };
 
 static __init int selinux_init(void)

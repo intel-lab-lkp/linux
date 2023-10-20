@@ -419,3 +419,7 @@ LSM_HOOK(int, 0, uring_override_creds, const struct cred *new)
 LSM_HOOK(int, 0, uring_sqpoll, void)
 LSM_HOOK(int, 0, uring_cmd, struct io_uring_cmd *ioucmd)
 #endif /* CONFIG_IO_URING */
+
+LSM_HOOK(int, 0, vduse_dev_create, u32 device_id)
+LSM_HOOK(int, 0, vduse_dev_destroy, u32 device_id)
+LSM_HOOK(int, 0, vduse_dev_open, u32 device_id)
