@@ -39,17 +39,17 @@
 /*
  * macros for easy use
  */
-#define rtsx_writel(chip, reg, value) \
+#define rtsx_writel(chip, (reg), value) \
 	iowrite32(value, (chip)->rtsx->remap_addr + reg)
-#define rtsx_readl(chip, reg) \
+#define rtsx_readl(chip, (reg) \
 	ioread32((chip)->rtsx->remap_addr + reg)
-#define rtsx_writew(chip, reg, value) \
+#define rtsx_writew(chip, (reg), value) \
 	iowrite16(value, (chip)->rtsx->remap_addr + reg)
-#define rtsx_readw(chip, reg) \
+#define rtsx_readw(chip, (reg)) \
 	ioread16((chip)->rtsx->remap_addr + reg)
-#define rtsx_writeb(chip, reg, value) \
+#define rtsx_writeb(chip, (reg), value) \
 	iowrite8(value, (chip)->rtsx->remap_addr + reg)
-#define rtsx_readb(chip, reg) \
+#define rtsx_readb(chip, (reg)) \
 	ioread8((chip)->rtsx->remap_addr + reg)
 
 #define rtsx_read_config_byte(chip, where, val) \
@@ -131,8 +131,8 @@ static inline struct rtsx_dev *host_to_rtsx(struct Scsi_Host *host)
  * The scsi_lock() and scsi_unlock() macros protect the sm_state and the
  * single queue element srb for write access
  */
-#define scsi_unlock(host)	spin_unlock_irq(host->host_lock)
-#define scsi_lock(host)		spin_lock_irq(host->host_lock)
+#define scsi_unlock(host)	spin_unlock_irq((host)->host_lock)
+#define scsi_lock(host)		spin_lock_irq((host)->host_lock)
 
 #define lock_state(chip)	spin_lock_irq(&((chip)->rtsx->reg_lock))
 #define unlock_state(chip)	spin_unlock_irq(&((chip)->rtsx->reg_lock))
