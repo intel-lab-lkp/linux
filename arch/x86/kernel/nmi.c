@@ -551,8 +551,6 @@ nmi_restart:
 	if (this_cpu_dec_return(nmi_state))
 		goto nmi_restart;
 
-	if (user_mode(regs))
-		mds_user_clear_cpu_buffers();
 	if (IS_ENABLED(CONFIG_NMI_CHECK_CPU)) {
 		WRITE_ONCE(nsp->idt_seq, nsp->idt_seq + 1);
 		WARN_ON_ONCE(nsp->idt_seq & 0x1);
