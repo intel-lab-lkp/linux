@@ -291,11 +291,11 @@ static int rtq9128_dac_power_event(struct snd_soc_dapm_widget *w, struct snd_kco
 
 	dev_dbg(comp->dev, "%s: %s event %d\n", __func__, w->name, event);
 
-	if (strcmp(w->name, "DAC1") == 0)
+	if (strstr(w->name, "DAC1"))
 		shift = 6;
-	else if (strcmp(w->name, "DAC2") == 0)
+	else if (strstr(w->name, "DAC2"))
 		shift = 4;
-	else if (strcmp(w->name, "DAC3") == 0)
+	else if (strstr(w->name, "DAC3"))
 		shift = 2;
 	else
 		shift = 0;
