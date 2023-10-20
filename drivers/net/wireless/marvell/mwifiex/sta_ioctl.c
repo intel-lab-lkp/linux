@@ -989,7 +989,6 @@ static int mwifiex_sec_ioctl_set_wpa_key(struct mwifiex_private *priv,
 			      struct mwifiex_ds_encrypt_key *encrypt_key)
 {
 	int ret;
-	u8 remove_key = false;
 	struct host_cmd_ds_802_11_key_material *ibss_key;
 
 	/* Current driver only supports key length of up to 32 bytes */
@@ -1031,14 +1030,9 @@ static int mwifiex_sec_ioctl_set_wpa_key(struct mwifiex_private *priv,
 	if (!encrypt_key->key_index)
 		encrypt_key->key_index = MWIFIEX_KEY_INDEX_UNICAST;
 
-	if (remove_key)
-		ret = mwifiex_send_cmd(priv, HostCmd_CMD_802_11_KEY_MATERIAL,
-				       HostCmd_ACT_GEN_SET,
-				       !KEY_INFO_ENABLED, encrypt_key, true);
-	else
-		ret = mwifiex_send_cmd(priv, HostCmd_CMD_802_11_KEY_MATERIAL,
-				       HostCmd_ACT_GEN_SET,
-				       KEY_INFO_ENABLED, encrypt_key, true);
+	ret = mwifiex_send_cmd(priv, HostCmd_CMD_802_11_KEY_MATERIAL,
+			       HostCmd_ACT_GEN_SET,
+			       KEY_INFO_ENABLED, encrypt_key, true);
 
 	return ret;
 }
