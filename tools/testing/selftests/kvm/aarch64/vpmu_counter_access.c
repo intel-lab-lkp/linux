@@ -9,7 +9,8 @@
  * those counters, and if the guest is prevented from accessing any
  * other counters.
  * It also checks if the userspace accesses to the PMU regsisters honor the
- * PMCR.N value that's set for the guest.
+ * PMCR.N value that's set for the guest and if these accesses are immutable
+ * after KVM has run once.
  * This test runs only when KVM_CAP_ARM_PMU_V3 is supported on the host.
  */
 #include <kvm_util.h>
@@ -648,6 +649,48 @@ static void run_error_test(uint64_t pmcr_n)
 	destroy_vpmu_vm();
 }
 
+static uint64_t immutable_regs[] = {
+	SYS_PMCR_EL0,
+	SYS_PMCNTENSET_EL0,
+	SYS_PMCNTENCLR_EL0,
+	SYS_PMINTENSET_EL1,
+	SYS_PMINTENCLR_EL1,
+	SYS_PMOVSSET_EL0,
+	SYS_PMOVSCLR_EL0,
+};
+
+/*
+ * Create a guest with one vCPU, run it, and then make an attempt to update
+ * the registers in @immutable_regs[] (with their complements). KVM shouldn't
+ * allow updating these registers once vCPU starts running. Hence, the test
+ * fails if that's not the case.
+ */
+static void run_immutable_test(uint64_t pmcr_n)
+{
+	int i;
+	struct kvm_vcpu *vcpu;
+	uint64_t reg_id, reg_val, reg_val_orig;
+
+	create_vpmu_vm(guest_code);
+	vcpu = vpmu_vm.vcpu;
+
+	run_vcpu(vcpu, pmcr_n);
+
+	for (i = 0; i < ARRAY_SIZE(immutable_regs); i++) {
+		reg_id = immutable_regs[i];
+
+		vcpu_get_reg(vcpu, KVM_ARM64_SYS_REG(reg_id), &reg_val_orig);
+		vcpu_set_reg(vcpu, KVM_ARM64_SYS_REG(reg_id), ~reg_val_orig);
+		vcpu_get_reg(vcpu, KVM_ARM64_SYS_REG(reg_id), &reg_val);
+
+		TEST_ASSERT(reg_val == reg_val_orig,
+			    "Register 0x%llx value updated after vCPU run: 0x%lx; expected: 0x%lx\n",
+			    KVM_ARM64_SYS_REG(reg_id), reg_val, reg_val_orig);
+	}
+
+	destroy_vpmu_vm();
+}
+
 /*
  * Return the default number of implemented PMU event counters excluding
  * the cycle counter (i.e. PMCR_EL0.N value) for the guest.
@@ -676,6 +719,8 @@ int main(void)
 
 	for (i = pmcr_n + 1; i < ARMV8_PMU_MAX_COUNTERS; i++)
 		run_error_test(i);
+
+	run_immutable_test(pmcr_n);
 
 	return 0;
 }
