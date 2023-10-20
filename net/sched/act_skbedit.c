@@ -112,6 +112,7 @@ static const struct nla_policy skbedit_policy[TCA_SKBEDIT_MAX + 1] = {
 	[TCA_SKBEDIT_MASK]		= { .len = sizeof(u32) },
 	[TCA_SKBEDIT_FLAGS]		= { .len = sizeof(u64) },
 	[TCA_SKBEDIT_QUEUE_MAPPING_MAX]	= { .len = sizeof(u16) },
+	[TCA_SKBEDIT_RSS_GROUP_ID]	= { .len = sizeof(u16) },
 };
 
 static int tcf_skbedit_init(struct net *net, struct nlattr *nla,
@@ -126,8 +127,8 @@ static int tcf_skbedit_init(struct net *net, struct nlattr *nla,
 	struct tcf_chain *goto_ch = NULL;
 	struct tc_skbedit *parm;
 	struct tcf_skbedit *d;
+	u16 *queue_mapping = NULL, *ptype = NULL, *rss_group_id = NULL;
 	u32 flags = 0, *priority = NULL, *mark = NULL, *mask = NULL;
-	u16 *queue_mapping = NULL, *ptype = NULL;
 	u16 mapping_mod = 1;
 	bool exists = false;
 	int ret = 0, err;
@@ -174,6 +175,17 @@ static int tcf_skbedit_init(struct net *net, struct nlattr *nla,
 	if (tb[TCA_SKBEDIT_MASK] != NULL) {
 		flags |= SKBEDIT_F_MASK;
 		mask = nla_data(tb[TCA_SKBEDIT_MASK]);
+	}
+
+	if (tb[TCA_SKBEDIT_RSS_GROUP_ID] != NULL) {
+		if (!is_tcf_skbedit_ingress(act_flags) ||
+		    !(act_flags & TCA_ACT_FLAGS_SKIP_SW)) {
+			NL_SET_ERR_MSG_MOD(extack,
+					   "\"rss_group_id\" option allowed only on receive side with hardware only, use skip_sw");
+			return -EOPNOTSUPP;
+		}
+		flags |= SKBEDIT_F_RSS_GROUP_ID;
+		rss_group_id = nla_data(tb[TCA_SKBEDIT_RSS_GROUP_ID]);
 	}
 
 	if (tb[TCA_SKBEDIT_FLAGS] != NULL) {
@@ -262,6 +274,9 @@ static int tcf_skbedit_init(struct net *net, struct nlattr *nla,
 	if (flags & SKBEDIT_F_MASK)
 		params_new->mask = *mask;
 
+	if (flags & SKBEDIT_F_RSS_GROUP_ID)
+		params_new->rss_group_id = *rss_group_id;
+
 	spin_lock_bh(&d->tcf_lock);
 	goto_ch = tcf_action_set_ctrlact(*a, parm->action, goto_ch);
 	params_new = rcu_replace_pointer(d->params, params_new,
@@ -326,6 +341,9 @@ static int tcf_skbedit_dump(struct sk_buff *skb, struct tc_action *a,
 
 		pure_flags |= SKBEDIT_F_TXQ_SKBHASH;
 	}
+	if ((params->flags & SKBEDIT_F_RSS_GROUP_ID) &&
+	    nla_put_u16(skb, TCA_SKBEDIT_RSS_GROUP_ID, params->rss_group_id))
+		goto nla_put_failure;
 	if (pure_flags != 0 &&
 	    nla_put(skb, TCA_SKBEDIT_FLAGS, sizeof(pure_flags), &pure_flags))
 		goto nla_put_failure;
@@ -362,6 +380,7 @@ static size_t tcf_skbedit_get_fill_size(const struct tc_action *act)
 		+ nla_total_size(sizeof(u32)) /* TCA_SKBEDIT_MARK */
 		+ nla_total_size(sizeof(u16)) /* TCA_SKBEDIT_PTYPE */
 		+ nla_total_size(sizeof(u32)) /* TCA_SKBEDIT_MASK */
+		+ nla_total_size(sizeof(u16)) /* TCA_SKBEDIT_RSS_GROUP_ID */
 		+ nla_total_size_64bit(sizeof(u64)); /* TCA_SKBEDIT_FLAGS */
 }
 
@@ -390,6 +409,9 @@ static int tcf_skbedit_offload_act_setup(struct tc_action *act, void *entry_data
 		} else if (is_tcf_skbedit_inheritdsfield(act)) {
 			NL_SET_ERR_MSG_MOD(extack, "Offload not supported when \"inheritdsfield\" option is used");
 			return -EOPNOTSUPP;
+		} else if (is_tcf_skbedit_rss_group_id(act)) {
+			entry->id = FLOW_ACTION_RSS;
+			entry->rss_group_id = tcf_skbedit_rss_group_id(act);
 		} else {
 			NL_SET_ERR_MSG_MOD(extack, "Unsupported skbedit option offload");
 			return -EOPNOTSUPP;
@@ -406,6 +428,8 @@ static int tcf_skbedit_offload_act_setup(struct tc_action *act, void *entry_data
 			fl_action->id = FLOW_ACTION_PRIORITY;
 		else if (is_tcf_skbedit_rx_queue_mapping(act))
 			fl_action->id = FLOW_ACTION_RX_QUEUE_MAPPING;
+		else if (is_tcf_skbedit_rss_group_id(act))
+			fl_action->id = FLOW_ACTION_RSS;
 		else
 			return -EOPNOTSUPP;
 	}

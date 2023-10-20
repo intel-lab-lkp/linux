@@ -19,6 +19,7 @@ struct tcf_skbedit_params {
 	u16 queue_mapping;
 	u16 mapping_mod;
 	u16 ptype;
+	u16 rss_group_id;
 	struct rcu_head rcu;
 };
 
@@ -106,6 +107,17 @@ static inline u16 tcf_skbedit_rx_queue_mapping(const struct tc_action *a)
 	return rx_queue;
 }
 
+static inline u16 tcf_skbedit_rss_group_id(const struct tc_action *a)
+{
+	u16 rss_group_id;
+
+	rcu_read_lock();
+	rss_group_id = rcu_dereference(to_skbedit(a)->params)->rss_group_id;
+	rcu_read_unlock();
+
+	return rss_group_id;
+}
+
 /* Return true iff action is queue_mapping */
 static inline bool is_tcf_skbedit_queue_mapping(const struct tc_action *a)
 {
@@ -134,6 +146,12 @@ static inline bool is_tcf_skbedit_rx_queue_mapping(const struct tc_action *a)
 static inline bool is_tcf_skbedit_inheritdsfield(const struct tc_action *a)
 {
 	return is_tcf_skbedit_with_flag(a, SKBEDIT_F_INHERITDSFIELD);
+}
+
+static inline bool is_tcf_skbedit_rss_group_id(const struct tc_action *a)
+{
+	return is_tcf_skbedit_ingress(a->tcfa_flags) &&
+	       is_tcf_skbedit_with_flag(a, SKBEDIT_F_RSS_GROUP_ID);
 }
 
 #endif /* __NET_TC_SKBEDIT_H */

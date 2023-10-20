@@ -168,6 +168,7 @@ enum flow_action_id {
 	FLOW_ACTION_PTYPE,
 	FLOW_ACTION_PRIORITY,
 	FLOW_ACTION_RX_QUEUE_MAPPING,
+	FLOW_ACTION_RSS,
 	FLOW_ACTION_WAKE,
 	FLOW_ACTION_QUEUE,
 	FLOW_ACTION_SAMPLE,
@@ -264,6 +265,7 @@ struct flow_action_entry {
 		u16                     ptype;          /* FLOW_ACTION_PTYPE */
 		u16			rx_queue;	/* FLOW_ACTION_RX_QUEUE_MAPPING */
 		u32			priority;	/* FLOW_ACTION_PRIORITY */
+		u16			rss_group_id;	/* FLOW_ACTION_RSS_GROUP_ID */
 		struct {				/* FLOW_ACTION_QUEUE */
 			u32		ctx;
 			u32		index;
