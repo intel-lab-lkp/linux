@@ -2419,7 +2419,7 @@ int tipc_nl_node_set_link(struct sk_buff *skb, struct genl_info *info)
 	int err;
 	int res = 0;
 	int bearer_id;
-	char *name;
+	char name[TIPC_MAX_LINK_NAME];
 	struct tipc_link *link;
 	struct tipc_node *node;
 	struct sk_buff_head xmitq;
@@ -2440,7 +2440,7 @@ int tipc_nl_node_set_link(struct sk_buff *skb, struct genl_info *info)
 	if (!attrs[TIPC_NLA_LINK_NAME])
 		return -EINVAL;
 
-	name = nla_data(attrs[TIPC_NLA_LINK_NAME]);
+	nla_strscpy(name, attrs[TIPC_NLA_LINK_NAME], TIPC_MAX_LINK_NAME);
 
 	if (strcmp(name, tipc_bclink_name) == 0)
 		return tipc_nl_bc_link_set(net, attrs);
@@ -2500,7 +2500,7 @@ int tipc_nl_node_get_link(struct sk_buff *skb, struct genl_info *info)
 	struct net *net = genl_info_net(info);
 	struct nlattr *attrs[TIPC_NLA_LINK_MAX + 1];
 	struct tipc_nl_msg msg;
-	char *name;
+	char name[TIPC_MAX_LINK_NAME];
 	int err;
 
 	msg.portid = info->snd_portid;
@@ -2518,7 +2518,7 @@ int tipc_nl_node_get_link(struct sk_buff *skb, struct genl_info *info)
 	if (!attrs[TIPC_NLA_LINK_NAME])
 		return -EINVAL;
 
-	name = nla_data(attrs[TIPC_NLA_LINK_NAME]);
+	nla_strscpy(name, attrs[TIPC_NLA_LINK_NAME], TIPC_MAX_LINK_NAME);
 
 	msg.skb = nlmsg_new(NLMSG_GOODSIZE, GFP_KERNEL);
 	if (!msg.skb)
@@ -2563,7 +2563,7 @@ err_free:
 int tipc_nl_node_reset_link_stats(struct sk_buff *skb, struct genl_info *info)
 {
 	int err;
-	char *link_name;
+	char link_name[TIPC_MAX_LINK_NAME];
 	unsigned int bearer_id;
 	struct tipc_link *link;
 	struct tipc_node *node;
@@ -2584,7 +2584,7 @@ int tipc_nl_node_reset_link_stats(struct sk_buff *skb, struct genl_info *info)
 	if (!attrs[TIPC_NLA_LINK_NAME])
 		return -EINVAL;
 
-	link_name = nla_data(attrs[TIPC_NLA_LINK_NAME]);
+	nla_strscpy(link_name, attrs[TIPC_NLA_LINK_NAME], TIPC_MAX_LINK_NAME);
 
 	err = -EINVAL;
 	if (!strcmp(link_name, tipc_bclink_name)) {
