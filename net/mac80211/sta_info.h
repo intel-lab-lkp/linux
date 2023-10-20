@@ -929,6 +929,10 @@ void ieee80211_sta_set_max_amsdu_subframes(struct sta_info *sta,
 
 void __ieee80211_sta_recalc_aggregates(struct sta_info *sta, u16 active_links);
 
+struct sta_info *
+ieee80211_find_best_sta_link(struct ieee80211_sub_if_data *sdata,
+			     struct ieee80211_link_data **link);
+
 enum sta_stats_type {
 	STA_STATS_RATE_TYPE_INVALID = 0,
 	STA_STATS_RATE_TYPE_LEGACY,
