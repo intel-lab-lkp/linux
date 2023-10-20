@@ -921,6 +921,35 @@ static inline size_t list_count_nodes(struct list_head *head)
 #define list_safe_reset_next(pos, n, member)				\
 	n = list_next_entry(pos, member)
 
+/**
+ * list_for_each_entry_del - iterate list and remove elements
+ * @pos:	the type * to use as a loop cursor.
+ * @head:	the head for your list.
+ * @member:	the name of the list_head within the struct.
+ *
+ * Delete first element from list before the iteration.  Iterate until
+ * the list is empty.
+ */
+#define list_for_each_entry_del(pos, head, member)			\
+	while (!list_empty(head) &&					\
+		({ pos = list_first_entry(head, typeof(*(pos)), member);\
+		   list_del(&(pos)->member); 1; }))
+
+/**
+ * list_for_each_entry_del_init - iterate list, remove and reinitialize elements
+ * @pos:	the type * to use as a loop cursor.
+ * @head:	the head for your list.
+ * @member:	the name of the list_head within the struct.
+ *
+ * Delete first element from list before the iteration using list_del_init().
+ * Iterate until the list is empty.
+ */
+#define list_for_each_entry_del_init(pos, head, member)			\
+	while (!list_empty(head) &&					\
+		({ pos = list_first_entry(head, typeof(*(pos)), member);\
+		   list_del_init(&(pos)->member); 1; }))
+
+
 /*
  * Double linked lists with a single pointer list head.
  * Mostly useful for hash tables where the two pointer list head is
