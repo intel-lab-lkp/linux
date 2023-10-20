@@ -322,12 +322,8 @@ static void wf_sat_remove(struct i2c_client *client)
 	struct wf_sat_sensor *sens;
 
 	/* release sensors */
-	while(!list_empty(&sat->sensors)) {
-		sens = list_first_entry(&sat->sensors,
-					struct wf_sat_sensor, link);
-		list_del(&sens->link);
+	list_for_each_entry_del(sens, &sat->sensors, link)
 		wf_unregister_sensor(&sens->sens);
-	}
 	sat->i2c = NULL;
 	kref_put(&sat->ref, wf_sat_release);
 }

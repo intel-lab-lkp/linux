@@ -243,9 +243,7 @@ static void qaic_destroy_drm_device(struct qaic_device *qdev, s32 partition_id)
 	 * user list.
 	 */
 	mutex_lock(&qddev->users_mutex);
-	while (!list_empty(&qddev->users)) {
-		usr = list_first_entry(&qddev->users, struct qaic_user, node);
-		list_del_init(&usr->node);
+	list_for_each_entry_del_init(usr, &qddev->users, node) {
 		kref_get(&usr->ref_count);
 		usr->qddev = NULL;
 		mutex_unlock(&qddev->users_mutex);

@@ -641,10 +641,7 @@ static void tegra_dma_tasklet(struct tasklet_struct *t)
 	unsigned long flags;
 
 	spin_lock_irqsave(&tdc->lock, flags);
-	while (!list_empty(&tdc->cb_desc)) {
-		dma_desc = list_first_entry(&tdc->cb_desc, typeof(*dma_desc),
-					    cb_node);
-		list_del(&dma_desc->cb_node);
+	list_for_each_entry_del(dma_desc, &tdc->cb_desc, cb_node) {
 		dmaengine_desc_get_callback(&dma_desc->txd, &cb);
 		cb_count = dma_desc->cb_count;
 		dma_desc->cb_count = 0;
@@ -778,12 +775,8 @@ static int tegra_dma_terminate_all(struct dma_chan *dc)
 skip_dma_stop:
 	tegra_dma_abort_all(tdc);
 
-	while (!list_empty(&tdc->cb_desc)) {
-		dma_desc = list_first_entry(&tdc->cb_desc, typeof(*dma_desc),
-					    cb_node);
-		list_del(&dma_desc->cb_node);
+	list_for_each_entry_del(dma_desc, &tdc->cb_desc, cb_node)
 		dma_desc->cb_count = 0;
-	}
 	spin_unlock_irqrestore(&tdc->lock, flags);
 
 	return 0;
@@ -1326,18 +1319,11 @@ static void tegra_dma_free_chan_resources(struct dma_chan *dc)
 	tdc->config_init = false;
 	tdc->isr_handler = NULL;
 
-	while (!list_empty(&dma_desc_list)) {
-		dma_desc = list_first_entry(&dma_desc_list, typeof(*dma_desc),
-					    node);
-		list_del(&dma_desc->node);
+	list_for_each_entry_del(dma_desc, &dma_desc_list, node)
 		kfree(dma_desc);
-	}
 
-	while (!list_empty(&sg_req_list)) {
-		sg_req = list_first_entry(&sg_req_list, typeof(*sg_req), node);
-		list_del(&sg_req->node);
+	list_for_each_entry_del(sg_req, &sg_req_list, node)
 		kfree(sg_req);
-	}
 
 	tdc->slave_id = TEGRA_APBDMA_SLAVE_ID_INVALID;
 }

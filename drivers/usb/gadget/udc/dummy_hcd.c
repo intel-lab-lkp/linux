@@ -328,11 +328,9 @@ static inline struct dummy *gadget_dev_to_dummy(struct device *dev)
 /* called with spinlock held */
 static void nuke(struct dummy *dum, struct dummy_ep *ep)
 {
-	while (!list_empty(&ep->queue)) {
-		struct dummy_request	*req;
+	struct dummy_request *req;
 
-		req = list_entry(ep->queue.next, struct dummy_request, queue);
-		list_del_init(&req->queue);
+	list_for_each_entry_del_init(req, &ep->queue, queue) {
 		req->req.status = -ESHUTDOWN;
 
 		spin_unlock(&dum->lock);

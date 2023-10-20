@@ -154,10 +154,7 @@ nfs4_shutdown_ds_clients(struct nfs_client *clp)
 {
 	struct nfs4_ds_server *dss;
 
-	while (!list_empty(&clp->cl_ds_clients)) {
-		dss = list_entry(clp->cl_ds_clients.next,
-					struct nfs4_ds_server, list);
-		list_del(&dss->list);
+	list_for_each_entry_del(dss, &clp->cl_ds_clients, list) {
 		rpc_shutdown_client(dss->rpc_clnt);
 		kfree (dss);
 	}
@@ -168,12 +165,8 @@ nfs4_cleanup_callback(struct nfs_client *clp)
 {
 	struct nfs4_copy_state *cp_state;
 
-	while (!list_empty(&clp->pending_cb_stateids)) {
-		cp_state = list_entry(clp->pending_cb_stateids.next,
-					struct nfs4_copy_state, copies);
-		list_del(&cp_state->copies);
+	list_for_each_entry_del(cp_state, &clp->pending_cb_stateids, copies)
 		kfree(cp_state);
-	}
 }
 
 void nfs41_shutdown_client(struct nfs_client *clp)

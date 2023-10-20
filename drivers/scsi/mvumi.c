@@ -347,10 +347,7 @@ static void mvumi_free_cmds(struct mvumi_hba *mhba)
 {
 	struct mvumi_cmd *cmd;
 
-	while (!list_empty(&mhba->cmd_pool)) {
-		cmd = list_first_entry(&mhba->cmd_pool, struct mvumi_cmd,
-							queue_pointer);
-		list_del(&cmd->queue_pointer);
+	list_for_each_entry_del(cmd, &mhba->cmd_pool, queue_pointer) {
 		if (!(mhba->hba_capability & HS_CAPABILITY_SUPPORT_DYN_SRC))
 			kfree(cmd->frame);
 		kfree(cmd);
@@ -388,10 +385,7 @@ static int mvumi_alloc_cmds(struct mvumi_hba *mhba)
 err_exit:
 	dev_err(&mhba->pdev->dev,
 			"failed to allocate memory for cmd[0x%x].\n", i);
-	while (!list_empty(&mhba->cmd_pool)) {
-		cmd = list_first_entry(&mhba->cmd_pool, struct mvumi_cmd,
-						queue_pointer);
-		list_del(&cmd->queue_pointer);
+	list_for_each_entry_del(cmd, &mhba->cmd_pool, queue_pointer) {
 		if (!(mhba->hba_capability & HS_CAPABILITY_SUPPORT_DYN_SRC))
 			kfree(cmd->frame);
 		kfree(cmd);
@@ -1767,10 +1761,7 @@ static void mvumi_handle_clob(struct mvumi_hba *mhba)
 	struct mvumi_cmd *cmd;
 	struct mvumi_ob_data *pool;
 
-	while (!list_empty(&mhba->free_ob_list)) {
-		pool = list_first_entry(&mhba->free_ob_list,
-						struct mvumi_ob_data, list);
-		list_del_init(&pool->list);
+	list_for_each_entry_del_init(pool, &mhba->free_ob_list, list) {
 		list_add_tail(&pool->list, &mhba->ob_data_list);
 
 		ob_frame = (struct mvumi_rsp_frame *) &pool->data[0];

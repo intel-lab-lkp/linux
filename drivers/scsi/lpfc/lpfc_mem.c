@@ -259,13 +259,9 @@ lpfc_mem_free(struct lpfc_hba *phba)
 	/* Free Device Data memory pool */
 	if (phba->device_data_mem_pool) {
 		/* Ensure all objects have been returned to the pool */
-		while (!list_empty(&phba->luns)) {
-			device_data = list_first_entry(&phba->luns,
-						       struct lpfc_device_data,
-						       listentry);
-			list_del(&device_data->listentry);
+		list_for_each_entry_del(device_data, &phba->luns, listentry)
 			mempool_free(device_data, phba->device_data_mem_pool);
-		}
+
 		mempool_destroy(phba->device_data_mem_pool);
 	}
 	phba->device_data_mem_pool = NULL;

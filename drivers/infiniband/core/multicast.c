@@ -398,11 +398,8 @@ static void process_group_error(struct mcast_group *group)
 	    group->pkey_index == pkey_index)
 		goto out;
 
-	while (!list_empty(&group->active_list)) {
-		member = list_entry(group->active_list.next,
-				    struct mcast_member, list);
+	list_for_each_entry_del_init(member, &group->active_list, list) {
 		refcount_inc(&member->refcount);
-		list_del_init(&member->list);
 		adjust_membership(group, member->multicast.rec.join_state, -1);
 		member->state = MCAST_ERROR;
 		spin_unlock_irq(&group->lock);

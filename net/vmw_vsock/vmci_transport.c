@@ -1594,12 +1594,9 @@ static int vmci_transport_socket_init(struct vsock_sock *vsk,
 
 static void vmci_transport_free_resources(struct list_head *transport_list)
 {
-	while (!list_empty(transport_list)) {
-		struct vmci_transport *transport =
-		    list_first_entry(transport_list, struct vmci_transport,
-				     elem);
-		list_del(&transport->elem);
+	struct vmci_transport *transport;
 
+	list_for_each_entry_del(transport, transport_list, elem) {
 		if (transport->detach_sub_id != VMCI_INVALID_ID) {
 			vmci_event_unsubscribe(transport->detach_sub_id);
 			transport->detach_sub_id = VMCI_INVALID_ID;

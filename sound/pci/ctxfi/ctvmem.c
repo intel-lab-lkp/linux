@@ -215,22 +215,14 @@ int ct_vm_create(struct ct_vm **rvm, struct pci_dev *pci)
 void ct_vm_destroy(struct ct_vm *vm)
 {
 	int i;
-	struct list_head *pos;
 	struct ct_vm_block *entry;
 
 	/* free used and unused list nodes */
-	while (!list_empty(&vm->used)) {
-		pos = vm->used.next;
-		list_del(pos);
-		entry = list_entry(pos, struct ct_vm_block, list);
+	list_for_each_entry_del(entry, &vm->used, list)
 		kfree(entry);
-	}
-	while (!list_empty(&vm->unused)) {
-		pos = vm->unused.next;
-		list_del(pos);
-		entry = list_entry(pos, struct ct_vm_block, list);
+
+	list_for_each_entry_del(entry, &vm->unused, list)
 		kfree(entry);
-	}
 
 	/* free allocated page table pages */
 	for (i = 0; i < CT_PTP_NUM; i++)

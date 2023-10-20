@@ -416,10 +416,7 @@ void cx18_stream_free(struct cx18_stream *s)
 		kfree(mdl);
 
 	/* empty buf_pool */
-	while (!list_empty(&s->buf_pool)) {
-		buf = list_first_entry(&s->buf_pool, struct cx18_buffer, list);
-		list_del_init(&buf->list);
-
+	list_for_each_entry_del_init(buf, &s->buf_pool, list) {
 		dma_unmap_single(&s->cx->pci_dev->dev, buf->dma_handle,
 				 s->buf_size, s->dma);
 		kfree(buf->buf);

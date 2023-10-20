@@ -543,19 +543,14 @@ static int msi2500_isoc_init(struct msi2500_dev *dev)
 /* Must be called with vb_queue_lock hold */
 static void msi2500_cleanup_queued_bufs(struct msi2500_dev *dev)
 {
+	struct msi2500_frame_buf *buf;
 	unsigned long flags;
 
 	dev_dbg(dev->dev, "\n");
 
 	spin_lock_irqsave(&dev->queued_bufs_lock, flags);
-	while (!list_empty(&dev->queued_bufs)) {
-		struct msi2500_frame_buf *buf;
-
-		buf = list_entry(dev->queued_bufs.next,
-				 struct msi2500_frame_buf, list);
-		list_del(&buf->list);
+	list_for_each_entry_del(buf, &dev->queued_bufs, list)
 		vb2_buffer_done(&buf->vb.vb2_buf, VB2_BUF_STATE_ERROR);
-	}
 	spin_unlock_irqrestore(&dev->queued_bufs_lock, flags);
 }
 

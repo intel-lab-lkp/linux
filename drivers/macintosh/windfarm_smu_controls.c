@@ -309,11 +309,8 @@ static void __exit smu_controls_exit(void)
 {
 	struct smu_fan_control *fct;
 
-	while (!list_empty(&smu_fans)) {
-		fct = list_entry(smu_fans.next, struct smu_fan_control, link);
-		list_del(&fct->link);
+	list_for_each_entry_del(fct, &smu_fans, link)
 		wf_unregister_control(&fct->ctrl);
-	}
 }
 
 

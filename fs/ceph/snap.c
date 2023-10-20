@@ -255,10 +255,7 @@ static void __cleanup_empty_realms(struct ceph_mds_client *mdsc)
 	lockdep_assert_held_write(&mdsc->snap_rwsem);
 
 	spin_lock(&mdsc->snap_empty_lock);
-	while (!list_empty(&mdsc->snap_empty)) {
-		realm = list_first_entry(&mdsc->snap_empty,
-				   struct ceph_snap_realm, empty_item);
-		list_del(&realm->empty_item);
+	list_for_each_entry_del(realm, &mdsc->snap_empty, empty_item) {
 		spin_unlock(&mdsc->snap_empty_lock);
 		__destroy_snap_realm(mdsc, realm);
 		spin_lock(&mdsc->snap_empty_lock);
@@ -869,12 +866,8 @@ more:
 	 * queue cap snaps _after_ we've built the new snap contexts,
 	 * so that i_head_snapc can be set appropriately.
 	 */
-	while (!list_empty(&dirty_realms)) {
-		realm = list_first_entry(&dirty_realms, struct ceph_snap_realm,
-					 dirty_item);
-		list_del_init(&realm->dirty_item);
+	list_for_each_entry_del_init(realm, &dirty_realms, dirty_item)
 		queue_realm_cap_snaps(realm);
-	}
 
 	if (realm_ret)
 		*realm_ret = first_realm;
@@ -1286,9 +1279,7 @@ void ceph_trim_snapid_map(struct ceph_mds_client *mdsc)
 	}
 	spin_unlock(&mdsc->snapid_map_lock);
 
-	while (!list_empty(&to_free)) {
-		sm = list_first_entry(&to_free, struct ceph_snapid_map, lru);
-		list_del(&sm->lru);
+	list_for_each_entry_del(sm, &to_free, lru) {
 		dout("trim snapid map %llx -> %x\n", sm->snap, sm->dev);
 		free_anon_bdev(sm->dev);
 		kfree(sm);
@@ -1310,9 +1301,7 @@ void ceph_cleanup_snapid_map(struct ceph_mds_client *mdsc)
 	}
 	spin_unlock(&mdsc->snapid_map_lock);
 
-	while (!list_empty(&to_free)) {
-		sm = list_first_entry(&to_free, struct ceph_snapid_map, lru);
-		list_del(&sm->lru);
+	list_for_each_entry_del(sm, &to_free, lru) {
 		free_anon_bdev(sm->dev);
 		if (WARN_ON_ONCE(atomic_read(&sm->ref))) {
 			pr_err("snapid map %llx -> %x still in use\n",

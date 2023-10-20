@@ -683,11 +683,8 @@ static void io_cqring_overflow_kill(struct io_ring_ctx *ctx)
 	clear_bit(IO_CHECK_CQ_OVERFLOW_BIT, &ctx->check_cq);
 	spin_unlock(&ctx->completion_lock);
 
-	while (!list_empty(&list)) {
-		ocqe = list_first_entry(&list, struct io_overflow_cqe, list);
-		list_del(&ocqe->list);
+	list_for_each_entry_del(ocqe, &list, list)
 		kfree(ocqe);
-	}
 }
 
 static void __io_cqring_overflow_flush(struct io_ring_ctx *ctx)
@@ -3237,9 +3234,7 @@ static __cold bool io_cancel_defer_files(struct io_ring_ctx *ctx,
 	if (list_empty(&list))
 		return false;
 
-	while (!list_empty(&list)) {
-		de = list_first_entry(&list, struct io_defer_entry, list);
-		list_del_init(&de->list);
+	list_for_each_entry_del_init(de, &list, list) {
 		io_req_task_queue_fail(de->req, -ECANCELED);
 		kfree(de);
 	}

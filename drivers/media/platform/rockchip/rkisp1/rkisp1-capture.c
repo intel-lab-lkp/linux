@@ -867,12 +867,8 @@ static void rkisp1_return_all_buffers(struct rkisp1_capture *cap,
 		vb2_buffer_done(&cap->buf.next->vb.vb2_buf, state);
 		cap->buf.next = NULL;
 	}
-	while (!list_empty(&cap->buf.queue)) {
-		buf = list_first_entry(&cap->buf.queue,
-				       struct rkisp1_buffer, queue);
-		list_del(&buf->queue);
+	list_for_each_entry_del(buf, &cap->buf.queue, queue)
 		vb2_buffer_done(&buf->vb.vb2_buf, state);
-	}
 	spin_unlock_irq(&cap->buf.lock);
 }
 

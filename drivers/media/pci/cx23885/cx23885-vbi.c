@@ -227,19 +227,15 @@ static int cx23885_start_streaming(struct vb2_queue *q, unsigned int count)
 
 static void cx23885_stop_streaming(struct vb2_queue *q)
 {
+	struct cx23885_buffer *buf;
 	struct cx23885_dev *dev = q->drv_priv;
 	struct cx23885_dmaqueue *dmaq = &dev->vbiq;
 	unsigned long flags;
 
 	cx_clear(VID_A_DMA_CTL, 0x22); /* FIFO and RISC enable */
 	spin_lock_irqsave(&dev->slock, flags);
-	while (!list_empty(&dmaq->active)) {
-		struct cx23885_buffer *buf = list_entry(dmaq->active.next,
-			struct cx23885_buffer, queue);
-
-		list_del(&buf->queue);
+	list_for_each_entry_del(buf, &dmaq->active, queue)
 		vb2_buffer_done(&buf->vb.vb2_buf, VB2_BUF_STATE_ERROR);
-	}
 	spin_unlock_irqrestore(&dev->slock, flags);
 }
 

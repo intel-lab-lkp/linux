@@ -61,10 +61,7 @@ void netfs_clear_subrequests(struct netfs_io_request *rreq, bool was_async)
 {
 	struct netfs_io_subrequest *subreq;
 
-	while (!list_empty(&rreq->subrequests)) {
-		subreq = list_first_entry(&rreq->subrequests,
-					  struct netfs_io_subrequest, rreq_link);
-		list_del(&subreq->rreq_link);
+	list_for_each_entry_del(subreq, &rreq->subrequests, rreq_link) {
 		netfs_put_subrequest(subreq, was_async,
 				     netfs_sreq_trace_put_clear);
 	}

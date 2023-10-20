@@ -1149,18 +1149,12 @@ fail_cdev_add:
 	device_destroy(&usb_gadget_class, devt);
 
 fail_rx_reqs:
-	while (!list_empty(&dev->rx_reqs)) {
-		req = container_of(dev->rx_reqs.next, struct usb_request, list);
-		list_del(&req->list);
+	list_for_each_entry_del(req, &dev->rx_reqs, list)
 		printer_req_free(dev->out_ep, req);
-	}
 
 fail_tx_reqs:
-	while (!list_empty(&dev->tx_reqs)) {
-		req = container_of(dev->tx_reqs.next, struct usb_request, list);
-		list_del(&req->list);
+	list_for_each_entry_del(req, &dev->tx_reqs, list)
 		printer_req_free(dev->in_ep, req);
-	}
 
 	usb_free_all_descriptors(f);
 	return ret;
@@ -1423,29 +1417,17 @@ static void printer_func_unbind(struct usb_configuration *c,
 	WARN_ON(!list_empty(&dev->rx_reqs_active));
 
 	/* Free all memory for this driver. */
-	while (!list_empty(&dev->tx_reqs)) {
-		req = container_of(dev->tx_reqs.next, struct usb_request,
-				list);
-		list_del(&req->list);
+	list_for_each_entry_del(req, &dev->tx_reqs, list)
 		printer_req_free(dev->in_ep, req);
-	}
 
 	if (dev->current_rx_req != NULL)
 		printer_req_free(dev->out_ep, dev->current_rx_req);
 
-	while (!list_empty(&dev->rx_reqs)) {
-		req = container_of(dev->rx_reqs.next,
-				struct usb_request, list);
-		list_del(&req->list);
+	list_for_each_entry_del(req, &dev->rx_reqs, list)
 		printer_req_free(dev->out_ep, req);
-	}
 
-	while (!list_empty(&dev->rx_buffers)) {
-		req = container_of(dev->rx_buffers.next,
-				struct usb_request, list);
-		list_del(&req->list);
+	list_for_each_entry_del(req, &dev->rx_buffers, list)
 		printer_req_free(dev->out_ep, req);
-	}
 	usb_free_all_descriptors(f);
 }
 

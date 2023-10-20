@@ -698,10 +698,7 @@ static void ieee80211_ibss_disconnect(struct ieee80211_sub_if_data *sdata)
 	sta_info_flush(sdata);
 
 	spin_lock_bh(&ifibss->incomplete_lock);
-	while (!list_empty(&ifibss->incomplete_stations)) {
-		sta = list_first_entry(&ifibss->incomplete_stations,
-				       struct sta_info, list);
-		list_del(&sta->list);
+	list_for_each_entry_del(sta, &ifibss->incomplete_stations, list) {
 		spin_unlock_bh(&ifibss->incomplete_lock);
 
 		sta_info_free(local, sta);
@@ -1692,10 +1689,7 @@ void ieee80211_ibss_work(struct ieee80211_sub_if_data *sdata)
 		goto out;
 
 	spin_lock_bh(&ifibss->incomplete_lock);
-	while (!list_empty(&ifibss->incomplete_stations)) {
-		sta = list_first_entry(&ifibss->incomplete_stations,
-				       struct sta_info, list);
-		list_del(&sta->list);
+	list_for_each_entry_del(sta, &ifibss->incomplete_stations, list) {
 		spin_unlock_bh(&ifibss->incomplete_lock);
 
 		ieee80211_ibss_finish_sta(sta);

@@ -612,12 +612,8 @@ static int gntdev_release(struct inode *inode, struct file *flip)
 	pr_debug("priv %p\n", priv);
 
 	mutex_lock(&priv->lock);
-	while (!list_empty(&priv->maps)) {
-		map = list_entry(priv->maps.next,
-				 struct gntdev_grant_map, next);
-		list_del(&map->next);
+	list_for_each_entry_del(map, &priv->maps, next)
 		gntdev_put_map(NULL /* already removed */, map);
-	}
 	mutex_unlock(&priv->lock);
 
 #ifdef CONFIG_XEN_GNTDEV_DMABUF

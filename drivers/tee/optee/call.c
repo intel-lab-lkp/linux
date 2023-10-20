@@ -145,10 +145,7 @@ void optee_shm_arg_cache_uninit(struct optee *optee)
 	struct optee_shm_arg_entry *entry;
 
 	mutex_destroy(&optee->shm_arg_cache.mutex);
-	while (!list_empty(head)) {
-		entry = list_first_entry(head, struct optee_shm_arg_entry,
-					 list_node);
-		list_del(&entry->list_node);
+	list_for_each_entry_del(entry, head, list_node) {
 		if (find_first_bit(entry->map, MAX_ARG_COUNT_PER_ENTRY) !=
 		     MAX_ARG_COUNT_PER_ENTRY) {
 			pr_err("Freeing non-free entry\n");

@@ -150,10 +150,7 @@ ocfs2_filecheck_sysfs_free(struct ocfs2_filecheck_sysfs_entry *entry)
 	struct ocfs2_filecheck_entry *p;
 
 	spin_lock(&entry->fs_fcheck->fc_lock);
-	while (!list_empty(&entry->fs_fcheck->fc_head)) {
-		p = list_first_entry(&entry->fs_fcheck->fc_head,
-				     struct ocfs2_filecheck_entry, fe_list);
-		list_del(&p->fe_list);
+	list_for_each_entry_del(p, &entry->fs_fcheck->fc_head, fe_list) {
 		BUG_ON(!p->fe_done); /* To free a undone file check entry */
 		kfree(p);
 	}

@@ -251,10 +251,8 @@ static int ext4_do_flush_completed_IO(struct inode *inode,
 	list_replace_init(head, &unwritten);
 	spin_unlock_irqrestore(&ei->i_completed_io_lock, flags);
 
-	while (!list_empty(&unwritten)) {
-		io_end = list_entry(unwritten.next, ext4_io_end_t, list);
+	list_for_each_entry_del_init(io_end, &unwritten, list) {
 		BUG_ON(!(io_end->flag & EXT4_IO_END_UNWRITTEN));
-		list_del_init(&io_end->list);
 
 		err = ext4_end_io_end(io_end);
 		if (unlikely(!ret && err))

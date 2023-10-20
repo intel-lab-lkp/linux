@@ -1034,12 +1034,9 @@ static void cleanup_workspace_manager(struct workspace_manager *wsm)
 {
 	struct crush_work *work;
 
-	while (!list_empty(&wsm->idle_ws)) {
-		work = list_first_entry(&wsm->idle_ws, struct crush_work,
-					item);
-		list_del_init(&work->item);
+	list_for_each_entry_del_init(work, &wsm->idle_ws, item)
 		free_workspace(work);
-	}
+
 	atomic_set(&wsm->total_ws, 0);
 	wsm->free_ws = 0;
 }

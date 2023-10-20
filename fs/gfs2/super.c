@@ -385,9 +385,7 @@ relock_shared:
 	gfs2_assert_withdraw(sdp, !error2);
 
 out:
-	while (!list_empty(&list)) {
-		lfcc = list_first_entry(&list, struct lfcc, list);
-		list_del(&lfcc->list);
+	list_for_each_entry_del(lfcc, &list, list) {
 		gfs2_glock_dq_uninit(&lfcc->gh);
 		kfree(lfcc);
 	}

@@ -1238,11 +1238,7 @@ qla1280_done(struct scsi_qla_host *ha)
 
 	done_q = &ha->done_q;
 
-	while (!list_empty(done_q)) {
-		sp = list_entry(done_q->next, struct srb, list);
-
-		list_del(&sp->list);
-	
+	list_for_each_entry_del(sp, done_q, list) {
 		cmd = sp->cmd;
 		bus = SCSI_BUS_32(cmd);
 		target = SCSI_TCN_32(cmd);

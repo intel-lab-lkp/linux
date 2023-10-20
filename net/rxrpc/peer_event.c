@@ -240,11 +240,7 @@ static void rxrpc_peer_keepalive_dispatch(struct rxrpc_net *rxnet,
 
 	spin_lock(&rxnet->peer_hash_lock);
 
-	while (!list_empty(collector)) {
-		peer = list_entry(collector->next,
-				  struct rxrpc_peer, keepalive_link);
-
-		list_del_init(&peer->keepalive_link);
+	list_for_each_entry_del_init(peer, collector, keepalive_link) {
 		if (!rxrpc_get_peer_maybe(peer, rxrpc_peer_get_keepalive))
 			continue;
 

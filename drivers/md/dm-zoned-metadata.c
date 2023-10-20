@@ -944,10 +944,7 @@ int dmz_flush_metadata(struct dmz_metadata *zmd)
 	if (ret)
 		goto err;
 
-	while (!list_empty(&write_list)) {
-		mblk = list_first_entry(&write_list, struct dmz_mblock, link);
-		list_del_init(&mblk->link);
-
+	list_for_each_entry_del_init(mblk, &write_list, link) {
 		spin_lock(&zmd->mblk_lock);
 		clear_bit(DMZ_META_DIRTY, &mblk->state);
 		if (mblk->ref == 0)
@@ -2808,10 +2805,7 @@ static void dmz_cleanup_metadata(struct dmz_metadata *zmd)
 		dmz_free_mblock(zmd, mblk);
 	}
 
-	while (!list_empty(&zmd->mblk_lru_list)) {
-		mblk = list_first_entry(&zmd->mblk_lru_list,
-					struct dmz_mblock, link);
-		list_del_init(&mblk->link);
+	list_for_each_entry_del_init(mblk, &zmd->mblk_lru_list, link) {
 		rb_erase(&mblk->node, &zmd->mblk_rbtree);
 		dmz_free_mblock(zmd, mblk);
 	}

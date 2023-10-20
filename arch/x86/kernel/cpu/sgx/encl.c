@@ -745,10 +745,7 @@ void sgx_encl_release(struct kref *ref)
 		encl->secs.epc_page = NULL;
 	}
 
-	while (!list_empty(&encl->va_pages)) {
-		va_page = list_first_entry(&encl->va_pages, struct sgx_va_page,
-					   list);
-		list_del(&va_page->list);
+	list_for_each_entry_del(va_page, &encl->va_pages, list) {
 		sgx_encl_free_epc_page(va_page->epc_page);
 		kfree(va_page);
 	}

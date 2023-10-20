@@ -1914,13 +1914,10 @@ static void _cma_cancel_listens(struct rdma_id_private *id_priv)
 	 */
 	list_del_init(&id_priv->listen_any_item);
 
-	while (!list_empty(&id_priv->listen_list)) {
-		dev_id_priv =
-			list_first_entry(&id_priv->listen_list,
-					 struct rdma_id_private, listen_item);
+	list_for_each_entry_del_init(dev_id_priv, &id_priv->listen_list,
+				     listen_item) {
 		/* sync with device removal to avoid duplicate destruction */
 		list_del_init(&dev_id_priv->device_item);
-		list_del_init(&dev_id_priv->listen_item);
 		mutex_unlock(&lock);
 
 		rdma_destroy_id(&dev_id_priv->id);
@@ -2018,12 +2015,8 @@ static void cma_leave_mc_groups(struct rdma_id_private *id_priv)
 {
 	struct cma_multicast *mc;
 
-	while (!list_empty(&id_priv->mc_list)) {
-		mc = list_first_entry(&id_priv->mc_list, struct cma_multicast,
-				      list);
-		list_del(&mc->list);
+	list_for_each_entry_del(mc, &id_priv->mc_list, list)
 		destroy_mc(id_priv, mc);
-	}
 }
 
 static void _destroy_id(struct rdma_id_private *id_priv,

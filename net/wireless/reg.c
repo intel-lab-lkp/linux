@@ -487,12 +487,7 @@ static void reg_regdb_apply(struct work_struct *work)
 	rtnl_lock();
 
 	mutex_lock(&reg_regdb_apply_mutex);
-	while (!list_empty(&reg_regdb_apply_list)) {
-		request = list_first_entry(&reg_regdb_apply_list,
-					   struct reg_regdb_apply_request,
-					   list);
-		list_del(&request->list);
-
+	list_for_each_entry_del(request, &reg_regdb_apply_list, list) {
 		set_regdom(request->regdom, REGD_SOURCE_INTERNAL_DB);
 		kfree(request);
 	}

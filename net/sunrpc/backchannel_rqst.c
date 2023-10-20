@@ -179,13 +179,8 @@ out_free:
 	/*
 	 * Memory allocation failed, free the temporary list
 	 */
-	while (!list_empty(&tmp_list)) {
-		req = list_first_entry(&tmp_list,
-				struct rpc_rqst,
-				rq_bc_pa_list);
-		list_del(&req->rq_bc_pa_list);
+	list_for_each_entry_del(req, &tmp_list, rq_bc_pa_list)
 		xprt_free_allocation(req);
-	}
 
 	dprintk("RPC:       setup backchannel transport failed\n");
 	return -ENOMEM;

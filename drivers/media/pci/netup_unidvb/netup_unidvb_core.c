@@ -625,12 +625,8 @@ static void netup_unidvb_queue_cleanup(struct netup_dma *dma)
 	unsigned long flags;
 
 	spin_lock_irqsave(&dma->lock, flags);
-	while (!list_empty(&dma->free_buffers)) {
-		buf = list_first_entry(&dma->free_buffers,
-			struct netup_unidvb_buffer, list);
-		list_del(&buf->list);
+	list_for_each_entry_del(buf, &dma->free_buffers, list)
 		vb2_buffer_done(&buf->vb.vb2_buf, VB2_BUF_STATE_ERROR);
-	}
 	spin_unlock_irqrestore(&dma->lock, flags);
 }
 

@@ -442,9 +442,7 @@ static void nvec_dispatch(struct work_struct *work)
 	struct nvec_msg *msg;
 
 	spin_lock_irqsave(&nvec->rx_lock, flags);
-	while (!list_empty(&nvec->rx_data)) {
-		msg = list_first_entry(&nvec->rx_data, struct nvec_msg, node);
-		list_del_init(&msg->node);
+	list_for_each_entry_del_init(msg, &nvec->rx_data, node) {
 		spin_unlock_irqrestore(&nvec->rx_lock, flags);
 
 		if (nvec->sync_write_pending ==

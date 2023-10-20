@@ -276,11 +276,8 @@ static void do_cancel_buffers(struct cx8802_dev *dev)
 	unsigned long flags;
 
 	spin_lock_irqsave(&dev->slock, flags);
-	while (!list_empty(&q->active)) {
-		buf = list_entry(q->active.next, struct cx88_buffer, list);
-		list_del(&buf->list);
+	list_for_each_entry_del(buf, &q->active, list)
 		vb2_buffer_done(&buf->vb.vb2_buf, VB2_BUF_STATE_ERROR);
-	}
 	spin_unlock_irqrestore(&dev->slock, flags);
 }
 

@@ -189,10 +189,7 @@ static int v_send_ret(struct vudc *udc)
 	int ret = 0;
 
 	spin_lock_irqsave(&udc->lock_tx, flags);
-	while (!list_empty(&udc->tx_queue)) {
-		txi = list_first_entry(&udc->tx_queue, struct tx_item,
-				       tx_entry);
-		list_del(&txi->tx_entry);
+	list_for_each_entry_del(txi, &udc->tx_queue, tx_entry) {
 		spin_unlock_irqrestore(&udc->lock_tx, flags);
 
 		switch (txi->type) {

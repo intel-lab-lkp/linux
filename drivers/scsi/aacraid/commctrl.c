@@ -359,14 +359,10 @@ int aac_close_fib_context(struct aac_dev * dev, struct aac_fib_context * fibctx)
 	/*
 	 *	First free any FIBs that have not been consumed.
 	 */
-	while (!list_empty(&fibctx->fib_list)) {
-		struct list_head * entry;
+	list_for_each_entry_del(fib, &fibctx->fib_list, fiblink) {
 		/*
 		 *	Pull the next fib from the fibs
 		 */
-		entry = fibctx->fib_list.next;
-		list_del(entry);
-		fib = list_entry(entry, struct fib, fiblink);
 		fibctx->count--;
 		/*
 		 *	Free the space occupied by this copy of the fib.

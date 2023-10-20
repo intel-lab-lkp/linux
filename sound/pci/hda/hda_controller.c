@@ -1317,10 +1317,7 @@ void azx_free_streams(struct azx *chip)
 	struct hdac_bus *bus = azx_bus(chip);
 	struct hdac_stream *s;
 
-	while (!list_empty(&bus->stream_list)) {
-		s = list_first_entry(&bus->stream_list, struct hdac_stream, list);
-		list_del(&s->list);
+	list_for_each_entry_del(s, &bus->stream_list, list)
 		kfree(stream_to_azx_dev(s));
-	}
 }
 EXPORT_SYMBOL_GPL(azx_free_streams);

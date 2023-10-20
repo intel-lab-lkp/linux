@@ -918,6 +918,7 @@ fail:
 static void
 vc4_complete_exec(struct drm_device *dev, struct vc4_exec_info *exec)
 {
+	struct vc4_bo *bo;
 	struct vc4_dev *vc4 = to_vc4_dev(dev);
 	unsigned long irqflags;
 	unsigned i;
@@ -940,12 +941,8 @@ vc4_complete_exec(struct drm_device *dev, struct vc4_exec_info *exec)
 		kvfree(exec->bo);
 	}
 
-	while (!list_empty(&exec->unref_list)) {
-		struct vc4_bo *bo = list_first_entry(&exec->unref_list,
-						     struct vc4_bo, unref_head);
-		list_del(&bo->unref_head);
+	list_for_each_entry_del(bo, &exec->unref_list, unref_head)
 		drm_gem_object_put(&bo->base.base);
-	}
 
 	/* Free up the allocation of any bin slots we used. */
 	spin_lock_irqsave(&vc4->job_lock, irqflags);
@@ -967,6 +964,7 @@ vc4_complete_exec(struct drm_device *dev, struct vc4_exec_info *exec)
 void
 vc4_job_handle_completed(struct vc4_dev *vc4)
 {
+	struct vc4_exec_info *exec;
 	unsigned long irqflags;
 	struct vc4_seqno_cb *cb, *cb_temp;
 
@@ -974,12 +972,7 @@ vc4_job_handle_completed(struct vc4_dev *vc4)
 		return;
 
 	spin_lock_irqsave(&vc4->job_lock, irqflags);
-	while (!list_empty(&vc4->job_done_list)) {
-		struct vc4_exec_info *exec =
-			list_first_entry(&vc4->job_done_list,
-					 struct vc4_exec_info, head);
-		list_del(&exec->head);
-
+	list_for_each_entry_del(exec, &vc4->job_done_list, head) {
 		spin_unlock_irqrestore(&vc4->job_lock, irqflags);
 		vc4_complete_exec(&vc4->base, exec);
 		spin_lock_irqsave(&vc4->job_lock, irqflags);

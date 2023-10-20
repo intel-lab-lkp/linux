@@ -2172,10 +2172,7 @@ bfa_ioc_mbox_flush(struct bfa_ioc *ioc)
 	struct bfa_ioc_mbox_mod *mod = &ioc->mbox_mod;
 	struct bfa_mbox_cmd *cmd;
 
-	while (!list_empty(&mod->cmd_q)) {
-		cmd = list_first_entry(&mod->cmd_q, struct bfa_mbox_cmd, qe);
-		list_del(&cmd->qe);
-	}
+	list_for_each_entry_del(cmd, &mod->cmd_q, qe);
 }
 
 /**

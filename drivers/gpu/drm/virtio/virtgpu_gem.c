@@ -284,10 +284,7 @@ void virtio_gpu_array_put_free_work(struct work_struct *work)
 	struct virtio_gpu_object_array *objs;
 
 	spin_lock(&vgdev->obj_free_lock);
-	while (!list_empty(&vgdev->obj_free_list)) {
-		objs = list_first_entry(&vgdev->obj_free_list,
-					struct virtio_gpu_object_array, next);
-		list_del(&objs->next);
+	list_for_each_entry_del(objs, &vgdev->obj_free_list, next) {
 		spin_unlock(&vgdev->obj_free_lock);
 		virtio_gpu_array_put_free(objs);
 		spin_lock(&vgdev->obj_free_lock);

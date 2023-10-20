@@ -308,13 +308,8 @@ static void ring_work(struct work_struct *work)
 invoke_callback:
 	/* allow callbacks to schedule new work */
 	spin_unlock_irqrestore(&ring->lock, flags);
-	while (!list_empty(&done)) {
-		frame = list_first_entry(&done, typeof(*frame), list);
-		/*
-		 * The callback may reenqueue or delete frame.
-		 * Do not hold on to it.
-		 */
-		list_del_init(&frame->list);
+	/* The callback may reenqueue or delete frame.  Do not hold on to it. */
+	list_for_each_entry_del_init(frame, &done, list) {
 		if (frame->callback)
 			frame->callback(ring, frame, canceled);
 	}

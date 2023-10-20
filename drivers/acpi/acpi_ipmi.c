@@ -335,11 +335,7 @@ static void ipmi_flush_tx_msg(struct acpi_ipmi_device *ipmi)
 	 * ipmi_recv_msg(s) are freed after invoking ipmi_destroy_user().
 	 */
 	spin_lock_irqsave(&ipmi->tx_msg_lock, flags);
-	while (!list_empty(&ipmi->tx_msg_list)) {
-		tx_msg = list_first_entry(&ipmi->tx_msg_list,
-					  struct acpi_ipmi_msg,
-					  head);
-		list_del(&tx_msg->head);
+	list_for_each_entry_del(tx_msg, &ipmi->tx_msg_list, head) {
 		spin_unlock_irqrestore(&ipmi->tx_msg_lock, flags);
 
 		/* wake up the sleep thread on the Tx msg */

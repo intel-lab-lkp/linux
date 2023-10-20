@@ -917,12 +917,8 @@ static void do_recv_completion(struct htc_endpoint *ep,
 	}
 
 	/* using legacy EpRecv */
-	while (!list_empty(queue_to_indicate)) {
-		packet = list_first_entry(queue_to_indicate,
-					  struct htc_packet, list);
-		list_del(&packet->list);
+	list_for_each_entry_del(packet, queue_to_indicate, list)
 		ep->ep_cb.rx(ep->target, packet);
-	}
 
 	return;
 }

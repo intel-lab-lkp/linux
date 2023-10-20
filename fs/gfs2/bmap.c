@@ -2174,11 +2174,8 @@ void gfs2_free_journal_extents(struct gfs2_jdesc *jd)
 {
 	struct gfs2_journal_extent *jext;
 
-	while(!list_empty(&jd->extent_list)) {
-		jext = list_first_entry(&jd->extent_list, struct gfs2_journal_extent, list);
-		list_del(&jext->list);
+	list_for_each_entry_del(jext, &jd->extent_list, list)
 		kfree(jext);
-	}
 }
 
 /**

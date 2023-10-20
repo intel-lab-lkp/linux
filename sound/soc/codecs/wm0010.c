@@ -478,12 +478,9 @@ static int wm0010_firmware_load(const char *name, struct snd_soc_component *comp
 	ret = 0;
 
 abort1:
-	while (!list_empty(&xfer_list)) {
-		xfer = list_first_entry(&xfer_list, struct wm0010_boot_xfer,
-					list);
+	list_for_each_entry_del(xfer, &xfer_list, list) {
 		kfree(xfer->t.rx_buf);
 		kfree(xfer->t.tx_buf);
-		list_del(&xfer->list);
 		kfree(xfer);
 	}
 

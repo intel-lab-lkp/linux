@@ -746,11 +746,7 @@ static int rockchip_gpio_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	while (!list_empty(&bank->deferred_pins)) {
-		cfg = list_first_entry(&bank->deferred_pins,
-				       struct rockchip_pin_deferred, head);
-		list_del(&cfg->head);
-
+	list_for_each_entry_del(cfg, &bank->deferred_pins, head) {
 		switch (cfg->param) {
 		case PIN_CONFIG_OUTPUT:
 			ret = rockchip_gpio_direction_output(&bank->gpio_chip, cfg->pin, cfg->arg);

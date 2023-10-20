@@ -816,21 +816,16 @@ hub_clear_tt_buffer(struct usb_device *hdev, u16 devinfo, u16 tt)
  */
 static void hub_tt_work(struct work_struct *work)
 {
+	struct usb_tt_clear	*clear;
 	struct usb_hub		*hub =
 		container_of(work, struct usb_hub, tt.clear_work);
 	unsigned long		flags;
 
 	spin_lock_irqsave(&hub->tt.lock, flags);
-	while (!list_empty(&hub->tt.clear_list)) {
-		struct list_head	*next;
-		struct usb_tt_clear	*clear;
+	list_for_each_entry_del(clear, &hub->tt.clear_list, clear_list) {
 		struct usb_device	*hdev = hub->hdev;
 		const struct hc_driver	*drv;
 		int			status;
-
-		next = hub->tt.clear_list.next;
-		clear = list_entry(next, struct usb_tt_clear, clear_list);
-		list_del(&clear->clear_list);
 
 		/* drop lock so HCD can concurrently report other TT errors */
 		spin_unlock_irqrestore(&hub->tt.lock, flags);

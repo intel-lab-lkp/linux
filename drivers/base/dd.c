@@ -95,11 +95,9 @@ static void deferred_probe_work_func(struct work_struct *work)
 	 * from under our feet.
 	 */
 	mutex_lock(&deferred_probe_mutex);
-	while (!list_empty(&deferred_probe_active_list)) {
-		private = list_first_entry(&deferred_probe_active_list,
-					typeof(*dev->p), deferred_probe);
+	list_for_each_entry_del_init(private, &deferred_probe_active_list,
+				     deferred_probe) {
 		dev = private->device;
-		list_del_init(&private->deferred_probe);
 
 		get_device(dev);
 

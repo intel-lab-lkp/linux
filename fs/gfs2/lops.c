@@ -739,11 +739,8 @@ static void buf_lo_after_commit(struct gfs2_sbd *sdp, struct gfs2_trans *tr)
 		return;
 
 	head = &tr->tr_buf;
-	while (!list_empty(head)) {
-		bd = list_first_entry(head, struct gfs2_bufdata, bd_list);
-		list_del_init(&bd->bd_list);
+	list_for_each_entry_del_init(bd, head, bd_list)
 		gfs2_unpin(sdp, bd->bd_bh, tr);
-	}
 }
 
 static void buf_lo_before_scan(struct gfs2_jdesc *jd,
@@ -900,9 +897,7 @@ void gfs2_drain_revokes(struct gfs2_sbd *sdp)
 	struct gfs2_bufdata *bd;
 	struct gfs2_glock *gl;
 
-	while (!list_empty(head)) {
-		bd = list_first_entry(head, struct gfs2_bufdata, bd_list);
-		list_del_init(&bd->bd_list);
+	list_for_each_entry_del_init(bd, head, bd_list) {
 		gl = bd->bd_gl;
 		gfs2_glock_remove_revoke(gl);
 		kmem_cache_free(gfs2_bufdata_cachep, bd);
@@ -1085,11 +1080,8 @@ static void databuf_lo_after_commit(struct gfs2_sbd *sdp, struct gfs2_trans *tr)
 		return;
 
 	head = &tr->tr_databuf;
-	while (!list_empty(head)) {
-		bd = list_first_entry(head, struct gfs2_bufdata, bd_list);
-		list_del_init(&bd->bd_list);
+	list_for_each_entry_del_init(bd, head, bd_list)
 		gfs2_unpin(sdp, bd->bd_bh, tr);
-	}
 }
 
 

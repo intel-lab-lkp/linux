@@ -637,10 +637,7 @@ void atomisp_flush_params_queue(struct atomisp_video_pipe *pipe)
 {
 	struct atomisp_css_params_with_list *param;
 
-	while (!list_empty(&pipe->per_frame_params)) {
-		param = list_entry(pipe->per_frame_params.next,
-				   struct atomisp_css_params_with_list, list);
-		list_del(&param->list);
+	list_for_each_entry_del(param, &pipe->per_frame_params, list) {
 		atomisp_free_css_parameters(&param->params);
 		kvfree(param);
 	}

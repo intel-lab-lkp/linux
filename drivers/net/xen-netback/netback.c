@@ -880,17 +880,13 @@ bool xenvif_mcast_match(struct xenvif *vif, const u8 *addr)
 
 void xenvif_mcast_addr_list_free(struct xenvif *vif)
 {
+	struct xenvif_mcast_addr *mcast;
+
 	/* No need for locking or RCU here. NAPI poll and TX queue
 	 * are stopped.
 	 */
-	while (!list_empty(&vif->fe_mcast_addr)) {
-		struct xenvif_mcast_addr *mcast;
-
-		mcast = list_first_entry(&vif->fe_mcast_addr,
-					 struct xenvif_mcast_addr,
-					 entry);
+	list_for_each_entry_del(mcast, &vif->fe_mcast_addr, entry) {
 		--vif->fe_mcast_count;
-		list_del(&mcast->entry);
 		kfree(mcast);
 	}
 }

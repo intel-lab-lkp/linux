@@ -2146,12 +2146,9 @@ static void coda_stop_streaming(struct vb2_queue *q)
 			flush_work(&ctx->seq_end_work);
 		}
 		spin_lock(&ctx->buffer_meta_lock);
-		while (!list_empty(&ctx->buffer_meta_list)) {
-			meta = list_first_entry(&ctx->buffer_meta_list,
-						struct coda_buffer_meta, list);
-			list_del(&meta->list);
+		list_for_each_entry_del(meta, &ctx->buffer_meta_list, list)
 			kfree(meta);
-		}
+
 		ctx->num_metas = 0;
 		spin_unlock(&ctx->buffer_meta_lock);
 		kfifo_init(&ctx->bitstream_fifo,

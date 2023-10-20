@@ -221,19 +221,13 @@ static void __del_qgroup_rb(struct btrfs_fs_info *fs_info,
 	struct btrfs_qgroup_list *list;
 
 	list_del(&qgroup->dirty);
-	while (!list_empty(&qgroup->groups)) {
-		list = list_first_entry(&qgroup->groups,
-					struct btrfs_qgroup_list, next_group);
-		list_del(&list->next_group);
+	list_for_each_entry_del(list, &qgroup->groups, next_group) {
 		list_del(&list->next_member);
 		kfree(list);
 	}
 
-	while (!list_empty(&qgroup->members)) {
-		list = list_first_entry(&qgroup->members,
-					struct btrfs_qgroup_list, next_member);
+	list_for_each_entry_del(list, &qgroup->members, next_member) {
 		list_del(&list->next_group);
-		list_del(&list->next_member);
 		kfree(list);
 	}
 }
@@ -2847,6 +2841,7 @@ cleanup:
  */
 int btrfs_run_qgroups(struct btrfs_trans_handle *trans)
 {
+	struct btrfs_qgroup *qgroup;
 	struct btrfs_fs_info *fs_info = trans->fs_info;
 	int ret = 0;
 
@@ -2862,11 +2857,7 @@ int btrfs_run_qgroups(struct btrfs_trans_handle *trans)
 		return ret;
 
 	spin_lock(&fs_info->qgroup_lock);
-	while (!list_empty(&fs_info->dirty_qgroups)) {
-		struct btrfs_qgroup *qgroup;
-		qgroup = list_first_entry(&fs_info->dirty_qgroups,
-					  struct btrfs_qgroup, dirty);
-		list_del_init(&qgroup->dirty);
+	list_for_each_entry_del_init(qgroup, &fs_info->dirty_qgroups, dirty) {
 		spin_unlock(&fs_info->qgroup_lock);
 		ret = update_qgroup_info_item(trans, qgroup);
 		if (ret)

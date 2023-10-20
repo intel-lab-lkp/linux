@@ -58,10 +58,7 @@ static void handle_memory_error(void)
 	struct OpalMsgNode *msg_node;
 
 	spin_lock_irqsave(&opal_mem_err_lock, flags);
-	while (!list_empty(&opal_memory_err_list)) {
-		 msg_node = list_entry(opal_memory_err_list.next,
-					   struct OpalMsgNode, list);
-		list_del(&msg_node->list);
+	list_for_each_entry_del(msg_node, &opal_memory_err_list, list) {
 		spin_unlock_irqrestore(&opal_mem_err_lock, flags);
 
 		merr_evt = (struct OpalMemoryErrorData *)

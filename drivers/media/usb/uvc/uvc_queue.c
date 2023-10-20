@@ -45,15 +45,12 @@ static inline struct uvc_buffer *uvc_vbuf_to_buffer(struct vb2_v4l2_buffer *buf)
 static void uvc_queue_return_buffers(struct uvc_video_queue *queue,
 			       enum uvc_buffer_state state)
 {
+	struct uvc_buffer *buf;
 	enum vb2_buffer_state vb2_state = state == UVC_BUF_STATE_ERROR
 					? VB2_BUF_STATE_ERROR
 					: VB2_BUF_STATE_QUEUED;
 
-	while (!list_empty(&queue->irqqueue)) {
-		struct uvc_buffer *buf = list_first_entry(&queue->irqqueue,
-							  struct uvc_buffer,
-							  queue);
-		list_del(&buf->queue);
+	list_for_each_entry_del(buf, &queue->irqqueue, queue) {
 		buf->state = state;
 		vb2_buffer_done(&buf->buf.vb2_buf, vb2_state);
 	}

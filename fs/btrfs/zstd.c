@@ -204,10 +204,7 @@ void zstd_cleanup_workspace_manager(void)
 
 	spin_lock_bh(&wsm.lock);
 	for (i = 0; i < ZSTD_BTRFS_MAX_LEVEL; i++) {
-		while (!list_empty(&wsm.idle_ws[i])) {
-			workspace = container_of(wsm.idle_ws[i].next,
-						 struct workspace, list);
-			list_del(&workspace->list);
+		list_for_each_entry_del(workspace, &wsm.idle_ws[i], list) {
 			list_del(&workspace->lru_list);
 			zstd_free_workspace(&workspace->list);
 		}

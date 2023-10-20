@@ -2508,11 +2508,8 @@ static void local_completions(struct work_struct *work)
 			       mad_agent_priv->qp_info->port_priv->port_num);
 
 	spin_lock_irqsave(&mad_agent_priv->lock, flags);
-	while (!list_empty(&mad_agent_priv->local_list)) {
-		local = list_entry(mad_agent_priv->local_list.next,
-				   struct ib_mad_local_private,
-				   completion_list);
-		list_del(&local->completion_list);
+	list_for_each_entry_del(local, &mad_agent_priv->local_list,
+				completion_list) {
 		spin_unlock_irqrestore(&mad_agent_priv->lock, flags);
 		free_mad = 0;
 		if (local->mad_priv) {

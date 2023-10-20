@@ -554,17 +554,13 @@ static void pwc_isoc_cleanup(struct pwc_device *pdev)
 static void pwc_cleanup_queued_bufs(struct pwc_device *pdev,
 				    enum vb2_buffer_state state)
 {
+	struct pwc_frame_buf *buf;
 	unsigned long flags = 0;
 
 	spin_lock_irqsave(&pdev->queued_bufs_lock, flags);
-	while (!list_empty(&pdev->queued_bufs)) {
-		struct pwc_frame_buf *buf;
 
-		buf = list_entry(pdev->queued_bufs.next, struct pwc_frame_buf,
-				 list);
-		list_del(&buf->list);
+	list_for_each_entry_del(buf, &pdev->queued_bufs, list)
 		vb2_buffer_done(&buf->vb.vb2_buf, state);
-	}
 	spin_unlock_irqrestore(&pdev->queued_bufs_lock, flags);
 }
 

@@ -688,12 +688,9 @@ static void evict(struct inode *inode)
  */
 static void dispose_list(struct list_head *head)
 {
-	while (!list_empty(head)) {
-		struct inode *inode;
+	struct inode *inode;
 
-		inode = list_first_entry(head, struct inode, i_lru);
-		list_del_init(&inode->i_lru);
-
+	list_for_each_entry_del_init(inode, head, i_lru) {
 		evict(inode);
 		cond_resched();
 	}

@@ -324,17 +324,11 @@ nvkm_disp_dtor(struct nvkm_engine *engine)
 
 	nvkm_event_fini(&disp->vblank);
 
-	while (!list_empty(&disp->conns)) {
-		conn = list_first_entry(&disp->conns, typeof(*conn), head);
-		list_del(&conn->head);
+	list_for_each_entry_del(conn, &disp->conns, head)
 		nvkm_conn_del(&conn);
-	}
 
-	while (!list_empty(&disp->outps)) {
-		outp = list_first_entry(&disp->outps, typeof(*outp), head);
-		list_del(&outp->head);
+	list_for_each_entry_del(outp, &disp->outps, head)
 		nvkm_outp_del(&outp);
-	}
 
 	while (!list_empty(&disp->iors)) {
 		ior = list_first_entry(&disp->iors, typeof(*ior), head);

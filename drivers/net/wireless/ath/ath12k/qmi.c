@@ -2986,10 +2986,7 @@ static void ath12k_qmi_driver_event_work(struct work_struct *work)
 	int ret;
 
 	spin_lock(&qmi->event_lock);
-	while (!list_empty(&qmi->event_list)) {
-		event = list_first_entry(&qmi->event_list,
-					 struct ath12k_qmi_driver_event, list);
-		list_del(&event->list);
+	list_for_each_entry_del(event, &qmi->event_list, list) {
 		spin_unlock(&qmi->event_lock);
 
 		if (test_bit(ATH12K_FLAG_UNREGISTERING, &ab->dev_flags))

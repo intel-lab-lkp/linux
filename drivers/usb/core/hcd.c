@@ -1666,6 +1666,7 @@ static void __usb_hcd_giveback_urb(struct urb *urb)
 
 static void usb_giveback_urb_bh(struct tasklet_struct *t)
 {
+	struct urb *urb;
 	struct giveback_urb_bh *bh = from_tasklet(bh, t, bh);
 	struct list_head local_list;
 
@@ -1674,11 +1675,7 @@ static void usb_giveback_urb_bh(struct tasklet_struct *t)
 	list_replace_init(&bh->head, &local_list);
 	spin_unlock_irq(&bh->lock);
 
-	while (!list_empty(&local_list)) {
-		struct urb *urb;
-
-		urb = list_entry(local_list.next, struct urb, urb_list);
-		list_del_init(&urb->urb_list);
+	list_for_each_entry_del_init(urb, &local_list, urb_list) {
 		bh->completing_ep = urb->ep;
 		__usb_hcd_giveback_urb(urb);
 		bh->completing_ep = NULL;

@@ -385,13 +385,10 @@ static struct exynos_media_pipeline *fimc_md_pipeline_create(
 
 static void fimc_md_pipelines_free(struct fimc_md *fmd)
 {
-	while (!list_empty(&fmd->pipelines)) {
-		struct fimc_pipeline *p;
+	struct fimc_pipeline *p;
 
-		p = list_entry(fmd->pipelines.next, typeof(*p), list);
-		list_del(&p->list);
+	list_for_each_entry_del(p, &fmd->pipelines, list)
 		kfree(p);
-	}
 }
 
 static int fimc_md_parse_one_endpoint(struct fimc_md *fmd,

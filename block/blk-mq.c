@@ -1488,11 +1488,8 @@ static void blk_mq_requeue_work(struct work_struct *work)
 		}
 	}
 
-	while (!list_empty(&flush_list)) {
-		rq = list_entry(flush_list.next, struct request, queuelist);
-		list_del_init(&rq->queuelist);
+	list_for_each_entry_del_init(rq, &flush_list, queuelist)
 		blk_mq_insert_request(rq, 0);
-	}
 
 	blk_mq_run_hw_queues(q, false);
 }
@@ -2821,14 +2818,11 @@ void blk_mq_flush_plug_list(struct blk_plug *plug, bool from_schedule)
 static void blk_mq_try_issue_list_directly(struct blk_mq_hw_ctx *hctx,
 		struct list_head *list)
 {
+	struct request *rq;
 	int queued = 0;
 	blk_status_t ret = BLK_STS_OK;
 
-	while (!list_empty(list)) {
-		struct request *rq = list_first_entry(list, struct request,
-				queuelist);
-
-		list_del_init(&rq->queuelist);
+	list_for_each_entry_del_init(rq, list, queuelist) {
 		ret = blk_mq_request_issue_directly(rq, list_empty(list));
 		switch (ret) {
 		case BLK_STS_OK:
@@ -3271,9 +3265,7 @@ void blk_mq_free_rqs(struct blk_mq_tag_set *set, struct blk_mq_tags *tags,
 
 	blk_mq_clear_rq_mapping(drv_tags, tags);
 
-	while (!list_empty(&tags->page_list)) {
-		page = list_first_entry(&tags->page_list, struct page, lru);
-		list_del_init(&page->lru);
+	list_for_each_entry_del_init(page, &tags->page_list, lru) {
 		/*
 		 * Remove kmemleak object previously allocated in
 		 * blk_mq_alloc_rqs().

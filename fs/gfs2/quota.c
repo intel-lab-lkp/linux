@@ -142,12 +142,8 @@ static void gfs2_qd_list_dispose(struct list_head *list)
 {
 	struct gfs2_quota_data *qd;
 
-	while (!list_empty(list)) {
-		qd = list_first_entry(list, struct gfs2_quota_data, qd_lru);
-		list_del(&qd->qd_lru);
-
+	list_for_each_entry_del(qd, list, qd_lru)
 		gfs2_qd_dispose(qd);
-	}
 }
 
 

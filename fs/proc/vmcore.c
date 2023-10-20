@@ -1535,13 +1535,10 @@ EXPORT_SYMBOL(vmcore_add_device_dump);
 static void vmcore_free_device_dumps(void)
 {
 #ifdef CONFIG_PROC_VMCORE_DEVICE_DUMP
-	mutex_lock(&vmcoredd_mutex);
-	while (!list_empty(&vmcoredd_list)) {
-		struct vmcoredd_node *dump;
+	struct vmcoredd_node *dump;
 
-		dump = list_first_entry(&vmcoredd_list, struct vmcoredd_node,
-					list);
-		list_del(&dump->list);
+	mutex_lock(&vmcoredd_mutex);
+	list_for_each_entry_del(dump, &vmcoredd_list, list) {
 		vfree(dump->buf);
 		vfree(dump);
 	}
@@ -1583,19 +1580,17 @@ fs_initcall(vmcore_init);
 /* Cleanup function for vmcore module. */
 void vmcore_cleanup(void)
 {
+	struct vmcore *m;
+
 	if (proc_vmcore) {
 		proc_remove(proc_vmcore);
 		proc_vmcore = NULL;
 	}
 
 	/* clear the vmcore list. */
-	while (!list_empty(&vmcore_list)) {
-		struct vmcore *m;
-
-		m = list_first_entry(&vmcore_list, struct vmcore, list);
-		list_del(&m->list);
+	list_for_each_entry_del(m, &vmcore_list, list)
 		kfree(m);
-	}
+
 	free_elfcorebuf();
 
 	/* clear vmcore device dump list */

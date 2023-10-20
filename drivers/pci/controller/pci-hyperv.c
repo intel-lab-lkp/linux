@@ -2592,11 +2592,7 @@ static void pci_devices_present_work(struct work_struct *work)
 
 	/* Pull this off the queue and process it if it was the last one. */
 	spin_lock_irqsave(&hbus->device_list_lock, flags);
-	while (!list_empty(&hbus->dr_list)) {
-		dr = list_first_entry(&hbus->dr_list, struct hv_dr_state,
-				      list_entry);
-		list_del(&dr->list_entry);
-
+	list_for_each_entry_del(dr, &hbus->dr_list, list_entry) {
 		/* Throw this away if the list still has stuff in it. */
 		if (!list_empty(&hbus->dr_list)) {
 			kfree(dr);
@@ -2658,11 +2654,7 @@ static void pci_devices_present_work(struct work_struct *work)
 	spin_unlock_irqrestore(&hbus->device_list_lock, flags);
 
 	/* Delete everything that should no longer exist. */
-	while (!list_empty(&removed)) {
-		hpdev = list_first_entry(&removed, struct hv_pci_dev,
-					 list_entry);
-		list_del(&hpdev->list_entry);
-
+	list_for_each_entry_del(hpdev, &removed, list_entry) {
 		if (hpdev->pci_slot)
 			pci_destroy_slot(hpdev->pci_slot);
 

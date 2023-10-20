@@ -297,17 +297,13 @@ static int sdr_cap_start_streaming(struct vb2_queue *vq, unsigned count)
 /* abort streaming and wait for last buffer */
 static void sdr_cap_stop_streaming(struct vb2_queue *vq)
 {
+	struct vivid_buffer *buf;
 	struct vivid_dev *dev = vb2_get_drv_priv(vq);
 
 	if (dev->kthread_sdr_cap == NULL)
 		return;
 
-	while (!list_empty(&dev->sdr_cap_active)) {
-		struct vivid_buffer *buf;
-
-		buf = list_entry(dev->sdr_cap_active.next,
-				struct vivid_buffer, list);
-		list_del(&buf->list);
+	list_for_each_entry_del(buf, &dev->sdr_cap_active, list) {
 		v4l2_ctrl_request_complete(buf->vb.vb2_buf.req_obj.req,
 					   &dev->ctrl_hdl_sdr_cap);
 		vb2_buffer_done(&buf->vb.vb2_buf, VB2_BUF_STATE_ERROR);

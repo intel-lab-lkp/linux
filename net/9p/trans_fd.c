@@ -1152,16 +1152,14 @@ MODULE_ALIAS_9P("fd");
 
 static void p9_poll_workfn(struct work_struct *work)
 {
+	struct p9_conn *conn;
 	unsigned long flags;
 
 	p9_debug(P9_DEBUG_TRANS, "start %p\n", current);
 
 	spin_lock_irqsave(&p9_poll_lock, flags);
-	while (!list_empty(&p9_poll_pending_list)) {
-		struct p9_conn *conn = list_first_entry(&p9_poll_pending_list,
-							struct p9_conn,
-							poll_pending_link);
-		list_del_init(&conn->poll_pending_link);
+	list_for_each_entry_del_init(conn, &p9_poll_pending_list,
+				     poll_pending_link) {
 		spin_unlock_irqrestore(&p9_poll_lock, flags);
 
 		p9_poll_mux(conn);

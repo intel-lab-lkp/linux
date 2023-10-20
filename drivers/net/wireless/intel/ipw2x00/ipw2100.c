@@ -5785,7 +5785,6 @@ static int ipw2100_close(struct net_device *dev)
 {
 	struct ipw2100_priv *priv = libipw_priv(dev);
 	unsigned long flags;
-	struct list_head *element;
 	struct ipw2100_tx_packet *packet;
 
 	IPW_DEBUG_INFO("enter\n");
@@ -5797,17 +5796,13 @@ static int ipw2100_close(struct net_device *dev)
 	netif_stop_queue(dev);
 
 	/* Flush the TX queue ... */
-	while (!list_empty(&priv->tx_pend_list)) {
-		element = priv->tx_pend_list.next;
-		packet = list_entry(element, struct ipw2100_tx_packet, list);
-
-		list_del(element);
+	list_for_each_entry_del(packet, &priv->tx_pend_list, list) {
 		DEC_STAT(&priv->tx_pend_stat);
 
 		libipw_txb_free(packet->info.d_struct.txb);
 		packet->info.d_struct.txb = NULL;
 
-		list_add_tail(element, &priv->tx_free_list);
+		list_add_tail(&packet->list, &priv->tx_free_list);
 		INC_STAT(&priv->tx_free_stat);
 	}
 	spin_unlock_irqrestore(&priv->low_lock, flags);

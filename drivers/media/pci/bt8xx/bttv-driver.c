@@ -1545,10 +1545,7 @@ static int start_streaming(struct vb2_queue *q, unsigned int count)
 	if (ret == 0) {
 		if (btv->field_count)
 			seqnr++;
-		while (!list_empty(&btv->capture)) {
-			buf = list_entry(btv->capture.next,
-					 struct bttv_buffer, list);
-			list_del(&buf->list);
+		list_for_each_entry_del(buf, &btv->capture, list) {
 			buf->vbuf.sequence = (btv->field_count >> 1) + seqnr++;
 			vb2_buffer_done(&buf->vbuf.vb2_buf,
 					VB2_BUF_STATE_QUEUED);
@@ -2816,16 +2813,12 @@ static void bttv_irq_timeout(struct timer_list *t)
 	/* cancel all outstanding capture / vbi requests */
 	if (btv->field_count)
 		seqnr++;
-	while (!list_empty(&btv->capture)) {
-		item = list_entry(btv->capture.next, struct bttv_buffer, list);
-		list_del(&item->list);
+	list_for_each_entry_del(item, &btv->capture, list) {
 		item->vbuf.vb2_buf.timestamp = ktime_get_ns();
 		item->vbuf.sequence = (btv->field_count >> 1) + seqnr++;
 		vb2_buffer_done(&item->vbuf.vb2_buf, VB2_BUF_STATE_ERROR);
 	}
-	while (!list_empty(&btv->vcapture)) {
-		item = list_entry(btv->vcapture.next, struct bttv_buffer, list);
-		list_del(&item->list);
+	list_for_each_entry_del(item, &btv->vcapture, list) {
 		item->vbuf.vb2_buf.timestamp = ktime_get_ns();
 		item->vbuf.sequence = (btv->field_count >> 1) + seqnr++;
 		vb2_buffer_done(&item->vbuf.vb2_buf, VB2_BUF_STATE_ERROR);

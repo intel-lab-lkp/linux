@@ -1833,11 +1833,7 @@ void btrfs_free_fs_roots(struct btrfs_fs_info *fs_info)
 	struct btrfs_root *gang[8];
 	int i;
 
-	while (!list_empty(&fs_info->dead_roots)) {
-		gang[0] = list_entry(fs_info->dead_roots.next,
-				     struct btrfs_root, root_list);
-		list_del(&gang[0]->root_list);
-
+	list_for_each_entry_del(gang[0], &fs_info->dead_roots, root_list) {
 		if (test_bit(BTRFS_ROOT_IN_RADIX, &gang[0]->state))
 			btrfs_drop_and_free_fs_root(fs_info, gang[0]);
 		btrfs_put_root(gang[0]);
@@ -4817,12 +4813,7 @@ void btrfs_cleanup_dirty_bgs(struct btrfs_transaction *cur_trans,
 	 * Refer to the definition of io_bgs member for details why it's safe
 	 * to use it without any locking
 	 */
-	while (!list_empty(&cur_trans->io_bgs)) {
-		cache = list_first_entry(&cur_trans->io_bgs,
-					 struct btrfs_block_group,
-					 io_list);
-
-		list_del_init(&cache->io_list);
+	list_for_each_entry_del_init(cache, &cur_trans->io_bgs, io_list) {
 		spin_lock(&cache->lock);
 		cache->disk_cache_state = BTRFS_DC_ERROR;
 		spin_unlock(&cache->lock);

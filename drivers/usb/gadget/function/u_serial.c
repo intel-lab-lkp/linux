@@ -494,9 +494,7 @@ static void gs_free_requests(struct usb_ep *ep, struct list_head *head,
 {
 	struct usb_request	*req;
 
-	while (!list_empty(head)) {
-		req = list_entry(head->next, struct usb_request, list);
-		list_del(&req->list);
+	list_for_each_entry_del(req, head, list) {
 		gs_free_req(ep, req);
 		if (allocated)
 			(*allocated)--;

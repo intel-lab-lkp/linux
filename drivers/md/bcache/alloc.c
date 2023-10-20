@@ -698,12 +698,8 @@ void bch_open_buckets_free(struct cache_set *c)
 {
 	struct open_bucket *b;
 
-	while (!list_empty(&c->data_buckets)) {
-		b = list_first_entry(&c->data_buckets,
-				     struct open_bucket, list);
-		list_del(&b->list);
+	list_for_each_entry_del(b, &c->data_buckets, list)
 		kfree(b);
-	}
 }
 
 int bch_open_buckets_alloc(struct cache_set *c)

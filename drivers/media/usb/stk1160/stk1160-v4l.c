@@ -756,10 +756,7 @@ void stk1160_clear_queue(struct stk1160 *dev, enum vb2_buffer_state vb2_state)
 
 	/* Release all active buffers */
 	spin_lock_irqsave(&dev->buf_lock, flags);
-	while (!list_empty(&dev->avail_bufs)) {
-		buf = list_first_entry(&dev->avail_bufs,
-			struct stk1160_buffer, list);
-		list_del(&buf->list);
+	list_for_each_entry_del(buf, &dev->avail_bufs, list) {
 		vb2_buffer_done(&buf->vb.vb2_buf, vb2_state);
 		stk1160_dbg("buffer [%p/%d] aborted\n",
 			    buf, buf->vb.vb2_buf.index);

@@ -133,10 +133,7 @@ static int start_streaming_vbi(struct vb2_queue *q, unsigned int count)
 	if (ret == 0) {
 		if (btv->field_count)
 			seqnr++;
-		while (!list_empty(&btv->vcapture)) {
-			buf = list_entry(btv->vcapture.next,
-					 struct bttv_buffer, list);
-			list_del(&buf->list);
+		list_for_each_entry_del(buf, &btv->vcapture, list) {
 			buf->vbuf.sequence = (btv->field_count >> 1) + seqnr++;
 			vb2_buffer_done(&buf->vbuf.vb2_buf,
 					VB2_BUF_STATE_QUEUED);

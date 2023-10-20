@@ -1718,11 +1718,9 @@ int ubi_thread(void *u)
  */
 static void shutdown_work(struct ubi_device *ubi)
 {
-	while (!list_empty(&ubi->works)) {
-		struct ubi_work *wrk;
+	struct ubi_work *wrk;
 
-		wrk = list_entry(ubi->works.next, struct ubi_work, list);
-		list_del(&wrk->list);
+	list_for_each_entry_del(wrk, &ubi->works, list) {
 		wrk->func(ubi, wrk, 1);
 		ubi->works_count -= 1;
 		ubi_assert(ubi->works_count >= 0);

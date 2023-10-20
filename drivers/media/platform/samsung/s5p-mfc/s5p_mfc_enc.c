@@ -1116,10 +1116,7 @@ static void cleanup_ref_queue(struct s5p_mfc_ctx *ctx)
 	struct s5p_mfc_buf *mb_entry;
 
 	/* move buffers in ref queue to src queue */
-	while (!list_empty(&ctx->ref_queue)) {
-		mb_entry = list_entry((&ctx->ref_queue)->next,
-						struct s5p_mfc_buf, list);
-		list_del(&mb_entry->list);
+	list_for_each_entry_del(mb_entry, &ctx->ref_queue, list) {
 		ctx->ref_queue_cnt--;
 		list_add_tail(&mb_entry->list, &ctx->src_queue);
 		ctx->src_queue_cnt++;

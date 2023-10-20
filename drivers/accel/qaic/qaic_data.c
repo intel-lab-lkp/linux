@@ -1805,10 +1805,8 @@ static void empty_xfer_list(struct qaic_device *qdev, struct dma_bridge_chan *db
 	struct qaic_bo *bo;
 
 	spin_lock_irqsave(&dbc->xfer_lock, flags);
-	while (!list_empty(&dbc->xfer_list)) {
-		bo = list_first_entry(&dbc->xfer_list, typeof(*bo), xfer_list);
+	list_for_each_entry_del(bo, &dbc->xfer_list, xfer_list) {
 		bo->queued = false;
-		list_del(&bo->xfer_list);
 		spin_unlock_irqrestore(&dbc->xfer_lock, flags);
 		dma_sync_sgtable_for_cpu(&qdev->pdev->dev, bo->sgt, bo->dir);
 		complete_all(&bo->xfer_done);

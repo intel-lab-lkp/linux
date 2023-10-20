@@ -3445,6 +3445,7 @@ static int linger_notify_finish_wait(struct ceph_osd_linger_request *lreq,
  */
 static void handle_timeout(struct work_struct *work)
 {
+	struct ceph_osd *osd;
 	struct ceph_osd_client *osdc =
 		container_of(work, struct ceph_osd_client, timeout_work.work);
 	struct ceph_options *opts = osdc->client->options;
@@ -3519,13 +3520,8 @@ static void handle_timeout(struct work_struct *work)
 	if (atomic_read(&osdc->num_homeless) || !list_empty(&slow_osds))
 		maybe_request_map(osdc);
 
-	while (!list_empty(&slow_osds)) {
-		struct ceph_osd *osd = list_first_entry(&slow_osds,
-							struct ceph_osd,
-							o_keepalive_item);
-		list_del_init(&osd->o_keepalive_item);
+	list_for_each_entry_del_init(osd, &slow_osds, o_keepalive_item)
 		ceph_con_keepalive(&osd->o_con);
-	}
 
 	up_write(&osdc->lock);
 	schedule_delayed_work(&osdc->timeout_work,

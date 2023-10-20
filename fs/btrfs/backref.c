@@ -3596,10 +3596,7 @@ void btrfs_backref_error_cleanup(struct btrfs_backref_cache *cache,
 	struct btrfs_backref_node *upper;
 	struct btrfs_backref_edge *edge;
 
-	while (!list_empty(&cache->useless_node)) {
-		lower = list_first_entry(&cache->useless_node,
-				   struct btrfs_backref_node, list);
-		list_del_init(&lower->list);
+	list_for_each_entry_del_init(lower, &cache->useless_node, list) {
 	}
 	while (!list_empty(&cache->pending_edge)) {
 		edge = list_first_entry(&cache->pending_edge,
@@ -3629,10 +3626,7 @@ void btrfs_backref_error_cleanup(struct btrfs_backref_cache *cache,
 			list_add(&upper->list, &cache->useless_node);
 	}
 
-	while (!list_empty(&cache->useless_node)) {
-		lower = list_first_entry(&cache->useless_node,
-				   struct btrfs_backref_node, list);
-		list_del_init(&lower->list);
+	list_for_each_entry_del_init(lower, &cache->useless_node, list) {
 		if (lower == node)
 			node = NULL;
 		btrfs_backref_drop_node(cache, lower);

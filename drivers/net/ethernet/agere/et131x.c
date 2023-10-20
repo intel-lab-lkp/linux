@@ -2012,11 +2012,7 @@ static void et131x_rx_dma_memory_free(struct et131x_adapter *adapter)
 	/* Free RFDs and associated packet descriptors */
 	WARN_ON(rx_ring->num_ready_recv != rx_ring->num_rfd);
 
-	while (!list_empty(&rx_ring->recv_list)) {
-		rfd = list_entry(rx_ring->recv_list.next,
-				 struct rfd, list_node);
-
-		list_del(&rfd->list_node);
+	list_for_each_entry_del(rfd, &rx_ring->recv_list, list_node) {
 		rfd->skb = NULL;
 		kfree(rfd);
 	}

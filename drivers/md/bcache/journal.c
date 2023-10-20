@@ -397,11 +397,8 @@ int bch_journal_replay(struct cache_set *s, struct list_head *list)
 	pr_info("journal replay done, %i keys in %i entries, seq %llu\n",
 		keys, entries, end);
 err:
-	while (!list_empty(list)) {
-		i = list_first_entry(list, struct journal_replay, list);
-		list_del(&i->list);
+	list_for_each_entry_del(i, list, list)
 		kfree(i);
-	}
 
 	return ret;
 }

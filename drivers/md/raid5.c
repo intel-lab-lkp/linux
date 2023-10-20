@@ -2583,11 +2583,9 @@ static int resize_stripes(struct r5conf *conf, int newsize)
 	}
 	if (i) {
 		/* didn't get enough, give up */
-		while (!list_empty(&newstripes)) {
-			nsh = list_entry(newstripes.next, struct stripe_head, lru);
-			list_del(&nsh->lru);
+		list_for_each_entry_del(nsh, &newstripes, lru)
 			free_stripe(sc, nsh);
-		}
+
 		kmem_cache_destroy(sc);
 		mutex_unlock(&conf->cache_size_mutex);
 		return -ENOMEM;
@@ -2661,10 +2659,7 @@ static int resize_stripes(struct r5conf *conf, int newsize)
 	conf->active_name = 1-conf->active_name;
 
 	/* Step 4, return new stripes to service */
-	while(!list_empty(&newstripes)) {
-		nsh = list_entry(newstripes.next, struct stripe_head, lru);
-		list_del_init(&nsh->lru);
-
+	list_for_each_entry_del_init(nsh, &newstripes, lru) {
 #if PAGE_SIZE != DEFAULT_STRIPE_SIZE
 		for (i = 0; i < nsh->nr_pages; i++) {
 			if (nsh->pages[i])
@@ -5724,9 +5719,7 @@ static void raid5_unplug(struct blk_plug_cb *blk_cb, bool from_schedule)
 
 	if (cb->list.next && !list_empty(&cb->list)) {
 		spin_lock_irq(&conf->device_lock);
-		while (!list_empty(&cb->list)) {
-			sh = list_first_entry(&cb->list, struct stripe_head, lru);
-			list_del_init(&sh->lru);
+		list_for_each_entry_del_init(sh, &cb->list, lru) {
 			/*
 			 * avoid race release_stripe_plug() sees
 			 * STRIPE_ON_UNPLUG_LIST clear but the stripe
@@ -6481,11 +6474,9 @@ static sector_t reshape_request(struct mddev *mddev, sector_t sector_nr, int *sk
 	/* Now that the sources are clearly marked, we can release
 	 * the destination stripes
 	 */
-	while (!list_empty(&stripes)) {
-		sh = list_entry(stripes.next, struct stripe_head, lru);
-		list_del_init(&sh->lru);
+	list_for_each_entry_del_init(sh, &stripes, lru)
 		raid5_release_stripe(sh);
-	}
+
 	/* If this takes us to the resync_max point where we have to pause,
 	 * then we need to write out the superblock.
 	 */

@@ -863,10 +863,7 @@ nfs4_xattr_cache_scan(struct shrinker *shrink, struct shrink_control *sc)
 
 	freed = list_lru_shrink_walk(&nfs4_xattr_cache_lru, sc,
 	    cache_lru_isolate, &dispose);
-	while (!list_empty(&dispose)) {
-		cache = list_first_entry(&dispose, struct nfs4_xattr_cache,
-		    dispose);
-		list_del_init(&cache->dispose);
+	list_for_each_entry_del_init(cache, &dispose, dispose) {
 		nfs4_xattr_discard_cache(cache);
 		kref_put(&cache->ref, nfs4_xattr_free_cache_cb);
 	}
@@ -948,11 +945,7 @@ nfs4_xattr_entry_scan(struct shrinker *shrink, struct shrink_control *sc)
 
 	freed = list_lru_shrink_walk(lru, sc, entry_lru_isolate, &dispose);
 
-	while (!list_empty(&dispose)) {
-		entry = list_first_entry(&dispose, struct nfs4_xattr_entry,
-		    dispose);
-		list_del_init(&entry->dispose);
-
+	list_for_each_entry_del_init(entry, &dispose, dispose) {
 		/*
 		 * Drop two references: the one that we just grabbed
 		 * in entry_lru_isolate, and the one that was set

@@ -273,6 +273,7 @@ static int cx25821_start_streaming(struct vb2_queue *q, unsigned int count)
 
 static void cx25821_stop_streaming(struct vb2_queue *q)
 {
+	struct cx25821_buffer *buf;
 	struct cx25821_channel *chan = q->drv_priv;
 	struct cx25821_dev *dev = chan->dev;
 	struct cx25821_dmaqueue *dmaq = &dev->channels[chan->id].dma_vidq;
@@ -280,13 +281,8 @@ static void cx25821_stop_streaming(struct vb2_queue *q)
 
 	cx_write(chan->sram_channels->dma_ctl, 0); /* FIFO and RISC disable */
 	spin_lock_irqsave(&dev->slock, flags);
-	while (!list_empty(&dmaq->active)) {
-		struct cx25821_buffer *buf = list_entry(dmaq->active.next,
-			struct cx25821_buffer, queue);
-
-		list_del(&buf->queue);
+	list_for_each_entry_del(buf, &dmaq->active, queue)
 		vb2_buffer_done(&buf->vb.vb2_buf, VB2_BUF_STATE_ERROR);
-	}
 	spin_unlock_irqrestore(&dev->slock, flags);
 }
 

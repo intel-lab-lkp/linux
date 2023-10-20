@@ -274,10 +274,7 @@ static int update_backref_cache(struct btrfs_trans_handle *trans,
 		btrfs_backref_cleanup_node(cache, node);
 	}
 
-	while (!list_empty(&cache->changed)) {
-		node = list_entry(cache->changed.next,
-				  struct btrfs_backref_node, list);
-		list_del_init(&node->list);
+	list_for_each_entry_del_init(node, &cache->changed, list) {
 		BUG_ON(node->pending);
 		update_backref_node(cache, node, node->new_bytenr);
 	}
@@ -393,17 +390,12 @@ struct btrfs_root *find_reloc_root(struct btrfs_fs_info *fs_info, u64 bytenr)
 static bool handle_useless_nodes(struct reloc_control *rc,
 				 struct btrfs_backref_node *node)
 {
+	struct btrfs_backref_node *cur;
 	struct btrfs_backref_cache *cache = &rc->backref_cache;
 	struct list_head *useless_node = &cache->useless_node;
 	bool ret = false;
 
-	while (!list_empty(useless_node)) {
-		struct btrfs_backref_node *cur;
-
-		cur = list_first_entry(useless_node, struct btrfs_backref_node,
-				 list);
-		list_del_init(&cur->list);
-
+	list_for_each_entry_del_init(cur, useless_node, list) {
 		/* Only tree root nodes can be added to @useless_nodes */
 		ASSERT(list_empty(&cur->upper));
 
@@ -1898,11 +1890,7 @@ again:
 
 	rc->merge_reloc_tree = 1;
 
-	while (!list_empty(&rc->reloc_roots)) {
-		reloc_root = list_entry(rc->reloc_roots.next,
-					struct btrfs_root, root_list);
-		list_del_init(&reloc_root->root_list);
-
+	list_for_each_entry_del_init(reloc_root, &rc->reloc_roots, root_list) {
 		root = btrfs_get_fs_root(fs_info, reloc_root->root_key.offset,
 				false);
 		if (IS_ERR(root)) {
@@ -4304,11 +4292,7 @@ int btrfs_recover_relocation(struct btrfs_fs_info *fs_info)
 
 	rc->merge_reloc_tree = 1;
 
-	while (!list_empty(&reloc_roots)) {
-		reloc_root = list_entry(reloc_roots.next,
-					struct btrfs_root, root_list);
-		list_del(&reloc_root->root_list);
-
+	list_for_each_entry_del(reloc_root, &reloc_roots, root_list) {
 		if (btrfs_root_refs(&reloc_root->root_item) == 0) {
 			list_add_tail(&reloc_root->root_list,
 				      &rc->reloc_roots);
@@ -4382,6 +4366,7 @@ out:
  */
 int btrfs_reloc_clone_csums(struct btrfs_ordered_extent *ordered)
 {
+	struct btrfs_ordered_sum *sums;
 	struct btrfs_inode *inode = BTRFS_I(ordered->inode);
 	struct btrfs_fs_info *fs_info = inode->root->fs_info;
 	u64 disk_bytenr = ordered->file_offset + inode->index_cnt;
@@ -4395,12 +4380,7 @@ int btrfs_reloc_clone_csums(struct btrfs_ordered_extent *ordered)
 	if (ret)
 		return ret;
 
-	while (!list_empty(&list)) {
-		struct btrfs_ordered_sum *sums =
-			list_entry(list.next, struct btrfs_ordered_sum, list);
-
-		list_del_init(&sums->list);
-
+	list_for_each_entry_del_init(sums, &list, list) {
 		/*
 		 * We need to offset the new_bytenr based on where the csum is.
 		 * We need to do this because we will read in entire prealloc

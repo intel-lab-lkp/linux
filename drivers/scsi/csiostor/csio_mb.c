@@ -1357,10 +1357,7 @@ csio_mb_completions(struct csio_hw *hw, struct list_head *cbfn_q)
 	struct csio_mbm *mbm = &hw->mbm;
 	enum fw_retval rv;
 
-	while (!list_empty(cbfn_q)) {
-		mbp = list_first_entry(cbfn_q, struct csio_mb, list);
-		list_del_init(&mbp->list);
-
+	list_for_each_entry_del_init(mbp, cbfn_q, list) {
 		rv = csio_mb_fw_retval(mbp);
 		if ((rv != FW_SUCCESS) && (rv != FW_HOSTERROR))
 			CSIO_INC_STATS(mbm, n_err);

@@ -1663,13 +1663,9 @@ void brcmf_proto_msgbuf_detach(struct brcmf_pub *drvr)
 	if (drvr->proto->pd) {
 		msgbuf = (struct brcmf_msgbuf *)drvr->proto->pd;
 		cancel_work_sync(&msgbuf->flowring_work);
-		while (!list_empty(&msgbuf->work_queue)) {
-			work = list_first_entry(&msgbuf->work_queue,
-						struct brcmf_msgbuf_work_item,
-						queue);
-			list_del(&work->queue);
+		list_for_each_entry_del(work, &msgbuf->work_queue, queue)
 			kfree(work);
-		}
+
 		kfree(msgbuf->flow_map);
 		kfree(msgbuf->txstatus_done_map);
 		if (msgbuf->txflow_wq)

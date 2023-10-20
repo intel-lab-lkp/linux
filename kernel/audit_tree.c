@@ -754,6 +754,8 @@ static int tag_mount(struct vfsmount *mnt, void *arg)
 static int prune_tree_thread(void *unused)
 {
 	for (;;) {
+		struct audit_tree *victim;
+
 		if (list_empty(&prune_list)) {
 			set_current_state(TASK_INTERRUPTIBLE);
 			schedule();
@@ -762,12 +764,7 @@ static int prune_tree_thread(void *unused)
 		audit_ctl_lock();
 		mutex_lock(&audit_filter_mutex);
 
-		while (!list_empty(&prune_list)) {
-			struct audit_tree *victim;
-
-			victim = list_entry(prune_list.next,
-					struct audit_tree, list);
-			list_del_init(&victim->list);
+		list_for_each_entry_del_init(victim, &prune_list, list) {
 
 			mutex_unlock(&audit_filter_mutex);
 

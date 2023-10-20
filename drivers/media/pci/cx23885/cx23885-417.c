@@ -1166,6 +1166,7 @@ static void buffer_queue(struct vb2_buffer *vb)
 
 static int cx23885_start_streaming(struct vb2_queue *q, unsigned int count)
 {
+	struct cx23885_buffer *buf;
 	struct cx23885_dev *dev = q->drv_priv;
 	struct cx23885_dmaqueue *dmaq = &dev->ts1.mpegq;
 	unsigned long flags;
@@ -1180,13 +1181,8 @@ static int cx23885_start_streaming(struct vb2_queue *q, unsigned int count)
 		return 0;
 	}
 	spin_lock_irqsave(&dev->slock, flags);
-	while (!list_empty(&dmaq->active)) {
-		struct cx23885_buffer *buf = list_entry(dmaq->active.next,
-			struct cx23885_buffer, queue);
-
-		list_del(&buf->queue);
+	list_for_each_entry_del(buf, &dmaq->active, queue)
 		vb2_buffer_done(&buf->vb.vb2_buf, VB2_BUF_STATE_QUEUED);
-	}
 	spin_unlock_irqrestore(&dev->slock, flags);
 	return ret;
 }

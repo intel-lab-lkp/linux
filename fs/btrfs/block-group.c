@@ -1487,13 +1487,9 @@ void btrfs_delete_unused_bgs(struct btrfs_fs_info *fs_info)
 		return;
 
 	spin_lock(&fs_info->unused_bgs_lock);
-	while (!list_empty(&fs_info->unused_bgs)) {
+	list_for_each_entry_del_init(block_group, &fs_info->unused_bgs,
+				     bg_list) {
 		int trimming;
-
-		block_group = list_first_entry(&fs_info->unused_bgs,
-					       struct btrfs_block_group,
-					       bg_list);
-		list_del_init(&block_group->bg_list);
 
 		space_info = block_group->space_info;
 
@@ -1776,14 +1772,9 @@ void btrfs_reclaim_bgs_work(struct work_struct *work)
 	 * and their presence in the reclaim_bgs list must be preserved.
 	 */
 	list_sort(NULL, &fs_info->reclaim_bgs, reclaim_bgs_cmp);
-	while (!list_empty(&fs_info->reclaim_bgs)) {
+	list_for_each_entry_del_init(bg, &fs_info->reclaim_bgs, bg_list) {
 		u64 zone_unusable;
 		int ret = 0;
-
-		bg = list_first_entry(&fs_info->reclaim_bgs,
-				      struct btrfs_block_group,
-				      bg_list);
-		list_del_init(&bg->bg_list);
 
 		space_info = bg->space_info;
 		spin_unlock(&fs_info->unused_bgs_lock);
@@ -3527,10 +3518,7 @@ int btrfs_write_dirty_block_groups(struct btrfs_trans_handle *trans)
 	 * Refer to the definition of io_bgs member for details why it's safe
 	 * to use it without any locking
 	 */
-	while (!list_empty(io)) {
-		cache = list_first_entry(io, struct btrfs_block_group,
-					 io_list);
-		list_del_init(&cache->io_list);
+	list_for_each_entry_del_init(cache, io, io_list) {
 		btrfs_wait_cache_io(trans, cache, path);
 		btrfs_put_block_group(cache);
 	}
@@ -4307,38 +4295,21 @@ int btrfs_free_block_groups(struct btrfs_fs_info *info)
 	}
 
 	write_lock(&info->block_group_cache_lock);
-	while (!list_empty(&info->caching_block_groups)) {
-		caching_ctl = list_entry(info->caching_block_groups.next,
-					 struct btrfs_caching_control, list);
-		list_del(&caching_ctl->list);
+	list_for_each_entry_del(caching_ctl, &info->caching_block_groups, list)
 		btrfs_put_caching_control(caching_ctl);
-	}
 	write_unlock(&info->block_group_cache_lock);
 
 	spin_lock(&info->unused_bgs_lock);
-	while (!list_empty(&info->unused_bgs)) {
-		block_group = list_first_entry(&info->unused_bgs,
-					       struct btrfs_block_group,
-					       bg_list);
-		list_del_init(&block_group->bg_list);
+	list_for_each_entry_del_init(block_group, &info->unused_bgs, bg_list)
 		btrfs_put_block_group(block_group);
-	}
 
-	while (!list_empty(&info->reclaim_bgs)) {
-		block_group = list_first_entry(&info->reclaim_bgs,
-					       struct btrfs_block_group,
-					       bg_list);
-		list_del_init(&block_group->bg_list);
+	list_for_each_entry_del_init(block_group, &info->reclaim_bgs, bg_list)
 		btrfs_put_block_group(block_group);
-	}
 	spin_unlock(&info->unused_bgs_lock);
 
 	spin_lock(&info->zone_active_bgs_lock);
-	while (!list_empty(&info->zone_active_bgs)) {
-		block_group = list_first_entry(&info->zone_active_bgs,
-					       struct btrfs_block_group,
-					       active_bg_list);
-		list_del_init(&block_group->active_bg_list);
+	list_for_each_entry_del_init(block_group, &info->zone_active_bgs,
+				     active_bg_list) {
 		btrfs_put_block_group(block_group);
 	}
 	spin_unlock(&info->zone_active_bgs_lock);

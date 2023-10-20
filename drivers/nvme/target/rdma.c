@@ -520,15 +520,11 @@ static int nvmet_rdma_post_recv(struct nvmet_rdma_device *ndev,
 
 static void nvmet_rdma_process_wr_wait_list(struct nvmet_rdma_queue *queue)
 {
+	struct nvmet_rdma_rsp *rsp;
+	bool ret;
+
 	spin_lock(&queue->rsp_wr_wait_lock);
-	while (!list_empty(&queue->rsp_wr_wait_list)) {
-		struct nvmet_rdma_rsp *rsp;
-		bool ret;
-
-		rsp = list_entry(queue->rsp_wr_wait_list.next,
-				struct nvmet_rdma_rsp, wait_list);
-		list_del(&rsp->wait_list);
-
+	list_for_each_entry_del(rsp, &queue->rsp_wr_wait_list, wait_list) {
 		spin_unlock(&queue->rsp_wr_wait_lock);
 		ret = nvmet_rdma_execute_command(rsp);
 		spin_lock(&queue->rsp_wr_wait_lock);
@@ -1613,6 +1609,7 @@ put_device:
 
 static void nvmet_rdma_queue_established(struct nvmet_rdma_queue *queue)
 {
+	struct nvmet_rdma_rsp *cmd;
 	unsigned long flags;
 
 	spin_lock_irqsave(&queue->state_lock, flags);
@@ -1622,13 +1619,7 @@ static void nvmet_rdma_queue_established(struct nvmet_rdma_queue *queue)
 	}
 	queue->state = NVMET_RDMA_Q_LIVE;
 
-	while (!list_empty(&queue->rsp_wait_list)) {
-		struct nvmet_rdma_rsp *cmd;
-
-		cmd = list_first_entry(&queue->rsp_wait_list,
-					struct nvmet_rdma_rsp, wait_list);
-		list_del(&cmd->wait_list);
-
+	list_for_each_entry_del(cmd, &queue->rsp_wait_list, wait_list) {
 		spin_unlock_irqrestore(&queue->state_lock, flags);
 		nvmet_rdma_handle_command(queue, cmd);
 		spin_lock_irqsave(&queue->state_lock, flags);
@@ -1640,6 +1631,7 @@ out_unlock:
 
 static void __nvmet_rdma_queue_disconnect(struct nvmet_rdma_queue *queue)
 {
+	struct nvmet_rdma_rsp *rsp;
 	bool disconnect = false;
 	unsigned long flags;
 
@@ -1648,15 +1640,8 @@ static void __nvmet_rdma_queue_disconnect(struct nvmet_rdma_queue *queue)
 	spin_lock_irqsave(&queue->state_lock, flags);
 	switch (queue->state) {
 	case NVMET_RDMA_Q_CONNECTING:
-		while (!list_empty(&queue->rsp_wait_list)) {
-			struct nvmet_rdma_rsp *rsp;
-
-			rsp = list_first_entry(&queue->rsp_wait_list,
-					       struct nvmet_rdma_rsp,
-					       wait_list);
-			list_del(&rsp->wait_list);
+		list_for_each_entry_del(rsp, &queue->rsp_wait_list, wait_list)
 			nvmet_rdma_put_rsp(rsp);
-		}
 		fallthrough;
 	case NVMET_RDMA_Q_LIVE:
 		queue->state = NVMET_RDMA_Q_DISCONNECTING;

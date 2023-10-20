@@ -168,17 +168,14 @@ int vivid_start_generating_touch_cap(struct vivid_dev *dev)
 
 void vivid_stop_generating_touch_cap(struct vivid_dev *dev)
 {
+	struct vivid_buffer *buf;
+
 	if (!dev->kthread_touch_cap)
 		return;
 
 	dev->touch_cap_streaming = false;
 
-	while (!list_empty(&dev->touch_cap_active)) {
-		struct vivid_buffer *buf;
-
-		buf = list_entry(dev->touch_cap_active.next,
-				 struct vivid_buffer, list);
-		list_del(&buf->list);
+	list_for_each_entry_del(buf, &dev->touch_cap_active, list) {
 		v4l2_ctrl_request_complete(buf->vb.vb2_buf.req_obj.req,
 					   &dev->ctrl_hdl_touch_cap);
 		vb2_buffer_done(&buf->vb.vb2_buf, VB2_BUF_STATE_ERROR);

@@ -1741,11 +1741,10 @@ static void detach_cap_releases(struct ceph_mds_session *session,
 static void dispose_cap_releases(struct ceph_mds_client *mdsc,
 				 struct list_head *dispose)
 {
-	while (!list_empty(dispose)) {
-		struct ceph_cap *cap;
+	struct ceph_cap *cap;
+
+	list_for_each_entry_del(cap, dispose, session_caps) {
 		/* zero out the in-progress message */
-		cap = list_first_entry(dispose, struct ceph_cap, session_caps);
-		list_del(&cap->session_caps);
 		ceph_put_cap(mdsc, cap);
 	}
 }
@@ -3440,10 +3439,7 @@ static void __wake_requests(struct ceph_mds_client *mdsc,
 
 	list_splice_init(head, &tmp_list);
 
-	while (!list_empty(&tmp_list)) {
-		req = list_entry(tmp_list.next,
-				 struct ceph_mds_request, r_wait);
-		list_del_init(&req->r_wait);
+	list_for_each_entry_del_init(req, &tmp_list, r_wait) {
 		dout(" wake request %p tid %llu\n", req, req->r_tid);
 		__do_request(mdsc, req);
 	}

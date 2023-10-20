@@ -244,10 +244,7 @@ void qlcnic_sriov_cleanup_list(struct qlcnic_trans_list *t_list)
 
 	spin_lock_irqsave(&t_list->lock, flags);
 
-	while (!list_empty(&t_list->wait_list)) {
-		trans = list_first_entry(&t_list->wait_list,
-					 struct qlcnic_bc_trans, list);
-		list_del(&trans->list);
+	list_for_each_entry_del(trans, &t_list->wait_list, list) {
 		t_list->count--;
 		cmd.req.arg = (u32 *)trans->req_pay;
 		cmd.rsp.arg = (u32 *)trans->rsp_pay;
@@ -1530,10 +1527,7 @@ void qlcnic_sriov_cleanup_async_list(struct qlcnic_back_channel *bc)
 	cancel_work_sync(&bc->vf_async_work);
 
 	spin_lock(&bc->queue_lock);
-	while (!list_empty(head)) {
-		entry = list_entry(head->next, struct qlcnic_async_cmd,
-				   list);
-		list_del(&entry->list);
+	list_for_each_entry_del(entry, head, list) {
 		kfree(entry->cmd);
 		kfree(entry);
 	}

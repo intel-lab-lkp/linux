@@ -1234,11 +1234,7 @@ static int allocate_receive_buffers(struct smbd_connection *info, int num_buf)
 	return 0;
 
 allocate_failed:
-	while (!list_empty(&info->receive_queue)) {
-		response = list_first_entry(
-				&info->receive_queue,
-				struct smbd_response, list);
-		list_del(&response->list);
+	list_for_each_entry_del(response, &info->receive_queue, list) {
 		info->count_receive_queue--;
 
 		mempool_free(response, info->response_mempool);

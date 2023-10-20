@@ -1164,15 +1164,11 @@ static int rtrs_srv_inv_rkey(struct rtrs_srv_con *con,
 
 static void rtrs_rdma_process_wr_wait_list(struct rtrs_srv_con *con)
 {
+	struct rtrs_srv_op *id;
+	int ret;
+
 	spin_lock(&con->rsp_wr_wait_lock);
-	while (!list_empty(&con->rsp_wr_wait_list)) {
-		struct rtrs_srv_op *id;
-		int ret;
-
-		id = list_entry(con->rsp_wr_wait_list.next,
-				struct rtrs_srv_op, wait_list);
-		list_del(&id->wait_list);
-
+	list_for_each_entry_del(id, &con->rsp_wr_wait_list, wait_list) {
 		spin_unlock(&con->rsp_wr_wait_lock);
 		ret = rtrs_srv_resp_rdma(id, id->status);
 		spin_lock(&con->rsp_wr_wait_lock);

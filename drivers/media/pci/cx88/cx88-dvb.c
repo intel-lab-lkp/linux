@@ -130,6 +130,7 @@ static int start_streaming(struct vb2_queue *q, unsigned int count)
 
 static void stop_streaming(struct vb2_queue *q)
 {
+	struct cx88_buffer *buf;
 	struct cx8802_dev *dev = q->drv_priv;
 	struct cx88_dmaqueue *dmaq = &dev->mpegq;
 	unsigned long flags;
@@ -137,13 +138,8 @@ static void stop_streaming(struct vb2_queue *q)
 	cx8802_cancel_buffers(dev);
 
 	spin_lock_irqsave(&dev->slock, flags);
-	while (!list_empty(&dmaq->active)) {
-		struct cx88_buffer *buf = list_entry(dmaq->active.next,
-			struct cx88_buffer, list);
-
-		list_del(&buf->list);
+	list_for_each_entry_del(buf, &dmaq->active, list)
 		vb2_buffer_done(&buf->vb.vb2_buf, VB2_BUF_STATE_ERROR);
-	}
 	spin_unlock_irqrestore(&dev->slock, flags);
 }
 

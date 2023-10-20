@@ -1133,10 +1133,7 @@ static void r5l_run_no_space_stripes(struct r5l_log *log)
 	struct stripe_head *sh;
 
 	spin_lock(&log->no_space_stripes_lock);
-	while (!list_empty(&log->no_space_stripes)) {
-		sh = list_first_entry(&log->no_space_stripes,
-				      struct stripe_head, log_list);
-		list_del_init(&sh->log_list);
+	list_for_each_entry_del_init(sh, &log->no_space_stripes, log_list) {
 		set_bit(STRIPE_HANDLE, &sh->state);
 		raid5_release_stripe(sh);
 	}

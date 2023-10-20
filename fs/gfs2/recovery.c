@@ -108,11 +108,8 @@ void gfs2_revoke_clean(struct gfs2_jdesc *jd)
 	struct list_head *head = &jd->jd_revoke_list;
 	struct gfs2_revoke_replay *rr;
 
-	while (!list_empty(head)) {
-		rr = list_first_entry(head, struct gfs2_revoke_replay, rr_list);
-		list_del(&rr->rr_list);
+	list_for_each_entry_del(rr, head, rr_list)
 		kfree(rr);
-	}
 }
 
 int __get_log_header(struct gfs2_sbd *sdp, const struct gfs2_log_header *lh,

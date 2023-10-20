@@ -123,9 +123,7 @@ nfsd_cacherep_dispose(struct list_head *dispose)
 	struct nfsd_cacherep *rp;
 	unsigned long freed = 0;
 
-	while (!list_empty(dispose)) {
-		rp = list_first_entry(dispose, struct nfsd_cacherep, c_lru);
-		list_del(&rp->c_lru);
+	list_for_each_entry_del(rp, dispose, c_lru) {
 		nfsd_cacherep_free(rp);
 		freed++;
 	}

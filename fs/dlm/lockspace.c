@@ -852,12 +852,8 @@ static int release_lockspace(struct dlm_ls *ls, int force)
 	for (i = 0; i < DLM_REMOVE_NAMES_MAX; i++)
 		kfree(ls->ls_remove_names[i]);
 
-	while (!list_empty(&ls->ls_new_rsb)) {
-		rsb = list_first_entry(&ls->ls_new_rsb, struct dlm_rsb,
-				       res_hashchain);
-		list_del(&rsb->res_hashchain);
+	list_for_each_entry_del(rsb, &ls->ls_new_rsb, res_hashchain)
 		dlm_free_rsb(rsb);
-	}
 
 	/*
 	 * Free structures on any other lists

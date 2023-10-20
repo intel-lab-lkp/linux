@@ -1124,12 +1124,9 @@ int usb_add_config(struct usb_composite_dev *cdev,
 		status = usb_gadget_check_config(cdev->gadget);
 
 	if (status < 0) {
-		while (!list_empty(&config->functions)) {
-			struct usb_function		*f;
+		struct usb_function *f;
 
-			f = list_first_entry(&config->functions,
-					struct usb_function, list);
-			list_del(&f->list);
+		list_for_each_entry_del(f, &config->functions, list) {
 			if (f->unbind) {
 				DBG(cdev, "unbind function '%s'/%p\n",
 					f->name, f);

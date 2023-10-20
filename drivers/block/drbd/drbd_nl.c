@@ -4836,12 +4836,10 @@ nla_put_failure:
 
 static void free_state_changes(struct list_head *list)
 {
-	while (!list_empty(list)) {
-		struct drbd_state_change *state_change =
-			list_first_entry(list, struct drbd_state_change, list);
-		list_del(&state_change->list);
+	struct drbd_state_change *state_change;
+
+	list_for_each_entry_del(state_change, list, list)
 		forget_state_change(state_change);
-	}
 }
 
 static unsigned int notifications_for_state_change(struct drbd_state_change *state_change)

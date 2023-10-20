@@ -1574,11 +1574,7 @@ ceph_direct_read_write(struct kiocb *iocb, struct iov_iter *iter,
 
 		list_splice(&aio_req->osd_reqs, &osd_reqs);
 		inode_dio_begin(inode);
-		while (!list_empty(&osd_reqs)) {
-			req = list_first_entry(&osd_reqs,
-					       struct ceph_osd_request,
-					       r_private_item);
-			list_del_init(&req->r_private_item);
+		list_for_each_entry_del_init(req, &osd_reqs, r_private_item) {
 			if (ret >= 0)
 				ceph_osdc_start_request(req->r_osdc, req);
 			if (ret < 0) {

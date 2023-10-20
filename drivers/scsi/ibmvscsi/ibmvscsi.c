@@ -786,9 +786,7 @@ static void purge_requests(struct ibmvscsi_host_data *hostdata, int error_code)
 	unsigned long flags;
 
 	spin_lock_irqsave(hostdata->host->host_lock, flags);
-	while (!list_empty(&hostdata->sent)) {
-		evt = list_first_entry(&hostdata->sent, struct srp_event_struct, list);
-		list_del(&evt->list);
+	list_for_each_entry_del(evt, &hostdata->sent, list) {
 		del_timer(&evt->timer);
 
 		spin_unlock_irqrestore(hostdata->host->host_lock, flags);

@@ -252,10 +252,7 @@ static int gntalloc_release(struct inode *inode, struct file *filp)
 	pr_debug("%s: priv %p\n", __func__, priv);
 
 	mutex_lock(&gref_mutex);
-	while (!list_empty(&priv->list)) {
-		gref = list_entry(priv->list.next,
-			struct gntalloc_gref, next_file);
-		list_del(&gref->next_file);
+	list_for_each_entry_del(gref, &priv->list, next_file) {
 		gref->users--;
 		if (gref->users == 0)
 			__del_gref(gref);

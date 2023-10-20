@@ -1466,6 +1466,7 @@ static void tb_dp_resource_available(struct tb *tb, struct tb_port *port)
 
 static void tb_disconnect_and_release_dp(struct tb *tb)
 {
+	struct tb_port *port;
 	struct tb_cm *tcm = tb_priv(tb);
 	struct tb_tunnel *tunnel, *n;
 
@@ -1478,12 +1479,7 @@ static void tb_disconnect_and_release_dp(struct tb *tb)
 			tb_deactivate_and_free_tunnel(tunnel);
 	}
 
-	while (!list_empty(&tcm->dp_resources)) {
-		struct tb_port *port;
-
-		port = list_first_entry(&tcm->dp_resources,
-					struct tb_port, list);
-		list_del_init(&port->list);
+	list_for_each_entry_del_init(port, &tcm->dp_resources, list) {
 	}
 }
 

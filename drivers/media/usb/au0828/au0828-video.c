@@ -880,6 +880,7 @@ static void au0828_stop_streaming(struct vb2_queue *vq)
 
 void au0828_stop_vbi_streaming(struct vb2_queue *vq)
 {
+	struct au0828_buffer *buf;
 	struct au0828_dev *dev = vb2_get_drv_priv(vq);
 	struct au0828_dmaqueue *vbiq = &dev->vbiq;
 	unsigned long flags = 0;
@@ -898,13 +899,9 @@ void au0828_stop_vbi_streaming(struct vb2_queue *vq)
 				VB2_BUF_STATE_ERROR);
 		dev->isoc_ctl.vbi_buf = NULL;
 	}
-	while (!list_empty(&vbiq->active)) {
-		struct au0828_buffer *buf;
 
-		buf = list_entry(vbiq->active.next, struct au0828_buffer, list);
-		list_del(&buf->list);
+	list_for_each_entry_del(buf, &vbiq->active, list)
 		vb2_buffer_done(&buf->vb.vb2_buf, VB2_BUF_STATE_ERROR);
-	}
 	spin_unlock_irqrestore(&dev->slock, flags);
 
 	dev->vbi_timeout_running = 0;

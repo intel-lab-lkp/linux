@@ -62,17 +62,12 @@ static int hvcs_convert(long to_convert)
 int hvcs_free_partner_info(struct list_head *head)
 {
 	struct hvcs_partner_info *pi;
-	struct list_head *element;
 
 	if (!head)
 		return -EINVAL;
 
-	while (!list_empty(head)) {
-		element = head->next;
-		pi = list_entry(element, struct hvcs_partner_info, node);
-		list_del(element);
+	list_for_each_entry_del(pi, head, node)
 		kfree(pi);
-	}
 
 	return 0;
 }

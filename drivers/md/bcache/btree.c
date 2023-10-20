@@ -782,10 +782,7 @@ void bch_btree_cache_free(struct cache_set *c)
 		mca_data_free(b);
 	}
 
-	while (!list_empty(&c->btree_cache_freed)) {
-		b = list_first_entry(&c->btree_cache_freed,
-				     struct btree, list);
-		list_del(&b->list);
+	list_for_each_entry_del(b, &c->btree_cache_freed, list) {
 		cancel_delayed_work_sync(&b->work);
 		kfree(b);
 	}

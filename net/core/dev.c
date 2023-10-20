@@ -10403,13 +10403,8 @@ void netdev_run_todo(void)
 
 	list_replace_init(&net_unlink_list, &unlink_list);
 
-	while (!list_empty(&unlink_list)) {
-		struct net_device *dev = list_first_entry(&unlink_list,
-							  struct net_device,
-							  unlink_list);
-		list_del_init(&dev->unlink_list);
+	list_for_each_entry_del_init(dev, &unlink_list, unlink_list)
 		dev->nested_level = dev->lower_level - 1;
-	}
 #endif
 
 	/* Snapshot list, allow later requests */
@@ -11166,6 +11161,7 @@ EXPORT_SYMBOL_GPL(__dev_change_net_namespace);
 
 static int dev_cpu_dead(unsigned int oldcpu)
 {
+	struct napi_struct *napi;
 	struct sk_buff **list_skb;
 	struct sk_buff *skb;
 	unsigned int cpu;
@@ -11195,12 +11191,7 @@ static int dev_cpu_dead(unsigned int oldcpu)
 	 * process_backlog() must be called by cpu owning percpu backlog.
 	 * We properly handle process_queue & input_pkt_queue later.
 	 */
-	while (!list_empty(&oldsd->poll_list)) {
-		struct napi_struct *napi = list_first_entry(&oldsd->poll_list,
-							    struct napi_struct,
-							    poll_list);
-
-		list_del_init(&napi->poll_list);
+	list_for_each_entry_del_init(napi, &oldsd->poll_list, poll_list) {
 		if (napi->poll == process_backlog)
 			napi->state = 0;
 		else

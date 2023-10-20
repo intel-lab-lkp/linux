@@ -865,18 +865,14 @@ static void dd_insert_requests(struct blk_mq_hw_ctx *hctx,
 			       struct list_head *list,
 			       blk_insert_t flags)
 {
+	struct request *rq;
 	struct request_queue *q = hctx->queue;
 	struct deadline_data *dd = q->elevator->elevator_data;
 	LIST_HEAD(free);
 
 	spin_lock(&dd->lock);
-	while (!list_empty(list)) {
-		struct request *rq;
-
-		rq = list_first_entry(list, struct request, queuelist);
-		list_del_init(&rq->queuelist);
+	list_for_each_entry_del_init(rq, list, queuelist)
 		dd_insert_request(hctx, rq, flags, &free);
-	}
 	spin_unlock(&dd->lock);
 
 	blk_mq_free_requests(&free);

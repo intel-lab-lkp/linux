@@ -1640,6 +1640,7 @@ static void null_map_queues(struct blk_mq_tag_set *set)
 
 static int null_poll(struct blk_mq_hw_ctx *hctx, struct io_comp_batch *iob)
 {
+	struct request *req;
 	struct nullb_queue *nq = hctx->driver_data;
 	LIST_HEAD(list);
 	int nr = 0;
@@ -1651,12 +1652,9 @@ static int null_poll(struct blk_mq_hw_ctx *hctx, struct io_comp_batch *iob)
 		blk_mq_set_request_complete(rq);
 	spin_unlock(&nq->poll_lock);
 
-	while (!list_empty(&list)) {
+	list_for_each_entry_del_init(req, &list, queuelist) {
 		struct nullb_cmd *cmd;
-		struct request *req;
 
-		req = list_first_entry(&list, struct request, queuelist);
-		list_del_init(&req->queuelist);
 		cmd = blk_mq_rq_to_pdu(req);
 		cmd->error = null_process_cmd(cmd, req_op(req), blk_rq_pos(req),
 						blk_rq_sectors(req));

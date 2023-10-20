@@ -806,13 +806,9 @@ void mlx4_ib_destroy_alias_guid_service(struct mlx4_ib_dev *dev)
 		det = &sriov->alias_guid.ports_guid[i];
 		cancel_delayed_work_sync(&det->alias_guid_work);
 		spin_lock_irqsave(&sriov->alias_guid.ag_work_lock, flags);
-		while (!list_empty(&det->cb_list)) {
-			cb_ctx = list_entry(det->cb_list.next,
-					    struct mlx4_alias_guid_work_context,
-					    list);
+		list_for_each_entry_del(cb_ctx, &det->cb_list, list) {
 			sa_query = cb_ctx->sa_query;
 			cb_ctx->sa_query = NULL;
-			list_del(&cb_ctx->list);
 			spin_unlock_irqrestore(&sriov->alias_guid.ag_work_lock, flags);
 			ib_sa_cancel_query(cb_ctx->query_id, sa_query);
 			wait_for_completion(&cb_ctx->done);

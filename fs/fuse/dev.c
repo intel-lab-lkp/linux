@@ -2079,12 +2079,11 @@ static __poll_t fuse_dev_poll(struct file *file, poll_table *wait)
 /* Abort all requests on the given list (pending or processing) */
 static void end_requests(struct list_head *head)
 {
-	while (!list_empty(head)) {
-		struct fuse_req *req;
-		req = list_entry(head->next, struct fuse_req, list);
+	struct fuse_req *req;
+
+	list_for_each_entry_del_init(req, head, list) {
 		req->out.h.error = -ECONNABORTED;
 		clear_bit(FR_SENT, &req->flags);
-		list_del_init(&req->list);
 		fuse_request_end(req);
 	}
 }

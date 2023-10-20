@@ -714,19 +714,14 @@ static int solo_enc_start_streaming(struct vb2_queue *q, unsigned int count)
 
 static void solo_enc_stop_streaming(struct vb2_queue *q)
 {
+	struct solo_vb2_buf *buf;
 	struct solo_enc_dev *solo_enc = vb2_get_drv_priv(q);
 	unsigned long flags;
 
 	spin_lock_irqsave(&solo_enc->av_lock, flags);
 	solo_enc_off(solo_enc);
-	while (!list_empty(&solo_enc->vidq_active)) {
-		struct solo_vb2_buf *buf = list_entry(
-				solo_enc->vidq_active.next,
-				struct solo_vb2_buf, list);
-
-		list_del(&buf->list);
+	list_for_each_entry_del(buf, &solo_enc->vidq_active, list)
 		vb2_buffer_done(&buf->vb.vb2_buf, VB2_BUF_STATE_ERROR);
-	}
 	spin_unlock_irqrestore(&solo_enc->av_lock, flags);
 }
 

@@ -106,14 +106,9 @@ const struct rvt_operation_params hfi1_post_parms[RVT_OPERATION_MAX] = {
 
 static void flush_list_head(struct list_head *l)
 {
-	while (!list_empty(l)) {
-		struct sdma_txreq *tx;
+	struct sdma_txreq *tx;
 
-		tx = list_first_entry(
-			l,
-			struct sdma_txreq,
-			list);
-		list_del_init(&tx->list);
+	list_for_each_entry_del_init(tx, l, list) {
 		hfi1_put_txreq(
 			container_of(tx, struct verbs_txreq, txreq));
 	}

@@ -827,12 +827,8 @@ void binder_alloc_deferred_release(struct binder_alloc *alloc)
 		buffers++;
 	}
 
-	while (!list_empty(&alloc->buffers)) {
-		buffer = list_first_entry(&alloc->buffers,
-					  struct binder_buffer, entry);
+	list_for_each_entry_del(buffer, &alloc->buffers, entry) {
 		WARN_ON(!buffer->free);
-
-		list_del(&buffer->entry);
 		WARN_ON_ONCE(!list_empty(&alloc->buffers));
 		kfree(buffer);
 	}

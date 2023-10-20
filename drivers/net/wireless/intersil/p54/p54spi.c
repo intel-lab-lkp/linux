@@ -430,12 +430,7 @@ static int p54spi_wq_tx(struct p54s_priv *priv)
 
 	spin_lock_irqsave(&priv->tx_lock, flags);
 
-	while (!list_empty(&priv->tx_pending)) {
-		entry = list_entry(priv->tx_pending.next,
-				   struct p54s_tx_info, tx_list);
-
-		list_del_init(&entry->tx_list);
-
+	list_for_each_entry_del_init(entry, &priv->tx_pending, tx_list) {
 		spin_unlock_irqrestore(&priv->tx_lock, flags);
 
 		dinfo = container_of((void *) entry, struct p54s_tx_info,

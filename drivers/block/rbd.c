@@ -1493,10 +1493,8 @@ static void rbd_obj_request_destroy(struct kref *kref)
 
 	dout("%s: obj %p\n", __func__, obj_request);
 
-	while (!list_empty(&obj_request->osd_reqs)) {
-		osd_req = list_first_entry(&obj_request->osd_reqs,
-				    struct ceph_osd_request, r_private_item);
-		list_del_init(&osd_req->r_private_item);
+	list_for_each_entry_del_init(osd_req, &obj_request->osd_reqs,
+				     r_private_item) {
 		ceph_osdc_put_request(osd_req);
 	}
 

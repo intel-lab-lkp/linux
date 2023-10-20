@@ -1644,17 +1644,13 @@ aoe_flush_iocq_by_index(int id)
 	struct frame *f;
 	struct aoedev *d;
 	LIST_HEAD(flist);
-	struct list_head *pos;
 	struct sk_buff *skb;
 	ulong flags;
 
 	spin_lock_irqsave(&iocq[id].lock, flags);
 	list_splice_init(&iocq[id].head, &flist);
 	spin_unlock_irqrestore(&iocq[id].lock, flags);
-	while (!list_empty(&flist)) {
-		pos = flist.next;
-		list_del(pos);
-		f = list_entry(pos, struct frame, head);
+	list_for_each_entry_del(f, &flist, head) {
 		d = f->t->d;
 		skb = f->r_skb;
 		spin_lock_irqsave(&d->lock, flags);

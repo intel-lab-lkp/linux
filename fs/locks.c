@@ -342,11 +342,8 @@ locks_dispose_list(struct list_head *dispose)
 {
 	struct file_lock *fl;
 
-	while (!list_empty(dispose)) {
-		fl = list_first_entry(dispose, struct file_lock, fl_list);
-		list_del_init(&fl->fl_list);
+	list_for_each_entry_del_init(fl, dispose, fl_list)
 		locks_free_lock(fl);
-	}
 }
 
 void locks_init_lock(struct file_lock *fl)

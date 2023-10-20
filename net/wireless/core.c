@@ -1051,18 +1051,14 @@ EXPORT_SYMBOL(wiphy_rfkill_start_polling);
 
 void cfg80211_process_wiphy_works(struct cfg80211_registered_device *rdev)
 {
+	struct wiphy_work *wk;
 	unsigned int runaway_limit = 100;
 	unsigned long flags;
 
 	lockdep_assert_held(&rdev->wiphy.mtx);
 
 	spin_lock_irqsave(&rdev->wiphy_work_lock, flags);
-	while (!list_empty(&rdev->wiphy_work_list)) {
-		struct wiphy_work *wk;
-
-		wk = list_first_entry(&rdev->wiphy_work_list,
-				      struct wiphy_work, entry);
-		list_del_init(&wk->entry);
+	list_for_each_entry_del_init(wk, &rdev->wiphy_work_list, entry) {
 		spin_unlock_irqrestore(&rdev->wiphy_work_lock, flags);
 
 		wk->func(&rdev->wiphy, wk);

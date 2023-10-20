@@ -441,11 +441,7 @@ void rxrpc_service_connection_reaper(struct work_struct *work)
 		rxrpc_set_service_reap_timer(rxnet, earliest);
 	}
 
-	while (!list_empty(&graveyard)) {
-		conn = list_entry(graveyard.next, struct rxrpc_connection,
-				  link);
-		list_del_init(&conn->link);
-
+	list_for_each_entry_del_init(conn, &graveyard, link) {
 		ASSERTCMP(atomic_read(&conn->active), ==, -1);
 		rxrpc_put_connection(conn, rxrpc_conn_put_service_reaped);
 	}

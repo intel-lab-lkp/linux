@@ -644,6 +644,7 @@ static struct pnfs_layout_segment *
 bl_alloc_lseg(struct pnfs_layout_hdr *lo, struct nfs4_layoutget_res *lgr,
 		gfp_t gfp_mask)
 {
+	struct pnfs_block_extent *be;
 	struct layout_verification lv = {
 		.mode = lgr->range.iomode,
 		.start = lgr->range.offset >> SECTOR_SHIFT,
@@ -706,12 +707,7 @@ bl_alloc_lseg(struct pnfs_layout_hdr *lo, struct nfs4_layoutget_res *lgr,
 	}
 
 process_extents:
-	while (!list_empty(&extents)) {
-		struct pnfs_block_extent *be =
-			list_first_entry(&extents, struct pnfs_block_extent,
-					 be_list);
-		list_del(&be->be_list);
-
+	list_for_each_entry_del(be, &extents, be_list) {
 		if (!status)
 			status = ext_tree_insert(bl, be);
 

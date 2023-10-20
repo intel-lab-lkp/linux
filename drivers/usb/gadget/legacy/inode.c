@@ -1555,18 +1555,18 @@ delegate:
 
 static void destroy_ep_files (struct dev_data *dev)
 {
+	struct ep_data	*ep;
+
 	DBG (dev, "%s %d\n", __func__, dev->state);
 
 	/* dev->state must prevent interference */
 	spin_lock_irq (&dev->lock);
-	while (!list_empty(&dev->epfiles)) {
-		struct ep_data	*ep;
+
+	/* break link to FS */
+	list_for_each_entry_del_init(ep, &dev->epfiles, epfiles) {
 		struct inode	*parent;
 		struct dentry	*dentry;
 
-		/* break link to FS */
-		ep = list_first_entry (&dev->epfiles, struct ep_data, epfiles);
-		list_del_init (&ep->epfiles);
 		spin_unlock_irq (&dev->lock);
 
 		dentry = ep->dentry;

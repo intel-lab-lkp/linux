@@ -1843,13 +1843,12 @@ xfs_buftarg_drain(
 
 	/* loop until there is nothing left on the lru list. */
 	while (list_lru_count(&btp->bt_lru)) {
+		struct xfs_buf *bp;
+
 		list_lru_walk(&btp->bt_lru, xfs_buftarg_drain_rele,
 			      &dispose, LONG_MAX);
 
-		while (!list_empty(&dispose)) {
-			struct xfs_buf *bp;
-			bp = list_first_entry(&dispose, struct xfs_buf, b_lru);
-			list_del_init(&bp->b_lru);
+		list_for_each_entry_del_init(bp, &dispose, b_lru) {
 			if (bp->b_flags & XBF_WRITE_FAIL) {
 				write_fail = true;
 				xfs_buf_alert_ratelimited(bp,
@@ -1913,6 +1912,7 @@ xfs_buftarg_shrink_scan(
 	struct shrinker		*shrink,
 	struct shrink_control	*sc)
 {
+	struct xfs_buf		*bp;
 	struct xfs_buftarg	*btp = container_of(shrink,
 					struct xfs_buftarg, bt_shrinker);
 	LIST_HEAD(dispose);
@@ -1921,12 +1921,8 @@ xfs_buftarg_shrink_scan(
 	freed = list_lru_shrink_walk(&btp->bt_lru, sc,
 				     xfs_buftarg_isolate, &dispose);
 
-	while (!list_empty(&dispose)) {
-		struct xfs_buf *bp;
-		bp = list_first_entry(&dispose, struct xfs_buf, b_lru);
-		list_del_init(&bp->b_lru);
+	list_for_each_entry_del_init(bp, &dispose, b_lru)
 		xfs_buf_rele(bp);
-	}
 
 	return freed;
 }
@@ -2252,11 +2248,7 @@ xfs_buf_delwri_submit(
 	xfs_buf_delwri_submit_buffers(buffer_list, &wait_list);
 
 	/* Wait for IO to complete. */
-	while (!list_empty(&wait_list)) {
-		bp = list_first_entry(&wait_list, struct xfs_buf, b_list);
-
-		list_del_init(&bp->b_list);
-
+	list_for_each_entry_del_init(bp, &wait_list, b_list) {
 		/*
 		 * Wait on the locked buffer, check for errors and unlock and
 		 * release the delwri queue reference.

@@ -4879,11 +4879,7 @@ static int btrfs_log_changed_extents(struct btrfs_trans_handle *trans,
 
 	list_sort(NULL, &extents, extent_cmp);
 process:
-	while (!list_empty(&extents)) {
-		em = list_entry(extents.next, struct extent_map, list);
-
-		list_del_init(&em->list);
-
+	list_for_each_entry_del_init(em, &extents, list) {
 		/*
 		 * If we had an error we just need to delete everybody from our
 		 * private list.

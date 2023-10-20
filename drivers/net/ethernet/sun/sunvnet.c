@@ -368,9 +368,7 @@ static void vnet_cleanup(void)
 	struct net_device *dev;
 
 	mutex_lock(&vnet_list_mutex);
-	while (!list_empty(&vnet_list)) {
-		vp = list_first_entry(&vnet_list, struct vnet, list);
-		list_del(&vp->list);
+	list_for_each_entry_del(vp, &vnet_list, list) {
 		dev = vp->dev;
 		/* vio_unregister_driver() should have cleaned up port_list */
 		BUG_ON(!list_empty(&vp->port_list));

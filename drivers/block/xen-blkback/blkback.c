@@ -300,12 +300,8 @@ void xen_blkbk_unmap_purged_grants(struct work_struct *work)
 	unmap_data.unmap_ops = unmap;
 	unmap_data.kunmap_ops = NULL;
 
-	while(!list_empty(&ring->persistent_purge_list)) {
-		persistent_gnt = list_first_entry(&ring->persistent_purge_list,
-		                                  struct persistent_gnt,
-		                                  remove_node);
-		list_del(&persistent_gnt->remove_node);
-
+	list_for_each_entry_del(persistent_gnt, &ring->persistent_purge_list,
+				remove_node) {
 		gnttab_set_unmap_op(&unmap[segs_to_unmap],
 			vaddr(persistent_gnt->page),
 			GNTMAP_host_map,

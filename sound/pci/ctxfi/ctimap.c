@@ -96,13 +96,8 @@ int input_mapper_delete(struct list_head *mappers, struct imapper *entry,
 void free_input_mapper_list(struct list_head *head)
 {
 	struct imapper *entry;
-	struct list_head *pos;
 
-	while (!list_empty(head)) {
-		pos = head->next;
-		list_del(pos);
-		entry = list_entry(pos, struct imapper, list);
+	list_for_each_entry_del(entry, head, list)
 		kfree(entry);
-	}
 }
 

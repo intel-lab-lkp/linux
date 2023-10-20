@@ -294,6 +294,8 @@ int vivid_start_generating_vid_out(struct vivid_dev *dev, bool *pstreaming)
 
 void vivid_stop_generating_vid_out(struct vivid_dev *dev, bool *pstreaming)
 {
+	struct vivid_buffer *buf;
+
 	dprintk(dev, 1, "%s\n", __func__);
 
 	if (dev->kthread_vid_out == NULL)
@@ -302,12 +304,7 @@ void vivid_stop_generating_vid_out(struct vivid_dev *dev, bool *pstreaming)
 	*pstreaming = false;
 	if (pstreaming == &dev->vid_out_streaming) {
 		/* Release all active buffers */
-		while (!list_empty(&dev->vid_out_active)) {
-			struct vivid_buffer *buf;
-
-			buf = list_entry(dev->vid_out_active.next,
-					 struct vivid_buffer, list);
-			list_del(&buf->list);
+		list_for_each_entry_del(buf, &dev->vid_out_active, list) {
 			v4l2_ctrl_request_complete(buf->vb.vb2_buf.req_obj.req,
 						   &dev->ctrl_hdl_vid_out);
 			vb2_buffer_done(&buf->vb.vb2_buf, VB2_BUF_STATE_ERROR);
@@ -317,12 +314,7 @@ void vivid_stop_generating_vid_out(struct vivid_dev *dev, bool *pstreaming)
 	}
 
 	if (pstreaming == &dev->vbi_out_streaming) {
-		while (!list_empty(&dev->vbi_out_active)) {
-			struct vivid_buffer *buf;
-
-			buf = list_entry(dev->vbi_out_active.next,
-					 struct vivid_buffer, list);
-			list_del(&buf->list);
+		list_for_each_entry_del(buf, &dev->vbi_out_active, list) {
 			v4l2_ctrl_request_complete(buf->vb.vb2_buf.req_obj.req,
 						   &dev->ctrl_hdl_vbi_out);
 			vb2_buffer_done(&buf->vb.vb2_buf, VB2_BUF_STATE_ERROR);
@@ -332,12 +324,7 @@ void vivid_stop_generating_vid_out(struct vivid_dev *dev, bool *pstreaming)
 	}
 
 	if (pstreaming == &dev->meta_out_streaming) {
-		while (!list_empty(&dev->meta_out_active)) {
-			struct vivid_buffer *buf;
-
-			buf = list_entry(dev->meta_out_active.next,
-					 struct vivid_buffer, list);
-			list_del(&buf->list);
+		list_for_each_entry_del(buf, &dev->meta_out_active, list) {
 			v4l2_ctrl_request_complete(buf->vb.vb2_buf.req_obj.req,
 						   &dev->ctrl_hdl_meta_out);
 			vb2_buffer_done(&buf->vb.vb2_buf, VB2_BUF_STATE_ERROR);

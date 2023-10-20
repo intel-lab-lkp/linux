@@ -710,11 +710,9 @@ out_dump:
 		ubifs_dump_node(c, &i->idx, ubifs_idx_node_sz(c, c->fanout));
 	}
 out_free:
-	while (!list_empty(&list)) {
-		i = list_entry(list.next, struct idx_node, list);
-		list_del(&i->list);
+	list_for_each_entry_del(i, &list, list)
 		kfree(i);
-	}
+
 	ubifs_err(c, "failed, error %d", err);
 	if (err > 0)
 		err = -EINVAL;

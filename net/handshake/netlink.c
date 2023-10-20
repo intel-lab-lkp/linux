@@ -228,10 +228,7 @@ static void __net_exit handshake_net_exit(struct net *net)
 	list_splice_init(&requests, &hn->hn_requests);
 	spin_unlock(&hn->hn_lock);
 
-	while (!list_empty(&requests)) {
-		req = list_first_entry(&requests, struct handshake_req, hr_list);
-		list_del(&req->hr_list);
-
+	list_for_each_entry_del(req, &requests, hr_list) {
 		/*
 		 * Requests on this list have not yet been
 		 * accepted, so they do not have an fd to put.

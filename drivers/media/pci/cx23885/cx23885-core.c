@@ -1651,10 +1651,7 @@ static void do_cancel_buffers(struct cx23885_tsport *port, char *reason)
 	unsigned long flags;
 
 	spin_lock_irqsave(&port->slock, flags);
-	while (!list_empty(&q->active)) {
-		buf = list_entry(q->active.next, struct cx23885_buffer,
-				 queue);
-		list_del(&buf->queue);
+	list_for_each_entry_del(buf, &q->active, queue) {
 		vb2_buffer_done(&buf->vb.vb2_buf, VB2_BUF_STATE_ERROR);
 		dprintk(1, "[%p/%d] %s - dma=0x%08lx\n",
 			buf, buf->vb.vb2_buf.index, reason,

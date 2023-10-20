@@ -503,17 +503,13 @@ static int tw68_start_streaming(struct vb2_queue *q, unsigned int count)
 
 static void tw68_stop_streaming(struct vb2_queue *q)
 {
+	struct tw68_buf *buf;
 	struct tw68_dev *dev = vb2_get_drv_priv(q);
 
 	/* Stop risc & fifo */
 	tw_clearl(TW68_DMAC, TW68_DMAP_EN | TW68_FIFO_EN);
-	while (!list_empty(&dev->active)) {
-		struct tw68_buf *buf =
-			container_of(dev->active.next, struct tw68_buf, list);
-
-		list_del(&buf->list);
+	list_for_each_entry_del(buf, &dev->active, list)
 		vb2_buffer_done(&buf->vb.vb2_buf, VB2_BUF_STATE_ERROR);
-	}
 }
 
 static const struct vb2_ops tw68_video_qops = {

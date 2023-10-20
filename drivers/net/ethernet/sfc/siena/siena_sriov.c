@@ -1148,10 +1148,7 @@ static void efx_siena_sriov_peer_work(struct work_struct *data)
 	mutex_unlock(&nic_data->local_lock);
 
 	/* Free any now unused endpoint pages */
-	while (!list_empty(&pages)) {
-		epp = list_first_entry(
-			&pages, struct efx_endpoint_page, link);
-		list_del(&epp->link);
+	list_for_each_entry_del(epp, &pages, link) {
 		dma_free_coherent(&efx->pci_dev->dev, EFX_PAGE_SIZE,
 				  epp->ptr, epp->addr);
 		kfree(epp);
@@ -1174,17 +1171,10 @@ static void efx_siena_sriov_free_local(struct efx_nic *efx)
 	struct efx_local_addr *local_addr;
 	struct efx_endpoint_page *epp;
 
-	while (!list_empty(&nic_data->local_addr_list)) {
-		local_addr = list_first_entry(&nic_data->local_addr_list,
-					      struct efx_local_addr, link);
-		list_del(&local_addr->link);
+	list_for_each_entry_del(local_addr, &nic_data->local_addr_list, link)
 		kfree(local_addr);
-	}
 
-	while (!list_empty(&nic_data->local_page_list)) {
-		epp = list_first_entry(&nic_data->local_page_list,
-				       struct efx_endpoint_page, link);
-		list_del(&epp->link);
+	list_for_each_entry_del(epp, &nic_data->local_page_list, link) {
 		dma_free_coherent(&efx->pci_dev->dev, EFX_PAGE_SIZE,
 				  epp->ptr, epp->addr);
 		kfree(epp);

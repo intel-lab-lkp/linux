@@ -130,10 +130,7 @@ void ieee80211_ocb_work(struct ieee80211_sub_if_data *sdata)
 	sdata_lock(sdata);
 
 	spin_lock_bh(&ifocb->incomplete_lock);
-	while (!list_empty(&ifocb->incomplete_stations)) {
-		sta = list_first_entry(&ifocb->incomplete_stations,
-				       struct sta_info, list);
-		list_del(&sta->list);
+	list_for_each_entry_del(sta, &ifocb->incomplete_stations, list) {
 		spin_unlock_bh(&ifocb->incomplete_lock);
 
 		ieee80211_ocb_finish_sta(sta);
@@ -213,10 +210,7 @@ int ieee80211_ocb_leave(struct ieee80211_sub_if_data *sdata)
 	sta_info_flush(sdata);
 
 	spin_lock_bh(&ifocb->incomplete_lock);
-	while (!list_empty(&ifocb->incomplete_stations)) {
-		sta = list_first_entry(&ifocb->incomplete_stations,
-				       struct sta_info, list);
-		list_del(&sta->list);
+	list_for_each_entry_del(sta, &ifocb->incomplete_stations, list) {
 		spin_unlock_bh(&ifocb->incomplete_lock);
 
 		sta_info_free(local, sta);

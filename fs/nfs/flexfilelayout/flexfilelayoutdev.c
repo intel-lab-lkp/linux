@@ -154,11 +154,7 @@ nfs4_ff_alloc_deviceid_node(struct nfs_server *server, struct pnfs_device *pdev,
 		goto out_err_drain_dsaddrs;
 
 	/* If DS was already in cache, free ds addrs */
-	while (!list_empty(&dsaddrs)) {
-		da = list_first_entry(&dsaddrs,
-				      struct nfs4_pnfs_ds_addr,
-				      da_node);
-		list_del_init(&da->da_node);
+	list_for_each_entry_del_init(da, &dsaddrs, da_node) {
 		kfree(da->da_remotestr);
 		kfree(da);
 	}
@@ -167,10 +163,7 @@ nfs4_ff_alloc_deviceid_node(struct nfs_server *server, struct pnfs_device *pdev,
 	return new_ds;
 
 out_err_drain_dsaddrs:
-	while (!list_empty(&dsaddrs)) {
-		da = list_first_entry(&dsaddrs, struct nfs4_pnfs_ds_addr,
-				      da_node);
-		list_del_init(&da->da_node);
+	list_for_each_entry_del_init(da, &dsaddrs, da_node) {
 		kfree(da->da_remotestr);
 		kfree(da);
 	}
@@ -462,13 +455,8 @@ void ff_layout_free_ds_ioerr(struct list_head *head)
 {
 	struct nfs4_ff_layout_ds_err *err;
 
-	while (!list_empty(head)) {
-		err = list_first_entry(head,
-				struct nfs4_ff_layout_ds_err,
-				list);
-		list_del(&err->list);
+	list_for_each_entry_del(err, head, list)
 		kfree(err);
-	}
 }
 
 /* called with inode i_lock held */

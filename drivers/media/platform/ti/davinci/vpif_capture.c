@@ -293,10 +293,7 @@ static void vpif_stop_streaming(struct vb2_queue *vq)
 	}
 
 	spin_lock_irqsave(&common->irqlock, flags);
-	while (!list_empty(&common->dma_queue)) {
-		common->next_frm = list_entry(common->dma_queue.next,
-						struct vpif_cap_buffer, list);
-		list_del(&common->next_frm->list);
+	list_for_each_entry_del(common->next_frm, &common->dma_queue, list) {
 		vb2_buffer_done(&common->next_frm->vb.vb2_buf,
 				VB2_BUF_STATE_ERROR);
 	}

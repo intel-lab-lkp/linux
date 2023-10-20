@@ -105,11 +105,8 @@ void hfi1_mmu_rb_unregister(struct mmu_rb_handler *handler)
 	}
 	spin_unlock_irqrestore(&handler->lock, flags);
 
-	while (!list_empty(&del_list)) {
-		rbnode = list_first_entry(&del_list, struct mmu_rb_node, list);
-		list_del(&rbnode->list);
+	list_for_each_entry_del(rbnode, &del_list, list)
 		kref_put(&rbnode->refcount, release_immediate);
-	}
 
 	/* Now the mm may be freed. */
 	mmdrop(handler->mn.mm);
@@ -303,9 +300,7 @@ static void handle_remove(struct work_struct *work)
 	list_replace_init(&handler->del_list, &del_list);
 	spin_unlock_irqrestore(&handler->lock, flags);
 
-	while (!list_empty(&del_list)) {
-		node = list_first_entry(&del_list, struct mmu_rb_node, list);
-		list_del(&node->list);
+	list_for_each_entry_del(node, &del_list, list) {
 		trace_hfi1_mmu_release_node(node);
 		handler->ops->remove(handler->ops_arg, node);
 	}

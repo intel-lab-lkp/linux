@@ -1006,17 +1006,13 @@ static void trans_drain(struct gfs2_trans *tr)
 		return;
 
 	head = &tr->tr_buf;
-	while (!list_empty(head)) {
-		bd = list_first_entry(head, struct gfs2_bufdata, bd_list);
-		list_del_init(&bd->bd_list);
+	list_for_each_entry_del_init(bd, head, bd_list) {
 		if (!list_empty(&bd->bd_ail_st_list))
 			gfs2_remove_from_ail(bd);
 		kmem_cache_free(gfs2_bufdata_cachep, bd);
 	}
 	head = &tr->tr_databuf;
-	while (!list_empty(head)) {
-		bd = list_first_entry(head, struct gfs2_bufdata, bd_list);
-		list_del_init(&bd->bd_list);
+	list_for_each_entry_del_init(bd, head, bd_list) {
 		if (!list_empty(&bd->bd_ail_st_list))
 			gfs2_remove_from_ail(bd);
 		kmem_cache_free(gfs2_bufdata_cachep, bd);

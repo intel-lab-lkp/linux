@@ -172,12 +172,8 @@ void qed_ooo_release_connection_isles(struct qed_hwfn *p_hwfn,
 	if (!p_archipelago)
 		return;
 
-	while (!list_empty(&p_archipelago->isles_list)) {
-		p_isle = list_first_entry(&p_archipelago->isles_list,
-					  struct qed_ooo_isle, list_entry);
-
-		list_del(&p_isle->list_entry);
-
+	list_for_each_entry_del(p_isle, &p_archipelago->isles_list,
+				list_entry) {
 		while (!list_empty(&p_isle->buffers_list)) {
 			p_buffer = list_first_entry(&p_isle->buffers_list,
 						    struct qed_ooo_buffer,
@@ -205,13 +201,8 @@ void qed_ooo_release_all_isles(struct qed_hwfn *p_hwfn,
 	for (i = 0; i < p_ooo_info->max_num_archipelagos; i++) {
 		p_archipelago = &(p_ooo_info->p_archipelagos_mem[i]);
 
-		while (!list_empty(&p_archipelago->isles_list)) {
-			p_isle = list_first_entry(&p_archipelago->isles_list,
-						  struct qed_ooo_isle,
-						  list_entry);
-
-			list_del(&p_isle->list_entry);
-
+		list_for_each_entry_del(p_isle, &p_archipelago->isles_list,
+					list_entry) {
 			while (!list_empty(&p_isle->buffers_list)) {
 				p_buffer =
 				    list_first_entry(&p_isle->buffers_list,

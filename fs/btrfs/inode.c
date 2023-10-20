@@ -1578,12 +1578,8 @@ static noinline void submit_compressed_extents(struct btrfs_work *work)
 	nr_pages = (async_chunk->end - async_chunk->start + PAGE_SIZE) >>
 		PAGE_SHIFT;
 
-	while (!list_empty(&async_chunk->extents)) {
-		async_extent = list_entry(async_chunk->extents.next,
-					  struct async_extent, list);
-		list_del(&async_extent->list);
+	list_for_each_entry_del(async_extent, &async_chunk->extents, list)
 		submit_one_async_extent(async_chunk, async_extent, &alloc_hint);
-	}
 
 	/* atomic_sub_return implies a barrier */
 	if (atomic_sub_return(nr_pages, &fs_info->async_delalloc_pages) <
@@ -1733,11 +1729,9 @@ static noinline int csum_exist_in_range(struct btrfs_fs_info *fs_info,
 	if (ret == 0 && list_empty(&list))
 		return 0;
 
-	while (!list_empty(&list)) {
-		sums = list_entry(list.next, struct btrfs_ordered_sum, list);
-		list_del(&sums->list);
+	list_for_each_entry_del(sums, &list, list)
 		kfree(sums);
-	}
+
 	if (ret < 0)
 		return ret;
 	return 1;

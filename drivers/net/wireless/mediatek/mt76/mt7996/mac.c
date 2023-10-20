@@ -2152,9 +2152,7 @@ void mt7996_mac_sta_rc_work(struct work_struct *work)
 	spin_lock_bh(&dev->mt76.sta_poll_lock);
 	list_splice_init(&dev->sta_rc_list, &list);
 
-	while (!list_empty(&list)) {
-		msta = list_first_entry(&list, struct mt7996_sta, rc_list);
-		list_del_init(&msta->rc_list);
+	list_for_each_entry_del_init(msta, &list, rc_list) {
 		changed = msta->changed;
 		msta->changed = 0;
 		spin_unlock_bh(&dev->mt76.sta_poll_lock);

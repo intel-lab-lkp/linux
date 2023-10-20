@@ -251,12 +251,9 @@ static void free_block_entry(struct block_entry *be)
 		kfree(ref);
 	}
 
-	while (!list_empty(&be->actions)) {
-		ra = list_first_entry(&be->actions, struct ref_action,
-				      list);
-		list_del(&ra->list);
+	list_for_each_entry_del(ra, &be->actions, list)
 		kfree(ra);
-	}
+
 	kfree(be);
 }
 
@@ -727,6 +724,8 @@ int btrfs_ref_tree_mod(struct btrfs_fs_info *fs_info,
 	 */
 	ret = -EINVAL;
 	if (action == BTRFS_ADD_DELAYED_EXTENT) {
+		struct ref_action *tmp;
+
 		/*
 		 * For subvol_create we'll just pass in whatever the parent root
 		 * is and the new root objectid, so let's not treat the passed
@@ -753,12 +752,7 @@ int btrfs_ref_tree_mod(struct btrfs_fs_info *fs_info,
 			goto out_unlock;
 		}
 
-		while (!list_empty(&be->actions)) {
-			struct ref_action *tmp;
-
-			tmp = list_first_entry(&be->actions, struct ref_action,
-					       list);
-			list_del(&tmp->list);
+		list_for_each_entry_del(tmp, &be->actions, list) {
 			kfree(tmp);
 		}
 	} else {

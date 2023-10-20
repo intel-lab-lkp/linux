@@ -612,12 +612,8 @@ static void nilfs_release_frozen_buffers(struct nilfs_shadow_map *shadow)
 	struct list_head *head = &shadow->frozen_buffers;
 	struct buffer_head *bh;
 
-	while (!list_empty(head)) {
-		bh = list_first_entry(head, struct buffer_head,
-				      b_assoc_buffers);
-		list_del_init(&bh->b_assoc_buffers);
+	list_for_each_entry_del_init(bh, head, b_assoc_buffers)
 		brelse(bh); /* drop ref-count to make it releasable */
-	}
 }
 
 /**

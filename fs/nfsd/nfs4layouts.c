@@ -451,11 +451,9 @@ out:
 static void
 nfsd4_free_layouts(struct list_head *reaplist)
 {
-	while (!list_empty(reaplist)) {
-		struct nfs4_layout *lp = list_first_entry(reaplist,
-				struct nfs4_layout, lo_perstate);
+	struct nfs4_layout *lp;
 
-		list_del(&lp->lo_perstate);
+	list_for_each_entry_del(lp, reaplist, lo_perstate) {
 		nfs4_put_stid(&lp->lo_state->ls_stid);
 		kmem_cache_free(nfs4_layout_cache, lp);
 	}

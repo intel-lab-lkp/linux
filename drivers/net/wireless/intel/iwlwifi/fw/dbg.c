@@ -2643,13 +2643,10 @@ static void iwl_fw_error_dump(struct iwl_fw_runtime *fwrt,
 
 static void iwl_dump_ini_list_free(struct list_head *list)
 {
-	while (!list_empty(list)) {
-		struct iwl_fw_ini_dump_entry *entry =
-			list_entry(list->next, typeof(*entry), list);
+	struct iwl_fw_ini_dump_entry *entry;
 
-		list_del(&entry->list);
+	list_for_each_entry_del(entry, list, list)
 		vfree(entry);
-	}
 }
 
 static void iwl_fw_error_dump_data_free(struct iwl_fwrt_dump_data *dump_data)

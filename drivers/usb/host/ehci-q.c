@@ -1402,11 +1402,7 @@ static void end_unlink_async(struct ehci_hcd *ehci)
 
 	/* Process the idle QHs */
 	ehci->async_unlinking = true;
-	while (!list_empty(&ehci->async_idle)) {
-		qh = list_first_entry(&ehci->async_idle, struct ehci_qh,
-				unlink_node);
-		list_del(&qh->unlink_node);
-
+	list_for_each_entry_del(qh, &ehci->async_idle, unlink_node) {
 		qh->qh_state = QH_STATE_IDLE;
 		qh->qh_next.qh = NULL;
 

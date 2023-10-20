@@ -1879,11 +1879,8 @@ static void l2cap_unregister_all_users(struct l2cap_conn *conn)
 {
 	struct l2cap_user *user;
 
-	while (!list_empty(&conn->users)) {
-		user = list_first_entry(&conn->users, struct l2cap_user, list);
-		list_del_init(&user->list);
+	list_for_each_entry_del_init(user, &conn->users, list)
 		user->remove(conn, user);
-	}
 }
 
 static void l2cap_conn_del(struct hci_conn *hcon, int err)

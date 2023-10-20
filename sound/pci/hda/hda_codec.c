@@ -120,12 +120,10 @@ static int add_conn_list(struct hda_codec *codec, hda_nid_t nid, int len,
 
 static void remove_conn_list(struct hda_codec *codec)
 {
-	while (!list_empty(&codec->conn_list)) {
-		struct hda_conn_list *p;
-		p = list_first_entry(&codec->conn_list, typeof(*p), list);
-		list_del(&p->list);
+	struct hda_conn_list *p;
+
+	list_for_each_entry_del(p, &codec->conn_list, list)
 		kfree(p);
-	}
 }
 
 /* read the connection and add to the cache */

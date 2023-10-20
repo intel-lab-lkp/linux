@@ -406,12 +406,8 @@ static void free_fs_devices(struct btrfs_fs_devices *fs_devices)
 	struct btrfs_device *device;
 
 	WARN_ON(fs_devices->opened);
-	while (!list_empty(&fs_devices->devices)) {
-		device = list_entry(fs_devices->devices.next,
-				    struct btrfs_device, dev_list);
-		list_del(&device->dev_list);
+	list_for_each_entry_del(device, &fs_devices->devices, dev_list)
 		btrfs_free_device(device);
-	}
 	kfree(fs_devices);
 }
 
@@ -419,12 +415,8 @@ void __exit btrfs_cleanup_fs_uuids(void)
 {
 	struct btrfs_fs_devices *fs_devices;
 
-	while (!list_empty(&fs_uuids)) {
-		fs_devices = list_entry(fs_uuids.next,
-					struct btrfs_fs_devices, fs_list);
-		list_del(&fs_devices->fs_list);
+	list_for_each_entry_del(fs_devices, &fs_uuids, fs_list)
 		free_fs_devices(fs_devices);
-	}
 }
 
 static bool match_fsid_fs_devices(const struct btrfs_fs_devices *fs_devices,

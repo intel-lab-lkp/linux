@@ -1293,11 +1293,8 @@ static void ext4_fc_cleanup(journal_t *journal, int full, tid_t tid)
 #endif
 	}
 
-	while (!list_empty(&sbi->s_fc_dentry_q[FC_Q_MAIN])) {
-		fc_dentry = list_first_entry(&sbi->s_fc_dentry_q[FC_Q_MAIN],
-					     struct ext4_fc_dentry_update,
-					     fcd_list);
-		list_del_init(&fc_dentry->fcd_list);
+	list_for_each_entry_del_init(fc_dentry,
+				     &sbi->s_fc_dentry_q[FC_Q_MAIN], fcd_list) {
 		list_del_init(&fc_dentry->fcd_dilist);
 		spin_unlock(&sbi->s_fc_lock);
 

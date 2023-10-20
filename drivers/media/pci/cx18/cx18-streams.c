@@ -173,14 +173,10 @@ static int cx18_buf_prepare(struct vb2_buffer *vb)
 
 void cx18_clear_queue(struct cx18_stream *s, enum vb2_buffer_state state)
 {
-	while (!list_empty(&s->vb_capture)) {
-		struct cx18_vb2_buffer *buf;
+	struct cx18_vb2_buffer *buf;
 
-		buf = list_first_entry(&s->vb_capture,
-				       struct cx18_vb2_buffer, list);
-		list_del(&buf->list);
+	list_for_each_entry_del(buf, &s->vb_capture, list)
 		vb2_buffer_done(&buf->vb.vb2_buf, state);
-	}
 }
 
 static int cx18_start_streaming(struct vb2_queue *vq, unsigned int count)

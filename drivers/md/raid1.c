@@ -2567,10 +2567,7 @@ static void raid1d(struct md_thread *thread)
 		if (!test_bit(MD_SB_CHANGE_PENDING, &mddev->sb_flags))
 			list_splice_init(&conf->bio_end_io_list, &tmp);
 		spin_unlock_irqrestore(&conf->device_lock, flags);
-		while (!list_empty(&tmp)) {
-			r1_bio = list_first_entry(&tmp, struct r1bio,
-						  retry_list);
-			list_del(&r1_bio->retry_list);
+		list_for_each_entry_del(r1_bio, &tmp, retry_list) {
 			idx = sector_to_idx(r1_bio->sector);
 			atomic_dec(&conf->nr_queued[idx]);
 			if (mddev->degraded)

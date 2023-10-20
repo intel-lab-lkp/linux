@@ -371,18 +371,13 @@ err_text:
 static void __exit mon_exit(void)
 {
 	struct mon_bus *mbus;
-	struct list_head *p;
 
 	usb_unregister_notify(&mon_nb);
 	usb_mon_deregister();
 
 	mutex_lock(&mon_lock);
 
-	while (!list_empty(&mon_buses)) {
-		p = mon_buses.next;
-		mbus = list_entry(p, struct mon_bus, bus_link);
-		list_del(p);
-
+	list_for_each_entry_del(mbus, &mon_buses, bus_link) {
 		if (mbus->text_inited)
 			mon_text_del(mbus);
 		if (mbus->bin_inited)

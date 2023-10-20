@@ -154,13 +154,8 @@ static inline void __bnx2x_exe_queue_reset_pending(
 {
 	struct bnx2x_exeq_elem *elem;
 
-	while (!list_empty(&o->pending_comp)) {
-		elem = list_first_entry(&o->pending_comp,
-					struct bnx2x_exeq_elem, link);
-
-		list_del(&elem->link);
+	list_for_each_entry_del(elem, &o->pending_comp, link)
 		bnx2x_exe_queue_free_elem(bp, elem);
-	}
 }
 
 /**
@@ -2659,11 +2654,8 @@ static void bnx2x_free_groups(struct list_head *mcast_group_list)
 {
 	struct bnx2x_mcast_elem_group *current_mcast_group;
 
-	while (!list_empty(mcast_group_list)) {
-		current_mcast_group = list_first_entry(mcast_group_list,
-				      struct bnx2x_mcast_elem_group,
-				      mcast_group_link);
-		list_del(&current_mcast_group->mcast_group_link);
+	list_for_each_entry_del(current_mcast_group, mcast_group_list,
+				mcast_group_link) {
 		free_page((unsigned long)current_mcast_group);
 	}
 }

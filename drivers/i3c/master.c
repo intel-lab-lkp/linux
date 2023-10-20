@@ -2427,12 +2427,8 @@ void i3c_generic_ibi_free_pool(struct i3c_generic_ibi_pool *pool)
 	struct i3c_generic_ibi_slot *slot;
 	unsigned int nslots = 0;
 
-	while (!list_empty(&pool->free_slots)) {
-		slot = list_first_entry(&pool->free_slots,
-					struct i3c_generic_ibi_slot, node);
-		list_del(&slot->node);
+	list_for_each_entry_del(slot, &pool->free_slots, node)
 		nslots++;
-	}
 
 	/*
 	 * If the number of freed slots is not equal to the number of allocated

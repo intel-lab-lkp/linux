@@ -984,13 +984,10 @@ out:
  */
 void ubifs_destroy_idx_gc(struct ubifs_info *c)
 {
-	while (!list_empty(&c->idx_gc)) {
-		struct ubifs_gced_idx_leb *idx_gc;
+	struct ubifs_gced_idx_leb *idx_gc;
 
-		idx_gc = list_entry(c->idx_gc.next, struct ubifs_gced_idx_leb,
-				    list);
+	list_for_each_entry_del(idx_gc, &c->idx_gc, list) {
 		c->idx_gc_cnt -= 1;
-		list_del(&idx_gc->list);
 		kfree(idx_gc);
 	}
 }

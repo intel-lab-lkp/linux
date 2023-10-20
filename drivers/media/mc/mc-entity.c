@@ -651,13 +651,10 @@ static int media_pipeline_explore_next_link(struct media_pipeline *pipe,
 
 static void media_pipeline_cleanup(struct media_pipeline *pipe)
 {
-	while (!list_empty(&pipe->pads)) {
-		struct media_pipeline_pad *ppad;
+	struct media_pipeline_pad *ppad;
 
-		ppad = list_first_entry(&pipe->pads, typeof(*ppad), list);
-		list_del(&ppad->list);
+	list_for_each_entry_del(ppad, &pipe->pads, list)
 		kfree(ppad);
-	}
 }
 
 static int media_pipeline_populate(struct media_pipeline *pipe,

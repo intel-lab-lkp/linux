@@ -700,11 +700,8 @@ xlog_cil_free_logvec(
 {
 	struct xfs_log_vec	*lv;
 
-	while (!list_empty(lv_chain)) {
-		lv = list_first_entry(lv_chain, struct xfs_log_vec, lv_list);
-		list_del_init(&lv->lv_list);
+	list_for_each_entry_del_init(lv, lv_chain, lv_list)
 		kmem_free(lv);
-	}
 }
 
 /*
@@ -1094,10 +1091,9 @@ static void
 xlog_cil_cleanup_whiteouts(
 	struct list_head	*whiteouts)
 {
-	while (!list_empty(whiteouts)) {
-		struct xfs_log_item *item = list_first_entry(whiteouts,
-						struct xfs_log_item, li_cil);
-		list_del_init(&item->li_cil);
+	struct xfs_log_item *item;
+
+	list_for_each_entry_del_init(item, whiteouts, li_cil) {
 		trace_xfs_cil_whiteout_unpin(item);
 		item->li_ops->iop_unpin(item, 1);
 	}

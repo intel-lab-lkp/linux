@@ -188,10 +188,7 @@ static void __fat_cache_inval_inode(struct inode *inode)
 	struct msdos_inode_info *i = MSDOS_I(inode);
 	struct fat_cache *cache;
 
-	while (!list_empty(&i->cache_lru)) {
-		cache = list_entry(i->cache_lru.next,
-				   struct fat_cache, cache_list);
-		list_del_init(&cache->cache_list);
+	list_for_each_entry_del_init(cache, &i->cache_lru, cache_list) {
 		i->nr_caches--;
 		fat_cache_free(cache);
 	}

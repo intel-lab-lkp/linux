@@ -366,20 +366,17 @@ static bool svm_bo_ref_unless_zero(struct svm_range_bo *svm_bo)
 
 static void svm_range_bo_release(struct kref *kref)
 {
+	struct svm_range *prange;
 	struct svm_range_bo *svm_bo;
 
 	svm_bo = container_of(kref, struct svm_range_bo, kref);
 	pr_debug("svm_bo 0x%p\n", svm_bo);
 
 	spin_lock(&svm_bo->list_lock);
-	while (!list_empty(&svm_bo->range_list)) {
-		struct svm_range *prange =
-				list_first_entry(&svm_bo->range_list,
-						struct svm_range, svm_bo_list);
-		/* list_del_init tells a concurrent svm_range_vram_node_new when
-		 * it's safe to reuse the svm_bo pointer and svm_bo_list head.
-		 */
-		list_del_init(&prange->svm_bo_list);
+	/* list_del_init tells a concurrent svm_range_vram_node_new when
+	 * it's safe to reuse the svm_bo pointer and svm_bo_list head.
+	 */
+	list_for_each_entry_del_init(prange, &svm_bo->range_list, svm_bo_list) {
 		spin_unlock(&svm_bo->list_lock);
 
 		pr_debug("svms 0x%p [0x%lx 0x%lx]\n", prange->svms,

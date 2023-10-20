@@ -525,9 +525,7 @@ static void __exit bnx2i_mod_exit(void)
 	struct bnx2i_hba *hba;
 
 	mutex_lock(&bnx2i_dev_lock);
-	while (!list_empty(&adapter_list)) {
-		hba = list_entry(adapter_list.next, struct bnx2i_hba, link);
-		list_del(&hba->link);
+	list_for_each_entry_del(hba, &adapter_list, link) {
 		adapter_count--;
 
 		if (test_bit(BNX2I_CNIC_REGISTERED, &hba->reg_with_cnic)) {

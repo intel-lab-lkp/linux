@@ -455,11 +455,7 @@ static int __init pcistub_init_devices_late(void)
 
 	spin_lock_irqsave(&pcistub_devices_lock, flags);
 
-	while (!list_empty(&seized_devices)) {
-		psdev = container_of(seized_devices.next,
-				     struct pcistub_device, dev_list);
-		list_del(&psdev->dev_list);
-
+	list_for_each_entry_del(psdev, &seized_devices, dev_list) {
 		spin_unlock_irqrestore(&pcistub_devices_lock, flags);
 
 		err = pcistub_init_device(psdev->dev);

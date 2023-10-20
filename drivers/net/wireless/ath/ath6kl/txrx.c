@@ -699,11 +699,7 @@ void ath6kl_tx_complete(struct htc_target *target,
 	spin_lock_bh(&ar->lock);
 
 	/* reap completed packets */
-	while (!list_empty(packet_queue)) {
-		packet = list_first_entry(packet_queue, struct htc_packet,
-					  list);
-		list_del(&packet->list);
-
+	list_for_each_entry_del(packet, packet_queue, list) {
 		if (WARN_ON_ONCE(packet->endpoint == ENDPOINT_UNUSED ||
 				 packet->endpoint >= ENDPOINT_MAX))
 			continue;

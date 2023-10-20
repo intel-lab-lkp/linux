@@ -1136,6 +1136,7 @@ int em28xx_start_analog_streaming(struct vb2_queue *vq, unsigned int count)
 
 static void em28xx_stop_streaming(struct vb2_queue *vq)
 {
+	struct em28xx_buffer *buf;
 	struct em28xx *dev = vb2_get_drv_priv(vq);
 	struct em28xx_v4l2 *v4l2 = dev->v4l2;
 	struct em28xx_dmaqueue *vidq = &dev->vidq;
@@ -1159,18 +1160,15 @@ static void em28xx_stop_streaming(struct vb2_queue *vq)
 				VB2_BUF_STATE_ERROR);
 		dev->usb_ctl.vid_buf = NULL;
 	}
-	while (!list_empty(&vidq->active)) {
-		struct em28xx_buffer *buf;
 
-		buf = list_entry(vidq->active.next, struct em28xx_buffer, list);
-		list_del(&buf->list);
+	list_for_each_entry_del(buf, &vidq->active, list)
 		vb2_buffer_done(&buf->vb.vb2_buf, VB2_BUF_STATE_ERROR);
-	}
 	spin_unlock_irqrestore(&dev->slock, flags);
 }
 
 void em28xx_stop_vbi_streaming(struct vb2_queue *vq)
 {
+	struct em28xx_buffer *buf;
 	struct em28xx *dev = vb2_get_drv_priv(vq);
 	struct em28xx_v4l2 *v4l2 = dev->v4l2;
 	struct em28xx_dmaqueue *vbiq = &dev->vbiq;
@@ -1194,13 +1192,9 @@ void em28xx_stop_vbi_streaming(struct vb2_queue *vq)
 				VB2_BUF_STATE_ERROR);
 		dev->usb_ctl.vbi_buf = NULL;
 	}
-	while (!list_empty(&vbiq->active)) {
-		struct em28xx_buffer *buf;
 
-		buf = list_entry(vbiq->active.next, struct em28xx_buffer, list);
-		list_del(&buf->list);
+	list_for_each_entry_del(buf, &vbiq->active, list)
 		vb2_buffer_done(&buf->vb.vb2_buf, VB2_BUF_STATE_ERROR);
-	}
 	spin_unlock_irqrestore(&dev->slock, flags);
 }
 

@@ -779,13 +779,8 @@ static void snd_timer_process_callbacks(struct snd_timer *timer,
 	struct snd_timer_instance *ti;
 	unsigned long resolution, ticks;
 
-	while (!list_empty(head)) {
-		ti = list_first_entry(head, struct snd_timer_instance,
-				      ack_list);
-
-		/* remove from ack_list and make empty */
-		list_del_init(&ti->ack_list);
-
+	/* remove from ack_list and make empty */
+	list_for_each_entry_del_init(ti, head, ack_list) {
 		if (!(ti->flags & SNDRV_TIMER_IFLG_DEAD)) {
 			ticks = ti->pticks;
 			ti->pticks = 0;

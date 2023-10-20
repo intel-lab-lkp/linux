@@ -904,9 +904,7 @@ static void free_orphans(struct ubifs_info *c)
 		kfree(orph);
 	}
 
-	while (!list_empty(&c->orph_list)) {
-		orph = list_entry(c->orph_list.next, struct ubifs_orphan, list);
-		list_del(&orph->list);
+	list_for_each_entry_del(orph, &c->orph_list, list) {
 		kfree(orph);
 		ubifs_err(c, "orphan list not empty at unmount");
 	}
@@ -1180,21 +1178,15 @@ static void ubifs_release_options(struct ubifs_info *c)
  */
 static void destroy_journal(struct ubifs_info *c)
 {
-	while (!list_empty(&c->unclean_leb_list)) {
-		struct ubifs_unclean_leb *ucleb;
+	struct ubifs_unclean_leb *ucleb;
+	struct ubifs_bud *bud;
 
-		ucleb = list_entry(c->unclean_leb_list.next,
-				   struct ubifs_unclean_leb, list);
-		list_del(&ucleb->list);
+	list_for_each_entry_del(ucleb, &c->unclean_leb_list, list)
 		kfree(ucleb);
-	}
-	while (!list_empty(&c->old_buds)) {
-		struct ubifs_bud *bud;
 
-		bud = list_entry(c->old_buds.next, struct ubifs_bud, list);
-		list_del(&bud->list);
+	list_for_each_entry_del(bud, &c->old_buds, list)
 		kfree(bud);
-	}
+
 	ubifs_destroy_idx_gc(c);
 	ubifs_destroy_size_tree(c);
 	ubifs_tnc_close(c);

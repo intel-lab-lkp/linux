@@ -1191,10 +1191,8 @@ static void ib_uverbs_free_hw_resources(struct ib_uverbs_device *uverbs_dev,
 	uverbs_disassociate_api_pre(uverbs_dev);
 
 	mutex_lock(&uverbs_dev->lists_mutex);
-	while (!list_empty(&uverbs_dev->uverbs_file_list)) {
-		file = list_first_entry(&uverbs_dev->uverbs_file_list,
-					struct ib_uverbs_file, list);
-		list_del_init(&file->list);
+	list_for_each_entry_del_init(file, &uverbs_dev->uverbs_file_list,
+				     list) {
 		kref_get(&file->ref);
 
 		/* We must release the mutex before going ahead and calling

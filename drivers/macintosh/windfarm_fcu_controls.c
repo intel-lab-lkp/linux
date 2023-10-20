@@ -564,11 +564,9 @@ static void wf_fcu_remove(struct i2c_client *client)
 	struct wf_fcu_priv *pv = dev_get_drvdata(&client->dev);
 	struct wf_fcu_fan *fan;
 
-	while (!list_empty(&pv->fan_list)) {
-		fan = list_first_entry(&pv->fan_list, struct wf_fcu_fan, link);
-		list_del(&fan->link);
+	list_for_each_entry_del(fan, &pv->fan_list, link)
 		wf_unregister_control(&fan->ctrl);
-	}
+
 	kref_put(&pv->ref, wf_fcu_release);
 }
 

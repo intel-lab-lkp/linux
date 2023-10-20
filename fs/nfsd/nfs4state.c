@@ -339,23 +339,15 @@ remove_blocked_locks(struct nfs4_lockowner *lo)
 
 	/* Dequeue all blocked locks */
 	spin_lock(&nn->blocked_locks_lock);
-	while (!list_empty(&lo->lo_blocked)) {
-		nbl = list_first_entry(&lo->lo_blocked,
-					struct nfsd4_blocked_lock,
-					nbl_list);
-		list_del_init(&nbl->nbl_list);
+	list_for_each_entry_del_init(nbl, &lo->lo_blocked, nbl_list) {
 		WARN_ON(list_empty(&nbl->nbl_lru));
 		list_move(&nbl->nbl_lru, &reaplist);
 	}
 	spin_unlock(&nn->blocked_locks_lock);
 
 	/* Now free them */
-	while (!list_empty(&reaplist)) {
-		nbl = list_first_entry(&reaplist, struct nfsd4_blocked_lock,
-					nbl_lru);
-		list_del_init(&nbl->nbl_lru);
+	list_for_each_entry_del_init(nbl, &reaplist, nbl_lru)
 		free_blocked_lock(nbl);
-	}
 }
 
 static void
@@ -1576,10 +1568,7 @@ free_ol_stateid_reaplist(struct list_head *reaplist)
 
 	might_sleep();
 
-	while (!list_empty(reaplist)) {
-		stp = list_first_entry(reaplist, struct nfs4_ol_stateid,
-				       st_locks);
-		list_del(&stp->st_locks);
+	list_for_each_entry_del(stp, reaplist, st_locks) {
 		fp = stp->st_stid.sc_file;
 		stp->st_stid.sc_free(&stp->st_stid);
 		if (fp)
@@ -1941,9 +1930,7 @@ static void nfsd4_del_conns(struct nfsd4_session *s)
 	struct nfsd4_conn *c;
 
 	spin_lock(&clp->cl_lock);
-	while (!list_empty(&s->se_conns)) {
-		c = list_first_entry(&s->se_conns, struct nfsd4_conn, cn_persession);
-		list_del_init(&c->cn_persession);
+	list_for_each_entry_del_init(c, &s->se_conns, cn_persession) {
 		spin_unlock(&clp->cl_lock);
 
 		unregister_xpt_user(c->cn_xprt, &c->cn_xpt_user);
@@ -2152,11 +2139,9 @@ static void drop_client(struct nfs4_client *clp)
 static void
 free_client(struct nfs4_client *clp)
 {
-	while (!list_empty(&clp->cl_sessions)) {
-		struct nfsd4_session *ses;
-		ses = list_entry(clp->cl_sessions.next, struct nfsd4_session,
-				se_perclnt);
-		list_del(&ses->se_perclnt);
+	struct nfsd4_session *ses;
+
+	list_for_each_entry_del(ses, &clp->cl_sessions, se_perclnt) {
 		WARN_ON_ONCE(atomic_read(&ses->se_ref));
 		free_session(ses);
 	}
@@ -2230,16 +2215,12 @@ __destroy_client(struct nfs4_client *clp)
 		list_add(&dp->dl_recall_lru, &reaplist);
 	}
 	spin_unlock(&state_lock);
-	while (!list_empty(&reaplist)) {
-		dp = list_entry(reaplist.next, struct nfs4_delegation, dl_recall_lru);
-		list_del_init(&dp->dl_recall_lru);
+	list_for_each_entry_del_init(dp, &reaplist, dl_recall_lru)
 		destroy_unhashed_deleg(dp);
-	}
-	while (!list_empty(&clp->cl_revoked)) {
-		dp = list_entry(clp->cl_revoked.next, struct nfs4_delegation, dl_recall_lru);
-		list_del_init(&dp->dl_recall_lru);
+
+	list_for_each_entry_del_init(dp, &clp->cl_revoked, dl_recall_lru)
 		nfs4_put_stid(&dp->dl_stid);
-	}
+
 	while (!list_empty(&clp->cl_openowners)) {
 		oo = list_entry(clp->cl_openowners.next, struct nfs4_openowner, oo_perclient);
 		nfs4_get_stateowner(&oo->oo_owner);
@@ -6170,12 +6151,8 @@ nfs4_laundromat(struct nfsd_net *nn)
 		list_add(&dp->dl_recall_lru, &reaplist);
 	}
 	spin_unlock(&state_lock);
-	while (!list_empty(&reaplist)) {
-		dp = list_first_entry(&reaplist, struct nfs4_delegation,
-					dl_recall_lru);
-		list_del_init(&dp->dl_recall_lru);
+	list_for_each_entry_del_init(dp, &reaplist, dl_recall_lru)
 		revoke_delegation(dp);
-	}
 
 	spin_lock(&nn->client_lock);
 	while (!list_empty(&nn->close_lru)) {
@@ -6215,12 +6192,9 @@ nfs4_laundromat(struct nfsd_net *nn)
 	}
 	spin_unlock(&nn->blocked_locks_lock);
 
-	while (!list_empty(&reaplist)) {
-		nbl = list_first_entry(&reaplist,
-					struct nfsd4_blocked_lock, nbl_lru);
-		list_del_init(&nbl->nbl_lru);
+	list_for_each_entry_del_init(nbl, &reaplist, nbl_lru)
 		free_blocked_lock(nbl);
-	}
+
 #ifdef CONFIG_NFSD_V4_2_INTER_SSC
 	/* service the server-to-server copy delayed unmount list */
 	nfsd4_ssc_expire_umount(nn);
@@ -6280,10 +6254,7 @@ deleg_reaper(struct nfsd_net *nn)
 	}
 	spin_unlock(&nn->client_lock);
 
-	while (!list_empty(&cblist)) {
-		clp = list_first_entry(&cblist, struct nfs4_client,
-					cl_ra_cblist);
-		list_del_init(&clp->cl_ra_cblist);
+	list_for_each_entry_del_init(clp, &cblist, cl_ra_cblist) {
 		clp->cl_ra->ra_keep = 0;
 		clp->cl_ra->ra_bmval[0] = BIT(RCA4_TYPE_MASK_RDATA_DLG);
 		trace_nfsd_cb_recall_any(clp->cl_ra);

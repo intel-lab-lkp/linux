@@ -998,6 +998,7 @@ static int dlfb_ops_open(struct fb_info *info, int user)
 
 static void dlfb_ops_destroy(struct fb_info *info)
 {
+	struct dlfb_deferred_free *d;
 	struct dlfb_data *dlfb = info->par;
 
 	cancel_work_sync(&dlfb->damage_work);
@@ -1012,9 +1013,7 @@ static void dlfb_ops_destroy(struct fb_info *info)
 
 	fb_destroy_modelist(&info->modelist);
 
-	while (!list_empty(&dlfb->deferred_free)) {
-		struct dlfb_deferred_free *d = list_entry(dlfb->deferred_free.next, struct dlfb_deferred_free, list);
-		list_del(&d->list);
+	list_for_each_entry_del(d, &dlfb->deferred_free, list) {
 		vfree(d->mem);
 		kfree(d);
 	}

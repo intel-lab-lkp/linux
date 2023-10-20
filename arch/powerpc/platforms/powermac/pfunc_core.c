@@ -779,6 +779,7 @@ EXPORT_SYMBOL_GPL(pmf_put_function);
 
 void pmf_unregister_driver(struct device_node *np)
 {
+	struct pmf_function *func;
 	struct pmf_device *dev;
 	unsigned long flags;
 
@@ -793,12 +794,8 @@ void pmf_unregister_driver(struct device_node *np)
 	}
 	list_del(&dev->link);
 
-	while(!list_empty(&dev->functions)) {
-		struct pmf_function *func =
-			list_entry(dev->functions.next, typeof(*func), link);
-		list_del(&func->link);
+	list_for_each_entry_del(func, &dev->functions, link) {
 		__pmf_put_function(func);
-	}
 
 	pmf_put_device(dev);
 	spin_unlock_irqrestore(&pmf_lock, flags);

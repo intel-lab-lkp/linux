@@ -318,15 +318,12 @@ err_free_dev:
 
 static void wwan_hwsim_dev_del(struct wwan_hwsim_dev *dev)
 {
+	struct wwan_hwsim_port *port;
+
 	debugfs_remove(dev->debugfs_portcreate);	/* Avoid new ports */
 
 	spin_lock(&dev->ports_lock);
-	while (!list_empty(&dev->ports)) {
-		struct wwan_hwsim_port *port;
-
-		port = list_first_entry(&dev->ports, struct wwan_hwsim_port,
-					list);
-		list_del_init(&port->list);
+	list_for_each_entry_del_init(port, &dev->ports, list) {
 		spin_unlock(&dev->ports_lock);
 		wwan_hwsim_port_del(port);
 		spin_lock(&dev->ports_lock);
@@ -489,10 +486,7 @@ static void wwan_hwsim_free_devs(void)
 	struct wwan_hwsim_dev *dev;
 
 	spin_lock(&wwan_hwsim_devs_lock);
-	while (!list_empty(&wwan_hwsim_devs)) {
-		dev = list_first_entry(&wwan_hwsim_devs, struct wwan_hwsim_dev,
-				       list);
-		list_del_init(&dev->list);
+	list_for_each_entry_del_init(dev, &wwan_hwsim_devs, list) {
 		spin_unlock(&wwan_hwsim_devs_lock);
 		wwan_hwsim_dev_del(dev);
 		spin_lock(&wwan_hwsim_devs_lock);

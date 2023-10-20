@@ -1770,11 +1770,8 @@ EXPORT_SYMBOL_GPL(xprt_free_slot);
 static void xprt_free_all_slots(struct rpc_xprt *xprt)
 {
 	struct rpc_rqst *req;
-	while (!list_empty(&xprt->free)) {
-		req = list_first_entry(&xprt->free, struct rpc_rqst, rq_list);
-		list_del(&req->rq_list);
+	list_for_each_entry_del(req, &xprt->free, rq_list)
 		kfree(req);
-	}
 }
 
 static DEFINE_IDA(rpc_xprt_ids);

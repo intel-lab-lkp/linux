@@ -277,10 +277,7 @@ static void hmi_event_handler(struct work_struct *work)
 	int unrecoverable = 0;
 
 	spin_lock_irqsave(&opal_hmi_evt_lock, flags);
-	while (!list_empty(&opal_hmi_evt_list)) {
-		msg_node = list_entry(opal_hmi_evt_list.next,
-					   struct OpalHmiEvtNode, list);
-		list_del(&msg_node->list);
+	list_for_each_entry_del(msg_node, &opal_hmi_evt_list, list) {
 		spin_unlock_irqrestore(&opal_hmi_evt_lock, flags);
 
 		hmi_evt = (struct OpalHMIEvent *) &msg_node->hmi_evt;

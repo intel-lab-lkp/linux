@@ -1055,12 +1055,9 @@ static int nilfs_segctor_apply_buffers(struct nilfs_sc_info *sci,
 	}
 
  dispose_buffers:
-	while (!list_empty(listp)) {
-		bh = list_first_entry(listp, struct buffer_head,
-				      b_assoc_buffers);
-		list_del_init(&bh->b_assoc_buffers);
+	list_for_each_entry_del_init(bh, listp, b_assoc_buffers)
 		brelse(bh);
-	}
+
 	return err;
 }
 

@@ -808,6 +808,7 @@ int afs_drop_inode(struct inode *inode)
  */
 void afs_evict_inode(struct inode *inode)
 {
+	struct afs_wb_key *wbk;
 	struct afs_vnode_cache_aux aux;
 	struct afs_vnode *vnode = AFS_FS_I(inode);
 
@@ -826,12 +827,8 @@ void afs_evict_inode(struct inode *inode)
 	fscache_clear_inode_writeback(afs_vnode_cache(vnode), inode, &aux);
 	clear_inode(inode);
 
-	while (!list_empty(&vnode->wb_keys)) {
-		struct afs_wb_key *wbk = list_entry(vnode->wb_keys.next,
-						    struct afs_wb_key, vnode_link);
-		list_del(&wbk->vnode_link);
+	list_for_each_entry_del(wbk, &vnode->wb_keys, vnode_link)
 		afs_put_wb_key(wbk);
-	}
 
 	fscache_relinquish_cookie(afs_vnode_cache(vnode),
 				  test_bit(AFS_VNODE_DELETED, &vnode->flags));

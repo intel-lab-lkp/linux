@@ -300,10 +300,8 @@ void pt_core_destroy(struct pt_device *pt)
 			  cmd_q->qbase_dma);
 
 	/* Flush the cmd queue */
-	while (!list_empty(&pt->cmd)) {
+	list_for_each_entry_del(cmd, &pt->cmd, entry) {
 		/* Invoke the callback directly with an error code */
-		cmd = list_first_entry(&pt->cmd, struct pt_cmd, entry);
-		list_del(&cmd->entry);
 		cmd->pt_cmd_callback(cmd->data, -ENODEV);
 	}
 }

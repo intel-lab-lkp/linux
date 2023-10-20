@@ -3442,12 +3442,8 @@ static int rockchip_pinctrl_remove(struct platform_device *pdev)
 		bank = &info->ctrl->pin_banks[i];
 
 		mutex_lock(&bank->deferred_lock);
-		while (!list_empty(&bank->deferred_pins)) {
-			cfg = list_first_entry(&bank->deferred_pins,
-					       struct rockchip_pin_deferred, head);
-			list_del(&cfg->head);
+		list_for_each_entry_del(cfg, &bank->deferred_pins, head)
 			kfree(cfg);
-		}
 		mutex_unlock(&bank->deferred_lock);
 	}
 

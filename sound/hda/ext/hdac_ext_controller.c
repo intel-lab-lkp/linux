@@ -117,11 +117,8 @@ void snd_hdac_ext_link_free_all(struct hdac_bus *bus)
 {
 	struct hdac_ext_link *hlink;
 
-	while (!list_empty(&bus->hlink_list)) {
-		hlink = list_first_entry(&bus->hlink_list, struct hdac_ext_link, list);
-		list_del(&hlink->list);
+	list_for_each_entry_del(hlink, &bus->hlink_list, list)
 		kfree(hlink);
-	}
 }
 EXPORT_SYMBOL_GPL(snd_hdac_ext_link_free_all);
 

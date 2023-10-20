@@ -395,11 +395,8 @@ nfsd_file_dispose_list(struct list_head *dispose)
 {
 	struct nfsd_file *nf;
 
-	while (!list_empty(dispose)) {
-		nf = list_first_entry(dispose, struct nfsd_file, nf_lru);
-		list_del_init(&nf->nf_lru);
+	list_for_each_entry_del_init(nf, dispose, nf_lru)
 		nfsd_file_free(nf);
-	}
 }
 
 /**
@@ -630,11 +627,8 @@ nfsd_file_close_inode_sync(struct inode *inode)
 	trace_nfsd_file_close(inode);
 
 	nfsd_file_queue_for_close(inode, &dispose);
-	while (!list_empty(&dispose)) {
-		nf = list_first_entry(&dispose, struct nfsd_file, nf_lru);
-		list_del_init(&nf->nf_lru);
+	list_for_each_entry_del_init(nf, &dispose, nf_lru)
 		nfsd_file_free(nf);
-	}
 	flush_delayed_fput();
 }
 

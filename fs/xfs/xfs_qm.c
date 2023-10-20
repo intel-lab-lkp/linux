@@ -504,6 +504,7 @@ xfs_qm_shrink_scan(
 	struct shrinker		*shrink,
 	struct shrink_control	*sc)
 {
+	struct xfs_dquot *dqp;
 	struct xfs_quotainfo	*qi = container_of(shrink,
 					struct xfs_quotainfo, qi_shrinker);
 	struct xfs_qm_isolate	isol;
@@ -523,13 +524,8 @@ xfs_qm_shrink_scan(
 	if (error)
 		xfs_warn(NULL, "%s: dquot reclaim failed", __func__);
 
-	while (!list_empty(&isol.dispose)) {
-		struct xfs_dquot	*dqp;
-
-		dqp = list_first_entry(&isol.dispose, struct xfs_dquot, q_lru);
-		list_del_init(&dqp->q_lru);
+	list_for_each_entry_del_init(dqp, &isol.dispose, q_lru)
 		xfs_qm_dqfree_one(dqp);
-	}
 
 	return freed;
 }

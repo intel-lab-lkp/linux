@@ -1941,10 +1941,7 @@ static void loop_process_work(struct loop_worker *worker,
 
 	current->flags |= PF_LOCAL_THROTTLE | PF_MEMALLOC_NOIO;
 	spin_lock_irq(&lo->lo_work_lock);
-	while (!list_empty(cmd_list)) {
-		cmd = container_of(
-			cmd_list->next, struct loop_cmd, list_entry);
-		list_del(cmd_list->next);
+	list_for_each_entry_del(cmd, cmd_list, list_entry) {
 		spin_unlock_irq(&lo->lo_work_lock);
 
 		loop_handle_cmd(cmd);

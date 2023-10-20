@@ -495,18 +495,13 @@ struct iss_buffer *omap4iss_video_buffer_next(struct iss_video *video)
  */
 void omap4iss_video_cancel_stream(struct iss_video *video)
 {
+	struct iss_buffer *buf;
 	unsigned long flags;
 
 	spin_lock_irqsave(&video->qlock, flags);
 
-	while (!list_empty(&video->dmaqueue)) {
-		struct iss_buffer *buf;
-
-		buf = list_first_entry(&video->dmaqueue, struct iss_buffer,
-				       list);
-		list_del(&buf->list);
+	list_for_each_entry_del(buf, &video->dmaqueue, list)
 		vb2_buffer_done(&buf->vb.vb2_buf, VB2_BUF_STATE_ERROR);
-	}
 
 	vb2_queue_error(video->queue);
 	video->error = true;

@@ -352,6 +352,7 @@ static void invoke_padata_reorder(struct work_struct *work)
 
 static void padata_serial_worker(struct work_struct *serial_work)
 {
+	struct padata_priv *padata;
 	struct padata_serial_queue *squeue;
 	struct parallel_data *pd;
 	LIST_HEAD(local_list);
@@ -367,14 +368,7 @@ static void padata_serial_worker(struct work_struct *serial_work)
 
 	cnt = 0;
 
-	while (!list_empty(&local_list)) {
-		struct padata_priv *padata;
-
-		padata = list_entry(local_list.next,
-				    struct padata_priv, list);
-
-		list_del_init(&padata->list);
-
+	list_for_each_entry_del_init(padata, &local_list, list) {
 		padata->serial(padata);
 		cnt++;
 	}

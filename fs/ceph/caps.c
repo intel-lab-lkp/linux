@@ -137,12 +137,8 @@ void ceph_caps_finalize(struct ceph_mds_client *mdsc)
 	struct ceph_cap *cap;
 
 	spin_lock(&mdsc->caps_list_lock);
-	while (!list_empty(&mdsc->caps_list)) {
-		cap = list_first_entry(&mdsc->caps_list,
-				       struct ceph_cap, caps_item);
-		list_del(&cap->caps_item);
+	list_for_each_entry_del(cap, &mdsc->caps_list, caps_item)
 		kmem_cache_free(ceph_cap_cachep, cap);
-	}
 	mdsc->caps_total_count = 0;
 	mdsc->caps_avail_count = 0;
 	mdsc->caps_use_count = 0;
@@ -3813,10 +3809,7 @@ static void handle_cap_flush_ack(struct inode *inode, u64 flush_tid,
 out:
 	spin_unlock(&ci->i_ceph_lock);
 
-	while (!list_empty(&to_remove)) {
-		cf = list_first_entry(&to_remove,
-				      struct ceph_cap_flush, i_list);
-		list_del_init(&cf->i_list);
+	list_for_each_entry_del_init(cf, &to_remove, i_list) {
 		if (!cf->is_capsnap)
 			ceph_free_cap_flush(cf);
 	}
@@ -4882,11 +4875,9 @@ int ceph_purge_inode_cap(struct inode *inode, struct ceph_cap *cap, bool *invali
 		spin_lock(&mdsc->cap_dirty_lock);
 
 		/* trash all of the cap flushes for this inode */
-		while (!list_empty(&ci->i_cap_flush_list)) {
-			cf = list_first_entry(&ci->i_cap_flush_list,
-					      struct ceph_cap_flush, i_list);
+		list_for_each_entry_del_init(cf, &ci->i_cap_flush_list,
+					     i_list) {
 			list_del_init(&cf->g_list);
-			list_del_init(&cf->i_list);
 			if (!cf->is_capsnap)
 				ceph_free_cap_flush(cf);
 		}

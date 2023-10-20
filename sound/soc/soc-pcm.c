@@ -1317,10 +1317,7 @@ void dpcm_be_disconnect(struct snd_soc_pcm_runtime *fe, int stream)
 	}
 	snd_soc_dpcm_stream_unlock_irq(fe, stream);
 
-	while (!list_empty(&deleted_dpcms)) {
-		dpcm = list_first_entry(&deleted_dpcms, struct snd_soc_dpcm,
-					list_fe);
-		list_del(&dpcm->list_fe);
+	list_for_each_entry_del(dpcm, &deleted_dpcms, list_fe) {
 		dpcm_remove_debugfs_state(dpcm);
 		kfree(dpcm);
 	}

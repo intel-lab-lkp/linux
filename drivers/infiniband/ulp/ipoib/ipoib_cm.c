@@ -1351,9 +1351,7 @@ static void ipoib_cm_tx_start(struct work_struct *work)
 	netif_tx_lock_bh(dev);
 	spin_lock_irqsave(&priv->lock, flags);
 
-	while (!list_empty(&priv->cm.start_list)) {
-		p = list_entry(priv->cm.start_list.next, typeof(*p), list);
-		list_del_init(&p->list);
+	list_for_each_entry_del_init(p, &priv->cm.start_list, list) {
 		neigh = p->neigh;
 
 		qpn = IPOIB_QPN(neigh->daddr);
@@ -1405,9 +1403,7 @@ static void ipoib_cm_tx_reap(struct work_struct *work)
 	netif_tx_lock_bh(dev);
 	spin_lock_irqsave(&priv->lock, flags);
 
-	while (!list_empty(&priv->cm.reap_list)) {
-		p = list_entry(priv->cm.reap_list.next, typeof(*p), list);
-		list_del_init(&p->list);
+	list_for_each_entry_del_init(p, &priv->cm.reap_list, list) {
 		spin_unlock_irqrestore(&priv->lock, flags);
 		netif_tx_unlock_bh(dev);
 		ipoib_cm_tx_destroy(p);

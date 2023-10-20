@@ -215,9 +215,7 @@ void dm_stats_cleanup(struct dm_stats *stats)
 	struct dm_stat *s;
 	struct dm_stat_shared *shared;
 
-	while (!list_empty(&stats->list)) {
-		s = container_of(stats->list.next, struct dm_stat, list_entry);
-		list_del(&s->list_entry);
+	list_for_each_entry_del(s, &stats->list, list_entry) {
 		for (ni = 0; ni < s->n_entries; ni++) {
 			shared = &s->stat_shared[ni];
 			if (WARN_ON(dm_stat_in_flight(shared))) {

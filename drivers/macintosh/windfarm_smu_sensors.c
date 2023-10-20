@@ -463,11 +463,8 @@ static void __exit smu_sensors_exit(void)
 		wf_unregister_sensor(&smu_cpu_power->sens);
 
 	/* dispose of basic sensors */
-	while (!list_empty(&smu_ads)) {
-		ads = list_entry(smu_ads.next, struct smu_ad_sensor, link);
-		list_del(&ads->link);
+	list_for_each_entry_del(ads, &smu_ads, link)
 		wf_unregister_sensor(&ads->sens);
-	}
 }
 
 

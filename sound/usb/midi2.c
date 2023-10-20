@@ -692,12 +692,8 @@ static void free_all_midi2_umps(struct snd_usb_midi2_interface *umidi)
 {
 	struct snd_usb_midi2_ump *rmidi;
 
-	while (!list_empty(&umidi->rawmidi_list)) {
-		rmidi = list_first_entry(&umidi->rawmidi_list,
-					 struct snd_usb_midi2_ump, list);
-		list_del(&rmidi->list);
+	list_for_each_entry_del(rmidi, &umidi->rawmidi_list, list)
 		kfree(rmidi);
-	}
 }
 
 static int create_midi2_ump(struct snd_usb_midi2_interface *umidi,

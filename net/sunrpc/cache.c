@@ -746,11 +746,8 @@ static void cache_revisit_request(struct cache_head *item)
 
 	spin_unlock(&cache_defer_lock);
 
-	while (!list_empty(&pending)) {
-		dreq = list_entry(pending.next, struct cache_deferred_req, recent);
-		list_del_init(&dreq->recent);
+	list_for_each_entry_del_init(dreq, &pending, recent)
 		dreq->revisit(dreq, 0);
-	}
 }
 
 void cache_clean_deferred(void *owner)
@@ -770,11 +767,8 @@ void cache_clean_deferred(void *owner)
 	}
 	spin_unlock(&cache_defer_lock);
 
-	while (!list_empty(&pending)) {
-		dreq = list_entry(pending.next, struct cache_deferred_req, recent);
-		list_del_init(&dreq->recent);
+	list_for_each_entry_del_init(dreq, &pending, recent)
 		dreq->revisit(dreq, 1);
-	}
 }
 
 /*

@@ -2564,9 +2564,7 @@ static void __exit nbd_cleanup(void)
 	idr_for_each(&nbd_index_idr, &nbd_exit_cb, &del_list);
 	mutex_unlock(&nbd_index_mutex);
 
-	while (!list_empty(&del_list)) {
-		nbd = list_first_entry(&del_list, struct nbd_device, list);
-		list_del_init(&nbd->list);
+	list_for_each_entry_del_init(nbd, &del_list, list) {
 		if (refcount_read(&nbd->config_refs))
 			pr_err("possibly leaking nbd_config (ref %d)\n",
 					refcount_read(&nbd->config_refs));

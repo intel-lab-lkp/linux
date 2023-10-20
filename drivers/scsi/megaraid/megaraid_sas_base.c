@@ -2780,10 +2780,7 @@ static int megasas_wait_for_outstanding(struct megasas_instance *instance)
 		}
 
 		reset_index = 0;
-		while (!list_empty(&clist_local)) {
-			reset_cmd = list_entry((&clist_local)->next,
-						struct megasas_cmd, list);
-			list_del_init(&reset_cmd->list);
+		list_for_each_entry_del_init(reset_cmd, &clist_local, list) {
 			if (reset_cmd->scmd) {
 				reset_cmd->scmd->result = DID_REQUEUE << 16;
 				dev_notice(&instance->pdev->dev, "%d:%p reset [%02x]\n",
@@ -3822,11 +3819,7 @@ megasas_issue_pending_cmds_again(struct megasas_instance *instance)
 	list_splice_init(&instance->internal_reset_pending_q, &clist_local);
 	spin_unlock_irqrestore(&instance->hba_lock, flags);
 
-	while (!list_empty(&clist_local)) {
-		cmd = list_entry((&clist_local)->next,
-					struct megasas_cmd, list);
-		list_del_init(&cmd->list);
-
+	list_for_each_entry_del_init(cmd, &clist_local, list) {
 		if (cmd->sync_cmd || cmd->scmd) {
 			dev_notice(&instance->pdev->dev, "command %p, %p:%d"
 				"detected to be pending while HBA reset\n",

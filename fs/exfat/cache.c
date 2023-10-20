@@ -195,10 +195,7 @@ static void __exfat_cache_inval_inode(struct inode *inode)
 	struct exfat_inode_info *ei = EXFAT_I(inode);
 	struct exfat_cache *cache;
 
-	while (!list_empty(&ei->cache_lru)) {
-		cache = list_entry(ei->cache_lru.next,
-				   struct exfat_cache, cache_list);
-		list_del_init(&cache->cache_list);
+	list_for_each_entry_del_init(cache, &ei->cache_lru, cache_list) {
 		ei->nr_caches--;
 		exfat_cache_free(cache);
 	}

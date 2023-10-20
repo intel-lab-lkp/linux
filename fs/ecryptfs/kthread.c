@@ -54,11 +54,8 @@ static int ecryptfs_threadfn(void *ignored)
 			mutex_unlock(&ecryptfs_kthread_ctl.mux);
 			goto out;
 		}
-		while (!list_empty(&ecryptfs_kthread_ctl.req_list)) {
-			req = list_first_entry(&ecryptfs_kthread_ctl.req_list,
-					       struct ecryptfs_open_req,
-					       kthread_ctl_list);
-			list_del(&req->kthread_ctl_list);
+		list_for_each_entry_del(req, &ecryptfs_kthread_ctl.req_list,
+					kthread_ctl_list) {
 			*req->lower_file = dentry_open(&req->path,
 				(O_RDWR | O_LARGEFILE), current_cred());
 			complete(&req->done);

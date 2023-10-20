@@ -9001,12 +9001,8 @@ static void attach_tasks(struct lb_env *env)
 	rq_lock(env->dst_rq, &rf);
 	update_rq_clock(env->dst_rq);
 
-	while (!list_empty(tasks)) {
-		p = list_first_entry(tasks, struct task_struct, se.group_node);
-		list_del_init(&p->se.group_node);
-
+	list_for_each_entry_del_init(p, tasks, se.group_node)
 		attach_task(env->dst_rq, p);
-	}
 
 	rq_unlock(env->dst_rq, &rf);
 }

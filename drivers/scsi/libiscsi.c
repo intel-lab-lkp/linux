@@ -1620,10 +1620,7 @@ static int iscsi_data_xmit(struct iscsi_conn *conn)
 	 * overflow us with nop-ins
 	 */
 check_mgmt:
-	while (!list_empty(&conn->mgmtqueue)) {
-		task = list_entry(conn->mgmtqueue.next, struct iscsi_task,
-				  running);
-		list_del_init(&task->running);
+	list_for_each_entry_del_init(task, &conn->mgmtqueue, running) {
 		if (iscsi_prep_mgmt_task(conn, task)) {
 			/* regular RX path uses back_lock */
 			spin_lock_bh(&conn->session->back_lock);
@@ -1659,10 +1656,7 @@ check_requeue:
 	}
 
 	/* process pending command queue */
-	while (!list_empty(&conn->cmdqueue)) {
-		task = list_entry(conn->cmdqueue.next, struct iscsi_task,
-				  running);
-		list_del_init(&task->running);
+	list_for_each_entry_del_init(task, &conn->cmdqueue, running) {
 		if (conn->session->state == ISCSI_STATE_LOGGING_OUT) {
 			fail_scsi_task(task, DID_IMM_RETRY);
 			continue;

@@ -644,7 +644,6 @@ static int mon_text_release(struct inode *inode, struct file *file)
 	struct mon_reader_text *rp = file->private_data;
 	struct mon_bus *mbus;
 	/* unsigned long flags; */
-	struct list_head *p;
 	struct mon_event_text *ep;
 
 	mutex_lock(&mon_lock);
@@ -665,10 +664,7 @@ static int mon_text_release(struct inode *inode, struct file *file)
 	 * So, we better not touch mbus.
 	 */
 	/* spin_lock_irqsave(&mbus->lock, flags); */
-	while (!list_empty(&rp->e_list)) {
-		p = rp->e_list.next;
-		ep = list_entry(p, struct mon_event_text, e_link);
-		list_del(p);
+	list_for_each_entry_del(ep, &rp->e_list, e_link) {
 		--rp->nevents;
 		kmem_cache_free(rp->e_slab, ep);
 	}

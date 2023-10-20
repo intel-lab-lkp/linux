@@ -1038,10 +1038,7 @@ void cfg80211_process_wdev_events(struct wireless_dev *wdev)
 	unsigned long flags;
 
 	spin_lock_irqsave(&wdev->event_lock, flags);
-	while (!list_empty(&wdev->event_list)) {
-		ev = list_first_entry(&wdev->event_list,
-				      struct cfg80211_event, list);
-		list_del(&ev->list);
+	list_for_each_entry_del(ev, &wdev->event_list, list) {
 		spin_unlock_irqrestore(&wdev->event_lock, flags);
 
 		wdev_lock(wdev);

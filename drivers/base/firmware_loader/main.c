@@ -1439,10 +1439,7 @@ static void __device_uncache_fw_images(void)
 	struct fw_cache_entry *fce;
 
 	spin_lock(&fwc->name_lock);
-	while (!list_empty(&fwc->fw_names)) {
-		fce = list_entry(fwc->fw_names.next,
-				struct fw_cache_entry, list);
-		list_del(&fce->list);
+	list_for_each_entry_del(fce, &fwc->fw_names, list) {
 		spin_unlock(&fwc->name_lock);
 
 		uncache_firmware(fce->name);

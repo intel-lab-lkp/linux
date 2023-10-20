@@ -130,12 +130,7 @@ static void tw686x_memcpy_buf_refill(struct tw686x_video_channel *vc,
 {
 	struct tw686x_v4l2_buf *buf;
 
-	while (!list_empty(&vc->vidq_queued)) {
-
-		buf = list_first_entry(&vc->vidq_queued,
-			struct tw686x_v4l2_buf, list);
-		list_del(&buf->list);
-
+	list_for_each_entry_del(buf, &vc->vidq_queued, list) {
 		vc->curr_bufs[pb] = buf;
 		return;
 	}
@@ -227,12 +222,8 @@ static void tw686x_sg_buf_refill(struct tw686x_video_channel *vc,
 	struct tw686x_dev *dev = vc->dev;
 	struct tw686x_v4l2_buf *buf;
 
-	while (!list_empty(&vc->vidq_queued)) {
+	list_for_each_entry_del(buf, &vc->vidq_queued, list) {
 		unsigned int buf_len;
-
-		buf = list_first_entry(&vc->vidq_queued,
-			struct tw686x_v4l2_buf, list);
-		list_del(&buf->list);
 
 		buf_len = (vc->width * vc->height * vc->format->depth) >> 3;
 		if (tw686x_sg_desc_fill(vc->sg_descs[pb], buf, buf_len)) {
@@ -471,16 +462,11 @@ static void tw686x_buf_queue(struct vb2_buffer *vb)
 static void tw686x_clear_queue(struct tw686x_video_channel *vc,
 			       enum vb2_buffer_state state)
 {
+	struct tw686x_v4l2_buf *buf;
 	unsigned int pb;
 
-	while (!list_empty(&vc->vidq_queued)) {
-		struct tw686x_v4l2_buf *buf;
-
-		buf = list_first_entry(&vc->vidq_queued,
-			struct tw686x_v4l2_buf, list);
-		list_del(&buf->list);
+	list_for_each_entry_del(buf, &vc->vidq_queued, list)
 		vb2_buffer_done(&buf->vb.vb2_buf, state);
-	}
 
 	for (pb = 0; pb < 2; pb++) {
 		if (vc->curr_bufs[pb])

@@ -868,11 +868,8 @@ static void destroy_bud_list(struct ubifs_info *c)
 {
 	struct bud_entry *b;
 
-	while (!list_empty(&c->replay_buds)) {
-		b = list_entry(c->replay_buds.next, struct bud_entry, list);
-		list_del(&b->list);
+	list_for_each_entry_del(b, &c->replay_buds, list)
 		kfree(b);
-	}
 }
 
 /**

@@ -2417,6 +2417,7 @@ csio_scsi_free_ddp_bufs(struct csio_scsim *scm, struct csio_hw *hw)
 int
 csio_scsim_init(struct csio_scsim *scm, struct csio_hw *hw)
 {
+	struct csio_sm *tmp;
 	int i;
 	struct csio_ioreq *ioreq;
 	struct csio_dma_buf *dma_buf;
@@ -2477,12 +2478,7 @@ free_ioreq:
 	 * Free up existing allocations, since an error
 	 * from here means we are returning for good
 	 */
-	while (!list_empty(&scm->ioreq_freelist)) {
-		struct csio_sm *tmp;
-
-		tmp = list_first_entry(&scm->ioreq_freelist,
-				       struct csio_sm, sm_list);
-		list_del_init(&tmp->sm_list);
+	list_for_each_entry_del_init(tmp, &scm->ioreq_freelist, sm_list) {
 		ioreq = (struct csio_ioreq *)tmp;
 
 		dma_buf = &ioreq->dma_buf;
@@ -2505,15 +2501,11 @@ free_ioreq:
 void
 csio_scsim_exit(struct csio_scsim *scm)
 {
+	struct csio_sm *tmp;
 	struct csio_ioreq *ioreq;
 	struct csio_dma_buf *dma_buf;
 
-	while (!list_empty(&scm->ioreq_freelist)) {
-		struct csio_sm *tmp;
-
-		tmp = list_first_entry(&scm->ioreq_freelist,
-				       struct csio_sm, sm_list);
-		list_del_init(&tmp->sm_list);
+	list_for_each_entry_del_init(tmp, &scm->ioreq_freelist, sm_list) {
 		ioreq = (struct csio_ioreq *)tmp;
 
 		dma_buf = &ioreq->dma_buf;

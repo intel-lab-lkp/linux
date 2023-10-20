@@ -3798,10 +3798,7 @@ restart:
 	}
 
 process_local_list:
-	while (!list_empty(&local_disc_list)) {
-		rport = list_first_entry(&local_disc_list,
-					 struct nvme_fc_rport, disc_list);
-		list_del_init(&rport->disc_list);
+	list_for_each_entry_del_init(rport, &local_disc_list, disc_list) {
 		spin_unlock_irqrestore(&nvme_fc_lock, flags);
 
 		lport = rport->lport;

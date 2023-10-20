@@ -328,11 +328,8 @@ void rpcauth_destroy_credlist(struct list_head *head)
 {
 	struct rpc_cred *cred;
 
-	while (!list_empty(head)) {
-		cred = list_entry(head->next, struct rpc_cred, cr_lru);
-		list_del_init(&cred->cr_lru);
+	list_for_each_entry_del_init(cred, head, cr_lru)
 		put_rpccred(cred);
-	}
 }
 
 static void

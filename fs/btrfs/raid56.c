@@ -1580,11 +1580,7 @@ static void raid_unplug(struct blk_plug_cb *cb, bool from_schedule)
 
 	list_sort(NULL, &plug->rbio_list, plug_cmp);
 
-	while (!list_empty(&plug->rbio_list)) {
-		cur = list_entry(plug->rbio_list.next,
-				 struct btrfs_raid_bio, plug_list);
-		list_del_init(&cur->plug_list);
-
+	list_for_each_entry_del_init(cur, &plug->rbio_list, plug_list) {
 		if (rbio_is_full(cur)) {
 			/* We have a full stripe, queue it down. */
 			start_async_work(cur, rmw_rbio_work);

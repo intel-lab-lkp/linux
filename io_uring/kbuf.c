@@ -254,6 +254,7 @@ static int __io_remove_buffers(struct io_ring_ctx *ctx,
 
 void io_destroy_buffers(struct io_ring_ctx *ctx)
 {
+	struct page *page;
 	struct io_buffer_list *bl;
 	unsigned long index;
 	int i;
@@ -270,13 +271,8 @@ void io_destroy_buffers(struct io_ring_ctx *ctx)
 		kfree(bl);
 	}
 
-	while (!list_empty(&ctx->io_buffers_pages)) {
-		struct page *page;
-
-		page = list_first_entry(&ctx->io_buffers_pages, struct page, lru);
-		list_del_init(&page->lru);
+	list_for_each_entry_del_init(page, &ctx->io_buffers_pages, lru)
 		__free_page(page);
-	}
 }
 
 int io_remove_buffers_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)

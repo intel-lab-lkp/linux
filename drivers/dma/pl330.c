@@ -1716,10 +1716,7 @@ static int pl330_update(struct pl330_dmac *pl330)
 	}
 
 	/* Now that we are in no hurry, do the callbacks */
-	while (!list_empty(&pl330->req_done)) {
-		descdone = list_first_entry(&pl330->req_done,
-					    struct dma_pl330_desc, rqd);
-		list_del(&descdone->rqd);
+	list_for_each_entry_del(descdone, &pl330->req_done, rqd) {
 		spin_unlock_irqrestore(&pl330->lock, flags);
 		dma_pl330_rqcb(descdone, PL330_ERR_NONE);
 		spin_lock_irqsave(&pl330->lock, flags);

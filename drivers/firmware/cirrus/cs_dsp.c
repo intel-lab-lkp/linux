@@ -332,11 +332,9 @@ static struct cs_dsp_buf *cs_dsp_buf_alloc(const void *src, size_t len,
 
 static void cs_dsp_buf_free(struct list_head *list)
 {
-	while (!list_empty(list)) {
-		struct cs_dsp_buf *buf = list_first_entry(list,
-							  struct cs_dsp_buf,
-							  list);
-		list_del(&buf->list);
+	struct cs_dsp_buf *buf;
+
+	list_for_each_entry_del(buf, list, list) {
 		vfree(buf->buf);
 		kfree(buf);
 	}
@@ -1655,13 +1653,8 @@ static void cs_dsp_free_alg_regions(struct cs_dsp *dsp)
 {
 	struct cs_dsp_alg_region *alg_region;
 
-	while (!list_empty(&dsp->alg_regions)) {
-		alg_region = list_first_entry(&dsp->alg_regions,
-					      struct cs_dsp_alg_region,
-					      list);
-		list_del(&alg_region->list);
+	list_for_each_entry_del(alg_region, &dsp->alg_regions, list)
 		kfree(alg_region);
-	}
 }
 
 static void cs_dsp_parse_wmfw_id_header(struct cs_dsp *dsp,

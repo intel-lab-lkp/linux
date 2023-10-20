@@ -200,11 +200,8 @@ static void dt3155_stop_streaming(struct vb2_queue *q)
 		pd->curr_buf = NULL;
 	}
 
-	while (!list_empty(&pd->dmaq)) {
-		vb = list_first_entry(&pd->dmaq, typeof(*vb), done_entry);
-		list_del(&vb->done_entry);
+	list_for_each_entry_del(vb, &pd->dmaq, done_entry)
 		vb2_buffer_done(vb, VB2_BUF_STATE_ERROR);
-	}
 	spin_unlock_irq(&pd->lock);
 }
 

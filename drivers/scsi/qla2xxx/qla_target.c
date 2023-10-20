@@ -6320,6 +6320,7 @@ out_term:
 
 static void qlt_sess_work_fn(struct work_struct *work)
 {
+	struct qla_tgt_sess_work_param *prm;
 	struct qla_tgt *tgt = container_of(work, struct qla_tgt, sess_work);
 	struct scsi_qla_host *vha = tgt->vha;
 	unsigned long flags;
@@ -6327,17 +6328,12 @@ static void qlt_sess_work_fn(struct work_struct *work)
 	ql_dbg(ql_dbg_tgt_mgt, vha, 0xf000, "Sess work (tgt %p)", tgt);
 
 	spin_lock_irqsave(&tgt->sess_work_lock, flags);
-	while (!list_empty(&tgt->sess_works_list)) {
-		struct qla_tgt_sess_work_param *prm = list_entry(
-		    tgt->sess_works_list.next, typeof(*prm),
-		    sess_works_list_entry);
-
-		/*
-		 * This work can be scheduled on several CPUs at time, so we
-		 * must delete the entry to eliminate double processing
-		 */
-		list_del(&prm->sess_works_list_entry);
-
+	/*
+	 * This work can be scheduled on several CPUs at time, so we
+	 * must delete the entry to eliminate double processing
+	 */
+	list_for_each_entry_del(prm, &tgt->sess_works_list,
+				sess_works_list_entry) {
 		spin_unlock_irqrestore(&tgt->sess_work_lock, flags);
 
 		switch (prm->type) {

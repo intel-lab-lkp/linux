@@ -444,16 +444,12 @@ EXPORT_SYMBOL_GPL(devm_watchdog_register_device);
 
 static int __init watchdog_deferred_registration(void)
 {
+	struct watchdog_device *wdd;
+
 	mutex_lock(&wtd_deferred_reg_mutex);
 	wtd_deferred_reg_done = true;
-	while (!list_empty(&wtd_deferred_reg_list)) {
-		struct watchdog_device *wdd;
-
-		wdd = list_first_entry(&wtd_deferred_reg_list,
-				       struct watchdog_device, deferred);
-		list_del(&wdd->deferred);
+	list_for_each_entry_del(wdd, &wtd_deferred_reg_list, deferred)
 		__watchdog_register_device(wdd);
-	}
 	mutex_unlock(&wtd_deferred_reg_mutex);
 	return 0;
 }

@@ -437,14 +437,10 @@ static void isp_video_buffer_queue(struct vb2_buffer *buf)
 static void omap3isp_video_return_buffers(struct isp_video *video,
 					  enum vb2_buffer_state state)
 {
-	while (!list_empty(&video->dmaqueue)) {
-		struct isp_buffer *buf;
+	struct isp_buffer *buf;
 
-		buf = list_first_entry(&video->dmaqueue,
-				       struct isp_buffer, irqlist);
-		list_del(&buf->irqlist);
+	list_for_each_entry_del(buf, &video->dmaqueue, irqlist)
 		vb2_buffer_done(&buf->vb.vb2_buf, state);
-	}
 }
 
 static int isp_video_start_streaming(struct vb2_queue *queue,

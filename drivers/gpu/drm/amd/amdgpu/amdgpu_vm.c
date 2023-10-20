@@ -1331,11 +1331,7 @@ int amdgpu_vm_clear_freed(struct amdgpu_device *adev,
 	struct dma_fence *f = NULL;
 	int r;
 
-	while (!list_empty(&vm->freed)) {
-		mapping = list_first_entry(&vm->freed,
-			struct amdgpu_bo_va_mapping, list);
-		list_del(&mapping->list);
-
+	list_for_each_entry_del(mapping, &vm->freed, list) {
 		if (vm->pte_support_ats &&
 		    mapping->start < AMDGPU_GMC_HOLE_START)
 			init_pte_value = AMDGPU_PTE_DEFAULT_ATC;

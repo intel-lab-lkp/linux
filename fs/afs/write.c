@@ -985,11 +985,8 @@ void afs_prune_wb_keys(struct afs_vnode *vnode)
 
 	spin_unlock(&vnode->wb_lock);
 
-	while (!list_empty(&graveyard)) {
-		wbk = list_entry(graveyard.next, struct afs_wb_key, vnode_link);
-		list_del(&wbk->vnode_link);
+	list_for_each_entry_del(wbk, &graveyard, vnode_link)
 		afs_put_wb_key(wbk);
-	}
 }
 
 /*

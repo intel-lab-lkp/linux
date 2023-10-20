@@ -608,12 +608,8 @@ static void rds_send_remove_from_sock(struct list_head *messages, int status)
 	struct rds_sock *rs = NULL;
 	struct rds_message *rm;
 
-	while (!list_empty(messages)) {
+	list_for_each_entry_del_init(rm, messages, m_conn_item) {
 		int was_on_sock = 0;
-
-		rm = list_entry(messages->next, struct rds_message,
-				m_conn_item);
-		list_del_init(&rm->m_conn_item);
 
 		/*
 		 * If we see this flag cleared then we're *sure* that someone
@@ -788,9 +784,7 @@ void rds_send_drop_to(struct rds_sock *rs, struct sockaddr_in6 *dest)
 
 	rds_wake_sk_sleep(rs);
 
-	while (!list_empty(&list)) {
-		rm = list_entry(list.next, struct rds_message, m_sock_item);
-		list_del_init(&rm->m_sock_item);
+	list_for_each_entry_del_init(rm, &list, m_sock_item) {
 		rds_message_wait(rm);
 
 		/* just in case the code above skipped this message

@@ -171,11 +171,8 @@ xhci_dbc_free_requests(struct list_head *head)
 {
 	struct dbc_request	*req;
 
-	while (!list_empty(head)) {
-		req = list_entry(head->next, struct dbc_request, list_pool);
-		list_del(&req->list_pool);
+	list_for_each_entry_del(req, head, list_pool)
 		xhci_dbc_free_req(req);
-	}
 }
 
 static int dbc_tty_install(struct tty_driver *driver, struct tty_struct *tty)

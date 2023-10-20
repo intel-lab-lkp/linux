@@ -376,9 +376,7 @@ static void clear_memb_list(struct list_head *head,
 {
 	struct dlm_member *memb;
 
-	while (!list_empty(head)) {
-		memb = list_entry(head->next, struct dlm_member, list);
-		list_del(&memb->list);
+	list_for_each_entry_del(memb, head, list) {
 		if (after_del)
 			after_del(memb->nodeid);
 		kfree(memb);

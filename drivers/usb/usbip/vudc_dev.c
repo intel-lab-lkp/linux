@@ -74,10 +74,7 @@ static void nuke(struct vudc *udc, struct vep *ep)
 {
 	struct vrequest	*req;
 
-	while (!list_empty(&ep->req_queue)) {
-		req = list_first_entry(&ep->req_queue, struct vrequest,
-				       req_entry);
-		list_del_init(&req->req_entry);
+	list_for_each_entry_del_init(req, &ep->req_queue, req_entry) {
 		req->req.status = -ESHUTDOWN;
 
 		spin_unlock(&udc->lock);

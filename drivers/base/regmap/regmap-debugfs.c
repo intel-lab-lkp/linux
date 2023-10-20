@@ -68,13 +68,8 @@ static void regmap_debugfs_free_dump_cache(struct regmap *map)
 {
 	struct regmap_debugfs_off_cache *c;
 
-	while (!list_empty(&map->debugfs_off_cache)) {
-		c = list_first_entry(&map->debugfs_off_cache,
-				     struct regmap_debugfs_off_cache,
-				     list);
-		list_del(&c->list);
+	list_for_each_entry_del(c, &map->debugfs_off_cache, list)
 		kfree(c);
-	}
 }
 
 static bool regmap_printable(struct regmap *map, unsigned int reg)

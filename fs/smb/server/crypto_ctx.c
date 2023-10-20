@@ -240,13 +240,8 @@ void ksmbd_crypto_destroy(void)
 {
 	struct ksmbd_crypto_ctx *ctx;
 
-	while (!list_empty(&ctx_list.idle_ctx)) {
-		ctx = list_entry(ctx_list.idle_ctx.next,
-				 struct ksmbd_crypto_ctx,
-				 list);
-		list_del(&ctx->list);
+	list_for_each_entry_del(ctx, &ctx_list.idle_ctx, list)
 		ctx_free(ctx);
-	}
 }
 
 int ksmbd_crypto_create(void)

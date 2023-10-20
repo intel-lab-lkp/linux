@@ -1427,13 +1427,11 @@ static void __write_dirty_buffer(struct dm_buffer *b,
 
 static void __flush_write_list(struct list_head *write_list)
 {
+	struct dm_buffer *b;
 	struct blk_plug plug;
 
 	blk_start_plug(&plug);
-	while (!list_empty(write_list)) {
-		struct dm_buffer *b =
-			list_entry(write_list->next, struct dm_buffer, write_list);
-		list_del(&b->write_list);
+	list_for_each_entry_del(b, write_list, write_list) {
 		submit_io(b, REQ_OP_WRITE, write_endio);
 		cond_resched();
 	}

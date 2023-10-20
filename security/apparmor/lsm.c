@@ -1710,10 +1710,7 @@ static void destroy_buffers(void)
 	union aa_buffer *aa_buf;
 
 	spin_lock(&aa_buffers_lock);
-	while (!list_empty(&aa_global_buffers)) {
-		aa_buf = list_first_entry(&aa_global_buffers, union aa_buffer,
-					 list);
-		list_del(&aa_buf->list);
+	list_for_each_entry_del(aa_buf, &aa_global_buffers, list) {
 		spin_unlock(&aa_buffers_lock);
 		kfree(aa_buf);
 		spin_lock(&aa_buffers_lock);

@@ -904,10 +904,7 @@ bna_rx_mcast_delall(struct bna_rx *rx)
 	}
 
 	/* Schedule all entries in active_q for deletion */
-	while (!list_empty(&rxf->mcast_active_q)) {
-		mac = list_first_entry(&rxf->mcast_active_q,
-				       struct bna_mac, qe);
-		list_del(&mac->qe);
+	list_for_each_entry_del(mac, &rxf->mcast_active_q, qe) {
 		del_mac = bna_cam_mod_mac_get(bna_mcam_mod_del_q(rxf->rx->bna));
 		memcpy(del_mac, mac, sizeof(*del_mac));
 		list_add_tail(&del_mac->qe, &rxf->mcast_pending_del_q);
@@ -2490,9 +2487,7 @@ bna_rx_destroy(struct bna_rx *rx)
 
 	bna_rxf_uninit(&rx->rxf);
 
-	while (!list_empty(&rx->rxp_q)) {
-		rxp = list_first_entry(&rx->rxp_q, struct bna_rxp, qe);
-		list_del(&rxp->qe);
+	list_for_each_entry_del(rxp, &rx->rxp_q, qe) {
 		GET_RXQS(rxp, q0, q1);
 		if (rx->rcb_destroy_cbfn)
 			rx->rcb_destroy_cbfn(rx->bna->bnad, q0->rcb);

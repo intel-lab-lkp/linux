@@ -144,6 +144,8 @@ void btrfs_put_transaction(struct btrfs_transaction *transaction)
 {
 	WARN_ON(refcount_read(&transaction->use_count) == 0);
 	if (refcount_dec_and_test(&transaction->use_count)) {
+		struct btrfs_block_group *cache;
+
 		BUG_ON(!list_empty(&transaction->list));
 		WARN_ON(!RB_EMPTY_ROOT(
 				&transaction->delayed_refs.href_root.rb_root));
@@ -160,13 +162,8 @@ void btrfs_put_transaction(struct btrfs_transaction *transaction)
 		 * and calling btrfs_finish_extent_commit()), so we can not
 		 * discard the physical locations of the block groups.
 		 */
-		while (!list_empty(&transaction->deleted_bgs)) {
-			struct btrfs_block_group *cache;
-
-			cache = list_first_entry(&transaction->deleted_bgs,
-						 struct btrfs_block_group,
-						 bg_list);
-			list_del_init(&cache->bg_list);
+		list_for_each_entry_del_init(cache, &transaction->deleted_bgs,
+					     bg_list) {
 			btrfs_unfreeze_block_group(cache);
 			btrfs_put_block_group(cache);
 		}
@@ -203,10 +200,8 @@ static noinline void switch_commit_roots(struct btrfs_trans_handle *trans)
 
 	/* We can free old roots now. */
 	spin_lock(&cur_trans->dropped_roots_lock);
-	while (!list_empty(&cur_trans->dropped_roots)) {
-		root = list_first_entry(&cur_trans->dropped_roots,
-					struct btrfs_root, root_list);
-		list_del_init(&root->root_list);
+	list_for_each_entry_del_init(root, &cur_trans->dropped_roots,
+				     root_list) {
 		spin_unlock(&cur_trans->dropped_roots_lock);
 		btrfs_free_log(trans, root);
 		btrfs_drop_and_free_fs_root(fs_info, root);
@@ -1285,7 +1280,7 @@ static noinline int commit_cowonly_roots(struct btrfs_trans_handle *trans)
 	struct btrfs_fs_info *fs_info = trans->fs_info;
 	struct list_head *dirty_bgs = &trans->transaction->dirty_bgs;
 	struct list_head *io_bgs = &trans->transaction->io_bgs;
-	struct list_head *next;
+	struct btrfs_root *root;
 	struct extent_buffer *eb;
 	int ret;
 
@@ -1319,11 +1314,8 @@ static noinline int commit_cowonly_roots(struct btrfs_trans_handle *trans)
 		return ret;
 
 again:
-	while (!list_empty(&fs_info->dirty_cowonly_roots)) {
-		struct btrfs_root *root;
-		next = fs_info->dirty_cowonly_roots.next;
-		list_del_init(next);
-		root = list_entry(next, struct btrfs_root, dirty_list);
+	list_for_each_entry_del_init(root, &fs_info->dirty_cowonly_roots,
+				     dirty_list) {
 		clear_bit(BTRFS_ROOT_DIRTY, &root->state);
 
 		list_add_tail(&root->dirty_list,

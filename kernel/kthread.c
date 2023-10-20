@@ -729,18 +729,16 @@ int kthreadd(void *unused)
 	cgroup_init_kthreadd();
 
 	for (;;) {
+		struct kthread_create_info *create;
+
 		set_current_state(TASK_INTERRUPTIBLE);
 		if (list_empty(&kthread_create_list))
 			schedule();
 		__set_current_state(TASK_RUNNING);
 
 		spin_lock(&kthread_create_lock);
-		while (!list_empty(&kthread_create_list)) {
-			struct kthread_create_info *create;
-
-			create = list_entry(kthread_create_list.next,
-					    struct kthread_create_info, list);
-			list_del_init(&create->list);
+		list_for_each_entry_del_init(create, &kthread_create_list,
+					     list) {
 			spin_unlock(&kthread_create_lock);
 
 			create_kthread(create);

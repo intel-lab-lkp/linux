@@ -82,12 +82,9 @@ static int do_make_slave(struct mount *mnt)
 		master = mnt->mnt_master;
 		if (!master) {
 			struct list_head *p = &mnt->mnt_slave_list;
-			while (!list_empty(p)) {
-				slave_mnt = list_first_entry(p,
-						struct mount, mnt_slave);
-				list_del_init(&slave_mnt->mnt_slave);
+			list_for_each_entry_del_init(slave_mnt, p, mnt_slave)
 				slave_mnt->mnt_master = NULL;
-			}
+
 			return 0;
 		}
 	} else {
@@ -533,14 +530,12 @@ static void umount_list(struct list_head *to_umount,
 
 static void restore_mounts(struct list_head *to_restore)
 {
-	/* Restore mounts to a clean working state */
-	while (!list_empty(to_restore)) {
-		struct mount *mnt, *parent;
-		struct mountpoint *mp;
+	struct mount *mnt, *parent;
+	struct mountpoint *mp;
 
-		mnt = list_first_entry(to_restore, struct mount, mnt_umounting);
+	/* Restore mounts to a clean working state */
+	list_for_each_entry_del_init(mnt, to_restore, mnt_umounting) {
 		CLEAR_MNT_MARK(mnt);
-		list_del_init(&mnt->mnt_umounting);
 
 		/* Should this mount be reparented? */
 		mp = mnt->mnt_mp;
@@ -556,10 +551,9 @@ static void restore_mounts(struct list_head *to_restore)
 
 static void cleanup_umount_visitations(struct list_head *visited)
 {
-	while (!list_empty(visited)) {
-		struct mount *mnt =
-			list_first_entry(visited, struct mount, mnt_umounting);
-		list_del_init(&mnt->mnt_umounting);
+	struct mount *mnt;
+
+	list_for_each_entry_del_init(mnt, visited, mnt_umounting) {
 	}
 }
 

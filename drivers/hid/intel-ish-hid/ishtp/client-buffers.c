@@ -101,20 +101,14 @@ void ishtp_cl_free_rx_ring(struct ishtp_cl *cl)
 
 	/* release allocated memory - pass over free_rb_list */
 	spin_lock_irqsave(&cl->free_list_spinlock, flags);
-	while (!list_empty(&cl->free_rb_list.list)) {
-		rb = list_entry(cl->free_rb_list.list.next, struct ishtp_cl_rb,
-				list);
-		list_del(&rb->list);
+	list_for_each_entry_del(rb, &cl->free_rb_list.list, list) {
 		kfree(rb->buffer.data);
 		kfree(rb);
 	}
 	spin_unlock_irqrestore(&cl->free_list_spinlock, flags);
 	/* release allocated memory - pass over in_process_list */
 	spin_lock_irqsave(&cl->in_process_spinlock, flags);
-	while (!list_empty(&cl->in_process_list.list)) {
-		rb = list_entry(cl->in_process_list.list.next,
-				struct ishtp_cl_rb, list);
-		list_del(&rb->list);
+	list_for_each_entry_del(rb, &cl->in_process_list.list, list) {
 		kfree(rb->buffer.data);
 		kfree(rb);
 	}
@@ -134,10 +128,7 @@ void ishtp_cl_free_tx_ring(struct ishtp_cl *cl)
 
 	spin_lock_irqsave(&cl->tx_free_list_spinlock, flags);
 	/* release allocated memory - pass over tx_free_list */
-	while (!list_empty(&cl->tx_free_list.list)) {
-		tx_buf = list_entry(cl->tx_free_list.list.next,
-				    struct ishtp_cl_tx_ring, list);
-		list_del(&tx_buf->list);
+	list_for_each_entry_del(tx_buf, &cl->tx_free_list.list, list) {
 		--cl->tx_ring_free_size;
 		kfree(tx_buf->send_buf.data);
 		kfree(tx_buf);
@@ -146,10 +137,7 @@ void ishtp_cl_free_tx_ring(struct ishtp_cl *cl)
 
 	spin_lock_irqsave(&cl->tx_list_spinlock, flags);
 	/* release allocated memory - pass over tx_list */
-	while (!list_empty(&cl->tx_list.list)) {
-		tx_buf = list_entry(cl->tx_list.list.next,
-				    struct ishtp_cl_tx_ring, list);
-		list_del(&tx_buf->list);
+	list_for_each_entry_del(tx_buf, &cl->tx_list.list, list) {
 		kfree(tx_buf->send_buf.data);
 		kfree(tx_buf);
 	}

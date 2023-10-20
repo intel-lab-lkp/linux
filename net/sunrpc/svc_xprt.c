@@ -987,10 +987,7 @@ void svc_age_temp_xprts_now(struct svc_serv *serv, struct sockaddr *server_addr)
 	}
 	spin_unlock_bh(&serv->sv_lock);
 
-	while (!list_empty(&to_be_closed)) {
-		le = to_be_closed.next;
-		list_del_init(le);
-		xprt = list_entry(le, struct svc_xprt, xpt_list);
+	list_for_each_entry_del_init(xprt, &to_be_closed, xpt_list) {
 		set_bit(XPT_CLOSE, &xprt->xpt_flags);
 		set_bit(XPT_KILL_TEMP, &xprt->xpt_flags);
 		dprintk("svc_age_temp_xprts_now: queuing xprt %p for closing\n",
@@ -1005,11 +1002,8 @@ static void call_xpt_users(struct svc_xprt *xprt)
 	struct svc_xpt_user *u;
 
 	spin_lock(&xprt->xpt_lock);
-	while (!list_empty(&xprt->xpt_users)) {
-		u = list_first_entry(&xprt->xpt_users, struct svc_xpt_user, list);
-		list_del_init(&u->list);
+	list_for_each_entry_del_init(u, &xprt->xpt_users, list)
 		u->callback(u);
-	}
 	spin_unlock(&xprt->xpt_lock);
 }
 

@@ -627,6 +627,7 @@ static int cec_open(struct inode *inode, struct file *filp)
 /* Override for the release function */
 static int cec_release(struct inode *inode, struct file *filp)
 {
+	struct cec_msg_entry *entry;
 	struct cec_devnode *devnode = cec_devnode_data(filp);
 	struct cec_adapter *adap = to_cec_adapter(devnode);
 	struct cec_fh *fh = filp->private_data;
@@ -664,22 +665,14 @@ static int cec_release(struct inode *inode, struct file *filp)
 		list_del_init(&data->xfer_list);
 	}
 	mutex_unlock(&adap->lock);
-	while (!list_empty(&fh->msgs)) {
-		struct cec_msg_entry *entry =
-			list_first_entry(&fh->msgs, struct cec_msg_entry, list);
-
-		list_del(&entry->list);
+	list_for_each_entry_del(entry, &fh->msgs, list)
 		kfree(entry);
-	}
-	for (i = CEC_NUM_CORE_EVENTS; i < CEC_NUM_EVENTS; i++) {
-		while (!list_empty(&fh->events[i])) {
-			struct cec_event_entry *entry =
-				list_first_entry(&fh->events[i],
-						 struct cec_event_entry, list);
 
-			list_del(&entry->list);
+	for (i = CEC_NUM_CORE_EVENTS; i < CEC_NUM_EVENTS; i++) {
+		struct cec_event_entry *entry;
+
+		list_for_each_entry_del(entry, &fh->events[i], list)
 			kfree(entry);
-		}
 	}
 	kfree(fh);
 

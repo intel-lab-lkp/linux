@@ -1552,13 +1552,7 @@ static void empty_done_q(struct ipu_image_convert_chan *chan)
 
 	spin_lock_irqsave(&chan->irqlock, flags);
 
-	while (!list_empty(&chan->done_q)) {
-		run = list_entry(chan->done_q.next,
-				 struct ipu_image_convert_run,
-				 list);
-
-		list_del(&run->list);
-
+	list_for_each_entry_del(run, &chan->done_q, list) {
 		dev_dbg(priv->ipu->dev,
 			"%s: task %u: completing ctx %p run %p with %d\n",
 			__func__, chan->ic_task, run->ctx, run, run->status);

@@ -37,15 +37,13 @@ static void ceph_pagelist_unmap_tail(struct ceph_pagelist *pl)
 
 void ceph_pagelist_release(struct ceph_pagelist *pl)
 {
+	struct page *page;
+
 	if (!refcount_dec_and_test(&pl->refcnt))
 		return;
 	ceph_pagelist_unmap_tail(pl);
-	while (!list_empty(&pl->head)) {
-		struct page *page = list_first_entry(&pl->head, struct page,
-						     lru);
-		list_del(&page->lru);
+	list_for_each_entry_del(page, &pl->head, lru)
 		__free_page(page);
-	}
 	ceph_pagelist_free_reserve(pl);
 	kfree(pl);
 }
@@ -120,10 +118,9 @@ EXPORT_SYMBOL(ceph_pagelist_reserve);
 /* Free any pages that have been preallocated. */
 int ceph_pagelist_free_reserve(struct ceph_pagelist *pl)
 {
-	while (!list_empty(&pl->free_list)) {
-		struct page *page = list_first_entry(&pl->free_list,
-						     struct page, lru);
-		list_del(&page->lru);
+	struct page *page;
+
+	list_for_each_entry_del(page, &pl->free_list, lru) {
 		__free_page(page);
 		--pl->num_pages_free;
 	}

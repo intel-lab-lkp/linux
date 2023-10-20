@@ -825,10 +825,7 @@ static void dev_forward_change(struct inet6_dev *idev)
 	}
 	read_unlock_bh(&idev->lock);
 
-	while (!list_empty(&tmp_addr_list)) {
-		ifa = list_first_entry(&tmp_addr_list,
-				       struct inet6_ifaddr, if_list_aux);
-		list_del(&ifa->if_list_aux);
+	list_for_each_entry_del(ifa, &tmp_addr_list, if_list_aux) {
 		if (idev->cnf.forwarding)
 			addrconf_join_anycast(ifa);
 		else
@@ -3858,10 +3855,7 @@ restart:
 		idev->if_flags &= ~(IF_RS_SENT|IF_RA_RCVD|IF_READY);
 
 	/* Step 3: clear tempaddr list */
-	while (!list_empty(&idev->tempaddr_list)) {
-		ifa = list_first_entry(&idev->tempaddr_list,
-				       struct inet6_ifaddr, tmp_list);
-		list_del(&ifa->tmp_list);
+	list_for_each_entry_del(ifa, &idev->tempaddr_list, tmp_list) {
 		write_unlock_bh(&idev->lock);
 		spin_lock_bh(&ifa->lock);
 
@@ -3878,13 +3872,9 @@ restart:
 		list_add_tail(&ifa->if_list_aux, &tmp_addr_list);
 	write_unlock_bh(&idev->lock);
 
-	while (!list_empty(&tmp_addr_list)) {
+	list_for_each_entry_del(ifa, &tmp_addr_list, if_list_aux) {
 		struct fib6_info *rt = NULL;
 		bool keep;
-
-		ifa = list_first_entry(&tmp_addr_list,
-				       struct inet6_ifaddr, if_list_aux);
-		list_del(&ifa->if_list_aux);
 
 		addrconf_del_dad_work(ifa);
 

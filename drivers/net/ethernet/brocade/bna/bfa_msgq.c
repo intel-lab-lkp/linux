@@ -57,12 +57,8 @@ cmdq_sm_stopped_entry(struct bfa_msgq_cmdq *cmdq)
 	cmdq->token = 0;
 	cmdq->offset = 0;
 	cmdq->bytes_to_copy = 0;
-	while (!list_empty(&cmdq->pending_q)) {
-		cmdq_ent = list_first_entry(&cmdq->pending_q,
-					    struct bfa_msgq_cmd_entry, qe);
-		list_del(&cmdq_ent->qe);
+	list_for_each_entry_del(cmdq_ent, &cmdq->pending_q, qe)
 		call_cmdq_ent_cbfn(cmdq_ent, BFA_STATUS_FAILED);
-	}
 }
 
 static void

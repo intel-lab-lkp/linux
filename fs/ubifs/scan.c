@@ -357,10 +357,8 @@ void ubifs_scan_destroy(struct ubifs_scan_leb *sleb)
 	struct list_head *head;
 
 	head = &sleb->nodes;
-	while (!list_empty(head)) {
-		node = list_entry(head->next, struct ubifs_scan_node, list);
-		list_del(&node->list);
+	list_for_each_entry_del(node, head, list)
 		kfree(node);
-	}
+
 	kfree(sleb);
 }

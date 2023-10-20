@@ -69,10 +69,7 @@ void ib_mr_pool_destroy(struct ib_qp *qp, struct list_head *list)
 	unsigned long flags;
 
 	spin_lock_irqsave(&qp->mr_lock, flags);
-	while (!list_empty(list)) {
-		mr = list_first_entry(list, struct ib_mr, qp_entry);
-		list_del(&mr->qp_entry);
-
+	list_for_each_entry_del(mr, list, qp_entry) {
 		spin_unlock_irqrestore(&qp->mr_lock, flags);
 		ib_dereg_mr(mr);
 		spin_lock_irqsave(&qp->mr_lock, flags);

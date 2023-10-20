@@ -1648,13 +1648,11 @@ static void umount_tree(struct mount *mnt, enum umount_tree_flags how)
 	if (how & UMOUNT_PROPAGATE)
 		propagate_umount(&tmp_list);
 
-	while (!list_empty(&tmp_list)) {
-		struct mnt_namespace *ns;
+	list_for_each_entry_del_init(p, &tmp_list, mnt_list) {
+		struct mnt_namespace *ns = p->mnt_ns;
 		bool disconnect;
-		p = list_first_entry(&tmp_list, struct mount, mnt_list);
+
 		list_del_init(&p->mnt_expire);
-		list_del_init(&p->mnt_list);
-		ns = p->mnt_ns;
 		if (ns) {
 			ns->mounts--;
 			__touch_mnt_namespace(ns);

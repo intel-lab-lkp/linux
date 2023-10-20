@@ -6296,13 +6296,10 @@ static void bfq_insert_requests(struct blk_mq_hw_ctx *hctx,
 				struct list_head *list,
 				blk_insert_t flags)
 {
-	while (!list_empty(list)) {
-		struct request *rq;
+	struct request *rq;
 
-		rq = list_first_entry(list, struct request, queuelist);
-		list_del_init(&rq->queuelist);
+	list_for_each_entry_del_init(rq, list, queuelist)
 		bfq_insert_request(hctx, rq, flags);
-	}
 }
 
 static void bfq_update_hw_tag(struct bfq_data *bfqd)

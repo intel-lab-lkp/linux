@@ -1048,16 +1048,12 @@ static void ccp5_destroy(struct ccp_device *ccp)
 	sp_free_ccp_irq(ccp->sp, ccp);
 
 	/* Flush the cmd and backlog queue */
-	while (!list_empty(&ccp->cmd)) {
+	list_for_each_entry_del(cmd, &ccp->cmd, entry) {
 		/* Invoke the callback directly with an error code */
-		cmd = list_first_entry(&ccp->cmd, struct ccp_cmd, entry);
-		list_del(&cmd->entry);
 		cmd->callback(cmd->data, -ENODEV);
 	}
-	while (!list_empty(&ccp->backlog)) {
+	list_for_each_entry_del(cmd, &ccp->backlog, entry) {
 		/* Invoke the callback directly with an error code */
-		cmd = list_first_entry(&ccp->backlog, struct ccp_cmd, entry);
-		list_del(&cmd->entry);
 		cmd->callback(cmd->data, -ENODEV);
 	}
 }

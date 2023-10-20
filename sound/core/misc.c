@@ -173,9 +173,7 @@ static void snd_fasync_work_fn(struct work_struct *work)
 	struct snd_fasync *fasync;
 
 	spin_lock_irq(&snd_fasync_lock);
-	while (!list_empty(&snd_fasync_list)) {
-		fasync = list_first_entry(&snd_fasync_list, struct snd_fasync, list);
-		list_del_init(&fasync->list);
+	list_for_each_entry_del_init(fasync, &snd_fasync_list, list) {
 		spin_unlock_irq(&snd_fasync_lock);
 		if (fasync->on)
 			kill_fasync(&fasync->fasync, fasync->signal, fasync->poll);

@@ -34,13 +34,9 @@ static unsigned int share_name_hash(const char *name)
 
 static void kill_share(struct ksmbd_share_config *share)
 {
-	while (!list_empty(&share->veto_list)) {
-		struct ksmbd_veto_pattern *p;
+	struct ksmbd_veto_pattern *p;
 
-		p = list_entry(share->veto_list.next,
-			       struct ksmbd_veto_pattern,
-			       list);
-		list_del(&p->list);
+	list_for_each_entry_del(p, &share->veto_list, list) {
 		kfree(p->pattern);
 		kfree(p);
 	}

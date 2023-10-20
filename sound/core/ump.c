@@ -74,10 +74,7 @@ static void snd_ump_endpoint_free(struct snd_rawmidi *rmidi)
 	struct snd_ump_endpoint *ump = rawmidi_to_ump(rmidi);
 	struct snd_ump_block *fb;
 
-	while (!list_empty(&ump->block_list)) {
-		fb = list_first_entry(&ump->block_list, struct snd_ump_block,
-				      list);
-		list_del(&fb->list);
+	list_for_each_entry_del(fb, &ump->block_list, list) {
 		if (fb->private_free)
 			fb->private_free(fb);
 		kfree(fb);

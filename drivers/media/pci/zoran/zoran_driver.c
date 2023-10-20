@@ -932,9 +932,7 @@ static void zr_vb2_stop_streaming(struct vb2_queue *vq)
 	}
 
 	spin_lock_irqsave(&zr->queued_bufs_lock, flags);
-	while (!list_empty(&zr->queued_bufs)) {
-		buf = list_entry(zr->queued_bufs.next, struct zr_buffer, queue);
-		list_del(&buf->queue);
+	list_for_each_entry_del(buf, &zr->queued_bufs, queue) {
 		vb2_buffer_done(&buf->vbuf.vb2_buf, VB2_BUF_STATE_ERROR);
 		zr->buf_in_reserve--;
 	}

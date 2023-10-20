@@ -2096,17 +2096,12 @@ void mpi3mr_flush_delayed_cmd_lists(struct mpi3mr_ioc *mrioc)
 	struct delayed_evt_ack_node *_evtack_node;
 
 	dprint_reset(mrioc, "flushing delayed dev_remove_hs commands\n");
-	while (!list_empty(&mrioc->delayed_rmhs_list)) {
-		_rmhs_node = list_entry(mrioc->delayed_rmhs_list.next,
-		    struct delayed_dev_rmhs_node, list);
-		list_del(&_rmhs_node->list);
+	list_for_each_entry_del(_rmhs_node, &mrioc->delayed_rmhs_list, list)
 		kfree(_rmhs_node);
-	}
+
 	dprint_reset(mrioc, "flushing delayed event ack commands\n");
-	while (!list_empty(&mrioc->delayed_evtack_cmds_list)) {
-		_evtack_node = list_entry(mrioc->delayed_evtack_cmds_list.next,
-		    struct delayed_evt_ack_node, list);
-		list_del(&_evtack_node->list);
+	list_for_each_entry_del(_evtack_node,
+				&mrioc->delayed_evtack_cmds_list, list) {
 		kfree(_evtack_node);
 	}
 }

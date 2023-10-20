@@ -338,10 +338,7 @@ static void core_tmr_drain_state_list(
 					   TMR_LUN_RESET_PRO : TMR_LUN_RESET,
 					   &drain_task_list);
 
-	while (!list_empty(&drain_task_list)) {
-		cmd = list_entry(drain_task_list.next, struct se_cmd, state_list);
-		list_del_init(&cmd->state_list);
-
+	list_for_each_entry_del_init(cmd, &drain_task_list, state_list) {
 		target_show_cmd("LUN_RESET: ", cmd);
 		pr_debug("LUN_RESET: ITT[0x%08llx] - %s pr_res_key: 0x%016Lx\n",
 			 cmd->tag, (preempt_and_abort_list) ? "preempt" : "",

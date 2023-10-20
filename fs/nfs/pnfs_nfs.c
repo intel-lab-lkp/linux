@@ -686,13 +686,8 @@ static void destroy_ds(struct nfs4_pnfs_ds *ds)
 
 	nfs_put_client(ds->ds_clp);
 
-	while (!list_empty(&ds->ds_addrs)) {
-		da = list_first_entry(&ds->ds_addrs,
-				      struct nfs4_pnfs_ds_addr,
-				      da_node);
-		list_del_init(&da->da_node);
+	list_for_each_entry_del_init(da, &ds->ds_addrs, da_node)
 		nfs4_pnfs_ds_addr_free(da);
-	}
 
 	kfree(ds->ds_remotestr);
 	kfree(ds);

@@ -298,11 +298,8 @@ static void return_buffers(struct vb2_queue *q, int state)
 		dq->curr = NULL;
 		vb2_buffer_done(&buf->vb.vb2_buf, state);
 	}
-	while (!list_empty(&dq->queue)) {
-		buf = list_entry(dq->queue.next, struct saa7146_buf, list);
-		list_del(&buf->list);
+	list_for_each_entry_del(buf, &dq->queue, list)
 		vb2_buffer_done(&buf->vb.vb2_buf, state);
-	}
 }
 
 static void vbi_stop(struct saa7146_dev *dev)
