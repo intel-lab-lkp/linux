@@ -392,16 +392,10 @@ bool time_travel_del_event(struct time_travel_event *e)
 	return true;
 }
 
-static void time_travel_update_time(unsigned long long next, bool idle)
+static void time_travel_update_to_event(struct time_travel_event *ne, bool idle)
 {
-	struct time_travel_event ne = {
-		.onstack = true,
-	};
 	struct time_travel_event *e;
 	bool finished = idle;
-
-	/* add it without a handler - we deal with that specifically below */
-	__time_travel_add_event(&ne, next);
 
 	do {
 		e = time_travel_first_event();
@@ -414,7 +408,7 @@ static void time_travel_update_time(unsigned long long next, bool idle)
 			BUG_ON(!time_travel_del_event(e));
 			BUG_ON(time_travel_time != e->time);
 
-			if (e == &ne) {
+			if (e == ne) {
 				finished = true;
 			} else {
 				if (e->onstack)
@@ -427,14 +421,38 @@ static void time_travel_update_time(unsigned long long next, bool idle)
 		e = time_travel_first_event();
 		if (e)
 			time_travel_ext_update_request(e->time);
-	} while (ne.pending && !finished);
+	} while (ne->pending && !finished);
 
-	time_travel_del_event(&ne);
+	time_travel_del_event(ne);
+}
+
+static void time_travel_update_time(unsigned long long next, bool idle)
+{
+	struct time_travel_event ne = {
+		.onstack = true,
+	};
+
+	__time_travel_add_event(&ne, next);
+	time_travel_update_to_event(&ne, idle);
+}
+
+static void time_travel_forward_time(unsigned long nsec, bool idle)
+{
+	struct time_travel_event ne = {
+		.onstack = true,
+	};
+	unsigned long flags;
+
+	local_irq_save(flags);
+	__time_travel_add_event(&ne, time_travel_time + nsec);
+	local_irq_restore(flags);
+
+	time_travel_update_to_event(&ne, idle);
 }
 
 void time_travel_ndelay(unsigned long nsec)
 {
-	time_travel_update_time(time_travel_time + nsec, false);
+	time_travel_forward_time(nsec, false);
 }
 EXPORT_SYMBOL(time_travel_ndelay);
 
@@ -569,6 +587,10 @@ static void time_travel_set_start(void)
 #define time_travel_ext_waiting 0
 
 static inline void time_travel_update_time(unsigned long long ns, bool retearly)
+{
+}
+
+static void time_travel_forward_time(unsigned long nsec, bool idle)
 {
 }
 
@@ -720,9 +742,7 @@ static u64 timer_read(struct clocksource *cs)
 		 */
 		if (!irqs_disabled() && !in_interrupt() && !in_softirq() &&
 		    !time_travel_ext_waiting)
-			time_travel_update_time(time_travel_time +
-						TIMER_MULTIPLIER,
-						false);
+			time_travel_forward_time(TIMER_MULTIPLIER, false);
 		return time_travel_time / TIMER_MULTIPLIER;
 	}
 
