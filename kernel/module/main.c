@@ -2830,7 +2830,7 @@ static int load_module(struct load_info *info, const char __user *uargs,
 {
 	struct module *mod;
 	bool module_allocated = false;
-	long err = 0;
+	long err;
 	char *after_dashes;
 
 	/*
