@@ -451,8 +451,8 @@ int devlink_nl_health_reporter_get_dumpit(struct sk_buff *skb,
 				 devlink_nl_health_reporter_get_dump_one);
 }
 
-int devlink_nl_cmd_health_reporter_set_doit(struct sk_buff *skb,
-					    struct genl_info *info)
+int devlink_nl_health_reporter_set_doit(struct sk_buff *skb,
+					struct genl_info *info)
 {
 	struct devlink *devlink = info->user_ptr[0];
 	struct devlink_health_reporter *reporter;
@@ -657,8 +657,8 @@ devlink_health_reporter_state_update(struct devlink_health_reporter *reporter,
 }
 EXPORT_SYMBOL_GPL(devlink_health_reporter_state_update);
 
-int devlink_nl_cmd_health_reporter_recover_doit(struct sk_buff *skb,
-						struct genl_info *info)
+int devlink_nl_health_reporter_recover_doit(struct sk_buff *skb,
+					    struct genl_info *info)
 {
 	struct devlink *devlink = info->user_ptr[0];
 	struct devlink_health_reporter *reporter;
@@ -1219,8 +1219,8 @@ nla_put_failure:
 	return err;
 }
 
-int devlink_nl_cmd_health_reporter_diagnose_doit(struct sk_buff *skb,
-						 struct genl_info *info)
+int devlink_nl_health_reporter_diagnose_doit(struct sk_buff *skb,
+					     struct genl_info *info)
 {
 	struct devlink *devlink = info->user_ptr[0];
 	struct devlink_health_reporter *reporter;
@@ -1278,8 +1278,8 @@ devlink_health_reporter_get_from_cb_lock(struct netlink_callback *cb)
 	return reporter;
 }
 
-int devlink_nl_cmd_health_reporter_dump_get_dumpit(struct sk_buff *skb,
-						   struct netlink_callback *cb)
+int devlink_nl_health_reporter_dump_get_dumpit(struct sk_buff *skb,
+					       struct netlink_callback *cb)
 {
 	struct devlink_nl_dump_state *state = devlink_dump_state(cb);
 	struct devlink_health_reporter *reporter;
@@ -1317,8 +1317,8 @@ unlock:
 	return err;
 }
 
-int devlink_nl_cmd_health_reporter_dump_clear_doit(struct sk_buff *skb,
-						   struct genl_info *info)
+int devlink_nl_health_reporter_dump_clear_doit(struct sk_buff *skb,
+					       struct genl_info *info)
 {
 	struct devlink *devlink = info->user_ptr[0];
 	struct devlink_health_reporter *reporter;
@@ -1334,8 +1334,8 @@ int devlink_nl_cmd_health_reporter_dump_clear_doit(struct sk_buff *skb,
 	return 0;
 }
 
-int devlink_nl_cmd_health_reporter_test_doit(struct sk_buff *skb,
-					     struct genl_info *info)
+int devlink_nl_health_reporter_test_doit(struct sk_buff *skb,
+					 struct genl_info *info)
 {
 	struct devlink *devlink = info->user_ptr[0];
 	struct devlink_health_reporter *reporter;
