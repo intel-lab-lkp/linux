@@ -149,6 +149,7 @@ int av7110_av_start_record(struct av7110 *av7110, int av,
 int av7110_av_start_play(struct av7110 *av7110, int av)
 {
 	int ret = 0;
+
 	dprintk(2, "av7110:%p, \n", av7110);
 
 	if (av7110->rec_mode)
@@ -183,6 +184,7 @@ int av7110_av_start_play(struct av7110 *av7110, int av)
 int av7110_av_stop(struct av7110 *av7110, int av)
 {
 	int ret = 0;
+
 	dprintk(2, "av7110:%p, \n", av7110);
 
 	if (!(av7110->playing & av) && !(av7110->rec_mode & av))
@@ -320,6 +322,7 @@ int av7110_set_volume(struct av7110 *av7110, unsigned int volleft,
 int av7110_set_vidmode(struct av7110 *av7110, enum av7110_video_mode mode)
 {
 	int ret;
+
 	dprintk(2, "av7110:%p, \n", av7110);
 
 	ret = av7110_fw_cmd(av7110, COMTYPE_ENCODER, LoadVidCode, 1, mode);
@@ -408,6 +411,7 @@ static inline long aux_ring_buffer_write(struct dvb_ringbuffer *rbuf,
 static void play_video_cb(u8 *buf, int count, void *priv)
 {
 	struct av7110 *av7110 = (struct av7110 *) priv;
+
 	dprintk(2, "av7110:%p, \n", av7110);
 
 	if ((buf[3] & 0xe0) == 0xe0) {
@@ -420,6 +424,7 @@ static void play_video_cb(u8 *buf, int count, void *priv)
 static void play_audio_cb(u8 *buf, int count, void *priv)
 {
 	struct av7110 *av7110 = (struct av7110 *) priv;
+
 	dprintk(2, "av7110:%p, \n", av7110);
 
 	aux_ring_buffer_write(&av7110->aout, buf, count);
@@ -471,6 +476,7 @@ static ssize_t dvb_play(struct av7110 *av7110, const char __user *buf,
 			unsigned long count, int nonblock, int type)
 {
 	unsigned long todo = count, n;
+
 	dprintk(2, "av7110:%p, \n", av7110);
 
 	if (!av7110->kbuf[type])
@@ -504,6 +510,7 @@ static ssize_t dvb_play_kernel(struct av7110 *av7110, const u8 *buf,
 			unsigned long count, int nonblock, int type)
 {
 	unsigned long todo = count, n;
+
 	dprintk(2, "av7110:%p, \n", av7110);
 
 	if (!av7110->kbuf[type])
@@ -534,6 +541,7 @@ static ssize_t dvb_aplay(struct av7110 *av7110, const char __user *buf,
 			 unsigned long count, int nonblock, int type)
 {
 	unsigned long todo = count, n;
+
 	dprintk(2, "av7110:%p, \n", av7110);
 
 	if (!av7110->kbuf[type])
@@ -1039,6 +1047,7 @@ static int play_iframe(struct av7110 *av7110, char __user *buf, unsigned int len
 	/* search in buf for instances of 00 00 01 b5 1? */
 	for (i = 0; i < len; i++) {
 		unsigned char c;
+
 		if (get_user(c, buf + i))
 			return -EFAULT;
 		if (match == 5) {
@@ -1223,6 +1232,7 @@ static int dvb_video_ioctl(struct file *file,
 	case VIDEO_SET_DISPLAY_FORMAT:
 	{
 		video_displayformat_t format = (video_displayformat_t) arg;
+
 		switch (format) {
 		case VIDEO_PAN_SCAN:
 			av7110->display_panscan = VID_PAN_SCAN_PREF;
@@ -1483,6 +1493,7 @@ static int dvb_audio_ioctl(struct file *file,
 	case AUDIO_SET_MIXER:
 	{
 		struct audio_mixer *amix = (struct audio_mixer *)parg;
+
 		ret = av7110_set_volume(av7110, amix->volume_left, amix->volume_right);
 		break;
 	}
