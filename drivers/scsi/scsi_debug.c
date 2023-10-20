@@ -1019,14 +1019,9 @@ static ssize_t sdebug_error_write(struct file *file, const char __user *ubuf,
 	struct sdebug_err_inject *inject;
 	struct scsi_device *sdev = (struct scsi_device *)file->f_inode->i_private;
 
-	buf = kmalloc(count, GFP_KERNEL);
-	if (!buf)
-		return -ENOMEM;
-
-	if (copy_from_user(buf, ubuf, count)) {
-		kfree(buf);
-		return -EFAULT;
-	}
+	buf = strndup_user(ubuf, count + 1);
+	if (IS_ERR(buf))
+		return PTR_ERR(buf);
 
 	if (buf[0] == '-')
 		return sdebug_err_remove(sdev, buf, count);
