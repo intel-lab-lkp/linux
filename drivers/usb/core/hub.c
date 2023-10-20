@@ -6233,7 +6233,7 @@ int usb_reset_device(struct usb_device *udev)
 						USB_INTERFACE_BOUND)
 					unbind = 1;
 				if (unbind)
-					usb_forced_unbind_intf(cintf);
+					usb_forced_unbind_intf(cintf, true);
 			}
 		}
 	}

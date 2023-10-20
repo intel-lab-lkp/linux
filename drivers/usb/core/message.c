@@ -1793,7 +1793,7 @@ void usb_deauthorize_interface(struct usb_interface *intf)
 		intf->authorized = 0;
 		device_unlock(dev);
 
-		usb_forced_unbind_intf(intf);
+		usb_forced_unbind_intf(intf, false);
 	}
 
 	device_unlock(dev->parent);

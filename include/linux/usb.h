@@ -212,6 +212,10 @@ enum usb_wireless_status {
  * @reset_ws: Used for scheduling resets from atomic context.
  * @resetting_device: USB core reset the device, so use alt setting 0 as
  *	current; needs bandwidth alloc after reset.
+ * @last_reset_rebind_jiffies: The jiffies count last time we did an
+ *	unbind/rebind as part of reset.
+ * @consecutive_reset_rebind_count: The number of times in a row we've done a
+ *	rebind for reset soon after doing one.
  *
  * USB device drivers attach to interfaces on a physical device.  Each
  * interface encapsulates a single high level function, such as feeding
@@ -268,6 +272,9 @@ struct usb_interface {
 	struct device dev;		/* interface specific device info */
 	struct device *usb_dev;
 	struct work_struct reset_ws;	/* for resets in atomic context */
+
+	unsigned long last_reset_rebind_jiffies;
+	unsigned int consecutive_reset_rebind_count;
 };
 
 #define to_usb_interface(__dev)	container_of_const(__dev, struct usb_interface, dev)

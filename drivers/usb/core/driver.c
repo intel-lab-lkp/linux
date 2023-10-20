@@ -1104,21 +1104,47 @@ void usb_deregister(struct usb_driver *driver)
 }
 EXPORT_SYMBOL_GPL(usb_deregister);
 
+#define CONSECUTIVE_RESET_JIFFIES	(HZ * 5)
+#define MAX_CONSECUTIVE_RESETS		3
+
 /* Forced unbinding of a USB interface driver, either because
  * it doesn't support pre_reset/post_reset/reset_resume or
  * because it doesn't support suspend/resume.
  *
  * The caller must hold @intf's device's lock, but not @intf's lock.
  */
-void usb_forced_unbind_intf(struct usb_interface *intf)
+void usb_forced_unbind_intf(struct usb_interface *intf, bool for_reset)
 {
 	struct usb_driver *driver = to_usb_driver(intf->dev.driver);
 
 	dev_dbg(&intf->dev, "forced unbind\n");
 	usb_driver_release_interface(driver, intf);
 
-	/* Mark the interface for later rebinding */
-	intf->needs_binding = 1;
+	/*
+	 * If we're doing an unbind/rebind for a device that doesn't support
+	 * reset then make an attempt to avoid looking the reset over and over.
+	 *
+	 * NOTE: with jiffies wraparound it is nominally possible that we could
+	 * falsely detect that two resets are consecutive if we get a reset at
+	 * just the right time. Given that 1000 HZ w/ 32-bit jiffies wraps in
+	 * ~50 days, this is highly unlikely. In any case, it should be nearly
+	 * impossible to hit this many times in a row.
+	 */
+	if (for_reset && time_in_range(jiffies, jiffies,
+				       intf->last_reset_rebind_jiffies +
+				       CONSECUTIVE_RESET_JIFFIES))
+		intf->consecutive_reset_rebind_count++;
+	else
+		intf->consecutive_reset_rebind_count = 0;
+
+	if (for_reset)
+		intf->last_reset_rebind_jiffies = jiffies;
+
+	if (intf->consecutive_reset_rebind_count >= MAX_CONSECUTIVE_RESETS)
+		dev_warn(&intf->dev, "Too many resets in a row; giving up\n");
+	else
+		/* Mark the interface for later rebinding */
+		intf->needs_binding = 1;
 }
 
 /*
@@ -1138,7 +1164,7 @@ static void unbind_marked_interfaces(struct usb_device *udev)
 		for (i = 0; i < config->desc.bNumInterfaces; ++i) {
 			intf = config->interface[i];
 			if (intf->dev.driver && intf->needs_binding)
-				usb_forced_unbind_intf(intf);
+				usb_forced_unbind_intf(intf, false);
 		}
 	}
 }
@@ -1157,7 +1183,7 @@ static void usb_rebind_intf(struct usb_interface *intf)
 
 	/* Delayed unbind of an existing driver */
 	if (intf->dev.driver)
-		usb_forced_unbind_intf(intf);
+		usb_forced_unbind_intf(intf, false);
 
 	/* Try to rebind the interface */
 	if (!intf->dev.power.is_prepared) {
@@ -1226,7 +1252,7 @@ static void unbind_no_pm_drivers_interfaces(struct usb_device *udev)
 			if (intf->dev.driver) {
 				drv = to_usb_driver(intf->dev.driver);
 				if (!drv->suspend || !drv->resume)
-					usb_forced_unbind_intf(intf);
+					usb_forced_unbind_intf(intf, false);
 			}
 		}
 	}
