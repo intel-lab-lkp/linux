@@ -928,12 +928,8 @@ static bool mp_check_pin_attr(int irq, struct irq_alloc_info *info)
 {
 	struct mp_chip_data *data = irq_get_chip_data(irq);
 
-	/*
-	 * setup_IO_APIC_irqs() programs all legacy IRQs with default trigger
-	 * and polarity attributes. So allow the first user to reprogram the
-	 * pin with real trigger and polarity attributes.
-	 */
-	if (irq < nr_legacy_irqs() && data->count == 1) {
+	/* allow the first user to reprogram the pin with real trigger and polarity */
+	if (data->count == 1) {
 		if (info->ioapic.is_level != data->is_level)
 			mp_register_handler(irq, info->ioapic.is_level);
 		data->entry.is_level = data->is_level = info->ioapic.is_level;
