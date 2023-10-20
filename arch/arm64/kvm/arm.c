@@ -1319,6 +1319,21 @@ static bool kvm_vcpu_init_changed(struct kvm_vcpu *vcpu,
 			     KVM_VCPU_MAX_FEATURES);
 }
 
+static int kvm_setup_vcpu(struct kvm_vcpu *vcpu)
+{
+	struct kvm *kvm = vcpu->kvm;
+
+	/*
+	 * When the vCPU has a PMU, but no PMU is set for the guest
+	 * yet, set the default one.
+	 */
+	if (kvm_vcpu_has_pmu(vcpu) && !kvm->arch.arm_pmu &&
+	    kvm_arm_set_default_pmu(kvm))
+		return -EINVAL;
+
+	return 0;
+}
+
 static int __kvm_vcpu_set_target(struct kvm_vcpu *vcpu,
 				 const struct kvm_vcpu_init *init)
 {
@@ -1333,6 +1348,10 @@ static int __kvm_vcpu_set_target(struct kvm_vcpu *vcpu,
 		goto out_unlock;
 
 	bitmap_copy(kvm->arch.vcpu_features, &features, KVM_VCPU_MAX_FEATURES);
+
+	ret = kvm_setup_vcpu(vcpu);
+	if (ret)
+		goto out_unlock;
 
 	/* Now we know what it is, we can reset it. */
 	kvm_reset_vcpu(vcpu);
