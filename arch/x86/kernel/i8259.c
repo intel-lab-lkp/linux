@@ -394,7 +394,7 @@ static int legacy_pic_probe(void)
 }
 
 struct legacy_pic null_legacy_pic = {
-	.nr_legacy_irqs = 0,
+	.nr_legacy_irqs = 1,
 	.chip = &dummy_irq_chip,
 	.mask = legacy_pic_uint_noop,
 	.unmask = legacy_pic_uint_noop,
