@@ -42,4 +42,6 @@ asmlinkage void handle_reserved(void);
 asmlinkage void handle_vint(void);
 asmlinkage void noinstr handle_loongarch_irq(struct pt_regs *regs);
 
+extern void *exception_table[];
+
 #endif	/* __ASM_EXCEPTION_H */
