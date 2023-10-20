@@ -75,7 +75,7 @@ static int drv_load(struct drm_device *ddev)
 
 	DRM_DEBUG("%s\n", __func__);
 
-	ldev = devm_kzalloc(ddev->dev, sizeof(*ldev), GFP_KERNEL);
+	ldev = kzalloc(sizeof(*ldev), GFP_KERNEL);
 	if (!ldev)
 		return -ENOMEM;
 
@@ -83,7 +83,7 @@ static int drv_load(struct drm_device *ddev)
 
 	ret = drmm_mode_config_init(ddev);
 	if (ret)
-		return ret;
+		goto err;
 
 	/*
 	 * set max width and height as default value.
@@ -99,7 +99,7 @@ static int drv_load(struct drm_device *ddev)
 
 	ret = ltdc_load(ddev);
 	if (ret)
-		return ret;
+		goto err;
 
 	drm_mode_config_reset(ddev);
 	drm_kms_helper_poll_init(ddev);
@@ -107,6 +107,9 @@ static int drv_load(struct drm_device *ddev)
 	platform_set_drvdata(pdev, ddev);
 
 	return 0;
+err:
+	kfree(ldev);
+	return ret;
 }
 
 static void drv_unload(struct drm_device *ddev)
@@ -115,6 +118,8 @@ static void drv_unload(struct drm_device *ddev)
 
 	drm_kms_helper_poll_fini(ddev);
 	ltdc_unload(ddev);
+	kfree(ddev->dev_private);
+	ddev->dev_private = NULL;
 }
 
 static __maybe_unused int drv_suspend(struct device *dev)
