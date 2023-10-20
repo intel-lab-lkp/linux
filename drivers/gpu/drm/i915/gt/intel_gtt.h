@@ -151,6 +151,7 @@ typedef u64 gen8_pte_t;
 
 #define GEN8_PAGE_PRESENT		BIT_ULL(0)
 #define GEN8_PAGE_RW			BIT_ULL(1)
+#define PTE_NULL_PAGE			BIT_ULL(9)
 
 #define GEN8_PDE_IPS_64K BIT(11)
 #define GEN8_PDE_PS_2M   BIT(7)

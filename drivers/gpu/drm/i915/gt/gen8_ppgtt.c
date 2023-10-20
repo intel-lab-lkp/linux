@@ -855,6 +855,9 @@ static int gen8_init_scratch(struct i915_address_space *vm)
 						      I915_CACHE_NONE),
 			       pte_flags);
 
+	if (HAS_NULL_PAGE(vm->i915))
+		vm->scratch[0]->encode |= PTE_NULL_PAGE;
+
 	for (i = 1; i <= vm->top; i++) {
 		struct drm_i915_gem_object *obj;
 
