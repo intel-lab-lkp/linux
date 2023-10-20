@@ -2889,12 +2889,12 @@ static void mwifiex_sdio_generic_fw_dump(struct mwifiex_adapter *adapter)
 			}
 			if (start_flag == 0)
 				break;
-			if (tries == MAX_POLL_TRIES) {
-				mwifiex_dbg(adapter, ERROR,
-					    "FW not ready to dump\n");
-				ret = -1;
-				goto done;
-			}
+		}
+		if (tries == MAX_POLL_TRIES) {
+			mwifiex_dbg(adapter, ERROR,
+				    "FW not ready to dump\n");
+			ret = -1;
+			goto done;
 		}
 		usleep_range(100, 200);
 	}
