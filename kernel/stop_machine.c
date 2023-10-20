@@ -183,8 +183,10 @@ static void set_state(struct multi_stop_data *msdata,
 {
 	/* Reset ack counter. */
 	atomic_set(&msdata->thread_ack, msdata->num_threads);
-	smp_wmb();
-	WRITE_ONCE(msdata->state, newstate);
+	/* This smp_store_release() pair with READ_ONCE() in multi_cpu_stop().
+	 * Avoid potential access multi_stop_data::state race behaviour.
+	 */
+	smp_store_release(&msdata->state, newstate);
 }
 
 /* Last one to ack a state moves to the next state. */
