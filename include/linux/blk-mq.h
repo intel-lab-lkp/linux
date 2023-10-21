@@ -727,13 +727,16 @@ struct request *blk_mq_alloc_request_hctx(struct request_queue *q,
 		blk_opf_t opf, blk_mq_req_flags_t flags,
 		unsigned int hctx_idx);
 
+struct tag_sharing_ctl {
+	unsigned int active_queues;
+};
+
 /*
  * Tag address space map.
  */
 struct blk_mq_tags {
 	unsigned int nr_tags;
 	unsigned int nr_reserved_tags;
-	unsigned int active_queues;
 
 	struct sbitmap_queue bitmap_tags;
 	struct sbitmap_queue breserved_tags;
@@ -744,9 +747,12 @@ struct blk_mq_tags {
 
 	/*
 	 * used to clear request reference in rqs[] before freeing one
-	 * request pool
+	 * request pool, and to protect tag_sharing_ctl.
 	 */
 	spinlock_t lock;
+
+	/* used when tags is shared for multiple request_queue or hctx. */
+	struct tag_sharing_ctl ctl;
 };
 
 static inline struct request *blk_mq_tag_to_rq(struct blk_mq_tags *tags,

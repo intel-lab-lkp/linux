@@ -57,8 +57,8 @@ void __blk_mq_tag_busy(struct blk_mq_hw_ctx *hctx)
 	}
 
 	spin_lock_irq(&tags->lock);
-	users = tags->active_queues + 1;
-	WRITE_ONCE(tags->active_queues, users);
+	users = tags->ctl.active_queues + 1;
+	WRITE_ONCE(tags->ctl.active_queues, users);
 	blk_mq_update_wake_batch(tags, users);
 	spin_unlock_irq(&tags->lock);
 }
@@ -94,8 +94,8 @@ void __blk_mq_tag_idle(struct blk_mq_hw_ctx *hctx)
 	}
 
 	spin_lock_irq(&tags->lock);
-	users = tags->active_queues - 1;
-	WRITE_ONCE(tags->active_queues, users);
+	users = tags->ctl.active_queues - 1;
+	WRITE_ONCE(tags->ctl.active_queues, users);
 	blk_mq_update_wake_batch(tags, users);
 	spin_unlock_irq(&tags->lock);
 
