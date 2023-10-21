@@ -212,7 +212,7 @@ static u8 HTIOTActIsDisableMCS14(struct rtllib_device *ieee, u8 *PeerMacAddr)
 	return 0;
 }
 
-static bool HTIOTActIsDisableMCS15(struct rtllib_device *ieee)
+static bool ht_iot_act_is_disable_mcs15(struct rtllib_device *ieee)
 {
 	return false;
 }
@@ -700,7 +700,7 @@ void HTResetSelfAndSavePeerSetting(struct rtllib_device *ieee,
 		if (bIOTAction)
 			ht_info->iot_action |= HT_IOT_ACT_DISABLE_MCS14;
 
-		bIOTAction = HTIOTActIsDisableMCS15(ieee);
+		bIOTAction = ht_iot_act_is_disable_mcs15(ieee);
 		if (bIOTAction)
 			ht_info->iot_action |= HT_IOT_ACT_DISABLE_MCS15;
 
