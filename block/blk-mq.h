@@ -274,10 +274,10 @@ static inline int blk_mq_get_rq_budget_token(struct request *rq)
 static inline void __blk_mq_add_active_requests(struct blk_mq_hw_ctx *hctx,
 						int val)
 {
-	if (blk_mq_is_shared_tags(hctx->flags))
-		atomic_add(val, &hctx->queue->nr_active_requests_shared_tags);
-	else
-		atomic_add(val, &hctx->nr_active);
+	struct shared_tag_info *info = blk_mq_is_shared_tags(hctx->flags) ?
+		&hctx->queue->shared_tag_info : &hctx->shared_tag_info;
+
+	atomic_add(val, &info->active_tags);
 }
 
 static inline void __blk_mq_inc_active_requests(struct blk_mq_hw_ctx *hctx)
@@ -288,10 +288,10 @@ static inline void __blk_mq_inc_active_requests(struct blk_mq_hw_ctx *hctx)
 static inline void __blk_mq_sub_active_requests(struct blk_mq_hw_ctx *hctx,
 		int val)
 {
-	if (blk_mq_is_shared_tags(hctx->flags))
-		atomic_sub(val, &hctx->queue->nr_active_requests_shared_tags);
-	else
-		atomic_sub(val, &hctx->nr_active);
+	struct shared_tag_info *info = blk_mq_is_shared_tags(hctx->flags) ?
+		&hctx->queue->shared_tag_info : &hctx->shared_tag_info;
+
+	atomic_sub(val, &info->active_tags);
 }
 
 static inline void __blk_mq_dec_active_requests(struct blk_mq_hw_ctx *hctx)
@@ -327,9 +327,10 @@ static inline void blk_mq_dec_active_requests(struct blk_mq_hw_ctx *hctx)
 
 static inline int __blk_mq_active_requests(struct blk_mq_hw_ctx *hctx)
 {
-	if (blk_mq_is_shared_tags(hctx->flags))
-		return atomic_read(&hctx->queue->nr_active_requests_shared_tags);
-	return atomic_read(&hctx->nr_active);
+	struct shared_tag_info *info = blk_mq_is_shared_tags(hctx->flags) ?
+		&hctx->queue->shared_tag_info : &hctx->shared_tag_info;
+
+	return atomic_read(&info->active_tags);
 }
 static inline void __blk_mq_put_driver_tag(struct blk_mq_hw_ctx *hctx,
 					   struct request *rq)

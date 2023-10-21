@@ -385,6 +385,11 @@ struct blk_mq_hw_ctx {
 	 */
 	struct blk_mq_tags	*tags;
 	/**
+	 * @shared_tag_info: Only used when a tag set is shared across request
+	 * queues.
+	 */
+	struct shared_tag_info	shared_tag_info;
+	/**
 	 * @sched_tags: Tags owned by I/O scheduler. If there is an I/O
 	 * scheduler associated with a request queue, a tag is assigned when
 	 * that request is allocated. Else, this member is not used.
@@ -398,12 +403,6 @@ struct blk_mq_hw_ctx {
 	unsigned int		numa_node;
 	/** @queue_num: Index of this hardware queue. */
 	unsigned int		queue_num;
-
-	/**
-	 * @nr_active: Number of active requests. Only used when a tag set is
-	 * shared across request queues.
-	 */
-	atomic_t		nr_active;
 
 	/** @cpuhp_online: List to store request if CPU is going to die */
 	struct hlist_node	cpuhp_online;

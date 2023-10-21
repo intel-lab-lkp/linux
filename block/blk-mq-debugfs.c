@@ -155,12 +155,27 @@ inval:
 	return count;
 }
 
+static void shared_tag_info_show(struct shared_tag_info *info,
+				 struct seq_file *m)
+{
+	seq_printf(m, "%d\n", atomic_read(&info->active_tags));
+}
+
+static int queue_shared_tag_info_show(void *data, struct seq_file *m)
+{
+	struct request_queue *q = data;
+
+	shared_tag_info_show(&q->shared_tag_info, m);
+	return 0;
+}
+
 static const struct blk_mq_debugfs_attr blk_mq_debugfs_queue_attrs[] = {
 	{ "poll_stat", 0400, queue_poll_stat_show },
 	{ "requeue_list", 0400, .seq_ops = &queue_requeue_list_seq_ops },
 	{ "pm_only", 0600, queue_pm_only_show, NULL },
 	{ "state", 0600, queue_state_show, queue_state_write },
 	{ "zone_wlock", 0400, queue_zone_wlock_show, NULL },
+	{ "shared_tag_info", 0400, queue_shared_tag_info_show, NULL },
 	{ },
 };
 
@@ -512,6 +527,14 @@ static int hctx_dispatch_busy_show(void *data, struct seq_file *m)
 	return 0;
 }
 
+static int hctx_shared_tag_info_show(void *data, struct seq_file *m)
+{
+	struct blk_mq_hw_ctx *hctx = data;
+
+	shared_tag_info_show(&hctx->shared_tag_info, m);
+	return 0;
+}
+
 #define CTX_RQ_SEQ_OPS(name, type)					\
 static void *ctx_##name##_rq_list_start(struct seq_file *m, loff_t *pos) \
 	__acquires(&ctx->lock)						\
@@ -628,6 +651,7 @@ static const struct blk_mq_debugfs_attr blk_mq_debugfs_hctx_attrs[] = {
 	{"active", 0400, hctx_active_show},
 	{"dispatch_busy", 0400, hctx_dispatch_busy_show},
 	{"type", 0400, hctx_type_show},
+	{"shared_tag_info", 0400, hctx_shared_tag_info_show},
 	{},
 };
 
