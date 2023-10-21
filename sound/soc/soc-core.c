@@ -2164,6 +2164,7 @@ static int snd_soc_bind_card(struct snd_soc_card *card)
 				card->name, ret);
 			goto probe_end;
 		}
+		dev_info(card->dev, "components: %s\n", card->components);
 	}
 
 	ret = snd_soc_card_late_probe(card);
