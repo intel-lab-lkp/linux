@@ -3652,7 +3652,7 @@ static int blk_mq_init_hctx(struct request_queue *q,
 	if (xa_insert(&q->hctx_table, hctx_idx, hctx, GFP_KERNEL))
 		goto exit_flush_rq;
 
-	blk_mq_init_shared_tag_info(&hctx->shared_tag_info);
+	blk_mq_init_shared_tag_info(&hctx->shared_tag_info, set->queue_depth);
 	return 0;
 
  exit_flush_rq:
@@ -4227,7 +4227,7 @@ int blk_mq_init_allocated_queue(struct blk_mq_tag_set *set,
 	if (blk_mq_alloc_ctxs(q))
 		goto err_exit;
 
-	blk_mq_init_shared_tag_info(&q->shared_tag_info);
+	blk_mq_init_shared_tag_info(&q->shared_tag_info, set->queue_depth);
 	/* init q->mq_kobj and sw queues' kobjects */
 	blk_mq_sysfs_init(q);
 

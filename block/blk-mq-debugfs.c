@@ -158,7 +158,8 @@ inval:
 static void shared_tag_info_show(struct shared_tag_info *info,
 				 struct seq_file *m)
 {
-	seq_printf(m, "%d\n", atomic_read(&info->active_tags));
+	seq_printf(m, "active tags %d\n", atomic_read(&info->active_tags));
+	seq_printf(m, "available tags %u\n", READ_ONCE(info->available_tags));
 }
 
 static int queue_shared_tag_info_show(void *data, struct seq_file *m)

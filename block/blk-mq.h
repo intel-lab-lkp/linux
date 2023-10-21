@@ -63,7 +63,8 @@ struct blk_mq_tags *blk_mq_alloc_map_and_rqs(struct blk_mq_tag_set *set,
 void blk_mq_free_map_and_rqs(struct blk_mq_tag_set *set,
 			     struct blk_mq_tags *tags,
 			     unsigned int hctx_idx);
-void blk_mq_init_shared_tag_info(struct shared_tag_info *info);
+void blk_mq_init_shared_tag_info(struct shared_tag_info *info,
+				 unsigned int nr_tags);
 
 /*
  * CPU -> queue mappings
@@ -416,7 +417,7 @@ static inline void blk_mq_free_requests(struct list_head *list)
 static inline bool hctx_may_queue(struct blk_mq_hw_ctx *hctx,
 				  struct sbitmap_queue *bt)
 {
-	unsigned int depth, users;
+	struct shared_tag_info *info;
 
 	if (!hctx || !(hctx->flags & BLK_MQ_F_TAG_QUEUE_SHARED))
 		return true;
@@ -432,20 +433,16 @@ static inline bool hctx_may_queue(struct blk_mq_hw_ctx *hctx,
 
 		if (!test_bit(QUEUE_FLAG_HCTX_ACTIVE, &q->queue_flags))
 			return true;
+
+		info = &q->shared_tag_info;
 	} else {
 		if (!test_bit(BLK_MQ_S_TAG_ACTIVE, &hctx->state))
 			return true;
+
+		info = &hctx->shared_tag_info;
 	}
 
-	users = READ_ONCE(hctx->tags->ctl.active_queues);
-	if (!users)
-		return true;
-
-	/*
-	 * Allow at least some tags
-	 */
-	depth = max((bt->sb.depth + users - 1) / users, 4U);
-	return __blk_mq_active_requests(hctx) < depth;
+	return atomic_read(&info->active_tags) < READ_ONCE(info->available_tags);
 }
 
 /* run the code block in @dispatch_ops with rcu/srcu read lock held */

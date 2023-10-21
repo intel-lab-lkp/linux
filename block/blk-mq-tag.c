@@ -14,6 +14,8 @@
 #include "blk-mq.h"
 #include "blk-mq-sched.h"
 
+#define shared_tags(tags, users) max((tags->nr_tags + users - 1) / users, 4U)
+
 /*
  * Recalculate wakeup batch when tag is shared by hctx.
  */
@@ -29,10 +31,39 @@ static void blk_mq_update_wake_batch(struct blk_mq_tags *tags,
 			users);
 }
 
-void blk_mq_init_shared_tag_info(struct shared_tag_info *info)
+void blk_mq_init_shared_tag_info(struct shared_tag_info *info,
+				 unsigned int nr_tags)
 {
 	atomic_set(&info->active_tags, 0);
 	INIT_LIST_HEAD(&info->node);
+	info->available_tags = nr_tags;
+}
+
+static void blk_mq_update_available_driver_tags(struct blk_mq_tags *tags,
+						struct shared_tag_info *info,
+						unsigned int users)
+{
+	unsigned int old = tags->ctl.active_queues;
+	int nr_tags;
+	struct shared_tag_info *iter;
+
+	if (!old || !users)
+		return;
+
+	nr_tags = (int)shared_tags(tags, users);
+	if (old < users)
+		WRITE_ONCE(info->available_tags, nr_tags);
+	else
+		WRITE_ONCE(info->available_tags, tags->nr_tags);
+
+	nr_tags -= (int)shared_tags(tags, old);
+	list_for_each_entry(iter, &tags->ctl.head, node) {
+		if (iter == info)
+			continue;
+
+		WRITE_ONCE(iter->available_tags,
+			   (unsigned int)((int)iter->available_tags + nr_tags));
+	}
 }
 
 /*
@@ -70,6 +101,7 @@ void __blk_mq_tag_busy(struct blk_mq_hw_ctx *hctx)
 	spin_lock_irq(&tags->lock);
 	list_add(&info->node, &tags->ctl.head);
 	users = tags->ctl.active_queues + 1;
+	blk_mq_update_available_driver_tags(tags, info, users);
 	WRITE_ONCE(tags->ctl.active_queues, users);
 	blk_mq_update_wake_batch(tags, users);
 	spin_unlock_irq(&tags->lock);
@@ -121,6 +153,7 @@ void __blk_mq_tag_idle(struct blk_mq_hw_ctx *hctx)
 
 	list_del_init(&info->node);
 	users = tags->ctl.active_queues - 1;
+	blk_mq_update_available_driver_tags(tags, info, users);
 	WRITE_ONCE(tags->ctl.active_queues, users);
 	blk_mq_update_wake_batch(tags, users);
 
