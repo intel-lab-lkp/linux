@@ -291,7 +291,7 @@ static int watchdog_start(struct watchdog_device *wdd)
  */
 static int watchdog_stop(struct watchdog_device *wdd)
 {
-	int err = 0;
+	int err;
 
 	if (!watchdog_active(wdd))
 		return 0;
