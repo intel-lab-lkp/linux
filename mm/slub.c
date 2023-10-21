@@ -2222,8 +2222,7 @@ static void *alloc_single_from_new_slab(struct kmem_cache *s,
  * Returns a list of objects or NULL if it fails.
  */
 static inline void *acquire_slab(struct kmem_cache *s,
-		struct kmem_cache_node *n, struct slab *slab,
-		int mode)
+		struct kmem_cache_node *n, struct slab *slab)
 {
 	void *freelist;
 	unsigned long counters;
@@ -2239,12 +2238,8 @@ static inline void *acquire_slab(struct kmem_cache *s,
 	freelist = slab->freelist;
 	counters = slab->counters;
 	new.counters = counters;
-	if (mode) {
-		new.inuse = slab->objects;
-		new.freelist = NULL;
-	} else {
-		new.freelist = freelist;
-	}
+	new.inuse = slab->objects;
+	new.freelist = NULL;
 
 	VM_BUG_ON(new.frozen);
 	new.frozen = 1;
@@ -2306,7 +2301,7 @@ static void *get_partial_node(struct kmem_cache *s, struct kmem_cache_node *n,
 		}
 
 		if (!object) {
-			t = acquire_slab(s, n, slab, object == NULL);
+			t = acquire_slab(s, n, slab);
 			if (t) {
 				*pc->slab = slab;
 				stat(s, ALLOC_FROM_PARTIAL);
