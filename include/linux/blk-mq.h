@@ -666,10 +666,11 @@ enum {
 
 	BLK_MQ_S_STOPPED	= 0,
 	BLK_MQ_S_TAG_ACTIVE	= 1,
-	BLK_MQ_S_SCHED_RESTART	= 2,
+	BLK_MQ_S_DTAG_BUSY      = 2,
+	BLK_MQ_S_SCHED_RESTART	= 3,
 
 	/* hw queue is inactive after all its CPUs become offline */
-	BLK_MQ_S_INACTIVE	= 3,
+	BLK_MQ_S_INACTIVE	= 4,
 
 	BLK_MQ_MAX_DEPTH	= 10240,
 
@@ -728,6 +729,8 @@ struct request *blk_mq_alloc_request_hctx(struct request_queue *q,
 
 struct tag_sharing_ctl {
 	unsigned int active_queues;
+	/* The number of shared queues/hctxs with exhausted driver tags. */
+	unsigned int busy_queues;
 	/*
 	 * If driver tags is shared for multiple queue/hctx, this is the head of
 	 * a list with request_queue/hctx->shared_tag_info.node entries.

@@ -195,8 +195,10 @@ static inline struct sbq_wait_state *bt_wait_ptr(struct sbitmap_queue *bt,
 	return sbq_wait_ptr(bt, &hctx->wait_index);
 }
 
-void __blk_mq_tag_busy(struct blk_mq_hw_ctx *);
-void __blk_mq_tag_idle(struct blk_mq_hw_ctx *);
+void __blk_mq_tag_busy(struct blk_mq_hw_ctx *hctx);
+void __blk_mq_tag_idle(struct blk_mq_hw_ctx *hctx);
+void __blk_mq_driver_tag_busy(struct blk_mq_hw_ctx *hctx);
+void __blk_mq_driver_tag_idle(struct blk_mq_hw_ctx *hctx);
 
 static inline void blk_mq_tag_busy(struct blk_mq_hw_ctx *hctx)
 {
@@ -208,6 +210,18 @@ static inline void blk_mq_tag_idle(struct blk_mq_hw_ctx *hctx)
 {
 	if (hctx->flags & BLK_MQ_F_TAG_QUEUE_SHARED)
 		__blk_mq_tag_idle(hctx);
+}
+
+static inline void blk_mq_driver_tag_busy(struct blk_mq_hw_ctx *hctx)
+{
+	if (hctx->flags & BLK_MQ_F_TAG_QUEUE_SHARED)
+		__blk_mq_driver_tag_busy(hctx);
+}
+
+static inline void blk_mq_driver_tag_idle(struct blk_mq_hw_ctx *hctx)
+{
+	if (hctx->flags & BLK_MQ_F_TAG_QUEUE_SHARED)
+		__blk_mq_driver_tag_idle(hctx);
 }
 
 static inline bool blk_mq_tag_is_reserved(struct blk_mq_tags *tags,
@@ -293,7 +307,8 @@ static inline void __blk_mq_sub_active_requests(struct blk_mq_hw_ctx *hctx,
 	struct shared_tag_info *info = blk_mq_is_shared_tags(hctx->flags) ?
 		&hctx->queue->shared_tag_info : &hctx->shared_tag_info;
 
-	atomic_sub(val, &info->active_tags);
+	if (!atomic_sub_return(val, &info->active_tags))
+		blk_mq_driver_tag_idle(hctx);
 }
 
 static inline void __blk_mq_dec_active_requests(struct blk_mq_hw_ctx *hctx)
@@ -354,8 +369,10 @@ bool __blk_mq_alloc_driver_tag(struct request *rq);
 
 static inline bool blk_mq_get_driver_tag(struct request *rq)
 {
-	if (rq->tag == BLK_MQ_NO_TAG && !__blk_mq_alloc_driver_tag(rq))
+	if (rq->tag == BLK_MQ_NO_TAG && !__blk_mq_alloc_driver_tag(rq)) {
+		blk_mq_driver_tag_busy(rq->mq_hctx);
 		return false;
+	}
 
 	return true;
 }

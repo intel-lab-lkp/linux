@@ -165,6 +165,51 @@ void __blk_mq_tag_idle(struct blk_mq_hw_ctx *hctx)
 	blk_mq_tag_wakeup_all(tags, false);
 }
 
+void __blk_mq_driver_tag_busy(struct blk_mq_hw_ctx *hctx)
+{
+	unsigned int users;
+	struct blk_mq_tags *tags = hctx->tags;
+
+	if (blk_mq_is_shared_tags(hctx->flags)) {
+		struct request_queue *q = hctx->queue;
+
+		if (test_bit(QUEUE_FLAG_HCTX_BUSY, &q->queue_flags) ||
+		    test_and_set_bit(QUEUE_FLAG_HCTX_BUSY, &q->queue_flags))
+			return;
+	} else {
+		if (test_bit(BLK_MQ_S_DTAG_BUSY, &hctx->state) ||
+		    test_and_set_bit(BLK_MQ_S_DTAG_BUSY, &hctx->state))
+			return;
+	}
+
+	spin_lock_irq(&tags->lock);
+	users = tags->ctl.busy_queues + 1;
+	WRITE_ONCE(tags->ctl.busy_queues, users);
+	spin_unlock_irq(&tags->lock);
+}
+
+void __blk_mq_driver_tag_idle(struct blk_mq_hw_ctx *hctx)
+{
+	unsigned int users;
+	struct blk_mq_tags *tags = hctx->tags;
+
+	if (blk_mq_is_shared_tags(hctx->flags)) {
+		struct request_queue *q = hctx->queue;
+
+		if (!test_and_clear_bit(QUEUE_FLAG_HCTX_BUSY,
+					&q->queue_flags))
+			return;
+	} else {
+		if (!test_and_clear_bit(BLK_MQ_S_DTAG_BUSY, &hctx->state))
+			return;
+	}
+
+	spin_lock_irq(&tags->lock);
+	users = tags->ctl.busy_queues - 1;
+	WRITE_ONCE(tags->ctl.busy_queues, users);
+	spin_unlock_irq(&tags->lock);
+}
+
 static int __blk_mq_get_tag(struct blk_mq_alloc_data *data,
 			    struct sbitmap_queue *bt)
 {
@@ -218,8 +263,11 @@ unsigned int blk_mq_get_tag(struct blk_mq_alloc_data *data)
 	if (tag != BLK_MQ_NO_TAG)
 		goto found_tag;
 
-	if (data->flags & BLK_MQ_REQ_NOWAIT)
+	if (data->flags & BLK_MQ_REQ_NOWAIT) {
+		if (!(data->rq_flags & RQF_SCHED_TAGS))
+			blk_mq_driver_tag_busy(data->hctx);
 		return BLK_MQ_NO_TAG;
+	}
 
 	ws = bt_wait_ptr(bt, data->hctx);
 	do {
@@ -245,6 +293,9 @@ unsigned int blk_mq_get_tag(struct blk_mq_alloc_data *data)
 		tag = __blk_mq_get_tag(data, bt);
 		if (tag != BLK_MQ_NO_TAG)
 			break;
+
+		if (!(data->rq_flags & RQF_SCHED_TAGS))
+			blk_mq_driver_tag_busy(data->hctx);
 
 		bt_prev = bt;
 		io_schedule();

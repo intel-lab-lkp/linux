@@ -1668,8 +1668,10 @@ static void blk_mq_timeout_work(struct work_struct *work)
 		 */
 		queue_for_each_hw_ctx(q, hctx, i) {
 			/* the hctx may be unmapped, so check it here */
-			if (blk_mq_hw_queue_mapped(hctx))
+			if (blk_mq_hw_queue_mapped(hctx)) {
 				blk_mq_tag_idle(hctx);
+				blk_mq_driver_tag_idle(hctx);
+			}
 		}
 	}
 	blk_queue_exit(q);
@@ -3594,8 +3596,10 @@ static void blk_mq_exit_hctx(struct request_queue *q,
 {
 	struct request *flush_rq = hctx->fq->flush_rq;
 
-	if (blk_mq_hw_queue_mapped(hctx))
+	if (blk_mq_hw_queue_mapped(hctx)) {
 		blk_mq_tag_idle(hctx);
+		blk_mq_driver_tag_idle(hctx);
+	}
 
 	if (blk_queue_init_done(q))
 		blk_mq_clear_flush_rq_mapping(set->tags[hctx_idx],
@@ -3931,6 +3935,7 @@ static void queue_set_hctx_shared(struct request_queue *q, bool shared)
 			hctx->flags |= BLK_MQ_F_TAG_QUEUE_SHARED;
 		} else {
 			blk_mq_tag_idle(hctx);
+			blk_mq_driver_tag_idle(hctx);
 			hctx->flags &= ~BLK_MQ_F_TAG_QUEUE_SHARED;
 		}
 	}
