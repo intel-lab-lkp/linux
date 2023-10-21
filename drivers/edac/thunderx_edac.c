@@ -1111,6 +1111,7 @@ static irqreturn_t thunderx_ocx_com_threaded_isr(int irq, void *irq_id)
 
 	unsigned long tail;
 	struct ocx_com_err_ctx *ctx;
+	size_t remaining;
 	int lane;
 	char *msg;
 	char *other;
@@ -1127,27 +1128,26 @@ static irqreturn_t thunderx_ocx_com_threaded_isr(int irq, void *irq_id)
 				ARRAY_SIZE(ocx->com_err_ctx));
 		ctx = &ocx->com_err_ctx[tail];
 
-		snprintf(msg, OCX_MESSAGE_SIZE, "%s: OCX_COM_INT: %016llx",
-			ocx->edac_dev->ctl_name, ctx->reg_com_int);
-
 		decode_register(other, OCX_OTHER_SIZE,
 				ocx_com_errors, ctx->reg_com_int);
 
-		strncat(msg, other, OCX_MESSAGE_SIZE);
+		remaining = OCX_MESSAGE_SIZE;
+		remaining -= scnprintf(msg, remaining, "%s: OCX_COM_INT: %016llx%s",
+				       ocx->edac_dev->ctl_name, ctx->reg_com_int,
+				       other);
 
 		for (lane = 0; lane < OCX_RX_LANES; lane++)
 			if (ctx->reg_com_int & BIT(lane)) {
-				snprintf(other, OCX_OTHER_SIZE,
-					 "\n\tOCX_LNE_INT[%02d]: %016llx OCX_LNE_STAT11[%02d]: %016llx",
-					 lane, ctx->reg_lane_int[lane],
-					 lane, ctx->reg_lane_stat11[lane]);
-
-				strncat(msg, other, OCX_MESSAGE_SIZE);
-
 				decode_register(other, OCX_OTHER_SIZE,
 						ocx_lane_errors,
 						ctx->reg_lane_int[lane]);
-				strncat(msg, other, OCX_MESSAGE_SIZE);
+
+				remaining -= scnprintf(msg + (OCX_MESSAGE_SIZE - remaining),
+						       remaining,
+						       "\n\tOCX_LNE_INT[%02d]: %016llx OCX_LNE_STAT11[%02d]: %016llx%s",
+						       lane, ctx->reg_lane_int[lane],
+						       lane, ctx->reg_lane_stat11[lane],
+						       other);
 			}
 
 		if (ctx->reg_com_int & OCX_COM_INT_CE)
