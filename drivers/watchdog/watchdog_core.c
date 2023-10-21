@@ -194,7 +194,7 @@ static int watchdog_pm_notifier(struct notifier_block *nb, unsigned long mode,
 				void *data)
 {
 	struct watchdog_device *wdd;
-	int ret = 0;
+	int ret;
 
 	wdd = container_of(nb, struct watchdog_device, pm_nb);
 
