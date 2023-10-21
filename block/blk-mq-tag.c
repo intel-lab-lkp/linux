@@ -29,6 +29,11 @@ static void blk_mq_update_wake_batch(struct blk_mq_tags *tags,
 			users);
 }
 
+void blk_mq_init_shared_tag_info(struct shared_tag_info *info)
+{
+	atomic_set(&info->active_tags, 0);
+}
+
 /*
  * If a previously inactive queue goes active, bump the active user count.
  * We need to do this before try to allocate driver tag, then even if fail

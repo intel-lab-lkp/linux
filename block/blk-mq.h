@@ -63,6 +63,7 @@ struct blk_mq_tags *blk_mq_alloc_map_and_rqs(struct blk_mq_tag_set *set,
 void blk_mq_free_map_and_rqs(struct blk_mq_tag_set *set,
 			     struct blk_mq_tags *tags,
 			     unsigned int hctx_idx);
+void blk_mq_init_shared_tag_info(struct shared_tag_info *info);
 
 /*
  * CPU -> queue mappings
