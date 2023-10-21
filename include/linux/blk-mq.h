@@ -736,6 +736,9 @@ struct tag_sharing_ctl {
 	 * a list with request_queue/hctx->shared_tag_info.node entries.
 	 */
 	struct list_head head;
+	bool timer_running;
+	/* Start when any queue/hctx failed to get driver tag. */
+	struct timer_list timer;
 };
 
 /*

@@ -35,6 +35,7 @@ void blk_mq_init_shared_tag_info(struct shared_tag_info *info,
 				 unsigned int nr_tags)
 {
 	atomic_set(&info->active_tags, 0);
+	atomic_set(&info->busy_count, 0);
 	INIT_LIST_HEAD(&info->node);
 	info->available_tags = nr_tags;
 }
@@ -143,26 +144,93 @@ void __blk_mq_tag_idle(struct blk_mq_hw_ctx *hctx)
 	spin_unlock_irq(&tags->lock);
 }
 
+static void tag_sharing_ctl_timer_fn(struct timer_list *t)
+{
+	struct tag_sharing_ctl *ctl = from_timer(ctl, t, timer);
+	struct blk_mq_tags *tags = container_of(ctl, struct blk_mq_tags, ctl);
+	struct shared_tag_info *busy = NULL;
+	struct shared_tag_info *info;
+	unsigned int nr_tags;
+	unsigned int step;
+	unsigned int free_tags = 0;
+	unsigned int borrowed_tags = 0;
+	unsigned int max_busy_count = 0;
+
+	spin_lock_irq(&tags->lock);
+
+	if (tags->ctl.busy_queues <= 1)
+		goto out;
+
+	/* First round, decrease busy_count by half. */
+	list_for_each_entry(info, &tags->ctl.head, node) {
+		int count = atomic_read(&info->busy_count);
+
+		if (count > tags->nr_tags)
+			count = count >> 1;
+		atomic_sub(count, &info->busy_count);
+	}
+
+	/* Second round, find borrowed tags that can be returned. */
+	nr_tags = shared_tags(tags, tags->ctl.busy_queues);
+	step = clamp_t(unsigned int, tags->nr_tags / SBQ_WAIT_QUEUES, 1,
+		       SBQ_WAKE_BATCH);
+	list_for_each_entry(info, &tags->ctl.head, node) {
+		if (info->available_tags > nr_tags &&
+		    atomic_read(&info->active_tags) <= nr_tags &&
+		    atomic_read(&info->busy_count) <= tags->nr_tags)
+			info->available_tags = nr_tags;
+	}
+
+	/* Last round, find available free tags, and which node need more tags. */
+	list_for_each_entry(info, &tags->ctl.head, node) {
+		unsigned int busy_count;
+
+		if (info->available_tags > nr_tags)
+			borrowed_tags += info->available_tags - nr_tags;
+		else
+			free_tags += info->available_tags - max(step,
+				(unsigned int)atomic_read(&info->active_tags));
+
+		busy_count = atomic_read(&info->busy_count);
+		if (busy_count > tags->nr_tags && busy_count > max_busy_count) {
+			busy = info;
+			max_busy_count = busy_count;
+		}
+	}
+
+	/* Borrow tags. */
+	if (busy && borrowed_tags < free_tags)
+		busy->available_tags += min(free_tags - borrowed_tags, step);
+
+out:
+	if (!busy) {
+		ctl->timer_running = false;
+	} else {
+		ctl->timer.expires = jiffies + HZ;
+		add_timer(&ctl->timer);
+	}
+	spin_unlock_irq(&tags->lock);
+}
+
 void __blk_mq_driver_tag_busy(struct blk_mq_hw_ctx *hctx)
 {
 	unsigned int users;
 	struct blk_mq_tags *tags = hctx->tags;
 	struct shared_tag_info *info;
+	bool timer_running = false;
 
 	if (blk_mq_is_shared_tags(hctx->flags)) {
 		struct request_queue *q = hctx->queue;
 
+		info = &q->shared_tag_info;
 		if (test_bit(QUEUE_FLAG_HCTX_BUSY, &q->queue_flags) ||
 		    test_and_set_bit(QUEUE_FLAG_HCTX_BUSY, &q->queue_flags))
-			return;
-
-		info = &q->shared_tag_info;
+			goto inc_busy;
 	} else {
+		info = &hctx->shared_tag_info;
 		if (test_bit(BLK_MQ_S_DTAG_BUSY, &hctx->state) ||
 		    test_and_set_bit(BLK_MQ_S_DTAG_BUSY, &hctx->state))
-			return;
-
-		info = &hctx->shared_tag_info;
+			goto inc_busy;
 	}
 
 	spin_lock_irq(&tags->lock);
@@ -172,6 +240,15 @@ void __blk_mq_driver_tag_busy(struct blk_mq_hw_ctx *hctx)
 	blk_mq_update_wake_batch(tags, users);
 	WRITE_ONCE(tags->ctl.busy_queues, users);
 	spin_unlock_irq(&tags->lock);
+	return;
+
+inc_busy:
+	atomic_inc(&info->busy_count);
+	if (!tags->ctl.timer_running &&
+	    try_cmpxchg_relaxed(&tags->ctl.timer_running, &timer_running, true)) {
+		tags->ctl.timer.expires = jiffies + HZ;
+		add_timer(&tags->ctl.timer);
+	}
 }
 
 void __blk_mq_driver_tag_idle(struct blk_mq_hw_ctx *hctx)
@@ -204,6 +281,7 @@ void __blk_mq_driver_tag_idle(struct blk_mq_hw_ctx *hctx)
 		info = &hctx->shared_tag_info;
 	}
 
+	atomic_set(&info->busy_count, 0);
 	list_del_init(&info->node);
 	users = tags->ctl.busy_queues - 1;
 	blk_mq_update_available_driver_tags(tags, info, users);
@@ -705,6 +783,7 @@ struct blk_mq_tags *blk_mq_init_tags(unsigned int total_tags,
 	tags->nr_reserved_tags = reserved_tags;
 	spin_lock_init(&tags->lock);
 	INIT_LIST_HEAD(&tags->ctl.head);
+	timer_setup(&tags->ctl.timer, tag_sharing_ctl_timer_fn, 0);
 
 	if (blk_mq_init_bitmaps(&tags->bitmap_tags, &tags->breserved_tags,
 				total_tags, reserved_tags, node,
@@ -717,6 +796,7 @@ struct blk_mq_tags *blk_mq_init_tags(unsigned int total_tags,
 
 void blk_mq_free_tags(struct blk_mq_tags *tags)
 {
+	del_timer_sync(&tags->ctl.timer);
 	sbitmap_queue_free(&tags->bitmap_tags);
 	sbitmap_queue_free(&tags->breserved_tags);
 	kfree(tags);

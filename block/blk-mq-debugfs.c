@@ -160,6 +160,7 @@ static void shared_tag_info_show(struct shared_tag_info *info,
 {
 	seq_printf(m, "active tags %d\n", atomic_read(&info->active_tags));
 	seq_printf(m, "available tags %u\n", READ_ONCE(info->available_tags));
+	seq_printf(m, "busy count %u\n", atomic_read(&info->busy_count));
 }
 
 static int queue_shared_tag_info_show(void *data, struct seq_file *m)

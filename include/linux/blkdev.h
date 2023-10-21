@@ -378,6 +378,7 @@ struct blk_independent_access_ranges {
 struct shared_tag_info {
 	atomic_t		active_tags;
 	unsigned int		available_tags;
+	atomic_t		busy_count;
 	struct list_head	node;
 };
 
