@@ -728,6 +728,11 @@ struct request *blk_mq_alloc_request_hctx(struct request_queue *q,
 
 struct tag_sharing_ctl {
 	unsigned int active_queues;
+	/*
+	 * If driver tags is shared for multiple queue/hctx, this is the head of
+	 * a list with request_queue/hctx->shared_tag_info.node entries.
+	 */
+	struct list_head head;
 };
 
 /*

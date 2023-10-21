@@ -32,6 +32,7 @@ static void blk_mq_update_wake_batch(struct blk_mq_tags *tags,
 void blk_mq_init_shared_tag_info(struct shared_tag_info *info)
 {
 	atomic_set(&info->active_tags, 0);
+	INIT_LIST_HEAD(&info->node);
 }
 
 /*
@@ -44,6 +45,7 @@ void __blk_mq_tag_busy(struct blk_mq_hw_ctx *hctx)
 {
 	unsigned int users;
 	struct blk_mq_tags *tags = hctx->tags;
+	struct shared_tag_info *info;
 
 	/*
 	 * calling test_bit() prior to test_and_set_bit() is intentional,
@@ -55,13 +57,18 @@ void __blk_mq_tag_busy(struct blk_mq_hw_ctx *hctx)
 		if (test_bit(QUEUE_FLAG_HCTX_ACTIVE, &q->queue_flags) ||
 		    test_and_set_bit(QUEUE_FLAG_HCTX_ACTIVE, &q->queue_flags))
 			return;
+
+		info = &q->shared_tag_info;
 	} else {
 		if (test_bit(BLK_MQ_S_TAG_ACTIVE, &hctx->state) ||
 		    test_and_set_bit(BLK_MQ_S_TAG_ACTIVE, &hctx->state))
 			return;
+
+		info = &hctx->shared_tag_info;
 	}
 
 	spin_lock_irq(&tags->lock);
+	list_add(&info->node, &tags->ctl.head);
 	users = tags->ctl.active_queues + 1;
 	WRITE_ONCE(tags->ctl.active_queues, users);
 	blk_mq_update_wake_batch(tags, users);
@@ -84,26 +91,44 @@ void blk_mq_tag_wakeup_all(struct blk_mq_tags *tags, bool include_reserve)
  */
 void __blk_mq_tag_idle(struct blk_mq_hw_ctx *hctx)
 {
-	struct blk_mq_tags *tags = hctx->tags;
 	unsigned int users;
+	struct blk_mq_tags *tags = hctx->tags;
+	struct shared_tag_info *info;
 
 	if (blk_mq_is_shared_tags(hctx->flags)) {
 		struct request_queue *q = hctx->queue;
 
-		if (!test_and_clear_bit(QUEUE_FLAG_HCTX_ACTIVE,
-					&q->queue_flags))
+		if (!test_bit(QUEUE_FLAG_HCTX_ACTIVE, &q->queue_flags))
 			return;
+		spin_lock_irq(&tags->lock);
+		if (!test_bit(QUEUE_FLAG_HCTX_ACTIVE, &q->queue_flags)) {
+			spin_unlock_irq(&tags->lock);
+			return;
+		}
+
+		info = &q->shared_tag_info;
 	} else {
-		if (!test_and_clear_bit(BLK_MQ_S_TAG_ACTIVE, &hctx->state))
+		if (!test_bit(BLK_MQ_S_TAG_ACTIVE, &hctx->state))
 			return;
+		spin_lock_irq(&tags->lock);
+		if (!test_bit(BLK_MQ_S_TAG_ACTIVE, &hctx->state)) {
+			spin_unlock_irq(&tags->lock);
+			return;
+		}
+
+		info = &hctx->shared_tag_info;
 	}
 
-	spin_lock_irq(&tags->lock);
+	list_del_init(&info->node);
 	users = tags->ctl.active_queues - 1;
 	WRITE_ONCE(tags->ctl.active_queues, users);
 	blk_mq_update_wake_batch(tags, users);
-	spin_unlock_irq(&tags->lock);
 
+	if (blk_mq_is_shared_tags(hctx->flags))
+		clear_bit(QUEUE_FLAG_HCTX_ACTIVE, &hctx->queue->queue_flags);
+	else
+		clear_bit(BLK_MQ_S_TAG_ACTIVE, &hctx->state);
+	spin_unlock_irq(&tags->lock);
 	blk_mq_tag_wakeup_all(tags, false);
 }
 
@@ -586,6 +611,7 @@ struct blk_mq_tags *blk_mq_init_tags(unsigned int total_tags,
 	tags->nr_tags = total_tags;
 	tags->nr_reserved_tags = reserved_tags;
 	spin_lock_init(&tags->lock);
+	INIT_LIST_HEAD(&tags->ctl.head);
 
 	if (blk_mq_init_bitmaps(&tags->bitmap_tags, &tags->breserved_tags,
 				total_tags, reserved_tags, node,

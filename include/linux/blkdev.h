@@ -376,7 +376,8 @@ struct blk_independent_access_ranges {
 };
 
 struct shared_tag_info {
-	atomic_t active_tags;
+	atomic_t		active_tags;
+	struct list_head	node;
 };
 
 struct request_queue {
