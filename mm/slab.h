@@ -193,6 +193,25 @@ static inline void __slab_clear_pfmemalloc(struct slab *slab)
 	__folio_clear_active(slab_folio(slab));
 }
 
+/*
+ * Slub reuse PG_workingset bit to keep track of whether it's on
+ * the per-node partial list.
+ */
+static inline bool slab_test_node_partial(const struct slab *slab)
+{
+	return folio_test_workingset((struct folio *)slab_folio(slab));
+}
+
+static inline void slab_set_node_partial(struct slab *slab)
+{
+	__folio_set_workingset(slab_folio(slab));
+}
+
+static inline void slab_clear_node_partial(struct slab *slab)
+{
+	__folio_clear_workingset(slab_folio(slab));
+}
+
 static inline void *slab_address(const struct slab *slab)
 {
 	return folio_address(slab_folio(slab));
