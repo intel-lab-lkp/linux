@@ -1679,30 +1679,6 @@ static void raid1_error(struct mddev *mddev, struct md_rdev *rdev)
 		mdname(mddev), conf->raid_disks - mddev->degraded);
 }
 
-static void print_conf(struct r1conf *conf)
-{
-	int i;
-
-	pr_debug("RAID1 conf printout:\n");
-	if (!conf) {
-		pr_debug("(!conf)\n");
-		return;
-	}
-	pr_debug(" --- wd:%d rd:%d\n", conf->raid_disks - conf->mddev->degraded,
-		 conf->raid_disks);
-
-	rcu_read_lock();
-	for (i = 0; i < conf->raid_disks; i++) {
-		struct md_rdev *rdev = rcu_dereference(conf->mirrors[i].rdev);
-		if (rdev)
-			pr_debug(" disk %d, wo:%d, o:%d, dev:%pg\n",
-				 i, !test_bit(In_sync, &rdev->flags),
-				 !test_bit(Faulty, &rdev->flags),
-				 rdev->bdev);
-	}
-	rcu_read_unlock();
-}
-
 static void close_sync(struct r1conf *conf)
 {
 	int idx;
@@ -1763,7 +1739,6 @@ static int raid1_spare_active(struct mddev *mddev)
 	mddev->degraded -= count;
 	spin_unlock_irqrestore(&conf->device_lock, flags);
 
-	print_conf(conf);
 	return count;
 }
 
@@ -1829,7 +1804,6 @@ static int raid1_add_disk(struct mddev *mddev, struct md_rdev *rdev)
 		rcu_assign_pointer(p[conf->raid_disks].rdev, rdev);
 	}
 
-	print_conf(conf);
 	return err;
 }
 
@@ -1846,7 +1820,6 @@ static int raid1_remove_disk(struct mddev *mddev, struct md_rdev *rdev)
 	if (rdev != p->rdev)
 		p = conf->mirrors + conf->raid_disks + number;
 
-	print_conf(conf);
 	if (rdev == p->rdev) {
 		if (test_bit(In_sync, &rdev->flags) ||
 		    atomic_read(&rdev->nr_pending)) {
@@ -1902,7 +1875,6 @@ static int raid1_remove_disk(struct mddev *mddev, struct md_rdev *rdev)
 	}
 abort:
 
-	print_conf(conf);
 	return err;
 }
 

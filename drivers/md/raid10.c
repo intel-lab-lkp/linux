@@ -2059,31 +2059,6 @@ static void raid10_error(struct mddev *mddev, struct md_rdev *rdev)
 		mdname(mddev), conf->geo.raid_disks - mddev->degraded);
 }
 
-static void print_conf(struct r10conf *conf)
-{
-	int i;
-	struct md_rdev *rdev;
-
-	pr_debug("RAID10 conf printout:\n");
-	if (!conf) {
-		pr_debug("(!conf)\n");
-		return;
-	}
-	pr_debug(" --- wd:%d rd:%d\n", conf->geo.raid_disks - conf->mddev->degraded,
-		 conf->geo.raid_disks);
-
-	/* This is only called with ->reconfix_mutex held, so
-	 * rcu protection of rdev is not needed */
-	for (i = 0; i < conf->geo.raid_disks; i++) {
-		rdev = conf->mirrors[i].rdev;
-		if (rdev)
-			pr_debug(" disk %d, wo:%d, o:%d, dev:%pg\n",
-				 i, !test_bit(In_sync, &rdev->flags),
-				 !test_bit(Faulty, &rdev->flags),
-				 rdev->bdev);
-	}
-}
-
 static void close_sync(struct r10conf *conf)
 {
 	wait_barrier(conf, false);
@@ -2136,7 +2111,6 @@ static int raid10_spare_active(struct mddev *mddev)
 	mddev->degraded -= count;
 	spin_unlock_irqrestore(&conf->device_lock, flags);
 
-	print_conf(conf);
 	return count;
 }
 
@@ -2207,7 +2181,6 @@ static int raid10_add_disk(struct mddev *mddev, struct md_rdev *rdev)
 		rcu_assign_pointer(p->replacement, rdev);
 	}
 
-	print_conf(conf);
 	return err;
 }
 
@@ -2219,7 +2192,6 @@ static int raid10_remove_disk(struct mddev *mddev, struct md_rdev *rdev)
 	struct md_rdev **rdevp;
 	struct raid10_info *p;
 
-	print_conf(conf);
 	if (unlikely(number >= mddev->raid_disks))
 		return 0;
 	p = conf->mirrors + number;
@@ -2271,7 +2243,6 @@ static int raid10_remove_disk(struct mddev *mddev, struct md_rdev *rdev)
 
 abort:
 
-	print_conf(conf);
 	return err;
 }
 
