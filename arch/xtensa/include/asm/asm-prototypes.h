@@ -3,7 +3,7 @@
 #define __ASM_PROTOTYPES_H
 
 #include <asm/cacheflush.h>
-#include <asm/checksum.h>
+#include <net/checksum.h>
 #include <asm/ftrace.h>
 #include <asm/page.h>
 #include <asm/string.h>

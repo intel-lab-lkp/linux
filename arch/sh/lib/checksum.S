@@ -193,7 +193,7 @@ unsigned int csum_partial_copy_generic (const char *src, char *dst, int len)
 ! r6:	int LEN
 !
 ENTRY(csum_partial_copy_generic)
-	mov	#-1,r7
+	mov	#0,r7
 	mov	#3,r0		! Check src and dest are equally aligned
 	mov	r4,r1
 	and	r0,r1
@@ -358,8 +358,10 @@ EXC(	mov.b	r0,@r5	)
 .section .fixup, "ax"							
 
 6001:
+	mov	#-1,r1
 	rts
-	 mov	#0,r0
+	 mov	#-1,r0
 .previous
+	mov	#0,r1
 	rts
 	 mov	r7,r0

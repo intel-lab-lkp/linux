@@ -12,7 +12,7 @@
 #include <linux/crash_dump.h>
 #include <linux/kernel.h>
 #include <linux/slab.h>
-#include <asm/checksum.h>
+#include <net/checksum.h>
 #include <asm/abs_lowcore.h>
 #include <asm/os_info.h>
 #include <asm/maccess.h>

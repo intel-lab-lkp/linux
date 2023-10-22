@@ -14,7 +14,7 @@
 #include <linux/io.h>
 #include <linux/arm-smccc.h>
 
-#include <asm/checksum.h>
+#include <net/checksum.h>
 #include <asm/ftrace.h>
 
 /*

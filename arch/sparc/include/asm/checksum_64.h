@@ -39,8 +39,8 @@ __wsum csum_partial(const void * buff, int len, __wsum sum);
  * better 64-bit) boundary
  */
 __wsum csum_partial_copy_nocheck(const void *src, void *dst, int len);
-__wsum csum_and_copy_from_user(const void __user *src, void *dst, int len);
-__wsum csum_and_copy_to_user(const void *src, void __user *dst, int len);
+__wsum_fault csum_and_copy_from_user(const void __user *src, void *dst, int len);
+__wsum_fault csum_and_copy_to_user(const void *src, void __user *dst, int len);
 
 /* ihl is always 5 or greater, almost always is 5, and iph is word aligned
  * the majority of the time.

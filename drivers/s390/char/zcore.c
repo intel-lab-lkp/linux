@@ -27,7 +27,7 @@
 #include <asm/debug.h>
 #include <asm/processor.h>
 #include <asm/irqflags.h>
-#include <asm/checksum.h>
+#include <net/checksum.h>
 #include <asm/os_info.h>
 #include <asm/switch_to.h>
 #include <asm/maccess.h>

@@ -25,7 +25,7 @@
 #include <asm/types.h>
 #include <asm/byteorder.h>
 #include <net/ip.h>
-#include <asm/checksum.h>
+#include <net/checksum.h>
 #include <linux/in6.h>
 #include <linux/tcp.h>
 #include <linux/ipv6.h>

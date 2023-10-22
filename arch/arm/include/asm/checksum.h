@@ -38,16 +38,16 @@ __wsum csum_partial(const void *buff, int len, __wsum sum);
 __wsum
 csum_partial_copy_nocheck(const void *src, void *dst, int len);
 
-__wsum
+__wsum_fault
 csum_partial_copy_from_user(const void __user *src, void *dst, int len);
 
 #define _HAVE_ARCH_COPY_AND_CSUM_FROM_USER
 #define _HAVE_ARCH_CSUM_AND_COPY
 static inline
-__wsum csum_and_copy_from_user(const void __user *src, void *dst, int len)
+__wsum_fault csum_and_copy_from_user(const void __user *src, void *dst, int len)
 {
 	if (!access_ok(src, len))
-		return 0;
+		return -1;
 
 	return csum_partial_copy_from_user(src, dst, len);
 }

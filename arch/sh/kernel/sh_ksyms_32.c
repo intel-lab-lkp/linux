@@ -4,7 +4,7 @@
 #include <linux/uaccess.h>
 #include <linux/delay.h>
 #include <linux/mm.h>
-#include <asm/checksum.h>
+#include <net/checksum.h>
 #include <asm/sections.h>
 
 EXPORT_SYMBOL(memchr);

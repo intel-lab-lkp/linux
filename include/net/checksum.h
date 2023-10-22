@@ -16,8 +16,40 @@
 #define _CHECKSUM_H
 
 #include <linux/errno.h>
-#include <asm/types.h>
+#include <linux/bitops.h>
 #include <asm/byteorder.h>
+
+typedef u64 __bitwise __wsum_fault;
+static inline __wsum_fault to_wsum_fault(__wsum v)
+{
+#if defined(CONFIG_64BIT) || defined(__LITTLE_ENDIAN__)
+	return (__force __wsum_fault)v;
+#else
+	return (__force __wsum_fault)((__force u64)v << 32);
+#endif
+}
+
+static inline __wsum_fault from_wsum_fault(__wsum v)
+{
+#if defined(CONFIG_64BIT) || defined(__LITTLE_ENDIAN__)
+	return (__force __wsum)v;
+#else
+	return (__force __wsum)((__force u64)v >> 32);
+#endif
+}
+
+static inline bool wsum_fault_check(__wsum_fault v)
+{
+#if defined(CONFIG_64BIT) || defined(__LITTLE_ENDIAN__)
+	return (__force s64)v < 0;
+#else
+	return (int)(__force u32)v < 0;
+#endif
+}
+
+#define CSUM_FAULT ((__force __wsum_fault)-1)
+
+
 #include <asm/checksum.h>
 #if !defined(_HAVE_ARCH_COPY_AND_CSUM_FROM_USER) || !defined(HAVE_CSUM_COPY_USER)
 #include <linux/uaccess.h>
@@ -25,24 +57,24 @@
 
 #ifndef _HAVE_ARCH_COPY_AND_CSUM_FROM_USER
 static __always_inline
-__wsum csum_and_copy_from_user (const void __user *src, void *dst,
+__wsum_fault csum_and_copy_from_user (const void __user *src, void *dst,
 				      int len)
 {
 	if (copy_from_user(dst, src, len))
-		return 0;
-	return csum_partial(dst, len, ~0U);
+		return CSUM_FAULT;
+	return to_wsum_fault(csum_partial(dst, len, 0));
 }
 #endif
 
 #ifndef HAVE_CSUM_COPY_USER
-static __always_inline __wsum csum_and_copy_to_user
+static __always_inline __wsum_fault csum_and_copy_to_user
 (const void *src, void __user *dst, int len)
 {
-	__wsum sum = csum_partial(src, len, ~0U);
+	__wsum sum = csum_partial(src, len, 0);
 
 	if (copy_to_user(dst, src, len) == 0)
-		return sum;
-	return 0;
+		return to_wsum_fault(sum);
+	return CSUM_FAULT;
 }
 #endif
 

@@ -44,7 +44,7 @@ SYM_FUNC_START(csum_partial_copy_generic)
 	movq  %r13, 3*8(%rsp)
 	movq  %r15, 4*8(%rsp)
 
-	movl  $-1, %eax
+	xorl  %eax, %eax
 	xorl  %r9d, %r9d
 	movl  %edx, %ecx
 	cmpl  $8, %ecx
@@ -249,8 +249,8 @@ SYM_FUNC_START(csum_partial_copy_generic)
 	roll $8, %eax
 	jmp .Lout
 
-	/* Exception: just return 0 */
+	/* Exception: just return -1 */
 .Lfault:
-	xorl %eax, %eax
+	movq -1, %rax
 	jmp  .Lout
 SYM_FUNC_END(csum_partial_copy_generic)

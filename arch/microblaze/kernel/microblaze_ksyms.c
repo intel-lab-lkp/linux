@@ -10,7 +10,7 @@
 #include <linux/in6.h>
 #include <linux/syscalls.h>
 
-#include <asm/checksum.h>
+#include <net/checksum.h>
 #include <asm/cacheflush.h>
 #include <linux/io.h>
 #include <asm/page.h>

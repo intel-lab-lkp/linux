@@ -52,7 +52,7 @@ __asm__ __volatile__("insqh %1,%2,%0":"=r" (z):"r" (x),"r" (y))
 	__guu_err;					\
 })
 
-static inline unsigned short from64to16(unsigned long x)
+static inline __wsum_fault from64to16(unsigned long x)
 {
 	/* Using extract instructions is a bit more efficient
 	   than the original shift/bitmask version.  */
@@ -72,7 +72,7 @@ static inline unsigned short from64to16(unsigned long x)
 			+ (unsigned long) tmp_v.us[2];
 
 	/* Similarly, out_v.us[2] is always zero for the final add.  */
-	return out_v.us[0] + out_v.us[1];
+	return to_wsum_fault((__force __wsum)(out_v.us[0] + out_v.us[1]));
 }
 
 
@@ -80,17 +80,17 @@ static inline unsigned short from64to16(unsigned long x)
 /*
  * Ok. This isn't fun, but this is the EASY case.
  */
-static inline unsigned long
+static inline __wsum_fault
 csum_partial_cfu_aligned(const unsigned long __user *src, unsigned long *dst,
 			 long len)
 {
-	unsigned long checksum = ~0U;
+	unsigned long checksum = 0;
 	unsigned long carry = 0;
 
 	while (len >= 0) {
 		unsigned long word;
 		if (__get_word(ldq, word, src))
-			return 0;
+			return CSUM_FAULT;
 		checksum += carry;
 		src++;
 		checksum += word;
@@ -104,7 +104,7 @@ csum_partial_cfu_aligned(const unsigned long __user *src, unsigned long *dst,
 	if (len) {
 		unsigned long word, tmp;
 		if (__get_word(ldq, word, src))
-			return 0;
+			return CSUM_FAULT;
 		tmp = *dst;
 		mskql(word, len, word);
 		checksum += word;
@@ -113,14 +113,14 @@ csum_partial_cfu_aligned(const unsigned long __user *src, unsigned long *dst,
 		*dst = word | tmp;
 		checksum += carry;
 	}
-	return checksum;
+	return from64to16 (checksum);
 }
 
 /*
  * This is even less fun, but this is still reasonably
  * easy.
  */
-static inline unsigned long
+static inline __wsum_fault
 csum_partial_cfu_dest_aligned(const unsigned long __user *src,
 			      unsigned long *dst,
 			      unsigned long soff,
@@ -129,16 +129,16 @@ csum_partial_cfu_dest_aligned(const unsigned long __user *src,
 	unsigned long first;
 	unsigned long word, carry;
 	unsigned long lastsrc = 7+len+(unsigned long)src;
-	unsigned long checksum = ~0U;
+	unsigned long checksum = 0;
 
 	if (__get_word(ldq_u, first,src))
-		return 0;
+		return CSUM_FAULT;
 	carry = 0;
 	while (len >= 0) {
 		unsigned long second;
 
 		if (__get_word(ldq_u, second, src+1))
-			return 0;
+			return CSUM_FAULT;
 		extql(first, soff, word);
 		len -= 8;
 		src++;
@@ -157,7 +157,7 @@ csum_partial_cfu_dest_aligned(const unsigned long __user *src,
 		unsigned long tmp;
 		unsigned long second;
 		if (__get_word(ldq_u, second, lastsrc))
-			return 0;
+			return CSUM_FAULT;
 		tmp = *dst;
 		extql(first, soff, word);
 		extqh(second, soff, first);
@@ -169,13 +169,13 @@ csum_partial_cfu_dest_aligned(const unsigned long __user *src,
 		*dst = word | tmp;
 		checksum += carry;
 	}
-	return checksum;
+	return from64to16 (checksum);
 }
 
 /*
  * This is slightly less fun than the above..
  */
-static inline unsigned long
+static inline __wsum_fault
 csum_partial_cfu_src_aligned(const unsigned long __user *src,
 			     unsigned long *dst,
 			     unsigned long doff,
@@ -185,12 +185,12 @@ csum_partial_cfu_src_aligned(const unsigned long __user *src,
 	unsigned long carry = 0;
 	unsigned long word;
 	unsigned long second_dest;
-	unsigned long checksum = ~0U;
+	unsigned long checksum = 0;
 
 	mskql(partial_dest, doff, partial_dest);
 	while (len >= 0) {
 		if (__get_word(ldq, word, src))
-			return 0;
+			return CSUM_FAULT;
 		len -= 8;
 		insql(word, doff, second_dest);
 		checksum += carry;
@@ -205,7 +205,7 @@ csum_partial_cfu_src_aligned(const unsigned long __user *src,
 	if (len) {
 		checksum += carry;
 		if (__get_word(ldq, word, src))
-			return 0;
+			return CSUM_FAULT;
 		mskql(word, len, word);
 		len -= 8;
 		checksum += word;
@@ -226,14 +226,14 @@ csum_partial_cfu_src_aligned(const unsigned long __user *src,
 	stq_u(partial_dest | second_dest, dst);
 out:
 	checksum += carry;
-	return checksum;
+	return from64to16 (checksum);
 }
 
 /*
  * This is so totally un-fun that it's frightening. Don't
  * look at this too closely, you'll go blind.
  */
-static inline unsigned long
+static inline __wsum_fault
 csum_partial_cfu_unaligned(const unsigned long __user * src,
 			   unsigned long * dst,
 			   unsigned long soff, unsigned long doff,
@@ -242,10 +242,10 @@ csum_partial_cfu_unaligned(const unsigned long __user * src,
 	unsigned long carry = 0;
 	unsigned long first;
 	unsigned long lastsrc;
-	unsigned long checksum = ~0U;
+	unsigned long checksum = 0;
 
 	if (__get_word(ldq_u, first, src))
-		return 0;
+		return CSUM_FAULT;
 	lastsrc = 7+len+(unsigned long)src;
 	mskql(partial_dest, doff, partial_dest);
 	while (len >= 0) {
@@ -253,7 +253,7 @@ csum_partial_cfu_unaligned(const unsigned long __user * src,
 		unsigned long second_dest;
 
 		if (__get_word(ldq_u, second, src+1))
-			return 0;
+			return CSUM_FAULT;
 		extql(first, soff, word);
 		checksum += carry;
 		len -= 8;
@@ -275,7 +275,7 @@ csum_partial_cfu_unaligned(const unsigned long __user * src,
 		unsigned long second_dest;
 
 		if (__get_word(ldq_u, second, lastsrc))
-			return 0;
+			return CSUM_FAULT;
 		extql(first, soff, word);
 		extqh(second, soff, first);
 		word |= first;
@@ -297,7 +297,7 @@ csum_partial_cfu_unaligned(const unsigned long __user * src,
 		unsigned long second_dest;
 
 		if (__get_word(ldq_u, second, lastsrc))
-			return 0;
+			return CSUM_FAULT;
 		extql(first, soff, word);
 		extqh(second, soff, first);
 		word |= first;
@@ -310,22 +310,21 @@ csum_partial_cfu_unaligned(const unsigned long __user * src,
 		stq_u(partial_dest | word | second_dest, dst);
 		checksum += carry;
 	}
-	return checksum;
+	return from64to16 (checksum);
 }
 
-static __wsum __csum_and_copy(const void __user *src, void *dst, int len)
+static __wsum_fault __csum_and_copy(const void __user *src, void *dst, int len)
 {
 	unsigned long soff = 7 & (unsigned long) src;
 	unsigned long doff = 7 & (unsigned long) dst;
-	unsigned long checksum;
 
 	if (!doff) {
 		if (!soff)
-			checksum = csum_partial_cfu_aligned(
+			return csum_partial_cfu_aligned(
 				(const unsigned long __user *) src,
 				(unsigned long *) dst, len-8);
 		else
-			checksum = csum_partial_cfu_dest_aligned(
+			return csum_partial_cfu_dest_aligned(
 				(const unsigned long __user *) src,
 				(unsigned long *) dst,
 				soff, len-8);
@@ -333,31 +332,28 @@ static __wsum __csum_and_copy(const void __user *src, void *dst, int len)
 		unsigned long partial_dest;
 		ldq_u(partial_dest, dst);
 		if (!soff)
-			checksum = csum_partial_cfu_src_aligned(
+			return csum_partial_cfu_src_aligned(
 				(const unsigned long __user *) src,
 				(unsigned long *) dst,
 				doff, len-8, partial_dest);
 		else
-			checksum = csum_partial_cfu_unaligned(
+			return csum_partial_cfu_unaligned(
 				(const unsigned long __user *) src,
 				(unsigned long *) dst,
 				soff, doff, len-8, partial_dest);
 	}
-	return (__force __wsum)from64to16 (checksum);
 }
 
-__wsum
-csum_and_copy_from_user(const void __user *src, void *dst, int len)
+__wsum_fault csum_and_copy_from_user(const void __user *src, void *dst, int len)
 {
 	if (!access_ok(src, len))
-		return 0;
+		return CSUM_FAULT;
 	return __csum_and_copy(src, dst, len);
 }
 
-__wsum
-csum_partial_copy_nocheck(const void *src, void *dst, int len)
+__wsum csum_partial_copy_nocheck(const void *src, void *dst, int len)
 {
-	return __csum_and_copy((__force const void __user *)src,
-						dst, len);
+	return from_wsum_fault(__csum_and_copy((__force const void __user *)src,
+						dst, len));
 }
 EXPORT_SYMBOL(csum_partial_copy_nocheck);

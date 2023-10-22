@@ -37,7 +37,7 @@ asmlinkage __wsum csum_partial(const void *buff, int len, __wsum sum);
  * better 64-bit) boundary
  */
 
-asmlinkage __wsum csum_partial_copy_generic(const void *src, void *dst, int len);
+asmlinkage __wsum_fault csum_partial_copy_generic(const void *src, void *dst, int len);
 
 #define _HAVE_ARCH_CSUM_AND_COPY
 /*
@@ -47,16 +47,16 @@ asmlinkage __wsum csum_partial_copy_generic(const void *src, void *dst, int len)
 static inline
 __wsum csum_partial_copy_nocheck(const void *src, void *dst, int len)
 {
-	return csum_partial_copy_generic(src, dst, len);
+	return from_wsum_fault(csum_partial_copy_generic(src, dst, len));
 }
 
 #define _HAVE_ARCH_COPY_AND_CSUM_FROM_USER
 static inline
-__wsum csum_and_copy_from_user(const void __user *src, void *dst,
+__wsum_fault csum_and_copy_from_user(const void __user *src, void *dst,
 				   int len)
 {
 	if (!access_ok(src, len))
-		return 0;
+		return CSUM_FAULT;
 	return csum_partial_copy_generic((__force const void *)src, dst, len);
 }
 
@@ -237,11 +237,11 @@ static __inline__ __sum16 csum_ipv6_magic(const struct in6_addr *saddr,
  *	Copy and checksum to user
  */
 #define HAVE_CSUM_COPY_USER
-static __inline__ __wsum csum_and_copy_to_user(const void *src,
+static __inline__ __wsum_fault csum_and_copy_to_user(const void *src,
 					       void __user *dst, int len)
 {
 	if (!access_ok(dst, len))
-		return 0;
+		return CSUM_FAULT;
 	return csum_partial_copy_generic(src, (__force void *)dst, len);
 }
 #endif

@@ -86,7 +86,7 @@ sum	.req	r3
 
 FN_ENTRY
 		save_regs
-		mov	sum, #-1
+		mov	sum, #0
 
 		cmp	len, #8			@ Ensure that we have at least
 		blo	.Lless8			@ 8 bytes to copy.
@@ -160,6 +160,7 @@ FN_ENTRY
 		ldr	sum, [sp, #0]		@ dst
 		tst	sum, #1
 		movne	r0, r0, ror #8
+		mov	r1, #0
 		load_regs
 
 .Lsrc_not_aligned:

@@ -4,7 +4,7 @@
  */
 
 #include <asm/xor.h>
-#include <asm/checksum.h>
+#include <net/checksum.h>
 #include <asm/trap_block.h>
 #include <linux/uaccess.h>
 #include <asm/atomic.h>

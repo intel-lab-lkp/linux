@@ -262,7 +262,7 @@ unsigned int csum_partial_copy_generic (const char *src, char *dst,
 
 #define EXC(y...)						\
 	9999: y;						\
-	_ASM_EXTABLE_TYPE(9999b, 7f, EX_TYPE_UACCESS | EX_FLAG_CLEAR_AX)
+	_ASM_EXTABLE_TYPE(9999b, 9f, EX_TYPE_UACCESS)
 
 #ifndef CONFIG_X86_USE_PPRO_CHECKSUM
 
@@ -278,7 +278,7 @@ SYM_FUNC_START(csum_partial_copy_generic)
 	movl ARGBASE+4(%esp),%esi	# src
 	movl ARGBASE+8(%esp),%edi	# dst
 
-	movl $-1, %eax			# sum
+	xorl %eax,%eax			# sum
 	testl $2, %edi			# Check alignment. 
 	jz 2f				# Jump if alignment is ok.
 	subl $2, %ecx			# Alignment uses up two bytes.
@@ -357,12 +357,17 @@ EXC(	movb %cl, (%edi)	)
 6:	addl %ecx, %eax
 	adcl $0, %eax
 7:
-
+	xorl %edx, %edx
+8:
 	popl %ebx
 	popl %esi
 	popl %edi
 	popl %ecx			# equivalent to addl $4,%esp
 	RET
+9:
+	movl $-1,%eax
+	movl $-1,%edx
+	jmp 8b
 SYM_FUNC_END(csum_partial_copy_generic)
 
 #else
@@ -388,7 +393,7 @@ SYM_FUNC_START(csum_partial_copy_generic)
 	movl ARGBASE+4(%esp),%esi	#src
 	movl ARGBASE+8(%esp),%edi	#dst	
 	movl ARGBASE+12(%esp),%ecx	#len
-	movl $-1, %eax			#sum
+	xorl %eax, %eax			#sum
 #	movl %ecx, %edx  
 	movl %ecx, %ebx  
 	movl %esi, %edx
@@ -430,11 +435,16 @@ EXC(	movb %dl, (%edi)         )
 6:	addl %edx, %eax
 	adcl $0, %eax
 7:
-
+	xorl %edx, %edx
+8:
 	popl %esi
 	popl %edi
 	popl %ebx
 	RET
+9:
+	movl $-1,%eax
+	movl $-1,%edx
+	jmp 8b
 SYM_FUNC_END(csum_partial_copy_generic)
 				
 #undef ROUND

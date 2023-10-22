@@ -28,7 +28,7 @@
 #include <asm/cpcmd.h>
 #include <asm/ebcdic.h>
 #include <asm/sclp.h>
-#include <asm/checksum.h>
+#include <net/checksum.h>
 #include <asm/debug.h>
 #include <asm/abs_lowcore.h>
 #include <asm/os_info.h>

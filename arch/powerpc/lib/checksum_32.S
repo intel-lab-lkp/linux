@@ -122,7 +122,7 @@ LG_CACHELINE_BYTES = L1_CACHE_SHIFT
 CACHELINE_MASK = (L1_CACHE_BYTES-1)
 
 _GLOBAL(csum_partial_copy_generic)
-	li	r12,-1
+	li	r12,0
 	addic	r0,r0,0			/* clear carry */
 	addi	r6,r4,-4
 	neg	r0,r4
@@ -233,12 +233,14 @@ _GLOBAL(csum_partial_copy_generic)
 	slwi	r0,r0,8
 	adde	r12,r12,r0
 66:	addze	r3,r12
+	li	r4,0
 	beqlr+	cr7
 	rlwinm	r3,r3,8,0,31	/* odd destination address: rotate one byte */
 	blr
 
 fault:
-	li	r3,0
+	li	r3,-1
+	li	r4,-1
 	blr
 
 	EX_TABLE(70b, fault);

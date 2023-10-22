@@ -4,7 +4,7 @@
  */
 
 #include <kunit/test.h>
-#include <asm/checksum.h>
+#include <net/checksum.h>
 
 #define MAX_LEN 512
 #define MAX_ALIGN 64

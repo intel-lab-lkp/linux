@@ -208,7 +208,7 @@ EXPORT_SYMBOL(__csum_partial)
  * csum_partial_copy_generic(r3=src, r4=dst, r5=len)
  */
 _GLOBAL(csum_partial_copy_generic)
-	li	r6,-1
+	li	r6,0
 	addic	r0,r6,0			/* clear carry */
 
 	srdi.	r6,r5,3			/* less than 8 bytes? */
@@ -406,7 +406,7 @@ dstnr;	stb	r6,0(r4)
 	ld	r16,STK_REG(R16)(r1)
 	addi	r1,r1,STACKFRAMESIZE
 .Lerror_nr:
-	li	r3,0
+	li	r3,-1
 	blr
 
 EXPORT_SYMBOL(csum_partial_copy_generic)

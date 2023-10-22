@@ -192,7 +192,7 @@ unsigned int csum_partial_copy_generic (const char *src, char *dst, int len)
 ENTRY(csum_partial_copy_generic)
 
 	abi_entry_default
-	movi	a5, -1
+	movi	a5, 0
 	or	a10, a2, a3
 
 	/* We optimize the following alignment tests for the 4-byte
@@ -311,6 +311,7 @@ EX(10f)	s8i	a9, a3, 0
 	ONES_ADD(a5, a9)
 8:
 	mov	a2, a5
+	movi	a3, 0
 	abi_ret_default
 
 5:
@@ -353,7 +354,8 @@ EXPORT_SYMBOL(csum_partial_copy_generic)
 # Exception handler:
 .section .fixup, "ax"
 10:
-	movi	a2, 0
+	movi	a2, -1
+	movi	a3, -1
 	abi_ret_default
 
 .previous

@@ -8,16 +8,16 @@
 #include <linux/export.h>
 #include <linux/compiler.h>
 #include <linux/types.h>
-#include <asm/checksum.h>
+#include <net/checksum.h>
 #include <linux/uaccess.h>
 
-__wsum csum_and_copy_from_user(const void __user *src, void *dst,
+__wsum_fault csum_and_copy_from_user(const void __user *src, void *dst,
 			       int len)
 {
-	__wsum csum;
+	__wsum_fault csum;
 
 	if (unlikely(!user_read_access_begin(src, len)))
-		return 0;
+		return CSUM_FAULT;
 
 	csum = csum_partial_copy_generic((void __force *)src, dst, len);
 
@@ -25,12 +25,12 @@ __wsum csum_and_copy_from_user(const void __user *src, void *dst,
 	return csum;
 }
 
-__wsum csum_and_copy_to_user(const void *src, void __user *dst, int len)
+__wsum_fault csum_and_copy_to_user(const void *src, void __user *dst, int len)
 {
-	__wsum csum;
+	__wsum_fault csum;
 
 	if (unlikely(!user_write_access_begin(dst, len)))
-		return 0;
+		return CSUM_FAULT;
 
 	csum = csum_partial_copy_generic(src, (void __force *)dst, len);
 

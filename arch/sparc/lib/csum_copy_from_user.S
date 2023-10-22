@@ -9,7 +9,7 @@
 	.section .fixup, "ax";	\
 	.align 4;		\
 99:	retl;			\
-	 mov	0, %o0;		\
+	 mov	-1, %o0;	\
 	.section __ex_table,"a";\
 	.align 4;		\
 	.word 98b, 99b;		\

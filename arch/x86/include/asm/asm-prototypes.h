@@ -4,7 +4,7 @@
 #include <linux/pgtable.h>
 #include <asm/string.h>
 #include <asm/page.h>
-#include <asm/checksum.h>
+#include <net/checksum.h>
 #include <asm/mce.h>
 
 #include <asm-generic/asm-prototypes.h>

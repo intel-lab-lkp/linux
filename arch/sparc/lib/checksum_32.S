@@ -453,5 +453,5 @@ ccslow:	cmp	%g1, 0
  * we only bother with faults on loads... */
 
 cc_fault:
-	ret
-	 clr	%o0
+	retl
+	 mov -1, %g1

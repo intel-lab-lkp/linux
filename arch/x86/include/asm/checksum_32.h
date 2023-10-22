@@ -27,7 +27,7 @@ asmlinkage __wsum csum_partial(const void *buff, int len, __wsum sum);
  * better 64-bit) boundary
  */
 
-asmlinkage __wsum csum_partial_copy_generic(const void *src, void *dst, int len);
+asmlinkage __wsum_fault csum_partial_copy_generic(const void *src, void *dst, int len);
 
 /*
  *	Note: when you get a NULL pointer exception here this means someone
@@ -38,17 +38,17 @@ asmlinkage __wsum csum_partial_copy_generic(const void *src, void *dst, int len)
  */
 static inline __wsum csum_partial_copy_nocheck(const void *src, void *dst, int len)
 {
-	return csum_partial_copy_generic(src, dst, len);
+	return from_wsum_fault(csum_partial_copy_generic(src, dst, len));
 }
 
-static inline __wsum csum_and_copy_from_user(const void __user *src,
+static inline __wsum_fault csum_and_copy_from_user(const void __user *src,
 					     void *dst, int len)
 {
-	__wsum ret;
+	__wsum_fault ret;
 
 	might_sleep();
 	if (!user_access_begin(src, len))
-		return 0;
+		return CSUM_FAULT;
 	ret = csum_partial_copy_generic((__force void *)src, dst, len);
 	user_access_end();
 
@@ -168,15 +168,15 @@ static inline __sum16 csum_ipv6_magic(const struct in6_addr *saddr,
 /*
  *	Copy and checksum to user
  */
-static inline __wsum csum_and_copy_to_user(const void *src,
+static inline __wsum_fault csum_and_copy_to_user(const void *src,
 					   void __user *dst,
 					   int len)
 {
-	__wsum ret;
+	__wsum_fault ret;
 
 	might_sleep();
 	if (!user_access_begin(dst, len))
-		return 0;
+		return CSUM_FAULT;
 
 	ret = csum_partial_copy_generic(src, (__force void *)dst, len);
 	user_access_end();

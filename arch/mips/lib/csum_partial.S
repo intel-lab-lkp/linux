@@ -437,7 +437,7 @@ EXPORT_SYMBOL(csum_partial)
 
 	.macro __BUILD_CSUM_PARTIAL_COPY_USER mode, from, to
 
-	li	sum, -1
+	move	sum, zero
 	move	odd, zero
 	/*
 	 * Note: dst & src may be unaligned, len may be 0
@@ -723,6 +723,9 @@ EXPORT_SYMBOL(csum_partial)
 1:
 #endif
 	.set	pop
+#ifndef CONFIG_64BIT
+	move	v1, zero
+#endif
 	.set reorder
 	jr	ra
 	.set noreorder
@@ -730,8 +733,11 @@ EXPORT_SYMBOL(csum_partial)
 
 	.set noreorder
 .L_exc:
+#ifndef CONFIG_64BIT
+	li	v1, -1
+#endif
 	jr	ra
-	 li	v0, 0
+	 li	v0, -1
 
 FEXPORT(__csum_partial_copy_nocheck)
 EXPORT_SYMBOL(__csum_partial_copy_nocheck)

@@ -128,7 +128,7 @@ EXPORT_SYMBOL(csum_partial);
  * copy from user space while checksumming, with exception handling.
  */
 
-__wsum
+__wsum_fault
 csum_and_copy_from_user(const void __user *src, void *dst, int len)
 {
 	/*
@@ -137,7 +137,7 @@ csum_and_copy_from_user(const void __user *src, void *dst, int len)
 	 * code.
 	 */
 	unsigned long tmp1, tmp2;
-	__wsum sum = ~0U;
+	__wsum sum = 0;
 
 	__asm__("movel %2,%4\n\t"
 		"btst #1,%4\n\t"	/* Check alignment */
@@ -240,7 +240,7 @@ csum_and_copy_from_user(const void __user *src, void *dst, int len)
 		".even\n"
 		/* If any exception occurs, return 0 */
 	     "90:\t"
-		"clrl %0\n"
+		"moveq #1,%5\n"
 		"jra 7b\n"
 		".previous\n"
 		".section __ex_table,\"a\"\n"
@@ -262,7 +262,7 @@ csum_and_copy_from_user(const void __user *src, void *dst, int len)
 		: "0" (sum), "1" (len), "2" (src), "3" (dst)
 	    );
 
-	return sum;
+	return tmp2 ? CSUM_FAULT : to_wsum_fault(sum);
 }
 
 

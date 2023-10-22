@@ -22,7 +22,7 @@
 
 #include <asm/processor.h>
 #include <linux/uaccess.h>
-#include <asm/checksum.h>
+#include <net/checksum.h>
 #include <asm/io.h>
 #include <asm/hardirq.h>
 #include <asm/delay.h>

@@ -1184,15 +1184,16 @@ EXPORT_SYMBOL(iov_iter_get_pages_alloc2);
 size_t csum_and_copy_from_iter(void *addr, size_t bytes, __wsum *csum,
 			       struct iov_iter *i)
 {
-	__wsum sum, next;
+	__wsum sum;
+	__wsum_fault next;
 	sum = *csum;
 	if (WARN_ON_ONCE(!i->data_source))
 		return 0;
 
 	iterate_and_advance(i, bytes, base, len, off, ({
 		next = csum_and_copy_from_user(base, addr + off, len);
-		sum = csum_block_add(sum, next, off);
-		next ? 0 : len;
+		sum = csum_block_add(sum, from_wsum_fault(next), off);
+		unlikely(wsum_fault_check(next)) ? 0 : len;
 	}), ({
 		sum = csum_and_memcpy(addr + off, base, len, sum, off);
 	})
@@ -1206,7 +1207,8 @@ size_t csum_and_copy_to_iter(const void *addr, size_t bytes, void *_csstate,
 			     struct iov_iter *i)
 {
 	struct csum_state *csstate = _csstate;
-	__wsum sum, next;
+	__wsum sum;
+	__wsum_fault next;
 
 	if (WARN_ON_ONCE(i->data_source))
 		return 0;
@@ -1222,8 +1224,8 @@ size_t csum_and_copy_to_iter(const void *addr, size_t bytes, void *_csstate,
 	sum = csum_shift(csstate->csum, csstate->off);
 	iterate_and_advance(i, bytes, base, len, off, ({
 		next = csum_and_copy_to_user(addr + off, base, len);
-		sum = csum_block_add(sum, next, off);
-		next ? 0 : len;
+		sum = csum_block_add(sum, from_wsum_fault(next), off);
+		unlikely(wsum_fault_check(next)) ? 0 : len;
 	}), ({
 		sum = csum_and_memcpy(base, addr + off, len, sum, off);
 	})
