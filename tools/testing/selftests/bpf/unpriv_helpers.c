@@ -4,8 +4,35 @@
 #include <stdlib.h>
 #include <error.h>
 #include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <fcntl.h>
 
 #include "unpriv_helpers.h"
+
+static bool get_mitigations_off(void)
+{
+	char cmdline[4096], *c;
+	int fd;
+
+	fd = open("/proc/cmdline", O_RDONLY);
+	if (fd < 0) {
+		perror("open /proc/cmdline");
+		return false;
+	}
+
+	if (read(fd, cmdline, sizeof(cmdline) - 1) < 0) {
+		perror("read /proc/cmdline");
+		return false;
+	}
+
+	cmdline[sizeof(cmdline) - 1] = '\0';
+	for (c = strtok(cmdline, " \n"); c; c = strtok(NULL, " \n")) {
+		if (!strncmp(c, "mitigtions=off", strlen(c)))
+			return true;
+	}
+	return false;
+}
 
 bool get_unpriv_disabled(void)
 {
@@ -22,5 +49,5 @@ bool get_unpriv_disabled(void)
 		disabled = true;
 	}
 
-	return disabled;
+	return disabled ? true : !get_mitigations_off();
 }
