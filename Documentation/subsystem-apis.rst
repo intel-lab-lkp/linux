@@ -62,18 +62,27 @@ Storage interfaces
    target/index
 
 **Fixme**: much more organizational work is needed here.
+Embedded interfaces
+-------------------
+
+.. toctree::
+   :maxdepth: 1
+
+   iio/index
+   spi/index
+   i2c/index
+   fpga/index
+   w1/index
+
+Miscellaneous
+-------------
 
 .. toctree::
    :maxdepth: 1
 
    accounting/index
    cpu-freq/index
-   fpga/index
-   i2c/index
-   iio/index
    pcmcia/index
-   spi/index
-   w1/index
    watchdog/index
    virt/index
    hwmon/index
