@@ -802,19 +802,17 @@ static int octeon_console_read(struct octeon_device *oct, u32 console_num,
 }
 
 #define FBUF_SIZE	(4 * 1024 * 1024)
-#define MAX_BOOTTIME_SIZE    80
 
 int octeon_download_firmware(struct octeon_device *oct, const u8 *data,
 			     size_t size)
 {
 	struct octeon_firmware_file_header *h;
-	char boottime[MAX_BOOTTIME_SIZE];
 	struct timespec64 ts;
 	u32 crc32_result;
+	u32 i, rem, used;
 	u64 load_addr;
 	u32 image_len;
 	int ret = 0;
-	u32 i, rem;
 
 	if (size < sizeof(struct octeon_firmware_file_header)) {
 		dev_err(&oct->pci_dev->dev, "Firmware file too small (%d < %d).\n",
@@ -896,16 +894,15 @@ int octeon_download_firmware(struct octeon_device *oct, const u8 *data,
 	 * Octeon always uses UTC time. so timezone information is not sent.
 	 */
 	ktime_get_real_ts64(&ts);
-	ret = snprintf(boottime, MAX_BOOTTIME_SIZE,
+
+	used = strnlen(h->bootcmd, sizeof(h->bootcmd));
+	ret = snprintf(h->bootcmd + used, sizeof(h->bootcmd) - used,
 		       " time_sec=%lld time_nsec=%ld",
 		       (s64)ts.tv_sec, ts.tv_nsec);
-	if ((sizeof(h->bootcmd) - strnlen(h->bootcmd, sizeof(h->bootcmd))) <=
-		ret) {
+	if (ret >= sizeof(h->bootcmd) - used) {
 		dev_err(&oct->pci_dev->dev, "Boot command buffer too small\n");
 		return -EINVAL;
 	}
-	strncat(h->bootcmd, boottime,
-		sizeof(h->bootcmd) - strnlen(h->bootcmd, sizeof(h->bootcmd)) - 1);
 
 	dev_info(&oct->pci_dev->dev, "Writing boot command: %s\n",
 		 h->bootcmd);
