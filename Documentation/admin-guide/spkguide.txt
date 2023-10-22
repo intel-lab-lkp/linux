@@ -83,8 +83,7 @@ spkout -- Speak Out
 txprt -- Transport
 dummy -- Plain text terminal
 
-Note: Speakup does * NOT * support usb connections!  Speakup also does *
-NOT * support the internal Tripletalk!
+Note: Speakup does * NOT * support the internal Tripletalk!
 
 Speakup does support two other synthesizers, but because they work in
 conjunction with other software, they must be loaded as modules after
