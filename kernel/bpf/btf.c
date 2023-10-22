@@ -5790,8 +5790,6 @@ struct btf *btf_parse_vmlinux(void)
 	/* btf_parse_vmlinux() runs under bpf_verifier_lock */
 	bpf_ctx_convert.t = btf_type_by_id(btf, bpf_ctx_convert_btf_id[0]);
 
-	bpf_struct_ops_init(btf, log);
-
 	refcount_set(&btf->refcnt, 1);
 
 	err = btf_alloc_id(btf);
@@ -7532,7 +7530,7 @@ struct module *btf_try_get_module(const struct btf *btf)
 /* Returns struct btf corresponding to the struct module.
  * This function can return NULL or ERR_PTR.
  */
-static struct btf *btf_get_module_btf(const struct module *module)
+struct btf *btf_get_module_btf(const struct module *module)
 {
 #ifdef CONFIG_DEBUG_INFO_BTF_MODULES
 	struct btf_module *btf_mod, *tmp;
@@ -8673,3 +8671,40 @@ const struct bpf_struct_ops_desc *btf_get_struct_ops(struct btf *btf, u32 *ret_c
 	return (const struct bpf_struct_ops_desc *)btf->struct_ops_tab->ops;
 }
 
+int register_bpf_struct_ops(struct bpf_struct_ops *st_ops)
+{
+	struct bpf_struct_ops_desc *desc;
+	struct bpf_verifier_log *log;
+	struct btf *btf;
+	int err = 0;
+
+	if (st_ops == NULL)
+		return -EINVAL;
+
+	btf = btf_get_module_btf(st_ops->owner);
+	if (!btf)
+		return -EINVAL;
+
+	log = kzalloc(sizeof(*log), GFP_KERNEL | __GFP_NOWARN);
+	if (!log) {
+		err = -ENOMEM;
+		goto errout;
+	}
+
+	log->level = BPF_LOG_KERNEL;
+
+	desc = btf_add_struct_ops(btf, st_ops);
+	if (IS_ERR(desc)) {
+		err = PTR_ERR(desc);
+		goto errout;
+	}
+
+	bpf_struct_ops_init(desc, btf, log);
+
+errout:
+	kfree(log);
+	btf_put(btf);
+
+	return err;
+}
+EXPORT_SYMBOL_GPL(register_bpf_struct_ops);
