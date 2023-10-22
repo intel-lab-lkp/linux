@@ -1705,7 +1705,7 @@ static void _rtl8821ae_enable_ltr(struct ieee80211_hw *hw)
 static bool _rtl8821ae_wowlan_initialize_adapter(struct ieee80211_hw *hw)
 {
 	struct rtl_priv *rtlpriv = rtl_priv(hw);
-	struct rtl_hal *rtlhal = rtl_hal(rtlpriv);
+	struct rtl_phy *rtlphy = &rtlpriv->phy;
 	bool init_finished = true;
 	u8 tmp = 0;
 
@@ -1735,7 +1735,7 @@ static bool _rtl8821ae_wowlan_initialize_adapter(struct ieee80211_hw *hw)
 	rtl8821ae_set_fw_wowlan_mode(hw, false);
 	rtl8821ae_set_fw_remote_wake_ctrl_cmd(hw, 0);
 
-	if (rtlhal->hw_rof_enable) {
+	if (rtlphy->hw_rof_enable) {
 		tmp = rtl_read_byte(rtlpriv, REG_HSISR + 3);
 		if (tmp & BIT(1)) {
 			/* Clear GPIO9 ISR */
@@ -2042,7 +2042,7 @@ static enum version_8821ae _rtl8821ae_read_chip_version(struct ieee80211_hw *hw)
 	if (rtlhal->hw_type == HARDWARE_TYPE_RTL8821AE) {
 		/*WL_HWROF_EN.*/
 		value32 = rtl_read_dword(rtlpriv, REG_MULTI_FUNC_CTRL);
-		rtlhal->hw_rof_enable = ((value32 & WL_HWROF_EN) ? 1 : 0);
+		rtlphy->hw_rof_enable = ((value32 & WL_HWROF_EN) ? 1 : 0);
 	}
 
 	switch (version) {
@@ -2340,6 +2340,7 @@ void rtl8821ae_card_disable(struct ieee80211_hw *hw)
 	struct rtl_hal *rtlhal = rtl_hal(rtlpriv);
 	struct rtl_ps_ctl *ppsc = rtl_psc(rtlpriv);
 	struct rtl_mac *mac = rtl_mac(rtlpriv);
+	struct rtl_phy *rtlphy = &rtlpriv->phy;
 	enum nl80211_iftype opmode;
 	bool support_remote_wakeup;
 	u8 tmp;
@@ -2449,7 +2450,7 @@ void rtl8821ae_card_disable(struct ieee80211_hw *hw)
 			"Wait Tx DMA Finished before host sleep. count=%d\n",
 			count);
 
-		if (rtlhal->hw_rof_enable) {
+		if (rtlphy->hw_rof_enable) {
 			printk("hw_rof_enable\n");
 			tmp = rtl_read_byte(rtlpriv, REG_HSISR + 3);
 			rtl_write_byte(rtlpriv, REG_HSISR + 3, tmp | BIT(1));
