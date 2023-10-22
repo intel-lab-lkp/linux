@@ -1,0 +1,158 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/clock/brcm,kona-ccu.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Broadcom Kona family clock control units (CCU)
+
+maintainers:
+  - Florian Fainelli <florian.fainelli@broadcom.com>
+  - Ray Jui <rjui@broadcom.com>
+  - Scott Branden <sbranden@broadcom.com>
+
+description:
+  Broadcom "Kona" style clock control unit (CCU) is a clock provider that
+  manages a set of clock signals.
+
+properties:
+  compatible:
+    enum:
+      - brcm,bcm11351-aon-ccu
+      - brcm,bcm11351-hub-ccu
+      - brcm,bcm11351-master-ccu
+      - brcm,bcm11351-root-ccu
+      - brcm,bcm11351-slave-ccu
+      - brcm,bcm21664-aon-ccu
+      - brcm,bcm21664-master-ccu
+      - brcm,bcm21664-root-ccu
+      - brcm,bcm21664-slave-ccu
+
+  reg:
+    maxItems: 1
+
+  '#clock-cells':
+    const: 1
+
+  clock-output-names:
+    minItems: 1
+    maxItems: 10
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - brcm,bcm11351-aon-ccu
+              - brcm,bcm11351-hub-ccu
+              - brcm,bcm11351-master-ccu
+              - brcm,bcm11351-root-ccu
+              - brcm,bcm11351-slave-ccu
+    then:
+      properties:
+        clock-output-names:
+          description: |
+            The following table defines the set of CCUs and clock specifiers
+            for BCM281XX family clocks.
+            These clock specifiers are defined in:
+                "include/dt-bindings/clock/bcm281xx.h"
+
+            CCU     Clock        Type  Index  Specifier
+            ---     -----        ----  -----  ---------
+            root    frac_1m      peri    0    BCM281XX_ROOT_CCU_FRAC_1M
+
+            aon     hub_timer    peri    0    BCM281XX_AON_CCU_HUB_TIMER
+            aon     pmu_bsc      peri    1    BCM281XX_AON_CCU_PMU_BSC
+            aon     pmu_bsc_var  peri    2    BCM281XX_AON_CCU_PMU_BSC_VAR
+
+            hub     tmon_1m      peri    0    BCM281XX_HUB_CCU_TMON_1M
+
+            master  sdio1        peri    0    BCM281XX_MASTER_CCU_SDIO1
+            master  sdio2        peri    1    BCM281XX_MASTER_CCU_SDIO2
+            master  sdio3        peri    2    BCM281XX_MASTER_CCU_SDIO3
+            master  sdio4        peri    3    BCM281XX_MASTER_CCU_SDIO4
+            master  dmac         peri    4    BCM281XX_MASTER_CCU_DMAC
+            master  usb_ic       peri    5    BCM281XX_MASTER_CCU_USB_IC
+            master  hsic2_48m    peri    6    BCM281XX_MASTER_CCU_HSIC_48M
+            master  hsic2_12m    peri    7    BCM281XX_MASTER_CCU_HSIC_12M
+
+            slave   uartb        peri    0    BCM281XX_SLAVE_CCU_UARTB
+            slave   uartb2       peri    1    BCM281XX_SLAVE_CCU_UARTB2
+            slave   uartb3       peri    2    BCM281XX_SLAVE_CCU_UARTB3
+            slave   uartb4       peri    3    BCM281XX_SLAVE_CCU_UARTB4
+            slave   ssp0         peri    4    BCM281XX_SLAVE_CCU_SSP0
+            slave   ssp2         peri    5    BCM281XX_SLAVE_CCU_SSP2
+            slave   bsc1         peri    6    BCM281XX_SLAVE_CCU_BSC1
+            slave   bsc2         peri    7    BCM281XX_SLAVE_CCU_BSC2
+            slave   bsc3         peri    8    BCM281XX_SLAVE_CCU_BSC3
+            slave   pwm          peri    9    BCM281XX_SLAVE_CCU_PWM
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - brcm,bcm21664-aon-ccu
+              - brcm,bcm21664-master-ccu
+              - brcm,bcm21664-root-ccu
+              - brcm,bcm21664-slave-ccu
+    then:
+      properties:
+        clock-output-names:
+          maxItems: 8
+          description: |
+            The following table defines the set of CCUs and clock specifiers
+            for BCM21664 family clocks.
+            These clock specifiers are defined in:
+                "include/dt-bindings/clock/bcm21664.h"
+
+            CCU     Clock         Type  Index  Specifier
+            ---     -----         ----  -----  ---------
+            root    frac_1m       peri    0    BCM21664_ROOT_CCU_FRAC_1M
+
+            aon     hub_timer     peri    0    BCM21664_AON_CCU_HUB_TIMER
+
+            master  sdio1         peri    0    BCM21664_MASTER_CCU_SDIO1
+            master  sdio2         peri    1    BCM21664_MASTER_CCU_SDIO2
+            master  sdio3         peri    2    BCM21664_MASTER_CCU_SDIO3
+            master  sdio4         peri    3    BCM21664_MASTER_CCU_SDIO4
+            master  sdio1_sleep   peri    4    BCM21664_MASTER_CCU_SDIO1_SLEEP
+            master  sdio2_sleep   peri    5    BCM21664_MASTER_CCU_SDIO2_SLEEP
+            master  sdio3_sleep   peri    6    BCM21664_MASTER_CCU_SDIO3_SLEEP
+            master  sdio4_sleep   peri    7    BCM21664_MASTER_CCU_SDIO4_SLEEP
+
+            slave   uartb         peri    0    BCM21664_SLAVE_CCU_UARTB
+            slave   uartb2        peri    1    BCM21664_SLAVE_CCU_UARTB2
+            slave   uartb3        peri    2    BCM21664_SLAVE_CCU_UARTB3
+            slave   uartb4        peri    3    BCM21664_SLAVE_CCU_UARTB4
+            slave   bsc1          peri    4    BCM21664_SLAVE_CCU_BSC1
+            slave   bsc2          peri    5    BCM21664_SLAVE_CCU_BSC2
+            slave   bsc3          peri    6    BCM21664_SLAVE_CCU_BSC3
+            slave   bsc4          peri    7    BCM21664_SLAVE_CCU_BSC4
+
+required:
+  - compatible
+  - reg
+  - '#clock-cells'
+  - clock-output-names
+
+additionalProperties: false
+
+examples:
+  - |
+    clock-controller@3e011000 {
+      compatible = "brcm,bcm11351-slave-ccu";
+      reg = <0x3e011000 0x0f00>;
+      #clock-cells = <1>;
+      clock-output-names = "uartb",
+                           "uartb2",
+                           "uartb3",
+                           "uartb4",
+                           "ssp0",
+                           "ssp2",
+                           "bsc1",
+                           "bsc2",
+                           "bsc3",
+                           "pwm";
+    };
+...
