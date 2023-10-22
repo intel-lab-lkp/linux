@@ -2043,8 +2043,16 @@ int delta_package(struct pkg_data *new, struct pkg_data *old)
 	old->pc8 = new->pc8 - old->pc8;
 	old->pc9 = new->pc9 - old->pc9;
 	old->pc10 = new->pc10 - old->pc10;
-	old->cpu_lpi = new->cpu_lpi - old->cpu_lpi;
-	old->sys_lpi = new->sys_lpi - old->sys_lpi;
+	if (new->cpu_lpi > old->cpu_lpi) {
+		old->cpu_lpi = new->cpu_lpi - old->cpu_lpi;
+	} else {
+		old->cpu_lpi = 0;
+	}
+	if (new->sys_lpi > old->sys_lpi) {
+		old->sys_lpi = new->sys_lpi - old->sys_lpi;
+	} else {
+		old->sys_lpi = 0;
+	}
 	old->pkg_temp_c = new->pkg_temp_c;
 
 	/* flag an error when rc6 counter resets/wraps */
