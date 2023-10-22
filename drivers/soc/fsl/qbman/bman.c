@@ -669,6 +669,9 @@ static int bm_alloc_bpid_range(u32 *result, u32 count)
 {
 	unsigned long addr;
 
+	if (!bm_bpalloc)
+		return -ENXIO;
+
 	addr = gen_pool_alloc(bm_bpalloc, count);
 	if (!addr)
 		return -ENOMEM;
