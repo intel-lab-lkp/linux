@@ -7,5 +7,6 @@ source "fs/smb/server/Kconfig"
 
 config SMBFS
 	tristate
+	select CRYPTO_LIB_ARC4
 	default y if CIFS=y || SMB_SERVER=y
 	default m if CIFS=m || SMB_SERVER=m
