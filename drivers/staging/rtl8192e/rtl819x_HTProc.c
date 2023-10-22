@@ -217,7 +217,7 @@ static bool HTIOTActIsDisableMCS15(struct rtllib_device *ieee)
 	return false;
 }
 
-static bool HTIOTActIsDisableMCSTwoSpatialStream(struct rtllib_device *ieee)
+static bool ht_iot_act_is_disable_mcs_two_spatial_stream(struct rtllib_device *ieee)
 {
 	return false;
 }
@@ -704,7 +704,7 @@ void HTResetSelfAndSavePeerSetting(struct rtllib_device *ieee,
 		if (bIOTAction)
 			ht_info->iot_action |= HT_IOT_ACT_DISABLE_MCS15;
 
-		bIOTAction = HTIOTActIsDisableMCSTwoSpatialStream(ieee);
+		bIOTAction = ht_iot_act_is_diable_mcs_two_spatial_stream(ieee);
 		if (bIOTAction)
 			ht_info->iot_action |= HT_IOT_ACT_DISABLE_ALL_2SS;
 
