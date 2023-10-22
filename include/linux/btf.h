@@ -576,7 +576,7 @@ struct bpf_struct_ops;
 struct bpf_struct_ops_desc;
 
 struct bpf_struct_ops_desc *
-btf_add_struct_ops(struct bpf_struct_ops *st_ops);
+btf_add_struct_ops(struct btf *btf, struct bpf_struct_ops *st_ops);
 const struct bpf_struct_ops_desc *
 btf_get_struct_ops(struct btf *btf, u32 *ret_cnt);
 
