@@ -26,6 +26,7 @@
 #include <asm/uasm.h>
 
 static DECLARE_BITMAP(core_power, NR_CPUS);
+static uint32_t core_entry_reg;
 
 struct core_boot_config *mips_cps_core_bootcfg;
 
@@ -37,7 +38,6 @@ static unsigned __init core_vpe_count(unsigned int cluster, unsigned core)
 static void __init cps_smp_setup(void)
 {
 	unsigned int nclusters, ncores, nvpes, core_vpes;
-	unsigned long core_entry;
 	int cl, c, v;
 
 	/* Detect & record VPE topology */
@@ -94,10 +94,20 @@ static void __init cps_smp_setup(void)
 	/* Make core 0 coherent with everything */
 	write_gcr_cl_coherence(0xff);
 
-	if (mips_cm_revision() >= CM_REV_CM3) {
-		core_entry = CKSEG1ADDR((unsigned long)mips_cps_core_entry);
-		write_gcr_bev_base(core_entry);
-	}
+	/*
+	 * Set up the core entry address
+	 * If accessible in KSEG1 just use KSEG1
+	 */
+	if (__pa_symbol(mips_cps_core_entry) < SZ_512M)
+		core_entry_reg =  CKSEG1ADDR(__pa_symbol(mips_cps_core_entry));
+
+	/* If CM is 64bit and with-in low 4G just use XKPHYS */
+	if (mips_cm_is64 && __pa_symbol(mips_cps_core_entry) < SZ_4G)
+		core_entry_reg =  __pa_symbol(mips_cps_core_entry) |
+					CM_GCR_Cx_RESET_BASE_MODE;
+
+	if (core_entry_reg && mips_cm_revision() >= CM_REV_CM3)
+		write_gcr_bev_base(core_entry_reg);
 
 #ifdef CONFIG_MIPS_MT_FPAFF
 	/* If we have an FPU, enroll ourselves in the FPU-full mask */
@@ -113,6 +123,11 @@ static void __init cps_prepare_cpus(unsigned int max_cpus)
 	u32 *entry_code;
 
 	mips_mt_set_cpuoptions();
+
+	if (!core_entry_reg) {
+		pr_err("core_entry address unsuitable, disabling smp-cps\n");
+		goto err_out;
+	}
 
 	/* Detect whether the CCA is unsuited to multi-core SMP */
 	cca = read_c0_config() & CONF_CM_CMASK;
@@ -213,7 +228,7 @@ static void boot_core(unsigned int core, unsigned int vpe_id)
 	mips_cm_lock_other(0, core, 0, CM_GCR_Cx_OTHER_BLOCK_LOCAL);
 
 	/* Set its reset vector */
-	write_gcr_co_reset_base(CKSEG1ADDR((unsigned long)mips_cps_core_entry));
+	write_gcr_co_reset_base(core_entry_reg);
 
 	/* Ensure its coherency is disabled */
 	write_gcr_co_coherence(0);
