@@ -16,9 +16,11 @@ enum {
 	PMIC_GLINK_CLIENT_BATT = 0,
 	PMIC_GLINK_CLIENT_ALTMODE,
 	PMIC_GLINK_CLIENT_UCSI,
+	PMIC_GLINK_CLIENT_UCSI_NO_PDOS,
 };
 
 #define PMIC_GLINK_CLIENT_DEFAULT	(BIT(PMIC_GLINK_CLIENT_BATT) |	\
+					 BIT(PMIC_GLINK_CLIENT_UCSI_NO_PDOS) | \
 					 BIT(PMIC_GLINK_CLIENT_ALTMODE))
 
 struct pmic_glink {
@@ -270,6 +272,11 @@ static int pmic_glink_probe(struct platform_device *pdev)
 
 	if (pg->client_mask & BIT(PMIC_GLINK_CLIENT_UCSI)) {
 		ret = pmic_glink_add_aux_device(pg, &pg->ucsi_aux, "ucsi");
+		if (ret)
+			return ret;
+	}
+	if (pg->client_mask & BIT(PMIC_GLINK_CLIENT_UCSI_NO_PDOS)) {
+		ret = pmic_glink_add_aux_device(pg, &pg->ucsi_aux, "ucsi-no-pdos");
 		if (ret)
 			return ret;
 	}
