@@ -98,7 +98,7 @@ static void ft_tport_delete(struct ft_tport *tport)
 
 /*
  * Add local port.
- * Called thru fc_lport_iterate().
+ * Called through fc_lport_iterate().
  */
 void ft_lport_add(struct fc_lport *lport, void *arg)
 {
@@ -110,7 +110,7 @@ void ft_lport_add(struct fc_lport *lport, void *arg)
 
 /*
  * Delete local port.
- * Called thru fc_lport_iterate().
+ * Called through fc_lport_iterate().
  */
 void ft_lport_del(struct fc_lport *lport, void *arg)
 {

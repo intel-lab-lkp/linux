@@ -573,7 +573,7 @@ sbc_compare_and_write(struct se_cmd *cmd)
 	int rc;
 	/*
 	 * Submit the READ first for COMPARE_AND_WRITE to perform the
-	 * comparision using SGLs at cmd->t_bidi_data_sg..
+	 * comparison using SGLs at cmd->t_bidi_data_sg..
 	 */
 	rc = down_interruptible(&dev->caw_sem);
 	if (rc != 0) {

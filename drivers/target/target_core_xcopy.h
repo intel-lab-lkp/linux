@@ -42,7 +42,7 @@ struct xcopy_op {
 };
 
 /*
- * Receive Copy Results Sevice Actions
+ * Receive Copy Results Service Actions
  */
 #define RCR_SA_COPY_STATUS		0x00
 #define RCR_SA_RECEIVE_DATA		0x01

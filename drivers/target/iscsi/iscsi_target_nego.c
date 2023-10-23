@@ -557,7 +557,7 @@ static void iscsi_target_do_login_rx(struct work_struct *work)
 	 * before initial PDU processing in iscsi_target_start_negotiation()
 	 * has completed, go ahead and retry until it's cleared.
 	 *
-	 * Otherwise if the TCP connection drops while this is occuring,
+	 * Otherwise if the TCP connection drops while this is occurring,
 	 * iscsi_target_start_negotiation() will detect the failure, call
 	 * cancel_delayed_work_sync(&conn->login_work), and cleanup the
 	 * remaining iscsi connection resources from iscsi_np process context.
@@ -1050,7 +1050,7 @@ static int iscsi_target_do_login(struct iscsit_conn *conn, struct iscsi_login *l
 				/*
 				 * Check to make sure the TCP connection has not
 				 * dropped asynchronously while session reinstatement
-				 * was occuring in this kthread context, before
+				 * was occurring in this kthread context, before
 				 * transitioning to full feature phase operation.
 				 */
 				if (iscsi_target_sk_check_close(conn))

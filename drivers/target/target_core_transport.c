@@ -1820,7 +1820,7 @@ EXPORT_SYMBOL_GPL(target_submit_prep);
  * This may only be called from process context, and also currently
  * assumes internal allocation of fabric payload buffer by target-core.
  *
- * It also assumes interal target core SGL memory allocation.
+ * It also assumes internal target core SGL memory allocation.
  *
  * This function must only be used by drivers that do their own
  * sync during shutdown and does not use target_stop_session. If there
@@ -3447,7 +3447,7 @@ static const struct sense_detail sense_detail_table[] = {
 		 * REGISTER AND MOVE service actionis attempted,
 		 * but there are insufficient device server resources to complete the
 		 * operation, then the command shall be terminated with CHECK CONDITION
-		 * status, with the sense key set to ILLEGAL REQUEST,and the additonal
+		 * status, with the sense key set to ILLEGAL REQUEST,and the additional
 		 * sense code set to INSUFFICIENT REGISTRATION RESOURCES.
 		 */
 		.key = ILLEGAL_REQUEST,

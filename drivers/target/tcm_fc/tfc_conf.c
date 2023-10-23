@@ -281,7 +281,7 @@ static void ft_del_tpg(struct se_portal_group *se_tpg)
 
 	destroy_workqueue(tpg->workqueue);
 
-	/* Wait for sessions to be freed thru RCU, for BUG_ON below */
+	/* Wait for sessions to be freed through RCU, for BUG_ON below */
 	synchronize_rcu();
 
 	mutex_lock(&ft_lport_lock);

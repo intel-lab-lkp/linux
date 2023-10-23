@@ -570,7 +570,7 @@ int iscsi_login_post_auth_non_zero_tsih(
 	/*
 	 * By following item 5 in the login table,  if we have found
 	 * an existing ISID and a valid/existing TSIH and an existing
-	 * CID we do connection reinstatement.  Currently we dont not
+	 * CID we do connection reinstatement.  Currently we don't not
 	 * support it so we send back an non-zero status class to the
 	 * initiator and release the new connection.
 	 */

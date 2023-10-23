@@ -1985,7 +1985,7 @@ static int tcmu_release(struct uio_info *info, struct inode *inode)
 		tcmu_free_cmd(cmd);
 	}
 	/*
-	 * We only freed data space, not ring space. Therefore we dont call
+	 * We only freed data space, not ring space. Therefore we don't call
 	 * run_tmr_queue, but call run_qfull_queue if tmr_list is empty.
 	 */
 	if (freed && list_empty(&udev->tmr_queue))
@@ -3125,7 +3125,7 @@ static ssize_t tcmu_free_kept_buf_store(struct config_item *item, const char *pa
 	tcmu_cmd_free_data(cmd, cmd->dbi_cnt);
 	tcmu_free_cmd(cmd);
 	/*
-	 * We only freed data space, not ring space. Therefore we dont call
+	 * We only freed data space, not ring space. Therefore we don't call
 	 * run_tmr_queue, but call run_qfull_queue if tmr_list is empty.
 	 */
 	if (list_empty(&udev->tmr_queue))
