@@ -489,7 +489,7 @@ have been included in the discussion.
 Co-developed-by: states that the patch was co-created by multiple developers;
 it is used to give attribution to co-authors (in addition to the author
 attributed by the From: tag) when several people work on a single patch.  Since
-Co-developed-by: denotes authorship, every Co-developed-by: must be immediately
+Co-developed-by: denotes authorship, every Co-developed-by: must be
 followed by a Signed-off-by: of the associated co-author.  Standard sign-off
 procedure applies, i.e. the ordering of Signed-off-by: tags should reflect the
 chronological history of the patch insofar as possible, regardless of whether
@@ -509,7 +509,8 @@ Example of a patch submitted by the From: author::
 	Signed-off-by: Second Co-Author <second@coauthor.example.org>
 	Signed-off-by: From Author <from@author.example.org>
 
-Example of a patch submitted by a Co-developed-by: author::
+Example of a patch submitted by a Co-developed-by: author, who also collected
+a Reviewed-by: tag posted for earlier version::
 
 	From: From Author <from@author.example.org>
 
@@ -519,6 +520,7 @@ Example of a patch submitted by a Co-developed-by: author::
 	Signed-off-by: Random Co-Author <random@coauthor.example.org>
 	Signed-off-by: From Author <from@author.example.org>
 	Co-developed-by: Submitting Co-Author <sub@coauthor.example.org>
+	Reviewed-by: Some Reviewer <srev@another.example.org>
 	Signed-off-by: Submitting Co-Author <sub@coauthor.example.org>
 
 

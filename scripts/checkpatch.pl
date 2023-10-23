@@ -2682,6 +2682,10 @@ sub process {
 	my $suppress_statement = 0;
 
 	my %signatures = ();
+	my %signoffs = ();
+	my %signoffs_msg = ();
+	my %codevs = ();
+	my %codevs_msg = ();
 
 	# Pre-scan the patch sanitizing the lines.
 	# Pre-scan the patch looking for any __setup documentation.
@@ -2967,11 +2971,13 @@ sub process {
 		if ($line =~ /^\s*signed-off-by:\s*(.*)/i) {
 			$signoff++;
 			$in_commit_log = 0;
+			my $ctx = $1;
+			$signoffs{$ctx} = $linenr;
+			$signoffs_msg{$ctx} = $herecurr;
 			if ($author ne ''  && $authorsignoff != 1) {
-				if (same_email_addresses($1, $author)) {
+				if (same_email_addresses($ctx, $author)) {
 					$authorsignoff = 1;
 				} else {
-					my $ctx = $1;
 					my ($email_name, $email_comment, $email_address, $comment1) = parse_email($ctx);
 					my ($author_name, $author_comment, $author_address, $comment2) = parse_email($author);
 
@@ -3158,22 +3164,15 @@ sub process {
 				$signatures{$sig_nospace} = 1;
 			}
 
-# Check Co-developed-by: immediately followed by Signed-off-by: with same name and email
+# Collect Co-developed-by: to check if each is backed up by Signed-off-by: with
+# the same name and email. Checks are made after main loop.
 			if ($sign_off =~ /^co-developed-by:$/i) {
 				if ($email eq $author) {
 					WARN("BAD_SIGN_OFF",
 					      "Co-developed-by: should not be used to attribute nominal patch author '$author'\n" . $herecurr);
 				}
-				if (!defined $lines[$linenr]) {
-					WARN("BAD_SIGN_OFF",
-					     "Co-developed-by: must be immediately followed by Signed-off-by:\n" . $herecurr);
-				} elsif ($rawlines[$linenr] !~ /^signed-off-by:\s*(.*)/i) {
-					WARN("BAD_SIGN_OFF",
-					     "Co-developed-by: must be immediately followed by Signed-off-by:\n" . $herecurr . $rawlines[$linenr] . "\n");
-				} elsif ($1 ne $email) {
-					WARN("BAD_SIGN_OFF",
-					     "Co-developed-by and Signed-off-by: name/email do not match\n" . $herecurr . $rawlines[$linenr] . "\n");
-				}
+				$codevs{$email} = $linenr;
+				$codevs_msg{$email} = $herecurr;
 			}
 
 # check if Reported-by: is followed by a Closes: tag
@@ -7710,6 +7709,17 @@ sub process {
 			} elsif ($authorsignoff == 5) {
 				WARN("FROM_SIGN_OFF_MISMATCH",
 				     "From:/Signed-off-by: email subaddress mismatch: $sob_msg\n");
+			}
+		}
+		# check if each Co-developed-by tag is backed up by Sign-off,
+		# warn if Co-developed-by tag was put after a Signed-off-by tag
+		foreach my $codev (keys %codevs) {
+			if (!$signoffs{$codev}) {
+				ERROR("BAD_SIGN_OFF",
+				      "Co-developed-by: must be followed by Signed-off-by:\n" . $codevs_msg{$codev});
+			} elsif ($signoffs{$codev} <= $codevs{$codev}) {
+				WARN("BAD_SIGN_OFF",
+				     "Co-developed-by: must be followed by Signed-off-by:, but was placed after it\n" . $signoffs_msg{$codev} . $codevs_msg{$codev});
 			}
 		}
 	}
