@@ -1,0 +1,72 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/net/oa-tc6.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: OPEN Alliance 10BASE-T1x MAC-PHY Specification Common Properties
+
+maintainers:
+  - Parthiban Veerasooran <parthiban.veerasooran@microchip.com>
+
+description:
+  These are generic properties that can apply to any 10BASE-T1x MAC-PHY
+  which uses OPEN Alliance TC6 specification.
+
+  10BASE-T1x MAC-PHY Serial Interface Specification can be found at:
+    https://opensig.org/about/specifications/
+
+properties:
+  $nodename:
+    pattern: "^oa-tc6(@.*)?"
+
+  "#address-cells":
+    const: 1
+
+  "#size-cells":
+    const: 0
+
+  oa-cps:
+    maxItems: 1
+    description:
+      Chunk Payload Size. Configures the data chunk payload size to 2^N,
+      where N is the value of this bitfield. The minimum possible data
+      chunk payload size is 8 bytes or N = 3. The default data chunk
+      payload size is 64 bytes, or N = 6. The minimum supported data chunk
+      payload size for this MAC-PHY device is indicated in the CPSMIN
+      field of the CAPABILITY register. Valid values for this parameter
+      are 8, 16, 32 and 64. All other values are reserved.
+
+  oa-txcte:
+    maxItems: 1
+    description:
+      Transmit Cut-Through Enable. When supported by this MAC-PHY device,
+      this bit enables the cut-through mode of frame transfer through the
+      MAC-PHY device from the SPI host to the network.
+
+  oa-rxcte:
+    maxItems: 1
+    description:
+      Receive Cut-Through Enable. When supported by this MAC-PHY device,
+      this bit enables the cut-through mode of frame transfer through the
+      MAC-PHY device from the network to the SPI host.
+
+  oa-prote:
+    maxItems: 1
+    description:
+      Control data read/write Protection Enable. When set, all control
+      data written to and read from the MAC-PHY will be transferred with
+      its complement for detection of bit errors.
+
+additionalProperties: true
+
+examples:
+  - |
+    oa-tc6 {
+        #address-cells = <1>;
+	#size-cells = <0>;
+	oa-cps = <64>;
+	oa-txcte;
+	oa-rxcte;
+	oa-prote;
+    };
