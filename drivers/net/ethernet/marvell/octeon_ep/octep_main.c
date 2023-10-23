@@ -777,7 +777,7 @@ static int octep_stop(struct net_device *netdev)
  */
 static inline int octep_iq_full_check(struct octep_iq *iq)
 {
-	if (likely((iq->max_count - atomic_read(&iq->instr_pending)) >=
+	if (likely((IQ_INSTR_SPACE(iq)) >
 		   OCTEP_WAKE_QUEUE_THRESHOLD))
 		return 0;
 
@@ -787,7 +787,7 @@ static inline int octep_iq_full_check(struct octep_iq *iq)
 	/* check again and restart the queue, in case NAPI has just freed
 	 * enough Tx ring entries.
 	 */
-	if (unlikely((iq->max_count - atomic_read(&iq->instr_pending)) >=
+	if (unlikely(IQ_INSTR_SPACE(iq) >
 		     OCTEP_WAKE_QUEUE_THRESHOLD)) {
 		netif_start_subqueue(iq->netdev, iq->q_no);
 		iq->stats.restart_cnt++;
@@ -897,14 +897,11 @@ static netdev_tx_t octep_start_xmit(struct sk_buff *skb,
 	xmit_more = netdev_xmit_more();
 
 	skb_tx_timestamp(skb);
-	atomic_inc(&iq->instr_pending);
 	iq->fill_cnt++;
 	wi++;
-	if (wi == iq->max_count)
-		wi = 0;
-	iq->host_write_index = wi;
+	iq->host_write_index = wi & iq->ring_size_mask;
 	if (xmit_more &&
-	    (atomic_read(&iq->instr_pending) <
+	    (IQ_INSTR_PENDING(iq) <
 	     (iq->max_count - OCTEP_WAKE_QUEUE_THRESHOLD)) &&
 	    iq->fill_cnt < iq->fill_threshold)
 		return NETDEV_TX_OK;
