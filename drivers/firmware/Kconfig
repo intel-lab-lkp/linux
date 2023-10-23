@@ -55,8 +55,8 @@ config EDD
 	  BIOS tries boot from.  This information is then exported via sysfs.
 
 	  This option is experimental and is known to fail to boot on some
-          obscure configurations. Most disk controller BIOS vendors do
-          not yet implement this feature.
+	  obscure configurations. Most disk controller BIOS vendors do
+	  not yet implement this feature.
 
 config EDD_OFF
 	bool "Sets default behavior for EDD detection to off"
@@ -68,14 +68,14 @@ config EDD_OFF
 	  using the kernel parameter 'edd={on|skipmbr|off}'.
 
 config FIRMWARE_MEMMAP
-    bool "Add firmware-provided memory map to sysfs" if EXPERT
-    default X86
-    help
-      Add the firmware-provided (unmodified) memory map to /sys/firmware/memmap.
-      That memory map is used for example by kexec to set up parameter area
-      for the next kernel, but can also be used for debugging purposes.
+	bool "Add firmware-provided memory map to sysfs" if EXPERT
+	default X86
+	help
+	  Add the firmware-provided (unmodified) memory map to /sys/firmware/memmap.
+	  That memory map is used for example by kexec to set up parameter area
+	  for the next kernel, but can also be used for debugging purposes.
 
-      See also Documentation/ABI/testing/sysfs-firmware-memmap.
+	  See also Documentation/ABI/testing/sysfs-firmware-memmap.
 
 config EFI_PCDP
 	bool "Console device selection via EFI PCDP or HCDP table"
@@ -99,12 +99,12 @@ config EFI_PCDP
 	  You must also enable the appropriate drivers (serial, VGA, etc.)
 
 	  See DIG64_HCDPv20_042804.pdf available from
-	  <http://www.dig64.org/specifications/> 
+	  <http://www.dig64.org/specifications/>
 
 config DMIID
-    bool "Export DMI identification via sysfs to userspace"
-    depends on DMI
-    default y
+	bool "Export DMI identification via sysfs to userspace"
+	depends on DMI
+	default y
 	help
 	  Say Y here if you want to query SMBIOS/DMI system identification
 	  information from userspace through /sys/class/dmi/id/ or if you want
