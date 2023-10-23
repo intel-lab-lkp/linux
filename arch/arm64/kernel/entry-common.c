@@ -802,6 +802,11 @@ asmlinkage void noinstr el0t_64_error_handler(struct pt_regs *regs)
 }
 
 #ifdef CONFIG_COMPAT
+UNHANDLED(el0t, 32, sync_ni)
+UNHANDLED(el0t, 32, irq_ni)
+UNHANDLED(el0t, 32, fiq_ni)
+UNHANDLED(el0t, 32, error_ni)
+
 static void noinstr el0_cp15(struct pt_regs *regs, unsigned long esr)
 {
 	enter_from_user_mode(regs);
@@ -821,6 +826,11 @@ static void noinstr el0_svc_compat(struct pt_regs *regs)
 
 asmlinkage void noinstr el0t_32_sync_handler(struct pt_regs *regs)
 {
+	if (!aarch32_enabled()) {
+		el0t_32_sync_ni_handler(regs);
+		return;
+	}
+
 	unsigned long esr = read_sysreg(esr_el1);
 
 	switch (ESR_ELx_EC(esr)) {
@@ -865,17 +875,26 @@ asmlinkage void noinstr el0t_32_sync_handler(struct pt_regs *regs)
 
 asmlinkage void noinstr el0t_32_irq_handler(struct pt_regs *regs)
 {
-	__el0_irq_handler_common(regs);
+	if (!aarch32_enabled())
+		el0t_32_irq_ni_handler(regs);
+	else
+		__el0_irq_handler_common(regs);
 }
 
 asmlinkage void noinstr el0t_32_fiq_handler(struct pt_regs *regs)
 {
-	__el0_fiq_handler_common(regs);
+	if (!aarch32_enabled())
+		el0t_32_fiq_ni_handler(regs);
+	else
+		__el0_fiq_handler_common(regs);
 }
 
 asmlinkage void noinstr el0t_32_error_handler(struct pt_regs *regs)
 {
-	__el0_error_handler_common(regs);
+	if (!aarch32_enabled())
+		el0t_32_error_ni_handler(regs);
+	else
+		__el0_error_handler_common(regs);
 }
 
 bool __aarch32_enabled __ro_after_init = true;

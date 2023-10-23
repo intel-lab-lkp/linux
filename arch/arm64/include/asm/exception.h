@@ -48,6 +48,13 @@ asmlinkage void el0t_32_irq_handler(struct pt_regs *regs);
 asmlinkage void el0t_32_fiq_handler(struct pt_regs *regs);
 asmlinkage void el0t_32_error_handler(struct pt_regs *regs);
 
+#ifdef CONFIG_COMPAT
+asmlinkage void el0t_32_sync_ni_handler(struct pt_regs *regs);
+asmlinkage void el0t_32_irq_ni_handler(struct pt_regs *regs);
+asmlinkage void el0t_32_fiq_ni_handler(struct pt_regs *regs);
+asmlinkage void el0t_32_error_ni_handler(struct pt_regs *regs);
+#endif
+
 asmlinkage void call_on_irq_stack(struct pt_regs *regs,
 				  void (*func)(struct pt_regs *));
 asmlinkage void asm_exit_to_user_mode(struct pt_regs *regs);
