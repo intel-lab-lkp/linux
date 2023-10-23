@@ -309,7 +309,7 @@ __ov2680_get_pad_format(struct ov2680_dev *sensor,
 			enum v4l2_subdev_format_whence which)
 {
 	if (which == V4L2_SUBDEV_FORMAT_TRY)
-		return v4l2_subdev_get_try_format(&sensor->sd, state, pad);
+		return v4l2_subdev_state_get_format(state, pad);
 
 	return &sensor->mode.fmt;
 }
@@ -321,7 +321,7 @@ __ov2680_get_pad_crop(struct ov2680_dev *sensor,
 		      enum v4l2_subdev_format_whence which)
 {
 	if (which == V4L2_SUBDEV_FORMAT_TRY)
-		return v4l2_subdev_get_try_crop(&sensor->sd, state, pad);
+		return v4l2_subdev_state_get_crop(state, pad);
 
 	return &sensor->mode.crop;
 }
@@ -650,7 +650,7 @@ static int ov2680_set_fmt(struct v4l2_subdev *sd,
 	ov2680_fill_format(sensor, &format->format, width, height);
 
 	if (format->which == V4L2_SUBDEV_FORMAT_TRY) {
-		try_fmt = v4l2_subdev_get_try_format(sd, sd_state, 0);
+		try_fmt = v4l2_subdev_state_get_format(sd_state, 0);
 		*try_fmt = format->format;
 		return 0;
 	}

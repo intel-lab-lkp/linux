@@ -920,7 +920,7 @@ static int ov2640_get_fmt(struct v4l2_subdev *sd,
 		return -EINVAL;
 
 	if (format->which == V4L2_SUBDEV_FORMAT_TRY) {
-		mf = v4l2_subdev_get_try_format(sd, sd_state, 0);
+		mf = v4l2_subdev_state_get_format(sd_state, 0);
 		format->format = *mf;
 		return 0;
 	}
@@ -1000,7 +1000,7 @@ static int ov2640_init_cfg(struct v4l2_subdev *sd,
 			   struct v4l2_subdev_state *sd_state)
 {
 	struct v4l2_mbus_framefmt *try_fmt =
-		v4l2_subdev_get_try_format(sd, sd_state, 0);
+		v4l2_subdev_state_get_format(sd_state, 0);
 	const struct ov2640_win_size *win =
 		ov2640_select_win(SVGA_WIDTH, SVGA_HEIGHT);
 
