@@ -419,7 +419,7 @@ enum iommu_hw_info_type {
 };
 
 /**
- * enum iommufd_hw_info_capabilities
+ * enum iommufd_hw_capabilities
  * @IOMMU_HW_CAP_DIRTY_TRACKING: IOMMU hardware support for dirty tracking
  *                               If available, it means the following APIs
  *                               are supported:
@@ -486,6 +486,7 @@ enum iommufd_hwpt_set_dirty_tracking_flags {
  * @size: sizeof(struct iommu_hwpt_set_dirty_tracking)
  * @flags: Combination of enum iommufd_hwpt_set_dirty_tracking_flags
  * @hwpt_id: HW pagetable ID that represents the IOMMU domain
+ * @__reserved: Must be 0
  *
  * Toggle dirty tracking on an HW pagetable.
  */
@@ -499,8 +500,8 @@ struct iommu_hwpt_set_dirty_tracking {
 					  IOMMUFD_CMD_HWPT_SET_DIRTY_TRACKING)
 
 /**
- * enum iommufd_get_dirty_bitmap_flags - Flags for getting dirty bits
- * @IOMMU_GET_DIRTY_BITMAP_NO_CLEAR: Just read the PTEs without clearing any
+ * enum iommufd_hwpt_get_dirty_bitmap_flags - Flags for getting dirty bits
+ * @IOMMU_HWPT_GET_DIRTY_BITMAP_NO_CLEAR: Just read the PTEs without clearing any
  *                                   dirty bits metadata. This flag can be
  *                                   passed in the expectation where the next
  *                                   operation is an unmap of the same IOVA
@@ -517,6 +518,7 @@ enum iommufd_hwpt_get_dirty_bitmap_flags {
  * @hwpt_id: HW pagetable ID that represents the IOMMU domain
  * @flags: Combination of enum iommufd_hwpt_get_dirty_bitmap_flags
  * @iova: base IOVA of the bitmap first bit
+ * @__reserved: Must be 0
  * @length: IOVA range size
  * @page_size: page size granularity of each bit in the bitmap
  * @data: bitmap where to set the dirty bits. The bitmap bits each
