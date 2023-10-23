@@ -236,7 +236,6 @@ struct fnic {
 	unsigned int wq_count;
 	unsigned int cq_count;
 
-	struct mutex sgreset_mutex;
 	struct dentry *fnic_stats_debugfs_host;
 	struct dentry *fnic_stats_debugfs_file;
 	struct dentry *fnic_reset_debugfs_file;
