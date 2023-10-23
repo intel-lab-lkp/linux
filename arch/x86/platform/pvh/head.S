@@ -121,6 +121,10 @@ SYM_CODE_START_LOCAL(pvh_start_xen)
 
 	ljmp $PVH_CS_SEL, $1f
 1:
+	/* Set percpu for stack canary. */
+	mov $PVH_DS_SEL,%eax
+	mov %eax, %fs
+
 	call xen_prepare_pvh
 	mov $_pa(pvh_bootparams), %esi
 
