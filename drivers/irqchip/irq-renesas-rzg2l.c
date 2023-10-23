@@ -28,8 +28,7 @@
 #define ISCR				0x10
 #define IITSR				0x14
 #define TSCR				0x20
-#define TITSR0				0x24
-#define TITSR1				0x28
+#define TITSR(n)			(0x24 + (n) * 4)
 #define TITSR0_MAX_INT			16
 #define TITSEL_WIDTH			0x2
 #define TSSR(n)				(0x30 + ((n) * 4))
@@ -45,6 +44,8 @@
 #define TITSR_TITSEL_EDGE_FALLING	1
 #define TITSR_TITSEL_LEVEL_HIGH		2
 #define TITSR_TITSEL_LEVEL_LOW		3
+#define TITSR_HWIRQ_TO_INDEX(hwirq)	((hwirq) >> TITSR0_MAX_INT)
+#define TITSR_HWIRQ_TO_SEL(hwirq)	((hwirq) & 0xF)		/* 0xF = TITSR0_MAX_INT - 1*/
 
 #define IITSR_IITSEL(n, sense)		((sense) << ((n) * 2))
 #define IITSR_IITSEL_LEVEL_LOW		0
@@ -185,12 +186,10 @@ static int rzg2l_irq_set_type(struct irq_data *d, unsigned int type)
 
 static int rzg2l_tint_set_edge(struct irq_data *d, unsigned int type)
 {
+	unsigned int hwirq = irqd_to_hwirq(d) - IRQC_TINT_START;
 	struct rzg2l_irqc_priv *priv = irq_data_to_priv(d);
-	unsigned int hwirq = irqd_to_hwirq(d);
-	u32 titseln = hwirq - IRQC_TINT_START;
-	u32 offset;
+	u32 index, sel, reg;
 	u8 sense;
-	u32 reg;
 
 	switch (type & IRQ_TYPE_SENSE_MASK) {
 	case IRQ_TYPE_EDGE_RISING:
@@ -205,17 +204,14 @@ static int rzg2l_tint_set_edge(struct irq_data *d, unsigned int type)
 		return -EINVAL;
 	}
 
-	offset = TITSR0;
-	if (titseln >= TITSR0_MAX_INT) {
-		titseln -= TITSR0_MAX_INT;
-		offset = TITSR1;
-	}
+	index = TITSR_HWIRQ_TO_INDEX(hwirq);
+	sel = TITSR_HWIRQ_TO_SEL(hwirq);
 
 	raw_spin_lock(&priv->lock);
-	reg = readl_relaxed(priv->base + offset);
-	reg &= ~(IRQ_MASK << (titseln * TITSEL_WIDTH));
-	reg |= sense << (titseln * TITSEL_WIDTH);
-	writel_relaxed(reg, priv->base + offset);
+	reg = readl_relaxed(priv->base + TITSR(index));
+	reg &= ~(IRQ_MASK << (sel * TITSEL_WIDTH));
+	reg |= sense << (sel * TITSEL_WIDTH);
+	writel_relaxed(reg, priv->base + TITSR(index));
 	raw_spin_unlock(&priv->lock);
 
 	return 0;
