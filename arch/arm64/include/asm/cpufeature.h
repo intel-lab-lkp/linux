@@ -679,8 +679,9 @@ static inline bool system_supports_32bit_el0(void)
 {
 	u64 pfr0 = read_sanitised_ftr_reg(SYS_ID_AA64PFR0_EL1);
 
-	return static_branch_unlikely(&arm64_mismatched_32bit_el0) ||
-	       id_aa64pfr0_32bit_el0(pfr0);
+	return (static_branch_unlikely(&arm64_mismatched_32bit_el0) ||
+		id_aa64pfr0_32bit_el0(pfr0)) &&
+		aarch32_enabled();
 }
 
 static inline bool system_supports_4kb_granule(void)
