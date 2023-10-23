@@ -25,6 +25,12 @@ properties:
 
   spi-cpol: true
 
+  spi-cs-inactive-delay-ns:
+    minimum: 16000
+    default: 16000
+    description:
+      Indicates the stall time between consecutive SPI transactions.
+
   interrupts:
     maxItems: 1
 
