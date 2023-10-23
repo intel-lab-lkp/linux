@@ -1926,6 +1926,7 @@ xlog_write_iclog(
 		 */
 		if (log->l_targ != log->l_mp->m_ddev_targp &&
 		    blkdev_issue_flush(log->l_mp->m_ddev_targp->bt_bdev)) {
+			up(&iclog->ic_sema);
 			xlog_force_shutdown(log, SHUTDOWN_LOG_IO_ERROR);
 			return;
 		}
@@ -1936,6 +1937,7 @@ xlog_write_iclog(
 	iclog->ic_flags &= ~(XLOG_ICL_NEED_FLUSH | XLOG_ICL_NEED_FUA);
 
 	if (xlog_map_iclog_data(&iclog->ic_bio, iclog->ic_data, count)) {
+		up(&iclog->ic_sema);
 		xlog_force_shutdown(log, SHUTDOWN_LOG_IO_ERROR);
 		return;
 	}
