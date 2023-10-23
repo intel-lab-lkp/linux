@@ -232,9 +232,11 @@ static int _compat_vdpa_reset(struct vhost_vdpa *v)
 	struct vdpa_device *vdpa = v->vdpa;
 	u32 flags = 0;
 
-	flags |= !vhost_backend_has_feature(v->vdev.vqs[0],
-					    VHOST_BACKEND_F_IOTLB_PERSIST) ?
-		 VDPA_RESET_F_CLEAN_MAP : 0;
+	if (v->vdev.vqs) {
+		flags |= !vhost_backend_has_feature(v->vdev.vqs[0],
+						    VHOST_BACKEND_F_IOTLB_PERSIST) ?
+			 VDPA_RESET_F_CLEAN_MAP : 0;
+	}
 
 	return vdpa_reset(vdpa, flags);
 }
