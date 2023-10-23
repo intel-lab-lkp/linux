@@ -29,6 +29,7 @@
 
 #include "i915_reg_defs.h"
 #include "intel_display_limits.h"
+#include "i915_drv.h"
 
 enum drm_scaling_filter;
 struct dpll;
@@ -41,7 +42,6 @@ struct drm_file;
 struct drm_format_info;
 struct drm_framebuffer;
 struct drm_i915_gem_object;
-struct drm_i915_private;
 struct drm_mode_fb_cmd2;
 struct drm_modeset_acquire_ctx;
 struct drm_plane;
@@ -558,5 +558,25 @@ bool assert_port_valid(struct drm_i915_private *i915, enum port port);
 })
 
 bool intel_scanout_needs_vtd_wa(struct drm_i915_private *i915);
+
+/*
+ * The uncore version of the spin lock functions is used to decide
+ * whether we need to lock the uncore lock or not.  This is only
+ * needed in i915, not in Xe.  Keep the decision-making centralized
+ * here.
+ */
+static inline void intel_spin_lock(struct drm_i915_private *i915)
+{
+#ifdef I915
+	spin_lock(&i915->uncore.lock);
+#endif
+}
+
+static inline void intel_spin_unlock(struct drm_i915_private *i915)
+{
+#ifdef I915
+	spin_unlock(&i915->uncore.lock);
+#endif
+}
 
 #endif
