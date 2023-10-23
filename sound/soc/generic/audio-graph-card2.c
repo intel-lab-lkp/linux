@@ -504,6 +504,7 @@ static int __graph_parse_node(struct simple_util_priv *priv,
 	return 0;
 }
 
+#define MAX_PROP 7
 static int graph_parse_node(struct simple_util_priv *priv,
 			    enum graph_type gtype,
 			    struct device_node *port,
@@ -513,9 +514,30 @@ static int graph_parse_node(struct simple_util_priv *priv,
 	int ret = 0;
 
 	if (graph_lnk_is_multi(port)) {
+		struct snd_soc_dai_link *dai_link = simple_priv_to_link(priv, li->link);
+		struct device_node *ports = of_get_parent(port);
+		struct device *dev = simple_priv_to_dev(priv);
 		int idx;
+		int num;
 
 		of_node_get(port);
+
+		/*
+		 * create ch_maps if CPU:Codec = N:M
+		 * DPCM is out of scope
+		 */
+		if (gtype != GRAPH_DPCM && !dai_link->ch_maps &&
+		    dai_link->num_cpus > 1 && dai_link->num_codecs > 1 &&
+		    dai_link->num_cpus != dai_link->num_codecs) {
+			num = max (dai_link->num_cpus, dai_link->num_codecs);
+
+			dai_link->ch_maps = devm_kcalloc(dev, num,
+						sizeof(struct snd_soc_dai_link_ch_map), GFP_KERNEL);
+			if (!dai_link->ch_maps) {
+				ret = -ENOMEM;
+				goto multi_end;
+			}
+		}
 
 		for (idx = 0;; idx++) {
 			ep = graph_get_next_multi_ep(&port);
@@ -527,7 +549,34 @@ static int graph_parse_node(struct simple_util_priv *priv,
 			of_node_put(ep);
 			if (ret < 0)
 				break;
+
+			/* CPU:Codec = N:M */
+			if (dai_link->ch_maps) {
+				const char *props = "ch-map-idx";
+				u32 num_array[MAX_PROP];
+				int i;
+
+				num = of_property_count_elems_of_size(ep, props, sizeof(u32));
+				if (num > MAX_PROP) {
+					dev_err(dev, "need update MAX_PROP (%d)\n", num);
+					ret = -EINVAL;
+					goto multi_end;
+				}
+
+				ret = of_property_read_u32_array(ep, props, num_array, num);
+				if (ret < 0)
+					goto multi_end;
+
+				for (i = 0; i < num; i++) {
+					if (is_cpu)
+						dai_link->ch_maps[num_array[i]].cpu = idx;
+					else
+						dai_link->ch_maps[num_array[i]].codec = idx;
+				}
+			}
 		}
+multi_end:
+		of_node_put(ports);
 	} else {
 		/* Single CPU / Codec */
 		ep = port_to_endpoint(port);
