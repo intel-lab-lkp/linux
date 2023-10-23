@@ -321,7 +321,7 @@ int amd_pmu_lbr_hw_config(struct perf_event *event)
 
 void amd_pmu_lbr_reset(void)
 {
-	struct cpu_hw_events *cpuc = this_cpu_ptr(&cpu_hw_events);
+	struct cpu_hw_events *cpuc = get_cpu_ptr(&cpu_hw_events);
 	int i;
 
 	if (!x86_pmu.lbr_nr)
@@ -335,6 +335,7 @@ void amd_pmu_lbr_reset(void)
 
 	cpuc->last_task_ctx = NULL;
 	cpuc->last_log_id = 0;
+	put_cpu_ptr(&cpu_hw_events);
 	wrmsrl(MSR_AMD64_LBR_SELECT, 0);
 }
 
