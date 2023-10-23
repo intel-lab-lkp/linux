@@ -1682,6 +1682,19 @@ v4l2_subdev_state_get_stream_format(struct v4l2_subdev_state *state,
 	struct v4l2_subdev_stream_configs *stream_configs;
 	unsigned int i;
 
+	if (WARN_ON(!state))
+		return NULL;
+
+	if (state->pads) {
+		if (stream)
+			return NULL;
+
+		if (WARN_ON(pad >= state->sd->entity.num_pads))
+			pad = 0;
+
+		return &state->pads[pad].try_fmt;
+	}
+
 	lockdep_assert_held(state->lock);
 
 	stream_configs = &state->stream_configs;
@@ -1703,6 +1716,19 @@ v4l2_subdev_state_get_stream_crop(struct v4l2_subdev_state *state,
 	struct v4l2_subdev_stream_configs *stream_configs;
 	unsigned int i;
 
+	if (WARN_ON(!state))
+		return NULL;
+
+	if (state->pads) {
+		if (stream)
+			return NULL;
+
+		if (WARN_ON(pad >= state->sd->entity.num_pads))
+			pad = 0;
+
+		return &state->pads[pad].try_crop;
+	}
+
 	lockdep_assert_held(state->lock);
 
 	stream_configs = &state->stream_configs;
@@ -1723,6 +1749,19 @@ v4l2_subdev_state_get_stream_compose(struct v4l2_subdev_state *state,
 {
 	struct v4l2_subdev_stream_configs *stream_configs;
 	unsigned int i;
+
+	if (WARN_ON(!state))
+		return NULL;
+
+	if (state->pads) {
+		if (stream)
+			return NULL;
+
+		if (WARN_ON(pad >= state->sd->entity.num_pads))
+			pad = 0;
+
+		return &state->pads[pad].try_compose;
+	}
 
 	lockdep_assert_held(state->lock);
 
