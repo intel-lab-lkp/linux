@@ -818,6 +818,7 @@ static netdev_tx_t octep_start_xmit(struct sk_buff *skb,
 	struct octep_iq *iq;
 	skb_frag_t *frag;
 	u16 nr_frags, si;
+	int xmit_more;
 	u16 q_no, wi;
 
 	q_no = skb_get_queue_mapping(skb);
@@ -892,18 +893,28 @@ static netdev_tx_t octep_start_xmit(struct sk_buff *skb,
 	}
 
 	netdev_tx_sent_queue(iq->netdev_q, skb->len);
+
+	xmit_more = netdev_xmit_more();
+
 	skb_tx_timestamp(skb);
 	atomic_inc(&iq->instr_pending);
+	iq->fill_cnt++;
 	wi++;
 	if (wi == iq->max_count)
 		wi = 0;
 	iq->host_write_index = wi;
+	if (xmit_more &&
+	    (atomic_read(&iq->instr_pending) <
+	     (iq->max_count - OCTEP_WAKE_QUEUE_THRESHOLD)) &&
+	    iq->fill_cnt < iq->fill_threshold)
+		return NETDEV_TX_OK;
+
 	/* Flush the hw descriptor before writing to doorbell */
 	wmb();
-
-	/* Ring Doorbell to notify the NIC there is a new packet */
-	writel(1, iq->doorbell_reg);
-	iq->stats.instr_posted++;
+	/* Ring Doorbell to notify the NIC of new packets */
+	writel(iq->fill_cnt, iq->doorbell_reg);
+	iq->stats.instr_posted += iq->fill_cnt;
+	iq->fill_cnt = 0;
 	return NETDEV_TX_OK;
 
 dma_map_sg_err:
