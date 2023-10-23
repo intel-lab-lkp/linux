@@ -559,6 +559,11 @@ static int virtio_vsock_vqs_init(struct virtio_vsock *vsock)
 	vsock->tx_run = true;
 	mutex_unlock(&vsock->tx_lock);
 
+	return 0;
+}
+
+static void virtio_vsock_vqs_fill(struct virtio_vsock *vsock)
+{
 	mutex_lock(&vsock->rx_lock);
 	virtio_vsock_rx_fill(vsock);
 	vsock->rx_run = true;
@@ -568,8 +573,6 @@ static int virtio_vsock_vqs_init(struct virtio_vsock *vsock)
 	virtio_vsock_event_fill(vsock);
 	vsock->event_run = true;
 	mutex_unlock(&vsock->event_lock);
-
-	return 0;
 }
 
 static void virtio_vsock_vqs_del(struct virtio_vsock *vsock)
@@ -664,6 +667,7 @@ static int virtio_vsock_probe(struct virtio_device *vdev)
 		goto out;
 
 	rcu_assign_pointer(the_virtio_vsock, vsock);
+	virtio_vsock_vqs_fill(vsock);
 
 	mutex_unlock(&the_virtio_vsock_mutex);
 
@@ -736,6 +740,7 @@ static int virtio_vsock_restore(struct virtio_device *vdev)
 		goto out;
 
 	rcu_assign_pointer(the_virtio_vsock, vsock);
+	virtio_vsock_vqs_fill(vsock);
 
 out:
 	mutex_unlock(&the_virtio_vsock_mutex);
