@@ -72,14 +72,8 @@ SYM_CODE_START_NOALIGN(startup_64)
 
 	/* Setup GSBASE to allow stack canary access for C code */
 	movl	$MSR_GS_BASE, %ecx
-#ifdef CONFIG_SMP
-	leaq	__per_cpu_load(%rip), %rdx
-	movl	%edx, %eax
-	shrq	$32,  %rdx
-#else
 	xorl	%eax, %eax
 	xorl	%edx, %edx
-#endif
 	wrmsr
 
 	call	startup_64_setup_env

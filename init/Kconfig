@@ -1718,7 +1718,7 @@ config KALLSYMS_ALL
 config KALLSYMS_ABSOLUTE_PERCPU
 	bool
 	depends on KALLSYMS
-	default X86_64 && SMP
+	default n
 
 config KALLSYMS_BASE_RELATIVE
 	bool

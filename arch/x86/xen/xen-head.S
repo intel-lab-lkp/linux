@@ -57,14 +57,8 @@ SYM_CODE_START(startup_xen)
 	 * the per cpu areas are set up.
 	 */
 	movl	$MSR_GS_BASE,%ecx
-#ifdef CONFIG_SMP
-	leaq	__per_cpu_load(%rip), %rdx
-	movl	%edx, %eax
-	shrq	$32, %rdx
-#else
 	xorl	%eax, %eax
 	xorl	%edx, %edx
-#endif
 	wrmsr
 
 	mov	%rsi, %rdi
