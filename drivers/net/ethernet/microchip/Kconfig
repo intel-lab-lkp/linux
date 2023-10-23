@@ -60,4 +60,15 @@ source "drivers/net/ethernet/microchip/lan966x/Kconfig"
 source "drivers/net/ethernet/microchip/sparx5/Kconfig"
 source "drivers/net/ethernet/microchip/vcap/Kconfig"
 
+config LAN865X
+	tristate "LAN865x support"
+	depends on SPI
+	depends on OA_TC6
+	help
+      	  Support for the Microchip LAN8650/1 Rev.B0 MACPHY Ethernet chip. It
+	  uses OPEN Alliance 10BASE-T1x Serial Interface specification.
+
+      	  To compile this driver as a module, choose M here. The module will be
+          called lan865x.
+
 endif # NET_VENDOR_MICROCHIP
