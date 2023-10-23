@@ -918,6 +918,7 @@ static void flow_offload_work_add(struct flow_offload_work *offload)
 		goto out;
 
 	set_bit(IPS_HW_OFFLOAD_BIT, &offload->flow->ct->status);
+	set_bit(NF_FLOW_HW_ESTABLISHED, &offload->flow->flags);
 
 out:
 	nf_flow_offload_destroy(flow_rule);
@@ -925,6 +926,7 @@ out:
 
 static void flow_offload_work_del(struct flow_offload_work *offload)
 {
+	clear_bit(NF_FLOW_HW_ESTABLISHED, &offload->flow->flags);
 	clear_bit(IPS_HW_OFFLOAD_BIT, &offload->flow->ct->status);
 	flow_offload_tuple_del(offload, FLOW_OFFLOAD_DIR_ORIGINAL);
 	if (test_bit(NF_FLOW_HW_BIDIRECTIONAL, &offload->flow->flags))
