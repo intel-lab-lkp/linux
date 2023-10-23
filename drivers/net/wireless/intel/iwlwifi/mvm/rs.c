@@ -3724,25 +3724,16 @@ static ssize_t rs_sta_dbgfs_scale_table_write(struct file *file,
 			const char __user *user_buf, size_t count, loff_t *ppos)
 {
 	struct iwl_lq_sta *lq_sta = file->private_data;
-	struct iwl_mvm *mvm;
-	char buf[64];
-	size_t buf_size;
-	u32 parsed_rate;
+	struct iwl_mvm *mvm = lq_sta->pers.drv;
+	ssize_t ret;
+	u32 rate;
 
-	mvm = lq_sta->pers.drv;
-	memset(buf, 0, sizeof(buf));
-	buf_size = min(count, sizeof(buf) -  1);
-	if (copy_from_user(buf, user_buf, buf_size))
-		return -EFAULT;
-
-	if (sscanf(buf, "%x", &parsed_rate) == 1)
-		lq_sta->pers.dbg_fixed_rate = parsed_rate;
-	else
-		lq_sta->pers.dbg_fixed_rate = 0;
+	ret = kstrtouint_from_user(user_buf, count, 0, &rate);
+	lq_sta->pers.dbg_fixed_rate = ret ? 0 : rate;
 
 	rs_program_fix_rate(mvm, lq_sta);
 
-	return count;
+	return ret ? ret : count;
 }
 
 static ssize_t rs_sta_dbgfs_scale_table_read(struct file *file,

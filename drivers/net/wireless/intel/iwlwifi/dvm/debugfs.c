@@ -408,20 +408,15 @@ static ssize_t iwl_dbgfs_rx_handlers_write(struct file *file,
 					 size_t count, loff_t *ppos)
 {
 	struct iwl_priv *priv = file->private_data;
+	ssize_t ret;
+	bool reset;
 
-	char buf[8];
-	int buf_size;
-	u32 reset_flag;
+	/* note actual value is not used here */
+	ret = kstrtobool_from_user(user_buf, count, &reset);
+	if (ret)
+		return ret;
 
-	memset(buf, 0, sizeof(buf));
-	buf_size = min(count, sizeof(buf) -  1);
-	if (copy_from_user(buf, user_buf, buf_size))
-		return -EFAULT;
-	if (sscanf(buf, "%x", &reset_flag) != 1)
-		return -EFAULT;
-	if (reset_flag == 0)
-		memset(&priv->rx_handlers_stats[0], 0,
-			sizeof(priv->rx_handlers_stats));
+	memset(priv->rx_handlers_stats, 0, sizeof(priv->rx_handlers_stats));
 
 	return count;
 }
@@ -490,18 +485,15 @@ static ssize_t iwl_dbgfs_disable_ht40_write(struct file *file,
 					 size_t count, loff_t *ppos)
 {
 	struct iwl_priv *priv = file->private_data;
-	char buf[8];
-	int buf_size;
-	int ht40;
+	ssize_t ret;
+	bool ht40;
 
-	memset(buf, 0, sizeof(buf));
-	buf_size = min(count, sizeof(buf) -  1);
-	if (copy_from_user(buf, user_buf, buf_size))
-		return -EFAULT;
-	if (sscanf(buf, "%d", &ht40) != 1)
-		return -EFAULT;
+	ret = kstrtobool_from_user(user_buf, count, &ht40);
+	if (ret)
+		return ret;
+
 	if (!iwl_is_any_associated(priv))
-		priv->disable_ht40 = ht40 ? true : false;
+		priv->disable_ht40 = ht40;
 	else
 		return -EINVAL;
 
@@ -542,18 +534,12 @@ static ssize_t iwl_dbgfs_sleep_level_override_write(struct file *file,
 						    size_t count, loff_t *ppos)
 {
 	struct iwl_priv *priv = file->private_data;
-	char buf[8];
-	int buf_size;
+	ssize_t ret;
 	int value;
 
-	memset(buf, 0, sizeof(buf));
-	buf_size = min(count, sizeof(buf) -  1);
-	if (copy_from_user(buf, user_buf, buf_size))
-		return -EFAULT;
-
-	if (sscanf(buf, "%d", &value) != 1)
-		return -EINVAL;
-
+	ret = kstrtoint_from_user(user_buf, count, 0, &value);
+	if (ret)
+		return ret;
 	/*
 	 * Our users expect 0 to be "CAM", but 0 isn't actually
 	 * valid here. However, let's not confuse them and present
@@ -1806,16 +1792,13 @@ static ssize_t iwl_dbgfs_clear_ucode_statistics_write(struct file *file,
 					 size_t count, loff_t *ppos)
 {
 	struct iwl_priv *priv = file->private_data;
-	char buf[8];
-	int buf_size;
-	int clear;
+	ssize_t ret;
+	bool clear;
 
-	memset(buf, 0, sizeof(buf));
-	buf_size = min(count, sizeof(buf) -  1);
-	if (copy_from_user(buf, user_buf, buf_size))
-		return -EFAULT;
-	if (sscanf(buf, "%d", &clear) != 1)
-		return -EFAULT;
+	/* note actual value is not used here */
+	ret = kstrtobool_from_user(user_buf, count, &clear);
+	if (ret)
+		return ret;
 
 	/* make request to uCode to retrieve statistics information */
 	mutex_lock(&priv->mutex);
@@ -1851,25 +1834,20 @@ static ssize_t iwl_dbgfs_ucode_tracing_write(struct file *file,
 					 size_t count, loff_t *ppos)
 {
 	struct iwl_priv *priv = file->private_data;
-	char buf[8];
-	int buf_size;
-	int trace;
+	ssize_t ret;
+	bool trace;
 
-	memset(buf, 0, sizeof(buf));
-	buf_size = min(count, sizeof(buf) -  1);
-	if (copy_from_user(buf, user_buf, buf_size))
-		return -EFAULT;
-	if (sscanf(buf, "%d", &trace) != 1)
-		return -EFAULT;
+	ret = kstrtobool_from_user(user_buf, count, &trace);
+	if (ret)
+		return ret;
 
+	priv->event_log.ucode_trace = trace;
 	if (trace) {
-		priv->event_log.ucode_trace = true;
 		if (iwl_is_alive(priv)) {
 			/* start collecting data now */
 			mod_timer(&priv->ucode_trace, jiffies);
 		}
 	} else {
-		priv->event_log.ucode_trace = false;
 		del_timer_sync(&priv->ucode_trace);
 	}
 
@@ -1922,16 +1900,12 @@ static ssize_t iwl_dbgfs_missed_beacon_write(struct file *file,
 					 size_t count, loff_t *ppos)
 {
 	struct iwl_priv *priv = file->private_data;
-	char buf[8];
-	int buf_size;
+	ssize_t ret;
 	int missed;
 
-	memset(buf, 0, sizeof(buf));
-	buf_size = min(count, sizeof(buf) -  1);
-	if (copy_from_user(buf, user_buf, buf_size))
-		return -EFAULT;
-	if (sscanf(buf, "%d", &missed) != 1)
-		return -EINVAL;
+	ret = kstrtoint_from_user(user_buf, count, 0, &missed);
+	if (ret)
+		return ret;
 
 	if (missed < IWL_MISSED_BEACON_THRESHOLD_MIN ||
 	    missed > IWL_MISSED_BEACON_THRESHOLD_MAX)
@@ -1963,16 +1937,12 @@ static ssize_t iwl_dbgfs_plcp_delta_write(struct file *file,
 					size_t count, loff_t *ppos) {
 
 	struct iwl_priv *priv = file->private_data;
-	char buf[8];
-	int buf_size;
+	ssize_t ret;
 	int plcp;
 
-	memset(buf, 0, sizeof(buf));
-	buf_size = min(count, sizeof(buf) -  1);
-	if (copy_from_user(buf, user_buf, buf_size))
-		return -EFAULT;
-	if (sscanf(buf, "%d", &plcp) != 1)
-		return -EINVAL;
+	ret = kstrtoint_from_user(user_buf, count, 0, &plcp);
+	if (ret)
+		return ret;
 	if ((plcp < IWL_MAX_PLCP_ERR_THRESHOLD_MIN) ||
 		(plcp > IWL_MAX_PLCP_ERR_THRESHOLD_MAX))
 		priv->plcp_delta_threshold =
@@ -2023,16 +1993,13 @@ static ssize_t iwl_dbgfs_txfifo_flush_write(struct file *file,
 					size_t count, loff_t *ppos) {
 
 	struct iwl_priv *priv = file->private_data;
-	char buf[8];
-	int buf_size;
-	int flush;
+	ssize_t ret;
+	bool flush;
 
-	memset(buf, 0, sizeof(buf));
-	buf_size = min(count, sizeof(buf) -  1);
-	if (copy_from_user(buf, user_buf, buf_size))
-		return -EFAULT;
-	if (sscanf(buf, "%d", &flush) != 1)
-		return -EINVAL;
+	/* note actual value is not used here */
+	ret = kstrtobool_from_user(user_buf, count, &flush);
+	if (ret)
+		return ret;
 
 	if (iwl_is_rfkill(priv))
 		return -EFAULT;
@@ -2113,23 +2080,17 @@ static ssize_t iwl_dbgfs_protection_mode_write(struct file *file,
 					size_t count, loff_t *ppos) {
 
 	struct iwl_priv *priv = file->private_data;
-	char buf[8];
-	int buf_size;
-	int rts;
+	ssize_t ret;
+	bool rts;
 
 	if (!priv->cfg->ht_params)
 		return -EINVAL;
 
-	memset(buf, 0, sizeof(buf));
-	buf_size = min(count, sizeof(buf) -  1);
-	if (copy_from_user(buf, user_buf, buf_size))
-		return -EFAULT;
-	if (sscanf(buf, "%d", &rts) != 1)
-		return -EINVAL;
-	if (rts)
-		priv->hw_params.use_rts_for_aggregation = true;
-	else
-		priv->hw_params.use_rts_for_aggregation = false;
+	ret = kstrtobool_from_user(user_buf, count, &rts);
+	if (ret)
+		return ret;
+
+	priv->hw_params.use_rts_for_aggregation = rts;
 	return count;
 }
 
@@ -2187,21 +2148,18 @@ static ssize_t iwl_dbgfs_log_event_write(struct file *file,
 					size_t count, loff_t *ppos)
 {
 	struct iwl_priv *priv = file->private_data;
-	u32 event_log_flag;
-	char buf[8];
-	int buf_size;
+	bool event_log_flag;
+	ssize_t ret;
 
 	/* check that the interface is up */
 	if (!iwl_is_ready(priv))
 		return -EAGAIN;
 
-	memset(buf, 0, sizeof(buf));
-	buf_size = min(count, sizeof(buf) -  1);
-	if (copy_from_user(buf, user_buf, buf_size))
-		return -EFAULT;
-	if (sscanf(buf, "%u", &event_log_flag) != 1)
-		return -EFAULT;
-	if (event_log_flag == 1)
+	ret = kstrtobool_from_user(user_buf, count, &event_log_flag);
+	if (ret)
+		return ret;
+
+	if (event_log_flag)
 		iwl_dump_nic_event_log(priv, true, NULL);
 
 	return count;
@@ -2241,16 +2199,12 @@ static ssize_t iwl_dbgfs_calib_disabled_write(struct file *file,
 					      size_t count, loff_t *ppos)
 {
 	struct iwl_priv *priv = file->private_data;
-	char buf[8];
-	u32 calib_disabled;
-	int buf_size;
+	bool calib_disabled;
+	ssize_t ret;
 
-	memset(buf, 0, sizeof(buf));
-	buf_size = min(count, sizeof(buf) - 1);
-	if (copy_from_user(buf, user_buf, buf_size))
-		return -EFAULT;
-	if (sscanf(buf, "%x", &calib_disabled) != 1)
-		return -EFAULT;
+	ret = kstrtobool_from_user(user_buf, count, &calib_disabled);
+	if (ret)
+		return ret;
 
 	priv->calib_disabled = calib_disabled;
 
