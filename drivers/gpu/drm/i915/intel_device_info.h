@@ -160,6 +160,7 @@ enum intel_ppgtt_type {
 	func(has_logical_ring_elsq); \
 	func(has_media_ratio_mode); \
 	func(has_mslice_steering); \
+	func(has_null_page); \
 	func(has_oa_bpc_reporting); \
 	func(has_oa_slice_contrib_limits); \
 	func(has_oam); \
