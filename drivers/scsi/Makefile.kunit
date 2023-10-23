@@ -1,0 +1,1 @@
+obj-$(CONFIG_SCSI_ERROR_TEST) += scsi_error_test.o
