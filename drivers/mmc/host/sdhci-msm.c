@@ -2245,6 +2245,27 @@ static int sdhci_msm_start_signal_voltage_switch(struct mmc_host *mmc,
 	return -EAGAIN;
 }
 
+static void sdhci_msm_check_auto_cmd12(struct mmc_host *mmc,
+				       struct mmc_request *mrq)
+{
+	struct sdhci_host *host = mmc_priv(mmc);
+	bool auto_cmd12 = (host->quirks & SDHCI_QUIRK_MULTIBLOCK_READ_ACMD12);
+
+	if (mrq->data && auto_cmd12) {
+		if (mmc_is_ffu_cmd(mrq->cmd))
+			host->flags &= ~SDHCI_AUTO_CMD12;
+		else
+			host->flags |= SDHCI_AUTO_CMD12;
+	}
+}
+
+static void sdhci_msm_request(struct mmc_host *mmc, struct mmc_request *mrq)
+{
+	sdhci_msm_check_auto_cmd12(mmc, mrq);
+
+	sdhci_request(mmc, mrq);
+}
+
 #define DRIVER_NAME "sdhci_msm"
 #define SDHCI_MSM_DUMP(f, x...) \
 	pr_err("%s: " DRIVER_NAME ": " f, mmc_hostname(host->mmc), ## x)
@@ -2637,6 +2658,8 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 	pm_runtime_set_autosuspend_delay(&pdev->dev,
 					 MSM_MMC_AUTOSUSPEND_DELAY_MS);
 	pm_runtime_use_autosuspend(&pdev->dev);
+
+	host->mmc_host_ops.request = sdhci_msm_request;
 
 	host->mmc_host_ops.start_signal_voltage_switch =
 		sdhci_msm_start_signal_voltage_switch;
