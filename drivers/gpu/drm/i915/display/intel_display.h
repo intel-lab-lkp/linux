@@ -559,4 +559,24 @@ bool assert_port_valid(struct drm_i915_private *i915, enum port port);
 
 bool intel_scanout_needs_vtd_wa(struct drm_i915_private *i915);
 
+/*
+ * The uncore version of the spin lock functions is used to decide
+ * whether we need to lock the uncore lock or not.  This is only
+ * needed in i915, not in Xe.  Keep the decision-making centralized
+ * here.
+ */
+static inline void intel_spin_lock(spinlock_t *lock)
+{
+#ifdef I915
+	spin_lock(lock);
+#endif
+}
+
+static inline void intel_spin_unlock(spinlock_t *lock)
+{
+#ifdef I915
+	spin_unlock(lock);
+#endif
+}
+
 #endif
