@@ -603,7 +603,8 @@ static int loop_change_fd(struct loop_device *lo, struct block_device *bdev,
 		goto out_err;
 
 	/* and ... switch */
-	disk_force_media_change(lo->lo_disk);
+	invalidate_bdev(lo->lo_disk->part0);
+	set_bit(GD_NEED_PART_SCAN, &lo->lo_disk->state);
 	blk_mq_freeze_queue(lo->lo_queue);
 	mapping_set_gfp_mask(old_file->f_mapping, lo->old_gfp_mask);
 	lo->lo_backing_file = file;
