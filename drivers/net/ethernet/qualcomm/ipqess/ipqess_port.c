@@ -1315,7 +1315,8 @@ ipqess_psgmii_configure(struct qca8k_priv *priv)
 	int ret;
 
 	if (!atomic_fetch_inc(&priv->psgmii_calibrated)) {
-		dev_warn(priv->dev, "Unable to calibrate PSGMII, link will be unstable!\n");
+		dev_dbg(priv->dev, "starting PSGMII calibration...\n");
+		psgmii_calibrate_and_test(priv);
 
 		ret = regmap_clear_bits(priv->psgmii, PSGMIIPHY_MODE_CONTROL,
 					PSGMIIPHY_MODE_ATHR_CSCO_MODE_25M);

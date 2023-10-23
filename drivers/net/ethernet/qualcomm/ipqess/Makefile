@@ -5,4 +5,4 @@
 
 obj-$(CONFIG_QCOM_IPQ4019_ESS) += ipqess.o
 
-ipqess-objs := ipqess_port.o ipqess_switch.o ipqess_notifiers.o ipqess_edma.o
+ipqess-objs := ipqess_port.o ipqess_switch.o ipqess_notifiers.o ipqess_edma.o ipqess_calib.o

@@ -92,4 +92,8 @@ int ipqess_port_obj_del(struct net_device *netdev, const void *ctx,
 
 bool ipqess_port_offloads_bridge_port(struct ipqess_port *port,
 				      const struct net_device *netdev);
+
+/* Defined in ipqess_calib.c */
+int psgmii_calibrate_and_test(struct qca8k_priv *priv);
+
 #endif
