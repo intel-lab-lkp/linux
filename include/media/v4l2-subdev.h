@@ -1543,7 +1543,7 @@ int v4l2_subdev_set_routing_with_fmt(struct v4l2_subdev *sd,
  * v4l2_subdev_state_get_format() - Get pointer to a stream format
  * @state: subdevice state
  * @pad: pad id
- * @stream: stream id
+ * @stream: stream id (optional argument)
  *
  * This returns a pointer to &struct v4l2_mbus_framefmt for the given pad +
  * stream in the subdev state.
@@ -1551,15 +1551,22 @@ int v4l2_subdev_set_routing_with_fmt(struct v4l2_subdev *sd,
  * For stream-unaware drivers the format for the corresponding pad is returned.
  * If the pad does not exist, NULL is returned.
  */
+#define v4l2_subdev_state_get_format(state, pad, ...)         \
+        __v4l2_subdev_state_get_format_ ## __VA_OPT__(stream) \
+        (state, pad __VA_OPT__(,) __VA_ARGS__)
+#define __v4l2_subdev_state_get_format_(state, pad)     \
+        __v4l2_subdev_state_get_format(state, pad, 0)
+#define __v4l2_subdev_state_get_format_stream(state, pad, stream)	\
+        __v4l2_subdev_state_get_format(state, pad, stream)
 struct v4l2_mbus_framefmt *
-v4l2_subdev_state_get_format(struct v4l2_subdev_state *state, unsigned int pad,
-			     u32 stream);
+__v4l2_subdev_state_get_format(struct v4l2_subdev_state *state,
+			       unsigned int pad, u32 stream);
 
 /**
  * v4l2_subdev_state_get_crop() - Get pointer to a stream crop rectangle
  * @state: subdevice state
  * @pad: pad id
- * @stream: stream id
+ * @stream: stream id (optional argument)
  *
  * This returns a pointer to crop rectangle for the given pad + stream in the
  * subdev state.
@@ -1567,15 +1574,22 @@ v4l2_subdev_state_get_format(struct v4l2_subdev_state *state, unsigned int pad,
  * For stream-unaware drivers the crop rectangle for the corresponding pad is
  * returned. If the pad does not exist, NULL is returned.
  */
+#define v4l2_subdev_state_get_crop(state, pad, ...)         \
+        __v4l2_subdev_state_get_crop_ ## __VA_OPT__(stream) \
+        (state, pad __VA_OPT__(,) __VA_ARGS__)
+#define __v4l2_subdev_state_get_crop_(state, pad)	\
+        __v4l2_subdev_state_get_crop(state, pad, 0)
+#define __v4l2_subdev_state_get_crop_stream(state, pad, stream)	\
+        __v4l2_subdev_state_get_crop(state, pad, stream)
 struct v4l2_rect *
-v4l2_subdev_state_get_crop(struct v4l2_subdev_state *state, unsigned int pad,
-			   u32 stream);
+__v4l2_subdev_state_get_crop(struct v4l2_subdev_state *state, unsigned int pad,
+			     u32 stream);
 
 /**
  * v4l2_subdev_state_get_compose() - Get pointer to a stream compose rectangle
  * @state: subdevice state
  * @pad: pad id
- * @stream: stream id
+ * @stream: stream id (optional argument)
  *
  * This returns a pointer to compose rectangle for the given pad + stream in the
  * subdev state.
@@ -1583,9 +1597,16 @@ v4l2_subdev_state_get_crop(struct v4l2_subdev_state *state, unsigned int pad,
  * For stream-unaware drivers the compose rectangle for the corresponding pad is
  * returned. If the pad does not exist, NULL is returned.
  */
+#define v4l2_subdev_state_get_compose(state, pad, ...)         \
+        __v4l2_subdev_state_get_compose_ ## __VA_OPT__(stream) \
+        (state, pad __VA_OPT__(,) __VA_ARGS__)
+#define __v4l2_subdev_state_get_compose_(state, pad)	\
+        __v4l2_subdev_state_get_compose(state, pad, 0)
+#define __v4l2_subdev_state_get_compose_stream(state, pad, stream)	\
+        __v4l2_subdev_state_get_compose(state, pad, stream)
 struct v4l2_rect *
-v4l2_subdev_state_get_compose(struct v4l2_subdev_state *state, unsigned int pad,
-			      u32 stream);
+__v4l2_subdev_state_get_compose(struct v4l2_subdev_state *state,
+				unsigned int pad, u32 stream);
 
 /**
  * v4l2_subdev_routing_find_opposite_end() - Find the opposite stream
