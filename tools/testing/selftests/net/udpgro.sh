@@ -97,7 +97,8 @@ run_one_nat() {
 		echo "ok" || \
 		echo "failed"&
 
-	sleep 0.1
+	# Hack: let bg programs complete the startup
+	sleep 0.2
 	./udpgso_bench_tx ${tx_args}
 	ret=$?
 	kill -INT $pid
