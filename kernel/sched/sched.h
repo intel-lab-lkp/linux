@@ -779,6 +779,12 @@ static inline long se_runnable(struct sched_entity *se)
 }
 #endif
 
+#ifdef CONFIG_RT_GROUP_SCHED
+#define rt_entity_is_task(rt_se) (!(rt_se)->my_q)
+#else
+#define rt_entity_is_task(rt_se) (1)
+#endif
+
 #ifdef CONFIG_SMP
 /*
  * XXX we want to get rid of these helpers and use the full load resolution.
@@ -3266,9 +3272,12 @@ static inline void update_current_exec_runtime(struct task_struct *curr,
 						u64 now, u64 delta_exec)
 {
 	curr->se.sum_exec_runtime += delta_exec;
-	account_group_exec_runtime(curr, delta_exec);
-
 	curr->se.exec_start = now;
+
+	if (curr->sched_class == &rt_sched_class && !rt_entity_is_task(&curr->rt))
+		return;
+
+	account_group_exec_runtime(curr, delta_exec);
 	cgroup_account_cputime(curr, delta_exec);
 }
 
