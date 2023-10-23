@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: "http://devicetree.org/schemas/soc/qcom/qcom,mem-dump.yaml#"
+$schema: "http://devicetree.org/meta-schemas/core.yaml#"
+
+title: Qualcomm memory dump
+
+description: |
+  Qualcomm memory dump driver dynamically reserves memory and provides hints(id and size)
+  of debugging information based on specified protocols with firmware. Firmware then does
+  the real data capture. The debugging information includes cache contents, internal
+  memory, registers. After crash and warm reboot, firmware scans ids,
+  sizes and stores contents into reserved memory accordingly. Firmware then enters into full
+  dump mode which dumps whole DDR to PC through USB.
+
+maintainers:
+  - Zhenhua Huang <quic_zhenhuah@quicinc.com>
+
+properties:
+  compatible:
+    const: qcom,mem-dump
+
+  memory-region:
+    maxItems: 1
+    description: phandle to memory reservation for qcom,mem-dump region.
+
+required:
+  - compatible
+  - memory-region
+
+additionalProperties: false
+
+examples:
+  # minimum memory dump definition.
+  - |
+    mem-dump {
+        compatible = "qcom,mem-dump";
+        memory-region = <&dump_mem>;
+    };
+
+...
