@@ -565,17 +565,6 @@ static void s390_dma_unmap_sg(struct device *dev, struct scatterlist *sg,
 	}
 }
 
-static unsigned long *bitmap_vzalloc(size_t bits, gfp_t flags)
-{
-	size_t n = BITS_TO_LONGS(bits);
-	size_t bytes;
-
-	if (unlikely(check_mul_overflow(n, sizeof(unsigned long), &bytes)))
-		return NULL;
-
-	return vzalloc(bytes);
-}
-	
 int zpci_dma_init_device(struct zpci_dev *zdev)
 {
 	u8 status;
@@ -615,13 +604,15 @@ int zpci_dma_init_device(struct zpci_dev *zdev)
 				zdev->end_dma - zdev->start_dma + 1);
 	zdev->end_dma = zdev->start_dma + zdev->iommu_size - 1;
 	zdev->iommu_pages = zdev->iommu_size >> PAGE_SHIFT;
-	zdev->iommu_bitmap = bitmap_vzalloc(zdev->iommu_pages, GFP_KERNEL);
+	zdev->iommu_bitmap = vzalloc(BITS_TO_LONGS(zdev->iommu_pages) *
+				     sizeof(unsigned long));
 	if (!zdev->iommu_bitmap) {
 		rc = -ENOMEM;
 		goto free_dma_table;
 	}
 	if (!s390_iommu_strict) {
-		zdev->lazy_bitmap = bitmap_vzalloc(zdev->iommu_pages, GFP_KERNEL);
+		zdev->lazy_bitmap = vzalloc(BITS_TO_LONGS(zdev->iommu_pages) *
+					    sizeof(unsigned long));
 		if (!zdev->lazy_bitmap) {
 			rc = -ENOMEM;
 			goto free_bitmap;
