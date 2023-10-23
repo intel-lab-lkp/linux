@@ -42,9 +42,11 @@ Every line starts with a key word and can be followed by multiple
 arguments.  "config" starts a new config entry. The following lines
 define attributes for this config option. Attributes can be the type of
 the config option, input prompt, dependencies, help text and default
-values. A config option can be defined multiple times with the same
-name, but every definition can have only a single input prompt and the
-type must not conflict.
+values.
+
+A config option can be defined multiple times (i.e. by multiple menu
+entries) with the same name, but each definition can have only a single
+prompt and their types must not conflict.
 
 Menu attributes
 ---------------
@@ -136,7 +138,10 @@ applicable everywhere (see syntax).
   below), reverse dependencies can be used to force a lower limit of
   another symbol. The value of the current menu symbol is used as the
   minimal value <symbol> can be set to. If <symbol> is selected multiple
-  times, the limit is set to the largest selection.
+  times, the limit is set to the largest selection. In other words, if
+  at least one menu selecting another symbol is ``y``, then the selected
+  symbol will also be ``y``.
+
   Reverse dependencies can only be used with boolean or tristate
   symbols.
 
@@ -473,6 +478,22 @@ This is a collection of Kconfig tips, most of which aren't obvious at
 first glance and most of which have become idioms in several Kconfig
 files.
 
+Misconceptions about prompts and symbols
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Looking at fragments of common Kconfig usage, it is easy to believe
+that a symbol can depend on another symbol. In fact, it is not the
+symbol itself that has a dependency; it is the visibility of the
+symbol's prompt that has a dependency.
+
+Likewise, since each prompt defines its own dependencies, it is quite
+possible to have two prompts for the same symbol with different sets
+of dependencies. As long as the user has at least one visible prompt,
+they can enable that symbol in their config. Conversely, if there are
+no visible prompts for a symbol, the user can not change its value,
+not even by explicitly setting it in their .config. (It may, however,
+still be selected by other prompts.)
+
 Adding common features and make the usage configurable
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 It is a common idiom to implement a feature/functionality that are
@@ -567,7 +588,7 @@ distro config owners, but also for every single developer or user who
 configures a kernel.
 
 Such a dependency can be relaxed by combining it with the compile-testing rule
-above, leading to:
+above, leading to::
 
   config FOO
 	bool "Support for foo hardware"
@@ -691,6 +712,28 @@ e98062ed6dc4    select A -> depends on A        (3)
 (1) Partial (or no) quote of error.
 (2) That seems to be the gist of that fix.
 (3) Same error.
+
+Experimenting with smaller-scale Kconfigs
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+It is fully possible to play around with smaller-scale Kconfig fragments
+instead of using the kernel's full set of Kconfig files. Create a file
+called ``Kconfig.test`` containing e.g.::
+
+  config MODULES
+          bool "Modules"
+          modules
+
+  config FOO
+          tristate "foo"
+
+  config BAR
+          tristate "bar"
+          depends on FOO
+
+You can now e.g. use menuconfig on this by simply running:
+``scripts/kconfig/mconf Kconfig.test``.
+
 
 Future kconfig work
 ~~~~~~~~~~~~~~~~~~~
