@@ -10,8 +10,9 @@
 #include <linux/udp.h>
 #include <linux/if_vlan.h>
 #include <linux/if_ether.h>
+#include <net/udp_tunnel.h>
 
-int wg_socket_init(struct wg_device *wg, u16 port);
+int wg_socket_init(struct wg_device *wg, struct udp_port_cfg port);
 void wg_socket_reinit(struct wg_device *wg, struct sock *new4,
 		      struct sock *new6);
 int wg_socket_send_buffer_to_peer(struct wg_peer *peer, void *data,
