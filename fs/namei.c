@@ -860,7 +860,7 @@ static inline int d_revalidate(struct dentry *dentry, unsigned int flags)
 	if (unlikely(dentry->d_flags & DCACHE_OP_REVALIDATE))
 		return dentry->d_op->d_revalidate(dentry, flags);
 	else
-		return 1;
+		return D_REVALIDATE_VALID;
 }
 
 /**
@@ -3330,8 +3330,9 @@ static int may_o_create(struct mnt_idmap *idmap,
 }
 
 /*
- * Attempt to atomically look up, create and open a file from a negative
- * dentry.
+ * Attempt to atomically look up, create and open a file from a
+ * dentry. Unless the file system returns D_REVALIDATE_ATOMIC in ->d_revalidate,
+ * the dentry is always negative.
  *
  * Returns 0 if successful.  The file will have been created and attached to
  * @file by the filesystem calling finish_open().
@@ -3406,7 +3407,7 @@ static struct dentry *lookup_open(struct nameidata *nd, struct file *file,
 	struct inode *dir_inode = dir->d_inode;
 	int open_flag = op->open_flag;
 	struct dentry *dentry;
-	int error, create_error = 0;
+	int error = 0, create_error = 0;
 	umode_t mode = op->mode;
 	DECLARE_WAIT_QUEUE_HEAD_ONSTACK(wq);
 
@@ -3433,7 +3434,7 @@ static struct dentry *lookup_open(struct nameidata *nd, struct file *file,
 		dput(dentry);
 		dentry = NULL;
 	}
-	if (dentry->d_inode) {
+	if (dentry->d_inode && error != D_REVALIDATE_ATOMIC) {
 		/* Cached positive dentry: will open in f_op->open */
 		return dentry;
 	}
