@@ -124,6 +124,7 @@ static int virtsnd_pcm_build_hw(struct virtio_pcm_substream *vss,
 	values = le64_to_cpu(info->formats);
 
 	vss->hw.formats = 0;
+	vss->appl_ptr = 0;
 
 	for (i = 0; i < ARRAY_SIZE(g_v2a_format_map); ++i)
 		if (values & (1ULL << i)) {
