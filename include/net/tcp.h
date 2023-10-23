@@ -2173,6 +2173,9 @@ struct tcp_sock_af_ops {
 				     sockptr_t optval,
 				     int optlen);
 #endif
+#ifdef CONFIG_TCP_AO
+	int (*ao_parse)(struct sock *sk, int optname, sockptr_t optval, int optlen);
+#endif
 };
 
 struct tcp_request_sock_ops {
