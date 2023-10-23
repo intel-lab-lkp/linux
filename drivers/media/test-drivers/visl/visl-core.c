@@ -93,6 +93,11 @@ module_param(stable_output, bool, 0644);
 MODULE_PARM_DESC(stable_output,
 		 " only write stable data for a given input on the output frames");
 
+bool codec_variability;
+module_param(codec_variability, bool, 0644);
+MODULE_PARM_DESC(codec_variability,
+		 " add codec specific variability data to generate more unique frames. (Only h.265 and hevc)");
+
 static const struct visl_ctrl_desc visl_fwht_ctrl_descs[] = {
 	{
 		.cfg.id = V4L2_CID_STATELESS_FWHT_PARAMS,

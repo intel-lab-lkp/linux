@@ -86,6 +86,7 @@ extern bool keep_bitstream_buffers;
 extern int bitstream_trace_frame_start;
 extern unsigned int bitstream_trace_nframes;
 extern bool stable_output;
+extern bool codec_variability;
 
 #define frame_dprintk(dev, current, fmt, arg...) \
 	do { \
