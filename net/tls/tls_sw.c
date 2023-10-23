@@ -1612,7 +1612,11 @@ tls_decrypt_sw(struct sock *sk, struct tls_context *tls_ctx,
 	struct strp_msg *rxm;
 	int pad, err;
 
-	err = tls_decrypt_sg(sk, &msg->msg_iter, NULL, darg);
+	if (msg == NULL)
+		err = tls_decrypt_sg(sk, NULL, NULL, darg);
+	else
+		err = tls_decrypt_sg(sk, &msg->msg_iter, NULL, darg);
+
 	if (err < 0) {
 		if (err == -EBADMSG)
 			TLS_INC_STATS(sock_net(sk), LINUX_MIB_TLSDECRYPTERROR);
@@ -1686,7 +1690,8 @@ tls_decrypt_device(struct sock *sk, struct msghdr *msg,
 		off = rxm->offset + prot->prepend_size;
 		len = rxm->full_len - prot->overhead_size;
 
-		err = skb_copy_datagram_msg(darg->skb, off, msg, len);
+		if (msg != NULL)
+			err = skb_copy_datagram_msg(darg->skb, off, msg, len);
 		if (err)
 			return err;
 	}
