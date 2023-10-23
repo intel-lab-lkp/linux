@@ -241,7 +241,7 @@ int dpu_encoder_get_crc_values_cnt(const struct drm_encoder *drm_enc)
 	return num_intf;
 }
 
-void dpu_encoder_setup_misr(const struct drm_encoder *drm_enc)
+void dpu_encoder_setup_misr(const struct drm_encoder *drm_enc, bool has_ctm)
 {
 	struct dpu_encoder_virt *dpu_enc;
 
@@ -255,7 +255,7 @@ void dpu_encoder_setup_misr(const struct drm_encoder *drm_enc)
 		if (!phys->hw_intf || !phys->hw_intf->ops.setup_misr)
 			continue;
 
-		phys->hw_intf->ops.setup_misr(phys->hw_intf, true, 1);
+		phys->hw_intf->ops.setup_misr(phys->hw_intf, true, 1, has_ctm);
 	}
 }
 

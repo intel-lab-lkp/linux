@@ -169,8 +169,9 @@ int dpu_encoder_get_crc_values_cnt(const struct drm_encoder *drm_enc);
 /**
  * dpu_encoder_setup_misr - enable misr calculations
  * @drm_enc:    Pointer to previously created drm encoder structure
+ * @has_ctm:    Is CTM enabled
  */
-void dpu_encoder_setup_misr(const struct drm_encoder *drm_encoder);
+void dpu_encoder_setup_misr(const struct drm_encoder *drm_encoder, bool has_ctm);
 
 /**
  * dpu_encoder_get_crc - get the crc value from interface blocks

@@ -483,7 +483,7 @@ void _dpu_hw_setup_qos_lut(struct dpu_hw_blk_reg_map *c, u32 offset,
 
 void dpu_hw_setup_misr(struct dpu_hw_blk_reg_map *c,
 		u32 misr_ctrl_offset,
-		bool enable, u32 frame_count)
+		bool enable, u32 frame_count, bool has_ctm)
 {
 	u32 config = 0;
 
@@ -495,6 +495,9 @@ void dpu_hw_setup_misr(struct dpu_hw_blk_reg_map *c,
 	if (enable) {
 		config = (frame_count & MISR_FRAME_COUNT_MASK) |
 			MISR_CTRL_ENABLE | MISR_CTRL_FREE_RUN_MASK;
+
+		if (!has_ctm)
+			config |= 1 << 24;
 
 		DPU_REG_WRITE(c, misr_ctrl_offset, config);
 	} else {

@@ -134,7 +134,7 @@ static void dpu_crtc_setup_encoder_misr(struct drm_crtc *crtc)
 	struct drm_encoder *drm_enc;
 
 	drm_for_each_encoder_mask(drm_enc, crtc->dev, crtc->state->encoder_mask)
-		dpu_encoder_setup_misr(drm_enc);
+		dpu_encoder_setup_misr(drm_enc, !!crtc->state->ctm);
 }
 
 static int dpu_crtc_set_crc_source(struct drm_crtc *crtc, const char *src_name)
