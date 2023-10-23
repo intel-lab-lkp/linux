@@ -10723,14 +10723,6 @@ M:	David E. Box <david.e.box@linux.intel.com>
 S:	Supported
 F:	drivers/platform/x86/intel/pmt/
 
-INTEL PRO/WIRELESS 2100, 2200BG, 2915ABG NETWORK CONNECTION SUPPORT
-M:	Stanislav Yakovlev <stas.yakovlev@gmail.com>
-L:	linux-wireless@vger.kernel.org
-S:	Maintained
-F:	Documentation/networking/device_drivers/wifi/intel/ipw2100.rst
-F:	Documentation/networking/device_drivers/wifi/intel/ipw2200.rst
-F:	drivers/net/wireless/intel/ipw2x00/
-
 INTEL PSTATE DRIVER
 M:	Srinivas Pandruvada <srinivas.pandruvada@linux.intel.com>
 M:	Len Brown <lenb@kernel.org>
