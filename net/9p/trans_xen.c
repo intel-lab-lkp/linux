@@ -382,7 +382,7 @@ static int xen_9pfs_front_init(struct xenbus_device *dev)
 	struct xenbus_transaction xbt;
 	struct xen_9pfs_front_priv *priv = dev_get_drvdata(&dev->dev);
 	char *versions, *v;
-	unsigned int max_rings, max_ring_order, len = 0;
+	unsigned int num_rings, max_rings, max_ring_order, len = 0;
 
 	versions = xenbus_read(XBT_NIL, dev->otherend, "versions", &len);
 	if (IS_ERR(versions))
@@ -408,15 +408,15 @@ static int xen_9pfs_front_init(struct xenbus_device *dev)
 	if (p9_xen_trans.maxsize > XEN_FLEX_RING_SIZE(max_ring_order))
 		p9_xen_trans.maxsize = XEN_FLEX_RING_SIZE(max_ring_order) / 2;
 
-	priv->num_rings = XEN_9PFS_NUM_RINGS;
-	priv->rings = kcalloc(priv->num_rings, sizeof(*priv->rings),
+	num_rings = priv->num_rings = XEN_9PFS_NUM_RINGS;
+	priv->rings = kcalloc(num_rings, sizeof(*priv->rings),
 			      GFP_KERNEL);
 	if (!priv->rings) {
 		kfree(priv);
 		return -ENOMEM;
 	}
 
-	for (i = 0; i < priv->num_rings; i++) {
+	for (i = 0; i < num_rings; i++) {
 		priv->rings[i].priv = priv;
 		ret = xen_9pfs_front_alloc_dataring(dev, &priv->rings[i],
 						    max_ring_order);
@@ -434,10 +434,11 @@ static int xen_9pfs_front_init(struct xenbus_device *dev)
 	if (ret)
 		goto error_xenbus;
 	ret = xenbus_printf(xbt, dev->nodename, "num-rings", "%u",
-			    priv->num_rings);
+			    num_rings);
 	if (ret)
 		goto error_xenbus;
-	for (i = 0; i < priv->num_rings; i++) {
+
+	for (i = 0; i < num_rings; i++) {
 		char str[16];
 
 		BUILD_BUG_ON(XEN_9PFS_NUM_RINGS > 9);
