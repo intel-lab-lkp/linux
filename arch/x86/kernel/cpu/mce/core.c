@@ -44,6 +44,7 @@
 #include <linux/sync_core.h>
 #include <linux/task_work.h>
 #include <linux/hardirq.h>
+#include <linux/kexec.h>
 
 #include <asm/intel-family.h>
 #include <asm/processor.h>
@@ -233,6 +234,7 @@ static noinstr void mce_panic(const char *msg, struct mce *final, char *exp)
 	struct llist_node *pending;
 	struct mce_evt_llist *l;
 	int apei_err = 0;
+	struct page *p;
 
 	/*
 	 * Allow instrumentation around external facilities usage. Not that it
@@ -286,6 +288,19 @@ static noinstr void mce_panic(const char *msg, struct mce *final, char *exp)
 	if (!fake_panic) {
 		if (panic_timeout == 0)
 			panic_timeout = mca_cfg.panic_timeout;
+		if (kexec_crash_loaded()) {
+			/*
+			 * Kdump can exclude the poisoned page to avoid touching the error
+			 * page again, the prerequisite is that the PG_hwpoison page flag
+			 * is set.  However, for some MCE fatal error cases, there is no
+			 * opportunity to queue a task for calling memory_failure(), and as
+			 * a result, the capture kernel panics.  So mark the page as
+			 * poisoned before kernel panic() for MCE.
+			 */
+			p = pfn_to_online_page(final->addr >> PAGE_SHIFT);
+			if (final && (final->status & MCI_STATUS_ADDRV) && p)
+				SetPageHWPoison(p);
+		}
 		panic(msg);
 	} else
 		pr_emerg(HW_ERR "Fake kernel panic: %s\n", msg);
