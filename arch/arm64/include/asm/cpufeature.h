@@ -657,6 +657,21 @@ static inline bool supports_clearbhb(int scope)
 						    ID_AA64ISAR2_EL1_CLRBHB_SHIFT);
 }
 
+#ifdef CONFIG_COMPAT
+extern bool __aarch32_enabled;
+
+static inline bool aarch32_enabled(void)
+{
+	return __aarch32_enabled;
+}
+#else /* !CONFIG_COMPAT */
+
+static inline bool aarch32_enabled(void)
+{
+	return false;
+}
+#endif
+
 const struct cpumask *system_32bit_el0_cpumask(void);
 DECLARE_STATIC_KEY_FALSE(arm64_mismatched_32bit_el0);
 
