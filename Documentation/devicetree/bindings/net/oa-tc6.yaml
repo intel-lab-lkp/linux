@@ -58,6 +58,18 @@ properties:
       data written to and read from the MAC-PHY will be transferred with
       its complement for detection of bit errors.
 
+  oa-dprac:
+    maxItems: 1
+    description:
+      Direct PHY Register Access Capability. Indicates if PHY registers
+      are directly accessible within the SPI register memory space.
+
+  oa-dprac:
+    maxItems: 1
+    description:
+      Indirect PHY Register Access Capability. Indicates if PHY registers
+      are indirectly accessible through the MDIO/MDC registers MDIOACCn.
+
 additionalProperties: true
 
 examples:
@@ -69,4 +81,6 @@ examples:
 	oa-txcte;
 	oa-rxcte;
 	oa-prote;
+	oa-dprac;
+	oa-iprac;
     };
