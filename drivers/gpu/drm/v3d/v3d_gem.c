@@ -333,6 +333,7 @@ v3d_job_free(struct kref *ref)
 		v3d_perfmon_put(job->perfmon);
 
 	kfree(job);
+	job = NULL;
 }
 
 static void
