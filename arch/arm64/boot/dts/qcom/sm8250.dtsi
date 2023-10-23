@@ -674,6 +674,11 @@
 		reg = <0x0 0x80000000 0x0 0x0>;
 	};
 
+	mem-dump {
+		compatible = "qcom,mem-dump";
+		memory-region = <&dump_mem>;
+	};
+
 	pmu {
 		compatible = "arm,armv8-pmuv3";
 		interrupts = <GIC_PPI 7 IRQ_TYPE_LEVEL_LOW>;
@@ -850,6 +855,13 @@
 		cdsp_secure_heap: memory@8bf00000 {
 			reg = <0x0 0x8bf00000 0x0 0x4600000>;
 			no-map;
+		};
+
+		dump_mem: mem-dump-region {
+			compatible = "shared-dma-pool";
+			size = <0 0x2800000>;
+			alloc-ranges = <0x0 0x00000000 0x0 0xffffffff>;
+			reusable;
 		};
 	};
 
@@ -5421,6 +5433,25 @@
 					drive-strength = <2>;
 					bias-pull-up;
 				};
+			};
+		};
+
+		sram@146bf000 {
+			compatible = "qcom,sm8250-imem", "syscon", "simple-mfd";
+			reg = <0 0x146bf000 0 0x1000>;
+			ranges = <0 0 0x146bf000 0x1000>;
+
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			mem-dump-table@10 {
+			    compatible = "qcom,qcom-imem-mem-dump-table";
+			    reg = <0x10 0x8>;
+			};
+
+			mem-dump-table-size@724 {
+				compatible = "qcom,qcom-imem-mem-dump-table-size";
+				reg = <0x724 0x8>;
 			};
 		};
 
