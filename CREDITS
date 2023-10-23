@@ -2191,6 +2191,11 @@ D: pirq addr, CS5535 alsa audio driver
 S: Gurgaon, India
 S: Kuala Lumpur, Malaysia
 
+N: M Chetan Kumar
+E: <m.chetan.kumar@intel.com>
+D: Intel WWAN IOSM driver
+D: Mediatek T7XX 5G WWAN reviewer
+
 N: Mohit Kumar
 D: ST Microelectronics SPEAr13xx PCI host bridge driver
 D: Synopsys DesignWare PCI host bridge driver
