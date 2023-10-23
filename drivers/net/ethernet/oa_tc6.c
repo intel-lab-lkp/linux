@@ -6,6 +6,8 @@
  */
 
 #include <linux/bitfield.h>
+#include <linux/interrupt.h>
+#include <linux/delay.h>
 #include <linux/oa_tc6.h>
 
 /* Opaque structure for MACPHY drivers */
@@ -169,10 +171,15 @@ static int oa_tc6_perform_ctrl(struct oa_tc6 *tc6, u32 addr, u32 val[], u8 len,
 	if (ret)
 		return ret;
 
-	/* Check echoed/received control reply for errors */
-	ret = oa_tc6_check_control(tc6, tx_buf, rx_buf, len, wnr, prote);
-	if (ret)
-		return ret;
+	/* In case of reset write, the echoed control command doesn't have any
+	 * valid data. So no need to check for errors.
+	 */
+	if (addr != RESET) {
+		/* Check echoed/received control reply for errors */
+		ret = oa_tc6_check_control(tc6, tx_buf, rx_buf, len, wnr, prote);
+		if (ret)
+			return ret;
+	}
 
 	if (!wnr) {
 		/* Copy read data from the rx data in case of ctrl read */
@@ -189,6 +196,49 @@ static int oa_tc6_perform_ctrl(struct oa_tc6 *tc6, u32 addr, u32 val[], u8 len,
 	}
 
 	return ret;
+}
+
+static int oa_tc6_sw_reset(struct oa_tc6 *tc6)
+{
+	u32 regval;
+	int ret;
+
+	/* Perform software reset with both protected and unprotected control
+	 * commands because the driver doesn't know the current status of the
+	 * MAC-PHY.
+	 */
+	regval = SWRESET;
+	ret = oa_tc6_perform_ctrl(tc6, RESET, &regval, 1, true, true);
+	if (ret)
+		return ret;
+
+	ret = oa_tc6_perform_ctrl(tc6, RESET, &regval, 1, true, false);
+	if (ret)
+		return ret;
+
+	/* The chip completes a reset in 3us, we might get here earlier than
+	 * that, as an added margin we'll conditionally sleep 5us.
+	 */
+	udelay(5);
+
+	ret = oa_tc6_perform_ctrl(tc6, STATUS0, &regval, 1, false, false);
+	if (ret)
+		return ret;
+
+	/* Check for reset complete interrupt status */
+	if (regval & RESETC) {
+		regval = RESETC;
+		/* SPI host should write RESETC bit with one to
+		 * clear the reset interrupt status.
+		 */
+		ret = oa_tc6_perform_ctrl(tc6, STATUS0, &regval, 1, true, false);
+		if (ret)
+			return ret;
+	} else {
+		return -ENODEV;
+	}
+
+	return 0;
 }
 
 /**
@@ -278,6 +328,12 @@ struct oa_tc6 *oa_tc6_init(struct spi_device *spi, bool prote)
 
 	tc6->spi = spi;
 	tc6->prote = prote;
+
+	/* Perform MAC-PHY software reset */
+	if (oa_tc6_sw_reset(tc6)) {
+		dev_err(&spi->dev, "MAC-PHY software reset failed\n");
+		return NULL;
+	}
 
 	return tc6;
 }
