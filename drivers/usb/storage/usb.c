@@ -1130,6 +1130,15 @@ static int storage_probe(struct usb_interface *intf,
 	return result;
 }
 
+static void usb_stor_shutdown(struct device *dev)
+{
+	struct usb_driver *driver = to_usb_driver(dev->driver);
+	struct usb_interface *intf = to_usb_interface(dev);
+
+	if (driver->disconnect)
+		driver->disconnect(intf);
+}
+
 static struct usb_driver usb_storage_driver = {
 	.name =		DRV_NAME,
 	.probe =	storage_probe,
@@ -1139,6 +1148,7 @@ static struct usb_driver usb_storage_driver = {
 	.reset_resume =	usb_stor_reset_resume,
 	.pre_reset =	usb_stor_pre_reset,
 	.post_reset =	usb_stor_post_reset,
+	.drvwrap.driver.shutdown = usb_stor_shutdown,
 	.id_table =	usb_storage_usb_ids,
 	.supports_autosuspend = 1,
 	.soft_unbind =	1,
