@@ -61,6 +61,8 @@ static inline struct bfad_cmd_priv *bfad_priv(struct scsi_cmnd *cmd)
 
 struct bfad_itnim_data_s {
 	struct bfad_itnim_s *itnim;
+	wait_queue_head_t *tmf_wq;
+	unsigned long tmf_status;
 };
 
 struct bfad_im_port_s {
