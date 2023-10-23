@@ -25,6 +25,11 @@ properties:
 
   spi-cpol: true
 
+  spi-cs-inactive-delay-ns:
+    minimum: 16000
+    description:
+      If not explicitly set in the device tree, the driver will set it to 16us.
+
   interrupts:
     maxItems: 1
 
