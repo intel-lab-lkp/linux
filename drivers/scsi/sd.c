@@ -1980,8 +1980,8 @@ static int sd_eh_action(struct scsi_cmnd *scmd, int eh_disp)
 	return eh_disp;
 }
 
-static int sd_cmp_sector(void *priv, const struct list_head *_a,
-			 const struct list_head *_b)
+int sd_cmp_sector(void *priv, const struct list_head *_a,
+		  const struct list_head *_b)
 {
 	struct scsi_cmnd *a = list_entry(_a, typeof(*a), eh_entry);
 	struct scsi_cmnd *b = list_entry(_b, typeof(*b), eh_entry);
@@ -2001,6 +2001,9 @@ static int sd_cmp_sector(void *priv, const struct list_head *_a,
 		return use_zwl_a > use_zwl_b;
 	return blk_rq_pos(rq_a) > blk_rq_pos(rq_b);
 }
+#if IS_MODULE(CONFIG_SD_TEST)
+EXPORT_SYMBOL_GPL(sd_cmp_sector);
+#endif
 
 static void sd_prepare_resubmit(struct list_head *cmd_list)
 {
