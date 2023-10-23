@@ -462,6 +462,12 @@ struct scsi_host_template {
 	unsigned queuecommand_may_block:1;
 
 	/*
+	 * The scsi_driver .eh_prepare_resubmit function must be called by
+	 * the SCSI error handler.
+	 */
+	unsigned needs_prepare_resubmit:1;
+
+	/*
 	 * Countdown for host blocking with no commands outstanding.
 	 */
 	unsigned int max_host_blocked;
