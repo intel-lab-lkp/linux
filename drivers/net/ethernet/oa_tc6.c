@@ -6,16 +6,23 @@
  */
 
 #include <linux/bitfield.h>
-#include <linux/interrupt.h>
 #include <linux/delay.h>
+#include <linux/mdio.h>
+#include <linux/phy.h>
 #include <linux/of.h>
 #include <linux/oa_tc6.h>
 
 /* Opaque structure for MACPHY drivers */
 struct oa_tc6 {
+	struct net_device *netdev;
+	struct phy_device *phydev;
+	struct mii_bus *mdiobus;
 	struct spi_device *spi;
+	struct device *dev;
 	u8 *ctrl_tx_buf;
 	u8 *ctrl_rx_buf;
+	bool dprac;
+	bool iprac;
 	bool prote;
 	u32 cps;
 };
@@ -204,6 +211,8 @@ static int oa_tc6_configure(struct oa_tc6 *tc6)
 {
 	struct spi_device *spi = tc6->spi;
 	struct device_node *oa_node;
+	bool dprac;
+	bool iprac;
 	u32 regval;
 	u8 mincps;
 	bool ctc;
@@ -225,8 +234,14 @@ static int oa_tc6_configure(struct oa_tc6 *tc6)
 	if (ret)
 		return ret;
 
+	/* Minimum supported Chunk Payload Size */
 	mincps = FIELD_GET(MINCPS, regval);
+	/* Cut-Through Capability */
 	ctc = (regval & CTC) ? true : false;
+	/* Direct PHY Register Access Capability */
+	dprac = (regval & DPRAC) ? true : false;
+	/* Indirect PHY Register access Capability */
+	iprac = (regval & IPRAC) ? true : false;
 
 	regval = 0;
 	oa_node = of_get_child_by_name(spi->dev.of_node, "oa-tc6");
@@ -242,7 +257,7 @@ static int oa_tc6_configure(struct oa_tc6 *tc6)
 			if (tc6->cps < mincps)
 				return -ENODEV;
 		} else {
-			tc6->cps = 64;
+			tc6->cps = OA_TC6_MAX_CPS;
 		}
 		if (of_property_present(oa_node, "oa-txcte")) {
 			/* Return error if the tx cut through mode is configured
@@ -266,8 +281,26 @@ static int oa_tc6_configure(struct oa_tc6 *tc6)
 			regval |= PROTE;
 			tc6->prote = true;
 		}
+		if (of_property_present(oa_node, "oa-dprac")) {
+			/* Return error if the direct phy register access mode
+			 * is configured but it is not supported by MAC-PHY.
+			 */
+			if (dprac)
+				tc6->dprac = true;
+			else
+				return -ENODEV;
+		}
+		if (of_property_present(oa_node, "oa-iprac")) {
+			/* Return error if the indirect phy register access mode
+			 * is configured but it is not supported by MAC-PHY.
+			 */
+			if (iprac)
+				tc6->iprac = true;
+			else
+				return -ENODEV;
+		}
 	} else {
-		tc6->cps = 64;
+		tc6->cps = OA_TC6_MAX_CPS;
 	}
 
 	regval |= FIELD_PREP(CPS, ilog2(tc6->cps) / ilog2(2)) | SYNC;
@@ -379,15 +412,108 @@ int oa_tc6_read_registers(struct oa_tc6 *tc6, u32 addr, u32 val[], u8 len)
 }
 EXPORT_SYMBOL_GPL(oa_tc6_read_registers);
 
+static void oa_tc6_handle_link_change(struct net_device *netdev)
+{
+	phy_print_status(netdev->phydev);
+}
+
+static int oa_tc6_mdiobus_read(struct mii_bus *bus, int phy_id, int idx)
+{
+	struct oa_tc6 *tc6 = bus->priv;
+	u32 regval;
+	bool ret;
+
+	ret = oa_tc6_read_register(tc6, 0xFF00 | (idx & 0xFF), &regval);
+	if (ret)
+		return -ENODEV;
+
+	return regval;
+}
+
+static int oa_tc6_mdiobus_write(struct mii_bus *bus, int phy_id, int idx,
+				u16 val)
+{
+	struct oa_tc6 *tc6 = bus->priv;
+
+	return oa_tc6_write_register(tc6, 0xFF00 | (idx & 0xFF), val);
+}
+
+static int oa_tc6_phy_init(struct oa_tc6 *tc6)
+{
+	int ret;
+
+	if (tc6->dprac) {
+		tc6->mdiobus = mdiobus_alloc();
+		if (!tc6->mdiobus) {
+			netdev_err(tc6->netdev, "MDIO bus alloc failed\n");
+			return -ENODEV;
+		}
+
+		tc6->mdiobus->phy_mask = ~(u32)BIT(1);
+		tc6->mdiobus->priv = tc6;
+		tc6->mdiobus->read = oa_tc6_mdiobus_read;
+		tc6->mdiobus->write = oa_tc6_mdiobus_write;
+		tc6->mdiobus->name = "oa-tc6-mdiobus";
+		tc6->mdiobus->parent = tc6->dev;
+
+		snprintf(tc6->mdiobus->id, ARRAY_SIZE(tc6->mdiobus->id), "%s",
+			 dev_name(&tc6->spi->dev));
+
+		ret = mdiobus_register(tc6->mdiobus);
+		if (ret) {
+			netdev_err(tc6->netdev, "Could not register MDIO bus\n");
+			mdiobus_free(tc6->mdiobus);
+			return ret;
+		}
+
+		tc6->phydev = phy_find_first(tc6->mdiobus);
+		if (!tc6->phydev) {
+			netdev_err(tc6->netdev, "No PHY found\n");
+			mdiobus_unregister(tc6->mdiobus);
+			mdiobus_free(tc6->mdiobus);
+			return -ENODEV;
+		}
+
+		tc6->phydev->is_internal = true;
+		ret = phy_connect_direct(tc6->netdev, tc6->phydev,
+					 &oa_tc6_handle_link_change,
+					 PHY_INTERFACE_MODE_INTERNAL);
+		if (ret) {
+			netdev_err(tc6->netdev, "Can't attach PHY to %s\n",
+				   tc6->mdiobus->id);
+			mdiobus_unregister(tc6->mdiobus);
+			mdiobus_free(tc6->mdiobus);
+			return ret;
+		}
+
+		phy_attached_info(tc6->netdev->phydev);
+
+		return ret;
+	} else if (tc6->iprac) {
+		// To be implemented. Currently returns -ENODEV.
+		return -ENODEV;
+	} else {
+		return -ENODEV;
+	}
+	return 0;
+}
+
+static void oa_tc6_phy_exit(struct oa_tc6 *tc6)
+{
+	phy_disconnect(tc6->phydev);
+	mdiobus_unregister(tc6->mdiobus);
+	mdiobus_free(tc6->mdiobus);
+}
+
 /**
  * oa_tc6_init - allocates and intializes oa_tc6 structure.
  * @spi: device with which data will be exchanged.
- * @prote: control data (register) read/write protection enable/disable.
+ * @netdev: network device to use.
  *
  * Returns pointer reference to the oa_tc6 structure if all the memory
  * allocation success otherwise NULL.
  */
-struct oa_tc6 *oa_tc6_init(struct spi_device *spi)
+struct oa_tc6 *oa_tc6_init(struct spi_device *spi, struct net_device *netdev)
 {
 	struct oa_tc6 *tc6;
 
@@ -395,15 +521,19 @@ struct oa_tc6 *oa_tc6_init(struct spi_device *spi)
 	if (!tc6)
 		return NULL;
 
+	/* Allocate memory for the control tx buffer used for SPI transfer. */
 	tc6->ctrl_tx_buf = devm_kzalloc(&spi->dev, TC6_CTRL_BUF_SIZE, GFP_KERNEL);
 	if (!tc6->ctrl_tx_buf)
 		return NULL;
 
+	/* Allocate memory for the control rx buffer used for SPI transfer. */
 	tc6->ctrl_rx_buf = devm_kzalloc(&spi->dev, TC6_CTRL_BUF_SIZE, GFP_KERNEL);
 	if (!tc6->ctrl_rx_buf)
 		return NULL;
 
 	tc6->spi = spi;
+	tc6->netdev = netdev;
+	SET_NETDEV_DEV(netdev, &spi->dev);
 
 	/* Perform MAC-PHY software reset */
 	if (oa_tc6_sw_reset(tc6)) {
@@ -417,9 +547,26 @@ struct oa_tc6 *oa_tc6_init(struct spi_device *spi)
 		return NULL;
 	}
 
+	/* Initialize PHY */
+	if (oa_tc6_phy_init(tc6)) {
+		dev_err(&spi->dev, "PHY initialization failed\n");
+		return NULL;
+	}
+
 	return tc6;
 }
 EXPORT_SYMBOL_GPL(oa_tc6_init);
+
+/**
+ * oa_tc6_exit - exit function.
+ * @tc6: oa_tc6 struct.
+ *
+ */
+void oa_tc6_exit(struct oa_tc6 *tc6)
+{
+	oa_tc6_phy_exit(tc6);
+}
+EXPORT_SYMBOL_GPL(oa_tc6_exit);
 
 MODULE_DESCRIPTION("OPEN Alliance 10BASE‑T1x MAC‑PHY Serial Interface Lib");
 MODULE_AUTHOR("Parthiban Veerasooran <parthiban.veerasooran@microchip.com>");
