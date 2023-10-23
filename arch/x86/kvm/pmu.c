@@ -127,9 +127,9 @@ static void kvm_perf_overflow(struct perf_event *perf_event,
 	struct kvm_pmc *pmc = perf_event->overflow_handler_context;
 
 	/*
-	 * Ignore overflow events for counters that are scheduled to be
-	 * reprogrammed, e.g. if a PMI for the previous event races with KVM's
-	 * handling of a related guest WRMSR.
+	 * Ignore asynchronous overflow events for counters that are scheduled
+	 * to be reprogrammed, e.g. if a PMI for the previous event races with
+	 * KVM's handling of a related guest WRMSR.
 	 */
 	if (test_and_set_bit(pmc->idx, pmc_to_pmu(pmc)->reprogram_pmi))
 		return;
@@ -226,13 +226,19 @@ static int pmc_reprogram_counter(struct kvm_pmc *pmc, u32 type, u64 config,
 
 static void pmc_pause_counter(struct kvm_pmc *pmc)
 {
-	u64 counter = pmc->counter;
+	/*
+	 * Accumulate emulated events, even if the PMC was already paused, e.g.
+	 * if KVM emulated an event after a WRMSR, but before reprogramming, or
+	 * if KVM couldn't create a perf event.
+	 */
+	u64 counter = pmc->counter + pmc->emulated_counter;
 
-	if (!pmc->perf_event || pmc->is_paused)
-		return;
+	pmc->emulated_counter = 0;
 
 	/* update counter, reset event value to avoid redundant accumulation */
-	counter += perf_event_pause(pmc->perf_event, true);
+	if (pmc->perf_event && !pmc->is_paused)
+		counter += perf_event_pause(pmc->perf_event, true);
+
 	pmc->counter = counter & pmc_bitmask(pmc);
 	pmc->is_paused = true;
 }
@@ -289,6 +295,14 @@ static void pmc_update_sample_period(struct kvm_pmc *pmc)
 
 void pmc_write_counter(struct kvm_pmc *pmc, u64 val)
 {
+	/*
+	 * Drop any unconsumed accumulated counts, the WRMSR is a write, not a
+	 * read-modify-write.  Adjust the counter value so that it's value is
+	 * relative to the current perf_event (if there is one), as reading the
+	 * current count is faster than pausing and repgrogramming the event in
+	 * order to reset it to '0'.
+	 */
+	pmc->emulated_counter = 0;
 	pmc->counter += val - pmc_read_counter(pmc);
 	pmc->counter &= pmc_bitmask(pmc);
 	pmc_update_sample_period(pmc);
@@ -426,6 +440,7 @@ static bool pmc_event_is_allowed(struct kvm_pmc *pmc)
 static void reprogram_counter(struct kvm_pmc *pmc)
 {
 	struct kvm_pmu *pmu = pmc_to_pmu(pmc);
+	u64 prev_counter = pmc->counter;
 	u64 eventsel = pmc->eventsel;
 	u64 new_config = eventsel;
 	u8 fixed_ctr_ctrl;
@@ -435,7 +450,7 @@ static void reprogram_counter(struct kvm_pmc *pmc)
 	if (!pmc_event_is_allowed(pmc))
 		goto reprogram_complete;
 
-	if (pmc->counter < pmc->prev_counter)
+	if (pmc->counter < prev_counter)
 		__kvm_perf_overflow(pmc, false);
 
 	if (eventsel & ARCH_PERFMON_EVENTSEL_PIN_CONTROL)
@@ -475,7 +490,6 @@ static void reprogram_counter(struct kvm_pmc *pmc)
 
 reprogram_complete:
 	clear_bit(pmc->idx, (unsigned long *)&pmc_to_pmu(pmc)->reprogram_pmi);
-	pmc->prev_counter = 0;
 }
 
 void kvm_pmu_handle_event(struct kvm_vcpu *vcpu)
@@ -701,6 +715,7 @@ static void kvm_pmu_reset(struct kvm_vcpu *vcpu)
 
 		pmc_stop_counter(pmc);
 		pmc->counter = 0;
+		pmc->emulated_counter = 0;
 
 		if (pmc_is_gp(pmc))
 			pmc->eventsel = 0;
@@ -772,8 +787,7 @@ void kvm_pmu_destroy(struct kvm_vcpu *vcpu)
 
 static void kvm_pmu_incr_counter(struct kvm_pmc *pmc)
 {
-	pmc->prev_counter = pmc->counter;
-	pmc->counter = (pmc->counter + 1) & pmc_bitmask(pmc);
+	pmc->emulated_counter++;
 	kvm_pmu_request_counter_reprogram(pmc);
 }
 
