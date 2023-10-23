@@ -327,6 +327,8 @@ static int pmic_glink_ucsi_probe(struct auxiliary_device *adev,
 	if (ret)
 		return ret;
 
+	ucsi->ucsi->quirks = id->driver_data;
+
 	ucsi_set_drvdata(ucsi->ucsi, ucsi);
 
 	device_for_each_child_node(dev, fwnode) {
@@ -379,6 +381,7 @@ static void pmic_glink_ucsi_remove(struct auxiliary_device *adev)
 
 static const struct auxiliary_device_id pmic_glink_ucsi_id_table[] = {
 	{ .name = "pmic_glink.ucsi", },
+	{ .name = "pmic_glink.ucsi-no-pdos", .driver_data = UCSI_NO_PARTNER_PDOS, },
 	{},
 };
 MODULE_DEVICE_TABLE(auxiliary, pmic_glink_ucsi_id_table);
