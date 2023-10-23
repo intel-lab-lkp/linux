@@ -17782,6 +17782,13 @@ F:	Documentation/devicetree/bindings/mailbox/qcom-ipcc.yaml
 F:	drivers/mailbox/qcom-ipcc.c
 F:	include/dt-bindings/mailbox/qcom-ipcc.h
 
+QUALCOMM IPQ4019 ESS DRIVER
+M:	Romain Gantois <romain.gantois@bootlin.com>
+L:	netdev@vger.kernel.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/net/qcom,ipq4019-ess.yaml
+F:	drivers/net/ethernet/qualcomm/ipqess/
+
 QUALCOMM IPQ4019 USB PHY DRIVER
 M:	Robert Marko <robert.marko@sartura.hr>
 M:	Luka Perkov <luka.perkov@sartura.hr>
