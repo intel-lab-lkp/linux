@@ -680,6 +680,9 @@ struct fuse_conn {
 	/** Is open atomic not implemented by fs? */
 	unsigned no_open_atomic:1;
 
+	/** Is open atomic is proven to be implemented by fs? */
+	unsigned has_open_atomic:1;
+
 	/** Is opendir/releasedir not implemented by fs? */
 	unsigned no_opendir:1;
 

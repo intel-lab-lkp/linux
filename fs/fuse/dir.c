@@ -220,6 +220,19 @@ static int fuse_dentry_revalidate(struct dentry *entry, unsigned int flags)
 
 		fm = get_fuse_mount(inode);
 
+		/* If open atomic is supported by FUSE then use this opportunity
+		 * to avoid this lookup and combine lookup + open into a single call.
+		 *
+		 * Note: Fuse detects open atomic implementation automatically.
+		 * Therefore first few call would go into open atomic code path
+		 * , detects that open atomic is implemented or not by setting
+		 * fc->no_open_atomic. In case open atomic is not implemented,
+		 * calls fall back to non-atomic open.
+		 */
+		if (fm->fc->has_open_atomic && flags & LOOKUP_OPEN) {
+			ret = D_REVALIDATE_ATOMIC;
+			goto out;
+		}
 		forget = fuse_alloc_forget();
 		ret = -ENOMEM;
 		if (!forget)
@@ -270,12 +283,12 @@ static int fuse_dentry_revalidate(struct dentry *entry, unsigned int flags)
 			dput(parent);
 		}
 	}
-	ret = 1;
+	ret = D_REVALIDATE_VALID;
 out:
 	return ret;
 
 invalid:
-	ret = 0;
+	ret = D_REVALIDATE_INVALID;
 	goto out;
 }
 
@@ -763,12 +776,84 @@ no_open:
 	return finish_no_open(file, res);
 }
 
+/**
+ * Revalidate inode hooked into dentry against freshly acquired
+ * attributes. If inode is stale then allocate new dentry and
+ * hook it onto fresh inode.
+ */
+static struct dentry *
+fuse_atomic_open_revalidate(struct fuse_conn *fc, struct dentry *entry,
+			    struct inode *inode, int switched,
+			    struct fuse_entry_out *outentry,
+			    wait_queue_head_t *wq, int *alloc_inode)
+{
+	u64 attr_version;
+	struct dentry *prev = entry;
+
+	if (outentry->nodeid != get_node_id(inode) ||
+	    (bool) IS_AUTOMOUNT(inode) !=
+	    (bool) (outentry->attr.flags & FUSE_ATTR_SUBMOUNT)) {
+		*alloc_inode = 1;
+	} else if (fuse_stale_inode(inode, outentry->generation,
+				  &outentry->attr)) {
+		fuse_make_bad(inode);
+		*alloc_inode = 1;
+	}
+
+	if (*alloc_inode) {
+		struct dentry *new = NULL;
+
+		if (!switched && !d_in_lookup(entry)) {
+			d_drop(entry);
+			new = d_alloc_parallel(entry->d_parent, &entry->d_name,
+					       wq);
+			if (IS_ERR(new))
+				return new;
+
+			if (unlikely(!d_in_lookup(new))) {
+				dput(new);
+				new = ERR_PTR(-EIO);
+				return new;
+			}
+		}
+
+		fuse_invalidate_entry(entry);
+
+		entry = new;
+	} else if (!*alloc_inode) {
+		attr_version = fuse_get_attr_version(fc);
+		forget_all_cached_acls(inode);
+		fuse_change_attributes(inode, &outentry->attr, NULL,
+				       ATTR_TIMEOUT(outentry),
+				       attr_version);
+	}
+
+	if (prev == entry) {
+		/* nothing changed, atomic-open on the server side
+		 * had increased the lookup count - do the same here
+		 */
+		struct fuse_inode *fi = get_fuse_inode(inode);
+
+		spin_lock(&fi->lock);
+		fi->nlookup++;
+		spin_unlock(&fi->lock);
+	}
+
+	return entry;
+}
+
+/**
+ * Does 'lookup + create + open' or 'lookup + open' atomically.
+ * @entry might be positive as well, therefore inode is re-validated.
+ * Positive dentry is invalidated in case inode attributes differ or
+ * we encountered error.
+ */
 static int _fuse_atomic_open(struct inode *dir, struct dentry *entry,
 			     struct file *file, unsigned int flags,
 			     umode_t mode)
 {
 	int err;
-	struct inode *inode;
+	struct inode *inode = d_inode(entry);
 	FUSE_ARGS(args);
 	struct fuse_mount *fm = get_fuse_mount(dir);
 	struct fuse_conn *fc = fm->fc;
@@ -780,10 +865,7 @@ static int _fuse_atomic_open(struct inode *dir, struct dentry *entry,
 	struct fuse_file *ff;
 	struct dentry *switched_entry = NULL, *alias = NULL;
 	DECLARE_WAIT_QUEUE_HEAD_ONSTACK(wq);
-
-	/* Expect a negative dentry */
-	if (unlikely(d_inode(entry)))
-		goto fallback;
+	int alloc_inode = 0;
 
 	/* Userspace expects S_IFREG in create mode */
 	if ((flags & O_CREAT) && (mode & S_IFMT) != S_IFREG)
@@ -835,36 +917,56 @@ static int _fuse_atomic_open(struct inode *dir, struct dentry *entry,
 
 	err = fuse_simple_request(fm, &args);
 	free_ext_value(&args);
-	if (err == -ENOSYS || err == -ELOOP) {
-		if (unlikely(err == -ENOSYS))
-			fc->no_open_atomic = 1;
-		goto free_and_fallback;
-	}
 
 	if (!err && !outentry.nodeid)
 		err = -ENOENT;
 
-	if (err)
-		goto out_free_ff;
+	if (err) {
+		if (unlikely(err == -ENOSYS)) {
+			fc->no_open_atomic = 1;
+
+			/* Might come up if userspace tricks us and would
+			 * return -ENOSYS for OPEN_ATOMIC after it was
+			 * aready working
+			 */
+			if (unlikely(fc->has_open_atomic == 1))
+				pr_info("fuse server/daemon bug, atomic open "
+					"got -ENOSYS although it was already "
+					"succeeding before.");
+
+			/* This should better never happen, revalidate
+			 * is missing for this entry
+			 */
+			if (WARN_ON_ONCE(d_really_is_positive(entry))) {
+				err = -EIO;
+				goto out_free_ff;
+			}
+			goto free_and_fallback;
+		} else if (err == -ELOOP) {
+			/* likely a symlink */
+			goto free_and_fallback;
+		} else {
+			if (d_really_is_positive(entry)) {
+				if (err != -EINTR && err != -ENOMEM)
+					fuse_invalidate_entry(entry);
+			}
+
+			goto out_free_ff;
+		}
+	}
+
+	if (!err && !fc->has_open_atomic) {
+		/* Only set this flag when atomic open did not return an error,
+		 * so that we are absolutely sure it is implemented.
+		 */
+		fc->has_open_atomic = 1;
+	}
 
 	err = -EIO;
 	if (invalid_nodeid(outentry.nodeid) || fuse_invalid_attr(&outentry.attr))
 		goto out_free_ff;
 
-	ff->fh = outopen.fh;
-	ff->nodeid = outentry.nodeid;
-	ff->open_flags = outopen.open_flags;
-	inode = fuse_iget(dir->i_sb, outentry.nodeid, outentry.generation,
-			  &outentry.attr, ATTR_TIMEOUT(&outentry), 0);
-	if (!inode) {
-		flags &= ~(O_CREAT | O_EXCL | O_TRUNC);
-		fuse_sync_release(NULL, ff, flags);
-		fuse_queue_forget(fm->fc, forget, outentry.nodeid, 1);
-		err = -ENOMEM;
-		goto out_err;
-	}
-
-	/* prevent racing/parallel lookup on a negative hashed */
+	/* prevent racing/parallel lookup */
 	if (!(flags & O_CREAT) && !d_in_lookup(entry)) {
 		d_drop(entry);
 		switched_entry = d_alloc_parallel(entry->d_parent,
@@ -879,10 +981,52 @@ static int _fuse_atomic_open(struct inode *dir, struct dentry *entry,
 			/* fall back */
 			dput(switched_entry);
 			switched_entry = NULL;
-			goto free_and_fallback;
+
+			if (!inode) {
+				goto free_and_fallback;
+			} else {
+				/* XXX can this happen at all and is there a
+				 * better way to handle it?
+				 */
+				err = -EIO;
+				goto out_free_ff;
+			}
+		}
+	}
+
+	if (inode) {
+		struct dentry *new;
+
+		err = -ESTALE;
+		new = fuse_atomic_open_revalidate(fm->fc, entry, inode,
+						  !!switched_entry,
+						  &outentry, &wq, &alloc_inode);
+		if (IS_ERR(new)) {
+			err = PTR_ERR(new);
+			goto out_free_ff;
 		}
 
+		if (new != entry && new != NULL)
+			switched_entry = new;
+	}
+
+	if (switched_entry)
 		entry = switched_entry;
+
+	ff->fh = outopen.fh;
+	ff->nodeid = outentry.nodeid;
+	ff->open_flags = outopen.open_flags;
+
+	if (!inode || alloc_inode) {
+		inode = fuse_iget(dir->i_sb, outentry.nodeid, outentry.generation,
+				  &outentry.attr, ATTR_TIMEOUT(&outentry), 0);
+		if (!inode) {
+			flags &= ~(O_CREAT | O_EXCL | O_TRUNC);
+			fuse_sync_release(NULL, ff, flags);
+			fuse_queue_forget(fm->fc, forget, outentry.nodeid, 1);
+			err = -ENOMEM;
+			goto out_err;
+		}
 	}
 
 	if (d_really_is_negative(entry)) {
