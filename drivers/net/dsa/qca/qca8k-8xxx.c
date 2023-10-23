@@ -20,8 +20,8 @@
 #include <linux/gpio/consumer.h>
 #include <linux/etherdevice.h>
 #include <linux/dsa/tag_qca.h>
+#include <linux/dsa/qca8k.h>
 
-#include "qca8k.h"
 #include "qca8k_leds.h"
 
 static void
