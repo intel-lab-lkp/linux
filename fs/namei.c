@@ -1614,10 +1614,11 @@ struct dentry *lookup_one_qstr_excl(const struct qstr *name,
 }
 EXPORT_SYMBOL(lookup_one_qstr_excl);
 
-static struct dentry *lookup_fast(struct nameidata *nd)
+static struct dentry *lookup_fast(struct nameidata *nd, bool *atomic_revalidate)
 {
 	struct dentry *dentry, *parent = nd->path.dentry;
 	int status = 1;
+	*atomic_revalidate = false;
 
 	/*
 	 * Rename seqlock is not required here because in the off chance
@@ -1659,6 +1660,10 @@ static struct dentry *lookup_fast(struct nameidata *nd)
 		dput(dentry);
 		return ERR_PTR(status);
 	}
+
+	if (status == D_REVALIDATE_ATOMIC)
+		*atomic_revalidate = true;
+
 	return dentry;
 }
 
@@ -1984,6 +1989,7 @@ static const char *handle_dots(struct nameidata *nd, int type)
 static const char *walk_component(struct nameidata *nd, int flags)
 {
 	struct dentry *dentry;
+	bool atomic_revalidate;
 	/*
 	 * "." and ".." are special - ".." especially so because it has
 	 * to be able to know about the current root directory and
@@ -1994,7 +2000,7 @@ static const char *walk_component(struct nameidata *nd, int flags)
 			put_link(nd);
 		return handle_dots(nd, nd->last_type);
 	}
-	dentry = lookup_fast(nd);
+	dentry = lookup_fast(nd, &atomic_revalidate);
 	if (IS_ERR(dentry))
 		return ERR_CAST(dentry);
 	if (unlikely(!dentry)) {
@@ -2002,6 +2008,9 @@ static const char *walk_component(struct nameidata *nd, int flags)
 		if (IS_ERR(dentry))
 			return ERR_CAST(dentry);
 	}
+
+	WARN_ON_ONCE(atomic_revalidate);
+
 	if (!(flags & WALK_MORE) && nd->depth)
 		put_link(nd);
 	return step_into(nd, flags, dentry);
@@ -3383,6 +3392,42 @@ static struct dentry *atomic_open(struct nameidata *nd, struct dentry *dentry,
 	return dentry;
 }
 
+static struct dentry *atomic_revalidate_open(struct dentry *dentry,
+					     struct nameidata *nd,
+					     struct file *file,
+					     const struct open_flags *op,
+					     bool *got_write)
+{
+	struct mnt_idmap *idmap;
+	struct dentry *dir = nd->path.dentry;
+	struct inode *dir_inode = dir->d_inode;
+	int open_flag = op->open_flag;
+	umode_t mode = op->mode;
+
+	if (unlikely(IS_DEADDIR(dir_inode)))
+		return ERR_PTR(-ENOENT);
+
+	file->f_mode &= ~FMODE_CREATED;
+
+	if (WARN_ON_ONCE(open_flag & O_CREAT))
+		return ERR_PTR(-EINVAL);
+
+	if (open_flag & (O_TRUNC | O_WRONLY | O_RDWR))
+		*got_write = !mnt_want_write(nd->path.mnt);
+	else
+		*got_write = false;
+
+	if (!*got_write)
+		open_flag &= ~O_TRUNC;
+
+	inode_lock_shared(dir->d_inode);
+	dentry = atomic_open(nd, dentry, file, open_flag, mode);
+	inode_unlock_shared(dir->d_inode);
+
+	return dentry;
+
+}
+
 /*
  * Look up and maybe create and open the last component.
  *
@@ -3527,12 +3572,26 @@ static const char *open_last_lookups(struct nameidata *nd,
 	}
 
 	if (!(open_flag & O_CREAT)) {
+		bool atomic_revalidate;
+
 		if (nd->last.name[nd->last.len])
 			nd->flags |= LOOKUP_FOLLOW | LOOKUP_DIRECTORY;
 		/* we _can_ be in RCU mode here */
-		dentry = lookup_fast(nd);
+		dentry = lookup_fast(nd, &atomic_revalidate);
 		if (IS_ERR(dentry))
 			return ERR_CAST(dentry);
+		if (dentry && unlikely(atomic_revalidate)) {
+			/* The file system shall not claim to support atomic
+			 * revalidate in RCU mode
+			 */
+			if (WARN_ON_ONCE(nd->flags & LOOKUP_RCU)) {
+				dput(dentry);
+				return ERR_PTR(-ECHILD);
+			}
+			dentry = atomic_revalidate_open(dentry, nd, file, op,
+							&got_write);
+			goto drop_write;
+		}
 		if (likely(dentry))
 			goto finish_lookup;
 
@@ -3569,6 +3628,7 @@ static const char *open_last_lookups(struct nameidata *nd,
 	else
 		inode_unlock_shared(dir->d_inode);
 
+drop_write:
 	if (got_write)
 		mnt_drop_write(nd->path.mnt);
 
