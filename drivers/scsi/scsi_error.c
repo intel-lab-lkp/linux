@@ -2188,9 +2188,10 @@ EXPORT_SYMBOL_GPL(scsi_eh_ready_devs);
 
 /**
  * scsi_eh_flush_done_q - finish processed commands or retry them.
+ * @shost:	SCSI host pointer.
  * @done_q:	list_head of processed commands.
  */
-void scsi_eh_flush_done_q(struct list_head *done_q)
+void scsi_eh_flush_done_q(struct Scsi_Host *shost, struct list_head *done_q)
 {
 	struct scsi_cmnd *scmd, *next;
 
@@ -2265,7 +2266,7 @@ static void scsi_unjam_host(struct Scsi_Host *shost)
 	if (shost->eh_deadline != -1)
 		shost->last_reset = 0;
 	spin_unlock_irqrestore(shost->host_lock, flags);
-	scsi_eh_flush_done_q(&eh_done_q);
+	scsi_eh_flush_done_q(shost, &eh_done_q);
 }
 
 /**

@@ -730,7 +730,7 @@ out:
 	/* now link into libata eh --- if we have any ata devices */
 	sas_ata_strategy_handler(shost);
 
-	scsi_eh_flush_done_q(&ha->eh_done_q);
+	scsi_eh_flush_done_q(shost, &ha->eh_done_q);
 
 	/* check if any new eh work was scheduled during the last run */
 	spin_lock_irq(&ha->lock);

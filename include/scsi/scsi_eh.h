@@ -11,7 +11,8 @@ struct Scsi_Host;
 
 extern void scsi_eh_finish_cmd(struct scsi_cmnd *scmd,
 			       struct list_head *done_q);
-extern void scsi_eh_flush_done_q(struct list_head *done_q);
+extern void scsi_eh_flush_done_q(struct Scsi_Host *shost,
+				 struct list_head *done_q);
 extern void scsi_report_bus_reset(struct Scsi_Host *, int);
 extern void scsi_report_device_reset(struct Scsi_Host *, int, int);
 extern int scsi_block_when_processing_errors(struct scsi_device *);

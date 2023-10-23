@@ -738,7 +738,7 @@ void ata_scsi_port_error_handler(struct Scsi_Host *host, struct ata_port *ap)
 	spin_unlock_irqrestore(ap->lock, flags);
 	ata_eh_release(ap);
 
-	scsi_eh_flush_done_q(&ap->eh_done_q);
+	scsi_eh_flush_done_q(host, &ap->eh_done_q);
 
 	/* clean up */
 	spin_lock_irqsave(ap->lock, flags);
