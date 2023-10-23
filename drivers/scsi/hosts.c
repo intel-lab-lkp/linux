@@ -442,6 +442,7 @@ struct Scsi_Host *scsi_host_alloc(const struct scsi_host_template *sht, int priv
 	shost->no_write_same = sht->no_write_same;
 	shost->host_tagset = sht->host_tagset;
 	shost->queuecommand_may_block = sht->queuecommand_may_block;
+	shost->disable_fair_tag_sharing = sht->disable_fair_tag_sharing;
 
 	if (shost_eh_deadline == -1 || !sht->eh_host_reset_handler)
 		shost->eh_deadline = -1;
