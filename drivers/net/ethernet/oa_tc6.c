@@ -8,6 +8,7 @@
 #include <linux/bitfield.h>
 #include <linux/interrupt.h>
 #include <linux/delay.h>
+#include <linux/of.h>
 #include <linux/oa_tc6.h>
 
 /* Opaque structure for MACPHY drivers */
@@ -16,6 +17,7 @@ struct oa_tc6 {
 	u8 *ctrl_tx_buf;
 	u8 *ctrl_rx_buf;
 	bool prote;
+	u32 cps;
 };
 
 static int oa_tc6_spi_transfer(struct spi_device *spi, u8 *ptx, u8 *prx, u16 len)
@@ -198,6 +200,81 @@ static int oa_tc6_perform_ctrl(struct oa_tc6 *tc6, u32 addr, u32 val[], u8 len,
 	return ret;
 }
 
+static int oa_tc6_configure(struct oa_tc6 *tc6)
+{
+	struct spi_device *spi = tc6->spi;
+	struct device_node *oa_node;
+	u32 regval;
+	u8 mincps;
+	bool ctc;
+	int ret;
+
+	/* Read and configure the IMASK0 register for unmasking the interrupts */
+	ret = oa_tc6_perform_ctrl(tc6, IMASK0, &regval, 1, false, false);
+	if (ret)
+		return ret;
+
+	regval &= ~(TXPEM & TXBOEM & TXBUEM & RXBOEM & LOFEM & HDREM);
+
+	ret = oa_tc6_perform_ctrl(tc6, IMASK0, &regval, 1, true, false);
+	if (ret)
+		return ret;
+
+	/* Read STDCAP register to get the MAC-PHY standard capabilities */
+	ret = oa_tc6_perform_ctrl(tc6, STDCAP, &regval, 1, false, false);
+	if (ret)
+		return ret;
+
+	mincps = FIELD_GET(MINCPS, regval);
+	ctc = (regval & CTC) ? true : false;
+
+	regval = 0;
+	oa_node = of_get_child_by_name(spi->dev.of_node, "oa-tc6");
+	if (oa_node) {
+		/* Read OA parameters from DT */
+		if (of_property_present(oa_node, "oa-cps")) {
+			ret = of_property_read_u32(oa_node, "oa-cps", &tc6->cps);
+			if (ret < 0)
+				return ret;
+			/* Return error if the configured cps is less than the
+			 * minimum cps supported by the MAC-PHY.
+			 */
+			if (tc6->cps < mincps)
+				return -ENODEV;
+		} else {
+			tc6->cps = 64;
+		}
+		if (of_property_present(oa_node, "oa-txcte")) {
+			/* Return error if the tx cut through mode is configured
+			 * but it is not supported by MAC-PHY.
+			 */
+			if (ctc)
+				regval |= TXCTE;
+			else
+				return -ENODEV;
+		}
+		if (of_property_present(oa_node, "oa-rxcte")) {
+			/* Return error if the rx cut through mode is configured
+			 * but it is not supported by MAC-PHY.
+			 */
+			if (ctc)
+				regval |= RXCTE;
+			else
+				return -ENODEV;
+		}
+		if (of_property_present(oa_node, "oa-prote")) {
+			regval |= PROTE;
+			tc6->prote = true;
+		}
+	} else {
+		tc6->cps = 64;
+	}
+
+	regval |= FIELD_PREP(CPS, ilog2(tc6->cps) / ilog2(2)) | SYNC;
+
+	return oa_tc6_perform_ctrl(tc6, CONFIG0, &regval, 1, true, false);
+}
+
 static int oa_tc6_sw_reset(struct oa_tc6 *tc6)
 {
 	u32 regval;
@@ -310,7 +387,7 @@ EXPORT_SYMBOL_GPL(oa_tc6_read_registers);
  * Returns pointer reference to the oa_tc6 structure if all the memory
  * allocation success otherwise NULL.
  */
-struct oa_tc6 *oa_tc6_init(struct spi_device *spi, bool prote)
+struct oa_tc6 *oa_tc6_init(struct spi_device *spi)
 {
 	struct oa_tc6 *tc6;
 
@@ -327,11 +404,16 @@ struct oa_tc6 *oa_tc6_init(struct spi_device *spi, bool prote)
 		return NULL;
 
 	tc6->spi = spi;
-	tc6->prote = prote;
 
 	/* Perform MAC-PHY software reset */
 	if (oa_tc6_sw_reset(tc6)) {
 		dev_err(&spi->dev, "MAC-PHY software reset failed\n");
+		return NULL;
+	}
+
+	/* Perform OA parameters and MAC-PHY configuration */
+	if (oa_tc6_configure(tc6)) {
+		dev_err(&spi->dev, "OA and MAC-PHY configuration failed\n");
 		return NULL;
 	}
 
