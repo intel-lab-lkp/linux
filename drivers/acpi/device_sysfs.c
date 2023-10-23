@@ -177,7 +177,7 @@ static int create_pnp_modalias(const struct acpi_device *acpi_dev, char *modalia
 		len += count;
 		size -= count;
 	}
-	modalias[len] = '\0';
+
 	return len;
 }
 
@@ -237,7 +237,7 @@ static int create_of_modalias(const struct acpi_device *acpi_dev, char *modalias
 		len += count;
 		size -= count;
 	}
-	modalias[len] = '\0';
+
 	return len;
 }
 
