@@ -47,6 +47,12 @@ properties:
   spi-max-frequency:
     maximum: 2000000
 
+  spi-cs-inactive-delay-ns:
+    minimum: 16000
+    default: 16000
+    description:
+      Indicates the stall time between consecutive SPI transactions.
+
   interrupts:
     maxItems: 1
 
