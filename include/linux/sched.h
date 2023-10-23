@@ -1683,6 +1683,10 @@ static inline unsigned int __task_state_index(unsigned int tsk_state,
 	if (tsk_state & TASK_RTLOCK_WAIT)
 		state = TASK_UNINTERRUPTIBLE;
 
+	/* Frozen tasks should appear as "D (disk sleep)' in userspace. */
+	if (tsk_state & TASK_FROZEN)
+		state = TASK_UNINTERRUPTIBLE;
+
 	return fls(state);
 }
 
