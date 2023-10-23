@@ -1484,8 +1484,12 @@ static void blk_mq_requeue_work(struct work_struct *work)
 			list_del_init(&rq->queuelist);
 			blk_mq_request_bypass_insert(rq, 0);
 		} else {
+			blk_insert_t insert_flags = BLK_MQ_INSERT_AT_HEAD;
+
 			list_del_init(&rq->queuelist);
-			blk_mq_insert_request(rq, BLK_MQ_INSERT_AT_HEAD);
+			if (blk_rq_is_seq_zoned_write(rq))
+				insert_flags = 0;
+			blk_mq_insert_request(rq, insert_flags);
 		}
 	}
 
