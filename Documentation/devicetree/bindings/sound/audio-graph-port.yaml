@@ -19,7 +19,12 @@ definitions:
     properties:
       mclk-fs:
         $ref: simple-card.yaml#/definitions/mclk-fs
-
+      ch-map-idx:
+        description: It indicates index of ch_maps array for CPU / Codec if number of
+          CPU(N) / Codec(M) DAIs were not same in one dai-link. ch-map-idx is not needed if the
+          numbers were 1:M or N:1 or N=M. see soc.h::[dai_link->ch_maps Image sample] and
+          ${LINUX}/sound/soc/generic/audio-graph-card2-custom-sample.dtsi. It is good sample.
+        $ref: /schemas/types.yaml#/definitions/uint32-array
   endpoint-base:
     allOf:
       - $ref: /schemas/graph.yaml#/$defs/endpoint-base
