@@ -111,24 +111,33 @@ static int get_cache_level(const char *cache_type)
 	return -1;
 }
 
+static int get_resource_cache_level(const char *resource)
+{
+	/* "MB" use L3 (LLC) resource id */
+	if (!strcmp(resource, "MB"))
+		return 3;
+	return get_cache_level(resource);
+}
+
 /*
- * get_resource_id - Get socket number/l3 id for a specified CPU
- * @cpu_no:	CPU number
- * @resource_id: Socket number or l3_id
+ * get_resource_id - Get resctrl resource id for a specified CPU
+ * @resource:		resource
+ * @cpu_no:		CPU number
+ * @resource_id:	resource id (cache id; for MB, L3 cache id)
  *
  * Return: >= 0 on success, < 0 on failure.
  */
-int get_resource_id(int cpu_no, int *resource_id)
+int get_resource_id(const char *resource, int cpu_no, int *resource_id)
 {
 	char phys_pkg_path[1024];
+	int cache_num;
 	FILE *fp;
 
-	if (get_vendor() == ARCH_AMD)
-		sprintf(phys_pkg_path, "%s%d/cache/index3/id",
-			PHYS_ID_PATH, cpu_no);
-	else
-		sprintf(phys_pkg_path, "%s%d/topology/physical_package_id",
-			PHYS_ID_PATH, cpu_no);
+	cache_num = get_resource_cache_level(resource);
+	if (cache_num < 0)
+		return cache_num;
+
+	sprintf(phys_pkg_path, "%s%d/cache/index%d/id", PHYS_ID_PATH, cpu_no, cache_num);
 
 	fp = fopen(phys_pkg_path, "r");
 	if (!fp) {
@@ -526,7 +535,7 @@ int write_schemata(char *ctrlgrp, char *schemata, int cpu_no, const char *resour
 		return -1;
 	}
 
-	if (get_resource_id(cpu_no, &resource_id) < 0) {
+	if (get_resource_id(resource, cpu_no, &resource_id) < 0) {
 		sprintf(reason, "Failed to get resource id");
 		ret = -1;
 

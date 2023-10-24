@@ -415,7 +415,7 @@ static void initialize_mem_bw_resctrl(const char *ctrlgrp, const char *mongrp,
 {
 	int resource_id;
 
-	if (get_resource_id(cpu_no, &resource_id) < 0) {
+	if (get_resource_id("MB", cpu_no, &resource_id) < 0) {
 		perror("Could not get resource_id");
 		return;
 	}
@@ -584,7 +584,7 @@ static void initialize_llc_occu_resctrl(const char *ctrlgrp, const char *mongrp,
 {
 	int resource_id;
 
-	if (get_resource_id(cpu_no, &resource_id) < 0) {
+	if (get_resource_id("L3", cpu_no, &resource_id) < 0) {
 		perror("# Unable to resource_id");
 		return;
 	}
