@@ -338,6 +338,8 @@ static int intel_dp_mst_compute_config(struct intel_encoder *encoder,
 	struct drm_i915_private *dev_priv = to_i915(encoder->base.dev);
 	struct intel_dp_mst_encoder *intel_mst = enc_to_mst(encoder);
 	struct intel_dp *intel_dp = &intel_mst->primary->dp;
+	const struct intel_connector *connector =
+		to_intel_connector(conn_state->connector);
 	const struct drm_display_mode *adjusted_mode =
 		&pipe_config->hw.adjusted_mode;
 	struct link_config_limits limits;
@@ -379,6 +381,11 @@ static int intel_dp_mst_compute_config(struct intel_encoder *encoder,
 							true,
 							&limits))
 			return -EINVAL;
+
+		if (!intel_dp_supports_fec(intel_dp, connector, pipe_config))
+			return -EINVAL;
+
+		pipe_config->fec_enable = !intel_dp_is_uhbr(pipe_config);
 
 		/*
 		 * FIXME: As bpc is hardcoded to 8, as mentioned above,
