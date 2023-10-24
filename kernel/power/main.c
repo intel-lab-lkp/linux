@@ -87,6 +87,7 @@ void ksys_sync_helper(void)
 	ktime_t start;
 	long elapsed_msecs;
 
+	pr_info("Syncing filesystems ... ");
 	start = ktime_get();
 	ksys_sync();
 	elapsed_msecs = ktime_to_ms(ktime_sub(ktime_get(), start));
