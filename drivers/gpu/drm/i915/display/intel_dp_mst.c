@@ -660,6 +660,39 @@ intel_dp_mst_atomic_topology_check(struct intel_connector *connector,
 	return ret;
 }
 
+static int intel_dp_mst_dsc_aux_use_count(struct intel_atomic_state *state,
+					  const struct intel_connector *connector)
+{
+	struct intel_connector *connector_iter;
+	struct intel_digital_connector_state *conn_state;
+	int use_count = 0;
+	int i;
+
+	for_each_new_intel_connector_in_state(state, connector_iter, conn_state, i) {
+		if (connector_iter->mst_port != connector->mst_port ||
+		    !conn_state->base.crtc)
+			continue;
+
+		if (!connector_iter->dp.dsc_decompression_enabled)
+			continue;
+
+		if (connector_iter->dp.dsc_decompression_aux ==
+		    connector->dp.dsc_decompression_aux)
+			use_count++;
+	}
+
+	return use_count;
+}
+
+static void intel_dp_mst_sink_set_decompression_state(struct intel_atomic_state *state,
+						      struct intel_connector *connector,
+						      const struct intel_crtc_state *crtc_state,
+						      bool enable)
+{
+	if (!intel_dp_mst_dsc_aux_use_count(state, connector))
+		intel_dp_sink_set_decompression_state(connector, crtc_state, enable);
+}
+
 static int
 intel_dp_mst_atomic_check(struct drm_connector *connector,
 			  struct drm_atomic_state *_state)
@@ -730,12 +763,7 @@ static void intel_mst_disable_dp(struct intel_atomic_state *state,
 
 	intel_audio_codec_disable(encoder, old_crtc_state, old_conn_state);
 
-	if (intel_dp->active_mst_links == 1) /* last stream ? */
-		/*
-		 * TODO: disable decompression for all streams/in any MST ports, not
-		 * only in the first downstream branch device.
-		 */
-		intel_dp_sink_set_decompression_state(connector, old_crtc_state, false);
+	intel_dp_mst_sink_set_decompression_state(state, connector, old_crtc_state, false);
 }
 
 static void intel_mst_post_disable_dp(struct intel_atomic_state *state,
@@ -890,15 +918,11 @@ static void intel_mst_pre_enable_dp(struct intel_atomic_state *state,
 
 	drm_dp_send_power_updown_phy(&intel_dp->mst_mgr, connector->port, true);
 
-	if (first_mst_stream) {
-		/*
-		 * TODO: enable decompression for all streams/in any MST ports, not
-		 * only in the first downstream branch device.
-		 */
-		intel_dp_sink_set_decompression_state(connector, pipe_config, true);
+	intel_dp_mst_sink_set_decompression_state(state, connector, pipe_config, true);
+
+	if (first_mst_stream)
 		dig_port->base.pre_enable(state, &dig_port->base,
 						pipe_config, NULL);
-	}
 
 	intel_dp->active_mst_links++;
 
@@ -1350,12 +1374,7 @@ static struct drm_connector *intel_dp_add_mst_connector(struct drm_dp_mst_topolo
 
 	drm_connector_helper_add(connector, &intel_dp_mst_connector_helper_funcs);
 
-	/*
-	 * TODO: set the AUX for the actual MST port decompressing the stream.
-	 * At the moment the driver only supports enabling this globally in the
-	 * first downstream MST branch, via intel_dp's (root port) AUX.
-	 */
-	intel_connector->dp.dsc_decompression_aux = &intel_dp->aux;
+	intel_connector->dp.dsc_decompression_aux = drm_dp_mst_dsc_aux_for_port(port);
 	intel_dp_mst_read_decompression_port_dsc_caps(intel_dp, intel_connector);
 	intel_connector->dp.dsc_hblank_expansion_quirk =
 		detect_dsc_hblank_expansion_quirk(intel_connector);
