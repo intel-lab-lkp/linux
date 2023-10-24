@@ -884,6 +884,8 @@ static bool folio_referenced_one(struct folio *folio,
 	if (referenced) {
 		pra->referenced++;
 		pra->vm_flags |= vma->vm_flags & ~VM_LOCKED;
+		if ((pra->vm_flags | VM_EXEC) && folio_is_file_lru(folio))
+			return false;
 	}
 
 	if (!pra->mapcount)
