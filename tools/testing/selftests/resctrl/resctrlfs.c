@@ -229,6 +229,44 @@ static int get_bit_mask(const char *filename, unsigned long *mask)
 }
 
 /*
+ * create_bit_mask- Create bit mask from start,len pair
+ * @start:	LSB of the mask
+ * @len		Number of bits in the mask
+ */
+unsigned long create_bit_mask(unsigned int start, unsigned int len)
+{
+	return ((1UL << len) - 1UL) << start;
+}
+
+/*
+ * count_contiguous_bits - Returns the longest train of bits in a bit mask
+ * @val		A bit mask
+ * @start	The location of the least-significant bit of the longest train
+ *
+ * Return:	The length of the contiguous bits in the longest train of bits
+ */
+static unsigned int count_contiguous_bits(unsigned long val, unsigned int *start)
+{
+	unsigned long last_val;
+	int count = 0;
+
+	while (val) {
+		last_val = val;
+		val &= (val >> 1);
+		count++;
+	}
+
+	if (start) {
+		if (count)
+			*start = ffsl(last_val) - 1;
+		else
+			*start = 0;
+	}
+
+	return count;
+}
+
+/*
  * get_cbm_mask - Get cbm bit mask
  * @cache_type:		Cache level L2/L3
  * @mask:		cbm_mask returned as unsigned long
@@ -249,6 +287,52 @@ int get_cbm_mask(const char *cache_type, unsigned long *mask)
 	ret = get_bit_mask(cbm_mask_path, mask);
 	if (ret)
 		return -1;
+
+	return 0;
+}
+
+/*
+ * get_shareable_mask - Get shareable mask from shareable_bits for given cache
+ * @cache_type:		Cache level L2/L3
+ * @shareable_mask:	shareable mask returned as unsigned long
+ *
+ * Return: = 0 on success, < 0 on failure.
+ */
+int get_shareable_mask(const char *cache_type, unsigned long *shareable_mask)
+{
+	char mask_path[1024];
+
+	if (!cache_type)
+		return -1;
+
+	snprintf(mask_path, sizeof(mask_path), "%s/%s/shareable_bits",
+		 INFO_PATH, cache_type);
+
+	return get_bit_mask(mask_path, shareable_mask);
+}
+
+/*
+ * get_mask_no_shareable - Get CBM mask without shareable_bits for given cache
+ * @cache_type:		Cache level L2/L3
+ * @mask:		mask returned as unsigned long
+ *
+ * Return: = 0 on success, < 0 on failure.
+ */
+int get_mask_no_shareable(const char *cache_type, unsigned long *mask)
+{
+	unsigned long full_mask, shareable_mask;
+	unsigned int start, len;
+
+	if (get_cbm_mask(cache_type, &full_mask) < 0)
+		return -1;
+	if (get_shareable_mask(cache_type, &shareable_mask) < 0)
+		return -1;
+
+	len = count_contiguous_bits(full_mask & ~shareable_mask, &start);
+	if (!len)
+		return -1;
+
+	*mask = create_bit_mask(start, len);
 
 	return 0;
 }
