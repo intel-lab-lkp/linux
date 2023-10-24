@@ -6561,9 +6561,12 @@ out:
 static int
 mpt_ioc_reset(MPT_ADAPTER *ioc, int reset_phase)
 {
+	unsigned long flags;
 	switch (reset_phase) {
 	case MPT_IOC_SETUP_RESET:
+		spin_lock_irqsave(&ioc->taskmgmt_lock, flags);
 		ioc->taskmgmt_quiesce_io = 1;
+		spin_unlock_irqrestore(&ioc->taskmgmt_lock, flags);
 		dtmprintk(ioc, printk(MYIOC_s_DEBUG_FMT
 		    "%s: MPT_IOC_SETUP_RESET\n", ioc->name, __func__));
 		break;
