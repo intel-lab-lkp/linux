@@ -145,7 +145,7 @@ int ttm_tt_create(struct ttm_buffer_object *bo, bool zero_alloc);
  * Create a struct ttm_tt to back data with system memory pages.
  * No pages are actually allocated.
  * Returns:
- * NULL: Out of memory.
+ * -ENOMEM: Out of memory.
  */
 int ttm_tt_init(struct ttm_tt *ttm, struct ttm_buffer_object *bo,
 		uint32_t page_flags, enum ttm_caching caching,
