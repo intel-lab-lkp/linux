@@ -1946,7 +1946,7 @@ extern struct task_struct *idle_task(int cpu);
  */
 static __always_inline bool is_idle_task(const struct task_struct *p)
 {
-	return !!(p->flags & PF_IDLE);
+	return !!(READ_ONCE(p->flags) & PF_IDLE);
 }
 
 extern struct task_struct *curr_task(int cpu);
