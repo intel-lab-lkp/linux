@@ -2937,22 +2937,32 @@ static bool downstream_hpd_needs_d0(struct intel_dp *intel_dp)
 		intel_dp->downstream_ports[0] & DP_DS_PORT_HPD;
 }
 
-void intel_dp_sink_set_decompression_state(struct intel_dp *intel_dp,
+static void
+intel_dp_sink_set_dsc_decompression(struct intel_connector *connector,
+				    bool enable)
+{
+	struct drm_i915_private *i915 = to_i915(connector->base.dev);
+
+	if (drm_dp_dpcd_writeb(connector->dp.dsc_decompression_aux, DP_DSC_ENABLE,
+			       enable ? DP_DECOMPRESSION_EN : 0) < 0)
+		drm_dbg_kms(&i915->drm,
+			    "Failed to %s sink decompression state\n",
+			    str_enable_disable(enable));
+}
+
+void intel_dp_sink_set_decompression_state(struct intel_connector *connector,
 					   const struct intel_crtc_state *crtc_state,
 					   bool enable)
 {
-	struct drm_i915_private *i915 = dp_to_i915(intel_dp);
-	int ret;
+	struct drm_i915_private *i915 = to_i915(connector->base.dev);
 
 	if (!crtc_state->dsc.compression_enable)
 		return;
 
-	ret = drm_dp_dpcd_writeb(&intel_dp->aux, DP_DSC_ENABLE,
-				 enable ? DP_DECOMPRESSION_EN : 0);
-	if (ret < 0)
-		drm_dbg_kms(&i915->drm,
-			    "Failed to %s sink decompression state\n",
-			    str_enable_disable(enable));
+	if (drm_WARN_ON(&i915->drm, !connector->dp.dsc_decompression_aux))
+		return;
+
+	intel_dp_sink_set_dsc_decompression(connector, enable);
 }
 
 static void
