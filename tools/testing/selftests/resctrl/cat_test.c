@@ -11,65 +11,68 @@
 #include "resctrl.h"
 #include <unistd.h>
 
-#define RESULT_FILE_NAME1	"result_cat1"
-#define RESULT_FILE_NAME2	"result_cat2"
+#define RESULT_FILE_NAME	"result_cat"
 #define NUM_OF_RUNS		5
-#define MAX_DIFF_PERCENT	4
-#define MAX_DIFF		1000000
 
 /*
- * Change schemata. Write schemata to specified
- * con_mon grp, mon_grp in resctrl FS.
- * Run 5 times in order to get average values.
+ * Minimum difference in LLC misses between a test with n+1 bits CBM mask to
+ * the test with n bits. With e.g. 5 vs 4 bits in the CBM mask, the minimum
+ * difference must be at least MIN_DIFF_PERCENT_PER_BIT * (4 - 1) = 3 percent.
+ *
+ * The relationship between number of used CBM bits and difference in LLC
+ * misses is not expected to be linear. With a small number of bits, the
+ * margin is smaller than with larger number of bits. For selftest purposes,
+ * however, linear approach is enough because ultimately only pass/fail
+ * decision has to be made and distinction between strong and stronger
+ * signal is irrelevant.
  */
-static int cat_setup(struct resctrl_val_param *p)
-{
-	char schemata[64];
-	int ret = 0;
-
-	/* Run NUM_OF_RUNS times */
-	if (p->num_of_runs >= NUM_OF_RUNS)
-		return END_OF_TESTS;
-
-	if (p->num_of_runs == 0) {
-		sprintf(schemata, "%lx", p->mask);
-		ret = write_schemata(p->ctrlgrp, schemata, p->cpu_no,
-				     p->resctrl_val);
-	}
-	p->num_of_runs++;
-
-	return ret;
-}
+#define MIN_DIFF_PERCENT_PER_BIT	1
 
 static int show_results_info(__u64 sum_llc_val, int no_of_bits,
-			     unsigned long cache_span, unsigned long max_diff,
-			     unsigned long max_diff_percent, unsigned long num_of_runs,
-			     bool platform)
+			     unsigned long cache_span, long min_diff_percent,
+			     unsigned long num_of_runs, bool platform,
+			     __s64 *prev_avg_llc_val)
 {
 	__u64 avg_llc_val = 0;
-	float diff_percent;
-	int ret;
+	float avg_diff;
+	int ret = 0;
 
 	avg_llc_val = sum_llc_val / num_of_runs;
-	diff_percent = ((float)cache_span - avg_llc_val) / cache_span * 100;
+	if (*prev_avg_llc_val) {
+		float delta = (__s64)(avg_llc_val - *prev_avg_llc_val);
 
-	ret = platform && abs((int)diff_percent) > max_diff_percent;
+		avg_diff = delta / *prev_avg_llc_val;
+		ret = platform && (avg_diff * 100) < (float)min_diff_percent;
 
-	ksft_print_msg("%s Check cache miss rate within %lu%%\n",
-		       ret ? "Fail:" : "Pass:", max_diff_percent);
+		ksft_print_msg("%s Check cache miss rate changed more than %.1f%%\n",
+			       ret ? "Fail:" : "Pass:", (float)min_diff_percent);
 
-	ksft_print_msg("Percent diff=%d\n", abs((int)diff_percent));
+		ksft_print_msg("Percent diff=%.1f\n", avg_diff * 100);
+	}
+	*prev_avg_llc_val = avg_llc_val;
 
 	show_cache_info(no_of_bits, avg_llc_val, cache_span, true);
 
 	return ret;
 }
 
-static int check_results(struct resctrl_val_param *param, size_t span)
+/* Remove one bit from the consecutive cbm mask */
+static unsigned long next_mask(unsigned long current_mask)
+{
+	return current_mask & (current_mask >> 1);
+}
+
+static int check_results(struct resctrl_val_param *param, const char *cache_type,
+			 unsigned long cache_total_size, unsigned long full_cache_mask,
+			 unsigned long current_mask)
 {
 	char *token_array[8], temp[512];
 	__u64 sum_llc_perf_miss = 0;
-	int runs = 0, no_of_bits = 0;
+	unsigned long alloc_size;
+	__s64 prev_avg_llc_val = 0;
+	int runs = 0;
+	int fail = 0;
+	int ret;
 	FILE *fp;
 
 	ksft_print_msg("Checking for pass/fail\n");
@@ -83,49 +86,71 @@ static int check_results(struct resctrl_val_param *param, size_t span)
 	while (fgets(temp, sizeof(temp), fp)) {
 		char *token = strtok(temp, ":\t");
 		int fields = 0;
+		int bits;
 
 		while (token) {
 			token_array[fields++] = token;
 			token = strtok(NULL, ":\t");
 		}
-		/*
-		 * Discard the first value which is inaccurate due to monitoring
-		 * setup transition phase.
-		 */
-		if (runs > 0)
-			sum_llc_perf_miss += strtoull(token_array[3], NULL, 0);
+
+		sum_llc_perf_miss += strtoull(token_array[3], NULL, 0);
 		runs++;
+
+		if (runs < NUM_OF_RUNS)
+			continue;
+
+		if (!current_mask) {
+			ksft_print_msg("Unexpected empty cache mask\n");
+			break;
+		}
+
+		alloc_size = cache_size(cache_total_size, current_mask, full_cache_mask);
+
+		bits = count_bits(current_mask);
+
+		ret = show_results_info(sum_llc_perf_miss, bits,
+					alloc_size / 64,
+					MIN_DIFF_PERCENT_PER_BIT * (bits - 1), runs,
+					get_vendor() == ARCH_INTEL,
+					&prev_avg_llc_val);
+		if (ret)
+			fail = 1;
+
+		runs = 0;
+		sum_llc_perf_miss = 0;
+		current_mask = next_mask(current_mask);
 	}
 
 	fclose(fp);
-	no_of_bits = count_bits(param->mask);
 
-	return show_results_info(sum_llc_perf_miss, no_of_bits, span / 64,
-				 MAX_DIFF, MAX_DIFF_PERCENT, runs - 1,
-				 get_vendor() == ARCH_INTEL);
+	return fail;
 }
 
 void cat_test_cleanup(void)
 {
-	remove(RESULT_FILE_NAME1);
-	remove(RESULT_FILE_NAME2);
+	remove(RESULT_FILE_NAME);
 }
 
 /*
  * cat_test:	execute CAT benchmark and measure LLC cache misses
  * @param:	parameters passed to cat_test()
  * @span:	buffer size for the benchmark
+ * @current_mask	start mask for the first iteration
  *
- * Return:	0 on success. non-zero on failure.
+ * Run CAT test, bits are removed one-by-one from the current_mask for each
+ * subsequent test.
+ *
+ * Return:		0 on success. non-zero on failure.
  */
-static int cat_test(struct resctrl_val_param *param, size_t span)
+static int cat_test(struct resctrl_val_param *param, size_t span, unsigned long current_mask)
 {
-	int memflush = 1, operation = 0, ret = 0;
 	char *resctrl_val = param->resctrl_val;
 	static struct perf_event_read pe_read;
 	struct perf_event_attr pea;
+	unsigned char *buf;
+	char schemata[64];
+	int ret, i, pe_fd;
 	pid_t bm_pid;
-	int pe_fd;
 
 	if (strcmp(param->filename, "") == 0)
 		sprintf(param->filename, "stdio");
@@ -143,54 +168,64 @@ static int cat_test(struct resctrl_val_param *param, size_t span)
 	if (ret)
 		return ret;
 
+	buf = alloc_buffer(span, 1);
+	if (buf == NULL)
+		return -1;
+
 	perf_event_attr_initialize(&pea, PERF_COUNT_HW_CACHE_MISSES);
 	perf_event_initialize_read_format(&pe_read);
 
-	/* Test runs until the callback setup() tells the test to stop. */
-	while (1) {
-		ret = param->setup(param);
-		if (ret == END_OF_TESTS) {
-			ret = 0;
-			break;
-		}
-		if (ret < 0)
-			break;
-		pe_fd = perf_event_reset_enable(&pea, bm_pid, param->cpu_no);
-		if (pe_fd < 0) {
-			ret = -1;
-			break;
-		}
-
-		if (run_fill_buf(span, memflush, operation, true)) {
-			fprintf(stderr, "Error-running fill buffer\n");
-			ret = -1;
-			goto pe_close;
-		}
-
-		sleep(1);
-		ret = perf_event_measure(pe_fd, &pe_read, param, bm_pid);
+	while (current_mask) {
+		snprintf(schemata, sizeof(schemata), "%lx", param->mask & ~current_mask);
+		ret = write_schemata("", schemata, param->cpu_no, param->resctrl_val);
 		if (ret)
-			goto pe_close;
+			goto free_buf;
+		snprintf(schemata, sizeof(schemata), "%lx", current_mask);
+		ret = write_schemata(param->ctrlgrp, schemata, param->cpu_no, param->resctrl_val);
+		if (ret)
+			goto free_buf;
 
-		close(pe_fd);
+		for (i = 0; i < NUM_OF_RUNS; i++) {
+			mem_flush(buf, span);
+			ret = fill_cache_read(buf, span, true);
+			if (ret)
+				goto free_buf;
+
+			pe_fd = perf_event_reset_enable(&pea, bm_pid, param->cpu_no);
+			if (pe_fd < 0) {
+				ret = -1;
+				goto free_buf;
+			}
+
+			fill_cache_read(buf, span, true);
+
+			ret = perf_event_measure(pe_fd, &pe_read, param, bm_pid);
+			if (ret)
+				goto pe_close;
+
+			close(pe_fd);
+		}
+		current_mask = next_mask(current_mask);
 	}
+
+free_buf:
+	free(buf);
 
 	return ret;
 
 pe_close:
 	close(pe_fd);
-	return ret;
+	goto free_buf;
 }
 
 int cat_perf_miss_val(int cpu_no, int n, char *cache_type)
 {
-	unsigned long l_mask, l_mask_1;
-	int ret, pipefd[2], sibling_cpu_no;
+	unsigned long long_mask, start_mask, full_cache_mask;
 	unsigned long cache_total_size = 0;
-	unsigned long full_cache_mask, long_mask;
+	unsigned int start;
 	int count_of_bits;
-	char pipe_message;
 	size_t span;
+	int ret;
 
 	/* Get default cbm mask for L3/L2 cache */
 	ret = get_cbm_mask(cache_type, &full_cache_mask);
@@ -207,8 +242,7 @@ int cat_perf_miss_val(int cpu_no, int n, char *cache_type)
 		return ret;
 	ksft_print_msg("Cache size :%lu\n", cache_total_size);
 
-	/* Get max number of bits from default-cabm mask */
-	count_of_bits = count_bits(long_mask);
+	count_of_bits = count_contiguous_bits(long_mask, &start);
 
 	if (!n)
 		n = count_of_bits / 2;
@@ -219,88 +253,26 @@ int cat_perf_miss_val(int cpu_no, int n, char *cache_type)
 			       count_of_bits - 1);
 		return -1;
 	}
-
-	/* Get core id from same socket for running another thread */
-	sibling_cpu_no = get_core_sibling(cpu_no);
-	if (sibling_cpu_no < 0)
-		return -1;
+	start_mask = create_bit_mask(start, n);
 
 	struct resctrl_val_param param = {
 		.resctrl_val	= CAT_STR,
 		.cpu_no		= cpu_no,
-		.setup		= cat_setup,
+		.ctrlgrp	= "c1",
+		.filename	= RESULT_FILE_NAME,
+		.num_of_runs	= 0,
 	};
-
-	l_mask = long_mask >> n;
-	l_mask_1 = ~l_mask & long_mask;
-
-	/* Set param values for parent thread which will be allocated bitmask
-	 * with (max_bits - n) bits
-	 */
-	span = cache_size(cache_total_size, l_mask, full_cache_mask);
-	strcpy(param.ctrlgrp, "c2");
-	strcpy(param.mongrp, "m2");
-	strcpy(param.filename, RESULT_FILE_NAME2);
-	param.mask = l_mask;
-	param.num_of_runs = 0;
-
-	if (pipe(pipefd)) {
-		perror("# Unable to create pipe");
-		return errno;
-	}
-
-	fflush(stdout);
-	bm_pid = fork();
-
-	/* Set param values for child thread which will be allocated bitmask
-	 * with n bits
-	 */
-	if (bm_pid == 0) {
-		param.mask = l_mask_1;
-		strcpy(param.ctrlgrp, "c1");
-		strcpy(param.mongrp, "m1");
-		span = cache_size(cache_total_size, l_mask_1, full_cache_mask);
-		strcpy(param.filename, RESULT_FILE_NAME1);
-		param.num_of_runs = 0;
-		param.cpu_no = sibling_cpu_no;
-	}
+	param.mask = long_mask;
+	span = cache_size(cache_total_size, start_mask, full_cache_mask);
 
 	remove(param.filename);
 
-	ret = cat_test(&param, span);
-	if (ret == 0)
-		ret = check_results(&param, span);
+	ret = cat_test(&param, span, start_mask);
+	if (ret)
+		goto out;
 
-	if (bm_pid == 0) {
-		/* Tell parent that child is ready */
-		close(pipefd[0]);
-		pipe_message = 1;
-		if (write(pipefd[1], &pipe_message, sizeof(pipe_message)) <
-		    sizeof(pipe_message))
-			/*
-			 * Just print the error message.
-			 * Let while(1) run and wait for itself to be killed.
-			 */
-			perror("# failed signaling parent process");
-
-		close(pipefd[1]);
-		while (1)
-			;
-	} else {
-		/* Parent waits for child to be ready. */
-		close(pipefd[1]);
-		pipe_message = 0;
-		while (pipe_message != 1) {
-			if (read(pipefd[0], &pipe_message,
-				 sizeof(pipe_message)) < sizeof(pipe_message)) {
-				perror("# failed reading from child process");
-				break;
-			}
-		}
-		close(pipefd[0]);
-		kill(bm_pid, SIGKILL);
-	}
-
+	ret = check_results(&param, cache_type, cache_total_size, full_cache_mask, start_mask);
+out:
 	cat_test_cleanup();
 
 	return ret;

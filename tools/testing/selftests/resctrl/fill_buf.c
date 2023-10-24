@@ -38,7 +38,7 @@ static void cl_flush(void *p)
 #endif
 }
 
-static void mem_flush(unsigned char *buf, size_t buf_size)
+void mem_flush(unsigned char *buf, size_t buf_size)
 {
 	unsigned char *cp = buf;
 	size_t i = 0;
@@ -100,7 +100,7 @@ static void fill_one_span_write(unsigned char *buf, size_t buf_size)
 	}
 }
 
-static int fill_cache_read(unsigned char *buf, size_t buf_size, bool once)
+int fill_cache_read(unsigned char *buf, size_t buf_size, bool once)
 {
 	int ret = 0;
 	FILE *fp;
@@ -134,7 +134,7 @@ static int fill_cache_write(unsigned char *buf, size_t buf_size, bool once)
 	return 0;
 }
 
-static unsigned char *alloc_buffer(size_t buf_size, int memflush)
+unsigned char *alloc_buffer(size_t buf_size, int memflush)
 {
 	void *p = NULL;
 	uint64_t *p64;
