@@ -29,16 +29,20 @@ properties:
           - const: rockchip,rk3568-pcie
 
   reg:
+    minItems: 3
     items:
       - description: Data Bus Interface (DBI) registers
       - description: Rockchip designed configuration registers
       - description: Config registers
+      - description: iATU registers
 
   reg-names:
+    minItems: 3
     items:
       - const: dbi
       - const: apb
       - const: config
+      - const: atu
 
   clocks:
     minItems: 5
