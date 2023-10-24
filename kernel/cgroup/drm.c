@@ -25,6 +25,8 @@ struct drm_cgroup_state {
 	bool over;
 	bool over_budget;
 
+	u64 total_us;
+
 	u64 per_s_budget_us;
 	u64 prev_active_us;
 	u64 active_us;
@@ -117,6 +119,24 @@ drmcs_write_weight(struct cgroup_subsys_state *css, struct cftype *cftype,
 	return 0;
 }
 
+static int drmcs_show_stat(struct seq_file *sf, void *v)
+{
+	struct drm_cgroup_state *drmcs = css_to_drmcs(seq_css(sf));
+	u64 val;
+
+#ifndef CONFIG_64BIT
+	mutex_lock(&drmcg_mutex);
+#endif
+	val = drmcs->total_us;
+#ifndef CONFIG_64BIT
+	mutex_unlock(&drmcg_mutex);
+#endif
+
+	seq_printf(sf, "usage_usec %llu\n", val);
+
+	return 0;
+}
+
 static bool __start_scanning(unsigned int period_us)
 {
 	struct drm_cgroup_state *root = &root_drmcs.drmcs;
@@ -169,11 +189,14 @@ static bool __start_scanning(unsigned int period_us)
 		parent = css_to_drmcs(node->parent);
 
 		active = drmcs_get_active_time_us(drmcs);
-		if (period_us && active > drmcs->prev_active_us)
+		if (period_us && active > drmcs->prev_active_us) {
 			drmcs->active_us += active - drmcs->prev_active_us;
+			drmcs->total_us += drmcs->active_us;
+		}
 		drmcs->prev_active_us = active;
 
 		parent->active_us += drmcs->active_us;
+		parent->total_us += drmcs->active_us;
 		parent->sum_children_weights += drmcs->weight;
 
 		css_put(node);
@@ -563,6 +586,10 @@ struct cftype files[] = {
 		.flags = CFTYPE_NOT_ON_ROOT,
 		.read_u64 = drmcs_read_weight,
 		.write_u64 = drmcs_write_weight,
+	},
+	{
+		.name = "stat",
+		.seq_show = drmcs_show_stat,
 	},
 	{ } /* Zero entry terminates. */
 };

@@ -2445,6 +2445,14 @@ respected.
 DRM weight based time control interface files
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+  drm.stat
+	A read-only flat-keyed file.
+
+	Contains these fields:
+
+	- usage_usec - GPU time used by the group, recursively including all
+		       child groups.
+
   drm.weight
 	Standard cgroup weight based control [1, 10000] used to configure the
 	relative distributing of GPU time between the sibling groups.
