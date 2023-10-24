@@ -91,7 +91,12 @@ vmlinux_link()
 
 	# The kallsyms linking does not need debug symbols included.
 	if [ "$output" != "${output#.tmp_vmlinux.kallsyms}" ] ; then
-		ldflags="${ldflags} ${wl}--strip-debug"
+		# The kallsyms linking does not need debug symbols included,
+		# unless the KALLSYMS_ALIAS_SRCLINE.
+		if ! is_enabled CONFIG_KALLSYMS_ALIAS_SRCLINE && \
+		   [ "$output" != "${output#.tmp_vmlinux.kallsyms}" ] ; then
+			ldflags="${ldflags} ${wl}--strip-debug"
+		fi
 	fi
 
 	if is_enabled CONFIG_VMLINUX_MAP; then
@@ -161,7 +166,23 @@ kallsyms()
 	fi
 
 	info KSYMS ${2}
-	scripts/kallsyms ${kallsymopt} ${1} > ${2}
+	ALIAS=""
+	KAS_DATA=""
+	if is_enabled CONFIG_KALLSYMS_ALIAS_SRCLINE_DATA; then
+		KAS_DATA="--process_data"
+	fi
+	if is_enabled CONFIG_KALLSYMS_ALIAS_SRCLINE; then
+		ALIAS=".alias"
+		# You can use KAS_ALIAS_DEBUG=<debug level> in the make statements to enable
+		# verbose execution for kas_alias.
+		${srctree}/scripts/kas_alias.py \
+			--addr2line ${ADDR2LINE} --vmlinux ${kallsyms_vmlinux} \
+			--nmdata ${1} --outfile ${1}${ALIAS} \
+			--modules_list ${MODORDER} --nm ${NM} --debug ${KAS_ALIAS_DEBUG:-0}\
+			--objdump ${OBJDUMP} --objcopy ${OBJCOPY} \
+			--basedir ${srctree} --separator @ ${KAS_DATA}
+	fi
+	scripts/kallsyms ${kallsymopt} ${1}${ALIAS} > ${2}
 }
 
 # Perform one step in kallsyms generation, including temporary linking of
@@ -203,6 +224,7 @@ cleanup()
 	rm -f System.map
 	rm -f vmlinux
 	rm -f vmlinux.map
+	find . -type f -name "*.orig" -exec rm {} \;
 }
 
 # Use "make V=1" to debug this script
