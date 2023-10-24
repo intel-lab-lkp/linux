@@ -664,7 +664,7 @@ new_vf_unlock:
  * @oldport: lport of previous interface
  * @newport: lport of destination interface
  */
-static void ice_lag_move_vf_nodes(struct ice_lag *lag, u8 oldport, u8 newport)
+void ice_lag_move_vf_nodes(struct ice_lag *lag, u8 oldport, u8 newport)
 {
 	struct ice_pf *pf;
 	int i;

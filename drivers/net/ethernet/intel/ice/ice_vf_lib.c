@@ -828,13 +828,19 @@ static void ice_notify_vf_reset(struct ice_vf *vf)
  */
 int ice_reset_vf(struct ice_vf *vf, u32 flags)
 {
+	struct ice_lag_netdev_list ndlist;
 	struct ice_pf *pf = vf->pf;
+	struct list_head *tmp, *n;
+	struct ice_lag *lag;
 	struct ice_vsi *vsi;
 	struct device *dev;
+	u8 act_pt, pri_pt;
 	int err = 0;
 	bool rsd;
 
 	dev = ice_pf_to_dev(pf);
+	act_pt = ICE_LAG_INVALID_PORT;
+	pri_pt = pf->hw.port_info->lport;
 
 	if (flags & ICE_VF_RESET_NOTIFY)
 		ice_notify_vf_reset(vf);
@@ -843,6 +849,33 @@ int ice_reset_vf(struct ice_vf *vf, u32 flags)
 		dev_dbg(dev, "Trying to reset VF %d, but all VF resets are disabled\n",
 			vf->vf_id);
 		return 0;
+	}
+
+	lag = pf->lag;
+	mutex_lock(&pf->lag_mutex);
+	if (lag && lag->bonded && lag->primary) {
+		act_pt = lag->active_port;
+		if (act_pt != pri_pt && act_pt != ICE_LAG_INVALID_PORT &&
+		    lag->upper_netdev) {
+			struct ice_lag_netdev_list *nl;
+			struct net_device *tmp_nd;
+
+			INIT_LIST_HEAD(&ndlist.node);
+			rcu_read_lock();
+			for_each_netdev_in_bond_rcu(lag->upper_netdev, tmp_nd) {
+				nl = kzalloc(sizeof(*nl), GFP_KERNEL);
+				if (!nl)
+					break;
+
+				nl->netdev = tmp_nd;
+				list_add(&nl->node, &ndlist.node);
+			}
+			rcu_read_unlock();
+			lag->netdev_head = &ndlist.node;
+			ice_lag_move_vf_nodes(lag, act_pt, pri_pt);
+		} else {
+			act_pt = ICE_LAG_INVALID_PORT;
+		}
 	}
 
 	if (flags & ICE_VF_RESET_LOCK)
@@ -936,6 +969,20 @@ int ice_reset_vf(struct ice_vf *vf, u32 flags)
 out_unlock:
 	if (flags & ICE_VF_RESET_LOCK)
 		mutex_unlock(&vf->cfg_lock);
+
+	if (lag && lag->bonded && lag->primary &&
+	    act_pt != ICE_LAG_INVALID_PORT) {
+		ice_lag_move_vf_nodes(lag, pri_pt, act_pt);
+		list_for_each_safe(tmp, n, &ndlist.node) {
+			struct ice_lag_netdev_list *entry;
+
+			entry = list_entry(tmp, struct ice_lag_netdev_list, node);
+			list_del(&entry->node);
+			kfree(entry);
+		}
+		lag->netdev_head = NULL;
+	}
+	mutex_unlock(&pf->lag_mutex);
 
 	return err;
 }
