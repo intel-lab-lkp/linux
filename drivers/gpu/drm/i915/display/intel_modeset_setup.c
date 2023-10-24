@@ -871,6 +871,19 @@ static void intel_modeset_readout_hw_state(struct drm_i915_private *i915)
 		intel_pmdemand_update_port_clock(i915, pmdemand_state, pipe,
 						 crtc_state->port_clock);
 
+		/*
+		 * In some customer cases, machine can start up with all
+		 * GV points restricted. However we don't ever read those
+		 * from hw and qgv_points_mask initialized as 0, would
+		 * make driver think that all points are unrestricted,
+		 * so we never update them with proper value, unless
+		 * some demanding scenario is requested and we have to
+		 * restrict some of those. Lets fix that by initializing
+		 * all points as restricted, then on first modeset, driver
+		 * will naturally calculate, which of those need to be
+		 * relaxed and do correspondent update.
+		 */
+		bw_state->qgv_points_mask = icl_qgv_points_mask(i915);
 		intel_bw_crtc_update(bw_state, crtc_state);
 	}
 

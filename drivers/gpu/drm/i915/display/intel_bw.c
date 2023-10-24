@@ -119,7 +119,7 @@ static int adls_pcode_read_psf_gv_point_info(struct drm_i915_private *dev_priv,
 	return 0;
 }
 
-static u16 icl_qgv_points_mask(struct drm_i915_private *i915)
+u16 icl_qgv_points_mask(struct drm_i915_private *i915)
 {
 	unsigned int num_psf_gv_points = i915->display.bw.max[0].num_psf_gv_points;
 	unsigned int num_qgv_points = i915->display.bw.max[0].num_qgv_points;
@@ -1277,9 +1277,10 @@ int intel_bw_atomic_check(struct intel_atomic_state *state)
 
 	/*
 	 * If none of our inputs (data rates, number of active
-	 * planes, SAGV yes/no) changed then nothing to do here.
+	 * planes, SAGV yes/no) changed then nothing to do here,
+	 * except if mask turns out to be in wrong state initially.
 	 */
-	if (!changed)
+	if (!changed && (new_bw_state->qgv_points_mask != icl_qgv_points_mask(i915)))
 		return 0;
 
 	ret = intel_bw_check_qgv_points(i915, old_bw_state, new_bw_state);
