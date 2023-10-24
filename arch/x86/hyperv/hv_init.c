@@ -68,7 +68,7 @@ static int hyperv_init_ghcb(void)
 
 	/* Mask out vTOM bit. ioremap_cache() maps decrypted */
 	ghcb_gpa &= ~ms_hyperv.shared_gpa_boundary;
-	ghcb_va = (void *)ioremap_cache(ghcb_gpa, HV_HYP_PAGE_SIZE);
+	ghcb_va = memremap(ghcb_gpa, HV_HYP_PAGE_SIZE, MEMREMAP_WB);
 	if (!ghcb_va)
 		return -ENOMEM;
 
