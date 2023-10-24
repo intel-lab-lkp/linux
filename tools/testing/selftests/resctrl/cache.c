@@ -170,35 +170,36 @@ static int print_results_cache(char *filename, int bm_pid,
 	return 0;
 }
 
-int measure_cache_vals(struct resctrl_val_param *param, int bm_pid)
+static int measure_llc_perf(struct resctrl_val_param *param, int bm_pid)
 {
-	unsigned long llc_perf_miss = 0, llc_occu_resc = 0, llc_value = 0;
+	unsigned long llc_perf_miss = 0;
 	int ret;
 
 	/*
 	 * Measure cache miss from perf.
 	 */
-	if (!strncmp(param->resctrl_val, CAT_STR, sizeof(CAT_STR))) {
-		ret = get_llc_perf(&llc_perf_miss);
-		if (ret < 0)
-			return ret;
-		llc_value = llc_perf_miss;
-	}
+	ret = get_llc_perf(&llc_perf_miss);
+	if (ret < 0)
+		return ret;
+
+	ret = print_results_cache(param->filename, bm_pid, llc_perf_miss);
+	return ret;
+}
+
+int measure_llc_resctrl(struct resctrl_val_param *param, int bm_pid)
+{
+	unsigned long llc_occu_resc = 0;
+	int ret;
 
 	/*
 	 * Measure llc occupancy from resctrl.
 	 */
-	if (!strncmp(param->resctrl_val, CMT_STR, sizeof(CMT_STR))) {
-		ret = get_llc_occu_resctrl(&llc_occu_resc);
-		if (ret < 0)
-			return ret;
-		llc_value = llc_occu_resc;
-	}
-	ret = print_results_cache(param->filename, bm_pid, llc_value);
-	if (ret)
+	ret = get_llc_occu_resctrl(&llc_occu_resc);
+	if (ret < 0)
 		return ret;
 
-	return 0;
+	ret = print_results_cache(param->filename, bm_pid, llc_occu_resc);
+	return ret;
 }
 
 /*
@@ -253,7 +254,7 @@ int cat_val(struct resctrl_val_param *param, size_t span)
 		}
 
 		sleep(1);
-		ret = measure_cache_vals(param, bm_pid);
+		ret = measure_llc_perf(param, bm_pid);
 		if (ret)
 			goto pe_close;
 	}
