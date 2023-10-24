@@ -901,9 +901,10 @@ static void mcam_ctlr_power_down(struct mcam_camera *cam)
 static int mclk_prepare(struct clk_hw *hw)
 {
 	struct mcam_camera *cam = container_of(hw, struct mcam_camera, mclk_hw);
+	int ret;
 
-	clk_prepare(cam->clk[0]);
-	return 0;
+	ret = clk_prepare(cam->clk[0]);
+	return ret;
 }
 
 static void mclk_unprepare(struct clk_hw *hw)
