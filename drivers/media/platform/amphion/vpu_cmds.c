@@ -271,6 +271,7 @@ exit:
 static int sync_session_response(struct vpu_inst *inst, unsigned long key, long timeout, int try)
 {
 	struct vpu_core *core;
+	struct wait_queue_entry wq_entry;
 
 	if (!inst || !inst->core)
 		return -EINVAL;
@@ -278,7 +279,19 @@ static int sync_session_response(struct vpu_inst *inst, unsigned long key, long 
 	core = inst->core;
 
 	call_void_vop(inst, wait_prepare);
-	wait_event_timeout(core->ack_wq, check_is_responsed(inst, key), timeout);
+	init_wait_entry(&wq_entry, 0);
+	for (;;) {
+		if (check_is_responsed(inst, key))
+			break;
+
+		prepare_to_wait_event(&core->ack_wq, &wq_entry, TASK_UNINTERRUPTIBLE);
+
+		timeout = schedule_timeout(timeout);
+		if (!timeout)
+			break;
+	}
+
+	finish_wait(&core->ack_wq, &wq_entry);
 	call_void_vop(inst, wait_finish);
 
 	if (!check_is_responsed(inst, key)) {
