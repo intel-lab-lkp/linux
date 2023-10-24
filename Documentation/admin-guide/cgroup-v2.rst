@@ -2418,6 +2418,37 @@ HugeTLB Interface Files
         hugetlb pages of <hugepagesize> in this cgroup.  Only active in
         use hugetlb pages are included.  The per-node values are in bytes.
 
+DRM
+---
+
+The DRM controller allows configuring weight based time control.
+
+DRM weight based time control
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The controller configures the GPU time allowed per group and periodically scans
+the belonging tasks to detect the over budget condition, at which point it
+invokes a callback notifying the DRM core of the condition.
+
+Because of the heterogenous hardware and driver DRM capabilities, time control
+is implemented as a loose co-operative (bi-directional) interface between the
+controller and DRM core.
+
+DRM core provides an API to query per process GPU utilization and 2nd API to
+receive notification from the cgroup controller when the group enters or exits
+the over budget condition.
+
+Individual DRM drivers which implement the interface are expected to act on this
+in a best-effort manner. There are no guarantees that the time budget will be
+respected.
+
+DRM weight based time control interface files
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  drm.weight
+	Standard cgroup weight based control [1, 10000] used to configure the
+	relative distributing of GPU time between the sibling groups.
+
 Misc
 ----
 
