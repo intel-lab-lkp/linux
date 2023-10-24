@@ -11,7 +11,7 @@
 
 struct uvc_device;
 
-void uvc_function_setup_continue(struct uvc_device *uvc);
+void uvc_function_setup_continue(struct uvc_device *uvc, int disale_ep);
 
 void uvc_function_connect(struct uvc_device *uvc);
 
