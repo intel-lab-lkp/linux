@@ -279,12 +279,10 @@ static ssize_t store_ctlr_mode(struct device *dev,
 	if (count > FCOE_MAX_MODENAME_LEN)
 		return -EINVAL;
 
-	strncpy(mode, buf, count);
+	strscpy(mode, buf, count);
 
 	if (mode[count - 1] == '\n')
 		mode[count - 1] = '\0';
-	else
-		mode[count] = '\0';
 
 	switch (ctlr->enabled) {
 	case FCOE_CTLR_ENABLED:
