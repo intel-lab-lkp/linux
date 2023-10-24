@@ -96,8 +96,7 @@ static int mbm_setup(struct resctrl_val_param *p)
 
 	/* Set up shemata with 100% allocation on the first run. */
 	if (p->num_of_runs == 0 && validate_resctrl_feature_request("MB", NULL))
-		ret = write_schemata(p->ctrlgrp, "100", p->cpu_no,
-				     p->resctrl_val);
+		ret = write_schemata(p->ctrlgrp, "100", p->cpu_no, p->resource);
 
 	p->num_of_runs++;
 
@@ -113,6 +112,7 @@ static int mbm_run_test(const struct resctrl_test *test, const struct user_param
 {
 	struct resctrl_val_param param = {
 		.resctrl_val	= MBM_STR,
+		.resource	= "MB",
 		.ctrlgrp	= "c1",
 		.mongrp		= "m1",
 		.cpu_no		= uparams->cpu,

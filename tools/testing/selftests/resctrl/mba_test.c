@@ -40,8 +40,7 @@ static int mba_setup(struct resctrl_val_param *p)
 
 	sprintf(allocation_str, "%d", allocation);
 
-	ret = write_schemata(p->ctrlgrp, allocation_str, p->cpu_no,
-			     p->resctrl_val);
+	ret = write_schemata(p->ctrlgrp, allocation_str, p->cpu_no, p->resource);
 	if (ret < 0)
 		return ret;
 
@@ -145,6 +144,7 @@ static int mba_run_test(const struct resctrl_test *test, const struct user_param
 {
 	struct resctrl_val_param param = {
 		.resctrl_val	= MBA_STR,
+		.resource	= "MB",
 		.ctrlgrp	= "c1",
 		.mongrp		= "m1",
 		.cpu_no		= uparams->cpu,

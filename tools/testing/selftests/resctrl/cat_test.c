@@ -142,7 +142,8 @@ void cat_test_cleanup(void)
  *
  * Return:		0 on success. non-zero on failure.
  */
-static int cat_test(struct resctrl_val_param *param, size_t span, unsigned long current_mask)
+static int cat_test(struct resctrl_val_param *param, const char *resource,
+		    size_t span, unsigned long current_mask)
 {
 	char *resctrl_val = param->resctrl_val;
 	static struct perf_event_read pe_read;
@@ -177,11 +178,11 @@ static int cat_test(struct resctrl_val_param *param, size_t span, unsigned long 
 
 	while (current_mask) {
 		snprintf(schemata, sizeof(schemata), "%lx", param->mask & ~current_mask);
-		ret = write_schemata("", schemata, param->cpu_no, param->resctrl_val);
+		ret = write_schemata("", schemata, param->cpu_no, resource);
 		if (ret)
 			goto free_buf;
 		snprintf(schemata, sizeof(schemata), "%lx", current_mask);
-		ret = write_schemata(param->ctrlgrp, schemata, param->cpu_no, param->resctrl_val);
+		ret = write_schemata(param->ctrlgrp, schemata, param->cpu_no, resource);
 		if (ret)
 			goto free_buf;
 
@@ -268,7 +269,7 @@ static int cat_run_test(const struct resctrl_test *test, const struct user_param
 
 	remove(param.filename);
 
-	ret = cat_test(&param, span, start_mask);
+	ret = cat_test(&param, test->resource, span, start_mask);
 	if (ret)
 		goto out;
 

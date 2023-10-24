@@ -81,6 +81,7 @@ struct resctrl_test {
 /*
  * resctrl_val_param:	resctrl test parameters
  * @resctrl_val:	Resctrl feature (Eg: mbm, mba.. etc)
+ * @resource:		Resource to test (e.g., MB, L3, L2, etc.)
  * @ctrlgrp:		Name of the control monitor group (con_mon grp)
  * @mongrp:		Name of the monitor group (mon grp)
  * @cpu_no:		CPU number to which the benchmark would be binded
@@ -90,6 +91,7 @@ struct resctrl_test {
  */
 struct resctrl_val_param {
 	char		*resctrl_val;
+	char		*resource;
 	char		ctrlgrp[64];
 	char		mongrp[64];
 	int		cpu_no;
@@ -127,8 +129,7 @@ bool validate_resctrl_feature_request(const char *resource, const char *feature)
 bool test_resource_feature_check(const struct resctrl_test *test);
 char *fgrep(FILE *inf, const char *str);
 int taskset_benchmark(pid_t bm_pid, int cpu_no);
-int write_schemata(char *ctrlgrp, char *schemata, int cpu_no,
-		   char *resctrl_val);
+int write_schemata(char *ctrlgrp, char *schemata, int cpu_no, const char *resource);
 int write_bm_pid_to_resctrl(pid_t bm_pid, char *ctrlgrp, char *mongrp,
 			    char *resctrl_val);
 int perf_event_open(struct perf_event_attr *hw_event, pid_t pid, int cpu,

@@ -125,6 +125,7 @@ static int cmt_run_test(const struct resctrl_test *test, const struct user_param
 
 	struct resctrl_val_param param = {
 		.resctrl_val	= CMT_STR,
+		.resource	= "L3",
 		.ctrlgrp	= "c1",
 		.mongrp		= "m1",
 		.cpu_no		= uparams->cpu,
