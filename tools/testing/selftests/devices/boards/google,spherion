@@ -1,0 +1,3 @@
+usb camera 11200000,PRODUCT=.*/2/.* 1.4.1 1 0,1
+usb bluetooth 11200000,PRODUCT=.*/2/.* 1.4.2 1 0,1
+pci wifi 11230000 0.0/0.0
