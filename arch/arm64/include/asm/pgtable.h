@@ -1099,21 +1099,22 @@ static inline int ptep_test_and_clear_young(struct vm_area_struct *vma,
 static inline int ptep_clear_flush_young(struct vm_area_struct *vma,
 					 unsigned long address, pte_t *ptep)
 {
-	int young = ptep_test_and_clear_young(vma, address, ptep);
-
-	if (young) {
-		/*
-		 * We can elide the trailing DSB here since the worst that can
-		 * happen is that a CPU continues to use the young entry in its
-		 * TLB and we mistakenly reclaim the associated page. The
-		 * window for such an event is bounded by the next
-		 * context-switch, which provides a DSB to complete the TLB
-		 * invalidation.
-		 */
-		flush_tlb_page_nosync(vma, address);
-	}
-
-	return young;
+	/*
+	 * This comment is borrowed from x86, but applies equally to ARM64:
+	 *
+	 * Clearing the accessed bit without a TLB flush doesn't cause
+	 * data corruption. [ It could cause incorrect page aging and
+	 * the (mistaken) reclaim of hot pages, but the chance of that
+	 * should be relatively low. ]
+	 *
+	 * So as a performance optimization don't flush the TLB when
+	 * clearing the accessed bit, it will eventually be flushed by
+	 * a context switch or a VM operation anyway. [ In the rare
+	 * event of it not getting flushed for a long time the delay
+	 * shouldn't really matter because there's no real memory
+	 * pressure for swapout to react to. ]
+	 */
+	return ptep_test_and_clear_young(vma, address, ptep);
 }
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
