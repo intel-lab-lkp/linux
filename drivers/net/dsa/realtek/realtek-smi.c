@@ -408,6 +408,23 @@ err_put_node:
 	return ret;
 }
 
+static int realtek_smi_hwreset(struct realtek_priv *priv, bool active)
+{
+#ifdef CONFIG_RESET_CONTROLLER
+	if (priv->reset_ctl) {
+		if (active)
+			return reset_control_assert(priv->reset_ctl);
+		else
+			return reset_control_deassert(priv->reset_ctl);
+	}
+#endif
+
+	if (priv->reset)
+		gpiod_set_value(priv->reset, active);
+
+	return 0;
+}
+
 static int realtek_smi_probe(struct platform_device *pdev)
 {
 	const struct realtek_variant *var;
@@ -457,18 +474,24 @@ static int realtek_smi_probe(struct platform_device *pdev)
 	dev_set_drvdata(dev, priv);
 	spin_lock_init(&priv->lock);
 
-	/* TODO: if power is software controlled, set up any regulators here */
+#ifdef CONFIG_RESET_CONTROLLER
+	priv->reset_ctl = devm_reset_control_get(dev, "switch");
+	if (IS_ERR(priv->reset_ctl)) {
+		dev_err(dev, "failed to get switch reset control\n");
+		return PTR_ERR(priv->reset_ctl);
+	}
+#endif
 
 	priv->reset = devm_gpiod_get_optional(dev, "reset", GPIOD_OUT_LOW);
 	if (IS_ERR(priv->reset)) {
 		dev_err(dev, "failed to get RESET GPIO\n");
 		return PTR_ERR(priv->reset);
 	}
-	if (priv->reset) {
-		gpiod_set_value(priv->reset, 1);
+	if (priv->reset_ctl || priv->reset) {
+		realtek_smi_hwreset(priv, 1);
 		dev_dbg(dev, "asserted RESET\n");
 		msleep(REALTEK_HW_STOP_DELAY);
-		gpiod_set_value(priv->reset, 0);
+		realtek_smi_hwreset(priv, 0);
 		msleep(REALTEK_HW_START_DELAY);
 		dev_dbg(dev, "deasserted RESET\n");
 	}
@@ -518,8 +541,7 @@ static void realtek_smi_remove(struct platform_device *pdev)
 		of_node_put(priv->slave_mii_bus->dev.of_node);
 
 	/* leave the device reset asserted */
-	if (priv->reset)
-		gpiod_set_value(priv->reset, 1);
+	realtek_smi_hwreset(priv, 1);
 }
 
 static void realtek_smi_shutdown(struct platform_device *pdev)

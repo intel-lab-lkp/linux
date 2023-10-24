@@ -12,6 +12,9 @@
 #include <linux/platform_device.h>
 #include <linux/gpio/consumer.h>
 #include <net/dsa.h>
+#ifdef CONFIG_RESET_CONTROLLER
+#include <linux/reset.h>
+#endif
 
 #define REALTEK_HW_STOP_DELAY		25	/* msecs */
 #define REALTEK_HW_START_DELAY		100	/* msecs */
@@ -48,6 +51,9 @@ struct rtl8366_vlan_4k {
 
 struct realtek_priv {
 	struct device		*dev;
+#ifdef CONFIG_RESET_CONTROLLER
+	struct reset_control    *reset_ctl;
+#endif
 	struct gpio_desc	*reset;
 	struct gpio_desc	*mdc;
 	struct gpio_desc	*mdio;
