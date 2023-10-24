@@ -962,10 +962,8 @@ static int mc_probe(struct platform_device *pdev)
 	if (!get_ecc_state(ddrmc_baseaddr))
 		return -ENXIO;
 
-	/* Allocate ID number for our EMIF controller */
+	/* Allocate ID number for the EMIF controller */
 	edac_mc_id = emif_get_id(pdev->dev.of_node);
-	if (edac_mc_id < 0)
-		return -EINVAL;
 
 	regval = readl(ddrmc_baseaddr + XDDR_REG_CONFIG0_OFFSET);
 	num_chans = FIELD_PREP(XDDR_REG_CONFIG0_NUM_CHANS_MASK, regval);
