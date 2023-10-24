@@ -65,4 +65,5 @@ int ice_init_lag(struct ice_pf *pf);
 void ice_deinit_lag(struct ice_pf *pf);
 void ice_lag_rebuild(struct ice_pf *pf);
 bool ice_lag_is_switchdev_running(struct ice_pf *pf);
+void ice_lag_move_vf_nodes(struct ice_lag *lag, u8 oldport, u8 newport);
 #endif /* _ICE_LAG_H_ */
