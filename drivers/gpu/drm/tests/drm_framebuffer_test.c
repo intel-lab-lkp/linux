@@ -8,8 +8,10 @@
 #include <kunit/test.h>
 
 #include <drm/drm_device.h>
+#include <drm/drm_drv.h>
 #include <drm/drm_mode.h>
 #include <drm/drm_fourcc.h>
+#include <drm/drm_kunit_helpers.h>
 #include <drm/drm_print.h>
 
 #include "../drm_crtc_internal.h"
@@ -317,11 +319,17 @@ static const struct drm_framebuffer_test drm_framebuffer_create_cases[] = {
 },
 };
 
+struct drm_framebuffer_test_priv {
+	struct drm_device dev;
+	void *private;
+};
+
 static struct drm_framebuffer *fb_create_mock(struct drm_device *dev,
 					      struct drm_file *file_priv,
 					      const struct drm_mode_fb_cmd2 *mode_cmd)
 {
-	int *buffer_created = dev->dev_private;
+	struct drm_framebuffer_test_priv *priv = container_of(dev, typeof(*priv), dev);
+	int *buffer_created = priv->private;
 	*buffer_created = 1;
 	return ERR_PTR(-EINVAL);
 }
@@ -332,29 +340,37 @@ static struct drm_mode_config_funcs mock_config_funcs = {
 
 static int drm_framebuffer_test_init(struct kunit *test)
 {
-	struct drm_device *mock;
+	struct device *parent;
+	struct drm_framebuffer_test_priv *priv;
+	struct drm_device *dev;
 
-	mock = kunit_kzalloc(test, sizeof(*mock), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, mock);
+	parent = drm_kunit_helper_alloc_device(test);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, parent);
 
-	mock->mode_config.min_width = MIN_WIDTH;
-	mock->mode_config.max_width = MAX_WIDTH;
-	mock->mode_config.min_height = MIN_HEIGHT;
-	mock->mode_config.max_height = MAX_HEIGHT;
-	mock->mode_config.funcs = &mock_config_funcs;
+	priv = drm_kunit_helper_alloc_drm_device(test, parent, typeof(*priv),
+						 dev, 0);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, priv);
+	dev = &priv->dev;
 
-	test->priv = mock;
+	dev->mode_config.min_width = MIN_WIDTH;
+	dev->mode_config.max_width = MAX_WIDTH;
+	dev->mode_config.min_height = MIN_HEIGHT;
+	dev->mode_config.max_height = MAX_HEIGHT;
+	dev->mode_config.funcs = &mock_config_funcs;
+
+	test->priv = priv;
 	return 0;
 }
 
 static void drm_test_framebuffer_create(struct kunit *test)
 {
 	const struct drm_framebuffer_test *params = test->param_value;
-	struct drm_device *mock = test->priv;
+	struct drm_framebuffer_test_priv *priv = test->priv;
+	struct drm_device *dev = &priv->dev;
 	int buffer_created = 0;
 
-	mock->dev_private = &buffer_created;
-	drm_internal_framebuffer_create(mock, &params->cmd, NULL);
+	priv->private = &buffer_created;
+	drm_internal_framebuffer_create(dev, &params->cmd, NULL);
 	KUNIT_EXPECT_EQ(test, params->buffer_created, buffer_created);
 }
 
