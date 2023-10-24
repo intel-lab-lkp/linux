@@ -295,6 +295,7 @@ int nfs_statfs(struct dentry *dentry, struct kstatfs *buf)
 	buf->f_ffree = res.afiles;
 
 	buf->f_namelen = server->namelen;
+	buf->f_fsid = u64_to_fsid(server->fsid.major ^ server->fsid.minor);
 
 	return 0;
 
