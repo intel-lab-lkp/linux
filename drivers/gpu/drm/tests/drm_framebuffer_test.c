@@ -602,10 +602,59 @@ static void drm_test_framebuffer_init(struct kunit *test)
 	drm_framebuffer_cleanup(&fb1);
 }
 
+static void destroy_free_mock(struct drm_framebuffer *fb)
+{
+	struct drm_framebuffer_test_priv *priv = container_of(fb->dev, typeof(*priv), dev);
+	int *buffer_freed = priv->private;
+	*buffer_freed = 1;
+}
+
+static struct drm_framebuffer_funcs framebuffer_funcs_free_mock = {
+	.destroy = destroy_free_mock,
+};
+
+static void drm_test_framebuffer_free(struct kunit *test)
+{
+	struct drm_framebuffer_test_priv *priv = test->priv;
+	struct drm_device *dev = &priv->dev;
+	struct drm_mode_object *obj;
+	struct drm_framebuffer fb = {
+		.dev = dev,
+		.funcs = &framebuffer_funcs_free_mock,
+	};
+	int buffer_freed = 0;
+	int id, ret;
+
+	priv->private = &buffer_freed;
+
+	/*
+	 * Case where the fb isn't registered. Just test if
+	 * drm_framebuffer_free calls fb->funcs->destroy
+	 */
+	drm_framebuffer_free(&fb.base.refcount);
+	KUNIT_EXPECT_EQ(test, buffer_freed, 1);
+
+	buffer_freed = 0;
+
+	ret = drm_mode_object_add(dev, &fb.base, DRM_MODE_OBJECT_FB);
+	KUNIT_ASSERT_EQ(test, ret, 0);
+	id = fb.base.id;
+
+	/* Now, test with the fb registered, that must end unregistered */
+	drm_framebuffer_free(&fb.base.refcount);
+	KUNIT_EXPECT_EQ(test, fb.base.id, 0);
+	KUNIT_EXPECT_EQ(test, buffer_freed, 1);
+
+	/* Test if the old id of the fb was really removed from the idr pool */
+	obj = drm_mode_object_find(dev, NULL, id, DRM_MODE_OBJECT_FB);
+	KUNIT_EXPECT_PTR_EQ(test, obj, NULL);
+}
+
 static struct kunit_case drm_framebuffer_tests[] = {
 	KUNIT_CASE_PARAM(drm_test_framebuffer_check_src_coords, check_src_coords_gen_params),
 	KUNIT_CASE(drm_test_framebuffer_cleanup),
 	KUNIT_CASE_PARAM(drm_test_framebuffer_create, drm_framebuffer_create_gen_params),
+	KUNIT_CASE(drm_test_framebuffer_free),
 	KUNIT_CASE(drm_test_framebuffer_init),
 	KUNIT_CASE(drm_test_framebuffer_lookup),
 	KUNIT_CASE(drm_test_framebuffer_modifiers_not_supported),
