@@ -53,6 +53,11 @@ Module parameters
   sure that, for a given input, the output frames are always exactly the same.
   This is useful for automated tests to check that output frames are correct.
 
+- codec_variability: Add codec specific variability in the ouput frames. It
+  adds a text line on the ouptut frames containing parameters that is specific
+  to the format of the input stream to ensure that different inputs do not give
+  the same output.
+
 What is the default use case for this driver?
 ---------------------------------------------
 
