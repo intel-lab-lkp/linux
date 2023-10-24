@@ -1401,6 +1401,7 @@ const char * const vmstat_text[] = {
 #ifdef CONFIG_ZSWAP
 	"zswpin",
 	"zswpout",
+	"zswpout_fail",
 #endif
 #ifdef CONFIG_X86
 	"direct_map_level2_splits",
