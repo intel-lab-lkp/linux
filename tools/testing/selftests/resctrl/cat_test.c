@@ -218,10 +218,11 @@ pe_close:
 	goto free_buf;
 }
 
-int cat_perf_miss_val(int cpu_no, int n, char *cache_type)
+int cat_perf_miss_val(const struct user_params *uparams, char *cache_type)
 {
 	unsigned long long_mask, start_mask, full_cache_mask;
 	unsigned long cache_total_size = 0;
+	int n = uparams->bits;
 	unsigned int start;
 	int count_of_bits;
 	size_t span;
@@ -237,7 +238,7 @@ int cat_perf_miss_val(int cpu_no, int n, char *cache_type)
 		return ret;
 
 	/* Get L3/L2 cache size */
-	ret = get_cache_size(cpu_no, cache_type, &cache_total_size);
+	ret = get_cache_size(uparams->cpu, cache_type, &cache_total_size);
 	if (ret)
 		return ret;
 	ksft_print_msg("Cache size :%lu\n", cache_total_size);
@@ -257,7 +258,7 @@ int cat_perf_miss_val(int cpu_no, int n, char *cache_type)
 
 	struct resctrl_val_param param = {
 		.resctrl_val	= CAT_STR,
-		.cpu_no		= cpu_no,
+		.cpu_no		= uparams->cpu,
 		.ctrlgrp	= "c1",
 		.filename	= RESULT_FILE_NAME,
 		.num_of_runs	= 0,

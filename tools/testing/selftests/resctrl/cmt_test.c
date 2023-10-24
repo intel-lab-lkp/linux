@@ -94,11 +94,12 @@ void cmt_test_cleanup(void)
 	remove(RESULT_FILE_NAME);
 }
 
-int cmt_resctrl_val(int cpu_no, int n, const char * const *benchmark_cmd)
+int cmt_resctrl_val(const struct user_params *uparams)
 {
-	const char * const *cmd = benchmark_cmd;
+	const char * const *cmd = uparams->benchmark_cmd;
 	const char *new_cmd[BENCHMARK_ARGS];
 	unsigned long cache_total_size = 0;
+	int n = uparams->bits ? : 5;
 	unsigned long long_mask;
 	char *span_str = NULL;
 	int count_of_bits;
@@ -109,7 +110,7 @@ int cmt_resctrl_val(int cpu_no, int n, const char * const *benchmark_cmd)
 	if (ret)
 		return ret;
 
-	ret = get_cache_size(cpu_no, "L3", &cache_total_size);
+	ret = get_cache_size(uparams->cpu, "L3", &cache_total_size);
 	if (ret)
 		return ret;
 	ksft_print_msg("Cache size :%lu\n", cache_total_size);
@@ -126,7 +127,7 @@ int cmt_resctrl_val(int cpu_no, int n, const char * const *benchmark_cmd)
 		.resctrl_val	= CMT_STR,
 		.ctrlgrp	= "c1",
 		.mongrp		= "m1",
-		.cpu_no		= cpu_no,
+		.cpu_no		= uparams->cpu,
 		.filename	= RESULT_FILE_NAME,
 		.mask		= ~(long_mask << n) & long_mask,
 		.num_of_runs	= 0,
@@ -137,8 +138,8 @@ int cmt_resctrl_val(int cpu_no, int n, const char * const *benchmark_cmd)
 
 	if (strcmp(cmd[0], "fill_buf") == 0) {
 		/* Duplicate the command to be able to replace span in it */
-		for (i = 0; benchmark_cmd[i]; i++)
-			new_cmd[i] = benchmark_cmd[i];
+		for (i = 0; uparams->benchmark_cmd[i]; i++)
+			new_cmd[i] = uparams->benchmark_cmd[i];
 		new_cmd[i] = NULL;
 
 		ret = asprintf(&span_str, "%zu", span);
