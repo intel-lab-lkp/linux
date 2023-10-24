@@ -272,6 +272,7 @@ int ima_collect_measurement(struct integrity_iint_cache *iint,
 				   AT_STATX_SYNC_AS_STAT);
 	if (!result && (stat.result_mask & STATX_CHANGE_COOKIE))
 		i_version = stat.change_cookie;
+
 	hash.hdr.algo = algo;
 	hash.hdr.length = hash_digest_size[algo];
 
