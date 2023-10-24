@@ -319,6 +319,8 @@ EXPORT_SYMBOL_GPL(flow_offload_refresh);
 static bool nf_flow_is_outdated(const struct flow_offload *flow)
 {
 	return test_bit(IPS_SEEN_REPLY_BIT, &flow->ct->status) &&
+		test_bit(IPS_HW_OFFLOAD_BIT, &flow->ct->status) &&
+		!test_bit(NF_FLOW_HW_PENDING, &flow->flags) &&
 		!test_bit(NF_FLOW_HW_ESTABLISHED, &flow->flags);
 }
 
