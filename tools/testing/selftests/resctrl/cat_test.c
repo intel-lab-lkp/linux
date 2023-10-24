@@ -132,7 +132,46 @@ void cat_test_cleanup(void)
 }
 
 /*
+ * L2 CAT test measures L2 misses indirectly using L3 accesses as a proxy
+ * because perf cannot directly provide the number of L2 misses (there are
+ * only platform specific ways to get the number of L2 misses).
+ *
+ * This function sets up L3 CAT to reduce noise from other processes during
+ * L2 CAT test.
+ */
+int l3_proxy_prepare(const struct resctrl_test *test, struct resctrl_val_param *param, int cpu)
+{
+	unsigned long l3_mask, split_mask;
+	unsigned int start;
+	int count_of_bits;
+	char schemata[64];
+	int n, ret;
+
+	if (!validate_resctrl_feature_request("L3", NULL)) {
+		ksft_print_msg("%s test results may contain noise because L3 CAT is not available!\n",
+			       test->name);
+		return 0;
+	}
+
+	ret = get_mask_no_shareable("L3", &l3_mask);
+	if (ret)
+		return ret;
+	count_of_bits = count_contiguous_bits(l3_mask, &start);
+	n = count_of_bits / 2;
+	split_mask = create_bit_mask(start, n);
+
+	snprintf(schemata, sizeof(schemata), "%lx", l3_mask & ~split_mask);
+	ret = write_schemata("", schemata, cpu, "L3");
+	if (ret)
+		return ret;
+
+	snprintf(schemata, sizeof(schemata), "%lx", split_mask);
+	return write_schemata(param->ctrlgrp, schemata, cpu, "L3");
+}
+
+/*
  * cat_test:	execute CAT benchmark and measure LLC cache misses
+ * @test:	test information structure
  * @param:	parameters passed to cat_test()
  * @span:	buffer size for the benchmark
  * @current_mask	start mask for the first iteration
@@ -142,9 +181,10 @@ void cat_test_cleanup(void)
  *
  * Return:		0 on success. non-zero on failure.
  */
-static int cat_test(struct resctrl_val_param *param, const char *resource,
+static int cat_test(const struct resctrl_test *test, struct resctrl_val_param *param,
 		    size_t span, unsigned long current_mask)
 {
+	__u64 pea_config = PERF_COUNT_HW_CACHE_MISSES;
 	char *resctrl_val = param->resctrl_val;
 	static struct perf_event_read pe_read;
 	struct perf_event_attr pea;
@@ -169,20 +209,26 @@ static int cat_test(struct resctrl_val_param *param, const char *resource,
 	if (ret)
 		return ret;
 
+	if (!strcmp(test->resource, "L2")) {
+		ret = l3_proxy_prepare(test, param, param->cpu_no);
+		if (ret)
+			return ret;
+		pea_config = PERF_COUNT_HW_CACHE_REFERENCES;
+	}
+	perf_event_attr_initialize(&pea, pea_config);
+	perf_event_initialize_read_format(&pe_read);
+
 	buf = alloc_buffer(span, 1);
 	if (buf == NULL)
 		return -1;
 
-	perf_event_attr_initialize(&pea, PERF_COUNT_HW_CACHE_MISSES);
-	perf_event_initialize_read_format(&pe_read);
-
 	while (current_mask) {
 		snprintf(schemata, sizeof(schemata), "%lx", param->mask & ~current_mask);
-		ret = write_schemata("", schemata, param->cpu_no, resource);
+		ret = write_schemata("", schemata, param->cpu_no, test->resource);
 		if (ret)
 			goto free_buf;
 		snprintf(schemata, sizeof(schemata), "%lx", current_mask);
-		ret = write_schemata(param->ctrlgrp, schemata, param->cpu_no, resource);
+		ret = write_schemata(param->ctrlgrp, schemata, param->cpu_no, test->resource);
 		if (ret)
 			goto free_buf;
 
@@ -269,7 +315,7 @@ static int cat_run_test(const struct resctrl_test *test, const struct user_param
 
 	remove(param.filename);
 
-	ret = cat_test(&param, test->resource, span, start_mask);
+	ret = cat_test(test, &param, span, start_mask);
 	if (ret)
 		goto out;
 
@@ -285,6 +331,14 @@ struct resctrl_test l3_cat_test = {
 	.name = "L3_CAT",
 	.group = "CAT",
 	.resource = "L3",
+	.feature_check = test_resource_feature_check,
+	.run_test = cat_run_test,
+};
+
+struct resctrl_test l2_cat_test = {
+	.name = "L2_CAT",
+	.group = "CAT",
+	.resource = "L2",
 	.feature_check = test_resource_feature_check,
 	.run_test = cat_run_test,
 };
