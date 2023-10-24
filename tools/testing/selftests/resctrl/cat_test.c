@@ -28,7 +28,7 @@
  */
 #define MIN_DIFF_PERCENT_PER_BIT	1
 
-static int show_results_info(__u64 sum_llc_val, int no_of_bits,
+static int show_results_info(__u64 sum_llc_val, int no_of_bits, bool ignore_fail,
 			     unsigned long cache_span, long min_diff_percent,
 			     unsigned long num_of_runs, bool platform,
 			     __s64 *prev_avg_llc_val)
@@ -40,12 +40,18 @@ static int show_results_info(__u64 sum_llc_val, int no_of_bits,
 	avg_llc_val = sum_llc_val / num_of_runs;
 	if (*prev_avg_llc_val) {
 		float delta = (__s64)(avg_llc_val - *prev_avg_llc_val);
+		char *res_str;
 
 		avg_diff = delta / *prev_avg_llc_val;
 		ret = platform && (avg_diff * 100) < (float)min_diff_percent;
 
+		res_str = ret ? "Fail:" : "Pass:";
+		if (ret && ignore_fail) {
+			res_str = "Pass (failure ignored):";
+			ret = 0;
+		}
 		ksft_print_msg("%s Check cache miss rate changed more than %.1f%%\n",
-			       ret ? "Fail:" : "Pass:", (float)min_diff_percent);
+			       res_str, (float)min_diff_percent);
 
 		ksft_print_msg("Percent diff=%.1f\n", avg_diff * 100);
 	}
@@ -85,6 +91,7 @@ static int check_results(struct resctrl_val_param *param, const char *cache_type
 
 	while (fgets(temp, sizeof(temp), fp)) {
 		char *token = strtok(temp, ":\t");
+		bool ignore_fail = false;
 		int fields = 0;
 		int bits;
 
@@ -108,7 +115,15 @@ static int check_results(struct resctrl_val_param *param, const char *cache_type
 
 		bits = count_bits(current_mask);
 
-		ret = show_results_info(sum_llc_perf_miss, bits,
+		/*
+		 * L2 CAT test with low number of bits has too small margin to
+		 * always remain positive. As negative values would be confusing
+		 * for the user, ignore failure instead.
+		 */
+		if (bits <= 2 && !strcmp(cache_type, "L2"))
+			ignore_fail = true;
+
+		ret = show_results_info(sum_llc_perf_miss, bits, ignore_fail,
 					alloc_size / 64,
 					MIN_DIFF_PERCENT_PER_BIT * (bits - 1), runs,
 					get_vendor() == ARCH_INTEL,
