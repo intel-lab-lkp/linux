@@ -598,7 +598,7 @@ static int ivpu_hw_37xx_info_init(struct ivpu_device *vdev)
 	return 0;
 }
 
-static int ivpu_hw_37xx_reset(struct ivpu_device *vdev)
+static int ivpu_hw_37xx_ip_reset(struct ivpu_device *vdev)
 {
 	int ret;
 	u32 val;
@@ -619,6 +619,23 @@ static int ivpu_hw_37xx_reset(struct ivpu_device *vdev)
 	ret = REGB_POLL_FLD(VPU_37XX_BUTTRESS_VPU_IP_RESET, TRIGGER, 0, TIMEOUT_US);
 	if (ret)
 		ivpu_err(vdev, "Timed out waiting for RESET completion\n");
+
+	return ret;
+}
+
+static int ivpu_hw_37xx_reset(struct ivpu_device *vdev)
+{
+	int ret = 0;
+
+	if (ivpu_hw_37xx_ip_reset(vdev)) {
+		ivpu_err(vdev, "Failed to reset VPU IP\n");
+		ret = -EIO;
+	}
+
+	if (ivpu_pll_disable(vdev)) {
+		ivpu_err(vdev, "Failed to disable PLL\n");
+		ret = -EIO;
+	}
 
 	return ret;
 }
@@ -651,7 +668,7 @@ static int ivpu_hw_37xx_power_up(struct ivpu_device *vdev)
 {
 	int ret;
 
-	ret = ivpu_hw_37xx_reset(vdev);
+	ret = ivpu_hw_37xx_ip_reset(vdev);
 	if (ret)
 		ivpu_warn(vdev, "Failed to reset HW: %d\n", ret);
 
@@ -722,7 +739,7 @@ static int ivpu_hw_37xx_power_down(struct ivpu_device *vdev)
 {
 	int ret = 0;
 
-	if (!ivpu_hw_37xx_is_idle(vdev) && ivpu_hw_37xx_reset(vdev))
+	if (!ivpu_hw_37xx_is_idle(vdev) && ivpu_hw_37xx_ip_reset(vdev))
 		ivpu_err(vdev, "Failed to reset the VPU\n");
 
 	if (ivpu_pll_disable(vdev)) {
