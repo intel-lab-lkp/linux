@@ -1606,3 +1606,75 @@ int intel_dp_mst_add_topology_state_for_crtc(struct intel_atomic_state *state,
 
 	return 0;
 }
+
+static struct intel_connector *
+get_connector_in_state_for_crtc(struct intel_atomic_state *state,
+				const struct intel_crtc *crtc)
+{
+	struct drm_connector_state *old_conn_state;
+	struct drm_connector_state *new_conn_state;
+	struct drm_connector *_connector;
+	int i;
+
+	for_each_oldnew_connector_in_state(&state->base, _connector,
+					   old_conn_state, new_conn_state, i) {
+		struct intel_connector *connector =
+			to_intel_connector(_connector);
+
+		if (old_conn_state->crtc == &crtc->base ||
+		    new_conn_state->crtc == &crtc->base)
+			return connector;
+	}
+
+	return NULL;
+}
+
+bool intel_dp_mst_crtc_needs_modeset(struct intel_atomic_state *state,
+				     struct intel_crtc *crtc)
+{
+	const struct intel_connector *crtc_connector;
+	const struct drm_connector_state *conn_state;
+	const struct drm_connector *_connector;
+	int i;
+
+	if (!intel_crtc_has_type(intel_atomic_get_new_crtc_state(state, crtc),
+				 INTEL_OUTPUT_DP_MST))
+		return false;
+
+	crtc_connector = get_connector_in_state_for_crtc(state, crtc);
+
+	if (!crtc_connector)
+		/* None of the connectors in the topology needs modeset */
+		return false;
+
+	for_each_new_connector_in_state(&state->base, _connector, conn_state, i) {
+		const struct intel_connector *connector =
+			to_intel_connector(_connector);
+		const struct intel_crtc_state *new_crtc_state =
+			intel_atomic_get_new_crtc_state(state, crtc);
+		const struct intel_crtc_state *old_crtc_state =
+			intel_atomic_get_old_crtc_state(state, crtc);
+
+		if (connector->mst_port != crtc_connector->mst_port)
+			continue;
+
+		if (!intel_crtc_needs_modeset(new_crtc_state))
+			continue;
+
+		if (old_crtc_state->dsc.compression_enable ==
+		    new_crtc_state->dsc.compression_enable)
+			continue;
+
+		/*
+		 * Toggling the compression flag because of this stream in the first
+		 * downstream branch device's UFP DPCD may reset the whole branch
+		 * device. To avoid the reset while other streams are also
+		 * active modeset the whole MST topology in this case.
+		 */
+		if (connector->dp.dsc_decompression_aux ==
+		    &connector->mst_port->aux)
+			return true;
+	}
+
+	return false;
+}
