@@ -117,4 +117,18 @@ int show_cache_info(unsigned long sum_llc_val, int no_of_bits,
 		    unsigned long max_diff_percent, unsigned long num_of_runs,
 		    bool platform, bool cmt);
 
+/*
+ * cache_size - Calculate the size of a cache portion
+ * @cache_size:	Cache size in bytes
+ * @mask:	Cache portion mask
+ * @cache_mask:	Full bitmask for the cache
+ *
+ * Return: The size of the cache portion in bytes.
+ */
+static inline int cache_size(unsigned long cache_size, unsigned long mask,
+			     unsigned long cache_mask)
+{
+	return cache_size * count_bits(mask) / count_bits(cache_mask);
+}
+
 #endif /* RESCTRL_H */
