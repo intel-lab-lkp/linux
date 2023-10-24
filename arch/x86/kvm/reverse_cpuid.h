@@ -116,20 +116,22 @@ static __always_inline void reverse_cpuid_check(unsigned int x86_leaf)
  */
 static __always_inline u32 __feature_translate(int x86_feature)
 {
-	if (x86_feature == X86_FEATURE_SGX1)
+	switch (x86_feature) {
+	case X86_FEATURE_SGX1:
 		return KVM_X86_FEATURE_SGX1;
-	else if (x86_feature == X86_FEATURE_SGX2)
+	case X86_FEATURE_SGX2:
 		return KVM_X86_FEATURE_SGX2;
-	else if (x86_feature == X86_FEATURE_SGX_EDECCSSA)
+	case X86_FEATURE_SGX_EDECCSSA:
 		return KVM_X86_FEATURE_SGX_EDECCSSA;
-	else if (x86_feature == X86_FEATURE_CONSTANT_TSC)
+	case X86_FEATURE_CONSTANT_TSC:
 		return KVM_X86_FEATURE_CONSTANT_TSC;
-	else if (x86_feature == X86_FEATURE_PERFMON_V2)
+	case X86_FEATURE_PERFMON_V2:
 		return KVM_X86_FEATURE_PERFMON_V2;
-	else if (x86_feature == X86_FEATURE_RRSBA_CTRL)
+	case X86_FEATURE_RRSBA_CTRL:
 		return KVM_X86_FEATURE_RRSBA_CTRL;
-
-	return x86_feature;
+	default:
+		return x86_feature;
+	}
 }
 
 static __always_inline u32 __feature_leaf(int x86_feature)
