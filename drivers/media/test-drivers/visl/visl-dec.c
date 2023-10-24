@@ -197,19 +197,30 @@ static void visl_tpg_fill_sequence(struct visl_ctx *ctx,
 {
 	u32 stream_ms;
 
-	stream_ms = jiffies_to_msecs(get_jiffies_64() - ctx->capture_streamon_jiffies);
+	if (!stable_output) {
+		stream_ms = jiffies_to_msecs(get_jiffies_64() - ctx->capture_streamon_jiffies);
 
-	scnprintf(buf, bufsz,
-		  "stream time: %02d:%02d:%02d:%03d sequence:%u timestamp:%lld field:%s",
-		  (stream_ms / (60 * 60 * 1000)) % 24,
-		  (stream_ms / (60 * 1000)) % 60,
-		  (stream_ms / 1000) % 60,
-		  stream_ms % 1000,
-		  run->dst->sequence,
-		  run->dst->vb2_buf.timestamp,
-		  (run->dst->field == V4L2_FIELD_ALTERNATE) ?
-		  (run->dst->field == V4L2_FIELD_TOP ?
-		  " top" : " bottom") : "none");
+		scnprintf(buf, bufsz,
+			  "stream time: %02d:%02d:%02d:%03d sequence:%u timestamp:%lld field:%s",
+			  (stream_ms / (60 * 60 * 1000)) % 24,
+			  (stream_ms / (60 * 1000)) % 60,
+			  (stream_ms / 1000) % 60,
+			  stream_ms % 1000,
+			  run->dst->sequence,
+			  run->dst->vb2_buf.timestamp,
+			  (run->dst->field == V4L2_FIELD_ALTERNATE) ?
+			  (run->dst->field == V4L2_FIELD_TOP ?
+			  " top" : " bottom") : "none");
+	} else {
+		scnprintf(buf, bufsz,
+			  "sequence:%u timestamp:%lld field:%s",
+			  run->dst->sequence,
+			  run->dst->vb2_buf.timestamp,
+			  (run->dst->field == V4L2_FIELD_ALTERNATE) ?
+			  (run->dst->field == V4L2_FIELD_TOP ?
+			  " top" : " bottom") : "none");
+
+	}
 }
 
 static void visl_tpg_fill(struct visl_ctx *ctx, struct visl_run *run)
@@ -244,15 +255,17 @@ static void visl_tpg_fill(struct visl_ctx *ctx, struct visl_run *run)
 	frame_dprintk(ctx->dev, run->dst->sequence, "");
 	line++;
 
-	visl_get_ref_frames(ctx, buf, TPG_STR_BUF_SZ, run);
+	if (!stable_output) {
+		visl_get_ref_frames(ctx, buf, TPG_STR_BUF_SZ, run);
 
-	while ((line_str = strsep(&tmp, "\n")) && strlen(line_str)) {
-		tpg_gen_text(&ctx->tpg, basep, line++ * line_height, 16, line_str);
-		frame_dprintk(ctx->dev, run->dst->sequence, "%s\n", line_str);
+		while ((line_str = strsep(&tmp, "\n")) && strlen(line_str)) {
+			tpg_gen_text(&ctx->tpg, basep, line++ * line_height, 16, line_str);
+			frame_dprintk(ctx->dev, run->dst->sequence, "%s\n", line_str);
+		}
+
+		frame_dprintk(ctx->dev, run->dst->sequence, "");
+		line++;
 	}
-
-	frame_dprintk(ctx->dev, run->dst->sequence, "");
-	line++;
 
 	scnprintf(buf,
 		  TPG_STR_BUF_SZ,
@@ -280,28 +293,30 @@ static void visl_tpg_fill(struct visl_ctx *ctx, struct visl_run *run)
 		frame_dprintk(ctx->dev, run->dst->sequence, "%s\n", buf);
 	}
 
-	line++;
-	frame_dprintk(ctx->dev, run->dst->sequence, "");
-	scnprintf(buf, TPG_STR_BUF_SZ, "Output queue status:");
-	tpg_gen_text(&ctx->tpg, basep, line++ * line_height, 16, buf);
-	frame_dprintk(ctx->dev, run->dst->sequence, "%s\n", buf);
+	if (!stable_output) {
+		line++;
+		frame_dprintk(ctx->dev, run->dst->sequence, "");
+		scnprintf(buf, TPG_STR_BUF_SZ, "Output queue status:");
+		tpg_gen_text(&ctx->tpg, basep, line++ * line_height, 16, buf);
+		frame_dprintk(ctx->dev, run->dst->sequence, "%s\n", buf);
 
-	len = 0;
-	for (i = 0; i < out_q->num_buffers; i++) {
-		char entry[] = "index: %u, state: %s, request_fd: %d, ";
-		u32 old_len = len;
-		char *q_status = visl_get_vb2_state(out_q->bufs[i]->state);
+		len = 0;
+		for (i = 0; i < out_q->num_buffers; i++) {
+			char entry[] = "index: %u, state: %s, request_fd: %d, ";
+			u32 old_len = len;
+			char *q_status = visl_get_vb2_state(out_q->bufs[i]->state);
 
-		len += scnprintf(&buf[len], TPG_STR_BUF_SZ - len,
-				 entry, i, q_status,
-				 to_vb2_v4l2_buffer(out_q->bufs[i])->request_fd);
+			len += scnprintf(&buf[len], TPG_STR_BUF_SZ - len,
+					 entry, i, q_status,
+					 to_vb2_v4l2_buffer(out_q->bufs[i])->request_fd);
 
-		len += visl_fill_bytesused(to_vb2_v4l2_buffer(out_q->bufs[i]),
-					   &buf[len],
-					   TPG_STR_BUF_SZ - len);
+			len += visl_fill_bytesused(to_vb2_v4l2_buffer(out_q->bufs[i]),
+						   &buf[len],
+						   TPG_STR_BUF_SZ - len);
 
-		tpg_gen_text(&ctx->tpg, basep, line++ * line_height, 16, &buf[old_len]);
-		frame_dprintk(ctx->dev, run->dst->sequence, "%s", &buf[old_len]);
+			tpg_gen_text(&ctx->tpg, basep, line++ * line_height, 16, &buf[old_len]);
+			frame_dprintk(ctx->dev, run->dst->sequence, "%s", &buf[old_len]);
+		}
 	}
 
 	line++;
@@ -333,25 +348,27 @@ static void visl_tpg_fill(struct visl_ctx *ctx, struct visl_run *run)
 		frame_dprintk(ctx->dev, run->dst->sequence, "%s\n", buf);
 	}
 
-	line++;
-	frame_dprintk(ctx->dev, run->dst->sequence, "");
-	scnprintf(buf, TPG_STR_BUF_SZ, "Capture queue status:");
-	tpg_gen_text(&ctx->tpg, basep, line++ * line_height, 16, buf);
-	frame_dprintk(ctx->dev, run->dst->sequence, "%s\n", buf);
+	if (!stable_output) {
+		line++;
+		frame_dprintk(ctx->dev, run->dst->sequence, "");
+		scnprintf(buf, TPG_STR_BUF_SZ, "Capture queue status:");
+		tpg_gen_text(&ctx->tpg, basep, line++ * line_height, 16, buf);
+		frame_dprintk(ctx->dev, run->dst->sequence, "%s\n", buf);
 
-	len = 0;
-	for (i = 0; i < cap_q->num_buffers; i++) {
-		u32 old_len = len;
-		char *q_status = visl_get_vb2_state(cap_q->bufs[i]->state);
+		len = 0;
+		for (i = 0; i < cap_q->num_buffers; i++) {
+			u32 old_len = len;
+			char *q_status = visl_get_vb2_state(cap_q->bufs[i]->state);
 
-		len += scnprintf(&buf[len], TPG_STR_BUF_SZ - len,
-				 "index: %u, status: %s, timestamp: %llu, is_held: %d",
-				 cap_q->bufs[i]->index, q_status,
-				 cap_q->bufs[i]->timestamp,
-				 to_vb2_v4l2_buffer(cap_q->bufs[i])->is_held);
+			len += scnprintf(&buf[len], TPG_STR_BUF_SZ - len,
+					 "index: %u, status: %s, timestamp: %llu, is_held: %d",
+					 cap_q->bufs[i]->index, q_status,
+					 cap_q->bufs[i]->timestamp,
+					 to_vb2_v4l2_buffer(cap_q->bufs[i])->is_held);
 
-		tpg_gen_text(&ctx->tpg, basep, line++ * line_height, 16, &buf[old_len]);
-		frame_dprintk(ctx->dev, run->dst->sequence, "%s", &buf[old_len]);
+			tpg_gen_text(&ctx->tpg, basep, line++ * line_height, 16, &buf[old_len]);
+			frame_dprintk(ctx->dev, run->dst->sequence, "%s", &buf[old_len]);
+		}
 	}
 }
 
