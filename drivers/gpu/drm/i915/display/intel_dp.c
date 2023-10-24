@@ -2950,6 +2950,24 @@ intel_dp_sink_set_dsc_decompression(struct intel_connector *connector,
 			    str_enable_disable(enable));
 }
 
+static void
+intel_dp_sink_set_dsc_passthrough(const struct intel_connector *connector,
+				  bool enable)
+{
+	struct drm_i915_private *i915 = to_i915(connector->base.dev);
+	struct drm_dp_aux *aux = connector->port ?
+				 connector->port->passthrough_aux : NULL;
+
+	if (!aux)
+		return;
+
+	if (drm_dp_dpcd_writeb(aux, DP_DSC_PASSTHROUGH_EN,
+			       enable ? DP_DSC_PASSTHROUGH_EN : 0) < 0)
+		drm_dbg_kms(&i915->drm,
+			    "Failed to %s sink compression passthrough state\n",
+			    str_enable_disable(enable));
+}
+
 void intel_dp_sink_set_decompression_state(struct intel_connector *connector,
 					   const struct intel_crtc_state *crtc_state,
 					   bool enable)
@@ -2962,7 +2980,13 @@ void intel_dp_sink_set_decompression_state(struct intel_connector *connector,
 	if (drm_WARN_ON(&i915->drm, !connector->dp.dsc_decompression_aux))
 		return;
 
-	intel_dp_sink_set_dsc_decompression(connector, enable);
+	if (enable) {
+		intel_dp_sink_set_dsc_passthrough(connector, true);
+		intel_dp_sink_set_dsc_decompression(connector, true);
+	} else {
+		intel_dp_sink_set_dsc_decompression(connector, false);
+		intel_dp_sink_set_dsc_passthrough(connector, false);
+	}
 }
 
 static void
