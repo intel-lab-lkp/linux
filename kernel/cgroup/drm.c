@@ -97,6 +97,9 @@ void drmcgroup_client_open(struct drm_file *file_priv)
 {
 	struct drm_cgroup_state *drmcs;
 
+	if (!file_priv->minor->dev->driver->cg_ops)
+		return;
+
 	drmcs = css_to_drmcs(task_get_css(current, drm_cgrp_id));
 
 	mutex_lock(&drmcg_mutex);
@@ -112,6 +115,9 @@ void drmcgroup_client_close(struct drm_file *file_priv)
 
 	drmcs = css_to_drmcs(file_priv->__css);
 
+	if (!file_priv->minor->dev->driver->cg_ops)
+		return;
+
 	mutex_lock(&drmcg_mutex);
 	list_del(&file_priv->clink);
 	file_priv->__css = NULL;
@@ -125,6 +131,9 @@ void drmcgroup_client_migrate(struct drm_file *file_priv)
 {
 	struct drm_cgroup_state *src, *dst;
 	struct cgroup_subsys_state *old;
+
+	if (!file_priv->minor->dev->driver->cg_ops)
+		return;
 
 	mutex_lock(&drmcg_mutex);
 
