@@ -5921,12 +5921,21 @@ next_op:
 		fallthrough;
 	case CEPH_SPARSE_READ_DATA:
 		if (sr->sr_index >= count) {
+			if (sr->sr_datalen && count) {
+				pr_warn_ratelimited("sr_datalen %d sr_index %d count %d\n",
+						    sr->sr_datalen, sr->sr_index,
+						    count);
+				WARN_ON_ONCE(sr->sr_datalen);
+			}
+
 			sr->sr_state = CEPH_SPARSE_READ_HDR;
 			goto next_op;
 		}
 
 		eoff = sr->sr_extent[sr->sr_index].off;
 		elen = sr->sr_extent[sr->sr_index].len;
+
+		sr->sr_datalen -= elen;
 
 		dout("[%d] ext %d off 0x%llx len 0x%llx\n",
 		     o->o_osd, sr->sr_index, eoff, elen);
