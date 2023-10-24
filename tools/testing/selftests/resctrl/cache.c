@@ -84,9 +84,8 @@ static int reset_enable_llc_perf(pid_t pid, int cpu_no)
  *
  * Return: =0 on success.  <0 on failure.
  */
-static int get_llc_perf(unsigned long *llc_perf_miss)
+static int get_llc_perf(__u64 *llc_perf_miss)
 {
-	__u64 total_misses;
 	int ret;
 
 	/* Stop counters after one span to get miss rate */
@@ -99,8 +98,7 @@ static int get_llc_perf(unsigned long *llc_perf_miss)
 		return -1;
 	}
 
-	total_misses = rf_cqm.values[0].value;
-	*llc_perf_miss = total_misses;
+	*llc_perf_miss = rf_cqm.values[0].value;
 
 	return 0;
 }
@@ -148,14 +146,12 @@ static int get_llc_occu_resctrl(unsigned long *llc_occupancy)
  *
  * Return:		0 on success. non-zero on failure.
  */
-static int print_results_cache(char *filename, int bm_pid,
-			       unsigned long llc_value)
+static int print_results_cache(char *filename, int bm_pid, __u64 llc_value)
 {
 	FILE *fp;
 
 	if (strcmp(filename, "stdio") == 0 || strcmp(filename, "stderr") == 0) {
-		printf("Pid: %d \t LLC_value: %lu\n", bm_pid,
-		       llc_value);
+		printf("Pid: %d \t LLC_value: %llu\n", bm_pid, llc_value);
 	} else {
 		fp = fopen(filename, "a");
 		if (!fp) {
@@ -163,7 +159,7 @@ static int print_results_cache(char *filename, int bm_pid,
 
 			return errno;
 		}
-		fprintf(fp, "Pid: %d \t llc_value: %lu\n", bm_pid, llc_value);
+		fprintf(fp, "Pid: %d \t llc_value: %llu\n", bm_pid, llc_value);
 		fclose(fp);
 	}
 
@@ -172,7 +168,7 @@ static int print_results_cache(char *filename, int bm_pid,
 
 static int measure_llc_perf(struct resctrl_val_param *param, int bm_pid)
 {
-	unsigned long llc_perf_miss = 0;
+	__u64 llc_perf_miss = 0;
 	int ret;
 
 	/*
@@ -273,11 +269,10 @@ pe_close:
  * @cache_span:		cache span
  * @lines:		cache span in lines or bytes
  */
-void show_cache_info(int no_of_bits, unsigned long avg_llc_val,
-		     size_t cache_span, bool lines)
+void show_cache_info(int no_of_bits, __u64 avg_llc_val, size_t cache_span, bool lines)
 {
 	ksft_print_msg("Number of bits: %d\n", no_of_bits);
-	ksft_print_msg("Average LLC val: %lu\n", avg_llc_val);
+	ksft_print_msg("Average LLC val: %llu\n", avg_llc_val);
 	ksft_print_msg("Cache span (%s): %zu\n", !lines ? "bytes" : "lines",
 		       cache_span);
 }
