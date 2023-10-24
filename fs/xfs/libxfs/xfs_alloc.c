@@ -2275,12 +2275,16 @@ xfs_alloc_min_freelist(
 
 	ASSERT(mp->m_alloc_maxlevels > 0);
 
-	/* space needed by-bno freespace btree */
+	/*
+	 * space needed by-bno freespace btree: one per level that may be split
+	 * by an insert, plus one more for a leaf split that may be necessary to
+	 * refill the AGFL
+	 */
 	min_free = min_t(unsigned int, levels[XFS_BTNUM_BNOi] + 1,
-				       mp->m_alloc_maxlevels);
-	/* space needed by-size freespace btree */
+				       mp->m_alloc_maxlevels) + 1;
+	/* space needed by-size freespace btree, same as above */
 	min_free += min_t(unsigned int, levels[XFS_BTNUM_CNTi] + 1,
-				       mp->m_alloc_maxlevels);
+				       mp->m_alloc_maxlevels) + 1;
 	/* space needed reverse mapping used space btree */
 	if (xfs_has_rmapbt(mp))
 		min_free += min_t(unsigned int, levels[XFS_BTNUM_RMAPi] + 1,
