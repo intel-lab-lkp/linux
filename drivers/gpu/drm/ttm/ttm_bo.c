@@ -936,7 +936,7 @@ EXPORT_SYMBOL(ttm_bo_validate);
  * @ctx: TTM operation context for memory allocation.
  * @sg: Scatter-gather table.
  * @resv: Pointer to a dma_resv, or NULL to let ttm allocate one.
- * @destroy: Destroy function. Use NULL for kfree().
+ * @destroy: Destroy function.
  *
  * This function initializes a pre-allocated struct ttm_buffer_object.
  * As this object may be part of a larger structure, this function,
@@ -1031,7 +1031,7 @@ EXPORT_SYMBOL(ttm_bo_init_reserved);
  * GEM user interface.
  * @sg: Scatter-gather table.
  * @resv: Pointer to a dma_resv, or NULL to let ttm allocate one.
- * @destroy: Destroy function. Use NULL for kfree().
+ * @destroy: Destroy function.
  *
  * This function initializes a pre-allocated struct ttm_buffer_object.
  * As this object may be part of a larger structure, this function,
