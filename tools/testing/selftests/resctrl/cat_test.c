@@ -93,17 +93,14 @@ int cat_perf_miss_val(int cpu_no, int n, char *cache_type)
 	int ret, pipefd[2], sibling_cpu_no;
 	unsigned long cache_size = 0;
 	unsigned long long_mask;
-	char cbm_mask[256];
 	int count_of_bits;
 	char pipe_message;
 	size_t span;
 
 	/* Get default cbm mask for L3/L2 cache */
-	ret = get_cbm_mask(cache_type, cbm_mask);
+	ret = get_cbm_mask(cache_type, &long_mask);
 	if (ret)
 		return ret;
-
-	long_mask = strtoul(cbm_mask, NULL, 16);
 
 	/* Get L3/L2 cache size */
 	ret = get_cache_size(cpu_no, cache_type, &cache_size);
