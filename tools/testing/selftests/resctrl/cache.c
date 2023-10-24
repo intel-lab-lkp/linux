@@ -29,25 +29,6 @@ static void initialize_perf_event_attr(void)
 	pea_llc_miss.disabled = 1;
 }
 
-static void ioctl_perf_event_ioc_reset_enable(void)
-{
-	ioctl(fd_lm, PERF_EVENT_IOC_RESET, 0);
-	ioctl(fd_lm, PERF_EVENT_IOC_ENABLE, 0);
-}
-
-static int perf_event_open_llc_miss(pid_t pid, int cpu_no)
-{
-	fd_lm = perf_event_open(&pea_llc_miss, pid, cpu_no, -1,
-				PERF_FLAG_FD_CLOEXEC);
-	if (fd_lm == -1) {
-		perror("Error opening leader");
-		ctrlc_handler(0, NULL, NULL);
-		return -1;
-	}
-
-	return 0;
-}
-
 static void initialize_llc_perf(void)
 {
 	memset(&pea_llc_miss, 0, sizeof(struct perf_event_attr));
@@ -63,42 +44,16 @@ static void initialize_llc_perf(void)
 
 static int reset_enable_llc_perf(pid_t pid, int cpu_no)
 {
-	int ret = 0;
-
-	ret = perf_event_open_llc_miss(pid, cpu_no);
-	if (ret < 0)
-		return ret;
-
-	/* Start counters to log values */
-	ioctl_perf_event_ioc_reset_enable();
-
-	return 0;
-}
-
-/*
- * get_llc_perf:	llc cache miss through perf events
- * @llc_perf_miss:	LLC miss counter that is filled on success
- *
- * Perf events like HW_CACHE_MISSES could be used to validate number of
- * cache lines allocated.
- *
- * Return: =0 on success.  <0 on failure.
- */
-static int get_llc_perf(__u64 *llc_perf_miss)
-{
-	int ret;
-
-	/* Stop counters after one span to get miss rate */
-
-	ioctl(fd_lm, PERF_EVENT_IOC_DISABLE, 0);
-
-	ret = read(fd_lm, &rf_cqm, sizeof(struct read_format));
-	if (ret == -1) {
-		perror("Could not get llc misses through perf");
+	fd_lm = perf_event_open(&pea_llc_miss, pid, cpu_no, -1, PERF_FLAG_FD_CLOEXEC);
+	if (fd_lm == -1) {
+		perror("Error opening leader");
+		ctrlc_handler(0, NULL, NULL);
 		return -1;
 	}
 
-	*llc_perf_miss = rf_cqm.values[0].value;
+	/* Start counters to log values */
+	ioctl(fd_lm, PERF_EVENT_IOC_RESET, 0);
+	ioctl(fd_lm, PERF_EVENT_IOC_ENABLE, 0);
 
 	return 0;
 }
@@ -166,20 +121,29 @@ static int print_results_cache(char *filename, int bm_pid, __u64 llc_value)
 	return 0;
 }
 
+/*
+ * measure_llc_perf:	measure perf events
+ * @bm_pid:	child pid that runs benchmark
+ *
+ * Measure things like cache misses from perf events.
+ *
+ * Return: =0 on success.  <0 on failure.
+ */
 static int measure_llc_perf(struct resctrl_val_param *param, int bm_pid)
 {
-	__u64 llc_perf_miss = 0;
 	int ret;
 
-	/*
-	 * Measure cache miss from perf.
-	 */
-	ret = get_llc_perf(&llc_perf_miss);
-	if (ret < 0)
-		return ret;
+	/* Stop counters after one span to get miss rate */
+	ioctl(fd_lm, PERF_EVENT_IOC_DISABLE, 0);
 
-	ret = print_results_cache(param->filename, bm_pid, llc_perf_miss);
-	return ret;
+	ret = read(fd_lm, &rf_cqm, sizeof(struct read_format));
+	close(fd_lm);
+	if (ret == -1) {
+		perror("Could not get perf value");
+		return -1;
+	}
+
+	return print_results_cache(param->filename, bm_pid, rf_cqm.values[0].value);
 }
 
 int measure_llc_resctrl(struct resctrl_val_param *param, int bm_pid)
