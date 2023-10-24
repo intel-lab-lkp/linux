@@ -1062,6 +1062,10 @@ int mlx5e_poll_ico_cq(struct mlx5e_cq *cq, int budget)
 				mlx5e_ktls_handle_get_psv_completion(wi, sq);
 				break;
 #endif
+#ifdef CONFIG_MLX5_EN_NVMEOTCP
+			case MLX5E_ICOSQ_WQE_UMR_NVMEOTCP:
+				break;
+#endif
 			default:
 				netdev_WARN_ONCE(cq->netdev,
 						 "Bad WQE type in ICOSQ WQE info: 0x%x\n",
