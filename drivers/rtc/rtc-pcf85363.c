@@ -110,9 +110,17 @@
 
 #define NVRAM_SIZE	0x40
 
+enum pcf85363_hiz_output_t {
+	PCF85363_HIZ_OFF,
+	PCF85363_HIZ_ON,
+	PCF85363_HIZ_SLEEP,
+};
+
 struct pcf85363 {
 	struct rtc_device	*rtc;
 	struct regmap		*regmap;
+
+	enum pcf85363_hiz_output_t hiz_output;
 };
 
 struct pcf85x63_config {
@@ -403,6 +411,7 @@ static int pcf85363_probe(struct i2c_client *client)
 	};
 	int ret, i, err;
 	bool wakeup_source;
+	const char *hiz_output = NULL;
 
 	if (data)
 		config = data;
@@ -433,9 +442,32 @@ static int pcf85363_probe(struct i2c_client *client)
 	pcf85363->rtc->range_min = RTC_TIMESTAMP_BEGIN_2000;
 	pcf85363->rtc->range_max = RTC_TIMESTAMP_END_2099;
 
+	if (device_property_present(&client->dev, "hiz-output")) {
+		ret = device_property_read_string(&client->dev, "hiz-output",
+						  &hiz_output);
+		if (ret)
+			return ret;
+
+		if (!strcmp(hiz_output, "enabled")) {
+			pcf85363->hiz_output = PCF85363_HIZ_ON;
+		} else if (!strcmp(hiz_output, "sleep")) {
+			pcf85363->hiz_output = PCF85363_HIZ_SLEEP;
+		} else if (!strcmp(hiz_output, "disabled")) {
+			pcf85363->hiz_output = PCF85363_HIZ_OFF;
+		} else {
+			dev_warn(&client->dev, "Unknown hiz-output: %s. Assuming disabled",
+				 hiz_output);
+			pcf85363->hiz_output = PCF85363_HIZ_OFF;
+		}
+	} else {
+		pcf85363->hiz_output = PCF85363_HIZ_OFF;
+	}
 	wakeup_source = device_property_read_bool(&client->dev,
 						  "wakeup-source");
-	if (client->irq > 0 || wakeup_source) {
+	if (pcf85363->hiz_output != PCF85363_HIZ_OFF) {
+		regmap_update_bits(pcf85363->regmap, CTRL_PIN_IO,
+				   PIN_IO_INTAPM, PIN_IO_INTA_HIZ);
+	} else if (client->irq > 0 || wakeup_source) {
 		regmap_write(pcf85363->regmap, CTRL_FLAGS, 0);
 		regmap_update_bits(pcf85363->regmap, CTRL_PIN_IO,
 				   PIN_IO_INTAPM, PIN_IO_INTA_OUT);
@@ -474,6 +506,31 @@ static int pcf85363_probe(struct i2c_client *client)
 	return ret;
 }
 
+#ifdef CONFIG_PM_SLEEP
+static int pcf85363_suspend(struct device *dev)
+{
+	struct pcf85363 *pcf85363 = dev_get_drvdata(dev);
+
+	if (pcf85363->hiz_output == PCF85363_HIZ_SLEEP)
+		regmap_update_bits(pcf85363->regmap, CTRL_PIN_IO, PIN_IO_INTAPM,
+				   device_may_wakeup(dev) ?  PIN_IO_INTA_OUT :
+				   PIN_IO_INTA_CLK);
+
+	return 0;
+}
+
+static int pcf85363_resume(struct device *dev)
+{
+	struct pcf85363 *pcf85363 = dev_get_drvdata(dev);
+
+	if (pcf85363->hiz_output == PCF85363_HIZ_SLEEP)
+		regmap_update_bits(pcf85363->regmap, CTRL_PIN_IO,
+				   PIN_IO_INTAPM, PIN_IO_INTA_HIZ);
+
+	return 0;
+}
+#endif
+
 static const __maybe_unused struct of_device_id dev_ids[] = {
 	{ .compatible = "nxp,pcf85263", .data = &pcf_85263_config },
 	{ .compatible = "nxp,pcf85363", .data = &pcf_85363_config },
@@ -481,9 +538,12 @@ static const __maybe_unused struct of_device_id dev_ids[] = {
 };
 MODULE_DEVICE_TABLE(of, dev_ids);
 
+static SIMPLE_DEV_PM_OPS(pcf85363_pm_ops, pcf85363_suspend, pcf85363_resume);
+
 static struct i2c_driver pcf85363_driver = {
 	.driver	= {
 		.name	= "pcf85363",
+		.pm	= &pcf85363_pm_ops,
 		.of_match_table = of_match_ptr(dev_ids),
 	},
 	.probe = pcf85363_probe,
