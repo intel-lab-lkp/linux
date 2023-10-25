@@ -827,7 +827,8 @@ EXPORT_SYMBOL_GPL(bcm_phy_cable_test_get_status_rdb);
 					 WAKE_MCAST | \
 					 WAKE_BCAST | \
 					 WAKE_MAGIC | \
-					 WAKE_MAGICSECURE)
+					 WAKE_MAGICSECURE | \
+					 WAKE_FILTER)
 
 int bcm_phy_set_wol(struct phy_device *phydev, struct ethtool_wolinfo *wol)
 {
@@ -880,6 +881,12 @@ int bcm_phy_set_wol(struct phy_device *phydev, struct ethtool_wolinfo *wol)
 	ctl &= ~(BCM54XX_WOL_MASK_MODE_MASK << BCM54XX_WOL_MASK_MODE_SHIFT);
 	ctl &= ~BCM54XX_WOL_DIR_PKT_EN;
 	ctl &= ~(BCM54XX_WOL_SECKEY_OPT_MASK << BCM54XX_WOL_SECKEY_OPT_SHIFT);
+
+	/* For WAKE_FILTER, we have already programmed the desired MAC DA
+	 * and associated mask by the time we get there.
+	 */
+	if (wol->wolopts & WAKE_FILTER)
+		goto program_ctl;
 
 	/* When using WAKE_MAGIC, we program the magic pattern filter to match
 	 * the device's MAC address and we accept any MAC DA in the Ethernet
@@ -935,6 +942,7 @@ int bcm_phy_set_wol(struct phy_device *phydev, struct ethtool_wolinfo *wol)
 			return ret;
 	}
 
+program_ctl:
 	if (wol->wolopts & WAKE_MAGICSECURE) {
 		ctl |= BCM54XX_WOL_SECKEY_OPT_6B <<
 		       BCM54XX_WOL_SECKEY_OPT_SHIFT;
@@ -998,6 +1006,16 @@ void bcm_phy_get_wol(struct phy_device *phydev, struct ethtool_wolinfo *wol)
 
 	if (!(ctl & BCM54XX_WOL_EN))
 		return;
+
+	ret = bcm_phy_read_exp(phydev, BCM54XX_WOL_SEC_KEY_8B);
+	if (ret < 0)
+		return;
+
+	/* Mutualy exclusive with other modes */
+	if (ret) {
+		wol->wolopts |= WAKE_FILTER;
+		return;
+	}
 
 	for (i = 0; i < sizeof(da) / 2; i++) {
 		ret = bcm_phy_read_exp(phydev,
@@ -1065,6 +1083,181 @@ int bcm_phy_led_brightness_set(struct phy_device *phydev,
 	return bcm_phy_write_shadow(phydev, reg, ret);
 }
 EXPORT_SYMBOL_GPL(bcm_phy_led_brightness_set);
+
+static int bcm_phy_get_rule(struct phy_device *phydev,
+			    struct ethtool_rxnfc *nfc,
+			    int loc)
+{
+	u8 da[ETH_ALEN];
+	unsigned int i;
+	int ret;
+
+	if (loc != 0)
+		return -EINVAL;
+
+	memset(nfc, 0, sizeof(*nfc));
+	nfc->flow_type = ETHER_FLOW;
+	nfc->fs.flow_type = ETHER_FLOW;
+
+	for (i = 0; i < sizeof(da) / 2; i++) {
+		ret = bcm_phy_read_exp(phydev,
+				       BCM54XX_WOL_MPD_DATA2(2 - i));
+		if (ret < 0)
+			return ret;
+
+		da[i * 2] = ret >> 8;
+		da[i * 2 + 1] = ret & 0xff;
+	}
+	ether_addr_copy(nfc->fs.h_u.ether_spec.h_dest, da);
+
+	for (i = 0; i < sizeof(da) / 2; i++) {
+		ret = bcm_phy_read_exp(phydev,
+				       BCM54XX_WOL_MASK(2 - i));
+		if (ret < 0)
+			return ret;
+
+		da[i * 2] = ~(ret >> 8);
+		da[i * 2 + 1] = ~(ret & 0xff);
+	}
+	ether_addr_copy(nfc->fs.m_u.ether_spec.h_dest, da);
+
+	ret = bcm_phy_read_exp(phydev, BCM54XX_WOL_INNER_PROTO);
+	if (ret < 0)
+		return ret;
+
+	nfc->fs.h_u.ether_spec.h_proto = be16_to_cpu(ret);
+
+	nfc->fs.ring_cookie = RX_CLS_FLOW_WAKE;
+	nfc->fs.location = 0;
+
+	return 0;
+}
+
+static int bcm_phy_set_rule(struct phy_device *phydev,
+			    struct ethtool_rxnfc *nfc)
+{
+	int ret = -EOPNOTSUPP;
+	unsigned int i;
+	__be16 h_proto;
+	const u8 *da;
+
+	/* We support only matching on the MAC DA with a custom mask and
+	 * optionally with a specific Ethernet type, reject anything else.
+	 */
+	if (nfc->fs.ring_cookie != RX_CLS_FLOW_WAKE ||
+	    (nfc->fs.location != 0 &&
+	     nfc->fs.location != RX_CLS_LOC_ANY &&
+	     nfc->fs.location != RX_CLS_LOC_FIRST) ||
+	    nfc->fs.flow_type != ETHER_FLOW ||
+	    !is_zero_ether_addr(nfc->fs.h_u.ether_spec.h_source) ||
+	    !is_zero_ether_addr(nfc->fs.m_u.ether_spec.h_source))
+		return ret;
+
+	ret = bcm_phy_read_exp(phydev, BCM54XX_WOL_SEC_KEY_8B);
+	if (ret < 0)
+		return ret;
+
+	if (ret)
+		return -EBUSY;
+
+	if (nfc->fs.location == RX_CLS_LOC_ANY ||
+	    nfc->fs.location == RX_CLS_LOC_FIRST)
+		nfc->fs.location = 0;
+
+	da = nfc->fs.h_u.ether_spec.h_dest;
+	for (i = 0; i < ETH_ALEN / 2; i++) {
+		ret = bcm_phy_write_exp(phydev,
+					BCM54XX_WOL_MPD_DATA2(2 - i),
+					da[i * 2] << 8 | da[i * 2 + 1]);
+		if (ret < 0)
+			return ret;
+	}
+
+	da = nfc->fs.m_u.ether_spec.h_dest;
+	for (i = 0; i < ETH_ALEN / 2; i++) {
+		ret = bcm_phy_write_exp(phydev,
+					BCM54XX_WOL_MASK(2 - i),
+					da[i * 2] << 8 | da[i * 2 + 1]);
+		if (ret < 0)
+			return ret;
+	}
+
+	/* Restore default inner protocol field unless overridden by the flow
+	 * specification.
+	 */
+	h_proto = be16_to_cpu(nfc->fs.h_u.ether_spec.h_proto);
+	if (!h_proto)
+		h_proto = ETH_P_8021Q;
+
+	ret = bcm_phy_write_exp(phydev, BCM54XX_WOL_INNER_PROTO,
+				h_proto);
+	if (ret)
+		return ret;
+
+	/* Use BCM54XX_WOL_SEC_KEY_8B as a scratch register to record
+	 * that we installed a filter rule.
+	 */
+	return bcm_phy_write_exp(phydev, BCM54XX_WOL_SEC_KEY_8B, 1);
+}
+
+int bcm_phy_get_rxnfc(struct phy_device *phydev,
+		      struct ethtool_rxnfc *cmd, u32 *rule_locs)
+{
+	int err = 0, rule_cnt = 0;
+
+	err = bcm_phy_read_exp(phydev, BCM54XX_WOL_SEC_KEY_8B);
+	if (err < 0)
+		return err;
+
+	rule_cnt = err;
+	err = 0;
+
+	switch (cmd->cmd) {
+	case ETHTOOL_GRXCLSRLCNT:
+		cmd->rule_cnt = rule_cnt;
+		cmd->data = 1 | RX_CLS_LOC_SPECIAL;
+		break;
+	case ETHTOOL_GRXCLSRULE:
+		err = bcm_phy_get_rule(phydev, cmd, cmd->fs.location);
+		break;
+	case ETHTOOL_GRXCLSRLALL:
+		if (rule_cnt)
+			rule_locs[0] = 0;
+		cmd->rule_cnt = rule_cnt;
+		cmd->data = 1;
+		break;
+	default:
+		err = -EOPNOTSUPP;
+		break;
+	}
+
+	return err;
+}
+EXPORT_SYMBOL_GPL(bcm_phy_get_rxnfc);
+
+int bcm_phy_set_rxnfc(struct phy_device *phydev,
+		      struct ethtool_rxnfc *cmd)
+{
+	int err = 0;
+
+	switch (cmd->cmd) {
+	case ETHTOOL_SRXCLSRLINS:
+		err = bcm_phy_set_rule(phydev, cmd);
+		break;
+	case ETHTOOL_SRXCLSRLDEL:
+		if (cmd->fs.location != 0)
+			return err;
+
+		err = bcm_phy_write_exp(phydev, BCM54XX_WOL_SEC_KEY_8B, 0);
+		break;
+	default:
+		err = -EOPNOTSUPP;
+		break;
+	}
+
+	return err;
+}
+EXPORT_SYMBOL_GPL(bcm_phy_set_rxnfc);
 
 MODULE_DESCRIPTION("Broadcom PHY Library");
 MODULE_LICENSE("GPL v2");
