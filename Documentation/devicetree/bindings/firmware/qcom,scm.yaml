@@ -47,6 +47,7 @@ properties:
           - qcom,scm-sc7280
           - qcom,scm-sc8180x
           - qcom,scm-sc8280xp
+          - qcom,scm-sc8380xp
           - qcom,scm-sdm670
           - qcom,scm-sdm845
           - qcom,scm-sdx55
