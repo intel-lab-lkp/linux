@@ -387,3 +387,46 @@ pub enum Either<L, R> {
     /// Constructs an instance of [`Either`] containing a value of type `R`.
     Right(R),
 }
+
+/// (Concurrent) Primitives to interact with C side, which are considered as marked access:
+///
+/// tools/memory-memory/Documentation/access-marking.txt
+
+/// The counter part of C `READ_ONCE()`.
+///
+/// The semantics is exactly the same as `READ_ONCE()`, especially when used for intentional data
+/// races.
+///
+/// # Safety
+///
+/// * `src` must be valid for reads.
+/// * `src` must be properly aligned.
+/// * `src` must point to a properly initialized value of value `T`.
+#[inline(always)]
+pub unsafe fn read_once<T: Copy>(src: *const T) -> T {
+    // SAFETY: the read is valid because of the function's safety requirement, plus the assumption
+    // here is that 1) a volatile pointer dereference in C and 2) a `read_volatile` in Rust have the
+    // same semantics, so this function should have the same behavior as `READ_ONCE()` regarding
+    // data races.
+    unsafe { src.read_volatile() }
+}
+
+/// The counter part of C `WRITE_ONCE()`.
+///
+/// The semantics is exactly the same as `WRITE_ONCE()`, especially when used for intentional data
+/// races.
+///
+/// # Safety
+///
+/// * `dst` must be valid for writes.
+/// * `dst` must be properly aligned.
+#[inline(always)]
+pub unsafe fn write_once<T: Copy>(dst: *mut T, value: T) {
+    // SAFETY: the write is valid because of the function's safety requirement, plus the assumption
+    // here is that 1) a write to a volatile pointer dereference in C and 2) a `write_volatile` in
+    // Rust have the same semantics, so this function should have the same behavior as
+    // `WRITE_ONCE()` regarding data races.
+    unsafe {
+        core::ptr::write_volatile(dst, value);
+    }
+}

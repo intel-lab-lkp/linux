@@ -38,3 +38,5 @@ pub use super::{str::CStr, ThisModule};
 pub use super::init::{InPlaceInit, Init, PinInit};
 
 pub use super::current;
+
+pub use super::types::{read_once, write_once};
