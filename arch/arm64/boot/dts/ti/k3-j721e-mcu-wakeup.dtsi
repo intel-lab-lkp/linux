@@ -34,12 +34,29 @@
 		};
 	};
 
-	mcu_conf: syscon@40f00000 {
-		compatible = "syscon", "simple-mfd";
+	mcu_conf: bus@40f00000 {
+		compatible = "simple-bus";
 		reg = <0x0 0x40f00000 0x0 0x20000>;
 		#address-cells = <1>;
 		#size-cells = <1>;
 		ranges = <0x0 0x0 0x40f00000 0x20000>;
+
+		efuse@200 {
+			compatible = "socionext,uniphier-efuse";
+			#address-cells = <1>;
+			#size-cells = <1>;
+			reg = <0x200 0x40>;
+
+			nvmem-layout {
+				compatible = "fixed-layout";
+				#address-cells = <1>;
+				#size-cells = <1>;
+
+				mac_address: mac@0 {
+					reg = <0x0 0x6>;
+				};
+			};
+		};
 
 		phy_gmii_sel: phy@4040 {
 			compatible = "ti,am654-phy-gmii-sel";
@@ -533,7 +550,8 @@
 				reg = <1>;
 				ti,mac-only;
 				label = "port1";
-				ti,syscon-efuse = <&mcu_conf 0x200>;
+				nvmem-cells = <&mac_address>;
+				nvmem-cell-names = "mac-address";
 				phys = <&phy_gmii_sel 1>;
 			};
 		};
