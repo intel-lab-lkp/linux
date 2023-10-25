@@ -295,11 +295,11 @@ struct swap_info_struct {
 	unsigned int __percpu *cluster_next_cpu; /*percpu index for next allocation */
 	unsigned int __percpu *cpu_next;/*
 					 * Likely next allocation offset. We
-					 * assign a cluster to each CPU, so each
-					 * CPU can allocate swap entry from its
-					 * own cluster and swapout sequentially.
-					 * The purpose is to optimize swapout
-					 * throughput.
+					 * assign a cluster per-order to each
+					 * CPU, so each CPU can allocate swap
+					 * entry from its own cluster and
+					 * swapout sequentially. The purpose is
+					 * to optimize swapout throughput.
 					 */
 	struct rb_root swap_extent_root;/* root of the swap extent rbtree */
 	struct block_device *bdev;	/* swap device or bdev of swap file */
