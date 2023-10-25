@@ -9,16 +9,15 @@ static int mt7915_eeprom_load_precal(struct mt7915_dev *dev)
 {
 	struct mt76_dev *mdev = &dev->mt76;
 	u8 *eeprom = mdev->eeprom.data;
-	u32 val = eeprom[MT_EE_DO_PRE_CAL];
-	u32 offs;
+	u32 offs = is_mt7915(&dev->mt76) ? MT_EE_DO_PRE_CAL : MT_EE_DO_PRE_CAL_V2;
+	u32 val;
 
-	if (!dev->flash_mode)
+	if (!dev->flash_mode || !eeprom[offs])
 		return 0;
 
-	if (val != (MT_EE_WIFI_CAL_DPD | MT_EE_WIFI_CAL_GROUP))
-		return 0;
+	val = mt7915_get_cal_group_size(dev) +
+	      (is_mt7915(&dev->mt76) ? MT_EE_CAL_DPD_SIZE : MT_EE_CAL_DPD_SIZE_V2);
 
-	val = MT_EE_CAL_GROUP_SIZE + MT_EE_CAL_DPD_SIZE;
 	dev->cal = devm_kzalloc(mdev->dev, val, GFP_KERNEL);
 	if (!dev->cal)
 		return -ENOMEM;
