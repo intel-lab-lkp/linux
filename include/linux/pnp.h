@@ -147,12 +147,18 @@ static inline resource_size_t pnp_mem_len(struct pnp_dev *dev,
 }
 
 
-static inline resource_size_t pnp_irq(struct pnp_dev *dev, unsigned int bar)
+static inline int pnp_irq(struct pnp_dev *dev, unsigned int bar)
 {
 	struct resource *res = pnp_get_resource(dev, IORESOURCE_IRQ, bar);
 
-	if (pnp_resource_valid(res))
+	if (pnp_resource_valid(res)) {
+#if IS_ENABLED(CONFIG_ARCH_ACPI_DEFERRED_GSI)
+		if (!pnp_resource_enabled(res))
+			return -EPROBE_DEFER;
+#endif
+
 		return res->start;
+	}
 	return -1;
 }
 
