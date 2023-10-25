@@ -4068,7 +4068,10 @@ next:
 		cur_lblock += nr_pblocks;
 	}
 	ret = nr_extents;
-	*span = 1 + highest_pblock - lowest_pblock;
+	if (lowest_pblock <= highest_pblock)
+		*span = 1 + highest_pblock - lowest_pblock;
+	else
+		*span = 0;
 	if (cur_lblock == 0)
 		cur_lblock = 1;	/* force Empty message */
 	sis->max = cur_lblock;
