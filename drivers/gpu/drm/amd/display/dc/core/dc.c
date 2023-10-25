@@ -528,6 +528,19 @@ dc_stream_forward_dmcu_crc_window(struct dmcu *dmcu,
 		dmcu->funcs->forward_crc_window(dmcu, rect, mux_mapping);
 }
 
+/**
+ * dc_stream_forward_crc_window() - Forward CRC window configuration to DMUB or DMCU.
+ * @stream: The stream state to forward CRC window configuration for.
+ * @rect: Pointer to the rectangle defining the CRC window coordinates.
+ * @is_stop: Flag indicating whether the CRC capture should be stopped.
+
+ * This function is responsible for forwarding the CRC window configuration
+ * for a given stream to either the DMUB or DMCU, depending on their availability.
+
+ * Return:
+ * %true if the CRC window configuration was successfully forwarded;
+ * %false if the stream was not found or CRC forwarding is not supported.
+ */
 bool
 dc_stream_forward_crc_window(struct dc_stream_state *stream,
 		struct rect *rect, bool is_stop)
