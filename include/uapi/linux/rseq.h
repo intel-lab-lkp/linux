@@ -10,8 +10,12 @@
  * Copyright (c) 2015-2018 Mathieu Desnoyers <mathieu.desnoyers@efficios.com>
  */
 
-#include <linux/types.h>
-#include <asm/byteorder.h>
+#ifdef __KERNEL__
+# include <linux/types.h>
+#else
+# include <ctype.h>
+# include <asm/types.h>
+#endif
 
 enum rseq_cpu_id_state {
 	RSEQ_CPU_ID_UNINITIALIZED		= -1,
