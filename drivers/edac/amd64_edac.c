@@ -996,11 +996,18 @@ static struct local_node_map {
 #define LNTM_NODE_COUNT				GENMASK(27, 16)
 #define LNTM_BASE_NODE_ID			GENMASK(11, 0)
 
-static int gpu_get_node_map(void)
+static int gpu_get_node_map(struct amd64_pvt *pvt)
 {
 	struct pci_dev *pdev;
 	int ret;
 	u32 tmp;
+
+	/* Mapping of nodes from hardware-provided AMD Node ID to a Linux logical
+	 * one is applicable for MI200 models.
+	 * Therefore return early for other heterogeneous systems.
+	 */
+	if (pvt->F3->device != PCI_DEVICE_ID_AMD_MI200_DF_F3)
+		return 0;
 
 	/*
 	 * Node ID 0 is reserved for CPUs.
@@ -3851,7 +3858,7 @@ static void gpu_init_csrows(struct mem_ctl_info *mci)
 
 			dimm->nr_pages = gpu_get_csrow_nr_pages(pvt, umc, cs);
 			dimm->edac_mode = EDAC_SECDED;
-			dimm->mtype = MEM_HBM2;
+			dimm->mtype = pvt->dram_type;
 			dimm->dtype = DEV_X16;
 			dimm->grain = 64;
 		}
@@ -3880,6 +3887,9 @@ static bool gpu_ecc_enabled(struct amd64_pvt *pvt)
 	return true;
 }
 
+/* Base address used for channels selection on MI200 GPUs */
+static u32 gpu_umc_base = 0x50000;
+
 static inline u32 gpu_get_umc_base(u8 umc, u8 channel)
 {
 	/*
@@ -3893,13 +3903,33 @@ static inline u32 gpu_get_umc_base(u8 umc, u8 channel)
 	 * On GPU nodes channels are selected in 3rd nibble
 	 * HBM chX[3:0]= [Y  ]5X[3:0]000;
 	 * HBM chX[7:4]= [Y+1]5X[3:0]000
+	 *
+	 * On MI300 APU nodes, same as GPU nodes but channels are selected
+	 * in the base address of 0x90000
 	 */
 	umc *= 2;
 
 	if (channel >= 4)
 		umc++;
 
-	return 0x50000 + (umc << 20) + ((channel % 4) << 12);
+	return gpu_umc_base + (umc << 20) + ((channel % 4) << 12);
+}
+
+static void gpu_determine_memory_type(struct amd64_pvt *pvt)
+{
+	if (pvt->fam == 0x19) {
+		switch (pvt->model) {
+		case 0x30 ... 0x3F:
+			pvt->dram_type = MEM_HBM2;
+			break;
+		case 0x90 ... 0x9F:
+			pvt->dram_type = MEM_HBM3;
+			break;
+		default:
+			break;
+		}
+	}
+	edac_dbg(1, "  MEM type: %s\n", edac_mem_types[pvt->dram_type]);
 }
 
 static void gpu_read_mc_regs(struct amd64_pvt *pvt)
@@ -3960,7 +3990,7 @@ static int gpu_hw_info_get(struct amd64_pvt *pvt)
 {
 	int ret;
 
-	ret = gpu_get_node_map();
+	ret = gpu_get_node_map(pvt);
 	if (ret)
 		return ret;
 
@@ -3971,6 +4001,7 @@ static int gpu_hw_info_get(struct amd64_pvt *pvt)
 	gpu_prep_chip_selects(pvt);
 	gpu_read_base_mask(pvt);
 	gpu_read_mc_regs(pvt);
+	gpu_determine_memory_type(pvt);
 
 	return 0;
 }
@@ -4142,6 +4173,12 @@ static int per_family_init(struct amd64_pvt *pvt)
 			pvt->ctl_name			= "F19h_M70h";
 			pvt->flags.zn_regs_v2		= 1;
 			break;
+		case 0x90 ... 0x9f:
+			pvt->ctl_name			= "F19h_M90h";
+			pvt->max_mcs			= 4;
+			gpu_umc_base			= 0x90000;
+			pvt->ops			= &gpu_ops;
+			break;
 		case 0xa0 ... 0xaf:
 			pvt->ctl_name			= "F19h_MA0h";
 			pvt->max_mcs			= 12;
@@ -4180,23 +4217,31 @@ static const struct attribute_group *amd64_edac_attr_groups[] = {
 	NULL
 };
 
+/*
+ * For Heterogeneous and APU models EDAC CHIP_SELECT and CHANNEL layers
+ * should be swapped to fit into the layers.
+ */
+static unsigned int get_layer_size(struct amd64_pvt *pvt, u8 layer)
+{
+	bool is_gpu = (pvt->ops == &gpu_ops);
+
+	if (!layer)
+		return is_gpu ? pvt->max_mcs : pvt->csels[0].b_cnt;
+
+	return is_gpu ? pvt->csels[0].b_cnt : pvt->max_mcs;
+}
+
 static int init_one_instance(struct amd64_pvt *pvt)
 {
 	struct mem_ctl_info *mci = NULL;
 	struct edac_mc_layer layers[2];
 	int ret = -ENOMEM;
 
-	/*
-	 * For Heterogeneous family EDAC CHIP_SELECT and CHANNEL layers should
-	 * be swapped to fit into the layers.
-	 */
 	layers[0].type = EDAC_MC_LAYER_CHIP_SELECT;
-	layers[0].size = (pvt->F3->device == PCI_DEVICE_ID_AMD_MI200_DF_F3) ?
-			 pvt->max_mcs : pvt->csels[0].b_cnt;
+	layers[0].size = get_layer_size(pvt, 0);
 	layers[0].is_virt_csrow = true;
 	layers[1].type = EDAC_MC_LAYER_CHANNEL;
-	layers[1].size = (pvt->F3->device == PCI_DEVICE_ID_AMD_MI200_DF_F3) ?
-			 pvt->csels[0].b_cnt : pvt->max_mcs;
+	layers[1].size = get_layer_size(pvt, 1);
 	layers[1].is_virt_csrow = false;
 
 	mci = edac_mc_alloc(pvt->mc_node_id, ARRAY_SIZE(layers), layers, 0);
