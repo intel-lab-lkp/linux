@@ -16,6 +16,7 @@
 
 #include <linux/device.h>
 #include <linux/mutex.h>
+#include <linux/psp-tee.h>
 
 #define TEE_DEFAULT_TIMEOUT		10
 #define MAX_BUFFER_SIZE			988
@@ -48,17 +49,13 @@ struct tee_init_ring_cmd {
 
 /**
  * struct ring_buf_manager - Helper structure to manage ring buffer.
- * @ring_start:  starting address of ring buffer
- * @ring_size:   size of ring buffer in bytes
- * @ring_pa:     physical address of ring buffer
  * @wptr:        index to the last written entry in ring buffer
+ * @ring_buf:    ring buffer allocated using DMA api
  */
 struct ring_buf_manager {
-	struct mutex mutex;	/* synchronizes access to ring buffer */
-	void *ring_start;
-	u32 ring_size;
-	phys_addr_t ring_pa;
+	struct mutex mutex;    /* synchronizes access to ring buffer */
 	u32 wptr;
+	struct psp_tee_buffer *ring_buf;
 };
 
 struct psp_tee_device {

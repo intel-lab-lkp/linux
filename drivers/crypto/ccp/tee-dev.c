@@ -76,22 +76,16 @@ EXPORT_SYMBOL(psp_tee_free_buffer);
 static int tee_alloc_ring(struct psp_tee_device *tee, int ring_size)
 {
 	struct ring_buf_manager *rb_mgr = &tee->rb_mgr;
-	void *start_addr;
 
 	if (!ring_size)
 		return -EINVAL;
 
-	/* We need actual physical address instead of DMA address, since
-	 * Trusted OS running on AMD Secure Processor will map this region
-	 */
-	start_addr = (void *)__get_free_pages(GFP_KERNEL, get_order(ring_size));
-	if (!start_addr)
+	rb_mgr->ring_buf = psp_tee_alloc_buffer(ring_size,
+						GFP_KERNEL | __GFP_ZERO);
+	if (!rb_mgr->ring_buf) {
+		dev_err(tee->dev, "ring allocation failed\n");
 		return -ENOMEM;
-
-	memset(start_addr, 0x0, ring_size);
-	rb_mgr->ring_start = start_addr;
-	rb_mgr->ring_size = ring_size;
-	rb_mgr->ring_pa = __psp_pa(start_addr);
+	}
 	mutex_init(&rb_mgr->mutex);
 
 	return 0;
@@ -101,15 +95,8 @@ static void tee_free_ring(struct psp_tee_device *tee)
 {
 	struct ring_buf_manager *rb_mgr = &tee->rb_mgr;
 
-	if (!rb_mgr->ring_start)
-		return;
+	psp_tee_free_buffer(rb_mgr->ring_buf);
 
-	free_pages((unsigned long)rb_mgr->ring_start,
-		   get_order(rb_mgr->ring_size));
-
-	rb_mgr->ring_start = NULL;
-	rb_mgr->ring_size = 0;
-	rb_mgr->ring_pa = 0;
 	mutex_destroy(&rb_mgr->mutex);
 }
 
@@ -133,35 +120,36 @@ static int tee_wait_cmd_poll(struct psp_tee_device *tee, unsigned int timeout,
 	return -ETIMEDOUT;
 }
 
-static
-struct tee_init_ring_cmd *tee_alloc_cmd_buffer(struct psp_tee_device *tee)
+struct psp_tee_buffer *tee_alloc_cmd_buffer(struct psp_tee_device *tee)
 {
 	struct tee_init_ring_cmd *cmd;
+	struct psp_tee_buffer *cmd_buffer;
 
-	cmd = kzalloc(sizeof(*cmd), GFP_KERNEL);
-	if (!cmd)
+	cmd_buffer = psp_tee_alloc_buffer(sizeof(*cmd),
+					  GFP_KERNEL | __GFP_ZERO);
+	if (!cmd_buffer)
 		return NULL;
 
-	cmd->hi_addr = upper_32_bits(tee->rb_mgr.ring_pa);
-	cmd->low_addr = lower_32_bits(tee->rb_mgr.ring_pa);
-	cmd->size = tee->rb_mgr.ring_size;
+	cmd = (struct tee_init_ring_cmd *)cmd_buffer->vaddr;
+	cmd->hi_addr = upper_32_bits(tee->rb_mgr.ring_buf->paddr);
+	cmd->low_addr = lower_32_bits(tee->rb_mgr.ring_buf->paddr);
+	cmd->size = tee->rb_mgr.ring_buf->size;
 
 	dev_dbg(tee->dev, "tee: ring address: high = 0x%x low = 0x%x size = %u\n",
 		cmd->hi_addr, cmd->low_addr, cmd->size);
 
-	return cmd;
+	return cmd_buffer;
 }
 
-static inline void tee_free_cmd_buffer(struct tee_init_ring_cmd *cmd)
+static inline void tee_free_cmd_buffer(struct psp_tee_buffer *cmd_buffer)
 {
-	kfree(cmd);
+	psp_tee_free_buffer(cmd_buffer);
 }
 
 static int tee_init_ring(struct psp_tee_device *tee)
 {
 	int ring_size = MAX_RING_BUFFER_ENTRIES * sizeof(struct tee_ring_cmd);
-	struct tee_init_ring_cmd *cmd;
-	phys_addr_t cmd_buffer;
+	struct psp_tee_buffer *cmd_buffer;
 	unsigned int reg;
 	int ret;
 
@@ -175,21 +163,19 @@ static int tee_init_ring(struct psp_tee_device *tee)
 
 	tee->rb_mgr.wptr = 0;
 
-	cmd = tee_alloc_cmd_buffer(tee);
-	if (!cmd) {
+	cmd_buffer = tee_alloc_cmd_buffer(tee);
+	if (!cmd_buffer) {
 		tee_free_ring(tee);
 		return -ENOMEM;
 	}
-
-	cmd_buffer = __psp_pa((void *)cmd);
 
 	/* Send command buffer details to Trusted OS by writing to
 	 * CPU-PSP message registers
 	 */
 
-	iowrite32(lower_32_bits(cmd_buffer),
+	iowrite32(lower_32_bits(cmd_buffer->paddr),
 		  tee->io_regs + tee->vdata->cmdbuff_addr_lo_reg);
-	iowrite32(upper_32_bits(cmd_buffer),
+	iowrite32(upper_32_bits(cmd_buffer->paddr),
 		  tee->io_regs + tee->vdata->cmdbuff_addr_hi_reg);
 	iowrite32(TEE_RING_INIT_CMD,
 		  tee->io_regs + tee->vdata->cmdresp_reg);
@@ -209,7 +195,7 @@ static int tee_init_ring(struct psp_tee_device *tee)
 	}
 
 free_buf:
-	tee_free_cmd_buffer(cmd);
+	tee_free_cmd_buffer(cmd_buffer);
 
 	return ret;
 }
@@ -219,7 +205,7 @@ static void tee_destroy_ring(struct psp_tee_device *tee)
 	unsigned int reg;
 	int ret;
 
-	if (!tee->rb_mgr.ring_start)
+	if (!tee->rb_mgr.ring_buf->vaddr)
 		return;
 
 	if (psp_dead)
@@ -308,7 +294,7 @@ static int tee_submit_cmd(struct psp_tee_device *tee, enum tee_cmd_id cmd_id,
 	do {
 		/* Get pointer to ring buffer command entry */
 		cmd = (struct tee_ring_cmd *)
-			(tee->rb_mgr.ring_start + tee->rb_mgr.wptr);
+			(tee->rb_mgr.ring_buf->vaddr + tee->rb_mgr.wptr);
 
 		rptr = ioread32(tee->io_regs + tee->vdata->ring_rptr_reg);
 
@@ -357,7 +343,7 @@ static int tee_submit_cmd(struct psp_tee_device *tee, enum tee_cmd_id cmd_id,
 
 	/* Update local copy of write pointer */
 	tee->rb_mgr.wptr += sizeof(struct tee_ring_cmd);
-	if (tee->rb_mgr.wptr >= tee->rb_mgr.ring_size)
+	if (tee->rb_mgr.wptr >= tee->rb_mgr.ring_buf->size)
 		tee->rb_mgr.wptr = 0;
 
 	/* Trigger interrupt to Trusted OS */
