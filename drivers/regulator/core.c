@@ -5077,7 +5077,7 @@ int regulator_notifier_call_chain(struct regulator_dev *rdev,
 	if (rdev->constraints->system_critical &&
 	    event == REGULATOR_EVENT_UNDER_VOLTAGE)
 		hw_protection_shutdown("System critical voltage drop detected",
-				       REGULATOR_DEF_EMERG_SHUTDWN_TMO);
+				       rdev->constraints->uv_survival_time);
 
 	_notifier_call_chain(rdev, event, data);
 	return NOTIFY_DONE;

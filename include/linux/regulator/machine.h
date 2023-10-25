@@ -158,6 +158,11 @@ struct notification_limit {
  *		      regulator_active_discharge values are used for
  *		      initialisation.
  * @enable_time: Turn-on time of the rails (unit: microseconds)
+ * @uv_survival_time: Survival time post a critical under-voltage event. Time
+ *                    the system can operate before the on-board capacitors
+ *                    fail, providing a window for necessary actions or
+ *                    preparations to be taken before power loss.
+ *                    (unit: microseconds)
  */
 struct regulation_constraints {
 
@@ -209,6 +214,7 @@ struct regulation_constraints {
 	unsigned int settling_time_up;
 	unsigned int settling_time_down;
 	unsigned int enable_time;
+	unsigned int uv_survival_time;
 
 	unsigned int active_discharge;
 
