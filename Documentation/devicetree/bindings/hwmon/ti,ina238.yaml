@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+
+$id: http://devicetree.org/schemas/hwmon/ti,ina238.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Texas Instruments INA238 power/voltage monitors
+
+maintainers:
+  - Jean Delvare <jdelvare@suse.com>
+  - Guenter Roeck <linux@roeck-us.net>
+
+description: |
+  The INA238 is an ultra-precise digital power monitor with a
+  16-bit delta-sigma ADC specifically designed for current-sensing
+  applications.
+
+  Datasheets:
+    https://www.ti.com/lit/ds/symlink/ina238.pdf
+
+properties:
+  compatible:
+    enum:
+      - ti,ina238
+
+  reg:
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        power-sensor@40 {
+            compatible = "ti,ina238";
+            reg = <0x40>;
+        };
+    };

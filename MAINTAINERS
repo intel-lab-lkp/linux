@@ -10271,6 +10271,7 @@ INA238 HARDWARE MONITOR DRIVER
 M:	Guenter Roeck <linux@roeck-us.net>
 L:	linux-hwmon@vger.kernel.org
 S:	Maintained
+F:	Documentation/devicetree/bindings/hwmon/ti,ina238.yaml
 F:	drivers/hwmon/ina238.c
 
 INDEX OF FURTHER KERNEL DOCUMENTATION
