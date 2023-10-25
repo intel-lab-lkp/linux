@@ -186,6 +186,13 @@ properties:
       be enabled but limit setting can be omitted. Limit is given as microvolt
       offset from voltage set to regulator.
 
+  regulator-uv-survival-time-ms:
+    description: Specifies the time (in milliseconds) the system can continue
+      to operate after a critical under-voltage event has been triggered,
+      before the on-board capacitors fail. This time essentially represents the
+      duration the system has to take any necessary actions or preparations
+      before power loss.
+
   regulator-temp-protection-kelvin:
     description: Set over temperature protection limit. This is a limit where
       hardware performs emergency shutdown. Zero can be passed to disable
