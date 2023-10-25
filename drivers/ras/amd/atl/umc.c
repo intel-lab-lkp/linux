@@ -153,6 +153,35 @@ static int umc_ondie_addr_to_normaddr(u64 mca_addr, u16 nid)
 	return mca_addr;
 }
 
+/*
+ * MCA_IPID_UMC[InstanceId] holds the SMN Base Address for a UMC instance.
+ * MI-300 has a fixed, model-specific mapping between a UMC instance and its
+ * related Data Fabric CS instance.
+ * Use the UMC SMN Base Address value to find the appropriate CS instance ID.
+ */
+static const u32 csmap[32] = {
+	0x393f00, 0x293f00, 0x193f00, 0x093f00, 0x392f00, 0x292f00,
+	0x192f00, 0x092f00, 0x391f00, 0x291f00, 0x191f00, 0x091f00,
+	0x390f00, 0x290f00, 0x190f00, 0x090f00, 0x793f00, 0x693f00,
+	0x593f00, 0x493f00, 0x792f00, 0x692f00, 0x592f00, 0x492f00,
+	0x791f00, 0x691f00, 0x591f00, 0x491f00, 0x790f00, 0x690f00,
+	0x590f00, 0x490f00 };
+
+/* MCA_IPID[InstanceId] give the Instance Number UMC SmnAddr */
+#define UMC_PHY_INSTANCE_NUM GENMASK(31, 0)
+
+static u8 fixup_cs_inst_id(struct mce *m)
+{
+	u32 smn_addr = FIELD_GET(UMC_PHY_INSTANCE_NUM, m->ipid);
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(csmap); i++) {
+		if (smn_addr == csmap[i])
+			break;
+	}
+	return i;
+}
+
 static u8 get_socket_id(struct mce *m)
 {
 	return m->socketid;
@@ -187,6 +216,10 @@ static u64 get_norm_addr(struct mce *m)
 #define UMC_CHANNEL_NUM	GENMASK(31, 20)
 static u8 get_cs_inst_id(struct mce *m)
 {
+	/* MI300: static mapping table for MCA_IPID[InstanceId] to CS physical ID. */
+	if (df_cfg.rev == DF4p5 && df_cfg.flags.heterogeneous)
+		return fixup_cs_inst_id(m);
+
 	return FIELD_GET(UMC_CHANNEL_NUM, m->ipid);
 }
 
