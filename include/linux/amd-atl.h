@@ -25,4 +25,6 @@ static inline int amd_umc_mca_addr_to_sys_addr(struct mce *m, u64 *sys_addr)
 	return umc_mca_addr_to_sys_addr(m, sys_addr);
 }
 
+int identify_poison_pages_retire_row(struct mce *m);
+
 #endif /* _AMD_ATL_H */

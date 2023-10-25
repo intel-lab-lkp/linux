@@ -2831,6 +2831,11 @@ static void decode_umc_error(int node_id, struct mce *m)
 
 	error_address_to_page_and_offset(sys_addr, &err);
 
+	if (pvt->fam == 0x19 && (pvt->model >= 0x90 && pvt->model <= 0x9f)) {
+		if (identify_poison_pages_retire_row(m))
+			return;
+	}
+
 log_error:
 	__log_ecc_error(mci, &err, ecc_type);
 }

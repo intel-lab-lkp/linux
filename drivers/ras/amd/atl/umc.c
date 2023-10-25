@@ -255,3 +255,106 @@ int umc_mca_addr_to_sys_addr(struct mce *m, u64 *sys_addr)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(umc_mca_addr_to_sys_addr);
+
+/*
+ * High Bandwidth Memory (HBM v3) has fixed number of columns in a
+ * row (8 columns in one HBM row).
+ * Extract column bits to find all the combination of masks to retire
+ * all the poison pages in a row.
+ */
+#define MAX_COLUMNS_IN_HBM_ROW	8
+
+/* The C2 bit in CH NA address */
+#define UMC_NA_C2_BIT	BIT(8)
+/* The C3 bit in CH NA address */
+#define UMC_NA_C3_BIT	BIT(9)
+/* The C4 bit in CH NA address */
+#define UMC_NA_C4_BIT	BIT(14)
+
+/* masks to get all possible combinations of column addresses */
+#define C_1_1_1_MASK	(UMC_NA_C4_BIT | UMC_NA_C3_BIT | UMC_NA_C2_BIT)
+#define C_1_1_0_MASK	(UMC_NA_C4_BIT | UMC_NA_C3_BIT)
+#define C_1_0_1_MASK	(UMC_NA_C4_BIT | UMC_NA_C2_BIT)
+#define C_1_0_0_MASK	(UMC_NA_C4_BIT)
+#define C_0_1_1_MASK	(UMC_NA_C3_BIT | UMC_NA_C2_BIT)
+#define C_0_1_0_MASK	(UMC_NA_C3_BIT)
+#define C_0_0_1_MASK	(UMC_NA_C2_BIT)
+#define C_0_0_0_MASK	~C_1_1_1_MASK
+
+/* Identify all combination of column address physical pages in a row */
+static int amd_umc_identify_pages_in_row(struct mce *m, u64 *spa_addr)
+{
+	u8 cs_inst_id = get_cs_inst_id(m);
+	u8 socket_id = get_socket_id(m);
+	u64 norm_addr = get_norm_addr(m);
+	u8 die_id = get_die_id(m);
+	u16 df_acc_id = get_df_acc_id(m);
+
+	u64 retire_addr, column;
+	u64 column_masks[] = { 0, C_0_0_1_MASK, C_0_1_0_MASK, C_0_1_1_MASK,
+			C_1_0_0_MASK, C_1_0_1_MASK, C_1_1_0_MASK, C_1_1_1_MASK };
+
+	/* clear and loop for all possibilities of [c4 c3 c2] */
+	norm_addr &= C_0_0_0_MASK;
+
+	for (column = 0; column < ARRAY_SIZE(column_masks); column++) {
+		retire_addr = norm_addr | column_masks[column];
+
+		if (norm_to_sys_addr(df_acc_id, socket_id, die_id, cs_inst_id, &retire_addr))
+			return -EINVAL;
+		*(spa_addr + column) = retire_addr;
+	}
+
+	return 0;
+}
+
+/* Find any duplicate addresses in all combination of column address */
+static void amd_umc_find_duplicate_spa(u64 arr[], int *size)
+{
+	int i, j, k;
+
+	/* use nested for loop to find the duplicate elements in array */
+	for (i = 0; i < *size; i++) {
+		for (j = i + 1; j < *size; j++) {
+			/* check duplicate element */
+			if (arr[i] == arr[j]) {
+				/* delete the current position of the duplicate element */
+				for (k = j; k < (*size - 1); k++)
+					arr[k] = arr[k + 1];
+
+			/* decrease the size of array after removing duplicate element */
+				(*size)--;
+
+			/* if the position of the elements is changes, don't increase index j */
+				j--;
+			}
+		}
+	}
+}
+
+int identify_poison_pages_retire_row(struct mce *m)
+{
+	int i, ret, addr_range;
+	unsigned long pfn;
+	u64 col[MAX_COLUMNS_IN_HBM_ROW];
+	u64 *spa_addr = col;
+
+	/* Identify all pages in a row */
+	pr_info("Identify all physical Pages in a row for MCE addr:0x%llx\n", m->addr);
+	ret = amd_umc_identify_pages_in_row(m, spa_addr);
+	if (!ret) {
+		for (i = 0; i < MAX_COLUMNS_IN_HBM_ROW; i++)
+			pr_info("col[%d]_addr:0x%llx ", i, spa_addr[i]);
+	}
+	/* Find duplicate entries from all 8 physical addresses in a row */
+	addr_range = ARRAY_SIZE(col);
+	amd_umc_find_duplicate_spa(spa_addr, &addr_range);
+	/* do page retirement on all system physical addresses */
+	for (i = 0; i < addr_range; i++) {
+		pfn = PHYS_PFN(spa_addr[i]);
+		memory_failure(pfn, 0);
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL(identify_poison_pages_retire_row);
