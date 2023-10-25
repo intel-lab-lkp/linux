@@ -888,6 +888,15 @@ int bcm_phy_set_wol(struct phy_device *phydev, struct ethtool_wolinfo *wol)
 	if (wol->wolopts & WAKE_FILTER)
 		goto program_ctl;
 
+	/* Enabling options other than WAKE_FILTER nullifies the one and only
+	 * network rule that we support.
+	 */
+	if (!(wol->wolopts & WAKE_FILTER)) {
+		ret = bcm_phy_write_exp(phydev, BCM54XX_WOL_SEC_KEY_8B, 0);
+		if (ret < 0)
+			return ret;
+	}
+
 	/* When using WAKE_MAGIC, we program the magic pattern filter to match
 	 * the device's MAC address and we accept any MAC DA in the Ethernet
 	 * frame.
@@ -1175,9 +1184,10 @@ static int bcm_phy_set_rule(struct phy_device *phydev,
 
 	da = nfc->fs.m_u.ether_spec.h_dest;
 	for (i = 0; i < ETH_ALEN / 2; i++) {
+		u16 mask = da[i * 2] << 8 | da[i * 2 + 1];
 		ret = bcm_phy_write_exp(phydev,
 					BCM54XX_WOL_MASK(2 - i),
-					da[i * 2] << 8 | da[i * 2 + 1]);
+					~mask);
 		if (ret < 0)
 			return ret;
 	}

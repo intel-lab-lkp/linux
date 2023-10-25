@@ -1524,6 +1524,14 @@ static int bcmgenet_set_rxnfc(struct net_device *dev, struct ethtool_rxnfc *cmd)
 	struct bcmgenet_priv *priv = netdev_priv(dev);
 	int err = 0;
 
+	if (dev->phydev) {
+		err = phy_ethtool_set_rxnfc(dev->phydev, cmd);
+		if (err != -EOPNOTSUPP)
+			return err;
+
+		err = 0;
+	}
+
 	switch (cmd->cmd) {
 	case ETHTOOL_SRXCLSRLINS:
 		err = bcmgenet_insert_flow(dev, cmd);
@@ -1578,6 +1586,14 @@ static int bcmgenet_get_rxnfc(struct net_device *dev, struct ethtool_rxnfc *cmd,
 	struct bcmgenet_rxnfc_rule *rule;
 	int err = 0;
 	int i = 0;
+
+	if (dev->phydev) {
+		err = phy_ethtool_get_rxnfc(dev->phydev, cmd, rule_locs);
+		if (err != -EOPNOTSUPP)
+			return err;
+
+		err = 0;
+	}
 
 	switch (cmd->cmd) {
 	case ETHTOOL_GRXRINGS:
