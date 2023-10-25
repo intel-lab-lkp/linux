@@ -2990,6 +2990,8 @@ static int mt7915_dpd_freq_idx(struct mt7915_dev *dev, u16 freq, u8 bw)
 	if (is_mt7915(&dev->mt76)) {
 		freq_list = freq_list_v1;
 		n_freqs = ARRAY_SIZE(freq_list_v1);
+		/* NOTE: apply adjacent channel data for the missing ch144 */
+		freq = (freq == 5720) ? 5700: freq;
 	} else {
 		freq_list = freq_list_v2;
 		n_freqs = ARRAY_SIZE(freq_list_v2);
