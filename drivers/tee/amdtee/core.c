@@ -17,6 +17,7 @@
 #include "amdtee_private.h"
 #include "../tee_private.h"
 #include <linux/psp-tee.h>
+#include <linux/psp.h>
 
 static struct amdtee_driver_data *drv_data;
 static DEFINE_MUTEX(session_list_mutex);
@@ -158,7 +159,8 @@ u32 get_buffer_id(struct tee_shm *shm)
 
 	mutex_lock(&ctxdata->shm_mutex);
 	list_for_each_entry(shmdata, &ctxdata->shm_list, shm_node)
-		if (shmdata->kaddr == shm->kaddr) {
+		if (shmdata->shm_buf &&
+		    shmdata->shm_buf->vaddr == shm->kaddr) {
 			buf_id = shmdata->buf_id;
 			break;
 		}
@@ -168,11 +170,13 @@ u32 get_buffer_id(struct tee_shm *shm)
 }
 
 static DEFINE_MUTEX(drv_mutex);
-static int copy_ta_binary(struct tee_context *ctx, void *ptr, void **ta,
-			  size_t *ta_size)
+static int copy_ta_binary(struct tee_context *ctx, void *ptr,
+			  struct psp_tee_buffer **bufp)
 {
 	const struct firmware *fw;
 	char fw_name[TA_PATH_MAX];
+	struct psp_tee_buffer *buf;
+	unsigned long size;
 	struct {
 		u32 lo;
 		u16 mid;
@@ -201,15 +205,16 @@ static int copy_ta_binary(struct tee_context *ctx, void *ptr, void **ta,
 		goto unlock;
 	}
 
-	*ta_size = roundup(fw->size, PAGE_SIZE);
-	*ta = (void *)__get_free_pages(GFP_KERNEL, get_order(*ta_size));
-	if (!*ta) {
-		pr_err("%s: get_free_pages failed\n", __func__);
+	size = roundup(fw->size, PAGE_SIZE);
+	buf = psp_tee_alloc_buffer(size, GFP_KERNEL);
+	if (!buf) {
+		pr_err("TA binary memory allocation failed\n");
 		rc = -ENOMEM;
 		goto rel_fw;
 	}
+	memcpy(buf->vaddr, fw->data, fw->size);
+	*bufp = buf;
 
-	memcpy(*ta, fw->data, fw->size);
 rel_fw:
 	release_firmware(fw);
 unlock:
@@ -234,24 +239,23 @@ int amdtee_open_session(struct tee_context *ctx,
 {
 	struct amdtee_context_data *ctxdata = ctx->data;
 	struct amdtee_session *sess = NULL;
+	struct psp_tee_buffer *buf;
 	u32 session_info, ta_handle;
-	size_t ta_size;
 	int rc, i;
-	void *ta;
 
 	if (arg->clnt_login != TEE_IOCTL_LOGIN_PUBLIC) {
 		pr_err("unsupported client login method\n");
 		return -EINVAL;
 	}
 
-	rc = copy_ta_binary(ctx, &arg->uuid[0], &ta, &ta_size);
+	rc = copy_ta_binary(ctx, &arg->uuid[0], &buf);
 	if (rc) {
 		pr_err("failed to copy TA binary\n");
 		return rc;
 	}
 
 	/* Load the TA binary into TEE environment */
-	handle_load_ta(ta, ta_size, arg);
+	handle_load_ta(buf, arg);
 	if (arg->ret != TEEC_SUCCESS)
 		goto out;
 
@@ -296,7 +300,7 @@ int amdtee_open_session(struct tee_context *ctx,
 	}
 
 out:
-	free_pages((u64)ta, get_order(ta_size));
+	psp_tee_free_buffer(buf);
 	return rc;
 }
 
@@ -336,51 +340,62 @@ int amdtee_close_session(struct tee_context *ctx, u32 session)
 	return 0;
 }
 
-int amdtee_map_shmem(struct tee_shm *shm)
+int amdtee_alloc_shmem(struct tee_shm *shm)
 {
 	struct amdtee_context_data *ctxdata;
 	struct amdtee_shm_data *shmnode;
-	struct shmem_desc shmem;
-	int rc, count;
+	struct psp_tee_buffer *shm_buf;
 	u32 buf_id;
+	int rc;
 
 	if (!shm)
 		return -EINVAL;
 
-	shmnode = kmalloc(sizeof(*shmnode), GFP_KERNEL);
-	if (!shmnode)
+	shm_buf = psp_tee_alloc_buffer(shm->size, GFP_KERNEL | __GFP_ZERO);
+	if (!shm_buf)
 		return -ENOMEM;
 
-	count = 1;
-	shmem.kaddr = shm->kaddr;
-	shmem.size = shm->size;
+	shm->kaddr = shm_buf->vaddr;
+	shm->paddr = __psp_pa(shm_buf->vaddr);
+
+	shmnode = kmalloc(sizeof(*shmnode), GFP_KERNEL);
+	if (!shmnode) {
+		rc = -ENOMEM;
+		goto free_dmabuf;
+	}
 
 	/*
 	 * Send a MAP command to TEE and get the corresponding
 	 * buffer Id
 	 */
-	rc = handle_map_shmem(count, &shmem, &buf_id);
+	rc = handle_map_shmem(shm_buf, &buf_id);
 	if (rc) {
 		pr_err("map_shmem failed: ret = %d\n", rc);
-		kfree(shmnode);
-		return rc;
+		goto free_shmnode;
 	}
 
-	shmnode->kaddr = shm->kaddr;
+	shmnode->shm_buf = shm_buf;
 	shmnode->buf_id = buf_id;
 	ctxdata = shm->ctx->data;
 	mutex_lock(&ctxdata->shm_mutex);
 	list_add(&shmnode->shm_node, &ctxdata->shm_list);
 	mutex_unlock(&ctxdata->shm_mutex);
 
-	pr_debug("buf_id :[%x] kaddr[%p]\n", shmnode->buf_id, shmnode->kaddr);
+	pr_debug("buf_id :[%x] kaddr[%p]\n", shmnode->buf_id, shm->kaddr);
 
 	return 0;
+
+free_shmnode:
+	kfree(shmnode);
+free_dmabuf:
+	psp_tee_free_buffer(shm_buf);
+	return rc;
 }
 
-void amdtee_unmap_shmem(struct tee_shm *shm)
+void amdtee_free_shmem(struct tee_shm *shm)
 {
 	struct amdtee_context_data *ctxdata;
+	struct psp_tee_buffer *shm_buf = NULL;
 	struct amdtee_shm_data *shmnode;
 	u32 buf_id;
 
@@ -388,6 +403,7 @@ void amdtee_unmap_shmem(struct tee_shm *shm)
 		return;
 
 	buf_id = get_buffer_id(shm);
+
 	/* Unmap the shared memory from TEE */
 	handle_unmap_shmem(buf_id);
 
@@ -396,10 +412,12 @@ void amdtee_unmap_shmem(struct tee_shm *shm)
 	list_for_each_entry(shmnode, &ctxdata->shm_list, shm_node)
 		if (buf_id == shmnode->buf_id) {
 			list_del(&shmnode->shm_node);
+			shm_buf = shmnode->shm_buf;
 			kfree(shmnode);
 			break;
 		}
 	mutex_unlock(&ctxdata->shm_mutex);
+	psp_tee_free_buffer(shm_buf);
 }
 
 int amdtee_invoke_func(struct tee_context *ctx,

@@ -283,52 +283,43 @@ int handle_invoke_cmd(struct tee_ioctl_invoke_arg *arg, u32 sinfo,
 	return ret;
 }
 
-int handle_map_shmem(u32 count, struct shmem_desc *start, u32 *buf_id)
+int handle_map_shmem(struct psp_tee_buffer *shm_buf, u32 *buf_id)
 {
 	struct tee_cmd_map_shared_mem *cmd;
-	phys_addr_t paddr;
-	int ret, i;
 	u32 status;
+	int ret;
 
-	if (!count || !start || !buf_id)
+	if (!shm_buf || !shm_buf->vaddr || !buf_id)
 		return -EINVAL;
 
 	cmd = kzalloc(sizeof(*cmd), GFP_KERNEL);
 	if (!cmd)
 		return -ENOMEM;
 
-	/* Size must be page aligned */
-	for (i = 0; i < count ; i++) {
-		if (!start[i].kaddr || (start[i].size & (PAGE_SIZE - 1))) {
-			ret = -EINVAL;
-			goto free_cmd;
-		}
-
-		if ((u64)start[i].kaddr & (PAGE_SIZE - 1)) {
-			pr_err("map shared memory: page unaligned. addr 0x%llx",
-			       (u64)start[i].kaddr);
-			ret = -EINVAL;
-			goto free_cmd;
-		}
+	/* Size and address must be page aligned */
+	if (shm_buf->size & (PAGE_SIZE - 1)) {
+		ret = -EINVAL;
+		goto free_cmd;
 	}
 
-	cmd->sg_list.count = count;
-
-	/* Create buffer list */
-	for (i = 0; i < count ; i++) {
-		paddr = __psp_pa(start[i].kaddr);
-		cmd->sg_list.buf[i].hi_addr = upper_32_bits(paddr);
-		cmd->sg_list.buf[i].low_addr = lower_32_bits(paddr);
-		cmd->sg_list.buf[i].size = start[i].size;
-		cmd->sg_list.size += cmd->sg_list.buf[i].size;
-
-		pr_debug("buf[%d]:hi addr = 0x%x\n", i,
-			 cmd->sg_list.buf[i].hi_addr);
-		pr_debug("buf[%d]:low addr = 0x%x\n", i,
-			 cmd->sg_list.buf[i].low_addr);
-		pr_debug("buf[%d]:size = 0x%x\n", i, cmd->sg_list.buf[i].size);
-		pr_debug("list size = 0x%x\n", cmd->sg_list.size);
+	if ((u64)shm_buf->vaddr & (PAGE_SIZE - 1)) {
+		pr_err("map shared memory: page unaligned. addr 0x%llx",
+		       (u64)shm_buf->vaddr);
+		ret = -EINVAL;
+		goto free_cmd;
 	}
+
+	/* Update sg list */
+	cmd->sg_list.count = 1;
+	cmd->sg_list.buf[0].hi_addr = upper_32_bits(shm_buf->paddr);
+	cmd->sg_list.buf[0].low_addr = lower_32_bits(shm_buf->paddr);
+	cmd->sg_list.buf[0].size = shm_buf->size;
+	cmd->sg_list.size = cmd->sg_list.buf[0].size;
+
+	pr_debug("buf: hi addr = 0x%x\n", cmd->sg_list.buf[0].hi_addr);
+	pr_debug("buf: low addr = 0x%x\n", cmd->sg_list.buf[0].low_addr);
+	pr_debug("buf: size = 0x%x\n", cmd->sg_list.buf[0].size);
+	pr_debug("list size = 0x%x\n", cmd->sg_list.size);
 
 	*buf_id = 0;
 
@@ -396,25 +387,24 @@ int handle_open_session(struct tee_ioctl_open_session_arg *arg, u32 *info,
 	return ret;
 }
 
-int handle_load_ta(void *data, u32 size, struct tee_ioctl_open_session_arg *arg)
+int handle_load_ta(struct psp_tee_buffer *buf,
+		   struct tee_ioctl_open_session_arg *arg)
 {
 	struct tee_cmd_unload_ta unload_cmd = {};
 	struct tee_cmd_load_ta load_cmd = {};
-	phys_addr_t blob;
 	int ret;
 
-	if (size == 0 || !data || !arg)
+	if (buf->size == 0 || !buf->paddr || !arg)
 		return -EINVAL;
 
-	blob = __psp_pa(data);
-	if (blob & (PAGE_SIZE - 1)) {
-		pr_err("load TA: page unaligned. blob 0x%llx", blob);
+	if (buf->dma & (PAGE_SIZE - 1)) {
+		pr_err("load TA: page unaligned. addr 0x%llx", buf->dma);
 		return -EINVAL;
 	}
 
-	load_cmd.hi_addr = upper_32_bits(blob);
-	load_cmd.low_addr = lower_32_bits(blob);
-	load_cmd.size = size;
+	load_cmd.hi_addr = upper_32_bits(buf->paddr);
+	load_cmd.low_addr = lower_32_bits(buf->paddr);
+	load_cmd.size = buf->size;
 
 	mutex_lock(&ta_refcount_mutex);
 

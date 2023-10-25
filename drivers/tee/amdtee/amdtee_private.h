@@ -13,6 +13,7 @@
 #include <linux/kref.h>
 #include <linux/types.h>
 #include "amdtee_if.h"
+#include <linux/psp-tee.h>
 
 #define DRIVER_NAME	"amdtee"
 #define DRIVER_AUTHOR   "AMD-TEE Linux driver team"
@@ -78,19 +79,14 @@ struct amdtee_driver_data {
 	struct amdtee *amdtee;
 };
 
-struct shmem_desc {
-	void *kaddr;
-	u64 size;
-};
-
 /**
  * struct amdtee_shm_data - Shared memory data
- * @kaddr:	Kernel virtual address of shared memory
+ * @shm_buf:	Pointer to shared memory buffer
  * @buf_id:	Buffer id of memory mapped by TEE_CMD_ID_MAP_SHARED_MEM
  */
 struct amdtee_shm_data {
 	struct  list_head shm_node;
-	void    *kaddr;
+	struct	psp_tee_buffer *shm_buf;
 	u32     buf_id;
 };
 
@@ -145,11 +141,11 @@ int amdtee_invoke_func(struct tee_context *ctx,
 
 int amdtee_cancel_req(struct tee_context *ctx, u32 cancel_id, u32 session);
 
-int amdtee_map_shmem(struct tee_shm *shm);
+int amdtee_alloc_shmem(struct tee_shm *shm);
 
-void amdtee_unmap_shmem(struct tee_shm *shm);
+void amdtee_free_shmem(struct tee_shm *shm);
 
-int handle_load_ta(void *data, u32 size,
+int handle_load_ta(struct psp_tee_buffer *buf,
 		   struct tee_ioctl_open_session_arg *arg);
 
 int handle_unload_ta(u32 ta_handle);
@@ -159,7 +155,7 @@ int handle_open_session(struct tee_ioctl_open_session_arg *arg, u32 *info,
 
 int handle_close_session(u32 ta_handle, u32 info);
 
-int handle_map_shmem(u32 count, struct shmem_desc *start, u32 *buf_id);
+int handle_map_shmem(struct psp_tee_buffer *shm_buf, u32 *buf_id);
 
 void handle_unmap_shmem(u32 buf_id);
 
