@@ -22,6 +22,7 @@ description: |
 properties:
   compatible:
     enum:
+      - ti,ina237
       - ti,ina238
 
   reg:
