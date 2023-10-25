@@ -67,3 +67,41 @@ void dark_screen_enable(struct intel_crtc_state *crtc_state)
 	intel_de_rmw(dev_priv, DARK_SCREEN(crtc->config->cpu_transcoder), 0, DARK_SCREEN_DETECT |
 		       DARK_SCREEN_DONE);
 }
+
+static int intel_darkscreen_debugfs_status_get(void *data, u64 *val)
+{
+	struct intel_crtc *crtc = data;
+
+	*val = crtc->dark_screen.enable;
+
+	return 0;
+}
+
+static int intel_darkscreen_debugfs_status_set(void *data, u64 val)
+{
+	struct intel_crtc *crtc = data;
+	struct intel_crtc_state *crtc_state;
+
+	crtc->dark_screen.enable = val;
+
+	crtc_state = to_intel_crtc_state(crtc->base.state);
+
+	if (crtc_state)
+		dark_screen_enable(crtc_state);
+
+	return 0;
+}
+
+/*
+ * Check the status whether the darkscreen
+ * is enabled or not.
+ */
+DEFINE_DEBUGFS_ATTRIBUTE(intel_darkscreen_debugfs_status_fops,
+			 intel_darkscreen_debugfs_status_get,
+			 intel_darkscreen_debugfs_status_set, "%llu\n");
+
+void intel_darkscreen_crtc_debugfs_add(struct intel_crtc *crtc)
+{
+	debugfs_create_file("i915_darkscreen_status", 0644, crtc->base.debugfs_entry,
+			    crtc, &intel_darkscreen_debugfs_status_fops);
+}
