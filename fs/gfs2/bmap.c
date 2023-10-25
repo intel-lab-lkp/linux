@@ -868,7 +868,7 @@ static int __gfs2_iomap_get(struct inode *inode, loff_t pos, loff_t length,
 	__be64 *ptr;
 	sector_t lblock;
 	sector_t lblock_stop;
-	int ret;
+	int ret = 0;
 	int eob;
 	u64 len;
 	struct buffer_head *bh;
