@@ -61,6 +61,7 @@ description: |
         sc7280
         sc8180x
         sc8280xp
+        sc8380xp
         sda660
         sdm450
         sdm630
@@ -108,6 +109,7 @@ description: |
         liquid
         rdp432-c2
         mtp
+        qcp
         qrd
         rb2
         ride
@@ -989,6 +991,12 @@ properties:
               - qcom,sm8550-mtp
               - qcom,sm8550-qrd
           - const: qcom,sm8550
+
+      - items:
+          - enum:
+              - qcom,sc8380xp-crd
+              - qcom,sc8380xp-qcp
+          - const: qcom,sc8380xp
 
   # Board compatibles go above
 
