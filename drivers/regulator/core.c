@@ -19,6 +19,7 @@
 #include <linux/delay.h>
 #include <linux/gpio/consumer.h>
 #include <linux/of.h>
+#include <linux/reboot.h>
 #include <linux/regmap.h>
 #include <linux/regulator/of_regulator.h>
 #include <linux/regulator/consumer.h>
@@ -5073,6 +5074,11 @@ EXPORT_SYMBOL_GPL(regulator_bulk_free);
 int regulator_notifier_call_chain(struct regulator_dev *rdev,
 				  unsigned long event, void *data)
 {
+	if (rdev->constraints->system_critical &&
+	    event == REGULATOR_EVENT_UNDER_VOLTAGE)
+		hw_protection_shutdown("System critical voltage drop detected",
+				       REGULATOR_DEF_EMERG_SHUTDWN_TMO);
+
 	_notifier_call_chain(rdev, event, data);
 	return NOTIFY_DONE;
 
