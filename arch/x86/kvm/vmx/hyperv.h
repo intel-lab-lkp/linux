@@ -29,6 +29,10 @@ static inline bool nested_vmx_is_evmptr12_valid(struct vcpu_vmx *vmx)
 {
 	return evmptr_is_valid(vmx->nested.hv_evmcs_vmptr);
 }
+static inline struct hv_enlightened_vmcs *nested_vmx_evmcs(struct vcpu_vmx *vmx)
+{
+	return vmx->nested.hv_evmcs;
+}
 u64 nested_get_evmptr(struct kvm_vcpu *vcpu);
 uint16_t nested_get_evmcs_version(struct kvm_vcpu *vcpu);
 int nested_enable_evmcs(struct kvm_vcpu *vcpu,
@@ -40,6 +44,10 @@ void vmx_hv_inject_synthetic_vmexit_post_tlb_flush(struct kvm_vcpu *vcpu);
 #else
 static inline gpa_t nested_vmx_evmptr12(struct vcpu_vmx *vmx) { return EVMPTR_INVALID; }
 static inline bool nested_vmx_is_evmptr12_valid(struct vcpu_vmx *vmx) { return false; }
+static inline struct hv_enlightened_vmcs *nested_vmx_evmcs(struct vcpu_vmx *vmx)
+{
+	return NULL;
+}
 static inline u64 nested_get_evmptr(struct kvm_vcpu *vcpu) { return EVMPTR_INVALID; }
 static inline void nested_evmcs_filter_control_msr(struct kvm_vcpu *vcpu, u32 msr_index, u64 *pdata) {}
 static inline bool nested_evmcs_l2_tlb_flush_enabled(struct kvm_vcpu *vcpu) { return false; }
