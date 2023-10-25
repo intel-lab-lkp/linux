@@ -188,20 +188,31 @@ u64 stable_page_flags(struct page *page)
 		u |= 1 << KPF_SLAB;
 
 	u |= kpf_copy_bit(k, KPF_ERROR,		PG_error);
-	u |= kpf_copy_bit(k, KPF_DIRTY,		PG_dirty);
+
+	if (PageDirty(page))
+		u |= 1 << KPF_DIRTY;
+
 	u |= kpf_copy_bit(k, KPF_UPTODATE,	PG_uptodate);
 	u |= kpf_copy_bit(k, KPF_WRITEBACK,	PG_writeback);
 
-	u |= kpf_copy_bit(k, KPF_LRU,		PG_lru);
-	u |= kpf_copy_bit(k, KPF_REFERENCED,	PG_referenced);
-	u |= kpf_copy_bit(k, KPF_ACTIVE,	PG_active);
+	if (PageLRU(page))
+		u |= 1 << KPF_LRU;
+
+	if (PageReferenced(page))
+		u |= 1 << KPF_REFERENCED;
+
+	if (PageActive(page))
+		u |= 1 << KPF_ACTIVE;
+
 	u |= kpf_copy_bit(k, KPF_RECLAIM,	PG_reclaim);
 
 	if (PageSwapCache(page))
 		u |= 1 << KPF_SWAPCACHE;
 	u |= kpf_copy_bit(k, KPF_SWAPBACKED,	PG_swapbacked);
 
-	u |= kpf_copy_bit(k, KPF_UNEVICTABLE,	PG_unevictable);
+	if (PageUnevictable(page))
+		u |= 1 << KPF_UNEVICTABLE;
+
 	u |= kpf_copy_bit(k, KPF_MLOCKED,	PG_mlocked);
 
 #ifdef CONFIG_MEMORY_FAILURE
