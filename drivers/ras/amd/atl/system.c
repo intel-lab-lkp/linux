@@ -144,6 +144,7 @@ static int determine_df_rev_legacy(void)
 
 	if (FIELD_GET(DF4_COMPONENT_ID_MASK, fabric_id_mask0)) {
 		df_cfg.rev = DF3p5;
+		df_cfg.flags.heterogeneous = 1;
 
 		/* Read D18F1x154 (SystemFabricIdMask1) */
 		if (df_indirect_read_broadcast(0, 1, 0x154, &fabric_id_mask1))

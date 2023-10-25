@@ -16,7 +16,7 @@
  * Returns the Destination Fabric ID. This is the first (lowest)
  * CS Fabric ID used within a DRAM Address map.
  */
-static u16 get_dst_fabric_id(struct addr_ctx *ctx)
+u16 get_dst_fabric_id(struct addr_ctx *ctx)
 {
 	switch (df_cfg.rev) {
 	case DF2:
@@ -97,6 +97,9 @@ static u64 make_space_for_cs_id(struct addr_ctx *ctx)
 	case NOHASH_8CHAN:
 	case NOHASH_16CHAN:
 	case NOHASH_32CHAN:
+	case MI2_HASH_8CHAN:
+	case MI2_HASH_16CHAN:
+	case MI2_HASH_32CHAN:
 	case DF2_2CHAN_HASH:
 		return make_space_for_cs_id_at_intlv_bit(ctx);
 
@@ -233,6 +236,9 @@ static u16 calculate_cs_id(struct addr_ctx *ctx)
 	case DF3_COD4_2CHAN_HASH:
 	case DF3_COD2_4CHAN_HASH:
 	case DF3_COD1_8CHAN_HASH:
+	case MI2_HASH_8CHAN:
+	case MI2_HASH_16CHAN:
+	case MI2_HASH_32CHAN:
 	case DF2_2CHAN_HASH:
 		return get_cs_id_df2(ctx);
 
@@ -296,6 +302,9 @@ static u64 insert_cs_id(struct addr_ctx *ctx, u64 denorm_addr, u16 cs_id)
 	case NOHASH_8CHAN:
 	case NOHASH_16CHAN:
 	case NOHASH_32CHAN:
+	case MI2_HASH_8CHAN:
+	case MI2_HASH_16CHAN:
+	case MI2_HASH_32CHAN:
 	case DF2_2CHAN_HASH:
 		return insert_cs_id_at_intlv_bit(ctx, denorm_addr, cs_id);
 

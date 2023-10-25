@@ -395,6 +395,61 @@ static int df4p5_dehash_addr(struct addr_ctx *ctx)
 	return 0;
 }
 
+/*
+ * MI200 hash bits
+ *				64K  2M  1G
+ * CSSelect[0] = XOR of addr{8,  16, 21, 30};
+ * CSSelect[1] = XOR of addr{9,  17, 22, 31};
+ * CSSelect[2] = XOR of addr{10, 18, 23, 32};
+ * CSSelect[3] = XOR of addr{11, 19, 24, 33}; - 16 and 32 channel only
+ * CSSelect[4] = XOR of addr{12, 20, 25, 34}; - 32 channel only
+ */
+static int mi200_dehash_addr(struct addr_ctx *ctx)
+{
+	u8 num_intlv_bits = ctx->map.total_intlv_bits;
+	bool hash_ctl_64k, hash_ctl_2M, hash_ctl_1G;
+	u8 hashed_bit, intlv_bit, i;
+
+	/* Assert that interleave bit is 8. */
+	if (ctx->map.intlv_bit_pos != 8) {
+		pr_warn("%s: Invalid interleave bit: %u",
+			__func__, ctx->map.intlv_bit_pos);
+		return -EINVAL;
+	}
+
+	/* Assert that die interleaving is disabled. */
+	if (ctx->map.num_intlv_dies > 1) {
+		pr_warn("%s: Invalid number of interleave dies: %u",
+			__func__, ctx->map.num_intlv_dies);
+		return -EINVAL;
+	}
+
+	/* Assert that socket interleaving is disabled. */
+	if (ctx->map.num_intlv_sockets > 1) {
+		pr_warn("%s: Invalid number of interleave sockets: %u",
+			__func__, ctx->map.num_intlv_sockets);
+		return -EINVAL;
+	}
+
+	hash_ctl_64k	= FIELD_GET(DF3_HASH_CTL_64K, ctx->map.ctl);
+	hash_ctl_2M	= FIELD_GET(DF3_HASH_CTL_2M, ctx->map.ctl);
+	hash_ctl_1G	= FIELD_GET(DF3_HASH_CTL_1G, ctx->map.ctl);
+
+	for (i = 0; i < num_intlv_bits; i++) {
+		intlv_bit = atl_get_bit(8 + i, ctx->ret_addr);
+
+		hashed_bit = intlv_bit;
+		hashed_bit ^= atl_get_bit(8 + i, ctx->ret_addr);
+		hashed_bit ^= atl_get_bit(16 + i, ctx->ret_addr) & hash_ctl_64k;
+		hashed_bit ^= atl_get_bit(21 + i, ctx->ret_addr) & hash_ctl_2M;
+		hashed_bit ^= atl_get_bit(30 + i, ctx->ret_addr) & hash_ctl_1G;
+
+		if (hashed_bit != intlv_bit)
+			ctx->ret_addr ^= BIT_ULL(8 + i);
+	}
+	return 0;
+}
+
 int dehash_address(struct addr_ctx *ctx)
 {
 	switch (ctx->map.intlv_mode) {
@@ -451,6 +506,11 @@ int dehash_address(struct addr_ctx *ctx)
 	case DF4p5_NPS1_16CHAN_1K_HASH:
 	case DF4p5_NPS1_16CHAN_2K_HASH:
 		return df4p5_dehash_addr(ctx);
+
+	case MI2_HASH_8CHAN:
+	case MI2_HASH_16CHAN:
+	case MI2_HASH_32CHAN:
+		return mi200_dehash_addr(ctx);
 
 	default:
 		ATL_BAD_INTLV_MODE(ctx->map.intlv_mode);

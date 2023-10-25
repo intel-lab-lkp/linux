@@ -601,3 +601,32 @@
 #define DF2_SOCKET_ID_SHIFT	GENMASK(31, 28)
 #define DF3_SOCKET_ID_SHIFT	GENMASK(9, 8)
 #define DF4_SOCKET_ID_SHIFT	GENMASK(11, 8)
+
+/*
+ * Total number of instances of all the blocks in DF
+ *
+ * Access type: Broadcast
+ *
+ * Register
+ *	Rev	Fieldname	Bits
+ *
+ *	D18F0x040 [Fabric Block Instance Count]
+ *	DF3	BlkInstCount	[7:0]
+ *	DF3p5	BlkInstCount	[7:0]
+ *	DF4	BlkInstCount	[7:0]
+ *	DF4p5	BlkInstCount	[9:0]
+ */
+#define DF_BLOCK_INSTANCE_COUNT	GENMASK(9, 0)
+
+/*
+ * Information on the block capabilities
+ *
+ * Access type: Broadcast
+ *
+ * Register
+ *	Rev	Fieldname	Bits
+ *
+ *	D18F0x044 [Fabric Block Instance Information 0]
+ *	DF3p5	BlkInstCount	[3:0]
+ */
+#define DF_INSTANCE_TYPE	GENMASK(3, 0)

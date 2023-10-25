@@ -355,6 +355,101 @@ static int get_dram_addr_map(struct addr_ctx *ctx)
 	}
 }
 
+static int find_moderator_instance_id(struct addr_ctx *ctx)
+{
+	u16 num_df_instances;
+	u32 reg;
+
+	/* Read D18F0x40 (FabricBlockInstanceCount). */
+	if (df_indirect_read_broadcast(0, 0, 0x40, &reg))
+		return -EINVAL;
+
+	num_df_instances = FIELD_GET(DF_BLOCK_INSTANCE_COUNT, reg);
+
+	for (ctx->inst_id = 0; ctx->inst_id < num_df_instances; ctx->inst_id++) {
+		/* Read D18F0x44 (FabricBlockInstanceInformation0). */
+		if (df_indirect_read_instance(0, 0, 0x44, ctx->inst_id, &reg))
+			return -EINVAL;
+
+		if (!reg)
+			continue;
+
+		/* Match on the first CCM instance. */
+		if (FIELD_GET(DF_INSTANCE_TYPE, reg) == DF_INST_TYPE_CCM)
+			return 0;
+	}
+
+	return -EINVAL;
+}
+
+static int find_map_by_dst_fabric_id(struct addr_ctx *ctx)
+{
+	u64 mask = df_cfg.node_id_mask;
+
+	for (ctx->map.num = 0; ctx->map.num < DF_NUM_DRAM_MAPS_AVAILABLE ; ctx->map.num++) {
+		if (get_dram_addr_map(ctx))
+			return -EINVAL;
+
+		/*
+		 * Match if the Destination Fabric ID in this map is the same as
+		 * the Fabric ID for the target memory device.
+		 */
+		if ((get_dst_fabric_id(ctx) & mask) == (ctx->cs_fabric_id & mask))
+			return 0;
+	}
+
+	return -EINVAL;
+}
+
+/* UMC to CS mapping for MI200 die[0]s */
+u8 umc_to_cs_mapping_mi200_die0[] = { 28, 20, 24, 16, 12, 4, 8, 0,
+					6, 30, 2, 26, 22, 14, 18, 10,
+					19, 11, 15, 7, 3, 27, 31, 23,
+					9, 1, 5, 29, 25, 17, 21, 13};
+
+/* UMC to CS mapping for MI200 die[1]s */
+u8 umc_to_cs_mapping_mi200_die1[] = { 19, 11, 15, 7, 3, 27, 31, 23,
+					9, 1, 5, 29, 25, 17, 21, 13,
+					28, 20, 24, 16, 12, 4, 8, 0,
+					6, 30, 2, 26, 22, 14, 18, 10};
+
+int get_umc_to_cs_mapping(struct addr_ctx *ctx)
+{
+	if (ctx->inst_id >= sizeof(umc_to_cs_mapping_mi200_die0))
+		return -EINVAL;
+
+	/*
+	 * MI200 has 2 dies and are enumerated alternatively
+	 * die0's are enumerated as node 2, 4, 6 and 8
+	 * die1's are enumerated as node 1, 3, 5 and 7
+	 */
+	if (ctx->node_id % 2)
+		ctx->inst_id = umc_to_cs_mapping_mi200_die1[ctx->inst_id];
+	else
+		ctx->inst_id = umc_to_cs_mapping_mi200_die0[ctx->inst_id];
+
+	return 0;
+}
+
+static int get_address_map_heterogeneous(struct addr_ctx *ctx)
+{
+	if (ctx->node_id >= amd_nb_num()) {
+		if (get_umc_to_cs_mapping(ctx))
+			return -EINVAL;
+	}
+
+	ctx->cs_fabric_id = ctx->inst_id;
+	ctx->cs_fabric_id |= ctx->node_id << df_cfg.node_id_shift;
+
+	if (find_moderator_instance_id(ctx))
+		return -EINVAL;
+
+	if (find_map_by_dst_fabric_id(ctx))
+		return -EINVAL;
+
+	return 0;
+}
+
 static int lookup_cs_fabric_id(struct addr_ctx *ctx)
 {
 	u32 reg;
@@ -482,6 +577,7 @@ static u8 get_num_intlv_chan(enum intlv_modes intlv_mode)
 	case NOHASH_8CHAN:
 	case DF3_COD1_8CHAN_HASH:
 	case DF4_NPS1_8CHAN_HASH:
+	case MI2_HASH_8CHAN:
 	case DF4p5_NPS1_8CHAN_1K_HASH:
 	case DF4p5_NPS1_8CHAN_2K_HASH:
 		return 8;
@@ -494,6 +590,7 @@ static u8 get_num_intlv_chan(enum intlv_modes intlv_mode)
 	case DF4p5_NPS1_12CHAN_2K_HASH:
 		return 12;
 	case NOHASH_16CHAN:
+	case MI2_HASH_16CHAN:
 	case DF4p5_NPS1_16CHAN_1K_HASH:
 	case DF4p5_NPS1_16CHAN_2K_HASH:
 		return 16;
@@ -501,6 +598,7 @@ static u8 get_num_intlv_chan(enum intlv_modes intlv_mode)
 	case DF4p5_NPS0_24CHAN_2K_HASH:
 		return 24;
 	case NOHASH_32CHAN:
+	case MI2_HASH_32CHAN:
 		return 32;
 	default:
 		ATL_BAD_INTLV_MODE(intlv_mode);
@@ -645,8 +743,11 @@ int get_address_map(struct addr_ctx *ctx)
 {
 	int ret = 0;
 
-	/* TODO: Add special path for DF3.5 heterogeneous systems. */
-	ret = get_address_map_common(ctx);
+	/* Add special path for DF3.5 heterogeneous systems. */
+	if (df_cfg.flags.heterogeneous && df_cfg.rev == DF3p5)
+		ret = get_address_map_heterogeneous(ctx);
+	else
+		ret = get_address_map_common(ctx);
 	if (ret)
 		return ret;
 
