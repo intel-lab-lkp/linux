@@ -2077,7 +2077,6 @@ err_put_video:
 	kfree(video->attached_array);
 err_free_video:
 	kfree(video);
-	device->driver_data = NULL;
 
 	return error;
 }
