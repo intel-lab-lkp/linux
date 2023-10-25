@@ -117,9 +117,7 @@ static void cpufreq_userspace_policy_limits(struct cpufreq_policy *policy)
 	else if (policy->min > userspace->setspeed)
 		__cpufreq_driver_target(policy, policy->min,
 					CPUFREQ_RELATION_L);
-	else
-		__cpufreq_driver_target(policy, userspace->setspeed,
-					CPUFREQ_RELATION_L);
+	/* Otherwise, keep the current frequency. */
 
 	mutex_unlock(&userspace->mutex);
 }
