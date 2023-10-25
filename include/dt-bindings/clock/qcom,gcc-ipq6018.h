@@ -259,4 +259,7 @@
 #define QDSS_STM_CLK_SRC			250
 #define QDSS_TRACECLKIN_CLK_SRC			251
 #define GCC_NSSNOC_ATB_CLK			252
+
+#define USB0_GDSC				0
+#define USB1_GDSC				1
 #endif
