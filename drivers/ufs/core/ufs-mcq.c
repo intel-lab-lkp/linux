@@ -436,7 +436,10 @@ int ufshcd_mcq_init(struct ufs_hba *hba)
 
 	for (i = 0; i < hba->nr_hw_queues; i++) {
 		hwq = &hba->uhq[i];
-		hwq->max_entries = hba->nutrs;
+		if (ufshcd_is_mcq_expand_queue_slot(hba))
+			hwq->max_entries = hba->nutrs + 1;
+		else
+			hwq->max_entries = hba->nutrs;
 		spin_lock_init(&hwq->sq_lock);
 		spin_lock_init(&hwq->cq_lock);
 		mutex_init(&hwq->sq_mutex);

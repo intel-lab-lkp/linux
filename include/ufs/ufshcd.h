@@ -642,6 +642,12 @@ enum ufshcd_quirks {
 	 * thus need this quirk to skip related flow.
 	 */
 	UFSHCD_QUIRK_MCQ_BROKEN_RTC			= 1 << 21,
+
+	/*
+	 * This quirk needs to be enabled if the host controller cannot
+	 * distinguish queue full or empty.
+	 */
+	UFSHCD_QUIRK_MCQ_EXPAND_QUEUE_SLOT              = 1 << 22,
 };
 
 enum ufshcd_caps {
@@ -1197,6 +1203,11 @@ static inline bool ufshcd_is_wb_allowed(struct ufs_hba *hba)
 static inline bool ufshcd_enable_wb_if_scaling_up(struct ufs_hba *hba)
 {
 	return hba->caps & UFSHCD_CAP_WB_WITH_CLK_SCALING;
+}
+
+static inline bool ufshcd_is_mcq_expand_queue_slot(struct ufs_hba *hba)
+{
+	return hba->quirks & UFSHCD_QUIRK_MCQ_EXPAND_QUEUE_SLOT;
 }
 
 #define ufsmcq_writel(hba, val, reg)	\
