@@ -36,6 +36,19 @@ properties:
     enum: [6000, 7000, 12500]
     default: 7000
 
+  hiz-output:
+    description:
+      Use enabled if the output should stay in high-impedance. This
+      mode will mask the output as an interrupt source.
+      Use sleep if the otuput should be only active in sleep mode.
+      This mode is compatible with any other output configuration.
+      The disabled value acts as if the property was not defined.
+    enum:
+      - enabled
+      - sleep
+      - disabled
+    default: disabled
+
   start-year: true
   wakeup-source: true
 
@@ -56,5 +69,6 @@ examples:
             reg = <0x51>;
             #clock-cells = <0>;
             quartz-load-femtofarads = <12500>;
+            hiz-output = "sleep";
         };
     };
