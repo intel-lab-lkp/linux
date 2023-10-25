@@ -268,9 +268,9 @@ int logicvc_layer_buffer_find_setup(struct logicvc_drm *logicvc,
 	u32 layer_stride = layer_bytespp * logicvc->config.row_stride;
 	u32 base_offset = layer->config.base_offset * layer_stride;
 	u32 buffer_offset = layer->config.buffer_offset * layer_stride;
-	u8 buffer_sel = 0;
-	u16 voffset = 0;
-	u16 hoffset = 0;
+	u32 buffer_sel = 0;
+	u32 voffset = 0;
+	u32 hoffset = 0;
 	phys_addr_t fb_addr;
 	u32 fb_offset;
 	u32 gap;

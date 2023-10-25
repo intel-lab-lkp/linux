@@ -18,9 +18,9 @@
 #define LOGICVC_LAYER_ALPHA_PIXEL		1
 
 struct logicvc_layer_buffer_setup {
-	u8 buffer_sel;
-	u16 voffset;
-	u16 hoffset;
+	u32 buffer_sel;
+	u32 voffset;
+	u32 hoffset;
 };
 
 struct logicvc_layer_config {
