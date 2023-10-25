@@ -542,6 +542,11 @@ out_put_holder_dir:
 	kobject_put(disk->part0->bd_holder_dir);
 out_del_block_link:
 	sysfs_remove_link(block_depr, dev_name(ddev));
+	/*
+	 * The error path needs to set memalloc_noio to false
+	 * consistent with del_gendisk.
+	 */
+	 pm_runtime_set_memalloc_noio(ddev, false);
 out_device_del:
 	device_del(ddev);
 out_free_ext_minor:
