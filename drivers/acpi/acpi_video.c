@@ -155,19 +155,19 @@ struct acpi_video_enumerated_device {
 
 struct acpi_video_bus {
 	struct acpi_device *device;
-	bool backlight_registered;
-	u8 dos_setting;
 	struct acpi_video_enumerated_device *attached_array;
-	u8 attached_count;
-	u8 child_count;
-	struct acpi_video_bus_cap cap;
-	struct acpi_video_bus_flags flags;
 	struct list_head video_device_list;
 	struct mutex device_list_lock;	/* protects video_device_list */
 	struct list_head entry;
 	struct input_dev *input;
-	char phys[32];	/* for input device */
 	struct notifier_block pm_nb;
+	bool backlight_registered;
+	u8 dos_setting;
+	u8 attached_count;
+	u8 child_count;
+	struct acpi_video_bus_cap cap;
+	struct acpi_video_bus_flags flags;
+	char phys[32];	/* for input device */
 };
 
 struct acpi_video_device_flags {
