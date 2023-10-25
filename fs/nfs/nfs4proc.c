@@ -5113,6 +5113,7 @@ static int _nfs4_proc_readdir(struct nfs_readdir_arg *nr_arg,
 		.pgbase = 0,
 		.count = nr_arg->page_len,
 		.plus = nr_arg->plus,
+		.server = server,
 	};
 	struct nfs4_readdir_res res;
 	struct rpc_message msg = {

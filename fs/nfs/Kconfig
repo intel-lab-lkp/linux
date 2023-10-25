@@ -212,3 +212,10 @@ config NFS_V4_2_READ_PLUS
 	default y
 	help
 	 Choose Y here to enable use of the NFS v4.2 READ_PLUS operation.
+
+config NFS_EXPERT_SYSFS
+	bool "NFS: Enable the support for expert tuning of nfs behaviors"
+	default n
+	help
+	  This option allows potentially dangerous modifications to the default
+	  behaviors of the NFS client via files within sysfs.

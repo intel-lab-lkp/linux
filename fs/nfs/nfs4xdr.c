@@ -1601,15 +1601,14 @@ static void encode_read(struct xdr_stream *xdr, const struct nfs_pgio_args *args
 
 static void encode_readdir(struct xdr_stream *xdr, const struct nfs4_readdir_arg *readdir, struct rpc_rqst *req, struct compound_hdr *hdr)
 {
-	uint32_t attrs[3] = {
-		FATTR4_WORD0_TYPE|FATTR4_WORD0_RDATTR_ERROR,
-		FATTR4_WORD1_MOUNTED_ON_FILEID,
-	};
+	uint32_t attrs[3];
 	uint32_t dircount = readdir->count;
 	uint32_t maxcount = readdir->count;
 	__be32 *p, verf[2];
 	uint32_t attrlen = 0;
 	unsigned int i;
+
+	memcpy(attrs, readdir->server->readdir_attrs, sizeof(attrs));
 
 	if (readdir->plus) {
 		attrs[0] |= FATTR4_WORD0_CHANGE|FATTR4_WORD0_SIZE|
