@@ -96,6 +96,10 @@ static int max_devices;
 static DEFINE_IDA(mmc_blk_ida);
 static DEFINE_IDA(mmc_rpmb_ida);
 
+static unsigned int ffu_progress;
+#define MMC_FFU_START	BIT(0)	/* FFU in progress */
+#define MMC_FFU_SBC	BIT(1)	/* close-ended FFU in progress */
+
 struct mmc_blk_busy_data {
 	struct mmc_card *card;
 	u32 status;
@@ -464,6 +468,34 @@ static int mmc_blk_ioctl_copy_to_user(struct mmc_ioc_cmd __user *ic_ptr,
 	return 0;
 }
 
+bool mmc_is_ffu_cmd(struct mmc_command *cmd)
+{
+	return ((ffu_progress & MMC_FFU_SBC) &&
+		cmd->opcode == MMC_WRITE_MULTIPLE_BLOCK);
+}
+
+static void mmc_blk_ffu_progress(struct mmc_command *cmd)
+{
+	if (MMC_EXTRACT_INDEX_FROM_ARG(cmd->arg) != EXT_CSD_MODE_CONFIG &&
+	    ffu_progress == 0)
+		return;
+
+	if ((MMC_EXTRACT_INDEX_FROM_ARG(cmd->arg) == EXT_CSD_MODE_CONFIG) &&
+	    (cmd->opcode == MMC_SWITCH)) {
+		u8 value = MMC_EXTRACT_VALUE_FROM_ARG(cmd->arg);
+
+		if (value == 1)
+			ffu_progress = MMC_FFU_START;
+		else
+			ffu_progress = 0;
+
+		return;
+	} else if (ffu_progress == MMC_FFU_START &&
+		   cmd->opcode == MMC_SET_BLOCK_COUNT) {
+		ffu_progress |= MMC_FFU_SBC;
+	}
+}
+
 static int __mmc_blk_ioctl_cmd(struct mmc_card *card, struct mmc_blk_data *md,
 			       struct mmc_blk_ioc_data *idata)
 {
@@ -547,6 +579,8 @@ static int __mmc_blk_ioctl_cmd(struct mmc_card *card, struct mmc_blk_data *md,
 	if ((MMC_EXTRACT_INDEX_FROM_ARG(cmd.arg) == EXT_CSD_SANITIZE_START) &&
 	    (cmd.opcode == MMC_SWITCH))
 		return mmc_sanitize(card, idata->ic.cmd_timeout_ms);
+
+	mmc_blk_ffu_progress(&cmd);
 
 	/* If it's an R1B response we need some more preparations. */
 	busy_timeout_ms = idata->ic.cmd_timeout_ms ? : MMC_BLK_TIMEOUT_MS;
