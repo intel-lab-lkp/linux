@@ -56,4 +56,7 @@ int ethtool_get_module_eeprom_call(struct net_device *dev,
 
 bool __ethtool_dev_mm_supported(struct net_device *dev);
 
+bool ethtool_dev_check_wake_filter(struct net_device *dev,
+				   const struct ethtool_wolinfo *wol);
+
 #endif /* _ETHTOOL_COMMON_H */

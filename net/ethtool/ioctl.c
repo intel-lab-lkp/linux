@@ -1457,6 +1457,9 @@ static int ethtool_set_wol(struct net_device *dev, char __user *useraddr)
 	    !memcmp(wol.sopass, cur_wol.sopass, sizeof(wol.sopass)))
 		return 0;
 
+	if (!ethtool_dev_check_wake_filter(dev, &wol))
+		return -EOPNOTSUPP;
+
 	ret = dev->ethtool_ops->set_wol(dev, &wol);
 	if (ret)
 		return ret;

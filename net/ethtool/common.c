@@ -742,3 +742,45 @@ ethtool_forced_speed_maps_init(struct ethtool_forced_speed_map *maps, u32 size)
 	}
 }
 EXPORT_SYMBOL_GPL(ethtool_forced_speed_maps_init);
+
+static int __ethtool_check_rxnfc_wake_filter(struct ethtool_rxnfc *rule_info,
+					     void *priv)
+{
+	bool *verdict = priv;
+
+	if (rule_info->fs.ring_cookie == RX_CLS_FLOW_WAKE) {
+		*verdict = true;
+		return 1;
+	}
+
+	return 0;
+}
+
+/**
+ * ethtool_dev_check_wake_filter: Tests if a network device can use the
+ * WAKE_FILTER Wake-on-LAN option.
+ * @dev: network device to test
+ * @wol: %ethtool_wolinfo structure with Wake-on-LAN configuration
+ *
+ * Returns true if there is no support for %WAKE_FILTER, no support
+ * for RXNFC ethtool operations, or if there is at least one WAKE_FILTER
+ * installed.
+ */
+bool ethtool_dev_check_wake_filter(struct net_device *dev,
+				   const struct ethtool_wolinfo *wol)
+{
+	bool verdict = false;
+	int ret;
+
+	if (!(wol->wolopts & WAKE_FILTER))
+		return true;
+
+	if (!dev->ethtool_ops->get_rxnfc ||
+	    !dev->ethtool_ops->set_rxnfc)
+		return true;
+
+	ret = __ethtool_for_each_rxnfc(dev, __ethtool_check_rxnfc_wake_filter,
+				       &verdict);
+
+	return ret < 0 ? false : verdict;
+}

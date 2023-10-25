@@ -132,6 +132,9 @@ ethnl_set_wol(struct ethnl_req_info *req_info, struct genl_info *info)
 				    tb[ETHTOOL_A_WOL_SOPASS], &mod);
 	}
 
+	if (!ethtool_dev_check_wake_filter(dev, &wol))
+		return -EOPNOTSUPP;
+
 	if (!mod)
 		return 0;
 	ret = dev->ethtool_ops->set_wol(dev, &wol);
