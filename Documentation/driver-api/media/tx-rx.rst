@@ -22,12 +22,13 @@ the host SoC. It is defined by the `MIPI alliance`_.
 
 .. _`MIPI alliance`: https://www.mipi.org/
 
-Parallel
-^^^^^^^^
+Parallel and BT.656
+^^^^^^^^^^^^^^^^^^^
 
-`BT.601`_ and `BT.656`_ are the most common parallel busses.
+Besides CSI-2, the `parallel`_ and `BT.656`_ buses are the two other bus types
+used commonly by camera sensors. Many camera sensors support both bus types.
 
-.. _`BT.601`: https://en.wikipedia.org/wiki/Rec._601
+.. _`parallel`: https://en.wikipedia.org/wiki/Parallel_communication
 .. _`BT.656`: https://en.wikipedia.org/wiki/ITU-R_BT.656
 
 Transmitter drivers
