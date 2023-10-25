@@ -126,12 +126,12 @@ static inline void write_pmuserenr(u32 val)
 	write_sysreg(val, pmuserenr_el0);
 }
 
-static inline u32 read_pmceid0(void)
+static inline u64 read_pmceid0(void)
 {
 	return read_sysreg(pmceid0_el0);
 }
 
-static inline u32 read_pmceid1(void)
+static inline u64 read_pmceid1(void)
 {
 	return read_sysreg(pmceid1_el0);
 }
