@@ -23,6 +23,7 @@
 #include "clk-alpha-pll.h"
 #include "clk-regmap-divider.h"
 #include "clk-regmap-mux.h"
+#include "gdsc.h"
 #include "reset.h"
 
 enum {
@@ -4146,6 +4147,22 @@ static struct clk_branch gcc_dcc_clk = {
 	},
 };
 
+static struct gdsc usb0_gdsc = {
+	.gdscr = 0x3e078,
+	.pd = {
+		.name = "usb0_gdsc",
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+};
+
+static struct gdsc usb1_gdsc = {
+	.gdscr = 0x3f078,
+	.pd = {
+		.name = "usb1_gdsc",
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+};
+
 static const struct alpha_pll_config ubi32_pll_config = {
 	.l = 0x3e,
 	.alpha = 0x6667,
@@ -4559,6 +4576,11 @@ static const struct qcom_reset_map gcc_ipq6018_resets[] = {
 	[GCC_Q6_AXIM_ARES] = {0x59110, 4},
 };
 
+static struct gdsc *gcc_ipq6018_gdscs[] = {
+	[USB0_GDSC] = &usb0_gdsc,
+	[USB1_GDSC] = &usb1_gdsc,
+};
+
 static const struct of_device_id gcc_ipq6018_match_table[] = {
 	{ .compatible = "qcom,gcc-ipq6018" },
 	{ }
@@ -4581,6 +4603,8 @@ static const struct qcom_cc_desc gcc_ipq6018_desc = {
 	.num_resets = ARRAY_SIZE(gcc_ipq6018_resets),
 	.clk_hws = gcc_ipq6018_hws,
 	.num_clk_hws = ARRAY_SIZE(gcc_ipq6018_hws),
+	.gdscs = gcc_ipq6018_gdscs,
+	.num_gdscs = ARRAY_SIZE(gcc_ipq6018_gdscs),
 };
 
 static int gcc_ipq6018_probe(struct platform_device *pdev)
@@ -4590,15 +4614,6 @@ static int gcc_ipq6018_probe(struct platform_device *pdev)
 	regmap = qcom_cc_map(pdev, &gcc_ipq6018_desc);
 	if (IS_ERR(regmap))
 		return PTR_ERR(regmap);
-
-	/* Disable SW_COLLAPSE for USB0 GDSCR */
-	regmap_update_bits(regmap, 0x3e078, BIT(0), 0x0);
-	/* Enable SW_OVERRIDE for USB0 GDSCR */
-	regmap_update_bits(regmap, 0x3e078, BIT(2), BIT(2));
-	/* Disable SW_COLLAPSE for USB1 GDSCR */
-	regmap_update_bits(regmap, 0x3f078, BIT(0), 0x0);
-	/* Enable SW_OVERRIDE for USB1 GDSCR */
-	regmap_update_bits(regmap, 0x3f078, BIT(2), BIT(2));
 
 	/* SW Workaround for UBI Huyara PLL */
 	regmap_update_bits(regmap, 0x2501c, BIT(26), BIT(26));
