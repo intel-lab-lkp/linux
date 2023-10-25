@@ -1526,7 +1526,7 @@ static int acpi_video_bus_stop_devices(struct acpi_video_bus *video)
 static void acpi_video_bus_notify(acpi_handle handle, u32 event, void *data)
 {
 	struct acpi_video_bus *video = data;
-	struct acpi_device *device = video->device;
+	struct acpi_device *adev = video->device;
 	struct input_dev *input;
 	int keycode = 0;
 
@@ -1559,12 +1559,12 @@ static void acpi_video_bus_notify(acpi_handle handle, u32 event, void *data)
 		break;
 
 	default:
-		acpi_handle_debug(device->handle, "Unsupported event [0x%x]\n",
+		acpi_handle_debug(adev->handle, "Unsupported event [0x%x]\n",
 				  event);
 		break;
 	}
 
-	if (acpi_notifier_call_chain(device, event, 0))
+	if (acpi_notifier_call_chain(adev, event, 0))
 		/* Something vetoed the keypress. */
 		keycode = 0;
 
@@ -1971,16 +1971,16 @@ static int instance;
 
 static int acpi_video_bus_probe(struct platform_device *pdev)
 {
-	struct acpi_device *device = ACPI_COMPANION(&pdev->dev);
+	struct acpi_device *adev = ACPI_COMPANION(&pdev->dev);
 	struct acpi_video_bus *video;
 	bool auto_detect;
 	int error;
 	acpi_status status;
 
 	status = acpi_walk_namespace(ACPI_TYPE_DEVICE,
-				acpi_dev_parent(device)->handle, 1,
-				acpi_video_bus_match, NULL,
-				device, NULL);
+				     acpi_dev_parent(adev)->handle, 1,
+				     acpi_video_bus_match, NULL,
+				     adev, NULL);
 	if (status == AE_ALREADY_EXISTS) {
 		pr_info(FW_BUG
 			"Duplicate ACPI video bus devices for the"
@@ -1996,21 +1996,21 @@ static int acpi_video_bus_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	/* a hack to fix the duplicate name "VID" problem on T61 */
-	if (!strcmp(device->pnp.bus_id, "VID")) {
+	if (!strcmp(adev->pnp.bus_id, "VID")) {
 		if (instance)
-			device->pnp.bus_id[3] = '0' + instance;
+			adev->pnp.bus_id[3] = '0' + instance;
 		instance++;
 	}
 	/* a hack to fix the duplicate name "VGA" problem on Pa 3553 */
-	if (!strcmp(device->pnp.bus_id, "VGA")) {
+	if (!strcmp(adev->pnp.bus_id, "VGA")) {
 		if (instance)
-			device->pnp.bus_id[3] = '0' + instance;
+			adev->pnp.bus_id[3] = '0' + instance;
 		instance++;
 	}
 
-	video->device = device;
-	strcpy(acpi_device_name(device), ACPI_VIDEO_BUS_NAME);
-	strcpy(acpi_device_class(device), ACPI_VIDEO_CLASS);
+	video->device = adev;
+	strcpy(acpi_device_name(adev), ACPI_VIDEO_BUS_NAME);
+	strcpy(acpi_device_class(adev), ACPI_VIDEO_CLASS);
 	platform_set_drvdata(pdev, video);
 
 	acpi_video_bus_find_cap(video);
@@ -2021,7 +2021,7 @@ static int acpi_video_bus_probe(struct platform_device *pdev)
 	mutex_init(&video->device_list_lock);
 	INIT_LIST_HEAD(&video->video_device_list);
 
-	error = acpi_video_bus_get_devices(video, device);
+	error = acpi_video_bus_get_devices(video, adev);
 	if (error)
 		goto err_put_video;
 
@@ -2029,10 +2029,10 @@ static int acpi_video_bus_probe(struct platform_device *pdev)
 	 * HP ZBook Fury 16 G10 requires ACPI video's child devices have _PS0
 	 * evaluated to have functional panel brightness control.
 	 */
-	acpi_device_fix_up_power_extended(device);
+	acpi_device_fix_up_power_extended(adev);
 
 	pr_info("%s [%s] (multi-head: %s  rom: %s  post: %s)\n",
-	       ACPI_VIDEO_DEVICE_NAME, acpi_device_bid(device),
+	       ACPI_VIDEO_DEVICE_NAME, acpi_device_bid(adev),
 	       str_yes_no(video->flags.multihead),
 	       str_yes_no(video->flags.rom),
 	       str_yes_no(video->flags.post));
@@ -2059,7 +2059,7 @@ static int acpi_video_bus_probe(struct platform_device *pdev)
 	if (error)
 		goto err_del;
 
-	error = acpi_dev_install_notify_handler(device, ACPI_DEVICE_NOTIFY,
+	error = acpi_dev_install_notify_handler(adev, ACPI_DEVICE_NOTIFY,
 						acpi_video_bus_notify, video);
 	if (error)
 		goto err_remove;
