@@ -591,6 +591,7 @@ static void __init _ti_omap4_clkctrl_setup(struct device_node *node)
 		provider->clkdm_name = kasprintf(GFP_KERNEL,
 						 "%s_clkdm", clkctrl_name);
 		if (!provider->clkdm_name) {
+			kfree(clkctrl_name);
 			kfree(provider);
 			return;
 		}
