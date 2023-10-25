@@ -388,6 +388,7 @@
 			clocks = <&xo>, <&sleep_clk>;
 			clock-names = "xo", "sleep_clk";
 			#clock-cells = <1>;
+			#power-domain-cells = <1>;
 			#reset-cells = <1>;
 		};
 
@@ -419,6 +420,9 @@
 					  <&gcc GCC_USB1_MOCK_UTMI_CLK>;
 			assigned-clock-rates = <133330000>,
 					       <24000000>;
+
+			power-domains = <&gcc USB1_GDSC>;
+
 			resets = <&gcc GCC_USB1_BCR>;
 			status = "disabled";
 
@@ -566,6 +570,8 @@
 			assigned-clock-rates = <133330000>,
 					       <133330000>,
 					       <20000000>;
+
+			power-domains = <&gcc USB0_GDSC>;
 
 			resets = <&gcc GCC_USB0_BCR>;
 			status = "disabled";
