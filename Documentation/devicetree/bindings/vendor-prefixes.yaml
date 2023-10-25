@@ -981,6 +981,8 @@ patternProperties:
     description: Oki Electric Industry Co., Ltd.
   "^olimex,.*":
     description: OLIMEX Ltd.
+  "^ologic,.*":
+    description: OLogic, Inc.
   "^olpc,.*":
     description: One Laptop Per Child
   "^oneplus,.*":
