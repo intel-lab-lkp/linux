@@ -25,6 +25,7 @@
 #include <linux/dmi.h>
 #include <linux/suspend.h>
 #include <linux/acpi.h>
+#include <linux/platform_device.h>
 #include <acpi/video.h>
 #include <linux/uaccess.h>
 
@@ -75,8 +76,8 @@ static int register_count;
 static DEFINE_MUTEX(register_count_mutex);
 static DEFINE_MUTEX(video_list_lock);
 static LIST_HEAD(video_bus_head);
-static int acpi_video_bus_add(struct acpi_device *device);
-static void acpi_video_bus_remove(struct acpi_device *device);
+static int acpi_video_bus_probe(struct platform_device *pdev);
+static void acpi_video_bus_remove(struct platform_device *pdev);
 static void acpi_video_bus_notify(acpi_handle handle, u32 event, void *data);
 
 /*
@@ -97,14 +98,13 @@ static const struct acpi_device_id video_device_ids[] = {
 };
 MODULE_DEVICE_TABLE(acpi, video_device_ids);
 
-static struct acpi_driver acpi_video_bus = {
-	.name = "video",
-	.class = ACPI_VIDEO_CLASS,
-	.ids = video_device_ids,
-	.ops = {
-		.add = acpi_video_bus_add,
-		.remove = acpi_video_bus_remove,
-		},
+static struct platform_driver acpi_video_bus = {
+	.probe = acpi_video_bus_probe,
+	.remove_new = acpi_video_bus_remove,
+	.driver = {
+		.name = "video",
+		.acpi_match_table = video_device_ids,
+	},
 };
 
 struct acpi_video_bus_flags {
@@ -1525,8 +1525,8 @@ static int acpi_video_bus_stop_devices(struct acpi_video_bus *video)
 
 static void acpi_video_bus_notify(acpi_handle handle, u32 event, void *data)
 {
-	struct acpi_device *device = data;
-	struct acpi_video_bus *video = acpi_driver_data(device);
+	struct acpi_video_bus *video = data;
+	struct acpi_device *device = video->device;
 	struct input_dev *input;
 	int keycode = 0;
 
@@ -1969,8 +1969,9 @@ static int acpi_video_bus_put_devices(struct acpi_video_bus *video)
 
 static int instance;
 
-static int acpi_video_bus_add(struct acpi_device *device)
+static int acpi_video_bus_probe(struct platform_device *pdev)
 {
+	struct acpi_device *device = ACPI_COMPANION(&pdev->dev);
 	struct acpi_video_bus *video;
 	bool auto_detect;
 	int error;
@@ -2010,7 +2011,7 @@ static int acpi_video_bus_add(struct acpi_device *device)
 	video->device = device;
 	strcpy(acpi_device_name(device), ACPI_VIDEO_BUS_NAME);
 	strcpy(acpi_device_class(device), ACPI_VIDEO_CLASS);
-	device->driver_data = video;
+	platform_set_drvdata(pdev, video);
 
 	acpi_video_bus_find_cap(video);
 	error = acpi_video_bus_check(video);
@@ -2059,7 +2060,7 @@ static int acpi_video_bus_add(struct acpi_device *device)
 		goto err_del;
 
 	error = acpi_dev_install_notify_handler(device, ACPI_DEVICE_NOTIFY,
-						acpi_video_bus_notify, device);
+						acpi_video_bus_notify, video);
 	if (error)
 		goto err_remove;
 
@@ -2081,11 +2082,11 @@ err_free_video:
 	return error;
 }
 
-static void acpi_video_bus_remove(struct acpi_device *device)
+static void acpi_video_bus_remove(struct platform_device *pdev)
 {
-	struct acpi_video_bus *video = acpi_driver_data(device);
+	struct acpi_video_bus *video = platform_get_drvdata(pdev);
 
-	acpi_dev_remove_notify_handler(device, ACPI_DEVICE_NOTIFY,
+	acpi_dev_remove_notify_handler(video->device, ACPI_DEVICE_NOTIFY,
 				       acpi_video_bus_notify);
 
 	mutex_lock(&video_list_lock);
@@ -2200,7 +2201,7 @@ int acpi_video_register(void)
 
 	dmi_check_system(video_dmi_table);
 
-	ret = acpi_bus_register_driver(&acpi_video_bus);
+	ret = platform_driver_register(&acpi_video_bus);
 	if (ret)
 		goto leave;
 
@@ -2220,7 +2221,7 @@ void acpi_video_unregister(void)
 {
 	mutex_lock(&register_count_mutex);
 	if (register_count) {
-		acpi_bus_unregister_driver(&acpi_video_bus);
+		platform_driver_unregister(&acpi_video_bus);
 		register_count = 0;
 		may_report_brightness_keys = false;
 	}
