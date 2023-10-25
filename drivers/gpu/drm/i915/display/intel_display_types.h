@@ -54,6 +54,7 @@
 #include "intel_display_power.h"
 #include "intel_dpll_mgr.h"
 #include "intel_wm_types.h"
+#include "intel_darkscreen.h"
 
 struct drm_printer;
 struct __intel_global_objs_state;
@@ -1514,6 +1515,8 @@ struct intel_crtc {
 
 	/* for loading single buffered registers during vblank */
 	struct pm_qos_request vblank_pm_qos;
+
+	struct intel_darkscreen dark_screen;
 
 #ifdef CONFIG_DEBUG_FS
 	struct intel_pipe_crc pipe_crc;
