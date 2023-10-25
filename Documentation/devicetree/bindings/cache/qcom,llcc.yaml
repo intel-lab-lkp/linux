@@ -25,6 +25,7 @@ properties:
       - qcom,sc7280-llcc
       - qcom,sc8180x-llcc
       - qcom,sc8280xp-llcc
+      - qcom,sc8380xp-llcc
       - qcom,sdm845-llcc
       - qcom,sm6350-llcc
       - qcom,sm7150-llcc
@@ -104,6 +105,7 @@ allOf:
               - qcom,qdu1000-llcc
               - qcom,sc8180x-llcc
               - qcom,sc8280xp-llcc
+              - qcom,sc8380xp-llcc
     then:
       properties:
         reg:
