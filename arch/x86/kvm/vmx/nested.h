@@ -58,7 +58,7 @@ static inline int vmx_has_valid_vmcs12(struct kvm_vcpu *vcpu)
 
 	/* 'hv_evmcs_vmptr' can also be EVMPTR_MAP_PENDING here */
 	return vmx->nested.current_vmptr != -1ull ||
-		vmx->nested.hv_evmcs_vmptr != EVMPTR_INVALID;
+		nested_vmx_evmptr12(vmx) != EVMPTR_INVALID;
 }
 
 static inline u16 nested_get_vpid02(struct kvm_vcpu *vcpu)
