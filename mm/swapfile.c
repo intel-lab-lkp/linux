@@ -639,27 +639,24 @@ new_cluster:
 
 	/*
 	 * Other CPUs can use our cluster if they can't find a free cluster,
-	 * check if there is still free entry in the cluster
+	 * check if the expected entry is still free. If not, drop it and
+	 * reserve a new cluster.
 	 */
-	max = min_t(unsigned long, si->max,
-		    ALIGN_DOWN(tmp, SWAPFILE_CLUSTER) + SWAPFILE_CLUSTER);
-	if (tmp < max) {
-		ci = lock_cluster(si, tmp);
-		while (tmp < max) {
-			if (!si->swap_map[tmp])
-				break;
-			tmp++;
-		}
+	ci = lock_cluster(si, tmp);
+	if (si->swap_map[tmp]) {
 		unlock_cluster(ci);
-	}
-	if (tmp >= max) {
 		*cpu_next = SWAP_NEXT_NULL;
 		goto new_cluster;
 	}
+	unlock_cluster(ci);
+
 	*offset = tmp;
 	*scan_base = tmp;
+
+	max = ALIGN_DOWN(tmp, SWAPFILE_CLUSTER) + SWAPFILE_CLUSTER;
 	tmp += 1;
 	*cpu_next = tmp < max ? tmp : SWAP_NEXT_NULL;
+
 	return true;
 }
 
