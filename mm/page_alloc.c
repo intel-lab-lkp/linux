@@ -4221,23 +4221,20 @@ static inline bool prepare_alloc_pages(gfp_t gfp_mask, unsigned int order,
  * @preferred_nid: The preferred NUMA node ID to allocate from
  * @nodemask: Set of nodes to allocate from, may be NULL
  * @nr_pages: The number of pages desired on the list or array
- * @page_list: Optional list to store the allocated pages
- * @page_array: Optional array to store the pages
+ * @page_array: Array array to store the pages
  *
  * This is a batched version of the page allocator that attempts to
- * allocate nr_pages quickly. Pages are added to page_list if page_list
- * is not NULL, otherwise it is assumed that the page_array is valid.
+ * allocate nr_pages quickly with pointers stored in page_array.
  *
  * For lists, nr_pages is the number of pages that should be allocated.
  *
  * For arrays, only NULL elements are populated with pages and nr_pages
  * is the maximum number of pages that will be stored in the array.
  *
- * Returns the number of pages on the list or array.
+ * Returns the number of pages in the array.
  */
 unsigned long __alloc_pages_bulk(gfp_t gfp, int preferred_nid,
 			nodemask_t *nodemask, int nr_pages,
-			struct list_head *page_list,
 			struct page **page_array)
 {
 	struct page *page;
@@ -4351,11 +4348,7 @@ unsigned long __alloc_pages_bulk(gfp_t gfp, int preferred_nid,
 		nr_account++;
 
 		prep_new_page(page, 0, gfp, 0);
-		if (page_list)
-			list_add(&page->lru, page_list);
-		else
-			page_array[nr_populated] = page;
-		nr_populated++;
+		page_array[nr_populated++] = page;
 	}
 
 	pcp_spin_unlock(pcp);
@@ -4372,13 +4365,8 @@ failed_irq:
 
 failed:
 	page = __alloc_pages(gfp, 0, preferred_nid, nodemask);
-	if (page) {
-		if (page_list)
-			list_add(&page->lru, page_list);
-		else
-			page_array[nr_populated] = page;
-		nr_populated++;
-	}
+	if (page)
+		page_array[nr_populated++] = page;
 
 	goto out;
 }

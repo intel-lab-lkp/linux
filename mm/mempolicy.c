@@ -2313,7 +2313,7 @@ struct folio *folio_alloc(gfp_t gfp, unsigned order)
 }
 EXPORT_SYMBOL(folio_alloc);
 
-static unsigned long alloc_pages_bulk_array_interleave(gfp_t gfp,
+static unsigned long alloc_pages_bulk_interleave(gfp_t gfp,
 		struct mempolicy *pol, unsigned long nr_pages,
 		struct page **page_array)
 {
@@ -2332,13 +2332,12 @@ static unsigned long alloc_pages_bulk_array_interleave(gfp_t gfp,
 		if (delta) {
 			nr_allocated = __alloc_pages_bulk(gfp,
 					interleave_nodes(pol), NULL,
-					nr_pages_per_node + 1, NULL,
-					page_array);
+					nr_pages_per_node + 1, page_array);
 			delta--;
 		} else {
 			nr_allocated = __alloc_pages_bulk(gfp,
 					interleave_nodes(pol), NULL,
-					nr_pages_per_node, NULL, page_array);
+					nr_pages_per_node, page_array);
 		}
 
 		page_array += nr_allocated;
@@ -2348,7 +2347,7 @@ static unsigned long alloc_pages_bulk_array_interleave(gfp_t gfp,
 	return total_allocated;
 }
 
-static unsigned long alloc_pages_bulk_array_preferred_many(gfp_t gfp, int nid,
+static unsigned long alloc_pages_bulk_preferred_many(gfp_t gfp, int nid,
 		struct mempolicy *pol, unsigned long nr_pages,
 		struct page **page_array)
 {
@@ -2359,11 +2358,11 @@ static unsigned long alloc_pages_bulk_array_preferred_many(gfp_t gfp, int nid,
 	preferred_gfp &= ~(__GFP_DIRECT_RECLAIM | __GFP_NOFAIL);
 
 	nr_allocated  = __alloc_pages_bulk(preferred_gfp, nid, &pol->nodes,
-					   nr_pages, NULL, page_array);
+					   nr_pages, page_array);
 
 	if (nr_allocated < nr_pages)
 		nr_allocated += __alloc_pages_bulk(gfp, numa_node_id(), NULL,
-				nr_pages - nr_allocated, NULL,
+				nr_pages - nr_allocated,
 				page_array + nr_allocated);
 	return nr_allocated;
 }
@@ -2374,7 +2373,7 @@ static unsigned long alloc_pages_bulk_array_preferred_many(gfp_t gfp, int nid,
  * It can accelerate memory allocation especially interleaving
  * allocate memory.
  */
-unsigned long alloc_pages_bulk_array_mempolicy(gfp_t gfp,
+unsigned long alloc_pages_bulk_mempolicy(gfp_t gfp,
 		unsigned long nr_pages, struct page **page_array)
 {
 	struct mempolicy *pol = &default_policy;
@@ -2383,15 +2382,15 @@ unsigned long alloc_pages_bulk_array_mempolicy(gfp_t gfp,
 		pol = get_task_policy(current);
 
 	if (pol->mode == MPOL_INTERLEAVE)
-		return alloc_pages_bulk_array_interleave(gfp, pol,
+		return alloc_pages_bulk_interleave(gfp, pol,
 							 nr_pages, page_array);
 
 	if (pol->mode == MPOL_PREFERRED_MANY)
-		return alloc_pages_bulk_array_preferred_many(gfp,
+		return alloc_pages_bulk_preferred_many(gfp,
 				numa_node_id(), pol, nr_pages, page_array);
 
 	return __alloc_pages_bulk(gfp, policy_node(gfp, pol, numa_node_id()),
-				  policy_nodemask(gfp, pol), nr_pages, NULL,
+				  policy_nodemask(gfp, pol), nr_pages,
 				  page_array);
 }
 
