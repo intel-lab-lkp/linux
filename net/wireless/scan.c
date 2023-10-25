@@ -202,7 +202,8 @@ static bool __cfg80211_unlink_bss(struct cfg80211_registered_device *rdev,
 
 	list_del_init(&bss->list);
 	list_del_init(&bss->pub.nontrans_list);
-	rb_erase(&bss->rbn, &rdev->bss_tree);
+	if (bss->in_rbtree)
+		rb_erase(&bss->rbn, &rdev->bss_tree);
 	rdev->bss_entries--;
 	WARN_ONCE((rdev->bss_entries == 0) ^ list_empty(&rdev->bss_list),
 		  "rdev bss entries[%d]/list[empty:%d] corruption\n",
@@ -1600,6 +1601,7 @@ static void rb_insert_bss(struct cfg80211_registered_device *rdev,
 
 		if (WARN_ON(!cmp)) {
 			/* will sort of leak this BSS */
+			bss->in_rbtree = false;
 			return;
 		}
 
@@ -1609,6 +1611,7 @@ static void rb_insert_bss(struct cfg80211_registered_device *rdev,
 			p = &(*p)->rb_right;
 	}
 
+	bss->in_rbtree = true;
 	rb_link_node(&bss->rbn, parent, p);
 	rb_insert_color(&bss->rbn, &rdev->bss_tree);
 }
@@ -3098,7 +3101,8 @@ void cfg80211_update_assoc_bss_entry(struct wireless_dev *wdev,
 			rdev->bss_generation++;
 	}
 
-	rb_erase(&cbss->rbn, &rdev->bss_tree);
+	if (cbss->in_rbtree)
+		rb_erase(&cbss->rbn, &rdev->bss_tree);
 	rb_insert_bss(rdev, cbss);
 	rdev->bss_generation++;
 
@@ -3107,7 +3111,8 @@ void cfg80211_update_assoc_bss_entry(struct wireless_dev *wdev,
 				 nontrans_list) {
 		bss = bss_from_pub(nontrans_bss);
 		bss->pub.channel = chan;
-		rb_erase(&bss->rbn, &rdev->bss_tree);
+		if (bss->in_rbtree)
+			rb_erase(&bss->rbn, &rdev->bss_tree);
 		rb_insert_bss(rdev, bss);
 		rdev->bss_generation++;
 	}

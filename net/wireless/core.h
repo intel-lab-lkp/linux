@@ -178,6 +178,7 @@ struct cfg80211_internal_bss {
 	unsigned long ts;
 	unsigned long refcount;
 	atomic_t hold;
+	bool in_rbtree;
 
 	/* time at the start of the reception of the first octet of the
 	 * timestamp field of the last beacon/probe received for this BSS.
