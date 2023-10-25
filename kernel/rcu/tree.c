@@ -3635,6 +3635,7 @@ static void synchronize_rcu_normal(void)
 {
 	struct rcu_synchronize rs;
 
+	trace_rcu_sr_normal(rcu_state.name, &rs.head, TPS("request"));
 	if (READ_ONCE(rcu_normal_wake_from_gp)) {
 		init_rcu_head_on_stack(&rs.head);
 		init_completion(&rs.completion);
@@ -3655,6 +3656,7 @@ static void synchronize_rcu_normal(void)
 	} else {
 		wait_rcu_gp(call_rcu_hurry);
 	}
+	trace_rcu_sr_normal(rcu_state.name, &rs.head, TPS("complete"));
 }
 
 /**
