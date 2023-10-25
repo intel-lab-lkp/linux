@@ -63,6 +63,10 @@ static int df4p5_get_intlv_mode(struct addr_ctx *ctx)
 	if (ctx->map.intlv_mode <= NOHASH_32CHAN)
 		return 0;
 
+	if (ctx->map.intlv_mode >= MI3_HASH_8CHAN &&
+	    ctx->map.intlv_mode <= MI3_HASH_32CHAN)
+		return 0;
+
 	/*
 	 * Modes matching the ranges above are returned as-is.
 	 *
@@ -117,6 +121,9 @@ static u64 get_hi_addr_offset(u32 reg_dram_offset)
 		ATL_BAD_DF_REV;
 	}
 
+	if (df_cfg.rev == DF4p5 && df_cfg.flags.heterogeneous)
+		shift = MI300_DRAM_LIMIT_LSB;
+
 	return hi_addr_offset << shift;
 }
 
@@ -138,13 +145,13 @@ static int get_dram_offset(struct addr_ctx *ctx, bool *enabled, u64 *norm_offset
 
 	if (df_cfg.rev >= DF4) {
 		/* Read D18F7x140 (DramOffset) */
-		if (df_indirect_read_instance(ctx->node_id, 7, 0x140 + (4 * map_num),
+		if (df_indirect_read_instance(ctx->df_acc_id, 7, 0x140 + (4 * map_num),
 					      ctx->inst_id, &reg_dram_offset))
 			return -EINVAL;
 
 	} else {
 		/* Read D18F0x1B4 (DramOffset) */
-		if (df_indirect_read_instance(ctx->node_id, 0, 0x1B4 + (4 * map_num),
+		if (df_indirect_read_instance(ctx->df_acc_id, 0, 0x1B4 + (4 * map_num),
 					      ctx->inst_id, &reg_dram_offset))
 			return -EINVAL;
 	}
@@ -170,7 +177,7 @@ static int df3_6ch_get_dram_addr_map(struct addr_ctx *ctx)
 		offset = 0x68;
 
 	/* Read D18F0x06{0,8} (DF::Skt0CsTargetRemap0)/(DF::Skt0CsTargetRemap1) */
-	if (df_indirect_read_broadcast(ctx->node_id, 0, offset, &reg))
+	if (df_indirect_read_broadcast(ctx->df_acc_id, 0, offset, &reg))
 		return -EINVAL;
 
 	/* Save 8 remap entries. */
@@ -191,12 +198,12 @@ static int df3_6ch_get_dram_addr_map(struct addr_ctx *ctx)
 static int df2_get_dram_addr_map(struct addr_ctx *ctx)
 {
 	/* Read D18F0x110 (DramBaseAddress). */
-	if (df_indirect_read_instance(ctx->node_id, 0, 0x110 + (8 * ctx->map.num),
+	if (df_indirect_read_instance(ctx->df_acc_id, 0, 0x110 + (8 * ctx->map.num),
 				      ctx->inst_id, &ctx->map.base))
 		return -EINVAL;
 
 	/* Read D18F0x114 (DramLimitAddress). */
-	if (df_indirect_read_instance(ctx->node_id, 0, 0x114 + (8 * ctx->map.num),
+	if (df_indirect_read_instance(ctx->df_acc_id, 0, 0x114 + (8 * ctx->map.num),
 				      ctx->inst_id, &ctx->map.limit))
 		return -EINVAL;
 
@@ -209,7 +216,7 @@ static int df3_get_dram_addr_map(struct addr_ctx *ctx)
 		return -EINVAL;
 
 	/* Read D18F0x3F8 (DfGlobalCtl). */
-	if (df_indirect_read_instance(ctx->node_id, 0, 0x3F8,
+	if (df_indirect_read_instance(ctx->df_acc_id, 0, 0x3F8,
 				      ctx->inst_id, &ctx->map.ctl))
 		return -EINVAL;
 
@@ -222,22 +229,22 @@ static int df4_get_dram_addr_map(struct addr_ctx *ctx)
 	u32 remap_reg;
 
 	/* Read D18F7xE00 (DramBaseAddress). */
-	if (df_indirect_read_instance(ctx->node_id, 7, 0xE00 + (16 * ctx->map.num),
+	if (df_indirect_read_instance(ctx->df_acc_id, 7, 0xE00 + (16 * ctx->map.num),
 				      ctx->inst_id, &ctx->map.base))
 		return -EINVAL;
 
 	/* Read D18F7xE04 (DramLimitAddress). */
-	if (df_indirect_read_instance(ctx->node_id, 7, 0xE04 + (16 * ctx->map.num),
+	if (df_indirect_read_instance(ctx->df_acc_id, 7, 0xE04 + (16 * ctx->map.num),
 				      ctx->inst_id, &ctx->map.limit))
 		return -EINVAL;
 
 	/* Read D18F7xE08 (DramAddressCtl). */
-	if (df_indirect_read_instance(ctx->node_id, 7, 0xE08 + (16 * ctx->map.num),
+	if (df_indirect_read_instance(ctx->df_acc_id, 7, 0xE08 + (16 * ctx->map.num),
 				      ctx->inst_id, &ctx->map.ctl))
 		return -EINVAL;
 
 	/* Read D18F7xE0C (DramAddressIntlv). */
-	if (df_indirect_read_instance(ctx->node_id, 7, 0xE0C + (16 * ctx->map.num),
+	if (df_indirect_read_instance(ctx->df_acc_id, 7, 0xE0C + (16 * ctx->map.num),
 				      ctx->inst_id, &ctx->map.intlv))
 		return -EINVAL;
 
@@ -252,7 +259,7 @@ static int df4_get_dram_addr_map(struct addr_ctx *ctx)
 	remap_sel = FIELD_GET(DF4_REMAP_SEL, ctx->map.ctl);
 
 	/* Read D18F7x180 (CsTargetRemap0A). */
-	if (df_indirect_read_instance(ctx->node_id, 7, 0x180 + (8 * remap_sel),
+	if (df_indirect_read_instance(ctx->df_acc_id, 7, 0x180 + (8 * remap_sel),
 				      ctx->inst_id, &remap_reg))
 		return -EINVAL;
 
@@ -261,7 +268,7 @@ static int df4_get_dram_addr_map(struct addr_ctx *ctx)
 		ctx->map.remap_array[i] = (remap_reg >> (j * shift)) & mask;
 
 	/* Read D18F7x184 (CsTargetRemap0B). */
-	if (df_indirect_read_instance(ctx->node_id, 7, 0x184 + (8 * remap_sel),
+	if (df_indirect_read_instance(ctx->df_acc_id, 7, 0x184 + (8 * remap_sel),
 				      ctx->inst_id, &remap_reg))
 		return -EINVAL;
 
@@ -278,22 +285,22 @@ static int df4p5_get_dram_addr_map(struct addr_ctx *ctx)
 	u32 remap_reg;
 
 	/* Read D18F7x200 (DramBaseAddress). */
-	if (df_indirect_read_instance(ctx->node_id, 7, 0x200 + (16 * ctx->map.num),
+	if (df_indirect_read_instance(ctx->df_acc_id, 7, 0x200 + (16 * ctx->map.num),
 				      ctx->inst_id, &ctx->map.base))
 		return -EINVAL;
 
 	/* Read D18F7x204 (DramLimitAddress). */
-	if (df_indirect_read_instance(ctx->node_id, 7, 0x204 + (16 * ctx->map.num),
+	if (df_indirect_read_instance(ctx->df_acc_id, 7, 0x204 + (16 * ctx->map.num),
 				      ctx->inst_id, &ctx->map.limit))
 		return -EINVAL;
 
 	/* Read D18F7x208 (DramAddressCtl). */
-	if (df_indirect_read_instance(ctx->node_id, 7, 0x208 + (16 * ctx->map.num),
+	if (df_indirect_read_instance(ctx->df_acc_id, 7, 0x208 + (16 * ctx->map.num),
 				      ctx->inst_id, &ctx->map.ctl))
 		return -EINVAL;
 
 	/* Read D18F7x20C (DramAddressIntlv). */
-	if (df_indirect_read_instance(ctx->node_id, 7, 0x20C + (16 * ctx->map.num),
+	if (df_indirect_read_instance(ctx->df_acc_id, 7, 0x20C + (16 * ctx->map.num),
 				      ctx->inst_id, &ctx->map.intlv))
 		return -EINVAL;
 
@@ -308,7 +315,7 @@ static int df4p5_get_dram_addr_map(struct addr_ctx *ctx)
 	remap_sel = FIELD_GET(DF4_REMAP_SEL, ctx->map.ctl);
 
 	/* Read D18F7x180 (CsTargetRemap0A). */
-	if (df_indirect_read_instance(ctx->node_id, 7, 0x180 + (24 * remap_sel),
+	if (df_indirect_read_instance(ctx->df_acc_id, 7, 0x180 + (24 * remap_sel),
 				      ctx->inst_id, &remap_reg))
 		return -EINVAL;
 
@@ -317,7 +324,7 @@ static int df4p5_get_dram_addr_map(struct addr_ctx *ctx)
 		ctx->map.remap_array[i] = (remap_reg >> (j * shift)) & mask;
 
 	/* Read D18F7x184 (CsTargetRemap0B). */
-	if (df_indirect_read_instance(ctx->node_id, 7, 0x184 + (24 * remap_sel),
+	if (df_indirect_read_instance(ctx->df_acc_id, 7, 0x184 + (24 * remap_sel),
 				      ctx->inst_id, &remap_reg))
 		return -EINVAL;
 
@@ -326,7 +333,7 @@ static int df4p5_get_dram_addr_map(struct addr_ctx *ctx)
 		ctx->map.remap_array[i] = (remap_reg >> (j * shift)) & mask;
 
 	/* Read D18F7x188 (CsTargetRemap0C). */
-	if (df_indirect_read_instance(ctx->node_id, 7, 0x188 + (24 * remap_sel),
+	if (df_indirect_read_instance(ctx->df_acc_id, 7, 0x188 + (24 * remap_sel),
 				      ctx->inst_id, &remap_reg))
 		return -EINVAL;
 
@@ -455,13 +462,16 @@ static int lookup_cs_fabric_id(struct addr_ctx *ctx)
 	u32 reg;
 
 	/* Read D18F0x50 (FabricBlockInstanceInformation3). */
-	if (df_indirect_read_instance(ctx->node_id, 0, 0x50, ctx->inst_id, &reg))
+	if (df_indirect_read_instance(ctx->df_acc_id, 0, 0x50, ctx->inst_id, &reg))
 		return -EINVAL;
 
 	if (df_cfg.rev < DF4p5)
 		ctx->cs_fabric_id = FIELD_GET(DF2_CS_FABRIC_ID, reg);
 	else
 		ctx->cs_fabric_id = FIELD_GET(DF4p5_CS_FABRIC_ID, reg);
+
+	if (df_cfg.rev == DF4p5 && df_cfg.flags.heterogeneous)
+		ctx->cs_fabric_id |= ctx->node_id << df_cfg.node_id_shift;
 
 	return 0;
 }
@@ -578,6 +588,7 @@ static u8 get_num_intlv_chan(enum intlv_modes intlv_mode)
 	case DF3_COD1_8CHAN_HASH:
 	case DF4_NPS1_8CHAN_HASH:
 	case MI2_HASH_8CHAN:
+	case MI3_HASH_8CHAN:
 	case DF4p5_NPS1_8CHAN_1K_HASH:
 	case DF4p5_NPS1_8CHAN_2K_HASH:
 		return 8;
@@ -591,6 +602,7 @@ static u8 get_num_intlv_chan(enum intlv_modes intlv_mode)
 		return 12;
 	case NOHASH_16CHAN:
 	case MI2_HASH_16CHAN:
+	case MI3_HASH_16CHAN:
 	case DF4p5_NPS1_16CHAN_1K_HASH:
 	case DF4p5_NPS1_16CHAN_2K_HASH:
 		return 16;
@@ -599,6 +611,7 @@ static u8 get_num_intlv_chan(enum intlv_modes intlv_mode)
 		return 24;
 	case NOHASH_32CHAN:
 	case MI2_HASH_32CHAN:
+	case MI3_HASH_32CHAN:
 		return 32;
 	default:
 		ATL_BAD_INTLV_MODE(intlv_mode);

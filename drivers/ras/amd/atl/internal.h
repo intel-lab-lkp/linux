@@ -27,8 +27,12 @@
 /* PCI IDs for Genoa DF Function 0. */
 #define DF_FUNC0_ID_GENOA		0x14AD1022
 
+/* PCI IDs for MI300 DF Function 0. */
+#define DF_FUNC0_ID_MI300		0x15281022
+
 /* Shift needed for adjusting register values to true values. */
 #define DF_DRAM_BASE_LIMIT_LSB		28
+#define MI300_DRAM_LIMIT_LSB		20
 
 /* Cache Coherent Moderator Instnce Type value on register */
 #define DF_INST_TYPE_CCM		0
@@ -74,6 +78,9 @@ enum intlv_modes {
 	DF4_NPS1_12CHAN_HASH		= 0x15,
 	DF4_NPS2_5CHAN_HASH		= 0x16,
 	DF4_NPS1_10CHAN_HASH		= 0x17,
+	MI3_HASH_8CHAN			= 0x18,
+	MI3_HASH_16CHAN			= 0x19,
+	MI3_HASH_32CHAN			= 0x1A,
 	MI2_HASH_8CHAN			= 0x1C,
 	MI2_HASH_16CHAN			= 0x1D,
 	MI2_HASH_32CHAN			= 0x1E,
@@ -219,6 +226,9 @@ struct addr_ctx {
 	 * System-wide ID that includes 'node' bits.
 	 */
 	u16 cs_fabric_id;
+
+	/* ID calculated from topology */
+	u16 df_acc_id;
 };
 
 int df_indirect_read_instance(u16 node, u8 func, u16 reg, u8 instance_id, u32 *lo);
@@ -235,7 +245,7 @@ u16 get_dst_fabric_id(struct addr_ctx *ctx);
 
 int dehash_address(struct addr_ctx *ctx);
 
-int norm_to_sys_addr(u8 socket_id, u8 die_id, u8 cs_inst_id, u64 *addr);
+int norm_to_sys_addr(u16 df_acc_id, u8 socket_id, u8 die_id, u8 cs_inst_id, u64 *addr);
 
 /*
  * Helper to use test_bit() without needing to do

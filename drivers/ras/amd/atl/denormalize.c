@@ -86,6 +86,46 @@ static u64 make_space_for_cs_id_split_2_1(struct addr_ctx *ctx)
 }
 
 /*
+ * Make space for CS ID at bits [14:8] as follows:
+ *
+ * 8 channels	-> bits [10:8]
+ * 16 channels	-> bits [11:8]
+ * 32 channels	-> bits [14,11:8]
+ *
+ * 1 die	-> N/A
+ * 2 dies	-> bit  [12]
+ * 4 dies	-> bits [13:12]
+ */
+static u64 make_space_for_cs_id_mi300(struct addr_ctx *ctx)
+{
+	u8 num_intlv_bits = order_base_2(ctx->map.num_intlv_chan);
+	u64 denorm_addr;
+
+	if (ctx->map.intlv_bit_pos != 8) {
+		pr_warn("%s: Invalid interleave bit: %u", __func__, ctx->map.intlv_bit_pos);
+		return -1;
+	}
+
+	/* Channel bits. Covers up to 4 bits at [11:8]. */
+	if (num_intlv_bits > 4)
+		denorm_addr = expand_bits(8, 4, ctx->ret_addr);
+	else
+		denorm_addr = expand_bits(ctx->map.intlv_bit_pos, num_intlv_bits, ctx->ret_addr);
+
+	/* Die bits. Always starts at [12]. */
+	if (ctx->map.num_intlv_dies > 1)
+		denorm_addr = expand_bits(12,
+					  ctx->map.total_intlv_bits - num_intlv_bits,
+					  denorm_addr);
+
+	/* Additional channel bit at [14]. */
+	if (num_intlv_bits > 4)
+		denorm_addr = expand_bits(14, 1, denorm_addr);
+
+	return denorm_addr;
+}
+
+/*
  * Take the current calculated address and shift enough bits in the middle
  * to make a gap where the interleave bits will be inserted.
  */
@@ -115,6 +155,11 @@ static u64 make_space_for_cs_id(struct addr_ctx *ctx)
 	case DF4p5_NPS1_8CHAN_2K_HASH:
 	case DF4p5_NPS1_16CHAN_2K_HASH:
 		return make_space_for_cs_id_split_2_1(ctx);
+
+	case MI3_HASH_8CHAN:
+	case MI3_HASH_16CHAN:
+	case MI3_HASH_32CHAN:
+		return make_space_for_cs_id_mi300(ctx);
 
 	case DF4p5_NPS2_4CHAN_1K_HASH:
 		//TODO
@@ -220,6 +265,32 @@ static u16 get_cs_id_df4(struct addr_ctx *ctx)
 }
 
 /*
+ * MI300 hash has:
+ * (C)hannel[3:0]	= cs_id[3:0]
+ * (S)tack[0]		= cs_id[4]
+ * (D)ie[1:0]		= cs_id[6:5]
+ *
+ * Hashed cs_id is swizzled so that Stack bit is at the end.
+ * cs_id = SDDCCCC
+ */
+static u16 get_cs_id_mi300(struct addr_ctx *ctx)
+{
+	u8 channel_bits, die_bits, stack_bit;
+	u16 die_id;
+
+	/* Subtract the "base" Destination Fabric ID. */
+	ctx->cs_fabric_id -= get_dst_fabric_id(ctx);
+
+	die_id = (ctx->cs_fabric_id & df_cfg.die_id_mask) >> df_cfg.die_id_shift;
+
+	channel_bits	= FIELD_GET(GENMASK(3, 0), ctx->cs_fabric_id);
+	stack_bit	= FIELD_GET(BIT(4), ctx->cs_fabric_id) << 6;
+	die_bits	= die_id << 4;
+
+	return stack_bit | die_bits | channel_bits;
+}
+
+/*
  * Derive the correct CS ID that represents the interleave bits
  * used within the system physical address. This accounts for the
  * interleave mode, number of interleaved channels/dies/sockets, and
@@ -251,6 +322,11 @@ static u16 calculate_cs_id(struct addr_ctx *ctx)
 	case DF4p5_NPS1_8CHAN_2K_HASH:
 	case DF4p5_NPS1_16CHAN_2K_HASH:
 		return get_cs_id_df4(ctx);
+
+	case MI3_HASH_8CHAN:
+	case MI3_HASH_16CHAN:
+	case MI3_HASH_32CHAN:
+		return get_cs_id_mi300(ctx);
 
 	/* CS ID is simply the CS Fabric ID adjusted by the Destination Fabric ID. */
 	case DF4p5_NPS2_4CHAN_1K_HASH:
@@ -305,6 +381,9 @@ static u64 insert_cs_id(struct addr_ctx *ctx, u64 denorm_addr, u16 cs_id)
 	case MI2_HASH_8CHAN:
 	case MI2_HASH_16CHAN:
 	case MI2_HASH_32CHAN:
+	case MI3_HASH_8CHAN:
+	case MI3_HASH_16CHAN:
+	case MI3_HASH_32CHAN:
 	case DF2_2CHAN_HASH:
 		return insert_cs_id_at_intlv_bit(ctx, denorm_addr, cs_id);
 

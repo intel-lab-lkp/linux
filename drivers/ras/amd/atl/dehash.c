@@ -450,6 +450,90 @@ static int mi200_dehash_addr(struct addr_ctx *ctx)
 	return 0;
 }
 
+/*
+ * MI300 hash bits
+ *			         4K 64K  2M  1G  1T  1T
+ * CSSelect[0] = XOR of addr{8,  12, 15, 22, 29, 36, 43}
+ * CSSelect[1] = XOR of addr{9,  13, 16, 23, 30, 37, 44}
+ * CSSelect[2] = XOR of addr{10, 14, 17, 24, 31, 38, 45}
+ * CSSelect[3] = XOR of addr{11,     18, 25, 32, 39, 46}
+ * CSSelect[4] = XOR of addr{14,     19, 26, 33, 40, 47} aka Stack
+ * DieID[0]    = XOR of addr{12,     20, 27, 34, 41    }
+ * DieID[1]    = XOR of addr{13,     21, 28, 35, 42    }
+ */
+static int mi300_dehash_addr(struct addr_ctx *ctx)
+{
+	bool hash_ctl_4k, hash_ctl_64k, hash_ctl_2M, hash_ctl_1G, hash_ctl_1T;
+	u8 hashed_bit, intlv_bit, num_intlv_bits, base_bit, i;
+
+	if (ctx->map.intlv_bit_pos != 8) {
+		pr_warn("%s: Invalid interleave bit: %u",
+			__func__, ctx->map.intlv_bit_pos);
+		return -EINVAL;
+	}
+
+	if (ctx->map.num_intlv_sockets > 1) {
+		pr_warn("%s: Invalid number of interleave sockets: %u",
+			__func__, ctx->map.num_intlv_sockets);
+		return -EINVAL;
+	}
+
+	hash_ctl_4k	= FIELD_GET(DF4p5_HASH_CTL_4K, ctx->map.ctl);
+	hash_ctl_64k	= FIELD_GET(DF4p5_HASH_CTL_64K, ctx->map.ctl);
+	hash_ctl_2M	= FIELD_GET(DF4p5_HASH_CTL_2M, ctx->map.ctl);
+	hash_ctl_1G	= FIELD_GET(DF4p5_HASH_CTL_1G, ctx->map.ctl);
+	hash_ctl_1T	= FIELD_GET(DF4p5_HASH_CTL_1T, ctx->map.ctl);
+
+	/* Channel bits */
+	num_intlv_bits = ilog2(ctx->map.num_intlv_chan);
+
+	for (i = 0; i < num_intlv_bits; i++) {
+		base_bit = 8 + i;
+
+		/* CSSelect[4] jumps to a base bit of 14. */
+		if (i == 4)
+			base_bit = 14;
+
+		intlv_bit = atl_get_bit(base_bit, ctx->ret_addr);
+
+		hashed_bit = intlv_bit;
+
+		/* 4k hash bit only applies to the first 3 bits. */
+		if (i <= 2)
+			hashed_bit ^= atl_get_bit(12 + i, ctx->ret_addr) & hash_ctl_4k;
+
+		hashed_bit ^= atl_get_bit(15 + i, ctx->ret_addr) & hash_ctl_64k;
+		hashed_bit ^= atl_get_bit(22 + i, ctx->ret_addr) & hash_ctl_2M;
+		hashed_bit ^= atl_get_bit(29 + i, ctx->ret_addr) & hash_ctl_1G;
+		hashed_bit ^= atl_get_bit(36 + i, ctx->ret_addr) & hash_ctl_1T;
+		hashed_bit ^= atl_get_bit(43 + i, ctx->ret_addr) & hash_ctl_1T;
+
+		if (hashed_bit != intlv_bit)
+			ctx->ret_addr ^= BIT_ULL(base_bit);
+	}
+
+	/* Die bits */
+	num_intlv_bits = ilog2(ctx->map.num_intlv_dies);
+
+	for (i = 0; i < num_intlv_bits; i++) {
+		base_bit = 12 + i;
+
+		intlv_bit = atl_get_bit(base_bit, ctx->ret_addr);
+
+		hashed_bit = intlv_bit;
+
+		hashed_bit ^= atl_get_bit(20 + i, ctx->ret_addr) & hash_ctl_64k;
+		hashed_bit ^= atl_get_bit(27 + i, ctx->ret_addr) & hash_ctl_2M;
+		hashed_bit ^= atl_get_bit(34 + i, ctx->ret_addr) & hash_ctl_1G;
+		hashed_bit ^= atl_get_bit(41 + i, ctx->ret_addr) & hash_ctl_1T;
+
+		if (hashed_bit != intlv_bit)
+			ctx->ret_addr ^= BIT_ULL(base_bit);
+	}
+
+	return 0;
+}
+
 int dehash_address(struct addr_ctx *ctx)
 {
 	switch (ctx->map.intlv_mode) {
@@ -511,6 +595,11 @@ int dehash_address(struct addr_ctx *ctx)
 	case MI2_HASH_16CHAN:
 	case MI2_HASH_32CHAN:
 		return mi200_dehash_addr(ctx);
+
+	case MI3_HASH_8CHAN:
+	case MI3_HASH_16CHAN:
+	case MI3_HASH_32CHAN:
+		return mi300_dehash_addr(ctx);
 
 	default:
 		ATL_BAD_INTLV_MODE(ctx->map.intlv_mode);

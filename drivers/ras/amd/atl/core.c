@@ -56,7 +56,7 @@ static int add_legacy_hole(struct addr_ctx *ctx)
 	if (df_cfg.rev >= DF4)
 		func = 7;
 
-	if (df_indirect_read_broadcast(ctx->node_id, func, 0x104, &dram_hole_base))
+	if (df_indirect_read_broadcast(ctx->df_acc_id, func, 0x104, &dram_hole_base))
 		return -EINVAL;
 
 	dram_hole_base &= DF_DRAM_HOLE_BASE_MASK;
@@ -103,7 +103,7 @@ static bool late_hole_remove(struct addr_ctx *ctx)
 	return false;
 }
 
-int norm_to_sys_addr(u8 socket_id, u8 die_id, u8 cs_inst_id, u64 *addr)
+int norm_to_sys_addr(u16 df_acc_id, u8 socket_id, u8 die_id, u8 cs_inst_id, u64 *addr)
 {
 	struct addr_ctx ctx;
 
@@ -115,6 +115,7 @@ int norm_to_sys_addr(u8 socket_id, u8 die_id, u8 cs_inst_id, u64 *addr)
 	/* We start from the normalized address */
 	ctx.ret_addr = *addr;
 	ctx.inst_id = cs_inst_id;
+	ctx.df_acc_id = df_acc_id;
 
 	if (determine_node_id(&ctx, socket_id, die_id)) {
 		pr_warn("Failed to determine Node ID");

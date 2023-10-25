@@ -251,6 +251,11 @@
 #define DF4_HASH_CTL_2M			BIT(9)
 #define DF4_HASH_CTL_1G			BIT(10)
 #define DF4_HASH_CTL_1T			BIT(15)
+#define DF4p5_HASH_CTL_4K		BIT(7)
+#define DF4p5_HASH_CTL_64K		BIT(8)
+#define DF4p5_HASH_CTL_2M		BIT(9)
+#define DF4p5_HASH_CTL_1G		BIT(10)
+#define DF4p5_HASH_CTL_1T		BIT(15)
 
 /*
  * High Address Offset
