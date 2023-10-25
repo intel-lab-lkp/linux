@@ -867,7 +867,7 @@ static struct file *__get_file_rcu(struct file __rcu **f)
 		return NULL;
 
 	if (unlikely(!atomic_long_inc_not_zero(&file->f_count)))
-		return ERR_PTR(-EAGAIN);
+		return ERR_PTR(-EINVAL);
 
 	file_reloaded = rcu_dereference_raw(*f);
 
@@ -926,6 +926,21 @@ struct file *get_file_rcu(struct file __rcu **f)
 	}
 }
 EXPORT_SYMBOL_GPL(get_file_rcu);
+
+struct file *get_file_rcu_once(struct file __rcu **f)
+{
+	for (;;) {
+		struct file __rcu *file;
+
+		file = __get_file_rcu(f);
+		if (!IS_ERR(file))
+			return file;
+
+		if (PTR_ERR(file) == -EINVAL)
+			return NULL;
+	}
+}
+EXPORT_SYMBOL_GPL(get_file_rcu_once);
 
 static inline struct file *__fget_files_rcu(struct files_struct *files,
        unsigned int fd, fmode_t mask)
