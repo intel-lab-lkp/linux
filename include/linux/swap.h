@@ -261,14 +261,12 @@ struct swap_cluster_info {
 #define CLUSTER_FLAG_NEXT_NULL 2 /* This cluster has no next cluster */
 
 /*
- * We assign a cluster to each CPU, so each CPU can allocate swap entry from
- * its own cluster and swapout sequentially. The purpose is to optimize swapout
- * throughput.
+ * The first page in the swap file is the swap header, which is always marked
+ * bad to prevent it from being allocated as an entry. This also prevents the
+ * cluster to which it belongs being marked free. Therefore 0 is safe to use as
+ * a sentinel to indicate cpu_next is not valid in swap_info_struct.
  */
-struct percpu_cluster {
-	struct swap_cluster_info index; /* Current cluster index */
-	unsigned int next; /* Likely next allocation offset */
-};
+#define SWAP_NEXT_NULL	0
 
 struct swap_cluster_list {
 	struct swap_cluster_info head;
@@ -295,7 +293,14 @@ struct swap_info_struct {
 	unsigned int cluster_next;	/* likely index for next allocation */
 	unsigned int cluster_nr;	/* countdown to next cluster search */
 	unsigned int __percpu *cluster_next_cpu; /*percpu index for next allocation */
-	struct percpu_cluster __percpu *percpu_cluster; /* per cpu's swap location */
+	unsigned int __percpu *cpu_next;/*
+					 * Likely next allocation offset. We
+					 * assign a cluster to each CPU, so each
+					 * CPU can allocate swap entry from its
+					 * own cluster and swapout sequentially.
+					 * The purpose is to optimize swapout
+					 * throughput.
+					 */
 	struct rb_root swap_extent_root;/* root of the swap extent rbtree */
 	struct block_device *bdev;	/* swap device or bdev of swap file */
 	struct file *swap_file;		/* seldom referenced */
