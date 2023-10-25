@@ -1027,9 +1027,6 @@ static int acpi_video_bus_check(struct acpi_video_bus *video)
 	acpi_status status = -ENOENT;
 	struct pci_dev *dev;
 
-	if (!video)
-		return -EINVAL;
-
 	dev = acpi_get_pci_dev(video->device->handle);
 	if (!dev)
 		return -ENODEV;
@@ -2087,13 +2084,7 @@ err_free_video:
 
 static void acpi_video_bus_remove(struct acpi_device *device)
 {
-	struct acpi_video_bus *video = NULL;
-
-
-	if (!device || !acpi_driver_data(device))
-		return;
-
-	video = acpi_driver_data(device);
+	struct acpi_video_bus *video = acpi_driver_data(device);
 
 	acpi_dev_remove_notify_handler(device, ACPI_DEVICE_NOTIFY,
 				       acpi_video_bus_notify);
