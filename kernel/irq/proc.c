@@ -39,6 +39,7 @@ static struct proc_dir_entry *root_irq_dir;
 enum {
 	AFFINITY,
 	AFFINITY_LIST,
+	AFFINITY_HINT,
 	EFFECTIVE,
 	EFFECTIVE_LIST,
 };
@@ -57,6 +58,9 @@ static int show_irq_affinity(int type, struct seq_file *m)
 			mask = desc->pending_mask;
 #endif
 		break;
+	case AFFINITY_HINT:
+		mask = desc->irq_common_data.affinity_hint;
+		break;
 	case EFFECTIVE:
 	case EFFECTIVE_LIST:
 #ifdef CONFIG_GENERIC_IRQ_EFFECTIVE_AFF_MASK
@@ -73,6 +77,7 @@ static int show_irq_affinity(int type, struct seq_file *m)
 		seq_printf(m, "%*pbl\n", cpumask_pr_args(mask));
 		break;
 	case AFFINITY:
+	case AFFINITY_HINT:
 	case EFFECTIVE:
 		seq_printf(m, "%*pb\n", cpumask_pr_args(mask));
 		break;
@@ -82,22 +87,7 @@ static int show_irq_affinity(int type, struct seq_file *m)
 
 static int irq_affinity_hint_proc_show(struct seq_file *m, void *v)
 {
-	struct irq_desc *desc = irq_to_desc((long)m->private);
-	unsigned long flags;
-	cpumask_var_t mask;
-
-	if (!zalloc_cpumask_var(&mask, GFP_KERNEL))
-		return -ENOMEM;
-
-	raw_spin_lock_irqsave(&desc->lock, flags);
-	if (desc->affinity_hint)
-		cpumask_copy(mask, desc->affinity_hint);
-	raw_spin_unlock_irqrestore(&desc->lock, flags);
-
-	seq_printf(m, "%*pb\n", cpumask_pr_args(mask));
-	free_cpumask_var(mask);
-
-	return 0;
+	return show_irq_affinity(AFFINITY_HINT, m);
 }
 
 int no_irq_affinity;

@@ -320,6 +320,8 @@ extern int __irq_apply_affinity_hint(unsigned int irq, const struct cpumask *m,
  * @m:		cpumask pointer (NULL to clear the hint)
  *
  * Updates the affinity hint, but does not change the affinity of the interrupt.
+ *
+ * Memory pointed by @m is not accessed after the call returns.
  */
 static inline int
 irq_update_affinity_hint(unsigned int irq, const struct cpumask *m)
@@ -335,6 +337,8 @@ irq_update_affinity_hint(unsigned int irq, const struct cpumask *m)
  *
  * Updates the affinity hint and if @m is not NULL it applies it as the
  * affinity of that interrupt.
+ *
+ * Memory pointed by @m is not accessed after the call returns.
  */
 static inline int
 irq_set_affinity_and_hint(unsigned int irq, const struct cpumask *m)

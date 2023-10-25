@@ -153,6 +153,7 @@ struct irq_common_data {
 	struct msi_desc		*msi_desc;
 #ifdef CONFIG_SMP
 	cpumask_var_t		affinity;
+	cpumask_var_t		affinity_hint;
 #endif
 #ifdef CONFIG_GENERIC_IRQ_EFFECTIVE_AFF_MASK
 	cpumask_var_t		effective_affinity;

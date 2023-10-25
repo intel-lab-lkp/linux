@@ -506,7 +506,10 @@ int __irq_apply_affinity_hint(unsigned int irq, const struct cpumask *m,
 
 	if (!desc)
 		return -EINVAL;
-	desc->affinity_hint = m;
+	if (m)
+		cpumask_copy(desc->irq_common_data.affinity_hint, m);
+	else
+		cpumask_clear(desc->irq_common_data.affinity_hint);
 	irq_put_desc_unlock(desc, flags);
 	if (m && setaffinity)
 		__irq_set_affinity(irq, m, false);
@@ -1915,12 +1918,6 @@ static struct irqaction *__free_irq(struct irq_desc *desc, void *dev_id)
 		/* Only shutdown. Deactivate after synchronize_hardirq() */
 		irq_shutdown(desc);
 	}
-
-#ifdef CONFIG_SMP
-	/* make sure affinity_hint is cleaned up */
-	if (WARN_ON_ONCE(desc->affinity_hint))
-		desc->affinity_hint = NULL;
-#endif
 
 	raw_spin_unlock_irqrestore(&desc->lock, flags);
 	/*
