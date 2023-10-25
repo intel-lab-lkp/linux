@@ -24,6 +24,8 @@
  * Video codecs
  */
 
+static void uvcg_video_pump(struct uvc_video *video);
+
 static int
 uvc_video_encode_header(struct uvc_video *video, struct uvc_buffer *buf,
 		u8 *data, int len)
@@ -329,7 +331,9 @@ uvc_video_complete(struct usb_ep *ep, struct usb_request *req)
 	 */
 	if (video->is_enabled) {
 		list_add_tail(&req->list, &video->req_free);
-		queue_work(video->async_wq, &video->pump);
+		spin_unlock_irqrestore(&video->req_lock, flags);
+		uvcg_video_pump(video);
+		return;
 	} else {
 		uvc_video_free_request(ureq, ep);
 	}
@@ -409,20 +413,32 @@ error:
  * Video streaming
  */
 
+void uvcg_video_pump_qbuf(struct uvc_video *video)
+{
+	if (video->is_bulk) {
+		/*
+		 * Only call uvcg_video_pump() from qbuf, for bulk eps since
+		 * for isoc, the complete handler will call uvcg_video_pump()
+		 * consistently. Calling it for isoc eps, while correct
+		 * will increase contention for video->req_lock since the
+		 * complete handler will be called more often.
+		 */
+		uvcg_video_pump(video);
+	}
+}
+
 /*
  * uvcg_video_pump - Pump video data into the USB requests
  *
  * This function fills the available USB requests (listed in req_free) with
  * video data from the queued buffers.
  */
-static void uvcg_video_pump(struct work_struct *work)
+static void uvcg_video_pump(struct uvc_video *video)
 {
-	struct uvc_video *video = container_of(work, struct uvc_video, pump);
 	struct uvc_video_queue *queue = &video->queue;
-	/* video->max_payload_size is only set when using bulk transfer */
-	bool is_bulk = video->max_payload_size;
 	struct usb_request *req = NULL;
-	struct uvc_buffer *buf;
+	struct uvc_request *ureq = NULL;
+	struct uvc_buffer *buf = NULL, *last_buf = NULL;
 	unsigned long flags;
 	bool buf_done;
 	int ret;
@@ -455,7 +471,8 @@ static void uvcg_video_pump(struct work_struct *work)
 		if (buf != NULL) {
 			video->encode(req, video, buf);
 			buf_done = buf->state == UVC_BUF_STATE_DONE;
-		} else if (!(queue->flags & UVC_QUEUE_DISCONNECTED) && !is_bulk) {
+		} else if (!(queue->flags & UVC_QUEUE_DISCONNECTED) &&
+				!video->is_bulk) {
 			/*
 			 * No video buffer available; the queue is still connected and
 			 * we're transferring over ISOC. Queue a 0 length request to
@@ -500,18 +517,30 @@ static void uvcg_video_pump(struct work_struct *work)
 			req->no_interrupt = 1;
 		}
 
-		/* Queue the USB request */
-		ret = uvcg_video_ep_queue(video, req);
 		spin_unlock_irqrestore(&queue->irqlock, flags);
-
+		spin_lock_irqsave(&video->req_lock, flags);
+		if (video->is_enabled) {
+			/* Queue the USB request */
+			ret = uvcg_video_ep_queue(video, req);
+			/* Endpoint now owns the request */
+			req = NULL;
+			video->req_int_count++;
+		} else {
+			ret =  -ENODEV;
+			ureq = req->context;
+			last_buf = ureq->last_buf;
+			ureq->last_buf = NULL;
+		}
+		spin_unlock_irqrestore(&video->req_lock, flags);
 		if (ret < 0) {
+			if (last_buf != NULL) {
+				// Return the buffer to the queue in the case the
+				// request was not queued to the ep.
+				uvcg_complete_buffer(&video->queue, last_buf);
+			}
 			uvcg_queue_cancel(queue, 0);
 			break;
 		}
-
-		/* Endpoint now owns the request */
-		req = NULL;
-		video->req_int_count++;
 	}
 
 	if (!req)
@@ -556,7 +585,6 @@ uvcg_video_disable(struct uvc_video *video)
 	}
 	spin_unlock_irqrestore(&video->req_lock, flags);
 
-	cancel_work_sync(&video->pump);
 	uvcg_queue_cancel(&video->queue, 0);
 
 	spin_lock_irqsave(&video->req_lock, flags);
@@ -626,14 +654,16 @@ int uvcg_video_enable(struct uvc_video *video, int enable)
 	if (video->max_payload_size) {
 		video->encode = uvc_video_encode_bulk;
 		video->payload_size = 0;
-	} else
+		video->is_bulk = true;
+	} else {
 		video->encode = video->queue.use_sg ?
 			uvc_video_encode_isoc_sg : uvc_video_encode_isoc;
+		video->is_bulk = false;
+	}
 
 	video->req_int_count = 0;
 
-	queue_work(video->async_wq, &video->pump);
-
+	uvcg_video_pump(video);
 	return ret;
 }
 
@@ -646,12 +676,6 @@ int uvcg_video_init(struct uvc_video *video, struct uvc_device *uvc)
 	INIT_LIST_HEAD(&video->ureqs);
 	INIT_LIST_HEAD(&video->req_free);
 	spin_lock_init(&video->req_lock);
-	INIT_WORK(&video->pump, uvcg_video_pump);
-
-	/* Allocate a work queue for asynchronous video pump handler. */
-	video->async_wq = alloc_workqueue("uvcgadget", WQ_UNBOUND | WQ_HIGHPRI, 0);
-	if (!video->async_wq)
-		return -EINVAL;
 
 	video->uvc = uvc;
 	video->fcc = V4L2_PIX_FMT_YUYV;
