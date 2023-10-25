@@ -4,12 +4,15 @@
  * Copyright (C) 2022 Ventana Micro Systems Inc.
  */
 
+#include <linux/acpi.h>
 #include <linux/of.h>
 #include <linux/of_irq.h>
 #include <linux/printk.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/irqchip/riscv-aplic.h>
+#include <linux/irqchip/riscv-imsic.h>
+#include <asm/acpi.h>
 
 #include "irq-riscv-aplic-main.h"
 
@@ -137,38 +140,44 @@ int aplic_setup_priv(struct aplic_priv *priv, struct device *dev,
 		     void __iomem *regs)
 {
 	struct of_phandle_args parent;
+	struct acpi_madt_aplic *aplic;
 	int rc;
-
-	/*
-	 * Currently, only OF fwnode is supported so extend this
-	 * function for ACPI support.
-	 */
-	if (!is_of_node(dev->fwnode))
-		return -EINVAL;
 
 	/* Save device pointer and register base */
 	priv->dev = dev;
 	priv->regs = regs;
 
-	/* Find out number of interrupt sources */
-	rc = of_property_read_u32(to_of_node(dev->fwnode),
-					     "riscv,num-sources",
-					     &priv->nr_irqs);
-	if (rc) {
-		dev_err(dev, "failed to get number of interrupt sources\n");
-		return rc;
-	}
+	if (is_of_node(dev->fwnode)) {
+		/* Find out number of interrupt sources */
+		rc = of_property_read_u32(to_of_node(dev->fwnode),
+					  "riscv,num-sources",
+					  &priv->nr_irqs);
+		if (rc) {
+			dev_err(dev, "failed to get number of interrupt sources\n");
+			return rc;
+		}
 
-	/*
-	 * Find out number of IDCs based on parent interrupts
-	 *
-	 * If "msi-parent" property is present then we ignore the
-	 * APLIC IDCs which forces the APLIC driver to use MSI mode.
-	 */
-	if (!of_property_present(to_of_node(dev->fwnode), "msi-parent")) {
-		while (!of_irq_parse_one(to_of_node(dev->fwnode),
-					 priv->nr_idcs, &parent))
-			priv->nr_idcs++;
+		/*
+		 * Find out number of IDCs based on parent interrupts
+		 *
+		 * If "msi-parent" property is present then we ignore the
+		 * APLIC IDCs which forces the APLIC driver to use MSI mode.
+		 */
+		if (!of_property_present(to_of_node(dev->fwnode), "msi-parent")) {
+			while (!of_irq_parse_one(to_of_node(dev->fwnode),
+						 priv->nr_idcs, &parent))
+				priv->nr_idcs++;
+		}
+	} else {
+		aplic = *(struct acpi_madt_aplic **)dev_get_platdata(dev);
+		if (!aplic) {
+			dev_err(dev, "APLIC platform data is NULL!\n");
+			return -1;
+		}
+		priv->gsi_base = aplic->gsi_base;
+		priv->nr_irqs = aplic->num_sources;
+		priv->nr_idcs = aplic->num_idcs;
+		priv->id = aplic->id;
 	}
 
 	/* Setup initial state APLIC interrupts */
@@ -177,9 +186,36 @@ int aplic_setup_priv(struct aplic_priv *priv, struct device *dev,
 	return 0;
 }
 
+#ifdef CONFIG_ACPI
+
+LIST_HEAD(aplic_list);
+struct aplic_priv_list {
+	struct aplic_priv *priv;
+	struct list_head list;
+};
+
+struct fwnode_handle *aplic_get_gsi_domain_id(u32 gsi)
+{
+	struct aplic_priv_list *aplic_element;
+	struct list_head *i, *tmp;
+
+	/* Find the APLIC that manages this GSI. */
+	list_for_each_safe(i, tmp, &aplic_list) {
+		aplic_element = list_entry(i, struct aplic_priv_list, list);
+		if (gsi >= aplic_element->priv->gsi_base &&
+		    gsi < (aplic_element->priv->gsi_base + aplic_element->priv->nr_irqs))
+			return aplic_element->priv->dev->fwnode;
+	}
+
+	return NULL;
+}
+
+#endif
+
 static int aplic_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
+	struct aplic_priv *priv;
 	bool msi_mode = false;
 	struct resource *res;
 	void __iomem *regs;
@@ -204,6 +240,9 @@ static int aplic_probe(struct platform_device *pdev)
 	if (is_of_node(dev->fwnode))
 		msi_mode = of_property_present(to_of_node(dev->fwnode),
 						"msi-parent");
+	else
+		msi_mode = imsic_acpi_get_fwnode(NULL) ? 1 : 0;
+
 	if (msi_mode)
 		rc = aplic_msi_setup(dev, regs);
 	else
@@ -213,6 +252,20 @@ static int aplic_probe(struct platform_device *pdev)
 			msi_mode ? "MSI" : "direct");
 		return rc;
 	}
+
+#ifdef CONFIG_ACPI
+	struct aplic_priv_list *aplic_element;
+
+	priv = dev_get_drvdata(dev);
+	if (priv) {
+		aplic_element = devm_kzalloc(dev, sizeof(*aplic_element), GFP_KERNEL);
+		if (!aplic_element)
+			return -ENOMEM;
+
+		aplic_element->priv = priv;
+		list_add_tail(&aplic_element->list, &aplic_list);
+	}
+#endif
 
 	return 0;
 }
