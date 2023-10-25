@@ -536,12 +536,24 @@ static int ethtool_get_rxnfc_rule_count(struct net_device *dev)
 	return info.rule_cnt;
 }
 
-int ethtool_get_max_rxnfc_channel(struct net_device *dev, u64 *max)
+/**
+ * __ethtool_for_each_rxnfc: Iterate over each RXNFC rule installed
+ * @dev: network device
+ * @cb: callback to analyze an %ethtool_rxnfc rule
+ * @priv: private pointer passed to the callback
+ *
+ * @cb is supposed to return the following:
+ *   < 0 on error
+ *   == 0 to continue
+ *   > 0 to stop iterating
+ */
+static int __ethtool_for_each_rxnfc(struct net_device *dev,
+				    int (*cb)(struct ethtool_rxnfc *info,
+					      void *priv), void *priv)
 {
 	const struct ethtool_ops *ops = dev->ethtool_ops;
 	struct ethtool_rxnfc *info;
 	int err, i, rule_cnt;
-	u64 max_ring = 0;
 
 	if (!ops->get_rxnfc)
 		return -EOPNOTSUPP;
@@ -570,21 +582,45 @@ int ethtool_get_max_rxnfc_channel(struct net_device *dev, u64 *max)
 		if (err)
 			goto err_free_info;
 
-		if (rule_info.fs.ring_cookie != RX_CLS_FLOW_DISC &&
-		    rule_info.fs.ring_cookie != RX_CLS_FLOW_WAKE &&
-		    !(rule_info.flow_type & FLOW_RSS) &&
-		    !ethtool_get_flow_spec_ring_vf(rule_info.fs.ring_cookie))
-			max_ring =
-				max_t(u64, max_ring, rule_info.fs.ring_cookie);
+		err = cb(&rule_info, priv);
+		if (err < 0)
+			goto err_free_info;
+		if (err > 0)
+			break;
 	}
 
 	kvfree(info);
-	*max = max_ring;
 	return 0;
 
 err_free_info:
 	kvfree(info);
 	return err;
+}
+
+static int __ethtool_get_max_rxnfc_channel(struct ethtool_rxnfc *rule_info,
+					   void *priv)
+{
+	u64 *max_ring = priv;
+
+	if (rule_info->fs.ring_cookie != RX_CLS_FLOW_DISC &&
+	    rule_info->fs.ring_cookie != RX_CLS_FLOW_WAKE &&
+	    !(rule_info->flow_type & FLOW_RSS) &&
+	    !ethtool_get_flow_spec_ring_vf(rule_info->fs.ring_cookie))
+		*max_ring =
+			max_t(u64, *max_ring, rule_info->fs.ring_cookie);
+
+	return 0;
+}
+
+int ethtool_get_max_rxnfc_channel(struct net_device *dev, u64 *max)
+{
+	u64 max_ring = 0;
+	int ret;
+
+	ret = __ethtool_for_each_rxnfc(dev, __ethtool_get_max_rxnfc_channel,
+				       &max_ring);
+	*max = max_ring;
+	return ret;
 }
 
 int ethtool_get_max_rxfh_channel(struct net_device *dev, u32 *max)
