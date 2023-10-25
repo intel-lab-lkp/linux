@@ -144,6 +144,19 @@ static bool zswap_exclusive_loads_enabled = IS_ENABLED(
 		CONFIG_ZSWAP_EXCLUSIVE_LOADS_DEFAULT_ON);
 module_param_named(exclusive_loads, zswap_exclusive_loads_enabled, bool, 0644);
 
+
+#ifdef CONFIG_ZSWAP_WRITEBACK_TIME_ON
+/* zswap writeback time threshold in second */
+static unsigned int  zswap_writeback_time_thr;
+static int zswap_writeback_time_thr_param_set(const char *, const struct kernel_param *);
+static const struct kernel_param_ops zswap_writeback_param_ops = {
+	.set =		zswap_writeback_time_thr_param_set,
+	.get =          param_get_uint,
+};
+module_param_cb(writeback_time_threshold, &zswap_writeback_param_ops,
+			&zswap_writeback_time_thr, 0644);
+#endif
+
 /* Number of zpools in zswap_pool (empirically determined for scalability) */
 #define ZSWAP_NR_ZPOOLS 32
 
@@ -200,6 +213,7 @@ struct zswap_pool {
  * value - value of the same-value filled pages which have same content
  * objcg - the obj_cgroup that the compressed memory is charged to
  * lru - handle to the pool's lru used to evict pages.
+ * last_ac_time - the last accessed time of zswap_entry.
  */
 struct zswap_entry {
 	struct rb_node rbnode;
@@ -213,6 +227,9 @@ struct zswap_entry {
 	};
 	struct obj_cgroup *objcg;
 	struct list_head lru;
+#ifdef CONFIG_ZSWAP_WRITEBACK_TIME_ON
+	ktime_t last_ac_time;
+#endif
 };
 
 /*
@@ -290,6 +307,27 @@ static void zswap_update_total_size(void)
 
 	zswap_pool_total_size = total;
 }
+
+#ifdef CONFIG_ZSWAP_WRITEBACK_TIME_ON
+static void zswap_set_access_time(struct zswap_entry *entry)
+{
+	entry->last_ac_time = ktime_get_boottime();
+}
+
+static void zswap_clear_access_time(struct zswap_entry *entry)
+{
+	entry->last_ac_time = 0;
+}
+#else
+static void zswap_set_access_time(struct zswap_entry *entry)
+{
+}
+
+static void zswap_clear_access_time(struct zswap_entry *entry)
+{
+}
+#endif
+
 
 /*********************************
 * zswap entry functions
@@ -398,6 +436,7 @@ static void zswap_free_entry(struct zswap_entry *entry)
 	else {
 		spin_lock(&entry->pool->lru_lock);
 		list_del(&entry->lru);
+		zswap_clear_access_time(entry);
 		spin_unlock(&entry->pool->lru_lock);
 		zpool_free(zswap_find_zpool(entry), entry->handle);
 		zswap_pool_put(entry->pool);
@@ -711,6 +750,52 @@ static void shrink_worker(struct work_struct *w)
 	} while (!zswap_can_accept());
 	zswap_pool_put(pool);
 }
+
+#ifdef CONFIG_ZSWAP_WRITEBACK_TIME_ON
+static bool zswap_reach_timethr(struct zswap_pool *pool)
+{
+	struct zswap_entry *entry;
+	ktime_t expire_time = 0;
+	bool ret = false;
+
+	spin_lock(&pool->lru_lock);
+
+	if (list_empty(&pool->lru))
+		goto out;
+
+	entry = list_last_entry(&pool->lru, struct zswap_entry, lru);
+	expire_time = ktime_add(entry->last_ac_time,
+			ns_to_ktime(zswap_writeback_time_thr * NSEC_PER_SEC));
+
+	if (ktime_after(ktime_get_boottime(), expire_time))
+		ret = true;
+out:
+	spin_unlock(&pool->lru_lock);
+	return ret;
+}
+
+static void zswap_reclaim_entry_by_timethr(void)
+{
+	struct zswap_pool *pool = zswap_pool_current_get();
+	int ret, failures = 0;
+
+	if (!pool)
+		return;
+
+	while (zswap_reach_timethr(pool)) {
+		ret = zswap_reclaim_entry(pool);
+		if (ret) {
+			zswap_reject_reclaim_fail++;
+			if (ret != -EAGAIN)
+				break;
+			if (++failures == MAX_RECLAIM_RETRIES)
+				break;
+		}
+		cond_resched();
+	}
+	zswap_pool_put(pool);
+}
+#endif
 
 static struct zswap_pool *zswap_pool_create(char *type, char *compressor)
 {
@@ -1039,6 +1124,23 @@ static int zswap_enabled_param_set(const char *val,
 
 	return ret;
 }
+
+#ifdef CONFIG_ZSWAP_WRITEBACK_TIME_ON
+static int zswap_writeback_time_thr_param_set(const char *val,
+				const struct kernel_param *kp)
+{
+	int ret = -ENODEV;
+
+	/* if this is load-time (pre-init) param setting, just return. */
+	if (system_state != SYSTEM_RUNNING)
+		return ret;
+
+	ret = param_set_uint(val, kp);
+	if (!ret)
+		zswap_reclaim_entry_by_timethr();
+	return ret;
+}
+#endif
 
 /*********************************
 * writeback code
@@ -1372,6 +1474,7 @@ insert_entry:
 	if (entry->length) {
 		spin_lock(&entry->pool->lru_lock);
 		list_add(&entry->lru, &entry->pool->lru);
+		zswap_set_access_time(entry);
 		spin_unlock(&entry->pool->lru_lock);
 	}
 	spin_unlock(&tree->lock);
@@ -1484,6 +1587,7 @@ freeentry:
 		folio_mark_dirty(folio);
 	} else if (entry->length) {
 		spin_lock(&entry->pool->lru_lock);
+		zswap_set_access_time(entry);
 		list_move(&entry->lru, &entry->pool->lru);
 		spin_unlock(&entry->pool->lru_lock);
 	}

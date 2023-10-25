@@ -61,6 +61,17 @@ config ZSWAP_EXCLUSIVE_LOADS_DEFAULT_ON
 	  The cost is that if the page was never dirtied and needs to be
 	  swapped out again, it will be re-compressed.
 
+config ZSWAP_WRITEBACK_TIME_ON
+        bool "writeback zswap based on the last accessed time"
+        depends on ZSWAP
+        default n
+        help
+          If selected, the feature for tracking last accessed time  will be
+          enabled at boot, otherwise it will be disabled.
+
+          The zswap can be swapout and save memory in userspace proactively
+          by writing writeback_time_threshold in second.
+
 choice
 	prompt "Default compressor"
 	depends on ZSWAP
