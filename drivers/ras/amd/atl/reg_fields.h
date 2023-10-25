@@ -28,14 +28,14 @@
  *	Rev	Fieldname	Bits
  *
  *	D18F0x50 [Fabric Block Instance Information 3]
- *	DF2	BlockFabricId	[19:8]
+ *	DF2	BlockFabricId	[13:8]
  *	DF3	BlockFabricId	[19:8]
  *	DF3p5	BlockFabricId	[19:8]
  *	DF4	BlockFabricId	[19:8]
- *	DF4p5	BlockFabricId	[15:8]
+ *	DF4p5	BlockFabricId	[19:8]
  */
-#define DF2_CS_FABRIC_ID	GENMASK(19, 8)
-#define DF4p5_CS_FABRIC_ID	GENMASK(15, 8)
+#define DF2_CS_FABRIC_ID	GENMASK(13, 8)
+#define DF4p5_CS_FABRIC_ID	GENMASK(19, 8)
 
 /*
  * Component ID Mask
