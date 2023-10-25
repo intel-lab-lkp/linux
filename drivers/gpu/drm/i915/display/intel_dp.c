@@ -5907,8 +5907,17 @@ intel_dp_add_properties(struct intel_dp *intel_dp, struct drm_connector *connect
 	intel_attach_broadcast_rgb_property(connector);
 	if (HAS_GMCH(dev_priv))
 		drm_connector_attach_max_bpc_property(connector, 6, 10);
-	else if (DISPLAY_VER(dev_priv) >= 5)
-		drm_connector_attach_max_bpc_property(connector, 6, 12);
+	else if (DISPLAY_VER(dev_priv) >= 5) {
+		int min_bpc = 6, max_bpc = 12;
+		struct intel_connector *intel_connector = to_intel_connector(connector);
+
+		if (HAS_DSC(dev_priv) && drm_dp_sink_supports_dsc(intel_connector->dp.dsc_dpcd)) {
+			min_bpc = intel_dp_dsc_min_src_input_bpc(dev_priv);
+			max_bpc = intel_dp_dsc_max_src_input_bpc(dev_priv);
+		}
+
+		drm_connector_attach_max_bpc_property(connector, min_bpc, max_bpc);
+	}
 
 	/* Register HDMI colorspace for case of lspcon */
 	if (intel_bios_encoder_is_lspcon(dp_to_dig_port(intel_dp)->base.devdata)) {
