@@ -40,6 +40,20 @@ enum tee_cmd_id {
 	TEE_CMD_ID_UNMAP_SHARED_MEM,
 };
 
+/**
+ * struct psp_tee_buffer - Structure of a TEE buffer shared with PSP.
+ * @dma:    DMA buffer address
+ * @paddr:  Physical address of DMA buffer
+ * @vaddr:  CPU virtual address of DMA buffer
+ * @size:   Size of DMA buffer in bytes
+ */
+struct psp_tee_buffer {
+	dma_addr_t dma;
+	phys_addr_t paddr;
+	void *vaddr;
+	unsigned long size;
+};
+
 #ifdef CONFIG_CRYPTO_DEV_SP_PSP
 /**
  * psp_tee_process_cmd() - Process command in Trusted Execution Environment
@@ -75,6 +89,28 @@ int psp_tee_process_cmd(enum tee_cmd_id cmd_id, void *buf, size_t len,
  */
 int psp_check_tee_status(void);
 
+/**
+ * psp_tee_alloc_buffer() - Allocates memory of requested size and flags using
+ * dma_alloc_coherent() API.
+ *
+ * This function can be used to allocate a shared memory region between the
+ * host and PSP TEE.
+ *
+ * Returns:
+ * non-NULL   a valid pointer to struct psp_tee_buffer
+ * NULL       on failure
+ */
+struct psp_tee_buffer *psp_tee_alloc_buffer(unsigned long size, gfp_t gfp);
+
+/**
+ * psp_tee_free_buffer() - Deallocates memory using dma_free_coherent() API.
+ *
+ * This function can be used to release shared memory region between host
+ * and PSP TEE.
+ *
+ */
+void psp_tee_free_buffer(struct psp_tee_buffer *tee_buffer);
+
 #else /* !CONFIG_CRYPTO_DEV_SP_PSP */
 
 static inline int psp_tee_process_cmd(enum tee_cmd_id cmd_id, void *buf,
@@ -87,5 +123,16 @@ static inline int psp_check_tee_status(void)
 {
 	return -ENODEV;
 }
+
+static inline
+struct psp_tee_buffer *psp_tee_alloc_buffer(unsigned long size, gfp_t gfp)
+{
+	return NULL;
+}
+
+static inline void psp_tee_free_buffer(struct psp_tee_buffer *tee_buffer)
+{
+}
+
 #endif /* CONFIG_CRYPTO_DEV_SP_PSP */
 #endif /* __PSP_TEE_H_ */

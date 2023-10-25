@@ -163,6 +163,9 @@ int psp_dev_init(struct sp_device *sp)
 		goto e_err;
 	}
 
+	if (sp->set_psp_master_device)
+		sp->set_psp_master_device(sp);
+
 	psp->io_regs = sp->io_map;
 
 	ret = psp_get_capability(psp);

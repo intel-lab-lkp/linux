@@ -13,6 +13,8 @@
 #include <linux/mutex.h>
 #include <linux/delay.h>
 #include <linux/slab.h>
+#include <linux/dma-direct.h>
+#include <linux/iommu.h>
 #include <linux/gfp.h>
 #include <linux/psp.h>
 #include <linux/psp-tee.h>
@@ -21,6 +23,55 @@
 #include "tee-dev.h"
 
 static bool psp_dead;
+
+struct psp_tee_buffer *psp_tee_alloc_buffer(unsigned long size, gfp_t gfp)
+{
+	struct psp_device *psp = psp_get_master_device();
+	struct psp_tee_buffer *tee_buf;
+	struct iommu_domain *dom;
+
+	if (!psp || !size)
+		return NULL;
+
+	tee_buf = kzalloc(sizeof(*tee_buf), GFP_KERNEL);
+	if (!tee_buf)
+		return NULL;
+
+	tee_buf->vaddr = dma_alloc_coherent(psp->dev, size, &tee_buf->dma, gfp);
+	if (!tee_buf->vaddr || !tee_buf->dma) {
+		kfree(tee_buf);
+		return NULL;
+	}
+
+	tee_buf->size = size;
+
+	/* Check whether IOMMU is present. If present, translate IOVA
+	 * to physical address, else the dma handle is the physical
+	 * address.
+	 */
+	dom = iommu_get_domain_for_dev(psp->dev);
+	if (dom)
+		tee_buf->paddr = iommu_iova_to_phys(dom, tee_buf->dma);
+	else
+		tee_buf->paddr = tee_buf->dma;
+
+	return tee_buf;
+}
+EXPORT_SYMBOL(psp_tee_alloc_buffer);
+
+void psp_tee_free_buffer(struct psp_tee_buffer *tee_buf)
+{
+	struct psp_device *psp = psp_get_master_device();
+
+	if (!psp || !tee_buf)
+		return;
+
+	dma_free_coherent(psp->dev, tee_buf->size,
+			  tee_buf->vaddr, tee_buf->dma);
+
+	kfree(tee_buf);
+}
+EXPORT_SYMBOL(psp_tee_free_buffer);
 
 static int tee_alloc_ring(struct psp_tee_device *tee, int ring_size)
 {
