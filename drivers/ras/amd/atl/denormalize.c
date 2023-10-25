@@ -442,6 +442,20 @@ static u16 get_logical_cs_fabric_id(struct addr_ctx *ctx)
 	return (phys_cs_fabric_id & df_cfg.node_id_mask) | log_cs_fabric_id;
 }
 
+/* Physical CS to Logical CS mapping for MI300 AIDs */
+u16 phy_to_logicalcs_mapping_mi300_aid[] = { 12, 13, 14, 15, 8, 9, 10, 11,
+					4, 5, 6, 7, 0, 1, 2, 3,
+					28, 29, 30, 31, 24, 25, 26, 27,
+					20, 21, 22, 23, 16, 17, 18, 19};
+
+static u16 get_logical_cs_fabric_id_mi300_die(struct addr_ctx *ctx)
+{
+	if (ctx->inst_id >= sizeof(phy_to_logicalcs_mapping_mi300_aid))
+		return -EINVAL;
+
+	return phy_to_logicalcs_mapping_mi300_aid[ctx->inst_id];
+}
+
 static int denorm_addr_common(struct addr_ctx *ctx)
 {
 	u64 denorm_addr;
@@ -451,7 +465,11 @@ static int denorm_addr_common(struct addr_ctx *ctx)
 	 * Convert the original physical CS Fabric ID to a logical value.
 	 * This is required for non-power-of-two and other interleaving modes.
 	 */
-	ctx->cs_fabric_id = get_logical_cs_fabric_id(ctx);
+	if (df_cfg.rev == DF4p5 && df_cfg.flags.heterogeneous)
+		ctx->cs_fabric_id = (ctx->cs_fabric_id & df_cfg.node_id_mask) |
+				     get_logical_cs_fabric_id_mi300_die(ctx);
+	else
+		ctx->cs_fabric_id = get_logical_cs_fabric_id(ctx);
 
 	denorm_addr = make_space_for_cs_id(ctx);
 	cs_id = calculate_cs_id(ctx);
