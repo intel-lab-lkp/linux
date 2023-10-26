@@ -3159,36 +3159,34 @@ out:
 	return rc;
 }
 
-static void resume_triggers2string(u32 triggers, char *string, int str_size)
+static void resume_triggers2string(u32 triggers, struct seq_buf *s)
 {
-	string[0] = '\0';
-
 	if (!triggers) {
-		strlcat(string, " UNKNOWN", str_size);
+		seq_buf_puts(s, " UNKNOWN");
 		return;
 	}
 
 	if (triggers & WMI_RESUME_TRIGGER_HOST)
-		strlcat(string, " HOST", str_size);
+		seq_buf_puts(s, " HOST")
 
 	if (triggers & WMI_RESUME_TRIGGER_UCAST_RX)
-		strlcat(string, " UCAST_RX", str_size);
+		seq_buf_puts(s, " UCAST_RX");
 
 	if (triggers & WMI_RESUME_TRIGGER_BCAST_RX)
-		strlcat(string, " BCAST_RX", str_size);
+		seq_buf_puts(s, " BCAST_RX");
 
 	if (triggers & WMI_RESUME_TRIGGER_WMI_EVT)
-		strlcat(string, " WMI_EVT", str_size);
+		seq_buf_puts(s, " WMI_EVT");
 
 	if (triggers & WMI_RESUME_TRIGGER_DISCONNECT)
-		strlcat(string, " DISCONNECT", str_size);
+		seq_buf_puts(s, " DISCONNECT");
 }
 
 int wmi_resume(struct wil6210_priv *wil)
 {
 	struct wil6210_vif *vif = ndev_to_vif(wil->main_ndev);
 	int rc;
-	char string[100];
+	DECLARE_SEQ_BUF(s, 100);
 	struct {
 		struct wmi_cmd_hdr wmi;
 		struct wmi_traffic_resume_event evt;
@@ -3203,10 +3201,9 @@ int wmi_resume(struct wil6210_priv *wil)
 		      WIL_WAIT_FOR_SUSPEND_RESUME_COMP);
 	if (rc)
 		return rc;
-	resume_triggers2string(le32_to_cpu(reply.evt.resume_triggers), string,
-			       sizeof(string));
+	resume_triggers2string(le32_to_cpu(reply.evt.resume_triggers), s);
 	wil_dbg_pm(wil, "device resume %s, resume triggers:%s (0x%x)\n",
-		   reply.evt.status ? "failed" : "passed", string,
+		   reply.evt.status ? "failed" : "passed", seq_buf_cstr(s),
 		   le32_to_cpu(reply.evt.resume_triggers));
 
 	return reply.evt.status;
