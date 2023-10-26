@@ -1,0 +1,30 @@
+drm drm-fixes 05d3ef8bba77c1b5f98d941d8b2d4aeab8118ef1
+	Linux 6.6-rc7
+drm-misc drm-misc-fixes b132ac51d7a50c37683be56c96ff64f8c887930f
+	accel/ivpu/37xx: Fix missing VPUIP interrupts
+drm-intel drm-intel-fixes 4cbed7702eb775cca22fff6827a549092cb59f61
+	drm/i915/pmu: Check if pmu is closed before stopping event
+drm drm-next 0ecf4aa32b7896b9160688bdbd20153dc06a50fb
+	Merge tag 'amd-drm-next-6.7-2023-10-20' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm-misc drm-misc-next-fixes d20b484c674d2eae816978a98fa38b4054aeca3b
+	drm/drm_exec: Work around a WW mutex lockdep oddity
+drm-intel drm-intel-next-fixes 0bb80ecc33a8fb5a682236443c1e740d5c917d1d
+	Linux 6.6-rc1
+drm-misc drm-misc-next b8644c4ae2b646b89b40892bf93cbb6f7451c868
+	drm/doc: document DRM_IOCTL_MODE_CREATE_DUMB
+drm-intel drm-intel-next bc725dc1a8317abb2403b3a906106dbe0d4d4422
+	drm/i915/display: debugfs entry to list display capabilities
+drm-intel drm-intel-gt-next 31f6a06f0c543b43a38fab10f39e5fc45ad62aa2
+	drm/i915/pmu: Check if pmu is closed before stopping event
+drm-intel topic/core-for-CI 4dfdf656708ee83de89dfb6289c290012212e4c6
+	PCI/ASPM: pci_enable_link_state: Add argument to acquire bus lock
+drm-misc topic/i915-ttm 1e3944578b749449bd7fa6bf0bae4c3d3f5f1733
+	Merge tag 'amd-drm-next-5.16-2021-09-27' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm topic/nouveau-misc dfc4005f8c172eea359f9db08c3b2b0ff0153699
+	drm/nouveau/disp: move DAC load detection method
+drm topic/drm-ci ad6bfe1b66a5c146ec236847eca7af4c8806d666
+	drm: ci: docs: fix build warning - add missing escape
+drm topic/vmemdup-user-array 06ab64a0d836ac430c5f94669710a78aa43942cb
+	drm: vmwgfx_surface.c: copy user-array safely
+drm topic/nvidia-gsp c09ddadcb054bbbb45b46e1dd0554a3ee1a96328
+	drm/nouveau/ofa/r535: initial support
