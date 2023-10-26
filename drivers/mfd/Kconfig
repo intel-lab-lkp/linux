@@ -1766,6 +1766,11 @@ config MFD_TPS6594_SPI
 
 	  This driver can also be built as a module.  If so, the module
 	  will be called tps6594-spi.
+config MFD_TPS65224
+        tristate
+        select MFD_CORE
+        select REGMAP
+        select REGMAP_IRQ
 
 config TWL4030_CORE
 	bool "TI TWL4030/TWL5030/TWL6030/TPS659x0 Support"
