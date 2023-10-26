@@ -509,7 +509,6 @@
 		ti,itap-del-sel-sdr25 = <0x0>;
 		ti,clkbuf-sel = <0x7>;
 		bus-width = <4>;
-		no-1-8-v;
 		status = "disabled";
 	};
 
