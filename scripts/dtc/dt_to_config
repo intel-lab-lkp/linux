@@ -748,6 +748,7 @@ sub handle_compatible()
        $pn_arg{node}         = $node;
        $pn_arg{node_enabled} = $node_enabled;
 
+       $compatible =~ s/\\0/", "/g;
        my @compatibles = split('", "', $compatible);
 
        $compatibles[0] =~ s/^"//;
