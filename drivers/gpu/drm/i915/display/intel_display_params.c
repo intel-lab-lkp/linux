@@ -3,6 +3,8 @@
  * Copyright © 2023 Intel Corporation
  */
 
+#include <drm/drm_drv.h>
+
 #include "intel_display_params.h"
 #include "i915_drv.h"
 
