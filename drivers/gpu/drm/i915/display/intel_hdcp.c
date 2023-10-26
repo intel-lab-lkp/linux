@@ -2324,6 +2324,17 @@ intel_hdcp_set_streams(struct intel_digital_port *dig_port,
 	return 0;
 }
 
+void intel_hdcp_try_enable(struct intel_atomic_state *state,
+			   struct intel_encoder *encoder,
+			   const struct intel_crtc_state *crtc_state,
+			   const struct drm_connector_state *conn_state)
+{
+	/* Enable hdcp if it's desired */
+	if (conn_state->content_protection ==
+	    DRM_MODE_CONTENT_PROTECTION_DESIRED)
+		intel_hdcp_enable(state, encoder, crtc_state, conn_state);
+}
+
 int intel_hdcp_enable(struct intel_atomic_state *state,
 		      struct intel_encoder *encoder,
 		      const struct intel_crtc_state *pipe_config,
