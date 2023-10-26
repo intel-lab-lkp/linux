@@ -562,6 +562,18 @@ config TPS6594_PFSM
 	  This driver can also be built as a module.  If so, the module
 	  will be called tps6594-pfsm.
 
+config TPS65224_PFSM
+		tristate "TI TPS65224 Pre-configurable Finite State Machine support"
+		depends on MFD_TPS65224
+		default MFD_TPS65224
+		help
+		  Support PFSM (Pre-configurable Finite State Machine) on TPS65224 PMIC devices.
+		  These devices integrate a finite state machine engine, which manages the state
+		  of the device during operating state transition.
+
+		  This driver can also be built as a module.  If so, the module
+		  will be called tps65224-pfsm.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
