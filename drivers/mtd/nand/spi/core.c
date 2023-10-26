@@ -1113,6 +1113,8 @@ int spinand_match_and_init(struct spinand_device *spinand,
 					       info->op_variants.update_cache);
 		spinand->op_templates.update_cache = op;
 
+		spinand->spimem->spi->rx_sample_delay_ns = table[i].rx_sample_delay_ns;
+
 		return 0;
 	}
 

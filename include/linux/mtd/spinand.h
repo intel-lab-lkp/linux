@@ -326,6 +326,7 @@ struct spinand_ondie_ecc_conf {
  * @model: model name
  * @devid: device ID
  * @flags: OR-ing of the SPINAND_XXX flags
+ * @rx_sample_delay_ns: clock to rx data delay timing (tCLQV)
  * @memorg: memory organization
  * @eccreq: ECC requirements
  * @eccinfo: on-die ECC info
@@ -343,6 +344,7 @@ struct spinand_info {
 	const char *model;
 	struct spinand_devid devid;
 	u32 flags;
+	u32 rx_sample_delay_ns;
 	struct nand_memory_organization memorg;
 	struct nand_ecc_props eccreq;
 	struct spinand_ecc_info eccinfo;
@@ -377,6 +379,9 @@ struct spinand_info {
 
 #define SPINAND_SELECT_TARGET(__func)					\
 	.select_target = __func,
+
+#define SPINAND_RX_SAMPLE_DELAY(__delay)				\
+	.rx_sample_delay_ns = __delay,
 
 #define SPINAND_INFO(__model, __id, __memorg, __eccreq, __op_variants,	\
 		     __flags, ...)					\
