@@ -23,6 +23,7 @@
  *
  */
 
+#include <linux/string.h>
 #include "amdgpu_dm_replay.h"
 #include "dc.h"
 #include "dm_helpers.h"
@@ -73,6 +74,8 @@ bool amdgpu_dm_setup_replay(struct dc_link *link, struct amdgpu_dm_connector *ac
 {
 	struct replay_config pr_config;
 	union replay_debug_flags *debug_flags = NULL;
+
+	memset(&pr_config, 0, sizeof(pr_config));
 
 	// For eDP, if Replay is supported, return true to skip checks
 	if (link->replay_settings.config.replay_supported)
