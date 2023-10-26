@@ -65,7 +65,11 @@ static int __set_clk_parents(struct device_node *node, bool clk_supplier)
 			goto err;
 		}
 
-		rc = clk_set_parent(clk, pclk);
+		if (__clk_get_hw(pclk) != __clk_get_hw(clk_get_parent(clk)))
+			rc = clk_set_parent(clk, pclk);
+		else
+			rc = 0;
+
 		if (rc < 0)
 			pr_err("clk: failed to reparent %s to %s: %d\n",
 			       __clk_get_name(clk), __clk_get_name(pclk), rc);
@@ -112,7 +116,10 @@ static int __set_clk_rates(struct device_node *node, bool clk_supplier)
 				return PTR_ERR(clk);
 			}
 
-			rc = clk_set_rate(clk, rate);
+			if (clk_get_rate(clk) != rate)
+				rc = clk_set_rate(clk, rate);
+			else
+				rc = 0;
 			if (rc < 0)
 				pr_err("clk: couldn't set %s clk rate to %u (%d), current rate: %lu\n",
 				       __clk_get_name(clk), rate, rc,
