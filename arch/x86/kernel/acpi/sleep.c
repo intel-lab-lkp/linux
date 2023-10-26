@@ -11,6 +11,7 @@
 #include <linux/dmi.h>
 #include <linux/cpumask.h>
 #include <linux/pgtable.h>
+#include <asm/apic.h>
 #include <asm/segment.h>
 #include <asm/desc.h>
 #include <asm/cacheflush.h>
@@ -129,12 +130,16 @@ int x86_acpi_suspend_lowlevel(void)
 	 */
 	current->thread.sp = (unsigned long)temp_stack + sizeof(temp_stack);
 	/*
-	 * Ensure the CPU knows which one it is when it comes back, if
-	 * it isn't in parallel mode and expected to work that out for
-	 * itself.
+	 * Ensure x2apic is re-enabled if necessary and the CPU knows which
+	 * one it is when it comes back, if it isn't in parallel mode and
+	 * expected to work that out for itself.
 	 */
-	if (!(smpboot_control & STARTUP_PARALLEL_MASK))
+	if (smpboot_control & STARTUP_PARALLEL_MASK) {
+		if (x2apic_enabled())
+			smpboot_control |= STARTUP_ENABLE_X2APIC;
+	} else {
 		smpboot_control = smp_processor_id();
+	}
 #endif
 	initial_code = (unsigned long)wakeup_long64;
 	saved_magic = 0x123456789abcdef0L;

@@ -236,9 +236,14 @@ SYM_INNER_LABEL(secondary_startup_64_no_verify, SYM_L_GLOBAL)
 	 * CPU number is encoded in smpboot_control.
 	 *
 	 * Bit 31	STARTUP_READ_APICID (Read APICID from APIC)
+	 * Bit 30	STARTUP_ENABLE_X2APIC (Enable X2APIC mode)
 	 * Bit 0-23	CPU# if STARTUP_xx flags are not set
 	 */
 	movl	smpboot_control(%rip), %ecx
+
+	testl	$STARTUP_ENABLE_X2APIC, %ecx
+	jnz	.Lenable_x2apic
+
 	testl	$STARTUP_READ_APICID, %ecx
 	jnz	.Lread_apicid
 	/*
@@ -247,6 +252,16 @@ SYM_INNER_LABEL(secondary_startup_64_no_verify, SYM_L_GLOBAL)
 	 */
 	andl	$(~STARTUP_PARALLEL_MASK), %ecx
 	jmp	.Lsetup_cpu
+
+.Lenable_x2apic:
+	/* Enable X2APIC if disabled */
+	mov	$MSR_IA32_APICBASE, %ecx
+	rdmsr
+	testl	$X2APIC_ENABLE, %eax
+	jnz	.Lread_apicid_msr
+	orl	$X2APIC_ENABLE, %eax
+	wrmsr
+	jmp	.Lread_apicid_msr
 
 .Lread_apicid:
 	/* Check whether X2APIC mode is already enabled */
