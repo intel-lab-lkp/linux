@@ -211,8 +211,9 @@ static inline void mmc_fixup_device(struct mmc_card *card,
 		if (f->manfid != CID_MANFID_ANY &&
 		    f->manfid != card->cid.manfid)
 			continue;
+		/* Only the bottom 8bits are valid in JESD84-B51 */
 		if (f->oemid != CID_OEMID_ANY &&
-		    f->oemid != card->cid.oemid)
+		     (f->oemid & 0xff) != (card->cid.oemid & 0xff))
 			continue;
 		if (f->name != CID_NAME_ANY &&
 		    strncmp(f->name, card->cid.prod_name,
