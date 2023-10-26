@@ -1751,7 +1751,7 @@ static bool gen8_csb_parse(const u64 csb)
 static noinline u64
 wa_csb_read(const struct intel_engine_cs *engine, u64 * const csb)
 {
-	u64 entry;
+	u64 entry = READ_ONCE(*csb);
 
 	/*
 	 * Reading from the HWSP has one particular advantage: we can detect
@@ -1763,7 +1763,7 @@ wa_csb_read(const struct intel_engine_cs *engine, u64 * const csb)
 	 * tgl,dg1:HSDES#22011327657
 	 */
 	preempt_disable();
-	if (wait_for_atomic_us((entry = READ_ONCE(*csb)) != -1, 10)) {
+	if (wait_for_atomic_us(entry != -1, 10)) {
 		int idx = csb - engine->execlists.csb_status;
 		int status;
 
