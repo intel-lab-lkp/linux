@@ -136,24 +136,26 @@ int copy_thread(struct task_struct *p, const struct kernel_clone_args *args)
 		status |= ST0_EXL;
 #endif
 		childregs->cp0_status = status;
-		return 0;
+	} else {
+		/* user thread */
+		*childregs = *regs;
+		childregs->regs[7] = 0; /* Clear error flag */
+		childregs->regs[2] = 0; /* Child gets zero as return value */
+		if (usp)
+			childregs->regs[29] = usp;
+
+		p->thread.reg29 = (unsigned long) childregs;
+		p->thread.reg31 = (unsigned long) ret_from_fork;
+
+		/*
+		 * New tasks lose permission to use the fpu. This accelerates context
+		 * switching for most programs since they don't use the fpu.
+		 */
+		childregs->cp0_status &= ~(ST0_CU2|ST0_CU1);
+
+		if (clone_flags & CLONE_SETTLS)
+			ti->tp_value = tls;
 	}
-
-	/* user thread */
-	*childregs = *regs;
-	childregs->regs[7] = 0; /* Clear error flag */
-	childregs->regs[2] = 0; /* Child gets zero as return value */
-	if (usp)
-		childregs->regs[29] = usp;
-
-	p->thread.reg29 = (unsigned long) childregs;
-	p->thread.reg31 = (unsigned long) ret_from_fork;
-
-	/*
-	 * New tasks lose permission to use the fpu. This accelerates context
-	 * switching for most programs since they don't use the fpu.
-	 */
-	childregs->cp0_status &= ~(ST0_CU2|ST0_CU1);
 
 	clear_tsk_thread_flag(p, TIF_USEDFPU);
 	clear_tsk_thread_flag(p, TIF_USEDMSA);
@@ -166,9 +168,6 @@ int copy_thread(struct task_struct *p, const struct kernel_clone_args *args)
 #ifdef CONFIG_MIPS_FP_SUPPORT
 	atomic_set(&p->thread.bd_emu_frame, BD_EMUFRAME_NONE);
 #endif
-
-	if (clone_flags & CLONE_SETTLS)
-		ti->tp_value = tls;
 
 	return 0;
 }
