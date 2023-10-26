@@ -1955,8 +1955,7 @@ static int htb_change_class(struct Qdisc *sch, u32 classid,
 				qdisc_refcount_inc(new_q);
 			}
 			old_q = htb_graft_helper(dev_queue, new_q);
-			/* No qdisc_put needed. */
-			WARN_ON(!(old_q->flags & TCQ_F_BUILTIN));
+			qdisc_put(old_q);
 		}
 		sch_tree_lock(sch);
 		if (parent && !parent->level) {
