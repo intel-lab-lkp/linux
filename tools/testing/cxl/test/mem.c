@@ -1237,6 +1237,7 @@ static int mock_transfer_fw(struct cxl_mockmem_data *mdata,
 	}
 
 	memcpy(fw + offset, transfer->data, length);
+	udelay(2000);
 	return 0;
 }
 
