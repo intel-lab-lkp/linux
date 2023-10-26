@@ -752,6 +752,8 @@ int f2fs_get_victim(struct f2fs_sb_info *sbi, unsigned int *result,
 	unsigned int last_segment;
 	unsigned int nsearched;
 	bool is_atgc;
+	bool is_prefer_data_victim =
+		test_opt(sbi, PREFER_DATA_VICTIM) && gc_type == FG_GC;
 	int ret = 0;
 
 	mutex_lock(&dirty_i->seglist_lock);
@@ -766,6 +768,11 @@ retry:
 	p.min_segno = NULL_SEGNO;
 	p.oldest_age = 0;
 	p.min_cost = get_max_cost(sbi, &p);
+
+	if (is_prefer_data_victim) {
+		p.node_min_cost = p.min_cost;
+		p.node_min_segno = p.min_segno;
+	}
 
 	is_atgc = (p.gc_mode == GC_AT || p.alloc_mode == AT_SSR);
 	nsearched = 0;
@@ -884,9 +891,25 @@ retry:
 
 		cost = get_gc_cost(sbi, segno, &p);
 
-		if (p.min_cost > cost) {
-			p.min_segno = segno;
-			p.min_cost = cost;
+		if (is_prefer_data_victim) {
+			if (IS_DATASEG(get_seg_entry(sbi, segno)->type)) {
+				/* update data segments victim */
+				if (p.min_cost > cost) {
+					p.min_segno = segno;
+					p.min_cost = cost;
+				}
+			} else {
+				/* update node segments victim */
+				if (p.node_min_cost > cost) {
+					p.node_min_segno = segno;
+					p.node_min_cost = cost;
+				}
+			}
+		} else {
+			if (p.min_cost > cost) {
+				p.min_segno = segno;
+				p.min_cost = cost;
+			}
 		}
 next:
 		if (nsearched >= p.max_search) {
@@ -898,6 +921,25 @@ next:
 			sm->last_victim[p.gc_mode] %=
 				(MAIN_SECS(sbi) * sbi->segs_per_sec);
 			break;
+		}
+	}
+
+	if (is_prefer_data_victim && sbi->need_node_clean) {
+		/* we need to clean node sections */
+		if (p.min_cost > p.node_min_cost) {
+			p.min_segno = p.node_min_segno;
+			p.min_cost = p.node_min_cost;
+		} else {
+			/*
+			 * data victim cost is the lowest.
+			 * if free sections are enough, stop cleaning node victim.
+			 * if not, it goes on by GCing data victims.
+			 */
+			if (has_enough_free_secs(sbi, prefree_segments(sbi), 0)) {
+				sbi->need_node_clean = false;
+				p.min_segno = NULL_SEGNO;
+				goto out;
+			}
 		}
 	}
 
@@ -1830,8 +1872,27 @@ gc_more:
 		goto stop;
 	}
 
+	__get_secs_required(sbi, NULL, &upper_secs, NULL);
+
+	/*
+	 * Write checkpoint to reclaim prefree segments.
+	 * We need more three extra sections for writer's data/node/dentry.
+	 */
+	if (free_sections(sbi) <= upper_secs + NR_GC_CHECKPOINT_SECS) {
+		if (test_opt(sbi, PREFER_DATA_VICTIM)) {
+			sbi->need_node_clean = true;
+		}
+		if (prefree_segments(sbi)) {
+			ret = f2fs_write_checkpoint(sbi, &cpc);
+			if (ret)
+				goto stop;
+			/* Reset due to checkpoint */
+			sec_freed = 0;
+		}
+	}
+
 	/* Let's run FG_GC, if we don't have enough space. */
-	if (has_not_enough_free_secs(sbi, 0, 0)) {
+	if (gc_type == BG_GC && has_not_enough_free_secs(sbi, 0, 0)) {
 		gc_type = FG_GC;
 
 		/*
@@ -1882,7 +1943,17 @@ retry:
 			if (!gc_control->no_bg_gc &&
 			    total_sec_freed < gc_control->nr_free_secs)
 				goto go_gc_more;
-			goto stop;
+			if (test_opt(sbi, PREFER_DATA_VICTIM)) {
+				/*
+				 * If the need_node_clean flag is set
+				 * even though there are enough free
+				 * sections, node cleaning will continue.
+				 */
+				if (!sbi->need_node_clean)
+					goto stop;
+			} else {
+				goto stop;
+			}
 		}
 		if (sbi->skipped_gc_rwsem)
 			skipped_round++;
@@ -1897,21 +1968,6 @@ retry:
 		goto stop;
 	}
 
-	__get_secs_required(sbi, NULL, &upper_secs, NULL);
-
-	/*
-	 * Write checkpoint to reclaim prefree segments.
-	 * We need more three extra sections for writer's data/node/dentry.
-	 */
-	if (free_sections(sbi) <= upper_secs + NR_GC_CHECKPOINT_SECS &&
-				prefree_segments(sbi)) {
-		stat_inc_cp_call_count(sbi, TOTAL_CALL);
-		ret = f2fs_write_checkpoint(sbi, &cpc);
-		if (ret)
-			goto stop;
-		/* Reset due to checkpoint */
-		sec_freed = 0;
-	}
 go_gc_more:
 	segno = NULL_SEGNO;
 	goto gc_more;
@@ -1920,8 +1976,10 @@ stop:
 	SIT_I(sbi)->last_victim[ALLOC_NEXT] = 0;
 	SIT_I(sbi)->last_victim[FLUSH_DEVICE] = gc_control->victim_segno;
 
-	if (gc_type == FG_GC)
+	if (gc_type == FG_GC) {
 		f2fs_unpin_all_sections(sbi, true);
+		sbi->need_node_clean = false;
+	}
 
 	trace_f2fs_gc_end(sbi->sb, ret, total_freed, total_sec_freed,
 				get_pages(sbi, F2FS_DIRTY_NODES),

@@ -165,6 +165,7 @@ enum {
 	Opt_memory_mode,
 	Opt_age_extent_cache,
 	Opt_errors,
+	Opt_prefer_data_victim,
 	Opt_err,
 };
 
@@ -245,6 +246,7 @@ static match_table_t f2fs_tokens = {
 	{Opt_memory_mode, "memory=%s"},
 	{Opt_age_extent_cache, "age_extent_cache"},
 	{Opt_errors, "errors=%s"},
+	{Opt_prefer_data_victim, "prefer_data_victim"},
 	{Opt_err, NULL},
 };
 
@@ -1318,6 +1320,13 @@ static int parse_options(struct super_block *sb, char *options, bool is_remount)
 				return -EINVAL;
 			}
 			kfree(name);
+			break;
+		case Opt_prefer_data_victim:
+			if (!f2fs_sb_has_blkzoned(sbi)) {
+				f2fs_err(sbi, "prefer_data_victim is only allowed with zoned block device feature");
+				return -EINVAL;
+			}
+			set_opt(sbi, PREFER_DATA_VICTIM);
 			break;
 		default:
 			f2fs_err(sbi, "Unrecognized mount option \"%s\" or missing value",
