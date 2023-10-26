@@ -96,14 +96,8 @@ SYM_CODE_START_LOCAL(pvh_start_xen)
 1:
 	/* Set base address in stack canary descriptor. */
 	mov $MSR_GS_BASE,%ecx
-#ifdef CONFIG_SMP
-	lea __per_cpu_load(%rip), %rdx
-	mov %edx, %eax
-	shr $32, %rdx
-#else
 	xor %eax, %eax
 	xor %edx, %edx
-#endif
 	wrmsr
 
 	call xen_prepare_pvh
