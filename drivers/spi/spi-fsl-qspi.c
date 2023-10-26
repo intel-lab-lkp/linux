@@ -274,6 +274,12 @@ struct fsl_qspi {
 	int selected;
 };
 
+struct fsl_qspi_chip_data {
+	u32 rx_sample_delay_ns;
+	unsigned long rate;
+	u32 smpr_sampling;
+};
+
 static inline int needs_swap_endian(struct fsl_qspi *q)
 {
 	return q->devtype_data->quirks & QUADSPI_QUIRK_SWAP_ENDIAN;
@@ -522,13 +528,62 @@ static void fsl_qspi_invalidate(struct fsl_qspi *q)
 	qspi_writel(q, reg, q->iobase + QUADSPI_MCR);
 }
 
+static void fsl_qspi_update_smpr_sampling(struct fsl_qspi *q, u32 smpr)
+{
+	void __iomem *base = q->iobase;
+	u32 reg;
+
+	/* Disable the module */
+	qspi_writel(q, QUADSPI_MCR_MDIS_MASK | QUADSPI_MCR_RESERVED_MASK,
+		    base + QUADSPI_MCR);
+
+	reg = qspi_readl(q, base + QUADSPI_SMPR) &
+	      ~(QUADSPI_SMPR_FSPHS_MASK | QUADSPI_SMPR_FSDLY_MASK);
+	qspi_writel(q, reg | smpr, base + QUADSPI_SMPR);
+
+	/* Enable the module */
+	qspi_writel(q, QUADSPI_MCR_RESERVED_MASK | QUADSPI_MCR_END_CFG_MASK,
+		    base + QUADSPI_MCR);
+}
+
+const char *sampling_mode[] = { "N1", "I1", "N2", "I2"};
+
 static void fsl_qspi_select_mem(struct fsl_qspi *q, struct spi_device *spi)
 {
 	unsigned long rate = spi->max_speed_hz;
 	int ret;
+	struct fsl_qspi_chip_data *chip = spi_get_ctldata(spi);
+	const char *sampling_ident = sampling_mode[0];
+
+	if (chip->rx_sample_delay_ns != spi->rx_sample_delay_ns |
+	    chip->rate != rate) {
+		chip->rx_sample_delay_ns = spi->rx_sample_delay_ns;
+		chip->rate = rate;
+
+		chip->smpr_sampling =
+			(2 * spi->rx_sample_delay_ns * (rate >> 10)) / (1000000000 >> 10);
+		dev_dbg(q->dev, "smpr_sampling = %u (delay %u ns)\n",
+			chip->smpr_sampling, spi->rx_sample_delay_ns);
+
+		if (chip->smpr_sampling > 3) {
+			dev_err(q->dev, "rx sample delay for device %s exceeds hw capabilities! Clamp value to maximum setting.\n",
+				dev_name(&spi->dev));
+			chip->smpr_sampling = 3;
+			sampling_ident = "(I2 clamped to max)";
+		} else {
+			sampling_ident = sampling_mode[chip->smpr_sampling];
+		}
+
+		chip->smpr_sampling <<= 5;
+		dev_info(q->dev, "sampling point %s at %lu kHz used for device %s\n",
+			 sampling_ident, rate / 1000, dev_name(&spi->dev));
+		fsl_qspi_update_smpr_sampling(q, chip->smpr_sampling);
+	}
 
 	if (q->selected == spi_get_chipselect(spi, 0))
 		return;
+
+	fsl_qspi_update_smpr_sampling(q, chip->smpr_sampling);
 
 	if (needs_4x_clock(q))
 		rate *= 4;
@@ -839,6 +894,28 @@ static const struct spi_controller_mem_ops fsl_qspi_mem_ops = {
 	.get_name = fsl_qspi_get_name,
 };
 
+static int fsl_qspi_setup(struct spi_device *spi)
+{
+	struct fsl_qspi_chip_data *chip = spi_get_ctldata(spi);
+
+	if (!chip) {
+		chip = kzalloc(sizeof(*chip), GFP_KERNEL);
+		if (!chip)
+			return -ENOMEM;
+		spi_set_ctldata(spi, chip);
+	}
+
+	return 0;
+}
+
+static void fsl_qspi_cleanup(struct spi_device *spi)
+{
+	struct fsl_qspi_chip_data *chip = spi_get_ctldata(spi);
+
+	kfree(chip);
+	spi_set_ctldata(spi, NULL);
+}
+
 static int fsl_qspi_probe(struct platform_device *pdev)
 {
 	struct spi_controller *ctlr;
@@ -864,6 +941,9 @@ static int fsl_qspi_probe(struct platform_device *pdev)
 	}
 
 	platform_set_drvdata(pdev, q);
+
+	ctlr->setup = fsl_qspi_setup;
+	ctlr->cleanup = fsl_qspi_cleanup;
 
 	/* find the resources */
 	q->iobase = devm_platform_ioremap_resource_byname(pdev, "QuadSPI");
