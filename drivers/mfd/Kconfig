@@ -1766,11 +1766,25 @@ config MFD_TPS6594_SPI
 
 	  This driver can also be built as a module.  If so, the module
 	  will be called tps6594-spi.
+
 config MFD_TPS65224
         tristate
         select MFD_CORE
         select REGMAP
         select REGMAP_IRQ
+
+config MFD_TPS65224_I2C
+        tristate "TI TPS65224 Power Management chip with I2C"
+        select MFD_TPS65224
+        select REGMAP_I2C
+        select CRC8
+        depends on I2C
+        help
+          If you say yes here you get support for the TPS65224 series of
+          PM chips with I2C interface.
+
+          This driver can also be built as a module.  If so, the module
+          will be called tps65224-i2c.
 
 config TWL4030_CORE
 	bool "TI TWL4030/TWL5030/TWL6030/TPS659x0 Support"
