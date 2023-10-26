@@ -1684,12 +1684,8 @@ __v4l2_subdev_state_get_format_stream(struct v4l2_subdev_state *state,
 		if (stream)
 			return NULL;
 
-		/*
-		 * Set the pad to 0 on error as this is aligned with the
-		 * behaviour of the pad state information access functions.
-		 */
 		if (WARN_ON(pad >= state->sd->entity.num_pads))
-			pad = 0;
+			return NULL;
 
 		return &state->pads[pad].try_fmt;
 	}
@@ -1722,12 +1718,8 @@ __v4l2_subdev_state_get_crop_stream(struct v4l2_subdev_state *state,
 		if (stream)
 			return NULL;
 
-		/*
-		 * Set the pad to 0 on error as this is aligned with the
-		 * behaviour of the pad state information access functions.
-		 */
 		if (WARN_ON(pad >= state->sd->entity.num_pads))
-			pad = 0;
+			return NULL;
 
 		return &state->pads[pad].try_crop;
 	}
@@ -1760,12 +1752,8 @@ __v4l2_subdev_state_get_compose_stream(struct v4l2_subdev_state *state,
 		if (stream)
 			return NULL;
 
-		/*
-		 * Set the pad to 0 on error as this is aligned with the
-		 * behaviour of the pad state information access functions.
-		 */
 		if (WARN_ON(pad >= state->sd->entity.num_pads))
-			pad = 0;
+			return NULL;
 
 		return &state->pads[pad].try_compose;
 	}
