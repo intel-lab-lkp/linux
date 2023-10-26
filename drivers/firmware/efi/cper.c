@@ -607,6 +607,22 @@ cper_estatus_print_section(const char *pfx, struct acpi_hest_generic_data *gdata
 			cper_print_prot_err(newpfx, prot_err);
 		else
 			goto err_section_too_small;
+	} else if (guid_equal(sec_type, &CPER_SEC_CXL_GEN_MEDIA) ||
+		   guid_equal(sec_type, &CPER_SEC_CXL_DRAM) ||
+		   guid_equal(sec_type, &CPER_SEC_CXL_MEM_MODULE)) {
+		struct cper_cxl_event_rec *rec = acpi_hest_get_payload(gdata);
+
+		printk("%ssection type: CXL Event\n", newpfx);
+
+		if (rec->hdr.length <= sizeof(rec->hdr))
+			goto err_section_too_small;
+
+		if (rec->hdr.length > sizeof(*rec)) {
+			pr_err(FW_WARN "error section length is too big\n");
+			return;
+		}
+
+		cper_post_cxl_event(newpfx, sec_type, rec);
 	} else {
 		const void *err = acpi_hest_get_payload(gdata);
 
