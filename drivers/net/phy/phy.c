@@ -1740,3 +1740,22 @@ int phy_ethtool_nway_reset(struct net_device *ndev)
 	return ret;
 }
 EXPORT_SYMBOL(phy_ethtool_nway_reset);
+
+int phy_ethtool_get_rxnfc(struct phy_device *phydev,
+			  struct ethtool_rxnfc *nfc, u32 *rule_locs)
+{
+	if (phydev->drv && phydev->drv->get_rxnfc)
+		return phydev->drv->get_rxnfc(phydev, nfc, rule_locs);
+
+	return -EOPNOTSUPP;
+}
+EXPORT_SYMBOL(phy_ethtool_get_rxnfc);
+
+int phy_ethtool_set_rxnfc(struct phy_device *phydev, struct ethtool_rxnfc *nfc)
+{
+	if (phydev->drv && phydev->drv->set_rxnfc)
+		return phydev->drv->set_rxnfc(phydev, nfc);
+
+	return -EOPNOTSUPP;
+}
+EXPORT_SYMBOL(phy_ethtool_set_rxnfc);

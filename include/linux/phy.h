@@ -1077,6 +1077,10 @@ struct phy_driver {
 	int (*get_sqi)(struct phy_device *dev);
 	/** @get_sqi_max: Get the maximum signal quality indication */
 	int (*get_sqi_max)(struct phy_device *dev);
+	/* Used for WAKE_FILTER programming only */
+	int (*get_rxnfc)(struct phy_device *dev,
+			 struct ethtool_rxnfc *nfc, u32 *rule_locs);
+	int (*set_rxnfc)(struct phy_device *dev, struct ethtool_rxnfc *nfc);
 
 	/* PLCA RS interface */
 	/** @get_plca_cfg: Return the current PLCA configuration */
@@ -1989,6 +1993,10 @@ int phy_ethtool_set_plca_cfg(struct phy_device *phydev,
 			     struct netlink_ext_ack *extack);
 int phy_ethtool_get_plca_status(struct phy_device *phydev,
 				struct phy_plca_status *plca_st);
+int phy_ethtool_get_rxnfc(struct phy_device *phydev,
+			  struct ethtool_rxnfc *nfc, u32 *rule_locs);
+int phy_ethtool_set_rxnfc(struct phy_device *phydev,
+			  struct ethtool_rxnfc *nfc);
 
 int __phy_hwtstamp_get(struct phy_device *phydev,
 		       struct kernel_hwtstamp_config *config);
