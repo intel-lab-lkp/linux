@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright(c) 2020 Intel Corporation. All rights reserved. */
+#include <asm-generic/unaligned.h>
 #include <linux/io-64-nonatomic-lo-hi.h>
 #include <linux/moduleparam.h>
 #include <linux/module.h>
@@ -10,6 +11,7 @@
 #include <linux/pci.h>
 #include <linux/aer.h>
 #include <linux/io.h>
+#include <linux/efi.h>
 #include "cxlmem.h"
 #include "cxlpci.h"
 #include "cxl.h"
@@ -748,6 +750,69 @@ static bool cxl_event_int_is_fw(u8 setting)
 	return mode == CXL_INT_FW;
 }
 
+#define CXL_EVENT_HDR_FLAGS_REC_SEVERITY GENMASK(1, 0)
+int cxl_cper_event_call(struct notifier_block *nb, unsigned long action, void *data)
+{
+	struct cxl_cper_notifier_data *nd = data;
+	struct cxl_event_record_raw record = (struct cxl_event_record_raw) {
+		.hdr.id = UUID_INIT(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+	};
+	enum cxl_event_log_type log_type;
+	struct cxl_memdev_state *mds;
+	u32 hdr_flags;
+
+	mds = container_of(nb, struct cxl_memdev_state, cxl_cper_nb);
+
+	/* Need serial number for device identification */
+	if (!(nd->rec->hdr.validation_bits & CPER_CXL_DEVICE_SN_VALID))
+		return NOTIFY_DONE;
+
+	/* FIXME endianess and bytes of serial number need verification */
+	/* FIXME Should other values be checked? */
+	if (memcmp(&mds->cxlds.serial, &nd->rec->hdr.dev_serial_num,
+		   sizeof(mds->cxlds.serial)))
+		return NOTIFY_DONE;
+
+	/* ensure record can always handle the full CPER provided data */
+	BUILD_BUG_ON(sizeof(record) <
+		(CPER_CXL_COMP_EVENT_LOG_SIZE + sizeof(record.hdr.id)));
+
+	/*
+	 * UEFI v2.10 defines N.2.14 defines the CXL CPER record as not
+	 * including the uuid field.
+	 */
+	memcpy(&record.hdr.length, &nd->rec->comp_event_log,
+		CPER_CXL_REC_LEN(nd->rec));
+
+	/* Fabricate a log type */
+	hdr_flags = get_unaligned_le24(record.hdr.flags);
+	log_type = FIELD_GET(CXL_EVENT_HDR_FLAGS_REC_SEVERITY, hdr_flags);
+
+	cxl_event_trace_record(mds->cxlds.cxlmd, log_type, &record,
+			       nd->cper_event);
+
+	return NOTIFY_OK;
+}
+
+static void cxl_unregister_cper_events(void *_mds)
+{
+	struct cxl_memdev_state *mds = _mds;
+
+	unregister_cxl_cper_notifier(&mds->cxl_cper_nb);
+}
+
+static void register_cper_events(struct cxl_memdev_state *mds)
+{
+	mds->cxl_cper_nb.notifier_call = cxl_cper_event_call;
+
+	if (register_cxl_cper_notifier(&mds->cxl_cper_nb)) {
+		dev_err(mds->cxlds.dev, "CPER registration failed\n");
+		return;
+	}
+
+	devm_add_action_or_reset(mds->cxlds.dev, cxl_unregister_cper_events, mds);
+}
+
 static int cxl_event_config(struct pci_host_bridge *host_bridge,
 			    struct cxl_memdev_state *mds)
 {
@@ -758,8 +823,10 @@ static int cxl_event_config(struct pci_host_bridge *host_bridge,
 	 * When BIOS maintains CXL error reporting control, it will process
 	 * event records.  Only one agent can do so.
 	 */
-	if (!host_bridge->native_cxl_error)
+	if (!host_bridge->native_cxl_error) {
+		register_cper_events(mds);
 		return 0;
+	}
 
 	rc = cxl_mem_alloc_event_buf(mds);
 	if (rc)
