@@ -595,6 +595,24 @@ static inline void __vringh_notify_disable(struct vringh *vrh,
 	}
 }
 
+static inline int __vringh_set_base(struct vringh *vrh, u16 idx,
+	                    int (*putu16)(const struct vringh *vrh,
+	                        __virtio16 *p, u16 val))
+{
+    int ret;
+
+    ret = putu16(vrh, &vrh->vring.avail->idx, idx);
+    if (ret)
+        return ret;
+
+    ret = putu16(vrh, &vrh->vring.used->idx, idx);
+    if (ret)
+        return ret;
+
+    vrh->last_avail_idx = vrh->last_used_idx = idx;
+    return 0;
+}
+
 /* Userspace access helpers: in this case, addresses are really userspace. */
 static inline int getu16_user(const struct vringh *vrh, u16 *val, const __virtio16 *p)
 {
@@ -1455,6 +1473,18 @@ void vringh_set_iotlb(struct vringh *vrh, struct vhost_iotlb *iotlb,
 	vrh->iotlb_lock = iotlb_lock;
 }
 EXPORT_SYMBOL(vringh_set_iotlb);
+
+/**
+ * vringh_set_base_iotlb - set avail_idx and used_idx
+ * @vrh: the vring
+ * @idx: the value to set
+ */
+int vringh_set_base_iotlb(struct vringh *vrh, u16 idx)
+{
+    return __vringh_set_base(vrh, idx, putu16_iotlb);
+}
+EXPORT_SYMBOL(vringh_set_base_iotlb);
+
 
 /**
  * vringh_getdesc_iotlb - get next available descriptor from ring with

@@ -306,6 +306,8 @@ int vringh_init_iotlb_va(struct vringh *vrh, u64 features,
 			 struct vring_avail *avail,
 			 struct vring_used *used);
 
+int vringh_set_base_iotlb(struct vringh *vrh, u16 idx);
+
 int vringh_getdesc_iotlb(struct vringh *vrh,
 			 struct vringh_kiov *riov,
 			 struct vringh_kiov *wiov,
