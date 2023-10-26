@@ -26,24 +26,36 @@ int optee_pool_op_alloc_helper(struct tee_shm_pool *pool, struct tee_shm *shm,
 						   size_t num_pages,
 						   unsigned long start))
 {
-	unsigned int order = get_order(size);
-	struct page *page;
+	size_t nr_pages = roundup(size, PAGE_SIZE) / PAGE_SIZE;
+	unsigned int i;
 	int rc = 0;
 
 	/*
 	 * Ignore alignment since this is already going to be page aligned
 	 * and there's no need for any larger alignment.
 	 */
-	page = alloc_pages(GFP_KERNEL | __GFP_ZERO, order);
-	if (!page)
+	shm->kaddr = alloc_pages_exact(nr_pages * PAGE_SIZE,
+				       GFP_KERNEL | __GFP_ZERO);
+	if (!shm->kaddr)
 		return -ENOMEM;
 
-	shm->kaddr = page_address(page);
-	shm->paddr = page_to_phys(page);
-	shm->size = PAGE_SIZE << order;
+	shm->size = nr_pages * PAGE_SIZE;
+	shm->num_pages = nr_pages;
 
-	if (shm_register) {
-		unsigned int nr_pages = 1 << order, i;
+	/*
+	 * If memory is registered immediately use a temporary page list
+	 * and free it directly after the registration is completed.
+	 *
+	 * Else, if we have allocated more than one page store a page
+	 * list in the struct tee_shm.
+	 *
+	 * Else, store the physical address of the single page that was
+	 * allocated.
+	 *
+	 * optee_pool_op_free_helper() is responsible for freeing the
+	 * resourses allocated in this function.
+	 */
+	if (shm_register || nr_pages > 1) {
 		struct page **pages;
 
 		pages = kcalloc(nr_pages, sizeof(*pages), GFP_KERNEL);
@@ -53,19 +65,26 @@ int optee_pool_op_alloc_helper(struct tee_shm_pool *pool, struct tee_shm *shm,
 		}
 
 		for (i = 0; i < nr_pages; i++)
-			pages[i] = page + i;
+			pages[i] = virt_to_page((u8 *)shm->kaddr +
+						i * PAGE_SIZE);
 
-		rc = shm_register(shm->ctx, shm, pages, nr_pages,
-				  (unsigned long)shm->kaddr);
-		kfree(pages);
-		if (rc)
-			goto err;
+		if (shm_register) {
+			rc = shm_register(shm->ctx, shm, pages, nr_pages,
+					  (unsigned long)shm->kaddr);
+			kfree(pages);
+			if (rc)
+				goto err;
+		} else {
+			shm->pages = pages;
+		}
+	} else {
+		shm->paddr = virt_to_phys(shm->kaddr);
 	}
 
 	return 0;
-
 err:
-	free_pages((unsigned long)shm->kaddr, order);
+	free_pages_exact(shm->kaddr, shm->size);
+	shm->kaddr = NULL;
 	return rc;
 }
 
@@ -75,8 +94,10 @@ void optee_pool_op_free_helper(struct tee_shm_pool *pool, struct tee_shm *shm,
 {
 	if (shm_unregister)
 		shm_unregister(shm->ctx, shm);
-	free_pages((unsigned long)shm->kaddr, get_order(shm->size));
+	free_pages_exact(shm->kaddr, shm->size);
 	shm->kaddr = NULL;
+	kfree(shm->pages);
+	shm->pages = NULL;
 }
 
 static void optee_bus_scan(struct work_struct *work)
