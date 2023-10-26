@@ -1053,22 +1053,34 @@ static inline int ethtool_mm_frag_size_min_to_add(u32 val_min, u32 *val_add,
  */
 extern __printf(2, 3) void ethtool_sprintf(u8 **data, const char *fmt, ...);
 
+/**
+ * ethtool_puts - Write string to ethtool string data
+ * @data: Pointer to start of string to update
+ * @str: String to write
+ *
+ * Write string to data. Update data to point at start of next
+ * string.
+ *
+ * Prefer this function to ethtool_sprintf() when given only
+ * two arguments or if @fmt is just "%s".
+ */
+extern void ethtool_puts(u8 **data, const char *str);
+
 /* Link mode to forced speed capabilities maps */
 struct ethtool_forced_speed_map {
-	u32		speed;
+	u32 speed;
 	__ETHTOOL_DECLARE_LINK_MODE_MASK(caps);
 
-	const u32	*cap_arr;
-	u32		arr_size;
+	const u32 *cap_arr;
+	u32 arr_size;
 };
 
-#define ETHTOOL_FORCED_SPEED_MAP(prefix, value)				\
-{									\
-	.speed		= SPEED_##value,				\
-	.cap_arr	= prefix##_##value,				\
-	.arr_size	= ARRAY_SIZE(prefix##_##value),			\
-}
+#define ETHTOOL_FORCED_SPEED_MAP(prefix, value)                      \
+	{                                                            \
+		.speed = SPEED_##value, .cap_arr = prefix##_##value, \
+		.arr_size = ARRAY_SIZE(prefix##_##value),            \
+	}
 
-void
-ethtool_forced_speed_maps_init(struct ethtool_forced_speed_map *maps, u32 size);
+void ethtool_forced_speed_maps_init(struct ethtool_forced_speed_map *maps,
+				    u32 size);
 #endif /* _LINUX_ETHTOOL_H */
