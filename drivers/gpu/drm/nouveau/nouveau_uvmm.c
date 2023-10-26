@@ -620,11 +620,14 @@ nouveau_uvmm_sm_prepare(struct nouveau_uvmm *uvmm,
 		case DRM_GPUVA_OP_MAP: {
 			u64 vmm_get_range = vmm_get_end - vmm_get_start;
 
+			if (!args)
+				goto unwind;
+
 			ret = op_map_prepare(uvmm, &new->map, &op->map, args);
 			if (ret)
 				goto unwind;
 
-			if (args && vmm_get_range) {
+			if (vmm_get_range) {
 				ret = nouveau_uvmm_vmm_get(uvmm, vmm_get_start,
 							   vmm_get_range);
 				if (ret) {
