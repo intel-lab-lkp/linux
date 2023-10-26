@@ -75,15 +75,13 @@ static int scmi_clk_set_rate(struct clk_hw *hw, unsigned long rate,
 			     unsigned long parent_rate)
 {
 	struct scmi_clk *clk = to_scmi_clk(hw);
+	const struct scmi_clock_info *info = clk->info;
+	u64 rate1 = 0;
+
+	if (info->flags & SCMI_CLOCK_SET_RATE_DENIED)
+		return -EACCES;
 
 	return scmi_proto_clk_ops->rate_set(clk->ph, clk->id, rate);
-}
-
-static int scmi_clk_set_parent(struct clk_hw *hw, u8 parent_index)
-{
-	struct scmi_clk *clk = to_scmi_clk(hw);
-
-	return scmi_proto_clk_ops->parent_set(clk->ph, clk->id, parent_index);
 }
 
 static u8 scmi_clk_get_parent(struct clk_hw *hw)
@@ -107,6 +105,17 @@ static u8 scmi_clk_get_parent(struct clk_hw *hw)
 	return p_idx;
 }
 
+static int scmi_clk_set_parent(struct clk_hw *hw, u8 parent_index)
+{
+	struct scmi_clk *clk = to_scmi_clk(hw);
+	const struct scmi_clock_info *info = clk->info;
+
+	if (info->flags & SCMI_CLOCK_SET_ENABLE_DENIED)
+		return -EACCES;
+
+	return scmi_proto_clk_ops->parent_set(clk->ph, clk->id, parent_index);
+}
+
 static int scmi_clk_determine_rate(struct clk_hw *hw, struct clk_rate_request *req)
 {
 	/*
@@ -119,6 +128,10 @@ static int scmi_clk_determine_rate(struct clk_hw *hw, struct clk_rate_request *r
 static int scmi_clk_enable(struct clk_hw *hw)
 {
 	struct scmi_clk *clk = to_scmi_clk(hw);
+	const struct scmi_clock_info *info = clk->info;
+
+	if (info->flags & SCMI_CLOCK_SET_ENABLE_DENIED)
+		return 0;
 
 	return scmi_proto_clk_ops->enable(clk->ph, clk->id, NOT_ATOMIC);
 }
@@ -126,6 +139,10 @@ static int scmi_clk_enable(struct clk_hw *hw)
 static void scmi_clk_disable(struct clk_hw *hw)
 {
 	struct scmi_clk *clk = to_scmi_clk(hw);
+	const struct scmi_clock_info *info = clk->info;
+
+	if (info->flags & SCMI_CLOCK_SET_ENABLE_DENIED)
+		return;
 
 	scmi_proto_clk_ops->disable(clk->ph, clk->id, NOT_ATOMIC);
 }
@@ -133,6 +150,10 @@ static void scmi_clk_disable(struct clk_hw *hw)
 static int scmi_clk_atomic_enable(struct clk_hw *hw)
 {
 	struct scmi_clk *clk = to_scmi_clk(hw);
+	const struct scmi_clock_info *info = clk->info;
+
+	if (info->flags & SCMI_CLOCK_SET_ENABLE_DENIED)
+		return 0;
 
 	return scmi_proto_clk_ops->enable(clk->ph, clk->id, ATOMIC);
 }
@@ -140,6 +161,10 @@ static int scmi_clk_atomic_enable(struct clk_hw *hw)
 static void scmi_clk_atomic_disable(struct clk_hw *hw)
 {
 	struct scmi_clk *clk = to_scmi_clk(hw);
+	const struct scmi_clock_info *info = clk->info;
+
+	if (info->flags & SCMI_CLOCK_SET_ENABLE_DENIED)
+		return;
 
 	scmi_proto_clk_ops->disable(clk->ph, clk->id, ATOMIC);
 }

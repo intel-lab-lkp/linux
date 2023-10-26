@@ -41,12 +41,16 @@ struct scmi_revision_info {
 	char sub_vendor_id[SCMI_SHORT_NAME_MAX_SIZE];
 };
 
+#define SCMI_CLOCK_SET_PARENT_DENIED	BIT(13)
+#define SCMI_CLOCK_SET_RATE_DENIED	BIT(14)
+#define SCMI_CLOCK_SET_ENABLE_DENIED	BIT(15)
 struct scmi_clock_info {
 	char name[SCMI_MAX_STR_SIZE];
 	unsigned int enable_latency;
 	bool rate_discrete;
 	bool rate_changed_notifications;
 	bool rate_change_requested_notifications;
+	unsigned int flags;
 	union {
 		struct {
 			int num_rates;

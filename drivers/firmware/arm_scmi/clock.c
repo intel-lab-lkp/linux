@@ -46,6 +46,9 @@ struct scmi_msg_resp_clock_attributes {
 #define SUPPORTS_RATE_CHANGE_REQUESTED_NOTIF(x)	((x) & BIT(30))
 #define SUPPORTS_EXTENDED_NAMES(x)		((x) & BIT(29))
 #define SUPPORTS_PARENT_CLOCK(x)		((x) & BIT(28))
+#define SETS_ENABLE_DENIED(x)			((x) & BIT(15))
+#define SETS_RATE_DENIED(x)			((x) & BIT(14))
+#define SETS_PARENT_DENIED(x)			((x) & BIT(13))
 	u8 name[SCMI_SHORT_NAME_MAX_SIZE];
 	__le32 clock_enable_latency;
 };
@@ -327,6 +330,12 @@ static int scmi_clock_attributes_get(const struct scmi_protocol_handle *ph,
 			clk->rate_change_requested_notifications = true;
 		if (SUPPORTS_PARENT_CLOCK(attributes))
 			scmi_clock_possible_parents(ph, clk_id, clk);
+		if (SETS_PARENT_DENIED(attributes))
+			clk->flags |= SCMI_CLOCK_SET_PARENT_DENIED;
+		if (SETS_RATE_DENIED(attributes))
+			clk->flags |= SCMI_CLOCK_SET_RATE_DENIED;
+		if (SETS_ENABLE_DENIED(attributes))
+			clk->flags |= SCMI_CLOCK_SET_ENABLE_DENIED;
 	}
 
 	return ret;
