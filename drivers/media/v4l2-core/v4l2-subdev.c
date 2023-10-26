@@ -1681,7 +1681,7 @@ __v4l2_subdev_state_get_format_stream(struct v4l2_subdev_state *state,
 		return NULL;
 
 	if (state->pads) {
-		if (stream)
+		if (WARN_ON(stream))
 			return NULL;
 
 		if (WARN_ON(pad >= state->sd->entity.num_pads))
@@ -1715,7 +1715,7 @@ __v4l2_subdev_state_get_crop_stream(struct v4l2_subdev_state *state,
 		return NULL;
 
 	if (state->pads) {
-		if (stream)
+		if (WARN_ON(stream))
 			return NULL;
 
 		if (WARN_ON(pad >= state->sd->entity.num_pads))
@@ -1749,7 +1749,7 @@ __v4l2_subdev_state_get_compose_stream(struct v4l2_subdev_state *state,
 		return NULL;
 
 	if (state->pads) {
-		if (stream)
+		if (WARN_ON(stream))
 			return NULL;
 
 		if (WARN_ON(pad >= state->sd->entity.num_pads))
