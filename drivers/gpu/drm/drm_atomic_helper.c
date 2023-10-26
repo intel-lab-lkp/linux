@@ -2274,6 +2274,10 @@ int drm_atomic_helper_setup_commit(struct drm_atomic_state *state,
 	funcs = state->dev->mode_config.helper_private;
 
 	for_each_oldnew_crtc_in_state(state, crtc, old_crtc_state, new_crtc_state, i) {
+		ret = stall_checks(crtc, nonblock);
+		if (ret)
+			return ret;
+
 		commit = kzalloc(sizeof(*commit), GFP_KERNEL);
 		if (!commit)
 			return -ENOMEM;
@@ -2281,10 +2285,6 @@ int drm_atomic_helper_setup_commit(struct drm_atomic_state *state,
 		init_commit(commit, crtc);
 
 		new_crtc_state->commit = commit;
-
-		ret = stall_checks(crtc, nonblock);
-		if (ret)
-			return ret;
 
 		/*
 		 * Drivers only send out events when at least either current or
