@@ -598,13 +598,17 @@ static void amd_pmu_cpu_starting(int cpu)
 	cpuc->amd_nb->refcnt++;
 }
 
+static void amd_pmu_cpu_dying(int cpu)
+{
+	amd_pmu_cpu_reset(cpu);
+}
+
 static void amd_pmu_cpu_dead(int cpu)
 {
 	struct cpu_hw_events *cpuhw = &per_cpu(cpu_hw_events, cpu);
 
 	kfree(cpuhw->lbr_sel);
 	cpuhw->lbr_sel = NULL;
-	amd_pmu_cpu_reset(cpu);
 
 	if (!x86_pmu.amd_nb_constraints)
 		return;
@@ -1270,6 +1274,7 @@ static __initconst const struct x86_pmu amd_pmu = {
 
 	.cpu_prepare		= amd_pmu_cpu_prepare,
 	.cpu_starting		= amd_pmu_cpu_starting,
+	.cpu_dying		= amd_pmu_cpu_dying,
 	.cpu_dead		= amd_pmu_cpu_dead,
 
 	.amd_nb_constraints	= 1,
