@@ -166,6 +166,7 @@ extern void spi_transfer_cs_change_delay_exec(struct spi_message *msg,
  * @cs_inactive: delay to be introduced by the controller after CS is
  *	deasserted. If @cs_change_delay is used from @spi_transfer, then the
  *	two delays will be added up.
+ * @rx_sample_delay_ns: spi clk to spi rx data delay
  * @pcpu_statistics: statistics for the spi_device
  *
  * A @spi_device is used to interchange data between an SPI slave
@@ -219,6 +220,8 @@ struct spi_device {
 	struct spi_delay	cs_setup;
 	struct spi_delay	cs_hold;
 	struct spi_delay	cs_inactive;
+	/* Transfer characteristics */
+	u32			rx_sample_delay_ns; /* Clock to RX data delay */
 
 	/* The statistics */
 	struct spi_statistics __percpu	*pcpu_statistics;
