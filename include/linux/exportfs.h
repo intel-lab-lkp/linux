@@ -294,7 +294,7 @@ extern struct dentry *exportfs_decode_fh(struct vfsmount *mnt, struct fid *fid,
 /*
  * Generic helpers for filesystems.
  */
-#ifdef CONFIG_EXPORTFS
+#if IS_ENABLED(CONFIG_EXPORTFS)
 int generic_encode_ino32_fh(struct inode *inode, __u32 *fh, int *max_len,
 			    struct inode *parent);
 #else
