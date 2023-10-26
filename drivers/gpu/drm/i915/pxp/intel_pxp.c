@@ -212,6 +212,9 @@ int intel_pxp_init(struct drm_i915_private *i915)
 	if (!gt)
 		return -ENODEV;
 
+	if (intel_gt_is_wedged(gt))
+		return -ENODEV;
+
 	/*
 	 * At this point, we will either enable full featured PXP capabilities
 	 * including session and object management, or we will init the backend tee
