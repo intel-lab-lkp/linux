@@ -534,9 +534,8 @@ ice_ptp_is_tx_tracker_up(struct ice_ptp_tx *tx)
  * 2) check that a timestamp is ready and available in the PHY memory bank
  * 3) read and copy the timestamp out of the PHY register
  * 4) unlock the index by clearing the associated in_use bit
- * 5) check if the timestamp is stale, and discard if so
- * 6) extend the 40 bit timestamp value to get a 64 bit timestamp value
- * 7) send this 64 bit timestamp to the stack
+ * 5) extend the 40 bit timestamp value to get a 64 bit timestamp value
+ * 6) send this 64 bit timestamp to the stack
  *
  * Note that we do not hold the tracking lock while reading the Tx timestamp.
  * This is because reading the timestamp requires taking a mutex that might
@@ -555,12 +554,6 @@ ice_ptp_is_tx_tracker_up(struct ice_ptp_tx *tx)
  * If a Tx thread starts a new timestamp just after this function exits, the
  * interrupt for that timestamp should re-trigger this function once
  * a timestamp is ready.
- *
- * In cases where the PTP hardware clock was directly adjusted, some
- * timestamps may not be able to safely use the timestamp extension math. In
- * this case, software will set the stale bit for any outstanding Tx
- * timestamps when the clock is adjusted. Then this function will discard
- * those captured timestamps instead of sending them to the stack.
  *
  * If a Tx packet has been waiting for more than 2 seconds, it is not possible
  * to correctly extend the timestamp using the cached PHC time. It is
@@ -652,8 +645,6 @@ skip_ts_read:
 		clear_bit(idx, tx->in_use);
 		skb = tx->tstamps[idx].skb;
 		tx->tstamps[idx].skb = NULL;
-		if (test_and_clear_bit(idx, tx->stale))
-			drop_ts = true;
 		spin_unlock(&tx->lock);
 
 		/* It is unlikely but possible that the SKB will have been
@@ -752,24 +743,21 @@ static enum ice_tx_tstamp_work ice_ptp_tx_tstamp(struct ice_ptp_tx *tx)
 static int
 ice_ptp_alloc_tx_tracker(struct ice_ptp_tx *tx)
 {
-	unsigned long *in_use, *stale;
 	struct ice_tx_tstamp *tstamps;
+	unsigned long *in_use;
 
 	tstamps = kcalloc(tx->len, sizeof(*tstamps), GFP_KERNEL);
 	in_use = bitmap_zalloc(tx->len, GFP_KERNEL);
-	stale = bitmap_zalloc(tx->len, GFP_KERNEL);
 
-	if (!tstamps || !in_use || !stale) {
+	if (!tstamps || !in_use) {
 		kfree(tstamps);
 		bitmap_free(in_use);
-		bitmap_free(stale);
 
 		return -ENOMEM;
 	}
 
 	tx->tstamps = tstamps;
 	tx->in_use = in_use;
-	tx->stale = stale;
 	tx->init = 1;
 
 	spin_lock_init(&tx->lock);
@@ -815,7 +803,6 @@ ice_ptp_flush_tx_tracker(struct ice_pf *pf, struct ice_ptp_tx *tx)
 		skb = tx->tstamps[idx].skb;
 		tx->tstamps[idx].skb = NULL;
 		clear_bit(idx, tx->in_use);
-		clear_bit(idx, tx->stale);
 		spin_unlock(&tx->lock);
 
 		/* Count the number of Tx timestamps flushed */
@@ -824,41 +811,6 @@ ice_ptp_flush_tx_tracker(struct ice_pf *pf, struct ice_ptp_tx *tx)
 		/* Free the SKB after we've cleared the bit */
 		dev_kfree_skb_any(skb);
 	}
-}
-
-/**
- * ice_ptp_mark_tx_tracker_stale - Mark unfinished timestamps as stale
- * @tx: the tracker to mark
- *
- * Mark currently outstanding Tx timestamps as stale. This prevents sending
- * their timestamp value to the stack. This is required to prevent extending
- * the 40bit hardware timestamp incorrectly.
- *
- * This should be called when the PTP clock is modified such as after a set
- * time request.
- */
-static void
-ice_ptp_mark_tx_tracker_stale(struct ice_ptp_tx *tx)
-{
-	spin_lock(&tx->lock);
-	bitmap_or(tx->stale, tx->stale, tx->in_use, tx->len);
-	spin_unlock(&tx->lock);
-}
-
-/**
- * ice_ptp_flush_all_tx_tracker - Flush all timestamp trackers on this clock
- * @pf: Board private structure
- *
- * Called by the clock owner to flush all the Tx timestamp trackers associated
- * with the clock.
- */
-static void
-ice_ptp_flush_all_tx_tracker(struct ice_pf *pf)
-{
-	struct ice_ptp_port *port;
-
-	list_for_each_entry(port, &pf->ptp.ports_owner.ports, list_member)
-		ice_ptp_flush_tx_tracker(ptp_port_to_pf(port), &port->tx);
 }
 
 /**
@@ -885,9 +837,6 @@ ice_ptp_release_tx_tracker(struct ice_pf *pf, struct ice_ptp_tx *tx)
 
 	bitmap_free(tx->in_use);
 	tx->in_use = NULL;
-
-	bitmap_free(tx->stale);
-	tx->stale = NULL;
 
 	tx->len = 0;
 }
@@ -1006,14 +955,12 @@ static int ice_ptp_update_cached_phctime(struct ice_pf *pf)
  * ice_ptp_reset_cached_phctime - Reset cached PHC time after an update
  * @pf: Board specific private structure
  *
- * This function must be called when the cached PHC time is no longer valid,
- * such as after a time adjustment. It marks any currently outstanding Tx
- * timestamps as stale and updates the cached PHC time for both the PF and Rx
- * rings.
+ * This function is called to immediately update the cached PHC time after
+ * a .settime or .adjtime call.
  *
  * If updating the PHC time cannot be done immediately, a warning message is
- * logged and the work item is scheduled immediately to minimize the window
- * with a wrong cached timestamp.
+ * logged and the work item is scheduled without delay to minimize the window
+ * where a timestamp is extended using the old cached value.
  */
 static void ice_ptp_reset_cached_phctime(struct ice_pf *pf)
 {
@@ -1036,13 +983,6 @@ static void ice_ptp_reset_cached_phctime(struct ice_pf *pf)
 		kthread_queue_delayed_work(pf->ptp.kworker, &pf->ptp.work,
 					   msecs_to_jiffies(10));
 	}
-
-	/* Mark any outstanding timestamps as stale, since they might have
-	 * been captured in hardware before the time update. This could lead
-	 * to us extending them with the wrong cached value resulting in
-	 * incorrect timestamp values.
-	 */
-	ice_ptp_mark_tx_tracker_stale(&pf->ptp.port.tx);
 }
 
 /**
@@ -2416,7 +2356,6 @@ s8 ice_ptp_request_ts(struct ice_ptp_tx *tx, struct sk_buff *skb)
 		 * requests.
 		 */
 		set_bit(idx, tx->in_use);
-		clear_bit(idx, tx->stale);
 		tx->tstamps[idx].start = jiffies;
 		tx->tstamps[idx].skb = skb_get(skb);
 		skb_shinfo(skb)->tx_flags |= SKBTX_IN_PROGRESS;
