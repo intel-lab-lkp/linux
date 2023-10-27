@@ -73,6 +73,14 @@ vfio_irq_ctx_alloc(struct vfio_pci_intr_ctx *intr_ctx, unsigned long index)
 	if (!ctx)
 		return NULL;
 
+	if (intr_ctx->ops->init_irq_ctx) {
+		ret = intr_ctx->ops->init_irq_ctx(intr_ctx, ctx);
+		if (ret < 0) {
+			kfree(ctx);
+			return NULL;
+		}
+	}
+
 	ret = xa_insert(&intr_ctx->ctx, index, ctx, GFP_KERNEL_ACCOUNT);
 	if (ret) {
 		kfree(ctx);

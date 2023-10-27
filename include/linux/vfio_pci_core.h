@@ -106,6 +106,8 @@ struct vfio_pci_intr_ops {
 				   unsigned int vector);
 	char *(*msi_device_name)(struct vfio_pci_intr_ctx *intr_ctx,
 				 unsigned int vector, unsigned int index);
+	int (*init_irq_ctx)(struct vfio_pci_intr_ctx *intr_ctx,
+			    struct vfio_pci_irq_ctx *ctx);
 };
 
 struct vfio_pci_core_device {
