@@ -23,6 +23,7 @@
 #include "vfio_pci_priv.h"
 
 struct vfio_pci_irq_ctx {
+	bool			emulated:1;
 	struct eventfd_ctx	*trigger;
 	struct virqfd		*unmask;
 	struct virqfd		*mask;
@@ -497,8 +498,10 @@ static int vfio_msi_set_vector_signal(struct vfio_pci_intr_ctx *intr_ctx,
 	ctx = vfio_irq_ctx_get(intr_ctx, vector);
 
 	if (ctx && ctx->trigger) {
-		irq_bypass_unregister_producer(&ctx->producer);
-		intr_ctx->ops->msi_free_interrupt(intr_ctx, ctx, vector);
+		if (!ctx->emulated) {
+			irq_bypass_unregister_producer(&ctx->producer);
+			intr_ctx->ops->msi_free_interrupt(intr_ctx, ctx, vector);
+		}
 		kfree(ctx->name);
 		ctx->name = NULL;
 		eventfd_ctx_put(ctx->trigger);
@@ -526,6 +529,9 @@ static int vfio_msi_set_vector_signal(struct vfio_pci_intr_ctx *intr_ctx,
 	}
 
 	ctx->trigger = trigger;
+
+	if (ctx->emulated)
+		return 0;
 
 	ret = intr_ctx->ops->msi_request_interrupt(intr_ctx, ctx, vector, index);
 	if (ret)
@@ -901,6 +907,83 @@ void vfio_pci_release_intr_ctx(struct vfio_pci_intr_ctx *intr_ctx)
 	_vfio_pci_release_intr_ctx(intr_ctx);
 }
 EXPORT_SYMBOL_GPL(vfio_pci_release_intr_ctx);
+
+/*
+ * vfio_pci_send_signal() - Send signal to the eventfd.
+ * @intr_ctx:	Interrupt context.
+ * @vector:	Vector for which interrupt will be signaled.
+ *
+ * Trigger signal to guest for emulated interrupts.
+ */
+void vfio_pci_send_signal(struct vfio_pci_intr_ctx *intr_ctx, unsigned int vector)
+{
+	struct vfio_pci_irq_ctx *ctx;
+
+	mutex_lock(&intr_ctx->igate);
+
+	ctx = vfio_irq_ctx_get(intr_ctx, vector);
+
+	if (WARN_ON_ONCE(!ctx || !ctx->emulated || !ctx->trigger))
+		goto out_unlock;
+
+	eventfd_signal(ctx->trigger, 1);
+
+out_unlock:
+	mutex_unlock(&intr_ctx->igate);
+}
+EXPORT_SYMBOL_GPL(vfio_pci_send_signal);
+
+/*
+ * vfio_pci_set_emulated() - Set range of interrupts that will be emulated.
+ * @intr_ctx:	Interrupt context.
+ * @start:	First emulated interrupt vector.
+ * @count:	Number of emulated interrupts starting from @start.
+ *
+ * Emulated interrupts will not be backed by hardware interrupts but
+ * instead triggered by virtual device driver.
+ *
+ * Return: error code on failure (-EBUSY if the vector is not available,
+ * -ENOMEM on allocation failure), 0 on success. No partial success, on
+ * success entire range was set as emulated, on failure no interrupt in
+ * range was set as emulated.
+ */
+int vfio_pci_set_emulated(struct vfio_pci_intr_ctx *intr_ctx,
+			  unsigned int start, unsigned int count)
+{
+	struct vfio_pci_irq_ctx *ctx;
+	unsigned long i, j;
+	int ret = -EINVAL;
+
+	mutex_lock(&intr_ctx->igate);
+
+	for (i = start; i < start + count; i++) {
+		ctx = kzalloc(sizeof(*ctx), GFP_KERNEL_ACCOUNT);
+		if (!ctx) {
+			ret = -ENOMEM;
+			goto out_err;
+		}
+		ctx->emulated = true;
+		ret = xa_insert(&intr_ctx->ctx, i, ctx, GFP_KERNEL_ACCOUNT);
+		if (ret) {
+			kfree(ctx);
+			goto out_err;
+		}
+	}
+
+	mutex_unlock(&intr_ctx->igate);
+	return 0;
+
+out_err:
+	for (j = start; j < i; j++) {
+		ctx = vfio_irq_ctx_get(intr_ctx, j);
+		vfio_irq_ctx_free(intr_ctx, ctx, j);
+	}
+
+	mutex_unlock(&intr_ctx->igate);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(vfio_pci_set_emulated);
 
 int vfio_pci_set_irqs_ioctl(struct vfio_pci_intr_ctx *intr_ctx, uint32_t flags,
 			    unsigned int index, unsigned int start,
