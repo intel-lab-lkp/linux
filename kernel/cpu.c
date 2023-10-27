@@ -1402,7 +1402,9 @@ void cpuhp_report_idle_dead(void)
 {
 	struct cpuhp_cpu_state *st = this_cpu_ptr(&cpuhp_state);
 
+	current->flags &= ~PF_IDLE;
 	BUG_ON(st->state != CPUHP_AP_OFFLINE);
+
 	rcutree_report_cpu_dead();
 	st->state = CPUHP_AP_IDLE_DEAD;
 	/*
@@ -1652,6 +1654,8 @@ void notify_cpu_starting(unsigned int cpu)
 void cpuhp_online_idle(enum cpuhp_state state)
 {
 	struct cpuhp_cpu_state *st = this_cpu_ptr(&cpuhp_state);
+
+	current->flags |= PF_IDLE;
 
 	/* Happens for the boot cpu */
 	if (state != CPUHP_AP_ONLINE_IDLE)
