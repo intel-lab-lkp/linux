@@ -33,12 +33,14 @@ properties:
       - description: Data Bus Interface (DBI) registers
       - description: Rockchip designed configuration registers
       - description: Config registers
+      - description: iATU/eDMA registers
 
   reg-names:
     items:
       - const: dbi
       - const: apb
       - const: config
+      - const: atu
 
   clocks:
     minItems: 5
@@ -171,10 +173,11 @@ examples:
 
         pcie3x2: pcie@fe280000 {
             compatible = "rockchip,rk3568-pcie";
-            reg = <0x3 0xc0800000 0x0 0x390000>,
-                  <0x0 0xfe280000 0x0 0x10000>,
-                  <0x3 0x80000000 0x0 0x100000>;
-            reg-names = "dbi", "apb", "config";
+            reg = <0x3 0xc0800000 0x0 0x00300000>,
+                  <0x0 0xfe280000 0x0 0x00010000>,
+                  <0x0 0xf0000000 0x0 0x00100000>,
+                  <0x3 0xc0b00000 0x0 0x00100000>;
+            reg-names = "dbi", "apb", "config", "atu";
             bus-range = <0x20 0x2f>;
             clocks = <&cru 143>, <&cru 144>,
                      <&cru 145>, <&cru 146>,
