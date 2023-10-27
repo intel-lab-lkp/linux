@@ -737,13 +737,14 @@ static int allocate_mid(struct cifs_ses *ses, struct smb_hdr *in_buf,
 static int
 wait_for_response(struct TCP_Server_Info *server, struct mid_q_entry *midQ)
 {
-	int error;
+	int ret;
 
-	error = wait_event_state(server->response_q,
-				 midQ->mid_state != MID_REQUEST_SUBMITTED &&
-				 midQ->mid_state != MID_RESPONSE_RECEIVED,
-				 (TASK_KILLABLE|TASK_FREEZABLE_UNSAFE));
-	if (error < 0)
+	ret = wait_event_killable_timeout(server->response_q,
+					  midQ->mid_state != MID_REQUEST_SUBMITTED &&
+					  midQ->mid_state != MID_RESPONSE_RECEIVED,
+					  10*HZ);
+
+	if ((ret < 0) || (ret == 0))
 		return -ERESTARTSYS;
 
 	return 0;
