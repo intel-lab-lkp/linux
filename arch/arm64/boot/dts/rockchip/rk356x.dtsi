@@ -968,10 +968,11 @@
 
 	pcie2x1: pcie@fe260000 {
 		compatible = "rockchip,rk3568-pcie";
-		reg = <0x3 0xc0000000 0x0 0x00400000>,
+		reg = <0x3 0xc0000000 0x0 0x00300000>,
 		      <0x0 0xfe260000 0x0 0x00010000>,
-		      <0x0 0xf4000000 0x0 0x00100000>;
-		reg-names = "dbi", "apb", "config";
+		      <0x0 0xf4000000 0x0 0x00100000>,
+		      <0x3 0xc0300000 0x0 0x00100000>;
+		reg-names = "dbi", "apb", "config", "atu";
 		interrupts = <GIC_SPI 75 IRQ_TYPE_LEVEL_HIGH>,
 			     <GIC_SPI 74 IRQ_TYPE_LEVEL_HIGH>,
 			     <GIC_SPI 73 IRQ_TYPE_LEVEL_HIGH>,
