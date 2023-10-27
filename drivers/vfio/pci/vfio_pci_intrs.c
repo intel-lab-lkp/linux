@@ -22,6 +22,21 @@
 
 #include "vfio_pci_priv.h"
 
+/*
+ * Interrupt Message Store (IMS) private interrupt context data
+ * @vdev:		Virtual device. Used for name of device in
+ *			request_irq().
+ * @pdev:		PCI device owning the IMS domain from where
+ *			interrupts are allocated.
+ * @default_cookie:	Default cookie used for IMS interrupts without unique
+ *			cookie.
+ */
+struct vfio_pci_ims {
+	struct vfio_device		*vdev;
+	struct pci_dev			*pdev;
+	union msi_instance_cookie	default_cookie;
+};
+
 struct vfio_pci_irq_ctx {
 	bool			emulated:1;
 	struct eventfd_ctx	*trigger;
@@ -31,6 +46,8 @@ struct vfio_pci_irq_ctx {
 	bool			masked;
 	struct irq_bypass_producer	producer;
 	int			virq;
+	int			ims_id;
+	union msi_instance_cookie	icookie;
 };
 
 static bool irq_is(struct vfio_pci_intr_ctx *intr_ctx, int type)
@@ -899,6 +916,7 @@ void vfio_pci_init_intr_ctx(struct vfio_pci_core_device *vdev,
 	_vfio_pci_init_intr_ctx(intr_ctx);
 	intr_ctx->ops = &vfio_pci_intr_ops;
 	intr_ctx->priv = vdev;
+	intr_ctx->ims_backed_irq = false;
 }
 EXPORT_SYMBOL_GPL(vfio_pci_init_intr_ctx);
 
@@ -984,6 +1002,166 @@ out_err:
 	return ret;
 }
 EXPORT_SYMBOL_GPL(vfio_pci_set_emulated);
+
+/* Guest MSI-X interrupts backed by IMS host interrupts */
+
+/*
+ * Free the IMS interrupt associated with @ctx.
+ *
+ * For an IMS interrupt the interrupt is freed from the underlying
+ * PCI device's IMS domain.
+ */
+static void vfio_pci_ims_irq_free(struct vfio_pci_intr_ctx *intr_ctx,
+				  struct vfio_pci_irq_ctx *ctx)
+{
+	struct vfio_pci_ims *ims = intr_ctx->priv;
+	struct msi_map irq_map = {};
+
+	irq_map.index = ctx->ims_id;
+	irq_map.virq = ctx->virq;
+	pci_ims_free_irq(ims->pdev, irq_map);
+	ctx->ims_id = -EINVAL;
+	ctx->virq = 0;
+}
+
+/*
+ * Allocate a host IMS interrupt for @ctx.
+ *
+ * For an IMS interrupt the interrupt is allocated from the underlying
+ * PCI device's IMS domain.
+ */
+static int vfio_pci_ims_irq_alloc(struct vfio_pci_intr_ctx *intr_ctx,
+				  struct vfio_pci_irq_ctx *ctx)
+{
+	struct vfio_pci_ims *ims = intr_ctx->priv;
+	struct msi_map irq_map = {};
+
+	irq_map = pci_ims_alloc_irq(ims->pdev, &ctx->icookie, NULL);
+	if (irq_map.index < 0)
+		return irq_map.index;
+
+	ctx->ims_id = irq_map.index;
+	ctx->virq = irq_map.virq;
+
+	return 0;
+}
+
+static void vfio_ims_free_interrupt(struct vfio_pci_intr_ctx *intr_ctx,
+				    struct vfio_pci_irq_ctx *ctx,
+				    unsigned int vector)
+{
+	free_irq(ctx->virq, ctx->trigger);
+	vfio_pci_ims_irq_free(intr_ctx, ctx);
+}
+
+static int vfio_ims_request_interrupt(struct vfio_pci_intr_ctx *intr_ctx,
+				      struct vfio_pci_irq_ctx *ctx,
+				      unsigned int vector,
+				      unsigned int index)
+{
+	int ret;
+
+	ret = vfio_pci_ims_irq_alloc(intr_ctx, ctx);
+	if (ret < 0)
+		return ret;
+
+	ret = request_irq(ctx->virq, vfio_msihandler, 0, ctx->name,
+			  ctx->trigger);
+	if (ret < 0) {
+		vfio_pci_ims_irq_free(intr_ctx, ctx);
+		return ret;
+	}
+
+	return 0;
+}
+
+static char *vfio_ims_device_name(struct vfio_pci_intr_ctx *intr_ctx,
+				  unsigned int vector,
+				  unsigned int index)
+{
+	struct vfio_pci_ims *ims = intr_ctx->priv;
+	struct device *dev = &ims->vdev->device;
+
+	return kasprintf(GFP_KERNEL, "vfio-ims[%d](%s)", vector, dev_name(dev));
+}
+
+static void vfio_ims_disable(struct vfio_pci_intr_ctx *intr_ctx,
+			     unsigned int index)
+{
+	struct vfio_pci_irq_ctx *ctx;
+	unsigned long i;
+
+	xa_for_each(&intr_ctx->ctx, i, ctx)
+		vfio_msi_set_vector_signal(intr_ctx, i, -1, index);
+}
+
+/*
+ * The virtual device driver is responsible for enabling IMS by creating
+ * the IMS domaim from where interrupts will be allocated dynamically.
+ * IMS thus has to be enabled by the time an ioctl() arrives.
+ */
+static int vfio_ims_enable(struct vfio_pci_intr_ctx *intr_ctx, int nvec,
+			   unsigned int index)
+{
+	return -EINVAL;
+}
+
+static int vfio_ims_init_irq_ctx(struct vfio_pci_intr_ctx *intr_ctx,
+				 struct vfio_pci_irq_ctx *ctx)
+{
+	struct vfio_pci_ims *ims = intr_ctx->priv;
+
+	ctx->icookie = ims->default_cookie;
+
+	return 0;
+}
+
+static struct vfio_pci_intr_ops vfio_pci_ims_intr_ops = {
+	.set_msix_trigger = vfio_pci_set_msi_trigger,
+	.set_req_trigger = vfio_pci_set_req_trigger,
+	.msi_enable = vfio_ims_enable,
+	.msi_disable = vfio_ims_disable,
+	.msi_request_interrupt = vfio_ims_request_interrupt,
+	.msi_free_interrupt = vfio_ims_free_interrupt,
+	.msi_device_name = vfio_ims_device_name,
+	.init_irq_ctx = vfio_ims_init_irq_ctx,
+};
+
+int vfio_pci_ims_init_intr_ctx(struct vfio_device *vdev,
+			       struct vfio_pci_intr_ctx *intr_ctx,
+			       struct pci_dev *pdev,
+			       union msi_instance_cookie *default_cookie)
+{
+	struct vfio_pci_ims *ims;
+
+	ims = kzalloc(sizeof(*ims), GFP_KERNEL_ACCOUNT);
+	if (!ims)
+		return -ENOMEM;
+
+	ims->pdev = pdev;
+	ims->default_cookie = *default_cookie;
+	ims->vdev = vdev;
+
+	_vfio_pci_init_intr_ctx(intr_ctx);
+
+	intr_ctx->ops = &vfio_pci_ims_intr_ops;
+	intr_ctx->priv = ims;
+	intr_ctx->ims_backed_irq = true;
+	intr_ctx->irq_type = VFIO_PCI_MSIX_IRQ_INDEX;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(vfio_pci_ims_init_intr_ctx);
+
+void vfio_pci_ims_release_intr_ctx(struct vfio_pci_intr_ctx *intr_ctx)
+{
+	struct vfio_pci_ims *ims = intr_ctx->priv;
+
+	_vfio_pci_release_intr_ctx(intr_ctx);
+	kfree(ims);
+	intr_ctx->irq_type = VFIO_PCI_NUM_IRQS;
+}
+EXPORT_SYMBOL_GPL(vfio_pci_ims_release_intr_ctx);
 
 int vfio_pci_set_irqs_ioctl(struct vfio_pci_intr_ctx *intr_ctx, uint32_t flags,
 			    unsigned int index, unsigned int start,
