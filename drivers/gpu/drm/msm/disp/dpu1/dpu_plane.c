@@ -55,6 +55,8 @@
 
 #define DEFAULT_REFRESH_RATE	60
 
+#define DPU_SOLID_FILL_FORMAT	DRM_FORMAT_ABGR8888
+
 static const uint32_t qcom_compressed_supported_formats[] = {
 	DRM_FORMAT_ABGR8888,
 	DRM_FORMAT_ARGB8888,
@@ -658,7 +660,7 @@ static void _dpu_plane_color_fill(struct dpu_plane *pdpu,
 	 * select fill format to match user property expectation,
 	 * h/w only supports RGB variants
 	 */
-	fmt = dpu_get_dpu_format(DRM_FORMAT_ABGR8888);
+	fmt = dpu_get_dpu_format(DPU_SOLID_FILL_FORMAT);
 	/* should not happen ever */
 	if (!fmt)
 		return;
@@ -877,18 +879,23 @@ static int dpu_plane_atomic_check(struct drm_plane *plane,
 
 	pipe_cfg->dst_rect = new_plane_state->dst;
 
-	fb_rect.x2 = new_plane_state->fb->width;
-	fb_rect.y2 = new_plane_state->fb->height;
+	if (new_plane_state->pixel_source == DRM_PLANE_PIXEL_SOURCE_FB && new_plane_state->fb) {
+		fb_rect.x2 = new_plane_state->fb->width;
+		fb_rect.y2 = new_plane_state->fb->height;
 
-	/* Ensure fb size is supported */
-	if (drm_rect_width(&fb_rect) > MAX_IMG_WIDTH ||
-	    drm_rect_height(&fb_rect) > MAX_IMG_HEIGHT) {
-		DPU_DEBUG_PLANE(pdpu, "invalid framebuffer " DRM_RECT_FMT "\n",
-				DRM_RECT_ARG(&fb_rect));
-		return -E2BIG;
+		/* Ensure fb size is supported */
+		if (drm_rect_width(&fb_rect) > MAX_IMG_WIDTH ||
+		    drm_rect_height(&fb_rect) > MAX_IMG_HEIGHT) {
+			DPU_DEBUG_PLANE(pdpu, "invalid framebuffer " DRM_RECT_FMT "\n",
+					DRM_RECT_ARG(&fb_rect));
+			return -E2BIG;
+		}
 	}
 
-	fmt = to_dpu_format(msm_framebuffer_format(new_plane_state->fb));
+	if (drm_plane_solid_fill_enabled(new_plane_state))
+		fmt = dpu_get_dpu_format(DPU_SOLID_FILL_FORMAT);
+	else
+		fmt = to_dpu_format(msm_framebuffer_format(new_plane_state->fb));
 
 	max_linewidth = pdpu->catalog->caps->max_linewidth;
 
@@ -1123,8 +1130,7 @@ static void dpu_plane_sspp_atomic_update(struct drm_plane *plane)
 	struct drm_crtc *crtc = state->crtc;
 	struct drm_framebuffer *fb = state->fb;
 	bool is_rt_pipe;
-	const struct dpu_format *fmt =
-		to_dpu_format(msm_framebuffer_format(fb));
+	const struct dpu_format *fmt;
 	struct dpu_sw_pipe_cfg *pipe_cfg = &pstate->pipe_cfg;
 	struct dpu_sw_pipe_cfg *r_pipe_cfg = &pstate->r_pipe_cfg;
 	struct dpu_kms *kms = _dpu_plane_get_kms(&pdpu->base);
@@ -1132,6 +1138,11 @@ static void dpu_plane_sspp_atomic_update(struct drm_plane *plane)
 	struct dpu_hw_fmt_layout layout;
 	bool layout_valid = false;
 	int ret;
+
+	if (drm_plane_solid_fill_enabled(state))
+		return;
+
+	fmt = to_dpu_format(msm_framebuffer_format(fb));
 
 	ret = dpu_format_populate_layout(aspace, fb, &layout);
 	if (ret)
