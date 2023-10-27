@@ -817,7 +817,8 @@
 		.comment 0 : { *(.comment) }				\
 		.symtab 0 : { *(.symtab) }				\
 		.strtab 0 : { *(.strtab) }				\
-		.shstrtab 0 : { *(.shstrtab) }
+		.shstrtab 0 : { *(.shstrtab) }				\
+		.debug_linux_ikconfig 0 : { *(.debug_linux_ikconfig) }
 
 #ifdef CONFIG_GENERIC_BUG
 #define BUG_TABLE							\
