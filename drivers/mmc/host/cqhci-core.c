@@ -1062,6 +1062,45 @@ static void cqhci_recover_mrqs(struct cqhci_host *cq_host)
 /* CQHCI could be expected to clear it's internal state pretty quickly */
 #define CQHCI_CLEAR_TIMEOUT		20
 
+/*
+ * During CQE recovery all pending tasks are cleared from the
+ * controller and its state is being reset.
+ * On some platforms the controller sets a task completion bit for
+ * a stale(previously cleared) task right after being re-enabled.
+ * This results in a spurious interrupt at best and corrupted data
+ * being passed up the stack at worst. The latter happens when
+ * the driver enqueues a new request on the problematic task slot
+ * before the "spurious" task completion interrupt is handled.
+ * To fix it:
+ * 1. Re-enable controller by clearing the halt flag.
+ * 2. Clear interrupt status and the task completion register.
+ * 3. Halt the controller again to be consistent with quirkless logic.
+ *
+ * This assumes that there are no pending requests on the queue.
+ */
+static void cqhci_quirk_clear_stale_tc(struct cqhci_host *cq_host)
+{
+	u32 reg;
+
+	WARN_ON(cq_host->qcnt);
+	cqhci_writel(cq_host, 0, CQHCI_CTL);
+	if ((cqhci_readl(cq_host, CQHCI_CTL) & CQHCI_HALT)) {
+		pr_err("%s: cqhci: CQE failed to exit halt state\n",
+			mmc_hostname(cq_host->mmc));
+	}
+	reg = cqhci_readl(cq_host, CQHCI_TCN);
+	cqhci_writel(cq_host, reg, CQHCI_TCN);
+	reg = cqhci_readl(cq_host, CQHCI_IS);
+	cqhci_writel(cq_host, reg, CQHCI_IS);
+
+	/*
+	 * Halt the controller again.
+	 * This is only needed so that we're consistent across quirk
+	 * and quirkless logic.
+	 */
+	cqhci_halt(cq_host->mmc, CQHCI_FINISH_HALT_TIMEOUT);
+}
+
 static void cqhci_recovery_finish(struct mmc_host *mmc)
 {
 	struct cqhci_host *cq_host = mmc->cqe_private;
@@ -1107,6 +1146,9 @@ static void cqhci_recovery_finish(struct mmc_host *mmc)
 	cq_host->recovery_halt = false;
 	mmc->cqe_on = false;
 	spin_unlock_irqrestore(&cq_host->lock, flags);
+
+	if (cq_host->quirks & CQHCI_QUIRK_CLEAR_STALE_TC)
+		cqhci_quirk_clear_stale_tc(cq_host);
 
 	/* Ensure all writes are done before interrupts are re-enabled */
 	wmb();
