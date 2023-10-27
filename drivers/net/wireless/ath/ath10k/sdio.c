@@ -238,35 +238,24 @@ out:
 	return ret;
 }
 
-static int ath10k_sdio_writesb32(struct ath10k *ar, u32 addr, u32 val)
+static int ath10k_sdio_writesb32(struct ath10k *ar, u32 addr, u32 value)
 {
 	struct ath10k_sdio *ar_sdio = ath10k_sdio_priv(ar);
 	struct sdio_func *func = ar_sdio->func;
-	__le32 *buf;
+	__le32 val = __cpu_to_le32(value);
 	int ret;
-
-	buf = kzalloc(sizeof(*buf), GFP_KERNEL);
-	if (!buf)
-		return -ENOMEM;
-
-	*buf = cpu_to_le32(val);
 
 	sdio_claim_host(func);
 
-	ret = sdio_writesb(func, addr, buf, sizeof(*buf));
-	if (ret) {
+	ret = sdio_writesb(func, addr, &val, sizeof(val));
+	if (ret)
 		ath10k_warn(ar, "failed to write value 0x%x to fixed sb address 0x%x: %d\n",
-			    val, addr, ret);
-		goto out;
-	}
+			    value, addr, ret);
+	else
+		ath10k_dbg(ar, ATH10K_DBG_SDIO, "sdio writesb32 addr 0x%x val 0x%x\n",
+			   addr, value);
 
-	ath10k_dbg(ar, ATH10K_DBG_SDIO, "sdio writesb32 addr 0x%x val 0x%x\n",
-		   addr, val);
-
-out:
 	sdio_release_host(func);
-
-	kfree(buf);
 
 	return ret;
 }
@@ -1758,24 +1747,14 @@ out:
 	return ret;
 }
 
-static int ath10k_sdio_diag_read32(struct ath10k *ar, u32 address,
-				   u32 *value)
+static int ath10k_sdio_diag_read32(struct ath10k *ar, u32 address, u32 *value)
 {
-	__le32 *val;
+	__le32 val;
 	int ret;
 
-	val = kzalloc(sizeof(*val), GFP_KERNEL);
-	if (!val)
-		return -ENOMEM;
-
-	ret = ath10k_sdio_hif_diag_read(ar, address, val, sizeof(*val));
-	if (ret)
-		goto out;
-
-	*value = __le32_to_cpu(*val);
-
-out:
-	kfree(val);
+	ret = ath10k_sdio_hif_diag_read(ar, address, &val, sizeof(val));
+	if (!ret)
+		*value = __le32_to_cpu(val);
 
 	return ret;
 }
