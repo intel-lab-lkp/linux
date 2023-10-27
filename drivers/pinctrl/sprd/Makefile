@@ -2,3 +2,4 @@
 obj-$(CONFIG_PINCTRL_SPRD)		+= pinctrl-sprd.o
 obj-$(CONFIG_PINCTRL_SPRD_SC9860)	+= pinctrl-sprd-sc9860.o
 obj-$(CONFIG_PINCTRL_SPRD_UMS512)	+= pinctrl-sprd-ums512.o
+obj-$(CONFIG_PINCTRL_SPRD_UMS9621)	+= pinctrl-sprd-ums9621.o
