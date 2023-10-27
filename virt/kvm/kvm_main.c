@@ -2297,7 +2297,6 @@ static int kvm_clear_dirty_log_protect(struct kvm *kvm,
 	if (copy_from_user(dirty_bitmap_buffer, log->dirty_bitmap, n))
 		return -EFAULT;
 
-	KVM_MMU_LOCK(kvm);
 	for (offset = log->first_page, i = offset / BITS_PER_LONG,
 		 n = DIV_ROUND_UP(log->num_pages, BITS_PER_LONG); n--;
 	     i++, offset += BITS_PER_LONG) {
@@ -2316,11 +2315,12 @@ static int kvm_clear_dirty_log_protect(struct kvm *kvm,
 		*/
 		if (mask) {
 			flush = true;
+			KVM_MMU_LOCK(kvm);
 			kvm_arch_mmu_enable_log_dirty_pt_masked(kvm, memslot,
 								offset, mask);
+			KVM_MMU_UNLOCK(kvm);
 		}
 	}
-	KVM_MMU_UNLOCK(kvm);
 
 	if (flush)
 		kvm_flush_remote_tlbs_memslot(kvm, memslot);
