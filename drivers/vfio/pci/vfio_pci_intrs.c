@@ -416,61 +416,34 @@ static int vfio_msi_alloc_irq(struct vfio_pci_core_device *vdev,
 	return map.index < 0 ? map.index : map.virq;
 }
 
-static int vfio_msi_set_vector_signal(struct vfio_pci_intr_ctx *intr_ctx,
-				      unsigned int vector, int fd,
+static void vfio_msi_free_interrupt(struct vfio_pci_intr_ctx *intr_ctx,
+				    struct vfio_pci_irq_ctx *ctx,
+				    unsigned int vector)
+{
+	struct vfio_pci_core_device *vdev = intr_ctx->priv;
+	u16 cmd;
+
+	cmd = vfio_pci_memory_lock_and_enable(vdev);
+	free_irq(ctx->virq, ctx->trigger);
+	vfio_pci_memory_unlock_and_restore(vdev, cmd);
+	ctx->virq = 0;
+	/* Interrupt stays allocated, will be freed at MSI-X disable. */
+}
+
+static int vfio_msi_request_interrupt(struct vfio_pci_intr_ctx *intr_ctx,
+				      struct vfio_pci_irq_ctx *ctx,
+				      unsigned int vector,
 				      unsigned int index)
 {
 	bool msix = (index == VFIO_PCI_MSIX_IRQ_INDEX) ? true : false;
 	struct vfio_pci_core_device *vdev = intr_ctx->priv;
-	struct pci_dev *pdev = vdev->pdev;
-	struct vfio_pci_irq_ctx *ctx;
-	struct eventfd_ctx *trigger;
-	int irq = -EINVAL, ret;
+	int irq, ret;
 	u16 cmd;
 
-	ctx = vfio_irq_ctx_get(intr_ctx, vector);
-
-	if (ctx && ctx->trigger) {
-		irq_bypass_unregister_producer(&ctx->producer);
-		irq = ctx->virq;
-		cmd = vfio_pci_memory_lock_and_enable(vdev);
-		free_irq(ctx->virq, ctx->trigger);
-		vfio_pci_memory_unlock_and_restore(vdev, cmd);
-		ctx->virq = 0;
-		/* Interrupt stays allocated, will be freed at MSI-X disable. */
-		kfree(ctx->name);
-		ctx->name = NULL;
-		eventfd_ctx_put(ctx->trigger);
-		ctx->trigger = NULL;
-	}
-
-	if (fd < 0)
-		return 0;
-
-	if (irq == -EINVAL) {
-		/* Interrupt stays allocated, will be freed at MSI-X disable. */
-		irq = vfio_msi_alloc_irq(vdev, vector, msix);
-		if (irq < 0)
-			return irq;
-	}
-
-	/* Per-interrupt context remain allocated. */
-	if (!ctx) {
-		ctx = vfio_irq_ctx_alloc(intr_ctx, vector);
-		if (!ctx)
-			return -ENOMEM;
-	}
-
-	ctx->name = kasprintf(GFP_KERNEL_ACCOUNT, "vfio-msi%s[%d](%s)",
-			      msix ? "x" : "", vector, pci_name(pdev));
-	if (!ctx->name)
-		return -ENOMEM;
-
-	trigger = eventfd_ctx_fdget(fd);
-	if (IS_ERR(trigger)) {
-		ret = PTR_ERR(trigger);
-		goto out_free_name;
-	}
+	/* Interrupt stays allocated, will be freed at MSI-X disable. */
+	irq = vfio_msi_alloc_irq(vdev, vector, msix);
+	if (irq < 0)
+		return irq;
 
 	/*
 	 * If the vector was previously allocated, refresh the on-device
@@ -485,29 +458,86 @@ static int vfio_msi_set_vector_signal(struct vfio_pci_intr_ctx *intr_ctx,
 		pci_write_msi_msg(irq, &msg);
 	}
 
-	ret = request_irq(irq, vfio_msihandler, 0, ctx->name, trigger);
+	ret = request_irq(irq, vfio_msihandler, 0, ctx->name, ctx->trigger);
 	vfio_pci_memory_unlock_and_restore(vdev, cmd);
-	if (ret)
-		goto out_put_eventfd_ctx;
 
 	ctx->virq = irq;
+
+	return ret;
+}
+
+static char *vfio_msi_device_name(struct vfio_pci_intr_ctx *intr_ctx,
+				  unsigned int vector,
+				  unsigned int index)
+{
+	bool msix = (index == VFIO_PCI_MSIX_IRQ_INDEX) ? true : false;
+	struct vfio_pci_core_device *vdev = intr_ctx->priv;
+	struct pci_dev *pdev = vdev->pdev;
+
+	return kasprintf(GFP_KERNEL_ACCOUNT, "vfio-msi%s[%d](%s)",
+			 msix ? "x" : "", vector, pci_name(pdev));
+}
+
+static int vfio_msi_set_vector_signal(struct vfio_pci_intr_ctx *intr_ctx,
+				      unsigned int vector, int fd,
+				      unsigned int index)
+{
+	struct vfio_pci_irq_ctx *ctx;
+	struct eventfd_ctx *trigger;
+	int ret;
+
+	ctx = vfio_irq_ctx_get(intr_ctx, vector);
+
+	if (ctx && ctx->trigger) {
+		irq_bypass_unregister_producer(&ctx->producer);
+		vfio_msi_free_interrupt(intr_ctx, ctx, vector);
+		kfree(ctx->name);
+		ctx->name = NULL;
+		eventfd_ctx_put(ctx->trigger);
+		ctx->trigger = NULL;
+	}
+
+	if (fd < 0)
+		return 0;
+
+	/* Per-interrupt context remain allocated. */
+	if (!ctx) {
+		ctx = vfio_irq_ctx_alloc(intr_ctx, vector);
+		if (!ctx)
+			return -ENOMEM;
+	}
+
+	ctx->name = vfio_msi_device_name(intr_ctx, vector, index);
+	if (!ctx->name)
+		return -ENOMEM;
+
+	trigger = eventfd_ctx_fdget(fd);
+	if (IS_ERR(trigger)) {
+		ret = PTR_ERR(trigger);
+		goto out_free_name;
+	}
+
+	ctx->trigger = trigger;
+
+	ret = vfio_msi_request_interrupt(intr_ctx, ctx, vector, index);
+	if (ret)
+		goto out_put_eventfd_ctx;
 
 	ctx->producer.token = trigger;
 	ctx->producer.irq = ctx->virq;
 	ret = irq_bypass_register_producer(&ctx->producer);
 	if (unlikely(ret)) {
-		dev_info(&pdev->dev,
-		"irq bypass producer (token %p) registration fails: %d\n",
-		ctx->producer.token, ret);
+		pr_info("%s irq bypass producer (token %p) registration fails: %d\n",
+			ctx->name, ctx->producer.token, ret);
 
 		ctx->producer.token = NULL;
 	}
-	ctx->trigger = trigger;
 
 	return 0;
 
 out_put_eventfd_ctx:
-	eventfd_ctx_put(trigger);
+	eventfd_ctx_put(ctx->trigger);
+	ctx->trigger = NULL;
 out_free_name:
 	kfree(ctx->name);
 	ctx->name = NULL;
