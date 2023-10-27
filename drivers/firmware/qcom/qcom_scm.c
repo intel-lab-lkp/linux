@@ -10,6 +10,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/export.h>
 #include <linux/firmware/qcom/qcom_scm.h>
+#include <linux/idr.h>
 #include <linux/init.h>
 #include <linux/interconnect.h>
 #include <linux/interrupt.h>
@@ -27,13 +28,18 @@
 static bool download_mode = IS_ENABLED(CONFIG_QCOM_SCM_DOWNLOAD_MODE_DEFAULT);
 module_param(download_mode, bool, 0);
 
+struct qcom_scm_waitq {
+	struct idr idr;
+	spinlock_t idr_lock;
+};
+
 struct qcom_scm {
 	struct device *dev;
 	struct clk *core_clk;
 	struct clk *iface_clk;
 	struct clk *bus_clk;
 	struct icc_path *path;
-	struct completion waitq_comp;
+	struct qcom_scm_waitq waitq;
 	struct reset_controller_dev reset;
 
 	/* control access to the interconnect path */
@@ -1742,42 +1748,76 @@ bool qcom_scm_is_available(void)
 }
 EXPORT_SYMBOL_GPL(qcom_scm_is_available);
 
-static int qcom_scm_assert_valid_wq_ctx(u32 wq_ctx)
+static struct completion *qcom_scm_get_completion(struct qcom_scm *scm, u32 wq_ctx)
 {
-	/* FW currently only supports a single wq_ctx (zero).
-	 * TODO: Update this logic to include dynamic allocation and lookup of
-	 * completion structs when FW supports more wq_ctx values.
-	 */
-	if (wq_ctx != 0) {
-		dev_err(__scm->dev, "Firmware unexpectedly passed non-zero wq_ctx\n");
-		return -EINVAL;
+	struct completion *wq;
+	unsigned long flags;
+	int err;
+
+	spin_lock_irqsave(&scm->waitq.idr_lock, flags);
+	wq = idr_find(&scm->waitq.idr, wq_ctx);
+	if (wq) {
+		/*
+		 * Valid struct completion *wq found corresponding to
+		 * given wq_ctx. We're done here.
+		 */
+		goto out;
 	}
 
-	return 0;
+	/*
+	 * If a struct completion *wq does not exist for wq_ctx, create it. FW
+	 * only uses a finite number of wq_ctx values, so we will be reaching
+	 * here only a few times right at the beginning of the device's uptime
+	 * and then early-exit from idr_find() above subsequently.
+	 */
+	wq = devm_kzalloc(scm->dev, sizeof(*wq), GFP_ATOMIC);
+	if (!wq) {
+		wq = ERR_PTR(-ENOMEM);
+		goto out;
+	}
+
+	init_completion(wq);
+
+	err = idr_alloc_u32(&scm->waitq.idr, wq, &wq_ctx, wq_ctx, GFP_ATOMIC);
+	if (err < 0) {
+		/* Don't wait for driver to be unloaded to free wq */
+		devm_kfree(scm->dev, wq);
+		wq = ERR_PTR(err);
+	}
+
+out:
+	spin_unlock_irqrestore(&scm->waitq.idr_lock, flags);
+	return wq;
 }
 
-int qcom_scm_wait_for_wq_completion(u32 wq_ctx)
+int qcom_scm_wait_for_wq_completion(struct qcom_scm *scm, u32 wq_ctx)
 {
-	int ret;
+	struct completion *wq;
 
-	ret = qcom_scm_assert_valid_wq_ctx(wq_ctx);
-	if (ret)
-		return ret;
+	wq = qcom_scm_get_completion(scm, wq_ctx);
+	if (IS_ERR(wq)) {
+		pr_err("Unable to wait on invalid waitqueue for wq_ctx %d: %ld\n",
+				wq_ctx, PTR_ERR(wq));
+		return PTR_ERR(wq);
+	}
 
-	wait_for_completion(&__scm->waitq_comp);
+	wait_for_completion(wq);
 
 	return 0;
 }
 
 static int qcom_scm_waitq_wakeup(struct qcom_scm *scm, unsigned int wq_ctx)
 {
-	int ret;
+	struct completion *wq;
 
-	ret = qcom_scm_assert_valid_wq_ctx(wq_ctx);
-	if (ret)
-		return ret;
+	wq = qcom_scm_get_completion(scm, wq_ctx);
+	if (IS_ERR(wq)) {
+		pr_err("Unable to wake up invalid waitqueue for wq_ctx %d: %ld\n",
+				wq_ctx, PTR_ERR(wq));
+		return PTR_ERR(wq);
+	}
 
-	complete(&__scm->waitq_comp);
+	complete(wq);
 
 	return 0;
 }
@@ -1854,10 +1894,13 @@ static int qcom_scm_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
+	platform_set_drvdata(pdev, scm);
+
 	__scm = scm;
 	__scm->dev = &pdev->dev;
 
-	init_completion(&__scm->waitq_comp);
+	spin_lock_init(&__scm->waitq.idr_lock);
+	idr_init(&__scm->waitq.idr);
 
 	irq = platform_get_irq_optional(pdev, 0);
 	if (irq < 0) {
@@ -1905,8 +1948,13 @@ static int qcom_scm_probe(struct platform_device *pdev)
 
 static void qcom_scm_shutdown(struct platform_device *pdev)
 {
+	struct qcom_scm *scm;
+
+	scm = platform_get_drvdata(pdev);
+
 	/* Clean shutdown, disable download mode to allow normal restart */
 	qcom_scm_set_download_mode(false);
+	idr_destroy(&scm->waitq.idr);
 }
 
 static const struct of_device_id qcom_scm_dt_match[] = {
