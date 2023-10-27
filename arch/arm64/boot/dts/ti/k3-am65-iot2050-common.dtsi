@@ -1180,6 +1180,12 @@
 	#address-cells = <1>;
 	#size-cells = <0>;
 	ti,pindir-d0-out-d1-in;
+
+	spidev@0 {
+		compatible = "siemens,iot2050-arduino-spi";
+		spi-max-frequency = <20000000>;
+		reg = <0>;
+	};
 };
 
 &tscadc1 {
