@@ -679,7 +679,7 @@ static int save_image_lzo(struct swap_map_handle *handle,
                           unsigned int nr_to_write)
 {
 	unsigned int m;
-	int ret = 0;
+	int ret;
 	int nr_pages;
 	int err2;
 	struct hib_bio_batch hb;
@@ -1060,7 +1060,7 @@ static int load_image(struct swap_map_handle *handle,
                       unsigned int nr_to_read)
 {
 	unsigned int m;
-	int ret = 0;
+	int ret;
 	ktime_t start;
 	ktime_t stop;
 	struct hib_bio_batch hb;
@@ -1166,7 +1166,7 @@ static int load_image_lzo(struct swap_map_handle *handle,
                           unsigned int nr_to_read)
 {
 	unsigned int m;
-	int ret = 0;
+	int ret;
 	int eof = 0;
 	struct hib_bio_batch hb;
 	ktime_t start;
