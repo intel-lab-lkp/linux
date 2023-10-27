@@ -2,6 +2,8 @@
 #ifndef DRIVERS_PCI_H
 #define DRIVERS_PCI_H
 
+#include <linux/bitfield.h>
+#include <linux/bits.h>
 #include <linux/pci.h>
 
 /* Number of possible devfns: 0.0 to 1f.7 inclusive */
@@ -800,19 +802,15 @@ static inline pci_power_t mid_pci_get_power_state(struct pci_dev *pdev)
  * Section 3.2.2.3.2, Figure 3-2, p. 50.
  */
 
-#define PCI_CONF1_BUS_SHIFT	16 /* Bus number */
-#define PCI_CONF1_DEV_SHIFT	11 /* Device number */
-#define PCI_CONF1_FUNC_SHIFT	8  /* Function number */
-
-#define PCI_CONF1_BUS_MASK	0xff
-#define PCI_CONF1_DEV_MASK	0x1f
-#define PCI_CONF1_FUNC_MASK	0x7
+#define PCI_CONF1_BUS_MASK	GENMASK(23, 16)
+#define PCI_CONF1_DEV_MASK	GENMASK(15, 11)
+#define PCI_CONF1_FUNC_MASK	GENMASK(10, 8)
 #define PCI_CONF1_REG_MASK	0xfc /* Limit aligned offset to a maximum of 256B */
 
 #define PCI_CONF1_ENABLE	BIT(31)
-#define PCI_CONF1_BUS(x)	(((x) & PCI_CONF1_BUS_MASK) << PCI_CONF1_BUS_SHIFT)
-#define PCI_CONF1_DEV(x)	(((x) & PCI_CONF1_DEV_MASK) << PCI_CONF1_DEV_SHIFT)
-#define PCI_CONF1_FUNC(x)	(((x) & PCI_CONF1_FUNC_MASK) << PCI_CONF1_FUNC_SHIFT)
+#define PCI_CONF1_BUS(x)	FIELD_PREP(PCI_CONF1_BUS_MASK, (x))
+#define PCI_CONF1_DEV(x)	FIELD_PREP(PCI_CONF1_DEV_MASK, (x))
+#define PCI_CONF1_FUNC(x)	FIELD_PREP(PCI_CONF1_FUNC_MASK, (x))
 #define PCI_CONF1_REG(x)	((x) & PCI_CONF1_REG_MASK)
 
 #define PCI_CONF1_ADDRESS(bus, dev, func, reg) \
@@ -830,9 +828,8 @@ static inline pci_power_t mid_pci_get_power_state(struct pci_dev *pdev)
  * are used for specifying additional 4 high bits of PCI Express register.
  */
 
-#define PCI_CONF1_EXT_REG_SHIFT	16
-#define PCI_CONF1_EXT_REG_MASK	0xf00
-#define PCI_CONF1_EXT_REG(x)	(((x) & PCI_CONF1_EXT_REG_MASK) << PCI_CONF1_EXT_REG_SHIFT)
+#define PCI_CONF1_EXT_REG_MASK	GENMASK(27, 24)
+#define PCI_CONF1_EXT_REG(x)	FIELD_PREP(PCI_CONF1_EXT_REG_MASK, (x) >> 8)
 
 #define PCI_CONF1_EXT_ADDRESS(bus, dev, func, reg) \
 	(PCI_CONF1_ADDRESS(bus, dev, func, reg) | \
