@@ -50,6 +50,11 @@ struct sprd_pins_info {
 	unsigned int reg;
 };
 
+struct sprd_pinctrl_priv_data {
+	unsigned long common_offset;
+	unsigned long misc_offset;
+};
+
 int sprd_pinctrl_core_probe(struct platform_device *pdev,
 			    struct sprd_pins_info *sprd_soc_pin_info,
 			    int pins_cnt);

@@ -29,8 +29,6 @@
 #include "pinctrl-sprd.h"
 
 #define PINCTRL_BIT_MASK(width)		(~(~0UL << (width)))
-#define PINCTRL_REG_OFFSET		0x20
-#define PINCTRL_REG_MISC_OFFSET		0x4020
 #define PINCTRL_REG_LEN			0x4
 
 #define PIN_FUNC_MASK			(BIT(4) | BIT(5))
@@ -148,12 +146,14 @@ struct sprd_pinctrl_soc_info {
  * @pctl: pointer to the pinctrl handle
  * @base: base address of the controller
  * @info: pointer to SoC's pins description information
+ * @pdata: pointer SoC's private data structure
  */
 struct sprd_pinctrl {
 	struct device *dev;
 	struct pinctrl_dev *pctl;
 	void __iomem *base;
 	struct sprd_pinctrl_soc_info *info;
+	const struct sprd_pinctrl_priv_data *pdata;
 };
 
 #define SPRD_PIN_CONFIG_CONTROL		(PIN_CONFIG_END + 1)
@@ -1025,12 +1025,12 @@ static int sprd_pinctrl_add_pins(struct sprd_pinctrl *sprd_pctl,
 			ctrl_pin++;
 		} else if (pin->type == COMMON_PIN) {
 			pin->reg = (unsigned long)sprd_pctl->base +
-				PINCTRL_REG_OFFSET + PINCTRL_REG_LEN *
+				sprd_pctl->pdata->common_offset + PINCTRL_REG_LEN *
 				(i - ctrl_pin);
 			com_pin++;
 		} else if (pin->type == MISC_PIN) {
 			pin->reg = (unsigned long)sprd_pctl->base +
-				PINCTRL_REG_MISC_OFFSET + PINCTRL_REG_LEN *
+				sprd_pctl->pdata->misc_offset + PINCTRL_REG_LEN *
 				(i - ctrl_pin - com_pin);
 		}
 	}
@@ -1052,6 +1052,7 @@ int sprd_pinctrl_core_probe(struct platform_device *pdev,
 	struct sprd_pinctrl *sprd_pctl;
 	struct sprd_pinctrl_soc_info *pinctrl_info;
 	struct pinctrl_pin_desc *pin_desc;
+	const struct sprd_pinctrl_priv_data *priv_data;
 	int ret, i;
 
 	sprd_pctl = devm_kzalloc(&pdev->dev, sizeof(struct sprd_pinctrl),
@@ -1069,6 +1070,11 @@ int sprd_pinctrl_core_probe(struct platform_device *pdev,
 	if (!pinctrl_info)
 		return -ENOMEM;
 
+	priv_data = of_device_get_match_data(&pdev->dev);
+	if (!priv_data)
+		return -EINVAL;
+
+	sprd_pctl->pdata = priv_data;
 	sprd_pctl->info = pinctrl_info;
 	sprd_pctl->dev = &pdev->dev;
 	platform_set_drvdata(pdev, sprd_pctl);
