@@ -134,6 +134,9 @@ i915_param_named_unsafe(lmem_size, uint, 0400,
 i915_param_named_unsafe(lmem_bar_size, uint, 0400,
 			"Set the lmem bar size(in MiB).");
 
+i915_param_named(enable_mtl_rcs_ccs_wa, bool, 0400,
+	"Enable the RCS/CCS switchout hold workaround for MTL (only some workloads are affected by issue and w/a has a performance penalty) (default:false)");
+
 static void _param_print_bool(struct drm_printer *p, const char *name,
 			      bool val)
 {
