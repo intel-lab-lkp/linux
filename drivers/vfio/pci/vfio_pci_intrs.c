@@ -801,6 +801,18 @@ static int vfio_pci_set_req_trigger(struct vfio_pci_intr_ctx *intr_ctx,
 					       count, flags, data);
 }
 
+static void _vfio_pci_init_intr_ctx(struct vfio_pci_intr_ctx *intr_ctx)
+{
+	intr_ctx->irq_type = VFIO_PCI_NUM_IRQS;
+	mutex_init(&intr_ctx->igate);
+	xa_init(&intr_ctx->ctx);
+}
+
+static void _vfio_pci_release_intr_ctx(struct vfio_pci_intr_ctx *intr_ctx)
+{
+	mutex_destroy(&intr_ctx->igate);
+}
+
 static struct vfio_pci_intr_ops vfio_pci_intr_ops = {
 	.set_intx_mask = vfio_pci_set_intx_mask,
 	.set_intx_unmask = vfio_pci_set_intx_unmask,
@@ -814,17 +826,15 @@ static struct vfio_pci_intr_ops vfio_pci_intr_ops = {
 void vfio_pci_init_intr_ctx(struct vfio_pci_core_device *vdev,
 			    struct vfio_pci_intr_ctx *intr_ctx)
 {
-	intr_ctx->irq_type = VFIO_PCI_NUM_IRQS;
+	_vfio_pci_init_intr_ctx(intr_ctx);
 	intr_ctx->ops = &vfio_pci_intr_ops;
 	intr_ctx->priv = vdev;
-	mutex_init(&intr_ctx->igate);
-	xa_init(&intr_ctx->ctx);
 }
 EXPORT_SYMBOL_GPL(vfio_pci_init_intr_ctx);
 
 void vfio_pci_release_intr_ctx(struct vfio_pci_intr_ctx *intr_ctx)
 {
-	mutex_destroy(&intr_ctx->igate);
+	_vfio_pci_release_intr_ctx(intr_ctx);
 }
 EXPORT_SYMBOL_GPL(vfio_pci_release_intr_ctx);
 
