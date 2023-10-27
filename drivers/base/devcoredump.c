@@ -83,9 +83,6 @@ static void devcd_dev_release(struct device *dev)
 {
 	struct devcd_entry *devcd = dev_to_devcd(dev);
 
-	devcd->free(devcd->data);
-	module_put(devcd->owner);
-
 	/*
 	 * this seems racy, but I don't see a notifier or such on
 	 * a struct device to know when it goes away?
@@ -95,6 +92,8 @@ static void devcd_dev_release(struct device *dev)
 				  "devcoredump");
 
 	put_device(devcd->failing_dev);
+	devcd->free(devcd->data);
+	module_put(devcd->owner);
 	kfree(devcd);
 }
 
