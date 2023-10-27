@@ -2636,7 +2636,6 @@ void mem_cgroup_handle_over_high(gfp_t gfp_mask)
 	unsigned long pflags;
 	unsigned long nr_reclaimed;
 	unsigned int nr_pages = current->memcg_nr_pages_over_high;
-	int nr_retries = MAX_RECLAIM_RETRIES;
 	struct mem_cgroup *memcg;
 	bool in_retry = false;
 
@@ -2691,7 +2690,7 @@ retry_reclaim:
 	 * memory.high, we want to encourage that rather than doing allocator
 	 * throttling.
 	 */
-	if (nr_reclaimed || nr_retries--) {
+	if (nr_reclaimed >= (in_retry ? SWAP_CLUSTER_MAX : nr_pages)) {
 		in_retry = true;
 		goto retry_reclaim;
 	}
