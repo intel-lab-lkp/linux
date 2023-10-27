@@ -12,6 +12,8 @@
 #include "rseq-x86-thread-pointer.h"
 #elif defined(__PPC__)
 #include "rseq-ppc-thread-pointer.h"
+#elif defined(__loongarch__)
+#include "rseq-loongarch-thread-pointer.h"
 #else
 #include "rseq-generic-thread-pointer.h"
 #endif

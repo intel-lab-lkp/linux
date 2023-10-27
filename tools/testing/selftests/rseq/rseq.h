@@ -128,6 +128,8 @@ static inline struct rseq_abi *rseq_get_abi(void)
 #include <rseq-s390.h>
 #elif defined(__riscv)
 #include <rseq-riscv.h>
+#elif defined(__loongarch__)
+#include <rseq-loongarch.h>
 #else
 #error unsupported target
 #endif
