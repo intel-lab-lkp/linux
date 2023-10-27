@@ -8,8 +8,13 @@
 
 #define ALT_FLAGS_SHIFT		16
 
-#define ALT_FLAG_NOT		(1 << 0)
+/* Negate the tested feature flag */
+#define ALT_FLAG_NOT		BIT(0)
+/* Check X86_VENDOR_* instead of a feature flag */
+#define	ALT_FLAG_VENDOR		BIT(1)
+
 #define ALT_NOT(feature)	((ALT_FLAG_NOT << ALT_FLAGS_SHIFT) | (feature))
+#define ALT_VENDOR(x86_vendor)	((ALT_FLAG_VENDOR << ALT_FLAGS_SHIFT) | (x86_vendor))
 
 #ifndef __ASSEMBLY__
 

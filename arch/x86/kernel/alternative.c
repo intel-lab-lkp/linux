@@ -422,19 +422,23 @@ void __init_or_module noinline apply_alternatives(struct alt_instr *start,
 
 		/*
 		 * Patch if either:
+		 * - running on the respective x86 vendor
 		 * - feature is present
 		 * - feature not present but ALT_FLAG_NOT is set to mean,
 		 *   patch if feature is *NOT* present.
 		 */
-		if (!boot_cpu_has(a->cpuid) == !(a->flags & ALT_FLAG_NOT)) {
+		if (a->flags & ALT_FLAG_VENDOR) {
+			if (boot_cpu_data.x86_vendor != a->cpuid) {
+				optimize_nops(instr, a->instrlen);
+				continue;
+			}
+		} else if (!boot_cpu_has(a->cpuid) == !(a->flags & ALT_FLAG_NOT)) {
 			optimize_nops(instr, a->instrlen);
 			continue;
 		}
 
-		DPRINTK(ALT, "feat: %s%d*32+%d, old: (%pS (%px) len: %d), repl: (%px, len: %d)",
-			(a->flags & ALT_FLAG_NOT) ? "!" : "",
-			a->cpuid >> 5,
-			a->cpuid & 0x1f,
+		DPRINTK(ALT, "feat: 0x%x, flags: 0x%x, old: (%pS (%px) len: %d), repl: (%px, len: %d)",
+			a->cpuid, a->flags,
 			instr, instr, a->instrlen,
 			replacement, a->replacementlen);
 
