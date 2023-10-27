@@ -49,6 +49,7 @@
 #include "i915_vma.h"
 #include "i915_vma_types.h"
 #include "intel_bios.h"
+#include "intel_darkscreen.h"
 #include "intel_display.h"
 #include "intel_display_limits.h"
 #include "intel_display_power.h"
@@ -1502,6 +1503,7 @@ struct intel_crtc {
 
 #ifdef CONFIG_DEBUG_FS
 	struct intel_pipe_crc pipe_crc;
+	struct intel_darkscreen dark_screen;
 #endif
 };
 
