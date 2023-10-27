@@ -194,6 +194,10 @@ static int framebuffer_check(struct drm_device *dev,
 
 	/* now let the driver pick its own format info */
 	info = drm_get_format_info(dev, r);
+	if (!info) {
+		drm_dbg_kms(dev, "no matched format info\n");
+		return -EFAULT;
+	}
 
 	for (i = 0; i < info->num_planes; i++) {
 		unsigned int width = fb_plane_width(r->width, info, i);
