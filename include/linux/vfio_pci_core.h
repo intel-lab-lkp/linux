@@ -51,10 +51,33 @@ struct vfio_pci_region {
 
 /*
  * Interrupt context of virtual PCI device
+ * @ops:		Interrupt management backend functions
  * @priv:		Private data of interrupt management backend
  */
 struct vfio_pci_intr_ctx {
+	const struct vfio_pci_intr_ops	*ops;
 	void				*priv;
+};
+
+struct vfio_pci_intr_ops {
+	int (*set_intx_mask)(struct vfio_pci_intr_ctx *intr_ctx,
+			     unsigned int index, unsigned int start,
+			     unsigned int count, uint32_t flags, void *data);
+	int (*set_intx_unmask)(struct vfio_pci_intr_ctx *intr_ctx,
+			       unsigned int index, unsigned int start,
+			       unsigned int count, uint32_t flags, void *data);
+	int (*set_intx_trigger)(struct vfio_pci_intr_ctx *intr_ctx,
+				unsigned int index, unsigned int start,
+				unsigned int count, uint32_t flags, void *data);
+	int (*set_msi_trigger)(struct vfio_pci_intr_ctx *intr_ctx,
+			       unsigned int index, unsigned int start,
+			       unsigned int count, uint32_t flags, void *data);
+	int (*set_err_trigger)(struct vfio_pci_intr_ctx *intr_ctx,
+			       unsigned int index, unsigned int start,
+			       unsigned int count, uint32_t flags, void *data);
+	int (*set_req_trigger)(struct vfio_pci_intr_ctx *intr_ctx,
+			       unsigned int index, unsigned int start,
+			       unsigned int count, uint32_t flags, void *data);
 };
 
 struct vfio_pci_core_device {
@@ -124,6 +147,8 @@ int vfio_pci_core_sriov_configure(struct vfio_pci_core_device *vdev,
 				  int nr_virtfn);
 long vfio_pci_core_ioctl(struct vfio_device *core_vdev, unsigned int cmd,
 		unsigned long arg);
+void vfio_pci_init_intr_ctx(struct vfio_pci_core_device *vdev,
+			    struct vfio_pci_intr_ctx *intr_ctx);
 int vfio_pci_core_ioctl_feature(struct vfio_device *device, u32 flags,
 				void __user *arg, size_t argsz);
 ssize_t vfio_pci_core_read(struct vfio_device *core_vdev, char __user *buf,

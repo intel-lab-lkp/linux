@@ -796,6 +796,23 @@ static int vfio_pci_set_req_trigger(struct vfio_pci_intr_ctx *intr_ctx,
 					       count, flags, data);
 }
 
+static struct vfio_pci_intr_ops vfio_pci_intr_ops = {
+	.set_intx_mask = vfio_pci_set_intx_mask,
+	.set_intx_unmask = vfio_pci_set_intx_unmask,
+	.set_intx_trigger = vfio_pci_set_intx_trigger,
+	.set_msi_trigger = vfio_pci_set_msi_trigger,
+	.set_err_trigger = vfio_pci_set_err_trigger,
+	.set_req_trigger = vfio_pci_set_req_trigger,
+};
+
+void vfio_pci_init_intr_ctx(struct vfio_pci_core_device *vdev,
+			    struct vfio_pci_intr_ctx *intr_ctx)
+{
+	intr_ctx->ops = &vfio_pci_intr_ops;
+	intr_ctx->priv = vdev;
+}
+EXPORT_SYMBOL_GPL(vfio_pci_init_intr_ctx);
+
 int vfio_pci_set_irqs_ioctl(struct vfio_pci_intr_ctx *intr_ctx, uint32_t flags,
 			    unsigned int index, unsigned int start,
 			    unsigned int count, void *data)
@@ -808,13 +825,16 @@ int vfio_pci_set_irqs_ioctl(struct vfio_pci_intr_ctx *intr_ctx, uint32_t flags,
 	case VFIO_PCI_INTX_IRQ_INDEX:
 		switch (flags & VFIO_IRQ_SET_ACTION_TYPE_MASK) {
 		case VFIO_IRQ_SET_ACTION_MASK:
-			func = vfio_pci_set_intx_mask;
+			if (intr_ctx->ops->set_intx_mask)
+				func = intr_ctx->ops->set_intx_mask;
 			break;
 		case VFIO_IRQ_SET_ACTION_UNMASK:
-			func = vfio_pci_set_intx_unmask;
+			if (intr_ctx->ops->set_intx_unmask)
+				func = intr_ctx->ops->set_intx_unmask;
 			break;
 		case VFIO_IRQ_SET_ACTION_TRIGGER:
-			func = vfio_pci_set_intx_trigger;
+			if (intr_ctx->ops->set_intx_trigger)
+				func = intr_ctx->ops->set_intx_trigger;
 			break;
 		}
 		break;
@@ -826,21 +846,24 @@ int vfio_pci_set_irqs_ioctl(struct vfio_pci_intr_ctx *intr_ctx, uint32_t flags,
 			/* XXX Need masking support exported */
 			break;
 		case VFIO_IRQ_SET_ACTION_TRIGGER:
-			func = vfio_pci_set_msi_trigger;
+			if (intr_ctx->ops->set_msi_trigger)
+				func = intr_ctx->ops->set_msi_trigger;
 			break;
 		}
 		break;
 	case VFIO_PCI_ERR_IRQ_INDEX:
 		switch (flags & VFIO_IRQ_SET_ACTION_TYPE_MASK) {
 		case VFIO_IRQ_SET_ACTION_TRIGGER:
-			func = vfio_pci_set_err_trigger;
+			if (intr_ctx->ops->set_err_trigger)
+				func = intr_ctx->ops->set_err_trigger;
 			break;
 		}
 		break;
 	case VFIO_PCI_REQ_IRQ_INDEX:
 		switch (flags & VFIO_IRQ_SET_ACTION_TYPE_MASK) {
 		case VFIO_IRQ_SET_ACTION_TRIGGER:
-			func = vfio_pci_set_req_trigger;
+			if (intr_ctx->ops->set_req_trigger)
+				func = intr_ctx->ops->set_req_trigger;
 			break;
 		}
 		break;

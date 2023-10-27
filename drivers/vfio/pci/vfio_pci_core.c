@@ -2166,7 +2166,7 @@ int vfio_pci_core_init_dev(struct vfio_device *core_vdev)
 	INIT_LIST_HEAD(&vdev->sriov_pfs_item);
 	init_rwsem(&vdev->memory_lock);
 	xa_init(&vdev->ctx);
-	vdev->intr_ctx.priv = vdev;
+	vfio_pci_init_intr_ctx(vdev, &vdev->intr_ctx);
 
 	return 0;
 }
