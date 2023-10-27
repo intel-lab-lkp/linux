@@ -349,6 +349,8 @@ properties:
           - silabs,si3210
             # Relative Humidity and Temperature Sensors
           - silabs,si7020
+            # Siemens IOT2050: SPI interface on Arduino connector
+          - siemens,iot2050-arduino-spi
             # Skyworks SKY81452: Six-Channel White LED Driver with Touch Panel Bias Supply
           - skyworks,sky81452
             # Socionext SynQuacer TPM MMIO module
