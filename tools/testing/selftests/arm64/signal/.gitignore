@@ -5,6 +5,7 @@ sme_*
 ssve_*
 sve_*
 tpidr2_*
+poe_siginfo
 za_*
 zt_*
 !*.[ch]
