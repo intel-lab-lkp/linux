@@ -91,6 +91,37 @@ err:
 }
 EXPORT_SYMBOL(bio_integrity_alloc);
 
+static void bio_integrity_unmap_user(struct bio_integrity_payload *bip)
+{
+	bool dirty = bio_data_dir(bip->bip_bio) == READ;
+	struct bio_vec *copy = bip->copy_vec;
+	struct bvec_iter iter;
+	struct bio_vec bv;
+
+	if (copy) {
+		unsigned short nr_vecs = bip->bip_max_vcnt;
+		size_t bytes = bip->bip_iter.bi_size;
+		void *buf = bvec_virt(bip->bip_vec);
+
+		if (dirty) {
+			struct iov_iter iter;
+
+			iov_iter_bvec(&iter, ITER_DEST, copy, nr_vecs, bytes);
+			WARN_ON(copy_to_iter(buf, bytes, &iter) != bytes);
+		}
+
+		memcpy(bip->bip_vec, copy, nr_vecs * sizeof(*copy));
+		kfree(copy);
+		kfree(buf);
+	}
+
+	bip_for_each_vec(bv, bip, iter) {
+		if (dirty && !PageCompound(bv.bv_page))
+			set_page_dirty_lock(bv.bv_page);
+		unpin_user_page(bv.bv_page);
+	}
+}
+
 /**
  * bio_integrity_free - Free bio integrity payload
  * @bio:	bio containing bip to be freed
@@ -105,6 +136,8 @@ void bio_integrity_free(struct bio *bio)
 
 	if (bip->bip_flags & BIP_BLOCK_INTEGRITY)
 		kfree(bvec_virt(bip->bip_vec));
+	else if (bip->bip_flags & BIP_INTEGRITY_USER)
+		bio_integrity_unmap_user(bip);
 
 	__bio_integrity_free(bs, bip);
 	bio->bi_integrity = NULL;
@@ -159,6 +192,168 @@ int bio_integrity_add_page(struct bio *bio, struct page *page,
 	return len;
 }
 EXPORT_SYMBOL(bio_integrity_add_page);
+
+static int bio_integrity_copy_user(struct bio *bio, struct bio_vec *bvec,
+				   int nr_vecs, unsigned int len,
+				   unsigned int direction, u32 seed)
+{
+	struct bio_integrity_payload *bip;
+	struct bio_vec *copy_vec = NULL;
+	struct iov_iter iter;
+	void *buf;
+	int ret;
+
+	/* if bvec is on the stack, we need to allocate a copy for the completion */
+	if (nr_vecs <= UIO_FASTIOV) {
+		copy_vec = kcalloc(sizeof(*bvec), nr_vecs, GFP_KERNEL);
+		if (!copy_vec)
+			return -ENOMEM;
+		memcpy(copy_vec, bvec, nr_vecs * sizeof(*bvec));
+	}
+
+	buf = kmalloc(len, GFP_KERNEL);
+	if (!buf)
+		goto free_copy;
+
+	if (direction == ITER_SOURCE) {
+		iov_iter_bvec(&iter, direction, bvec, nr_vecs, len);
+		if (!copy_from_iter_full(buf, len, &iter)) {
+			ret = -EFAULT;
+			goto free_buf;
+		}
+	} else {
+		memset(buf, 0, len);
+	}
+
+	/*
+	 * We just need one vec for this bip, but we need to preserve the
+	 * number of vecs in the user bvec for the completion handling, so use
+	 * nr_vecs.
+	 */
+	bip = bio_integrity_alloc(bio, GFP_KERNEL, nr_vecs);
+	if (IS_ERR(bip)) {
+		ret = PTR_ERR(bip);
+		goto free_buf;
+	}
+
+	ret = bio_integrity_add_page(bio, virt_to_page(buf), len,
+				     offset_in_page(buf));
+	if (ret != len) {
+		ret = -ENOMEM;
+		goto free_bip;
+	}
+
+	bip->bip_flags |= BIP_INTEGRITY_USER;
+	bip->copy_vec = copy_vec ?: bvec;
+	return 0;
+free_bip:
+	bio_integrity_free(bio);
+free_buf:
+	kfree(buf);
+free_copy:
+	kfree(copy_vec);
+	return ret;
+}
+
+int bio_integrity_map_user(struct bio *bio, void __user *ubuf, unsigned int len,
+			   u32 seed)
+{
+	struct request_queue *q = bdev_get_queue(bio->bi_bdev);
+	unsigned long offs, align = q->dma_pad_mask | queue_dma_alignment(q);
+	int ret, direction, nr_vecs, i, j, folios = 0;
+	struct bio_vec stack_vec[UIO_FASTIOV];
+	struct bio_vec bv, *bvec = stack_vec;
+	struct page *stack_pages[UIO_FASTIOV];
+	struct page **pages = stack_pages;
+	struct bio_integrity_payload *bip;
+	struct iov_iter iter;
+	struct bvec_iter bi;
+	u32 bytes;
+
+	if (bio_integrity(bio))
+		return -EINVAL;
+	if (len >> SECTOR_SHIFT > queue_max_hw_sectors(q))
+		return -E2BIG;
+
+	if (bio_data_dir(bio) == READ)
+		direction = ITER_DEST;
+	else
+		direction = ITER_SOURCE;
+
+	iov_iter_ubuf(&iter, direction, ubuf, len);
+	nr_vecs = iov_iter_npages(&iter, BIO_MAX_VECS + 1);
+	if (nr_vecs > BIO_MAX_VECS)
+		return -E2BIG;
+	if (nr_vecs > UIO_FASTIOV) {
+		bvec = kcalloc(sizeof(*bvec), nr_vecs, GFP_KERNEL);
+		if (!bvec)
+			return -ENOMEM;
+		pages = NULL;
+	}
+
+	bytes = iov_iter_extract_pages(&iter, &pages, len, nr_vecs, 0, &offs);
+	if (unlikely(bytes < 0)) {
+		ret =  bytes;
+		goto free_bvec;
+	}
+
+	for (i = 0; i < nr_vecs; i = j) {
+		size_t size = min_t(size_t, bytes, PAGE_SIZE - offs);
+		struct folio *folio = page_folio(pages[i]);
+
+		bytes -= size;
+		for (j = i + 1; j < nr_vecs; j++) {
+			size_t next = min_t(size_t, PAGE_SIZE, bytes);
+
+			if (page_folio(pages[j]) != folio ||
+			    pages[j] != pages[j - 1] + 1)
+				break;
+			unpin_user_page(pages[j]);
+			size += next;
+			bytes -= next;
+		}
+
+		bvec_set_page(&bvec[folios], pages[i], size, offs);
+		offs = 0;
+		folios++;
+	}
+
+	if (pages != stack_pages)
+		kvfree(pages);
+
+	if (folios > queue_max_integrity_segments(q) ||
+	    !iov_iter_is_aligned(&iter, align, align)) {
+		ret = bio_integrity_copy_user(bio, bvec, folios, len,
+					      direction, seed);
+		if (ret)
+			goto release_pages;
+		return 0;
+	}
+
+	bip = bio_integrity_alloc(bio, GFP_KERNEL, folios);
+	if (IS_ERR(bip)) {
+		ret = PTR_ERR(bip);
+		goto release_pages;
+	}
+
+	memcpy(bip->bip_vec, bvec, folios * sizeof(*bvec));
+	if (bvec != stack_vec)
+		kfree(bvec);
+
+	bip->bip_flags |= BIP_INTEGRITY_USER;
+	bip->copy_vec = NULL;
+	return 0;
+
+release_pages:
+	bi.bi_size = len;
+	for_each_bvec(bv, bvec, bi, bi)
+		unpin_user_page(bv.bv_page);
+free_bvec:
+	if (bvec != stack_vec)
+		kfree(bvec);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(bio_integrity_map_user);
 
 /**
  * bio_integrity_process - Process integrity metadata for a bio
