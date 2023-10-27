@@ -37,6 +37,15 @@
 
 #define TDREPORT_SUBTYPE_0	0
 
+/*
+ * TDX metadata base field id, used by TDCALL TDG.SYS.RD
+ * See TDX ABI Spec Global Metadata Fields
+ */
+#define TDX_SYS_VENDOR_ID_FID		0x0800000200000000ULL
+#define TDX_SYS_MINOR_FID		0x0800000100000003ULL
+#define TDX_SYS_MAJOR_FID		0x0800000100000004ULL
+#define TDX_VENDOR_INTEL		0x8086
+
 /* Called from __tdx_hypercall() for unrecoverable failure */
 noinstr void __noreturn __tdx_hypercall_failed(void)
 {
@@ -800,6 +809,55 @@ static bool tdx_enc_status_change_finish(unsigned long vaddr, int numpages,
 	return true;
 }
 
+/*
+ * Detect TDX Module version info from TDG.SYS.RD TDCALL
+ */
+static void detect_tdx_version(void)
+{
+	struct tdx_module_args args = {};
+	u16 major_version, minor_version;
+	u32 vendor_id;
+	u64 ret;
+
+	args.rdx = TDX_SYS_VENDOR_ID_FID;
+	ret = __tdcall_ret(TDG_SYS_RD, &args);
+	if (ret)
+		goto err_out;
+
+	vendor_id = args.r8;
+
+	memset(&args, 0, sizeof(args));
+	args.rdx = TDX_SYS_MAJOR_FID;
+	ret = __tdcall_ret(TDG_SYS_RD, &args);
+	if (ret)
+		goto err_out;
+
+	major_version = args.r8;
+
+	memset(&args, 0, sizeof(args));
+	args.rdx = TDX_SYS_MINOR_FID;
+	ret = __tdcall_ret(TDG_SYS_RD, &args);
+	if (ret)
+		goto err_out;
+
+	minor_version = args.r8;
+
+	pr_info("Guest detected. version:%u.%u VendorID:%x\n",
+		major_version, minor_version, vendor_id);
+
+	return;
+
+err_out:
+	if (TDCALL_RETURN_CODE(ret) == TDCALL_INVALID_OPERAND)
+		pr_info("TDG.SYS.RD not available\n");
+	else
+		pr_info("TDG.SYS.RD unknown error (%llu), reading field %llu\n",
+			ret, args.rdx);
+
+	pr_info("Assuming TDX version:1.x (x<5) VendorID:%x\n",
+		TDX_VENDOR_INTEL);
+}
+
 void __init tdx_early_init(void)
 {
 	struct tdx_module_args args = {
@@ -870,5 +928,5 @@ void __init tdx_early_init(void)
 	 */
 	x86_cpuinit.parallel_bringup = false;
 
-	pr_info("Guest detected\n");
+	detect_tdx_version();
 }
