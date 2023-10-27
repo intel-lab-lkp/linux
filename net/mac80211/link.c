@@ -115,6 +115,62 @@ static void ieee80211_free_links(struct ieee80211_sub_if_data *sdata,
 		kfree(links[link_id]);
 }
 
+/* For cases where we need a link for stats and such, and just want
+ * a 'good' one.
+ */
+struct sta_info *
+ieee80211_find_best_sta_link(struct ieee80211_sub_if_data *sdata,
+			     struct ieee80211_link_data **link)
+{
+	struct ieee80211_link_data *best_link = NULL;
+	struct sta_info *best_sta = NULL;
+	int i;
+
+	for (i = 0; i < IEEE80211_MLD_MAX_NUM_LINKS; i++) {
+		struct ieee80211_link_data *link1;
+		struct sta_info *sta1;
+		bool sta1_better = false;
+
+		link1 = sdata_dereference(sdata->link[i], sdata);
+		if (!link1)
+			continue;
+		if (!best_link) {
+			best_link = link1;
+			best_sta = sta_info_get_bss(sdata, best_link->u.mgd.bssid);
+			continue;
+		}
+
+		sta1 = sta_info_get_bss(sdata, link1->u.mgd.bssid);
+		if (!sta1)
+			continue;
+
+		/* we have two potential best links, find one we like best. */
+		if (!best_sta || sta1->sta_state > best_sta->sta_state) {
+			sta1_better = true;
+		} else if (sta1->sta_state == best_sta->sta_state) {
+			u32 freq_best = 0;
+			u32 freq1 = 0;
+
+			if (best_link->conf->chandef.chan)
+				freq_best = best_link->conf->chandef.chan->center_freq;
+			if (link1->conf->chandef.chan)
+				freq1 = link1->conf->chandef.chan->center_freq;
+			if (freq1 > freq_best)
+				sta1_better = true;
+		}
+
+		if (sta1_better) {
+			best_sta = sta1;
+			best_link = link1;
+		}
+	}
+
+	*link = best_link;
+	if (best_link)
+		return sta_info_get_bss(sdata, best_link->u.mgd.bssid);
+	return sta_info_get_bss(sdata, sdata->deflink.u.mgd.bssid);
+}
+
 static int ieee80211_check_dup_link_addrs(struct ieee80211_sub_if_data *sdata)
 {
 	unsigned int i, j;
