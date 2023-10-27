@@ -56,6 +56,7 @@ struct vfio_pci_region {
  * @igate:		Protects members of struct vfio_pci_intr_ctx
  * @err_trigger:	Eventfd associated with error reporting IRQ
  * @req_trigger:	Eventfd associated with device request notification
+ * @ctx:		Per-interrupt context indexed by vector
  */
 struct vfio_pci_intr_ctx {
 	const struct vfio_pci_intr_ops	*ops;
@@ -63,6 +64,7 @@ struct vfio_pci_intr_ctx {
 	struct mutex			igate;
 	struct eventfd_ctx		*err_trigger;
 	struct eventfd_ctx		*req_trigger;
+	struct xarray			ctx;
 };
 
 struct vfio_pci_intr_ops {
@@ -98,7 +100,6 @@ struct vfio_pci_core_device {
 	u8			*vconfig;
 	struct perm_bits	*msi_perm;
 	spinlock_t		irqlock;
-	struct xarray		ctx;
 	int			irq_type;
 	int			num_regions;
 	struct vfio_pci_region	*region;

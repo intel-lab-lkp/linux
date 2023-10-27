@@ -52,13 +52,13 @@ static
 struct vfio_pci_irq_ctx *vfio_irq_ctx_get(struct vfio_pci_core_device *vdev,
 					  unsigned long index)
 {
-	return xa_load(&vdev->ctx, index);
+	return xa_load(&vdev->intr_ctx.ctx, index);
 }
 
 static void vfio_irq_ctx_free(struct vfio_pci_core_device *vdev,
 			      struct vfio_pci_irq_ctx *ctx, unsigned long index)
 {
-	xa_erase(&vdev->ctx, index);
+	xa_erase(&vdev->intr_ctx.ctx, index);
 	kfree(ctx);
 }
 
@@ -72,7 +72,7 @@ vfio_irq_ctx_alloc(struct vfio_pci_core_device *vdev, unsigned long index)
 	if (!ctx)
 		return NULL;
 
-	ret = xa_insert(&vdev->ctx, index, ctx, GFP_KERNEL_ACCOUNT);
+	ret = xa_insert(&vdev->intr_ctx.ctx, index, ctx, GFP_KERNEL_ACCOUNT);
 	if (ret) {
 		kfree(ctx);
 		return NULL;
@@ -530,7 +530,7 @@ static void vfio_msi_disable(struct vfio_pci_core_device *vdev, bool msix)
 	unsigned long i;
 	u16 cmd;
 
-	xa_for_each(&vdev->ctx, i, ctx) {
+	xa_for_each(&vdev->intr_ctx.ctx, i, ctx) {
 		vfio_virqfd_disable(&ctx->unmask);
 		vfio_virqfd_disable(&ctx->mask);
 		vfio_msi_set_vector_signal(vdev, i, -1, msix);
@@ -810,6 +810,7 @@ void vfio_pci_init_intr_ctx(struct vfio_pci_core_device *vdev,
 	intr_ctx->ops = &vfio_pci_intr_ops;
 	intr_ctx->priv = vdev;
 	mutex_init(&intr_ctx->igate);
+	xa_init(&intr_ctx->ctx);
 }
 EXPORT_SYMBOL_GPL(vfio_pci_init_intr_ctx);
 
