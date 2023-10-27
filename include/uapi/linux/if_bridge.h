@@ -52,6 +52,19 @@
 #define BR_STATE_FORWARDING 3
 #define BR_STATE_BLOCKING 4
 
+/**
+ * struct __bridge_info - the bridge information
+ *
+ * @designated_root: Designated bridge's root bridge identifier
+ *
+ * @bridge_id: Current bridge identifier
+ *
+ * @root_path_cost: The cost of bridge root path
+ *
+ * @max_age: The hello packet timeout
+ *
+ * @hello_time: The time in seconds between hello packets sent by the bridge
+ */
 struct __bridge_info {
 	__u64 designated_root;
 	__u64 bridge_id;
@@ -74,6 +87,17 @@ struct __bridge_info {
 	__u32 gc_timer_value;
 };
 
+/**
+ * struct __port_info - the bridge port information
+ *
+ * @designated_root: Designated bridge's root bridge identifier
+ *
+ * @designated_bridge: Designated bridge's identifier
+ *
+ * @port_id: Current port id
+ *
+ * @designated_port: Designated port number
+ */
 struct __port_info {
 	__u64 designated_root;
 	__u64 designated_bridge;
