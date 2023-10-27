@@ -64,8 +64,8 @@ void fnic_handle_link(struct work_struct *work)
 			new_port_speed);
 	if (old_port_speed != new_port_speed)
 		FNIC_MAIN_DBG(KERN_INFO, fnic->lport->host,
-				"Current vnic speed set to :  %llu\n",
-				new_port_speed);
+				"fnic<%d>: %s: %d: Current vnic speed set to: %llu\n",
+				fnic->fnic_num, __func__, __LINE__, new_port_speed);
 
 	switch (vnic_dev_port_speed(fnic->vdev)) {
 	case DCEM_PORTSPEED_10G:
@@ -102,6 +102,9 @@ void fnic_handle_link(struct work_struct *work)
 			fnic_fc_trace_set_data(fnic->lport->host->host_no,
 				FNIC_FC_LE, "Link Status: DOWN->DOWN",
 				strlen("Link Status: DOWN->DOWN"));
+			FNIC_MAIN_DBG(KERN_INFO, fnic->lport->host,
+					"fnic<%d>: %s: %d: down->down\n",
+					fnic->fnic_num, __func__, __LINE__);
 		} else {
 			if (old_link_down_cnt != fnic->link_down_cnt) {
 				/* UP -> DOWN -> UP */
@@ -128,8 +131,9 @@ void fnic_handle_link(struct work_struct *work)
 					fnic_fcoe_send_vlan_req(fnic);
 					return;
 				}
-				FNIC_FCS_DBG(KERN_DEBUG, fnic->lport->host,
-					     "link up\n");
+				FNIC_MAIN_DBG(KERN_INFO, fnic->lport->host,
+						"fnic<%d>: %s: %d: up->down->up: Link up\n",
+						fnic->fnic_num, __func__, __LINE__);
 				fcoe_ctlr_link_up(&fnic->ctlr);
 			} else {
 				/* UP -> UP */
@@ -138,6 +142,9 @@ void fnic_handle_link(struct work_struct *work)
 					fnic->lport->host->host_no, FNIC_FC_LE,
 					"Link Status: UP_UP",
 					strlen("Link Status: UP_UP"));
+				FNIC_MAIN_DBG(KERN_INFO, fnic->lport->host,
+						"fnic<%d>: %s: %d: up->up\n",
+						fnic->fnic_num, __func__, __LINE__);
 			}
 		}
 	} else if (fnic->link_status) {
@@ -153,7 +160,9 @@ void fnic_handle_link(struct work_struct *work)
 			return;
 		}
 
-		FNIC_FCS_DBG(KERN_DEBUG, fnic->lport->host, "link up\n");
+		FNIC_MAIN_DBG(KERN_INFO, fnic->lport->host,
+				"fnic<%d>: %s: %d: down->up: Link up\n",
+				fnic->fnic_num, __func__, __LINE__);
 		fnic_fc_trace_set_data(fnic->lport->host->host_no, FNIC_FC_LE,
 				       "Link Status: DOWN_UP", strlen("Link Status: DOWN_UP"));
 		fcoe_ctlr_link_up(&fnic->ctlr);
@@ -161,7 +170,9 @@ void fnic_handle_link(struct work_struct *work)
 		/* UP -> DOWN */
 		fnic->lport->host_stats.link_failure_count++;
 		spin_unlock_irqrestore(&fnic->fnic_lock, flags);
-		FNIC_FCS_DBG(KERN_DEBUG, fnic->lport->host, "link down\n");
+		FNIC_MAIN_DBG(KERN_INFO, fnic->lport->host,
+				"fnic<%d>: %s: %d: up->down: Link down\n",
+				fnic->fnic_num, __func__, __LINE__);
 		fnic_fc_trace_set_data(
 			fnic->lport->host->host_no, FNIC_FC_LE,
 			"Link Status: UP_DOWN",
@@ -763,8 +774,9 @@ void fnic_set_port_id(struct fc_lport *lport, u32 port_id, struct fc_frame *fp)
 	u8 *mac;
 	int ret;
 
-	FNIC_FCS_DBG(KERN_DEBUG, lport->host, "set port_id %x fp %p\n",
-		     port_id, fp);
+	FNIC_FCS_DBG(KERN_DEBUG, lport->host,
+			"fnic<%d>: %s: %d: set port_id 0x%x fp 0x%p\n",
+			fnic->fnic_num, __func__, __LINE__, port_id, fp);
 
 	/*
 	 * If we're clearing the FC_ID, change to use the ctl_src_addr.
@@ -790,10 +802,10 @@ void fnic_set_port_id(struct fc_lport *lport, u32 port_id, struct fc_frame *fp)
 	if (fnic->state == FNIC_IN_ETH_MODE || fnic->state == FNIC_IN_FC_MODE)
 		fnic->state = FNIC_IN_ETH_TRANS_FC_MODE;
 	else {
-		FNIC_FCS_DBG(KERN_DEBUG, fnic->lport->host,
-			     "Unexpected fnic state %s while"
-			     " processing flogi resp\n",
-			     fnic_state_to_str(fnic->state));
+		FNIC_FCS_DBG(KERN_ERR, fnic->lport->host,
+			     "fnic<%d>: %s: %d: Unexpected fnic state: %s processing FLOGI response",
+			     fnic->fnic_num, __func__, __LINE__,
+				 fnic_state_to_str(fnic->state));
 		spin_unlock_irq(&fnic->fnic_lock);
 		return;
 	}
