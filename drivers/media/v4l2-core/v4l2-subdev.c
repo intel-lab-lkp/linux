@@ -1687,7 +1687,7 @@ __v4l2_subdev_state_get_format_stream(struct v4l2_subdev_state *state,
 		if (WARN_ON(pad >= state->sd->entity.num_pads))
 			return NULL;
 
-		return &state->pads[pad].try_fmt;
+		return &state->pads[pad].format;
 	}
 
 	lockdep_assert_held(state->lock);
@@ -1721,7 +1721,7 @@ __v4l2_subdev_state_get_crop_stream(struct v4l2_subdev_state *state,
 		if (WARN_ON(pad >= state->sd->entity.num_pads))
 			return NULL;
 
-		return &state->pads[pad].try_crop;
+		return &state->pads[pad].crop;
 	}
 
 	lockdep_assert_held(state->lock);
@@ -1755,7 +1755,7 @@ __v4l2_subdev_state_get_compose_stream(struct v4l2_subdev_state *state,
 		if (WARN_ON(pad >= state->sd->entity.num_pads))
 			return NULL;
 
-		return &state->pads[pad].try_compose;
+		return &state->pads[pad].compose;
 	}
 
 	lockdep_assert_held(state->lock);

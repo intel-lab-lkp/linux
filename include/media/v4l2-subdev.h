@@ -688,17 +688,14 @@ struct v4l2_subdev_ir_ops {
 /**
  * struct v4l2_subdev_pad_config - Used for storing subdev pad information.
  *
- * @try_fmt: &struct v4l2_mbus_framefmt
- * @try_crop: &struct v4l2_rect to be used for crop
- * @try_compose: &struct v4l2_rect to be used for compose
- *
- * Note: This struct is also used in active state, and the 'try' prefix is
- * historical and to be removed.
+ * @format: &struct v4l2_mbus_framefmt
+ * @crop: &struct v4l2_rect to be used for crop
+ * @compose: &struct v4l2_rect to be used for compose
  */
 struct v4l2_subdev_pad_config {
-	struct v4l2_mbus_framefmt try_fmt;
-	struct v4l2_rect try_crop;
-	struct v4l2_rect try_compose;
+	struct v4l2_mbus_framefmt format;
+	struct v4l2_rect crop;
+	struct v4l2_rect compose;
 };
 
 /**
