@@ -427,7 +427,7 @@ static int vfio_pci_core_runtime_suspend(struct device *dev)
 	 * vfio_pci_intx_mask() will return false and in that case, INTx
 	 * should not be unmasked in the runtime resume.
 	 */
-	vdev->pm_intx_masked = ((vdev->irq_type == VFIO_PCI_INTX_IRQ_INDEX) &&
+	vdev->pm_intx_masked = ((vdev->intr_ctx.irq_type == VFIO_PCI_INTX_IRQ_INDEX) &&
 				vfio_pci_intx_mask(vdev));
 
 	return 0;
@@ -596,7 +596,7 @@ void vfio_pci_core_disable(struct vfio_pci_core_device *vdev)
 
 	vfio_pci_set_irqs_ioctl(&vdev->intr_ctx, VFIO_IRQ_SET_DATA_NONE |
 				VFIO_IRQ_SET_ACTION_TRIGGER,
-				vdev->irq_type, 0, 0, NULL);
+				vdev->intr_ctx.irq_type, 0, 0, NULL);
 
 	/* Device closed, don't need mutex here */
 	list_for_each_entry_safe(ioeventfd, ioeventfd_tmp,
@@ -2153,7 +2153,6 @@ int vfio_pci_core_init_dev(struct vfio_device *core_vdev)
 		container_of(core_vdev, struct vfio_pci_core_device, vdev);
 
 	vdev->pdev = to_pci_dev(core_vdev->dev);
-	vdev->irq_type = VFIO_PCI_NUM_IRQS;
 	spin_lock_init(&vdev->irqlock);
 	mutex_init(&vdev->ioeventfds_lock);
 	INIT_LIST_HEAD(&vdev->dummy_resources_list);

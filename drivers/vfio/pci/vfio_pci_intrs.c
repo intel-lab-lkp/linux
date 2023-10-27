@@ -33,19 +33,19 @@ struct vfio_pci_irq_ctx {
 
 static bool irq_is(struct vfio_pci_core_device *vdev, int type)
 {
-	return vdev->irq_type == type;
+	return vdev->intr_ctx.irq_type == type;
 }
 
 static bool is_intx(struct vfio_pci_core_device *vdev)
 {
-	return vdev->irq_type == VFIO_PCI_INTX_IRQ_INDEX;
+	return vdev->intr_ctx.irq_type == VFIO_PCI_INTX_IRQ_INDEX;
 }
 
 static bool is_irq_none(struct vfio_pci_core_device *vdev)
 {
-	return !(vdev->irq_type == VFIO_PCI_INTX_IRQ_INDEX ||
-		 vdev->irq_type == VFIO_PCI_MSI_IRQ_INDEX ||
-		 vdev->irq_type == VFIO_PCI_MSIX_IRQ_INDEX);
+	return !(vdev->intr_ctx.irq_type == VFIO_PCI_INTX_IRQ_INDEX ||
+		 vdev->intr_ctx.irq_type == VFIO_PCI_MSI_IRQ_INDEX ||
+		 vdev->intr_ctx.irq_type == VFIO_PCI_MSIX_IRQ_INDEX);
 }
 
 static
@@ -255,7 +255,7 @@ static int vfio_intx_enable(struct vfio_pci_core_device *vdev)
 	if (vdev->pci_2_3)
 		pci_intx(vdev->pdev, !ctx->masked);
 
-	vdev->irq_type = VFIO_PCI_INTX_IRQ_INDEX;
+	vdev->intr_ctx.irq_type = VFIO_PCI_INTX_IRQ_INDEX;
 
 	return 0;
 }
@@ -331,7 +331,7 @@ static void vfio_intx_disable(struct vfio_pci_core_device *vdev)
 		vfio_virqfd_disable(&ctx->mask);
 	}
 	vfio_intx_set_signal(vdev, -1);
-	vdev->irq_type = VFIO_PCI_NUM_IRQS;
+	vdev->intr_ctx.irq_type = VFIO_PCI_NUM_IRQS;
 	vfio_irq_ctx_free(vdev, ctx, 0);
 }
 
@@ -367,7 +367,7 @@ static int vfio_msi_enable(struct vfio_pci_core_device *vdev, int nvec, bool msi
 	}
 	vfio_pci_memory_unlock_and_restore(vdev, cmd);
 
-	vdev->irq_type = msix ? VFIO_PCI_MSIX_IRQ_INDEX :
+	vdev->intr_ctx.irq_type = msix ? VFIO_PCI_MSIX_IRQ_INDEX :
 				VFIO_PCI_MSI_IRQ_INDEX;
 
 	if (!msix) {
@@ -547,7 +547,7 @@ static void vfio_msi_disable(struct vfio_pci_core_device *vdev, bool msix)
 	if (vdev->nointx)
 		pci_intx(pdev, 0);
 
-	vdev->irq_type = VFIO_PCI_NUM_IRQS;
+	vdev->intr_ctx.irq_type = VFIO_PCI_NUM_IRQS;
 }
 
 /*
@@ -677,7 +677,7 @@ static int vfio_pci_set_msi_trigger(struct vfio_pci_intr_ctx *intr_ctx,
 		int32_t *fds = data;
 		int ret;
 
-		if (vdev->irq_type == index)
+		if (vdev->intr_ctx.irq_type == index)
 			return vfio_msi_set_block(vdev, start, count,
 						  fds, msix);
 
@@ -807,6 +807,7 @@ static struct vfio_pci_intr_ops vfio_pci_intr_ops = {
 void vfio_pci_init_intr_ctx(struct vfio_pci_core_device *vdev,
 			    struct vfio_pci_intr_ctx *intr_ctx)
 {
+	intr_ctx->irq_type = VFIO_PCI_NUM_IRQS;
 	intr_ctx->ops = &vfio_pci_intr_ops;
 	intr_ctx->priv = vdev;
 	mutex_init(&intr_ctx->igate);
