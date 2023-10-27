@@ -724,6 +724,7 @@ static int fsl_asoc_card_probe(struct platform_device *pdev)
 		priv->dai_link[0].num_codecs = 2;
 		priv->dai_link[2].num_codecs = 2;
 		priv->dai_fmt |= SND_SOC_DAIFMT_CBP_CFP;
+		of_property_read_u32(np, "cpu-slot-width", &priv->cpu_priv.slot_width);
 	} else {
 		dev_err(&pdev->dev, "unknown Device Tree compatible\n");
 		ret = -EINVAL;
