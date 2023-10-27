@@ -809,10 +809,10 @@ static int fsl_asoc_card_probe(struct platform_device *pdev)
 
 	/* Normal DAI Link */
 	priv->dai_link[0].cpus->of_node = cpu_np;
-	priv->dai_link[0].codecs->dai_name = codec_dai_name;
+	priv->dai_link[0].codecs[0].dai_name = codec_dai_name;
 
 	if (!fsl_asoc_card_is_ac97(priv))
-		priv->dai_link[0].codecs->of_node = codec_np;
+		priv->dai_link[0].codecs[0].of_node = codec_np;
 	else {
 		u32 idx;
 
@@ -823,11 +823,11 @@ static int fsl_asoc_card_probe(struct platform_device *pdev)
 			goto asrc_fail;
 		}
 
-		priv->dai_link[0].codecs->name =
+		priv->dai_link[0].codecs[0].name =
 				devm_kasprintf(&pdev->dev, GFP_KERNEL,
 					       "ac97-codec.%u",
 					       (unsigned int)idx);
-		if (!priv->dai_link[0].codecs->name) {
+		if (!priv->dai_link[0].codecs[0].name) {
 			ret = -ENOMEM;
 			goto asrc_fail;
 		}
@@ -838,13 +838,19 @@ static int fsl_asoc_card_probe(struct platform_device *pdev)
 	priv->card.num_links = 1;
 
 	if (asrc_pdev) {
+		int i;
+		struct snd_soc_dai_link_component *codec;
+		struct snd_soc_dai_link *link;
+
 		/* DPCM DAI Links only if ASRC exists */
 		priv->dai_link[1].cpus->of_node = asrc_np;
 		priv->dai_link[1].platforms->of_node = asrc_np;
-		priv->dai_link[2].codecs->dai_name = codec_dai_name;
-		priv->dai_link[2].codecs->of_node = codec_np;
-		priv->dai_link[2].codecs->name =
-				priv->dai_link[0].codecs->name;
+		link = &(priv->dai_link[2]);
+		for_each_link_codecs(link, i, codec) {
+			codec->dai_name = priv->dai_link[0].codecs[i].dai_name;
+			codec->of_node = priv->dai_link[0].codecs[i].of_node;
+			codec->name = priv->dai_link[0].codecs[i].name;
+		}
 		priv->dai_link[2].cpus->of_node = cpu_np;
 		priv->dai_link[2].dai_fmt = priv->dai_fmt;
 		priv->card.num_links = 3;
