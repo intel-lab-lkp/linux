@@ -58,30 +58,21 @@ EXPORT_SYMBOL_GPL(fpga_bridge_disable);
 static struct fpga_bridge *__fpga_bridge_get(struct device *dev,
 					     struct fpga_image_info *info)
 {
-	struct fpga_bridge *bridge;
-	int ret = -ENODEV;
+	struct fpga_bridge *bridge = to_fpga_bridge(dev);
 
-	bridge = to_fpga_bridge(dev);
-
-	bridge->info = info;
+	get_device(dev);
 
 	if (!mutex_trylock(&bridge->mutex)) {
-		ret = -EBUSY;
-		goto err_dev;
+		dev_dbg(dev, "%s: FPGA Bridge already in use\n", __func__);
+		put_device(dev);
+		return ERR_PTR(-EBUSY);
 	}
 
-	if (!try_module_get(dev->parent->driver->owner))
-		goto err_ll_mod;
+	bridge->info = info;
 
 	dev_dbg(&bridge->dev, "get\n");
 
 	return bridge;
-
-err_ll_mod:
-	mutex_unlock(&bridge->mutex);
-err_dev:
-	put_device(dev);
-	return ERR_PTR(ret);
 }
 
 /**
@@ -93,7 +84,7 @@ err_dev:
  * Return:
  * * fpga_bridge struct pointer if successful.
  * * -EBUSY if someone already has a reference to the bridge.
- * * -ENODEV if @np is not an FPGA Bridge or can't take parent driver refcount.
+ * * -ENODEV if @np is not an FPGA Bridge.
  */
 struct fpga_bridge *of_fpga_bridge_get(struct device_node *np,
 				       struct fpga_image_info *info)
@@ -146,7 +137,6 @@ void fpga_bridge_put(struct fpga_bridge *bridge)
 	dev_dbg(&bridge->dev, "put\n");
 
 	bridge->info = NULL;
-	module_put(bridge->dev.parent->driver->owner);
 	mutex_unlock(&bridge->mutex);
 	put_device(&bridge->dev);
 }

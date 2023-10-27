@@ -41,22 +41,17 @@ EXPORT_SYMBOL_GPL(fpga_region_class_find);
  * Return:
  * * fpga_region struct if successful.
  * * -EBUSY if someone already has a reference to the region.
- * * -ENODEV if can't take parent driver module refcount.
  */
 static struct fpga_region *fpga_region_get(struct fpga_region *region)
 {
 	struct device *dev = &region->dev;
 
+	get_device(dev);
+
 	if (!mutex_trylock(&region->mutex)) {
 		dev_dbg(dev, "%s: FPGA Region already in use\n", __func__);
-		return ERR_PTR(-EBUSY);
-	}
-
-	get_device(dev);
-	if (!try_module_get(dev->parent->driver->owner)) {
 		put_device(dev);
-		mutex_unlock(&region->mutex);
-		return ERR_PTR(-ENODEV);
+		return ERR_PTR(-EBUSY);
 	}
 
 	dev_dbg(dev, "get\n");
@@ -75,9 +70,8 @@ static void fpga_region_put(struct fpga_region *region)
 
 	dev_dbg(dev, "put\n");
 
-	module_put(dev->parent->driver->owner);
-	put_device(dev);
 	mutex_unlock(&region->mutex);
+	put_device(dev);
 }
 
 /**

@@ -670,14 +670,9 @@ static struct fpga_manager *__fpga_mgr_get(struct device *dev)
 
 	mgr = to_fpga_manager(dev);
 
-	if (!try_module_get(dev->parent->driver->owner))
-		goto err_dev;
+	get_device(&mgr->dev);
 
 	return mgr;
-
-err_dev:
-	put_device(dev);
-	return ERR_PTR(-ENODEV);
 }
 
 static int fpga_mgr_dev_match(struct device *dev, const void *data)
@@ -727,7 +722,6 @@ EXPORT_SYMBOL_GPL(of_fpga_mgr_get);
  */
 void fpga_mgr_put(struct fpga_manager *mgr)
 {
-	module_put(mgr->dev.parent->driver->owner);
 	put_device(&mgr->dev);
 }
 EXPORT_SYMBOL_GPL(fpga_mgr_put);
