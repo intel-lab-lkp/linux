@@ -346,16 +346,19 @@ static irqreturn_t vfio_msihandler(int irq, void *arg)
 	return IRQ_HANDLED;
 }
 
-static int vfio_msi_enable(struct vfio_pci_intr_ctx *intr_ctx, int nvec, bool msix)
+static int vfio_msi_enable(struct vfio_pci_intr_ctx *intr_ctx, int nvec,
+			   unsigned int index)
 {
 	struct vfio_pci_core_device *vdev = intr_ctx->priv;
 	struct pci_dev *pdev = vdev->pdev;
-	unsigned int flag = msix ? PCI_IRQ_MSIX : PCI_IRQ_MSI;
+	unsigned int flag;
 	int ret;
 	u16 cmd;
 
 	if (!is_irq_none(intr_ctx))
 		return -EINVAL;
+
+	flag = (index == VFIO_PCI_MSIX_IRQ_INDEX) ? PCI_IRQ_MSIX : PCI_IRQ_MSI;
 
 	/* return the number of supported vectors if we can't get all: */
 	cmd = vfio_pci_memory_lock_and_enable(vdev);
@@ -368,10 +371,9 @@ static int vfio_msi_enable(struct vfio_pci_intr_ctx *intr_ctx, int nvec, bool ms
 	}
 	vfio_pci_memory_unlock_and_restore(vdev, cmd);
 
-	intr_ctx->irq_type = msix ? VFIO_PCI_MSIX_IRQ_INDEX :
-				VFIO_PCI_MSI_IRQ_INDEX;
+	intr_ctx->irq_type = index;
 
-	if (!msix) {
+	if (index == VFIO_PCI_MSI_IRQ_INDEX) {
 		/*
 		 * Compute the virtual hardware field for max msi vectors -
 		 * it is the log base 2 of the number of vectors.
@@ -414,8 +416,10 @@ static int vfio_msi_alloc_irq(struct vfio_pci_core_device *vdev,
 }
 
 static int vfio_msi_set_vector_signal(struct vfio_pci_core_device *vdev,
-				      unsigned int vector, int fd, bool msix)
+				      unsigned int vector, int fd,
+				      unsigned int index)
 {
+	bool msix = (index == VFIO_PCI_MSIX_IRQ_INDEX) ? true : false;
 	struct pci_dev *pdev = vdev->pdev;
 	struct vfio_pci_irq_ctx *ctx;
 	struct eventfd_ctx *trigger;
@@ -506,25 +510,26 @@ out_free_ctx:
 
 static int vfio_msi_set_block(struct vfio_pci_core_device *vdev,
 			      unsigned int start, unsigned int count,
-			      int32_t *fds, bool msix)
+			      int32_t *fds, unsigned int index)
 {
 	unsigned int i, j;
 	int ret = 0;
 
 	for (i = 0, j = start; i < count && !ret; i++, j++) {
 		int fd = fds ? fds[i] : -1;
-		ret = vfio_msi_set_vector_signal(vdev, j, fd, msix);
+		ret = vfio_msi_set_vector_signal(vdev, j, fd, index);
 	}
 
 	if (ret) {
 		for (i = start; i < j; i++)
-			vfio_msi_set_vector_signal(vdev, i, -1, msix);
+			vfio_msi_set_vector_signal(vdev, i, -1, index);
 	}
 
 	return ret;
 }
 
-static void vfio_msi_disable(struct vfio_pci_intr_ctx *intr_ctx, bool msix)
+static void vfio_msi_disable(struct vfio_pci_intr_ctx *intr_ctx,
+			     unsigned int index)
 {
 	struct vfio_pci_core_device *vdev = intr_ctx->priv;
 	struct pci_dev *pdev = vdev->pdev;
@@ -535,7 +540,7 @@ static void vfio_msi_disable(struct vfio_pci_intr_ctx *intr_ctx, bool msix)
 	xa_for_each(&intr_ctx->ctx, i, ctx) {
 		vfio_virqfd_disable(&ctx->unmask);
 		vfio_virqfd_disable(&ctx->mask);
-		vfio_msi_set_vector_signal(vdev, i, -1, msix);
+		vfio_msi_set_vector_signal(vdev, i, -1, index);
 	}
 
 	cmd = vfio_pci_memory_lock_and_enable(vdev);
@@ -666,10 +671,9 @@ static int vfio_pci_set_msi_trigger(struct vfio_pci_intr_ctx *intr_ctx,
 	struct vfio_pci_core_device *vdev = intr_ctx->priv;
 	struct vfio_pci_irq_ctx *ctx;
 	unsigned int i;
-	bool msix = (index == VFIO_PCI_MSIX_IRQ_INDEX) ? true : false;
 
 	if (irq_is(intr_ctx, index) && !count && (flags & VFIO_IRQ_SET_DATA_NONE)) {
-		vfio_msi_disable(intr_ctx, msix);
+		vfio_msi_disable(intr_ctx, index);
 		return 0;
 	}
 
@@ -682,15 +686,15 @@ static int vfio_pci_set_msi_trigger(struct vfio_pci_intr_ctx *intr_ctx,
 
 		if (vdev->intr_ctx.irq_type == index)
 			return vfio_msi_set_block(vdev, start, count,
-						  fds, msix);
+						  fds, index);
 
-		ret = vfio_msi_enable(intr_ctx, start + count, msix);
+		ret = vfio_msi_enable(intr_ctx, start + count, index);
 		if (ret)
 			return ret;
 
-		ret = vfio_msi_set_block(vdev, start, count, fds, msix);
+		ret = vfio_msi_set_block(vdev, start, count, fds, index);
 		if (ret)
-			vfio_msi_disable(intr_ctx, msix);
+			vfio_msi_disable(intr_ctx, index);
 
 		return ret;
 	}
