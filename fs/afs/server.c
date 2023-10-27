@@ -27,7 +27,7 @@ struct afs_server *afs_find_server(struct afs_net *net,
 	const struct afs_addr_list *alist;
 	struct afs_server *server = NULL;
 	unsigned int i;
-	int seq = 0, diff;
+	int seq, diff;
 
 	rcu_read_lock();
 
@@ -35,7 +35,8 @@ struct afs_server *afs_find_server(struct afs_net *net,
 		if (server)
 			afs_unuse_server_notime(net, server, afs_server_trace_put_find_rsq);
 		server = NULL;
-		read_seqbegin_or_lock(&net->fs_addr_lock, &seq);
+
+		seq = read_seqbegin(&net->fs_addr_lock);
 
 		if (srx->transport.family == AF_INET6) {
 			const struct sockaddr_in6 *a = &srx->transport.sin6, *b;
@@ -75,9 +76,7 @@ struct afs_server *afs_find_server(struct afs_net *net,
 	found:
 		server = afs_maybe_use_server(server, afs_server_trace_get_by_addr);
 
-	} while (need_seqretry(&net->fs_addr_lock, seq));
-
-	done_seqretry(&net->fs_addr_lock, seq);
+	} while (read_seqretry(&net->fs_addr_lock, seq));
 
 	rcu_read_unlock();
 	return server;
@@ -90,7 +89,7 @@ struct afs_server *afs_find_server_by_uuid(struct afs_net *net, const uuid_t *uu
 {
 	struct afs_server *server = NULL;
 	struct rb_node *p;
-	int diff, seq = 0;
+	int diff, seq;
 
 	_enter("%pU", uuid);
 
@@ -103,7 +102,7 @@ struct afs_server *afs_find_server_by_uuid(struct afs_net *net, const uuid_t *uu
 			afs_unuse_server(net, server, afs_server_trace_put_uuid_rsq);
 		server = NULL;
 
-		read_seqbegin_or_lock(&net->fs_lock, &seq);
+		seq = read_seqbegin(&net->fs_lock);
 
 		p = net->fs_servers.rb_node;
 		while (p) {
@@ -121,9 +120,7 @@ struct afs_server *afs_find_server_by_uuid(struct afs_net *net, const uuid_t *uu
 
 			server = NULL;
 		}
-	} while (need_seqretry(&net->fs_lock, seq));
-
-	done_seqretry(&net->fs_lock, seq);
+	} while (read_seqretry(&net->fs_lock, seq));
 
 	_leave(" = %p", server);
 	return server;
