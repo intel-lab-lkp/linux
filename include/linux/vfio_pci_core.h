@@ -49,6 +49,14 @@ struct vfio_pci_region {
 	u32				flags;
 };
 
+/*
+ * Interrupt context of virtual PCI device
+ * @priv:		Private data of interrupt management backend
+ */
+struct vfio_pci_intr_ctx {
+	void				*priv;
+};
+
 struct vfio_pci_core_device {
 	struct vfio_device	vdev;
 	struct pci_dev		*pdev;
@@ -96,6 +104,7 @@ struct vfio_pci_core_device {
 	struct mutex		vma_lock;
 	struct list_head	vma_list;
 	struct rw_semaphore	memory_lock;
+	struct vfio_pci_intr_ctx	intr_ctx;
 };
 
 /* Will be exported for vfio pci drivers usage */

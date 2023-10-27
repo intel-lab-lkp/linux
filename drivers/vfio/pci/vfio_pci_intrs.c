@@ -553,11 +553,13 @@ static void vfio_msi_disable(struct vfio_pci_core_device *vdev, bool msix)
 /*
  * IOCTL support
  */
-static int vfio_pci_set_intx_unmask(struct vfio_pci_core_device *vdev,
+static int vfio_pci_set_intx_unmask(struct vfio_pci_intr_ctx *intr_ctx,
 				    unsigned int index, unsigned int start,
 				    unsigned int count, uint32_t flags,
 				    void *data)
 {
+	struct vfio_pci_core_device *vdev = intr_ctx->priv;
+
 	if (!is_intx(vdev) || start != 0 || count != 1)
 		return -EINVAL;
 
@@ -585,10 +587,12 @@ static int vfio_pci_set_intx_unmask(struct vfio_pci_core_device *vdev,
 	return 0;
 }
 
-static int vfio_pci_set_intx_mask(struct vfio_pci_core_device *vdev,
+static int vfio_pci_set_intx_mask(struct vfio_pci_intr_ctx *intr_ctx,
 				  unsigned int index, unsigned int start,
 				  unsigned int count, uint32_t flags, void *data)
 {
+	struct vfio_pci_core_device *vdev = intr_ctx->priv;
+
 	if (!is_intx(vdev) || start != 0 || count != 1)
 		return -EINVAL;
 
@@ -605,11 +609,13 @@ static int vfio_pci_set_intx_mask(struct vfio_pci_core_device *vdev,
 	return 0;
 }
 
-static int vfio_pci_set_intx_trigger(struct vfio_pci_core_device *vdev,
+static int vfio_pci_set_intx_trigger(struct vfio_pci_intr_ctx *intr_ctx,
 				     unsigned int index, unsigned int start,
 				     unsigned int count, uint32_t flags,
 				     void *data)
 {
+	struct vfio_pci_core_device *vdev = intr_ctx->priv;
+
 	if (is_intx(vdev) && !count && (flags & VFIO_IRQ_SET_DATA_NONE)) {
 		vfio_intx_disable(vdev);
 		return 0;
@@ -649,11 +655,12 @@ static int vfio_pci_set_intx_trigger(struct vfio_pci_core_device *vdev,
 	return 0;
 }
 
-static int vfio_pci_set_msi_trigger(struct vfio_pci_core_device *vdev,
+static int vfio_pci_set_msi_trigger(struct vfio_pci_intr_ctx *intr_ctx,
 				    unsigned int index, unsigned int start,
 				    unsigned int count, uint32_t flags,
 				    void *data)
 {
+	struct vfio_pci_core_device *vdev = intr_ctx->priv;
 	struct vfio_pci_irq_ctx *ctx;
 	unsigned int i;
 	bool msix = (index == VFIO_PCI_MSIX_IRQ_INDEX) ? true : false;
@@ -758,11 +765,13 @@ static int vfio_pci_set_ctx_trigger_single(struct eventfd_ctx **ctx,
 	return -EINVAL;
 }
 
-static int vfio_pci_set_err_trigger(struct vfio_pci_core_device *vdev,
+static int vfio_pci_set_err_trigger(struct vfio_pci_intr_ctx *intr_ctx,
 				    unsigned int index, unsigned int start,
 				    unsigned int count, uint32_t flags,
 				    void *data)
 {
+	struct vfio_pci_core_device *vdev = intr_ctx->priv;
+
 	if (!pci_is_pcie(vdev->pdev))
 		return -ENOTTY;
 
@@ -773,11 +782,13 @@ static int vfio_pci_set_err_trigger(struct vfio_pci_core_device *vdev,
 					       count, flags, data);
 }
 
-static int vfio_pci_set_req_trigger(struct vfio_pci_core_device *vdev,
+static int vfio_pci_set_req_trigger(struct vfio_pci_intr_ctx *intr_ctx,
 				    unsigned int index, unsigned int start,
 				    unsigned int count, uint32_t flags,
 				    void *data)
 {
+	struct vfio_pci_core_device *vdev = intr_ctx->priv;
+
 	if (index != VFIO_PCI_REQ_IRQ_INDEX || start != 0 || count > 1)
 		return -EINVAL;
 
@@ -785,11 +796,11 @@ static int vfio_pci_set_req_trigger(struct vfio_pci_core_device *vdev,
 					       count, flags, data);
 }
 
-int vfio_pci_set_irqs_ioctl(struct vfio_pci_core_device *vdev, uint32_t flags,
+int vfio_pci_set_irqs_ioctl(struct vfio_pci_intr_ctx *intr_ctx, uint32_t flags,
 			    unsigned int index, unsigned int start,
 			    unsigned int count, void *data)
 {
-	int (*func)(struct vfio_pci_core_device *vdev, unsigned int index,
+	int (*func)(struct vfio_pci_intr_ctx *intr_ctx, unsigned int index,
 		    unsigned int start, unsigned int count, uint32_t flags,
 		    void *data) = NULL;
 
@@ -838,5 +849,5 @@ int vfio_pci_set_irqs_ioctl(struct vfio_pci_core_device *vdev, uint32_t flags,
 	if (!func)
 		return -ENOTTY;
 
-	return func(vdev, index, start, count, flags, data);
+	return func(intr_ctx, index, start, count, flags, data);
 }
