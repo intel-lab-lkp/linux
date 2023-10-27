@@ -24,6 +24,7 @@
 #include <xen/interface/sched.h>
 
 #include <asm/xen/cpuid.h>
+#include <asm/pvclock.h>
 
 #include "cpuid.h"
 #include "trace.h"
@@ -142,6 +143,30 @@ static enum hrtimer_restart xen_timer_callback(struct hrtimer *timer)
 	kvm_vcpu_kick(vcpu);
 
 	return HRTIMER_NORESTART;
+}
+
+/*
+ * get_kvmclock_ns() is broken when the guest TSC is scaled.
+ *
+ * The guest sees a *scaled* TSC (passed through one mul/shift conversion)
+ * and then performs another mul/shift conversion according to the pvclock
+ * information that KVM provided, to get its kvmclock in nanoseconds. That
+ * is the clock it uses for setting its timers.
+ *
+ * get_kvmclock_ns(), on the other hand, just uses a *single* mul/shift
+ * conversion to go straight from host TSC to nanoseconds. There is a
+ * systemic error due to doing it differently to the guest, eventually
+ * resulting in guest timers going off at the *wrong* times, according
+ * to the guest's idea of what its kvmclock (i.e. Xen clock) is.
+ *
+ * Fixing kvmclock is hard. In the very short term, until we can do that,
+ * just don't use it for the case where its brokenness matters most, the
+ * Xen timers.
+ */
+static uint64_t vcpu_get_kvmclock_ns(struct kvm_vcpu *vcpu)
+{
+	uint64_t guest_tsc = kvm_read_l1_tsc(vcpu, rdtsc());
+	return __pvclock_read_cycles(&vcpu->arch.hv_clock, guest_tsc);
 }
 
 static void kvm_xen_start_timer(struct kvm_vcpu *vcpu, u64 guest_abs, s64 delta_ns)
@@ -924,7 +949,7 @@ int kvm_xen_vcpu_set_attr(struct kvm_vcpu *vcpu, struct kvm_xen_vcpu_attr *data)
 		if (data->u.timer.port && data->u.timer.expires_ns)
 			kvm_xen_start_timer(vcpu, data->u.timer.expires_ns,
 					    data->u.timer.expires_ns -
-					    get_kvmclock_ns(vcpu->kvm));
+					    vcpu_get_kvmclock_ns(vcpu));
 
 		r = 0;
 		break;
@@ -1374,7 +1399,7 @@ static bool kvm_xen_hcall_vcpu_op(struct kvm_vcpu *vcpu, bool longmode, int cmd,
 			return true;
 		}
 
-		delta = oneshot.timeout_abs_ns - get_kvmclock_ns(vcpu->kvm);
+		delta = oneshot.timeout_abs_ns - vcpu_get_kvmclock_ns(vcpu);
 		if ((oneshot.flags & VCPU_SSHOTTMR_future) && delta < 0) {
 			*r = -ETIME;
 			return true;
@@ -1404,7 +1429,7 @@ static bool kvm_xen_hcall_set_timer_op(struct kvm_vcpu *vcpu, uint64_t timeout,
 		return false;
 
 	if (timeout) {
-		uint64_t guest_now = get_kvmclock_ns(vcpu->kvm);
+		uint64_t guest_now = vcpu_get_kvmclock_ns(vcpu);
 		int64_t delta = timeout - guest_now;
 
 		/* Xen has a 'Linux workaround' in do_set_timer_op() which
