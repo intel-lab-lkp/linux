@@ -490,7 +490,7 @@ static int vfio_msi_set_vector_signal(struct vfio_pci_intr_ctx *intr_ctx,
 
 	if (ctx && ctx->trigger) {
 		irq_bypass_unregister_producer(&ctx->producer);
-		vfio_msi_free_interrupt(intr_ctx, ctx, vector);
+		intr_ctx->ops->msi_free_interrupt(intr_ctx, ctx, vector);
 		kfree(ctx->name);
 		ctx->name = NULL;
 		eventfd_ctx_put(ctx->trigger);
@@ -507,7 +507,7 @@ static int vfio_msi_set_vector_signal(struct vfio_pci_intr_ctx *intr_ctx,
 			return -ENOMEM;
 	}
 
-	ctx->name = vfio_msi_device_name(intr_ctx, vector, index);
+	ctx->name = intr_ctx->ops->msi_device_name(intr_ctx, vector, index);
 	if (!ctx->name)
 		return -ENOMEM;
 
@@ -519,7 +519,7 @@ static int vfio_msi_set_vector_signal(struct vfio_pci_intr_ctx *intr_ctx,
 
 	ctx->trigger = trigger;
 
-	ret = vfio_msi_request_interrupt(intr_ctx, ctx, vector, index);
+	ret = intr_ctx->ops->msi_request_interrupt(intr_ctx, ctx, vector, index);
 	if (ret)
 		goto out_put_eventfd_ctx;
 
@@ -708,7 +708,7 @@ static int vfio_pci_set_msi_trigger(struct vfio_pci_intr_ctx *intr_ctx,
 	unsigned int i;
 
 	if (irq_is(intr_ctx, index) && !count && (flags & VFIO_IRQ_SET_DATA_NONE)) {
-		vfio_msi_disable(intr_ctx, index);
+		intr_ctx->ops->msi_disable(intr_ctx, index);
 		return 0;
 	}
 
@@ -723,13 +723,13 @@ static int vfio_pci_set_msi_trigger(struct vfio_pci_intr_ctx *intr_ctx,
 			return vfio_msi_set_block(intr_ctx, start, count,
 						  fds, index);
 
-		ret = vfio_msi_enable(intr_ctx, start + count, index);
+		ret = intr_ctx->ops->msi_enable(intr_ctx, start + count, index);
 		if (ret)
 			return ret;
 
 		ret = vfio_msi_set_block(intr_ctx, start, count, fds, index);
 		if (ret)
-			vfio_msi_disable(intr_ctx, index);
+			intr_ctx->ops->msi_disable(intr_ctx, index);
 
 		return ret;
 	}
@@ -872,6 +872,11 @@ static struct vfio_pci_intr_ops vfio_pci_intr_ops = {
 	.set_msix_trigger = vfio_pci_set_msi_trigger,
 	.set_err_trigger = vfio_pci_set_err_trigger,
 	.set_req_trigger = vfio_pci_set_req_trigger,
+	.msi_enable = vfio_msi_enable,
+	.msi_disable = vfio_msi_disable,
+	.msi_request_interrupt = vfio_msi_request_interrupt,
+	.msi_free_interrupt = vfio_msi_free_interrupt,
+	.msi_device_name = vfio_msi_device_name,
 };
 
 void vfio_pci_init_intr_ctx(struct vfio_pci_core_device *vdev,

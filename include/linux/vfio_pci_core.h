@@ -69,6 +69,8 @@ struct vfio_pci_intr_ctx {
 	int				irq_type;
 };
 
+struct vfio_pci_irq_ctx;
+
 struct vfio_pci_intr_ops {
 	int (*set_intx_mask)(struct vfio_pci_intr_ctx *intr_ctx,
 			     unsigned int index, unsigned int start,
@@ -91,6 +93,19 @@ struct vfio_pci_intr_ops {
 	int (*set_req_trigger)(struct vfio_pci_intr_ctx *intr_ctx,
 			       unsigned int index, unsigned int start,
 			       unsigned int count, uint32_t flags, void *data);
+	int (*msi_enable)(struct vfio_pci_intr_ctx *intr_ctx, int nvec,
+			  unsigned int index);
+	void (*msi_disable)(struct vfio_pci_intr_ctx *intr_ctx,
+			    unsigned int index);
+	int (*msi_request_interrupt)(struct vfio_pci_intr_ctx *intr_ctx,
+				     struct vfio_pci_irq_ctx *ctx,
+				     unsigned int vector,
+				     unsigned int index);
+	void (*msi_free_interrupt)(struct vfio_pci_intr_ctx *intr_ctx,
+				   struct vfio_pci_irq_ctx *ctx,
+				   unsigned int vector);
+	char *(*msi_device_name)(struct vfio_pci_intr_ctx *intr_ctx,
+				 unsigned int vector, unsigned int index);
 };
 
 struct vfio_pci_core_device {
