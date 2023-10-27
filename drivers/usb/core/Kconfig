@@ -116,3 +116,10 @@ config USB_AUTOSUSPEND_DELAY
 	  The default value Linux has always had is 2 seconds.  Change
 	  this value if you want a different delay and cannot modify
 	  the command line or module parameter.
+
+config USB_RUST
+	bool "Rust USB bindings"
+	depends on USB && RUST
+	default n
+	help
+	  Enables Rust bindings for USB.
