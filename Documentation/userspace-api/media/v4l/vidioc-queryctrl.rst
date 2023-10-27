@@ -235,7 +235,8 @@ See also the examples in :ref:`control`.
       - ``default_value``
       - The default value of a ``V4L2_CTRL_TYPE_INTEGER``, ``_INTEGER64``,
 	``_BOOLEAN``, ``_BITMASK``, ``_MENU``, ``_INTEGER_MENU``, ``_U8``
-	or ``_U16`` control. Not valid for other types of controls.
+	``_FIXED_POINT`` or ``_U16`` control. Not valid for other types of
+	controls.
 
 	.. note::
 
@@ -549,6 +550,12 @@ See also the examples in :ref:`control`.
       - n/a
       - A struct :c:type:`v4l2_ctrl_av1_film_grain`, containing AV1 Film Grain
         parameters for stateless video decoders.
+    * - ``V4L2_CTRL_TYPE_FIXED_POINT``
+      - any
+      - any
+      - any
+      - A 64-bit integer valued control, containing parameter which is
+        Q31.32 format.
 
 .. raw:: latex
 

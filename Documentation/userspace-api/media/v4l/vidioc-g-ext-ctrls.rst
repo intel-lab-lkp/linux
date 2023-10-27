@@ -162,13 +162,13 @@ still cause this situation.
     * - __s32
       - ``value``
       - New value or current value. Valid if this control is not of type
-	``V4L2_CTRL_TYPE_INTEGER64`` and ``V4L2_CTRL_FLAG_HAS_PAYLOAD`` is
-	not set.
+	``V4L2_CTRL_TYPE_INTEGER64``, ``V4L2_CTRL_TYPE_FIXED_POINT`` and
+	``V4L2_CTRL_FLAG_HAS_PAYLOAD`` is not set.
     * - __s64
       - ``value64``
       - New value or current value. Valid if this control is of type
-	``V4L2_CTRL_TYPE_INTEGER64`` and ``V4L2_CTRL_FLAG_HAS_PAYLOAD`` is
-	not set.
+	``V4L2_CTRL_TYPE_INTEGER64``, ``V4L2_CTRL_TYPE_FIXED_POINT`` and
+	``V4L2_CTRL_FLAG_HAS_PAYLOAD`` is not set.
     * - char *
       - ``string``
       - A pointer to a string. Valid if this control is of type
@@ -193,8 +193,9 @@ still cause this situation.
     * - __s64 *
       - ``p_s64``
       - A pointer to a matrix control of signed 64-bit values. Valid if
-        this control is of type ``V4L2_CTRL_TYPE_INTEGER64`` and
-        ``V4L2_CTRL_FLAG_HAS_PAYLOAD`` is set.
+        this control is of type ``V4L2_CTRL_TYPE_INTEGER64``,
+        ``V4L2_CTRL_TYPE_FIXED_POINT`` and ``V4L2_CTRL_FLAG_HAS_PAYLOAD``
+        is set.
     * - struct :c:type:`v4l2_area` *
       - ``p_area``
       - A pointer to a struct :c:type:`v4l2_area`. Valid if this control is
