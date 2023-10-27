@@ -4229,8 +4229,7 @@ int i915_perf_open_ioctl(struct drm_device *dev, void *data,
 	int ret;
 
 	if (!perf->i915) {
-		drm_dbg(&perf->i915->drm,
-			"i915 perf interface not available for this system\n");
+		DRM_DEBUG("i915 perf interface not available for this system\n");
 		return -ENOTSUPP;
 	}
 
@@ -4609,8 +4608,7 @@ int i915_perf_add_config_ioctl(struct drm_device *dev, void *data,
 	int err, id;
 
 	if (!perf->i915) {
-		drm_dbg(&perf->i915->drm,
-			"i915 perf interface not available for this system\n");
+		DRM_DEBUG("i915 perf interface not available for this system\n");
 		return -ENOTSUPP;
 	}
 
@@ -4775,8 +4773,7 @@ int i915_perf_remove_config_ioctl(struct drm_device *dev, void *data,
 	int ret;
 
 	if (!perf->i915) {
-		drm_dbg(&perf->i915->drm,
-			"i915 perf interface not available for this system\n");
+		DRM_DEBUG("i915 perf interface not available for this system\n");
 		return -ENOTSUPP;
 	}
 
