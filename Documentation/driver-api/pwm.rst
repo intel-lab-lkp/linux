@@ -43,6 +43,15 @@ After being requested, a PWM has to be configured using::
 
 	int pwm_apply_cansleep(struct pwm_device *pwm, struct pwm_state *state);
 
+Some PWM devices can be used from atomic context. You can check if this is
+supported with::
+
+        bool pwm_is_atomic(struct pwm_device *pwm);
+
+If true, the PWM can be configured from atomic context with::
+
+	int pwm_apply_atomic(struct pwm_device *pwm, struct pwm_state *state);
+
 This API controls both the PWM period/duty_cycle config and the
 enable/disable state.
 
