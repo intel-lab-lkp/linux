@@ -1522,6 +1522,7 @@ int cxgb4_port_mirror_alloc(struct net_device *dev)
 	mutex_lock(&pi->vi_mirror_mutex);
 	if (pi->viid_mirror) {
 		pi->vi_mirror_count++;
+		ret = -EINVAL;
 		goto out_unlock;
 	}
 
