@@ -778,7 +778,7 @@ static int vfio_pci_set_err_trigger(struct vfio_pci_intr_ctx *intr_ctx,
 	if (index != VFIO_PCI_ERR_IRQ_INDEX || start != 0 || count > 1)
 		return -EINVAL;
 
-	return vfio_pci_set_ctx_trigger_single(&vdev->err_trigger,
+	return vfio_pci_set_ctx_trigger_single(&intr_ctx->err_trigger,
 					       count, flags, data);
 }
 
@@ -787,12 +787,10 @@ static int vfio_pci_set_req_trigger(struct vfio_pci_intr_ctx *intr_ctx,
 				    unsigned int count, uint32_t flags,
 				    void *data)
 {
-	struct vfio_pci_core_device *vdev = intr_ctx->priv;
-
 	if (index != VFIO_PCI_REQ_IRQ_INDEX || start != 0 || count > 1)
 		return -EINVAL;
 
-	return vfio_pci_set_ctx_trigger_single(&vdev->req_trigger,
+	return vfio_pci_set_ctx_trigger_single(&intr_ctx->req_trigger,
 					       count, flags, data);
 }
 
@@ -811,8 +809,15 @@ void vfio_pci_init_intr_ctx(struct vfio_pci_core_device *vdev,
 {
 	intr_ctx->ops = &vfio_pci_intr_ops;
 	intr_ctx->priv = vdev;
+	mutex_init(&intr_ctx->igate);
 }
 EXPORT_SYMBOL_GPL(vfio_pci_init_intr_ctx);
+
+void vfio_pci_release_intr_ctx(struct vfio_pci_intr_ctx *intr_ctx)
+{
+	mutex_destroy(&intr_ctx->igate);
+}
+EXPORT_SYMBOL_GPL(vfio_pci_release_intr_ctx);
 
 int vfio_pci_set_irqs_ioctl(struct vfio_pci_intr_ctx *intr_ctx, uint32_t flags,
 			    unsigned int index, unsigned int start,

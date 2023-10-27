@@ -700,16 +700,16 @@ void vfio_pci_core_close_device(struct vfio_device *core_vdev)
 #endif
 	vfio_pci_core_disable(vdev);
 
-	mutex_lock(&vdev->igate);
-	if (vdev->err_trigger) {
-		eventfd_ctx_put(vdev->err_trigger);
-		vdev->err_trigger = NULL;
+	mutex_lock(&vdev->intr_ctx.igate);
+	if (vdev->intr_ctx.err_trigger) {
+		eventfd_ctx_put(vdev->intr_ctx.err_trigger);
+		vdev->intr_ctx.err_trigger = NULL;
 	}
-	if (vdev->req_trigger) {
-		eventfd_ctx_put(vdev->req_trigger);
-		vdev->req_trigger = NULL;
+	if (vdev->intr_ctx.req_trigger) {
+		eventfd_ctx_put(vdev->intr_ctx.req_trigger);
+		vdev->intr_ctx.req_trigger = NULL;
 	}
-	mutex_unlock(&vdev->igate);
+	mutex_unlock(&vdev->intr_ctx.igate);
 }
 EXPORT_SYMBOL_GPL(vfio_pci_core_close_device);
 
@@ -1214,12 +1214,12 @@ static int vfio_pci_ioctl_set_irqs(struct vfio_pci_core_device *vdev,
 			return PTR_ERR(data);
 	}
 
-	mutex_lock(&vdev->igate);
+	mutex_lock(&vdev->intr_ctx.igate);
 
 	ret = vfio_pci_set_irqs_ioctl(&vdev->intr_ctx, hdr.flags, hdr.index,
 				      hdr.start, hdr.count, data);
 
-	mutex_unlock(&vdev->igate);
+	mutex_unlock(&vdev->intr_ctx.igate);
 	kfree(data);
 
 	return ret;
@@ -1876,20 +1876,20 @@ void vfio_pci_core_request(struct vfio_device *core_vdev, unsigned int count)
 		container_of(core_vdev, struct vfio_pci_core_device, vdev);
 	struct pci_dev *pdev = vdev->pdev;
 
-	mutex_lock(&vdev->igate);
+	mutex_lock(&vdev->intr_ctx.igate);
 
-	if (vdev->req_trigger) {
+	if (vdev->intr_ctx.req_trigger) {
 		if (!(count % 10))
 			pci_notice_ratelimited(pdev,
 				"Relaying device request to user (#%u)\n",
 				count);
-		eventfd_signal(vdev->req_trigger, 1);
+		eventfd_signal(vdev->intr_ctx.req_trigger, 1);
 	} else if (count == 0) {
 		pci_warn(pdev,
 			"No device request channel registered, blocked until released by user\n");
 	}
 
-	mutex_unlock(&vdev->igate);
+	mutex_unlock(&vdev->intr_ctx.igate);
 }
 EXPORT_SYMBOL_GPL(vfio_pci_core_request);
 
@@ -2156,7 +2156,6 @@ int vfio_pci_core_init_dev(struct vfio_device *core_vdev)
 
 	vdev->pdev = to_pci_dev(core_vdev->dev);
 	vdev->irq_type = VFIO_PCI_NUM_IRQS;
-	mutex_init(&vdev->igate);
 	spin_lock_init(&vdev->irqlock);
 	mutex_init(&vdev->ioeventfds_lock);
 	INIT_LIST_HEAD(&vdev->dummy_resources_list);
@@ -2177,7 +2176,7 @@ void vfio_pci_core_release_dev(struct vfio_device *core_vdev)
 	struct vfio_pci_core_device *vdev =
 		container_of(core_vdev, struct vfio_pci_core_device, vdev);
 
-	mutex_destroy(&vdev->igate);
+	vfio_pci_release_intr_ctx(&vdev->intr_ctx);
 	mutex_destroy(&vdev->ioeventfds_lock);
 	mutex_destroy(&vdev->vma_lock);
 	kfree(vdev->region);
@@ -2300,12 +2299,12 @@ pci_ers_result_t vfio_pci_core_aer_err_detected(struct pci_dev *pdev,
 {
 	struct vfio_pci_core_device *vdev = dev_get_drvdata(&pdev->dev);
 
-	mutex_lock(&vdev->igate);
+	mutex_lock(&vdev->intr_ctx.igate);
 
-	if (vdev->err_trigger)
-		eventfd_signal(vdev->err_trigger, 1);
+	if (vdev->intr_ctx.err_trigger)
+		eventfd_signal(vdev->intr_ctx.err_trigger, 1);
 
-	mutex_unlock(&vdev->igate);
+	mutex_unlock(&vdev->intr_ctx.igate);
 
 	return PCI_ERS_RESULT_CAN_RECOVER;
 }

@@ -53,10 +53,16 @@ struct vfio_pci_region {
  * Interrupt context of virtual PCI device
  * @ops:		Interrupt management backend functions
  * @priv:		Private data of interrupt management backend
+ * @igate:		Protects members of struct vfio_pci_intr_ctx
+ * @err_trigger:	Eventfd associated with error reporting IRQ
+ * @req_trigger:	Eventfd associated with device request notification
  */
 struct vfio_pci_intr_ctx {
 	const struct vfio_pci_intr_ops	*ops;
 	void				*priv;
+	struct mutex			igate;
+	struct eventfd_ctx		*err_trigger;
+	struct eventfd_ctx		*req_trigger;
 };
 
 struct vfio_pci_intr_ops {
@@ -92,7 +98,6 @@ struct vfio_pci_core_device {
 	u8			*vconfig;
 	struct perm_bits	*msi_perm;
 	spinlock_t		irqlock;
-	struct mutex		igate;
 	struct xarray		ctx;
 	int			irq_type;
 	int			num_regions;
@@ -117,8 +122,6 @@ struct vfio_pci_core_device {
 	struct pci_saved_state	*pci_saved_state;
 	struct pci_saved_state	*pm_save;
 	int			ioeventfds_nr;
-	struct eventfd_ctx	*err_trigger;
-	struct eventfd_ctx	*req_trigger;
 	struct eventfd_ctx	*pm_wake_eventfd_ctx;
 	struct list_head	dummy_resources_list;
 	struct mutex		ioeventfds_lock;
@@ -152,6 +155,7 @@ long vfio_pci_core_ioctl(struct vfio_device *core_vdev, unsigned int cmd,
 		unsigned long arg);
 void vfio_pci_init_intr_ctx(struct vfio_pci_core_device *vdev,
 			    struct vfio_pci_intr_ctx *intr_ctx);
+void vfio_pci_release_intr_ctx(struct vfio_pci_intr_ctx *intr_ctx);
 int vfio_pci_core_ioctl_feature(struct vfio_device *device, u32 flags,
 				void __user *arg, size_t argsz);
 ssize_t vfio_pci_core_read(struct vfio_device *core_vdev, char __user *buf,
