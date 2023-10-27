@@ -29,6 +29,7 @@ struct vfio_pci_irq_ctx {
 	char			*name;
 	bool			masked;
 	struct irq_bypass_producer	producer;
+	int			virq;
 };
 
 static bool irq_is(struct vfio_pci_intr_ctx *intr_ctx, int type)
@@ -431,10 +432,11 @@ static int vfio_msi_set_vector_signal(struct vfio_pci_intr_ctx *intr_ctx,
 
 	if (ctx && ctx->trigger) {
 		irq_bypass_unregister_producer(&ctx->producer);
-		irq = pci_irq_vector(pdev, vector);
+		irq = ctx->virq;
 		cmd = vfio_pci_memory_lock_and_enable(vdev);
-		free_irq(irq, ctx->trigger);
+		free_irq(ctx->virq, ctx->trigger);
 		vfio_pci_memory_unlock_and_restore(vdev, cmd);
+		ctx->virq = 0;
 		/* Interrupt stays allocated, will be freed at MSI-X disable. */
 		kfree(ctx->name);
 		ctx->name = NULL;
@@ -488,8 +490,10 @@ static int vfio_msi_set_vector_signal(struct vfio_pci_intr_ctx *intr_ctx,
 	if (ret)
 		goto out_put_eventfd_ctx;
 
+	ctx->virq = irq;
+
 	ctx->producer.token = trigger;
-	ctx->producer.irq = irq;
+	ctx->producer.irq = ctx->virq;
 	ret = irq_bypass_register_producer(&ctx->producer);
 	if (unlikely(ret)) {
 		dev_info(&pdev->dev,
