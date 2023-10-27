@@ -429,7 +429,7 @@ static int vfio_msi_set_vector_signal(struct vfio_pci_intr_ctx *intr_ctx,
 
 	ctx = vfio_irq_ctx_get(intr_ctx, vector);
 
-	if (ctx) {
+	if (ctx && ctx->trigger) {
 		irq_bypass_unregister_producer(&ctx->producer);
 		irq = pci_irq_vector(pdev, vector);
 		cmd = vfio_pci_memory_lock_and_enable(vdev);
@@ -437,8 +437,9 @@ static int vfio_msi_set_vector_signal(struct vfio_pci_intr_ctx *intr_ctx,
 		vfio_pci_memory_unlock_and_restore(vdev, cmd);
 		/* Interrupt stays allocated, will be freed at MSI-X disable. */
 		kfree(ctx->name);
+		ctx->name = NULL;
 		eventfd_ctx_put(ctx->trigger);
-		vfio_irq_ctx_free(intr_ctx, ctx, vector);
+		ctx->trigger = NULL;
 	}
 
 	if (fd < 0)
@@ -451,16 +452,17 @@ static int vfio_msi_set_vector_signal(struct vfio_pci_intr_ctx *intr_ctx,
 			return irq;
 	}
 
-	ctx = vfio_irq_ctx_alloc(intr_ctx, vector);
-	if (!ctx)
-		return -ENOMEM;
+	/* Per-interrupt context remain allocated. */
+	if (!ctx) {
+		ctx = vfio_irq_ctx_alloc(intr_ctx, vector);
+		if (!ctx)
+			return -ENOMEM;
+	}
 
 	ctx->name = kasprintf(GFP_KERNEL_ACCOUNT, "vfio-msi%s[%d](%s)",
 			      msix ? "x" : "", vector, pci_name(pdev));
-	if (!ctx->name) {
-		ret = -ENOMEM;
-		goto out_free_ctx;
-	}
+	if (!ctx->name)
+		return -ENOMEM;
 
 	trigger = eventfd_ctx_fdget(fd);
 	if (IS_ERR(trigger)) {
@@ -504,8 +506,7 @@ out_put_eventfd_ctx:
 	eventfd_ctx_put(trigger);
 out_free_name:
 	kfree(ctx->name);
-out_free_ctx:
-	vfio_irq_ctx_free(intr_ctx, ctx, vector);
+	ctx->name = NULL;
 	return ret;
 }
 
@@ -704,7 +705,7 @@ static int vfio_pci_set_msi_trigger(struct vfio_pci_intr_ctx *intr_ctx,
 
 	for (i = start; i < start + count; i++) {
 		ctx = vfio_irq_ctx_get(intr_ctx, i);
-		if (!ctx)
+		if (!ctx || !ctx->trigger)
 			continue;
 		if (flags & VFIO_IRQ_SET_DATA_NONE) {
 			eventfd_signal(ctx->trigger, 1);
@@ -810,6 +811,22 @@ static void _vfio_pci_init_intr_ctx(struct vfio_pci_intr_ctx *intr_ctx)
 
 static void _vfio_pci_release_intr_ctx(struct vfio_pci_intr_ctx *intr_ctx)
 {
+	struct vfio_pci_irq_ctx *ctx;
+	unsigned long i;
+
+	/*
+	 * Per-interrupt context remains allocated after interrupt is
+	 * freed. Per-interrupt context need to be freed separately.
+	 */
+	mutex_lock(&intr_ctx->igate);
+	xa_for_each(&intr_ctx->ctx, i, ctx) {
+		WARN_ON_ONCE(ctx->trigger);
+		WARN_ON_ONCE(ctx->name);
+		xa_erase(&intr_ctx->ctx, i);
+		kfree(ctx);
+	}
+	mutex_unlock(&intr_ctx->igate);
+
 	mutex_destroy(&intr_ctx->igate);
 }
 
