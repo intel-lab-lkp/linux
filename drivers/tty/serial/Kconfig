@@ -85,6 +85,19 @@ config SERIAL_EARLYCON_SEMIHOST
 	  This is enabled with "earlycon=smh" on the kernel command line.
 	  The console is enabled when early_param is processed.
 
+config SERIAL_EARLYCON_UHI
+	bool "Early console using MIPS UHI semihosting"
+	depends on MIPS
+	select SERIAL_CORE
+	select SERIAL_CORE_CONSOLE
+	select SERIAL_EARLYCON
+	help
+	  Support for early debug console using UHI semihosting.
+	  This enables the console before standard serial driver is probed.
+	  This is enabled with "earlycon=uhi" or "earlycon=uhi_stdio" on the
+	  kernel command line.
+	  The console is enabled when early_param is processed.
+
 config SERIAL_EARLYCON_RISCV_SBI
 	bool "Early console using RISC-V SBI"
 	depends on RISCV_SBI_V01
