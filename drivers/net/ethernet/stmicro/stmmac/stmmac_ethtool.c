@@ -867,8 +867,24 @@ static int stmmac_ethtool_op_set_eee(struct net_device *dev,
 		netdev_warn(priv->dev,
 			    "Setting EEE tx-lpi is not supported\n");
 
-	if (!edata->eee_enabled)
+	if (!edata->eee_enabled) {
 		stmmac_disable_eee_mode(priv);
+	} else {
+		__ETHTOOL_DECLARE_LINK_MODE_MASK(supported);
+		__ETHTOOL_DECLARE_LINK_MODE_MASK(advertised);
+
+		ethtool_convert_legacy_u32_to_link_mode(supported,
+							edata->supported);
+		ethtool_convert_legacy_u32_to_link_mode(advertised,
+							edata->advertised);
+
+		/*Check if the advertise speed is supported.*/
+		if (!bitmap_subset(advertised,
+				   supported,
+				   __ETHTOOL_LINK_MODE_MASK_NBITS)){
+			return -EOPNOTSUPP;
+		}
+	}
 
 	ret = phylink_ethtool_set_eee(priv->phylink, edata);
 	if (ret)
