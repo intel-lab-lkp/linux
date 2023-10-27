@@ -346,14 +346,15 @@ static irqreturn_t vfio_msihandler(int irq, void *arg)
 	return IRQ_HANDLED;
 }
 
-static int vfio_msi_enable(struct vfio_pci_core_device *vdev, int nvec, bool msix)
+static int vfio_msi_enable(struct vfio_pci_intr_ctx *intr_ctx, int nvec, bool msix)
 {
+	struct vfio_pci_core_device *vdev = intr_ctx->priv;
 	struct pci_dev *pdev = vdev->pdev;
 	unsigned int flag = msix ? PCI_IRQ_MSIX : PCI_IRQ_MSI;
 	int ret;
 	u16 cmd;
 
-	if (!is_irq_none(&vdev->intr_ctx))
+	if (!is_irq_none(intr_ctx))
 		return -EINVAL;
 
 	/* return the number of supported vectors if we can't get all: */
@@ -367,7 +368,7 @@ static int vfio_msi_enable(struct vfio_pci_core_device *vdev, int nvec, bool msi
 	}
 	vfio_pci_memory_unlock_and_restore(vdev, cmd);
 
-	vdev->intr_ctx.irq_type = msix ? VFIO_PCI_MSIX_IRQ_INDEX :
+	intr_ctx->irq_type = msix ? VFIO_PCI_MSIX_IRQ_INDEX :
 				VFIO_PCI_MSI_IRQ_INDEX;
 
 	if (!msix) {
@@ -523,14 +524,15 @@ static int vfio_msi_set_block(struct vfio_pci_core_device *vdev,
 	return ret;
 }
 
-static void vfio_msi_disable(struct vfio_pci_core_device *vdev, bool msix)
+static void vfio_msi_disable(struct vfio_pci_intr_ctx *intr_ctx, bool msix)
 {
+	struct vfio_pci_core_device *vdev = intr_ctx->priv;
 	struct pci_dev *pdev = vdev->pdev;
 	struct vfio_pci_irq_ctx *ctx;
 	unsigned long i;
 	u16 cmd;
 
-	xa_for_each(&vdev->intr_ctx.ctx, i, ctx) {
+	xa_for_each(&intr_ctx->ctx, i, ctx) {
 		vfio_virqfd_disable(&ctx->unmask);
 		vfio_virqfd_disable(&ctx->mask);
 		vfio_msi_set_vector_signal(vdev, i, -1, msix);
@@ -547,7 +549,7 @@ static void vfio_msi_disable(struct vfio_pci_core_device *vdev, bool msix)
 	if (vdev->nointx)
 		pci_intx(pdev, 0);
 
-	vdev->intr_ctx.irq_type = VFIO_PCI_NUM_IRQS;
+	intr_ctx->irq_type = VFIO_PCI_NUM_IRQS;
 }
 
 /*
@@ -667,7 +669,7 @@ static int vfio_pci_set_msi_trigger(struct vfio_pci_intr_ctx *intr_ctx,
 	bool msix = (index == VFIO_PCI_MSIX_IRQ_INDEX) ? true : false;
 
 	if (irq_is(intr_ctx, index) && !count && (flags & VFIO_IRQ_SET_DATA_NONE)) {
-		vfio_msi_disable(vdev, msix);
+		vfio_msi_disable(intr_ctx, msix);
 		return 0;
 	}
 
@@ -682,13 +684,13 @@ static int vfio_pci_set_msi_trigger(struct vfio_pci_intr_ctx *intr_ctx,
 			return vfio_msi_set_block(vdev, start, count,
 						  fds, msix);
 
-		ret = vfio_msi_enable(vdev, start + count, msix);
+		ret = vfio_msi_enable(intr_ctx, start + count, msix);
 		if (ret)
 			return ret;
 
 		ret = vfio_msi_set_block(vdev, start, count, fds, msix);
 		if (ret)
-			vfio_msi_disable(vdev, msix);
+			vfio_msi_disable(intr_ctx, msix);
 
 		return ret;
 	}
