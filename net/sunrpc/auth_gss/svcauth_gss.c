@@ -640,7 +640,38 @@ gss_svc_searchbyctx(struct cache_detail *cd, struct xdr_netobj *handle)
 }
 
 /**
- * gss_check_seq_num - GSS sequence number window check
+ * gss_seq_num_lower_bound - GSS sequence number window check
+ * @rqstp: RPC Call to use when reporting errors
+ * @rsci: cached GSS context state (updated on return)
+ * @seq_num: sequence number to check
+ *
+ * Implements the lower bound check part of the sequence number
+ * algorithm as specified in RFC 2203, Section 5.3.3.1. "Context
+ * Management". This is lockless since we're not updating the
+ * window here. Also, it happens before GSS_VerifyMIC() since MIC
+ * verification can take a long time during which the window can
+ * advance considerably.
+ *
+ * Return values:
+ *   %true: @rqstp's GSS sequence number is inside the window
+ *   %false: @rqstp's GSS sequence number is below the window
+ */
+static bool gss_seq_num_lower_bound(const struct svc_rqst *rqstp,
+				    const struct rsc *rsci, u32 seq_num)
+{
+	const struct gss_svc_seq_data *sd = &rsci->seqdata;
+	unsigned int max = READ_ONCE(sd->sd_max);
+
+	if (seq_num + GSS_SEQ_WIN <= max) {
+		trace_rpcgss_svc_seqno_low(rqstp, seq_num,
+					   max - GSS_SEQ_WIN, max);
+		return false;
+	}
+	return true;
+}
+
+/**
+ * gss_seq_num_update - GSS sequence number window update
  * @rqstp: RPC Call to use when reporting errors
  * @rsci: cached GSS context state (updated on return)
  * @seq_num: sequence number to check
@@ -652,8 +683,8 @@ gss_svc_searchbyctx(struct cache_detail *cd, struct xdr_netobj *handle)
  *   %true: @rqstp's GSS sequence number is inside the window
  *   %false: @rqstp's GSS sequence number is outside the window
  */
-static bool gss_check_seq_num(const struct svc_rqst *rqstp, struct rsc *rsci,
-			      u32 seq_num)
+static bool gss_seq_num_update(const struct svc_rqst *rqstp, struct rsc *rsci,
+			       u32 seq_num)
 {
 	struct gss_svc_seq_data *sd = &rsci->seqdata;
 	bool result = false;
@@ -669,8 +700,6 @@ static bool gss_check_seq_num(const struct svc_rqst *rqstp, struct rsc *rsci,
 		}
 		__set_bit(seq_num % GSS_SEQ_WIN, sd->sd_win);
 		goto ok;
-	} else if (seq_num + GSS_SEQ_WIN <= sd->sd_max) {
-		goto toolow;
 	}
 	if (__test_and_set_bit(seq_num % GSS_SEQ_WIN, sd->sd_win))
 		goto alreadyseen;
@@ -681,11 +710,6 @@ out:
 	spin_unlock(&sd->sd_lock);
 	return result;
 
-toolow:
-	trace_rpcgss_svc_seqno_low(rqstp, seq_num,
-				   sd->sd_max - GSS_SEQ_WIN,
-				   sd->sd_max);
-	goto out;
 alreadyseen:
 	trace_rpcgss_svc_seqno_seen(rqstp, seq_num);
 	goto out;
@@ -708,6 +732,14 @@ svcauth_gss_verify_header(struct svc_rqst *rqstp, struct rsc *rsci,
 	struct xdr_buf		rpchdr;
 	struct xdr_netobj	checksum;
 	struct kvec		iov;
+
+	if (unlikely(gc->gc_seq > MAXSEQ)) {
+		trace_rpcgss_svc_seqno_large(rqstp, gc->gc_seq);
+		rqstp->rq_auth_stat = rpcsec_gsserr_ctxproblem;
+		return SVC_DENIED;
+	}
+	if (!gss_seq_num_lower_bound(rqstp, rsci, gc->gc_seq))
+		return SVC_DROP;
 
 	/*
 	 * Compute the checksum of the incoming Call from the
@@ -738,12 +770,11 @@ svcauth_gss_verify_header(struct svc_rqst *rqstp, struct rsc *rsci,
 		return SVC_DENIED;
 	}
 
-	if (gc->gc_seq > MAXSEQ) {
-		trace_rpcgss_svc_seqno_large(rqstp, gc->gc_seq);
-		rqstp->rq_auth_stat = rpcsec_gsserr_ctxproblem;
-		return SVC_DENIED;
-	}
-	if (!gss_check_seq_num(rqstp, rsci, gc->gc_seq))
+	/*
+	 * RFC 2203 states that the sequence number window should
+	 * be updated only if GSS_VerifyMIC returns GSS_S_COMPLETE.
+	 */
+	if (!gss_seq_num_update(rqstp, rsci, gc->gc_seq))
 		return SVC_DROP;
 	return SVC_OK;
 }
