@@ -960,6 +960,12 @@ static int glk_emmc_add_host(struct sdhci_pci_slot *slot)
 
 	cq_host->mmio = host->ioaddr + 0x200;
 	cq_host->quirks |= CQHCI_QUIRK_SHORT_TXFR_DESC_SZ;
+	/*
+	 * The controller on Jasper Lake signals a stale task completion
+	 * event after CQE recovery.
+	 */
+	if (slot->chip->pdev->device == PCI_DEVICE_ID_INTEL_JSL_EMMC)
+		cq_host->quirks |= CQHCI_QUIRK_CLEAR_STALE_TC;
 	cq_host->ops = &glk_cqhci_ops;
 
 	dma64 = host->flags & SDHCI_USE_64_BIT_DMA;
