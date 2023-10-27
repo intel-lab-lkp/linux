@@ -550,6 +550,7 @@ static int fsl_asoc_card_probe(struct platform_device *pdev)
 	struct platform_device *cpu_pdev;
 	struct fsl_asoc_card_priv *priv;
 	struct device *codec_dev[2] = { NULL, NULL };
+	const char *generic_codec_dai_names[2];
 	const char *codec_dai_name;
 	const char *codec_dev_name[2];
 	u32 asrc_fmt = 0;
@@ -717,6 +718,11 @@ static int fsl_asoc_card_probe(struct platform_device *pdev)
 		priv->dai_fmt |= SND_SOC_DAIFMT_CBM_CFM;
 		if (codec_dev[0])
 			priv->codec_priv.mclk = devm_clk_get(codec_dev[0], NULL);
+	} else if (of_device_is_compatible(np, "fsl,imx-audio-generic")) {
+		generic_codec_dai_names[0] = "dit-hifi";
+		generic_codec_dai_names[1] = "dir-hifi";
+		priv->dai_link[0].num_codecs = 2;
+		priv->dai_link[2].num_codecs = 2;
 	} else {
 		dev_err(&pdev->dev, "unknown Device Tree compatible\n");
 		ret = -EINVAL;
@@ -756,6 +762,12 @@ static int fsl_asoc_card_probe(struct platform_device *pdev)
 
 	if (!fsl_asoc_card_is_ac97(priv) && !codec_dev[0]) {
 		dev_dbg(&pdev->dev, "failed to find codec device\n");
+		ret = -EPROBE_DEFER;
+		goto asrc_fail;
+	}
+	if (of_device_is_compatible(np, "fsl,imx-audio-generic")
+	  && !codec_dev[1]) {
+		dev_dbg(&pdev->dev, "failed to find second codec device\n");
 		ret = -EPROBE_DEFER;
 		goto asrc_fail;
 	}
@@ -816,11 +828,21 @@ static int fsl_asoc_card_probe(struct platform_device *pdev)
 
 	/* Normal DAI Link */
 	priv->dai_link[0].cpus->of_node = cpu_np;
-	priv->dai_link[0].codecs[0].dai_name = codec_dai_name;
 
-	if (!fsl_asoc_card_is_ac97(priv))
+	if (of_device_is_compatible(np, "fsl,imx-audio-generic")) {
+		priv->dai_link[0].codecs[0].dai_name =
+			generic_codec_dai_names[0];
+		priv->dai_link[0].codecs[1].dai_name =
+			generic_codec_dai_names[1];
+	} else {
+		priv->dai_link[0].codecs[0].dai_name = codec_dai_name;
+	}
+
+	if (!fsl_asoc_card_is_ac97(priv)) {
 		priv->dai_link[0].codecs[0].of_node = codec_np[0];
-	else {
+		if (of_device_is_compatible(np, "fsl,imx-audio-generic"))
+			priv->dai_link[0].codecs[1].of_node = codec_np[1];
+	} else {
 		u32 idx;
 
 		ret = of_property_read_u32(cpu_np, "cell-index", &idx);
@@ -950,6 +972,7 @@ static const struct of_device_id fsl_asoc_card_dt_ids[] = {
 	{ .compatible = "fsl,imx-audio-si476x", },
 	{ .compatible = "fsl,imx-audio-wm8958", },
 	{ .compatible = "fsl,imx-audio-nau8822", },
+	{ .compatible = "fsl,imx-audio-generic", },
 	{}
 };
 MODULE_DEVICE_TABLE(of, fsl_asoc_card_dt_ids);
