@@ -916,3 +916,4 @@ out_unlock:
 	mutex_unlock(&intr_ctx->igate);
 	return ret;
 }
+EXPORT_SYMBOL_GPL(vfio_pci_set_irqs_ioctl);
