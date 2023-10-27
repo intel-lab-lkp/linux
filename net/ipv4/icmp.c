@@ -555,7 +555,6 @@ static struct rtable *icmp_route_lookup(struct net *net,
 					    XFRM_LOOKUP_ICMP);
 	if (!IS_ERR(rt2)) {
 		dst_release(&rt->dst);
-		memcpy(fl4, &fl4_dec, sizeof(*fl4));
 		rt = rt2;
 	} else if (PTR_ERR(rt2) == -EPERM) {
 		if (rt)
