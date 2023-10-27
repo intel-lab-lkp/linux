@@ -17,6 +17,9 @@ Note: The card is initially designed for those sound cards who use AC'97, I2S
       and PCM DAI formats. However, it'll be also possible to support those non
       AC'97/I2S/PCM type sound cards, such as S/PDIF audio and HDMI audio, as
       long as the driver has been properly upgraded.
+      To use CPU DAIs that do not require a codec such as an S/PDIF controller,
+      or to use a DAI to output or capture raw I2S/TDM data, you can
+      use the compatible "fsl,imx-audio-generic".
 
 
 The compatible list for this generic sound card currently:
@@ -48,6 +51,8 @@ The compatible list for this generic sound card currently:
 
  "fsl,imx-audio-nau8822"
 
+ "fsl,imx-audio-generic"
+
 Required properties:
 
   - compatible		: Contains one of entries in the compatible list.
@@ -56,7 +61,11 @@ Required properties:
 
   - audio-cpu		: The phandle of an CPU DAI controller
 
-  - audio-codec		: The phandle of an audio codec
+  - audio-codec		: The phandle of an audio codec.
+			  If using the "fsl,imx-audio-generic" compatible,
+			  give instead a pair of phandles with the
+			  spdif_transmitter first (driver SPDIF DIT) and the
+			  spdif_receiver second (driver SPDIF DIR).
 
 Optional properties:
 
@@ -87,6 +96,21 @@ Optional properties:
   - frame-inversion	: dai-link uses frame clock inversion, for details see simple-card.yaml.
   - bitclock-inversion	: dai-link uses bit clock inversion, for details see simple-card.yaml.
   - mclk-id		: main clock id, specific for each card configuration.
+
+Optional, relevant only with the "fsl,imx-audio-generic" compatible:
+
+  - cpu-slot-width	: Indicates a specific TDM slot width in bits.
+  - cpu-slot-num	: Indicates a specific number of TDM slots per frame.
+
+  - cpu-sysclk-freq-rx	: Frequency of the CPU DAI sys clock for Rx.
+  - cpu-sysclk-freq-tx	: Frequency of the CPU DAI sys clock for Tx.
+
+  - cpu-sysclk-dir-rx-out	: Boolean property. Specifies sys clock direction
+				  as 'out' on initialization for Rx.
+				  If not set, default direction is 'in'.
+  - cpu-sysclk-dir-tx-out	: Boolean property. Specifies sys clock direction
+				  as 'out' on initialization for Tx.
+				  If not set, default direction is 'in'.
 
 Optional unless SSI is selected as a CPU DAI:
 
