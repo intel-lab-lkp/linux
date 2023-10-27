@@ -98,6 +98,17 @@ config DEBUG_ZBOOT
 	  to reduce the kernel image size and speed up the booting procedure a
 	  little.
 
+config ZBOOT_DBG_UHI
+	bool "Enable UHI debugging"
+	depends on DEBUG_ZBOOT
+	default n
+	help
+	  Enable this option to debug compressed kernel support via UHI.
+	  Logs will be outputed to the host machine via UHI Plog function.
+	  You MUST connect system to a debugger with UHI semihosting support
+	  or use a boot montor implemented UHI exceptions, otherwise the
+	  system will hang.
+
 config ZBOOT_INGENIC_UART
 	int "UART to use for compressed kernel debugging"
 	depends on DEBUG_ZBOOT && MACH_INGENIC_SOC

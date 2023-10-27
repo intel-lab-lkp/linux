@@ -4,7 +4,7 @@
  *
  * NOTE: putc() is board specific, if your board have a 16550 compatible uart,
  * please select SYS_SUPPORTS_ZBOOT_UART16550 for your machine. othewise, you
- * need to implement your own putc().
+ * need to implement your own putc() or puts().
  */
 #include <linux/compiler.h>
 #include <linux/types.h>
@@ -13,7 +13,7 @@ void __weak putc(char c)
 {
 }
 
-void puts(const char *s)
+void __weak puts(const char *s)
 {
 	char c;
 	while ((c = *s++) != '\0') {

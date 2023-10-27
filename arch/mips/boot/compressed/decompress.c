@@ -17,6 +17,7 @@
 
 #include <asm/addrspace.h>
 #include <asm/unaligned.h>
+#include <asm/uhi.h>
 #include <asm-generic/vmlinux.lds.h>
 
 /*
@@ -46,6 +47,9 @@ void error(char *x)
 	puts(x);
 	puts("\n\n -- System halted");
 
+#ifdef CONFIG_ZBOOT_DBG_UHI
+	uhi_bootfailure(0);
+#endif
 	while (1)
 		;	/* Halt */
 }
