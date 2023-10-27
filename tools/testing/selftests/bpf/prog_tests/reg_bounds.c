@@ -750,16 +750,27 @@ static int reg_state_branch_taken_op(enum num_t t, struct reg_state *x, struct r
 		/* OP_EQ and OP_NE are sign-agnostic */
 		enum num_t tu = t_unsigned(t);
 		enum num_t ts = t_signed(t);
-		int br_u, br_s;
+		int br_u, br_s, br;
 
 		br_u = range_branch_taken_op(tu, x->r[tu], y->r[tu], op);
 		br_s = range_branch_taken_op(ts, x->r[ts], y->r[ts], op);
 
 		if (br_u >= 0 && br_s >= 0 && br_u != br_s)
 			ASSERT_FALSE(true, "branch taken inconsistency!\n");
-		if (br_u >= 0)
-			return br_u;
-		return br_s;
+
+		/* if 64-bit ranges are indecisive, use 32-bit subranges to
+		 * eliminate always/never taken branches, if possible
+		 */
+		if (br_u == -1 && (t == U64 || t == S64)) {
+			br = range_branch_taken_op(U32, x->r[U32], y->r[U32], op);
+			if (br != -1)
+				return br;
+			br = range_branch_taken_op(S32, x->r[S32], y->r[S32], op);
+			if (br != -1)
+				return br;
+		}
+
+		return br_u >= 0 ? br_u : br_s;
 	}
 	return range_branch_taken_op(t, x->r[t], y->r[t], op);
 }
