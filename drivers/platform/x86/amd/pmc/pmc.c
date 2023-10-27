@@ -918,6 +918,11 @@ static int amd_pmc_get_dram_size(struct amd_pmc_dev *dev)
 
 	switch (dev->cpu_id) {
 	case AMD_CPU_ID_YC:
+		if (!dev->major) {
+			ret = amd_pmc_get_smu_version(dev);
+			if (ret)
+				goto err_dram_size;
+		}
 		if (!(dev->major > 90 || (dev->major == 90 && dev->minor > 39))) {
 			ret = -EINVAL;
 			goto err_dram_size;
