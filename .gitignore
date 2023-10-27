@@ -38,6 +38,7 @@
 *.o
 *.o.*
 *.patch
+*.rlib
 *.rmeta
 *.rpm
 *.rsi
@@ -53,6 +54,7 @@
 *.zst
 Module.symvers
 modules.order
+exports_*_generated.c
 
 #
 # Top-level generic files

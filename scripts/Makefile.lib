@@ -45,12 +45,17 @@ else
 obj-y		:= $(filter-out %/, $(obj-y))
 endif
 
+rlib-y := $(foreach m, $(filter lib%.rlib, $(obj-y)), $(m:lib%.rlib=%.o))
+rlib-m := $(foreach m, $(filter lib%.rlib, $(obj-m)), $(m:lib%.rlib=%.o))
+
 # Expand $(foo-objs) $(foo-y) etc. by replacing their individuals
 suffix-search = $(strip $(foreach s, $3, $($(1:%$(strip $2)=%$s))))
 # List composite targets that are constructed by combining other targets
 multi-search = $(sort $(foreach m, $1, $(if $(call suffix-search, $m, $2, $3 -), $m)))
 # List primitive targets that are compiled from source files
 real-search = $(foreach m, $1, $(if $(call suffix-search, $m, $2, $3 -), $(call suffix-search, $m, $2, $3), $m))
+# List exported symbols from .rlib targets
+rlib-exports = $(foreach m, $1, $(if $(findstring .rlib, $m),$(m:lib%.rlib=exports_%_generated.o)) $m)
 
 # If $(foo-objs), $(foo-y), $(foo-m), or $(foo-) exists, foo.o is a composite object
 multi-obj-y := $(call multi-search, $(obj-y), .o, -objs -y)
@@ -59,7 +64,7 @@ multi-obj-ym := $(multi-obj-y) $(multi-obj-m)
 
 # Replace multi-part objects by their individual parts,
 # including built-in.a from subdirectories
-real-obj-y := $(call real-search, $(obj-y), .o, -objs -y)
+real-obj-y := $(call rlib-exports, $(call real-search, $(obj-y), .o, -objs -y))
 real-obj-m := $(call real-search, $(obj-m), .o, -objs -y -m)
 
 always-y += $(always-m)
@@ -95,6 +100,8 @@ extra-y		:= $(addprefix $(obj)/,$(extra-y))
 always-y	:= $(addprefix $(obj)/,$(always-y))
 targets		:= $(addprefix $(obj)/,$(targets))
 obj-m		:= $(addprefix $(obj)/,$(obj-m))
+rlib-y		:= $(addprefix $(obj)/,$(rlib-y))
+rlib-m		:= $(addprefix $(obj)/,$(rlib-m))
 lib-y		:= $(addprefix $(obj)/,$(lib-y))
 real-obj-y	:= $(addprefix $(obj)/,$(real-obj-y))
 real-obj-m	:= $(addprefix $(obj)/,$(real-obj-m))
@@ -210,7 +217,11 @@ _cpp_flags += -I $(srctree)/$(src) -I $(objtree)/$(obj)
 endif
 endif
 
-part-of-module = $(if $(filter $(basename $@).o, $(real-obj-m)),y)
+_rust_libs = $(foreach l, $(rust-libs), -L $(obj)/$(dir $l) --extern $(notdir $(basename $l)))
+
+part-of-module =                                             \
+	$(if $(or $(filter $(basename $@).o, $(real-obj-m)), \
+		$(filter $(basename $@).rlib, $(real-obj-m))),y)
 quiet_modtag = $(if $(part-of-module),[M],   )
 
 modkern_cflags =                                          \
@@ -232,7 +243,8 @@ c_flags        = -Wp,-MMD,$(depfile) $(NOSTDINC_FLAGS) $(LINUXINCLUDE)     \
 		 $(_c_flags) $(modkern_cflags)                           \
 		 $(basename_flags) $(modname_flags)
 
-rust_flags     = $(_rust_flags) $(modkern_rustflags) @$(objtree)/include/generated/rustc_cfg
+rust_flags     = $(_rust_flags) $(modkern_rustflags) $(_rust_libs) \
+		 @$(objtree)/include/generated/rustc_cfg
 
 a_flags        = -Wp,-MMD,$(depfile) $(NOSTDINC_FLAGS) $(LINUXINCLUDE)     \
 		 $(_a_flags) $(modkern_aflags)

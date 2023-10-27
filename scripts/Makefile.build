@@ -20,6 +20,7 @@ always-m :=
 targets :=
 subdir-y :=
 subdir-m :=
+rust-libs :=
 EXTRA_AFLAGS   :=
 EXTRA_CFLAGS   :=
 EXTRA_CPPFLAGS :=
@@ -243,9 +244,13 @@ $(obj)/%.o: $(src)/%.c $(recordmcount_source) FORCE
 	$(call if_changed_rule,cc_o_c)
 	$(call cmd,force_checksrc)
 
+mod_objs = $(call real-search, $*.o, .o, -objs -y -m)
+exports_objs = $(foreach m, $(sort $(basename \
+	$(filter $(notdir $(rlib-m)), $(mod_objs)))), exports_$m_generated.o)
+
 # To make this rule robust against "Argument list too long" error,
 # ensure to add $(obj)/ prefix by a shell command.
-cmd_mod = printf '%s\n' $(call real-search, $*.o, .o, -objs -y -m) | \
+cmd_mod = printf '%s\n' $(mod_objs) $(exports_objs) | \
 	$(AWK) '!x[$$0]++ { print("$(obj)/"$$0) }' > $@
 
 $(obj)/%.mod: FORCE
@@ -274,7 +279,7 @@ rust_common_cmd = \
 	-Zcrate-attr='feature($(rust_allowed_features))' \
 	--extern alloc --extern kernel \
 	--crate-type rlib -L $(objtree)/rust/ \
-	--crate-name $(basename $(notdir $@)) \
+	--crate-name $(basename $(notdir $<)) \
 	--out-dir $(dir $@) --emit=dep-info=$(depfile)
 
 # `--emit=obj`, `--emit=asm` and `--emit=llvm-ir` imply a single codegen unit
@@ -285,11 +290,42 @@ rust_common_cmd = \
 # i.e. the outputs we would get for the different single targets (e.g. `.ll`)
 # would not match each other.
 
+rlib_obj = $(dir $@)$*.$*.o
+rlib_meta = $(dir $@)$(patsubst %.rlib,%.rmeta,$(notdir $@))
+
 quiet_cmd_rustc_o_rs = $(RUSTC_OR_CLIPPY_QUIET) $(quiet_modtag) $@
       cmd_rustc_o_rs = $(rust_common_cmd) --emit=obj=$@ $<
 
+quiet_cmd_ln_rlib_o = SYMLINK $@
+      cmd_ln_rlib_o = ln -s -f $*.$*.o $@
+
 $(obj)/%.o: $(src)/%.rs FORCE
-	$(call if_changed_dep,rustc_o_rs)
+	$(if $(findstring $@, $(rlib-y) $(rlib-m)), \
+		$(call if_changed,ln_rlib_o), $(call if_changed_dep,rustc_o_rs))
+
+quiet_cmd_rustc_rlib_rs = $(RUSTC_OR_CLIPPY_QUIET) $(quiet_modtag) $@
+      cmd_rustc_rlib_rs = $(rust_common_cmd) --extern bindings \
+		--emit=obj=$(rlib_obj) --emit=metadata=$(rlib_meta) $<; \
+	rm -f $@; $(AR) cDPrST $@ $(rlib_obj) $(rlib_meta)
+
+quiet_cmd_rlib_exports = EXPORTS $@
+      cmd_rlib_exports = \
+	echo "\#include <linux/module.h>"  > $@; \
+	$(NM) -p --defined-only $(rlib_obj) \
+		| grep -P ' (T|R|D) (?!(init|cleanup)_module)' | cut -d ' ' -f 3 \
+		| xargs -Isymbol \
+		echo 'extern int symbol; EXPORT_SYMBOL_GPL(symbol);' >> $@
+
+$(rlib-m): $(obj)/%.o: $(obj)/exports_%_generated.o $(obj)/lib%.rlib $(src)/%.rs FORCE
+
+$(obj)/lib%.rlib: $(src)/%.rs FORCE
+	$(call if_changed_dep,rustc_rlib_rs)
+
+$(obj)/exports_%_generated.c: $(obj)/lib%.rlib FORCE
+	$(call if_changed,rlib_exports)
+
+$(obj)/exports_%_generated.o: $(obj)/exports_%_generated.c FORCE
+	$(call if_changed,cc_o_c)
 
 quiet_cmd_rustc_rsi_rs = $(RUSTC_OR_CLIPPY_QUIET) $(quiet_modtag) $@
       cmd_rustc_rsi_rs = \
@@ -394,9 +430,14 @@ $(subdir-modorder): $(obj)/%/modules.order: $(obj)/% ;
 # To make this rule robust against "Argument list too long" error,
 # remove $(obj)/ prefix, and restore it by a shell command.
 
+# If we have a .rlib for the archive change it for its object member
+crate-obj = $(foreach m, $1, $(if $(findstring .rlib, $m), \
+	$(basename $(m:lib%=%)).$(m:lib%.rlib=%.o),$m))
+
 quiet_cmd_ar_builtin = AR      $@
       cmd_ar_builtin = rm -f $@; \
-	$(if $(real-prereqs), printf "$(obj)/%s " $(patsubst $(obj)/%,%,$(real-prereqs)) | xargs) \
+	$(if $(real-prereqs), printf "$(obj)/%s " \
+		$(call crate-obj, $(patsubst $(obj)/%,%,$(real-prereqs))) | xargs) \
 	$(AR) cDPrST $@
 
 $(obj)/built-in.a: $(real-obj-y) FORCE
