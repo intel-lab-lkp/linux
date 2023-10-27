@@ -776,7 +776,7 @@ static int validate_mmap_request(struct file *file,
 			if (!(capabilities & NOMMU_MAP_DIRECT))
 				return -ENODEV;
 
-			/* we mustn't privatise shared mappings */
+			/* we mustn't privatize shared mappings */
 			capabilities &= ~NOMMU_MAP_COPY;
 		} else {
 			/* we're going to read the file into private memory we
