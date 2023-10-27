@@ -102,8 +102,6 @@
 
 &pcie3x2 {
 	num-lanes = <1>;
-	num-ib-windows = <8>;
-	num-ob-windows = <8>;
 	reset-gpios = <&gpio2 RK_PD6 GPIO_ACTIVE_HIGH>;
 	vpcie3v3-supply = <&vcc3v3_pcie>;
 	status = "okay";

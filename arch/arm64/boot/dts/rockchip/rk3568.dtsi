@@ -84,8 +84,6 @@
 				<0 0 0 3 &pcie3x1_intc 2>,
 				<0 0 0 4 &pcie3x1_intc 3>;
 		linux,pci-domain = <1>;
-		num-ib-windows = <6>;
-		num-ob-windows = <2>;
 		max-link-speed = <3>;
 		msi-map = <0x0 &gic 0x1000 0x1000>;
 		num-lanes = <1>;
@@ -137,8 +135,6 @@
 				<0 0 0 3 &pcie3x2_intc 2>,
 				<0 0 0 4 &pcie3x2_intc 3>;
 		linux,pci-domain = <2>;
-		num-ib-windows = <6>;
-		num-ob-windows = <2>;
 		max-link-speed = <3>;
 		msi-map = <0x0 &gic 0x2000 0x1000>;
 		num-lanes = <2>;
