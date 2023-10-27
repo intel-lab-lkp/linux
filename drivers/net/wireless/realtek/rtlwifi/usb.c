@@ -332,10 +332,11 @@ static int _rtl_usb_init(struct ieee80211_hw *hw)
 	}
 	/* usb endpoint mapping */
 	err = rtlpriv->cfg->usb_interface_cfg->usb_endpoint_mapping(hw);
-	rtlusb->usb_mq_to_hwq =  rtlpriv->cfg->usb_interface_cfg->usb_mq_to_hwq;
-	_rtl_usb_init_tx(hw);
-	_rtl_usb_init_rx(hw);
-	return err;
+	if (err)
+		return err;
+	rtlusb->usb_mq_to_hwq = rtlpriv->cfg->usb_interface_cfg->usb_mq_to_hwq;
+	err = _rtl_usb_init_tx(hw);
+	return err ? err : _rtl_usb_init_rx(hw);
 }
 
 static void rtl_usb_init_sw(struct ieee80211_hw *hw)
@@ -1033,37 +1034,39 @@ int rtl_usb_probe(struct usb_interface *intf,
 	/* Init IO handler */
 	_rtl_usb_io_handler_init(&udev->dev, hw);
 	rtlpriv->cfg->ops->read_chip_version(hw);
-	/*like read eeprom and so on */
+	/* like read eeprom and so on */
 	rtlpriv->cfg->ops->read_eeprom_info(hw);
 	err = _rtl_usb_init(hw);
 	if (err)
-		goto error_out2;
+		goto out_usb_init;
 	rtl_usb_init_sw(hw);
 	/* Init mac80211 sw */
 	err = rtl_init_core(hw);
 	if (err) {
 		pr_err("Can't allocate sw for mac80211\n");
-		goto error_out2;
+		goto out_core_init;
 	}
 	if (rtlpriv->cfg->ops->init_sw_vars(hw)) {
 		pr_err("Can't init_sw_vars\n");
-		goto error_out;
+		goto out;
 	}
 	rtl_init_sw_leds(hw);
 
 	err = ieee80211_register_hw(hw);
 	if (err) {
 		pr_err("Can't register mac80211 hw.\n");
-		goto error_out;
+		goto out;
 	}
 	rtlpriv->mac80211.mac80211_registered = 1;
 
 	set_bit(RTL_STATUS_INTERFACE_START, &rtlpriv->status);
 	return 0;
 
-error_out:
+out:
 	rtl_deinit_core(hw);
-error_out2:
+out_core_init:
+	rtl_usb_cleanup(hw);
+out_usb_init:
 	_rtl_usb_io_handler_release(hw);
 	usb_put_dev(udev);
 	complete(&rtlpriv->firmware_loading_complete);
