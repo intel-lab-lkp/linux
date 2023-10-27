@@ -31,9 +31,9 @@ struct vfio_pci_irq_ctx {
 	struct irq_bypass_producer	producer;
 };
 
-static bool irq_is(struct vfio_pci_core_device *vdev, int type)
+static bool irq_is(struct vfio_pci_intr_ctx *intr_ctx, int type)
 {
-	return vdev->intr_ctx.irq_type == type;
+	return intr_ctx->irq_type == type;
 }
 
 static bool is_intx(struct vfio_pci_core_device *vdev)
@@ -41,11 +41,11 @@ static bool is_intx(struct vfio_pci_core_device *vdev)
 	return vdev->intr_ctx.irq_type == VFIO_PCI_INTX_IRQ_INDEX;
 }
 
-static bool is_irq_none(struct vfio_pci_core_device *vdev)
+static bool is_irq_none(struct vfio_pci_intr_ctx *intr_ctx)
 {
-	return !(vdev->intr_ctx.irq_type == VFIO_PCI_INTX_IRQ_INDEX ||
-		 vdev->intr_ctx.irq_type == VFIO_PCI_MSI_IRQ_INDEX ||
-		 vdev->intr_ctx.irq_type == VFIO_PCI_MSIX_IRQ_INDEX);
+	return !(intr_ctx->irq_type == VFIO_PCI_INTX_IRQ_INDEX ||
+		 intr_ctx->irq_type == VFIO_PCI_MSI_IRQ_INDEX ||
+		 intr_ctx->irq_type == VFIO_PCI_MSIX_IRQ_INDEX);
 }
 
 static
@@ -235,7 +235,7 @@ static int vfio_intx_enable(struct vfio_pci_core_device *vdev)
 {
 	struct vfio_pci_irq_ctx *ctx;
 
-	if (!is_irq_none(vdev))
+	if (!is_irq_none(&vdev->intr_ctx))
 		return -EINVAL;
 
 	if (!vdev->pdev->irq)
@@ -353,7 +353,7 @@ static int vfio_msi_enable(struct vfio_pci_core_device *vdev, int nvec, bool msi
 	int ret;
 	u16 cmd;
 
-	if (!is_irq_none(vdev))
+	if (!is_irq_none(&vdev->intr_ctx))
 		return -EINVAL;
 
 	/* return the number of supported vectors if we can't get all: */
@@ -621,7 +621,7 @@ static int vfio_pci_set_intx_trigger(struct vfio_pci_intr_ctx *intr_ctx,
 		return 0;
 	}
 
-	if (!(is_intx(vdev) || is_irq_none(vdev)) || start != 0 || count != 1)
+	if (!(is_intx(vdev) || is_irq_none(intr_ctx)) || start != 0 || count != 1)
 		return -EINVAL;
 
 	if (flags & VFIO_IRQ_SET_DATA_EVENTFD) {
@@ -665,12 +665,12 @@ static int vfio_pci_set_msi_trigger(struct vfio_pci_intr_ctx *intr_ctx,
 	unsigned int i;
 	bool msix = (index == VFIO_PCI_MSIX_IRQ_INDEX) ? true : false;
 
-	if (irq_is(vdev, index) && !count && (flags & VFIO_IRQ_SET_DATA_NONE)) {
+	if (irq_is(intr_ctx, index) && !count && (flags & VFIO_IRQ_SET_DATA_NONE)) {
 		vfio_msi_disable(vdev, msix);
 		return 0;
 	}
 
-	if (!(irq_is(vdev, index) || is_irq_none(vdev)))
+	if (!(irq_is(intr_ctx, index) || is_irq_none(intr_ctx)))
 		return -EINVAL;
 
 	if (flags & VFIO_IRQ_SET_DATA_EVENTFD) {
@@ -692,7 +692,7 @@ static int vfio_pci_set_msi_trigger(struct vfio_pci_intr_ctx *intr_ctx,
 		return ret;
 	}
 
-	if (!irq_is(vdev, index))
+	if (!irq_is(intr_ctx, index))
 		return -EINVAL;
 
 	for (i = start; i < start + count; i++) {
