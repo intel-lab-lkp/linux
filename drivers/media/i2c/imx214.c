@@ -1069,7 +1069,7 @@ static int imx214_probe(struct i2c_client *client)
 
 	ret = imx214_ctrls_init(imx214);
 	if (ret < 0)
-		goto free_ctrl;
+		goto error_power_off;
 
 	mutex_init(&imx214->mutex);
 	imx214->ctrls.lock = &imx214->mutex;
@@ -1100,6 +1100,7 @@ free_entity:
 free_ctrl:
 	mutex_destroy(&imx214->mutex);
 	v4l2_ctrl_handler_free(&imx214->ctrls);
+error_power_off:
 	pm_runtime_disable(imx214->dev);
 
 	return ret;
