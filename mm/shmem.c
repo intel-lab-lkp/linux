@@ -1614,32 +1614,18 @@ static gfp_t limit_gfp_mask(gfp_t huge_gfp, gfp_t limit_gfp)
 	return result;
 }
 
-static struct folio *shmem_alloc_hugefolio(gfp_t gfp,
-		struct shmem_inode_info *info, pgoff_t index)
+static struct folio *shmem_alloc_folio(gfp_t gfp, struct shmem_inode_info *info,
+				       pgoff_t index, unsigned int order)
 {
 	struct mempolicy *mpol;
 	pgoff_t ilx;
 	struct page *page;
 
-	mpol = shmem_get_pgoff_policy(info, index, HPAGE_PMD_ORDER, &ilx);
-	page = alloc_pages_mpol(gfp, HPAGE_PMD_ORDER, mpol, ilx, numa_node_id());
+	mpol = shmem_get_pgoff_policy(info, index, order, &ilx);
+	page = alloc_pages_mpol(gfp, order, mpol, ilx, numa_node_id());
 	mpol_cond_put(mpol);
 
 	return page_rmappable_folio(page);
-}
-
-static struct folio *shmem_alloc_folio(gfp_t gfp,
-		struct shmem_inode_info *info, pgoff_t index)
-{
-	struct mempolicy *mpol;
-	pgoff_t ilx;
-	struct page *page;
-
-	mpol = shmem_get_pgoff_policy(info, index, 0, &ilx);
-	page = alloc_pages_mpol(gfp, 0, mpol, ilx, numa_node_id());
-	mpol_cond_put(mpol);
-
-	return (struct folio *)page;
 }
 
 static struct folio *shmem_alloc_and_add_folio(gfp_t gfp,
@@ -1648,6 +1634,7 @@ static struct folio *shmem_alloc_and_add_folio(gfp_t gfp,
 {
 	struct address_space *mapping = inode->i_mapping;
 	struct shmem_inode_info *info = SHMEM_I(inode);
+	unsigned int order = 0;
 	struct folio *folio;
 	long pages;
 	int error;
@@ -1668,12 +1655,12 @@ static struct folio *shmem_alloc_and_add_folio(gfp_t gfp,
 				index + HPAGE_PMD_NR - 1, XA_PRESENT))
 			return ERR_PTR(-E2BIG);
 
-		folio = shmem_alloc_hugefolio(gfp, info, index);
+		folio = shmem_alloc_folio(gfp, info, index, HPAGE_PMD_ORDER);
 		if (!folio)
 			count_vm_event(THP_FILE_FALLBACK);
 	} else {
-		pages = 1;
-		folio = shmem_alloc_folio(gfp, info, index);
+		pages = 1UL << order;
+		folio = shmem_alloc_folio(gfp, info, index, order);
 	}
 	if (!folio)
 		return ERR_PTR(-ENOMEM);
@@ -1774,7 +1761,7 @@ static int shmem_replace_folio(struct folio **foliop, gfp_t gfp,
 	 */
 	gfp &= ~GFP_CONSTRAINT_MASK;
 	VM_BUG_ON_FOLIO(folio_test_large(old), old);
-	new = shmem_alloc_folio(gfp, info, index);
+	new = shmem_alloc_folio(gfp, info, index, 0);
 	if (!new)
 		return -ENOMEM;
 
@@ -2618,7 +2605,7 @@ int shmem_mfill_atomic_pte(pmd_t *dst_pmd,
 
 	if (!*foliop) {
 		ret = -ENOMEM;
-		folio = shmem_alloc_folio(gfp, info, pgoff);
+		folio = shmem_alloc_folio(gfp, info, pgoff, 0);
 		if (!folio)
 			goto out_unacct_blocks;
 
