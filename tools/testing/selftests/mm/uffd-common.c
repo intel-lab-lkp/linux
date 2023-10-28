@@ -17,6 +17,7 @@ bool map_shared;
 bool test_uffdio_wp = true;
 unsigned long long *count_verify;
 uffd_test_ops_t *uffd_test_ops;
+uffd_test_case_ops_t *uffd_test_case_ops;
 
 static int uffd_mem_fd_create(off_t mem_size, bool hugetlb)
 {
@@ -286,11 +287,17 @@ void uffd_test_ctx_clear(void)
 		uffd = -1;
 	}
 
+	if (uffd_test_case_ops && uffd_test_case_ops->pre_release)
+		uffd_test_case_ops->pre_release();
+
 	munmap_area((void **)&area_src);
 	munmap_area((void **)&area_src_alias);
 	munmap_area((void **)&area_dst);
 	munmap_area((void **)&area_dst_alias);
 	munmap_area((void **)&area_remap);
+
+	if (uffd_test_case_ops && uffd_test_case_ops->post_release)
+		uffd_test_case_ops->post_release();
 }
 
 int uffd_test_ctx_init(uint64_t features, const char **errmsg)
@@ -298,12 +305,30 @@ int uffd_test_ctx_init(uint64_t features, const char **errmsg)
 	unsigned long nr, cpu;
 	int ret;
 
+	if (uffd_test_case_ops && uffd_test_case_ops->pre_alloc) {
+		ret = uffd_test_case_ops->pre_alloc();
+		if (ret) {
+			if (errmsg)
+				*errmsg = "pre-allocation operation failed";
+			return ret;
+		}
+	}
+
 	ret = uffd_test_ops->allocate_area((void **)&area_src, true);
 	ret |= uffd_test_ops->allocate_area((void **)&area_dst, false);
 	if (ret) {
 		if (errmsg)
 			*errmsg = "memory allocation failed";
 		return ret;
+	}
+
+	if (uffd_test_case_ops && uffd_test_case_ops->post_alloc) {
+		ret = uffd_test_case_ops->post_alloc();
+		if (ret) {
+			if (errmsg)
+				*errmsg = "post-allocation operation failed";
+			return ret;
+		}
 	}
 
 	ret = userfaultfd_open(&features);
