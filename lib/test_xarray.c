@@ -694,6 +694,139 @@ static noinline void check_multi_store(struct xarray *xa)
 #endif
 }
 
+#ifdef CONFIG_XARRAY_MULTI
+static noinline void check_xa_multi_store_adv_add(struct xarray *xa,
+						  unsigned long index,
+						  unsigned int order,
+						  void *p)
+{
+	XA_STATE(xas, xa, index);
+
+	xas_set_order(&xas, index, order);
+
+	do {
+		xas_lock_irq(&xas);
+
+		xas_store(&xas, p);
+		XA_BUG_ON(xa, xas_error(&xas));
+		XA_BUG_ON(xa, xa_load(xa, index) != p);
+
+		xas_unlock_irq(&xas);
+	} while (xas_nomem(&xas, GFP_KERNEL));
+
+	XA_BUG_ON(xa, xas_error(&xas));
+}
+
+static noinline void check_xa_multi_store_adv_delete(struct xarray *xa,
+						     unsigned long index,
+						     unsigned int order)
+{
+	unsigned int nrpages = 1UL << order;
+	unsigned long base = round_down(index, nrpages);
+	XA_STATE(xas, xa, base);
+
+	xas_set_order(&xas, base, order);
+	xas_store(&xas, NULL);
+	xas_init_marks(&xas);
+}
+
+static unsigned long some_val = 0xdeadbeef;
+static unsigned long some_val_2 = 0xdeaddead;
+
+/* mimics the page cache */
+static noinline void check_xa_multi_store_adv(struct xarray *xa,
+					      unsigned long pos,
+					      unsigned int order)
+{
+	unsigned int nrpages = 1UL << order;
+	unsigned long index, base, next_index, next_next_index;
+	unsigned int i;
+
+	index = pos >> PAGE_SHIFT;
+	base = round_down(index, nrpages);
+	next_index = round_down(base + nrpages, nrpages);
+	next_next_index = round_down(next_index + nrpages, nrpages);
+
+	check_xa_multi_store_adv_add(xa, base, order, &some_val);
+
+	for (i = 0; i < nrpages; i++)
+		XA_BUG_ON(xa, xa_load(xa, base + i) != &some_val);
+
+	XA_BUG_ON(xa, xa_load(xa, next_index) != NULL);
+
+	/* Use order 0 for the next item */
+	check_xa_multi_store_adv_add(xa, next_index, 0, &some_val_2);
+	XA_BUG_ON(xa, xa_load(xa, next_index) != &some_val_2);
+
+	/* Remove the next item */
+	check_xa_multi_store_adv_delete(xa, next_index, 0);
+
+	/* Now use order for a new pointer */
+	check_xa_multi_store_adv_add(xa, next_index, order, &some_val_2);
+
+	for (i = 0; i < nrpages; i++)
+		XA_BUG_ON(xa, xa_load(xa, next_index + i) != &some_val_2);
+
+	check_xa_multi_store_adv_delete(xa, next_index, order);
+	check_xa_multi_store_adv_delete(xa, base, order);
+	XA_BUG_ON(xa, !xa_empty(xa));
+
+	/* starting fresh again */
+
+	/* let's test some holes now */
+
+	/* hole at base and next_next */
+	check_xa_multi_store_adv_add(xa, next_index, order, &some_val_2);
+
+	for (i = 0; i < nrpages; i++)
+		XA_BUG_ON(xa, xa_load(xa, base + i) != NULL);
+
+	for (i = 0; i < nrpages; i++)
+		XA_BUG_ON(xa, xa_load(xa, next_index + i) != &some_val_2);
+
+	for (i = 0; i < nrpages; i++)
+		XA_BUG_ON(xa, xa_load(xa, next_next_index + i) != NULL);
+
+	check_xa_multi_store_adv_delete(xa, next_index, order);
+	XA_BUG_ON(xa, !xa_empty(xa));
+
+	/* hole at base and next */
+
+	check_xa_multi_store_adv_add(xa, next_next_index, order, &some_val_2);
+
+	for (i = 0; i < nrpages; i++)
+		XA_BUG_ON(xa, xa_load(xa, base + i) != NULL);
+
+	for (i = 0; i < nrpages; i++)
+		XA_BUG_ON(xa, xa_load(xa, next_index + i) != NULL);
+
+	for (i = 0; i < nrpages; i++)
+		XA_BUG_ON(xa, xa_load(xa, next_next_index + i) != &some_val_2);
+
+	check_xa_multi_store_adv_delete(xa, next_next_index, order);
+	XA_BUG_ON(xa, !xa_empty(xa));
+}
+#endif
+
+static noinline void check_multi_store_advanced(struct xarray *xa)
+{
+#ifdef CONFIG_XARRAY_MULTI
+	unsigned int max_order = IS_ENABLED(CONFIG_XARRAY_MULTI) ? 20 : 1;
+	unsigned long end = ULONG_MAX/2;
+	unsigned long pos, i;
+
+	/*
+	 * About 117 million tests below.
+	 */
+	for (pos = 7; pos < end; pos = (pos * pos) + 564) {
+		for (i = 0; i < max_order; i++) {
+			check_xa_multi_store_adv(xa, pos, i);
+			check_xa_multi_store_adv(xa, pos + 157, i);
+		}
+	}
+#endif
+}
+
 static noinline void check_xa_alloc_1(struct xarray *xa, unsigned int base)
 {
 	int i;
@@ -1825,6 +1958,7 @@ static int xarray_checks(void)
 	check_reserve(&array);
 	check_reserve(&xa0);
 	check_multi_store(&array);
+	check_multi_store_advanced(&array);
 	check_get_order(&array);
 	check_xa_alloc();
 	check_find(&array);
