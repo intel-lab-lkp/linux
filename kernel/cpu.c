@@ -1371,6 +1371,7 @@ static int takedown_cpu(unsigned int cpu)
 
 	cpuhp_bp_sync_dead(cpu);
 
+	lockdep_cleanup_dead_cpu(cpu, idle_thread_get(cpu));
 	tick_cleanup_dead_cpu(cpu);
 	rcutree_migrate_callbacks(cpu);
 	return 0;
