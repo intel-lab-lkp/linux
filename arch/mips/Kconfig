@@ -133,6 +133,7 @@ choice
 
 config MIPS_GENERIC_KERNEL
 	bool "Generic board-agnostic MIPS kernel"
+	select ARCH_SPARSEMEM_DEFAULT if 64BIT
 	select MIPS_GENERIC
 	select BOOT_RAW
 	select BUILTIN_DTB
