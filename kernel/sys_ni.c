@@ -253,6 +253,9 @@ COND_SYSCALL(pkey_free);
 /* memfd_secret */
 COND_SYSCALL(memfd_secret);
 
+/* ememz */
+COND_SYSCALL(ememz);
+
 /*
  * Architecture specific weak syscall entries.
  */
