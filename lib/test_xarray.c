@@ -423,6 +423,26 @@ static noinline void check_cmpxchg(struct xarray *xa)
 	XA_BUG_ON(xa, !xa_empty(xa));
 }
 
+static noinline void check_cmpxchg_order(struct xarray *xa)
+{
+	void *FIVE = xa_mk_value(5);
+	unsigned int order = IS_ENABLED(CONFIG_XARRAY_MULTI) ? 15 : 1;
+	void *old;
+
+	XA_BUG_ON(xa, !xa_empty(xa));
+	XA_BUG_ON(xa, xa_store_index(xa, 5, GFP_KERNEL) != NULL);
+	XA_BUG_ON(xa, xa_insert(xa, 5, FIVE, GFP_KERNEL) != -EBUSY);
+	XA_BUG_ON(xa, xa_store_order(xa, 5, order, FIVE, GFP_KERNEL));
+	XA_BUG_ON(xa, xa_get_order(xa, 5) != order);
+	XA_BUG_ON(xa, xa_get_order(xa, xa_to_value(FIVE)) != order);
+	old = xa_cmpxchg(xa, 5, FIVE, NULL, GFP_KERNEL);
+	XA_BUG_ON(xa, old != FIVE);
+	XA_BUG_ON(xa, xa_get_order(xa, 5) != 0);
+	XA_BUG_ON(xa, xa_get_order(xa, xa_to_value(FIVE)) != 0);
+	XA_BUG_ON(xa, xa_get_order(xa, xa_to_value(old)) != 0);
+	XA_BUG_ON(xa, !xa_empty(xa));
+}
+
 static noinline void check_reserve(struct xarray *xa)
 {
 	void *entry;
@@ -1801,6 +1821,7 @@ static int xarray_checks(void)
 	check_xas_erase(&array);
 	check_insert(&array);
 	check_cmpxchg(&array);
+	check_cmpxchg_order(&array);
 	check_reserve(&array);
 	check_reserve(&xa0);
 	check_multi_store(&array);
