@@ -163,7 +163,7 @@ static inline int ccid_packet_dequeue_eval(const int return_code)
 static inline int ccid_hc_tx_send_packet(struct ccid *ccid, struct sock *sk,
 					 struct sk_buff *skb)
 {
-	if (ccid->ccid_ops->ccid_hc_tx_send_packet != NULL)
+	if (ccid != NULL && ccid->ccid_ops->ccid_hc_tx_send_packet != NULL)
 		return ccid->ccid_ops->ccid_hc_tx_send_packet(sk, skb);
 	return CCID_PACKET_SEND_AT_ONCE;
 }
