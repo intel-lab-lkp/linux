@@ -6,7 +6,7 @@ choice
 
 config LEMOTE_FULOONG2E
 	bool "Lemote Fuloong(2e) mini-PC"
-	select ARCH_SPARSEMEM_ENABLE
+	select ARCH_SPARSEMEM_DEFAULT
 	select ARCH_HAS_PHYS_TO_DMA
 	select ARCH_MIGHT_HAVE_PC_PARPORT
 	select ARCH_MIGHT_HAVE_PC_SERIO
@@ -36,7 +36,7 @@ config LEMOTE_FULOONG2E
 
 config LEMOTE_MACH2F
 	bool "Lemote Loongson 2F family machines"
-	select ARCH_SPARSEMEM_ENABLE
+	select ARCH_SPARSEMEM_DEFAULT
 	select ARCH_HAS_PHYS_TO_DMA
 	select ARCH_MIGHT_HAVE_PC_PARPORT
 	select ARCH_MIGHT_HAVE_PC_SERIO

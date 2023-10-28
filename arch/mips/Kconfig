@@ -460,7 +460,7 @@ config MACH_LOONGSON2EF
 
 config MACH_LOONGSON64
 	bool "Loongson 64-bit family of machines"
-	select ARCH_SPARSEMEM_ENABLE
+	select ARCH_SPARSEMEM_DEFAULT
 	select ARCH_MIGHT_HAVE_PC_PARPORT
 	select ARCH_MIGHT_HAVE_PC_SERIO
 	select GENERIC_ISA_DMA_SUPPORT_BROKEN
@@ -656,7 +656,7 @@ config SGI_IP22
 config SGI_IP27
 	bool "SGI IP27 (Origin200/2000)"
 	select ARCH_HAS_PHYS_TO_DMA
-	select ARCH_SPARSEMEM_ENABLE
+	select ARCH_SPARSEMEM_DEFAULT
 	select FW_ARC
 	select FW_ARC64
 	select ARC_CMDLINE_ONLY
@@ -923,7 +923,7 @@ config CAVIUM_OCTEON_SOC
 	select ZONE_DMA32
 	select GPIOLIB
 	select USE_OF
-	select ARCH_SPARSEMEM_ENABLE
+	select ARCH_SPARSEMEM_DEFAULT
 	select SYS_SUPPORTS_SMP
 	select NR_CPUS_DEFAULT_64
 	select MIPS_NR_CPU_NR_MAP_1024
@@ -2573,10 +2573,13 @@ config CPU_SUPPORTS_MSA
 
 config ARCH_FLATMEM_ENABLE
 	def_bool y
-	depends on !NUMA && !CPU_LOONGSON2EF
 
 config ARCH_SPARSEMEM_ENABLE
-	bool
+	def_bool y
+	depends on 64BIT
+
+config ARCH_SELECT_MEMORY_MODEL
+	def_bool ARCH_SPARSEMEM_ENABLE
 
 config NUMA
 	bool "NUMA Support"
