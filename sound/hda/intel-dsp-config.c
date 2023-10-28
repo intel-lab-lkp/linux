@@ -16,10 +16,11 @@
 static int dsp_driver;
 
 module_param(dsp_driver, int, 0444);
-MODULE_PARM_DESC(dsp_driver, "Force the DSP driver for Intel DSP (0=auto, 1=legacy, 2=SST, 3=SOF)");
+MODULE_PARM_DESC(dsp_driver, "Force the DSP driver for Intel DSP (0=auto, 1=legacy, 2=SST, 3=SOF, 4=AVS)");
 
 #define FLAG_SST			BIT(0)
 #define FLAG_SOF			BIT(1)
+#define FLAG_AVS			BIT(2)
 #define FLAG_SST_ONLY_IF_DMIC		BIT(15)
 #define FLAG_SOF_ONLY_IF_DMIC		BIT(16)
 #define FLAG_SOF_ONLY_IF_SOUNDWIRE	BIT(17)
@@ -56,7 +57,7 @@ static const struct config_entry config_table[] = {
 /*
  * Apollolake (Broxton-P)
  * the legacy HDAudio driver is used except on Up Squared (SOF) and
- * Chromebooks (SST), as well as devices based on the ES8336 codec
+ * Chromebooks (AVS), as well as devices based on the ES8336 codec
  */
 #if IS_ENABLED(CONFIG_SND_SOC_SOF_APOLLOLAKE)
 	{
@@ -81,7 +82,7 @@ static const struct config_entry config_table[] = {
 #endif
 #if IS_ENABLED(CONFIG_SND_SOC_INTEL_APL)
 	{
-		.flags = FLAG_SST,
+		.flags = FLAG_AVS,
 		.device = PCI_DEVICE_ID_INTEL_HDA_APL,
 		.dmi_table = (const struct dmi_system_id []) {
 			{
@@ -96,13 +97,13 @@ static const struct config_entry config_table[] = {
 #endif
 /*
  * Skylake and Kabylake use legacy HDAudio driver except for Google
- * Chromebooks (SST)
+ * Chromebooks (AVS)
  */
 
 /* Sunrise Point-LP */
 #if IS_ENABLED(CONFIG_SND_SOC_INTEL_SKL)
 	{
-		.flags = FLAG_SST,
+		.flags = FLAG_AVS,
 		.device = PCI_DEVICE_ID_INTEL_HDA_SKL_LP,
 		.dmi_table = (const struct dmi_system_id []) {
 			{
@@ -122,7 +123,7 @@ static const struct config_entry config_table[] = {
 /* Kabylake-LP */
 #if IS_ENABLED(CONFIG_SND_SOC_INTEL_KBL)
 	{
-		.flags = FLAG_SST,
+		.flags = FLAG_AVS,
 		.device = PCI_DEVICE_ID_INTEL_HDA_KBL_LP,
 		.dmi_table = (const struct dmi_system_id []) {
 			{
@@ -660,6 +661,9 @@ int snd_intel_dsp_driver_probe(struct pci_dev *pci)
 			return SND_INTEL_DSP_DRIVER_SST;
 		}
 	}
+
+	if (cfg->flags & FLAG_AVS)
+		return SND_INTEL_DSP_DRIVER_AVS;
 
 	return SND_INTEL_DSP_DRIVER_LEGACY;
 }
