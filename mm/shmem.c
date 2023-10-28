@@ -1644,7 +1644,7 @@ static struct folio *shmem_alloc_folio(gfp_t gfp,
 
 static struct folio *shmem_alloc_and_add_folio(gfp_t gfp,
 		struct inode *inode, pgoff_t index,
-		struct mm_struct *fault_mm, bool huge)
+		struct mm_struct *fault_mm)
 {
 	struct address_space *mapping = inode->i_mapping;
 	struct shmem_inode_info *info = SHMEM_I(inode);
@@ -1652,10 +1652,7 @@ static struct folio *shmem_alloc_and_add_folio(gfp_t gfp,
 	long pages;
 	int error;
 
-	if (!IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE))
-		huge = false;
-
-	if (huge) {
+	if (gfp & VM_HUGEPAGE) {
 		pages = HPAGE_PMD_NR;
 		index = round_down(index, HPAGE_PMD_NR);
 
@@ -1690,7 +1687,7 @@ static struct folio *shmem_alloc_and_add_folio(gfp_t gfp,
 		if (xa_find(&mapping->i_pages, &index,
 				index + pages - 1, XA_PRESENT)) {
 			error = -EEXIST;
-		} else if (huge) {
+		} else if (gfp & VM_HUGEPAGE) {
 			count_vm_event(THP_FILE_FALLBACK);
 			count_vm_event(THP_FILE_FALLBACK_CHARGE);
 		}
@@ -2054,7 +2051,7 @@ repeat:
 		huge_gfp = vma_thp_gfp_mask(vma);
 		huge_gfp = limit_gfp_mask(huge_gfp, gfp);
 		folio = shmem_alloc_and_add_folio(huge_gfp,
-				inode, index, fault_mm, true);
+				inode, index, fault_mm);
 		if (!IS_ERR(folio)) {
 			count_vm_event(THP_FILE_ALLOC);
 			goto alloced;
@@ -2063,7 +2060,7 @@ repeat:
 			goto repeat;
 	}
 
-	folio = shmem_alloc_and_add_folio(gfp, inode, index, fault_mm, false);
+	folio = shmem_alloc_and_add_folio(gfp, inode, index, fault_mm);
 	if (IS_ERR(folio)) {
 		error = PTR_ERR(folio);
 		if (error == -EEXIST)
