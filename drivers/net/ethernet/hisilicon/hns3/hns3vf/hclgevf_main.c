@@ -1924,8 +1924,14 @@ static void hclgevf_service_task(struct work_struct *work)
 	hclgevf_mailbox_service_task(hdev);
 }
 
-static void hclgevf_clear_event_cause(struct hclgevf_dev *hdev, u32 regclr)
+static void hclgevf_clear_event_cause(struct hclgevf_dev *hdev, u32 regclr,
+				      bool need_dalay)
 {
+#define HCLGEVF_RESET_DELAY		5
+
+	if (need_dalay)
+		mdelay(HCLGEVF_RESET_DELAY);
+
 	hclgevf_write_dev(&hdev->hw, HCLGE_COMM_VECTOR0_CMDQ_SRC_REG, regclr);
 }
 
@@ -1990,7 +1996,8 @@ static irqreturn_t hclgevf_misc_irq_handle(int irq, void *data)
 	hclgevf_enable_vector(&hdev->misc_vector, false);
 	event_cause = hclgevf_check_evt_cause(hdev, &clearval);
 	if (event_cause != HCLGEVF_VECTOR0_EVENT_OTHER)
-		hclgevf_clear_event_cause(hdev, clearval);
+		hclgevf_clear_event_cause(hdev, clearval,
+					  event_cause == HCLGEVF_VECTOR0_EVENT_RST);
 
 	switch (event_cause) {
 	case HCLGEVF_VECTOR0_EVENT_RST:
@@ -2340,7 +2347,7 @@ static int hclgevf_misc_irq_init(struct hclgevf_dev *hdev)
 		return ret;
 	}
 
-	hclgevf_clear_event_cause(hdev, 0);
+	hclgevf_clear_event_cause(hdev, 0, false);
 
 	/* enable misc. vector(vector 0) */
 	hclgevf_enable_vector(&hdev->misc_vector, true);
