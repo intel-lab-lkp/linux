@@ -1,0 +1,12 @@
+<!-- SPDX-License-Identifier: GPL-2.0 -->
+<!-- Copyright © 2023, Oracle and/or its affiliates. -->
+
+{# Create a language bar for translations #}
+{% if languages|length > 0: %}
+<div class="language-selection">
+Languages:
+{% for ref in languages: %}
+<a href="{{ ref.refuri }}">{{ ref.astext() }}</a>{% if not loop.last %}, {% endif %}
+{% endfor %}
+</div>
+{% endif %}

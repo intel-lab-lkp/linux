@@ -73,3 +73,11 @@ input.kernel-toc-toggle { display: none; }
     h3.kernel-toc-contents { display: inline; }
     div.kerneltoc a { color: black; }
 }
+
+/* Language selection bar */
+div.language-selection {
+    background: #eeeeee;
+    border: 1px solid #cccccc;
+    margin-bottom: 1em;
+    padding: .5em;
+}
