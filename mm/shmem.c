@@ -84,6 +84,9 @@ static struct vfsmount *shm_mnt __ro_after_init;
 
 #include "internal.h"
 
+#define CREATE_TRACE_POINTS
+#include <trace/events/shmem.h>
+
 #define VM_ACCT(size)    (PAGE_ALIGN(size) >> PAGE_SHIFT)
 
 /* Pretend that each entry is of this size in directory's i_size */
@@ -1726,6 +1729,7 @@ static struct folio *shmem_alloc_and_add_folio(gfp_t gfp,
 		}
 	}
 
+	trace_mm_shmem_add_to_page_cache(folio);
 	shmem_recalc_inode(inode, pages, 0);
 	folio_add_lru(folio);
 	return folio;

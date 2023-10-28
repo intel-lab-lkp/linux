@@ -21736,6 +21736,7 @@ M:	Hugh Dickins <hughd@google.com>
 L:	linux-mm@kvack.org
 S:	Maintained
 F:	include/linux/shmem_fs.h
+F:	include/trace/events/shmem.h
 F:	mm/shmem.c
 
 TOMOYO SECURITY MODULE
