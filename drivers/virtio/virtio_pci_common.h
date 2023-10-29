@@ -46,6 +46,7 @@ struct virtio_pci_admin_vq {
 	struct virtio_pci_vq_info info;
 	struct completion flush_done;
 	refcount_t refcount;
+	u64 supported_cmds;
 	/* Name of the admin queue: avq.$index. */
 	char name[10];
 	u16 vq_index;
