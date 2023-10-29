@@ -42,6 +42,8 @@
 enum loongson_chip_id {
 	CHIP_LS7A1000 = 0,
 	CHIP_LS7A2000 = 1,
+	CHIP_LS2K1000 = 2,
+	CHIP_LS2K2000 = 3,
 	CHIP_LS_LAST,
 };
 
