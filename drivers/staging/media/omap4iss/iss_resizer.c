@@ -7,17 +7,17 @@
  * Author: Sergio Aguirre <sergio.a.aguirre@gmail.com>
  */
 
-#include <linux/module.h>
-#include <linux/uaccess.h>
-#include <linux/delay.h>
-#include <linux/device.h>
-#include <linux/dma-mapping.h>
-#include <linux/mm.h>
-#include <linux/sched.h>
+ #include <linux/module.h>
+ #include <linux/uaccess.h>
+ #include <linux/delay.h>
+ #include <linux/device.h>
+ #include <linux/dma-mapping.h>
+ #include <linux/mm.h>
+ #include <linux/sched.h>
 
-#include "iss.h"
-#include "iss_regs.h"
-#include "iss_resizer.h"
+ #include "iss.h"
+ #include "iss_regs.h"
+ #include "iss_resizer.h"
 
 static const unsigned int resizer_fmts[] = {
 	MEDIA_BUS_FMT_UYVY8_1X16,
@@ -30,11 +30,11 @@ static const unsigned int resizer_fmts[] = {
  *
  * Also prints other debug information stored in the RESIZER module.
  */
-#define RSZ_PRINT_REGISTER(iss, name)\
+ #define RSZ_PRINT_REGISTER(iss, name)\
 	dev_dbg(iss->dev, "###RSZ " #name "=0x%08x\n", \
 		iss_reg_read(iss, OMAP4_ISS_MEM_ISP_RESIZER, RSZ_##name))
 
-#define RZA_PRINT_REGISTER(iss, name)\
+ #define RZA_PRINT_REGISTER(iss, name)\
 	dev_dbg(iss->dev, "###RZA " #name "=0x%08x\n", \
 		iss_reg_read(iss, OMAP4_ISS_MEM_ISP_RESIZER, RZA_##name))
 
@@ -116,8 +116,12 @@ static void resizer_enable(struct iss_resizer_device *resizer, u8 enable)
 		       RSZ_SRC_EN_SRC_EN, enable ? RSZ_SRC_EN_SRC_EN : 0);
 
 	/* TODO: Enable RSZB */
-	iss_reg_update(iss, OMAP4_ISS_MEM_ISP_RESIZER, RZA_EN, RSZ_EN_EN,
-		       enable ? RSZ_EN_EN : 0);
+	u32 reg_value = ioread32(iss->base_addr + OMAP4_ISS_MEM_ISP_RESIZER,
+		       	+ RZ_SYSCONFIG);
+	reg_value |= RSZ_SYSCONFIG_RSZB_CLK_EN;
+	iowrite32(reg_value, iss->base_addr + OMAP4_ISS_MEM_ISP_RESIZER, 
+			+ RSZ_SYSCONFIG);
+
 }
 
 /* -----------------------------------------------------------------------------
