@@ -257,11 +257,20 @@ choice
 		  Say Y here if you want kernel low-level debugging support
 		  on uart0 of Ingenic SoCs.
 
+	config DEBUG_ALCHEMY_UART
+		bool "Kernel low-level debugging messages via Alchemy UART"
+		depends on MIPS_ALCHEMY
+		select DEBUG_LL_UART
+		help
+		  Say Y here if you want kernel low-level debugging support
+		  on uart of alchemy SoCs.
+
 endchoice
 
 config DEBUG_LL_INCLUDE
 	string
 	default "debug/8250.S" if DEBUG_LL_UART_8250 || DEBUG_UART_8250
+	default "debug/alchemy.S" if DEBUG_ALCHEMY_UART
 	default "debug/uhi.S" if DEBUG_MIPS_UHI
 	default "debug-macro.S"
 
@@ -293,6 +302,7 @@ config DEBUG_UART_PHYS
 	default 0x1fd003f8 if DEBUG_LOONGSON3_UART
 	default 0x1fe00000 if DEBUG_LOONGSON2K_UART
 	default 0x10030000 if DEBUG_INGENIC_UART
+	default 0x11100000 if DEBUG_ALCHEMY_UART
 	help
 	  This is the physical base address of the debug UART. It must be
 	  accessible from unmapped kernel space (i.e. KSEG1 for 32bit kernels
