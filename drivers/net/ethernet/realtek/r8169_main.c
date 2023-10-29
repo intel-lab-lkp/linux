@@ -3348,7 +3348,15 @@ static void rtl_hw_start_8117(struct rtl8169_private *tp)
 		{ 0x19, 0x0040,	0x1100 },
 		{ 0x59, 0x0040,	0x1100 },
 	};
+
+	static const struct e_info_regdata e_info_8117_wr_1[] = {
+		{ 0xe63e, 0x0001 },
+		{ 0xe63e, 0x0000 },
+		{ 0xc094, 0x0000 },
+		{ 0xc09e, 0x0000 },
+	};
 	int rg_saw_cnt;
+	unsigned long flags;
 
 	rtl8168ep_stop_cmac(tp);
 	rtl_ephy_init(tp, e_info_8117);
@@ -3388,15 +3396,13 @@ static void rtl_hw_start_8117(struct rtl8169_private *tp)
 		r8168_mac_ocp_modify(tp, 0xd412, 0x0fff, sw_cnt_1ms_ini);
 	}
 
-	r8168_mac_ocp_modify(tp, 0xe056, 0x00f0, 0x0070);
-	r8168_mac_ocp_write(tp, 0xea80, 0x0003);
-	r8168_mac_ocp_modify(tp, 0xe052, 0x0000, 0x0009);
-	r8168_mac_ocp_modify(tp, 0xd420, 0x0fff, 0x047f);
-
-	r8168_mac_ocp_write(tp, 0xe63e, 0x0001);
-	r8168_mac_ocp_write(tp, 0xe63e, 0x0000);
-	r8168_mac_ocp_write(tp, 0xc094, 0x0000);
-	r8168_mac_ocp_write(tp, 0xc09e, 0x0000);
+	raw_spin_lock_irqsave(&tp->mac_ocp_lock, flags);
+	__r8168_mac_ocp_modify(tp, 0xe056, 0x00f0, 0x0070);
+	__r8168_mac_ocp_write(tp, 0xea80, 0x0003);
+	__r8168_mac_ocp_modify(tp, 0xe052, 0x0000, 0x0009);
+	__r8168_mac_ocp_modify(tp, 0xd420, 0x0fff, 0x047f);
+	__r8168_mac_ocp_write_seq(tp, e_info_8117_wr_1);
+	raw_spin_unlock_irqrestore(&tp->mac_ocp_lock, flags);
 
 	/* firmware is for MAC only */
 	r8169_apply_firmware(tp);
