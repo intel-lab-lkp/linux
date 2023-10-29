@@ -16,6 +16,7 @@ struct lima_bo {
 	struct list_head va;
 
 	size_t heap_size;
+	bool put_pages;
 };
 
 static inline struct lima_bo *
