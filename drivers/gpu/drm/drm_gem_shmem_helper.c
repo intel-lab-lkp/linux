@@ -872,11 +872,30 @@ struct sg_table *drm_gem_shmem_get_sg_table(struct drm_gem_shmem_object *shmem)
 }
 EXPORT_SYMBOL_GPL(drm_gem_shmem_get_sg_table);
 
-static struct sg_table *drm_gem_shmem_get_pages_sgt_locked(struct drm_gem_shmem_object *shmem)
+/**
+ * drm_gem_shmem_get_pages_sgt_locked - Provide a scatter/gather table of pinned
+ *                                      pages for a shmem GEM object
+ * @shmem: shmem GEM object
+ *
+ * This is a locked version of @drm_gem_shmem_get_sg_table that exports a
+ * scatter/gather table suitable for PRIME usage by calling the standard
+ * DMA mapping API.
+ *
+ * Drivers must hold GEM's reservation lock when using this function.
+ *
+ * Drivers who need to acquire an scatter/gather table for objects need to call
+ * drm_gem_shmem_get_pages_sgt() instead.
+ *
+ * Returns:
+ * A pointer to the scatter/gather table of pinned pages or error pointer on failure.
+ */
+struct sg_table *drm_gem_shmem_get_pages_sgt_locked(struct drm_gem_shmem_object *shmem)
 {
 	struct drm_gem_object *obj = &shmem->base;
 	int ret;
 	struct sg_table *sgt;
+
+	dma_resv_assert_held(shmem->base.resv);
 
 	if (shmem->sgt)
 		return shmem->sgt;
@@ -901,6 +920,7 @@ err_free_sgt:
 	kfree(sgt);
 	return ERR_PTR(ret);
 }
+EXPORT_SYMBOL_GPL(drm_gem_shmem_get_pages_sgt_locked);
 
 /**
  * drm_gem_shmem_get_pages_sgt - Pin pages, dma map them, and return a
