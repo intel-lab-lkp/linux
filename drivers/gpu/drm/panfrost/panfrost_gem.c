@@ -20,16 +20,6 @@ static void panfrost_gem_free_object(struct drm_gem_object *obj)
 	struct panfrost_device *pfdev = obj->dev->dev_private;
 
 	/*
-	 * Make sure the BO is no longer inserted in the shrinker list before
-	 * taking care of the destruction itself. If we don't do that we have a
-	 * race condition between this function and what's done in
-	 * panfrost_gem_shrinker_scan().
-	 */
-	mutex_lock(&pfdev->shrinker_lock);
-	list_del_init(&bo->base.madv_list);
-	mutex_unlock(&pfdev->shrinker_lock);
-
-	/*
 	 * If we still have mappings attached to the BO, there's a problem in
 	 * our refcounting.
 	 */
@@ -94,7 +84,11 @@ static void panfrost_gem_mapping_release(struct kref *kref)
 
 	mapping = container_of(kref, struct panfrost_gem_mapping, refcount);
 
+	/* shrinker that may purge mapping at the same time */
+	dma_resv_lock(mapping->obj->base.base.resv, NULL);
 	panfrost_gem_teardown_mapping(mapping);
+	dma_resv_unlock(mapping->obj->base.base.resv);
+
 	drm_gem_object_put(&mapping->obj->base.base);
 	panfrost_mmu_ctx_put(mapping->mmu);
 	kfree(mapping);
@@ -228,6 +222,25 @@ static size_t panfrost_gem_rss(struct drm_gem_object *obj)
 	return 0;
 }
 
+static int panfrost_shmem_evict(struct drm_gem_object *obj)
+{
+	struct panfrost_gem_object *bo = to_panfrost_bo(obj);
+
+	if (!drm_gem_shmem_is_purgeable(&bo->base))
+		return -EBUSY;
+
+	if (!mutex_trylock(&bo->mappings.lock))
+		return -EBUSY;
+
+	panfrost_gem_teardown_mappings_locked(bo);
+
+	drm_gem_shmem_purge_locked(&bo->base);
+
+	mutex_unlock(&bo->mappings.lock);
+
+	return 0;
+}
+
 static const struct drm_gem_object_funcs panfrost_gem_funcs = {
 	.free = panfrost_gem_free_object,
 	.open = panfrost_gem_open,
@@ -242,6 +255,7 @@ static const struct drm_gem_object_funcs panfrost_gem_funcs = {
 	.status = panfrost_gem_status,
 	.rss = panfrost_gem_rss,
 	.vm_ops = &drm_gem_shmem_vm_ops,
+	.evict = panfrost_shmem_evict,
 };
 
 /**

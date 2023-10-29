@@ -326,6 +326,7 @@ int panfrost_mmu_map(struct panfrost_gem_mapping *mapping)
 	struct panfrost_device *pfdev = to_panfrost_device(obj->dev);
 	struct sg_table *sgt;
 	int prot = IOMMU_READ | IOMMU_WRITE;
+	int ret = 0;
 
 	if (WARN_ON(mapping->active))
 		return 0;
@@ -333,15 +334,26 @@ int panfrost_mmu_map(struct panfrost_gem_mapping *mapping)
 	if (bo->noexec)
 		prot |= IOMMU_NOEXEC;
 
+	if (!obj->import_attach) {
+		ret = drm_gem_shmem_pin(shmem);
+		if (ret)
+			return ret;
+	}
+
 	sgt = drm_gem_shmem_get_pages_sgt(shmem);
-	if (WARN_ON(IS_ERR(sgt)))
-		return PTR_ERR(sgt);
+	if (WARN_ON(IS_ERR(sgt))) {
+		ret = PTR_ERR(sgt);
+		goto unpin;
+	}
 
 	mmu_map_sg(pfdev, mapping->mmu, mapping->mmnode.start << PAGE_SHIFT,
 		   prot, sgt);
 	mapping->active = true;
+unpin:
+	if (!obj->import_attach)
+		drm_gem_shmem_unpin(shmem);
 
-	return 0;
+	return ret;
 }
 
 void panfrost_mmu_unmap(struct panfrost_gem_mapping *mapping)
