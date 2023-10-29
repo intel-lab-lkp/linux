@@ -24,6 +24,7 @@
 #define OCOTP_UID_HIGH			0x420
 
 #define IMX8MP_OCOTP_UID_OFFSET		0x10
+#define IMX8MP_OCOTP_UID_HIGH		0xe00
 
 /* Same as ANADIG_DIGPROG_IMX7D */
 #define ANADIG_DIGPROG_IMX8MM	0x800
@@ -31,9 +32,11 @@
 struct imx8_soc_data {
 	char *name;
 	u32 (*soc_revision)(void);
+	bool uid_128bit;
 };
 
 static u64 soc_uid;
+static u64 soc_uid_h;
 
 #ifdef CONFIG_HAVE_ARM_SMCCC
 static u32 imx8mq_soc_revision_from_atf(void)
@@ -101,8 +104,6 @@ static void __init imx8mm_soc_uid(void)
 	void __iomem *ocotp_base;
 	struct device_node *np;
 	struct clk *clk;
-	u32 offset = of_machine_is_compatible("fsl,imx8mp") ?
-		     IMX8MP_OCOTP_UID_OFFSET : 0;
 
 	np = of_find_compatible_node(NULL, NULL, "fsl,imx8mm-ocotp");
 	if (!np)
@@ -118,12 +119,52 @@ static void __init imx8mm_soc_uid(void)
 
 	clk_prepare_enable(clk);
 
-	soc_uid = readl_relaxed(ocotp_base + OCOTP_UID_HIGH + offset);
+	soc_uid = readl_relaxed(ocotp_base + OCOTP_UID_HIGH);
 	soc_uid <<= 32;
-	soc_uid |= readl_relaxed(ocotp_base + OCOTP_UID_LOW + offset);
+	soc_uid |= readl_relaxed(ocotp_base + OCOTP_UID_LOW);
 
 	clk_disable_unprepare(clk);
 	clk_put(clk);
+
+	iounmap(ocotp_base);
+	of_node_put(np);
+}
+
+static void __init imx8mp_soc_uid(void)
+{
+	void __iomem *ocotp_base;
+	struct device_node *np;
+	struct clk *clk;
+
+	np = of_find_compatible_node(NULL, NULL, "fsl,imx8mp-ocotp");
+	if (!np)
+		return;
+
+	ocotp_base = of_iomap(np, 0);
+	if (!ocotp_base) {
+		WARN_ON(!ocotp_base);
+		return;
+	}
+
+	clk = of_clk_get_by_name(np, NULL);
+	if (IS_ERR(clk)) {
+		WARN_ON(IS_ERR(clk));
+		return;
+	}
+
+	clk_prepare_enable(clk);
+
+	soc_uid = readl_relaxed(ocotp_base + OCOTP_UID_HIGH + IMX8MP_OCOTP_UID_OFFSET);
+	soc_uid <<= 32;
+	soc_uid |= readl_relaxed(ocotp_base + OCOTP_UID_LOW + IMX8MP_OCOTP_UID_OFFSET);
+
+	soc_uid_h = readl_relaxed(ocotp_base + IMX8MP_OCOTP_UID_HIGH + 0x10);
+	soc_uid_h <<= 32;
+	soc_uid_h |= readl_relaxed(ocotp_base + IMX8MP_OCOTP_UID_HIGH);
+
+	clk_disable_unprepare(clk);
+	clk_put(clk);
+
 	iounmap(ocotp_base);
 	of_node_put(np);
 }
@@ -146,7 +187,11 @@ static u32 __init imx8mm_soc_revision(void)
 	iounmap(anatop_base);
 	of_node_put(np);
 
-	imx8mm_soc_uid();
+
+	if (of_machine_is_compatible("fsl,imx8mp"))
+		imx8mp_soc_uid();
+	else
+		imx8mm_soc_uid();
 
 	return rev;
 }
@@ -169,6 +214,7 @@ static const struct imx8_soc_data imx8mn_soc_data = {
 static const struct imx8_soc_data imx8mp_soc_data = {
 	.name = "i.MX8MP",
 	.soc_revision = imx8mm_soc_revision,
+	.uid_128bit = true,
 };
 
 static __maybe_unused const struct of_device_id imx8_soc_match[] = {
@@ -222,7 +268,12 @@ static int __init imx8_soc_init(void)
 		goto free_soc;
 	}
 
-	soc_dev_attr->serial_number = kasprintf(GFP_KERNEL, "%016llX", soc_uid);
+	if (data->uid_128bit)
+		soc_dev_attr->serial_number = kasprintf(GFP_KERNEL, "%016llX%016llX",
+							soc_uid_h, soc_uid);
+	else
+		soc_dev_attr->serial_number = kasprintf(GFP_KERNEL, "%016llX", soc_uid);
+
 	if (!soc_dev_attr->serial_number) {
 		ret = -ENOMEM;
 		goto free_rev;
