@@ -939,6 +939,63 @@ static void r8168_mac_ocp_modify(struct rtl8169_private *tp, u32 reg, u16 mask,
 	raw_spin_unlock_irqrestore(&tp->mac_ocp_lock, flags);
 }
 
+struct e_info_regdata {
+	u32	reg;
+	u32	data;
+};
+
+struct e_info_regmaskset {
+	u32	reg;
+	u16	mask;
+	u16	set;
+};
+
+static void __r8168_mac_ocp_write_seqlen(struct rtl8169_private *tp,
+					 const struct e_info_regdata *array, int len)
+{
+	struct e_info_regdata const *p;
+
+	for (p = array; len--; p++)
+		__r8168_mac_ocp_write(tp, p->reg, p->data);
+}
+
+static void r8168_mac_ocp_write_seqlen(struct rtl8169_private *tp,
+				       const struct e_info_regdata *array, int len)
+{
+	unsigned long flags;
+
+	raw_spin_lock_irqsave(&tp->mac_ocp_lock, flags);
+	__r8168_mac_ocp_write_seqlen(tp, array, len);
+	raw_spin_unlock_irqrestore(&tp->mac_ocp_lock, flags);
+}
+
+static void __r8168_mac_ocp_modify_seqlen(struct rtl8169_private *tp,
+					  const struct e_info_regmaskset *array, int len)
+{
+	struct e_info_regmaskset const *p;
+	u16 data;
+
+	for (p = array; len--; p++) {
+		data = __r8168_mac_ocp_read(tp, p->reg);
+		__r8168_mac_ocp_write(tp, p->reg, (data & ~p->mask) | p->set);
+	}
+}
+
+static void r8168_mac_ocp_modify_seqlen(struct rtl8169_private *tp,
+					const struct e_info_regmaskset *array, int len)
+{
+	unsigned long flags;
+
+	raw_spin_lock_irqsave(&tp->mac_ocp_lock, flags);
+	__r8168_mac_ocp_modify_seqlen(tp, array, len);
+	raw_spin_unlock_irqrestore(&tp->mac_ocp_lock, flags);
+}
+
+#define r8168_mac_ocp_write_seq(tp, a) r8168_mac_ocp_write_seqlen(tp, a, ARRAY_SIZE(a))
+#define r8168_mac_ocp_modify_seq(tp, a) r8168_mac_ocp_modify_seqlen(tp, a, ARRAY_SIZE(a))
+#define __r8168_mac_ocp_write_seq(tp, a) __r8168_mac_ocp_write_seqlen(tp, a, ARRAY_SIZE(a))
+#define __r8168_mac_ocp_modify_seq(tp, a) __r8168_mac_ocp_modify_seqlen(tp, a, ARRAY_SIZE(a))
+
 /* Work around a hw issue with RTL8168g PHY, the quirk disables
  * PHY MCU interrupts before PHY power-down.
  */
