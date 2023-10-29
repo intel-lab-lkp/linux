@@ -78,7 +78,7 @@ do {									\
 do {									\
 	if (attr == &sysfs_ ## file) {					\
 		ssize_t ret = bch_hprint(buf, val);			\
-		strcat(buf, "\n");					\
+		strcat(buf + ret, "\n");				\
 		return ret + 1;						\
 	}								\
 } while (0)
