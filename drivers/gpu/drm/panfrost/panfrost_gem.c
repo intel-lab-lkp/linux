@@ -47,7 +47,12 @@ static void panfrost_gem_free_object(struct drm_gem_object *obj)
 			}
 		}
 		kvfree(bo->sgts);
+
+		drm_gem_shmem_put_pages(&bo->base);
 	}
+
+	if (!bo->is_heap && !obj->import_attach)
+		drm_gem_shmem_put_pages(&bo->base);
 
 	drm_gem_shmem_free(&bo->base);
 }
@@ -269,6 +274,7 @@ panfrost_gem_create(struct drm_device *dev, size_t size, u32 flags)
 {
 	struct drm_gem_shmem_object *shmem;
 	struct panfrost_gem_object *bo;
+	int err;
 
 	/* Round up heap allocations to 2MB to keep fault handling simple */
 	if (flags & PANFROST_BO_HEAP)
@@ -282,7 +288,18 @@ panfrost_gem_create(struct drm_device *dev, size_t size, u32 flags)
 	bo->noexec = !!(flags & PANFROST_BO_NOEXEC);
 	bo->is_heap = !!(flags & PANFROST_BO_HEAP);
 
+	if (!bo->is_heap) {
+		err = drm_gem_shmem_get_pages(shmem);
+		if (err)
+			goto err_free;
+	}
+
 	return bo;
+
+err_free:
+	drm_gem_shmem_free(&bo->base);
+
+	return ERR_PTR(err);
 }
 
 struct drm_gem_object *
