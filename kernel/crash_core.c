@@ -892,12 +892,14 @@ DEFINE_MUTEX(__crash_hotplug_lock);
 #define crash_hotplug_lock() mutex_lock(&__crash_hotplug_lock)
 #define crash_hotplug_unlock() mutex_unlock(&__crash_hotplug_lock)
 
+#define CPU_HOTPLUG	0
+#define MEM_HOTPLUG	1
 /*
  * This routine utilized when the crash_hotplug sysfs node is read.
  * It reflects the kernel's ability/permission to update the crash
  * elfcorehdr directly.
  */
-int crash_check_update_elfcorehdr(void)
+static int crash_hotplug_support(int hotplug)
 {
 	int rc = 0;
 
@@ -909,16 +911,25 @@ int crash_check_update_elfcorehdr(void)
 		return 0;
 	}
 	if (kexec_crash_image) {
-		if (kexec_crash_image->file_mode)
-			rc = 1;
-		else
-			rc = kexec_crash_image->update_elfcorehdr;
+		if (hotplug == CPU_HOTPLUG)
+			rc = arch_crash_hotplug_cpu_support(kexec_crash_image);
+		else if (hotplug == MEM_HOTPLUG)
+			rc = arch_crash_hotplug_memory_support(kexec_crash_image);
 	}
 	/* Release lock now that update complete */
 	kexec_unlock();
 	crash_hotplug_unlock();
-
 	return rc;
+}
+
+int crash_hotplug_cpu_support(void)
+{
+	return crash_hotplug_support(CPU_HOTPLUG);
+}
+
+int crash_hotplug_memory_support(void)
+{
+	return crash_hotplug_support(MEM_HOTPLUG);
 }
 
 /*

@@ -398,18 +398,28 @@ int crash_load_segments(struct kimage *image)
 #undef pr_fmt
 #define pr_fmt(fmt) "crash hp: " fmt
 
-/* These functions provide the value for the sysfs crash_hotplug nodes */
-#ifdef CONFIG_HOTPLUG_CPU
-int arch_crash_hotplug_cpu_support(void)
+#if defined(CONFIG_HOTPLUG_CPU) || defined(CONFIG_MEMORY_HOTPLUG)
+static int crash_hotplug_support(struct kimage *image)
 {
-	return crash_check_update_elfcorehdr();
+	if (image->file_mode)
+		return 1;
+
+	return image->update_elfcorehdr;
+}
+#endif
+
+#ifdef CONFIG_HOTPLUG_CPU
+/* These functions provide the value for the sysfs crash_hotplug nodes */
+int arch_crash_hotplug_cpu_support(struct kimage *image)
+{
+	return crash_hotplug_support(image);
 }
 #endif
 
 #ifdef CONFIG_MEMORY_HOTPLUG
-int arch_crash_hotplug_memory_support(void)
+int arch_crash_hotplug_memory_support(struct kimage *image)
 {
-	return crash_check_update_elfcorehdr();
+	return crash_hotplug_support(image);
 }
 #endif
 
