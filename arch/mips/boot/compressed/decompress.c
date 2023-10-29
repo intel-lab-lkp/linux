@@ -31,8 +31,10 @@ extern unsigned char __image_begin[], __image_end[];
 
 /* debug interfaces  */
 #ifdef CONFIG_DEBUG_ZBOOT
-extern void puts(const char *s);
-extern void puthex(unsigned long long val);
+extern void printascii(const char *s);
+extern void printhexl(unsigned long val);
+#define puts(s) printascii(s)
+#define puthex(val) printhexl(val)
 #else
 #define puts(s) do {} while (0)
 #define puthex(val) do {} while (0)

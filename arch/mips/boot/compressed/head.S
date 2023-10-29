@@ -22,6 +22,12 @@
 	move	s2, a2
 	move	s3, a3
 
+#ifdef CONFIG_DEBUG_ZBOOT_EXCEP
+	/* Set up the exception vector */
+	PTR_LA	t9, setup_debug_ll_exception
+	jalr	t9
+#endif
+
 	/* Clear BSS */
 	PTR_LA	a0, _edata
 	PTR_LA	a2, _end

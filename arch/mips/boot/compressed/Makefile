@@ -43,13 +43,8 @@ KCSAN_SANITIZE			:= n
 # decompressor objects (linked with vmlinuz)
 vmlinuzobjs-y := $(obj)/head.o $(obj)/decompress.o $(obj)/string.o $(obj)/bswapsi.o
 
-ifdef CONFIG_DEBUG_ZBOOT
-vmlinuzobjs-$(CONFIG_DEBUG_ZBOOT)		   += $(obj)/dbg.o
-vmlinuzobjs-$(CONFIG_SYS_SUPPORTS_ZBOOT_UART16550) += $(obj)/uart-16550.o
-vmlinuzobjs-$(CONFIG_SYS_SUPPORTS_ZBOOT_UART_PROM) += $(obj)/uart-prom.o
-vmlinuzobjs-$(CONFIG_MIPS_ALCHEMY)		   += $(obj)/uart-alchemy.o
-vmlinuzobjs-$(CONFIG_ATH79)			   += $(obj)/uart-ath79.o
-endif
+vmlinuzobjs-$(CONFIG_DEBUG_ZBOOT)		+= $(obj)/debug.o
+vmlinuzobjs-$(CONFIG_DEBUG_ZBOOT_EXCEPT)	+= $(obj)/debug-vec.o
 
 vmlinuzobjs-$(CONFIG_KERNEL_XZ) += $(obj)/ashldi3.o
 

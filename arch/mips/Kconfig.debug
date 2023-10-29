@@ -79,33 +79,6 @@ config SB1XXX_CORELIS
 	  Select compile flags that produce code that can be processed by the
 	  Corelis mksym utility and UDB Emulator.
 
-config DEBUG_ZBOOT
-	bool "Enable compressed kernel support debugging"
-	depends on DEBUG_KERNEL && SYS_SUPPORTS_ZBOOT
-	default n
-	help
-	  If you want to add compressed kernel support to a new board, and the
-	  board supports uart16550 compatible serial port, please select
-	  SYS_SUPPORTS_ZBOOT_UART16550 for your board and enable this option to
-	  debug it.
-
-	  If your board doesn't support uart16550 compatible serial port, you
-	  can try to select SYS_SUPPORTS_ZBOOT and use the other methods to
-	  debug it. for example, add a new serial port support just as
-	  arch/mips/boot/compressed/uart-16550.c does.
-
-	  After the compressed kernel support works, please disable this option
-	  to reduce the kernel image size and speed up the booting procedure a
-	  little.
-
-config ZBOOT_INGENIC_UART
-	int "UART to use for compressed kernel debugging"
-	depends on DEBUG_ZBOOT && MACH_INGENIC_SOC
-	default 0
-	range 0 4
-	help
-	  Specify the UART that should be used for compressed kernel debugging.
-
 config SPINLOCK_TEST
 	bool "Enable spinlock timing tests in debugfs"
 	depends on DEBUG_FS
@@ -328,3 +301,22 @@ config DEBUG_UART_8250_WIDTH
 	int "Register width for the 8250 debug UART"
 	depends on DEBUG_LL_UART_8250 || DEBUG_UART_8250
 	default 1
+
+config DEBUG_ZBOOT
+	bool "Enable compressed kernel debugging via DEBUG_LL output"
+	depends on DEBUG_LL && SYS_SUPPORTS_ZBOOT
+	help
+	  Say Y here if you want to enable debugging of a compressed kernel
+	  via the DEBUG_LL output.  This is useful if you are debugging
+	  decompressor issues.
+
+	  If unsure, say N.
+
+config DEBUG_ZBOOT_EXCEPT
+	bool "Enable compressed kernel debugging of exceptions"
+	depends on DEBUG_ZBOOT
+	help
+	  Say Y here if you want to enable debugging of exceptions happen
+	  during decompression of a compressed kernel via the DEBUG_LL output.
+
+	  If unsure, say N.
