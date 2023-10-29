@@ -105,17 +105,6 @@ void stk1160_copy_video(struct stk1160 *dev, u8 *src, int len)
 	u8 *dst = buf->mem;
 	int remain;
 
-	/*
-	 * TODO: These stk1160_dbg are very spammy!
-	 * We should 1) check why we are getting them
-	 * and 2) add ratelimit.
-	 *
-	 * UPDATE: One of the reasons (the only one?) for getting these
-	 * is incorrect standard (mismatch between expected and configured).
-	 * So perhaps, we could add a counter for errors. When the counter
-	 * reaches some value, we simply stop streaming.
-	 */
-
 	len -= 4;
 	src += 4;
 
@@ -151,7 +140,7 @@ void stk1160_copy_video(struct stk1160 *dev, u8 *src, int len)
 
 	/* Let the bug hunt begin! sanity checks! */
 	if (lencopy < 0) {
-		stk1160_dbg("copy skipped: negative lencopy\n");
+		printk_ratelimited("copy skipped: negative lencopy\n");
 		return;
 	}
 
