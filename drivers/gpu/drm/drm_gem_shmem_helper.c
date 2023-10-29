@@ -217,6 +217,7 @@ static int drm_gem_shmem_get_pages_locked(struct drm_gem_shmem_object *shmem)
  * @shmem: shmem GEM object
  *
  * This function decreases the use count and puts the backing pages when use drops to zero.
+ * Caller must hold GEM's reservation lock.
  */
 void drm_gem_shmem_put_pages_locked(struct drm_gem_shmem_object *shmem)
 {
@@ -226,6 +227,25 @@ void drm_gem_shmem_put_pages_locked(struct drm_gem_shmem_object *shmem)
 		drm_gem_shmem_free_pages(shmem);
 }
 EXPORT_SYMBOL_GPL(drm_gem_shmem_put_pages_locked);
+
+/*
+ * drm_gem_shmem_put_pages - Decrease use count on the backing pages for a shmem GEM object
+ * @shmem: shmem GEM object
+ *
+ * This function decreases the use count and puts the backing pages when use drops to zero.
+ * It's unlocked version of drm_gem_shmem_put_pages_locked(), caller must not hold
+ * GEM's reservation lock.
+ */
+void drm_gem_shmem_put_pages(struct drm_gem_shmem_object *shmem)
+{
+	if (refcount_dec_not_one(&shmem->pages_use_count))
+		return;
+
+	dma_resv_lock(shmem->base.resv, NULL);
+	drm_gem_shmem_put_pages_locked(shmem);
+	dma_resv_unlock(shmem->base.resv);
+}
+EXPORT_SYMBOL_GPL(drm_gem_shmem_put_pages);
 
 /*
  * drm_gem_shmem_get_pages - Increase use count on the backing pages for a shmem GEM object
