@@ -10,6 +10,7 @@
 #include "lsdc_drv.h"
 #include "lsdc_output.h"
 
+#include "ite_it66121.h"
 /*
  * The display controller in the LS7A1000 exports two DVO interfaces, thus
  * external encoder is required, except connected to the DPI panel directly.
@@ -37,68 +38,6 @@
  *
  *  TODO: Add support for non-transparent encoders
  */
-
-static int ls7a1000_dpi_connector_get_modes(struct drm_connector *conn)
-{
-	unsigned int num = 0;
-	struct edid *edid;
-
-	if (conn->ddc) {
-		edid = drm_get_edid(conn, conn->ddc);
-		if (edid) {
-			drm_connector_update_edid_property(conn, edid);
-			num = drm_add_edid_modes(conn, edid);
-			kfree(edid);
-		}
-
-		return num;
-	}
-
-	num = drm_add_modes_noedid(conn, 1920, 1200);
-
-	drm_set_preferred_mode(conn, 1024, 768);
-
-	return num;
-}
-
-static struct drm_encoder *
-ls7a1000_dpi_connector_get_best_encoder(struct drm_connector *connector,
-					struct drm_atomic_state *state)
-{
-	struct lsdc_output *output = connector_to_lsdc_output(connector);
-
-	return &output->encoder;
-}
-
-static const struct drm_connector_helper_funcs
-ls7a1000_dpi_connector_helpers = {
-	.atomic_best_encoder = ls7a1000_dpi_connector_get_best_encoder,
-	.get_modes = ls7a1000_dpi_connector_get_modes,
-};
-
-static enum drm_connector_status
-ls7a1000_dpi_connector_detect(struct drm_connector *connector, bool force)
-{
-	struct i2c_adapter *ddc = connector->ddc;
-
-	if (ddc) {
-		if (drm_probe_ddc(ddc))
-			return connector_status_connected;
-
-		return connector_status_disconnected;
-	}
-
-	return connector_status_unknown;
-}
-
-static const struct drm_connector_funcs ls7a1000_dpi_connector_funcs = {
-	.detect = ls7a1000_dpi_connector_detect,
-	.fill_modes = drm_helper_probe_single_connector_modes,
-	.destroy = drm_connector_cleanup,
-	.reset = drm_atomic_helper_connector_reset,
-	.atomic_duplicate_state = drm_atomic_helper_connector_duplicate_state,
-	.atomic_destroy_state = drm_atomic_helper_connector_destroy_state
-};
 
 static void ls7a1000_pipe0_encoder_reset(struct drm_encoder *encoder)
 {
@@ -139,40 +78,67 @@ static const struct drm_encoder_funcs ls7a1000_encoder_funcs[2] = {
 	},
 };
 
+/*
+ * This is a default output description for LS7A1000/LS2K1000, this is always
+ * true from the hardware perspective. It is just that when there are external
+ * display bridge connected, this description no longer complete. As it cannot
+ * describe the topology about the external encoders.
+ */
+static const struct lsdc_output_desc ls7a1000_output_desc[2] = {
+	{
+		.pipe = 0,
+		.encoder_type = DRM_MODE_ENCODER_DPI,
+		.connector_type = DRM_MODE_CONNECTOR_DPI,
+		.encoder_funcs = &ls7a1000_encoder_funcs[0],
+		.encoder_helper_funcs = &lsdc_encoder_helper_funcs,
+		.connector_funcs = &lsdc_connector_funcs,
+		.connector_helper_funcs = &lsdc_connector_helper_funcs,
+		.name = "DVO-0",
+	},
+	{
+		.pipe = 1,
+		.encoder_type = DRM_MODE_ENCODER_DPI,
+		.connector_type = DRM_MODE_CONNECTOR_DPI,
+		.encoder_funcs = &ls7a1000_encoder_funcs[1],
+		.encoder_helper_funcs = &lsdc_encoder_helper_funcs,
+		.connector_funcs = &lsdc_connector_funcs,
+		.connector_helper_funcs = &lsdc_connector_helper_funcs,
+		.name = "DVO-1",
+	},
+};
+
 int ls7a1000_output_init(struct drm_device *ddev,
 			 struct lsdc_display_pipe *dispipe,
 			 struct i2c_adapter *ddc,
 			 unsigned int index)
 {
 	struct lsdc_output *output = &dispipe->output;
-	struct drm_encoder *encoder = &output->encoder;
-	struct drm_connector *connector = &output->connector;
-	int ret;
+	enum loongson_vbios_encoder_name encoder_name = 0;
+	struct drm_bridge *bridge = NULL;
+	u8 slave_addr;
+	bool ret;
 
-	ret = drm_encoder_init(ddev, encoder, &ls7a1000_encoder_funcs[index],
-			       DRM_MODE_ENCODER_TMDS, "encoder-%u", index);
-	if (ret)
-		return ret;
+	output->descp = &ls7a1000_output_desc[index];
 
-	encoder->possible_crtcs = BIT(index);
+	ret = loongson_vbios_query_encoder_info(ddev, index, NULL,
+						&encoder_name, &slave_addr);
+	if (!ret)
+		goto skip;
 
-	ret = drm_connector_init_with_ddc(ddev, connector,
-					  &ls7a1000_dpi_connector_funcs,
-					  DRM_MODE_CONNECTOR_DPI, ddc);
-	if (ret)
-		return ret;
+	switch (encoder_name) {
+	case ENCODER_CHIP_IT66121:
+		bridge = it66121_bridge_create(ddev, ddc, slave_addr, false,
+					       0, index);
+		break;
+	default:
+		break;
+	}
 
-	drm_info(ddev, "display pipe-%u has a DVO\n", index);
+	if (IS_ERR(bridge))
+		goto skip;
 
-	drm_connector_helper_add(connector, &ls7a1000_dpi_connector_helpers);
+	output->bridge = bridge;
 
-	drm_connector_attach_encoder(connector, encoder);
-
-	connector->polled = DRM_CONNECTOR_POLL_CONNECT |
-			    DRM_CONNECTOR_POLL_DISCONNECT;
-
-	connector->interlace_allowed = 0;
-	connector->doublescan_allowed = 0;
-
-	return 0;
+skip:
+	return lsdc_output_init(ddev, dispipe, ddc, index);
 }
