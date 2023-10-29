@@ -3227,6 +3227,21 @@ static void rtl_hw_start_8168h_1(struct rtl8169_private *tp)
 		{ 0x04, 0xffff,	0x854a },
 		{ 0x01, 0xffff,	0x068b }
 	};
+
+	static const struct e_info_regmaskset e_info_regmaskset_8168h_1[] = {
+		{ 0xe056, 0x00f0, 0x0070 },
+		{ 0xe052, 0x6000, 0x8008 },
+		{ 0xe0d6, 0x01ff, 0x017f },
+		{ 0xd420, 0x0fff, 0x047f },
+	};
+
+	static const struct e_info_regdata e_info_regdata_8168h_1[] = {
+		{ 0xe63e, 0x0001 },
+		{ 0xe63e, 0x0000 },
+		{ 0xc094, 0x0000 },
+		{ 0xc09e, 0x0000 },
+	};
+
 	int rg_saw_cnt;
 
 	rtl_ephy_init(tp, e_info_8168h_1);
@@ -3267,15 +3282,8 @@ static void rtl_hw_start_8168h_1(struct rtl8169_private *tp)
 		r8168_mac_ocp_modify(tp, 0xd412, 0x0fff, sw_cnt_1ms_ini);
 	}
 
-	r8168_mac_ocp_modify(tp, 0xe056, 0x00f0, 0x0070);
-	r8168_mac_ocp_modify(tp, 0xe052, 0x6000, 0x8008);
-	r8168_mac_ocp_modify(tp, 0xe0d6, 0x01ff, 0x017f);
-	r8168_mac_ocp_modify(tp, 0xd420, 0x0fff, 0x047f);
-
-	r8168_mac_ocp_write(tp, 0xe63e, 0x0001);
-	r8168_mac_ocp_write(tp, 0xe63e, 0x0000);
-	r8168_mac_ocp_write(tp, 0xc094, 0x0000);
-	r8168_mac_ocp_write(tp, 0xc09e, 0x0000);
+	r8168_mac_ocp_modify_seq(tp, e_info_regmaskset_8168h_1);
+	r8168_mac_ocp_write_seq(tp, e_info_regdata_8168h_1);
 }
 
 static void rtl_hw_start_8168ep(struct rtl8169_private *tp)
