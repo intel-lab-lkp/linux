@@ -955,6 +955,9 @@ struct sg_table *drm_gem_shmem_get_pages_sgt(struct drm_gem_shmem_object *shmem)
 	drm_WARN_ON(obj->dev, drm_gem_shmem_is_evictable(shmem));
 	drm_WARN_ON(obj->dev, drm_gem_shmem_is_purgeable(shmem));
 
+	if (shmem->sgt)
+		return shmem->sgt;
+
 	ret = dma_resv_lock_interruptible(shmem->base.resv, NULL);
 	if (ret)
 		return ERR_PTR(ret);
