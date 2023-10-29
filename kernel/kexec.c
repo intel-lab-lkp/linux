@@ -132,6 +132,8 @@ static int do_kexec_load(unsigned long entry, unsigned long nr_segments,
 #ifdef CONFIG_CRASH_HOTPLUG
 	if (flags & KEXEC_UPDATE_ELFCOREHDR)
 		image->update_elfcorehdr = 1;
+	if (flags & KEXEC_UPDATE_FDT)
+		image->update_fdt = 1;
 #endif
 
 	ret = machine_kexec_prepare(image);
