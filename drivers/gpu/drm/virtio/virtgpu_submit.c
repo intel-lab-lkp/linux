@@ -465,8 +465,19 @@ static void virtio_gpu_install_out_fence_fd(struct virtio_gpu_submit *submit)
 
 static int virtio_gpu_lock_buflist(struct virtio_gpu_submit *submit)
 {
-	if (submit->buflist)
-		return virtio_gpu_array_lock_resv(submit->buflist);
+	int err;
+
+	if (submit->buflist) {
+		err = virtio_gpu_array_lock_resv(submit->buflist);
+		if (err)
+			return err;
+
+		err = virtio_gpu_array_prepare(submit->vgdev, submit->buflist);
+		if (err) {
+			virtio_gpu_array_unlock_resv(submit->buflist);
+			return err;
+		}
+	}
 
 	return 0;
 }
