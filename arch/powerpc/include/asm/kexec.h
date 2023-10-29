@@ -99,6 +99,12 @@ void relocate_new_kernel(unsigned long indirection_page, unsigned long reboot_co
 
 void kexec_copy_flush(struct kimage *image);
 
+#ifdef CONFIG_PPC64
+struct crash_mem;
+int update_cpus_node(void *fdt);
+int get_crash_memory_ranges(struct crash_mem **mem_ranges);
+#endif /* CONFIG_PPC64 */
+
 #if defined(CONFIG_CRASH_DUMP) && defined(CONFIG_PPC_RTAS)
 void crash_free_reserved_phys_range(unsigned long begin, unsigned long end);
 #define crash_free_reserved_phys_range crash_free_reserved_phys_range
