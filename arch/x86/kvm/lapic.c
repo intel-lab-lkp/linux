@@ -1945,7 +1945,7 @@ static void start_sw_tscdeadline(struct kvm_lapic *apic)
 	guest_tsc = kvm_read_l1_tsc(vcpu, rdtsc());
 
 	ns = (tscdeadline - guest_tsc) * 1000000ULL;
-	do_div(ns, this_tsc_khz);
+	div64_ul(ns, this_tsc_khz);
 
 	if (likely(tscdeadline > guest_tsc) &&
 	    likely(ns > apic->lapic_timer.timer_advance_ns)) {
