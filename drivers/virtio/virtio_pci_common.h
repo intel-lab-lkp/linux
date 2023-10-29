@@ -44,9 +44,12 @@ struct virtio_pci_vq_info {
 struct virtio_pci_admin_vq {
 	/* Virtqueue info associated with this admin queue. */
 	struct virtio_pci_vq_info info;
+	struct completion flush_done;
+	refcount_t refcount;
 	/* Name of the admin queue: avq.$index. */
 	char name[10];
 	u16 vq_index;
+	bool abort;
 };
 
 /* Our device structure */
