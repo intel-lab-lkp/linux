@@ -1177,7 +1177,6 @@ static int decode_modrm(struct x86_emulate_ctxt *ctxt,
 {
 	u8 sib;
 	int index_reg, base_reg, scale;
-	int rc = X86EMUL_CONTINUE;
 	ulong modrm_ea = 0;
 
 	ctxt->modrm_reg = ((ctxt->rex_prefix << 1) & 8); /* REX.R */
@@ -1199,16 +1198,16 @@ static int decode_modrm(struct x86_emulate_ctxt *ctxt,
 			op->bytes = 16;
 			op->addr.xmm = ctxt->modrm_rm;
 			kvm_read_sse_reg(ctxt->modrm_rm, &op->vec_val);
-			return rc;
+			return X86EMUL_CONTINUE;
 		}
 		if (ctxt->d & Mmx) {
 			op->type = OP_MM;
 			op->bytes = 8;
 			op->addr.mm = ctxt->modrm_rm & 7;
-			return rc;
+			return X86EMUL_CONTINUE;
 		}
 		fetch_register_operand(op);
-		return rc;
+		return X86EMUL_CONTINUE;
 	}
 
 	op->type = OP_MEM;
@@ -1306,14 +1305,12 @@ static int decode_modrm(struct x86_emulate_ctxt *ctxt,
 		ctxt->memop.addr.mem.ea = (u32)ctxt->memop.addr.mem.ea;
 
 done:
-	return rc;
+	return X86EMUL_CONTINUE;
 }
 
 static int decode_abs(struct x86_emulate_ctxt *ctxt,
 		      struct operand *op)
 {
-	int rc = X86EMUL_CONTINUE;
-
 	op->type = OP_MEM;
 	switch (ctxt->ad_bytes) {
 	case 2:
@@ -1327,7 +1324,7 @@ static int decode_abs(struct x86_emulate_ctxt *ctxt,
 		break;
 	}
 done:
-	return rc;
+	return X86EMUL_CONTINUE;
 }
 
 static void fetch_bit_operand(struct x86_emulate_ctxt *ctxt)
@@ -4554,8 +4551,6 @@ static unsigned imm_size(struct x86_emulate_ctxt *ctxt)
 static int decode_imm(struct x86_emulate_ctxt *ctxt, struct operand *op,
 		      unsigned size, bool sign_extension)
 {
-	int rc = X86EMUL_CONTINUE;
-
 	op->type = OP_IMM;
 	op->bytes = size;
 	op->addr.mem.ea = ctxt->_eip;
@@ -4588,7 +4583,7 @@ static int decode_imm(struct x86_emulate_ctxt *ctxt, struct operand *op,
 		}
 	}
 done:
-	return rc;
+	return X86EMUL_CONTINUE;
 }
 
 static int decode_operand(struct x86_emulate_ctxt *ctxt, struct operand *op,
