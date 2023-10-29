@@ -20,4 +20,6 @@ loongson-y += loongson_device.o \
 	      loongson_module.o \
 	      loongson_vbios.o
 
+loongson-y += ite_it66121.o
+
 obj-$(CONFIG_DRM_LOONGSON) += loongson.o

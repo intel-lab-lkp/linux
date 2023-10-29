@@ -7,6 +7,7 @@ config DRM_LOONGSON
 	select DRM_TTM
 	select I2C
 	select I2C_ALGOBIT
+	select REGMAP_I2C
 	help
 	  This is a DRM driver for Loongson Graphics, it may including
 	  LS7A2000, LS7A1000, LS2K2000 and LS2K1000 etc. Loongson LS7A
