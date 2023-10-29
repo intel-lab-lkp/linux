@@ -10,6 +10,7 @@ loongson-y := \
 	lsdc_i2c.o \
 	lsdc_irq.o \
 	lsdc_output.o \
+	lsdc_output_2k2000.o \
 	lsdc_output_7a1000.o \
 	lsdc_output_7a2000.o \
 	lsdc_plane.o \

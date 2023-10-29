@@ -61,6 +61,11 @@ int ls7a2000_output_init(struct drm_device *ddev,
 			 struct i2c_adapter *ddc,
 			 unsigned int index);
 
+int ls2k2000_output_init(struct drm_device *ddev,
+			 struct lsdc_display_pipe *dispipe,
+			 struct i2c_adapter *ddc,
+			 unsigned int pipe);
+
 int lsdc_output_init(struct drm_device *ddev,
 		     struct lsdc_display_pipe *dispipe,
 		     struct i2c_adapter *ddc,

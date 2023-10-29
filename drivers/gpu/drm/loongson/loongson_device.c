@@ -6,6 +6,7 @@
 #include <linux/pci.h>
 
 #include "lsdc_drv.h"
+#include "lsdc_probe.h"
 
 extern struct loongson_vbios __loongson_vbios;
 
@@ -22,6 +23,15 @@ static const struct lsdc_kms_funcs ls7a2000_kms_funcs = {
 	.create_i2c = lsdc_create_i2c_chan,
 	.irq_handler = ls7a2000_dc_irq_handler,
 	.output_init = ls7a2000_output_init,
+	.cursor_plane_init = ls7a2000_cursor_plane_init,
+	.primary_plane_init = lsdc_primary_plane_init,
+	.crtc_init = ls7a2000_crtc_init,
+};
+
+static const struct lsdc_kms_funcs ls2k2000_kms_funcs = {
+	.create_i2c = lsdc_create_i2c_chan,
+	.irq_handler = ls7a2000_dc_irq_handler,
+	.output_init = ls2k2000_output_init,
 	.cursor_plane_init = ls7a2000_cursor_plane_init,
 	.primary_plane_init = lsdc_primary_plane_init,
 	.crtc_init = ls7a2000_crtc_init,
@@ -93,14 +103,50 @@ static const struct loongson_gfx_desc ls7a2000_gfx = {
 	.model = "LS7A2000 bridge chipset",
 };
 
+static const struct loongson_gfx_desc ls2k2000_gfx = {
+	.dc = {
+		.num_of_crtc = 2,
+		.max_pixel_clk = 350000,
+		.max_width = 4096,
+		.max_height = 4096,
+		.num_of_hw_cursor = 2,
+		.hw_cursor_w = 64,
+		.hw_cursor_h = 64,
+		.pitch_align = 64,
+		.has_vblank_counter = true,
+		.funcs = &ls2k2000_kms_funcs,
+	},
+	.conf_reg_base = LS7A2000_CONF_REG_BASE,
+	.gfxpll = {
+		.reg_offset = LS7A2000_PLL_GFX_REG,
+		.reg_size = 8,
+	},
+	.pixpll = {
+		[0] = {
+			.reg_offset = LS7A2000_PIXPLL0_REG,
+			.reg_size = 8,
+		},
+		[1] = {
+			.reg_offset = LS7A2000_PIXPLL1_REG,
+			.reg_size = 8,
+		},
+	},
+	.vbios = &__loongson_vbios,
+	.chip_id = CHIP_LS2K2000,
+	.model = "LS2K2000 SoC",
+};
+
 static const struct lsdc_desc *__chip_id_desc_table[] = {
 	[CHIP_LS7A1000] = &ls7a1000_gfx.dc,
 	[CHIP_LS7A2000] = &ls7a2000_gfx.dc,
+	[CHIP_LS2K2000] = &ls2k2000_gfx.dc,
 	[CHIP_LS_LAST] = NULL,
 };
 
 const struct lsdc_desc *
 lsdc_device_probe(struct pci_dev *pdev, enum loongson_chip_id chip_id)
 {
+	chip_id = loongson_chip_id_fixup(chip_id);
+
 	return __chip_id_desc_table[chip_id];
 }
