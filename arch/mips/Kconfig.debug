@@ -265,6 +265,14 @@ choice
 		  Say Y here if you want kernel low-level debugging support
 		  on uart of alchemy SoCs.
 
+	config DEBUG_AR933X_UART
+		bool "Kernel low-level debugging messages via Alchemy UART"
+		depends on MIPS_ALCHEMY
+		select DEBUG_LL_UART
+		help
+		  Say Y here if you want kernel low-level debugging support
+		  on uart of AR933X SoCs.
+
 endchoice
 
 config DEBUG_LL_INCLUDE
@@ -303,6 +311,7 @@ config DEBUG_UART_PHYS
 	default 0x1fe00000 if DEBUG_LOONGSON2K_UART
 	default 0x10030000 if DEBUG_INGENIC_UART
 	default 0x11100000 if DEBUG_ALCHEMY_UART
+	default 0x18020000 if DEBUG_AR933X_UART
 	help
 	  This is the physical base address of the debug UART. It must be
 	  accessible from unmapped kernel space (i.e. KSEG1 for 32bit kernels
