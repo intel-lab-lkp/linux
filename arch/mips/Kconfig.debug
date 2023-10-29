@@ -164,3 +164,83 @@ config MIPS_CPS_NS16550_WIDTH
 	  lb/sb instructions.
 
 endif # MIPS_CPS_NS16550_BOOL
+
+# These options are only for real kernel hackers who want to get their hands dirty.
+config DEBUG_LL
+	bool "Kernel low-level debugging functions (read help!)"
+	depends on DEBUG_KERNEL
+	help
+	  Say Y here to include definitions of printascii, printch, printhex
+	  in the kernel.  This is helpful if you are debugging code that
+	  executes before the console is initialized.
+
+	  Note that selecting this option will limit the kernel to a single
+	  UART or semihosting definition, as specified below. Attempting to
+	  boot the kernel image on a different platform *will not work*, so
+	  this option should not be enabled for kernels that are intended to
+	  be portable.
+
+choice
+	prompt "Kernel low-level debugging port"
+	depends on DEBUG_LL
+
+	config DEBUG_MIPS_UHI
+		bool "Kernel low-level debugging via UHI semihosting"
+		help
+		  Say Y here if you want kernel low-level debugging support
+		  via MIPS UHI semihosting.
+
+	config DEBUG_LL_UART_8250
+		bool "Kernel low-level debugging via 8250 UART"
+		select DEBUG_LL_UART
+		help
+		  Say Y here if you wish the debug print routes to direct
+		  their output to an 8250 UART.  You can use this option
+		  to provide the parameters for the 8250 UART rather than
+		  selecting one of the platform specific options below if
+		  you know the parameters for the port.
+
+endchoice
+
+config DEBUG_LL_INCLUDE
+	string
+	default "debug/8250.S" if DEBUG_LL_UART_8250 || DEBUG_UART_8250
+	default "debug/uhi.S" if DEBUG_MIPS_UHI
+	default "debug-macro.S"
+
+# Compatibility options for 8250
+config DEBUG_UART_8250
+	bool
+	select DEBUG_LL_UART
+
+config DEBUG_LL_UART
+	bool
+
+config DEBUG_UART_FLOW_CONTROL
+	bool "Enable flow control (CTS) for the debug UART"
+	depends on DEBUG_LL_UART
+	default n
+	help
+	  Some UART ports are connected to terminals that will use modem
+	  control signals to indicate whether they are ready to receive text.
+	  In practice this means that the terminal is asserting the special
+	  control signal CTS (Clear To Send). If your debug UART supports
+	  this and your debug terminal will require it, enable this option.
+
+config DEBUG_UART_PHYS
+	hex "Physical base address of debug UART"
+	depends on DEBUG_LL_UART
+	help
+	  This is the physical base address of the debug UART. It must be
+	  accessible from unmapped kernel space (i.e. KSEG1 for 32bit kernels
+	  or XKPHYS for 64bit kernels).
+
+config DEBUG_UART_8250_SHIFT
+	int "Register offset shift for the 8250 debug UART"
+	depends on DEBUG_LL_UART_8250 || DEBUG_UART_8250
+	default 2
+
+config DEBUG_UART_8250_WIDTH
+	int "Register width for the 8250 debug UART"
+	depends on DEBUG_LL_UART_8250 || DEBUG_UART_8250
+	default 1
