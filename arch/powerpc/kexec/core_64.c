@@ -19,8 +19,10 @@
 #include <linux/of.h>
 #include <linux/libfdt.h>
 #include <linux/memblock.h>
+#include <linux/memory.h>
 
 #include <asm/page.h>
+#include <asm/drmem.h>
 #include <asm/current.h>
 #include <asm/machdep.h>
 #include <asm/cacheflush.h>
@@ -547,9 +549,7 @@ out:
 #undef pr_fmt
 #define pr_fmt(fmt) "crash hp: " fmt
 
-#ifdef CONFIG_HOTPLUG_CPU
- /* Provides the value for the sysfs crash_hotplug nodes */
-int arch_crash_hotplug_cpu_support(struct kimage *image)
+static int crash_hotplug_support(struct kimage *image)
 {
 	if (image->file_mode)
 		return 1;
@@ -560,7 +560,117 @@ int arch_crash_hotplug_cpu_support(struct kimage *image)
 	 */
 	return image->update_elfcorehdr && image->update_fdt;
 }
+
+#ifdef CONFIG_HOTPLUG_CPU
+ /* Provides the value for the sysfs crash_hotplug nodes */
+int arch_crash_hotplug_cpu_support(struct kimage *image)
+{
+	return crash_hotplug_support(image);
+}
 #endif
+
+#ifdef CONFIG_MEMORY_HOTPLUG
+ /* Provides the value for the sysfs memory_hotplug nodes */
+int arch_crash_hotplug_memory_support(struct kimage *image)
+{
+	return crash_hotplug_support(image);
+}
+#endif
+
+/*
+ * Advertise preferred elfcorehdr size to userspace via
+ * /sys/kernel/crash_elfcorehdr_size sysfs interface.
+ */
+unsigned int arch_crash_get_elfcorehdr_size(void)
+{
+	unsigned int sz;
+	unsigned long elf_phdr_cnt;
+
+	/* Program header for CPU notes and vmcoreinfo */
+	elf_phdr_cnt = 2;
+	if (IS_ENABLED(CONFIG_MEMORY_HOTPLUG))
+		/* In the worst case, a Phdr is needed for every other LMB to be
+		 * represented as an individual crash range.
+		 */
+		elf_phdr_cnt += memory_hotplug_max() / (2 * drmem_lmb_size());
+
+	/* Do not cross the max limit */
+	if (elf_phdr_cnt > PN_XNUM)
+		elf_phdr_cnt = PN_XNUM;
+
+	sz = sizeof(struct elfhdr) + (elf_phdr_cnt * sizeof(Elf64_Phdr));
+	return sz;
+}
+
+/**
+ * update_crash_elfcorehdr() - Recreate the elfcorehdr and replace it with old
+ *			       elfcorehdr in the kexec segment array.
+ * @image: the active struct kimage
+ * @mn: struct memory_notify data handler
+ */
+static void update_crash_elfcorehdr(struct kimage *image, struct memory_notify *mn)
+{
+	int ret;
+	struct crash_mem *cmem = NULL;
+	struct kexec_segment *ksegment;
+	void *ptr, *mem, *elfbuf = NULL;
+	unsigned long elfsz, memsz, base_addr, size;
+
+	ksegment = &image->segment[image->elfcorehdr_index];
+	mem = (void *) ksegment->mem;
+	memsz = ksegment->memsz;
+
+	ret = get_crash_memory_ranges(&cmem);
+	if (ret) {
+		pr_err("Failed to get crash mem range\n");
+		return;
+	}
+
+	/*
+	 * The hot unplugged memory is part of crash memory ranges,
+	 * remove it here.
+	 */
+	if (image->hp_action == KEXEC_CRASH_HP_REMOVE_MEMORY) {
+		base_addr = PFN_PHYS(mn->start_pfn);
+		size = mn->nr_pages * PAGE_SIZE;
+		ret = remove_mem_range(&cmem, base_addr, size);
+		if (ret) {
+			pr_err("Failed to remove hot-unplugged from crash memory ranges.\n");
+			return;
+		}
+	}
+
+	ret = crash_prepare_elf64_headers(cmem, false, &elfbuf, &elfsz);
+	if (ret) {
+		pr_err("Failed to prepare elf header\n");
+		return;
+	}
+
+	/*
+	 * It is unlikely that kernel hit this because elfcorehdr kexec
+	 * segment (memsz) is built with addition space to accommodate growing
+	 * number of crash memory ranges while loading the kdump kernel. It is
+	 * Just to avoid any unforeseen case.
+	 */
+	if (elfsz > memsz) {
+		pr_err("Updated crash elfcorehdr elfsz %lu > memsz %lu", elfsz, memsz);
+		goto out;
+	}
+
+	ptr = __va(mem);
+	if (ptr) {
+		/* Temporarily invalidate the crash image while it is replaced */
+		xchg(&kexec_crash_image, NULL);
+
+		/* Replace the old elfcorehdr with newly prepared elfcorehdr */
+		memcpy((void *)ptr, elfbuf, elfsz);
+
+		/* The crash image is now valid once again */
+		xchg(&kexec_crash_image, image);
+	}
+out:
+	vfree(elfbuf);
+}
 
 /**
  * arch_crash_handle_hotplug_event - Handle crash CPU/Memory hotplug events to update the
@@ -572,7 +682,7 @@ int arch_crash_hotplug_cpu_support(struct kimage *image)
  * CPU addition: Update the FDT segment to include the newly added CPU.
  * CPU removal: No action is needed, with the assumption that it's okay to have offline CPUs
  *		as part of the FDT.
- * Memory addition/removal: No action is taken as this is not yet supported.
+ * Memory addition/removal: Recreate the elfcorehdr segment
  */
 void arch_crash_handle_hotplug_event(struct kimage *image, void *arg)
 {
@@ -593,7 +703,6 @@ void arch_crash_handle_hotplug_event(struct kimage *image, void *arg)
 		return;
 
 	} else if (hp_action == KEXEC_CRASH_HP_ADD_CPU) {
-
 		void *fdt, *ptr;
 		unsigned long mem;
 		int i, fdt_index = -1;
@@ -628,8 +737,10 @@ void arch_crash_handle_hotplug_event(struct kimage *image, void *arg)
 
 	} else if (hp_action == KEXEC_CRASH_HP_REMOVE_MEMORY ||
 		   hp_action == KEXEC_CRASH_HP_ADD_MEMORY) {
-		pr_info_once("Crash update is not supported for memory hotplug\n");
-		return;
+		struct memory_notify *mn;
+
+		mn = (struct memory_notify *)arg;
+		update_crash_elfcorehdr(image, mn);
 	}
 }
 #endif
