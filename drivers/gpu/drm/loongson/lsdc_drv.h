@@ -16,6 +16,7 @@
 #include <drm/drm_plane.h>
 #include <drm/ttm/ttm_device.h>
 
+#include "loongson_vbios.h"
 #include "lsdc_i2c.h"
 #include "lsdc_irq.h"
 #include "lsdc_gfxpll.h"
@@ -84,6 +85,13 @@ struct loongson_gfx_desc {
 		u32 reg_offset;
 		u32 reg_size;
 	} pixpll[LSDC_NUM_CRTC];
+
+	/*
+	 * @vbios: Provide information about the output configuration,
+	 * and provide information about dynamic features which cannot
+	 * be detected(determined) with the chip_id.
+	 */
+	const struct loongson_vbios *vbios;
 
 	enum loongson_chip_id chip_id;
 	char model[64];

@@ -7,6 +7,8 @@
 
 #include "lsdc_drv.h"
 
+extern struct loongson_vbios __loongson_vbios;
+
 static const struct lsdc_kms_funcs ls7a1000_kms_funcs = {
 	.create_i2c = lsdc_create_i2c_chan,
 	.irq_handler = ls7a1000_dc_irq_handler,
@@ -53,6 +55,7 @@ static const struct loongson_gfx_desc ls7a1000_gfx = {
 			.reg_size = 8,
 		},
 	},
+	.vbios = &__loongson_vbios,
 	.chip_id = CHIP_LS7A1000,
 	.model = "LS7A1000 bridge chipset",
 };
@@ -85,6 +88,7 @@ static const struct loongson_gfx_desc ls7a2000_gfx = {
 			.reg_size = 8,
 		},
 	},
+	.vbios = &__loongson_vbios,
 	.chip_id = CHIP_LS7A2000,
 	.model = "LS7A2000 bridge chipset",
 };

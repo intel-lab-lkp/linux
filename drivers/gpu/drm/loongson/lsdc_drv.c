@@ -213,6 +213,10 @@ lsdc_create_device(struct pci_dev *pdev,
 		return ERR_PTR(ret);
 	}
 
+	ret = loongson_vbios_init(ddev);
+	if (ret)
+		drm_info(ddev, "No VBIOS support\n");
+
 	ret = drm_aperture_remove_conflicting_framebuffers(ldev->vram_base,
 							   ldev->vram_size,
 							   driver);

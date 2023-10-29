@@ -17,6 +17,7 @@ loongson-y := \
 	lsdc_ttm.o
 
 loongson-y += loongson_device.o \
-	      loongson_module.o
+	      loongson_module.o \
+	      loongson_vbios.o
 
 obj-$(CONFIG_DRM_LOONGSON) += loongson.o
