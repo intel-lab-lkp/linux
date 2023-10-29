@@ -47,6 +47,9 @@ void v3d_free_object(struct drm_gem_object *obj)
 	/* GPU execution may have dirtied any pages in the BO. */
 	bo->base.pages_mark_dirty_on_put = true;
 
+	if (!obj->import_attach)
+		drm_gem_shmem_put_pages(&bo->base);
+
 	drm_gem_shmem_free(&bo->base);
 }
 
@@ -135,12 +138,18 @@ struct v3d_bo *v3d_bo_create(struct drm_device *dev, struct drm_file *file_priv,
 		return ERR_CAST(shmem_obj);
 	bo = to_v3d_bo(&shmem_obj->base);
 
-	ret = v3d_bo_create_finish(&shmem_obj->base);
+	ret = drm_gem_shmem_get_pages(shmem_obj);
 	if (ret)
 		goto free_obj;
 
+	ret = v3d_bo_create_finish(&shmem_obj->base);
+	if (ret)
+		goto put_pages;
+
 	return bo;
 
+put_pages:
+	drm_gem_shmem_put_pages(shmem_obj);
 free_obj:
 	drm_gem_shmem_free(shmem_obj);
 	return ERR_PTR(ret);
