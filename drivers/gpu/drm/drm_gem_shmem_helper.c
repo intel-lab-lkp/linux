@@ -133,6 +133,14 @@ drm_gem_shmem_free_pages(struct drm_gem_shmem_object *shmem)
 {
 	struct drm_gem_object *obj = &shmem->base;
 
+	if (shmem->sgt) {
+		dma_unmap_sgtable(obj->dev->dev, shmem->sgt,
+				  DMA_BIDIRECTIONAL, 0);
+		sg_free_table(shmem->sgt);
+		kfree(shmem->sgt);
+		shmem->sgt = NULL;
+	}
+
 #ifdef CONFIG_X86
 	if (shmem->map_wc)
 		set_pages_array_wb(shmem->pages, obj->size >> PAGE_SHIFT);
@@ -155,23 +163,12 @@ void drm_gem_shmem_free(struct drm_gem_shmem_object *shmem)
 {
 	struct drm_gem_object *obj = &shmem->base;
 
-	if (obj->import_attach) {
+	if (obj->import_attach)
 		drm_prime_gem_destroy(obj, shmem->sgt);
-	} else {
-		drm_WARN_ON(obj->dev, refcount_read(&shmem->vmap_use_count));
 
-		if (shmem->sgt) {
-			dma_unmap_sgtable(obj->dev->dev, shmem->sgt,
-					  DMA_BIDIRECTIONAL, 0);
-			sg_free_table(shmem->sgt);
-			kfree(shmem->sgt);
-		}
-		if (shmem->pages)
-			drm_gem_shmem_put_pages_locked(shmem);
-
-		drm_WARN_ON(obj->dev, refcount_read(&shmem->pages_use_count));
-		drm_WARN_ON(obj->dev, refcount_read(&shmem->pages_pin_count));
-	}
+	drm_WARN_ON(obj->dev, refcount_read(&shmem->vmap_use_count));
+	drm_WARN_ON(obj->dev, refcount_read(&shmem->pages_use_count));
+	drm_WARN_ON(obj->dev, refcount_read(&shmem->pages_pin_count));
 
 	drm_gem_object_release(obj);
 	kfree(shmem);
@@ -705,6 +702,9 @@ struct sg_table *drm_gem_shmem_get_sg_table(struct drm_gem_shmem_object *shmem)
 
 	drm_WARN_ON(obj->dev, obj->import_attach);
 
+	if (drm_WARN_ON(obj->dev, !shmem->pages))
+		return ERR_PTR(-ENOMEM);
+
 	return drm_prime_pages_to_sg(obj->dev, shmem->pages, obj->size >> PAGE_SHIFT);
 }
 EXPORT_SYMBOL_GPL(drm_gem_shmem_get_sg_table);
@@ -720,15 +720,10 @@ static struct sg_table *drm_gem_shmem_get_pages_sgt_locked(struct drm_gem_shmem_
 
 	drm_WARN_ON(obj->dev, obj->import_attach);
 
-	ret = drm_gem_shmem_get_pages_locked(shmem);
-	if (ret)
-		return ERR_PTR(ret);
-
 	sgt = drm_gem_shmem_get_sg_table(shmem);
-	if (IS_ERR(sgt)) {
-		ret = PTR_ERR(sgt);
-		goto err_put_pages;
-	}
+	if (IS_ERR(sgt))
+		return sgt;
+
 	/* Map the pages for use by the h/w. */
 	ret = dma_map_sgtable(obj->dev->dev, sgt, DMA_BIDIRECTIONAL, 0);
 	if (ret)
@@ -741,8 +736,6 @@ static struct sg_table *drm_gem_shmem_get_pages_sgt_locked(struct drm_gem_shmem_
 err_free_sgt:
 	sg_free_table(sgt);
 	kfree(sgt);
-err_put_pages:
-	drm_gem_shmem_put_pages_locked(shmem);
 	return ERR_PTR(ret);
 }
 
@@ -758,6 +751,14 @@ err_put_pages:
  * This is the main function for drivers to get at backing storage, and it hides
  * and difference between dma-buf imported and natively allocated objects.
  * drm_gem_shmem_get_sg_table() should not be directly called by drivers.
+ *
+ * Drivers should adhere to these SGT usage rules:
+ *
+ * 1. SGT should be allocated only if shmem pages are pinned at the
+ *    time of allocation, otherwise allocation will fail.
+ *
+ * 2. Drivers should ensure that pages are pinned during the time of
+ *    SGT usage and should get new SGT if pages were unpinned.
  *
  * Returns:
  * A pointer to the scatter/gather table of pinned pages or errno on failure.
