@@ -147,8 +147,18 @@ void virtio_gpu_gem_object_close(struct drm_gem_object *obj,
 	struct virtio_gpu_device *vgdev = obj->dev->dev_private;
 	struct virtio_gpu_fpriv *vfpriv = file->driver_priv;
 	struct virtio_gpu_object_array *objs;
+	struct virtio_gpu_object *bo;
 
 	if (!vgdev->has_virgl_3d)
+		return;
+
+	bo = gem_to_virtio_gpu_obj(obj);
+
+	/*
+	 * Purged BO was already detached and released, the resource ID
+	 * is invalid by now.
+	 */
+	if (!virtio_gpu_gem_madvise(bo, VIRTGPU_MADV_WILLNEED))
 		return;
 
 	objs = virtio_gpu_array_alloc(1);
@@ -313,6 +323,31 @@ int virtio_gpu_array_prepare(struct virtio_gpu_device *vgdev,
 	}
 
 	return ret;
+}
+
+int virtio_gpu_gem_madvise(struct virtio_gpu_object *bo, int madv)
+{
+	if (virtio_gpu_is_shmem(bo))
+		return drm_gem_shmem_object_madvise(&bo->base.base, madv);
+
+	return 1;
+}
+
+int virtio_gpu_gem_host_mem_release(struct virtio_gpu_object *bo)
+{
+	struct virtio_gpu_device *vgdev = bo->base.base.dev->dev_private;
+	int err;
+
+	if (bo->created) {
+		err = virtio_gpu_cmd_release_resource(vgdev, bo);
+		if (err)
+			return err;
+
+		virtio_gpu_notify(vgdev);
+		bo->created = false;
+	}
+
+	return 0;
 }
 
 int virtio_gpu_gem_pin(struct virtio_gpu_object *bo)
