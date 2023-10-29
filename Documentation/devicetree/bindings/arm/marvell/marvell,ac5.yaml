@@ -27,6 +27,20 @@ properties:
           - const: marvell,ac5x
           - const: marvell,ac5
 
+      - description: Alleycat5X (98DX35xx) Reference Design as COM Express Carrier
+        items:
+          - enum:
+              - marvell,rd-ac5x-carrier
+          - const: marvell,ac5x
+
+      - description:
+           Alleycat5X (98DX35xx) Reference Design as COM Express Carrier plus
+           Armada CN9131 COM Express CPU module
+        items:
+          - enum:
+              - marvell,rd-ac5x-carrier-with-cn9131
+          - const: marvell,ac5x
+
 additionalProperties: true
 
 ...
