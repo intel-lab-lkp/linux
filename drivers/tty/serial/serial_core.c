@@ -1300,7 +1300,7 @@ static int uart_get_icount(struct tty_struct *tty,
 
 #define SER_RS485_LEGACY_FLAGS	(SER_RS485_ENABLED | SER_RS485_RTS_ON_SEND | \
 				 SER_RS485_RTS_AFTER_SEND | SER_RS485_RX_DURING_TX | \
-				 SER_RS485_TERMINATE_BUS)
+				 SER_RS485_TERMINATE_BUS | SER_RS422_ENABLED)
 
 static int uart_check_rs485_flags(struct uart_port *port, struct serial_rs485 *rs485)
 {
@@ -1366,8 +1366,23 @@ static void uart_sanitize_serial_rs485(struct uart_port *port, struct serial_rs4
 {
 	u32 supported_flags = port->rs485_supported.flags;
 
-	if (!(rs485->flags & SER_RS485_ENABLED)) {
+	if (!(rs485->flags & (SER_RS485_ENABLED | SER_RS422_ENABLED))) {
 		memset(rs485, 0, sizeof(*rs485));
+		return;
+	}
+
+	/* Pick sane setting if the user enables both interfaces */
+	if (rs485->flags & (SER_RS485_ENABLED | SER_RS422_ENABLED)) {
+		dev_warn_ratelimited(port->dev,
+			"%s (%d): Invalid serial interface setting, using RS485 instead\n",
+			port->name, port->line);
+		rs485->flags &= ~SER_RS422_ENABLED;
+	}
+
+	/* Clear other bits and return if RS422 is enabled */
+	if (rs485->flags & SER_RS422_ENABLED) {
+		memset(rs485, 0, sizeof(*rs485));
+		rs485->flags |= SER_RS422_ENABLED;
 		return;
 	}
 
