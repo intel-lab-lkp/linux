@@ -13,6 +13,7 @@
 #include "hw.h"
 #include "dp_tx.h"
 #include "dp_rx.h"
+#include "testmode.h"
 #include "peer.h"
 
 #define CHAN2G(_channel, _freq, _flags) { \
@@ -598,7 +599,10 @@ struct ath12k *ath12k_mac_get_ar_by_pdev_id(struct ath12k_base *ab, u32 pdev_id)
 		return NULL;
 
 	for (i = 0; i < ab->num_radios; i++) {
-		pdev = rcu_dereference(ab->pdevs_active[i]);
+		if (ab->fw_mode == ATH12K_FIRMWARE_MODE_FTM)
+			pdev = &ab->pdevs[i];
+		else
+			pdev = rcu_dereference(ab->pdevs_active[i]);
 
 		if (pdev && pdev->pdev_id == pdev_id)
 			return (pdev->ar ? pdev->ar : NULL);
@@ -4992,6 +4996,11 @@ static int ath12k_mac_op_start(struct ieee80211_hw *hw)
 	struct ath12k_pdev *pdev = ar->pdev;
 	int ret;
 
+	if (ath12k_ftm_mode) {
+		ath12k_err(ab, "fail to start mac operations in ftm mode\n");
+		return -EWOULDBLOCK;
+	}
+
 	ath12k_mac_drain_tx(ar);
 	mutex_lock(&ar->conf_mutex);
 
@@ -5006,6 +5015,7 @@ static int ath12k_mac_op_start(struct ieee80211_hw *hw)
 	case ATH12K_STATE_RESTARTED:
 	case ATH12K_STATE_WEDGED:
 	case ATH12K_STATE_ON:
+	case ATH12K_STATE_TM:
 		WARN_ON(1);
 		ret = -EINVAL;
 		goto err;
@@ -6930,6 +6940,7 @@ static const struct ieee80211_ops ath12k_ops = {
 	.get_survey			= ath12k_mac_op_get_survey,
 	.flush				= ath12k_mac_op_flush,
 	.sta_statistics			= ath12k_mac_op_sta_statistics,
+	CFG80211_TESTMODE_CMD(ath12k_tm_cmd)
 };
 
 static void ath12k_mac_update_ch_list(struct ath12k *ar,
