@@ -120,6 +120,14 @@
 
 #define VM_ENTRY_ALWAYSON_WITHOUT_TRUE_MSR	0x000011ff
 
+/* x86 memory types, explicitly used in VMX only */
+#define MEM_TYPE_WB				0x6ULL
+#define MEM_TYPE_UC				0x0ULL
+
+/* VMX_BASIC bits and bitmasks */
+#define VMX_BASIC_32BIT_PHYS_ADDR_ONLY		BIT_ULL(48)
+#define VMX_BASIC_INOUT				BIT_ULL(54)
+
 #define VMX_MISC_PREEMPTION_TIMER_RATE_MASK	0x0000001f
 #define VMX_MISC_SAVE_EFER_LMA			0x00000020
 #define VMX_MISC_ACTIVITY_HLT			0x00000040
@@ -141,6 +149,16 @@ static inline u32 vmx_basic_vmcs_revision_id(u64 vmx_basic)
 static inline u32 vmx_basic_vmcs_size(u64 vmx_basic)
 {
 	return (vmx_basic & GENMASK_ULL(44, 32)) >> 32;
+}
+
+static inline u32 vmx_basic_vmcs_basic_cap(u64 vmx_basic)
+{
+	return (vmx_basic & GENMASK_ULL(63, 45)) >> 32;
+}
+
+static inline u32 vmx_basic_vmcs_mem_type(u64 vmx_basic)
+{
+	return (vmx_basic & GENMASK_ULL(53, 50)) >> 50;
 }
 
 static inline int vmx_misc_preemption_timer_rate(u64 vmx_misc)
@@ -505,8 +523,6 @@ enum vmcs_field {
 #define VMX_EPTP_PWL_5				0x20ull
 #define VMX_EPTP_AD_ENABLE_BIT			(1ull << 6)
 #define VMX_EPTP_MT_MASK			0x7ull
-#define VMX_EPTP_MT_WB				0x6ull
-#define VMX_EPTP_MT_UC				0x0ull
 #define VMX_EPT_READABLE_MASK			0x1ull
 #define VMX_EPT_WRITABLE_MASK			0x2ull
 #define VMX_EPT_EXECUTABLE_MASK			0x4ull
