@@ -608,10 +608,12 @@ void intel_rc6_init(struct intel_rc6 *rc6)
 	/* Disable runtime-pm until we can save the GPU state with rc6 pctx */
 	rpm_get(rc6);
 
-	if (!rc6_supported(rc6))
-		return;
-
 	rc6_res_reg_init(rc6);
+
+	if (!rc6_supported(rc6)) {
+		rpm_put(rc6);
+		return;
+	}
 
 	if (IS_CHERRYVIEW(i915))
 		err = chv_rc6_init(rc6);
