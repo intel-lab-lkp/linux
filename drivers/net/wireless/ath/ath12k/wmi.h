@@ -2269,6 +2269,14 @@ struct ath12k_wmi_hal_reg_capabilities_ext_arg {
 	u32 high_5ghz_chan;
 };
 
+enum {
+	WMI_VDEV_FLAGS_NON_MBSSID_AP       = BIT(0),
+	WMI_VDEV_FLAGS_TRANSMIT_AP         = BIT(1),
+	WMI_VDEV_FLAGS_NON_TRANSMIT_AP     = BIT(2),
+	WMI_VDEV_FLAGS_EMA_MODE            = BIT(3),
+	WMI_VDEV_FLAGS_SCAN_MODE_VAP       = BIT(4),
+};
+
 #define WMI_HOST_MAX_PDEV 3
 
 struct ath12k_wmi_host_mem_chunk_params {
