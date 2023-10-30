@@ -1,0 +1,30 @@
+drm drm-fixes 44117828ed5c129a8146585e81262c0025daa50f
+	Merge tag 'amd-drm-fixes-6.6-2023-10-25' of https://gitlab.freedesktop.org/agd5f/linux into drm-fixes
+drm-misc drm-misc-fixes 101c9f637efa1655f55876644d4439e552267527
+	drm/syncobj: fix DRM_SYNCOBJ_WAIT_FLAGS_WAIT_AVAILABLE
+drm-intel drm-intel-fixes 4cbed7702eb775cca22fff6827a549092cb59f61
+	drm/i915/pmu: Check if pmu is closed before stopping event
+drm drm-next 5258dfd4a6adb5f45f046b0dd2e73c680f880d9d
+	usb: typec: altmodes/displayport: fixup drm internal api change vs new user.
+drm-misc drm-misc-next-fixes 94565e95e247c188fed4d3da1034402f3fb297de
+	drm/ssd130x: Fix possible uninitialized usage of crtc_state variable
+drm-intel drm-intel-next-fixes 5258dfd4a6adb5f45f046b0dd2e73c680f880d9d
+	usb: typec: altmodes/displayport: fixup drm internal api change vs new user.
+drm-misc drm-misc-next 3198a62eb8f8411b605501cb78c2298c67ecee91
+	accel/ivpu: Add support for delayed D0i3 entry message
+drm-intel drm-intel-next a3431650f30a94b179d419ef87c21213655c28cd
+	drm/i915/mtl: Support HBR3 rate with C10 phy and eDP in MTL
+drm-intel drm-intel-gt-next 36f27350ff745bd228ab04d7845dfbffc177a889
+	i915/perf: Fix NULL deref bugs with drm_dbg() calls
+drm-intel topic/core-for-CI 8273f4404517c733e12a245cb837d02d7646b85b
+	PCI/ASPM: pci_enable_link_state: Add argument to acquire bus lock
+drm-misc topic/i915-ttm 1e3944578b749449bd7fa6bf0bae4c3d3f5f1733
+	Merge tag 'amd-drm-next-5.16-2021-09-27' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm topic/nouveau-misc dfc4005f8c172eea359f9db08c3b2b0ff0153699
+	drm/nouveau/disp: move DAC load detection method
+drm topic/drm-ci ad6bfe1b66a5c146ec236847eca7af4c8806d666
+	drm: ci: docs: fix build warning - add missing escape
+drm topic/vmemdup-user-array 06ab64a0d836ac430c5f94669710a78aa43942cb
+	drm: vmwgfx_surface.c: copy user-array safely
+drm topic/nvidia-gsp c09ddadcb054bbbb45b46e1dd0554a3ee1a96328
+	drm/nouveau/ofa/r535: initial support
