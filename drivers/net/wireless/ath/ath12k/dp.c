@@ -1001,6 +1001,15 @@ void ath12k_dp_pdev_pre_alloc(struct ath12k_base *ab)
 
 void ath12k_dp_hal_rx_desc_init(struct ath12k_base *ab)
 {
+	if (test_bit(WMI_TLV_SERVICE_WMSK_COMPACTION_RX_TLVS, ab->wmi_ab.svc_map) &&
+	    ab->hw_params->hal_ops->rxdma_ring_wmask_rx_mpdu_start &&
+	    ab->hw_params->hal_ops->rxdma_ring_wmask_rx_msdu_end) {
+		/* RX TLVS compaction is supported, hence change the hal_rx_ops
+		 * based on device.
+		 */
+		if (ab->hal_rx_ops == &hal_rx_qcn9274_ops)
+			ab->hal_rx_ops = &hal_rx_qcn9274_compact_ops;
+	}
 	ab->hal.hal_desc_sz =
 		ab->hal_rx_ops->rx_desc_get_desc_size();
 }
