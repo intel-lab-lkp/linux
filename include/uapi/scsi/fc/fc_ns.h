@@ -145,7 +145,7 @@ struct fc_gid_pn_resp {
  */
 struct fc_gspn_resp {
 	__u8	fp_name_len;
-	char	fp_name[];
+	char	fp_name[] __nonstring;
 };
 
 /*
@@ -171,7 +171,7 @@ struct fc_ns_rn_id {
 struct fc_ns_rsnn {
 	__be64		fr_wwn;		/* node name */
 	__u8		fr_name_len;
-	char		fr_name[];
+	char		fr_name[] __nonstring;
 } __attribute__((__packed__));
 
 /*
@@ -180,7 +180,7 @@ struct fc_ns_rsnn {
 struct fc_ns_rspn {
 	struct fc_ns_fid fr_fid;	/* port ID object */
 	__u8		fr_name_len;
-	char		fr_name[];
+	char		fr_name[] __nonstring;
 } __attribute__((__packed__));
 
 /*
