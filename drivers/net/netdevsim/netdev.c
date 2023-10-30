@@ -25,6 +25,7 @@
 #include <net/udp_tunnel.h>
 
 #include "netdevsim.h"
+#include "dpll.h"
 
 static netdev_tx_t nsim_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
@@ -344,6 +345,20 @@ static int nsim_init_netdevsim(struct netdevsim *ns)
 	if (err)
 		goto err_ipsec_teardown;
 	rtnl_unlock();
+
+	if (ns->nsim_dev_port->port_index == 0) {
+		err = nsim_dpll_init_owner(&ns->dpll,
+					   ns->nsim_dev->nsim_bus_dev->dev.id);
+		if (err)
+			goto err_ipsec_teardown;
+	}
+
+	err = nsim_rclk_init(&ns->dpll, ns->nsim_dev->nsim_bus_dev->dev.id,
+			     ns->nsim_dev_port->port_index);
+
+	if (err)
+		goto err_ipsec_teardown;
+
 	return 0;
 
 err_ipsec_teardown:
@@ -419,6 +434,11 @@ void nsim_destroy(struct netdevsim *ns)
 	if (nsim_dev_port_is_pf(ns->nsim_dev_port))
 		nsim_udp_tunnels_info_destroy(dev);
 	mock_phc_destroy(ns->phc);
+
+	nsim_rclk_free(&ns->dpll);
+	if (ns->nsim_dev_port->port_index == 0)
+		nsim_dpll_free_owner(&ns->dpll);
+
 	free_netdev(dev);
 }
 

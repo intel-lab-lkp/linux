@@ -26,6 +26,8 @@
 #include <net/xdp.h>
 #include <net/macsec.h>
 
+#include "dpll.h"
+
 #define DRV_NAME	"netdevsim"
 
 #define NSIM_XDP_MAX_MTU	4000
@@ -125,6 +127,8 @@ struct netdevsim {
 	} udp_ports;
 
 	struct nsim_ethtool ethtool;
+
+	struct nsim_dpll_info dpll;
 };
 
 struct netdevsim *
