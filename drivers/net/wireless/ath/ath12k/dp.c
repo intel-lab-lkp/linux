@@ -999,6 +999,12 @@ void ath12k_dp_pdev_pre_alloc(struct ath12k_base *ab)
 	}
 }
 
+void ath12k_dp_hal_rx_desc_init(struct ath12k_base *ab)
+{
+	ab->hal.hal_desc_sz =
+		ab->hal_rx_ops->rx_desc_get_desc_size();
+}
+
 static void ath12k_dp_service_mon_ring(struct timer_list *t)
 {
 	struct ath12k_base *ab = from_timer(ab, t, mon_reap_timer);
