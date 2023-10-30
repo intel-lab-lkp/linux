@@ -122,6 +122,19 @@ patternProperties:
       [3] Documentation/devicetree/bindings/power/power-domain.yaml
       [4] Documentation/devicetree/bindings/power/domain-idle-state.yaml
 
+  "^reboot-mode-.*$":
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    minItems: 1
+    maxItems: 2
+    description: |
+      Describes a vendor-specific reset type. The string after "reboot-mode-"
+      maps a reboot mode to the parameters in the PSCI SYSTEM_RESET2 call.
+
+      Parameters are named reboot-mode-xxx = <type[, cookie]>, where xxx
+      is the name of the magic reboot mode, type is the lower 31 bits
+      of the reset_type, and, optionally, the cookie value. If the cookie
+      is not provided, it is defaulted to zero.
+
 required:
   - compatible
   - method
