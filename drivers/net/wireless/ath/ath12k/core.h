@@ -792,6 +792,8 @@ struct ath12k_base {
 	/* true means radio is on */
 	bool rfkill_radio_on;
 
+	const struct hal_rx_ops *hal_rx_ops;
+
 	/* must be last */
 	u8 drv_priv[] __aligned(sizeof(void *));
 };
