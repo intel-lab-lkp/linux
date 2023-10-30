@@ -109,6 +109,7 @@ struct ath12k_pci {
 	unsigned long flags;
 	u16 link_ctl;
 	const struct ath12k_pci_ops *pci_ops;
+	u32 qmi_instance;
 };
 
 static inline struct ath12k_pci *ath12k_pci_priv(struct ath12k_base *ab)
