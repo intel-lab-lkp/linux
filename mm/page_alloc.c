@@ -3459,6 +3459,8 @@ __alloc_pages_may_oom(gfp_t gfp_mask, unsigned int order,
 		.order = order,
 	};
 	struct page *page;
+	struct zone *zone;
+	struct zoneref *z;
 
 	*did_some_progress = 0;
 
@@ -3473,6 +3475,16 @@ __alloc_pages_may_oom(gfp_t gfp_mask, unsigned int order,
 	}
 
 	/*
+	 * If should_reclaim_retry() encounters a state where:
+	 * reclaimable + free doesn't satisfy the wmark levels,
+	 * it can directly jump to OOM without even unreserving
+	 * the highatomic page blocks. Try them for once here
+	 * before jumping to OOM.
+	 */
+retry:
+	unreserve_highatomic_pageblock(ac, true);
+
+	/*
 	 * Go through the zonelist yet one more time, keep very high watermark
 	 * here, this is only to catch a parallel oom killing, we must fail if
 	 * we're still under heavy pressure. But make sure that this reclaim
@@ -3484,6 +3496,12 @@ __alloc_pages_may_oom(gfp_t gfp_mask, unsigned int order,
 				      ALLOC_WMARK_HIGH|ALLOC_CPUSET, ac);
 	if (page)
 		goto out;
+
+	for_each_zone_zonelist_nodemask(zone, z, ac->zonelist, ac->highest_zoneidx,
+								ac->nodemask) {
+		if (zone->nr_reserved_highatomic > 0)
+			goto retry;
+	}
 
 	/* Coredumps can quickly deplete all memory reserves */
 	if (current->flags & PF_DUMPCORE)
