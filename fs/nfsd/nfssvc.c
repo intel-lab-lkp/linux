@@ -1072,30 +1072,20 @@ bool nfssvc_encode_voidres(struct svc_rqst *rqstp, struct xdr_stream *xdr)
 	return true;
 }
 
-int nfsd_pool_stats_open(struct inode *inode, struct file *file)
+static struct svc_serv *nfsd_get_serv(struct seq_file *s, bool start)
 {
-	int ret;
-	struct nfsd_net *nn = net_generic(inode->i_sb->s_fs_info, nfsd_net_id);
-
-	mutex_lock(&nfsd_mutex);
-	if (nn->nfsd_serv == NULL) {
+	struct nfsd_net *nn = net_generic(file_inode(s->file)->i_sb->s_fs_info,
+					  nfsd_net_id);
+	if (start) {
+		mutex_lock(&nfsd_mutex);
+		return nn->nfsd_serv;
+	} else {
 		mutex_unlock(&nfsd_mutex);
-		return -ENODEV;
+		return NULL;
 	}
-	svc_get(nn->nfsd_serv);
-	ret = svc_pool_stats_open(nn->nfsd_serv, file);
-	mutex_unlock(&nfsd_mutex);
-	return ret;
 }
 
-int nfsd_pool_stats_release(struct inode *inode, struct file *file)
+int nfsd_pool_stats_open(struct inode *inode, struct file *file)
 {
-	struct seq_file *seq = file->private_data;
-	struct svc_serv *serv = seq->private;
-	int ret = seq_release(inode, file);
-
-	mutex_lock(&nfsd_mutex);
-	svc_put(serv);
-	mutex_unlock(&nfsd_mutex);
-	return ret;
+	return svc_pool_stats_open(nfsd_get_serv, file);
 }

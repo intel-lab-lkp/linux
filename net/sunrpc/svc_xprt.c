@@ -1366,26 +1366,38 @@ EXPORT_SYMBOL_GPL(svc_xprt_names);
 
 /*----------------------------------------------------------------------------*/
 
+struct pool_private {
+	struct svc_serv *(*get_serv)(struct seq_file *, bool);
+	struct svc_serv *serv;
+};
+
 static void *svc_pool_stats_start(struct seq_file *m, loff_t *pos)
 {
 	unsigned int pidx = (unsigned int)*pos;
-	struct svc_serv *serv = m->private;
+	struct pool_private *pp = m->private;
 
 	dprintk("svc_pool_stats_start, *pidx=%u\n", pidx);
 
+	pp->serv = pp->get_serv(m, true);
+
 	if (!pidx)
 		return SEQ_START_TOKEN;
-	return (pidx > serv->sv_nrpools ? NULL : &serv->sv_pools[pidx-1]);
+	if (!pp->serv)
+		return NULL;
+	return (pidx > pp->serv->sv_nrpools ? NULL : &pp->serv->sv_pools[pidx-1]);
 }
 
 static void *svc_pool_stats_next(struct seq_file *m, void *p, loff_t *pos)
 {
 	struct svc_pool *pool = p;
-	struct svc_serv *serv = m->private;
+	struct pool_private *pp = m->private;
+	struct svc_serv *serv = pp->serv;
 
 	dprintk("svc_pool_stats_next, *pos=%llu\n", *pos);
 
-	if (p == SEQ_START_TOKEN) {
+	if (!serv) {
+		pool = NULL;
+	} else if (p == SEQ_START_TOKEN) {
 		pool = &serv->sv_pools[0];
 	} else {
 		unsigned int pidx = (pool - &serv->sv_pools[0]);
@@ -1400,6 +1412,9 @@ static void *svc_pool_stats_next(struct seq_file *m, void *p, loff_t *pos)
 
 static void svc_pool_stats_stop(struct seq_file *m, void *p)
 {
+	struct pool_private *pp = m->private;
+
+	pp->get_serv(m, false);
 }
 
 static int svc_pool_stats_show(struct seq_file *m, void *p)
@@ -1427,15 +1442,35 @@ static const struct seq_operations svc_pool_stats_seq_ops = {
 	.show	= svc_pool_stats_show,
 };
 
-int svc_pool_stats_open(struct svc_serv *serv, struct file *file)
+int svc_pool_stats_open(struct svc_serv *(*get_serv)(struct seq_file *, bool),
+			struct file *file)
 {
+	struct pool_private *pp;
 	int err;
 
+	pp = kmalloc(sizeof(*pp), GFP_KERNEL);
+	if (!pp)
+		return -ENOMEM;
+
 	err = seq_open(file, &svc_pool_stats_seq_ops);
-	if (!err)
-		((struct seq_file *) file->private_data)->private = serv;
+	if (!err) {
+		pp->get_serv = get_serv;
+		((struct seq_file *) file->private_data)->private = pp;
+	} else
+		kfree(pp);
+
 	return err;
 }
 EXPORT_SYMBOL(svc_pool_stats_open);
+
+int svc_pool_stats_release(struct inode *inode, struct file *file)
+{
+	struct seq_file *seq = file->private_data;
+
+	kfree(seq->private);
+	seq->private = NULL;
+	return seq_release(inode, file);
+}
+EXPORT_SYMBOL(svc_pool_stats_release);
 
 /*----------------------------------------------------------------------------*/

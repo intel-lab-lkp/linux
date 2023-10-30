@@ -433,7 +433,10 @@ void		   svc_exit_thread(struct svc_rqst *);
 struct svc_serv *  svc_create_pooled(struct svc_program *, unsigned int,
 				     int (*threadfn)(void *data));
 int		   svc_set_num_threads(struct svc_serv *, struct svc_pool *, int);
-int		   svc_pool_stats_open(struct svc_serv *serv, struct file *file);
+int		   svc_pool_stats_open(struct svc_serv *(*get_serv)(struct seq_file *, bool),
+				       struct file *file);
+int		   svc_pool_stats_release(struct inode *inode,
+					  struct file *file);
 void		   svc_process(struct svc_rqst *rqstp);
 void		   svc_process_bc(struct rpc_rqst *req, struct svc_rqst *rqstp);
 int		   svc_register(const struct svc_serv *, struct net *, const int,
