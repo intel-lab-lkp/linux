@@ -124,7 +124,7 @@ struct tcp_ao_info {
 #define tcp_hash_fail(msg, family, skb, fmt, ...)			\
 do {									\
 	const struct tcphdr *th = tcp_hdr(skb);				\
-	char hdr_flags[5] = {};						\
+	char hdr_flags[5];						\
 	char *f = hdr_flags;						\
 									\
 	if (th->fin)							\
@@ -135,8 +135,7 @@ do {									\
 		*f++ = 'R';						\
 	if (th->ack)							\
 		*f++ = 'A';						\
-	if (f != hdr_flags)						\
-		*f = ' ';						\
+	*f = 0;								\
 	if ((family) == AF_INET) {					\
 		net_info_ratelimited("%s for (%pI4, %d)->(%pI4, %d) %s" fmt "\n", \
 				msg, &ip_hdr(skb)->saddr, ntohs(th->source), \
