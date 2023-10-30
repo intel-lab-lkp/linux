@@ -434,6 +434,28 @@ static bool cred_cap_issubset(const struct cred *set, const struct cred *subset)
 }
 
 /**
+ * is_dumpability_changed - Will changing creds from old to new
+ * affect the dumpability in commit_creds?
+ *
+ * Return: false - dumpability will not be changed in commit_creds.
+ * Return: true  - dumpability will be changed to non-dumpable.
+ *
+ * @old: The old credentials
+ * @new: The new credentials
+ */
+bool is_dumpability_changed(const struct cred *old, const struct cred *new)
+{
+	if (!uid_eq(old->euid, new->euid) ||
+	    !gid_eq(old->egid, new->egid) ||
+	    !uid_eq(old->fsuid, new->fsuid) ||
+	    !gid_eq(old->fsgid, new->fsgid) ||
+	    !cred_cap_issubset(old, new))
+		return true;
+
+	return false;
+}
+
+/**
  * commit_creds - Install new credentials upon the current task
  * @new: The credentials to be assigned
  *
@@ -467,11 +489,7 @@ int commit_creds(struct cred *new)
 	get_cred(new); /* we will require a ref for the subj creds too */
 
 	/* dumpability changes */
-	if (!uid_eq(old->euid, new->euid) ||
-	    !gid_eq(old->egid, new->egid) ||
-	    !uid_eq(old->fsuid, new->fsuid) ||
-	    !gid_eq(old->fsgid, new->fsgid) ||
-	    !cred_cap_issubset(old, new)) {
+	if (is_dumpability_changed(old, new)) {
 		if (task->mm)
 			set_dumpable(task->mm, suid_dumpable);
 		task->pdeath_signal = 0;
