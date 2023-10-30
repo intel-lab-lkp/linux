@@ -913,6 +913,7 @@ static const struct ath12k_hw_params ath12k_hw_params[] = {
 		.rfkill_on_level = 0,
 
 		.rddm_size = 0,
+		.otp_board_id_register = QCN9274_QFPROM_RAW_RFA_PDET_ROW13_LSB,
 	},
 	{
 		.name = "wcn7850 hw2.0",
@@ -975,6 +976,7 @@ static const struct ath12k_hw_params ath12k_hw_params[] = {
 		.rfkill_on_level = 1,
 
 		.rddm_size = 0x780000,
+		.otp_board_id_register = 0,
 	},
 	{
 		.name = "qcn9274 hw2.0",
@@ -984,7 +986,7 @@ static const struct ath12k_hw_params ath12k_hw_params[] = {
 			.board_size = 256 * 1024,
 			.cal_offset = 128 * 1024,
 		},
-		.max_radios = 1,
+		.max_radios = 2,
 		.single_pdev_only = false,
 		.qmi_service_ins_id = ATH12K_QMI_WLFW_SERVICE_INS_ID_V01_QCN9274,
 		.internal_sleep_clock = false,
@@ -1036,6 +1038,7 @@ static const struct ath12k_hw_params ath12k_hw_params[] = {
 		.rfkill_on_level = 0,
 
 		.rddm_size = 0,
+		.otp_board_id_register = QCN9274_QFPROM_RAW_RFA_PDET_ROW13_LSB,
 	},
 };
 

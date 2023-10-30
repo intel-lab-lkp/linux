@@ -92,6 +92,7 @@
 #define ATH12K_DEFAULT_BOARD_FILE	"board.bin"
 #define ATH12K_DEFAULT_CAL_FILE		"caldata.bin"
 #define ATH12K_AMSS_FILE		"amss.bin"
+#define ATH12K_AMSS_DUALMAC_FILE	"amss_dualmac.bin"
 #define ATH12K_M3_FILE			"m3.bin"
 #define ATH12K_REGDB_FILE_NAME		"regdb.bin"
 
@@ -204,6 +205,8 @@ struct ath12k_hw_params {
 	u32 rfkill_on_level;
 
 	u32 rddm_size;
+
+	u32 otp_board_id_register;
 };
 
 struct ath12k_hw_ops {
