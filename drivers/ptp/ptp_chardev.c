@@ -109,6 +109,9 @@ int ptp_open(struct posix_clock_context *pccontext, fmode_t fmode)
 	struct timestamp_event_queue *queue;
 	char debugfsname[32];
 
+	if (mutex_lock_interruptible(&ptp->tsevq_mux)) 
+		return -ERESTARTSYS;
+
 	queue = kzalloc(sizeof(*queue), GFP_KERNEL);
 	if (!queue)
 		return -EINVAL;
@@ -132,15 +135,20 @@ int ptp_open(struct posix_clock_context *pccontext, fmode_t fmode)
 	debugfs_create_u32_array("mask", 0444, queue->debugfs_instance,
 				 &queue->dfs_bitmap);
 
+	mutex_unlock(&ptp->tsevq_mux);
 	return 0;
 }
 
 int ptp_release(struct posix_clock_context *pccontext)
 {
 	struct timestamp_event_queue *queue = pccontext->private_clkdata;
+	struct ptp_clock *ptp =
+		container_of(pccontext->clk, struct ptp_clock, clock);
 	unsigned long flags;
 
 	if (queue) {
+		if (mutex_lock_interruptible(&ptp->tsevq_mux)) 
+			return -ERESTARTSYS;
 		debugfs_remove(queue->debugfs_instance);
 		pccontext->private_clkdata = NULL;
 		spin_lock_irqsave(&queue->lock, flags);
@@ -148,6 +156,7 @@ int ptp_release(struct posix_clock_context *pccontext)
 		spin_unlock_irqrestore(&queue->lock, flags);
 		bitmap_free(queue->mask);
 		kfree(queue);
+		mutex_unlock(&ptp->tsevq_mux);
 	}
 	return 0;
 }
@@ -585,7 +594,5 @@ ssize_t ptp_read(struct posix_clock_context *pccontext, uint rdflags,
 free_event:
 	kfree(event);
 exit:
-	if (result < 0)
-		ptp_release(pccontext);
 	return result;
 }
