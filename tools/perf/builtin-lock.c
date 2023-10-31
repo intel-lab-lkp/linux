@@ -2021,6 +2021,27 @@ static int check_lock_report_options(const struct option *options,
 	return 0;
 }
 
+static int check_lock_info_options(const struct option *options,
+				   const char * const *usage)
+{
+	if (!info_map && !info_threads) {
+		pr_err("Requires one of --map or --threads\n");
+		parse_options_usage(usage, options, "map", 0);
+		parse_options_usage(NULL, options, "threads", 0);
+		return -1;
+
+	}
+
+	if (info_map && info_threads) {
+		pr_err("Cannot show map and threads together\n");
+		parse_options_usage(usage, options, "map", 0);
+		parse_options_usage(NULL, options, "threads", 0);
+		return -1;
+	}
+
+	return 0;
+}
+
 static int check_lock_contention_options(const struct option *options,
 					 const char * const *usage)
 
@@ -2710,6 +2731,10 @@ int cmd_lock(int argc, const char **argv)
 			if (argc)
 				usage_with_options(info_usage, info_options);
 		}
+
+		if (check_lock_info_options(info_options, info_usage) < 0)
+			return -1;
+
 		/* recycling report_lock_ops */
 		trace_handler = &report_lock_ops;
 		rc = __cmd_report(true);
