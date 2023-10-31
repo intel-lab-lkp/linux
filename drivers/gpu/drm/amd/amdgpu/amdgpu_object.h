@@ -67,7 +67,12 @@ struct amdgpu_bo_va_mapping {
 	struct rb_node			rb;
 	uint64_t			start;
 	uint64_t			last;
-	uint64_t			__subtree_last;
+	union {
+		/* BOs in interval tree only */
+		uint64_t		__subtree_last;
+		/* Freed BOs only */
+		bool			sync_unmap;
+	};
 	uint64_t			offset;
 	uint64_t			flags;
 };
