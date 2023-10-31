@@ -1,0 +1,184 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/leds-mp3326.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: LED driver for MP3326 from Monolithic Power Systems
+
+maintainers:
+  - Yuxi Wang <Yuxi.Wang@monolithicpower.com>
+
+description: |
+  Monolithic Power Systems MP3326 LED Drivers
+
+  For more product information please see the link below:
+  https://www.monolithicpower.com/en/products/mp3326.html
+
+properties:
+  compatible:
+    - const: mps,mp3326
+
+  "#address-cells":
+    const: 1
+
+  "#size-cells":
+    const: 0
+
+  reg:
+    maxItems: 1
+
+  mps,led-protect:
+    description: |
+      LED short protection threshold.
+    enum: [0, 1, 2, 3]
+
+  multi-led:
+    type: object
+
+    properties:
+      "#address-cells":
+        const: 1
+      "#size-cells":
+        const: 0
+
+      color:
+        description: RGB module
+        const: LED_COLOR_ID_RGB
+
+      led_r:
+        type: object
+
+        properties:
+          "#address-cells":
+            const: 1
+          "#size-cells":
+            const: 0
+          reg:
+            description: Index of the LED.
+            minimum: 1
+            maximum: 16
+          color:
+            description: Red.
+            const: LED_COLOR_ID_RED
+          required:
+            - reg
+            - color
+
+      led_g:
+        type: object
+
+        properties:
+          "#address-cells":
+            const: 1
+          "#size-cells":
+            const: 0
+        reg:
+          description: Index of the LED.
+          minimum: 1
+          maximum: 16
+        color:
+          description: Green.
+          const: LED_COLOR_ID_GREEN
+        required:
+          - reg
+          - color
+
+      led_b:
+        type: object
+
+        properties:
+          "#address-cells":
+            const: 1
+          "#size-cells":
+            const: 0
+        reg:
+          description: Index of the LED.
+          minimum: 1
+          maximum: 16
+        color:
+          description: Blue.
+          const: LED_COLOR_ID_BLUE
+        required:
+          - reg
+          - color
+
+  patternProperties:
+    "^led@[0-3]$":
+      type: object
+
+      properties:
+        reg:
+          description: Index of the LED.
+          minimum: 1
+          maximum: 16
+
+        required:
+          - reg
+          - color
+
+examples:
+  - |
+    #include <dt-bindings/leds/common.h>
+
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        mp3326@30 {
+            compatible = "mps,mp3326";
+            reg = <0x30>;
+            led-protect =<3>;
+            #address-cells = <1>;
+            #size-cells = <0>;
+
+            multi-led {
+              color = <LED_COLOR_ID_RGB>;
+              #address-cells = <1>;
+              #size-cells = <0>;
+
+              rgb_r@1 {
+                  #address-cells = <1>;
+                  #size-cells = <0>;
+                  reg  = <1>;
+                  color = <LED_COLOR_ID_RED>;
+              };
+              rgb_g@2 {
+                  #address-cells = <1>;
+                  #size-cells = <0>;
+                  reg = <2>;
+                  color = <LED_COLOR_ID_GREEN>;
+              };
+              rgb_b@3 {
+                  #address-cells = <1>;
+                  #size-cells = <0>;
+                  reg = <3>;
+                  color = <LED_COLOR_ID_BLUE>;
+              };
+            };
+        };
+    };
+
+  - |
+    #include <dt-bindings/leds/common.h>
+
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        mp3326@30 {
+            compatible = "mps,mp3326";
+            reg = <0x30>;
+            led-protect =<3>;
+            #address-cells = <1>;
+            #size-cells = <0>;
+            led0@0 {
+                #address-cells = <1>;
+                #size-cells = <0>;
+                reg= <5>;
+                color = <LED_COLOR_ID_WHITE>;
+            };
+        };
+    };
+
+...
