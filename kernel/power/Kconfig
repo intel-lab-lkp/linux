@@ -193,6 +193,14 @@ config PM
 	  responsible for the actual handling of device suspend requests and
 	  wake-up events.
 
+config PM_RPM_EXCEPTION
+	bool "Prioritize Runtime Power Management more than Power Management"
+	default n
+	help
+	Provides a way to prioritize Runtime Power Management more than Power
+	Management. This way system can suspnd with maintaining specific
+	components in operation.
+
 config PM_DEBUG
 	bool "Power Management Debug Support"
 	depends on PM

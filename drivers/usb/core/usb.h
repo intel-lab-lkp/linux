@@ -90,6 +90,22 @@ extern void usb_major_cleanup(void);
 extern int usb_device_supports_lpm(struct usb_device *udev);
 extern int usb_port_disable(struct usb_device *udev);
 
+#ifdef	CONFIG_PM_RPM_EXCEPTION
+
+static inline int usb_runtime_pm_exception(struct usb_device *udev)
+{
+	return atomic_read(&udev->dev.power.usage_count);
+}
+
+#else
+
+static inline int usb_runtime_pm_exception(struct usb_device *udev)
+{
+	return 0;
+}
+
+#endif
+
 #ifdef	CONFIG_PM
 
 extern int usb_suspend(struct device *dev, pm_message_t msg);

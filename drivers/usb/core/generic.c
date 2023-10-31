@@ -266,6 +266,9 @@ int usb_generic_driver_suspend(struct usb_device *udev, pm_message_t msg)
 {
 	int rc;
 
+	if (usb_runtime_pm_exception(udev))
+		return 0;
+
 	/* Normal USB devices suspend through their upstream port.
 	 * Root hubs don't have upstream ports to suspend,
 	 * so we have to shut down their downstream HC-to-USB
@@ -293,6 +296,9 @@ int usb_generic_driver_suspend(struct usb_device *udev, pm_message_t msg)
 int usb_generic_driver_resume(struct usb_device *udev, pm_message_t msg)
 {
 	int rc;
+
+	if (usb_runtime_pm_exception(udev))
+		return 0;
 
 	/* Normal USB devices resume/reset through their upstream port.
 	 * Root hubs don't have upstream ports to resume or reset,
