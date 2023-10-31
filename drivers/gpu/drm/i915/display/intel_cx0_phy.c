@@ -31,7 +31,7 @@
 
 bool intel_is_c10phy(struct drm_i915_private *i915, enum phy phy)
 {
-	if (DISPLAY_VER_FULL(i915) == IP_VER(14, 0) && phy < PHY_C)
+	if ((IS_LUNARLAKE(i915) || IS_METEORLAKE(i915)) && phy < PHY_C)
 		return true;
 
 	return false;
@@ -206,6 +206,13 @@ static int __intel_cx0_read_once(struct drm_i915_private *i915, enum port port,
 
 	intel_clear_response_ready_flag(i915, port, lane);
 
+	/*
+	 * FIXME: Workaround to let HW to settle
+	 * down and let the message bus to end up
+	 * in a known state
+	 */
+	intel_cx0_bus_reset(i915, port, lane);
+
 	return REG_FIELD_GET(XELPDP_PORT_P2M_DATA_MASK, val);
 }
 
@@ -284,6 +291,13 @@ static int __intel_cx0_write_once(struct drm_i915_private *i915, enum port port,
 	}
 
 	intel_clear_response_ready_flag(i915, port, lane);
+
+	/*
+	 * FIXME: Workaround to let HW to settle
+	 * down and let the message bus to end up
+	 * in a known state
+	 */
+	intel_cx0_bus_reset(i915, port, lane);
 
 	return 0;
 }
@@ -1850,8 +1864,8 @@ static int intel_c10pll_calc_state(struct intel_crtc_state *crtc_state,
 	return -EINVAL;
 }
 
-void intel_c10pll_readout_hw_state(struct intel_encoder *encoder,
-				   struct intel_c10pll_state *pll_state)
+static void intel_c10pll_readout_hw_state(struct intel_encoder *encoder,
+					  struct intel_c10pll_state *pll_state)
 {
 	struct drm_i915_private *i915 = to_i915(encoder->base.dev);
 	u8 lane = INTEL_CX0_LANE0;
@@ -2103,8 +2117,8 @@ static bool intel_c20_use_mplla(u32 clock)
 	return false;
 }
 
-void intel_c20pll_readout_hw_state(struct intel_encoder *encoder,
-				   struct intel_c20pll_state *pll_state)
+static void intel_c20pll_readout_hw_state(struct intel_encoder *encoder,
+					  struct intel_c20pll_state *pll_state)
 {
 	struct drm_i915_private *i915 = to_i915(encoder->base.dev);
 	bool cntx;
@@ -2378,8 +2392,8 @@ static void intel_c20_pll_program(struct drm_i915_private *i915,
 		      BIT(0), cntx ? 0 : 1, MB_WRITE_COMMITTED);
 }
 
-int intel_c10pll_calc_port_clock(struct intel_encoder *encoder,
-				 const struct intel_c10pll_state *pll_state)
+static int intel_c10pll_calc_port_clock(struct intel_encoder *encoder,
+					const struct intel_c10pll_state *pll_state)
 {
 	unsigned int frac_quot = 0, frac_rem = 0, frac_den = 1;
 	unsigned int multiplier, tx_clk_div, hdmi_div, refclk = 38400;
@@ -2405,8 +2419,8 @@ int intel_c10pll_calc_port_clock(struct intel_encoder *encoder,
 	return tmpclk;
 }
 
-int intel_c20pll_calc_port_clock(struct intel_encoder *encoder,
-				 const struct intel_c20pll_state *pll_state)
+static int intel_c20pll_calc_port_clock(struct intel_encoder *encoder,
+					const struct intel_c20pll_state *pll_state)
 {
 	unsigned int frac, frac_en, frac_quot, frac_rem, frac_den;
 	unsigned int multiplier, refclk = 38400;
@@ -3052,4 +3066,28 @@ void intel_c10pll_state_verify(struct intel_atomic_state *state,
 			"[CRTC:%d:%s] mismatch in C10MPLLB: Register CMN0 (expected 0x%02x, found 0x%02x)",
 			crtc->base.base.id, crtc->base.name,
 			mpllb_sw_state->cmn, mpllb_hw_state.cmn);
+}
+
+void intel_cx0pll_readout_hw_state(struct intel_encoder *encoder,
+				   struct intel_cx0pll_state *pll_state)
+{
+	struct drm_i915_private *i915 = to_i915(encoder->base.dev);
+	enum phy phy = intel_port_to_phy(i915, encoder->port);
+
+	if (intel_is_c10phy(i915, phy))
+		intel_c10pll_readout_hw_state(encoder, &pll_state->c10);
+	else
+		intel_c20pll_readout_hw_state(encoder, &pll_state->c20);
+}
+
+int intel_cx0pll_calc_port_clock(struct intel_encoder *encoder,
+				 const struct intel_cx0pll_state *pll_state)
+{
+	struct drm_i915_private *i915 = to_i915(encoder->base.dev);
+	enum phy phy = intel_port_to_phy(i915, encoder->port);
+
+	if (intel_is_c10phy(i915, phy))
+		return intel_c10pll_calc_port_clock(encoder, &pll_state->c10);
+
+	return intel_c20pll_calc_port_clock(encoder, &pll_state->c20);
 }
