@@ -1223,6 +1223,94 @@ Description:	This file shows the total latency (in micro seconds) of write
 
 		The file is read only.
 
+What:		/sys/bus/platform/drivers/ufshcd/*/power_info/lane
+What:		/sys/bus/platform/devices/*.ufs/power_info/lane
+Date:		September 2023
+Contact:	Can Guo <quic_cang@quicinc.com>
+Description:	This file shows how many lanes are enabled on the UFS link,
+		i.e., an output 2 means UFS link is operating with 2 lanes.
+
+		The file is read only.
+
+What:		/sys/bus/platform/drivers/ufshcd/*/power_info/mode
+What:		/sys/bus/platform/devices/*.ufs/power_info/mode
+Date:		September 2023
+Contact:	Can Guo <quic_cang@quicinc.com>
+Description:	This file shows the UniPro power mode of UFS link:
+		==  ====================================================
+		1   FAST_MODE
+		2   SLOW_MODE
+		4   FASTAUTO_MODE
+		5   SLOWAUTO_MODE
+		==  ====================================================
+
+		The file is read only.
+
+What:		/sys/bus/platform/drivers/ufshcd/*/power_info/rate
+What:		/sys/bus/platform/devices/*.ufs/power_info/rate
+Date:		September 2023
+Contact:	Can Guo <quic_cang@quicinc.com>
+Description:	This file shows the speed rate of UFS link:
+		==  ====================================================
+		0   Indicates that the gear is in PWM mode
+		1   HS_MODE_A - High Speed Rate A
+		2   HS_MODE_B - High Speed Rate B
+		==  ====================================================
+
+		The file is read only.
+
+What:		/sys/bus/platform/drivers/ufshcd/*/power_info/gear
+What:		/sys/bus/platform/devices/*.ufs/power_info/gear
+Date:		September 2023
+Contact:	Can Guo <quic_cang@quicinc.com>
+Description:	This file shows the gear of UFS link. 'rate' indicates whether
+		the gear is in PWM mode or High-Speed mode.
+		==  ====================================================
+		1   PWM_GEAR1
+		2   PWM_GEAR2
+		3   PWM_GEAR3
+		4   PWM_GEAR4
+		5   PWM_GEAR5
+		6   PWM_GEAR6
+		7   PWM_GEAR7
+		==  ====================================================
+		1   HS_GEAR1
+		2   HS_GEAR2
+		3   HS_GEAR3
+		4   HS_GEAR4
+		5   HS_GEAR5
+		==  ====================================================
+
+		The file is read only.
+
+What:		/sys/bus/platform/drivers/ufshcd/*/power_info/dev_pm
+What:		/sys/bus/platform/devices/*.ufs/power_info/dev_pm
+Date:		September 2023
+Contact:	Can Guo <quic_cang@quicinc.com>
+Description:	This file shows the UFS device power mode:
+		==  ====================================================
+		1   ACTIVE_PWR_MODE
+		2   SLEEP_PWR_MODE
+		3   POWERDOWN_PWR_MODE
+		4   DEEPSLEEP_PWR_MODE
+		==  ====================================================
+
+		The file is read only.
+
+What:		/sys/bus/platform/drivers/ufshcd/*/power_info/link_state
+What:		/sys/bus/platform/devices/*.ufs/power_info/link_state
+Date:		September 2023
+Contact:	Can Guo <quic_cang@quicinc.com>
+Description:	This file shows the state of UFS link:
+		==  ====================================================
+		0   UIC_LINK_OFF_STATE
+		1   UIC_LINK_ACTIVE_STATE
+		2   UIC_LINK_HIBERN8_STATE
+		3   UIC_LINK_BROKEN_STATE
+		==  ====================================================
+
+		The file is read only.
+
 What:		/sys/bus/platform/drivers/ufshcd/*/device_descriptor/wb_presv_us_en
 What:		/sys/bus/platform/devices/*.ufs/device_descriptor/wb_presv_us_en
 Date:		June 2020
