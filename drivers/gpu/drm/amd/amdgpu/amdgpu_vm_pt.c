@@ -652,6 +652,7 @@ static void amdgpu_vm_pt_free(struct amdgpu_vm_bo_base *entry)
 
 	spin_lock(&entry->vm->status_lock);
 	list_del(&entry->vm_status);
+	list_del(&entry->eviction_status);
 	spin_unlock(&entry->vm->status_lock);
 	amdgpu_bo_unref(&entry->bo);
 }

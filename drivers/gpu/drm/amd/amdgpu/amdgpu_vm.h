@@ -156,6 +156,7 @@ struct amdgpu_vm_bo_base {
 
 	/* protected by spinlock */
 	struct list_head		vm_status;
+	struct list_head		eviction_status;
 
 	/* protected by the BO being reserved */
 	bool				moved;

@@ -174,19 +174,23 @@ int amdgpu_vm_set_pasid(struct amdgpu_device *adev, struct amdgpu_vm *vm,
  * State for PDs/PTs and per VM BOs which are not at the location they should
  * be.
  */
-static void amdgpu_vm_bo_evicted(struct amdgpu_vm_bo_base *vm_bo)
+static void amdgpu_vm_bo_set_evicted(struct amdgpu_vm_bo_base *vm_bo, bool evicted)
 {
 	struct amdgpu_vm *vm = vm_bo->vm;
 	struct amdgpu_bo *bo = vm_bo->bo;
 
-	vm_bo->moved = true;
 	spin_lock(&vm_bo->vm->status_lock);
-	if (bo->tbo.type == ttm_bo_type_kernel)
-		list_move(&vm_bo->vm_status, &vm->evicted);
-	else
-		list_move_tail(&vm_bo->vm_status, &vm->evicted);
+	if (evicted && bo->tbo.base.resv == vm->root.bo->tbo.base.resv) {
+		if (bo->tbo.type == ttm_bo_type_kernel)
+			list_move(&vm_bo->eviction_status, &vm->evicted);
+		else
+			list_move_tail(&vm_bo->eviction_status, &vm->evicted);
+	} else {
+		list_del_init(&vm_bo->eviction_status);
+	}
 	spin_unlock(&vm_bo->vm->status_lock);
 }
+
 /**
  * amdgpu_vm_bo_moved - vm_bo is moved
  *
@@ -310,6 +314,7 @@ void amdgpu_vm_bo_base_init(struct amdgpu_vm_bo_base *base,
 	base->bo = bo;
 	base->next = NULL;
 	INIT_LIST_HEAD(&base->vm_status);
+	INIT_LIST_HEAD(&base->eviction_status);
 
 	if (!bo)
 		return;
@@ -336,7 +341,7 @@ void amdgpu_vm_bo_base_init(struct amdgpu_vm_bo_base *base,
 	 * is currently evicted. add the bo to the evicted list to make sure it
 	 * is validated on next vm use to avoid fault.
 	 * */
-	amdgpu_vm_bo_evicted(base);
+	amdgpu_vm_bo_set_evicted(base, true);
 }
 
 /**
@@ -460,7 +465,7 @@ int amdgpu_vm_validate_pt_bos(struct amdgpu_device *adev, struct amdgpu_vm *vm,
 	while (!list_empty(&vm->evicted)) {
 		bo_base = list_first_entry(&vm->evicted,
 					   struct amdgpu_vm_bo_base,
-					   vm_status);
+					   eviction_status);
 		spin_unlock(&vm->status_lock);
 
 		bo = bo_base->bo;
@@ -1034,7 +1039,7 @@ void amdgpu_vm_get_memory(struct amdgpu_vm *vm,
 	list_for_each_entry_safe(bo_va, tmp, &vm->idle, base.vm_status)
 		amdgpu_vm_bo_get_memory(bo_va, stats);
 
-	list_for_each_entry_safe(bo_va, tmp, &vm->evicted, base.vm_status)
+	list_for_each_entry_safe(bo_va, tmp, &vm->evicted, base.eviction_status)
 		amdgpu_vm_bo_get_memory(bo_va, stats);
 
 	list_for_each_entry_safe(bo_va, tmp, &vm->relocated, base.vm_status)
@@ -1153,21 +1158,10 @@ int amdgpu_vm_bo_update(struct amdgpu_device *adev, struct amdgpu_bo_va *bo_va,
 			return r;
 	}
 
-	/* If the BO is not in its preferred location add it back to
-	 * the evicted list so that it gets validated again on the
-	 * next command submission.
-	 */
-	if (bo && bo->tbo.base.resv == vm->root.bo->tbo.base.resv) {
-		uint32_t mem_type = bo->tbo.resource->mem_type;
-
-		if (!(bo->preferred_domains &
-		      amdgpu_mem_type_to_domain(mem_type)))
-			amdgpu_vm_bo_evicted(&bo_va->base);
-		else
-			amdgpu_vm_bo_idle(&bo_va->base);
-	} else {
+	if (bo && bo->tbo.base.resv == vm->root.bo->tbo.base.resv)
+		amdgpu_vm_bo_idle(&bo_va->base);
+	else
 		amdgpu_vm_bo_done(&bo_va->base);
-	}
 
 	list_splice_init(&bo_va->invalids, &bo_va->valids);
 	bo_va->cleared = clear;
@@ -1883,6 +1877,7 @@ void amdgpu_vm_bo_del(struct amdgpu_device *adev,
 
 	spin_lock(&vm->status_lock);
 	list_del(&bo_va->base.vm_status);
+	list_del(&bo_va->base.eviction_status);
 	spin_unlock(&vm->status_lock);
 
 	list_for_each_entry_safe(mapping, next, &bo_va->valids, list) {
@@ -1959,13 +1954,18 @@ void amdgpu_vm_bo_invalidate(struct amdgpu_device *adev,
 	if (bo->parent && (amdgpu_bo_shadowed(bo->parent) == bo))
 		bo = bo->parent;
 
+	/* If the BO is not in its preferred location add it back to
+	 * the evicted list so that it gets validated again on the
+	 * next command submission.
+	 */
+	uint32_t mem_type = bo->tbo.resource->mem_type;
+	bool suboptimal = !(bo->preferred_domains &
+			 amdgpu_mem_type_to_domain(mem_type));
+
 	for (bo_base = bo->vm_bo; bo_base; bo_base = bo_base->next) {
 		struct amdgpu_vm *vm = bo_base->vm;
 
-		if (evicted && bo->tbo.base.resv == vm->root.bo->tbo.base.resv) {
-			amdgpu_vm_bo_evicted(bo_base);
-			continue;
-		}
+		amdgpu_vm_bo_set_evicted(bo_base, suboptimal);
 
 		if (bo_base->moved)
 			continue;
@@ -2648,13 +2648,11 @@ void amdgpu_debugfs_vm_bo_info(struct amdgpu_vm *vm, struct seq_file *m)
 {
 	struct amdgpu_bo_va *bo_va, *tmp;
 	u64 total_idle = 0;
-	u64 total_evicted = 0;
 	u64 total_relocated = 0;
 	u64 total_moved = 0;
 	u64 total_invalidated = 0;
 	u64 total_done = 0;
 	unsigned int total_idle_objs = 0;
-	unsigned int total_evicted_objs = 0;
 	unsigned int total_relocated_objs = 0;
 	unsigned int total_moved_objs = 0;
 	unsigned int total_invalidated_objs = 0;
@@ -2669,15 +2667,6 @@ void amdgpu_debugfs_vm_bo_info(struct amdgpu_vm *vm, struct seq_file *m)
 		total_idle += amdgpu_bo_print_info(id++, bo_va->base.bo, m);
 	}
 	total_idle_objs = id;
-	id = 0;
-
-	seq_puts(m, "\tEvicted BOs:\n");
-	list_for_each_entry_safe(bo_va, tmp, &vm->evicted, base.vm_status) {
-		if (!bo_va->base.bo)
-			continue;
-		total_evicted += amdgpu_bo_print_info(id++, bo_va->base.bo, m);
-	}
-	total_evicted_objs = id;
 	id = 0;
 
 	seq_puts(m, "\tRelocated BOs:\n");
@@ -2718,8 +2707,6 @@ void amdgpu_debugfs_vm_bo_info(struct amdgpu_vm *vm, struct seq_file *m)
 
 	seq_printf(m, "\tTotal idle size:        %12lld\tobjs:\t%d\n", total_idle,
 		   total_idle_objs);
-	seq_printf(m, "\tTotal evicted size:     %12lld\tobjs:\t%d\n", total_evicted,
-		   total_evicted_objs);
 	seq_printf(m, "\tTotal relocated size:   %12lld\tobjs:\t%d\n", total_relocated,
 		   total_relocated_objs);
 	seq_printf(m, "\tTotal moved size:       %12lld\tobjs:\t%d\n", total_moved,
