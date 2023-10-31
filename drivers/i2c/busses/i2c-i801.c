@@ -1298,7 +1298,7 @@ static struct i801_mux_config i801_mux_config_asus_z8_d12 = {
 	.gpio_chip = "gpio_ich",
 	.values = { 0x02, 0x03 },
 	.n_values = 2,
-	.classes = { I2C_CLASS_SPD, I2C_CLASS_SPD },
+	.classes = { I2C_CLASS_HWMON, I2C_CLASS_HWMON },
 	.gpios = { 52, 53 },
 	.n_gpios = 2,
 };
@@ -1307,7 +1307,7 @@ static struct i801_mux_config i801_mux_config_asus_z8_d18 = {
 	.gpio_chip = "gpio_ich",
 	.values = { 0x02, 0x03, 0x01 },
 	.n_values = 3,
-	.classes = { I2C_CLASS_SPD, I2C_CLASS_SPD, I2C_CLASS_SPD },
+	.classes = { I2C_CLASS_HWMON, I2C_CLASS_HWMON, I2C_CLASS_HWMON },
 	.gpios = { 52, 53 },
 	.n_gpios = 2,
 };
@@ -1394,6 +1394,9 @@ static void i801_add_mux(struct i801_priv *priv)
 		return;
 
 	mux_config = id->driver_data;
+
+	/* Parent and mux children class support must not overlap */
+	priv->adapter.class = 0;
 
 	/* Prepare the platform data */
 	memset(&gpio_data, 0, sizeof(struct i2c_mux_gpio_platform_data));
