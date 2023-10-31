@@ -856,6 +856,7 @@ static void unhook_dentry(struct dentry **dentry, struct dentry **list)
 		*dentry = NULL;
 	}
 }
+
 /**
  * eventfs_remove_dir - remove eventfs dir or file from list
  * @ei: eventfs_inode to be removed.
@@ -868,6 +869,7 @@ void eventfs_remove_dir(struct eventfs_inode *ei)
 	LIST_HEAD(ei_del_list);
 	struct dentry *dentry_list = NULL;
 	struct dentry *dentry;
+	struct inode *inode;
 	int i;
 
 	if (!ei)
@@ -891,7 +893,28 @@ void eventfs_remove_dir(struct eventfs_inode *ei)
 		ptr = (unsigned long)dentry->d_fsdata & ~1UL;
 		dentry_list = (struct dentry *)ptr;
 		dentry->d_fsdata = NULL;
+
+		inode = dentry->d_inode;
+		inode_lock(inode);
+		if (d_is_dir(dentry))
+			inode->i_flags |= S_DEAD;
+		clear_nlink(inode);
+		inode_unlock(inode);
+
+		inode = dentry->d_parent->d_inode;
+		inode_lock(inode);
+
+		/* Remove its visibility */
 		d_invalidate(dentry);
+		if (d_is_dir(dentry))
+			fsnotify_rmdir(inode, dentry);
+		else
+			fsnotify_unlink(inode, dentry);
+
+		if (d_is_dir(dentry))
+			drop_nlink(inode);
+		inode_unlock(inode);
+
 		mutex_lock(&eventfs_mutex);
 		/* dentry should now have at least a single reference */
 		WARN_ONCE((int)d_count(dentry) < 1,
