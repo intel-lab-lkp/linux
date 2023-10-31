@@ -35,6 +35,7 @@ properties:
               - samsung,exynos5433-sysreg
               - samsung,exynos850-sysreg
               - samsung,exynosautov9-sysreg
+              - samsung,exynosautov920-sysreg
           - const: syscon
         deprecated: true
       - items:
@@ -49,6 +50,12 @@ properties:
               - samsung,exynosautov9-peric0-sysreg
               - samsung,exynosautov9-peric1-sysreg
           - const: samsung,exynosautov9-sysreg
+          - const: syscon
+      - items:
+          - enum:
+              - samsung,exynosautov920-peric0-sysreg
+              - samsung,exynosautov920-peric1-sysreg
+          - const: samsung,exynosautov920-sysreg
           - const: syscon
 
   reg:
