@@ -21,6 +21,7 @@ struct intel_encoder;
 struct intel_plane;
 struct intel_plane_state;
 
+bool psr2_global_enabled(struct intel_dp *intel_dp);
 void intel_psr_init_dpcd(struct intel_dp *intel_dp);
 void intel_psr_pre_plane_update(struct intel_atomic_state *state,
 				struct intel_crtc *crtc);
