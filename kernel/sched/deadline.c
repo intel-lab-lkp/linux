@@ -1301,8 +1301,6 @@ static void update_curr_dl(struct rq *rq)
 	schedstat_set(curr->stats.exec_max,
 		      max(curr->stats.exec_max, delta_exec));
 
-	trace_sched_stat_runtime(curr, delta_exec, 0);
-
 	update_current_exec_runtime(curr, now, delta_exec, true);
 
 	if (dl_entity_is_special(dl_se))

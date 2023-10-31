@@ -3268,6 +3268,7 @@ static inline void update_current_exec_runtime(struct task_struct *curr,
 	curr->se.exec_start = now;
 
 	if (task) {
+		trace_sched_stat_runtime(curr, delta_exec, curr->se.vruntime);
 		account_group_exec_runtime(curr, delta_exec);
 		cgroup_account_cputime(curr, delta_exec);
 	}
