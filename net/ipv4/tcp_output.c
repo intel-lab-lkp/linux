@@ -658,7 +658,7 @@ static void tcp_options_write(struct tcphdr *th, struct tcp_sock *tp,
 			memset(ptr, TCPOPT_NOP, sizeof(*ptr));
 			ptr++;
 		}
-out_ao:
+out_ao:;
 #endif
 	}
 	if (unlikely(opts->mss)) {
