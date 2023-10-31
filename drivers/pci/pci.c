@@ -6224,6 +6224,40 @@ int pcie_set_mps(struct pci_dev *dev, int mps)
 EXPORT_SYMBOL(pcie_set_mps);
 
 /**
+ * pcie_is_tunneling_port - Check if a PCI device is used for TBT3/USB4 tunneling
+ * @dev: PCI device to check
+ *
+ * Returns true if the device is used for PCIe tunneling, false otherwise.
+ */
+static bool
+pcie_is_tunneling_port(struct pci_dev *pdev)
+{
+	struct device_link *link;
+	struct pci_dev *supplier;
+
+	/* Intel TBT3 bridge */
+	if (pdev->is_thunderbolt)
+		return true;
+
+	if (!pci_is_pcie(pdev))
+		return false;
+
+	if (pci_pcie_type(pdev) != PCI_EXP_TYPE_ROOT_PORT)
+		return false;
+
+	/* PCIe root port used for tunneling linked to USB4 router */
+	list_for_each_entry(link, &pdev->dev.links.suppliers, c_node) {
+		supplier = to_pci_dev(link->supplier);
+		if (!supplier)
+			continue;
+		if (supplier->class == PCI_CLASS_SERIAL_USB_USB4)
+			return true;
+	}
+
+	return false;
+}
+
+/**
  * pcie_bandwidth_available - determine minimum link settings of a PCIe
  *			      device and its bandwidth limitation
  * @dev: PCI device to query
@@ -6236,6 +6270,8 @@ EXPORT_SYMBOL(pcie_set_mps);
  * limiting_dev, speed, and width pointers are supplied) information about
  * that point.  The bandwidth returned is in Mb/s, i.e., megabits/second of
  * raw bandwidth.
+ *
+ * This function excludes root ports and bridges used for USB4 and TBT3 tunneling.
  */
 u32 pcie_bandwidth_available(struct pci_dev *dev, struct pci_dev **limiting_dev,
 			     enum pci_bus_speed *speed,
@@ -6254,6 +6290,10 @@ u32 pcie_bandwidth_available(struct pci_dev *dev, struct pci_dev **limiting_dev,
 	bw = 0;
 
 	while (dev) {
+		/* skip root ports and bridges used for tunneling */
+		if (pcie_is_tunneling_port(dev))
+			goto skip;
+
 		pcie_capability_read_word(dev, PCI_EXP_LNKSTA, &lnksta);
 
 		next_speed = pcie_link_speed[lnksta & PCI_EXP_LNKSTA_CLS];
@@ -6274,6 +6314,7 @@ u32 pcie_bandwidth_available(struct pci_dev *dev, struct pci_dev **limiting_dev,
 				*width = next_width;
 		}
 
+skip:
 		dev = pci_upstream_bridge(dev);
 	}
 
