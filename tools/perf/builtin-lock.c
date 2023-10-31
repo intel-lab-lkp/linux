@@ -78,7 +78,7 @@ struct callstack_filter {
 
 static struct lock_filter filters;
 
-static enum lock_aggr_mode aggr_mode = LOCK_AGGR_ADDR;
+static enum lock_aggr_mode aggr_mode = LOCK_AGGR_CALLER;
 
 static bool needs_callstack(void)
 {
@@ -1983,8 +1983,8 @@ static int __cmd_report(bool display_info)
 	if (select_key(false))
 		goto out_delete;
 
-	if (show_thread_stats)
-		aggr_mode = LOCK_AGGR_TASK;
+	aggr_mode = show_thread_stats ? LOCK_AGGR_TASK :
+		show_lock_addrs ? LOCK_AGGR_ADDR : LOCK_AGGR_CALLER;
 
 	err = perf_session__process_events(session);
 	if (err)
@@ -2006,6 +2006,19 @@ out_delete:
 
 static void sighandler(int sig __maybe_unused)
 {
+}
+
+static int check_lock_report_options(const struct option *options,
+				     const char * const *usage)
+{
+	if (show_thread_stats && show_lock_addrs) {
+		pr_err("Cannot use thread and addr mode together\n");
+		parse_options_usage(usage, options, "threads", 0);
+		parse_options_usage(NULL, options, "lock-addr", 0);
+		return -1;
+	}
+
+	return 0;
 }
 
 static int check_lock_contention_options(const struct option *options,
@@ -2590,6 +2603,7 @@ int cmd_lock(int argc, const char **argv)
 	/* TODO: type */
 	OPT_BOOLEAN('c', "combine-locks", &combine_locks,
 		    "combine locks in the same class"),
+	OPT_BOOLEAN('l', "lock-addr", &show_lock_addrs, "show lock stats by address"),
 	OPT_BOOLEAN('t', "threads", &show_thread_stats,
 		    "show per-thread lock stats"),
 	OPT_INTEGER('E', "entries", &print_nr_entries, "display this many functions"),
@@ -2681,6 +2695,10 @@ int cmd_lock(int argc, const char **argv)
 			if (argc)
 				usage_with_options(report_usage, report_options);
 		}
+
+		if (check_lock_report_options(report_options, report_usage) < 0)
+			return -1;
+
 		rc = __cmd_report(false);
 	} else if (!strcmp(argv[0], "script")) {
 		/* Aliased to 'perf script' */

@@ -80,6 +80,10 @@ REPORT OPTIONS
 --combine-locks::
 	Merge lock instances in the same class (based on name).
 
+-l::
+--lock-addr::
+	Show lock contention stat by address
+
 -t::
 --threads::
     The -t option is to show per-thread lock stat like below:
