@@ -1473,6 +1473,8 @@ struct flow_msg {
 		u8 next_header;
 	};
 	__be16 vlan_itci;
+	u8 icmp_type;
+	u8 icmp_code;
 };
 
 struct npc_install_flow_req {
