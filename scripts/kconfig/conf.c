@@ -74,13 +74,17 @@ static void strip(char *str)
 }
 
 /* Helper function to facilitate fgets() by Jean Sacren. */
-static void xfgets(char *str, int size, FILE *in)
+static int xfgets(char *str, int size, FILE *in)
 {
+	int ret = 0;
+
 	if (!fgets(str, size, in))
-		fprintf(stderr, "\nError in reading or end of file.\n");
+		ret = -1;
 
 	if (!tty_stdio)
 		printf("%s", str);
+
+	return ret;
 }
 
 static void set_randconfig_seed(void)
@@ -339,7 +343,10 @@ static int conf_askvalue(struct symbol *sym, const char *def)
 		/* fall through */
 	default:
 		fflush(stdout);
-		xfgets(line, sizeof(line), stdin);
+		if (xfgets(line, sizeof(line), stdin) != 0) {
+			fprintf(stderr, "Error while reading value of symbol \"%s\"\n", sym->name);
+			exit(1);
+		}
 		break;
 	}
 
@@ -521,7 +528,11 @@ static int conf_choice(struct menu *menu)
 			/* fall through */
 		case oldaskconfig:
 			fflush(stdout);
-			xfgets(line, sizeof(line), stdin);
+			if (xfgets(line, sizeof(line), stdin) != 0) {
+				fprintf(stderr, "Error while reading value of symbol \"%s\"\n",
+						sym->name);
+				exit(1);
+			}
 			strip(line);
 			if (line[0] == '?') {
 				print_help(menu);
