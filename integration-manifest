@@ -1,0 +1,30 @@
+drm drm-fixes 44117828ed5c129a8146585e81262c0025daa50f
+	Merge tag 'amd-drm-fixes-6.6-2023-10-25' of https://gitlab.freedesktop.org/agd5f/linux into drm-fixes
+drm-misc drm-misc-fixes 101c9f637efa1655f55876644d4439e552267527
+	drm/syncobj: fix DRM_SYNCOBJ_WAIT_FLAGS_WAIT_AVAILABLE
+drm-intel drm-intel-fixes 4cbed7702eb775cca22fff6827a549092cb59f61
+	drm/i915/pmu: Check if pmu is closed before stopping event
+drm drm-next 631808095a82e6b6f8410a95f8b12b8d0d38b161
+	Merge tag 'amd-drm-next-6.7-2023-10-27' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm-misc drm-misc-next-fixes 94565e95e247c188fed4d3da1034402f3fb297de
+	drm/ssd130x: Fix possible uninitialized usage of crtc_state variable
+drm-intel drm-intel-next-fixes 471aa951bf1206d3c10d0daa67005b8e4db4ff83
+	i915/perf: Fix NULL deref bugs with drm_dbg() calls
+drm-misc drm-misc-next 9d7c8c066916f231ca0ed4e4fce6c4b58ca3e451
+	Revert "drm/omapdrm: Annotate dma-fence critical section in commit path"
+drm-intel drm-intel-next 949113d34fb82a5dc6f5dd3ad9168001b441792b
+	drm/i915/mtl: Apply notify_guc to all GTs
+drm-intel drm-intel-gt-next 2fb771f3b840ff59e593dad9b6289276ea545698
+	drm/i915: Set copy engine arbitration for Wa_16018031267 / Wa_16018063123
+drm-intel topic/core-for-CI 8273f4404517c733e12a245cb837d02d7646b85b
+	PCI/ASPM: pci_enable_link_state: Add argument to acquire bus lock
+drm-misc topic/i915-ttm 1e3944578b749449bd7fa6bf0bae4c3d3f5f1733
+	Merge tag 'amd-drm-next-5.16-2021-09-27' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm topic/nouveau-misc dfc4005f8c172eea359f9db08c3b2b0ff0153699
+	drm/nouveau/disp: move DAC load detection method
+drm topic/drm-ci ad6bfe1b66a5c146ec236847eca7af4c8806d666
+	drm: ci: docs: fix build warning - add missing escape
+drm topic/vmemdup-user-array 06ab64a0d836ac430c5f94669710a78aa43942cb
+	drm: vmwgfx_surface.c: copy user-array safely
+drm topic/nvidia-gsp 7e6bd6409b66f57741dd69e0ee20f4ed4434b67c
+	nouveau/disp: fix post-gsp build on 32-bit arm.
