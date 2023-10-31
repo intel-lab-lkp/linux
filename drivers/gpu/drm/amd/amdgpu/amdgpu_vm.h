@@ -276,6 +276,9 @@ struct amdgpu_vm {
 	/* per VM BOs moved, but not yet updated in the PT */
 	struct list_head	moved;
 
+	/* normal and per VM BOs that are not moved, but have new PT entries */
+	struct list_head	dirty;
+
 	/* All BOs of this VM not currently in the state machine */
 	struct list_head	idle;
 

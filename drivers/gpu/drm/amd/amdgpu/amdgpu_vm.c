@@ -192,6 +192,21 @@ static void amdgpu_vm_bo_set_evicted(struct amdgpu_vm_bo_base *vm_bo, bool evict
 }
 
 /**
+ * amdgpu_vm_bo_dirty - vm_bo is dirty
+ *
+ * @vm_bo: vm_bo which is dirty
+ *
+ * State for normal and per VM BOs that are not moved, but have new entries in
+ * bo_va->invalids.
+ */
+static void amdgpu_vm_bo_dirty(struct amdgpu_vm_bo_base *vm_bo)
+{
+	spin_lock(&vm_bo->vm->status_lock);
+	list_move(&vm_bo->vm_status, &vm_bo->vm->dirty);
+	spin_unlock(&vm_bo->vm->status_lock);
+}
+
+/**
  * amdgpu_vm_bo_moved - vm_bo is moved
  *
  * @vm_bo: vm_bo which is moved
@@ -1042,6 +1057,9 @@ void amdgpu_vm_get_memory(struct amdgpu_vm *vm,
 	list_for_each_entry_safe(bo_va, tmp, &vm->evicted, base.eviction_status)
 		amdgpu_vm_bo_get_memory(bo_va, stats);
 
+	list_for_each_entry_safe(bo_va, tmp, &vm->dirty, base.vm_status)
+		amdgpu_vm_bo_get_memory(bo_va, stats);
+
 	list_for_each_entry_safe(bo_va, tmp, &vm->relocated, base.vm_status)
 		amdgpu_vm_bo_get_memory(bo_va, stats);
 
@@ -1411,6 +1429,17 @@ int amdgpu_vm_handle_moved(struct amdgpu_device *adev,
 			dma_resv_unlock(resv);
 		spin_lock(&vm->status_lock);
 	}
+
+	while (!list_empty(&vm->dirty)) {
+		bo_va = list_first_entry(&vm->dirty, struct amdgpu_bo_va,
+					 base.vm_status);
+		spin_unlock(&vm->status_lock);
+
+		r = amdgpu_vm_bo_update(adev, bo_va, false);
+		if (r)
+			return r;
+		spin_lock(&vm->status_lock);
+	}
 	spin_unlock(&vm->status_lock);
 
 	return 0;
@@ -1476,19 +1505,16 @@ static void amdgpu_vm_bo_insert_map(struct amdgpu_device *adev,
 				    struct amdgpu_bo_va_mapping *mapping)
 {
 	struct amdgpu_vm *vm = bo_va->base.vm;
-	struct amdgpu_bo *bo = bo_va->base.bo;
 
 	mapping->bo_va = bo_va;
 	list_add(&mapping->list, &bo_va->invalids);
 	amdgpu_vm_it_insert(mapping, &vm->va);
+	if (!bo_va->base.moved)
+		amdgpu_vm_bo_dirty(&bo_va->base);
 
 	if (mapping->flags & AMDGPU_PTE_PRT)
 		amdgpu_vm_prt_get(adev);
 
-	if (bo && bo->tbo.base.resv == vm->root.bo->tbo.base.resv &&
-	    !bo_va->base.moved) {
-		amdgpu_vm_bo_moved(&bo_va->base);
-	}
 	trace_amdgpu_vm_bo_map(bo_va, mapping);
 }
 
@@ -1725,6 +1751,8 @@ int amdgpu_vm_bo_clear_mappings(struct amdgpu_device *adev,
 			before->flags = tmp->flags;
 			before->bo_va = tmp->bo_va;
 			list_add(&before->list, &tmp->bo_va->invalids);
+			if (!tmp->bo_va->base.moved)
+				amdgpu_vm_bo_dirty(&tmp->bo_va->base);
 		}
 
 		/* Remember mapping split at the end */
@@ -1736,6 +1764,8 @@ int amdgpu_vm_bo_clear_mappings(struct amdgpu_device *adev,
 			after->flags = tmp->flags;
 			after->bo_va = tmp->bo_va;
 			list_add(&after->list, &tmp->bo_va->invalids);
+			if (!tmp->bo_va->base.moved)
+				amdgpu_vm_bo_dirty(&tmp->bo_va->base);
 		}
 
 		list_del(&tmp->list);
@@ -1761,30 +1791,18 @@ int amdgpu_vm_bo_clear_mappings(struct amdgpu_device *adev,
 
 	/* Insert partial mapping before the range */
 	if (!list_empty(&before->list)) {
-		struct amdgpu_bo *bo = before->bo_va->base.bo;
-
 		amdgpu_vm_it_insert(before, &vm->va);
 		if (before->flags & AMDGPU_PTE_PRT)
 			amdgpu_vm_prt_get(adev);
-
-		if (bo && bo->tbo.base.resv == vm->root.bo->tbo.base.resv &&
-		    !before->bo_va->base.moved)
-			amdgpu_vm_bo_moved(&before->bo_va->base);
 	} else {
 		kfree(before);
 	}
 
 	/* Insert partial mapping after the range */
 	if (!list_empty(&after->list)) {
-		struct amdgpu_bo *bo = after->bo_va->base.bo;
-
 		amdgpu_vm_it_insert(after, &vm->va);
 		if (after->flags & AMDGPU_PTE_PRT)
 			amdgpu_vm_prt_get(adev);
-
-		if (bo && bo->tbo.base.resv == vm->root.bo->tbo.base.resv &&
-		    !after->bo_va->base.moved)
-			amdgpu_vm_bo_moved(&after->bo_va->base);
 	} else {
 		kfree(after);
 	}
@@ -2136,6 +2154,7 @@ int amdgpu_vm_init(struct amdgpu_device *adev, struct amdgpu_vm *vm, int32_t xcp
 	INIT_LIST_HEAD(&vm->evicted);
 	INIT_LIST_HEAD(&vm->relocated);
 	INIT_LIST_HEAD(&vm->moved);
+	INIT_LIST_HEAD(&vm->dirty);
 	INIT_LIST_HEAD(&vm->idle);
 	INIT_LIST_HEAD(&vm->invalidated);
 	spin_lock_init(&vm->status_lock);
@@ -2648,11 +2667,13 @@ void amdgpu_debugfs_vm_bo_info(struct amdgpu_vm *vm, struct seq_file *m)
 {
 	struct amdgpu_bo_va *bo_va, *tmp;
 	u64 total_idle = 0;
+	u64 total_dirty = 0;
 	u64 total_relocated = 0;
 	u64 total_moved = 0;
 	u64 total_invalidated = 0;
 	u64 total_done = 0;
 	unsigned int total_idle_objs = 0;
+	unsigned int total_dirty_objs = 0;
 	unsigned int total_relocated_objs = 0;
 	unsigned int total_moved_objs = 0;
 	unsigned int total_invalidated_objs = 0;
@@ -2667,6 +2688,15 @@ void amdgpu_debugfs_vm_bo_info(struct amdgpu_vm *vm, struct seq_file *m)
 		total_idle += amdgpu_bo_print_info(id++, bo_va->base.bo, m);
 	}
 	total_idle_objs = id;
+	id = 0;
+
+	seq_puts(m, "\tDirty BOs:\n");
+	list_for_each_entry_safe(bo_va, tmp, &vm->dirty, base.vm_status) {
+		if (!bo_va->base.bo)
+			continue;
+		total_dirty += amdgpu_bo_print_info(id++, bo_va->base.bo, m);
+	}
+	total_dirty_objs = id;
 	id = 0;
 
 	seq_puts(m, "\tRelocated BOs:\n");
@@ -2707,6 +2737,8 @@ void amdgpu_debugfs_vm_bo_info(struct amdgpu_vm *vm, struct seq_file *m)
 
 	seq_printf(m, "\tTotal idle size:        %12lld\tobjs:\t%d\n", total_idle,
 		   total_idle_objs);
+	seq_printf(m, "\tTotal dirty size:       %12lld\tobjs:\t%d\n", total_dirty,
+		   total_dirty_objs);
 	seq_printf(m, "\tTotal relocated size:   %12lld\tobjs:\t%d\n", total_relocated,
 		   total_relocated_objs);
 	seq_printf(m, "\tTotal moved size:       %12lld\tobjs:\t%d\n", total_moved,
