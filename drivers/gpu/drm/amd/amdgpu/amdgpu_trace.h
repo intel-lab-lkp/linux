@@ -276,6 +276,7 @@ TRACE_EVENT(amdgpu_vm_bo_unmap,
 			     __field(long, last)
 			     __field(u64, offset)
 			     __field(u64, flags)
+			     __field(bool, sync_unmap)
 			     ),
 
 	    TP_fast_assign(
@@ -284,10 +285,11 @@ TRACE_EVENT(amdgpu_vm_bo_unmap,
 			   __entry->last = mapping->last;
 			   __entry->offset = mapping->offset;
 			   __entry->flags = mapping->flags;
+			   __entry->sync_unmap = mapping->sync_unmap;
 			   ),
-	    TP_printk("bo=%p, start=%lx, last=%lx, offset=%010llx, flags=%llx",
+	    TP_printk("bo=%p, start=%lx, last=%lx, offset=%010llx, flags=%llx, sync_unmap=%d",
 		      __entry->bo, __entry->start, __entry->last,
-		      __entry->offset, __entry->flags)
+		      __entry->offset, __entry->flags, __entry->sync_unmap)
 );
 
 DECLARE_EVENT_CLASS(amdgpu_vm_mapping,
