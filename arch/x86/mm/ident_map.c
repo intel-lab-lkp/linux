@@ -31,17 +31,25 @@ static int ident_pud_init(struct x86_mapping_info *info, pud_t *pud_page,
 		if (next > end)
 			next = end;
 
-		if (info->direct_gbpages) {
+		/*
+		 * if gbpages allowed, this entry not yet present, and
+		 * the full gbpage range is requested (both ends are
+		 * correctly aligned), create a gbpage.
+		 */
+		if (info->direct_gbpages
+		    && !pud_present(*pud)
+		    && !(addr & ~PUD_MASK)
+		    && !(next & ~PUD_MASK)) {
 			pud_t pudval;
 
-			if (pud_present(*pud))
-				continue;
-
-			addr &= PUD_MASK;
 			pudval = __pud((addr - info->offset) | info->page_flag);
 			set_pud(pud, pudval);
 			continue;
 		}
+
+		/* if this is already a gbpage, this portion is already mapped */
+		if (pud_large(*pud))
+			continue;
 
 		if (pud_present(*pud)) {
 			pmd = pmd_offset(pud, 0);
