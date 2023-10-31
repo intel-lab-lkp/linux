@@ -604,10 +604,9 @@ out:
  * vital here, so they are not reported back to userspace.
  */
 static void amdgpu_gem_va_update_vm(struct amdgpu_device *adev,
-				    struct amdgpu_vm *vm,
-				    struct amdgpu_bo_va *bo_va,
-				    uint32_t operation)
+				    struct amdgpu_vm *vm)
 {
+	struct amdgpu_bo_va *bo_va;
 	int r;
 
 	if (!amdgpu_vm_ready(vm))
@@ -617,12 +616,18 @@ static void amdgpu_gem_va_update_vm(struct amdgpu_device *adev,
 	if (r)
 		goto error;
 
-	if (operation == AMDGPU_VA_OP_MAP ||
-	    operation == AMDGPU_VA_OP_REPLACE) {
+	spin_lock(&vm->status_lock);
+	while (!list_empty(&vm->dirty)) {
+		bo_va = list_first_entry(&vm->dirty, struct amdgpu_bo_va,
+					 base.vm_status);
+		spin_unlock(&vm->status_lock);
+
 		r = amdgpu_vm_bo_update(adev, bo_va, false);
 		if (r)
 			goto error;
+		spin_lock(&vm->status_lock);
 	}
+	spin_unlock(&vm->status_lock);
 
 	r = amdgpu_vm_update_pdes(adev, vm, false);
 
@@ -792,8 +797,7 @@ int amdgpu_gem_va_ioctl(struct drm_device *dev, void *data,
 		break;
 	}
 	if (!r && !(args->flags & AMDGPU_VM_DELAY_UPDATE) && !amdgpu_vm_debug)
-		amdgpu_gem_va_update_vm(adev, &fpriv->vm, bo_va,
-					args->operation);
+		amdgpu_gem_va_update_vm(adev, &fpriv->vm);
 
 error:
 	drm_exec_fini(&exec);
