@@ -280,8 +280,10 @@ out:
 		 */
 		dc->worker = kthread_create(&flush_worker_fn, dc,
 					    "dm-delay-flush-worker");
-		if (!dc->worker)
+		if (IS_ERR(dc->worker)) {
+			ret = PTR_ERR(dc->worker);
 			goto bad;
+		}
 	} else {
 		timer_setup(&dc->delay_timer, handle_delayed_timer, 0);
 		INIT_WORK(&dc->flush_expired_bios, flush_expired_bios);
