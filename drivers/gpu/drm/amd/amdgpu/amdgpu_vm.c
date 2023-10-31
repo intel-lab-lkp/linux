@@ -495,12 +495,9 @@ int amdgpu_vm_validate_pt_bos(struct amdgpu_device *adev, struct amdgpu_vm *vm,
 				return r;
 		}
 
-		if (bo->tbo.type != ttm_bo_type_kernel) {
-			amdgpu_vm_bo_moved(bo_base);
-		} else {
+		if (bo->tbo.type == ttm_bo_type_kernel)
 			vm->update_funcs->map_table(to_amdgpu_bo_vm(bo));
-			amdgpu_vm_bo_relocated(bo_base);
-		}
+
 		spin_lock(&vm->status_lock);
 	}
 	spin_unlock(&vm->status_lock);
