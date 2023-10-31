@@ -1132,6 +1132,7 @@ EXPORT_SYMBOL_GPL(tmio_mmc_host_alloc);
 
 void tmio_mmc_host_free(struct tmio_mmc_host *host)
 {
+	cancel_delayed_work_sync(&host->mmc->detect);
 	mmc_free_host(host->mmc);
 }
 EXPORT_SYMBOL_GPL(tmio_mmc_host_free);
