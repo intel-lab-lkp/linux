@@ -427,7 +427,7 @@ static long cdce925_clk_round_rate(struct clk_hw *hw, unsigned long rate,
 	unsigned long l_parent_rate = *parent_rate;
 	u16 divider = cdce925_calc_divider(rate, l_parent_rate);
 
-	if (l_parent_rate / divider != rate) {
+	if (divider && l_parent_rate / divider != rate) {
 		l_parent_rate = cdce925_clk_best_parent_rate(hw, rate);
 		divider = cdce925_calc_divider(rate, l_parent_rate);
 		*parent_rate = l_parent_rate;
