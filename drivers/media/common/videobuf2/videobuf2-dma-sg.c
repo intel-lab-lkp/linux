@@ -489,9 +489,24 @@ static int vb2_dma_sg_dmabuf_ops_vmap(struct dma_buf *dbuf,
 {
 	struct vb2_dma_sg_buf *buf = dbuf->priv;
 
+	if (!buf->vaddr)
+		buf->vaddr = vmap(buf->pages, buf->num_pages, VM_MAP,
+				  PAGE_KERNEL);
+
 	iosys_map_set_vaddr(map, buf->vaddr);
 
 	return 0;
+}
+
+static void vb2_dma_sg_dmabuf_ops_vunmap(struct dma_buf *dbuf,
+				      struct iosys_map *map)
+{
+	struct vb2_dma_sg_buf *buf = dbuf->priv;
+
+	if (buf->vaddr)
+		vunmap(buf->vaddr);
+
+	buf->vaddr = NULL;
 }
 
 static int vb2_dma_sg_dmabuf_ops_mmap(struct dma_buf *dbuf,
@@ -508,6 +523,7 @@ static const struct dma_buf_ops vb2_dma_sg_dmabuf_ops = {
 	.begin_cpu_access = vb2_dma_sg_dmabuf_ops_begin_cpu_access,
 	.end_cpu_access = vb2_dma_sg_dmabuf_ops_end_cpu_access,
 	.vmap = vb2_dma_sg_dmabuf_ops_vmap,
+	.vunmap = vb2_dma_sg_dmabuf_ops_vunmap,
 	.mmap = vb2_dma_sg_dmabuf_ops_mmap,
 	.release = vb2_dma_sg_dmabuf_ops_release,
 };
