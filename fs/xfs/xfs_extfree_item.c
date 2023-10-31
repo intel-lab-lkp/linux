@@ -704,6 +704,8 @@ xfs_efi_item_recover(
 
 		if (!requeue_only) {
 			xfs_extent_free_get_group(mp, &fake);
+			if (xfs_efi_is_realtime(&fake))
+				xfs_rtbitmap_lock(tp, mp);
 			error = xfs_trans_free_extent(tp, efdp, &fake);
 			xfs_extent_free_put_group(&fake);
 		}
