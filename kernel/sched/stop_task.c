@@ -81,7 +81,7 @@ static void put_prev_task_stop(struct rq *rq, struct task_struct *prev)
 	schedstat_set(curr->stats.exec_max,
 		      max(curr->stats.exec_max, delta_exec));
 
-	update_current_exec_runtime(curr, now, delta_exec);
+	update_current_exec_runtime(curr, now, delta_exec, true);
 }
 
 /*

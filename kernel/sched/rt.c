@@ -1018,7 +1018,8 @@ static void update_curr_rt(struct rq *rq)
 
 	trace_sched_stat_runtime(curr, delta_exec, 0);
 
-	update_current_exec_runtime(curr, now, delta_exec);
+	update_current_exec_runtime(curr, now, delta_exec,
+				    rt_entity_is_task(rt_se));
 
 	if (!rt_bandwidth_enabled())
 		return;

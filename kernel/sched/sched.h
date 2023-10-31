@@ -3262,13 +3262,15 @@ extern void sched_dynamic_update(int mode);
 #endif
 
 static inline void update_current_exec_runtime(struct task_struct *curr,
-						u64 now, u64 delta_exec)
+					       u64 now, u64 delta_exec, bool task)
 {
 	curr->se.sum_exec_runtime += delta_exec;
-	account_group_exec_runtime(curr, delta_exec);
-
 	curr->se.exec_start = now;
-	cgroup_account_cputime(curr, delta_exec);
+
+	if (task) {
+		account_group_exec_runtime(curr, delta_exec);
+		cgroup_account_cputime(curr, delta_exec);
+	}
 }
 
 #ifdef CONFIG_SCHED_MM_CID
