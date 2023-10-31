@@ -214,6 +214,7 @@ static inline void free_vmemmap_page(struct page *page)
 		free_bootmem_page(page);
 	else
 		__free_page(page);
+	__mod_node_page_state(page_pgdat(page), NR_PAGE_METADATA, -1);
 }
 
 /* Free a list of the vmemmap pages */
@@ -336,6 +337,7 @@ static int vmemmap_remap_free(unsigned long start, unsigned long end,
 			  (void *)walk.reuse_addr);
 		list_add(&walk.reuse_page->lru, &vmemmap_pages);
 	}
+	__mod_node_page_state(NODE_DATA(nid), NR_PAGE_METADATA, 1);
 
 	/*
 	 * In order to make remapping routine most efficient for the huge pages,
@@ -381,14 +383,16 @@ static int alloc_vmemmap_page_list(unsigned long start, unsigned long end,
 				   struct list_head *list)
 {
 	gfp_t gfp_mask = GFP_KERNEL | __GFP_RETRY_MAYFAIL | __GFP_THISNODE;
-	unsigned long nr_pages = (end - start) >> PAGE_SHIFT;
+	unsigned long nr_pages = DIV_ROUND_UP(end - start, PAGE_SIZE);
 	int nid = page_to_nid((struct page *)start);
 	struct page *page, *next;
+	int i;
 
-	while (nr_pages--) {
+	for (i = 0; i < nr_pages; i++) {
 		page = alloc_pages_node(nid, gfp_mask, 0);
 		if (!page)
 			goto out;
+		__mod_node_page_state(page_pgdat(page), NR_PAGE_METADATA, 1);
 		list_add_tail(&page->lru, list);
 	}
 
