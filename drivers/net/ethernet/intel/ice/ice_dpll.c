@@ -1824,6 +1824,7 @@ ice_dpll_init_info_direct_pins(struct ice_pf *pf,
 	int num_pins, i, ret = -EINVAL;
 	struct ice_hw *hw = &pf->hw;
 	struct ice_dpll_pin *pins;
+	unsigned long caps;
 	u8 freq_supp_num;
 	bool input;
 
@@ -1843,6 +1844,7 @@ ice_dpll_init_info_direct_pins(struct ice_pf *pf,
 	}
 
 	for (i = 0; i < num_pins; i++) {
+		caps = 0;
 		pins[i].idx = i;
 		pins[i].prop.board_label = ice_cgu_get_pin_name(hw, i, input);
 		pins[i].prop.type = ice_cgu_get_pin_type(hw, i, input);
@@ -1855,8 +1857,8 @@ ice_dpll_init_info_direct_pins(struct ice_pf *pf,
 						      &dp->input_prio[i]);
 			if (ret)
 				return ret;
-			pins[i].prop.capabilities |=
-				DPLL_PIN_CAPABILITIES_PRIORITY_CAN_CHANGE;
+			caps |= (DPLL_PIN_CAPABILITIES_PRIORITY_CAN_CHANGE |
+				 DPLL_PIN_CAPABILITIES_STATE_CAN_CHANGE);
 			pins[i].prop.phase_range.min =
 				pf->dplls.input_phase_adj_max;
 			pins[i].prop.phase_range.max =
@@ -1866,9 +1868,11 @@ ice_dpll_init_info_direct_pins(struct ice_pf *pf,
 				pf->dplls.output_phase_adj_max;
 			pins[i].prop.phase_range.max =
 				-pf->dplls.output_phase_adj_max;
+			ret = ice_cgu_get_output_pin_state_caps(hw, i, &caps);
+			if (ret)
+				return ret;
 		}
-		pins[i].prop.capabilities |=
-			DPLL_PIN_CAPABILITIES_STATE_CAN_CHANGE;
+		pins[i].prop.capabilities = caps;
 		ret = ice_dpll_pin_state_update(pf, &pins[i], pin_type, NULL);
 		if (ret)
 			return ret;
