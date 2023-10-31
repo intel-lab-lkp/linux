@@ -684,6 +684,7 @@ static int cxl_decoder_commit(struct cxl_decoder *cxld)
 		if (rc) {
 			dev_dbg(&port->dev, "%s: target configuration error\n",
 				dev_name(&cxld->dev));
+			up_read(&cxl_dpa_rwsem);
 			goto err;
 		}
 
