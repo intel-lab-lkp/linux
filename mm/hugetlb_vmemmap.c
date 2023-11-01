@@ -214,6 +214,7 @@ static inline void free_vmemmap_page(struct page *page)
 		free_bootmem_page(page);
 	else
 		__free_page(page);
+	__mod_node_page_state(page_pgdat(page), NR_PAGE_METADATA, -1);
 }
 
 /* Free a list of the vmemmap pages */
@@ -335,6 +336,7 @@ static int vmemmap_remap_free(unsigned long start, unsigned long end,
 		copy_page(page_to_virt(walk.reuse_page),
 			  (void *)walk.reuse_addr);
 		list_add(&walk.reuse_page->lru, &vmemmap_pages);
+		__mod_node_page_state(NODE_DATA(nid), NR_PAGE_METADATA, 1);
 	}
 
 	/*
@@ -384,13 +386,19 @@ static int alloc_vmemmap_page_list(unsigned long start, unsigned long end,
 	unsigned long nr_pages = (end - start) >> PAGE_SHIFT;
 	int nid = page_to_nid((struct page *)start);
 	struct page *page, *next;
+	int i;
 
-	while (nr_pages--) {
+	for (i = 0; i < nr_pages; i++) {
 		page = alloc_pages_node(nid, gfp_mask, 0);
-		if (!page)
+		if (!page) {
+			__mod_node_page_state(NODE_DATA(nid), NR_PAGE_METADATA,
+					      i);
 			goto out;
+		}
 		list_add_tail(&page->lru, list);
 	}
+
+	__mod_node_page_state(NODE_DATA(nid), NR_PAGE_METADATA, nr_pages);
 
 	return 0;
 out:

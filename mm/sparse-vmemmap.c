@@ -469,5 +469,8 @@ struct page * __meminit __populate_section_memmap(unsigned long pfn,
 	if (r < 0)
 		return NULL;
 
+	__mod_node_page_state(NODE_DATA(nid), NR_PAGE_METADATA,
+			      DIV_ROUND_UP(end - start, PAGE_SIZE));
+
 	return pfn_to_page(pfn);
 }

@@ -1758,6 +1758,9 @@ static void __update_and_free_hugetlb_folio(struct hstate *h,
 		destroy_compound_gigantic_folio(folio, huge_page_order(h));
 		free_gigantic_folio(folio, huge_page_order(h));
 	} else {
+#ifndef CONFIG_SPARSEMEM_VMEMMAP
+		__node_stat_sub_folio(folio, NR_PAGE_METADATA);
+#endif
 		__free_pages(&folio->page, huge_page_order(h));
 	}
 }
@@ -2093,6 +2096,7 @@ static struct folio *alloc_buddy_hugetlb_folio(struct hstate *h,
 	struct page *page;
 	bool alloc_try_hard = true;
 	bool retry = true;
+	struct folio *folio;
 
 	/*
 	 * By default we always try hard to allocate the page with
@@ -2143,9 +2147,12 @@ retry:
 		__count_vm_event(HTLB_BUDDY_PGALLOC_FAIL);
 		return NULL;
 	}
-
+	folio = page_folio(page);
+#ifndef CONFIG_SPARSEMEM_VMEMMAP
+	__node_stat_add_folio(folio, NR_PAGE_METADATA);
+#endif
 	__count_vm_event(HTLB_BUDDY_PGALLOC);
-	return page_folio(page);
+	return folio;
 }
 
 /*
