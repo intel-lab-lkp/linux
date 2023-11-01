@@ -1377,6 +1377,16 @@ static void ads7846_remove(struct spi_device *spi)
 	ads7846_stop(ts);
 }
 
+static const struct spi_device_id ads7846_spi_ids[] = {
+	{ "tsc2046" },
+	{ "ads7843" },
+	{ "ads7845" },
+	{ "ads7846" },
+	{ "ads7873" },
+	{ },
+};
+MODULE_DEVICE_TABLE(spi, ads7846_spi_ids);
+
 static struct spi_driver ads7846_driver = {
 	.driver = {
 		.name		= "ads7846",
@@ -1384,6 +1394,7 @@ static struct spi_driver ads7846_driver = {
 		.pm		= pm_sleep_ptr(&ads7846_pm),
 		.of_match_table	= ads7846_dt_ids,
 	},
+	.id_table = ads7846_spi_ids,
 	.probe		= ads7846_probe,
 	.remove		= ads7846_remove,
 };
