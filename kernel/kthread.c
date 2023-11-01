@@ -1259,7 +1259,7 @@ bool kthread_mod_delayed_work(struct kthread_worker *worker,
 {
 	struct kthread_work *work = &dwork->work;
 	unsigned long flags;
-	int ret;
+	bool ret;
 
 	raw_spin_lock_irqsave(&worker->lock, flags);
 
@@ -1304,7 +1304,7 @@ static bool __kthread_cancel_work_sync(struct kthread_work *work, bool is_dwork)
 {
 	struct kthread_worker *worker = work->worker;
 	unsigned long flags;
-	int ret = false;
+	bool ret = false;
 
 	if (!worker)
 		goto out;
