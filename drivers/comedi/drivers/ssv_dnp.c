@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0+
 /*
- * ssv_dnp.c
- * generic comedi driver for SSV Embedded Systems' DIL/Net-PCs
+ * Generic comedi driver for SSV Embedded Systems' DIL/Net-PCs
  * Copyright (C) 2001 Robert Schwebel <robert@schwebel.de>
  *
  * COMEDI - Linux Control and Measurement Device Interface
