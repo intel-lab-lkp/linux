@@ -1010,6 +1010,8 @@ static int ni_patch_dependency_tables_based_on_leakage(struct radeon_device *rde
 
 	ret = ni_patch_single_dependency_table_based_on_leakage(rdev,
 								&rdev->pm.dpm.dyn_state.vddc_dependency_on_sclk);
+	if (ret)
+		return ret;
 
 	ret = ni_patch_single_dependency_table_based_on_leakage(rdev,
 								&rdev->pm.dpm.dyn_state.vddc_dependency_on_mclk);
@@ -4098,7 +4100,12 @@ int ni_dpm_init(struct radeon_device *rdev)
 	rdev->pm.dpm.dyn_state.vddc_dependency_on_dispclk.entries[3].clk = 72000;
 	rdev->pm.dpm.dyn_state.vddc_dependency_on_dispclk.entries[3].v = 900;
 
-	ni_patch_dependency_tables_based_on_leakage(rdev);
+	ret = ni_patch_dependency_tables_based_on_leakage(rdev);
+	if (ret) {
+		kfree(rdev->pm.dpm.dyn_state.vddc_dependency_on_dispclk.entries);
+		r600_free_extended_power_table(rdev);
+		return ret;
+	}
 
 	if (rdev->pm.dpm.voltage_response_time == 0)
 		rdev->pm.dpm.voltage_response_time = R600_VOLTAGERESPONSETIME_DFLT;
