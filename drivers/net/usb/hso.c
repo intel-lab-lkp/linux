@@ -1390,7 +1390,8 @@ static void hso_serial_set_termios(struct tty_struct *tty,
 	if (serial->port.count)
 		_hso_serial_set_termios(tty);
 	else
-		tty->termios = *old;
+		if (old)
+			tty->termios = *old;
 	spin_unlock_irqrestore(&serial->serial_lock, flags);
 
 	/* done */
