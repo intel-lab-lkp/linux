@@ -374,12 +374,12 @@ static inline int validate_ns(struct nsset *nsset, struct ns_common *ns)
  */
 static int validate_nsset(struct nsset *nsset, struct pid *pid)
 {
-	int ret = 0;
 	unsigned flags = nsset->flags;
 	struct user_namespace *user_ns = NULL;
 	struct pid_namespace *pid_ns = NULL;
 	struct nsproxy *nsp;
 	struct task_struct *tsk;
+	int ret;
 
 	/* Take a "snapshot" of the target task's namespaces. */
 	rcu_read_lock();
