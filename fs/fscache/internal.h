@@ -225,7 +225,7 @@ do {						\
 /*
  * assertions
  */
-#if 1 /* defined(__KDEBUGALL) */
+#ifdef CONFIG_FSCACHE_ASSERT
 
 #define ASSERT(X)							\
 do {									\
