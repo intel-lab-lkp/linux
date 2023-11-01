@@ -20,9 +20,7 @@ struct syminfo {
  * Entries in table are ascending, sorted first by section_index,
  * then by addr, and last by symbol_index.  The sorting by
  * symbol_index is used to ensure predictable behavior when
- * multiple symbols are present with the same address; all
- * symbols past the first are effectively ignored, by eliding
- * them in symsearch_fixup().
+ * multiple symbols are present with the same address.
  */
 struct symsearch {
 	unsigned int table_size;
@@ -97,32 +95,6 @@ static void symsearch_populate(struct elf_info *elf,
 		fatal("%s: size mismatch\n", __func__);
 }
 
-/*
- * Do any fixups on the table after sorting.
- * For now, this just finds adjacent entries which have
- * the same section_index and addr, and it propagates
- * the first symbol_index over the subsequent entries,
- * so that only one symbol_index is seen for any given
- * section_index and addr.  This ensures that whether
- * we're looking at an address from "above" or "below"
- * that we see the same symbol_index.
- * This does leave some duplicate entries in the table;
- * in practice, these are a small fraction of the
- * total number of entries, and they are harmless to
- * the binary search algorithm other than a few occasional
- * unnecessary comparisons.
- */
-static void symsearch_fixup(struct syminfo *table, unsigned int table_size)
-{
-	/* Don't look at index 0, it will never change. */
-	for (unsigned int i = 1; i < table_size; i++) {
-		if (table[i].addr == table[i - 1].addr &&
-		    table[i].section_index == table[i - 1].section_index) {
-			table[i].symbol_index = table[i - 1].symbol_index;
-		}
-	}
-}
-
 void symsearch_init(struct elf_info *elf)
 {
 	unsigned int table_size = symbol_count(elf);
@@ -134,8 +106,6 @@ void symsearch_init(struct elf_info *elf)
 	symsearch_populate(elf, elf->symsearch->table, table_size);
 	qsort(elf->symsearch->table, table_size,
 	      sizeof(struct syminfo), syminfo_compare);
-
-	symsearch_fixup(elf->symsearch->table, table_size);
 }
 
 void symsearch_finish(struct elf_info *elf)
@@ -226,12 +196,33 @@ static Elf_Sym *symsearch_find(struct elf_info *elf, Elf_Addr addr,
 static bool symsearch_nearest_filter(const Elf_Sym *sym1, const Elf_Sym *sym2,
 				     void *data)
 {
+	struct elf_info *elf = data;
+	unsigned int bind1, bind2, unscores1, unscores2;
+
 	/* If sym2 is NULL, this is the first occurrence, always take it. */
 	if (sym2 == NULL)
 		return true;
 
 	/* Prefer lower address. */
-	return sym1->st_value < sym2->st_value;
+	if (sym1->st_value < sym2->st_value)
+		return true;
+	if (sym1->st_value > sym2->st_value)
+		return false;
+
+	bind1 = ELF_ST_BIND(sym1->st_info);
+	bind2 = ELF_ST_BIND(sym2->st_info);
+
+	/* Prefer global symbol. */
+	if (bind1 == STB_GLOBAL && bind2 != STB_GLOBAL)
+		return true;
+	if (bind1 != STB_GLOBAL && bind2 == STB_GLOBAL)
+		return false;
+
+	/* Prefer less underscores. */
+	unscores1 = strspn(sym_name(elf, sym1), "_");
+	unscores2 = strspn(sym_name(elf, sym2), "_");
+
+	return unscores1 < unscores2;
 }
 
 /*
@@ -247,5 +238,5 @@ Elf_Sym *symsearch_find_nearest(struct elf_info *elf, Elf_Addr addr,
 				Elf_Addr min_distance)
 {
 	return symsearch_find(elf, addr, secndx, allow_negative, min_distance,
-			      symsearch_nearest_filter, NULL);
+			      symsearch_nearest_filter, elf);
 }
