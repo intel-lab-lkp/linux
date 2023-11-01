@@ -235,7 +235,7 @@ TRACE_EVENT(cxl_generic_event,
 
 	TP_fast_assign(
 		CXL_EVT_TP_fast_assign(cxlmd, log, rec->hdr);
-		memcpy(&__entry->hdr_uuid, &rec->hdr.id, sizeof(uuid_t));
+		memcpy(&__entry->hdr_uuid, &rec->id, sizeof(uuid_t));
 		memcpy(__entry->data, &rec->data, CXL_EVENT_RECORD_DATA_LENGTH);
 	),
 
