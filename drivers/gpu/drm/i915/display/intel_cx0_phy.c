@@ -195,6 +195,13 @@ static int __intel_cx0_read_once(struct drm_i915_private *i915, enum port port,
 		return -ETIMEDOUT;
 	}
 
+	/*
+	 * write XELPDP_PORT_P2M_MSGBUS_STATUS register after read to clear
+	 * any error sticky bits set from previous transactions
+	 */
+	val = intel_de_read(i915, XELPDP_PORT_P2M_MSGBUS_STATUS(port, lane));
+	intel_de_write(i915, XELPDP_PORT_P2M_MSGBUS_STATUS(port, lane), val);
+
 	intel_de_write(i915, XELPDP_PORT_M2P_MSGBUS_CTL(port, lane),
 		       XELPDP_PORT_M2P_TRANSACTION_PENDING |
 		       XELPDP_PORT_M2P_COMMAND_READ |
@@ -261,6 +268,13 @@ static int __intel_cx0_write_once(struct drm_i915_private *i915, enum port port,
 		intel_cx0_bus_reset(i915, port, lane);
 		return -ETIMEDOUT;
 	}
+
+	/*
+	 * write XELPDP_PORT_P2M_MSGBUS_STATUS register after read to clear
+	 * any error sticky bits set from previous transactions
+	 */
+	val = intel_de_read(i915, XELPDP_PORT_P2M_MSGBUS_STATUS(port, lane));
+	intel_de_write(i915, XELPDP_PORT_P2M_MSGBUS_STATUS(port, lane), val);
 
 	intel_de_write(i915, XELPDP_PORT_M2P_MSGBUS_CTL(port, lane),
 		       XELPDP_PORT_M2P_TRANSACTION_PENDING |
