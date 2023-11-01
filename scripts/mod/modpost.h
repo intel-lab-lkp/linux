@@ -156,6 +156,15 @@ static inline unsigned int get_secindex(const struct elf_info *info,
 	return index;
 }
 
+static inline const char *sym_name(const struct elf_info *elf,
+				   const Elf_Sym *sym)
+{
+	if (sym)
+		return elf->strtab + sym->st_name;
+	else
+		return "(unknown)";
+}
+
 /*
  * If there's no name there, ignore it; likewise, ignore it if it's
  * one of the magic symbols emitted used by current tools.

@@ -710,14 +710,6 @@ static char *get_modinfo(struct elf_info *info, const char *tag)
 	return get_next_modinfo(info, tag, NULL);
 }
 
-static const char *sym_name(struct elf_info *elf, Elf_Sym *sym)
-{
-	if (sym)
-		return elf->strtab + sym->st_name;
-	else
-		return "(unknown)";
-}
-
 /*
  * Check whether the 'string' argument matches one of the 'patterns',
  * an array of shell wildcard patterns (glob).
