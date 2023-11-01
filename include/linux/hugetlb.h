@@ -1268,9 +1268,11 @@ static inline bool __vma_shareable_lock(struct vm_area_struct *vma)
 	return (vma->vm_flags & VM_MAYSHARE) && vma->vm_private_data;
 }
 
+#define HPAGE_RESV_OWNER    (1UL << 0)
 static inline bool __vma_private_lock(struct vm_area_struct *vma)
 {
-	return (!(vma->vm_flags & VM_MAYSHARE)) && vma->vm_private_data;
+	return (!(vma->vm_flags & VM_MAYSHARE)) && vma->vm_private_data && 
+		((unsigned long)vma->vm_private_data & HPAGE_RESV_OWNER);
 }
 
 /*
