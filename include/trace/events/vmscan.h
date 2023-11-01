@@ -141,19 +141,47 @@ DEFINE_EVENT(mm_vmscan_direct_reclaim_begin_template, mm_vmscan_direct_reclaim_b
 );
 
 #ifdef CONFIG_MEMCG
-DEFINE_EVENT(mm_vmscan_direct_reclaim_begin_template, mm_vmscan_memcg_reclaim_begin,
 
-	TP_PROTO(int order, gfp_t gfp_flags),
+DECLARE_EVENT_CLASS(mm_vmscan_memcg_reclaim_begin_template,
 
-	TP_ARGS(order, gfp_flags)
+	TP_PROTO(const struct mem_cgroup *memcg, int order, gfp_t gfp_flags),
+
+	TP_ARGS(memcg, order, gfp_flags),
+
+	TP_STRUCT__entry(
+		__field(int, order)
+		__field(unsigned long, gfp_flags)
+		__array(char, name, NAME_MAX + 1)
+	),
+
+	TP_fast_assign(
+		__entry->order = order;
+		__entry->gfp_flags = (__force unsigned long)gfp_flags;
+		cgroup_name(memcg->css.cgroup,
+			__entry->name,
+			sizeof(__entry->name));
+	),
+
+	TP_printk("memcg=%s order=%d gfp_flags=%s",
+		__entry->name,
+		__entry->order,
+		show_gfp_flags(__entry->gfp_flags))
 );
 
-DEFINE_EVENT(mm_vmscan_direct_reclaim_begin_template, mm_vmscan_memcg_softlimit_reclaim_begin,
+DEFINE_EVENT(mm_vmscan_memcg_reclaim_begin_template, mm_vmscan_memcg_reclaim_begin,
 
-	TP_PROTO(int order, gfp_t gfp_flags),
+	TP_PROTO(const struct mem_cgroup *memcg, int order, gfp_t gfp_flags),
 
-	TP_ARGS(order, gfp_flags)
+	TP_ARGS(memcg, order, gfp_flags)
 );
+
+DEFINE_EVENT(mm_vmscan_memcg_reclaim_begin_template, mm_vmscan_memcg_softlimit_reclaim_begin,
+
+	TP_PROTO(const struct mem_cgroup *memcg, int order, gfp_t gfp_flags),
+
+	TP_ARGS(memcg, order, gfp_flags)
+);
+
 #endif /* CONFIG_MEMCG */
 
 DECLARE_EVENT_CLASS(mm_vmscan_direct_reclaim_end_template,
@@ -181,19 +209,44 @@ DEFINE_EVENT(mm_vmscan_direct_reclaim_end_template, mm_vmscan_direct_reclaim_end
 );
 
 #ifdef CONFIG_MEMCG
-DEFINE_EVENT(mm_vmscan_direct_reclaim_end_template, mm_vmscan_memcg_reclaim_end,
 
-	TP_PROTO(unsigned long nr_reclaimed),
+DECLARE_EVENT_CLASS(mm_vmscan_memcg_reclaim_end_template,
 
-	TP_ARGS(nr_reclaimed)
+	TP_PROTO(const struct mem_cgroup *memcg, unsigned long nr_reclaimed),
+
+	TP_ARGS(memcg, nr_reclaimed),
+
+	TP_STRUCT__entry(
+		__field(unsigned long, nr_reclaimed)
+		__array(char, name, NAME_MAX + 1)
+	),
+
+	TP_fast_assign(
+		__entry->nr_reclaimed = nr_reclaimed;
+		cgroup_name(memcg->css.cgroup,
+			__entry->name,
+			sizeof(__entry->name));
+	),
+
+	TP_printk("memcg=%s nr_reclaimed=%lu",
+		__entry->name,
+		__entry->nr_reclaimed)
 );
 
-DEFINE_EVENT(mm_vmscan_direct_reclaim_end_template, mm_vmscan_memcg_softlimit_reclaim_end,
+DEFINE_EVENT(mm_vmscan_memcg_reclaim_end_template, mm_vmscan_memcg_reclaim_end,
 
-	TP_PROTO(unsigned long nr_reclaimed),
+	TP_PROTO(const struct mem_cgroup *memcg, unsigned long nr_reclaimed),
 
-	TP_ARGS(nr_reclaimed)
+	TP_ARGS(memcg, nr_reclaimed)
 );
+
+DEFINE_EVENT(mm_vmscan_memcg_reclaim_end_template, mm_vmscan_memcg_softlimit_reclaim_end,
+
+	TP_PROTO(const struct mem_cgroup *memcg, unsigned long nr_reclaimed),
+
+	TP_ARGS(memcg, nr_reclaimed)
+);
+
 #endif /* CONFIG_MEMCG */
 
 TRACE_EVENT(mm_shrink_slab_start,
