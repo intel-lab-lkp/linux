@@ -425,7 +425,7 @@ do {							\
 #define _debug(FMT, ...) no_printk(FMT, ##__VA_ARGS__)
 #endif
 
-#if 1 /* defined(__KDEBUGALL) */
+#ifdef CONFIG_CACHEFILES_ASSERT
 
 #define ASSERT(X)							\
 do {									\

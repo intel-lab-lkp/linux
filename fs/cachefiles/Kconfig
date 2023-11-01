@@ -38,3 +38,14 @@ config CACHEFILES_ONDEMAND
 	  and is delegated to userspace.
 
 	  If unsure, say N.
+
+config CACHEFILES_ASSERT
+	bool "CACHEFILES asserts"
+	default n
+	depends on CACHEFILES
+	help
+	  Support the ASSERT mode for failure behavior.
+	  Say N here to disable the ASSERT by default.
+	  Say Y to add assertion checks in some places. But the assertion
+	  failure will result in fatal errors that BUG() the kernel.
+
