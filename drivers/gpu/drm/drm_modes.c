@@ -1933,6 +1933,22 @@ void drm_connector_list_update(struct drm_connector *connector)
 }
 EXPORT_SYMBOL(drm_connector_list_update);
 
+/**
+ * drm_mode_unset_preferred - clear the preferred status on existing modes.
+ * @connector: the connector to update
+ *
+ * Walk the mode list for connector, clearing the preferred status on existing
+ * modes.
+ */
+void drm_mode_unset_preferred_modes(struct drm_connector *connector)
+{
+	struct drm_display_mode *cur_mode;
+
+	list_for_each_entry(cur_mode, &connector->probed_modes, head)
+		cur_mode->type &= ~DRM_MODE_TYPE_PREFERRED;
+}
+EXPORT_SYMBOL_GPL(drm_mode_unset_preferred_modes);
+
 static int drm_mode_parse_cmdline_bpp(const char *str, char **end_ptr,
 				      struct drm_cmdline_mode *mode)
 {

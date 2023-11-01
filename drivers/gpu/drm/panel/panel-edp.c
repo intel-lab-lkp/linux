@@ -622,10 +622,13 @@ static int panel_edp_get_modes(struct drm_panel *panel,
 	 * and no modes (the generic edp-panel case) because it will clobber
 	 * the display_info that was already set by drm_add_edid_modes().
 	 */
-	if (p->desc->num_timings || p->desc->num_modes)
+	if (p->desc->num_timings || p->desc->num_modes) {
+		/* hard-coded modes present, unset preferred modes from edid. */
+		drm_mode_unset_preferred_modes(connector);
 		num += panel_edp_get_non_edid_modes(p, connector);
-	else if (!num)
+	} else if (!num) {
 		dev_warn(p->base.dev, "No display modes\n");
+	}
 
 	/*
 	 * TODO: Remove once all drm drivers call
