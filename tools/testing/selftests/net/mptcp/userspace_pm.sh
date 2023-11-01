@@ -560,6 +560,7 @@ test_subflows()
 	print_title "Subflows v4 or v6 only tests"
 
 	# Capture events on the network namespace running the server
+	ip netns exec "$ns1" ./pm_nl_ctl flush
 	:>"$server_evts"
 
 	# Attempt to add a listener at 10.0.2.2:<subflow-port>
@@ -638,6 +639,8 @@ test_subflows()
 	   "$client6_token"
 	sleep 0.5
 
+	ip netns exec "$ns2" ./pm_nl_ctl flush
+
 	# Attempt to add a listener at 10.0.2.2:<new-port>
 	ip netns exec "$ns2" ./pm_nl_ctl listen 10.0.2.2\
 	   $new4_port &
@@ -676,6 +679,7 @@ test_subflows()
 	   "$client4_token"
 
 	# Capture events on the network namespace running the client
+	ip netns exec "$ns1" ./pm_nl_ctl flush
 	:>"$client_evts"
 
 	# Attempt to add a listener at 10.0.2.1:<subflow-port>
@@ -753,6 +757,8 @@ test_subflows()
 	   "$server6_token"
 	sleep 0.5
 
+	ip netns exec "$ns1" ./pm_nl_ctl flush
+
 	# Attempt to add a listener at 10.0.2.1:<new-port>
 	ip netns exec "$ns1" ./pm_nl_ctl listen 10.0.2.1\
 	   $new4_port &
@@ -793,6 +799,8 @@ test_subflows()
 test_subflows_v4_v6_mix()
 {
 	print_title "Subflows v4 and v6 mix tests"
+
+	ip netns exec "$ns2" ./pm_nl_ctl flush
 
 	# Attempt to add a listener at 10.0.2.1:<subflow-port>
 	ip netns exec "$ns1" ./pm_nl_ctl listen 10.0.2.1\
