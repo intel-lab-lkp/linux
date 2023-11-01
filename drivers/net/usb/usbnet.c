@@ -1372,6 +1372,11 @@ netdev_tx_t usbnet_start_xmit (struct sk_buff *skb,
 		}
 	}
 
+	if (!skb) {
+		netif_dbg(dev, tx_err, dev->net, "tx skb is NULL\n");
+		goto drop;
+	}
+
 	if (!(urb = usb_alloc_urb (0, GFP_ATOMIC))) {
 		netif_dbg(dev, tx_err, dev->net, "no urb\n");
 		goto drop;
