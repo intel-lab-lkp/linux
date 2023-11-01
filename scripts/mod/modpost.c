@@ -1021,6 +1021,18 @@ static Elf_Sym *find_tosym(struct elf_info *elf, Elf_Addr addr, Elf_Sym *sym)
 				      true, 20);
 }
 
+static Elf_Sym *find_tosym_with_name(struct elf_info *elf, Elf_Addr addr,
+				     Elf_Sym *sym, const char *name)
+{
+	/* If the supplied symbol has the expected name, return it. */
+	if (!strcmp(sym_name(elf, sym), name))
+		return sym;
+
+	/* Look up a symbol with the given name. */
+	return symsearch_find_with_name(elf, addr, get_secindex(elf, sym),
+					true, 20, name);
+}
+
 static bool is_executable_section(struct elf_info *elf, unsigned int secndx)
 {
 	if (secndx >= elf->num_sections)
@@ -1079,7 +1091,7 @@ static void default_mismatch_handler(const char *modname, struct elf_info *elf,
 
 static void check_export_symbol(struct module *mod, struct elf_info *elf,
 				Elf_Addr faddr, const char *secname,
-				Elf_Sym *sym)
+				Elf_Sym *sym, Elf_Addr taddr)
 {
 	static const char *prefix = "__export_symbol_";
 	const char *label_name, *name, *data;
@@ -1096,17 +1108,18 @@ static void check_export_symbol(struct module *mod, struct elf_info *elf,
 		return;
 	}
 
+	name = label_name + strlen(prefix);
+	sym = find_tosym_with_name(elf, taddr, sym, name);
+	if (!sym) {
+		error("%s: could not find the the export symbol '%s'\n",
+		      mod->name, name);
+		return;
+	}
+
 	if (ELF_ST_BIND(sym->st_info) != STB_GLOBAL &&
 	    ELF_ST_BIND(sym->st_info) != STB_WEAK) {
 		error("%s: local symbol '%s' was exported\n", mod->name,
 		      label_name + strlen(prefix));
-		return;
-	}
-
-	name = sym_name(elf, sym);
-	if (strcmp(label_name + strlen(prefix), name)) {
-		error("%s: .export_symbol section references '%s', but it does not seem to be an export symbol\n",
-		      mod->name, name);
 		return;
 	}
 
@@ -1156,7 +1169,7 @@ static void check_section_mismatch(struct module *mod, struct elf_info *elf,
 	const struct sectioncheck *mismatch;
 
 	if (module_enabled && elf->export_symbol_secndx == fsecndx) {
-		check_export_symbol(mod, elf, faddr, tosec, sym);
+		check_export_symbol(mod, elf, faddr, tosec, sym, taddr);
 		return;
 	}
 
