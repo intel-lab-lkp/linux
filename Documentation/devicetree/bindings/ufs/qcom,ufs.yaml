@@ -103,6 +103,8 @@ properties:
     description:
       GPIO connected to the RESET pin of the UFS memory device.
 
+  msi-parent: true
+
 required:
   - compatible
   - reg
@@ -318,5 +320,6 @@ examples:
                             <0 0>,
                             <0 0>;
             qcom,ice = <&ice>;
+            msi-parent = <&gic_its 0x60>;
         };
     };
