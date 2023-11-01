@@ -154,9 +154,10 @@ Elf_Sym *symsearch_find_nearest(struct elf_info *elf, Elf_Addr addr,
 				unsigned int secndx, bool allow_negative,
 				Elf_Addr min_distance)
 {
-	unsigned int hi = elf->symsearch->table_size;
-	unsigned int lo = 0;
 	const struct syminfo *table = elf->symsearch->table;
+	unsigned int table_size = elf->symsearch->table_size;
+	unsigned int hi = table_size;
+	unsigned int lo = 0;
 	struct syminfo target;
 
 	target.addr = addr;
@@ -183,8 +184,7 @@ Elf_Sym *symsearch_find_nearest(struct elf_info *elf, Elf_Addr addr,
 	 */
 	Elf_Sym *result = NULL;
 
-	if (allow_negative &&
-	    hi < elf->symsearch->table_size &&
+	if (allow_negative && hi < table_size &&
 	    table[hi].section_index == secndx &&
 	    table[hi].addr - addr <= min_distance) {
 		min_distance = table[hi].addr - addr;
