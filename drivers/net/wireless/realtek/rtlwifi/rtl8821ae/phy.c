@@ -2278,15 +2278,14 @@ static s8 _rtl8812ae_phy_get_txpower_limit(struct ieee80211_hw *hw,
 	struct rtl_priv *rtlpriv = rtl_priv(hw);
 	struct rtl_efuse *rtlefuse = rtl_efuse(rtlpriv);
 	struct rtl_phy *rtlphy = &rtlpriv->phy;
-	short band_temp = -1, regulation = -1, bandwidth_temp = -1,
-		 rate_section = -1, channel_temp = -1;
-	u16 regu, bdwidth, sec, chnl;
+	short band_temp = -1, bandwidth_temp = -1,
+		rate_section = -1, channel_temp = -1;
+	u16 bdwidth, sec, chnl;
 	s8 power_limit = MAX_POWER_INDEX;
+	const short regulation = TXPWR_LMT_WW;
 
 	if (rtlefuse->eeprom_regulatory == 2)
 		return MAX_POWER_INDEX;
-
-	regulation = TXPWR_LMT_WW;
 
 	if (band == BAND_ON_2_4G)
 		band_temp = 0;
@@ -2393,8 +2392,8 @@ static s8 _rtl8812ae_phy_get_txpower_limit(struct ieee80211_hw *hw,
 		;/* BAND_ON_BOTH don't care temporarily */
 	}
 
-	if (band_temp == -1 || regulation == -1 || bandwidth_temp == -1 ||
-		rate_section == -1 || channel_temp == -1) {
+	if (band_temp == -1 || bandwidth_temp == -1 ||
+	    rate_section == -1 || channel_temp == -1) {
 		rtl_dbg(rtlpriv, COMP_POWER, DBG_LOUD,
 			"Wrong index value to access power limit table [band %d][regulation %d][bandwidth %d][rf_path %d][rate_section %d][chnl %d]\n",
 			band_temp, regulation, bandwidth_temp, rf_path,
@@ -2402,7 +2401,6 @@ static s8 _rtl8812ae_phy_get_txpower_limit(struct ieee80211_hw *hw,
 		return MAX_POWER_INDEX;
 	}
 
-	regu = regulation;
 	bdwidth = bandwidth_temp;
 	sec = rate_section;
 	chnl = channel_temp;
@@ -2415,10 +2413,7 @@ static s8 _rtl8812ae_phy_get_txpower_limit(struct ieee80211_hw *hw,
 			limits[i] = rtlphy->txpwr_limit_2_4g[i][bdwidth]
 			[sec][chnl][rf_path];
 
-		power_limit = (regulation == TXPWR_LMT_WW) ?
-			_rtl8812ae_phy_get_world_wide_limit(limits) :
-			rtlphy->txpwr_limit_2_4g[regu][bdwidth]
-					[sec][chnl][rf_path];
+		power_limit = _rtl8812ae_phy_get_world_wide_limit(limits);
 	} else if (band == BAND_ON_5G) {
 		s8 limits[10] = {0};
 		u8 i;
@@ -2427,10 +2422,7 @@ static s8 _rtl8812ae_phy_get_txpower_limit(struct ieee80211_hw *hw,
 			limits[i] = rtlphy->txpwr_limit_5g[i][bdwidth]
 			[sec][chnl][rf_path];
 
-		power_limit = (regulation == TXPWR_LMT_WW) ?
-			_rtl8812ae_phy_get_world_wide_limit(limits) :
-			rtlphy->txpwr_limit_5g[regu][chnl]
-			[sec][chnl][rf_path];
+		power_limit = _rtl8812ae_phy_get_world_wide_limit(limits);
 	} else {
 		rtl_dbg(rtlpriv, COMP_INIT, DBG_LOUD,
 			"No power limit table of the specified band\n");
