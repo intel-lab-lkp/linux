@@ -1,0 +1,70 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+# Copyright 2020-2023 Unisoc Inc.
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/phy/phy-sprd-usb20-hs.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Spreadtrum USB20 High Speed PHY
+
+maintainers:
+  - Pu Li <lip308226@gmail.com>
+
+properties:
+  compatible:
+    oneOf:
+      - items:
+          - enum:
+              - sprd,pike2-phy
+              - sprd,sharkle-phy
+              - sprd,sharkl3-phy
+              - sprd,sharkl5-phy
+              - sprd,sharkl5pro-phy
+              - sprd,qogirl6-phy
+              - sprd,qogirn6lite-phy
+              - sprd,uis8520-phy
+
+  reg:
+    maxItems: 1
+
+  reg-names:
+    const: phy_glb_regs
+
+  sprd,syscon-enable:
+    description:
+      Phandle to aon apb syscon register region.
+    $ref: /schemas/types.yaml#/definitions/phandle
+
+  sprd,syscon-ana:
+    description:
+      Phandle to analog syscon register region.
+    $ref: /schemas/types.yaml#/definitions/phandle
+
+  sprd,vdd-voltage:
+    description:
+      It represents the value of one analog power supply of phy,
+      the unit is uV.
+    $ref: /schemas/types.yaml#/definitions/uint32
+
+  "#phy-cells":
+    const: 0
+
+required:
+  - compatible
+  - reg
+  - reg-names
+  - "#phy-cells"
+
+additionalProperties: false
+
+examples:
+  - |
+    hsphy@64570000 {
+      compatible = "sprd,qogirl6-phy";
+      reg = <0x64570000 0x3030>;
+      reg-names = "phy_glb_regs";
+      sprd,syscon-enable = <&aon_apb_regs>;
+      sprd,syscon-ana = <&anlg_phy_g2_regs>;
+      sprd,vdd-voltage = <3300000>;
+      #phy-cells = <0>;
+    };
