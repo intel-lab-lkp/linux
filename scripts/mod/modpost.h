@@ -186,6 +186,9 @@ void symsearch_finish(struct elf_info *elf);
 Elf_Sym *symsearch_find_nearest(struct elf_info *elf, Elf_Addr addr,
 				unsigned int secndx, bool allow_negative,
 				Elf_Addr min_distance);
+Elf_Sym *symsearch_find_with_name(struct elf_info *elf, Elf_Addr addr,
+				  unsigned int secndx, bool allow_negative,
+				  Elf_Addr min_distance, const char *name);
 
 /* file2alias.c */
 void handle_moddevtable(struct module *mod, struct elf_info *info,

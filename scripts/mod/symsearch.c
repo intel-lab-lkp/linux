@@ -240,3 +240,47 @@ Elf_Sym *symsearch_find_nearest(struct elf_info *elf, Elf_Addr addr,
 	return symsearch_find(elf, addr, secndx, allow_negative, min_distance,
 			      symsearch_nearest_filter, elf);
 }
+
+struct name_filter_data {
+	struct elf_info *elf;
+	const char *name;
+};
+
+static bool symsearch_name_filter(const Elf_Sym *sym1, const Elf_Sym *sym2,
+				  void *_data)
+{
+	struct name_filter_data *data = _data;
+	const char *name;
+
+	/* Check the symbol name. */
+	name = sym_name(data->elf, sym1);
+	if (strcmp(name, data->name))
+		return false;
+
+	/* If sym2 is NULL, this is the first occurrence, always take it. */
+	if (!sym2)
+		return true;
+
+	/* Prefer lower address. */
+	return sym1->st_value < sym2->st_value;
+}
+
+/*
+ * Find the symbol which is in secndx and has the given name, and is located
+ * close enough to the given address.
+ * allow_negative: allow returning a symbol whose address is > addr.
+ * min_distance: ignore symbols which are further away than this.
+ * name: the name of the symbol to search for.
+ *
+ * Returns a pointer into the symbol table for success.
+ * Returns NULL if no legal symbol is found within the requested range.
+ */
+Elf_Sym *symsearch_find_with_name(struct elf_info *elf, Elf_Addr addr,
+				  unsigned int secndx, bool allow_negative,
+				  Elf_Addr min_distance, const char *name)
+{
+	struct name_filter_data data = { .elf = elf, .name = name };
+
+	return symsearch_find(elf, addr, secndx, allow_negative, min_distance,
+			      symsearch_name_filter, &data);
+}
