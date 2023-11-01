@@ -156,7 +156,7 @@ Elf_Sym *symsearch_find_nearest(struct elf_info *elf, Elf_Addr addr,
 {
 	unsigned int hi = elf->symsearch->table_size;
 	unsigned int lo = 0;
-	struct syminfo *table = elf->symsearch->table;
+	const struct syminfo *table = elf->symsearch->table;
 	struct syminfo target;
 
 	target.addr = addr;
