@@ -5,6 +5,8 @@
  * to a given address.
  */
 
+#include <stdbool.h>
+
 #include "modpost.h"
 
 struct syminfo {
@@ -142,17 +144,11 @@ void symsearch_finish(struct elf_info *elf)
 	elf->symsearch = NULL;
 }
 
-/*
- * Find the syminfo which is in secndx and "nearest" to addr.
- * allow_negative: allow returning a symbol whose address is > addr.
- * min_distance: ignore symbols which are further away than this.
- *
- * Returns a pointer into the symbol table for success.
- * Returns NULL if no legal symbol is found within the requested range.
- */
-Elf_Sym *symsearch_find_nearest(struct elf_info *elf, Elf_Addr addr,
-				unsigned int secndx, bool allow_negative,
-				Elf_Addr min_distance)
+static Elf_Sym *symsearch_find(struct elf_info *elf, Elf_Addr addr,
+			       unsigned int secndx, bool allow_negative,
+			       Elf_Addr min_distance,
+			       bool (*filter)(const Elf_Sym *, const Elf_Sym *, void *),
+			       void *filter_data)
 {
 	const struct syminfo *table = elf->symsearch->table;
 	unsigned int table_size = elf->symsearch->table_size;
@@ -178,22 +174,78 @@ Elf_Sym *symsearch_find_nearest(struct elf_info *elf, Elf_Addr addr,
 	 * entry in the array which comes before target, including the
 	 * case where it perfectly matches the section and the address.
 	 *
-	 * Note -- if the address we're looking up falls perfectly
-	 * in the middle of two symbols, this is written to always
-	 * prefer the symbol with the lower address.
+	 * If there are multiple candidates, the filter() callback can be used
+	 * to break a tie. filter() is provided with the current symbol and the
+	 * best one so far. If it returns true, the current one is selected.
+	 * Only a few iterations are expected, hence the linear search is fine.
 	 */
-	Elf_Sym *result = NULL;
+	Elf_Addr distance;
+	Elf_Sym *best = NULL;
+	Elf_Sym *sym;
+	int i;
 
-	if (allow_negative && hi < table_size &&
-	    table[hi].section_index == secndx &&
-	    table[hi].addr - addr <= min_distance) {
-		min_distance = table[hi].addr - addr;
-		result = &elf->symtab_start[table[hi].symbol_index];
+	/* Search to the left. */
+	for (i = hi - 1; i >= 0; i--) {
+		if (table[i].section_index != secndx)
+			break;
+
+		distance = addr - table[i].addr;
+		if (distance > min_distance)
+			break;
+
+		sym = &elf->symtab_start[table[i].symbol_index];
+		if (filter(sym, best, filter_data)) {
+			min_distance = distance;
+			best = sym;
+		}
 	}
-	if (hi > 0 &&
-	    table[hi - 1].section_index == secndx &&
-	    addr - table[hi - 1].addr <= min_distance) {
-		result = &elf->symtab_start[table[hi - 1].symbol_index];
+
+	if (!allow_negative)
+		return best;
+
+	/* Search to the right if allow_negative is true. */
+	for (i = hi; i < table_size; i++) {
+		if (table[i].section_index != secndx)
+			break;
+
+		distance = table[i].addr - addr;
+		if (distance > min_distance)
+			break;
+
+		sym = &elf->symtab_start[table[i].symbol_index];
+		if (filter(sym, best, filter_data)) {
+			min_distance = distance;
+			best = sym;
+		}
 	}
-	return result;
+
+	return best;
+}
+
+/* Return true if sym1 is preferred over sym2. */
+static bool symsearch_nearest_filter(const Elf_Sym *sym1, const Elf_Sym *sym2,
+				     void *data)
+{
+	/* If sym2 is NULL, this is the first occurrence, always take it. */
+	if (sym2 == NULL)
+		return true;
+
+	/* Prefer lower address. */
+	return sym1->st_value < sym2->st_value;
+}
+
+/*
+ * Find the syminfo which is in secndx and "nearest" to addr.
+ * allow_negative: allow returning a symbol whose address is > addr.
+ * min_distance: ignore symbols which are further away than this.
+ *
+ * Returns a pointer into the symbol table for success.
+ * Returns NULL if no legal symbol is found within the requested range.
+ */
+Elf_Sym *symsearch_find_nearest(struct elf_info *elf, Elf_Addr addr,
+				unsigned int secndx, bool allow_negative,
+				Elf_Addr min_distance)
+{
+	return symsearch_find(elf, addr, secndx, allow_negative, min_distance,
+			      symsearch_nearest_filter, NULL);
 }
