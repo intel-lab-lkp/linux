@@ -149,7 +149,7 @@ static int capiminor_add_ack(struct capiminor *mp, u16 datahandle)
 	n = kmalloc(sizeof(*n), GFP_ATOMIC);
 	if (unlikely(!n)) {
 		printk(KERN_ERR "capi: alloc datahandle failed\n");
-		return -1;
+		return -ENOMEM;
 	}
 	n->datahandle = datahandle;
 	INIT_LIST_HEAD(&n->list);
