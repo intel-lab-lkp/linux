@@ -18778,6 +18778,13 @@ F:	samples/rust/
 F:	scripts/*rust*
 K:	\b(?i:rust)\b
 
+RVE BOARD SUPPORT
+M:	Hugo Villeneuve <hvilleneuve@dimonoff.com>
+L:	linux-arm-kernel@lists.infradead.org (moderated for non-subscribers)
+S:	Supported
+W:	https://rve.ca
+F:	arch/arm64/boot/dts/freescale/imx*rve-*.dts*
+
 RXRPC SOCKETS (AF_RXRPC)
 M:	David Howells <dhowells@redhat.com>
 M:	Marc Dionne <marc.dionne@auristor.com>
