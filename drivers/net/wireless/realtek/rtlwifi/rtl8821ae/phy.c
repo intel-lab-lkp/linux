@@ -437,12 +437,11 @@ u32 phy_get_tx_swing_8812A(struct ieee80211_hw *hw, u8	band,
 	struct rtl_hal *rtlhal = rtl_hal(rtl_priv(hw));
 	struct rtl_dm *rtldm = rtl_dm(rtlpriv);
 	struct rtl_efuse *rtlefuse = rtl_efuse(rtl_priv(hw));
-	s8 reg_swing_2g = -1;/* 0xff; */
-	s8 reg_swing_5g = -1;/* 0xff; */
-	s8 swing_2g = -1 * reg_swing_2g;
-	s8 swing_5g = -1 * reg_swing_5g;
-	u32  out = 0x200;
-	const s8 auto_temp = -1;
+	const s8 reg_swing_2g = -1; /* 0xff; */
+	const s8 reg_swing_5g = -1; /* 0xff; */
+	const s8 swing_2g = -1 * reg_swing_2g;
+	const s8 swing_5g = -1 * reg_swing_5g;
+	u32 out = 0x200;
 
 	rtl_dbg(rtlpriv, COMP_SCAN, DBG_LOUD,
 		"===> PHY_GetTXBBSwing_8812A, bbSwing_2G: %d, bbSwing_5G: %d,autoload_failflag=%d.\n",
@@ -452,36 +451,16 @@ u32 phy_get_tx_swing_8812A(struct ieee80211_hw *hw, u8	band,
 	if (rtlefuse->autoload_failflag) {
 		if (band == BAND_ON_2_4G) {
 			rtldm->swing_diff_2g = swing_2g;
-			if (swing_2g == 0) {
-				out = 0x200; /* 0 dB */
-			} else if (swing_2g == -3) {
-				out = 0x16A; /* -3 dB */
-			} else if (swing_2g == -6) {
-				out = 0x101; /* -6 dB */
-			} else if (swing_2g == -9) {
-				out = 0x0B6; /* -9 dB */
-			} else {
-				rtldm->swing_diff_2g = 0;
-				out = 0x200;
-			}
+			rtldm->swing_diff_2g = 0;
+			out = 0x200;
 		} else if (band == BAND_ON_5G) {
 			rtldm->swing_diff_5g = swing_5g;
-			if (swing_5g == 0) {
-				out = 0x200; /* 0 dB */
-			} else if (swing_5g == -3) {
-				out = 0x16A; /* -3 dB */
-			} else if (swing_5g == -6) {
-				out = 0x101; /* -6 dB */
-			} else if (swing_5g == -9) {
-				out = 0x0B6; /* -9 dB */
+			if (rtlhal->hw_type == HARDWARE_TYPE_RTL8821AE) {
+				rtldm->swing_diff_5g = -3;
+				out = 0x16A;
 			} else {
-				if (rtlhal->hw_type == HARDWARE_TYPE_RTL8821AE) {
-					rtldm->swing_diff_5g = -3;
-					out = 0x16A;
-				} else {
-					rtldm->swing_diff_5g = 0;
-					out = 0x200;
-				}
+				rtldm->swing_diff_5g = 0;
+				out = 0x200;
 			}
 		} else {
 			rtldm->swing_diff_2g = -3;
@@ -492,35 +471,11 @@ u32 phy_get_tx_swing_8812A(struct ieee80211_hw *hw, u8	band,
 		u32 swing = 0, swing_a = 0, swing_b = 0;
 
 		if (band == BAND_ON_2_4G) {
-			if (reg_swing_2g == auto_temp) {
-				efuse_shadow_read(hw, 1, 0xC6, (u32 *)&swing);
-				swing = (swing == 0xFF) ? 0x00 : swing;
-			} else if (swing_2g ==  0) {
-				swing = 0x00; /* 0 dB */
-			} else if (swing_2g == -3) {
-				swing = 0x05; /* -3 dB */
-			} else if (swing_2g == -6) {
-				swing = 0x0A; /* -6 dB */
-			} else if (swing_2g == -9) {
-				swing = 0xFF; /* -9 dB */
-			} else {
-				swing = 0x00;
-			}
+			efuse_shadow_read(hw, 1, 0xC6, (u32 *)&swing);
+			swing = (swing == 0xFF) ? 0x00 : swing;
 		} else {
-			if (reg_swing_5g == auto_temp) {
-				efuse_shadow_read(hw, 1, 0xC7, (u32 *)&swing);
-				swing = (swing == 0xFF) ? 0x00 : swing;
-			} else if (swing_5g ==  0) {
-				swing = 0x00; /* 0 dB */
-			} else if (swing_5g == -3) {
-				swing = 0x05; /* -3 dB */
-			} else if (swing_5g == -6) {
-				swing = 0x0A; /* -6 dB */
-			} else if (swing_5g == -9) {
-				swing = 0xFF; /* -9 dB */
-			} else {
-				swing = 0x00;
-			}
+			efuse_shadow_read(hw, 1, 0xC7, (u32 *)&swing);
+			swing = (swing == 0xFF) ? 0x00 : swing;
 		}
 
 		swing_a = (swing & 0x3) >> 0; /* 0xC6/C7[1:0] */
