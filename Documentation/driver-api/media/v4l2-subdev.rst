@@ -195,6 +195,10 @@ performed using the :c:func:`v4l2_async_unregister_subdev` call. Subdevices
 registered this way are stored in a global list of subdevices, ready to be
 picked up by bridge drivers.
 
+Note that all sensor initialisation has to complete before registering the async
+sub-device, including enabling runtime PM. This is because the sensor becomes
+accessible via the UAPI without further action by the sensor driver.
+
 Asynchronous sub-device notifiers
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
