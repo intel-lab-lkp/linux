@@ -91,7 +91,7 @@ static int hyperv_setup_vram(struct hyperv_drm_device *hv,
 	 * connect to display properly for ARM64 Linux VM, as the host also maps
 	 * the VRAM cacheable.
 	 */
-	hv->vram = ioremap_cache(hv->mem->start, hv->fb_size);
+	hv->vram = memremap(hv->mem->start, hv->fb_size, MEMREMAP_WB | MEMREMAP_DEC);
 	if (!hv->vram) {
 		drm_err(dev, "Failed to map vram\n");
 		ret = -ENOMEM;

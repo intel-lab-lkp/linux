@@ -1034,7 +1034,7 @@ static int hvfb_getmem(struct hv_device *hdev, struct fb_info *info)
 	 * VM Connect to display properly for ARM64 Linux VM, as the host also
 	 * maps the VRAM cacheable.
 	 */
-	fb_virt = ioremap_cache(par->mem->start, screen_fb_size);
+	fb_virt = memremap(par->mem->start, screen_fb_size, MEMREMAP_WB | MEMREMAP_DEC);
 	if (!fb_virt)
 		goto err2;
 
@@ -1068,7 +1068,7 @@ getmem_done:
 	return 0;
 
 err3:
-	iounmap(fb_virt);
+	memunmap(fb_virt);
 err2:
 	vmbus_free_mmio(par->mem->start, screen_fb_size);
 	par->mem = NULL;
@@ -1086,7 +1086,7 @@ static void hvfb_putmem(struct hv_device *hdev, struct fb_info *info)
 
 	if (par->need_docopy) {
 		vfree(par->dio_vp);
-		iounmap(info->screen_base);
+		memunmap(info->screen_base);
 		vmbus_free_mmio(par->mem->start, screen_fb_size);
 	} else {
 		hvfb_release_phymem(hdev, info->fix.smem_start,
