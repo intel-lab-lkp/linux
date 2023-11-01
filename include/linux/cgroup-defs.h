@@ -368,6 +368,13 @@ struct cgroup_rstat_cpu {
 	 */
 	struct cgroup *updated_children;	/* terminated by self cgroup */
 	struct cgroup *updated_next;		/* NULL iff not on the list */
+
+	/*
+	 * A singly-linked list of cgroup_rstat_cpu structures to be flushed.
+	 * Protected by cgroup_rstat_lock.
+	 */
+	struct cgroup_rstat_cpu *flush_next;
+	struct cgroup *cgroup;			/* Cgroup back pointer */
 };
 
 struct cgroup_freezer_state {

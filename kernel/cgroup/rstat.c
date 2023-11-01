@@ -146,6 +146,42 @@ static struct cgroup *cgroup_rstat_cpu_pop_updated(struct cgroup *pos,
 }
 
 /*
+ * Return a list of cgroup_rstat_cpu structures to be flushed
+ */
+static struct cgroup_rstat_cpu *cgroup_rstat_flush_list(struct cgroup *root,
+							int cpu)
+{
+	raw_spinlock_t *cpu_lock = per_cpu_ptr(&cgroup_rstat_cpu_lock, cpu);
+	struct cgroup_rstat_cpu *head = NULL, *tail, *next;
+	unsigned long flags;
+	struct cgroup *pos;
+
+	/*
+	 * The _irqsave() is needed because cgroup_rstat_lock is
+	 * spinlock_t which is a sleeping lock on PREEMPT_RT. Acquiring
+	 * this lock with the _irq() suffix only disables interrupts on
+	 * a non-PREEMPT_RT kernel. The raw_spinlock_t below disables
+	 * interrupts on both configurations. The _irqsave() ensures
+	 * that interrupts are always disabled and later restored.
+	 */
+	raw_spin_lock_irqsave(cpu_lock, flags);
+	pos = cgroup_rstat_cpu_pop_updated(NULL, root, cpu);
+	if (!pos)
+		goto unlock;
+
+	head = tail = cgroup_rstat_cpu(pos, cpu);
+	while ((pos = cgroup_rstat_cpu_pop_updated(pos, root, cpu))) {
+		next = cgroup_rstat_cpu(pos, cpu);
+		tail->flush_next = next;
+		tail = next;
+	}
+	tail->flush_next = NULL;
+unlock:
+	raw_spin_unlock_irqrestore(cpu_lock, flags);
+	return head;
+}
+
+/*
  * A hook for bpf stat collectors to attach to and flush their stats.
  * Together with providing bpf kfuncs for cgroup_rstat_updated() and
  * cgroup_rstat_flush(), this enables a complete workflow where bpf progs that
@@ -179,23 +215,14 @@ static void cgroup_rstat_flush_locked(struct cgroup *cgrp)
 	lockdep_assert_held(&cgroup_rstat_lock);
 
 	for_each_possible_cpu(cpu) {
-		raw_spinlock_t *cpu_lock = per_cpu_ptr(&cgroup_rstat_cpu_lock,
-						       cpu);
-		struct cgroup *pos = NULL;
-		unsigned long flags;
+		struct cgroup_rstat_cpu *rstat_cpu_next;
 
-		/*
-		 * The _irqsave() is needed because cgroup_rstat_lock is
-		 * spinlock_t which is a sleeping lock on PREEMPT_RT. Acquiring
-		 * this lock with the _irq() suffix only disables interrupts on
-		 * a non-PREEMPT_RT kernel. The raw_spinlock_t below disables
-		 * interrupts on both configurations. The _irqsave() ensures
-		 * that interrupts are always disabled and later restored.
-		 */
-		raw_spin_lock_irqsave(cpu_lock, flags);
-		while ((pos = cgroup_rstat_cpu_pop_updated(pos, cgrp, cpu))) {
+		rstat_cpu_next = cgroup_rstat_flush_list(cgrp, cpu);
+		while (rstat_cpu_next) {
+			struct cgroup *pos = rstat_cpu_next->cgroup;
 			struct cgroup_subsys_state *css;
 
+			rstat_cpu_next = rstat_cpu_next->flush_next;
 			cgroup_base_stat_flush(pos, cpu);
 			bpf_rstat_flush(pos, cgroup_parent(pos), cpu);
 
@@ -205,7 +232,6 @@ static void cgroup_rstat_flush_locked(struct cgroup *cgrp)
 				css->ss->css_rstat_flush(css, cpu);
 			rcu_read_unlock();
 		}
-		raw_spin_unlock_irqrestore(cpu_lock, flags);
 
 		/* play nice and yield if necessary */
 		if (need_resched() || spin_needbreak(&cgroup_rstat_lock)) {
@@ -281,6 +307,7 @@ int cgroup_rstat_init(struct cgroup *cgrp)
 		struct cgroup_rstat_cpu *rstatc = cgroup_rstat_cpu(cgrp, cpu);
 
 		rstatc->updated_children = cgrp;
+		rstatc->cgroup = cgrp;
 		u64_stats_init(&rstatc->bsync);
 	}
 
