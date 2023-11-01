@@ -507,25 +507,6 @@ get_md_pagetable(struct iommufd_ucmd *ucmd, u32 mockpt_id,
 	return hwpt;
 }
 
-static inline struct iommufd_hw_pagetable *
-get_md_pagetable_nested(struct iommufd_ucmd *ucmd, u32 mockpt_id,
-			struct mock_iommu_domain_nested **mock_nested)
-{
-	struct iommufd_hw_pagetable *hwpt;
-
-	hwpt = __get_md_pagetable(ucmd, mockpt_id, IOMMUFD_OBJ_HWPT_NESTED);
-	if (IS_ERR(hwpt))
-		return hwpt;
-	if (hwpt->domain->type != IOMMU_DOMAIN_NESTED ||
-	    hwpt->domain->ops != &domain_nested_ops) {
-		iommufd_put_object(&hwpt->obj);
-		return ERR_PTR(-EINVAL);
-	}
-	*mock_nested = container_of(hwpt->domain,
-				    struct mock_iommu_domain_nested, domain);
-	return hwpt;
-}
-
 struct mock_bus_type {
 	struct bus_type bus;
 	struct notifier_block nb;
