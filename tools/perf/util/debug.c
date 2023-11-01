@@ -246,6 +246,19 @@ int perf_debug_option(const char *str)
 	return 0;
 }
 
+void perf_debug_fprint_options(FILE *file)
+{
+	struct sublevel_option *opt = debug_opts;
+
+	if (!file)
+		return;
+
+	while (opt->name) {
+		fprintf(file, "%s%s", opt == debug_opts ? "" : ",", opt->name);
+		opt++;
+	}
+}
+
 int perf_quiet_option(void)
 {
 	struct sublevel_option *opt = &debug_opts[0];

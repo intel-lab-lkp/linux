@@ -279,7 +279,11 @@ static int handle_options(const char ***argv, int *argc, int *envchanged)
 			exit(0);
 		} else if (!strcmp(cmd, "--debug")) {
 			if (*argc < 2) {
-				fprintf(stderr, "No variable specified for --debug.\n");
+				fprintf(stderr,
+					"No variable specified for --debug, available options: ");
+				perf_debug_fprint_options(stderr);
+				fprintf(stderr, "\n");
+
 				usage(perf_usage_string);
 			}
 			if (perf_debug_option((*argv)[1]))
