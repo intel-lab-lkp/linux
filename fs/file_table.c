@@ -336,6 +336,9 @@ struct file *alloc_file_pseudo(struct inode *inode, struct vfsmount *mnt,
 	struct path path;
 	struct file *file;
 
+	if (WARN_ON_ONCE(S_ISDIR(inode->i_mode)))
+		return ERR_PTR(-EISDIR);
+
 	path.dentry = d_alloc_pseudo(mnt->mnt_sb, &this);
 	if (!path.dentry)
 		return ERR_PTR(-ENOMEM);
