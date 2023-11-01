@@ -80,7 +80,11 @@ static int btrfs_remount(struct super_block *sb, int *flags, char *data);
 
 static void btrfs_put_super(struct super_block *sb)
 {
-	close_ctree(btrfs_sb(sb));
+	struct btrfs_fs_info *fs_info = btrfs_sb(sb);
+
+	btrfs_info(fs_info, "unmounting filesystem %pU",
+		   fs_info->fs_devices->fsid);
+	close_ctree(fs_info);
 }
 
 enum {
