@@ -160,6 +160,7 @@ static const struct spi_device_id st_accel_id_table[] = {
 	{ LIS3DHH_ACCEL_DEV_NAME },
 	{ LIS3DE_ACCEL_DEV_NAME },
 	{ LIS302DL_ACCEL_DEV_NAME },
+	{ LIS302DL_SPI_ACCEL_DEV_NAME },
 	{ LSM303C_ACCEL_DEV_NAME },
 	{ IIS328DQ_ACCEL_DEV_NAME },
 	{},
