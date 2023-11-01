@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: GPL-2.0
+#
+# Phy drivers for Spreadtrum platforms
+#
+
+config SPRD_USB20_HSPHY
+	tristate "Spreadtrum USB20 HSPHY Driver"
+	select USB_PHY
+	depends on ARCH_SPRD || COMPILE_TEST
+	help
+	  Enable this to support the SPRD USB20 High Speed PHY that is part of SOC.
+	  This driver takes care of all the PHY functionality,
+	  normally paired with DesignWare USB20 (DRD) Controller or
+	  Spreadtrum musb phy (DRD )controller.

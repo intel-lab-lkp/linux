@@ -31,6 +31,7 @@ obj-y					+= allwinner/	\
 					   rockchip/	\
 					   samsung/	\
 					   socionext/	\
+					   sprd/	\
 					   st/		\
 					   starfive/	\
 					   sunplus/	\
