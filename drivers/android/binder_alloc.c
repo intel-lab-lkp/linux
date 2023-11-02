@@ -194,6 +194,9 @@ static void binder_free_page_range(struct binder_alloc *alloc,
 		index = (page_addr - alloc->buffer) / PAGE_SIZE;
 		page = &alloc->pages[index];
 
+		if (!page->page_ptr)
+			continue;
+
 		trace_binder_free_lru_start(alloc, index);
 
 		ret = list_lru_add(&binder_alloc_lru, &page->lru);
@@ -214,6 +217,9 @@ static int binder_get_user_page_remote(struct binder_alloc *alloc,
 		return -ESRCH;
 
 	mmap_write_lock(alloc->mm);
+	if (lru_page->page_ptr)
+		goto out;
+
 	if (!alloc->vma) {
 		pr_err("%d: %s failed, no vma\n", alloc->pid, __func__);
 		ret = -ESRCH;
@@ -236,15 +242,51 @@ static int binder_get_user_page_remote(struct binder_alloc *alloc,
 		goto out;
 	}
 
-	lru_page->page_ptr = page;
+	/* mark page insertion complete and safe to acquire */
+	smp_store_release(&lru_page->page_ptr, page);
 out:
 	mmap_write_unlock(alloc->mm);
 	mmput_async(alloc->mm);
 	return ret;
 }
 
-static int binder_allocate_page_range(struct binder_alloc *alloc,
-				      unsigned long start, unsigned long end)
+/* The range of pages should include those shared with other buffers */
+static int binder_get_page_range(struct binder_alloc *alloc,
+				 unsigned long start, unsigned long end)
+{
+	struct binder_lru_page *page;
+	unsigned long page_addr;
+
+	binder_alloc_debug(BINDER_DEBUG_BUFFER_ALLOC,
+			   "%d: get pages %lx-%lx\n",
+			   alloc->pid, start, end);
+
+	for (page_addr = start; page_addr < end; page_addr += PAGE_SIZE) {
+		unsigned long index;
+		int ret;
+
+		index = (page_addr - alloc->buffer) / PAGE_SIZE;
+		page = &alloc->pages[index];
+
+		/* check if page insertion is marked complete by release */
+		if (smp_load_acquire(&page->page_ptr))
+			continue;
+
+		trace_binder_alloc_page_start(alloc, index);
+
+		ret = binder_get_user_page_remote(alloc, page, page_addr);
+		if (ret)
+			return ret;
+
+		trace_binder_alloc_page_end(alloc, index);
+	}
+
+	return 0;
+}
+
+/* The range of pages should exclude those shared with other buffers */
+static void binder_allocate_page_range(struct binder_alloc *alloc,
+				       unsigned long start, unsigned long end)
 {
 	struct binder_lru_page *page;
 	unsigned long page_addr;
@@ -253,15 +295,11 @@ static int binder_allocate_page_range(struct binder_alloc *alloc,
 			   "%d: allocate pages %lx-%lx\n",
 			   alloc->pid, start, end);
 
-	if (end <= start)
-		return 0;
-
 	trace_binder_update_page_range(alloc, true, start, end);
 
 	for (page_addr = start; page_addr < end; page_addr += PAGE_SIZE) {
 		unsigned long index;
 		bool on_lru;
-		int ret;
 
 		index = (page_addr - alloc->buffer) / PAGE_SIZE;
 		page = &alloc->pages[index];
@@ -276,21 +314,9 @@ static int binder_allocate_page_range(struct binder_alloc *alloc,
 			continue;
 		}
 
-		trace_binder_alloc_page_start(alloc, index);
-
-		ret = binder_get_user_page_remote(alloc, page, page_addr);
-		if (ret) {
-			binder_free_page_range(alloc, start, page_addr);
-			return ret;
-		}
-
 		if (index + 1 > alloc->pages_high)
 			alloc->pages_high = index + 1;
-
-		trace_binder_alloc_page_end(alloc, index);
 	}
-
-	return 0;
 }
 
 static inline void binder_alloc_set_vma(struct binder_alloc *alloc,
@@ -410,7 +436,6 @@ static struct binder_buffer *binder_alloc_new_buf_locked(
 	unsigned long has_page_addr;
 	unsigned long end_page_addr;
 	size_t buffer_size;
-	int ret;
 
 	if (is_async &&
 	    alloc->free_async_space < size + sizeof(struct binder_buffer)) {
@@ -453,18 +478,14 @@ static struct binder_buffer *binder_alloc_new_buf_locked(
 		     "%d: binder_alloc_buf size %zd got buffer %pK size %zd\n",
 		      alloc->pid, size, buffer, buffer_size);
 
-	has_page_addr = (buffer->user_data + buffer_size) & PAGE_MASK;
 	WARN_ON(n && buffer_size != size);
+
+	has_page_addr = (buffer->user_data + buffer_size) & PAGE_MASK;
 	end_page_addr = PAGE_ALIGN(buffer->user_data + size);
 	if (end_page_addr > has_page_addr)
 		end_page_addr = has_page_addr;
-	ret = binder_allocate_page_range(alloc, PAGE_ALIGN(buffer->user_data),
-					 end_page_addr);
-	if (ret) {
-		buffer = ERR_PTR(ret);
-		goto out;
-	}
-
+	binder_allocate_page_range(alloc, PAGE_ALIGN(buffer->user_data),
+				   end_page_addr);
 	if (buffer_size != size) {
 		new_buffer->user_data = buffer->user_data + size;
 		list_add(&new_buffer->entry, &buffer->entry);
@@ -491,7 +512,6 @@ static struct binder_buffer *binder_alloc_new_buf_locked(
 			buffer->oneway_spam_suspect = true;
 	}
 
-out:
 	/* discard possibly unused new_buffer */
 	kfree(new_buffer);
 	return buffer;
@@ -520,6 +540,7 @@ struct binder_buffer *binder_alloc_new_buf(struct binder_alloc *alloc,
 {
 	struct binder_buffer *buffer, *next;
 	size_t size;
+	int ret;
 
 	/* Check binder_alloc is fully initialized */
 	if (!binder_alloc_get_vma(alloc)) {
@@ -564,6 +585,12 @@ struct binder_buffer *binder_alloc_new_buf(struct binder_alloc *alloc,
 	buffer->extra_buffers_size = extra_buffers_size;
 	buffer->pid = current->tgid;
 
+	ret = binder_get_page_range(alloc, buffer->user_data & PAGE_MASK,
+				    PAGE_ALIGN(buffer->user_data + size));
+	if (ret) {
+		binder_alloc_free_buf(alloc, buffer);
+		buffer = ERR_PTR(ret);
+	}
 out:
 	return buffer;
 }
