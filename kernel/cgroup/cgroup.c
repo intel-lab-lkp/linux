@@ -3320,7 +3320,7 @@ static ssize_t cgroup_subtree_control_write(struct kernfs_open_file *of,
 			}
 
 			if (!(cgroup_control(cgrp) & (1 << ssid))) {
-				ret = -ENOENT;
+				ret = -EINVAL;
 				goto out_unlock;
 			}
 		} else if (disable & (1 << ssid)) {
