@@ -209,6 +209,9 @@ struct usb_ep_caps {
  *	by this EP (0 - 16, actual number is 2^n)
  * @mult: multiplier, 'mult' value for SS Isoc EPs
  * @maxburst: the maximum number of bursts supported by this EP (for usb3)
+ * @fifo_mode: indicates that the control of this EP is handed off to an
+ *	hardware fifo device. Depends on hardware support eg. EBC feature
+ *	of DWC usb3.1 device or equivalent. Set before enabling the EP
  * @driver_data:for use by the gadget driver.
  * @address: used to identify the endpoint when finding descriptor that
  *	matches connection speed
@@ -236,6 +239,7 @@ struct usb_ep {
 	unsigned		max_streams:16;
 	unsigned		mult:2;
 	unsigned		maxburst:5;
+	unsigned		fifo_mode:1;
 	u8			address;
 	const struct usb_endpoint_descriptor	*desc;
 	const struct usb_ss_ep_comp_descriptor	*comp_desc;
