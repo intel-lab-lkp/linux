@@ -1242,13 +1242,7 @@ static bool is_igp(struct drm_i915_private *i915)
 void i915_pmu_register(struct drm_i915_private *i915)
 {
 	struct i915_pmu *pmu = &i915->pmu;
-	const struct attribute_group *attr_groups[] = {
-		&i915_pmu_format_attr_group,
-		&pmu->events_attr_group,
-		&i915_pmu_cpumask_attr_group,
-		NULL
-	};
-
+	const struct attribute_group **attr_groups;
 	int ret = -ENOMEM;
 
 	if (GRAPHICS_VER(i915) <= 2) {
@@ -1281,10 +1275,16 @@ void i915_pmu_register(struct drm_i915_private *i915)
 	if (!pmu->events_attr_group.attrs)
 		goto err_name;
 
-	pmu->base.attr_groups = kmemdup(attr_groups, sizeof(attr_groups),
-					GFP_KERNEL);
-	if (!pmu->base.attr_groups)
+	attr_groups = kcalloc(4, sizeof(struct attribute_group *), GFP_KERNEL);
+	if (!attr_groups)
 		goto err_attr;
+
+	attr_groups[0] = &i915_pmu_format_attr_group;
+	attr_groups[1] = &pmu->events_attr_group;
+	attr_groups[2] = &i915_pmu_cpumask_attr_group;
+	attr_groups[3] = NULL; /* sentinel */
+
+	pmu->base.attr_groups = attr_groups;
 
 	pmu->base.module	= THIS_MODULE;
 	pmu->base.task_ctx_nr	= perf_invalid_context;
