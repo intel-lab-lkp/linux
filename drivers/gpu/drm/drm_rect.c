@@ -135,7 +135,7 @@ static int drm_calc_scale(int src, int dst)
 {
 	int scale = 0;
 
-	if (WARN_ON(src < 0 || dst < 0))
+	if (WARN_ON_ONCE(src < 0 || dst < 0))
 		return -EINVAL;
 
 	if (dst == 0)
