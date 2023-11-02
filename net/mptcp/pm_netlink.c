@@ -346,6 +346,35 @@ out:
 	__sock_put(sk);
 }
 
+static bool mptcp_addresses_ids_equal(const struct mptcp_addr_info *a,
+				      const struct mptcp_addr_info *b,
+				      bool use_port, bool use_id)
+{
+	if (!mptcp_addresses_equal(a, b, use_port))
+		return false;
+	if (!use_id)
+		return true;
+
+	return a->id == b->id;
+}
+
+static struct mptcp_pm_add_entry *
+mptcp_lookup_anno_list_by_saddr_and_id(const struct mptcp_sock *msk,
+				       const struct mptcp_addr_info *addr,
+				       bool use_id)
+{
+	struct mptcp_pm_add_entry *entry;
+
+	lockdep_assert_held(&msk->pm.lock);
+
+	list_for_each_entry(entry, &msk->pm.anno_list, list) {
+		if (mptcp_addresses_ids_equal(&entry->addr, addr, true, use_id))
+			return entry;
+	}
+
+	return NULL;
+}
+
 struct mptcp_pm_add_entry *
 mptcp_pm_del_add_timer(struct mptcp_sock *msk,
 		       const struct mptcp_addr_info *addr, bool check_id)
@@ -354,12 +383,12 @@ mptcp_pm_del_add_timer(struct mptcp_sock *msk,
 	struct sock *sk = (struct sock *)msk;
 
 	spin_lock_bh(&msk->pm.lock);
-	entry = mptcp_lookup_anno_list_by_saddr(msk, addr);
-	if (entry && (!check_id || entry->addr.id == addr->id))
+	entry = mptcp_lookup_anno_list_by_saddr_and_id(msk, addr, check_id);
+	if (entry)
 		entry->retrans_times = ADD_ADDR_RETRANS_MAX;
 	spin_unlock_bh(&msk->pm.lock);
 
-	if (entry && (!check_id || entry->addr.id == addr->id))
+	if (entry)
 		sk_stop_timer_sync(sk, &entry->add_timer);
 
 	return entry;
