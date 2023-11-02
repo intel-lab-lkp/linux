@@ -2270,10 +2270,10 @@ __bpf_kfunc struct task_struct *bpf_task_from_pid(s32 pid)
  * bpf_dynptr_slice will not invalidate any ctx->data/data_end pointers in
  * the bpf program.
  *
- * Return: NULL if the call failed (eg invalid dynptr), pointer to a read-only
- * data slice (can be either direct pointer to the data or a pointer to the user
- * provided buffer, with its contents containing the data, if unable to obtain
- * direct pointer)
+ * Return: NULL or error pointer if the call failed (eg invalid dynptr), pointer
+ * to a read-only data slice (can be either direct pointer to the data or a
+ * pointer to the user provided buffer, with its contents containing the data,
+ * if unable to obtain direct pointer)
  */
 __bpf_kfunc void *bpf_dynptr_slice(const struct bpf_dynptr_kern *ptr, u32 offset,
 				   void *buffer__opt, u32 buffer__szk)
@@ -2354,10 +2354,10 @@ __bpf_kfunc void *bpf_dynptr_slice(const struct bpf_dynptr_kern *ptr, u32 offset
  * bpf_dynptr_slice_rdwr will not invalidate any ctx->data/data_end pointers in
  * the bpf program.
  *
- * Return: NULL if the call failed (eg invalid dynptr), pointer to a
- * data slice (can be either direct pointer to the data or a pointer to the user
- * provided buffer, with its contents containing the data, if unable to obtain
- * direct pointer)
+ * Return: NULL or error pointer if the call failed (eg invalid dynptr), pointer
+ * to a data slice (can be either direct pointer to the data or a pointer to the
+ * user provided buffer, with its contents containing the data, if unable to
+ * obtain direct pointer)
  */
 __bpf_kfunc void *bpf_dynptr_slice_rdwr(const struct bpf_dynptr_kern *ptr, u32 offset,
 					void *buffer__opt, u32 buffer__szk)
