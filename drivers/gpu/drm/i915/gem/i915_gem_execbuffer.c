@@ -5,6 +5,7 @@
  */
 
 #include <linux/dma-resv.h>
+#include <linux/file.h>
 #include <linux/highmem.h>
 #include <linux/sync_file.h>
 #include <linux/uaccess.h>

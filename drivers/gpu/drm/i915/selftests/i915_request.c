@@ -22,8 +22,10 @@
  *
  */
 
-#include <linux/prime_numbers.h>
+#include <linux/file.h>
+#include <linux/kthread.h>
 #include <linux/pm_qos.h>
+#include <linux/prime_numbers.h>
 #include <linux/sort.h>
 
 #include "gem/i915_gem_internal.h"

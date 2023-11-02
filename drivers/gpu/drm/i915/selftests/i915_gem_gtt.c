@@ -22,6 +22,7 @@
  *
  */
 
+#include <linux/file.h>
 #include <linux/list_sort.h>
 #include <linux/prime_numbers.h>
 

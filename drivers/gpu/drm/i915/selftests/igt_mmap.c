@@ -4,6 +4,8 @@
  * Copyright © 2019 Intel Corporation
  */
 
+#include <linux/file.h>
+
 #include <drm/drm_file.h>
 
 #include "i915_drv.h"

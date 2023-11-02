@@ -5,6 +5,7 @@
  */
 
 #include <linux/anon_inodes.h>
+#include <linux/file.h>
 #include <linux/mman.h>
 #include <linux/pfn_t.h>
 #include <linux/sizes.h>
