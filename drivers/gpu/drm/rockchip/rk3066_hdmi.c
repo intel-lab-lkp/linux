@@ -23,8 +23,6 @@
 
 struct hdmi_data_info {
 	int vic; /* The CEA Video ID (VIC) of the current drm display mode. */
-	unsigned int enc_out_format;
-	unsigned int colorimetry;
 };
 
 struct rk3066_hdmi_i2c {
@@ -200,14 +198,7 @@ static int rk3066_hdmi_config_avi(struct rk3066_hdmi *hdmi,
 	rc = drm_hdmi_avi_infoframe_from_display_mode(&frame.avi,
 						      &hdmi->connector, mode);
 
-	if (hdmi->hdmi_data.enc_out_format == HDMI_COLORSPACE_YUV444)
-		frame.avi.colorspace = HDMI_COLORSPACE_YUV444;
-	else if (hdmi->hdmi_data.enc_out_format == HDMI_COLORSPACE_YUV422)
-		frame.avi.colorspace = HDMI_COLORSPACE_YUV422;
-	else
-		frame.avi.colorspace = HDMI_COLORSPACE_RGB;
-
-	frame.avi.colorimetry = hdmi->hdmi_data.colorimetry;
+	frame.avi.colorspace = HDMI_COLORSPACE_RGB;
 	frame.avi.scan_mode = HDMI_SCAN_MODE_NONE;
 
 	return rk3066_hdmi_upload_frame(hdmi, rc, &frame,
@@ -329,15 +320,6 @@ static int rk3066_hdmi_setup(struct rk3066_hdmi *hdmi,
 	struct drm_display_info *display = &hdmi->connector.display_info;
 
 	hdmi->hdmi_data.vic = drm_match_cea_mode(mode);
-	hdmi->hdmi_data.enc_out_format = HDMI_COLORSPACE_RGB;
-
-	if (hdmi->hdmi_data.vic == 6 || hdmi->hdmi_data.vic == 7 ||
-	    hdmi->hdmi_data.vic == 21 || hdmi->hdmi_data.vic == 22 ||
-	    hdmi->hdmi_data.vic == 2 || hdmi->hdmi_data.vic == 3 ||
-	    hdmi->hdmi_data.vic == 17 || hdmi->hdmi_data.vic == 18)
-		hdmi->hdmi_data.colorimetry = HDMI_COLORIMETRY_ITU_601;
-	else
-		hdmi->hdmi_data.colorimetry = HDMI_COLORIMETRY_ITU_709;
 
 	hdmi->tmdsclk = mode->clock * 1000;
 
