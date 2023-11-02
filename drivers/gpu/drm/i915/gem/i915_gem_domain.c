@@ -456,6 +456,9 @@ i915_gem_object_pin_to_display_plane(struct drm_i915_gem_object *obj,
 	if (intel_scanout_needs_vtd_wa(i915)) {
 		unsigned int guard = VTD_GUARD;
 
+		if (IS_METEORLAKE(i915))
+			guard *= 200;
+
 		if (i915_gem_object_is_tiled(obj))
 			guard = max(guard,
 				    i915_gem_object_get_tile_row_size(obj));
