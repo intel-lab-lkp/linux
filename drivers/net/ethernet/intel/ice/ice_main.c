@@ -1839,6 +1839,10 @@ static void ice_handle_mdd_event(struct ice_pf *pf)
 			if (netif_msg_tx_err(pf))
 				dev_info(dev, "Malicious Driver Detection event TX_TCLAN detected on VF %d\n",
 					 vf->vf_id);
+			dev_info(dev,
+				 "PF-to-VF reset on VF %d due to Tx MDD TX_TCLAN event\n",
+				 vf->vf_id);
+			ice_reset_vf(vf, ICE_VF_RESET_NOTIFY);
 		}
 
 		reg = rd32(hw, VP_MDET_TX_TDPU(vf->vf_id));
@@ -1849,6 +1853,10 @@ static void ice_handle_mdd_event(struct ice_pf *pf)
 			if (netif_msg_tx_err(pf))
 				dev_info(dev, "Malicious Driver Detection event TX_TDPU detected on VF %d\n",
 					 vf->vf_id);
+			dev_info(dev,
+				 "PF-to-VF reset on VF %d due to Tx MDD TX_TDPU event\n",
+				 vf->vf_id);
+			ice_reset_vf(vf, ICE_VF_RESET_NOTIFY);
 		}
 
 		reg = rd32(hw, VP_MDET_RX(vf->vf_id));
