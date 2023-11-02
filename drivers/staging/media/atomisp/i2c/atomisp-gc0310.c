@@ -660,11 +660,7 @@ static int gc0310_probe(struct i2c_client *client)
 		return ret;
 	}
 
-	ret = media_entity_pads_init(&dev->sd.entity, 1, &dev->pad);
-	if (ret) {
-		gc0310_remove(client);
-		return ret;
-	}
+	media_entity_pads_init(&dev->sd.entity, 1, &dev->pad);
 
 	ret = v4l2_async_register_subdev_sensor(&dev->sd);
 	if (ret) {
