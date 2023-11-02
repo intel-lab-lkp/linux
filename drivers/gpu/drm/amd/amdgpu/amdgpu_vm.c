@@ -844,6 +844,7 @@ static void amdgpu_vm_tlb_seq_cb(struct dma_fence *fence,
  * @immediate: immediate submission in a page fault
  * @unlocked: unlocked invalidation during MM callback
  * @flush_tlb: trigger tlb invalidation after update completed
+ * @sync_unmap: wait for BO users before unmapping
  * @resv: fences we need to sync to
  * @start: start of mapped range
  * @last: last mapped entry
@@ -861,8 +862,9 @@ static void amdgpu_vm_tlb_seq_cb(struct dma_fence *fence,
  */
 int amdgpu_vm_update_range(struct amdgpu_device *adev, struct amdgpu_vm *vm,
 			   bool immediate, bool unlocked, bool flush_tlb,
-			   struct dma_resv *resv, uint64_t start, uint64_t last,
-			   uint64_t flags, uint64_t offset, uint64_t vram_base,
+			   bool sync_unmap, struct dma_resv *resv,
+			   uint64_t start, uint64_t last, uint64_t flags,
+			   uint64_t offset, uint64_t vram_base,
 			   struct ttm_resource *res, dma_addr_t *pages_addr,
 			   struct dma_fence **fence)
 {
@@ -902,7 +904,7 @@ int amdgpu_vm_update_range(struct amdgpu_device *adev, struct amdgpu_vm *vm,
 	/* Implicitly sync to command submissions in the same VM before
 	 * unmapping. Sync to moving fences before mapping.
 	 */
-	if (!(flags & (AMDGPU_PTE_VALID | AMDGPU_PTE_PRT)))
+	if (!(flags & (AMDGPU_PTE_VALID | AMDGPU_PTE_PRT)) && sync_unmap)
 		sync_mode = AMDGPU_SYNC_EQ_OWNER;
 	else
 		sync_mode = AMDGPU_SYNC_EXPLICIT;
@@ -1145,10 +1147,10 @@ int amdgpu_vm_bo_update(struct amdgpu_device *adev, struct amdgpu_bo_va *bo_va,
 		trace_amdgpu_vm_bo_update(mapping);
 
 		r = amdgpu_vm_update_range(adev, vm, false, false, flush_tlb,
-					   resv, mapping->start, mapping->last,
-					   update_flags, mapping->offset,
-					   vram_base, mem, pages_addr,
-					   last_update);
+					   true, resv, mapping->start,
+					   mapping->last, update_flags,
+					   mapping->offset, vram_base, mem,
+					   pages_addr, last_update);
 		if (r)
 			return r;
 	}
@@ -1340,7 +1342,8 @@ int amdgpu_vm_clear_freed(struct amdgpu_device *adev,
 		    mapping->start < AMDGPU_GMC_HOLE_START)
 			init_pte_value = AMDGPU_PTE_DEFAULT_ATC;
 
-		r = amdgpu_vm_update_range(adev, vm, false, false, true, resv,
+		r = amdgpu_vm_update_range(adev, vm, false, false, true,
+					   mapping->sync_unmap, resv,
 					   mapping->start, mapping->last,
 					   init_pte_value, 0, 0, NULL, NULL,
 					   &f);
@@ -1572,6 +1575,7 @@ int amdgpu_vm_bo_map(struct amdgpu_device *adev,
  * @offset: requested offset in the BO
  * @size: BO size in bytes
  * @flags: attributes of pages (read/write/valid/etc.)
+ * @sync_unmap: wait for BO users before replacing existing mapping
  *
  * Add a mapping of the BO at the specefied addr into the VM. Replace existing
  * mappings as we do so.
@@ -1582,9 +1586,9 @@ int amdgpu_vm_bo_map(struct amdgpu_device *adev,
  * Object has to be reserved and unreserved outside!
  */
 int amdgpu_vm_bo_replace_map(struct amdgpu_device *adev,
-			     struct amdgpu_bo_va *bo_va,
-			     uint64_t saddr, uint64_t offset,
-			     uint64_t size, uint64_t flags)
+			     struct amdgpu_bo_va *bo_va, uint64_t saddr,
+			     uint64_t offset, uint64_t size, uint64_t flags,
+			     bool sync_unmap)
 {
 	struct amdgpu_bo_va_mapping *mapping;
 	struct amdgpu_bo *bo = bo_va->base.bo;
@@ -1608,7 +1612,7 @@ int amdgpu_vm_bo_replace_map(struct amdgpu_device *adev,
 	if (!mapping)
 		return -ENOMEM;
 
-	r = amdgpu_vm_bo_clear_mappings(adev, bo_va->base.vm, saddr, size);
+	r = amdgpu_vm_bo_clear_mappings(adev, bo_va->base.vm, saddr, size, sync_unmap);
 	if (r) {
 		kfree(mapping);
 		return r;
@@ -1633,6 +1637,7 @@ int amdgpu_vm_bo_replace_map(struct amdgpu_device *adev,
  * @adev: amdgpu_device pointer
  * @bo_va: bo_va to remove the address from
  * @saddr: where to the BO is mapped
+ * @sync_unmap: wait for BO users before unmapping
  *
  * Remove a mapping of the BO at the specefied addr from the VM.
  *
@@ -1641,9 +1646,8 @@ int amdgpu_vm_bo_replace_map(struct amdgpu_device *adev,
  *
  * Object has to be reserved and unreserved outside!
  */
-int amdgpu_vm_bo_unmap(struct amdgpu_device *adev,
-		       struct amdgpu_bo_va *bo_va,
-		       uint64_t saddr)
+int amdgpu_vm_bo_unmap(struct amdgpu_device *adev, struct amdgpu_bo_va *bo_va,
+		       uint64_t saddr, bool sync_unmap)
 {
 	struct amdgpu_bo_va_mapping *mapping;
 	struct amdgpu_vm *vm = bo_va->base.vm;
@@ -1671,6 +1675,7 @@ int amdgpu_vm_bo_unmap(struct amdgpu_device *adev,
 	list_del(&mapping->list);
 	amdgpu_vm_it_remove(mapping, &vm->va);
 	mapping->bo_va = NULL;
+	mapping->sync_unmap = sync_unmap;
 	trace_amdgpu_vm_bo_unmap(bo_va, mapping);
 
 	if (valid)
@@ -1689,6 +1694,7 @@ int amdgpu_vm_bo_unmap(struct amdgpu_device *adev,
  * @vm: VM structure to use
  * @saddr: start of the range
  * @size: size of the range
+ * @sync_unmap: wait for BO users before unmapping
  *
  * Remove all mappings in a range, split them as appropriate.
  *
@@ -1696,8 +1702,8 @@ int amdgpu_vm_bo_unmap(struct amdgpu_device *adev,
  * 0 for success, error for failure.
  */
 int amdgpu_vm_bo_clear_mappings(struct amdgpu_device *adev,
-				struct amdgpu_vm *vm,
-				uint64_t saddr, uint64_t size)
+				struct amdgpu_vm *vm, uint64_t saddr,
+				uint64_t size, bool sync_unmap)
 {
 	struct amdgpu_bo_va_mapping *before, *after, *tmp, *next;
 	LIST_HEAD(removed);
@@ -1761,6 +1767,7 @@ int amdgpu_vm_bo_clear_mappings(struct amdgpu_device *adev,
 		    tmp->last = eaddr;
 
 		tmp->bo_va = NULL;
+		tmp->sync_unmap = sync_unmap;
 		list_add(&tmp->list, &vm->freed);
 		trace_amdgpu_vm_bo_unmap(NULL, tmp);
 	}
@@ -1889,6 +1896,7 @@ void amdgpu_vm_bo_del(struct amdgpu_device *adev,
 		list_del(&mapping->list);
 		amdgpu_vm_it_remove(mapping, &vm->va);
 		mapping->bo_va = NULL;
+		mapping->sync_unmap = true;
 		trace_amdgpu_vm_bo_unmap(bo_va, mapping);
 		list_add(&mapping->list, &vm->freed);
 	}
@@ -2617,8 +2625,9 @@ bool amdgpu_vm_handle_fault(struct amdgpu_device *adev, u32 pasid,
 		goto error_unlock;
 	}
 
-	r = amdgpu_vm_update_range(adev, vm, true, false, false, NULL, addr,
-				   addr, flags, value, 0, NULL, NULL, NULL);
+	r = amdgpu_vm_update_range(adev, vm, true, false, false, true, NULL,
+				   addr, addr, flags, value, 0, NULL, NULL,
+				   NULL);
 	if (r)
 		goto error_unlock;
 
