@@ -558,3 +558,27 @@ set_flags_err:
 	sock_put(sk);
 	return ret;
 }
+
+void mptcp_userspace_pm_flush_addrs_list(struct net *net)
+{
+	long s_slot = 0, s_num = 0;
+	struct mptcp_sock *msk;
+
+	while ((msk = mptcp_token_iter_next(net, &s_slot, &s_num)) != NULL) {
+		struct sock *sk = (struct sock *)msk;
+		unsigned long *id_bitmap;
+
+		if (mptcp_pm_is_userspace(msk)) {
+			lock_sock(sk);
+			mptcp_pm_pernet_lock(msk);
+			id_bitmap = mptcp_pm_get_id_bitmap(msk);
+			bitmap_zero(id_bitmap, MPTCP_PM_MAX_ADDR_ID + 1);
+			mptcp_pm_pernet_unlock(msk);
+			mptcp_userspace_pm_free_local_addr_list(msk);
+			release_sock(sk);
+		}
+
+		sock_put(sk);
+		cond_resched();
+	}
+}
