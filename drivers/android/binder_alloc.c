@@ -595,16 +595,16 @@ static unsigned long prev_buffer_end_page(struct binder_buffer *buffer)
 }
 
 static void binder_delete_free_buffer(struct binder_alloc *alloc,
-				      struct binder_buffer *buffer)
+				      struct binder_buffer *buffer,
+				      bool free_pages)
 {
 	struct binder_buffer *prev, *next = NULL;
-	bool to_free = true;
 
 	BUG_ON(alloc->buffers.next == &buffer->entry);
 	prev = binder_buffer_prev(buffer);
 	BUG_ON(!prev->free);
 	if (prev_buffer_end_page(prev) == buffer_start_page(buffer)) {
-		to_free = false;
+		free_pages = false;
 		binder_alloc_debug(BINDER_DEBUG_BUFFER_ALLOC,
 				   "%d: merge free, buffer %lx share page with %lx\n",
 				   alloc->pid, buffer->user_data,
@@ -614,7 +614,7 @@ static void binder_delete_free_buffer(struct binder_alloc *alloc,
 	if (!list_is_last(&buffer->entry, &alloc->buffers)) {
 		next = binder_buffer_next(buffer);
 		if (buffer_start_page(next) == buffer_start_page(buffer)) {
-			to_free = false;
+			free_pages = false;
 			binder_alloc_debug(BINDER_DEBUG_BUFFER_ALLOC,
 					   "%d: merge free, buffer %lx share page with %lx\n",
 					   alloc->pid,
@@ -627,10 +627,10 @@ static void binder_delete_free_buffer(struct binder_alloc *alloc,
 		binder_alloc_debug(BINDER_DEBUG_BUFFER_ALLOC,
 				   "%d: merge free, buffer start %lx is page aligned\n",
 				   alloc->pid, buffer->user_data);
-		to_free = false;
+		free_pages = false;
 	}
 
-	if (to_free) {
+	if (free_pages) {
 		binder_alloc_debug(BINDER_DEBUG_BUFFER_ALLOC,
 				   "%d: merge free, buffer %lx do not share page with %lx or %lx\n",
 				   alloc->pid, buffer->user_data,
@@ -644,7 +644,8 @@ static void binder_delete_free_buffer(struct binder_alloc *alloc,
 }
 
 static void binder_free_buf_locked(struct binder_alloc *alloc,
-				   struct binder_buffer *buffer)
+				   struct binder_buffer *buffer,
+				   bool free_pages)
 {
 	size_t size, buffer_size;
 
@@ -672,8 +673,9 @@ static void binder_free_buf_locked(struct binder_alloc *alloc,
 			      alloc->pid, size, alloc->free_async_space);
 	}
 
-	binder_free_page_range(alloc, PAGE_ALIGN(buffer->user_data),
-			       (buffer->user_data + buffer_size) & PAGE_MASK);
+	if (free_pages)
+		binder_free_page_range(alloc, PAGE_ALIGN(buffer->user_data),
+				       (buffer->user_data + buffer_size) & PAGE_MASK);
 
 	rb_erase(&buffer->rb_node, &alloc->allocated_buffers);
 	buffer->free = 1;
@@ -682,14 +684,14 @@ static void binder_free_buf_locked(struct binder_alloc *alloc,
 
 		if (next->free) {
 			rb_erase(&next->rb_node, &alloc->free_buffers);
-			binder_delete_free_buffer(alloc, next);
+			binder_delete_free_buffer(alloc, next, free_pages);
 		}
 	}
 	if (alloc->buffers.next != &buffer->entry) {
 		struct binder_buffer *prev = binder_buffer_prev(buffer);
 
 		if (prev->free) {
-			binder_delete_free_buffer(alloc, buffer);
+			binder_delete_free_buffer(alloc, buffer, free_pages);
 			rb_erase(&prev->rb_node, &alloc->free_buffers);
 			buffer = prev;
 		}
@@ -722,7 +724,7 @@ void binder_alloc_free_buf(struct binder_alloc *alloc,
 		buffer->clear_on_free = false;
 	}
 	mutex_lock(&alloc->mutex);
-	binder_free_buf_locked(alloc, buffer);
+	binder_free_buf_locked(alloc, buffer, true);
 	mutex_unlock(&alloc->mutex);
 }
 
@@ -829,7 +831,7 @@ void binder_alloc_deferred_release(struct binder_alloc *alloc)
 			binder_alloc_clear_buf(alloc, buffer);
 			buffer->clear_on_free = false;
 		}
-		binder_free_buf_locked(alloc, buffer);
+		binder_free_buf_locked(alloc, buffer, false);
 		buffers++;
 	}
 
