@@ -68,6 +68,8 @@ config SFP
 
 comment "MII PHY device drivers"
 
+source "drivers/net/phy/aquantia/Kconfig"
+
 config AMD_PHY
 	tristate "AMD and Altima PHYs"
 	help
@@ -95,11 +97,6 @@ config ADIN1100_PHY
 	  Adds support for the Analog Devices Industrial T1L Ethernet PHYs.
 	  Currently supports the:
 	  - ADIN1100 - Robust,Industrial, Low Power 10BASE-T1L Ethernet PHY
-
-config AQUANTIA_PHY
-	tristate "Aquantia PHYs"
-	help
-	  Currently supports the Aquantia AQ1202, AQ2104, AQR105, AQR405
 
 config AX88796B_PHY
 	tristate "Asix PHYs"
