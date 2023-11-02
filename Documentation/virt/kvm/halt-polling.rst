@@ -44,12 +44,14 @@ or in the case of powerpc kvm-hv, in the vcore struct:
 
 Thus this is a per vcpu (or vcore) value.
 
-During polling if a wakeup source is received within the halt polling interval,
-the interval is left unchanged. In the event that a wakeup source isn't
-received during the polling interval (and thus schedule is invoked) there are
-two options, either the polling interval and total block time[0] were less than
-the global max polling interval (see module params below), or the total block
-time was greater than the global max polling interval.
+During polling if a wakeup source is not received within the halt polling
+interval (and thus schedule is invoked), the interval is always shrunk in
+shrink_halt_poll_ns(). In the event that a wakeup source is received during
+the polling interval, polling interval is left unchanged if total block time
+is below or equal to current interval value otherwise there are two options,
+either the polling interval and total block time[0] were less than the global
+max polling interval (see module params below), or the total block time was
+greater than the global max polling interval.
 
 In the event that both the polling interval and total block time were less than
 the global max polling interval then the polling interval can be increased in
@@ -79,11 +81,11 @@ adjustment of the polling interval.
 Module Parameters
 =================
 
-The kvm module has 3 tuneable module parameters to adjust the global max
-polling interval as well as the rate at which the polling interval is grown and
-shrunk. These variables are defined in include/linux/kvm_host.h and as module
-parameters in virt/kvm/kvm_main.c, or arch/powerpc/kvm/book3s_hv.c in the
-powerpc kvm-hv case.
+The kvm module has 4 tunable module parameters to adjust the global max
+polling interval, initial value (to grow from 0) as well as the rate at which
+the polling interval is grown and shrunk. These variables are defined in
+include/linux/kvm_host.h and as module parameters in virt/kvm/kvm_main.c, or
+arch/powerpc/kvm/book3s_hv.c in the powerpc kvm-hv case.
 
 +-----------------------+---------------------------+-------------------------+
 |Module Parameter	|   Description		    |	     Default Value    |
