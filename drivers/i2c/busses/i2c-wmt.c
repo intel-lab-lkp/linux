@@ -376,23 +376,9 @@ static int wmt_i2c_probe(struct platform_device *pdev)
 		return err;
 	}
 
-	err = i2c_add_adapter(adap);
-	if (err)
-		return err;
-
 	platform_set_drvdata(pdev, i2c_dev);
 
-	return 0;
-}
-
-static void wmt_i2c_remove(struct platform_device *pdev)
-{
-	struct wmt_i2c_dev *i2c_dev = platform_get_drvdata(pdev);
-
-	/* Disable interrupts, clock and delete adapter */
-	writew(0, i2c_dev->base + REG_IMR);
-	clk_disable_unprepare(i2c_dev->clk);
-	i2c_del_adapter(&i2c_dev->adapter);
+	return devm_i2c_add_adapter(&pdev->dev, &i2c_dev->adapter);
 }
 
 static const struct of_device_id wmt_i2c_dt_ids[] = {
@@ -402,7 +388,6 @@ static const struct of_device_id wmt_i2c_dt_ids[] = {
 
 static struct platform_driver wmt_i2c_driver = {
 	.probe		= wmt_i2c_probe,
-	.remove_new	= wmt_i2c_remove,
 	.driver		= {
 		.name	= "wmt-i2c",
 		.of_match_table = wmt_i2c_dt_ids,
