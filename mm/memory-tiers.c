@@ -282,6 +282,14 @@ void node_get_allowed_targets(pg_data_t *pgdat, nodemask_t *targets)
 	rcu_read_unlock();
 }
 
+nodemask_t next_demotion_nodes(int node)
+{
+	if (!node_demotion)
+		return NODE_MASK_NONE;
+
+	return node_demotion[node].preferred;
+}
+
 /**
  * next_demotion_node() - Get the next node in the demotion path
  * @node: The starting node to lookup the next node

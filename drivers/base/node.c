@@ -7,6 +7,7 @@
 #include <linux/init.h>
 #include <linux/mm.h>
 #include <linux/memory.h>
+#include <linux/memory-tiers.h>
 #include <linux/vmstat.h>
 #include <linux/notifier.h>
 #include <linux/node.h>
@@ -569,11 +570,23 @@ static ssize_t node_read_distance(struct device *dev,
 }
 static DEVICE_ATTR(distance, 0444, node_read_distance, NULL);
 
+static ssize_t demotion_nodes_show(struct device *dev,
+			     struct device_attribute *attr, char *buf)
+{
+	int ret;
+	nodemask_t nmask = next_demotion_nodes(dev->id);
+
+	ret = sysfs_emit(buf, "%*pbl\n", nodemask_pr_args(&nmask));
+	return ret;
+}
+static DEVICE_ATTR_RO(demotion_nodes);
+
 static struct attribute *node_dev_attrs[] = {
 	&dev_attr_meminfo.attr,
 	&dev_attr_numastat.attr,
 	&dev_attr_distance.attr,
 	&dev_attr_vmstat.attr,
+	&dev_attr_demotion_nodes.attr,
 	NULL
 };
 

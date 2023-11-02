@@ -38,12 +38,18 @@ void init_node_memory_type(int node, struct memory_dev_type *default_type);
 void clear_node_memory_type(int node, struct memory_dev_type *memtype);
 #ifdef CONFIG_MIGRATION
 int next_demotion_node(int node);
+nodemask_t next_demotion_nodes(int node);
 void node_get_allowed_targets(pg_data_t *pgdat, nodemask_t *targets);
 bool node_is_toptier(int node);
 #else
 static inline int next_demotion_node(int node)
 {
 	return NUMA_NO_NODE;
+}
+
+static inline next_demotion_nodes next_demotion_nodes(int node)
+{
+	return NODE_MASK_NONE;
 }
 
 static inline void node_get_allowed_targets(pg_data_t *pgdat, nodemask_t *targets)
