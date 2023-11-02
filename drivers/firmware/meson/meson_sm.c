@@ -23,6 +23,10 @@
 
 #include <linux/firmware/meson/meson_sm.h>
 
+#ifdef CONFIG_MESON_GX_SOCINFO
+extern unsigned int meson_gx_socinfo;
+#endif
+
 struct meson_sm_cmd {
 	unsigned int index;
 	u32 smc_id;
@@ -310,7 +314,19 @@ static ssize_t chipid_show(struct device *dev, struct device_attribute *attr,
 		buff = kmalloc(SM_CHIP_ID_LENGTH, GFP_KERNEL);
 		if (!buff)
 			return -ENOMEM;
-		((uint32_t *)buff)[0] = 0; // CPU_ID is empty
+#ifdef CONFIG_MESON_GX_SOCINFO
+		uint8_t *ch;
+		int i;
+
+		((uint32_t *)buff)[0] =
+			((meson_gx_socinfo & 0xff000000)        |       // Family ID
+			((meson_gx_socinfo << 8) & 0xff0000)    |       // Chip Revision
+			((meson_gx_socinfo >> 8) & 0xff00));            // Package ID
+
+		((uint32_t *)buff)[0] = htonl(((uint32_t *)buff)[0]);
+#else
+		((uint32)t *)buff)[0] = 0;
+#endif
 		/* Transform into expected order for display */
 		ch = (uint8_t *)(id_buf + 4);
 		for (i = 0; i < 12; i++)
