@@ -79,12 +79,53 @@
 	src: local("IBM Plex Sans"),
 	     url("IBMPlexSans-BoldItalic.woff2") format("woff2");
 }
+
+/* IBM Plex Mono, regular */
+@font-face {
+	font-display: swap;
+	font-family: "IBM Plex Mono";
+	font-style: normal;
+	font-weight: 400;
+	src: local("IBM Plex Mono"),
+	     url("IBMPlexMono-Regular.woff2") format("woff2");
+}
+
+/* IBM Plex Mono, italic */
+@font-face {
+	font-display: swap;
+	font-family: "IBM Plex Mono";
+	font-style: italic;
+	font-weight: 400;
+	src: local("IBM Plex Mono"),
+	     url("IBMPlexMono-Italic.woff2") format("woff2");
+}
+
+/* IBM Plex Mono, bold */
+@font-face {
+	font-display: swap;
+	font-family: "IBM Plex Mono";
+	font-style: normal;
+	font-weight: 700;
+	src: local("IBM Plex Mono"),
+	     url("IBMPlexMono-Bold.woff2") format("woff2");
+}
+
+/* IBM Plex Mono, bold italic */
+@font-face {
+	font-display: swap;
+	font-family: "IBM Plex Mono";
+	font-style: italic;
+	font-weight: 700;
+	src: local("IBM Plex Mono"),
+	     url("IBMPlexMono-BoldItalic.woff2") format("woff2");
+}
 /* End @font-face definitions */
 
 /* Fallback fonts */
 :root {
 	--fallback-family-sans: ui-sans-serif, system-ui, -apple-system, "Helvetica Neue", "Segoe UI", Roboto, Ubuntu, Cantarell, "Noto Sans", sans-serif;
 	--fallback-family-serif: ui-serif, system-ui, -apple-system, "Times New Roman", "Roboto Serif", serif;
+	--fallback-family-mono: "Consolas", "Menlo", "DejaVu Sans Mono", "Bitstream Vera Sans Mono", "Ubuntu Mono", monospace;
 }
 
 body {
@@ -109,4 +150,8 @@ span.menuselection {
 
 div.body h1, div.body h2, div.body h3, div.body h4, div.body h5, div.body h6 {
 	font-family: "Newsreader", var(--fallback-family-serif);
+}
+
+code, kbd, pre, samp, tt {
+	font-family: "IBM Plex Mono", var(--fallback-family-mono);
 }
