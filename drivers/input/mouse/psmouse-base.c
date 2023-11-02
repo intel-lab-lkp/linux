@@ -12,6 +12,7 @@
 
 #include <linux/bitops.h>
 #include <linux/delay.h>
+#include <linux/dmi.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/interrupt.h>
@@ -104,6 +105,16 @@ static struct attribute *psmouse_dev_attrs[] = {
 };
 
 ATTRIBUTE_GROUPS(psmouse_dev);
+
+static const struct dmi_system_id resync_on_resume[] = {
+	{
+		.ident = "Lenovo N24",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_VERSION, "Lenovo N24"),
+		},
+	}
+};
 
 /*
  * psmouse_mutex protects all operations changing state of mouse
@@ -285,6 +296,12 @@ static int psmouse_handle_byte(struct psmouse *psmouse)
 				     "%s at %s lost sync at byte %d\n",
 				     psmouse->name, psmouse->phys,
 				     psmouse->pktcnt);
+			if (dmi_check_system(resync_on_resume)) {
+				psmouse_notice(psmouse, "issuing resync request");
+				__psmouse_set_state(psmouse, PSMOUSE_RESYNCING);
+				psmouse_queue_work(psmouse, &psmouse->resync_work, 0);
+				return -EIO;
+			}
 			if (++psmouse->out_of_sync_cnt == psmouse->resetafter) {
 				__psmouse_set_state(psmouse, PSMOUSE_IGNORE);
 				psmouse_notice(psmouse,
