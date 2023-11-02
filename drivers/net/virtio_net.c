@@ -3364,8 +3364,14 @@ static int virtnet_get_link_ksettings(struct net_device *dev,
 static int virtnet_send_tx_notf_coal_cmds(struct virtnet_info *vi,
 					  struct ethtool_coalesce *ec)
 {
+	bool tx_ctrl_dim_on = !!ec->use_adaptive_tx_coalesce;
 	struct scatterlist sgs_tx;
 	int i;
+
+	if (tx_ctrl_dim_on) {
+		pr_debug("Failed to enable adaptive-tx, which is not supported\n");
+		return -EOPNOTSUPP;
+	}
 
 	vi->ctrl->coal_tx.tx_usecs = cpu_to_le32(ec->tx_coalesce_usecs);
 	vi->ctrl->coal_tx.tx_max_packets = cpu_to_le32(ec->tx_max_coalesced_frames);
@@ -3497,6 +3503,25 @@ static int virtnet_send_rx_notf_coal_vq_cmds(struct virtnet_info *vi,
 	return 0;
 }
 
+static int virtnet_send_tx_notf_coal_vq_cmds(struct virtnet_info *vi,
+					     struct ethtool_coalesce *ec,
+					     u16 queue)
+{
+	bool tx_ctrl_dim_on = !!ec->use_adaptive_tx_coalesce;
+	int err;
+
+	if (tx_ctrl_dim_on) {
+		pr_debug("Enabling adaptive-tx for txq%d is not supported\n", queue);
+		return -EOPNOTSUPP;
+	}
+
+	err = virtnet_send_tx_ctrl_coal_vq_cmd(vi, queue,
+					       ec->tx_coalesce_usecs,
+					       ec->tx_max_coalesced_frames);
+
+	return err;
+}
+
 static int virtnet_send_notf_coal_vq_cmds(struct virtnet_info *vi,
 					  struct ethtool_coalesce *ec,
 					  u16 queue)
@@ -3507,9 +3532,7 @@ static int virtnet_send_notf_coal_vq_cmds(struct virtnet_info *vi,
 	if (err)
 		return err;
 
-	err = virtnet_send_tx_ctrl_coal_vq_cmd(vi, queue,
-					       ec->tx_coalesce_usecs,
-					       ec->tx_max_coalesced_frames);
+	err = virtnet_send_tx_notf_coal_vq_cmds(vi, ec, queue);
 	if (err)
 		return err;
 
