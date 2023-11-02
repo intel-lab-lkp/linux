@@ -253,7 +253,10 @@ struct ida {
 #define DEFINE_IDA(name)	struct ida name = IDA_INIT(name)
 
 int ida_alloc_range(struct ida *, unsigned int min, unsigned int max, gfp_t);
+int ida_alloc_group_range(struct ida *ida, unsigned int min, unsigned int max,
+			  unsigned int group, gfp_t gfp);
 void ida_free(struct ida *, unsigned int id);
+void ida_free_group(struct ida *ida, unsigned int id, unsigned int group);
 void ida_destroy(struct ida *ida);
 unsigned long ida_weight(struct ida *ida);
 

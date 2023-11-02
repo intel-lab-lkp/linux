@@ -362,6 +362,178 @@ EXPORT_SYMBOL(idr_replace);
  * bitmap, which is excessive.
  */
 
+static void __ida_free_group(struct ida *ida, unsigned int id, unsigned int group);
+
+/**
+ * ida_alloc_group_range() - Allocate contiguous group of an unused IDs.
+ * @ida: IDA handle.
+ * @min: Lowest ID to allocate.
+ * @max: Highest ID to allocate.
+ * @group: Number of extra IDs to allocate.
+ * @gfp: Memory allocation flags.
+ *
+ * Allocate contiguous set of (1 + @group) IDs between @min and @max, inclusive.
+ * The allocated IDs will not exceed %INT_MAX, even if @max is larger.
+ *
+ * Context: Any context. It is safe to call this function without
+ * locking in your code.
+ * Return: The first allocated ID, or %-ENOMEM if memory could not be allocated,
+ * or %-ENOSPC if there are no free contiguous range of IDs.
+ */
+int ida_alloc_group_range(struct ida *ida, unsigned int min, unsigned int max,
+			  unsigned int group, gfp_t gfp)
+{
+	XA_STATE(xas, &ida->xa, min / IDA_BITMAP_BITS);
+	unsigned bit = min % IDA_BITMAP_BITS;
+	unsigned long flags;
+	struct ida_bitmap *bitmap, *alloc = NULL;
+	unsigned int start, end, chunk, nbit;
+	unsigned int more = group;
+
+	if ((int)min < 0)
+		return -ENOSPC;
+
+	if ((int)max < 0)
+		max = INT_MAX;
+	end = max;
+	start = end + 1;
+
+retry:
+	xas_lock_irqsave(&xas, flags);
+next:
+	bitmap = xas_find_marked(&xas, max / IDA_BITMAP_BITS, XA_FREE_MARK);
+	if (xas.xa_index > min / IDA_BITMAP_BITS)
+		bit = 0;
+	if (xas.xa_index * IDA_BITMAP_BITS + bit + more > max)
+		goto nospc;
+
+	if (xa_is_value(bitmap)) {
+		unsigned long tmp = xa_to_value(bitmap);
+
+		if (bit + more < BITS_PER_XA_VALUE) {
+			bit = find_next_zero_bit(&tmp, BITS_PER_XA_VALUE, bit);
+			if (xas.xa_index * IDA_BITMAP_BITS + bit + more > max)
+				goto nospc;
+			if (more == group)
+				start = xas.xa_index * IDA_BITMAP_BITS + bit;
+			if (bit + more < BITS_PER_XA_VALUE &&
+			    bit + more < find_next_bit(&tmp, bit + more + 1, bit)) {
+				tmp |= GENMASK(bit + more, bit);
+				xas_store(&xas, xa_mk_value(tmp));
+				goto out;
+			}
+		}
+		bitmap = alloc;
+		if (!bitmap)
+			bitmap = kzalloc(sizeof(*bitmap), GFP_NOWAIT);
+		if (!bitmap)
+			goto alloc;
+		bitmap->bitmap[0] = tmp;
+		xas_store(&xas, bitmap);
+		if (xas_error(&xas)) {
+			bitmap->bitmap[0] = 0;
+			goto out;
+		}
+		alloc = NULL;
+	}
+
+	if (bitmap) {
+		bit = find_next_zero_bit(bitmap->bitmap, IDA_BITMAP_BITS, bit);
+		if (xas.xa_index * IDA_BITMAP_BITS + bit + more > max)
+			goto nospc;
+		if (bit == IDA_BITMAP_BITS)
+			goto next;
+		if (more == group)
+			start = xas.xa_index * IDA_BITMAP_BITS + bit;
+		if (more)
+			goto more;
+		__set_bit(bit, bitmap->bitmap);
+		if (bitmap_full(bitmap->bitmap, IDA_BITMAP_BITS))
+			xas_clear_mark(&xas, XA_FREE_MARK);
+	} else {
+		if (more == group)
+			start = xas.xa_index * IDA_BITMAP_BITS + bit;
+
+		if (bit + more < BITS_PER_XA_VALUE) {
+			bitmap = xa_mk_value(GENMASK(bit + more, bit));
+		} else {
+			bitmap = alloc;
+			if (!bitmap)
+				bitmap = kzalloc(sizeof(*bitmap), GFP_NOWAIT);
+			if (!bitmap)
+				goto alloc;
+			if (more) {
+				xas_store(&xas, bitmap);
+				if (xas_error(&xas))
+					goto out;
+				alloc = NULL;
+				goto more;
+			}
+			__set_bit(bit, bitmap->bitmap);
+		}
+		xas_store(&xas, bitmap);
+	}
+out:
+	xas_unlock_irqrestore(&xas, flags);
+	if (xas_nomem(&xas, gfp)) {
+		xas.xa_index = min / IDA_BITMAP_BITS;
+		bit = min % IDA_BITMAP_BITS;
+		goto retry;
+	}
+	if (bitmap != alloc)
+		kfree(alloc);
+	if (xas_error(&xas))
+		return xas_error(&xas);
+	return WARN_ON_ONCE(start > end) ? -ENOSPC : start;
+alloc:
+	xas_unlock_irqrestore(&xas, flags);
+	alloc = kzalloc(sizeof(*bitmap), gfp);
+	if (!alloc)
+		return -ENOMEM;
+	xas_set(&xas, min / IDA_BITMAP_BITS);
+	bit = min % IDA_BITMAP_BITS;
+	goto retry;
+restart:
+	max = end;
+	more = group;
+	start = end + 1;
+	goto next;
+more:
+	chunk = bit + more < IDA_BITMAP_BITS ?
+		1 + more : IDA_BITMAP_BITS - bit;
+	nbit = find_next_bit(bitmap->bitmap, bit + chunk, bit);
+	if (nbit < bit + chunk) {
+		min = xas.xa_index * IDA_BITMAP_BITS + nbit + 1;
+		bit = min % IDA_BITMAP_BITS;
+		xas_set(&xas, min / IDA_BITMAP_BITS);
+		if (group == more)
+			goto restart;
+		goto nospc;
+	}
+	bitmap_set(bitmap->bitmap, bit, chunk);
+	if (bitmap_full(bitmap->bitmap, IDA_BITMAP_BITS))
+		xas_clear_mark(&xas, XA_FREE_MARK);
+	if (chunk < 1 + more) {
+		more -= chunk;
+		min = (xas.xa_index + 1) * IDA_BITMAP_BITS;
+		max = min + more;
+		xas_set(&xas, min / IDA_BITMAP_BITS);
+		bit = 0;
+		goto next;
+	}
+	goto out;
+nospc:
+	if (more != group) {
+		__ida_free_group(ida, start, group - more - 1);
+		xas_reset(&xas);
+		goto restart;
+	}
+	xas_unlock_irqrestore(&xas, flags);
+	kfree(alloc);
+	return -ENOSPC;
+}
+EXPORT_SYMBOL(ida_alloc_group_range);
+
 /**
  * ida_alloc_range() - Allocate an unused ID.
  * @ida: IDA handle.
@@ -378,103 +550,86 @@ EXPORT_SYMBOL(idr_replace);
  * or %-ENOSPC if there are no free IDs.
  */
 int ida_alloc_range(struct ida *ida, unsigned int min, unsigned int max,
-			gfp_t gfp)
+		    gfp_t gfp)
 {
-	XA_STATE(xas, &ida->xa, min / IDA_BITMAP_BITS);
-	unsigned bit = min % IDA_BITMAP_BITS;
-	unsigned long flags;
-	struct ida_bitmap *bitmap, *alloc = NULL;
-
-	if ((int)min < 0)
-		return -ENOSPC;
-
-	if ((int)max < 0)
-		max = INT_MAX;
-
-retry:
-	xas_lock_irqsave(&xas, flags);
-next:
-	bitmap = xas_find_marked(&xas, max / IDA_BITMAP_BITS, XA_FREE_MARK);
-	if (xas.xa_index > min / IDA_BITMAP_BITS)
-		bit = 0;
-	if (xas.xa_index * IDA_BITMAP_BITS + bit > max)
-		goto nospc;
-
-	if (xa_is_value(bitmap)) {
-		unsigned long tmp = xa_to_value(bitmap);
-
-		if (bit < BITS_PER_XA_VALUE) {
-			bit = find_next_zero_bit(&tmp, BITS_PER_XA_VALUE, bit);
-			if (xas.xa_index * IDA_BITMAP_BITS + bit > max)
-				goto nospc;
-			if (bit < BITS_PER_XA_VALUE) {
-				tmp |= 1UL << bit;
-				xas_store(&xas, xa_mk_value(tmp));
-				goto out;
-			}
-		}
-		bitmap = alloc;
-		if (!bitmap)
-			bitmap = kzalloc(sizeof(*bitmap), GFP_NOWAIT);
-		if (!bitmap)
-			goto alloc;
-		bitmap->bitmap[0] = tmp;
-		xas_store(&xas, bitmap);
-		if (xas_error(&xas)) {
-			bitmap->bitmap[0] = 0;
-			goto out;
-		}
-	}
-
-	if (bitmap) {
-		bit = find_next_zero_bit(bitmap->bitmap, IDA_BITMAP_BITS, bit);
-		if (xas.xa_index * IDA_BITMAP_BITS + bit > max)
-			goto nospc;
-		if (bit == IDA_BITMAP_BITS)
-			goto next;
-
-		__set_bit(bit, bitmap->bitmap);
-		if (bitmap_full(bitmap->bitmap, IDA_BITMAP_BITS))
-			xas_clear_mark(&xas, XA_FREE_MARK);
-	} else {
-		if (bit < BITS_PER_XA_VALUE) {
-			bitmap = xa_mk_value(1UL << bit);
-		} else {
-			bitmap = alloc;
-			if (!bitmap)
-				bitmap = kzalloc(sizeof(*bitmap), GFP_NOWAIT);
-			if (!bitmap)
-				goto alloc;
-			__set_bit(bit, bitmap->bitmap);
-		}
-		xas_store(&xas, bitmap);
-	}
-out:
-	xas_unlock_irqrestore(&xas, flags);
-	if (xas_nomem(&xas, gfp)) {
-		xas.xa_index = min / IDA_BITMAP_BITS;
-		bit = min % IDA_BITMAP_BITS;
-		goto retry;
-	}
-	if (bitmap != alloc)
-		kfree(alloc);
-	if (xas_error(&xas))
-		return xas_error(&xas);
-	return xas.xa_index * IDA_BITMAP_BITS + bit;
-alloc:
-	xas_unlock_irqrestore(&xas, flags);
-	alloc = kzalloc(sizeof(*bitmap), gfp);
-	if (!alloc)
-		return -ENOMEM;
-	xas_set(&xas, min / IDA_BITMAP_BITS);
-	bit = min % IDA_BITMAP_BITS;
-	goto retry;
-nospc:
-	xas_unlock_irqrestore(&xas, flags);
-	kfree(alloc);
-	return -ENOSPC;
+	return ida_alloc_group_range(ida, min, max, 0, gfp);
 }
 EXPORT_SYMBOL(ida_alloc_range);
+
+static void __ida_free_group(struct ida *ida, unsigned int id, unsigned int group)
+{
+	XA_STATE(xas, &ida->xa, id / IDA_BITMAP_BITS);
+	unsigned bit = id % IDA_BITMAP_BITS;
+	unsigned int chunk, more = group;
+	struct ida_bitmap *bitmap;
+	bool set = true;
+
+	if ((int)id < 0)
+		return;
+
+next:
+	bitmap = xas_load(&xas);
+
+	chunk = bit + more < IDA_BITMAP_BITS ?
+		1 + more : IDA_BITMAP_BITS - bit;
+
+	if (xa_is_value(bitmap)) {
+		unsigned long v = xa_to_value(bitmap);
+		unsigned long m;
+
+		if (bit + more >= BITS_PER_XA_VALUE) {
+			m = GENMASK(BITS_PER_XA_VALUE - 1, bit);
+			set = false;
+		} else {
+			m = GENMASK(bit + more, bit);
+			set = set && !((v & m) ^ m);
+		}
+		v &= ~m;
+		xas_store(&xas, v ? xa_mk_value(v) : NULL);
+	} else if (bitmap) {
+		unsigned int nbit;
+
+		nbit = find_next_zero_bit(bitmap->bitmap, bit + chunk, bit);
+		if (nbit < bit + chunk)
+			set = false;
+		bitmap_clear(bitmap->bitmap, bit, chunk);
+		xas_set_mark(&xas, XA_FREE_MARK);
+		if (bitmap_empty(bitmap->bitmap, IDA_BITMAP_BITS)) {
+			kfree(bitmap);
+			xas_store(&xas, NULL);
+		}
+	} else {
+		set = false;
+	}
+
+	if (chunk < 1 + more) {
+		more -= chunk;
+		xas_set(&xas, xas.xa_index + 1);
+		bit = 0;
+		goto next;
+	}
+
+	WARN(!set, "IDA: trying to free non contiguous IDs %u..%u!\n", id, id + group);
+}
+
+/**
+ * ida_free_group() - Release contiguous group of an allocated IDs.
+ * @ida: IDA handle.
+ * @id: First ID of the group.
+ * @group: Number of extra IDs in group.
+ *
+ * Context: Any context. It is safe to call this function without
+ * locking in your code.
+ */
+void ida_free_group(struct ida *ida, unsigned int id, unsigned int group)
+{
+	unsigned long flags;
+
+	xa_lock_irqsave(&ida->xa, flags);
+	__ida_free_group(ida, id, group);
+	xa_unlock_irqrestore(&ida->xa, flags);
+}
+EXPORT_SYMBOL(ida_free_group);
 
 /**
  * ida_free() - Release an allocated ID.
@@ -486,43 +641,11 @@ EXPORT_SYMBOL(ida_alloc_range);
  */
 void ida_free(struct ida *ida, unsigned int id)
 {
-	XA_STATE(xas, &ida->xa, id / IDA_BITMAP_BITS);
-	unsigned bit = id % IDA_BITMAP_BITS;
-	struct ida_bitmap *bitmap;
 	unsigned long flags;
 
-	if ((int)id < 0)
-		return;
-
-	xas_lock_irqsave(&xas, flags);
-	bitmap = xas_load(&xas);
-
-	if (xa_is_value(bitmap)) {
-		unsigned long v = xa_to_value(bitmap);
-		if (bit >= BITS_PER_XA_VALUE)
-			goto err;
-		if (!(v & (1UL << bit)))
-			goto err;
-		v &= ~(1UL << bit);
-		if (!v)
-			goto delete;
-		xas_store(&xas, xa_mk_value(v));
-	} else {
-		if (!test_bit(bit, bitmap->bitmap))
-			goto err;
-		__clear_bit(bit, bitmap->bitmap);
-		xas_set_mark(&xas, XA_FREE_MARK);
-		if (bitmap_empty(bitmap->bitmap, IDA_BITMAP_BITS)) {
-			kfree(bitmap);
-delete:
-			xas_store(&xas, NULL);
-		}
-	}
-	xas_unlock_irqrestore(&xas, flags);
-	return;
- err:
-	xas_unlock_irqrestore(&xas, flags);
-	WARN(1, "ida_free called for id=%d which is not allocated.\n", id);
+	xa_lock_irqsave(&ida->xa, flags);
+	__ida_free_group(ida, id, 0);
+	xa_unlock_irqrestore(&ida->xa, flags);
 }
 EXPORT_SYMBOL(ida_free);
 
