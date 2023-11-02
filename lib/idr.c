@@ -554,6 +554,31 @@ void ida_destroy(struct ida *ida)
 }
 EXPORT_SYMBOL(ida_destroy);
 
+/**
+ * ida_weight() - Calculate number of allocated IDs.
+ * @ida: IDA handle.
+ *
+ * Return: Number of allocated IDs in this IDA.
+ */
+unsigned long ida_weight(struct ida *ida)
+{
+	XA_STATE(xas, &ida->xa, 0);
+	struct ida_bitmap *bitmap;
+	unsigned long weight = 0;
+	unsigned long flags;
+
+	xas_lock_irqsave(&xas, flags);
+	xas_for_each(&xas, bitmap, ULONG_MAX) {
+		weight += xa_is_value(bitmap) ?
+			hweight_long(xa_to_value(bitmap)) :
+			bitmap_weight(bitmap->bitmap, IDA_BITMAP_BITS);
+	}
+	xas_unlock_irqrestore(&xas, flags);
+
+	return weight;
+}
+EXPORT_SYMBOL(ida_weight);
+
 #ifndef __KERNEL__
 extern void xa_dump_index(unsigned long index, unsigned int shift);
 #define IDA_CHUNK_SHIFT		ilog2(IDA_BITMAP_BITS)
