@@ -2533,7 +2533,12 @@ void hci_conn_enter_active_mode(struct hci_conn *conn, __u8 force_active)
 	if (conn->mode != HCI_CM_SNIFF)
 		goto timer;
 
-	if (!test_bit(HCI_CONN_POWER_SAVE, &conn->flags) && !force_active)
+	if (test_bit(HCI_CONN_POWER_SAVE, &conn->flags)) {
+		BT_DBG("%s: hcon %p is already active mode", __func__, conn);
+		goto timer;
+	}
+
+	if (!force_active)
 		goto timer;
 
 	if (!test_and_set_bit(HCI_CONN_MODE_CHANGE_PEND, &conn->flags)) {
