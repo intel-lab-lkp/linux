@@ -552,7 +552,7 @@ struct mlx5_ifc_fte_match_set_lyr_2_4_bits {
 
 	u8         reserved_at_c0[0x10];
 	u8         ipv4_ihl[0x4];
-	u8         reserved_at_c4[0x4];
+	u8         reserved_at_d4[0x4];
 
 	u8         ttl_hoplimit[0x8];
 
