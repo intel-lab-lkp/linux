@@ -457,9 +457,12 @@ static ssize_t dsb_mode_store(struct device *dev,
 {
 	struct tpdm_drvdata *drvdata = dev_get_drvdata(dev->parent);
 	unsigned long val;
+	int ret;
 
-	if ((kstrtoul(buf, 0, &val)) || (val < 0) ||
-			(val & ~TPDM_DSB_MODE_MASK))
+	ret = kstrtoul(buf, 0, &val);
+	if (ret)
+		return ret;
+	if (val & ~TPDM_DSB_MODE_MASK)
 		return -EINVAL;
 
 	spin_lock(&drvdata->spinlock);
