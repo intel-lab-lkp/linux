@@ -71,11 +71,7 @@ static inline void pmu_irq_stats(struct drm_i915_private *i915,
 	if (unlikely(res != IRQ_HANDLED))
 		return;
 
-	/*
-	 * A clever compiler translates that into INC. A not so clever one
-	 * should at least prevent store tearing.
-	 */
-	WRITE_ONCE(i915->pmu.irq_count, i915->pmu.irq_count + 1);
+	i915_pmu_irq(i915);
 }
 
 void gen3_irq_reset(struct intel_uncore *uncore, i915_reg_t imr,

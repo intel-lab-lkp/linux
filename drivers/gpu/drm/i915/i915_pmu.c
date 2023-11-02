@@ -1348,3 +1348,12 @@ void i915_pmu_unregister(struct drm_i915_private *i915)
 		kfree(pmu->name);
 	free_event_attributes(pmu);
 }
+
+void i915_pmu_irq(struct drm_i915_private *i915)
+{
+	/*
+	 * A clever compiler translates that into INC. A not so clever one
+	 * should at least prevent store tearing.
+	 */
+	WRITE_ONCE(i915->pmu.irq_count, i915->pmu.irq_count + 1);
+}
