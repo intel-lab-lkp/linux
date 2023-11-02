@@ -350,7 +350,7 @@ static int bd_init_fs_context(struct fs_context *fc)
 	struct pseudo_fs_context *ctx = init_pseudo(fc, BDEVFS_MAGIC);
 	if (!ctx)
 		return -ENOMEM;
-	fc->s_iflags |= SB_I_CGROUPWB;
+	fc->s_iflags |= SB_I_CGROUPWB | SB_I_STABLE_WRITES;
 	ctx->ops = &bdev_sops;
 	return 0;
 }
