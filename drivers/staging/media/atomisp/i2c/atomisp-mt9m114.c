@@ -1581,11 +1581,7 @@ static int mt9m114_probe(struct i2c_client *client)
 
 	/* REVISIT: Do we need media controller? */
 	ret = media_entity_pads_init(&dev->sd.entity, 1, &dev->pad);
-	if (ret) {
-		mt9m114_remove(client);
-		return ret;
-	}
-	return 0;
+	return ret;
 }
 
 static const struct acpi_device_id mt9m114_acpi_match[] = {
