@@ -655,7 +655,11 @@ repeat:
 			}
 		}
 		/* area below @rend is dealt with, forget about it */
-		base = min(rend, end);
+		if (end < rend) {
+			base = end;
+			break;
+		} else
+			base = rend;
 	}
 
 	/* insert the remaining portion */
