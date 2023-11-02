@@ -1,0 +1,68 @@
+/* SPDX-License-Identifier: GPL-2.0 */
+
+/* @font-face definitions */
+/* IBM Plex Sans, regular */
+@font-face {
+	font-display: swap;
+	font-family: "IBM Plex Sans";
+	font-style: normal;
+	font-weight: 400;
+	src: local("IBM Plex Sans"),
+	     url("IBMPlexSans-Regular.woff2") format("woff2");
+}
+
+/* IBM Plex Sans, italic */
+@font-face {
+	font-display: swap;
+	font-family: "IBM Plex Sans";
+	font-style: italic;
+	font-weight: 400;
+	src: local("IBM Plex Sans"),
+	     url("IBMPlexSans-Italic.woff2") format("woff2");
+}
+
+/* IBM Plex Sans, bold */
+@font-face {
+	font-display: swap;
+	font-family: "IBM Plex Sans";
+	font-style: normal;
+	font-weight: 700;
+	src: local("IBM Plex Sans"),
+	     url("IBMPlexSans-Bold.woff2") format("woff2");
+}
+
+/* IBM Plex Sans, bold italic */
+@font-face {
+	font-display: swap;
+	font-family: "IBM Plex Sans";
+	font-style: italic;
+	font-weight: 700;
+	src: local("IBM Plex Sans"),
+	     url("IBMPlexSans-BoldItalic.woff2") format("woff2");
+}
+/* End @font-face definitions */
+
+/* Fallback fonts */
+:root {
+	--fallback-family-sans: ui-sans-serif, system-ui, -apple-system, "Helvetica Neue", "Segoe UI", Roboto, Ubuntu, Cantarell, "Noto Sans", sans-serif;
+}
+
+body {
+	font-family: "IBM Plex Sans", var(--fallback-family-sans);
+}
+
+div.sphinxsidebar h3, div.sphinxsidebar h4, div.sphinxsidebar input {
+	font-family: "IBM Plex Sans", var(--fallback-family-sans);
+}
+
+div.admonition p.admonition-title {
+	font-family: "IBM Plex Sans", var(--fallback-family-sans);
+}
+
+span.menuselection {	
+	font-family: "IBM Plex Sans", var(--fallback-family-sans);
+	/* Distinguish menu text from regular prose by giving it
+	 * the same background color as inline pre-formatted text. */
+	background-color: #ecf0f3;
+	color: #222;	
+}
