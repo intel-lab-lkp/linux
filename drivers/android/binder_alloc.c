@@ -400,17 +400,19 @@ static bool debug_low_async_space_locked(struct binder_alloc *alloc)
 	return false;
 }
 
+/* Callers preallocate @new_buffer, it is freed by this function if unused */
 static struct binder_buffer *binder_alloc_new_buf_locked(
 				struct binder_alloc *alloc,
+				struct binder_buffer *new_buffer,
 				size_t size,
 				int is_async)
 {
 	struct rb_node *n = alloc->free_buffers.rb_node;
-	struct binder_buffer *buffer;
-	size_t buffer_size;
 	struct rb_node *best_fit = NULL;
+	struct binder_buffer *buffer;
 	unsigned long has_page_addr;
 	unsigned long end_page_addr;
+	size_t buffer_size;
 	int ret;
 
 	if (is_async &&
@@ -461,22 +463,17 @@ static struct binder_buffer *binder_alloc_new_buf_locked(
 		end_page_addr = has_page_addr;
 	ret = binder_allocate_page_range(alloc, PAGE_ALIGN(buffer->user_data),
 					 end_page_addr);
-	if (ret)
-		return ERR_PTR(ret);
+	if (ret) {
+		buffer = ERR_PTR(ret);
+		goto out;
+	}
 
 	if (buffer_size != size) {
-		struct binder_buffer *new_buffer;
-
-		new_buffer = kzalloc(sizeof(*buffer), GFP_KERNEL);
-		if (!new_buffer) {
-			pr_err("%s: %d failed to alloc new buffer struct\n",
-			       __func__, alloc->pid);
-			goto err_alloc_buf_struct_failed;
-		}
 		new_buffer->user_data = buffer->user_data + size;
 		list_add(&new_buffer->entry, &buffer->entry);
 		new_buffer->free = 1;
 		binder_insert_free_buffer(alloc, new_buffer);
+		new_buffer = NULL;
 	}
 
 	rb_erase(best_fit, &alloc->free_buffers);
@@ -497,12 +494,10 @@ static struct binder_buffer *binder_alloc_new_buf_locked(
 			buffer->oneway_spam_suspect = true;
 	}
 
+out:
+	/* discard possibly unused new_buffer */
+	kfree(new_buffer);
 	return buffer;
-
-err_alloc_buf_struct_failed:
-	binder_free_page_range(alloc, PAGE_ALIGN(buffer->user_data),
-			       end_page_addr);
-	return ERR_PTR(-ENOMEM);
 }
 
 /**
@@ -526,7 +521,7 @@ struct binder_buffer *binder_alloc_new_buf(struct binder_alloc *alloc,
 					   size_t extra_buffers_size,
 					   int is_async)
 {
-	struct binder_buffer *buffer;
+	struct binder_buffer *buffer, *next;
 	size_t size;
 
 	/* Check binder_alloc is fully initialized */
@@ -551,11 +546,16 @@ struct binder_buffer *binder_alloc_new_buf(struct binder_alloc *alloc,
 		return ERR_PTR(-EINVAL);
 	}
 
+	/* preallocate the next buffer */
+	next = kzalloc(sizeof(*next), GFP_KERNEL);
+	if (!next)
+		return ERR_PTR(-ENOMEM);
+
 	/* Pad 0-size buffers so they get assigned unique addresses */
 	size = max(size, sizeof(void *));
 
 	mutex_lock(&alloc->mutex);
-	buffer = binder_alloc_new_buf_locked(alloc, size, is_async);
+	buffer = binder_alloc_new_buf_locked(alloc, next, size, is_async);
 	mutex_unlock(&alloc->mutex);
 
 	if (IS_ERR(buffer))
