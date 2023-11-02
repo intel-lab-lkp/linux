@@ -67,16 +67,6 @@ static const struct core_text builtin_coretext = {
 	.name = "builtin",
 };
 
-asm (
-	".pushsection .rodata				\n"
-	".global skl_call_thunk_template		\n"
-	"skl_call_thunk_template:			\n"
-		__stringify(INCREMENT_CALL_DEPTH)"	\n"
-	".global skl_call_thunk_tail			\n"
-	"skl_call_thunk_tail:				\n"
-	".popsection					\n"
-);
-
 extern u8 skl_call_thunk_template[];
 extern u8 skl_call_thunk_tail[];
 
