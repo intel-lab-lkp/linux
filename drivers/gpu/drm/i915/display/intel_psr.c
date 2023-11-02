@@ -1987,10 +1987,35 @@ static bool psr2_sel_fetch_pipe_state_supported(const struct intel_crtc_state *c
 	return true;
 }
 
+/*
+ * Check selective fetch is optimum
+ *
+ * Compare selective fetch area w.r.t screen size in case both FBC and PSR2
+ * is supported. If the selective fetch area is more than 25% of screen
+ * size, FBC is might be more efficient than PSR2. So force full frame
+ * update.
+ */
+static bool psr2_sel_fetch_not_optimal(struct drm_i915_private *i915,
+				       struct drm_rect *sel_fetch,
+				       struct drm_rect *src)
+{
+	int screen_area, selfetch_area;
+
+	/* This is needed where FBC + PSR can be supported */
+	if (DISPLAY_VER(i915) < 20 || !i915->display.params.enable_fbc ||
+	    !HAS_FBC(i915))
+		return false;
+
+	selfetch_area = drm_rect_height(sel_fetch) * drm_rect_width(sel_fetch);
+	screen_area = drm_rect_height(src) * drm_rect_width(src);
+
+	return DIV_ROUND_CLOSEST(screen_area, selfetch_area) <= 4;
+}
+
 int intel_psr2_sel_fetch_update(struct intel_atomic_state *state,
 				struct intel_crtc *crtc)
 {
-	struct drm_i915_private *dev_priv = to_i915(state->base.dev);
+	struct drm_i915_private *i915 = to_i915(state->base.dev);
 	struct intel_crtc_state *crtc_state = intel_atomic_get_new_crtc_state(state, crtc);
 	struct drm_rect pipe_clip = { .x1 = 0, .y1 = -1, .x2 = INT_MAX, .y2 = -1 };
 	struct intel_plane_state *new_plane_state, *old_plane_state;
@@ -2082,7 +2107,7 @@ int intel_psr2_sel_fetch_update(struct intel_atomic_state *state,
 	 * calculation for those.
 	 */
 	if (pipe_clip.y1 == -1) {
-		drm_info_once(&dev_priv->drm,
+		drm_info_once(&i915->drm,
 			      "Selective fetch area calculation failed in pipe %c\n",
 			      pipe_name(crtc->pipe));
 		full_update = true;
@@ -2092,9 +2117,9 @@ int intel_psr2_sel_fetch_update(struct intel_atomic_state *state,
 		goto skip_sel_fetch_set_loop;
 
 	/* Wa_14014971492 */
-	if ((IS_DISPLAY_IP_STEP(dev_priv, IP_VER(14, 0), STEP_A0, STEP_B0) ||
-	     IS_ALDERLAKE_P(dev_priv) || IS_TIGERLAKE(dev_priv)) &&
-	    crtc_state->splitter.enable)
+	if ((IS_DISPLAY_IP_STEP(i915, IP_VER(14, 0), STEP_A0, STEP_B0) ||
+	     IS_ALDERLAKE_P(i915) || IS_TIGERLAKE(i915)) &&
+	     crtc_state->splitter.enable)
 		pipe_clip.y1 = 0;
 
 	ret = drm_atomic_add_affected_planes(&state->base, &crtc->base);
@@ -2149,7 +2174,14 @@ int intel_psr2_sel_fetch_update(struct intel_atomic_state *state,
 		}
 	}
 
+	if (full_update)
+		goto skip_sel_fetch_set_loop;
+
+	full_update = psr2_sel_fetch_not_optimal(i915, &pipe_clip,
+						 &crtc_state->pipe_src);
+
 skip_sel_fetch_set_loop:
+	crtc_state->full_frame_fetch = full_update;
 	psr2_man_trk_ctl_calc(crtc_state, &pipe_clip, full_update);
 	return 0;
 }
