@@ -72,7 +72,7 @@ static int test_dso(struct dso *dso)
 	if (verbose > 1)
 		dso__fprintf(dso, stderr);
 
-	for (nd = rb_first_cached(&dso->symbols); nd; nd = rb_next(nd)) {
+	for (nd = rb_first_cached(dso__symbols(dso)); nd; nd = rb_next(nd)) {
 		struct symbol *sym = rb_entry(nd, struct symbol, rb_node);
 
 		if (sym->type != STT_FUNC && sym->type != STT_GNU_IFUNC)
