@@ -310,9 +310,26 @@ unsigned long htab_convert_pte_flags(unsigned long pteflags, unsigned long flags
 			else
 				rflags |= 0x3;
 		}
+		WARN_ON(!(pteflags & _PAGE_RWX));
 	} else {
 		if (pteflags & _PAGE_RWX)
 			rflags |= 0x2;
+		else {
+			/*
+			 * PAGE_NONE will get mapped to 0b110 (slb key 1 no access)
+			 * We picked 0b110 instead of 0b000 so that slb key 0 will
+			 * get only read only access for the same rflags.
+			 */
+			if (mmu_has_feature(MMU_FTR_KERNEL_RO))
+				rflags |= (HPTE_R_PP0 | 0x2);
+			/*
+			 * rflags = HPTE_R_N
+			 * Without KERNEL_RO feature this will result in slb
+			 * key 0 with read/write. But ISA only supports that.
+			 * There is no key 1 no-access and key 0 read-only
+			 * pp bit support.
+			 */
+		}
 		if (!((pteflags & _PAGE_WRITE) && (pteflags & _PAGE_DIRTY)))
 			rflags |= 0x1;
 	}
