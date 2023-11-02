@@ -1,6 +1,45 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 
 /* @font-face definitions */
+/* Newsreader, regular */
+@font-face {
+	font-display: swap;
+	font-family: "Newsreader";
+	font-style: normal;
+	font-weight: 400;
+	src: local("Newsreader"),
+	     url("Newsreader_14pt-Regular.woff2") format("woff2");
+}
+
+/* Newsreader, italic */
+@font-face {
+	font-display: swap;
+	font-family: "Newsreader";
+	font-style: italic;
+	font-weight: 400;
+	src: local("Newsreader"),
+	     url("Newsreader_14pt-Italic.woff2") format("woff2");
+}
+
+/* Newsreader, bold */
+@font-face {
+	font-display: swap;
+	font-family: "Newsreader";
+	font-style: normal;
+	font-weight: 700;
+	src: local("Newsreader"),
+	     url("Newsreader_14pt-Bold.woff2") format("woff2");
+}
+
+/* Newsreader, bold italic */
+@font-face {
+	font-display: swap;
+	font-family: "Newsreader";
+	font-style: italic;
+	font-weight: 700;
+	src: local("Newsreader"),
+	     url("Newsreader_14pt-BoldItalic.woff2") format("woff2");
+}
 /* IBM Plex Sans, regular */
 @font-face {
 	font-display: swap;
@@ -45,6 +84,7 @@
 /* Fallback fonts */
 :root {
 	--fallback-family-sans: ui-sans-serif, system-ui, -apple-system, "Helvetica Neue", "Segoe UI", Roboto, Ubuntu, Cantarell, "Noto Sans", sans-serif;
+	--fallback-family-serif: ui-serif, system-ui, -apple-system, "Times New Roman", "Roboto Serif", serif;
 }
 
 body {
@@ -65,4 +105,8 @@ span.menuselection {
 	 * the same background color as inline pre-formatted text. */
 	background-color: #ecf0f3;
 	color: #222;	
+}
+
+div.body h1, div.body h2, div.body h3, div.body h4, div.body h5, div.body h6 {
+	font-family: "Newsreader", var(--fallback-family-serif);
 }
