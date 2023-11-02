@@ -65,8 +65,9 @@
 #include "intel_uncore.h"
 
 struct drm_i915_clock_gating_funcs;
-struct vlv_s0ix_state;
+struct i915_pmu;
 struct intel_pxp;
+struct vlv_s0ix_state;
 
 #define GEM_QUIRK_PIN_SWIZZLED_PAGES	BIT(0)
 
@@ -363,7 +364,7 @@ struct drm_i915_private {
 
 	bool irq_enabled;
 
-	struct i915_pmu pmu;
+	struct i915_pmu *pmu;
 
 	/* The TTM device structure. */
 	struct ttm_device bdev;

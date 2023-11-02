@@ -4,7 +4,10 @@
  * Copyright © 2017-2018 Intel Corporation
  */
 
+#include <linux/hrtimer.h>
+#include <linux/perf_event.h>
 #include <linux/pm_runtime.h>
+#include <linux/spinlock_types.h>
 
 #include "gt/intel_engine.h"
 #include "gt/intel_engine_pm.h"
@@ -18,6 +21,143 @@
 
 #include "i915_drv.h"
 #include "i915_pmu.h"
+
+/*
+ * Non-engine events that we need to track enabled-disabled transition and
+ * current state.
+ */
+enum i915_pmu_tracked_events {
+	__I915_PMU_ACTUAL_FREQUENCY_ENABLED = 0,
+	__I915_PMU_REQUESTED_FREQUENCY_ENABLED,
+	__I915_PMU_RC6_RESIDENCY_ENABLED,
+	__I915_PMU_TRACKED_EVENT_COUNT, /* count marker */
+};
+
+/*
+ * Slots used from the sampling timer (non-engine events) with some extras for
+ * convenience.
+ */
+enum {
+	__I915_SAMPLE_FREQ_ACT = 0,
+	__I915_SAMPLE_FREQ_REQ,
+	__I915_SAMPLE_RC6,
+	__I915_SAMPLE_RC6_LAST_REPORTED,
+	__I915_NUM_PMU_SAMPLERS
+};
+
+#define I915_PMU_MAX_GT 2
+
+/*
+ * How many different events we track in the global PMU mask.
+ *
+ * It is also used to know to needed number of event reference counters.
+ */
+#define I915_PMU_MASK_BITS \
+	(I915_ENGINE_SAMPLE_COUNT + \
+	 I915_PMU_MAX_GT * __I915_PMU_TRACKED_EVENT_COUNT)
+
+struct i915_pmu {
+	/**
+	 * @i915: i915 device backpointer.
+	 */
+	struct drm_i915_private *i915;
+	/**
+	 * @cpuhp: Struct used for CPU hotplug handling.
+	 */
+	struct {
+		struct hlist_node node;
+		unsigned int cpu;
+	} cpuhp;
+	/**
+	 * @base: PMU base.
+	 */
+	struct pmu base;
+	/**
+	 * @closed: i915 is unregistering.
+	 */
+	bool closed;
+	/**
+	 * @name: Name as registered with perf core.
+	 */
+	const char *name;
+	/**
+	 * @lock: Lock protecting enable mask and ref count handling.
+	 */
+	spinlock_t lock;
+	/**
+	 * @unparked: GT unparked mask.
+	 */
+	unsigned int unparked;
+	/**
+	 * @timer: Timer for internal i915 PMU sampling.
+	 */
+	struct hrtimer timer;
+	/**
+	 * @enable: Bitmask of specific enabled events.
+	 *
+	 * For some events we need to track their state and do some internal
+	 * house keeping.
+	 *
+	 * Each engine event sampler type and event listed in enum
+	 * i915_pmu_tracked_events gets a bit in this field.
+	 *
+	 * Low bits are engine samplers and other events continue from there.
+	 */
+	u32 enable;
+
+	/**
+	 * @timer_last:
+	 *
+	 * Timestmap of the previous timer invocation.
+	 */
+	ktime_t timer_last;
+
+	/**
+	 * @enable_count: Reference counts for the enabled events.
+	 *
+	 * Array indices are mapped in the same way as bits in the @enable field
+	 * and they are used to control sampling on/off when multiple clients
+	 * are using the PMU API.
+	 */
+	unsigned int enable_count[I915_PMU_MASK_BITS];
+	/**
+	 * @timer_enabled: Should the internal sampling timer be running.
+	 */
+	bool timer_enabled;
+	/**
+	 * @sample: Current and previous (raw) counters for sampling events.
+	 *
+	 * These counters are updated from the i915 PMU sampling timer.
+	 *
+	 * Only global counters are held here, while the per-engine ones are in
+	 * struct intel_engine_cs.
+	 */
+	struct i915_pmu_sample sample[I915_PMU_MAX_GT][__I915_NUM_PMU_SAMPLERS];
+	/**
+	 * @sleep_last: Last time GT parked for RC6 estimation.
+	 */
+	ktime_t sleep_last[I915_PMU_MAX_GT];
+	/**
+	 * @irq_count: Number of interrupts
+	 *
+	 * Intentionally unsigned long to avoid atomics or heuristics on 32bit.
+	 * 4e9 interrupts are a lot and postprocessing can really deal with an
+	 * occasional wraparound easily. It's 32bit after all.
+	 */
+	unsigned long irq_count;
+	/**
+	 * @events_attr_group: Device events attribute group.
+	 */
+	struct attribute_group events_attr_group;
+	/**
+	 * @i915_attr: Memory block holding device attributes.
+	 */
+	void *i915_attr;
+	/**
+	 * @pmu_attr: Memory block holding device attributes.
+	 */
+	void *pmu_attr;
+};
 
 /* Frequency for the sampling timer for events which need it. */
 #define FREQUENCY 200
@@ -38,7 +178,7 @@ static struct i915_pmu *event_to_pmu(struct perf_event *event)
 
 static struct drm_i915_private *pmu_to_i915(struct i915_pmu *pmu)
 {
-	return container_of(pmu, struct drm_i915_private, pmu);
+	return pmu->i915;
 }
 
 static u8 engine_config_sample(u64 config)
@@ -222,7 +362,7 @@ static u64 get_rc6(struct intel_gt *gt)
 {
 	struct drm_i915_private *i915 = gt->i915;
 	const unsigned int gt_id = gt->info.id;
-	struct i915_pmu *pmu = &i915->pmu;
+	struct i915_pmu *pmu = i915->pmu;
 	unsigned long flags;
 	bool awake = false;
 	u64 val;
@@ -281,7 +421,7 @@ static void init_rc6(struct i915_pmu *pmu)
 
 static void park_rc6(struct intel_gt *gt)
 {
-	struct i915_pmu *pmu = &gt->i915->pmu;
+	struct i915_pmu *pmu = gt->i915->pmu;
 
 	store_sample(pmu, gt->info.id, __I915_SAMPLE_RC6, __get_rc6(gt));
 	pmu->sleep_last[gt->info.id] = ktime_get_raw();
@@ -300,9 +440,9 @@ static void __i915_pmu_maybe_start_timer(struct i915_pmu *pmu)
 
 void i915_pmu_gt_parked(struct intel_gt *gt)
 {
-	struct i915_pmu *pmu = &gt->i915->pmu;
+	struct i915_pmu *pmu = gt->i915->pmu;
 
-	if (!pmu->base.event_init)
+	if (!pmu || !pmu->base.event_init)
 		return;
 
 	spin_lock_irq(&pmu->lock);
@@ -322,9 +462,9 @@ void i915_pmu_gt_parked(struct intel_gt *gt)
 
 void i915_pmu_gt_unparked(struct intel_gt *gt)
 {
-	struct i915_pmu *pmu = &gt->i915->pmu;
+	struct i915_pmu *pmu = gt->i915->pmu;
 
-	if (!pmu->base.event_init)
+	if (!pmu || !pmu->base.event_init)
 		return;
 
 	spin_lock_irq(&pmu->lock);
@@ -399,7 +539,7 @@ engines_sample(struct intel_gt *gt, unsigned int period_ns)
 	enum intel_engine_id id;
 	unsigned long flags;
 
-	if ((i915->pmu.enable & ENGINE_SAMPLE_MASK) == 0)
+	if ((i915->pmu->enable & ENGINE_SAMPLE_MASK) == 0)
 		return;
 
 	if (!intel_gt_pm_is_awake(gt))
@@ -437,7 +577,7 @@ frequency_sample(struct intel_gt *gt, unsigned int period_ns)
 {
 	struct drm_i915_private *i915 = gt->i915;
 	const unsigned int gt_id = gt->info.id;
-	struct i915_pmu *pmu = &i915->pmu;
+	struct i915_pmu *pmu = i915->pmu;
 	struct intel_rps *rps = &gt->rps;
 
 	if (!frequency_sampling_enabled(pmu, gt_id))
@@ -1241,7 +1381,7 @@ static bool is_igp(struct drm_i915_private *i915)
 
 void i915_pmu_register(struct drm_i915_private *i915)
 {
-	struct i915_pmu *pmu = &i915->pmu;
+	struct i915_pmu *pmu;
 	const struct attribute_group **attr_groups;
 	int ret = -ENOMEM;
 
@@ -1249,6 +1389,13 @@ void i915_pmu_register(struct drm_i915_private *i915)
 		drm_info(&i915->drm, "PMU not supported for this GPU.");
 		return;
 	}
+
+	pmu = kzalloc(sizeof(*pmu), GFP_KERNEL);
+	if (!pmu)
+		return;
+
+	i915->pmu = pmu;
+	pmu->i915 = i915;
 
 	spin_lock_init(&pmu->lock);
 	hrtimer_init(&pmu->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
@@ -1317,15 +1464,20 @@ err_name:
 	if (!is_igp(i915))
 		kfree(pmu->name);
 err:
+	kfree(pmu);
+	i915->pmu = NULL;
 	drm_notice(&i915->drm, "Failed to register PMU!\n");
 }
 
 void i915_pmu_unregister(struct drm_i915_private *i915)
 {
-	struct i915_pmu *pmu = &i915->pmu;
+	struct i915_pmu *pmu = i915->pmu;
+
+	if (!pmu)
+		return;
 
 	if (!pmu->base.event_init)
-		return;
+		goto out;
 
 	/*
 	 * "Disconnect" the PMU callbacks - since all are atomic synchronize_rcu
@@ -1345,13 +1497,20 @@ void i915_pmu_unregister(struct drm_i915_private *i915)
 	if (!is_igp(i915))
 		kfree(pmu->name);
 	free_event_attributes(pmu);
+
+out:
+	kfree(i915->pmu);
+	i915->pmu = NULL;
 }
 
 void i915_pmu_irq(struct drm_i915_private *i915)
 {
+	if (!i915->pmu)
+		return;
+
 	/*
 	 * A clever compiler translates that into INC. A not so clever one
 	 * should at least prevent store tearing.
 	 */
-	WRITE_ONCE(i915->pmu.irq_count, i915->pmu.irq_count + 1);
+	WRITE_ONCE(i915->pmu->irq_count, i915->pmu->irq_count + 1);
 }
