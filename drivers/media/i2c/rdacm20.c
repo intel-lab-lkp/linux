@@ -611,9 +611,7 @@ static int rdacm20_probe(struct i2c_client *client)
 
 	dev->pad.flags = MEDIA_PAD_FL_SOURCE;
 	dev->sd.entity.function = MEDIA_ENT_F_CAM_SENSOR;
-	ret = media_entity_pads_init(&dev->sd.entity, 1, &dev->pad);
-	if (ret < 0)
-		goto error_free_ctrls;
+	media_entity_pads_init(&dev->sd.entity, 1, &dev->pad);
 
 	ret = v4l2_async_register_subdev(&dev->sd);
 	if (ret)
