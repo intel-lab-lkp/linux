@@ -1111,13 +1111,18 @@ void drop_slab(void)
 static int reclaimer_offset(void)
 {
 	BUILD_BUG_ON(PGSTEAL_DIRECT - PGSTEAL_KSWAPD !=
-			PGDEMOTE_DIRECT - PGDEMOTE_KSWAPD);
+			PGDEMOTE_SRC_DIRECT - PGDEMOTE_SRC_KSWAPD);
 	BUILD_BUG_ON(PGSTEAL_DIRECT - PGSTEAL_KSWAPD !=
 			PGSCAN_DIRECT - PGSCAN_KSWAPD);
 	BUILD_BUG_ON(PGSTEAL_KHUGEPAGED - PGSTEAL_KSWAPD !=
-			PGDEMOTE_KHUGEPAGED - PGDEMOTE_KSWAPD);
+			PGDEMOTE_SRC_KHUGEPAGED - PGDEMOTE_SRC_KSWAPD);
 	BUILD_BUG_ON(PGSTEAL_KHUGEPAGED - PGSTEAL_KSWAPD !=
 			PGSCAN_KHUGEPAGED - PGSCAN_KSWAPD);
+	BUILD_BUG_ON(PGDEMOTE_SRC_DIRECT - PGDEMOTE_SRC_KSWAPD !=
+			PGDEMOTE_DST_DIRECT - PGDEMOTE_DST_KSWAPD);
+	BUILD_BUG_ON(PGDEMOTE_SRC_KHUGEPAGED - PGDEMOTE_SRC_KSWAPD !=
+			PGDEMOTE_DST_KHUGEPAGED - PGDEMOTE_DST_KSWAPD);
+
 
 	if (current_is_kswapd())
 		return 0;
@@ -1678,8 +1683,10 @@ static unsigned int demote_folio_list(struct list_head *demote_folios,
 		      (unsigned long)&mtc, MIGRATE_ASYNC, MR_DEMOTION,
 		      &nr_succeeded);
 
+	mod_node_page_state(pgdat,
+		    PGDEMOTE_SRC_KSWAPD + reclaimer_offset(), nr_succeeded);
 	mod_node_page_state(NODE_DATA(target_nid),
-		    PGDEMOTE_KSWAPD + reclaimer_offset(), nr_succeeded);
+		    PGDEMOTE_DST_KSWAPD + reclaimer_offset(), nr_succeeded);
 
 	return nr_succeeded;
 }
