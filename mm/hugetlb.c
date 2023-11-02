@@ -1026,7 +1026,6 @@ __weak unsigned long vma_mmu_pagesize(struct vm_area_struct *vma)
  * bits of the reservation map pointer, which are always clear due to
  * alignment.
  */
-#define HPAGE_RESV_OWNER    (1UL << 0)
 #define HPAGE_RESV_UNMAPPED (1UL << 1)
 #define HPAGE_RESV_MASK (HPAGE_RESV_OWNER | HPAGE_RESV_UNMAPPED)
 

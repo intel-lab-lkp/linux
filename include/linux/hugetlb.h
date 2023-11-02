@@ -179,6 +179,7 @@ struct address_space *hugetlb_page_mapping_lock_write(struct page *hpage);
 
 extern int sysctl_hugetlb_shm_group;
 extern struct list_head huge_boot_pages;
+static int is_vma_resv_set(struct vm_area_struct *vma, unsigned long flag);
 
 /* arch callbacks */
 
@@ -1268,9 +1269,11 @@ static inline bool __vma_shareable_lock(struct vm_area_struct *vma)
 	return (vma->vm_flags & VM_MAYSHARE) && vma->vm_private_data;
 }
 
+#define HPAGE_RESV_OWNER    (1UL << 0)
 static inline bool __vma_private_lock(struct vm_area_struct *vma)
 {
-	return (!(vma->vm_flags & VM_MAYSHARE)) && vma->vm_private_data;
+	return (!(vma->vm_flags & VM_MAYSHARE)) && vma->vm_private_data && 
+		is_vma_resv_set(vma, HPAGE_RESV_OWNER);
 }
 
 /*
