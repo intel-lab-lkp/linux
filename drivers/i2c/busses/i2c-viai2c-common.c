@@ -15,6 +15,13 @@ int viai2c_wait_bus_ready(struct viai2c *i2c)
 			dev_warn(i2c->dev, "timeout waiting for bus ready\n");
 			return -EBUSY;
 		}
+		if (i2c->platform == VIAI2C_PLAT_ZHAOXIN) {
+			u16 tmp = ioread16(i2c->base + VIAI2C_REG_CR);
+
+			iowrite16(tmp | VIAI2C_CR_END_MASK,
+					i2c->base + VIAI2C_REG_CR);
+		}
+
 		msleep(20);
 	}
 
@@ -53,7 +60,7 @@ static int viai2c_write(struct viai2c *i2c, struct i2c_msg *pmsg, bool last)
 		writew(pmsg->buf[0] & 0xFF, base + VIAI2C_REG_CDR);
 	}
 
-	if (!(pmsg->flags & I2C_M_NOSTART)) {
+	if (i2c->platform == VIAI2C_PLAT_WMT && !(pmsg->flags & I2C_M_NOSTART)) {
 		val = readw(base + VIAI2C_REG_CR);
 		val &= ~VIAI2C_CR_TX_END;
 		val |= VIAI2C_CR_CPU_RDY;
@@ -63,7 +70,7 @@ static int viai2c_write(struct viai2c *i2c, struct i2c_msg *pmsg, bool last)
 	reinit_completion(&i2c->complete);
 	writew(tcr_val | pmsg->addr, base + VIAI2C_REG_TCR);
 
-	if (pmsg->flags & I2C_M_NOSTART) {
+	if (i2c->platform == VIAI2C_PLAT_WMT && pmsg->flags & I2C_M_NOSTART) {
 		val = readw(base + VIAI2C_REG_CR);
 		val |= VIAI2C_CR_CPU_RDY;
 		writew(val, base + VIAI2C_REG_CR);
@@ -92,8 +99,10 @@ static int viai2c_write(struct viai2c *i2c, struct i2c_msg *pmsg, bool last)
 		}
 
 		if (xfer_len == pmsg->len) {
-			if (!last)
+			if (i2c->platform == VIAI2C_PLAT_WMT && !last)
 				writew(VIAI2C_CR_ENABLE, base + VIAI2C_REG_CR);
+			else if (i2c->platform == VIAI2C_PLAT_ZHAOXIN && last)
+				writeb(VIAI2C_CR_TX_END, base + VIAI2C_REG_CR);
 		} else {
 			writew(pmsg->buf[xfer_len] & 0xFF,
 					base + VIAI2C_REG_CDR);
@@ -105,7 +114,7 @@ static int viai2c_write(struct viai2c *i2c, struct i2c_msg *pmsg, bool last)
 	return 0;
 }
 
-static int viai2c_read(struct viai2c *i2c, struct i2c_msg *pmsg)
+static int viai2c_read(struct viai2c *i2c, struct i2c_msg *pmsg, bool first)
 {
 	u16 val, tcr_val = i2c->tcr;
 	u32 xfer_len = 0;
@@ -114,7 +123,7 @@ static int viai2c_read(struct viai2c *i2c, struct i2c_msg *pmsg)
 	val = readw(base + VIAI2C_REG_CR);
 	val &= ~(VIAI2C_CR_TX_END | VIAI2C_CR_RX_END);
 
-	if (!(pmsg->flags & I2C_M_NOSTART))
+	if (i2c->platform == VIAI2C_PLAT_WMT && !(pmsg->flags & I2C_M_NOSTART))
 		val |= VIAI2C_CR_CPU_RDY;
 
 	if (pmsg->len == 1)
@@ -128,7 +137,8 @@ static int viai2c_read(struct viai2c *i2c, struct i2c_msg *pmsg)
 
 	writew(tcr_val, base + VIAI2C_REG_TCR);
 
-	if (pmsg->flags & I2C_M_NOSTART) {
+	if ((i2c->platform == VIAI2C_PLAT_WMT && (pmsg->flags & I2C_M_NOSTART))
+	    || (i2c->platform == VIAI2C_PLAT_ZHAOXIN && !first)) {
 		val = readw(base + VIAI2C_REG_CR);
 		val |= VIAI2C_CR_CPU_RDY;
 		writew(val, base + VIAI2C_REG_CR);
@@ -162,14 +172,15 @@ int viai2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 
 	for (i = 0; ret >= 0 && i < num; i++) {
 		pmsg = &msgs[i];
-		if (!(pmsg->flags & I2C_M_NOSTART)) {
+		if (!(pmsg->flags & I2C_M_NOSTART)
+		   && (i2c->platform == VIAI2C_PLAT_WMT)) {
 			ret = viai2c_wait_bus_ready(i2c);
 			if (ret < 0)
 				return ret;
 		}
 
 		if (pmsg->flags & I2C_M_RD)
-			ret = viai2c_read(i2c, pmsg);
+			ret = viai2c_read(i2c, pmsg, i == 0);
 		else
 			ret = viai2c_write(i2c, pmsg, i == (num - 1));
 	}
@@ -183,6 +194,9 @@ static irqreturn_t viai2c_isr(int irq, void *data)
 
 	/* save the status and write-clear it */
 	i2c->cmd_status = readw(i2c->base + VIAI2C_REG_ISR);
+	if (!i2c->cmd_status)
+		return IRQ_NONE;
+
 	writew(i2c->cmd_status, i2c->base + VIAI2C_REG_ISR);
 
 	complete(&i2c->complete);

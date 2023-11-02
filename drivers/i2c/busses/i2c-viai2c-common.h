@@ -50,6 +50,7 @@
 
 enum {
 	VIAI2C_PLAT_WMT = 1,
+	VIAI2C_PLAT_ZHAOXIN
 };
 
 struct viai2c {
@@ -62,6 +63,12 @@ struct viai2c {
 	int			irq;
 	u16			cmd_status;
 	u8			platform;
+	u8			addr;
+	u16			tr;
+	u16			mcr;
+	u16			csr;
+	u8			fstp;
+	u8			hrv;
 };
 
 int viai2c_wait_bus_ready(struct viai2c *i2c);
