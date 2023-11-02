@@ -7674,6 +7674,26 @@ static void tg3_tx_timeout(struct net_device *dev, unsigned int txqueue)
 {
 	struct tg3 *tp = netdev_priv(dev);
 
+	/* checking the PCI channel state for hard errors
+	 * for pci_channel_io_frozen case
+	 *   - I/O to channel is blocked.
+	 *     The EEH layer and I/O error detections will
+	 *     handle the reset procedure
+	 * for pci_channel_io_perm_failure  case
+	 *   - the PCI card is dead.
+	 *     The reset will not help
+	 * report the error for both cases and return.
+	 */
+	if (tp->pdev->error_state == pci_channel_io_frozen) {
+		netdev_err(dev, " %s, I/O to channel is blocked\n", __func__);
+		return;
+	}
+
+	if (tp->pdev->error_state == pci_channel_io_perm_failure) {
+		netdev_err(dev, " %s, adapter has failed permanently!\n", __func__);
+		return;
+	}
+
 	if (netif_msg_tx_err(tp)) {
 		netdev_err(dev, "transmit timed out, resetting\n");
 		tg3_dump_state(tp);
