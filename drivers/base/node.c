@@ -496,20 +496,32 @@ static DEVICE_ATTR(meminfo, 0444, node_read_meminfo, NULL);
 static ssize_t node_read_numastat(struct device *dev,
 				  struct device_attribute *attr, char *buf)
 {
+	struct pglist_data *pgdat = NODE_DATA(dev->id);
+	unsigned long demote_src, demote_dst;
+
 	fold_vm_numa_events();
+	demote_src = node_page_state_pages(pgdat, PGDEMOTE_SRC_KSWAPD) +
+		     node_page_state_pages(pgdat, PGDEMOTE_SRC_DIRECT) +
+		     node_page_state_pages(pgdat, PGDEMOTE_SRC_KHUGEPAGED);
+	demote_dst = node_page_state_pages(pgdat, PGDEMOTE_DST_KSWAPD) +
+		     node_page_state_pages(pgdat, PGDEMOTE_DST_DIRECT) +
+		     node_page_state_pages(pgdat, PGDEMOTE_DST_KHUGEPAGED);
 	return sysfs_emit(buf,
 			  "numa_hit %lu\n"
 			  "numa_miss %lu\n"
 			  "numa_foreign %lu\n"
 			  "interleave_hit %lu\n"
 			  "local_node %lu\n"
-			  "other_node %lu\n",
+			  "other_node %lu\n"
+			  "demote_src %lu\n"
+			  "demote_dst %lu\n",
 			  sum_zone_numa_event_state(dev->id, NUMA_HIT),
 			  sum_zone_numa_event_state(dev->id, NUMA_MISS),
 			  sum_zone_numa_event_state(dev->id, NUMA_FOREIGN),
 			  sum_zone_numa_event_state(dev->id, NUMA_INTERLEAVE_HIT),
 			  sum_zone_numa_event_state(dev->id, NUMA_LOCAL),
-			  sum_zone_numa_event_state(dev->id, NUMA_OTHER));
+			  sum_zone_numa_event_state(dev->id, NUMA_OTHER),
+			  demote_src, demote_dst);
 }
 static DEVICE_ATTR(numastat, 0444, node_read_numastat, NULL);
 
