@@ -240,9 +240,10 @@ struct meson_sm_firmware *meson_sm_get(struct device_node *sm_node)
 }
 EXPORT_SYMBOL_GPL(meson_sm_get);
 
-#define SM_CHIP_ID_LENGTH	119
+#define SM_CHIP_ID_LENGTH	128
 #define SM_CHIP_ID_OFFSET	4
 #define SM_CHIP_ID_SIZE		12
+#define SM_CHIP_IDv2_SIZE	16
 
 static ssize_t serial_show(struct device *dev, struct device_attribute *attr,
 			 char *buf)
@@ -274,8 +275,59 @@ static ssize_t serial_show(struct device *dev, struct device_attribute *attr,
 
 static DEVICE_ATTR_RO(serial);
 
+static ssize_t chipid_show(struct device *dev, struct device_attribute *attr,
+			 char *buf)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct meson_sm_firmware *fw;
+	uint8_t *id_buf;
+	int ret;
+
+	fw = platform_get_drvdata(pdev);
+
+	id_buf = kmalloc(SM_CHIP_ID_LENGTH, GFP_KERNEL);
+	if (!id_buf)
+		return -ENOMEM;
+
+	ret = meson_sm_call_read(fw, id_buf, SM_CHIP_ID_LENGTH, SM_GET_CHIP_ID,
+				 2, 0, 0, 0, 0);
+	if (ret < 0) {
+		kfree(id_buf);
+		return ret;
+	}
+
+	int version = *((unsigned int *)id_buf);
+
+	if (version == 2)
+		ret = scnprintf(buf, PAGE_SIZE, "%16phN\n", &id_buf[SM_CHIP_ID_OFFSET]);
+	else {
+		/**
+		 * Legacy 12-byte chip ID read out, transform data
+		 * to expected order format.
+		 */
+		uint8_t *buff;
+
+		buff = kmalloc(SM_CHIP_ID_LENGTH, GFP_KERNEL);
+		if (!buff)
+			return -ENOMEM;
+		((uint32_t *)buff)[0] = 0; // CPU_ID is empty
+		/* Transform into expected order for display */
+		ch = (uint8_t *)(id_buf + 4);
+		for (i = 0; i < 12; i++)
+			buff[i + 4] = ch[11 - i];
+		ret = scnprintf(buf, PAGE_SIZE, "%16phN\n", &buff);
+		kfree(buff);
+	}
+
+	kfree(id_buf);
+	return ret;
+}
+
+static DEVICE_ATTR_RO(chipid);
+
 static struct attribute *meson_sm_sysfs_attributes[] = {
 	&dev_attr_serial.attr,
+	&dev_attr_chipid.attr,
 	NULL,
 };
 
