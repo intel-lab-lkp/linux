@@ -234,6 +234,12 @@ config REALTEK_RTD1319D_INTC
 	help
 	  Support for Realtek RTD1319D Interrupt Controller.
 
+config REALTEK_RTD1325_INTC
+	tristate "Realtek RTD1325 interrupt controller"
+	select REALTEK_DHC_INTC
+	help
+	  Support for Realtek RTD1325 Interrupt Controller.
+
 config RENESAS_INTC_IRQPIN
 	bool "Renesas INTC External IRQ Pin Support" if COMPILE_TEST
 	select IRQ_DOMAIN
