@@ -1196,7 +1196,7 @@ static void unmap_bo_from_gpuvm(struct kgd_mem *mem,
 	struct amdgpu_device *adev = entry->adev;
 	struct amdgpu_vm *vm = bo_va->base.vm;
 
-	amdgpu_vm_bo_unmap(adev, bo_va, entry->va);
+	amdgpu_vm_bo_unmap(adev, bo_va, entry->va, true);
 
 	amdgpu_vm_clear_freed(adev, vm, &bo_va->last_pt_update);
 

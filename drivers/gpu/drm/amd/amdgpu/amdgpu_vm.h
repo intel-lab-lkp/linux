@@ -423,12 +423,12 @@ void amdgpu_vm_bo_base_init(struct amdgpu_vm_bo_base *base,
 			    struct amdgpu_vm *vm, struct amdgpu_bo *bo);
 int amdgpu_vm_update_range(struct amdgpu_device *adev, struct amdgpu_vm *vm,
 			   bool immediate, bool unlocked, bool flush_tlb,
-			   struct dma_resv *resv, uint64_t start, uint64_t last,
-			   uint64_t flags, uint64_t offset, uint64_t vram_base,
+			   bool sync_unmap, struct dma_resv *resv,
+			   uint64_t start, uint64_t last, uint64_t flags,
+			   uint64_t offset, uint64_t vram_base,
 			   struct ttm_resource *res, dma_addr_t *pages_addr,
 			   struct dma_fence **fence);
-int amdgpu_vm_bo_update(struct amdgpu_device *adev,
-			struct amdgpu_bo_va *bo_va,
+int amdgpu_vm_bo_update(struct amdgpu_device *adev, struct amdgpu_bo_va *bo_va,
 			bool clear);
 bool amdgpu_vm_evictable(struct amdgpu_bo *bo);
 void amdgpu_vm_bo_invalidate(struct amdgpu_device *adev,
@@ -444,15 +444,14 @@ int amdgpu_vm_bo_map(struct amdgpu_device *adev,
 		     uint64_t addr, uint64_t offset,
 		     uint64_t size, uint64_t flags);
 int amdgpu_vm_bo_replace_map(struct amdgpu_device *adev,
-			     struct amdgpu_bo_va *bo_va,
-			     uint64_t addr, uint64_t offset,
-			     uint64_t size, uint64_t flags);
-int amdgpu_vm_bo_unmap(struct amdgpu_device *adev,
-		       struct amdgpu_bo_va *bo_va,
-		       uint64_t addr);
+			     struct amdgpu_bo_va *bo_va, uint64_t addr,
+			     uint64_t offset, uint64_t size, uint64_t flags,
+			     bool sync_unmap);
+int amdgpu_vm_bo_unmap(struct amdgpu_device *adev, struct amdgpu_bo_va *bo_va,
+		       uint64_t addr, bool sync_unmap);
 int amdgpu_vm_bo_clear_mappings(struct amdgpu_device *adev,
-				struct amdgpu_vm *vm,
-				uint64_t saddr, uint64_t size);
+				struct amdgpu_vm *vm, uint64_t saddr,
+				uint64_t size, bool sync_unmap);
 struct amdgpu_bo_va_mapping *amdgpu_vm_bo_lookup_mapping(struct amdgpu_vm *vm,
 							 uint64_t addr);
 void amdgpu_vm_bo_trace_cs(struct amdgpu_vm *vm, struct ww_acquire_ctx *ticket);
