@@ -993,8 +993,6 @@ static int ov2722_probe(struct i2c_client *client)
 	dev->sd.entity.function = MEDIA_ENT_F_CAM_SENSOR;
 
 	ret = media_entity_pads_init(&dev->sd.entity, 1, &dev->pad);
-	if (ret)
-		ov2722_remove(client);
 
 	return atomisp_register_i2c_module(&dev->sd, ovpdev, RAW_CAMERA);
 

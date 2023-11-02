@@ -1733,8 +1733,6 @@ static int ov5693_probe(struct i2c_client *client)
 	dev->sd.ctrl_handler = &dev->ctrl_handler;
 
 	ret = media_entity_pads_init(&dev->sd.entity, 1, &dev->pad);
-	if (ret)
-		ov5693_remove(client);
 
 	return ret;
 out_free:

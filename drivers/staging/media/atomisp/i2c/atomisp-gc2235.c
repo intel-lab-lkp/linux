@@ -840,9 +840,7 @@ static int gc2235_probe(struct i2c_client *client)
 	dev->ctrl_handler.lock = &dev->input_lock;
 	dev->sd.ctrl_handler = &dev->ctrl_handler;
 
-	ret = media_entity_pads_init(&dev->sd.entity, 1, &dev->pad);
-	if (ret)
-		gc2235_remove(client);
+	media_entity_pads_init(&dev->sd.entity, 1, &dev->pad);
 
 	return atomisp_register_i2c_module(&dev->sd, gcpdev, RAW_CAMERA);
 
