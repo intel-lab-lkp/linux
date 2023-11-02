@@ -2300,7 +2300,18 @@ static int btrfs_unfreeze(struct super_block *sb)
 
 static int btrfs_show_devname(struct seq_file *m, struct dentry *root)
 {
-	struct btrfs_fs_info *fs_info = btrfs_sb(root->d_sb);
+	struct btrfs_fs_devices *fs_devices = btrfs_sb(root->d_sb)->fs_devices;
+	struct btrfs_device *device;
+	struct btrfs_device *first_device = NULL;
+
+	list_for_each_entry(device, &fs_devices->devices, dev_list) {
+		if (first_device == NULL) {
+			first_device = device;
+			continue;
+		}
+		if (first_device->devt > device->devt)
+			first_device = device;
+	}
 
 	/*
 	 * There should be always a valid pointer in latest_dev, it may be stale
@@ -2308,7 +2319,7 @@ static int btrfs_show_devname(struct seq_file *m, struct dentry *root)
 	 * the end of RCU grace period.
 	 */
 	rcu_read_lock();
-	seq_escape(m, btrfs_dev_name(fs_info->fs_devices->latest_dev), " \t\n\\");
+	seq_escape(m, rcu_str_deref(first_device->name), " \t\n\\");
 	rcu_read_unlock();
 
 	return 0;
