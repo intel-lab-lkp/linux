@@ -24,6 +24,8 @@
 
 static int __initdata_or_module debug_callthunks;
 
+#define MAX_PATCH_LEN (255-1)
+
 #define prdbg(fmt, args...)					\
 do {								\
 	if (debug_callthunks)					\
@@ -171,13 +173,51 @@ static const u8 nops[] = {
 	0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
 };
 
+#define apply_reloc_n(n_, p_, d_)				\
+	do {							\
+		s32 v = *(s##n_ *)(p_);				\
+		v += (d_);					\
+		BUG_ON((v >> 31) != (v >> (n_-1)));		\
+		*(s##n_ *)(p_) = (s##n_)v;			\
+	} while (0)
+
+static __always_inline
+void apply_reloc(int n, void *ptr, uintptr_t diff)
+{
+	switch (n) {
+	case 4: apply_reloc_n(32, ptr, diff); break;
+	default: BUG();
+	}
+}
+
+static void apply_relocation(u8 *buf, size_t len, u8 *dest, u8 *src)
+{
+	for (int next, i = 0; i < len; i = next) {
+		struct insn insn;
+
+		if (WARN_ON_ONCE(insn_decode_kernel(&insn, &buf[i])))
+			return;
+
+		next = i + insn.length;
+
+		if (insn_rip_relative(&insn))
+			apply_reloc(insn.displacement.nbytes,
+				    buf + i + insn_offset_displacement(&insn),
+				    src - dest);
+	}
+}
+
 static void *patch_dest(void *dest, bool direct)
 {
 	unsigned int tsize = SKL_TMPL_SIZE;
+	u8 insn_buff[MAX_PATCH_LEN];
 	u8 *pad = dest - tsize;
 
+	memcpy(insn_buff, skl_call_thunk_template, tsize);
+	apply_relocation(insn_buff, tsize, pad, skl_call_thunk_template);
+
 	/* Already patched? */
-	if (!bcmp(pad, skl_call_thunk_template, tsize))
+	if (!bcmp(pad, insn_buff, tsize))
 		return pad;
 
 	/* Ensure there are nops */
@@ -187,9 +227,9 @@ static void *patch_dest(void *dest, bool direct)
 	}
 
 	if (direct)
-		memcpy(pad, skl_call_thunk_template, tsize);
+		memcpy(pad, insn_buff, tsize);
 	else
-		text_poke_copy_locked(pad, skl_call_thunk_template, tsize, true);
+		text_poke_copy_locked(pad, insn_buff, tsize, true);
 	return pad;
 }
 
@@ -287,20 +327,26 @@ void *callthunks_translate_call_dest(void *dest)
 static bool is_callthunk(void *addr)
 {
 	unsigned int tmpl_size = SKL_TMPL_SIZE;
-	void *tmpl = skl_call_thunk_template;
+	u8 insn_buff[MAX_PATCH_LEN];
 	unsigned long dest;
+	u8 *pad;
 
 	dest = roundup((unsigned long)addr, CONFIG_FUNCTION_ALIGNMENT);
 	if (!thunks_initialized || skip_addr((void *)dest))
 		return false;
 
-	return !bcmp((void *)(dest - tmpl_size), tmpl, tmpl_size);
+	*pad = dest - tmpl_size;
+
+	memcpy(insn_buff, skl_call_thunk_template, tmpl_size);
+	apply_relocation(insn_buff, tmpl_size, pad, skl_call_thunk_template);
+
+	return !bcmp(pad, insn_buff, tmpl_size);
 }
 
 int x86_call_depth_emit_accounting(u8 **pprog, void *func)
 {
 	unsigned int tmpl_size = SKL_TMPL_SIZE;
-	void *tmpl = skl_call_thunk_template;
+	u8 insn_buff[MAX_PATCH_LEN];
 
 	if (!thunks_initialized)
 		return 0;
@@ -309,7 +355,10 @@ int x86_call_depth_emit_accounting(u8 **pprog, void *func)
 	if (func && is_callthunk(func))
 		return 0;
 
-	memcpy(*pprog, tmpl, tmpl_size);
+	memcpy(insn_buff, skl_call_thunk_template, tmpl_size);
+	apply_relocation(insn_buff, tmpl_size, *pprog, skl_call_thunk_template);
+
+	memcpy(*pprog, insn_buff, tmpl_size);
 	*pprog += tmpl_size;
 	return tmpl_size;
 }
