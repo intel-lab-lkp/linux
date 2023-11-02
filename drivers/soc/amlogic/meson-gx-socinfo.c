@@ -24,6 +24,10 @@
 #define SOCINFO_MINOR	GENMASK(15, 8)
 #define SOCINFO_MISC	GENMASK(7, 0)
 
+
+unsigned int meson_gx_socinfo;
+EXPORT_SYMBOL(meson_gx_socinfo);
+
 static const struct meson_gx_soc_id {
 	const char *name;
 	unsigned int id;
@@ -131,10 +135,10 @@ static int __init meson_gx_socinfo_init(void)
 	struct soc_device *soc_dev;
 	struct device_node *np;
 	struct regmap *regmap;
-	unsigned int socinfo;
 	struct device *dev;
 	int ret;
 
+	meson_gx_socinfo = 0;
 	/* look up for chipid node */
 	np = of_find_compatible_node(NULL, NULL, "amlogic,meson-gx-ao-secure");
 	if (!np)
@@ -160,11 +164,13 @@ static int __init meson_gx_socinfo_init(void)
 		return -ENODEV;
 	}
 
-	ret = regmap_read(regmap, AO_SEC_SOCINFO_OFFSET, &socinfo);
-	if (ret < 0)
+	ret = regmap_read(regmap, AO_SEC_SOCINFO_OFFSET, &meson_gx_socinfo);
+	if (ret < 0) {
+		meson_gx_socinfo = 0;
 		return ret;
+	}
 
-	if (!socinfo) {
+	if (!meson_gx_socinfo) {
 		pr_err("%s: invalid chipid value\n", __func__);
 		return -EINVAL;
 	}
@@ -175,13 +181,13 @@ static int __init meson_gx_socinfo_init(void)
 
 	soc_dev_attr->family = "Amlogic Meson";
 	soc_dev_attr->revision = kasprintf(GFP_KERNEL, "%x:%x - %x:%x",
-					   socinfo_to_major(socinfo),
-					   socinfo_to_minor(socinfo),
-					   socinfo_to_pack(socinfo),
-					   socinfo_to_misc(socinfo));
+					   socinfo_to_major(meson_gx_socinfo),
+					   socinfo_to_minor(meson_gx_socinfo),
+					   socinfo_to_pack(meson_gx_socinfo),
+					   socinfo_to_misc(meson_gx_socinfo));
 	soc_dev_attr->soc_id = kasprintf(GFP_KERNEL, "%s (%s)",
-					 socinfo_to_soc_id(socinfo),
-					 socinfo_to_package_id(socinfo));
+					 socinfo_to_soc_id(meson_gx_socinfo),
+					 socinfo_to_package_id(meson_gx_socinfo));
 
 	soc_dev = soc_device_register(soc_dev_attr);
 	if (IS_ERR(soc_dev)) {
@@ -194,10 +200,10 @@ static int __init meson_gx_socinfo_init(void)
 
 	dev_info(dev, "Amlogic Meson %s Revision %x:%x (%x:%x) Detected\n",
 			soc_dev_attr->soc_id,
-			socinfo_to_major(socinfo),
-			socinfo_to_minor(socinfo),
-			socinfo_to_pack(socinfo),
-			socinfo_to_misc(socinfo));
+			socinfo_to_major(meson_gx_socinfo),
+			socinfo_to_minor(meson_gx_socinfo),
+			socinfo_to_pack(meson_gx_socinfo),
+			socinfo_to_misc(meson_gx_socinfo));
 
 	return 0;
 }
