@@ -6931,3 +6931,43 @@ out:
 	return spliced ?: ret;
 }
 EXPORT_SYMBOL(skb_splice_from_iter);
+
+void large_skb_destructor(struct sk_buff *skb)
+{
+	if (is_vmalloc_addr(skb->head)) {
+		if (!skb->cloned ||
+		    !atomic_dec_return(&(skb_shinfo(skb)->dataref)))
+			vfree(skb->head);
+
+		skb->head = NULL;
+	}
+	if (skb->sk)
+		sock_rfree(skb);
+}
+EXPORT_SYMBOL(large_skb_destructor);
+
+struct sk_buff *alloc_large_skb(unsigned int size,
+					       int broadcast)
+{
+	struct sk_buff *skb;
+	void *data;
+
+	if (size <= NLMSG_GOODSIZE || broadcast)
+		return alloc_skb(size, GFP_KERNEL);
+
+	size = SKB_DATA_ALIGN(size) +
+	       SKB_DATA_ALIGN(sizeof(struct skb_shared_info));
+
+	data = vmalloc(size);
+	if (!data)
+		return NULL;
+
+	skb = __build_skb(data, size);
+	if (!skb)
+		vfree(data);
+	else
+		skb->destructor = large_skb_destructor;
+
+	return skb;
+}
+EXPORT_SYMBOL(alloc_large_skb);

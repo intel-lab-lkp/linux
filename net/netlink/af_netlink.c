@@ -369,24 +369,11 @@ static void netlink_rcv_wake(struct sock *sk)
 		wake_up_interruptible(&nlk->wait);
 }
 
-static void netlink_skb_destructor(struct sk_buff *skb)
-{
-	if (is_vmalloc_addr(skb->head)) {
-		if (!skb->cloned ||
-		    !atomic_dec_return(&(skb_shinfo(skb)->dataref)))
-			vfree(skb->head);
-
-		skb->head = NULL;
-	}
-	if (skb->sk != NULL)
-		sock_rfree(skb);
-}
-
 static void netlink_skb_set_owner_r(struct sk_buff *skb, struct sock *sk)
 {
 	WARN_ON(skb->sk != NULL);
 	skb->sk = sk;
-	skb->destructor = netlink_skb_destructor;
+	skb->destructor = large_skb_destructor;
 	atomic_add(skb->truesize, &sk->sk_rmem_alloc);
 	sk_mem_charge(sk, skb->truesize);
 }
@@ -1204,30 +1191,6 @@ struct sock *netlink_getsockbyfilp(struct file *filp)
 	return sock;
 }
 
-static struct sk_buff *netlink_alloc_large_skb(unsigned int size,
-					       int broadcast)
-{
-	struct sk_buff *skb;
-	void *data;
-
-	if (size <= NLMSG_GOODSIZE || broadcast)
-		return alloc_skb(size, GFP_KERNEL);
-
-	size = SKB_DATA_ALIGN(size) +
-	       SKB_DATA_ALIGN(sizeof(struct skb_shared_info));
-
-	data = vmalloc(size);
-	if (data == NULL)
-		return NULL;
-
-	skb = __build_skb(data, size);
-	if (skb == NULL)
-		vfree(data);
-	else
-		skb->destructor = netlink_skb_destructor;
-
-	return skb;
-}
 
 /*
  * Attach a skb to a netlink socket.
@@ -1882,7 +1845,7 @@ static int netlink_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 	if (len > sk->sk_sndbuf - 32)
 		goto out;
 	err = -ENOBUFS;
-	skb = netlink_alloc_large_skb(len, dst_group);
+	skb = alloc_large_skb(len, dst_group);
 	if (skb == NULL)
 		goto out;
 
