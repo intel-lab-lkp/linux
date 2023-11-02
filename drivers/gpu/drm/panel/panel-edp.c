@@ -1204,6 +1204,29 @@ static const struct panel_desc boe_nv133fhm_n61 = {
 	},
 };
 
+static const struct drm_display_mode boe_nv133wum_n63_mode = {
+	.clock = 157760,
+	.hdisplay = 1920,
+	.hsync_start = 1920 + 48,
+	.hsync_end = 1920 + 48 + 32,
+	.htotal = 1920 + 48 + 32 + 80,
+	.vdisplay = 1200,
+	.vsync_start = 1200 + 3,
+	.vsync_end = 1200 + 3 + 6,
+	.vtotal = 1200 + 3 + 6 + 31,
+	.flags = DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_NVSYNC,
+};
+
+static const struct panel_desc boe_nv133wum_n63 = {
+	.modes = &boe_nv133wum_n63_mode,
+	.num_modes = 1,
+	.bpc = 8,
+	.size = {
+		.width = 286,
+		.height = 179,
+	},
+};
+
 static const struct drm_display_mode boe_nv140fhmn49_modes[] = {
 	{
 		.clock = 148500,
@@ -1724,6 +1747,9 @@ static const struct of_device_id platform_of_match[] = {
 		.compatible = "boe,nv133fhm-n62",
 		.data = &boe_nv133fhm_n61,
 	}, {
+		.compatible = "boe,nv133wum-n63",
+		.data = &boe_nv133wum_n63,
+	}, {
 		.compatible = "boe,nv140fhmn49",
 		.data = &boe_nv140fhmn49,
 	}, {
@@ -1852,6 +1878,7 @@ static const struct edp_panel_entry edp_panels[] = {
 	EDP_PANEL_ENTRY('B', 'O', 'E', 0x095f, &delay_200_500_e50, "NE135FBM-N41 v8.1"),
 	EDP_PANEL_ENTRY('B', 'O', 'E', 0x098d, &boe_nv110wtm_n61.delay, "NV110WTM-N61"),
 	EDP_PANEL_ENTRY('B', 'O', 'E', 0x09dd, &delay_200_500_e50, "NT116WHM-N21"),
+	EDP_PANEL_ENTRY('B', 'O', 'E', 0x0a1b, &delay_200_500_e50, "NV133WUM-N63"),
 	EDP_PANEL_ENTRY('B', 'O', 'E', 0x0a5d, &delay_200_500_e50, "NV116WHM-N45"),
 	EDP_PANEL_ENTRY('B', 'O', 'E', 0x0ac5, &delay_200_500_e50, "NV116WHM-N4C"),
 
