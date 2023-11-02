@@ -1202,8 +1202,15 @@ static int intel_fbc_check_plane(struct intel_atomic_state *state,
 	 * Bspec: 50422 HSD: 14010260002
 	 */
 	if (DISPLAY_VER(i915) >= 12 && crtc_state->has_psr2) {
-		plane_state->no_fbc_reason = "PSR2 enabled";
-		return 0;
+		if (DISPLAY_VER(i915) >= 20)
+			plane_state->no_fbc_reason =
+				crtc_state->full_frame_fetch ? NULL :
+					"PSR2 selective fetch enabled";
+		else
+			plane_state->no_fbc_reason = "PSR2 enabled";
+
+		if (plane_state->no_fbc_reason)
+			return 0;
 	}
 
 	/* Wa_14016291713 */
