@@ -236,7 +236,7 @@ static int framebuffer_check(struct drm_device *dev,
 		}
 	}
 
-	for (i = info->num_planes; i < 4; i++) {
+	for (i = info->num_planes; i < DRM_FORMAT_MAX_PLANES; i++) {
 		if (r->modifier[i]) {
 			drm_dbg_kms(dev, "non-zero modifier for unused plane %d\n", i);
 			return -EINVAL;
