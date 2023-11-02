@@ -20,7 +20,8 @@ usage()
 {
 	cat <<EOF
 Usage: $0 [OPTIONS]
-  -s | --summary		Print summary with detailed log in output.log
+  -s | --summary		Print summary with detailed log in output.log (conflict with -p)
+  -p | --per_test_log		Print test log in /tmp with each test name (conflict with -s)
   -t | --test COLLECTION:TEST	Run TEST from COLLECTION
   -c | --collection COLLECTION	Run all tests from COLLECTION
   -l | --list			List the available collection:test entries
@@ -40,6 +41,9 @@ while true; do
 		-s | --summary)
 			logfile="$BASE_DIR"/output.log
 			cat /dev/null > $logfile
+			shift ;;
+		-p | --per_test_log)
+			per_test_logging=1
 			shift ;;
 		-t | --test)
 			TESTS="$TESTS $2"
