@@ -54,6 +54,7 @@ static struct vgic_irq *vgic_add_lpi(struct kvm *kvm, u32 intid,
 
 	INIT_LIST_HEAD(&irq->lpi_list);
 	INIT_LIST_HEAD(&irq->ap_list);
+	INIT_LIST_HEAD(&irq->host_irq_head);
 	raw_spin_lock_init(&irq->irq_lock);
 
 	irq->config = VGIC_CONFIG_EDGE;
@@ -61,6 +62,7 @@ static struct vgic_irq *vgic_add_lpi(struct kvm *kvm, u32 intid,
 	irq->intid = intid;
 	irq->target_vcpu = vcpu;
 	irq->group = 1;
+	atomic_set(&irq->map_count, 0);
 
 	raw_spin_lock_irqsave(&dist->lpi_list_lock, flags);
 
@@ -284,6 +286,7 @@ static int update_lpi_config(struct kvm *kvm, struct vgic_irq *irq,
 	u8 prop;
 	int ret;
 	unsigned long flags;
+	struct vlpi_host_irq *vlpi_hirq;
 
 	ret = kvm_read_guest_lock(kvm, propbase + irq->intid - GIC_LPI_OFFSET,
 				  &prop, 1);
@@ -305,8 +308,13 @@ static int update_lpi_config(struct kvm *kvm, struct vgic_irq *irq,
 
 	raw_spin_unlock_irqrestore(&irq->irq_lock, flags);
 
-	if (irq->hw)
-		return its_prop_update_vlpi(irq->host_irq, prop, needs_inv);
+	if (irq->hw) {
+		list_for_each_entry(vlpi_hirq, &irq->host_irq_head, host_irq_list) {
+			ret = its_prop_update_vlpi(vlpi_hirq->host_irq, prop, needs_inv);
+			if (ret)
+				return ret;
+		}
+	}
 
 	return 0;
 }
@@ -354,25 +362,31 @@ int vgic_copy_lpi_list(struct kvm *kvm, struct kvm_vcpu *vcpu, u32 **intid_ptr)
 static int update_affinity(struct vgic_irq *irq, struct kvm_vcpu *vcpu)
 {
 	int ret = 0;
-	unsigned long flags;
+	unsigned long flags, counts;
+	struct vlpi_host_irq *vlpi_hirq;
 
 	raw_spin_lock_irqsave(&irq->irq_lock, flags);
 	irq->target_vcpu = vcpu;
 	raw_spin_unlock_irqrestore(&irq->irq_lock, flags);
 
 	if (irq->hw) {
-		struct its_vlpi_map map;
+		counts = atomic_read(&irq->map_count);
+		list_for_each_entry(vlpi_hirq, &irq->host_irq_head, host_irq_list) {
+			struct its_vlpi_map map;
 
-		ret = its_get_vlpi(irq->host_irq, &map);
-		if (ret)
-			return ret;
+			ret = its_get_vlpi(vlpi_hirq->host_irq, &map);
+			if (ret)
+				return ret;
 
-		if (map.vpe)
-			atomic_dec(&map.vpe->vlpi_count);
-		map.vpe = &vcpu->arch.vgic_cpu.vgic_v3.its_vpe;
-		atomic_inc(&map.vpe->vlpi_count);
+			counts--;
+			if (map.vpe && !counts)
+				atomic_dec(&map.vpe->vlpi_count);
+			map.vpe = &vcpu->arch.vgic_cpu.vgic_v3.its_vpe;
+			if (!counts)
+				atomic_inc(&map.vpe->vlpi_count);
 
-		ret = its_map_vlpi(irq->host_irq, &map);
+			ret = its_map_vlpi(vlpi_hirq->host_irq, &map);
+		}
 	}
 
 	return ret;
@@ -737,6 +751,7 @@ static int vgic_its_trigger_msi(struct kvm *kvm, struct vgic_its *its,
 				u32 devid, u32 eventid)
 {
 	struct vgic_irq *irq = NULL;
+	struct vlpi_host_irq *vlpi_hirq;
 	unsigned long flags;
 	int err;
 
@@ -744,9 +759,15 @@ static int vgic_its_trigger_msi(struct kvm *kvm, struct vgic_its *its,
 	if (err)
 		return err;
 
-	if (irq->hw)
-		return irq_set_irqchip_state(irq->host_irq,
-					     IRQCHIP_STATE_PENDING, true);
+	if (irq->hw) {
+		list_for_each_entry(vlpi_hirq, &irq->host_irq_head, host_irq_list) {
+			err = irq_set_irqchip_state(vlpi_hirq->host_irq,
+						    IRQCHIP_STATE_PENDING, true);
+			if (err)
+				return err;
+			return 0;
+		}
+	}
 
 	raw_spin_lock_irqsave(&irq->irq_lock, flags);
 	irq->pending_latch = true;
@@ -812,12 +833,17 @@ int vgic_its_inject_msi(struct kvm *kvm, struct kvm_msi *msi)
 /* Requires the its_lock to be held. */
 static void its_free_ite(struct kvm *kvm, struct its_ite *ite)
 {
+	struct vlpi_host_irq *vlpi_hirq;
+
 	list_del(&ite->ite_list);
 
 	/* This put matches the get in vgic_add_lpi. */
 	if (ite->irq) {
-		if (ite->irq->hw)
-			WARN_ON(its_unmap_vlpi(ite->irq->host_irq));
+		if (ite->irq->hw) {
+			list_for_each_entry(vlpi_hirq, &ite->irq->host_irq_head, host_irq_list) {
+				WARN_ON(its_unmap_vlpi(vlpi_hirq->host_irq));
+			}
+		}
 
 		vgic_put_irq(kvm, ite->irq);
 	}
@@ -1297,7 +1323,8 @@ static int vgic_its_cmd_handle_clear(struct kvm *kvm, struct vgic_its *its,
 	u32 device_id = its_cmd_get_deviceid(its_cmd);
 	u32 event_id = its_cmd_get_id(its_cmd);
 	struct its_ite *ite;
-
+	struct vlpi_host_irq *vlpi_hirq;
+	int ret;
 
 	ite = find_ite(its, device_id, event_id);
 	if (!ite)
@@ -1305,9 +1332,14 @@ static int vgic_its_cmd_handle_clear(struct kvm *kvm, struct vgic_its *its,
 
 	ite->irq->pending_latch = false;
 
-	if (ite->irq->hw)
-		return irq_set_irqchip_state(ite->irq->host_irq,
-					     IRQCHIP_STATE_PENDING, false);
+	if (ite->irq->hw) {
+		list_for_each_entry(vlpi_hirq, &ite->irq->host_irq_head, host_irq_list) {
+			ret = irq_set_irqchip_state(vlpi_hirq->host_irq,
+						    IRQCHIP_STATE_PENDING, false);
+			if (ret)
+				return ret;
+		}
+	}
 
 	return 0;
 }

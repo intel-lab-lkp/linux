@@ -413,6 +413,7 @@ int kvm_vgic_v4_set_forwarding(struct kvm *kvm, int virq,
 {
 	struct vgic_its *its;
 	struct vgic_irq *irq;
+	struct vlpi_host_irq *vlpi_hirq;
 	struct its_vlpi_map map;
 	unsigned long flags;
 	int ret;
@@ -456,9 +457,19 @@ int kvm_vgic_v4_set_forwarding(struct kvm *kvm, int virq,
 	if (ret)
 		goto out;
 
-	irq->hw		= true;
-	irq->host_irq	= virq;
-	atomic_inc(&map.vpe->vlpi_count);
+	vlpi_hirq = kzalloc(sizeof(struct vlpi_host_irq), GFP_KERNEL_ACCOUNT);
+	if (!vlpi_hirq)
+		return -ENOMEM;
+
+	INIT_LIST_HEAD(&vlpi_hirq->host_irq_list);
+	vlpi_hirq->host_irq = virq;
+	list_add_tail(&vlpi_hirq->host_irq_list, &irq->host_irq_head);
+
+	if (!atomic_read(&irq->map_count)) {
+		irq->hw = true;
+		atomic_inc(&map.vpe->vlpi_count);
+	}
+	atomic_inc(&irq->map_count);
 
 	/* Transfer pending state */
 	raw_spin_lock_irqsave(&irq->irq_lock, flags);
@@ -488,6 +499,8 @@ int kvm_vgic_v4_unset_forwarding(struct kvm *kvm, int virq,
 {
 	struct vgic_its *its;
 	struct vgic_irq *irq;
+	struct vlpi_host_irq *vlpi_hirq;
+	struct its_vpe *vpe;
 	int ret;
 
 	if (!vgic_supports_direct_msis(kvm))
@@ -508,10 +521,22 @@ int kvm_vgic_v4_unset_forwarding(struct kvm *kvm, int virq,
 	if (ret)
 		goto out;
 
-	WARN_ON(!(irq->hw && irq->host_irq == virq));
+	WARN_ON(!(irq->hw));
 	if (irq->hw) {
-		atomic_dec(&irq->target_vcpu->arch.vgic_cpu.vgic_v3.its_vpe.vlpi_count);
-		irq->hw = false;
+		list_for_each_entry(vlpi_hirq, &irq->host_irq_head, host_irq_list) {
+			if (vlpi_hirq->host_irq == virq) {
+				list_del(&vlpi_hirq->host_irq_list);
+				kfree(vlpi_hirq);
+				break;
+			}
+		}
+
+		atomic_dec(&irq->map_count);
+		if (!atomic_read(&irq->map_count)) {
+			vpe = &irq->target_vcpu->arch.vgic_cpu.vgic_v3.its_vpe;
+			atomic_dec(&vpe->vlpi_count);
+			irq->hw = false;
+		}
 		ret = its_unmap_vlpi(virq);
 	}
 

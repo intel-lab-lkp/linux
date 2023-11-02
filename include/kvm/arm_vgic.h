@@ -114,6 +114,11 @@ struct irq_ops {
 	bool (*get_input_level)(int vintid);
 };
 
+struct vlpi_host_irq {
+	struct list_head host_irq_list;
+	unsigned int host_irq;
+};
+
 struct vgic_irq {
 	raw_spinlock_t irq_lock;	/* Protects the content of the struct */
 	struct list_head lpi_list;	/* Used to link all LPIs together */
@@ -138,6 +143,8 @@ struct vgic_irq {
 	bool active;			/* not used for LPIs */
 	bool enabled;
 	bool hw;			/* Tied to HW IRQ */
+	atomic_t map_count;		/* record vLPI map times */
+	struct list_head host_irq_head;	/* record host irqs list of a vLPI */
 	struct kref refcount;		/* Used for LPIs */
 	u32 hwintid;			/* HW INTID number */
 	unsigned int host_irq;		/* linux irq corresponding to hwintid */
