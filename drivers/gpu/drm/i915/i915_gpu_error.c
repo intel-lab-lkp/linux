@@ -722,9 +722,13 @@ static void err_print_gt_info(struct drm_i915_error_state_buf *m,
 			      struct intel_gt_coredump *gt)
 {
 	struct drm_printer p = i915_error_printer(m);
+	struct drm_i915_private *i915 = gt->_gt->i915;
+	struct intel_gt *gt_n;
+	unsigned int n;
 
 	intel_gt_info_print(&gt->info, &p);
-	intel_sseu_print_topology(gt->_gt->i915, &gt->info.sseu, &p);
+	for_each_gt(gt_n, i915, n)
+		intel_sseu_print_topology(gt_n->i915, &gt_n->info.sseu, &p);
 }
 
 static void err_print_gt_display(struct drm_i915_error_state_buf *m,
