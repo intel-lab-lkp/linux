@@ -190,7 +190,7 @@ static inline bool bch2_dev_exists(struct bch_sb *sb,
 				   unsigned dev)
 {
 	if (dev < sb->nr_devices) {
-	struct bch_member m = bch2_sb_member_get(sb, dev);
+		struct bch_member m = bch2_sb_member_get(sb, dev);
 		return bch2_member_exists(&m);
 	}
 	return false;
