@@ -227,9 +227,23 @@ static inline void *offset_to_ptr(const int *off)
 
 #endif /* __ASSEMBLY__ */
 
+/* Import __stringify. */
+#ifndef __stringify
+#include <linux/stringify.h>
+#endif
+
 /* Quite-unique ID. */
 #ifndef __QUITE_UNIQUE_ID
 # define __QUITE_UNIQUE_ID(prefix) __PASTE(__PASTE(prefix, __LINE__), __COUNTER__)
+#endif
+
+/* Quite-unique Section NAME. */
+#ifndef __SECTION_NAME
+#ifdef CONFIG_LD_DEAD_CODE_DATA_ELIMINATION
+# define __SECTION_NAME(prefix) __stringify(__QUITE_UNIQUE_ID(prefix.))
+#else
+# define __SECTION_NAME(prefix) __stringify(prefix)
+#endif
 #endif
 
 /* &a[0] degrades to a pointer: a different type from an array */
