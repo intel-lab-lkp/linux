@@ -16,7 +16,7 @@ struct kcs_bmc_device_ops {
 };
 
 irqreturn_t kcs_bmc_handle_event(struct kcs_bmc_device *kcs_bmc);
-int kcs_bmc_add_device(struct kcs_bmc_device *kcs_bmc);
-void kcs_bmc_remove_device(struct kcs_bmc_device *kcs_bmc);
+int kcs_bmc_add_device(struct kcs_bmc_device *dev);
+void kcs_bmc_remove_device(struct kcs_bmc_device *dev);
 
 #endif

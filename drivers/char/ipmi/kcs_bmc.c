@@ -19,6 +19,7 @@
 static DEFINE_MUTEX(kcs_bmc_lock);
 static LIST_HEAD(kcs_bmc_devices);
 static LIST_HEAD(kcs_bmc_drivers);
+static LIST_HEAD(kcs_bmc_clients);
 
 /* Consumer data access */
 
@@ -129,25 +130,27 @@ void kcs_bmc_disable_device(struct kcs_bmc_client *client)
 }
 EXPORT_SYMBOL(kcs_bmc_disable_device);
 
-int kcs_bmc_add_device(struct kcs_bmc_device *kcs_bmc)
+int kcs_bmc_add_device(struct kcs_bmc_device *dev)
 {
+	struct kcs_bmc_client *client;
 	struct kcs_bmc_driver *drv;
 	int error = 0;
-	int rc;
 
-	spin_lock_init(&kcs_bmc->lock);
-	kcs_bmc->client = NULL;
+	spin_lock_init(&dev->lock);
+	dev->client = NULL;
 
 	mutex_lock(&kcs_bmc_lock);
-	list_add(&kcs_bmc->entry, &kcs_bmc_devices);
+	list_add(&dev->entry, &kcs_bmc_devices);
 	list_for_each_entry(drv, &kcs_bmc_drivers, entry) {
-		rc = drv->ops->add_device(kcs_bmc);
-		if (!rc)
-			continue;
-
-		dev_err(kcs_bmc->dev, "Failed to add chardev for KCS channel %d: %d",
-			kcs_bmc->channel, rc);
-		error = rc;
+		client = drv->ops->add_device(drv, dev);
+		if (IS_ERR(client)) {
+			error = PTR_ERR(client);
+			dev_err(dev->dev,
+				"Failed to add chardev for KCS channel %d: %d",
+				dev->channel, error);
+			break;
+		}
+		list_add(&client->entry, &kcs_bmc_clients);
 	}
 	mutex_unlock(&kcs_bmc_lock);
 
@@ -155,31 +158,37 @@ int kcs_bmc_add_device(struct kcs_bmc_device *kcs_bmc)
 }
 EXPORT_SYMBOL(kcs_bmc_add_device);
 
-void kcs_bmc_remove_device(struct kcs_bmc_device *kcs_bmc)
+void kcs_bmc_remove_device(struct kcs_bmc_device *dev)
 {
-	struct kcs_bmc_driver *drv;
+	struct kcs_bmc_client *curr, *tmp;
 
 	mutex_lock(&kcs_bmc_lock);
-	list_del(&kcs_bmc->entry);
-	list_for_each_entry(drv, &kcs_bmc_drivers, entry) {
-		drv->ops->remove_device(kcs_bmc);
+	list_for_each_entry_safe(curr, tmp, &kcs_bmc_clients, entry) {
+		if (curr->dev == dev) {
+			list_del(&curr->entry);
+			curr->drv->ops->remove_device(curr);
+		}
 	}
+	list_del(&dev->entry);
 	mutex_unlock(&kcs_bmc_lock);
 }
 EXPORT_SYMBOL(kcs_bmc_remove_device);
 
 void kcs_bmc_register_driver(struct kcs_bmc_driver *drv)
 {
-	struct kcs_bmc_device *kcs_bmc;
-	int rc;
+	struct kcs_bmc_client *client;
+	struct kcs_bmc_device *dev;
 
 	mutex_lock(&kcs_bmc_lock);
 	list_add(&drv->entry, &kcs_bmc_drivers);
-	list_for_each_entry(kcs_bmc, &kcs_bmc_devices, entry) {
-		rc = drv->ops->add_device(kcs_bmc);
-		if (rc)
-			dev_err(kcs_bmc->dev, "Failed to add driver for KCS channel %d: %d",
-				kcs_bmc->channel, rc);
+	list_for_each_entry(dev, &kcs_bmc_devices, entry) {
+		client = drv->ops->add_device(drv, dev);
+		if (IS_ERR(client)) {
+			dev_err(dev->dev, "Failed to add driver for KCS channel %d: %ld",
+				dev->channel, PTR_ERR(client));
+			continue;
+		}
+		list_add(&client->entry, &kcs_bmc_clients);
 	}
 	mutex_unlock(&kcs_bmc_lock);
 }
@@ -187,13 +196,16 @@ EXPORT_SYMBOL(kcs_bmc_register_driver);
 
 void kcs_bmc_unregister_driver(struct kcs_bmc_driver *drv)
 {
-	struct kcs_bmc_device *kcs_bmc;
+	struct kcs_bmc_client *curr, *tmp;
 
 	mutex_lock(&kcs_bmc_lock);
-	list_del(&drv->entry);
-	list_for_each_entry(kcs_bmc, &kcs_bmc_devices, entry) {
-		drv->ops->remove_device(kcs_bmc);
+	list_for_each_entry_safe(curr, tmp, &kcs_bmc_clients, entry) {
+		if (curr->drv == drv) {
+			list_del(&curr->entry);
+			drv->ops->remove_device(curr);
+		}
 	}
+	list_del(&drv->entry);
 	mutex_unlock(&kcs_bmc_lock);
 }
 EXPORT_SYMBOL(kcs_bmc_unregister_driver);

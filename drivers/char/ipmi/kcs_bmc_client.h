@@ -8,16 +8,7 @@
 
 #include "kcs_bmc.h"
 
-struct kcs_bmc_driver_ops {
-	int (*add_device)(struct kcs_bmc_device *kcs_bmc);
-	void (*remove_device)(struct kcs_bmc_device *kcs_bmc);
-};
-
-struct kcs_bmc_driver {
-	struct list_head entry;
-
-	const struct kcs_bmc_driver_ops *ops;
-};
+struct kcs_bmc_driver;
 
 struct kcs_bmc_client_ops {
 	irqreturn_t (*event)(struct kcs_bmc_client *client);
@@ -26,7 +17,31 @@ struct kcs_bmc_client_ops {
 struct kcs_bmc_client {
 	const struct kcs_bmc_client_ops *ops;
 
+	struct kcs_bmc_driver *drv;
 	struct kcs_bmc_device *dev;
+	struct list_head entry;
+};
+
+struct kcs_bmc_driver_ops {
+	struct kcs_bmc_client *(*add_device)(struct kcs_bmc_driver *drv,
+					     struct kcs_bmc_device *dev);
+	void (*remove_device)(struct kcs_bmc_client *client);
+};
+
+static inline void kcs_bmc_client_init(struct kcs_bmc_client *client,
+				       const struct kcs_bmc_client_ops *ops,
+				       struct kcs_bmc_driver *drv,
+				       struct kcs_bmc_device *dev)
+{
+	client->ops = ops;
+	client->drv = drv;
+	client->dev = dev;
+}
+
+struct kcs_bmc_driver {
+	struct list_head entry;
+
+	const struct kcs_bmc_driver_ops *ops;
 };
 
 void kcs_bmc_register_driver(struct kcs_bmc_driver *drv);

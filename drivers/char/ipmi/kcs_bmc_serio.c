@@ -13,8 +13,6 @@
 #include "kcs_bmc_client.h"
 
 struct kcs_bmc_serio {
-	struct list_head entry;
-
 	struct kcs_bmc_client client;
 	struct serio *port;
 
@@ -64,10 +62,8 @@ static void kcs_bmc_serio_close(struct serio *port)
 	kcs_bmc_disable_device(&priv->client);
 }
 
-static DEFINE_SPINLOCK(kcs_bmc_serio_instances_lock);
-static LIST_HEAD(kcs_bmc_serio_instances);
-
-static int kcs_bmc_serio_add_device(struct kcs_bmc_device *kcs_bmc)
+static struct kcs_bmc_client *
+kcs_bmc_serio_add_device(struct kcs_bmc_driver *drv, struct kcs_bmc_device *dev)
 {
 	struct kcs_bmc_serio *priv;
 	struct serio *port;
@@ -75,12 +71,12 @@ static int kcs_bmc_serio_add_device(struct kcs_bmc_device *kcs_bmc)
 
 	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
 	if (!priv)
-		return -ENOMEM;
+		return ERR_PTR(ENOMEM);
 
 	/* Use kzalloc() as the allocation is cleaned up with kfree() via serio_unregister_port() */
 	port = kzalloc(sizeof(*port), GFP_KERNEL);
 	if (!port) {
-		rc = -ENOMEM;
+		rc = ENOMEM;
 		goto cleanup_priv;
 	}
 
@@ -88,45 +84,28 @@ static int kcs_bmc_serio_add_device(struct kcs_bmc_device *kcs_bmc)
 	port->open = kcs_bmc_serio_open;
 	port->close = kcs_bmc_serio_close;
 	port->port_data = priv;
-	port->dev.parent = kcs_bmc->dev;
+	port->dev.parent = dev->dev;
 
 	spin_lock_init(&priv->lock);
 	priv->port = port;
-	priv->client.dev = kcs_bmc;
-	priv->client.ops = &kcs_bmc_serio_client_ops;
 
-	spin_lock_irq(&kcs_bmc_serio_instances_lock);
-	list_add(&priv->entry, &kcs_bmc_serio_instances);
-	spin_unlock_irq(&kcs_bmc_serio_instances_lock);
+	kcs_bmc_client_init(&priv->client, &kcs_bmc_serio_client_ops, drv, dev);
 
 	serio_register_port(port);
 
-	pr_info("Initialised serio client for channel %d\n", kcs_bmc->channel);
+	pr_info("Initialised serio client for channel %d\n", dev->channel);
 
-	return 0;
+	return &priv->client;
 
 cleanup_priv:
 	kfree(priv);
 
-	return rc;
+	return ERR_PTR(rc);
 }
 
-static void kcs_bmc_serio_remove_device(struct kcs_bmc_device *kcs_bmc)
+static void kcs_bmc_serio_remove_device(struct kcs_bmc_client *client)
 {
-	struct kcs_bmc_serio *priv = NULL, *pos;
-
-	spin_lock_irq(&kcs_bmc_serio_instances_lock);
-	list_for_each_entry(pos, &kcs_bmc_serio_instances, entry) {
-		if (pos->client.dev == kcs_bmc) {
-			priv = pos;
-			list_del(&pos->entry);
-			break;
-		}
-	}
-	spin_unlock_irq(&kcs_bmc_serio_instances_lock);
-
-	if (!priv)
-		return;
+	struct kcs_bmc_serio *priv = client_to_kcs_bmc_serio(client);
 
 	/* kfree()s priv->port via put_device() */
 	serio_unregister_port(priv->port);

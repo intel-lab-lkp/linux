@@ -71,8 +71,6 @@ enum kcs_ipmi_errors {
 #define KCS_ZERO_DATA     0
 
 struct kcs_bmc_ipmi {
-	struct list_head entry;
-
 	struct kcs_bmc_client client;
 
 	spinlock_t lock;
@@ -462,27 +460,24 @@ static const struct file_operations kcs_bmc_ipmi_fops = {
 	.unlocked_ioctl = kcs_bmc_ipmi_ioctl,
 };
 
-static DEFINE_SPINLOCK(kcs_bmc_ipmi_instances_lock);
-static LIST_HEAD(kcs_bmc_ipmi_instances);
-
-static int kcs_bmc_ipmi_add_device(struct kcs_bmc_device *kcs_bmc)
+static struct kcs_bmc_client *
+kcs_bmc_ipmi_add_device(struct kcs_bmc_driver *drv, struct kcs_bmc_device *dev)
 {
 	struct kcs_bmc_ipmi *priv;
 	int rc;
 
 	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
 	if (!priv)
-		return -ENOMEM;
+		return ERR_PTR(ENOMEM);
 
 	spin_lock_init(&priv->lock);
 	mutex_init(&priv->mutex);
 	init_waitqueue_head(&priv->queue);
 
-	priv->client.dev = kcs_bmc;
-	priv->client.ops = &kcs_bmc_ipmi_client_ops;
+	kcs_bmc_client_init(&priv->client, &kcs_bmc_ipmi_client_ops, drv, dev);
 
 	priv->miscdev.minor = MISC_DYNAMIC_MINOR;
-	priv->miscdev.name = kasprintf(GFP_KERNEL, "%s%u", DEVICE_NAME, kcs_bmc->channel);
+	priv->miscdev.name = kasprintf(GFP_KERNEL, "%s%u", DEVICE_NAME, dev->channel);
 	if (!priv->miscdev.name) {
 		rc = -ENOMEM;
 		goto cleanup_priv;
@@ -496,13 +491,9 @@ static int kcs_bmc_ipmi_add_device(struct kcs_bmc_device *kcs_bmc)
 		goto cleanup_miscdev_name;
 	}
 
-	spin_lock_irq(&kcs_bmc_ipmi_instances_lock);
-	list_add(&priv->entry, &kcs_bmc_ipmi_instances);
-	spin_unlock_irq(&kcs_bmc_ipmi_instances_lock);
+	pr_info("Initialised IPMI client for channel %d\n", dev->channel);
 
-	pr_info("Initialised IPMI client for channel %d\n", kcs_bmc->channel);
-
-	return 0;
+	return &priv->client;
 
 cleanup_miscdev_name:
 	kfree(priv->miscdev.name);
@@ -510,25 +501,12 @@ cleanup_miscdev_name:
 cleanup_priv:
 	kfree(priv);
 
-	return rc;
+	return ERR_PTR(rc);
 }
 
-static void kcs_bmc_ipmi_remove_device(struct kcs_bmc_device *kcs_bmc)
+static void kcs_bmc_ipmi_remove_device(struct kcs_bmc_client *client)
 {
-	struct kcs_bmc_ipmi *priv = NULL, *pos;
-
-	spin_lock_irq(&kcs_bmc_ipmi_instances_lock);
-	list_for_each_entry(pos, &kcs_bmc_ipmi_instances, entry) {
-		if (pos->client.dev == kcs_bmc) {
-			priv = pos;
-			list_del(&pos->entry);
-			break;
-		}
-	}
-	spin_unlock_irq(&kcs_bmc_ipmi_instances_lock);
-
-	if (!priv)
-		return;
+	struct kcs_bmc_ipmi *priv = client_to_kcs_bmc_ipmi(client);
 
 	misc_deregister(&priv->miscdev);
 	kcs_bmc_disable_device(&priv->client);
