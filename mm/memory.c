@@ -960,7 +960,7 @@ copy_present_pte(struct vm_area_struct *dst_vma, struct vm_area_struct *src_vma,
 	} else if (page) {
 		folio_get(folio);
 		page_dup_file_rmap(page, false);
-		rss[mm_counter_file(page)]++;
+		rss[mm_counter_file_folio(folio)]++;
 	}
 
 	/*
