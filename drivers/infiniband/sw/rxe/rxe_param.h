@@ -38,7 +38,7 @@ static inline enum ib_mtu eth_mtu_int_to_enum(int mtu)
 /* default/initial rxe device parameter settings */
 enum rxe_device_param {
 	RXE_MAX_MR_SIZE			= -1ull,
-	RXE_PAGE_SIZE_CAP		= 0xfffff000,
+	RXE_PAGE_SIZE_CAP		= PAGE_SIZE,
 	RXE_MAX_QP_WR			= DEFAULT_MAX_VALUE,
 	RXE_DEVICE_CAP_FLAGS		= IB_DEVICE_BAD_PKEY_CNTR
 					| IB_DEVICE_BAD_QKEY_CNTR
