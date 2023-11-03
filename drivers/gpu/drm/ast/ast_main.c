@@ -444,9 +444,11 @@ struct ast_device *ast_device_create(const struct drm_driver *drv,
 	if (ret)
 		return ERR_PTR(ret);
 
-	ast->regs = pcim_iomap(pdev, 1, 0);
-	if (!ast->regs)
-		return ERR_PTR(-EIO);
+	ret = pcim_iomap_regions(pdev, BIT(1), 0);
+	if (ret)
+		return ERR_PTR(ret);
+
+	ast->regs = pcim_iomap_table(pdev)[1];
 
 	/*
 	 * After AST2500, MMIO is enabled by default, and it should be adopted
@@ -461,9 +463,10 @@ struct ast_device *ast_device_create(const struct drm_driver *drv,
 
 	/* "map" IO regs if the above hasn't done so already */
 	if (!ast->ioregs) {
-		ast->ioregs = pcim_iomap(pdev, 2, 0);
-		if (!ast->ioregs)
-			return ERR_PTR(-EIO);
+		ret = pcim_iomap_regions(pdev, BIT(2), 0);
+		if (ret)
+			return ERR_PTR(ret);
+		ast->ioregs = pcim_iomap_table(pdev)[2];
 	}
 
 	if (!ast_is_vga_enabled(dev)) {
