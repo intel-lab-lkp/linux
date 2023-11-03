@@ -9,7 +9,6 @@
 #include <asm/cacheflush.h>
 
 extern struct vdso_data *vdso_data;
-extern bool cntvct_ok;
 
 /*
  * Update the vDSO data page to keep in sync with kernel timekeeping.
