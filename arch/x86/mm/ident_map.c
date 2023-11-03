@@ -31,13 +31,23 @@ static int ident_pud_init(struct x86_mapping_info *info, pud_t *pud_page,
 		if (next > end)
 			next = end;
 
-		if (info->direct_gbpages) {
+		/* if this is already a gbpage, this portion is already mapped */
+		if (pud_large(*pud))
+			continue;
+
+		/*
+		 * To be eligible to use a gbpage:
+		 *   - gbpages must be enabled
+		 *   - addr must be gb aligned (start of region)
+		 *   - next must be gb aligned (end of region)
+		 *   - PUD must be empty (nothing already mapped in this region)
+		 */
+		if (info->direct_gbpages
+		    && !(addr & ~PUD_MASK)
+		    && !(next & ~PUD_MASK)
+		    && !pud_present(*pud)) {
 			pud_t pudval;
 
-			if (pud_present(*pud))
-				continue;
-
-			addr &= PUD_MASK;
 			pudval = __pud((addr - info->offset) | info->page_flag);
 			set_pud(pud, pudval);
 			continue;
