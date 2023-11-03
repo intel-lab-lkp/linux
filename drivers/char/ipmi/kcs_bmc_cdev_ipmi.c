@@ -66,6 +66,10 @@ enum kcs_ipmi_errors {
 	KCS_UNSPECIFIED_ERROR       = 0xFF
 };
 
+#define DEVICE_NAME "ipmi-kcs"
+#define KCS_MSG_BUFSIZ    1000
+#define KCS_ZERO_DATA     0
+
 struct kcs_bmc_ipmi {
 	struct list_head entry;
 
@@ -79,23 +83,17 @@ struct kcs_bmc_ipmi {
 	wait_queue_head_t queue;
 	bool data_in_avail;
 	int  data_in_idx;
-	u8  *data_in;
+	u8   data_in[KCS_MSG_BUFSIZ];
 
 	int  data_out_idx;
 	int  data_out_len;
-	u8  *data_out;
+	u8   data_out[KCS_MSG_BUFSIZ];
 
 	struct mutex mutex;
-	u8 *kbuffer;
+	u8 kbuffer[KCS_MSG_BUFSIZ];
 
 	struct miscdevice miscdev;
 };
-
-#define DEVICE_NAME "ipmi-kcs"
-
-#define KCS_MSG_BUFSIZ    1000
-
-#define KCS_ZERO_DATA     0
 
 /* IPMI 2.0 - Table 9-1, KCS Interface Status Register Bits */
 #define KCS_STATUS_STATE(state) (state << 6)
@@ -478,19 +476,15 @@ static int kcs_bmc_ipmi_add_device(struct kcs_bmc_device *kcs_bmc)
 
 	spin_lock_init(&priv->lock);
 	mutex_init(&priv->mutex);
-
 	init_waitqueue_head(&priv->queue);
 
 	priv->client.dev = kcs_bmc;
 	priv->client.ops = &kcs_bmc_ipmi_client_ops;
-	priv->data_in = devm_kmalloc(kcs_bmc->dev, KCS_MSG_BUFSIZ, GFP_KERNEL);
-	priv->data_out = devm_kmalloc(kcs_bmc->dev, KCS_MSG_BUFSIZ, GFP_KERNEL);
-	priv->kbuffer = devm_kmalloc(kcs_bmc->dev, KCS_MSG_BUFSIZ, GFP_KERNEL);
 
 	priv->miscdev.minor = MISC_DYNAMIC_MINOR;
 	priv->miscdev.name = devm_kasprintf(kcs_bmc->dev, GFP_KERNEL, "%s%u", DEVICE_NAME,
 					   kcs_bmc->channel);
-	if (!priv->data_in || !priv->data_out || !priv->kbuffer || !priv->miscdev.name)
+	if (!priv->miscdev.name)
 		return -EINVAL;
 
 	priv->miscdev.fops = &kcs_bmc_ipmi_fops;
@@ -529,9 +523,6 @@ static void kcs_bmc_ipmi_remove_device(struct kcs_bmc_device *kcs_bmc)
 
 	misc_deregister(&priv->miscdev);
 	kcs_bmc_disable_device(&priv->client);
-	devm_kfree(kcs_bmc->dev, priv->kbuffer);
-	devm_kfree(kcs_bmc->dev, priv->data_out);
-	devm_kfree(kcs_bmc->dev, priv->data_in);
 	devm_kfree(kcs_bmc->dev, priv);
 }
 
