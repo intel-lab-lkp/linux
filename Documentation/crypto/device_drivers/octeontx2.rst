@@ -23,3 +23,7 @@ The ``octeontx2`` driver implements the following driver-specific parameters.
      - u16
      - runtime
      - Configures maximum icb entries that HW can use in RX path.
+   * - ``t106_mode``
+     - u8
+     - runtime
+     - Used to configure CN10KA B0/CN10KB CPT to work as CN10KA A0/A1.
