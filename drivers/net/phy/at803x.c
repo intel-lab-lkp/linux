@@ -176,6 +176,8 @@
 #define AT8030_PHY_ID_MASK			0xffffffef
 
 #define QCA8081_PHY_ID				0x004dd101
+#define QCA8081_PHY_MASK			0xffffff00
+#define QCA8084_PHY_ID				0x004dd180
 
 #define QCA8327_A_PHY_ID			0x004dd033
 #define QCA8327_B_PHY_ID			0x004dd034
@@ -278,6 +280,15 @@
 
 #define QCA8081_PHY_SERDES_MMD1_FIFO_CTRL	0x9072
 #define QCA8081_PHY_FIFO_RSTN			BIT(11)
+
+/* QCA8084 ADC clock edge */
+#define QCA8084_ADC_CLK_SEL			0x8b80
+#define QCA8084_ADC_CLK_SEL_ACLK		GENMASK(7, 4)
+#define QCA8084_ADC_CLK_SEL_ACLK_FALL		0xf
+#define QCA8084_ADC_CLK_SEL_ACLK_RISE		0x0
+
+#define QCA8084_MSE_THRESHOLD			0x800a
+#define QCA8084_MSE_THRESHOLD_2P5G_VAL		0x51c6
 
 MODULE_DESCRIPTION("Qualcomm Atheros AR803x and QCA808X PHY driver");
 MODULE_AUTHOR("Matus Ujhelyi");
@@ -1760,12 +1771,29 @@ static bool qca808x_is_prefer_master(struct phy_device *phydev)
 
 static bool qca808x_has_fast_retrain_or_slave_seed(struct phy_device *phydev)
 {
+	if (phydev->phy_id == QCA8084_PHY_ID)
+		return false;
+
 	return linkmode_test_bit(ETHTOOL_LINK_MODE_2500baseT_Full_BIT, phydev->supported);
 }
 
 static int qca808x_config_init(struct phy_device *phydev)
 {
 	int ret;
+
+	if (phydev->phy_id == QCA8084_PHY_ID) {
+		/* Invert ADC clock edge */
+		ret = at803x_debug_reg_mask(phydev, QCA8084_ADC_CLK_SEL,
+					    QCA8084_ADC_CLK_SEL_ACLK,
+					    FIELD_PREP(QCA8084_ADC_CLK_SEL_ACLK,
+						       QCA8084_ADC_CLK_SEL_ACLK_FALL));
+		if (ret < 0)
+			return ret;
+
+		/* Adjust MSE threshold value to avoid link issue with some link partner */
+		return phy_write_mmd(phydev, MDIO_MMD_PMAPMD,
+				QCA8084_MSE_THRESHOLD, QCA8084_MSE_THRESHOLD_2P5G_VAL);
+	}
 
 	/* Active adc&vga on 802.3az for the link 1000M and 100M */
 	ret = phy_modify_mmd(phydev, MDIO_MMD_PCS, QCA808X_PHY_MMD3_ADDR_CLD_CTRL7,
@@ -1957,6 +1985,11 @@ static int qca808x_cable_test_start(struct phy_device *phydev)
 	phy_write_mmd(phydev, MDIO_MMD_PCS, 0x8078, 0xc050);
 	phy_write_mmd(phydev, MDIO_MMD_PCS, 0x807a, 0xc060);
 	phy_write_mmd(phydev, MDIO_MMD_PCS, 0x807e, 0xb060);
+
+	if (phydev->phy_id == QCA8084_PHY_ID) {
+		phy_write_mmd(phydev, MDIO_MMD_PCS, 0x8075, 0xa060);
+		phy_write_mmd(phydev, MDIO_MMD_PCS, 0x807f, 0x1eb0);
+	}
 
 	return 0;
 }
@@ -2207,8 +2240,9 @@ static struct phy_driver at803x_driver[] = {
 	.resume			= qca83xx_resume,
 }, {
 	/* Qualcomm QCA8081 */
-	PHY_ID_MATCH_EXACT(QCA8081_PHY_ID),
-	.name			= "Qualcomm QCA8081",
+	.phy_id			= QCA8081_PHY_ID,
+	.phy_id_mask		= QCA8081_PHY_MASK,
+	.name			= "Qualcomm QCA808X",
 	.flags			= PHY_POLL_CABLE_TEST,
 	.probe			= at803x_probe,
 	.config_intr		= at803x_config_intr,
@@ -2241,7 +2275,7 @@ static struct mdio_device_id __maybe_unused atheros_tbl[] = {
 	{ PHY_ID_MATCH_EXACT(QCA8327_A_PHY_ID) },
 	{ PHY_ID_MATCH_EXACT(QCA8327_B_PHY_ID) },
 	{ PHY_ID_MATCH_EXACT(QCA9561_PHY_ID) },
-	{ PHY_ID_MATCH_EXACT(QCA8081_PHY_ID) },
+	{ QCA8081_PHY_ID, QCA8081_PHY_MASK},
 	{ }
 };
 
