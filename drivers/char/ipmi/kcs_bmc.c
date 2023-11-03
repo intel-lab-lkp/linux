@@ -174,7 +174,7 @@ void kcs_bmc_remove_device(struct kcs_bmc_device *dev)
 }
 EXPORT_SYMBOL(kcs_bmc_remove_device);
 
-void kcs_bmc_register_driver(struct kcs_bmc_driver *drv)
+int kcs_bmc_register_driver(struct kcs_bmc_driver *drv)
 {
 	struct kcs_bmc_client *client;
 	struct kcs_bmc_device *dev;
@@ -191,6 +191,8 @@ void kcs_bmc_register_driver(struct kcs_bmc_driver *drv)
 		list_add(&client->entry, &kcs_bmc_clients);
 	}
 	mutex_unlock(&kcs_bmc_lock);
+
+	return 0;
 }
 EXPORT_SYMBOL(kcs_bmc_register_driver);
 

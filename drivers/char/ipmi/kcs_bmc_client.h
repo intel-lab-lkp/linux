@@ -5,6 +5,7 @@
 #define __KCS_BMC_CONSUMER_H__
 
 #include <linux/irqreturn.h>
+#include <linux/module.h>
 
 #include "kcs_bmc.h"
 
@@ -44,8 +45,12 @@ struct kcs_bmc_driver {
 	const struct kcs_bmc_driver_ops *ops;
 };
 
-void kcs_bmc_register_driver(struct kcs_bmc_driver *drv);
+int kcs_bmc_register_driver(struct kcs_bmc_driver *drv);
 void kcs_bmc_unregister_driver(struct kcs_bmc_driver *drv);
+
+#define module_kcs_bmc_driver(__kcs_bmc_driver) \
+	module_driver(__kcs_bmc_driver, kcs_bmc_register_driver, \
+		kcs_bmc_unregister_driver)
 
 int kcs_bmc_enable_device(struct kcs_bmc_client *client);
 void kcs_bmc_disable_device(struct kcs_bmc_client *client);

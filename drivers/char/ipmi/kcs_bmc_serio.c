@@ -123,20 +123,7 @@ static struct kcs_bmc_driver kcs_bmc_serio_driver = {
 	.ops = &kcs_bmc_serio_driver_ops,
 };
 
-static int __init kcs_bmc_serio_init(void)
-{
-	kcs_bmc_register_driver(&kcs_bmc_serio_driver);
-
-	return 0;
-}
-module_init(kcs_bmc_serio_init);
-
-static void __exit kcs_bmc_serio_exit(void)
-{
-	kcs_bmc_unregister_driver(&kcs_bmc_serio_driver);
-}
-module_exit(kcs_bmc_serio_exit);
-
+module_kcs_bmc_driver(kcs_bmc_serio_driver);
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("Andrew Jeffery <andrew@aj.id.au>");
 MODULE_DESCRIPTION("Adapter driver for serio access to BMC KCS devices");

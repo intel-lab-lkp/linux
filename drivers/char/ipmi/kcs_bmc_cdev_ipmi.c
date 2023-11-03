@@ -523,20 +523,7 @@ static struct kcs_bmc_driver kcs_bmc_ipmi_driver = {
 	.ops = &kcs_bmc_ipmi_driver_ops,
 };
 
-static int __init kcs_bmc_ipmi_init(void)
-{
-	kcs_bmc_register_driver(&kcs_bmc_ipmi_driver);
-
-	return 0;
-}
-module_init(kcs_bmc_ipmi_init);
-
-static void __exit kcs_bmc_ipmi_exit(void)
-{
-	kcs_bmc_unregister_driver(&kcs_bmc_ipmi_driver);
-}
-module_exit(kcs_bmc_ipmi_exit);
-
+module_kcs_bmc_driver(kcs_bmc_ipmi_driver);
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("Haiyue Wang <haiyue.wang@linux.intel.com>");
 MODULE_AUTHOR("Andrew Jeffery <andrew@aj.id.au>");
