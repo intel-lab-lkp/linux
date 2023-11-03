@@ -956,13 +956,13 @@ enum xhci_overhead_type {
 };
 
 struct xhci_interval_bw {
-	unsigned int		num_packets;
 	/* Sorted by max packet size.
 	 * Head of the list is the greatest max packet size.
 	 */
 	struct list_head	endpoints;
 	/* How many endpoints of each speed are present. */
 	unsigned int		overhead[3];
+	unsigned int		num_packets;
 };
 
 #define	XHCI_MAX_INTERVAL	16
