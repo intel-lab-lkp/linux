@@ -48,10 +48,6 @@ static inline struct xbitmap_node *
 xbitmap_tree_iter_first(struct rb_root_cached *root, uint64_t start,
 			uint64_t last);
 
-static inline struct xbitmap_node *
-xbitmap_tree_iter_next(struct xbitmap_node *node, uint64_t start,
-		       uint64_t last);
-
 INTERVAL_TREE_DEFINE(struct xbitmap_node, bn_rbnode, uint64_t,
 		__bn_subtree_last, START, LAST, static inline, xbitmap_tree)
 
