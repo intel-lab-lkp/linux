@@ -936,6 +936,9 @@ endif
 # `rustc`'s `-Zfunction-sections` applies to data too (as of 1.59.0).
 ifdef CONFIG_LD_DEAD_CODE_DATA_ELIMINATION
 KBUILD_CFLAGS_KERNEL += -ffunction-sections -fdata-sections
+ifdef CONFIG_SECTION_SHF_GROUP_SUPPORT
+KBUILD_CFLAGS_KERNEL += -finhibit-size-directive
+endif
 KBUILD_RUSTFLAGS_KERNEL += -Zfunction-sections=y
 LDFLAGS_vmlinux += --gc-sections
 ifdef CONFIG_LD_DEAD_CODE_DATA_ELIMINATION_DEBUG
