@@ -59,8 +59,6 @@ static void rxe_mr_init(int access, struct rxe_mr *mr)
 
 	mr->access = access;
 	mr->ibmr.page_size = PAGE_SIZE;
-	mr->page_mask = PAGE_MASK;
-	mr->page_shift = PAGE_SHIFT;
 	mr->state = RXE_MR_STATE_INVALID;
 }
 
@@ -230,8 +228,6 @@ int rxe_map_mr_sg(struct ib_mr *ibmr, struct scatterlist *sgl,
 	}
 
 	mr->nbuf = 0;
-	mr->page_shift = PAGE_SHIFT;
-	mr->page_mask = PAGE_MASK;
 
 	return ib_sg_to_pages(ibmr, sgl, sg_nents, sg_offset, rxe_set_page);
 }
