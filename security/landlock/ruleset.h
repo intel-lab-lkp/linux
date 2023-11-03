@@ -30,7 +30,7 @@
 	LANDLOCK_ACCESS_FS_REFER)
 /* clang-format on */
 
-typedef u16 access_mask_t;
+typedef u32 access_mask_t;
 /* Makes sure all filesystem access rights can be stored. */
 static_assert(BITS_PER_TYPE(access_mask_t) >= LANDLOCK_NUM_ACCESS_FS);
 /* Makes sure all network access rights can be stored. */
@@ -256,6 +256,54 @@ static inline void landlock_get_ruleset(struct landlock_ruleset *const ruleset)
 		refcount_inc(&ruleset->usage);
 }
 
+/**
+ * expand_ioctl - return the dst flags from either the src flag or the
+ * LANDLOCK_ACCESS_FS_IOCTL flag, depending on whether the
+ * LANDLOCK_ACCESS_FS_IOCTL and src access rights are handled or not.
+ *
+ * @handled: Handled access rights
+ * @access:  The access mask to copy values from
+ * @src:     A single access right to copy from in @access.
+ * @dst:     One or more access rights to copy to
+ *
+ * Returns:
+ * @dst, or 0
+ */
+static inline access_mask_t expand_ioctl(access_mask_t handled,
+					 access_mask_t access,
+					 access_mask_t src, access_mask_t dst)
+{
+	if (!(handled & LANDLOCK_ACCESS_FS_IOCTL))
+		return 0;
+
+	access_mask_t copy_from = (handled & src) ? src :
+						    LANDLOCK_ACCESS_FS_IOCTL;
+	if (access & copy_from)
+		return dst;
+	return 0;
+}
+
+/**
+ * Returns @access with the synthetic IOCTL group flags enabled if necessary.
+ *
+ * @handled: Handled FS access rights.
+ * @access:  FS access rights to expand.
+ *
+ * Returns:
+ * @access expanded by the necessary flags for the synthetic IOCTL access rights.
+ */
+static inline access_mask_t expand_all_ioctl(access_mask_t handled,
+					     access_mask_t access)
+{
+	return access |
+	       expand_ioctl(handled, access, LANDLOCK_ACCESS_FS_WRITE_FILE,
+			    IOCTL_CMD_G1 | IOCTL_CMD_G2 | IOCTL_CMD_G4) |
+	       expand_ioctl(handled, access, LANDLOCK_ACCESS_FS_READ_FILE,
+			    IOCTL_CMD_G1 | IOCTL_CMD_G2 | IOCTL_CMD_G3) |
+	       expand_ioctl(handled, access, LANDLOCK_ACCESS_FS_READ_DIR,
+			    IOCTL_CMD_G1);
+}
+
 static inline void
 landlock_add_fs_access_mask(struct landlock_ruleset *const ruleset,
 			    const access_mask_t fs_access_mask,
@@ -265,6 +313,9 @@ landlock_add_fs_access_mask(struct landlock_ruleset *const ruleset,
 
 	/* Should already be checked in sys_landlock_create_ruleset(). */
 	WARN_ON_ONCE(fs_access_mask != fs_mask);
+
+	fs_mask = expand_all_ioctl(fs_mask, fs_mask);
+
 	ruleset->access_masks[layer_level] |=
 		(fs_mask << LANDLOCK_SHIFT_ACCESS_FS);
 }
