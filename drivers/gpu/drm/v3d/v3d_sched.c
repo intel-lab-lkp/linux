@@ -190,20 +190,22 @@ v3d_tfu_job_run(struct drm_sched_job *sched_job)
 
 	trace_v3d_submit_tfu(dev, to_v3d_fence(fence)->seqno);
 
-	V3D_WRITE(V3D_TFU_IIA, job->args.iia);
-	V3D_WRITE(V3D_TFU_IIS, job->args.iis);
-	V3D_WRITE(V3D_TFU_ICA, job->args.ica);
-	V3D_WRITE(V3D_TFU_IUA, job->args.iua);
-	V3D_WRITE(V3D_TFU_IOA, job->args.ioa);
-	V3D_WRITE(V3D_TFU_IOS, job->args.ios);
-	V3D_WRITE(V3D_TFU_COEF0, job->args.coef[0]);
-	if (job->args.coef[0] & V3D_TFU_COEF0_USECOEF) {
-		V3D_WRITE(V3D_TFU_COEF1, job->args.coef[1]);
-		V3D_WRITE(V3D_TFU_COEF2, job->args.coef[2]);
-		V3D_WRITE(V3D_TFU_COEF3, job->args.coef[3]);
+	V3D_WRITE(V3D_TFU_IIA(v3d->ver), job->args.iia);
+	V3D_WRITE(V3D_TFU_IIS(v3d->ver), job->args.iis);
+	V3D_WRITE(V3D_TFU_ICA(v3d->ver), job->args.ica);
+	V3D_WRITE(V3D_TFU_IUA(v3d->ver), job->args.iua);
+	V3D_WRITE(V3D_TFU_IOA(v3d->ver), job->args.ioa);
+	if (v3d->ver >= 71)
+		V3D_WRITE(V3D_V7_TFU_IOC, job->args.v71.ioc);
+	V3D_WRITE(V3D_TFU_IOS(v3d->ver), job->args.ios);
+	V3D_WRITE(V3D_TFU_COEF0(v3d->ver), job->args.coef[0]);
+	if (v3d->ver >= 71 || (job->args.coef[0] & V3D_TFU_COEF0_USECOEF)) {
+		V3D_WRITE(V3D_TFU_COEF1(v3d->ver), job->args.coef[1]);
+		V3D_WRITE(V3D_TFU_COEF2(v3d->ver), job->args.coef[2]);
+		V3D_WRITE(V3D_TFU_COEF3(v3d->ver), job->args.coef[3]);
 	}
 	/* ICFG kicks off the job. */
-	V3D_WRITE(V3D_TFU_ICFG, job->args.icfg | V3D_TFU_ICFG_IOC);
+	V3D_WRITE(V3D_TFU_ICFG(v3d->ver), job->args.icfg | V3D_TFU_ICFG_IOC);
 
 	return fence;
 }
@@ -215,7 +217,7 @@ v3d_csd_job_run(struct drm_sched_job *sched_job)
 	struct v3d_dev *v3d = job->base.v3d;
 	struct drm_device *dev = &v3d->drm;
 	struct dma_fence *fence;
-	int i;
+	int i, csd_cfg0_reg, csd_cfg_reg_count;
 
 	v3d->csd_job = job;
 
@@ -233,10 +235,12 @@ v3d_csd_job_run(struct drm_sched_job *sched_job)
 
 	v3d_switch_perfmon(v3d, &job->base);
 
-	for (i = 1; i <= 6; i++)
-		V3D_CORE_WRITE(0, V3D_CSD_QUEUED_CFG0 + 4 * i, job->args.cfg[i]);
+	csd_cfg0_reg = V3D_CSD_QUEUED_CFG0(v3d->ver);
+	csd_cfg_reg_count = v3d->ver < 71 ? 6 : 7;
+	for (i = 1; i <= csd_cfg_reg_count; i++)
+		V3D_CORE_WRITE(0, csd_cfg0_reg + 4 * i, job->args.cfg[i]);
 	/* CFG0 write kicks off the job. */
-	V3D_CORE_WRITE(0, V3D_CSD_QUEUED_CFG0, job->args.cfg[0]);
+	V3D_CORE_WRITE(0, csd_cfg0_reg, job->args.cfg[0]);
 
 	return fence;
 }
@@ -336,7 +340,7 @@ v3d_csd_job_timedout(struct drm_sched_job *sched_job)
 {
 	struct v3d_csd_job *job = to_csd_job(sched_job);
 	struct v3d_dev *v3d = job->base.v3d;
-	u32 batches = V3D_CORE_READ(0, V3D_CSD_CURRENT_CFG4);
+	u32 batches = V3D_CORE_READ(0, V3D_CSD_CURRENT_CFG4(v3d->ver));
 
 	/* If we've made progress, skip reset and let the timer get
 	 * rearmed.
@@ -388,7 +392,7 @@ v3d_sched_init(struct v3d_dev *v3d)
 	int ret;
 
 	ret = drm_sched_init(&v3d->queue[V3D_BIN].sched,
-			     &v3d_bin_sched_ops,
+			     &v3d_bin_sched_ops, NULL,
 			     DRM_SCHED_PRIORITY_COUNT,
 			     hw_jobs_limit, job_hang_limit,
 			     msecs_to_jiffies(hang_limit_ms), NULL,
@@ -397,7 +401,7 @@ v3d_sched_init(struct v3d_dev *v3d)
 		return ret;
 
 	ret = drm_sched_init(&v3d->queue[V3D_RENDER].sched,
-			     &v3d_render_sched_ops,
+			     &v3d_render_sched_ops, NULL,
 			     DRM_SCHED_PRIORITY_COUNT,
 			     hw_jobs_limit, job_hang_limit,
 			     msecs_to_jiffies(hang_limit_ms), NULL,
@@ -406,7 +410,7 @@ v3d_sched_init(struct v3d_dev *v3d)
 		goto fail;
 
 	ret = drm_sched_init(&v3d->queue[V3D_TFU].sched,
-			     &v3d_tfu_sched_ops,
+			     &v3d_tfu_sched_ops, NULL,
 			     DRM_SCHED_PRIORITY_COUNT,
 			     hw_jobs_limit, job_hang_limit,
 			     msecs_to_jiffies(hang_limit_ms), NULL,
@@ -416,7 +420,7 @@ v3d_sched_init(struct v3d_dev *v3d)
 
 	if (v3d_has_csd(v3d)) {
 		ret = drm_sched_init(&v3d->queue[V3D_CSD].sched,
-				     &v3d_csd_sched_ops,
+				     &v3d_csd_sched_ops, NULL,
 				     DRM_SCHED_PRIORITY_COUNT,
 				     hw_jobs_limit, job_hang_limit,
 				     msecs_to_jiffies(hang_limit_ms), NULL,
@@ -425,7 +429,7 @@ v3d_sched_init(struct v3d_dev *v3d)
 			goto fail;
 
 		ret = drm_sched_init(&v3d->queue[V3D_CACHE_CLEAN].sched,
-				     &v3d_cache_clean_sched_ops,
+				     &v3d_cache_clean_sched_ops, NULL,
 				     DRM_SCHED_PRIORITY_COUNT,
 				     hw_jobs_limit, job_hang_limit,
 				     msecs_to_jiffies(hang_limit_ms), NULL,
