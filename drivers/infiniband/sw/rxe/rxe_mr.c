@@ -193,9 +193,8 @@ err1:
 	return err;
 }
 
-static int rxe_set_page(struct ib_mr *ibmr, u64 dma_addr)
+static int rxe_store_page(struct rxe_mr *mr, u64 dma_addr)
 {
-	struct rxe_mr *mr = to_rmr(ibmr);
 	struct page *page = ib_virt_dma_to_page(dma_addr);
 	bool persistent = !!(mr->access & IB_ACCESS_FLUSH_PERSISTENT);
 	int err;
@@ -216,20 +215,48 @@ static int rxe_set_page(struct ib_mr *ibmr, u64 dma_addr)
 	return 0;
 }
 
+static int rxe_set_page(struct ib_mr *base_mr, u64 buf_addr)
+{
+	return 0;
+}
+
 int rxe_map_mr_sg(struct ib_mr *ibmr, struct scatterlist *sgl,
-		  int sg_nents, unsigned int *sg_offset)
+		  int sg_nents, unsigned int *sg_offset_p)
 {
 	struct rxe_mr *mr = to_rmr(ibmr);
+	struct scatterlist *sg;
+	unsigned int sg_offset = sg_offset_p ? *sg_offset_p : 0;
+	int i;
 
-	if (ibmr->page_size != PAGE_SIZE) {
-		rxe_err_mr(mr, "Unsupport mr page size %x, expect PAGE_SIZE(%lx)\n",
+	if (!IS_ALIGNED(ibmr->page_size, PAGE_SIZE)) {
+		rxe_err_mr(mr, "Misaligned page size %x, expect PAGE_SIZE(%lx) aligned\n",
 			   ibmr->page_size, PAGE_SIZE);
 		return -EINVAL;
 	}
 
 	mr->nbuf = 0;
 
-	return ib_sg_to_pages(ibmr, sgl, sg_nents, sg_offset, rxe_set_page);
+	for_each_sg(sgl, sg, sg_nents, i) {
+		u64 dma_addr = sg_dma_address(sg) + sg_offset;
+		unsigned int dma_len = sg_dma_len(sg) - sg_offset;
+		u64 end_dma_addr = dma_addr + dma_len;
+		u64 page_addr = dma_addr & PAGE_MASK;
+
+		if (sg_dma_len(sg) == 0) {
+			rxe_dbg_mr(mr, "empty SGE\n");
+			return -EINVAL;
+		}
+		do {
+			int ret = rxe_store_page(mr, page_addr);
+			if (ret)
+				return ret;
+
+			page_addr += PAGE_SIZE;
+		} while (page_addr < end_dma_addr);
+		sg_offset = 0;
+	}
+
+	return ib_sg_to_pages(ibmr, sgl, sg_nents, sg_offset_p, rxe_set_page);
 }
 
 static int rxe_mr_copy_xarray(struct rxe_mr *mr, u64 iova, void *addr,
