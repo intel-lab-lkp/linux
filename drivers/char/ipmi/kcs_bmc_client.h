@@ -10,7 +10,7 @@
 
 struct kcs_bmc_driver_ops {
 	int (*add_device)(struct kcs_bmc_device *kcs_bmc);
-	int (*remove_device)(struct kcs_bmc_device *kcs_bmc);
+	void (*remove_device)(struct kcs_bmc_device *kcs_bmc);
 };
 
 struct kcs_bmc_driver {

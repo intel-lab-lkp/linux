@@ -135,15 +135,11 @@ EXPORT_SYMBOL(kcs_bmc_add_device);
 void kcs_bmc_remove_device(struct kcs_bmc_device *kcs_bmc)
 {
 	struct kcs_bmc_driver *drv;
-	int rc;
 
 	mutex_lock(&kcs_bmc_lock);
 	list_del(&kcs_bmc->entry);
 	list_for_each_entry(drv, &kcs_bmc_drivers, entry) {
-		rc = drv->ops->remove_device(kcs_bmc);
-		if (rc)
-			dev_err(kcs_bmc->dev, "Failed to remove chardev for KCS channel %d: %d",
-				kcs_bmc->channel, rc);
+		drv->ops->remove_device(kcs_bmc);
 	}
 	mutex_unlock(&kcs_bmc_lock);
 }
@@ -169,15 +165,11 @@ EXPORT_SYMBOL(kcs_bmc_register_driver);
 void kcs_bmc_unregister_driver(struct kcs_bmc_driver *drv)
 {
 	struct kcs_bmc_device *kcs_bmc;
-	int rc;
 
 	mutex_lock(&kcs_bmc_lock);
 	list_del(&drv->entry);
 	list_for_each_entry(kcs_bmc, &kcs_bmc_devices, entry) {
-		rc = drv->ops->remove_device(kcs_bmc);
-		if (rc)
-			dev_err(kcs_bmc->dev, "Failed to remove driver for KCS channel %d: %d",
-				kcs_bmc->channel, rc);
+		drv->ops->remove_device(kcs_bmc);
 	}
 	mutex_unlock(&kcs_bmc_lock);
 }

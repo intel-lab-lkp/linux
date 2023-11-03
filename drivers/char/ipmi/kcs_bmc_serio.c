@@ -103,7 +103,7 @@ static int kcs_bmc_serio_add_device(struct kcs_bmc_device *kcs_bmc)
 	return 0;
 }
 
-static int kcs_bmc_serio_remove_device(struct kcs_bmc_device *kcs_bmc)
+static void kcs_bmc_serio_remove_device(struct kcs_bmc_device *kcs_bmc)
 {
 	struct kcs_bmc_serio *priv = NULL, *pos;
 
@@ -118,7 +118,7 @@ static int kcs_bmc_serio_remove_device(struct kcs_bmc_device *kcs_bmc)
 	spin_unlock_irq(&kcs_bmc_serio_instances_lock);
 
 	if (!priv)
-		return -ENODEV;
+		return;
 
 	/* kfree()s priv->port via put_device() */
 	serio_unregister_port(priv->port);
@@ -127,8 +127,6 @@ static int kcs_bmc_serio_remove_device(struct kcs_bmc_device *kcs_bmc)
 	kcs_bmc_disable_device(kcs_bmc, &priv->client);
 
 	devm_kfree(priv->client.dev->dev, priv);
-
-	return 0;
 }
 
 static const struct kcs_bmc_driver_ops kcs_bmc_serio_driver_ops = {
