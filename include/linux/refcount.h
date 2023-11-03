@@ -366,4 +366,19 @@ extern __must_check bool refcount_dec_and_lock(refcount_t *r, spinlock_t *lock) 
 extern __must_check bool refcount_dec_and_lock_irqsave(refcount_t *r,
 						       spinlock_t *lock,
 						       unsigned long *flags) __cond_acquires(lock);
+extern bool refcount_dec_and_lockptr(refcount_t *r, void (*lock)(void *lockptr),
+				     void (*unlock)(void *lockptr),  void *lockptr) __cond_acquires(lockptr);
+
+extern void lockptr_mutex_lock(void *lockptr) __acquires(lockptr);
+extern void lockptr_mutex_unlock(void *lockptr) __releases(lockptr);
+extern void lockptr_spin_lock(void *lockptr) __acquires(lockptr);
+extern void lockptr_spin_unlock(void *lockptr) __releases(lockptr);
+
+struct lockptr_irqsave_data {
+	void *lockptr;
+	unsigned long *flags;
+};
+extern void lockptr_irqsave(void *lockptr) __acquires(lockptr);
+extern void lockptr_irqsave(void *lockptr) __releases(lockptr);
+
 #endif /* _LINUX_REFCOUNT_H */

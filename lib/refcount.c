@@ -94,6 +94,34 @@ bool refcount_dec_not_one(refcount_t *r)
 }
 EXPORT_SYMBOL(refcount_dec_not_one);
 
+bool refcount_dec_and_lockptr(refcount_t *r, void (*lock)(void *lockptr),
+			      void (*unlock)(void *lockptr),  void *lockptr)
+{
+	if (refcount_dec_not_one(r))
+		return false;
+
+	lock(lockptr);
+	if (!refcount_dec_and_test(r)) {
+		unlock(lockptr);
+		return false;
+	}
+
+	return true;
+}
+EXPORT_SYMBOL(refcount_dec_and_lockptr);
+
+void lockptr_mutex_lock(void *lockptr)
+{
+	mutex_lock(lockptr);
+}
+EXPORT_SYMBOL(lockptr_mutex_lock);
+
+void lockptr_mutex_unlock(void *lockptr)
+{
+	mutex_unlock(lockptr);
+}
+EXPORT_SYMBOL(lockptr_mutex_unlock);
+
 /**
  * refcount_dec_and_mutex_lock - return holding mutex if able to decrement
  *                               refcount to 0
@@ -112,18 +140,22 @@ EXPORT_SYMBOL(refcount_dec_not_one);
  */
 bool refcount_dec_and_mutex_lock(refcount_t *r, struct mutex *lock)
 {
-	if (refcount_dec_not_one(r))
-		return false;
-
-	mutex_lock(lock);
-	if (!refcount_dec_and_test(r)) {
-		mutex_unlock(lock);
-		return false;
-	}
-
-	return true;
+	return refcount_dec_and_lockptr(r, lockptr_mutex_lock,
+					lockptr_mutex_unlock, lock);
 }
 EXPORT_SYMBOL(refcount_dec_and_mutex_lock);
+
+void lockptr_spin_lock(void *lockptr)
+{
+	spin_lock(lockptr);
+}
+EXPORT_SYMBOL(lockptr_spin_lock);
+
+void lockptr_spin_unlock(void *lockptr)
+{
+	spin_unlock(lockptr);
+}
+EXPORT_SYMBOL(lockptr_spin_unlock);
 
 /**
  * refcount_dec_and_lock - return holding spinlock if able to decrement
@@ -143,18 +175,26 @@ EXPORT_SYMBOL(refcount_dec_and_mutex_lock);
  */
 bool refcount_dec_and_lock(refcount_t *r, spinlock_t *lock)
 {
-	if (refcount_dec_not_one(r))
-		return false;
-
-	spin_lock(lock);
-	if (!refcount_dec_and_test(r)) {
-		spin_unlock(lock);
-		return false;
-	}
-
-	return true;
+	return refcount_dec_and_lockptr(r, lockptr_spin_lock,
+					lockptr_spin_unlock, lock);
 }
 EXPORT_SYMBOL(refcount_dec_and_lock);
+
+void lockptr_lock_irqsave(void *lockptr)
+{
+	struct lockptr_irqsave_data *d = lockptr;
+
+	spin_lock_irqsave(d->lockptr, *d->flags);
+}
+EXPORT_SYMBOL(lockptr_lock_irqsave);
+
+void lockptr_unlock_irqsave(void *lockptr)
+{
+	struct lockptr_irqsave_data *d = lockptr;
+
+	spin_unlock_irqrestore(d->lockptr, *d->flags);
+}
+EXPORT_SYMBOL(lockptr_unlock_irqsave);
 
 /**
  * refcount_dec_and_lock_irqsave - return holding spinlock with disabled
@@ -172,15 +212,13 @@ EXPORT_SYMBOL(refcount_dec_and_lock);
 bool refcount_dec_and_lock_irqsave(refcount_t *r, spinlock_t *lock,
 				   unsigned long *flags)
 {
-	if (refcount_dec_not_one(r))
-		return false;
+	struct lockptr_irqsave_data d = {
+		.lockptr = lock,
+		.flags = flags,
+	};
 
-	spin_lock_irqsave(lock, *flags);
-	if (!refcount_dec_and_test(r)) {
-		spin_unlock_irqrestore(lock, *flags);
-		return false;
-	}
-
-	return true;
+	return refcount_dec_and_lockptr(r, lockptr_lock_irqsave,
+					lockptr_unlock_irqsave, &d);
 }
 EXPORT_SYMBOL(refcount_dec_and_lock_irqsave);
+
