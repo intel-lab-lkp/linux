@@ -148,7 +148,7 @@ static void __rxe_insert_mcg(struct rxe_mcg *mcg)
 			link = &(*link)->rb_right;
 	}
 
-	rb_link_node(&mcg->node, node, link);
+	rb_link_node_rcu(&mcg->node, node, link);
 	rb_insert_color(&mcg->node, tree);
 }
 
@@ -164,14 +164,13 @@ static void __rxe_remove_mcg(struct rxe_mcg *mcg)
 }
 
 /**
- * __rxe_lookup_mcg - lookup mcg in rxe->mcg_tree while holding lock
+ * rxe_lookup_mcg - lookup mcg in rxe->mcg_tree while holding lock
  * @rxe: rxe device object
  * @mgid: multicast IP address
  *
- * Context: caller must hold rxe->mcg_lock
  * Returns: mcg on success and takes a ref to mcg else NULL
  */
-static struct rxe_mcg *__rxe_lookup_mcg(struct rxe_dev *rxe,
+struct rxe_mcg *rxe_lookup_mcg(struct rxe_dev *rxe,
 					union ib_gid *mgid)
 {
 	struct rb_root *tree = &rxe->mcg_tree;
@@ -179,7 +178,8 @@ static struct rxe_mcg *__rxe_lookup_mcg(struct rxe_dev *rxe,
 	struct rb_node *node;
 	int cmp;
 
-	node = tree->rb_node;
+	rcu_read_lock();
+	node = rcu_dereference_raw(tree->rb_node);
 
 	while (node) {
 		mcg = rb_entry(node, struct rxe_mcg, node);
@@ -187,12 +187,13 @@ static struct rxe_mcg *__rxe_lookup_mcg(struct rxe_dev *rxe,
 		cmp = memcmp(&mcg->mgid, mgid, sizeof(*mgid));
 
 		if (cmp > 0)
-			node = node->rb_left;
+			node = rcu_dereference_raw(node->rb_left);
 		else if (cmp < 0)
-			node = node->rb_right;
+			node = rcu_dereference_raw(node->rb_right);
 		else
 			break;
 	}
+	rcu_read_unlock();
 
 	if (node) {
 		kref_get(&mcg->ref_cnt);
@@ -200,24 +201,6 @@ static struct rxe_mcg *__rxe_lookup_mcg(struct rxe_dev *rxe,
 	}
 
 	return NULL;
-}
-
-/**
- * rxe_lookup_mcg - lookup up mcg in red-back tree
- * @rxe: rxe device object
- * @mgid: multicast IP address
- *
- * Returns: mcg if found else NULL
- */
-struct rxe_mcg *rxe_lookup_mcg(struct rxe_dev *rxe, union ib_gid *mgid)
-{
-	struct rxe_mcg *mcg;
-
-	spin_lock_bh(&rxe->mcg_lock);
-	mcg = __rxe_lookup_mcg(rxe, mgid);
-	spin_unlock_bh(&rxe->mcg_lock);
-
-	return mcg;
 }
 
 /**
@@ -313,7 +296,7 @@ void rxe_cleanup_mcg(struct kref *kref)
 {
 	struct rxe_mcg *mcg = container_of(kref, typeof(*mcg), ref_cnt);
 
-	kfree(mcg);
+	kfree_rcu(mcg, rcu);
 }
 
 /**
