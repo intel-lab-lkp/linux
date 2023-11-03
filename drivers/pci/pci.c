@@ -3032,7 +3032,7 @@ bool pci_bridge_d3_possible(struct pci_dev *bridge)
 			return true;
 
 		/* Even the oldest 2010 Thunderbolt controller supports D3. */
-		if (bridge->is_thunderbolt)
+		if (bridge->is_tunneled)
 			return true;
 
 		/* Platform might know better if the bridge supports D3 */
