@@ -12,6 +12,7 @@ obj-$(CONFIG_VHOST_RING) += vringh.o
 
 obj-$(CONFIG_VHOST_VDPA) += vhost_vdpa.o
 vhost_vdpa-y := vdpa.o
+vhost_vdpa-$(CONFIG_IOMMUFD) += iommufd.o
 
 obj-$(CONFIG_VHOST)	+= vhost.o
 
