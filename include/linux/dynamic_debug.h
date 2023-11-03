@@ -32,6 +32,8 @@ struct _ddebug {
 #define CLS_BITS 6
 	unsigned int class_id:CLS_BITS;
 #define _DPRINTK_CLASS_DFLT		((1 << CLS_BITS) - 1)
+	unsigned int unused:8;
+
 	/*
 	 * The flags field controls the behaviour at the callsite.
 	 * The bits here are changed dynamically when the user
@@ -58,7 +60,10 @@ struct _ddebug {
 #else
 #define _DPRINTK_FLAGS_DEFAULT 0
 #endif
-	unsigned int flags:8;
+	struct {
+		unsigned int flags:8;
+		unsigned unused:24;
+	} ctrl;
 } __attribute__((aligned(8)));
 
 enum class_map_type {
@@ -171,7 +176,7 @@ void __dynamic_ibdev_dbg(struct _ddebug *descriptor,
 		.filename = __FILE__,				\
 		.format = (fmt),				\
 		.lineno = __LINE__,				\
-		.flags = _DPRINTK_FLAGS_DEFAULT,		\
+		.ctrl = { .flags = _DPRINTK_FLAGS_DEFAULT },	\
 		.class_id = cls,				\
 		_DPRINTK_KEY_INIT				\
 	};							\
