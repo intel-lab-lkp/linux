@@ -3827,6 +3827,17 @@ DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_CACTUS_RIDGE_2C
 			quirk_thunderbolt_command_complete);
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_PORT_RIDGE,
 			quirk_thunderbolt_command_complete);
+
+/*
+ * PCIe root port associated with the integrated controller is used for PCIe
+ * tunneling but can't be detected using ACPI.
+ */
+static void quirk_thunderbolt_tunneling(struct pci_dev *pdev)
+{
+	pdev->is_tunneled = 1;
+}
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x9a23,
+			quirk_thunderbolt_tunneling);
 #ifdef CONFIG_ACPI
 /*
  * Apple: Shutdown Cactus Ridge Thunderbolt controller.
