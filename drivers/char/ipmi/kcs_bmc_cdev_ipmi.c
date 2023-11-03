@@ -470,7 +470,7 @@ static int kcs_bmc_ipmi_add_device(struct kcs_bmc_device *kcs_bmc)
 	struct kcs_bmc_ipmi *priv;
 	int rc;
 
-	priv = devm_kzalloc(kcs_bmc->dev, sizeof(*priv), GFP_KERNEL);
+	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
 
@@ -482,26 +482,35 @@ static int kcs_bmc_ipmi_add_device(struct kcs_bmc_device *kcs_bmc)
 	priv->client.ops = &kcs_bmc_ipmi_client_ops;
 
 	priv->miscdev.minor = MISC_DYNAMIC_MINOR;
-	priv->miscdev.name = devm_kasprintf(kcs_bmc->dev, GFP_KERNEL, "%s%u", DEVICE_NAME,
-					   kcs_bmc->channel);
-	if (!priv->miscdev.name)
-		return -EINVAL;
+	priv->miscdev.name = kasprintf(GFP_KERNEL, "%s%u", DEVICE_NAME, kcs_bmc->channel);
+	if (!priv->miscdev.name) {
+		rc = -ENOMEM;
+		goto cleanup_priv;
+	}
 
 	priv->miscdev.fops = &kcs_bmc_ipmi_fops;
 
 	rc = misc_register(&priv->miscdev);
 	if (rc) {
-		dev_err(kcs_bmc->dev, "Unable to register device: %d\n", rc);
-		return rc;
+		pr_err("Unable to register device: %d\n", rc);
+		goto cleanup_miscdev_name;
 	}
 
 	spin_lock_irq(&kcs_bmc_ipmi_instances_lock);
 	list_add(&priv->entry, &kcs_bmc_ipmi_instances);
 	spin_unlock_irq(&kcs_bmc_ipmi_instances_lock);
 
-	dev_info(kcs_bmc->dev, "Initialised IPMI client for channel %d", kcs_bmc->channel);
+	pr_info("Initialised IPMI client for channel %d\n", kcs_bmc->channel);
 
 	return 0;
+
+cleanup_miscdev_name:
+	kfree(priv->miscdev.name);
+
+cleanup_priv:
+	kfree(priv);
+
+	return rc;
 }
 
 static void kcs_bmc_ipmi_remove_device(struct kcs_bmc_device *kcs_bmc)
@@ -523,7 +532,8 @@ static void kcs_bmc_ipmi_remove_device(struct kcs_bmc_device *kcs_bmc)
 
 	misc_deregister(&priv->miscdev);
 	kcs_bmc_disable_device(&priv->client);
-	devm_kfree(kcs_bmc->dev, priv);
+	kfree(priv->miscdev.name);
+	kfree(priv);
 }
 
 static const struct kcs_bmc_driver_ops kcs_bmc_ipmi_driver_ops = {

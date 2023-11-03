@@ -71,15 +71,18 @@ static int kcs_bmc_serio_add_device(struct kcs_bmc_device *kcs_bmc)
 {
 	struct kcs_bmc_serio *priv;
 	struct serio *port;
+	int rc;
 
-	priv = devm_kzalloc(kcs_bmc->dev, sizeof(*priv), GFP_KERNEL);
+	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
 
 	/* Use kzalloc() as the allocation is cleaned up with kfree() via serio_unregister_port() */
 	port = kzalloc(sizeof(*port), GFP_KERNEL);
-	if (!port)
-		return -ENOMEM;
+	if (!port) {
+		rc = -ENOMEM;
+		goto cleanup_priv;
+	}
 
 	port->id.type = SERIO_8042;
 	port->open = kcs_bmc_serio_open;
@@ -98,9 +101,14 @@ static int kcs_bmc_serio_add_device(struct kcs_bmc_device *kcs_bmc)
 
 	serio_register_port(port);
 
-	dev_info(kcs_bmc->dev, "Initialised serio client for channel %d", kcs_bmc->channel);
+	pr_info("Initialised serio client for channel %d\n", kcs_bmc->channel);
 
 	return 0;
+
+cleanup_priv:
+	kfree(priv);
+
+	return rc;
 }
 
 static void kcs_bmc_serio_remove_device(struct kcs_bmc_device *kcs_bmc)
@@ -122,11 +130,9 @@ static void kcs_bmc_serio_remove_device(struct kcs_bmc_device *kcs_bmc)
 
 	/* kfree()s priv->port via put_device() */
 	serio_unregister_port(priv->port);
-
 	/* Ensure the IBF IRQ is disabled if we were the active client */
 	kcs_bmc_disable_device(&priv->client);
-
-	devm_kfree(priv->client.dev->dev, priv);
+	kfree(priv);
 }
 
 static const struct kcs_bmc_driver_ops kcs_bmc_serio_driver_ops = {
