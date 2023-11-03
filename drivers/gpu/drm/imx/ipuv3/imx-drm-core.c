@@ -10,6 +10,7 @@
 #include <linux/dma-buf.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
+#include <linux/iosys-map.h>
 
 #include <video/imx-ipu-v3.h>
 
@@ -17,9 +18,12 @@
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_drv.h>
 #include <drm/drm_fbdev_dma.h>
+#include <drm/drm_fb_dma_helper.h>
+#include <drm/drm_framebuffer.h>
 #include <drm/drm_gem_dma_helper.h>
 #include <drm/drm_gem_framebuffer_helper.h>
 #include <drm/drm_managed.h>
+#include <drm/drm_panic.h>
 #include <drm/drm_of.h>
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_vblank.h>
@@ -160,6 +164,31 @@ static int imx_drm_dumb_create(struct drm_file *file_priv,
 	return ret;
 }
 
+static int imx_drm_get_scanout_buffer(struct drm_device *dev,
+				      struct drm_scanout_buffer *sb)
+{
+	struct drm_plane *plane;
+	struct drm_gem_dma_object *dma_obj;
+
+	drm_for_each_plane(plane, dev) {
+		if (!plane->state || !plane->state->fb || !plane->state->visible ||
+		    plane->type != DRM_PLANE_TYPE_PRIMARY)
+			continue;
+
+		dma_obj = drm_fb_dma_get_gem_obj(plane->state->fb, 0);
+		if (!dma_obj->vaddr)
+			continue;
+
+		iosys_map_set_vaddr(&sb->map, dma_obj->vaddr);
+		sb->format = plane->state->fb->format;
+		sb->height = plane->state->fb->height;
+		sb->width = plane->state->fb->width;
+		sb->pitch = plane->state->fb->pitches[0];
+		return 0;
+	}
+	return -ENODEV;
+}
+
 static const struct drm_driver imx_drm_driver = {
 	.driver_features	= DRIVER_MODESET | DRIVER_GEM | DRIVER_ATOMIC,
 	DRM_GEM_DMA_DRIVER_OPS_WITH_DUMB_CREATE(imx_drm_dumb_create),
@@ -172,6 +201,7 @@ static const struct drm_driver imx_drm_driver = {
 	.major			= 1,
 	.minor			= 0,
 	.patchlevel		= 0,
+	.get_scanout_buffer	= imx_drm_get_scanout_buffer,
 };
 
 static int compare_of(struct device *dev, void *data)
