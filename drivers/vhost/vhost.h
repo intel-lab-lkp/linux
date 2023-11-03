@@ -310,6 +310,27 @@ static inline bool vhost_is_little_endian(struct vhost_virtqueue *vq)
 }
 #endif
 
+struct iommufd_ctx;
+struct vdpa_device;
+void vhost_vdpa_lockdep_assert_held(struct vdpa_device *vdpa);
+
+#if IS_ENABLED(CONFIG_IOMMUFD)
+int vdpa_iommufd_bind(struct vdpa_device *vdpa, struct iommufd_ctx *ictx,
+		      u32 *ioas_id, u32 *device_id);
+void vdpa_iommufd_unbind(struct vdpa_device *vdpa);
+#else
+static inline int vdpa_iommufd_bind(struct vdpa_device *vdpa,
+				    struct iommufd_ctx *ictx, u32 *ioas_id,
+				    u32 *device_id)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline void vdpa_iommufd_unbind(struct vdpa_device *vdpa)
+{
+}
+#endif
+
 /* Memory accessors */
 static inline u16 vhost16_to_cpu(struct vhost_virtqueue *vq, __virtio16 val)
 {
