@@ -227,6 +227,8 @@ static void bcmasp_netfilt_wr(struct bcmasp_priv *priv,
 
 	reg_offset = bcmasp_netfilt_get_reg_offset(priv, nfilt, reg_type,
 						   offset);
+	if (reg_offset < 0)
+		return;
 
 	rx_filter_core_wl(priv, val, reg_offset);
 }
@@ -244,6 +246,8 @@ static u32 bcmasp_netfilt_rd(struct bcmasp_priv *priv,
 
 	reg_offset = bcmasp_netfilt_get_reg_offset(priv, nfilt, reg_type,
 						   offset);
+	if (reg_offset < 0)
+		return 0;
 
 	return rx_filter_core_rl(priv, reg_offset);
 }
