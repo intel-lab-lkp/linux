@@ -15,6 +15,7 @@ struct drm_rect;
 
 struct iosys_map;
 
+u32 drm_fb_convert_from_xrgb8888(u32 color, u32 format);
 unsigned int drm_fb_clip_offset(unsigned int pitch, const struct drm_format_info *format,
 				const struct drm_rect *clip);
 
@@ -24,6 +25,14 @@ void drm_fb_memcpy(struct iosys_map *dst, const unsigned int *dst_pitch,
 void drm_fb_swab(struct iosys_map *dst, const unsigned int *dst_pitch,
 		 const struct iosys_map *src, const struct drm_framebuffer *fb,
 		 const struct drm_rect *clip, bool cached);
+void drm_fb_blit_from_r1(struct iosys_map *dmap, unsigned int dpitch,
+			 const u8 *sbuf8, unsigned int spitch,
+			 unsigned int height, unsigned int width,
+			 u32 fg_color, u32 bg_color,
+			 unsigned int pixel_width);
+void drm_fb_fill(struct iosys_map *dmap, unsigned int dpitch,
+		 unsigned int height, unsigned int width,
+		 u32 color, unsigned int pixel_width);
 void drm_fb_xrgb8888_to_rgb332(struct iosys_map *dst, const unsigned int *dst_pitch,
 			       const struct iosys_map *src, const struct drm_framebuffer *fb,
 			       const struct drm_rect *clip);
