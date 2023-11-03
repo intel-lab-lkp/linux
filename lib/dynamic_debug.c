@@ -1128,6 +1128,41 @@ static void ddebug_dev_printk(struct _ddebug *desc, const struct device *dev,
 	}
 }
 
+void _print_hex_dump(struct _ddebug *descriptor, const char *level,
+		     const char *prefix_str, int prefix_type, int rowsize,
+		     int groupsize, const void *buf, size_t len, bool ascii)
+{
+	const u8 *ptr = buf;
+	int i, linelen, remaining = len;
+	unsigned char linebuf[32 * 3 + 2 + 32 + 1];
+
+	if (rowsize != 16 && rowsize != 32)
+		rowsize = 16;
+
+	for (i = 0; i < len; i += rowsize) {
+		linelen = min(remaining, rowsize);
+		remaining -= rowsize;
+
+		hex_dump_to_buffer(ptr + i, linelen, rowsize, groupsize,
+				   linebuf, sizeof(linebuf), ascii);
+
+		switch (prefix_type) {
+		case DUMP_PREFIX_ADDRESS:
+			ddebug_printk(descriptor, "%s%s%p: %s\n",
+				      level, prefix_str, ptr + i, linebuf);
+			break;
+		case DUMP_PREFIX_OFFSET:
+			ddebug_printk(descriptor, "%s%s%.8x: %s\n",
+				      level, prefix_str, i, linebuf);
+			break;
+		default:
+			ddebug_printk(descriptor, "%s%s%s\n",
+				      level, prefix_str, linebuf);
+			break;
+		}
+	}
+}
+
 void __dynamic_pr_debug(struct _ddebug *descriptor, const char *fmt, ...)
 {
 	va_list args;
