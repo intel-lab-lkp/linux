@@ -460,6 +460,10 @@ static const struct vdpa_config_ops vp_vdpa_ops = {
 	.set_config	= vp_vdpa_set_config,
 	.set_config_cb  = vp_vdpa_set_config_cb,
 	.get_vq_irq	= vp_vdpa_get_vq_irq,
+	.bind_iommufd = vdpa_iommufd_physical_bind,
+	.unbind_iommufd = vdpa_iommufd_physical_unbind,
+	.attach_ioas = vdpa_iommufd_physical_attach_ioas,
+	.detach_ioas = vdpa_iommufd_physical_detach_ioas,
 };
 
 static void vp_vdpa_free_irq_vectors(void *data)
