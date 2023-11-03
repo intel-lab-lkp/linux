@@ -1740,6 +1740,56 @@ config USED_SYSCALLS
 
 	  If unsure, please disable TRIM_UNUSED_SYSCALLS.
 
+choice
+	prompt "Trim methods" if EXPERT
+	default RESTRICTED_TRIM_UNUSED_SYSCALLS
+	depends on TRIM_UNUSED_SYSCALLS
+	help
+	  This option selects the method to trim unused syscall wrongly kept.
+
+	  The binary files compiled using both methods are identical.
+
+	  If the trim methods is not specified, some syscalls are kept by
+	  linker script and can not be trimmed.
+
+config RESTRICTED_TRIM_UNUSED_SYSCALLS
+	bool "Leave some kept syscalls (EXPERIMENTAL)" if EXPERT
+	help
+	  Say Y here to trim 'unused' syscalls wrongly kept by __ex_table
+	  like sections in kernel space.
+
+	  Some syscalls are kept by linker script and can not be trimmed.
+
+	  If unsure, choose this.
+
+config SECTION_SHF_LINK_ORDER_SUPPORT
+	bool "Using SHF_LINK_ORDER attribute (EXPERIMENTAL)" if EXPERT
+	depends on HAVE_SECTION_SHF_LINK_ORDER_SUPPORT
+	help
+	  Say Y here to trim more 'unused' syscalls wrongly kept by __ex_table
+	  like sections in kernel space.
+
+	  This option uses the SHF_LINK_ORDER attribute to build references for
+	  orphan sections. Therefore, these sections are no longer kept in the
+	  linker script.
+
+	  If unsure, not choose this.
+
+config SECTION_SHF_GROUP_SUPPORT
+	bool "Using SHF_GROUP attribute (EXPERIMENTAL)" if EXPERT
+	depends on HAVE_SECTION_SHF_GROUP_SUPPORT
+	help
+	  Say Y here to trim more 'unused' syscalls wrongly kept by __ex_table
+	  like sections in kernel space.
+
+	  This option uses the SHF_GROUP attribute to build references for
+	  orphan sections. Therefore, these sections are no longer kept in the
+	  linker script.
+
+	  If unsure, not choose this.
+
+endchoice
+
 config KALLSYMS
 	bool "Load all symbols for debugging/ksymoops" if EXPERT
 	default y
