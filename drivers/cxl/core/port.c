@@ -43,6 +43,7 @@ int cxl_num_decoders_committed(struct cxl_port *port)
 
 	return port->commit_end + 1;
 }
+EXPORT_SYMBOL_NS_GPL(cxl_num_decoders_committed, CXL);
 
 static ssize_t devtype_show(struct device *dev, struct device_attribute *attr,
 			    char *buf)
