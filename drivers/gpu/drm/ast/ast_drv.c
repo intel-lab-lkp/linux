@@ -62,8 +62,8 @@ static const struct drm_driver ast_driver = {
 	.major = DRIVER_MAJOR,
 	.minor = DRIVER_MINOR,
 	.patchlevel = DRIVER_PATCHLEVEL,
-
-	DRM_GEM_SHMEM_DRIVER_OPS
+	.get_scanout_buffer = ast_get_scanout_buffer,
+	DRM_GEM_SHMEM_DRIVER_OPS,
 };
 
 /*

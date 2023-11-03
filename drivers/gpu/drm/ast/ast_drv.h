@@ -504,6 +504,9 @@ int ast_mode_config_init(struct ast_device *ast);
 #define ASTDP_1366x768_60		0x1E
 #define ASTDP_1152x864_75		0x1F
 
+int ast_get_scanout_buffer(struct drm_device *dev,
+			   struct drm_scanout_buffer *sb);
+
 int ast_mm_init(struct ast_device *ast);
 
 /* ast post */

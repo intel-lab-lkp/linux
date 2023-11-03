@@ -43,6 +43,7 @@
 #include <drm/drm_gem_framebuffer_helper.h>
 #include <drm/drm_gem_shmem_helper.h>
 #include <drm/drm_managed.h>
+#include <drm/drm_panic.h>
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_simple_kms_helper.h>
 
@@ -1929,4 +1930,29 @@ int ast_mode_config_init(struct ast_device *ast)
 	drm_kms_helper_poll_init(dev);
 
 	return 0;
+}
+
+int ast_get_scanout_buffer(struct drm_device *dev,
+			   struct drm_scanout_buffer *sb)
+{
+	struct drm_plane *plane;
+	struct ast_plane *ast_plane;
+	struct iosys_map map;
+
+	drm_for_each_plane(plane, dev) {
+		if (!plane->state || !plane->state->visible || !plane->state->fb ||
+		    plane->type != DRM_PLANE_TYPE_PRIMARY)
+			continue;
+		ast_plane = to_ast_plane(plane);
+		if (!ast_plane->vaddr)
+			continue;
+
+		sb->format = plane->state->fb->format;
+		sb->width = plane->state->fb->width;
+		sb->height = plane->state->fb->height;
+		sb->pitch = plane->state->fb->pitches[0];
+		iosys_map_set_vaddr_iomem(&sb->map, ast_plane->vaddr);
+		return 0;
+	}
+	return -ENODEV;
 }
