@@ -36,6 +36,7 @@
 #include <linux/sched.h>
 #include <linux/device.h>
 #include <linux/netdevice.h>
+#include <linux/trace.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/dyndbg.h>
@@ -80,6 +81,18 @@ static int verbose;
 module_param(verbose, int, 0644);
 MODULE_PARM_DESC(verbose, " dynamic_debug/control processing "
 		 "( 0 = off (default), 1 = module add/rm, 2 = >control summary, 3 = parsing, 4 = per-site changes)");
+
+/*
+ * When trace is enabled (T flag is set) and trace_dst field is set
+ * to value greater than 0 (0 is reserved for trace events) then
+ * debug logs will be written to trace instance pointed by trace_dst
+ * value, for example when trace_dst value is 2 then debug logs will
+ * be written to <debugfs>/tracing/instances/dyndbg_inst_2 instance.
+ * Given trace instance will not be initialized until debug logs are
+ * requested to be written to it and afer init will persist until
+ * reboot.
+ */
+static struct trace_array *trace_arr[TRACE_DST_MAX];
 
 static inline struct dd_ctrl *get_ctrl(struct _ddebug *desc)
 {
@@ -255,6 +268,45 @@ static struct ddebug_class_map *ddebug_find_valid_class(struct ddebug_table cons
 	return NULL;
 }
 
+static int handle_trace_dst(struct dd_ctrl *ctrl)
+{
+#define TRACE_INST_NAME_LEN 16
+	char instance_name[TRACE_INST_NAME_LEN];
+	struct trace_array *arr;
+	int ret = -EINVAL;
+
+	/* check if trace (T flag) is enabled */
+	if (!(ctrl->flags & _DPRINTK_FLAGS_TRACE))
+		return 0;
+
+	/* check if trace destination are trace events */
+	if (!ctrl->trace_dst)
+		return 0;
+
+	/* check if trace instance is already set up */
+	if (trace_arr[ctrl->trace_dst])
+		return 0;
+
+	snprintf(instance_name, TRACE_INST_NAME_LEN,
+		 "dyndbg_inst_%u", ctrl->trace_dst);
+	arr = trace_array_get_by_name(instance_name);
+	if (!arr)
+		goto err;
+
+	ret = trace_array_init_printk(arr);
+	if (ret)
+		goto err_init;
+
+	trace_arr[ctrl->trace_dst] = arr;
+	return 0;
+
+err_init:
+	trace_array_put(arr);
+	trace_array_destroy(arr);
+err:
+	return ret;
+}
+
 #define __outvar /* filled by callee */
 /*
  * Search the tables for _ddebug's which match the given `query' and
@@ -337,6 +389,9 @@ static int ddebug_change(const struct ddebug_query *query,
 			nctrl.flags = (get_flags(dp) & modifiers->mask) | modifiers->flags;
 			nctrl.trace_dst = modifiers->trace_dst;
 			if (!memcmp(&nctrl, get_ctrl(dp), sizeof(nctrl)))
+				continue;
+
+			if (handle_trace_dst(&nctrl))
 				continue;
 #ifdef CONFIG_JUMP_LABEL
 			if (get_flags(dp) & _DPRINTK_FLAGS_ENABLED) {
@@ -977,8 +1032,8 @@ static DEFINE_PER_CPU(struct ddebug_trace_bufs, ddebug_trace_bufs);
 static DEFINE_PER_CPU(int, ddebug_trace_reserve);
 
 __printf(3, 0)
-static void ddebug_trace(struct _ddebug *desc, const struct device *dev,
-			 const char *fmt, va_list args)
+static void ddebug_trace_event(struct _ddebug *desc, const struct device *dev,
+			       const char *fmt, va_list args)
 {
 	struct ddebug_trace_buf *buf;
 	int bufidx;
@@ -1010,6 +1065,15 @@ out:
 	preempt_enable_notrace();
 }
 
+__printf(2, 0)
+static void ddebug_trace_instance(struct _ddebug *desc, const char *fmt,
+				  va_list *args)
+{
+	struct va_format vaf = { .fmt = fmt, .va = args};
+
+	trace_array_printk(trace_arr[get_trace_dst(desc)], _THIS_IP_, "%pV", &vaf);
+}
+
 __printf(2, 3)
 static void ddebug_printk(struct _ddebug *desc, const char *fmt, ...)
 {
@@ -1022,7 +1086,11 @@ static void ddebug_printk(struct _ddebug *desc, const char *fmt, ...)
 		 * All callers include the KERN_DEBUG prefix to keep the
 		 * vprintk case simple; strip it out for tracing.
 		 */
-		ddebug_trace(desc, NULL, fmt + strlen(KERN_DEBUG), args);
+		if (get_trace_dst(desc))
+			ddebug_trace_instance(desc, fmt, &args);
+		else
+			ddebug_trace_event(desc, NULL,
+					   fmt + strlen(KERN_DEBUG), args);
 		va_end(args);
 	}
 
@@ -1044,7 +1112,10 @@ static void ddebug_dev_printk(struct _ddebug *desc, const struct device *dev,
 		va_list args;
 
 		va_start(args, fmt);
-		ddebug_trace(desc, dev, fmt, args);
+		if (get_trace_dst(desc))
+			ddebug_trace_instance(desc, fmt, &args);
+		else
+			ddebug_trace_event(desc, dev, fmt, args);
 		va_end(args);
 	}
 
