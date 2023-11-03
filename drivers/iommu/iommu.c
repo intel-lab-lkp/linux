@@ -3165,6 +3165,7 @@ unlock_out:
 
 	return ret;
 }
+EXPORT_SYMBOL_GPL(iommu_device_use_default_domain);
 
 /**
  * iommu_device_unuse_default_domain() - Device driver stops handling device
@@ -3188,6 +3189,7 @@ void iommu_device_unuse_default_domain(struct device *dev)
 	mutex_unlock(&group->mutex);
 	iommu_group_put(group);
 }
+EXPORT_SYMBOL_GPL(iommu_device_unuse_default_domain);
 
 static int __iommu_group_alloc_blocking_domain(struct iommu_group *group)
 {
