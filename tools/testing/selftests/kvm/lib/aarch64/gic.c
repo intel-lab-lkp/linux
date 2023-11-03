@@ -49,7 +49,7 @@ gic_dist_init(enum gic_type type, unsigned int nr_cpus, void *dist_base)
 	spin_unlock(&gic_lock);
 }
 
-void gic_init(enum gic_type type, unsigned int nr_cpus,
+void _gic_init(enum gic_type type, unsigned int nr_cpus,
 		void *dist_base, void *redist_base)
 {
 	uint32_t cpu = guest_get_vcpuid();
@@ -61,6 +61,11 @@ void gic_init(enum gic_type type, unsigned int nr_cpus,
 
 	gic_dist_init(type, nr_cpus, dist_base);
 	gic_cpu_init(cpu, redist_base);
+}
+
+void gic_init(enum gic_type type, unsigned int nr_cpus)
+{
+	_gic_init(type, nr_cpus, (void *)GICD_BASE_GPA, (void *)GICR_BASE_GPA);
 }
 
 void gic_irq_enable(unsigned int intid)

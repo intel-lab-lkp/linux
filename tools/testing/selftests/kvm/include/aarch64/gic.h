@@ -16,13 +16,16 @@ enum gic_type {
 #define MIN_SPI			32
 #define MAX_SPI			1019
 #define IAR_SPURIOUS		1023
+#define GICD_BASE_GPA			0x8000000ULL
+#define GICR_BASE_GPA			0x80A0000ULL
 
 #define INTID_IS_SGI(intid)	(0       <= (intid) && (intid) < MIN_PPI)
 #define INTID_IS_PPI(intid)	(MIN_PPI <= (intid) && (intid) < MIN_SPI)
 #define INTID_IS_SPI(intid)	(MIN_SPI <= (intid) && (intid) <= MAX_SPI)
 
-void gic_init(enum gic_type type, unsigned int nr_cpus,
+void _gic_init(enum gic_type type, unsigned int nr_cpus,
 		void *dist_base, void *redist_base);
+void gic_init(enum gic_type type, unsigned int nr_cpus);
 void gic_irq_enable(unsigned int intid);
 void gic_irq_disable(unsigned int intid);
 unsigned int gic_get_and_ack_irq(void);

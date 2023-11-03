@@ -30,7 +30,7 @@
  * redistributor regions of the guest. Since it depends on the number of
  * vCPUs for the VM, it must be called after all the vCPUs have been created.
  */
-int vgic_v3_setup(struct kvm_vm *vm, unsigned int nr_vcpus, uint32_t nr_irqs,
+int _vgic_v3_setup(struct kvm_vm *vm, uint32_t nr_vcpus, uint32_t nr_irqs,
 		uint64_t gicd_base_gpa, uint64_t gicr_base_gpa)
 {
 	int gic_fd;
@@ -77,6 +77,11 @@ int vgic_v3_setup(struct kvm_vm *vm, unsigned int nr_vcpus, uint32_t nr_irqs,
 			    KVM_DEV_ARM_VGIC_CTRL_INIT, NULL);
 
 	return gic_fd;
+}
+
+int vgic_v3_setup(struct kvm_vm *vm, uint32_t nr_vcpus, uint32_t nr_irqs)
+{
+	return _vgic_v3_setup(vm, nr_vcpus, nr_irqs, GICD_BASE_GPA, GICR_BASE_GPA);
 }
 
 /* should only work for level sensitive interrupts */
