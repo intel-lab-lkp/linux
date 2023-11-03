@@ -187,4 +187,4 @@ EXPORT_SYMBOL(kcs_bmc_update_event_mask);
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("Haiyue Wang <haiyue.wang@linux.intel.com>");
 MODULE_AUTHOR("Andrew Jeffery <andrew@aj.id.au>");
-MODULE_DESCRIPTION("KCS BMC to handle the IPMI request from system software");
+MODULE_DESCRIPTION("Subsystem for BMCs to communicate via KCS devices");
