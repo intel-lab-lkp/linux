@@ -2600,11 +2600,6 @@ static inline int mm_counter_folio(struct folio *folio)
 	return mm_counter_file_folio(folio);
 }
 
-static inline int mm_counter(struct page *page)
-{
-	return mm_counter_folio(page_folio(page));
-}
-
 static inline unsigned long get_mm_rss(struct mm_struct *mm)
 {
 	return get_mm_counter(mm, MM_FILEPAGES) +
