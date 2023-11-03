@@ -1067,9 +1067,6 @@ static int vhost_vdpa_map(struct vhost_vdpa *v, struct vhost_iotlb *iotlb,
 		/* Legacy iommu domain pathway without IOMMUFD */
 		r = iommu_map(v->domain, iova, pa, size,
 			      perm_to_iommu_flags(perm), GFP_KERNEL);
-	} else {
-		r = iommu_map(v->domain, iova, pa, size,
-			      perm_to_iommu_flags(perm), GFP_KERNEL);
 	}
 	if (r) {
 		vhost_iotlb_del_range(iotlb, iova, iova + size - 1);
@@ -1095,8 +1092,10 @@ static void vhost_vdpa_unmap(struct vhost_vdpa *v,
 	if (ops->set_map) {
 		if (!v->in_batch)
 			ops->set_map(vdpa, asid, iotlb);
+	} else if (!vdpa->iommufd_ictx) {
+		/* Legacy iommu domain pathway without IOMMUFD */
+		iommu_unmap(v->domain, iova, size);
 	}
-
 }
 
 static int vhost_vdpa_va_map(struct vhost_vdpa *v,
@@ -1149,7 +1148,36 @@ next:
 
 	return ret;
 }
+#if 0
+int vhost_pin_pages(struct vdpa_device *device, dma_addr_t iova, int npage,
+		    int prot, struct page **pages)
+{
+	if (!pages || !npage)
+		return -EINVAL;
+	//if (!device->config->dma_unmap)
+	//return -EINVAL;
 
+	if (0) { //device->iommufd_access) {
+		int ret;
+
+		if (iova > ULONG_MAX)
+			return -EINVAL;
+
+		ret = iommufd_access_pin_pages(
+			device->iommufd_access, iova, npage * PAGE_SIZE, pages,
+			(prot & IOMMU_WRITE) ? IOMMUFD_ACCESS_RW_WRITE : 0);
+		if (ret) {
+
+			return ret;
+		}
+
+		return npage;
+	} else {
+		return pin_user_pages(iova, npage, prot, pages);
+	}
+	return -EINVAL;
+}
+#endif
 static int vhost_vdpa_pa_map(struct vhost_vdpa *v,
 			     struct vhost_iotlb *iotlb,
 			     u64 iova, u64 size, u64 uaddr, u32 perm)
@@ -1418,9 +1446,13 @@ static void vhost_vdpa_free_domain(struct vhost_vdpa *v)
 	struct device *dma_dev = vdpa_get_dma_dev(vdpa);
 
 	if (v->domain) {
-		iommu_detach_device(v->domain, dma_dev);
+		if (!vdpa->iommufd_ictx) {
+			iommu_detach_device(v->domain, dma_dev);
+		}
 		iommu_domain_free(v->domain);
 	}
+	if (vdpa->iommufd_ictx)
+		vdpa_iommufd_unbind(vdpa);
 
 	v->domain = NULL;
 }
@@ -1645,6 +1677,7 @@ static int vhost_vdpa_probe(struct vdpa_device *vdpa)
 	}
 
 	atomic_set(&v->opened, 0);
+	atomic_set(&vdpa->iommufd_users, 0);
 	v->minor = minor;
 	v->vdpa = vdpa;
 	v->nvqs = vdpa->nvqs;
