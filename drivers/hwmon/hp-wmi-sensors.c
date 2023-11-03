@@ -17,13 +17,17 @@
  *     Available: https://github.com/linuxhw/ACPI
  * [4] P. Rohár, "bmfdec - Decompile binary MOF file (BMF) from WMI buffer",
  *     2017. [Online]. Available: https://github.com/pali/bmfdec
+ * [5] Microsoft Corporation, "Driver-Defined WMI Data Items", 2017. [Online].
+ *     Available: https://learn.microsoft.com/en-us/windows-hardware/drivers/kernel/driver-defined-wmi-data-items
  */
 
 #include <linux/acpi.h>
 #include <linux/debugfs.h>
+#include <linux/dmi.h>
 #include <linux/hwmon.h>
 #include <linux/jiffies.h>
 #include <linux/mutex.h>
+#include <linux/nls.h>
 #include <linux/units.h>
 #include <linux/wmi.h>
 
@@ -51,6 +55,10 @@
 #define HP_WMI_MAX_STR_SIZE		128U
 #define HP_WMI_MAX_PROPERTIES		32U
 #define HP_WMI_MAX_INSTANCES		32U
+
+/* DMI board names for machines requiring workarounds. */
+
+#define HP_WMI_BOARD_NAME_ELITEDESK_800_G6	"870C"
 
 enum hp_wmi_type {
 	HP_WMI_TYPE_OTHER			= 1,
@@ -412,6 +420,30 @@ static char *hp_wmi_strdup(struct device *dev, const char *src)
 	return dst;
 }
 
+/* hp_wmi_wstrdup - hp_wmi_strdup, but for a raw WMI string */
+static char *hp_wmi_wstrdup(struct device *dev, const u8 *buf)
+{
+	const wchar_t *src;
+	size_t len;
+	char *dst;
+	int i;
+
+	/* WMI strings are length-prefixed UTF-16. See [5]. */
+	src = (wchar_t *)buf;
+	len = min(*src++ / sizeof(*src), (size_t)HP_WMI_MAX_STR_SIZE - 1);
+	while (len && !src[len - 1])
+		len--;
+
+	dst = devm_kmalloc(dev, (len + 1) * sizeof(*dst), GFP_KERNEL);
+	if (!dst)
+		return NULL;
+
+	i = utf16s_to_utf8s(src, len, UTF16_LITTLE_ENDIAN, dst, len);
+	dst[i] = '\0';
+
+	return strim(dst);
+}
+
 /*
  * hp_wmi_get_wobj - poll WMI for a WMI object instance
  * @guid: WMI object GUID
@@ -442,6 +474,21 @@ static u8 hp_wmi_wobj_instance_count(const char *guid)
 	return clamp(count, 0, (int)HP_WMI_MAX_INSTANCES);
 }
 
+static bool is_raw_wmi_string(const acpi_object_type property_map[], int prop)
+{
+	const char *board_name;
+
+	if (property_map != hp_wmi_platform_events_property_map ||
+	    prop != HP_WMI_PLATFORM_EVENTS_PROPERTY_NAME)
+		return false;
+
+	board_name = dmi_get_system_info(DMI_BOARD_NAME);
+	if (!board_name)
+		return false;
+
+	return !strcmp(board_name, HP_WMI_BOARD_NAME_ELITEDESK_800_G6);
+}
+
 static int check_wobj(const union acpi_object *wobj,
 		      const acpi_object_type property_map[], int last_prop)
 {
@@ -462,8 +509,12 @@ static int check_wobj(const union acpi_object *wobj,
 	for (prop = 0; prop <= last_prop; prop++) {
 		type = elements[prop].type;
 		valid_type = property_map[prop];
-		if (type != valid_type)
+		if (type != valid_type) {
+			if (type == ACPI_TYPE_BUFFER &&
+			    is_raw_wmi_string(property_map, prop))
+				continue;
 			return -EINVAL;
+		}
 	}
 
 	return 0;
@@ -480,7 +531,9 @@ static int extract_acpi_value(struct device *dev,
 		break;
 
 	case ACPI_TYPE_STRING:
-		*out_string = hp_wmi_strdup(dev, strim(element->string.pointer));
+		*out_string = element->type == ACPI_TYPE_BUFFER ?
+			hp_wmi_wstrdup(dev, element->buffer.pointer) :
+			hp_wmi_strdup(dev, strim(element->string.pointer));
 		if (!*out_string)
 			return -ENOMEM;
 		break;
