@@ -807,12 +807,9 @@ static int dwc3_phy_power_on(struct dwc3 *dwc)
 {
 	int ret;
 
-	usb_phy_set_suspend(dwc->usb2_phy, 0);
-	usb_phy_set_suspend(dwc->usb3_phy, 0);
-
 	ret = phy_power_on(dwc->usb2_generic_phy);
 	if (ret < 0)
-		goto err_suspend_usb3_phy;
+		return ret;
 
 	ret = phy_power_on(dwc->usb3_generic_phy);
 	if (ret < 0)
@@ -822,9 +819,6 @@ static int dwc3_phy_power_on(struct dwc3 *dwc)
 
 err_power_off_usb2_phy:
 	phy_power_off(dwc->usb2_generic_phy);
-err_suspend_usb3_phy:
-	usb_phy_set_suspend(dwc->usb3_phy, 1);
-	usb_phy_set_suspend(dwc->usb2_phy, 1);
 
 	return ret;
 }
@@ -833,9 +827,6 @@ static void dwc3_phy_power_off(struct dwc3 *dwc)
 {
 	phy_power_off(dwc->usb3_generic_phy);
 	phy_power_off(dwc->usb2_generic_phy);
-
-	usb_phy_set_suspend(dwc->usb3_phy, 1);
-	usb_phy_set_suspend(dwc->usb2_phy, 1);
 }
 
 static int dwc3_clk_enable(struct dwc3 *dwc)
@@ -2171,6 +2162,9 @@ static int dwc3_suspend_common(struct dwc3 *dwc, pm_message_t msg)
 		break;
 	}
 
+	usb_phy_set_suspend(dwc->usb2_phy, 1);
+	usb_phy_set_suspend(dwc->usb3_phy, 1);
+
 	return 0;
 }
 
@@ -2179,6 +2173,9 @@ static int dwc3_resume_common(struct dwc3 *dwc, pm_message_t msg)
 	unsigned long	flags;
 	int		ret;
 	u32		reg;
+
+	usb_phy_set_suspend(dwc->usb2_phy, 0);
+	usb_phy_set_suspend(dwc->usb3_phy, 0);
 
 	switch (dwc->current_dr_role) {
 	case DWC3_GCTL_PRTCAP_DEVICE:
