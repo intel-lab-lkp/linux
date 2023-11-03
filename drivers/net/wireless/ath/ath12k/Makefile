@@ -22,6 +22,7 @@ ath12k-y += core.o \
 	    dp_mon.o
 
 ath12k-$(CONFIG_ATH12K_TRACING) += trace.o
+ath12k-$(CONFIG_NL80211_TESTMODE) += testmode.o
 
 # for tracing framework to find trace.h
 CFLAGS_trace.o := -I$(src)
