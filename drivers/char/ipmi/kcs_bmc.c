@@ -22,33 +22,53 @@ static LIST_HEAD(kcs_bmc_drivers);
 
 /* Consumer data access */
 
-u8 kcs_bmc_read_data(struct kcs_bmc_device *kcs_bmc)
+static void kcs_bmc_client_validate(struct kcs_bmc_client *client)
 {
-	return kcs_bmc->ops->io_inputb(kcs_bmc, kcs_bmc->ioreg.idr);
+	WARN_ONCE(client != READ_ONCE(client->dev->client), "KCS client confusion detected");
+}
+
+u8 kcs_bmc_read_data(struct kcs_bmc_client *client)
+{
+	struct kcs_bmc_device *dev = client->dev;
+
+	kcs_bmc_client_validate(client);
+	return dev->ops->io_inputb(dev, dev->ioreg.idr);
 }
 EXPORT_SYMBOL(kcs_bmc_read_data);
 
-void kcs_bmc_write_data(struct kcs_bmc_device *kcs_bmc, u8 data)
+void kcs_bmc_write_data(struct kcs_bmc_client *client, u8 data)
 {
-	kcs_bmc->ops->io_outputb(kcs_bmc, kcs_bmc->ioreg.odr, data);
+	struct kcs_bmc_device *dev = client->dev;
+
+	kcs_bmc_client_validate(client);
+	dev->ops->io_outputb(dev, dev->ioreg.odr, data);
 }
 EXPORT_SYMBOL(kcs_bmc_write_data);
 
-u8 kcs_bmc_read_status(struct kcs_bmc_device *kcs_bmc)
+u8 kcs_bmc_read_status(struct kcs_bmc_client *client)
 {
-	return kcs_bmc->ops->io_inputb(kcs_bmc, kcs_bmc->ioreg.str);
+	struct kcs_bmc_device *dev = client->dev;
+
+	kcs_bmc_client_validate(client);
+	return dev->ops->io_inputb(dev, dev->ioreg.str);
 }
 EXPORT_SYMBOL(kcs_bmc_read_status);
 
-void kcs_bmc_write_status(struct kcs_bmc_device *kcs_bmc, u8 data)
+void kcs_bmc_write_status(struct kcs_bmc_client *client, u8 data)
 {
-	kcs_bmc->ops->io_outputb(kcs_bmc, kcs_bmc->ioreg.str, data);
+	struct kcs_bmc_device *dev = client->dev;
+
+	kcs_bmc_client_validate(client);
+	dev->ops->io_outputb(dev, dev->ioreg.str, data);
 }
 EXPORT_SYMBOL(kcs_bmc_write_status);
 
-void kcs_bmc_update_status(struct kcs_bmc_device *kcs_bmc, u8 mask, u8 val)
+void kcs_bmc_update_status(struct kcs_bmc_client *client, u8 mask, u8 val)
 {
-	kcs_bmc->ops->io_updateb(kcs_bmc, kcs_bmc->ioreg.str, mask, val);
+	struct kcs_bmc_device *dev = client->dev;
+
+	kcs_bmc_client_validate(client);
+	dev->ops->io_updateb(dev, dev->ioreg.str, mask, val);
 }
 EXPORT_SYMBOL(kcs_bmc_update_status);
 
@@ -73,36 +93,39 @@ static void kcs_bmc_update_event_mask(struct kcs_bmc_device *kcs_bmc, u8 mask, u
 	kcs_bmc->ops->irq_mask_update(kcs_bmc, mask, events);
 }
 
-int kcs_bmc_enable_device(struct kcs_bmc_device *kcs_bmc, struct kcs_bmc_client *client)
+int kcs_bmc_enable_device(struct kcs_bmc_client *client)
 {
+	struct kcs_bmc_device *dev = client->dev;
 	int rc;
 
-	spin_lock_irq(&kcs_bmc->lock);
-	if (kcs_bmc->client) {
+	spin_lock_irq(&dev->lock);
+	if (dev->client) {
 		rc = -EBUSY;
 	} else {
 		u8 mask = KCS_BMC_EVENT_TYPE_IBF;
 
-		kcs_bmc->client = client;
-		kcs_bmc_update_event_mask(kcs_bmc, mask, mask);
+		dev->client = client;
+		kcs_bmc_update_event_mask(dev, mask, mask);
 		rc = 0;
 	}
-	spin_unlock_irq(&kcs_bmc->lock);
+	spin_unlock_irq(&dev->lock);
 
 	return rc;
 }
 EXPORT_SYMBOL(kcs_bmc_enable_device);
 
-void kcs_bmc_disable_device(struct kcs_bmc_device *kcs_bmc, struct kcs_bmc_client *client)
+void kcs_bmc_disable_device(struct kcs_bmc_client *client)
 {
-	spin_lock_irq(&kcs_bmc->lock);
-	if (client == kcs_bmc->client) {
+	struct kcs_bmc_device *dev = client->dev;
+
+	spin_lock_irq(&dev->lock);
+	if (client == dev->client) {
 		u8 mask = KCS_BMC_EVENT_TYPE_IBF | KCS_BMC_EVENT_TYPE_OBE;
 
-		kcs_bmc_update_event_mask(kcs_bmc, mask, 0);
-		kcs_bmc->client = NULL;
+		kcs_bmc_update_event_mask(dev, mask, 0);
+		dev->client = NULL;
 	}
-	spin_unlock_irq(&kcs_bmc->lock);
+	spin_unlock_irq(&dev->lock);
 }
 EXPORT_SYMBOL(kcs_bmc_disable_device);
 

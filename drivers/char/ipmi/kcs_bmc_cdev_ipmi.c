@@ -121,14 +121,14 @@ enum kcs_states {
 
 static inline void set_state(struct kcs_bmc_ipmi *priv, u8 state)
 {
-	kcs_bmc_update_status(priv->client.dev, KCS_STATUS_STATE_MASK, KCS_STATUS_STATE(state));
+	kcs_bmc_update_status(&priv->client, KCS_STATUS_STATE_MASK, KCS_STATUS_STATE(state));
 }
 
 static void kcs_bmc_ipmi_force_abort(struct kcs_bmc_ipmi *priv)
 {
 	set_state(priv, ERROR_STATE);
-	kcs_bmc_read_data(priv->client.dev);
-	kcs_bmc_write_data(priv->client.dev, KCS_ZERO_DATA);
+	kcs_bmc_read_data(&priv->client);
+	kcs_bmc_write_data(&priv->client, KCS_ZERO_DATA);
 
 	priv->phase = KCS_PHASE_ERROR;
 	priv->data_in_avail = false;
@@ -137,10 +137,8 @@ static void kcs_bmc_ipmi_force_abort(struct kcs_bmc_ipmi *priv)
 
 static void kcs_bmc_ipmi_handle_data(struct kcs_bmc_ipmi *priv)
 {
-	struct kcs_bmc_device *dev;
+	struct kcs_bmc_client *client = &priv->client;
 	u8 data;
-
-	dev = priv->client.dev;
 
 	switch (priv->phase) {
 	case KCS_PHASE_WRITE_START:
@@ -150,8 +148,8 @@ static void kcs_bmc_ipmi_handle_data(struct kcs_bmc_ipmi *priv)
 	case KCS_PHASE_WRITE_DATA:
 		if (priv->data_in_idx < KCS_MSG_BUFSIZ) {
 			set_state(priv, WRITE_STATE);
-			kcs_bmc_write_data(dev, KCS_ZERO_DATA);
-			priv->data_in[priv->data_in_idx++] = kcs_bmc_read_data(dev);
+			kcs_bmc_write_data(client, KCS_ZERO_DATA);
+			priv->data_in[priv->data_in_idx++] = kcs_bmc_read_data(client);
 		} else {
 			kcs_bmc_ipmi_force_abort(priv);
 			priv->error = KCS_LENGTH_ERROR;
@@ -161,7 +159,7 @@ static void kcs_bmc_ipmi_handle_data(struct kcs_bmc_ipmi *priv)
 	case KCS_PHASE_WRITE_END_CMD:
 		if (priv->data_in_idx < KCS_MSG_BUFSIZ) {
 			set_state(priv, READ_STATE);
-			priv->data_in[priv->data_in_idx++] = kcs_bmc_read_data(dev);
+			priv->data_in[priv->data_in_idx++] = kcs_bmc_read_data(client);
 			priv->phase = KCS_PHASE_WRITE_DONE;
 			priv->data_in_avail = true;
 			wake_up_interruptible(&priv->queue);
@@ -175,33 +173,33 @@ static void kcs_bmc_ipmi_handle_data(struct kcs_bmc_ipmi *priv)
 		if (priv->data_out_idx == priv->data_out_len)
 			set_state(priv, IDLE_STATE);
 
-		data = kcs_bmc_read_data(dev);
+		data = kcs_bmc_read_data(client);
 		if (data != KCS_CMD_READ_BYTE) {
 			set_state(priv, ERROR_STATE);
-			kcs_bmc_write_data(dev, KCS_ZERO_DATA);
+			kcs_bmc_write_data(client, KCS_ZERO_DATA);
 			break;
 		}
 
 		if (priv->data_out_idx == priv->data_out_len) {
-			kcs_bmc_write_data(dev, KCS_ZERO_DATA);
+			kcs_bmc_write_data(client, KCS_ZERO_DATA);
 			priv->phase = KCS_PHASE_IDLE;
 			break;
 		}
 
-		kcs_bmc_write_data(dev, priv->data_out[priv->data_out_idx++]);
+		kcs_bmc_write_data(client, priv->data_out[priv->data_out_idx++]);
 		break;
 
 	case KCS_PHASE_ABORT_ERROR1:
 		set_state(priv, READ_STATE);
-		kcs_bmc_read_data(dev);
-		kcs_bmc_write_data(dev, priv->error);
+		kcs_bmc_read_data(client);
+		kcs_bmc_write_data(client, priv->error);
 		priv->phase = KCS_PHASE_ABORT_ERROR2;
 		break;
 
 	case KCS_PHASE_ABORT_ERROR2:
 		set_state(priv, IDLE_STATE);
-		kcs_bmc_read_data(dev);
-		kcs_bmc_write_data(dev, KCS_ZERO_DATA);
+		kcs_bmc_read_data(client);
+		kcs_bmc_write_data(client, KCS_ZERO_DATA);
 		priv->phase = KCS_PHASE_IDLE;
 		break;
 
@@ -216,9 +214,9 @@ static void kcs_bmc_ipmi_handle_cmd(struct kcs_bmc_ipmi *priv)
 	u8 cmd;
 
 	set_state(priv, WRITE_STATE);
-	kcs_bmc_write_data(priv->client.dev, KCS_ZERO_DATA);
+	kcs_bmc_write_data(&priv->client, KCS_ZERO_DATA);
 
-	cmd = kcs_bmc_read_data(priv->client.dev);
+	cmd = kcs_bmc_read_data(&priv->client);
 	switch (cmd) {
 	case KCS_CMD_WRITE_START:
 		priv->phase = KCS_PHASE_WRITE_START;
@@ -269,7 +267,7 @@ static irqreturn_t kcs_bmc_ipmi_event(struct kcs_bmc_client *client)
 
 	spin_lock(&priv->lock);
 
-	status = kcs_bmc_read_status(client->dev);
+	status = kcs_bmc_read_status(client);
 	if (status & KCS_STATUS_IBF) {
 		if (status & KCS_STATUS_CMD_DAT)
 			kcs_bmc_ipmi_handle_cmd(priv);
@@ -299,7 +297,7 @@ static int kcs_bmc_ipmi_open(struct inode *inode, struct file *filp)
 {
 	struct kcs_bmc_ipmi *priv = to_kcs_bmc(filp);
 
-	return kcs_bmc_enable_device(priv->client.dev, &priv->client);
+	return kcs_bmc_enable_device(&priv->client);
 }
 
 static __poll_t kcs_bmc_ipmi_poll(struct file *filp, poll_table *wait)
@@ -402,7 +400,7 @@ static ssize_t kcs_bmc_ipmi_write(struct file *filp, const char __user *buf,
 		priv->data_out_idx = 1;
 		priv->data_out_len = count;
 		memcpy(priv->data_out, priv->kbuffer, count);
-		kcs_bmc_write_data(priv->client.dev, priv->data_out[0]);
+		kcs_bmc_write_data(&priv->client, priv->data_out[0]);
 		ret = count;
 	} else {
 		ret = -EINVAL;
@@ -425,11 +423,11 @@ static long kcs_bmc_ipmi_ioctl(struct file *filp, unsigned int cmd,
 
 	switch (cmd) {
 	case IPMI_BMC_IOCTL_SET_SMS_ATN:
-		kcs_bmc_update_status(priv->client.dev, KCS_STATUS_SMS_ATN, KCS_STATUS_SMS_ATN);
+		kcs_bmc_update_status(&priv->client, KCS_STATUS_SMS_ATN, KCS_STATUS_SMS_ATN);
 		break;
 
 	case IPMI_BMC_IOCTL_CLEAR_SMS_ATN:
-		kcs_bmc_update_status(priv->client.dev, KCS_STATUS_SMS_ATN, 0);
+		kcs_bmc_update_status(&priv->client, KCS_STATUS_SMS_ATN, 0);
 		break;
 
 	case IPMI_BMC_IOCTL_FORCE_ABORT:
@@ -451,7 +449,7 @@ static int kcs_bmc_ipmi_release(struct inode *inode, struct file *filp)
 	struct kcs_bmc_ipmi *priv = to_kcs_bmc(filp);
 
 	kcs_bmc_ipmi_force_abort(priv);
-	kcs_bmc_disable_device(priv->client.dev, &priv->client);
+	kcs_bmc_disable_device(&priv->client);
 
 	return 0;
 }
@@ -530,7 +528,7 @@ static void kcs_bmc_ipmi_remove_device(struct kcs_bmc_device *kcs_bmc)
 		return;
 
 	misc_deregister(&priv->miscdev);
-	kcs_bmc_disable_device(priv->client.dev, &priv->client);
+	kcs_bmc_disable_device(&priv->client);
 	devm_kfree(kcs_bmc->dev, priv->kbuffer);
 	devm_kfree(kcs_bmc->dev, priv->data_out);
 	devm_kfree(kcs_bmc->dev, priv->data_in);

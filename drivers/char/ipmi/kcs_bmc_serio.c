@@ -36,10 +36,10 @@ static irqreturn_t kcs_bmc_serio_event(struct kcs_bmc_client *client)
 
 	spin_lock(&priv->lock);
 
-	status = kcs_bmc_read_status(client->dev);
+	status = kcs_bmc_read_status(client);
 
 	if (status & KCS_BMC_STR_IBF)
-		handled = serio_interrupt(priv->port, kcs_bmc_read_data(client->dev), 0);
+		handled = serio_interrupt(priv->port, kcs_bmc_read_data(client), 0);
 
 	spin_unlock(&priv->lock);
 
@@ -54,14 +54,14 @@ static int kcs_bmc_serio_open(struct serio *port)
 {
 	struct kcs_bmc_serio *priv = port->port_data;
 
-	return kcs_bmc_enable_device(priv->client.dev, &priv->client);
+	return kcs_bmc_enable_device(&priv->client);
 }
 
 static void kcs_bmc_serio_close(struct serio *port)
 {
 	struct kcs_bmc_serio *priv = port->port_data;
 
-	kcs_bmc_disable_device(priv->client.dev, &priv->client);
+	kcs_bmc_disable_device(&priv->client);
 }
 
 static DEFINE_SPINLOCK(kcs_bmc_serio_instances_lock);
@@ -124,7 +124,7 @@ static void kcs_bmc_serio_remove_device(struct kcs_bmc_device *kcs_bmc)
 	serio_unregister_port(priv->port);
 
 	/* Ensure the IBF IRQ is disabled if we were the active client */
-	kcs_bmc_disable_device(kcs_bmc, &priv->client);
+	kcs_bmc_disable_device(&priv->client);
 
 	devm_kfree(priv->client.dev->dev, priv);
 }
