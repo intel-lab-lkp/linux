@@ -8,6 +8,9 @@
 #undef TP_printk
 #define TP_printk(fmt, args...) fmt "\n", args
 
+#undef TP_printk_no_nl
+#define TP_printk_no_nl(fmt, args...) fmt, args
+
 #undef __get_dynamic_array
 #define __get_dynamic_array(field)	\
 		((void *)__entry + (__entry->__data_loc_##field & 0xffff))

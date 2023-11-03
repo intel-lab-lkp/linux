@@ -37,3 +37,6 @@
 
 #undef TP_printk
 #define TP_printk(fmt, args...) "\"" fmt "\", "  __stringify(args)
+
+#undef TP_printk_no_nl
+#define TP_printk_no_nl(fmt, args...) "\"" fmt "\", "  __stringify(args)
