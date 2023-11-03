@@ -20,20 +20,10 @@ TRACE_EVENT(prdbg,
 
 	    TP_fast_assign(
 			__entry->desc = desc;
-			/*
-			 * Each trace entry is printed in a new line.
-			 * If the msg finishes with '\n', cut it off
-			 * to avoid blank lines in the trace.
-			 */
-			if (len > 0 && (text[len - 1] == '\n'))
-				len -= 1;
-
 			memcpy(__get_str(msg), text, len);
-			__get_str(msg)[len] = 0;
 		    ),
 
-	    TP_printk("%s.%s %s", __entry->desc->modname,
-		      __entry->desc->function, __get_str(msg))
+	    TP_printk_no_nl("%s", __get_str(msg))
 );
 
 /* capture dev_dbg() callsite descriptor, device, and message */
@@ -52,20 +42,10 @@ TRACE_EVENT(devdbg,
 	    TP_fast_assign(
 			__entry->desc = desc;
 			__entry->dev = (struct device *) dev;
-			/*
-			 * Each trace entry is printed in a new line.
-			 * If the msg finishes with '\n', cut it off
-			 * to avoid blank lines in the trace.
-			 */
-			if (len > 0 && (text[len - 1] == '\n'))
-				len -= 1;
-
 			memcpy(__get_str(msg), text, len);
-			__get_str(msg)[len] = 0;
 		    ),
 
-	    TP_printk("%s.%s %s", __entry->desc->modname,
-		      __entry->desc->function, __get_str(msg))
+	    TP_printk_no_nl("%s", __get_str(msg))
 );
 
 #endif /* _TRACE_DYNDBG_H */
