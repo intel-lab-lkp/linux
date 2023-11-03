@@ -25,6 +25,64 @@ struct actlr_data {
 	u32 actlr;
 };
 
+static const struct actlr_data sm8550_apps_actlr_data[] = {
+	{ 0x18a0, 0x0000, 0x00000103 },
+	{ 0x18e0, 0x0000, 0x00000103 },
+	{ 0x0800, 0x0020, 0x00000001 },
+	{ 0x1800, 0x00c0, 0x00000001 },
+	{ 0x1820, 0x0000, 0x00000001 },
+	{ 0x1860, 0x0000, 0x00000001 },
+	{ 0x0c01, 0x0020, 0x00000303 },
+	{ 0x0c02, 0x0020, 0x00000303 },
+	{ 0x0c03, 0x0020, 0x00000303 },
+	{ 0x0c04, 0x0020, 0x00000303 },
+	{ 0x0c05, 0x0020, 0x00000303 },
+	{ 0x0c06, 0x0020, 0x00000303 },
+	{ 0x0c07, 0x0020, 0x00000303 },
+	{ 0x0c08, 0x0020, 0x00000303 },
+	{ 0x0c09, 0x0020, 0x00000303 },
+	{ 0x0c0c, 0x0020, 0x00000303 },
+	{ 0x0c0d, 0x0020, 0x00000303 },
+	{ 0x0c0e, 0x0020, 0x00000303 },
+	{ 0x0c0f, 0x0020, 0x00000303 },
+	{ 0x1961, 0x0000, 0x00000303 },
+	{ 0x1962, 0x0000, 0x00000303 },
+	{ 0x1963, 0x0000, 0x00000303 },
+	{ 0x1964, 0x0000, 0x00000303 },
+	{ 0x1965, 0x0000, 0x00000303 },
+	{ 0x1966, 0x0000, 0x00000303 },
+	{ 0x1967, 0x0000, 0x00000303 },
+	{ 0x1968, 0x0000, 0x00000303 },
+	{ 0x1969, 0x0000, 0x00000303 },
+	{ 0x196c, 0x0000, 0x00000303 },
+	{ 0x196d, 0x0000, 0x00000303 },
+	{ 0x196e, 0x0000, 0x00000303 },
+	{ 0x196f, 0x0000, 0x00000303 },
+	{ 0x19c1, 0x0010, 0x00000303 },
+	{ 0x19c2, 0x0010, 0x00000303 },
+	{ 0x19c3, 0x0010, 0x00000303 },
+	{ 0x19c4, 0x0010, 0x00000303 },
+	{ 0x19c5, 0x0010, 0x00000303 },
+	{ 0x19c6, 0x0010, 0x00000303 },
+	{ 0x19c7, 0x0010, 0x00000303 },
+	{ 0x19c8, 0x0010, 0x00000303 },
+	{ 0x19c9, 0x0010, 0x00000303 },
+	{ 0x19cc, 0x0010, 0x00000303 },
+	{ 0x19cd, 0x0010, 0x00000303 },
+	{ 0x19ce, 0x0010, 0x00000303 },
+	{ 0x19cf, 0x0010, 0x00000303 },
+	{ 0x1c00, 0x0002, 0x00000103 },
+	{ 0x1c01, 0x0000, 0x00000001 },
+	{ 0x1920, 0x0000, 0x00000103 },
+	{ 0x1923, 0x0000, 0x00000103 },
+	{ 0x1924, 0x0000, 0x00000103 },
+	{ 0x1940, 0x0000, 0x00000103 },
+	{ 0x1941, 0x0004, 0x00000103 },
+	{ 0x1943, 0x0000, 0x00000103 },
+	{ 0x1944, 0x0000, 0x00000103 },
+	{ 0x1947, 0x0000, 0x00000103 },
+};
+
 static struct qcom_smmu *to_qcom_smmu(struct arm_smmu_device *smmu)
 {
 	return container_of(smmu, struct qcom_smmu, smmu);
@@ -451,6 +509,16 @@ static const struct arm_smmu_impl sdm845_smmu_500_impl = {
 	.tlb_sync = qcom_smmu_tlb_sync,
 };
 
+
+static const struct arm_smmu_impl sm8550_smmu_500_impl = {
+	.init_context = qcom_smmu_init_context,
+	.cfg_probe = qcom_smmu_cfg_probe,
+	.def_domain_type = qcom_smmu_def_domain_type,
+	.reset = arm_mmu500_reset,
+	.write_s2cr = qcom_smmu_write_s2cr,
+	.tlb_sync = qcom_smmu_tlb_sync,
+};
+
 static const struct arm_smmu_impl qcom_adreno_smmu_v2_impl = {
 	.init_context = qcom_adreno_smmu_init_context,
 	.def_domain_type = qcom_smmu_def_domain_type,
@@ -514,6 +582,11 @@ static const struct qcom_smmu_config qcom_smmu_impl0_cfg = {
 	.reg_offset = qcom_smmu_impl0_reg_offset,
 };
 
+static const struct actlr_config sm8550_actlrcfg = {
+	.adata = sm8550_apps_actlr_data,
+	.size = ARRAY_SIZE(sm8550_apps_actlr_data),
+};
+
 /*
  * It is not yet possible to use MDP SMMU with the bypass quirk on the msm8996,
  * there are not enough context banks.
@@ -537,16 +610,20 @@ static const struct qcom_smmu_match_data sdm845_smmu_500_data = {
 	/* Also no debug configuration. */
 };
 
+
+static const struct qcom_smmu_match_data sm8550_smmu_500_impl0_data = {
+	.impl = &sm8550_smmu_500_impl,
+	.adreno_impl = &qcom_adreno_smmu_500_impl,
+	.cfg = &qcom_smmu_impl0_cfg,
+	.actlrcfg = &sm8550_actlrcfg,
+};
+
 static const struct qcom_smmu_match_data qcom_smmu_500_impl0_data = {
 	.impl = &qcom_smmu_500_impl,
 	.adreno_impl = &qcom_adreno_smmu_500_impl,
 	.cfg = &qcom_smmu_impl0_cfg,
 };
 
-/*
- * Do not add any more qcom,SOC-smmu-500 entries to this list, unless they need
- * special handling and can not be covered by the qcom,smmu-500 entry.
- */
 static const struct of_device_id __maybe_unused qcom_smmu_impl_of_match[] = {
 	{ .compatible = "qcom,msm8996-smmu-v2", .data = &msm8996_smmu_data },
 	{ .compatible = "qcom,msm8998-smmu-v2", .data = &qcom_smmu_v2_data },
