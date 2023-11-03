@@ -29,7 +29,7 @@
 #endif
 
 #define __ASM_EXTABLE_RAW(insn, fixup, type, data)	\
-	.pushsection	__SECTION_NAME(__ex_table), "a";		\
+	__ASM_EXTABLE_PUSH_SECTION;			\
 	.balign		4;				\
 	.long		((insn) - .);			\
 	.long		((fixup) - .);			\
@@ -37,9 +37,8 @@
 	.short		(data);				\
 	.popsection;
 
-	.macro		_asm_extable, insn, fixup
-	__ASM_EXTABLE_RAW(\insn, \fixup, EX_TYPE_FIXUP, 0)
-	.endm
+#define _asm_extable(insn, fixup)			\
+	__ASM_EXTABLE_RAW(insn, fixup, EX_TYPE_FIXUP, 0)
 
 #else /* __ASSEMBLY__ */
 

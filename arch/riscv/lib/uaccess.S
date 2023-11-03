@@ -4,11 +4,9 @@
 #include <asm/asm-extable.h>
 #include <asm/csr.h>
 
-	.macro fixup op reg addr lbl
-100:
-	\op \reg, \addr
-	_asm_extable	100b, \lbl
-	.endm
+#define fixup(op, reg, addr, lbl)	\
+	100: op reg, addr;		\
+	_asm_extable(100b, lbl)
 
 ENTRY(__asm_copy_to_user)
 ENTRY(__asm_copy_from_user)
@@ -50,9 +48,9 @@ ENTRY(__asm_copy_from_user)
 	beq	a0, t1, .Lskip_align_dst
 1:
 	/* a5 - one byte for copying data */
-	fixup lb      a5, 0(a1), 10f
+	fixup(lb, a5, 0(a1), 10f)
 	addi	a1, a1, 1	/* src */
-	fixup sb      a5, 0(a0), 10f
+	fixup(sb, a5, 0(a0), 10f)
 	addi	a0, a0, 1	/* dst */
 	bltu	a0, t1, 1b	/* t1 - start of aligned dst */
 
@@ -77,22 +75,22 @@ ENTRY(__asm_copy_from_user)
 	 */
 	addi	t0, t0, -(8*SZREG) /* not to over run */
 2:
-	fixup REG_L   a4,        0(a1), 10f
-	fixup REG_L   a5,    SZREG(a1), 10f
-	fixup REG_L   a6,  2*SZREG(a1), 10f
-	fixup REG_L   a7,  3*SZREG(a1), 10f
-	fixup REG_L   t1,  4*SZREG(a1), 10f
-	fixup REG_L   t2,  5*SZREG(a1), 10f
-	fixup REG_L   t3,  6*SZREG(a1), 10f
-	fixup REG_L   t4,  7*SZREG(a1), 10f
-	fixup REG_S   a4,        0(a0), 10f
-	fixup REG_S   a5,    SZREG(a0), 10f
-	fixup REG_S   a6,  2*SZREG(a0), 10f
-	fixup REG_S   a7,  3*SZREG(a0), 10f
-	fixup REG_S   t1,  4*SZREG(a0), 10f
-	fixup REG_S   t2,  5*SZREG(a0), 10f
-	fixup REG_S   t3,  6*SZREG(a0), 10f
-	fixup REG_S   t4,  7*SZREG(a0), 10f
+	fixup(REG_L, a4,        0(a1), 10f)
+	fixup(REG_L, a5,    SZREG(a1), 10f)
+	fixup(REG_L, a6,  2*SZREG(a1), 10f)
+	fixup(REG_L, a7,  3*SZREG(a1), 10f)
+	fixup(REG_L, t1,  4*SZREG(a1), 10f)
+	fixup(REG_L, t2,  5*SZREG(a1), 10f)
+	fixup(REG_L, t3,  6*SZREG(a1), 10f)
+	fixup(REG_L, t4,  7*SZREG(a1), 10f)
+	fixup(REG_S, a4,        0(a0), 10f)
+	fixup(REG_S, a5,    SZREG(a0), 10f)
+	fixup(REG_S, a6,  2*SZREG(a0), 10f)
+	fixup(REG_S, a7,  3*SZREG(a0), 10f)
+	fixup(REG_S, t1,  4*SZREG(a0), 10f)
+	fixup(REG_S, t2,  5*SZREG(a0), 10f)
+	fixup(REG_S, t3,  6*SZREG(a0), 10f)
+	fixup(REG_S, t4,  7*SZREG(a0), 10f)
 	addi	a0, a0, 8*SZREG
 	addi	a1, a1, 8*SZREG
 	bltu	a0, t0, 2b
@@ -130,7 +128,7 @@ ENTRY(__asm_copy_from_user)
 	sub	t4, a5, t3
 
 	/* Load the first word to combine with second word */
-	fixup REG_L   a5, 0(a1), 10f
+	fixup(REG_L, a5, 0(a1), 10f)
 
 3:
 	/* Main shifting copy
@@ -142,11 +140,11 @@ ENTRY(__asm_copy_from_user)
 
 	/* At least one iteration will be executed */
 	srl	a4, a5, t3
-	fixup REG_L   a5, SZREG(a1), 10f
+	fixup(REG_L, a5, SZREG(a1), 10f)
 	addi	a1, a1, SZREG
 	sll	a2, a5, t4
 	or	a2, a2, a4
-	fixup REG_S   a2, 0(a0), 10f
+	fixup(REG_S, a2, 0(a0), 10f)
 	addi	a0, a0, SZREG
 	bltu	a0, t1, 3b
 
@@ -163,9 +161,9 @@ ENTRY(__asm_copy_from_user)
 	 */
 	bgeu	a0, t0, .Lout_copy_user  /* check if end of copy */
 4:
-	fixup lb      a5, 0(a1), 10f
+	fixup(lb, a5, 0(a1), 10f)
 	addi	a1, a1, 1	/* src */
-	fixup sb      a5, 0(a0), 10f
+	fixup(sb, a5, 0(a0), 10f)
 	addi	a0, a0, 1	/* dst */
 	bltu	a0, t0, 4b	/* t0 - end of dst */
 
@@ -205,7 +203,7 @@ ENTRY(__clear_user)
 	bgeu t0, t1, 2f
 	bltu a0, t0, 4f
 1:
-	fixup REG_S, zero, (a0), 11f
+	fixup(REG_S, zero, (a0), 11f)
 	addi a0, a0, SZREG
 	bltu a0, t1, 1b
 2:
@@ -217,12 +215,12 @@ ENTRY(__clear_user)
 	li a0, 0
 	ret
 4: /* Edge case: unalignment */
-	fixup sb, zero, (a0), 11f
+	fixup(sb, zero, (a0), 11f)
 	addi a0, a0, 1
 	bltu a0, t0, 4b
 	j 1b
 5: /* Edge case: remainder */
-	fixup sb, zero, (a0), 11f
+	fixup(sb, zero, (a0), 11f)
 	addi a0, a0, 1
 	bltu a0, a3, 5b
 	j 3b
