@@ -47,4 +47,7 @@ void gic_irq_clear_pending(unsigned int intid);
 bool gic_irq_get_pending(unsigned int intid);
 void gic_irq_set_config(unsigned int intid, bool is_edge);
 
+/* Execute a Wait For Interrupt instruction. */
+void gic_wfi(void);
+
 #endif /* SELFTEST_KVM_GIC_H */
