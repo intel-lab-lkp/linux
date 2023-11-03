@@ -1,0 +1,26 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ */
+
+/dts-v1/;
+
+/* PM7250B is configured to use SID8/9 */
+#define PM7250B_SID 8
+#define PM7250B_SID1 9
+
+#include "qcm6490-iot-common.dtsi"
+#include "pm7250b.dtsi"
+
+/ {
+	model = "Qualcomm Technologies, Inc. QCM6490 RB3";
+	compatible = "qcom,qcm6490-rb3", "qcom,qcm6490";
+
+	aliases {
+		serial0 = &uart5;
+	};
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+};
