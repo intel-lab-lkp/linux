@@ -201,18 +201,30 @@
 # endif
 #endif
 
-#define BOUNDED_SECTION_PRE_LABEL(_sec_, _label_, _BEGIN_, _END_)	\
+#ifdef CONFIG_SECTION_NO_KEEP_SUPPORT
+#define NO_KEEP(sec) sec
+#else
+#define NO_KEEP(sec) KEEP(sec)
+#endif
+
+#define _BOUNDED_SECTION_PRE_LABEL(_sec_, _label_, _BEGIN_, _END_, _KEEP_, ...)	\
 	_BEGIN_##_label_ = .;						\
-	KEEP(*(BSEC_MAIN(_sec_)))					\
+	_KEEP_(*(BSEC_MAIN(_sec_)))					\
 	_END_##_label_ = .;
 
-#define BOUNDED_SECTION_POST_LABEL(_sec_, _label_, _BEGIN_, _END_)	\
+#define BOUNDED_SECTION_PRE_LABEL(_sec_, _label_, _BEGIN_, _END_, ...)		\
+	_BOUNDED_SECTION_PRE_LABEL(_sec_, _label_, _BEGIN_, _END_, ##__VA_ARGS__, KEEP)
+
+#define _BOUNDED_SECTION_POST_LABEL(_sec_, _label_, _BEGIN_, _END_, _KEEP_, ...)\
 	_label_##_BEGIN_ = .;						\
-	KEEP(*(BSEC_MAIN(_sec_)))					\
+	_KEEP_(*(BSEC_MAIN(_sec_)))					\
 	_label_##_END_ = .;
 
-#define BOUNDED_SECTION_BY(_sec_, _label_)				\
-	BOUNDED_SECTION_PRE_LABEL(_sec_, _label_, __start, __stop)
+#define BOUNDED_SECTION_POST_LABEL(_sec_, _label_, _BEGIN_, _END_, ...)		\
+	_BOUNDED_SECTION_POST_LABEL(_sec_, _label_, _BEGIN_, _END_, ##__VA_ARGS__, KEEP)
+
+#define BOUNDED_SECTION_BY(_sec_, _label_, ...)				\
+	_BOUNDED_SECTION_PRE_LABEL(_sec_, _label_, __start, __stop, ##__VA_ARGS__, KEEP)
 
 #define BOUNDED_SECTION(_sec)	 BOUNDED_SECTION_BY(_sec, _sec)
 

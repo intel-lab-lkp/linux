@@ -1467,6 +1467,13 @@ config HAVE_SECTION_NO_KEEP_SUPPORT
 	depends on HAVE_SECTION_SHF_LINK_ORDER_SUPPORT || HAVE_SECTION_SHF_GROUP_SUPPORT
 	default y
 
+config SECTION_NO_KEEP_SUPPORT
+	bool
+	depends on SECTION_SHF_LINK_ORDER_SUPPORT || SECTION_SHF_GROUP_SUPPORT
+	default y
+	help
+	  This option allows some sections unkept so they can be GC
+
 config HAVE_SECTION_SHF_LINK_ORDER_SUPPORT
 	bool
 	depends on AS_IS_GNU && AS_VERSION >= 23500
@@ -1765,6 +1772,7 @@ config RESTRICTED_TRIM_UNUSED_SYSCALLS
 config SECTION_SHF_LINK_ORDER_SUPPORT
 	bool "Using SHF_LINK_ORDER attribute (EXPERIMENTAL)" if EXPERT
 	depends on HAVE_SECTION_SHF_LINK_ORDER_SUPPORT
+	select SECTION_NO_KEEP_SUPPORT
 	help
 	  Say Y here to trim more 'unused' syscalls wrongly kept by __ex_table
 	  like sections in kernel space.
@@ -1778,6 +1786,7 @@ config SECTION_SHF_LINK_ORDER_SUPPORT
 config SECTION_SHF_GROUP_SUPPORT
 	bool "Using SHF_GROUP attribute (EXPERIMENTAL)" if EXPERT
 	depends on HAVE_SECTION_SHF_GROUP_SUPPORT
+	select SECTION_NO_KEEP_SUPPORT
 	help
 	  Say Y here to trim more 'unused' syscalls wrongly kept by __ex_table
 	  like sections in kernel space.
