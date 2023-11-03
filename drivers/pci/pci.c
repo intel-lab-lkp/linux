@@ -6223,6 +6223,35 @@ int pcie_set_mps(struct pci_dev *dev, int mps)
 }
 EXPORT_SYMBOL(pcie_set_mps);
 
+static u32 pcie_calc_bw_limits(struct pci_dev *dev, u32 bw,
+			       struct pci_dev **limiting_dev,
+			       enum pci_bus_speed *speed,
+			       enum pcie_link_width *width)
+{
+	enum pcie_link_width next_width;
+	enum pci_bus_speed next_speed;
+	u32 next_bw;
+	u16 lnksta;
+
+	pcie_capability_read_word(dev, PCI_EXP_LNKSTA, &lnksta);
+	next_speed = pcie_link_speed[lnksta & PCI_EXP_LNKSTA_CLS];
+	next_width = (lnksta & PCI_EXP_LNKSTA_NLW) >> PCI_EXP_LNKSTA_NLW_SHIFT;
+	next_bw = next_width * PCIE_SPEED2MBS_ENC(next_speed);
+
+	/* Check if current device limits the total bandwidth */
+	if (!bw || next_bw <= bw) {
+		bw = next_bw;
+		if (limiting_dev)
+			*limiting_dev = dev;
+		if (speed)
+			*speed = next_speed;
+		if (width)
+			*width = next_width;
+	}
+
+	return bw;
+}
+
 /**
  * pcie_bandwidth_available - determine minimum link settings of a PCIe
  *			      device and its bandwidth limitation
@@ -6236,46 +6265,41 @@ EXPORT_SYMBOL(pcie_set_mps);
  * limiting_dev, speed, and width pointers are supplied) information about
  * that point.  The bandwidth returned is in Mb/s, i.e., megabits/second of
  * raw bandwidth.
+ *
+ * This excludes the bandwidth calculation that has been returned from a
+ * PCIe device used for transmitting tunneled PCIe traffic over a Thunderbolt
+ * or USB4 link that is part of larger hierarchy. The calculation is excluded
+ * because the USB4 specification specifies that the max speed returned from
+ * PCIe configuration registers for the tunneling link is always PCI 1x 2.5 GT/s.
+ * When only tunneled devices are present, the bandwidth returned is the
+ * bandwidth available from the first tunneled device.
  */
 u32 pcie_bandwidth_available(struct pci_dev *dev, struct pci_dev **limiting_dev,
 			     enum pci_bus_speed *speed,
 			     enum pcie_link_width *width)
 {
-	u16 lnksta;
-	enum pci_bus_speed next_speed;
-	enum pcie_link_width next_width;
-	u32 bw, next_bw;
+	struct pci_dev *tdev = NULL;
+	u32 bw = 0;
 
 	if (speed)
 		*speed = PCI_SPEED_UNKNOWN;
 	if (width)
 		*width = PCIE_LNK_WIDTH_UNKNOWN;
 
-	bw = 0;
-
 	while (dev) {
-		pcie_capability_read_word(dev, PCI_EXP_LNKSTA, &lnksta);
-
-		next_speed = pcie_link_speed[lnksta & PCI_EXP_LNKSTA_CLS];
-		next_width = (lnksta & PCI_EXP_LNKSTA_NLW) >>
-			PCI_EXP_LNKSTA_NLW_SHIFT;
-
-		next_bw = next_width * PCIE_SPEED2MBS_ENC(next_speed);
-
-		/* Check if current device limits the total bandwidth */
-		if (!bw || next_bw <= bw) {
-			bw = next_bw;
-
-			if (limiting_dev)
-				*limiting_dev = dev;
-			if (speed)
-				*speed = next_speed;
-			if (width)
-				*width = next_width;
+		if (dev->is_tunneled) {
+			if (!tdev)
+				tdev = dev;
+			goto skip;
 		}
-
+		bw = pcie_calc_bw_limits(dev, bw, limiting_dev, speed, width);
+skip:
 		dev = pci_upstream_bridge(dev);
 	}
+
+	/* If nothing "faster" found on link, limit to first tunneled device */
+	if (tdev && !bw)
+		bw = pcie_calc_bw_limits(tdev, bw, limiting_dev, speed, width);
 
 	return bw;
 }
