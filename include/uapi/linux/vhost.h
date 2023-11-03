@@ -219,4 +219,70 @@
  */
 #define VHOST_VDPA_RESUME		_IO(VHOST_VIRTIO, 0x7E)
 
+/* vhost_vdpa_set_iommufd
+ * Input parameters:
+ * @iommufd: file descriptor from /dev/iommu; pass -1 to unset
+ * @iommufd_ioasid: IOAS identifier returned from ioctl(IOMMU_IOAS_ALLOC)
+ * Output parameters:
+ * @out_dev_id: device identifier
+ */
+struct vhost_vdpa_set_iommufd {
+	__s32 iommufd;
+	__u32 iommufd_ioasid;
+	__u32 out_dev_id;
+};
+
+#define VHOST_VDPA_SET_IOMMU_FD \
+	_IOW(VHOST_VIRTIO, 0x7F, struct vhost_vdpa_set_iommufd)
+
+/*
+ * VDPA_DEVICE_ATTACH_IOMMUFD_AS -
+ * _IOW(VHOST_VIRTIO, 0x7f, struct vdpa_device_attach_iommufd_as)
+ *
+ * Attach a vdpa device to an iommufd address space specified by IOAS
+ * id.
+ *
+ * Available only after a device has been bound to iommufd via
+ * VHOST_VDPA_SET_IOMMU_FD
+ *
+ * Undo by VDPA_DEVICE_DETACH_IOMMUFD_AS or device fd close.
+ *
+ * @argsz:	user filled size of this data.
+ * @flags:	must be 0.
+ * @ioas_id:	Input the target id which can represent an ioas
+ *		allocated via iommufd subsystem.
+ *
+ * Return: 0 on success, -errno on failure.
+ */
+struct vdpa_device_attach_iommufd_as {
+	__u32 argsz;
+	__u32 flags;
+	__u32 ioas_id;
+};
+
+#define VDPA_DEVICE_ATTACH_IOMMUFD_AS \
+	_IOW(VHOST_VIRTIO, 0x82, struct vdpa_device_attach_iommufd_as)
+
+/*
+ * VDPA_DEVICE_DETACH_IOMMUFD_AS
+ *
+ * Detach a vdpa device from the iommufd address space it has been
+ * attached to. After it, device should be in a blocking DMA state.
+ *
+ * Available only after a device has been bound to iommufd via
+ * VHOST_VDPA_SET_IOMMU_FD
+ *
+ * @argsz:	user filled size of this data.
+ * @flags:	must be 0.
+ *
+ * Return: 0 on success, -errno on failure.
+ */
+struct vdpa_device_detach_iommufd_as {
+	__u32 argsz;
+	__u32 flags;
+};
+
+#define VDPA_DEVICE_DETACH_IOMMUFD_AS \
+	_IOW(VHOST_VIRTIO, 0x83, struct vdpa_device_detach_iommufd_as)
+
 #endif
