@@ -72,16 +72,6 @@ void rxe_mr_init_dma(int access, struct rxe_mr *mr)
 	mr->ibmr.type = IB_MR_TYPE_DMA;
 }
 
-static unsigned long rxe_mr_iova_to_index(struct rxe_mr *mr, u64 iova)
-{
-	return (iova >> mr->page_shift) - (mr->ibmr.iova >> mr->page_shift);
-}
-
-static unsigned long rxe_mr_iova_to_page_offset(struct rxe_mr *mr, u64 iova)
-{
-	return iova & (mr_page_size(mr) - 1);
-}
-
 static bool is_pmem_page(struct page *pg)
 {
 	unsigned long paddr = page_to_phys(pg);
@@ -232,17 +222,16 @@ int rxe_map_mr_sg(struct ib_mr *ibmr, struct scatterlist *sgl,
 		  int sg_nents, unsigned int *sg_offset)
 {
 	struct rxe_mr *mr = to_rmr(ibmr);
-	unsigned int page_size = mr_page_size(mr);
 
-	if (page_size != PAGE_SIZE) {
+	if (ibmr->page_size != PAGE_SIZE) {
 		rxe_err_mr(mr, "Unsupport mr page size %x, expect PAGE_SIZE(%lx)\n",
-			   page_size, PAGE_SIZE);
+			   ibmr->page_size, PAGE_SIZE);
 		return -EINVAL;
 	}
 
 	mr->nbuf = 0;
-	mr->page_shift = ilog2(page_size);
-	mr->page_mask = ~((u64)page_size - 1);
+	mr->page_shift = PAGE_SHIFT;
+	mr->page_mask = PAGE_MASK;
 
 	return ib_sg_to_pages(ibmr, sgl, sg_nents, sg_offset, rxe_set_page);
 }
@@ -250,8 +239,8 @@ int rxe_map_mr_sg(struct ib_mr *ibmr, struct scatterlist *sgl,
 static int rxe_mr_copy_xarray(struct rxe_mr *mr, u64 iova, void *addr,
 			      unsigned int length, enum rxe_mr_copy_dir dir)
 {
-	unsigned int page_offset = rxe_mr_iova_to_page_offset(mr, iova);
-	unsigned long index = rxe_mr_iova_to_index(mr, iova);
+	unsigned int page_offset = iova & (PAGE_SIZE - 1);
+	unsigned long index = (iova - mr->ibmr.iova) >> PAGE_SHIFT;
 	unsigned int bytes;
 	struct page *page;
 	void *va;
@@ -261,8 +250,7 @@ static int rxe_mr_copy_xarray(struct rxe_mr *mr, u64 iova, void *addr,
 		if (!page)
 			return -EFAULT;
 
-		bytes = min_t(unsigned int, length,
-				mr_page_size(mr) - page_offset);
+		bytes = min_t(unsigned int, length, PAGE_SIZE - page_offset);
 		va = kmap_local_page(page);
 		if (dir == RXE_FROM_MR_OBJ)
 			memcpy(addr, va + page_offset, bytes);
@@ -450,14 +438,12 @@ int rxe_flush_pmem_iova(struct rxe_mr *mr, u64 iova, unsigned int length)
 		return err;
 
 	while (length > 0) {
-		index = rxe_mr_iova_to_index(mr, iova);
+		index = (iova - mr->ibmr.iova) >> PAGE_SHIFT;
 		page = xa_load(&mr->page_list, index);
-		page_offset = rxe_mr_iova_to_page_offset(mr, iova);
+		page_offset = iova & (PAGE_SIZE - 1);
 		if (!page)
 			return -EFAULT;
-		bytes = min_t(unsigned int, length,
-				mr_page_size(mr) - page_offset);
-
+		bytes = min_t(unsigned int, length, PAGE_SIZE - page_offset);
 		va = kmap_local_page(page);
 		arch_wb_cache_pmem(va + page_offset, bytes);
 		kunmap_local(va);
@@ -498,8 +484,8 @@ int rxe_mr_do_atomic_op(struct rxe_mr *mr, u64 iova, int opcode,
 			rxe_dbg_mr(mr, "iova out of range");
 			return RESPST_ERR_RKEY_VIOLATION;
 		}
-		page_offset = rxe_mr_iova_to_page_offset(mr, iova);
-		index = rxe_mr_iova_to_index(mr, iova);
+		page_offset = iova & (PAGE_SIZE - 1);
+		index = (iova - mr->ibmr.iova) >> PAGE_SHIFT;
 		page = xa_load(&mr->page_list, index);
 		if (!page)
 			return RESPST_ERR_RKEY_VIOLATION;
@@ -556,8 +542,8 @@ int rxe_mr_do_atomic_write(struct rxe_mr *mr, u64 iova, u64 value)
 			rxe_dbg_mr(mr, "iova out of range");
 			return RESPST_ERR_RKEY_VIOLATION;
 		}
-		page_offset = rxe_mr_iova_to_page_offset(mr, iova);
-		index = rxe_mr_iova_to_index(mr, iova);
+		page_offset = iova & (PAGE_SIZE - 1);
+		index = (iova - mr->ibmr.iova) >> PAGE_SHIFT;
 		page = xa_load(&mr->page_list, index);
 		if (!page)
 			return RESPST_ERR_RKEY_VIOLATION;
