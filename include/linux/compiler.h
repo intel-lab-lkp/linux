@@ -246,6 +246,12 @@ static inline void *offset_to_ptr(const int *off)
 #endif
 #endif
 
+/* Unique Label NAME. */
+/* Label is file scope, __LINE__ is enough, and not change in the same macro call */
+#ifndef __LABEL_NAME
+# define __LABEL_NAME(prefix) __stringify(__PASTE(__PASTE(prefix, _), __LINE__))
+#endif
+
 /* &a[0] degrades to a pointer: a different type from an array */
 #define __must_be_array(a)	BUILD_BUG_ON_ZERO(__same_type((a), &(a)[0]))
 
