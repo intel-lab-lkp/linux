@@ -114,6 +114,7 @@ available subsections can be seen below.
    zorro
    hte/index
    wmi
+   tee
 
 .. only::  subproject and html
 
