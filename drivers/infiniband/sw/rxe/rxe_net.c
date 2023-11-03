@@ -412,6 +412,27 @@ static int rxe_loopback(struct sk_buff *skb, struct rxe_pkt_info *pkt)
 	return 0;
 }
 
+/* for a multicast packet must send remotely and looback to any local qps
+ * that may belong to the mcast group
+ */
+static int rxe_loop_and_send(struct sk_buff *skb, struct rxe_pkt_info *pkt)
+{
+	struct sk_buff *cskb;
+	int err, loc_err = 0;
+
+	if (atomic_read(&pkt->rxe->mcg_num)) {
+		loc_err = -ENOMEM;
+		cskb = skb_clone(skb, GFP_KERNEL);
+		if (cskb)
+			loc_err = rxe_loopback(cskb, pkt);
+	}
+
+	err = rxe_send(skb, pkt);
+	if (loc_err)
+		err = loc_err;
+	return err;
+}
+
 int rxe_xmit_packet(struct rxe_qp *qp, struct rxe_pkt_info *pkt,
 		    struct sk_buff *skb)
 {
@@ -431,7 +452,9 @@ int rxe_xmit_packet(struct rxe_qp *qp, struct rxe_pkt_info *pkt,
 
 	rxe_icrc_generate(skb, pkt);
 
-	if (pkt->mask & RXE_LOOPBACK_MASK)
+	if (pkt->mask & RXE_MCAST_MASK)
+		err = rxe_loop_and_send(skb, pkt);
+	else if (pkt->mask & RXE_LOOPBACK_MASK)
 		err = rxe_loopback(skb, pkt);
 	else
 		err = rxe_send(skb, pkt);
