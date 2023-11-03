@@ -2585,17 +2585,12 @@ static inline void dec_mm_counter(struct mm_struct *mm, int member)
 	mm_trace_rss_stat(mm, member);
 }
 
+/* Optimized variant when folio is already known not to be anon */
 static inline int mm_counter_file_folio(struct folio *folio)
 {
 	if (folio_test_swapbacked(folio))
 		return MM_SHMEMPAGES;
 	return MM_FILEPAGES;
-}
-
-/* Optimized variant when page is already known not to be PageAnon */
-static inline int mm_counter_file(struct page *page)
-{
-	return mm_counter_file_folio(page_folio(page));
 }
 
 static inline int mm_counter_folio(struct folio *folio)
