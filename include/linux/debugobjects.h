@@ -31,6 +31,11 @@ struct debug_obj {
 	unsigned int		astate;
 	void			*object;
 	const struct debug_obj_descr *descr;
+#ifdef CONFIG_STACKDEPOT
+#define DEBUG_OBJ_ADDRS_COUNT 16
+	/* Including stackdepot.h blows up the build, so open-code the handle. */
+	u64 trace_handle;
+#endif
 };
 
 /**

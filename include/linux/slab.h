@@ -793,4 +793,15 @@ int slab_dead_cpu(unsigned int cpu);
 #define slab_dead_cpu		NULL
 #endif
 
+
+/**
+ * Calling this on allocated memory will print debugging info
+ * about the object, if CONFIG_SLAB_DEBUG is enabled.
+ */
+#ifdef CONFIG_SLUB_DEBUG
+void slab_print_mem_info(const void *x);
+#else
+static inline void slab_print_mem_info(const void *x) { }
+#endif
+
 #endif	/* _LINUX_SLAB_H */

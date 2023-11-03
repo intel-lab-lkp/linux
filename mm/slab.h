@@ -399,14 +399,14 @@ DECLARE_STATIC_KEY_TRUE(slub_debug_enabled);
 #else
 DECLARE_STATIC_KEY_FALSE(slub_debug_enabled);
 #endif
-extern void print_tracking(struct kmem_cache *s, void *object);
+extern void print_tracking(struct kmem_cache *s, const void *object);
 long validate_slab_cache(struct kmem_cache *s);
 static inline bool __slub_debug_enabled(void)
 {
 	return static_branch_unlikely(&slub_debug_enabled);
 }
 #else
-static inline void print_tracking(struct kmem_cache *s, void *object)
+static inline void print_tracking(struct kmem_cache *s, const void *object)
 {
 }
 static inline bool __slub_debug_enabled(void)

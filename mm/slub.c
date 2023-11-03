@@ -760,10 +760,10 @@ static inline unsigned int get_info_end(struct kmem_cache *s)
 		return s->inuse;
 }
 
-static struct track *get_track(struct kmem_cache *s, void *object,
+static struct track *get_track(struct kmem_cache *s, const void *object,
 	enum track_item alloc)
 {
-	struct track *p;
+	const struct track *p;
 
 	p = object + get_info_end(s);
 
@@ -841,11 +841,14 @@ static void print_track(const char *s, struct track *t, unsigned long pr_time)
 #endif
 }
 
-void print_tracking(struct kmem_cache *s, void *object)
+void print_tracking(struct kmem_cache *s, const void *object)
 {
 	unsigned long pr_time = jiffies;
-	if (!(s->flags & SLAB_STORE_USER))
+	if (!(s->flags & SLAB_STORE_USER)) {
+		pr_err("slub-print-tracking, STORE-USER not enabled, cache: %s flags: 0x%x\n",
+		       s->name, s->flags);
 		return;
+	}
 
 	print_track("Allocated", get_track(s, object, TRACK_ALLOC), pr_time);
 	print_track("Freed", get_track(s, object, TRACK_FREE), pr_time);
@@ -1712,6 +1715,29 @@ slab_flags_t kmem_cache_flags(unsigned int object_size,
 
 	return flags | slub_debug_local;
 }
+
+void slab_print_mem_info(const void *x)
+{
+	struct slab *slab;
+
+	if (unlikely(ZERO_OR_NULL_PTR(x)))
+		return;
+
+	slab = virt_to_slab(x);
+	if (!slab) {
+		pr_err("slub-print-mem-info, could not find slab for virt addr: %p\n",
+		       x);
+		return;
+	}
+
+	pr_err("slab-info, slab: %p\n", slab);
+	print_slab_info(slab);
+	pr_err("slab-tracking-info: cache: %s (%p)\n",
+	       slab->slab_cache->name, slab->slab_cache);
+	print_tracking(slab->slab_cache, x);
+	pr_err("end of slab-tracking-info\n");
+}
+
 #else /* !CONFIG_SLUB_DEBUG */
 static inline void setup_object_debug(struct kmem_cache *s, void *object) {}
 static inline

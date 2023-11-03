@@ -17,6 +17,8 @@
 #include <linux/hash.h>
 #include <linux/kmemleak.h>
 #include <linux/cpu.h>
+#include <linux/slab.h>
+#include <linux/stackdepot.h>
 
 #define ODEBUG_HASH_BITS	14
 #define ODEBUG_HASH_SIZE	(1 << ODEBUG_HASH_BITS)
@@ -216,6 +218,33 @@ static struct debug_obj *__alloc_object(struct hlist_head *list)
 	return obj;
 }
 
+#ifdef CONFIG_STACKDEPOT
+static void debug_print_stack_info(struct debug_obj *object)
+{
+	if (object->trace_handle) {
+		pr_err("debugobjects: debug_obj allocated at:\n");
+		stack_depot_print(object->trace_handle);
+		pr_err("end of stack dump\n");
+	}
+}
+
+static noinline depot_stack_handle_t set_track_prepare(void)
+{
+	depot_stack_handle_t trace_handle;
+	unsigned long entries[DEBUG_OBJ_ADDRS_COUNT];
+	unsigned int nr_entries;
+
+	nr_entries = stack_trace_save(entries, ARRAY_SIZE(entries), 3);
+	trace_handle = stack_depot_save(entries, nr_entries, GFP_NOWAIT);
+
+	return trace_handle;
+}
+
+#else
+static void debug_print_stack_info(struct debug_obj *object) { }
+static depot_stack_handle_t set_track_prepare(void) { }
+#endif
+
 static struct debug_obj *
 alloc_object(void *addr, struct debug_bucket *b, const struct debug_obj_descr *descr)
 {
@@ -272,6 +301,12 @@ init_obj:
 		obj->state  = ODEBUG_STATE_NONE;
 		obj->astate = 0;
 		hlist_add_head(&obj->node, &b->list);
+
+		/* Save stack of where object was created */
+#ifdef CONFIG_STACKDEPOT
+		/* kernel backtrace */
+		obj->trace_handle = set_track_prepare();
+#endif
 	}
 	return obj;
 }
@@ -515,6 +550,8 @@ static void debug_print_object(struct debug_obj *obj, char *msg)
 				 "object: %p object type: %s hint: %pS\n",
 			msg, obj_states[obj->state], obj->astate,
 			obj->object, descr->name, hint);
+		debug_print_stack_info(obj);
+		slab_print_mem_info(obj->object);
 	}
 	debug_objects_warnings++;
 }

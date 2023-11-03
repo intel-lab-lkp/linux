@@ -121,4 +121,6 @@ static inline int objs_per_slab(const struct kmem_cache *cache,
 	return cache->num;
 }
 
+static inline void slab_print_mem_info(const void *x) { }
+
 #endif	/* _LINUX_SLAB_DEF_H */
