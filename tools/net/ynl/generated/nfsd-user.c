@@ -15,6 +15,8 @@
 /* Enums */
 static const char * const nfsd_op_strmap[] = {
 	[NFSD_CMD_RPC_STATUS_GET] = "rpc-status-get",
+	[NFSD_CMD_THREADS_SET] = "threads-set",
+	[NFSD_CMD_THREADS_GET] = "threads-get",
 };
 
 const char *nfsd_op_str(int op)
@@ -45,6 +47,15 @@ struct ynl_policy_attr nfsd_rpc_status_policy[NFSD_A_RPC_STATUS_MAX + 1] = {
 struct ynl_policy_nest nfsd_rpc_status_nest = {
 	.max_attr = NFSD_A_RPC_STATUS_MAX,
 	.table = nfsd_rpc_status_policy,
+};
+
+struct ynl_policy_attr nfsd_server_worker_policy[NFSD_A_SERVER_WORKER_MAX + 1] = {
+	[NFSD_A_SERVER_WORKER_THREADS] = { .name = "threads", .type = YNL_PT_U32, },
+};
+
+struct ynl_policy_nest nfsd_server_worker_nest = {
+	.max_attr = NFSD_A_SERVER_WORKER_MAX,
+	.table = nfsd_server_worker_policy,
 };
 
 /* Common nested types */
@@ -87,6 +98,87 @@ struct nfsd_rpc_status_get_list *nfsd_rpc_status_get_dump(struct ynl_sock *ys)
 
 free_list:
 	nfsd_rpc_status_get_list_free(yds.first);
+	return NULL;
+}
+
+/* ============== NFSD_CMD_THREADS_SET ============== */
+/* NFSD_CMD_THREADS_SET - do */
+void nfsd_threads_set_req_free(struct nfsd_threads_set_req *req)
+{
+	free(req);
+}
+
+int nfsd_threads_set(struct ynl_sock *ys, struct nfsd_threads_set_req *req)
+{
+	struct nlmsghdr *nlh;
+	int err;
+
+	nlh = ynl_gemsg_start_req(ys, ys->family_id, NFSD_CMD_THREADS_SET, 1);
+	ys->req_policy = &nfsd_server_worker_nest;
+
+	if (req->_present.threads)
+		mnl_attr_put_u32(nlh, NFSD_A_SERVER_WORKER_THREADS, req->threads);
+
+	err = ynl_exec(ys, nlh, NULL);
+	if (err < 0)
+		return -1;
+
+	return 0;
+}
+
+/* ============== NFSD_CMD_THREADS_GET ============== */
+/* NFSD_CMD_THREADS_GET - do */
+void nfsd_threads_get_rsp_free(struct nfsd_threads_get_rsp *rsp)
+{
+	free(rsp);
+}
+
+int nfsd_threads_get_rsp_parse(const struct nlmsghdr *nlh, void *data)
+{
+	struct ynl_parse_arg *yarg = data;
+	struct nfsd_threads_get_rsp *dst;
+	const struct nlattr *attr;
+
+	dst = yarg->data;
+
+	mnl_attr_for_each(attr, nlh, sizeof(struct genlmsghdr)) {
+		unsigned int type = mnl_attr_get_type(attr);
+
+		if (type == NFSD_A_SERVER_WORKER_THREADS) {
+			if (ynl_attr_validate(yarg, attr))
+				return MNL_CB_ERROR;
+			dst->_present.threads = 1;
+			dst->threads = mnl_attr_get_u32(attr);
+		}
+	}
+
+	return MNL_CB_OK;
+}
+
+struct nfsd_threads_get_rsp *nfsd_threads_get(struct ynl_sock *ys)
+{
+	struct ynl_req_state yrs = { .yarg = { .ys = ys, }, };
+	struct nfsd_threads_get_rsp *rsp;
+	struct nlmsghdr *nlh;
+	int err;
+
+	nlh = ynl_gemsg_start_req(ys, ys->family_id, NFSD_CMD_THREADS_GET, 1);
+	ys->req_policy = &nfsd_server_worker_nest;
+	yrs.yarg.rsp_policy = &nfsd_server_worker_nest;
+
+	rsp = calloc(1, sizeof(*rsp));
+	yrs.yarg.data = rsp;
+	yrs.cb = nfsd_threads_get_rsp_parse;
+	yrs.rsp_cmd = NFSD_CMD_THREADS_GET;
+
+	err = ynl_exec(ys, nlh, &yrs);
+	if (err < 0)
+		goto err_free;
+
+	return rsp;
+
+err_free:
+	nfsd_threads_get_rsp_free(rsp);
 	return NULL;
 }
 

@@ -30,4 +30,51 @@ void nfsd_rpc_status_get_list_free(struct nfsd_rpc_status_get_list *rsp);
 
 struct nfsd_rpc_status_get_list *nfsd_rpc_status_get_dump(struct ynl_sock *ys);
 
+/* ============== NFSD_CMD_THREADS_SET ============== */
+/* NFSD_CMD_THREADS_SET - do */
+struct nfsd_threads_set_req {
+	struct {
+		__u32 threads:1;
+	} _present;
+
+	__u32 threads;
+};
+
+static inline struct nfsd_threads_set_req *nfsd_threads_set_req_alloc(void)
+{
+	return calloc(1, sizeof(struct nfsd_threads_set_req));
+}
+void nfsd_threads_set_req_free(struct nfsd_threads_set_req *req);
+
+static inline void
+nfsd_threads_set_req_set_threads(struct nfsd_threads_set_req *req,
+				 __u32 threads)
+{
+	req->_present.threads = 1;
+	req->threads = threads;
+}
+
+/*
+ * set the number of running threads
+ */
+int nfsd_threads_set(struct ynl_sock *ys, struct nfsd_threads_set_req *req);
+
+/* ============== NFSD_CMD_THREADS_GET ============== */
+/* NFSD_CMD_THREADS_GET - do */
+
+struct nfsd_threads_get_rsp {
+	struct {
+		__u32 threads:1;
+	} _present;
+
+	__u32 threads;
+};
+
+void nfsd_threads_get_rsp_free(struct nfsd_threads_get_rsp *rsp);
+
+/*
+ * get the number of running threads
+ */
+struct nfsd_threads_get_rsp *nfsd_threads_get(struct ynl_sock *ys);
+
 #endif /* _LINUX_NFSD_GEN_H */
