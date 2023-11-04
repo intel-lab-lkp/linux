@@ -207,11 +207,19 @@ static int spi_mockup_transfer(struct spi_controller *ctrl,
 	return ret;
 }
 
+struct spi_mockup_priv_data {
+	u32 min_speed;
+	u32 max_speed;
+	u16 flags;
+	u16 num_cs;
+};
+
 static int spi_mockup_probe(struct platform_device *pdev)
 {
 	int ret;
 	struct mockup_spi *mock;
 	struct spi_controller *ctrl;
+	struct spi_mockup_priv_data *data;
 
 	ctrl = spi_alloc_host(&pdev->dev, sizeof(struct mockup_spi));
 	if (!ctrl) {
@@ -227,6 +235,14 @@ static int spi_mockup_probe(struct platform_device *pdev)
 	ctrl->mode_bits = SPI_MODE_USER_MASK;
 	ctrl->bus_num = pdev->id;
 	ctrl->transfer_one_message = spi_mockup_transfer;
+
+	data = dev_get_platdata(&pdev->dev);
+	if (data) {
+		ctrl->min_speed_hz = data->min_speed;
+		ctrl->max_speed_hz = data->max_speed;
+		ctrl->flags = data->flags;
+		ctrl->num_chipselect = data->num_cs;
+	}
 
 	mock = spi_controller_get_devdata(ctrl);
 	mutex_init(&mock->lock);
@@ -259,6 +275,7 @@ struct spi_mockup_device {
 	unsigned int bus_nr;
 	struct mutex lock;
 	struct platform_device *pdev;
+	struct spi_mockup_priv_data data;
 };
 
 static struct spi_mockup_device *to_spi_mockup_dev(struct config_item *item)
@@ -283,6 +300,9 @@ spi_mockup_enable_store(struct config_item *item, const char *page, size_t len)
 
 	pdevinfo.name = "spi-mockup";
 	pdevinfo.id = dev->bus_nr;
+	pdevinfo.data = &dev->data;
+	pdevinfo.size_data = sizeof(dev->data);
+
 	dev->pdev = platform_device_register_full(&pdevinfo);
 	if (IS_ERR(dev->pdev)) {
 		ret = PTR_ERR(dev->pdev);
@@ -315,9 +335,43 @@ out:
 }
 CONFIGFS_ATTR_WO(spi_mockup_, disable);
 
+#define SPI_MOCKUP_ATTR(type, name) \
+static ssize_t spi_mockup_ ## name ## _store(struct config_item *item,	   \
+					     const char *page, size_t len) \
+{									   \
+	int ret;							   \
+	type val;							   \
+	struct spi_mockup_device *dev = to_spi_mockup_dev(item);	   \
+									   \
+	mutex_lock(&dev->lock);						   \
+	if (dev->pdev) {						   \
+		ret = -EBUSY;						   \
+		goto out;						   \
+	}								   \
+									   \
+	ret = kstrto ## type(page, 0, &val);				   \
+	if (ret)							   \
+		goto out;						   \
+									   \
+	dev->data.name = val;						   \
+out:									   \
+	mutex_unlock(&dev->lock);					   \
+	return ret ? ret : len;						   \
+}									   \
+CONFIGFS_ATTR_WO(spi_mockup_, name)					   \
+
+SPI_MOCKUP_ATTR(u32, min_speed)
+SPI_MOCKUP_ATTR(u32, max_speed)
+SPI_MOCKUP_ATTR(u16, flags)
+SPI_MOCKUP_ATTR(u16, num_cs)
+
 static struct configfs_attribute *spi_mockup_configfs_attrs[] = {
 	&spi_mockup_attr_enable,
 	&spi_mockup_attr_disable,
+	&spi_mockup_attr_min_speed,
+	&spi_mockup_attr_max_speed,
+	&spi_mockup_attr_flags,
+	&spi_mockup_attr_num_cs,
 	NULL,
 };
 
@@ -342,6 +396,7 @@ spi_mockup_config_make_device_group(struct config_group *group,
 	if (!dev)
 		return ERR_PTR(-ENOMEM);
 
+	dev->data.num_cs = MOCKUP_CHIPSELECT_MAX;
 	dev->bus_nr = nr;
 	mutex_init(&dev->lock);
 
