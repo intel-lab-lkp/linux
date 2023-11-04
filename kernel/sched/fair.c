@@ -1201,6 +1201,8 @@ static void update_curr(struct cfs_rq *cfs_rq)
 		account_group_exec_runtime(curtask, delta_exec);
 		if (curtask->server)
 			dl_server_update(curtask->server, delta_exec);
+		else
+			dl_server_update(&rq_of(cfs_rq)->fair_server, delta_exec);
 	}
 
 	account_cfs_rq_runtime(cfs_rq, delta_exec);
@@ -8421,6 +8423,7 @@ void fair_server_init(struct rq *rq)
 	dl_se->dl_runtime = 50 * NSEC_PER_MSEC;
 	dl_se->dl_deadline = 1000 * NSEC_PER_MSEC;
 	dl_se->dl_period = 1000 * NSEC_PER_MSEC;
+	dl_se->dl_zerolax = 1;
 
 	dl_server_init(dl_se, rq, fair_server_has_tasks, fair_server_pick);
 }

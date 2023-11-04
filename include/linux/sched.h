@@ -660,6 +660,8 @@ struct sched_dl_entity {
 	unsigned int			dl_non_contending : 1;
 	unsigned int			dl_overrun	  : 1;
 	unsigned int			dl_server         : 1;
+	unsigned int			dl_zerolax	  : 1;
+	unsigned int			dl_zerolax_armed  : 1;
 
 	/*
 	 * Bandwidth enforcement timer. Each -deadline task has its
