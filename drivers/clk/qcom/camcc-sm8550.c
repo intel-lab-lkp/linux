@@ -3544,7 +3544,7 @@ static int cam_cc_sm8550_probe(struct platform_device *pdev)
 	regmap_update_bits(regmap, 0x1419c, BIT(0), BIT(0));
 	regmap_update_bits(regmap, 0x142cc, BIT(0), BIT(0));
 
-	ret = qcom_cc_really_probe(pdev, &cam_cc_sm8550_desc, regmap);
+	ret = qcom_cc_really_probe(&pdev->dev, &cam_cc_sm8550_desc, regmap);
 
 	pm_runtime_put(&pdev->dev);
 
