@@ -73,6 +73,15 @@ static void intel_init_pmu_capability(void)
 	int i;
 
 	/*
+	 * Do not enumerate support for architectural events that KVM doesn't
+	 * support.  Clear unsupported events "unavailable" bit as well, as
+	 * architecturally such bits are reserved to zero.
+	 */
+	kvm_pmu_cap.events_mask_len = min(kvm_pmu_cap.events_mask_len,
+					  NR_REAL_INTEL_ARCH_EVENTS);
+	kvm_pmu_cap.events_mask &= GENMASK(kvm_pmu_cap.events_mask_len - 1, 0);
+
+	 /*
 	 * Perf may (sadly) back a guest fixed counter with a general purpose
 	 * counter, and so KVM must hide fixed counters whose associated
 	 * architectural event are unsupported.  On real hardware, this should
