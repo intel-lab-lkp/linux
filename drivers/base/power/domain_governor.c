@@ -406,7 +406,7 @@ struct dev_power_governor simple_qos_governor = {
 	.power_down_ok = default_power_down_ok,
 };
 
-/**
+/*
  * pm_genpd_gov_always_on - A governor implementing an always-on policy
  */
 struct dev_power_governor pm_domain_always_on_gov = {
