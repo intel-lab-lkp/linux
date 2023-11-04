@@ -430,7 +430,7 @@ struct f2fs_sit_block {
  * ex) data_blkaddr = (block_t)(nodepage_start_address + ofs_in_node)
  */
 #define ENTRIES_IN_SUM		512
-#define	SUMMARY_SIZE		(7)	/* sizeof(struct summary) */
+#define	SUMMARY_SIZE		(7)	/* sizeof(struct f2fs_summary) */
 #define	SUM_FOOTER_SIZE		(5)	/* sizeof(struct summary_footer) */
 #define SUM_ENTRY_SIZE		(SUMMARY_SIZE * ENTRIES_IN_SUM)
 
