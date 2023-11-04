@@ -1156,6 +1156,12 @@ static int gmac_map_tx_bufs(struct net_device *netdev, struct sk_buff *skb,
 		mtu = MTU_SIZE_BIT_MASK;
 	}
 
+	if (skb->len > 65535) {
+		/* The field for length is only 16 bits */
+		netdev_err(netdev, "%s: frame too big, max size 65535 bytes\n", __func__);
+		return -EINVAL;
+	}
+
 	word1 = skb->len;
 	word3 = SOF_BIT;
 
