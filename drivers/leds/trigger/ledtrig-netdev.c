@@ -195,7 +195,8 @@ static void get_device_state(struct led_netdev_data *trigger_data)
 {
 	struct ethtool_link_ksettings cmd;
 
-	trigger_data->carrier_link_up = netif_carrier_ok(trigger_data->net_dev);
+	trigger_data->carrier_link_up = netif_running(trigger_data->net_dev) &&
+		netif_carrier_ok(trigger_data->net_dev);
 	if (!trigger_data->carrier_link_up)
 		return;
 
