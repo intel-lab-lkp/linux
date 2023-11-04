@@ -1151,6 +1151,11 @@ static int gmac_map_tx_bufs(struct net_device *netdev, struct sk_buff *skb,
 	if (skb->protocol == htons(ETH_P_8021Q))
 		mtu += VLAN_HLEN;
 
+	if (mtu > MTU_SIZE_BIT_MASK) {
+		netdev_err(netdev, "%s: MTU too big, max size 2047 bytes, capped\n", __func__);
+		mtu = MTU_SIZE_BIT_MASK;
+	}
+
 	word1 = skb->len;
 	word3 = SOF_BIT;
 
@@ -2464,11 +2469,12 @@ static int gemini_ethernet_port_probe(struct platform_device *pdev)
 
 	netdev->hw_features = GMAC_OFFLOAD_FEATURES;
 	netdev->features |= GMAC_OFFLOAD_FEATURES | NETIF_F_GRO;
-	/* We can handle jumbo frames up to 10236 bytes so, let's accept
-	 * payloads of 10236 bytes minus VLAN and ethernet header
+	/* We can receive jumbo frames up to 10236 bytes but only
+	 * transmit 2047 bytes so, let's accept payloads of 2047
+	 * bytes minus VLAN and ethernet header
 	 */
 	netdev->min_mtu = ETH_MIN_MTU;
-	netdev->max_mtu = 10236 - VLAN_ETH_HLEN;
+	netdev->max_mtu = MTU_SIZE_BIT_MASK - VLAN_ETH_HLEN;
 
 	port->freeq_refill = 0;
 	netif_napi_add(netdev, &port->napi, gmac_napi_poll);
