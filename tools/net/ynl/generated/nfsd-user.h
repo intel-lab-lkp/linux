@@ -132,4 +132,58 @@ void nfsd_version_get_list_free(struct nfsd_version_get_list *rsp);
 
 struct nfsd_version_get_list *nfsd_version_get_dump(struct ynl_sock *ys);
 
+/* ============== NFSD_CMD_LISTENER_START ============== */
+/* NFSD_CMD_LISTENER_START - do */
+struct nfsd_listener_start_req {
+	struct {
+		__u32 transport_name_len;
+		__u32 port:1;
+	} _present;
+
+	char *transport_name;
+	__u32 port;
+};
+
+static inline struct nfsd_listener_start_req *
+nfsd_listener_start_req_alloc(void)
+{
+	return calloc(1, sizeof(struct nfsd_listener_start_req));
+}
+void nfsd_listener_start_req_free(struct nfsd_listener_start_req *req);
+
+static inline void
+nfsd_listener_start_req_set_transport_name(struct nfsd_listener_start_req *req,
+					   const char *transport_name)
+{
+	free(req->transport_name);
+	req->_present.transport_name_len = strlen(transport_name);
+	req->transport_name = malloc(req->_present.transport_name_len + 1);
+	memcpy(req->transport_name, transport_name, req->_present.transport_name_len);
+	req->transport_name[req->_present.transport_name_len] = 0;
+}
+static inline void
+nfsd_listener_start_req_set_port(struct nfsd_listener_start_req *req,
+				 __u32 port)
+{
+	req->_present.port = 1;
+	req->port = port;
+}
+
+/*
+ * start server listener
+ */
+int nfsd_listener_start(struct ynl_sock *ys,
+			struct nfsd_listener_start_req *req);
+
+/* ============== NFSD_CMD_LISTENER_GET ============== */
+/* NFSD_CMD_LISTENER_GET - dump */
+struct nfsd_listener_get_list {
+	struct nfsd_listener_get_list *next;
+	struct nfsd_listener_get_rsp obj __attribute__ ((aligned (8)));
+};
+
+void nfsd_listener_get_list_free(struct nfsd_listener_get_list *rsp);
+
+struct nfsd_listener_get_list *nfsd_listener_get_dump(struct ynl_sock *ys);
+
 #endif /* _LINUX_NFSD_GEN_H */

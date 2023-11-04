@@ -19,6 +19,8 @@ static const char * const nfsd_op_strmap[] = {
 	[NFSD_CMD_THREADS_GET] = "threads-get",
 	[NFSD_CMD_VERSION_SET] = "version-set",
 	[NFSD_CMD_VERSION_GET] = "version-get",
+	[NFSD_CMD_LISTENER_START] = "listener-start",
+	[NFSD_CMD_LISTENER_GET] = "listener-get",
 };
 
 const char *nfsd_op_str(int op)
@@ -69,6 +71,16 @@ struct ynl_policy_attr nfsd_server_version_policy[NFSD_A_SERVER_VERSION_MAX + 1]
 struct ynl_policy_nest nfsd_server_version_nest = {
 	.max_attr = NFSD_A_SERVER_VERSION_MAX,
 	.table = nfsd_server_version_policy,
+};
+
+struct ynl_policy_attr nfsd_server_listener_policy[NFSD_A_SERVER_LISTENER_MAX + 1] = {
+	[NFSD_A_SERVER_LISTENER_TRANSPORT_NAME] = { .name = "transport-name", .type = YNL_PT_NUL_STR, },
+	[NFSD_A_SERVER_LISTENER_PORT] = { .name = "port", .type = YNL_PT_U32, },
+};
+
+struct ynl_policy_nest nfsd_server_listener_nest = {
+	.max_attr = NFSD_A_SERVER_LISTENER_MAX,
+	.table = nfsd_server_listener_policy,
 };
 
 /* Common nested types */
@@ -260,6 +272,75 @@ struct nfsd_version_get_list *nfsd_version_get_dump(struct ynl_sock *ys)
 
 free_list:
 	nfsd_version_get_list_free(yds.first);
+	return NULL;
+}
+
+/* ============== NFSD_CMD_LISTENER_START ============== */
+/* NFSD_CMD_LISTENER_START - do */
+void nfsd_listener_start_req_free(struct nfsd_listener_start_req *req)
+{
+	free(req->transport_name);
+	free(req);
+}
+
+int nfsd_listener_start(struct ynl_sock *ys,
+			struct nfsd_listener_start_req *req)
+{
+	struct nlmsghdr *nlh;
+	int err;
+
+	nlh = ynl_gemsg_start_req(ys, ys->family_id, NFSD_CMD_LISTENER_START, 1);
+	ys->req_policy = &nfsd_server_listener_nest;
+
+	if (req->_present.transport_name_len)
+		mnl_attr_put_strz(nlh, NFSD_A_SERVER_LISTENER_TRANSPORT_NAME, req->transport_name);
+	if (req->_present.port)
+		mnl_attr_put_u32(nlh, NFSD_A_SERVER_LISTENER_PORT, req->port);
+
+	err = ynl_exec(ys, nlh, NULL);
+	if (err < 0)
+		return -1;
+
+	return 0;
+}
+
+/* ============== NFSD_CMD_LISTENER_GET ============== */
+/* NFSD_CMD_LISTENER_GET - dump */
+void nfsd_listener_get_list_free(struct nfsd_listener_get_list *rsp)
+{
+	struct nfsd_listener_get_list *next = rsp;
+
+	while ((void *)next != YNL_LIST_END) {
+		rsp = next;
+		next = rsp->next;
+
+		free(rsp->obj.transport_name);
+		free(rsp);
+	}
+}
+
+struct nfsd_listener_get_list *nfsd_listener_get_dump(struct ynl_sock *ys)
+{
+	struct ynl_dump_state yds = {};
+	struct nlmsghdr *nlh;
+	int err;
+
+	yds.ys = ys;
+	yds.alloc_sz = sizeof(struct nfsd_listener_get_list);
+	yds.cb = nfsd_listener_get_rsp_parse;
+	yds.rsp_cmd = NFSD_CMD_LISTENER_GET;
+	yds.rsp_policy = &nfsd_server_listener_nest;
+
+	nlh = ynl_gemsg_start_dump(ys, ys->family_id, NFSD_CMD_LISTENER_GET, 1);
+
+	err = ynl_exec_dump(ys, nlh, &yds);
+	if (err < 0)
+		goto free_list;
+
+	return yds.first;
+
+free_list:
+	nfsd_listener_get_list_free(yds.first);
 	return NULL;
 }
 
