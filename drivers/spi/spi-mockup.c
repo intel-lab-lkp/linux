@@ -12,6 +12,7 @@
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/spi/spi.h>
+#include <linux/configfs.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/spi_mockup.h>
@@ -224,7 +225,7 @@ static int spi_mockup_probe(struct platform_device *pdev)
 	ctrl->dev.groups = spi_mockup_groups;
 	ctrl->num_chipselect = MOCKUP_CHIPSELECT_MAX;
 	ctrl->mode_bits = SPI_MODE_USER_MASK;
-	ctrl->bus_num = 0;
+	ctrl->bus_num = pdev->id;
 	ctrl->transfer_one_message = spi_mockup_transfer;
 
 	mock = spi_controller_get_devdata(ctrl);
@@ -252,7 +253,165 @@ static struct platform_driver spi_mockup_driver = {
 		.of_match_table = spi_mockup_match,
 	},
 };
-module_platform_driver(spi_mockup_driver);
+
+struct spi_mockup_device {
+	struct config_group group;
+	unsigned int bus_nr;
+	struct mutex lock;
+	struct platform_device *pdev;
+};
+
+static struct spi_mockup_device *to_spi_mockup_dev(struct config_item *item)
+{
+	struct config_group *group = to_config_group(item);
+
+	return container_of(group, struct spi_mockup_device, group);
+}
+
+static ssize_t
+spi_mockup_enable_store(struct config_item *item, const char *page, size_t len)
+{
+	int ret = len;
+	struct platform_device_info pdevinfo = {0};
+	struct spi_mockup_device *dev = to_spi_mockup_dev(item);
+
+	mutex_lock(&dev->lock);
+	if (dev->pdev) {
+		ret = -EEXIST;
+		goto out;
+	}
+
+	pdevinfo.name = "spi-mockup";
+	pdevinfo.id = dev->bus_nr;
+	dev->pdev = platform_device_register_full(&pdevinfo);
+	if (IS_ERR(dev->pdev)) {
+		ret = PTR_ERR(dev->pdev);
+		dev->pdev = NULL;
+		goto out;
+	}
+out:
+	mutex_unlock(&dev->lock);
+	return ret;
+}
+CONFIGFS_ATTR_WO(spi_mockup_, enable);
+
+static ssize_t
+spi_mockup_disable_store(struct config_item *item, const char *page, size_t len)
+{
+	int ret = len;
+	struct spi_mockup_device *dev = to_spi_mockup_dev(item);
+
+	mutex_lock(&dev->lock);
+	if (!dev->pdev) {
+		ret = -ENODEV;
+		goto out;
+	}
+
+	platform_device_unregister(dev->pdev);
+	dev->pdev = NULL;
+out:
+	mutex_unlock(&dev->lock);
+	return ret;
+}
+CONFIGFS_ATTR_WO(spi_mockup_, disable);
+
+static struct configfs_attribute *spi_mockup_configfs_attrs[] = {
+	&spi_mockup_attr_enable,
+	&spi_mockup_attr_disable,
+	NULL,
+};
+
+static const struct config_item_type spi_mockup_device_config_group_type = {
+	.ct_owner	= THIS_MODULE,
+	.ct_attrs	= spi_mockup_configfs_attrs,
+};
+
+static struct config_group *
+spi_mockup_config_make_device_group(struct config_group *group,
+				    const char *name)
+{
+	int ret, nchar;
+	unsigned int nr;
+	struct spi_mockup_device *dev;
+
+	ret = sscanf(name, "spi%u%n", &nr, &nchar);
+	if (ret != 1 || nchar != strlen(name))
+		return ERR_PTR(-EINVAL);
+
+	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
+	if (!dev)
+		return ERR_PTR(-ENOMEM);
+
+	dev->bus_nr = nr;
+	mutex_init(&dev->lock);
+
+	config_group_init_type_name(&dev->group, name,
+				    &spi_mockup_device_config_group_type);
+
+	return &dev->group;
+}
+
+static void spi_mockup_config_group_release(struct config_item *item)
+{
+	struct spi_mockup_device *dev = to_spi_mockup_dev(item);
+
+	kfree(dev);
+}
+
+static struct configfs_item_operations spi_mockup_config_item_ops = {
+	.release = spi_mockup_config_group_release,
+};
+
+static struct configfs_group_operations spi_mockup_config_group_ops = {
+	.make_group = spi_mockup_config_make_device_group,
+};
+
+static const struct config_item_type spi_mockup_config_type = {
+	.ct_owner	= THIS_MODULE,
+	.ct_group_ops	= &spi_mockup_config_group_ops,
+	.ct_item_ops	= &spi_mockup_config_item_ops,
+};
+
+static struct configfs_subsystem spi_mockup_config_subsys = {
+	.su_group = {
+		.cg_item = {
+			.ci_namebuf = "spi-mockup",
+			.ci_type = &spi_mockup_config_type,
+		}
+	}
+};
+
+static int __init spi_mockup_init(void)
+{
+	int ret;
+
+	ret = platform_driver_register(&spi_mockup_driver);
+	if (ret) {
+		pr_err("spi mockup driver registering failed with %d\n", ret);
+		return ret;
+	}
+
+	config_group_init(&spi_mockup_config_subsys.su_group);
+	mutex_init(&spi_mockup_config_subsys.su_mutex);
+	ret = configfs_register_subsystem(&spi_mockup_config_subsys);
+	if (ret) {
+		pr_err("spi mockup configfs registering failed with %d\n", ret);
+		mutex_destroy(&spi_mockup_config_subsys.su_mutex);
+		platform_driver_unregister(&spi_mockup_driver);
+		return ret;
+	}
+
+	return ret;
+}
+module_init(spi_mockup_init);
+
+static void __exit spi_mockup_exit(void)
+{
+	configfs_unregister_subsystem(&spi_mockup_config_subsys);
+	mutex_destroy(&spi_mockup_config_subsys.su_mutex);
+	return platform_driver_unregister(&spi_mockup_driver);
+}
+module_exit(spi_mockup_exit);
 
 MODULE_AUTHOR("Wei Yongjun <weiyongjun1@huawei.com>");
 MODULE_DESCRIPTION("SPI controller Testing Driver");
