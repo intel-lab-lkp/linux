@@ -15,6 +15,13 @@ static const struct nla_policy nfsd_threads_set_nl_policy[NFSD_A_SERVER_WORKER_T
 	[NFSD_A_SERVER_WORKER_THREADS] = { .type = NLA_U32, },
 };
 
+/* NFSD_CMD_VERSION_SET - do */
+static const struct nla_policy nfsd_version_set_nl_policy[NFSD_A_SERVER_VERSION_STATUS + 1] = {
+	[NFSD_A_SERVER_VERSION_MAJOR] = { .type = NLA_U32, },
+	[NFSD_A_SERVER_VERSION_MINOR] = { .type = NLA_U32, },
+	[NFSD_A_SERVER_VERSION_STATUS] = { .type = NLA_U8, },
+};
+
 /* Ops table for nfsd */
 static const struct genl_split_ops nfsd_nl_ops[] = {
 	{
@@ -35,6 +42,18 @@ static const struct genl_split_ops nfsd_nl_ops[] = {
 		.cmd	= NFSD_CMD_THREADS_GET,
 		.doit	= nfsd_nl_threads_get_doit,
 		.flags	= GENL_CMD_CAP_DO,
+	},
+	{
+		.cmd		= NFSD_CMD_VERSION_SET,
+		.doit		= nfsd_nl_version_set_doit,
+		.policy		= nfsd_version_set_nl_policy,
+		.maxattr	= NFSD_A_SERVER_VERSION_STATUS,
+		.flags		= GENL_ADMIN_PERM | GENL_CMD_CAP_DO,
+	},
+	{
+		.cmd	= NFSD_CMD_VERSION_GET,
+		.dumpit	= nfsd_nl_version_get_dumpit,
+		.flags	= GENL_CMD_CAP_DUMP,
 	},
 };
 

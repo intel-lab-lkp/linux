@@ -68,6 +68,18 @@ attribute-sets:
       -
         name: threads
         type: u32
+  -
+    name: server-version
+    attributes:
+      -
+        name: major
+        type: u32
+      -
+        name: minor
+        type: u32
+      -
+        name: status
+        type: u8
 
 operations:
   list:
@@ -110,3 +122,23 @@ operations:
         reply:
           attributes:
             - threads
+    -
+      name: version-set
+      doc: enable/disable server version
+      attribute-set: server-version
+      flags: [ admin-perm ]
+      do:
+        request:
+          attributes:
+            - major
+            - minor
+            - status
+    -
+      name: version-get
+      doc: dump server versions
+      attribute-set: server-version
+      dump:
+        reply:
+          attributes:
+            - major
+            - minor

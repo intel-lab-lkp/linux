@@ -17,6 +17,8 @@ static const char * const nfsd_op_strmap[] = {
 	[NFSD_CMD_RPC_STATUS_GET] = "rpc-status-get",
 	[NFSD_CMD_THREADS_SET] = "threads-set",
 	[NFSD_CMD_THREADS_GET] = "threads-get",
+	[NFSD_CMD_VERSION_SET] = "version-set",
+	[NFSD_CMD_VERSION_GET] = "version-get",
 };
 
 const char *nfsd_op_str(int op)
@@ -56,6 +58,17 @@ struct ynl_policy_attr nfsd_server_worker_policy[NFSD_A_SERVER_WORKER_MAX + 1] =
 struct ynl_policy_nest nfsd_server_worker_nest = {
 	.max_attr = NFSD_A_SERVER_WORKER_MAX,
 	.table = nfsd_server_worker_policy,
+};
+
+struct ynl_policy_attr nfsd_server_version_policy[NFSD_A_SERVER_VERSION_MAX + 1] = {
+	[NFSD_A_SERVER_VERSION_MAJOR] = { .name = "major", .type = YNL_PT_U32, },
+	[NFSD_A_SERVER_VERSION_MINOR] = { .name = "minor", .type = YNL_PT_U32, },
+	[NFSD_A_SERVER_VERSION_STATUS] = { .name = "status", .type = YNL_PT_U8, },
+};
+
+struct ynl_policy_nest nfsd_server_version_nest = {
+	.max_attr = NFSD_A_SERVER_VERSION_MAX,
+	.table = nfsd_server_version_policy,
 };
 
 /* Common nested types */
@@ -179,6 +192,74 @@ struct nfsd_threads_get_rsp *nfsd_threads_get(struct ynl_sock *ys)
 
 err_free:
 	nfsd_threads_get_rsp_free(rsp);
+	return NULL;
+}
+
+/* ============== NFSD_CMD_VERSION_SET ============== */
+/* NFSD_CMD_VERSION_SET - do */
+void nfsd_version_set_req_free(struct nfsd_version_set_req *req)
+{
+	free(req);
+}
+
+int nfsd_version_set(struct ynl_sock *ys, struct nfsd_version_set_req *req)
+{
+	struct nlmsghdr *nlh;
+	int err;
+
+	nlh = ynl_gemsg_start_req(ys, ys->family_id, NFSD_CMD_VERSION_SET, 1);
+	ys->req_policy = &nfsd_server_version_nest;
+
+	if (req->_present.major)
+		mnl_attr_put_u32(nlh, NFSD_A_SERVER_VERSION_MAJOR, req->major);
+	if (req->_present.minor)
+		mnl_attr_put_u32(nlh, NFSD_A_SERVER_VERSION_MINOR, req->minor);
+	if (req->_present.status)
+		mnl_attr_put_u8(nlh, NFSD_A_SERVER_VERSION_STATUS, req->status);
+
+	err = ynl_exec(ys, nlh, NULL);
+	if (err < 0)
+		return -1;
+
+	return 0;
+}
+
+/* ============== NFSD_CMD_VERSION_GET ============== */
+/* NFSD_CMD_VERSION_GET - dump */
+void nfsd_version_get_list_free(struct nfsd_version_get_list *rsp)
+{
+	struct nfsd_version_get_list *next = rsp;
+
+	while ((void *)next != YNL_LIST_END) {
+		rsp = next;
+		next = rsp->next;
+
+		free(rsp);
+	}
+}
+
+struct nfsd_version_get_list *nfsd_version_get_dump(struct ynl_sock *ys)
+{
+	struct ynl_dump_state yds = {};
+	struct nlmsghdr *nlh;
+	int err;
+
+	yds.ys = ys;
+	yds.alloc_sz = sizeof(struct nfsd_version_get_list);
+	yds.cb = nfsd_version_get_rsp_parse;
+	yds.rsp_cmd = NFSD_CMD_VERSION_GET;
+	yds.rsp_policy = &nfsd_server_version_nest;
+
+	nlh = ynl_gemsg_start_dump(ys, ys->family_id, NFSD_CMD_VERSION_GET, 1);
+
+	err = ynl_exec_dump(ys, nlh, &yds);
+	if (err < 0)
+		goto free_list;
+
+	return yds.first;
+
+free_list:
+	nfsd_version_get_list_free(yds.first);
 	return NULL;
 }
 
