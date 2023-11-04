@@ -68,6 +68,36 @@ static int fixed_pmc_events[] = {
 	[2] = PSEUDO_ARCH_REFERENCE_CYCLES,
 };
 
+static void intel_init_pmu_capability(void)
+{
+	int i;
+
+	/*
+	 * Perf may (sadly) back a guest fixed counter with a general purpose
+	 * counter, and so KVM must hide fixed counters whose associated
+	 * architectural event are unsupported.  On real hardware, this should
+	 * never happen, but if KVM is running on a funky virtual CPU model...
+	 *
+	 * TODO: Drop this horror if/when KVM stops using perf events for
+	 * guest fixed counters, or can explicitly request fixed counters.
+	 */
+	for (i = 0; i < kvm_pmu_cap.num_counters_fixed; i++) {
+		int event = fixed_pmc_events[i];
+
+		/*
+		 * Ignore pseudo-architectural events, they're a bizarre way of
+		 * requesting events from perf that _can't_ be backed with a
+		 * general purpose architectural event, i.e. they're guaranteed
+		 * to be backed by the real fixed counter.
+		 */
+		if (event < NR_REAL_INTEL_ARCH_EVENTS &&
+		    (kvm_pmu_cap.events_mask & BIT(event)))
+			break;
+	}
+
+	kvm_pmu_cap.num_counters_fixed = i;
+}
+
 static void reprogram_fixed_counters(struct kvm_pmu *pmu, u64 data)
 {
 	struct kvm_pmc *pmc;
@@ -789,6 +819,7 @@ void intel_pmu_cross_mapped_check(struct kvm_pmu *pmu)
 }
 
 struct kvm_pmu_ops intel_pmu_ops __initdata = {
+	.init_pmu_capability = intel_init_pmu_capability,
 	.hw_event_available = intel_hw_event_available,
 	.pmc_idx_to_pmc = intel_pmc_idx_to_pmc,
 	.rdpmc_ecx_to_pmc = intel_rdpmc_ecx_to_pmc,
