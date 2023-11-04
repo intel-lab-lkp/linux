@@ -10,6 +10,7 @@
 #include <linux/errname.h>
 #include <linux/slab.h>
 #include <linux/refcount.h>
+#include <linux/usb.h>
 #include <linux/wait.h>
 #include <linux/sched.h>
 #include <linux/workqueue.h>
