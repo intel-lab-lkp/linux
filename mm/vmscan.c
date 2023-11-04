@@ -136,6 +136,9 @@ struct scan_control {
 	/* Always discard instead of demoting to lower tier memory */
 	unsigned int no_demotion:1;
 
+	/* Swap space is exhausted, only reclaim swapcache for anon LRU */
+	unsigned int swapcache_only:1;
+
 	/* Allocation order */
 	s8 order;
 
@@ -308,6 +311,12 @@ static bool can_demote(int nid, struct scan_control *sc)
 	return true;
 }
 
+static void set_swapcache_mode(struct scan_control *sc, bool swapcache_only)
+{
+	if (sc)
+		sc->swapcache_only = swapcache_only;
+}
+
 static inline bool can_reclaim_anon_pages(struct mem_cgroup *memcg,
 					  int nid,
 					  struct scan_control *sc)
@@ -317,12 +326,26 @@ static inline bool can_reclaim_anon_pages(struct mem_cgroup *memcg,
 		 * For non-memcg reclaim, is there
 		 * space in any swap device?
 		 */
-		if (get_nr_swap_pages() > 0)
+		if (get_nr_swap_pages() > 0) {
+			set_swapcache_mode(sc, false);
 			return true;
+		}
+		/* Is there any swapcache pages to reclaim? */
+		if (total_swapcache_pages() > 0) {
+			set_swapcache_mode(sc, true);
+			return true;
+		}
 	} else {
 		/* Is the memcg below its swap limit? */
-		if (mem_cgroup_get_nr_swap_pages(memcg) > 0)
+		if (mem_cgroup_get_nr_swap_pages(memcg) > 0) {
+			set_swapcache_mode(sc, false);
 			return true;
+		}
+		/* Is there any swapcache pages in memcg to reclaim? */
+		if (mem_cgroup_get_nr_swapcache_pages(memcg) > 0) {
+			set_swapcache_mode(sc, true);
+			return true;
+		}
 	}
 
 	/*
@@ -1641,6 +1664,15 @@ static unsigned long isolate_lru_folios(unsigned long nr_to_scan,
 		 * Account all pages in a folio.
 		 */
 		scan += nr_pages;
+
+		/*
+		 * Count non-swapcache too because the swapcache pages may
+		 * be rare and it takes too much times here if not count
+		 * the non-swapcache pages.
+		 */
+		if (unlikely(sc->swapcache_only && !is_file_lru(lru) &&
+		    !folio_test_swapcache(folio)))
+			goto move;
 
 		if (!folio_test_lru(folio))
 			goto move;
