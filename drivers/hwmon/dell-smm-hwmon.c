@@ -12,6 +12,7 @@
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
+#include <linux/acpi.h>
 #include <linux/capability.h>
 #include <linux/cpu.h>
 #include <linux/ctype.h>
@@ -34,8 +35,10 @@
 #include <linux/thermal.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
+#include <linux/wmi.h>
 
 #include <linux/i8k.h>
+#include <asm/unaligned.h>
 
 #define I8K_SMM_FN_STATUS	0x0025
 #define I8K_SMM_POWER_STATUS	0x0069
@@ -65,6 +68,8 @@
 
 #define I8K_POWER_AC		0x05
 #define I8K_POWER_BATTERY	0x01
+
+#define DELL_SMM_WMI_GUID	"F1DDEE52-063C-4784-A11E-8A06684B9B01"
 
 #define DELL_SMM_NO_TEMP	10
 #define DELL_SMM_NO_FANS	3
@@ -219,6 +224,69 @@ static const struct dell_smm_ops i8k_smm_ops = {
 	.smm_call = i8k_smm_call,
 };
 
+/*
+ * Call the System Management Mode BIOS over WMI.
+ */
+static int wmi_smm_call(struct device *dev, struct smm_regs *regs)
+{
+	struct wmi_device *wdev = container_of(dev, struct wmi_device, dev);
+	struct acpi_buffer out = { ACPI_ALLOCATE_BUFFER, NULL };
+	u32 wmi_payload[] = {
+		sizeof(regs->eax),
+		regs->eax,
+		sizeof(regs->ebx),
+		regs->ebx,
+		sizeof(regs->ecx),
+		regs->ecx,
+		sizeof(regs->edx),
+		regs->edx
+	};
+	const struct acpi_buffer in = {
+		.length = sizeof(wmi_payload),
+		.pointer = &wmi_payload,
+	};
+	union acpi_object *obj;
+	acpi_status status;
+	u32 *wmi_response;
+	int ret = 0;
+	int i;
+
+	status = wmidev_evaluate_method(wdev, 0x0, 0x1, &in, &out);
+	if (ACPI_FAILURE(status))
+		return -EIO;
+
+	obj = out.pointer;
+	if (!obj)
+		return -ENODATA;
+
+	if (obj->type != ACPI_TYPE_BUFFER && obj->buffer.length != sizeof(wmi_payload)) {
+		ret = -ENOMSG;
+
+		goto err_free;
+	}
+
+	wmi_response = (u32 *)obj->buffer.pointer;
+
+	/* Check if register size is correct */
+	for (i = 0; i < ARRAY_SIZE(wmi_payload); i += 2) {
+		if (get_unaligned_le32(&wmi_response[i]) != sizeof(wmi_response[i + 1])) {
+			ret = -ENOMSG;
+
+			goto err_free;
+		}
+	}
+
+	regs->eax = get_unaligned_le32(&wmi_response[1]);
+	regs->ebx = get_unaligned_le32(&wmi_response[3]);
+	regs->ecx = get_unaligned_le32(&wmi_response[5]);
+	regs->edx = get_unaligned_le32(&wmi_response[7]);
+
+err_free:
+	kfree(obj);
+
+	return ret;
+}
+
 static int dell_smm_call(const struct dell_smm_ops *ops, struct smm_regs *regs)
 {
 	int eax = regs->eax;
@@ -306,7 +374,7 @@ static int i8k_get_fan_type(struct dell_smm_data *data, u8 fan)
 /*
  * Read the fan nominal rpm for specific fan speed.
  */
-static int __init i8k_get_fan_nominal_speed(const struct dell_smm_data *data, u8 fan, int speed)
+static int i8k_get_fan_nominal_speed(const struct dell_smm_data *data, u8 fan, int speed)
 {
 	struct smm_regs regs = {
 		.eax = I8K_SMM_GET_NOM_SPEED,
@@ -349,7 +417,7 @@ static int i8k_set_fan(const struct dell_smm_data *data, u8 fan, int speed)
 	return dell_smm_call(data->ops, &regs);
 }
 
-static int __init i8k_get_temp_type(const struct dell_smm_data *data, u8 sensor)
+static int i8k_get_temp_type(const struct dell_smm_data *data, u8 sensor)
 {
 	struct smm_regs regs = {
 		.eax = I8K_SMM_GET_TEMP_TYPE,
@@ -401,7 +469,7 @@ static int i8k_get_temp(const struct dell_smm_data *data, u8 sensor)
 	return temp;
 }
 
-static int __init dell_smm_get_signature(const struct dell_smm_ops *ops, int req_fn)
+static int dell_smm_get_signature(const struct dell_smm_ops *ops, int req_fn)
 {
 	struct smm_regs regs = { .eax = req_fn, };
 	int rc;
@@ -986,7 +1054,7 @@ static const struct hwmon_chip_info dell_smm_chip_info = {
 	.info = dell_smm_info,
 };
 
-static int __init dell_smm_init_cdev(struct device *dev, u8 fan_num)
+static int dell_smm_init_cdev(struct device *dev, u8 fan_num)
 {
 	struct dell_smm_data *data = dev_get_drvdata(dev);
 	struct thermal_cooling_device *cdev;
@@ -1017,7 +1085,7 @@ static int __init dell_smm_init_cdev(struct device *dev, u8 fan_num)
 	return ret;
 }
 
-static int __init dell_smm_init_hwmon(struct device *dev)
+static int dell_smm_init_hwmon(struct device *dev)
 {
 	struct dell_smm_data *data = dev_get_drvdata(dev);
 	struct device *dell_smm_hwmon_dev;
@@ -1083,7 +1151,7 @@ static int __init dell_smm_init_hwmon(struct device *dev)
 	return PTR_ERR_OR_ZERO(dell_smm_hwmon_dev);
 }
 
-static int __init dell_smm_init_data(struct device *dev, const struct dell_smm_ops *ops)
+static int dell_smm_init_data(struct device *dev, const struct dell_smm_ops *ops)
 {
 	struct dell_smm_data *data;
 
@@ -1409,6 +1477,9 @@ static const struct dmi_system_id i8k_whitelist_fan_control[] __initconst = {
 	{ }
 };
 
+/*
+ * Legacy SMM backend driver.
+ */
 static int __init dell_smm_probe(struct platform_device *pdev)
 {
 	int ret;
@@ -1433,6 +1504,47 @@ static struct platform_driver dell_smm_driver = {
 };
 
 static struct platform_device *dell_smm_device;
+
+/*
+ * WMI SMM backend driver.
+ */
+static int dell_smm_wmi_probe(struct wmi_device *wdev, const void *context)
+{
+	struct dell_smm_ops *ops;
+	int ret;
+
+	ops = devm_kzalloc(&wdev->dev, sizeof(*ops), GFP_KERNEL);
+	if (!ops)
+		return -ENOMEM;
+
+	ops->smm_call = wmi_smm_call;
+	ops->smm_dev = &wdev->dev;
+
+	if (dell_smm_get_signature(ops, I8K_SMM_GET_DELL_SIG1) &&
+	    dell_smm_get_signature(ops, I8K_SMM_GET_DELL_SIG2))
+		return -ENODEV;
+
+	ret = dell_smm_init_data(&wdev->dev, ops);
+	if (ret < 0)
+		return ret;
+
+	return dell_smm_init_hwmon(&wdev->dev);
+}
+
+static const struct wmi_device_id dell_smm_wmi_id_table[] = {
+	{ DELL_SMM_WMI_GUID, NULL },
+	{ }
+};
+MODULE_DEVICE_TABLE(wmi, dell_smm_wmi_id_table);
+
+static struct wmi_driver dell_smm_wmi_driver = {
+	.driver = {
+		.name = KBUILD_MODNAME,
+		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
+	},
+	.id_table = dell_smm_wmi_id_table,
+	.probe = dell_smm_wmi_probe,
+};
 
 /*
  * Probe for the presence of a supported laptop.
@@ -1485,33 +1597,43 @@ static void __init dell_smm_init_dmi(void)
 	}
 }
 
-static int __init i8k_init(void)
+static int __init dell_smm_legacy_check(void)
 {
-	/*
-	 * Get DMI information
-	 */
 	if (!dmi_check_system(i8k_dmi_table)) {
 		if (!ignore_dmi && !force)
 			return -ENODEV;
 
-		pr_info("not running on a supported Dell system.\n");
+		pr_info("Probing for legacy SMM handler on unsupported machine\n");
 		pr_info("vendor=%s, model=%s, version=%s\n",
 			i8k_get_dmi_data(DMI_SYS_VENDOR),
 			i8k_get_dmi_data(DMI_PRODUCT_NAME),
 			i8k_get_dmi_data(DMI_BIOS_VERSION));
 	}
 
-	dell_smm_init_dmi();
-
-	/*
-	 * Get SMM Dell signature
-	 */
 	if (dell_smm_get_signature(&i8k_smm_ops, I8K_SMM_GET_DELL_SIG1) &&
 	    dell_smm_get_signature(&i8k_smm_ops, I8K_SMM_GET_DELL_SIG2)) {
 		if (!force)
 			return -ENODEV;
 
-		pr_err("Unable to get Dell SMM signature\n");
+		pr_warn("Forcing legacy SMM calls on a possibly incompatible machine\n");
+	}
+
+	return 0;
+}
+
+static int __init i8k_init(void)
+{
+	int ret;
+
+	dell_smm_init_dmi();
+
+	ret = dell_smm_legacy_check();
+	if (ret < 0) {
+		/*
+		 * On modern machines, SMM communication happens over WMI, meaning
+		 * the SMM handler might not react to legacy SMM calls.
+		 */
+		return wmi_driver_register(&dell_smm_wmi_driver);
 	}
 
 	dell_smm_device = platform_create_bundle(&dell_smm_driver, dell_smm_probe, NULL, 0, NULL,
@@ -1522,8 +1644,12 @@ static int __init i8k_init(void)
 
 static void __exit i8k_exit(void)
 {
-	platform_device_unregister(dell_smm_device);
-	platform_driver_unregister(&dell_smm_driver);
+	if (dell_smm_device) {
+		platform_device_unregister(dell_smm_device);
+		platform_driver_unregister(&dell_smm_driver);
+	} else {
+		wmi_driver_unregister(&dell_smm_wmi_driver);
+	}
 }
 
 module_init(i8k_init);
