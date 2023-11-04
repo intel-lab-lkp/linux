@@ -533,7 +533,7 @@ static void intel_pmu_refresh(struct kvm_vcpu *vcpu)
 	pmu->counter_bitmask[KVM_PMC_GP] = ((u64)1 << eax.split.bit_width) - 1;
 	eax.split.mask_length = min_t(int, eax.split.mask_length,
 				      kvm_pmu_cap.events_mask_len);
-	pmu->available_event_types = ~entry->ebx &
+	pmu->available_event_types = ~(entry->ebx | kvm_pmu_cap.events_mask) &
 					((1ull << eax.split.mask_length) - 1);
 
 	if (pmu->version == 1) {
