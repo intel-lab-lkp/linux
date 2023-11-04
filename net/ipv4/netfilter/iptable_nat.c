@@ -169,4 +169,5 @@ static void __exit iptable_nat_exit(void)
 module_init(iptable_nat_init);
 module_exit(iptable_nat_exit);
 
+MODULE_DESCRIPTION("Netfilter NAT module");
 MODULE_LICENSE("GPL");
