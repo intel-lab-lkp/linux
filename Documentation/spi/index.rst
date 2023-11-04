@@ -13,6 +13,7 @@ Serial Peripheral Interface (SPI)
    pxa2xx
    spi-lm70llp
    spi-sc18is602
+   spi-mockup
 
 .. only::  subproject and html
 
