@@ -3539,6 +3539,27 @@ DECLARE_RTL_COND(rtl_mac_ocp_e00e_cond)
 
 static void rtl_hw_start_8125_common(struct rtl8169_private *tp)
 {
+
+	static const struct e_info_regmaskset e_info_8125_common_1[] = {
+		{ 0xd3e2, 0x0fff, 0x03a9 },
+		{ 0xd3e4, 0x00ff, 0x0000 },
+		{ 0xe860, 0x0000, 0x0080 },
+	};
+
+	static const struct e_info_regmaskset e_info_8125_common_2[] = {
+		{ 0xc0b4, 0x0000, 0x000c },
+		{ 0xeb6a, 0x00ff, 0x0033 },
+		{ 0xeb50, 0x03e0, 0x0040 },
+		{ 0xe056, 0x00f0, 0x0030 },
+		{ 0xe040, 0x1000, 0x0000 },
+		{ 0xea1c, 0x0003, 0x0001 },
+		{ 0xe0c0, 0x4f0f, 0x4403 },
+		{ 0xe052, 0x0080, 0x0068 },
+		{ 0xd430, 0x0fff, 0x047f },
+		{ 0xea1c, 0x0004, 0x0000 },
+		{ 0xeb54, 0x0000, 0x0001 },
+	};
+
 	rtl_pcie_state_l2l3_disable(tp);
 
 	RTL_W16(tp, 0x382, 0x221b);
@@ -3553,9 +3574,7 @@ static void rtl_hw_start_8125_common(struct rtl8169_private *tp)
 	r8168_mac_ocp_write(tp, 0xc140, 0xffff);
 	r8168_mac_ocp_write(tp, 0xc142, 0xffff);
 
-	r8168_mac_ocp_modify(tp, 0xd3e2, 0x0fff, 0x03a9);
-	r8168_mac_ocp_modify(tp, 0xd3e4, 0x00ff, 0x0000);
-	r8168_mac_ocp_modify(tp, 0xe860, 0x0000, 0x0080);
+	r8168_mac_ocp_modify_seq(tp, e_info_8125_common_1);
 
 	/* disable new tx descriptor format */
 	r8168_mac_ocp_modify(tp, 0xeb58, 0x0001, 0x0000);
@@ -3570,18 +3589,7 @@ static void rtl_hw_start_8125_common(struct rtl8169_private *tp)
 	else
 		r8168_mac_ocp_modify(tp, 0xe63e, 0x0c30, 0x0020);
 
-	r8168_mac_ocp_modify(tp, 0xc0b4, 0x0000, 0x000c);
-	r8168_mac_ocp_modify(tp, 0xeb6a, 0x00ff, 0x0033);
-	r8168_mac_ocp_modify(tp, 0xeb50, 0x03e0, 0x0040);
-	r8168_mac_ocp_modify(tp, 0xe056, 0x00f0, 0x0030);
-	r8168_mac_ocp_modify(tp, 0xe040, 0x1000, 0x0000);
-	r8168_mac_ocp_modify(tp, 0xea1c, 0x0003, 0x0001);
-	r8168_mac_ocp_modify(tp, 0xe0c0, 0x4f0f, 0x4403);
-	r8168_mac_ocp_modify(tp, 0xe052, 0x0080, 0x0068);
-	r8168_mac_ocp_modify(tp, 0xd430, 0x0fff, 0x047f);
-
-	r8168_mac_ocp_modify(tp, 0xea1c, 0x0004, 0x0000);
-	r8168_mac_ocp_modify(tp, 0xeb54, 0x0000, 0x0001);
+	r8168_mac_ocp_modify_seq(tp, e_info_8125_common_2);
 	udelay(1);
 	r8168_mac_ocp_modify(tp, 0xeb54, 0x0001, 0x0000);
 	RTL_W16(tp, 0x1880, RTL_R16(tp, 0x1880) & ~0x0030);
