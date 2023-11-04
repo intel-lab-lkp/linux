@@ -15,6 +15,7 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/panic_notifier.h>
+#include <linux/reboot.h>
 #include <linux/types.h>
 #include <linux/cdev.h>
 #include <linux/list.h>
@@ -73,6 +74,13 @@ static struct notifier_block pvpanic_panic_nb = {
 	.notifier_call = pvpanic_panic_notify,
 	.priority = INT_MAX,
 };
+
+static int pvpanic_sys_off(struct sys_off_data *data)
+{
+	pvpanic_send_event(PVPANIC_SHUTDOWN);
+
+	return NOTIFY_DONE;
+}
 
 static void pvpanic_remove(void *param)
 {
@@ -152,7 +160,7 @@ int devm_pvpanic_probe(struct device *dev, void __iomem *base)
 		return -ENOMEM;
 
 	pi->base = base;
-	pi->capability = PVPANIC_PANICKED | PVPANIC_CRASH_LOADED;
+	pi->capability = PVPANIC_PANICKED | PVPANIC_CRASH_LOADED | PVPANIC_SHUTDOWN;
 
 	/* initlize capability by RDPT */
 	pi->capability &= ioread8(base);
@@ -168,12 +176,18 @@ int devm_pvpanic_probe(struct device *dev, void __iomem *base)
 }
 EXPORT_SYMBOL_GPL(devm_pvpanic_probe);
 
+static struct sys_off_handler *sys_off_handler;
+
 static int pvpanic_init(void)
 {
 	INIT_LIST_HEAD(&pvpanic_list);
 	spin_lock_init(&pvpanic_lock);
 
 	atomic_notifier_chain_register(&panic_notifier_list, &pvpanic_panic_nb);
+	sys_off_handler = register_sys_off_handler(SYS_OFF_MODE_POWER_OFF, SYS_OFF_PRIO_DEFAULT,
+						   pvpanic_sys_off, NULL);
+	if (IS_ERR(sys_off_handler))
+		sys_off_handler = NULL;
 
 	return 0;
 }
@@ -182,6 +196,7 @@ module_init(pvpanic_init);
 static void pvpanic_exit(void)
 {
 	atomic_notifier_chain_unregister(&panic_notifier_list, &pvpanic_panic_nb);
-
+	if (sys_off_handler)
+		unregister_sys_off_handler(sys_off_handler);
 }
 module_exit(pvpanic_exit);
