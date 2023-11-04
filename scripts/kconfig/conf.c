@@ -76,8 +76,10 @@ static void strip(char *str)
 /* Helper function to facilitate fgets() by Jean Sacren. */
 static void xfgets(char *str, int size, FILE *in)
 {
-	if (!fgets(str, size, in))
+	if (!fgets(str, size, in)) {
 		fprintf(stderr, "\nError in reading or end of file.\n");
+		exit(1);
+	}
 
 	if (!tty_stdio)
 		printf("%s", str);
