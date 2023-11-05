@@ -153,18 +153,14 @@ static int ti_sci_pm_domain_probe(struct platform_device *pdev)
 					max_id = args.args[0];
 
 				pd = devm_kzalloc(dev, sizeof(*pd), GFP_KERNEL);
-				if (!pd) {
-					of_node_put(np);
-					return -ENOMEM;
-				}
+				if (!pd)
+					goto put_node;
 
 				pd->pd.name = devm_kasprintf(dev, GFP_KERNEL,
 							     "pd:%d",
 							     args.args[0]);
-				if (!pd->pd.name) {
-					of_node_put(np);
-					return -ENOMEM;
-				}
+				if (!pd->pd.name)
+					goto put_node;
 
 				pd->pd.power_off = ti_sci_pd_power_off;
 				pd->pd.power_on = ti_sci_pd_power_on;
@@ -193,6 +189,10 @@ static int ti_sci_pm_domain_probe(struct platform_device *pdev)
 		pd_provider->data.domains[pd->idx] = &pd->pd;
 
 	return of_genpd_add_provider_onecell(dev->of_node, &pd_provider->data);
+
+put_node:
+	of_node_put(np);
+	return -ENOMEM;
 }
 
 static struct platform_driver ti_sci_pm_domains_driver = {
