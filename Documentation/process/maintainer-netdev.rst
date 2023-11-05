@@ -33,6 +33,45 @@ Aside from subsystems like those mentioned above, all network-related
 Linux development (i.e. RFC, review, comments, etc.) takes place on
 netdev.
 
+Managing emails
+~~~~~~~~~~~~~~~
+
+netdev is a busy mailing list with on average over 200 emails received per day,
+which can be overwhelming to beginners. Rather than subscribing to the entire
+list, considering using ``lei`` to only subscribe to topics that you are
+interested in. Konstantin Ryabitsev wrote excellent tutorials on using ``lei``:
+
+ - https://people.kernel.org/monsieuricon/lore-lei-part-1-getting-started
+ - https://people.kernel.org/monsieuricon/lore-lei-part-2-now-with-imap
+
+As a netdev beginner, you may want to filter out driver changes and only focus
+on core netdev changes. Try using the following query with ``lei q``::
+
+  lei q -o ~/Mail/netdev \
+    -I https://lore.kernel.org/all \
+    -t '(b:b/net/* AND tc:netdev@vger.kernel.org AND rt:2.week.ago..'
+
+This query will only match threads containing messages with patches that modify
+files in ``net/*``. For more information on the query language, see:
+
+  https://lore.kernel.org/linux-btrfs/_/text/help/
+
+By default ``lei`` will output to a Maildir, but it also supports Mbox and IMAP
+by adding a prefix to the output directory ``-o``. For a list of supported
+formats and prefix strings, see:
+
+  https://www.mankier.com/1/lei-q
+
+If you would like to use IMAP, Konstantin’s blog is slightly outdated and you
+no longer need to use here strings i.e. ``<<<`` or ``<<EOF``. You can simply
+point lei at an IMAP server e.g. ``imaps://imap.gmail.com``::
+
+  lei q -o imaps://imap.gmail.com/netdev \
+    -I https://lore.kernel.org/all \
+    -t '(b:b/net/* AND tc:netdev@vger.kernel.org AND rt:2.week.ago..'
+
+You need to set up ``git-credentials`` properly first.
+
 Development cycle
 -----------------
 
