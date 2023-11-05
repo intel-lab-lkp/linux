@@ -571,6 +571,17 @@ static int mvs_pci_init(struct pci_dev *pdev, const struct pci_device_id *ent)
 	rc = sas_register_ha(SHOST_TO_SAS_HA(shost));
 	if (rc)
 		goto err_out_shost;
+
+	/* Try to enable MSI, this is needed at least on OCZ RevoDrive 3 X2 */
+	if (pdev->vendor == PCI_VENDOR_ID_OCZ) {
+		rc = pci_enable_msi(mvi->pdev);
+		if (rc) {
+			dev_err(&mvi->pdev->dev,
+				"mvsas: Failed to enable MSI for OCZ device, attached drives may not be detected. rc=%d\n",
+				rc);
+		}
+	}
+
 	rc = request_irq(pdev->irq, irq_handler, IRQF_SHARED,
 		DRV_NAME, SHOST_TO_SAS_HA(shost));
 	if (rc)
@@ -583,6 +594,9 @@ static int mvs_pci_init(struct pci_dev *pdev, const struct pci_device_id *ent)
 	return 0;
 
 err_not_sas:
+	if (pdev->vendor == PCI_VENDOR_ID_OCZ)
+		pci_disable_msi(mvi->pdev);
+
 	sas_unregister_ha(SHOST_TO_SAS_HA(shost));
 err_out_shost:
 	scsi_remove_host(mvi->shost);
@@ -606,6 +620,9 @@ static void mvs_pci_remove(struct pci_dev *pdev)
 #ifdef CONFIG_SCSI_MVSAS_TASKLET
 	tasklet_kill(&((struct mvs_prv_info *)sha->lldd_ha)->mv_tasklet);
 #endif
+
+	if (pdev->vendor == PCI_VENDOR_ID_OCZ)
+		pci_disable_msi(mvi->pdev);
 
 	sas_unregister_ha(sha);
 	sas_remove_host(mvi->shost);
