@@ -1122,17 +1122,7 @@ static void mmc_blk_issue_erase_rq(struct mmc_queue *mq, struct request *req,
 	nr = blk_rq_sectors(req);
 
 	do {
-		err = 0;
-		if (card->quirks & MMC_QUIRK_INAND_CMD38) {
-			err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
-					 INAND_CMD38_ARG_EXT_CSD,
-					 erase_arg == MMC_TRIM_ARG ?
-					 INAND_CMD38_ARG_TRIM :
-					 INAND_CMD38_ARG_ERASE,
-					 card->ext_csd.generic_cmd6_time);
-		}
-		if (!err)
-			err = mmc_erase(card, from, nr, erase_arg);
+		err = mmc_erase(card, from, nr, erase_arg);
 	} while (err == -EIO && !mmc_blk_reset(md, card->host, type));
 	if (err)
 		status = BLK_STS_IOERR;
@@ -1182,17 +1172,6 @@ static void mmc_blk_issue_secdiscard_rq(struct mmc_queue *mq,
 		arg = MMC_SECURE_ERASE_ARG;
 
 retry:
-	if (card->quirks & MMC_QUIRK_INAND_CMD38) {
-		err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
-				 INAND_CMD38_ARG_EXT_CSD,
-				 arg == MMC_SECURE_TRIM1_ARG ?
-				 INAND_CMD38_ARG_SECTRIM1 :
-				 INAND_CMD38_ARG_SECERASE,
-				 card->ext_csd.generic_cmd6_time);
-		if (err)
-			goto out_retry;
-	}
-
 	err = mmc_erase(card, from, nr, arg);
 	if (err == -EIO)
 		goto out_retry;
@@ -1202,15 +1181,6 @@ retry:
 	}
 
 	if (arg == MMC_SECURE_TRIM1_ARG) {
-		if (card->quirks & MMC_QUIRK_INAND_CMD38) {
-			err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
-					 INAND_CMD38_ARG_EXT_CSD,
-					 INAND_CMD38_ARG_SECTRIM2,
-					 card->ext_csd.generic_cmd6_time);
-			if (err)
-				goto out_retry;
-		}
-
 		err = mmc_erase(card, from, nr, MMC_SECURE_TRIM2_ARG);
 		if (err == -EIO)
 			goto out_retry;
