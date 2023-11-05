@@ -1889,6 +1889,9 @@ int fuse_do_setattr(struct dentry *dentry, struct iattr *attr,
 			 */
 			i_size_write(inode, 0);
 			truncate_pagecache(inode, 0);
+			if (fault_blocked && FUSE_IS_DAX(inode))
+				fuse_dax_inode_cleanup(inode);
+
 			goto out;
 		}
 		file = NULL;
@@ -1984,6 +1987,8 @@ int fuse_do_setattr(struct dentry *dentry, struct iattr *attr,
 	    S_ISREG(inode->i_mode) && oldsize != outarg.attr.size) {
 		truncate_pagecache(inode, outarg.attr.size);
 		invalidate_inode_pages2(mapping);
+		if (fault_blocked && FUSE_IS_DAX(inode))
+			fuse_dax_inode_cleanup_range(inode, outarg.attr.size);
 	}
 
 	clear_bit(FUSE_I_SIZE_UNSTABLE, &fi->state);

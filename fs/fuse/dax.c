@@ -385,6 +385,15 @@ void fuse_dax_inode_cleanup(struct inode *inode)
 	WARN_ON(fi->dax->nr);
 }
 
+/* Callers need to make sure fi->i_mmap_sem is held. */
+void fuse_dax_inode_cleanup_range(struct inode *inode, loff_t start)
+{
+	struct fuse_conn *fc = get_fuse_conn(inode);
+	struct fuse_inode *fi = get_fuse_inode(inode);
+
+	inode_reclaim_dmap_range(fc->dax, inode, start, -1);
+}
+
 static void fuse_fill_iomap_hole(struct iomap *iomap, loff_t length)
 {
 	iomap->addr = IOMAP_NULL_ADDR;
