@@ -172,6 +172,8 @@ static struct gpio_leds_priv *gpio_leds_create(struct platform_device *pdev)
 		led.gpiod = devm_fwnode_gpiod_get(dev, child, NULL, GPIOD_ASIS,
 						  NULL);
 		if (IS_ERR(led.gpiod)) {
+			dev_err(dev, "Failed to get gpio '%pfw': %ld\n",
+				child, PTR_ERR(led.gpiod));
 			fwnode_handle_put(child);
 			return ERR_CAST(led.gpiod);
 		}
