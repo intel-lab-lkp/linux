@@ -675,10 +675,9 @@ atmci_of_init(struct platform_device *pdev)
 					      "cd", GPIOD_IN, "cd-gpios");
 		err = PTR_ERR_OR_ZERO(pdata->slot[slot_id].detect_pin);
 		if (err) {
-			if (err != -ENOENT) {
-				of_node_put(cnp);
-				return ERR_PTR(err);
-			}
+			if (err != -ENOENT)
+				goto put_node;
+
 			pdata->slot[slot_id].detect_pin = NULL;
 		}
 
@@ -690,15 +689,18 @@ atmci_of_init(struct platform_device *pdev)
 					      "wp", GPIOD_IN, "wp-gpios");
 		err = PTR_ERR_OR_ZERO(pdata->slot[slot_id].wp_pin);
 		if (err) {
-			if (err != -ENOENT) {
-				of_node_put(cnp);
-				return ERR_PTR(err);
-			}
+			if (err != -ENOENT)
+				goto put_node;
+
 			pdata->slot[slot_id].wp_pin = NULL;
 		}
 	}
 
 	return pdata;
+
+put_node:
+	of_node_put(cnp);
+	return ERR_PTR(err);
 }
 #else /* CONFIG_OF */
 static inline struct mci_platform_data*
