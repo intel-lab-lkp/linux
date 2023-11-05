@@ -2206,6 +2206,9 @@ exit_iep:
 	if (prueth->pdata.quirk_10m_link_issue)
 		icss_iep_exit_fw(prueth->iep1);
 
+	icss_iep_put(prueth->iep1);
+	icss_iep_put(prueth->iep0);
+
 free_pool:
 	gen_pool_free(prueth->sram_pool,
 		      (unsigned long)prueth->msmcram.va, msmc_ram_size);
