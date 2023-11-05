@@ -90,7 +90,7 @@ initial_plane_vma(struct drm_i915_private *i915,
 			"Using phys_base=%pa, based on initial plane programming\n",
 			&phys_base);
 	} else {
-		phys_base = base;
+		phys_base = 0;
 		mem = i915->mm.stolen_region;
 	}
 
