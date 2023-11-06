@@ -6575,11 +6575,12 @@ pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 # define SM_MASK_PREEMPT	SM_PREEMPT
 #endif
 
-static bool try_to_deactivate_task(struct rq *rq, struct task_struct *p, unsigned long state)
+static bool try_to_deactivate_task(struct rq *rq, struct task_struct *p,
+				   unsigned long state, bool deactivate_cond)
 {
 	if (signal_pending_state(state, p)) {
 		WRITE_ONCE(p->__state, TASK_RUNNING);
-	} else {
+	} else if (deactivate_cond) {
 		p->sched_contributes_to_load =
 			(state & TASK_UNINTERRUPTIBLE) &&
 			!(state & TASK_NOLOAD) &&
@@ -6609,6 +6610,74 @@ static bool try_to_deactivate_task(struct rq *rq, struct task_struct *p, unsigne
 	}
 	return false;
 }
+
+#ifdef CONFIG_PROXY_EXEC
+/*
+ * Initial simple proxy that just returns the task if its waking
+ * or deactivates the blocked task so we can pick something that
+ * isn't blocked.
+ */
+static struct task_struct *
+proxy(struct rq *rq, struct task_struct *next, struct rq_flags *rf)
+{
+	struct task_struct *p = next;
+	struct mutex *mutex;
+	unsigned long state;
+
+	mutex = p->blocked_on;
+	/* Something changed in the chain, pick_again */
+	if (!mutex)
+		return NULL;
+	/*
+	 * By taking mutex->wait_lock we hold off concurrent mutex_unlock()
+	 * and ensure @owner sticks around.
+	 */
+	raw_spin_lock(&mutex->wait_lock);
+	raw_spin_lock(&p->blocked_lock);
+
+	/* Check again that p is blocked with blocked_lock held */
+	if (!task_is_blocked(p) || mutex != p->blocked_on) {
+		/*
+		 * Something changed in the blocked_on chain and
+		 * we don't know if only at this level. So, let's
+		 * just bail out completely and let __schedule
+		 * figure things out (pick_again loop).
+		 */
+		raw_spin_unlock(&p->blocked_lock);
+		raw_spin_unlock(&mutex->wait_lock);
+		return NULL;
+	}
+
+	state = READ_ONCE(p->__state);
+	/* Don't deactivate if the state has been changed to TASK_RUNNING */
+	if (!state) {
+		raw_spin_unlock(&p->blocked_lock);
+		raw_spin_unlock(&mutex->wait_lock);
+		return p;
+	}
+
+	try_to_deactivate_task(rq, next, state, true);
+
+	/*
+	 * If next is the selected task, then remove lingering
+	 * references to it from rq and sched_class structs after
+	 * dequeueing.
+	 */
+	put_prev_task(rq, next);
+	rq_set_selected(rq, rq->idle);
+	resched_curr(rq);
+	raw_spin_unlock(&p->blocked_lock);
+	raw_spin_unlock(&mutex->wait_lock);
+	return NULL;
+}
+#else /* PROXY_EXEC */
+static struct task_struct *
+proxy(struct rq *rq, struct task_struct *next, struct rq_flags *rf)
+{
+	BUG(); // This should never be called in the !PROXY case
+	return next;
+}
+#endif /* PROXY_EXEC */
 
 /*
  * __schedule() is the main scheduler function.
@@ -6700,12 +6769,24 @@ static void __sched notrace __schedule(unsigned int sched_mode)
 	 */
 	prev_state = READ_ONCE(prev->__state);
 	if (!(sched_mode & SM_MASK_PREEMPT) && prev_state) {
-		try_to_deactivate_task(rq, prev, prev_state);
+		try_to_deactivate_task(rq, prev, prev_state,
+				       !task_is_blocked(prev));
 		switch_count = &prev->nvcsw;
 	}
 
-	next = pick_next_task(rq, prev, &rf);
+pick_again:
+	next = pick_next_task(rq, rq_selected(rq), &rf);
 	rq_set_selected(rq, next);
+	if (unlikely(task_is_blocked(next))) {
+		next = proxy(rq, next, &rf);
+		if (!next) {
+			rq_unpin_lock(rq, &rf);
+			__balance_callbacks(rq);
+			rq_repin_lock(rq, &rf);
+			goto pick_again;
+		}
+	}
+
 	clear_tsk_need_resched(prev);
 	clear_preempt_need_resched();
 #ifdef CONFIG_SCHED_DEBUG
