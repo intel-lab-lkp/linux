@@ -144,6 +144,9 @@ static bool sev_es_negotiate_protocol(void)
 {
 	u64 val;
 
+	if (ghcb_version)
+		return true;
+
 	/* Do the GHCB protocol version negotiation */
 	sev_es_wr_ghcb_msr(GHCB_MSR_SEV_INFO_REQ);
 	VMGEXIT();
