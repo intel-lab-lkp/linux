@@ -914,26 +914,31 @@ static noinline void __sched __mutex_unlock_slowpath(struct mutex *lock, unsigne
 
 	mutex_release(&lock->dep_map, ip);
 
-	/*
-	 * Release the lock before (potentially) taking the spinlock such that
-	 * other contenders can get on with things ASAP.
-	 *
-	 * Except when HANDOFF, in that case we must not clear the owner field,
-	 * but instead set it to the top waiter.
-	 */
-	owner = atomic_long_read(&lock->owner);
-	for (;;) {
-		MUTEX_WARN_ON(__owner_task(owner) != current);
-		MUTEX_WARN_ON(owner & MUTEX_FLAG_PICKUP);
+	if (sched_proxy_exec()) {
+		/* Always force HANDOFF for Proxy Exec for now. Revisit. */
+		owner = MUTEX_FLAG_HANDOFF;
+	} else {
+		/*
+		 * Release the lock before (potentially) taking the spinlock
+		 * such that other contenders can get on with things ASAP.
+		 *
+		 * Except when HANDOFF, in that case we must not clear the
+		 * owner field, but instead set it to the top waiter.
+		 */
+		owner = atomic_long_read(&lock->owner);
+		for (;;) {
+			MUTEX_WARN_ON(__owner_task(owner) != current);
+			MUTEX_WARN_ON(owner & MUTEX_FLAG_PICKUP);
 
-		if (owner & MUTEX_FLAG_HANDOFF)
-			break;
-
-		if (atomic_long_try_cmpxchg_release(&lock->owner, &owner, __owner_flags(owner))) {
-			if (owner & MUTEX_FLAG_WAITERS)
+			if (owner & MUTEX_FLAG_HANDOFF)
 				break;
 
-			return;
+			if (atomic_long_try_cmpxchg_release(&lock->owner, &owner,
+							    __owner_flags(owner))) {
+				if (owner & MUTEX_FLAG_WAITERS)
+					break;
+				return;
+			}
 		}
 	}
 
