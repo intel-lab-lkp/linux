@@ -329,7 +329,7 @@ void bt_dbg(const char *format, ...)
 	vaf.fmt = format;
 	vaf.va = &args;
 
-	printk(KERN_DEBUG pr_fmt("%pV"), &vaf);
+	pr_debug("%pV", &vaf);
 
 	va_end(args);
 }
