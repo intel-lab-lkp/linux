@@ -194,12 +194,9 @@ static bool is_hdr_mode(const struct intel_crtc_state *crtc_state)
 static void
 skl_wa_827(struct drm_i915_private *dev_priv, enum pipe pipe, bool enable)
 {
-	if (enable)
-		intel_de_rmw(dev_priv, CLKGATE_DIS_PSL(pipe),
-			     0, DUPS1_GATING_DIS | DUPS2_GATING_DIS);
-	else
-		intel_de_rmw(dev_priv, CLKGATE_DIS_PSL(pipe),
-			     DUPS1_GATING_DIS | DUPS2_GATING_DIS, 0);
+	intel_de_rmw(dev_priv, CLKGATE_DIS_PSL(pipe),
+		     DUPS1_GATING_DIS | DUPS2_GATING_DIS,
+		     enable ? DUPS1_GATING_DIS | DUPS2_GATING_DIS : 0);
 }
 
 /* Wa_2006604312:icl,ehl */
@@ -207,10 +204,9 @@ static void
 icl_wa_scalerclkgating(struct drm_i915_private *dev_priv, enum pipe pipe,
 		       bool enable)
 {
-	if (enable)
-		intel_de_rmw(dev_priv, CLKGATE_DIS_PSL(pipe), 0, DPFR_GATING_DIS);
-	else
-		intel_de_rmw(dev_priv, CLKGATE_DIS_PSL(pipe), DPFR_GATING_DIS, 0);
+	intel_de_rmw(dev_priv, CLKGATE_DIS_PSL(pipe),
+		     DPFR_GATING_DIS,
+		     enable ? DPFR_GATING_DIS : 0);
 }
 
 /* Wa_1604331009:icl,jsl,ehl */
@@ -218,7 +214,8 @@ static void
 icl_wa_cursorclkgating(struct drm_i915_private *dev_priv, enum pipe pipe,
 		       bool enable)
 {
-	intel_de_rmw(dev_priv, CLKGATE_DIS_PSL(pipe), CURSOR_GATING_DIS,
+	intel_de_rmw(dev_priv, CLKGATE_DIS_PSL(pipe),
+		     CURSOR_GATING_DIS,
 		     enable ? CURSOR_GATING_DIS : 0);
 }
 
