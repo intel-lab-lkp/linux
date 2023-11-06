@@ -69,6 +69,8 @@ jiffies = jiffies_64;
 #define ALIGN_ENTRY_TEXT_BEGIN	. = ALIGN(PMD_SIZE);
 #define ALIGN_ENTRY_TEXT_END	. = ALIGN(PMD_SIZE);
 
+#ifdef CONFIG_AMD_MEM_ENCRYPT
+
 /*
  * This section contains data which will be mapped as decrypted. Memory
  * encryption operates on a page basis. Make this section PMD-aligned
@@ -85,6 +87,12 @@ jiffies = jiffies_64;
 	__start_bss_decrypted_unused = .;			\
 	. = ALIGN(PMD_SIZE);					\
 	__end_bss_decrypted = .;				\
+
+#else
+
+#define BSS_DECRYPTED
+
+#endif
 
 #else
 
