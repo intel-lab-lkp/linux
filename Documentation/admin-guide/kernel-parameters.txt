@@ -4648,6 +4648,10 @@
 			that).
 			Format: <bool>
 
+	proxy_exec=	[KNL] Enable or disables "proxy execution" style
+			solution to mutex based priority inversion.
+			Format: "enable" or "disable"
+
 	psi=		[KNL] Enable or disable pressure stall information
 			tracking.
 			Format: <bool>

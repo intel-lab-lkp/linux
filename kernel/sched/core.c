@@ -117,6 +117,37 @@ EXPORT_TRACEPOINT_SYMBOL_GPL(sched_update_nr_running_tp);
 
 DEFINE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
 
+#ifdef CONFIG_PROXY_EXEC
+DEFINE_STATIC_KEY_TRUE(__sched_proxy_exec);
+static int __init setup_proxy_exec(char *str)
+{
+	int ret = 0;
+
+	if (!str)
+		goto out;
+
+	if (!strcmp(str, "enable")) {
+		static_branch_enable(&__sched_proxy_exec);
+		ret = 1;
+	} else if (!strcmp(str, "disable")) {
+		static_branch_disable(&__sched_proxy_exec);
+		ret = 1;
+	}
+out:
+	if (!ret)
+		pr_warn("Unable to parse proxy_exec=\n");
+
+	return ret;
+}
+#else
+static int __init setup_proxy_exec(char *str)
+{
+	pr_warn("CONFIG_PROXY_EXEC=n, so it cannot be enabled or disabled at boottime\n");
+	return 0;
+}
+#endif
+__setup("proxy_exec=", setup_proxy_exec);
+
 #ifdef CONFIG_SCHED_DEBUG
 /*
  * Debugging: various feature bits

@@ -1554,6 +1554,19 @@ struct task_struct {
 	 */
 };
 
+#ifdef CONFIG_PROXY_EXEC
+DECLARE_STATIC_KEY_TRUE(__sched_proxy_exec);
+static inline bool sched_proxy_exec(void)
+{
+	return static_branch_likely(&__sched_proxy_exec);
+}
+#else
+static inline bool sched_proxy_exec(void)
+{
+	return false;
+}
+#endif
+
 static inline struct pid *task_pid(struct task_struct *task)
 {
 	return task->thread_pid;
