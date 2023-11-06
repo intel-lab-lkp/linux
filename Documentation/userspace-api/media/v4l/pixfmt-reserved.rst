@@ -295,6 +295,14 @@ please make a proposal on the linux-media mailing list.
       - Compressed format used by Nuvoton NPCM video driver. This format is
         defined in Remote Framebuffer Protocol (RFC 6143, chapter 7.7.4 Hextile
         Encoding).
+    * .. _V4L2-PIX-FMT-MS21:
+
+      - ``V4L2_PIX_FMT_MS21``
+      - 'MS21'
+      - This format has one plane, luma and chroma are stored in a contiguous
+        memory. Luma pixel in 16x32 tiles at the start, chroma pixel in 16x16
+        tiles at the end. The image height must be aligned with 32 and the image
+        width must be aligned with 16.
 .. raw:: latex
 
     \normalsize
