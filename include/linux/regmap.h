@@ -1241,9 +1241,25 @@ static inline int regmap_update_bits(struct regmap *map, unsigned int reg,
 	return regmap_update_bits_base(map, reg, mask, val, NULL, false, false);
 }
 
+static inline int regmap_update_bits_autoshift_val(struct regmap *map, unsigned int reg,
+				     unsigned int mask, unsigned int val)
+{
+	val <<= (ffs(mask) - 1);
+
+	return regmap_update_bits_base(map, reg, mask, val, NULL, false, false);
+}
+
 static inline int regmap_update_bits_async(struct regmap *map, unsigned int reg,
 					   unsigned int mask, unsigned int val)
 {
+	return regmap_update_bits_base(map, reg, mask, val, NULL, true, false);
+}
+
+static inline int regmap_update_bits_autoshift_val_async(struct regmap *map,
+					   unsigned int reg, unsigned int mask, unsigned int val)
+{
+	val <<= (ffs(mask) - 1);
+
 	return regmap_update_bits_base(map, reg, mask, val, NULL, true, false);
 }
 
@@ -1255,11 +1271,32 @@ static inline int regmap_update_bits_check(struct regmap *map, unsigned int reg,
 				       change, false, false);
 }
 
+static inline int regmap_update_bits_autoshift_val_check(struct regmap *map,
+					   unsigned int reg, unsigned int mask, unsigned int val,
+					   bool *change)
+{
+	val <<= (ffs(mask) - 1);
+
+	return regmap_update_bits_base(map, reg, mask, val,
+				       change, false, false);
+}
+
 static inline int
 regmap_update_bits_check_async(struct regmap *map, unsigned int reg,
 			       unsigned int mask, unsigned int val,
 			       bool *change)
 {
+	return regmap_update_bits_base(map, reg, mask, val,
+				       change, true, false);
+}
+
+static inline int
+regmap_update_bits_autoshift_val_check_async(struct regmap *map,
+				   unsigned int reg, unsigned int mask, unsigned int val,
+			       bool *change)
+{
+	val <<= (ffs(mask) - 1);
+
 	return regmap_update_bits_base(map, reg, mask, val,
 				       change, true, false);
 }
@@ -1808,12 +1845,27 @@ static inline int regmap_update_bits(struct regmap *map, unsigned int reg,
 	return -EINVAL;
 }
 
+static inline int regmap_update_bits_autoshift_val(struct regmap *map,
+					 unsigned int reg, unsigned int mask, unsigned int val)
+{
+	WARN_ONCE(1, "regmap API is disabled");
+	return -EINVAL;
+}
+
 static inline int regmap_update_bits_async(struct regmap *map, unsigned int reg,
 					   unsigned int mask, unsigned int val)
 {
 	WARN_ONCE(1, "regmap API is disabled");
 	return -EINVAL;
 }
+
+static inline int regmap_update_bits_autoshift_val_async(struct regmap *map,
+					   unsigned int reg, unsigned int mask, unsigned int val)
+{
+	WARN_ONCE(1, "regmap API is disabled");
+	return -EINVAL;
+}
+
 
 static inline int regmap_update_bits_check(struct regmap *map, unsigned int reg,
 					   unsigned int mask, unsigned int val,
@@ -1823,9 +1875,26 @@ static inline int regmap_update_bits_check(struct regmap *map, unsigned int reg,
 	return -EINVAL;
 }
 
+static inline int regmap_update_bits_autoshift_val_check(struct regmap *map,
+					   unsigned int reg, unsigned int mask, unsigned int val,
+					   bool *change)
+{
+	WARN_ONCE(1, "regmap API is disabled");
+	return -EINVAL;
+}
+
 static inline int
 regmap_update_bits_check_async(struct regmap *map, unsigned int reg,
 			       unsigned int mask, unsigned int val,
+			       bool *change)
+{
+	WARN_ONCE(1, "regmap API is disabled");
+	return -EINVAL;
+}
+
+static inline int
+regmap_update_bits_autoshift_val_check_async(struct regmap *map,
+				   unsigned int reg, unsigned int mask, unsigned int val,
 			       bool *change)
 {
 	WARN_ONCE(1, "regmap API is disabled");
