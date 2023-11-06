@@ -83,6 +83,7 @@ struct sdhci_sprd_host {
 	u32 version;
 	struct clk *clk_sdio;
 	struct clk *clk_enable;
+	struct clk *clk_1x_enable;
 	struct clk *clk_2x_enable;
 	struct pinctrl *pinctrl;
 	struct pinctrl_state *pins_uhs;
@@ -784,6 +785,10 @@ static int sdhci_sprd_probe(struct platform_device *pdev)
 	}
 	sprd_host->clk_enable = clk;
 
+	clk = devm_clk_get(&pdev->dev, "1x_enable");
+	if (!IS_ERR(clk))
+		sprd_host->clk_1x_enable = clk;
+
 	clk = devm_clk_get(&pdev->dev, "2x_enable");
 	if (!IS_ERR(clk))
 		sprd_host->clk_2x_enable = clk;
@@ -794,11 +799,15 @@ static int sdhci_sprd_probe(struct platform_device *pdev)
 
 	ret = clk_prepare_enable(sprd_host->clk_enable);
 	if (ret)
+		goto clk_sdio_disable;
+
+	ret = clk_prepare_enable(sprd_host->clk_1x_enable);
+	if (ret)
 		goto clk_disable;
 
 	ret = clk_prepare_enable(sprd_host->clk_2x_enable);
 	if (ret)
-		goto clk_disable2;
+		goto clk_1x_disable;
 
 	sdhci_sprd_init_config(host);
 	host->version = sdhci_readw(host, SDHCI_HOST_VERSION);
@@ -858,10 +867,13 @@ pm_runtime_disable:
 
 	clk_disable_unprepare(sprd_host->clk_2x_enable);
 
-clk_disable2:
-	clk_disable_unprepare(sprd_host->clk_enable);
+clk_1x_disable:
+	clk_disable_unprepare(sprd_host->clk_1x_enable);
 
 clk_disable:
+	clk_disable_unprepare(sprd_host->clk_enable);
+
+clk_sdio_disable:
 	clk_disable_unprepare(sprd_host->clk_sdio);
 
 pltfm_free:
@@ -878,6 +890,7 @@ static void sdhci_sprd_remove(struct platform_device *pdev)
 
 	clk_disable_unprepare(sprd_host->clk_sdio);
 	clk_disable_unprepare(sprd_host->clk_enable);
+	clk_disable_unprepare(sprd_host->clk_1x_enable);
 	clk_disable_unprepare(sprd_host->clk_2x_enable);
 
 	sdhci_pltfm_free(pdev);
@@ -900,6 +913,7 @@ static int sdhci_sprd_runtime_suspend(struct device *dev)
 
 	clk_disable_unprepare(sprd_host->clk_sdio);
 	clk_disable_unprepare(sprd_host->clk_enable);
+	clk_disable_unprepare(sprd_host->clk_1x_enable);
 	clk_disable_unprepare(sprd_host->clk_2x_enable);
 
 	return 0;
@@ -915,9 +929,13 @@ static int sdhci_sprd_runtime_resume(struct device *dev)
 	if (ret)
 		return ret;
 
-	ret = clk_prepare_enable(sprd_host->clk_enable);
+	ret = clk_prepare_enable(sprd_host->clk_1x_enable);
 	if (ret)
 		goto clk_2x_disable;
+
+	ret = clk_prepare_enable(sprd_host->clk_enable);
+	if (ret)
+		goto clk_1x_disable;
 
 	ret = clk_prepare_enable(sprd_host->clk_sdio);
 	if (ret)
@@ -930,6 +948,9 @@ static int sdhci_sprd_runtime_resume(struct device *dev)
 
 clk_disable:
 	clk_disable_unprepare(sprd_host->clk_enable);
+
+clk_1x_disable:
+	clk_disable_unprepare(sprd_host->clk_1x_enable);
 
 clk_2x_disable:
 	clk_disable_unprepare(sprd_host->clk_2x_enable);
