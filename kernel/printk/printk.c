@@ -2315,6 +2315,8 @@ asmlinkage int vprintk_emit(int facility, int level,
 			    const struct dev_printk_info *dev_info,
 			    const char *fmt, va_list args)
 {
+	static atomic_t panic_noise_count = ATOMIC_INIT(0);
+
 	int printed_len;
 	bool in_sched = false;
 
@@ -2322,8 +2324,22 @@ asmlinkage int vprintk_emit(int facility, int level,
 	if (unlikely(suppress_printk))
 		return 0;
 
-	if (unlikely(suppress_panic_printk) && other_cpu_in_panic())
-		return 0;
+	if (other_cpu_in_panic()) {
+		if (unlikely(suppress_panic_printk))
+			return 0;
+
+		/*
+		 * The messages on the panic CPU are the most important. If
+		 * non-panic CPUs are generating many messages, the panic
+		 * messages could get lost. Limit the number of non-panic
+		 * messages to approximately 1/4 of the ringbuffer.
+		 */
+		if (atomic_inc_return_relaxed(&panic_noise_count) >
+		    (1 << (prb->desc_ring.count_bits - 2))) {
+			suppress_panic_printk = 1;
+			return 0;
+		}
+	}
 
 	if (level == LOGLEVEL_SCHED) {
 		level = LOGLEVEL_DEFAULT;
@@ -2799,8 +2815,6 @@ void console_prepend_dropped(struct printk_message *pmsg, unsigned long dropped)
 bool printk_get_next_message(struct printk_message *pmsg, u64 seq,
 			     bool is_extended, bool may_suppress)
 {
-	static int panic_console_dropped;
-
 	struct printk_buffers *pbufs = pmsg->pbufs;
 	const size_t scratchbuf_sz = sizeof(pbufs->scratchbuf);
 	const size_t outbuf_sz = sizeof(pbufs->outbuf);
@@ -2827,17 +2841,6 @@ bool printk_get_next_message(struct printk_message *pmsg, u64 seq,
 
 	pmsg->seq = r.info->seq;
 	pmsg->dropped = r.info->seq - seq;
-
-	/*
-	 * Check for dropped messages in panic here so that printk
-	 * suppression can occur as early as possible if necessary.
-	 */
-	if (pmsg->dropped &&
-	    panic_in_progress() &&
-	    panic_console_dropped++ > 10) {
-		suppress_panic_printk = 1;
-		pr_warn_once("Too many dropped messages. Suppress messages on non-panic CPUs to prevent livelock.\n");
-	}
 
 	/* Skip record that has level above the console loglevel. */
 	if (may_suppress && suppress_message_printing(r.info->level))
