@@ -8670,6 +8670,31 @@ bool ieee80211_operating_class_to_band(u8 operating_class,
 				       enum nl80211_band *band);
 
 /**
+ * ieee80211_operating_class_to_center_freq - convert operating class to
+ * center frequency
+ *
+ * @operating_class: the operating class to convert
+ * @chan: the ieee80211_channel to convert
+ * @center_freq1: cneter frequency 1 pointer to fill
+ * @center_freq2: cneter frequency 2 pointer to fill
+ *
+ * Returns %true if the conversion was successful, %false otherwise.
+ */
+bool ieee80211_operating_class_to_center_freq(u8 operating_class,
+					      struct ieee80211_channel *chan,
+					      u32 *center_freq1,
+					      u32 *center_freq2);
+
+/**
+ * ieee80211_operating_class_to_chan_width - convert operating class to
+ * nl80211 channel width
+ *
+ * @operating_class: the operating class to convert
+ */
+enum nl80211_chan_width
+ieee80211_operating_class_to_chan_width(u8 operating_class);
+
+/**
  * ieee80211_chandef_to_operating_class - convert chandef to operation class
  *
  * @chandef: the chandef to convert
