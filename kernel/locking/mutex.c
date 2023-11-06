@@ -667,10 +667,11 @@ __mutex_lock_common(struct mutex *lock, unsigned int state, unsigned int subclas
 
 		raw_spin_lock_irqsave(&lock->wait_lock, flags);
 		raw_spin_lock(&current->blocked_lock);
+
 		/*
-		 * Gets reset by unlock path().
+		 * Clear blocked_on_waking flag set by the unlock path().
 		 */
-		set_task_blocked_on(current, lock);
+		current->blocked_on_waking = false;
 		set_current_state(state);
 		/*
 		 * Here we order against unlock; we must either see it change
@@ -950,7 +951,7 @@ static noinline void __sched __mutex_unlock_slowpath(struct mutex *lock, unsigne
 		debug_mutex_wake_waiter(lock, waiter);
 		raw_spin_lock(&next->blocked_lock);
 		WARN_ON(next->blocked_on != lock);
-		set_task_blocked_on(current, NULL);
+		next->blocked_on_waking = true;
 		raw_spin_unlock(&next->blocked_lock);
 		wake_q_add(&wake_q, next);
 	}
