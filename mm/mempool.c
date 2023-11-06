@@ -366,6 +366,20 @@ out:
 EXPORT_SYMBOL(mempool_resize);
 
 /**
+ * mempool_use_prealloc_only - mark a pool to only use preallocated elements
+ * @pool:      pointer to the memory pool that should be marked
+ *
+ * This function should only be called right after the pool creation via
+ * mempool_init() or mempool_create() and must not be called concurrently with
+ * mempool_alloc().
+ */
+void mempool_use_prealloc_only(mempool_t *pool)
+{
+	pool->use_prealloc_only = true;
+}
+EXPORT_SYMBOL(mempool_use_prealloc_only);
+
+/**
  * mempool_alloc - allocate an element from a specific memory pool
  * @pool:      pointer to the memory pool which was allocated via
  *             mempool_create().
@@ -397,9 +411,11 @@ void *mempool_alloc(mempool_t *pool, gfp_t gfp_mask)
 
 repeat_alloc:
 
-	element = pool->alloc(gfp_temp, pool->pool_data);
-	if (likely(element != NULL))
-		return element;
+	if (!pool->use_prealloc_only) {
+		element = pool->alloc(gfp_temp, pool->pool_data);
+		if (likely(element != NULL))
+			return element;
+	}
 
 	spin_lock_irqsave(&pool->lock, flags);
 	if (likely(pool->curr_nr)) {
@@ -413,6 +429,11 @@ repeat_alloc:
 		 */
 		kmemleak_update_trace(element);
 		return element;
+	}
+
+	if (pool->use_prealloc_only) {
+		spin_unlock_irqrestore(&pool->lock, flags);
+		return NULL;
 	}
 
 	/*

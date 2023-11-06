@@ -18,6 +18,7 @@ typedef struct mempool_s {
 	int min_nr;		/* nr of elements at *elements */
 	int curr_nr;		/* Current nr of elements at *elements */
 	void **elements;
+	bool use_prealloc_only;	/* Use only preallocated elements */
 
 	void *pool_data;
 	mempool_alloc_t *alloc;
@@ -48,6 +49,7 @@ extern mempool_t *mempool_create_node(int min_nr, mempool_alloc_t *alloc_fn,
 			mempool_free_t *free_fn, void *pool_data,
 			gfp_t gfp_mask, int nid);
 
+extern void mempool_use_prealloc_only(mempool_t *pool);
 extern int mempool_resize(mempool_t *pool, int new_min_nr);
 extern void mempool_destroy(mempool_t *pool);
 extern void *mempool_alloc(mempool_t *pool, gfp_t gfp_mask) __malloc;
