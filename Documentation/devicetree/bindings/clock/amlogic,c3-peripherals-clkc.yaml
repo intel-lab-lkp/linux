@@ -1,0 +1,104 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+# Copyright (C) 2022-2023 Amlogic, Inc. All rights reserved
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/clock/amlogic,c3-peripherals-clkc.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Amlogic C3 Serials Peripheral Clock Controller
+
+maintainers:
+  - Neil Armstrong <neil.armstrong@linaro.org>
+  - Jerome Brunet <jbrunet@baylibre.com>
+  - Xianwei Zhao <xianwei.zhao@amlogic.com>
+  - Chuan Liu <chuan.liu@amlogic.com>
+
+properties:
+  compatible:
+    const: amlogic,c3-peripherals-clkc
+
+  reg:
+    maxItems: 1
+
+  clocks:
+    minItems: 12
+    items:
+      - description: input oscillator (usually at 24MHz)
+      - description: input oscillator (usually at 32KHz)
+      - description: input Fix PLL
+      - description: input Fclk div 2
+      - description: input Fclk div 2p5
+      - description: input Fclk div 3
+      - description: input Fclk div 4
+      - description: input Fclk div 5
+      - description: input Fclk div 7
+      - description: input gp0 pll
+      - description: input gp1 pll
+      - description: input hifi pll
+      - description: input pad clock for rtc_clk (optional)
+
+  clock-names:
+    minItems: 12
+    items:
+      - const: xtal_24m
+      - const: xtal_32k
+      - const: fix
+      - const: fdiv2
+      - const: fdiv2p5
+      - const: fdiv3
+      - const: fdiv4
+      - const: fdiv5
+      - const: fdiv7
+      - const: gp0
+      - const: gp1
+      - const: hifi
+      - const: pad
+
+  "#clock-cells":
+    const: 1
+
+required:
+  - compatible
+  - reg
+  - clocks
+  - clock-names
+  - "#clock-cells"
+
+additionalProperties: false
+
+examples:
+  - |
+    apb {
+        #address-cells = <2>;
+        #size-cells = <2>;
+
+        clock-controller@0 {
+            compatible = "amlogic,c3-peripherals-clkc";
+            reg = <0x0 0x0 0x0 0x49c>;
+            #clock-cells = <1>;
+            clocks = <&xtal_24m>,
+                     <&xtal_32k>,
+                     <&clkc_pll 1>,
+                     <&clkc_pll 5>,
+                     <&clkc_pll 7>,
+                     <&clkc_pll 9>,
+                     <&clkc_pll 11>,
+                     <&clkc_pll 13>,
+                     <&clkc_pll 15>,
+                     <&clkc_pll 17>,
+                     <&clkc_pll 19>,
+                     <&clkc_pll 21>;
+            clock-names = "xtal_24m",
+                          "xtal_32k",
+                          "fix",
+                          "fdiv2",
+                          "fdiv2p5",
+                          "fdiv3",
+                          "fdiv4",
+                          "fdiv5",
+                          "fdiv7",
+                          "gp0",
+                          "gp1",
+                          "hifi";
+        };
+    };
