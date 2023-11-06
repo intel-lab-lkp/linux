@@ -9,9 +9,6 @@ title: Freescale i.MX PWM controller
 maintainers:
   - Philipp Zabel <p.zabel@pengutronix.de>
 
-allOf:
-  - $ref: pwm.yaml#
-
 properties:
   "#pwm-cells":
     description: |
@@ -73,6 +70,23 @@ required:
   - interrupts
 
 additionalProperties: false
+
+allOf:
+  - $ref: pwm.yaml#
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: fsl,imx1-pwm
+    then:
+      properties:
+        "#pwm-cells":
+          enum: [2]
+    else:
+      properties:
+        "#pwm-cells":
+          enum: [3]
 
 examples:
   - |
