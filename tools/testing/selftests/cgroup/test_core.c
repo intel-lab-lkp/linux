@@ -817,7 +817,8 @@ static int test_cgcore_lesser_ns_open(const char *root)
 	if (cg_enter_current(cg_test_a))
 		goto cleanup;
 
-	if ((status = write(cg_test_b_procs_fd, "0", 1)) >= 0 || errno != ENOENT)
+	status = write(cg_test_b_procs_fd, "0", 1);
+	if (status >= 0 || errno != ENOENT)
 		goto cleanup;
 
 	ret = KSFT_PASS;

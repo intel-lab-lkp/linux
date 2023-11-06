@@ -411,12 +411,14 @@ int dirfd_open_opath(const char *dir)
 	return open(dir, O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW | O_PATH);
 }
 
-#define close_prot_errno(fd)                                                   \
-	if (fd >= 0) {                                                         \
-		int _e_ = errno;                                               \
-		close(fd);                                                     \
-		errno = _e_;                                                   \
-	}
+#define close_prot_errno(fd)				\
+	do {						\
+		if (fd >= 0) {                          \
+			int _e_ = errno;                \
+			close(fd);                      \
+			errno = _e_;                    \
+		}					\
+	} while (0);
 
 static int clone_into_cgroup_run_nowait(const char *cgroup,
 					int (*fn)(const char *cgroup, void *arg),
