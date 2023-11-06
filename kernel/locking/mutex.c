@@ -623,7 +623,7 @@ __mutex_lock_common(struct mutex *lock, unsigned int state, unsigned int subclas
 			goto err_early_kill;
 	}
 
-	current->blocked_on = lock;
+	set_task_blocked_on(current, lock);
 	set_current_state(state);
 	trace_contention_begin(lock, LCB_F_MUTEX);
 	for (;;) {
@@ -670,7 +670,7 @@ __mutex_lock_common(struct mutex *lock, unsigned int state, unsigned int subclas
 		/*
 		 * Gets reset by unlock path().
 		 */
-		current->blocked_on = lock;
+		set_task_blocked_on(current, lock);
 		set_current_state(state);
 		/*
 		 * Here we order against unlock; we must either see it change
@@ -699,7 +699,7 @@ __mutex_lock_common(struct mutex *lock, unsigned int state, unsigned int subclas
 		}
 	}
 acquired:
-	current->blocked_on = NULL;
+	set_task_blocked_on(current, NULL);
 	__set_current_state(TASK_RUNNING);
 
 	if (ww_ctx) {
@@ -731,7 +731,7 @@ skip_wait:
 	return 0;
 
 err:
-	current->blocked_on = NULL;
+	set_task_blocked_on(current, NULL);
 	__set_current_state(TASK_RUNNING);
 	__mutex_remove_waiter(lock, &waiter);
 err_early_kill:
@@ -950,7 +950,7 @@ static noinline void __sched __mutex_unlock_slowpath(struct mutex *lock, unsigne
 		debug_mutex_wake_waiter(lock, waiter);
 		raw_spin_lock(&next->blocked_lock);
 		WARN_ON(next->blocked_on != lock);
-		next->blocked_on = NULL;
+		set_task_blocked_on(current, NULL);
 		raw_spin_unlock(&next->blocked_lock);
 		wake_q_add(&wake_q, next);
 	}
