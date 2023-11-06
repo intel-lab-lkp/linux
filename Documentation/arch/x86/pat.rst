@@ -144,7 +144,7 @@ otherwise not be effective.
         |||                                                |
   WC    000      WB   _PAGE_CACHE_MODE_WB             WC   |   WC
   WC    001      WC   _PAGE_CACHE_MODE_WC             WC*  |   WC
-  WC    010      UC-  _PAGE_CACHE_MODE_UC_MINUS       WC*  |   UC
+  WC    010      UC-  _PAGE_CACHE_MODE_UC_MINUS       WC*  |   WC
   WC    011      UC   _PAGE_CACHE_MODE_UC             UC   |   UC
   ====  =======  ===  =========================  =====================
 
