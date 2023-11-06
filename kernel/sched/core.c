@@ -3804,6 +3804,119 @@ static inline void ttwu_do_wakeup(struct task_struct *p)
 	trace_sched_wakeup(p);
 }
 
+#ifdef CONFIG_PROXY_EXEC
+static void do_activate_task(struct rq *rq, struct task_struct *p, int en_flags)
+{
+	lockdep_assert_rq_held(rq);
+
+	if (!sched_proxy_exec()) {
+		activate_task(rq, p, en_flags);
+		return;
+	}
+
+	if (p->sleeping_owner) {
+		struct task_struct *owner = p->sleeping_owner;
+
+		raw_spin_lock(&owner->blocked_lock);
+		list_del_init(&p->blocked_node);
+		p->sleeping_owner = NULL;
+		raw_spin_unlock(&owner->blocked_lock);
+	}
+
+	/*
+	 * By calling activate_task with blocked_lock held, we order against
+	 * the proxy() blocked_task case such that no more blocked tasks will
+	 * be enqueued on p once we release p->blocked_lock.
+	 */
+	raw_spin_lock(&p->blocked_lock);
+	WARN_ON(task_cpu(p) != cpu_of(rq));
+	activate_task(rq, p, en_flags);
+	raw_spin_unlock(&p->blocked_lock);
+}
+
+static void activate_blocked_ents(struct rq *target_rq,
+				  struct task_struct *owner,
+				  int wake_flags)
+{
+	unsigned long flags;
+	struct rq_flags rf;
+	int target_cpu = cpu_of(target_rq);
+	int en_flags = ENQUEUE_WAKEUP | ENQUEUE_NOCLOCK;
+
+	if (wake_flags & WF_MIGRATED)
+		en_flags |= ENQUEUE_MIGRATED;
+	/*
+	 * A whole bunch of 'proxy' tasks back this blocked task, wake
+	 * them all up to give this task its 'fair' share.
+	 */
+	raw_spin_lock(&owner->blocked_lock);
+	while (!list_empty(&owner->blocked_head)) {
+		struct task_struct *pp;
+		unsigned int state;
+
+		pp = list_first_entry(&owner->blocked_head,
+				      struct task_struct,
+				      blocked_node);
+		BUG_ON(pp == owner);
+		list_del_init(&pp->blocked_node);
+		WARN_ON(!pp->sleeping_owner);
+		pp->sleeping_owner = NULL;
+		raw_spin_unlock(&owner->blocked_lock);
+
+		/* Nested as ttwu holds the owner's pi_lock */
+		/* XXX But how do we enforce ordering to avoid ABBA? */
+		raw_spin_lock_irqsave_nested(&pp->pi_lock, flags, SINGLE_DEPTH_NESTING);
+		smp_rmb();
+		state = READ_ONCE(pp->__state);
+		/* Avoid racing with ttwu */
+		if (state == TASK_WAKING) {
+			raw_spin_unlock_irqrestore(&pp->pi_lock, flags);
+			raw_spin_lock(&owner->blocked_lock);
+			continue;
+		}
+		if (READ_ONCE(pp->on_rq)) {
+			/*
+			 * We raced with a non mutex handoff activation of pp.
+			 * That activation will also take care of activating
+			 * all of the tasks after pp in the blocked_entry list,
+			 * so we're done here.
+			 */
+			raw_spin_unlock_irqrestore(&pp->pi_lock, flags);
+			raw_spin_lock(&owner->blocked_lock);
+			continue;
+		}
+
+		__set_task_cpu(pp, target_cpu);
+
+		rq_lock_irqsave(target_rq, &rf);
+		update_rq_clock(target_rq);
+		do_activate_task(target_rq, pp, en_flags);
+		resched_curr(target_rq);
+		rq_unlock_irqrestore(target_rq, &rf);
+		raw_spin_unlock_irqrestore(&pp->pi_lock, flags);
+
+		/* recurse */
+		activate_blocked_ents(target_rq, pp, wake_flags);
+
+		raw_spin_lock(&owner->blocked_lock);
+	}
+	raw_spin_unlock(&owner->blocked_lock);
+}
+
+#else
+static inline void do_activate_task(struct rq *rq, struct task_struct *p,
+				    int en_flags)
+{
+	activate_task(rq, p, en_flags);
+}
+
+static inline void activate_blocked_ents(struct rq *target_rq,
+					 struct task_struct *owner,
+					 int wake_flags)
+{
+}
+#endif
+
 static void
 ttwu_do_activate(struct rq *rq, struct task_struct *p, int wake_flags,
 		 struct rq_flags *rf)
@@ -3825,7 +3938,8 @@ ttwu_do_activate(struct rq *rq, struct task_struct *p, int wake_flags,
 		atomic_dec(&task_rq(p)->nr_iowait);
 	}
 
-	activate_task(rq, p, en_flags);
+	do_activate_task(rq, p, en_flags);
+
 	check_preempt_curr(rq, p, wake_flags);
 
 	ttwu_do_wakeup(p);
@@ -3922,13 +4036,19 @@ void sched_ttwu_pending(void *arg)
 	update_rq_clock(rq);
 
 	llist_for_each_entry_safe(p, t, llist, wake_entry.llist) {
+		int wake_flags;
 		if (WARN_ON_ONCE(p->on_cpu))
 			smp_cond_load_acquire(&p->on_cpu, !VAL);
 
 		if (WARN_ON_ONCE(task_cpu(p) != cpu_of(rq)))
 			set_task_cpu(p, cpu_of(rq));
 
-		ttwu_do_activate(rq, p, p->sched_remote_wakeup ? WF_MIGRATED : 0, &rf);
+		wake_flags = p->sched_remote_wakeup ? WF_MIGRATED : 0;
+		ttwu_do_activate(rq, p, wake_flags, &rf);
+		rq_unlock(rq, &rf);
+		activate_blocked_ents(rq, p, wake_flags);
+		rq_lock(rq, &rf);
+		update_rq_clock(rq);
 	}
 
 	/*
@@ -4069,6 +4189,15 @@ static void ttwu_queue(struct task_struct *p, int cpu, int wake_flags)
 	update_rq_clock(rq);
 	ttwu_do_activate(rq, p, wake_flags, &rf);
 	rq_unlock(rq, &rf);
+
+	/*
+	 * When activating blocked ents, we will take the entities
+	 * pi_lock, so drop the owners. Would love suggestions for
+	 * a better approach.
+	 */
+	raw_spin_unlock(&p->pi_lock);
+	activate_blocked_ents(rq, p, wake_flags);
+	raw_spin_lock(&p->pi_lock);
 }
 
 /*
@@ -6778,6 +6907,31 @@ static inline bool proxy_return_migration(struct rq *rq, struct rq_flags *rf,
 	return false;
 }
 
+static void proxy_enqueue_on_owner(struct rq *rq, struct task_struct *owner,
+				   struct task_struct *next)
+{
+	/*
+	 * ttwu_activate() will pick them up and place them on whatever rq
+	 * @owner will run next.
+	 */
+	if (!owner->on_rq) {
+		BUG_ON(!next->on_rq);
+		deactivate_task(rq, next, DEQUEUE_SLEEP);
+		if (task_current_selected(rq, next)) {
+			put_prev_task(rq, next);
+			rq_set_selected(rq, rq->idle);
+		}
+		/*
+		 * ttwu_do_activate must not have a chance to activate p
+		 * elsewhere before it's fully extricated from its old rq.
+		 */
+		WARN_ON(next->sleeping_owner);
+		next->sleeping_owner = owner;
+		smp_mb();
+		list_add(&next->blocked_node, &owner->blocked_head);
+	}
+}
+
 /*
  * Find who @next (currently blocked on a mutex) can proxy for.
  *
@@ -6807,7 +6961,6 @@ static inline bool proxy_return_migration(struct rq *rq, struct rq_flags *rf,
 static struct task_struct *
 proxy(struct rq *rq, struct task_struct *next, struct rq_flags *rf)
 {
-	struct task_struct *ret = NULL;
 	struct task_struct *p = next;
 	struct task_struct *owner = NULL;
 	bool curr_in_chain = false;
@@ -6886,12 +7039,41 @@ proxy(struct rq *rq, struct task_struct *next, struct rq_flags *rf)
 		}
 
 		if (!owner->on_rq) {
-			/* XXX Don't handle blocked owners yet */
-			if (!proxy_deactivate(rq, next))
-				ret = next;
-			raw_spin_unlock(&p->blocked_lock);
+			/*
+			 * rq->curr must not be added to the blocked_head list or else
+			 * ttwu_do_activate could enqueue it elsewhere before it switches
+			 * out here. The approach to avoiding this is the same as in the
+			 * migrate_task case.
+			 */
+			if (curr_in_chain) {
+				raw_spin_unlock(&p->blocked_lock);
+				raw_spin_unlock(&mutex->wait_lock);
+				return proxy_resched_idle(rq, next);
+			}
+
+			/*
+			 * If !@owner->on_rq, holding @rq->lock will not pin the task,
+			 * so we cannot drop @mutex->wait_lock until we're sure its a blocked
+			 * task on this rq.
+			 *
+			 * We use @owner->blocked_lock to serialize against ttwu_activate().
+			 * Either we see its new owner->on_rq or it will see our list_add().
+			 */
+			if (owner != p) {
+				raw_spin_unlock(&p->blocked_lock);
+				raw_spin_lock(&owner->blocked_lock);
+			}
+
+			proxy_enqueue_on_owner(rq, owner, next);
+
+			if (task_current_selected(rq, next)) {
+				put_prev_task(rq, next);
+				rq_set_selected(rq, rq->idle);
+			}
+			raw_spin_unlock(&owner->blocked_lock);
 			raw_spin_unlock(&mutex->wait_lock);
-			return ret;
+
+			return NULL; /* retry task selection */
 		}
 
 		if (owner == p) {

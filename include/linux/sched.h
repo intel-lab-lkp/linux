@@ -1151,6 +1151,9 @@ struct task_struct {
 	struct task_struct		*blocked_donor;	/* task that is boosting us */
 	struct mutex			*blocked_on;	/* lock we're blocked on */
 	bool				blocked_on_waking; /* blocked on, but waking */
+	struct list_head		blocked_head;  /* tasks blocked on us */
+	struct list_head		blocked_node;  /* our entry on someone elses blocked_head */
+	struct task_struct		*sleeping_owner; /* task our blocked_node is enqueued on */
 	raw_spinlock_t			blocked_lock;
 
 #ifdef CONFIG_DEBUG_ATOMIC_SLEEP
