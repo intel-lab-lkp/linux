@@ -696,7 +696,7 @@ static int __hugetlb_events_show(struct seq_file *seq, bool local)
 	else
 		max = atomic_long_read(&h_cg->events[idx][HUGETLB_MAX]);
 
-	seq_printf(seq, "max %lu\n", max);
+	seq_printf(seq, "max %ld\n", max);
 
 	return 0;
 }
