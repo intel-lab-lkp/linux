@@ -96,46 +96,22 @@ EXPORT_SYMBOL(refcount_dec_not_one);
 
 bool refcount_dec_and_mutex_lock(refcount_t *r, struct mutex *lock)
 {
-	if (refcount_dec_not_one(r))
-		return false;
-
-	mutex_lock(lock);
-	if (!refcount_dec_and_test(r)) {
-		mutex_unlock(lock);
-		return false;
-	}
-
-	return true;
+	return __refcount_dec_and_lock(r, mutex_lock(lock),
+				       mutex_unlock(lock));
 }
 EXPORT_SYMBOL(refcount_dec_and_mutex_lock);
 
 bool refcount_dec_and_lock(refcount_t *r, spinlock_t *lock)
 {
-	if (refcount_dec_not_one(r))
-		return false;
-
-	spin_lock(lock);
-	if (!refcount_dec_and_test(r)) {
-		spin_unlock(lock);
-		return false;
-	}
-
-	return true;
+	return __refcount_dec_and_lock(r, spin_lock(lock),
+				       spin_unlock(lock));
 }
 EXPORT_SYMBOL(refcount_dec_and_lock);
 
 bool refcount_dec_and_lock_irqsave(refcount_t *r, spinlock_t *lock,
 				   unsigned long *flags)
 {
-	if (refcount_dec_not_one(r))
-		return false;
-
-	spin_lock_irqsave(lock, *flags);
-	if (!refcount_dec_and_test(r)) {
-		spin_unlock_irqrestore(lock, *flags);
-		return false;
-	}
-
-	return true;
+	return __refcount_dec_and_lock(r, spin_lock_irqsave(lock, *flags),
+				       spin_unlock_irqrestore(lock, *flags));
 }
 EXPORT_SYMBOL(refcount_dec_and_lock_irqsave);

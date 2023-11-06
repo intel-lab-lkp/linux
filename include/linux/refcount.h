@@ -363,6 +363,31 @@ extern __must_check bool refcount_dec_if_one(refcount_t *r);
 extern __must_check bool refcount_dec_not_one(refcount_t *r);
 
 /**
+ * __refcount_dec_and_lock - macro to create code to holding a lock if being
+ *                           able to decremnt refcount to 0
+ * @_ref: the refcount
+ * @_lock: lock function call code
+ * @_unlock: unlock function call code
+ *
+ * The result will be directly returned as a right operand operation. Uusally
+ * the caller use it directly after a return statement.
+ */
+#define __refcount_dec_and_lock(_ref, _lock, _unlock)	\
+({							\
+	bool _ret = false;				\
+							\
+	if (!refcount_dec_not_one(_ref)) {		\
+		_lock;					\
+		if (!refcount_dec_and_test(_ref))	\
+			_unlock;			\
+		else					\
+			_ret = true;			\
+	}						\
+							\
+	_ret;						\
+})
+
+/**
  * refcount_dec_and_mutex_lock - return holding mutex if able to decrement
  *                               refcount to 0
  * @r: the refcount
