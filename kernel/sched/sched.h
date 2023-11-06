@@ -1013,7 +1013,10 @@ struct rq {
 	 */
 	unsigned int		nr_uninterruptible;
 
-	struct task_struct __rcu	*curr;
+	struct task_struct __rcu	*curr;       /* Execution context */
+#ifdef CONFIG_PROXY_EXEC
+	struct task_struct __rcu	*curr_sched; /* Scheduling context (policy) */
+#endif
 	struct task_struct	*idle;
 	struct task_struct	*stop;
 	unsigned long		next_balance;
@@ -1211,6 +1214,22 @@ DECLARE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
 #define task_rq(p)		cpu_rq(task_cpu(p))
 #define cpu_curr(cpu)		(cpu_rq(cpu)->curr)
 #define raw_rq()		raw_cpu_ptr(&runqueues)
+
+#ifdef CONFIG_PROXY_EXEC
+#define rq_selected(rq)		((rq)->curr_sched)
+#define cpu_curr_selected(cpu)	(cpu_rq(cpu)->curr_sched)
+static inline void rq_set_selected(struct rq *rq, struct task_struct *t)
+{
+	rcu_assign_pointer(rq->curr_sched, t);
+}
+#else
+#define rq_selected(rq)		((rq)->curr)
+#define cpu_curr_selected(cpu)	(cpu_rq(cpu)->curr)
+static inline void rq_set_selected(struct rq *rq, struct task_struct *t)
+{
+	/* Do nothing */
+}
+#endif
 
 struct sched_group;
 #ifdef CONFIG_SCHED_CORE
@@ -2128,9 +2147,23 @@ static inline u64 global_rt_runtime(void)
 	return (u64)sysctl_sched_rt_runtime * NSEC_PER_USEC;
 }
 
+/*
+ * Is p the current execution context?
+ */
 static inline int task_current(struct rq *rq, struct task_struct *p)
 {
 	return rq->curr == p;
+}
+
+/*
+ * Is p the current scheduling context?
+ *
+ * Note that it might be the current execution context at the same time if
+ * rq->curr == rq_selected() == p.
+ */
+static inline int task_current_selected(struct rq *rq, struct task_struct *p)
+{
+	return rq_selected(rq) == p;
 }
 
 #ifdef CONFIG_PROXY_EXEC
@@ -2308,7 +2341,7 @@ struct sched_class {
 
 static inline void put_prev_task(struct rq *rq, struct task_struct *prev)
 {
-	WARN_ON_ONCE(rq->curr != prev);
+	WARN_ON_ONCE(rq_selected(rq) != prev);
 	prev->sched_class->put_prev_task(rq, prev);
 }
 
