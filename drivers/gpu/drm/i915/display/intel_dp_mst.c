@@ -43,6 +43,7 @@
 #include "intel_dpio_phy.h"
 #include "intel_hdcp.h"
 #include "intel_hotplug.h"
+#include "intel_vdsc.h"
 #include "skl_scaler.h"
 
 static int intel_dp_mst_check_constraints(struct drm_i915_private *i915, int bpp,
@@ -298,6 +299,18 @@ static int intel_dp_mst_update_slots(struct intel_encoder *encoder,
 }
 
 static bool
+intel_dp_mst_dsc_source_support(const struct intel_crtc_state *crtc_state)
+{
+	struct drm_i915_private *i915 = to_i915(crtc_state->uapi.crtc->dev);
+
+	/*
+	 * FIXME: Enabling DSC on ICL results in blank screen and FIFO pipe /
+	 * transcoder underruns, re-enable DSC after fixing this issue.
+	 */
+	return DISPLAY_VER(i915) >= 12 && intel_dsc_source_support(crtc_state);
+}
+
+static bool
 intel_dp_mst_compute_config_limits(struct intel_dp *intel_dp,
 				   struct intel_crtc_state *crtc_state,
 				   bool dsc,
@@ -374,6 +387,9 @@ static int intel_dp_mst_compute_config(struct intel_encoder *encoder,
 		drm_dbg_kms(&dev_priv->drm, "Try DSC (fallback=%s, force=%s)\n",
 			    str_yes_no(ret),
 			    str_yes_no(intel_dp->force_dsc_en));
+
+		if (!intel_dp_mst_dsc_source_support(pipe_config))
+			return -EINVAL;
 
 		if (!intel_dp_mst_compute_config_limits(intel_dp,
 							pipe_config,
@@ -587,18 +603,12 @@ static void intel_mst_disable_dp(struct intel_atomic_state *state,
 	struct intel_dp *intel_dp = &dig_port->dp;
 	struct intel_connector *connector =
 		to_intel_connector(old_conn_state->connector);
-	struct drm_dp_mst_topology_state *new_mst_state =
-		drm_atomic_get_new_mst_topology_state(&state->base, &intel_dp->mst_mgr);
-	struct drm_dp_mst_atomic_payload *new_payload =
-		drm_atomic_get_mst_payload_state(new_mst_state, connector->port);
 	struct drm_i915_private *i915 = to_i915(connector->base.dev);
 
 	drm_dbg_kms(&i915->drm, "active links %d\n",
 		    intel_dp->active_mst_links);
 
 	intel_hdcp_disable(intel_mst->connector);
-
-	drm_dp_remove_payload_part1(&intel_dp->mst_mgr, new_mst_state, new_payload);
 
 	intel_audio_codec_disable(encoder, old_crtc_state, old_conn_state);
 }
@@ -633,6 +643,8 @@ static void intel_mst_post_disable_dp(struct intel_atomic_state *state,
 	intel_crtc_vblank_off(old_crtc_state);
 
 	intel_disable_transcoder(old_crtc_state);
+
+	drm_dp_remove_payload_part1(&intel_dp->mst_mgr, new_mst_state, new_payload);
 
 	clear_act_sent(encoder, old_crtc_state);
 
@@ -795,8 +807,6 @@ static void intel_mst_enable_dp(struct intel_atomic_state *state,
 
 	drm_WARN_ON(&dev_priv->drm, pipe_config->has_pch_encoder);
 
-	clear_act_sent(encoder, pipe_config);
-
 	if (intel_dp_is_uhbr(pipe_config)) {
 		const struct drm_display_mode *adjusted_mode =
 			&pipe_config->hw.adjusted_mode;
@@ -810,6 +820,8 @@ static void intel_mst_enable_dp(struct intel_atomic_state *state,
 
 	intel_ddi_enable_transcoder_func(encoder, pipe_config);
 
+	clear_act_sent(encoder, pipe_config);
+
 	intel_de_rmw(dev_priv, TRANS_DDI_FUNC_CTL(trans), 0,
 		     TRANS_DDI_DP_VC_PAYLOAD_ALLOC);
 
@@ -821,12 +833,10 @@ static void intel_mst_enable_dp(struct intel_atomic_state *state,
 	drm_dp_add_payload_part2(&intel_dp->mst_mgr, &state->base,
 				 drm_atomic_get_mst_payload_state(mst_state, connector->port));
 
-	if (DISPLAY_VER(dev_priv) >= 14 && pipe_config->fec_enable)
-		intel_de_rmw(dev_priv, MTL_CHICKEN_TRANS(trans), 0,
-			     FECSTALL_DIS_DPTSTREAM_DPTTG);
-	else if (DISPLAY_VER(dev_priv) >= 12 && pipe_config->fec_enable)
-		intel_de_rmw(dev_priv, CHICKEN_TRANS(trans), 0,
-			     FECSTALL_DIS_DPTSTREAM_DPTTG);
+	if (DISPLAY_VER(dev_priv) >= 12)
+		intel_de_rmw(dev_priv, hsw_chicken_trans_reg(dev_priv, trans),
+			     FECSTALL_DIS_DPTSTREAM_DPTTG,
+			     pipe_config->fec_enable ? FECSTALL_DIS_DPTSTREAM_DPTTG : 0);
 
 	intel_audio_sdp_split_update(pipe_config);
 
@@ -836,10 +846,7 @@ static void intel_mst_enable_dp(struct intel_atomic_state *state,
 
 	intel_audio_codec_enable(encoder, pipe_config, conn_state);
 
-	/* Enable hdcp if it's desired */
-	if (conn_state->content_protection ==
-	    DRM_MODE_CONTENT_PROTECTION_DESIRED)
-		intel_hdcp_enable(state, encoder, pipe_config, conn_state);
+	intel_hdcp_enable(state, encoder, pipe_config, conn_state);
 }
 
 static bool intel_dp_mst_enc_get_hw_state(struct intel_encoder *encoder,
