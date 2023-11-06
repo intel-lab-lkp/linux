@@ -5850,7 +5850,7 @@ static inline void convert_extent_map(struct ceph_sparse_read *sr)
 }
 #endif
 
-#define MAX_EXTENTS 4096
+#define MAX_EXTENTS (16*1024*1024)
 
 static int osd_sparse_read(struct ceph_connection *con,
 			   struct ceph_msg_data_cursor *cursor,
@@ -5883,14 +5883,13 @@ next_op:
 		if (count > 0) {
 			if (!sr->sr_extent || count > sr->sr_ext_len) {
 				/*
-				 * Apply a hard cap to the number of extents.
-				 * If we have more, assume something is wrong.
+				 * Warn if hits a hard cap to the number of extents.
+				 * Too many extents could make the following
+				 * kmalloc_array() fail.
 				 */
-				if (count > MAX_EXTENTS) {
-					dout("%s: OSD returned 0x%x extents in a single reply!\n",
-					     __func__, count);
-					return -EREMOTEIO;
-				}
+				if (count > MAX_EXTENTS)
+					pr_warn_ratelimited("%s: OSD returned 0x%x extents in a single reply!\n",
+							    __func__, count);
 
 				/* no extent array provided, or too short */
 				kfree(sr->sr_extent);
