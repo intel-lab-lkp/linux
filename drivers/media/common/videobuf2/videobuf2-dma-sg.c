@@ -564,6 +564,12 @@ static int vb2_dma_sg_map_dmabuf(void *mem_priv)
 		return -EINVAL;
 	}
 
+	/* verify the dmabuf is secure if we are in secure mode */
+	if (buf->vb->vb2_queue->secure_mem && !sg_dma_secure(sgt->sgl)) {
+		pr_err("secure queue requires secure dma_buf");
+		return -EINVAL;
+	}
+
 	buf->dma_sgt = sgt;
 	buf->vaddr = NULL;
 

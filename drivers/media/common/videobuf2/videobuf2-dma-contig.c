@@ -710,6 +710,12 @@ static int vb2_dc_map_dmabuf(void *mem_priv)
 		return -EINVAL;
 	}
 
+	/* verify the dmabuf is secure if we are in secure mode */
+	if (buf->vb->vb2_queue->secure_mem && sg_page(sgt->sgl)) {
+		pr_err("secure queue requires secure dma_buf");
+		return -EINVAL;
+	}
+
 	/* checking if dmabuf is big enough to store contiguous chunk */
 	contig_size = vb2_dc_get_contiguous_size(sgt);
 	if (contig_size < buf->size) {
