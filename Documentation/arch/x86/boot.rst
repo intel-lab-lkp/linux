@@ -1432,7 +1432,8 @@ The boot loader *must* fill out the following fields in bp::
 
 All other fields should be zero.
 
-NOTE: The EFI Handover Protocol is deprecated in favour of the ordinary PE/COFF
+.. note::
+      The EFI Handover Protocol is deprecated in favour of the ordinary PE/COFF
       entry point, combined with the LINUX_EFI_INITRD_MEDIA_GUID based initrd
       loading protocol (refer to [0] for an example of the bootloader side of
       this), which removes the need for any knowledge on the part of the EFI
@@ -1440,4 +1441,4 @@ NOTE: The EFI Handover Protocol is deprecated in favour of the ordinary PE/COFF
       requirements/limitations regarding the placement of the command line
       and ramdisk in memory, or the placement of the kernel image itself.
 
-[0] https://github.com/u-boot/u-boot/commit/ec80b4735a593961fe701cc3a5d717d4739b0fd0
+      [0] https://github.com/u-boot/u-boot/commit/ec80b4735a593961fe701cc3a5d717d4739b0fd0
