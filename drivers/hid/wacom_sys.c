@@ -320,6 +320,9 @@ static void wacom_feature_mapping(struct hid_device *hdev,
 			if (ret == n && features->type == HID_GENERIC) {
 				ret = hid_report_raw_event(hdev,
 					HID_FEATURE_REPORT, data, n, 0);
+				if (ret)
+					hid_warn(hdev, "%s: failed to report feature: %pe\n",
+						 __func__, ERR_PTR(ret));
 			} else if (ret == 2 && features->type != HID_GENERIC) {
 				features->touch_max = data[1];
 			} else {
@@ -381,6 +384,9 @@ static void wacom_feature_mapping(struct hid_device *hdev,
 		if (ret == n) {
 			ret = hid_report_raw_event(hdev, HID_FEATURE_REPORT,
 						   data, n, 0);
+			if (ret)
+				hid_warn(hdev, "%s: failed to report feature: %pe\n",
+					 __func__, ERR_PTR(ret));
 		} else {
 			hid_warn(hdev, "%s: could not retrieve sensor offsets\n",
 				 __func__);
