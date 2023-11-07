@@ -687,10 +687,8 @@ int vchiq_initialise(struct vchiq_instance **instance_out)
 		usleep_range(500, 600);
 	}
 	if (i == VCHIQ_INIT_RETRIES) {
-		vchiq_log_error(state->dev, VCHIQ_CORE, "%s: videocore not initialized\n",
-				__func__);
-		ret = -ENOTCONN;
-		goto failed;
+		pr_err("%s: videocore not initialized\n", __func__);
+		return -ENOTCONN;
 	} else if (i > 0) {
 		vchiq_log_warning(state->dev, VCHIQ_CORE,
 				  "%s: videocore initialized after %d retries\n", __func__, i);

@@ -1170,13 +1170,12 @@ static int vchiq_open(struct inode *inode, struct file *file)
 	struct vchiq_state *state = vchiq_get_state();
 	struct vchiq_instance *instance;
 
-	vchiq_log_debug(state->dev, VCHIQ_ARM, "vchiq_open");
-
 	if (!state) {
-		vchiq_log_error(state->dev, VCHIQ_ARM,
-				"vchiq has no connection to VideoCore");
+		pr_err("%s: vchiq has no connection to VideoCore\n", __func__);
 		return -ENOTCONN;
 	}
+
+	vchiq_log_debug(state->dev, VCHIQ_ARM, "vchiq_open");
 
 	instance = kzalloc(sizeof(*instance), GFP_KERNEL);
 	if (!instance)
