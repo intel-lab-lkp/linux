@@ -1806,6 +1806,7 @@ static int sa_aead_setkey(struct crypto_aead *authenc,
 	int cmdl_len;
 	struct sa_cmdl_cfg cfg;
 	int key_idx;
+	int error;
 
 	if (crypto_authenc_extractkeys(&keys, key, keylen) != 0)
 		return -EINVAL;
@@ -1869,7 +1870,9 @@ static int sa_aead_setkey(struct crypto_aead *authenc,
 	crypto_aead_set_flags(ctx->fallback.aead,
 			      crypto_aead_get_flags(authenc) &
 			      CRYPTO_TFM_REQ_MASK);
-	crypto_aead_setkey(ctx->fallback.aead, key, keylen);
+	error = crypto_aead_setkey(ctx->fallback.aead, key, keylen);
+	if (error)
+		return error;
 
 	return 0;
 }
