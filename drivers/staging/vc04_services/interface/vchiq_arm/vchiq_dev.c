@@ -47,9 +47,10 @@ user_service_free(void *userdata)
 
 static void close_delivered(struct user_service *user_service)
 {
-	vchiq_log_debug(user_service->service->state->dev, VCHIQ_ARM,
-			"%s(handle=%x)",
-			__func__, user_service->service->handle);
+	dev_dbg(user_service->service->state->dev,
+		"%s: %s: %s(handle=%x)\n",
+		log_cat(VCHIQ_ARM), log_type(DEBUG),
+		__func__, user_service->service->handle);
 
 	if (user_service->close_pending) {
 		/* Allow the underlying service to be culled */
@@ -235,8 +236,9 @@ static int vchiq_ioc_dequeue_message(struct vchiq_instance *instance,
 			spin_unlock(&msg_queue_spinlock);
 			DEBUG_TRACE(DEQUEUE_MESSAGE_LINE);
 			if (wait_for_completion_interruptible(&user_service->insert_event)) {
-				vchiq_log_debug(service->state->dev, VCHIQ_ARM,
-						"DEQUEUE_MESSAGE interrupted");
+				dev_dbg(service->state->dev,
+					"%s: %s: DEQUEUE_MESSAGE interrupted\n",
+					log_cat(VCHIQ_ARM), log_type(DEBUG));
 				ret = -EINTR;
 				break;
 			}
@@ -325,8 +327,9 @@ static int vchiq_irq_queue_bulk_tx_rx(struct vchiq_instance *instance,
 			ret = -ESRCH;
 			goto out;
 		}
-		vchiq_log_debug(service->state->dev, VCHIQ_ARM,
-				"found bulk_waiter %pK for pid %d", waiter, current->pid);
+		dev_dbg(service->state->dev, "%s: %s: found bulk_waiter %pK for pid %d\n",
+			log_cat(VCHIQ_ARM), log_type(DEBUG),
+			waiter, current->pid);
 		userdata = &waiter->bulk_waiter;
 	} else {
 		userdata = args->userdata;
@@ -357,8 +360,8 @@ static int vchiq_irq_queue_bulk_tx_rx(struct vchiq_instance *instance,
 		mutex_lock(&instance->bulk_waiter_list_mutex);
 		list_add(&waiter->list, &instance->bulk_waiter_list);
 		mutex_unlock(&instance->bulk_waiter_list_mutex);
-		vchiq_log_debug(service->state->dev, VCHIQ_ARM,
-				"saved bulk_waiter %pK for pid %d", waiter, current->pid);
+		dev_dbg(service->state->dev, "%s: %s: saved bulk_waiter %pK for pid %d\n",
+			log_cat(VCHIQ_ARM), log_type(DEBUG), waiter, current->pid);
 
 		ret = put_user(mode_waiting, mode);
 	}
@@ -457,8 +460,9 @@ static int vchiq_ioc_await_completion(struct vchiq_instance *instance,
 		mutex_lock(&instance->completion_mutex);
 		if (rc) {
 			DEBUG_TRACE(AWAIT_COMPLETION_LINE);
-			vchiq_log_debug(instance->state->dev, VCHIQ_ARM,
-					"AWAIT_COMPLETION interrupted");
+			dev_dbg(instance->state->dev,
+				"%s: %s: AWAIT_COMPLETION interrupted\n",
+				log_cat(VCHIQ_ARM), log_type(DEBUG));
 			ret = -EINTR;
 			goto out;
 		}
@@ -873,10 +877,11 @@ vchiq_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	}
 
 	if (!status && (ret < 0) && (ret != -EINTR) && (ret != -EWOULDBLOCK)) {
-		vchiq_log_debug(instance->state->dev, VCHIQ_ARM,
-				"  ioctl instance %pK, cmd %s -> status %d, %ld",
-				instance, (_IOC_NR(cmd) <= VCHIQ_IOC_MAX) ?
-				ioctl_names[_IOC_NR(cmd)] : "<invalid>", status, ret);
+		dev_dbg(instance->state->dev,
+			"%s: %s: ioctl instance %pK, cmd %s -> status %d, %ld\n",
+			log_cat(VCHIQ_ARM), log_type(DEBUG),
+			instance, (_IOC_NR(cmd) <= VCHIQ_IOC_MAX) ?
+			ioctl_names[_IOC_NR(cmd)] : "<invalid>", status, ret);
 	} else {
 		dev_dbg(instance->state->dev,
 			"%s: %s: ioctl instance %pK, cmd %s -> status %d\n, %ld\n",
@@ -1181,7 +1186,8 @@ static int vchiq_open(struct inode *inode, struct file *file)
 		return -ENOTCONN;
 	}
 
-	vchiq_log_debug(state->dev, VCHIQ_ARM, "vchiq_open");
+	dev_dbg(state->dev, "%s: %s: vchiq_open\n",
+		log_cat(VCHIQ_ARM), log_type(DEBUG));
 
 	instance = kzalloc(sizeof(*instance), GFP_KERNEL);
 	if (!instance)
@@ -1211,8 +1217,9 @@ static int vchiq_release(struct inode *inode, struct file *file)
 	int ret = 0;
 	int i;
 
-	vchiq_log_debug(state->dev, VCHIQ_ARM, "%s: instance=%lx", __func__,
-			(unsigned long)instance);
+	dev_dbg(state->dev, "%s: %s: %s: instance=%lx\n",
+		log_cat(VCHIQ_ARM), log_type(DEBUG),
+		__func__, (unsigned long)instance);
 
 	if (!state) {
 		ret = -EPERM;

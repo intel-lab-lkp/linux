@@ -311,9 +311,9 @@ create_pagelist(struct vchiq_instance *instance, char *buf, char __user *ubuf,
 						   type == PAGELIST_READ, pages);
 
 		if (actual_pages != num_pages) {
-			vchiq_log_debug(instance->state->dev, VCHIQ_ARM,
-					"%s - only %d/%d pages locked",
-					__func__, actual_pages, num_pages);
+			dev_dbg(instance->state->dev, "%s: %s: %s - only %d/%d pages locked\n",
+				log_cat(VCHIQ_ARM), log_type(DEBUG),
+				__func__, actual_pages, num_pages);
 
 			/* This is probably due to the process being killed */
 			if (actual_pages > 0)
@@ -556,8 +556,8 @@ static int vchiq_platform_init(struct platform_device *pdev, struct vchiq_state 
 		return -ENXIO;
 	}
 
-	vchiq_log_debug(&pdev->dev, VCHIQ_ARM, "vchiq_init - done (slots %pK, phys %pad)",
-			vchiq_slot_zero, &slot_phys);
+	dev_dbg(&pdev->dev, "%s: %s: vchiq_init - done (slots %pK, phys %pad)\n",
+		log_cat(VCHIQ_ARM), log_type(DEBUG), vchiq_slot_zero, &slot_phys);
 
 	vchiq_call_connected_callbacks();
 
@@ -727,9 +727,9 @@ void free_bulk_waiter(struct vchiq_instance *instance)
 	list_for_each_entry_safe(waiter, next,
 				 &instance->bulk_waiter_list, list) {
 		list_del(&waiter->list);
-		vchiq_log_debug(instance->state->dev, VCHIQ_ARM,
-				"bulk_waiter - cleaned up %pK for pid %d",
-				waiter, waiter->pid);
+		dev_dbg(instance->state->dev,
+			"%s: %s: bulk_waiter - cleaned up %pK for pid %d\n",
+			log_cat(VCHIQ_ARM), log_type(DEBUG), waiter, waiter->pid);
 		kfree(waiter);
 	}
 }
@@ -999,9 +999,8 @@ vchiq_blocking_bulk_transfer(struct vchiq_instance *instance, unsigned int handl
 		mutex_lock(&instance->bulk_waiter_list_mutex);
 		list_add(&waiter->list, &instance->bulk_waiter_list);
 		mutex_unlock(&instance->bulk_waiter_list_mutex);
-		vchiq_log_debug(instance->state->dev, VCHIQ_ARM,
-				"saved bulk_waiter %pK for pid %d", waiter,
-				current->pid);
+		dev_dbg(instance->state->dev, "%s: %s: saved bulk_waiter %pK for pid %d\n",
+			log_cat(VCHIQ_ARM), log_type(DEBUG), waiter, current->pid);
 	}
 
 	return status;
@@ -1026,12 +1025,12 @@ add_completion(struct vchiq_instance *instance, enum vchiq_reason reason,
 			log_cat(VCHIQ_CORE), log_type(TRACE), __func__);
 		DEBUG_COUNT(COMPLETION_QUEUE_FULL_COUNT);
 		if (wait_for_completion_interruptible(&instance->remove_event)) {
-			vchiq_log_debug(instance->state->dev, VCHIQ_ARM,
-					"service_callback interrupted");
+			dev_dbg(instance->state->dev, "%s: %s: service_callback interrupted\n",
+				log_cat(VCHIQ_ARM), log_type(DEBUG));
 			return -EAGAIN;
 		} else if (instance->closing) {
-			vchiq_log_debug(instance->state->dev, VCHIQ_ARM,
-					"service_callback closing");
+			dev_dbg(instance->state->dev, "%s: %s: service_callback closing\n",
+				log_cat(VCHIQ_ARM), log_type(DEBUG));
 			return 0;
 		}
 		DEBUG_TRACE(SERVICE_CALLBACK_LINE);
@@ -1136,8 +1135,9 @@ service_callback(struct vchiq_instance *instance, enum vchiq_reason reason,
 				instance->completion_remove) < 0) {
 				int status;
 
-				vchiq_log_debug(instance->state->dev, VCHIQ_ARM,
-						"Inserting extra MESSAGE_AVAILABLE");
+				dev_dbg(instance->state->dev,
+					"%s: %s: Inserting extra MESSAGE_AVAILABLE\n",
+					log_cat(VCHIQ_ARM), log_type(DEBUG));
 				DEBUG_TRACE(SERVICE_CALLBACK_LINE);
 				status = add_completion(instance, reason, NULL, user_service,
 							bulk_userdata);
@@ -1150,14 +1150,15 @@ service_callback(struct vchiq_instance *instance, enum vchiq_reason reason,
 
 			DEBUG_TRACE(SERVICE_CALLBACK_LINE);
 			if (wait_for_completion_interruptible(&user_service->remove_event)) {
-				vchiq_log_debug(instance->state->dev, VCHIQ_ARM,
-						"%s interrupted", __func__);
+				dev_dbg(instance->state->dev,
+					"%s: %s: %s interrupted\n",
+					log_cat(VCHIQ_ARM), log_type(DEBUG), __func__);
 				DEBUG_TRACE(SERVICE_CALLBACK_LINE);
 				vchiq_service_put(service);
 				return -EAGAIN;
 			} else if (instance->closing) {
-				vchiq_log_debug(instance->state->dev, VCHIQ_ARM,
-						"%s closing", __func__);
+				dev_dbg(instance->state->dev, "%s: %s: %s closing",
+					log_cat(VCHIQ_ARM), log_type(DEBUG), __func__);
 				DEBUG_TRACE(SERVICE_CALLBACK_LINE);
 				vchiq_service_put(service);
 				return -EINVAL;
@@ -1773,8 +1774,9 @@ void vchiq_platform_conn_state_changed(struct vchiq_state *state,
 	struct vchiq_arm_state *arm_state = vchiq_platform_get_arm_state(state);
 	char threadname[16];
 
-	vchiq_log_debug(state->dev, VCHIQ_SUSPEND, "%d: %s->%s", state->id,
-			get_conn_state_name(oldstate), get_conn_state_name(newstate));
+	dev_dbg(state->dev, "%s: %s: %d: %s->%s\n",
+		log_cat(VCHIQ_SUSPEND), log_type(DEBUG), state->id,
+		get_conn_state_name(oldstate), get_conn_state_name(newstate));
 	if (state->conn_state != VCHIQ_CONNSTATE_CONNECTED)
 		return;
 
@@ -1838,9 +1840,8 @@ static int vchiq_probe(struct platform_device *pdev)
 
 	vchiq_debugfs_init();
 
-	vchiq_log_debug(&pdev->dev, VCHIQ_ARM,
-			"vchiq: platform initialised - version %d (min %d)",
-			VCHIQ_VERSION, VCHIQ_VERSION_MIN);
+	dev_dbg(&pdev->dev, "%s: %s: vchiq: platform initialised - version %d (min %d)\n",
+		log_cat(VCHIQ_ARM), log_type(DEBUG), VCHIQ_VERSION, VCHIQ_VERSION_MIN);
 
 	/*
 	 * Simply exit on error since the function handles cleanup in
