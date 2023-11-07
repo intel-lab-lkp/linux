@@ -91,6 +91,8 @@ struct evsel_str_handler {
 
 struct evlist *evlist__new(void);
 struct evlist *evlist__new_default(void);
+const char *arch_evlist__default_cycles_event(bool can_profile_kernel);
+const char *evlist__default_cycles_event(bool can_profile_kernel);
 struct evlist *evlist__new_dummy(void);
 void evlist__init(struct evlist *evlist, struct perf_cpu_map *cpus,
 		  struct perf_thread_map *threads);

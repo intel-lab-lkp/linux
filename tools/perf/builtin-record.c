@@ -4150,7 +4150,7 @@ int cmd_record(int argc, const char **argv)
 	if (rec->evlist->core.nr_entries == 0) {
 		bool can_profile_kernel = perf_event_paranoid_check(1);
 
-		err = parse_event(rec->evlist, can_profile_kernel ? "cycles:P" : "cycles:Pu");
+		err = parse_event(rec->evlist, evlist__default_cycles_event(can_profile_kernel));
 		if (err)
 			goto out;
 	}

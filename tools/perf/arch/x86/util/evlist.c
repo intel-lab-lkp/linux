@@ -5,6 +5,8 @@
 #include "util/evlist.h"
 #include "util/parse-events.h"
 #include "util/event.h"
+#include "util/env.h"
+#include "linux/string.h"
 #include "topdown.h"
 #include "evsel.h"
 
@@ -91,4 +93,36 @@ int arch_evlist__cmp(const struct evsel *lhs, const struct evsel *rhs)
 
 	/* Default ordering by insertion index. */
 	return lhs->core.idx - rhs->core.idx;
+}
+
+/*
+ * Precise cycles event is forwarded to ibs_op// pmu on AMD. However, IBS
+ * has hw issue on certain Zen2 processors where it might raise NMI without
+ * sample_valid bit set, which causes Unknown NMI warnings. So default to
+ * non-precise cycles event on affected processors.
+ */
+const char *arch_evlist__default_cycles_event(bool can_profile_kernel)
+{
+	struct perf_env env = { .total_mem = 0, };
+	unsigned int family, model, stepping;
+	bool is_amd;
+	int ret;
+
+	perf_env__cpuid(&env);
+	is_amd = env.cpuid && strstarts(env.cpuid, "AuthenticAMD");
+	if (!is_amd)
+		goto out;
+
+	ret = sscanf(env.cpuid, "%*[^,],%u,%u,%u", &family, &model, &stepping);
+	if (ret == 3 && family == 0x17 && (
+	    (model >= 0x30 && model <= 0x3f) ||
+	    (model >= 0x60 && model <= 0x7f) ||
+	    (model >= 0x90 && model <= 0x9f))) {
+		perf_env__exit(&env);
+		return can_profile_kernel ? "cycles" : "cycles:u";
+	}
+
+out:
+	perf_env__exit(&env);
+	return can_profile_kernel ? "cycles:P" : "cycles:Pu";
 }

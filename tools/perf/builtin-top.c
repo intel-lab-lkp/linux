@@ -1666,7 +1666,7 @@ int cmd_top(int argc, const char **argv)
 
 	if (!top.evlist->core.nr_entries) {
 		bool can_profile_kernel = perf_event_paranoid_check(1);
-		int err = parse_event(top.evlist, can_profile_kernel ? "cycles:P" : "cycles:Pu");
+		int err = parse_event(top.evlist, evlist__default_cycles_event(can_profile_kernel));
 
 		if (err)
 			goto out_delete_evlist;

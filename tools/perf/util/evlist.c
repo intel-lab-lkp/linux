@@ -90,6 +90,16 @@ struct evlist *evlist__new(void)
 	return evlist;
 }
 
+const char * __weak arch_evlist__default_cycles_event(bool can_profile_kernel)
+{
+	return can_profile_kernel ? "cycles:P" : "cycles:Pu";
+}
+
+const char *evlist__default_cycles_event(bool can_profile_kernel)
+{
+	return arch_evlist__default_cycles_event(can_profile_kernel);
+}
+
 struct evlist *evlist__new_default(void)
 {
 	struct evlist *evlist = evlist__new();
@@ -100,7 +110,7 @@ struct evlist *evlist__new_default(void)
 		return NULL;
 
 	can_profile_kernel = perf_event_paranoid_check(1);
-	err = parse_event(evlist, can_profile_kernel ? "cycles:P" : "cycles:Pu");
+	err = parse_event(evlist, evlist__default_cycles_event(can_profile_kernel));
 	if (err) {
 		evlist__delete(evlist);
 		evlist = NULL;
