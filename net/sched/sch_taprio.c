@@ -288,7 +288,8 @@ static void taprio_update_queue_max_sdu(struct taprio_sched *q,
 		/* TC gate never closes => keep the queueMaxSDU
 		 * selected by the user
 		 */
-		if (sched->max_open_gate_duration[tc] == sched->cycle_time) {
+		if (sched->max_open_gate_duration[tc] == sched->cycle_time &&
+		    !cycle_corr_active(sched->cycle_time_correction)) {
 			max_sdu_dynamic = U32_MAX;
 		} else {
 			u32 max_frm_len;
@@ -684,7 +685,8 @@ static void taprio_set_budgets(struct taprio_sched *q,
 
 	for (tc = 0; tc < num_tc; tc++) {
 		/* Traffic classes which never close have infinite budget */
-		if (entry->gate_duration[tc] == sched->cycle_time)
+		if (entry->gate_duration[tc] == sched->cycle_time &&
+		    !cycle_corr_active(sched->cycle_time_correction))
 			budget = INT_MAX;
 		else
 			budget = div64_u64((u64)entry->gate_duration[tc] * PSEC_PER_NSEC,
@@ -896,6 +898,32 @@ static bool should_restart_cycle(const struct sched_gate_list *oper,
 	return false;
 }
 
+/* Open gate duration were calculated at the beginning with consideration of
+ * multiple entries. If cycle time correction is active, there's only a single
+ * remaining entry left from oper to run.
+ * Update open gate duration based on this last entry.
+ */
+static void update_open_gate_duration(struct sched_entry *entry,
+				      struct sched_gate_list *oper,
+				      int num_tc,
+				      u64 open_gate_duration)
+{
+	int tc;
+
+	if (!entry || !oper)
+		return;
+
+	for (tc = 0; tc < num_tc; tc++) {
+		if (entry->gate_mask & BIT(tc)) {
+			entry->gate_duration[tc] = open_gate_duration;
+			oper->max_open_gate_duration[tc] = open_gate_duration;
+		} else {
+			entry->gate_duration[tc] = 0;
+			oper->max_open_gate_duration[tc] = 0;
+		}
+	}
+}
+
 static bool should_change_sched(struct sched_gate_list *oper)
 {
 	bool change_to_admin_sched = false;
@@ -1010,13 +1038,28 @@ static enum hrtimer_restart advance_sched(struct hrtimer *timer)
 			/* The next entry is the last entry we will run from
 			 * oper, subsequent ones will take from the new admin
 			 */
+			u64 new_gate_duration =
+				next->interval + oper->cycle_time_correction;
+			struct qdisc_size_table *stab =
+				rtnl_dereference(q->root->stab);
+
 			oper->cycle_end_time = new_base_time;
 			end_time = new_base_time;
+
+			update_open_gate_duration(next, oper, num_tc,
+						  new_gate_duration);
+			taprio_update_queue_max_sdu(q, oper, stab);
 		}
 	}
 
 	for (tc = 0; tc < num_tc; tc++) {
-		if (next->gate_duration[tc] == oper->cycle_time)
+		if (cycle_corr_active(oper->cycle_time_correction) &&
+		    (next->gate_mask & BIT(tc)))
+			/* Set to the new base time, ensuring a smooth transition
+			 * to the new schedule when the next entry finishes.
+			 */
+			next->gate_close_time[tc] = end_time;
+		else if (next->gate_duration[tc] == oper->cycle_time)
 			next->gate_close_time[tc] = KTIME_MAX;
 		else
 			next->gate_close_time[tc] = ktime_add_ns(entry->end_time,
