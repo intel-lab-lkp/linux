@@ -690,8 +690,8 @@ int vchiq_initialise(struct vchiq_instance **instance_out)
 		pr_err("%s: videocore not initialized\n", __func__);
 		return -ENOTCONN;
 	} else if (i > 0) {
-		vchiq_log_warning(state->dev, VCHIQ_CORE,
-				  "%s: videocore initialized after %d retries\n", __func__, i);
+		dev_dbg(state->dev, "%s: %s: %s: videocore initialized after %d retries\n",
+			log_cat(VCHIQ_CORE), log_type(WARN), __func__, i);
 	}
 
 	instance = kzalloc(sizeof(*instance), GFP_KERNEL);
@@ -1705,20 +1705,22 @@ vchiq_dump_service_use_state(struct vchiq_state *state)
 	read_unlock_bh(&arm_state->susp_res_lock);
 
 	if (only_nonzero)
-		vchiq_log_warning(state->dev, VCHIQ_SUSPEND,
-				  "Too many active services (%d). Only dumping up to first %d services with non-zero use-count",
-				  active_services, found);
+		dev_dbg(state->dev,
+			"%s: %s: Too many active services (%d). Only dumping up to first %d services with non-zero use-count\n",
+			log_cat(VCHIQ_SUSPEND), log_type(WARN), active_services, found);
 
 	for (i = 0; i < found; i++) {
-		vchiq_log_warning(state->dev, VCHIQ_SUSPEND,
-				  "%p4cc:%d service count %d %s",
-				  &service_data[i].fourcc,
-				  service_data[i].clientid, service_data[i].use_count,
-				  service_data[i].use_count ? nz : "");
+		dev_dbg(state->dev,
+			"%s: %s: %p4cc:%d service count %d %s\n",
+			log_cat(VCHIQ_SUSPEND), log_type(WARN),
+			&service_data[i].fourcc,
+			service_data[i].clientid, service_data[i].use_count,
+			service_data[i].use_count ? nz : "");
 	}
-	vchiq_log_warning(state->dev, VCHIQ_SUSPEND, "VCHIQ use count %d", peer_count);
-	vchiq_log_warning(state->dev, VCHIQ_SUSPEND, "Overall vchiq instance use count %d",
-			  vc_use_count);
+	dev_dbg(state->dev, "%s: %s: VCHIQ use count %d\n",
+		log_cat(VCHIQ_SUSPEND), log_type(WARN), peer_count);
+	dev_dbg(state->dev, "%s: %s: Overall vchiq instance use count %d\n",
+		log_cat(VCHIQ_SUSPEND), log_type(WARN), vc_use_count);
 
 	kfree(service_data);
 }
@@ -1833,8 +1835,8 @@ static int vchiq_probe(struct platform_device *pdev)
 	 */
 	err = vchiq_register_chrdev(&pdev->dev);
 	if (err) {
-		vchiq_log_warning(&pdev->dev, VCHIQ_ARM,
-				  "Failed to initialize vchiq cdev");
+		dev_dbg(&pdev->dev, "%s: %s: Failed to initialize vchiq cdev\n",
+			log_cat(VCHIQ_ARM), log_type(WARN));
 		goto error_exit;
 	}
 
@@ -1844,7 +1846,8 @@ static int vchiq_probe(struct platform_device *pdev)
 	return 0;
 
 failed_platform_init:
-	vchiq_log_warning(&pdev->dev, VCHIQ_ARM, "could not initialize vchiq platform");
+	dev_dbg(&pdev->dev, "%s: %s: Could not initialize vchiq platform\n",
+		log_cat(VCHIQ_ARM), log_type(WARN));
 error_exit:
 	return err;
 }
