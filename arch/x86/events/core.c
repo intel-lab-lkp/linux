@@ -1388,16 +1388,25 @@ int x86_perf_event_set_period(struct perf_event *event)
 		hwc->last_period = period;
 		ret = 1;
 	}
-	/*
-	 * Quirk: certain CPUs dont like it if just 1 hw_event is left:
-	 */
-	if (unlikely(left < 2))
-		left = 2;
 
 	if (left > x86_pmu.max_period)
 		left = x86_pmu.max_period;
 
-	static_call_cond(x86_pmu_limit_period)(event, &left);
+	/*
+	 * Exempt KVM guest events from the minimum period requirements.  It's
+	 * the guest's responsibility to ensure it can make forward progress,
+	 * and it's KVM's responsibility to configure an appropriate "period"
+	 * to correctly virtualize overflow for the guest's PMCs.
+	 */
+	if (!event->attr.exclude_host) {
+		/*
+		 * Quirk: certain CPUs dont like it if just 1 event is left:
+		 */
+		if (unlikely(left < 2))
+			left = 2;
+
+		static_call_cond(x86_pmu_limit_period)(event, &left);
+	}
 
 	this_cpu_write(pmc_prev_left[idx], left);
 
