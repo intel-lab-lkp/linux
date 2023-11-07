@@ -143,6 +143,8 @@ patternProperties:
     description: Artesyn Embedded Technologies Inc.
   "^asahi-kasei,.*":
     description: Asahi Kasei Corp.
+  "^asair,.*":
+    description: Aosong Electronic Co., Ltd.
   "^asc,.*":
     description: All Sensors Corporation
   "^asix,.*":
