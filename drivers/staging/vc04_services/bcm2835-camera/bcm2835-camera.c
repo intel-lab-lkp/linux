@@ -333,11 +333,8 @@ static void buffer_cb(struct vchiq_mmal_instance *instance,
 		 mmal_buf->pts);
 
 	if (status) {
-		/* error in transfer */
-		if (buf) {
-			/* there was a buffer with the error so return it */
-			vb2_buffer_done(&buf->vb.vb2_buf, VB2_BUF_STATE_ERROR);
-		}
+		/* There was a buffer with the error so return it. */
+		vb2_buffer_done(&buf->vb.vb2_buf, VB2_BUF_STATE_ERROR);
 		return;
 	}
 
