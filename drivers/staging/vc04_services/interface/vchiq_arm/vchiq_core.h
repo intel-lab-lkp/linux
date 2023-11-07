@@ -39,6 +39,13 @@ enum vchiq_log_category {
 	VCHIQ_SUSPEND,
 };
 
+enum vchiq_log_type {
+	ERROR,
+	WARN,
+	DEBUG,
+	TRACE,
+};
+
 static inline const char *log_cat(enum vchiq_log_category c)
 {
 	static const char * const strings[] = {
@@ -52,10 +59,18 @@ static inline const char *log_cat(enum vchiq_log_category c)
 	return strings[c];
 };
 
-#ifndef vchiq_log_error
-#define vchiq_log_error(dev, cat, fmt, ...) \
-	do { dev_dbg(dev, "%s error: " fmt, log_cat(cat), ##__VA_ARGS__); } while (0)
-#endif
+static inline const char *log_type(enum vchiq_log_type t)
+{
+	static const char * const types_str[] = {
+		"error",
+		"warning",
+		"debug",
+		"trace",
+	};
+
+	return types_str[t];
+};
+
 #ifndef vchiq_log_warning
 #define vchiq_log_warning(dev, cat, fmt, ...) \
 	do { dev_dbg(dev, "%s warning: " fmt, log_cat(cat), ##__VA_ARGS__); } while (0)
