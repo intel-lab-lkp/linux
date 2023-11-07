@@ -1379,41 +1379,75 @@ static void setup_first_end_time(struct taprio_sched *q,
 		rcu_assign_pointer(q->current_entry, NULL);
 }
 
+static void update_gate_close_time(struct sched_entry *current_entry,
+				   ktime_t new_end_time,
+				   int num_tc)
+{
+	int tc;
+
+	for (tc = 0; tc < num_tc; tc++) {
+		if (current_entry->gate_mask & BIT(tc))
+			current_entry->gate_close_time[tc] = new_end_time;
+	}
+}
+
 static void taprio_start_sched(struct Qdisc *sch,
 			       ktime_t new_base_time,
-			       struct sched_gate_list *new)
+			       struct sched_gate_list *admin)
 {
 	struct taprio_sched *q = qdisc_priv(sch);
+	ktime_t expires = hrtimer_get_expires(&q->advance_timer);
+	struct net_device *dev = qdisc_dev(q->root);
+	struct sched_entry *curr_entry = NULL;
 	struct sched_gate_list *oper = NULL;
-	ktime_t expires, start;
 
 	if (FULL_OFFLOAD_IS_ENABLED(q->flags))
 		return;
 
 	oper = rcu_dereference_protected(q->oper_sched,
 					 lockdep_is_held(&q->current_entry_lock));
+	curr_entry = rcu_dereference_protected(q->current_entry,
+					       lockdep_is_held(&q->current_entry_lock));
 
-	expires = hrtimer_get_expires(&q->advance_timer);
-	if (expires == 0)
-		expires = KTIME_MAX;
+	if (hrtimer_active(&q->advance_timer)) {
+		oper->cycle_time_correction =
+			get_cycle_time_correction(oper, new_base_time,
+						  curr_entry->end_time,
+						  curr_entry);
 
-	/* If the new schedule starts before the next expiration, we
-	 * reprogram it to the earliest one, so we change the admin
-	 * schedule to the operational one at the right time.
-	 */
-	start = min_t(ktime_t, new_base_time, expires);
+		if (cycle_corr_active(oper->cycle_time_correction)) {
+			/* This is the last entry we are running from oper,
+			 * subsequent entry will take from the new admin.
+			 */
+			ktime_t	now = taprio_get_time(q);
+			u64 gate_duration_left = ktime_sub(new_base_time, now);
+			struct qdisc_size_table *stab =
+				rtnl_dereference(q->root->stab);
+			int num_tc = netdev_get_num_tc(dev);
 
-	if (expires != KTIME_MAX &&
-	    ktime_compare(start, new_base_time) == 0) {
-		/* Since timer was changed to align to the new admin schedule,
-		 * setting the variable below to a non-initialized value will
-		 * indicate to advance_sched() to call switch_schedules() after
-		 * this timer expires.
-		 */
-		oper->cycle_time_correction = 0;
+			oper->cycle_end_time = new_base_time;
+			curr_entry->end_time = new_base_time;
+			curr_entry->correction_active = true;
+
+			update_open_gate_duration(curr_entry, oper, num_tc,
+						  gate_duration_left);
+			update_gate_close_time(curr_entry, new_base_time, num_tc);
+			taprio_update_queue_max_sdu(q, oper, stab);
+			taprio_set_budgets(q, oper, curr_entry);
+		}
 	}
 
-	hrtimer_start(&q->advance_timer, start, HRTIMER_MODE_ABS);
+	if (!hrtimer_active(&q->advance_timer) ||
+	    cycle_corr_active(oper->cycle_time_correction)) {
+		/* Use new admin base time if :
+		 * 1. there's no active oper
+		 * 2. there's active oper and we will change to the new admin
+		 * schedule after the current entry from oper ends
+		 */
+		expires = new_base_time;
+	}
+
+	hrtimer_start(&q->advance_timer, expires, HRTIMER_MODE_ABS);
 }
 
 static void taprio_set_picos_per_byte(struct net_device *dev,
