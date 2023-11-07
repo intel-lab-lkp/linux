@@ -656,10 +656,10 @@ void iwl_mvm_protect_session(struct iwl_mvm *mvm,
 	time_cmd.apply_time = cpu_to_le32(0);
 
 	time_cmd.max_frags = TE_V2_FRAG_NONE;
-	time_cmd.max_delay = cpu_to_le32(max_delay);
+	time_cmd.max_delay = cpu_to_le32(MSEC_TO_TU(max_delay));
 	/* TODO: why do we need to interval = bi if it is not periodic? */
 	time_cmd.interval = cpu_to_le32(1);
-	time_cmd.duration = cpu_to_le32(duration);
+	time_cmd.duration = cpu_to_le32(MSEC_TO_TU(duration));
 	time_cmd.repeat = 1;
 	time_cmd.policy = cpu_to_le16(TE_V2_NOTIF_HOST_EVENT_START |
 				      TE_V2_NOTIF_HOST_EVENT_END |
@@ -1249,7 +1249,7 @@ int iwl_mvm_schedule_csa_period(struct iwl_mvm *mvm,
 	time_cmd.id = cpu_to_le32(TE_CHANNEL_SWITCH_PERIOD);
 	time_cmd.apply_time = cpu_to_le32(apply_time);
 	time_cmd.max_frags = TE_V2_FRAG_NONE;
-	time_cmd.duration = cpu_to_le32(duration);
+	time_cmd.duration = cpu_to_le32(MSEC_TO_TU(duration));
 	time_cmd.repeat = 1;
 	time_cmd.interval = cpu_to_le32(1);
 	time_cmd.policy = cpu_to_le16(TE_V2_NOTIF_HOST_EVENT_START |
