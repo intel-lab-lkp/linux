@@ -393,7 +393,11 @@ static int blkdev_roset(struct block_device *bdev, unsigned cmd,
 		if (ret)
 			return ret;
 	}
-	bdev->bd_read_only = n;
+	if (!bdev->bd_read_only != !n) {
+		bdev->bd_read_only = n;
+		clear_bit(GD_ROWR_WARNED, &bdev->bd_disk->state);
+	}
+
 	return 0;
 }
 

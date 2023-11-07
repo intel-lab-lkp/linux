@@ -1448,6 +1448,7 @@ void set_disk_ro(struct gendisk *disk, bool read_only)
 		if (!test_and_clear_bit(GD_READ_ONLY, &disk->state))
 			return;
 	}
+	clear_bit(GD_ROWR_WARNED, &disk->state);
 	set_disk_ro_uevent(disk, read_only);
 }
 EXPORT_SYMBOL(set_disk_ro);
