@@ -3752,7 +3752,7 @@ release:
 }
 
 
-static int amifb_remove(struct platform_device *pdev)
+static void amifb_remove(struct platform_device *pdev)
 {
 	struct fb_info *info = platform_get_drvdata(pdev);
 
@@ -3765,12 +3765,11 @@ static int amifb_remove(struct platform_device *pdev)
 	chipfree();
 	framebuffer_release(info);
 	amifb_video_off();
-	return 0;
 }
 
 static struct platform_driver amifb_driver = {
 	.probe = amifb_probe,
-	.remove = amifb_remove,
+	.remove_new = amifb_remove,
 	.driver = {
 		.name	= "amiga-video",
 	},
