@@ -259,6 +259,14 @@ static int duration_to_length(struct taprio_sched *q, u64 duration)
 	return div_u64(duration * PSEC_PER_NSEC, atomic64_read(&q->picos_per_byte));
 }
 
+static bool cycle_corr_active(s64 cycle_time_correction)
+{
+	if (cycle_time_correction == INIT_CYCLE_TIME_CORRECTION)
+		return false;
+	else
+		return true;
+}
+
 /* Sets sched->max_sdu[] and sched->max_frm_len[] to the minimum between the
  * q->max_sdu[] requested by the user and the max_sdu dynamically determined by
  * the maximum open gate durations at the given link speed.
@@ -888,38 +896,59 @@ static bool should_restart_cycle(const struct sched_gate_list *oper,
 	return false;
 }
 
-static bool should_change_schedules(const struct sched_gate_list *admin,
-				    const struct sched_gate_list *oper,
-				    ktime_t end_time)
+static bool should_change_sched(struct sched_gate_list *oper)
 {
-	ktime_t next_base_time, extension_time;
+	bool change_to_admin_sched = false;
 
-	if (!admin)
+	if (oper->cycle_time_correction != INIT_CYCLE_TIME_CORRECTION) {
+		/* The recent entry ran is the last one from oper */
+		change_to_admin_sched = true;
+		oper->cycle_time_correction = INIT_CYCLE_TIME_CORRECTION;
+	}
+
+	return change_to_admin_sched;
+}
+
+static bool should_extend_cycle(const struct sched_gate_list *oper,
+				ktime_t new_base_time,
+				ktime_t entry_end_time,
+				const struct sched_entry *entry)
+{
+	ktime_t next_cycle_end_time = ktime_add_ns(oper->cycle_end_time,
+						   oper->cycle_time);
+	bool extension_supported = oper->cycle_time_extension > 0 ? true : false;
+	s64 extension_limit = oper->cycle_time_extension;
+
+	if (extension_supported &&
+	    list_is_last(&entry->list, &oper->entries) &&
+	    ktime_before(new_base_time, next_cycle_end_time) &&
+	    ktime_sub(new_base_time, entry_end_time) < extension_limit)
+		return true;
+	else
 		return false;
+}
 
-	next_base_time = sched_base_time(admin);
+static s64 get_cycle_time_correction(const struct sched_gate_list *oper,
+				     ktime_t new_base_time,
+				     ktime_t entry_end_time,
+				     const struct sched_entry *entry)
+{
+	s64 correction = INIT_CYCLE_TIME_CORRECTION;
 
-	/* This is the simple case, the end_time would fall after
-	 * the next schedule base_time.
-	 */
-	if (ktime_compare(next_base_time, end_time) <= 0)
-		return true;
+	if (!entry || !oper)
+		return correction;
 
-	/* This is the cycle_time_extension case, if the end_time
-	 * plus the amount that can be extended would fall after the
-	 * next schedule base_time, we can extend the current schedule
-	 * for that amount.
-	 */
-	extension_time = ktime_add_ns(end_time, oper->cycle_time_extension);
+	if (ktime_compare(new_base_time, entry_end_time) <= 0) {
+		/* negative or zero correction */
+		correction = ktime_sub(new_base_time, entry_end_time);
+	} else if (ktime_after(new_base_time, entry_end_time) &&
+		   should_extend_cycle(oper, new_base_time,
+				       entry_end_time, entry)) {
+		/* positive correction */
+		correction = ktime_sub(new_base_time, entry_end_time);
+	}
 
-	/* FIXME: the IEEE 802.1Q-2018 Specification isn't clear about
-	 * how precisely the extension should be made. So after
-	 * conformance testing, this logic may change.
-	 */
-	if (ktime_compare(next_base_time, extension_time) <= 0)
-		return true;
-
-	return false;
+	return correction;
 }
 
 static enum hrtimer_restart advance_sched(struct hrtimer *timer)
@@ -942,10 +971,8 @@ static enum hrtimer_restart advance_sched(struct hrtimer *timer)
 	admin = rcu_dereference_protected(q->admin_sched,
 					  lockdep_is_held(&q->current_entry_lock));
 
-	if (!oper || oper->cycle_time_correction != INIT_CYCLE_TIME_CORRECTION) {
-		oper->cycle_time_correction = INIT_CYCLE_TIME_CORRECTION;
+	if (!oper || should_change_sched(oper))
 		switch_schedules(q, &admin, &oper);
-	}
 
 	/* This can happen in two cases: 1. this is the very first run
 	 * of this function (i.e. we weren't running any schedule
@@ -972,20 +999,28 @@ static enum hrtimer_restart advance_sched(struct hrtimer *timer)
 	end_time = ktime_add_ns(entry->end_time, next->interval);
 	end_time = min_t(ktime_t, end_time, oper->cycle_end_time);
 
+	if (admin) {
+		ktime_t new_base_time = sched_base_time(admin);
+
+		oper->cycle_time_correction =
+			get_cycle_time_correction(oper, new_base_time,
+						  end_time, next);
+
+		if (cycle_corr_active(oper->cycle_time_correction)) {
+			/* The next entry is the last entry we will run from
+			 * oper, subsequent ones will take from the new admin
+			 */
+			oper->cycle_end_time = new_base_time;
+			end_time = new_base_time;
+		}
+	}
+
 	for (tc = 0; tc < num_tc; tc++) {
 		if (next->gate_duration[tc] == oper->cycle_time)
 			next->gate_close_time[tc] = KTIME_MAX;
 		else
 			next->gate_close_time[tc] = ktime_add_ns(entry->end_time,
 								 next->gate_duration[tc]);
-	}
-
-	if (should_change_schedules(admin, oper, end_time)) {
-		/* Set things so the next time this runs, the new
-		 * schedule runs.
-		 */
-		end_time = sched_base_time(admin);
-		oper->cycle_time_correction = 0;
 	}
 
 	next->end_time = end_time;
