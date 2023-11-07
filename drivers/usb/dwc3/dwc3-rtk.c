@@ -187,6 +187,7 @@ static enum usb_device_speed __get_dwc3_maximum_speed(struct device_node *np)
 
 	ret = match_string(speed_names, ARRAY_SIZE(speed_names), maximum_speed);
 
+	of_node_put(dwc3_np);
 	return (ret < 0) ? USB_SPEED_UNKNOWN : ret;
 }
 
@@ -339,6 +340,8 @@ static int dwc3_rtk_probe_dwc3_core(struct dwc3_rtk *rtk)
 
 	switch_usb2_role(rtk, rtk->cur_role);
 
+	platform_device_put(dwc3_pdev);
+	of_node_put(dwc3_node);
 	return 0;
 
 err_pdev_put:
