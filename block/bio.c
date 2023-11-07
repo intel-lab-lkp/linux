@@ -1300,6 +1300,47 @@ out:
 	return ret;
 }
 
+/* should only be called before submission */
+static void bio_shrink(struct bio *bio, unsigned bytes)
+{
+	unsigned int size = bio->bi_iter.bi_size;
+	int idx;
+
+	if (bytes >= size)
+		return;
+
+	WARN_ON_ONCE(bio_flagged(bio, BIO_CLONED));
+
+	idx = bio->bi_vcnt - 1;
+	bio->bi_iter.bi_size -= bytes;
+	while (bytes > 0) {
+		struct bio_vec *bv = &bio->bi_io_vec[idx];
+		unsigned int len = min_t(unsigned, bv->bv_len, bytes);
+
+		bytes -= len;
+		bv->bv_len -= len;
+		if (!bv->bv_len) {
+			bio_release_page(bio, bv->bv_page);
+			idx--;
+		}
+	}
+	WARN_ON_ONCE(idx < 0);
+	bio->bi_vcnt = idx + 1;
+}
+
+static unsigned bio_align_with_io_size(struct bio *bio)
+{
+	struct request_queue *q = bdev_get_queue(bio->bi_bdev);
+	unsigned int size = bio->bi_iter.bi_size;
+	unsigned int trim = size & ((queue_max_sectors(q) << 9) - 1);
+
+	if (trim && trim != size) {
+		bio_shrink(bio, trim);
+		return trim;
+	}
+	return 0;
+}
+
 /**
  * bio_iov_iter_get_pages - add user or kernel pages to a bio
  * @bio: bio to add pages to
@@ -1338,6 +1379,22 @@ int bio_iov_iter_get_pages(struct bio *bio, struct iov_iter *iter)
 	do {
 		ret = __bio_iov_iter_get_pages(bio, iter);
 	} while (!ret && iov_iter_count(iter) && !bio_full(bio, 0));
+
+
+	/*
+	 * If we still have data and bio is full, this bio size may not be
+	 * aligned with max io size, small bio can be caused by split, try
+	 * to avoid this situation by aligning bio with max io size.
+	 *
+	 * Big chunk of sequential IO workload can benefit from this way.
+	 */
+	if (!ret && iov_iter_count(iter) && bio->bi_bdev &&
+			bio_op(bio) != REQ_OP_ZONE_APPEND) {
+		unsigned trim = bio_align_with_io_size(bio);
+
+		if (trim)
+			iov_iter_revert(iter, trim);
+	}
 
 	return bio->bi_vcnt ? 0 : ret;
 }
