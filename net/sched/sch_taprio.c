@@ -1379,13 +1379,18 @@ static void setup_first_end_time(struct taprio_sched *q,
 }
 
 static void taprio_start_sched(struct Qdisc *sch,
-			       ktime_t start, struct sched_gate_list *new)
+			       ktime_t new_base_time,
+			       struct sched_gate_list *new)
 {
 	struct taprio_sched *q = qdisc_priv(sch);
-	ktime_t expires;
+	struct sched_gate_list *oper = NULL;
+	ktime_t expires, start;
 
 	if (FULL_OFFLOAD_IS_ENABLED(q->flags))
 		return;
+
+	oper = rcu_dereference_protected(q->oper_sched,
+					 lockdep_is_held(&q->current_entry_lock));
 
 	expires = hrtimer_get_expires(&q->advance_timer);
 	if (expires == 0)
@@ -1395,7 +1400,17 @@ static void taprio_start_sched(struct Qdisc *sch,
 	 * reprogram it to the earliest one, so we change the admin
 	 * schedule to the operational one at the right time.
 	 */
-	start = min_t(ktime_t, start, expires);
+	start = min_t(ktime_t, new_base_time, expires);
+
+	if (expires != KTIME_MAX &&
+	    ktime_compare(start, new_base_time) == 0) {
+		/* Since timer was changed to align to the new admin schedule,
+		 * setting the variable below to a non-initialized value will
+		 * indicate to advance_sched() to call switch_schedules() after
+		 * this timer expires.
+		 */
+		oper->cycle_time_correction = 0;
+	}
 
 	hrtimer_start(&q->advance_timer, start, HRTIMER_MODE_ABS);
 }
