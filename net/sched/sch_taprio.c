@@ -1375,7 +1375,8 @@ static void setup_first_end_time(struct taprio_sched *q,
 			first->gate_close_time[tc] = ktime_add_ns(base, first->gate_duration[tc]);
 	}
 
-	rcu_assign_pointer(q->current_entry, NULL);
+	if (!hrtimer_active(&q->advance_timer))
+		rcu_assign_pointer(q->current_entry, NULL);
 }
 
 static void taprio_start_sched(struct Qdisc *sch,
