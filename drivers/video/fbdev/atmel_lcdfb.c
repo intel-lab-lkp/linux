@@ -1017,7 +1017,7 @@ put_display_node:
 	return ret;
 }
 
-static int __init atmel_lcdfb_probe(struct platform_device *pdev)
+static int atmel_lcdfb_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct fb_info *info;
@@ -1223,7 +1223,7 @@ out:
 	return ret;
 }
 
-static int __exit atmel_lcdfb_remove(struct platform_device *pdev)
+static int atmel_lcdfb_remove(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct fb_info *info = dev_get_drvdata(dev);
@@ -1301,7 +1301,8 @@ static int atmel_lcdfb_resume(struct platform_device *pdev)
 #endif
 
 static struct platform_driver atmel_lcdfb_driver = {
-	.remove		= __exit_p(atmel_lcdfb_remove),
+	.probe		= atmel_lcdfb_probe,
+	.remove		= atmel_lcdfb_remove,
 	.suspend	= atmel_lcdfb_suspend,
 	.resume		= atmel_lcdfb_resume,
 	.driver		= {
@@ -1310,7 +1311,7 @@ static struct platform_driver atmel_lcdfb_driver = {
 	},
 };
 
-module_platform_driver_probe(atmel_lcdfb_driver, atmel_lcdfb_probe);
+module_platform_driver(atmel_lcdfb_driver, );
 
 MODULE_DESCRIPTION("AT91 LCD Controller framebuffer driver");
 MODULE_AUTHOR("Nicolas Ferre <nicolas.ferre@atmel.com>");
