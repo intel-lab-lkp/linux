@@ -41,6 +41,7 @@ static struct static_key_false taprio_have_working_mqprio;
 #define TXTIME_ASSIST_IS_ENABLED(flags) ((flags) & TCA_TAPRIO_ATTR_FLAG_TXTIME_ASSIST)
 #define FULL_OFFLOAD_IS_ENABLED(flags) ((flags) & TCA_TAPRIO_ATTR_FLAG_FULL_OFFLOAD)
 #define TAPRIO_FLAGS_INVALID U32_MAX
+#define INIT_CYCLE_TIME_CORRECTION S64_MIN
 
 struct sched_entry {
 	/* Durations between this GCL entry and the GCL entry where the
@@ -75,6 +76,7 @@ struct sched_gate_list {
 	ktime_t cycle_end_time;
 	s64 cycle_time;
 	s64 cycle_time_extension;
+	s64 cycle_time_correction;
 	s64 base_time;
 };
 
@@ -940,8 +942,10 @@ static enum hrtimer_restart advance_sched(struct hrtimer *timer)
 	admin = rcu_dereference_protected(q->admin_sched,
 					  lockdep_is_held(&q->current_entry_lock));
 
-	if (!oper)
+	if (!oper || oper->cycle_time_correction != INIT_CYCLE_TIME_CORRECTION) {
+		oper->cycle_time_correction = INIT_CYCLE_TIME_CORRECTION;
 		switch_schedules(q, &admin, &oper);
+	}
 
 	/* This can happen in two cases: 1. this is the very first run
 	 * of this function (i.e. we weren't running any schedule
@@ -981,7 +985,7 @@ static enum hrtimer_restart advance_sched(struct hrtimer *timer)
 		 * schedule runs.
 		 */
 		end_time = sched_base_time(admin);
-		switch_schedules(q, &admin, &oper);
+		oper->cycle_time_correction = 0;
 	}
 
 	next->end_time = end_time;
@@ -1174,6 +1178,7 @@ static int parse_taprio_schedule(struct taprio_sched *q, struct nlattr **tb,
 	}
 
 	taprio_calculate_gate_durations(q, new);
+	new->cycle_time_correction = INIT_CYCLE_TIME_CORRECTION;
 
 	return 0;
 }
