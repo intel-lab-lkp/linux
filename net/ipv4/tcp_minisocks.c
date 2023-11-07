@@ -368,7 +368,7 @@ static void tcp_md5_twsk_free_rcu(struct rcu_head *head)
 	struct tcp_md5sig_key *key;
 
 	key = container_of(head, struct tcp_md5sig_key, rcu);
-	kfree(key);
+	kfree_sensitive(key);
 	static_branch_slow_dec_deferred(&tcp_md5_needed);
 	tcp_md5_release_sigpool();
 }
