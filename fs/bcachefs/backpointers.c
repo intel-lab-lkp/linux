@@ -316,7 +316,7 @@ struct btree *bch2_backpointer_get_node(struct btree_trans *trans,
 	if (IS_ERR(b))
 		goto err;
 
-	BUG_ON(b->c.level != bp.level - 1);
+	BUG_ON(b && b->c.level != bp.level - 1);
 
 	if (b && extent_matches_bp(c, bp.btree_id, bp.level,
 				   bkey_i_to_s_c(&b->key),
