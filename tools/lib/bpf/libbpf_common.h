@@ -79,11 +79,14 @@
  */
 #define LIBBPF_OPTS_RESET(NAME, ...)					    \
 	do {								    \
-		memset(&NAME, 0, sizeof(NAME));				    \
-		NAME = (typeof(NAME)) {					    \
-			.sz = sizeof(NAME),				    \
-			__VA_ARGS__					    \
-		};							    \
+		typeof(NAME) ___##NAME = ({ 				    \
+			memset(&___##NAME, 0, sizeof(typeof(NAME)));	    \
+			(typeof(NAME)) {				    \
+				.sz = sizeof(typeof(NAME)),		    \
+				__VA_ARGS__				    \
+			};						    \
+		});							    \
+		memcpy(&NAME, &___##NAME, sizeof(typeof(NAME)));	    \
 	} while (0)
 
 #endif /* __LIBBPF_LIBBPF_COMMON_H */
