@@ -676,7 +676,7 @@ static char *mem_fmt(char *buf, int size, unsigned long hsize)
 static int __hugetlb_events_show(struct seq_file *seq, bool local)
 {
 	int idx;
-	long max;
+	unsigned long max;
 	struct cftype *cft = seq_cft(seq);
 	struct hugetlb_cgroup *h_cg = hugetlb_cgroup_from_css(seq_css(seq));
 
