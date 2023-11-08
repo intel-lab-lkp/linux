@@ -1282,16 +1282,22 @@ PAGE_SIZE multiple when read back.
 	This is a simple interface to trigger memory reclaim in the
 	target cgroup.
 
-	This file accepts a single key, the number of bytes to reclaim.
-	No nested keys are currently supported.
+	This file accepts a few key, the number of bytes to reclaim.
+	Few nested keys are currently supported.
 
 	Example::
 
 	  echo "1G" > memory.reclaim
 
-	The interface can be later extended with nested keys to
-	configure the reclaim behavior. For example, specify the
-	type of memory to reclaim from (anon, file, ..).
+	The interface extended with nested keys to configure the
+	reclaim behavior. For example, specify the swappiness of
+	memory to reclaim from (anon, file, ..).
+
+	Example::
+
+	  echo "1G" 200 > memory.reclaim (only reclaim anon)
+	  echo "1G" 0  > memory.reclaim (only reclaim file)
+	  echo "1G" 1  > memory.reclaim (only reclaim file)
 
 	Please note that the kernel can over or under reclaim from
 	the target cgroup. If less bytes are reclaimed than the

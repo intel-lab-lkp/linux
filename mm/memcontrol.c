@@ -6901,19 +6901,47 @@ static ssize_t memory_reclaim(struct kernfs_open_file *of, char *buf,
 	unsigned int nr_retries = MAX_RECLAIM_RETRIES;
 	unsigned long nr_to_reclaim, nr_reclaimed = 0;
 	unsigned int reclaim_options;
+	int swappiness = -1, org_swappiness, n;
+	char *tmpbuf;
 	int err;
 
-	buf = strstrip(buf);
-	err = page_counter_memparse(buf, "", &nr_to_reclaim);
+	tmpbuf = kvzalloc(nbytes, GFP_KERNEL);
+	if (unlikely(!tmpbuf))
+		return -ENOMEM;
+
+	buf = skip_spaces(buf);
+	n = sscanf(buf, "%s %d", tmpbuf, &swappiness);
+	if (n < 1) {
+		err = -EINVAL;
+		goto out_free;
+	}
+
+	if (n == 2 && (swappiness > 200 || swappiness < 0)) {
+		err = -EINVAL;
+		goto out_free;
+	}
+
+	err = page_counter_memparse(tmpbuf, "", &nr_to_reclaim);
 	if (err)
-		return err;
+		goto out_free;
 
 	reclaim_options	= MEMCG_RECLAIM_MAY_SWAP | MEMCG_RECLAIM_PROACTIVE;
+	if (swappiness != -1) {
+		org_swappiness = memcg->swappiness;
+		memcg->swappiness = swappiness;
+		if (swappiness == 200)
+			reclaim_options |= MEMCG_RECLAIM_ANON;
+		else if (swappiness == 0 || swappiness == 1)
+			reclaim_options |= MEMCG_RECLAIM_FILE;
+	}
+
 	while (nr_reclaimed < nr_to_reclaim) {
 		unsigned long reclaimed;
 
-		if (signal_pending(current))
-			return -EINTR;
+		if (signal_pending(current)) {
+			err = -EINTR;
+			goto out;
+		}
 
 		/*
 		 * This is the final attempt, drain percpu lru caches in the
@@ -6927,13 +6955,26 @@ static ssize_t memory_reclaim(struct kernfs_open_file *of, char *buf,
 					min(nr_to_reclaim - nr_reclaimed, SWAP_CLUSTER_MAX),
 					GFP_KERNEL, reclaim_options);
 
-		if (!reclaimed && !nr_retries--)
-			return -EAGAIN;
+		if (!reclaimed && !nr_retries--) {
+			err = -EAGAIN;
+			goto out;
+		}
 
 		nr_reclaimed += reclaimed;
 	}
 
+	if (swappiness != -1)
+		memcg->swappiness = org_swappiness;
+
 	return nbytes;
+
+out:
+	if (swappiness != -1)
+		memcg->swappiness = org_swappiness;
+
+out_free:
+	kvfree(tmpbuf);
+	return err;
 }
 
 static struct cftype memory_files[] = {
