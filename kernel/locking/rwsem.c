@@ -1005,8 +1005,7 @@ rwsem_down_read_slowpath(struct rw_semaphore *sem, long count, unsigned int stat
 	 * waiter, don't attempt optimistic lock stealing if the lock is
 	 * currently owned by readers.
 	 */
-	if ((atomic_long_read(&sem->owner) & RWSEM_READER_OWNED) &&
-	    (rcnt > 1) && !(count & RWSEM_WRITER_LOCKED))
+	if ((atomic_long_read(&sem->owner) & RWSEM_READER_OWNED) && (rcnt > 1))
 		goto queue;
 
 	/*
