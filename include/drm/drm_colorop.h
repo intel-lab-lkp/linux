@@ -132,6 +132,14 @@ struct drm_colorop {
 	enum drm_colorop_type type;
 
 	/**
+	 * @next:
+	 *
+	 * Read-only
+	 * Pointer to next drm_colorop in pipeline
+	 */
+	struct drm_colorop *next;
+
+	/**
 	 * @type_property:
 	 *
 	 * Read-only "TYPE" property for specifying the type of
@@ -158,9 +166,19 @@ struct drm_colorop {
 	 */
 	struct drm_property *curve_1d_type_property;
 
+	/**
+	 * @next_property
+	 *
+	 * Read-only property to next colorop in the pipeline
+	 */
+	struct drm_property *next_property;
+
 };
 
 #define obj_to_colorop(x) container_of(x, struct drm_colorop, base)
+
+
+
 
 /**
  * drm_crtc_find - look up a Colorop object from its ID
@@ -207,6 +225,8 @@ static inline unsigned int drm_colorop_index(const struct drm_colorop *colorop)
 
 #define drm_for_each_colorop(colorop, dev) \
 	list_for_each_entry(colorop, &(dev)->mode_config.colorop_list, head)
+
+void drm_colorop_set_next_property(struct drm_colorop *colorop, struct drm_colorop *next);
 
 
 #endif /* __DRM_COLOROP_H__ */
