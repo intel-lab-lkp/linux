@@ -680,6 +680,9 @@ EXPORT_SYMBOL(drm_sched_resubmit_jobs);
  * This function returns -ENOENT in this case (which probably should be -EIO as
  * a more meanigful return value).
  *
+ * Note that job->sched is not a valid pointer until drm_sched_job_arm() has
+ * been called.
+ *
  * Returns 0 for success, negative error code otherwise.
  */
 int drm_sched_job_init(struct drm_sched_job *job,
@@ -691,7 +694,7 @@ int drm_sched_job_init(struct drm_sched_job *job,
 		 * or worse--a blank screen--leave a trail in the
 		 * logs, so this can be debugged easier.
 		 */
-		drm_err(job->sched, "%s: entity has no rq!\n", __func__);
+		pr_err("%s: entity has no rq!\n", __func__);
 		return -ENOENT;
 	}
 
