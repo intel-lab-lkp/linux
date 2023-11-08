@@ -839,10 +839,12 @@ static int init_hdm_decoder(struct cxl_port *port, struct cxl_decoder *cxld,
 			cxld->target_type = CXL_DECODER_HOSTONLYMEM;
 		else
 			cxld->target_type = CXL_DECODER_DEVMEM;
+		down_write(&cxl_region_rwsem);
 		if (cxld->id != cxl_num_decoders_committed(port)) {
 			dev_warn(&port->dev,
 				 "decoder%d.%d: Committed out of order\n",
 				 port->id, cxld->id);
+			up_write(&cxl_region_rwsem);
 			return -ENXIO;
 		}
 
@@ -850,9 +852,11 @@ static int init_hdm_decoder(struct cxl_port *port, struct cxl_decoder *cxld,
 			dev_warn(&port->dev,
 				 "decoder%d.%d: Committed with zero size\n",
 				 port->id, cxld->id);
+			up_write(&cxl_region_rwsem);
 			return -ENXIO;
 		}
 		port->commit_end = cxld->id;
+		up_write(&cxl_region_rwsem);
 	} else {
 		if (cxled) {
 			struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
