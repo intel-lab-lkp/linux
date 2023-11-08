@@ -746,6 +746,14 @@ struct drm_plane {
 	struct drm_property *color_range_property;
 
 	/**
+	 * @color_pipeline_property:
+	 *
+	 * Optional "COLOR_PIPELINE" enum property for specifying
+	 * a color pipeline to use on the plane.
+	 */
+	struct drm_property *color_pipeline_property;
+
+	/**
 	 * @scaling_filter_property: property to apply a particular filter while
 	 * scaling.
 	 */
