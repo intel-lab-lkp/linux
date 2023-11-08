@@ -345,13 +345,13 @@ int cg_run(const char *cgroup,
 	}
 }
 
-pid_t clone_into_cgroup(int cgroup_fd)
+pid_t clone_into_cgroup(int cgroup_fd, unsigned long extra_flags)
 {
 #ifdef CLONE_ARGS_SIZE_VER2
 	pid_t pid;
 
 	struct __clone_args args = {
-		.flags = CLONE_INTO_CGROUP,
+		.flags = CLONE_INTO_CGROUP | extra_flags,
 		.exit_signal = SIGCHLD,
 		.cgroup = cgroup_fd,
 	};
@@ -429,7 +429,7 @@ static int clone_into_cgroup_run_nowait(const char *cgroup,
 	if (cgroup_fd < 0)
 		return -1;
 
-	pid = clone_into_cgroup(cgroup_fd);
+	pid = clone_into_cgroup(cgroup_fd, 0);
 	close_prot_errno(cgroup_fd);
 	if (pid == 0)
 		exit(fn(cgroup, arg));
@@ -588,7 +588,7 @@ int clone_into_cgroup_run_wait(const char *cgroup)
 	if (cgroup_fd < 0)
 		return -1;
 
-	pid = clone_into_cgroup(cgroup_fd);
+	pid = clone_into_cgroup(cgroup_fd, 0);
 	close_prot_errno(cgroup_fd);
 	if (pid < 0)
 		return -1;

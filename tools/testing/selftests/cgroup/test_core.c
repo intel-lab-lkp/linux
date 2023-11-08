@@ -201,7 +201,7 @@ static int test_cgcore_populated(const char *root)
 	if (cgroup_fd < 0)
 		goto cleanup;
 
-	pid = clone_into_cgroup(cgroup_fd);
+	pid = clone_into_cgroup(cgroup_fd, 0);
 	if (pid < 0) {
 		if (errno == ENOSYS)
 			goto cleanup_pass;
@@ -233,7 +233,7 @@ static int test_cgcore_populated(const char *root)
 		cg_test_d = NULL;
 	}
 
-	pid = clone_into_cgroup(cgroup_fd);
+	pid = clone_into_cgroup(cgroup_fd, 0);
 	if (pid < 0)
 		goto cleanup_pass;
 	if (pid == 0)
