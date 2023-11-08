@@ -12,6 +12,8 @@
 #include <linux/atomic.h>
 #include <linux/slab.h>
 #include <linux/misc_cgroup.h>
+#include <linux/mm.h>
+#include <linux/fdtable.h>
 
 #define MAX_STR "max"
 #define MAX_NUM U64_MAX
@@ -24,6 +26,7 @@ static const char *const misc_res_name[] = {
 	/* AMD SEV-ES ASIDs resource */
 	"sev_es",
 #endif
+	"nofile",
 };
 
 /* Root misc cgroup */
@@ -37,7 +40,9 @@ static struct misc_cg root_cg;
  * more than the actual capacity. We are using Limits resource distribution
  * model of cgroup for miscellaneous controller.
  */
-static u64 misc_res_capacity[MISC_CG_RES_TYPES];
+static u64 misc_res_capacity[MISC_CG_RES_TYPES] = {
+	[MISC_CG_RES_NOFILE] = MAX_NUM,
+};
 
 /**
  * parent_misc() - Get the parent of the passed misc cgroup.
@@ -445,10 +450,203 @@ static void misc_cg_free(struct cgroup_subsys_state *css)
 	kfree(css_misc(css));
 }
 
+static void revert_attach_until(struct cgroup_taskset *tset, struct task_struct *stop)
+{
+	struct task_struct *task;
+	struct cgroup_subsys_state *dst_css;
+
+	cgroup_taskset_for_each(task, dst_css, tset) {
+		struct misc_cg *misc, *old_misc;
+		struct cgroup_subsys_state *old_css;
+		struct files_struct *files;
+		struct fdtable *fdt;
+		unsigned long nofile;
+
+		if (task == stop)
+			break;
+
+		misc = css_misc(dst_css);
+		old_css = task_css(task, misc_cgrp_id);
+		old_misc = css_misc(old_css);
+
+		if (misc == old_misc)
+			continue;
+
+		task_lock(task);
+		files = task->files;
+		spin_lock(&files->file_lock);
+		fdt = files_fdtable(files);
+
+		if (old_misc == files->mcg)
+			goto done;
+
+		WARN_ON_ONCE(misc != files->mcg);
+
+		nofile = count_open_files(fdt);
+		misc_cg_charge(MISC_CG_RES_NOFILE, old_misc, nofile);
+		misc_cg_uncharge(MISC_CG_RES_NOFILE, misc, nofile);
+
+		put_misc_cg(files->mcg);
+		css_get(old_css);
+		files->mcg = old_misc;
+
+done:
+		spin_unlock(&files->file_lock);
+		task_unlock(task);
+	}
+}
+
+static int misc_cg_can_attach(struct cgroup_taskset *tset)
+{
+	struct task_struct *task;
+	struct cgroup_subsys_state *dst_css;
+
+	cgroup_taskset_for_each(task, dst_css, tset) {
+		struct misc_cg *misc, *old_misc;
+		struct cgroup_subsys_state *old_css;
+		unsigned long nofile;
+		struct files_struct *files;
+		struct fdtable *fdt;
+		int ret;
+
+		misc = css_misc(dst_css);
+		old_css = task_css(task, misc_cgrp_id);
+		old_misc = css_misc(old_css);
+
+		if (misc == old_misc)
+			continue;
+
+		task_lock(task);
+		files = task->files;
+		spin_lock(&files->file_lock);
+		fdt = files_fdtable(files);
+
+		/*
+		 * If this task->files was already in the right place (either
+		 * because of dup_fd() or because some other thread had already
+		 * migrated it), we don't need to do anything.
+		 */
+		if (misc == files->mcg)
+			goto done;
+
+		WARN_ON_ONCE(old_misc != files->mcg);
+
+		nofile = count_open_files(fdt);
+		ret = misc_cg_try_charge(MISC_CG_RES_NOFILE, misc, nofile);
+		if (ret < 0) {
+			spin_unlock(&files->file_lock);
+			task_unlock(task);
+			revert_attach_until(tset, task);
+			return ret;
+		}
+		misc_cg_uncharge(MISC_CG_RES_NOFILE, old_misc, nofile);
+
+		/*
+		 * let's ref the new table, install it, and
+		 * deref the old one.
+		 */
+		put_misc_cg(files->mcg);
+		css_get(dst_css);
+		files->mcg = misc;
+
+done:
+		spin_unlock(&files->file_lock);
+		task_unlock(task);
+
+	}
+
+	return 0;
+}
+
+static void misc_cg_cancel_attach(struct cgroup_taskset *tset)
+{
+	revert_attach_until(tset, NULL);
+}
+
+static int misc_cg_can_fork(struct task_struct *task, struct css_set *cset)
+{
+	struct misc_cg *dst_misc, *init_misc;
+	struct files_struct *files;
+	struct fdtable *fdt;
+	unsigned long nofile;
+	struct cgroup_subsys_state *dst_css, *cur_css;
+	int ret;
+
+	init_misc = css_misc(init_css_set.subsys[misc_cgrp_id]);
+	cur_css = task_get_css(task, misc_cgrp_id);
+
+	WARN_ON_ONCE(init_misc != css_misc(cur_css));
+
+	dst_css = cset->subsys[misc_cgrp_id];
+	dst_misc = css_misc(dst_css);
+
+	/*
+	 * When forking, tasks are initially put into the init_css_set (see
+	 * cgroup_fork()). Then, we do a dup_fd() and charge init_css_set for
+	 * the new task's fds. We need to migrate from the init_css_set to the
+	 * target one so we can charge the right place.
+	 */
+	task_lock(task);
+	files = task->files;
+	spin_lock(&files->file_lock);
+	fdt = files_fdtable(files);
+
+	ret = 0;
+	if (files->mcg == dst_misc)
+		goto out;
+
+	nofile = count_open_files(fdt);
+	ret = misc_cg_try_charge(MISC_CG_RES_NOFILE, dst_misc, nofile);
+	if (ret < 0)
+		goto out;
+
+	misc_cg_uncharge(MISC_CG_RES_NOFILE, init_misc, nofile);
+
+	put_misc_cg(files->mcg);
+	css_get(dst_css);
+	files->mcg = dst_misc;
+	ret = 0;
+
+out:
+	spin_unlock(&files->file_lock);
+	task_unlock(task);
+
+	return ret;
+}
+
+static void misc_cg_cancel_fork(struct task_struct *task, struct css_set *cset)
+{
+	struct misc_cg *dst_misc;
+	struct files_struct *files;
+	struct fdtable *fdt;
+	unsigned long nofile;
+	struct cgroup_subsys_state *dst_css;
+
+	dst_css = cset->subsys[misc_cgrp_id];
+	dst_misc = css_misc(dst_css);
+
+	task_lock(task);
+	files = task->files;
+	spin_lock(&files->file_lock);
+	fdt = files_fdtable(files);
+
+	/*
+	 * we don't need to re-charge anyone, since this fork is going away.
+	 */
+	nofile = count_open_files(fdt);
+	misc_cg_uncharge(MISC_CG_RES_NOFILE, dst_misc, nofile);
+	spin_unlock(&files->file_lock);
+	task_unlock(task);
+}
+
 /* Cgroup controller callbacks */
 struct cgroup_subsys misc_cgrp_subsys = {
 	.css_alloc = misc_cg_alloc,
 	.css_free = misc_cg_free,
 	.legacy_cftypes = misc_cg_files,
 	.dfl_cftypes = misc_cg_files,
+	.can_attach = misc_cg_can_attach,
+	.cancel_attach = misc_cg_cancel_attach,
+	.can_fork = misc_cg_can_fork,
+	.cancel_fork = misc_cg_cancel_fork,
 };

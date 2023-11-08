@@ -14,6 +14,7 @@
 #include <linux/types.h>
 #include <linux/init.h>
 #include <linux/fs.h>
+#include <linux/misc_cgroup.h>
 
 #include <linux/atomic.h>
 
@@ -65,6 +66,9 @@ struct files_struct {
 	unsigned long open_fds_init[1];
 	unsigned long full_fds_bits_init[1];
 	struct file __rcu * fd_array[NR_OPEN_DEFAULT];
+#ifdef CONFIG_CGROUP_MISC
+	struct misc_cg *mcg;
+#endif
 };
 
 struct file_operations;
