@@ -676,8 +676,6 @@ struct intel_atomic_state {
 
 	bool rps_interactive;
 
-	struct i915_sw_fence commit_ready;
-
 	struct llist_node freed;
 };
 
@@ -1710,6 +1708,7 @@ struct intel_psr {
 	u32 dc3co_exitline;
 	u32 dc3co_exit_delay;
 	struct delayed_work dc3co_work;
+	u8 entry_setup_frames;
 };
 
 struct intel_dp {
