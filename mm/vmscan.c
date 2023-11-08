@@ -4485,6 +4485,7 @@ static int isolate_folios(struct lruvec *lruvec, struct scan_control *sc, int sw
 	int type;
 	int scanned;
 	int tier = -1;
+	bool unbalance;
 	DEFINE_MIN_SEQ(lruvec);
 
 	/*
@@ -4492,7 +4493,13 @@ static int isolate_folios(struct lruvec *lruvec, struct scan_control *sc, int sw
 	 * available from the same generation, interpret swappiness 1 as file
 	 * first and 200 as anon first.
 	 */
-	if (!swappiness)
+	if (unlikely(unbalance_file_reclaim(sc, swappiness))) {
+		unbalance = true;
+		type = LRU_GEN_FILE;
+	} else if (unlikely(unbalance_anon_reclaim(sc, swappiness))) {
+		unbalance = true;
+		type = LRU_GEN_ANON;
+	} else if (!swappiness)
 		type = LRU_GEN_FILE;
 	else if (min_seq[LRU_GEN_ANON] < min_seq[LRU_GEN_FILE])
 		type = LRU_GEN_ANON;
@@ -4508,7 +4515,7 @@ static int isolate_folios(struct lruvec *lruvec, struct scan_control *sc, int sw
 			tier = get_tier_idx(lruvec, type);
 
 		scanned = scan_folios(lruvec, sc, type, tier, list);
-		if (scanned)
+		if (scanned || unbalance)
 			break;
 
 		type = !type;
