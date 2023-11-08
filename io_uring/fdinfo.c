@@ -213,6 +213,12 @@ __cold void io_uring_show_fdinfo(struct seq_file *m, struct file *f)
 
 	}
 
+	if (ctx->sq_data) {
+		seq_printf(m, "PID:\t%d\n", task_pid_nr(ctx->sq_data->thread));
+		seq_printf(m, "work:\t%lu\n", ctx->sq_data->work);
+		seq_printf(m, "total:\t%lu\n", ctx->sq_data->total);
+	}
+
 	spin_unlock(&ctx->completion_lock);
 }
 #endif
