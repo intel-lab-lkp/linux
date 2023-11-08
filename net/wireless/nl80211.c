@@ -12183,24 +12183,37 @@ static int nl80211_setdel_pmksa(struct sk_buff *skb, struct genl_info *info)
 
 	memset(&pmksa, 0, sizeof(struct cfg80211_pmksa));
 
-	if (!info->attrs[NL80211_ATTR_PMKID])
+	if ((info->genlhdr->cmd == NL80211_CMD_SET_PMKSA) &&
+	    (!info->attrs[NL80211_ATTR_PMKID]))
 		return -EINVAL;
 
-	pmksa.pmkid = nla_data(info->attrs[NL80211_ATTR_PMKID]);
+	if (info->attrs[NL80211_ATTR_PMKID])
+		pmksa.pmkid = nla_data(info->attrs[NL80211_ATTR_PMKID]);
 
 	if (info->attrs[NL80211_ATTR_MAC]) {
 		pmksa.bssid = nla_data(info->attrs[NL80211_ATTR_MAC]);
-	} else if (info->attrs[NL80211_ATTR_SSID] &&
-		   info->attrs[NL80211_ATTR_FILS_CACHE_ID] &&
-		   (info->genlhdr->cmd == NL80211_CMD_DEL_PMKSA ||
+	} else if (info->attrs[NL80211_ATTR_SSID]) {
+		/* SSID based pmksa flush suppported only for FILS,
+		 * OWE/SAE OFFLOAD cases
+		 */
+		if (info->attrs[NL80211_ATTR_FILS_CACHE_ID] &&
+		    (info->genlhdr->cmd == NL80211_CMD_DEL_PMKSA ||
 		    info->attrs[NL80211_ATTR_PMK])) {
+			pmksa.cache_id =
+				nla_data(info->attrs[NL80211_ATTR_FILS_CACHE_ID]);
+		} else if ((info->genlhdr->cmd == NL80211_CMD_DEL_PMKSA) &&
+		    (!wiphy_ext_feature_isset(
+		    &rdev->wiphy, NL80211_EXT_FEATURE_SAE_OFFLOAD) &&
+		    (!wiphy_ext_feature_isset(
+		    &rdev->wiphy,NL80211_EXT_FEATURE_OWE_OFFLOAD)))){
+			return -EINVAL;
+		}
 		pmksa.ssid = nla_data(info->attrs[NL80211_ATTR_SSID]);
 		pmksa.ssid_len = nla_len(info->attrs[NL80211_ATTR_SSID]);
-		pmksa.cache_id =
-			nla_data(info->attrs[NL80211_ATTR_FILS_CACHE_ID]);
 	} else {
 		return -EINVAL;
 	}
+
 	if (info->attrs[NL80211_ATTR_PMK]) {
 		pmksa.pmk = nla_data(info->attrs[NL80211_ATTR_PMK]);
 		pmksa.pmk_len = nla_len(info->attrs[NL80211_ATTR_PMK]);
