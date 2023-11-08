@@ -2858,11 +2858,8 @@ static struct request *blk_mq_get_new_requests(struct request_queue *q,
 	};
 	struct request *rq;
 
-	if (unlikely(bio_queue_enter(bio)))
-		return NULL;
-
 	if (blk_mq_attempt_bio_merge(q, bio, nsegs))
-		goto queue_exit;
+		return NULL;
 
 	rq_qos_throttle(q, bio);
 
@@ -2878,35 +2875,43 @@ static struct request *blk_mq_get_new_requests(struct request_queue *q,
 	rq_qos_cleanup(q, bio);
 	if (bio->bi_opf & REQ_NOWAIT)
 		bio_wouldblock_error(bio);
-queue_exit:
-	blk_queue_exit(q);
 	return NULL;
 }
 
-static inline struct request *blk_mq_get_cached_request(struct request_queue *q,
+/* cached request means we grab active queue usage counter */
+static inline struct request *blk_mq_cached_req(const struct request_queue *q,
+		const struct blk_plug *plug)
+{
+	if (plug) {
+		struct request *rq = rq_list_peek(&plug->cached_rq);
+
+		if (rq && rq->q == q)
+			return rq;
+	}
+	return NULL;
+}
+
+/* return true if this bio needs to handle by allocating new request */
+static inline bool blk_mq_try_cached_rq(struct request *rq,
 		struct blk_plug *plug, struct bio **bio, unsigned int nsegs)
 {
-	struct request *rq;
+	struct request_queue *q = rq->q;
 	enum hctx_type type, hctx_type;
 
-	if (!plug)
-		return NULL;
-	rq = rq_list_peek(&plug->cached_rq);
-	if (!rq || rq->q != q)
-		return NULL;
+	WARN_ON_ONCE(rq_list_peek(&plug->cached_rq) != rq);
 
 	if (blk_mq_attempt_bio_merge(q, *bio, nsegs)) {
 		*bio = NULL;
-		return NULL;
+		return false;
 	}
 
 	type = blk_mq_get_hctx_type((*bio)->bi_opf);
 	hctx_type = rq->mq_hctx->type;
 	if (type != hctx_type &&
 	    !(type == HCTX_TYPE_READ && hctx_type == HCTX_TYPE_DEFAULT))
-		return NULL;
+		return true;
 	if (op_is_flush(rq->cmd_flags) != op_is_flush((*bio)->bi_opf))
-		return NULL;
+		return true;
 
 	/*
 	 * If any qos ->throttle() end up blocking, we will have flushed the
@@ -2919,7 +2924,8 @@ static inline struct request *blk_mq_get_cached_request(struct request_queue *q,
 	blk_mq_rq_time_init(rq, 0);
 	rq->cmd_flags = (*bio)->bi_opf;
 	INIT_LIST_HEAD(&rq->queuelist);
-	return rq;
+
+	return false;
 }
 
 static void bio_set_ioprio(struct bio *bio)
@@ -2951,6 +2957,7 @@ void blk_mq_submit_bio(struct bio *bio)
 	struct blk_mq_hw_ctx *hctx;
 	struct request *rq;
 	unsigned int nr_segs = 1;
+	bool need_alloc = true;
 	blk_status_t ret;
 
 	bio = blk_queue_bounce(bio, q);
@@ -2960,18 +2967,36 @@ void blk_mq_submit_bio(struct bio *bio)
 			return;
 	}
 
-	if (!bio_integrity_prep(bio))
-		return;
-
 	bio_set_ioprio(bio);
 
-	rq = blk_mq_get_cached_request(q, plug, &bio, nr_segs);
-	if (!rq) {
+	rq = blk_mq_cached_req(q, plug);
+	if (rq) {
+		/* cached request held queue usage counter */
+		if (!bio_integrity_prep(bio))
+			return;
+
+		need_alloc = blk_mq_try_cached_rq(rq, plug, &bio, nr_segs);
 		if (!bio)
 			return;
+	}
+
+	if (need_alloc) {
+		if (!rq) {
+			if (unlikely(bio_queue_enter(bio)))
+				return;
+
+			if (!bio_integrity_prep(bio))
+				return;
+		} else {
+			/* cached request held queue usage counter */
+			percpu_ref_get(&q->q_usage_counter);
+		}
+
 		rq = blk_mq_get_new_requests(q, plug, bio, nr_segs);
-		if (unlikely(!rq))
+		if (unlikely(!rq)) {
+			blk_queue_exit(q);
 			return;
+		}
 	}
 
 	trace_block_getrq(bio);
