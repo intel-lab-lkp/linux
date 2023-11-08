@@ -122,6 +122,38 @@ static void misc_cg_cancel_charge(enum misc_res_type type, struct misc_cg *cg,
 }
 
 /**
+ * misc_cg_charge() - Charge the cgroup, ignoring limits/capacity.
+ * @type: Misc res type to charge.
+ * @cg: Misc cgroup which will be charged.
+ * @amount: Amount to charge.
+ *
+ * Charge @amount to the misc cgroup. Caller must use the same cgroup during
+ * the uncharge call.
+ *
+ * Context: Any context.
+ */
+void misc_cg_charge(enum misc_res_type type, struct misc_cg *cg, u64 amount)
+{
+	struct misc_res *res;
+	struct misc_cg *i;
+
+	if (!(valid_type(type) && cg && READ_ONCE(misc_res_capacity[type]))) {
+		WARN_ON_ONCE(!valid_type(type));
+		return;
+	}
+
+	if (!amount)
+		return;
+
+	for (i = cg; i; i = parent_misc(i)) {
+		res = &i->res[type];
+
+		atomic_long_add(amount, &res->usage);
+	}
+}
+EXPORT_SYMBOL_GPL(misc_cg_charge);
+
+/**
  * misc_cg_try_charge() - Try charging the misc cgroup.
  * @type: Misc res type to charge.
  * @cg: Misc cgroup which will be charged.
