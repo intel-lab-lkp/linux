@@ -187,11 +187,6 @@ struct MES_LOG_ENTRY_DATA {
 	};
 };
 
-struct MES_LOG_BUFFER {
-	struct MES_LOG_ENTRY_HEADER	header;
-	struct MES_LOG_ENTRY_DATA	entries[1];
-};
-
 enum MES_SWIP_TO_HWIP_DEF {
 	MES_MAX_HWIP_SEGMENT = 8,
 };
