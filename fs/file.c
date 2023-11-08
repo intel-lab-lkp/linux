@@ -285,6 +285,16 @@ static unsigned int count_possible_open_files(struct fdtable *fdt)
 	return i;
 }
 
+u64 count_open_files(struct fdtable *fdt)
+{
+	int i;
+	u64 retval = 0;
+
+	for (i = 0; i < DIV_ROUND_UP(fdt->max_fds, BITS_PER_LONG); i++)
+		retval += hweight64((__u64)fdt->open_fds[i]);
+	return retval;
+}
+
 /*
  * Note that a sane fdtable size always has to be a multiple of
  * BITS_PER_LONG, since we have bitmaps that are sized by this.
