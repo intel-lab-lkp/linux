@@ -13,7 +13,17 @@
 #include "kvm_util.h"
 
 /* Default guest test virtual memory offset */
+#ifndef __loongarch__
 #define DEFAULT_GUEST_TEST_MEM		0xc0000000
+#else
+/*
+ * Default base address for application loading is 0x120000000,
+ * DEFAULT_GUEST_TEST_MEM should be larger than app loading address,
+ * so that PER_VCPU_MEM_SIZE can be large enough, and kvm selftests
+ * app size is smaller than 256M in generic
+ */
+#define DEFAULT_GUEST_TEST_MEM		0x130000000
+#endif
 
 #define DEFAULT_PER_VCPU_MEM_SIZE	(1 << 30) /* 1G */
 
