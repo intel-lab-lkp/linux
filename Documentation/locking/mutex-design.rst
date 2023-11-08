@@ -124,7 +124,7 @@ Acquire the mutex, interruptible::
 				       unsigned int subclass);
    int mutex_lock_interruptible(struct mutex *lock);
 
-Acquire the mutex, interruptible, if dec to 0::
+Acquire the mutex, uninterruptible, if dec to 0::
 
    int atomic_dec_and_mutex_lock(atomic_t *cnt, struct mutex *lock);
 
