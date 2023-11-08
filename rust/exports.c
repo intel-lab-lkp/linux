@@ -13,7 +13,11 @@
 
 #include <linux/module.h>
 
+#ifdef CONFIG_RUST_MODULES
 #define EXPORT_SYMBOL_RUST_GPL(sym) extern int sym; EXPORT_SYMBOL_GPL(sym)
+#else
+#define EXPORT_SYMBOL_RUST_GPL(sym)
+#endif
 
 #include "exports_core_generated.h"
 #include "exports_alloc_generated.h"

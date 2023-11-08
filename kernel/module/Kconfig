@@ -158,6 +158,7 @@ config MODULE_UNLOAD_TAINT_TRACKING
 	  shown. If unsure, say N.
 
 config MODVERSIONS
+	depends on !RUST_MODULES
 	bool "Module versioning support"
 	help
 	  Usually, you have to use modules compiled with your kernel.
