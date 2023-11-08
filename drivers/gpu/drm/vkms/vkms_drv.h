@@ -170,4 +170,8 @@ void vkms_writeback_row(struct vkms_writeback_job *wb, const struct line_buffer 
 /* Writeback */
 int vkms_enable_writeback_connector(struct vkms_device *vkmsdev);
 
+/* Colorops */
+int vkms_initialize_colorops(struct drm_plane *plane);
+
+
 #endif /* _VKMS_DRV_H_ */
