@@ -518,7 +518,7 @@ static int cap11xx_i2c_probe(struct i2c_client *i2c_client)
 	struct device *dev = &i2c_client->dev;
 	struct cap11xx_priv *priv;
 	const struct cap11xx_hw_model *cap;
-	int i, error, irq;
+	int i, error;
 	unsigned int val, rev;
 
 	if (id->driver_data >= ARRAY_SIZE(cap11xx_devices)) {
@@ -624,13 +624,7 @@ static int cap11xx_i2c_probe(struct i2c_client *i2c_client)
 	if (error)
 		return error;
 
-	irq = irq_of_parse_and_map(dev->of_node, 0);
-	if (!irq) {
-		dev_err(dev, "Unable to parse or map IRQ\n");
-		return -ENXIO;
-	}
-
-	error = devm_request_threaded_irq(dev, irq, NULL, cap11xx_thread_func,
+	error = devm_request_threaded_irq(dev, i2c_client->irq, NULL, cap11xx_thread_func,
 					  IRQF_ONESHOT, dev_name(dev), priv);
 	if (error)
 		return error;
