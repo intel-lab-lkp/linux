@@ -12,6 +12,7 @@
 #include <linux/time.h>
 #include <linux/getcpu.h>
 #include <asm/unistd.h>
+#include <vdso/gettime.h>
 
 int __vdso_clock_gettime(clockid_t clock, struct __kernel_old_timespec *ts)
 {
