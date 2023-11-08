@@ -420,7 +420,9 @@ static ssize_t sta_agg_status_write(struct file *file, const char __user *userbu
 	if (ret || tid >= IEEE80211_NUM_TIDS)
 		return -EINVAL;
 
-	wiphy_lock(sta->local->hw.wiphy);
+	ret = mutex_lock_interruptible(&sta->local->hw.wiphy->mtx);
+	if (ret)
+		return ret;
 	if (tx) {
 		if (start)
 			ret = ieee80211_start_tx_ba_session(&sta->sta, tid,
@@ -432,7 +434,7 @@ static ssize_t sta_agg_status_write(struct file *file, const char __user *userbu
 					       3, true);
 		ret = 0;
 	}
-	wiphy_unlock(sta->local->hw.wiphy);
+	mutex_unlock(&sta->local->hw.wiphy->mtx);
 
 	return ret ?: count;
 }

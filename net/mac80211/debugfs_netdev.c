@@ -29,11 +29,13 @@ static ssize_t ieee80211_if_read_sdata(
 	ssize_t (*format)(const struct ieee80211_sub_if_data *sdata, char *, int))
 {
 	char buf[200];
-	ssize_t ret = -EINVAL;
+	ssize_t ret;
 
-	wiphy_lock(sdata->local->hw.wiphy);
+	ret = mutex_lock_interruptible(&sdata->local->hw.wiphy->mtx);
+	if (ret)
+		return ret;
 	ret = (*format)(sdata, buf, sizeof(buf));
-	wiphy_unlock(sdata->local->hw.wiphy);
+	mutex_unlock(&sdata->local->hw.wiphy->mtx);
 
 	if (ret >= 0)
 		ret = simple_read_from_buffer(userbuf, count, ppos, buf, ret);
@@ -57,9 +59,11 @@ static ssize_t ieee80211_if_write_sdata(
 		return -EFAULT;
 	buf[count] = '\0';
 
-	wiphy_lock(sdata->local->hw.wiphy);
+	ret = mutex_lock_interruptible(&sdata->local->hw.wiphy->mtx);
+	if (ret)
+		return ret;
 	ret = (*write)(sdata, buf, count);
-	wiphy_unlock(sdata->local->hw.wiphy);
+	mutex_unlock(&sdata->local->hw.wiphy->mtx);
 
 	return ret;
 }
@@ -73,9 +77,11 @@ static ssize_t ieee80211_if_read_link(
 	char buf[200];
 	ssize_t ret = -EINVAL;
 
-	wiphy_lock(link->sdata->local->hw.wiphy);
+	ret = mutex_lock_interruptible(&link->sdata->local->hw.wiphy->mtx);
+	if (ret)
+		return ret;
 	ret = (*format)(link, buf, sizeof(buf));
-	wiphy_unlock(link->sdata->local->hw.wiphy);
+	mutex_unlock(&link->sdata->local->hw.wiphy->mtx);
 
 	if (ret >= 0)
 		ret = simple_read_from_buffer(userbuf, count, ppos, buf, ret);
@@ -99,9 +105,11 @@ static ssize_t ieee80211_if_write_link(
 		return -EFAULT;
 	buf[count] = '\0';
 
-	wiphy_lock(link->sdata->local->hw.wiphy);
+	ret = mutex_lock_interruptible(&link->sdata->local->hw.wiphy->mtx);
+	if (ret)
+		return ret;
 	ret = (*write)(link, buf, count);
-	wiphy_unlock(link->sdata->local->hw.wiphy);
+	mutex_unlock(&link->sdata->local->hw.wiphy->mtx);
 
 	return ret;
 }
