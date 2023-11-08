@@ -111,6 +111,10 @@ struct scan_control {
 	/* Proactive reclaim invoked by userspace through memory.reclaim */
 	unsigned int proactive:1;
 
+	/* Unbalance reclaim pages. */
+	unsigned int unbalance_anon:1;
+	unsigned int unbalance_file:1;
+
 	/*
 	 * Cgroup memory below memory.low is protected as long as we
 	 * don't threaten to OOM. If any cgroup is reclaimed at
@@ -2342,6 +2346,18 @@ static void prepare_scan_control(pg_data_t *pgdat, struct scan_control *sc)
 	}
 }
 
+static __always_inline bool unbalance_anon_reclaim(struct scan_control *sc,
+						   int swappiness)
+{
+	return sc->unbalance_anon && cgroup_reclaim(sc);
+}
+
+static __always_inline bool unbalance_file_reclaim(struct scan_control *sc,
+						   int swappiness)
+{
+	return sc->unbalance_file && cgroup_reclaim(sc);
+}
+
 /*
  * Determine how aggressively the anon and file LRU lists should be
  * scanned.
@@ -2361,6 +2377,16 @@ static void get_scan_count(struct lruvec *lruvec, struct scan_control *sc,
 	enum scan_balance scan_balance;
 	unsigned long ap, fp;
 	enum lru_list lru;
+
+	if (unlikely(unbalance_file_reclaim(sc, swappiness))) {
+		scan_balance = SCAN_FILE;
+		goto out;
+	}
+
+	if (unlikely(unbalance_anon_reclaim(sc, swappiness))) {
+		scan_balance = SCAN_ANON;
+		goto out;
+	}
 
 	/* If we have no swap space, do not bother scanning anon folios. */
 	if (!sc->may_swap || !can_reclaim_anon_pages(memcg, pgdat->node_id, sc)) {
