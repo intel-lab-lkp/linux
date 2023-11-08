@@ -443,7 +443,7 @@ void menu_finalize(struct menu *parent)
 			if (!expr_contains_symbol(dep, sym))
 				/* No dependency, quit */
 				break;
-			if (expr_depends_symbol(dep, sym))
+			if (expr_depends_symbol(dep, sym, false))
 				/* Absolute dependency, put in submenu */
 				goto next;
 

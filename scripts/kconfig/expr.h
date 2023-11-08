@@ -299,7 +299,7 @@ struct expr *expr_trans_bool(struct expr *e);
 struct expr *expr_eliminate_dups(struct expr *e);
 struct expr *expr_transform(struct expr *e);
 int expr_contains_symbol(struct expr *dep, struct symbol *sym);
-bool expr_depends_symbol(struct expr *dep, struct symbol *sym);
+bool expr_depends_symbol(struct expr *dep, struct symbol *sym, bool recurse);
 struct expr *expr_trans_compare(struct expr *e, enum expr_type type, struct symbol *sym);
 
 void expr_fprint(struct expr *e, FILE *out);

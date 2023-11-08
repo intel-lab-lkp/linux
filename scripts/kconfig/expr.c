@@ -876,25 +876,35 @@ int expr_contains_symbol(struct expr *dep, struct symbol *sym)
 	return 0;
 }
 
-bool expr_depends_symbol(struct expr *dep, struct symbol *sym)
+static bool sym_depends_symbol(struct symbol *hay, struct symbol *needle, bool recurse) {
+	if (!hay)
+		return false;
+	if (hay == needle)
+		return true;
+	if (recurse)
+		return expr_depends_symbol(hay->dir_dep.expr, needle, recurse);
+	return false;
+}
+
+bool expr_depends_symbol(struct expr *dep, struct symbol *sym, bool recurse)
 {
 	if (!dep)
 		return false;
 
 	switch (dep->type) {
 	case E_AND:
-		return expr_depends_symbol(dep->left.expr, sym) ||
-		       expr_depends_symbol(dep->right.expr, sym);
+		return expr_depends_symbol(dep->left.expr, sym, recurse) ||
+		       expr_depends_symbol(dep->right.expr, sym, recurse);
 	case E_SYMBOL:
-		return dep->left.sym == sym;
+		return sym_depends_symbol(dep->left.sym, sym, recurse);
 	case E_EQUAL:
-		if (dep->left.sym == sym) {
+		if (sym_depends_symbol(dep->left.sym, sym, recurse)) {
 			if (dep->right.sym == &symbol_yes || dep->right.sym == &symbol_mod)
 				return true;
 		}
 		break;
 	case E_UNEQUAL:
-		if (dep->left.sym == sym) {
+		if (sym_depends_symbol(dep->left.sym, sym, recurse)) {
 			if (dep->right.sym == &symbol_no)
 				return true;
 		}
