@@ -27,8 +27,43 @@ static int mock_move(struct ttm_buffer_object *bo, bool evict,
 		     struct ttm_resource *new_mem,
 		     struct ttm_place *hop)
 {
-	bo->resource = new_mem;
-	return 0;
+	struct ttm_resource *old_mem = bo->resource;
+	int ret;
+
+	if (!old_mem || (old_mem->mem_type == TTM_PL_SYSTEM && !bo->ttm)) {
+		ttm_bo_move_null(bo, new_mem);
+		return 0;
+	}
+
+	/* Dummy multihop */
+	if (bo->resource->mem_type == TTM_PL_VRAM &&
+	    new_mem->mem_type == TTM_PL_MULTIHOP) {
+		hop->mem_type = TTM_PL_TT;
+		hop->flags = TTM_PL_FLAG_TEMPORARY;
+		hop->fpfn = 0;
+		hop->lpfn = 0;
+		return -EMULTIHOP;
+	}
+
+	if (old_mem->mem_type == TTM_PL_SYSTEM &&
+	    new_mem->mem_type == TTM_PL_TT) {
+		ttm_bo_move_null(bo, new_mem);
+		return 0;
+	}
+
+	if (old_mem->mem_type == TTM_PL_TT &&
+	    new_mem->mem_type == TTM_PL_SYSTEM) {
+		ret = ttm_bo_wait_ctx(bo, ctx);
+
+		if (ret)
+			return ret;
+
+		ttm_resource_free(bo, &bo->resource);
+		ttm_bo_assign_mem(bo, new_mem);
+		return 0;
+	}
+
+	return ttm_bo_move_memcpy(bo, ctx, new_mem);
 }
 
 struct ttm_device_funcs ttm_dev_funcs = {
