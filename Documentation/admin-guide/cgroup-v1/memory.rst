@@ -90,6 +90,7 @@ Brief summary of control files.
                                      This knob is deprecated and shouldn't be
                                      used.
  memory.oom_control		     set/show oom controls.
+ memory.memory		     proactive reclaim.
  memory.numa_stat		     show the number of memory usage per numa
 				     node
  memory.kmem.limit_in_bytes          Deprecated knob to set and read the kernel
@@ -972,7 +973,42 @@ Test:
    (Expect a bunch of notifications, and eventually, the oom-killer will
    trigger.)
 
-12. TODO
+12. Proactive Reclaim
+========
+memory.reclaim A write-only nested-keyed file which exists for all cgroups.
+
+This is a simple interface to trigger memory reclaim in the
+target cgroup.
+
+This file accepts a few key, the number of bytes to reclaim.
+Few nested keys are currently supported.
+
+Example::
+
+  echo "1G" > memory.reclaim
+
+The interface extended with nested keys to configure the
+reclaim behavior. For example, specify the swappiness of
+memory to reclaim from (anon, file, ..).
+
+Example::
+
+  echo "1G" 200 > memory.reclaim (only reclaim anon)
+  echo "1G" 0  > memory.reclaim (only reclaim file)
+  echo "1G" 1  > memory.reclaim (only reclaim file)
+
+Please note that the kernel can over or under reclaim from
+the target cgroup. If less bytes are reclaimed than the
+specified amount, -EAGAIN is returned.
+
+Please note that the proactive reclaim (triggered by this
+interface) is not meant to indicate memory pressure on the
+memory cgroup. Therefore socket memory balancing triggered by
+the memory reclaim normally is not exercised in this case.
+This means that the networking layer will not adapt based on
+reclaim induced by memory.reclaim.
+
+13. TODO
 ========
 
 1. Make per-cgroup scanner reclaim not-shared pages first

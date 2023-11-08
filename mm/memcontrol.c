@@ -5162,6 +5162,89 @@ static int mem_cgroup_slab_show(struct seq_file *m, void *p)
 
 static int memory_stat_show(struct seq_file *m, void *v);
 
+static ssize_t memory_reclaim(struct kernfs_open_file *of, char *buf,
+			      size_t nbytes, loff_t off)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_css(of_css(of));
+	unsigned int nr_retries = MAX_RECLAIM_RETRIES;
+	unsigned long nr_to_reclaim, nr_reclaimed = 0;
+	unsigned int reclaim_options;
+	int swappiness = -1, org_swappiness, n;
+	char *tmpbuf;
+	int err;
+
+	tmpbuf = kvzalloc(nbytes, GFP_KERNEL);
+	if (unlikely(!tmpbuf))
+		return -ENOMEM;
+
+	buf = skip_spaces(buf);
+	n = sscanf(buf, "%s %d", tmpbuf, &swappiness);
+	if (n < 1) {
+		err = -EINVAL;
+		goto out_free;
+	}
+
+	if (n == 2 && (swappiness > 200 || swappiness < 0)) {
+		err = -EINVAL;
+		goto out_free;
+	}
+
+	err = page_counter_memparse(tmpbuf, "", &nr_to_reclaim);
+	if (err)
+		goto out_free;
+
+	reclaim_options	= MEMCG_RECLAIM_MAY_SWAP | MEMCG_RECLAIM_PROACTIVE;
+	if (swappiness != -1) {
+		org_swappiness = memcg->swappiness;
+		memcg->swappiness = swappiness;
+		if (swappiness == 200)
+			reclaim_options |= MEMCG_RECLAIM_ANON;
+		else if (swappiness == 0 || swappiness == 1)
+			reclaim_options |= MEMCG_RECLAIM_FILE;
+	}
+
+	while (nr_reclaimed < nr_to_reclaim) {
+		unsigned long reclaimed;
+
+		if (signal_pending(current)) {
+			err = -EINTR;
+			goto out;
+		}
+
+		/*
+		 * This is the final attempt, drain percpu lru caches in the
+		 * hope of introducing more evictable pages for
+		 * try_to_free_mem_cgroup_pages().
+		 */
+		if (!nr_retries)
+			lru_add_drain_all();
+
+		reclaimed = try_to_free_mem_cgroup_pages(memcg,
+					min(nr_to_reclaim - nr_reclaimed, SWAP_CLUSTER_MAX),
+					GFP_KERNEL, reclaim_options);
+
+		if (!reclaimed && !nr_retries--) {
+			err = -EAGAIN;
+			goto out;
+		}
+
+		nr_reclaimed += reclaimed;
+	}
+
+	if (swappiness != -1)
+		memcg->swappiness = org_swappiness;
+
+	return nbytes;
+
+out:
+	if (swappiness != -1)
+		memcg->swappiness = org_swappiness;
+
+out_free:
+	kvfree(tmpbuf);
+	return err;
+}
+
 static struct cftype mem_cgroup_legacy_files[] = {
 	{
 		.name = "usage_in_bytes",
@@ -5224,6 +5307,10 @@ static struct cftype mem_cgroup_legacy_files[] = {
 		.name = "oom_control",
 		.seq_show = mem_cgroup_oom_control_read,
 		.write_u64 = mem_cgroup_oom_control_write,
+	},
+	{
+		.name = "reclaim",
+		.write = memory_reclaim,
 	},
 	{
 		.name = "pressure_level",
@@ -6892,89 +6979,6 @@ static ssize_t memory_oom_group_write(struct kernfs_open_file *of,
 	WRITE_ONCE(memcg->oom_group, oom_group);
 
 	return nbytes;
-}
-
-static ssize_t memory_reclaim(struct kernfs_open_file *of, char *buf,
-			      size_t nbytes, loff_t off)
-{
-	struct mem_cgroup *memcg = mem_cgroup_from_css(of_css(of));
-	unsigned int nr_retries = MAX_RECLAIM_RETRIES;
-	unsigned long nr_to_reclaim, nr_reclaimed = 0;
-	unsigned int reclaim_options;
-	int swappiness = -1, org_swappiness, n;
-	char *tmpbuf;
-	int err;
-
-	tmpbuf = kvzalloc(nbytes, GFP_KERNEL);
-	if (unlikely(!tmpbuf))
-		return -ENOMEM;
-
-	buf = skip_spaces(buf);
-	n = sscanf(buf, "%s %d", tmpbuf, &swappiness);
-	if (n < 1) {
-		err = -EINVAL;
-		goto out_free;
-	}
-
-	if (n == 2 && (swappiness > 200 || swappiness < 0)) {
-		err = -EINVAL;
-		goto out_free;
-	}
-
-	err = page_counter_memparse(tmpbuf, "", &nr_to_reclaim);
-	if (err)
-		goto out_free;
-
-	reclaim_options	= MEMCG_RECLAIM_MAY_SWAP | MEMCG_RECLAIM_PROACTIVE;
-	if (swappiness != -1) {
-		org_swappiness = memcg->swappiness;
-		memcg->swappiness = swappiness;
-		if (swappiness == 200)
-			reclaim_options |= MEMCG_RECLAIM_ANON;
-		else if (swappiness == 0 || swappiness == 1)
-			reclaim_options |= MEMCG_RECLAIM_FILE;
-	}
-
-	while (nr_reclaimed < nr_to_reclaim) {
-		unsigned long reclaimed;
-
-		if (signal_pending(current)) {
-			err = -EINTR;
-			goto out;
-		}
-
-		/*
-		 * This is the final attempt, drain percpu lru caches in the
-		 * hope of introducing more evictable pages for
-		 * try_to_free_mem_cgroup_pages().
-		 */
-		if (!nr_retries)
-			lru_add_drain_all();
-
-		reclaimed = try_to_free_mem_cgroup_pages(memcg,
-					min(nr_to_reclaim - nr_reclaimed, SWAP_CLUSTER_MAX),
-					GFP_KERNEL, reclaim_options);
-
-		if (!reclaimed && !nr_retries--) {
-			err = -EAGAIN;
-			goto out;
-		}
-
-		nr_reclaimed += reclaimed;
-	}
-
-	if (swappiness != -1)
-		memcg->swappiness = org_swappiness;
-
-	return nbytes;
-
-out:
-	if (swappiness != -1)
-		memcg->swappiness = org_swappiness;
-
-out_free:
-	kvfree(tmpbuf);
-	return err;
 }
 
 static struct cftype memory_files[] = {
