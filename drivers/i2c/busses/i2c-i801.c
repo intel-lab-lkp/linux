@@ -261,7 +261,6 @@ struct i801_mux_config {
 	char *gpio_chip;
 	unsigned values[3];
 	int n_values;
-	unsigned classes[3];
 	unsigned gpios[2];		/* Relative to gpio_chip->base */
 	int n_gpios;
 };
@@ -1298,7 +1297,6 @@ static struct i801_mux_config i801_mux_config_asus_z8_d12 = {
 	.gpio_chip = "gpio_ich",
 	.values = { 0x02, 0x03 },
 	.n_values = 2,
-	.classes = { I2C_CLASS_SPD, I2C_CLASS_SPD },
 	.gpios = { 52, 53 },
 	.n_gpios = 2,
 };
@@ -1307,7 +1305,6 @@ static struct i801_mux_config i801_mux_config_asus_z8_d18 = {
 	.gpio_chip = "gpio_ich",
 	.values = { 0x02, 0x03, 0x01 },
 	.n_values = 3,
-	.classes = { I2C_CLASS_SPD, I2C_CLASS_SPD, I2C_CLASS_SPD },
 	.gpios = { 52, 53 },
 	.n_gpios = 2,
 };
@@ -1379,6 +1376,47 @@ static const struct dmi_system_id mux_dmi_table[] = {
 	{ }
 };
 
+#define JC42_REG_CAP		0x00
+#define JC42_REG_CONFIG		0x01
+#define JC42_REG_MANID		0x06
+#define JC42_REG_DEVICEID	0x07
+
+static int i801_jc42_probe(struct i2c_adapter *adap, unsigned short addr)
+{
+	struct i2c_client cl = {.adapter = adap, .addr = addr};
+	int cap, config, manid, devid;
+
+	cap = i2c_smbus_read_word_swapped(&cl, JC42_REG_CAP);
+	config = i2c_smbus_read_word_swapped(&cl, JC42_REG_CONFIG);
+	manid = i2c_smbus_read_word_swapped(&cl, JC42_REG_MANID);
+	devid = i2c_smbus_read_word_swapped(&cl, JC42_REG_DEVICEID);
+
+	if (cap < 0 || config < 0 || manid < 0 || devid < 0)
+		return 0;
+
+	if (cap & 0xff00 || config & 0xf800 || !manid)
+		return 0;
+
+	return 1;
+}
+
+static int i801_register_jc42(struct device *dev, void *data)
+{
+	struct i2c_adapter *adap;
+	struct i2c_client *client;
+	struct i2c_board_info info = {.type = "jc42"};
+	static const unsigned short addrs[] =
+		{0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, I2C_CLIENT_END};
+
+	adap = i2c_verify_adapter(dev);
+	if(!adap)
+		return 0;
+
+	client = i2c_new_scanned_device(adap, &info, addrs, i801_jc42_probe);
+
+	return PTR_ERR_OR_ZERO(client);
+}
+
 /* Setup multiplexing if needed */
 static void i801_add_mux(struct i801_priv *priv)
 {
@@ -1400,7 +1438,6 @@ static void i801_add_mux(struct i801_priv *priv)
 	gpio_data.parent = priv->adapter.nr;
 	gpio_data.values = mux_config->values;
 	gpio_data.n_values = mux_config->n_values;
-	gpio_data.classes = mux_config->classes;
 	gpio_data.idle = I2C_MUX_GPIO_NO_IDLE;
 
 	/* Register GPIO descriptor lookup table */
@@ -1430,6 +1467,9 @@ static void i801_add_mux(struct i801_priv *priv)
 		gpiod_remove_lookup_table(lookup);
 		dev_err(dev, "Failed to register i2c-mux-gpio device\n");
 	}
+
+	/* Ignore errors */
+	device_for_each_child(dev, NULL, i801_register_jc42);
 }
 
 static void i801_del_mux(struct i801_priv *priv)
