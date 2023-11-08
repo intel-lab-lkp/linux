@@ -114,6 +114,7 @@ n	[A-Za-z0-9_-]
 "optional"		return T_OPTIONAL;
 "prompt"		return T_PROMPT;
 "range"			return T_RANGE;
+"rust_modules"		return T_MODULES_RUST;
 "select"		return T_SELECT;
 "source"		return T_SOURCE;
 "string"		return T_STRING;

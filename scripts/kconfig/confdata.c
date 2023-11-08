@@ -549,10 +549,12 @@ int conf_read(const char *name)
 
 	if (conf_read_simple(name, S_DEF_USER)) {
 		sym_calc_value(modules_sym);
+		sym_calc_value(modules_rust_sym);
 		return 1;
 	}
 
 	sym_calc_value(modules_sym);
+	sym_calc_value(modules_rust_sym);
 
 	for_all_symbols(i, sym) {
 		sym_calc_value(sym);
@@ -1090,6 +1092,7 @@ static int conf_touch_deps(void)
 
 	conf_read_simple(name, S_DEF_AUTO);
 	sym_calc_value(modules_sym);
+	sym_calc_value(modules_rust_sym);
 
 	for_all_symbols(i, sym) {
 		sym_calc_value(sym);

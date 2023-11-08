@@ -68,6 +68,7 @@ struct menu *current_menu, *current_entry;
 %token T_MENU
 %token T_MENUCONFIG
 %token T_MODULES
+%token T_MODULES_RUST
 %token T_ON
 %token T_OPEN_PAREN
 %token T_OPTIONAL
@@ -223,6 +224,15 @@ config_option: T_MODULES T_EOL
 			    current_entry->sym->name, modules_sym->name);
 	modules_sym = current_entry->sym;
 };
+
+config_option: T_MODULES_RUST T_EOL
+{
+	if (modules_rust_sym)
+		zconf_error("symbol '%s' redefines option 'rust_modules' already defined by symbol '%s'",
+			    current_entry->sym->name, modules_rust_sym->name);
+	modules_rust_sym = current_entry->sym;
+};
+
 
 /* choice entry */
 
@@ -495,6 +505,8 @@ void conf_parse(const char *name)
 		exit(1);
 	if (!modules_sym)
 		modules_sym = sym_find( "n" );
+	if (!modules_rust_sym)
+		modules_rust_sym = sym_find( "n" );
 
 	if (!menu_has_prompt(&rootmenu)) {
 		current_entry = &rootmenu;

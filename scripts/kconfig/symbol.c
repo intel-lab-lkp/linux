@@ -38,6 +38,18 @@ static struct symbol symbol_empty = {
 struct symbol *modules_sym;
 static tristate modules_val;
 
+struct symbol *modules_rust_sym;
+static tristate modules_rust_val;
+
+bool sym_depends_rust(struct symbol *sym)
+{
+	static struct symbol *rust_sym;
+
+	if (!rust_sym)
+		rust_sym = sym_find("RUST");
+	return expr_depends_symbol(sym->dir_dep.expr, rust_sym, true);
+}
+
 enum symbol_type sym_get_type(struct symbol *sym)
 {
 	enum symbol_type type = sym->type;
@@ -46,6 +58,8 @@ enum symbol_type sym_get_type(struct symbol *sym)
 		if (sym_is_choice_value(sym) && sym->visible == yes)
 			type = S_BOOLEAN;
 		else if (modules_val == no)
+			type = S_BOOLEAN;
+		else if ((modules_rust_val == no) && sym_depends_rust(sym))
 			type = S_BOOLEAN;
 	}
 	return type;
@@ -443,6 +457,10 @@ void sym_calc_value(struct symbol *sym)
 			sym_set_all_changed();
 			modules_val = modules_sym->curr.tri;
 		}
+		if (modules_rust_sym == sym) {
+			sym_set_all_changed();
+			modules_rust_val = modules_rust_sym->curr.tri;
+		}
 	}
 
 	if (sym_is_choice(sym)) {
@@ -474,6 +492,7 @@ void sym_clear_all_valid(void)
 		sym->flags &= ~SYMBOL_VALID;
 	conf_set_changed(true);
 	sym_calc_value(modules_sym);
+	sym_calc_value(modules_rust_sym);
 }
 
 bool sym_tristate_within_range(struct symbol *sym, tristate val)
@@ -704,6 +723,7 @@ const char *sym_get_string_default(struct symbol *sym)
 
 	sym_calc_visibility(sym);
 	sym_calc_value(modules_sym);
+	sym_calc_value(modules_rust_sym);
 	val = symbol_no.curr.tri;
 	str = symbol_empty.curr.val;
 
@@ -734,9 +754,12 @@ const char *sym_get_string_default(struct symbol *sym)
 	val = EXPR_OR(val, sym->rev_dep.tri);
 
 	/* transpose mod to yes if modules are not enabled */
-	if (val == mod)
-		if (!sym_is_choice_value(sym) && modules_sym->curr.tri == no)
+	if ((val == mod) && !sym_is_choice_value(sym)) {
+		if (modules_sym->curr.tri == no)
 			val = yes;
+		if ((modules_rust_sym->curr.tri == no) && sym_depends_rust(sym))
+			val = yes;
+	}
 
 	/* transpose mod to yes if type is bool */
 	if (sym->type == S_BOOLEAN && val == mod)
@@ -778,7 +801,11 @@ const char *sym_get_string_value(struct symbol *sym)
 			return "n";
 		case mod:
 			sym_calc_value(modules_sym);
+			sym_calc_value(modules_rust_sym);
+			if (sym_depends_rust(sym))
+				return (modules_rust_sym->curr.tri == no) ? "n" : "m";
 			return (modules_sym->curr.tri == no) ? "n" : "m";
+
 		case yes:
 			return "y";
 		}
