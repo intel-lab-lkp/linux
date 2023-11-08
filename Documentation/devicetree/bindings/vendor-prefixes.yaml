@@ -103,6 +103,8 @@ patternProperties:
     description: Amlogic, Inc.
   "^ampere,.*":
     description: Ampere Computing LLC
+  "^amphenol,.*":
+    description: Amphenol
   "^ampire,.*":
     description: Ampire Co., Ltd.
   "^ams,.*":
