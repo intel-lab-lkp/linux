@@ -26,6 +26,11 @@ int user_unwind_next(struct user_unwind_state *state)
 	case USER_UNWIND_TYPE_FP:
 		frame = &fp_frame;
 		break;
+	case USER_UNWIND_TYPE_SFRAME:
+		ret = sframe_find(state->ip, frame);
+		if (ret)
+			goto the_end;
+		break;
 	default:
 		BUG();
 	}
@@ -64,10 +69,14 @@ int user_unwind_start(struct user_unwind_state *state,
 		return -EINVAL;
 	}
 
-	if (type == USER_UNWIND_TYPE_AUTO)
-		state->type = USER_UNWIND_TYPE_FP;
-	else
+	if (type == USER_UNWIND_TYPE_AUTO) {
+		state->type = sframe_enabled_current() ? USER_UNWIND_TYPE_SFRAME
+						       : USER_UNWIND_TYPE_FP;
+	} else {
+		if (type == USER_UNWIND_TYPE_SFRAME && !sframe_enabled_current())
+			return -EINVAL;
 		state->type = type;
+	}
 
 	state->sp = user_stack_pointer(regs);
 	state->ip = instruction_pointer(regs);

@@ -8,6 +8,7 @@
 enum user_unwind_type {
 	USER_UNWIND_TYPE_AUTO,
 	USER_UNWIND_TYPE_FP,
+	USER_UNWIND_TYPE_SFRAME,
 };
 
 struct user_unwind_frame {

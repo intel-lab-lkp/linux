@@ -47,6 +47,7 @@
 #include <linux/dax.h>
 #include <linux/uaccess.h>
 #include <linux/rseq.h>
+#include <linux/sframe.h>
 #include <asm/param.h>
 #include <asm/page.h>
 
@@ -633,11 +634,13 @@ static unsigned long load_elf_interp(struct elfhdr *interp_elf_ex,
 		unsigned long no_base, struct elf_phdr *interp_elf_phdata,
 		struct arch_elf_state *arch_state)
 {
-	struct elf_phdr *eppnt;
+	struct elf_phdr *eppnt, *sframe_phdr = NULL;
 	unsigned long load_addr = 0;
 	int load_addr_set = 0;
 	unsigned long error = ~0UL;
 	unsigned long total_size;
+	unsigned long start_code = ~0UL;
+	unsigned long end_code = 0;
 	int i;
 
 	/* First of all, some simple consistency checks */
@@ -659,7 +662,8 @@ static unsigned long load_elf_interp(struct elfhdr *interp_elf_ex,
 
 	eppnt = interp_elf_phdata;
 	for (i = 0; i < interp_elf_ex->e_phnum; i++, eppnt++) {
-		if (eppnt->p_type == PT_LOAD) {
+		switch (eppnt->p_type) {
+		case PT_LOAD: {
 			int elf_type = MAP_PRIVATE;
 			int elf_prot = make_prot(eppnt->p_flags, arch_state,
 						 true, true);
@@ -698,7 +702,29 @@ static unsigned long load_elf_interp(struct elfhdr *interp_elf_ex,
 				error = -ENOMEM;
 				goto out;
 			}
+
+			if ((eppnt->p_flags & PF_X) && k < start_code)
+				start_code = k;
+
+			k = load_addr + eppnt->p_vaddr + eppnt->p_filesz;
+			if ((eppnt->p_flags & PF_X) && k > end_code)
+				end_code = k;
+			break;
 		}
+		case PT_GNU_SFRAME:
+			sframe_phdr = eppnt;
+			break;
+		}
+	}
+
+	if (sframe_phdr) {
+		struct sframe_file sfile = {
+			.sframe_addr	= load_addr + sframe_phdr->p_vaddr,
+			.text_start	= start_code,
+			.text_end	= end_code,
+		};
+
+		__sframe_add_section(&sfile);
 	}
 
 	error = load_addr;
@@ -823,7 +849,7 @@ static int load_elf_binary(struct linux_binprm *bprm)
 	int first_pt_load = 1;
 	unsigned long error;
 	struct elf_phdr *elf_ppnt, *elf_phdata, *interp_elf_phdata = NULL;
-	struct elf_phdr *elf_property_phdata = NULL;
+	struct elf_phdr *elf_property_phdata = NULL, *sframe_phdr = NULL;
 	unsigned long elf_brk;
 	int retval, i;
 	unsigned long elf_entry;
@@ -929,6 +955,10 @@ out_free_interp:
 				executable_stack = EXSTACK_ENABLE_X;
 			else
 				executable_stack = EXSTACK_DISABLE_X;
+			break;
+
+		case PT_GNU_SFRAME:
+			sframe_phdr = elf_ppnt;
 			break;
 
 		case PT_LOPROC ... PT_HIPROC:
@@ -1277,6 +1307,16 @@ out_free_interp:
 		   emulate the SVr4 behavior. Sigh. */
 		error = vm_mmap(NULL, 0, PAGE_SIZE, PROT_READ | PROT_EXEC,
 				MAP_FIXED | MAP_PRIVATE, 0);
+	}
+
+	if (sframe_phdr) {
+		struct sframe_file sfile = {
+			.sframe_addr	= load_bias + sframe_phdr->p_vaddr,
+			.text_start	= start_code,
+			.text_end	= end_code,
+		};
+
+		__sframe_add_section(&sfile);
 	}
 
 	regs = current_pt_regs();
