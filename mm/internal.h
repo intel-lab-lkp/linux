@@ -1159,6 +1159,8 @@ struct vma_prepare {
 	struct vm_area_struct *remove2;
 };
 
+extern atomic_t migrc_pause_cnt;
+
 /*
  * Initialize the page when allocated from buddy allocator.
  */
@@ -1200,6 +1202,21 @@ static inline void can_migrc_fail(void)
 static inline bool can_migrc_test(void)
 {
 	return current->can_migrc && current->tlb_ubc_ro.flush_required;
+}
+
+static inline void migrc_pause(void)
+{
+	atomic_inc(&migrc_pause_cnt);
+}
+
+static inline void migrc_resume(void)
+{
+	atomic_dec(&migrc_pause_cnt);
+}
+
+static inline bool migrc_paused(void)
+{
+	return !!atomic_read(&migrc_pause_cnt);
 }
 
 /*

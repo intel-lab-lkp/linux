@@ -100,6 +100,16 @@ static void migrc_undo_folios(struct folio *fsrc, struct folio *fdst)
 static void migrc_expand_req(struct folio *fsrc, struct folio *fdst,
 			     struct migrc_req *req)
 {
+	/*
+	 * If migrc has been paused in the middle of unmap because of
+	 * high memory pressure, then the folios that have already been
+	 * marked as pending should get back.
+	 */
+	if (!req) {
+		migrc_undo_folios(fsrc, fdst);
+		return;
+	}
+
 	if (req->nid == -1)
 		req->nid = folio_nid(fsrc);
 
@@ -146,6 +156,12 @@ static void migrc_req_end(struct migrc_req *req)
 
 	llist_add(&req->llnode, &NODE_DATA(req->nid)->migrc_reqs);
 }
+
+/*
+ * Increase on entry of handling high memory pressure e.g. direct
+ * reclaim, decrease on the exit. See __alloc_pages_slowpath().
+ */
+atomic_t migrc_pause_cnt = ATOMIC_INIT(0);
 
 /*
  * Gather folios and architecture specific data to handle.
@@ -211,6 +227,31 @@ static void fold_ubc_ro_to_migrc(struct migrc_req *req)
 	 */
 	arch_tlbbatch_clear(&tlb_ubc_ro->arch);
 	tlb_ubc_ro->flush_required = false;
+}
+
+static void fold_migrc_to_ubc(struct migrc_req *req)
+{
+	struct tlbflush_unmap_batch *tlb_ubc = &current->tlb_ubc;
+
+	if (!req)
+		return;
+
+	/*
+	 * Fold the req's data to tlb_ubc.
+	 */
+	arch_tlbbatch_fold(&tlb_ubc->arch, &req->arch);
+
+	/*
+	 * Reset the req's data.
+	 */
+	arch_tlbbatch_clear(&req->arch);
+
+	/*
+	 * req->arch might be empty. However, conservatively set
+	 * ->flush_required to true so that try_to_unmap_flush() can
+	 * check it anyway.
+	 */
+	tlb_ubc->flush_required = true;
 }
 
 bool isolate_movable_page(struct page *page, isolate_mode_t mode)
@@ -1791,7 +1832,7 @@ static int migrate_pages_batch(struct list_head *from,
 	/*
 	 * Apply migrc only to numa migration for now.
 	 */
-	if (reason == MR_DEMOTION || reason == MR_NUMA_MISPLACED)
+	if (!migrc_paused() && (reason == MR_DEMOTION || reason == MR_NUMA_MISPLACED))
 		mreq = migrc_req_start();
 
 	for (pass = 0; pass < nr_pass && retry; pass++) {
@@ -1827,6 +1868,16 @@ static int migrate_pages_batch(struct list_head *from,
 				stats->nr_failed_pages += nr_pages;
 				list_move_tail(&folio->lru, ret_folios);
 				continue;
+			}
+
+			/*
+			 * In case that the system is in high memory
+			 * pressure, give up migrc mechanism this turn.
+			 */
+			if (unlikely(mreq && migrc_paused())) {
+				fold_migrc_to_ubc(mreq);
+				migrc_req_end(mreq);
+				mreq = NULL;
 			}
 
 			can_migrc_init();
