@@ -90,6 +90,7 @@ struct sdhci_sprd_host {
 	u32 base_rate;
 	int flags; /* backup of host attribute */
 	u32 phy_delay[MMC_TIMING_MMC_HS400 + 2];
+	u8 power_mode;
 };
 
 enum sdhci_sprd_tuning_type {
@@ -416,12 +417,71 @@ static void sdhci_sprd_request_done(struct sdhci_host *host,
 	mmc_request_done(host->mmc, mrq);
 }
 
+static void sdhci_sprd_signal_voltage_switch(struct sdhci_host *host, bool enable)
+{
+	const char *name = mmc_hostname(host->mmc);
+	bool on;
+
+	if (IS_ERR(host->mmc->supply.vqmmc))
+		return;
+
+	on = regulator_is_enabled(host->mmc->supply.vqmmc);
+	if (!(on ^ enable))
+		return;
+
+	if (enable) {
+		if (regulator_enable(host->mmc->supply.vqmmc))
+			pr_err("%s: signal voltage enable fail!\n", name);
+		else if (regulator_is_enabled(host->mmc->supply.vqmmc))
+			pr_debug("%s: signal voltage enable success!\n", name);
+		else
+			pr_err("%s: signal voltage enable hw fail!\n", name);
+	} else {
+		if (regulator_disable(host->mmc->supply.vqmmc))
+			pr_err("%s: signal voltage disable fail\n", name);
+		else if (!regulator_is_enabled(host->mmc->supply.vqmmc))
+			pr_debug("%s: signal voltage disable success!\n", name);
+		else
+			pr_err("%s: signal voltage disable hw fail\n", name);
+	}
+}
+
+static void sdhci_sprd_set_power(struct sdhci_host *host, unsigned char mode,
+				 unsigned short vdd)
+{
+	struct sdhci_sprd_host *sprd_host = TO_SPRD_HOST(host);
+	struct mmc_host *mmc = host->mmc;
+
+	if (sprd_host->power_mode == mmc->ios.power_mode)
+		return;
+
+	switch (mode) {
+	case MMC_POWER_OFF:
+		sdhci_sprd_signal_voltage_switch(host, false);
+		if (!IS_ERR(mmc->supply.vmmc))
+			mmc_regulator_set_ocr(host->mmc, mmc->supply.vmmc, 0);
+		break;
+	case MMC_POWER_ON:
+	case MMC_POWER_UP:
+		if (!IS_ERR(mmc->supply.vmmc))
+			mmc_regulator_set_ocr(host->mmc, mmc->supply.vmmc, vdd);
+
+		/* waiting for mmc->supply.vmmc to stabilize */
+		usleep_range(200, 250);
+		sdhci_sprd_signal_voltage_switch(host, true);
+		break;
+	}
+
+	sprd_host->power_mode = mmc->ios.power_mode;
+}
+
 static struct sdhci_ops sdhci_sprd_ops = {
 	.read_l = sdhci_sprd_readl,
 	.write_l = sdhci_sprd_writel,
 	.write_w = sdhci_sprd_writew,
 	.write_b = sdhci_sprd_writeb,
 	.set_clock = sdhci_sprd_set_clock,
+	.set_power = sdhci_sprd_set_power,
 	.get_max_clock = sdhci_sprd_get_max_clock,
 	.get_min_clock = sdhci_sprd_get_min_clock,
 	.set_bus_width = sdhci_set_bus_width,
@@ -804,6 +864,8 @@ static int sdhci_sprd_probe(struct platform_device *pdev)
 	host->version = sdhci_readw(host, SDHCI_HOST_VERSION);
 	sprd_host->version = ((host->version & SDHCI_VENDOR_VER_MASK) >>
 			       SDHCI_VENDOR_VER_SHIFT);
+
+	sprd_host->power_mode = MMC_POWER_OFF;
 
 	pm_runtime_get_noresume(&pdev->dev);
 	pm_runtime_set_active(&pdev->dev);
