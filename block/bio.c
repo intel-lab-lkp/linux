@@ -1262,8 +1262,11 @@ static int __bio_iov_iter_get_pages(struct bio *bio, struct iov_iter *iter)
 
 	if (bio->bi_bdev) {
 		size_t trim = size & (bdev_logical_block_size(bio->bi_bdev) - 1);
-		iov_iter_revert(iter, trim);
-		size -= trim;
+
+		if (trim) {
+			iov_iter_revert(iter, trim);
+			size -= trim;
+		}
 	}
 
 	if (unlikely(!size)) {
@@ -1286,7 +1289,8 @@ static int __bio_iov_iter_get_pages(struct bio *bio, struct iov_iter *iter)
 		offset = 0;
 	}
 
-	iov_iter_revert(iter, left);
+	if (left)
+		iov_iter_revert(iter, left);
 out:
 	while (i < nr_pages)
 		bio_release_page(bio, pages[i++]);
