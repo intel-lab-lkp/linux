@@ -2816,8 +2816,8 @@ static unsigned long get_segment_base(unsigned int segment)
 
 #include <linux/compat.h>
 
-static inline int
-perf_callchain_user32(struct pt_regs *regs, struct perf_callchain_entry_ctx *entry)
+static inline int __perf_callchain_user32(struct pt_regs *regs,
+					  struct perf_callchain_entry_ctx *entry)
 {
 	/* 32-bit process in 64-bit kernel. */
 	unsigned long ss_base, cs_base;
@@ -2831,7 +2831,6 @@ perf_callchain_user32(struct pt_regs *regs, struct perf_callchain_entry_ctx *ent
 	ss_base = get_segment_base(regs->ss);
 
 	fp = compat_ptr(ss_base + regs->bp);
-	pagefault_disable();
 	while (entry->nr < entry->max_stack) {
 		if (!valid_user_frame(fp, sizeof(frame)))
 			break;
@@ -2844,19 +2843,18 @@ perf_callchain_user32(struct pt_regs *regs, struct perf_callchain_entry_ctx *ent
 		perf_callchain_store(entry, cs_base + frame.return_address);
 		fp = compat_ptr(ss_base + frame.next_frame);
 	}
-	pagefault_enable();
 	return 1;
 }
-#else
-static inline int
-perf_callchain_user32(struct pt_regs *regs, struct perf_callchain_entry_ctx *entry)
+#else /* !CONFIG_IA32_EMULATION */
+static inline int __perf_callchain_user32(struct pt_regs *regs,
+					  struct perf_callchain_entry_ctx *entry)
 {
-    return 0;
+	return 0;
 }
-#endif
+#endif /* CONFIG_IA32_EMULATION */
 
-void
-perf_callchain_user(struct perf_callchain_entry_ctx *entry, struct pt_regs *regs)
+void __perf_callchain_user(struct perf_callchain_entry_ctx *entry,
+			   struct pt_regs *regs, bool atomic)
 {
 	struct stack_frame frame;
 	const struct stack_frame __user *fp;
@@ -2876,13 +2874,15 @@ perf_callchain_user(struct perf_callchain_entry_ctx *entry, struct pt_regs *regs
 
 	perf_callchain_store(entry, regs->ip);
 
-	if (!nmi_uaccess_okay())
+	if (atomic && !nmi_uaccess_okay())
 		return;
 
-	if (perf_callchain_user32(regs, entry))
-		return;
+	if (atomic)
+		pagefault_disable();
 
-	pagefault_disable();
+	if (__perf_callchain_user32(regs, entry))
+		goto done;
+
 	while (entry->nr < entry->max_stack) {
 		if (!valid_user_frame(fp, sizeof(frame)))
 			break;
@@ -2895,7 +2895,22 @@ perf_callchain_user(struct perf_callchain_entry_ctx *entry, struct pt_regs *regs
 		perf_callchain_store(entry, frame.return_address);
 		fp = (void __user *)frame.next_frame;
 	}
-	pagefault_enable();
+done:
+	if (atomic)
+		pagefault_enable();
+}
+
+
+void perf_callchain_user(struct perf_callchain_entry_ctx *entry,
+			 struct pt_regs *regs)
+{
+	return __perf_callchain_user(entry, regs, true);
+}
+
+void perf_callchain_user_deferred(struct perf_callchain_entry_ctx *entry,
+				  struct pt_regs *regs)
+{
+	return __perf_callchain_user(entry, regs, false);
 }
 
 /*
