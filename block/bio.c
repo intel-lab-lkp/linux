@@ -1210,6 +1210,57 @@ static int bio_iov_add_zone_append_page(struct bio *bio, struct page *page,
 	return 0;
 }
 
+/*
+ * Figure out max_size hint of iov_iter_extract_pages() for minimizing
+ * bio & iov iter revert so that bio can be aligned with max io size.
+ */
+static unsigned int bio_get_buffer_size_hint(const struct bio *bio,
+		unsigned int left)
+{
+	unsigned int nr_bvecs = bio->bi_max_vecs - bio->bi_vcnt;
+	unsigned int size, predicted_space, max_bytes;
+	unsigned int space = nr_bvecs << PAGE_SHIFT;
+	unsigned int align_deviation;
+
+	/* If we have enough space really, just try to get all pages */
+	if (!bio->bi_bdev || nr_bvecs >= (bio->bi_max_vecs / 4) ||
+			!bio->bi_vcnt || left <= space)
+		return UINT_MAX - size;
+
+	max_bytes = bdev_max_io_bytes(bio->bi_bdev);
+	size = bio->bi_iter.bi_size;
+
+	/*
+	 * One bvec can hold physically continuous page frames with
+	 * multipage bvec and bytes in these pages can be pretty big, so
+	 * predict the available space by averaging bytes on all bvecs
+	 */
+	predicted_space = size * nr_bvecs / bio->bi_vcnt;
+	/*
+	 * If predicted space is bigger than max io bytes and at least two
+	 * vectors left, ask for all pages
+	 */
+	if (predicted_space > max_bytes && nr_bvecs > 2)
+		return UINT_MAX - size;
+
+	/*
+	 * This bio is close to be full, and stop to add pages if it is
+	 * basically aligned, otherwise just get & add pages if the bio
+	 * can be kept as aligned, so that we can minimize bio & iov iter
+	 * revert
+	 */
+	align_deviation = max_t(unsigned int, 16U * 1024, max_bytes / 16);
+	if ((size & (max_bytes - 1)) > align_deviation) {
+		unsigned aligned_bytes = max_bytes - (size & (max_bytes - 1));
+
+		/* try to keep bio aligned if we have enough data and space */
+		if (aligned_bytes <= left && aligned_bytes <= predicted_space)
+			return aligned_bytes;
+	}
+
+	return 0;
+}
+
 #define PAGE_PTRS_PER_BVEC     (sizeof(struct bio_vec) / sizeof(struct page *))
 
 /**
@@ -1229,7 +1280,7 @@ static int __bio_iov_iter_get_pages(struct bio *bio, struct iov_iter *iter)
 	unsigned short entries_left = bio->bi_max_vecs - bio->bi_vcnt;
 	struct bio_vec *bv = bio->bi_io_vec + bio->bi_vcnt;
 	struct page **pages = (struct page **)bv;
-	ssize_t size, left;
+	ssize_t size, left, max_size;
 	unsigned len, i = 0;
 	size_t offset;
 	int ret = 0;
@@ -1245,6 +1296,10 @@ static int __bio_iov_iter_get_pages(struct bio *bio, struct iov_iter *iter)
 	if (bio->bi_bdev && blk_queue_pci_p2pdma(bio->bi_bdev->bd_disk->queue))
 		extraction_flags |= ITER_ALLOW_P2PDMA;
 
+	max_size = bio_get_buffer_size_hint(bio, iov_iter_count(iter));
+	if (!max_size)
+		return -E2BIG;
+
 	/*
 	 * Each segment in the iov is required to be a block size multiple.
 	 * However, we may not be able to get the entire segment if it spans
@@ -1252,8 +1307,7 @@ static int __bio_iov_iter_get_pages(struct bio *bio, struct iov_iter *iter)
 	 * result to ensure the bio's total size is correct. The remainder of
 	 * the iov data will be picked up in the next bio iteration.
 	 */
-	size = iov_iter_extract_pages(iter, &pages,
-				      UINT_MAX - bio->bi_iter.bi_size,
+	size = iov_iter_extract_pages(iter, &pages, max_size,
 				      nr_pages, extraction_flags, &offset);
 	if (unlikely(size <= 0))
 		return size ? size : -EFAULT;
@@ -1298,6 +1352,46 @@ out:
 	return ret;
 }
 
+/* should only be called before submission */
+static void bio_shrink(struct bio *bio, unsigned bytes)
+{
+	unsigned int size = bio->bi_iter.bi_size;
+	int idx;
+
+	if (bytes >= size)
+		return;
+
+	WARN_ON_ONCE(bio_flagged(bio, BIO_CLONED));
+
+	idx = bio->bi_vcnt - 1;
+	bio->bi_iter.bi_size -= bytes;
+	while (bytes > 0) {
+		struct bio_vec *bv = &bio->bi_io_vec[idx];
+		unsigned int len = min_t(unsigned, bv->bv_len, bytes);
+
+		bytes -= len;
+		bv->bv_len -= len;
+		if (!bv->bv_len) {
+			bio_release_page(bio, bv->bv_page);
+			idx--;
+		}
+	}
+	WARN_ON_ONCE(idx < 0);
+	bio->bi_vcnt = idx + 1;
+}
+
+static unsigned bio_align_with_io_size(struct bio *bio)
+{
+	unsigned int size = bio->bi_iter.bi_size;
+	unsigned int trim = size & (bdev_max_io_bytes(bio->bi_bdev) - 1);
+
+	if (trim && trim != size) {
+		bio_shrink(bio, trim);
+		return trim;
+	}
+	return 0;
+}
+
 /**
  * bio_iov_iter_get_pages - add user or kernel pages to a bio
  * @bio: bio to add pages to
@@ -1336,6 +1430,22 @@ int bio_iov_iter_get_pages(struct bio *bio, struct iov_iter *iter)
 	do {
 		ret = __bio_iov_iter_get_pages(bio, iter);
 	} while (!ret && iov_iter_count(iter) && !bio_full(bio, 0));
+
+
+	/*
+	 * If we still have data and bio is full, this bio size may not be
+	 * aligned with max io size, small bio can be caused by split, try
+	 * to avoid this situation by aligning bio with max io size.
+	 *
+	 * Big chunk of sequential IO workload can benefit from this way.
+	 */
+	if (!ret && iov_iter_count(iter) && bio->bi_bdev &&
+			bio_op(bio) != REQ_OP_ZONE_APPEND) {
+		unsigned trim = bio_align_with_io_size(bio);
+
+		if (trim)
+			iov_iter_revert(iter, trim);
+	}
 
 	return bio->bi_vcnt ? 0 : ret;
 }

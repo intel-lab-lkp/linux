@@ -1151,6 +1151,11 @@ static inline unsigned queue_logical_block_size(const struct request_queue *q)
 	return retval;
 }
 
+static inline unsigned int bdev_max_io_bytes(struct block_device *bdev)
+{
+	return queue_max_bytes(bdev_get_queue(bdev));
+}
+
 static inline unsigned int bdev_logical_block_size(struct block_device *bdev)
 {
 	return queue_logical_block_size(bdev_get_queue(bdev));
