@@ -6751,6 +6751,12 @@ static void perf_pending_irq(struct irq_work *entry)
 	struct perf_event *event = container_of(entry, struct perf_event, pending_irq);
 	int rctx;
 
+	if (!is_software_event(event)) {
+		if (event->pending_unwind)
+			task_work_add(current, &event->pending_task, TWA_RESUME);
+		return;
+	}
+
 	/*
 	 * If we 'fail' here, that's OK, it means recursion is already disabled
 	 * and we won't recurse 'further'.
@@ -6772,10 +6778,56 @@ static void perf_pending_irq(struct irq_work *entry)
 		perf_swevent_put_recursion_context(rctx);
 }
 
+static void perf_pending_task_unwind(struct perf_event *event)
+{
+	struct pt_regs *regs = task_pt_regs(current);
+	struct perf_output_handle handle;
+	struct perf_event_header header;
+	struct perf_sample_data data;
+	struct perf_callchain_entry *callchain;
+
+	callchain = kmalloc(sizeof(struct perf_callchain_entry) +
+			    (sizeof(__u64) * event->attr.sample_max_stack) +
+			    (sizeof(__u64) * 1) /* one context */,
+			    GFP_KERNEL);
+	if (!callchain)
+		return;
+
+	callchain->nr = 0;
+	data.callchain = callchain;
+
+	perf_sample_data_init(&data, 0, event->hw.last_period);
+
+	data.deferred = true;
+
+	perf_prepare_sample(&data, event, regs);
+
+	perf_prepare_header(&header, &data, event, regs);
+
+	if (perf_output_begin(&handle, &data, event, header.size))
+		goto done;
+
+	perf_output_sample(&handle, &header, &data, event);
+
+	perf_output_end(&handle);
+
+done:
+	kfree(callchain);
+}
+
+
 static void perf_pending_task(struct callback_head *head)
 {
 	struct perf_event *event = container_of(head, struct perf_event, pending_task);
 	int rctx;
+
+	if (!is_software_event(event)) {
+		if (event->pending_unwind) {
+			perf_pending_task_unwind(event);
+			event->pending_unwind = 0;
+		}
+		return;
+	}
 
 	/*
 	 * If we 'fail' here, that's OK, it means recursion is already disabled
@@ -7587,22 +7639,48 @@ static u64 perf_get_page_size(unsigned long addr)
 
 static struct perf_callchain_entry __empty_callchain = { .nr = 0, };
 
-struct perf_callchain_entry *
-perf_callchain(struct perf_event *event, struct pt_regs *regs)
+void perf_callchain(struct perf_sample_data *data, struct perf_event *event,
+		    struct pt_regs *regs)
 {
 	bool kernel = !event->attr.exclude_callchain_kernel;
 	bool user   = !event->attr.exclude_callchain_user;
 	const u32 max_stack = event->attr.sample_max_stack;
-	struct perf_callchain_entry *callchain;
+	bool defer_user = IS_ENABLED(CONFIG_HAVE_PERF_CALLCHAIN_DEFERRED);
 
 	/* Disallow cross-task user callchains. */
 	user &= !event->ctx->task || event->ctx->task == current;
 
 	if (!kernel && !user)
-		return &__empty_callchain;
+		goto empty;
 
-	callchain = get_perf_callchain(regs, kernel, user, max_stack, true);
-	return callchain ?: &__empty_callchain;
+	data->callchain = get_perf_callchain(regs, kernel, user, max_stack, true, defer_user);
+	if (!data->callchain)
+		goto empty;
+
+	if (user && defer_user && !event->pending_unwind) {
+		event->pending_unwind = 1;
+		irq_work_queue(&event->pending_irq);
+	}
+
+	return;
+
+empty:
+	data->callchain = &__empty_callchain;
+}
+
+void perf_callchain_deferred(struct perf_sample_data *data,
+			     struct perf_event *event, struct pt_regs *regs)
+{
+	struct perf_callchain_entry_ctx ctx;
+
+	ctx.entry		= data->callchain;
+	ctx.max_stack		= event->attr.sample_max_stack;
+	ctx.nr			= 0;
+	ctx.contexts		= 0;
+	ctx.contexts_maxed	= false;
+
+	perf_callchain_store_context(&ctx, PERF_CONTEXT_USER);
+	perf_callchain_user_deferred(&ctx, regs);
 }
 
 static __always_inline u64 __cond_set(u64 flags, u64 s, u64 d)

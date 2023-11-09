@@ -178,7 +178,7 @@ put_callchain_entry(int rctx)
 
 struct perf_callchain_entry *
 get_perf_callchain(struct pt_regs *regs, bool kernel, bool user,
-		   u32 max_stack, bool add_mark)
+		   u32 max_stack, bool add_mark, bool defer_user)
 {
 	struct perf_callchain_entry *entry;
 	struct perf_callchain_entry_ctx ctx;
@@ -205,6 +205,11 @@ get_perf_callchain(struct pt_regs *regs, bool kernel, bool user,
 			if (!current->mm)
 				goto exit_put;
 			regs = task_pt_regs(current);
+		}
+
+		if (defer_user) {
+			perf_callchain_store_context(&ctx, PERF_CONTEXT_USER_DEFERRED);
+			goto exit_put;
 		}
 
 		if (add_mark)

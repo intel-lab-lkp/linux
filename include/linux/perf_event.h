@@ -786,6 +786,7 @@ struct perf_event {
 	struct irq_work			pending_irq;
 	struct callback_head		pending_task;
 	unsigned int			pending_work;
+	unsigned int			pending_unwind;
 
 	atomic_t			event_limit;
 
@@ -1113,7 +1114,10 @@ int perf_event_read_local(struct perf_event *event, u64 *value,
 extern u64 perf_event_read_value(struct perf_event *event,
 				 u64 *enabled, u64 *running);
 
-extern struct perf_callchain_entry *perf_callchain(struct perf_event *event, struct pt_regs *regs);
+extern void perf_callchain(struct perf_sample_data *data,
+			   struct perf_event *event, struct pt_regs *regs);
+extern void perf_callchain_deferred(struct perf_sample_data *data,
+				    struct perf_event *event, struct pt_regs *regs);
 
 static inline bool branch_sample_no_flags(const struct perf_event *event)
 {
@@ -1189,6 +1193,7 @@ struct perf_sample_data {
 	u64				data_page_size;
 	u64				code_page_size;
 	u64				aux_size;
+	bool				deferred;
 } ____cacheline_aligned;
 
 /* default value for data source */
@@ -1206,6 +1211,7 @@ static inline void perf_sample_data_init(struct perf_sample_data *data,
 	data->sample_flags = PERF_SAMPLE_PERIOD;
 	data->period = period;
 	data->dyn_size = 0;
+	data->deferred = false;
 
 	if (addr) {
 		data->addr = addr;
@@ -1219,7 +1225,11 @@ static inline void perf_sample_save_callchain(struct perf_sample_data *data,
 {
 	int size = 1;
 
-	data->callchain = perf_callchain(event, regs);
+	if (data->deferred)
+		perf_callchain_deferred(data, event, regs);
+	else
+		perf_callchain(data, event, regs);
+
 	size += data->callchain->nr;
 
 	data->dyn_size += size * sizeof(u64);
@@ -1534,11 +1544,17 @@ extern void perf_callchain_user(struct perf_callchain_entry_ctx *entry, struct p
 extern void perf_callchain_kernel(struct perf_callchain_entry_ctx *entry, struct pt_regs *regs);
 extern struct perf_callchain_entry *
 get_perf_callchain(struct pt_regs *regs, bool kernel, bool user,
-		   u32 max_stack, bool add_mark);
+		   u32 max_stack, bool add_mark, bool defer_user);
 extern int get_callchain_buffers(int max_stack);
 extern void put_callchain_buffers(void);
 extern struct perf_callchain_entry *get_callchain_entry(int *rctx);
 extern void put_callchain_entry(int rctx);
+
+#ifdef CONFIG_HAVE_PERF_CALLCHAIN_DEFERRED
+extern void perf_callchain_user_deferred(struct perf_callchain_entry_ctx *entry, struct pt_regs *regs);
+#else
+static inline void perf_callchain_user_deferred(struct perf_callchain_entry_ctx *entry, struct pt_regs *regs) {}
+#endif
 
 extern int sysctl_perf_event_max_stack;
 extern int sysctl_perf_event_max_contexts_per_stack;
