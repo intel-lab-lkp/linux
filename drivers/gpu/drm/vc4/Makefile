@@ -34,4 +34,6 @@ vc4-$(CONFIG_DRM_VC4_KUNIT_TEST) += \
 
 vc4-$(CONFIG_DEBUG_FS) += vc4_debugfs.o
 
+vc4-$(CONFIG_DMABUF_HEAPS) += vc4_dma_heap.o
+
 obj-$(CONFIG_DRM_VC4)  += vc4.o

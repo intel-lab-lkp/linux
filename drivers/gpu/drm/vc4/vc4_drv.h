@@ -1078,4 +1078,9 @@ int vc4_perfmon_destroy_ioctl(struct drm_device *dev, void *data,
 int vc4_perfmon_get_values_ioctl(struct drm_device *dev, void *data,
 				 struct drm_file *file_priv);
 
+/* vc4_dma_heap.c */
+#if IS_ENABLED(CONFIG_DMABUF_HEAPS)
+int vc4_dma_heap_create(struct vc4_dev *vc4);
+#endif
+
 #endif /* _VC4_DRV_H_ */

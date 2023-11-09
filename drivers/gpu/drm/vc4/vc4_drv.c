@@ -391,6 +391,12 @@ static int vc4_drm_bind(struct device *dev)
 
 	drm_fbdev_dma_setup(drm, 16);
 
+#if IS_ENABLED(CONFIG_DMABUF_HEAPS)
+	ret = vc4_dma_heap_create(vc4);
+	if (ret)
+		goto err;
+#endif
+
 	return 0;
 
 err:
