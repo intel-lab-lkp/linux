@@ -14,6 +14,10 @@ struct sensor_device_attribute{
 	struct device_attribute dev_attr;
 	int index;
 };
+
+#define to_sensor_sysfs_attr(_name) \
+	(&sensor_dev_attr_##_name.dev_attr.attr)
+
 #define to_sensor_dev_attr(_dev_attr) \
 	container_of(_dev_attr, struct sensor_device_attribute, dev_attr)
 
