@@ -42,11 +42,14 @@ int main(int argc, char **argv)
 		memset(&req, 0, sizeof(req));
 
 		req.offset = strtoul(argv[j], &end, 0);
-		if (*end != '\0')
+		if (*end != '\0') {
+			close(fd);
 			goto err_usage;
+		}
 
 		ret = ioctl(fd, GPIO_V2_GET_LINEINFO_WATCH_IOCTL, &req);
 		if (ret) {
+			close(fd);
 			perror("unable to set up line watch");
 			return EXIT_FAILURE;
 		}
@@ -58,6 +61,7 @@ int main(int argc, char **argv)
 	for (;;) {
 		ret = poll(&pfd, 1, 5000);
 		if (ret < 0) {
+			close(pfd.fd);
 			perror("error polling the linechanged fd");
 			return EXIT_FAILURE;
 		} else if (ret > 0) {
@@ -66,7 +70,7 @@ int main(int argc, char **argv)
 			if (rd < 0 || rd != sizeof(chg)) {
 				if (rd != sizeof(chg))
 					errno = EIO;
-
+				close(pfd.fd);
 				perror("error reading line change event");
 				return EXIT_FAILURE;
 			}
@@ -82,6 +86,7 @@ int main(int argc, char **argv)
 				event = "config changed";
 				break;
 			default:
+				close(pfd.fd);
 				fprintf(stderr,
 					"invalid event type received from the kernel\n");
 				return EXIT_FAILURE;
@@ -91,7 +96,7 @@ int main(int argc, char **argv)
 			       chg.info.offset, event, (uint64_t)chg.timestamp_ns);
 		}
 	}
-
+	close(pfd.fd);
 	return 0;
 
 err_usage:
