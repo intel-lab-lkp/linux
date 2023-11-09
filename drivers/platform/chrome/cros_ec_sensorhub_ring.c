@@ -133,33 +133,70 @@ int cros_ec_sensorhub_ring_fifo_enable(struct cros_ec_sensorhub *sensorhub,
 	return ret;
 }
 
-static int cros_ec_sensor_ring_median_cmp(const void *pv1, const void *pv2)
+static void cros_ec_sensor_ring_median_swap(s64 *a, s64 *b)
 {
-	s64 v1 = *(s64 *)pv1;
-	s64 v2 = *(s64 *)pv2;
-
-	if (v1 > v2)
-		return 1;
-	else if (v1 < v2)
-		return -1;
-	else
-		return 0;
+	s64 tmp = *a;
+	*a = *b;
+	*b = tmp;
 }
 
 /*
  * cros_ec_sensor_ring_median: Gets median of an array of numbers
  *
- * For now it's implemented using an inefficient > O(n) sort then return
- * the middle element. A more optimal method would be something like
- * quickselect, but given that n = 64 we can probably live with it in the
- * name of clarity.
+ * It's implemented using the quickselect algorithm, which achieves an
+ * average time complexity of O(n) the middle element. In the worst case,
+ * the runtime of quickselect could regress to O(n^2). To mitigate this,
+ * algorithms like median-of-medians exist, which can guarantee O(n) even
+ * in the worst case. However, these algorithms come with a higher
+ * overhead and are more complex to implement, making quickselect a
+ * pragmatic choice for our use case.
  *
- * Warning: the input array gets modified (sorted)!
+ * Warning: the input array gets modified!
  */
 static s64 cros_ec_sensor_ring_median(s64 *array, size_t length)
 {
-	sort(array, length, sizeof(s64), cros_ec_sensor_ring_median_cmp, NULL);
-	return array[length / 2];
+	const int k = length / 2;
+	int lo = 0;
+	int hi = length - 1;
+
+	while (lo <= hi) {
+		int mid = lo + (hi - lo) / 2;
+		int pivot, pivot_index;
+		int i = lo - 1;
+
+		/* We employ the median-of-three rule to choose the pivot, mitigating
+		 * worst-case scenarios such as already sorted arrays and aiming to reduce
+		 * the expected number of necessary comparisons. This strategy enhances the
+		 * algorithm's performance and ensures a more balanced partitioning.
+         */
+		if (array[lo] > array[mid])
+			cros_ec_sensor_ring_median_swap(&array[lo],
+							&array[mid]);
+		if (array[lo] > array[hi])
+			cros_ec_sensor_ring_median_swap(&array[lo], &array[hi]);
+		if (array[mid] < array[hi])
+			cros_ec_sensor_ring_median_swap(&array[mid],
+							&array[hi]);
+
+		pivot = array[hi];
+
+		for (int j = lo; j < hi; j++)
+			if (array[j] < pivot)
+				cros_ec_sensor_ring_median_swap(&array[++i],
+								&array[j]);
+
+		cros_ec_sensor_ring_median_swap(&array[i + 1], &array[hi]);
+		pivot_index = i + 1;
+		if (pivot_index == k)
+			return array[pivot_index];
+		if (pivot_index > k)
+			hi = pivot_index - 1;
+		else
+			lo = pivot_index + 1;
+	}
+
+	/* Should never reach here. */
+	return -1;
 }
 
 /*
