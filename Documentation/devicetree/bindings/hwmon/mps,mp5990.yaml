@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/hwmon/mps,mp5990.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Monolithic Power Systems Devices MP5990 Hot-Swap Controller
+
+maintainers:
+  - Peter Yin <peteryin.openbmc@gmail.com>
+
+description: |
+  Monolithic Power Systems Devices MP5990 Hot-Swap Controller
+
+  Datasheets:
+  https://www.monolithicpower.com/en/mp5990.html
+
+properties:
+  compatible:
+    const: mps,mp5990
+
+  reg:
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        power-sensor@20 {
+            reg = <0x20>;
+            compatible = "mps,mp5990";
+        };
+    };
