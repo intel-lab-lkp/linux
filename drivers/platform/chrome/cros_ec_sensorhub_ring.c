@@ -176,7 +176,7 @@ static s64 cros_ec_sensor_ring_median(s64 *array, size_t length)
  * While a and b are recorded at accurate times (due to the EC real time
  * nature); c is pretty untrustworthy, even though it's recorded the
  * first thing in ec_irq_handler(). There is a very good change we'll get
- * added lantency due to:
+ * added latency due to:
  *   other irqs
  *   ddrfreq
  *   cpuidle
