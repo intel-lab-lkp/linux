@@ -367,8 +367,9 @@ static bool __drm_atomic_helper_damage_merged(const struct drm_plane_state *old_
  * This function merges any valid plane damage clips into one rectangle and
  * returns it in @rect.
  *
- * For details see: drm_atomic_helper_damage_iter_init() and
- * drm_atomic_helper_damage_iter_next().
+ * For details see: drm_atomic_helper_damage_iter_init(),
+ * drm_atomic_helper_damage_iter_next() and
+ * `Damage Tracking Properties`_.
  *
  * Note that this helper is for drivers that do per-plane uploads and expect
  * to handle frame damages. Drivers that do per-buffer uploads instead should
@@ -400,8 +401,9 @@ EXPORT_SYMBOL(drm_atomic_helper_damage_merged);
  * full plane update should happen. It also ensure helper iterator will return
  * &drm_plane_state.src as damage.
  *
- * For details see: drm_atomic_helper_buffer_damage_iter_init() and
- * drm_atomic_helper_damage_iter_next().
+ * For details see: drm_atomic_helper_buffer_damage_iter_init(),
+ * drm_atomic_helper_damage_iter_next() and
+ * `Damage Tracking Properties`_.
  *
  * Returns:
  * True if there is valid buffer damage otherwise false.

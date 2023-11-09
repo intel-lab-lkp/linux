@@ -1439,9 +1439,25 @@ out:
  *
  * Drivers that are interested in damage interface for plane should enable
  * FB_DAMAGE_CLIPS property by calling drm_plane_enable_fb_damage_clips().
- * Drivers implementing damage can use drm_atomic_helper_damage_iter_init() and
- * drm_atomic_helper_damage_iter_next() helper iterator function to get damage
- * rectangles clipped to &drm_plane_state.src.
+ *
+ * Note that there are two types of damage handling: frame damage and buffer
+ * damage. The drivers implementing a per-plane or per-CRTC upload target and
+ * need to handle frame damage can use drm_atomic_helper_damage_iter_init(),
+ * but drivers implementing a per-buffer upload target and need to handle buffer
+ * damage should use drm_atomic_helper_buffer_damage_iter_init() helper instead.
+ *
+ * Once the iterator has been initialized by the damage helpers mentioned above,
+ * the drm_atomic_helper_damage_iter_next() helper iterator function can be used
+ * to get damage rectangles clipped to &drm_plane_state.src.
+ *
+ * The type of damage handling implemented depends on the driver's upload target
+ * but notice that when using swap buffers, the returned damage rectangle is the
+ * &drm_plane_state.src, since a full plane update should happen. There is no
+ * buffer age support or similar damage accumulation algorithm implemented yet.
+ *
+ * For more information about the two type of damage, see:
+ *     https://registry.khronos.org/EGL/extensions/KHR/EGL_KHR_swap_buffers_with_damage.txt
+ *     https://emersion.fr/blog/2019/intro-to-damage-tracking/
  */
 
 /**
