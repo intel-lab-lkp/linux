@@ -238,7 +238,7 @@ struct drm_i915_private {
 		struct list_head uabi_engines_list;
 		struct rb_root uabi_engines;
 	};
-	unsigned int engine_uabi_class_count[I915_LAST_UABI_ENGINE_CLASS + 1];
+	unsigned int engine_uabi_class_count[I915_MAX_UABI_CLASSES];
 
 	/* protects the irq masks */
 	spinlock_t irq_lock;

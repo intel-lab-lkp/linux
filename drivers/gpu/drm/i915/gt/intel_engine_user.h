@@ -11,6 +11,10 @@
 struct drm_i915_private;
 struct intel_engine_cs;
 
+#define I915_LAST_UABI_ENGINE_CLASS I915_ENGINE_CLASS_COMPUTE
+#define I915_KERNEL_RSVD_CLASS (I915_LAST_UABI_ENGINE_CLASS + 1)
+#define I915_MAX_UABI_CLASSES (I915_KERNEL_RSVD_CLASS + 1)
+
 struct intel_engine_cs *
 intel_engine_lookup_user(struct drm_i915_private *i915, u8 class, u8 instance);
 

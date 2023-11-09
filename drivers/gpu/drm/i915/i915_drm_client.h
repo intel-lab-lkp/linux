@@ -12,7 +12,7 @@
 
 #include <uapi/drm/i915_drm.h>
 
-#define I915_LAST_UABI_ENGINE_CLASS I915_ENGINE_CLASS_COMPUTE
+#include "gt/intel_engine_user.h"
 
 struct drm_file;
 struct drm_printer;

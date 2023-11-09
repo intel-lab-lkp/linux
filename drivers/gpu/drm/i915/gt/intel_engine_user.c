@@ -47,6 +47,7 @@ static const u8 uabi_classes[] = {
 	[VIDEO_DECODE_CLASS] = I915_ENGINE_CLASS_VIDEO,
 	[VIDEO_ENHANCEMENT_CLASS] = I915_ENGINE_CLASS_VIDEO_ENHANCE,
 	[COMPUTE_CLASS] = I915_ENGINE_CLASS_COMPUTE,
+	[OTHER_CLASS] = I915_KERNEL_RSVD_CLASS,
 };
 
 static int engine_cmp(void *priv, const struct list_head *A,
@@ -138,7 +139,7 @@ const char *intel_engine_class_repr(u8 class)
 		[COPY_ENGINE_CLASS] = "bcs",
 		[VIDEO_DECODE_CLASS] = "vcs",
 		[VIDEO_ENHANCEMENT_CLASS] = "vecs",
-		[OTHER_CLASS] = "other",
+		[OTHER_CLASS] = "gsc",
 		[COMPUTE_CLASS] = "ccs",
 	};
 
@@ -216,14 +217,8 @@ void intel_engines_driver_register(struct drm_i915_private *i915)
 		if (intel_gt_has_unrecoverable_error(engine->gt))
 			continue; /* ignore incomplete engines */
 
-		/*
-		 * We don't want to expose the GSC engine to the users, but we
-		 * still rename it so it is easier to identify in the debug logs
-		 */
-		if (engine->id == GSC0) {
-			engine_rename(engine, "gsc", 0);
-			continue;
-		}
+		/* The only engine we expect in OTHER_CLASS is GSC0 */
+		GEM_WARN_ON(engine->class == OTHER_CLASS && engine->id != GSC0);
 
 		GEM_BUG_ON(engine->class >= ARRAY_SIZE(uabi_classes));
 		engine->uabi_class = uabi_classes[engine->class];
@@ -237,6 +232,10 @@ void intel_engines_driver_register(struct drm_i915_private *i915)
 		engine_rename(engine,
 			      intel_engine_class_repr(engine->class),
 			      engine->uabi_instance);
+
+		/* We don't want to expose the GSC engine to the users */
+		if (engine->id == GSC0)
+			continue;
 
 		rb_link_node(&engine->uabi_node, prev, p);
 		rb_insert_color(&engine->uabi_node, &i915->uabi_engines);
