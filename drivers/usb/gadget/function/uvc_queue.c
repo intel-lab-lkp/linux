@@ -55,7 +55,6 @@ static int uvc_queue_setup(struct vb2_queue *vq,
 	sizes[0] = video->imagesize;
 
 	req_size = video->ep->maxpacket
-		 * max_t(unsigned int, video->ep->maxburst, 1)
 		 * (video->ep->mult);
 
 	/* We divide by two, to increase the chance to run
