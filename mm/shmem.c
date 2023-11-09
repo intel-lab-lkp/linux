@@ -395,6 +395,7 @@ static int shmem_reserve_inode(struct super_block *sb, ino_t *inop)
 static void shmem_free_inode(struct super_block *sb, size_t freed_ispace)
 {
 	struct shmem_sb_info *sbinfo = SHMEM_SB(sb);
+
 	if (sbinfo->max_inodes) {
 		raw_spin_lock(&sbinfo->stat_lock);
 		sbinfo->free_ispace += BOGO_INODE_SIZE + freed_ispace;
@@ -735,6 +736,7 @@ static long shmem_unused_huge_count(struct super_block *sb,
 		struct shrink_control *sc)
 {
 	struct shmem_sb_info *sbinfo = SHMEM_SB(sb);
+
 	return READ_ONCE(sbinfo->shrinklist_len);
 }
 #else /* !CONFIG_TRANSPARENT_HUGEPAGE */
@@ -1163,9 +1165,8 @@ static int shmem_setattr(struct mnt_idmap *idmap,
 		return error;
 
 	if ((info->seals & F_SEAL_EXEC) && (attr->ia_valid & ATTR_MODE)) {
-		if ((inode->i_mode ^ attr->ia_mode) & 0111) {
+		if ((inode->i_mode ^ attr->ia_mode) & 0111)
 			return -EPERM;
-		}
 	}
 
 	if (S_ISREG(inode->i_mode) && (attr->ia_valid & ATTR_SIZE)) {
@@ -1189,6 +1190,7 @@ static int shmem_setattr(struct mnt_idmap *idmap,
 		}
 		if (newsize <= oldsize) {
 			loff_t holebegin = round_up(newsize, PAGE_SIZE);
+
 			if (oldsize > holebegin)
 				unmap_mapping_range(inode->i_mapping,
 							holebegin, 0, 1);
@@ -1471,6 +1473,7 @@ static int shmem_writepage(struct page *page, struct writeback_control *wbc)
 	if (!folio_test_uptodate(folio)) {
 		if (inode->i_private) {
 			struct shmem_falloc *shmem_falloc;
+
 			spin_lock(&inode->i_lock);
 			shmem_falloc = inode->i_private;
 			if (shmem_falloc &&
@@ -1544,6 +1547,7 @@ static void shmem_show_mpol(struct seq_file *seq, struct mempolicy *mpol)
 static struct mempolicy *shmem_get_sbmpol(struct shmem_sb_info *sbinfo)
 {
 	struct mempolicy *mpol = NULL;
+
 	if (sbinfo->mpol) {
 		raw_spin_lock(&sbinfo->stat_lock);	/* prevent replace/use races */
 		mpol = sbinfo->mpol;
@@ -2146,6 +2150,7 @@ static int synchronous_wake_function(wait_queue_entry_t *wait,
 			unsigned int mode, int sync, void *key)
 {
 	int ret = default_wake_function(wait, mode, sync, key);
+
 	list_del_init(&wait->entry);
 	return ret;
 }
@@ -2331,6 +2336,7 @@ unsigned long shmem_get_unmapped_area(struct file *file,
 static int shmem_set_policy(struct vm_area_struct *vma, struct mempolicy *mpol)
 {
 	struct inode *inode = file_inode(vma->vm_file);
+
 	return mpol_set_shared_policy(&SHMEM_I(inode)->policy, vma, mpol);
 }
 
@@ -2698,7 +2704,7 @@ static const struct inode_operations shmem_short_symlink_operations;
 
 static int
 shmem_write_begin(struct file *file, struct address_space *mapping,
-			loff_t pos, unsigned len,
+			loff_t pos, unsigned int len,
 			struct page **pagep, void **fsdata)
 {
 	struct inode *inode = mapping->host;
@@ -2733,7 +2739,7 @@ shmem_write_begin(struct file *file, struct address_space *mapping,
 
 static int
 shmem_write_end(struct file *file, struct address_space *mapping,
-			loff_t pos, unsigned len, unsigned copied,
+			loff_t pos, unsigned int len, unsigned int copied,
 			struct page *page, void *fsdata)
 {
 	struct folio *folio = page_folio(page);
@@ -2745,6 +2751,7 @@ shmem_write_end(struct file *file, struct address_space *mapping,
 	if (!folio_test_uptodate(folio)) {
 		if (copied < folio_size(folio)) {
 			size_t from = offset_in_folio(folio, pos);
+
 			folio_zero_segments(folio, 0, from,
 					from + copied, folio_size(folio));
 		}
@@ -3748,6 +3755,7 @@ static const struct xattr_handler * const shmem_xattr_handlers[] = {
 static ssize_t shmem_listxattr(struct dentry *dentry, char *buffer, size_t size)
 {
 	struct shmem_inode_info *info = SHMEM_I(d_inode(dentry));
+
 	return simple_xattr_list(d_inode(dentry), &info->xattrs, buffer, size);
 }
 #endif /* CONFIG_TMPFS_XATTR */
@@ -3779,6 +3787,7 @@ static int shmem_match(struct inode *ino, void *vfh)
 {
 	__u32 *fh = vfh;
 	__u64 inum = fh[2];
+
 	inum = (inum << 32) | fh[1];
 	return ino->i_ino == inum && fh[0] == ino->i_generation;
 }
@@ -3829,6 +3838,7 @@ static int shmem_encode_fh(struct inode *inode, __u32 *fh, int *len,
 		 * to do it once
 		 */
 		static DEFINE_SPINLOCK(lock);
+
 		spin_lock(&lock);
 		if (inode_unhashed(inode))
 			__insert_inode_hash(inode,
@@ -3881,20 +3891,20 @@ static const struct constant_table shmem_param_enums_huge[] = {
 
 const struct fs_parameter_spec shmem_fs_parameters[] = {
 	fsparam_u32   ("gid",		Opt_gid),
-	fsparam_enum  ("huge",		Opt_huge,  shmem_param_enums_huge),
+	fsparam_enum("huge",		Opt_huge,  shmem_param_enums_huge),
 	fsparam_u32oct("mode",		Opt_mode),
 	fsparam_string("mpol",		Opt_mpol),
 	fsparam_string("nr_blocks",	Opt_nr_blocks),
 	fsparam_string("nr_inodes",	Opt_nr_inodes),
 	fsparam_string("size",		Opt_size),
 	fsparam_u32   ("uid",		Opt_uid),
-	fsparam_flag  ("inode32",	Opt_inode32),
-	fsparam_flag  ("inode64",	Opt_inode64),
-	fsparam_flag  ("noswap",	Opt_noswap),
+	fsparam_flag("inode32",	Opt_inode32),
+	fsparam_flag("inode64",	Opt_inode64),
+	fsparam_flag("noswap",	Opt_noswap),
 #ifdef CONFIG_TMPFS_QUOTA
-	fsparam_flag  ("quota",		Opt_quota),
-	fsparam_flag  ("usrquota",	Opt_usrquota),
-	fsparam_flag  ("grpquota",	Opt_grpquota),
+	fsparam_flag("quota",		Opt_quota),
+	fsparam_flag("usrquota",	Opt_usrquota),
+	fsparam_flag("grpquota",	Opt_grpquota),
 	fsparam_string("usrquota_block_hardlimit", Opt_usrquota_block_hardlimit),
 	fsparam_string("usrquota_inode_hardlimit", Opt_usrquota_inode_hardlimit),
 	fsparam_string("grpquota_block_hardlimit", Opt_grpquota_block_hardlimit),
@@ -4080,12 +4090,14 @@ static int shmem_parse_options(struct fs_context *fc, void *data)
 
 	if (options) {
 		int err = security_sb_eat_lsm_opts(options, &fc->security);
+
 		if (err)
 			return err;
 	}
 
 	while (options != NULL) {
 		char *this_char = options;
+
 		for (;;) {
 			/*
 			 * NUL-terminate this option: unfortunately,
@@ -4266,7 +4278,7 @@ static int shmem_show_options(struct seq_file *seq, struct dentry *root)
 	shmem_show_mpol(seq, mpol);
 	mpol_put(mpol);
 	if (sbinfo->noswap)
-		seq_printf(seq, ",noswap");
+		seq_puts(seq, ",noswap");
 	return 0;
 }
 
@@ -4294,7 +4306,7 @@ static int shmem_fill_super(struct super_block *sb, struct fs_context *fc)
 	int error = -ENOMEM;
 
 	/* Round up to L1_CACHE_BYTES to resist false sharing */
-	sbinfo = kzalloc(max((int)sizeof(struct shmem_sb_info),
+	sbinfo = kzalloc(max_t((int)sizeof(struct shmem_sb_info),
 				L1_CACHE_BYTES), GFP_KERNEL);
 	if (!sbinfo)
 		return error;
@@ -4422,6 +4434,7 @@ static struct kmem_cache *shmem_inode_cachep __ro_after_init;
 static struct inode *shmem_alloc_inode(struct super_block *sb)
 {
 	struct shmem_inode_info *info;
+
 	info = alloc_inode_sb(sb, shmem_inode_cachep, GFP_KERNEL);
 	if (!info)
 		return NULL;
@@ -4446,6 +4459,7 @@ static void shmem_destroy_inode(struct inode *inode)
 static void shmem_init_inode(void *foo)
 {
 	struct shmem_inode_info *info = foo;
+
 	inode_init_once(&info->vfs_inode);
 }
 
@@ -4778,6 +4792,7 @@ static inline struct inode *shmem_get_inode(struct mnt_idmap *idmap,
 				umode_t mode, dev_t dev, unsigned long flags)
 {
 	struct inode *inode = ramfs_get_inode(sb, dir, mode, dev);
+
 	return inode ? inode : ERR_PTR(-ENOSPC);
 }
 
@@ -4804,7 +4819,7 @@ static struct file *__shmem_file_setup(struct vfsmount *mnt, const char *name,
 		return ERR_PTR(-EINVAL);
 
 	inode = shmem_get_inode(&nop_mnt_idmap, mnt->mnt_sb, NULL,
-				S_IFREG | S_IRWXUGO, 0, flags);
+				S_IFREG | 0777, 0, flags);
 	if (IS_ERR(inode)) {
 		shmem_unacct_size(flags, size);
 		return ERR_CAST(inode);
@@ -4823,10 +4838,10 @@ static struct file *__shmem_file_setup(struct vfsmount *mnt, const char *name,
 
 /**
  * shmem_kernel_file_setup - get an unlinked file living in tmpfs which must be
- * 	kernel internal.  There will be NO LSM permission checks against the
- * 	underlying inode.  So users of this interface must do LSM checks at a
- *	higher layer.  The users are the big_key and shm implementations.  LSM
- *	checks are provided at the key or shm level rather than the inode.
+ * kernel internal.  There will be NO LSM permission checks against the
+ * underlying inode.  So users of this interface must do LSM checks at a
+ * higher layer.  The users are the big_key and shm implementations.  LSM
+ * checks are provided at the key or shm level rather than the inode.
  * @name: name for dentry (to be seen in /proc/<pid>/maps
  * @size: size to be set for the file
  * @flags: VM_NORESERVE suppresses pre-accounting of the entire object size
