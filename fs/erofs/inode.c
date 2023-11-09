@@ -19,7 +19,6 @@ static void *erofs_read_inode(struct erofs_buf *buf,
 	erofs_blk_t blkaddr, nblks = 0;
 	void *kaddr;
 	struct erofs_inode_compact *dic;
-	struct erofs_inode_extended *die, *copied = NULL;
 	unsigned int ifmt;
 	int err;
 
@@ -53,6 +52,8 @@ static void *erofs_read_inode(struct erofs_buf *buf,
 
 	switch (erofs_inode_version(ifmt)) {
 	case EROFS_INODE_LAYOUT_EXTENDED:
+		struct erofs_inode_extended *die, *copied = NULL;
+
 		vi->inode_isize = sizeof(struct erofs_inode_extended);
 		/* check if the extended inode acrosses block boundary */
 		if (*ofs + vi->inode_isize <= sb->s_blocksize) {
@@ -98,6 +99,7 @@ static void *erofs_read_inode(struct erofs_buf *buf,
 			inode->i_rdev = 0;
 			break;
 		default:
+			kfree(copied);
 			goto bogusimode;
 		}
 		i_uid_write(inode, le32_to_cpu(die->i_uid));
@@ -117,7 +119,6 @@ static void *erofs_read_inode(struct erofs_buf *buf,
 			/* fill chunked inode summary info */
 			vi->chunkformat = le16_to_cpu(die->i_u.c.format);
 		kfree(copied);
-		copied = NULL;
 		break;
 	case EROFS_INODE_LAYOUT_COMPACT:
 		vi->inode_isize = sizeof(struct erofs_inode_compact);
@@ -197,7 +198,6 @@ bogusimode:
 	err = -EFSCORRUPTED;
 err_out:
 	DBG_BUGON(1);
-	kfree(copied);
 	erofs_put_metabuf(buf);
 	return ERR_PTR(err);
 }
