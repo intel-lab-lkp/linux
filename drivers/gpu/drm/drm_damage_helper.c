@@ -204,7 +204,8 @@ EXPORT_SYMBOL(drm_atomic_helper_dirtyfb);
 static void
 __drm_atomic_helper_damage_iter_init(struct drm_atomic_helper_damage_iter *iter,
 				     const struct drm_plane_state *old_state,
-				     const struct drm_plane_state *state)
+				     const struct drm_plane_state *state,
+				     bool buffer_damage)
 {
 	struct drm_rect src;
 	memset(iter, 0, sizeof(*iter));
@@ -223,7 +224,8 @@ __drm_atomic_helper_damage_iter_init(struct drm_atomic_helper_damage_iter *iter,
 	iter->plane_src.x2 = (src.x2 >> 16) + !!(src.x2 & 0xFFFF);
 	iter->plane_src.y2 = (src.y2 >> 16) + !!(src.y2 & 0xFFFF);
 
-	if (!iter->clips || !drm_rect_equals(&state->src, &old_state->src)) {
+	if (!iter->clips || !drm_rect_equals(&state->src, &old_state->src) ||
+	    (buffer_damage && old_state->fb != state->fb)) {
 		iter->clips = NULL;
 		iter->num_clips = 0;
 		iter->full_update = true;
@@ -243,6 +245,10 @@ __drm_atomic_helper_damage_iter_init(struct drm_atomic_helper_damage_iter *iter,
  * update). Currently this iterator returns full plane src in case plane src
  * changed but that can be changed in future to return damage.
  *
+ * Note that this helper is for drivers that do per-plane uploads and expect
+ * to handle frame damages. Drivers that do per-buffer uploads instead should
+ * use @drm_atomic_helper_buffer_damage_iter_init() that handles buffer damages.
+ *
  * For the case when plane is not visible or plane update should not happen the
  * first call to iter_next will return false. Note that this helper use clipped
  * &drm_plane_state.src, so driver calling this helper should have called
@@ -253,9 +259,36 @@ drm_atomic_helper_damage_iter_init(struct drm_atomic_helper_damage_iter *iter,
 				   const struct drm_plane_state *old_state,
 				   const struct drm_plane_state *state)
 {
-	__drm_atomic_helper_damage_iter_init(iter, old_state, state);
+	__drm_atomic_helper_damage_iter_init(iter, old_state, state, false);
 }
 EXPORT_SYMBOL(drm_atomic_helper_damage_iter_init);
+
+/**
+ * drm_atomic_helper_buffer_damage_iter_init - Initialize the buffer damage iterator.
+ * @iter: The iterator to initialize.
+ * @old_state: Old plane state for validation.
+ * @state: Plane state from which to iterate the damage clips.
+ *
+ * Initialize an iterator, which clips buffer damage
+ * &drm_plane_state.fb_damage_clips to plane &drm_plane_state.src. This iterator
+ * returns full plane src in case buffer damage is not present because user-space
+ * didn't sent, driver discarded it (it want to do full plane update) or the plane
+ * @state has an attached framebuffer that is different than the one in @state (it
+ * has changed since the last plane update).
+ *
+ * For the case when plane is not visible or plane update should not happen the
+ * first call to iter_next will return false. Note that this helper use clipped
+ * &drm_plane_state.src, so driver calling this helper should have called
+ * drm_atomic_helper_check_plane_state() earlier.
+ */
+void
+drm_atomic_helper_buffer_damage_iter_init(struct drm_atomic_helper_damage_iter *iter,
+					  const struct drm_plane_state *old_state,
+					  const struct drm_plane_state *state)
+{
+	__drm_atomic_helper_damage_iter_init(iter, old_state, state, true);
+}
+EXPORT_SYMBOL(drm_atomic_helper_buffer_damage_iter_init);
 
 /**
  * drm_atomic_helper_damage_iter_next - Advance the damage iterator.
@@ -301,7 +334,8 @@ EXPORT_SYMBOL(drm_atomic_helper_damage_iter_next);
 
 static bool __drm_atomic_helper_damage_merged(const struct drm_plane_state *old_state,
 					      struct drm_plane_state *state,
-					      struct drm_rect *rect)
+					      struct drm_rect *rect,
+					      bool buffer_damage)
 {
 	struct drm_atomic_helper_damage_iter iter;
 	struct drm_rect clip;
@@ -312,7 +346,7 @@ static bool __drm_atomic_helper_damage_merged(const struct drm_plane_state *old_
 	rect->x2 = 0;
 	rect->y2 = 0;
 
-	drm_atomic_helper_damage_iter_init(&iter, old_state, state);
+	__drm_atomic_helper_damage_iter_init(&iter, old_state, state, buffer_damage);
 	drm_atomic_for_each_plane_damage(&iter, &clip) {
 		rect->x1 = min(rect->x1, clip.x1);
 		rect->y1 = min(rect->y1, clip.y1);
@@ -336,6 +370,10 @@ static bool __drm_atomic_helper_damage_merged(const struct drm_plane_state *old_
  * For details see: drm_atomic_helper_damage_iter_init() and
  * drm_atomic_helper_damage_iter_next().
  *
+ * Note that this helper is for drivers that do per-plane uploads and expect
+ * to handle frame damages. Drivers that do per-buffer uploads instead should
+ * use @drm_atomic_helper_buffer_damage_merged() that handles buffer damages.
+ *
  * Returns:
  * True if there is valid plane damage otherwise false.
  */
@@ -343,6 +381,35 @@ bool drm_atomic_helper_damage_merged(const struct drm_plane_state *old_state,
 				     struct drm_plane_state *state,
 				     struct drm_rect *rect)
 {
-	return __drm_atomic_helper_damage_merged(old_state, state, rect);
+	return __drm_atomic_helper_damage_merged(old_state, state, rect, false);
 }
 EXPORT_SYMBOL(drm_atomic_helper_damage_merged);
+
+/**
+ * drm_atomic_helper_buffer_damage_merged - Merged buffer damage
+ * @old_state: Old plane state for validation.
+ * @state: Plane state from which to iterate the damage clips.
+ * @rect: Returns the merged buffer damage rectangle
+ *
+ * This function merges any valid buffer damage clips into one rectangle and
+ * returns it in @rect. It checks if the framebuffers attached to @old_state
+ * and @state are the same. If that is not the case then the returned damage
+ * rectangle is the &drm_plane_state.src, since a full update should happen.
+ *
+ * Note that &drm_plane_state.fb_damage_clips == NULL in plane state means that
+ * full plane update should happen. It also ensure helper iterator will return
+ * &drm_plane_state.src as damage.
+ *
+ * For details see: drm_atomic_helper_buffer_damage_iter_init() and
+ * drm_atomic_helper_damage_iter_next().
+ *
+ * Returns:
+ * True if there is valid buffer damage otherwise false.
+ */
+bool drm_atomic_helper_buffer_damage_merged(const struct drm_plane_state *old_state,
+					    struct drm_plane_state *state,
+					    struct drm_rect *rect)
+{
+	return __drm_atomic_helper_damage_merged(old_state, state, rect, true);
+}
+EXPORT_SYMBOL(drm_atomic_helper_buffer_damage_merged);
