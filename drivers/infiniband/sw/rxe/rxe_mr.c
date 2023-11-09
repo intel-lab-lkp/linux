@@ -498,7 +498,12 @@ int rxe_mr_do_atomic_op(struct rxe_mr *mr, u64 iova, int opcode,
 		}
 		page_offset = rxe_mr_iova_to_page_offset(mr, iova);
 		index = rxe_mr_iova_to_index(mr, iova);
-		page = xa_load(&mr->page_list, index);
+
+		if (mr->umem->is_odp)
+			page = xa_untag_pointer(xa_load(&mr->page_list, index));
+		else
+			page = xa_load(&mr->page_list, index);
+
 		if (!page)
 			return RESPST_ERR_RKEY_VIOLATION;
 	}

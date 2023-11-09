@@ -254,3 +254,36 @@ int rxe_odp_mr_copy(struct rxe_mr *mr, u64 iova, void *addr, int length,
 
 	return err;
 }
+
+int rxe_odp_mr_atomic_op(struct rxe_mr *mr, u64 iova, int opcode,
+			 u64 compare, u64 swap_add, u64 *orig_val)
+{
+	struct ib_umem_odp *umem_odp = to_ib_umem_odp(mr->umem);
+	int err;
+
+	spin_lock(&mr->page_list.xa_lock);
+
+	/* Atomic operations manipulate a single char. */
+	if (rxe_odp_check_pages(mr, iova, sizeof(char), 0)) {
+		spin_unlock(&mr->page_list.xa_lock);
+
+		/* umem_mutex is locked on success */
+		err = rxe_odp_do_pagefault_and_lock(mr, iova, sizeof(char), 0);
+		if (err < 0)
+			return err;
+
+		/*
+		 * The spinlock is always locked under mutex_lock except
+		 * for MR initialization. No worry about deadlock.
+		 */
+		spin_lock(&mr->page_list.xa_lock);
+		mutex_unlock(&umem_odp->umem_mutex);
+	}
+
+	err = rxe_mr_do_atomic_op(mr, iova, opcode, compare,
+				  swap_add, orig_val);
+
+	spin_unlock(&mr->page_list.xa_lock);
+
+	return err;
+}
