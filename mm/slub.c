@@ -44,6 +44,7 @@
 
 #include <linux/debugfs.h>
 #include <trace/events/kmem.h>
+#include <linux/page_owner.h>
 
 #include "internal.h"
 
@@ -1993,6 +1994,19 @@ static inline bool shuffle_freelist(struct kmem_cache *s, struct slab *slab)
 }
 #endif /* CONFIG_SLAB_FREELIST_RANDOM */
 
+#ifdef CONFIG_PAGE_OWNER
+static int slab_alloc_post_page_owner(struct folio *folio, struct task_struct *tsk,
+			void *data, char *kbuf, size_t count)
+{
+	int ret;
+	struct kmem_cache *kmem_cache = data;
+
+	ret = scnprintf(kbuf, count, "SLAB_PAGE slab_name:%s\n", kmem_cache->name);
+
+	return ret;
+}
+#endif
+
 static struct slab *allocate_slab(struct kmem_cache *s, gfp_t flags, int node)
 {
 	struct slab *slab;
@@ -2028,6 +2042,7 @@ static struct slab *allocate_slab(struct kmem_cache *s, gfp_t flags, int node)
 		stat(s, ORDER_FALLBACK);
 	}
 
+	set_folio_alloc_post_page_owner(slab_folio(slab), slab_alloc_post_page_owner, s);
 	slab->objects = oo_objects(oo);
 	slab->inuse = 0;
 	slab->frozen = 0;

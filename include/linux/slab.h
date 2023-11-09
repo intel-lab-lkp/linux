@@ -795,5 +795,11 @@ int slab_dead_cpu(unsigned int cpu);
 #define slab_prepare_cpu	NULL
 #define slab_dead_cpu		NULL
 #endif
-
+#ifndef CONFIG_PAGE_OWNER
+static inline int slab_alloc_post_page_owner(struct folio *folio, struct task_struct *tsk,
+		void *data, char *kbuf, size_t count)
+{
+	return 0;
+}
+#endif
 #endif	/* _LINUX_SLAB_H */
