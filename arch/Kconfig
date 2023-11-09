@@ -428,6 +428,9 @@ config HAVE_HARDLOCKUP_DETECTOR_ARCH
 config HAVE_PERF_CALLCHAIN_DEFERRED
 	bool
 
+config HAVE_USER_UNWIND
+	bool
+
 config HAVE_PERF_REGS
 	bool
 	help
