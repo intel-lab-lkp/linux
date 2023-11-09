@@ -234,14 +234,6 @@ static const struct super_operations debugfs_super_operations = {
 	.free_inode	= debugfs_free_inode,
 };
 
-static void debugfs_release_dentry(struct dentry *dentry)
-{
-	void *fsd = dentry->d_fsdata;
-
-	if (!((unsigned long)fsd & DEBUGFS_FSDATA_IS_REAL_FOPS_BIT))
-		kfree(dentry->d_fsdata);
-}
-
 static struct vfsmount *debugfs_automount(struct path *path)
 {
 	debugfs_automount_t f;
@@ -251,7 +243,6 @@ static struct vfsmount *debugfs_automount(struct path *path)
 
 static const struct dentry_operations debugfs_dops = {
 	.d_delete = always_delete_dentry,
-	.d_release = debugfs_release_dentry,
 	.d_automount = debugfs_automount,
 };
 
@@ -733,6 +724,11 @@ static void __debugfs_file_removed(struct dentry *dentry)
 		return;
 	if (!refcount_dec_and_test(&fsd->active_users))
 		wait_for_completion(&fsd->active_users_drained);
+
+	/* this no longer matters */
+	dentry->d_fsdata = NULL;
+
+	kfree(fsd);
 }
 
 static void remove_one(struct dentry *victim)
