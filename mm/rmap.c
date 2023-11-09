@@ -605,6 +605,28 @@ out:
 }
 
 #ifdef CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH
+
+void fold_ubc_ro(void)
+{
+	struct tlbflush_unmap_batch *tlb_ubc = &current->tlb_ubc;
+	struct tlbflush_unmap_batch *tlb_ubc_ro = &current->tlb_ubc_ro;
+
+	if (!tlb_ubc_ro->flush_required)
+		return;
+
+	/*
+	 * Fold tlb_ubc_ro's data to tlb_ubc.
+	 */
+	arch_tlbbatch_fold(&tlb_ubc->arch, &tlb_ubc_ro->arch);
+	tlb_ubc->flush_required = true;
+
+	/*
+	 * Reset tlb_ubc_ro's data.
+	 */
+	arch_tlbbatch_clear(&tlb_ubc_ro->arch);
+	tlb_ubc_ro->flush_required = false;
+}
+
 /*
  * Flush TLB entries for recently unmapped pages from remote CPUs. It is
  * important if a PTE was dirty when it was unmapped that it's flushed
@@ -615,6 +637,7 @@ void try_to_unmap_flush(void)
 {
 	struct tlbflush_unmap_batch *tlb_ubc = &current->tlb_ubc;
 
+	fold_ubc_ro();
 	if (!tlb_ubc->flush_required)
 		return;
 
@@ -645,12 +668,17 @@ void try_to_unmap_flush_dirty(void)
 static void set_tlb_ubc_flush_pending(struct mm_struct *mm, pte_t pteval,
 				      unsigned long uaddr)
 {
-	struct tlbflush_unmap_batch *tlb_ubc = &current->tlb_ubc;
+	struct tlbflush_unmap_batch *tlb_ubc;
 	int batch;
 	bool writable = pte_dirty(pteval);
 
 	if (!pte_accessible(mm, pteval))
 		return;
+
+	if (pte_write(pteval) || writable)
+		tlb_ubc = &current->tlb_ubc;
+	else
+		tlb_ubc = &current->tlb_ubc_ro;
 
 	arch_tlbbatch_add_pending(&tlb_ubc->arch, mm, uaddr);
 	tlb_ubc->flush_required = true;
