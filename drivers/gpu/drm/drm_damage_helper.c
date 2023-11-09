@@ -201,28 +201,10 @@ out_drop_locks:
 }
 EXPORT_SYMBOL(drm_atomic_helper_dirtyfb);
 
-/**
- * drm_atomic_helper_damage_iter_init - Initialize the damage iterator.
- * @iter: The iterator to initialize.
- * @old_state: Old plane state for validation.
- * @state: Plane state from which to iterate the damage clips.
- *
- * Initialize an iterator, which clips plane damage
- * &drm_plane_state.fb_damage_clips to plane &drm_plane_state.src. This iterator
- * returns full plane src in case damage is not present because either
- * user-space didn't sent or driver discarded it (it want to do full plane
- * update). Currently this iterator returns full plane src in case plane src
- * changed but that can be changed in future to return damage.
- *
- * For the case when plane is not visible or plane update should not happen the
- * first call to iter_next will return false. Note that this helper use clipped
- * &drm_plane_state.src, so driver calling this helper should have called
- * drm_atomic_helper_check_plane_state() earlier.
- */
-void
-drm_atomic_helper_damage_iter_init(struct drm_atomic_helper_damage_iter *iter,
-				   const struct drm_plane_state *old_state,
-				   const struct drm_plane_state *state)
+static void
+__drm_atomic_helper_damage_iter_init(struct drm_atomic_helper_damage_iter *iter,
+				     const struct drm_plane_state *old_state,
+				     const struct drm_plane_state *state)
 {
 	struct drm_rect src;
 	memset(iter, 0, sizeof(*iter));
@@ -246,6 +228,32 @@ drm_atomic_helper_damage_iter_init(struct drm_atomic_helper_damage_iter *iter,
 		iter->num_clips = 0;
 		iter->full_update = true;
 	}
+}
+
+/**
+ * drm_atomic_helper_damage_iter_init - Initialize the damage iterator.
+ * @iter: The iterator to initialize.
+ * @old_state: Old plane state for validation.
+ * @state: Plane state from which to iterate the damage clips.
+ *
+ * Initialize an iterator, which clips plane damage
+ * &drm_plane_state.fb_damage_clips to plane &drm_plane_state.src. This iterator
+ * returns full plane src in case damage is not present because either
+ * user-space didn't sent or driver discarded it (it want to do full plane
+ * update). Currently this iterator returns full plane src in case plane src
+ * changed but that can be changed in future to return damage.
+ *
+ * For the case when plane is not visible or plane update should not happen the
+ * first call to iter_next will return false. Note that this helper use clipped
+ * &drm_plane_state.src, so driver calling this helper should have called
+ * drm_atomic_helper_check_plane_state() earlier.
+ */
+void
+drm_atomic_helper_damage_iter_init(struct drm_atomic_helper_damage_iter *iter,
+				   const struct drm_plane_state *old_state,
+				   const struct drm_plane_state *state)
+{
+	__drm_atomic_helper_damage_iter_init(iter, old_state, state);
 }
 EXPORT_SYMBOL(drm_atomic_helper_damage_iter_init);
 
@@ -291,24 +299,9 @@ drm_atomic_helper_damage_iter_next(struct drm_atomic_helper_damage_iter *iter,
 }
 EXPORT_SYMBOL(drm_atomic_helper_damage_iter_next);
 
-/**
- * drm_atomic_helper_damage_merged - Merged plane damage
- * @old_state: Old plane state for validation.
- * @state: Plane state from which to iterate the damage clips.
- * @rect: Returns the merged damage rectangle
- *
- * This function merges any valid plane damage clips into one rectangle and
- * returns it in @rect.
- *
- * For details see: drm_atomic_helper_damage_iter_init() and
- * drm_atomic_helper_damage_iter_next().
- *
- * Returns:
- * True if there is valid plane damage otherwise false.
- */
-bool drm_atomic_helper_damage_merged(const struct drm_plane_state *old_state,
-				     struct drm_plane_state *state,
-				     struct drm_rect *rect)
+static bool __drm_atomic_helper_damage_merged(const struct drm_plane_state *old_state,
+					      struct drm_plane_state *state,
+					      struct drm_rect *rect)
 {
 	struct drm_atomic_helper_damage_iter iter;
 	struct drm_rect clip;
@@ -329,5 +322,27 @@ bool drm_atomic_helper_damage_merged(const struct drm_plane_state *old_state,
 	}
 
 	return valid;
+}
+
+/**
+ * drm_atomic_helper_damage_merged - Merged plane damage
+ * @old_state: Old plane state for validation.
+ * @state: Plane state from which to iterate the damage clips.
+ * @rect: Returns the merged damage rectangle
+ *
+ * This function merges any valid plane damage clips into one rectangle and
+ * returns it in @rect.
+ *
+ * For details see: drm_atomic_helper_damage_iter_init() and
+ * drm_atomic_helper_damage_iter_next().
+ *
+ * Returns:
+ * True if there is valid plane damage otherwise false.
+ */
+bool drm_atomic_helper_damage_merged(const struct drm_plane_state *old_state,
+				     struct drm_plane_state *state,
+				     struct drm_rect *rect)
+{
+	return __drm_atomic_helper_damage_merged(old_state, state, rect);
 }
 EXPORT_SYMBOL(drm_atomic_helper_damage_merged);
