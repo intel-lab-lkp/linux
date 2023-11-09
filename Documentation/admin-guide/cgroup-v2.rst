@@ -1640,6 +1640,51 @@ PAGE_SIZE multiple when read back.
 	Shows pressure stall information for memory. See
 	:ref:`Documentation/accounting/psi.rst <psi>` for details.
 
+  memory.interleave_weights
+	An array of weights to be used for the interleave mempolicy.
+
+	By default, weights are set to 1, and are only displayed for
+	possible numa nodes (ones which are or may become online).
+
+	Example::
+
+	  cat memory.interleave_weights
+	  0:1,1:1
+
+	Here both nodes 0 and 1 are set to weight 1. Node weights are
+	set individually.
+
+	Example::
+
+	  echo "0:3" > memory.interleave_weights
+	  echo "1:1" > memory.interleave_weights
+
+	Here we set a 3:1 ratio for nodes 0 and 1. Mempolicy will
+	allocate 3 pages on node 0 before allocating 1 page on node 1.
+
+	Child cgroups inherit weights from their parent and may override
+	them or revert back to inheriting the parent weights by writing
+	-1:0 to memory.interleave_weights.
+
+	Example::
+
+	  echo "0:3" > parent/memory.interleave_weights
+	  echo "1:1" > parent/memory.interleave_weights
+
+	  # Child cgroup inherits these weights
+	  cat parent/child/memory.interleave_weights
+	  0:3,1:1
+
+	  # Override the weights
+	  echo "0:5" > parent/child/memory.interleave_weights
+	  echo "1:2" > parent/child/memory.interleave_weights
+	  cat parent/child/memory.interleave_weights
+	  0:5,1:2
+
+	  # Revert the child back to inheriting the parent weights
+	  echo "-1:0" > parent/child/memory.interleave_weights
+	  cat parent/child/memory.interleave_weights
+	  0:3,1:1
 
 Usage Guidelines
 ~~~~~~~~~~~~~~~~

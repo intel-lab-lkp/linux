@@ -243,6 +243,17 @@ MPOL_INTERLEAVED
 	address range or file.  During system boot up, the temporary
 	interleaved system default policy works in this mode.
 
+	The default interleave behavior is round-robin, however cgroups
+	implement an interleave_weights feature which can be used to
+	change the interleave distribution.  When weights are used,
+	the behavior above remains the same, but placement adheres to
+	weights such that multiple allocations will respected the set
+	weights.  For example, if the weights for nodes 0 and 1 are
+	3 and 1 respectively (0:3,1:1), then 3 pages will be allocated
+	on node 0 for every 1 page allocated on node 1.
+
+	For more details, see `Documentation/admin-guide/cgroup-v2.rst`
+
 MPOL_PREFERRED_MANY
 	This mode specifies that the allocation should be preferably
 	satisfied from the nodemask specified in the policy. If there is
