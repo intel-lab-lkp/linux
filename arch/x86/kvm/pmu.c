@@ -731,11 +731,37 @@ static inline bool cpl_is_matched(struct kvm_pmc *pmc)
 	return (static_call(kvm_x86_get_cpl)(pmc->vcpu) == 0) ? select_os : select_user;
 }
 
+static inline bool guest_pmu_is_enabled(struct kvm_pmu *pmu)
+{
+	/*
+	 * Currently VMs do not have PMU settings in configs which defaults
+	 * to "pmu=off".
+	 *
+	 * For Intel currently this means pmu->version will be 0.
+	 * For AMD currently PMU cannot be disabled:
+	 * pmu->version should be 2 for Zen 4 cpus and 1 otherwise.
+	 */
+	if (pmu->version == 0)
+		return false;
+
+	/*
+	 * Starting with PMU v2 IA32_PERF_GLOBAL_CTRL MSR is available and
+	 * it can be used to check if none PMCs are enabled.
+	 */
+	if (pmu->version >= 2 && !(pmu->global_ctrl & ~pmu->global_ctrl_mask))
+		return false;
+
+	return true;
+}
+
 void kvm_pmu_trigger_event(struct kvm_vcpu *vcpu, u64 perf_hw_id)
 {
 	struct kvm_pmu *pmu = vcpu_to_pmu(vcpu);
 	struct kvm_pmc *pmc;
 	int i;
+
+	if (!guest_pmu_is_enabled(pmu))
+		return;
 
 	for_each_set_bit(i, pmu->all_valid_pmc_idx, X86_PMC_IDX_MAX) {
 		pmc = static_call(kvm_x86_pmu_pmc_idx_to_pmc)(pmu, i);
