@@ -32,6 +32,9 @@ struct page_owner {
 	char comm[TASK_COMM_LEN];
 	pid_t pid;
 	pid_t tgid;
+	folio_alloc_post_page_owner_t *folio_alloc_post_page_owner;
+	/* for folio_alloc_post_page_owner function parameter */
+	void *data;
 };
 
 static bool page_owner_enabled __initdata;
@@ -152,6 +155,8 @@ void __reset_page_owner(struct page *page, unsigned short order)
 		page_owner = get_page_owner(page_ext);
 		page_owner->free_handle = handle;
 		page_owner->free_ts_nsec = free_ts_nsec;
+		page_owner->folio_alloc_post_page_owner = NULL;
+		page_owner->data = NULL;
 		page_ext = page_ext_next(page_ext);
 	}
 	page_ext_put(page_ext);
@@ -256,6 +261,8 @@ void __folio_copy_owner(struct folio *newfolio, struct folio *old)
 	new_page_owner->ts_nsec = old_page_owner->ts_nsec;
 	new_page_owner->free_ts_nsec = old_page_owner->ts_nsec;
 	strcpy(new_page_owner->comm, old_page_owner->comm);
+	new_page_owner->folio_alloc_post_page_owner = old_page_owner->folio_alloc_post_page_owner;
+	new_page_owner->data = old_page_owner->data;
 
 	/*
 	 * We don't clear the bit on the old folio as it's going to be freed
@@ -270,6 +277,25 @@ void __folio_copy_owner(struct folio *newfolio, struct folio *old)
 	__set_bit(PAGE_EXT_OWNER_ALLOCATED, &new_ext->flags);
 	page_ext_put(new_ext);
 	page_ext_put(old_ext);
+}
+
+void set_folio_alloc_post_page_owner(struct folio *folio,
+		folio_alloc_post_page_owner_t *folio_alloc_post_page_owner, void *data)
+{
+	struct page *page;
+	struct page_ext *page_ext;
+	struct page_owner *page_owner;
+
+	page = &folio->page;
+	page_ext = page_ext_get(page);
+	if (unlikely(!page_ext))
+		return;
+
+	page_owner = get_page_owner(page_ext);
+	page_owner->folio_alloc_post_page_owner = folio_alloc_post_page_owner;
+	page_owner->data = data;
+
+	page_ext_put(page_ext);
 }
 
 void pagetypeinfo_showmixedcount_print(struct seq_file *m,
@@ -400,6 +426,7 @@ print_page_owner(char __user *buf, size_t count, unsigned long pfn,
 		depot_stack_handle_t handle)
 {
 	int ret, pageblock_mt, page_mt;
+	struct task_struct *tsk;
 	char *kbuf;
 
 	count = min_t(size_t, count, PAGE_SIZE);
@@ -413,6 +440,15 @@ print_page_owner(char __user *buf, size_t count, unsigned long pfn,
 			&page_owner->gfp_mask, page_owner->pid,
 			page_owner->tgid, page_owner->comm,
 			page_owner->ts_nsec);
+
+	if (page_owner->folio_alloc_post_page_owner) {
+		rcu_read_lock();
+		tsk = find_task_by_pid_ns(page_owner->pid, &init_pid_ns);
+		rcu_read_unlock();
+		ret += page_owner->folio_alloc_post_page_owner(page_folio(page), tsk, page_owner->data,
+				kbuf + ret, count - ret);
+	} else
+		ret += scnprintf(kbuf + ret, count - ret, "OTHER_PAGE\n");
 
 	/* Print information relevant to grouping pages by mobility */
 	pageblock_mt = get_pageblock_migratetype(page);

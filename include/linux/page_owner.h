@@ -4,6 +4,9 @@
 
 #include <linux/jump_label.h>
 
+typedef int (folio_alloc_post_page_owner_t)(struct folio *folio, struct task_struct *tsk,
+			void *data, char *kbuf, size_t count);
+
 #ifdef CONFIG_PAGE_OWNER
 extern struct static_key_false page_owner_inited;
 extern struct page_ext_operations page_owner_ops;
@@ -17,6 +20,8 @@ extern void __set_page_owner_migrate_reason(struct page *page, int reason);
 extern void __dump_page_owner(const struct page *page);
 extern void pagetypeinfo_showmixedcount_print(struct seq_file *m,
 					pg_data_t *pgdat, struct zone *zone);
+extern void set_folio_alloc_post_page_owner(struct folio *folio,
+		folio_alloc_post_page_owner_t *folio_alloc_post_page_owner, void *data);
 
 static inline void reset_page_owner(struct page *page, unsigned short order)
 {
@@ -70,6 +75,10 @@ static inline void set_page_owner_migrate_reason(struct page *page, int reason)
 {
 }
 static inline void dump_page_owner(const struct page *page)
+{
+}
+static inline void set_folio_alloc_post_page_owner(struct folio *folio,
+		folio_alloc_post_page_owner_t *folio_alloc_post_page_owner, void *data)
 {
 }
 #endif /* CONFIG_PAGE_OWNER */
