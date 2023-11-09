@@ -2912,7 +2912,7 @@ int vmw_du_helper_plane_update(struct vmw_du_update_plane *update)
 	 * Iterate in advance to check if really need plane update and find the
 	 * number of clips that actually are in plane src for fifo allocation.
 	 */
-	drm_atomic_helper_damage_iter_init(&iter, old_state, state);
+	drm_atomic_helper_buffer_damage_iter_init(&iter, old_state, state);
 	drm_atomic_for_each_plane_damage(&iter, &clip)
 		num_hits++;
 
