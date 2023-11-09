@@ -3967,6 +3967,9 @@ static int qm_set_vf_mse(struct hisi_qm *qm, bool set)
 	int i;
 
 	pos = pci_find_ext_capability(pdev, PCI_EXT_CAP_ID_SRIOV);
+	if (!pos)
+		return -ENODEV;
+
 	pci_read_config_word(pdev, pos + PCI_SRIOV_CTRL, &sriov_ctrl);
 	if (set)
 		sriov_ctrl |= PCI_SRIOV_CTRL_MSE;
