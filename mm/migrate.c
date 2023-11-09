@@ -57,6 +57,162 @@
 
 #include "internal.h"
 
+/*
+ * Marks the folios as pending for TLB flush.
+ */
+static void migrc_mark_pending(struct folio *fsrc, struct folio *fdst)
+{
+	folio_get(fsrc);
+	__folio_set_migrc(fsrc);
+	__folio_set_migrc(fdst);
+}
+
+static bool migrc_under_processing(struct folio *fsrc, struct folio *fdst)
+{
+	/*
+	 * case1. folio_test_migrc(fsrc) && !folio_test_migrc(fdst):
+	 *
+	 *	fsrc was already under migrc's control even before the
+	 *	current migration. Migrc doesn't work with it this time.
+	 *
+	 * case2. !folio_test_migrc(fsrc) && !folio_test_migrc(fdst):
+	 *
+	 *	This is the normal case that is not migrc's interest.
+	 *
+	 * case3. folio_test_migrc(fsrc) && folio_test_migrc(fdst):
+	 *
+	 *	Only the case that migrc works on.
+	 */
+	return folio_test_migrc(fsrc) && folio_test_migrc(fdst);
+}
+
+static void migrc_undo_folios(struct folio *fsrc, struct folio *fdst)
+{
+	/*
+	 * TLB flushes needed are already done at this moment so the
+	 * flag doesn't have to be kept.
+	 */
+	__folio_clear_migrc(fsrc);
+	__folio_clear_migrc(fdst);
+	folio_put(fsrc);
+}
+
+static void migrc_expand_req(struct folio *fsrc, struct folio *fdst,
+			     struct migrc_req *req)
+{
+	if (req->nid == -1)
+		req->nid = folio_nid(fsrc);
+
+	/*
+	 * All the nids in a req should be the same.
+	 */
+	WARN_ON(req->nid != folio_nid(fsrc));
+
+	list_add(&fsrc->lru, &req->folios);
+	atomic_inc(&folio_zone(fsrc)->migrc_pending_nr);
+}
+
+/*
+ * Prepares for gathering folios pending for TLB flushes, try to
+ * allocate objects needed, initialize them and make them ready.
+ */
+static struct migrc_req *migrc_req_start(void)
+{
+	struct migrc_req *req;
+
+	req = kmalloc(sizeof(struct migrc_req), GFP_KERNEL);
+	if (!req)
+		return NULL;
+
+	arch_tlbbatch_clear(&req->arch);
+	INIT_LIST_HEAD(&req->folios);
+	req->nid = -1;
+
+	return req;
+}
+
+/*
+ * Hang the request with the collected folios to the corresponding node.
+ */
+static void migrc_req_end(struct migrc_req *req)
+{
+	if (!req)
+		return;
+
+	if (list_empty(&req->folios)) {
+		kfree(req);
+		return;
+	}
+
+	llist_add(&req->llnode, &NODE_DATA(req->nid)->migrc_reqs);
+}
+
+/*
+ * Gather folios and architecture specific data to handle.
+ */
+static void migrc_gather(struct list_head *folios,
+			 struct arch_tlbflush_unmap_batch *arch,
+			 struct llist_head *reqs)
+{
+	struct llist_node *nodes;
+	struct migrc_req *req;
+	struct migrc_req *req2;
+
+	nodes = llist_del_all(reqs);
+	if (!nodes)
+		return;
+
+	llist_for_each_entry_safe(req, req2, nodes, llnode) {
+		arch_tlbbatch_fold(arch, &req->arch);
+		list_splice(&req->folios, folios);
+		kfree(req);
+	}
+}
+
+bool migrc_flush_free_folios(nodemask_t *nodes)
+{
+	struct folio *f, *f2;
+	int nid;
+	struct arch_tlbflush_unmap_batch arch;
+	LIST_HEAD(folios);
+
+	if (!nodes)
+		nodes = &node_possible_map;
+	arch_tlbbatch_clear(&arch);
+
+	for_each_node_mask(nid, *nodes)
+		migrc_gather(&folios, &arch, &NODE_DATA(nid)->migrc_reqs);
+
+	if (list_empty(&folios))
+		return false;
+
+	arch_tlbbatch_flush(&arch);
+	list_for_each_entry_safe(f, f2, &folios, lru) {
+		atomic_dec(&folio_zone(f)->migrc_pending_nr);
+		folio_put(f);
+	}
+	return true;
+}
+
+static void fold_ubc_ro_to_migrc(struct migrc_req *req)
+{
+	struct tlbflush_unmap_batch *tlb_ubc_ro = &current->tlb_ubc_ro;
+
+	if (!tlb_ubc_ro->flush_required)
+		return;
+
+	/*
+	 * Fold tlb_ubc_ro's data to the request.
+	 */
+	arch_tlbbatch_fold(&req->arch, &tlb_ubc_ro->arch);
+
+	/*
+	 * Reset tlb_ubc_ro's data.
+	 */
+	arch_tlbbatch_clear(&tlb_ubc_ro->arch);
+	tlb_ubc_ro->flush_required = false;
+}
+
 bool isolate_movable_page(struct page *page, isolate_mode_t mode)
 {
 	struct folio *folio = folio_get_nontail_page(page);
@@ -379,6 +535,7 @@ static int folio_expected_refs(struct address_space *mapping,
 		struct folio *folio)
 {
 	int refs = 1;
+
 	if (!mapping)
 		return refs;
 
@@ -405,6 +562,12 @@ int folio_migrate_mapping(struct address_space *mapping,
 	int dirty;
 	int expected_count = folio_expected_refs(mapping, folio) + extra_count;
 	long nr = folio_nr_pages(folio);
+
+	/*
+	 * Migrc mechanism increased the reference count.
+	 */
+	if (migrc_under_processing(folio, newfolio))
+		expected_count++;
 
 	if (!mapping) {
 		/* Anonymous page without mapping */
@@ -1620,9 +1783,16 @@ static int migrate_pages_batch(struct list_head *from,
 	LIST_HEAD(unmap_folios);
 	LIST_HEAD(dst_folios);
 	bool nosplit = (reason == MR_NUMA_MISPLACED);
+	struct migrc_req *mreq = NULL;
 
 	VM_WARN_ON_ONCE(mode != MIGRATE_ASYNC &&
 			!list_empty(from) && !list_is_singular(from));
+
+	/*
+	 * Apply migrc only to numa migration for now.
+	 */
+	if (reason == MR_DEMOTION || reason == MR_NUMA_MISPLACED)
+		mreq = migrc_req_start();
 
 	for (pass = 0; pass < nr_pass && retry; pass++) {
 		retry = 0;
@@ -1630,6 +1800,8 @@ static int migrate_pages_batch(struct list_head *from,
 		nr_retry_pages = 0;
 
 		list_for_each_entry_safe(folio, folio2, from, lru) {
+			bool can_migrc;
+
 			is_thp = folio_test_large(folio) && folio_test_pmd_mappable(folio);
 			nr_pages = folio_nr_pages(folio);
 
@@ -1657,9 +1829,21 @@ static int migrate_pages_batch(struct list_head *from,
 				continue;
 			}
 
+			can_migrc_init();
 			rc = migrate_folio_unmap(get_new_folio, put_new_folio,
 					private, folio, &dst, mode, reason,
 					ret_folios);
+			/*
+			 * can_migrc is true only if:
+			 *
+			 *    1. struct migrc_req has been allocated &&
+			 *    2. There's no writable mapping at all &&
+			 *    3. There's read-only mapping found &&
+			 *    4. Not under migrc's control already
+			 */
+			can_migrc = mreq && can_migrc_test() &&
+				    !folio_test_migrc(folio);
+
 			/*
 			 * The rules are:
 			 *	Success: folio will be freed
@@ -1720,6 +1904,19 @@ static int migrate_pages_batch(struct list_head *from,
 			case MIGRATEPAGE_UNMAP:
 				list_move_tail(&folio->lru, &unmap_folios);
 				list_add_tail(&dst->lru, &dst_folios);
+
+				if (can_migrc) {
+					/*
+					 * To use ->lru exclusively, just
+					 * mark the page flag for now.
+					 *
+					 * The folio will be queued to
+					 * the current migrc request on
+					 * move success below.
+					 */
+					migrc_mark_pending(folio, dst);
+					fold_ubc_ro_to_migrc(mreq);
+				}
 				break;
 			default:
 				/*
@@ -1733,6 +1930,11 @@ static int migrate_pages_batch(struct list_head *from,
 				stats->nr_failed_pages += nr_pages;
 				break;
 			}
+			/*
+			 * Done with the current folio. Fold the ro
+			 * batch data gathered, to the normal batch.
+			 */
+			fold_ubc_ro();
 		}
 	}
 	nr_failed += retry;
@@ -1774,6 +1976,14 @@ move:
 			case MIGRATEPAGE_SUCCESS:
 				stats->nr_succeeded += nr_pages;
 				stats->nr_thp_succeeded += is_thp;
+
+				/*
+				 * Now that it's safe to use ->lru,
+				 * queue the folio to the current migrc
+				 * request.
+				 */
+				if (migrc_under_processing(folio, dst))
+					migrc_expand_req(folio, dst, mreq);
 				break;
 			default:
 				nr_failed++;
@@ -1791,12 +2001,17 @@ move:
 
 	rc = rc_saved ? : nr_failed;
 out:
+	migrc_req_end(mreq);
+
 	/* Cleanup remaining folios */
 	dst = list_first_entry(&dst_folios, struct folio, lru);
 	dst2 = list_next_entry(dst, lru);
 	list_for_each_entry_safe(folio, folio2, &unmap_folios, lru) {
 		int page_was_mapped = 0;
 		struct anon_vma *anon_vma = NULL;
+
+		if (migrc_under_processing(folio, dst))
+			migrc_undo_folios(folio, dst);
 
 		__migrate_folio_extract(dst, &page_was_mapped, &anon_vma);
 		migrate_folio_undo_src(folio, page_was_mapped, anon_vma,

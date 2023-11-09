@@ -3360,6 +3360,17 @@ static vm_fault_t do_wp_page(struct vm_fault *vmf)
 		folio = page_folio(vmf->page);
 
 	/*
+	 * This folio has its read copy to prevent inconsistency while
+	 * deferring TLB flushes. However, the problem might arise if
+	 * it's going to become writable.
+	 *
+	 * To prevent it, give up the deferring TLB flushes and perform
+	 * TLB flush right away.
+	 */
+	if (folio && migrc_unpend_if_pending(folio))
+		migrc_flush_free_folios(NULL);
+
+	/*
 	 * Shared mapping: we are guaranteed to have VM_WRITE and
 	 * FAULT_FLAG_WRITE set at this point.
 	 */

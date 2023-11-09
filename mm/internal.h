@@ -1158,4 +1158,61 @@ struct vma_prepare {
 	struct vm_area_struct *remove;
 	struct vm_area_struct *remove2;
 };
+
+/*
+ * Initialize the page when allocated from buddy allocator.
+ */
+static inline void migrc_init_page(struct page *p)
+{
+	__ClearPageMigrc(p);
+}
+
+/*
+ * Check if the folio is pending for TLB flush and then clear the flag.
+ */
+static inline bool migrc_unpend_if_pending(struct folio *f)
+{
+	return folio_test_clear_migrc(f);
+}
+
+/*
+ * Reset the indicator indicating there are no writable mappings at the
+ * beginning of every rmap traverse for unmap. Migrc can work only when
+ * all the mappings are RO.
+ */
+static inline void can_migrc_init(void)
+{
+	current->can_migrc = true;
+}
+
+/*
+ * Mark the folio is not applicable to migrc once it found a writble or
+ * dirty pte during rmap traverse for unmap.
+ */
+static inline void can_migrc_fail(void)
+{
+	current->can_migrc = false;
+}
+
+/*
+ * Check if all the mappings are RO and RO mappings even exist.
+ */
+static inline bool can_migrc_test(void)
+{
+	return current->can_migrc && current->tlb_ubc_ro.flush_required;
+}
+
+/*
+ * Return the number of folios pending TLB flush that have yet to get
+ * freed in the zone.
+ */
+static inline int migrc_pending_nr_in_zone(struct zone *z)
+{
+	return atomic_read(&z->migrc_pending_nr);
+}
+
+/*
+ * Perform TLB flush needed and free the folios in the node.
+ */
+bool migrc_flush_free_folios(nodemask_t *nodes);
 #endif	/* __MM_INTERNAL_H */

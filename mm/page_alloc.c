@@ -1535,6 +1535,9 @@ inline void post_alloc_hook(struct page *page, unsigned int order,
 
 	set_page_owner(page, order, gfp_flags);
 	page_table_check_alloc(page, order);
+
+	for (i = 0; i != 1 << order; ++i)
+		migrc_init_page(page + i);
 }
 
 static void prep_new_page(struct page *page, unsigned int order, gfp_t gfp_flags,
@@ -2839,6 +2842,8 @@ bool __zone_watermark_ok(struct zone *z, unsigned int order, unsigned long mark,
 	long min = mark;
 	int o;
 
+	free_pages += migrc_pending_nr_in_zone(z);
+
 	/* free_pages may go negative - that's OK */
 	free_pages -= __zone_watermark_unusable_free(z, order, alloc_flags);
 
@@ -2933,7 +2938,7 @@ static inline bool zone_watermark_fast(struct zone *z, unsigned int order,
 		long usable_free;
 		long reserved;
 
-		usable_free = free_pages;
+		usable_free = free_pages + migrc_pending_nr_in_zone(z);
 		reserved = __zone_watermark_unusable_free(z, 0, alloc_flags);
 
 		/* reserved may over estimate high-atomic reserves. */
@@ -3120,6 +3125,16 @@ retry:
 				       ac->highest_zoneidx, alloc_flags,
 				       gfp_mask)) {
 			int ret;
+
+			/*
+			 * Free the pending folios so that the remaining
+			 * code can use the updated vmstats and check
+			 * zone_watermark_fast() again.
+			 */
+			migrc_flush_free_folios(ac->nodemask);
+			if (zone_watermark_fast(zone, order, mark,
+			    ac->highest_zoneidx, alloc_flags, gfp_mask))
+				goto try_this_zone;
 
 			if (has_unaccepted_memory()) {
 				if (try_to_accept_memory(zone, order))

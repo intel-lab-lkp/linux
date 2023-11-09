@@ -136,6 +136,7 @@ enum pageflags {
 	PG_arch_2,
 	PG_arch_3,
 #endif
+	PG_migrc,		/* Page is under migrc's control */
 	__NR_PAGEFLAGS,
 
 	PG_readahead = PG_reclaim,
@@ -588,6 +589,9 @@ SETPAGEFLAG(Young, young, PF_ANY)
 TESTCLEARFLAG(Young, young, PF_ANY)
 PAGEFLAG(Idle, idle, PF_ANY)
 #endif
+
+TESTCLEARFLAG(Migrc, migrc, PF_ANY)
+__PAGEFLAG(Migrc, migrc, PF_ANY)
 
 /*
  * PageReported() is used to track reported free pages within the Buddy

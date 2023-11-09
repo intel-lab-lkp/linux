@@ -1399,4 +1399,25 @@ enum {
 	/* See also internal only FOLL flags in mm/internal.h */
 };
 
+struct migrc_req {
+	/*
+	 * folios pending for TLB flush
+	 */
+	struct list_head folios;
+
+	/*
+	 * for hanging to the associated numa node
+	 */
+	struct llist_node llnode;
+
+	/*
+	 * architecture specific data for batched TLB flush
+	 */
+	struct arch_tlbflush_unmap_batch arch;
+
+	/*
+	 * associated numa node
+	 */
+	int nid;
+};
 #endif /* _LINUX_MM_TYPES_H */
