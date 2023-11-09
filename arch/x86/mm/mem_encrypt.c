@@ -44,7 +44,7 @@ static void print_mem_encrypt_feature_info(void)
 {
 	pr_info("Memory Encryption Features active:");
 
-	if (cpu_feature_enabled(X86_FEATURE_TDX_GUEST)) {
+	if (cc_vendor == CC_VENDOR_INTEL) {
 		pr_cont(" Intel TDX\n");
 		return;
 	}
