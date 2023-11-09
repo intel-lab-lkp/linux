@@ -246,6 +246,26 @@ struct fsl_edma_engine {
 	edma_writel(chan->edma, val,				\
 		   (void __iomem *)&(container_of(chan->tcd, struct fsl_edma3_ch_reg, tcd)->__name))
 
+#define fsl_edma_get_tcd(_chan, _tcd, _field) ((_tcd)->_field)
+
+#define fsl_edma_le_to_cpu(x)					\
+(sizeof(x) == sizeof(u32) ? le32_to_cpu(x) : le16_to_cpu(x))
+
+#define fsl_edma_get_tcd_to_cpu(_chan, _tcd, _field)		\
+fsl_edma_le_to_cpu(fsl_edma_get_tcd(_chan, _tcd, _field))
+
+#define fsl_edma_set_tcd_to_le(_fsl_chan, _tcd, _val, _field)	\
+do {								\
+	switch (sizeof((_tcd)->_field)) {				\
+	case sizeof(u32):					\
+		(_tcd)->_field = cpu_to_le32(_val);		\
+		break;						\
+	case sizeof(u16):					\
+		(_tcd)->_field = cpu_to_le16(_val);		\
+		break;						\
+	}							\
+} while (0)
+
 /*
  * R/W functions for big- or little-endian registers:
  * The eDMA controller's endian is independent of the CPU core's endian.
