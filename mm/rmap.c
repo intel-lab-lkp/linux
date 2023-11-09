@@ -75,7 +75,7 @@
 #include <linux/memremap.h>
 #include <linux/userfaultfd_k.h>
 #include <linux/mm_inline.h>
-
+#include <linux/page_owner.h>
 #include <asm/tlbflush.h>
 
 #define CREATE_TRACE_POINTS
@@ -1151,6 +1151,18 @@ void folio_move_anon_rmap(struct folio *folio, struct vm_area_struct *vma)
 	 */
 	WRITE_ONCE(folio->mapping, anon_vma);
 }
+#ifdef CONFIG_PAGE_OWNER
+static int anon_alloc_post_page_owner(struct folio *folio, struct task_struct *tsk,
+			void *data, char *kbuf, size_t count)
+{
+	int ret;
+	unsigned long address = (unsigned long)data;
+
+	ret = scnprintf(kbuf, count, "ANON_PAGE address 0x%lx\n", address);
+
+	return ret;
+}
+#endif
 
 /**
  * __folio_set_anon - set up a new anonymous rmap for a folio
@@ -1182,6 +1194,7 @@ static void __folio_set_anon(struct folio *folio, struct vm_area_struct *vma,
 	anon_vma = (void *) anon_vma + PAGE_MAPPING_ANON;
 	WRITE_ONCE(folio->mapping, (struct address_space *) anon_vma);
 	folio->index = linear_page_index(vma, address);
+	set_folio_alloc_post_page_owner(folio, anon_alloc_post_page_owner, (void *)address);
 }
 
 /**

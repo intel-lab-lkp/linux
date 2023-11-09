@@ -502,4 +502,11 @@ static inline int page_mkclean(struct page *page)
 {
 	return folio_mkclean(page_folio(page));
 }
+#ifndef CONFIG_PAGE_OWNER
+static inline int anon_alloc_post_page_owner(struct folio *folio, struct task_struct *tsk,
+		void *data, char *kbuf, size_t count)
+{
+	return 0;
+}
+#endif
 #endif	/* _LINUX_RMAP_H */
