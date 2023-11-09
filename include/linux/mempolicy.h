@@ -48,6 +48,9 @@ struct mempolicy {
 	nodemask_t nodes;	/* interleave/bind/perfer */
 	int home_node;		/* Home node to use for MPOL_BIND and MPOL_PREFERRED_MANY */
 
+	unsigned char cur_weight;  /* weight of current il node */
+	unsigned char il_weights[MAX_NUMNODES]; /* used during allocation */
+
 	union {
 		nodemask_t cpuset_mems_allowed;	/* relative to these nodes */
 		nodemask_t user_nodemask;	/* nodemask passed by user */
