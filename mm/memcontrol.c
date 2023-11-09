@@ -5319,6 +5319,7 @@ static struct mem_cgroup *mem_cgroup_alloc(void)
 	INIT_WORK(&memcg->high_work, high_work_func);
 	INIT_LIST_HEAD(&memcg->oom_notify);
 	mutex_init(&memcg->thresholds_lock);
+	mutex_init(&memcg->mempolicy_lock);
 	spin_lock_init(&memcg->move_lock);
 	vmpressure_init(&memcg->vmpressure);
 	INIT_LIST_HEAD(&memcg->event_list);
@@ -7896,6 +7897,176 @@ static struct cftype zswap_files[] = {
 };
 #endif /* CONFIG_MEMCG_KMEM && CONFIG_ZSWAP */
 
+unsigned char mem_cgroup_get_il_weight(unsigned int nid)
+{
+	struct mem_cgroup *memcg;
+	unsigned char weight = 0;
+	unsigned char *weights;
+
+	rcu_read_lock();
+	memcg = mem_cgroup_from_task(current);
+	while (!mem_cgroup_is_root(memcg)) {
+		weights = rcu_dereference(memcg->mempolicy.il_weights);
+		if (weights) {
+			weight = weights[nid];
+			break;
+		}
+		memcg = parent_mem_cgroup(memcg);
+	}
+	rcu_read_unlock();
+
+	return weight;
+}
+
+unsigned int mem_cgroup_get_il_weights(nodemask_t *nodes,
+				       unsigned char *weights)
+{
+	struct mem_cgroup *memcg;
+	unsigned char *memcg_weights;
+	unsigned int nid;
+	unsigned int total = 0;
+	unsigned char weight;
+
+	rcu_read_lock();
+	memcg = mem_cgroup_from_task(current);
+	while (memcg && !mem_cgroup_is_root(memcg)) {
+		memcg_weights = rcu_dereference(memcg->mempolicy.il_weights);
+		if (!memcg_weights) {
+			memcg = parent_mem_cgroup(memcg);
+			continue;
+		}
+
+		for_each_node_mask(nid, *nodes) {
+			weight = memcg_weights[nid];
+			weights[nid] = weight ? weight : 1;
+			total += weights[nid];
+		}
+		break;
+	}
+	rcu_read_unlock();
+
+	return total;
+}
+
+static int mpol_ilw_show(struct seq_file *m, void *v)
+{
+	struct mem_cgroup *memcg;
+	unsigned char *weights;
+	unsigned int nid;
+	unsigned int count = 0;
+
+	rcu_read_lock();
+	memcg = mem_cgroup_from_seq(m);
+
+	while (memcg && !mem_cgroup_is_root(memcg)) {
+		weights = rcu_dereference(memcg->mempolicy.il_weights);
+		if (weights)
+			break;
+		memcg = parent_mem_cgroup(memcg);
+	}
+	for_each_node(nid) {
+		seq_printf(m, "%s%d:%d", (count++ ? "," : ""), nid,
+			   weights ? weights[nid] : 1);
+	}
+	seq_putc(m, '\n');
+	rcu_read_unlock();
+
+	return 0;
+}
+
+static ssize_t mpol_ilw_write(struct kernfs_open_file *of, char *buf,
+			      size_t nbytes, loff_t off)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_css(of_css(of));
+	struct mem_cgroup *pmcg;
+	unsigned char *new_weights = NULL, *old_weights = NULL;
+	int node;
+	unsigned char weight;
+	ssize_t ret;
+	char *sep = memchr(buf, ':', nbytes);
+	bool parent_weights = false;
+
+	if (!sep || sep == buf || sep == (buf + nbytes - 1))
+		return -EINVAL;
+	*sep = '\0';
+
+	ret = kstrtoint(buf, 10, &node);
+	if (ret)
+		return ret;
+
+	ret = kstrtou8(sep + 1, 10, &weight);
+	if (ret)
+		return ret;
+
+	/*
+	 * if value is -1:0, clear weights and set pointer to NULL
+	 * this allows the parent cgroup settings to take over
+	 */
+	if (node == -1 && weight == 0)
+		goto set_weights;
+	else if (node < 0)
+		return -EINVAL;
+	else if (node >= MAX_NUMNODES || weight == 0)
+		return -EINVAL;
+
+	new_weights = kzalloc(sizeof(unsigned char)*MAX_NUMNODES, GFP_KERNEL);
+	if (!new_weights)
+		return -ENOMEM;
+set_weights:
+	/* acquire mutex and readlock so we can read from parents if needed */
+	mutex_lock(&memcg->mempolicy_lock);
+	rcu_read_lock();
+	old_weights = rcu_dereference(memcg->mempolicy.il_weights);
+
+	/* If we're clearing the weights, don't bother looking at old ones */
+	if (!new_weights)
+		goto swap_weights;
+
+	/* Check for parent weights to inherit */
+	pmcg = memcg;
+	while (!old_weights) {
+		pmcg = parent_mem_cgroup(pmcg);
+
+		if (!pmcg || mem_cgroup_is_root(pmcg))
+			break;
+		old_weights = rcu_dereference(pmcg->mempolicy.il_weights);
+		parent_weights = true;
+	}
+
+	/* Copy the old weights or default all nodes to 1 */
+	if (old_weights)
+		memcpy(new_weights, old_weights,
+		       sizeof(unsigned char)*MAX_NUMNODES);
+	else
+		memset(new_weights, 1,
+		       sizeof(unsigned char)*MAX_NUMNODES);
+	new_weights[node] = weight;
+
+swap_weights:
+	rcu_assign_pointer(memcg->mempolicy.il_weights, new_weights);
+
+	rcu_read_unlock();
+	synchronize_rcu();
+
+	/* If we are inheriting weights from the parent, do not free */
+	if (old_weights && !parent_weights)
+		kfree(old_weights);
+
+	mutex_unlock(&memcg->mempolicy_lock);
+
+	return nbytes;
+}
+
+static struct cftype mempolicy_files[] = {
+	{
+		.name = "interleave_weights",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.seq_show = mpol_ilw_show,
+		.write = mpol_ilw_write,
+	},
+	{ }	/* terminate */
+};
+
 static int __init mem_cgroup_swap_init(void)
 {
 	if (mem_cgroup_disabled())
@@ -7906,6 +8077,7 @@ static int __init mem_cgroup_swap_init(void)
 #if defined(CONFIG_MEMCG_KMEM) && defined(CONFIG_ZSWAP)
 	WARN_ON(cgroup_add_dfl_cftypes(&memory_cgrp_subsys, zswap_files));
 #endif
+	WARN_ON(cgroup_add_dfl_cftypes(&memory_cgrp_subsys, mempolicy_files));
 	return 0;
 }
 subsys_initcall(mem_cgroup_swap_init);

@@ -21,6 +21,8 @@
 #include <linux/vmstat.h>
 #include <linux/writeback.h>
 #include <linux/page-flags.h>
+#include <linux/numa.h>
+#include <linux/nodemask.h>
 
 struct mem_cgroup;
 struct obj_cgroup;
@@ -167,6 +169,15 @@ struct mem_cgroup_thresholds {
 	struct mem_cgroup_threshold_ary *spare;
 };
 
+/* For mempolicy information */
+struct mem_cgroup_mempolicy {
+	/*
+	 * When interleaving is applied, do allocations on each node by the
+	 * weight value.  Size is always MAX_NUMNODES. Protected by RCU.
+	 */
+	unsigned char *il_weights;
+};
+
 /*
  * Remember four most recent foreign writebacks with dirty pages in this
  * cgroup.  Inode sharing is expected to be uncommon and, even if we miss
@@ -264,6 +275,12 @@ struct mem_cgroup {
 
 	/* thresholds for mem+swap usage. RCU-protected */
 	struct mem_cgroup_thresholds memsw_thresholds;
+
+	/* protect the mempolicy settings */
+	struct mutex mempolicy_lock;
+
+	/* mempolicy defaults for tasks */
+	struct mem_cgroup_mempolicy mempolicy;
 
 	/* For oom notifier event fd */
 	struct list_head oom_notify;
@@ -1159,6 +1176,12 @@ unsigned long mem_cgroup_soft_limit_reclaim(pg_data_t *pgdat, int order,
 						gfp_t gfp_mask,
 						unsigned long *total_scanned);
 
+
+unsigned char mem_cgroup_get_il_weight(unsigned int nid);
+
+unsigned int mem_cgroup_get_il_weights(nodemask_t *nodes,
+				       unsigned char *weights);
+
 #else /* CONFIG_MEMCG */
 
 #define MEM_CGROUP_ID_SHIFT	0
@@ -1588,6 +1611,14 @@ static inline
 unsigned long mem_cgroup_soft_limit_reclaim(pg_data_t *pgdat, int order,
 					    gfp_t gfp_mask,
 					    unsigned long *total_scanned)
+{
+	return 0;
+}
+
+static unsigned char mem_cgroup_get_il_weight(unsigned int nid) { return 0; }
+
+static unsigned int mem_cgroup_get_il_weights(nodemask_t *nodes,
+					      unsigned char *weights)
 {
 	return 0;
 }
