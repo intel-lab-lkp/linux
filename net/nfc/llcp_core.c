@@ -102,6 +102,7 @@ static void nfc_llcp_socket_release(struct nfc_llcp_local *local, bool device,
 				accept_sk->sk_state_change(sk);
 
 				bh_unlock_sock(accept_sk);
+				lsk->local = NULL;
 			}
 		}
 
@@ -113,6 +114,7 @@ static void nfc_llcp_socket_release(struct nfc_llcp_local *local, bool device,
 		bh_unlock_sock(sk);
 
 		sk_del_node_init(sk);
+		llcp_sock->local = NULL;
 	}
 
 	write_unlock(&local->sockets.lock);
