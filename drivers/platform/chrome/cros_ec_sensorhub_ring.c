@@ -511,7 +511,7 @@ cros_ec_sensor_ring_process_event(struct cros_ec_sensorhub *sensorhub,
  *                                 ringbuffer.
  *
  * This is the new spreading code, assumes every sample's timestamp
- * preceeds the sample. Run if tight_timestamps == true.
+ * precedes the sample. Run if tight_timestamps == true.
  *
  * Sometimes the EC receives only one interrupt (hence timestamp) for
  * a batch of samples. Only the first sample will have the correct
