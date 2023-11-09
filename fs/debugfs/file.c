@@ -103,6 +103,12 @@ int debugfs_file_get(struct dentry *dentry)
 			kfree(fsd);
 			fsd = READ_ONCE(dentry->d_fsdata);
 		}
+#ifdef CONFIG_LOCKDEP
+		fsd->lock_name = kasprintf(GFP_KERNEL, "debugfs:%pd", dentry);
+		lockdep_register_key(&fsd->key);
+		lockdep_init_map(&fsd->lockdep_map, fsd->lock_name ?: "debugfs",
+				 &fsd->key, 0);
+#endif
 	}
 
 	/*
@@ -118,6 +124,8 @@ int debugfs_file_get(struct dentry *dentry)
 
 	if (!refcount_inc_not_zero(&fsd->active_users))
 		return -EIO;
+
+	lock_map_acquire_read(&fsd->lockdep_map);
 
 	return 0;
 }
@@ -135,6 +143,8 @@ EXPORT_SYMBOL_GPL(debugfs_file_get);
 void debugfs_file_put(struct dentry *dentry)
 {
 	struct debugfs_fsdata *fsd = READ_ONCE(dentry->d_fsdata);
+
+	lock_map_release(&fsd->lockdep_map);
 
 	if (refcount_dec_and_test(&fsd->active_users))
 		complete(&fsd->active_users_drained);
