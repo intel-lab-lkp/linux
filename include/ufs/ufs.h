@@ -14,6 +14,7 @@
 #include <linux/bitops.h>
 #include <linux/types.h>
 #include <uapi/scsi/scsi_bsg_ufs.h>
+#include <linux/rtc.h>
 
 /*
  * Using static_assert() is not allowed in UAPI header files. Hence the check
@@ -551,6 +552,20 @@ struct ufs_vreg_info {
 	struct ufs_vreg *vdd_hba;
 };
 
+enum ufs_rtc_time {
+	UFS_RTC_RELATIVE,
+	UFS_RTC_ABSOLUTE
+};
+
+enum ufs_rtc_time_unit {
+	UFS_RTC_TIME_UNIT_UNDEFINE	= 0x0,
+	UFS_RTC_TIME_UNIT_MONTHS	= 0x1,
+	UFS_RTC_TIME_UNIT_WEEKS		= 0x2,
+	UFS_RTC_TIME_UNIT_DAYS		= 0x3,
+	UFS_RTC_TIME_UNIT_HOURS		= 0x4,
+	UFS_RTC_TIME_UNIT_MINUTES	= 0x5
+};
+
 struct ufs_dev_info {
 	bool	f_power_on_wp_en;
 	/* Keeps information if any of the LU is power on write protected */
@@ -578,6 +593,11 @@ struct ufs_dev_info {
 
 	/* UFS EXT_IID Enable */
 	bool	b_ext_iid_en;
+
+	/* UFS RTC */
+	enum ufs_rtc_time rtc_type;
+	time64_t rtc_time_baseline;
+	u32 rtc_update_period;
 };
 
 /*
