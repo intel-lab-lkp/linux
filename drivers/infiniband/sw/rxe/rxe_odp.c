@@ -177,3 +177,80 @@ int rxe_odp_mr_init_user(struct rxe_dev *rxe, u64 start, u64 length,
 
 	return err;
 }
+
+/* Take xarray spinlock before entry */
+static inline bool rxe_odp_check_pages(struct rxe_mr *mr, u64 iova,
+				       int length, u32 flags)
+{
+	unsigned long upper = rxe_mr_iova_to_index(mr, iova + length - 1);
+	unsigned long lower = rxe_mr_iova_to_index(mr, iova);
+	bool need_fault = false;
+	void *page, *entry;
+	size_t perm = 0;
+
+
+	if (!(flags & RXE_PAGEFAULT_RDONLY))
+		perm = RXE_ODP_WRITABLE_BIT;
+
+	XA_STATE(xas, &mr->page_list, lower);
+
+	while (xas.xa_index <= upper) {
+		page = xas_load(&xas);
+
+		/* Check page presence and write permission */
+		if (!page || (perm && !(xa_pointer_tag(page) & perm))) {
+			need_fault = true;
+			break;
+		}
+		entry = xas_next(&xas);
+	}
+
+	return need_fault;
+}
+
+int rxe_odp_mr_copy(struct rxe_mr *mr, u64 iova, void *addr, int length,
+		    enum rxe_mr_copy_dir dir)
+{
+	struct ib_umem_odp *umem_odp = to_ib_umem_odp(mr->umem);
+	u32 flags = 0;
+	int err;
+
+	if (unlikely(!mr->umem->is_odp))
+		return -EOPNOTSUPP;
+
+	switch (dir) {
+	case RXE_TO_MR_OBJ:
+		break;
+
+	case RXE_FROM_MR_OBJ:
+		flags = RXE_PAGEFAULT_RDONLY;
+		break;
+
+	default:
+		return -EINVAL;
+	}
+
+	spin_lock(&mr->page_list.xa_lock);
+
+	if (rxe_odp_check_pages(mr, iova, length, flags)) {
+		spin_unlock(&mr->page_list.xa_lock);
+
+		/* umem_mutex is locked on success */
+		err = rxe_odp_do_pagefault_and_lock(mr, iova, length, flags);
+		if (err < 0)
+			return err;
+
+		/*
+		 * The spinlock is always locked under mutex_lock except
+		 * for MR initialization. No worry about deadlock.
+		 */
+		spin_lock(&mr->page_list.xa_lock);
+		mutex_unlock(&umem_odp->umem_mutex);
+	}
+
+	err =  rxe_mr_copy_xarray(mr, iova, addr, length, dir);
+
+	spin_unlock(&mr->page_list.xa_lock);
+
+	return err;
+}

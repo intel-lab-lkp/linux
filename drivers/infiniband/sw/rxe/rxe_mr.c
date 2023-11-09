@@ -247,7 +247,12 @@ int rxe_mr_copy_xarray(struct rxe_mr *mr, u64 iova, void *addr,
 	void *va;
 
 	while (length) {
-		page = xa_load(&mr->page_list, index);
+		if (mr->umem->is_odp)
+			page = xa_untag_pointer(xa_load(&mr->page_list,
+							index));
+		else
+			page = xa_load(&mr->page_list, index);
+
 		if (!page)
 			return -EFAULT;
 
@@ -319,7 +324,7 @@ int rxe_mr_copy(struct rxe_mr *mr, u64 iova, void *addr,
 	}
 
 	if (mr->umem->is_odp)
-		return -EOPNOTSUPP;
+		return rxe_odp_mr_copy(mr, iova, addr, length, dir);
 	else
 		return rxe_mr_copy_xarray(mr, iova, addr, length, dir);
 }
