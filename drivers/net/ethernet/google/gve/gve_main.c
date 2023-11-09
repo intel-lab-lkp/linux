@@ -254,16 +254,16 @@ static int gve_napi_poll(struct napi_struct *napi, int budget)
 	if (block->tx) {
 		if (block->tx->q_num < priv->tx_cfg.num_queues)
 			reschedule |= gve_tx_poll(block, budget);
-		else
+		else if (budget)
 			reschedule |= gve_xdp_poll(block, budget);
 	}
 
-	if (block->rx) {
+	if (block->rx && budget > 0) {
 		work_done = gve_rx_poll(block, budget);
 		reschedule |= work_done == budget;
 	}
 
-	if (reschedule)
+	if (reschedule || budget == 0)
 		return budget;
 
        /* Complete processing - don't unmask irq if busy polling is enabled */
@@ -298,12 +298,12 @@ static int gve_napi_poll_dqo(struct napi_struct *napi, int budget)
 	if (block->tx)
 		reschedule |= gve_tx_poll_dqo(block, /*do_clean=*/true);
 
-	if (block->rx) {
+	if (block->rx && budget > 0) {
 		work_done = gve_rx_poll_dqo(block, budget);
 		reschedule |= work_done == budget;
 	}
 
-	if (reschedule)
+	if (reschedule || budget == 0)
 		return budget;
 
 	if (likely(napi_complete_done(napi, work_done))) {
