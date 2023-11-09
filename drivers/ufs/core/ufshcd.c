@@ -8234,9 +8234,9 @@ static void ufshcd_rtc_work(struct work_struct *work)
 
 	ufshcd_update_rtc(hba);
 out:
-	if (ufshcd_is_ufs_dev_active(hba))
+	if (ufshcd_is_ufs_dev_active(hba) && hba->dev_info.rtc_update_period)
 		schedule_delayed_work(&hba->ufs_rtc_delayed_work,
-							msecs_to_jiffies(UFS_RTC_UPDATE_EVERY_MS));
+						msecs_to_jiffies(hba->dev_info.rtc_update_period));
 	return;
 }
 
