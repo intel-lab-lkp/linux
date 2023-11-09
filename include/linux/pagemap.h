@@ -1514,4 +1514,11 @@ unsigned int i_blocks_per_page(struct inode *inode, struct page *page)
 {
 	return i_blocks_per_folio(inode, page_folio(page));
 }
+#ifndef CONFIG_PAGE_OWNER
+static inline int filemap_alloc_post_page_owner(struct folio *folio, struct task_struct *tsk,
+		void *data, char *kbuf, size_t count)
+{
+	return 0;
+}
+#endif
 #endif /* _LINUX_PAGEMAP_H */

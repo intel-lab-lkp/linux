@@ -45,6 +45,7 @@
 #include <linux/migrate.h>
 #include <linux/pipe_fs_i.h>
 #include <linux/splice.h>
+#include <linux/page_owner.h>
 #include <asm/pgalloc.h>
 #include <asm/tlbflush.h>
 #include "internal.h"
@@ -838,6 +839,48 @@ void replace_page_cache_folio(struct folio *old, struct folio *new)
 }
 EXPORT_SYMBOL_GPL(replace_page_cache_folio);
 
+#ifdef CONFIG_PAGE_OWNER
+static int filemap_alloc_post_page_owner(struct folio *folio, struct task_struct *tsk,
+			void *data, char *kbuf, size_t count)
+{
+	int ret;
+	int mapcount;
+	dev_t s_dev;
+	struct inode *inode;
+	struct vm_area_struct *vma;
+	struct mm_struct *mm;
+	unsigned long virtual_start = 0x0;
+	unsigned long virtual_end = 0x0;
+	struct address_space *mapping = data;
+
+	mapcount = folio_mapcount(folio);
+	if (mapcount && tsk && tsk->mm) {
+		mm = tsk->mm;
+		VMA_ITERATOR(vmi, mm, 0);
+		mmap_read_lock(mm);
+		for_each_vma(vmi, vma) {
+			if (page_mapped_in_vma(&folio->page, vma)) {
+				virtual_start = vma_address(&folio->page, vma);
+				virtual_end = virtual_start + folio_nr_pages(folio) * PAGE_SIZE;
+				break;
+			}
+		}
+		mmap_read_unlock(mm);
+	}
+
+	inode = mapping->host;
+	if (mapping->host->i_sb)
+		s_dev = mapping->host->i_sb->s_dev;
+	else
+		s_dev = mapping->host->i_rdev;
+	ret = scnprintf(kbuf, count, "FILE_PAGE dev %d:%d ino:%lu index:0x%lx mapcount:%d refcount:%d 0x%lx - 0x%lx\n",
+		MAJOR(s_dev), MINOR(s_dev), inode->i_ino, folio->index, mapcount, folio_ref_count(folio),
+		virtual_start, virtual_end);
+
+	return ret;
+}
+#endif
+
 noinline int __filemap_add_folio(struct address_space *mapping,
 		struct folio *folio, pgoff_t index, gfp_t gfp, void **shadowp)
 {
@@ -915,6 +958,7 @@ unlock:
 	if (xas_error(&xas))
 		goto error;
 
+	set_folio_alloc_post_page_owner(folio, filemap_alloc_post_page_owner, mapping);
 	trace_mm_filemap_add_to_page_cache(folio);
 	return 0;
 error:
