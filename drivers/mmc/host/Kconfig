@@ -837,6 +837,19 @@ config MMC_DW_STARFIVE
 	  Synopsys DesignWare Memory Card Interface driver. Select this option
 	  for platforms based on StarFive JH7110 SoC.
 
+config MMC_DW_CQE
+	tristate "Synopsys DesignWare Memory Card with CQE Interface"
+	depends on ARC || ARM || ARM64 || MIPS || COMPILE_TEST
+	select MMC_CQHCI
+	help
+	 This selects support for the Synopsys DesignWare Mobile Storage IP
+	 block after JEDEC Standard version 5.1. Select this option for SD and
+	 MMC interfaces that use command queue.
+
+	 If you have a controller with this interface, say Y or M here.
+
+	 If unsure, say Y.
+
 config MMC_SH_MMCIF
 	tristate "SuperH Internal MMCIF support"
 	depends on SUPERH || ARCH_RENESAS || COMPILE_TEST
