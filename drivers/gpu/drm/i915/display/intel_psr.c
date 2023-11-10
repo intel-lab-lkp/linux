@@ -29,6 +29,7 @@
 #include "i915_reg.h"
 #include "intel_atomic.h"
 #include "intel_crtc.h"
+#include "intel_ddi.h"
 #include "intel_de.h"
 #include "intel_display_types.h"
 #include "intel_dp.h"
@@ -179,9 +180,9 @@ static bool psr_global_enabled(struct intel_dp *intel_dp)
 
 	switch (intel_dp->psr.debug & I915_PSR_DEBUG_MODE_MASK) {
 	case I915_PSR_DEBUG_DEFAULT:
-		if (i915->params.enable_psr == -1)
+		if (i915->display.params.enable_psr == -1)
 			return connector->panel.vbt.psr.enable;
-		return i915->params.enable_psr;
+		return i915->display.params.enable_psr;
 	case I915_PSR_DEBUG_DISABLE:
 		return false;
 	default:
@@ -198,7 +199,7 @@ static bool psr2_global_enabled(struct intel_dp *intel_dp)
 	case I915_PSR_DEBUG_FORCE_PSR1:
 		return false;
 	default:
-		if (i915->params.enable_psr == 1)
+		if (i915->display.params.enable_psr == 1)
 			return false;
 		return true;
 	}
@@ -592,6 +593,9 @@ static void intel_psr_enable_sink(struct intel_dp *intel_dp)
 	if (intel_dp->psr.req_psr2_sdp_prior_scanline)
 		dpcd_val |= DP_PSR_SU_REGION_SCANLINE_CAPTURE;
 
+	if (intel_dp->psr.entry_setup_frames > 0)
+		dpcd_val |= DP_PSR_FRAME_CAPTURE;
+
 	drm_dp_dpcd_writeb(&intel_dp->aux, DP_PSR_EN_CFG, dpcd_val);
 
 	drm_dp_dpcd_writeb(&intel_dp->aux, DP_SET_POWER, DP_SET_POWER_D0);
@@ -606,7 +610,7 @@ static u32 intel_psr1_get_tp_time(struct intel_dp *intel_dp)
 	if (DISPLAY_VER(dev_priv) >= 11)
 		val |= EDP_PSR_TP4_TIME_0us;
 
-	if (dev_priv->params.psr_safest_params) {
+	if (dev_priv->display.params.psr_safest_params) {
 		val |= EDP_PSR_TP1_TIME_2500us;
 		val |= EDP_PSR_TP2_TP3_TIME_2500us;
 		goto check_tp3_sel;
@@ -690,6 +694,9 @@ static void hsw_activate_psr1(struct intel_dp *intel_dp)
 	if (DISPLAY_VER(dev_priv) >= 8)
 		val |= EDP_PSR_CRC_ENABLE;
 
+	if (DISPLAY_VER(dev_priv) >= 20)
+		val |= LNL_EDP_PSR_ENTRY_SETUP_FRAMES(intel_dp->psr.entry_setup_frames);
+
 	intel_de_rmw(dev_priv, psr_ctl_reg(dev_priv, cpu_transcoder),
 		     ~EDP_PSR_RESTORE_PSR_ACTIVE_CTX_MASK, val);
 }
@@ -700,7 +707,7 @@ static u32 intel_psr2_get_tp_time(struct intel_dp *intel_dp)
 	struct drm_i915_private *dev_priv = dp_to_i915(intel_dp);
 	u32 val = 0;
 
-	if (dev_priv->params.psr_safest_params)
+	if (dev_priv->display.params.psr_safest_params)
 		return EDP_PSR2_TP2_TIME_2500us;
 
 	if (connector->panel.vbt.psr.psr2_tp2_tp3_wakeup_time_us >= 0 &&
@@ -727,11 +734,27 @@ static int psr2_block_count(struct intel_dp *intel_dp)
 	return psr2_block_count_lines(intel_dp) / 4;
 }
 
+static u8 frames_before_su_entry(struct intel_dp *intel_dp)
+{
+	u8 frames_before_su_entry;
+
+	frames_before_su_entry = max_t(u8,
+				       intel_dp->psr.sink_sync_latency + 1,
+				       2);
+
+	/* Entry setup frames must be at least 1 less than frames before SU entry */
+	if (intel_dp->psr.entry_setup_frames >= frames_before_su_entry)
+		frames_before_su_entry = intel_dp->psr.entry_setup_frames + 1;
+
+	return frames_before_su_entry;
+}
+
 static void hsw_activate_psr2(struct intel_dp *intel_dp)
 {
 	struct drm_i915_private *dev_priv = dp_to_i915(intel_dp);
 	enum transcoder cpu_transcoder = intel_dp->psr.transcoder;
 	u32 val = EDP_PSR2_ENABLE;
+	u32 psr_val = 0;
 
 	val |= EDP_PSR2_IDLE_FRAMES(psr_compute_idle_frames(intel_dp));
 
@@ -741,7 +764,8 @@ static void hsw_activate_psr2(struct intel_dp *intel_dp)
 	if (DISPLAY_VER(dev_priv) >= 10 && DISPLAY_VER(dev_priv) <= 12)
 		val |= EDP_Y_COORDINATE_ENABLE;
 
-	val |= EDP_PSR2_FRAME_BEFORE_SU(max_t(u8, intel_dp->psr.sink_sync_latency + 1, 2));
+	val |= EDP_PSR2_FRAME_BEFORE_SU(frames_before_su_entry(intel_dp));
+
 	val |= intel_psr2_get_tp_time(intel_dp);
 
 	if (DISPLAY_VER(dev_priv) >= 12) {
@@ -785,6 +809,9 @@ static void hsw_activate_psr2(struct intel_dp *intel_dp)
 	if (intel_dp->psr.req_psr2_sdp_prior_scanline)
 		val |= EDP_PSR2_SU_SDP_SCANLINE;
 
+	if (DISPLAY_VER(dev_priv) >= 20)
+		psr_val |= LNL_EDP_PSR_ENTRY_SETUP_FRAMES(intel_dp->psr.entry_setup_frames);
+
 	if (intel_dp->psr.psr2_sel_fetch_enabled) {
 		u32 tmp;
 
@@ -798,7 +825,7 @@ static void hsw_activate_psr2(struct intel_dp *intel_dp)
 	 * PSR2 HW is incorrectly using EDP_PSR_TP1_TP3_SEL and BSpec is
 	 * recommending keep this bit unset while PSR2 is enabled.
 	 */
-	intel_de_write(dev_priv, psr_ctl_reg(dev_priv, cpu_transcoder), 0);
+	intel_de_write(dev_priv, psr_ctl_reg(dev_priv, cpu_transcoder), psr_val);
 
 	intel_de_write(dev_priv, EDP_PSR2_CTL(cpu_transcoder), val);
 }
@@ -943,7 +970,7 @@ static bool intel_psr2_sel_fetch_config_valid(struct intel_dp *intel_dp,
 {
 	struct drm_i915_private *dev_priv = dp_to_i915(intel_dp);
 
-	if (!dev_priv->params.enable_psr2_sel_fetch &&
+	if (!dev_priv->display.params.enable_psr2_sel_fetch &&
 	    intel_dp->psr.debug != I915_PSR_DEBUG_ENABLE_SEL_FETCH) {
 		drm_dbg_kms(&dev_priv->drm,
 			    "PSR2 sel fetch not enabled, disabled by parameter\n");
@@ -1056,7 +1083,7 @@ static bool _compute_psr2_wake_times(struct intel_dp *intel_dp,
 	    fast_wake_lines > max_wake_lines)
 		return false;
 
-	if (i915->params.psr_safest_params)
+	if (i915->display.params.psr_safest_params)
 		io_wake_lines = fast_wake_lines = max_wake_lines;
 
 	/* According to Bspec lower limit should be set as 7 lines. */
@@ -1064,6 +1091,39 @@ static bool _compute_psr2_wake_times(struct intel_dp *intel_dp,
 	intel_dp->psr.fast_wake_lines = max(fast_wake_lines, 7);
 
 	return true;
+}
+
+static u8 intel_psr_entry_setup_frames(struct intel_dp *intel_dp,
+				       const struct drm_display_mode *adjusted_mode)
+{
+	struct drm_i915_private *i915 = dp_to_i915(intel_dp);
+	int psr_setup_time = drm_dp_psr_setup_time(intel_dp->psr_dpcd);
+	u8 entry_setup_frames = 0;
+
+	if (psr_setup_time < 0) {
+		drm_dbg_kms(&i915->drm,
+			    "PSR condition failed: Invalid PSR setup time (0x%02x)\n",
+			    intel_dp->psr_dpcd[1]);
+		return -ETIME;
+	}
+
+	if (intel_usecs_to_scanlines(adjusted_mode, psr_setup_time) >
+	    adjusted_mode->crtc_vtotal - adjusted_mode->crtc_vdisplay - 1) {
+		if (DISPLAY_VER(i915) >= 20) {
+			/* setup entry frames can be up to 3 frames */
+			entry_setup_frames = 1;
+			drm_dbg_kms(&i915->drm,
+				    "PSR setup entry frames %d\n",
+				    entry_setup_frames);
+		} else {
+			drm_dbg_kms(&i915->drm,
+				    "PSR condition failed: PSR setup time (%d us) too long\n",
+				    psr_setup_time);
+			return -ETIME;
+		}
+	}
+
+	return entry_setup_frames;
 }
 
 static bool intel_psr2_config_valid(struct intel_dp *intel_dp,
@@ -1213,7 +1273,7 @@ void intel_psr_compute_config(struct intel_dp *intel_dp,
 	struct drm_i915_private *dev_priv = dp_to_i915(intel_dp);
 	const struct drm_display_mode *adjusted_mode =
 		&crtc_state->hw.adjusted_mode;
-	int psr_setup_time;
+	u8 entry_setup_frames;
 
 	/*
 	 * Current PSR panels don't work reliably with VRR enabled
@@ -1242,19 +1302,13 @@ void intel_psr_compute_config(struct intel_dp *intel_dp,
 		return;
 	}
 
-	psr_setup_time = drm_dp_psr_setup_time(intel_dp->psr_dpcd);
-	if (psr_setup_time < 0) {
-		drm_dbg_kms(&dev_priv->drm,
-			    "PSR condition failed: Invalid PSR setup time (0x%02x)\n",
-			    intel_dp->psr_dpcd[1]);
-		return;
-	}
+	entry_setup_frames = intel_psr_entry_setup_frames(intel_dp, adjusted_mode);
 
-	if (intel_usecs_to_scanlines(adjusted_mode, psr_setup_time) >
-	    adjusted_mode->crtc_vtotal - adjusted_mode->crtc_vdisplay - 1) {
+	if (entry_setup_frames >= 0) {
+		intel_dp->psr.entry_setup_frames = entry_setup_frames;
+	} else {
 		drm_dbg_kms(&dev_priv->drm,
-			    "PSR condition failed: PSR setup time (%d us) too long\n",
-			    psr_setup_time);
+			    "PSR condition failed: PSR setup timing not met\n");
 		return;
 	}
 
@@ -1452,12 +1506,10 @@ static void intel_psr_enable_source(struct intel_dp *intel_dp,
 		 * All supported adlp panels have 1-based X granularity, this may
 		 * cause issues if non-supported panels are used.
 		 */
-		if (IS_DISPLAY_IP_STEP(dev_priv, IP_VER(14, 0), STEP_A0, STEP_B0))
-			intel_de_rmw(dev_priv, MTL_CHICKEN_TRANS(cpu_transcoder), 0,
-				     ADLP_1_BASED_X_GRANULARITY);
-		else if (IS_ALDERLAKE_P(dev_priv))
-			intel_de_rmw(dev_priv, CHICKEN_TRANS(cpu_transcoder), 0,
-				     ADLP_1_BASED_X_GRANULARITY);
+		if (IS_DISPLAY_IP_STEP(dev_priv, IP_VER(14, 0), STEP_A0, STEP_B0) ||
+		    IS_ALDERLAKE_P(dev_priv))
+			intel_de_rmw(dev_priv, hsw_chicken_trans_reg(dev_priv, cpu_transcoder),
+				     0, ADLP_1_BASED_X_GRANULARITY);
 
 		/* Wa_16012604467:adlp,mtl[a0,b0] */
 		if (IS_DISPLAY_IP_STEP(dev_priv, IP_VER(14, 0), STEP_A0, STEP_B0))
