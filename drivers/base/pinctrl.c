@@ -103,3 +103,36 @@ cleanup_alloc:
 
 	return 0;
 }
+
+#ifdef CONFIG_PM
+/**
+ * pinctrl_state_try_default() - Try setting default state if available
+ * @dev The device to set pinctrl state
+ */
+inline void pinctrl_state_try_default(struct device *dev)
+{
+	if (dev->pins && !IS_ERR(dev->pins->default_state))
+		pinctrl_select_state(dev->pins->p, dev->pins->default_state);
+}
+
+/**
+ * pinctrl_state_try_idle() - Try setting idle state if available
+ * @dev The device to set pinctrl state
+ */
+inline void pinctrl_state_try_idle(struct device *dev)
+{
+	if (dev->pins && !IS_ERR(dev->pins->idle_state))
+		pinctrl_select_state(dev->pins->p, dev->pins->idle_state);
+}
+
+/**
+ * pinctrl_state_try_sleep() - Try setting sleep state if available
+ * @dev The device to set pinctrl state
+ */
+inline void pinctrl_state_try_sleep(struct device *dev)
+{
+	if (dev->pins && !IS_ERR(dev->pins->sleep_state))
+		pinctrl_select_state(dev->pins->p, dev->pins->sleep_state);
+}
+#endif
+

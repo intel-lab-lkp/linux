@@ -9,6 +9,7 @@
 #include <linux/ktime.h>
 #include <linux/hrtimer.h>
 #include <linux/export.h>
+#include <linux/pinctrl/devinfo.h>
 #include <linux/pm_runtime.h>
 #include <linux/pm_wakeirq.h>
 #include <trace/events/rpm.h>
@@ -499,7 +500,7 @@ static int rpm_idle(struct device *dev, int rpmflags)
 
 	/* If no callback assume success. */
 	if (!callback || dev->power.no_callbacks)
-		goto out;
+		goto no_callback;
 
 	/* Carry out an asynchronous or a synchronous idle notification. */
 	if (rpmflags & RPM_ASYNC) {
@@ -529,6 +530,8 @@ static int rpm_idle(struct device *dev, int rpmflags)
 	dev->power.idle_notification = false;
 	wake_up_all(&dev->power.wait_queue);
 
+ no_callback:
+	pinctrl_state_try_idle(dev);
  out:
 	trace_rpm_return_int(dev, _THIS_IP_, retval);
 	return retval ? retval : rpm_suspend(dev, rpmflags | RPM_AUTO);
@@ -676,6 +679,7 @@ static int rpm_suspend(struct device *dev, int rpmflags)
  no_callback:
 	__update_runtime_status(dev, RPM_SUSPENDED);
 	pm_runtime_deactivate_timer(dev);
+	pinctrl_state_try_sleep(dev);
 
 	if (dev->parent) {
 		parent = dev->parent;
@@ -918,6 +922,7 @@ static int rpm_resume(struct device *dev, int rpmflags)
  no_callback:
 		__update_runtime_status(dev, RPM_ACTIVE);
 		pm_runtime_mark_last_busy(dev);
+		pinctrl_state_try_default(dev);
 		if (parent)
 			atomic_inc(&parent->power.child_count);
 	}
@@ -1899,6 +1904,7 @@ int pm_runtime_force_suspend(struct device *dev)
 		__update_runtime_status(dev, RPM_SUSPENDED);
 		dev->power.needs_force_resume = 1;
 	}
+	pinctrl_state_try_sleep(dev);
 
 	return 0;
 
@@ -1946,6 +1952,7 @@ int pm_runtime_force_resume(struct device *dev)
 	}
 
 	pm_runtime_mark_last_busy(dev);
+	pinctrl_state_try_default(dev);
 out:
 	dev->power.needs_force_resume = 0;
 	pm_runtime_enable(dev);

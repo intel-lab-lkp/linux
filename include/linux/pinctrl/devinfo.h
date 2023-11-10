@@ -54,6 +54,12 @@ static inline struct pinctrl *dev_pinctrl(struct device *dev)
 	return dev->pins->p;
 }
 
+#ifdef CONFIG_PM
+extern inline void pinctrl_state_try_default(struct device *dev);
+extern inline void pinctrl_state_try_idle(struct device *dev);
+extern inline void pinctrl_state_try_sleep(struct device *dev);
+#endif /* CONFIG_PM */
+
 #else
 
 /* Stubs if we're not using pinctrl */
@@ -73,5 +79,10 @@ static inline struct pinctrl *dev_pinctrl(struct device *dev)
 	return NULL;
 }
 
+#ifdef CONFIG_PM
+static inline void pinctrl_state_try_default(struct device *dev) {}
+static inline void pinctrl_state_try_idle(struct device *dev) {}
+static inline void pinctrl_state_try_sleep(struct device *dev) {}
+#endif /* CONFIG_PM */
 #endif /* CONFIG_PINCTRL */
 #endif /* PINCTRL_DEVINFO_H */
