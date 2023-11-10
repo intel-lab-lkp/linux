@@ -1,0 +1,501 @@
+﻿.. Documentation/ABI/testing/sysfs-driver-xe-sriov
+..
+.. Intel Xe driver ABI (SR-IOV extensions)
+..
+    The Single Root I/O Virtualization (SR-IOV) extension to
+    the PCI Express (PCIe) specification suite is supported
+    starting from 12th generation of Intel Graphics processors.
+
+    This document describes Xe driver specific additions.
+
+    For description of generic SR-IOV sysfs attributes see
+    "Documentation/ABI/testing/sysfs-bus-pci" document.
+
+    /sys/bus/pci/drivers/xe/BDF/
+    ├── sriov_auto_provisioning
+    │   ├── admin_mode
+    │   ├── enabled
+    │   ├── reset_defaults
+    │   ├── resources
+    │   │   ├── default_contexts_quota
+    │   │   ├── default_doorbells_quota
+    │   │   ├── default_ggtt_quota
+    │   │   └── default_lmem_quota
+    │   ├── scheduling
+    │   │   ├── default_exec_quantum_ms
+    │   │   └── default_preempt_timeout_us
+    │   └── monitoring
+    │       ├── default_cat_error_count
+    │       ├── default_doorbell_time_us
+    │       ├── default_engine_reset_count
+    │       ├── default_h2g_time_us
+    │       ├── default_irq_time_us
+    │       └── default_page_fault_count
+
+    /sys/bus/pci/drivers/xe/BDF/
+    ├── sriov_extensions
+    │   ├── monitoring_period_ms
+    │   ├── strict_scheduling_enabled
+    │   ├── pf
+    │   │   ├── device -> ../../../BDF
+    │   │   ├── priority
+    │   │   ├── tile0
+    │   │   │   ├── gt0
+    │   │   │   │   ├── exec_quantum_ms
+    │   │   │   │   ├── preempt_timeout_us
+    │   │   │   │   └── thresholds
+    │   │   │   │       ├── cat_error_count
+    │   │   │   │       ├── doorbell_time_us
+    │   │   │   │       ├── engine_reset_count
+    │   │   │   │       ├── h2g_time_us
+    │   │   │   │       ├── irq_time_us
+    │   │   │   │       └── page_fault_count
+    │   │   │   └── gtX
+    │   │   └── tileT
+    │   ├── vf1
+    │   │   ├── device -> ../../../BDF+1
+    │   │   ├── stop
+    │   │   ├── tile0
+    │   │   │   ├── ggtt_quota
+    │   │   │   ├── lmem_quota
+    │   │   │   ├── gt0
+    │   │   │   │   ├── contexts_quota
+    │   │   │   │   ├── doorbells_quota
+    │   │   │   │   ├── exec_quantum_ms
+    │   │   │   │   ├── preempt_timeout_us
+    │   │   │   │   └── thresholds
+    │   │   │   │       ├── cat_error_count
+    │   │   │   │       ├── doorbell_time_us
+    │   │   │   │       ├── engine_reset_count
+    │   │   │   │       ├── h2g_time_us
+    │   │   │   │       ├── irq_time_us
+    │   │   │   │       └── page_fault_count
+    │   │   │   └── gtX
+    │   │   └── tileT
+    │   └── vfN
+..
+
+
+What:		/sys/bus/pci/drivers/xe/.../sriov_auto_provisioning/
+Date:		2024
+KernelVersion:	TBD
+Contact:	intel-xe@lists.freedesktop.org
+Description:
+		This directory appears on the device when:
+
+		 - device supports SR-IOV, and
+		 - device is a Physical Function (PF), and
+		 - xe driver supports SR-IOV PF on given device, and
+		 - xe driver supports automatic VFs provisioning.
+
+		This directory is used as a root for all attributes related to
+		automatic provisioning of SR-IOV Physical Function (PF) and/or
+		Virtual Functions (VFs).
+
+
+What:		/sys/bus/pci/drivers/xe/.../sriov_auto_provisioning/enabled
+Date:		2024
+KernelVersion:	TBD
+Contact:	intel-xe@lists.freedesktop.org
+Description:
+		(RW) bool (0, 1)
+
+		This file represents configuration flag for the automatic VFs
+		(un)provisioning that could be performed by the PF.
+
+		The default value is 1 (true).
+
+		This flag can be set to false, unless manual provisioning is not
+		applicable for given platform or it is not supported by current
+		PF implementation. In such cases -EPERM will be returned.
+
+		This flag will be automatically set to false when there will be
+		other attempts to change any of VF's resource provisioning.
+		See "sriov_extensions" section for details.
+
+		This flag can be set back to true if and only if all VFs are
+		fully unprovisioned, otherwise -EEXIST error will be returned.
+
+		false = "disabled"
+			When disabled, then PF will not attempt to do automatic
+			VFs provisioning when VFs are being enabled and will not
+			perform automatic unprovisioning of the VFs when VFs will
+			be disabled.
+
+		true = "enabled"
+			When enabled, then on VFs enabling PF will do automatic
+			VFs provisioning based on the default settings described
+			below.
+
+			If automatic VFs provisioning fails due to some reasons,
+			then VFs will not be enabled.
+
+			If enabled, all resources allocated during VFs enabling
+			will be released during VFs disabling (automatic unprovisioning).
+
+
+What:		/sys/bus/pci/drivers/xe/.../sriov_auto_provisioning/admin_mode
+Date:		2024
+KernelVersion:	TBD
+Contact:	intel-xe@lists.freedesktop.org
+Description:
+		(RW) bool (0, 1)
+
+		This file represents configuration flag for the automatic VFs
+		provisioning that could be performed by the PF.
+
+		The default value depends on the platform type.
+
+		This flag can be changed any time, but will have no effect if
+		VFs are already provisioned.
+
+		If enabled (default on discrete platforms) then the PF will
+		retain only minimum hardcoded resources for its own use when
+		doing VFs automatic provisioning and will not use any default
+		values described below for its own configuration.
+
+		If disabled (default on integrated platforms) then the PF will
+		treat itself like yet another additional VF in all fair resource
+		allocations and will also try to apply default provisioning
+		values described below for its own configuration.
+
+
+What:		/sys/bus/pci/drivers/xe/.../sriov_auto_provisioning/reset_defaults
+Date:		2024
+KernelVersion:	TBD
+Contact:	intel-xe@lists.freedesktop.org
+Description:
+		(WO) bool (1)
+
+		Writing to this file will reset all default provisioning parameters
+		listed below to the default values.
+
+
+What:		/sys/bus/pci/drivers/xe/.../sriov_auto_provisioning/resources/default_contexts_quota
+What:		/sys/bus/pci/drivers/xe/.../sriov_auto_provisioning/resources/default_doorbells_quota
+What:		/sys/bus/pci/drivers/xe/.../sriov_auto_provisioning/resources/default_ggtt_quota
+What:		/sys/bus/pci/drivers/xe/.../sriov_auto_provisioning/resources/default_lmem_quota
+What:		/sys/bus/pci/drivers/xe/.../sriov_auto_provisioning/scheduling/default_exec_quantum_ms
+What:		/sys/bus/pci/drivers/xe/.../sriov_auto_provisioning/scheduling/default_preempt_timeout_us
+What:		/sys/bus/pci/drivers/xe/.../sriov_auto_provisioning/monitoring/default_cat_error_count
+What:		/sys/bus/pci/drivers/xe/.../sriov_auto_provisioning/monitoring/default_doorbell_time_us
+What:		/sys/bus/pci/drivers/xe/.../sriov_auto_provisioning/monitoring/default_engine_reset_count
+What:		/sys/bus/pci/drivers/xe/.../sriov_auto_provisioning/monitoring/default_h2g_time_us
+What:		/sys/bus/pci/drivers/xe/.../sriov_auto_provisioning/monitoring/default_irq_time_us
+What:		/sys/bus/pci/drivers/xe/.../sriov_auto_provisioning/monitoring/default_page_fault_count
+Date:		2024
+KernelVersion:	TBD
+Contact:	intel-xe@lists.freedesktop.org
+Description:
+		These files represent default provisioning that should be used
+		for VFs automatic provisioning.
+
+		These values can be changed any time, but will have no effect if
+		VFs are already provisioned.
+
+		default_contexts_quota: (RW) integer 0..U32_MAX
+			The number of GuC context IDs to provide to the VF.
+			The default value is 0 (use fair allocations).
+			See "sriov_extensions/vfN/tileT/gtX/contexts_quota" for details.
+
+		default_doorbells_quota: (RW) integer 0..U32_MAX
+			The number of GuC doorbells to provide to the VF.
+			The default value is 0 (use fair allocations).
+			See "sriov_extensions/vfN/tileT/gtX/doorbells_quota" for details.
+
+		default_ggtt_quota: (RW) integer 0..U32_MAX
+			The size of the GGTT address space (in bytes) to provide to the VF.
+			The default value is 0 (use fair allocations).
+			See "sriov_extensions/vfN/tileT/ggtt_quota" for details.
+
+		default_lmem_quota: (RW) integer 0..U32_MAX
+			The size of the LMEM (in bytes) to provide to the VF.
+			The default value is 0 (use fair allocations).
+			See "sriov_extensions/vfN/tileT/lmem_quota" for details.
+
+		default_exec_quantum_ms: (RW) integer 0..U32_MAX
+			The GT execution quantum (in millisecs) assigned to the function.
+			The default value is 0 (infinify).
+			See "sriov_extensions/vfN/tileT/gtX/exec_quantum_ms" for details.
+
+		default_preempt_timeout_us: (RW) integer 0..U32_MAX
+			The GT preemption timeout (in microsecs) assigned to the function.
+			The default value is 0 (infinity).
+			See "sriov_extensions/vfN/tileT/gtX/preempt_timeout_us" for details.
+
+		default_cat_error_count: (RW) integer 0..U32_MAX
+		default_doorbell_time_us: (RW) integer 0..U32_MAX
+		default_engine_reset_count: (RW) integer 0..U32_MAX
+		default_h2g_time_us: (RW) integer 0..U32_MAX
+		default_irq_time_us: (RW) integer 0..U32_MAX
+		default_page_fault_count: (RW) integer 0..U32_MAX
+			The monitoring threshold to be set for the function.
+			The default value is 0 (don't monitor).
+			See "sriov_extensions/vfN/tileT/gtX/thresholds" for details.
+
+
+What:		/sys/bus/pci/drivers/xe/.../sriov_extensions/
+Date:		2024
+KernelVersion:	TBD
+Contact:	intel-xe@lists.freedesktop.org
+Description:
+		This directory appears on Xe device when:
+
+		 - device supports SR-IOV, and
+		 - device is a Physical Function (PF), and
+		 - driver is enabled to support SR-IOV PF on given device.
+
+		This directory is used as a root for all attributes required to
+		manage both Physical Function (PF) and Virtual Functions (VFs).
+
+
+What:		/sys/bus/pci/drivers/xe/.../sriov_extensions/strict_scheduling_enabled
+Date:		2024
+KernelVersion:	TBD
+Contact:	intel-xe@lists.freedesktop.org
+Description:
+		(RW) bool
+
+		This file represents a flag used to determine if scheduling
+		parameters should be respected even if there is no active
+		workloads submitted by the PF or VFs.
+
+		This flag is disabled by default, unless strict scheduling is
+		not applicable on given platform. In such case this file will
+		be read-only.
+
+		The change to this file may have no effect if VFs are not yet enabled.
+		If strict scheduling can't be enabled in GuC then write will fail with -EIO.
+
+
+What:		/sys/bus/pci/drivers/xe/.../sriov_extensions/monitoring_period_ms
+Date:		2024
+KernelVersion:	TBD
+Contact:	intel-xe@lists.freedesktop.org
+Description:
+		(RW) integer
+
+		This file represents the configuration knob used by adverse event
+		monitoring. A value here is the period in millisecs during which
+		events are counted and the total is checked against a threshold.
+		See "sriov_extensions/vfN/tileT/gtX/thresholds" for more details.
+
+		Default is 0 (monitoring is disabled).
+
+		If monitoring capability is not available, then attempt to enable
+		will fail with -EPERM error. If monitoring can't be enabled in
+		GuC then write will fail with -EIO.
+
+
+What:		/sys/bus/pci/drivers/xe/.../sriov_extensions/pf/
+Date:		2024
+KernelVersion:	TBD
+Contact:	intel-xe@lists.freedesktop.org
+Description:
+		This directory holds all attributes related to the SR-IOV
+		Physical Function (PF).
+
+
+What:		/sys/bus/pci/drivers/xe/.../sriov_extensions/vfN/
+Date:		2024
+KernelVersion:	TBD
+Contact:	intel-xe@lists.freedesktop.org
+Description:
+		This directory holds all attributes related to the SR-IOV
+		Virtual Function (VF).
+
+		Note that VF numbers (N) are 1-based as described in PCI SR-IOV specification.
+		The Xe driver implementaton follows that naming schema.
+
+		There will be "vf1", "vf2" up to "vfN" directories, where N matches
+		value of the PCI "sriov_totalvfs" attribute.
+
+What:		/sys/bus/pci/drivers/xe/.../sriov_extensions/pf/tileT/
+What:		/sys/bus/pci/drivers/xe/.../sriov_extensions/vfN/tileT/
+Date:		2024
+KernelVersion:	TBD
+Contact:	intel-xe@lists.freedesktop.org
+Description:
+		This directory holds all SR-IOV attributes related to the device tile.
+		The tile numbers (T) start from 0.
+
+		There is at least one "tile0/" directory present.
+
+
+What:		/sys/bus/pci/drivers/xe/.../sriov_extensions/pf/tileT/gtX
+What:		/sys/bus/pci/drivers/xe/.../sriov_extensions/vfN/tileT/gtX
+Date:		2024
+KernelVersion:	TBD
+Contact:	intel-xe@lists.freedesktop.org
+Description:
+		This directory holds all SR-IOV attributes related to the device GT.
+		The GT numbers (X) start from 0.
+
+		There is at least one "gt0/" directory present.
+
+
+What:		/sys/bus/pci/drivers/xe/.../sriov_extensions/pf/device
+What:		/sys/bus/pci/drivers/xe/.../sriov_extensions/vfN/device
+Date:		2024
+KernelVersion:	TBD
+Contact:	intel-xe@lists.freedesktop.org
+Description:
+		(symbolic link)
+
+		Backlink to the PCI device entry representing given function.
+		For PF this link is always present.
+		For VF this link is present only for currently enabled VFs.
+
+
+What:		/sys/bus/pci/drivers/xe/.../sriov_extensions/pf/priority
+Date:		2024
+KernelVersion:	TBD
+Contact:	intel-xe@lists.freedesktop.org
+Description:
+		(RW) string
+
+		This file represents a GuC Scheduler knob to override the default
+		round-robin or FIFO scheduler policies implemented by the GuC.
+
+		The default value is "peer".
+
+		This flag can be changed, unless such change is not applicable
+		for given platform or is not supported by current GuC firmware.
+		In such case this file could be read-only or will return -EPERM
+		on write attempt.
+
+		"immediate"
+			GuC will Schedule PF workloads immediately and PF
+			workloads only until the PF's work queues in GuC
+			are empty.
+
+		"lazy"
+			GuC will Schedule PF workloads at the next opportune
+			moment and PF workloads only until the PF work queues
+			in GuC are empty.
+
+		"peer"
+			GuC Scheduler will treat PF and VFs with equal priority.
+
+
+What:		/sys/bus/pci/drivers/xe/.../sriov_extensions/vfN/stop
+Date:		2024
+KernelVersion:	TBD
+Contact:	intel-xe@lists.freedesktop.org
+Description:
+		(WO) bool (1)
+
+		Write to this file will force GuC to stop handle any requests from
+		this VF, but without triggering a FLR.
+		To recover, the full FLR must be issued using generic "device/reset".
+
+		This file allows to implement custom policy mechanism when VF is
+		misbehaving and triggering adverse events above defined thresholds.
+
+
+What:		/sys/bus/pci/drivers/xe/.../sriov_extensions/pf/tileT/gtX/exec_quantum_ms
+What:		/sys/bus/pci/drivers/xe/.../sriov_extensions/pf/tileT/gtX/preempt_timeout_us
+What:		/sys/bus/pci/drivers/xe/.../sriov_extensions/vfN/tileT/gtX/exec_quantum_ms
+What:		/sys/bus/pci/drivers/xe/.../sriov_extensions/vfN/tileT/gtX/preempt_timeout_us
+Date:		2024
+KernelVersion:	TBD
+Contact:	intel-xe@lists.freedesktop.org
+Description:
+		These files represent scheduling parameters of the functions.
+
+		These scheduling parameters can be changed even if VFs are enabled
+		and running, unless such change is not applicable on given platform
+		due to fixed hardware or firmware assignment.
+
+		exec_quantum_ms: (RW) integer 0..U32_MAX
+			The GT execution quantum in [ms] assigned to the function.
+			Requested quantum might be aligned per HW/FW requirements.
+
+			Default is 0 (unlimited).
+
+		preempt_timeout_us: (RW) integer 0..U32_MAX
+			The GT preemption timeout in [us] assigned to the function.
+			Requested timeout might be aligned per HW/FW requirements.
+
+			Default is 0 (unlimited).
+
+
+What:		/sys/bus/pci/drivers/xe/.../sriov_extensions/vfN/tileT/ggtt_quota
+What:		/sys/bus/pci/drivers/xe/.../sriov_extensions/vfN/tileT/lmem_quota
+What:		/sys/bus/pci/drivers/xe/.../sriov_extensions/vfN/tileT/gtX/contexts_quota
+What:		/sys/bus/pci/drivers/xe/.../sriov_extensions/vfN/tileT/gtX/doorbells_quota
+Date:		2024
+KernelVersion:	TBD
+Contact:	intel-xe@lists.freedesktop.org
+Description:
+		These files represent shared resource assigned to the functions.
+
+		These resource parameters can be changed, unless VF is already running,
+		or such change is not applicable on given platform due to fixed hardware
+		or firmware assignment.
+
+		Writes to these attributes may fail with:
+			-EPERM if change is not applicable on give HW/FW.
+			-E2BIG if value larger that HW/FW limit.
+			-EDQUOT if value is larger than maximum quota defined by the PF.
+			-ENOSPC if PF can't allocate required quota.
+			-EBUSY if the resource is currently in use by the VF.
+			-EIO if GuC refuses to change provisioning.
+
+		ggtt_quota: (RW) integer 0..U64_MAX
+			The size of the GGTT address space (in bytes) assigned to the VF.
+			The value might be aligned per HW/FW requirements.
+
+			Default is 0 (unprovisioned).
+
+		lmem_quota: (RW) integer 0..U64_MAX
+			The size of the Local Memory (in bytes) assigned to the VF.
+			The value might be aligned per HW/FW requirements.
+
+			This attribute is only available on discrete platforms.
+
+			Default is 0 (unprovisioned).
+
+		contexts_quota: (RW) 0..U16_MAX
+			The number of GuC submission contexts assigned to the VF.
+			This value might be aligned per HW/FW requirements.
+
+			Default is 0 (unprovisioned).
+
+		doorbells_quota: (RW) 0..U16_MAX
+			The number of GuC doorbells assigned to the VF.
+			This value might be aligned per HW/FW requirements.
+
+			Default is 0 (unprovisioned).
+
+
+What:		/sys/bus/pci/drivers/xe/.../sriov_extensions/pf/tileT/gtX/thresholds/cat_error_count
+What:		/sys/bus/pci/drivers/xe/.../sriov_extensions/pf/tileT/gtX/thresholds/doorbell_time_us
+What:		/sys/bus/pci/drivers/xe/.../sriov_extensions/pf/tileT/gtX/thresholds/engine_reset_count
+What:		/sys/bus/pci/drivers/xe/.../sriov_extensions/pf/tileT/gtX/thresholds/h2g_time_us
+What:		/sys/bus/pci/drivers/xe/.../sriov_extensions/pf/tileT/gtX/thresholds/irq_time_us
+What:		/sys/bus/pci/drivers/xe/.../sriov_extensions/pf/tileT/gtX/thresholds/page_fault_count
+What:		/sys/bus/pci/drivers/xe/.../sriov_extensions/vfN/tileT/gtX/thresholds/cat_error_count
+What:		/sys/bus/pci/drivers/xe/.../sriov_extensions/vfN/tileT/gtX/thresholds/doorbell_time_us
+What:		/sys/bus/pci/drivers/xe/.../sriov_extensions/vfN/tileT/gtX/thresholds/engine_reset_count
+What:		/sys/bus/pci/drivers/xe/.../sriov_extensions/vfN/tileT/gtX/thresholds/h2g_time_us
+What:		/sys/bus/pci/drivers/xe/.../sriov_extensions/vfN/tileT/gtX/thresholds/irq_time_us
+What:		/sys/bus/pci/drivers/xe/.../sriov_extensions/vfN/tileT/gtX/thresholds/page_fault_count
+Date:		2024
+KernelVersion:	TBD
+Contact:	intel-xe@lists.freedesktop.org
+Description:
+		These files represent threshold values used by the GuC to trigger
+		security events if adverse event monitoring is enabled.
+
+		These thresholds are checked every "monitoring_period_ms".
+		Refer to GuC ABI for details about each threshold category.
+
+		Default value for all thresholds is 0 (disabled).
+
+		cat_error_count: (RW) integer
+		doorbell_time_us: (RW) integer
+		engine_reset_count: (RW) integer
+		h2g_time_us: (RW) integer
+		irq_time_us: (RW) integer
+		page_fault_count: (RW) integer

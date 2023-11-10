@@ -35,3 +35,8 @@ host such documentation:
 .. toctree::
 
    xe.rst
+
+.. toctree::
+   :maxdepth: 1
+
+   xe_sriov.rst
