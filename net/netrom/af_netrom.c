@@ -970,6 +970,8 @@ int nr_rx_frame(struct sk_buff *skb, struct net_device *dev)
 		nr_transmit_refusal(skb, 0);
 		if (sk)
 			sock_put(sk);
+		if (make)
+			sock_put(make);
 		return 0;
 	}
 
