@@ -85,9 +85,11 @@ for my $fh ($H, $LH) {
 sub bit_def($) {
 	my $bit = shift @_;
 
-	return "BIT($bit)" if defined $kernel;
-	return "(1U << $bit)" if $bit =~ /^[a-zA-Z0-9_]+$/;
-	return "(1U << ($bit))";
+	if (defined $kernel) {
+		return "BIT$bit" if $bit =~ /^\(.*\)$/;
+		return "BIT($bit)";
+	}
+	return "(1U << $bit)";
 }
 
 print $H <<EOF
@@ -97,23 +99,39 @@ print $H <<EOF
 EOF
   ;
 
-print $H "#include <linux/bits.h>\n\n" if defined $kernel;
-
 print $H <<EOF
-#define CCS_FL_BASE		16
-EOF
-  ;
+#include <linux/bits.h>
 
-print $H "#define CCS_FL_16BIT		" . bit_def("CCS_FL_BASE") . "\n";
-print $H "#define CCS_FL_32BIT		" . bit_def("CCS_FL_BASE + 1") . "\n";
-print $H "#define CCS_FL_FLOAT_IREAL	" . bit_def("CCS_FL_BASE + 2") . "\n";
-print $H "#define CCS_FL_IREAL		" . bit_def("CCS_FL_BASE + 3") . "\n";
+#include <media/v4l2-cci.h>
+
+EOF
+	if defined $kernel;
+
+print $H "#define CCS_FL_BASE		" .
+    (defined $kernel ? "CCI_REG_FLAG_PRIVATE_START" : 16) . "\n";
+
+my $flag = -1;
+
+sub flag_str() {
+	$flag++;
+
+	return "CCS_FL_BASE" if !$flag;
+
+	return "(CCS_FL_BASE + $flag)";
+}
+
+if (! defined $kernel) {
+	print $H "#define CCS_FL_16BIT		" . bit_def(flag_str) . "\n";
+	print $H "#define CCS_FL_32BIT		" . bit_def(flag_str) . "\n";
+}
+print $H "#define CCS_FL_FLOAT_IREAL	" . bit_def(flag_str) . "\n";
+print $H "#define CCS_FL_IREAL		" . bit_def(flag_str) . "\n";
 
 print $H <<EOF
 #define CCS_R_ADDR(r)		((r) & 0xffff)
 
 EOF
-  ;
+    if ! defined $kernel;
 
 print $A <<EOF
 #include <stdint.h>
@@ -189,12 +207,12 @@ sub tabconv($) {
 	return (join "\n", @l) . "\n";
 }
 
-sub elem_size(@) {
+sub elem_bits(@) {
 	my @flags = @_;
 
-	return 2 if grep /^16$/, @flags;
-	return 4 if grep /^32$/, @flags;
-	return 1;
+	return 16 if grep /^16$/, @flags;
+	return 32 if grep /^32$/, @flags;
+	return 8;
 }
 
 sub arr_size($) {
@@ -369,15 +387,18 @@ while (<$R>) {
 	$name =~ s/[,\.-]/_/g;
 
 	my $flagstring = "";
-	my $size = elem_size(@flags);
-	$flagstring .= "| CCS_FL_16BIT " if $size eq "2";
-	$flagstring .= "| CCS_FL_32BIT " if $size eq "4";
+	my $bits = elem_bits(@flags);
+	if (! defined $kernel) {
+		$flagstring .= "| CCS_FL_16BIT " if $bits == 16;
+		$flagstring .= "| CCS_FL_32BIT " if $bits == 32;
+	}
 	$flagstring .= "| CCS_FL_FLOAT_IREAL " if grep /^float_ireal$/, @flags;
 	$flagstring .= "| CCS_FL_IREAL " if grep /^ireal$/, @flags;
 	$flagstring =~ s/^\| //;
 	$flagstring =~ s/ $//;
 	$flagstring = "($flagstring)" if $flagstring =~ /\|/;
 	my $base_addr = $addr;
+	$addr = "CCI_REG$bits($addr)" if defined $kernel;
 	$addr = "($addr | $flagstring)" if $flagstring ne "";
 
 	my $arglist = @$args ? "(" . (join ", ", @$args) . ")" : "";
@@ -392,7 +413,7 @@ while (<$R>) {
 		  argparams => {},
 		  args => $args,
 		  arglist => $arglist,
-		  elsize => $size,
+		  elsize => $bits / 8,
 		);
 
 	if (!@$args) {
