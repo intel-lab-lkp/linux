@@ -21,6 +21,27 @@
 	status = "okay";
 };
 
+&q6v5_wcss {
+	pd-1 {
+		firmware-name = "ath11k/IPQ5332/hw1.0/q6_fw1.mdt";
+		interrupts-extended = <&wcss_smp2p_in 8 IRQ_TYPE_NONE>,
+				      <&wcss_smp2p_in 9 IRQ_TYPE_NONE>,
+				      <&wcss_smp2p_in 12 IRQ_TYPE_NONE>,
+				      <&wcss_smp2p_in 11 IRQ_TYPE_NONE>;
+		interrupt-names = "fatal",
+				  "ready",
+				  "spawn-ack",
+				  "stop-ack";
+
+		qcom,smem-states = <&wcss_smp2p_out 8>,
+				   <&wcss_smp2p_out 9>,
+				   <&wcss_smp2p_out 10>;
+		qcom,smem-state-names = "shutdown",
+					"stop",
+					"spawn";
+	};
+};
+
 &sdhc {
 	bus-width = <4>;
 	max-frequency = <192000000>;
