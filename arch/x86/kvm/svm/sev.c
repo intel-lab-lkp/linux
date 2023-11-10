@@ -2043,13 +2043,6 @@ int sev_mem_enc_unregister_region(struct kvm *kvm,
 		goto failed;
 	}
 
-	/*
-	 * Ensure that all guest tagged cache entries are flushed before
-	 * releasing the pages back to the system for use. CLFLUSH will
-	 * not do this, so issue a WBINVD.
-	 */
-	wbinvd_on_all_cpus();
-
 	__unregister_enc_region_locked(kvm, region);
 
 	mutex_unlock(&kvm->lock);
@@ -2146,13 +2139,6 @@ void sev_vm_destroy(struct kvm *kvm)
 		kvm_put_kvm(owner_kvm);
 		return;
 	}
-
-	/*
-	 * Ensure that all guest tagged cache entries are flushed before
-	 * releasing the pages back to the system for use. CLFLUSH will
-	 * not do this, so issue a WBINVD.
-	 */
-	wbinvd_on_all_cpus();
 
 	/*
 	 * if userspace was terminated before unregistering the memory regions
