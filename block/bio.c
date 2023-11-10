@@ -1227,8 +1227,10 @@ static int __bio_iov_iter_get_pages(struct bio *bio, struct iov_iter *iter)
 	iov_iter_extraction_t extraction_flags = 0;
 	unsigned short nr_pages = bio->bi_max_vecs - bio->bi_vcnt;
 	unsigned short entries_left = bio->bi_max_vecs - bio->bi_vcnt;
+	struct block_device *bdev = bio->bi_bdev;
 	struct bio_vec *bv = bio->bi_io_vec + bio->bi_vcnt;
 	struct page **pages = (struct page **)bv;
+	ssize_t max_extract = UINT_MAX - bio->bi_iter.bi_size;
 	ssize_t size, left;
 	unsigned len, i = 0;
 	size_t offset;
@@ -1242,7 +1244,7 @@ static int __bio_iov_iter_get_pages(struct bio *bio, struct iov_iter *iter)
 	BUILD_BUG_ON(PAGE_PTRS_PER_BVEC < 2);
 	pages += entries_left * (PAGE_PTRS_PER_BVEC - 1);
 
-	if (bio->bi_bdev && blk_queue_pci_p2pdma(bio->bi_bdev->bd_disk->queue))
+	if (bdev && blk_queue_pci_p2pdma(bdev->bd_disk->queue))
 		extraction_flags |= ITER_ALLOW_P2PDMA;
 
 	/*
@@ -1252,16 +1254,21 @@ static int __bio_iov_iter_get_pages(struct bio *bio, struct iov_iter *iter)
 	 * result to ensure the bio's total size is correct. The remainder of
 	 * the iov data will be picked up in the next bio iteration.
 	 */
-	size = iov_iter_extract_pages(iter, &pages,
-				      UINT_MAX - bio->bi_iter.bi_size,
+	if (bdev && bio_op(bio) != REQ_OP_ZONE_APPEND) {
+		unsigned int max = queue_max_bytes(bdev_get_queue(bdev));
+
+		max_extract = bio->bi_iter.bi_size ?
+			max - bio->bi_iter.bi_size & (max - 1) : max;
+	}
+	size = iov_iter_extract_pages(iter, &pages, max_extract,
 				      nr_pages, extraction_flags, &offset);
 	if (unlikely(size <= 0))
 		return size ? size : -EFAULT;
 
 	nr_pages = DIV_ROUND_UP(offset + size, PAGE_SIZE);
 
-	if (bio->bi_bdev) {
-		size_t trim = size & (bdev_logical_block_size(bio->bi_bdev) - 1);
+	if (bdev) {
+		size_t trim = size & (bdev_logical_block_size(bdev) - 1);
 		iov_iter_revert(iter, trim);
 		size -= trim;
 	}
