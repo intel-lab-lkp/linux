@@ -1,0 +1,30 @@
+drm drm-fixes ffc253263a1375a65fa6c9f62a893e9767fbebfa
+	Linux 6.6
+drm-misc drm-misc-fixes 0e8b9f258baed25f1c5672613699247c76b007b5
+	drm/qxl: prevent memory leak
+drm-intel drm-intel-fixes 4cbed7702eb775cca22fff6827a549092cb59f61
+	drm/i915/pmu: Check if pmu is closed before stopping event
+drm drm-next 03df0fc007ca4713fa1e716329af556f981807e4
+	Merge tag 'amd-drm-next-6.7-2023-11-10' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm-misc drm-misc-next-fixes 94565e95e247c188fed4d3da1034402f3fb297de
+	drm/ssd130x: Fix possible uninitialized usage of crtc_state variable
+drm-intel drm-intel-next-fixes 9506fba463fcbdf8c8b7af3ec9ee34360df843fe
+	drm/i915/tc: Fix -Wformat-truncation in intel_tc_port_init
+drm-misc drm-misc-next 540527b1385fb203cc4513ca838b4de60bbbc49a
+	drm/panfrost: Set regulators on/off during system sleep on MediaTek SoCs
+drm-intel drm-intel-next 9b1c97fc0ce6090c328b5723250f4deeefc95fcd
+	drm/i915: remove excess functions from plane protection check
+drm-intel drm-intel-gt-next 968853033d8aa4dbb80fbafa6f5d9b6a0ea21272
+	drm/i915: Implement fdinfo memory stats printing
+drm-intel topic/core-for-CI 8273f4404517c733e12a245cb837d02d7646b85b
+	PCI/ASPM: pci_enable_link_state: Add argument to acquire bus lock
+drm-misc topic/i915-ttm 1e3944578b749449bd7fa6bf0bae4c3d3f5f1733
+	Merge tag 'amd-drm-next-5.16-2021-09-27' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm topic/nouveau-misc dfc4005f8c172eea359f9db08c3b2b0ff0153699
+	drm/nouveau/disp: move DAC load detection method
+drm topic/drm-ci ad6bfe1b66a5c146ec236847eca7af4c8806d666
+	drm: ci: docs: fix build warning - add missing escape
+drm topic/vmemdup-user-array 06ab64a0d836ac430c5f94669710a78aa43942cb
+	drm: vmwgfx_surface.c: copy user-array safely
+drm topic/nvidia-gsp 8d55b0a940bb10592ffaad68d14314823ddf4cdf
+	nouveau/gsp: add some basic registry entries.
