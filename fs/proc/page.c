@@ -110,8 +110,7 @@ static inline u64 kpf_copy_bit(u64 kflags, int ubit, int kbit)
 u64 stable_page_flags(struct page *page)
 {
 	struct folio *folio;
-	u64 k;
-	u64 u;
+	u64 k, p, u;
 
 	/*
 	 * pseudo flag: KPF_NOPAGE
@@ -121,7 +120,8 @@ u64 stable_page_flags(struct page *page)
 		return 1 << KPF_NOPAGE;
 
 	folio = page_folio(page);
-	k = page->flags;
+	k = folio->flags;
+	p = page->flags;
 	u = 0;
 
 	/*
@@ -202,7 +202,7 @@ u64 stable_page_flags(struct page *page)
 	u |= kpf_copy_bit(k, KPF_MLOCKED,	PG_mlocked);
 
 #ifdef CONFIG_MEMORY_FAILURE
-	u |= kpf_copy_bit(k, KPF_HWPOISON,	PG_hwpoison);
+	u |= kpf_copy_bit(p, KPF_HWPOISON,	PG_hwpoison);
 #endif
 
 #ifdef CONFIG_ARCH_USES_PG_UNCACHED
@@ -211,13 +211,13 @@ u64 stable_page_flags(struct page *page)
 
 	u |= kpf_copy_bit(k, KPF_RESERVED,	PG_reserved);
 	u |= kpf_copy_bit(k, KPF_MAPPEDTODISK,	PG_mappedtodisk);
-	u |= kpf_copy_bit(k, KPF_PRIVATE,	PG_private);
-	u |= kpf_copy_bit(k, KPF_PRIVATE_2,	PG_private_2);
-	u |= kpf_copy_bit(k, KPF_OWNER_PRIVATE,	PG_owner_priv_1);
+	u |= kpf_copy_bit(p, KPF_PRIVATE,	PG_private);
+	u |= kpf_copy_bit(p, KPF_PRIVATE_2,	PG_private_2);
+	u |= kpf_copy_bit(p, KPF_OWNER_PRIVATE,	PG_owner_priv_1);
 	u |= kpf_copy_bit(k, KPF_ARCH,		PG_arch_1);
 #ifdef CONFIG_ARCH_USES_PG_ARCH_X
-	u |= kpf_copy_bit(k, KPF_ARCH_2,	PG_arch_2);
-	u |= kpf_copy_bit(k, KPF_ARCH_3,	PG_arch_3);
+	u |= kpf_copy_bit(p, KPF_ARCH_2,	PG_arch_2);
+	u |= kpf_copy_bit(p, KPF_ARCH_3,	PG_arch_3);
 #endif
 
 	return u;
