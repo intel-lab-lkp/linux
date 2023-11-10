@@ -127,6 +127,14 @@ efi_status_t efi_handle_cmdline(efi_loaded_image_t *image, char **cmdline_ptr)
 		return EFI_OUT_OF_RESOURCES;
 	}
 
+#ifdef CONFIG_GENERIC_CMDLINE
+	status = efi_handle_builtin_cmdline(cmdline);
+	if (status != EFI_SUCCESS) {
+		goto fail_free_cmdline;
+	}
+#endif
+
+#ifdef CONFIG_CMDLINE
 	if (IS_ENABLED(CONFIG_CMDLINE_EXTEND) ||
 	    IS_ENABLED(CONFIG_CMDLINE_FORCE) ||
 	    cmdline_size == 0) {
@@ -144,6 +152,7 @@ efi_status_t efi_handle_cmdline(efi_loaded_image_t *image, char **cmdline_ptr)
 			goto fail_free_cmdline;
 		}
 	}
+#endif
 
 	*cmdline_ptr = cmdline;
 	return EFI_SUCCESS;

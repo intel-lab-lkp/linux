@@ -11,6 +11,7 @@
 
 #include <linux/efi.h>
 #include <linux/kernel.h>
+#include <linux/cmdline.h>
 #include <asm/efi.h>
 #include <asm/setup.h>
 
@@ -27,6 +28,34 @@ static bool efi_disable_pci_dma = IS_ENABLED(CONFIG_EFI_DISABLE_PCI_DMA);
 bool __pure __efi_soft_reserve_enabled(void)
 {
 	return !efi_nosoftreserve;
+}
+
+/**
+ * efi_handle_cmdline() - handle adding in built-in parts of the command line
+ * @cmdline:	kernel command line
+ *
+ * Add in the generic parts of the commandline and start the parsing of the
+ * command line.
+ *
+ * Return:	status code
+ */
+efi_status_t efi_handle_builtin_cmdline(char const *cmdline)
+{
+	efi_status_t status = EFI_SUCCESS;
+
+	if (sizeof(CMDLINE_STATIC_PREPEND) > 1)
+		status |= efi_parse_options(CMDLINE_STATIC_PREPEND);
+
+	if (!IS_ENABLED(CONFIG_CMDLINE_OVERRIDE))
+		status |= efi_parse_options(cmdline);
+
+	if (sizeof(CMDLINE_STATIC_APPEND) > 1)
+		status |= efi_parse_options(CMDLINE_STATIC_APPEND);
+
+	if (status != EFI_SUCCESS)
+		efi_err("Failed to parse options\n");
+
+	return status;
 }
 
 /**
