@@ -10542,6 +10542,23 @@ static inline void calculate_imbalance(struct lb_env *env, struct sd_lb_stats *s
 					 local->group_util;
 
 			/*
+			 * On an asymmetric system with CPU-bound tasks, a
+			 * migrate_util balance might not be able to migrate a
+			 * task from a big to a little CPU, letting a little
+			 * CPU unused.
+			 * If local has an empty CPU and busiest is overloaded,
+			 * balance one task with a migrate_task migration type
+			 * instead.
+			 */
+			if (env->sd->flags & SD_ASYM_CPUCAPACITY &&
+			    local->sum_nr_running < local->group_weight &&
+			    busiest->sum_nr_running > busiest->group_weight) {
+				env->migration_type = migrate_task;
+				env->imbalance = 1;
+				return;
+			}
+
+			/*
 			 * In some cases, the group's utilization is max or even
 			 * higher than capacity because of migrations but the
 			 * local CPU is (newly) idle. There is at least one
