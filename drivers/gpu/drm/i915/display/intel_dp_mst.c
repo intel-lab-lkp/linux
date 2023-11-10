@@ -273,6 +273,8 @@ static int intel_dp_dsc_mst_compute_link_config(struct intel_encoder *encoder,
 	int min_bpp, max_bpp, sink_min_bpp, sink_max_bpp;
 	u8 dsc_max_bpc;
 	int min_compressed_bpp, max_compressed_bpp;
+	int bppx16_incr = drm_dp_dsc_sink_bpp_incr(connector->dp.dsc_dpcd);
+	int bppx16_step;
 
 	/* Max DSC Input BPC for ICL is 10 and for TGL+ is 12 */
 	if (DISPLAY_VER(i915) >= 12)
@@ -327,11 +329,16 @@ static int intel_dp_dsc_mst_compute_link_config(struct intel_encoder *encoder,
 	min_compressed_bpp = intel_dp_dsc_nearest_valid_bpp(i915, min_compressed_bpp,
 							    crtc_state->pipe_bpp);
 
+	if (DISPLAY_VER(i915) < 14 || bppx16_incr <= 1)
+		bppx16_step = 16;
+	else
+		bppx16_step = 16 / bppx16_incr;
+
 	slots = intel_dp_mst_find_vcpi_slots_for_bpp(encoder, crtc_state,
 						     to_bpp_x16(max_compressed_bpp),
 						     to_bpp_x16(min_compressed_bpp),
 						     limits,
-						     conn_state, 16, true);
+						     conn_state, bppx16_step, true);
 
 	if (slots < 0)
 		return slots;
