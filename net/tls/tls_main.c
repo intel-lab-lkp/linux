@@ -806,22 +806,6 @@ static int tls_setsockopt(struct sock *sk, int level, int optname,
 	return do_tls_setsockopt(sk, optname, optval, optlen);
 }
 
-struct tls_context *tls_ctx_create(struct sock *sk)
-{
-	struct inet_connection_sock *icsk = inet_csk(sk);
-	struct tls_context *ctx;
-
-	ctx = kzalloc(sizeof(*ctx), GFP_ATOMIC);
-	if (!ctx)
-		return NULL;
-
-	mutex_init(&ctx->tx_lock);
-	rcu_assign_pointer(icsk->icsk_ulp_data, ctx);
-	ctx->sk_proto = READ_ONCE(sk->sk_prot);
-	ctx->sk = sk;
-	return ctx;
-}
-
 static void build_proto_ops(struct proto_ops ops[TLS_NUM_CONFIG][TLS_NUM_CONFIG],
 			    const struct proto_ops *base)
 {
@@ -933,6 +917,7 @@ static void build_protos(struct proto prot[TLS_NUM_CONFIG][TLS_NUM_CONFIG],
 
 static int tls_init(struct sock *sk)
 {
+	struct inet_connection_sock *icsk = inet_csk(sk);
 	struct tls_context *ctx;
 	int rc = 0;
 
@@ -954,14 +939,27 @@ static int tls_init(struct sock *sk)
 
 	/* allocate tls context */
 	write_lock_bh(&sk->sk_callback_lock);
-	ctx = tls_ctx_create(sk);
+	ctx = kzalloc(sizeof(*ctx), GFP_ATOMIC);
 	if (!ctx) {
 		rc = -ENOMEM;
 		goto out;
 	}
 
+	mutex_init(&ctx->tx_lock);
+	ctx->sk_proto = READ_ONCE(sk->sk_prot);
+	ctx->sk = sk;
 	ctx->tx_conf = TLS_BASE;
 	ctx->rx_conf = TLS_BASE;
+	/* rcu_assign_pointer() should be called after initialization of
+	 * all fields of ctx. It ensures that all fields of ctx are
+	 * visible before changing sk->sk_prot, and prevents reading of
+	 * uninitialized fields in tls_{getsockopt,setsockopt}. Note that
+	 * we do not need a read barrier in tls_{getsockopt,setsockopt} as
+	 * there is an address dependency between
+	 * sk->sk_proto->{getsockopt,setsockopt} and ctx->sk_proto.
+	 */
+	rcu_assign_pointer(icsk->icsk_ulp_data, ctx);
+
 	update_sk_prot(sk, ctx);
 out:
 	write_unlock_bh(&sk->sk_callback_lock);
