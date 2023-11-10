@@ -438,3 +438,6 @@ $(obj)/$(TEST_FORTIFY_LOG): $(addprefix $(obj)/, $(TEST_FORTIFY_LOGS)) FORCE
 ifeq ($(CONFIG_FORTIFY_SOURCE),y)
 $(obj)/string.o: $(obj)/$(TEST_FORTIFY_LOG)
 endif
+
+obj-$(CONFIG_TEST_CMDLINE) += test_cmdline1.o
+obj-$(CONFIG_CMDLINE_BOOL)     += generic_cmdline.o

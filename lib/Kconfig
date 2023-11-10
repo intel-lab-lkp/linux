@@ -729,6 +729,10 @@ config PARMAN
 config OBJAGG
 	tristate "objagg" if COMPILE_TEST
 
+config TEST_CMDLINE
+	depends on CMDLINE_BOOL && !CMDLINE_OVERRIDE
+	tristate "Test generic command line handling"
+
 endmenu
 
 config GENERIC_IOREMAP
