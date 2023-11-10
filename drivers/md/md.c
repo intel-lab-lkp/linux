@@ -4840,13 +4840,16 @@ action_show(struct mddev *mddev, char *page)
 	return sprintf(page, "%s\n", type);
 }
 
-static void stop_sync_thread(struct mddev *mddev)
+static int stop_sync_thread(struct mddev *mddev)
 {
-	if (!test_bit(MD_RECOVERY_RUNNING, &mddev->recovery))
-		return;
+	int ret = 0;
 
-	if (mddev_lock(mddev))
-		return;
+	if (!test_bit(MD_RECOVERY_RUNNING, &mddev->recovery))
+		return 0;
+
+	ret = mddev_lock(mddev);
+	if (ret)
+		return ret;
 
 	/*
 	 * Check again in case MD_RECOVERY_RUNNING is cleared before lock is
@@ -4854,7 +4857,7 @@ static void stop_sync_thread(struct mddev *mddev)
 	 */
 	if (!test_bit(MD_RECOVERY_RUNNING, &mddev->recovery)) {
 		mddev_unlock(mddev);
-		return;
+		return 0;
 	}
 
 	if (work_pending(&mddev->sync_work))
@@ -4868,50 +4871,69 @@ static void stop_sync_thread(struct mddev *mddev)
 	md_wakeup_thread_directly(mddev->sync_thread);
 
 	mddev_unlock(mddev);
+	return 0;
 }
 
-static void idle_sync_thread(struct mddev *mddev)
+static int idle_sync_thread(struct mddev *mddev)
 {
+	int ret;
 	int sync_seq = atomic_read(&mddev->sync_seq);
+	bool flag;
 
-	if (mutex_lock_interruptible(&mddev->sync_mutex))
-		return;
+	ret = mutex_lock_interruptible(&mddev->sync_mutex);
+	if (ret)
+		return ret;
 
-	clear_bit(MD_RECOVERY_FROZEN, &mddev->recovery);
-	stop_sync_thread(mddev);
+	flag = test_and_clear_bit(MD_RECOVERY_FROZEN, &mddev->recovery);
+	ret = stop_sync_thread(mddev);
+	if (ret)
+		goto out;
 
-	wait_event_interruptible(resync_wait,
+	ret = wait_event_interruptible(resync_wait,
 			sync_seq != atomic_read(&mddev->sync_seq) ||
 			!test_bit(MD_RECOVERY_RUNNING, &mddev->recovery));
-
+out:
+	if (ret && flag)
+		set_bit(MD_RECOVERY_FROZEN, &mddev->recovery);
 	mutex_unlock(&mddev->sync_mutex);
+	return ret;
 }
 
-static void frozen_sync_thread(struct mddev *mddev)
+static int frozen_sync_thread(struct mddev *mddev)
 {
-	if (mutex_lock_interruptible(&mddev->sync_mutex))
-		return;
+	int ret = mutex_lock_interruptible(&mddev->sync_mutex);
+	bool flag;
 
-	set_bit(MD_RECOVERY_FROZEN, &mddev->recovery);
-	stop_sync_thread(mddev);
+	if (ret)
+		return ret;
 
-	wait_event_interruptible(resync_wait, mddev->sync_thread == NULL &&
+	flag = test_and_set_bit(MD_RECOVERY_FROZEN, &mddev->recovery);
+	ret = stop_sync_thread(mddev);
+	if (ret)
+		goto out;
+
+	ret = wait_event_interruptible(resync_wait,
+			mddev->sync_thread == NULL &&
 			!test_bit(MD_RECOVERY_RUNNING, &mddev->recovery));
-
+out:
+	if (ret && !flag)
+		clear_bit(MD_RECOVERY_FROZEN, &mddev->recovery);
 	mutex_unlock(&mddev->sync_mutex);
+	return ret;
 }
 
 static ssize_t
 action_store(struct mddev *mddev, const char *page, size_t len)
 {
+	int ret = 0;
+
 	if (!mddev->pers || !mddev->pers->sync_request)
 		return -EINVAL;
 
-
 	if (cmd_match(page, "idle"))
-		idle_sync_thread(mddev);
+		ret = idle_sync_thread(mddev);
 	else if (cmd_match(page, "frozen"))
-		frozen_sync_thread(mddev);
+		ret = frozen_sync_thread(mddev);
 	else if (test_bit(MD_RECOVERY_RUNNING, &mddev->recovery))
 		return -EBUSY;
 	else if (cmd_match(page, "resync"))
@@ -4955,6 +4977,10 @@ action_store(struct mddev *mddev, const char *page, size_t len)
 		set_bit(MD_RECOVERY_REQUESTED, &mddev->recovery);
 		set_bit(MD_RECOVERY_SYNC, &mddev->recovery);
 	}
+
+	if (ret)
+		return ret;
+
 	if (mddev->ro == MD_AUTO_READ) {
 		/* A write to sync_action is enough to justify
 		 * canceling read-auto mode
