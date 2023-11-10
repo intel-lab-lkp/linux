@@ -262,31 +262,48 @@ static u64 cpuid_get_supported_xcr0(struct kvm_cpuid_entry2 *entries, int nent)
 	return (best->eax | ((u64)best->edx << 32)) & kvm_caps.supported_xcr0;
 }
 
+static __always_inline void kvm_update_feature_runtime(struct kvm_vcpu *vcpu,
+						       struct kvm_cpuid_entry2 *entry,
+						       unsigned int x86_feature,
+						       bool has_feature)
+{
+	if (entry)
+		cpuid_entry_change(entry, x86_feature, has_feature);
+
+	if (vcpu)
+		guest_cpu_cap_change(vcpu, x86_feature, has_feature);
+}
+
 static void __kvm_update_cpuid_runtime(struct kvm_vcpu *vcpu, struct kvm_cpuid_entry2 *entries,
 				       int nent)
 {
 	struct kvm_cpuid_entry2 *best;
+	struct kvm_vcpu *caps = vcpu;
+
+	/*
+	 * Don't update vCPU capabilities if KVM is updating CPUID entries that
+	 * are coming in from userspace!
+	 */
+	if (entries != vcpu->arch.cpuid_entries)
+		caps = NULL;
 
 	best = cpuid_entry2_find(entries, nent, 1, KVM_CPUID_INDEX_NOT_SIGNIFICANT);
-	if (best) {
-		/* Update OSXSAVE bit */
-		if (boot_cpu_has(X86_FEATURE_XSAVE))
-			cpuid_entry_change(best, X86_FEATURE_OSXSAVE,
+
+	if (boot_cpu_has(X86_FEATURE_XSAVE))
+		kvm_update_feature_runtime(caps, best, X86_FEATURE_OSXSAVE,
 					   kvm_is_cr4_bit_set(vcpu, X86_CR4_OSXSAVE));
 
-		cpuid_entry_change(best, X86_FEATURE_APIC,
-			   vcpu->arch.apic_base & MSR_IA32_APICBASE_ENABLE);
+	kvm_update_feature_runtime(caps, best, X86_FEATURE_APIC,
+				   vcpu->arch.apic_base & MSR_IA32_APICBASE_ENABLE);
 
-		if (!kvm_check_has_quirk(vcpu->kvm, KVM_X86_QUIRK_MISC_ENABLE_NO_MWAIT))
-			cpuid_entry_change(best, X86_FEATURE_MWAIT,
-					   vcpu->arch.ia32_misc_enable_msr &
-					   MSR_IA32_MISC_ENABLE_MWAIT);
-	}
+	if (!kvm_check_has_quirk(vcpu->kvm, KVM_X86_QUIRK_MISC_ENABLE_NO_MWAIT))
+		kvm_update_feature_runtime(caps, best, X86_FEATURE_MWAIT,
+					   vcpu->arch.ia32_misc_enable_msr & MSR_IA32_MISC_ENABLE_MWAIT);
 
 	best = cpuid_entry2_find(entries, nent, 7, 0);
-	if (best && boot_cpu_has(X86_FEATURE_PKU))
-		cpuid_entry_change(best, X86_FEATURE_OSPKE,
-				   kvm_is_cr4_bit_set(vcpu, X86_CR4_PKE));
+	if (boot_cpu_has(X86_FEATURE_PKU))
+		kvm_update_feature_runtime(caps, best, X86_FEATURE_OSPKE,
+					   kvm_is_cr4_bit_set(vcpu, X86_CR4_PKE));
 
 	best = cpuid_entry2_find(entries, nent, 0xD, 0);
 	if (best)
@@ -353,6 +370,9 @@ static void kvm_vcpu_after_set_cpuid(struct kvm_vcpu *vcpu)
 	 * Reset guest capabilities to userspace's guest CPUID definition, i.e.
 	 * honor userspace's definition for features that don't require KVM or
 	 * hardware management/support (or that KVM simply doesn't care about).
+	 *
+	 * Note, KVM has already done runtime updates on guest CPUID, i.e. this
+	 * will also correctly set runtime features in guest CPU capabilities.
 	 */
 	for (i = 0; i < NR_KVM_CPU_CAPS; i++) {
 		const struct cpuid_reg cpuid = reverse_cpuid[i];
