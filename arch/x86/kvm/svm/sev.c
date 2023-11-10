@@ -2335,7 +2335,11 @@ void sev_guest_memory_reclaimed(struct kvm *kvm,
 	if (!sev_guest(kvm))
 		return;
 
-	wbinvd_on_all_cpus();
+	if (mmu_notifier_event == MMU_NOTIFY_UNMAP ||
+	    mmu_notifier_event == MMU_NOTIFY_CLEAR ||
+	    mmu_notifier_event == MMU_NOTIFY_RELEASE ||
+	    mmu_notifier_event == MMU_NOTIFY_MIGRATE)
+		wbinvd_on_all_cpus();
 }
 
 void sev_free_vcpu(struct kvm_vcpu *vcpu)
