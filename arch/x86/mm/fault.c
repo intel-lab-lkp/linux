@@ -34,6 +34,7 @@
 #include <asm/kvm_para.h>		/* kvm_handle_async_pf		*/
 #include <asm/vdso.h>			/* fixup_vdso_exception()	*/
 #include <asm/irq_stack.h>
+#include <asm/wrprotect.h>		/* wrprotect_is_on, ...		*/
 
 #define CREATE_TRACE_POINTS
 #include <asm/trace/exceptions.h>
@@ -1497,6 +1498,13 @@ handle_page_fault(struct pt_regs *regs, unsigned long error_code,
 
 	if (unlikely(kmmio_fault(regs, address)))
 		return;
+
+#ifdef CONFIG_WRPROTECT
+	/* only react on protection fault with write access */
+	if (unlikely(wrprotect_is_on))
+		if (wrprotect_page_fault_handler(error_code))
+			return;
+#endif /* CONFIG_WRPROTECT */
 
 	/* Was the fault on kernel-controlled part of the address space? */
 	if (unlikely(fault_in_kernel_space(address))) {
