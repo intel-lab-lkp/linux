@@ -1,0 +1,101 @@
+Kernel drivers ltc4282
+==========================================
+
+Supported chips:
+
+  * Analog Devices LTC4282
+
+    Prefix: 'ltc4282'
+
+    Addresses scanned: - I2C 0x40 - 0x5A (7-bit)
+    Addresses scanned: - I2C 0x80 - 0xB4 with a step of 2 (8-bit)
+
+    Datasheet:
+
+        https://www.analog.com/media/en/technical-documentation/data-sheets/ltc4282.pdf
+
+Author: Nuno Sá <nuno.sa@analog.com>
+
+Description
+___________
+
+The LTC4282 hot swap controller allows a board to be safely inserted and removed
+from a live backplane. Using one or more external N-channel pass transistors,
+board supply voltage and inrush current are ramped up at an adjustable rate. An
+I2C interface and onboard ADC allows for monitoring of board current, voltage,
+power, energy and fault status. The device features analog foldback current
+limiting and supply monitoring for applications from 2.9V to 33V. Dual 12V gate
+drive allows high power applications to either share safe operating area across
+parallel MOSFETs or support a 2-stage start-up that first charges the load
+capacitance followed by enabling a low on-resistance path to the load. The
+LTC4282 is well suited to high power applications because the precise monitoring
+capability and accurate current limiting reduce the extremes in which both loads
+and power supplies must safely operate. Non-volatile configuration allows for
+flexibility in the autonomous generation of alerts and response to faults.
+
+Sysfs entries
+_____________
+
+The following attributes are supported. Limits are read-write and all the other
+attributes are read-only.
+
+======================= ==========================================
+in0_input		Output voltage (mV).
+in0_min			Undervoltage threshold
+in0_max                 Overvoltage threshold
+in0_lowest		Lowest measured voltage
+in0_highest		Highest measured voltage
+in0_min_alarm		Undervoltage alarm
+in0_max_alarm           Overvoltage alarm
+in0_label		Channel label (VSOURCE)
+
+in1_input		Input voltage (mV).
+in1_lcrit_alarm         Critical Undervoltage alarm
+in1_lcrit_fault_log     Undervoltage Fault Log. In some setups, clearing this
+			fault (writing on the file) might be needed.
+in1_crit_alarm          Critical Overvoltage alarm
+in1_crit_fault_log	Overvoltage Fault Log. In some setups, clearing this
+			fault (writing on the file) might be needed
+in1_label		Channel label (VDD)
+
+in2_input		GPIO voltage (mV)
+in2_min			Undervoltage threshold
+in2_max			Overvoltage threshold
+in2_lowest		Lowest measured voltage
+in2_highest		Highest measured voltage
+in2_min_alarm		Undervoltage alarm
+in2_max_alarm		Overvoltage alarm
+in2_label		Channel label (VGPIO)
+
+curr1_input		Sense current (mA)
+curr1_min		Undercurrent threshold
+curr1_max		Overcurrent threshold
+curr1_lowest		Lowest measured current
+curr1_highest		Highest measured current
+curr1_min_alarm		Undercurrent alarm
+curr1_max_alarm		Overcurrent alarm
+curr1_crit_alarm        Critical Overcurrent alarm
+curr1_crit_fault_log	Overcurrent Fault Log. In some setups, clearing this
+			fault (writing on the file) might be needed
+curr1_label		Channel label (ISENSE)
+
+power1_input		Power (in uW)
+power1_min		Low power threshold
+power1_max		High power threshold
+power1_average          Average Power use
+power1_input_lowest	Historical minimum power use
+power1_input_highest	Historical maximum power use
+power1_min_alarm	Low power alarm
+power1_max_alarm	High power alarm
+power1_good		Power considered good
+power1_fault_log	Power bad Fault log
+power1_label		Channel label (Power)
+
+energy1_input		Measured energy over time (in microJoule)
+energy1_enable		Enable/Disable Energy accumulation
+
+fet_short_fault		FET short alarm
+fet_short_fault_log	FET short Fault log
+fet_bad_fault		FET bad alarm
+fet_bad_fault_log	FET bad Fault log
+======================= ==========================================
