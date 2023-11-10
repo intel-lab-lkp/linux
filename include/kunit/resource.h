@@ -390,6 +390,15 @@ void kunit_remove_resource(struct kunit *test, struct kunit_resource *res);
 /* A 'deferred action' function to be used with kunit_add_action. */
 typedef void (kunit_action_t)(void *);
 
+/* We can't cast function pointers to kunit_action_t if CFI is enabled. */
+#define KUNIT_DEFINE_ACTION_WRAPPER(wrapper, orig, arg_type) \
+	static void wrapper(void *in) \
+	{ \
+		arg_type arg = (arg_type)in; \
+		orig(arg); \
+	}
+
+
 /**
  * kunit_add_action() - Call a function when the test ends.
  * @test: Test case to associate the action with.
