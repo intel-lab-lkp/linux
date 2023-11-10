@@ -6317,12 +6317,11 @@ static void md_clean(struct mddev *mddev)
 
 static void __md_stop_writes(struct mddev *mddev)
 {
-	set_bit(MD_RECOVERY_FROZEN, &mddev->recovery);
-	if (work_pending(&mddev->sync_work))
-		flush_workqueue(md_misc_wq);
-	if (mddev->sync_thread) {
-		set_bit(MD_RECOVERY_INTR, &mddev->recovery);
-		md_reap_sync_thread(mddev);
+	if (test_bit(MD_RECOVERY_RUNNING, &mddev->recovery)) {
+		stop_sync_thread(mddev, true, false);
+		mddev_lock_nointr(mddev);
+	} else {
+		set_bit(MD_RECOVERY_FROZEN, &mddev->recovery);
 	}
 
 	del_timer_sync(&mddev->safemode_timer);
