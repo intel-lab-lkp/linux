@@ -154,7 +154,8 @@ static unsigned long long kvm_active_vms;
 
 static DEFINE_PER_CPU(cpumask_var_t, cpu_kick_mask);
 
-__weak void kvm_arch_guest_memory_reclaimed(struct kvm *kvm)
+__weak void kvm_arch_guest_memory_reclaimed(struct kvm *kvm,
+					    unsigned int mmu_notifier_event)
 {
 }
 
@@ -396,7 +397,7 @@ void kvm_flush_remote_tlbs_memslot(struct kvm *kvm,
 static void kvm_flush_shadow_all(struct kvm *kvm)
 {
 	kvm_arch_flush_shadow_all(kvm);
-	kvm_arch_guest_memory_reclaimed(kvm);
+	kvm_arch_guest_memory_reclaimed(kvm, MMU_NOTIFY_RELEASE);
 }
 
 #ifdef KVM_ARCH_NR_OBJS_PER_MEMORY_CACHE
@@ -546,11 +547,13 @@ typedef bool (*hva_handler_t)(struct kvm *kvm, struct kvm_gfn_range *range);
 typedef void (*on_lock_fn_t)(struct kvm *kvm, unsigned long start,
 			     unsigned long end);
 
-typedef void (*on_unlock_fn_t)(struct kvm *kvm);
+typedef void (*on_unlock_fn_t)(struct kvm *kvm,
+			       unsigned int mmu_notifier_event);
 
 struct kvm_hva_range {
 	unsigned long start;
 	unsigned long end;
+	unsigned int event;
 	union kvm_mmu_notifier_arg arg;
 	hva_handler_t handler;
 	on_lock_fn_t on_lock;
@@ -647,7 +650,7 @@ static __always_inline int __kvm_handle_hva_range(struct kvm *kvm,
 	if (locked) {
 		KVM_MMU_UNLOCK(kvm);
 		if (!IS_KVM_NULL_FN(range->on_unlock))
-			range->on_unlock(kvm);
+			range->on_unlock(kvm, range->event);
 	}
 
 	srcu_read_unlock(&kvm->srcu, idx);
@@ -774,6 +777,7 @@ static int kvm_mmu_notifier_invalidate_range_start(struct mmu_notifier *mn,
 	const struct kvm_hva_range hva_range = {
 		.start		= range->start,
 		.end		= range->end,
+		.event		= range->event,
 		.handler	= kvm_unmap_gfn_range,
 		.on_lock	= kvm_mmu_invalidate_begin,
 		.on_unlock	= kvm_arch_guest_memory_reclaimed,
@@ -1769,7 +1773,7 @@ static void kvm_invalidate_memslot(struct kvm *kvm,
 	 *	- kvm_is_visible_gfn (mmu_check_root)
 	 */
 	kvm_arch_flush_shadow_memslot(kvm, old);
-	kvm_arch_guest_memory_reclaimed(kvm);
+	kvm_arch_guest_memory_reclaimed(kvm, MMU_NOTIFY_UNMAP);
 
 	/* Was released by kvm_swap_active_memslots(), reacquire. */
 	mutex_lock(&kvm->slots_arch_lock);

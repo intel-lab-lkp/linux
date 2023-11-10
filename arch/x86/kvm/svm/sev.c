@@ -2329,7 +2329,8 @@ do_wbinvd:
 	wbinvd_on_all_cpus();
 }
 
-void sev_guest_memory_reclaimed(struct kvm *kvm)
+void sev_guest_memory_reclaimed(struct kvm *kvm,
+				unsigned int mmu_notifier_event)
 {
 	if (!sev_guest(kvm))
 		return;

@@ -2270,7 +2270,8 @@ static inline long kvm_arch_vcpu_async_ioctl(struct file *filp,
 }
 #endif /* CONFIG_HAVE_KVM_VCPU_ASYNC_IOCTL */
 
-void kvm_arch_guest_memory_reclaimed(struct kvm *kvm);
+void kvm_arch_guest_memory_reclaimed(struct kvm *kvm,
+				     unsigned int mmu_notifier_event);
 
 #ifdef CONFIG_HAVE_KVM_VCPU_RUN_PID_CHANGE
 int kvm_arch_vcpu_run_pid_change(struct kvm_vcpu *vcpu);

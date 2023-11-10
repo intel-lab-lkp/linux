@@ -10592,9 +10592,10 @@ static void vcpu_load_eoi_exitmap(struct kvm_vcpu *vcpu)
 		vcpu, (u64 *)vcpu->arch.ioapic_handled_vectors);
 }
 
-void kvm_arch_guest_memory_reclaimed(struct kvm *kvm)
+void kvm_arch_guest_memory_reclaimed(struct kvm *kvm,
+				     unsigned int mmu_notifier_event)
 {
-	static_call_cond(kvm_x86_guest_memory_reclaimed)(kvm);
+	static_call_cond(kvm_x86_guest_memory_reclaimed)(kvm, mmu_notifier_event);
 }
 
 static void kvm_vcpu_reload_apic_access_page(struct kvm_vcpu *vcpu)
