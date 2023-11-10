@@ -720,7 +720,7 @@ static int __guc_add_request(struct intel_guc *guc, struct i915_request *rq)
 	if (unlikely(context_blocked(ce) && !intel_context_is_parent(ce)))
 		goto out;
 
-	enabled = context_enabled(ce) || context_blocked(ce);
+	enabled = context_enabled(ce) || context_blocked(ce) || context_pending_enable(ce);
 
 	if (!enabled) {
 		action[len++] = INTEL_GUC_ACTION_SCHED_CONTEXT_MODE_SET;
