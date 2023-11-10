@@ -39,3 +39,41 @@ static int __init setup_elfcorehdr(char *arg)
 	return end > arg ? 0 : -EINVAL;
 }
 early_param("elfcorehdr", setup_elfcorehdr);
+
+/*
+ * Architectures may override this function to read from ELF header
+ */
+ssize_t __weak elfcorehdr_read(char *buf, size_t count, u64 *ppos)
+{
+	struct kvec kvec = { .iov_base = buf, .iov_len = count };
+	struct iov_iter iter;
+
+	if (!is_kdump_kernel()) {
+		memcpy(buf, ppos, count);
+		return count;
+	}
+
+	iov_iter_kvec(&iter, ITER_DEST, &kvec, 1, count);
+
+	return read_from_oldmem(&iter, count, ppos, false);
+}
+
+/*
+ * Architectures may override this function to read from notes sections
+ */
+ssize_t __weak elfcorehdr_read_notes(char *buf, size_t count, u64 *ppos)
+{
+	struct kvec kvec = { .iov_base = buf, .iov_len = count };
+	struct iov_iter iter;
+
+	if (!is_kdump_kernel()) {
+		memcpy(buf, __va(*ppos), count);
+		return count;
+	}
+
+	iov_iter_kvec(&iter, ITER_DEST, &kvec, 1, count);
+
+	return read_from_oldmem(&iter, count, ppos,
+			cc_platform_has(CC_ATTR_MEM_ENCRYPT));
+}
+

@@ -192,33 +192,6 @@ void __weak elfcorehdr_free(unsigned long long addr)
 {}
 
 /*
- * Architectures may override this function to read from ELF header
- */
-ssize_t __weak elfcorehdr_read(char *buf, size_t count, u64 *ppos)
-{
-	struct kvec kvec = { .iov_base = buf, .iov_len = count };
-	struct iov_iter iter;
-
-	iov_iter_kvec(&iter, ITER_DEST, &kvec, 1, count);
-
-	return read_from_oldmem(&iter, count, ppos, false);
-}
-
-/*
- * Architectures may override this function to read from notes sections
- */
-ssize_t __weak elfcorehdr_read_notes(char *buf, size_t count, u64 *ppos)
-{
-	struct kvec kvec = { .iov_base = buf, .iov_len = count };
-	struct iov_iter iter;
-
-	iov_iter_kvec(&iter, ITER_DEST, &kvec, 1, count);
-
-	return read_from_oldmem(&iter, count, ppos,
-			cc_platform_has(CC_ATTR_MEM_ENCRYPT));
-}
-
-/*
  * Architectures may override this function to map oldmem
  */
 int __weak remap_oldmem_pfn_range(struct vm_area_struct *vma,
@@ -720,7 +693,7 @@ static u64 get_vmcore_size(size_t elfsz, size_t elfnotesegsz,
  * program header table pointed to by @ehdr_ptr to real size of ELF
  * note segment.
  */
-static int __init update_note_header_size_elf64(const Elf64_Ehdr *ehdr_ptr)
+static int update_note_header_size_elf64(const Elf64_Ehdr *ehdr_ptr)
 {
 	int i, rc=0;
 	Elf64_Phdr *phdr_ptr;
@@ -734,14 +707,17 @@ static int __init update_note_header_size_elf64(const Elf64_Ehdr *ehdr_ptr)
 			continue;
 		max_sz = phdr_ptr->p_memsz;
 		offset = phdr_ptr->p_offset;
-		notes_section = kmalloc(max_sz, GFP_KERNEL);
-		if (!notes_section)
-			return -ENOMEM;
-		rc = elfcorehdr_read_notes(notes_section, max_sz, &offset);
-		if (rc < 0) {
-			kfree(notes_section);
-			return rc;
-		}
+		if (is_kdump_kernel()) {
+			notes_section = kmalloc(max_sz, GFP_KERNEL);
+			if (!notes_section)
+				return -ENOMEM;
+			rc = elfcorehdr_read_notes(notes_section, max_sz, &offset);
+			if (rc < 0) {
+				kfree(notes_section);
+				return rc;
+			}
+		} else
+			notes_section = __va(phdr_ptr->p_paddr);
 		nhdr_ptr = notes_section;
 		while (nhdr_ptr->n_namesz != 0) {
 			sz = sizeof(Elf64_Nhdr) +
@@ -755,7 +731,8 @@ static int __init update_note_header_size_elf64(const Elf64_Ehdr *ehdr_ptr)
 			real_sz += sz;
 			nhdr_ptr = (Elf64_Nhdr*)((char*)nhdr_ptr + sz);
 		}
-		kfree(notes_section);
+		if (is_kdump_kernel())
+			kfree(notes_section);
 		phdr_ptr->p_memsz = real_sz;
 		if (real_sz == 0) {
 			pr_warn("Warning: Zero PT_NOTE entries found\n");
@@ -783,7 +760,7 @@ static int __init update_note_header_size_elf64(const Elf64_Ehdr *ehdr_ptr)
  * and each of PT_NOTE program headers has actual ELF note segment
  * size in its p_memsz member.
  */
-static int __init get_note_number_and_size_elf64(const Elf64_Ehdr *ehdr_ptr,
+static int get_note_number_and_size_elf64(const Elf64_Ehdr *ehdr_ptr,
 						 int *nr_ptnote, u64 *sz_ptnote)
 {
 	int i;
@@ -818,7 +795,7 @@ static int __init get_note_number_and_size_elf64(const Elf64_Ehdr *ehdr_ptr,
  * and each of PT_NOTE program headers has actual ELF note segment
  * size in its p_memsz member.
  */
-static int __init copy_notes_elf64(const Elf64_Ehdr *ehdr_ptr, char *notes_buf)
+static int copy_notes_elf64(const Elf64_Ehdr *ehdr_ptr, char *notes_buf)
 {
 	int i, rc=0;
 	Elf64_Phdr *phdr_ptr;
@@ -841,7 +818,7 @@ static int __init copy_notes_elf64(const Elf64_Ehdr *ehdr_ptr, char *notes_buf)
 }
 
 /* Merges all the PT_NOTE headers into one. */
-static int __init merge_note_headers_elf64(char *elfptr, size_t *elfsz,
+int merge_note_headers_elf64(char *elfptr, size_t *elfsz,
 					   char **notes_buf, size_t *notes_sz)
 {
 	int i, nr_ptnote=0, rc=0;

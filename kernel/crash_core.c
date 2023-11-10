@@ -545,15 +545,23 @@ void crash_update_vmcoreinfo_safecopy(void *ptr)
 
 void crash_save_vmcoreinfo(void)
 {
+	unsigned char *tmp_vmcoreinfo_data;
+
 	if (!vmcoreinfo_note)
 		return;
 
 	/* Use the safe copy to generate vmcoreinfo note if have */
-	if (vmcoreinfo_data_safecopy)
+	if (vmcoreinfo_data_safecopy) {
+		tmp_vmcoreinfo_data = vmcoreinfo_data;
 		vmcoreinfo_data = vmcoreinfo_data_safecopy;
+	}
 
 	vmcoreinfo_append_str("CRASHTIME=%lld\n", ktime_get_real_seconds());
 	update_vmcoreinfo_note();
+
+	/* Restore the original destination so it can be used multiple times */
+	if (vmcoreinfo_data_safecopy)
+		vmcoreinfo_data = tmp_vmcoreinfo_data;
 }
 
 void vmcoreinfo_append_str(const char *fmt, ...)
