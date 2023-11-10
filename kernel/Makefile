@@ -47,6 +47,7 @@ obj-y += power/
 obj-y += printk/
 obj-y += irq/
 obj-y += rcu/
+obj-y += livedump/
 obj-y += livepatch/
 obj-y += dma/
 obj-y += entry/

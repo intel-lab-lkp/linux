@@ -2366,6 +2366,21 @@ config WRPROTECT
 
 	  If in doubt, say N.
 
+config LIVEDUMP
+   bool "Live Dump support"
+   depends on WRPROTECT
+   help
+     Set this option to 'Y' to allow the kernel support to acquire
+     a consistent snapshot of kernel space without stopping system.
+
+     This feature regularly causes small overhead on kernel.
+
+     Once this feature is initialized by its special ioctl, it
+     allocates huge memory for itself and causes much more overhead
+     on kernel.
+
+     If in doubt, say N.
+
 config MODIFY_LDT_SYSCALL
 	bool "Enable the LDT (local descriptor table)" if EXPERT
 	default y
