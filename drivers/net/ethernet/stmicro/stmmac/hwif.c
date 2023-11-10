@@ -72,6 +72,11 @@ static int stmmac_dwmac1_quirks(struct stmmac_priv *priv)
 		mac->desc = &ndesc_ops;
 	}
 
+	if (priv->synopsys_id == DWGMAC_CORE_1_00) {
+		priv->plat->tx_coe = 0;
+		priv->plat->rx_coe = STMMAC_RX_COE_NONE;
+	}
+
 	stmmac_dwmac_mode_quirk(priv);
 	return 0;
 }
