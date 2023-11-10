@@ -129,15 +129,43 @@ struct klp_object {
 	bool patched;
 };
 
+struct klp_patch;
+struct klp_state;
+
+/**
+ * struct klp_state_callbacks - callbacks manipulating the state
+ * @setup:	executed before code patching when the state is added
+ * @enable:	executed after code patching when the state is added
+ * @disable:	executed before code unpatching when the state is removed
+ * @release:	executed after code unpatching when the state is removed
+ * @setup_succeeded: internal state used by a rollback on error
+ *
+ * All callbacks are optional.
+ *
+ * @setup callback returns 0 on success and an error code otherwise.
+ * Any error prevents enabling the livepatch. @disable() callbacks
+ * are then called to rollback @enable callbacks which has already
+ * succeeded before.
+ */
+struct klp_state_callbacks {
+	int (*setup)(struct klp_patch *patch, struct klp_state *state);
+	void (*enable)(struct klp_patch *patch, struct klp_state *state);
+	void (*disable)(struct klp_patch *patch, struct klp_state *state);
+	void (*release)(struct klp_patch *patch, struct klp_state *state);
+	bool setup_succeeded;
+};
+
 /**
  * struct klp_state - state of the system modified by the livepatch
  * @id:		system state identifier (non-zero)
  * @version:	version of the change
+ * @callbacks:	optional callbacks used when introducing or removing the state
  * @data:	custom data
  */
 struct klp_state {
 	unsigned long id;
 	unsigned int version;
+	struct klp_state_callbacks callbacks;
 	void *data;
 };
 

@@ -12,6 +12,7 @@
 #include <linux/static_call.h>
 #include "core.h"
 #include "patch.h"
+#include "state.h"
 #include "transition.h"
 
 #define MAX_STACK_ENTRIES  100
@@ -101,6 +102,7 @@ static void klp_complete_transition(void)
 	if (klp_transition_patch->replace && klp_target_state == KLP_PATCHED) {
 		klp_unpatch_replaced_patches(klp_transition_patch);
 		klp_discard_nops(klp_transition_patch);
+		klp_release_obsolete_states(klp_transition_patch);
 	}
 
 	if (klp_target_state == KLP_UNPATCHED) {
@@ -138,6 +140,12 @@ static void klp_complete_transition(void)
 		task = idle_task(cpu);
 		WARN_ON_ONCE(test_tsk_thread_flag(task, TIF_PATCH_PENDING));
 		task->patch_state = KLP_UNDEFINED;
+	}
+
+	if (klp_target_state == KLP_PATCHED) {
+		klp_enable_states(klp_transition_patch);
+	} else if (klp_target_state == KLP_UNPATCHED) {
+		klp_release_states(klp_transition_patch);
 	}
 
 	klp_for_each_object(klp_transition_patch, obj) {

@@ -117,3 +117,121 @@ bool klp_is_patch_compatible(struct klp_patch *patch)
 
 	return true;
 }
+
+bool is_state_in_other_patches(struct klp_patch *patch, struct klp_state *state)
+{
+	struct klp_patch *old_patch;
+	struct klp_state *old_state;
+
+	klp_for_each_patch(old_patch) {
+		if (old_patch == patch)
+			continue;
+
+		klp_for_each_state(old_patch, old_state) {
+			if (old_state->id == state->id)
+				return true;
+		}
+	}
+
+	return false;
+}
+
+int klp_setup_states(struct klp_patch *patch)
+{
+	struct klp_state *state;
+	int err;
+
+	klp_for_each_state(patch, state) {
+		if (!is_state_in_other_patches(patch, state) &&
+		    state->callbacks.setup) {
+
+			err = state->callbacks.setup(patch, state);
+			if (err)
+				goto err;
+		}
+
+		state->callbacks.setup_succeeded = true;
+	}
+
+	return 0;
+
+err:
+	klp_release_states(patch);
+	return err;
+}
+
+void klp_enable_states(struct klp_patch *patch)
+{
+	struct klp_state *state;
+
+	klp_for_each_state(patch, state) {
+		if (is_state_in_other_patches(patch, state))
+			continue;
+
+		if (!state->callbacks.enable)
+			continue;
+
+		state->callbacks.enable(patch, state);
+	}
+}
+
+void klp_disable_states(struct klp_patch *patch)
+{
+	struct klp_state *state;
+
+	klp_for_each_state(patch, state) {
+		if (is_state_in_other_patches(patch, state))
+			continue;
+
+		if (!state->callbacks.disable)
+			continue;
+
+		state->callbacks.disable(patch, state);
+	}
+}
+
+void klp_release_states(struct klp_patch *patch)
+{
+	struct klp_state *state;
+
+	klp_for_each_state(patch, state) {
+		if (is_state_in_other_patches(patch, state))
+			continue;
+
+		if (!state->callbacks.release)
+			continue;
+
+		if (state->callbacks.setup_succeeded)
+			state->callbacks.release(patch, state);
+	}
+}
+
+void klp_enable_obsolete_states(struct klp_patch *patch)
+{
+	struct klp_patch *old_patch;
+
+	klp_for_each_patch(old_patch) {
+		if (old_patch != patch)
+			klp_enable_states(old_patch);
+	}
+}
+
+void klp_disable_obsolete_states(struct klp_patch *patch)
+{
+	struct klp_patch *old_patch;
+
+	klp_for_each_patch(old_patch) {
+		if (old_patch != patch)
+			klp_disable_states(old_patch);
+	}
+}
+
+void klp_release_obsolete_states(struct klp_patch *patch)
+{
+	struct klp_patch *old_patch;
+
+	klp_for_each_patch(old_patch) {
+		if (old_patch != patch)
+			klp_release_states(old_patch);
+	}
+}

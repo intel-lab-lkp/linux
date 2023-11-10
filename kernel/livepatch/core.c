@@ -975,6 +975,8 @@ static int __klp_disable_patch(struct klp_patch *patch)
 
 	klp_init_transition(patch, KLP_UNPATCHED);
 
+	klp_disable_states(patch);
+
 	klp_for_each_object(patch, obj)
 		if (obj->patched)
 			klp_pre_unpatch_callback(obj);
@@ -1010,6 +1012,13 @@ static int __klp_enable_patch(struct klp_patch *patch)
 
 	klp_init_transition(patch, KLP_PATCHED);
 
+	ret = klp_setup_states(patch);
+	if (ret)
+		goto err;
+
+	if (patch->replace)
+		klp_disable_obsolete_states(patch);
+
 	/*
 	 * Enforce the order of the func->transition writes in
 	 * klp_init_transition() and the ops->func_stack writes in
@@ -1027,14 +1036,14 @@ static int __klp_enable_patch(struct klp_patch *patch)
 		if (ret) {
 			pr_warn("pre-patch callback failed for object '%s'\n",
 				klp_is_module(obj) ? obj->name : "vmlinux");
-			goto err;
+			goto err_states;
 		}
 
 		ret = klp_patch_object(obj);
 		if (ret) {
 			pr_warn("failed to patch object '%s'\n",
 				klp_is_module(obj) ? obj->name : "vmlinux");
-			goto err;
+			goto err_states;
 		}
 	}
 
@@ -1043,6 +1052,12 @@ static int __klp_enable_patch(struct klp_patch *patch)
 	klp_try_complete_transition();
 
 	return 0;
+
+err_states:
+	if (patch->replace)
+		klp_enable_obsolete_states(patch);
+
+	klp_release_states(patch);
 err:
 	pr_warn("failed to enable patch '%s'\n", patch->mod->name);
 
