@@ -28,6 +28,7 @@
 const guid_t pci_acpi_dsm_guid =
 	GUID_INIT(0xe5c937d0, 0x3553, 0x4d7a,
 		  0x91, 0x17, 0xea, 0x4d, 0x19, 0xc3, 0x43, 0x4d);
+const int pci_acpi_dsm_rev = 5;
 
 #if defined(CONFIG_PCI_QUIRKS) && defined(CONFIG_ARM64)
 static int acpi_get_rc_addr(struct acpi_device *adev, struct resource *res)
@@ -1215,7 +1216,8 @@ void acpi_pci_add_bus(struct pci_bus *bus)
 	if (!pci_is_root_bus(bus))
 		return;
 
-	obj = acpi_evaluate_dsm_typed(ACPI_HANDLE(bus->bridge), &pci_acpi_dsm_guid, 3,
+	obj = acpi_evaluate_dsm_typed(ACPI_HANDLE(bus->bridge),
+				      &pci_acpi_dsm_guid, pci_acpi_dsm_rev,
 				      DSM_PCI_POWER_ON_RESET_DELAY, NULL, ACPI_TYPE_INTEGER);
 	if (!obj)
 		return;
@@ -1376,7 +1378,7 @@ static void pci_acpi_optimize_delay(struct pci_dev *pdev,
 	if (bridge->ignore_reset_delay)
 		pdev->d3cold_delay = 0;
 
-	obj = acpi_evaluate_dsm_typed(handle, &pci_acpi_dsm_guid, 3,
+	obj = acpi_evaluate_dsm_typed(handle, &pci_acpi_dsm_guid, pci_acpi_dsm_rev,
 				      DSM_PCI_DEVICE_READINESS_DURATIONS, NULL,
 				      ACPI_TYPE_PACKAGE);
 	if (!obj)

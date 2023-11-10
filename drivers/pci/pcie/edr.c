@@ -35,7 +35,7 @@ static int acpi_enable_dpc(struct pci_dev *pdev)
 	 * Behavior when calling unsupported _DSM functions is undefined,
 	 * so check whether EDR_PORT_DPC_ENABLE_DSM is supported.
 	 */
-	if (!acpi_check_dsm(adev->handle, &pci_acpi_dsm_guid, 5,
+	if (!acpi_check_dsm(adev->handle, &pci_acpi_dsm_guid, pci_acpi_dsm_rev,
 			    1ULL << EDR_PORT_DPC_ENABLE_DSM))
 		return 0;
 
@@ -51,8 +51,9 @@ static int acpi_enable_dpc(struct pci_dev *pdev)
 	 * Firmware Specification r3.2, sec 4.6.12, EDR_PORT_DPC_ENABLE_DSM is
 	 * optional.  Return success if it's not implemented.
 	 */
-	obj = acpi_evaluate_dsm(adev->handle, &pci_acpi_dsm_guid, 5,
-				EDR_PORT_DPC_ENABLE_DSM, &argv4);
+	obj = acpi_evaluate_dsm(adev->handle, &pci_acpi_dsm_guid,
+				pci_acpi_dsm_rev, EDR_PORT_DPC_ENABLE_DSM,
+				&argv4);
 	if (!obj)
 		return 0;
 
@@ -88,12 +89,12 @@ static struct pci_dev *acpi_dpc_port_get(struct pci_dev *pdev)
 	 * Behavior when calling unsupported _DSM functions is undefined,
 	 * so check whether EDR_PORT_DPC_ENABLE_DSM is supported.
 	 */
-	if (!acpi_check_dsm(adev->handle, &pci_acpi_dsm_guid, 5,
+	if (!acpi_check_dsm(adev->handle, &pci_acpi_dsm_guid, pci_acpi_dsm_rev,
 			    1ULL << EDR_PORT_LOCATE_DSM))
 		return pci_dev_get(pdev);
 
-	obj = acpi_evaluate_dsm(adev->handle, &pci_acpi_dsm_guid, 5,
-				EDR_PORT_LOCATE_DSM, NULL);
+	obj = acpi_evaluate_dsm(adev->handle, &pci_acpi_dsm_guid,
+				pci_acpi_dsm_rev, EDR_PORT_LOCATE_DSM, NULL);
 	if (!obj)
 		return pci_dev_get(pdev);
 
