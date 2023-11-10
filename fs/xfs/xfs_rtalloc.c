@@ -1182,7 +1182,7 @@ xfs_rtallocate_extent(
 	int			error;	/* error value */
 	xfs_rtxnum_t		r;	/* result allocated rtext */
 
-	ASSERT(xfs_isilocked(args.mp->m_rbmip, XFS_ILOCK_EXCL));
+	xfs_assert_ilocked(args.mp->m_rbmip, XFS_ILOCK_EXCL);
 	ASSERT(minlen > 0 && minlen <= maxlen);
 
 	/*
@@ -1425,7 +1425,7 @@ xfs_rtpick_extent(
 	uint64_t		seq;		/* sequence number of file creation */
 	struct timespec64	ts;		/* timespec in inode */
 
-	ASSERT(xfs_isilocked(mp->m_rbmip, XFS_ILOCK_EXCL));
+	xfs_assert_ilocked(mp->m_rbmip, XFS_ILOCK_EXCL);
 
 	ts = inode_get_atime(VFS_I(mp->m_rbmip));
 	if (!(mp->m_rbmip->i_diflags & XFS_DIFLAG_NEWRTBM)) {

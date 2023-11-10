@@ -649,7 +649,7 @@ xfs_inode_item_pin(
 {
 	struct xfs_inode	*ip = INODE_ITEM(lip)->ili_inode;
 
-	ASSERT(xfs_isilocked(ip, XFS_ILOCK_EXCL));
+	xfs_assert_ilocked(ip, XFS_ILOCK_EXCL);
 	ASSERT(lip->li_buf);
 
 	trace_xfs_inode_pin(ip, _RET_IP_);
@@ -755,7 +755,7 @@ xfs_inode_item_release(
 	unsigned short		lock_flags;
 
 	ASSERT(ip->i_itemp != NULL);
-	ASSERT(xfs_isilocked(ip, XFS_ILOCK_EXCL));
+	xfs_assert_ilocked(ip, XFS_ILOCK_EXCL);
 
 	lock_flags = iip->ili_lock_flags;
 	iip->ili_lock_flags = 0;
