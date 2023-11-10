@@ -1349,6 +1349,60 @@ static struct acpi_device *acpi_pci_find_companion(struct device *dev)
 }
 
 /**
+ * pci_acpi_request_aux_power_for_d3cold - Request auxiliary power for D3cold
+ * @pdev: PCI device to request power for
+ * @arg: mW requested
+ *
+ * This function requests auxiliary power for a PCI device in D3cold state
+ * when main power is removed above the value guaranteed by PCI specification.
+ *
+ * Return:
+ *  0 on success
+ *  -ENODEV when the device does not support the _DSM
+ *  -EIO on ACPI call failure
+ *  -EACCESS when the request was denied
+ *  Positive value corresponding to platform requested retry interval in seconds
+ */
+int pci_acpi_request_aux_power_for_d3cold(struct pci_dev *pdev, int arg)
+{
+	struct acpi_device *adev = ACPI_COMPANION(&pdev->dev);
+	union acpi_object *obj;
+	union acpi_object argv4 = {
+		.integer.type = ACPI_TYPE_INTEGER,
+		.integer.value = arg,
+	};
+	int val;
+
+	if (!acpi_check_dsm(adev->handle, &pci_acpi_dsm_guid,
+			    pci_acpi_dsm_rev,
+			    1 << DSM_PCI_REQUEST_D3COLD_AUX_POWER))
+		return -ENODEV;
+
+	obj = acpi_evaluate_dsm_typed(adev->handle, &pci_acpi_dsm_guid,
+				      pci_acpi_dsm_rev,
+				      DSM_PCI_REQUEST_D3COLD_AUX_POWER,
+				      &argv4, ACPI_TYPE_INTEGER);
+	if (!obj)
+		return -EIO;
+
+	val = obj->integer.value;
+	ACPI_FREE(obj);
+
+	switch (val) {
+	case PCI_D3COLD_AUX_DENIED:
+		return -EACCES;
+	case PCI_D3COLD_AUX_GRANTED:
+	case PCI_D3COLD_AUX_NO_MAIN_POWER_REMOVAL:
+		return 0;
+	default:
+		break;
+	}
+
+	return val;
+}
+EXPORT_SYMBOL_GPL(pci_acpi_request_aux_power_for_d3cold);
+
+/**
  * pci_acpi_optimize_delay - optimize PCI D3 and D3cold delay from ACPI
  * @pdev: the PCI device whose delay is to be updated
  * @handle: ACPI handle of this device
