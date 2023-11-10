@@ -20,10 +20,6 @@ struct mutex;
 int i915_gem_mmap_gtt_version(void);
 int i915_gem_mmap(struct file *filp, struct vm_area_struct *vma);
 
-int i915_gem_dumb_mmap_offset(struct drm_file *file_priv,
-			      struct drm_device *dev,
-			      u32 handle, u64 *offset);
-
 void __i915_gem_object_release_mmap_gtt(struct drm_i915_gem_object *obj);
 void i915_gem_object_release_mmap_gtt(struct drm_i915_gem_object *obj);
 
