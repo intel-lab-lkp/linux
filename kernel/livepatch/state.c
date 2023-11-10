@@ -198,11 +198,17 @@ void klp_release_states(struct klp_patch *patch)
 		if (is_state_in_other_patches(patch, state))
 			continue;
 
-		if (!state->callbacks.release)
-			continue;
-
-		if (state->callbacks.setup_succeeded)
+		if (state->callbacks.release && state->callbacks.setup_succeeded)
 			state->callbacks.release(patch, state);
+
+		if (state->is_shadow)
+			klp_shadow_free_all(state->id, state->callbacks.shadow_dtor);
+
+		/*
+		 * The @release callback is supposed to restore the original
+		 * state before the @setup callback was called.
+		 */
+		state->callbacks.setup_succeeded = 0;
 	}
 }
 

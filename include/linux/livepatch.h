@@ -132,12 +132,18 @@ struct klp_object {
 struct klp_patch;
 struct klp_state;
 
+typedef int (*klp_shadow_ctor_t)(void *obj,
+				 void *shadow_data,
+				 void *ctor_data);
+typedef void (*klp_shadow_dtor_t)(void *obj, void *shadow_data);
+
 /**
  * struct klp_state_callbacks - callbacks manipulating the state
  * @setup:	executed before code patching when the state is added
  * @enable:	executed after code patching when the state is added
  * @disable:	executed before code unpatching when the state is removed
  * @release:	executed after code unpatching when the state is removed
+ * @shadow_dtor: destructor for the related shadow variable
  * @setup_succeeded: internal state used by a rollback on error
  *
  * All callbacks are optional.
@@ -152,6 +158,7 @@ struct klp_state_callbacks {
 	void (*enable)(struct klp_patch *patch, struct klp_state *state);
 	void (*disable)(struct klp_patch *patch, struct klp_state *state);
 	void (*release)(struct klp_patch *patch, struct klp_state *state);
+	klp_shadow_dtor_t shadow_dtor;
 	bool setup_succeeded;
 };
 
@@ -160,12 +167,15 @@ struct klp_state_callbacks {
  * @id:		system state identifier (non-zero)
  * @version:	version of the change
  * @callbacks:	optional callbacks used when introducing or removing the state
+ * @is_shadow:  the state handles lifetime of a shadow variable
+ *		with the same @id
  * @data:	custom data
  */
 struct klp_state {
 	unsigned long id;
 	unsigned int version;
 	struct klp_state_callbacks callbacks;
+	bool is_shadow;
 	void *data;
 };
 
@@ -239,11 +249,6 @@ static inline bool klp_have_reliable_stack(void)
 	return IS_ENABLED(CONFIG_STACKTRACE) &&
 	       IS_ENABLED(CONFIG_HAVE_RELIABLE_STACKTRACE);
 }
-
-typedef int (*klp_shadow_ctor_t)(void *obj,
-				 void *shadow_data,
-				 void *ctor_data);
-typedef void (*klp_shadow_dtor_t)(void *obj, void *shadow_data);
 
 void *klp_shadow_get(void *obj, unsigned long id);
 void *klp_shadow_alloc(void *obj, unsigned long id,
