@@ -65,6 +65,12 @@ struct netns_xfrm {
 	u32			sysctl_aevent_rseqth;
 	int			sysctl_larval_drop;
 	u32			sysctl_acq_expires;
+#if IS_ENABLED(CONFIG_XFRM_IPTFS)
+	u32			sysctl_iptfs_drptime;
+	u32			sysctl_iptfs_idelay;
+	u32			sysctl_iptfs_maxqsize;
+	u32			sysctl_iptfs_rewin;
+#endif
 
 	u8			policy_default[XFRM_POLICY_MAX];
 
