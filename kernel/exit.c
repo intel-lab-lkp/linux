@@ -13,6 +13,7 @@
 #include <linux/sched/task.h>
 #include <linux/sched/task_stack.h>
 #include <linux/sched/cputime.h>
+#include <linux/sched/debug.h>
 #include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/capability.h>
@@ -806,6 +807,76 @@ static void synchronize_group_exit(struct task_struct *tsk, long code)
 	spin_unlock_irq(&sighand->siglock);
 }
 
+/*
+ * This function only dump thread executable sections to reduce maps space,
+ * since an unhandled falut in user mode is likely generated from code section.
+ */
+static void dump_thread_maps_info(struct task_struct *tsk)
+{
+	struct vm_area_struct *vma;
+	struct mm_struct *mm = tsk->mm;
+
+	if (!mmap_read_trylock(mm))
+		return;
+
+	VMA_ITERATOR(vmi, mm, 0);
+	pr_info("%s-%d: Dump maps info start\n", tsk->comm, task_pid_nr(tsk));
+	for_each_vma(vmi, vma) {
+		struct file *file = vma->vm_file;
+		int flags = vma->vm_flags;
+		unsigned long long pgoff = ((loff_t)vma->vm_pgoff) << PAGE_SHIFT;
+
+		if (file) {
+			if (flags & VM_EXEC) {
+				char tpath[256] = {0};
+				char *pathname = d_path(&file->f_path, tpath, sizeof(tpath));
+
+				pr_info("%08lx-%08lx %c%c%c%c %08llx %s\n",
+					vma->vm_start, vma->vm_end,
+					flags & VM_READ ? 'r' : '-',
+					flags & VM_WRITE ? 'w' : '-',
+					flags & VM_EXEC ? 'x' : '-',
+					flags & VM_MAYSHARE ? 's' : 'p',
+					pgoff, pathname);
+			}
+		} else {
+			const char *name = arch_vma_name(vma);
+
+			if (!name) {
+				struct mm_struct *mm = vma->vm_mm;
+
+				if (mm) {
+					if (vma_is_initial_heap(vma))
+						name = "[heap]";
+					else if (vma_is_initial_stack(vma))
+						name = "[stack]";
+				} else {
+					name = "[vdso]";
+				}
+			}
+
+			if (name && (flags & VM_EXEC)) {
+				pr_info("%08lx-%08lx %c%c%c%c %08llx %s\n",
+					vma->vm_start, vma->vm_end,
+					flags & VM_READ ? 'r' : '-',
+					flags & VM_WRITE ? 'w' : '-',
+					flags & VM_EXEC ? 'x' : '-',
+					flags & VM_MAYSHARE ? 's' : 'p', pgoff, name);
+			}
+		}
+	}
+	mmap_read_unlock(mm);
+	pr_info("%s-%d: Dump maps info end\n", tsk->comm, task_pid_nr(tsk));
+}
+
+static void dump_thread_info(struct task_struct *tsk)
+{
+	struct pt_regs *regs = task_pt_regs(tsk);
+
+	dump_thread_maps_info(tsk);
+	show_regs(regs);
+}
+
 void __noreturn do_exit(long code)
 {
 	struct task_struct *tsk = current;
@@ -836,12 +907,14 @@ void __noreturn do_exit(long code)
 	group_dead = atomic_dec_and_test(&tsk->signal->live);
 	if (group_dead) {
 		/*
-		 * If the last thread of global init has exited, panic
-		 * immediately to get a useable coredump.
+		 * If the last thread of global init has exited, dump
+		 * some usable information before panic.
 		 */
-		if (unlikely(is_global_init(tsk)))
+		if (unlikely(is_global_init(tsk))) {
+			dump_thread_info(tsk);
 			panic("Attempted to kill init! exitcode=0x%08x\n",
 				tsk->signal->group_exit_code ?: (int)code);
+		}
 
 #ifdef CONFIG_POSIX_TIMERS
 		hrtimer_cancel(&tsk->signal->real_timer);
