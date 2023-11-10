@@ -132,12 +132,14 @@ livepatch: '$MOD_LIVEPATCH2': unpatching complete
 
 start_test "incompatible cumulative livepatches"
 
-load_lp $MOD_LIVEPATCH2
-load_failing_mod $MOD_LIVEPATCH
-disable_lp $MOD_LIVEPATCH2
-unload_lp $MOD_LIVEPATCH2
+load_lp $MOD_LIVEPATCH2 block_state_disable=1
+load_failing_mod $MOD_LIVEPATCH no_state=1
+# load the livepatch again with default features (state and disable supported)
+load_lp $MOD_LIVEPATCH
+disable_lp $MOD_LIVEPATCH
+unload_lp $MOD_LIVEPATCH
 
-check_result "% modprobe $MOD_LIVEPATCH2
+check_result "% modprobe $MOD_LIVEPATCH2 block_state_disable=1
 livepatch: enabling patch '$MOD_LIVEPATCH2'
 livepatch: '$MOD_LIVEPATCH2': initializing patching transition
 $MOD_LIVEPATCH2: setup_state_callback: state 1
@@ -147,18 +149,24 @@ livepatch: '$MOD_LIVEPATCH2': completing patching transition
 $MOD_LIVEPATCH2: enable_state_callback: state 1
 $MOD_LIVEPATCH2: fix_console_loglevel: fixing console_loglevel
 livepatch: '$MOD_LIVEPATCH2': patching complete
-% modprobe $MOD_LIVEPATCH
+% modprobe $MOD_LIVEPATCH no_state=1
 livepatch: Livepatch patch ($MOD_LIVEPATCH) is not compatible with the already installed livepatches.
 modprobe: ERROR: could not insert '$MOD_LIVEPATCH': Invalid argument
-% echo 0 > /sys/kernel/livepatch/$MOD_LIVEPATCH2/enabled
-livepatch: '$MOD_LIVEPATCH2': initializing unpatching transition
-$MOD_LIVEPATCH2: disable_state_callback: state 1
-$MOD_LIVEPATCH2: restore_console_loglevel: restoring console_loglevel
-livepatch: '$MOD_LIVEPATCH2': starting unpatching transition
-livepatch: '$MOD_LIVEPATCH2': completing unpatching transition
-$MOD_LIVEPATCH2: release_state_callback: state 1
-$MOD_LIVEPATCH2: free_loglevel_state: freeing space for the stored console_loglevel
-livepatch: '$MOD_LIVEPATCH2': unpatching complete
-% rmmod $MOD_LIVEPATCH2"
+% modprobe $MOD_LIVEPATCH
+livepatch: enabling patch '$MOD_LIVEPATCH'
+livepatch: '$MOD_LIVEPATCH': initializing patching transition
+livepatch: '$MOD_LIVEPATCH': starting patching transition
+livepatch: '$MOD_LIVEPATCH': completing patching transition
+livepatch: '$MOD_LIVEPATCH': patching complete
+% echo 0 > /sys/kernel/livepatch/$MOD_LIVEPATCH/enabled
+livepatch: '$MOD_LIVEPATCH': initializing unpatching transition
+$MOD_LIVEPATCH: disable_state_callback: state 1
+$MOD_LIVEPATCH: restore_console_loglevel: restoring console_loglevel
+livepatch: '$MOD_LIVEPATCH': starting unpatching transition
+livepatch: '$MOD_LIVEPATCH': completing unpatching transition
+$MOD_LIVEPATCH: release_state_callback: state 1
+$MOD_LIVEPATCH: free_loglevel_state: freeing space for the stored console_loglevel
+livepatch: '$MOD_LIVEPATCH': unpatching complete
+% rmmod $MOD_LIVEPATCH"
 
 exit 0

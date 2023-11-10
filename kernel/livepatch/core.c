@@ -373,6 +373,13 @@ static ssize_t enabled_store(struct kobject *kobj, struct kobj_attribute *attr,
 		goto out;
 	}
 
+	if (patch->enabled && klp_patch_disable_blocked(patch)) {
+		pr_err("The livepatch '%s' does not support disable\n",
+		       patch->mod->name);
+		ret = -EINVAL;
+		goto out;
+	}
+
 	/*
 	 * Allow to reverse a pending transition in both ways. It might be
 	 * necessary to complete the transition without forcing and breaking
@@ -1097,10 +1104,10 @@ int klp_enable_patch(struct klp_patch *patch)
 
 	if (!klp_is_patch_compatible(patch)) {
 		pr_err("Livepatch patch (%s) is not compatible with the already installed livepatches.\n",
-			patch->mod->name);
+		       patch->mod->name);
 		mutex_unlock(&klp_mutex);
 		return -EINVAL;
-	}
+       }
 
 	if (!try_module_get(patch->mod)) {
 		mutex_unlock(&klp_mutex);
@@ -1111,17 +1118,17 @@ int klp_enable_patch(struct klp_patch *patch)
 
 	ret = klp_init_patch(patch);
 	if (ret)
-		goto err;
+		goto unlock_free;
 
 	ret = __klp_enable_patch(patch);
 	if (ret)
-		goto err;
+		goto unlock_free;
 
 	mutex_unlock(&klp_mutex);
 
 	return 0;
 
-err:
+unlock_free:
 	klp_free_patch_start(patch);
 
 	mutex_unlock(&klp_mutex);

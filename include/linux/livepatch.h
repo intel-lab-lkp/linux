@@ -140,16 +140,16 @@ struct klp_state_callbacks {
 /**
  * struct klp_state - state of the system modified by the livepatch
  * @id:		system state identifier (non-zero)
- * @version:	version of the change
  * @callbacks:	optional callbacks used when introducing or removing the state
+ * @block_disable: the state disablement is not supported
  * @is_shadow:  the state handles lifetime of a shadow variable
  *		with the same @id
  * @data:	custom data
  */
 struct klp_state {
 	unsigned long id;
-	unsigned int version;
 	struct klp_state_callbacks callbacks;
+	bool block_disable;
 	bool is_shadow;
 	void *data;
 };
@@ -159,7 +159,9 @@ struct klp_state {
  * @mod:	reference to the live patch module
  * @objs:	object entries for kernel objects to be patched
  * @states:	system states that can get modified
+ * version:	livepatch version (optional)
  * @replace:	replace all actively used patches
+ *
  * @list:	list node for global list of actively used patches
  * @kobj:	kobject for sysfs resources
  * @obj_list:	dynamic list of the object entries
@@ -173,6 +175,7 @@ struct klp_patch {
 	struct module *mod;
 	struct klp_object *objs;
 	struct klp_state *states;
+	unsigned int version;
 	bool replace;
 
 	/* internal */

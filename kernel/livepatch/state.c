@@ -91,22 +91,25 @@ static bool klp_is_state_compatible(struct klp_patch *patch,
 
 	state = klp_get_state(patch, old_state->id);
 
-	/* A cumulative livepatch must handle all already modified states. */
-	if (!state)
-		return !patch->replace;
+	if (!state && old_state->block_disable)
+		return false;
 
-	return state->version >= old_state->version;
+	return true;
 }
 
 /*
  * Check that the new livepatch will not break the existing system states.
- * Cumulative patches must handle all already modified states.
- * Non-cumulative patches can touch already modified states.
+ * The patch could replace existing patches only when the obsolete
+ * states can be disabled.
  */
 bool klp_is_patch_compatible(struct klp_patch *patch)
 {
 	struct klp_patch *old_patch;
 	struct klp_state *old_state;
+
+	/* Non-cumulative patches are always compatible. */
+	if (!patch->replace)
+		return true;
 
 	klp_for_each_patch(old_patch) {
 		klp_for_each_state(old_patch, old_state) {
@@ -116,6 +119,18 @@ bool klp_is_patch_compatible(struct klp_patch *patch)
 	}
 
 	return true;
+}
+
+bool klp_patch_disable_blocked(struct klp_patch *patch)
+{
+	struct klp_state *state;
+
+	klp_for_each_state(patch, state) {
+		if (state->block_disable)
+			return true;
+	}
+
+	return false;
 }
 
 bool is_state_in_other_patches(struct klp_patch *patch, struct klp_state *state)

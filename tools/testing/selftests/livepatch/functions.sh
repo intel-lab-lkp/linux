@@ -277,6 +277,23 @@ function set_pre_patch_ret {
 		die "failed to set pre_patch_ret parameter for $mod module"
 }
 
+# set_module_param(modname, param, val)
+#	modname - module name to set
+#	param - name of the parameter to set
+#       val - value to set
+function set_module_param {
+	local mod="$1"; shift
+	local param="$1"; shift
+	local val="$1"
+
+	log "% echo $val > /sys/module/$mod/parameters/$param"
+	echo "$val" > "/sys/module/$mod/parameters/$param"
+
+	# Wait for sysfs value to hold ...
+	loop_until '[[ $(cat "/sys/module/$mod/parameters/$param") == "$val" ]]' ||
+		die "failed to set parameter $param for $mod module to the value $val"
+}
+
 # read_module_param(modname, param)
 #	modname - module name which provides the given parameter
 #	param - parameter name to be read

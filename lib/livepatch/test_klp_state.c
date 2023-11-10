@@ -11,17 +11,6 @@
 
 #define CONSOLE_LOGLEVEL_FIX_ID 1
 
-/*
- * Version of the state which defines compatibility of livepaches.
- * The value is artificial. It set just for testing the compatibility
- * checks. In reality, all versions are compatible because all
- * the callbacks do nothing and the shadow variable clean up
- * is done by the core.
- */
-#ifndef CONSOLE_LOGLEVEL_FIX_VERSION
-#define CONSOLE_LOGLEVEL_FIX_VERSION 1
-#endif
-
 static struct klp_patch patch;
 
 static int allocate_loglevel_state(void)
@@ -115,6 +104,80 @@ static void release_state_callback(struct klp_patch *patch, struct klp_state *st
 	free_loglevel_state();
 }
 
+static struct klp_state states[] = {
+	{
+		.id = CONSOLE_LOGLEVEL_FIX_ID,
+		.callbacks = {
+			.setup = setup_state_callback,
+			.enable = enable_state_callback,
+			.disable = disable_state_callback,
+			.release = release_state_callback,
+		},
+	}, { }
+};
+
+static int block_state_disable_get(char *buffer, const struct kernel_param *kp)
+{
+	pr_info("%s: Disable transition is %s by state: %lu\n",
+		__func__,
+		states[0].block_disable ? "not supported" : "supported",
+		states[0].id);
+
+	return 0;
+}
+
+static int block_state_disable_set(const char *val, const struct kernel_param *kp)
+{
+	bool block;
+	int ret;
+
+	ret = kstrtobool(val, &block);
+	if (ret)
+		return ret;
+
+	states[0].block_disable = block;
+
+	return 0;
+}
+
+static const struct kernel_param_ops block_state_disable_ops = {
+	.get	= block_state_disable_get,
+	.set	= block_state_disable_set,
+};
+
+module_param_cb(block_state_disable, &block_state_disable_ops, NULL, 0600);
+MODULE_PARM_DESC(block_state_disable, "Set to 1 to pretend that the state does not support disable operation (default = 0).");
+
+bool no_state;
+
+static int no_state_get(char *buffer, const struct kernel_param *kp)
+{
+	return sysfs_emit("%s", no_state ? "1" : "0");
+}
+
+static int no_state_set(const char *val, const struct kernel_param *kp)
+{
+	bool no;
+	int ret;
+
+	ret = kstrtobool(val, &no);
+	if (ret)
+		return ret;
+
+	no_state = no;
+
+	return 0;
+}
+
+static const struct kernel_param_ops no_state_ops = {
+	.get	= no_state_get,
+	.set	= no_state_set,
+};
+
+module_param_cb(no_state, &no_state_ops, NULL, 0400);
+MODULE_PARM_DESC(no_state, "Set to 1 when the livepatch should not support the state. (default = 0).");
+
+
 static struct klp_func no_funcs[] = {
 	{}
 };
@@ -123,19 +186,6 @@ static struct klp_object objs[] = {
 	{
 		.name = NULL,	/* vmlinux */
 		.funcs = no_funcs,
-	}, { }
-};
-
-static struct klp_state states[] = {
-	{
-		.id = CONSOLE_LOGLEVEL_FIX_ID,
-		.version = CONSOLE_LOGLEVEL_FIX_VERSION,
-		.callbacks = {
-			.setup = setup_state_callback,
-			.enable = enable_state_callback,
-			.disable = disable_state_callback,
-			.release = release_state_callback,
-		},
 	}, { }
 };
 
@@ -148,6 +198,9 @@ static struct klp_patch patch = {
 
 static int test_klp_callbacks_demo_init(void)
 {
+	if (no_state)
+		patch.states = NULL;
+
 	return klp_enable_patch(&patch);
 }
 
