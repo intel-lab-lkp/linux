@@ -6370,9 +6370,6 @@ static void __md_stop(struct mddev *mddev)
 	struct md_personality *pers = mddev->pers;
 	md_bitmap_destroy(mddev);
 	mddev_detach(mddev);
-	/* Ensure ->event_work is done */
-	if (mddev->event_work.func)
-		flush_workqueue(md_misc_wq);
 	spin_lock(&mddev->lock);
 	mddev->pers = NULL;
 	spin_unlock(&mddev->lock);
