@@ -72,41 +72,6 @@ static __always_inline void cpuid_entry_override(struct kvm_cpuid_entry2 *entry,
 	*reg = kvm_cpu_caps[leaf];
 }
 
-static __always_inline u32 *guest_cpuid_get_register(struct kvm_vcpu *vcpu,
-						     unsigned int x86_feature)
-{
-	const struct cpuid_reg cpuid = x86_feature_cpuid(x86_feature);
-	struct kvm_cpuid_entry2 *entry;
-
-	entry = kvm_find_cpuid_entry_index(vcpu, cpuid.function, cpuid.index);
-	if (!entry)
-		return NULL;
-
-	return __cpuid_entry_get_reg(entry, cpuid.reg);
-}
-
-static __always_inline bool guest_cpuid_has(struct kvm_vcpu *vcpu,
-					    unsigned int x86_feature)
-{
-	u32 *reg;
-
-	reg = guest_cpuid_get_register(vcpu, x86_feature);
-	if (!reg)
-		return false;
-
-	return *reg & __feature_bit(x86_feature);
-}
-
-static __always_inline void guest_cpuid_clear(struct kvm_vcpu *vcpu,
-					      unsigned int x86_feature)
-{
-	u32 *reg;
-
-	reg = guest_cpuid_get_register(vcpu, x86_feature);
-	if (reg)
-		*reg &= ~__feature_bit(x86_feature);
-}
-
 static inline bool guest_cpuid_is_amd_or_hygon(struct kvm_vcpu *vcpu)
 {
 	struct kvm_cpuid_entry2 *best;
@@ -218,27 +183,6 @@ static __always_inline bool guest_pv_has(struct kvm_vcpu *vcpu,
 	return vcpu->arch.pv_cpuid.features & (1u << kvm_feature);
 }
 
-enum kvm_governed_features {
-#define KVM_GOVERNED_FEATURE(x) KVM_GOVERNED_##x,
-#include "governed_features.h"
-	KVM_NR_GOVERNED_FEATURES
-};
-
-static __always_inline int kvm_governed_feature_index(unsigned int x86_feature)
-{
-	switch (x86_feature) {
-#define KVM_GOVERNED_FEATURE(x) case x: return KVM_GOVERNED_##x;
-#include "governed_features.h"
-	default:
-		return -1;
-	}
-}
-
-static __always_inline bool kvm_is_governed_feature(unsigned int x86_feature)
-{
-	return kvm_governed_feature_index(x86_feature) >= 0;
-}
-
 static __always_inline void guest_cpu_cap_set(struct kvm_vcpu *vcpu,
 					      unsigned int x86_feature)
 {
@@ -285,17 +229,17 @@ static __always_inline bool guest_cpu_cap_has(struct kvm_vcpu *vcpu,
 
 static inline bool guest_has_spec_ctrl_msr(struct kvm_vcpu *vcpu)
 {
-	return (guest_cpuid_has(vcpu, X86_FEATURE_SPEC_CTRL) ||
-		guest_cpuid_has(vcpu, X86_FEATURE_AMD_STIBP) ||
-		guest_cpuid_has(vcpu, X86_FEATURE_AMD_IBRS) ||
-		guest_cpuid_has(vcpu, X86_FEATURE_AMD_SSBD));
+	return (guest_cpu_cap_has(vcpu, X86_FEATURE_SPEC_CTRL) ||
+		guest_cpu_cap_has(vcpu, X86_FEATURE_AMD_STIBP) ||
+		guest_cpu_cap_has(vcpu, X86_FEATURE_AMD_IBRS) ||
+		guest_cpu_cap_has(vcpu, X86_FEATURE_AMD_SSBD));
 }
 
 static inline bool guest_has_pred_cmd_msr(struct kvm_vcpu *vcpu)
 {
-	return (guest_cpuid_has(vcpu, X86_FEATURE_SPEC_CTRL) ||
-		guest_cpuid_has(vcpu, X86_FEATURE_AMD_IBPB) ||
-		guest_cpuid_has(vcpu, X86_FEATURE_SBPB));
+	return (guest_cpu_cap_has(vcpu, X86_FEATURE_SPEC_CTRL) ||
+		guest_cpu_cap_has(vcpu, X86_FEATURE_AMD_IBPB) ||
+		guest_cpu_cap_has(vcpu, X86_FEATURE_SBPB));
 }
 
 #endif
