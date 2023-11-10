@@ -504,6 +504,26 @@ struct amdgpu_allowed_register_entry {
 	bool grbm_indexed;
 };
 
+/**
+ * enum amd_reset_method - Methods for resetting AMD GPU devices
+ *
+ * @AMD_RESET_METHOD_NONE: The device will not be reset.
+ * @AMD_RESET_LEGACY: Method reserved for SI/CIK asics.
+ * @AMD_RESET_MODE0: High level PCIe reset.
+ * @AMD_RESET_MODE1: Resets each IP block (SDMA, GFX, VCN, etc.) individually.
+ *                   Suitable only for some discrete GPUs.
+ * @AMD_RESET_MODE2: Resets only the GFX block. Useful for APUs, giving that
+ *                   the rest of IP blocks and SMU is shared with the CPU.
+ * @AMD_RESET_BACO: BACO (Bus Alive, Chip Off) method powers off and on the card
+ *                  but without powering off the PCI bus. Suitable only for
+ *                  discrete GPUs.
+ * @AMD_RESET_PCI: Does a full bus reset, including powering on and off the
+ *                 card.
+ *
+ * Methods available for AMD GPU driver for resetting the device. Not all
+ * methods are suitable for every device. User can overwrite the method using
+ * module parameter `reset_method`.
+ */
 enum amd_reset_method {
 	AMD_RESET_METHOD_NONE = -1,
 	AMD_RESET_METHOD_LEGACY = 0,
