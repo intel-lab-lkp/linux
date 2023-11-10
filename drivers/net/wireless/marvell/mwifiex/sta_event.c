@@ -762,7 +762,7 @@ int mwifiex_process_sta_event(struct mwifiex_private *priv)
 		mwifiex_dbg(adapter, EVENT, "info: EVENT: AWAKE\n");
 		if (!adapter->pps_uapsd_mode &&
 		    (priv->port_open ||
-		     (priv->bss_mode == NL80211_IFTYPE_ADHOC)) &&
+		    (priv->bss_mode == NL80211_IFTYPE_ADHOC)) &&
 		    priv->media_connected && adapter->sleep_period.period) {
 			adapter->pps_uapsd_mode = true;
 			mwifiex_dbg(adapter, EVENT,
@@ -773,7 +773,7 @@ int mwifiex_process_sta_event(struct mwifiex_private *priv)
 			if (mwifiex_check_last_packet_indication(priv)) {
 				if (adapter->data_sent ||
 				    (adapter->if_ops.is_port_ready &&
-				     !adapter->if_ops.is_port_ready(priv))) {
+				    !adapter->if_ops.is_port_ready(priv))) {
 					adapter->ps_state = PS_STATE_AWAKE;
 					adapter->pm_wakeup_card_req = false;
 					adapter->pm_wakeup_fw_try = false;
@@ -781,12 +781,10 @@ int mwifiex_process_sta_event(struct mwifiex_private *priv)
 					break;
 				}
 				if (!mwifiex_send_null_packet
-					(priv,
-					 MWIFIEX_TxPD_POWER_MGMT_NULL_PACKET |
-					 MWIFIEX_TxPD_POWER_MGMT_LAST_PACKET))
-						adapter->ps_state =
-							PS_STATE_SLEEP;
-					return 0;
+				    (priv, MWIFIEX_TxPD_POWER_MGMT_NULL_PACKET |
+				     MWIFIEX_TxPD_POWER_MGMT_LAST_PACKET))
+					adapter->ps_state = PS_STATE_SLEEP;
+				return 0;
 			}
 		}
 		adapter->ps_state = PS_STATE_AWAKE;
