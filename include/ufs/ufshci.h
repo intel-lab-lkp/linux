@@ -465,6 +465,7 @@ enum utp_ocs {
 
 enum {
 	MASK_OCS			= 0x0F,
+	MASK_EEC			= 0xF0,
 };
 
 /* The maximum length of the data byte count field in the PRDT is 256KB */
