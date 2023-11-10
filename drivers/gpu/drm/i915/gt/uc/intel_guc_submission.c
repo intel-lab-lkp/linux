@@ -3150,7 +3150,8 @@ guc_context_revoke(struct intel_context *ce, struct i915_request *rq,
 		guc_cancel_context_requests(ce);
 		intel_engine_signal_breadcrumbs(ce->engine);
 	} else if (!context_pending_disable(ce)) {
-		u16 guc_id;
+		u16 guc_id = ~0;
+		bool pending_enable = context_pending_enable(ce);
 
 		/*
 		 * We add +2 here as the schedule disable complete CTB handler
@@ -3158,7 +3159,11 @@ guc_context_revoke(struct intel_context *ce, struct i915_request *rq,
 		 */
 		atomic_add(2, &ce->pin_count);
 
-		guc_id = prep_context_pending_disable(ce);
+		if (pending_enable)
+			guc_id = ce->guc_id.id;
+		else
+			guc_id = prep_context_pending_disable(ce);
+
 		spin_unlock_irqrestore(&ce->guc_state.lock, flags);
 
 		/*
@@ -3169,7 +3174,15 @@ guc_context_revoke(struct intel_context *ce, struct i915_request *rq,
 		with_intel_runtime_pm(runtime_pm, wakeref) {
 			__guc_context_set_preemption_timeout(guc, guc_id,
 							     preempt_timeout_ms);
-			__guc_context_sched_disable(guc, ce, guc_id);
+			if (!pending_enable)
+				__guc_context_sched_disable(guc, ce, guc_id);
+		}
+
+		if (pending_enable) {
+			/* Can't have both in flight concurrently, so try again later... */
+			mod_delayed_work(system_unbound_wq,
+					 &ce->guc_state.sched_disable_delay_work,
+					 msecs_to_jiffies(1));
 		}
 	} else {
 		if (!context_guc_id_invalid(ce))
@@ -3222,7 +3235,13 @@ static void __delay_sched_disable(struct work_struct *wrk)
 
 	spin_lock_irqsave(&ce->guc_state.lock, flags);
 
-	if (bypass_sched_disable(guc, ce)) {
+	if (context_pending_enable(ce)) {
+		spin_unlock_irqrestore(&ce->guc_state.lock, flags);
+		/* Can't have both in flight concurrently, so try again later... */
+		mod_delayed_work(system_unbound_wq,
+				 &ce->guc_state.sched_disable_delay_work,
+				 msecs_to_jiffies(1));
+	} else if (bypass_sched_disable(guc, ce)) {
 		spin_unlock_irqrestore(&ce->guc_state.lock, flags);
 		intel_context_sched_disable_unpin(ce);
 	} else {
@@ -3257,8 +3276,8 @@ static void guc_context_sched_disable(struct intel_context *ce)
 	if (bypass_sched_disable(guc, ce)) {
 		spin_unlock_irqrestore(&ce->guc_state.lock, flags);
 		intel_context_sched_disable_unpin(ce);
-	} else if (!intel_context_is_closed(ce) && !guc_id_pressure(guc, ce) &&
-		   delay) {
+	} else if ((!intel_context_is_closed(ce) && !guc_id_pressure(guc, ce) &&
+		    delay) || context_pending_enable(ce)) {
 		spin_unlock_irqrestore(&ce->guc_state.lock, flags);
 		mod_delayed_work(system_unbound_wq,
 				 &ce->guc_state.sched_disable_delay_work,
