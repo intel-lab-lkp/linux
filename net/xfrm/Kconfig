@@ -134,6 +134,15 @@ config NET_KEY_MIGRATE
 
 	  If unsure, say N.
 
+config XFRM_IPTFS
+	bool "IPsec IPTFS (RFC 9347) encapsulation support"
+	depends on XFRM
+	help
+	  Information on the IPTFS encapsulation can be found
+          in RFC 9347.
+
+          If unsure, say N.
+
 config XFRM_ESPINTCP
 	bool
 
