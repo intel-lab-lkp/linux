@@ -61,7 +61,19 @@ static struct kvm_pmc *intel_pmc_idx_to_pmc(struct kvm_pmu *pmu, int pmc_idx)
 
 static u32 intel_rdpmc_get_masked_idx(struct kvm_pmu *pmu, u32 idx)
 {
-	return idx & ~(INTEL_RDPMC_FIXED | INTEL_RDPMC_FAST);
+	/*
+	 * Fast RDPMC is only supported on non-architectural PMUs, which KVM
+	 * doesn't support.
+	 */
+	if (WARN_ON_ONCE(!pmu->version))
+		return idx & ~INTEL_RDPMC_FAST;
+
+	/*
+	 * Fixed PMCs are supported on all architectural PMUs.  Note, KVM only
+	 * emulates fixed PMCs for PMU v2+, but the flag itself is still valid,
+	 * i.e. let RDPMC fail due to accessing a non-existent counter.
+	 */
+	return idx & ~INTEL_RDPMC_FIXED;
 }
 
 static bool intel_is_valid_rdpmc_ecx(struct kvm_vcpu *vcpu, unsigned int idx)
