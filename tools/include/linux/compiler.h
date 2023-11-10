@@ -69,7 +69,7 @@
  * Glory to Martin Uecker <Martin.Uecker@med.uni-goettingen.de>
  */
 #define __is_constexpr(x) \
-	(sizeof(int) == sizeof(*(8 ? ((void *)((long)(x) * 0l)) : (int *)8)))
+	_Generic(0 ? (void *)((long)(x) * 0) : (char *)0, char *: 1, void *: 0)
 
 #ifdef __ANDROID__
 /*
