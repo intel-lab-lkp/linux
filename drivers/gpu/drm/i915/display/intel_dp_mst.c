@@ -47,20 +47,21 @@
 #include "intel_vdsc.h"
 #include "skl_scaler.h"
 
-static int intel_dp_mst_check_constraints(struct drm_i915_private *i915, int bpp,
+static int intel_dp_mst_check_constraints(struct drm_i915_private *i915, int bpp_x16,
 					  const struct drm_display_mode *adjusted_mode,
 					  struct intel_crtc_state *crtc_state,
 					  bool dsc)
 {
 	if (intel_dp_is_uhbr(crtc_state) && DISPLAY_VER(i915) <= 13 && dsc) {
-		int output_bpp = bpp;
+		int output_bpp_x16 = bpp_x16;
 		/* DisplayPort 2 128b/132b, bits per lane is always 32 */
 		int symbol_clock = crtc_state->port_clock / 32;
 
-		if (output_bpp * adjusted_mode->crtc_clock >=
+		if (DIV_ROUND_UP(output_bpp_x16 * adjusted_mode->crtc_clock, 16) >=
 		    symbol_clock * 72) {
 			drm_dbg_kms(&i915->drm, "UHBR check failed(required bw %d available %d)\n",
-				    output_bpp * adjusted_mode->crtc_clock, symbol_clock * 72);
+				    DIV_ROUND_UP(output_bpp_x16 * adjusted_mode->crtc_clock, 16),
+				    symbol_clock * 72);
 			return -EINVAL;
 		}
 	}
@@ -127,8 +128,8 @@ static void intel_dp_mst_compute_m_n(const struct intel_crtc_state *crtc_state,
 
 static int intel_dp_mst_find_vcpi_slots_for_bpp(struct intel_encoder *encoder,
 						struct intel_crtc_state *crtc_state,
-						int max_bpp,
-						int min_bpp,
+						int max_bpp_x16,
+						int min_bpp_x16,
 						struct link_config_limits *limits,
 						struct drm_connector_state *conn_state,
 						int step,
@@ -143,7 +144,7 @@ static int intel_dp_mst_find_vcpi_slots_for_bpp(struct intel_encoder *encoder,
 	struct drm_i915_private *i915 = to_i915(connector->base.dev);
 	const struct drm_display_mode *adjusted_mode =
 		&crtc_state->hw.adjusted_mode;
-	int bpp, slots = -EINVAL;
+	int bpp_x16, slots = -EINVAL;
 	int ret = 0;
 
 	mst_state = drm_atomic_get_mst_topology_state(state, &intel_dp->mst_mgr);
@@ -164,25 +165,25 @@ static int intel_dp_mst_find_vcpi_slots_for_bpp(struct intel_encoder *encoder,
 						      crtc_state->port_clock,
 						      crtc_state->lane_count);
 
-	drm_dbg_kms(&i915->drm, "Looking for slots in range min bpp %d max bpp %d\n",
-		    min_bpp, max_bpp);
+	drm_dbg_kms(&i915->drm, "Looking for slots in range min bpp " BPP_X16_FMT " max bpp " BPP_X16_FMT "\n",
+		    BPP_X16_ARGS(min_bpp_x16), BPP_X16_ARGS(max_bpp_x16));
 
-	for (bpp = max_bpp; bpp >= min_bpp; bpp -= step) {
+	for (bpp_x16 = max_bpp_x16; bpp_x16 >= min_bpp_x16; bpp_x16 -= step) {
 		struct intel_link_m_n remote_m_n;
-		int link_bpp;
+		int link_bpp_x16;
 
-		drm_dbg_kms(&i915->drm, "Trying bpp %d\n", bpp);
+		drm_dbg_kms(&i915->drm, "Trying bpp " BPP_X16_FMT "\n", BPP_X16_ARGS(bpp_x16));
 
-		ret = intel_dp_mst_check_constraints(i915, bpp, adjusted_mode, crtc_state, dsc);
+		ret = intel_dp_mst_check_constraints(i915, bpp_x16, adjusted_mode, crtc_state, dsc);
 		if (ret)
 			continue;
 
-		link_bpp = dsc ? bpp :
-			intel_dp_output_bpp(crtc_state->output_format, bpp);
+		link_bpp_x16 = dsc ? bpp_x16 :
+			intel_dp_output_bpp(crtc_state->output_format, to_bpp_int(bpp_x16));
 
-		intel_dp_mst_compute_m_n(crtc_state, connector, false, dsc, to_bpp_x16(link_bpp),
+		intel_dp_mst_compute_m_n(crtc_state, connector, false, dsc, link_bpp_x16,
 					 &crtc_state->dp_m_n);
-		intel_dp_mst_compute_m_n(crtc_state, connector, true, dsc, to_bpp_x16(link_bpp),
+		intel_dp_mst_compute_m_n(crtc_state, connector, true, dsc, link_bpp_x16,
 					 &remote_m_n);
 
 		/*
@@ -225,10 +226,11 @@ static int intel_dp_mst_find_vcpi_slots_for_bpp(struct intel_encoder *encoder,
 			    slots);
 	} else {
 		if (!dsc)
-			crtc_state->pipe_bpp = bpp;
+			crtc_state->pipe_bpp = to_bpp_int(bpp_x16);
 		else
-			crtc_state->dsc.compressed_bpp_x16 = to_bpp_x16(bpp);
-		drm_dbg_kms(&i915->drm, "Got %d slots for pipe bpp %d dsc %d\n", slots, bpp, dsc);
+			crtc_state->dsc.compressed_bpp_x16 = bpp_x16;
+		drm_dbg_kms(&i915->drm, "Got %d slots for pipe bpp " BPP_X16_FMT " dsc %d\n",
+			    slots, BPP_X16_ARGS(bpp_x16), dsc);
 	}
 
 	return slots;
@@ -246,10 +248,10 @@ static int intel_dp_mst_compute_link_config(struct intel_encoder *encoder,
 	 * YUV420 is only half of the pipe bpp value.
 	 */
 	slots = intel_dp_mst_find_vcpi_slots_for_bpp(encoder, crtc_state,
-						     to_bpp_int(limits->link.max_bpp_x16),
-						     to_bpp_int(limits->link.min_bpp_x16),
+						     limits->link.max_bpp_x16,
+						     limits->link.min_bpp_x16,
 						     limits,
-						     conn_state, 2 * 3, false);
+						     conn_state, 2 * 3 * 16, false);
 
 	if (slots < 0)
 		return slots;
@@ -325,9 +327,11 @@ static int intel_dp_dsc_mst_compute_link_config(struct intel_encoder *encoder,
 	min_compressed_bpp = intel_dp_dsc_nearest_valid_bpp(i915, min_compressed_bpp,
 							    crtc_state->pipe_bpp);
 
-	slots = intel_dp_mst_find_vcpi_slots_for_bpp(encoder, crtc_state, max_compressed_bpp,
-						     min_compressed_bpp, limits,
-						     conn_state, 1, true);
+	slots = intel_dp_mst_find_vcpi_slots_for_bpp(encoder, crtc_state,
+						     to_bpp_x16(max_compressed_bpp),
+						     to_bpp_x16(min_compressed_bpp),
+						     limits,
+						     conn_state, 16, true);
 
 	if (slots < 0)
 		return slots;
