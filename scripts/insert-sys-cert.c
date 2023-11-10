@@ -30,6 +30,9 @@
 #define USED_SYM  "system_extra_cert_used"
 #define LSIZE_SYM "system_certificate_list_size"
 
+#define CMDLINE_APPEND "cmdline_append"
+#define CMDLINE_PREPEND "cmdline_prepend"
+
 #define info(format, args...) fprintf(stderr, "INFO:    " format, ## args)
 #define warn(format, args...) fprintf(stdout, "WARNING: " format, ## args)
 #define  err(format, args...) fprintf(stderr, "ERROR:   " format, ## args)
@@ -267,26 +270,173 @@ static void print_sym(Elf_Ehdr *hdr, struct sym *s)
 
 static void print_usage(char *e)
 {
-	printf("Usage %s [-s <System.map>] -b <vmlinux> -c <certfile>\n", e);
+	printf("Usage %s [-s <System.map>] -b <vmlinux> [ -c <certfile> | -p <command line prepend> | -a <command line append> ]-\n", e);
+}
+
+static char *cmdline_prepend, *cmdline_append;
+static char *system_map_file;
+static char *cert_file;
+static char *cli_name;
+
+static int insert_certificate(Elf_Ehdr *hdr)
+{
+	struct sym cert_sym, lsize_sym, used_sym;
+	Elf_Shdr *symtab = NULL;
+	unsigned long *lsize;
+	FILE *system_map;
+	int cert_size;
+	char *cert;
+	int *used;
+
+	if (!cert_file) {
+		print_usage(cli_name);
+		return EXIT_FAILURE;
+	}
+
+	cert = read_file(cert_file, &cert_size);
+	if (!cert)
+		return EXIT_FAILURE;
+
+	symtab = get_symbol_table(hdr);
+	if (!symtab) {
+		warn("Could not find the symbol table.\n");
+		if (!system_map_file) {
+			err("Please provide a System.map file.\n");
+			print_usage(cli_name);
+			return EXIT_FAILURE;
+		}
+
+		system_map = fopen(system_map_file, "r");
+		if (!system_map) {
+			perror(system_map_file);
+			return EXIT_FAILURE;
+		}
+		get_symbol_from_map(hdr, system_map, CERT_SYM, &cert_sym);
+		get_symbol_from_map(hdr, system_map, USED_SYM, &used_sym);
+		get_symbol_from_map(hdr, system_map, LSIZE_SYM, &lsize_sym);
+		cert_sym.size = used_sym.address - cert_sym.address;
+	} else {
+		info("Symbol table found.\n");
+		if (system_map_file)
+			warn("System.map is ignored.\n");
+		get_symbol_from_table(hdr, symtab, CERT_SYM, &cert_sym);
+		get_symbol_from_table(hdr, symtab, USED_SYM, &used_sym);
+		get_symbol_from_table(hdr, symtab, LSIZE_SYM, &lsize_sym);
+	}
+
+	if (!cert_sym.offset || !lsize_sym.offset || !used_sym.offset)
+		return EXIT_FAILURE;
+
+	print_sym(hdr, &cert_sym);
+	print_sym(hdr, &used_sym);
+	print_sym(hdr, &lsize_sym);
+
+	lsize = (unsigned long *)lsize_sym.content;
+	used = (int *)used_sym.content;
+
+	if (cert_sym.size < cert_size) {
+		err("Certificate is larger than the reserved area!\n");
+		return EXIT_FAILURE;
+	}
+
+	/* If the existing cert is the same, don't overwrite */
+	if (cert_size == *used &&
+	    strncmp(cert_sym.content, cert, cert_size) == 0) {
+		warn("Certificate was already inserted.\n");
+		return EXIT_SUCCESS;
+	}
+
+	if (*used > 0)
+		warn("Replacing previously inserted certificate.\n");
+
+	memcpy(cert_sym.content, cert, cert_size);
+	if (cert_size < cert_sym.size)
+		memset(cert_sym.content + cert_size,
+			0, cert_sym.size - cert_size);
+
+	*lsize = *lsize + cert_size - *used;
+	*used = cert_size;
+	info("Inserted the contents of %s into %lx.\n", cert_file,
+						cert_sym.address);
+	info("Used %d bytes out of %d bytes reserved.\n", *used,
+						 cert_sym.size);
+	return EXIT_SUCCESS;
+}
+
+static int insert_cmdline(Elf_Ehdr *hdr)
+{
+	struct sym cmdline_prepend_sym, cmdline_append_sym;
+	Elf_Shdr *symtab = NULL;
+	FILE *system_map;
+
+	symtab = get_symbol_table(hdr);
+	if (!symtab) {
+		warn("Could not find the symbol table.\n");
+		if (!system_map_file) {
+			err("Please provide a System.map file.\n");
+			print_usage(cli_name);
+			return EXIT_FAILURE;
+		}
+
+		system_map = fopen(system_map_file, "r");
+		if (!system_map) {
+			perror(system_map_file);
+			return EXIT_FAILURE;
+		}
+		get_symbol_from_map(hdr, system_map, CMDLINE_PREPEND, &cmdline_prepend_sym);
+		get_symbol_from_map(hdr, system_map, CMDLINE_APPEND, &cmdline_append_sym);
+	} else {
+		info("Symbol table found.\n");
+		if (system_map_file)
+			warn("System.map is ignored.\n");
+		get_symbol_from_table(hdr, symtab, CMDLINE_PREPEND, &cmdline_prepend_sym);
+		get_symbol_from_table(hdr, symtab, CMDLINE_APPEND, &cmdline_append_sym);
+	}
+
+	print_sym(hdr, &cmdline_prepend_sym);
+	print_sym(hdr, &cmdline_append_sym);
+
+
+	if (cmdline_prepend) {
+		if ((strlen(cmdline_prepend) + 1) > cmdline_prepend_sym.size) {
+			err("cmdline prepend is larger than the reserved area!\n");
+			return EXIT_FAILURE;
+		}
+
+		memcpy(cmdline_prepend_sym.content, cmdline_prepend, strlen(cmdline_prepend) + 1);
+		if ((strlen(cmdline_prepend) + 1) < cmdline_prepend_sym.size)
+			memset(cmdline_prepend_sym.content + strlen(cmdline_prepend) + 1,
+				0, cmdline_prepend_sym.size - (strlen(cmdline_prepend) + 1));
+
+		info("Inserted cmdline prepend of \"%s\" into vmlinux.\n", cmdline_prepend);
+
+	}
+	if (cmdline_append) {
+		if ((strlen(cmdline_append) + 1) > cmdline_append_sym.size) {
+			err("cmdline append is larger than the reserved area!\n");
+			return EXIT_FAILURE;
+		}
+
+		memcpy(cmdline_append_sym.content, cmdline_append, strlen(cmdline_append) + 1);
+		if ((strlen(cmdline_append) + 1) < cmdline_append_sym.size)
+			memset(cmdline_append_sym.content + strlen(cmdline_append) + 1,
+				0, cmdline_append_sym.size - (strlen(cmdline_append) + 1));
+
+		info("Inserted cmdline append of \"%s\" into vmlinux.\n", cmdline_append);
+
+	}
+	return EXIT_SUCCESS;
 }
 
 int main(int argc, char **argv)
 {
-	char *system_map_file = NULL;
 	char *vmlinux_file = NULL;
-	char *cert_file = NULL;
 	int vmlinux_size;
-	int cert_size;
 	Elf_Ehdr *hdr;
-	char *cert;
-	FILE *system_map;
-	unsigned long *lsize;
-	int *used;
 	int opt;
-	Elf_Shdr *symtab = NULL;
-	struct sym cert_sym, lsize_sym, used_sym;
+	int ret = EXIT_SUCCESS;
 
-	while ((opt = getopt(argc, argv, "b:c:s:")) != -1) {
+	while ((opt = getopt(argc, argv, "b:c:s:p:a:")) != -1) {
 		switch (opt) {
 		case 's':
 			system_map_file = optarg;
@@ -297,19 +447,23 @@ int main(int argc, char **argv)
 		case 'c':
 			cert_file = optarg;
 			break;
+		case 'p':
+			cmdline_prepend = optarg;
+			break;
+		case 'a':
+			cmdline_append = optarg;
+			break;
 		default:
 			break;
 		}
 	}
 
-	if (!vmlinux_file || !cert_file) {
-		print_usage(argv[0]);
+	cli_name = argv[0];
+
+	if (!vmlinux_file) {
+		print_usage(cli_name);
 		exit(EXIT_FAILURE);
 	}
-
-	cert = read_file(cert_file, &cert_size);
-	if (!cert)
-		exit(EXIT_FAILURE);
 
 	hdr = map_file(vmlinux_file, &vmlinux_size);
 	if (!hdr)
@@ -343,68 +497,13 @@ int main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}
 
-	symtab = get_symbol_table(hdr);
-	if (!symtab) {
-		warn("Could not find the symbol table.\n");
-		if (!system_map_file) {
-			err("Please provide a System.map file.\n");
-			print_usage(argv[0]);
-			exit(EXIT_FAILURE);
-		}
-
-		system_map = fopen(system_map_file, "r");
-		if (!system_map) {
-			perror(system_map_file);
-			exit(EXIT_FAILURE);
-		}
-		get_symbol_from_map(hdr, system_map, CERT_SYM, &cert_sym);
-		get_symbol_from_map(hdr, system_map, USED_SYM, &used_sym);
-		get_symbol_from_map(hdr, system_map, LSIZE_SYM, &lsize_sym);
-		cert_sym.size = used_sym.address - cert_sym.address;
-	} else {
-		info("Symbol table found.\n");
-		if (system_map_file)
-			warn("System.map is ignored.\n");
-		get_symbol_from_table(hdr, symtab, CERT_SYM, &cert_sym);
-		get_symbol_from_table(hdr, symtab, USED_SYM, &used_sym);
-		get_symbol_from_table(hdr, symtab, LSIZE_SYM, &lsize_sym);
+	if (cert_file) {
+		ret = insert_certificate(hdr);
+		printf("%s\n", cert_file);
 	}
 
-	if (!cert_sym.offset || !lsize_sym.offset || !used_sym.offset)
-		exit(EXIT_FAILURE);
+	if (cmdline_append || cmdline_prepend)
+		ret = insert_cmdline(hdr);
 
-	print_sym(hdr, &cert_sym);
-	print_sym(hdr, &used_sym);
-	print_sym(hdr, &lsize_sym);
-
-	lsize = (unsigned long *)lsize_sym.content;
-	used = (int *)used_sym.content;
-
-	if (cert_sym.size < cert_size) {
-		err("Certificate is larger than the reserved area!\n");
-		exit(EXIT_FAILURE);
-	}
-
-	/* If the existing cert is the same, don't overwrite */
-	if (cert_size == *used &&
-	    strncmp(cert_sym.content, cert, cert_size) == 0) {
-		warn("Certificate was already inserted.\n");
-		exit(EXIT_SUCCESS);
-	}
-
-	if (*used > 0)
-		warn("Replacing previously inserted certificate.\n");
-
-	memcpy(cert_sym.content, cert, cert_size);
-	if (cert_size < cert_sym.size)
-		memset(cert_sym.content + cert_size,
-			0, cert_sym.size - cert_size);
-
-	*lsize = *lsize + cert_size - *used;
-	*used = cert_size;
-	info("Inserted the contents of %s into %lx.\n", cert_file,
-						cert_sym.address);
-	info("Used %d bytes out of %d bytes reserved.\n", *used,
-						 cert_sym.size);
-	exit(EXIT_SUCCESS);
+	exit(ret);
 }
