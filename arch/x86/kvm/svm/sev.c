@@ -65,6 +65,47 @@ module_param_named(debug_swap, sev_es_debug_swap_enabled, bool, 0444);
 #define sev_es_debug_swap_enabled false
 #endif /* CONFIG_KVM_AMD_SEV */
 
+#define MMU_NOTIFY_OTHERS_BIT BIT_ULL(0)
+#define MMU_NOTIFY_UNMAP_BIT BIT_ULL(1)
+#define MMU_NOTIFY_CLEAR_BIT BIT_ULL(2)
+#define MMU_NOTIFY_PROTECTION_VMA_BIT BIT_ULL(3)
+#define MMU_NOTIFY_PROTECTION_PAGE_BIT BIT_ULL(4)
+#define MMU_NOTIFY_SOFT_DIRTY_BIT BIT_ULL(5)
+#define MMU_NOTIFY_RELEASE_BIT BIT_ULL(6)
+#define MMU_NOTIFY_MIGRATE_BIT BIT_ULL(7)
+#define MMU_NOTIFY_EXCLUSIVE_BIT BIT_ULL(8)
+
+/*
+ * Explicitly decouple with the mmu_notifier_event enum, so that the interface
+ * (i.e. bit definitions in the module param bitmp) remains the same when the
+ * original enum get updated.
+ */
+static const int mmu_notifier_event_map[NR_MMU_NOTIFY_EVENTS] = {
+	[MMU_NOTIFY_UNMAP] = MMU_NOTIFY_UNMAP_BIT,
+	[MMU_NOTIFY_CLEAR] = MMU_NOTIFY_CLEAR_BIT,
+	[MMU_NOTIFY_PROTECTION_VMA] = MMU_NOTIFY_PROTECTION_VMA_BIT,
+	[MMU_NOTIFY_PROTECTION_PAGE] = MMU_NOTIFY_PROTECTION_PAGE_BIT,
+	[MMU_NOTIFY_SOFT_DIRTY] = MMU_NOTIFY_SOFT_DIRTY_BIT,
+	[MMU_NOTIFY_RELEASE] = MMU_NOTIFY_RELEASE_BIT,
+	[MMU_NOTIFY_MIGRATE] = MMU_NOTIFY_MIGRATE_BIT,
+	[MMU_NOTIFY_EXCLUSIVE] = MMU_NOTIFY_EXCLUSIVE_BIT
+};
+unsigned long flush_on_mmu_notifier_event_bitmap = MMU_NOTIFY_UNMAP_BIT |
+	MMU_NOTIFY_CLEAR_BIT | MMU_NOTIFY_RELEASE_BIT | MMU_NOTIFY_MIGRATE_BIT;
+EXPORT_SYMBOL_GPL(flush_on_mmu_notifier_event_bitmap);
+module_param(flush_on_mmu_notifier_event_bitmap, ulong, 0644);
+MODULE_PARM_DESC(flush_on_mmu_notifier_event_bitmap,
+"Whether a cache flush is needed when the sev guest memory is reclaimed with a specific mmu notifier event.\n"
+"\tBit 0 (0x01)  left to any event not yet defined in the map\n"
+"\tBit 1 (0x02)  corresponds to MMU_NOTIFY_UNMAP event\n"
+"\tBit 2 (0x04)  corresponds to MMU_NOTIFY_CLEAR event\n"
+"\tBit 3 (0x08)  corresponds to MMU_NOTIFY_PROTECTION_VMA event\n"
+"\tBit 4 (0x10)  corresponds to MMU_NOTIFY_PROTECTION_PAGE event\n"
+"\tBit 5 (0x20)  corresponds to MMU_NOTIFY_SOFT_DIRTY event\n"
+"\tBit 6 (0x80)  corresponds to MMU_NOTIFY_RELEASE event\n"
+"\tBit 7 (0x100) corresponds to MMU_NOTIFY_MIGRATE event\n"
+"\tBit 8 (0x200) corresponds to MMU_NOTIFY_EXCLUSIVE event");
+
 static u8 sev_enc_bit;
 static DECLARE_RWSEM(sev_deactivate_lock);
 static DEFINE_MUTEX(sev_bitmap_lock);
@@ -2335,10 +2376,8 @@ void sev_guest_memory_reclaimed(struct kvm *kvm,
 	if (!sev_guest(kvm))
 		return;
 
-	if (mmu_notifier_event == MMU_NOTIFY_UNMAP ||
-	    mmu_notifier_event == MMU_NOTIFY_CLEAR ||
-	    mmu_notifier_event == MMU_NOTIFY_RELEASE ||
-	    mmu_notifier_event == MMU_NOTIFY_MIGRATE)
+	if (mmu_notifier_event_map[mmu_notifier_event] &
+	    flush_on_mmu_notifier_event_bitmap)
 		wbinvd_on_all_cpus();
 }
 

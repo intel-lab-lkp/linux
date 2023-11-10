@@ -47,6 +47,9 @@ struct mmu_interval_notifier;
  * longer have exclusive access to the page. When sent during creation of an
  * exclusive range the owner will be initialised to the value provided by the
  * caller of make_device_exclusive_range(), otherwise the owner will be NULL.
+ *
+ * @NR_MMU_NOTIFY_EVENTS: number of mmu notifier events, should always be at
+ * the end of the enum list.
  */
 enum mmu_notifier_event {
 	MMU_NOTIFY_UNMAP = 0,
@@ -57,6 +60,7 @@ enum mmu_notifier_event {
 	MMU_NOTIFY_RELEASE,
 	MMU_NOTIFY_MIGRATE,
 	MMU_NOTIFY_EXCLUSIVE,
+	NR_MMU_NOTIFY_EVENTS,
 };
 
 #define MMU_NOTIFIER_RANGE_BLOCKABLE (1 << 0)
