@@ -25,9 +25,28 @@ static void rtl8723be_init_aspm_vars(struct ieee80211_hw *hw)
 {
 	struct rtl_priv *rtlpriv = rtl_priv(hw);
 	struct rtl_pci *rtlpci = rtl_pcidev(rtl_pcipriv(hw));
+	struct pci_dev *bridge_pdev;
 
 	/*close ASPM for AMD defaultly */
 	rtlpci->const_amdpci_aspm = 0;
+
+	/* Disable ASPM if RTL8723BE connects to some Intel PCI bridges, such as
+	 * Skylake and Kabylake. Otherwise, the PCI AER flood hangs system.
+	 */
+	bridge_pdev = rtlpci->pdev->bus->self;
+	if (bridge_pdev->vendor == PCI_VENDOR_ID_INTEL) {
+		switch(bridge_pdev->device) {
+		case 0x9d15:
+		/* PCI bridges on Skylake */
+		case 0xa110 ... 0xa11f:
+		case 0xa167 ... 0xa16a:
+		/* PCI bridges on Kabylake */
+		case 0xa290 ... 0xa29f:
+		case 0xa2e7 ... 0xa2ee:
+			rtlpriv->cfg->mod_params->aspm_support = 0;
+			break;
+		}
+	}
 
 	/* ASPM PS mode.
 	 * 0 - Disable ASPM,
