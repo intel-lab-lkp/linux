@@ -772,27 +772,6 @@ out_put:
 	return err;
 }
 
-int
-i915_gem_dumb_mmap_offset(struct drm_file *file,
-			  struct drm_device *dev,
-			  u32 handle,
-			  u64 *offset)
-{
-	struct drm_i915_private *i915 = to_i915(dev);
-	enum i915_mmap_type mmap_type;
-
-	if (HAS_LMEM(to_i915(dev)))
-		mmap_type = I915_MMAP_TYPE_FIXED;
-	else if (pat_enabled())
-		mmap_type = I915_MMAP_TYPE_WC;
-	else if (!i915_ggtt_has_aperture(to_gt(i915)->ggtt))
-		return -ENODEV;
-	else
-		mmap_type = I915_MMAP_TYPE_GTT;
-
-	return __assign_mmap_offset_handle(file, handle, mmap_type, offset);
-}
-
 /**
  * i915_gem_mmap_offset_ioctl - prepare an object for GTT mmap'ing
  * @dev: DRM device
