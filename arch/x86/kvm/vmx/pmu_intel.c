@@ -20,6 +20,10 @@
 #include "nested.h"
 #include "pmu.h"
 
+/* Perf's "BASE" is wildly misleading, this is a single-bit flag, not a base. */
+#define INTEL_RDPMC_FIXED	INTEL_PMC_FIXED_RDPMC_BASE
+#define INTEL_RDPMC_FAST	BIT(31)
+
 #define MSR_PMC_FULL_WIDTH_BIT      (MSR_IA32_PMC0 - MSR_IA32_PERFCTR0)
 
 static void reprogram_fixed_counters(struct kvm_pmu *pmu, u64 data)
@@ -55,12 +59,17 @@ static struct kvm_pmc *intel_pmc_idx_to_pmc(struct kvm_pmu *pmu, int pmc_idx)
 	}
 }
 
+static u32 intel_rdpmc_get_masked_idx(struct kvm_pmu *pmu, u32 idx)
+{
+	return idx & ~(INTEL_RDPMC_FIXED | INTEL_RDPMC_FAST);
+}
+
 static bool intel_is_valid_rdpmc_ecx(struct kvm_vcpu *vcpu, unsigned int idx)
 {
 	struct kvm_pmu *pmu = vcpu_to_pmu(vcpu);
-	bool fixed = idx & (1u << 30);
+	bool fixed = idx & INTEL_RDPMC_FIXED;
 
-	idx &= ~(3u << 30);
+	idx = intel_rdpmc_get_masked_idx(pmu, idx);
 
 	return fixed ? idx < pmu->nr_arch_fixed_counters
 		     : idx < pmu->nr_arch_gp_counters;
@@ -70,11 +79,14 @@ static struct kvm_pmc *intel_rdpmc_ecx_to_pmc(struct kvm_vcpu *vcpu,
 					    unsigned int idx, u64 *mask)
 {
 	struct kvm_pmu *pmu = vcpu_to_pmu(vcpu);
-	bool fixed = idx & (1u << 30);
+	bool fixed = idx & INTEL_RDPMC_FIXED;
 	struct kvm_pmc *counters;
 	unsigned int num_counters;
 
-	idx &= ~(3u << 30);
+	if (idx & INTEL_RDPMC_FAST)
+		*mask &= GENMASK_ULL(31, 0);
+
+	idx = intel_rdpmc_get_masked_idx(pmu, idx);
 	if (fixed) {
 		counters = pmu->fixed_counters;
 		num_counters = pmu->nr_arch_fixed_counters;
