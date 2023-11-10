@@ -172,6 +172,10 @@ static int intel_dp_mst_find_vcpi_slots_for_bpp(struct intel_encoder *encoder,
 		struct intel_link_m_n remote_m_n;
 		int link_bpp_x16;
 
+		if (dsc && intel_dp->force_dsc_fractional_bpp_en &&
+		    !to_bpp_frac(bpp_x16))
+			continue;
+
 		drm_dbg_kms(&i915->drm, "Trying bpp " BPP_X16_FMT "\n", BPP_X16_ARGS(bpp_x16));
 
 		ret = intel_dp_mst_check_constraints(i915, bpp_x16, adjusted_mode, crtc_state, dsc);
@@ -225,12 +229,16 @@ static int intel_dp_mst_find_vcpi_slots_for_bpp(struct intel_encoder *encoder,
 		drm_dbg_kms(&i915->drm, "failed finding vcpi slots:%d\n",
 			    slots);
 	} else {
-		if (!dsc)
-			crtc_state->pipe_bpp = to_bpp_int(bpp_x16);
-		else
+		if (dsc) {
 			crtc_state->dsc.compressed_bpp_x16 = bpp_x16;
+			if (intel_dp->force_dsc_fractional_bpp_en && to_bpp_frac(bpp_x16))
+				drm_dbg_kms(&i915->drm, "Forcing DSC fractional bpp\n");
+		} else {
+			crtc_state->pipe_bpp = to_bpp_int(bpp_x16);
+		}
 		drm_dbg_kms(&i915->drm, "Got %d slots for pipe bpp " BPP_X16_FMT " dsc %d\n",
 			    slots, BPP_X16_ARGS(bpp_x16), dsc);
+
 	}
 
 	return slots;
