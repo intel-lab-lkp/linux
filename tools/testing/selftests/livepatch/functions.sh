@@ -277,6 +277,20 @@ function set_pre_patch_ret {
 		die "failed to set pre_patch_ret parameter for $mod module"
 }
 
+# read_module_param(modname, param)
+#	modname - module name which provides the given parameter
+#	param - parameter name to be read
+function read_module_param {
+	local mod="$1"; shift
+	local param="$1"
+
+	log "% cat /sys/module/$mod/parameters/$param"
+	ret=$(cat /sys/module/$mod/parameters/$param 2>&1)
+	if [[ "$ret" != "" ]]; then
+		die "$ret"
+	fi
+}
+
 function start_test {
 	local test="$1"
 
@@ -336,9 +350,24 @@ function check_sysfs_value() {
 	local rel_path="$1"; shift
 	local expected_value="$1"; shift
 
+#	echo "mod=$mod"
+#	echo "rel_path=$rel_path"
+#	echo "expected_value=$expected_value"
 	local path="$KLP_SYSFS_DIR/$mod/$rel_path"
 	local value=`cat $path`
 	if test "$value" != "$expected_value" ; then
 		die "Unexpected value in $path: $expected_value vs. $value"
 	fi
+}
+
+# check_object_patched(livepatch_module, objname, expected_value)
+#	livepatch_module - livepatch module creating the sysfs interface
+#	objname - livepatched object to be checked
+#	expected_value - expected value read from the file
+function check_object_patched() {
+	local livepatch_module="$1"; shift
+	local objname="$1"; shift
+	local expected_value="$1"; shift
+
+	check_sysfs_value "$livepatch_module" "$objname/patched" "$expected_value"
 }
