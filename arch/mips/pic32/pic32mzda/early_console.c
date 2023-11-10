@@ -76,7 +76,7 @@ static char * __init pic32_getcmdline(void)
 	 * command line setup if using CONFIG_CMDLINE_BOOL.
 	 */
 #ifdef CONFIG_CMDLINE_OVERRIDE
-	return CONFIG_CMDLINE;
+	return CMDLINE_STATIC_PREPEND " " CMDLINE_STATIC_APPEND;
 #else
 	return fw_getcmdline();
 #endif

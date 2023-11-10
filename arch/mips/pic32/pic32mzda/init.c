@@ -9,6 +9,7 @@
 #include <linux/of_fdt.h>
 #include <linux/of_platform.h>
 #include <linux/platform_data/sdhci-pic32.h>
+#include <linux/cmdline.h>
 
 #include <asm/fw/fw.h>
 #include <asm/mips-boards/generic.h>
@@ -41,7 +42,7 @@ void __init plat_mem_setup(void)
 	pr_info(" boot_command_line: %s\n", boot_command_line);
 	pr_info(" arcs_cmdline     : %s\n", arcs_cmdline);
 #ifdef CONFIG_CMDLINE_BOOL
-	pr_info(" builtin_cmdline  : %s\n", CONFIG_CMDLINE);
+	pr_info(" builtin_cmdline  : %s\n", CMDLINE_STATIC_PREPEND " " CMDLINE_STATIC_APPEND);
 #endif
 	if (dtb != __dtb_start)
 		strscpy(arcs_cmdline, boot_command_line, COMMAND_LINE_SIZE);

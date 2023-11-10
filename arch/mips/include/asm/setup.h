@@ -5,6 +5,7 @@
 #include <linux/types.h>
 #include <uapi/asm/setup.h>
 
+#ifndef __ASSEMBLY__
 extern void prom_putchar(char);
 extern void setup_early_printk(void);
 
@@ -27,5 +28,6 @@ extern unsigned long ebase;
 extern unsigned int hwrena;
 extern void per_cpu_trap_init(bool);
 extern void cpu_cache_init(void);
+#endif
 
 #endif /* __SETUP_H */

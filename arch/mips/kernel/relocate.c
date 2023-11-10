@@ -23,6 +23,7 @@
 #include <linux/start_kernel.h>
 #include <linux/string.h>
 #include <linux/printk.h>
+#include <linux/cmdline.h>
 
 #define RELOCATED(x) ((void *)((long)x + offset))
 
@@ -247,16 +248,26 @@ static inline __init bool kaslr_disabled(void)
 	char *str;
 
 #if defined(CONFIG_CMDLINE_BOOL)
-	const char *builtin_cmdline = CONFIG_CMDLINE;
+	char *builtin_cmdline = CMDLINE_PREPEND;
 
 	str = strstr(builtin_cmdline, "nokaslr");
 	if (str == builtin_cmdline ||
 	    (str > builtin_cmdline && *(str - 1) == ' '))
 		return true;
 #endif
-	str = strstr(arcs_cmdline, "nokaslr");
-	if (str == arcs_cmdline || (str > arcs_cmdline && *(str - 1) == ' '))
+	if (!IS_ENABLED(CONFIG_CMDLINE_OVERRIDE)) {
+		str = strstr(arcs_cmdline, "nokaslr");
+		if (str == arcs_cmdline || (str > arcs_cmdline && *(str - 1) == ' '))
+			return true;
+	}
+
+#if defined(CONFIG_CMDLINE_BOOL)
+	builtin_cmdline = CMDLINE_APPEND;
+	str = strstr(builtin_cmdline, "nokaslr");
+	if (str == builtin_cmdline ||
+	    (str > builtin_cmdline && *(str - 1) == ' '))
 		return true;
+#endif
 
 	return false;
 }
