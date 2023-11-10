@@ -766,6 +766,10 @@ struct task_struct {
 	refcount_t			usage;
 	/* Per task flags (PF_*), defined further below: */
 	unsigned int			flags;
+#ifdef CONFIG_EXITZ_SYSCALL
+	/* Zero resource on exit flags (EZ_*). */
+	unsigned int			ezflags;
+#endif
 	unsigned int			ptrace;
 
 #ifdef CONFIG_SMP
