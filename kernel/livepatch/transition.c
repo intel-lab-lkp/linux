@@ -148,15 +148,6 @@ static void klp_complete_transition(void)
 		klp_release_states(klp_transition_patch);
 	}
 
-	klp_for_each_object(klp_transition_patch, obj) {
-		if (!klp_is_object_loaded(obj))
-			continue;
-		if (klp_target_state == KLP_PATCHED)
-			klp_post_patch_callback(obj);
-		else if (klp_target_state == KLP_UNPATCHED)
-			klp_post_unpatch_callback(obj);
-	}
-
 	pr_notice("'%s': %s complete\n", klp_transition_patch->mod->name,
 		  klp_target_state == KLP_PATCHED ? "patching" : "unpatching");
 
