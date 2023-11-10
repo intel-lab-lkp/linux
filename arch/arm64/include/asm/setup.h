@@ -3,10 +3,13 @@
 #ifndef __ARM64_ASM_SETUP_H
 #define __ARM64_ASM_SETUP_H
 
+#ifndef __ASSEMBLY__
 #include <linux/string.h>
+#endif
 
 #include <uapi/asm/setup.h>
 
+#ifndef __ASSEMBLY__
 void *get_early_fdt_ptr(void);
 void early_fdt_map(u64 dt_phys);
 
@@ -30,5 +33,6 @@ static inline bool arch_parse_debug_rodata(char *arg)
 	return false;
 }
 #define arch_parse_debug_rodata arch_parse_debug_rodata
+#endif /* __ASSEMBLY__ */
 
 #endif

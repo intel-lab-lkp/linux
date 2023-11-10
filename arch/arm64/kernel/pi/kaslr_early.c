@@ -11,6 +11,7 @@
 #include <linux/types.h>
 #include <linux/sizes.h>
 #include <linux/string.h>
+#include <linux/cmdline.h>
 
 #include <asm/archrandom.h>
 #include <asm/memory.h>
@@ -42,7 +43,7 @@ static bool cmdline_contains_nokaslr(const u8 *cmdline)
 
 static bool is_kaslr_disabled_cmdline(void *fdt)
 {
-	if (!IS_ENABLED(CONFIG_CMDLINE_FORCE)) {
+	if (!IS_ENABLED(CONFIG_CMDLINE_OVERRIDE)) {
 		int node;
 		const u8 *prop;
 
@@ -54,16 +55,15 @@ static bool is_kaslr_disabled_cmdline(void *fdt)
 		if (!prop)
 			goto out;
 
+		if (cmdline_contains_nokaslr(CMDLINE_STATIC_APPEND))
+			return true;
 		if (cmdline_contains_nokaslr(prop))
 			return true;
-
-		if (IS_ENABLED(CONFIG_CMDLINE_EXTEND))
-			goto out;
-
-		return false;
+		if (cmdline_contains_nokaslr(CMDLINE_STATIC_PREPEND))
+			return true;
 	}
 out:
-	return cmdline_contains_nokaslr(CONFIG_CMDLINE);
+	return cmdline_contains_nokaslr(cmdline_get_static_builtin());
 }
 
 static u64 get_kaslr_seed(void *fdt)
