@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * mm/kmemleak.c
  *
  * Copyright (C) 2008 ARM Limited
  * Written by Catalin Marinas <catalin.marinas@arm.com>
@@ -97,7 +96,7 @@
 #include <linux/crc32.h>
 
 #include <asm/sections.h>
-#include <asm/processor.h>
+#include <linux/processor.h>
 #include <linux/atomic.h>
 
 #include <linux/kasan.h>
@@ -368,6 +367,7 @@ static void print_unreferenced(struct seq_file *seq,
 
 	for (i = 0; i < nr_entries; i++) {
 		void *ptr = (void *)entries[i];
+
 		warn_or_seq_printf(seq, "    [<%pK>] %pS\n", ptr, ptr);
 	}
 }
@@ -406,10 +406,11 @@ static struct kmemleak_object *__lookup_object(unsigned long ptr, int alias,
 	unsigned long untagged_ptr = (unsigned long)kasan_reset_tag((void *)ptr);
 
 	while (rb) {
-		struct kmemleak_object *object;
+		struct kmemleak_object *object = NULL;
 		unsigned long untagged_objp;
 
 		object = rb_entry(rb, struct kmemleak_object, rb_node);
+
 		untagged_objp = (unsigned long)kasan_reset_tag((void *)object->pointer);
 
 		if (untagged_ptr < untagged_objp)
@@ -674,10 +675,10 @@ static int __link_object(struct kmemleak_object *object, unsigned long ptr,
 	/* task information */
 	if (in_hardirq()) {
 		object->pid = 0;
-		strncpy(object->comm, "hardirq", sizeof(object->comm));
+		strscpy(object->comm, "hardirq", sizeof(object->comm));
 	} else if (in_serving_softirq()) {
 		object->pid = 0;
-		strncpy(object->comm, "softirq", sizeof(object->comm));
+		strscpy(object->comm, "softirq", sizeof(object->comm));
 	} else {
 		object->pid = current->pid;
 		/*
@@ -686,7 +687,7 @@ static int __link_object(struct kmemleak_object *object, unsigned long ptr,
 		 * dependency issues with current->alloc_lock. In the worst
 		 * case, the command line is not correct.
 		 */
-		strncpy(object->comm, current->comm, sizeof(object->comm));
+		strscpy(object->comm, current->comm, sizeof(object->comm));
 	}
 
 	/* kernel backtrace */
@@ -1662,6 +1663,7 @@ static void kmemleak_scan(void)
 		rcu_read_lock();
 		for_each_process_thread(g, p) {
 			void *stack = try_get_task_stack(p);
+
 			if (stack) {
 				scan_block(stack, stack + THREAD_SIZE, NULL);
 				put_task_stack(p);
@@ -1768,6 +1770,7 @@ static int kmemleak_scan_thread(void *arg)
 	 */
 	if (first_run) {
 		signed long timeout = msecs_to_jiffies(SECS_FIRST_SCAN * 1000);
+
 		first_run = 0;
 		while (timeout && !kthread_should_stop())
 			timeout = schedule_timeout_interruptible(timeout);
@@ -2013,7 +2016,7 @@ static ssize_t kmemleak_write(struct file *file, const char __user *user_buf,
 	else if (strncmp(buf, "scan=off", 8) == 0)
 		stop_scan_thread();
 	else if (strncmp(buf, "scan=", 5) == 0) {
-		unsigned secs;
+		unsigned int secs;
 		unsigned long msecs;
 
 		ret = kstrtouint(buf + 5, 0, &secs);
@@ -2130,8 +2133,7 @@ static int __init kmemleak_boot_config(char *str)
 	else if (strcmp(str, "on") == 0) {
 		kmemleak_skip_disable = 1;
 		stack_depot_request_early_init();
-	}
-	else
+	} else
 		return -EINVAL;
 	return 0;
 }
