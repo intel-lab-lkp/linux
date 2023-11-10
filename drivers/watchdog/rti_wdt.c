@@ -236,12 +236,8 @@ static int rti_wdt_probe(struct platform_device *pdev)
 	if (wdt->freq < 32768)
 		wdt->freq = wdt->freq * 9 / 10;
 
-	pm_runtime_enable(dev);
-	ret = pm_runtime_resume_and_get(dev);
-	if (ret < 0) {
-		pm_runtime_disable(&pdev->dev);
-		return dev_err_probe(dev, ret, "runtime pm failed\n");
-	}
+	devm_pm_runtime_enable(dev);
+	pm_runtime_get_noresume(dev);
 
 	platform_set_drvdata(pdev, wdt);
 
@@ -260,7 +256,7 @@ static int rti_wdt_probe(struct platform_device *pdev)
 	wdt->base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(wdt->base)) {
 		ret = PTR_ERR(wdt->base);
-		goto err_iomap;
+		return ret;
 	}
 
 	if (readl(wdt->base + RTIDWDCTRL) == WDENABLE_KEY) {
@@ -286,7 +282,7 @@ static int rti_wdt_probe(struct platform_device *pdev)
 		ret = rti_wdt_setup_hw_hb(wdd, wsize);
 		if (ret) {
 			dev_err(dev, "bad window size.\n");
-			goto err_iomap;
+			return ret;
 		}
 
 		last_ping = heartbeat_ms - time_left_ms;
@@ -301,7 +297,7 @@ static int rti_wdt_probe(struct platform_device *pdev)
 		ret = of_address_to_resource(node, 0, &res);
 		if (ret) {
 			dev_err(dev, "No memory address assigned to the region.\n");
-			goto err_iomap;
+			return ret;
 		}
 
 		/*
@@ -312,15 +308,13 @@ static int rti_wdt_probe(struct platform_device *pdev)
 		reserved_mem_size = resource_size(&res);
 		if (reserved_mem_size < RESERVED_MEM_MIN_SIZE) {
 			dev_err(dev, "The size of reserved memory is too small.\n");
-			ret = -EINVAL;
-			goto err_iomap;
+			return -EINVAL;
 		}
 
 		vaddr = memremap(paddr, reserved_mem_size, MEMREMAP_WB);
 		if (!vaddr) {
 			dev_err(dev, "Failed to map memory-region.\n");
-			ret = -ENOMEM;
-			goto err_iomap;
+			return -ENOMEM;
 		}
 
 		if (vaddr[0] == PON_REASON_SOF_NUM &&
@@ -337,19 +331,13 @@ static int rti_wdt_probe(struct platform_device *pdev)
 	ret = watchdog_register_device(wdd);
 	if (ret) {
 		dev_err(dev, "cannot register watchdog device\n");
-		goto err_iomap;
+		return ret;
 	}
 
 	if (last_ping)
 		watchdog_set_last_hw_keepalive(wdd, last_ping);
 
 	return 0;
-
-err_iomap:
-	pm_runtime_put_sync(&pdev->dev);
-	pm_runtime_disable(&pdev->dev);
-
-	return ret;
 }
 
 static void rti_wdt_remove(struct platform_device *pdev)
@@ -357,8 +345,6 @@ static void rti_wdt_remove(struct platform_device *pdev)
 	struct rti_wdt_device *wdt = platform_get_drvdata(pdev);
 
 	watchdog_unregister_device(&wdt->wdd);
-	pm_runtime_put(&pdev->dev);
-	pm_runtime_disable(&pdev->dev);
 }
 
 static const struct of_device_id rti_wdt_of_match[] = {
