@@ -116,7 +116,7 @@ dml_float_t dml_ceil(dml_float_t x, dml_float_t granularity)
 dml_float_t dml_floor(dml_float_t x, dml_float_t granularity)
 {
 	if (granularity == 0)
-	return 0;
+		return 0;
 	//return (dml_float_t) (floor(x / granularity) * granularity);
 	return (dml_float_t)dcn_bw_floor2(x, granularity);
 }
