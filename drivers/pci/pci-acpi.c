@@ -1403,6 +1403,46 @@ int pci_acpi_request_aux_power_for_d3cold(struct pci_dev *pdev, int arg)
 EXPORT_SYMBOL_GPL(pci_acpi_request_aux_power_for_d3cold);
 
 /**
+ * pci_acpi_set_perst_delay - Set the assertion delay for the PERST# signal
+ * @pdev: PCI device to set the delay for
+ * @arg: Delay value in microseconds
+ *
+ * This function sets the delay for the PERST# signal of the given PCI device.
+ * The delay value is specified in microseconds through the @arg parameter.
+ * The maximum delay value is 10000 microseconds.
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+int pci_acpi_set_perst_delay(struct pci_dev *pdev, int arg)
+{
+	struct acpi_device *adev = ACPI_COMPANION(&pdev->dev);
+	union acpi_object *obj;
+	union acpi_object argv4 = {
+		.integer.type = ACPI_TYPE_INTEGER,
+		.integer.value = arg,
+	};
+	int val;
+
+	if (!acpi_check_dsm(adev->handle, &pci_acpi_dsm_guid,
+			    pci_acpi_dsm_rev, 1 << DSM_PCI_ADD_PERST_DELAY))
+		return -ENODEV;
+
+	if (arg > 10000)
+		return -EINVAL;
+
+	obj = acpi_evaluate_dsm_typed(adev->handle, &pci_acpi_dsm_guid,
+				      pci_acpi_dsm_rev, DSM_PCI_ADD_PERST_DELAY,
+				      &argv4, ACPI_TYPE_INTEGER);
+	if (!obj)
+		return -EIO;
+
+	val = obj->integer.value;
+	ACPI_FREE(obj);
+	return (val == arg) ? 0 : -EINVAL;
+}
+EXPORT_SYMBOL_GPL(pci_acpi_set_perst_delay);
+
+/**
  * pci_acpi_optimize_delay - optimize PCI D3 and D3cold delay from ACPI
  * @pdev: the PCI device whose delay is to be updated
  * @handle: ACPI handle of this device

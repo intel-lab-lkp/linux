@@ -123,12 +123,14 @@ extern const int pci_acpi_dsm_rev;
 #define DSM_PCI_POWER_ON_RESET_DELAY		0x08
 #define DSM_PCI_DEVICE_READINESS_DURATIONS	0x09
 #define DSM_PCI_REQUEST_D3COLD_AUX_POWER	0x0A
+#define DSM_PCI_ADD_PERST_DELAY			0x0B
 
 #define PCI_D3COLD_AUX_DENIED			0
 #define PCI_D3COLD_AUX_GRANTED			1
 #define PCI_D3COLD_AUX_NO_MAIN_POWER_REMOVAL	2
 
 int pci_acpi_request_aux_power_for_d3cold(struct pci_dev *pdev, int arg);
+int pci_acpi_set_perst_delay(struct pci_dev *pdev, int arg);
 
 #ifdef CONFIG_PCIE_EDR
 void pci_acpi_add_edr_notifier(struct pci_dev *pdev);
