@@ -254,7 +254,7 @@ static __always_inline bool kvm_is_governed_feature(unsigned int x86_feature)
 	return kvm_governed_feature_index(x86_feature) >= 0;
 }
 
-static __always_inline void kvm_governed_feature_set(struct kvm_vcpu *vcpu,
+static __always_inline void guest_cpu_cap_set(struct kvm_vcpu *vcpu,
 						     unsigned int x86_feature)
 {
 	BUILD_BUG_ON(!kvm_is_governed_feature(x86_feature));
@@ -263,15 +263,15 @@ static __always_inline void kvm_governed_feature_set(struct kvm_vcpu *vcpu,
 		  vcpu->arch.governed_features.enabled);
 }
 
-static __always_inline void kvm_governed_feature_check_and_set(struct kvm_vcpu *vcpu,
-							       unsigned int x86_feature)
+static __always_inline void guest_cpu_cap_check_and_set(struct kvm_vcpu *vcpu,
+							unsigned int x86_feature)
 {
 	if (kvm_cpu_cap_has(x86_feature) && guest_cpuid_has(vcpu, x86_feature))
-		kvm_governed_feature_set(vcpu, x86_feature);
+		guest_cpu_cap_set(vcpu, x86_feature);
 }
 
-static __always_inline bool guest_can_use(struct kvm_vcpu *vcpu,
-					  unsigned int x86_feature)
+static __always_inline bool guest_cpu_cap_has(struct kvm_vcpu *vcpu,
+					      unsigned int x86_feature)
 {
 	BUILD_BUG_ON(!kvm_is_governed_feature(x86_feature));
 
