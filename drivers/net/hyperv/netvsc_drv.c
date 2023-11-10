@@ -2793,11 +2793,14 @@ static int __init netvsc_drv_init(void)
 	}
 	netvsc_ring_bytes = ring_size * PAGE_SIZE;
 
-	ret = vmbus_driver_register(&netvsc_drv);
-	if (ret)
-		return ret;
-
 	register_netdevice_notifier(&netvsc_netdev_notifier);
+
+	ret = vmbus_driver_register(&netvsc_drv);
+	if (ret) {
+		unregister_netdevice_notifier(&netvsc_netdev_notifier);
+		return ret;
+	}
+
 	return 0;
 }
 
