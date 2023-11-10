@@ -4840,28 +4840,45 @@ action_show(struct mddev *mddev, char *page)
 	return sprintf(page, "%s\n", type);
 }
 
-static int stop_sync_thread(struct mddev *mddev)
+static bool sync_thread_stopped(struct mddev *mddev, int *seq_ptr)
 {
+	if (seq_ptr && *seq_ptr != atomic_read(&mddev->sync_seq))
+		return true;
+
+	return (!mddev->sync_thread &&
+		!test_bit(MD_RECOVERY_RUNNING, &mddev->recovery));
+}
+
+/*
+ * stop_sync_thread() - stop running sync_thread.
+ * @mddev: the array that sync_thread belongs to.
+ * @freeze: set true to prevent new sync_thread to start.
+ * @interruptible: if set true, then user can interrupt while waiting for
+ * sync_thread to be done.
+ *
+ * Noted that this function must be called with 'reconfig_mutex' grabbed, and
+ * fter this function return, 'reconfig_mtuex' will be released.
+ */
+static int stop_sync_thread(struct mddev *mddev, bool freeze,
+			    bool interruptible)
+	__releases(&mddev->reconfig_mutex)
+{
+	int *seq_ptr = NULL;
+	int sync_seq;
 	int ret = 0;
 
-	if (!test_bit(MD_RECOVERY_RUNNING, &mddev->recovery))
-		return 0;
+	if (freeze) {
+		set_bit(MD_RECOVERY_FROZEN, &mddev->recovery);
+	} else {
+		clear_bit(MD_RECOVERY_FROZEN, &mddev->recovery);
+		sync_seq = atomic_read(&mddev->sync_seq);
+		seq_ptr = &sync_seq;
+	}
 
-	ret = mddev_lock(mddev);
-	if (ret)
-		return ret;
-
-	/*
-	 * Check again in case MD_RECOVERY_RUNNING is cleared before lock is
-	 * held.
-	 */
 	if (!test_bit(MD_RECOVERY_RUNNING, &mddev->recovery)) {
 		mddev_unlock(mddev);
 		return 0;
 	}
-
-	if (work_pending(&mddev->sync_work))
-		flush_workqueue(md_misc_wq);
 
 	set_bit(MD_RECOVERY_INTR, &mddev->recovery);
 	/*
@@ -4871,53 +4888,58 @@ static int stop_sync_thread(struct mddev *mddev)
 	md_wakeup_thread_directly(mddev->sync_thread);
 
 	mddev_unlock(mddev);
-	return 0;
+	if (work_pending(&mddev->sync_work))
+		flush_work(&mddev->sync_work);
+
+	if (interruptible)
+		ret = wait_event_interruptible(resync_wait,
+					sync_thread_stopped(mddev, seq_ptr));
+	else
+		wait_event(resync_wait, sync_thread_stopped(mddev, seq_ptr));
+
+	return ret;
 }
 
 static int idle_sync_thread(struct mddev *mddev)
 {
 	int ret;
-	int sync_seq = atomic_read(&mddev->sync_seq);
 	bool flag;
 
 	ret = mutex_lock_interruptible(&mddev->sync_mutex);
 	if (ret)
 		return ret;
 
-	flag = test_and_clear_bit(MD_RECOVERY_FROZEN, &mddev->recovery);
-	ret = stop_sync_thread(mddev);
+	flag = test_bit(MD_RECOVERY_FROZEN, &mddev->recovery);
+	ret = mddev_lock(mddev);
 	if (ret)
-		goto out;
+		goto unlock;
 
-	ret = wait_event_interruptible(resync_wait,
-			sync_seq != atomic_read(&mddev->sync_seq) ||
-			!test_bit(MD_RECOVERY_RUNNING, &mddev->recovery));
-out:
+	ret = stop_sync_thread(mddev, false, true);
 	if (ret && flag)
 		set_bit(MD_RECOVERY_FROZEN, &mddev->recovery);
+unlock:
 	mutex_unlock(&mddev->sync_mutex);
 	return ret;
 }
 
 static int frozen_sync_thread(struct mddev *mddev)
 {
-	int ret = mutex_lock_interruptible(&mddev->sync_mutex);
+	int ret;
 	bool flag;
 
+	ret = mutex_lock_interruptible(&mddev->sync_mutex);
 	if (ret)
 		return ret;
 
-	flag = test_and_set_bit(MD_RECOVERY_FROZEN, &mddev->recovery);
-	ret = stop_sync_thread(mddev);
+	flag = test_bit(MD_RECOVERY_FROZEN, &mddev->recovery);
+	ret = mddev_lock(mddev);
 	if (ret)
-		goto out;
+		goto unlock;
 
-	ret = wait_event_interruptible(resync_wait,
-			mddev->sync_thread == NULL &&
-			!test_bit(MD_RECOVERY_RUNNING, &mddev->recovery));
-out:
+	ret = stop_sync_thread(mddev, true, true);
 	if (ret && !flag)
 		clear_bit(MD_RECOVERY_FROZEN, &mddev->recovery);
+unlock:
 	mutex_unlock(&mddev->sync_mutex);
 	return ret;
 }
@@ -6389,22 +6411,10 @@ static int md_set_readonly(struct mddev *mddev, struct block_device *bdev)
 	if (mddev->external && test_bit(MD_SB_CHANGE_PENDING, &mddev->sb_flags))
 		return -EBUSY;
 
-	if (!test_bit(MD_RECOVERY_FROZEN, &mddev->recovery)) {
+	if (!test_bit(MD_RECOVERY_FROZEN, &mddev->recovery))
 		did_freeze = 1;
-		set_bit(MD_RECOVERY_FROZEN, &mddev->recovery);
-	}
-	if (test_bit(MD_RECOVERY_RUNNING, &mddev->recovery))
-		set_bit(MD_RECOVERY_INTR, &mddev->recovery);
 
-	/*
-	 * Thread might be blocked waiting for metadata update which will now
-	 * never happen
-	 */
-	md_wakeup_thread_directly(mddev->sync_thread);
-
-	mddev_unlock(mddev);
-	wait_event(resync_wait, !test_bit(MD_RECOVERY_RUNNING,
-					  &mddev->recovery));
+	stop_sync_thread(mddev, true, false);
 	wait_event(mddev->sb_wait,
 		   !test_bit(MD_SB_CHANGE_PENDING, &mddev->sb_flags));
 	mddev_lock_nointr(mddev);
@@ -6413,6 +6423,10 @@ static int md_set_readonly(struct mddev *mddev, struct block_device *bdev)
 	if ((mddev->pers && atomic_read(&mddev->openers) > !!bdev) ||
 	    mddev->sync_thread ||
 	    test_bit(MD_RECOVERY_RUNNING, &mddev->recovery)) {
+		/*
+		 * This could happen if user change array state through
+		 * ioctl/sysfs while reconfig_mutex is released.
+		 */
 		pr_warn("md: %s still in use.\n",mdname(mddev));
 		err = -EBUSY;
 		goto out;
@@ -6449,30 +6463,25 @@ static int do_md_stop(struct mddev *mddev, int mode,
 	struct md_rdev *rdev;
 	int did_freeze = 0;
 
-	if (!test_bit(MD_RECOVERY_FROZEN, &mddev->recovery)) {
+	if (!test_bit(MD_RECOVERY_FROZEN, &mddev->recovery))
 		did_freeze = 1;
+
+	if (test_bit(MD_RECOVERY_RUNNING, &mddev->recovery)) {
+		stop_sync_thread(mddev, true, false);
+		mddev_lock_nointr(mddev);
+	} else {
 		set_bit(MD_RECOVERY_FROZEN, &mddev->recovery);
 	}
-	if (test_bit(MD_RECOVERY_RUNNING, &mddev->recovery))
-		set_bit(MD_RECOVERY_INTR, &mddev->recovery);
-
-	/*
-	 * Thread might be blocked waiting for metadata update which will now
-	 * never happen
-	 */
-	md_wakeup_thread_directly(mddev->sync_thread);
-
-	mddev_unlock(mddev);
-	wait_event(resync_wait, (mddev->sync_thread == NULL &&
-				 !test_bit(MD_RECOVERY_RUNNING,
-					   &mddev->recovery)));
-	mddev_lock_nointr(mddev);
 
 	mutex_lock(&mddev->open_mutex);
 	if ((mddev->pers && atomic_read(&mddev->openers) > !!bdev) ||
 	    mddev->sysfs_active ||
 	    mddev->sync_thread ||
 	    test_bit(MD_RECOVERY_RUNNING, &mddev->recovery)) {
+		/*
+		 * This could happen if user change array state through
+		 * ioctl/sysfs while reconfig_mutex is released.
+		 */
 		pr_warn("md: %s still in use.\n",mdname(mddev));
 		mutex_unlock(&mddev->open_mutex);
 		if (did_freeze) {
