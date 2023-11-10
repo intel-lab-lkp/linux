@@ -222,6 +222,7 @@ struct dwmac4_addrs {
 #define STMMAC_FLAG_HWTSTAMP_CORRECT_LATENCY	BIT(12)
 #define STMMAC_FLAG_DISABLE_HALF_DUPLEX	BIT(13)
 #define STMMAC_FLAG_DISABLE_FORCE_1000	BIT(14)
+#define STMMAC_FLAG_DISABLE_FLOW_CONTROL	BIT(15)
 
 struct plat_stmmacenet_data {
 	int bus_id;
