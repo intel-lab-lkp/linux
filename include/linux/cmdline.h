@@ -103,4 +103,35 @@ __cmdline_add_builtin(
 
 #define cmdline_get_static_builtin(dest) \
 	(CMDLINE_STATIC_PREPEND CMDLINE_STATIC_APPEND)
+
+#ifndef CONFIG_GENERIC_CMDLINE
+static inline bool of_deprecated_cmdline_update(char *cmdline, const char *dt_bootargs, int length)
+{
+	if (dt_bootargs != NULL && length > 0)
+		strlcpy(cmdline, dt_bootargs, min(length, COMMAND_LINE_SIZE));
+	/*
+	 * CONFIG_CMDLINE is meant to be a default in case nothing else
+	 * managed to set the command line, unless CONFIG_CMDLINE_FORCE
+	 * is set in which case we override whatever was found earlier.
+	 */
+
+#ifdef CONFIG_CMDLINE
+#if defined(CONFIG_CMDLINE_EXTEND)
+	strlcat(cmdline, " ", COMMAND_LINE_SIZE);
+	strlcat(cmdline, CONFIG_CMDLINE, COMMAND_LINE_SIZE);
+#elif defined(CONFIG_CMDLINE_FORCE)
+	strscpy(cmdline, CONFIG_CMDLINE, COMMAND_LINE_SIZE);
+#else
+	/* No arguments from boot loader, use kernel's  cmdl*/
+	if (!((char *)cmdline)[0])
+		strscpy(cmdline, CONFIG_CMDLINE, COMMAND_LINE_SIZE);
 #endif
+#endif /* CONFIG_CMDLINE */
+	return true;
+}
+#else
+static inline bool of_deprecated_cmdline_update(char *cmdline, const char *dt_bootargs, int length) { return false; }
+#endif /* CONFIG_GENERIC_CMDLINE */
+
+
+#endif /* _LINUX_CMDLINE_H */
