@@ -588,7 +588,6 @@ static void release_attributes_data(void)
 static int hp_add_other_attributes(int attr_type)
 {
 	struct kobject *attr_name_kobj;
-	union acpi_object *obj = NULL;
 	int ret;
 	char *attr_name;
 
@@ -650,7 +649,6 @@ static int hp_add_other_attributes(int attr_type)
 
 err_other_attr_init:
 	mutex_unlock(&bioscfg_drv.mutex);
-	kfree(obj);
 	return ret;
 }
 
