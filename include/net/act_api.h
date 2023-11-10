@@ -12,6 +12,7 @@
 #include <net/pkt_sched.h>
 #include <net/net_namespace.h>
 #include <net/netns/generic.h>
+#include <net/dst.h>
 
 struct tcf_idrinfo {
 	struct mutex	lock;
@@ -293,5 +294,89 @@ static inline void tcf_action_stats_update(struct tc_action *a, u64 bytes,
 #endif
 }
 
+static inline int tcf_mirred_forward(bool to_ingress, bool nested_call,
+				     struct sk_buff *skb)
+{
+	int err;
+
+	if (!to_ingress)
+		err = tcf_dev_queue_xmit(skb, dev_queue_xmit);
+	else if (nested_call)
+		err = netif_rx(skb);
+	else
+		err = netif_receive_skb(skb);
+
+	return err;
+}
+
+static inline struct sk_buff *
+tcf_mirred_common(struct sk_buff *skb, bool want_ingress, bool dont_clone,
+		  bool expects_nh, struct net_device *dest_dev)
+{
+	struct sk_buff *skb_to_send = skb;
+	bool at_ingress;
+	int mac_len;
+	bool at_nh;
+	int err;
+
+	if (unlikely(!(dest_dev->flags & IFF_UP)) ||
+	    !netif_carrier_ok(dest_dev)) {
+		net_notice_ratelimited("tc mirred to Houston: device %s is down\n",
+				       dest_dev->name);
+		err = -ENODEV;
+		goto err_out;
+	}
+
+	if (!dont_clone) {
+		skb_to_send = skb_clone(skb, GFP_ATOMIC);
+		if (!skb_to_send) {
+			err =  -ENOMEM;
+			goto err_out;
+		}
+	}
+
+	at_ingress = skb_at_tc_ingress(skb);
+
+	/* All mirred/redirected skbs should clear previous ct info */
+	nf_reset_ct(skb_to_send);
+	if (want_ingress && !at_ingress) /* drop dst for egress -> ingress */
+		skb_dst_drop(skb_to_send);
+
+	at_nh = skb->data == skb_network_header(skb);
+	if (at_nh != expects_nh) {
+		mac_len = at_ingress ? skb->mac_len :
+			  skb_network_offset(skb);
+		if (expects_nh) {
+			/* target device/action expect data at nh */
+			skb_pull_rcsum(skb_to_send, mac_len);
+		} else {
+			/* target device/action expect data at mac */
+			skb_push_rcsum(skb_to_send, mac_len);
+		}
+	}
+
+	skb_to_send->skb_iif = skb->dev->ifindex;
+	skb_to_send->dev = dest_dev;
+
+	return skb_to_send;
+
+err_out:
+	return ERR_PTR(err);
+}
+
+static inline int
+tcf_redirect_act(struct sk_buff *skb,
+		 bool nested_call, bool want_ingress)
+{
+	skb_set_redirected(skb, skb->tc_at_ingress);
+
+	return tcf_mirred_forward(want_ingress, nested_call, skb);
+}
+
+static inline int
+tcf_mirror_act(struct sk_buff *skb, bool nested_call, bool want_ingress)
+{
+	return tcf_mirred_forward(want_ingress, nested_call, skb);
+}
 
 #endif
