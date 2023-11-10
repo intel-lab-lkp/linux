@@ -76,8 +76,15 @@
 #define DMA_INTR_ENA_RIE 0x00000040	/* Receive Interrupt */
 #define DMA_INTR_ENA_ERE 0x00004000	/* Early Receive */
 
+#define DMA_INTR_ENA_NIE_LOONGSON 0x00060000	/* Loongson Normal Summary */
+
+#ifdef	CONFIG_DWMAC_LOONGSON
+#define DMA_INTR_NORMAL	(DMA_INTR_ENA_NIE_LOONGSON | DMA_INTR_ENA_NIE | \
+			DMA_INTR_ENA_RIE | DMA_INTR_ENA_TIE)
+#else
 #define DMA_INTR_NORMAL	(DMA_INTR_ENA_NIE | DMA_INTR_ENA_RIE | \
 			DMA_INTR_ENA_TIE)
+#endif
 
 /* DMA Abnormal interrupt */
 #define DMA_INTR_ENA_AIE 0x00008000	/* Abnormal Summary */
@@ -91,8 +98,15 @@
 #define DMA_INTR_ENA_TJE 0x00000008	/* Transmit Jabber */
 #define DMA_INTR_ENA_TSE 0x00000002	/* Transmit Stopped */
 
+#define DMA_INTR_ENA_AIE_LOONGSON 0x00018000	/* Loongson Abnormal Summary */
+
+#ifdef	CONFIG_DWMAC_LOONGSON
+#define DMA_INTR_ABNORMAL	(DMA_INTR_ENA_AIE_LOONGSON | DMA_INTR_ENA_AIE | \
+				DMA_INTR_ENA_FBE | DMA_INTR_ENA_UNE)
+#else
 #define DMA_INTR_ABNORMAL	(DMA_INTR_ENA_AIE | DMA_INTR_ENA_FBE | \
 				DMA_INTR_ENA_UNE)
+#endif
 
 /* DMA default interrupt mask */
 #define DMA_INTR_DEFAULT_MASK	(DMA_INTR_NORMAL | DMA_INTR_ABNORMAL)
@@ -128,9 +142,29 @@
 #define DMA_STATUS_TI	0x00000001	/* Transmit Interrupt */
 #define DMA_CONTROL_FTF		0x00100000	/* Flush transmit FIFO */
 
-#define DMA_STATUS_MSK_COMMON		(DMA_STATUS_NIS | \
-					 DMA_STATUS_AIS | \
-					 DMA_STATUS_FBI)
+#define DMA_STATUS_TX_NIS_LOONGSON		0x00040000	/* Normal Tx Interrupt Summary */
+#define DMA_STATUS_RX_NIS_LOONGSON		0x00020000	/* Normal Rx Interrupt Summary */
+#define DMA_STATUS_TX_AIS_LOONGSON		0x00010000	/* Abnormal Tx Interrupt Summary */
+#define DMA_STATUS_RX_AIS_LOONGSON		0x00008000	/* Abnormal Rx Interrupt Summary */
+#define DMA_STATUS_TX_FBI_LOONGSON		0x00002000	/* Fatal Tx Bus Error Interrupt */
+#define DMA_STATUS_RX_FBI_LOONGSON		0x00001000	/* Fatal Rx Bus Error Interrupt */
+
+#ifdef	CONFIG_DWMAC_LOONGSON
+#define DMA_NOR_INTR_STATUS	    (DMA_STATUS_TX_NIS_LOONGSON | DMA_STATUS_RX_NIS_LOONGSON)
+#define DMA_ABNOR_INTR_STATUS	    (DMA_STATUS_TX_AIS_LOONGSON | DMA_STATUS_RX_AIS_LOONGSON)
+#define DMA_FB_INTR_STATUS	    (DMA_STATUS_TX_FBI_LOONGSON | DMA_STATUS_RX_FBI_LOONGSON)
+#else
+#define DMA_NOR_INTR_STATUS	    DMA_STATUS_NIS
+#define DMA_ABNOR_INTR_STATUS	    DMA_STATUS_AIS
+#define DMA_FB_INTR_STATUS	    DMA_STATUS_FBI
+#endif
+
+#define DMA_INTR_STATUS		    (DMA_STATUS_GPI | \
+					 DMA_STATUS_GMI | \
+					 DMA_STATUS_GLI)
+#define DMA_STATUS_MSK_COMMON		(DMA_NOR_INTR_STATUS | \
+					 DMA_ABNOR_INTR_STATUS | \
+					 DMA_FB_INTR_STATUS)
 
 #define DMA_STATUS_MSK_RX		(DMA_STATUS_ERI | \
 					 DMA_STATUS_RWT | \
@@ -147,6 +181,9 @@
 					 DMA_STATUS_TPS | \
 					 DMA_STATUS_TI | \
 					 DMA_STATUS_MSK_COMMON)
+
+/* Following DMA defines are chanels oriented */
+#define DMA_CHAN_OFFSET			0x100
 
 #define NUM_DWMAC100_DMA_REGS	9
 #define NUM_DWMAC1000_DMA_REGS	23
@@ -169,5 +206,19 @@ void dwmac_dma_stop_rx(struct stmmac_priv *priv, void __iomem *ioaddr,
 int dwmac_dma_interrupt(struct stmmac_priv *priv, void __iomem *ioaddr,
 			struct stmmac_extra_stats *x, u32 chan, u32 dir);
 int dwmac_dma_reset(struct stmmac_priv *priv, void __iomem *ioaddr);
+
+static inline u32 dma_chan_base_addr(u32 base, u32 chan)
+{
+	return base + chan * DMA_CHAN_OFFSET;
+}
+
+#define DMA_CHAN_XMT_POLL_DEMAND(chan)	dma_chan_base_addr(DMA_XMT_POLL_DEMAND, chan)
+#define DMA_CHAN_INTR_ENA(chan)		dma_chan_base_addr(DMA_INTR_ENA, chan)
+#define DMA_CHAN_CONTROL(chan)		dma_chan_base_addr(DMA_CONTROL, chan)
+#define DMA_CHAN_STATUS(chan)		dma_chan_base_addr(DMA_STATUS, chan)
+#define DMA_CHAN_BUS_MODE(chan)		dma_chan_base_addr(DMA_BUS_MODE, chan)
+#define DMA_CHAN_RCV_BASE_ADDR(chan)	dma_chan_base_addr(DMA_RCV_BASE_ADDR, chan)
+#define DMA_CHAN_TX_BASE_ADDR(chan)	dma_chan_base_addr(DMA_TX_BASE_ADDR, chan)
+#define DMA_CHAN_RX_WATCHDOG(chan)	dma_chan_base_addr(DMA_RX_WATCHDOG, chan)
 
 #endif /* __DWMAC_DMA_H__ */
