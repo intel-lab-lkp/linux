@@ -10,6 +10,12 @@
 #include <linux/err.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/tee_drv.h>
+#include <linux/uuid.h>
+
+#define TZ_TA_MEM_UUID_MTK		"4477588a-8476-11e2-ad15-e41f1390d676"
+
+#define TEE_PARAM_NUM			4
 
 enum secure_memory_type {
 	/*
@@ -27,6 +33,9 @@ struct secure_buffer {
 struct secure_heap;
 
 struct secure_heap_prv_data {
+	const char			*uuid;
+	const int			tee_impl_id;
+
 	int	(*memory_alloc)(struct secure_heap *sec_heap, struct secure_buffer *sec_buf);
 	void	(*memory_free)(struct secure_heap *sec_heap, struct secure_buffer *sec_buf);
 
@@ -39,7 +48,60 @@ struct secure_heap {
 	const char			*name;
 	const enum secure_memory_type	mem_type;
 
+	struct tee_context		*tee_ctx;
+	u32				tee_session;
+
 	const struct secure_heap_prv_data *data;
+};
+
+static int tee_ctx_match(struct tee_ioctl_version_data *ver, const void *data)
+{
+	const struct secure_heap_prv_data *d = data;
+
+	return ver->impl_id == d->tee_impl_id;
+}
+
+static int secure_heap_tee_session_init(struct secure_heap *sec_heap)
+{
+	struct tee_param t_param[TEE_PARAM_NUM] = {0};
+	struct tee_ioctl_open_session_arg arg = {0};
+	const struct secure_heap_prv_data *data = sec_heap->data;
+	uuid_t ta_mem_uuid;
+	int ret;
+
+	sec_heap->tee_ctx = tee_client_open_context(NULL, tee_ctx_match, data, NULL);
+	if (IS_ERR(sec_heap->tee_ctx)) {
+		pr_err_once("%s: open context failed, ret=%ld\n", sec_heap->name,
+			    PTR_ERR(sec_heap->tee_ctx));
+		return -ENODEV;
+	}
+
+	arg.num_params = TEE_PARAM_NUM;
+	arg.clnt_login = TEE_IOCTL_LOGIN_PUBLIC;
+	ret = uuid_parse(data->uuid, &ta_mem_uuid);
+	if (ret)
+		goto close_context;
+	memcpy(&arg.uuid, &ta_mem_uuid.b, sizeof(ta_mem_uuid));
+
+	ret = tee_client_open_session(sec_heap->tee_ctx, &arg, t_param);
+	if (ret < 0 || arg.ret) {
+		pr_err_once("%s: open session failed, ret=%d:%d\n",
+			    sec_heap->name, ret, arg.ret);
+		ret = -EINVAL;
+		goto close_context;
+	}
+	sec_heap->tee_session = arg.session;
+	return 0;
+
+close_context:
+	tee_client_close_context(sec_heap->tee_ctx);
+	return ret;
+}
+
+/* The memory allocating is within the TEE. */
+const struct secure_heap_prv_data mtk_sec_mem_data = {
+	.uuid			= TZ_TA_MEM_UUID_MTK,
+	.tee_impl_id		= TEE_IMPL_ID_OPTEE,
 };
 
 static int secure_heap_secure_memory_allocate(struct secure_heap *sec_heap,
@@ -84,10 +146,22 @@ secure_heap_allocate(struct dma_heap *heap, unsigned long size,
 		     unsigned long fd_flags, unsigned long heap_flags)
 {
 	struct secure_heap *sec_heap = dma_heap_get_drvdata(heap);
+	const struct secure_heap_prv_data *data = sec_heap->data;
 	struct secure_buffer *sec_buf;
 	DEFINE_DMA_BUF_EXPORT_INFO(exp_info);
 	struct dma_buf *dmabuf;
 	int ret;
+
+	/*
+	 * If uuid is valid, It requires enter TEE to protect buffers. However
+	 * TEE probe may be late. Initialize the secure session the first time
+	 * we request the secure buffer.
+	 */
+	if (data->uuid && !sec_heap->tee_session) {
+		ret = secure_heap_tee_session_init(sec_heap);
+		if (ret)
+			return ERR_PTR(ret);
+	}
 
 	sec_buf = kzalloc(sizeof(*sec_buf), GFP_KERNEL);
 	if (!sec_buf)
@@ -127,6 +201,7 @@ static struct secure_heap secure_heaps[] = {
 	{
 		.name		= "secure_mtk_cm",
 		.mem_type	= SECURE_MEMORY_TYPE_MTK_CM_TZ,
+		.data		= &mtk_sec_mem_data,
 	},
 };
 
