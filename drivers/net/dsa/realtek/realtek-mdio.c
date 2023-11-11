@@ -146,7 +146,7 @@ static int realtek_mdio_probe(struct mdio_device *mdiodev)
 	ret = priv->ops->detect(priv);
 	if (ret) {
 		dev_err(dev, "unable to detect switch\n");
-		return ret;
+		goto err_variant_put;
 	}
 
 	priv->ds->num_ports = priv->num_ports;
@@ -155,10 +155,15 @@ static int realtek_mdio_probe(struct mdio_device *mdiodev)
 	if (ret) {
 		dev_err_probe(dev, ret, "unable to register switch ret = %pe\n",
 			      ERR_PTR(ret));
-		return ret;
+		goto err_variant_put;
 	}
 
 	return 0;
+
+err_variant_put:
+	realtek_variant_put(priv->variant);
+
+	return ret;
 }
 
 static void realtek_mdio_remove(struct mdio_device *mdiodev)

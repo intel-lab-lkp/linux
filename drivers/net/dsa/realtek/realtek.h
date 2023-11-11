@@ -16,6 +16,38 @@
 #define REALTEK_HW_STOP_DELAY		25	/* msecs */
 #define REALTEK_HW_START_DELAY		100	/* msecs */
 
+#define REALTEK_RTL8365MB_MODNAME	"rtl8365mb"
+#define REALTEK_RTL8366RB_MODNAME	"rtl8366"
+
+struct realtek_variant_entry {
+	const struct realtek_variant *variant;
+	const char *compatible;
+	struct module *owner;
+	struct list_head list;
+};
+
+#define module_realtek_variant(__variant, __compatible)			\
+static struct realtek_variant_entry __variant ## _entry = {		\
+	.compatible = __compatible,					\
+	.variant = &(__variant),					\
+	.owner = THIS_MODULE,						\
+};									\
+static int __init realtek_variant_module_init(void)			\
+{									\
+	realtek_variant_register(&__variant ## _entry);			\
+	return 0;							\
+}									\
+module_init(realtek_variant_module_init)				\
+									\
+static void __exit realtek_variant_module_exit(void)			\
+{									\
+	realtek_variant_unregister(&__variant ## _entry);		\
+}									\
+module_exit(realtek_variant_module_exit)
+
+void realtek_variant_register(struct realtek_variant_entry *var_ent);
+void realtek_variant_unregister(struct realtek_variant_entry *var_ent);
+
 struct realtek_ops;
 struct dentry;
 struct inode;
@@ -120,6 +152,7 @@ struct realtek_ops {
 struct realtek_variant {
 	const struct dsa_switch_ops *ds_ops_smi;
 	const struct dsa_switch_ops *ds_ops_mdio;
+	const struct realtek_variant_info *info;
 	const struct realtek_ops *ops;
 	unsigned int clk_delay;
 	u8 cmd_read;
@@ -145,8 +178,5 @@ void rtl8366_get_strings(struct dsa_switch *ds, int port, u32 stringset,
 			 uint8_t *data);
 int rtl8366_get_sset_count(struct dsa_switch *ds, int port, int sset);
 void rtl8366_get_ethtool_stats(struct dsa_switch *ds, int port, uint64_t *data);
-
-extern const struct realtek_variant rtl8366rb_variant;
-extern const struct realtek_variant rtl8365mb_variant;
 
 #endif /*  _REALTEK_H */
