@@ -43,6 +43,8 @@ enum secure_buffer_tee_cmd { /* PARAM NUM always is 4. */
 };
 
 enum secure_memory_type {
+	/* CMA for the secure memory, Use the normal cma ops to alloc/free. */
+	SECURE_MEMORY_TYPE_CMA		= 0,
 	/*
 	 * MediaTek static chunk memory carved out for TrustZone. The memory
 	 * management is inside the TEE.
@@ -65,6 +67,7 @@ struct secure_buffer {
 	 * a value got from TEE.
 	 */
 	u32				sec_handle;
+	struct page			*cma_page;
 };
 
 #define TEE_MEM_COMMAND_ID_BASE_MTK	0x10000
@@ -287,6 +290,33 @@ const struct secure_heap_prv_data mtk_sec_mem_data = {
 	.unsecure_the_memory	= secure_heap_tee_unsecure_memory,
 };
 
+static int cma_secure_memory_allocate(struct secure_heap *sec_heap,
+				      struct secure_buffer *sec_buf)
+{
+	if (!sec_heap->cma)
+		return -EINVAL;
+
+	sec_buf->cma_page = cma_alloc(sec_heap->cma, sec_buf->size >> PAGE_SHIFT,
+				      get_order(PAGE_SIZE), false);
+	if (!sec_buf->cma_page)
+		return -ENOMEM;
+
+	memset(page_address(sec_buf->cma_page), 0, sec_buf->size);
+	return 0;
+}
+
+static void cma_secure_memory_free(struct secure_heap *sec_heap,
+				   struct secure_buffer *sec_buf)
+{
+	cma_release(sec_heap->cma, sec_buf->cma_page, sec_buf->size >> PAGE_SHIFT);
+}
+
+const struct secure_heap_prv_data cma_sec_mem_data = {
+	.memory_alloc	= cma_secure_memory_allocate,
+	.memory_free	= cma_secure_memory_free,
+	/* TODO : secure the buffer. */
+};
+
 static int secure_heap_secure_memory_allocate(struct secure_heap *sec_heap,
 					      struct secure_buffer *sec_buf)
 {
@@ -497,6 +527,11 @@ static const struct dma_heap_ops sec_heap_ops = {
 
 static struct secure_heap secure_heaps[] = {
 	{
+		.name		= "secure_cma",
+		.mem_type	= SECURE_MEMORY_TYPE_CMA,
+		.data		= &cma_sec_mem_data,
+	},
+	{
 		.name		= "secure_mtk_cm",
 		.mem_type	= SECURE_MEMORY_TYPE_MTK_CM_TZ,
 		.data		= &mtk_sec_mem_data,
@@ -522,7 +557,8 @@ static int __init secure_cma_init(struct reserved_mem *rmem)
 	}
 
 	for (i = 0; i < ARRAY_SIZE(secure_heaps); i++, sec_heap++) {
-		if (sec_heap->mem_type != SECURE_MEMORY_TYPE_MTK_CM_CMA)
+		if (sec_heap->mem_type != SECURE_MEMORY_TYPE_MTK_CM_CMA &&
+		    sec_heap->mem_type != SECURE_MEMORY_TYPE_CMA)
 			continue;
 
 		sec_heap->cma = sec_cma;
