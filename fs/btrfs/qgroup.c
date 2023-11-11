@@ -171,7 +171,7 @@ qgroup_rescan_init(struct btrfs_fs_info *fs_info, u64 progress_objectid,
 static void qgroup_rescan_zero_tracking(struct btrfs_fs_info *fs_info);
 
 /* must be called with qgroup_ioctl_lock held */
-static struct btrfs_qgroup *find_qgroup_rb(struct btrfs_fs_info *fs_info,
+struct btrfs_qgroup *find_qgroup_rb(struct btrfs_fs_info *fs_info,
 					   u64 qgroupid)
 {
 	struct rb_node *n = fs_info->qgroup_tree.rb_node;
