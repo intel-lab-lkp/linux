@@ -17,6 +17,27 @@
 
 #define TEE_PARAM_NUM			4
 
+enum secure_buffer_tee_cmd { /* PARAM NUM always is 4. */
+	/*
+	 * TZCMD_SECMEM_ZALLOC: Allocate the zeroed secure memory from TEE.
+	 *
+	 * [in]  value[0].a: The buffer size.
+	 *       value[0].b: alignment.
+	 * [in]  value[1].a: enum secure_memory_type.
+	 * [out] value[3].a: The secure handle.
+	 */
+	TZCMD_SECMEM_ZALLOC = 0,
+
+	/*
+	 * TZCMD_SECMEM_FREE: Free secure memory.
+	 *
+	 * [in]  value[0].a: The secure handle of this buffer, It's value[3].a of
+	 *                   TZCMD_SECMEM_ZALLOC.
+	 * [out] value[1].a: return value, 0 means successful, otherwise fail.
+	 */
+	TZCMD_SECMEM_FREE = 1,
+};
+
 enum secure_memory_type {
 	/*
 	 * MediaTek static chunk memory carved out for TrustZone. The memory
@@ -28,13 +49,25 @@ enum secure_memory_type {
 struct secure_buffer {
 	struct dma_heap			*heap;
 	size_t				size;
+	/*
+	 * The secure handle is a reference to a buffer within the TEE, this is
+	 * a value got from TEE.
+	 */
+	u32				sec_handle;
 };
+
+#define TEE_MEM_COMMAND_ID_BASE_MTK	0x10000
 
 struct secure_heap;
 
 struct secure_heap_prv_data {
 	const char			*uuid;
 	const int			tee_impl_id;
+	/*
+	 * Different TEEs may implement different commands, and this provides an opportunity
+	 * for TEEs to use the same enum secure_buffer_tee_cmd.
+	 */
+	const int			tee_command_id_base;
 
 	int	(*memory_alloc)(struct secure_heap *sec_heap, struct secure_buffer *sec_buf);
 	void	(*memory_free)(struct secure_heap *sec_heap, struct secure_buffer *sec_buf);
@@ -98,10 +131,74 @@ close_context:
 	return ret;
 }
 
+static int
+secure_heap_tee_service_call(struct tee_context *tee_ctx, u32 session,
+			     unsigned int command, struct tee_param *params)
+{
+	struct tee_ioctl_invoke_arg arg = {0};
+	int ret;
+
+	arg.num_params = TEE_PARAM_NUM;
+	arg.session = session;
+	arg.func = command;
+
+	ret = tee_client_invoke_func(tee_ctx, &arg, params);
+	if (ret < 0 || arg.ret) {
+		pr_err("%s: cmd %d ret %d:%x.\n", __func__, command, ret, arg.ret);
+		ret = -EOPNOTSUPP;
+	}
+	return ret;
+}
+
+static int secure_heap_tee_secure_memory(struct secure_heap *sec_heap,
+					 struct secure_buffer *sec_buf)
+{
+	const struct secure_heap_prv_data *data = sec_heap->data;
+	struct tee_param params[TEE_PARAM_NUM] = {0};
+	int ret;
+
+	params[0].attr = TEE_IOCTL_PARAM_ATTR_TYPE_VALUE_INPUT;
+	params[0].u.value.a = sec_buf->size;
+	params[0].u.value.b = PAGE_SIZE;
+	params[1].attr = TEE_IOCTL_PARAM_ATTR_TYPE_VALUE_INPUT;
+	params[1].u.value.a = sec_heap->mem_type;
+	params[2].attr = TEE_IOCTL_PARAM_ATTR_TYPE_VALUE_INPUT;
+
+	params[3].attr = TEE_IOCTL_PARAM_ATTR_TYPE_VALUE_OUTPUT;
+	ret = secure_heap_tee_service_call(sec_heap->tee_ctx, sec_heap->tee_session,
+					   data->tee_command_id_base + TZCMD_SECMEM_ZALLOC,
+					   params);
+	if (ret)
+		return -ENOMEM;
+
+	sec_buf->sec_handle = params[3].u.value.a;
+	return 0;
+}
+
+static void secure_heap_tee_unsecure_memory(struct secure_heap *sec_heap,
+					    struct secure_buffer *sec_buf)
+{
+	struct tee_param params[TEE_PARAM_NUM] = {0};
+
+	params[0].attr = TEE_IOCTL_PARAM_ATTR_TYPE_VALUE_INPUT;
+	params[0].u.value.a = sec_buf->sec_handle;
+	params[1].attr = TEE_IOCTL_PARAM_ATTR_TYPE_VALUE_OUTPUT;
+
+	secure_heap_tee_service_call(sec_heap->tee_ctx, sec_heap->tee_session,
+				     sec_heap->data->tee_command_id_base + TZCMD_SECMEM_FREE,
+				     params);
+	if (params[1].u.value.a)
+		pr_err("%s, free buffer(0x%x) return fail(%lld) from TEE.\n",
+		       sec_heap->name, sec_buf->sec_handle, params[1].u.value.a);
+}
+
 /* The memory allocating is within the TEE. */
 const struct secure_heap_prv_data mtk_sec_mem_data = {
 	.uuid			= TZ_TA_MEM_UUID_MTK,
 	.tee_impl_id		= TEE_IMPL_ID_OPTEE,
+	.tee_command_id_base	= TEE_MEM_COMMAND_ID_BASE_MTK,
+	.secure_the_memory	= secure_heap_tee_secure_memory,
+	.unsecure_the_memory	= secure_heap_tee_unsecure_memory,
 };
 
 static int secure_heap_secure_memory_allocate(struct secure_heap *sec_heap,
