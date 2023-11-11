@@ -2767,19 +2767,6 @@ static inline bool mast_sufficient(struct maple_subtree_state *mast)
 	return false;
 }
 
-/*
- * mast_overflow: Check if there is too much data in the subtree state for a
- * single node.
- * @mast: The maple subtree state
- */
-static inline bool mast_overflow(struct maple_subtree_state *mast)
-{
-	if (mast->bn->b_end >= mt_slot_count(mast->orig_l->node))
-		return true;
-
-	return false;
-}
-
 static inline void *mtree_range_walk(struct ma_state *mas)
 {
 	unsigned long *pivots;
@@ -2932,9 +2919,6 @@ static int mas_spanning_rebalance(struct ma_state *mas,
 		mast->orig_l->last = mast->orig_l->max;
 
 		if (mast_sufficient(mast))
-			continue;
-
-		if (mast_overflow(mast))
 			continue;
 
 		/* May be a new root stored in mast->bn */
