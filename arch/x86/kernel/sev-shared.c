@@ -1083,7 +1083,7 @@ static void pvalidate_pages(struct snp_psc_desc *desc)
 	for (i = 0; i <= desc->hdr.end_entry; i++) {
 		e = &desc->entries[i];
 
-		vaddr = (unsigned long)pfn_to_kaddr(e->gfn);
+		vaddr = (unsigned long)pfn_to_kaddr((unsigned long)e->gfn);
 		size = e->pagesize ? RMP_PG_SIZE_2M : RMP_PG_SIZE_4K;
 		validate = e->operation == SNP_PAGE_STATE_PRIVATE;
 
