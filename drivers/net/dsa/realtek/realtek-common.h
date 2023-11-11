@@ -16,4 +16,7 @@ const struct realtek_variant *realtek_variant_get(
 		const struct of_device_id *match);
 void realtek_variant_put(const struct realtek_variant *var);
 
+void realtek_reset_assert(struct realtek_priv *priv);
+void realtek_reset_deassert(struct realtek_priv *priv);
+
 #endif

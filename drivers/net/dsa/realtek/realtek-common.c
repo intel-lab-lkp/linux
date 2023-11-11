@@ -163,17 +163,25 @@ struct realtek_priv *realtek_common_probe(struct device *dev,
 	priv->leds_disabled = of_property_read_bool(np, "realtek,disable-leds");
 
 	/* TODO: if power is software controlled, set up any regulators here */
+	priv->reset_ctl = devm_reset_control_get_optional(dev, NULL);
+	if (IS_ERR(priv->reset_ctl)) {
+		ret = PTR_ERR(priv->reset_ctl);
+		dev_err_probe(dev, ret, "failed to get reset control\n");
+		goto err_variant_put;
+	}
+
 	priv->reset = devm_gpiod_get_optional(dev, "reset", GPIOD_OUT_LOW);
 	if (IS_ERR(priv->reset)) {
 		ret = PTR_ERR(priv->reset);
 		dev_err(dev, "failed to get RESET GPIO\n");
 		goto err_variant_put;
 	}
-	if (priv->reset) {
-		gpiod_set_value(priv->reset, 1);
+
+	if (priv->reset_ctl || priv->reset) {
+		realtek_reset_assert(priv);
 		dev_dbg(dev, "asserted RESET\n");
 		msleep(REALTEK_HW_STOP_DELAY);
-		gpiod_set_value(priv->reset, 0);
+		realtek_reset_deassert(priv);
 		msleep(REALTEK_HW_START_DELAY);
 		dev_dbg(dev, "deasserted RESET\n");
 	}
@@ -208,10 +216,45 @@ void realtek_common_remove(struct realtek_priv *priv)
 	realtek_variant_put(priv->variant);
 
 	/* leave the device reset asserted */
-	if (priv->reset)
-		gpiod_set_value(priv->reset, 1);
+	realtek_reset_assert(priv);
 }
 EXPORT_SYMBOL(realtek_common_remove);
+
+void realtek_reset_assert(struct realtek_priv *priv)
+{
+	int ret;
+
+	if (priv->reset_ctl) {
+		ret = reset_control_assert(priv->reset_ctl);
+		if (!ret)
+			return;
+
+		dev_warn(priv->dev,
+			 "Failed to assert the switch reset control: %pe\n",
+			 ERR_PTR(ret));
+	}
+
+	if (priv->reset)
+		gpiod_set_value(priv->reset, true);
+}
+
+void realtek_reset_deassert(struct realtek_priv *priv)
+{
+	int ret;
+
+	if (priv->reset_ctl) {
+		ret = reset_control_deassert(priv->reset_ctl);
+		if (!ret)
+			return;
+
+		dev_warn(priv->dev,
+			 "Failed to deassert the switch reset control: %pe\n",
+			 ERR_PTR(ret));
+	}
+
+	if (priv->reset)
+		gpiod_set_value(priv->reset, false);
+}
 
 const struct of_device_id realtek_common_of_match[] = {
 #if IS_ENABLED(CONFIG_NET_DSA_REALTEK_RTL8366RB)
