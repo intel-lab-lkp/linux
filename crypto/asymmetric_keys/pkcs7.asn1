@@ -28,7 +28,7 @@ SignedData ::= SEQUENCE {
 }
 
 ContentInfo ::= SEQUENCE {
-	contentType	ContentType ({ pkcs7_note_OID }),
+	contentType	ContentType,
 	content		[0] EXPLICIT Data OPTIONAL
 }
 
