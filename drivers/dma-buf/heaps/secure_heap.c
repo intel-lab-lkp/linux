@@ -4,11 +4,12 @@
  *
  * Copyright (C) 2023 MediaTek Inc.
  */
-
+#include <linux/cma.h>
 #include <linux/dma-buf.h>
 #include <linux/dma-heap.h>
 #include <linux/err.h>
 #include <linux/module.h>
+#include <linux/of_reserved_mem.h>
 #include <linux/scatterlist.h>
 #include <linux/slab.h>
 #include <linux/tee_drv.h>
@@ -25,6 +26,8 @@ enum secure_buffer_tee_cmd { /* PARAM NUM always is 4. */
 	 * [in]  value[0].a: The buffer size.
 	 *       value[0].b: alignment.
 	 * [in]  value[1].a: enum secure_memory_type.
+	 * [in]  value[2].a: pa base in cma case.
+	 *       value[2].b: The buffer size in cma case.
 	 * [out] value[3].a: The secure handle.
 	 */
 	TZCMD_SECMEM_ZALLOC = 0,
@@ -45,6 +48,13 @@ enum secure_memory_type {
 	 * management is inside the TEE.
 	 */
 	SECURE_MEMORY_TYPE_MTK_CM_TZ	= 1,
+	/*
+	 * MediaTek dynamic chunk memory carved out from CMA.
+	 * In normal case, the CMA could be used in kernel; When SVP start, we will
+	 * allocate whole this CMA and pass whole the CMA PA and size into TEE to
+	 * protect it, then the detail memory management also is inside the TEE.
+	 */
+	SECURE_MEMORY_TYPE_MTK_CM_CMA	= 2,
 };
 
 struct secure_buffer {
@@ -70,6 +80,7 @@ struct secure_heap_prv_data {
 	 */
 	const int			tee_command_id_base;
 
+	int	(*heap_init)(struct secure_heap *sec_heap);
 	int	(*memory_alloc)(struct secure_heap *sec_heap, struct secure_buffer *sec_buf);
 	void	(*memory_free)(struct secure_heap *sec_heap, struct secure_buffer *sec_buf);
 
@@ -86,6 +97,13 @@ struct secure_heap {
 	u32				tee_session;
 
 	const struct secure_heap_prv_data *data;
+
+	struct cma		*cma;
+	struct page		*cma_page_mtk;
+	unsigned long		cma_paddr;
+	unsigned long		cma_size;
+	unsigned long		cma_used_size_mtk;
+	struct mutex		lock; /* lock for cma_used_size_mtk */
 };
 
 struct secure_heap_attachment {
@@ -168,7 +186,10 @@ static int secure_heap_tee_secure_memory(struct secure_heap *sec_heap,
 	params[1].attr = TEE_IOCTL_PARAM_ATTR_TYPE_VALUE_INPUT;
 	params[1].u.value.a = sec_heap->mem_type;
 	params[2].attr = TEE_IOCTL_PARAM_ATTR_TYPE_VALUE_INPUT;
-
+	if (sec_heap->cma && sec_heap->mem_type == SECURE_MEMORY_TYPE_MTK_CM_CMA) {
+		params[2].u.value.a = sec_heap->cma_paddr;
+		params[2].u.value.b = sec_heap->cma_size;
+	}
 	params[3].attr = TEE_IOCTL_PARAM_ATTR_TYPE_VALUE_OUTPUT;
 	ret = secure_heap_tee_service_call(sec_heap->tee_ctx, sec_heap->tee_session,
 					   data->tee_command_id_base + TZCMD_SECMEM_ZALLOC,
@@ -196,6 +217,66 @@ static void secure_heap_tee_unsecure_memory(struct secure_heap *sec_heap,
 		pr_err("%s, free buffer(0x%x) return fail(%lld) from TEE.\n",
 		       sec_heap->name, sec_buf->sec_handle, params[1].u.value.a);
 }
+
+static int mtk_secure_memory_cma_allocate(struct secure_heap *sec_heap,
+					  struct secure_buffer *sec_buf)
+{
+	/*
+	 * Allocate CMA only when allocating buffer for the first time, and just
+	 * increase cma_used_size_mtk at the other time.
+	 */
+	mutex_lock(&sec_heap->lock);
+	if (sec_heap->cma_used_size_mtk)
+		goto add_size;
+
+	mutex_unlock(&sec_heap->lock);
+	sec_heap->cma_page_mtk = cma_alloc(sec_heap->cma, sec_heap->cma_size >> PAGE_SHIFT,
+					   get_order(PAGE_SIZE), false);
+	if (!sec_heap->cma_page_mtk)
+		return -ENOMEM;
+
+	mutex_lock(&sec_heap->lock);
+add_size:
+	sec_heap->cma_used_size_mtk += sec_buf->size;
+	mutex_unlock(&sec_heap->lock);
+
+	return 0;
+}
+
+static void mtk_secure_memory_cma_free(struct secure_heap *sec_heap,
+				       struct secure_buffer *sec_buf)
+{
+	bool cma_is_empty;
+
+	mutex_lock(&sec_heap->lock);
+	sec_heap->cma_used_size_mtk -= sec_buf->size;
+	cma_is_empty = !sec_heap->cma_used_size_mtk;
+	mutex_unlock(&sec_heap->lock);
+
+	if (cma_is_empty)
+		cma_release(sec_heap->cma, sec_heap->cma_page_mtk,
+			    sec_heap->cma_size >> PAGE_SHIFT);
+}
+
+static int mtk_secure_heap_cma_init(struct secure_heap *sec_heap)
+{
+	if (!sec_heap->cma)
+		return -EINVAL;
+	mutex_init(&sec_heap->lock);
+	return 0;
+}
+
+/* Use CMA to prepare the buffer and the memory allocating is within the TEE. */
+const struct secure_heap_prv_data mtk_sec_mem_data_cma = {
+	.uuid			= TZ_TA_MEM_UUID_MTK,
+	.tee_impl_id		= TEE_IMPL_ID_OPTEE,
+	.tee_command_id_base	= TEE_MEM_COMMAND_ID_BASE_MTK,
+	.heap_init		= mtk_secure_heap_cma_init,
+	.memory_alloc		= mtk_secure_memory_cma_allocate,
+	.memory_free		= mtk_secure_memory_cma_free,
+	.secure_the_memory	= secure_heap_tee_secure_memory,
+	.unsecure_the_memory	= secure_heap_tee_unsecure_memory,
+};
 
 /* The memory allocating is within the TEE. */
 const struct secure_heap_prv_data mtk_sec_mem_data = {
@@ -420,7 +501,38 @@ static struct secure_heap secure_heaps[] = {
 		.mem_type	= SECURE_MEMORY_TYPE_MTK_CM_TZ,
 		.data		= &mtk_sec_mem_data,
 	},
+	{
+		.name		= "secure_mtk_cma",
+		.mem_type	= SECURE_MEMORY_TYPE_MTK_CM_CMA,
+		.data		= &mtk_sec_mem_data_cma,
+	},
 };
+
+static int __init secure_cma_init(struct reserved_mem *rmem)
+{
+	struct secure_heap *sec_heap = secure_heaps;
+	struct cma *sec_cma;
+	int ret, i;
+
+	ret = cma_init_reserved_mem(rmem->base, rmem->size, 0, rmem->name,
+				    &sec_cma);
+	if (ret) {
+		pr_err("%s: %s set up CMA fail\n", __func__, rmem->name);
+		return ret;
+	}
+
+	for (i = 0; i < ARRAY_SIZE(secure_heaps); i++, sec_heap++) {
+		if (sec_heap->mem_type != SECURE_MEMORY_TYPE_MTK_CM_CMA)
+			continue;
+
+		sec_heap->cma = sec_cma;
+		sec_heap->cma_paddr = rmem->base;
+		sec_heap->cma_size = rmem->size;
+	}
+	return 0;
+}
+
+RESERVEDMEM_OF_DECLARE(secure_cma, "secure_cma_region", secure_cma_init);
 
 static int secure_heap_init(void)
 {
@@ -428,12 +540,20 @@ static int secure_heap_init(void)
 	struct dma_heap_export_info exp_info;
 	struct dma_heap *heap;
 	unsigned int i;
+	int ret;
 
 	for (i = 0; i < ARRAY_SIZE(secure_heaps); i++, sec_heap++) {
 		exp_info.name = sec_heap->name;
 		exp_info.ops = &sec_heap_ops;
 		exp_info.priv = (void *)sec_heap;
 
+		if (sec_heap->data && sec_heap->data->heap_init) {
+			ret = sec_heap->data->heap_init(sec_heap);
+			if (ret) {
+				pr_err("sec_heap %s init fail %d.\n", sec_heap->name, ret);
+				continue;
+			}
+		}
 		heap = dma_heap_add(&exp_info);
 		if (IS_ERR(heap))
 			return PTR_ERR(heap);
