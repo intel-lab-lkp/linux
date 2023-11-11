@@ -8,6 +8,7 @@
 #include <linux/platform_device.h>
 #include <linux/pm_domain.h>
 #include <linux/regulator/consumer.h>
+#include <linux/aperture.h>
 
 #include <drm/drm_aperture.h>
 #include <drm/drm_atomic.h>
@@ -828,6 +829,13 @@ static struct simpledrm_device *simpledrm_device_create(struct drm_driver *drv,
 	if (mem) {
 		void *screen_base;
 
+		ret = aperture_remove_conflicting_devices(mem->start, resource_size(mem),
+			DRIVER_NAME);
+		if (ret) {
+			drm_err(dev, "aperture_remove_conflicting_devices: failed:%d\n",
+			    __func__, ret);
+			return ERR_PTR(ret);
+		}
 		ret = devm_aperture_acquire_from_firmware(dev, mem->start, resource_size(mem));
 		if (ret) {
 			drm_err(dev, "could not acquire memory range %pr: %d\n", mem, ret);
@@ -848,6 +856,13 @@ static struct simpledrm_device *simpledrm_device_create(struct drm_driver *drv,
 		if (!res)
 			return ERR_PTR(-EINVAL);
 
+		ret = aperture_remove_conflicting_devices(res->start, resource_size(res),
+			DRIVER_NAME);
+		if (ret) {
+			drm_err(dev, "aperture_remove_conflicting_devices: failed:%d\n",
+			    __func__, ret);
+			return ERR_PTR(ret);
+		}
 		ret = devm_aperture_acquire_from_firmware(dev, res->start, resource_size(res));
 		if (ret) {
 			drm_err(dev, "could not acquire memory range %pr: %d\n", res, ret);
