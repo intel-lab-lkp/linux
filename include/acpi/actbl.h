@@ -148,7 +148,7 @@ struct acpi_table_rsdt {
 struct acpi_table_xsdt {
 	struct acpi_table_header header;	/* Common ACPI table header */
 	u64 table_offset_entry[1];	/* Array of pointers to ACPI tables */
-};
+} __packed;
 
 #define ACPI_RSDT_ENTRY_SIZE        (sizeof (u32))
 #define ACPI_XSDT_ENTRY_SIZE        (sizeof (u64))
