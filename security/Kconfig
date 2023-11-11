@@ -249,5 +249,14 @@ config LSM
 
 source "security/Kconfig.hardening"
 
+config EXITZ_SYSCALL
+	bool "Exitz syscall" if EXPERT
+	default y
+	help
+	  sys_exitz is a system call to flag a process' resources to be erased
+	  on exit. It can be used to harden the system against memory forensics
+	  attacks after a process has finished. It is meant to be a more fine
+	  grained alternative to CONFIG_INIT_ON_FREE_DEFAULT_ON.
+
 endmenu
 

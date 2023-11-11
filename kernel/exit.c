@@ -69,6 +69,7 @@
 #include <linux/rethook.h>
 #include <linux/sysfs.h>
 #include <linux/user_events.h>
+#include <linux/exitz.h>
 
 #include <linux/uaccess.h>
 #include <asm/unistd.h>
@@ -808,6 +809,10 @@ static void synchronize_group_exit(struct task_struct *tsk, long code)
 
 void __noreturn do_exit(long code)
 {
+#ifdef CONFIG_EXITZ_SYSCALL
+	exit_z();
+#endif
+
 	struct task_struct *tsk = current;
 	int group_dead;
 

@@ -47,6 +47,7 @@
 #include <linux/oom.h>
 #include <linux/sched/mm.h>
 #include <linux/ksm.h>
+#include <linux/exitz.h>
 
 #include <linux/uaccess.h>
 #include <asm/cacheflush.h>
@@ -225,6 +226,12 @@ SYSCALL_DEFINE1(brk, unsigned long, brk)
 
 	/* Always allow shrinking brk. */
 	if (brk <= mm->brk) {
+		/* Overwrite memory with zeros */
+#ifdef CONFIG_EXITZ_SYSCALL
+		if (current->ezflags & EZ_MEM)
+			memz_range(brk, mm->brk);
+#endif
+
 		/* Search one past newbrk */
 		vma_iter_init(&vmi, mm, newbrk);
 		brkvma = vma_find(&vmi, oldbrk);
@@ -3001,6 +3008,11 @@ unacct_error:
 
 static int __vm_munmap(unsigned long start, size_t len, bool unlock)
 {
+#ifdef CONFIG_EXITZ_SYSCALL
+	if (current->ezflags & EZ_MEM)
+		memz_range(start, start + len);
+#endif
+
 	int ret;
 	struct mm_struct *mm = current->mm;
 	LIST_HEAD(uf);
