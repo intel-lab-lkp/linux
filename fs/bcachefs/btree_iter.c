@@ -1214,7 +1214,7 @@ __bch2_btree_path_set_pos(struct btree_trans *trans,
 		   struct btree_path *path, struct bpos new_pos,
 		   bool intent, unsigned long ip, int cmp)
 {
-	unsigned level = path->level;
+	unsigned level;
 
 	bch2_trans_verify_not_in_restart(trans);
 	EBUG_ON(!path->ref);
