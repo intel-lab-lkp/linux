@@ -8198,8 +8198,6 @@ again:
 		if (curr) {
 			if (curr->on_rq)
 				update_curr(cfs_rq);
-			else
-				curr = NULL;
 
 			if (unlikely(check_cfs_rq_runtime(cfs_rq)))
 				goto again;
@@ -8249,8 +8247,6 @@ again:
 		if (curr) {
 			if (curr->on_rq)
 				update_curr(cfs_rq);
-			else
-				curr = NULL;
 
 			/*
 			 * This call to check_cfs_rq_runtime() will do the
