@@ -970,6 +970,8 @@ properties:
       - items:
           - enum:
               - microsoft,surface-duo2
+              - oneplus,lemonade
+              - oneplus,lemonadep
               - qcom,sm8350-hdk
               - qcom,sm8350-mtp
               - sony,pdx214-generic
