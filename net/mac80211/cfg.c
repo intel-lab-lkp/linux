@@ -4833,7 +4833,7 @@ static int ieee80211_add_intf_link(struct wiphy *wiphy,
 	if (wdev->use_4addr)
 		return -EOPNOTSUPP;
 
-	return ieee80211_vif_set_links(sdata, wdev->valid_links, 0);
+	return ieee80211_vif_set_links(sdata, wdev->valid_links, 0, false);
 }
 
 static void ieee80211_del_intf_link(struct wiphy *wiphy,
@@ -4844,7 +4844,7 @@ static void ieee80211_del_intf_link(struct wiphy *wiphy,
 
 	lockdep_assert_wiphy(sdata->local->hw.wiphy);
 
-	ieee80211_vif_set_links(sdata, wdev->valid_links, 0);
+	ieee80211_vif_set_links(sdata, wdev->valid_links, 0, false);
 }
 
 static int sta_add_link_station(struct ieee80211_local *local,

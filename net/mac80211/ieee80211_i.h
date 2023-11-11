@@ -2000,10 +2000,11 @@ void ieee80211_link_init(struct ieee80211_sub_if_data *sdata,
 			 struct ieee80211_bss_conf *link_conf);
 void ieee80211_link_stop(struct ieee80211_link_data *link);
 int ieee80211_vif_set_links(struct ieee80211_sub_if_data *sdata,
-			    u16 new_links, u16 dormant_links);
-static inline void ieee80211_vif_clear_links(struct ieee80211_sub_if_data *sdata)
+			    u16 new_links, u16 dormant_links, bool ignore_driver_failures);
+static inline void ieee80211_vif_clear_links(struct ieee80211_sub_if_data *sdata,
+					     bool ignore_driver_failures)
 {
-	ieee80211_vif_set_links(sdata, 0, 0);
+	ieee80211_vif_set_links(sdata, 0, 0, ignore_driver_failures);
 }
 
 /* tx handling */

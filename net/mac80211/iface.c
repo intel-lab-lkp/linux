@@ -806,7 +806,7 @@ static void ieee80211_teardown_sdata(struct ieee80211_sub_if_data *sdata)
 	if (ieee80211_vif_is_mesh(&sdata->vif))
 		ieee80211_mesh_teardown_sdata(sdata);
 
-	ieee80211_vif_clear_links(sdata);
+	ieee80211_vif_clear_links(sdata, true);
 	ieee80211_link_stop(&sdata->deflink);
 }
 
