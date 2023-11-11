@@ -4141,9 +4141,6 @@ static inline bool mas_wr_append(struct ma_wr_state *wr_mas,
 	if (mt_in_rcu(mas->tree))
 		return false;
 
-	if (mas->offset != wr_mas->node_end)
-		return false;
-
 	end = wr_mas->node_end;
 	if (mas->offset != end)
 		return false;
