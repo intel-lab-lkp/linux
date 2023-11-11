@@ -1589,8 +1589,8 @@ static int dbg_is_node_dirty(struct ubifs_info *c, int node_type, int lnum,
  */
 static int dbg_check_ltab_lnum(struct ubifs_info *c, int lnum)
 {
-	int err, len = c->leb_size, dirty = 0, node_type, node_num, node_len;
-	int ret;
+	int len = c->leb_size, dirty = 0, node_type, node_num, node_len;
+	int ret, err = 0;
 	void *buf, *p;
 
 	if (!dbg_is_chk_lprops(c))
@@ -1646,7 +1646,6 @@ static int dbg_check_ltab_lnum(struct ubifs_info *c, int lnum)
 		len -= node_len;
 	}
 
-	err = 0;
 out:
 	vfree(buf);
 	return err;
