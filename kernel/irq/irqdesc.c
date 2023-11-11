@@ -565,6 +565,7 @@ int __init early_irq_init(void)
 
 	for (i = 0; i < initcnt; i++) {
 		desc = alloc_desc(i, node, 0, NULL, NULL);
+		BUG_ON(!desc);
 		irq_insert_desc(i, desc);
 	}
 	return arch_early_irq_init();
@@ -582,18 +583,16 @@ struct irq_desc irq_desc[NR_IRQS] __cacheline_aligned_in_smp = {
 
 int __init early_irq_init(void)
 {
-	int count, i, node = first_online_node;
-	struct irq_desc *desc;
+	int count = ARRAY_SIZE(irq_desc), i, node = first_online_node;
+	struct irq_desc *desc = irq_desc;
 
 	init_irq_default_affinity();
 
 	printk(KERN_INFO "NR_IRQS: %d\n", NR_IRQS);
 
-	desc = irq_desc;
-	count = ARRAY_SIZE(irq_desc);
-
 	for (i = 0; i < count; i++) {
 		desc[i].kstat_irqs = alloc_percpu(unsigned int);
+		BUG_ON(!desc[i].kstat_irqs);
 		alloc_masks(&desc[i], node);
 		raw_spin_lock_init(&desc[i].lock);
 		lockdep_set_class(&desc[i].lock, &irq_desc_lock_class);
