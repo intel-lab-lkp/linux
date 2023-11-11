@@ -83,10 +83,9 @@ this to include other types of resources like doorbells.
 Client Drivers
 --------------
 
-A client driver typically only has to conditionally change its DMA map
-routine to use the mapping function :c:func:`pci_p2pdma_map_sg()` instead
-of the usual :c:func:`dma_map_sg()` function. Memory mapped in this
-way does not need to be unmapped.
+A client driver only has to use the mapping api :c:func:`dma_map_sg()`
+and :c:func:`dma_unmap_sg()` functions, as usual, and the implementation
+will do the right thing for the P2P capable memory.
 
 The client may also, optionally, make use of
 :c:func:`is_pci_p2pdma_page()` to determine when to use the P2P mapping
