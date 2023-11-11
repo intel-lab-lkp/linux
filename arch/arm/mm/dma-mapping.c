@@ -1779,6 +1779,12 @@ void arch_setup_dma_ops(struct device *dev, u64 dma_base, u64 size,
 	if (iommu)
 		arm_setup_iommu_dma_ops(dev, dma_base, size, iommu, coherent);
 
+#ifdef CONFIG_ARM_DMA_USE_IOMMU_XEN
+	if (dev->dma_ops == &iommu_ops) {
+		dev->archdata.dma_ops_setup = true;
+		return;
+	}
+#endif
 	xen_setup_dma_ops(dev);
 	dev->archdata.dma_ops_setup = true;
 }

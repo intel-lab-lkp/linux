@@ -181,6 +181,22 @@ config SWIOTLB_XEN
 	select DMA_OPS
 	select SWIOTLB
 
+config ARM_DMA_USE_IOMMU_XEN
+	bool "Prefer IOMMU DMA ops on Xen"
+	depends on SWIOTLB_XEN
+	depends on ARM_DMA_USE_IOMMU
+	help
+	  Normally on Xen, the IOMMU is used by Xen and not exposed to
+	  Linux. Some Arm systems such as Exynos have an IOMMU that
+	  Xen does not use so the IOMMU is exposed to Linux in those
+	  cases. This option enables Linux to use the IOMMU instead of
+	  using the Xen swiotlb_dma_ops for DMA on Xen.
+
+	  Say N here unless support for one or more devices that use
+	  IOMMU ops instead of Xen swiotlb ops for DMA is needed and the
+	  devices that use the IOMMU do not cause any problems on the
+	  Xen system in use.
+
 config XEN_PCI_STUB
 	bool
 
