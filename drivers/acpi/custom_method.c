@@ -77,6 +77,9 @@ static ssize_t cm_write(struct file *file, const char __user *user_buf,
 		if (ACPI_FAILURE(status))
 			return -EINVAL;
 		add_taint(TAINT_OVERRIDDEN_ACPI_TABLE, LOCKDEP_NOW_UNRELIABLE);
+	} else {
+		kfree(buf);
+		buf = NULL;
 	}
 
 	return count;
