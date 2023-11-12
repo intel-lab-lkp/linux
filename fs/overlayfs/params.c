@@ -530,6 +530,7 @@ static int ovl_parse_param_lowerdir(const char *name, struct fs_context *fc)
 	return 0;
 
 out_put:
+	ctx->nr = nr;
 	ovl_reset_lowerdirs(ctx);
 
 out_err:
