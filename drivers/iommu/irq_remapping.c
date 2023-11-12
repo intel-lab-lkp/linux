@@ -24,6 +24,23 @@ int no_x2apic_optout;
 
 int disable_irq_post = 0;
 
+#ifdef CONFIG_X86_POSTED_MSI
+
+unsigned int posted_msi_off;
+
+static int __init cmdl_posted_msi_off(char *str)
+{
+	int value = 0;
+
+	get_option(&str, &value);
+	posted_msi_off = value;
+
+	return 1;
+}
+
+__setup("posted_msi_off=", cmdl_posted_msi_off);
+#endif
+
 static int disable_irq_remap;
 static struct irq_remap_ops *remap_ops;
 
