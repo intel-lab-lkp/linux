@@ -4182,11 +4182,14 @@ static void *s_start(struct seq_file *m, loff_t *pos)
 	int cpu;
 
 	mutex_lock(&trace_types_lock);
-	if (unlikely(tr->current_trace != iter->trace)) {
-		/* Close iter->trace before switching to the new current tracer */
-		if (iter->trace->close)
-			iter->trace->close(iter);
-		iter->trace = tr->current_trace;
+	if (unlikely(tr->current_trace && iter->trace->name != tr->current_trace->name)) {
+		/* Switch to the new current tracer then close old tracer */
+		struct tracer *prev_trace = iter->trace;
+		*iter->trace = *tr->current_trace;
+		/* Make sure the switch is seen by all CPUs before closing */
+		smp_wmb();
+		if (prev_trace->close)
+			prev_trace->close(iter);
 		/* Reopen the new current tracer */
 		if (iter->trace->open)
 			iter->trace->open(iter);
