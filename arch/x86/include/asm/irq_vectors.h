@@ -99,9 +99,22 @@
 
 #define LOCAL_TIMER_VECTOR		0xec
 
+/*
+ * Posted interrupt notification vector for all device MSIs delivered to
+ * the host kernel.
+ *
+ * Choose lower priority class bit [7:4] than other system vectors such
+ * that it can be preempted by the system interrupts.
+ *
+ * It is also higher than all external vectors but it should not matter
+ * in that external vectors for posted MSIs are in a different number space.
+ */
+#define POSTED_MSI_NOTIFICATION_VECTOR	0xdf
 #define NR_VECTORS			 256
 
-#ifdef CONFIG_X86_LOCAL_APIC
+#ifdef X86_POSTED_MSI
+#define FIRST_SYSTEM_VECTOR		POSTED_MSI_NOTIFICATION_VECTOR
+#elif defined(CONFIG_X86_LOCAL_APIC)
 #define FIRST_SYSTEM_VECTOR		LOCAL_TIMER_VECTOR
 #else
 #define FIRST_SYSTEM_VECTOR		NR_VECTORS
