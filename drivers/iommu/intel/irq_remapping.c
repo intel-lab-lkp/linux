@@ -1125,6 +1125,15 @@ struct irq_remap_ops intel_irq_remap_ops = {
 	.reenable		= reenable_irq_remapping,
 	.enable_faulting	= enable_drhd_fault_handling,
 };
+#ifdef CONFIG_X86_POSTED_MSI
+
+static u64 get_pi_desc_addr(struct irq_data *irqd)
+{
+	int cpu = cpumask_first(irq_data_get_effective_affinity_mask(irqd));
+
+	return __pa(per_cpu_ptr(&posted_interrupt_desc, cpu));
+}
+#endif
 
 static void intel_ir_reconfigure_irte(struct irq_data *irqd, bool force)
 {
