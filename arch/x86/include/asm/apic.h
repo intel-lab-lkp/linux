@@ -485,6 +485,7 @@ static inline void apic_setup_apic_calls(void) { }
 #endif /* CONFIG_X86_LOCAL_APIC */
 
 extern void apic_ack_irq(struct irq_data *data);
+extern void apic_ack_irq_no_eoi(struct irq_data *data);
 
 static inline bool lapic_vector_set_in_irr(unsigned int vector)
 {

@@ -911,6 +911,11 @@ void apic_ack_irq(struct irq_data *irqd)
 	apic_eoi();
 }
 
+void apic_ack_irq_no_eoi(struct irq_data *irqd)
+{
+	irq_move_irq(irqd);
+}
+
 void apic_ack_edge(struct irq_data *irqd)
 {
 	irq_complete_move(irqd_cfg(irqd));

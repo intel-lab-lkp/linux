@@ -1233,6 +1233,42 @@ static struct irq_chip intel_ir_chip = {
 	.irq_set_vcpu_affinity	= intel_ir_set_vcpu_affinity,
 };
 
+/*
+ * With posted MSIs, all vectors are multiplexed into a single notification
+ * vector. Devices MSIs are then dispatched in a demux loop where
+ * EOIs can be coalesced as well.
+ *
+ * IR chip "INTEL-IR-POST" does not do EOI on ACK instead letting posted
+ * interrupt notification handler to perform EOI.
+ *
+ * For the example below, 3 MSIs are coalesced in one CPU notification. Only
+ * one apic_eoi() is needed.
+ *
+ * __sysvec_posted_msi_notification() {
+ * irq_enter()
+ *	handle_edge_irq()
+ *		irq_chip_ack_parent()
+ *			apic_ack_irq_no_eoi()
+ *		handle_irq()
+ *	handle_edge_irq()
+ *		irq_chip_ack_parent()
+ *			apic_ack_irq_no_eoi()
+ *		handle_irq()
+ *	handle_edge_irq()
+ *		irq_chip_ack_parent()
+ *			apic_ack_irq_no_eoi()
+ *		handle_irq()
+ *	apic_eoi()
+ * irq_exit()
+ */
+static struct irq_chip intel_ir_chip_post_msi = {
+	.name			= "INTEL-IR-POST",
+	.irq_ack		= apic_ack_irq_no_eoi,
+	.irq_set_affinity	= intel_ir_set_affinity,
+	.irq_compose_msi_msg	= intel_ir_compose_msi_msg,
+	.irq_set_vcpu_affinity	= intel_ir_set_vcpu_affinity,
+};
+
 static void fill_msi_msg(struct msi_msg *msg, u32 index, u32 subhandle)
 {
 	memset(msg, 0, sizeof(*msg));
@@ -1361,7 +1397,7 @@ static int intel_irq_remapping_alloc(struct irq_domain *domain,
 
 		irq_data->hwirq = (index << 16) + i;
 		irq_data->chip_data = ird;
-		irq_data->chip = &intel_ir_chip;
+		irq_data->chip = posted_msi_supported() ? &intel_ir_chip_post_msi : &intel_ir_chip;
 		intel_irq_remapping_prepare_irte(ird, irq_cfg, info, index, i);
 		irq_set_status_flags(virq + i, IRQ_MOVE_PCNTXT);
 	}
