@@ -184,6 +184,13 @@ int arch_show_interrupts(struct seq_file *p, int prec)
 			   irq_stats(j)->kvm_posted_intr_wakeup_ipis);
 	seq_puts(p, "  Posted-interrupt wakeup event\n");
 #endif
+#ifdef CONFIG_X86_POSTED_MSI
+	seq_printf(p, "%*s: ", prec, "PMN");
+	for_each_online_cpu(j)
+		seq_printf(p, "%10u ",
+			   irq_stats(j)->posted_msi_notification_count);
+	seq_puts(p, "  Posted MSI notification event\n");
+#endif
 	return 0;
 }
 
@@ -350,6 +357,90 @@ void intel_posted_msi_init(void)
 {
 	this_cpu_write(posted_interrupt_desc.nv, POSTED_MSI_NOTIFICATION_VECTOR);
 	this_cpu_write(posted_interrupt_desc.ndst, this_cpu_read(x86_cpu_to_apicid));
+}
+
+static __always_inline inline void handle_pending_pir(struct pi_desc *pid, struct pt_regs *regs)
+{
+	int i, vec = FIRST_EXTERNAL_VECTOR;
+	u64 pir_copy[4];
+
+	/*
+	 * Make a copy of PIR which contains IRQ pending bits for vectors,
+	 * then invoke IRQ handlers for each pending vector.
+	 * If any new interrupts were posted while we are processing, will
+	 * do again before allowing new notifications. The idea is to
+	 * minimize the number of the expensive notifications if IRQs come
+	 * in a high frequency burst.
+	 */
+	for (i = 0; i < 4; i++)
+		pir_copy[i] = raw_atomic64_xchg((atomic64_t *)&pid->pir_l[i], 0);
+
+	/*
+	 * Ideally, we should start from the high order bits set in the PIR
+	 * since each bit represents a vector. Higher order bit position means
+	 * the vector has higher priority. But external vectors are allocated
+	 * based on availability not priority.
+	 *
+	 * EOI is included in the IRQ handlers call to apic_ack_irq, which
+	 * allows higher priority system interrupt to get in between.
+	 */
+	for_each_set_bit_from(vec, (unsigned long *)&pir_copy[0], 256)
+		call_irq_handler(vec, regs);
+
+}
+
+/*
+ * Performance data shows that 3 is good enough to harvest 90+% of the benefit
+ * on high IRQ rate workload.
+ * Alternatively, could make this tunable, use 3 as default.
+ */
+#define MAX_POSTED_MSI_COALESCING_LOOP 3
+
+/*
+ * For MSIs that are delivered as posted interrupts, the CPU notifications
+ * can be coalesced if the MSIs arrive in high frequency bursts.
+ */
+DEFINE_IDTENTRY_SYSVEC(sysvec_posted_msi_notification)
+{
+	struct pt_regs *old_regs = set_irq_regs(regs);
+	struct pi_desc *pid;
+	int i = 0;
+
+	pid = this_cpu_ptr(&posted_interrupt_desc);
+
+	inc_irq_stat(posted_msi_notification_count);
+	irq_enter();
+
+	while (i++ < MAX_POSTED_MSI_COALESCING_LOOP) {
+		handle_pending_pir(pid, regs);
+
+		/*
+		 * If there are new interrupts posted in PIR, do again. If
+		 * nothing pending, no need to wait for more interrupts.
+		 */
+		if (is_pir_pending(pid))
+			continue;
+		else
+			break;
+	}
+
+	/*
+	 * Clear outstanding notification bit to allow new IRQ notifications,
+	 * do this last to maximize the window of interrupt coalescing.
+	 */
+	pi_clear_on(pid);
+
+	/*
+	 * There could be a race of PI notification and the clearing of ON bit,
+	 * process PIR bits one last time such that handling the new interrupts
+	 * are not delayed until the next IRQ.
+	 */
+	if (unlikely(is_pir_pending(pid)))
+		handle_pending_pir(pid, regs);
+
+	apic_eoi();
+	irq_exit();
+	set_irq_regs(old_regs);
 }
 #endif /* X86_POSTED_MSI */
 
