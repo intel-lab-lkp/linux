@@ -40,6 +40,13 @@ static int qnx4_match(int len, const char *name,
 	} else {
 		namelen = QNX4_SHORT_NAME_MAX;
 	}
+
+	/** qnx4 dir name length can vary, check the di_fname
+	 * fetched from (struct qnx4_inode_entry *) before use in
+	 * strlen to avoid panic due to buffer overflow"
+	 */
+	if (strnlen(de->di_fname, namelen) >= sizeof(de->di_fname))
+		return -ENAMETOOLONG;
 	thislen = strlen( de->di_fname );
 	if ( thislen > namelen )
 		thislen = namelen;
