@@ -19,6 +19,7 @@
 #include <asm/apic.h>
 #include <asm/i8259.h>
 #include <asm/desc.h>
+#include <asm/posted_intr.h>
 #include <asm/irq_remapping.h>
 
 #include <asm/trace/irq_vectors.h>
@@ -978,9 +979,14 @@ static void __vector_cleanup(struct vector_cleanup *cl, bool check_irr)
 		 * Do not check IRR when called from lapic_offline(), because
 		 * fixup_irqs() was just called to scan IRR for set bits and
 		 * forward them to new destination CPUs via IPIs.
+		 *
+		 * If the vector to be cleaned is delivered as posted intr,
+		 * it is possible that the interrupt has been posted but
+		 * not made to the IRR due to coalesced notifications.
+		 * Therefore, check PIR to see if the interrupt was posted.
 		 */
 		irr = check_irr ? apic_read(APIC_IRR + (vector / 32 * 0x10)) : 0;
-		if (irr & (1U << (vector % 32))) {
+		if (irr & (1U << (vector % 32)) || is_pi_pending_this_cpu(vector)) {
 			pr_warn_once("Moved interrupt pending in old target APIC %u\n", apicd->irq);
 			rearm = true;
 			continue;
