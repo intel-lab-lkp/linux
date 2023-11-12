@@ -418,6 +418,18 @@ static void mxc_update_irq_chained_handler(struct mxc_gpio_port *port, bool enab
 	}
 }
 
+static int mxc_gpio_get_direction(struct gpio_chip *gc, unsigned int offset)
+{
+	struct mxc_gpio_port *port = gpiochip_get_data(gc);
+	u32 dir;
+
+	dir = readl(port->base + GPIO_GDIR);
+	if (dir & BIT(offset))
+		return GPIO_LINE_DIRECTION_OUT;
+
+	return GPIO_LINE_DIRECTION_IN;
+}
+
 static int mxc_gpio_probe(struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node;
@@ -490,6 +502,7 @@ static int mxc_gpio_probe(struct platform_device *pdev)
 	port->gc.request = mxc_gpio_request;
 	port->gc.free = mxc_gpio_free;
 	port->gc.to_irq = mxc_gpio_to_irq;
+	port->gc.get_direction = mxc_gpio_get_direction;
 	port->gc.base = (pdev->id < 0) ? of_alias_get_id(np, "gpio") * 32 :
 					     pdev->id * 32;
 
