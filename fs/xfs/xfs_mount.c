@@ -1144,7 +1144,6 @@ xfs_mod_freecounter(
 	int64_t			lcounter;
 	long long		res_used;
 	uint64_t		set_aside = 0;
-	s32			batch;
 	bool			has_resv_pool;
 
 	ASSERT(counter == &mp->m_fdblocks || counter == &mp->m_frextents);
@@ -1178,20 +1177,6 @@ xfs_mod_freecounter(
 	}
 
 	/*
-	 * Taking blocks away, need to be more accurate the closer we
-	 * are to zero.
-	 *
-	 * If the counter has a value of less than 2 * max batch size,
-	 * then make everything serialise as we are real close to
-	 * ENOSPC.
-	 */
-	if (__percpu_counter_compare(counter, 2 * XFS_FDBLOCKS_BATCH,
-				     XFS_FDBLOCKS_BATCH) < 0)
-		batch = 1;
-	else
-		batch = XFS_FDBLOCKS_BATCH;
-
-	/*
 	 * Set aside allocbt blocks because these blocks are tracked as free
 	 * space but not available for allocation. Technically this means that a
 	 * single reservation cannot consume all remaining free space, but the
@@ -1204,7 +1189,7 @@ xfs_mod_freecounter(
 	 */
 	if (has_resv_pool)
 		set_aside = xfs_fdblocks_unavailable(mp);
-	percpu_counter_add_batch(counter, delta, batch);
+	percpu_counter_add_batch(counter, delta, XFS_FDBLOCKS_BATCH);
 	if (__percpu_counter_compare(counter, set_aside,
 				     XFS_FDBLOCKS_BATCH) >= 0) {
 		/* we had space! */
