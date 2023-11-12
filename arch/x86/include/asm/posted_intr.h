@@ -98,9 +98,40 @@ static inline bool pi_test_sn(struct pi_desc *pi_desc)
 }
 
 #ifdef CONFIG_X86_POSTED_MSI
+/*
+ * Not all external vectors are subject to interrupt remapping, e.g. IOMMU's
+ * own interrupts. Here we do not distinguish them since those vector bits in
+ * PIR will always be zero.
+ */
+static inline bool is_pi_pending_this_cpu(unsigned int vector)
+{
+	struct pi_desc *pid;
+
+	if (WARN_ON(vector > NR_VECTORS || vector < FIRST_EXTERNAL_VECTOR))
+		return false;
+
+	pid = this_cpu_ptr(&posted_interrupt_desc);
+
+	return (pid->pir[vector >> 5] & (1 << (vector % 32)));
+}
+
+static inline bool is_pir_pending(struct pi_desc *pid)
+{
+	int i;
+
+	for (i = 0; i < 4; i++) {
+		if (pid->pir_l[i])
+			return true;
+	}
+
+	return false;
+}
+
 extern void intel_posted_msi_init(void);
 
 #else
+static inline bool is_pi_pending_this_cpu(unsigned int vector) {return false; }
+
 static inline void intel_posted_msi_init(void) {};
 
 #endif /* X86_POSTED_MSI */
