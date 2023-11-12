@@ -218,6 +218,7 @@ static struct btrfs_qgroup *add_qgroup_rb(struct btrfs_fs_info *fs_info,
 			p = &(*p)->rb_right;
 		} else {
 			kfree(prealloc);
+			prealloc = NULL;
 			return qgroup;
 		}
 	}
@@ -1697,6 +1698,7 @@ int btrfs_create_qgroup(struct btrfs_trans_handle *trans, u64 qgroupid)
 	struct btrfs_root *quota_root;
 	struct btrfs_qgroup *qgroup;
 	struct btrfs_qgroup *prealloc = NULL;
+	u64 objid;
 	int ret = 0;
 
 	if (btrfs_qgroup_mode(fs_info) == BTRFS_QGROUP_MODE_DISABLED)
@@ -1727,6 +1729,8 @@ int btrfs_create_qgroup(struct btrfs_trans_handle *trans, u64 qgroupid)
 	spin_lock(&fs_info->qgroup_lock);
 	qgroup = add_qgroup_rb(fs_info, prealloc, qgroupid);
 	spin_unlock(&fs_info->qgroup_lock);
+	while (prealloc && !btrfs_get_free_objectid(fs_info->tree_root, 
+				&objid) && objid <= qgroupid);
 	prealloc = NULL;
 
 	ret = btrfs_sysfs_add_one_qgroup(fs_info, qgroup);
