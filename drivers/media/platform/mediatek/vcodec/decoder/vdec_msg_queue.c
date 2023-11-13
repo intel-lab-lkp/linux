@@ -206,26 +206,21 @@ void vdec_msg_queue_deinit(struct vdec_msg_queue *msg_queue,
 	int i;
 
 	mem = &msg_queue->wdma_addr;
-	if (mem->va)
-		mtk_vcodec_mem_free(ctx, mem);
+	mtk_vcodec_mem_free(ctx, mem);
 	for (i = 0; i < NUM_BUFFER_COUNT; i++) {
 		lat_buf = &msg_queue->lat_buf[i];
 
 		mem = &lat_buf->wdma_err_addr;
-		if (mem->va)
-			mtk_vcodec_mem_free(ctx, mem);
+		mtk_vcodec_mem_free(ctx, mem);
 
 		mem = &lat_buf->slice_bc_addr;
-		if (mem->va)
-			mtk_vcodec_mem_free(ctx, mem);
+		mtk_vcodec_mem_free(ctx, mem);
 
 		mem = &lat_buf->rd_mv_addr;
-		if (mem->va)
-			mtk_vcodec_mem_free(ctx, mem);
+		mtk_vcodec_mem_free(ctx, mem);
 
 		mem = &lat_buf->tile_addr;
-		if (mem->va)
-			mtk_vcodec_mem_free(ctx, mem);
+		mtk_vcodec_mem_free(ctx, mem);
 
 		kfree(lat_buf->private_data);
 		lat_buf->private_data = NULL;

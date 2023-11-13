@@ -192,23 +192,19 @@ static void vdec_vp8_slice_free_working_buf(struct vdec_vp8_slice_inst *inst)
 	struct mtk_vcodec_mem *mem;
 
 	mem = &inst->seg_id_buf;
-	if (mem->va)
-		mtk_vcodec_mem_free(inst->ctx, mem);
+	mtk_vcodec_mem_free(inst->ctx, mem);
 	inst->vsi->dec.seg_id_buf_dma = 0;
 
 	mem = &inst->wrap_y_buf;
-	if (mem->va)
-		mtk_vcodec_mem_free(inst->ctx, mem);
+	mtk_vcodec_mem_free(inst->ctx, mem);
 	inst->vsi->dec.wrap_y_dma = 0;
 
 	mem = &inst->wrap_c_buf;
-	if (mem->va)
-		mtk_vcodec_mem_free(inst->ctx, mem);
+	mtk_vcodec_mem_free(inst->ctx, mem);
 	inst->vsi->dec.wrap_c_dma = 0;
 
 	mem = &inst->vld_wrapper_buf;
-	if (mem->va)
-		mtk_vcodec_mem_free(inst->ctx, mem);
+	mtk_vcodec_mem_free(inst->ctx, mem);
 	inst->vsi->dec.vld_wrapper_dma = 0;
 }
 

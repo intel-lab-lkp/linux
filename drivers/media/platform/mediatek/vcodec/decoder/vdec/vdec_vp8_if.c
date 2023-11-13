@@ -379,9 +379,7 @@ static void free_working_buf(struct vdec_vp8_inst *inst)
 {
 	struct mtk_vcodec_mem *mem = &inst->working_buf;
 
-	if (mem->va)
-		mtk_vcodec_mem_free(inst->ctx, mem);
-
+	mtk_vcodec_mem_free(inst->ctx, mem);
 	inst->vsi->dec.working_buf_dma = 0;
 }
 

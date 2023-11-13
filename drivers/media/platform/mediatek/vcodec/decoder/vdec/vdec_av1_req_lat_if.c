@@ -783,8 +783,7 @@ static int vdec_av1_slice_init_cdf_table(struct vdec_av1_slice_instance *instanc
 
 	mtk_vdec_debug(ctx, "map cdf table to 0x%p\n", remote_cdf_table);
 
-	if (instance->cdf_table.va)
-		mtk_vcodec_mem_free(ctx, &instance->cdf_table);
+	mtk_vcodec_mem_free(ctx, &instance->cdf_table);
 	instance->cdf_table.size = vsi->cdf_table_size;
 
 	ret = mtk_vcodec_mem_alloc(ctx, &instance->cdf_table);
@@ -814,8 +813,7 @@ static int vdec_av1_slice_init_iq_table(struct vdec_av1_slice_instance *instance
 
 	mtk_vdec_debug(ctx, "map iq table to 0x%p\n", remote_iq_table);
 
-	if (instance->iq_table.va)
-		mtk_vcodec_mem_free(ctx, &instance->iq_table);
+	mtk_vcodec_mem_free(ctx, &instance->iq_table);
 	instance->iq_table.size = vsi->iq_table_size;
 
 	ret = mtk_vcodec_mem_alloc(ctx, &instance->iq_table);
@@ -970,22 +968,19 @@ static int vdec_av1_slice_alloc_working_buffer(struct vdec_av1_slice_instance *i
 	max_sb_h = DIV_ROUND_UP(max_h, 128);
 
 	for (i = 0; i < AV1_MAX_FRAME_BUF_COUNT; i++) {
-		if (instance->mv[i].va)
-			mtk_vcodec_mem_free(ctx, &instance->mv[i]);
+		mtk_vcodec_mem_free(ctx, &instance->mv[i]);
 		instance->mv[i].size = max_sb_w * max_sb_h * SZ_1K;
 		ret = mtk_vcodec_mem_alloc(ctx, &instance->mv[i]);
 		if (ret)
 			goto err;
 
-		if (instance->seg[i].va)
-			mtk_vcodec_mem_free(ctx, &instance->seg[i]);
+		mtk_vcodec_mem_free(ctx, &instance->seg[i]);
 		instance->seg[i].size = max_sb_w * max_sb_h * 512;
 		ret = mtk_vcodec_mem_alloc(ctx, &instance->seg[i]);
 		if (ret)
 			goto err;
 
-		if (instance->cdf[i].va)
-			mtk_vcodec_mem_free(ctx, &instance->cdf[i]);
+		mtk_vcodec_mem_free(ctx, &instance->cdf[i]);
 		instance->cdf[i].size = AV1_CDF_TABLE_BUFFER_SIZE;
 		ret = mtk_vcodec_mem_alloc(ctx, &instance->cdf[i]);
 		if (ret)
@@ -1001,8 +996,7 @@ static int vdec_av1_slice_alloc_working_buffer(struct vdec_av1_slice_instance *i
 		vsi->cdf_tmp.size = instance->cdf_temp.size;
 	}
 
-	if (instance->tile.va)
-		mtk_vcodec_mem_free(ctx, &instance->tile);
+	mtk_vcodec_mem_free(ctx, &instance->tile);
 
 	instance->tile.size = AV1_TILE_BUF_SIZE * V4L2_AV1_MAX_TILE_COUNT;
 	ret = mtk_vcodec_mem_alloc(ctx, &instance->tile);

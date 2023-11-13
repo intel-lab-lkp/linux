@@ -651,8 +651,7 @@ static int vdec_hevc_slice_alloc_mv_buf(struct vdec_hevc_slice_inst *inst,
 	mtk_v4l2_vdec_dbg(3, inst->ctx, "allocate mv buffer size = 0x%x", buf_sz);
 	for (i = 0; i < HEVC_MAX_MV_NUM; i++) {
 		mem = &inst->mv_buf[i];
-		if (mem->va)
-			mtk_vcodec_mem_free(inst->ctx, mem);
+		mtk_vcodec_mem_free(inst->ctx, mem);
 		mem->size = buf_sz;
 		err = mtk_vcodec_mem_alloc(inst->ctx, mem);
 		if (err) {
@@ -671,8 +670,7 @@ static void vdec_hevc_slice_free_mv_buf(struct vdec_hevc_slice_inst *inst)
 
 	for (i = 0; i < HEVC_MAX_MV_NUM; i++) {
 		mem = &inst->mv_buf[i];
-		if (mem->va)
-			mtk_vcodec_mem_free(inst->ctx, mem);
+		mtk_vcodec_mem_free(inst->ctx, mem);
 	}
 }
 
@@ -913,8 +911,7 @@ static void vdec_hevc_slice_deinit(void *h_vdec)
 	vdec_hevc_slice_free_mv_buf(inst);
 
 	mem = &inst->wrap_addr;
-	if (mem->va)
-		mtk_vcodec_mem_free(inst->ctx, mem);
+	mtk_vcodec_mem_free(inst->ctx, mem);
 
 	vdec_msg_queue_deinit(&inst->ctx->msg_queue, inst->ctx);
 	kfree(inst);

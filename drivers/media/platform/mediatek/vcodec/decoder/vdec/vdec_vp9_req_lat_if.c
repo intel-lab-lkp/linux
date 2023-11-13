@@ -590,8 +590,7 @@ static int vdec_vp9_slice_alloc_working_buffer(struct vdec_vp9_slice_instance *i
 
 	size = (max_sb_w * max_sb_h + 2) * 576;
 	for (i = 0; i < 2; i++) {
-		if (instance->mv[i].va)
-			mtk_vcodec_mem_free(ctx, &instance->mv[i]);
+		mtk_vcodec_mem_free(ctx, &instance->mv[i]);
 		instance->mv[i].size = size;
 		if (mtk_vcodec_mem_alloc(ctx, &instance->mv[i]))
 			goto err;
@@ -599,8 +598,7 @@ static int vdec_vp9_slice_alloc_working_buffer(struct vdec_vp9_slice_instance *i
 
 	size = (max_sb_w * max_sb_h * 32) + 256;
 	for (i = 0; i < 2; i++) {
-		if (instance->seg[i].va)
-			mtk_vcodec_mem_free(ctx, &instance->seg[i]);
+		mtk_vcodec_mem_free(ctx, &instance->seg[i]);
 		instance->seg[i].size = size;
 		if (mtk_vcodec_mem_alloc(ctx, &instance->seg[i]))
 			goto err;
@@ -637,20 +635,15 @@ static void vdec_vp9_slice_free_working_buffer(struct vdec_vp9_slice_instance *i
 	struct mtk_vcodec_dec_ctx *ctx = instance->ctx;
 	int i;
 
-	for (i = 0; i < ARRAY_SIZE(instance->mv); i++) {
-		if (instance->mv[i].va)
-			mtk_vcodec_mem_free(ctx, &instance->mv[i]);
-	}
-	for (i = 0; i < ARRAY_SIZE(instance->seg); i++) {
-		if (instance->seg[i].va)
-			mtk_vcodec_mem_free(ctx, &instance->seg[i]);
-	}
-	if (instance->tile.va)
-		mtk_vcodec_mem_free(ctx, &instance->tile);
-	if (instance->prob.va)
-		mtk_vcodec_mem_free(ctx, &instance->prob);
-	if (instance->counts.va)
-		mtk_vcodec_mem_free(ctx, &instance->counts);
+	for (i = 0; i < ARRAY_SIZE(instance->mv); i++)
+		mtk_vcodec_mem_free(ctx, &instance->mv[i]);
+
+	for (i = 0; i < ARRAY_SIZE(instance->seg); i++)
+		mtk_vcodec_mem_free(ctx, &instance->seg[i]);
+
+	mtk_vcodec_mem_free(ctx, &instance->tile);
+	mtk_vcodec_mem_free(ctx, &instance->prob);
+	mtk_vcodec_mem_free(ctx, &instance->counts);
 
 	instance->level = VP9_RES_NONE;
 }

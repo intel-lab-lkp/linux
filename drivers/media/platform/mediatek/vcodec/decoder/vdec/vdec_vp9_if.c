@@ -387,8 +387,7 @@ static bool vp9_alloc_work_buf(struct vdec_vp9_inst *inst)
 		       vsi->pic_h, vsi->buf_w, vsi->buf_h);
 
 	mem = &inst->mv_buf;
-	if (mem->va)
-		mtk_vcodec_mem_free(inst->ctx, mem);
+	mtk_vcodec_mem_free(inst->ctx, mem);
 
 	mem->size = ((vsi->buf_w / 64) *
 		    (vsi->buf_h / 64) + 2) * 36 * 16;
@@ -405,8 +404,7 @@ static bool vp9_alloc_work_buf(struct vdec_vp9_inst *inst)
 
 
 	mem = &inst->seg_id_buf;
-	if (mem->va)
-		mtk_vcodec_mem_free(inst->ctx, mem);
+	mtk_vcodec_mem_free(inst->ctx, mem);
 
 	mem->size = VP9_SEG_ID_SZ;
 	result = mtk_vcodec_mem_alloc(inst->ctx, mem);
@@ -567,8 +565,7 @@ static void vp9_free_inst(struct vdec_vp9_inst *inst)
 	struct mtk_vcodec_mem mem;
 
 	mem = inst->mem;
-	if (mem.va)
-		mtk_vcodec_mem_free(inst->ctx, &mem);
+	mtk_vcodec_mem_free(inst->ctx, &mem);
 }
 
 static bool vp9_decode_end_proc(struct vdec_vp9_inst *inst)
@@ -761,12 +758,10 @@ static void vdec_vp9_deinit(void *h_vdec)
 		mtk_vdec_err(inst->ctx, "vpu_dec_deinit failed");
 
 	mem = &inst->mv_buf;
-	if (mem->va)
-		mtk_vcodec_mem_free(inst->ctx, mem);
+	mtk_vcodec_mem_free(inst->ctx, mem);
 
 	mem = &inst->seg_id_buf;
-	if (mem->va)
-		mtk_vcodec_mem_free(inst->ctx, mem);
+	mtk_vcodec_mem_free(inst->ctx, mem);
 
 	vp9_free_all_sf_ref_fb(inst);
 	vp9_free_inst(inst);

@@ -174,8 +174,7 @@ static void free_predication_buf(struct vdec_h264_slice_inst *inst)
 	struct mtk_vcodec_mem *mem = &inst->pred_buf;
 
 	inst->vsi_ctx.pred_buf_dma = 0;
-	if (mem->va)
-		mtk_vcodec_mem_free(inst->ctx, mem);
+	mtk_vcodec_mem_free(inst->ctx, mem);
 }
 
 static int alloc_mv_buf(struct vdec_h264_slice_inst *inst,
@@ -189,8 +188,7 @@ static int alloc_mv_buf(struct vdec_h264_slice_inst *inst,
 	mtk_v4l2_vdec_dbg(3, inst->ctx, "size = 0x%x", buf_sz);
 	for (i = 0; i < H264_MAX_MV_NUM; i++) {
 		mem = &inst->mv_buf[i];
-		if (mem->va)
-			mtk_vcodec_mem_free(inst->ctx, mem);
+		mtk_vcodec_mem_free(inst->ctx, mem);
 		mem->size = buf_sz;
 		err = mtk_vcodec_mem_alloc(inst->ctx, mem);
 		if (err) {
@@ -211,8 +209,7 @@ static void free_mv_buf(struct vdec_h264_slice_inst *inst)
 	for (i = 0; i < H264_MAX_MV_NUM; i++) {
 		inst->vsi_ctx.mv_buf_dma[i] = 0;
 		mem = &inst->mv_buf[i];
-		if (mem->va)
-			mtk_vcodec_mem_free(inst->ctx, mem);
+		mtk_vcodec_mem_free(inst->ctx, mem);
 	}
 }
 
