@@ -363,8 +363,11 @@ static int nand_check_wp(struct nand_chip *chip)
 	int ret;
 
 	/* Broken xD cards report WP despite being writable */
-	if (chip->options & NAND_BROKEN_XD)
+	if (chip->options & NAND_BROKEN_XD) {
+		pr_info("nand_chip->options indicates NAND_BROKEN_XD %d\n",
+			(chip->options & NAND_BROKEN_XD));
 		return 0;
+	}
 
 	/* Check the WP bit */
 	ret = nand_status_op(chip, &status);
