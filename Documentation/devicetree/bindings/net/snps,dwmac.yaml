@@ -505,6 +505,10 @@ properties:
     required:
       - compatible
 
+  phy-connection-type: true
+
+  phy-mode: true
+
   stmmac-axi-config:
     type: object
     unevaluatedProperties: false
@@ -564,7 +568,6 @@ required:
   - reg
   - interrupts
   - interrupt-names
-  - phy-mode
 
 dependencies:
   snps,reset-active-low: ["snps,reset-gpio"]
