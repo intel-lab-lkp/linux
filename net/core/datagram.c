@@ -436,7 +436,15 @@ static int __skb_datagram_iter(const struct sk_buff *skb, int offset,
 		end = start + skb_frag_size(frag);
 		if ((copy = end - offset) > 0) {
 			struct page *page = skb_frag_page(frag);
-			u8 *vaddr = kmap(page);
+			u8 *vaddr;
+
+			if ((page->pp_magic & ~0x3UL) == PP_SIGNATURE) {
+				struct page_pool_iov *ppiov = (struct page_pool_iov *)page;
+
+				page = ppiov->page;
+			}
+
+			vaddr = kmap(page);
 
 			if (copy > len)
 				copy = len;
