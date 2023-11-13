@@ -87,8 +87,6 @@ struct svcxprt_rdma {
 	int                  sc_max_req_size;	/* Size of each RQ WR buf */
 	u8		     sc_port_num;
 
-	struct ib_pd         *sc_pd;
-
 	spinlock_t	     sc_send_lock;
 	struct llist_head    sc_send_ctxts;
 	spinlock_t	     sc_rw_ctxt_lock;
@@ -101,6 +99,7 @@ struct svcxprt_rdma {
 	struct ib_qp         *sc_qp;
 	struct ib_cq         *sc_rq_cq;
 	struct ib_cq         *sc_sq_cq;
+	struct ib_pd         *sc_pd;
 
 	spinlock_t	     sc_lock;		/* transport lock */
 
