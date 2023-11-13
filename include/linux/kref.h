@@ -68,26 +68,43 @@ static inline int kref_put(struct kref *kref, void (*release)(struct kref *kref)
 	return 0;
 }
 
+/**
+ * __kref_dec_and_lock - macro to create code to holding a lock and call the
+ *                       release callback if being able to decremnt refcount
+ *                       to 0
+ * @kref: the kref
+ * @_release: callback for the release function
+ * @_ref_dec_and_lock: ref_and_lock lock specific function call code
+ *
+ * The result will be directly returned as a right operand operation. Uusally
+ * the caller use it directly after a return statement.
+ */
+#define __kref_put_lock(_kref, _release, _ref_dec_and_lock)	\
+({								\
+	int _ret = 0;						\
+								\
+	if (_ref_dec_and_lock) {				\
+		_release(kref);					\
+		_ret = 1;					\
+	}							\
+								\
+	_ret;							\
+})
+
 static inline int kref_put_mutex(struct kref *kref,
 				 void (*release)(struct kref *kref),
 				 struct mutex *lock)
 {
-	if (refcount_dec_and_mutex_lock(&kref->refcount, lock)) {
-		release(kref);
-		return 1;
-	}
-	return 0;
+	return __kref_put_lock(kref, release,
+			       refcount_dec_and_mutex_lock(&kref->refcount, lock));
 }
 
 static inline int kref_put_lock(struct kref *kref,
 				void (*release)(struct kref *kref),
 				spinlock_t *lock)
 {
-	if (refcount_dec_and_lock(&kref->refcount, lock)) {
-		release(kref);
-		return 1;
-	}
-	return 0;
+	return __kref_put_lock(kref, release,
+			       refcount_dec_and_lock(&kref->refcount, lock));
 }
 
 /**
