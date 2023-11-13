@@ -32,6 +32,7 @@
 #include <linux/exportfs.h>
 #include <linux/writeback.h>
 #include <linux/security.h>
+#include <linux/sunrpc/svcauth_gss.h>
 
 #include "xdr3.h"
 
@@ -1217,6 +1218,33 @@ out_nfserr:
 }
 
 /**
+ * nfsd_read_splice_ok - check if spliced reading is supported
+ * @rqstp: RPC transaction context
+ *
+ * Return values:
+ *   %true: nfsd_splice_read() may be used
+ *   %false: nfsd_splice_read() must not be used
+ *
+ * NFS READ normally uses splice to send data in-place. However the
+ * data in cache can change after the reply's MIC is computed but
+ * before the RPC reply is sent. To prevent the client from
+ * rejecting the server-computed MIC in this somewhat rare case, do
+ * not use splice with the GSS integrity and privacy services.
+ */
+bool nfsd_read_splice_ok(struct svc_rqst *rqstp)
+{
+	struct auth_domain *domain = rqstp->rq_gssclient;
+
+	if (domain)
+		switch (svcauth_gss_flavor(domain)) {
+		case RPC_AUTH_GSS_KRB5I:
+		case RPC_AUTH_GSS_KRB5P:
+			return false;
+		}
+	return true;
+}
+
+/**
  * nfsd_read - Read data from a file
  * @rqstp: RPC transaction context
  * @fhp: file handle of file to be read
@@ -1245,7 +1273,7 @@ __be32 nfsd_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		return err;
 
 	file = nf->nf_file;
-	if (file->f_op->splice_read && test_bit(RQ_SPLICE_OK, &rqstp->rq_flags))
+	if (file->f_op->splice_read && nfsd_read_splice_ok(rqstp))
 		err = nfsd_splice_read(rqstp, fhp, file, offset, count, eof);
 	else
 		err = nfsd_iter_read(rqstp, fhp, file, offset, count, 0, eof);
