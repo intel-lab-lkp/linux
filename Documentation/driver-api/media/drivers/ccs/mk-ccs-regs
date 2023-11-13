@@ -136,7 +136,7 @@ if (! defined $kernel) {
 
 print $H "#define CCS_FL_FLOAT_IREAL	" . flag_str(\$flag, \$all_flags) . "\n";
 print $H "#define CCS_FL_IREAL		" . flag_str(\$flag, \$all_flags) . "\n";
-print $H "#define CCS_BUILD_BUG \
+print $H "#define CCS_BUILD_BUG \\
 	BUILD_BUG_ON(~CCI_REG_PRIVATE_MASK & ($all_flags))\n"
     if defined $kernel;
 
