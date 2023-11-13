@@ -117,7 +117,7 @@ static void otg_leave_state(struct otg_fsm *fsm, enum usb_otg_state old_state)
 	}
 }
 
-static void otg_hnp_polling_work(struct work_struct *work)
+void otg_hnp_polling_work(struct work_struct *work)
 {
 	struct otg_fsm *fsm = container_of(to_delayed_work(work),
 				struct otg_fsm, hnp_polling_work);
@@ -192,11 +192,6 @@ static void otg_start_hnp_polling(struct otg_fsm *fsm)
 	 */
 	if (!fsm->host_req_flag)
 		return;
-
-	if (!fsm->hnp_work_inited) {
-		INIT_DELAYED_WORK(&fsm->hnp_polling_work, otg_hnp_polling_work);
-		fsm->hnp_work_inited = true;
-	}
 
 	schedule_delayed_work(&fsm->hnp_polling_work,
 					msecs_to_jiffies(T_HOST_REQ_POLL));
