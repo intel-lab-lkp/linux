@@ -7,6 +7,7 @@
 
 #include <linux/errno.h>
 #include <linux/gnss.h>
+#include <linux/gpio/consumer.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -64,6 +65,7 @@ static const struct gnss_serial_ops ubx_gserial_ops = {
 
 static int ubx_probe(struct serdev_device *serdev)
 {
+	struct gpio_desc *reset_gpio;
 	struct gnss_serial *gserial;
 	struct ubx_data *data;
 	int ret;
@@ -89,6 +91,13 @@ static int ubx_probe(struct serdev_device *serdev)
 	ret = devm_regulator_get_enable_optional(&serdev->dev, "v-bckp");
 	if (ret < 0 && ret != -ENODEV)
 		goto err_free_gserial;
+
+	/* Deassert Reset */
+	reset_gpio = devm_gpiod_get_optional(&serdev->dev, "reset", GPIOD_OUT_LOW);
+	if (IS_ERR(reset_gpio)) {
+		ret = PTR_ERR(reset_gpio);
+		goto err_free_gserial;
+	}
 
 	ret = gnss_serial_register(gserial);
 	if (ret)
