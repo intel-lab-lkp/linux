@@ -4,6 +4,7 @@
  */
 
 #include <dt-bindings/interrupt-controller/irq.h>
+#include <dt-bindings/reset/sophgo,cv1800b-reset.h>
 
 / {
 	compatible = "sophgo,cv1800b";
@@ -64,6 +65,7 @@
 			reg = <0x04140000 0x100>;
 			interrupts = <44 IRQ_TYPE_LEVEL_HIGH>;
 			clocks = <&osc>;
+			resets = <&rst RST_UART0>;
 			reg-shift = <2>;
 			reg-io-width = <4>;
 			status = "disabled";
@@ -74,6 +76,7 @@
 			reg = <0x04150000 0x100>;
 			interrupts = <45 IRQ_TYPE_LEVEL_HIGH>;
 			clocks = <&osc>;
+			resets = <&rst RST_UART1>;
 			reg-shift = <2>;
 			reg-io-width = <4>;
 			status = "disabled";
@@ -84,6 +87,7 @@
 			reg = <0x04160000 0x100>;
 			interrupts = <46 IRQ_TYPE_LEVEL_HIGH>;
 			clocks = <&osc>;
+			resets = <&rst RST_UART2>;
 			reg-shift = <2>;
 			reg-io-width = <4>;
 			status = "disabled";
@@ -94,6 +98,7 @@
 			reg = <0x04170000 0x100>;
 			interrupts = <47 IRQ_TYPE_LEVEL_HIGH>;
 			clocks = <&osc>;
+			resets = <&rst RST_UART3>;
 			reg-shift = <2>;
 			reg-io-width = <4>;
 			status = "disabled";
@@ -104,6 +109,7 @@
 			reg = <0x041c0000 0x100>;
 			interrupts = <48 IRQ_TYPE_LEVEL_HIGH>;
 			clocks = <&osc>;
+			resets = <&rst RST_UART4>;
 			reg-shift = <2>;
 			reg-io-width = <4>;
 			status = "disabled";
