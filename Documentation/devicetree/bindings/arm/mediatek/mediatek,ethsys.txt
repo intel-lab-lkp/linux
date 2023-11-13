@@ -12,6 +12,7 @@ Required Properties:
 	- "mediatek,mt7629-ethsys", "syscon"
 	- "mediatek,mt7981-ethsys", "syscon"
 	- "mediatek,mt7986-ethsys", "syscon"
+	- "mediatek,mt7988-ethsys", "syscon"
 - #clock-cells: Must be 1
 - #reset-cells: Must be 1
 
