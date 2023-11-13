@@ -2078,6 +2078,13 @@ static int fw_devlink_create_devlink(struct device *con,
 
 	if (sup_dev) {
 		/*
+		 * The supplier device may have changed and so, the supplier
+		 * fwnode maybe inconsistent.
+		 * Update the supplier fwnode
+		 */
+		sup_handle = sup_dev->fwnode;
+
+		/*
 		 * If it's one of those drivers that don't actually bind to
 		 * their device using driver core, then don't wait on this
 		 * supplier device indefinitely.
