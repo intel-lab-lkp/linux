@@ -23,6 +23,8 @@
 
 #include <trace/events/page_pool.h>
 
+static DEFINE_STATIC_KEY_FALSE(page_pool_mem_providers);
+
 #define DEFER_TIME (msecs_to_jiffies(1000))
 #define DEFER_WARN_INTERVAL (60 * HZ)
 
@@ -172,6 +174,7 @@ static int page_pool_init(struct page_pool *pool,
 			  const struct page_pool_params *params)
 {
 	unsigned int ring_qsize = 1024; /* Default */
+	int err;
 
 	memcpy(&pool->p, params, sizeof(pool->p));
 
@@ -229,10 +232,34 @@ static int page_pool_init(struct page_pool *pool,
 	/* Driver calling page_pool_create() also call page_pool_destroy() */
 	refcount_set(&pool->user_cnt, 1);
 
+	switch (pool->p.memory_provider) {
+	case __PP_MP_NONE:
+		break;
+	default:
+		err = -EINVAL;
+		goto free_ptr_ring;
+	}
+
+	pool->mp_priv = pool->p.mp_priv;
+	if (pool->mp_ops) {
+		err = pool->mp_ops->init(pool);
+		if (err) {
+			pr_warn("%s() mem-provider init failed %d\n",
+				__func__, err);
+			goto free_ptr_ring;
+		}
+
+		static_branch_inc(&page_pool_mem_providers);
+	}
+
 	if (pool->p.flags & PP_FLAG_DMA_MAP)
 		get_device(pool->p.dev);
 
 	return 0;
+
+free_ptr_ring:
+	ptr_ring_cleanup(&pool->ring, NULL);
+	return err;
 }
 
 /**
@@ -261,18 +288,13 @@ EXPORT_SYMBOL(page_pool_create);
 
 static void page_pool_return_page(struct page_pool *pool, struct page *page);
 
-noinline
-static struct page *page_pool_refill_alloc_cache(struct page_pool *pool)
+static bool page_pool_page_in_pref_node(struct page_pool *pool, struct page *page)
 {
-	struct ptr_ring *r = &pool->ring;
-	struct page *page;
 	int pref_nid; /* preferred NUMA node */
 
-	/* Quicker fallback, avoid locks when ring is empty */
-	if (__ptr_ring_empty(r)) {
-		alloc_stat_inc(pool, empty);
-		return NULL;
-	}
+	/* Always assume page is in pref node for mem providers */
+	if (static_branch_unlikely(&page_pool_mem_providers) && pool->mp_ops)
+		return true;
 
 	/* Softirq guarantee CPU and thus NUMA node is stable. This,
 	 * assumes CPU refilling driver RX-ring will also run RX-NAPI.
@@ -284,13 +306,31 @@ static struct page *page_pool_refill_alloc_cache(struct page_pool *pool)
 	pref_nid = numa_mem_id(); /* will be zero like page_to_nid() */
 #endif
 
+	if (page_to_nid(page) == pref_nid)
+		return true;
+
+	return false;
+}
+
+noinline
+static struct page *page_pool_refill_alloc_cache(struct page_pool *pool)
+{
+	struct ptr_ring *r = &pool->ring;
+	struct page *page;
+
+	/* Quicker fallback, avoid locks when ring is empty */
+	if (__ptr_ring_empty(r)) {
+		alloc_stat_inc(pool, empty);
+		return NULL;
+	}
+
 	/* Refill alloc array, but only if NUMA match */
 	do {
 		page = __ptr_ring_consume(r);
 		if (unlikely(!page))
 			break;
 
-		if (likely(page_to_nid(page) == pref_nid)) {
+		if (likely(page_pool_page_in_pref_node(pool, page))) {
 			pool->alloc.cache[pool->alloc.count++] = page;
 		} else {
 			/* NUMA mismatch;
@@ -494,7 +534,10 @@ struct page *page_pool_alloc_pages(struct page_pool *pool, gfp_t gfp)
 		return page;
 
 	/* Slow-path: cache empty, do real allocation */
-	page = __page_pool_alloc_pages_slow(pool, gfp);
+	if (static_branch_unlikely(&page_pool_mem_providers) && pool->mp_ops)
+		page = pool->mp_ops->alloc_pages(pool, gfp);
+	else
+		page = __page_pool_alloc_pages_slow(pool, gfp);
 	return page;
 }
 EXPORT_SYMBOL(page_pool_alloc_pages);
@@ -547,7 +590,10 @@ void page_pool_return_page(struct page_pool *pool, struct page *page)
 {
 	int count;
 
-	__page_pool_release_page_dma(pool, page);
+	if (static_branch_unlikely(&page_pool_mem_providers) && pool->mp_ops)
+		pool->mp_ops->release_page(pool, page);
+	else
+		__page_pool_release_page_dma(pool, page);
 
 	page_pool_clear_pp_info(page);
 
@@ -557,7 +603,11 @@ void page_pool_return_page(struct page_pool *pool, struct page *page)
 	count = atomic_inc_return_relaxed(&pool->pages_state_release_cnt);
 	trace_page_pool_state_release(pool, page, count);
 
-	put_page(page);
+	if (static_branch_unlikely(&page_pool_mem_providers) && pool->mp_ops)
+		pool->mp_ops->free_pages(pool, page);
+	else
+		put_page(page);
+
 	/* An optimization would be to call __free_pages(page, pool->p.order)
 	 * knowing page is not part of page-cache (thus avoiding a
 	 * __page_cache_release() call).
@@ -824,6 +874,11 @@ static void __page_pool_destroy(struct page_pool *pool)
 {
 	if (pool->disconnect)
 		pool->disconnect(pool);
+
+	if (pool->mp_ops) {
+		pool->mp_ops->destroy(pool);
+		static_branch_dec(&page_pool_mem_providers);
+	}
 
 	ptr_ring_cleanup(&pool->ring, NULL);
 
