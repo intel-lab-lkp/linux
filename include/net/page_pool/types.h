@@ -124,6 +124,7 @@ struct mem_provider;
 
 enum pp_memory_provider_type {
 	__PP_MP_NONE, /* Use system allocator directly */
+	PP_MP_DMABUF_DEVMEM, /* dmabuf devmem provider */
 };
 
 struct pp_memory_provider_ops {
@@ -133,6 +134,33 @@ struct pp_memory_provider_ops {
 	void (*release_page)(struct page_pool *pool, struct page *page);
 	void (*free_pages)(struct page_pool *pool, struct page *page);
 };
+
+extern const struct pp_memory_provider_ops dmabuf_devmem_ops;
+
+struct page_pool_iov {
+	unsigned long res0;
+	unsigned long pp_magic;
+	struct page_pool *pp;
+	struct page *page;  /* dmabuf memory provider specific field */
+	unsigned long dma_addr;
+	atomic_long_t pp_frag_count;
+	unsigned int res1;
+	refcount_t _refcount;
+};
+
+#define PAGE_POOL_MATCH(pg, iov)				\
+	static_assert(offsetof(struct page, pg) ==		\
+		      offsetof(struct page_pool_iov, iov))
+PAGE_POOL_MATCH(flags, res0);
+PAGE_POOL_MATCH(pp_magic, pp_magic);
+PAGE_POOL_MATCH(pp, pp);
+PAGE_POOL_MATCH(_pp_mapping_pad, page);
+PAGE_POOL_MATCH(dma_addr, dma_addr);
+PAGE_POOL_MATCH(pp_frag_count, pp_frag_count);
+PAGE_POOL_MATCH(_mapcount, res1);
+PAGE_POOL_MATCH(_refcount, _refcount);
+#undef PAGE_POOL_MATCH
+static_assert(sizeof(struct page_pool_iov) <= sizeof(struct page));
 
 struct page_pool {
 	struct page_pool_params p;
