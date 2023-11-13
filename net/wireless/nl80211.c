@@ -818,6 +818,8 @@ static const struct nla_policy nl80211_policy[NUM_NL80211_ATTR] = {
 	[NL80211_ATTR_HW_TIMESTAMP_ENABLED] = { .type = NLA_FLAG },
 	[NL80211_ATTR_EMA_RNR_ELEMS] = { .type = NLA_NESTED },
 	[NL80211_ATTR_MLO_LINK_DISABLED] = { .type = NLA_FLAG },
+	[NL80211_ATTR_PTK_REKEY_INTERVAL] = { .type = NLA_U32 },
+	[NL80211_ATTR_GTK_REKEY_INTERVAL] = { .type = NLA_U32 },
 };
 
 /* policy for the key attributes */
@@ -10891,6 +10893,17 @@ static int nl80211_crypto_settings(struct cfg80211_registered_device *rdev,
 			nla_get_u8(info->attrs[NL80211_ATTR_SAE_PWE]);
 	else
 		settings->sae_pwe = NL80211_SAE_PWE_UNSPECIFIED;
+
+	if (info->attrs[NL80211_ATTR_PTK_REKEY_INTERVAL] ||
+	    info->attrs[NL80211_ATTR_GTK_REKEY_INTERVAL]) {
+		if (!wiphy_ext_feature_isset(&rdev->wiphy,
+					NL80211_EXT_FEATURE_4WAY_HANDSHAKE_AP_PSK))
+			return -EINVAL;
+		if (info->attrs[NL80211_ATTR_PTK_REKEY_INTERVAL])
+			settings->ptk_rekey_interval = nla_get_u32(info->attrs[NL80211_ATTR_PTK_REKEY_INTERVAL]);
+		else
+			settings->gtk_rekey_interval = nla_get_u32(info->attrs[NL80211_ATTR_GTK_REKEY_INTERVAL]);
+	}
 
 	return 0;
 }
