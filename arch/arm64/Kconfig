@@ -2084,6 +2084,21 @@ config ARM64_MTE_COMP_KUNIT_TEST
 	  be compressed into pointer-size values and correctly decompressed
 	  afterwards.
 
+config ARM64_MTE_SWAP_STATS
+	bool "Collect usage statistics of tag compression for swapped MTE tags"
+	default y
+	depends on ARM64_MTE && ARM64_MTE_COMP
+	help
+	  Collect usage statistics for ARM64 MTE tag compression during swapping.
+
+	  Adds allocation/deallocation counters for buffers that were stored
+	  uncompressed (and thus occupy 128 bytes of heap plus the Xarray
+	  overhead to store a pointer) and those that were compressed into
+	  8-byte pointers (effectively using 0 bytes of heap in addition to
+	  the Xarray overhead).
+	  The counters are exposed to the userspace via
+	  /sys/kernel/debug/mteswap/stats.
+
 config ARM64_SVE
 	bool "ARM Scalable Vector Extension support"
 	default y

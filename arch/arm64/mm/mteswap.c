@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
+#include <linux/debugfs.h>
 #include <linux/pagemap.h>
 #include <linux/xarray.h>
 #include <linux/slab.h>
@@ -11,16 +12,54 @@
 
 static DEFINE_XARRAY(mte_pages);
 
+enum mteswap_counters {
+	MTESWAP_CTR_INLINE = 0,
+	MTESWAP_CTR_OUTLINE,
+	MTESWAP_CTR_SIZE
+};
+
+#if defined(CONFIG_ARM64_MTE_SWAP_STATS)
+static atomic_long_t alloc_counters[MTESWAP_CTR_SIZE];
+static atomic_long_t dealloc_counters[MTESWAP_CTR_SIZE];
+
+static void inc_alloc_counter(int kind)
+{
+	atomic_long_inc(&alloc_counters[kind]);
+}
+
+static void inc_dealloc_counter(int kind)
+{
+	atomic_long_inc(&dealloc_counters[kind]);
+}
+#else
+static void inc_alloc_counter(int kind)
+{
+}
+
+static void inc_dealloc_counter(int kind)
+{
+}
+#endif
+
 void *mte_allocate_tag_storage(void)
 {
+	void *ret;
+
 	/* tags granule is 16 bytes, 2 tags stored per byte */
-	return kmalloc(MTE_PAGE_TAG_STORAGE, GFP_KERNEL);
+	ret = kmalloc(MTE_PAGE_TAG_STORAGE, GFP_KERNEL);
+	if (ret)
+		inc_alloc_counter(MTESWAP_CTR_OUTLINE);
+	return ret;
 }
 
 void mte_free_tag_storage(char *storage)
 {
-	if (!mte_is_compressed(storage))
+	if (!mte_is_compressed(storage)) {
 		kfree(storage);
+		inc_dealloc_counter(MTESWAP_CTR_OUTLINE);
+	} else {
+		inc_dealloc_counter(MTESWAP_CTR_INLINE);
+	}
 }
 
 int mte_save_tags(struct page *page)
@@ -39,6 +78,7 @@ int mte_save_tags(struct page *page)
 	if (compressed_storage) {
 		mte_free_tag_storage(tag_storage);
 		tag_storage = compressed_storage;
+		inc_alloc_counter(MTESWAP_CTR_INLINE);
 	}
 
 	/* lookup the swap entry.val from the page */
@@ -98,3 +138,52 @@ void mte_invalidate_tags_area(int type)
 	}
 	xa_unlock(&mte_pages);
 }
+
+#if defined(CONFIG_ARM64_MTE_SWAP_STATS)
+/* DebugFS interface. */
+static int stats_show(struct seq_file *seq, void *v)
+{
+	unsigned long total_mem_alloc = 0, total_mem_dealloc = 0;
+	unsigned long total_num_alloc = 0, total_num_dealloc = 0;
+	unsigned long sizes[2] = { 8, MTE_PAGE_TAG_STORAGE };
+	long alloc, dealloc;
+	unsigned long size;
+	int i;
+
+	for (i = 0; i < MTESWAP_CTR_SIZE; i++) {
+		alloc = atomic_long_read(&alloc_counters[i]);
+		dealloc = atomic_long_read(&dealloc_counters[i]);
+		total_num_alloc += alloc;
+		total_num_dealloc += dealloc;
+		size = sizes[i];
+		/*
+		 * Do not count 8-byte buffers towards compressed tag storage
+		 * size.
+		 */
+		if (i) {
+			total_mem_alloc += (size * alloc);
+			total_mem_dealloc += (size * dealloc);
+		}
+		seq_printf(seq,
+			   "%lu bytes:\t%lu allocations,\t%lu deallocations\n",
+			   size, alloc, dealloc);
+	}
+	seq_printf(seq, "uncompressed tag storage size:\t%lu\n",
+		   (total_num_alloc - total_num_dealloc) *
+			   MTE_PAGE_TAG_STORAGE);
+	seq_printf(seq, "compressed tag storage size:\t%lu\n",
+		   total_mem_alloc - total_mem_dealloc);
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(stats);
+
+static int mteswap_init(void)
+{
+	struct dentry *mteswap_dir;
+
+	mteswap_dir = debugfs_create_dir("mteswap", NULL);
+	debugfs_create_file("stats", 0444, mteswap_dir, NULL, &stats_fops);
+	return 0;
+}
+module_init(mteswap_init);
+#endif

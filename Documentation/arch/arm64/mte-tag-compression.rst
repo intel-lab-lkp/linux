@@ -145,6 +145,18 @@ Tag compression and decompression implicitly rely on the fixed MTE tag size
 (4 bits) and number of tags per page. Should these values change, the algorithm
 may need to be revised.
 
+Stats
+=====
+
+When `CONFIG_ARM64_MTE_SWAP_STATS` is enabled, `arch/arm64/mm/mteswap.c` exports
+usage statistics for tag compression used when swapping tagged pages. The data
+can be accessed via debugfs::
+
+  # cat /sys/kernel/debug/mteswap/stats
+  8 bytes:        10438 allocations,      10417 deallocations
+  128 bytes:      26180 allocations,      26179 deallocations
+  uncompressed tag storage size:  2816
+  compressed tag storage size:    128
 
 Programming Interface
 =====================
