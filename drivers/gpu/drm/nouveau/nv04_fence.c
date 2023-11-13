@@ -39,7 +39,9 @@ struct nv04_fence_priv {
 static int
 nv04_fence_emit(struct nouveau_fence *fence)
 {
-	struct nvif_push *push = fence->channel->chan.push;
+	rcu_read_lock();
+	struct nvif_push *push = rcu_dereference(fence->channel)->chan.push;
+	rcu_read_unlock();
 	int ret = PUSH_WAIT(push, 2);
 	if (ret == 0) {
 		PUSH_NVSQ(push, NV_SW, 0x0150, fence->base.seqno);
