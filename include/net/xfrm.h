@@ -2190,4 +2190,11 @@ static inline int register_xfrm_interface_bpf(void)
 
 #endif
 
+#if IS_ENABLED(CONFIG_XFRM_IPTFS)
+#define XFRM_IPTFS_DEFAULT_MAX_QUEUE_SIZE (1024 * 1024)
+#define XFRM_IPTFS_DEFAULT_INIT_DELAY_USECS (0)
+#define XFRM_IPTFS_DEFAULT_DROP_TIME_USECS (1000000)
+#define XFRM_IPTFS_DEFAULT_REORDER_WINDOW (3)
+#endif
+
 #endif	/* _NET_XFRM_H */
