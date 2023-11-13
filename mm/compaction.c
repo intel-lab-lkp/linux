@@ -127,6 +127,37 @@ static unsigned long release_free_list(struct page_list *freepages)
 }
 
 #ifdef CONFIG_COMPACTION
+
+static void sort_folios_by_order(struct list_head *pages)
+{
+	struct page_list page_list[MAX_ORDER + 1];
+	int order;
+	struct folio *folio, *next;
+
+	for (order = 0; order <= MAX_ORDER; order++)
+		init_page_list(&page_list[order]);
+
+	list_for_each_entry_safe(folio, next, pages, lru) {
+		order = folio_order(folio);
+
+		if (order > MAX_ORDER)
+			continue;
+
+		list_move(&folio->lru, &page_list[order].pages);
+		page_list[order].nr_pages++;
+	}
+
+	for (order = MAX_ORDER; order >= 0; order--) {
+		if (page_list[order].nr_pages) {
+
+			list_for_each_entry_safe(folio, next,
+						 &page_list[order].pages, lru) {
+				list_move_tail(&folio->lru, pages);
+			}
+		}
+	}
+}
+
 bool PageMovable(struct page *page)
 {
 	const struct movable_operations *mops;
@@ -2638,6 +2669,8 @@ rescan:
 			last_migrated_pfn = max(cc->zone->zone_start_pfn,
 				pageblock_start_pfn(cc->migrate_pfn - 1));
 		}
+
+		sort_folios_by_order(&cc->migratepages);
 
 		err = migrate_pages(&cc->migratepages, compaction_alloc,
 				compaction_free, (unsigned long)cc, cc->mode,
