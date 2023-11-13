@@ -6202,7 +6202,6 @@ static void sysfs_display_ring(void *head, int size, int extend_desc,
 				   le32_to_cpu(p->des2), le32_to_cpu(p->des3));
 			p++;
 		}
-		seq_printf(seq, "\n");
 	}
 }
 
