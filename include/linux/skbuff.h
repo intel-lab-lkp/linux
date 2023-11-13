@@ -2473,13 +2473,15 @@ static inline void skb_len_add(struct sk_buff *skb, int delta)
 static inline void __skb_fill_page_desc(struct sk_buff *skb, int i,
 					struct page *page, int off, int size)
 {
-	__skb_fill_page_desc_noacc(skb_shinfo(skb), i, page, off, size);
+	skb_frag_t *frag = &skb_shinfo(skb)->frags[i];
+
+	skb_frag_fill_page_desc(frag, page, off, size);
 
 	/* Propagate page pfmemalloc to the skb if we can. The problem is
 	 * that not all callers have unique ownership of the page but rely
 	 * on page_is_pfmemalloc doing the right thing(tm).
 	 */
-	page = compound_head(page);
+	page = frag->bv_page;
 	if (page_is_pfmemalloc(page))
 		skb->pfmemalloc	= true;
 }
@@ -3429,7 +3431,7 @@ static inline struct page *skb_frag_page(const skb_frag_t *frag)
  */
 static inline void __skb_frag_ref(skb_frag_t *frag)
 {
-	get_page(skb_frag_page(frag));
+	page_ref_inc(skb_frag_page(frag));
 }
 
 /**
