@@ -13,6 +13,7 @@
 #include <linux/memblock.h>
 #include <linux/memory.h>
 #include <linux/mm.h>
+#include <linux/sched/clock.h>
 #include <linux/static_key.h>
 #include <linux/string.h>
 #include <linux/types.h>
@@ -92,6 +93,17 @@ void __init kasan_init_tags(void)
 	}
 }
 
+#ifdef CONFIG_KASAN_EXTRA_INFO
+static void save_extra_info(struct kasan_stack_ring_entry *entry)
+{
+	u32 cpu = raw_smp_processor_id();
+	u64 ts_nsec = local_clock();
+
+	WRITE_ONCE(entry->cpu, cpu);
+	WRITE_ONCE(entry->ts_nsec, ts_nsec);
+}
+#endif /* CONFIG_KASAN_EXTRA_INFO */
+
 static void save_stack_info(struct kmem_cache *cache, void *object,
 			gfp_t gfp_flags, bool is_free)
 {
@@ -124,6 +136,9 @@ next:
 	WRITE_ONCE(entry->pid, current->pid);
 	WRITE_ONCE(entry->stack, stack);
 	WRITE_ONCE(entry->is_free, is_free);
+#ifdef CONFIG_KASAN_EXTRA_INFO
+	save_extra_info(entry);
+#endif /* CONFIG_KASAN_EXTRA_INFO */
 
 	/*
 	 * Paired with smp_load_acquire() in kasan_complete_mode_report_info().

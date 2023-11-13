@@ -20,6 +20,7 @@
 #include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/sched.h>
+#include <linux/sched/clock.h>
 #include <linux/sched/task_stack.h>
 #include <linux/slab.h>
 #include <linux/stacktrace.h>
@@ -50,6 +51,10 @@ void kasan_set_track(struct kasan_track *track, gfp_t flags)
 {
 	track->pid = current->pid;
 	track->stack = kasan_save_stack(flags, true);
+#ifdef CONFIG_KASAN_EXTRA_INFO
+	track->cpu = raw_smp_processor_id();
+	track->ts_nsec = local_clock();
+#endif /* CONFIG_KASAN_EXTRA_INFO */
 }
 
 #if defined(CONFIG_KASAN_GENERIC) || defined(CONFIG_KASAN_SW_TAGS)

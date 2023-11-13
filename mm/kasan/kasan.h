@@ -187,6 +187,10 @@ static inline bool kasan_requires_meta(void)
 struct kasan_track {
 	u32 pid;
 	depot_stack_handle_t stack;
+#ifdef CONFIG_KASAN_EXTRA_INFO
+	u32 cpu;
+	u64 ts_nsec;
+#endif /* CONFIG_KASAN_EXTRA_INFO */
 };
 
 enum kasan_report_type {
@@ -202,6 +206,7 @@ struct kasan_report_info {
 	size_t access_size;
 	bool is_write;
 	unsigned long ip;
+	u64 ts_nsec;
 
 	/* Filled in by the common reporting code. */
 	const void *first_bad_addr;
@@ -278,6 +283,10 @@ struct kasan_stack_ring_entry {
 	u32 pid;
 	depot_stack_handle_t stack;
 	bool is_free;
+#ifdef CONFIG_KASAN_EXTRA_INFO
+	u32 cpu;
+	u64 ts_nsec;
+#endif /* CONFIG_KASAN_EXTRA_INFO */
 };
 
 struct kasan_stack_ring {

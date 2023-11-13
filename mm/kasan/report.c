@@ -25,6 +25,7 @@
 #include <linux/types.h>
 #include <linux/kasan.h>
 #include <linux/module.h>
+#include <linux/sched/clock.h>
 #include <linux/sched/task_stack.h>
 #include <linux/uaccess.h>
 #include <trace/events/error_report.h>
@@ -242,27 +243,40 @@ static void end_report(unsigned long *flags, const void *addr, bool is_write)
 
 static void print_error_description(struct kasan_report_info *info)
 {
+	unsigned long rem_usec = do_div(info->ts_nsec, NSEC_PER_SEC) / 1000;
+
 	pr_err("BUG: KASAN: %s in %pS\n", info->bug_type, (void *)info->ip);
 
 	if (info->type != KASAN_REPORT_ACCESS) {
-		pr_err("Free of addr %px by task %s/%d\n",
-			info->access_addr, current->comm, task_pid_nr(current));
+		pr_err("Free of addr %px by task %s/%d at %lu.%06lus\n",
+			info->access_addr, current->comm, task_pid_nr(current),
+			(unsigned long)info->ts_nsec, rem_usec);
 		return;
 	}
 
 	if (info->access_size)
-		pr_err("%s of size %zu at addr %px by task %s/%d\n",
+		pr_err("%s of size %zu at addr %px by task %s/%d at %lu.%06lus\n",
 			info->is_write ? "Write" : "Read", info->access_size,
-			info->access_addr, current->comm, task_pid_nr(current));
+			info->access_addr, current->comm, task_pid_nr(current),
+			(unsigned long)info->ts_nsec, rem_usec);
 	else
-		pr_err("%s at addr %px by task %s/%d\n",
+		pr_err("%s at addr %px by task %s/%d at %lu.%06lus\n",
 			info->is_write ? "Write" : "Read",
-			info->access_addr, current->comm, task_pid_nr(current));
+			info->access_addr, current->comm, task_pid_nr(current),
+			(unsigned long)info->ts_nsec, rem_usec);
 }
 
 static void print_track(struct kasan_track *track, const char *prefix)
 {
+#ifdef CONFIG_KASAN_EXTRA_INFO
+	unsigned long rem_usec = do_div(track->ts_nsec, NSEC_PER_SEC) / 1000;
+
+	pr_err("%s by task %u on cpu %d at %lu.%06lus:\n",
+			prefix, track->pid, track->cpu,
+			(unsigned long)track->ts_nsec, rem_usec);
+#else
 	pr_err("%s by task %u:\n", prefix, track->pid);
+#endif /* CONFIG_KASAN_EXTRA_INFO */
 	if (track->stack)
 		stack_depot_print(track->stack);
 	else
@@ -544,6 +558,7 @@ void kasan_report_invalid_free(void *ptr, unsigned long ip, enum kasan_report_ty
 	info.access_size = 0;
 	info.is_write = false;
 	info.ip = ip;
+	info.ts_nsec = local_clock();
 
 	complete_report_info(&info);
 
@@ -582,6 +597,7 @@ bool kasan_report(const void *addr, size_t size, bool is_write,
 	info.access_size = size;
 	info.is_write = is_write;
 	info.ip = ip;
+	info.ts_nsec = local_clock();
 
 	complete_report_info(&info);
 

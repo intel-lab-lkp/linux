@@ -207,4 +207,15 @@ config KASAN_MODULE_TEST
 	  A part of the KASAN test suite that is not integrated with KUnit.
 	  Incompatible with Hardware Tag-Based KASAN.
 
+config KASAN_EXTRA_INFO
+	bool "Record and report more information"
+	depends on KASAN
+	help
+	  Record and report more information to help us find the cause of
+	  the bug. The trade-off is potentially increased memory consumption
+	  (to record more information).
+
+	  Currently the CPU number and timestamp are additionally recorded
+	  at allocation and free.
+
 endif # KASAN
