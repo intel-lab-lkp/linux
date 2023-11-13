@@ -2850,11 +2850,20 @@ struct page *__rmqueue_pcplist(struct zone *zone, unsigned int order,
 			int batch = nr_pcp_alloc(pcp, zone, order);
 			int alloced;
 
+			/*
+			 * If pcplist is empty and alloc_flags is with ALLOC_HIGHATOMIC,
+			 * it should alloc from buddy highatomic migrate freelist firstly
+			 * to ensure quick and successful allocation.
+			 */
+			if (alloc_flags & ALLOC_HIGHATOMIC)
+				goto out;
+
 			alloced = rmqueue_bulk(zone, order,
 					batch, list,
 					migratetype, alloc_flags);
 
 			pcp->count += alloced << order;
+out:
 			if (unlikely(list_empty(list)))
 				return NULL;
 		}
@@ -2918,7 +2927,7 @@ static inline
 struct page *rmqueue(struct zone *preferred_zone,
 			struct zone *zone, unsigned int order,
 			gfp_t gfp_flags, unsigned int alloc_flags,
-			int migratetype)
+			int migratetype, bool *highatomc_allocation)
 {
 	struct page *page;
 
@@ -2937,6 +2946,23 @@ struct page *rmqueue(struct zone *preferred_zone,
 
 	page = rmqueue_buddy(preferred_zone, zone, order, alloc_flags,
 							migratetype);
+
+	/*
+	 * The high-order atomic allocation pageblock reserved conditions:
+	 *
+	 * If the high-order atomic allocation page is alloced from pcplist,
+	 * the highatomic pageblock does not need to be reserved, which can
+	 * void to migrate an increasing number of pages into buddy
+	 * MIGRATE_HIGHATOMIC freelist and lead to an increasing risk of
+	 * allocation failure on other buddy migrate freelists.
+	 *
+	 * If the high-order atomic allocation page is alloced from buddy
+	 * highatomic migrate freelist, regardless of whether the allocation
+	 * is successful or not, the highatomic pageblock can try to be
+	 * reserved.
+	 */
+	if (unlikely(alloc_flags & ALLOC_HIGHATOMIC))
+		*highatomc_allocation = true;
 
 out:
 	/* Separate test+clear to avoid unnecessary atomics */
@@ -3208,6 +3234,7 @@ get_page_from_freelist(gfp_t gfp_mask, unsigned int order, int alloc_flags,
 	struct pglist_data *last_pgdat = NULL;
 	bool last_pgdat_dirty_ok = false;
 	bool no_fallback;
+	bool highatomc_allocation = false;
 
 retry:
 	/*
@@ -3339,7 +3366,7 @@ check_alloc_wmark:
 
 try_this_zone:
 		page = rmqueue(ac->preferred_zoneref->zone, zone, order,
-				gfp_mask, alloc_flags, ac->migratetype);
+				gfp_mask, alloc_flags, ac->migratetype, &highatomc_allocation);
 		if (page) {
 			prep_new_page(page, order, gfp_mask, alloc_flags);
 
@@ -3347,7 +3374,7 @@ try_this_zone:
 			 * If this is a high-order atomic allocation then check
 			 * if the pageblock should be reserved for the future
 			 */
-			if (unlikely(alloc_flags & ALLOC_HIGHATOMIC))
+			if (unlikely(highatomc_allocation))
 				reserve_highatomic_pageblock(page, zone);
 
 			return page;
