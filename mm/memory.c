@@ -4172,14 +4172,10 @@ static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
 
 	/* Allocate our own private page. */
 	if (unlikely(anon_vma_prepare(vma)))
-		goto oom;
-	folio = vma_alloc_zeroed_movable_folio(vma, vmf->address);
+		return VM_FAULT_OOM;
+	folio = folio_prealloc(vma->vm_mm, vma, vmf->address, true);
 	if (!folio)
-		goto oom;
-
-	if (mem_cgroup_charge(folio, vma->vm_mm, GFP_KERNEL))
-		goto oom_free_page;
-	folio_throttle_swaprate(folio, GFP_KERNEL);
+		return VM_FAULT_OOM;
 
 	/*
 	 * The memory barrier inside __folio_mark_uptodate makes sure that
@@ -4230,10 +4226,6 @@ unlock:
 release:
 	folio_put(folio);
 	goto unlock;
-oom_free_page:
-	folio_put(folio);
-oom:
-	return VM_FAULT_OOM;
 }
 
 /*
