@@ -170,6 +170,7 @@ static int intel_dp_mst_find_vcpi_slots_for_bpp(struct intel_encoder *encoder,
 
 	for (bpp = max_bpp; bpp >= min_bpp; bpp -= step) {
 		struct intel_link_m_n remote_m_n;
+		int alloc_tu;
 		int link_bpp;
 
 		drm_dbg_kms(&i915->drm, "Trying bpp %d\n", bpp);
@@ -200,9 +201,14 @@ static int intel_dp_mst_find_vcpi_slots_for_bpp(struct intel_encoder *encoder,
 		 * crtc_state->dp_m_n.tu), provided that the driver doesn't
 		 * enable SSC on the corresponding link.
 		 */
+		crtc_state->pbn = DIV_ROUND_UP_ULL(mul_u32_u32(mst_state->pbn_div * 64,
+							       remote_m_n.data_m),
+						   remote_m_n.data_n);
+
+		alloc_tu = DIV_ROUND_UP_ULL(crtc_state->pbn, mst_state->pbn_div);
+		drm_WARN_ON(&i915->drm, alloc_tu < remote_m_n.tu);
 		drm_WARN_ON(&i915->drm, remote_m_n.tu < crtc_state->dp_m_n.tu);
-		crtc_state->dp_m_n.tu = remote_m_n.tu;
-		crtc_state->pbn = remote_m_n.tu * mst_state->pbn_div;
+		crtc_state->dp_m_n.tu = alloc_tu;
 
 		slots = drm_dp_atomic_find_time_slots(state, &intel_dp->mst_mgr,
 						      connector->port,
