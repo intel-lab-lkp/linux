@@ -6184,24 +6184,16 @@ static void sysfs_display_ring(void *head, int size, int extend_desc,
 	struct dma_desc *p = (struct dma_desc *)head;
 	dma_addr_t dma_addr;
 
+	if (extend_desc)
+		p = &ep->basic;
+
 	for (i = 0; i < size; i++) {
-		if (extend_desc) {
-			dma_addr = dma_phy_addr + i * sizeof(*ep);
-			seq_printf(seq, "%d [%pad]: 0x%x 0x%x 0x%x 0x%x\n",
-				   i, &dma_addr,
-				   le32_to_cpu(ep->basic.des0),
-				   le32_to_cpu(ep->basic.des1),
-				   le32_to_cpu(ep->basic.des2),
-				   le32_to_cpu(ep->basic.des3));
-			ep++;
-		} else {
-			dma_addr = dma_phy_addr + i * sizeof(*p);
-			seq_printf(seq, "%d [%pad]: 0x%x 0x%x 0x%x 0x%x\n",
-				   i, &dma_addr,
-				   le32_to_cpu(p->des0), le32_to_cpu(p->des1),
-				   le32_to_cpu(p->des2), le32_to_cpu(p->des3));
-			p++;
-		}
+		dma_addr = dma_phy_addr + i * sizeof(*p);
+		seq_printf(seq, "%d [%pad]: 0x%x 0x%x 0x%x 0x%x\n",
+				i, &dma_addr,
+				le32_to_cpu(p->des0), le32_to_cpu(p->des1),
+				le32_to_cpu(p->des2), le32_to_cpu(p->des3));
+		p++;
 	}
 }
 
