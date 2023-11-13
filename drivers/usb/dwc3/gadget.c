@@ -2745,7 +2745,7 @@ static int dwc3_gadget_pullup(struct usb_gadget *g, int is_on)
 	 * successful resume, the DWC3 runtime PM resume routine will handle
 	 * the run stop sequence, so avoid duplicate operations here.
 	 */
-	ret = pm_runtime_get_sync(dwc->dev);
+	ret = pm_runtime_resume_and_get(dwc->dev);
 	if (!ret || ret < 0) {
 		pm_runtime_put(dwc->dev);
 		if (ret < 0)
