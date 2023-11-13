@@ -932,13 +932,15 @@ static ssize_t beacon_filtering_write(struct file *file,
 
 	wl12xx_for_each_wlvif(wl, wlvif) {
 		ret = wl1271_acx_beacon_filter_opt(wl, wlvif, !!value);
+		if (ret < 0)
+			break;
 	}
 
 	pm_runtime_mark_last_busy(wl->dev);
 	pm_runtime_put_autosuspend(wl->dev);
 out:
 	mutex_unlock(&wl->mutex);
-	return count;
+	return ret < 0 ? ret : count;
 }
 
 static const struct file_operations beacon_filtering_ops = {
