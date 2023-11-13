@@ -1218,6 +1218,10 @@ struct survey_info {
  *
  *	NL80211_SAE_PWE_BOTH
  *	  Allow either hunting-and-pecking loop or hash-to-element
+ * @ptk_rekey_interval: PTK rekey interval in seconds for drivers supporting
+ *	AP 4 way handshake offload.
+ * @gtk_rekey_interval: GTK rekey interval in seconds for drivers supporting
+ *	AP 4 way handshake offload.
  */
 struct cfg80211_crypto_settings {
 	u32 wpa_versions;
@@ -1235,6 +1239,8 @@ struct cfg80211_crypto_settings {
 	const u8 *sae_pwd;
 	u8 sae_pwd_len;
 	enum nl80211_sae_pwe_mechanism sae_pwe;
+	u32 ptk_rekey_interval;
+	u32 gtk_rekey_interval;
 };
 
 /**
