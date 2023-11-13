@@ -3371,6 +3371,8 @@ static int hns3_alloc_buffer(struct hns3_enet_ring *ring,
 	struct page *p;
 
 	if (ring->page_pool) {
+		struct page_pool_iov *ppiov;
+
 		p = page_pool_dev_alloc_frag(ring->page_pool,
 					     &cb->page_offset,
 					     hns3_buf_size(ring));
@@ -3378,7 +3380,8 @@ static int hns3_alloc_buffer(struct hns3_enet_ring *ring,
 			return -ENOMEM;
 
 		cb->priv = p;
-		cb->buf = page_address(p);
+		ppiov = cb->priv;
+		cb->buf = page_address(ppiov->page);
 		cb->dma = page_pool_get_dma_addr(p);
 		cb->type = DESC_TYPE_PP_FRAG;
 		cb->reuse_flag = 0;
@@ -4940,7 +4943,7 @@ static void hns3_put_ring_config(struct hns3_nic_priv *priv)
 static void hns3_alloc_page_pool(struct hns3_enet_ring *ring)
 {
 	struct page_pool_params pp_params = {
-		.flags = PP_FLAG_DMA_MAP | PP_FLAG_DMA_SYNC_DEV,
+		.flags = 0,//PP_FLAG_DMA_MAP | PP_FLAG_DMA_SYNC_DEV,
 		.order = hns3_page_order(ring),
 		.pool_size = ring->desc_num * hns3_buf_size(ring) /
 				(PAGE_SIZE << hns3_page_order(ring)),
@@ -4949,6 +4952,8 @@ static void hns3_alloc_page_pool(struct hns3_enet_ring *ring)
 		.dma_dir = DMA_FROM_DEVICE,
 		.offset = 0,
 		.max_len = PAGE_SIZE << hns3_page_order(ring),
+		.memory_provider = PP_MP_DMABUF_DEVMEM,
+		.mp_priv = &dmabuf_devmem_ops,
 	};
 
 	ring->page_pool = page_pool_create(&pp_params);
