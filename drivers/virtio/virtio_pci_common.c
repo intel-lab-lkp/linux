@@ -492,8 +492,27 @@ static int virtio_pci_restore(struct device *dev)
 	return virtio_device_restore(&vp_dev->vdev);
 }
 
+static int virtio_pci_suspend(struct device *dev)
+{
+	struct pci_dev *pci_dev = to_pci_dev(dev);
+
+	return pci_dev->pm_cap ? 0 : virtio_pci_freeze(dev);
+}
+
+static int virtio_pci_resume(struct device *dev)
+{
+	struct pci_dev *pci_dev = to_pci_dev(dev);
+
+	return pci_dev->pm_cap ? 0 : virtio_pci_restore(dev);
+}
+
 static const struct dev_pm_ops virtio_pci_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(virtio_pci_freeze, virtio_pci_restore)
+	.suspend = virtio_pci_suspend,
+	.resume = virtio_pci_resume,
+	.freeze = virtio_pci_freeze,
+	.thaw = virtio_pci_restore,
+	.poweroff = virtio_pci_freeze,
+	.restore = virtio_pci_restore,
 };
 #endif
 
