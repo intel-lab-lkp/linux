@@ -6,6 +6,8 @@
 #include <linux/swap.h>
 #include <linux/swapops.h>
 #include <asm/mte.h>
+#include <asm/mtecomp.h>
+#include "mtecomp.h"
 
 static DEFINE_XARRAY(mte_pages);
 
@@ -17,12 +19,13 @@ void *mte_allocate_tag_storage(void)
 
 void mte_free_tag_storage(char *storage)
 {
-	kfree(storage);
+	if (!mte_is_compressed(storage))
+		kfree(storage);
 }
 
 int mte_save_tags(struct page *page)
 {
-	void *tag_storage, *ret;
+	void *tag_storage, *compressed_storage, *ret;
 
 	if (!page_mte_tagged(page))
 		return 0;
@@ -32,6 +35,11 @@ int mte_save_tags(struct page *page)
 		return -ENOMEM;
 
 	mte_save_page_tags(page_address(page), tag_storage);
+	compressed_storage = mte_compress(tag_storage);
+	if (compressed_storage) {
+		mte_free_tag_storage(tag_storage);
+		tag_storage = compressed_storage;
+	}
 
 	/* lookup the swap entry.val from the page */
 	ret = xa_store(&mte_pages, page_swap_entry(page).val, tag_storage,
@@ -50,13 +58,20 @@ int mte_save_tags(struct page *page)
 void mte_restore_tags(swp_entry_t entry, struct page *page)
 {
 	void *tags = xa_load(&mte_pages, entry.val);
+	void *tag_storage = NULL;
 
 	if (!tags)
 		return;
 
 	if (try_page_mte_tagging(page)) {
+		if (mte_is_compressed(tags)) {
+			tag_storage = mte_allocate_tag_storage();
+			mte_decompress(tags, tag_storage);
+			tags = tag_storage;
+		}
 		mte_restore_page_tags(page_address(page), tags);
 		set_page_mte_tagged(page);
+		mte_free_tag_storage(tag_storage);
 	}
 }
 
