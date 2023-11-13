@@ -1356,15 +1356,31 @@ int v4l2_subdev_link_validate(struct media_link *link)
 	struct v4l2_subdev *source_sd, *sink_sd;
 	struct v4l2_subdev_state *source_state, *sink_state;
 	bool states_locked;
+	bool is_sink_subdev;
+	bool is_source_subdev;
 	int ret;
 
-	if (!is_media_entity_v4l2_subdev(link->sink->entity) ||
-	    !is_media_entity_v4l2_subdev(link->source->entity)) {
-		pr_warn_once("%s of link '%s':%u->'%s':%u is not a V4L2 sub-device, driver bug!\n",
-			     !is_media_entity_v4l2_subdev(link->sink->entity) ?
-			     "sink" : "source",
-			     link->source->entity->name, link->source->index,
-			     link->sink->entity->name, link->sink->index);
+	is_sink_subdev = is_media_entity_v4l2_subdev(link->sink->entity);
+	is_source_subdev = is_media_entity_v4l2_subdev(link->source->entity);
+
+	if (!is_sink_subdev || !is_source_subdev) {
+		/*
+		 * Do not print the warning if the source is a video device and
+		 * the sink a subdev. This is a valid use case, to allow usage
+		 * of this helper by subdev drivers that have multiple sink
+		 * pads, some connected to video devices and some connected to
+		 * other subdevs. The video device to subdev link is typically
+		 * validated manually by the driver at stream start time in such
+		 * cases.
+		 */
+		if (!is_sink_subdev ||
+		    !is_media_entity_v4l2_video_device(link->source->entity))
+			pr_warn_once("%s of link '%s':%u->'%s':%u is not a V4L2 sub-device, driver bug!\n",
+				     !is_sink_subdev ? "sink" : "source",
+				     link->source->entity->name,
+				     link->source->index,
+				     link->sink->entity->name,
+				     link->sink->index);
 		return 0;
 	}
 
