@@ -275,6 +275,19 @@ static inline bool is_page_pool_compiled_in(void)
 #endif
 }
 
+static inline bool page_pool_frag_ref(struct page *page, bool recycle)
+{
+	if (recycle && (page->pp_magic & ~0x3UL) == PP_SIGNATURE) {
+		atomic_long_inc(&page->pp_frag_count);
+		return true;
+	}
+
+	BUG_ON((page->pp_magic & ~0x3UL) == PP_SIGNATURE &&
+	       page->pp->mp_ops);
+
+	return false;
+}
+
 /* Caller must provide appropriate safe context, e.g. NAPI. */
 void page_pool_update_nid(struct page_pool *pool, int new_nid);
 

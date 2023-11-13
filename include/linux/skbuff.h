@@ -37,6 +37,7 @@
 #endif
 #include <net/net_debug.h>
 #include <net/dropreason-core.h>
+#include <net/page_pool/types.h>
 
 /**
  * DOC: skb checksums
@@ -3429,9 +3430,14 @@ static inline struct page *skb_frag_page(const skb_frag_t *frag)
  *
  * Takes an additional reference on the paged fragment @frag.
  */
-static inline void __skb_frag_ref(skb_frag_t *frag)
+static inline void __skb_frag_ref(skb_frag_t *frag, bool recycle)
 {
-	page_ref_inc(skb_frag_page(frag));
+	struct page *page = skb_frag_page(frag);
+
+	if (page_pool_frag_ref(page, recycle))
+		return;
+
+	page_ref_inc(page);
 }
 
 /**
@@ -3443,7 +3449,7 @@ static inline void __skb_frag_ref(skb_frag_t *frag)
  */
 static inline void skb_frag_ref(struct sk_buff *skb, int f)
 {
-	__skb_frag_ref(&skb_shinfo(skb)->frags[f]);
+	__skb_frag_ref(&skb_shinfo(skb)->frags[f], skb->pp_recycle);
 }
 
 bool napi_pp_put_page(struct page *page, bool napi_safe);
