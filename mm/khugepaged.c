@@ -1384,6 +1384,12 @@ static int hpage_collapse_scan_pmd(struct mm_struct *mm,
 		     PageReferenced(page) || mmu_notifier_test_young(vma->vm_mm,
 								     address)))
 			referenced++;
+
+		if (compound_order(page) == HPAGE_PMD_ORDER &&
+		    !is_huge_zero_page(page)) {
+			result = SCAN_PTE_MAPPED_HUGEPAGE;
+			goto out_unmap;
+		}
 	}
 	if (!writable) {
 		result = SCAN_PAGE_RO;
@@ -1400,6 +1406,11 @@ out_unmap:
 		result = collapse_huge_page(mm, address, referenced,
 					    unmapped, cc);
 		/* collapse_huge_page will return with the mmap_lock released */
+		*mmap_locked = false;
+	}
+	if (result == SCAN_PTE_MAPPED_HUGEPAGE) {
+		/* adapt to calling convention of collapse_pte_mapped_thp() */
+		mmap_read_unlock(mm);
 		*mmap_locked = false;
 	}
 out:
@@ -1454,6 +1465,140 @@ static int set_huge_pmd(struct vm_area_struct *vma, unsigned long addr,
 	return SCAN_SUCCEED;
 }
 
+static struct page *find_lock_pte_mapped_page_unsafe(struct vm_area_struct *vma,
+						unsigned long addr, pmd_t *pmd)
+{
+	pte_t *pte, pteval;
+	struct page *page = NULL;
+
+	/* caller should recheck with ptl. */
+	pte = pte_offset_map(pmd, addr);
+	if (!pte)
+		return NULL;
+
+	pteval = ptep_get_lockless(pte);
+	if (pte_none(pteval) || !pte_present(pteval))
+		goto out;
+
+	page = vm_normal_page(vma, addr, pteval);
+	if (unlikely(!page) || unlikely(is_zone_device_page(page)))
+		goto out;
+
+	page = compound_head(page);
+
+	if (!trylock_page(page)) {
+		page = NULL;
+		goto out;
+	}
+
+	if (!get_page_unless_zero(page)) {
+		unlock_page(page);
+		page = NULL;
+		goto out;
+	}
+
+out:
+	pte_unmap(pte);
+	return page;
+}
+
+/* call with mmap write lock, and hpage is PG_locked. */
+static noinline int collapse_pte_mapped_thp_anon(struct mm_struct *mm,
+					struct vm_area_struct *vma,
+					unsigned long haddr, struct page *hpage)
+{
+	struct mmu_notifier_range range;
+	unsigned long addr;
+	pmd_t *pmd, pmdval;
+	pte_t *start_pte, *pte;
+	spinlock_t *pml, *ptl;
+	pgtable_t pgtable;
+	int result, i;
+
+	result = find_pmd_or_thp_or_none(mm, haddr, &pmd);
+	if (result != SCAN_SUCCEED)
+		goto out;
+
+	result = SCAN_FAIL;
+	start_pte = pte_offset_map_lock(mm, pmd, haddr, &ptl);
+	if (!start_pte)		/* mmap_lock + page lock should prevent this */
+		goto out;
+	/* step 1: check all mapped PTEs are to the right huge page */
+	for (i = 0, addr = haddr, pte = start_pte;
+	     i < HPAGE_PMD_NR; i++, addr += PAGE_SIZE, pte++) {
+		struct page *page;
+		pte_t pteval = ptep_get(pte);
+
+		if (pte_none(pteval) || !pte_present(pteval)) {
+			result = SCAN_PTE_NON_PRESENT;
+			goto out_unmap;
+		}
+
+		page = vm_normal_page(vma, addr, pteval);
+		if (WARN_ON_ONCE(page && is_zone_device_page(page)))
+			page = NULL;
+		/*
+		 * Note that uprobe, debugger, or MAP_PRIVATE may change the
+		 * page table, but the new page will not be a subpage of hpage.
+		 */
+		if (hpage + i != page)
+			goto out_unmap;
+	}
+	pte_unmap_unlock(start_pte, ptl);
+
+	/* step 2: clear page table and adjust rmap */
+	vma_start_write(vma);
+
+	mmu_notifier_range_init(&range, MMU_NOTIFY_CLEAR, 0, mm,
+				haddr, haddr + HPAGE_PMD_SIZE);
+	mmu_notifier_invalidate_range_start(&range);
+
+	pml = pmd_lock(mm, pmd);
+	pmdval = pmdp_collapse_flush(vma, haddr, pmd);
+	spin_unlock(pml);
+
+	mmu_notifier_invalidate_range_end(&range);
+	tlb_remove_table_sync_one();
+
+	start_pte = pte_offset_map_lock(mm, &pmdval, haddr, &ptl);
+	if (!start_pte)
+		goto abort;
+	for (i = 0, addr = haddr, pte = start_pte;
+	     i < HPAGE_PMD_NR; i++, addr += PAGE_SIZE, pte++) {
+		struct page *page;
+		pte_t pteval = ptep_get(pte);
+
+		page = vm_normal_page(vma, addr, pteval);
+		page_remove_rmap(page, vma, false);
+	}
+	pte_unmap_unlock(start_pte, ptl);
+
+	/* step 3: install pmd entry */
+	pgtable = pmd_pgtable(pmdval);
+
+	pmdval = mk_huge_pmd(hpage, vma->vm_page_prot);
+	pmdval = maybe_pmd_mkwrite(pmd_mkdirty(pmdval), vma);
+
+	spin_lock(pml);
+	page_add_anon_rmap(hpage, vma, haddr, RMAP_COMPOUND);
+	pgtable_trans_huge_deposit(mm, pmd, pgtable);
+	set_pmd_at(mm, haddr, pmd, pmdval);
+	update_mmu_cache_pmd(vma, haddr, pmd);
+	spin_unlock(pml);
+
+	result = SCAN_SUCCEED;
+	return result;
+abort:
+	spin_lock(pml);
+	pmd_populate(mm, pmd, pmd_pgtable(pmdval));
+	spin_unlock(pml);
+out_unmap:
+	if (start_pte)
+		pte_unmap_unlock(start_pte, ptl);
+out:
+	return result;
+}
+
 /**
  * collapse_pte_mapped_thp - Try to collapse a pte-mapped THP for mm at
  * address haddr.
@@ -1479,13 +1624,15 @@ int collapse_pte_mapped_thp(struct mm_struct *mm, unsigned long addr,
 	spinlock_t *pml = NULL, *ptl;
 	int nr_ptes = 0, result = SCAN_FAIL;
 	int i;
+	bool file;
 
 	mmap_assert_locked(mm);
 
 	/* First check VMA found, in case page tables are being torn down */
-	if (!vma || !vma->vm_file ||
-	    !range_in_vma(vma, haddr, haddr + HPAGE_PMD_SIZE))
+	if (!vma || !range_in_vma(vma, haddr, haddr + HPAGE_PMD_SIZE))
 		return SCAN_VMA_CHECK;
+
+	file = !!vma->vm_file;
 
 	/* Fast check before locking page if already PMD-mapped */
 	result = find_pmd_or_thp_or_none(mm, haddr, &pmd);
@@ -1506,8 +1653,11 @@ int collapse_pte_mapped_thp(struct mm_struct *mm, unsigned long addr,
 	if (userfaultfd_wp(vma))
 		return SCAN_PTE_UFFD_WP;
 
-	hpage = find_lock_page(vma->vm_file->f_mapping,
-			       linear_page_index(vma, haddr));
+	if (file)
+		hpage = find_lock_page(vma->vm_file->f_mapping,
+				linear_page_index(vma, haddr));
+	else
+		hpage = find_lock_pte_mapped_page_unsafe(vma, haddr, pmd);
 	if (!hpage)
 		return SCAN_PAGE_NULL;
 
@@ -1518,6 +1668,11 @@ int collapse_pte_mapped_thp(struct mm_struct *mm, unsigned long addr,
 
 	if (compound_order(hpage) != HPAGE_PMD_ORDER) {
 		result = SCAN_PAGE_COMPOUND;
+		goto drop_hpage;
+	}
+
+	if (!file) {
+		result = collapse_pte_mapped_thp_anon(mm, vma, haddr, hpage);
 		goto drop_hpage;
 	}
 
@@ -2415,6 +2570,18 @@ skip:
 			} else {
 				*result = hpage_collapse_scan_pmd(mm, vma,
 					khugepaged_scan.address, &mmap_locked, cc);
+				if (*result == SCAN_PTE_MAPPED_HUGEPAGE) {
+					mmap_write_lock(mm);
+					if (hpage_collapse_test_exit(mm)) {
+						mmap_write_unlock(mm);
+						goto breakouterloop_mmap_lock;
+					}
+					*result = collapse_pte_mapped_thp(mm,
+						khugepaged_scan.address, true);
+					if (*result == SCAN_PMD_MAPPED)
+						*result = SCAN_SUCCEED;
+					mmap_write_unlock(mm);
+				}
 			}
 
 			if (*result == SCAN_SUCCEED)
@@ -2764,9 +2931,15 @@ handle_result:
 		case SCAN_PTE_MAPPED_HUGEPAGE:
 			BUG_ON(mmap_locked);
 			BUG_ON(*prev);
-			mmap_read_lock(mm);
-			result = collapse_pte_mapped_thp(mm, addr, true);
-			mmap_read_unlock(mm);
+			if (vma->vm_file) {
+				mmap_read_lock(mm);
+				result = collapse_pte_mapped_thp(mm, addr, true);
+				mmap_read_unlock(mm);
+			} else {
+				mmap_write_lock(mm);
+				result = collapse_pte_mapped_thp(mm, addr, true);
+				mmap_write_unlock(mm);
+			}
 			goto handle_result;
 		/* Whitelisted set of results where continuing OK */
 		case SCAN_PMD_NULL:
