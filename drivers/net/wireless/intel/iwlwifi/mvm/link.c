@@ -102,8 +102,11 @@ int iwl_mvm_link_changed(struct iwl_mvm *mvm, struct ieee80211_vif *vif,
 	int ret;
 
 	if (WARN_ON_ONCE(!link_info ||
-			 link_info->fw_link_id == IWL_MVM_FW_LINK_ID_INVALID))
+			 link_info->fw_link_id == IWL_MVM_FW_LINK_ID_INVALID)) {
+		IWL_ERR(mvm, "Invalid info in link-changed, link_info: %p NULL or LINK_ID_INVALID\n",
+			link_info);
 		return -EINVAL;
+	}
 
 	if (changes & LINK_CONTEXT_MODIFY_ACTIVE) {
 		/* When activating a link, phy context should be valid;
