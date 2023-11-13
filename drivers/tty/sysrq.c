@@ -1154,10 +1154,12 @@ EXPORT_SYMBOL(unregister_sysrq_key);
 static ssize_t write_sysrq_trigger(struct file *file, const char __user *buf,
 				   size_t count, loff_t *ppos)
 {
-	if (count) {
+	size_t i;
+
+	for (i = 0; i < count; i++) {
 		char c;
 
-		if (get_user(c, buf))
+		if (get_user(c, buf+i))
 			return -EFAULT;
 		__handle_sysrq(c, false);
 	}
