@@ -2423,6 +2423,14 @@ static inline void skb_frag_fill_page_desc(skb_frag_t *frag,
 					   struct page *page,
 					   int off, int size)
 {
+	/* expect head page for compound page */
+	if (WARN_ON_ONCE(PageTail(page))) {
+		struct page *head = compound_head(page);
+
+		off += (page_to_pfn(page) - page_to_pfn(head)) * PAGE_SIZE;
+		page = head;
+	}
+
 	frag->bv_page = page;
 	frag->bv_offset = off;
 	skb_frag_size_set(frag, size);
