@@ -48,14 +48,19 @@ static void enqueue_external_timestamp(struct timestamp_event_queue *queue,
 	s64 seconds;
 	u32 remainder;
 
-	seconds = div_u64_rem(src->timestamp, 1000000000, &remainder);
+	if(src->type != PTP_CLOCK_EXTOFF)
+		seconds = div_u64_rem(src->timestamp, 1000000000, &remainder);
 
 	spin_lock_irqsave(&queue->lock, flags);
 
 	dst = &queue->buf[queue->tail];
 	dst->index = src->index;
-	dst->t.sec = seconds;
-	dst->t.nsec = remainder;
+	if(src->type != PTP_CLOCK_EXTOFF) {
+		dst->t.sec = seconds;
+		dst->t.nsec = remainder;
+	} else {
+		dst->o = src->offset;
+	}
 
 	if (!queue_free(queue))
 		queue->head = (queue->head + 1) % PTP_MAX_TIMESTAMPS;
@@ -416,6 +421,7 @@ void ptp_clock_event(struct ptp_clock *ptp, struct ptp_clock_event *event)
 		break;
 
 	case PTP_CLOCK_EXTTS:
+	case PTP_CLOCK_EXTOFF:
 		/* Enqueue timestamp on selected queues */
 		spin_lock_irqsave(&ptp->tsevqs_lock, flags);
 		list_for_each_entry(tsevq, &ptp->tsevqs, qlist) {
