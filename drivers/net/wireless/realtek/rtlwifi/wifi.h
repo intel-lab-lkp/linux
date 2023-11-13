@@ -1605,7 +1605,6 @@ struct rtl_hal {
 	bool being_init_adapter;
 	bool mac_func_enable;
 	bool pre_edcca_enable;
-	struct bt_coexist_8723 hal_coex_8723;
 
 	enum intf_type interface;
 	u16 hw_type;		/*92c or 92d or 92s and so on */
@@ -1660,7 +1659,6 @@ struct rtl_hal {
 	/* Dual mac */
 	enum macphy_mode macphymode;
 	enum band_type current_bandtype;	/* 0:2.4G, 1:5G */
-	enum band_type current_bandtypebackup;
 	enum band_type bandset;
 	/* dual MAC 0--Mac0 1--Mac1 */
 	u32 interfaceindex;
@@ -1678,8 +1676,6 @@ struct rtl_hal {
 	bool load_imrandiqk_setting_for2g;
 
 	bool disable_amsdu_8k;
-	bool master_of_dmsp;
-	bool slave_of_dmsp;
 
 	/*for wowlan*/
 	bool enter_pnp_sleep;
