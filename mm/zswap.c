@@ -1063,11 +1063,12 @@ static int zswap_writeback_entry(struct zswap_entry *entry,
 	struct mempolicy *mpol;
 	struct scatterlist input, output;
 	struct crypto_acomp_ctx *acomp_ctx;
+	struct swap_info_struct *si;
 	struct zpool *pool = zswap_find_zpool(entry);
 	bool page_was_allocated;
 	u8 *src, *tmp = NULL;
 	unsigned int dlen;
-	int ret;
+	int ret = 0;
 	struct writeback_control wbc = {
 		.sync_mode = WB_SYNC_NONE,
 	};
@@ -1082,16 +1083,30 @@ static int zswap_writeback_entry(struct zswap_entry *entry,
 	mpol = get_task_policy(current);
 	page = __read_swap_cache_async(swpentry, GFP_KERNEL, mpol,
 				NO_INTERLEAVE_INDEX, &page_was_allocated);
-	if (!page) {
+	if (!page)
 		ret = -ENOMEM;
-		goto fail;
-	}
-
-	/* Found an existing page, we raced with load/swapin */
-	if (!page_was_allocated) {
+	else if (!page_was_allocated) {
+		/* Found an existing page, we raced with load/swapin */
 		put_page(page);
 		ret = -EEXIST;
-		goto fail;
+	}
+
+	if (ret) {
+		si = get_swap_device(swpentry);
+		if (!si)
+			goto out;
+
+		/* Two cases to directly release zswap_entry.
+		 * 1) -ENOMEM,if the swpentry has been freed, but cached in
+		 * swap_slots_cache(no page and swapcount = 0).
+		 * 2) -EEXIST, option zswap_exclusive_loads_enabled disabled and
+		 * zswap_load completed(page in swap_cache and swapcount = 0).
+		 */
+		if (!swap_swapcount(si, swpentry))
+			ret = 0;
+
+		put_swap_device(si);
+		goto out;
 	}
 
 	/*
@@ -1106,7 +1121,7 @@ static int zswap_writeback_entry(struct zswap_entry *entry,
 		spin_unlock(&tree->lock);
 		delete_from_swap_cache(page_folio(page));
 		ret = -ENOMEM;
-		goto fail;
+		goto out;
 	}
 	spin_unlock(&tree->lock);
 
@@ -1156,7 +1171,7 @@ static int zswap_writeback_entry(struct zswap_entry *entry,
 
 	return ret;
 
-fail:
+out:
 	if (!zpool_can_sleep_mapped(pool))
 		kfree(tmp);
 
