@@ -96,6 +96,8 @@ int set_memory_block_size_order(unsigned int order);
 #define	MEM_GOING_ONLINE	(1<<3)
 #define	MEM_CANCEL_ONLINE	(1<<4)
 #define	MEM_CANCEL_OFFLINE	(1<<5)
+#define	MEM_PHYS_ONLINE		(1<<6)
+#define	MEM_PHYS_OFFLINE	(1<<7)
 
 struct memory_notify {
 	unsigned long start_pfn;
