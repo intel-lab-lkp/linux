@@ -7568,6 +7568,10 @@ int ufshcd_try_to_abort_task(struct ufs_hba *hba, int tag)
 		goto out;
 	}
 
+	if (!ufshcd_cmd_inflight(lrbp->cmd) ||
+	    test_bit(SCMD_STATE_COMPLETE, &lrbp->cmd->state))
+		goto out;
+
 	err = ufshcd_clear_cmd(hba, tag);
 	if (err)
 		dev_err(hba->dev, "%s: Failed clearing cmd at tag %d, err %d\n",
