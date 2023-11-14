@@ -2707,6 +2707,10 @@
 		 187 = /dev/ttyUL0		Xilinx uartlite - port 0
 		    ...
 		 190 = /dev/ttyUL3		Xilinx uartlite - port 3
+
+		 If maximum number of uartlite serial ports more than 4, then driver uses
+		 dynamic allocation instead of static allocation for major number.
+
 		 191 = /dev/xvc0		Xen virtual console - port 0
 		 192 = /dev/ttyPZ0		pmac_zilog - port 0
 		    ...
