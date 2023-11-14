@@ -59,4 +59,7 @@ int ipqess_port_register(struct ipqess_switch *sw,
 			 struct device_node *port_node);
 void ipqess_port_unregister(struct ipqess_port *port);
 
+/* Defined in ipqess_ethtool.c */
+void ipqess_port_set_ethtool_ops(struct net_device *netdev);
+
 #endif
