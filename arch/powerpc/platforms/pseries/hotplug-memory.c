@@ -575,7 +575,6 @@ static int dlpar_add_lmb(struct drmem_lmb *lmb)
 
 	rc = update_lmb_associativity_index(lmb);
 	if (rc) {
-		dlpar_release_drc(lmb->drc_index);
 		return rc;
 	}
 
