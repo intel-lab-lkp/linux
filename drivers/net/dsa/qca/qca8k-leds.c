@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/property.h>
 #include <linux/regmap.h>
+#include <linux/dsa/qca8k.h>
 #include <net/dsa.h>
 
-#include "qca8k.h"
 #include "qca8k_leds.h"
 
 static u32 qca8k_phy_to_port(int phy)
