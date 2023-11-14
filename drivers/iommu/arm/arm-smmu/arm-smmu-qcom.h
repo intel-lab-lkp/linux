@@ -9,6 +9,7 @@
 struct qcom_smmu {
 	struct arm_smmu_device smmu;
 	const struct qcom_smmu_config *cfg;
+	const struct actlr_config *actlrcfg;
 	bool bypass_quirk;
 	u8 bypass_cbndx;
 	u32 stall_enabled;
@@ -25,6 +26,7 @@ struct qcom_smmu_config {
 };
 
 struct qcom_smmu_match_data {
+	const struct actlr_config *actlrcfg;
 	const struct qcom_smmu_config *cfg;
 	const struct arm_smmu_impl *impl;
 	const struct arm_smmu_impl *adreno_impl;
