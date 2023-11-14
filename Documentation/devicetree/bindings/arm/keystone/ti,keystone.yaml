@@ -1,0 +1,53 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/arm/keystone/ti,keystone.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Texas Instruments Keystone SoC architecture
+
+maintainers:
+  - Andrew Davis <afd@ti.com>
+
+description: |
+  Platforms based on Texas Instruments Keystone2 Multicore SoC architecture
+  shall have the following properties.
+
+properties:
+  $nodename:
+    const: '/'
+  compatible:
+    oneOf:
+
+      - description: Keystone 2 Hawking/Kepler
+        items:
+          - enum:
+              - ti,k2hk-evm # Keystone 2 Hawking/Kepler EVM
+          - const: ti,k2hk
+          - const: ti,keystone
+
+      - description: Keystone 2 Lamarr
+        items:
+          - enum:
+              - ti,k2l-evm # Keystone 2 Lamarr EVM
+          - const: ti,k2l
+          - const: ti,keystone
+
+      - description: Keystone 2 Edison
+        items:
+          - enum:
+              - ti,k2e-evm # Keystone 2 Edison EVM
+          - const: ti,k2e
+          - const: ti,keystone
+
+      - description: K2G
+        items:
+          - enum:
+              - ti,k2g-evm # K2G EVM
+              - ti,k2g-ice # K2G Industrial Communication Engine EVM
+          - const: ti,k2g
+          - const: ti,keystone
+
+additionalProperties: true
+
+...
