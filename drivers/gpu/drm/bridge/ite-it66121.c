@@ -1004,6 +1004,21 @@ static const struct drm_bridge_funcs it66121_bridge_funcs = {
 	.hpd_disable = it66121_bridge_hpd_disable,
 };
 
+static void it66121_bridge_init_base(struct drm_bridge *bridge,
+				     struct device_node *of_node,
+				     bool hpd_support)
+{
+	bridge->funcs = &it66121_bridge_funcs;
+	bridge->type = DRM_MODE_CONNECTOR_HDMIA;
+	bridge->ops = DRM_BRIDGE_OP_DETECT | DRM_BRIDGE_OP_EDID;
+	if (hpd_support)
+		bridge->ops |= DRM_BRIDGE_OP_HPD;
+
+	bridge->of_node = of_node;
+
+	drm_bridge_add(bridge);
+}
+
 static irqreturn_t it66121_irq_threaded_handler(int irq, void *dev_id)
 {
 	int ret;
@@ -1637,11 +1652,6 @@ static int it66121_probe(struct i2c_client *client)
 	    ctx->device_id != ctx->info->pid)
 		return -ENODEV;
 
-	ctx->bridge.funcs = &it66121_bridge_funcs;
-	ctx->bridge.of_node = dev->of_node;
-	ctx->bridge.type = DRM_MODE_CONNECTOR_HDMIA;
-	ctx->bridge.ops = DRM_BRIDGE_OP_DETECT | DRM_BRIDGE_OP_EDID | DRM_BRIDGE_OP_HPD;
-
 	ret = devm_request_threaded_irq(dev, client->irq, NULL,	it66121_irq_threaded_handler,
 					IRQF_ONESHOT, dev_name(dev), ctx);
 	if (ret < 0) {
@@ -1649,9 +1659,9 @@ static int it66121_probe(struct i2c_client *client)
 		return ret;
 	}
 
-	it66121_audio_codec_init(ctx, dev);
+	it66121_bridge_init_base(&ctx->bridge, dev->of_node, true);
 
-	drm_bridge_add(&ctx->bridge);
+	it66121_audio_codec_init(ctx, dev);
 
 	dev_info(dev, "IT66121 probed, chip id: 0x%x:0x%x, revision: %u\n",
 		 ctx->vender_id, ctx->device_id, ctx->revision);
