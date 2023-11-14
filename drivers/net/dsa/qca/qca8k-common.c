@@ -79,6 +79,19 @@ int qca8k_rmw(struct qca8k_priv *priv, u32 reg, u32 mask, u32 write_val)
 {
 	return regmap_update_bits(priv->regmap, reg, mask, write_val);
 }
+EXPORT_SYMBOL_GPL(qca8k_rmw);
+
+int qca8k_set_bits(struct qca8k_priv *priv, u32 reg, u32 bits)
+{
+	return regmap_set_bits(priv->regmap, reg, bits);
+}
+EXPORT_SYMBOL_GPL(qca8k_set_bits);
+
+int qca8k_clear_bits(struct qca8k_priv *priv, u32 reg, u32 bits)
+{
+	return regmap_clear_bits(priv->regmap, reg, bits);
+}
+EXPORT_SYMBOL_GPL(qca8k_clear_bits);
 
 static const struct regmap_range qca8k_readable_ranges[] = {
 	regmap_reg_range(0x0000, 0x00e4), /* Global control */
@@ -164,8 +177,8 @@ static void qca8k_fdb_write(struct qca8k_priv *priv, u16 vid, u8 port_mask,
 			  QCA8K_ATU_TABLE_SIZE);
 }
 
-static int qca8k_fdb_access(struct qca8k_priv *priv, enum qca8k_fdb_cmd cmd,
-			    int port)
+int qca8k_fdb_access(struct qca8k_priv *priv, enum qca8k_fdb_cmd cmd,
+		     int port)
 {
 	u32 reg;
 	int ret;
@@ -199,9 +212,10 @@ static int qca8k_fdb_access(struct qca8k_priv *priv, enum qca8k_fdb_cmd cmd,
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(qca8k_fdb_access);
 
-static int qca8k_fdb_next(struct qca8k_priv *priv, struct qca8k_fdb *fdb,
-			  int port)
+int qca8k_fdb_next(struct qca8k_priv *priv, struct qca8k_fdb *fdb,
+		   int port)
 {
 	int ret;
 
@@ -212,6 +226,7 @@ static int qca8k_fdb_next(struct qca8k_priv *priv, struct qca8k_fdb *fdb,
 
 	return qca8k_fdb_read(priv, fdb);
 }
+EXPORT_SYMBOL_GPL(qca8k_fdb_next);
 
 static int qca8k_fdb_add(struct qca8k_priv *priv, const u8 *mac,
 			 u16 port_mask, u16 vid, u8 aging)
@@ -226,8 +241,8 @@ static int qca8k_fdb_add(struct qca8k_priv *priv, const u8 *mac,
 	return ret;
 }
 
-static int qca8k_fdb_del(struct qca8k_priv *priv, const u8 *mac,
-			 u16 port_mask, u16 vid)
+int qca8k_fdb_del(struct qca8k_priv *priv, const u8 *mac,
+		  u16 port_mask, u16 vid)
 {
 	int ret;
 
@@ -238,6 +253,7 @@ static int qca8k_fdb_del(struct qca8k_priv *priv, const u8 *mac,
 
 	return ret;
 }
+EXPORT_SYMBOL_GPL(qca8k_fdb_del);
 
 void qca8k_fdb_flush(struct qca8k_priv *priv)
 {
@@ -245,9 +261,10 @@ void qca8k_fdb_flush(struct qca8k_priv *priv)
 	qca8k_fdb_access(priv, QCA8K_FDB_FLUSH, -1);
 	mutex_unlock(&priv->reg_mutex);
 }
+EXPORT_SYMBOL_GPL(qca8k_fdb_flush);
 
-static int qca8k_fdb_search_and_insert(struct qca8k_priv *priv, u8 port_mask,
-				       const u8 *mac, u16 vid, u8 aging)
+int qca8k_fdb_search_and_insert(struct qca8k_priv *priv, u8 port_mask,
+				const u8 *mac, u16 vid, u8 aging)
 {
 	struct qca8k_fdb fdb = { 0 };
 	int ret;
@@ -282,9 +299,10 @@ exit:
 	mutex_unlock(&priv->reg_mutex);
 	return ret;
 }
+EXPORT_SYMBOL_GPL(qca8k_fdb_search_and_insert);
 
-static int qca8k_fdb_search_and_del(struct qca8k_priv *priv, u8 port_mask,
-				    const u8 *mac, u16 vid)
+int qca8k_fdb_search_and_del(struct qca8k_priv *priv, u8 port_mask,
+			     const u8 *mac, u16 vid)
 {
 	struct qca8k_fdb fdb = { 0 };
 	int ret;
@@ -324,6 +342,7 @@ exit:
 	mutex_unlock(&priv->reg_mutex);
 	return ret;
 }
+EXPORT_SYMBOL_GPL(qca8k_fdb_search_and_del);
 
 static int qca8k_vlan_access(struct qca8k_priv *priv,
 			     enum qca8k_vlan_cmd cmd, u16 vid)
@@ -358,8 +377,8 @@ static int qca8k_vlan_access(struct qca8k_priv *priv,
 	return 0;
 }
 
-static int qca8k_vlan_add(struct qca8k_priv *priv, u8 port, u16 vid,
-			  bool untagged)
+int qca8k_vlan_add(struct qca8k_priv *priv, u8 port, u16 vid,
+		   bool untagged)
 {
 	u32 reg;
 	int ret;
@@ -395,8 +414,9 @@ out:
 
 	return ret;
 }
+EXPORT_SYMBOL_GPL(qca8k_vlan_add);
 
-static int qca8k_vlan_del(struct qca8k_priv *priv, u8 port, u16 vid)
+int qca8k_vlan_del(struct qca8k_priv *priv, u8 port, u16 vid)
 {
 	u32 reg, mask;
 	int ret, i;
@@ -438,6 +458,7 @@ out:
 
 	return ret;
 }
+EXPORT_SYMBOL_GPL(qca8k_vlan_del);
 
 int qca8k_mib_init(struct qca8k_priv *priv)
 {
