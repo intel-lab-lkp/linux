@@ -292,7 +292,38 @@ enum chip_id {
 struct it66121_chip_info {
 	enum chip_id id;
 	u16 vid, pid;
+	char name[24];
 };
+
+static const struct it66121_chip_info it66121_chip_info[] = {
+	{
+		.id = ID_IT66121,
+		.vid = 0x4954,
+		.pid = 0x0612,
+		.name = "IT66121",
+	},
+	{
+		.id = ID_IT6610,
+		.vid = 0xca00,
+		.pid = 0x0611,
+		.name = "IT6610",
+	},
+};
+
+static const struct it66121_chip_info *
+it66121_get_match_data(u16 vender_id, u16 device_id)
+{
+	const struct it66121_chip_info *info;
+	unsigned int i;
+
+	for (i = 0; i < ARRAY_SIZE(it66121_chip_info); i++) {
+		info = &it66121_chip_info[i];
+		if (info->vid == vender_id && info->pid == device_id)
+			return info;
+	}
+
+	return NULL;
+}
 
 struct it66121_ctx {
 	struct regmap *regmap;
@@ -1677,28 +1708,16 @@ static void it66121_remove(struct i2c_client *client)
 	mutex_destroy(&ctx->lock);
 }
 
-static const struct it66121_chip_info it66121_chip_info = {
-	.id = ID_IT66121,
-	.vid = 0x4954,
-	.pid = 0x0612,
-};
-
-static const struct it66121_chip_info it6610_chip_info = {
-	.id = ID_IT6610,
-	.vid = 0xca00,
-	.pid = 0x0611,
-};
-
 static const struct of_device_id it66121_dt_match[] = {
-	{ .compatible = "ite,it66121", &it66121_chip_info },
-	{ .compatible = "ite,it6610", &it6610_chip_info },
+	{ .compatible = "ite,it66121", &it66121_chip_info[0] },
+	{ .compatible = "ite,it6610", &it66121_chip_info[1] },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, it66121_dt_match);
 
 static const struct i2c_device_id it66121_id[] = {
-	{ "it66121", (kernel_ulong_t) &it66121_chip_info },
-	{ "it6610", (kernel_ulong_t) &it6610_chip_info },
+	{ "it66121", (kernel_ulong_t) &it66121_chip_info[0] },
+	{ "it6610", (kernel_ulong_t) &it66121_chip_info[1] },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, it66121_id);
