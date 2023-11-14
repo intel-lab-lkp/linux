@@ -974,7 +974,7 @@ void kernfs_notify(struct kernfs_node *kn)
 		kernfs_get(kn);
 		kn->attr.notify_next = kernfs_notify_list;
 		kernfs_notify_list = kn;
-		schedule_work(&kernfs_notify_work);
+		queue_work(kernfs_wq, &kernfs_notify_work);
 	}
 	spin_unlock_irqrestore(&kernfs_notify_lock, flags);
 }

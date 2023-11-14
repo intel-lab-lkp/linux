@@ -24,6 +24,7 @@
 struct kmem_cache *kernfs_node_cache __ro_after_init;
 struct kmem_cache *kernfs_iattrs_cache __ro_after_init;
 struct kernfs_global_locks *kernfs_locks __ro_after_init;
+struct workqueue_struct *kernfs_wq __ro_after_init;
 
 static int kernfs_sop_show_options(struct seq_file *sf, struct dentry *dentry)
 {
@@ -432,4 +433,6 @@ void __init kernfs_init(void)
 					      0, SLAB_PANIC, NULL);
 
 	kernfs_lock_init();
+
+	kernfs_wq = alloc_workqueue("kernfs", WQ_MEM_RECLAIM, 0);
 }

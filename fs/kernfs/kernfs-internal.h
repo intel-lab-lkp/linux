@@ -123,6 +123,7 @@ static inline bool kernfs_dir_changed(struct kernfs_node *parent,
 
 extern const struct super_operations kernfs_sops;
 extern struct kmem_cache *kernfs_node_cache, *kernfs_iattrs_cache;
+extern struct workqueue_struct *kernfs_wq;
 
 /*
  * inode.c
