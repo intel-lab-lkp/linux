@@ -344,7 +344,7 @@ static int gb_message_send(struct gb_host_device *hd, u16 cport, struct gb_messa
 	dev_dbg(&hd->dev, "Sending greybus message with Operation %u, Type: %X on Cport %u",
 		msg->header->operation_id, msg->header->type, cport);
 
-	if (msg->header->size > RX_HDLC_PAYLOAD)
+	if (le16_to_cpu(msg->header->size) > RX_HDLC_PAYLOAD)
 		return dev_err_probe(&hd->dev, -E2BIG, "Greybus message too big");
 
 	memcpy(msg->header->pad, &cport, sizeof(cport));
