@@ -1,0 +1,128 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/dma/ti/ti,edma3-tpcc.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Texas Instruments eDMA3 Channel Controller
+
+description: |
+  The eDMA3 consists of two components, Channel controller (CC) and Transfer
+  Controller(s) (TC). The CC is the main entry for DMA users since it is
+  responsible for the DMA channel handling, while the TCs are responsible to
+  execute the actual DMA tansfer. This documents the Channel Controller.
+
+maintainers:
+  - Andrew Davis <afd@ti.com>
+
+allOf:
+  - $ref: /schemas/dma/dma-controller.yaml#
+
+properties:
+  compatible:
+    oneOf:
+      - const: ti,edma3-tpcc # OMAP, AM33xx, and AM43xx
+      - items:
+          - const: ti,k2g-edma3-tpcc # 66AK2G
+          - const: ti,edma3-tpcc
+
+  reg:
+    maxItems: 1
+
+  reg-names:
+    const: edma3_cc
+
+  interrupts:
+    items:
+      - description: CCINT Interrupt
+      - description: MPERR Interrupt
+      - description: CCERRINT Interrupt
+
+  interrupt-names:
+    items:
+      - const: edma3_ccint
+      - const: edma3_mperr
+      - const: edma3_ccerrint
+
+  "#dma-cells":
+    const: 2
+    description: |
+      The first cell is the DMA request number.
+      The second cell is the TC the channel is serviced on.
+
+  ti,tptcs:
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+    description: |
+      List of TPTCs associated with the eDMA in the following form,
+      <&tptc_phandle TC_priority_number>. The highest priority is 0.
+
+  power-domains:
+    maxItems: 1
+
+  ti,edma-memcpy-channels:
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    description: |
+      List of channels allocated to be used for memcpy, iow
+      these channels will be SW triggered channels.
+
+  ti,edma-reserved-slot-ranges:
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    description: |
+      PaRAM slot ranges which should not be used by the driver,
+      they are allocated to be used by for example the DSP.
+
+  dma-channel-mask:
+    description: |
+      Mask of usable channels. Single uint32 for EDMA with 32 channels,
+      array of two uint32 for EDMA with 64 channels.
+
+  dma-requests:
+    const: 64
+
+required:
+  - compatible
+  - reg
+  - reg-names
+  - interrupts
+  - interrupt-names
+  - "#dma-cells"
+  - ti,tptcs
+
+if:
+  properties:
+    compatible:
+      contains:
+        enum:
+          - ti,k2g-edma3-tptc
+then:
+  required:
+    - power-domains
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    dma-controller@49000000 {
+        compatible = "ti,edma3-tpcc";
+        reg = <0x49000000 0x10000>;
+        reg-names = "edma3_cc";
+        interrupts = <GIC_SPI 200 IRQ_TYPE_EDGE_RISING>,
+                     <GIC_SPI 216 IRQ_TYPE_EDGE_RISING>,
+                     <GIC_SPI 217 IRQ_TYPE_EDGE_RISING>;
+        interrupt-names = "edma3_ccint",
+                          "edma3_mperr",
+                          "edma3_ccerrint";
+        dma-requests = <64>;
+        #dma-cells = <2>;
+
+        ti,tptcs = <&edma_tptc0 7>, <&edma_tptc1 7>, <&edma_tptc2 0>;
+
+        /* Channel 20 and 21 is allocated for memcpy */
+        ti,edma-memcpy-channels = <20 21>;
+        /* The following PaRAM slots are reserved: 35-44 and 100-109 */
+        ti,edma-reserved-slot-ranges = <35 10>, <100 10>;
+        /* The following channels are reserved: 35-44 */
+        dma-channel-mask = <0xffffffff /* Channel 0-31 */
+                            0xffffe007>; /* Channel 32-63 */
+    };
