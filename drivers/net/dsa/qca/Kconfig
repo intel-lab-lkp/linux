@@ -11,6 +11,7 @@ config NET_DSA_AR9331
 config NET_DSA_QCA8K
 	tristate "Qualcomm Atheros QCA8K Ethernet switch family support"
 	select NET_DSA_TAG_QCA
+	select NET_DSA_QCA8K_LIB
 	select REGMAP
 	help
 	  This enables support for the Qualcomm Atheros QCA8K Ethernet
@@ -24,3 +25,12 @@ config NET_DSA_QCA8K_LEDS_SUPPORT
 	help
 	  This enabled support for LEDs present on the Qualcomm Atheros
 	  QCA8K Ethernet switch chips.
+
+config NET_DSA_QCA8K_LIB
+	tristate "Qualcomm Atheros QCA8K hardware support library"
+	select REGMAP
+	help
+	  This enables the hardware support library for the Qualcomm
+	  Atheros QCA8K Ethernet switch. It is used by the switchdev-based
+	  IPQ4019 integrated switch driver and by the DSA QCA8K switch
+	  driver.
