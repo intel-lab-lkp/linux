@@ -94,8 +94,8 @@ nouveau_vga_init(struct nouveau_drm *drm)
 
 	vga_client_register(pdev, nouveau_vga_set_decode);
 
-	/* don't register Thunderbolt eGPU with vga_switcheroo */
-	if (pci_is_thunderbolt_attached(pdev))
+	/* don't register USB4/Thunderbolt eGPU with vga_switcheroo */
+	if (dev_is_removable(&pdev->dev))
 		return;
 
 	vga_switcheroo_register_client(pdev, &nouveau_switcheroo_ops, runtime);
@@ -118,7 +118,7 @@ nouveau_vga_fini(struct nouveau_drm *drm)
 
 	vga_client_unregister(pdev);
 
-	if (pci_is_thunderbolt_attached(pdev))
+	if (dev_is_removable(&pdev->dev))
 		return;
 
 	vga_switcheroo_unregister_client(pdev);
