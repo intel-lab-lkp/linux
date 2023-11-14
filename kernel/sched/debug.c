@@ -579,7 +579,7 @@ print_task(struct seq_file *m, struct rq *rq, struct task_struct *p)
 	else
 		SEQ_printf(m, " %c", task_state_to_char(p));
 
-	SEQ_printf(m, "%15s %5d %9Ld.%06ld %c %9Ld.%06ld %9Ld.%06ld %9Ld.%06ld %9Ld %5d ",
+	SEQ_printf(m, " %15s %5d %9Ld.%06ld %c %9Ld.%06ld %9Ld.%06ld %9Ld.%06ld %9Ld %5d ",
 		p->comm, task_pid_nr(p),
 		SPLIT_NS(p->se.vruntime),
 		entity_eligible(cfs_rq_of(&p->se), &p->se) ? 'E' : 'N',
@@ -589,14 +589,13 @@ print_task(struct seq_file *m, struct rq *rq, struct task_struct *p)
 		(long long)(p->nvcsw + p->nivcsw),
 		p->prio);
 
-	SEQ_printf(m, "%9lld.%06ld %9lld.%06ld %9lld.%06ld %9lld.%06ld",
+	SEQ_printf(m, "%9lld.%06ld %9lld.%06ld %9lld.%06ld",
 		SPLIT_NS(schedstat_val_or_zero(p->stats.wait_sum)),
-		SPLIT_NS(p->se.sum_exec_runtime),
 		SPLIT_NS(schedstat_val_or_zero(p->stats.sum_sleep_runtime)),
 		SPLIT_NS(schedstat_val_or_zero(p->stats.sum_block_runtime)));
 
 #ifdef CONFIG_NUMA_BALANCING
-	SEQ_printf(m, " %d %d", task_node(p), task_numa_group_id(p));
+	SEQ_printf(m, " %5d %5d", task_node(p), task_numa_group_id(p));
 #endif
 #ifdef CONFIG_CGROUP_SCHED
 	SEQ_printf_task_group_path(m, task_group(p), " %s")
@@ -611,10 +610,37 @@ static void print_rq(struct seq_file *m, struct rq *rq, int rq_cpu)
 
 	SEQ_printf(m, "\n");
 	SEQ_printf(m, "runnable tasks:\n");
-	SEQ_printf(m, " S            task   PID         tree-key  switches  prio"
-		   "     wait-time             sum-exec        sum-sleep\n");
-	SEQ_printf(m, "-------------------------------------------------------"
-		   "------------------------------------------------------\n");
+	SEQ_printf(m, " S"
+		"            task"
+		"   PID"
+		"         tree-key"
+		" E"
+		"         deadline"
+		"            slice"
+		"         sum-exec"
+		"  switches"
+		"  prio"
+		"        wait-time"
+		"        sum-sleep"
+		"        sum-block"
+#ifdef CONFIG_NUMA_BALANCING
+		"  node    id"
+#endif
+#ifdef CONFIG_CGROUP_SCHED
+		" task-group"
+#endif
+		"\n"
+	);
+	SEQ_printf(m, "--------------------------------------------------------"
+		"--------------------------------------------------------------"
+		"-------------------------------------------"
+#ifdef CONFIG_NUMA_BALANCING
+		"------------"
+#endif
+#ifdef CONFIG_CGROUP_SCHED
+		"-----------"
+#endif
+		"\n");
 
 	rcu_read_lock();
 	for_each_process_thread(g, p) {
