@@ -6269,11 +6269,20 @@ static u32 pcie_calc_bw_limits(struct pci_dev *dev, u32 bw,
  * limiting_dev, speed, and width pointers are supplied) information about
  * that point.  The bandwidth returned is in Mb/s, i.e., megabits/second of
  * raw bandwidth.
+ *
+ * This excludes the bandwidth calculation that has been returned from a
+ * PCIe device that is used for transmitting tunneled PCIe traffic over a virtual
+ * link part of larger hierarchy. Examples include Thunderbolt3 and USB4 links.
+ * The calculation is excluded because the USB4 specification specifies that the
+ * max speed returned from PCIe configuration registers for the tunneling link is
+ * always PCI 1x 2.5 GT/s.  When only tunneled devices are present, the bandwidth
+ * returned is the bandwidth available from the first tunneled device.
  */
 u32 pcie_bandwidth_available(struct pci_dev *dev, struct pci_dev **limiting_dev,
 			     enum pci_bus_speed *speed,
 			     enum pcie_link_width *width)
 {
+	struct pci_dev *vdev = NULL;
 	u32 bw = 0;
 
 	if (speed)
@@ -6282,9 +6291,19 @@ u32 pcie_bandwidth_available(struct pci_dev *dev, struct pci_dev **limiting_dev,
 		*width = PCIE_LNK_WIDTH_UNKNOWN;
 
 	while (dev) {
+		if (dev->is_virtual_link || dev->is_thunderbolt) {
+			if (!vdev)
+				vdev = dev;
+			goto skip;
+		}
 		bw = pcie_calc_bw_limits(dev, bw, limiting_dev, speed, width);
+skip:
 		dev = pci_upstream_bridge(dev);
 	}
+
+	/* If nothing "faster" found on hierarchy, limit to first virtual link */
+	if (vdev && !bw)
+		bw = pcie_calc_bw_limits(vdev, bw, limiting_dev, speed, width);
 
 	return bw;
 }
