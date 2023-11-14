@@ -306,6 +306,8 @@ err_wedged:
 
 static void wait_for_suspend(struct intel_gt *gt)
 {
+	int final_timeout_ms = (I915_GT_SUSPEND_IDLE_TIMEOUT * 10);
+
 	if (!intel_gt_pm_is_awake(gt))
 		return;
 
@@ -318,7 +320,10 @@ static void wait_for_suspend(struct intel_gt *gt)
 		intel_gt_retire_requests(gt);
 	}
 
-	intel_gt_pm_wait_for_idle(gt);
+	/* we are suspending, so we shouldn't be waiting forever */
+	if (intel_gt_pm_wait_timeout_for_idle(gt, final_timeout_ms) == -ETIMEDOUT)
+		gt_warn(gt, "bailing from %s after %d milisec timeout\n",
+			__func__, final_timeout_ms);
 }
 
 void intel_gt_suspend_prepare(struct intel_gt *gt)
