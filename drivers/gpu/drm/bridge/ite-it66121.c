@@ -340,6 +340,37 @@ static int it66121_of_read_bus_width(struct device *dev, u32 *bus_width)
 	return 0;
 }
 
+static int it66121_of_get_next_bridge(struct device *dev,
+				      struct drm_bridge **next_bridge)
+{
+	struct device_node *np;
+	struct drm_bridge *bridge;
+
+	np = of_graph_get_remote_node(dev->of_node, 1, -1);
+	if (!np) {
+		dev_err(dev, "The endpoint is unconnected\n");
+		return -EINVAL;
+	}
+
+	if (!of_device_is_available(np)) {
+		of_node_put(np);
+		dev_err(dev, "The remote device is disabled\n");
+		return -ENODEV;
+	}
+
+	bridge = of_drm_find_bridge(np);
+	of_node_put(np);
+
+	if (!bridge) {
+		dev_dbg(dev, "Next bridge not found, deferring probe\n");
+		return -EPROBE_DEFER;
+	}
+
+	*next_bridge = bridge;
+
+	return 0;
+}
+
 static const struct regmap_range_cfg it66121_regmap_banks[] = {
 	{
 		.name = "it66121",
@@ -1531,7 +1562,6 @@ static const char * const it66121_supplies[] = {
 static int it66121_probe(struct i2c_client *client)
 {
 	u32 revision_id, vendor_ids[2] = { 0 }, device_ids[2] = { 0 };
-	struct device_node *ep;
 	int ret;
 	struct it66121_ctx *ctx;
 	struct device *dev = &client->dev;
@@ -1553,24 +1583,9 @@ static int it66121_probe(struct i2c_client *client)
 	if (ret)
 		return ret;
 
-	ep = of_graph_get_remote_node(dev->of_node, 1, -1);
-	if (!ep) {
-		dev_err(dev, "The endpoint is unconnected\n");
-		return -EINVAL;
-	}
-
-	if (!of_device_is_available(ep)) {
-		of_node_put(ep);
-		dev_err(dev, "The remote device is disabled\n");
-		return -ENODEV;
-	}
-
-	ctx->next_bridge = of_drm_find_bridge(ep);
-	of_node_put(ep);
-	if (!ctx->next_bridge) {
-		dev_dbg(dev, "Next bridge not found, deferring probe\n");
-		return -EPROBE_DEFER;
-	}
+	ret = it66121_of_get_next_bridge(dev, &ctx->next_bridge);
+	if (ret)
+		return ret;
 
 	i2c_set_clientdata(client, ctx);
 	mutex_init(&ctx->lock);
