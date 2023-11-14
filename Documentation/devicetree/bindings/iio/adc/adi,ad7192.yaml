@@ -80,6 +80,16 @@ properties:
       and when chop is disabled.
     type: boolean
 
+  adi,clock-xtal:
+    description: |
+      External crystal connected from MCLK1 to MCLK2.
+    type: boolean
+
+  adi,int-clock-output-enable:
+    description: |
+      Internal 4.92 MHz clock available on MCLK2 pin.
+    type: boolean
+
   bipolar:
     description: see Documentation/devicetree/bindings/iio/adc/adc.yaml
     type: boolean
