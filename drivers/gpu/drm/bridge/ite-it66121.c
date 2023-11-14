@@ -22,6 +22,7 @@
 
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_bridge.h>
+#include <drm/drm_bridge_connector.h>
 #include <drm/drm_edid.h>
 #include <drm/drm_modes.h>
 #include <drm/drm_print.h>
@@ -703,14 +704,32 @@ static int it66121_bridge_attach(struct drm_bridge *bridge,
 				 enum drm_bridge_attach_flags flags)
 {
 	struct it66121_ctx *ctx = bridge_to_it66121(bridge);
+	struct drm_bridge *next_bridge = ctx->next_bridge;
+	struct drm_encoder *encoder = bridge->encoder;
 	int ret;
 
-	if (!(flags & DRM_BRIDGE_ATTACH_NO_CONNECTOR))
-		return -EINVAL;
+	if (next_bridge) {
+		if (!(flags & DRM_BRIDGE_ATTACH_NO_CONNECTOR)) {
+			WARN_ON(1);
+			flags |= DRM_BRIDGE_ATTACH_NO_CONNECTOR;
+		}
+		ret = drm_bridge_attach(encoder, next_bridge, bridge, flags);
+		if (ret)
+			return ret;
+	} else {
+		struct drm_connector *connector;
 
-	ret = drm_bridge_attach(bridge->encoder, ctx->next_bridge, bridge, flags);
-	if (ret)
-		return ret;
+		if (flags & DRM_BRIDGE_ATTACH_NO_CONNECTOR)
+			WARN_ON(1);
+
+		connector = drm_bridge_connector_init(bridge->dev, encoder);
+		if (IS_ERR(connector))
+			return PTR_ERR(connector);
+
+		drm_connector_attach_encoder(connector, encoder);
+
+		ctx->connector = connector;
+	}
 
 	if (ctx->info->id == ID_IT66121) {
 		ret = regmap_write_bits(ctx->regmap, IT66121_CLK_BANK_REG,
@@ -1632,16 +1651,13 @@ static const char * const it66121_supplies[] = {
 	"vcn33", "vcn18", "vrf12"
 };
 
-static int it66121_probe(struct i2c_client *client)
+int it66121_create_bridge(struct i2c_client *client, bool of_support,
+			  bool hpd_support, bool audio_support,
+			  struct drm_bridge **bridge)
 {
+	struct device *dev = &client->dev;
 	int ret;
 	struct it66121_ctx *ctx;
-	struct device *dev = &client->dev;
-
-	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
-		dev_err(dev, "I2C check functionality failed.\n");
-		return -ENXIO;
-	}
 
 	ctx = devm_kzalloc(dev, sizeof(*ctx), GFP_KERNEL);
 	if (!ctx)
@@ -1649,24 +1665,19 @@ static int it66121_probe(struct i2c_client *client)
 
 	ctx->dev = dev;
 	ctx->client = client;
-	ctx->info = i2c_get_match_data(client);
-
-	ret = it66121_of_read_bus_width(dev, &ctx->bus_width);
-	if (ret)
-		return ret;
-
-	ret = it66121_of_get_next_bridge(dev, &ctx->next_bridge);
-	if (ret)
-		return ret;
-
-	i2c_set_clientdata(client, ctx);
 	mutex_init(&ctx->lock);
 
-	ret = devm_regulator_bulk_get_enable(dev, ARRAY_SIZE(it66121_supplies),
-					     it66121_supplies);
-	if (ret) {
-		dev_err(dev, "Failed to enable power supplies\n");
-		return ret;
+	if (of_support) {
+		ret = it66121_of_read_bus_width(dev, &ctx->bus_width);
+		if (ret)
+			return ret;
+
+		ret = it66121_of_get_next_bridge(dev, &ctx->next_bridge);
+		if (ret)
+			return ret;
+	} else {
+		ctx->bus_width = 24;
+		ctx->next_bridge = NULL;
 	}
 
 	it66121_hw_reset(ctx);
@@ -1679,33 +1690,80 @@ static int it66121_probe(struct i2c_client *client)
 	if (ret)
 		return ret;
 
-	if (ctx->vender_id != ctx->info->vid ||
-	    ctx->device_id != ctx->info->pid)
+	ctx->info = it66121_get_match_data(ctx->vender_id, ctx->device_id);
+	if (!ctx->info)
 		return -ENODEV;
 
-	ret = devm_request_threaded_irq(dev, client->irq, NULL,	it66121_irq_threaded_handler,
-					IRQF_ONESHOT, dev_name(dev), ctx);
-	if (ret < 0) {
-		dev_err(dev, "Failed to request irq %d:%d\n", client->irq, ret);
-		return ret;
+	if (hpd_support) {
+		ret = devm_request_threaded_irq(dev, client->irq, NULL,
+						it66121_irq_threaded_handler,
+						IRQF_ONESHOT, dev_name(dev),
+						ctx);
+		if (ret < 0) {
+			dev_err(dev, "Failed to request irq: %d\n", ret);
+			return ret;
+		}
 	}
 
 	it66121_bridge_init_base(&ctx->bridge, dev->of_node, true);
 
-	it66121_audio_codec_init(ctx, dev);
+	if (audio_support)
+		it66121_audio_codec_init(ctx, dev);
+
+	*bridge = &ctx->bridge;
 
 	dev_info(dev, "IT66121 probed, chip id: 0x%x:0x%x, revision: %u\n",
 		 ctx->vender_id, ctx->device_id, ctx->revision);
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(it66121_create_bridge);
+
+static int it66121_probe(struct i2c_client *client)
+{
+	struct device *dev = &client->dev;
+	struct it66121_ctx *ctx;
+	struct drm_bridge *bridge;
+	int ret;
+
+	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
+		dev_err(dev, "I2C check functionality failed.\n");
+		return -ENXIO;
+	}
+
+	ret = devm_regulator_bulk_get_enable(dev, ARRAY_SIZE(it66121_supplies),
+					     it66121_supplies);
+	if (ret) {
+		dev_err(dev, "Failed to enable power supplies\n");
+		return ret;
+	}
+
+	ret = it66121_create_bridge(client, true, true, true, &bridge);
+	if (ret)
+		return ret;
+
+	ctx = bridge_to_it66121(bridge);
+
+	i2c_set_clientdata(client, ctx);
+
+	return 0;
+}
+
+void it66121_destroy_bridge(struct drm_bridge *bridge)
+{
+	struct it66121_ctx *ctx = bridge_to_it66121(bridge);
+
+	drm_bridge_remove(bridge);
+
+	mutex_destroy(&ctx->lock);
+}
+EXPORT_SYMBOL_GPL(it66121_destroy_bridge);
 
 static void it66121_remove(struct i2c_client *client)
 {
 	struct it66121_ctx *ctx = i2c_get_clientdata(client);
 
-	drm_bridge_remove(&ctx->bridge);
-	mutex_destroy(&ctx->lock);
+	it66121_destroy_bridge(&ctx->bridge);
 }
 
 static const struct of_device_id it66121_dt_match[] = {
