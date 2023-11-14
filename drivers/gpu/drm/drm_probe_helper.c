@@ -1116,21 +1116,20 @@ EXPORT_SYMBOL(drm_crtc_helper_mode_valid_fixed);
  */
 int drm_connector_helper_get_modes_from_ddc(struct drm_connector *connector)
 {
-	struct edid *edid;
-	int count = 0;
+	const struct drm_edid *drm_edid;
+	int count;
 
 	if (!connector->ddc)
 		return 0;
 
-	edid = drm_get_edid(connector, connector->ddc);
+	drm_edid = drm_edid_read(connector);
 
-	// clears property if EDID is NULL
-	drm_connector_update_edid_property(connector, edid);
+	/* clears property if EDID is NULL */
+	drm_edid_connector_update(connector, drm_edid);
 
-	if (edid) {
-		count = drm_add_edid_modes(connector, edid);
-		kfree(edid);
-	}
+	count = drm_edid_connector_add_modes(connector);
+
+	drm_edid_free(drm_edid);
 
 	return count;
 }
