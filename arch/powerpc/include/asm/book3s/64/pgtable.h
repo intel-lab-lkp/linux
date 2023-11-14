@@ -17,12 +17,6 @@
 #define _PAGE_EXEC		0x00001 /* execute permission */
 #define _PAGE_WRITE		0x00002 /* write access allowed */
 #define _PAGE_READ		0x00004	/* read access allowed */
-#define _PAGE_NA		_PAGE_PRIVILEGED
-#define _PAGE_NAX		_PAGE_EXEC
-#define _PAGE_RO		_PAGE_READ
-#define _PAGE_ROX		(_PAGE_READ | _PAGE_EXEC)
-#define _PAGE_RW		(_PAGE_READ | _PAGE_WRITE)
-#define _PAGE_RWX		(_PAGE_READ | _PAGE_WRITE | _PAGE_EXEC)
 #define _PAGE_PRIVILEGED	0x00008 /* kernel access only */
 #define _PAGE_SAO		0x00010 /* Strong access order */
 #define _PAGE_NON_IDEMPOTENT	0x00020 /* non idempotent memory */
@@ -529,6 +523,9 @@ static inline bool pte_user(pte_t pte)
 }
 
 #define pte_access_permitted pte_access_permitted
+/*
+ * execute-only mappings return false
+ */
 static inline bool pte_access_permitted(pte_t pte, bool write)
 {
 	/*
