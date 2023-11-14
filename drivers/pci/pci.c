@@ -6224,6 +6224,38 @@ int pcie_set_mps(struct pci_dev *dev, int mps)
 }
 EXPORT_SYMBOL(pcie_set_mps);
 
+static u32 pcie_calc_bw_limits(struct pci_dev *dev, u32 bw,
+			       struct pci_dev **limiting_dev,
+			       enum pci_bus_speed *speed,
+			       enum pcie_link_width *width)
+{
+	enum pcie_link_width next_width;
+	enum pci_bus_speed next_speed;
+	u32 next_bw;
+	u16 lnksta;
+
+	pcie_capability_read_word(dev, PCI_EXP_LNKSTA, &lnksta);
+
+	next_speed = pcie_link_speed[FIELD_GET(PCI_EXP_LNKSTA_CLS, lnksta)];
+	next_width = FIELD_GET(PCI_EXP_LNKSTA_NLW, lnksta);
+
+	next_bw = next_width * PCIE_SPEED2MBS_ENC(next_speed);
+
+	/* Check if current device limits the total bandwidth */
+	if (!bw || next_bw <= bw) {
+		bw = next_bw;
+
+		if (limiting_dev)
+			*limiting_dev = dev;
+		if (speed)
+			*speed = next_speed;
+		if (width)
+			*width = next_width;
+	}
+
+	return bw;
+}
+
 /**
  * pcie_bandwidth_available - determine minimum link settings of a PCIe
  *			      device and its bandwidth limitation
@@ -6242,39 +6274,15 @@ u32 pcie_bandwidth_available(struct pci_dev *dev, struct pci_dev **limiting_dev,
 			     enum pci_bus_speed *speed,
 			     enum pcie_link_width *width)
 {
-	u16 lnksta;
-	enum pci_bus_speed next_speed;
-	enum pcie_link_width next_width;
-	u32 bw, next_bw;
+	u32 bw = 0;
 
 	if (speed)
 		*speed = PCI_SPEED_UNKNOWN;
 	if (width)
 		*width = PCIE_LNK_WIDTH_UNKNOWN;
 
-	bw = 0;
-
 	while (dev) {
-		pcie_capability_read_word(dev, PCI_EXP_LNKSTA, &lnksta);
-
-		next_speed = pcie_link_speed[FIELD_GET(PCI_EXP_LNKSTA_CLS,
-						       lnksta)];
-		next_width = FIELD_GET(PCI_EXP_LNKSTA_NLW, lnksta);
-
-		next_bw = next_width * PCIE_SPEED2MBS_ENC(next_speed);
-
-		/* Check if current device limits the total bandwidth */
-		if (!bw || next_bw <= bw) {
-			bw = next_bw;
-
-			if (limiting_dev)
-				*limiting_dev = dev;
-			if (speed)
-				*speed = next_speed;
-			if (width)
-				*width = next_width;
-		}
-
+		bw = pcie_calc_bw_limits(dev, bw, limiting_dev, speed, width);
 		dev = pci_upstream_bridge(dev);
 	}
 
