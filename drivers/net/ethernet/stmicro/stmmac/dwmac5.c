@@ -716,11 +716,11 @@ void dwmac5_fpe_configure(void __iomem *ioaddr, u32 num_txq, u32 num_rxq,
 	u32 value;
 
 	if (!enable) {
-		value = readl(ioaddr + MAC_FPE_CTRL_STS);
+		value = readb(ioaddr + MAC_FPE_CTRL_STS);
 
 		value &= ~EFPE;
 
-		writel(value, ioaddr + MAC_FPE_CTRL_STS);
+		writeb(value, ioaddr + MAC_FPE_CTRL_STS);
 		return;
 	}
 
@@ -729,9 +729,9 @@ void dwmac5_fpe_configure(void __iomem *ioaddr, u32 num_txq, u32 num_rxq,
 	value |= (num_rxq - 1) << GMAC_RXQCTRL_FPRQ_SHIFT;
 	writel(value, ioaddr + GMAC_RXQ_CTRL1);
 
-	value = readl(ioaddr + MAC_FPE_CTRL_STS);
+	value = readb(ioaddr + MAC_FPE_CTRL_STS);
 	value |= EFPE;
-	writel(value, ioaddr + MAC_FPE_CTRL_STS);
+	writeb(value, ioaddr + MAC_FPE_CTRL_STS);
 }
 
 int dwmac5_fpe_irq_status(void __iomem *ioaddr, struct net_device *dev)
@@ -770,7 +770,7 @@ void dwmac5_fpe_send_mpacket(void __iomem *ioaddr, enum stmmac_mpacket_type type
 {
 	u32 value;
 
-	value = readl(ioaddr + MAC_FPE_CTRL_STS);
+	value = readb(ioaddr + MAC_FPE_CTRL_STS);
 
 	if (type == MPACKET_VERIFY) {
 		value &= ~SRSP;
@@ -780,5 +780,5 @@ void dwmac5_fpe_send_mpacket(void __iomem *ioaddr, enum stmmac_mpacket_type type
 		value |= SRSP;
 	}
 
-	writel(value, ioaddr + MAC_FPE_CTRL_STS);
+	writeb(value, ioaddr + MAC_FPE_CTRL_STS);
 }
