@@ -2109,8 +2109,8 @@ char *fwnode_full_name_string(struct fwnode_handle *fwnode, char *buf,
 {
 	int depth;
 
-	/* Loop starting from the root node to the current node. */
-	for (depth = fwnode_count_parents(fwnode); depth >= 0; depth--) {
+	/* Loop starting from the root node to the parent of current node. */
+	for (depth = fwnode_count_parents(fwnode); depth > 0; depth--) {
 		struct fwnode_handle *__fwnode =
 			fwnode_get_nth_parent(fwnode, depth);
 
@@ -2121,6 +2121,16 @@ char *fwnode_full_name_string(struct fwnode_handle *fwnode, char *buf,
 
 		fwnode_handle_put(__fwnode);
 	}
+
+	/* Handle current node without calling fwnode_handle_{get,put}().
+	 * This allows to print the full node name while the current node is
+	 * being destroyed (ie print from a function called because of
+	 * refcount == 0) without any refcount issues.
+	 */
+	buf = string(buf, end, fwnode_get_name_prefix(fwnode),
+		     default_str_spec);
+	buf = string(buf, end, fwnode_get_name(fwnode),
+		     default_str_spec);
 
 	return buf;
 }
