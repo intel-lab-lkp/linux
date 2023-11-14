@@ -369,8 +369,10 @@ static inline void do_message_pass(int cpu, int msg)
 
 void arch_smp_send_reschedule(int cpu)
 {
-	if (likely(smp_ops))
+	if (likely(smp_ops)) {
+		__smp_lwsync();
 		do_message_pass(cpu, PPC_MSG_RESCHEDULE);
+	}
 }
 EXPORT_SYMBOL_GPL(arch_smp_send_reschedule);
 
