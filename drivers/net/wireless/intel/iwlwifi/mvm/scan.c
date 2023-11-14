@@ -2356,7 +2356,10 @@ iwl_mvm_scan_umac_fill_general_p_v12(struct iwl_mvm *mvm,
 			link_id = ffs(vif->active_links) - 1;
 
 		link_info = scan_vif->link[link_id];
-		if (!WARN_ON(!link_info))
+		if (WARN_ON(!link_info))
+			IWL_ERR(mvm, "scan failure: Cannot find link info for link-id: %d active-links: 0x%x\n",
+				link_id, vif->active_links);
+		else
 			gp->scan_start_mac_or_link_id = link_info->fw_link_id;
 	}
 }
