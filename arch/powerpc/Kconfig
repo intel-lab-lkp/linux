@@ -380,8 +380,9 @@ config DEFAULT_UIMAGE
 	  Used to allow a board to specify it wants a uImage built by default
 
 config ARCH_HIBERNATION_POSSIBLE
-	bool
-	default y
+	def_bool y
+	depends on PPC_PSERIES || \
+		PPC_PMAC || PPC_POWERNV || FSL_SOC_BOOKE
 
 config ARCH_SUSPEND_POSSIBLE
 	def_bool y
