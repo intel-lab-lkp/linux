@@ -4625,6 +4625,7 @@ int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 	case KVM_CAP_ENABLE_CAP:
 	case KVM_CAP_VM_DISABLE_NX_HUGE_PAGES:
 	case KVM_CAP_IRQFD_RESAMPLE:
+	case KVM_CAP_X86_BUS_FREQUENCY_CONTROL:
 		r = 1;
 		break;
 	case KVM_CAP_EXIT_HYPERCALL:
@@ -6616,6 +6617,40 @@ split_irqchip_unlock:
 		}
 		mutex_unlock(&kvm->lock);
 		break;
+	case KVM_CAP_X86_BUS_FREQUENCY_CONTROL: {
+		u64 bus_frequency = cap->args[0];
+		u64 bus_cycle_ns;
+
+		if (!bus_frequency)
+			return -EINVAL;
+		/* CPUID[0x15] only support 32bits.  */
+		if (bus_frequency != (u32)bus_frequency)
+			return -EINVAL;
+
+		/* Cast to avoid 64bit division on 32bit platform. */
+		bus_cycle_ns = 1000000000UL / (u32)bus_frequency;
+		if (!bus_cycle_ns)
+			return -EINVAL;
+
+		r = 0;
+		mutex_lock(&kvm->lock);
+		/*
+		 * Don't allow to change the frequency dynamically during vcpu
+		 * running to avoid potentially bizarre behavior.
+		 */
+		if (kvm->created_vcpus)
+			r = -EBUSY;
+		/* This is for in-kernel vAPIC emulation. */
+		else if (!irqchip_in_kernel(kvm))
+			r = -ENXIO;
+
+		if (!r) {
+			kvm->arch.apic_bus_cycle_ns = bus_cycle_ns;
+			kvm->arch.apic_bus_frequency = bus_frequency;
+		}
+		mutex_unlock(&kvm->lock);
+		return r;
+	}
 	default:
 		r = -EINVAL;
 		break;
