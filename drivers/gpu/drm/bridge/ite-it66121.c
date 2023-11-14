@@ -313,6 +313,9 @@ struct it66121_ctx {
 		bool auto_cts;
 	} audio;
 	const struct it66121_chip_info *info;
+	u16 vender_id;
+	u16 device_id;
+	u8 revision;
 };
 
 static inline struct it66121_ctx *bridge_to_it66121(struct drm_bridge *bridge)
@@ -397,6 +400,30 @@ static void it66121_hw_reset(struct it66121_ctx *ctx)
 	gpiod_set_value(ctx->gpio_reset, 1);
 	msleep(20);
 	gpiod_set_value(ctx->gpio_reset, 0);
+}
+
+static int it66121_read_chip_id(struct it66121_ctx *ctx, bool verbose)
+{
+	u8 id[4];
+	int ret;
+
+	ret = regmap_bulk_read(ctx->regmap, IT66121_VENDOR_ID0_REG, id, 4);
+	if (ret < 0) {
+		dev_err(ctx->dev, "Failed to read chip ID: %d\n", ret);
+		return ret;
+	}
+
+	ctx->vender_id = (u16)id[1] << 8 | id[0];
+	ctx->device_id = ((u16)(id[3] & IT66121_DEVICE_ID1_MASK) << 8 | id[2]);
+	/* Revision is shared with DEVICE_ID1 */
+	ctx->revision = FIELD_GET(IT66121_REVISION_MASK, id[3]);
+
+	if (verbose) {
+		dev_info(ctx->dev, "Found ITE66121: 0x%x%x, revision: %u\n",
+			 ctx->vender_id, ctx->device_id, ctx->revision);
+	}
+
+	return 0;
 }
 
 static inline int it66121_preamble_ddc(struct it66121_ctx *ctx)
@@ -1561,7 +1588,6 @@ static const char * const it66121_supplies[] = {
 
 static int it66121_probe(struct i2c_client *client)
 {
-	u32 revision_id, vendor_ids[2] = { 0 }, device_ids[2] = { 0 };
 	int ret;
 	struct it66121_ctx *ctx;
 	struct device *dev = &client->dev;
@@ -1603,19 +1629,13 @@ static int it66121_probe(struct i2c_client *client)
 	if (IS_ERR(ctx->regmap))
 		return PTR_ERR(ctx->regmap);
 
-	regmap_read(ctx->regmap, IT66121_VENDOR_ID0_REG, &vendor_ids[0]);
-	regmap_read(ctx->regmap, IT66121_VENDOR_ID1_REG, &vendor_ids[1]);
-	regmap_read(ctx->regmap, IT66121_DEVICE_ID0_REG, &device_ids[0]);
-	regmap_read(ctx->regmap, IT66121_DEVICE_ID1_REG, &device_ids[1]);
+	ret = it66121_read_chip_id(ctx, false);
+	if (ret)
+		return ret;
 
-	/* Revision is shared with DEVICE_ID1 */
-	revision_id = FIELD_GET(IT66121_REVISION_MASK, device_ids[1]);
-	device_ids[1] &= IT66121_DEVICE_ID1_MASK;
-
-	if ((vendor_ids[1] << 8 | vendor_ids[0]) != ctx->info->vid ||
-	    (device_ids[1] << 8 | device_ids[0]) != ctx->info->pid) {
+	if (ctx->vender_id != ctx->info->vid ||
+	    ctx->device_id != ctx->info->pid)
 		return -ENODEV;
-	}
 
 	ctx->bridge.funcs = &it66121_bridge_funcs;
 	ctx->bridge.of_node = dev->of_node;
@@ -1633,7 +1653,8 @@ static int it66121_probe(struct i2c_client *client)
 
 	drm_bridge_add(&ctx->bridge);
 
-	dev_info(dev, "IT66121 revision %d probed\n", revision_id);
+	dev_info(dev, "IT66121 probed, chip id: 0x%x:0x%x, revision: %u\n",
+		 ctx->vender_id, ctx->device_id, ctx->revision);
 
 	return 0;
 }
