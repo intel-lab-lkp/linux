@@ -331,6 +331,9 @@ static int autofs_fill_super(struct super_block *s, struct fs_context *fc)
 		goto fail;
 
 	root_inode = autofs_get_inode(s, S_IFDIR | 0755);
+	if (!root_inode)
+		goto fail_ino;
+
 	root_inode->i_uid = ctx->uid;
 	root_inode->i_gid = ctx->gid;
 
