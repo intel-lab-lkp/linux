@@ -495,7 +495,7 @@ bool ceph_quota_update_statfs(struct ceph_fs_client *fsc, struct kstatfs *buf)
 	realm = get_quota_realm(mdsc, d_inode(fsc->sb->s_root),
 				QUOTA_GET_MAX_BYTES, true);
 	up_read(&mdsc->snap_rwsem);
-	if (!realm)
+	if (IS_ERR_OR_NULL(realm))
 		return false;
 
 	spin_lock(&realm->inodes_with_caps_lock);
