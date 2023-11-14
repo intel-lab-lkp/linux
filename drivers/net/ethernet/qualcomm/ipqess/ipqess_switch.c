@@ -80,21 +80,8 @@ unsigned int ipqess_switch_fastest_ageing_time(struct ipqess_switch *sw,
 int ipqess_set_ageing_time(struct ipqess_switch *sw, unsigned int msecs)
 {
 	struct qca8k_priv *priv = sw->priv;
-	unsigned int secs = msecs / 1000;
-	u32 val;
 
-	/* AGE_TIME reg is set in 7s step */
-	val = secs / 7;
-
-	/* Handle case with 0 as val to NOT disable
-	 * learning
-	 */
-	if (!val)
-		val = 1;
-
-	return regmap_update_bits(priv->regmap, QCA8K_REG_ATU_CTRL,
-				  QCA8K_ATU_AGE_TIME_MASK,
-				  QCA8K_ATU_AGE_TIME(val));
+	return qca8k_set_ageing_time(priv, msecs);
 }
 
 static struct qca8k_pcs *pcs_to_qca8k_pcs(struct phylink_pcs *pcs)

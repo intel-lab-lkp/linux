@@ -553,7 +553,8 @@ int qca8k_set_mac_eee(struct dsa_switch *ds, int port, struct ethtool_eee *eee);
 int qca8k_get_mac_eee(struct dsa_switch *ds, int port, struct ethtool_eee *e);
 
 /* Common bridge function */
-void qca8k_port_stp_state_set(struct dsa_switch *ds, int port, u8 state);
+void qca8k_port_stp_state_set(struct qca8k_priv *priv, int port, u8 state,
+			      bool port_learning, int set_learning);
 int qca8k_port_pre_bridge_flags(struct dsa_switch *ds, int port,
 				struct switchdev_brport_flags flags,
 				struct netlink_ext_ack *extack);
@@ -577,8 +578,8 @@ int qca8k_port_change_mtu(struct dsa_switch *ds, int port, int new_mtu);
 int qca8k_port_max_mtu(struct dsa_switch *ds, int port);
 
 /* Common fast age function */
-void qca8k_port_fast_age(struct dsa_switch *ds, int port);
-int qca8k_set_ageing_time(struct dsa_switch *ds, unsigned int msecs);
+void qca8k_port_fast_age(struct qca8k_priv *priv, int port);
+int qca8k_set_ageing_time(struct qca8k_priv *priv, unsigned int msecs);
 
 /* Common FDB function */
 int qca8k_port_fdb_insert(struct qca8k_priv *priv, const u8 *addr,
@@ -589,7 +590,7 @@ int qca8k_port_fdb_add(struct dsa_switch *ds, int port,
 int qca8k_port_fdb_del(struct dsa_switch *ds, int port,
 		       const unsigned char *addr, u16 vid,
 		       struct dsa_db db);
-int qca8k_port_fdb_dump(struct dsa_switch *ds, int port,
+int qca8k_port_fdb_dump(struct qca8k_priv *priv, int port,
 			dsa_fdb_dump_cb_t *cb, void *data);
 int qca8k_fdb_del(struct qca8k_priv *priv, const u8 *mac,
 		  u16 port_mask, u16 vid);
@@ -618,13 +619,12 @@ void qca8k_port_mirror_del(struct dsa_switch *ds, int port,
 			   struct dsa_mall_mirror_tc_entry *mirror);
 
 /* Common port VLAN function */
-int qca8k_port_vlan_filtering(struct dsa_switch *ds, int port,
-			      bool vlan_filtering,
-			      struct netlink_ext_ack *extack);
+int qca8k_port_vlan_filtering(struct qca8k_priv *priv, int port,
+			      bool vlan_filtering);
 int qca8k_vlan_add(struct qca8k_priv *priv, u8 port, u16 vid,
 		   bool untagged);
 int qca8k_vlan_del(struct qca8k_priv *priv, u8 port, u16 vid);
-int qca8k_port_vlan_add(struct dsa_switch *ds, int port,
+int qca8k_port_vlan_add(struct qca8k_priv *priv, int port,
 			const struct switchdev_obj_port_vlan *vlan,
 			struct netlink_ext_ack *extack);
 int qca8k_port_vlan_del(struct dsa_switch *ds, int port,
