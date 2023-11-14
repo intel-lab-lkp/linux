@@ -349,11 +349,6 @@ static int sclp_mem_notifier(struct notifier_block *nb,
 		if (contains_standby_increment(start, start + size))
 			rc = -EPERM;
 		break;
-	case MEM_ONLINE:
-	case MEM_CANCEL_OFFLINE:
-		break;
-	case MEM_GOING_ONLINE:
-		break;
 	case MEM_PHYS_ONLINE:
 		rc = sclp_mem_change_state(start, size, 1);
 		if (rc || !memory_block->altmap)
@@ -368,9 +363,6 @@ static int sclp_mem_notifier(struct notifier_block *nb,
 		 * buddy allocator later.
 		 */
 		__arch_set_page_nodat((void *)start, memory_block->altmap->free);
-		break;
-	case MEM_CANCEL_ONLINE:
-	case MEM_OFFLINE:
 		break;
 	case MEM_PHYS_OFFLINE:
 		if (memory_block->altmap)
