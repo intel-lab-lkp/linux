@@ -1142,6 +1142,13 @@ struct phy_driver {
 	int (*led_hw_control_get)(struct phy_device *dev, u8 index,
 				  unsigned long *rules);
 
+	/* @calibration_start: Start calibrating the MAC-to-PHY link. */
+	int (*calibration_start)(struct phy_device *dev);
+
+	/* @calibration_start: Finalize MAC-to-PHY link calibration
+	 * and run tests. Returns 0 if the calibration tests are successful.
+	 */
+	int (*calibration_stop)(struct phy_device *dev);
 };
 #define to_phy_driver(d) container_of(to_mdio_common_driver(d),		\
 				      struct phy_driver, mdiodrv)
@@ -1769,6 +1776,27 @@ int phy_start_cable_test_tdr(struct phy_device *phydev,
 	return -EOPNOTSUPP;
 }
 #endif
+
+static inline
+int phy_start_calibration(struct phy_device *phydev)
+{
+	if (!(phydev->drv &&
+	      phydev->drv->calibration_start &&
+	      phydev->drv->calibration_stop))
+		return -EOPNOTSUPP;
+
+	return phydev->drv->calibration_start(phydev);
+}
+
+static inline
+int phy_stop_calibration(struct phy_device *phydev)
+{
+	if (!(phydev->drv &&
+	      phydev->drv->calibration_stop))
+		return -EOPNOTSUPP;
+
+	return phydev->drv->calibration_stop(phydev);
+}
 
 static inline void phy_device_reset(struct phy_device *phydev, int value)
 {
