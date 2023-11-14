@@ -673,6 +673,8 @@ static int parse_xfer_event(struct mhi_controller *mhi_cntrl,
 			}
 
 			read_lock_bh(&mhi_chan->lock);
+			if (mhi_chan->ch_state != MHI_CH_STATE_ENABLED)
+				goto end_process_tx_event;
 		}
 		break;
 	} /* CC_EOT */
@@ -1212,6 +1214,10 @@ int mhi_gen_tre(struct mhi_controller *mhi_cntrl, struct mhi_chan *mhi_chan,
 
 	/* Protect accesses for reading and incrementing WP */
 	write_lock_bh(&mhi_chan->lock);
+	if (mhi_chan->ch_state != MHI_CH_STATE_ENABLED) {
+		write_unlock_bh(&mhi_chan->lock);
+		return -EINVAL;
+	}
 
 	buf_ring = &mhi_chan->buf_ring;
 	tre_ring = &mhi_chan->tre_ring;
