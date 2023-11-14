@@ -61,24 +61,37 @@ const struct qca8k_mib_desc ar8327_mib[] = {
 	MIB_DESC(1, 0xa8, "RXUnicast"),
 	MIB_DESC(1, 0xac, "TXUnicast"),
 };
-EXPORT_SYMBOL(ar8327_mib);
+EXPORT_SYMBOL_GPL(ar8327_mib);
 
 int qca8k_read(struct qca8k_priv *priv, u32 reg, u32 *val)
 {
 	return regmap_read(priv->regmap, reg, val);
 }
-EXPORT_SYMBOL(qca8k_read);
+EXPORT_SYMBOL_GPL(qca8k_read);
 
 int qca8k_write(struct qca8k_priv *priv, u32 reg, u32 val)
 {
 	return regmap_write(priv->regmap, reg, val);
 }
-EXPORT_SYMBOL(qca8k_write);
+EXPORT_SYMBOL_GPL(qca8k_write);
 
 int qca8k_rmw(struct qca8k_priv *priv, u32 reg, u32 mask, u32 write_val)
 {
 	return regmap_update_bits(priv->regmap, reg, mask, write_val);
 }
+EXPORT_SYMBOL_GPL(qca8k_rmw);
+
+int qca8k_set_bits(struct qca8k_priv *priv, u32 reg, u32 bits)
+{
+	return regmap_set_bits(priv->regmap, reg, bits);
+}
+EXPORT_SYMBOL_GPL(qca8k_set_bits);
+
+int qca8k_clear_bits(struct qca8k_priv *priv, u32 reg, u32 bits)
+{
+	return regmap_clear_bits(priv->regmap, reg, bits);
+}
+EXPORT_SYMBOL_GPL(qca8k_clear_bits);
 
 static const struct regmap_range qca8k_readable_ranges[] = {
 	regmap_reg_range(0x0000, 0x00e4), /* Global control */
@@ -102,7 +115,7 @@ const struct regmap_access_table qca8k_readable_table = {
 	.yes_ranges = qca8k_readable_ranges,
 	.n_yes_ranges = ARRAY_SIZE(qca8k_readable_ranges),
 };
-EXPORT_SYMBOL(qca8k_readable_table);
+EXPORT_SYMBOL_GPL(qca8k_readable_table);
 
 static int qca8k_busy_wait(struct qca8k_priv *priv, u32 reg, u32 mask)
 {
@@ -164,8 +177,8 @@ static void qca8k_fdb_write(struct qca8k_priv *priv, u16 vid, u8 port_mask,
 			  QCA8K_ATU_TABLE_SIZE);
 }
 
-static int qca8k_fdb_access(struct qca8k_priv *priv, enum qca8k_fdb_cmd cmd,
-			    int port)
+int qca8k_fdb_access(struct qca8k_priv *priv, enum qca8k_fdb_cmd cmd,
+		     int port)
 {
 	u32 reg;
 	int ret;
@@ -199,9 +212,10 @@ static int qca8k_fdb_access(struct qca8k_priv *priv, enum qca8k_fdb_cmd cmd,
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(qca8k_fdb_access);
 
-static int qca8k_fdb_next(struct qca8k_priv *priv, struct qca8k_fdb *fdb,
-			  int port)
+int qca8k_fdb_next(struct qca8k_priv *priv, struct qca8k_fdb *fdb,
+		   int port)
 {
 	int ret;
 
@@ -212,6 +226,7 @@ static int qca8k_fdb_next(struct qca8k_priv *priv, struct qca8k_fdb *fdb,
 
 	return qca8k_fdb_read(priv, fdb);
 }
+EXPORT_SYMBOL_GPL(qca8k_fdb_next);
 
 static int qca8k_fdb_add(struct qca8k_priv *priv, const u8 *mac,
 			 u16 port_mask, u16 vid, u8 aging)
@@ -226,8 +241,8 @@ static int qca8k_fdb_add(struct qca8k_priv *priv, const u8 *mac,
 	return ret;
 }
 
-static int qca8k_fdb_del(struct qca8k_priv *priv, const u8 *mac,
-			 u16 port_mask, u16 vid)
+int qca8k_fdb_del(struct qca8k_priv *priv, const u8 *mac,
+		  u16 port_mask, u16 vid)
 {
 	int ret;
 
@@ -238,6 +253,7 @@ static int qca8k_fdb_del(struct qca8k_priv *priv, const u8 *mac,
 
 	return ret;
 }
+EXPORT_SYMBOL_GPL(qca8k_fdb_del);
 
 void qca8k_fdb_flush(struct qca8k_priv *priv)
 {
@@ -245,9 +261,10 @@ void qca8k_fdb_flush(struct qca8k_priv *priv)
 	qca8k_fdb_access(priv, QCA8K_FDB_FLUSH, -1);
 	mutex_unlock(&priv->reg_mutex);
 }
+EXPORT_SYMBOL_GPL(qca8k_fdb_flush);
 
-static int qca8k_fdb_search_and_insert(struct qca8k_priv *priv, u8 port_mask,
-				       const u8 *mac, u16 vid, u8 aging)
+int qca8k_fdb_search_and_insert(struct qca8k_priv *priv, u8 port_mask,
+				const u8 *mac, u16 vid, u8 aging)
 {
 	struct qca8k_fdb fdb = { 0 };
 	int ret;
@@ -282,9 +299,10 @@ exit:
 	mutex_unlock(&priv->reg_mutex);
 	return ret;
 }
+EXPORT_SYMBOL_GPL(qca8k_fdb_search_and_insert);
 
-static int qca8k_fdb_search_and_del(struct qca8k_priv *priv, u8 port_mask,
-				    const u8 *mac, u16 vid)
+int qca8k_fdb_search_and_del(struct qca8k_priv *priv, u8 port_mask,
+			     const u8 *mac, u16 vid)
 {
 	struct qca8k_fdb fdb = { 0 };
 	int ret;
@@ -324,6 +342,7 @@ exit:
 	mutex_unlock(&priv->reg_mutex);
 	return ret;
 }
+EXPORT_SYMBOL_GPL(qca8k_fdb_search_and_del);
 
 static int qca8k_vlan_access(struct qca8k_priv *priv,
 			     enum qca8k_vlan_cmd cmd, u16 vid)
@@ -358,8 +377,8 @@ static int qca8k_vlan_access(struct qca8k_priv *priv,
 	return 0;
 }
 
-static int qca8k_vlan_add(struct qca8k_priv *priv, u8 port, u16 vid,
-			  bool untagged)
+int qca8k_vlan_add(struct qca8k_priv *priv, u8 port, u16 vid,
+		   bool untagged)
 {
 	u32 reg;
 	int ret;
@@ -395,8 +414,9 @@ out:
 
 	return ret;
 }
+EXPORT_SYMBOL_GPL(qca8k_vlan_add);
 
-static int qca8k_vlan_del(struct qca8k_priv *priv, u8 port, u16 vid)
+int qca8k_vlan_del(struct qca8k_priv *priv, u8 port, u16 vid)
 {
 	u32 reg, mask;
 	int ret, i;
@@ -438,6 +458,7 @@ out:
 
 	return ret;
 }
+EXPORT_SYMBOL_GPL(qca8k_vlan_del);
 
 int qca8k_mib_init(struct qca8k_priv *priv)
 {
@@ -465,7 +486,7 @@ exit:
 	mutex_unlock(&priv->reg_mutex);
 	return ret;
 }
-EXPORT_SYMBOL(qca8k_mib_init);
+EXPORT_SYMBOL_GPL(qca8k_mib_init);
 
 void qca8k_port_set_status(struct qca8k_priv *priv, int port, int enable)
 {
@@ -480,7 +501,7 @@ void qca8k_port_set_status(struct qca8k_priv *priv, int port, int enable)
 	else
 		regmap_clear_bits(priv->regmap, QCA8K_REG_PORT_STATUS(port), mask);
 }
-EXPORT_SYMBOL(qca8k_port_set_status);
+EXPORT_SYMBOL_GPL(qca8k_port_set_status);
 
 void qca8k_get_strings(struct dsa_switch *ds, int port, u32 stringset,
 		       uint8_t *data)
@@ -494,7 +515,7 @@ void qca8k_get_strings(struct dsa_switch *ds, int port, u32 stringset,
 	for (i = 0; i < priv->info->mib_count; i++)
 		ethtool_sprintf(&data, "%s", ar8327_mib[i].name);
 }
-EXPORT_SYMBOL(qca8k_get_strings);
+EXPORT_SYMBOL_GPL(qca8k_get_strings);
 
 void qca8k_get_ethtool_stats(struct dsa_switch *ds, int port,
 			     uint64_t *data)
@@ -528,7 +549,7 @@ void qca8k_get_ethtool_stats(struct dsa_switch *ds, int port,
 			data[i] |= (u64)hi << 32;
 	}
 }
-EXPORT_SYMBOL(qca8k_get_ethtool_stats);
+EXPORT_SYMBOL_GPL(qca8k_get_ethtool_stats);
 
 int qca8k_get_sset_count(struct dsa_switch *ds, int port, int sset)
 {
@@ -539,7 +560,7 @@ int qca8k_get_sset_count(struct dsa_switch *ds, int port, int sset)
 
 	return priv->info->mib_count;
 }
-EXPORT_SYMBOL(qca8k_get_sset_count);
+EXPORT_SYMBOL_GPL(qca8k_get_sset_count);
 
 int qca8k_set_mac_eee(struct dsa_switch *ds, int port,
 		      struct ethtool_eee *eee)
@@ -564,7 +585,7 @@ exit:
 	mutex_unlock(&priv->reg_mutex);
 	return ret;
 }
-EXPORT_SYMBOL(qca8k_set_mac_eee);
+EXPORT_SYMBOL_GPL(qca8k_set_mac_eee);
 
 int qca8k_get_mac_eee(struct dsa_switch *ds, int port,
 		      struct ethtool_eee *e)
@@ -572,7 +593,7 @@ int qca8k_get_mac_eee(struct dsa_switch *ds, int port,
 	/* Nothing to do on the port's MAC */
 	return 0;
 }
-EXPORT_SYMBOL(qca8k_get_mac_eee);
+EXPORT_SYMBOL_GPL(qca8k_get_mac_eee);
 
 static int qca8k_port_configure_learning(struct dsa_switch *ds, int port,
 					 bool learning)
@@ -623,7 +644,7 @@ void qca8k_port_stp_state_set(struct dsa_switch *ds, int port, u8 state)
 
 	qca8k_port_configure_learning(ds, port, learning);
 }
-EXPORT_SYMBOL(qca8k_port_stp_state_set);
+EXPORT_SYMBOL_GPL(qca8k_port_stp_state_set);
 
 int qca8k_port_pre_bridge_flags(struct dsa_switch *ds, int port,
 				struct switchdev_brport_flags flags,
@@ -634,7 +655,7 @@ int qca8k_port_pre_bridge_flags(struct dsa_switch *ds, int port,
 
 	return 0;
 }
-EXPORT_SYMBOL(qca8k_port_pre_bridge_flags);
+EXPORT_SYMBOL_GPL(qca8k_port_pre_bridge_flags);
 
 int qca8k_port_bridge_flags(struct dsa_switch *ds, int port,
 			    struct switchdev_brport_flags flags,
@@ -651,7 +672,7 @@ int qca8k_port_bridge_flags(struct dsa_switch *ds, int port,
 
 	return 0;
 }
-EXPORT_SYMBOL(qca8k_port_bridge_flags);
+EXPORT_SYMBOL_GPL(qca8k_port_bridge_flags);
 
 int qca8k_port_bridge_join(struct dsa_switch *ds, int port,
 			   struct dsa_bridge bridge,
@@ -688,7 +709,7 @@ int qca8k_port_bridge_join(struct dsa_switch *ds, int port,
 
 	return ret;
 }
-EXPORT_SYMBOL(qca8k_port_bridge_join);
+EXPORT_SYMBOL_GPL(qca8k_port_bridge_join);
 
 void qca8k_port_bridge_leave(struct dsa_switch *ds, int port,
 			     struct dsa_bridge bridge)
@@ -717,7 +738,7 @@ void qca8k_port_bridge_leave(struct dsa_switch *ds, int port,
 	qca8k_rmw(priv, QCA8K_PORT_LOOKUP_CTRL(port),
 		  QCA8K_PORT_LOOKUP_MEMBER, BIT(cpu_port));
 }
-EXPORT_SYMBOL(qca8k_port_bridge_leave);
+EXPORT_SYMBOL_GPL(qca8k_port_bridge_leave);
 
 void qca8k_port_fast_age(struct dsa_switch *ds, int port)
 {
@@ -727,7 +748,7 @@ void qca8k_port_fast_age(struct dsa_switch *ds, int port)
 	qca8k_fdb_access(priv, QCA8K_FDB_FLUSH_PORT, port);
 	mutex_unlock(&priv->reg_mutex);
 }
-EXPORT_SYMBOL(qca8k_port_fast_age);
+EXPORT_SYMBOL_GPL(qca8k_port_fast_age);
 
 int qca8k_set_ageing_time(struct dsa_switch *ds, unsigned int msecs)
 {
@@ -748,7 +769,7 @@ int qca8k_set_ageing_time(struct dsa_switch *ds, unsigned int msecs)
 				  QCA8K_ATU_AGE_TIME_MASK,
 				  QCA8K_ATU_AGE_TIME(val));
 }
-EXPORT_SYMBOL(qca8k_set_ageing_time);
+EXPORT_SYMBOL_GPL(qca8k_set_ageing_time);
 
 int qca8k_port_enable(struct dsa_switch *ds, int port,
 		      struct phy_device *phy)
@@ -763,7 +784,7 @@ int qca8k_port_enable(struct dsa_switch *ds, int port,
 
 	return 0;
 }
-EXPORT_SYMBOL(qca8k_port_enable);
+EXPORT_SYMBOL_GPL(qca8k_port_enable);
 
 void qca8k_port_disable(struct dsa_switch *ds, int port)
 {
@@ -772,7 +793,7 @@ void qca8k_port_disable(struct dsa_switch *ds, int port)
 	qca8k_port_set_status(priv, port, 0);
 	priv->port_enabled_map &= ~BIT(port);
 }
-EXPORT_SYMBOL(qca8k_port_disable);
+EXPORT_SYMBOL_GPL(qca8k_port_disable);
 
 int qca8k_port_change_mtu(struct dsa_switch *ds, int port, int new_mtu)
 {
@@ -811,13 +832,13 @@ int qca8k_port_change_mtu(struct dsa_switch *ds, int port, int new_mtu)
 
 	return ret;
 }
-EXPORT_SYMBOL(qca8k_port_change_mtu);
+EXPORT_SYMBOL_GPL(qca8k_port_change_mtu);
 
 int qca8k_port_max_mtu(struct dsa_switch *ds, int port)
 {
 	return QCA8K_MAX_MTU;
 }
-EXPORT_SYMBOL(qca8k_port_max_mtu);
+EXPORT_SYMBOL_GPL(qca8k_port_max_mtu);
 
 int qca8k_port_fdb_insert(struct qca8k_priv *priv, const u8 *addr,
 			  u16 port_mask, u16 vid)
@@ -829,7 +850,7 @@ int qca8k_port_fdb_insert(struct qca8k_priv *priv, const u8 *addr,
 	return qca8k_fdb_add(priv, addr, port_mask, vid,
 			     QCA8K_ATU_STATUS_STATIC);
 }
-EXPORT_SYMBOL(qca8k_port_fdb_insert);
+EXPORT_SYMBOL_GPL(qca8k_port_fdb_insert);
 
 int qca8k_port_fdb_add(struct dsa_switch *ds, int port,
 		       const unsigned char *addr, u16 vid,
@@ -840,7 +861,7 @@ int qca8k_port_fdb_add(struct dsa_switch *ds, int port,
 
 	return qca8k_port_fdb_insert(priv, addr, port_mask, vid);
 }
-EXPORT_SYMBOL(qca8k_port_fdb_add);
+EXPORT_SYMBOL_GPL(qca8k_port_fdb_add);
 
 int qca8k_port_fdb_del(struct dsa_switch *ds, int port,
 		       const unsigned char *addr, u16 vid,
@@ -854,7 +875,7 @@ int qca8k_port_fdb_del(struct dsa_switch *ds, int port,
 
 	return qca8k_fdb_del(priv, addr, port_mask, vid);
 }
-EXPORT_SYMBOL(qca8k_port_fdb_del);
+EXPORT_SYMBOL_GPL(qca8k_port_fdb_del);
 
 int qca8k_port_fdb_dump(struct dsa_switch *ds, int port,
 			dsa_fdb_dump_cb_t *cb, void *data)
@@ -878,7 +899,7 @@ int qca8k_port_fdb_dump(struct dsa_switch *ds, int port,
 
 	return 0;
 }
-EXPORT_SYMBOL(qca8k_port_fdb_dump);
+EXPORT_SYMBOL_GPL(qca8k_port_fdb_dump);
 
 int qca8k_port_mdb_add(struct dsa_switch *ds, int port,
 		       const struct switchdev_obj_port_mdb *mdb,
@@ -894,7 +915,7 @@ int qca8k_port_mdb_add(struct dsa_switch *ds, int port,
 	return qca8k_fdb_search_and_insert(priv, BIT(port), addr, vid,
 					   QCA8K_ATU_STATUS_STATIC);
 }
-EXPORT_SYMBOL(qca8k_port_mdb_add);
+EXPORT_SYMBOL_GPL(qca8k_port_mdb_add);
 
 int qca8k_port_mdb_del(struct dsa_switch *ds, int port,
 		       const struct switchdev_obj_port_mdb *mdb,
@@ -909,7 +930,7 @@ int qca8k_port_mdb_del(struct dsa_switch *ds, int port,
 
 	return qca8k_fdb_search_and_del(priv, BIT(port), addr, vid);
 }
-EXPORT_SYMBOL(qca8k_port_mdb_del);
+EXPORT_SYMBOL_GPL(qca8k_port_mdb_del);
 
 int qca8k_port_mirror_add(struct dsa_switch *ds, int port,
 				 struct dsa_mall_mirror_tc_entry *mirror,
@@ -965,7 +986,7 @@ int qca8k_port_mirror_add(struct dsa_switch *ds, int port,
 
 	return 0;
 }
-EXPORT_SYMBOL(qca8k_port_mirror_add);
+EXPORT_SYMBOL_GPL(qca8k_port_mirror_add);
 
 void qca8k_port_mirror_del(struct dsa_switch *ds, int port,
 			   struct dsa_mall_mirror_tc_entry *mirror)
@@ -1002,7 +1023,7 @@ void qca8k_port_mirror_del(struct dsa_switch *ds, int port,
 err:
 	dev_err(priv->dev, "Failed to del mirror port from %d", port);
 }
-EXPORT_SYMBOL(qca8k_port_mirror_del);
+EXPORT_SYMBOL_GPL(qca8k_port_mirror_del);
 
 int qca8k_port_vlan_filtering(struct dsa_switch *ds, int port,
 			      bool vlan_filtering,
@@ -1023,7 +1044,7 @@ int qca8k_port_vlan_filtering(struct dsa_switch *ds, int port,
 
 	return ret;
 }
-EXPORT_SYMBOL(qca8k_port_vlan_filtering);
+EXPORT_SYMBOL_GPL(qca8k_port_vlan_filtering);
 
 int qca8k_port_vlan_add(struct dsa_switch *ds, int port,
 			const struct switchdev_obj_port_vlan *vlan,
@@ -1054,7 +1075,7 @@ int qca8k_port_vlan_add(struct dsa_switch *ds, int port,
 
 	return ret;
 }
-EXPORT_SYMBOL(qca8k_port_vlan_add);
+EXPORT_SYMBOL_GPL(qca8k_port_vlan_add);
 
 int qca8k_port_vlan_del(struct dsa_switch *ds, int port,
 			const struct switchdev_obj_port_vlan *vlan)
@@ -1068,7 +1089,7 @@ int qca8k_port_vlan_del(struct dsa_switch *ds, int port,
 
 	return ret;
 }
-EXPORT_SYMBOL(qca8k_port_vlan_del);
+EXPORT_SYMBOL_GPL(qca8k_port_vlan_del);
 
 static bool qca8k_lag_can_offload(struct dsa_switch *ds,
 				  struct dsa_lag lag,
@@ -1239,14 +1260,14 @@ int qca8k_port_lag_join(struct dsa_switch *ds, int port, struct dsa_lag lag,
 
 	return qca8k_lag_refresh_portmap(ds, port, lag, false);
 }
-EXPORT_SYMBOL(qca8k_port_lag_join);
+EXPORT_SYMBOL_GPL(qca8k_port_lag_join);
 
 int qca8k_port_lag_leave(struct dsa_switch *ds, int port,
 			 struct dsa_lag lag)
 {
 	return qca8k_lag_refresh_portmap(ds, port, lag, true);
 }
-EXPORT_SYMBOL(qca8k_port_lag_leave);
+EXPORT_SYMBOL_GPL(qca8k_port_lag_leave);
 
 int qca8k_read_switch_id(struct qca8k_priv *priv)
 {
@@ -1276,6 +1297,6 @@ int qca8k_read_switch_id(struct qca8k_priv *priv)
 
 	return 0;
 }
-EXPORT_SYMBOL(qca8k_read_switch_id);
+EXPORT_SYMBOL_GPL(qca8k_read_switch_id);
 
 MODULE_LICENSE("GPL");

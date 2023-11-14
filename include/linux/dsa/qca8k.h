@@ -266,6 +266,7 @@
 #define   QCA8K_PORT_LOOKUP_STATE_LEARNING		QCA8K_PORT_LOOKUP_STATE(0x3)
 #define   QCA8K_PORT_LOOKUP_STATE_FORWARD		QCA8K_PORT_LOOKUP_STATE(0x4)
 #define   QCA8K_PORT_LOOKUP_LEARN			BIT(20)
+#define   QCA8K_PORT_LOOKUP_LOOPBACK_EN			BIT(21)
 #define   QCA8K_PORT_LOOKUP_ING_MIRROR_EN		BIT(25)
 
 #define QCA8K_REG_GOL_TRUNK_CTRL0			0x700
@@ -341,6 +342,31 @@
 /* QCA specific MII registers */
 #define MII_ATH_MMD_ADDR				0x0d
 #define MII_ATH_MMD_DATA				0x0e
+
+/* IPQ4019 PSGMII PHY registers */
+#define QCA8K_IPQ4019_REG_RGMII_CTRL			0x004
+#define   QCA8K_IPQ4019_RGMII_CTRL_RGMII_RXC		GENMASK(1, 0)
+#define   QCA8K_IPQ4019_RGMII_CTRL_RGMII_TXC		GENMASK(9, 8)
+/* Some kind of CLK selection
+ * 0: gcc_ess_dly2ns
+ * 1: gcc_ess_clk
+ */
+#define   QCA8K_IPQ4019_RGMII_CTRL_CLK				BIT(10)
+#define   QCA8K_IPQ4019_RGMII_CTRL_DELAY_RMII0			GENMASK(17, 16)
+#define   QCA8K_IPQ4019_RGMII_CTRL_INVERT_RMII0_REF_CLK		BIT(18)
+#define   QCA8K_IPQ4019_RGMII_CTRL_DELAY_RMII1			GENMASK(20, 19)
+#define   QCA8K_IPQ4019_RGMII_CTRL_INVERT_RMII1_REF_CLK		BIT(21)
+#define   QCA8K_IPQ4019_RGMII_CTRL_INVERT_RMII0_MASTER_EN	BIT(24)
+#define   QCA8K_IPQ4019_RGMII_CTRL_INVERT_RMII1_MASTER_EN	BIT(25)
+
+#define PSGMIIPHY_MODE_CONTROL				0x1b4
+#define   PSGMIIPHY_MODE_ATHR_CSCO_MODE_25M		BIT(0)
+#define PSGMIIPHY_TX_CONTROL				0x288
+#define   PSGMIIPHY_TX_CONTROL_MAGIC_VALUE		0x8380
+#define PSGMIIPHY_VCO_CALIBRATION_CONTROL_REGISTER_1	0x9c
+#define   PSGMIIPHY_REG_PLL_VCO_CALIB_RESTART		BIT(14)
+#define PSGMIIPHY_VCO_CALIBRATION_CONTROL_REGISTER_2	0xa0
+#define   PSGMIIPHY_REG_PLL_VCO_CALIB_READY		BIT(0)
 
 enum {
 	QCA8K_PORT_SPEED_10M = 0,
@@ -467,6 +493,9 @@ struct qca8k_priv {
 	struct qca8k_pcs pcs_port_6;
 	const struct qca8k_match_data *info;
 	struct qca8k_led ports_led[QCA8K_LED_COUNT];
+
+	/* IPQ4019 specific */
+	struct regmap *psgmii;
 };
 
 struct qca8k_mib_desc {
@@ -507,6 +536,8 @@ int qca8k_read_switch_id(struct qca8k_priv *priv);
 int qca8k_read(struct qca8k_priv *priv, u32 reg, u32 *val);
 int qca8k_write(struct qca8k_priv *priv, u32 reg, u32 val);
 int qca8k_rmw(struct qca8k_priv *priv, u32 reg, u32 mask, u32 write_val);
+int qca8k_set_bits(struct qca8k_priv *priv, u32 reg, u32 bits);
+int qca8k_clear_bits(struct qca8k_priv *priv, u32 reg, u32 bits);
 
 /* Common ops function */
 void qca8k_fdb_flush(struct qca8k_priv *priv);
@@ -560,6 +591,16 @@ int qca8k_port_fdb_del(struct dsa_switch *ds, int port,
 		       struct dsa_db db);
 int qca8k_port_fdb_dump(struct dsa_switch *ds, int port,
 			dsa_fdb_dump_cb_t *cb, void *data);
+int qca8k_fdb_del(struct qca8k_priv *priv, const u8 *mac,
+		  u16 port_mask, u16 vid);
+int qca8k_fdb_next(struct qca8k_priv *priv, struct qca8k_fdb *fdb,
+		   int port);
+int qca8k_fdb_access(struct qca8k_priv *priv, enum qca8k_fdb_cmd cmd,
+		     int port);
+int qca8k_fdb_search_and_insert(struct qca8k_priv *priv, u8 port_mask,
+				const u8 *mac, u16 vid, u8 aging);
+int qca8k_fdb_search_and_del(struct qca8k_priv *priv, u8 port_mask,
+			     const u8 *mac, u16 vid);
 
 /* Common MDB function */
 int qca8k_port_mdb_add(struct dsa_switch *ds, int port,
@@ -577,8 +618,12 @@ void qca8k_port_mirror_del(struct dsa_switch *ds, int port,
 			   struct dsa_mall_mirror_tc_entry *mirror);
 
 /* Common port VLAN function */
-int qca8k_port_vlan_filtering(struct dsa_switch *ds, int port, bool vlan_filtering,
+int qca8k_port_vlan_filtering(struct dsa_switch *ds, int port,
+			      bool vlan_filtering,
 			      struct netlink_ext_ack *extack);
+int qca8k_vlan_add(struct qca8k_priv *priv, u8 port, u16 vid,
+		   bool untagged);
+int qca8k_vlan_del(struct qca8k_priv *priv, u8 port, u16 vid);
 int qca8k_port_vlan_add(struct dsa_switch *ds, int port,
 			const struct switchdev_obj_port_vlan *vlan,
 			struct netlink_ext_ack *extack);
