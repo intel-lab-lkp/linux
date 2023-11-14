@@ -28,6 +28,9 @@ static struct cpumask scale_freq_counters_mask;
 static bool scale_freq_invariant;
 static DEFINE_PER_CPU(u32, freq_factor) = 1;
 
+/* Maximum threads number per-Core */
+static int topology_smt_num_threads = 1;
+
 static bool supports_scale_freq_counters(const struct cpumask *cpus)
 {
 	return cpumask_subset(cpus, &scale_freq_counters_mask);
@@ -729,6 +732,28 @@ const struct cpumask *cpu_clustergroup_mask(int cpu)
 	return &cpu_topology[cpu].cluster_sibling;
 }
 
+#ifdef CONFIG_HOTPLUG_SMT
+
+void __init topology_smt_set_num_threads(unsigned int num_threads)
+{
+	topology_smt_num_threads = num_threads;
+}
+
+/*
+ * On SMT Hotplug the primary thread of the SMT won't be disabled. For x86 they
+ * seem to have a primary thread for special purpose. For other arthitectures
+ * like arm64 there's no such restriction for a primary thread, so make the
+ * first thread in the SMT as the primary thread.
+ */
+bool topology_is_primary_thread(unsigned int cpu)
+{
+	if (cpu == cpumask_first(topology_sibling_cpumask(cpu)))
+		return true;
+
+	return false;
+}
+#endif
+
 void update_siblings_masks(unsigned int cpuid)
 {
 	struct cpu_topology *cpu_topo, *cpuid_topo = &cpu_topology[cpuid];
@@ -840,6 +865,13 @@ void __init init_cpu_topology(void)
 		 */
 		reset_cpu_topology();
 	}
+
+	/*
+	 * By this stage we get to know whether we support SMT or not, update
+	 * the information for the core. We don't support
+	 * CONFIG_SMT_NUM_THREADS_DYNAMIC so make the max_threads == num_threads.
+	 */
+	cpu_smt_set_num_threads(topology_smt_num_threads, topology_smt_num_threads);
 
 	for_each_possible_cpu(cpu) {
 		ret = fetch_cache_info(cpu);
