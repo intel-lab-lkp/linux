@@ -18,6 +18,7 @@
 #include <linux/mm.h>
 #include <linux/mmzone.h>
 #include <linux/memory.h>
+#include <linux/memory_hotplug.h>
 #include <linux/module.h>
 #include <asm/ctlreg.h>
 #include <asm/chpid.h>
@@ -26,6 +27,7 @@
 #include <asm/sclp.h>
 #include <asm/numa.h>
 #include <asm/facility.h>
+#include <asm/page-states.h>
 
 #include "sclp.h"
 
@@ -319,6 +321,8 @@ static bool contains_standby_increment(unsigned long start, unsigned long end)
 static int sclp_mem_notifier(struct notifier_block *nb,
 			     unsigned long action, void *data)
 {
+	struct mhp_params params = { .pgprot = pgprot_mhp(PAGE_KERNEL) };
+	struct memory_block *memory_block;
 	unsigned long start, size;
 	struct memory_notify *arg;
 	unsigned char id;
@@ -330,6 +334,11 @@ static int sclp_mem_notifier(struct notifier_block *nb,
 	mutex_lock(&sclp_mem_mutex);
 	for_each_clear_bit(id, sclp_storage_ids, sclp_max_storage_id + 1)
 		sclp_attach_storage(id);
+	memory_block = find_memory_block(pfn_to_section_nr(arg->start_pfn));
+	if (!memory_block) {
+		rc = -EINVAL;
+		goto out;
+	}
 	switch (action) {
 	case MEM_GOING_OFFLINE:
 		/*
@@ -344,17 +353,34 @@ static int sclp_mem_notifier(struct notifier_block *nb,
 	case MEM_CANCEL_OFFLINE:
 		break;
 	case MEM_GOING_ONLINE:
+		break;
+	case MEM_PHYS_ONLINE:
 		rc = sclp_mem_change_state(start, size, 1);
+		if (rc || !memory_block->altmap)
+			goto out;
+		params.altmap = memory_block->altmap;
+		rc = __add_pages(0, arg->start_pfn, arg->nr_pages, &params);
+		if (rc)
+			sclp_mem_change_state(start, size, 0);
+		/*
+		 * Set CMMA state to nodat here, since the struct page memory
+		 * at the beginning of the memory block will not go through the
+		 * buddy allocator later.
+		 */
+		__arch_set_page_nodat((void *)start, memory_block->altmap->free);
 		break;
 	case MEM_CANCEL_ONLINE:
-		sclp_mem_change_state(start, size, 0);
-		break;
 	case MEM_OFFLINE:
+		break;
+	case MEM_PHYS_OFFLINE:
+		if (memory_block->altmap)
+			__remove_pages(arg->start_pfn, arg->nr_pages, memory_block->altmap);
 		sclp_mem_change_state(start, size, 0);
 		break;
 	default:
 		break;
 	}
+out:
 	mutex_unlock(&sclp_mem_mutex);
 	return rc ? NOTIFY_BAD : NOTIFY_OK;
 }
@@ -400,7 +426,8 @@ static void __init add_memory_merged(u16 rn)
 	if (!size)
 		goto skip_add;
 	for (addr = start; addr < start + size; addr += block_size)
-		add_memory(0, addr, block_size, MHP_NONE);
+		add_memory(0, addr, block_size,
+			   MACHINE_HAS_EDAT1 ? MHP_MEMMAP_ON_MEMORY : MHP_NONE);
 skip_add:
 	first_rn = rn;
 	num = 1;

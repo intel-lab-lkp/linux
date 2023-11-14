@@ -288,6 +288,12 @@ int arch_add_memory(int nid, u64 start, u64 size,
 	rc = vmem_add_mapping(start, size);
 	if (rc)
 		return rc;
+	/*
+	 * If MHP_MEMMAP_ON_MEMORY is enabled, perform __add_pages() during memory
+	 * onlining phase
+	 */
+	if (params->altmap)
+		return 0;
 
 	rc = __add_pages(nid, start_pfn, size_pages, params);
 	if (rc)
@@ -300,7 +306,15 @@ void arch_remove_memory(u64 start, u64 size, struct vmem_altmap *altmap)
 	unsigned long start_pfn = start >> PAGE_SHIFT;
 	unsigned long nr_pages = size >> PAGE_SHIFT;
 
-	__remove_pages(start_pfn, nr_pages, altmap);
+	/*
+	 * On s390, currently arch_remove_memory() will be called during error
+	 * handling of add_memory_resource(). When MHP_MEMMAP_ON_MEMORY is
+	 * enabled, __add_pages() is performed later during the memory onlining
+	 * phase.  Hence, __remove_pages() should not be called here in that
+	 * case, but only later during memory offline phase
+	 */
+	if (!altmap)
+		__remove_pages(start_pfn, nr_pages, NULL);
 	vmem_remove_mapping(start, size);
 }
 #endif /* CONFIG_MEMORY_HOTPLUG */
