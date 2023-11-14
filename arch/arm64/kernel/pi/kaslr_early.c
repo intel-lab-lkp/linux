@@ -81,7 +81,7 @@ static u64 get_kaslr_seed(void *fdt)
 		return 0;
 
 	ret = fdt64_to_cpu(*prop);
-	*prop = 0;
+	fdt_nop_property(fdt, node, "kaslr-seed");
 	return ret;
 }
 
