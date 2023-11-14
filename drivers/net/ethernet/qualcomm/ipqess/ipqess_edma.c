@@ -22,6 +22,7 @@
 #include "ipqess_edma.h"
 #include "ipqess_port.h"
 #include "ipqess_switch.h"
+#include "ipqess_notifiers.h"
 
 static void ipqess_edma_w32(struct ipqess_edma *edma, u32 reg, u32 val)
 {
@@ -1152,6 +1153,10 @@ int ipqess_edma_init(struct platform_device *pdev, struct device_node *np)
 			port->edma = edma;
 	}
 
+	err = ipqess_notifiers_register();
+	if (err)
+		goto err_hw_stop;
+
 	return 0;
 
 err_hw_stop:
@@ -1171,6 +1176,8 @@ void ipqess_edma_uninit(struct ipqess_edma *edma)
 {
 	struct qca8k_priv *priv = edma->sw->priv;
 	u32 val;
+
+	ipqess_notifiers_unregister();
 
 	ipqess_edma_irq_disable(edma);
 	ipqess_edma_hw_stop(edma);

@@ -1979,34 +1979,71 @@ qca8k_setup(struct dsa_switch *ds)
 	return 0;
 }
 
+int qca8k_dsa_port_fdb_dump(struct dsa_switch *ds, int port,
+			    dsa_fdb_dump_cb_t *cb, void *data)
+{
+	return qca8k_port_fdb_dump(ds->priv, port, cb, data);
+}
+
+void qca8k_dsa_port_stp_state_set(struct dsa_switch *ds, int port,
+				  u8 state)
+{
+	qca8k_port_stp_state_set(ds->priv, port, state,
+				 dsa_to_port(ds, port)->learning, true);
+}
+
+void qca8k_dsa_port_fast_age(struct dsa_switch *ds, int port)
+{
+	qca8k_port_fast_age(ds->priv, port);
+}
+
+int qca8k_dsa_set_ageing_time(struct dsa_switch *ds, unsigned int msecs)
+{
+	return qca8k_set_ageing_time(ds->priv, msecs);
+}
+
+int qca8k_dsa_port_vlan_filtering(struct dsa_switch *ds, int port,
+				  bool vlan_filtering,
+				  struct netlink_ext_ack *extack)
+{
+	return qca8k_port_vlan_filtering(ds->priv, port, vlan_filtering);
+}
+
+int qca8k_dsa_vlan_add(struct dsa_switch *ds, int port,
+		       const struct switchdev_obj_port_vlan *vlan,
+		       struct netlink_ext_ack *extack)
+{
+	return qca8k_port_vlan_add(ds->priv, port, vlan, extack);
+}
+
 static const struct dsa_switch_ops qca8k_switch_ops = {
 	.get_tag_protocol	= qca8k_get_tag_protocol,
 	.setup			= qca8k_setup,
 	.get_strings		= qca8k_get_strings,
 	.get_ethtool_stats	= qca8k_get_ethtool_stats,
 	.get_sset_count		= qca8k_get_sset_count,
-	.set_ageing_time	= qca8k_set_ageing_time,
+	.set_ageing_time	= qca8k_dsa_set_ageing_time,
 	.get_mac_eee		= qca8k_get_mac_eee,
 	.set_mac_eee		= qca8k_set_mac_eee,
 	.port_enable		= qca8k_port_enable,
 	.port_disable		= qca8k_port_disable,
 	.port_change_mtu	= qca8k_port_change_mtu,
 	.port_max_mtu		= qca8k_port_max_mtu,
-	.port_stp_state_set	= qca8k_port_stp_state_set,
+	.port_stp_state_set	= qca8k_dsa_port_stp_state_set,
 	.port_pre_bridge_flags	= qca8k_port_pre_bridge_flags,
 	.port_bridge_flags	= qca8k_port_bridge_flags,
 	.port_bridge_join	= qca8k_port_bridge_join,
 	.port_bridge_leave	= qca8k_port_bridge_leave,
-	.port_fast_age		= qca8k_port_fast_age,
+	.port_fast_age		= qca8k_dsa_port_fast_age,
 	.port_fdb_add		= qca8k_port_fdb_add,
 	.port_fdb_del		= qca8k_port_fdb_del,
-	.port_fdb_dump		= qca8k_port_fdb_dump,
+	.port_fdb_dump		= qca8k_dsa_port_fdb_dump,
 	.port_mdb_add		= qca8k_port_mdb_add,
 	.port_mdb_del		= qca8k_port_mdb_del,
 	.port_mirror_add	= qca8k_port_mirror_add,
 	.port_mirror_del	= qca8k_port_mirror_del,
-	.port_vlan_filtering	= qca8k_port_vlan_filtering,
-	.port_vlan_add		= qca8k_port_vlan_add,
+	.port_vlan_filtering	= qca8k_dsa_port_vlan_filtering,
+	.port_vlan_add		= qca8k_dsa_vlan_add,
 	.port_vlan_del		= qca8k_port_vlan_del,
 	.phylink_get_caps	= qca8k_phylink_get_caps,
 	.phylink_mac_select_pcs	= qca8k_phylink_mac_select_pcs,

@@ -66,6 +66,7 @@ config QCOM_IPQ4019_ESS
 	depends on (OF && ARCH_QCOM) || COMPILE_TEST
 	select PHYLINK
 	select NET_DSA
+	select NET_SWITCHDEV
 	select NET_DSA_QCA8K_LIB
 	select PAGE_POOL
 	help
