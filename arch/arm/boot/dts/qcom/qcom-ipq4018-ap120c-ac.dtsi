@@ -242,6 +242,19 @@
 	pinctrl-names = "default";
 };
 
+&switch {
+	status = "okay";
+};
+
+&swport4 {
+	status = "okay";
+	label = "lan";
+};
+
+&swport5 {
+	status = "okay";
+};
+
 &wifi0 {
 	status = "okay";
 	nvmem-cell-names = "pre-calibration";
