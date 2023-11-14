@@ -8188,6 +8188,37 @@ static void nft_unregister_flowtable_net_hooks(struct net *net,
 	__nft_unregister_flowtable_net_hooks(net, hook_list, false);
 }
 
+static bool nft_flowtable_offload_clash(struct net *net,
+				        const struct nft_hook *hook,
+				        struct nft_flowtable *flowtable)
+{
+	const struct nftables_pernet *nft_net;
+	struct nft_flowtable *existing_ft;
+	const struct nft_table *table;
+
+	/* No offload requested, no need to validate */
+	if (!nf_flowtable_hw_offload(&flowtable->data))
+		return false;
+
+	nft_net = nft_pernet(net);
+
+	list_for_each_entry(table, &nft_net->tables, list) {
+		list_for_each_entry(existing_ft, &table->flowtables, list) {
+		        const struct nft_hook *hook2;
+
+			if (!nft_is_active_next(net, existing_ft))
+				continue;
+
+			list_for_each_entry(hook2, &existing_ft->hook_list, list) {
+				if (hook->ops.dev == hook2->ops.dev)
+					return true;
+			}
+		}
+	}
+
+	return false;
+}
+
 static int nft_register_flowtable_net_hooks(struct net *net,
 					    struct nft_table *table,
 					    struct list_head *hook_list,
@@ -8198,6 +8229,11 @@ static int nft_register_flowtable_net_hooks(struct net *net,
 	int err, i = 0;
 
 	list_for_each_entry(hook, hook_list, list) {
+		if (nft_flowtable_offload_clash(net, hook, flowtable)) {
+			err = -EEXIST;
+			goto err_unregister_net_hooks;
+		}
+
 		list_for_each_entry(ft, &table->flowtables, list) {
 			if (!nft_is_active_next(net, ft))
 				continue;
