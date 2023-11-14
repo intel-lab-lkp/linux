@@ -3652,6 +3652,7 @@ struct ixgbe_hw {
 	bool				allow_unsupported_sfp;
 	bool				wol_enabled;
 	bool				need_crosstalk_fix;
+	bool				is_overtemp;
 };
 
 struct ixgbe_info {
@@ -3692,7 +3693,6 @@ struct ixgbe_info {
 #define IXGBE_ERR_FDIR_REINIT_FAILED            -23
 #define IXGBE_ERR_EEPROM_VERSION                -24
 #define IXGBE_ERR_NO_SPACE                      -25
-#define IXGBE_ERR_OVERTEMP                      -26
 #define IXGBE_ERR_FC_NOT_NEGOTIATED             -27
 #define IXGBE_ERR_FC_NOT_SUPPORTED              -28
 #define IXGBE_ERR_SFP_SETUP_NOT_COMPLETE        -30

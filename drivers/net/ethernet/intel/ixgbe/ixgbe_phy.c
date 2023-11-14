@@ -409,8 +409,10 @@ s32 ixgbe_reset_phy_generic(struct ixgbe_hw *hw)
 
 	/* Don't reset PHY if it's shut down due to overtemp. */
 	if (!hw->phy.reset_if_overtemp &&
-	    (IXGBE_ERR_OVERTEMP == hw->phy.ops.check_overtemp(hw)))
+	    hw->phy.ops.check_overtemp(hw) == -EIO && hw->is_overtemp) {
+		hw->is_overtemp = false;
 		return 0;
+	}
 
 	/* Blocked by MNG FW so bail */
 	if (ixgbe_check_reset_blocked(hw))
@@ -2763,7 +2765,8 @@ s32 ixgbe_tn_check_overtemp(struct ixgbe_hw *hw)
 	if (!(phy_data & IXGBE_TN_LASI_STATUS_TEMP_ALARM))
 		return 0;
 
-	return IXGBE_ERR_OVERTEMP;
+	hw->is_overtemp = true;
+	return -EIO;
 }
 
 /** ixgbe_set_copper_phy_power - Control power for copper phy
