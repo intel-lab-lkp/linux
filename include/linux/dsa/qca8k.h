@@ -496,6 +496,7 @@ struct qca8k_priv {
 
 	/* IPQ4019 specific */
 	struct regmap *psgmii;
+	atomic_t psgmii_calibrated;
 };
 
 struct qca8k_mib_desc {

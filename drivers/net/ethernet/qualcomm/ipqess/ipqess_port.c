@@ -1218,6 +1218,26 @@ int ipqess_port_check_8021q_upper(struct net_device *netdev,
 
 /* phylink ops */
 
+static int
+ipqess_psgmii_configure(struct ipqess_port *port)
+{
+	int ret = 0;
+
+	/* For this multi-port PHY, we only need one calibration run,
+	 * don't rerun it for other ports
+	 */
+	if (!atomic_cmpxchg(&port->sw->priv->psgmii_calibrated, 0, 1)) {
+		psgmii_calibrate_and_test(port);
+
+		ret = regmap_clear_bits(port->sw->priv->psgmii, PSGMIIPHY_MODE_CONTROL,
+					PSGMIIPHY_MODE_ATHR_CSCO_MODE_25M);
+		ret = regmap_write(port->sw->priv->psgmii, PSGMIIPHY_TX_CONTROL,
+				   PSGMIIPHY_TX_CONTROL_MAGIC_VALUE);
+	}
+
+	return ret;
+}
+
 static void
 ipqess_phylink_mac_config(struct phylink_config *config,
 			  unsigned int mode,
@@ -1233,12 +1253,22 @@ ipqess_phylink_mac_config(struct phylink_config *config,
 	case 1:
 	case 2:
 	case 3:
+		if (state->interface == PHY_INTERFACE_MODE_PSGMII)
+			if (ipqess_psgmii_configure(port))
+				dev_err(priv->dev,
+					"PSGMII configuration failed!\n");
+		return;
 	case 4:
 	case 5:
 		if (phy_interface_mode_is_rgmii(state->interface))
 			regmap_set_bits(priv->regmap,
 					QCA8K_IPQ4019_REG_RGMII_CTRL,
 					QCA8K_IPQ4019_RGMII_CTRL_CLK);
+
+		if (state->interface == PHY_INTERFACE_MODE_PSGMII)
+			if (ipqess_psgmii_configure(port))
+				dev_err(priv->dev,
+					"PSGMII configuration failed!\n");
 		return;
 	default:
 		dev_err(priv->dev, "%s: unsupported port: %i\n", __func__,
