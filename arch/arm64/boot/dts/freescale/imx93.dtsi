@@ -4,6 +4,7 @@
  */
 
 #include <dt-bindings/clock/imx93-clock.h>
+#include <dt-bindings/dma/fsl-edma.h>
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/input/input.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
@@ -670,7 +671,8 @@
 				interrupts = <GIC_SPI 68 IRQ_TYPE_LEVEL_HIGH>;
 				clocks = <&clk IMX93_CLK_LPUART3_GATE>;
 				clock-names = "ipg";
-				dmas = <&edma2 18 0 1>, <&edma2 17 0 0>;
+				dmas = <&edma2 18 0 (FSL_EDMA_RX | FSL_EDMA_ODD_CH)>,
+				       <&edma2 17 0 FSL_EDMA_EVEN_CH>;
 				dma-names = "rx", "tx";
 				status = "disabled";
 			};
@@ -681,7 +683,8 @@
 				interrupts = <GIC_SPI 69 IRQ_TYPE_LEVEL_HIGH>;
 				clocks = <&clk IMX93_CLK_LPUART4_GATE>;
 				clock-names = "ipg";
-				dmas = <&edma2 20 0 1>, <&edma2 19 0 0>;
+				dmas = <&edma2 20 0 (FSL_EDMA_RX | FSL_EDMA_ODD_CH)>,
+				       <&edma2 19 0 FSL_EDMA_EVEN_CH>;
 				dma-names = "rx", "tx";
 				status = "disabled";
 			};
@@ -692,7 +695,8 @@
 				interrupts = <GIC_SPI 70 IRQ_TYPE_LEVEL_HIGH>;
 				clocks = <&clk IMX93_CLK_LPUART5_GATE>;
 				clock-names = "ipg";
-				dmas = <&edma2 22 0 1>, <&edma2 21 0 0>;
+				dmas = <&edma2 22 0 (FSL_EDMA_RX | FSL_EDMA_ODD_CH)>,
+				       <&edma2 21 0 FSL_EDMA_EVEN_CH>;
 				dma-names = "rx", "tx";
 				status = "disabled";
 			};
@@ -703,7 +707,8 @@
 				interrupts = <GIC_SPI 71 IRQ_TYPE_LEVEL_HIGH>;
 				clocks = <&clk IMX93_CLK_LPUART6_GATE>;
 				clock-names = "ipg";
-				dmas = <&edma2 24 0 1>, <&edma2 23 0 0>;
+				dmas = <&edma2 24 0 (FSL_EDMA_RX | FSL_EDMA_ODD_CH)>,
+				       <&edma2 23 0 FSL_EDMA_EVEN_CH>;
 				dma-names = "rx", "tx";
 				status = "disabled";
 			};
