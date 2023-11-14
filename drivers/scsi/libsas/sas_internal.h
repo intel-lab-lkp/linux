@@ -202,6 +202,7 @@ static inline void sas_add_parent_port(struct domain_device *dev, int phy_id)
 		sas_port_mark_backlink(ex->parent_port);
 	}
 	sas_port_add_phy(ex->parent_port, ex_phy->phy);
+	ex_phy->port = ex->parent_port;
 }
 
 static inline struct domain_device *sas_alloc_device(void)
