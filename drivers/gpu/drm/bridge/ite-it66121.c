@@ -320,6 +320,26 @@ static inline struct it66121_ctx *bridge_to_it66121(struct drm_bridge *bridge)
 	return container_of(bridge, struct it66121_ctx, bridge);
 }
 
+static int it66121_of_read_bus_width(struct device *dev, u32 *bus_width)
+{
+	struct device_node *np;
+	u32 bw;
+
+	np = of_graph_get_endpoint_by_regs(dev->of_node, 0, 0);
+	if (!np)
+		return -EINVAL;
+
+	of_property_read_u32(np, "bus-width", &bw);
+	of_node_put(np);
+
+	if (bw != 12 && bw != 24)
+		return -EINVAL;
+
+	*bus_width = bw;
+
+	return 0;
+}
+
 static const struct regmap_range_cfg it66121_regmap_banks[] = {
 	{
 		.name = "it66121",
@@ -1525,19 +1545,13 @@ static int it66121_probe(struct i2c_client *client)
 	if (!ctx)
 		return -ENOMEM;
 
-	ep = of_graph_get_endpoint_by_regs(dev->of_node, 0, 0);
-	if (!ep)
-		return -EINVAL;
-
 	ctx->dev = dev;
 	ctx->client = client;
 	ctx->info = i2c_get_match_data(client);
 
-	of_property_read_u32(ep, "bus-width", &ctx->bus_width);
-	of_node_put(ep);
-
-	if (ctx->bus_width != 12 && ctx->bus_width != 24)
-		return -EINVAL;
+	ret = it66121_of_read_bus_width(dev, &ctx->bus_width);
+	if (ret)
+		return ret;
 
 	ep = of_graph_get_remote_node(dev->of_node, 1, -1);
 	if (!ep) {
