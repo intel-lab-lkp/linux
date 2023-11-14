@@ -684,6 +684,7 @@ int ipqess_port_register(struct ipqess_switch *sw,
 	netdev->dev.of_node = port->dn;
 
 	netdev->rtnl_link_ops = &ipqess_port_link_ops;
+	ipqess_port_set_ethtool_ops(netdev);
 
 	netdev->tstats = netdev_alloc_pcpu_stats(struct pcpu_sw_netstats);
 	if (!netdev->tstats) {
