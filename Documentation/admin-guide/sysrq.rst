@@ -75,9 +75,18 @@ On other
 	submit a patch to be included in this section.
 
 On all
-	Write a character to /proc/sysrq-trigger.  e.g.::
+	Write single character to /proc/sysrq-trigger.
+	Only first character is interpreted, rest of string is ignored.
+	However it is not reccomended to write any extra characters
+	as the behavior is undefined and might change in the future versions.
+	e.g.::
 
 		echo t > /proc/sysrq-trigger
+
+	Alternatively write multiple keys combo prepended by underscore.
+	All characters are interpreted this way. e.g.::
+
+		echo _reisub > /proc/sysrq-trigger
 
 The :kbd:`<command key>` is case sensitive.
 
