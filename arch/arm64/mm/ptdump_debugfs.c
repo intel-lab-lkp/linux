@@ -68,5 +68,11 @@ static const struct file_operations ptdump_fops = {
 
 void __init ptdump_debugfs_register(struct ptdump_info *info, const char *name)
 {
-	debugfs_create_file(name, 0400, NULL, info, &ptdump_fops);
+	ptdump_debugfs_kvm_register(info, name, NULL);
+}
+
+void ptdump_debugfs_kvm_register(struct ptdump_info *info, const char *name,
+				 struct dentry *d_entry)
+{
+	debugfs_create_file(name, 0400, d_entry, info, &ptdump_fops);
 }

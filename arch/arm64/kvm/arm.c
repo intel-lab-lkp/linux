@@ -28,6 +28,7 @@
 
 #include <linux/uaccess.h>
 #include <asm/ptrace.h>
+#include <asm/ptdump.h>
 #include <asm/mman.h>
 #include <asm/tlbflush.h>
 #include <asm/cacheflush.h>
@@ -2468,6 +2469,7 @@ static __init int kvm_arm_init(void)
 	if (err)
 		goto out_subs;
 
+	ptdump_register_host_stage2();
 	kvm_arm_initialised = true;
 
 	return 0;
