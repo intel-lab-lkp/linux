@@ -1475,6 +1475,39 @@ int i2c_handle_smbus_host_notify(struct i2c_adapter *adap, unsigned short addr)
 }
 EXPORT_SYMBOL_GPL(i2c_handle_smbus_host_notify);
 
+static int i2c_setup_bus_reset_gpio(struct i2c_adapter *adap)
+{
+	int res;
+
+	adap->reset_gpios = devm_gpiod_get_array_optional(&adap->dev, "bus-reset", GPIOD_OUT_HIGH);
+	if (IS_ERR(adap->reset_gpios))
+		return dev_err_probe(&adap->dev, PTR_ERR(adap->reset_gpios),
+				     "Cannot get reset gpio\n");
+	res = device_property_read_u32(&adap->dev, "bus-reset-duration-us", &adap->reset_duration);
+	if (res)
+		adap->reset_duration = 1;
+
+	return 0;
+}
+
+static void i2c_deassert_bus_reset_gpio(struct i2c_adapter *adap)
+{
+	unsigned long *values;
+
+	if (!adap->reset_gpios)
+		return;
+
+	values = bitmap_zalloc(adap->reset_gpios->ndescs, GFP_KERNEL);
+	if (!values)
+		return;
+
+	gpiod_set_array_value_cansleep(adap->reset_gpios->ndescs,
+			adap->reset_gpios->desc, adap->reset_gpios->info,
+			values);
+
+	bitmap_free(values);
+}
+
 static int i2c_register_adapter(struct i2c_adapter *adap)
 {
 	int res = -EINVAL;
@@ -1528,6 +1561,10 @@ static int i2c_register_adapter(struct i2c_adapter *adap)
 	if (res)
 		goto out_reg;
 
+	res = i2c_setup_bus_reset_gpio(adap);
+	if (res)
+		goto out_reg;
+
 	device_enable_async_suspend(&adap->dev);
 	pm_runtime_no_callbacks(&adap->dev);
 	pm_suspend_ignore_children(&adap->dev, true);
@@ -1546,6 +1583,8 @@ static int i2c_register_adapter(struct i2c_adapter *adap)
 		dev_warn(&adap->dev,
 			 "Failed to create compatibility class link\n");
 #endif
+	/* bring downstream devices out of reset */
+	i2c_deassert_bus_reset_gpio(adap);
 
 	/* create pre-declared device nodes */
 	of_i2c_register_devices(adap);

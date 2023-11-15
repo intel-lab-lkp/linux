@@ -746,6 +746,9 @@ struct i2c_adapter {
 
 	struct irq_domain *host_notify_domain;
 	struct regulator *bus_regulator;
+
+	struct gpio_descs *reset_gpios;
+	u32 reset_duration;
 };
 #define to_i2c_adapter(d) container_of(d, struct i2c_adapter, dev)
 
