@@ -1629,6 +1629,13 @@ struct acpi_hest_generic_status {
 	u32 error_severity;
 };
 
+struct hest_parse_aer_info {
+	struct pci_dev *pci_dev;
+	struct acpi_hest_aer *hest_aer_endpoint;
+	struct acpi_hest_aer_root *hest_aer_root_port;
+	struct acpi_hest_aer_bridge *hest_aer_bridge;
+};
+
 /* Values for block_status flags above */
 
 #define ACPI_HEST_UNCORRECTABLE             (1)
