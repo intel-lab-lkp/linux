@@ -67,6 +67,21 @@ extern struct kobj_attribute shmem_enabled_attr;
 #define HPAGE_PMD_ORDER (HPAGE_PMD_SHIFT-PAGE_SHIFT)
 #define HPAGE_PMD_NR (1<<HPAGE_PMD_ORDER)
 
+/*
+ * Mask of all large folio orders supported for anonymous THP.
+ */
+#define THP_ORDERS_ALL_ANON	BIT(PMD_ORDER)
+
+/*
+ * Mask of all large folio orders supported for file THP.
+ */
+#define THP_ORDERS_ALL_FILE	(BIT(PMD_ORDER) | BIT(PUD_ORDER))
+
+/*
+ * Mask of all large folio orders supported for THP.
+ */
+#define THP_ORDERS_ALL		(THP_ORDERS_ALL_ANON | THP_ORDERS_ALL_FILE)
+
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 #define HPAGE_PMD_SHIFT PMD_SHIFT
 #define HPAGE_PMD_SIZE	((1UL) << HPAGE_PMD_SHIFT)
@@ -78,13 +93,18 @@ extern struct kobj_attribute shmem_enabled_attr;
 
 extern unsigned long transparent_hugepage_flags;
 
-#define hugepage_flags_enabled()					       \
-	(transparent_hugepage_flags &				       \
-	 ((1<<TRANSPARENT_HUGEPAGE_FLAG) |		       \
-	  (1<<TRANSPARENT_HUGEPAGE_REQ_MADV_FLAG)))
-#define hugepage_flags_always()				\
-	(transparent_hugepage_flags &			\
-	 (1<<TRANSPARENT_HUGEPAGE_FLAG))
+bool hugepage_flags_enabled(void);
+
+static inline int first_order(unsigned long orders)
+{
+	return fls_long(orders) - 1;
+}
+
+static inline int next_order(unsigned long *orders, int prev)
+{
+	*orders &= ~BIT(prev);
+	return first_order(*orders);
+}
 
 /*
  * Do the below checks:
@@ -97,23 +117,39 @@ extern unsigned long transparent_hugepage_flags;
  *   - For all vmas, check if the haddr is in an aligned HPAGE_PMD_SIZE
  *     area.
  */
-static inline bool transhuge_vma_suitable(struct vm_area_struct *vma,
-		unsigned long addr)
+static inline unsigned long transhuge_vma_suitable(struct vm_area_struct *vma,
+		unsigned long addr, unsigned long orders)
 {
-	unsigned long haddr;
+	int order;
 
-	/* Don't have to check pgoff for anonymous vma */
-	if (!vma_is_anonymous(vma)) {
-		if (!IS_ALIGNED((vma->vm_start >> PAGE_SHIFT) - vma->vm_pgoff,
-				HPAGE_PMD_NR))
-			return false;
+	/*
+	 * Iterate over orders, highest to lowest, removing orders that don't
+	 * meet alignment requirements from the set. Exit loop at first order
+	 * that meets requirements, since all lower orders must also meet
+	 * requirements.
+	 */
+
+	order = first_order(orders);
+
+	while (orders) {
+		unsigned long hpage_size = PAGE_SIZE << order;
+		unsigned long haddr = ALIGN_DOWN(addr, hpage_size);
+
+		if (haddr >= vma->vm_start &&
+		    haddr + hpage_size <= vma->vm_end) {
+			if (!vma_is_anonymous(vma)) {
+				if (IS_ALIGNED((vma->vm_start >> PAGE_SHIFT) -
+						vma->vm_pgoff,
+						hpage_size >> PAGE_SHIFT))
+					break;
+			} else
+				break;
+		}
+
+		order = next_order(&orders, order);
 	}
 
-	haddr = addr & HPAGE_PMD_MASK;
-
-	if (haddr < vma->vm_start || haddr + HPAGE_PMD_SIZE > vma->vm_end)
-		return false;
-	return true;
+	return orders;
 }
 
 static inline bool file_thp_enabled(struct vm_area_struct *vma)
@@ -130,8 +166,9 @@ static inline bool file_thp_enabled(struct vm_area_struct *vma)
 	       !inode_is_open_for_write(inode) && S_ISREG(inode->i_mode);
 }
 
-bool hugepage_vma_check(struct vm_area_struct *vma, unsigned long vm_flags,
-			bool smaps, bool in_pf, bool enforce_sysfs);
+unsigned long hugepage_vma_check(struct vm_area_struct *vma,
+				 unsigned long vm_flags, bool smaps, bool in_pf,
+				 bool enforce_sysfs, unsigned long orders);
 
 #define transparent_hugepage_use_zero_page()				\
 	(transparent_hugepage_flags &					\
@@ -267,17 +304,18 @@ static inline bool folio_test_pmd_mappable(struct folio *folio)
 	return false;
 }
 
-static inline bool transhuge_vma_suitable(struct vm_area_struct *vma,
-		unsigned long addr)
+static inline unsigned long transhuge_vma_suitable(struct vm_area_struct *vma,
+		unsigned long addr, unsigned long orders)
 {
-	return false;
+	return 0;
 }
 
-static inline bool hugepage_vma_check(struct vm_area_struct *vma,
-				      unsigned long vm_flags, bool smaps,
-				      bool in_pf, bool enforce_sysfs)
+static inline unsigned long hugepage_vma_check(struct vm_area_struct *vma,
+					unsigned long vm_flags, bool smaps,
+					bool in_pf, bool enforce_sysfs,
+					unsigned long orders)
 {
-	return false;
+	return 0;
 }
 
 static inline void folio_prep_large_rmappable(struct folio *folio) {}
