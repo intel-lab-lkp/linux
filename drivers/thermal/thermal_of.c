@@ -538,6 +538,97 @@ out_kfree_of_ops:
 	return ERR_PTR(ret);
 }
 
+/**
+ * __thermal_of_get_zone_by_index() - Get thermal zone handle from the DT
+ *				      thermal-zones index
+ * @dev:   Pointer to the consumer device
+ * @index: Index of thermal-zones
+ *
+ * This function will search for a thermal zone in the thermal-zones phandle
+ * array corresponding to the specified index, then will search for its name
+ * into the registered thermal zones through thermal_zone_get_zone_by_name()
+ *
+ * Please note that this function is for internal use only and expects that
+ * all of the sanity checks are performed by its caller.
+ *
+ * Return: thermal_zone_device pointer on success, ERR_PTR() on error or NULL
+ * when the API is disabled or the "thermal-zones" DT property is missing.
+ */
+static struct thermal_zone_device
+*__thermal_of_get_zone_by_index(struct device *dev, int index)
+{
+	struct thermal_zone_device *tzd;
+	struct device_node *np;
+
+	np = of_parse_phandle(dev->of_node, "thermal-zones", index);
+	if (!np)
+		return NULL;
+
+	tzd = thermal_zone_get_zone_by_name(np->name);
+	of_node_put(np);
+
+	return tzd;
+}
+
+/**
+ * thermal_of_get_zone_by_index() - Get thermal zone handle from a DT node
+ *				    based on index
+ * @dev:   Pointer to the consumer device
+ * @index: Index of thermal-zones
+ *
+ * Return: thermal_zone_device pointer on success, ERR_PTR() on error or NULL
+ * when the API is disabled or the "thermal-zones" DT property is missing.
+ */
+struct thermal_zone_device *thermal_of_get_zone_by_index(struct device *dev, int index)
+{
+	if (!dev || !dev->of_node)
+		return ERR_PTR(-ENODEV);
+
+	if (!of_property_present(dev->of_node, "thermal-zones"))
+		return NULL;
+
+	return __thermal_of_get_zone_by_index(dev, index);
+}
+
+/**
+ * thermal_of_get_zone() - Get thermal zone handle from a DT node based
+ *			   on name, or the first handle in list
+ * @dev:   Pointer to the consumer device
+ * @name:  Name as found in thermal-zone-names or NULL
+ *
+ * This function will search for a thermal zone in the thermal-zones phandle
+ * array corresponding to the index of that in the thermal-zone-names array.
+ * If the name is not specified (NULL), it will return the first thermal zone
+ * in the thermal-zones phandle array.
+ *
+ * Return: thermal_zone_device pointer on success, ERR_PTR() on error or NULL
+ * when the API is disabled or the "thermal-zones" DT property is missing.
+ */
+struct thermal_zone_device *thermal_of_get_zone(struct device *dev, const char *name)
+{
+	int index;
+
+	if (!dev || !dev->of_node)
+		return ERR_PTR(-ENODEV);
+
+	if (!of_property_present(dev->of_node, "thermal-zones")) {
+		pr_err("thermal zones property not present\n");
+		return NULL;
+	}
+
+	if (name) {
+		index = of_property_match_string(dev->of_node, "thermal-zone-names", name);
+		if (index < 0) {
+			pr_err("thermal zone names property not present\n");
+			return ERR_PTR(index);
+		}
+	} else {
+		index = 0;
+	}
+
+	return __thermal_of_get_zone_by_index(dev, index);
+}
+
 static void devm_thermal_of_zone_release(struct device *dev, void *res)
 {
 	thermal_of_zone_unregister(*(struct thermal_zone_device **)res);

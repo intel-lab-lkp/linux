@@ -261,6 +261,9 @@ struct thermal_zone_device *devm_thermal_of_zone_register(struct device *dev, in
 
 void devm_thermal_of_zone_unregister(struct device *dev, struct thermal_zone_device *tz);
 
+struct thermal_zone_device *thermal_of_get_zone_by_index(struct device *dev, int index);
+struct thermal_zone_device *thermal_of_get_zone(struct device *dev, const char *name);
+
 #else
 
 static inline
@@ -273,6 +276,18 @@ struct thermal_zone_device *devm_thermal_of_zone_register(struct device *dev, in
 static inline void devm_thermal_of_zone_unregister(struct device *dev,
 						   struct thermal_zone_device *tz)
 {
+}
+
+static inline
+struct thermal_zone_device *thermal_of_get_zone_by_index(struct device *dev, int index)
+{
+	return ERR_PTR(-ENOTSUPP);
+}
+
+static inline
+struct thermal_zone_device *thermal_of_get_zone(struct device *dev, const char *name)
+{
+	return ERR_PTR(-ENOTSUPP);
 }
 #endif
 
