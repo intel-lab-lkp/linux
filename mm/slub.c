@@ -1024,7 +1024,8 @@ static __printf(3, 4) void slab_err(struct kmem_cache *s, struct slab *slab,
 	add_taint(TAINT_BAD_PAGE, LOCKDEP_NOW_UNRELIABLE);
 }
 
-static void init_object(struct kmem_cache *s, void *object, u8 val)
+__no_sanitize_memory static void
+init_object(struct kmem_cache *s, void *object, u8 val)
 {
 	u8 *p = kasan_reset_tag(object);
 	unsigned int poison_size = s->object_size;
