@@ -10,7 +10,7 @@
 #ifndef __MM_KMSAN_KMSAN_H
 #define __MM_KMSAN_KMSAN_H
 
-#include <asm/pgtable_64_types.h>
+#include <linux/pgtable.h>
 #include <linux/irqflags.h>
 #include <linux/sched.h>
 #include <linux/stackdepot.h>
