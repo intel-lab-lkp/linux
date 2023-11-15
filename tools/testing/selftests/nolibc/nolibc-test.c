@@ -1039,10 +1039,13 @@ int run_stdlib(int min, int max)
 	return ret;
 }
 
-#define EXPECT_VFPRINTF(c, expected, fmt, ...)				\
-	ret += expect_vfprintf(llen, c, expected, fmt, ##__VA_ARGS__)
+#define ASSERT_VFPRINTF(c, expected, fmt, ...)				\
+	enum RESULT res = assert_vfprintf(_metadata, c, expected, fmt, ##__VA_ARGS__); \
+	if (res == SKIPPED) SKIP(return); \
+	if (res == FAIL) FAIL(return);
 
-static int expect_vfprintf(int llen, int c, const char *expected, const char *fmt, ...)
+static enum RESULT assert_vfprintf(struct __test_metadata *_metadata, int c,
+				   const char *expected, const char *fmt, ...)
 {
 	int ret, fd;
 	ssize_t w, r;
@@ -1051,25 +1054,20 @@ static int expect_vfprintf(int llen, int c, const char *expected, const char *fm
 	va_list args;
 
 	fd = open("/tmp", O_TMPFILE | O_EXCL | O_RDWR, 0600);
-	if (fd == -1) {
-		result(llen, SKIPPED);
-		return 0;
-	}
+	if (fd == -1)
+		return SKIPPED;
 
 	memfile = fdopen(fd, "w+");
-	if (!memfile) {
-		result(llen, FAIL);
-		return 1;
-	}
+	if (!memfile)
+		return FAIL;
 
 	va_start(args, fmt);
 	w = vfprintf(memfile, fmt, args);
 	va_end(args);
 
 	if (w != c) {
-		llen += printf(" written(%d) != %d", (int)w, c);
-		result(llen, FAIL);
-		return 1;
+		_metadata->exe.llen += printf(" written(%d) != %d", (int)w, c);
+		return FAIL;
 	}
 
 	fflush(memfile);
@@ -1080,46 +1078,30 @@ static int expect_vfprintf(int llen, int c, const char *expected, const char *fm
 	fclose(memfile);
 
 	if (r != w) {
-		llen += printf(" written(%d) != read(%d)", (int)w, (int)r);
-		result(llen, FAIL);
-		return 1;
+		_metadata->exe.llen += printf(" written(%d) != read(%d)", (int)w, (int)r);
+		return FAIL;
 	}
 
 	buf[r] = '\0';
-	llen += printf(" \"%s\" = \"%s\"", expected, buf);
+	_metadata->exe.llen += printf(" \"%s\" = \"%s\"", expected, buf);
 	ret = strncmp(expected, buf, c);
 
-	result(llen, ret ? FAIL : OK);
-	return ret;
+	return ret ? FAIL : OK;
 }
 
-static int run_vfprintf(int min, int max)
+TEST(vfprintf, empty)     { ASSERT_VFPRINTF(0, "", ""); }
+TEST(vfprintf, simple)    { ASSERT_VFPRINTF(3, "foo", "foo"); }
+TEST(vfprintf, string)    { ASSERT_VFPRINTF(3, "foo", "%s", "foo"); }
+TEST(vfprintf, number)    { ASSERT_VFPRINTF(4, "1234", "%d", 1234); }
+TEST(vfprintf, negnumber) { ASSERT_VFPRINTF(5, "-1234", "%d", -1234); }
+TEST(vfprintf, unsigned)  { ASSERT_VFPRINTF(5, "12345", "%u", 12345); }
+TEST(vfprintf, char)      { ASSERT_VFPRINTF(1, "c", "%c", 'c'); }
+TEST(vfprintf, hex)       { ASSERT_VFPRINTF(1, "f", "%x", 0xf); }
+TEST(vfprintf, pointer)   { ASSERT_VFPRINTF(3, "0x1", "%p", (void *) 0x1); }
+
+int run_vfprintf(int min, int max)
 {
-	int test;
-	int ret = 0;
-
-	for (test = min; test >= 0 && test <= max; test++) {
-		int llen = 0; /* line length */
-
-		/* avoid leaving empty lines below, this will insert holes into
-		 * test numbers.
-		 */
-		switch (test + __LINE__ + 1) {
-		CASE_TEST(empty);        EXPECT_VFPRINTF(0, "", ""); break;
-		CASE_TEST(simple);       EXPECT_VFPRINTF(3, "foo", "foo"); break;
-		CASE_TEST(string);       EXPECT_VFPRINTF(3, "foo", "%s", "foo"); break;
-		CASE_TEST(number);       EXPECT_VFPRINTF(4, "1234", "%d", 1234); break;
-		CASE_TEST(negnumber);    EXPECT_VFPRINTF(5, "-1234", "%d", -1234); break;
-		CASE_TEST(unsigned);     EXPECT_VFPRINTF(5, "12345", "%u", 12345); break;
-		CASE_TEST(char);         EXPECT_VFPRINTF(1, "c", "%c", 'c'); break;
-		CASE_TEST(hex);          EXPECT_VFPRINTF(1, "f", "%x", 0xf); break;
-		CASE_TEST(pointer);      EXPECT_VFPRINTF(3, "0x1", "%p", (void *) 0x1); break;
-		case __LINE__:
-			return ret; /* must be last */
-		/* note: do not set any defaults so as to permit holes above */
-		}
-	}
-	return ret;
+	return run_test_suite("vfprintf", min, max);
 }
 
 static int smash_stack(void)
