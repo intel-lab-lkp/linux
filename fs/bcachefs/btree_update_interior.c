@@ -1054,7 +1054,6 @@ bch2_btree_update_start(struct btree_trans *trans, struct btree_path *path,
 	unsigned nr_nodes[2] = { 0, 0 };
 	unsigned update_level = level;
 	enum bch_watermark watermark = flags & BCH_WATERMARK_MASK;
-	unsigned journal_flags = 0;
 	int ret = 0;
 	u32 restart_count = trans->restart_count;
 
@@ -1067,10 +1066,6 @@ bch2_btree_update_start(struct btree_trans *trans, struct btree_path *path,
 
 	flags &= ~BCH_WATERMARK_MASK;
 	flags |= watermark;
-
-	if (flags & BCH_TRANS_COMMIT_journal_reclaim)
-		journal_flags |= JOURNAL_RES_GET_NONBLOCK;
-	journal_flags |= watermark;
 
 	while (1) {
 		nr_nodes[!!update_level] += 1 + split;
