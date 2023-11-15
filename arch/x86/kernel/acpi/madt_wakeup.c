@@ -1,4 +1,5 @@
 #include <linux/acpi.h>
+#include <linux/cpu.h>
 #include <linux/io.h>
 #include <asm/apic.h>
 #include <asm/barrier.h>
@@ -74,6 +75,8 @@ int __init acpi_parse_mp_wake(union acpi_subtable_headers *header,
 	acpi_table_print_madt_entry(&header->common);
 
 	acpi_mp_wake_mailbox_paddr = mp_wake->base_address;
+
+	cpu_hotplug_disable_offlining();
 
 	apic_update_callback(wakeup_secondary_cpu_64, acpi_wakeup_cpu);
 
