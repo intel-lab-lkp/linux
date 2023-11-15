@@ -2865,7 +2865,7 @@ void ptlock_free(struct ptdesc *ptdesc);
 
 static inline spinlock_t *ptlock_ptr(struct ptdesc *ptdesc)
 {
-	return ptdesc->ptl;
+	return (likely(ptdesc)) ? ptdesc->ptl : NULL;
 }
 #else /* ALLOC_SPLIT_PTLOCKS */
 static inline void ptlock_cache_init(void)
@@ -2883,7 +2883,7 @@ static inline void ptlock_free(struct ptdesc *ptdesc)
 
 static inline spinlock_t *ptlock_ptr(struct ptdesc *ptdesc)
 {
-	return &ptdesc->ptl;
+	return (likely(ptdesc)) ? &ptdesc->ptl : NULL;
 }
 #endif /* ALLOC_SPLIT_PTLOCKS */
 
