@@ -54,8 +54,8 @@
 struct exynos_pcie {
 	struct dw_pcie			pci;
 	void __iomem			*elbi_base;
-	struct clk			*clk;
-	struct clk			*bus_clk;
+	struct clk_bulk_data		*clks;
+	int				clk_cnt;
 	struct phy			*phy;
 	struct regulator_bulk_data	supplies[2];
 };
@@ -63,32 +63,17 @@ struct exynos_pcie {
 static int exynos_pcie_init_clk_resources(struct exynos_pcie *ep)
 {
 	struct device *dev = ep->pci.dev;
-	int ret;
 
-	ret = clk_prepare_enable(ep->clk);
-	if (ret) {
-		dev_err(dev, "cannot enable pcie rc clock");
-		return ret;
-	}
+	ep->clk_cnt = devm_clk_bulk_get_all(dev, &ep->clks);
+	if (ep->clk_cnt < 0)
+		return ep->clk_cnt;
 
-	ret = clk_prepare_enable(ep->bus_clk);
-	if (ret) {
-		dev_err(dev, "cannot enable pcie bus clock");
-		goto err_bus_clk;
-	}
-
-	return 0;
-
-err_bus_clk:
-	clk_disable_unprepare(ep->clk);
-
-	return ret;
+	return clk_bulk_prepare_enable(ep->clk_cnt, ep->clks);
 }
 
 static void exynos_pcie_deinit_clk_resources(struct exynos_pcie *ep)
 {
-	clk_disable_unprepare(ep->bus_clk);
-	clk_disable_unprepare(ep->clk);
+	clk_bulk_disable_unprepare(ep->clk_cnt, ep->clks);
 }
 
 static void exynos_pcie_writel(void __iomem *base, u32 val, u32 reg)
@@ -332,32 +317,20 @@ static int exynos_pcie_probe(struct platform_device *pdev)
 	if (IS_ERR(ep->elbi_base))
 		return PTR_ERR(ep->elbi_base);
 
-	ep->clk = devm_clk_get(dev, "pcie");
-	if (IS_ERR(ep->clk)) {
-		dev_err(dev, "Failed to get pcie rc clock\n");
-		return PTR_ERR(ep->clk);
-	}
-
-	ep->bus_clk = devm_clk_get(dev, "pcie_bus");
-	if (IS_ERR(ep->bus_clk)) {
-		dev_err(dev, "Failed to get pcie bus clock\n");
-		return PTR_ERR(ep->bus_clk);
-	}
+	ret = exynos_pcie_init_clk_resources(ep);
+	if (ret)
+		return ret;
 
 	ep->supplies[0].supply = "vdd18";
 	ep->supplies[1].supply = "vdd10";
 	ret = devm_regulator_bulk_get(dev, ARRAY_SIZE(ep->supplies),
 				      ep->supplies);
 	if (ret)
-		return ret;
-
-	ret = exynos_pcie_init_clk_resources(ep);
-	if (ret)
-		return ret;
+		goto fail_regulator;
 
 	ret = regulator_bulk_enable(ARRAY_SIZE(ep->supplies), ep->supplies);
 	if (ret)
-		return ret;
+		goto fail_regulator;
 
 	platform_set_drvdata(pdev, ep);
 
@@ -369,8 +342,9 @@ static int exynos_pcie_probe(struct platform_device *pdev)
 
 fail_probe:
 	phy_exit(ep->phy);
-	exynos_pcie_deinit_clk_resources(ep);
 	regulator_bulk_disable(ARRAY_SIZE(ep->supplies), ep->supplies);
+fail_regulator:
+	exynos_pcie_deinit_clk_resources(ep);
 
 	return ret;
 }
