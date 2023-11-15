@@ -19,10 +19,27 @@ int check_version(const struct load_info *info,
 	unsigned int versindex = info->index.vers;
 	unsigned int i, num_versions;
 	struct modversion_info *versions;
+	struct modversion_info_ext version_ext;
 
 	/* Exporting module didn't supply crcs?  OK, we're already tainted. */
 	if (!crc)
 		return 1;
+
+	/* If we have extended version info, rely on it */
+	if (modversion_ext_start(info, &version_ext) >= 0) {
+		do {
+			if (strncmp(version_ext.name.value, symname,
+				    version_ext.name.end - version_ext.name.value) != 0)
+				continue;
+
+			if (*version_ext.crc.value == *crc)
+				return 1;
+			pr_debug("Found checksum %X vs module %X\n",
+				 *crc, *version_ext.crc.value);
+			goto bad_version;
+		} while (modversion_ext_advance(&version_ext) == 0);
+		goto broken_toolchain;
+	}
 
 	/* No versions at all?  modprobe --force does this. */
 	if (versindex == 0)
@@ -46,6 +63,7 @@ int check_version(const struct load_info *info,
 		goto bad_version;
 	}
 
+broken_toolchain:
 	/* Broken toolchain. Warn once, then let it go.. */
 	pr_warn_once("%s: no symbol version for %s\n", info->name, symname);
 	return 1;
@@ -85,6 +103,65 @@ int same_magic(const char *amagic, const char *bmagic,
 		bmagic += strcspn(bmagic, " ");
 	}
 	return strcmp(amagic, bmagic) == 0;
+}
+
+#define MODVERSION_FIELD_START(sec, field) \
+	field.value = (typeof(field.value))sec.sh_addr; \
+	field.end = field.value + sec.sh_size
+
+ssize_t modversion_ext_start(const struct load_info *info,
+			     struct modversion_info_ext *start)
+{
+	unsigned int crc_idx = info->index.vers_ext_crc;
+	unsigned int name_idx = info->index.vers_ext_name;
+	Elf_Shdr *sechdrs = info->sechdrs;
+
+	// Both of these fields are needed for this to be useful
+	// Any future fields should be initialized to NULL if absent.
+	if ((crc_idx == 0) || (name_idx == 0))
+		return -EINVAL;
+
+	MODVERSION_FIELD_START(sechdrs[crc_idx], start->crc);
+	MODVERSION_FIELD_START(sechdrs[name_idx], start->name);
+
+	return (start->crc.end - start->crc.value) / sizeof(*start->crc.value);
+}
+
+static int modversion_ext_s32_advance(struct modversion_info_ext_s32 *field)
+{
+	if (!field->value)
+		return 0;
+	if (field->value >= field->end)
+		return -EINVAL;
+	field->value++;
+	return 0;
+}
+
+static int modversion_ext_string_advance(struct modversion_info_ext_string *s)
+{
+	if (!s->value)
+		return 0;
+	if (s->value >= s->end)
+		return -EINVAL;
+	s->value += strnlen(s->value, s->end - s->value - 1) + 1;
+	if (s->value >= s->end)
+		return -EINVAL;
+	return 0;
+}
+
+int modversion_ext_advance(struct modversion_info_ext *start)
+{
+	int ret;
+
+	ret = modversion_ext_s32_advance(&start->crc);
+	if (ret < 0)
+		return ret;
+
+	ret = modversion_ext_string_advance(&start->name);
+	if (ret < 0)
+		return ret;
+
+	return 0;
 }
 
 /*

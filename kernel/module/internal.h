@@ -80,7 +80,7 @@ struct load_info {
 	unsigned int used_pages;
 #endif
 	struct {
-		unsigned int sym, str, mod, vers, info, pcpu;
+		unsigned int sym, str, mod, vers, info, pcpu, vers_ext_crc, vers_ext_name;
 	} index;
 };
 
@@ -384,6 +384,20 @@ void module_layout(struct module *mod, struct modversion_info *ver, struct kerne
 		   struct kernel_symbol *ks, struct tracepoint * const *tp);
 int check_modstruct_version(const struct load_info *info, struct module *mod);
 int same_magic(const char *amagic, const char *bmagic, bool has_crcs);
+struct modversion_info_ext_s32 {
+	const s32 *value;
+	const s32 *end;
+};
+struct modversion_info_ext_string {
+	const char *value;
+	const char *end;
+};
+struct modversion_info_ext {
+	struct modversion_info_ext_s32 crc;
+	struct modversion_info_ext_string name;
+};
+ssize_t modversion_ext_start(const struct load_info *info, struct modversion_info_ext *ver);
+int modversion_ext_advance(struct modversion_info_ext *ver);
 #else /* !CONFIG_MODVERSIONS */
 static inline int check_version(const struct load_info *info,
 				const char *symname,

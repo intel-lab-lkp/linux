@@ -1886,10 +1886,15 @@ static int elf_validity_cache_copy(struct load_info *info, int flags)
 	if (!info->name)
 		info->name = info->mod->name;
 
-	if (flags & MODULE_INIT_IGNORE_MODVERSIONS)
+	if (flags & MODULE_INIT_IGNORE_MODVERSIONS) {
 		info->index.vers = 0; /* Pretend no __versions section! */
-	else
+		info->index.vers_ext_crc = 0;
+		info->index.vers_ext_name = 0;
+	} else {
 		info->index.vers = find_sec(info, "__versions");
+		info->index.vers_ext_crc = find_sec(info, "__version_ext_crcs");
+		info->index.vers_ext_name = find_sec(info, "__version_ext_names");
+	}
 
 	info->index.pcpu = find_pcpusec(info);
 
