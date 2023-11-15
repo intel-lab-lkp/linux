@@ -1304,9 +1304,8 @@ static int bcmasp_probe(struct platform_device *pdev)
 		intf = bcmasp_interface_create(priv, intf_node, i);
 		if (!intf) {
 			dev_err(dev, "Cannot create eth interface %d\n", i);
-			bcmasp_remove_intfs(priv);
 			of_node_put(intf_node);
-			goto of_put_exit;
+			goto remove_intfs;
 		}
 		list_add_tail(&intf->list, &priv->intfs);
 		i++;
@@ -1331,6 +1330,7 @@ static int bcmasp_probe(struct platform_device *pdev)
 			netdev_err(intf->ndev,
 				   "failed to register net_device: %d\n", ret);
 			priv->destroy_wol(priv);
+remove_intfs:
 			bcmasp_remove_intfs(priv);
 			goto of_put_exit;
 		}
