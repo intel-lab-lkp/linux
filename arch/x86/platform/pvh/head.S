@@ -94,10 +94,15 @@ SYM_CODE_START_LOCAL(pvh_start_xen)
 	/* 64-bit entry point. */
 	.code64
 1:
-	/* Set base address in stack canary descriptor. */
+	/*
+	 * Set up GSBASE.
+	 * Note that, on SMP, the boot cpu uses init data section until
+	 * the per cpu areas are set up.
+	 */
 	mov $MSR_GS_BASE,%ecx
-	mov $_pa(canary), %eax
-	xor %edx, %edx
+	lea INIT_PER_CPU_VAR(fixed_percpu_data)(%rip), %rdx
+	mov %edx, %eax
+	shr $32, %rdx
 	wrmsr
 
 	call xen_prepare_pvh
@@ -156,8 +161,6 @@ SYM_DATA_START_LOCAL(gdt_start)
 SYM_DATA_END_LABEL(gdt_start, SYM_L_LOCAL, gdt_end)
 
 	.balign 16
-SYM_DATA_LOCAL(canary, .fill 48, 1, 0)
-
 SYM_DATA_START_LOCAL(early_stack)
 	.fill BOOT_STACK_SIZE, 1, 0
 SYM_DATA_END_LABEL(early_stack, SYM_L_LOCAL, early_stack_end)
