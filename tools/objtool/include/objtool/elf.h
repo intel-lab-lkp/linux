@@ -43,7 +43,8 @@ struct section {
 	char *name;
 	int idx;
 	bool _changed, text, rodata, noinstr, init, truncate;
-	struct reloc *relocs;
+	struct list_head reloc_list;
+	int num_relocs;
 };
 
 struct symbol {
@@ -71,11 +72,21 @@ struct symbol {
 	struct reloc *relocs;
 };
 
+struct reloc_block;
+
 struct reloc {
 	struct elf_hash_node hash;
-	struct section *sec;
+	struct reloc_block *block;
 	struct symbol *sym;
 	struct reloc *sym_next_reloc;
+};
+
+struct reloc_block {
+	struct list_head list;
+	struct section *sec;
+	int start_idx;
+	int len;
+	struct reloc relocs[0];
 };
 
 struct elf {
@@ -108,6 +119,11 @@ struct elf *elf_open_read(const char *name, int flags);
 
 struct section *elf_create_section(struct elf *elf, const char *name,
 				   size_t entsize, unsigned int nr);
+
+int elf_extend_rela_section(struct elf *elf,
+			    struct section *rsec,
+			    int add_relocs);
+
 struct section *elf_create_section_pair(struct elf *elf, const char *name,
 					size_t entsize, unsigned int nr,
 					unsigned int reloc_nr);
@@ -197,12 +213,12 @@ static inline unsigned int sec_num_entries(struct section *sec)
 
 static inline unsigned int reloc_idx(struct reloc *reloc)
 {
-	return reloc - reloc->sec->relocs;
+	return reloc->block->start_idx + (reloc - &reloc->block->relocs[0]);
 }
 
 static inline void *reloc_rel(struct reloc *reloc)
 {
-	struct section *rsec = reloc->sec;
+	struct section *rsec = reloc->block->sec;
 
 	return rsec->data->d_buf + (reloc_idx(reloc) * rsec->sh.sh_entsize);
 }
@@ -215,7 +231,7 @@ static inline bool is_32bit_reloc(struct reloc *reloc)
 	 * Elf64_Rel:  16 bytes
 	 * Elf64_Rela: 24 bytes
 	 */
-	return reloc->sec->sh.sh_entsize < 16;
+	return reloc->block->sec->sh.sh_entsize < 16;
 }
 
 #define __get_reloc_field(reloc, field)					\
@@ -241,7 +257,7 @@ static inline u64 reloc_offset(struct reloc *reloc)
 static inline void set_reloc_offset(struct elf *elf, struct reloc *reloc, u64 offset)
 {
 	__set_reloc_field(reloc, r_offset, offset);
-	mark_sec_changed(elf, reloc->sec, true);
+	mark_sec_changed(elf, reloc->block->sec, true);
 }
 
 static inline s64 reloc_addend(struct reloc *reloc)
@@ -252,7 +268,7 @@ static inline s64 reloc_addend(struct reloc *reloc)
 static inline void set_reloc_addend(struct elf *elf, struct reloc *reloc, s64 addend)
 {
 	__set_reloc_field(reloc, r_addend, addend);
-	mark_sec_changed(elf, reloc->sec, true);
+	mark_sec_changed(elf, reloc->block->sec, true);
 }
 
 
@@ -282,7 +298,7 @@ static inline void set_reloc_sym(struct elf *elf, struct reloc *reloc, unsigned 
 
 	__set_reloc_field(reloc, r_info, info);
 
-	mark_sec_changed(elf, reloc->sec, true);
+	mark_sec_changed(elf, reloc->block->sec, true);
 }
 static inline void set_reloc_type(struct elf *elf, struct reloc *reloc, unsigned int type)
 {
@@ -292,7 +308,46 @@ static inline void set_reloc_type(struct elf *elf, struct reloc *reloc, unsigned
 
 	__set_reloc_field(reloc, r_info, info);
 
-	mark_sec_changed(elf, reloc->sec, true);
+	mark_sec_changed(elf, reloc->block->sec, true);
+}
+
+static inline struct reloc *get_reloc_by_index(struct section *rsec, int idx)
+{
+	struct reloc_block *block;
+
+	list_for_each_entry(block, &rsec->reloc_list, list) {
+		if (idx < block->len)
+			return &block->relocs[idx];
+		idx -= block->len;
+	}
+
+	return NULL;
+}
+
+static inline struct reloc *first_reloc(struct section *sec)
+{
+	struct reloc_block *block;
+
+	if (list_empty(&sec->reloc_list))
+		return NULL;
+
+	block = list_first_entry(&sec->reloc_list, struct reloc_block, list);
+	return &block->relocs[0];
+}
+
+static inline struct reloc *next_reloc(struct reloc *reloc)
+{
+	struct reloc_block *block = reloc->block;
+
+	reloc++;
+	if (reloc < &block->relocs[block->len])
+		return reloc;
+
+	if (list_is_last(&block->list, &block->sec->reloc_list))
+		return NULL;
+
+	block = list_next_entry(block, list);
+	return &block->relocs[0];
 }
 
 #define for_each_sec(file, sec)						\
@@ -308,15 +363,10 @@ static inline void set_reloc_type(struct elf *elf, struct reloc *reloc, unsigned
 			sec_for_each_sym(__sec, sym)
 
 #define for_each_reloc(rsec, reloc)					\
-	for (int __i = 0, __fake = 1; __fake; __fake = 0)		\
-		for (reloc = rsec->relocs;				\
-		     __i < sec_num_entries(rsec);			\
-		     __i++, reloc++)
+	for (reloc = first_reloc(rsec); reloc; reloc = next_reloc(reloc))
 
 #define for_each_reloc_from(rsec, reloc)				\
-	for (int __i = reloc_idx(reloc);				\
-	     __i < sec_num_entries(rsec);				\
-	     __i++, reloc++)
+	for (; reloc; reloc = next_reloc(reloc))
 
 #define OFFSET_STRIDE_BITS	4
 #define OFFSET_STRIDE		(1UL << OFFSET_STRIDE_BITS)
@@ -344,7 +394,7 @@ static inline u32 sec_offset_hash(struct section *sec, unsigned long offset)
 
 static inline u32 reloc_hash(struct reloc *reloc)
 {
-	return sec_offset_hash(reloc->sec, reloc_offset(reloc));
+	return sec_offset_hash(reloc->block->sec, reloc_offset(reloc));
 }
 
 #endif /* _OBJTOOL_ELF_H */
