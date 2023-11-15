@@ -72,6 +72,10 @@ void kmsan_copy_to_user(void __user *to, const void *from, size_t to_copy,
  */
 void kmsan_memmove_metadata(void *dst, const void *src, size_t n);
 
+void kmsan_enable_current(void);
+
+void kmsan_disable_current(void);
+
 #else
 
 static inline void kmsan_poison_memory(const void *address, size_t size,
@@ -89,6 +93,14 @@ static inline void kmsan_copy_to_user(void __user *to, const void *from,
 {
 }
 static inline void kmsan_memmove_metadata(void *dst, const void *src, size_t n)
+{
+}
+
+static inline void kmsan_enable_current(void)
+{
+}
+
+static inline void kmsan_disable_current(void)
 {
 }
 
