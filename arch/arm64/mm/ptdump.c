@@ -27,6 +27,7 @@
 #include <asm/kvm_pkvm.h>
 #include <asm/kvm_pgtable.h>
 #include <asm/kvm_host.h>
+#include <asm/kvm_mmu.h>
 
 
 enum address_markers_idx {
@@ -519,6 +520,16 @@ void ptdump_check_wx(void)
 #ifdef CONFIG_PTDUMP_STAGE2_DEBUGFS
 static struct ptdump_info stage2_kernel_ptdump_info;
 
+struct ptdump_registered_guest {
+	struct list_head		reg_list;
+	struct ptdump_info		info;
+	struct kvm_pgtable_snapshot	snapshot;
+	rwlock_t			*lock;
+};
+
+static LIST_HEAD(ptdump_guest_list);
+static DEFINE_MUTEX(ptdump_list_lock);
+
 static phys_addr_t ptdump_host_pa(void *addr)
 {
 	return __pa(addr);
@@ -755,6 +766,63 @@ static void stage2_ptdump_walk(struct seq_file *s, struct ptdump_info *info)
 	};
 
 	kvm_pgtable_walk(pgtable, start_ipa, end_ipa, &walker);
+}
+
+static void guest_stage2_ptdump_walk(struct seq_file *s,
+				     struct ptdump_info *info)
+{
+	struct ptdump_info_file_priv *f_priv =
+		container_of(info, struct ptdump_info_file_priv, info);
+	struct ptdump_registered_guest *guest = info->priv;
+
+	f_priv->file_priv = &guest->snapshot;
+
+	read_lock(guest->lock);
+	stage2_ptdump_walk(s, info);
+	read_unlock(guest->lock);
+}
+
+int ptdump_register_guest_stage2(struct kvm *kvm)
+{
+	struct ptdump_registered_guest *guest;
+	struct kvm_s2_mmu *mmu = &kvm->arch.mmu;
+	struct kvm_pgtable *pgt = mmu->pgt;
+
+	guest = kzalloc(sizeof(struct ptdump_registered_guest), GFP_KERNEL);
+	if (!guest)
+		return -ENOMEM;
+
+	memcpy(&guest->snapshot.pgtable, pgt, sizeof(struct kvm_pgtable));
+	guest->info = (struct ptdump_info) {
+		.ptdump_walk		= guest_stage2_ptdump_walk,
+	};
+
+	guest->info.priv = guest;
+	guest->lock = &kvm->mmu_lock;
+	mutex_lock(&ptdump_list_lock);
+
+	ptdump_debugfs_kvm_register(&guest->info, "stage2_page_tables",
+				    kvm->debugfs_dentry);
+
+	list_add(&guest->reg_list, &ptdump_guest_list);
+	mutex_unlock(&ptdump_list_lock);
+
+	return 0;
+}
+
+void ptdump_unregister_guest_stage2(struct kvm_pgtable *pgt)
+{
+	struct ptdump_registered_guest *guest;
+
+	mutex_lock(&ptdump_list_lock);
+	list_for_each_entry(guest, &ptdump_guest_list, reg_list) {
+		if (guest->snapshot.pgtable.pgd == pgt->pgd) {
+			list_del(&guest->reg_list);
+			kfree(guest);
+			break;
+		}
+	}
+	mutex_unlock(&ptdump_list_lock);
 }
 
 void ptdump_register_host_stage2(void)

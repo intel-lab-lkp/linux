@@ -11,6 +11,7 @@
 #include <linux/sched/signal.h>
 #include <trace/events/kvm.h>
 #include <asm/pgalloc.h>
+#include <asm/ptdump.h>
 #include <asm/cacheflush.h>
 #include <asm/kvm_arm.h>
 #include <asm/kvm_mmu.h>
@@ -1021,6 +1022,7 @@ void kvm_free_stage2_pgd(struct kvm_s2_mmu *mmu)
 	write_unlock(&kvm->mmu_lock);
 
 	if (pgt) {
+		ptdump_unregister_guest_stage2(pgt);
 		kvm_pgtable_stage2_destroy(pgt);
 		kfree(pgt);
 	}

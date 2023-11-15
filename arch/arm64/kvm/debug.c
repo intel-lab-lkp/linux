@@ -13,6 +13,7 @@
 #include <asm/kvm_asm.h>
 #include <asm/kvm_arm.h>
 #include <asm/kvm_emulate.h>
+#include <asm/ptdump.h>
 
 #include "trace.h"
 
@@ -341,4 +342,9 @@ void kvm_arch_vcpu_put_debug_state_flags(struct kvm_vcpu *vcpu)
 {
 	vcpu_clear_flag(vcpu, DEBUG_STATE_SAVE_SPE);
 	vcpu_clear_flag(vcpu, DEBUG_STATE_SAVE_TRBE);
+}
+
+int kvm_arch_create_vm_debugfs(struct kvm *kvm)
+{
+	return ptdump_register_guest_stage2(kvm);
 }
