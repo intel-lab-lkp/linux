@@ -28,6 +28,7 @@ MODULE_ALIAS("devname:fuse");
 /* Ordinary requests have even IDs, while interrupts IDs are odd */
 #define FUSE_INT_REQ_BIT (1ULL << 0)
 #define FUSE_REQ_ID_STEP (1ULL << 1)
+#define FUSE_REQ_ID_MASK (~(FUSE_INT_REQ_BIT | FUSE_REQ_ID_RESEND_BIT))
 
 static struct kmem_cache *fuse_req_cachep;
 
@@ -194,14 +195,14 @@ EXPORT_SYMBOL_GPL(fuse_len_args);
 
 u64 fuse_get_unique(struct fuse_iqueue *fiq)
 {
-	fiq->reqctr += FUSE_REQ_ID_STEP;
+	fiq->reqctr = (fiq->reqctr + FUSE_REQ_ID_STEP) & FUSE_REQ_ID_MASK;
 	return fiq->reqctr;
 }
 EXPORT_SYMBOL_GPL(fuse_get_unique);
 
 static unsigned int fuse_req_hash(u64 unique)
 {
-	return hash_long(unique & ~FUSE_INT_REQ_BIT, FUSE_PQ_HASH_BITS);
+	return hash_long(unique & FUSE_REQ_ID_MASK, FUSE_PQ_HASH_BITS);
 }
 
 /*
@@ -1813,7 +1814,7 @@ static struct fuse_req *request_find(struct fuse_pqueue *fpq, u64 unique)
 	struct fuse_req *req;
 
 	list_for_each_entry(req, &fpq->processing[hash], list) {
-		if (req->in.h.unique == unique)
+		if ((req->in.h.unique & FUSE_REQ_ID_MASK) == unique)
 			return req;
 	}
 	return NULL;
@@ -1884,7 +1885,7 @@ static ssize_t fuse_dev_do_write(struct fuse_dev *fud,
 	spin_lock(&fpq->lock);
 	req = NULL;
 	if (fpq->connected)
-		req = request_find(fpq, oh.unique & ~FUSE_INT_REQ_BIT);
+		req = request_find(fpq, oh.unique & FUSE_REQ_ID_MASK);
 
 	err = -ENOENT;
 	if (!req) {
@@ -2274,6 +2275,8 @@ void fuse_resend_pqueue(struct fuse_conn *fc)
 
 	list_for_each_entry_safe(req, next, &to_queue, list) {
 		__set_bit(FR_PENDING, &req->flags);
+		/* mark the request as resend request */
+		req->in.h.unique |= FUSE_REQ_ID_RESEND_BIT;
 	}
 
 	spin_lock(&fiq->lock);
