@@ -750,30 +750,58 @@ static u64 __update_min_vruntime(struct cfs_rq *cfs_rq, u64 vruntime)
 	return min_vruntime;
 }
 
+#ifdef CONFIG_SCHED_CORE
+static u64 __update_core_min_vruntime(struct cfs_rq *cfs_rq, u64 vruntime)
+{
+	u64 min_vruntime = cfs_rq->core_min_vruntime;
+	s64 delta = (s64)(vruntime - min_vruntime);
+
+	return delta > 0 ? vruntime : min_vruntime;
+}
+#endif
+
 static void update_min_vruntime(struct cfs_rq *cfs_rq)
 {
 	struct sched_entity *se = __pick_first_entity(cfs_rq);
 	struct sched_entity *curr = cfs_rq->curr;
 
 	u64 vruntime = cfs_rq->min_vruntime;
+#ifdef CONFIG_SCHED_CORE
+	u64 core_vruntime = cfs_rq->core->min_vruntime;
+#endif
 
 	if (curr) {
-		if (curr->on_rq)
+		if (curr->on_rq) {
 			vruntime = curr->vruntime;
-		else
+#ifdef CONFIG_SCHED_CORE
+			core_vruntime = curr->core_vruntime;
+#endif
+		} else {
 			curr = NULL;
+		}
 	}
 
 	if (se) {
-		if (!curr)
+		if (!curr) {
 			vruntime = se->vruntime;
-		else
+#ifdef CONFIG_SCHED_CORE
+			core_vruntime = se->core_vruntime;
+#endif
+		} else {
 			vruntime = min_vruntime(vruntime, se->vruntime);
+#ifdef CONFIG_SCHED_CORE
+			core_vruntime = min_vruntime(core_vruntime, se->core_vruntime);
+#endif
+		}
 	}
 
 	/* ensure we never gain time by being placed backwards. */
 	u64_u32_store(cfs_rq->min_vruntime,
 		      __update_min_vruntime(cfs_rq, vruntime));
+#ifdef CONFIG_SCHED_CORE
+	u64_u32_store(cfs_rq->core->core_min_vruntime,
+		     __update_core_min_vruntime(cfs_rq->core, vruntime));
+#endif
 }
 
 static inline bool __entity_less(struct rb_node *a, const struct rb_node *b)
@@ -1137,6 +1165,7 @@ static void update_curr(struct cfs_rq *cfs_rq)
 	struct sched_entity *curr = cfs_rq->curr;
 	u64 now = rq_clock_task(rq_of(cfs_rq));
 	u64 delta_exec;
+	u64 delta_exec_fair;
 
 	if (unlikely(!curr))
 		return;
@@ -1158,7 +1187,11 @@ static void update_curr(struct cfs_rq *cfs_rq)
 	curr->sum_exec_runtime += delta_exec;
 	schedstat_add(cfs_rq->exec_clock, delta_exec);
 
-	curr->vruntime += calc_delta_fair(delta_exec, curr);
+	delta_exec_fair = calc_delta_fair(delta_exec, curr);
+	curr->vruntime += delta_exec_fair;
+#ifdef CONFIG_SCHED_CORE
+	curr->core_vruntime += delta_exec_fair;
+#endif
 	update_deadline(cfs_rq, curr);
 	update_min_vruntime(cfs_rq);
 
@@ -5009,6 +5042,9 @@ static void
 place_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 {
 	u64 vslice, vruntime = avg_vruntime(cfs_rq);
+#ifdef CONFIG_SCHED_CORE
+	u64 core_vruntime = cfs_rq->core->core_min_vruntime + vruntime - cfs_rq->min_vruntime;
+#endif
 	s64 lag = 0;
 
 	se->slice = sysctl_sched_base_slice;
@@ -5091,6 +5127,9 @@ place_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 	}
 
 	se->vruntime = vruntime - lag;
+#ifdef CONFIG_SCHED_CORE
+	se->core_vruntime = core_vruntime - lag;
+#endif
 
 	/*
 	 * When joining the competition; the exisiting tasks will be,
@@ -12655,6 +12694,9 @@ void init_cfs_rq(struct cfs_rq *cfs_rq)
 {
 	cfs_rq->tasks_timeline = RB_ROOT_CACHED;
 	u64_u32_store(cfs_rq->min_vruntime, (u64)(-(1LL << 20)));
+#ifdef CONFIG_SCHED_CORE
+	u64_u32_store(cfs_rq->core_min_vruntime, (u64)(-(1LL << 20)));
+#endif
 #ifdef CONFIG_SMP
 	raw_spin_lock_init(&cfs_rq->removed.lock);
 #endif
