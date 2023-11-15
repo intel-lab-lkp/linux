@@ -88,6 +88,12 @@ static inline bool __access_ok(const void __user *ptr, unsigned long size)
 		return valid_user_address(ptr);
 	} else {
 		unsigned long sum = size + (unsigned long)ptr;
+
+#ifdef CONFIG_COMPAT
+		if (in_ia32_syscall())
+			return valid_user_address(sum) &&
+			sum >= (unsigned long)ptr && sum < UL(0x100000000);
+#endif
 		return valid_user_address(sum) && sum >= (unsigned long)ptr;
 	}
 }
