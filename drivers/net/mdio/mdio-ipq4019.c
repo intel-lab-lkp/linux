@@ -61,6 +61,15 @@
 #define IPQ_HIGH_ADDR_PREFIX			0x18
 #define IPQ_LOW_ADDR_PREFIX			0x10
 
+/* QCA8084 PHY & PCS address can be customized, 4 PHYs and 3 PCSs are
+ * available.
+ */
+#define QCA8084_PHY_ADDR_LENGTH			5
+#define QCA8084_PHY_ADDR_NUM			4
+#define QCA8084_PCS_ADDR_NUM			3
+#define QCA8084_PHY_ADDR_MASK			GENMASK(19, 0)
+#define QCA8084_PCS_ADDR_MASK			GENMASK(14, 0)
+
 enum mdio_clk_id {
 	MDIO_CLK_MDIO_AHB,
 	MDIO_CLK_UNIPHY0_AHB,
@@ -317,6 +326,102 @@ static int qca8084_modify(struct mii_bus *bus, u32 regaddr, u32 clear, u32 set)
 	return qca8084_mii_write(bus, IPQ_LOW_ADDR_PREFIX | addr, reg, val);
 };
 
+/* The PHY/PCS MDIO address can be programed when the device tree property
+ * "fixup" of PHY node is specified.
+ */
+static int ipq_phy_addr_fixup(struct mii_bus *bus, struct device_node *mdio_node)
+{
+	const __be32 *phy_cfg;
+	u32 phy_addr_val, pcs_addr_val;
+	int ret, phy_index, pcs_index;
+	struct device_node *child;
+
+	phy_index = 0;
+	pcs_index = 0;
+	phy_addr_val = 0;
+	pcs_addr_val = 0;
+	for_each_available_child_of_node(mdio_node, child) {
+		ret = of_mdio_parse_addr(&bus->dev, child);
+		if (ret < 0)
+			continue;
+
+		if (!of_property_present(child, "fixup"))
+			continue;
+
+		if (of_property_present(child, "compatible")) {
+			pcs_addr_val |= ret << (QCA8084_PHY_ADDR_LENGTH * pcs_index);
+			pcs_index++;
+		} else {
+			phy_addr_val |= ret << (QCA8084_PHY_ADDR_LENGTH * phy_index);
+			phy_index++;
+		}
+	}
+
+	if (!phy_addr_val && !pcs_addr_val)
+		return 0;
+
+	if (phy_index > QCA8084_PHY_ADDR_NUM || pcs_index > QCA8084_PCS_ADDR_NUM) {
+		dev_err(&bus->dev,
+			"Too many MDIO address(phy number %d, pcs number %d) to be programed\n",
+			phy_index, pcs_index);
+		return -1;
+	}
+
+	phy_cfg = of_get_property(mdio_node, "phyaddr-fixup", &ret);
+
+	/* For MDIO access, phyaddr-fixup only provides the register address,
+	 * such as qca8084 PHY.
+	 *
+	 * As for local bus, the register length also needs to be provided,
+	 * such as the internal PHY of IPQ5018, only PHY address can be programed.
+	 */
+	if (!phy_cfg || (ret != (2 * sizeof(__be32)) && ret != sizeof(__be32)))
+		return 0;
+
+	if (ret == sizeof(__be32)) {
+		const __be32 *pcs_cfg;
+
+		/* MDIO access for customizing PHY address of qca8084 */
+		if (phy_addr_val != 0) {
+			ret = qca8084_modify(bus, be32_to_cpup(phy_cfg),
+					     QCA8084_PHY_ADDR_MASK, phy_addr_val);
+			if (ret)
+				return ret;
+		}
+
+		pcs_cfg = of_get_property(mdio_node, "pcsaddr-fixup", NULL);
+		/* Programe the PCS address if pcsaddr-fixup specified */
+		if (pcs_cfg && pcs_addr_val != 0) {
+			ret = qca8084_modify(bus, be32_to_cpup(pcs_cfg),
+					     QCA8084_PCS_ADDR_MASK, pcs_addr_val);
+			if (ret)
+				return ret;
+		}
+	} else {
+		void __iomem *ephy_cfg_base;
+
+		/* Local bus access for customizing internal PHY address of IPQ5018 */
+		ephy_cfg_base = ioremap(be32_to_cpup(phy_cfg), be32_to_cpup(phy_cfg + 1));
+		if (!ephy_cfg_base)
+			return -ENOMEM;
+
+		if (phy_addr_val != 0)
+			writel(phy_addr_val, ephy_cfg_base);
+	}
+
+	return 0;
+}
+
+static int ipq_mdio_preinit(struct mii_bus *bus)
+{
+	struct device_node *mdio_node = dev_of_node(&bus->dev);
+
+	if (!mdio_node)
+		return 0;
+
+	return ipq_phy_addr_fixup(bus, mdio_node);
+}
+
 /* For the CMN PLL block, the reference clock can be configured according to
  * the device tree property "cmn_ref_clk", the internal 48MHZ is used by default
  * on the ipq533 platform.
@@ -455,7 +560,7 @@ static int ipq_mdio_reset(struct mii_bus *bus)
 	if (ret == 0)
 		mdelay(10);
 
-	return ret;
+	return ipq_mdio_preinit(bus);
 }
 
 static int ipq4019_mdio_probe(struct platform_device *pdev)
