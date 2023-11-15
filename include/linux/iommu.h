@@ -111,6 +111,7 @@ struct iommu_domain {
 			int users;
 		};
 	};
+	int nid;
 };
 
 static inline bool iommu_is_dma_domain(struct iommu_domain *domain)

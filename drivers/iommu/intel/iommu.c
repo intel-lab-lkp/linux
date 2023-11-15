@@ -569,8 +569,10 @@ static void domain_update_iommu_cap(struct dmar_domain *domain)
 	 * If RHSA is missing, we should default to the device numa domain
 	 * as fall back.
 	 */
-	if (domain->nid == NUMA_NO_NODE)
+	if (domain->nid == NUMA_NO_NODE) {
 		domain->nid = domain_update_device_node(domain);
+		domain->domain.nid = domain->nid;
+	}
 
 	/*
 	 * First-level translation restricts the input-address to a
@@ -1767,6 +1769,7 @@ static struct dmar_domain *alloc_domain(unsigned int type)
 		return NULL;
 
 	domain->nid = NUMA_NO_NODE;
+	domain->domain.nid = NUMA_NO_NODE;
 	if (first_level_by_default(type))
 		domain->use_first_level = true;
 	domain->has_iotlb_device = false;
@@ -1809,6 +1812,8 @@ static int domain_attach_iommu(struct dmar_domain *domain,
 	info->refcnt	= 1;
 	info->did	= num;
 	info->iommu	= iommu;
+	domain->nid     = iommu->node;
+	domain->domain.nid     = iommu->node;
 	curr = xa_cmpxchg(&domain->iommu_array, iommu->seq_id,
 			  NULL, info, GFP_ATOMIC);
 	if (curr) {
@@ -1839,6 +1844,7 @@ static void domain_detach_iommu(struct dmar_domain *domain,
 		clear_bit(info->did, iommu->domain_ids);
 		xa_erase(&domain->iommu_array, iommu->seq_id);
 		domain->nid = NUMA_NO_NODE;
+		domain->domain.nid = NUMA_NO_NODE;
 		domain_update_iommu_cap(domain);
 		kfree(info);
 	}

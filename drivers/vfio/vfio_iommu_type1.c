@@ -59,6 +59,11 @@ static unsigned int dma_entry_limit __read_mostly = U16_MAX;
 module_param_named(dma_entry_limit, dma_entry_limit, uint, 0644);
 MODULE_PARM_DESC(dma_entry_limit,
 		 "Maximum number of user DMA mappings per container (65535).");
+static uint attach_group_by_node;
+module_param_named(attach_group_by_node,
+		attach_group_by_node, uint, 0644);
+MODULE_PARM_DESC(attach_group_by_node,
+		 "Attach group to domain when it's in same node");
 
 struct vfio_iommu {
 	struct list_head	domain_list;
@@ -2287,19 +2292,23 @@ static int vfio_iommu_type1_attach_group(void *iommu_data,
 		if (d->domain->ops == domain->domain->ops &&
 		    d->enforce_cache_coherency ==
 			    domain->enforce_cache_coherency) {
-			iommu_detach_group(domain->domain, group->iommu_group);
-			if (!iommu_attach_group(d->domain,
-						group->iommu_group)) {
-				list_add(&group->next, &d->group_list);
-				iommu_domain_free(domain->domain);
-				kfree(domain);
-				goto done;
-			}
+			if ((attach_group_by_node == 1 &&
+				d->domain->nid == domain->domain->nid) ||
+				attach_group_by_node == 0) {
+				iommu_detach_group(domain->domain, group->iommu_group);
+				if (!iommu_attach_group(d->domain,
+							group->iommu_group)) {
+					list_add(&group->next, &d->group_list);
+					iommu_domain_free(domain->domain);
+					kfree(domain);
+					goto done;
+				}
 
-			ret = iommu_attach_group(domain->domain,
-						 group->iommu_group);
-			if (ret)
-				goto out_domain;
+				ret = iommu_attach_group(domain->domain,
+						group->iommu_group);
+				if (ret)
+					goto out_domain;
+			}
 		}
 	}
 
