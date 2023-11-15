@@ -338,15 +338,11 @@ void tcp_time_wait(struct sock *sk, int state, int timeo)
 		if (state == TCP_TIME_WAIT)
 			timeo = TCP_TIMEWAIT_LEN;
 
-	       local_bh_disable();
-
 		// Linkage updates.
 		inet_twsk_hashdance(tw, sk, net->ipv4.tcp_death_row.hashinfo);
 		inet_twsk_schedule(tw, timeo);
 		// Access to tw after this point is illegal.
 		inet_twsk_put(tw);
-
-		local_bh_enable();
 	} else {
 		/* Sorry, if we're out of memory, just CLOSE this
 		 * socket up.  We've got bigger problems than
