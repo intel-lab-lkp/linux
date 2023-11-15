@@ -370,6 +370,8 @@ again:
 	if (unlikely(!pte))
 		return pte;
 	ptl = pte_lockptr(mm, &pmdval);
+	if (unlikely(!ptl))
+		return NULL;
 	spin_lock(ptl);
 	if (likely(pmd_same(pmdval, pmdp_get_lockless(pmd)))) {
 		*ptlp = ptl;
