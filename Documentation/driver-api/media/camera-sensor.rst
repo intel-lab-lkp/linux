@@ -67,11 +67,23 @@ system resources required to power the sensor up and down. For drivers that
 don't use any of those resources (such as drivers that support ACPI systems
 only), the runtime PM handlers may be left unimplemented.
 
-In general, the device shall be powered on at least when its registers are
-being accessed and when it is streaming. Drivers should use
-``pm_runtime_resume_and_get()`` when starting streaming and
-``pm_runtime_put()`` or ``pm_runtime_put_autosuspend()`` when stopping
-streaming. They may power the device up at probe time (for example to read
+In general, the device shall be powered on at least when its registers are being
+accessed and when it is streaming. Drivers not using autosuspend should use
+:c:func:`pm_runtime_resume_and_get()` to ensure the device is powered on. The
+function increments Runtime PM usage_count which the driver is responsible for
+decrementing using e.g. :c:func:`pm_runtime_put()` in order to power off the
+device. Drivers using autosuspend in order to avoid needless powering the sensor
+off and on again, should use :c:func:`pm_runtime_get_sync()` and
+:c:func:`pm_runtime_put_mark_busy_autosusp()` respectively. Note that runtime PM
+usage_count of the device must be put even if :c:func:`pm_runtime_get_sync()`
+fails. :c:func:`pm_runtime_get_sync()` returns 1 if the device was already
+powered on.
+
+Drivers that support Devicetree shall also power on the device explicitly in
+driver's probe() function and power the device off in driver's remove() function
+without relying on Runtime PM.
+
+Drivers may power the device up at probe time (for example to read
 identification registers), but should not keep it powered unconditionally after
 probe.
 
@@ -103,11 +115,13 @@ of the device. This is because the power state of the device is only changed
 after the power state transition has taken place. The ``s_ctrl`` callback can be
 used to obtain device's power state after the power state transition:
 
-.. c:function:: int pm_runtime_get_if_in_use(struct device *dev);
+.. c:function:: int pm_runtime_get_if_active(struct device *dev);
 
 The function returns a non-zero value if it succeeded getting the power count or
 runtime PM was disabled, in either of which cases the driver may proceed to
-access the device.
+access the device. Note that the device's usage_count is not incremented if the
+function returns an error, in which case the usage_count also must not be put
+using pm_runtime_put() or its variants.
 
 Rotation, orientation and flipping
 ----------------------------------
