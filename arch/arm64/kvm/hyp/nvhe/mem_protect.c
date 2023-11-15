@@ -266,6 +266,108 @@ int kvm_guest_prepare_stage2(struct pkvm_hyp_vm *vm, void *pgd)
 	return 0;
 }
 
+#ifdef CONFIG_NVHE_EL2_DEBUG
+static struct hyp_pool snapshot_pool = {0};
+static DEFINE_HYP_SPINLOCK(snapshot_pool_lock);
+
+static void *snapshot_zalloc_pages_exact(size_t size)
+{
+	void *addr = hyp_alloc_pages(&snapshot_pool, get_order(size));
+
+	hyp_split_page(hyp_virt_to_page(addr));
+
+	/*
+	 * The size of concatenated PGDs is always a power of two of PAGE_SIZE,
+	 * so there should be no need to free any of the tail pages to make the
+	 * allocation exact.
+	 */
+	WARN_ON(size != (PAGE_SIZE << get_order(size)));
+
+	return addr;
+}
+
+static void snapshot_get_page(void *addr)
+{
+	hyp_get_page(&snapshot_pool, addr);
+}
+
+static void *snapshot_zalloc_page(void *mc)
+{
+	struct hyp_page *p;
+	void *addr;
+
+	addr = hyp_alloc_pages(&snapshot_pool, 0);
+	if (addr)
+		return addr;
+
+	addr = pop_hyp_memcache(mc, hyp_phys_to_virt);
+	if (!addr)
+		return addr;
+
+	memset(addr, 0, PAGE_SIZE);
+	p = hyp_virt_to_page(addr);
+	memset(p, 0, sizeof(*p));
+	p->refcount = 1;
+
+	return addr;
+}
+
+static void snapshot_s2_free_pages_exact(void *addr, unsigned long size)
+{
+	u8 order = get_order(size);
+	unsigned int i;
+	struct hyp_page *p;
+
+	for (i = 0; i < (1 << order); i++) {
+		p = hyp_virt_to_page(addr + (i * PAGE_SIZE));
+		hyp_page_ref_dec_and_test(p);
+	}
+}
+
+int __pkvm_host_stage2_prepare_copy(struct kvm_pgtable_snapshot *snapshot)
+{
+	size_t required_pgd_len;
+	struct kvm_pgtable_mm_ops mm_ops = {0};
+	struct kvm_s2_mmu *mmu = &host_mmu.arch.mmu;
+	struct kvm_pgtable *to_pgt, *from_pgt = &host_mmu.pgt;
+	struct kvm_hyp_memcache *memcache = &snapshot->mc;
+	int ret;
+	void *pgd;
+
+	required_pgd_len = kvm_pgtable_stage2_pgd_size(mmu->vtcr);
+	if (snapshot->pgd_len < required_pgd_len)
+		return -ENOMEM;
+
+	to_pgt = &snapshot->pgtable;
+	pgd = kern_hyp_va(snapshot->pgd_hva);
+
+	hyp_spin_lock(&snapshot_pool_lock);
+	hyp_pool_init(&snapshot_pool, hyp_virt_to_pfn(pgd),
+		      required_pgd_len / PAGE_SIZE, 0);
+
+	mm_ops.zalloc_pages_exact	= snapshot_zalloc_pages_exact;
+	mm_ops.zalloc_page		= snapshot_zalloc_page;
+	mm_ops.free_pages_exact		= snapshot_s2_free_pages_exact;
+	mm_ops.get_page			= snapshot_get_page;
+	mm_ops.phys_to_virt		= hyp_phys_to_virt;
+	mm_ops.virt_to_phys		= hyp_virt_to_phys;
+	mm_ops.page_count		= hyp_page_count;
+
+	to_pgt->ia_bits		= from_pgt->ia_bits;
+	to_pgt->start_level	= from_pgt->start_level;
+	to_pgt->flags		= from_pgt->flags;
+	to_pgt->mm_ops		= &mm_ops;
+
+	host_lock_component();
+	ret = kvm_pgtable_stage2_copy(to_pgt, from_pgt, memcache);
+	host_unlock_component();
+
+	hyp_spin_unlock(&snapshot_pool_lock);
+
+	return ret;
+}
+#endif /* CONFIG_NVHE_EL2_DEBUG */
+
 void reclaim_guest_pages(struct pkvm_hyp_vm *vm, struct kvm_hyp_memcache *mc)
 {
 	void *addr;
