@@ -323,7 +323,7 @@ int squashfs_read_data(struct super_block *sb, u64 index, int length,
 	}
 	if (length < 0 || length > output->length ||
 			(index + length) > msblk->bytes_used) {
-		res = -EIO;
+		res = length < 0 ? -EIO : -EFBIG;
 		goto out;
 	}
 

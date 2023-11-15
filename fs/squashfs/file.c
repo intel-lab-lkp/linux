@@ -461,6 +461,11 @@ static int squashfs_read_folio(struct file *file, struct folio *folio)
 	TRACE("Entered squashfs_readpage, page index %lx, start block %llx\n",
 				page->index, squashfs_i(inode)->start);
 
+	if (!file_end) {
+		res = -EINVAL;
+		goto out;
+	}
+
 	if (page->index >= ((i_size_read(inode) + PAGE_SIZE - 1) >>
 					PAGE_SHIFT))
 		goto out;
@@ -546,6 +551,9 @@ static void squashfs_readahead(struct readahead_control *ractl)
 	struct page **pages;
 	int i, file_end = i_size_read(inode) >> msblk->block_log;
 	unsigned int max_pages = 1UL << shift;
+
+	if (!file_end)
+		return;
 
 	readahead_expand(ractl, start, (len | mask) + 1);
 
