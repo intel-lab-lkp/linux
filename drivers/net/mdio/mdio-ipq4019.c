@@ -43,6 +43,13 @@
 /* Maximum SOC PCS(uniphy) number on IPQ platform */
 #define ETH_LDO_RDY_CNT				3
 
+#define CMN_PLL_REFERENCE_CLOCK			0x784
+#define CMN_PLL_REFCLK_INDEX			GENMASK(3, 0)
+#define CMN_PLL_REFCLK_EXTERNAL			BIT(9)
+
+#define CMN_PLL_POWER_ON_AND_RESET		0x780
+#define CMN_ANA_EN_SW_RSTN			BIT(6)
+
 enum mdio_clk_id {
 	MDIO_CLK_MDIO_AHB,
 	MDIO_CLK_UNIPHY0_AHB,
@@ -54,6 +61,7 @@ enum mdio_clk_id {
 
 struct ipq4019_mdio_data {
 	void __iomem *membase;
+	void __iomem *cmn_membase;
 	void __iomem *eth_ldo_rdy[ETH_LDO_RDY_CNT];
 	struct clk *clk[MDIO_CLK_CNT];
 	struct gpio_descs *reset_gpios;
@@ -227,11 +235,72 @@ static int ipq4019_mdio_write_c22(struct mii_bus *bus, int mii_id, int regnum,
 	return 0;
 }
 
+/* For the CMN PLL block, the reference clock can be configured according to
+ * the device tree property "cmn_ref_clk", the internal 48MHZ is used by default
+ * on the ipq533 platform.
+ *
+ * The output clock of CMN PLL block is provided to the MDIO slave devices,
+ * threre are 4 CMN PLL output clocks (1x25MHZ + 3x50MHZ) enabled by default.
+ *
+ * such as the output 50M clock for the qca8084 PHY.
+ */
+static void ipq_cmn_clock_config(struct mii_bus *bus)
+{
+	u32 reg_val;
+	const char *cmn_ref_clk;
+	struct ipq4019_mdio_data *priv = bus->priv;
+
+	if (priv && priv->cmn_membase) {
+		reg_val = readl(priv->cmn_membase + CMN_PLL_REFERENCE_CLOCK);
+		reg_val &= ~(CMN_PLL_REFCLK_EXTERNAL | CMN_PLL_REFCLK_INDEX);
+
+		/* Select reference clock source */
+		cmn_ref_clk = of_get_property(bus->parent->of_node, "cmn_ref_clk", NULL);
+		if (!cmn_ref_clk) {
+			/* Internal 48MHZ selected by default */
+			reg_val |= FIELD_PREP(CMN_PLL_REFCLK_INDEX, 7);
+		} else {
+			if (!strcmp(cmn_ref_clk, "external_25MHz"))
+				reg_val |= (CMN_PLL_REFCLK_EXTERNAL |
+					    FIELD_PREP(CMN_PLL_REFCLK_INDEX, 3));
+			else if (!strcmp(cmn_ref_clk, "external_31250KHz"))
+				reg_val |= (CMN_PLL_REFCLK_EXTERNAL |
+					    FIELD_PREP(CMN_PLL_REFCLK_INDEX, 4));
+			else if (!strcmp(cmn_ref_clk, "external_40MHz"))
+				reg_val |= (CMN_PLL_REFCLK_EXTERNAL |
+					    FIELD_PREP(CMN_PLL_REFCLK_INDEX, 6));
+			else if (!strcmp(cmn_ref_clk, "external_48MHz"))
+				reg_val |= (CMN_PLL_REFCLK_EXTERNAL |
+					    FIELD_PREP(CMN_PLL_REFCLK_INDEX, 7));
+			else if (!strcmp(cmn_ref_clk, "external_50MHz"))
+				reg_val |= (CMN_PLL_REFCLK_EXTERNAL |
+					    FIELD_PREP(CMN_PLL_REFCLK_INDEX, 8));
+			else
+				reg_val |= FIELD_PREP(CMN_PLL_REFCLK_INDEX, 7);
+		}
+
+		writel(reg_val, priv->cmn_membase + CMN_PLL_REFERENCE_CLOCK);
+
+		/* assert CMN PLL */
+		reg_val = readl(priv->cmn_membase + CMN_PLL_POWER_ON_AND_RESET);
+		reg_val &= ~CMN_ANA_EN_SW_RSTN;
+		writel(reg_val, priv->cmn_membase);
+		fsleep(IPQ_PHY_SET_DELAY_US);
+
+		/* deassert CMN PLL */
+		reg_val |= CMN_ANA_EN_SW_RSTN;
+		writel(reg_val, priv->cmn_membase + CMN_PLL_POWER_ON_AND_RESET);
+		fsleep(IPQ_PHY_SET_DELAY_US);
+	}
+}
+
 static int ipq_mdio_reset(struct mii_bus *bus)
 {
 	struct ipq4019_mdio_data *priv = bus->priv;
 	u32 val;
 	int ret;
+
+	ipq_cmn_clock_config(bus);
 
 	/* For the platform ipq5332, there are two uniphy available to connect the
 	 * ethernet devices, the uniphy gcc clock should be enabled for resetting
@@ -328,9 +397,19 @@ static int ipq4019_mdio_probe(struct platform_device *pdev)
 	/* This resource is optional */
 	for (ret = 0; ret < ETH_LDO_RDY_CNT; ret++) {
 		res = platform_get_resource(pdev, IORESOURCE_MEM, ret + 1);
-		if (res)
+		if (res && strcmp(res->name, "cmn_blk"))
 			priv->eth_ldo_rdy[ret] = devm_ioremap(&pdev->dev,
 							      res->start, resource_size(res));
+	}
+
+	/* The CMN block resource is for providing clock source of ethernet, which can
+	 * be optionally configured on the platform ipq9574 and ipq5332.
+	 */
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "cmn_blk");
+	if (res) {
+		priv->cmn_membase = devm_ioremap_resource(&pdev->dev, res);
+		if (IS_ERR(priv->cmn_membase))
+			return PTR_ERR(priv->cmn_membase);
 	}
 
 	for (ret = 0; ret < MDIO_CLK_CNT; ret++) {
