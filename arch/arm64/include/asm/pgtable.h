@@ -134,6 +134,10 @@ static inline pteval_t __phys_to_pte_val(phys_addr_t phys)
 #define pte_valid_not_user(pte) \
 	((pte_val(pte) & (PTE_VALID | PTE_USER | PTE_UXN)) == (PTE_VALID | PTE_UXN))
 /*
+ * Returns true if the pte is valid and has the contiguous bit set.
+ */
+#define pte_valid_cont(pte)	(pte_valid(pte) && pte_cont(pte))
+/*
  * Could the pte be present in the TLB? We must check mm_tlb_flush_pending
  * so that we don't erroneously return false for pages that have been
  * remapped as PROT_NONE but are yet to be flushed from the TLB.
@@ -1116,6 +1120,202 @@ extern void ptep_modify_prot_commit(struct vm_area_struct *vma,
 				    unsigned long addr, pte_t *ptep,
 				    pte_t old_pte, pte_t new_pte);
 
+#ifdef CONFIG_ARM64_CONTPTE
+
+/*
+ * The contpte APIs are used to transparently manage the contiguous bit in ptes
+ * where it is possible and makes sense to do so. The PTE_CONT bit is considered
+ * a private implementation detail of the public ptep API (see below).
+ */
+extern void __contpte_try_fold(struct mm_struct *mm, unsigned long addr,
+				pte_t *ptep, pte_t pte);
+extern void __contpte_try_unfold(struct mm_struct *mm, unsigned long addr,
+				pte_t *ptep, pte_t pte);
+extern pte_t contpte_ptep_get(pte_t *ptep, pte_t orig_pte);
+extern pte_t contpte_ptep_get_lockless(pte_t *orig_ptep);
+extern void contpte_set_ptes(struct mm_struct *mm, unsigned long addr,
+				pte_t *ptep, pte_t pte, unsigned int nr);
+extern int contpte_ptep_test_and_clear_young(struct vm_area_struct *vma,
+				unsigned long addr, pte_t *ptep);
+extern int contpte_ptep_clear_flush_young(struct vm_area_struct *vma,
+				unsigned long addr, pte_t *ptep);
+extern int contpte_ptep_set_access_flags(struct vm_area_struct *vma,
+				unsigned long addr, pte_t *ptep,
+				pte_t entry, int dirty);
+
+static inline pte_t *contpte_align_down(pte_t *ptep)
+{
+	return (pte_t *)(ALIGN_DOWN((unsigned long)ptep >> 3, CONT_PTES) << 3);
+}
+
+static inline bool contpte_is_enabled(struct mm_struct *mm)
+{
+	/*
+	 * Don't attempt to apply the contig bit to kernel mappings, because
+	 * dynamically adding/removing the contig bit can cause page faults.
+	 * These racing faults are ok for user space, since they get serialized
+	 * on the PTL. But kernel mappings can't tolerate faults.
+	 */
+
+	return mm != &init_mm;
+}
+
+static inline void contpte_try_fold(struct mm_struct *mm, unsigned long addr,
+					pte_t *ptep, pte_t pte)
+{
+	/*
+	 * Only bother trying if both the virtual and physical addresses are
+	 * aligned and correspond to the last entry in a contig range. The core
+	 * code mostly modifies ranges from low to high, so this is the likely
+	 * the last modification in the contig range, so a good time to fold.
+	 * We can't fold special mappings, because there is no associated folio.
+	 */
+
+	bool valign = ((unsigned long)ptep >> 3) % CONT_PTES == CONT_PTES - 1;
+	bool palign = pte_pfn(pte) % CONT_PTES == CONT_PTES - 1;
+
+	if (contpte_is_enabled(mm) && valign && palign &&
+	    pte_valid(pte) && !pte_cont(pte) && !pte_special(pte))
+		__contpte_try_fold(mm, addr, ptep, pte);
+}
+
+static inline void contpte_try_unfold(struct mm_struct *mm, unsigned long addr,
+					pte_t *ptep, pte_t pte)
+{
+	if (contpte_is_enabled(mm) && pte_valid_cont(pte))
+		__contpte_try_unfold(mm, addr, ptep, pte);
+}
+
+/*
+ * The below functions constitute the public API that arm64 presents to the
+ * core-mm to manipulate PTE entries within the their page tables (or at least
+ * this is the subset of the API that arm64 needs to implement). These public
+ * versions will automatically and transparently apply the contiguous bit where
+ * it makes sense to do so. Therefore any users that are contig-aware (e.g.
+ * hugetlb, kernel mapper) should NOT use these APIs, but instead use the
+ * private versions, which are prefixed with double underscore. All of these
+ * APIs except for ptep_get_lockless() are expected to be called with the PTL
+ * held.
+ */
+
+#define ptep_get ptep_get
+static inline pte_t ptep_get(pte_t *ptep)
+{
+	pte_t pte = __ptep_get(ptep);
+
+	if (!pte_valid_cont(pte))
+		return pte;
+
+	return contpte_ptep_get(ptep, pte);
+}
+
+#define ptep_get_lockless ptep_get_lockless
+static inline pte_t ptep_get_lockless(pte_t *ptep)
+{
+	pte_t pte = __ptep_get(ptep);
+
+	if (!pte_valid_cont(pte))
+		return pte;
+
+	return contpte_ptep_get_lockless(ptep);
+}
+
+static inline void set_pte(pte_t *ptep, pte_t pte)
+{
+	/*
+	 * We don't have the mm or vaddr so cannot unfold or fold contig entries
+	 * (since it requires tlb maintenance). set_pte() is not used in core
+	 * code, so this should never even be called. Regardless do our best to
+	 * service any call and emit a warning if there is any attempt to set a
+	 * pte on top of an existing contig range.
+	 */
+	pte_t orig_pte = __ptep_get(ptep);
+
+	WARN_ON_ONCE(pte_valid_cont(orig_pte));
+	__set_pte(ptep, pte_mknoncont(pte));
+}
+
+#define set_ptes set_ptes
+static inline void set_ptes(struct mm_struct *mm, unsigned long addr,
+				pte_t *ptep, pte_t pte, unsigned int nr)
+{
+	pte = pte_mknoncont(pte);
+
+	if (!contpte_is_enabled(mm))
+		__set_ptes(mm, addr, ptep, pte, nr);
+	else if (nr == 1) {
+		contpte_try_unfold(mm, addr, ptep, __ptep_get(ptep));
+		__set_ptes(mm, addr, ptep, pte, nr);
+		contpte_try_fold(mm, addr, ptep, pte);
+	} else
+		contpte_set_ptes(mm, addr, ptep, pte, nr);
+}
+
+static inline void pte_clear(struct mm_struct *mm,
+				unsigned long addr, pte_t *ptep)
+{
+	contpte_try_unfold(mm, addr, ptep, __ptep_get(ptep));
+	__pte_clear(mm, addr, ptep);
+}
+
+#define __HAVE_ARCH_PTEP_GET_AND_CLEAR
+static inline pte_t ptep_get_and_clear(struct mm_struct *mm,
+				unsigned long addr, pte_t *ptep)
+{
+	contpte_try_unfold(mm, addr, ptep, __ptep_get(ptep));
+	return __ptep_get_and_clear(mm, addr, ptep);
+}
+
+#define __HAVE_ARCH_PTEP_TEST_AND_CLEAR_YOUNG
+static inline int ptep_test_and_clear_young(struct vm_area_struct *vma,
+				unsigned long addr, pte_t *ptep)
+{
+	pte_t orig_pte = __ptep_get(ptep);
+
+	if (!pte_valid_cont(orig_pte))
+		return __ptep_test_and_clear_young(vma, addr, ptep);
+
+	return contpte_ptep_test_and_clear_young(vma, addr, ptep);
+}
+
+#define __HAVE_ARCH_PTEP_CLEAR_YOUNG_FLUSH
+static inline int ptep_clear_flush_young(struct vm_area_struct *vma,
+				unsigned long addr, pte_t *ptep)
+{
+	pte_t orig_pte = __ptep_get(ptep);
+
+	if (!pte_valid_cont(orig_pte))
+		return __ptep_clear_flush_young(vma, addr, ptep);
+
+	return contpte_ptep_clear_flush_young(vma, addr, ptep);
+}
+
+#define __HAVE_ARCH_PTEP_SET_WRPROTECT
+static inline void ptep_set_wrprotect(struct mm_struct *mm,
+				unsigned long addr, pte_t *ptep)
+{
+	contpte_try_unfold(mm, addr, ptep, __ptep_get(ptep));
+	__ptep_set_wrprotect(mm, addr, ptep);
+	contpte_try_fold(mm, addr, ptep, __ptep_get(ptep));
+}
+
+#define __HAVE_ARCH_PTEP_SET_ACCESS_FLAGS
+static inline int ptep_set_access_flags(struct vm_area_struct *vma,
+				unsigned long addr, pte_t *ptep,
+				pte_t entry, int dirty)
+{
+	pte_t orig_pte = __ptep_get(ptep);
+
+	entry = pte_mknoncont(entry);
+
+	if (!pte_valid_cont(orig_pte))
+		return __ptep_set_access_flags(vma, addr, ptep, entry, dirty);
+
+	return contpte_ptep_set_access_flags(vma, addr, ptep, entry, dirty);
+}
+
+#else /* CONFIG_ARM64_CONTPTE */
+
 #define ptep_get				__ptep_get
 #define set_pte					__set_pte
 #define set_ptes				__set_ptes
@@ -1130,6 +1330,8 @@ extern void ptep_modify_prot_commit(struct vm_area_struct *vma,
 #define ptep_set_wrprotect			__ptep_set_wrprotect
 #define __HAVE_ARCH_PTEP_SET_ACCESS_FLAGS
 #define ptep_set_access_flags			__ptep_set_access_flags
+
+#endif /* CONFIG_ARM64_CONTPTE */
 
 #endif /* !__ASSEMBLY__ */
 
