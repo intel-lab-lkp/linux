@@ -64,6 +64,7 @@ __cold void io_uring_show_fdinfo(struct seq_file *m, struct file *f)
 	unsigned int sq_shift = 0;
 	unsigned int sq_entries, cq_entries;
 	int sq_pid = -1, sq_cpu = -1;
+	int sq_busy = 0;
 	bool has_lock;
 	unsigned int i;
 
@@ -134,6 +135,21 @@ __cold void io_uring_show_fdinfo(struct seq_file *m, struct file *f)
 		seq_printf(m, "\n");
 	}
 
+	if (ctx && (ctx->flags & IORING_SETUP_SQPOLL)) {
+		struct io_sq_data *sq = ctx->sq_data;
+
+		if (sq && sq->total_time != 0)
+			sq_busy = (int)(sq->work_time * 100 / sq->total_time);
+
+		sq_pid = sq->task_pid;
+		sq_cpu = sq->sq_cpu;
+	}
+
+	seq_printf(m, "SqThread:\t%d\n", sq_pid);
+	seq_printf(m, "SqThreadCpu:\t%d\n", sq_cpu);
+	seq_printf(m, "SqBusy:\t%d%%\n", sq_busy);
+	seq_printf(m, "UserFiles:\t%u\n", ctx->nr_user_files);
+
 	/*
 	 * Avoid ABBA deadlock between the seq lock and the io_uring mutex,
 	 * since fdinfo case grabs it in the opposite direction of normal use
@@ -142,21 +158,6 @@ __cold void io_uring_show_fdinfo(struct seq_file *m, struct file *f)
 	 */
 	has_lock = mutex_trylock(&ctx->uring_lock);
 
-	if (has_lock && (ctx->flags & IORING_SETUP_SQPOLL)) {
-		struct io_sq_data *sq = ctx->sq_data;
-
-		if (mutex_trylock(&sq->lock)) {
-			if (sq->thread) {
-				sq_pid = task_pid_nr(sq->thread);
-				sq_cpu = task_cpu(sq->thread);
-			}
-			mutex_unlock(&sq->lock);
-		}
-	}
-
-	seq_printf(m, "SqThread:\t%d\n", sq_pid);
-	seq_printf(m, "SqThreadCpu:\t%d\n", sq_cpu);
-	seq_printf(m, "UserFiles:\t%u\n", ctx->nr_user_files);
 	for (i = 0; has_lock && i < ctx->nr_user_files; i++) {
 		struct file *f = io_file_from_index(&ctx->file_table, i);
 

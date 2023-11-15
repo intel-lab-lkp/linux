@@ -224,17 +224,21 @@ static int io_sq_thread(void *data)
 	struct io_ring_ctx *ctx;
 	unsigned long timeout = 0;
 	char buf[TASK_COMM_LEN];
+	unsigned long sq_start, sq_work_begin, sq_work_end;
 	DEFINE_WAIT(wait);
 
 	snprintf(buf, sizeof(buf), "iou-sqp-%d", sqd->task_pid);
 	set_task_comm(current, buf);
 
-	if (sqd->sq_cpu != -1)
+	if (sqd->sq_cpu != -1) {
 		set_cpus_allowed_ptr(current, cpumask_of(sqd->sq_cpu));
-	else
+	} else {
 		set_cpus_allowed_ptr(current, cpu_online_mask);
+		sqd->sq_cpu = raw_smp_processor_id();
+	}
 
 	mutex_lock(&sqd->lock);
+	sq_start = jiffies;
 	while (1) {
 		bool cap_entries, sqt_spin = false;
 
@@ -245,6 +249,7 @@ static int io_sq_thread(void *data)
 		}
 
 		cap_entries = !list_is_singular(&sqd->ctx_list);
+		sq_work_begin = jiffies;
 		list_for_each_entry(ctx, &sqd->ctx_list, sqd_list) {
 			int ret = __io_sq_thread(ctx, cap_entries);
 
@@ -254,6 +259,11 @@ static int io_sq_thread(void *data)
 		if (io_run_task_work())
 			sqt_spin = true;
 
+		sq_work_end = jiffies;
+		sqd->total_time = sq_work_end - sq_start;
+		if (sqt_spin == true)
+			sqd->work_time += sq_work_end - sq_work_begin;
+
 		if (sqt_spin || !time_after(jiffies, timeout)) {
 			if (sqt_spin)
 				timeout = jiffies + sqd->sq_thread_idle;
@@ -261,6 +271,7 @@ static int io_sq_thread(void *data)
 				mutex_unlock(&sqd->lock);
 				cond_resched();
 				mutex_lock(&sqd->lock);
+				sqd->sq_cpu = raw_smp_processor_id();
 			}
 			continue;
 		}
@@ -294,6 +305,7 @@ static int io_sq_thread(void *data)
 				mutex_unlock(&sqd->lock);
 				schedule();
 				mutex_lock(&sqd->lock);
+				sqd->sq_cpu = raw_smp_processor_id();
 			}
 			list_for_each_entry(ctx, &sqd->ctx_list, sqd_list)
 				atomic_andnot(IORING_SQ_NEED_WAKEUP,
@@ -395,14 +407,14 @@ __cold int io_sq_offload_create(struct io_ring_ctx *ctx,
 			sqd->sq_cpu = -1;
 		}
 
-		sqd->task_pid = current->pid;
-		sqd->task_tgid = current->tgid;
+		sqd->task_tgid = current->pid;
 		tsk = create_io_thread(io_sq_thread, sqd, NUMA_NO_NODE);
 		if (IS_ERR(tsk)) {
 			ret = PTR_ERR(tsk);
 			goto err_sqpoll;
 		}
 
+		sqd->task_pid = task_pid_nr(tsk);
 		sqd->thread = tsk;
 		ret = io_uring_alloc_task_context(tsk, ctx);
 		wake_up_new_task(tsk);
