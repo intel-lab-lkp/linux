@@ -15,11 +15,13 @@ properties:
       - enum:
           - qcom,ipq4019-mdio
           - qcom,ipq5018-mdio
+          - qcom,ipq5332-mdio
 
       - items:
           - enum:
               - qcom,ipq6018-mdio
               - qcom,ipq8074-mdio
+              - qcom,ipq9574-mdio
           - const: qcom,ipq4019-mdio
 
   "#address-cells":
@@ -30,19 +32,47 @@ properties:
 
   reg:
     minItems: 1
-    maxItems: 2
+    maxItems: 5
     description:
-      the first Address and length of the register set for the MDIO controller.
-      the second Address and length of the register for ethernet LDO, this second
-      address range is only required by the platform IPQ50xx.
+      the first Address and length of the register set for the MDIO controller,
+      the optional second, third and fourth address and length of the register
+      for ethernet LDO, these three address range are required by the platform
+      IPQ50xx/IPQ5332, the last address and length is for the CMN clock to
+      select the reference clock.
+
+  reg-names:
+    minItems: 1
+    maxItems: 5
 
   clocks:
-    items:
-      - description: MDIO clock source frequency fixed to 100MHZ
+    minItems: 1
+    maxItems: 5
+    description:
+      MDIO system clock frequency fixed to 100MHZ, and the GCC uniphy
+      clocks enabled for resetting ethernet PHY.
 
   clock-names:
-    items:
-      - const: gcc_mdio_ahb_clk
+    minItems: 1
+    maxItems: 5
+
+  phy-reset-gpio:
+    minItems: 1
+    maxItems: 3
+    description:
+      GPIO used to reset the PHY, each GPIO is for resetting the connected
+      ethernet PHY device.
+
+  phyaddr-fixup:
+    description: Register address for programing MDIO address of PHY devices
+
+  pcsaddr-fixup:
+    description: Register address for programing MDIO address of PCS devices
+
+  mdio-clk-fixup:
+    description: The initialization clocks to be configured
+
+  fixup:
+    description: The MDIO address of PHY/PCS device to be programed
 
 required:
   - compatible
@@ -61,6 +91,8 @@ allOf:
               - qcom,ipq5018-mdio
               - qcom,ipq6018-mdio
               - qcom,ipq8074-mdio
+              - qcom,ipq5332-mdio
+              - qcom,ipq9574-mdio
     then:
       required:
         - clocks
@@ -69,6 +101,29 @@ allOf:
       properties:
         clocks: false
         clock-names: false
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - qcom,ipq5332-mdio
+    then:
+      properties:
+        clocks:
+          items:
+            - description: MDIO clock source frequency fixed to 100MHZ
+            - description: UNIPHY0 AHB clock source frequency fixed to 100MHZ
+            - description: UNIPHY0 SYS clock source frequency fixed to 24MHZ
+            - description: UNIPHY1 AHB clock source frequency fixed to 100MHZ
+            - description: UNIPHY1 SYS clock source frequency fixed to 24MHZ
+        clock-names:
+          items:
+            - const: gcc_mdio_ahb_clk
+            - const: gcc_uniphy0_ahb_clk
+            - const: gcc_uniphy0_sys_clk
+            - const: gcc_uniphy1_ahb_clk
+            - const: gcc_uniphy1_sys_clk
 
 unevaluatedProperties: false
 
@@ -99,4 +154,71 @@ examples:
       ethphy4: ethernet-phy@4 {
         reg = <4>;
       };
+    };
+
+  - |
+    #include <dt-bindings/clock/qcom,ipq5332-gcc.h>
+    #include <dt-bindings/gpio/gpio.h>
+
+    mdio@90000 {
+      #address-cells = <1>;
+      #size-cells = <0>;
+      compatible = "qcom,ipq5332-mdio";
+      reg = <0x90000 0x64>, <0x7A00610 0x4>, <0x7A10610 0x4>, <0x9B000 0x800>;
+      reg-names = "mdio", "eth_ldo1", "eth_ldo2", "cmn_blk";
+
+      clocks = <&gcc GCC_MDIO_AHB_CLK>,
+               <&gcc GCC_UNIPHY0_AHB_CLK>,
+               <&gcc GCC_UNIPHY0_SYS_CLK>,
+               <&gcc GCC_UNIPHY1_AHB_CLK>,
+               <&gcc GCC_UNIPHY1_SYS_CLK>;
+
+      clock-names = "gcc_mdio_ahb_clk",
+                    "gcc_uniphy0_ahb_clk",
+                    "gcc_uniphy0_sys_clk",
+                    "gcc_uniphy1_ahb_clk",
+                    "gcc_uniphy1_sys_clk";
+
+      phy-reset-gpio = <&tlmm 51 GPIO_ACTIVE_LOW>;
+      phyaddr-fixup = <0xC90F018>;
+      pcsaddr-fixup = <0xC90F014>;
+      mdio-clk-fixup;
+
+      qca8kphy0: ethernet-phy@1 {
+        reg = <1>;
+        fixup;
+      };
+
+      qca8kphy1: ethernet-phy@2 {
+        reg = <2>;
+        fixup;
+      };
+
+      qca8kphy2: ethernet-phy@3 {
+        reg = <3>;
+        fixup;
+      };
+
+      qca8kphy3: ethernet-phy@4 {
+        reg = <4>;
+        fixup;
+      };
+
+      qca8kpcs0: pcsphy0@5 {
+        compatible = "qcom,qca8k_pcs";
+        reg = <5>;
+        fixup;
+        };
+
+      qca8kpcs1: pcsphy1@6 {
+        compatible = "qcom,qca8k_pcs";
+        reg = <6>;
+        fixup;
+        };
+
+      qca8kxpcs: xpcsphy@7 {
+        compatible = "qcom,qca8k_pcs";
+        reg = <7>;
+        fixup;
+        };
     };
