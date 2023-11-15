@@ -99,6 +99,14 @@ wants to support one of the below features, it should adapt these bindings.
 	indicates that the system is accessible via this bus as an endpoint for
 	MCTP over I2C transport.
 
+- bus-reset-gpios:
+	GPIO pin providing a common reset for all downstream devices. This GPIO
+	will be asserted then released before the downstream devices are probed.
+
+- bus-reset-duration-us:
+	Reset duration in us.
+	default: 1
+
 Required properties (per child device)
 --------------------------------------
 
