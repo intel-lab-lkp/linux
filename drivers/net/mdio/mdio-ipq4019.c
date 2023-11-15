@@ -34,16 +34,35 @@
 
 /* MDIO clock source frequency is fixed to 100M */
 #define IPQ_MDIO_CLK_RATE			100000000
+#define IPQ_UNIPHY_AHB_CLK_RATE			100000000
+#define IPQ_UNIPHY_SYS_CLK_RATE			24000000
 
 #define IPQ_PHY_SET_DELAY_US			100000
 
 /* Maximum SOC PCS(uniphy) number on IPQ platform */
 #define ETH_LDO_RDY_CNT				3
 
+enum mdio_clk_id {
+	MDIO_CLK_MDIO_AHB,
+	MDIO_CLK_UNIPHY0_AHB,
+	MDIO_CLK_UNIPHY0_SYS,
+	MDIO_CLK_UNIPHY1_AHB,
+	MDIO_CLK_UNIPHY1_SYS,
+	MDIO_CLK_CNT
+};
+
 struct ipq4019_mdio_data {
 	void __iomem *membase;
 	void __iomem *eth_ldo_rdy[ETH_LDO_RDY_CNT];
-	struct clk *mdio_clk;
+	struct clk *clk[MDIO_CLK_CNT];
+};
+
+const char *const mdio_clk_name[] = {
+	"gcc_mdio_ahb_clk",
+	"gcc_uniphy0_ahb_clk",
+	"gcc_uniphy0_sys_clk",
+	"gcc_uniphy1_ahb_clk",
+	"gcc_uniphy1_sys_clk"
 };
 
 static int ipq4019_mdio_wait_busy(struct mii_bus *bus)
@@ -212,6 +231,38 @@ static int ipq_mdio_reset(struct mii_bus *bus)
 	u32 val;
 	int ret;
 
+	/* For the platform ipq5332, there are two uniphy available to connect the
+	 * ethernet devices, the uniphy gcc clock should be enabled for resetting
+	 * the connected device such as qca8386 switch or qca8081 PHY effectively.
+	 */
+	if (of_device_is_compatible(bus->parent->of_node, "qcom,ipq5332-mdio")) {
+		int i;
+		unsigned long rate = 0;
+
+		for (i = MDIO_CLK_UNIPHY0_AHB; i < MDIO_CLK_CNT; i++) {
+			switch (i) {
+			case MDIO_CLK_UNIPHY0_AHB:
+			case MDIO_CLK_UNIPHY1_AHB:
+				rate = IPQ_UNIPHY_AHB_CLK_RATE;
+				break;
+			case MDIO_CLK_UNIPHY0_SYS:
+			case MDIO_CLK_UNIPHY1_SYS:
+				rate = IPQ_UNIPHY_SYS_CLK_RATE;
+				break;
+			default:
+				break;
+			}
+
+			ret = clk_set_rate(priv->clk[i], rate);
+			if (ret)
+				return ret;
+
+			ret = clk_prepare_enable(priv->clk[i]);
+			if (ret)
+				return ret;
+		}
+	}
+
 	/* To indicate CMN_PLL that ethernet_ldo has been ready if platform resource 1
 	 * or more resource are specified in the device tree.
 	 */
@@ -225,11 +276,11 @@ static int ipq_mdio_reset(struct mii_bus *bus)
 	}
 
 	/* Configure MDIO clock source frequency if clock is specified in the device tree */
-	ret = clk_set_rate(priv->mdio_clk, IPQ_MDIO_CLK_RATE);
+	ret = clk_set_rate(priv->clk[MDIO_CLK_MDIO_AHB], IPQ_MDIO_CLK_RATE);
 	if (ret)
 		return ret;
 
-	ret = clk_prepare_enable(priv->mdio_clk);
+	ret = clk_prepare_enable(priv->clk[MDIO_CLK_MDIO_AHB]);
 	if (ret == 0)
 		mdelay(10);
 
@@ -253,10 +304,6 @@ static int ipq4019_mdio_probe(struct platform_device *pdev)
 	if (IS_ERR(priv->membase))
 		return PTR_ERR(priv->membase);
 
-	priv->mdio_clk = devm_clk_get_optional(&pdev->dev, "gcc_mdio_ahb_clk");
-	if (IS_ERR(priv->mdio_clk))
-		return PTR_ERR(priv->mdio_clk);
-
 	/* The platform resource is provided on the chipset IPQ5018/IPQ5332 */
 	/* This resource is optional */
 	for (ret = 0; ret < ETH_LDO_RDY_CNT; ret++) {
@@ -264,6 +311,12 @@ static int ipq4019_mdio_probe(struct platform_device *pdev)
 		if (res)
 			priv->eth_ldo_rdy[ret] = devm_ioremap(&pdev->dev,
 							      res->start, resource_size(res));
+	}
+
+	for (ret = 0; ret < MDIO_CLK_CNT; ret++) {
+		priv->clk[ret] = devm_clk_get_optional(&pdev->dev, mdio_clk_name[ret]);
+		if (IS_ERR(priv->clk[ret]))
+			return PTR_ERR(priv->clk[ret]);
 	}
 
 	bus->name = "ipq4019_mdio";
