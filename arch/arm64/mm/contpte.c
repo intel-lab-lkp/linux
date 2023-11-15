@@ -144,6 +144,14 @@ pte_t contpte_ptep_get(pte_t *ptep, pte_t orig_pte)
 	for (i = 0; i < CONT_PTES; i++, ptep++) {
 		pte = __ptep_get(ptep);
 
+		/*
+		 * Deal with the partial contpte_ptep_get_and_clear_full() case,
+		 * where some of the ptes in the range may be cleared but others
+		 * are still to do. See contpte_ptep_get_and_clear_full().
+		 */
+		if (pte_val(pte) == 0)
+			continue;
+
 		if (pte_dirty(pte))
 			orig_pte = pte_mkdirty(orig_pte);
 
@@ -255,6 +263,52 @@ void contpte_set_ptes(struct mm_struct *mm, unsigned long addr,
 	} while (addr != end);
 }
 EXPORT_SYMBOL(contpte_set_ptes);
+
+pte_t contpte_ptep_get_and_clear_full(struct mm_struct *mm,
+					unsigned long addr, pte_t *ptep)
+{
+	/*
+	 * When doing a full address space teardown, we can avoid unfolding the
+	 * contiguous range, and therefore avoid the associated tlbi. Instead,
+	 * just get and clear the pte. The caller is promising to call us for
+	 * every pte, so every pte in the range will be cleared by the time the
+	 * tlbi is issued.
+	 *
+	 * This approach is not perfect though, as for the duration between
+	 * returning from the first call to ptep_get_and_clear_full() and making
+	 * the final call, the contpte block in an intermediate state, where
+	 * some ptes are cleared and others are still set with the PTE_CONT bit.
+	 * If any other APIs are called for the ptes in the contpte block during
+	 * that time, we have to be very careful. The core code currently
+	 * interleaves calls to ptep_get_and_clear_full() with ptep_get() and so
+	 * ptep_get() must be careful to ignore the cleared entries when
+	 * accumulating the access and dirty bits - the same goes for
+	 * ptep_get_lockless(). The only other calls we might resonably expect
+	 * are to set markers in the previously cleared ptes. (We shouldn't see
+	 * valid entries being set until after the tlbi, at which point we are
+	 * no longer in the intermediate state). Since markers are not valid,
+	 * this is safe; set_ptes() will see the old, invalid entry and will not
+	 * attempt to unfold. And the new pte is also invalid so it won't
+	 * attempt to fold. We shouldn't see this for the 'full' case anyway.
+	 *
+	 * The last remaining issue is returning the access/dirty bits. That
+	 * info could be present in any of the ptes in the contpte block.
+	 * ptep_get() will gather those bits from across the contpte block. We
+	 * don't bother doing that here, because we know that the information is
+	 * used by the core-mm to mark the underlying folio as accessed/dirty.
+	 * And since the same folio must be underpinning the whole block (that
+	 * was a requirement for folding in the first place), that information
+	 * will make it to the folio eventually once all the ptes have been
+	 * cleared. This approach means we don't have to play games with
+	 * accumulating and storing the bits. It does mean that any interleaved
+	 * calls to ptep_get() may lack correct access/dirty information if we
+	 * have already cleared the pte that happened to store it. The core code
+	 * does not rely on this though.
+	 */
+
+	return __ptep_get_and_clear(mm, addr, ptep);
+}
+EXPORT_SYMBOL(contpte_ptep_get_and_clear_full);
 
 int contpte_ptep_test_and_clear_young(struct vm_area_struct *vma,
 					unsigned long addr, pte_t *ptep)

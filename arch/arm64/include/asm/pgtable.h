@@ -1145,6 +1145,8 @@ extern pte_t contpte_ptep_get(pte_t *ptep, pte_t orig_pte);
 extern pte_t contpte_ptep_get_lockless(pte_t *orig_ptep);
 extern void contpte_set_ptes(struct mm_struct *mm, unsigned long addr,
 				pte_t *ptep, pte_t pte, unsigned int nr);
+extern pte_t contpte_ptep_get_and_clear_full(struct mm_struct *mm,
+				unsigned long addr, pte_t *ptep);
 extern int contpte_ptep_test_and_clear_young(struct vm_area_struct *vma,
 				unsigned long addr, pte_t *ptep);
 extern int contpte_ptep_clear_flush_young(struct vm_area_struct *vma,
@@ -1270,12 +1272,24 @@ static inline void pte_clear(struct mm_struct *mm,
 	__pte_clear(mm, addr, ptep);
 }
 
+#define __HAVE_ARCH_PTEP_GET_AND_CLEAR_FULL
+static inline pte_t ptep_get_and_clear_full(struct mm_struct *mm,
+				unsigned long addr, pte_t *ptep, int full)
+{
+	pte_t orig_pte = __ptep_get(ptep);
+
+	if (!pte_valid_cont(orig_pte) || !full) {
+		contpte_try_unfold(mm, addr, ptep, orig_pte);
+		return __ptep_get_and_clear(mm, addr, ptep);
+	} else
+		return contpte_ptep_get_and_clear_full(mm, addr, ptep);
+}
+
 #define __HAVE_ARCH_PTEP_GET_AND_CLEAR
 static inline pte_t ptep_get_and_clear(struct mm_struct *mm,
 				unsigned long addr, pte_t *ptep)
 {
-	contpte_try_unfold(mm, addr, ptep, __ptep_get(ptep));
-	return __ptep_get_and_clear(mm, addr, ptep);
+	return ptep_get_and_clear_full(mm, addr, ptep, 0);
 }
 
 #define __HAVE_ARCH_PTEP_TEST_AND_CLEAR_YOUNG
