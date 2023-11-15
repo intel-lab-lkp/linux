@@ -881,13 +881,16 @@ static struct sched_entity *pick_eevdf(struct cfs_rq *cfs_rq)
 	struct sched_entity *se = __pick_first_entity(cfs_rq);
 	struct sched_entity *curr = cfs_rq->curr;
 	struct sched_entity *best = NULL;
+	struct rq *rq = rq_of(cfs_rq);
 
 	/*
 	 * We can safely skip eligibility check if there is only one entity
 	 * in this cfs_rq, saving some cycles.
 	 */
-	if (cfs_rq->nr_running == 1)
+	if (cfs_rq->nr_running == 1) {
+		schedstat_inc(rq->pick_direct);
 		return curr && curr->on_rq ? curr : se;
+	}
 
 	if (curr && (!curr->on_rq || !entity_eligible(cfs_rq, curr)))
 		curr = NULL;
@@ -896,14 +899,19 @@ static struct sched_entity *pick_eevdf(struct cfs_rq *cfs_rq)
 	 * Once selected, run a task until it either becomes non-eligible or
 	 * until it gets a new slice. See the HACK in set_next_entity().
 	 */
-	if (sched_feat(RUN_TO_PARITY) && curr && curr->vlag == curr->deadline)
+	if (sched_feat(RUN_TO_PARITY) && curr && curr->vlag == curr->deadline) {
+		schedstat_inc(rq->pick_parity);
 		return curr;
+	}
 
 	/* Pick the leftmost entity if it's eligible */
 	if (se && entity_eligible(cfs_rq, se)) {
+		schedstat_inc(rq->pick_fast);
 		best = se;
 		goto found;
 	}
+
+	schedstat_inc(rq->pick_slow);
 
 	/* Heap search for the EEVD entity */
 	while (node) {

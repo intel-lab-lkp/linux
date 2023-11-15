@@ -1105,6 +1105,11 @@ struct rq {
 	/* try_to_wake_up() stats */
 	unsigned int		ttwu_count;
 	unsigned int		ttwu_local;
+
+	unsigned int		pick_direct;
+	unsigned int		pick_parity;
+	unsigned int		pick_fast;
+	unsigned int		pick_slow;
 #endif
 
 #ifdef CONFIG_CPU_IDLE
