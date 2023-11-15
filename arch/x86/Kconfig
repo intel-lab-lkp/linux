@@ -266,7 +266,7 @@ config X86
 	select HAVE_FUNCTION_ARG_ACCESS_API
 	select HAVE_SETUP_PER_CPU_AREA
 	select HAVE_SOFTIRQ_ON_OWN_STACK
-	select HAVE_STACKPROTECTOR		if CC_HAS_SANE_STACKPROTECTOR
+	select HAVE_STACKPROTECTOR		if X86_64 || CC_HAS_SANE_STACKPROTECTOR
 	select HAVE_STACK_VALIDATION		if HAVE_OBJTOOL
 	select HAVE_STATIC_CALL
 	select HAVE_STATIC_CALL_INLINE		if HAVE_OBJTOOL
@@ -410,15 +410,14 @@ config PGTABLE_LEVELS
 
 config CC_HAS_SANE_STACKPROTECTOR
 	bool
-	default y if 64BIT
+	default $(cc-option,-mstack-protector-guard-reg=gs -mstack-protector-guard-symbol=__stack_chk_guard) if 64BIT
 	default $(cc-option,-mstack-protector-guard-reg=fs -mstack-protector-guard-symbol=__stack_chk_guard)
-	help
-	  We have to make sure stack protector is unconditionally disabled if
-	  the compiler does not allow control of the segment and symbol.
 
 config STACKPROTECTOR_OBJTOOL
 	bool
-	default n
+	depends on X86_64 && STACKPROTECTOR
+	default !CC_HAS_SANE_STACKPROTECTOR
+	prompt "Debug objtool stack protector conversion" if CC_HAS_SANE_STACKPROTECTOR && DEBUG_KERNEL
 
 menu "Processor type and features"
 
