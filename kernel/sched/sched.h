@@ -1121,6 +1121,7 @@ struct rq {
 #ifdef CONFIG_SCHED_CORE
 	/* per rq */
 	struct rq		*core;
+	unsigned int		core_id;
 	struct task_struct	*core_pick;
 	unsigned int		core_enabled;
 	unsigned int		core_sched_seq;
