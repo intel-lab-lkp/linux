@@ -70,6 +70,30 @@
 #define QCA8084_PHY_ADDR_MASK			GENMASK(19, 0)
 #define QCA8084_PCS_ADDR_MASK			GENMASK(14, 0)
 
+/* QCA8084 GCC & security control registers */
+/* LDO control, BIT20 for PHY0 and PHY1, BIT21 for PHY2 and PHY3 */
+#define EPHY_CFG				0xC90F018
+#define EPHY_CFG_LDO_CTRL			GENMASK(21, 20)
+
+/* GEPHY TX&RX clock control register starts from GEPHY0_TX,
+ * end with GEPHY3_RX, the gap is 0x20.
+ */
+#define GEPHY0_TX_CBCR				0xC800058
+#define GEPHY3_RX_CBCR				0xC800138
+#define GEPHY_CBCR_GAP				0x20
+
+#define SRDS0_SYS_CBCR				0xC8001A8
+#define SRDS1_SYS_CBCR				0xC8001AC
+#define EPHY0_SYS_CBCR				0xC8001B0
+#define EPHY1_SYS_CBCR				0xC8001B4
+#define EPHY2_SYS_CBCR				0xC8001B8
+#define EPHY3_SYS_CBCR				0xC8001BC
+#define CLK_EN					BIT(0)
+#define CLK_RESET				BIT(2)
+
+#define GCC_GEPHY_MISC				0xC800304
+#define GCC_GEPHY_MISC_DSP_RESET		GENMASK(4, 0)
+
 enum mdio_clk_id {
 	MDIO_CLK_MDIO_AHB,
 	MDIO_CLK_UNIPHY0_AHB,
@@ -412,14 +436,121 @@ static int ipq_phy_addr_fixup(struct mii_bus *bus, struct device_node *mdio_node
 	return 0;
 }
 
+static inline int qca8084_clock_en_set(struct mii_bus *bus, u32 reg, bool enable)
+{
+	return qca8084_modify(bus, reg, CLK_EN, enable ? CLK_EN : 0);
+}
+
+static inline int qca8084_clock_reset(struct mii_bus *bus, u32 reg)
+{
+	int ret;
+
+	ret = qca8084_modify(bus, reg, CLK_RESET, CLK_RESET);
+	if (ret)
+		return ret;
+
+	usleep_range(20000, 21000);
+	return qca8084_modify(bus, reg, CLK_RESET, 0);
+}
+
+static int qca8084_clock_config(struct mii_bus *bus)
+{
+	u32 reg;
+	int ret;
+
+	/* Enable PCS */
+	ret = qca8084_clock_en_set(bus, SRDS0_SYS_CBCR, true);
+	if (ret)
+		return ret;
+
+	ret = qca8084_clock_en_set(bus, SRDS1_SYS_CBCR, true);
+	if (ret)
+		return ret;
+
+	/* Reset PCS */
+	ret = qca8084_clock_reset(bus, SRDS0_SYS_CBCR);
+	if (ret)
+		return ret;
+
+	ret = qca8084_clock_reset(bus, SRDS1_SYS_CBCR);
+	if (ret)
+		return ret;
+
+	/* Disable EPHY GMII RX & TX clock */
+	reg = GEPHY0_TX_CBCR;
+	while (reg <= GEPHY3_RX_CBCR) {
+		ret = qca8084_clock_en_set(bus, reg, false);
+		if (ret)
+			return ret;
+
+		reg += GEPHY_CBCR_GAP;
+	}
+
+	/* Enable EPHY */
+	ret = qca8084_clock_en_set(bus, EPHY0_SYS_CBCR, true);
+	if (ret)
+		return ret;
+
+	ret = qca8084_clock_en_set(bus, EPHY1_SYS_CBCR, true);
+	if (ret)
+		return ret;
+
+	ret = qca8084_clock_en_set(bus, EPHY2_SYS_CBCR, true);
+	if (ret)
+		return ret;
+
+	ret = qca8084_clock_en_set(bus, EPHY3_SYS_CBCR, true);
+	if (ret)
+		return ret;
+
+	/* Reset EPHY */
+	ret = qca8084_clock_reset(bus, EPHY0_SYS_CBCR);
+	if (ret)
+		return ret;
+
+	ret = qca8084_clock_reset(bus, EPHY1_SYS_CBCR);
+	if (ret)
+		return ret;
+
+	ret = qca8084_clock_reset(bus, EPHY2_SYS_CBCR);
+	if (ret)
+		return ret;
+
+	ret = qca8084_clock_reset(bus, EPHY3_SYS_CBCR);
+	if (ret)
+		return ret;
+
+	/* Deassert EPHY DSP */
+	ret = qca8084_modify(bus, GCC_GEPHY_MISC, GCC_GEPHY_MISC_DSP_RESET, 0);
+	if (ret)
+		return ret;
+
+	/* Enable efuse loading into analog circuit */
+	ret = qca8084_modify(bus, EPHY_CFG, EPHY_CFG_LDO_CTRL, 0);
+	if (ret)
+		return ret;
+
+	/* Sleep 10ms */
+	usleep_range(10000, 11000);
+	return 0;
+}
+
 static int ipq_mdio_preinit(struct mii_bus *bus)
 {
+	int ret;
 	struct device_node *mdio_node = dev_of_node(&bus->dev);
 
 	if (!mdio_node)
 		return 0;
 
-	return ipq_phy_addr_fixup(bus, mdio_node);
+	ret = ipq_phy_addr_fixup(bus, mdio_node);
+	if (ret)
+		return ret;
+
+	if (of_property_read_bool(mdio_node, "mdio-clk-fixup"))
+		ret = qca8084_clock_config(bus);
+
+	return ret;
 }
 
 /* For the CMN PLL block, the reference clock can be configured according to
