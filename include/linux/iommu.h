@@ -597,6 +597,8 @@ struct iommu_device {
 /**
  * struct iommu_fault_param - per-device IOMMU fault data
  * @lock: protect pending faults list
+ * @users: user counter to manage the lifetime of the data, this field
+ *         is protected by dev->iommu->lock.
  * @dev: the device that owns this param
  * @queue: IOPF queue
  * @queue_list: index into queue->devices
@@ -606,6 +608,7 @@ struct iommu_device {
  */
 struct iommu_fault_param {
 	struct mutex lock;
+	int users;
 
 	struct device *dev;
 	struct iopf_queue *queue;
