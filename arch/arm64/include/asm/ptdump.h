@@ -20,9 +20,16 @@ struct ptdump_info {
 	const struct addr_marker	*markers;
 	unsigned long			base_addr;
 	void (*ptdump_walk)(struct seq_file *s, struct ptdump_info *info);
+	int (*ptdump_prepare_walk)(void *file_priv);
+	void (*ptdump_end_walk)(void *file_priv);
 };
 
 void ptdump_walk(struct seq_file *s, struct ptdump_info *info);
+
+struct ptdump_info_file_priv {
+	struct ptdump_info	info;
+	void			*file_priv;
+};
 #ifdef CONFIG_PTDUMP_DEBUGFS
 #define EFI_RUNTIME_MAP_END	DEFAULT_MAP_WINDOW_64
 void __init ptdump_debugfs_register(struct ptdump_info *info, const char *name);
