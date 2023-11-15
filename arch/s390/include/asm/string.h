@@ -15,15 +15,12 @@
 #define __HAVE_ARCH_MEMCPY	/* gcc builtin & arch function */
 #define __HAVE_ARCH_MEMMOVE	/* gcc builtin & arch function */
 #define __HAVE_ARCH_MEMSET	/* gcc builtin & arch function */
-#define __HAVE_ARCH_MEMSET16	/* arch function */
-#define __HAVE_ARCH_MEMSET32	/* arch function */
-#define __HAVE_ARCH_MEMSET64	/* arch function */
 
 void *memcpy(void *dest, const void *src, size_t n);
 void *memset(void *s, int c, size_t n);
 void *memmove(void *dest, const void *src, size_t n);
 
-#ifndef CONFIG_KASAN
+#if !defined(CONFIG_KASAN) && !defined(CONFIG_KMSAN)
 #define __HAVE_ARCH_MEMCHR	/* inline & arch function */
 #define __HAVE_ARCH_MEMCMP	/* arch function */
 #define __HAVE_ARCH_MEMSCAN	/* inline & arch function */
@@ -36,6 +33,9 @@ void *memmove(void *dest, const void *src, size_t n);
 #define __HAVE_ARCH_STRNCPY	/* arch function */
 #define __HAVE_ARCH_STRNLEN	/* inline & arch function */
 #define __HAVE_ARCH_STRSTR	/* arch function */
+#define __HAVE_ARCH_MEMSET16	/* arch function */
+#define __HAVE_ARCH_MEMSET32	/* arch function */
+#define __HAVE_ARCH_MEMSET64	/* arch function */
 
 /* Prototypes for non-inlined arch strings functions. */
 int memcmp(const void *s1, const void *s2, size_t n);
@@ -44,7 +44,7 @@ size_t strlcat(char *dest, const char *src, size_t n);
 char *strncat(char *dest, const char *src, size_t n);
 char *strncpy(char *dest, const char *src, size_t n);
 char *strstr(const char *s1, const char *s2);
-#endif /* !CONFIG_KASAN */
+#endif /* !defined(CONFIG_KASAN) && !defined(CONFIG_KMSAN) */
 
 #undef __HAVE_ARCH_STRCHR
 #undef __HAVE_ARCH_STRNCHR
@@ -73,21 +73,6 @@ void *__memmove(void *dest, const void *src, size_t n);
 void *__memset16(uint16_t *s, uint16_t v, size_t count);
 void *__memset32(uint32_t *s, uint32_t v, size_t count);
 void *__memset64(uint64_t *s, uint64_t v, size_t count);
-
-static inline void *memset16(uint16_t *s, uint16_t v, size_t count)
-{
-	return __memset16(s, v, count * sizeof(v));
-}
-
-static inline void *memset32(uint32_t *s, uint32_t v, size_t count)
-{
-	return __memset32(s, v, count * sizeof(v));
-}
-
-static inline void *memset64(uint64_t *s, uint64_t v, size_t count)
-{
-	return __memset64(s, v, count * sizeof(v));
-}
 
 #if !defined(IN_ARCH_STRING_C) && (!defined(CONFIG_FORTIFY_SOURCE) || defined(__NO_FORTIFY))
 
@@ -194,6 +179,27 @@ static inline size_t strnlen(const char * s, size_t n)
 	return end - s;
 }
 #endif
+
+#ifdef __HAVE_ARCH_MEMSET16
+static inline void *memset16(uint16_t *s, uint16_t v, size_t count)
+{
+	return __memset16(s, v, count * sizeof(v));
+}
+#endif
+
+#ifdef __HAVE_ARCH_MEMSET32
+static inline void *memset32(uint32_t *s, uint32_t v, size_t count)
+{
+	return __memset32(s, v, count * sizeof(v));
+}
+#endif
+
+#ifdef __HAVE_ARCH_MEMSET64
+static inline void *memset64(uint64_t *s, uint64_t v, size_t count)
+{
+	return __memset64(s, v, count * sizeof(v));
+}
+#endif
 #else /* IN_ARCH_STRING_C */
 void *memchr(const void * s, int c, size_t n);
 void *memscan(void *s, int c, size_t n);
@@ -201,6 +207,9 @@ char *strcat(char *dst, const char *src);
 char *strcpy(char *dst, const char *src);
 size_t strlen(const char *s);
 size_t strnlen(const char * s, size_t n);
+void *memset16(uint16_t *s, uint16_t v, size_t count);
+void *memset32(uint32_t *s, uint32_t v, size_t count);
+void *memset64(uint64_t *s, uint64_t v, size_t count);
 #endif /* !IN_ARCH_STRING_C */
 
 #endif /* __S390_STRING_H_ */
