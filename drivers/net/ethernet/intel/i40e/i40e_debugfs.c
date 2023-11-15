@@ -72,7 +72,7 @@ static ssize_t i40e_dbg_command_read(struct file *filp, char __user *buffer,
 {
 	struct i40e_pf *pf = filp->private_data;
 	int bytes_not_copied;
-	int buf_size = 256;
+	int buf_size = IFNAMSIZ + sizeof(i40e_dbg_command_buf) + 4;
 	char *buf;
 	int len;
 
