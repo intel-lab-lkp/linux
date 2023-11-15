@@ -658,15 +658,18 @@ static void mfd_assert_grow_write(int fd)
 	buf = malloc(mfd_def_size * 8);
 	if (!buf) {
 		printf("malloc(%zu) failed: %m\n", mfd_def_size * 8);
+		free(buf);
 		abort();
 	}
 
 	l = pwrite(fd, buf, mfd_def_size * 8, 0);
 	if (l != (mfd_def_size * 8)) {
 		printf("pwrite() failed: %m\n");
+		free(buf);
 		abort();
 	}
 
+	free(buf);
 	mfd_assert_size(fd, mfd_def_size * 8);
 }
 
@@ -682,14 +685,18 @@ static void mfd_fail_grow_write(int fd)
 	buf = malloc(mfd_def_size * 8);
 	if (!buf) {
 		printf("malloc(%zu) failed: %m\n", mfd_def_size * 8);
+		free(buf);
 		abort();
 	}
 
 	l = pwrite(fd, buf, mfd_def_size * 8, 0);
 	if (l == (mfd_def_size * 8)) {
 		printf("pwrite() didn't fail as expected\n");
+		free(buf);
 		abort();
 	}
+
+	free(buf);
 }
 
 static void mfd_assert_mode(int fd, int mode)
@@ -771,15 +778,18 @@ static pid_t spawn_thread(unsigned int flags, int (*fn)(void *), void *arg)
 	stack = malloc(STACK_SIZE);
 	if (!stack) {
 		printf("malloc(STACK_SIZE) failed: %m\n");
+		free(stack);
 		abort();
 	}
 
 	pid = clone(fn, stack + STACK_SIZE, SIGCHLD | flags, arg);
 	if (pid < 0) {
 		printf("clone() failed: %m\n");
+		free(stack);
 		abort();
 	}
 
+	free(stack);
 	return pid;
 }
 

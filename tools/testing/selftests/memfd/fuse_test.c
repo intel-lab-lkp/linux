@@ -205,6 +205,7 @@ static pid_t spawn_sealing_thread(void)
 	stack = malloc(STACK_SIZE);
 	if (!stack) {
 		printf("malloc(STACK_SIZE) failed: %m\n");
+		free(stack);
 		abort();
 	}
 
@@ -214,9 +215,11 @@ static pid_t spawn_sealing_thread(void)
 		    NULL);
 	if (pid < 0) {
 		printf("clone() failed: %m\n");
+		free(stack);
 		abort();
 	}
 
+	free(stack);
 	return pid;
 }
 
