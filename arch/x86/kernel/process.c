@@ -930,7 +930,6 @@ static __cpuidle void mwait_idle(void)
 			raw_local_irq_disable();
 		}
 	}
-	__current_clr_polling();
 }
 
 void select_idle_routine(const struct cpuinfo_x86 *c)
