@@ -33,3 +33,35 @@ particularly useful:
 
 :Source: A URL pointing to the source code of the test suite
 :Docs: A URL pointing to further test suite documentation
+
+xfstests
+--------
+
+:Summary: File system regression test suite
+:Source: git://git.kernel.org/pub/scm/fs/xfs/xfstests-dev.git
+:Docs: https://github.com/tytso/xfstests-bld/blob/master/Documentation/what-is-xfstests.md
+
+As the name might imply, xfstests is a file system regression test suite which
+was originally developed by Silicon Graphics (SGI) for the XFS file system.
+Originally, xfstests, like XFS was only supported on the SGI's Irix operating
+system. When XFS was ported to Linux, so was xfstests, and now xfstests is
+only supported on Linux.
+
+Today, xfstests is used as a file system regression test suite for all of
+Linux's major file systems: xfs, ext2, ext4, cifs, btrfs, f2fs, reiserfs, gfs,
+jfs, udf, nfs, and tmpfs. Many file system maintainers will run a full set of
+xfstests before sending patches to Linus, and will require that any major
+changes be tested using xfstests before they are submitted for integration.
+
+The easiest way to start running xfstests is under KVM with xfstests-bld:
+https://github.com/tytso/xfstests-bld/blob/master/Documentation/kvm-quickstart.md
+
+kvm-xfstests smoke
+------------------
+
+:Summary: File system smoke tests
+:Superset: xfstests
+:Docs: https://github.com/tytso/xfstests-bld/blob/master/Documentation/kvm-quickstart.md
+
+The "kvm-xfstests smoke" is a minimal subset of xfstests for testing all major
+file systems, running under KVM.
