@@ -100,9 +100,8 @@ SYM_CODE_START_LOCAL(pvh_start_xen)
 	 * the per cpu areas are set up.
 	 */
 	mov $MSR_GS_BASE,%ecx
-	lea INIT_PER_CPU_VAR(fixed_percpu_data)(%rip), %rdx
-	mov %edx, %eax
-	shr $32, %rdx
+	xor %eax, %eax
+	xor %edx, %edx
 	wrmsr
 
 	call xen_prepare_pvh
