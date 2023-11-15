@@ -65,3 +65,16 @@ kvm-xfstests smoke
 
 The "kvm-xfstests smoke" is a minimal subset of xfstests for testing all major
 file systems, running under KVM.
+
+kunit
+-----
+
+:Summary: The complete set of KUnit unit tests
+:Command: tools/testing/kunit/kunit.py run --alltests
+
+kunit core
+----------
+
+:Summary: KUnit tests for the framework itself
+:Superset: kunit
+:Command: tools/testing/kunit/kunit.py run --kunitconfig lib/kunit
