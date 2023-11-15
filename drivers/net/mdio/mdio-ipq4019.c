@@ -12,6 +12,7 @@
 #include <linux/phy.h>
 #include <linux/platform_device.h>
 #include <linux/clk.h>
+#include <linux/gpio/consumer.h>
 
 #define MDIO_MODE_REG				0x40
 #define MDIO_ADDR_REG				0x44
@@ -55,6 +56,7 @@ struct ipq4019_mdio_data {
 	void __iomem *membase;
 	void __iomem *eth_ldo_rdy[ETH_LDO_RDY_CNT];
 	struct clk *clk[MDIO_CLK_CNT];
+	struct gpio_descs *reset_gpios;
 };
 
 const char *const mdio_clk_name[] = {
@@ -275,6 +277,24 @@ static int ipq_mdio_reset(struct mii_bus *bus)
 		}
 	}
 
+	/* Do the optional reset on the devices connected with MDIO bus */
+	if (priv->reset_gpios) {
+		unsigned long *values = bitmap_zalloc(priv->reset_gpios->ndescs, GFP_KERNEL);
+
+		if (!values)
+			return -ENOMEM;
+
+		bitmap_fill(values, priv->reset_gpios->ndescs);
+		gpiod_set_array_value_cansleep(priv->reset_gpios->ndescs, priv->reset_gpios->desc,
+					       priv->reset_gpios->info, values);
+
+		fsleep(IPQ_PHY_SET_DELAY_US);
+		bitmap_zero(values, priv->reset_gpios->ndescs);
+		gpiod_set_array_value_cansleep(priv->reset_gpios->ndescs, priv->reset_gpios->desc,
+					       priv->reset_gpios->info, values);
+		bitmap_free(values);
+	}
+
 	/* Configure MDIO clock source frequency if clock is specified in the device tree */
 	ret = clk_set_rate(priv->clk[MDIO_CLK_MDIO_AHB], IPQ_MDIO_CLK_RATE);
 	if (ret)
@@ -318,6 +338,19 @@ static int ipq4019_mdio_probe(struct platform_device *pdev)
 		if (IS_ERR(priv->clk[ret]))
 			return PTR_ERR(priv->clk[ret]);
 	}
+
+	/* This GPIO reset is for qca8084 PHY, which is only probeable by MDIO bus
+	 * after the following steps completed.
+	 *
+	 * 1. Enable LDO to provide clock for qca8084 and enable SoC GCC uniphy related clocks.
+	 * 2. Do GPIO reset on the qca8084 PHY.
+	 * 3. Configure the PHY address that is customized according to device treee.
+	 * 4. Configure the related qca8084 GCC clock & reset.
+	 */
+	priv->reset_gpios = devm_gpiod_get_array_optional(&pdev->dev, "phy-reset", GPIOD_OUT_LOW);
+	if (IS_ERR(priv->reset_gpios))
+		return dev_err_probe(&pdev->dev, PTR_ERR(priv->reset_gpios),
+				     "mii_bus %s couldn't get reset GPIO\n", bus->id);
 
 	bus->name = "ipq4019_mdio";
 	bus->read = ipq4019_mdio_read_c22;
