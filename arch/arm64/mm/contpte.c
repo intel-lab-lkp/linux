@@ -302,6 +302,48 @@ int contpte_ptep_clear_flush_young(struct vm_area_struct *vma,
 }
 EXPORT_SYMBOL(contpte_ptep_clear_flush_young);
 
+void contpte_set_wrprotects(struct mm_struct *mm, unsigned long addr,
+					pte_t *ptep, unsigned int nr)
+{
+	unsigned long next;
+	unsigned long end = addr + (nr << PAGE_SHIFT);
+
+	do {
+		next = pte_cont_addr_end(addr, end);
+		nr = (next - addr) >> PAGE_SHIFT;
+
+		/*
+		 * If wrprotecting an entire contig range, we can avoid
+		 * unfolding. Just set wrprotect and wait for the later
+		 * mmu_gather flush to invalidate the tlb. Until the flush, the
+		 * page may or may not be wrprotected. After the flush, it is
+		 * guarranteed wrprotected. If its a partial range though, we
+		 * must unfold, because we can't have a case where CONT_PTE is
+		 * set but wrprotect applies to a subset of the PTEs; this would
+		 * cause it to continue to be unpredictable after the flush.
+		 */
+		if (nr != CONT_PTES)
+			contpte_try_unfold(mm, addr, ptep, __ptep_get(ptep));
+
+		__ptep_set_wrprotects(mm, addr, ptep, nr);
+
+		addr = next;
+		ptep += nr;
+
+		/*
+		 * If applying to a partial contig range, the change could have
+		 * made the range foldable. Use the last pte in the range we
+		 * just set for comparison, since contpte_try_fold() only
+		 * triggers when acting on the last pte in the contig range.
+		 */
+		if (nr != CONT_PTES)
+			contpte_try_fold(mm, addr - PAGE_SIZE, ptep - 1,
+					 __ptep_get(ptep - 1));
+
+	} while (addr != end);
+}
+EXPORT_SYMBOL(contpte_set_wrprotects);
+
 int contpte_ptep_set_access_flags(struct vm_area_struct *vma,
 					unsigned long addr, pte_t *ptep,
 					pte_t entry, int dirty)
