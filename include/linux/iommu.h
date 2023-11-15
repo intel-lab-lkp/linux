@@ -1431,7 +1431,7 @@ iommu_sva_domain_alloc(struct device *dev, struct mm_struct *mm)
 #ifdef CONFIG_IOMMU_IOPF
 int iopf_queue_add_device(struct iopf_queue *queue, struct device *dev);
 int iopf_queue_remove_device(struct iopf_queue *queue, struct device *dev);
-int iopf_queue_flush_dev(struct device *dev);
+int iopf_queue_discard_dev_pasid(struct device *dev, ioasid_t pasid);
 struct iopf_queue *iopf_queue_alloc(const char *name);
 void iopf_queue_free(struct iopf_queue *queue);
 int iopf_queue_discard_partial(struct iopf_queue *queue);
@@ -1453,7 +1453,7 @@ iopf_queue_remove_device(struct iopf_queue *queue, struct device *dev)
 	return -ENODEV;
 }
 
-static inline int iopf_queue_flush_dev(struct device *dev)
+static inline int iopf_queue_discard_dev_pasid(struct device *dev, ioasid_t pasid)
 {
 	return -ENODEV;
 }

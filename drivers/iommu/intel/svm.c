@@ -495,7 +495,7 @@ prq_retry:
 		goto prq_retry;
 	}
 
-	iopf_queue_flush_dev(dev);
+	iopf_queue_discard_dev_pasid(dev, pasid);
 
 	/*
 	 * Perform steps described in VT-d spec CH7.10 to drain page
