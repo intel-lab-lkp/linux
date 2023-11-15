@@ -342,9 +342,9 @@ static inline void __sync_cache_and_tags(pte_t pte, unsigned int nr_pages)
 		mte_sync_tags(pte, nr_pages);
 }
 
-static inline void set_ptes(struct mm_struct *mm,
-			    unsigned long __always_unused addr,
-			    pte_t *ptep, pte_t pte, unsigned int nr)
+static inline void __set_ptes(struct mm_struct *mm,
+			      unsigned long __always_unused addr,
+			      pte_t *ptep, pte_t pte, unsigned int nr)
 {
 	page_table_check_ptes_set(mm, ptep, pte, nr);
 	__sync_cache_and_tags(pte, nr);
@@ -358,7 +358,6 @@ static inline void set_ptes(struct mm_struct *mm,
 		pte_val(pte) += PAGE_SIZE;
 	}
 }
-#define set_ptes set_ptes
 
 /*
  * Huge pte definitions.
@@ -1067,7 +1066,7 @@ static inline void arch_swap_restore(swp_entry_t entry, struct folio *folio)
 #endif /* CONFIG_ARM64_MTE */
 
 /*
- * On AArch64, the cache coherency is handled via the set_pte_at() function.
+ * On AArch64, the cache coherency is handled via the __set_ptes() function.
  */
 static inline void update_mmu_cache_range(struct vm_fault *vmf,
 		struct vm_area_struct *vma, unsigned long addr, pte_t *ptep,
@@ -1121,6 +1120,7 @@ extern void ptep_modify_prot_commit(struct vm_area_struct *vma,
 				    pte_t old_pte, pte_t new_pte);
 
 #define set_pte					__set_pte
+#define set_ptes				__set_ptes
 
 #endif /* !__ASSEMBLY__ */
 
