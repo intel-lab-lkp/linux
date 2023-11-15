@@ -18,28 +18,31 @@
 #define MDIO_DATA_WRITE_REG			0x48
 #define MDIO_DATA_READ_REG			0x4c
 #define MDIO_CMD_REG				0x50
-#define MDIO_CMD_ACCESS_BUSY		BIT(16)
-#define MDIO_CMD_ACCESS_START		BIT(8)
-#define MDIO_CMD_ACCESS_CODE_READ	0
-#define MDIO_CMD_ACCESS_CODE_WRITE	1
-#define MDIO_CMD_ACCESS_CODE_C45_ADDR	0
-#define MDIO_CMD_ACCESS_CODE_C45_WRITE	1
-#define MDIO_CMD_ACCESS_CODE_C45_READ	2
+#define MDIO_CMD_ACCESS_BUSY			BIT(16)
+#define MDIO_CMD_ACCESS_START			BIT(8)
+#define MDIO_CMD_ACCESS_CODE_READ		0
+#define MDIO_CMD_ACCESS_CODE_WRITE		1
+#define MDIO_CMD_ACCESS_CODE_C45_ADDR		0
+#define MDIO_CMD_ACCESS_CODE_C45_WRITE		1
+#define MDIO_CMD_ACCESS_CODE_C45_READ		2
 
 /* 0 = Clause 22, 1 = Clause 45 */
 #define MDIO_MODE_C45				BIT(8)
 
-#define IPQ4019_MDIO_TIMEOUT	10000
-#define IPQ4019_MDIO_SLEEP		10
+#define IPQ4019_MDIO_TIMEOUT			10000
+#define IPQ4019_MDIO_SLEEP			10
 
 /* MDIO clock source frequency is fixed to 100M */
-#define IPQ_MDIO_CLK_RATE	100000000
+#define IPQ_MDIO_CLK_RATE			100000000
 
-#define IPQ_PHY_SET_DELAY_US	100000
+#define IPQ_PHY_SET_DELAY_US			100000
+
+/* Maximum SOC PCS(uniphy) number on IPQ platform */
+#define ETH_LDO_RDY_CNT				3
 
 struct ipq4019_mdio_data {
-	void __iomem	*membase;
-	void __iomem *eth_ldo_rdy;
+	void __iomem *membase;
+	void __iomem *eth_ldo_rdy[ETH_LDO_RDY_CNT];
 	struct clk *mdio_clk;
 };
 
@@ -210,13 +213,15 @@ static int ipq_mdio_reset(struct mii_bus *bus)
 	int ret;
 
 	/* To indicate CMN_PLL that ethernet_ldo has been ready if platform resource 1
-	 * is specified in the device tree.
+	 * or more resource are specified in the device tree.
 	 */
-	if (priv->eth_ldo_rdy) {
-		val = readl(priv->eth_ldo_rdy);
-		val |= BIT(0);
-		writel(val, priv->eth_ldo_rdy);
-		fsleep(IPQ_PHY_SET_DELAY_US);
+	for (ret = 0; ret < ETH_LDO_RDY_CNT; ret++) {
+		if (priv->eth_ldo_rdy[ret]) {
+			val = readl(priv->eth_ldo_rdy[ret]);
+			val |= BIT(0);
+			writel(val, priv->eth_ldo_rdy[ret]);
+			fsleep(IPQ_PHY_SET_DELAY_US);
+		}
 	}
 
 	/* Configure MDIO clock source frequency if clock is specified in the device tree */
@@ -252,11 +257,14 @@ static int ipq4019_mdio_probe(struct platform_device *pdev)
 	if (IS_ERR(priv->mdio_clk))
 		return PTR_ERR(priv->mdio_clk);
 
-	/* The platform resource is provided on the chipset IPQ5018 */
+	/* The platform resource is provided on the chipset IPQ5018/IPQ5332 */
 	/* This resource is optional */
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 1);
-	if (res)
-		priv->eth_ldo_rdy = devm_ioremap_resource(&pdev->dev, res);
+	for (ret = 0; ret < ETH_LDO_RDY_CNT; ret++) {
+		res = platform_get_resource(pdev, IORESOURCE_MEM, ret + 1);
+		if (res)
+			priv->eth_ldo_rdy[ret] = devm_ioremap(&pdev->dev,
+							      res->start, resource_size(res));
+	}
 
 	bus->name = "ipq4019_mdio";
 	bus->read = ipq4019_mdio_read_c22;
@@ -288,6 +296,7 @@ static void ipq4019_mdio_remove(struct platform_device *pdev)
 static const struct of_device_id ipq4019_mdio_dt_ids[] = {
 	{ .compatible = "qcom,ipq4019-mdio" },
 	{ .compatible = "qcom,ipq5018-mdio" },
+	{ .compatible = "qcom,ipq5332-mdio" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, ipq4019_mdio_dt_ids);
