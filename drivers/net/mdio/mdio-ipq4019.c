@@ -53,6 +53,14 @@
 #define CMN_PLL_POWER_ON_AND_RESET		0x780
 #define CMN_ANA_EN_SW_RSTN			BIT(6)
 
+/* QCA8084 includes the PHY chip, GCC/TLMM and the control modules,
+ * except for the PHY register, other registers are accessed by MDIO bus
+ * with 32bit value, which has the special MDIO sequences to access the
+ * switch modules register.
+ */
+#define IPQ_HIGH_ADDR_PREFIX			0x18
+#define IPQ_LOW_ADDR_PREFIX			0x10
+
 enum mdio_clk_id {
 	MDIO_CLK_MDIO_AHB,
 	MDIO_CLK_UNIPHY0_AHB,
@@ -242,6 +250,72 @@ static int ipq4019_mdio_write_c22(struct mii_bus *bus, int mii_id, int regnum,
 
 	return 0;
 }
+
+static inline void split_addr(u32 regaddr, u16 *r1, u16 *r2, u16 *page, u16 *sw_addr)
+{
+	*r1 = regaddr & 0x1c;
+
+	regaddr >>= 5;
+	*r2 = regaddr & 0x7;
+
+	regaddr >>= 3;
+	*page = regaddr & 0xffff;
+
+	regaddr >>= 16;
+	*sw_addr = regaddr & 0xff;
+}
+
+static int qca8084_set_page(struct mii_bus *bus, u16 sw_addr, u16 page)
+{
+	return bus->write(bus, IPQ_HIGH_ADDR_PREFIX | (sw_addr >> 5), sw_addr & 0x1f, page);
+}
+
+static int qca8084_mii_read(struct mii_bus *bus, u16 addr, u16 reg, u32 *val)
+{
+	int ret, data;
+
+	ret = bus->read(bus, addr, reg);
+	if (ret >= 0) {
+		data = ret;
+
+		ret = bus->read(bus, addr, reg | BIT(1));
+		if (ret >= 0)
+			*val =  data | ret << 16;
+	}
+
+	return ret < 0 ? ret : 0;
+}
+
+static int qca8084_mii_write(struct mii_bus *bus, u16 addr, u16 reg, u32 val)
+{
+	int ret;
+
+	ret = bus->write(bus, addr, reg, lower_16_bits(val));
+	if (!ret)
+		ret = bus->write(bus, addr, reg | BIT(1), upper_16_bits(val));
+
+	return ret;
+}
+
+static int qca8084_modify(struct mii_bus *bus, u32 regaddr, u32 clear, u32 set)
+{
+	u16 reg, addr, page, sw_addr;
+	u32 val;
+	int ret;
+
+	split_addr(regaddr, &reg, &addr, &page, &sw_addr);
+	ret = qca8084_set_page(bus, sw_addr, page);
+	if (ret < 0)
+		return ret;
+
+	ret = qca8084_mii_read(bus, IPQ_LOW_ADDR_PREFIX | addr, reg, &val);
+	if (ret < 0)
+		return ret;
+
+	val &= ~clear;
+	val |= set;
+	return qca8084_mii_write(bus, IPQ_LOW_ADDR_PREFIX | addr, reg, val);
+};
 
 /* For the CMN PLL block, the reference clock can be configured according to
  * the device tree property "cmn_ref_clk", the internal 48MHZ is used by default
