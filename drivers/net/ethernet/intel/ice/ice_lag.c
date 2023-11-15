@@ -679,6 +679,48 @@ static void ice_lag_move_vf_nodes(struct ice_lag *lag, u8 oldport, u8 newport)
 			ice_lag_move_single_vf_nodes(lag, oldport, newport, i);
 }
 
+/**
+ * ice_lag_move_vf_nodes_cfg - move VF nodes outside LAG netdev event context
+ * @lag: local lag struct
+ * @src_prt: lport value for source port
+ * @dst_prt: lport value for destination port
+ *
+ * This function is used to move nodes during an out-of-netdev-event situation,
+ * primarily when the driver needs to reconfigure or recreate resources.
+ *
+ * Must be called while holding the lag_mutex to avoid lag events from
+ * processing while out-of-sync moves are happening.  Also, paired moves,
+ * such as used in a reset flow, should both be called under the same mutex
+ * lock to avoid changes between start of reset and end of reset.
+ */
+void ice_lag_move_vf_nodes_cfg(struct ice_lag *lag, u8 src_prt, u8 dst_prt)
+{
+	struct ice_lag_netdev_list ndlist, *nl;
+	struct list_head *tmp, *n;
+	struct net_device *tmp_nd;
+
+	INIT_LIST_HEAD(&ndlist.node);
+	rcu_read_lock();
+	for_each_netdev_in_bond_rcu(lag->upper_netdev, tmp_nd) {
+		nl = kzalloc(sizeof(*nl), GFP_ATOMIC);
+		if (!nl)
+			break;
+
+		nl->netdev = tmp_nd;
+		list_add(&nl->node, &ndlist.node);
+	}
+	rcu_read_unlock();
+	lag->netdev_head = &ndlist.node;
+	ice_lag_move_vf_nodes(lag, src_prt, dst_prt);
+
+	list_for_each_safe(tmp, n, &ndlist.node) {
+		nl = list_entry(tmp, struct ice_lag_netdev_list, node);
+		list_del(&nl->node);
+		kfree(nl);
+	}
+	lag->netdev_head = NULL;
+}
+
 #define ICE_LAG_SRIOV_CP_RECIPE		10
 #define ICE_LAG_SRIOV_TRAIN_PKT_LEN	16
 
