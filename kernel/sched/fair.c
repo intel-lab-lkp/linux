@@ -12382,35 +12382,6 @@ static inline void task_tick_core(struct rq *rq, struct task_struct *curr)
 		resched_curr(rq);
 }
 
-/*
- * se_fi_update - Update the cfs_rq->min_vruntime_fi in a CFS hierarchy if needed.
- */
-static void se_fi_update(const struct sched_entity *se, unsigned int fi_seq,
-			 bool forceidle)
-{
-	for_each_sched_entity(se) {
-		struct cfs_rq *cfs_rq = cfs_rq_of(se);
-
-		if (forceidle) {
-			if (cfs_rq->forceidle_seq == fi_seq)
-				break;
-			cfs_rq->forceidle_seq = fi_seq;
-		}
-
-		cfs_rq->min_vruntime_fi = cfs_rq->min_vruntime;
-	}
-}
-
-void task_vruntime_update(struct rq *rq, struct task_struct *p, bool in_fi)
-{
-	struct sched_entity *se = &p->se;
-
-	if (p->sched_class != &fair_sched_class)
-		return;
-
-	se_fi_update(se, rq->core->core_forceidle_seq, in_fi);
-}
-
 bool cfs_prio_less(const struct task_struct *a, const struct task_struct *b,
 			bool in_fi)
 {
@@ -12438,9 +12409,6 @@ bool cfs_prio_less(const struct task_struct *a, const struct task_struct *b,
 			seb = parent_entity(seb);
 	}
 
-	se_fi_update(sea, rq->core->core_forceidle_seq, in_fi);
-	se_fi_update(seb, rq->core->core_forceidle_seq, in_fi);
-
 	cfs_rqa = sea->cfs_rq;
 	cfs_rqb = seb->cfs_rq;
 #else
@@ -12453,8 +12421,7 @@ bool cfs_prio_less(const struct task_struct *a, const struct task_struct *b,
 	 * min_vruntime_fi, which would have been updated in prior calls
 	 * to se_fi_update().
 	 */
-	delta = (s64)(sea->vruntime - seb->vruntime) +
-		(s64)(cfs_rqb->min_vruntime_fi - cfs_rqa->min_vruntime_fi);
+	delta = (s64)(sea->core_vruntime - seb->core_vruntime);
 
 	return delta > 0;
 }

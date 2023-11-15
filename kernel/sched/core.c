@@ -6052,8 +6052,6 @@ static inline struct task_struct *pick_task(struct rq *rq)
 	BUG(); /* The idle class should always have a runnable task. */
 }
 
-extern void task_vruntime_update(struct rq *rq, struct task_struct *p, bool in_fi);
-
 static void queue_core_balance(struct rq *rq);
 
 static struct task_struct *
@@ -6154,7 +6152,6 @@ pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 			 * unconstrained picks as well.
 			 */
 			WARN_ON_ONCE(fi_before);
-			task_vruntime_update(rq, next, false);
 			goto out_set_next;
 		}
 	}
@@ -6204,8 +6201,6 @@ pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 		if (p == rq_i->idle) {
 			if (rq_i->nr_running) {
 				rq->core->core_forceidle_count++;
-				if (!fi_before)
-					rq->core->core_forceidle_seq++;
 			}
 		} else {
 			occ++;
@@ -6244,17 +6239,6 @@ pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 		 */
 		if (!rq_i->core_pick)
 			continue;
-
-		/*
-		 * Update for new !FI->FI transitions, or if continuing to be in !FI:
-		 * fi_before     fi      update?
-		 *  0            0       1
-		 *  0            1       1
-		 *  1            0       1
-		 *  1            1       0
-		 */
-		if (!(fi_before && rq->core->core_forceidle_count))
-			task_vruntime_update(rq_i, rq_i->core_pick, !!rq->core->core_forceidle_count);
 
 		rq_i->core_pick->core_occupation = occ;
 
@@ -6474,7 +6458,6 @@ static void sched_core_cpu_deactivate(unsigned int cpu)
 	core_rq->core_pick_seq             = rq->core_pick_seq;
 	core_rq->core_cookie               = rq->core_cookie;
 	core_rq->core_forceidle_count      = rq->core_forceidle_count;
-	core_rq->core_forceidle_seq        = rq->core_forceidle_seq;
 	core_rq->core_forceidle_occupation = rq->core_forceidle_occupation;
 
 	/*

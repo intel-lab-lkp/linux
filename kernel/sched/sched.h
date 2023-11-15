@@ -546,7 +546,6 @@ struct cfs_rq {
 	u64			min_vruntime;
 #ifdef CONFIG_SCHED_CORE
 	u64			core_min_vruntime;
-	unsigned int		forceidle_seq;
 	u64			min_vruntime_fi;
 	struct cfs_rq		*core;
 #endif
@@ -1134,7 +1133,6 @@ struct rq {
 	unsigned int		core_pick_seq;
 	unsigned long		core_cookie;
 	unsigned int		core_forceidle_count;
-	unsigned int		core_forceidle_seq;
 	unsigned int		core_forceidle_occupation;
 	u64			core_forceidle_start;
 #endif
