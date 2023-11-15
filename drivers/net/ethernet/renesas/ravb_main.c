@@ -1863,16 +1863,23 @@ static void ravb_tx_timeout(struct net_device *ndev, unsigned int txqueue)
 	/* tx_errors count up */
 	ndev->stats.tx_errors++;
 
-	schedule_work(&priv->work);
+	schedule_delayed_work(&priv->work, 0);
 }
 
 static void ravb_tx_timeout_work(struct work_struct *work)
 {
-	struct ravb_private *priv = container_of(work, struct ravb_private,
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct ravb_private *priv = container_of(dwork, struct ravb_private,
 						 work);
 	const struct ravb_hw_info *info = priv->info;
 	struct net_device *ndev = priv->ndev;
 	int error;
+
+	if (!rtnl_trylock()) {
+		if (netif_running(ndev))
+			schedule_delayed_work(&priv->work, msecs_to_jiffies(10));
+		return;
+	}
 
 	netif_tx_stop_all_queues(ndev);
 
@@ -1907,7 +1914,7 @@ static void ravb_tx_timeout_work(struct work_struct *work)
 		 */
 		netdev_err(ndev, "%s: ravb_dmac_init() failed, error %d\n",
 			   __func__, error);
-		return;
+		goto out_unlock;
 	}
 	ravb_emac_init(ndev);
 
@@ -1917,6 +1924,9 @@ out:
 		ravb_ptp_init(ndev, priv->pdev);
 
 	netif_tx_start_all_queues(ndev);
+
+out_unlock:
+	rtnl_unlock();
 }
 
 /* Packet transmit function for Ethernet AVB */
@@ -2167,7 +2177,7 @@ static int ravb_close(struct net_device *ndev)
 			of_phy_deregister_fixed_link(np);
 	}
 
-	cancel_work_sync(&priv->work);
+	cancel_delayed_work_sync(&priv->work);
 
 	if (info->multi_irqs) {
 		free_irq(priv->tx_irqs[RAVB_NC], ndev);
@@ -2687,7 +2697,7 @@ static int ravb_probe(struct platform_device *pdev)
 	ndev->base_addr = res->start;
 
 	spin_lock_init(&priv->lock);
-	INIT_WORK(&priv->work, ravb_tx_timeout_work);
+	INIT_DELAYED_WORK(&priv->work, ravb_tx_timeout_work);
 
 	error = of_get_phy_mode(np, &priv->phy_interface);
 	if (error && error != -ENODEV)

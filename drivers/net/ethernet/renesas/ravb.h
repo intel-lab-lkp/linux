@@ -1081,7 +1081,7 @@ struct ravb_private {
 	u32 cur_tx[NUM_TX_QUEUE];
 	u32 dirty_tx[NUM_TX_QUEUE];
 	struct napi_struct napi[NUM_RX_QUEUE];
-	struct work_struct work;
+	struct delayed_work work;
 	/* MII transceiver section. */
 	struct mii_bus *mii_bus;	/* MDIO bus control */
 	int link;
