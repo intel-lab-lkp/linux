@@ -1084,7 +1084,9 @@ u32 nvme_command_effects(struct nvme_ctrl *ctrl, struct nvme_ns *ns, u8 opcode)
 	u32 effects = 0;
 
 	if (ns) {
-		effects = le32_to_cpu(ns->head->effects->iocs[opcode]);
+		struct nvme_effects_log	*cel = xa_load(&ctrl->cels, ns->head->ids.csi);
+
+		effects = le32_to_cpu(cel->iocs[opcode]);
 		if (effects & ~(NVME_CMD_EFFECTS_CSUPP | NVME_CMD_EFFECTS_LBCC))
 			dev_warn_once(ctrl->device,
 				"IO command:%02x has unusual effects:%08x\n",
@@ -2871,7 +2873,8 @@ static int nvme_get_effects_log(struct nvme_ctrl *ctrl, u8 csi,
 
 	xa_store(&ctrl->cels, csi, cel, GFP_KERNEL);
 out:
-	*log = cel;
+	if (log)
+		*log = cel;
 	return 0;
 }
 
@@ -3385,13 +3388,6 @@ static struct nvme_ns_head *nvme_alloc_ns_head(struct nvme_ctrl *ctrl,
 	head->shared = info->is_shared;
 	kref_init(&head->ref);
 
-	if (head->ids.csi) {
-		ret = nvme_get_effects_log(ctrl, head->ids.csi, &head->effects);
-		if (ret)
-			goto out_cleanup_srcu;
-	} else
-		head->effects = ctrl->effects;
-
 	ret = nvme_mpath_alloc_disk(ctrl, head);
 	if (ret)
 		goto out_cleanup_srcu;
@@ -3774,6 +3770,9 @@ static void nvme_scan_ns(struct nvme_ctrl *ctrl, unsigned nsid)
 	 * becomes ready and restart the scan.
 	 */
 	if (ret || !info.is_ready)
+		return;
+
+	if (info.ids.csi && nvme_get_effects_log(ctrl, info.ids.csi, NULL))
 		return;
 
 	ns = nvme_find_get_ns(ctrl, nsid);

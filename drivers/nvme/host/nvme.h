@@ -444,7 +444,6 @@ struct nvme_ns_head {
 	struct kref		ref;
 	bool			shared;
 	int			instance;
-	struct nvme_effects_log *effects;
 
 	struct cdev		cdev;
 	struct device		cdev_device;
