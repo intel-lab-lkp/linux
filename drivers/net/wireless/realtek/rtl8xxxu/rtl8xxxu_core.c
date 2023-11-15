@@ -4757,6 +4757,12 @@ void rtl8xxxu_gen1_init_aggregation(struct rtl8xxxu_priv *priv)
 	 *   RxAggPageTimeout = 4 or 6 (absolute time 34ms/(2^6))
 	 */
 
+	/* REG_RXDMA_AGG_PG_TH + 1 seems to be the timeout register on
+	 * gen2 chips and rtl8188eu. The rtl8723au seems unhappy if we
+	 * don't set it, so better set both.
+	 */
+	timeout = 4;
+
 	page_thresh = (priv->fops->rx_agg_buf_size / 512);
 	if (rtl8xxxu_dma_agg_pages >= 0) {
 		if (rtl8xxxu_dma_agg_pages <= page_thresh)
@@ -4771,12 +4777,6 @@ void rtl8xxxu_gen1_init_aggregation(struct rtl8xxxu_priv *priv)
 				__func__, rtl8xxxu_dma_agg_pages, page_thresh);
 	}
 	rtl8xxxu_write8(priv, REG_RXDMA_AGG_PG_TH, page_thresh);
-	/*
-	 * REG_RXDMA_AGG_PG_TH + 1 seems to be the timeout register on
-	 * gen2 chips and rtl8188eu. The rtl8723au seems unhappy if we
-	 * don't set it, so better set both.
-	 */
-	timeout = 4;
 
 	if (rtl8xxxu_dma_agg_timeout >= 0) {
 		if (rtl8xxxu_dma_agg_timeout <= 127)
