@@ -747,8 +747,6 @@ static int rcar_du_vsps_init(struct rcar_du_device *rcdu)
 			goto error;
 	}
 
-	return 0;
-
 error:
 	for (i = 0; i < ARRAY_SIZE(vsps); ++i)
 		of_node_put(vsps[i].np);
