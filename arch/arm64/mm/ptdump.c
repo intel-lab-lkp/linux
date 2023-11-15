@@ -86,6 +86,7 @@ struct pg_state {
 	bool check_wx;
 	unsigned long wx_pages;
 	unsigned long uxn_pages;
+	struct ptdump_info_file_priv *f_priv;
 };
 
 struct prot_bits {
@@ -172,6 +173,66 @@ static const struct prot_bits pte_bits[] = {
 		.val	= PTE_ATTRINDX(MT_NORMAL_TAGGED),
 		.set	= "MEM/NORMAL-TAGGED",
 	}
+};
+
+static const struct prot_bits stage2_pte_bits[] = {
+	{
+		.mask	= PTE_VALID,
+		.val	= PTE_VALID,
+		.set	= " ",
+		.clear	= "F",
+	}, {
+		.mask	= KVM_PTE_LEAF_ATTR_HI_S2_XN,
+		.val	= KVM_PTE_LEAF_ATTR_HI_S2_XN,
+		.set	= "XN",
+		.clear	= "  ",
+	}, {
+		.mask	= KVM_PTE_LEAF_ATTR_LO_S2_S2AP_R,
+		.val	= KVM_PTE_LEAF_ATTR_LO_S2_S2AP_R,
+		.set	= "R",
+		.clear	= " ",
+	}, {
+		.mask	= KVM_PTE_LEAF_ATTR_LO_S2_S2AP_W,
+		.val	= KVM_PTE_LEAF_ATTR_LO_S2_S2AP_W,
+		.set	= "W",
+		.clear	= " ",
+	}, {
+		.mask	= KVM_PTE_LEAF_ATTR_LO_S2_AF,
+		.val	= KVM_PTE_LEAF_ATTR_LO_S2_AF,
+		.set	= "AF",
+		.clear	= "  ",
+	}, {
+		.mask	= PTE_NG,
+		.val	= PTE_NG,
+		.set	= "FnXS",
+		.clear	= "  ",
+	}, {
+		.mask	= PTE_CONT,
+		.val	= PTE_CONT,
+		.set	= "CON",
+		.clear	= "   ",
+	}, {
+		.mask	= PTE_TABLE_BIT,
+		.val	= PTE_TABLE_BIT,
+		.set	= "   ",
+		.clear	= "BLK",
+	}, {
+		.mask	= KVM_PGTABLE_PROT_SW0,
+		.val	= KVM_PGTABLE_PROT_SW0,
+		.set	= "SW0", /* PKVM_PAGE_SHARED_OWNED */
+	}, {
+		.mask   = KVM_PGTABLE_PROT_SW1,
+		.val	= KVM_PGTABLE_PROT_SW1,
+		.set	= "SW1", /* PKVM_PAGE_SHARED_BORROWED */
+	}, {
+		.mask	= KVM_PGTABLE_PROT_SW2,
+		.val	= KVM_PGTABLE_PROT_SW2,
+		.set	= "SW2",
+	}, {
+		.mask   = KVM_PGTABLE_PROT_SW3,
+		.val	= KVM_PGTABLE_PROT_SW3,
+		.set	= "SW3",
+	},
 };
 
 struct pg_level {
@@ -286,6 +347,7 @@ static void note_page(struct ptdump_state *pt_st, unsigned long addr, int level,
 			delta >>= 10;
 			unit++;
 		}
+
 		pt_dump_seq_printf(st->seq, "%9lu%c %s", delta, *unit,
 				   pg_info[st->level].name);
 		if (st->current_prot && pg_info[st->level].bits)
@@ -393,6 +455,11 @@ static void *ptdump_host_va(phys_addr_t phys)
 {
 	return __va(phys);
 }
+
+static struct kvm_pgtable_mm_ops host_mmops = {
+	.phys_to_virt	=	ptdump_host_va,
+	.virt_to_phys	=	ptdump_host_pa,
+};
 
 static size_t stage2_get_pgd_len(void)
 {
@@ -528,6 +595,95 @@ static void stage2_ptdump_end_walk(void *file_priv)
 	f_priv->file_priv = NULL;
 }
 
+static int stage2_ptdump_visitor(const struct kvm_pgtable_visit_ctx *ctx,
+				 enum kvm_pgtable_walk_flags visit)
+{
+	struct pg_state *st = ctx->arg;
+	struct ptdump_state *pt_st = &st->ptdump;
+
+	pt_st->note_page(pt_st, ctx->addr, ctx->level, ctx->old);
+
+	return 0;
+}
+
+static void stage2_ptdump_build_levels(struct pg_level *level,
+				       size_t num_levels,
+				       unsigned int start_level)
+{
+	static const char * const lvl_names[] = {"PGD", "PUD", "PMD", "PTE"};
+	int i, j, name_index;
+
+	if (num_levels > KVM_PGTABLE_MAX_LEVELS && start_level > 2) {
+		pr_warn("invalid configuration %lu levels start_lvl %u\n",
+			num_levels, start_level);
+		return;
+	}
+
+	for (i = start_level; i < num_levels; i++) {
+		name_index = i - start_level;
+		name_index = name_index * start_level + name_index;
+
+		level[i].name	= lvl_names[name_index];
+		level[i].num	= ARRAY_SIZE(stage2_pte_bits);
+		level[i].bits	= stage2_pte_bits;
+
+		for (j = 0; j < level[i].num; j++)
+			level[i].mask |= level[i].bits[j].mask;
+	}
+}
+
+static void stage2_ptdump_walk(struct seq_file *s, struct ptdump_info *info)
+{
+	struct ptdump_info_file_priv *f_priv =
+		container_of(info, struct ptdump_info_file_priv, info);
+	struct kvm_pgtable_snapshot *snapshot = f_priv->file_priv;
+	struct pg_state st;
+	struct kvm_pgtable *pgtable;
+	u64 start_ipa = 0, end_ipa;
+	struct addr_marker ipa_address_markers[3];
+	struct pg_level stage2_pg_level[KVM_PGTABLE_MAX_LEVELS] = {0};
+	struct kvm_pgtable_walker walker = (struct kvm_pgtable_walker) {
+		.cb	= stage2_ptdump_visitor,
+		.arg	= &st,
+		.flags	= KVM_PGTABLE_WALK_LEAF,
+	};
+
+	if (snapshot == NULL || !snapshot->pgtable.pgd)
+		return;
+
+	pgtable = &snapshot->pgtable;
+	pgtable->mm_ops = &host_mmops;
+	end_ipa = BIT(pgtable->ia_bits) - 1;
+
+	memset(&ipa_address_markers[0], 0, sizeof(ipa_address_markers));
+
+	ipa_address_markers[0].start_address = start_ipa;
+	ipa_address_markers[0].name = "IPA start";
+
+	ipa_address_markers[1].start_address = end_ipa;
+	ipa_address_markers[1].name = "IPA end";
+
+	stage2_ptdump_build_levels(stage2_pg_level, KVM_PGTABLE_MAX_LEVELS,
+				   pgtable->start_level);
+
+	st = (struct pg_state) {
+		.seq		= s,
+		.marker		= &ipa_address_markers[0],
+		.level		= -1,
+		.pg_level	= &stage2_pg_level[0],
+		.f_priv		= f_priv,
+		.ptdump		= {
+			.note_page	= note_page,
+			.range		= (struct ptdump_range[]) {
+				{start_ipa,	end_ipa},
+				{0,		0},
+			},
+		},
+	};
+
+	kvm_pgtable_walk(pgtable, start_ipa, end_ipa, &walker);
+}
+
 void ptdump_register_host_stage2(void)
 {
 	if (!is_protected_kvm_enabled())
@@ -537,6 +693,7 @@ void ptdump_register_host_stage2(void)
 		.mc_len			= host_s2_pgtable_pages(),
 		.ptdump_prepare_walk	= stage2_ptdump_prepare_walk,
 		.ptdump_end_walk	= stage2_ptdump_end_walk,
+		.ptdump_walk		= stage2_ptdump_walk,
 	};
 
 	ptdump_debugfs_kvm_register(&stage2_kernel_ptdump_info,
