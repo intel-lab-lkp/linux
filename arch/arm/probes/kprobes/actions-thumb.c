@@ -438,7 +438,7 @@ t16_simulate_branch(probes_opcode_t insn,
 	regs->ARM_pc = pc + (offset * 2);
 }
 
-static unsigned long __kprobes
+static unsigned long __kprobes __attribute__((optimize("no-omit-frame-pointer")))
 t16_emulate_loregs(probes_opcode_t insn,
 		   struct arch_probes_insn *asi, struct pt_regs *regs)
 {
@@ -521,7 +521,7 @@ t16_decode_hiregs(probes_opcode_t insn, struct arch_probes_insn *asi,
 	return INSN_GOOD;
 }
 
-static void __kprobes
+static void __kprobes __attribute__((optimize("no-omit-frame-pointer")))
 t16_emulate_push(probes_opcode_t insn,
 		struct arch_probes_insn *asi, struct pt_regs *regs)
 {
@@ -557,7 +557,7 @@ t16_decode_push(probes_opcode_t insn, struct arch_probes_insn *asi,
 	return INSN_GOOD;
 }
 
-static void __kprobes
+static void __kprobes __attribute__((optimize("no-omit-frame-pointer")))
 t16_emulate_pop_nopc(probes_opcode_t insn,
 		struct arch_probes_insn *asi, struct pt_regs *regs)
 {
@@ -576,7 +576,7 @@ t16_emulate_pop_nopc(probes_opcode_t insn,
 		);
 }
 
-static void __kprobes
+static void __kprobes __attribute__((optimize("no-omit-frame-pointer")))
 t16_emulate_pop_pc(probes_opcode_t insn,
 		struct arch_probes_insn *asi, struct pt_regs *regs)
 {
