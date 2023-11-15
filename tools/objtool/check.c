@@ -1315,6 +1315,11 @@ __weak bool arch_is_embedded_insn(struct symbol *sym)
 	return false;
 }
 
+__weak int arch_hack_stackprotector(struct objtool_file *file)
+{
+	return 0;
+}
+
 static struct reloc *insn_reloc(struct objtool_file *file, struct instruction *insn)
 {
 	struct reloc *reloc;
@@ -4807,6 +4812,13 @@ int check(struct objtool_file *file)
 
 	if (opts.orc && nr_insns) {
 		ret = orc_create(file);
+		if (ret < 0)
+			goto out;
+		warnings += ret;
+	}
+
+	if (opts.hack_stackprotector) {
+		ret = arch_hack_stackprotector(file);
 		if (ret < 0)
 			goto out;
 		warnings += ret;

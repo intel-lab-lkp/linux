@@ -120,6 +120,10 @@ struct elf *elf_open_read(const char *name, int flags);
 struct section *elf_create_section(struct elf *elf, const char *name,
 				   size_t entsize, unsigned int nr);
 
+struct section *elf_create_rela_section(struct elf *elf,
+					struct section *sec,
+					unsigned int reloc_nr);
+
 int elf_extend_rela_section(struct elf *elf,
 			    struct section *rsec,
 			    int add_relocs);
@@ -129,6 +133,8 @@ struct section *elf_create_section_pair(struct elf *elf, const char *name,
 					unsigned int reloc_nr);
 
 struct symbol *elf_create_prefix_symbol(struct elf *elf, struct symbol *orig, long size);
+
+struct symbol *elf_create_undef_symbol(struct elf *elf, const char *sym_name);
 
 struct reloc *elf_init_reloc_text_sym(struct elf *elf, struct section *sec,
 				      unsigned long offset,

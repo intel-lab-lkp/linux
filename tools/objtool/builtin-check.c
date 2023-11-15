@@ -62,12 +62,17 @@ static int parse_hacks(const struct option *opt, const char *str, int unset)
 		found = true;
 	}
 
+	if (!str || strstr(str, "stackprotector")) {
+		opts.hack_stackprotector = true;
+		found = true;
+	}
+
 	return found ? 0 : -1;
 }
 
 static const struct option check_options[] = {
 	OPT_GROUP("Actions:"),
-	OPT_CALLBACK_OPTARG('h', "hacks", NULL, NULL, "jump_label,noinstr,skylake", "patch toolchain bugs/limitations", parse_hacks),
+	OPT_CALLBACK_OPTARG('h', "hacks", NULL, NULL, "jump_label,noinstr,skylake,stackprotector", "patch toolchain bugs/limitations", parse_hacks),
 	OPT_BOOLEAN('i', "ibt", &opts.ibt, "validate and annotate IBT"),
 	OPT_BOOLEAN('m', "mcount", &opts.mcount, "annotate mcount/fentry calls for ftrace"),
 	OPT_BOOLEAN('n', "noinstr", &opts.noinstr, "validate noinstr rules"),
@@ -94,6 +99,7 @@ static const struct option check_options[] = {
 	OPT_BOOLEAN(0, "sec-address", &opts.sec_address, "print section addresses in warnings"),
 	OPT_BOOLEAN(0, "stats", &opts.stats, "print statistics"),
 	OPT_BOOLEAN('v', "verbose", &opts.verbose, "verbose warnings"),
+	OPT_BOOLEAN(0, "smp", &opts.smp, "building an SMP kernel"),
 
 	OPT_END(),
 };
@@ -133,6 +139,7 @@ static bool opts_valid(void)
 {
 	if (opts.hack_jump_label	||
 	    opts.hack_noinstr		||
+	    opts.hack_stackprotector	||
 	    opts.ibt			||
 	    opts.mcount			||
 	    opts.noinstr		||

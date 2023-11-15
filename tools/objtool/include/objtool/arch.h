@@ -28,6 +28,7 @@ enum insn_type {
 	INSN_CLD,
 	INSN_TRAP,
 	INSN_ENDBR,
+	INSN_STACKPROTECTOR,
 	INSN_OTHER,
 };
 
@@ -95,5 +96,7 @@ bool arch_is_embedded_insn(struct symbol *sym);
 int arch_rewrite_retpolines(struct objtool_file *file);
 
 bool arch_pc_relative_reloc(struct reloc *reloc);
+
+int arch_hack_stackprotector(struct objtool_file *file);
 
 #endif /* _ARCH_H */

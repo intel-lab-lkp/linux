@@ -144,6 +144,18 @@ static bool has_notrack_prefix(struct insn *insn)
 	return false;
 }
 
+static bool has_gs_prefix(struct insn *insn)
+{
+	int i;
+
+	for (i = 0; i < insn->prefixes.nbytes; i++) {
+		if (insn->prefixes.bytes[i] == 0x65)
+			return true;
+	}
+
+	return false;
+}
+
 int arch_decode_instruction(struct objtool_file *file, const struct section *sec,
 			    unsigned long offset, unsigned int maxlen,
 			    struct instruction *insn)
@@ -408,9 +420,43 @@ int arch_decode_instruction(struct objtool_file *file, const struct section *sec
 
 		break;
 
+	case 0x2b:
+	case 0x3b:
+	case 0x39:
+		if (!rex_w)
+			break;
+
+		/* sub %gs:0x28, reg */
+		/* cmp %gs:0x28, reg */
+		/* cmp reg, %gs:0x28 */
+		if (has_gs_prefix(&ins) &&
+		    modrm_mod == 0 &&
+		    modrm_rm == 4 &&
+		    sib_index == 4 &&
+		    sib_base == 5 &&
+		    ins.displacement.value == 0x28)
+		{
+			insn->type = INSN_STACKPROTECTOR;
+			break;
+		}
+
+		break;
+
 	case 0x8b:
 		if (!rex_w)
 			break;
+
+		/* mov %gs:0x28, reg */
+		if (has_gs_prefix(&ins) &&
+		    modrm_mod == 0 &&
+		    modrm_rm == 4 &&
+		    sib_index == 4 &&
+		    sib_base == 5 &&
+		    ins.displacement.value == 0x28)
+		{
+			insn->type = INSN_STACKPROTECTOR;
+			break;
+		}
 
 		if (rm_is_mem(CFI_BP)) {
 
