@@ -547,6 +547,7 @@ struct cfs_rq {
 #ifdef CONFIG_SCHED_CORE
 	unsigned int		forceidle_seq;
 	u64			min_vruntime_fi;
+	struct cfs_rq		*core;
 #endif
 
 #ifndef CONFIG_64BIT

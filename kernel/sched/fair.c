@@ -12420,6 +12420,16 @@ bool cfs_prio_less(const struct task_struct *a, const struct task_struct *b,
 	return delta > 0;
 }
 
+void sched_core_init_cfs_rq(struct task_group *tg, struct cfs_rq *cfs_rq)
+{
+#ifdef CONFIG_FAIR_GROUP_SCHED
+	struct rq *rq = rq_of(cfs_rq);
+	int core_id = rq->core_id;
+
+	cfs_rq->core = tg->cfs_rq[core_id];
+#endif
+}
+
 static int task_is_throttled_fair(struct task_struct *p, int cpu)
 {
 	struct cfs_rq *cfs_rq;
@@ -12715,6 +12725,7 @@ int alloc_fair_sched_group(struct task_group *tg, struct task_group *parent)
 
 		init_cfs_rq(cfs_rq);
 		init_tg_cfs_entry(tg, cfs_rq, se, i, parent->se[i]);
+		sched_core_init_cfs_rq(tg, cfs_rq);
 		init_entity_runnable_average(se);
 	}
 

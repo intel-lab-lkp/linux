@@ -6432,6 +6432,7 @@ static void sched_core_cpu_starting(unsigned int cpu)
 		if (t == cpu) {
 			rq->core = core_rq;
 			rq->core_id = core_id;
+			rq->cfs.core = &core_rq->cfs;
 		}
 
 		WARN_ON_ONCE(rq->core != core_rq);
@@ -6488,6 +6489,7 @@ static void sched_core_cpu_deactivate(unsigned int cpu)
 		rq = cpu_rq(t);
 		rq->core = core_rq;
 		rq->core_id = core_id;
+		rq->cfs.core = &core_rq->cfs;
 	}
 }
 
@@ -6498,6 +6500,7 @@ static inline void sched_core_cpu_dying(unsigned int cpu)
 	if (rq->core != rq) {
 		rq->core = rq;
 		rq->core_id = cpu;
+		rq->cfs.core = &rq->cfs;
 	}
 }
 
@@ -10016,6 +10019,7 @@ void __init sched_init(void)
 #ifdef CONFIG_SCHED_CORE
 		rq->core = rq;
 		rq->core_id = i;
+		rq->cfs.core = &rq->cfs;
 		rq->core_pick = NULL;
 		rq->core_enabled = 0;
 		rq->core_tree = RB_ROOT;
