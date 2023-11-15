@@ -44,6 +44,7 @@ usage: $P [options] <pattern matching regexes>
       B:  URI for bug tracking/submission
       C:  URI for chat
       P:  URI or file for subsystem specific coding styles
+      V:  Test suite name
       T:  SCM tree type and location
       F:  File and directory pattern
       X:  File and directory exclusion pattern
@@ -73,7 +74,7 @@ sub by_category($$) {
 
 sub by_pattern($$) {
     my ($a, $b) = @_;
-    my $preferred_order = 'MRLSWQBCPTFXNK';
+    my $preferred_order = 'MRLSWQBCPVTFXNK';
 
     my $a1 = uc(substr($a, 0, 1));
     my $b1 = uc(substr($b, 0, 1));

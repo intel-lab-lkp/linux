@@ -59,6 +59,12 @@ Descriptions of section entries and preferred order
 	      matches patches or files that contain one or more of the words
 	      printk, pr_info or pr_err
 	   One regex pattern per line.  Multiple K: lines acceptable.
+	V: *Test* recommended for execution. The name of a test suite
+	   that should be executed for changes to the maintained subsystem.
+	   The test suite must be documented in a structured way in
+	   Documentation/process/tests.rst under a heading of the same name.
+	   V: xfstests
+	   One test suite per line.
 
 Maintainers List
 ----------------

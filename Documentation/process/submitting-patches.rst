@@ -228,6 +228,25 @@ You should be able to justify all violations that remain in your
 patch.
 
 
+Test your changes
+-----------------
+
+Test the patch to the best of your ability. Check the MAINTAINERS file for the
+subsystem(s) you are changing to see if there are any **V:** entries requiring
+particular test suites to be executed. If any are required, follow the
+instructions in the Documentation/process/tests.rst under the headings
+matching the V: entries.
+
+If you ran any test suites documented in the Documentation/process/tests.rst
+file, and they passed, add a 'Tested-with: <test_suite>' line to the messages
+of the commits you tested, one for every test suite, substituting
+'<test_suite>' with their names.
+
+If a subsystem you're changing requires a test suite to be executed and the
+commit lacks the 'Tested-with:' line referring to it (or its documented
+superset), scripts/checkpatch.pl will produce a WARNING reminding you to run
+it.
+
 Select the recipients for your patch
 ------------------------------------
 

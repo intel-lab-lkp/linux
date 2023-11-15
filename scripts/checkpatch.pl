@@ -66,6 +66,9 @@ my $codespellfile = "/usr/share/codespell/dictionary.txt";
 my $user_codespellfile = "";
 my $conststructsfile = "$D/const_structs.checkpatch";
 my $docsfile = "$D/../Documentation/dev-tools/checkpatch.rst";
+my $testsrelfile = "Documentation/process/tests.rst";
+my $testsfile = "$D/../$testsrelfile";
+my %tests = ();
 my $typedefsfile;
 my $color = "auto";
 my $allow_c99_comments = 1; # Can be overridden by --ignore C99_COMMENT_TOLERANCE
@@ -282,6 +285,39 @@ sub load_docs {
 	close($docs);
 }
 
+sub load_tests {
+	open(my $tests, '<', "$testsfile")
+	    or warn "$P: Can't read the tests file $testsfile $!\n";
+
+	my $name = undef;
+	my $prev_line = undef;
+	my $in_field_list = 0;
+
+	while (<$tests>) {
+		my $line = $_;
+		$line =~ s/\s+$//;
+
+		# If the previous line was a second-level header (test name)
+		if ($line =~ /^-+$/ &&
+		    defined($prev_line) &&
+		    length($line) == length($prev_line)) {
+			$name = $prev_line;
+			$tests{$name} = {};
+			$in_field_list = 1;
+		# Else, if we're parsing the test's header field list
+		} elsif ($in_field_list) {
+			if ($line =~ /^:([^:]+):\s+(.*)/) {
+				$tests{$name}{lc($1)} = $2;
+			} else {
+				$in_field_list = !$line;
+			}
+		}
+
+		$prev_line = $line;
+	}
+	close($tests);
+}
+
 # Perl's Getopt::Long allows options to take optional arguments after a space.
 # Prevent --color by itself from consuming other arguments
 foreach (@ARGV) {
@@ -372,6 +408,7 @@ if ($color =~ /^[01]$/) {
 
 load_docs() if ($verbose);
 list_types(0) if ($list_types);
+load_tests();
 
 $fix = 1 if ($fix_inplace);
 $check_orig = $check;
@@ -1142,6 +1179,26 @@ sub is_maintained_obsolete {
 	}
 
 	return $maintained_status{$filename} =~ /obsolete/i;
+}
+
+# Test suites required per changed file
+our %file_required_tests = ();
+
+# Return a list of test suites required for execution for a particular file
+sub get_file_required_tests {
+	my ($filename) = @_;
+	my $file_required_tests;
+
+	return () if (!$tree || !(-e "$root/scripts/get_maintainer.pl"));
+
+	if (!exists($file_required_tests{$filename})) {
+		my $output = `perl $root/scripts/get_maintainer.pl --test --multiline --nogit --nogit-fallback -f $filename 2>&1`;
+		die "Failed retrieving tests required for changes to \"$filename\":\n$output" if ($?);
+		$file_required_tests{$filename} = [grep { !/@/ } split("\n", $output)]
+	}
+
+	$file_required_tests = $file_required_tests{$filename};
+	return @$file_required_tests;
 }
 
 sub is_SPDX_License_valid {
@@ -2689,6 +2746,9 @@ sub process {
 	my @setup_docs = ();
 	my $setup_docs = 0;
 
+	# Test suites which should not be required for execution
+	my %not_required_tests = ();
+
 	my $camelcase_file_seeded = 0;
 
 	my $checklicenseline = 1;
@@ -2905,6 +2965,27 @@ sub process {
 					WARN("DT_SPLIT_BINDING_PATCH",
 					     "DT binding docs and includes should be a separate patch. See: Documentation/devicetree/bindings/submitting-patches.rst\n");
 				}
+			}
+
+			# Check if tests are required for changes to the file
+			foreach my $name (get_file_required_tests($realfile)) {
+				next if exists $not_required_tests{$name};
+				my $test_ref = "\"$name\"";
+				my $summary = $tests{$name}{"summary"};
+				my $command = $tests{$name}{"command"};
+				my $instructions = "";
+				if (defined($summary)) {
+					$test_ref = "$summary ($test_ref)";
+				}
+				if (defined($command)) {
+					$instructions .= "\nRun the test with \"$command\".";
+				}
+				$instructions .= "\nSee $testsrelfile for instructions.";
+				WARN("TEST_REQUIRED",
+				     "Changes to $realfile require running $test_ref, " .
+				     "but no corresponding Tested-with: tag found." .
+				     "$instructions");
+				$not_required_tests{$name} = 1;
 			}
 
 			next;
@@ -3231,6 +3312,29 @@ sub process {
 					$fixed[$fixlinenr] = "Fixes: $cid (\"$ctitle\")";
 				}
 			}
+		}
+
+# Check and accumulate executed test suites
+		if (!$in_commit_log && $line =~ /^\s*Tested-with:\s*(.*)/i) {
+			my $name = $1;
+			my $sub_found = 0;
+			if (!exists $tests{$name}) {
+				ERROR("TEST_NAME",
+				      "Test suite \"$name\" not documented in $testsrelfile\n" . $herecurr);
+			}
+			# Do not require this test suite and all its subsets
+			local *dont_require_test = sub {
+				my ($name) = @_;
+				$not_required_tests{$name} = 1;
+				foreach my $sub_name (keys %tests) {
+					my $sub_data = $tests{$sub_name};
+					my $superset = $sub_data->{"superset"};
+					if (defined($superset) and $superset eq $name) {
+						dont_require_test($sub_name);
+					}
+				}
+			};
+			dont_require_test($name);
 		}
 
 # Check email subject for common tools that don't need to be mentioned
@@ -3657,7 +3761,7 @@ sub process {
 				}
 			}
 # check MAINTAINERS entries for the right ordering too
-			my $preferred_order = 'MRLSWQBCPTFXNK';
+			my $preferred_order = 'MRLSWQBCPVTFXNK';
 			if ($rawline =~ /^\+[A-Z]:/ &&
 			    $prevrawline =~ /^[\+ ][A-Z]:/) {
 				$rawline =~ /^\+([A-Z]):\s*(.*)/;
@@ -3681,6 +3785,18 @@ sub process {
 						WARN("MAINTAINERS_STYLE",
 						     "Misordered MAINTAINERS entry - list file patterns in alphabetic order\n" . $hereprev);
 					}
+				}
+			}
+# check MAINTAINERS V: entries are valid and refer to a documented test suite
+			if ($rawline =~ /^\+V:\s*(.*)/) {
+				my $name = $1;
+				if ($name =~ /@/) {
+					ERROR("TEST_NAME",
+					      "Test suite name cannot contain '@' character\n" . $herecurr);
+				}
+				if (!exists $tests{$name}) {
+					ERROR("TEST_NAME",
+					      "Test suite \"$name\" not documented in $testsrelfile\n" . $herecurr);
 				}
 			}
 		}
