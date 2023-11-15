@@ -134,7 +134,6 @@ static __always_inline void mwait_idle_with_hints(unsigned long eax, unsigned lo
 			}
 		}
 	}
-	current_clr_polling();
 }
 
 /*

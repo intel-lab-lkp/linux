@@ -175,6 +175,7 @@ static int power_saving_thread(void *data)
 			stop_critical_timings();
 
 			mwait_idle_with_hints(power_saving_mwait_eax, 1);
+			current_clr_polling();
 
 			start_critical_timings();
 			tick_broadcast_exit();
