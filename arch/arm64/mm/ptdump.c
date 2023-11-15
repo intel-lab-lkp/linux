@@ -89,11 +89,19 @@ struct pg_state {
 	struct ptdump_info_file_priv *f_priv;
 };
 
+/*
+ * This callback checks the runtime configuration before interpreting the
+ * attributes defined in the prot_bits.
+ */
+typedef bool (*is_feature_cb)(const void *ctx);
+
 struct prot_bits {
 	u64		mask;
 	u64		val;
 	const char	*set;
 	const char	*clear;
+	is_feature_cb   feature_on;  /* bit ignored if the callback returns false */
+	is_feature_cb   feature_off; /* bit ignored if the callback returns true */
 };
 
 static const struct prot_bits pte_bits[] = {
@@ -175,6 +183,34 @@ static const struct prot_bits pte_bits[] = {
 	}
 };
 
+static bool is_fwb_enabled(const void *ctx)
+{
+	const struct pg_state *st = ctx;
+	struct ptdump_info_file_priv *f_priv = st->f_priv;
+	struct kvm_pgtable_snapshot *snapshot = f_priv->file_priv;
+	struct kvm_pgtable *pgtable = &snapshot->pgtable;
+
+	bool fwb_enabled = false;
+
+	if (cpus_have_final_cap(ARM64_HAS_STAGE2_FWB))
+		fwb_enabled = !(pgtable->flags & KVM_PGTABLE_S2_NOFWB);
+
+	return fwb_enabled;
+}
+
+static bool is_table_bit_ignored(const void *ctx)
+{
+	const struct pg_state *st = ctx;
+
+	if (!(st->current_prot & PTE_VALID))
+		return true;
+
+	if (st->level == CONFIG_PGTABLE_LEVELS)
+		return true;
+
+	return false;
+}
+
 static const struct prot_bits stage2_pte_bits[] = {
 	{
 		.mask	= PTE_VALID,
@@ -216,6 +252,27 @@ static const struct prot_bits stage2_pte_bits[] = {
 		.val	= PTE_TABLE_BIT,
 		.set	= "   ",
 		.clear	= "BLK",
+		.feature_off	= is_table_bit_ignored,
+	}, {
+		.mask	= KVM_PTE_LEAF_ATTR_LO_S2_MEMATTR | PTE_VALID,
+		.val	= PTE_S2_MEMATTR(MT_S2_DEVICE_nGnRE) | PTE_VALID,
+		.set	= "DEVICE/nGnRE",
+		.feature_off	= is_fwb_enabled,
+	}, {
+		.mask	= KVM_PTE_LEAF_ATTR_LO_S2_MEMATTR | PTE_VALID,
+		.val	= PTE_S2_MEMATTR(MT_S2_FWB_DEVICE_nGnRE) | PTE_VALID,
+		.set	= "DEVICE/nGnRE FWB",
+		.feature_on	= is_fwb_enabled,
+	}, {
+		.mask	= KVM_PTE_LEAF_ATTR_LO_S2_MEMATTR | PTE_VALID,
+		.val	= PTE_S2_MEMATTR(MT_S2_NORMAL) | PTE_VALID,
+		.set	= "MEM/NORMAL",
+		.feature_off	= is_fwb_enabled,
+	}, {
+		.mask	= KVM_PTE_LEAF_ATTR_LO_S2_MEMATTR | PTE_VALID,
+		.val	= PTE_S2_MEMATTR(MT_S2_FWB_NORMAL) | PTE_VALID,
+		.set	= "MEM/NORMAL FWB",
+		.feature_on	= is_fwb_enabled,
 	}, {
 		.mask	= KVM_PGTABLE_PROT_SW0,
 		.val	= KVM_PGTABLE_PROT_SW0,
@@ -267,12 +324,18 @@ static struct pg_level pg_level[] = {
 };
 
 static void dump_prot(struct pg_state *st, const struct prot_bits *bits,
-			size_t num)
+		      size_t num)
 {
 	unsigned i;
 
 	for (i = 0; i < num; i++, bits++) {
 		const char *s;
+
+		if (bits->feature_on && !bits->feature_on(st))
+			continue;
+
+		if (bits->feature_off && bits->feature_off(st))
+			continue;
 
 		if ((st->current_prot & bits->mask) == bits->val)
 			s = bits->set;
