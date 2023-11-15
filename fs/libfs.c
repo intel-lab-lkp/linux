@@ -428,7 +428,7 @@ static bool offset_dir_emit(struct dir_context *ctx, struct dentry *dentry)
 			  inode->i_ino, fs_umode_to_dtype(inode->i_mode));
 }
 
-static void offset_iterate_dir(struct inode *inode, struct dir_context *ctx)
+static bool offset_iterate_dir(struct inode *inode, struct dir_context *ctx)
 {
 	struct offset_ctx *so_ctx = inode->i_op->get_offset_ctx(inode);
 	XA_STATE(xas, &so_ctx->xa, ctx->pos);
@@ -437,7 +437,7 @@ static void offset_iterate_dir(struct inode *inode, struct dir_context *ctx)
 	while (true) {
 		dentry = offset_find_next(&xas);
 		if (!dentry)
-			break;
+			return true;
 
 		if (!offset_dir_emit(ctx, dentry)) {
 			dput(dentry);
@@ -447,6 +447,7 @@ static void offset_iterate_dir(struct inode *inode, struct dir_context *ctx)
 		dput(dentry);
 		ctx->pos = xas.xa_index + 1;
 	}
+	return false;
 }
 
 /**
@@ -472,6 +473,7 @@ static void offset_iterate_dir(struct inode *inode, struct dir_context *ctx)
  */
 static int offset_readdir(struct file *file, struct dir_context *ctx)
 {
+	struct dentry *cursor = file->private_data;
 	struct dentry *dir = file->f_path.dentry;
 
 	lockdep_assert_held(&d_inode(dir)->i_rwsem);
@@ -479,11 +481,19 @@ static int offset_readdir(struct file *file, struct dir_context *ctx)
 	if (!dir_emit_dots(file, ctx))
 		return 0;
 
-	offset_iterate_dir(d_inode(dir), ctx);
+	if (ctx->pos == 2)
+		cursor->d_flags &= ~DCACHE_EOD;
+	else if (cursor->d_flags & DCACHE_EOD)
+		return 0;
+
+	if (offset_iterate_dir(d_inode(dir), ctx))
+		cursor->d_flags |= DCACHE_EOD;
 	return 0;
 }
 
 const struct file_operations simple_offset_dir_operations = {
+	.open		= dcache_dir_open,
+	.release	= dcache_dir_close,
 	.llseek		= offset_dir_llseek,
 	.iterate_shared	= offset_readdir,
 	.read		= generic_read_dir,
