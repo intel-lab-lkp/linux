@@ -40,6 +40,7 @@
 #include <asm/intel_pt.h>
 #include <asm/crash.h>
 #include <asm/cmdline.h>
+#include <asm/tdx.h>
 
 /* Used while preparing memory map entries for second kernel */
 struct crash_memmap_data {
@@ -106,6 +107,9 @@ void native_machine_crash_shutdown(struct pt_regs *regs)
 	local_irq_disable();
 
 	crash_smp_send_stop();
+
+	if (cc_platform_has(CC_ATTR_GUEST_MEM_ENCRYPT))
+		x86_platform.guest.enc_kexec_unshare_mem(true);
 
 	cpu_emergency_disable_virtualization();
 
