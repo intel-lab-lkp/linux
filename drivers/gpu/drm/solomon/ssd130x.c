@@ -1453,7 +1453,7 @@ static void ssd130x_parse_properties(struct ssd130x_device *ssd130x)
 		ssd130x->height = ssd130x->device_info->default_height;
 
 	if (device_property_read_u32(dev, "solomon,page-offset", &ssd130x->page_offset))
-		ssd130x->page_offset = 1;
+		ssd130x->page_offset = 0;
 
 	if (device_property_read_u32(dev, "solomon,col-offset", &ssd130x->col_offset))
 		ssd130x->col_offset = 0;
