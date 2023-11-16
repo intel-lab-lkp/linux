@@ -3616,7 +3616,7 @@ sub process {
 					$needs_help = 1;
 					next;
 				}
-				if ($f =~ /^\+\s*help\s*$/) {
+				if ($f =~ /^\+\s*help\s*$/ || $f =~ /^\s*help\s*$/) {
 					$has_help = 1;
 					next;
 				}
