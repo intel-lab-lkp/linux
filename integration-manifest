@@ -1,0 +1,30 @@
+drm drm-fixes b85ea95d086471afb4ad062012a4d73cd328fa86
+	Linux 6.7-rc1
+drm-misc drm-misc-fixes ae1aadb1eb8d3cbc52e42bee71d67bd4a71f9f07
+	nouveau: don't fail driver load if no display hw present.
+drm-intel drm-intel-fixes b85ea95d086471afb4ad062012a4d73cd328fa86
+	Linux 6.7-rc1
+drm drm-next b85ea95d086471afb4ad062012a4d73cd328fa86
+	Linux 6.7-rc1
+drm-misc drm-misc-next-fixes 94565e95e247c188fed4d3da1034402f3fb297de
+	drm/ssd130x: Fix possible uninitialized usage of crtc_state variable
+drm-intel drm-intel-next-fixes b85ea95d086471afb4ad062012a4d73cd328fa86
+	Linux 6.7-rc1
+drm-misc drm-misc-next 3b434a3445fff3149128db0169da864d67057325
+	accel/ivpu: Use threaded IRQ to handle JOB done messages
+drm-intel drm-intel-next 98ed369800f79a2cd199b8415d14d82a5f2e007f
+	drm/i915/dsb: DSB code refactoring
+drm-intel drm-intel-gt-next d3715a6471c8f0a90fb852c10a5a84948d6a1ff5
+	drm/i915/huc: Stop printing about unsupported HuC on MTL
+drm-intel topic/core-for-CI a2458d8f618a30e57b7ea70a93e66975d2273f25
+	PCI/ASPM: pci_enable_link_state: Add argument to acquire bus lock
+drm-misc topic/i915-ttm 1e3944578b749449bd7fa6bf0bae4c3d3f5f1733
+	Merge tag 'amd-drm-next-5.16-2021-09-27' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm topic/nouveau-misc dfc4005f8c172eea359f9db08c3b2b0ff0153699
+	drm/nouveau/disp: move DAC load detection method
+drm topic/drm-ci ad6bfe1b66a5c146ec236847eca7af4c8806d666
+	drm: ci: docs: fix build warning - add missing escape
+drm topic/vmemdup-user-array 06ab64a0d836ac430c5f94669710a78aa43942cb
+	drm: vmwgfx_surface.c: copy user-array safely
+drm topic/nvidia-gsp 8d55b0a940bb10592ffaad68d14314823ddf4cdf
+	nouveau/gsp: add some basic registry entries.
