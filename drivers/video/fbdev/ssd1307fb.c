@@ -637,7 +637,7 @@ static int ssd1307fb_probe(struct i2c_client *client)
 		par->height = 16;
 
 	if (device_property_read_u32(dev, "solomon,page-offset", &par->page_offset))
-		par->page_offset = 1;
+		par->page_offset = 0;
 
 	if (device_property_read_u32(dev, "solomon,col-offset", &par->col_offset))
 		par->col_offset = 0;
