@@ -606,6 +606,10 @@ op_unmap_prepare(struct drm_gpuva_op_unmap *u)
 	drm_gpuva_unmap(u);
 }
 
+/*
+ * Note: @args should not be NULL when calling for
+ * a map operation.
+ */
 static int
 nouveau_uvmm_sm_prepare(struct nouveau_uvmm *uvmm,
 			struct nouveau_uvma_prealloc *new,
@@ -626,7 +630,7 @@ nouveau_uvmm_sm_prepare(struct nouveau_uvmm *uvmm,
 			if (ret)
 				goto unwind;
 
-			if (args && vmm_get_range) {
+			if (vmm_get_range) {
 				ret = nouveau_uvmm_vmm_get(uvmm, vmm_get_start,
 							   vmm_get_range);
 				if (ret) {
