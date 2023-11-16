@@ -122,6 +122,10 @@
 #include "xgbe.h"
 #include "xgbe-common.h"
 
+#ifdef CONFIG_X86
+#include <asm/amd_nb.h>
+#endif
+
 static int xgbe_config_multi_msi(struct xgbe_prv_data *pdata)
 {
 	unsigned int vector_count;
@@ -302,18 +306,17 @@ static int xgbe_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		pdata->xpcs_window_sel_reg = PCS_V2_WINDOW_SELECT;
 		break;
 	}
+	pci_dev_put(rdev);
 
 	/* Configure the PCS indirect addressing support */
 	if (pdata->vdata->xpcs_access == XGBE_XPCS_ACCESS_V3) {
 		reg = XP_IOREAD(pdata, XP_PROP_0);
-		pdata->xphy_base = PCS_RN_SMN_BASE_ADDR +
-				   (PCS_RN_PORT_ADDR_SIZE * XP_GET_BITS(reg, XP_PROP_0, PORT_ID));
-		pci_write_config_dword(rdev, 0x60, pdata->xphy_base + (pdata->xpcs_window_def_reg));
-		pci_read_config_dword(rdev, 0x64, &reg);
+		pdata->smn_base = PCS_RN_SMN_BASE_ADDR +
+				  (PCS_RN_PORT_ADDR_SIZE * XP_GET_BITS(reg, XP_PROP_0, PORT_ID));
+		amd_smn_read(0, pdata->smn_base + (pdata->xpcs_window_def_reg), &reg);
 	} else {
 		reg = XPCS32_IOREAD(pdata, pdata->xpcs_window_def_reg);
 	}
-	pci_dev_put(rdev);
 
 	pdata->xpcs_window = XPCS_GET_BITS(reg, PCS_V2_WINDOW_DEF, OFFSET);
 	pdata->xpcs_window <<= 6;
