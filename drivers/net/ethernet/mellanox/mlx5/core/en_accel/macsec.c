@@ -475,6 +475,13 @@ static void update_macsec_epn(struct mlx5e_macsec_sa *sa, const struct macsec_ke
 	epn_state->overlap = next_pn_halves->lower < MLX5_MACSEC_EPN_SCOPE_MID ? 0 : 1;
 }
 
+static int mlx5e_macsec_dev_open(struct macsec_context *ctx)
+{
+	*ctx->offload_md_dst = true;
+
+	return 0;
+}
+
 static int mlx5e_macsec_add_txsa(struct macsec_context *ctx)
 {
 	struct mlx5e_priv *priv = macsec_netdev_priv(ctx->netdev);
@@ -1608,6 +1615,7 @@ static void mlx5e_macsec_aso_cleanup(struct mlx5e_macsec_aso *aso, struct mlx5_c
 }
 
 static const struct macsec_ops macsec_offload_ops = {
+	.mdo_dev_open = mlx5e_macsec_dev_open,
 	.mdo_add_txsa = mlx5e_macsec_add_txsa,
 	.mdo_upd_txsa = mlx5e_macsec_upd_txsa,
 	.mdo_del_txsa = mlx5e_macsec_del_txsa,
