@@ -1,4 +1,8 @@
 # SPDX-License-Identifier: GPL-2.0
+
+KBUILD_EXTRA_WARN=1
+DTC_FLAGS += -Wno-graph_child_address
+
 dtb-$(CONFIG_ARCH_EXYNOS) += \
 	exynos5433-tm2.dtb		\
 	exynos5433-tm2e.dtb		\
