@@ -35,7 +35,7 @@ properties:
 
   solomon,page-offset:
     $ref: /schemas/types.yaml#/definitions/uint32
-    default: 1
+    default: 0
     description:
       Offset of pages (band of 8 pixels) that the screen is mapped to
 
