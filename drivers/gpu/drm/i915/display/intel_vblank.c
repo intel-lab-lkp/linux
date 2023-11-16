@@ -302,13 +302,12 @@ static bool i915_get_crtc_scanoutpos(struct drm_crtc *_crtc,
 	}
 
 	/*
-	 * Lock uncore.lock, as we will do multiple timing critical raw
-	 * register reads, potentially with preemption disabled, so the
-	 * following code must not block on uncore.lock.
+	 * We will do multiple timing critical raw register reads, so
+	 * disable interrupts and preemption to make sure this code
+	 * doesn't get blocked.
 	 */
-	spin_lock_irqsave(&dev_priv->uncore.lock, irqflags);
-
-	/* preempt_disable_rt() should go right here in PREEMPT_RT patchset. */
+	local_irq_save(irqflags);
+	preempt_disable();
 
 	/* Get optional system timestamp before query. */
 	if (stime)
@@ -372,9 +371,8 @@ static bool i915_get_crtc_scanoutpos(struct drm_crtc *_crtc,
 	if (etime)
 		*etime = ktime_get();
 
-	/* preempt_enable_rt() should go right here in PREEMPT_RT patchset. */
-
-	spin_unlock_irqrestore(&dev_priv->uncore.lock, irqflags);
+	preempt_enable();
+	local_irq_restore(irqflags);
 
 	/*
 	 * While in vblank, position will be negative
@@ -408,13 +406,14 @@ bool intel_crtc_get_vblank_timestamp(struct drm_crtc *crtc, int *max_error,
 
 int intel_get_crtc_scanline(struct intel_crtc *crtc)
 {
-	struct drm_i915_private *dev_priv = to_i915(crtc->base.dev);
 	unsigned long irqflags;
 	int position;
 
-	spin_lock_irqsave(&dev_priv->uncore.lock, irqflags);
+	local_irq_save(irqflags);
+	preempt_disable();
 	position = __intel_get_crtc_scanline(crtc);
-	spin_unlock_irqrestore(&dev_priv->uncore.lock, irqflags);
+	preempt_enable();
+	local_irq_restore(irqflags);
 
 	return position;
 }
@@ -528,16 +527,16 @@ void intel_crtc_update_active_timings(const struct intel_crtc_state *crtc_state,
 	 * Belts and suspenders locking to guarantee everyone sees 100%
 	 * consistent state during fastset seamless refresh rate changes.
 	 *
-	 * vblank_time_lock takes care of all drm_vblank.c stuff, and
-	 * uncore.lock takes care of __intel_get_crtc_scanline() which
-	 * may get called elsewhere as well.
+	 * vblank_time_lock takes care of all drm_vblank.c stuff.  For
+	 * __intel_get_crtc_scanline() we don't need locking or
+	 * disabling preemption and irqs, since this is already done
+	 * by the vblank_time_lock spinlock calls.
 	 *
 	 * TODO maybe just protect everything (including
 	 * __intel_get_crtc_scanline()) with vblank_time_lock?
 	 * Need to audit everything to make sure it's safe.
 	 */
 	spin_lock_irqsave(&i915->drm.vblank_time_lock, irqflags);
-	spin_lock(&i915->uncore.lock);
 
 	drm_calc_timestamping_constants(&crtc->base, &adjusted_mode);
 
@@ -547,6 +546,5 @@ void intel_crtc_update_active_timings(const struct intel_crtc_state *crtc_state,
 
 	crtc->scanline_offset = intel_crtc_scanline_offset(crtc_state);
 
-	spin_unlock(&i915->uncore.lock);
 	spin_unlock_irqrestore(&i915->drm.vblank_time_lock, irqflags);
 }
