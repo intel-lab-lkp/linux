@@ -296,8 +296,10 @@ void sas_free_device(struct kref *kref)
 	dev->phy = NULL;
 
 	/* remove the phys and ports, everything else should be gone */
-	if (dev_is_expander(dev->dev_type))
+	if (dev_is_expander(dev->dev_type)) {
 		kfree(dev->ex_dev.ex_phy);
+		dev->ex_dev.ex_phy = NULL;
+	}
 
 	if (dev_is_sata(dev) && dev->sata_dev.ap) {
 		ata_sas_tport_delete(dev->sata_dev.ap);
