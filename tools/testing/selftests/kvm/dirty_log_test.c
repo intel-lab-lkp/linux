@@ -726,6 +726,9 @@ static void run_test(enum vm_guest_mode mode, void *arg)
 		return;
 	}
 
+	sem_init(&sem_vcpu_stop, 0, 0);
+	sem_init(&sem_vcpu_cont, 0, 0);
+
 	/*
 	 * We reserve page table for 2 times of extra dirty mem which
 	 * will definitely cover the original (1G+) test range.  Here
@@ -870,9 +873,6 @@ int main(int argc, char *argv[])
 	};
 	int opt, i;
 	sigset_t sigset;
-
-	sem_init(&sem_vcpu_stop, 0, 0);
-	sem_init(&sem_vcpu_cont, 0, 0);
 
 	guest_modes_append_default();
 
