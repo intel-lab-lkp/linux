@@ -47,6 +47,8 @@
 		.ext_info = _ext_info,					\
 	}
 
+uint8_t inv_icm42605_int_reg;
+
 enum inv_icm42600_accel_scan {
 	INV_ICM42600_ACCEL_SCAN_X,
 	INV_ICM42600_ACCEL_SCAN_Y,
@@ -58,6 +60,69 @@ enum inv_icm42600_accel_scan {
 static const struct iio_chan_spec_ext_info inv_icm42600_accel_ext_infos[] = {
 	IIO_MOUNT_MATRIX(IIO_SHARED_BY_ALL, inv_icm42600_get_mount_matrix),
 	{},
+};
+
+static ssize_t tilt_interrupt_show(struct device *dev,
+			       struct device_attribute *attr, char *buf)
+{
+	struct inv_icm42600_state *st = dev_get_drvdata(dev);
+	unsigned int val;
+	int ret;
+
+	ret = regmap_read(st->map, inv_icm42605_int_reg, &val);
+
+	if (ret != 0)
+		return ret;
+
+	snprintf(buf, PAGE_SIZE, "Read reg %x value %x\n", inv_icm42605_int_reg, val);
+
+	return strlen(buf);
+}
+
+static ssize_t tilt_interrupt_store(struct device *dev,
+		struct device_attribute *attr, const char *buf,
+		size_t count)
+{
+	struct inv_icm42600_state *st = dev_get_drvdata(dev);
+	int ret;
+	int value;
+
+	if (!st)
+		return -EINVAL;
+
+	if (kstrtoint(buf, 10, &value))
+		return -EINVAL;
+
+	inv_icm42605_int_reg = INV_ICM42605_REG_INT_STATUS3;
+
+	switch (value) {
+	case 1:
+		ret = inv_icm42605_generate_tilt_interrupt(st);
+		if (ret != 0)
+			return -EIO;
+		break;
+	case 0:
+		ret = inv_icm42605_disable_tilt_interrupt(st);
+		if (ret != 0)
+			return -EIO;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return count;
+}
+
+static DEVICE_ATTR_RW(tilt_interrupt, 0644,
+		   tilt_interrupt_show, tilt_interrupt_store);
+
+static struct attribute *icm42605_attrs[] = {
+	&dev_attr_tilt_interrupt.attr,
+	NULL,
+};
+
+static const struct attribute_group icm42605_attrs_group = {
+	.attrs = icm42605_attrs,
 };
 
 static const struct iio_chan_spec inv_icm42600_accel_channels[] = {
@@ -702,6 +767,7 @@ static const struct iio_info inv_icm42600_accel_info = {
 	.update_scan_mode = inv_icm42600_accel_update_scan_mode,
 	.hwfifo_set_watermark = inv_icm42600_accel_hwfifo_set_watermark,
 	.hwfifo_flush_to_buffer = inv_icm42600_accel_hwfifo_flush,
+	.attrs = &icm42605_attrs_group,
 };
 
 struct iio_dev *inv_icm42600_accel_init(struct inv_icm42600_state *st)
@@ -788,6 +854,70 @@ int inv_icm42600_accel_parse_fifo(struct iio_dev *indio_dev)
 		ts_val = inv_sensors_timestamp_pop(ts);
 		iio_push_to_buffers_with_timestamp(indio_dev, &buffer, ts_val);
 	}
+
+	return 0;
+}
+
+int inv_icm42605_generate_tilt_interrupt(struct inv_icm42600_state *st)
+{
+	int ret;
+	int val;
+	char sleep = 10;
+
+	ret = regmap_update_bits(st->map, INV_ICM42605_REG_APEX_CONFIG4,
+				 INV_ICM42605_APEX_CONFIG4_MASK, 0);
+	if (ret)
+		return ret;
+
+	val = INV_ICM42600_PWR_ACCEL_MODE;
+	ret = regmap_write(st->map, INV_ICM42600_REG_PWR_MGMT0, val);
+	if (ret)
+		return ret;
+
+	val = INV_ICM42605_APEX_CONFIG0;
+	ret = regmap_write(st->map, INV_ICM42605_REG_APEX_CONFIG0, val);
+	if (ret)
+		return ret;
+
+	val = INV_ICM42600_SIGNAL_PATH_RESET_DMP_MEM_RESET;
+	ret = regmap_write(st->map, INV_ICM42600_REG_SIGNAL_PATH_RESET, val);
+	if (ret)
+		return ret;
+
+	msleep(sleep);
+
+	val = INV_ICM42600_SIGNAL_PATH_RESET_DMP_INIT_EN;
+	ret = regmap_write(st->map, INV_ICM42600_REG_SIGNAL_PATH_RESET, val);
+	if (ret)
+		return ret;
+
+	val = INV_ICM42605_APEX_CONFIG0_TILT_ENABLE |
+	      INV_ICM42605_APEX_CONFIG0;
+	ret = regmap_write(st->map, INV_ICM42605_REG_APEX_CONFIG0, val);
+	if (ret)
+		return ret;
+
+	ret = regmap_update_bits(st->map, INV_ICM42605_REG_INTF_CONFIG1,
+				 INV_ICM42605_INTF_CONFIG1_MASK,
+				 INV_ICM42605_INTF_CONFIG1_TILT_DET_INT1_EN);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+int inv_icm42605_disable_tilt_interrupt(struct inv_icm42600_state *st)
+{
+	int ret;
+
+	ret = regmap_write(st->map, INV_ICM42605_REG_APEX_CONFIG0, 0);
+	if (ret)
+		return ret;
+
+	ret = regmap_update_bits(st->map, INV_ICM42605_REG_INTF_CONFIG1,
+			INV_ICM42605_INTF_CONFIG1_MASK, 0);
+	if (ret)
+		return ret;
 
 	return 0;
 }

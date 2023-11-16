@@ -187,6 +187,8 @@ struct inv_icm42600_state {
 #define INV_ICM42600_FIFO_CONFIG_STOP_ON_FULL		\
 		FIELD_PREP(INV_ICM42600_FIFO_CONFIG_MASK, 2)
 
+#define INV_ICM42600_REG_MASK        GENMASK(7, 0)
+
 /* all sensor data are 16 bits (2 registers wide) in big-endian */
 #define INV_ICM42600_REG_TEMP_DATA			0x001D
 #define INV_ICM42600_REG_ACCEL_DATA_X			0x001F
@@ -239,6 +241,7 @@ struct inv_icm42600_state {
 #define INV_ICM42600_REG_PWR_MGMT0			0x004E
 #define INV_ICM42600_PWR_MGMT0_TEMP_DIS			BIT(5)
 #define INV_ICM42600_PWR_MGMT0_IDLE			BIT(4)
+#define INV_ICM42600_PWR_ACCEL_MODE			BIT(1)
 #define INV_ICM42600_PWR_MGMT0_GYRO(_mode)		\
 		FIELD_PREP(GENMASK(3, 2), (_mode))
 #define INV_ICM42600_PWR_MGMT0_ACCEL(_mode)		\
@@ -306,6 +309,21 @@ struct inv_icm42600_state {
 #define INV_ICM42600_WHOAMI_ICM42622			0x46
 #define INV_ICM42600_WHOAMI_ICM42631			0x5C
 
+/* Register configs for tilt interrupt */
+#define INV_ICM42605_REG_APEX_CONFIG4                  0x4043
+#define INV_ICM42605_APEX_CONFIG4_MASK                 GENMASK(7, 0)
+
+#define INV_ICM42605_REG_APEX_CONFIG0                  0x0056
+#define INV_ICM42605_APEX_CONFIG0_TILT_ENABLE          BIT(4)
+#define INV_ICM42605_APEX_CONFIG0                      BIT(1)
+
+#define INV_ICM42605_REG_INTF_CONFIG1                   0x404D
+#define INV_ICM42605_INTF_CONFIG1_MASK                  GENMASK(5, 0)
+#define INV_ICM42605_INTF_CONFIG1_TILT_DET_INT1_EN      BIT(3)
+
+#define INV_ICM42605_REG_INT_STATUS3                   0x0038
+
+
 /* User bank 1 (MSB 0x10) */
 #define INV_ICM42600_REG_SENSOR_CONFIG0			0x1003
 #define INV_ICM42600_SENSOR_CONFIG0_ZG_DISABLE		BIT(5)
@@ -364,6 +382,8 @@ typedef int (*inv_icm42600_bus_setup)(struct inv_icm42600_state *);
 extern const struct regmap_config inv_icm42600_regmap_config;
 extern const struct dev_pm_ops inv_icm42600_pm_ops;
 
+extern uint8_t inv_icm42605_int_reg;
+
 const struct iio_mount_matrix *
 inv_icm42600_get_mount_matrix(const struct iio_dev *indio_dev,
 			      const struct iio_chan_spec *chan);
@@ -394,5 +414,9 @@ int inv_icm42600_gyro_parse_fifo(struct iio_dev *indio_dev);
 struct iio_dev *inv_icm42600_accel_init(struct inv_icm42600_state *st);
 
 int inv_icm42600_accel_parse_fifo(struct iio_dev *indio_dev);
+
+int inv_icm42605_generate_tilt_interrupt(struct inv_icm42600_state *st);
+
+int inv_icm42605_disable_tilt_interrupt(struct inv_icm42600_state *st);
 
 #endif
