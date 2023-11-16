@@ -24,28 +24,122 @@
 /**
  * DOC: Overview
  *
- * The GPU scheduler provides entities which allow userspace to push jobs
- * into software queues which are then scheduled on a hardware run queue.
- * The software queues have a priority among them. The scheduler selects the entities
- * from the run queue using a FIFO. The scheduler provides dependency handling
- * features among jobs. The driver is supposed to provide callback functions for
- * backend operations to the scheduler like submitting a job to hardware run queue,
- * returning the dependencies of a job etc.
+ * The GPU scheduler implements some logic to decide which command submission
+ * to push next to the hardware. Another major use case of the GPU scheduler
+ * is to enforce correct driver behavior around those command submissions.
+ * Because of this it's also used by drivers which don't need the actual
+ * scheduling functionality.
  *
- * The organisation of the scheduler is the following:
+ * All callbacks the driver needs to implement are restricted by DMA-fence
+ * signaling rules to guarantee deadlock free forward progress. This especially
+ * means that for normal operation no memory can be allocated in a callback.
+ * All memory which is needed for pushing the job to the hardware must be
+ * allocated before arming a job. It also means that no locks can be taken
+ * under which memory might be allocated as well.
  *
- * 1. Each hw run queue has one scheduler
- * 2. Each scheduler has multiple run queues with different priorities
- *    (e.g., HIGH_HW,HIGH_SW, KERNEL, NORMAL)
- * 3. Each scheduler run queue has a queue of entities to schedule
- * 4. Entities themselves maintain a queue of jobs that will be scheduled on
- *    the hardware.
+ * Memory which is optional to allocate, for example for device core dumping or
+ * debugging, *must* be allocated with GFP_NOWAIT and appropriate error
+ * handling taking if that allocation fails. GFP_ATOMIC should only be used if
+ * absolutely necessary since dipping into the special atomic reserves is
+ * usually not justified for a GPU driver.
+ */
+
+/**
+ * DOC: Job Object
  *
- * The jobs in a entity are always scheduled in the order that they were pushed.
+ * The base job object contains submission dependencies in the form of DMA-fence
+ * objects. Drivers can also implement an optional prepare_job callback which
+ * returns additional dependencies as DMA-fence objects. It's important to note
+ * that this callback can't allocate memory or grab locks under which memory is
+ * allocated.
  *
- * Note that once a job was taken from the entities queue and pushed to the
- * hardware, i.e. the pending queue, the entity must not be referenced anymore
- * through the jobs entity pointer.
+ * Drivers should use this as base class for an object which contains the
+ * necessary state to push the command submission to the hardware.
+ *
+ * The lifetime of the job object should at least be from pushing it into the
+ * scheduler until the scheduler notes through the free callback that a job
+ * isn't needed any more. Drivers can of course keep their job object alive
+ * longer than that, but that's outside of the scope of the scheduler
+ * component. Job initialization is split into two parts, drm_sched_job_init()
+ * and drm_sched_job_arm(). It's important to note that after arming a job
+ * drivers must follow the DMA-fence rules and can't easily allocate memory
+ * or takes locks under which memory is allocated.
+ */
+
+/**
+ * DOC: Entity Object
+ *
+ * The entity object which is a container for jobs which should execute
+ * sequentially. Drivers should create an entity for each individual context
+ * they maintain for command submissions which can run in parallel.
+ *
+ * The lifetime of the entity should *not* exceed the lifetime of the
+ * userspace process it was created for and drivers should call the
+ * drm_sched_entity_flush() function from their file_operations.flush
+ * callback. So it's possible that an entity object is not alive any
+ * more while jobs from it are still running on the hardware.
+ *
+ * Background is that for compatibility reasons with existing
+ * userspace all results of a command submission should become visible
+ * externally even after after a process exits. This is normal POSIX behavior
+ * for I/O operations.
+ *
+ * The problem with this approach is that GPU submissions contain executable
+ * shaders enabling processes to evade their termination by offloading work to
+ * the GPU. So when a process is terminated with a SIGKILL the entity object
+ * makes sure that jobs are freed without running them while still maintaining
+ * correct sequential order for signaling fences.
+ */
+
+/**
+ * DOC: Hardware Fence Object
+ *
+ * The hardware fence object is a DMA-fence provided by the driver as result of
+ * running jobs. Drivers need to make sure that the normal DMA-fence semantics
+ * are followed for this object. It's important to note that the memory for
+ * this object can *not* be allocated in the run_job callback since that would
+ * violate the requirements for the DMA-fence implementation. The scheduler
+ * maintains a timeout handler which triggers if this fence doesn't signal in
+ * a configurable time frame.
+ *
+ * The lifetime of this object follows DMA-fence ref-counting rules, the
+ * scheduler takes ownership of the reference returned by the driver and drops
+ * it when it's not needed any more.
+ */
+
+/**
+ * DOC: Scheduler Fence Object
+ *
+ * The scheduler fence object which encapsulates the whole time from pushing
+ * the job into the scheduler until the hardware has finished processing it.
+ * This is internally managed by the scheduler, but drivers can grab additional
+ * reference to it after arming a job. The implementation provides DMA-fence
+ * interfaces for signaling both scheduling of a command submission as well as
+ * finishing of processing.
+ *
+ * The lifetime of this object also follows normal DMA-fence ref-counting
+ * rules. The finished fence is the one normally exposed outside of the
+ * scheduler, but the driver can grab references to both the scheduled as well
+ * as the finished fence when needed for pipe-lining optimizations.
+ */
+
+/**
+ * DOC: Scheduler and Run Queue Objects
+ *
+ * The scheduler object itself does the actual work of selecting a job and
+ * pushing it to the hardware. Both FIFO and RR selection algorithm are
+ * supported, but FIFO is preferred for many use cases.
+ *
+ * The lifetime of the scheduler is managed by the driver using it. Before
+ * destroying the scheduler the driver must ensure that all hardware processing
+ * involving this scheduler object has finished by calling for example
+ * disable_irq(). It is *not* sufficient to wait for the hardware fence here
+ * since this doesn't guarantee that all callback processing has finished.
+ *
+ * The run queue object is a container of entities for a certain priority
+ * level. This object is internally managed by the scheduler and drivers
+ * shouldn't touch them directly. The lifetime of run queues are bound to the
+ * schedulers lifetime.
  */
 
 /**
@@ -70,6 +164,42 @@
  * scheduler executes this callback every time the scheduler considers a job for
  * execution and subsequently checks whether the job fits the scheduler's credit
  * limit.
+ */
+
+/**
+ * DOC: Error and Timeout handling
+ *
+ * Errors schould be signaled by using dma_fence_set_error() on the hardware
+ * fence object before signaling it. Errors are then bubbled up from the
+ * hardware fence to the scheduler fence.
+ *
+ * The entity allows querying errors on the last run submission using the
+ * drm_sched_entity_error() function which can be used to cancel queued
+ * submissions in the run_job callback as well as preventing pushing further
+ * ones into the entity in the drivers submission function.
+ *
+ * When the hardware fence fails to signal in a configurable amount of time the
+ * timedout_job callback is issued. The driver should then follow the procedure
+ * described on the &struct drm_sched_backend_ops.timedout_job callback (TODO:
+ * The timeout handler should probably switch to using the hardware fence as
+ * parameter instead of the job. Otherwise the handling will always race
+ * between timing out and signaling the fence).
+ *
+ * The scheduler also used to provided functionality for re-submitting jobs
+ * with replacing the hardware fence during reset handling. This functionality
+ * is now marked as deprecated. This has proven to be fundamentally racy and
+ * not compatible with DMA-fence rules and shouldn't be used in any new code.
+ *
+ * Additional there is the drm_sched_increase_karma() function which tries to
+ * find the entity which submitted a job and increases it's 'karma'
+ * atomic variable to prevent re-submitting jobs from this entity. This has
+ * quite some overhead and re-submitting jobs is now marked as deprecated. So
+ * using this function is rather discouraged.
+ *
+ * Drivers can still re-create the GPU state should it be lost during timeout
+ * handling when they can guarantee that forward progress is made and this
+ * doesn't cause another timeout. But this is strongly hardware specific and
+ * out of the scope of the general GPU scheduler.
  */
 
 #include <linux/wait.h>
