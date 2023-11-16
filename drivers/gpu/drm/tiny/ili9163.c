@@ -129,6 +129,7 @@ MODULE_DEVICE_TABLE(of, ili9163_of_match);
 
 static const struct spi_device_id ili9163_id[] = {
 	{ "nhd-1.8-128160EF", 0 },
+	{ "1.8-128160EF", 0 },
 	{ }
 };
 MODULE_DEVICE_TABLE(spi, ili9163_id);
