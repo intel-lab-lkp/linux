@@ -3606,6 +3606,42 @@ DECLARE_PCI_FIXUP_FINAL(0x1b7c, 0x0004, /* Ceton InfiniTV4 */
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_REALTEK, 0x8169,
 			quirk_broken_intx_masking);
 
+
+static void quirk_disable_int_bridge_sub_pci_aspm(struct pci_dev *dev)
+{
+	struct pci_dev *pdev;
+	u16 val;
+
+	if (dev->bus && dev->bus->self)
+		pdev = dev->bus->self;
+	else
+		return;
+
+	if (pdev->vendor == PCI_VENDOR_ID_INTEL) {
+		switch (pdev->device) {
+		case 0x9d15:
+		/* PCI bridges on Skylake */
+		case 0xa110 ... 0xa11f:
+		case 0xa167 ... 0xa16a:
+		/* PCI bridges on Kabylake */
+		case 0xa290 ... 0xa29f:
+		case 0xa2e7 ... 0xa2ee:
+			pci_info(dev, "quirk: disable the device's ASPM\n");
+			pcie_capability_read_word(pdev, PCI_EXP_LNKCTL, &val);
+			val &= ~PCI_EXP_LNKCTL_ASPMC;
+			pcie_capability_write_word(dev, PCI_EXP_LNKCTL, val);
+			break;
+		}
+	}
+}
+
+/*
+ * Disable Realtek RTL8723BE PCIE's ASPM, if it connects to some Intel bridges,
+ * such as Skylake and Kabylake. Otherwise, the PCI AER flood hangs system.
+ */
+DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_REALTEK, 0xb723,
+			quirk_disable_int_bridge_sub_pci_aspm);
+
 /*
  * Intel i40e (XL710/X710) 10/20/40GbE NICs all have broken INTx masking,
  * DisINTx can be set but the interrupt status bit is non-functional.

@@ -26,6 +26,12 @@ static void rtl8723be_init_aspm_vars(struct ieee80211_hw *hw)
 	struct rtl_priv *rtlpriv = rtl_priv(hw);
 	struct rtl_pci *rtlpci = rtl_pcidev(rtl_pcipriv(hw));
 
+	/* Disable ASPM if the link control disables it */
+	if (!pcie_aspm_enabled(rtlpci->pdev)) {
+		pci_info(rtlpci->pdev, "PCIE ASPM is disabled\n");
+		rtlpriv->cfg->mod_params->aspm_support = 0;
+	}
+
 	/*close ASPM for AMD defaultly */
 	rtlpci->const_amdpci_aspm = 0;
 
