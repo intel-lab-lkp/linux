@@ -830,18 +830,11 @@ static struct page *follow_page_mask(struct vm_area_struct *vma,
 {
 	pgd_t *pgd, pgdval;
 	struct mm_struct *mm = vma->vm_mm;
+	struct page *page;
+
+	vma_pgtable_walk_begin(vma);
 
 	ctx->page_mask = 0;
-
-	/*
-	 * Call hugetlb_follow_page_mask for hugetlb vmas as it will use
-	 * special hugetlb page table walking code.  This eliminates the
-	 * need to check for hugetlb entries in the general walking code.
-	 */
-	if (is_vm_hugetlb_page(vma))
-		return hugetlb_follow_page_mask(vma, address, flags,
-						&ctx->page_mask);
-
 	pgd = pgd_offset(mm, address);
 	pgdval = *pgd;
 
@@ -852,6 +845,8 @@ static struct page *follow_page_mask(struct vm_area_struct *vma,
 				     address, PGDIR_SHIFT, flags, ctx);
 	else
 		page = follow_p4d_mask(vma, address, pgd, flags, ctx);
+
+	vma_pgtable_walk_end(vma);
 
 	return page;
 }
