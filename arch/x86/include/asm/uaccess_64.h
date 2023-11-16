@@ -85,7 +85,7 @@ static inline unsigned long __untagged_addr_remote(struct mm_struct *mm,
 static inline bool __access_ok(const void __user *ptr, unsigned long size)
 {
 	if (__builtin_constant_p(size <= PAGE_SIZE) && size <= PAGE_SIZE) {
-		return valid_user_address(ptr);
+		return valid_user_address((unsigned long)ptr);
 	} else {
 		unsigned long sum = size + (unsigned long)ptr;
 		return valid_user_address(sum) && sum >= (unsigned long)ptr;
