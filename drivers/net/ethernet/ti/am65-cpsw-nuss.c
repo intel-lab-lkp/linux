@@ -2149,10 +2149,9 @@ am65_cpsw_nuss_init_port_ndev(struct am65_cpsw_common *common, u32 port_idx)
 		return 0;
 
 	/* alloc netdev */
-	port->ndev = devm_alloc_etherdev_mqs(common->dev,
-					     sizeof(struct am65_cpsw_ndev_priv),
-					     AM65_CPSW_MAX_TX_QUEUES,
-					     AM65_CPSW_MAX_RX_QUEUES);
+	port->ndev = alloc_etherdev_mqs(sizeof(struct am65_cpsw_ndev_priv),
+					AM65_CPSW_MAX_TX_QUEUES,
+					AM65_CPSW_MAX_RX_QUEUES);
 	if (!port->ndev) {
 		dev_err(dev, "error allocating slave net_device %u\n",
 			port->port_id);
@@ -2266,6 +2265,8 @@ static void am65_cpsw_nuss_cleanup_ndev(struct am65_cpsw_common *common)
 		port = &common->ports[i];
 		if (port->ndev && port->ndev->reg_state == NETREG_REGISTERED)
 			unregister_netdev(port->ndev);
+
+		free_netdev(port->ndev);
 	}
 }
 
