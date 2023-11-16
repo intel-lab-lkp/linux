@@ -900,8 +900,6 @@ static const u16 NCT6116_REG_TSI_TEMP[] = { 0x59, 0x5b };
 
 static enum pwm_enable reg_to_pwm_enable(int pwm, int mode)
 {
-	if (mode == 0 && pwm == 255)
-		return off;
 	return mode + 1;
 }
 
