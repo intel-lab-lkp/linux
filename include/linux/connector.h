@@ -98,10 +98,8 @@ void cn_del_callback(const struct cb_id *id);
  *
  * If there are no listeners for given group %-ESRCH can be returned.
  */
-int cn_netlink_send_mult(struct cn_msg *msg, u16 len, u32 portid,
-			 u32 group, gfp_t gfp_mask,
-			 int (*filter)(struct sock *dsk, struct sk_buff *skb,
-				       void *data),
+int cn_netlink_send_mult(struct cn_msg *msg, u16 len, u32 portid, u32 __group,
+			 gfp_t gfp_mask, netlink_filter_fn filter,
 			 void *filter_data);
 
 /**
