@@ -6395,7 +6395,8 @@ For arm64:
 ----------
 
 SMCCC exits can be enabled depending on the configuration of the SMCCC
-filter. See the Documentation/virt/kvm/devices/vm.rst
+filter. This feature can be only available if KVM_CAP_ARM_VM_SMCCC is
+upported. See the Documentation/virt/kvm/devices/vm.rst
 ``KVM_ARM_SMCCC_FILTER`` for more details.
 
 ``nr`` contains the function ID of the guest's SMCCC call. Userspace is
