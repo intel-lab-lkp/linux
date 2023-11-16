@@ -21,6 +21,10 @@
 #include <linux/of.h>
 #include <linux/suspend.h>
 
+#ifdef CONFIG_THERMAL_ASYNC_RESUME
+#include <linux/workqueue.h>
+#endif /* CONFIG_THERMAL_ASYNC_RESUME */
+
 #define CREATE_TRACE_POINTS
 #include "thermal_trace.h"
 
@@ -40,6 +44,10 @@ static DEFINE_MUTEX(thermal_governor_lock);
 static atomic_t in_suspend;
 
 static struct thermal_governor *def_governor;
+
+#ifdef CONFIG_THERMAL_ASYNC_RESUME
+struct work_struct *resume_thermal_zones_wk;
+#endif /* CONFIG_THERMAL_ASYNC_RESUME */
 
 /*
  * Governor section: set of functions to handle thermal governors
@@ -1506,26 +1514,53 @@ exit:
 }
 EXPORT_SYMBOL_GPL(thermal_zone_get_zone_by_name);
 
-static int thermal_pm_notify(struct notifier_block *nb,
-			     unsigned long mode, void *_unused)
+static inline void resume_thermal_zones(void)
 {
 	struct thermal_zone_device *tz;
 
+	list_for_each_entry(tz, &thermal_tz_list, node) {
+		if (!thermal_zone_device_is_enabled(tz))
+			continue;
+
+		thermal_zone_device_init(tz);
+		thermal_zone_device_update(tz, THERMAL_EVENT_UNSPECIFIED);
+	}
+}
+
+#ifdef CONFIG_THERMAL_ASYNC_RESUME
+static void thermal_resume_work_fn(struct work_struct *work)
+{
+	resume_thermal_zones();
+}
+
+static inline void thermal_resume_enqueue(void)
+{
+	INIT_WORK(resume_thermal_zones_wk, thermal_resume_work_fn);
+	queue_work(system_unbound_wq, resume_thermal_zones_wk);
+}
+#endif /* CONFIG_THERMAL_ASYNC_RESUME */
+
+static int thermal_pm_notify(struct notifier_block *nb,
+			     unsigned long mode, void *_unused)
+{
 	switch (mode) {
 	case PM_HIBERNATION_PREPARE:
 	case PM_RESTORE_PREPARE:
 	case PM_SUSPEND_PREPARE:
+#ifdef CONFIG_THERMAL_ASYNC_RESUME
+		flush_work(resume_thermal_zones_wk);
+#endif /* CONFIG_THERMAL_ASYNC_RESUME */
 		atomic_set(&in_suspend, 1);
 		break;
 	case PM_POST_HIBERNATION:
 	case PM_POST_RESTORE:
 	case PM_POST_SUSPEND:
 		atomic_set(&in_suspend, 0);
-		list_for_each_entry(tz, &thermal_tz_list, node) {
-			thermal_zone_device_init(tz);
-			thermal_zone_device_update(tz,
-						   THERMAL_EVENT_UNSPECIFIED);
-		}
+#ifdef CONFIG_THERMAL_ASYNC_RESUME
+		thermal_resume_enqueue();
+#else /* CONFIG_THERMAL_ASYNC_RESUME */
+		resume_thermal_zones();
+#endif /* CONFIG_THERMAL_ASYNC_RESUME */
 		break;
 	default:
 		break;
@@ -1540,6 +1575,15 @@ static struct notifier_block thermal_pm_nb = {
 static int __init thermal_init(void)
 {
 	int result;
+
+#ifdef CONFIG_THERMAL_ASYNC_RESUME
+	resume_thermal_zones_wk = kmalloc(sizeof(*resume_thermal_zones_wk),
+					GFP_KERNEL);
+	if (!resume_thermal_zones_wk) {
+		result = -ENOMEM;
+		goto error;
+	}
+#endif /* CONFIG_THERMAL_ASYNC_RESUME */
 
 	result = thermal_netlink_init();
 	if (result)

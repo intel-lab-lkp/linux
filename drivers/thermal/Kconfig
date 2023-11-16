@@ -91,6 +91,17 @@ config THERMAL_WRITABLE_TRIPS
 	  Say 'Y' here if you would like to allow userspace tools to
 	  change trip temperatures.
 
+config THERMAL_ASYNC_RESUME
+	bool "Thermal async init zones on system resume"
+	default n
+	help
+	  Re-initialize thermal zones asynchronously on system resume.
+	  Thermal zone sensors may be attached on slow buses, impacting
+	  the duration of PM_POST_SUSPEND. If that is a concern enable
+	  this switch.
+
+	  If in doubt, say N.
+
 choice
 	prompt "Default Thermal governor"
 	default THERMAL_DEFAULT_GOV_STEP_WISE
