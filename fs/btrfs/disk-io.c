@@ -80,8 +80,17 @@ static void csum_tree_block(struct extent_buffer *buf, u8 *result)
 	char *kaddr;
 	int i;
 
+	memset(result, 0, BTRFS_CSUM_SIZE);
 	shash->tfm = fs_info->csum_shash;
 	crypto_shash_init(shash);
+
+	if (buf->addr) {
+		crypto_shash_digest(shash,
+				    buf->addr + offset_in_page(buf->start) + BTRFS_CSUM_SIZE,
+				    buf->len - BTRFS_CSUM_SIZE, result);
+		return;
+	}
+
 	kaddr = page_address(buf->pages[0]) + offset_in_page(buf->start);
 	crypto_shash_update(shash, kaddr + BTRFS_CSUM_SIZE,
 			    first_page_part - BTRFS_CSUM_SIZE);
@@ -90,7 +99,6 @@ static void csum_tree_block(struct extent_buffer *buf, u8 *result)
 		kaddr = page_address(buf->pages[i]);
 		crypto_shash_update(shash, kaddr, PAGE_SIZE);
 	}
-	memset(result, 0, BTRFS_CSUM_SIZE);
 	crypto_shash_final(shash, result);
 }
 
