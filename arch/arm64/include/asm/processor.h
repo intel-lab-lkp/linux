@@ -52,7 +52,12 @@
 
 #define DEFAULT_MAP_WINDOW_64	(UL(1) << VA_BITS_MIN)
 #define TASK_SIZE_64		(UL(1) << vabits_actual)
+#ifdef CONFIG_COMPAT
+#define TASK_SIZE_MAX		(test_thread_flag(TIF_32BIT) ? \
+				UL(0x100000000) : (UL(1) << VA_BITS))
+#else
 #define TASK_SIZE_MAX		(UL(1) << VA_BITS)
+#endif
 
 #ifdef CONFIG_COMPAT
 #if defined(CONFIG_ARM64_64K_PAGES) && defined(CONFIG_KUSER_HELPERS)
