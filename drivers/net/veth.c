@@ -225,7 +225,7 @@ static void veth_get_ethtool_stats(struct net_device *dev,
 	for (i = 0; i < peer->real_num_rx_queues; i++) {
 		const struct veth_rq_stats *rq_stats = &rcv_priv->rq[i].stats;
 		const void *base = (void *)&rq_stats->vs;
-		unsigned int start, tx_idx = idx;
+		unsigned int start, tx_idx = pp_idx;
 		size_t offset;
 
 		tx_idx += (i % dev->real_num_tx_queues) * VETH_TQ_STATS_LEN;
