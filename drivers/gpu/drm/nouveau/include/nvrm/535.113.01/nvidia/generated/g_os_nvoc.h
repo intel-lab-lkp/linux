@@ -28,17 +28,17 @@
 
 typedef struct PACKED_REGISTRY_ENTRY
 {
-    NvU32                   nameOffset;
-    NvU8                    type;
-    NvU32                   data;
-    NvU32                   length;
+	NvU32                   nameOffset;
+	NvU8                    type;
+	NvU32                   data;
+	NvU32                   length;
 } PACKED_REGISTRY_ENTRY;
 
 typedef struct PACKED_REGISTRY_TABLE
 {
-    NvU32                   size;
-    NvU32                   numEntries;
-    PACKED_REGISTRY_ENTRY   entries[0];
+	NvU32                   size;
+	NvU32                   numEntries;
+	PACKED_REGISTRY_ENTRY   entries[] __counted_by(numEntries);
 } PACKED_REGISTRY_TABLE;
 
 #endif
