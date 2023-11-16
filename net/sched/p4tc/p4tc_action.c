@@ -655,17 +655,16 @@ static struct p4tc_act_param *param_find_byname(struct idr *params_idr,
 	return NULL;
 }
 
-static struct p4tc_act_param *tcf_param_find_byid(struct idr *params_idr,
-						  const u32 param_id)
+struct p4tc_act_param *tcf_param_find_byid(struct idr *params_idr,
+					   const u32 param_id)
 {
 	return idr_find(params_idr, param_id);
 }
 
-static struct p4tc_act_param *
-tcf_param_find_byany(struct p4tc_act *act,
-		     const char *param_name,
-		     const u32 param_id,
-		     struct netlink_ext_ack *extack)
+struct p4tc_act_param *tcf_param_find_byany(struct p4tc_act *act,
+					    const char *param_name,
+					    const u32 param_id,
+					    struct netlink_ext_ack *extack)
 {
 	struct p4tc_act_param *param;
 	int err;
