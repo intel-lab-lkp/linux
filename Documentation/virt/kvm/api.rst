@@ -6256,9 +6256,9 @@ More architecture-specific flags detailing state of the VCPU that may
 affect the device's behavior. Current defined flags::
 
   /* x86, set if the VCPU is in system management mode */
-  #define KVM_RUN_X86_SMM     (1 << 0)
+  #define KVM_RUN_X86_SMM          (1 << 0)
   /* x86, set if bus lock detected in VM */
-  #define KVM_RUN_BUS_LOCK    (1 << 1)
+  #define KVM_RUN_X86_BUS_LOCK     (1 << 1)
   /* arm64, set for KVM_EXIT_DEBUG */
   #define KVM_DEBUG_ARCH_HSR_HIGH_VALID  (1 << 0)
 
@@ -7582,20 +7582,20 @@ KVM_BUS_LOCK_DETECTION_OFF and KVM_BUS_LOCK_DETECTION_EXIT are supported
 currently and mutually exclusive with each other. More bits can be added in
 the future.
 
-With KVM_BUS_LOCK_DETECTION_OFF set, bus locks in guest will not cause vm exits
+With KVM_BUS_LOCK_DETECTION_OFF set, bus locks in guest will not cause VM exits
 so that no additional actions are needed. This is the default mode.
 
-With KVM_BUS_LOCK_DETECTION_EXIT set, vm exits happen when bus lock detected
-in VM. KVM just exits to userspace when handling them. Userspace can enforce
-its own throttling or other policy based mitigations.
+With KVM_BUS_LOCK_DETECTION_EXIT set, VM exits happen when a bus lock is
+detected in VM. KVM just exits to userspace when handling them. Userspace can
+enforce its own throttling or other policy based mitigations.
 
-This capability is aimed to address the thread that VM can exploit bus locks to
-degree the performance of the whole system. Once the userspace enable this
-capability and select the KVM_BUS_LOCK_DETECTION_EXIT mode, KVM will set the
-KVM_RUN_BUS_LOCK flag in vcpu-run->flags field and exit to userspace. Concerning
-the bus lock vm exit can be preempted by a higher priority VM exit, the exit
-notifications to userspace can be KVM_EXIT_BUS_LOCK or other reasons.
-KVM_RUN_BUS_LOCK flag is used to distinguish between them.
+This capability is aimed to address the fact that a VM can exploit bus locks to
+impact the performance of the whole system. Once userspace enables this
+capability and selects the KVM_BUS_LOCK_DETECTION_EXIT mode, KVM will set the
+KVM_RUN_X86_BUS_LOCK flag in the vcpu->run->flags field and exit to userspace.
+Concerning the bus lock, a VM exit can be preempted by a higher priority VM
+exit, so the exit notification to userspace can be KVM_EXIT_BUS_LOCK or another
+reason. KVM_RUN_X86_BUS_LOCK flag is used to distinguish between them.
 
 7.23 KVM_CAP_PPC_DAWR1
 ----------------------
