@@ -1002,6 +1002,7 @@ static enum rx_handler_result handle_not_macsec(struct sk_buff *skb)
 	rcu_read_lock();
 	rxd = macsec_data_rcu(skb->dev);
 	md_dst = skb_metadata_dst(skb);
+	bool is_macsec_md_dst = md_dst && md_dst->type == METADATA_MACSEC;
 
 	list_for_each_entry_rcu(macsec, &rxd->secys, secys) {
 		struct sk_buff *nskb;
@@ -1014,10 +1015,13 @@ static enum rx_handler_result handle_not_macsec(struct sk_buff *skb)
 		if (macsec_is_offloaded(macsec) && netif_running(ndev)) {
 			struct macsec_rx_sc *rx_sc = NULL;
 
-			if (md_dst && md_dst->type == METADATA_MACSEC)
+			if (macsec->offload_md_dst && !is_macsec_md_dst)
+				continue;
+
+			if (is_macsec_md_dst)
 				rx_sc = find_rx_sc(&macsec->secy, md_dst->u.macsec_info.sci);
 
-			if (md_dst && md_dst->type == METADATA_MACSEC && !rx_sc)
+			if (is_macsec_md_dst && !rx_sc)
 				continue;
 
 			if (ether_addr_equal_64bits(hdr->h_dest,
