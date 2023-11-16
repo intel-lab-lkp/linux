@@ -890,7 +890,7 @@ static struct device_attribute *sysinfo_device_attr_create(int
 			return NULL;
 
 		sysfs_attr_init(&attr->attr);
-		attr->attr.mode = 0444;
+		attr->attr.mode = 0400;
 
 		switch (sysinfo_interface_group_index) {
 		case INTERFACE_PROCESSOR_BUS_TOPOLOGY_ATTR:
