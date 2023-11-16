@@ -64,9 +64,9 @@ properties:
     description: |
       Transfer function which defines the range of valid values delivered by the
       sensor.
-      1 - A, 10% to 90% of 2^24 (1677722 .. 15099494)
-      2 - B, 2.5% to 22.5% of 2^24 (419430 .. 3774874)
-      3 - C, 20% to 80% of 2^24 (3355443 .. 13421773)
+      0 - A, 10% to 90% of 2^24 (1677722 .. 15099494)
+      1 - B, 2.5% to 22.5% of 2^24 (419430 .. 3774874)
+      2 - C, 20% to 80% of 2^24 (3355443 .. 13421773)
     $ref: /schemas/types.yaml#/definitions/uint32
 
   vdd-supply:
