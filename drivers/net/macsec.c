@@ -93,6 +93,7 @@ struct pcpu_secy_stats {
  * @secys: linked list of SecY's on the underlying device
  * @gro_cells: pointer to the Generic Receive Offload cell
  * @offload: status of offloading on the MACsec device
+ * @offload_md_dst: whether MACsec device offload supports sk_buff md_dst
  */
 struct macsec_dev {
 	struct macsec_secy secy;
@@ -102,6 +103,7 @@ struct macsec_dev {
 	struct list_head secys;
 	struct gro_cells gro_cells;
 	enum macsec_offload offload;
+	bool offload_md_dst;
 };
 
 /**
@@ -3525,6 +3527,7 @@ static int macsec_dev_open(struct net_device *dev)
 		}
 
 		ctx.secy = &macsec->secy;
+		ctx.offload_md_dst = &macsec->offload_md_dst;
 		err = macsec_offload(ops->mdo_dev_open, &ctx);
 		if (err)
 			goto clear_allmulti;

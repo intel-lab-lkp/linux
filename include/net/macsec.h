@@ -255,6 +255,7 @@ struct macsec_context {
 	};
 	enum macsec_offload offload;
 
+	bool *offload_md_dst;
 	struct macsec_secy *secy;
 	struct macsec_rx_sc *rx_sc;
 	struct {
