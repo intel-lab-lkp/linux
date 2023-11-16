@@ -274,12 +274,16 @@ static int xgbe_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	/* Set the PCS indirect addressing definition registers */
 	rdev = pci_get_domain_bus_and_slot(0, 0, PCI_DEVFN(0, 0));
-	if (rdev &&
-	    (rdev->vendor == PCI_VENDOR_ID_AMD) && (rdev->device == 0x15d0)) {
+
+	if (!(rdev && rdev->vendor == PCI_VENDOR_ID_AMD))
+		goto err_pci_enable;
+
+	switch (rdev->device) {
+	case 0x15d0:
 		pdata->xpcs_window_def_reg = PCS_V2_RV_WINDOW_DEF;
 		pdata->xpcs_window_sel_reg = PCS_V2_RV_WINDOW_SELECT;
-	} else if (rdev && (rdev->vendor == PCI_VENDOR_ID_AMD) &&
-		   (rdev->device == 0x14b5)) {
+		break;
+	case 0x14b5:
 		pdata->xpcs_window_def_reg = PCS_V2_YC_WINDOW_DEF;
 		pdata->xpcs_window_sel_reg = PCS_V2_YC_WINDOW_SELECT;
 
@@ -288,9 +292,11 @@ static int xgbe_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 		/* Yellow Carp devices do not need rrc */
 		pdata->vdata->enable_rrc = 0;
-	} else {
+		break;
+	default:
 		pdata->xpcs_window_def_reg = PCS_V2_WINDOW_DEF;
 		pdata->xpcs_window_sel_reg = PCS_V2_WINDOW_SELECT;
+		break;
 	}
 	pci_dev_put(rdev);
 
