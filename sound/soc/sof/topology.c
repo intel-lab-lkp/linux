@@ -1737,8 +1737,10 @@ static int sof_dai_load(struct snd_soc_component *scomp, int index,
 	/* perform pcm set op */
 	if (ipc_pcm_ops && ipc_pcm_ops->pcm_setup) {
 		ret = ipc_pcm_ops->pcm_setup(sdev, spcm);
-		if (ret < 0)
+		if (ret < 0) {
+			kfree(spcm);
 			return ret;
+		}
 	}
 
 	dai_drv->dobj.private = spcm;
@@ -1748,6 +1750,7 @@ static int sof_dai_load(struct snd_soc_component *scomp, int index,
 			       ARRAY_SIZE(stream_tokens), private->array,
 			       le32_to_cpu(private->size));
 	if (ret) {
+		kfree(dai_drv->dobj.private);
 		dev_err(scomp->dev, "error: parse stream tokens failed %d\n",
 			le32_to_cpu(private->size));
 		return ret;
@@ -1765,9 +1768,9 @@ static int sof_dai_load(struct snd_soc_component *scomp, int index,
 	ret = snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV, sdev->dev,
 				  PAGE_SIZE, &spcm->stream[stream].page_table);
 	if (ret < 0) {
+		kfree(dai_drv->dobj.private);
 		dev_err(scomp->dev, "error: can't alloc page table for %s %d\n",
 			caps->name, ret);
-
 		return ret;
 	}
 
@@ -1783,9 +1786,10 @@ capture:
 	stream = SNDRV_PCM_STREAM_CAPTURE;
 
 	/* do we need to allocate capture PCM DMA pages */
-	if (!spcm->pcm.capture)
+	if (!spcm->pcm.capture) {
+		kfree(dai_drv->dobj.private);
 		return ret;
-
+	}
 	caps = &spcm->pcm.caps[stream];
 
 	/* allocate capture page table buffer */
@@ -1811,7 +1815,7 @@ capture:
 free_playback_tables:
 	if (spcm->pcm.playback)
 		snd_dma_free_pages(&spcm->stream[SNDRV_PCM_STREAM_PLAYBACK].page_table);
-
+	kfree(dai_drv->dobj.private);
 	return ret;
 }
 
