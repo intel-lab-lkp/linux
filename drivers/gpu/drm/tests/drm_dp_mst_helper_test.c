@@ -68,6 +68,150 @@ static void dp_mst_calc_pbn_mode_desc(const struct drm_dp_mst_calc_pbn_mode_test
 KUNIT_ARRAY_PARAM(drm_dp_mst_calc_pbn_mode, drm_dp_mst_calc_pbn_mode_cases,
 		  dp_mst_calc_pbn_mode_desc);
 
+struct drm_dp_mst_calc_pbn_div_test {
+	int link_rate;
+	int lane_count;
+	fixed20_12 expected;
+};
+
+#define fp_init(__int, __frac) { \
+	.full = (__int) * (1 << 12) + \
+		(__frac) * (1 << 12) / 100000 \
+}
+
+static const struct drm_dp_mst_calc_pbn_div_test drm_dp_mst_calc_pbn_div_dp1_4_cases[] = {
+	/*
+	 * DP1.4 rates:
+	 * .expected = .link_rate * .lane_count * 0.8000 / 8 / 54 / 100
+	 * UHBR rates:
+	 * .expected = .link_rate * .lane_count * 0.9671 / 8 / 54 / 100
+	 * truncated to 5 decimal places.
+	 */
+	{
+		.link_rate = 162000,
+		.lane_count = 1,
+		.expected = fp_init(3, 0),
+	},
+	{
+		.link_rate = 162000,
+		.lane_count = 2,
+		.expected = fp_init(6, 0),
+	},
+	{
+		.link_rate = 162000,
+		.lane_count = 4,
+		.expected = fp_init(12, 0),
+	},
+	{
+		.link_rate = 270000,
+		.lane_count = 1,
+		.expected = fp_init(5, 0),
+	},
+	{
+		.link_rate = 270000,
+		.lane_count = 2,
+		.expected = fp_init(10, 0),
+	},
+	{
+		.link_rate = 270000,
+		.lane_count = 4,
+		.expected = fp_init(20, 0),
+	},
+	{
+		.link_rate = 540000,
+		.lane_count = 1,
+		.expected = fp_init(10, 0),
+	},
+	{
+		.link_rate = 540000,
+		.lane_count = 2,
+		.expected = fp_init(20, 0),
+	},
+	{
+		.link_rate = 540000,
+		.lane_count = 4,
+		.expected = fp_init(40, 0),
+	},
+	{
+		.link_rate = 810000,
+		.lane_count = 1,
+		.expected = fp_init(15, 0),
+	},
+	{
+		.link_rate = 810000,
+		.lane_count = 2,
+		.expected = fp_init(30, 0),
+	},
+	{
+		.link_rate = 810000,
+		.lane_count = 4,
+		.expected = fp_init(60, 0),
+	},
+	{
+		.link_rate = 1000000,
+		.lane_count = 1,
+		.expected = fp_init(22, 38657),
+	},
+	{
+		.link_rate = 1000000,
+		.lane_count = 2,
+		.expected = fp_init(44, 77314),
+	},
+	{
+		.link_rate = 1000000,
+		.lane_count = 4,
+		.expected = fp_init(89, 54629),
+	},
+	{
+		.link_rate = 1350000,
+		.lane_count = 1,
+		.expected = fp_init(30, 22187),
+	},
+	{
+		.link_rate = 1350000,
+		.lane_count = 2,
+		.expected = fp_init(60, 44375),
+	},
+	{
+		.link_rate = 1350000,
+		.lane_count = 4,
+		.expected = fp_init(120, 88750),
+	},
+	{
+		.link_rate = 2000000,
+		.lane_count = 1,
+		.expected = fp_init(44, 77314),
+	},
+	{
+		.link_rate = 2000000,
+		.lane_count = 2,
+		.expected = fp_init(89, 54629),
+	},
+	{
+		.link_rate = 2000000,
+		.lane_count = 4,
+		.expected = fp_init(179,  9259),  /* 179.09259 */
+	},
+};
+
+static void drm_test_dp_mst_calc_pbn_div(struct kunit *test)
+{
+	const struct drm_dp_mst_calc_pbn_div_test *params = test->param_value;
+	/* mgr->dev is only needed by drm_dbg_kms(), but it's not called for the test cases. */
+	struct drm_dp_mst_topology_mgr mgr = {};
+
+	KUNIT_EXPECT_EQ(test, drm_dp_get_vc_payload_bw(&mgr, params->link_rate, params->lane_count).full,
+			params->expected.full);
+}
+
+static void dp_mst_calc_pbn_div_desc(const struct drm_dp_mst_calc_pbn_div_test *t, char *desc)
+{
+	sprintf(desc, "Link rate %d lane count %d", t->link_rate, t->lane_count);
+}
+
+KUNIT_ARRAY_PARAM(drm_dp_mst_calc_pbn_div, drm_dp_mst_calc_pbn_div_dp1_4_cases,
+		  dp_mst_calc_pbn_div_desc);
+
 static u8 data[] = { 0xff, 0x00, 0xdd };
 
 struct drm_dp_mst_sideband_msg_req_test {
@@ -416,6 +560,7 @@ KUNIT_ARRAY_PARAM(drm_dp_mst_sideband_msg_req, drm_dp_mst_sideband_msg_req_cases
 
 static struct kunit_case drm_dp_mst_helper_tests[] = {
 	KUNIT_CASE_PARAM(drm_test_dp_mst_calc_pbn_mode, drm_dp_mst_calc_pbn_mode_gen_params),
+	KUNIT_CASE_PARAM(drm_test_dp_mst_calc_pbn_div, drm_dp_mst_calc_pbn_div_gen_params),
 	KUNIT_CASE_PARAM(drm_test_dp_mst_sideband_msg_req_decode,
 			 drm_dp_mst_sideband_msg_req_gen_params),
 	{ }
