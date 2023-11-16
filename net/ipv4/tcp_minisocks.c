@@ -281,7 +281,7 @@ static void tcp_time_wait_init(struct sock *sk, struct tcp_timewait_sock *tcptw)
 	return;
 out_free:
 	WARN_ON_ONCE(1);
-	kfree(tcptw->tw_md5_key);
+	kfree_sensitive(tcptw->tw_md5_key);
 	tcptw->tw_md5_key = NULL;
 #endif
 }
@@ -368,7 +368,7 @@ static void tcp_md5_twsk_free_rcu(struct rcu_head *head)
 	struct tcp_md5sig_key *key;
 
 	key = container_of(head, struct tcp_md5sig_key, rcu);
-	kfree(key);
+	kfree_sensitive(key);
 	static_branch_slow_dec_deferred(&tcp_md5_needed);
 	tcp_md5_release_sigpool();
 }
