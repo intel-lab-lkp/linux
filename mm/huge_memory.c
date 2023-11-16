@@ -1486,32 +1486,32 @@ static inline bool can_follow_write_pmd(pmd_t pmd, struct page *page,
 	return !userfaultfd_huge_pmd_wp(vma, pmd);
 }
 
-struct page *follow_trans_huge_pmd(struct vm_area_struct *vma,
-				   unsigned long addr,
-				   pmd_t *pmd,
-				   unsigned int flags)
+struct page *follow_huge_pmd(struct vm_area_struct *vma, unsigned long addr,
+			     pmd_t *pmd, unsigned int flags,
+			     struct follow_page_context *ctx)
 {
 	struct mm_struct *mm = vma->vm_mm;
+	pmd_t pmdval = *pmd;
 	struct page *page;
 	int ret;
 
 	assert_spin_locked(pmd_lockptr(mm, pmd));
 
-	page = pmd_page(*pmd);
+	page = pmd_page(pmdval);
 	VM_BUG_ON_PAGE(!PageHead(page) && !is_zone_device_page(page), page);
 
 	if ((flags & FOLL_WRITE) &&
-	    !can_follow_write_pmd(*pmd, page, vma, flags))
+	    !can_follow_write_pmd(pmdval, page, vma, flags))
 		return NULL;
 
 	/* Avoid dumping huge zero page */
-	if ((flags & FOLL_DUMP) && is_huge_zero_pmd(*pmd))
+	if ((flags & FOLL_DUMP) && is_huge_zero_pmd(pmdval))
 		return ERR_PTR(-EFAULT);
 
 	if (pmd_protnone(*pmd) && !gup_can_follow_protnone(vma, flags))
 		return NULL;
 
-	if (!pmd_write(*pmd) && gup_must_unshare(vma, flags, page))
+	if (!pmd_write(pmdval) && gup_must_unshare(vma, flags, page))
 		return ERR_PTR(-EMLINK);
 
 	VM_BUG_ON_PAGE((flags & FOLL_PIN) && PageAnon(page) &&
@@ -1521,10 +1521,11 @@ struct page *follow_trans_huge_pmd(struct vm_area_struct *vma,
 	if (ret)
 		return ERR_PTR(ret);
 
-	if (flags & FOLL_TOUCH)
+	if (pmd_trans_huge(pmdval) && (flags & FOLL_TOUCH))
 		touch_pmd(vma, addr, pmd, flags & FOLL_WRITE);
 
 	page += (addr & ~HPAGE_PMD_MASK) >> PAGE_SHIFT;
+	ctx->page_mask = HPAGE_PMD_NR - 1;
 	VM_BUG_ON_PAGE(!PageCompound(page) && !is_zone_device_page(page), page);
 
 	return page;

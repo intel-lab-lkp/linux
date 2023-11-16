@@ -1007,9 +1007,9 @@ int __must_check try_grab_page(struct page *page, unsigned int flags);
 /*
  * mm/huge_memory.c
  */
-struct page *follow_trans_huge_pmd(struct vm_area_struct *vma,
-				   unsigned long addr, pmd_t *pmd,
-				   unsigned int flags);
+struct page *follow_huge_pmd(struct vm_area_struct *vma, unsigned long addr,
+			     pmd_t *pmd, unsigned int flags,
+			     struct follow_page_context *ctx);
 
 /*
  * mm/mmap.c
