@@ -5,5 +5,6 @@
 
    ABI
    writing-bindings
+   writing-dts
    writing-schema
    submitting-patches
