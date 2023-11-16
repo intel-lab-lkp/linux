@@ -2551,6 +2551,14 @@ store_pwm(struct device *dev, struct device_attribute *attr, const char *buf,
 	int err;
 	u16 reg;
 
+	if (index == 0 && data->pwm_enable[nr] != manual) {
+		dev_err(dev,
+			"The pwm%d doesn't support manual fan speed control in automatic mode.\n",
+			nr + 1);
+		dev_err(dev, "Please set pwm%d_enable to manual mode.\n", nr + 1);
+		return -EOPNOTSUPP;
+	}
+
 	err = kstrtoul(buf, 10, &val);
 	if (err < 0)
 		return err;
