@@ -708,8 +708,7 @@ static struct page *follow_pmd_mask(struct vm_area_struct *vma,
 		ptl = pmd_lock(mm, pmd);
 		page = follow_devmap_pmd(vma, address, pmd, flags, &ctx->pgmap);
 		spin_unlock(ptl);
-		if (page)
-			return page;
+		return page;
 	}
 	if (likely(!pmd_trans_huge(pmdval)))
 		return follow_page_pte(vma, address, pmd, flags, &ctx->pgmap);
@@ -756,8 +755,7 @@ static struct page *follow_pud_mask(struct vm_area_struct *vma,
 		ptl = pud_lock(mm, pud);
 		page = follow_devmap_pud(vma, address, pud, flags, &ctx->pgmap);
 		spin_unlock(ptl);
-		if (page)
-			return page;
+		return page;
 	}
 	if (unlikely(pud_bad(*pud)))
 		return no_page_table(vma, flags);
