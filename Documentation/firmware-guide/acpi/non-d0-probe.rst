@@ -24,6 +24,14 @@ there's a problem with the device, the driver likely probes just fine but the
 first user will find out the device doesn't work, instead of a failure at probe
 time. This feature should thus be used sparingly.
 
+ACPI framework
+--------------
+
+Use the Linux ACPI framework function :c:func:`acpi_dev_state_d0()` to tell
+whether the device was powered on for probe. :c:func:`acpi_dev_state_d0()`
+returns true if the device is powered on, false otherwise. For non-ACPI backed
+devices it returns true always.
+
 I²C
 ---
 
