@@ -181,7 +181,8 @@ static unsigned int pcm_rate_transform(struct device *dev, unsigned int rate)
 	return MTK_AFE_PCM_RATE_48K;
 }
 
-unsigned int mt8186_tdm_relatch_rate_transform(struct device *dev, unsigned int rate)
+unsigned int mt8186_tdm_relatch_rate_transform(struct device *dev,
+					       unsigned int rate)
 {
 	switch (rate) {
 	case 8000:
@@ -222,7 +223,8 @@ unsigned int mt8186_tdm_relatch_rate_transform(struct device *dev, unsigned int 
 	return MTK_AFE_TDM_RELATCH_RATE_48K;
 }
 
-unsigned int mt8186_rate_transform(struct device *dev, unsigned int rate, int aud_blk)
+unsigned int mt8186_rate_transform(struct device *dev, unsigned int rate,
+				   int aud_blk)
 {
 	switch (aud_blk) {
 	case MT8186_DAI_PCM:
@@ -234,14 +236,13 @@ unsigned int mt8186_rate_transform(struct device *dev, unsigned int rate, int au
 	}
 }
 
-int mt8186_dai_set_priv(struct mtk_base_afe *afe, int id, int priv_size, const void *priv_data)
+int mt8186_dai_set_priv(struct mtk_base_afe *afe, int id, int priv_size,
+			const void *priv_data)
 {
 	struct mt8186_afe_private *afe_priv = afe->platform_priv;
 	void *temp_data;
 
-	temp_data = devm_kzalloc(afe->dev,
-				 priv_size,
-				 GFP_KERNEL);
+	temp_data = devm_kzalloc(afe->dev, priv_size, GFP_KERNEL);
 	if (!temp_data)
 		return -ENOMEM;
 
