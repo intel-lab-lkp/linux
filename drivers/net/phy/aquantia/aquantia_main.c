@@ -26,6 +26,9 @@
 #define PHY_ID_AQR412	0x03a1b712
 #define PHY_ID_AQR113C	0x31c31c12
 
+#define MDIO_PHYXS_XAUI_RX_VEND2		0xc441
+#define MDIO_PHYXS_XAUI_RX_VEND2_USX_AUTONEG_EN	BIT(3)
+
 #define MDIO_PHYXS_VEND_IF_STATUS		0xe812
 #define MDIO_PHYXS_VEND_IF_STATUS_TYPE_MASK	GENMASK(7, 3)
 #define MDIO_PHYXS_VEND_IF_STATUS_TYPE_KR	0
@@ -544,6 +547,15 @@ static int aqr107_config_init(struct phy_device *phydev)
 		aqr107_chip_info(phydev);
 
 	aqr107_validate_mode(phydev, phydev->interface);
+
+	if (phydev->interface == PHY_INTERFACE_MODE_USXGMII) {
+		ret = phy_modify_mmd(phydev, MDIO_MMD_PHYXS,
+				     MDIO_PHYXS_XAUI_RX_VEND2,
+				     MDIO_PHYXS_XAUI_RX_VEND2_USX_AUTONEG_EN,
+				     MDIO_PHYXS_XAUI_RX_VEND2_USX_AUTONEG_EN);
+		if (ret)
+			return ret;
+	}
 
 	return aqr107_set_downshift(phydev, MDIO_AN_VEND_PROV_DOWNSHIFT_DFLT);
 }
