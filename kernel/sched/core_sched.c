@@ -142,7 +142,7 @@ int sched_core_share_pid(unsigned int cmd, pid_t pid, enum pid_type type,
 	BUILD_BUG_ON(PR_SCHED_CORE_SCOPE_PROCESS_GROUP != PIDTYPE_PGID);
 
 	if (type > PIDTYPE_PGID || cmd >= PR_SCHED_CORE_MAX || pid < 0 ||
-	    (cmd != PR_SCHED_CORE_GET && uaddr))
+	    (cmd != PR_SCHED_CORE_GET && cmd != PR_SCHED_CORE_CREATE && uaddr))
 		return -EINVAL;
 
 	rcu_read_lock();
@@ -229,6 +229,10 @@ out_tasklist:
 	read_unlock(&tasklist_lock);
 
 out:
+	if (cmd == PR_SCHED_CORE_CREATE && !err && uaddr) {
+		ptr_to_hashval((void *)cookie, &id);
+		err = put_user(id, (u64 __user *)uaddr);
+	}
 	sched_core_put_cookie(cookie);
 	put_task_struct(task);
 	return err;
