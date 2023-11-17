@@ -496,6 +496,23 @@ static inline int pm_runtime_put_autosuspend(struct device *dev)
 }
 
 /**
+ * pm_runtime_put_mark_busy_autosusp - Update the last access time of a device
+ *				       and drop device usage counter and queue
+ *				       autosuspend if 0.
+ * @dev: Target device.
+ *
+ * Update the last access time of @dev using pm_runtime_mark_last_busy(), then
+ * decrement the runtime PM usage counter of @dev and if it turns out to be
+ * equal to 0, queue up a work item for @dev like in pm_request_autosuspend().
+ */
+static inline int pm_runtime_put_mark_busy_autosusp(struct device *dev)
+{
+	pm_runtime_mark_last_busy(dev);
+
+	return pm_runtime_autosuspend(dev);
+}
+
+/**
  * pm_runtime_put_sync - Drop device usage counter and run "idle check" if 0.
  * @dev: Target device.
  *
