@@ -960,7 +960,8 @@ static int ipa_remove(struct platform_device *pdev)
 			ret = ipa_modem_stop(ipa);
 		}
 		if (ret)
-			return ret;
+			dev_err(dev, "Failed to stop modem (%pe)\n",
+				ERR_PTR(ret));
 
 		ipa_teardown(ipa);
 	}
