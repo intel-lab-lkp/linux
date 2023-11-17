@@ -136,8 +136,29 @@ allOf:
       required:
         - cpu_off
         - cpu_on
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: arm,psci-1.0
+    then:
+      $ref: /schemas/power/reset/reboot-mode.yaml#
+      properties:
+        # "mode-normal" is just SYSTEM_RESET
+        mode-normal: false
+      patternProperties:
+        "^mode-.*$":
+          maxItems: 2
+          description: |
+            Describes a vendor-specific reset type. The string after "mode-"
+            maps a reboot mode to the parameters in the PSCI SYSTEM_RESET2 call.
 
-additionalProperties: false
+            Parameters are named mode-xxx = <type[, cookie]>, where xxx
+            is the name of the magic reboot mode, type is the lower 31 bits
+            of the reset_type, and, optionally, the cookie value. If the cookie
+            is not provided, it is defaulted to zero.
+
+unevaluatedProperties: false
 
 examples:
   - |+
@@ -259,5 +280,16 @@ examples:
         #power-domain-cells = <0>;
         domain-idle-states = <&CLUSTER_RET>, <&CLUSTER_PWRDN>;
       };
+    };
+
+  - |+
+
+    // Case 5: SYSTEM_RESET2 vendor resets
+    psci {
+      compatible = "arm,psci-1.0";
+      method = "smc";
+
+      mode-edl = <0>;
+      mode-bootloader = <1 2>;
     };
 ...
