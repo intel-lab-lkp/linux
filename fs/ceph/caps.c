@@ -4923,6 +4923,11 @@ int ceph_encode_dentry_release(void **p, struct dentry *dentry,
 	int force = 0;
 	int ret;
 
+	if (!dir) {
+		parent = dget_parent(dentry);
+		dir = d_inode(parent);
+	}
+
 	/*
 	 * force an record for the directory caps if we have a dentry lease.
 	 * this is racy (can't take i_ceph_lock and d_lock together), but it
@@ -4932,14 +4937,9 @@ int ceph_encode_dentry_release(void **p, struct dentry *dentry,
 	spin_lock(&dentry->d_lock);
 	if (di->lease_session && di->lease_session->s_mds == mds)
 		force = 1;
-	if (!dir) {
-		parent = dget(dentry->d_parent);
-		dir = d_inode(parent);
-	}
 	spin_unlock(&dentry->d_lock);
 
 	ret = ceph_encode_inode_release(p, dir, mds, drop, unless, force);
-	dput(parent);
 
 	cl = ceph_inode_to_client(dir);
 	spin_lock(&dentry->d_lock);
@@ -4952,8 +4952,10 @@ int ceph_encode_dentry_release(void **p, struct dentry *dentry,
 		if (IS_ENCRYPTED(dir) && fscrypt_has_encryption_key(dir)) {
 			int ret2 = ceph_encode_encrypted_fname(dir, dentry, *p);
 
-			if (ret2 < 0)
+			if (ret2 < 0) {
+				dput(parent);
 				return ret2;
+			}
 
 			rel->dname_len = cpu_to_le32(ret2);
 			*p += ret2;
@@ -4965,6 +4967,8 @@ int ceph_encode_dentry_release(void **p, struct dentry *dentry,
 	} else {
 		spin_unlock(&dentry->d_lock);
 	}
+
+	dput(parent);
 	return ret;
 }
 
