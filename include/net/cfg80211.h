@@ -3370,7 +3370,7 @@ enum wiphy_params_flags {
  *	threshold to generate a new PMK before the current one expires.
  */
 struct cfg80211_pmksa {
-	const u8 *bssid;
+	const u8 *peer_addr;
 	const u8 *pmkid;
 	const u8 *pmk;
 	size_t pmk_len;

@@ -12189,7 +12189,7 @@ static int nl80211_setdel_pmksa(struct sk_buff *skb, struct genl_info *info)
 	pmksa.pmkid = nla_data(info->attrs[NL80211_ATTR_PMKID]);
 
 	if (info->attrs[NL80211_ATTR_MAC]) {
-		pmksa.bssid = nla_data(info->attrs[NL80211_ATTR_MAC]);
+		pmksa.peer_addr = nla_data(info->attrs[NL80211_ATTR_MAC]);
 	} else if (info->attrs[NL80211_ATTR_SSID] &&
 		   info->attrs[NL80211_ATTR_FILS_CACHE_ID] &&
 		   (info->genlhdr->cmd == NL80211_CMD_DEL_PMKSA ||

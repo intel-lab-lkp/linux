@@ -1544,7 +1544,7 @@ static int cfg80211_wext_siwpmksa(struct net_device *dev,
 	if (wdev->iftype != NL80211_IFTYPE_STATION)
 		return -EINVAL;
 
-	cfg_pmksa.bssid = pmksa->bssid.sa_data;
+	cfg_pmksa.peer_addr = pmksa->bssid.sa_data;
 	cfg_pmksa.pmkid = pmksa->pmkid;
 
 	wiphy_lock(&rdev->wiphy);
