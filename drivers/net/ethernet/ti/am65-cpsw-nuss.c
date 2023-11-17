@@ -3007,9 +3007,12 @@ static int am65_cpsw_nuss_remove(struct platform_device *pdev)
 
 	common = dev_get_drvdata(dev);
 
-	ret = pm_runtime_resume_and_get(&pdev->dev);
+	ret = pm_runtime_get_sync(&pdev->dev);
 	if (ret < 0)
-		return ret;
+		/* am65_cpts_resume() doesn't fail, so handling ret < 0 is only
+		 * for the sake of completeness.
+		 */
+		dev_err(dev, "runtime resume failed (%pe)\n", ERR_PTR(ret));
 
 	am65_cpsw_unregister_devlink(common);
 	am65_cpsw_unregister_notifiers(common);
