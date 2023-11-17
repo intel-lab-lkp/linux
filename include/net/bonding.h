@@ -777,6 +777,9 @@ extern struct rtnl_link_ops bond_link_ops;
 /* exported from bond_sysfs_slave.c */
 extern const struct sysfs_ops slave_sysfs_ops;
 
+/* exported from bond_sysfs.c */
+extern rwlock_t bonding_dev_lock;
+
 /* exported from bond_3ad.c */
 extern const u8 lacpdu_mcast_addr[];
 
