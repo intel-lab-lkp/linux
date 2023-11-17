@@ -2042,16 +2042,24 @@ static int cpsw_remove(struct platform_device *pdev)
 	struct cpsw_common *cpsw = platform_get_drvdata(pdev);
 	int ret;
 
-	ret = pm_runtime_resume_and_get(&pdev->dev);
+	ret = pm_runtime_get_sync(&pdev->dev);
 	if (ret < 0)
-		return ret;
+		/* There is no need to do something about that. The important
+		 * thing is to not exit early, but do all cleanup that doesn't
+		 * requrie register access.
+		 */
+		dev_err(&pdev->dev, "runtime resume failed (%pe)\n",
+			ERR_PTR(ret));
 
 	cpsw_unregister_notifiers(cpsw);
 	cpsw_unregister_devlink(cpsw);
 	cpsw_unregister_ports(cpsw);
 
-	cpts_release(cpsw->cpts);
-	cpdma_ctlr_destroy(cpsw->dma);
+	if (ret >= 0) {
+		cpts_release(cpsw->cpts);
+		cpdma_ctlr_destroy(cpsw->dma);
+	}
+
 	cpsw_remove_dt(cpsw);
 	pm_runtime_put_sync(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
