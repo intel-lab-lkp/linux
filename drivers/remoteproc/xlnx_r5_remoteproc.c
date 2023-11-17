@@ -16,6 +16,7 @@
 #include <linux/of_reserved_mem.h>
 #include <linux/platform_device.h>
 #include <linux/remoteproc.h>
+#include <linux/pm_domain.h>
 
 #include "remoteproc_internal.h"
 
@@ -102,6 +103,12 @@ static const struct mem_bank_data zynqmp_tcm_banks_lockstep[] = {
  * @rproc: rproc handle
  * @pm_domain_id: RPU CPU power domain id
  * @ipi: pointer to mailbox information
+ * @num_pm_dev: number of tcm pm domain devices for this core
+ * @pm_dev_core0: pm domain virtual devices for power domain framework
+ * @pm_dev_core0_link: pm domain device links after registration
+ * @pm_dev_core1: used only in lockstep mode. second core's pm domain virtual devices
+ * @pm_dev_core1_link: used only in lockstep mode. second core's pm device links after
+ * registration
  */
 struct zynqmp_r5_core {
 	struct device *dev;
@@ -111,6 +118,11 @@ struct zynqmp_r5_core {
 	struct rproc *rproc;
 	u32 pm_domain_id;
 	struct mbox_info *ipi;
+	int num_pm_dev;
+	struct device **pm_dev_core0;
+	struct device_link **pm_dev_core0_link;
+	struct device **pm_dev_core1;
+	struct device_link **pm_dev_core1_link;
 };
 
 /**
@@ -651,7 +663,8 @@ static int add_tcm_carveout_lockstep_mode(struct rproc *rproc)
 					     ZYNQMP_PM_CAPABILITY_ACCESS, 0,
 					     ZYNQMP_PM_REQUEST_ACK_BLOCKING);
 		if (ret < 0) {
-			dev_err(dev, "failed to turn on TCM 0x%x", pm_domain_id);
+			dev_err(dev, "failed to turn on TCM 0x%x",
+				pm_domain_id);
 			goto release_tcm_lockstep;
 		}
 
@@ -758,6 +771,189 @@ static int zynqmp_r5_parse_fw(struct rproc *rproc, const struct firmware *fw)
 	return ret;
 }
 
+static void zynqmp_r5_remove_pm_domains(struct rproc *rproc)
+{
+	struct zynqmp_r5_core *r5_core = rproc->priv;
+	struct device *dev = r5_core->dev;
+	struct zynqmp_r5_cluster *cluster;
+	int i;
+
+	cluster = platform_get_drvdata(to_platform_device(dev->parent));
+
+	for (i = 1; i < r5_core->num_pm_dev; i++) {
+		device_link_del(r5_core->pm_dev_core0_link[i]);
+		dev_pm_domain_detach(r5_core->pm_dev_core0[i], false);
+	}
+
+	kfree(r5_core->pm_dev_core0);
+	r5_core->pm_dev_core0 = NULL;
+	kfree(r5_core->pm_dev_core0_link);
+	r5_core->pm_dev_core0_link = NULL;
+
+	if (cluster->mode == SPLIT_MODE) {
+		r5_core->num_pm_dev = 0;
+		return;
+	}
+
+	for (i = 1; i < r5_core->num_pm_dev; i++) {
+		device_link_del(r5_core->pm_dev_core1_link[i]);
+		dev_pm_domain_detach(r5_core->pm_dev_core1[i], false);
+	}
+
+	kfree(r5_core->pm_dev_core1);
+	r5_core->pm_dev_core1 = NULL;
+	kfree(r5_core->pm_dev_core1_link);
+	r5_core->pm_dev_core1_link = NULL;
+	r5_core->num_pm_dev = 0;
+}
+
+static int zynqmp_r5_add_pm_domains(struct rproc *rproc)
+{
+	struct zynqmp_r5_core *r5_core = rproc->priv;
+	struct device *dev = r5_core->dev, *dev2;
+	struct zynqmp_r5_cluster *cluster;
+	struct platform_device *pdev;
+	struct device_node *np;
+	int i, j, num_pm_dev, ret;
+
+	cluster = dev_get_drvdata(dev->parent);
+
+	/* get number of power-domains */
+	num_pm_dev = of_count_phandle_with_args(r5_core->np, "power-domains",
+						"#power-domain-cells");
+
+	if (num_pm_dev <= 0)
+		return -EINVAL;
+
+	r5_core->pm_dev_core0 = kcalloc(num_pm_dev,
+					sizeof(struct device *),
+					GFP_KERNEL);
+	if (!r5_core->pm_dev_core0)
+		ret = -ENOMEM;
+
+	r5_core->pm_dev_core0_link = kcalloc(num_pm_dev,
+					     sizeof(struct device_link *),
+					     GFP_KERNEL);
+	if (!r5_core->pm_dev_core0_link) {
+		kfree(r5_core->pm_dev_core0);
+		r5_core->pm_dev_core0 = NULL;
+		return -ENOMEM;
+	}
+
+	r5_core->num_pm_dev = num_pm_dev;
+
+	/*
+	 * start from 2nd entry in power-domains property list as
+	 * for zynqmp we only add TCM power domains and not core's power domain.
+	 * 1st entry is used to configure r5 operation mode.
+	 */
+	for (i = 1; i < r5_core->num_pm_dev; i++) {
+		r5_core->pm_dev_core0[i] = dev_pm_domain_attach_by_id(dev, i);
+		if (IS_ERR_OR_NULL(r5_core->pm_dev_core0[i])) {
+			dev_dbg(dev, "failed to attach pm domain %d, ret=%ld\n", i,
+				PTR_ERR(r5_core->pm_dev_core0[i]));
+			ret = -EINVAL;
+			goto fail_add_pm_domains;
+		}
+		r5_core->pm_dev_core0_link[i] = device_link_add(dev,
+								r5_core->pm_dev_core0[i],
+								DL_FLAG_STATELESS |
+								DL_FLAG_RPM_ACTIVE |
+								DL_FLAG_PM_RUNTIME);
+		if (!r5_core->pm_dev_core0_link[i]) {
+			dev_pm_domain_detach(r5_core->pm_dev_core0[i], true);
+			r5_core->pm_dev_core0[i] = NULL;
+			ret = -EINVAL;
+			goto fail_add_pm_domains;
+		}
+	}
+
+	if (cluster->mode == SPLIT_MODE)
+		return 0;
+
+	r5_core->pm_dev_core1 = kcalloc(num_pm_dev,
+					sizeof(struct device *),
+					GFP_KERNEL);
+	if (!r5_core->pm_dev_core1) {
+		ret = -ENOMEM;
+		goto fail_add_pm_domains;
+	}
+
+	r5_core->pm_dev_core1_link = kcalloc(num_pm_dev,
+					     sizeof(struct device_link *),
+					     GFP_KERNEL);
+	if (!r5_core->pm_dev_core1_link) {
+		kfree(r5_core->pm_dev_core1);
+		r5_core->pm_dev_core1 = NULL;
+		ret = -ENOMEM;
+		goto fail_add_pm_domains;
+	}
+
+	/* get second core's device to detach its power-domains */
+	np = of_get_next_child(cluster->dev->of_node, of_node_get(dev->of_node));
+
+	pdev = of_find_device_by_node(np);
+	if (!pdev) {
+		dev_err(cluster->dev, "core1 platform device not available\n");
+		kfree(r5_core->pm_dev_core1);
+		kfree(r5_core->pm_dev_core1_link);
+		r5_core->pm_dev_core1 = NULL;
+		r5_core->pm_dev_core1_link = NULL;
+		ret = -EINVAL;
+		goto fail_add_pm_domains;
+	}
+
+	dev2 = &pdev->dev;
+
+	/* for zynqmp we only add TCM power domains and not core's power domain */
+	for (j = 1; j < r5_core->num_pm_dev; j++) {
+		r5_core->pm_dev_core1[j] = dev_pm_domain_attach_by_id(dev2, j);
+		if (!r5_core->pm_dev_core1[j]) {
+			dev_dbg(dev, "can't attach to pm domain %d\n", j);
+			ret = -EINVAL;
+			goto fail_add_pm_domains_lockstep;
+		} else if (IS_ERR(r5_core->pm_dev_core1[j])) {
+			dev_dbg(dev, "can't attach to pm domain %d\n", j);
+			ret = PTR_ERR(r5_core->pm_dev_core1[j]);
+			goto fail_add_pm_domains_lockstep;
+		}
+
+		r5_core->pm_dev_core1_link[j] = device_link_add(dev,
+								r5_core->pm_dev_core1[j],
+								DL_FLAG_STATELESS |
+								DL_FLAG_RPM_ACTIVE |
+								DL_FLAG_PM_RUNTIME);
+		if (!r5_core->pm_dev_core1_link[j]) {
+			dev_pm_domain_detach(r5_core->pm_dev_core1[j], true);
+			r5_core->pm_dev_core1[j] = NULL;
+			ret = -ENODEV;
+			goto fail_add_pm_domains_lockstep;
+		}
+	}
+
+fail_add_pm_domains_lockstep:
+	while (--j >= 0) {
+		device_link_del(r5_core->pm_dev_core1_link[j]);
+		dev_pm_domain_detach(r5_core->pm_dev_core1[j], true);
+	}
+	kfree(r5_core->pm_dev_core1);
+	r5_core->pm_dev_core1 = NULL;
+	kfree(r5_core->pm_dev_core1_link);
+	r5_core->pm_dev_core1_link = NULL;
+
+fail_add_pm_domains:
+	while (--i >= 0) {
+		device_link_del(r5_core->pm_dev_core0_link[i]);
+		dev_pm_domain_detach(r5_core->pm_dev_core0[i], true);
+	}
+	kfree(r5_core->pm_dev_core0);
+	r5_core->pm_dev_core0 = NULL;
+	kfree(r5_core->pm_dev_core0_link);
+	r5_core->pm_dev_core0_link = NULL;
+
+	return ret;
+}
+
 /**
  * zynqmp_r5_rproc_prepare()
  * adds carveouts for TCM bank and reserved memory regions
@@ -770,19 +966,30 @@ static int zynqmp_r5_rproc_prepare(struct rproc *rproc)
 {
 	int ret;
 
+	ret = zynqmp_r5_add_pm_domains(rproc);
+	if (ret) {
+		dev_err(&rproc->dev, "failed to add pm domains\n");
+		return ret;
+	}
+
 	ret = add_tcm_banks(rproc);
 	if (ret) {
 		dev_err(&rproc->dev, "failed to get TCM banks, err %d\n", ret);
-		return ret;
+		goto fail_prepare;
 	}
 
 	ret = add_mem_regions_carveout(rproc);
 	if (ret) {
 		dev_err(&rproc->dev, "failed to get reserve mem regions %d\n", ret);
-		return ret;
+		goto fail_prepare;
 	}
 
 	return 0;
+
+fail_prepare:
+	zynqmp_r5_remove_pm_domains(rproc);
+
+	return ret;
 }
 
 /**
@@ -800,6 +1007,8 @@ static int zynqmp_r5_rproc_unprepare(struct rproc *rproc)
 	int i;
 
 	r5_core = rproc->priv;
+
+	zynqmp_r5_remove_pm_domains(rproc);
 
 	for (i = 0; i < r5_core->tcm_bank_count; i++) {
 		pm_domain_id = r5_core->tcm_banks[i]->pm_domain_id;
