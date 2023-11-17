@@ -326,6 +326,43 @@ static int cs43130_set_pll(struct snd_soc_component *component, int pll_id, int 
 	return ret;
 }
 
+static int cs43130_wait_for_completion(struct cs43130_private *cs43130, struct completion *to_poll,
+					int time)
+{
+	int stickies, offset, flag;
+	int ret = 0;
+
+	if (cs43130->has_irq_line) {
+		ret = wait_for_completion_timeout(to_poll, msecs_to_jiffies(time));
+	} else {
+		if (to_poll == &cs43130->xtal_rdy) {
+			offset = 0;
+			flag = CS43130_XTAL_RDY_INT;
+		} else if (to_poll == &cs43130->pll_rdy) {
+			offset = 0;
+			flag = CS43130_PLL_RDY_INT;
+		} else if (to_poll == &cs43130->hpload_evt) {
+			offset = 3;
+			flag = CS43130_HPLOAD_NO_DC_INT | CS43130_HPLOAD_UNPLUG_INT |
+				CS43130_HPLOAD_OOR_INT | CS43130_HPLOAD_AC_INT |
+				CS43130_HPLOAD_DC_INT | CS43130_HPLOAD_ON_INT |
+				CS43130_HPLOAD_OFF_INT;
+		} else {
+			return 0;
+		}
+
+		ret = regmap_read_poll_timeout(cs43130->regmap, CS43130_INT_STATUS_1 + offset,
+					       stickies, (stickies & flag),
+					       1000, time * 1000);
+
+		/*
+		 * Return 0 for an timeout/error to be consistent with wait_for_completion_timeout
+		 */
+		ret = !ret;
+	}
+	return ret;
+}
+
 static int cs43130_change_clksrc(struct snd_soc_component *component,
 				 enum cs43130_mclk_src_sel src)
 {
@@ -364,8 +401,7 @@ static int cs43130_change_clksrc(struct snd_soc_component *component,
 					   CS43130_XTAL_RDY_INT_MASK, 0);
 			regmap_update_bits(cs43130->regmap, CS43130_PWDN_CTL,
 					   CS43130_PDN_XTAL_MASK, 0);
-			ret = wait_for_completion_timeout(&cs43130->xtal_rdy,
-							  msecs_to_jiffies(100));
+			ret = cs43130_wait_for_completion(cs43130, &cs43130->xtal_rdy, 100);
 			regmap_update_bits(cs43130->regmap, CS43130_INT_MASK_1,
 					   CS43130_XTAL_RDY_INT_MASK,
 					   1 << CS43130_XTAL_RDY_INT_SHIFT);
@@ -400,8 +436,7 @@ static int cs43130_change_clksrc(struct snd_soc_component *component,
 					   CS43130_XTAL_RDY_INT_MASK, 0);
 			regmap_update_bits(cs43130->regmap, CS43130_PWDN_CTL,
 					   CS43130_PDN_XTAL_MASK, 0);
-			ret = wait_for_completion_timeout(&cs43130->xtal_rdy,
-							  msecs_to_jiffies(100));
+			ret = cs43130_wait_for_completion(cs43130, &cs43130->xtal_rdy, 100);
 			regmap_update_bits(cs43130->regmap, CS43130_INT_MASK_1,
 					   CS43130_XTAL_RDY_INT_MASK,
 					   1 << CS43130_XTAL_RDY_INT_SHIFT);
@@ -416,8 +451,7 @@ static int cs43130_change_clksrc(struct snd_soc_component *component,
 				   CS43130_PLL_RDY_INT_MASK, 0);
 		regmap_update_bits(cs43130->regmap, CS43130_PWDN_CTL,
 				   CS43130_PDN_PLL_MASK, 0);
-		ret = wait_for_completion_timeout(&cs43130->pll_rdy,
-						  msecs_to_jiffies(100));
+		ret = cs43130_wait_for_completion(cs43130, &cs43130->pll_rdy, 100);
 		regmap_update_bits(cs43130->regmap, CS43130_INT_MASK_1,
 				   CS43130_PLL_RDY_INT_MASK,
 				   1 << CS43130_PLL_RDY_INT_SHIFT);
@@ -2040,8 +2074,8 @@ static int cs43130_hpload_proc(struct cs43130_private *cs43130,
 	regmap_multi_reg_write(cs43130->regmap, seq,
 			       seq_size);
 
-	ret = wait_for_completion_timeout(&cs43130->hpload_evt,
-					  msecs_to_jiffies(1000));
+	ret = cs43130_wait_for_completion(cs43130, &cs43130->hpload_evt, 1000);
+
 	regmap_read(cs43130->regmap, CS43130_INT_MASK_4, &msk);
 	if (!ret) {
 		dev_err(cs43130->dev, "Timeout waiting for HPLOAD interrupt\n");
@@ -2545,8 +2579,10 @@ static int cs43130_i2c_probe(struct i2c_client *client)
 					IRQF_ONESHOT | IRQF_TRIGGER_LOW,
 					"cs43130", cs43130);
 	if (ret != 0) {
-		dev_err(cs43130->dev, "Failed to request IRQ: %d\n", ret);
-		goto err;
+		dev_dbg(cs43130->dev, "Failed to request IRQ: %d, will poll instead\n", ret);
+		cs43130->has_irq_line = 0;
+	} else {
+		cs43130->has_irq_line = 1;
 	}
 
 	cs43130->mclk_int_src = CS43130_MCLK_SRC_RCO;
