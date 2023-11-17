@@ -1263,10 +1263,11 @@ int fib_table_insert(struct net *net, struct fib_table *tb,
 
 		nlflags &= ~NLM_F_EXCL;
 
-		/* We have 2 goals:
+		/* We have 3 goals:
 		 * 1. Find exact match for type, scope, fib_info to avoid
 		 * duplicate routes
 		 * 2. Find next 'fa' (or head), NLM_F_APPEND inserts before it
+		 * 3. Find the right 'fa' in case a prefsrc is used
 		 */
 		fa_match = NULL;
 		fa_first = fa;
@@ -1282,6 +1283,9 @@ int fib_table_insert(struct net *net, struct fib_table *tb,
 				fa_match = fa;
 				break;
 			}
+			if (cfg->fc_prefsrc &&
+			    cfg->fc_prefsrc == fa->fa_info->fib_prefsrc)
+				fa_first = fa;
 		}
 
 		if (cfg->fc_nlflags & NLM_F_REPLACE) {
