@@ -189,6 +189,9 @@ static ATOMIC_NOTIFIER_HEAD(restart_handler_list);
  *
  *	Currently always returns zero, as atomic_notifier_chain_register()
  *	always returns zero.
+ *
+ *	This function is deprecated, use register_sys_off_handler(SYS_OFF_MODE_RESTART)
+ *	or devm_register_restart_handler() instead.
  */
 int register_restart_handler(struct notifier_block *nb)
 {

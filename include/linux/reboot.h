@@ -46,8 +46,12 @@ extern int unregister_reboot_notifier(struct notifier_block *);
 
 extern int devm_register_reboot_notifier(struct device *, struct notifier_block *);
 
-extern int register_restart_handler(struct notifier_block *);
-extern int unregister_restart_handler(struct notifier_block *);
+/*
+ * This function is deprecated, use register_sys_off_handler(SYS_OFF_MODE_RESTART)
+ * or devm_register_restart_handler() instead.
+ */
+extern int __deprecated register_restart_handler(struct notifier_block *);
+extern int __deprecated unregister_restart_handler(struct notifier_block *);
 extern void do_kernel_restart(char *cmd);
 
 /*
