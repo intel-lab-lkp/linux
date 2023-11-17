@@ -1,0 +1,79 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/interrupt-controller/realtek,rtd1319d-intc.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Realtek DHC RTD1319D Interrupt Controller Device Tree Bindings
+
+description:
+  This interrupt controller is a component of Realtek DHC RTD1319D and
+  is designed to receive interrupts from peripheral devices.
+
+  Each DHC SoC has two sets of interrupt controllers, each capable of
+  handling up to 32 interrupts.
+
+maintainers:
+  - James Tai <james.tai@realtek.com>
+
+allOf:
+  - $ref: /schemas/interrupt-controller.yaml#
+
+properties:
+  "#interrupt-cells":
+    const: 1
+
+  compatible:
+    enum:
+      - realtek,rtd1319d-intc-iso
+      - realtek,rtd1319d-intc-misc
+
+  "#address-cells":
+    const: 0
+
+  interrupt-controller: true
+
+  interrupts-extended:
+    minItems: 1
+    maxItems: 4
+
+  reg:
+    maxItems: 1
+
+required:
+  - "#interrupt-cells"
+  - "#address-cells"
+  - compatible
+  - interrupt-controller
+  - interrupts-extended
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+
+    rtd1319d_iso_irq: interrupt-controller@40 {
+      compatible = "realtek,rtd1319d-intc-iso";
+      reg = <0x00 0x40>;
+      interrupts-extended = <&gic GIC_SPI 41 IRQ_TYPE_LEVEL_HIGH>,
+                            <&gic GIC_SPI 0 IRQ_TYPE_LEVEL_HIGH>;
+      interrupt-controller;
+      #address-cells = <0>;
+      #interrupt-cells = <1>;
+    };
+
+    rtd1319d_misc_irq: interrupt-controller@80 {
+      compatible = "realtek,rtd1319d-intc-misc";
+      reg = <0x00 0x80>;
+      interrupts-extended = <&gic GIC_SPI 40 IRQ_TYPE_LEVEL_HIGH>,
+                            <&gic GIC_SPI 89 IRQ_TYPE_LEVEL_HIGH>,
+                            <&gic GIC_SPI 90 IRQ_TYPE_LEVEL_HIGH>,
+                            <&gic GIC_SPI 39 IRQ_TYPE_LEVEL_HIGH>;
+      interrupt-controller;
+      #address-cells = <0>;
+      #interrupt-cells = <1>;
+    };
+...
