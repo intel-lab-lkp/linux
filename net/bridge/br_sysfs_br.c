@@ -933,6 +933,99 @@ static ssize_t vlan_stats_per_port_store(struct device *d,
 static DEVICE_ATTR_RW(vlan_stats_per_port);
 #endif
 
+/**
+ * DOC: Bridge sysfs attributes
+ *
+ * @forward_delay: IFLA_BR_FORWARD_DELAY
+ *
+ * @hello_time: IFLA_BR_HELLO_TIME
+ *
+ * @max_age: IFLA_BR_MAX_AGE
+ *
+ * @ageing_time: IFLA_BR_AGEING_TIME
+ *
+ * @stp_state: IFLA_BR_STP_STATE
+ *
+ * @group_fwd_mask: IFLA_BR_GROUP_FWD_MASK
+ *
+ * @priority: IFLA_BR_PRIORITY
+ *
+ * @bridge_id: IFLA_BR_BRIDGE_ID
+ *
+ * @root_id: IFLA_BR_ROOT_ID
+ *
+ * @root_path_cost: IFLA_BR_ROOT_PATH_COST
+ *
+ * @root_port: IFLA_BR_ROOT_PORT
+ *
+ * @topology_change: IFLA_BR_TOPOLOGY_CHANGE
+ *
+ * @topology_change_detected: IFLA_BR_TOPOLOGY_CHANGE_DETECTED
+ *
+ * @hello_timer: IFLA_BR_HELLO_TIMER
+ *
+ * @tcn_timer: IFLA_BR_TCN_TIMER
+ *
+ * @topology_change_timer: IFLA_BR_TOPOLOGY_CHANGE_TIMER
+ *
+ * @gc_timer: IFLA_BR_GC_TIMER
+ *
+ * @group_addr: IFLA_BR_GROUP_ADDR
+ *
+ * @flush: IFLA_BR_FDB_FLUSH
+ *
+ * @no_linklocal_learn: BR_BOOLOPT_NO_LL_LEARN
+ *
+ * @multicast_router: IFLA_BR_MCAST_ROUTER
+ *
+ * @multicast_snooping: IFLA_BR_MCAST_SNOOPING
+ *
+ * @multicast_querier: IFLA_BR_MCAST_QUERIER
+ *
+ * @multicast_query_use_ifaddr: IFLA_BR_MCAST_QUERY_USE_IFADDR
+ *
+ * @hash_elasticity: IFLA_BR_MCAST_HASH_ELASTICITY
+ *
+ * @hash_max: IFLA_BR_MCAST_HASH_MAX
+ *
+ * @multicast_last_member_count: IFLA_BR_MCAST_LAST_MEMBER_CNT
+ *
+ * @multicast_startup_query_count: IFLA_BR_MCAST_STARTUP_QUERY_CNT
+ *
+ * @multicast_last_member_interval: IFLA_BR_MCAST_LAST_MEMBER_INTVL
+ *
+ * @multicast_membership_interval: IFLA_BR_MCAST_MEMBERSHIP_INTVL
+ *
+ * @multicast_querier_interval: IFLA_BR_MCAST_QUERIER_INTVL
+ *
+ * @multicast_query_interval: IFLA_BR_MCAST_QUERY_INTVL
+ *
+ * @multicast_query_response_interval: IFLA_BR_MCAST_QUERY_RESPONSE_INTVL
+ *
+ * @multicast_startup_query_interval: IFLA_BR_MCAST_STARTUP_QUERY_INTVL
+ *
+ * @multicast_stats_enabled: IFLA_BR_MCAST_STATS_ENABLED
+ *
+ * @multicast_igmp_version: IFLA_BR_MCAST_IGMP_VERSION
+ *
+ * @multicast_mld_version: IFLA_BR_MCAST_MLD_VERSION
+ *
+ * @nf_call_iptables: IFLA_BR_NF_CALL_IPTABLES
+ *
+ * @nf_call_ip6tables: IFLA_BR_NF_CALL_IP6TABLES
+ *
+ * @nf_call_arptables: IFLA_BR_NF_CALL_ARPTABLES
+ *
+ * @vlan_filtering: IFLA_BR_VLAN_FILTERING
+ *
+ * @vlan_protocol: IFLA_BR_VLAN_PROTOCOL
+ *
+ * @default_pvid: IFLA_BR_VLAN_DEFAULT_PVID
+ *
+ * @vlan_stats_enabled: IFLA_BR_VLAN_STATS_ENABLED
+ *
+ * @vlan_stats_per_port: IFLA_BR_VLAN_STATS_PER_PORT
+ */
 static struct attribute *bridge_attrs[] = {
 	&dev_attr_forward_delay.attr,
 	&dev_attr_hello_time.attr,
