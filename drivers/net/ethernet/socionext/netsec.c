@@ -1410,21 +1410,28 @@ static int netsec_reset_hardware(struct netsec_priv *priv,
 		netsec_write(priv, NETSEC_REG_DMA_MH_CTRL,
 			     NETSEC_DMA_CTRL_REG_STOP);
 
-		while (netsec_read(priv, NETSEC_REG_DMA_HM_CTRL) &
-		       NETSEC_DMA_CTRL_REG_STOP)
-			cpu_relax();
-
-		while (netsec_read(priv, NETSEC_REG_DMA_MH_CTRL) &
-		       NETSEC_DMA_CTRL_REG_STOP)
-			cpu_relax();
+		if (netsec_wait_while_busy(priv, NETSEC_REG_DMA_HM_CTRL,
+					   NETSEC_DMA_CTRL_REG_STOP) ||
+		    netsec_wait_while_busy(priv, NETSEC_REG_DMA_MH_CTRL,
+					   NETSEC_DMA_CTRL_REG_STOP)) {
+			dev_warn(priv->dev,
+				 "%s: DMA transfer cannot be stopped.\n",
+				 __func__);
+			/* There is no recovery mechanism in place if this
+			 * error occurs. Frames may be lost.
+			 */
+		}
 	}
 
 	netsec_write(priv, NETSEC_REG_SOFT_RST, NETSEC_SOFT_RST_REG_RESET);
 	netsec_write(priv, NETSEC_REG_SOFT_RST, NETSEC_SOFT_RST_REG_RUN);
 	netsec_write(priv, NETSEC_REG_COM_INIT, NETSEC_COM_INIT_REG_ALL);
 
-	while (netsec_read(priv, NETSEC_REG_COM_INIT) != 0)
-		cpu_relax();
+	if (netsec_wait_while_busy(priv, NETSEC_REG_COM_INIT, 1)) {
+		dev_err(priv->dev,
+			"%s: failed to reset NETSEC.\n", __func__);
+		return -ETIMEDOUT;
+	}
 
 	/* set desc_start addr */
 	netsec_write(priv, NETSEC_REG_NRM_RX_DESC_START_UP,
@@ -1476,9 +1483,13 @@ static int netsec_reset_hardware(struct netsec_priv *priv,
 	netsec_write(priv, NETSEC_REG_DMA_MH_CTRL, MH_CTRL__MODE_TRANS);
 	netsec_write(priv, NETSEC_REG_PKT_CTRL, value);
 
-	while ((netsec_read(priv, NETSEC_REG_MODE_TRANS_COMP_STATUS) &
-		NETSEC_MODE_TRANS_COMP_IRQ_T2N) == 0)
-		cpu_relax();
+	usleep_range(100000, 120000);
+
+	if ((netsec_read(priv, NETSEC_REG_MODE_TRANS_COMP_STATUS) &
+			 NETSEC_MODE_TRANS_COMP_IRQ_T2N) == 0) {
+		dev_warn(priv->dev,
+			 "%s: trans comp timeout.\n", __func__);
+	}
 
 	/* clear any pending EMPTY/ERR irq status */
 	netsec_write(priv, NETSEC_REG_NRM_TX_STATUS, ~0);
