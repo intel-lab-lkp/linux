@@ -2007,7 +2007,7 @@ static int tcf_fill_node(struct net *net, struct sk_buff *skb,
 		tcm->tcm_ifindex = TCM_IFINDEX_MAGIC_BLOCK;
 		tcm->tcm_block_index = block->index;
 	}
-	tcm->tcm_info = TC_H_MAKE(tp->prio, tp->protocol);
+	tcm->tcm_info = TC_H_MAKE(tp->prio, be16_to_cpu(tp->protocol));
 	if (nla_put_string(skb, TCA_KIND, tp->ops->kind))
 		goto nla_put_failure;
 	if (nla_put_u32(skb, TCA_CHAIN, tp->chain->index))
@@ -2692,7 +2692,7 @@ static bool tcf_chain_dump(struct tcf_chain *chain, struct Qdisc *q, u32 parent,
 		    TC_H_MAJ(tcm->tcm_info) != tp->prio)
 			continue;
 		if (TC_H_MIN(tcm->tcm_info) &&
-		    TC_H_MIN(tcm->tcm_info) != tp->protocol)
+		    TC_H_MIN(tcm->tcm_info) != be16_to_cpu(tp->protocol))
 			continue;
 		if (*p_index > index_start)
 			memset(&cb->args[1], 0,
