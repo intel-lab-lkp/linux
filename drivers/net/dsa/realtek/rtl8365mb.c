@@ -2164,7 +2164,7 @@ static const struct realtek_ops rtl8365mb_ops = {
 	.phy_write = rtl8365mb_phy_write,
 };
 
-const struct realtek_variant rtl8365mb_variant = {
+static const struct realtek_variant rtl8365mb_variant = {
 	.ds_ops_smi = &rtl8365mb_switch_ops_smi,
 	.ds_ops_mdio = &rtl8365mb_switch_ops_mdio,
 	.ops = &rtl8365mb_ops,
@@ -2173,7 +2173,7 @@ const struct realtek_variant rtl8365mb_variant = {
 	.cmd_write = 0xb8,
 	.chip_data_sz = sizeof(struct rtl8365mb),
 };
-EXPORT_SYMBOL_GPL(rtl8365mb_variant);
+module_realtek_variant(rtl8365mb_variant, "realtek,rtl8365mb");
 
 MODULE_AUTHOR("Alvin Šipraga <alsi@bang-olufsen.dk>");
 MODULE_DESCRIPTION("Driver for RTL8365MB-VC ethernet switch");

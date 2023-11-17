@@ -143,7 +143,4 @@ void rtl8366_get_strings(struct dsa_switch *ds, int port, u32 stringset,
 int rtl8366_get_sset_count(struct dsa_switch *ds, int port, int sset);
 void rtl8366_get_ethtool_stats(struct dsa_switch *ds, int port, uint64_t *data);
 
-extern const struct realtek_variant rtl8366rb_variant;
-extern const struct realtek_variant rtl8365mb_variant;
-
 #endif /*  _REALTEK_H */

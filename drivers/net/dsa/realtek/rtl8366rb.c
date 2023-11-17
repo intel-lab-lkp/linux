@@ -1912,7 +1912,7 @@ static const struct realtek_ops rtl8366rb_ops = {
 	.phy_write	= rtl8366rb_phy_write,
 };
 
-const struct realtek_variant rtl8366rb_variant = {
+static const struct realtek_variant rtl8366rb_variant = {
 	.ds_ops_smi = &rtl8366rb_switch_ops_smi,
 	.ds_ops_mdio = &rtl8366rb_switch_ops_mdio,
 	.ops = &rtl8366rb_ops,
@@ -1921,7 +1921,7 @@ const struct realtek_variant rtl8366rb_variant = {
 	.cmd_write = 0xa8,
 	.chip_data_sz = sizeof(struct rtl8366rb),
 };
-EXPORT_SYMBOL_GPL(rtl8366rb_variant);
+module_realtek_variant(rtl8366rb_variant, "realtek,rtl8366rb");
 
 MODULE_AUTHOR("Linus Walleij <linus.walleij@linaro.org>");
 MODULE_DESCRIPTION("Driver for RTL8366RB ethernet switch");

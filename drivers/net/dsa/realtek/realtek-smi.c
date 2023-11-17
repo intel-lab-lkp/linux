@@ -408,12 +408,16 @@ static int realtek_smi_probe(struct platform_device *pdev)
 
 	/* Fetch MDIO pins */
 	priv->mdc = devm_gpiod_get_optional(dev, "mdc", GPIOD_OUT_LOW);
-	if (IS_ERR(priv->mdc))
-		return PTR_ERR(priv->mdc);
+	if (IS_ERR(priv->mdc)) {
+		ret = PTR_ERR(priv->mdc);
+		goto err_variant_put;
+	}
 
 	priv->mdio = devm_gpiod_get_optional(dev, "mdio", GPIOD_OUT_LOW);
-	if (IS_ERR(priv->mdio))
-		return PTR_ERR(priv->mdio);
+	if (IS_ERR(priv->mdio)) {
+		ret = PTR_ERR(priv->mdc);
+		goto err_variant_put;
+	}
 
 	priv->setup_interface = realtek_smi_setup_mdio;
 	priv->write_reg_noack = realtek_smi_write_reg_noack;
@@ -421,7 +425,7 @@ static int realtek_smi_probe(struct platform_device *pdev)
 	ret = priv->ops->detect(priv);
 	if (ret) {
 		dev_err(dev, "unable to detect switch\n");
-		return ret;
+		goto err_variant_put;
 	}
 
 	priv->ds->ops = priv->variant->ds_ops_smi;
@@ -430,10 +434,15 @@ static int realtek_smi_probe(struct platform_device *pdev)
 	ret = dsa_register_switch(priv->ds);
 	if (ret) {
 		dev_err_probe(dev, ret, "unable to register switch\n");
-		return ret;
+		goto err_variant_put;
 	}
 
 	return 0;
+
+err_variant_put:
+	realtek_variant_put(priv->variant);
+
+	return ret;
 }
 
 static void realtek_smi_remove(struct platform_device *pdev)
