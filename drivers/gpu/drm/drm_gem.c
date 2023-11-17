@@ -222,9 +222,6 @@ drm_gem_object_handle_put_unlocked(struct drm_gem_object *obj)
 	struct drm_device *dev = obj->dev;
 	bool final = false;
 
-	if (WARN_ON(READ_ONCE(obj->handle_count) == 0))
-		return;
-
 	/*
 	* Must bump handle count first as this may be the last
 	* ref, in which case the object would disappear before we
