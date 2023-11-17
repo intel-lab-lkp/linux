@@ -417,7 +417,8 @@ static void dirty_ring_after_vcpu_run(struct kvm_vcpu *vcpu, int ret, int err)
 
 static void dirty_ring_before_vcpu_join(void)
 {
-	/* Kick another round of vcpu just to make sure it will quit */
+	/* Wait vcpu exit, and let it continue to see the host_quit. */
+	dirty_ring_wait_vcpu();
 	sem_post(&sem_vcpu_cont);
 }
 
@@ -719,12 +720,18 @@ static void run_test(enum vm_guest_mode mode, void *arg)
 	struct kvm_vm *vm;
 	unsigned long *bmap;
 	uint32_t ring_buf_idx = 0;
+	int sem_val;
 
 	if (!log_mode_supported()) {
 		print_skip("Log mode '%s' not supported",
 			   log_modes[host_log_mode].name);
 		return;
 	}
+
+	sem_getvalue(&sem_vcpu_stop, &sem_val);
+	assert(sem_val == 0);
+	sem_getvalue(&sem_vcpu_cont, &sem_val);
+	assert(sem_val == 0);
 
 	/*
 	 * We reserve page table for 2 times of extra dirty mem which
@@ -825,6 +832,13 @@ static void run_test(enum vm_guest_mode mode, void *arg)
 		sync_global_to_guest(vm, iteration);
 	}
 
+	/*
+	 *
+	 * Before we set the host_quit, let the vcpu has time to run, to make
+	 * sure we consume the sem_vcpu_stop and the vcpu consume the
+	 * sem_vcpu_cont, to keep the semaphore balance.
+	 */
+	usleep(p->interval * 1000);
 	/* Tell the vcpu thread to quit */
 	host_quit = true;
 	log_mode_before_vcpu_join();
