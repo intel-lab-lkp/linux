@@ -98,6 +98,8 @@
 #define ST_EPOF				0x80
 /* Status transfer size, 16 bytes status, 16 byte result flags */
 #define ST_SIZE				0x20
+/* 1-wire data i/o fifo size, 128 bytes */
+#define FIFO_SIZE                       0x80
 
 /* Result Register flags */
 #define RR_DETECT			0xA5 /* New device detected */
@@ -614,13 +616,10 @@ static int ds_read_byte(struct ds_device *dev, u8 *byte)
 	return 0;
 }
 
-static int ds_read_block(struct ds_device *dev, u8 *buf, int len)
+static int __read_block(struct ds_device *dev, u8 *buf, int len)
 {
 	struct ds_status st;
 	int err;
-
-	if (len > 64*1024)
-		return -E2BIG;
 
 	memset(buf, 0xFF, len);
 
@@ -640,7 +639,25 @@ static int ds_read_block(struct ds_device *dev, u8 *buf, int len)
 	return err;
 }
 
-static int ds_write_block(struct ds_device *dev, u8 *buf, int len)
+static int ds_read_block(struct ds_device *dev, u8 *buf, int len)
+{
+	int err, to_read, rem = len;
+
+	if (len > 64*1024)
+		return -E2BIG;
+
+	do {
+		to_read = rem <= FIFO_SIZE ? rem : FIFO_SIZE;
+		err = __read_block(dev, &buf[len - rem], to_read);
+		if (err < 0)
+			return err;
+		rem -= to_read;
+	} while (rem);
+
+	return err;
+}
+
+static int __write_block(struct ds_device *dev, u8 *buf, int len)
 {
 	int err;
 	struct ds_status st;
@@ -663,6 +680,24 @@ static int ds_write_block(struct ds_device *dev, u8 *buf, int len)
 		return err;
 
 	return !(err == len);
+}
+
+static int ds_write_block(struct ds_device *dev, u8 *buf, int len)
+{
+	int err, to_write, rem = len;
+
+	if (len > 64*1024)
+		return -E2BIG;
+
+	do {
+		to_write = rem <= FIFO_SIZE ? rem : FIFO_SIZE;
+		err = __write_block(dev, &buf[len - rem], to_write);
+		if (err < 0)
+			return err;
+		rem -= to_write;
+	} while (rem);
+
+	return err;
 }
 
 static void ds9490r_search(void *data, struct w1_master *master,
