@@ -922,7 +922,7 @@ exit_fp_process:
 
 static void qedi_ring_doorbell(struct qedi_conn *qedi_conn)
 {
-	qedi_conn->ep->db_data.sq_prod = qedi_conn->ep->fw_sq_prod_idx;
+	qedi_conn->ep->db_data.sq_prod = cpu_to_le16(qedi_conn->ep->fw_sq_prod_idx);
 
 	/* wmb - Make sure fw idx is coherent */
 	wmb();
