@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- *	w1_ds2433.c - w1 family 23 (DS2433) driver
+ *	w1_ds2433.c - w1 family 23 (DS2433) & 43 (DS28EC20) eeprom driver
  *
  * Copyright (c) 2005 Ben Gardner <bgardner@wabtec.com>
+ * Copyright (c) 2023 Marc Ferland <marc.ferland@sonatest.com>
  */
 
 #include <linux/kernel.h>
@@ -23,6 +24,7 @@
 #include <linux/w1.h>
 
 #define W1_F23_EEPROM_DS2433	0x23
+#define W1_F43_EEPROM_DS28EC20	0x43
 
 #define W1_PAGE_SIZE		32
 #define W1_PAGE_BITS		5
@@ -45,10 +47,16 @@ static const struct ds2433_config config_f23 = {
 	.tprog = 5,
 };
 
+static const struct ds2433_config config_f43 = {
+	.eeprom_size = 2560,
+	.page_count = 80,
+	.tprog = 10,
+};
+
 struct w1_data {
 #ifdef CONFIG_W1_SLAVE_DS2433_CRC
-	u8	*memory;
-	u32	validcrc;
+	u8		*memory;
+	unsigned long	*validcrc;
 #endif
 	const struct ds2433_config *cfg;
 };
@@ -75,11 +83,11 @@ static int w1_f23_refresh_block(struct w1_slave *sl, struct w1_data *data,
 	u8	wrbuf[3];
 	int	off = block * W1_PAGE_SIZE;
 
-	if (data->validcrc & (1 << block))
+	if (test_bit(block, data->validcrc))
 		return 0;
 
 	if (w1_reset_select_slave(sl)) {
-		data->validcrc = 0;
+		bitmap_zero(data->validcrc, data->cfg->page_count);
 		return -EIO;
 	}
 
@@ -91,7 +99,7 @@ static int w1_f23_refresh_block(struct w1_slave *sl, struct w1_data *data,
 
 	/* cache the block if the CRC is valid */
 	if (crc16(CRC16_INIT, &data->memory[off], W1_PAGE_SIZE) == CRC16_VALID)
-		data->validcrc |= (1 << block);
+		set_bit(block, data->validcrc);
 
 	return 0;
 }
@@ -206,7 +214,7 @@ static int w1_f23_write(struct w1_slave *sl, int addr, int len, const u8 *data)
 	/* Reset the bus to wake up the EEPROM (this may not be needed) */
 	w1_reset_bus(sl->master);
 #ifdef CONFIG_W1_SLAVE_DS2433_CRC
-	fdata->validcrc &= ~(1 << (addr >> W1_PAGE_BITS));
+	clear_bit(addr >> W1_PAGE_BITS, fdata->validcrc);
 #endif
 	return 0;
 }
@@ -269,6 +277,13 @@ static struct bin_attribute bin_attr_f23_eeprom = {
 	.size = config_f23.eeprom_size,
 };
 
+static struct bin_attribute bin_attr_f43_eeprom = {
+	.attr = { .name = "eeprom", .mode = 0644 },
+	.read = eeprom_read,
+	.write = eeprom_write,
+	.size = config_f43.eeprom_size,
+};
+
 static struct bin_attribute *w1_f23_bin_attributes[] = {
 	&bin_attr_f23_eeprom,
 	NULL,
@@ -283,6 +298,20 @@ static const struct attribute_group *w1_f23_groups[] = {
 	NULL,
 };
 
+static struct bin_attribute *w1_f43_bin_attributes[] = {
+	&bin_attr_f43_eeprom,
+	NULL,
+};
+
+static const struct attribute_group w1_f43_group = {
+	.bin_attrs = w1_f43_bin_attributes,
+};
+
+static const struct attribute_group *w1_f43_groups[] = {
+	&w1_f43_group,
+	NULL,
+};
+
 static int w1_add_slave(struct w1_slave *sl)
 {
 	struct w1_data *data;
@@ -291,11 +320,25 @@ static int w1_add_slave(struct w1_slave *sl)
 	if (!data)
 		return -ENOMEM;
 
-	data->cfg = &config_f23;
+	switch (sl->family->fid) {
+	case W1_F23_EEPROM_DS2433:
+		data->cfg = &config_f23;
+		break;
+	case W1_F43_EEPROM_DS28EC20:
+		data->cfg = &config_f43;
+		break;
+	}
 
 #ifdef CONFIG_W1_SLAVE_DS2433_CRC
 	data->memory = kzalloc(data->cfg->eeprom_size, GFP_KERNEL);
 	if (!data->memory) {
+		kfree(data);
+		return -ENOMEM;
+	}
+	data->validcrc = bitmap_zalloc(data->cfg->page_count,
+				       GFP_KERNEL);
+	if (!data->validcrc) {
+		kfree(data->memory);
 		kfree(data);
 		return -ENOMEM;
 	}
@@ -310,6 +353,7 @@ static void w1_remove_slave(struct w1_slave *sl)
 	struct w1_data *data = sl->family_data;
 #ifdef CONFIG_W1_SLAVE_DS2433_CRC
 	kfree(data->memory);
+	bitmap_free(data->validcrc);
 #endif /* CONFIG_W1_SLAVE_DS2433_CRC */
 	kfree(data);
 	sl->family_data = NULL;
@@ -321,9 +365,20 @@ static const struct w1_family_ops w1_f23_fops = {
 	.groups		= w1_f23_groups,
 };
 
+static const struct w1_family_ops w1_f43_fops = {
+	.add_slave      = w1_add_slave,
+	.remove_slave   = w1_remove_slave,
+	.groups         = w1_f43_groups,
+};
+
 static struct w1_family w1_family_23 = {
 	.fid = W1_F23_EEPROM_DS2433,
 	.fops = &w1_f23_fops,
+};
+
+static struct w1_family w1_family_43 = {
+	.fid = W1_F43_EEPROM_DS28EC20,
+	.fops = &w1_f43_fops,
 };
 
 static int __init w1_ds2433_init(void)
@@ -334,18 +389,29 @@ static int __init w1_ds2433_init(void)
 	if (err)
 		return err;
 
+	err = w1_register_family(&w1_family_43);
+	if (err)
+		goto err_43;
+
 	return 0;
+
+err_43:
+	w1_unregister_family(&w1_family_23);
+	return err;
 }
 
 static void __exit w1_ds2433_exit(void)
 {
 	w1_unregister_family(&w1_family_23);
+	w1_unregister_family(&w1_family_43);
 }
 
 module_init(w1_ds2433_init);
 module_exit(w1_ds2433_exit);
 
 MODULE_AUTHOR("Ben Gardner <bgardner@wabtec.com>");
-MODULE_DESCRIPTION("w1 family 23 driver for DS2433, 4kb EEPROM");
+MODULE_AUTHOR("Marc Ferland <marc.ferland@sonatest.com>");
+MODULE_DESCRIPTION("w1 family 23/43 driver for DS2433 (4kb) and DS28EC20 (20kb)");
 MODULE_LICENSE("GPL");
 MODULE_ALIAS("w1-family-" __stringify(W1_F23_EEPROM_DS2433));
+MODULE_ALIAS("w1-family-" __stringify(W1_F43_EEPROM_DS28EC20));
