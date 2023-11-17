@@ -1094,7 +1094,7 @@ int graph_util_parse_dai(struct device *dev, struct device_node *ep,
 	/* Get dai->name */
 	args.np		= node;
 	args.args[0]	= graph_get_dai_id(ep);
-	args.args_count	= (of_graph_get_endpoint_count(node) > 1);
+	args.args_count	= (of_graph_get_endpoint_count(node) >= 1);
 
 	/*
 	 * FIXME
