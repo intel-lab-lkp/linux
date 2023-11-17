@@ -267,7 +267,8 @@ static int kvm_gmem_migrate_folio(struct address_space *mapping,
 	return -EINVAL;
 }
 
-static int kvm_gmem_error_page(struct address_space *mapping, struct page *page)
+static int kvm_gmem_error_folio(struct address_space *mapping,
+		struct folio *folio)
 {
 	struct list_head *gmem_list = &mapping->private_list;
 	struct kvm_gmem *gmem;
@@ -275,8 +276,8 @@ static int kvm_gmem_error_page(struct address_space *mapping, struct page *page)
 
 	filemap_invalidate_lock_shared(mapping);
 
-	start = page->index;
-	end = start + thp_nr_pages(page);
+	start = folio->index;
+	end = start + folio_nr_pages(folio);
 
 	list_for_each_entry(gmem, gmem_list, entry)
 		kvm_gmem_invalidate_begin(gmem, start, end);
@@ -303,7 +304,7 @@ static const struct address_space_operations kvm_gmem_aops = {
 #ifdef CONFIG_MIGRATION
 	.migrate_folio	= kvm_gmem_migrate_folio,
 #endif
-	.error_remove_page = kvm_gmem_error_page,
+	.error_remove_folio = kvm_gmem_error_folio,
 };
 
 static int kvm_gmem_getattr(struct mnt_idmap *idmap, const struct path *path,
