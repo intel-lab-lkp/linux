@@ -505,6 +505,21 @@ static void aqr107_chip_info(struct phy_device *phydev)
 		   fw_major, fw_minor, build_id, prov_id);
 }
 
+static void aqr107_validate_mode(struct phy_device *phydev,
+				 phy_interface_t dts_mode)
+{
+	int ret;
+
+	/* Get the actual PHY mode */
+	ret = aqr107_read_status(phydev);
+	if (ret)
+		return;
+
+	if (dts_mode != phydev->interface)
+		phydev_info(phydev, "%s mode is set in DTS while %s mode is actual. Please update your devicetree.\n",
+			    phy_modes(dts_mode), phy_modes(phydev->interface));
+}
+
 static int aqr107_config_init(struct phy_device *phydev)
 {
 	int ret;
@@ -527,6 +542,8 @@ static int aqr107_config_init(struct phy_device *phydev)
 	ret = aqr107_wait_reset_complete(phydev);
 	if (!ret)
 		aqr107_chip_info(phydev);
+
+	aqr107_validate_mode(phydev, phydev->interface);
 
 	return aqr107_set_downshift(phydev, MDIO_AN_VEND_PROV_DOWNSHIFT_DFLT);
 }
