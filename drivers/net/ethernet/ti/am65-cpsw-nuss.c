@@ -2999,7 +2999,7 @@ err_pm_clear:
 	return ret;
 }
 
-static int am65_cpsw_nuss_remove(struct platform_device *pdev)
+static void am65_cpsw_nuss_remove(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct am65_cpsw_common *common;
@@ -3030,7 +3030,6 @@ static int am65_cpsw_nuss_remove(struct platform_device *pdev)
 
 	pm_runtime_put_sync(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
-	return 0;
 }
 
 static int am65_cpsw_nuss_suspend(struct device *dev)
@@ -3130,7 +3129,7 @@ static struct platform_driver am65_cpsw_nuss_driver = {
 		.pm = &am65_cpsw_nuss_dev_pm_ops,
 	},
 	.probe = am65_cpsw_nuss_probe,
-	.remove = am65_cpsw_nuss_remove,
+	.remove_new = am65_cpsw_nuss_remove,
 };
 
 module_platform_driver(am65_cpsw_nuss_driver);
