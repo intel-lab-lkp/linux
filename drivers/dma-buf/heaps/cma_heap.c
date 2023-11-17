@@ -367,7 +367,14 @@ static const struct dma_heap_ops cma_heap_ops = {
 	.allocate = cma_heap_allocate,
 };
 
-static int __add_cma_heap(struct cma *cma, void *data)
+/**
+ * cma_heap_add - adds a CMA heap to dmabuf heaps
+ * @cma:       pointer to the CMA pool to register the heap for
+ * @data:      unused
+ *
+ * Returns 0 on success. Else, returns errno.
+ */
+int cma_heap_add(struct cma *cma, void *data)
 {
 	struct cma_heap *cma_heap;
 	struct dma_heap_export_info exp_info;
@@ -391,6 +398,7 @@ static int __add_cma_heap(struct cma *cma, void *data)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(cma_heap_add);
 
 static int add_default_cma_heap(void)
 {
@@ -398,7 +406,7 @@ static int add_default_cma_heap(void)
 	int ret = 0;
 
 	if (default_cma)
-		ret = __add_cma_heap(default_cma, NULL);
+		ret = cma_heap_add(default_cma, NULL);
 
 	return ret;
 }

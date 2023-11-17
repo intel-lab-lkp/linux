@@ -12,6 +12,7 @@
 #include <linux/cdev.h>
 #include <linux/types.h>
 
+struct cma;
 struct dma_heap;
 
 /**
@@ -64,5 +65,14 @@ const char *dma_heap_get_name(struct dma_heap *heap);
  * @exp_info:		information needed to register this heap
  */
 struct dma_heap *dma_heap_add(const struct dma_heap_export_info *exp_info);
+
+#ifdef CONFIG_DMABUF_HEAPS_CMA
+int cma_heap_add(struct cma *cma, void *data);
+#else
+static inline int cma_heap_add(struct cma *cma, void *data)
+{
+	return -EINVAL;
+}
+#endif /* CONFIG_DMABUF_HEAPS_CMA */
 
 #endif /* _DMA_HEAPS_H */
