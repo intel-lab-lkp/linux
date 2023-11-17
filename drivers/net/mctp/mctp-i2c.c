@@ -34,7 +34,7 @@
 #define MCTP_I2C_BUFSZ (3 + MCTP_I2C_MAXBLOCK + 1)
 #define MCTP_I2C_MINLEN 8
 #define MCTP_I2C_COMMANDCODE 0x0f
-#define MCTP_I2C_TX_WORK_LEN 100
+#define MCTP_I2C_TX_WORK_LEN 500
 /* Sufficient for 64kB at min mtu */
 #define MCTP_I2C_TX_QUEUE_LEN 1100
 
