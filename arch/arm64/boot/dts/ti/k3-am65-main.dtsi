@@ -490,11 +490,12 @@
 			reg = <0x00004090 0x4>;
 		};
 
-		serdes_mux: mux-controller {
-			compatible = "mmio-mux";
+		serdes_mux: mux-controller@4080 {
+			compatible = "reg-mux";
+			reg = <0x4080 0x14>;
 			#mux-control-cells = <1>;
-			mux-reg-masks = <0x4080 0x3>, /* SERDES0 lane select */
-					<0x4090 0x3>; /* SERDES1 lane select */
+			mux-reg-masks = <0x0 0x3>, /* SERDES0 lane select */
+					<0x10 0x3>; /* SERDES1 lane select */
 		};
 
 		dss_oldi_io_ctrl: dss-oldi-io-ctrl@41e0 {
