@@ -75,8 +75,8 @@ struct mbox_info {
 };
 
 /*
- * Hardcoded TCM bank values. This will be removed once TCM bindings are
- * accepted for system-dt specifications and upstreamed in linux kernel
+ * Hardcoded TCM bank values. This will stay in driver to maintain backward
+ * compatibility with device-tree that does not have TCM information.
  */
 static const struct mem_bank_data zynqmp_tcm_banks_split[] = {
 	{0xffe00000UL, 0x0, 0x10000UL, PD_R5_0_ATCM, "atcm0"}, /* TCM 64KB each */
@@ -587,12 +587,21 @@ static int add_tcm_carveout_split_mode(struct rproc *rproc)
 		bank_size = r5_core->tcm_banks[i]->size;
 		pm_domain_id = r5_core->tcm_banks[i]->pm_domain_id;
 
-		ret = zynqmp_pm_request_node(pm_domain_id,
-					     ZYNQMP_PM_CAPABILITY_ACCESS, 0,
-					     ZYNQMP_PM_REQUEST_ACK_BLOCKING);
-		if (ret < 0) {
-			dev_err(dev, "failed to turn on TCM 0x%x", pm_domain_id);
-			goto release_tcm_split;
+		/*
+		 * If TCM information is available in device-tree then
+		 * in that case, pm domain framework will power on/off TCM.
+		 * In that case pm_domain_id is set to 0. If hardcode
+		 * bindings from driver is used, then only this driver will
+		 * use pm_domain_id.
+		 */
+		if (pm_domain_id) {
+			ret = zynqmp_pm_request_node(pm_domain_id,
+						     ZYNQMP_PM_CAPABILITY_ACCESS, 0,
+						     ZYNQMP_PM_REQUEST_ACK_BLOCKING);
+			if (ret < 0) {
+				dev_err(dev, "failed to turn on TCM 0x%x", pm_domain_id);
+				goto release_tcm_split;
+			}
 		}
 
 		dev_dbg(dev, "TCM carveout split mode %s addr=%llx, da=0x%x, size=0x%lx",
@@ -604,7 +613,8 @@ static int add_tcm_carveout_split_mode(struct rproc *rproc)
 						 bank_name);
 		if (!rproc_mem) {
 			ret = -ENOMEM;
-			zynqmp_pm_release_node(pm_domain_id);
+			if (pm_domain_id)
+				zynqmp_pm_release_node(pm_domain_id);
 			goto release_tcm_split;
 		}
 
@@ -617,7 +627,8 @@ release_tcm_split:
 	/* If failed, Turn off all TCM banks turned on before */
 	for (i--; i >= 0; i--) {
 		pm_domain_id = r5_core->tcm_banks[i]->pm_domain_id;
-		zynqmp_pm_release_node(pm_domain_id);
+		if (pm_domain_id)
+			zynqmp_pm_release_node(pm_domain_id);
 	}
 	return ret;
 }
@@ -659,13 +670,16 @@ static int add_tcm_carveout_lockstep_mode(struct rproc *rproc)
 		pm_domain_id = r5_core->tcm_banks[i]->pm_domain_id;
 
 		/* Turn on each TCM bank individually */
-		ret = zynqmp_pm_request_node(pm_domain_id,
-					     ZYNQMP_PM_CAPABILITY_ACCESS, 0,
-					     ZYNQMP_PM_REQUEST_ACK_BLOCKING);
-		if (ret < 0) {
-			dev_err(dev, "failed to turn on TCM 0x%x",
-				pm_domain_id);
-			goto release_tcm_lockstep;
+
+		if (pm_domain_id) {
+			ret = zynqmp_pm_request_node(pm_domain_id,
+						     ZYNQMP_PM_CAPABILITY_ACCESS, 0,
+						     ZYNQMP_PM_REQUEST_ACK_BLOCKING);
+			if (ret < 0) {
+				dev_err(dev, "failed to turn on TCM 0x%x",
+					pm_domain_id);
+				goto release_tcm_lockstep;
+			}
 		}
 
 		bank_size = r5_core->tcm_banks[i]->size;
@@ -683,7 +697,8 @@ static int add_tcm_carveout_lockstep_mode(struct rproc *rproc)
 						 bank_name);
 		if (!rproc_mem) {
 			ret = -ENOMEM;
-			zynqmp_pm_release_node(pm_domain_id);
+			if (pm_domain_id)
+				zynqmp_pm_release_node(pm_domain_id);
 			goto release_tcm_lockstep;
 		}
 
@@ -700,7 +715,8 @@ release_tcm_lockstep:
 	/* If failed, Turn off all TCM banks turned on before */
 	for (i--; i >= 0; i--) {
 		pm_domain_id = r5_core->tcm_banks[i]->pm_domain_id;
-		zynqmp_pm_release_node(pm_domain_id);
+		if (pm_domain_id)
+			zynqmp_pm_release_node(pm_domain_id);
 	}
 	return ret;
 }
@@ -931,6 +947,8 @@ static int zynqmp_r5_add_pm_domains(struct rproc *rproc)
 		}
 	}
 
+	return 0;
+
 fail_add_pm_domains_lockstep:
 	while (--j >= 0) {
 		device_link_del(r5_core->pm_dev_core1_link[j]);
@@ -1012,7 +1030,7 @@ static int zynqmp_r5_rproc_unprepare(struct rproc *rproc)
 
 	for (i = 0; i < r5_core->tcm_bank_count; i++) {
 		pm_domain_id = r5_core->tcm_banks[i]->pm_domain_id;
-		if (zynqmp_pm_release_node(pm_domain_id))
+		if (pm_domain_id && zynqmp_pm_release_node(pm_domain_id))
 			dev_warn(r5_core->dev,
 				 "can't turn off TCM bank 0x%x", pm_domain_id);
 	}
@@ -1085,6 +1103,83 @@ static struct zynqmp_r5_core *zynqmp_r5_add_rproc_core(struct device *cdev)
 free_rproc:
 	rproc_free(r5_rproc);
 	return ERR_PTR(ret);
+}
+
+static int zynqmp_r5_get_tcm_node_from_dt(struct zynqmp_r5_cluster *cluster)
+{
+	struct zynqmp_r5_core *r5_core;
+	int i, j, tcm_bank_count, ret;
+	struct platform_device *cpdev;
+	struct mem_bank_data *tcm;
+	struct device_node *np;
+	struct resource *res;
+	u64 abs_addr, size;
+	struct device *dev;
+
+	for (i = 0; i < cluster->core_count; i++) {
+		r5_core = cluster->r5_cores[i];
+		dev = r5_core->dev;
+		np = dev_of_node(dev);
+
+		/* we have address cell 2 and size cell as 2 */
+		ret = of_property_count_elems_of_size(np, "reg",
+						      4 * sizeof(u32));
+		if (ret <= 0) {
+			dev_err(dev, "can't get reg property err %d\n", ret);
+			return -EINVAL;
+		}
+
+		tcm_bank_count = ret;
+
+		r5_core->tcm_banks = devm_kcalloc(dev, tcm_bank_count,
+						  sizeof(struct mem_bank_data *),
+						  GFP_KERNEL);
+		if (!r5_core->tcm_banks)
+			ret = -ENOMEM;
+
+		r5_core->tcm_bank_count = tcm_bank_count;
+		for (j = 0; j < tcm_bank_count; j++) {
+			tcm = devm_kzalloc(dev, sizeof(struct mem_bank_data),
+					   GFP_KERNEL);
+			if (!tcm)
+				return -ENOMEM;
+
+			r5_core->tcm_banks[j] = tcm;
+
+			/* get tcm address without translation */
+			ret = of_property_read_reg(np, j, &abs_addr, &size);
+			if (ret) {
+				dev_err(dev, "failed to get reg property\n");
+				return ret;
+			}
+
+			/*
+			 * remote processor can address only 32 bits
+			 * so convert 64-bits into 32-bits. This will discard
+			 * any unwanted upper 32-bits.
+			 */
+			tcm->da = (u32)abs_addr;
+			tcm->size = (u32)size;
+
+			cpdev = to_platform_device(dev);
+			res = platform_get_resource(cpdev, IORESOURCE_MEM, j);
+			if (!res) {
+				dev_err(dev, "failed to get tcm resource\n");
+				return -EINVAL;
+			}
+
+			tcm->addr = (u32)res->start;
+			tcm->bank_name = (char *)res->name;
+			res = devm_request_mem_region(dev, tcm->addr, tcm->size,
+						      tcm->bank_name);
+			if (!res) {
+				dev_err(dev, "failed to request tcm resource\n");
+				return -EINVAL;
+			}
+		}
+	}
+
+	return 0;
 }
 
 /**
@@ -1165,10 +1260,19 @@ static int zynqmp_r5_core_init(struct zynqmp_r5_cluster *cluster,
 	struct zynqmp_r5_core *r5_core;
 	int ret, i;
 
-	ret = zynqmp_r5_get_tcm_node(cluster);
-	if (ret < 0) {
-		dev_err(dev, "can't get tcm node, err %d\n", ret);
-		return ret;
+	r5_core = cluster->r5_cores[0];
+	if (of_find_property(r5_core->np, "reg", NULL)) {
+		ret = zynqmp_r5_get_tcm_node_from_dt(cluster);
+		if (ret) {
+			dev_err(dev, "can't get tcm node from dt, err %d\n", ret);
+			return ret;
+		}
+	} else {
+		ret = zynqmp_r5_get_tcm_node(cluster);
+		if (ret < 0) {
+			dev_err(dev, "can't get tcm node, err %d\n", ret);
+			return ret;
+		}
 	}
 
 	for (i = 0; i < cluster->core_count; i++) {
