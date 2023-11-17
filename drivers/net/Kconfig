@@ -626,6 +626,7 @@ config NETDEVSIM
 	depends on PSAMPLE || PSAMPLE=n
 	depends on PTP_1588_CLOCK_MOCK || PTP_1588_CLOCK_MOCK=n
 	select NET_DEVLINK
+	select DPLL
 	help
 	  This driver is a developer testing tool and software model that can
 	  be used to test various control path networking APIs, especially

@@ -344,8 +344,15 @@ static int nsim_init_netdevsim(struct netdevsim *ns)
 	if (err)
 		goto err_ipsec_teardown;
 	rtnl_unlock();
+
+	err = nsim_rclk_init(ns);
+	if (err)
+		goto err_netdevice_unregister;
+
 	return 0;
 
+err_netdevice_unregister:
+	unregister_netdevice(ns->netdev);
 err_ipsec_teardown:
 	nsim_ipsec_teardown(ns);
 	nsim_macsec_teardown(ns);
@@ -419,6 +426,9 @@ void nsim_destroy(struct netdevsim *ns)
 	if (nsim_dev_port_is_pf(ns->nsim_dev_port))
 		nsim_udp_tunnels_info_destroy(dev);
 	mock_phc_destroy(ns->phc);
+
+	nsim_rclk_free(ns);
+
 	free_netdev(dev);
 }
 
