@@ -1,5 +1,7 @@
 .. SPDX-License-Identifier: GPL-2.0
 
+.. _firmware_acpi_non_d0_probe:
+
 ========================================
 Probing devices in other D states than 0
 ========================================
