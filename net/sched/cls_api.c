@@ -387,7 +387,7 @@ static struct tcf_proto *tcf_proto_create(const char *kind, u32 protocol,
 		goto errout;
 	}
 	tp->classify = tp->ops->classify;
-	tp->protocol = protocol;
+	tp->protocol = cpu_to_be16(protocol);
 	tp->prio = prio;
 	tp->chain = chain;
 	spin_lock_init(&tp->lock);
