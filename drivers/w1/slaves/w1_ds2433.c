@@ -45,7 +45,7 @@ static const struct ds2433_config config_f23 = {
 	.tprog = 5,
 };
 
-struct w1_f23_data {
+struct w1_data {
 #ifdef CONFIG_W1_SLAVE_DS2433_CRC
 	u8	*memory;
 	u32	validcrc;
@@ -69,7 +69,7 @@ static inline size_t w1_f23_fix_count(loff_t off, size_t count, size_t size)
 }
 
 #ifdef CONFIG_W1_SLAVE_DS2433_CRC
-static int w1_f23_refresh_block(struct w1_slave *sl, struct w1_f23_data *data,
+static int w1_f23_refresh_block(struct w1_slave *sl, struct w1_data *data,
 				int block)
 {
 	u8	wrbuf[3];
@@ -103,7 +103,7 @@ static ssize_t eeprom_read(struct file *filp, struct kobject *kobj,
 {
 	struct w1_slave *sl = kobj_to_w1_slave(kobj);
 #ifdef CONFIG_W1_SLAVE_DS2433_CRC
-	struct w1_f23_data *data = sl->family_data;
+	struct w1_data *data = sl->family_data;
 	int i, min_page, max_page;
 #else
 	u8 wrbuf[3];
@@ -164,7 +164,7 @@ out_up:
  */
 static int w1_f23_write(struct w1_slave *sl, int addr, int len, const u8 *data)
 {
-	struct w1_f23_data *f23 = sl->family_data;
+	struct w1_data *fdata = sl->family_data;
 	u8 wrbuf[4];
 	u8 rdbuf[W1_PAGE_SIZE + 3];
 	u8 es = (addr + len - 1) & 0x1f;
@@ -201,12 +201,12 @@ static int w1_f23_write(struct w1_slave *sl, int addr, int len, const u8 *data)
 	w1_write_block(sl->master, wrbuf, 4);
 
 	/* Sleep for tprog ms to wait for the write to complete */
-	msleep(f23->cfg->tprog);
+	msleep(fdata->cfg->tprog);
 
 	/* Reset the bus to wake up the EEPROM (this may not be needed) */
 	w1_reset_bus(sl->master);
 #ifdef CONFIG_W1_SLAVE_DS2433_CRC
-	f23->validcrc &= ~(1 << (addr >> W1_PAGE_BITS));
+	fdata->validcrc &= ~(1 << (addr >> W1_PAGE_BITS));
 #endif
 	return 0;
 }
@@ -283,11 +283,11 @@ static const struct attribute_group *w1_f23_groups[] = {
 	NULL,
 };
 
-static int w1_f23_add_slave(struct w1_slave *sl)
+static int w1_add_slave(struct w1_slave *sl)
 {
-	struct w1_f23_data *data;
+	struct w1_data *data;
 
-	data = kzalloc(sizeof(struct w1_f23_data), GFP_KERNEL);
+	data = kzalloc(sizeof(struct w1_data), GFP_KERNEL);
 	if (!data)
 		return -ENOMEM;
 
@@ -305,9 +305,9 @@ static int w1_f23_add_slave(struct w1_slave *sl)
 	return 0;
 }
 
-static void w1_f23_remove_slave(struct w1_slave *sl)
+static void w1_remove_slave(struct w1_slave *sl)
 {
-	struct w1_f23_data *data = sl->family_data;
+	struct w1_data *data = sl->family_data;
 #ifdef CONFIG_W1_SLAVE_DS2433_CRC
 	kfree(data->memory);
 #endif /* CONFIG_W1_SLAVE_DS2433_CRC */
@@ -316,8 +316,8 @@ static void w1_f23_remove_slave(struct w1_slave *sl)
 }
 
 static const struct w1_family_ops w1_f23_fops = {
-	.add_slave      = w1_f23_add_slave,
-	.remove_slave   = w1_f23_remove_slave,
+	.add_slave      = w1_add_slave,
+	.remove_slave   = w1_remove_slave,
 	.groups		= w1_f23_groups,
 };
 
