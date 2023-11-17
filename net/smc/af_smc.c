@@ -1870,7 +1870,8 @@ static int smcr_serv_conf_first_link(struct smc_sock *smc)
 		return SMC_CLC_DECL_TIMEOUT_CL;
 
 	/* receive CONFIRM LINK response from client over the RoCE fabric */
-	qentry = smc_llc_wait(link->lgr, link, SMC_LLC_WAIT_TIME,
+	qentry = smc_llc_wait(link->lgr, link,
+			      sock_net(&smc->sk)->smc.sysctl_smcr_srv_confirm_link_timeout,
 			      SMC_LLC_CONFIRM_LINK);
 	if (!qentry) {
 		struct smc_clc_msg_decline dclc;

@@ -22,5 +22,7 @@ struct netns_smc {
 	int				sysctl_smcr_testlink_time;
 	int				sysctl_wmem;
 	int				sysctl_rmem;
+	/* server's Confirm Link timeout in seconds */
+	int				sysctl_smcr_srv_confirm_link_timeout;
 };
 #endif

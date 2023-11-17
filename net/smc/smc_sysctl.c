@@ -51,6 +51,13 @@ static struct ctl_table smc_table[] = {
 		.proc_handler	= proc_dointvec_jiffies,
 	},
 	{
+		.procname	= "smcr_srv_confirm_link_timeout",
+		.data		= &init_net.smc.sysctl_smcr_srv_confirm_link_timeout,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_jiffies,
+	},
+	{
 		.procname	= "wmem",
 		.data		= &init_net.smc.sysctl_wmem,
 		.maxlen		= sizeof(int),
@@ -95,6 +102,11 @@ int __net_init smc_sysctl_net_init(struct net *net)
 	net->smc.sysctl_autocorking_size = SMC_AUTOCORKING_DEFAULT_SIZE;
 	net->smc.sysctl_smcr_buf_type = SMCR_PHYS_CONT_BUFS;
 	net->smc.sysctl_smcr_testlink_time = SMC_LLC_TESTLINK_DEFAULT_TIME;
+	/* Increasing the server's timeout by twice as much as the client's
+	 * timeout by default can temporarily avoid decline messages of
+	 * both side been crossed or collided.
+	 */
+	net->smc.sysctl_smcr_srv_confirm_link_timeout = 2 * SMC_LLC_WAIT_TIME;
 	WRITE_ONCE(net->smc.sysctl_wmem, net_smc_wmem_init);
 	WRITE_ONCE(net->smc.sysctl_rmem, net_smc_rmem_init);
 
