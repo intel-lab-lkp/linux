@@ -62,6 +62,7 @@ properties:
           - qcom,scm-sm8450
           - qcom,scm-sm8550
           - qcom,scm-qcs404
+          - qcom,scm-x1e80100
       - const: qcom,scm
 
   clocks:
@@ -179,6 +180,7 @@ allOf:
                 - qcom,scm-sc8280xp
                 - qcom,scm-sm8450
                 - qcom,scm-sm8550
+                - qcom,scm-x1e80100
     then:
       properties:
         interconnects: false
