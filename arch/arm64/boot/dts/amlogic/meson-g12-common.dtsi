@@ -2039,10 +2039,12 @@
 			};
 
 			pwm_AO_cd: pwm@2000 {
-				compatible = "amlogic,meson-g12a-ao-pwm-cd";
+				compatible = "amlogic,meson8-pwm-v2";
 				reg = <0x0 0x2000 0x0 0x20>;
 				#pwm-cells = <3>;
 				status = "disabled";
+				clocks = <&xtal>,
+					 <&clkc_AO CLKID_AO_CLK81>;
 			};
 
 			uart_AO: serial@3000 {
@@ -2078,10 +2080,14 @@
 			};
 
 			pwm_AO_ab: pwm@7000 {
-				compatible = "amlogic,meson-g12a-ao-pwm-ab";
+				compatible = "amlogic,meson8-pwm-v2";
 				reg = <0x0 0x7000 0x0 0x20>;
 				#pwm-cells = <3>;
 				status = "disabled";
+				clocks = <&xtal>,
+					 <&clkc_AO CLKID_AO_CLK81>,
+					 <&clkc CLKID_FCLK_DIV4>,
+					 <&clkc CLKID_FCLK_DIV5>;
 			};
 
 			ir: ir@8000 {
@@ -2229,24 +2235,36 @@
 			};
 
 			pwm_ef: pwm@19000 {
-				compatible = "amlogic,meson-g12a-ee-pwm";
+				compatible = "amlogic,meson8-pwm-v2";
 				reg = <0x0 0x19000 0x0 0x20>;
 				#pwm-cells = <3>;
 				status = "disabled";
+				clocks = <&xtal>,
+					 <0>,
+					 <&clkc CLKID_FCLK_DIV4>,
+					 <&clkc CLKID_FCLK_DIV3>;
 			};
 
 			pwm_cd: pwm@1a000 {
-				compatible = "amlogic,meson-g12a-ee-pwm";
+				compatible = "amlogic,meson8-pwm-v2";
 				reg = <0x0 0x1a000 0x0 0x20>;
 				#pwm-cells = <3>;
 				status = "disabled";
+				clocks = <&xtal>,
+					 <0>,
+					 <&clkc CLKID_FCLK_DIV4>,
+					 <&clkc CLKID_FCLK_DIV3>;
 			};
 
 			pwm_ab: pwm@1b000 {
-				compatible = "amlogic,meson-g12a-ee-pwm";
+				compatible = "amlogic,meson8-pwm-v2";
 				reg = <0x0 0x1b000 0x0 0x20>;
 				#pwm-cells = <3>;
 				status = "disabled";
+				clocks = <&xtal>,
+					 <0>,
+					 <&clkc CLKID_FCLK_DIV4>,
+					 <&clkc CLKID_FCLK_DIV3>;
 			};
 
 			i2c3: i2c@1c000 {
