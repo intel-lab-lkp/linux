@@ -1522,23 +1522,32 @@ static int xhci_urb_enqueue(struct usb_hcd *hcd, struct urb *urb, gfp_t mem_flag
 	struct urb_priv	*urb_priv;
 	int num_tds;
 
-	if (!urb)
-		return -EINVAL;
-	ret = xhci_check_args(hcd, urb->dev, urb->ep,
-					true, true, __func__);
-	if (ret <= 0)
-		return ret ? ret : -EINVAL;
+	spin_lock_irqsave(&xhci->lock, flags);
+
+	if (!urb) {
+		ret = -EINVAL;
+		goto done;
+	}
+
+	ret = xhci_check_args(hcd, urb->dev, urb->ep, true, true, __func__);
+	if (ret <= 0) {
+		ret = ret ? ret : -EINVAL;
+		goto done;
+	}
 
 	slot_id = urb->dev->slot_id;
 	ep_index = xhci_get_endpoint_index(&urb->ep->desc);
 	ep_state = &xhci->devs[slot_id]->eps[ep_index].ep_state;
 
-	if (!HCD_HW_ACCESSIBLE(hcd))
-		return -ESHUTDOWN;
+	if (!HCD_HW_ACCESSIBLE(hcd)) {
+		ret = -ESHUTDOWN;
+		goto done;
+	}
 
 	if (xhci->devs[slot_id]->flags & VDEV_PORT_ERROR) {
 		xhci_dbg(xhci, "Can't queue urb, port error, link inactive\n");
-		return -ENODEV;
+		ret = -ENODEV;
+		goto done;
 	}
 
 	if (usb_endpoint_xfer_isoc(&urb->ep->desc))
@@ -1552,8 +1561,10 @@ static int xhci_urb_enqueue(struct usb_hcd *hcd, struct urb *urb, gfp_t mem_flag
 		num_tds = 1;
 
 	urb_priv = kzalloc(struct_size(urb_priv, td, num_tds), mem_flags);
-	if (!urb_priv)
-		return -ENOMEM;
+	if (!urb_priv) {
+		ret = -ENOMEM;
+		goto done;
+	}
 
 	urb_priv->num_tds = num_tds;
 	urb_priv->num_tds_done = 0;
@@ -1571,12 +1582,10 @@ static int xhci_urb_enqueue(struct usb_hcd *hcd, struct urb *urb, gfp_t mem_flag
 			if (ret < 0) {
 				xhci_urb_free_priv(urb_priv);
 				urb->hcpriv = NULL;
-				return ret;
+				goto done;
 			}
 		}
 	}
-
-	spin_lock_irqsave(&xhci->lock, flags);
 
 	if (xhci->xhc_state & XHCI_STATE_DYING) {
 		xhci_dbg(xhci, "Ep 0x%x: URB %p submitted for non-responsive xHCI host.\n",
@@ -1620,6 +1629,7 @@ free_priv:
 		xhci_urb_free_priv(urb_priv);
 		urb->hcpriv = NULL;
 	}
+done:
 	spin_unlock_irqrestore(&xhci->lock, flags);
 	return ret;
 }
