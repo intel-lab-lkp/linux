@@ -59,6 +59,7 @@
  *  - TCC bit is present in MCx_STATUS.
  */
 #define MCI_CONFIG_MCAX		0x1
+#define MCI_CONFIG_FRUTEXT	BIT_ULL(9)
 #define MCI_IPID_MCATYPE_OLD	0xFFFF0000
 #define MCI_IPID_HWID_OLD	0xFFF
 #define MCI_IPID_MCATYPE	GENMASK_ULL(63, 48)
@@ -199,6 +200,7 @@ struct mce_hw_err {
 		struct {
 			u64 synd1;
 			u64 synd2;
+			u64 config;
 		} amd;
 	} vi;
 };
