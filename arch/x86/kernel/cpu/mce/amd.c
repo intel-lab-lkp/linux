@@ -616,13 +616,12 @@ out:
 
 bool amd_filter_mce(struct mce *m)
 {
-	enum smca_bank_types bank_type = smca_get_bank_type(m->extcpu, m->bank);
 	struct cpuinfo_x86 *c = &boot_cpu_data;
 
 	/* See Family 17h Models 10h-2Fh Erratum #1114. */
 	if (c->x86 == 0x17 &&
 	    c->x86_model >= 0x10 && c->x86_model <= 0x2F &&
-	    bank_type == SMCA_IF && XEC(m->status, 0x3f) == 10)
+	    m->bank == 1 && XEC(m->status, 0x3f) == 10)
 		return true;
 
 	/* NB GART TLB error reporting is disabled by default. */
@@ -654,7 +653,7 @@ static void disable_err_thresholding(struct cpuinfo_x86 *c, unsigned int bank)
 	} else if (c->x86 == 0x17 &&
 		   (c->x86_model >= 0x10 && c->x86_model <= 0x2F)) {
 
-		if (smca_get_bank_type(smp_processor_id(), bank) != SMCA_IF)
+		if (bank != 1)
 			return;
 
 		msrs[0] = MSR_AMD64_SMCA_MCx_MISC(bank);
