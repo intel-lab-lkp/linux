@@ -304,13 +304,6 @@ unsigned long long poke_real_address_q(unsigned long long addr,
 
 #define ioremap_uc	ioremap
 
-/*
- * Convert a physical pointer to a virtual kernel pointer for /dev/mem
- * access
- */
-#define xlate_dev_mem_ptr(p)	__va(p)
-#define unxlate_dev_mem_ptr(p, v) do { } while (0)
-
 #include <asm-generic/io.h>
 
 #define ARCH_HAS_VALID_PHYS_ADDR_RANGE
