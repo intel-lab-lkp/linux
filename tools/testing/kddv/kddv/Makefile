@@ -12,6 +12,7 @@ install:
 	$(INSTALL) -m 0755 -d $(INSTALL_PATH)
 	$(INSTALL) __init__.py $(INSTALL_PATH)
 	cp -rf core/ $(INSTALL_PATH)
+	cp -rf cmds/ $(INSTALL_PATH)
 	cp -rf tests/ $(INSTALL_PATH)
 
 clean:
