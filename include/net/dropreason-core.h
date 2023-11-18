@@ -85,7 +85,11 @@
 	FN(IPV6_NDISC_BAD_OPTIONS)	\
 	FN(IPV6_NDISC_NS_OTHERHOST)	\
 	FN(QUEUE_PURGE)			\
-	FN(TC_ERROR)			\
+	FN(TC_EXT_COOKIE_NOTFOUND)	\
+	FN(TC_COOKIE_EXT_MISMATCH)	\
+	FN(TC_COOKIE_MISMATCH)		\
+	FN(TC_CHAIN_NOTFOUND)		\
+	FN(TC_RECLASSIFY_LOOP)		\
 	FNe(MAX)
 
 /**
@@ -376,8 +380,28 @@ enum skb_drop_reason {
 	SKB_DROP_REASON_IPV6_NDISC_NS_OTHERHOST,
 	/** @SKB_DROP_REASON_QUEUE_PURGE: bulk free. */
 	SKB_DROP_REASON_QUEUE_PURGE,
-	/** @SKB_DROP_REASON_TC_ERROR: generic internal tc error. */
-	SKB_DROP_REASON_TC_ERROR,
+	/**
+	 * @SKB_DROP_REASON_TC_EXT_COOKIE_NOTFOUND: tc cookie was looked up
+	 * using ext, but was not found.
+	 */
+	SKB_DROP_REASON_TC_EXT_COOKIE_NOTFOUND,
+	/**
+	 * @SKB_DROP_REASON_TC_COOKIE_EXT_MISMATCH: tc ext was lookup using
+	 * cookie and either was not found or different from expected.
+	 */
+	SKB_DROP_REASON_TC_COOKIE_EXT_MISMATCH,
+	/**
+	 * @SKB_DROP_REASON_TC_COOKIE_MISMATCH: tc cookie available but was
+	 * unable to match to filter.
+	 */
+	SKB_DROP_REASON_TC_COOKIE_MISMATCH,
+	/** @SKB_DROP_REASON_TC_CHAIN_NOTFOUND: tc chain lookup failed. */
+	SKB_DROP_REASON_TC_CHAIN_NOTFOUND,
+	/**
+	 * @SKB_DROP_REASON_TC_RECLASSIFY_LOOP: tc exceeded max reclassify loop
+	 * iterations.
+	 */
+	SKB_DROP_REASON_TC_RECLASSIFY_LOOP,
 	/**
 	 * @SKB_DROP_REASON_MAX: the maximum of core drop reasons, which
 	 * shouldn't be used as a real 'reason' - only for tracing code gen
