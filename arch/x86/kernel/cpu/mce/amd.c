@@ -129,7 +129,7 @@ static const char *smca_get_name(enum smca_bank_types t)
 	return smca_names[t];
 }
 
-enum smca_bank_types smca_get_bank_type(unsigned int cpu, unsigned int bank)
+static enum smca_bank_types smca_get_bank_type_old(unsigned int cpu, unsigned int bank)
 {
 	struct smca_bank *b;
 
@@ -142,7 +142,6 @@ enum smca_bank_types smca_get_bank_type(unsigned int cpu, unsigned int bank)
 
 	return b->hwid->bank_type;
 }
-EXPORT_SYMBOL_GPL(smca_get_bank_type);
 
 /* UMCs have HWID=0x96.*/
 static bool smca_umc_bank_type(u64 ipid)
@@ -160,7 +159,7 @@ bool smca_gpu_umc_bank_type(u64 ipid)
 }
 EXPORT_SYMBOL_GPL(smca_gpu_umc_bank_type);
 
-static const struct smca_hwid smca_hwid_mcatypes[] = {
+static const struct smca_hwid smca_hwid_mcatypes_old[] = {
 	/* { bank_type, hwid_mcatype } */
 
 	/* Reserved type */
@@ -220,6 +219,83 @@ static const struct smca_hwid smca_hwid_mcatypes[] = {
 	{ SMCA_WAFL_PHY, HWID_MCATYPE(0x267, 0x0)	},
 	{ SMCA_GMI_PHY,	 HWID_MCATYPE(0x269, 0x0)	},
 };
+
+/* Keep sorted first by HWID then by McaType. */
+static const u32 smca_hwid_mcatypes[] = {
+	/* Reserved type */
+	[SMCA_RESERVED]		= HWID_MCATYPE(0x00, 0x0),
+
+	/* System Management Unit MCA type */
+	[SMCA_SMU]		= HWID_MCATYPE(0x01, 0x0),
+	[SMCA_SMU_V2]		= HWID_MCATYPE(0x01, 0x1),
+
+	/* Microprocessor 5 Unit MCA type */
+	[SMCA_MP5]		= HWID_MCATYPE(0x01, 0x2),
+
+	/* MPDMA MCA type */
+	[SMCA_MPDMA]		= HWID_MCATYPE(0x01, 0x3),
+
+	/* Parameter Block MCA type */
+	[SMCA_PB]		= HWID_MCATYPE(0x05, 0x0),
+
+	/* Northbridge IO Unit MCA type */
+	[SMCA_NBIO]		= HWID_MCATYPE(0x18, 0x0),
+
+	/* Data Fabric MCA types */
+	[SMCA_CS]		= HWID_MCATYPE(0x2E, 0x0),
+	[SMCA_PIE]		= HWID_MCATYPE(0x2E, 0x1),
+	[SMCA_CS_V2]		= HWID_MCATYPE(0x2E, 0x2),
+
+	/* PCI Express Unit MCA type */
+	[SMCA_PCIE]		= HWID_MCATYPE(0x46, 0x0),
+	[SMCA_PCIE_V2]		= HWID_MCATYPE(0x46, 0x1),
+
+	[SMCA_XGMI_PCS]		= HWID_MCATYPE(0x50, 0x0),
+	[SMCA_NBIF]		= HWID_MCATYPE(0x6C, 0x0),
+	[SMCA_SHUB]		= HWID_MCATYPE(0x80, 0x0),
+
+	/* Unified Memory Controller MCA type */
+	[SMCA_UMC]		= HWID_MCATYPE(0x96, 0x0),
+	[SMCA_UMC_V2]		= HWID_MCATYPE(0x96, 0x1),
+
+	[SMCA_SATA]		= HWID_MCATYPE(0xA8, 0x0),
+	[SMCA_USB]		= HWID_MCATYPE(0xAA, 0x0),
+
+	/* ZN Core (HWID=0xB0) MCA types */
+	[SMCA_LS]		= HWID_MCATYPE(0xB0, 0x0),
+	[SMCA_IF]		= HWID_MCATYPE(0xB0, 0x1),
+	[SMCA_L2_CACHE]		= HWID_MCATYPE(0xB0, 0x2),
+	[SMCA_DE]		= HWID_MCATYPE(0xB0, 0x3),
+	/* HWID 0xB0 MCATYPE 0x4 is Reserved */
+	[SMCA_EX]		= HWID_MCATYPE(0xB0, 0x5),
+	[SMCA_FP]		= HWID_MCATYPE(0xB0, 0x6),
+	[SMCA_L3_CACHE]		= HWID_MCATYPE(0xB0, 0x7),
+	[SMCA_LS_V2]		= HWID_MCATYPE(0xB0, 0x10),
+
+	/* Platform Security Processor MCA type */
+	[SMCA_PSP]		= HWID_MCATYPE(0xFF, 0x0),
+	[SMCA_PSP_V2]		= HWID_MCATYPE(0xFF, 0x1),
+
+	[SMCA_GMI_PCS]		= HWID_MCATYPE(0x241, 0x0),
+	[SMCA_XGMI_PHY]		= HWID_MCATYPE(0x259, 0x0),
+	[SMCA_WAFL_PHY]		= HWID_MCATYPE(0x267, 0x0),
+	[SMCA_GMI_PHY]		= HWID_MCATYPE(0x269, 0x0),
+};
+
+enum smca_bank_types smca_get_bank_type(u64 ipid)
+{
+	enum smca_bank_types type;
+	u32 hwid_mcatype = HWID_MCATYPE(FIELD_GET(MCI_IPID_HWID, ipid),
+					FIELD_GET(MCI_IPID_MCATYPE, ipid));
+
+	for (type = 0; type < ARRAY_SIZE(smca_hwid_mcatypes); type++) {
+		if (hwid_mcatype == smca_hwid_mcatypes[type])
+			return type;
+	}
+
+	return N_SMCA_BANK_TYPES;
+}
+EXPORT_SYMBOL_GPL(smca_get_bank_type);
 
 /*
  * In SMCA enabled processors, we can have multiple banks for a given IP type.
@@ -324,8 +400,8 @@ static void smca_configure(unsigned int bank, unsigned int cpu)
 	hwid_mcatype = HWID_MCATYPE(high & MCI_IPID_HWID_OLD,
 				    (high & MCI_IPID_MCATYPE_OLD) >> 16);
 
-	for (i = 0; i < ARRAY_SIZE(smca_hwid_mcatypes); i++) {
-		s_hwid = &smca_hwid_mcatypes[i];
+	for (i = 0; i < ARRAY_SIZE(smca_hwid_mcatypes_old); i++) {
+		s_hwid = &smca_hwid_mcatypes_old[i];
 
 		if (hwid_mcatype == s_hwid->hwid_mcatype) {
 			this_cpu_ptr(smca_banks)[bank].hwid = s_hwid;
@@ -1104,7 +1180,7 @@ static const char *get_name(unsigned int cpu, unsigned int bank, struct threshol
 		return th_names[bank];
 	}
 
-	bank_type = smca_get_bank_type(cpu, bank);
+	bank_type = smca_get_bank_type_old(cpu, bank);
 	if (bank_type >= N_SMCA_BANK_TYPES)
 		return NULL;
 

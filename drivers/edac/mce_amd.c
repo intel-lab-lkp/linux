@@ -1207,7 +1207,7 @@ static const char *smca_get_long_name(enum smca_bank_types t)
 /* Decode errors according to Scalable MCA specification */
 static void decode_smca_error(struct mce *m)
 {
-	enum smca_bank_types bank_type = smca_get_bank_type(m->extcpu, m->bank);
+	enum smca_bank_types bank_type = smca_get_bank_type(m->ipid);
 	const char *ip_name;
 	u8 xec = XEC(m->status, xec_mask);
 
