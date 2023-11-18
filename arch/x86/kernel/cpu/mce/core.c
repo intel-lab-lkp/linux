@@ -115,20 +115,31 @@ static struct irq_work mce_irq_work;
  */
 BLOCKING_NOTIFIER_HEAD(x86_mce_decoder_chain);
 
+void mce_setup_global(struct mce *m)
+{
+	memset(m, 0, sizeof(struct mce));
+
+	m->cpuid	= cpuid_eax(1);
+	m->cpuvendor	= boot_cpu_data.x86_vendor;
+	m->mcgcap	= __rdmsr(MSR_IA32_MCG_CAP);
+	/* need the internal __ version to avoid deadlocks */
+	m->time		= __ktime_get_real_seconds();
+}
+
+void mce_setup_per_cpu(struct mce *m)
+{
+	m->apicid		= cpu_data(m->extcpu).topo.initial_apicid;
+	m->microcode		= cpu_data(m->extcpu).microcode;
+	m->ppin			= cpu_data(m->extcpu).ppin;
+	m->socketid		= cpu_data(m->extcpu).topo.pkg_id;
+}
+
 /* Do initial initialization of a struct mce */
 void mce_setup(struct mce *m)
 {
-	memset(m, 0, sizeof(struct mce));
+	mce_setup_global(m);
 	m->cpu = m->extcpu = smp_processor_id();
-	/* need the internal __ version to avoid deadlocks */
-	m->time = __ktime_get_real_seconds();
-	m->cpuvendor = boot_cpu_data.x86_vendor;
-	m->cpuid = cpuid_eax(1);
-	m->socketid = cpu_data(m->extcpu).topo.pkg_id;
-	m->apicid = cpu_data(m->extcpu).topo.initial_apicid;
-	m->mcgcap = __rdmsr(MSR_IA32_MCG_CAP);
-	m->ppin = cpu_data(m->extcpu).ppin;
-	m->microcode = boot_cpu_data.microcode;
+	mce_setup_per_cpu(m);
 }
 
 DEFINE_PER_CPU(struct mce, injectm);
