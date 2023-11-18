@@ -595,6 +595,9 @@ static void deferred_error_interrupt_enable(struct cpuinfo_x86 *c)
 	u32 low = 0, high = 0;
 	int def_offset = -1, def_new;
 
+	if (!mce_flags.succor)
+		return;
+
 	if (rdmsr_safe(MSR_CU_DEF_ERR, &low, &high))
 		return;
 
@@ -774,6 +777,7 @@ void mce_amd_feature_init(struct cpuinfo_x86 *c)
 	u32 low = 0, high = 0, address = 0;
 	int offset = -1;
 
+	deferred_error_interrupt_enable(c);
 
 	for (bank = 0; bank < this_cpu_read(mce_num_banks); ++bank) {
 		if (mce_flags.smca)
@@ -800,9 +804,6 @@ void mce_amd_feature_init(struct cpuinfo_x86 *c)
 			offset = prepare_threshold_block(bank, block, address, offset, high);
 		}
 	}
-
-	if (mce_flags.succor)
-		deferred_error_interrupt_enable(c);
 }
 
 /*
