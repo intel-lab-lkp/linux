@@ -60,6 +60,16 @@ int arch_stack_walk_reliable(stack_trace_consume_fn consume_entry, void *cookie,
 
 void arch_stack_walk_user(stack_trace_consume_fn consume_entry, void *cookie,
 			  const struct pt_regs *regs);
+
+/**
+ * arch_dump_user_stacktrace - Architecture specific function to dump the
+ *			       stack trace for user process
+ * @regs: Pointer to the pt_regs of user process
+ * @tsk: Pointer to the task_struct of user process
+ * @loglvl: Log level
+ */
+void arch_dump_user_stacktrace(struct pt_regs *regs, struct task_struct *tsk,
+			       const char *loglvl);
 #endif /* CONFIG_ARCH_STACKWALK */
 
 #ifdef CONFIG_STACKTRACE

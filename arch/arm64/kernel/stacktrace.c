@@ -215,6 +215,214 @@ static bool dump_backtrace_entry(void *arg, unsigned long where)
 	return true;
 }
 
+/* The struct defined for AArch64 userspace stack frame */
+struct stack_frame_user {
+	unsigned long fp;
+	unsigned long sp;
+	unsigned long pc;
+};
+
+/*
+ * The function of AArch64 userspace stack frame unwind method.
+ * Note: If the caller is not current task, it's supposed to call
+ * access_process_vm() to access another task' address space.
+ */
+static int arch_unwind_user_frame(struct task_struct *tsk, unsigned long high,
+				struct stack_frame_user *frame)
+{
+	int ret = 0;
+	unsigned long fp = frame->fp;
+	unsigned long low = frame->sp;
+
+	if (fp < low || fp > high || fp & 0xf)
+		return -EFAULT;
+
+	frame->sp = fp + 0x10;
+	/* Disable page fault to make sure get_user going on wheels */
+	pagefault_disable();
+	if (tsk == current) {
+		if (get_user(frame->fp, (unsigned long __user *)fp) ||
+			get_user(frame->pc, (unsigned long __user *)(fp + 8)))
+			ret = -EFAULT;
+	} else {
+		if (access_process_vm(tsk, fp, &frame->fp,
+			sizeof(unsigned long), 0) != sizeof(unsigned long) ||
+			access_process_vm(tsk, fp + 0x08, &frame->pc,
+			sizeof(unsigned long), 0) != sizeof(unsigned long))
+			ret = -EFAULT;
+	}
+	pagefault_enable();
+
+	return ret;
+}
+
+/*
+ * Print the executable address and corresponding VMA info.
+ */
+static void print_vma_addr_info(char *prefix, struct task_struct *task,
+				unsigned long ip, const char *loglvl)
+{
+	struct mm_struct *mm;
+	struct vm_area_struct *vma;
+
+	if (task != current)
+		mm = get_task_mm(task);
+	else
+		mm = task->mm;
+
+	if (!mm)
+		return;
+	/*
+	 * we might be running from an atomic context so we cannot sleep
+	 */
+	if (!mmap_read_trylock(mm)) {
+		mmput(mm);
+		return;
+	}
+
+	vma = find_vma(mm, ip);
+	if (vma && vma->vm_file) {
+		struct file *f = vma->vm_file;
+		char *buf = (char *)__get_free_page(GFP_NOWAIT);
+
+		if (buf) {
+			char *p;
+
+			p = file_path(f, buf, PAGE_SIZE);
+			if (IS_ERR(p))
+				p = "?";
+			printk("%s%s%s[%lx-%lx]\n", loglvl, prefix, p,
+					vma->vm_start,
+					vma->vm_end);
+			free_page((unsigned long)buf);
+		}
+	}
+	mmap_read_unlock(mm);
+	if (task != current)
+		mmput(mm);
+}
+
+static struct vm_area_struct *find_user_stack_vma(struct task_struct *task, unsigned long sp)
+{
+	struct mm_struct *mm;
+	struct vm_area_struct *vma;
+
+	if (task != current)
+		mm = get_task_mm(task);
+	else
+		mm = task->mm;
+
+	if (!mm)
+		return NULL;
+	/*
+	 * we might be running from an atomic context so we cannot sleep
+	 */
+	if (!mmap_read_trylock(mm)) {
+		mmput(mm);
+		return NULL;
+	}
+	vma = find_vma(mm, sp);
+	mmap_read_unlock(mm);
+	if (task != current)
+		mmput(mm);
+
+	return vma;
+}
+
+static void dump_user_backtrace_entry(struct task_struct *tsk,
+				unsigned long where, const char *loglvl)
+{
+	char prefix[64];
+
+	snprintf(prefix, sizeof(prefix), "<0x%lx> in ", where);
+	print_vma_addr_info(prefix, tsk, where, loglvl);
+}
+
+void arch_dump_user_stacktrace(struct pt_regs *regs, struct task_struct *tsk,
+								const char *loglvl)
+{
+	struct stack_frame_user frame;
+	struct vm_area_struct *vma;
+	unsigned long userstack_start, userstack_end;
+
+	if (!tsk)
+		tsk = current;
+
+	/*
+	 * If @regs is not specified or caller is not current task,.
+	 * @regs is supposed to get from @tsk.
+	 */
+	if (!regs || tsk != current)
+		regs = task_pt_regs(tsk);
+
+	/* TODO: support stack unwind for compat user mode */
+	if (compat_user_mode(regs))
+		return;
+
+	userstack_start = regs->user_regs.sp;
+	vma = find_user_stack_vma(tsk, userstack_start);
+	if (!vma)
+		return;
+
+	userstack_end = vma->vm_end;
+	frame.fp = regs->user_regs.regs[29];
+	frame.sp = userstack_start;
+	frame.pc = regs->user_regs.pc;
+
+	printk("%s[%s-%d] Dump user backtrace:\n", loglvl, tsk->comm, tsk->pid);
+	while (1) {
+		unsigned long where = frame.pc;
+
+		if (!where || where & 0x3)
+			break;
+		dump_user_backtrace_entry(tsk, where, loglvl);
+		if (arch_unwind_user_frame(tsk, userstack_end, &frame) < 0)
+			break;
+	}
+}
+EXPORT_SYMBOL_GPL(arch_dump_user_stacktrace);
+
+/**
+ * stack_trace_save_user - Save user space stack traces into a storage array
+ * @consume_entry: Callback for save a user space stack trace
+ * @cookie:	Caller supplied pointer handed back by arch_stack_walk()
+ * @regs: The pt_regs pointer of current task
+ */
+void arch_stack_walk_user(stack_trace_consume_fn consume_entry, void *cookie,
+			  const struct pt_regs *regs)
+{
+	struct stack_frame_user frame;
+	struct vm_area_struct *vma;
+	unsigned long userstack_start, userstack_end;
+	struct task_struct *tsk = current;
+
+	/* TODO: support stack unwind for compat user mode */
+	if (!regs || !user_mode(regs) || compat_user_mode(regs))
+		return;
+
+	userstack_start = regs->user_regs.sp;
+	vma = find_user_stack_vma(tsk, userstack_start);
+	if (!vma)
+		return;
+
+	userstack_end = vma->vm_end;
+	frame.fp = regs->user_regs.regs[29];
+	frame.sp = userstack_start;
+	frame.pc = regs->user_regs.pc;
+
+	while (1) {
+		unsigned long where = frame.pc;
+
+		/* Sanity check: ABI requires pc to be aligned 4 bytes. */
+		if (!where || where & 0x3)
+			break;
+		if (!consume_entry(cookie, where))
+			break;
+		if (arch_unwind_user_frame(tsk, userstack_end, &frame) < 0)
+			break;
+	}
+}
+
 void dump_backtrace(struct pt_regs *regs, struct task_struct *tsk,
 		    const char *loglvl)
 {
