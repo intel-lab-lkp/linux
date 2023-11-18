@@ -48,7 +48,6 @@
 #define MSR_CU_DEF_ERR		0xC0000410
 #define MASK_DEF_LVTOFF		0x000000F0
 #define MASK_DEF_INT_TYPE	0x00000006
-#define DEF_LVT_OFF		0x2
 #define DEF_INT_TYPE_APIC	0x2
 #define INTR_TYPE_APIC			0x1
 
@@ -581,19 +580,9 @@ static int setup_APIC_mce_threshold(int reserved, int new)
 	return reserved;
 }
 
-static int setup_APIC_deferred_error(int reserved, int new)
+static void enable_deferred_error_interrupt(void)
 {
-	if (reserved < 0 && !setup_APIC_eilvt(new, DEFERRED_ERROR_VECTOR,
-					      APIC_EILVT_MSG_FIX, 0))
-		return new;
-
-	return reserved;
-}
-
-static void deferred_error_interrupt_enable(struct cpuinfo_x86 *c)
-{
-	u32 low = 0, high = 0;
-	int def_offset = -1, def_new;
+	u32 low = 0, high = 0, def_new;
 
 	if (!mce_flags.succor)
 		return;
@@ -601,17 +590,15 @@ static void deferred_error_interrupt_enable(struct cpuinfo_x86 *c)
 	if (rdmsr_safe(MSR_CU_DEF_ERR, &low, &high))
 		return;
 
+	/*
+	 * Trust the value from hardware.
+	 * If there's a conflict, then setup_APIC_eilvt() will throw an error.
+	 */
 	def_new = (low & MASK_DEF_LVTOFF) >> 4;
-	if (!(low & MASK_DEF_LVTOFF)) {
-		pr_err(FW_BUG "Your BIOS is not setting up LVT offset 0x2 for deferred error IRQs correctly.\n");
-		def_new = DEF_LVT_OFF;
-		low = (low & ~MASK_DEF_LVTOFF) | (DEF_LVT_OFF << 4);
-	}
+	if (setup_APIC_eilvt(def_new, DEFERRED_ERROR_VECTOR, APIC_EILVT_MSG_FIX, 0))
+		return;
 
-	def_offset = setup_APIC_deferred_error(def_offset, def_new);
-	if ((def_offset == def_new) &&
-	    (deferred_error_int_vector != amd_deferred_error_interrupt))
-		deferred_error_int_vector = amd_deferred_error_interrupt;
+	deferred_error_int_vector = amd_deferred_error_interrupt;
 
 	if (!mce_flags.smca)
 		low = (low & ~MASK_DEF_INT_TYPE) | DEF_INT_TYPE_APIC;
@@ -777,7 +764,7 @@ void mce_amd_feature_init(struct cpuinfo_x86 *c)
 	u32 low = 0, high = 0, address = 0;
 	int offset = -1;
 
-	deferred_error_interrupt_enable(c);
+	enable_deferred_error_interrupt();
 
 	for (bank = 0; bank < this_cpu_read(mce_num_banks); ++bank) {
 		if (mce_flags.smca)
