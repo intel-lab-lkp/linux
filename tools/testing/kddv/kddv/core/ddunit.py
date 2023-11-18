@@ -10,6 +10,7 @@ import logging
 import unittest
 
 from .model import DriverModel
+from .environ import environ
 
 logger = logging.getLogger(__name__)
 
@@ -25,11 +26,17 @@ class DriverTest(unittest.TestCase, DriverModel):
         except:
             self.skipTest(f"Module {self.module_name} not found")
         self.mockup.load()
+        environ.setup()
 
     def tearDown(self):
+        environ.teardown()
         self.mockup.unload()
         self.driver.teardown()
         super().tearDown()
+
+    def _callTestMethod(self, method):
+        method()
+        self.assertFault()
 
     def assertRegEqual(self, reg, data, msg=None):
         value = self.read_reg(reg)
@@ -42,3 +49,8 @@ class DriverTest(unittest.TestCase, DriverModel):
     def assertRegsEqual(self, reg, data, msg=None):
         value = self.read_regs(reg, len(data))
         self.assertListEqual(value, data, msg)
+
+    def assertFault(self):
+        msg = environ.check_failure()
+        if msg:
+            raise self.failureException(msg)
