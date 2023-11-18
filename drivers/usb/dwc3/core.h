@@ -1119,6 +1119,8 @@ struct dwc3_scratchpad_array {
  *			instances in park mode.
  * @gfladj_refclk_lpm_sel: set if we need to enable SOF/ITP counter
  *                          running based on ref_clk
+ * @xhci_sg_trb_cache_size_quirk: set to prevent XHC timeout when scatter-gather
+ *			is enabled due to TRB_CACHE_SIZE.
  * @tx_de_emphasis_quirk: set if we enable Tx de-emphasis quirk
  * @tx_de_emphasis: Tx de-emphasis value
  *	0	- -6dB de-emphasis
@@ -1342,6 +1344,7 @@ struct dwc3 {
 	unsigned		parkmode_disable_ss_quirk:1;
 	unsigned		parkmode_disable_hs_quirk:1;
 	unsigned		gfladj_refclk_lpm_sel:1;
+	unsigned		xhci_sg_trb_cache_size_quirk:1;
 
 	unsigned		tx_de_emphasis_quirk:1;
 	unsigned		tx_de_emphasis:2;

@@ -63,6 +63,7 @@ int dwc3_host_init(struct dwc3 *dwc)
 {
 	struct property_entry	props[4];
 	struct platform_device	*xhci;
+	struct xhci_plat_priv   dwc3_xhci_plat_priv = {0};
 	int			ret, irq;
 	int			prop_idx = 0;
 
@@ -86,6 +87,14 @@ int dwc3_host_init(struct dwc3 *dwc)
 		dev_err(dwc->dev, "couldn't add resources to xHCI device\n");
 		goto err;
 	}
+
+	if (dwc->xhci_sg_trb_cache_size_quirk)
+		dwc3_xhci_plat_priv.quirks |= XHCI_SG_TRB_CACHE_SIZE_QUIRK;
+
+	ret = platform_device_add_data(xhci, &dwc3_xhci_plat_priv,
+					sizeof(dwc3_xhci_plat_priv));
+	if (ret)
+		goto err;
 
 	memset(props, 0, sizeof(struct property_entry) * ARRAY_SIZE(props));
 
