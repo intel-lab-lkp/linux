@@ -18,6 +18,7 @@
 
 struct spi_mockup_host {
 	struct config_group group;
+	struct config_group targets_group;
 
 	struct mutex lock;
 
@@ -29,6 +30,7 @@ struct spi_mockup_host {
 
 	struct platform_device *pdev;
 	struct spi_controller *ctrl;
+	unsigned long bitmap[BITS_TO_LONGS(MOCKUP_CHIPSELECT_MAX)];
 };
 
 static struct spi_mockup_host *to_spi_mockup_host(struct config_item *item)
@@ -37,6 +39,205 @@ static struct spi_mockup_host *to_spi_mockup_host(struct config_item *item)
 
 	return container_of(group, struct spi_mockup_host, group);
 }
+
+static struct spi_mockup_host *
+to_spi_mockup_host_from_targets(struct config_group *targets_group)
+{
+	return container_of(targets_group,
+			    struct spi_mockup_host, targets_group);
+}
+
+struct spi_mockup_target {
+	struct config_group group;
+	unsigned short chip;
+	char device_id[SPI_NAME_SIZE];
+	struct spi_device *spi;
+	struct spi_mockup_host *host;
+};
+
+static struct spi_mockup_target *to_spi_mockup_target(struct config_item *item)
+{
+	struct config_group *group = to_config_group(item);
+
+	return container_of(group, struct spi_mockup_target, group);
+}
+
+static ssize_t
+spi_mockup_target_device_id_show(struct config_item *item, char *buf)
+{
+	struct spi_mockup_target *target = to_spi_mockup_target(item);
+
+	return sprintf(buf, "%s\n", target->device_id);
+}
+
+static ssize_t
+spi_mockup_target_device_id_store(struct config_item *item,
+				  const char *buf, size_t len)
+{
+	struct spi_mockup_target *target = to_spi_mockup_target(item);
+
+	if (len > SPI_NAME_SIZE)
+		return -EINVAL;
+
+	memcpy(target->device_id, buf, len);
+
+	return len;
+}
+CONFIGFS_ATTR(spi_mockup_target_, device_id);
+
+static int __target_online(struct spi_mockup_target *target)
+{
+	struct spi_board_info info = {0};
+	struct device *dev;
+
+	if (target->spi)
+		return -EBUSY;
+
+	if (!target->host->pdev)
+		return -ENODEV;
+
+	target->chip = find_first_zero_bit(target->host->bitmap,
+					   MOCKUP_CHIPSELECT_MAX);
+	if (target->chip < 0)
+		return target->chip;
+
+	if (target->chip > target->host->num_cs)
+		return -EBUSY;
+
+	info.chip_select = target->chip;
+	strncpy(info.modalias, target->device_id,
+		strlen(target->device_id));
+
+	target->spi = spi_new_device(target->host->ctrl, &info);
+	if (!target->spi)
+		return -ENOMEM;
+
+	bitmap_set(target->host->bitmap, target->chip, 1);
+
+	dev = &target->host->ctrl->dev;
+	dev_info(dev, "Instantiated device %s at 0x%02x\n",
+		 info.modalias, info.chip_select);
+
+	return 0;
+}
+
+static int __target_offline(struct spi_mockup_target *target)
+{
+	struct device *dev;
+
+	if (!target->spi)
+		return -ENODEV;
+
+	dev = &target->host->ctrl->dev;
+	dev_info(dev, "Deleting device %s at 0x%02hx\n",
+		 dev_name(&target->spi->dev), target->chip);
+
+	spi_unregister_device(target->spi);
+	target->spi = NULL;
+
+	bitmap_clear(target->host->bitmap, target->chip, 1);
+
+
+	return 0;
+}
+
+static ssize_t
+spi_mockup_target_live_store(struct config_item *item,
+			     const char *buf, size_t len)
+{
+	struct spi_mockup_target *target = to_spi_mockup_target(item);
+	int ret;
+	bool res;
+
+	ret = kstrtobool(buf, &res);
+	if (ret)
+		return -EINVAL;
+
+	if (!strlen(target->device_id))
+		return -EINVAL;
+
+	mutex_lock(&target->host->lock);
+	if (res)
+		ret = __target_online(target);
+	else
+		ret = __target_offline(target);
+	mutex_unlock(&target->host->lock);
+
+	return ret ? ret : len;
+}
+
+static ssize_t
+spi_mockup_target_live_show(struct config_item *item, char *buf)
+{
+	struct spi_mockup_target *target = to_spi_mockup_target(item);
+
+	return sprintf(buf, "%s\n", (target->spi) ? "true" : "false");
+}
+CONFIGFS_ATTR(spi_mockup_target_, live);
+
+
+static struct configfs_attribute *spi_mockup_target_attrs[] = {
+	&spi_mockup_target_attr_device_id,
+	&spi_mockup_target_attr_live,
+	NULL,
+};
+
+static void spi_mockup_target_release(struct config_item *item)
+{
+	struct spi_mockup_target *target = to_spi_mockup_target(item);
+
+	__target_offline(target);
+	kfree(target);
+}
+
+static struct configfs_item_operations spi_mockup_target_item_ops = {
+	.release = spi_mockup_target_release,
+};
+
+static const struct config_item_type spi_mockup_target_item_type = {
+	.ct_owner	= THIS_MODULE,
+	.ct_attrs	= spi_mockup_target_attrs,
+	.ct_item_ops    = &spi_mockup_target_item_ops,
+};
+
+static struct config_group *
+spi_mockup_target_make_group(struct config_group *group, const char *name)
+{
+	struct spi_mockup_target *target;
+	struct spi_mockup_host *host = to_spi_mockup_host_from_targets(group);
+
+	target = kzalloc(sizeof(*target), GFP_KERNEL);
+	if (!target)
+		return ERR_PTR(-ENOMEM);
+
+	target->host = host;
+
+	config_group_init_type_name(&target->group, name,
+				    &spi_mockup_target_item_type);
+
+	return &target->group;
+}
+
+static struct configfs_group_operations spi_mockup_targets_group_ops = {
+	.make_group = spi_mockup_target_make_group,
+};
+
+static void spi_mockup_targets_group_release(struct config_item *item)
+{
+	struct spi_mockup_target *target = to_spi_mockup_target(item);
+
+	kfree(target);
+}
+
+static struct configfs_item_operations spi_mockup_targets_group_item_ops = {
+	.release = spi_mockup_targets_group_release,
+};
+
+static const struct config_item_type spi_mockup_target_type = {
+	.ct_owner     = THIS_MODULE,
+	.ct_group_ops = &spi_mockup_targets_group_ops,
+	.ct_item_ops  = &spi_mockup_targets_group_item_ops,
+};
 
 static ssize_t __host_online(struct spi_mockup_host *host)
 {
@@ -68,6 +269,9 @@ static ssize_t __host_offline(struct spi_mockup_host *host)
 {
 	if (!host->pdev)
 		return -ENODEV;
+
+	if (!bitmap_empty(host->bitmap, host->num_cs))
+		return -EBUSY;
 
 	platform_device_unregister(host->pdev);
 	host->pdev = NULL;
@@ -191,6 +395,10 @@ spi_mockup_host_make_group(struct config_group *group, const char *name)
 
 	config_group_init_type_name(&host->group, name,
 				    &spi_mockup_host_config_group_type);
+
+	config_group_init_type_name(&host->targets_group, "targets",
+				    &spi_mockup_target_type);
+	configfs_add_default_group(&host->targets_group, &host->group);
 
 	return &host->group;
 }
