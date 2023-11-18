@@ -97,20 +97,18 @@ int apei_smca_report_x86_error(struct cper_ia_proc_ctx *ctx_info, u64 lapic_id)
 	if (ctx_info->reg_arr_size < 48)
 		return -EINVAL;
 
-	mce_setup(&m);
-
-	m.extcpu = -1;
-	m.socketid = -1;
-
 	for_each_possible_cpu(cpu) {
-		if (cpu_data(cpu).topo.initial_apicid == lapic_id) {
-			m.extcpu = cpu;
-			m.socketid = cpu_data(m.extcpu).topo.pkg_id;
+		if (cpu_data(cpu).topo.initial_apicid == lapic_id)
 			break;
-		}
 	}
 
-	m.apicid = lapic_id;
+	if (!cpu_possible(cpu))
+		return -EINVAL;
+
+	mce_setup_global(&m);
+	m.cpu = m.extcpu = cpu;
+	mce_setup_per_cpu(&m);
+
 	m.bank = (ctx_info->msr_addr >> 4) & 0xFF;
 	m.status = *i_mce;
 	m.addr = *(i_mce + 1);
