@@ -150,6 +150,16 @@ static bool smca_umc_bank_type(u64 ipid)
 	return FIELD_GET(MCI_IPID_HWID, ipid) == 0x96;
 }
 
+/* GPU UMCs have MCATYPE=0x1.*/
+bool smca_gpu_umc_bank_type(u64 ipid)
+{
+	if (!smca_umc_bank_type(ipid))
+		return false;
+
+	return FIELD_GET(MCI_IPID_MCATYPE, ipid) == 0x1;
+}
+EXPORT_SYMBOL_GPL(smca_gpu_umc_bank_type);
+
 static const struct smca_hwid smca_hwid_mcatypes[] = {
 	/* { bank_type, hwid_mcatype } */
 
@@ -312,7 +322,7 @@ static void smca_configure(unsigned int bank, unsigned int cpu)
 	}
 
 	hwid_mcatype = HWID_MCATYPE(high & MCI_IPID_HWID_OLD,
-				    (high & MCI_IPID_MCATYPE) >> 16);
+				    (high & MCI_IPID_MCATYPE_OLD) >> 16);
 
 	for (i = 0; i < ARRAY_SIZE(smca_hwid_mcatypes); i++) {
 		s_hwid = &smca_hwid_mcatypes[i];

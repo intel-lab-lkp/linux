@@ -3279,12 +3279,11 @@ static int amdgpu_bad_page_notifier(struct notifier_block *nb,
 	uint32_t umc_inst = 0, ch_inst = 0;
 
 	/*
-	 * If the error was generated in UMC_V2, which belongs to GPU UMCs,
-	 * and error occurred in DramECC (Extended error code = 0) then only
-	 * process the error, else bail out.
+	 * If the error was generated in a GPU UMC and error occurred in
+	 * DramECC (Extended error code = 0) then only process the error,
+	 * else bail out.
 	 */
-	if (!m || !((smca_get_bank_type(m->extcpu, m->bank) == SMCA_UMC_V2) &&
-		    (XEC(m->status, 0x3f) == 0x0)))
+	if (!m || !(smca_gpu_umc_bank_type(m->ipid) && (XEC(m->status, 0x3f) == 0x0)))
 		return NOTIFY_DONE;
 
 	/*

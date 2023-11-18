@@ -59,8 +59,9 @@
  *  - TCC bit is present in MCx_STATUS.
  */
 #define MCI_CONFIG_MCAX		0x1
-#define MCI_IPID_MCATYPE	0xFFFF0000
+#define MCI_IPID_MCATYPE_OLD	0xFFFF0000
 #define MCI_IPID_HWID_OLD	0xFFF
+#define MCI_IPID_MCATYPE	GENMASK_ULL(63, 48)
 #define MCI_IPID_HWID		GENMASK_ULL(43, 32)
 
 /*
@@ -341,6 +342,7 @@ extern int mce_threshold_remove_device(unsigned int cpu);
 
 void mce_amd_feature_init(struct cpuinfo_x86 *c);
 enum smca_bank_types smca_get_bank_type(unsigned int cpu, unsigned int bank);
+bool smca_gpu_umc_bank_type(u64 ipid);
 #else
 
 static inline int mce_threshold_create_device(unsigned int cpu)		{ return 0; };
