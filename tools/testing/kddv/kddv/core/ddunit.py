@@ -11,8 +11,25 @@ import unittest
 
 from .model import DriverModel
 from .environ import environ
+from .failnth import FaultIterator
 
 logger = logging.getLogger(__name__)
+
+class _AssertRaisesFaultContext(unittest.case._AssertRaisesContext):
+    def __enter__(self):
+        environ.enter_fault_inject()
+        return self
+
+    def __exit__(self, exc_type, exc_value, tb):
+        if not environ.exit_fault_inject():
+            return False
+        if exc_type is None:
+            return True
+        if issubclass(exc_type, self.expected):
+            return True
+        if issubclass(exc_type, AssertionError):
+            return True
+        return super().__exit__(exc_type, exc_value, tb)
 
 class DriverTest(unittest.TestCase, DriverModel):
     def __init__(self, methodName=None):
@@ -35,7 +52,10 @@ class DriverTest(unittest.TestCase, DriverModel):
         super().tearDown()
 
     def _callTestMethod(self, method):
-        method()
+        fault = FaultIterator()
+        for nth in iter(fault):
+            logger.debug(f"fault inject: nth={nth}")
+            method()
         self.assertFault()
 
     def assertRegEqual(self, reg, data, msg=None):
@@ -54,3 +74,10 @@ class DriverTest(unittest.TestCase, DriverModel):
         msg = environ.check_failure()
         if msg:
             raise self.failureException(msg)
+
+    def assertRaisesFault(self, *args, **kwargs):
+        context = _AssertRaisesFaultContext(OSError, self)
+        try:
+            return context.handle('assertRaises', args, kwargs)
+        finally:
+            context = None

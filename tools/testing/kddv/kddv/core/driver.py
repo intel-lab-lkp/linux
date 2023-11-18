@@ -12,6 +12,7 @@ import subprocess
 from pathlib import Path
 
 from .device import Device
+from .environ import environ
 
 logger = logging.getLogger(__name__)
 
@@ -54,9 +55,11 @@ class Driver(object):
         subprocess.check_output(
             ["/sbin/modprobe", self.module], stderr=subprocess.STDOUT
         )
+        environ.notify_insmod(self.module)
 
     def remove_mdule(self):
         logger.debug(f'rmmod {self.module}')
+        environ.notify_rmmod()
         subprocess.check_output(["/sbin/rmmod", self.module])
 
     def setup(self):
