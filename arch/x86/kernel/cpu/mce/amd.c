@@ -44,11 +44,11 @@
 #define MASK_BLKPTR_LO    0xFF000000
 #define MCG_XBLK_ADDR     0xC0000400
 
-/* Deferred error settings */
+/* MCA Interrupt Configuration register, one per CPU */
 #define MSR_CU_DEF_ERR		0xC0000410
-#define MASK_DEF_LVTOFF		0x000000F0
-#define MASK_DEF_INT_TYPE	0x00000006
-#define DEF_INT_TYPE_APIC	0x2
+#define MSR_MCA_INTR_CFG		0xC0000410
+#define INTR_CFG_DFR_LVT_OFFSET		GENMASK_ULL(7, 4)
+#define INTR_CFG_LEGACY_DFR_INTR_TYPE	GENMASK_ULL(2, 1)
 #define INTR_TYPE_APIC			0x1
 
 /* Scalable MCA: */
@@ -580,30 +580,30 @@ static int setup_APIC_mce_threshold(int reserved, int new)
 	return reserved;
 }
 
-static void enable_deferred_error_interrupt(void)
+static void enable_deferred_error_interrupt(u64 mca_intr_cfg)
 {
-	u32 low = 0, high = 0, def_new;
+	u8 dfr_offset;
 
-	if (!mce_flags.succor)
-		return;
-
-	if (rdmsr_safe(MSR_CU_DEF_ERR, &low, &high))
+	if (!mca_intr_cfg)
 		return;
 
 	/*
 	 * Trust the value from hardware.
 	 * If there's a conflict, then setup_APIC_eilvt() will throw an error.
 	 */
-	def_new = (low & MASK_DEF_LVTOFF) >> 4;
-	if (setup_APIC_eilvt(def_new, DEFERRED_ERROR_VECTOR, APIC_EILVT_MSG_FIX, 0))
+	dfr_offset = FIELD_GET(INTR_CFG_DFR_LVT_OFFSET, mca_intr_cfg);
+	if (setup_APIC_eilvt(dfr_offset, DEFERRED_ERROR_VECTOR, APIC_EILVT_MSG_FIX, 0))
 		return;
 
 	deferred_error_int_vector = amd_deferred_error_interrupt;
 
-	if (!mce_flags.smca)
-		low = (low & ~MASK_DEF_INT_TYPE) | DEF_INT_TYPE_APIC;
+	if (mce_flags.smca)
+		return;
 
-	wrmsr(MSR_CU_DEF_ERR, low, high);
+	mca_intr_cfg &= ~INTR_CFG_LEGACY_DFR_INTR_TYPE;
+	mca_intr_cfg |= FIELD_PREP(INTR_CFG_LEGACY_DFR_INTR_TYPE, INTR_TYPE_APIC);
+
+	wrmsrl(MSR_MCA_INTR_CFG, mca_intr_cfg);
 }
 
 static u32 smca_get_block_address(unsigned int bank, unsigned int block,
@@ -757,14 +757,28 @@ static void disable_err_thresholding(struct cpuinfo_x86 *c, unsigned int bank)
 		wrmsrl(MSR_K7_HWCR, hwcr);
 }
 
+static u64 get_mca_intr_cfg(void)
+{
+	u64 mca_intr_cfg;
+
+	if (!mce_flags.succor && !mce_flags.smca)
+		return 0;
+
+	if (rdmsrl_safe(MSR_MCA_INTR_CFG, &mca_intr_cfg))
+		return 0;
+
+	return mca_intr_cfg;
+}
+
 /* cpu init entry point, called from mce.c with preempt off */
 void mce_amd_feature_init(struct cpuinfo_x86 *c)
 {
 	unsigned int bank, block, cpu = smp_processor_id();
+	u64 mca_intr_cfg = get_mca_intr_cfg();
 	u32 low = 0, high = 0, address = 0;
 	int offset = -1;
 
-	enable_deferred_error_interrupt();
+	enable_deferred_error_interrupt(mca_intr_cfg);
 
 	for (bank = 0; bank < this_cpu_read(mce_num_banks); ++bank) {
 		if (mce_flags.smca)
