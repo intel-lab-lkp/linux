@@ -10,4 +10,4 @@ __all__ = [
     'SPIDriverTest',
 ]
 
-from .buses import SPIDriverTest
+from .spi import SPIDriverTest

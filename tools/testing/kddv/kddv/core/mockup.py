@@ -101,7 +101,14 @@ class Mockup(object):
     def remove_device(self):
         pass
 
+    def setup(self):
+        pass
+
+    def teardown(self):
+        pass
+
     def load(self):
+        self.setup()
         self.load_bpf()
         self.load_regmaps()
         self.load_configs()
@@ -110,6 +117,7 @@ class Mockup(object):
     def unload(self):
         self.remove_device()
         self.unload_bpf()
+        self.teardown()
 
     def bpf_map_name(self):
         bpf_name = re.sub("-", "_", self.bpf)

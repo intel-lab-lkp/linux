@@ -2,6 +2,7 @@
 include ../../../scripts/Makefile.include
 
 INSTALL ?= install
+SUBDIRS := data
 
 all:
 	@for SUBDIR in $(SUBDIRS); do		\
@@ -14,6 +15,10 @@ install:
 	cp -rf core/ $(INSTALL_PATH)
 	cp -rf cmds/ $(INSTALL_PATH)
 	cp -rf tests/ $(INSTALL_PATH)
+
+	@for SUBDIR in $(SUBDIRS); do		\
+		$(MAKE) INSTALL_PATH=$(INSTALL_PATH)/$$SUBDIR -C $$SUBDIR install; \
+	done;
 
 clean:
 	@for SUBDIR in $(SUBDIRS); do		\
