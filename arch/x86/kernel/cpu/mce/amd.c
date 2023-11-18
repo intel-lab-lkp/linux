@@ -1434,7 +1434,7 @@ int mce_threshold_create_device(unsigned int cpu)
 	struct threshold_bank **bp;
 	int err;
 
-	if (!mce_flags.amd_threshold)
+	if (!this_cpu_read(bank_map))
 		return 0;
 
 	bp = this_cpu_read(threshold_banks);
