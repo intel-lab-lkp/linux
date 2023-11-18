@@ -230,6 +230,18 @@ properties:
       enabled for any given device.
     $ref: /schemas/types.yaml#/definitions/phandle
 
+  '#address-cells':
+    enum: [ 1, 2 ]
+
+  '#size-cells':
+    enum: [ 1, 2 ]
+
+  ranges: true
+
+patternProperties:
+  "^tbu@[0-9a-f]*":
+    type: object
+
 required:
   - compatible
   - reg
@@ -450,6 +462,19 @@ allOf:
             - description: GPU memory bus clock
             - description: Voter clock required for HLOS SMMU access
             - description: Interface clock required for register access
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: qcom,smmu-500
+    then:
+      patternProperties:
+        "^tbu@[0-9a-f]*":
+          $ref: qcom,qsmmuv500-tbu.yaml
+          unevaluatedProperties: false
+      properties:
+        ranges: true
 
   # Disallow clocks for all other platforms with specific compatibles
   - if:
