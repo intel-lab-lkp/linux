@@ -1232,6 +1232,17 @@ config SPI_TLE62X0
 	  sysfs interface, with each line presented as a kind of GPIO
 	  exposing both switch control and diagnostic feedback.
 
+config SPI_MOCKUP
+	tristate "SPI controller Testing Driver"
+	help
+	  This enables SPI controller testing driver, which provides a way to
+	  test SPI subsystem.
+
+	  If you do build this module, be sure to read the notes and warnings
+	  in <file:Documentation/spi/spi-mockup.rst>.
+
+	  If you don't know what to do here, definitely say N.
+
 #
 # Add new SPI protocol masters in alphabetical order above this line
 #
