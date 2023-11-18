@@ -1234,6 +1234,7 @@ config SPI_TLE62X0
 
 config SPI_MOCKUP
 	tristate "SPI controller Testing Driver"
+	select BPF_EVENTS
 	help
 	  This enables SPI controller testing driver, which provides a way to
 	  test SPI subsystem.

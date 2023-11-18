@@ -14,6 +14,9 @@
 #include <linux/spi/spi.h>
 #include <linux/configfs.h>
 
+#define CREATE_TRACE_POINTS
+#include <trace/events/spi_mockup.h>
+
 #define MOCKUP_CHIPSELECT_MAX	U16_MAX
 
 struct spi_mockup_host {
@@ -422,12 +425,58 @@ static struct configfs_subsystem spi_mockup_config_subsys = {
 };
 
 static int
+spi_mockup_transfer_writeable(struct spi_message *msg)
+{
+	struct spi_msg_ctx *ctx;
+	struct spi_transfer *t;
+	int ret = 0;
+
+	ctx = kmalloc(sizeof(*ctx), GFP_ATOMIC);
+	if (!ctx)
+		return -ENOMEM;
+
+	list_for_each_entry(t, &msg->transfers, transfer_list) {
+		if (t->len > SPI_BUFSIZ_MAX)
+			return -E2BIG;
+
+		memset(ctx, 0, sizeof(*ctx));
+		ctx->cs_off = t->cs_off;
+		ctx->cs_change = t->cs_change;
+		ctx->tx_nbits = t->tx_nbits;
+		ctx->rx_nbits = t->rx_nbits;
+
+		if (t->tx_nbits)
+			memcpy(ctx->data, t->tx_buf, t->len);
+
+		trace_spi_transfer_writeable(ctx, msg->spi->chip_select, t->len);
+
+		if (ctx->ret) {
+			ret = ctx->ret;
+			break;
+		}
+
+		if (t->rx_nbits)
+			memcpy(t->rx_buf, ctx->data, t->len);
+		msg->actual_length += t->len;
+	}
+
+	kfree(ctx);
+
+	return ret;
+}
+
+static int
 spi_mockup_transfer(struct spi_controller *ctrl, struct spi_message *msg)
 {
-	msg->status = 0;
+	int ret = 0;
+
+	if (trace_spi_transfer_writeable_enabled())
+		ret = spi_mockup_transfer_writeable(msg);
+
+	msg->status = ret;
 	spi_finalize_current_message(ctrl);
 
-	return 0;
+	return ret;
 }
 
 static int
