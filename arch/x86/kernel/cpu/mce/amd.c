@@ -325,8 +325,7 @@ static DEFINE_PER_CPU(u64, bank_map);
 /* Map of banks that have more than MCA_MISC0 available. */
 static DEFINE_PER_CPU(u64, smca_misc_banks_map);
 
-static void amd_threshold_interrupt(void);
-static void amd_deferred_error_interrupt(void);
+static void amd_mca_interrupt(void);
 
 static void default_deferred_error_interrupt(void)
 {
@@ -595,7 +594,7 @@ static void enable_deferred_error_interrupt(u64 mca_intr_cfg)
 	if (setup_APIC_eilvt(dfr_offset, DEFERRED_ERROR_VECTOR, APIC_EILVT_MSG_FIX, 0))
 		return;
 
-	deferred_error_int_vector = amd_deferred_error_interrupt;
+	deferred_error_int_vector = amd_mca_interrupt;
 
 	if (mce_flags.smca)
 		return;
@@ -874,33 +873,6 @@ bool amd_mce_usable_address(struct mce *m)
 	return false;
 }
 
-static void __log_error(unsigned int bank, u64 status, u64 addr, u64 misc)
-{
-	struct mce m;
-
-	mce_setup(&m);
-
-	m.status = status;
-	m.misc   = misc;
-	m.bank   = bank;
-	m.tsc	 = rdtsc();
-
-	if (m.status & MCI_STATUS_ADDRV) {
-		m.addr = addr;
-
-		smca_extract_err_addr(&m);
-	}
-
-	if (mce_flags.smca) {
-		rdmsrl(MSR_AMD64_SMCA_MCx_IPID(bank), m.ipid);
-
-		if (m.status & MCI_STATUS_SYNDV)
-			rdmsrl(MSR_AMD64_SMCA_MCx_SYND(bank), m.synd);
-	}
-
-	mce_log(&m);
-}
-
 DEFINE_IDTENTRY_SYSVEC(sysvec_deferred_error)
 {
 	trace_deferred_error_apic_entry(DEFERRED_ERROR_VECTOR);
@@ -911,74 +883,45 @@ DEFINE_IDTENTRY_SYSVEC(sysvec_deferred_error)
 }
 
 /*
- * Returns true if the logged error is deferred. False, otherwise.
- */
-static inline bool
-_log_error_bank(unsigned int bank, u32 msr_stat, u32 msr_addr, u64 misc)
-{
-	u64 status, addr = 0;
-
-	rdmsrl(msr_stat, status);
-	if (!(status & MCI_STATUS_VAL))
-		return false;
-
-	if (status & MCI_STATUS_ADDRV)
-		rdmsrl(msr_addr, addr);
-
-	__log_error(bank, status, addr, misc);
-
-	wrmsrl(msr_stat, 0);
-
-	return status & MCI_STATUS_DEFERRED;
-}
-
-static bool _log_error_deferred(unsigned int bank, u32 misc)
-{
-	if (!_log_error_bank(bank, mca_msr_reg(bank, MCA_STATUS),
-			     mca_msr_reg(bank, MCA_ADDR), misc))
-		return false;
-
-	/*
-	 * Non-SMCA systems don't have MCA_DESTAT/MCA_DEADDR registers.
-	 * Return true here to avoid accessing these registers.
-	 */
-	if (!mce_flags.smca)
-		return true;
-
-	/* Clear MCA_DESTAT if the deferred error was logged from MCA_STATUS. */
-	wrmsrl(MSR_AMD64_SMCA_MCx_DESTAT(bank), 0);
-	return true;
-}
-
-/*
  * We have three scenarios for checking for Deferred errors:
  *
  * 1) Non-SMCA systems check MCA_STATUS and log error if found.
+ *    This is already handled in machine_check_poll().
  * 2) SMCA systems check MCA_STATUS. If error is found then log it and also
  *    clear MCA_DESTAT.
  * 3) SMCA systems check MCA_DESTAT, if error was not found in MCA_STATUS, and
  *    log it.
  */
-static void log_error_deferred(unsigned int bank)
+static void handle_smca_dfr_error(struct mce *m)
 {
-	if (_log_error_deferred(bank, 0))
+	struct mce m_dfr;
+	u64 mca_destat;
+
+	/* Non-SMCA systems don't have MCA_DESTAT/MCA_DEADDR registers. */
+	if (!mce_flags.smca)
 		return;
 
-	/*
-	 * Only deferred errors are logged in MCA_DE{STAT,ADDR} so just check
-	 * for a valid error.
-	 */
-	_log_error_bank(bank, MSR_AMD64_SMCA_MCx_DESTAT(bank),
-			      MSR_AMD64_SMCA_MCx_DEADDR(bank), 0);
-}
+	/* Clear MCA_DESTAT if the deferred error was logged from MCA_STATUS. */
+	if (m->status & MCI_STATUS_DEFERRED)
+		goto out;
 
-/* APIC interrupt handler for deferred errors */
-static void amd_deferred_error_interrupt(void)
-{
-	unsigned int bank;
+	/* MCA_STATUS didn't have a deferred error, so check MCA_DESTAT for one. */
+	mca_destat = mce_rdmsrl(MSR_AMD64_SMCA_MCx_DESTAT(m->bank));
 
-	for (bank = 0; bank < this_cpu_read(mce_num_banks); ++bank)
-		log_error_deferred(bank);
+	if (!(mca_destat & MCI_STATUS_VAL))
+		return;
+
+	/* Reuse the same data collected from machine_check_poll(). */
+	memcpy(&m_dfr, m, sizeof(m_dfr));
+
+	/* Save the MCA_DE{STAT,ADDR} values. */
+	m_dfr.status = mca_destat;
+	m_dfr.addr = mce_rdmsrl(MSR_AMD64_SMCA_MCx_DEADDR(m_dfr.bank));
+
+	mce_log(&m_dfr);
+
+out:
+	wrmsrl(MSR_AMD64_SMCA_MCx_DESTAT(m->bank), 0);
 }
 
 static void reset_block(struct threshold_block *block)
@@ -1028,10 +971,10 @@ static void reset_thr_blocks(unsigned int bank)
 }
 
 /*
- * Threshold interrupt handler will service THRESHOLD_APIC_VECTOR. The interrupt
- * goes off when error_count reaches threshold_limit.
+ * The same procedure should be used when checking MCA banks in non-urgent
+ * situations, e.g. polling and interrupts.
  */
-static void amd_threshold_interrupt(void)
+static void amd_mca_interrupt(void)
 {
 	/* Check all banks for now. This could be optimized in the future. */
 	machine_check_poll(MCP_TIMESTAMP, this_cpu_ptr(&mce_poll_banks));
@@ -1040,6 +983,7 @@ static void amd_threshold_interrupt(void)
 void amd_handle_error(struct mce *m)
 {
 	reset_thr_blocks(m->bank);
+	handle_smca_dfr_error(m);
 }
 
 /*
@@ -1514,6 +1458,6 @@ int mce_threshold_create_device(unsigned int cpu)
 	this_cpu_write(threshold_banks, bp);
 
 	if (thresholding_irq_en)
-		mce_threshold_vector = amd_threshold_interrupt;
+		mce_threshold_vector = amd_mca_interrupt;
 	return 0;
 }

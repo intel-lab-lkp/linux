@@ -663,6 +663,14 @@ static void vendor_handle_error(struct mce *m)
 
 DEFINE_PER_CPU(unsigned, mce_poll_count);
 
+static bool smca_destat_is_valid(unsigned int bank)
+{
+	if (!mce_flags.smca)
+		return false;
+
+	return mce_rdmsrl(MSR_AMD64_SMCA_MCx_DESTAT(bank)) & MCI_STATUS_VAL;
+}
+
 /*
  * Poll for corrected events or events that happened before reset.
  * Those are just logged through /dev/mcelog.
@@ -704,8 +712,14 @@ bool machine_check_poll(enum mcp_flags flags, mce_banks_t *b)
 		m.status = mce_rdmsrl(mca_msr_reg(i, MCA_STATUS));
 
 		/* If this entry is not valid, ignore it */
-		if (!(m.status & MCI_STATUS_VAL))
+		if (!(m.status & MCI_STATUS_VAL)) {
+			if (smca_destat_is_valid(i)) {
+				mce_read_aux(&m, i);
+				goto clear_it;
+			}
+
 			continue;
+		}
 
 		/*
 		 * If we are logging everything (at CPU online) or this
