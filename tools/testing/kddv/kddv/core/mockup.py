@@ -29,6 +29,7 @@ class Mockup(object):
         self.bpf = p.bpf
         self.addr = p.address
         self.devid = p.device_id
+        self.configs = p.configs
         self.regshift = p.regshift
         self.regbytes = p.regbytes
         self.valbytes = p.valbytes
@@ -103,6 +104,7 @@ class Mockup(object):
     def load(self):
         self.load_bpf()
         self.load_regmaps()
+        self.load_configs()
         self.create_device()
 
     def unload(self):
@@ -115,6 +117,32 @@ class Mockup(object):
 
     def to_bpf_bytes(self, val, len):
         return list("%d" % n for n in list(val.to_bytes(len, 'little')))
+
+    def write_bpf_map(self, name, addr, val):
+        cmds = [self.bpftool, 'map', 'update']
+        cmds += ['name', name]
+        cmds += ['key']
+        cmds += self.to_bpf_bytes(addr, 4)
+        cmds += ['value']
+        cmds += self.to_bpf_bytes(val, 4)
+        logger.debug(' '.join(cmds))
+        subprocess.check_output(cmds)
+
+    def write_config(self, addr, val):
+        if self.bpf is None:
+            return
+        self.write_bpf_map('bpf_xfer_conf', addr, val)
+
+    def write_configs(self, addr, data):
+        for i in range(len(data)):
+            self.write_config(addr + i, data[i])
+
+    def load_configs(self):
+        for reg, value in self.configs.items():
+            if isinstance(value, list):
+                self.write_configs(reg, value)
+            else:
+                self.write_config(reg, value)
 
     def load_regmaps(self):
         for reg, value in self.regmaps.items():

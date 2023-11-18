@@ -68,6 +68,10 @@ class DriverModel(object):
         return 1
 
     @property
+    def configs(self):
+        return {}
+
+    @property
     def regmaps(self):
         return {}
 
