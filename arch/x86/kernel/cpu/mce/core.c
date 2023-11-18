@@ -655,6 +655,12 @@ static noinstr void mce_read_aux(struct mce *m, int i)
 	}
 }
 
+static void vendor_handle_error(struct mce *m)
+{
+	if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD)
+		return amd_handle_error(m);
+}
+
 DEFINE_PER_CPU(unsigned, mce_poll_count);
 
 /*
@@ -760,6 +766,8 @@ log_it:
 			mce_log(&m);
 
 clear_it:
+		vendor_handle_error(&m);
+
 		/*
 		 * Clear state for this bank.
 		 */

@@ -981,12 +981,7 @@ static void amd_deferred_error_interrupt(void)
 		log_error_deferred(bank);
 }
 
-static void log_error_thresholding(unsigned int bank, u64 misc)
-{
-	_log_error_deferred(bank, misc);
-}
-
-static void log_and_reset_block(struct threshold_block *block)
+static void reset_block(struct threshold_block *block)
 {
 	struct thresh_restart tr;
 	u32 low = 0, high = 0;
@@ -1000,13 +995,36 @@ static void log_and_reset_block(struct threshold_block *block)
 	if (!(high & MASK_OVERFLOW_HI))
 		return;
 
-	/* Log the MCE which caused the threshold event. */
-	log_error_thresholding(block->bank, ((u64)high << 32) | low);
-
 	/* Reset threshold block after logging error. */
 	memset(&tr, 0, sizeof(tr));
 	tr.b = block;
 	threshold_restart_bank(&tr);
+}
+
+static void reset_thr_blocks(unsigned int bank)
+{
+	struct threshold_block *first_block = NULL, *block = NULL, *tmp = NULL;
+	struct threshold_bank **bp = this_cpu_read(threshold_banks);
+
+	/*
+	 * Validate that the threshold bank has been initialized already. The
+	 * handler is installed at boot time, but on a hotplug event the
+	 * interrupt might fire before the data has been initialized.
+	 */
+	if (!bp || !bp[bank])
+		return;
+
+	first_block = bp[bank]->blocks;
+	if (!first_block)
+		return;
+
+	/*
+	 * The first block is also the head of the list. Check it first
+	 * before iterating over the rest.
+	 */
+	reset_block(first_block);
+	list_for_each_entry_safe(block, tmp, &first_block->miscj, miscj)
+		reset_block(block);
 }
 
 /*
@@ -1015,34 +1033,13 @@ static void log_and_reset_block(struct threshold_block *block)
  */
 static void amd_threshold_interrupt(void)
 {
-	struct threshold_block *first_block = NULL, *block = NULL, *tmp = NULL;
-	struct threshold_bank **bp = this_cpu_read(threshold_banks);
-	unsigned int bank, cpu = smp_processor_id();
+	/* Check all banks for now. This could be optimized in the future. */
+	machine_check_poll(MCP_TIMESTAMP, this_cpu_ptr(&mce_poll_banks));
+}
 
-	/*
-	 * Validate that the threshold bank has been initialized already. The
-	 * handler is installed at boot time, but on a hotplug event the
-	 * interrupt might fire before the data has been initialized.
-	 */
-	if (!bp)
-		return;
-
-	for (bank = 0; bank < this_cpu_read(mce_num_banks); ++bank) {
-		if (!(per_cpu(bank_map, cpu) & BIT_ULL(bank)))
-			continue;
-
-		first_block = bp[bank]->blocks;
-		if (!first_block)
-			continue;
-
-		/*
-		 * The first block is also the head of the list. Check it first
-		 * before iterating over the rest.
-		 */
-		log_and_reset_block(first_block);
-		list_for_each_entry_safe(block, tmp, &first_block->miscj, miscj)
-			log_and_reset_block(block);
-	}
+void amd_handle_error(struct mce *m)
+{
+	reset_thr_blocks(m->bank);
 }
 
 /*
