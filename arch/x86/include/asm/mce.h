@@ -60,7 +60,8 @@
  */
 #define MCI_CONFIG_MCAX		0x1
 #define MCI_IPID_MCATYPE	0xFFFF0000
-#define MCI_IPID_HWID		0xFFF
+#define MCI_IPID_HWID_OLD	0xFFF
+#define MCI_IPID_HWID		GENMASK_ULL(43, 32)
 
 /*
  * Note that the full MCACOD field of IA32_MCi_STATUS MSR is

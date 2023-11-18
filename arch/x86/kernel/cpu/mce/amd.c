@@ -7,6 +7,7 @@
  *
  *  All MC4_MISCi registers are shared between cores on a node.
  */
+#include <linux/bitfield.h>
 #include <linux/interrupt.h>
 #include <linux/notifier.h>
 #include <linux/kobject.h>
@@ -142,6 +143,12 @@ enum smca_bank_types smca_get_bank_type(unsigned int cpu, unsigned int bank)
 	return b->hwid->bank_type;
 }
 EXPORT_SYMBOL_GPL(smca_get_bank_type);
+
+/* UMCs have HWID=0x96.*/
+static bool smca_umc_bank_type(u64 ipid)
+{
+	return FIELD_GET(MCI_IPID_HWID, ipid) == 0x96;
+}
 
 static const struct smca_hwid smca_hwid_mcatypes[] = {
 	/* { bank_type, hwid_mcatype } */
@@ -304,7 +311,7 @@ static void smca_configure(unsigned int bank, unsigned int cpu)
 		return;
 	}
 
-	hwid_mcatype = HWID_MCATYPE(high & MCI_IPID_HWID,
+	hwid_mcatype = HWID_MCATYPE(high & MCI_IPID_HWID_OLD,
 				    (high & MCI_IPID_MCATYPE) >> 16);
 
 	for (i = 0; i < ARRAY_SIZE(smca_hwid_mcatypes); i++) {
@@ -714,14 +721,10 @@ static bool legacy_mce_is_memory_error(struct mce *m)
  */
 static bool smca_mce_is_memory_error(struct mce *m)
 {
-	enum smca_bank_types bank_type;
-
 	if (XEC(m->status, 0x3f))
 		return false;
 
-	bank_type = smca_get_bank_type(m->extcpu, m->bank);
-
-	return bank_type == SMCA_UMC || bank_type == SMCA_UMC_V2;
+	return smca_umc_bank_type(m->ipid);
 }
 
 bool amd_mce_is_memory_error(struct mce *m)
