@@ -437,8 +437,10 @@ static int genl_allocate_reserve_groups(int n_groups, int *first_id)
 			} else {
 				new_groups = krealloc(mc_groups, nlen,
 						      GFP_KERNEL);
-				if (!new_groups)
+				if (!new_groups) {
+					kfree(mc_groups);
 					return -ENOMEM;
+				}
 				mc_groups = new_groups;
 				for (i = 0; i < BITS_TO_LONGS(n_groups); i++)
 					mc_groups[mc_groups_longs + i] = 0;
