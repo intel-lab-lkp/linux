@@ -909,9 +909,9 @@ DEFINE_IDTENTRY_SYSVEC(sysvec_deferred_error)
  * 3) SMCA systems check MCA_DESTAT, if error was not found in MCA_STATUS, and
  *    log it.
  */
-static void handle_smca_dfr_error(struct mce *m)
+static void handle_smca_dfr_error(struct mce_hw_err *err)
 {
-	struct mce m_dfr;
+	struct mce_hw_err err_dfr;
 	u64 mca_destat;
 
 	/* Non-SMCA systems don't have MCA_DESTAT/MCA_DEADDR registers. */
@@ -919,26 +919,26 @@ static void handle_smca_dfr_error(struct mce *m)
 		return;
 
 	/* Clear MCA_DESTAT if the deferred error was logged from MCA_STATUS. */
-	if (m->status & MCI_STATUS_DEFERRED)
+	if (err->m.status & MCI_STATUS_DEFERRED)
 		goto out;
 
 	/* MCA_STATUS didn't have a deferred error, so check MCA_DESTAT for one. */
-	mca_destat = mce_rdmsrl(MSR_AMD64_SMCA_MCx_DESTAT(m->bank));
+	mca_destat = mce_rdmsrl(MSR_AMD64_SMCA_MCx_DESTAT(err->m.bank));
 
 	if (!(mca_destat & MCI_STATUS_VAL))
 		return;
 
 	/* Reuse the same data collected from machine_check_poll(). */
-	memcpy(&m_dfr, m, sizeof(m_dfr));
+	memcpy(&err_dfr, err, sizeof(err_dfr));
 
 	/* Save the MCA_DE{STAT,ADDR} values. */
-	m_dfr.status = mca_destat;
-	m_dfr.addr = mce_rdmsrl(MSR_AMD64_SMCA_MCx_DEADDR(m_dfr.bank));
+	err_dfr.m.status = mca_destat;
+	err_dfr.m.addr = mce_rdmsrl(MSR_AMD64_SMCA_MCx_DEADDR(err_dfr.m.bank));
 
-	mce_log(&m_dfr);
+	mce_log(&err_dfr);
 
 out:
-	wrmsrl(MSR_AMD64_SMCA_MCx_DESTAT(m->bank), 0);
+	wrmsrl(MSR_AMD64_SMCA_MCx_DESTAT(err->m.bank), 0);
 }
 
 static void reset_block(struct threshold_block *block)
@@ -997,10 +997,10 @@ static void amd_mca_interrupt(void)
 	machine_check_poll(MCP_TIMESTAMP, this_cpu_ptr(&mce_poll_banks));
 }
 
-void amd_handle_error(struct mce *m)
+void amd_handle_error(struct mce_hw_err *err)
 {
-	reset_thr_blocks(m->bank);
-	handle_smca_dfr_error(m);
+	reset_thr_blocks(err->m.bank);
+	handle_smca_dfr_error(err);
 }
 
 /*
