@@ -8,6 +8,7 @@
 
 from .driver import Driver
 from .mockup import Mockup
+from .consts import CFG_IO_FAULT
 
 class DriverModel(object):
     bus = None
@@ -89,3 +90,6 @@ class DriverModel(object):
 
     def write_regs(self, addr, data):
         self.mockup.write_regs(addr, data)
+
+    def trigger_io_fault(self, count = 1):
+        self.mockup.write_config(CFG_IO_FAULT, count)

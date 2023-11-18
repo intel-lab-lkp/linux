@@ -18,6 +18,7 @@
 #define BPF_CONF_REG_RSHIFT	0x11
 #define BPF_CONF_REG_LSHIFT	0x12
 #define BPF_CONF_REG_XBSWAP	0x13
+#define BPF_CONF_IO_FAULT	0x20
 
 struct {
 	__uint(type, BPF_MAP_TYPE_ARRAY);
@@ -28,6 +29,7 @@ struct {
 
 static u32 bpf_reg_mask, bpf_reg_xbswap;
 static u32 bpf_reg_rshift, bpf_reg_lshift;
+static u32 bpf_io_fault;
 
 static u32 bpf_xfer_read_conf(u32 key)
 {
@@ -59,6 +61,7 @@ static int bpf_xfer_update_config(void)
 	bpf_reg_rshift = bpf_xfer_read_conf(BPF_CONF_REG_RSHIFT);
 	bpf_reg_lshift = bpf_xfer_read_conf(BPF_CONF_REG_LSHIFT);
 	bpf_reg_xbswap = bpf_xfer_read_conf(BPF_CONF_REG_XBSWAP);
+	bpf_io_fault = bpf_xfer_read_conf(BPF_CONF_IO_FAULT);
 
 	return 0;
 }
@@ -107,5 +110,15 @@ u32 bpf_xfer_reg_u32(u32 reg)
 	if (bpf_reg_lshift)
 		reg = reg << bpf_reg_lshift;
 	return reg;
+}
+
+bool bpf_xfer_should_fault(void)
+{
+	bpf_xfer_update_config();
+
+	if (bpf_io_fault)
+		bpf_xfer_write_conf(BPF_CONF_IO_FAULT, bpf_io_fault - 1);
+
+	return !!bpf_io_fault;
 }
 #endif
