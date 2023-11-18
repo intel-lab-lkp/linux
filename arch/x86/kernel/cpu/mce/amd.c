@@ -47,6 +47,7 @@
 /* MCA Interrupt Configuration register, one per CPU */
 #define MSR_CU_DEF_ERR		0xC0000410
 #define MSR_MCA_INTR_CFG		0xC0000410
+#define INTR_CFG_THR_LVT_OFFSET		GENMASK_ULL(15, 12)
 #define INTR_CFG_DFR_LVT_OFFSET		GENMASK_ULL(7, 4)
 #define INTR_CFG_LEGACY_DFR_INTR_TYPE	GENMASK_ULL(2, 1)
 #define INTR_TYPE_APIC			0x1
@@ -54,8 +55,10 @@
 /* Scalable MCA: */
 
 /* MCA_CONFIG register, one per MCA bank */
+#define CFG_CE_INT_EN			BIT_ULL(40)
 #define CFG_DFR_INT_TYPE		GENMASK_ULL(38, 37)
 #define CFG_MCAX_EN			BIT_ULL(32)
+#define CFG_CE_INT_PRESENT		BIT_ULL(10)
 #define CFG_LSB_IN_STATUS		BIT_ULL(8)
 #define CFG_DFR_INT_SUPP		BIT_ULL(5)
 
@@ -355,8 +358,19 @@ static void smca_set_misc_banks_map(unsigned int bank, unsigned int cpu)
 
 }
 
+static bool smca_thr_handler_enabled(u64 mca_intr_cfg)
+{
+	u8 offset = FIELD_GET(INTR_CFG_THR_LVT_OFFSET, mca_intr_cfg);
+
+	if (setup_APIC_eilvt(offset, THRESHOLD_APIC_VECTOR, APIC_EILVT_MSG_FIX, 0))
+		return false;
+
+	mce_threshold_vector = amd_mca_interrupt;
+	return true;
+}
+
 /* Set appropriate bits in MCA_CONFIG. */
-static void configure_smca(unsigned int bank)
+static void configure_smca(unsigned int bank, u64 mca_intr_cfg)
 {
 	u64 mca_config;
 
@@ -390,6 +404,9 @@ static void configure_smca(unsigned int bank)
 
 	if (FIELD_GET(CFG_LSB_IN_STATUS, mca_config))
 		this_cpu_ptr(mce_banks_array)[bank].lsb_in_status = true;
+
+	if (FIELD_GET(CFG_CE_INT_PRESENT, mca_config) && smca_thr_handler_enabled(mca_intr_cfg))
+		mca_config |= FIELD_PREP(CFG_CE_INT_EN, 0x1);
 
 	wrmsrl(MSR_AMD64_SMCA_MCx_CONFIG(bank), mca_config);
 }
@@ -783,7 +800,7 @@ void mce_amd_feature_init(struct cpuinfo_x86 *c)
 		if (mce_flags.smca)
 			smca_configure_old(bank, cpu);
 
-		configure_smca(bank);
+		configure_smca(bank, mca_intr_cfg);
 		disable_err_thresholding(c, bank);
 
 		for (block = 0; block < NR_BLOCKS; ++block) {
