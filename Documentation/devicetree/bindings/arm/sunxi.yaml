@@ -141,6 +141,12 @@ properties:
           - const: sinovoip,bananapi-m64
           - const: allwinner,sun50i-a64
 
+      - description: BananaPi P2 Zero v1.1
+        items:
+          - const: sinovoip,bananapi-p2-zero-v1.1
+          - const: sinovoip,bananapi-p2-zero
+          - const: allwinner,sun8i-h2-plus
+
       - description: BananaPro
         items:
           - const: lemaker,bananapro
