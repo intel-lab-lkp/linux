@@ -197,7 +197,8 @@ static DEFINE_SPINLOCK(napi_hash_lock);
 static unsigned int napi_gen_id = NR_CPUS;
 static DEFINE_READ_MOSTLY_HASHTABLE(napi_hash, 8);
 
-static DECLARE_RWSEM(devnet_rename_sem);
+DECLARE_RWSEM(devnet_rename_sem);
+EXPORT_SYMBOL(devnet_rename_sem);
 
 static inline void dev_base_seq_inc(struct net *net)
 {

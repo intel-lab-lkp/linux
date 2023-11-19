@@ -780,6 +780,9 @@ extern const struct sysfs_ops slave_sysfs_ops;
 /* exported from bond_3ad.c */
 extern const u8 lacpdu_mcast_addr[];
 
+/* exported from net/core/dev.c */
+extern struct rw_semaphore devnet_rename_sem;
+
 static inline netdev_tx_t bond_tx_drop(struct net_device *dev, struct sk_buff *skb)
 {
 	dev_core_stats_tx_dropped_inc(dev);
