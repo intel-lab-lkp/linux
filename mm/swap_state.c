@@ -899,7 +899,7 @@ static struct page *swapin_no_readahead(swp_entry_t entry, gfp_t gfp_mask,
 }
 
 /**
- * swapin_readahead - swap in pages in hope we need them soon
+ * swapin_page_fault - swap in a page from page fault context
  * @entry: swap entry of this memory
  * @gfp_mask: memory allocation flags
  * @vmf: fault information
@@ -911,8 +911,8 @@ static struct page *swapin_no_readahead(swp_entry_t entry, gfp_t gfp_mask,
  * it will read ahead blocks by cluster-based(ie, physical disk based)
  * or vma-based(ie, virtual address based on faulty address) readahead.
  */
-struct page *swapin_readahead(swp_entry_t entry, gfp_t gfp_mask,
-			      struct vm_fault *vmf, enum swap_cache_result *result)
+struct page *swapin_page_fault(swp_entry_t entry, gfp_t gfp_mask,
+			       struct vm_fault *vmf, enum swap_cache_result *result)
 {
 	struct swap_info_struct *si;
 	struct mempolicy *mpol;
@@ -936,15 +936,18 @@ struct page *swapin_readahead(swp_entry_t entry, gfp_t gfp_mask,
 	mpol = get_vma_policy(vmf->vma, vmf->address, 0, &ilx);
 	if (swap_use_no_readahead(si, swp_offset(entry))) {
 		*result = SWAP_CACHE_BYPASS;
-		page = swapin_no_readahead(entry, gfp_mask, mpol, ilx, vmf->vma->vm_mm);
+		page = swapin_no_readahead(entry, GFP_HIGHUSER_MOVABLE,
+					   mpol, ilx, vmf->vma->vm_mm);
 		if (shadow)
 			workingset_refault(page_folio(page), shadow);
 	} else {
 		*result = SWAP_CACHE_MISS;
 		if (swap_use_vma_readahead(si))
-			page = swap_vma_readahead(entry, gfp_mask, mpol, ilx, vmf);
+			page = swap_vma_readahead(entry, GFP_HIGHUSER_MOVABLE,
+						  mpol, ilx, vmf);
 		else
-			page = swap_cluster_readahead(entry, gfp_mask, mpol, ilx);
+			page = swap_cluster_readahead(entry, GFP_HIGHUSER_MOVABLE,
+						      mpol, ilx, vmf->vma->vm_mm);
 	}
 	mpol_cond_put(mpol);
 done:

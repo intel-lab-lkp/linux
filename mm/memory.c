@@ -3844,8 +3844,8 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 		goto out;
 	}
 
-	page = swapin_readahead(entry, GFP_HIGHUSER_MOVABLE,
-				vmf, &cache_result);
+	page = swapin_page_fault(entry, GFP_HIGHUSER_MOVABLE,
+				 vmf, &cache_result);
 	if (IS_ERR_OR_NULL(page)) {
 		/*
 		 * Back out if somebody else faulted in this pte
