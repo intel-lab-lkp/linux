@@ -98,6 +98,8 @@ static struct virtio_transport loopback_transport = {
 		.notify_buffer_size       = virtio_transport_notify_buffer_size,
 
 		.read_skb = virtio_transport_read_skb,
+
+		.set_rcvlowat             = virtio_transport_set_rcvlowat
 	},
 
 	.send_pkt = vsock_loopback_send_pkt,
