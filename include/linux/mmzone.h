@@ -83,6 +83,11 @@ static inline bool is_migrate_movable(int mt)
 	return is_migrate_cma(mt) || mt == MIGRATE_MOVABLE;
 }
 
+#ifdef CONFIG_CMA
+/* Free whole pageblock and set its migration type to MIGRATE_CMA. */
+void init_cma_reserved_pageblock(struct page *page);
+#endif
+
 /*
  * Check whether a migratetype can be merged with another migratetype.
  *

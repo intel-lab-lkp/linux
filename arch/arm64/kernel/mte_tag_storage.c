@@ -5,10 +5,12 @@
  * Copyright (C) 2023 ARM Ltd.
  */
 
+#include <linux/cma.h>
 #include <linux/memblock.h>
 #include <linux/mm.h>
 #include <linux/of_device.h>
 #include <linux/of_fdt.h>
+#include <linux/pageblock-flags.h>
 #include <linux/range.h>
 #include <linux/string.h>
 #include <linux/xarray.h>
@@ -189,6 +191,14 @@ static int __init fdt_init_tag_storage(unsigned long node, const char *uname,
 		return ret;
 	}
 
+	/* Pages are managed in pageblock_nr_pages chunks */
+	if (!IS_ALIGNED(tag_range->start | range_len(tag_range), pageblock_nr_pages)) {
+		pr_err("Tag storage region 0x%llx-0x%llx not aligned to pageblock size 0x%llx",
+		       PFN_PHYS(tag_range->start), PFN_PHYS(tag_range->end),
+		       PFN_PHYS(pageblock_nr_pages));
+		return -EINVAL;
+	}
+
 	ret = tag_storage_get_memory_node(node, &mem_node);
 	if (ret)
 		return ret;
@@ -254,3 +264,61 @@ void __init mte_tag_storage_init(void)
 		pr_info("MTE tag storage region management disabled");
 	}
 }
+
+static int __init mte_tag_storage_activate_regions(void)
+{
+	phys_addr_t dram_start, dram_end;
+	struct range *tag_range;
+	unsigned long pfn;
+	int i, ret;
+
+	if (num_tag_regions == 0)
+		return 0;
+
+	dram_start = memblock_start_of_DRAM();
+	dram_end = memblock_end_of_DRAM();
+
+	for (i = 0; i < num_tag_regions; i++) {
+		tag_range = &tag_regions[i].tag_range;
+		/*
+		 * Tag storage region was clipped by arm64_bootmem_init()
+		 * enforcing addressing limits.
+		 */
+		if (PFN_PHYS(tag_range->start) < dram_start ||
+				PFN_PHYS(tag_range->end) >= dram_end) {
+			pr_err("Tag storage region 0x%llx-0x%llx outside addressable memory",
+			       PFN_PHYS(tag_range->start), PFN_PHYS(tag_range->end));
+			ret = -EINVAL;
+			goto out_disabled;
+		}
+	}
+
+	/*
+	 * MTE disabled, tag storage pages can be used like any other pages. The
+	 * only restriction is that the pages cannot be used by kexec because
+	 * the memory remains marked as reserved in the memblock allocator.
+	 */
+	if (!system_supports_mte()) {
+		for (i = 0; i< num_tag_regions; i++) {
+			tag_range = &tag_regions[i].tag_range;
+			for (pfn = tag_range->start; pfn <= tag_range->end; pfn++)
+				free_reserved_page(pfn_to_page(pfn));
+		}
+		ret = 0;
+		goto out_disabled;
+	}
+
+	for (i = 0; i < num_tag_regions; i++) {
+		tag_range = &tag_regions[i].tag_range;
+		for (pfn = tag_range->start; pfn <= tag_range->end; pfn += pageblock_nr_pages)
+			init_cma_reserved_pageblock(pfn_to_page(pfn));
+		totalcma_pages += range_len(tag_range);
+	}
+
+	return 0;
+
+out_disabled:
+	pr_info("MTE tag storage region management disabled");
+	return ret;
+}
+arch_initcall(mte_tag_storage_activate_regions);

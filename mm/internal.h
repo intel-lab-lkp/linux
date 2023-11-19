@@ -539,9 +539,6 @@ isolate_migratepages_range(struct compact_control *cc,
 int __alloc_contig_migrate_range(struct compact_control *cc,
 					unsigned long start, unsigned long end);
 
-/* Free whole pageblock and set its migration type to MIGRATE_CMA. */
-void init_cma_reserved_pageblock(struct page *page);
-
 #endif /* CONFIG_COMPACTION || CONFIG_CMA */
 
 int find_suitable_fallback(struct free_area *area, unsigned int order,
