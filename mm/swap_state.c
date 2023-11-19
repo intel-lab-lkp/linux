@@ -334,8 +334,7 @@ static inline bool swap_use_vma_readahead(struct swap_info_struct *si)
  *
  * Caller must lock the swap device or hold a reference to keep it valid.
  */
-struct folio *swap_cache_get_folio(swp_entry_t entry,
-		struct vm_area_struct *vma, unsigned long addr)
+struct folio *swap_cache_get_folio(swp_entry_t entry, struct vm_fault *vmf)
 {
 	struct folio *folio;
 
@@ -352,22 +351,22 @@ struct folio *swap_cache_get_folio(swp_entry_t entry,
 			return folio;
 
 		readahead = folio_test_clear_readahead(folio);
-		if (vma && vma_ra) {
+		if (vmf && vma_ra) {
 			unsigned long ra_val;
 			int win, hits;
 
-			ra_val = GET_SWAP_RA_VAL(vma);
+			ra_val = GET_SWAP_RA_VAL(vmf->vma);
 			win = SWAP_RA_WIN(ra_val);
 			hits = SWAP_RA_HITS(ra_val);
 			if (readahead)
 				hits = min_t(int, hits + 1, SWAP_RA_HITS_MAX);
-			atomic_long_set(&vma->swap_readahead_info,
-					SWAP_RA_VAL(addr, win, hits));
+			atomic_long_set(&vmf->vma->swap_readahead_info,
+					SWAP_RA_VAL(vmf->address, win, hits));
 		}
 
 		if (readahead) {
 			count_vm_event(SWAP_RA_HIT);
-			if (!vma || !vma_ra)
+			if (!vmf || !vma_ra)
 				atomic_inc(&swapin_readahead_hits);
 		}
 	} else {
@@ -926,7 +925,7 @@ struct page *swapin_readahead(swp_entry_t entry, gfp_t gfp_mask,
 	struct page *page;
 	pgoff_t ilx;
 
-	folio = swap_cache_get_folio(entry, vmf->vma, vmf->address);
+	folio = swap_cache_get_folio(entry, vmf);
 	if (folio) {
 		page = folio_file_page(folio, swp_offset(entry));
 		cache_result = SWAP_CACHE_HIT;
