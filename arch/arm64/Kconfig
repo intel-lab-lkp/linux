@@ -2062,6 +2062,18 @@ config ARM64_MTE
 
 	  Documentation/arch/arm64/memory-tagging-extension.rst.
 
+if ARM64_MTE
+config ARM64_MTE_TAG_STORAGE
+	bool "Dynamic MTE tag storage management"
+	help
+	  Adds support for dynamic management of the memory used by the hardware
+	  for storing MTE tags. This memory, unlike normal memory, cannot be
+	  tagged. When it is used to store tags for another memory location it
+	  cannot be used for any type of allocation.
+
+	  If unsure, say N
+endif # ARM64_MTE
+
 endmenu # "ARMv8.5 architectural features"
 
 menu "ARMv8.7 architectural features"

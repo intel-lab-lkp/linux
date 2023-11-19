@@ -42,6 +42,7 @@
 #include <asm/cpufeature.h>
 #include <asm/cpu_ops.h>
 #include <asm/kasan.h>
+#include <asm/mte_tag_storage.h>
 #include <asm/numa.h>
 #include <asm/scs.h>
 #include <asm/sections.h>
@@ -341,6 +342,12 @@ void __init __no_sanitize_address setup_arch(char **cmdline_p)
 		WARN_TAINT(mmu_enabled_at_boot, TAINT_FIRMWARE_WORKAROUND,
 			   FW_BUG "Booted with MMU enabled!");
 	}
+
+	/*
+	 * Must be called before memory limits are enforced by
+	 * arm64_memblock_init().
+	 */
+	mte_tag_storage_init();
 
 	arm64_memblock_init();
 
