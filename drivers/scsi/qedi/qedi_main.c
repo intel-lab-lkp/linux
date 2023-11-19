@@ -1864,7 +1864,7 @@ void qedi_get_task_tid(struct qedi_ctx *qedi, u32 itt, s16 *tid)
 	u16 i;
 
 	for (i = 0; i < MAX_ISCSI_TASK_ENTRIES; i++) {
-		if (qedi->itt_map[i].itt == itt) {
+		if (le32_to_cpu(qedi->itt_map[i].itt) == itt) {
 			*tid = i;
 			QEDI_INFO(&qedi->dbg_ctx, QEDI_LOG_CONN,
 				  "Ref itt=0x%x, found at tid=0x%x\n",
