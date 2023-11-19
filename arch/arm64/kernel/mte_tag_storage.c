@@ -265,6 +265,35 @@ void __init mte_tag_storage_init(void)
 	}
 }
 
+/* alloc_contig_range() requires all pages to be in the same zone. */
+static int __init mte_tag_storage_check_zone(void)
+{
+	struct range *tag_range;
+	struct zone *zone;
+	unsigned long pfn;
+	u32 block_size;
+	int i, j;
+
+	for (i = 0; i < num_tag_regions; i++) {
+		block_size = tag_regions[i].block_size;
+		if (block_size == 1)
+			continue;
+
+		tag_range = &tag_regions[i].tag_range;
+		for (pfn = tag_range->start; pfn <= tag_range->end; pfn += block_size) {
+			zone = page_zone(pfn_to_page(pfn));
+			for (j = 1; j < block_size; j++) {
+				if (page_zone(pfn_to_page(pfn + j)) != zone) {
+					pr_err("Tag storage block pages in different zones");
+					return -EINVAL;
+				}
+			}
+		}
+	}
+
+	 return 0;
+}
+
 static int __init mte_tag_storage_activate_regions(void)
 {
 	phys_addr_t dram_start, dram_end;
@@ -320,6 +349,10 @@ static int __init mte_tag_storage_activate_regions(void)
 		ret = 0;
 		goto out_disabled;
 	}
+
+	ret = mte_tag_storage_check_zone();
+	if (ret)
+		goto out_disabled;
 
 	for (i = 0; i < num_tag_regions; i++) {
 		tag_range = &tag_regions[i].tag_range;
