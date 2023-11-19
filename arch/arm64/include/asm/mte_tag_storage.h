@@ -11,6 +11,8 @@
 
 #include <asm/mte.h>
 
+extern void dcache_inval_tags_poc(unsigned long start, unsigned long end);
+
 #ifdef CONFIG_ARM64_MTE_TAG_STORAGE
 
 DECLARE_STATIC_KEY_FALSE(tag_storage_enabled_key);

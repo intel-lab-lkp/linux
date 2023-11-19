@@ -19,6 +19,7 @@
 #include <linux/vm_event_item.h>
 #include <linux/xarray.h>
 
+#include <asm/cacheflush.h>
 #include <asm/mte_tag_storage.h>
 
 __ro_after_init DEFINE_STATIC_KEY_FALSE(tag_storage_enabled_key);
@@ -431,7 +432,12 @@ static bool tag_storage_block_is_reserved(unsigned long block)
 
 static int tag_storage_reserve_block(unsigned long block, struct tag_region *region, int order)
 {
+	unsigned long block_va;
 	int ret;
+
+	block_va = (unsigned long)page_to_virt(pfn_to_page(block));
+	/* Avoid writeback of dirty data cache lines corrupting tags. */
+	dcache_inval_poc(block_va, block_va + region->block_size * PAGE_SIZE);
 
 	ret = xa_err(xa_store(&tag_blocks_reserved, block, pfn_to_page(block), GFP_KERNEL));
 	if (!ret)
@@ -587,12 +593,17 @@ void free_tag_storage(struct page *page, int order)
 {
 	unsigned long block, start_block, end_block;
 	struct tag_region *region;
+	unsigned long page_va;
 	unsigned long flags;
 	int ret;
 
 	ret = tag_storage_find_block(page, &start_block, &region);
 	if (WARN_ONCE(ret, "Missing tag storage block for pfn 0x%lx", page_to_pfn(page)))
 		return;
+
+	page_va = (unsigned long)page_to_virt(page);
+	/* Avoid writeback of dirty tag cache lines corrupting data. */
+	dcache_inval_tags_poc(page_va, page_va + (PAGE_SIZE << order));
 
 	end_block = start_block + order_to_num_blocks(order) * region->block_size;
 

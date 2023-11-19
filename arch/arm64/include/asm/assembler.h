@@ -311,6 +311,16 @@ alternative_cb_end
 	.endm
 
 /*
+ * tcache_line_size - get the safe tag cache line size across all CPUs
+ */
+	.macro	tcache_line_size, reg, tmp
+	read_ctr	\tmp
+	ubfm		\tmp, \tmp, #32, #37	// tag cache line size encoding
+	mov		\reg, #4		// bytes per word
+	lsl		\reg, \reg, \tmp	// actual tag cache line size
+	.endm
+
+/*
  * raw_icache_line_size - get the minimum I-cache line size on this CPU
  * from the CTR register.
  */

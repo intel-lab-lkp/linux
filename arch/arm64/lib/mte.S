@@ -175,3 +175,19 @@ SYM_FUNC_START(mte_copy_page_tags_from_buf)
 
 	ret
 SYM_FUNC_END(mte_copy_page_tags_from_buf)
+
+/*
+ *	dcache_inval_tags_poc(start, end)
+ *
+ *	Ensure that any tags in the D-cache for the interval [start, end)
+ *	are invalidated to PoC.
+ *
+ *	- start   - virtual start address of region
+ *	- end     - virtual end address of region
+ */
+SYM_FUNC_START(__pi_dcache_inval_tags_poc)
+	tcache_line_size x2, x3
+	dcache_by_myline_op igvac, sy, x0, x1, x2, x3
+	ret
+SYM_FUNC_END(__pi_dcache_inval_tags_poc)
+SYM_FUNC_ALIAS(dcache_inval_tags_poc, __pi_dcache_inval_tags_poc)
