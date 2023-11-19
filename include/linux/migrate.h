@@ -60,6 +60,10 @@ struct movable_operations {
 /* Defined in mm/debug.c: */
 extern const char *migrate_reason_names[MR_TYPES];
 
+#ifndef arch_migration_target_gfp
+#define arch_migration_target_gfp(src, gfp) 0
+#endif
+
 #ifdef CONFIG_MIGRATION
 
 void putback_movable_pages(struct list_head *l);

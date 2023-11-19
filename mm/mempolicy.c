@@ -1182,6 +1182,7 @@ static struct folio *alloc_migration_target_by_mpol(struct folio *src,
 
 		h = folio_hstate(src);
 		gfp = htlb_alloc_mask(h);
+		gfp |= arch_migration_target_gfp(src, gfp);
 		nodemask = policy_nodemask(gfp, pol, ilx, &nid);
 		return alloc_hugetlb_folio_nodemask(h, nid, nodemask, gfp);
 	}
@@ -1190,6 +1191,7 @@ static struct folio *alloc_migration_target_by_mpol(struct folio *src,
 		gfp = GFP_TRANSHUGE;
 	else
 		gfp = GFP_HIGHUSER_MOVABLE | __GFP_RETRY_MAYFAIL | __GFP_COMP;
+	gfp |= arch_migration_target_gfp(src, gfp);
 
 	page = alloc_pages_mpol(gfp, order, pol, ilx, nid);
 	return page_rmappable_folio(page);

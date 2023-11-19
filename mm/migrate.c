@@ -2016,6 +2016,7 @@ struct folio *alloc_migration_target(struct folio *src, unsigned long private)
 		struct hstate *h = folio_hstate(src);
 
 		gfp_mask = htlb_modify_alloc_mask(h, gfp_mask);
+		gfp_mask |= arch_migration_target_gfp(src, gfp);
 		return alloc_hugetlb_folio_nodemask(h, nid,
 						mtc->nmask, gfp_mask);
 	}
@@ -2032,6 +2033,7 @@ struct folio *alloc_migration_target(struct folio *src, unsigned long private)
 	zidx = zone_idx(folio_zone(src));
 	if (is_highmem_idx(zidx) || zidx == ZONE_MOVABLE)
 		gfp_mask |= __GFP_HIGHMEM;
+	gfp_mask |= arch_migration_target_gfp(src, gfp);
 
 	return __folio_alloc(gfp_mask, order, nid, mtc->nmask);
 }
@@ -2500,6 +2502,7 @@ static struct folio *alloc_misplaced_dst_folio(struct folio *src,
 			__GFP_NOWARN;
 		gfp &= ~__GFP_RECLAIM;
 	}
+	gfp |= arch_migration_target_gfp(src, gfp);
 	return __folio_alloc_node(gfp, order, nid);
 }
 
