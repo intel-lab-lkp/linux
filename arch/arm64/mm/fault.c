@@ -948,7 +948,7 @@ struct folio *vma_alloc_zeroed_movable_folio(struct vm_area_struct *vma,
 	 * separate DC ZVA and STGM.
 	 */
 	if (vma->vm_flags & VM_MTE)
-		flags |= __GFP_ZEROTAGS;
+		flags |= __GFP_TAGGED;
 
 	return vma_alloc_folio(flags, 0, vma, vaddr, false);
 }
