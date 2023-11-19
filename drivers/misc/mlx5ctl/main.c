@@ -8,6 +8,7 @@
 #include <linux/auxiliary_bus.h>
 #include <linux/mlx5/device.h>
 #include <linux/mlx5/driver.h>
+#include <uapi/misc/mlx5ctl.h>
 #include <linux/atomic.h>
 #include <linux/refcount.h>
 
@@ -198,10 +199,80 @@ unlock:
 	return 0;
 }
 
+static int mlx5ctl_info_ioctl(struct file *file,
+			      struct mlx5ctl_info __user *arg,
+			      size_t usize)
+{
+	struct mlx5ctl_fd *mfd = file->private_data;
+	struct mlx5ctl_dev *mcdev = mfd->mcdev;
+	struct mlx5_core_dev *mdev = mcdev->mdev;
+	struct mlx5ctl_info *info;
+	size_t ksize = 0;
+	int err = 0;
+
+	ksize = max(sizeof(struct mlx5ctl_info), usize);
+	info = kzalloc(ksize, GFP_KERNEL_ACCOUNT);
+	if (!info)
+		return -ENOMEM;
+
+	info->size = sizeof(struct mlx5ctl_info);
+
+	info->dev_uctx_cap = MLX5_CAP_GEN(mdev, uctx_cap);
+	info->uctx_cap = mfd->uctx_cap;
+	info->uctx_uid = mfd->uctx_uid;
+	info->ucap = mfd->ucap;
+
+	strscpy(info->devname, dev_name(&mdev->pdev->dev),
+		sizeof(info->devname));
+
+	if (copy_to_user(arg, info, usize))
+		err = -EFAULT;
+
+	kfree(info);
+	return err;
+}
+
+static long mlx5ctl_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+	struct mlx5ctl_fd *mfd = file->private_data;
+	struct mlx5ctl_dev *mcdev = mfd->mcdev;
+	void __user *argp = (void __user *)arg;
+	size_t size = _IOC_SIZE(cmd);
+	int err = 0;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	mlx5ctl_dbg(mcdev, "ioctl 0x%x type/nr: %d/%d size: %d DIR:%d\n", cmd,
+		    _IOC_TYPE(cmd), _IOC_NR(cmd), _IOC_SIZE(cmd), _IOC_DIR(cmd));
+
+	down_read(&mcdev->rw_lock);
+	if (!mcdev->mdev) {
+		err = -ENODEV;
+		goto unlock;
+	}
+
+	switch (cmd) {
+	case MLX5CTL_IOCTL_INFO:
+		err = mlx5ctl_info_ioctl(file, argp, size);
+		break;
+
+	default:
+		mlx5ctl_dbg(mcdev, "Unknown ioctl %x\n", cmd);
+		err = -ENOIOCTLCMD;
+		break;
+	}
+unlock:
+	up_read(&mcdev->rw_lock);
+	return err;
+}
+
 static const struct file_operations mlx5ctl_fops = {
 	.owner = THIS_MODULE,
 	.open = mlx5ctl_open,
 	.release = mlx5ctl_release,
+	.unlocked_ioctl = mlx5ctl_ioctl,
+	.compat_ioctl = compat_ptr_ioctl,
 };
 
 static int mlx5ctl_probe(struct auxiliary_device *adev,
