@@ -316,6 +316,11 @@ void free_pages_and_swap_cache(struct encoded_page **pages, int nr)
 	release_pages(pages, nr);
 }
 
+static inline bool swap_use_no_readahead(struct swap_info_struct *si, swp_entry_t entry)
+{
+	return data_race(si->flags & SWP_SYNCHRONOUS_IO) && __swap_count(entry) == 1;
+}
+
 static inline bool swap_use_vma_readahead(void)
 {
 	return READ_ONCE(enable_vma_readahead) && !atomic_read(&nr_rotate_swap);
@@ -861,8 +866,8 @@ skip:
  * Returns the struct page for entry and addr after the swap entry is read
  * in.
  */
-struct page *swapin_no_readahead(swp_entry_t entry, gfp_t gfp_mask,
-				 struct vm_fault *vmf)
+static struct page *swapin_no_readahead(swp_entry_t entry, gfp_t gfp_mask,
+					struct vm_fault *vmf)
 {
 	struct vm_area_struct *vma = vmf->vma;
 	struct page *page = NULL;
@@ -904,6 +909,8 @@ struct page *swapin_no_readahead(swp_entry_t entry, gfp_t gfp_mask,
  * @entry: swap entry of this memory
  * @gfp_mask: memory allocation flags
  * @vmf: fault information
+ * @swapcached: pointer to a bool used as indicator if the
+ *              page is swapped in through swapcache.
  *
  * Returns the struct page for entry and addr, after queueing swapin.
  *
@@ -912,17 +919,29 @@ struct page *swapin_no_readahead(swp_entry_t entry, gfp_t gfp_mask,
  * or vma-based(ie, virtual address based on faulty address) readahead.
  */
 struct page *swapin_readahead(swp_entry_t entry, gfp_t gfp_mask,
-				struct vm_fault *vmf)
+			      struct vm_fault *vmf, bool *swapcached)
 {
 	struct mempolicy *mpol;
-	pgoff_t ilx;
 	struct page *page;
+	pgoff_t ilx;
+	bool cached;
 
 	mpol = get_vma_policy(vmf->vma, vmf->address, 0, &ilx);
-	page = swap_use_vma_readahead() ?
-		swap_vma_readahead(entry, gfp_mask, mpol, ilx, vmf) :
-		swap_cluster_readahead(entry, gfp_mask, mpol, ilx);
+	if (swap_use_no_readahead(swp_swap_info(entry), entry)) {
+		page = swapin_no_readahead(entry, gfp_mask, vmf);
+		cached = false;
+	} else if (swap_use_vma_readahead()) {
+		page = swap_vma_readahead(entry, gfp_mask, mpol, ilx, vmf);
+		cached = true;
+	} else {
+		page = swap_cluster_readahead(entry, gfp_mask, mpol, ilx);
+		cached = true;
+	}
 	mpol_cond_put(mpol);
+
+	if (swapcached)
+		*swapcached = cached;
+
 	return page;
 }
 

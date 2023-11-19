@@ -1874,7 +1874,7 @@ static int unuse_pte_range(struct vm_area_struct *vma, pmd_t *pmd,
 			};
 
 			page = swapin_readahead(entry, GFP_HIGHUSER_MOVABLE,
-						&vmf);
+						&vmf, NULL);
 			if (page)
 				folio = page_folio(page);
 		}
