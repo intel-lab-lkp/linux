@@ -232,6 +232,97 @@ static int mlx5ctl_info_ioctl(struct file *file,
 	return err;
 }
 
+struct mlx5_ifc_mbox_in_hdr_bits {
+	u8         opcode[0x10];
+	u8         uid[0x10];
+
+	u8         reserved_at_20[0x10];
+	u8         op_mod[0x10];
+
+	u8         reserved_at_40[0x40];
+};
+
+struct mlx5_ifc_mbox_out_hdr_bits {
+	u8         status[0x8];
+	u8         reserved_at_8[0x18];
+
+	u8         syndrome[0x20];
+
+	u8         reserved_at_40[0x40];
+};
+
+static int mlx5ctl_cmdrpc_ioctl(struct file *file,
+				struct mlx5ctl_cmdrpc __user *arg,
+				size_t usize)
+{
+	struct mlx5ctl_fd *mfd = file->private_data;
+	struct mlx5ctl_dev *mcdev = mfd->mcdev;
+	struct mlx5ctl_cmdrpc *rpc = NULL;
+	void *in = NULL, *out = NULL;
+	size_t ksize = 0;
+	int err;
+
+	ksize = max(sizeof(struct mlx5ctl_cmdrpc), usize);
+	rpc = kzalloc(ksize, GFP_KERNEL_ACCOUNT);
+	if (!rpc)
+		return -ENOMEM;
+
+	err = copy_from_user(rpc, arg, usize);
+	if (err)
+		goto out;
+
+	mlx5ctl_dbg(mcdev, "[UID %d] cmdrpc: rpc->inlen %d rpc->outlen %d\n",
+		    mfd->uctx_uid, rpc->inlen, rpc->outlen);
+
+	if (rpc->inlen < MLX5_ST_SZ_BYTES(mbox_in_hdr) ||
+	    rpc->outlen < MLX5_ST_SZ_BYTES(mbox_out_hdr) ||
+	    rpc->inlen > MLX5CTL_MAX_RPC_SIZE ||
+	    rpc->outlen > MLX5CTL_MAX_RPC_SIZE) {
+		err = -EINVAL;
+		goto out;
+	}
+
+	if (rpc->flags) {
+		err = -EOPNOTSUPP;
+		goto out;
+	}
+
+	in = memdup_user(u64_to_user_ptr(rpc->in), rpc->inlen);
+	if (IS_ERR(in)) {
+		err = PTR_ERR(in);
+		goto out;
+	}
+
+	out = kvzalloc(rpc->outlen, GFP_KERNEL_ACCOUNT);
+	if (!out) {
+		err = -ENOMEM;
+		goto out;
+	}
+
+	mlx5ctl_dbg(mcdev, "[UID %d] cmdif: opcode 0x%x inlen %d outlen %d\n",
+		    mfd->uctx_uid,
+		    MLX5_GET(mbox_in_hdr, in, opcode), rpc->inlen, rpc->outlen);
+
+	MLX5_SET(mbox_in_hdr, in, uid, mfd->uctx_uid);
+	err = mlx5_cmd_do(mcdev->mdev, in, rpc->inlen, out, rpc->outlen);
+	mlx5ctl_dbg(mcdev, "[UID %d] cmdif: opcode 0x%x retval %d\n",
+		    mfd->uctx_uid,
+		    MLX5_GET(mbox_in_hdr, in, opcode), err);
+
+	/* -EREMOTEIO means outbox is valid, but out.status is not */
+	if (!err || err == -EREMOTEIO) {
+		err = 0;
+		if (copy_to_user(u64_to_user_ptr(rpc->out), out, rpc->outlen))
+			err = -EFAULT;
+	}
+
+out:
+	kvfree(out);
+	kfree(in);
+	kfree(rpc);
+	return err;
+}
+
 static long mlx5ctl_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	struct mlx5ctl_fd *mfd = file->private_data;
@@ -255,6 +346,10 @@ static long mlx5ctl_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 	switch (cmd) {
 	case MLX5CTL_IOCTL_INFO:
 		err = mlx5ctl_info_ioctl(file, argp, size);
+		break;
+
+	case MLX5CTL_IOCTL_CMDRPC:
+		err = mlx5ctl_cmdrpc_ioctl(file, argp, size);
 		break;
 
 	default:
