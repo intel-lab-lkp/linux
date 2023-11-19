@@ -55,7 +55,7 @@ struct page *read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 				   struct swap_iocb **plug);
 struct page *__read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 				     struct mempolicy *mpol, pgoff_t ilx,
-				     bool *new_page_allocated);
+				     struct mm_struct *mm, bool *new_page_allocated);
 struct page *swapin_readahead(swp_entry_t entry, gfp_t flag,
 			      struct vm_fault *vmf, enum swap_cache_result *result);
 struct page *swapin_page_non_fault(swp_entry_t entry, gfp_t gfp_mask,

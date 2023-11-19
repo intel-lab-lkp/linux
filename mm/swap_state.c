@@ -416,7 +416,7 @@ struct folio *filemap_get_incore_folio(struct address_space *mapping,
 
 struct page *__read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 				     struct mempolicy *mpol, pgoff_t ilx,
-				     bool *new_page_allocated)
+				     struct mm_struct *mm, bool *new_page_allocated)
 {
 	struct swap_info_struct *si;
 	struct folio *folio;
@@ -462,7 +462,7 @@ struct page *__read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 						mpol, ilx, numa_node_id());
 		if (!folio)
                         goto fail_put_swap;
-		if (mem_cgroup_swapin_charge_folio(folio, NULL, gfp_mask, entry))
+		if (mem_cgroup_swapin_charge_folio(folio, mm, gfp_mask, entry))
 			goto fail_put_folio;
 
 		/*
@@ -540,7 +540,7 @@ struct page *read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 
 	mpol = get_vma_policy(vma, addr, 0, &ilx);
 	page = __read_swap_cache_async(entry, gfp_mask, mpol, ilx,
-					&page_allocated);
+				       vma->vm_mm, &page_allocated);
 	mpol_cond_put(mpol);
 
 	if (page_allocated)
@@ -628,7 +628,8 @@ static unsigned long swapin_nr_pages(unsigned long offset)
  * are fairly likely to have been swapped out from the same node.
  */
 static struct page *swap_cluster_readahead(swp_entry_t entry, gfp_t gfp_mask,
-					   struct mempolicy *mpol, pgoff_t ilx)
+					   struct mempolicy *mpol, pgoff_t ilx,
+					   struct mm_struct *mm)
 {
 	struct page *page;
 	unsigned long entry_offset = swp_offset(entry);
@@ -657,7 +658,7 @@ static struct page *swap_cluster_readahead(swp_entry_t entry, gfp_t gfp_mask,
 		/* Ok, do the async read-ahead now */
 		page = __read_swap_cache_async(
 				swp_entry(swp_type(entry), offset),
-				gfp_mask, mpol, ilx, &page_allocated);
+				gfp_mask, mpol, ilx, mm, &page_allocated);
 		if (!page)
 			continue;
 		if (page_allocated) {
@@ -675,7 +676,7 @@ static struct page *swap_cluster_readahead(swp_entry_t entry, gfp_t gfp_mask,
 skip:
 	/* The page was likely read above, so no need for plugging here */
 	page = __read_swap_cache_async(entry, gfp_mask, mpol, ilx,
-					&page_allocated);
+				       mm, &page_allocated);
 	if (unlikely(page_allocated))
 		swap_readpage(page, false, NULL);
 	return page;
@@ -830,7 +831,7 @@ static struct page *swap_vma_readahead(swp_entry_t targ_entry, gfp_t gfp_mask,
 		pte_unmap(pte);
 		pte = NULL;
 		page = __read_swap_cache_async(entry, gfp_mask, mpol, ilx,
-						&page_allocated);
+					       vmf->vma->vm_mm, &page_allocated);
 		if (!page)
 			continue;
 		if (page_allocated) {
@@ -850,7 +851,7 @@ static struct page *swap_vma_readahead(swp_entry_t targ_entry, gfp_t gfp_mask,
 skip:
 	/* The page was likely read above, so no need for plugging here */
 	page = __read_swap_cache_async(targ_entry, gfp_mask, mpol, targ_ilx,
-					&page_allocated);
+				       vmf->vma->vm_mm, &page_allocated);
 	if (unlikely(page_allocated))
 		swap_readpage(page, false, NULL);
 	return page;
@@ -980,7 +981,7 @@ struct page *swapin_page_non_fault(swp_entry_t entry, gfp_t gfp_mask,
 			workingset_refault(page_folio(page), shadow);
 		cache_result = SWAP_CACHE_BYPASS;
 	} else {
-		page = swap_cluster_readahead(entry, gfp_mask, mpol, ilx);
+		page = swap_cluster_readahead(entry, gfp_mask, mpol, ilx, mm);
 		cache_result = SWAP_CACHE_MISS;
 	}
 done:
