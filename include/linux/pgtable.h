@@ -884,6 +884,13 @@ static inline int arch_prep_new_page(struct page *page, int order, gfp_t gfp)
 static inline void arch_free_pages_prepare(struct page *page, int order) { }
 #endif
 
+#ifndef __HAVE_ARCH_ALLOC_CMA
+static inline bool arch_alloc_cma(gfp_t gfp)
+{
+	return true;
+}
+#endif
+
 #ifndef __HAVE_ARCH_UNMAP_ONE
 /*
  * Some architectures support metadata associated with a page. When a
