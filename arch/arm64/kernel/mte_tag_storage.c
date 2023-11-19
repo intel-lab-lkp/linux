@@ -547,8 +547,10 @@ int reserve_tag_storage(struct page *page, int order, gfp_t gfp)
 	mutex_lock(&tag_blocks_lock);
 
 	/* Check again, this time with the lock held. */
-	if (page_tag_storage_reserved(page))
-		goto out_unlock;
+	if (page_tag_storage_reserved(page)) {
+		mutex_unlock(&tag_blocks_lock);
+		return 0;
+	}
 
 	/* Make sure existing entries are not freed from out under out feet. */
 	xa_lock_irqsave(&tag_blocks_reserved, flags);
@@ -583,8 +585,9 @@ int reserve_tag_storage(struct page *page, int order, gfp_t gfp)
 	}
 
 	page_set_tag_storage_reserved(page, order);
-out_unlock:
 	mutex_unlock(&tag_blocks_lock);
+
+	mte_restore_tags_for_pfn(page_to_pfn(page), order);
 
 	return 0;
 
@@ -612,7 +615,8 @@ void free_tag_storage(struct page *page, int order)
 	struct tag_region *region;
 	unsigned long page_va;
 	unsigned long flags;
-	int ret;
+	void *tags;
+	int i, ret;
 
 	ret = tag_storage_find_block(page, &start_block, &region);
 	if (WARN_ONCE(ret, "Missing tag storage block for pfn 0x%lx", page_to_pfn(page)))
@@ -621,6 +625,14 @@ void free_tag_storage(struct page *page, int order)
 	page_va = (unsigned long)page_to_virt(page);
 	/* Avoid writeback of dirty tag cache lines corrupting data. */
 	dcache_inval_tags_poc(page_va, page_va + (PAGE_SIZE << order));
+
+	tags_by_pfn_lock();
+	for (i = 0; i < (1 << order); i++) {
+		tags = mte_erase_tags_for_pfn(page_to_pfn(page + i));
+		if (unlikely(tags))
+			mte_free_tag_buf(tags);
+	}
+	tags_by_pfn_unlock();
 
 	end_block = start_block + order_to_num_blocks(order) * region->block_size;
 
