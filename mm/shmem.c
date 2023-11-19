@@ -1857,13 +1857,11 @@ static int shmem_swapin_folio(struct inode *inode, pgoff_t index,
 	page = swapin_page_non_fault(swap, gfp, mpol, ilx, fault_mm, &result);
 	mpol_cond_put(mpol);
 
-	if (PTR_ERR(page) == -EBUSY) {
-		if (!shmem_confirm_swap(mapping, index, swap))
-			return -EEXIST;
+	if (IS_ERR_OR_NULL(page)) {
+		if (!page)
+			error = -ENOMEM;
 		else
-			return -EINVAL;
-	} else if (!page) {
-		error = -ENOMEM;
+			error = -EINVAL;
 		goto failed;
 	} else {
 		folio = page_folio(page);
