@@ -395,6 +395,9 @@ static int __init mte_tag_storage_activate_regions(void)
 
 	reserve_tag_storage(ZERO_PAGE(0), 0, GFP_HIGHUSER_MOVABLE);
 
+	static_branch_enable(&tag_storage_enabled_key);
+	pr_info("MTE tag storage region management enabled");
+
 	return 0;
 
 out_disabled:
