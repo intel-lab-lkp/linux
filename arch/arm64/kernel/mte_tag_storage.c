@@ -572,6 +572,23 @@ int reserve_tag_storage(struct page *page, int order, gfp_t gfp)
 				break;
 		}
 
+		/*
+		 * alloc_contig_range() returns -EINTR from
+		 * __alloc_contig_migrate_range() if a fatal signal is pending.
+		 * As long as the signal hasn't been handled, it is impossible
+		 * to reserve tag storage for any page. Stop trying to reserve
+		 * tag storage, but return 0 so the page allocator can make
+		 * forward progress, instead of printing an OOM splat.
+		 *
+		 * The tagged page with missing tag storage will be mapped with
+		 * PAGE_FAULT_ON_ACCESS in set_pte_at(), which means accesses
+		 * until the signal is delivered will cause a fault.
+		 */
+		if (ret == -EINTR) {
+			ret = 0;
+			goto out_error;
+		}
+
 		if (ret)
 			goto out_error;
 

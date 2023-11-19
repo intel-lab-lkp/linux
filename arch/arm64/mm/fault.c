@@ -950,6 +950,11 @@ gfp_t arch_calc_vma_gfp(struct vm_area_struct *vma, gfp_t gfp)
 
 void tag_clear_highpage(struct page *page)
 {
+	if (tag_storage_enabled() && unlikely(!page_tag_storage_reserved(page))) {
+		clear_page(page_address(page));
+		return;
+	}
+
 	/* Newly allocated page, shouldn't have been tagged yet */
 	WARN_ON_ONCE(!try_page_mte_tagging(page));
 	mte_zero_clear_page_tags(page_address(page));
