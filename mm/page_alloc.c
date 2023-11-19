@@ -1538,9 +1538,15 @@ inline void post_alloc_hook(struct page *page, unsigned int order,
 	page_table_check_alloc(page, order);
 }
 
-static void prep_new_page(struct page *page, unsigned int order, gfp_t gfp_flags,
+static int prep_new_page(struct page *page, unsigned int order, gfp_t gfp_flags,
 							unsigned int alloc_flags)
 {
+	int ret;
+
+	ret = arch_prep_new_page(page, order, gfp_flags);
+	if (unlikely(ret))
+		return ret;
+
 	post_alloc_hook(page, order, gfp_flags);
 
 	if (order && (gfp_flags & __GFP_COMP))
@@ -1556,6 +1562,8 @@ static void prep_new_page(struct page *page, unsigned int order, gfp_t gfp_flags
 		set_page_pfmemalloc(page);
 	else
 		clear_page_pfmemalloc(page);
+
+	return 0;
 }
 
 /*
@@ -3163,6 +3171,24 @@ static inline unsigned int gfp_to_alloc_flags_cma(gfp_t gfp_mask,
 	return alloc_flags;
 }
 
+#ifdef HAVE_ARCH_ALLOC_PAGE
+static void return_page_to_buddy(struct page *page, int order)
+{
+	int migratetype = get_pfnblock_migratetype(page, pfn);
+	unsigned long pfn = page_to_pfn(page);
+	struct zone *zone = page_zone(page);
+	unsigned long flags;
+
+	spin_lock_irqsave(&zone->lock, flags);
+	__free_one_page(page, pfn, zone, order, migratetype, FPI_TO_TAIL);
+	spin_unlock_irqrestore(&zone->lock, flags);
+}
+#else
+static void return_page_to_buddy(struct page *page, int order)
+{
+}
+#endif
+
 /*
  * get_page_from_freelist goes through the zonelist trying to allocate
  * a page.
@@ -3309,7 +3335,10 @@ try_this_zone:
 		page = rmqueue(ac->preferred_zoneref->zone, zone, order,
 				gfp_mask, alloc_flags, ac->migratetype);
 		if (page) {
-			prep_new_page(page, order, gfp_mask, alloc_flags);
+			if (prep_new_page(page, order, gfp_mask, alloc_flags)) {
+				return_page_to_buddy(page, order);
+				goto no_page;
+			}
 
 			/*
 			 * If this is a high-order atomic allocation then check
@@ -3319,20 +3348,20 @@ try_this_zone:
 				reserve_highatomic_pageblock(page, zone);
 
 			return page;
-		} else {
-			if (has_unaccepted_memory()) {
-				if (try_to_accept_memory(zone, order))
-					goto try_this_zone;
-			}
+		}
+no_page:
+		if (has_unaccepted_memory()) {
+			if (try_to_accept_memory(zone, order))
+				goto try_this_zone;
+		}
 
 #ifdef CONFIG_DEFERRED_STRUCT_PAGE_INIT
-			/* Try again if zone has deferred pages */
-			if (deferred_pages_enabled()) {
-				if (_deferred_grow_zone(zone, order))
-					goto try_this_zone;
-			}
-#endif
+		/* Try again if zone has deferred pages */
+		if (deferred_pages_enabled()) {
+			if (_deferred_grow_zone(zone, order))
+				goto try_this_zone;
 		}
+#endif
 	}
 
 	/*
@@ -3538,8 +3567,12 @@ __alloc_pages_direct_compact(gfp_t gfp_mask, unsigned int order,
 	count_vm_event(COMPACTSTALL);
 
 	/* Prep a captured page if available */
-	if (page)
-		prep_new_page(page, order, gfp_mask, alloc_flags);
+	if (page) {
+		if (prep_new_page(page, order, gfp_mask, alloc_flags)) {
+			return_page_to_buddy(page, order);
+			page = NULL;
+		}
+	}
 
 	/* Try get a page from the freelist if available */
 	if (!page)
@@ -4490,9 +4523,18 @@ unsigned long __alloc_pages_bulk(gfp_t gfp, int preferred_nid,
 			}
 			break;
 		}
+
+		if (prep_new_page(page, 0, gfp, 0)) {
+			pcp_spin_unlock(pcp);
+			pcp_trylock_finish(UP_flags);
+			return_page_to_buddy(page, 0);
+			if (!nr_account)
+				goto failed;
+			else
+				goto out_statistics;
+		}
 		nr_account++;
 
-		prep_new_page(page, 0, gfp, 0);
 		if (page_list)
 			list_add(&page->lru, page_list);
 		else
@@ -4503,6 +4545,7 @@ unsigned long __alloc_pages_bulk(gfp_t gfp, int preferred_nid,
 	pcp_spin_unlock(pcp);
 	pcp_trylock_finish(UP_flags);
 
+out_statistics:
 	__count_zid_vm_events(PGALLOC, zone_idx(zone), nr_account);
 	zone_statistics(ac.preferred_zoneref->zone, zone, nr_account);
 
