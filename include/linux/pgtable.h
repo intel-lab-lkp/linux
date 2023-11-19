@@ -880,6 +880,10 @@ static inline int arch_prep_new_page(struct page *page, int order, gfp_t gfp)
 }
 #endif
 
+#ifndef __HAVE_ARCH_FREE_PAGES_PREPARE
+static inline void arch_free_pages_prepare(struct page *page, int order) { }
+#endif
+
 #ifndef __HAVE_ARCH_UNMAP_ONE
 /*
  * Some architectures support metadata associated with a page. When a

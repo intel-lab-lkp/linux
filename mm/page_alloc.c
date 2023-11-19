@@ -1086,6 +1086,8 @@ static __always_inline bool free_pages_prepare(struct page *page,
 	trace_mm_page_free(page, order);
 	kmsan_free_page(page, order);
 
+	arch_free_pages_prepare(page, order);
+
 	if (unlikely(PageHWPoison(page)) && !order) {
 		/*
 		 * Do not let hwpoison pages hit pcplists/buddy
@@ -3171,7 +3173,7 @@ static inline unsigned int gfp_to_alloc_flags_cma(gfp_t gfp_mask,
 	return alloc_flags;
 }
 
-#ifdef HAVE_ARCH_ALLOC_PAGE
+#ifdef HAVE_ARCH_PREP_NEW_PAGE
 static void return_page_to_buddy(struct page *page, int order)
 {
 	int migratetype = get_pfnblock_migratetype(page, pfn);
