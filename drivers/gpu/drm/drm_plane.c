@@ -1442,6 +1442,32 @@ out:
  * Drivers implementing damage can use drm_atomic_helper_damage_iter_init() and
  * drm_atomic_helper_damage_iter_next() helper iterator function to get damage
  * rectangles clipped to &drm_plane_state.src.
+ *
+ * Note that there are two types of damage handling: frame damage and buffer
+ * damage, the type of damage handling implemented depends on a driver's upload
+ * target. Drivers implementing a per-plane or per-CRTC upload target need to
+ * handle frame damage, while drivers implementing a per-buffer upload target
+ * need to handle buffer damage.
+ *
+ * The existing damage helpers only support the frame damage type, there is no
+ * buffer age support or similar damage accumulation algorithm implemented yet.
+ *
+ * Only drivers handling frame damage can use the mentioned damage helpers to
+ * iterate over the damaged regions. Drivers that handle buffer damage, need to
+ * set &struct drm_plane_state.ignore_damage_clips as an indication to
+ * drm_atomic_helper_damage_iter_init() that the damage clips should be ignored.
+ * In that case, the returned damage rectangle is the &drm_plane_state.src since
+ * a full plane update should happen.
+ *
+ * That is because drivers with a per-plane upload target, expect the backing
+ * storage buffer to not change for a given plane. If the upload buffer changes
+ * between page flips, the new  upload buffer has to be updated as a whole. This
+ * can be improved in the future if support for frame damage is added to the DRM
+ * damage helpers, similarly to how user-space already handle this case as it is
+ * explained in the following documents:
+ *
+ *     https://registry.khronos.org/EGL/extensions/KHR/EGL_KHR_swap_buffers_with_damage.txt
+ *     https://emersion.fr/blog/2019/intro-to-damage-tracking/
  */
 
 /**
