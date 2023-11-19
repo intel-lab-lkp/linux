@@ -456,7 +456,6 @@ extern void free_pages_and_swap_cache(struct encoded_page **, int);
 /* linux/mm/swapfile.c */
 extern atomic_long_t nr_swap_pages;
 extern long total_swap_pages;
-extern atomic_t nr_rotate_swap;
 extern bool has_usable_swap(void);
 
 /* Swap 50% full? Release swapcache more aggressively.. */
