@@ -316,9 +316,9 @@ void free_pages_and_swap_cache(struct encoded_page **pages, int nr)
 	release_pages(pages, nr);
 }
 
-static inline bool swap_use_no_readahead(struct swap_info_struct *si, swp_entry_t entry)
+static inline bool swap_use_no_readahead(struct swap_info_struct *si, pgoff_t offset)
 {
-	return data_race(si->flags & SWP_SYNCHRONOUS_IO) && __swap_count(entry) == 1;
+	return data_race(si->flags & SWP_SYNCHRONOUS_IO) && swap_count(si->swap_map[offset]) == 1;
 }
 
 static inline bool swap_use_vma_readahead(struct swap_info_struct *si)
@@ -928,7 +928,7 @@ struct page *swapin_readahead(swp_entry_t entry, gfp_t gfp_mask,
 
 	si = swp_swap_info(entry);
 	mpol = get_vma_policy(vmf->vma, vmf->address, 0, &ilx);
-	if (swap_use_no_readahead(si, entry)) {
+	if (swap_use_no_readahead(si, swp_offset(entry))) {
 		page = swapin_no_readahead(entry, gfp_mask, mpol, ilx, vmf->vma->vm_mm);
 		cached = false;
 	} else if (swap_use_vma_readahead(si)) {

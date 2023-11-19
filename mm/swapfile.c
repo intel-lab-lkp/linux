@@ -1431,14 +1431,6 @@ void swapcache_free_entries(swp_entry_t *entries, int n)
 		spin_unlock(&p->lock);
 }
 
-int __swap_count(swp_entry_t entry)
-{
-	struct swap_info_struct *si = swp_swap_info(entry);
-	pgoff_t offset = swp_offset(entry);
-
-	return swap_count(si->swap_map[offset]);
-}
-
 /*
  * How many references to @entry are currently swapped out?
  * This does not give an exact answer when swap count is continued,
