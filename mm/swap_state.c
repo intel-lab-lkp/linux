@@ -913,7 +913,6 @@ static struct page *swapin_no_readahead(swp_entry_t entry, gfp_t gfp_mask,
 struct page *swapin_readahead(swp_entry_t entry, gfp_t gfp_mask,
 			      struct vm_fault *vmf, enum swap_cache_result *result)
 {
-	enum swap_cache_result cache_result;
 	struct swap_info_struct *si;
 	struct mempolicy *mpol;
 	void *shadow = NULL;
@@ -928,29 +927,27 @@ struct page *swapin_readahead(swp_entry_t entry, gfp_t gfp_mask,
 
 	folio = swap_cache_get_folio(entry, vmf, &shadow);
 	if (folio) {
+		*result = SWAP_CACHE_HIT;
 		page = folio_file_page(folio, swp_offset(entry));
-		cache_result = SWAP_CACHE_HIT;
 		goto done;
 	}
 
 	mpol = get_vma_policy(vmf->vma, vmf->address, 0, &ilx);
 	if (swap_use_no_readahead(si, swp_offset(entry))) {
+		*result = SWAP_CACHE_BYPASS;
 		page = swapin_no_readahead(entry, gfp_mask, mpol, ilx, vmf->vma->vm_mm);
-		cache_result = SWAP_CACHE_BYPASS;
 		if (shadow)
 			workingset_refault(page_folio(page), shadow);
-	} else if (swap_use_vma_readahead(si)) {
-		page = swap_vma_readahead(entry, gfp_mask, mpol, ilx, vmf);
-		cache_result = SWAP_CACHE_MISS;
 	} else {
-		page = swap_cluster_readahead(entry, gfp_mask, mpol, ilx);
-		cache_result = SWAP_CACHE_MISS;
+		*result = SWAP_CACHE_MISS;
+		if (swap_use_vma_readahead(si))
+			page = swap_vma_readahead(entry, gfp_mask, mpol, ilx, vmf);
+		else
+			page = swap_cluster_readahead(entry, gfp_mask, mpol, ilx);
 	}
 	mpol_cond_put(mpol);
 done:
 	put_swap_device(si);
-	if (result)
-		*result = cache_result;
 
 	return page;
 }
