@@ -12,6 +12,7 @@
 #include <linux/extable.h>
 #include <linux/kfence.h>
 #include <linux/signal.h>
+#include <linux/migrate.h>
 #include <linux/mm.h>
 #include <linux/hardirq.h>
 #include <linux/init.h>
@@ -956,6 +957,50 @@ void tag_clear_highpage(struct page *page)
 }
 
 #ifdef CONFIG_ARM64_MTE_TAG_STORAGE
+
+#define MR_TAGGED_TAG_STORAGE	MR_ARCH_1
+
+extern bool isolate_lru_page(struct page *page);
+extern void putback_movable_pages(struct list_head *l);
+
+/* Returns with the page reference dropped. */
+static void migrate_tag_storage_page(struct page *page)
+{
+	struct migration_target_control mtc = {
+		.nid = NUMA_NO_NODE,
+		.gfp_mask = GFP_HIGHUSER_MOVABLE | __GFP_TAGGED,
+	};
+	unsigned long i, nr_pages = compound_nr(page);
+	LIST_HEAD(pagelist);
+	int ret, tries;
+
+	lru_cache_disable();
+
+	for (i = 0; i < nr_pages; i++) {
+		if (!isolate_lru_page(page + i)) {
+			ret = -EAGAIN;
+			goto out;
+		}
+		/* Isolate just grabbed another reference, drop ours. */
+		put_page(page + i);
+		list_add_tail(&(page + i)->lru, &pagelist);
+	}
+
+	tries = 5;
+	while (tries--) {
+		ret = migrate_pages(&pagelist, alloc_migration_target, NULL, (unsigned long)&mtc,
+				    MIGRATE_SYNC, MR_TAGGED_TAG_STORAGE, NULL);
+		if (ret == 0 || ret != -EBUSY)
+			break;
+	}
+
+out:
+	if (ret != 0)
+		putback_movable_pages(&pagelist);
+
+	lru_cache_enable();
+}
+
 vm_fault_t handle_page_missing_tag_storage(struct vm_fault *vmf)
 {
 	struct vm_area_struct *vma = vmf->vma;
@@ -1012,6 +1057,11 @@ vm_fault_t handle_page_missing_tag_storage(struct vm_fault *vmf)
 	 */
 	if (unlikely(is_migrate_isolate_page(page)))
 		goto out_retry;
+
+	if (unlikely(page_is_tag_storage(page))) {
+		migrate_tag_storage_page(page);
+		return 0;
+	}
 
 	ret = reserve_tag_storage(page, 0, GFP_HIGHUSER_MOVABLE);
 	if (ret)
@@ -1097,6 +1147,11 @@ vm_fault_t handle_huge_page_missing_tag_storage(struct vm_fault *vmf)
 
 	if (unlikely(is_migrate_isolate_page(page)))
 		goto out_retry;
+
+	if (unlikely(page_is_tag_storage(page))) {
+		migrate_tag_storage_page(page);
+		return 0;
+	}
 
 	ret = reserve_tag_storage(page, HPAGE_PMD_ORDER, GFP_HIGHUSER_MOVABLE);
 	if (ret)

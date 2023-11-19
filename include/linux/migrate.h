@@ -10,8 +10,6 @@
 typedef struct folio *new_folio_t(struct folio *folio, unsigned long private);
 typedef void free_folio_t(struct folio *folio, unsigned long private);
 
-struct migration_target_control;
-
 /*
  * Return values from addresss_space_operations.migratepage():
  * - negative errno on page migration failure;
@@ -55,6 +53,12 @@ struct movable_operations {
 	int (*migrate_page)(struct page *dst, struct page *src,
 			enum migrate_mode);
 	void (*putback_page)(struct page *);
+};
+
+struct migration_target_control {
+	int nid;		/* preferred node id */
+	nodemask_t *nmask;
+	gfp_t gfp_mask;
 };
 
 /* Defined in mm/debug.c: */

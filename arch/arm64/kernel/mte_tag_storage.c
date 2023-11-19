@@ -500,6 +500,21 @@ bool page_tag_storage_reserved(struct page *page)
 	return test_bit(PG_tag_storage_reserved, &page->flags);
 }
 
+bool page_is_tag_storage(struct page *page)
+{
+	unsigned long pfn = page_to_pfn(page);
+	struct range *tag_range;
+	int i;
+
+	for (i = 0; i < num_tag_regions; i++) {
+		tag_range = &tag_regions[i].tag_range;
+		if (tag_range->start <= pfn && pfn <= tag_range->end)
+			return true;
+	}
+
+	return false;
+}
+
 int reserve_tag_storage(struct page *page, int order, gfp_t gfp)
 {
 	unsigned long start_block, end_block;
