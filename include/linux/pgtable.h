@@ -1458,6 +1458,23 @@ static inline int pmd_protnone(pmd_t pmd)
 }
 #endif /* CONFIG_NUMA_BALANCING */
 
+#ifndef CONFIG_ARCH_HAS_FAULT_ON_ACCESS
+static inline bool fault_on_access_pte(pte_t pte)
+{
+	return false;
+}
+
+static inline bool fault_on_access_pmd(pmd_t pmd)
+{
+	return false;
+}
+
+static inline vm_fault_t arch_do_page_fault_on_access(struct vm_fault *vmf)
+{
+	return VM_FAULT_SIGBUS;
+}
+#endif
+
 #endif /* CONFIG_MMU */
 
 #ifdef CONFIG_HAVE_ARCH_HUGE_VMAP

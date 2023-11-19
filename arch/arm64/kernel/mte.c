@@ -21,6 +21,7 @@
 #include <asm/barrier.h>
 #include <asm/cpufeature.h>
 #include <asm/mte.h>
+#include <asm/mte_tag_storage.h>
 #include <asm/ptrace.h>
 #include <asm/sysreg.h>
 
@@ -35,13 +36,18 @@ DEFINE_STATIC_KEY_FALSE(mte_async_or_asymm_mode);
 EXPORT_SYMBOL_GPL(mte_async_or_asymm_mode);
 #endif
 
-void mte_sync_tags(pte_t pte, unsigned int nr_pages)
+void mte_sync_tags(pte_t *pteval, unsigned int nr_pages)
 {
-	struct page *page = pte_page(pte);
+	struct page *page = pte_page(*pteval);
 	unsigned int i;
 
-	/* if PG_mte_tagged is set, tags have already been initialised */
 	for (i = 0; i < nr_pages; i++, page++) {
+		if (tag_storage_enabled() && unlikely(!page_tag_storage_reserved(page))) {
+			*pteval = pte_modify(*pteval, PAGE_FAULT_ON_ACCESS);
+			continue;
+		}
+
+		/* if PG_mte_tagged is set, tags have already been initialised */
 		if (try_page_mte_tagging(page)) {
 			mte_clear_page_tags(page_address(page));
 			set_page_mte_tagged(page);

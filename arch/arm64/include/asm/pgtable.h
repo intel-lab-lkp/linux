@@ -326,10 +326,10 @@ static inline void __check_safe_pte_update(struct mm_struct *mm, pte_t *ptep,
 		     __func__, pte_val(old_pte), pte_val(pte));
 }
 
-static inline void __sync_cache_and_tags(pte_t pte, unsigned int nr_pages)
+static inline void __sync_cache_and_tags(pte_t *pteval, unsigned int nr_pages)
 {
-	if (pte_present(pte) && pte_user_exec(pte) && !pte_special(pte))
-		__sync_icache_dcache(pte);
+	if (pte_present(*pteval) && pte_user_exec(*pteval) && !pte_special(*pteval))
+		__sync_icache_dcache(*pteval);
 
 	/*
 	 * If the PTE would provide user space access to the tags associated
@@ -337,9 +337,9 @@ static inline void __sync_cache_and_tags(pte_t pte, unsigned int nr_pages)
 	 * pte_access_permitted() returns false for exec only mappings, they
 	 * don't expose tags (instruction fetches don't check tags).
 	 */
-	if (system_supports_mte() && pte_access_permitted(pte, false) &&
-	    !pte_special(pte) && pte_tagged(pte))
-		mte_sync_tags(pte, nr_pages);
+	if (system_supports_mte() && pte_access_permitted(*pteval, false) &&
+	    !pte_special(*pteval) && pte_tagged(*pteval))
+		mte_sync_tags(pteval, nr_pages);
 }
 
 static inline void set_ptes(struct mm_struct *mm,
@@ -347,7 +347,7 @@ static inline void set_ptes(struct mm_struct *mm,
 			    pte_t *ptep, pte_t pte, unsigned int nr)
 {
 	page_table_check_ptes_set(mm, ptep, pte, nr);
-	__sync_cache_and_tags(pte, nr);
+	__sync_cache_and_tags(&pte, nr);
 
 	for (;;) {
 		__check_safe_pte_update(mm, ptep, pte);
@@ -459,6 +459,26 @@ static inline int pmd_protnone(pmd_t pmd)
 }
 #endif
 
+#ifdef CONFIG_ARCH_HAS_FAULT_ON_ACCESS
+static inline bool fault_on_access_pte(pte_t pte)
+{
+	return (pte_val(pte) & (PTE_PROT_NONE | PTE_TAG_STORAGE_NONE | PTE_VALID)) ==
+		(PTE_PROT_NONE | PTE_TAG_STORAGE_NONE);
+}
+
+static inline bool fault_on_access_pmd(pmd_t pmd)
+{
+	return fault_on_access_pte(pmd_pte(pmd));
+}
+
+static inline vm_fault_t arch_do_page_fault_on_access(struct vm_fault *vmf)
+{
+	if (tag_storage_enabled())
+		return handle_page_missing_tag_storage(vmf);
+	return VM_FAULT_SIGBUS;
+}
+#endif /* CONFIG_ARCH_HAS_FAULT_ON_ACCESS */
+
 #define pmd_present_invalid(pmd)     (!!(pmd_val(pmd) & PMD_PRESENT_INVALID))
 
 static inline int pmd_present(pmd_t pmd)
@@ -533,7 +553,7 @@ static inline void __set_pte_at(struct mm_struct *mm,
 				unsigned long __always_unused addr,
 				pte_t *ptep, pte_t pte, unsigned int nr)
 {
-	__sync_cache_and_tags(pte, nr);
+	__sync_cache_and_tags(&pte, nr);
 	__check_safe_pte_update(mm, ptep, pte);
 	set_pte(ptep, pte);
 }
@@ -828,8 +848,8 @@ static inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
 	 * in MAIR_EL1. The mask below has to include PTE_ATTRINDX_MASK.
 	 */
 	const pteval_t mask = PTE_USER | PTE_PXN | PTE_UXN | PTE_RDONLY |
-			      PTE_PROT_NONE | PTE_VALID | PTE_WRITE | PTE_GP |
-			      PTE_ATTRINDX_MASK;
+			      PTE_PROT_NONE | PTE_TAG_STORAGE_NONE | PTE_VALID |
+			      PTE_WRITE | PTE_GP | PTE_ATTRINDX_MASK;
 	/* preserve the hardware dirty information */
 	if (pte_hw_dirty(pte))
 		pte = set_pte_bit(pte, __pgprot(PTE_DIRTY));

@@ -33,6 +33,8 @@ int reserve_tag_storage(struct page *page, int order, gfp_t gfp);
 void free_tag_storage(struct page *page, int order);
 
 bool page_tag_storage_reserved(struct page *page);
+
+vm_fault_t handle_page_missing_tag_storage(struct vm_fault *vmf);
 #else
 static inline bool tag_storage_enabled(void)
 {

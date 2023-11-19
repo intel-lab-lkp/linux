@@ -19,6 +19,7 @@
 #include <linux/kprobes.h>
 #include <linux/uaccess.h>
 #include <linux/page-flags.h>
+#include <linux/page-isolation.h>
 #include <linux/sched/signal.h>
 #include <linux/sched/debug.h>
 #include <linux/highmem.h>
@@ -953,3 +954,103 @@ void tag_clear_highpage(struct page *page)
 	mte_zero_clear_page_tags(page_address(page));
 	set_page_mte_tagged(page);
 }
+
+#ifdef CONFIG_ARM64_MTE_TAG_STORAGE
+vm_fault_t handle_page_missing_tag_storage(struct vm_fault *vmf)
+{
+	struct vm_area_struct *vma = vmf->vma;
+	struct page *page = NULL;
+	pte_t new_pte, old_pte;
+	bool writable = false;
+	vm_fault_t err;
+	int ret;
+
+	spin_lock(vmf->ptl);
+	if (unlikely(!pte_same(*vmf->pte, vmf->orig_pte))) {
+		pte_unmap_unlock(vmf->pte, vmf->ptl);
+		return 0;
+	}
+
+	/* Get the normal PTE  */
+	old_pte = ptep_get(vmf->pte);
+	new_pte = pte_modify(old_pte, vma->vm_page_prot);
+
+	/*
+	 * Detect now whether the PTE could be writable; this information
+	 * is only valid while holding the PT lock.
+	 */
+	writable = pte_write(new_pte);
+	if (!writable && vma_wants_manual_pte_write_upgrade(vma) &&
+	    can_change_pte_writable(vma, vmf->address, new_pte))
+		writable = true;
+
+	page = vm_normal_page(vma, vmf->address, new_pte);
+	if (!page || is_zone_device_page(page))
+		goto out_map;
+
+	/*
+	 * This should never happen, once a VMA has been marked as tagged, that
+	 * cannot be changed.
+	 */
+	if (!(vma->vm_flags & VM_MTE))
+		goto out_map;
+
+	/* Prevent the page from being unmapped from under us. */
+	get_page(page);
+	vma_set_access_pid_bit(vma);
+
+	/*
+	 * Pairs with pte_offset_map_nolock(), which takes the RCU read lock,
+	 * and spin_lock() above which takes the ptl lock. Both locks should be
+	 * balanced after this point.
+	 */
+	pte_unmap_unlock(vmf->pte, vmf->ptl);
+
+	/*
+	 * Probably the page is being isolated for migration, replay the fault
+	 * to give time for the entry to be replaced by a migration pte.
+	 */
+	if (unlikely(is_migrate_isolate_page(page)))
+		goto out_retry;
+
+	ret = reserve_tag_storage(page, 0, GFP_HIGHUSER_MOVABLE);
+	if (ret)
+		goto out_retry;
+
+	put_page(page);
+
+	vmf->pte = pte_offset_map_lock(vma->vm_mm, vmf->pmd, vmf->address, &vmf->ptl);
+	if (unlikely(!pte_same(*vmf->pte, vmf->orig_pte))) {
+		pte_unmap_unlock(vmf->pte, vmf->ptl);
+		return 0;
+	}
+
+out_map:
+	/*
+	 * Make it present again, depending on how arch implements
+	 * non-accessible ptes, some can allow access by kernel mode.
+	 */
+	old_pte = ptep_modify_prot_start(vma, vmf->address, vmf->pte);
+	new_pte = pte_modify(old_pte, vma->vm_page_prot);
+	new_pte = pte_mkyoung(new_pte);
+	if (writable)
+		new_pte = pte_mkwrite(new_pte, vma);
+	ptep_modify_prot_commit(vma, vmf->address, vmf->pte, old_pte, new_pte);
+	update_mmu_cache(vma, vmf->address, vmf->pte);
+	pte_unmap_unlock(vmf->pte, vmf->ptl);
+
+	return 0;
+
+out_retry:
+	put_page(page);
+	if (vmf->flags & FAULT_FLAG_VMA_LOCK)
+		vma_end_read(vma);
+	if (fault_flag_allow_retry_first(vmf->flags)) {
+		err = VM_FAULT_RETRY;
+	} else {
+		/* Replay the fault. */
+		err = 0;
+	}
+	return err;
+}
+#endif

@@ -2066,6 +2066,7 @@ if ARM64_MTE
 config ARM64_MTE_TAG_STORAGE
 	bool "Dynamic MTE tag storage management"
 	depends on ARCH_KEEP_MEMBLOCK
+	select ARCH_HAS_FAULT_ON_ACCESS
 	select CONFIG_CMA
 	help
 	  Adds support for dynamic management of the memory used by the hardware

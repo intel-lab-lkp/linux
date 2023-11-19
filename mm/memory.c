@@ -5044,6 +5044,9 @@ static vm_fault_t handle_pte_fault(struct vm_fault *vmf)
 	if (!pte_present(vmf->orig_pte))
 		return do_swap_page(vmf);
 
+	if (fault_on_access_pte(vmf->orig_pte) && vma_is_accessible(vmf->vma))
+		return arch_do_page_fault_on_access(vmf);
+
 	if (pte_protnone(vmf->orig_pte) && vma_is_accessible(vmf->vma))
 		return do_numa_page(vmf);
 
