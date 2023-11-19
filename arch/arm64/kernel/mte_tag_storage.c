@@ -11,11 +11,17 @@
 #include <linux/of_device.h>
 #include <linux/of_fdt.h>
 #include <linux/pageblock-flags.h>
+#include <linux/page-flags.h>
+#include <linux/page_owner.h>
 #include <linux/range.h>
+#include <linux/sched/mm.h>
 #include <linux/string.h>
+#include <linux/vm_event_item.h>
 #include <linux/xarray.h>
 
 #include <asm/mte_tag_storage.h>
+
+__ro_after_init DEFINE_STATIC_KEY_FALSE(tag_storage_enabled_key);
 
 struct tag_region {
 	struct range mem_range;	/* Memory associated with the tag storage, in PFNs. */
@@ -27,6 +33,31 @@ struct tag_region {
 
 static struct tag_region tag_regions[MAX_TAG_REGIONS];
 static int num_tag_regions;
+
+/*
+ * A note on locking. Reserving tag storage takes the tag_blocks_lock mutex,
+ * because alloc_contig_range() might sleep.
+ *
+ * Freeing tag storage takes the xa_lock spinlock with interrupts disabled
+ * because pages can be freed from non-preemptible contexts, including from an
+ * interrupt handler.
+ *
+ * Because tag storage can be freed from interrupt contexts, the xarray is
+ * defined with the XA_FLAGS_LOCK_IRQ flag to disable interrupts when calling
+ * xa_store(). This is done to prevent a deadlock with free_tag_storage() being
+ * called from an interrupt raised before xa_store() releases the xa_lock.
+ *
+ * All of the above means that reserve_tag_storage() cannot run concurrently
+ * with itself (no concurrent insertions), but it can run at the same time as
+ * free_tag_storage(). The first thing that reserve_tag_storage() does after
+ * taking the mutex is increase the refcount on all present tag storage blocks
+ * with the xa_lock held, to serialize against freeing the blocks. This is an
+ * optimization to avoid taking and releasing the xa_lock after each iteration
+ * if the refcount operation was moved inside the loop, where it would have had
+ * to be executed for each block.
+ */
+static DEFINE_XARRAY_FLAGS(tag_blocks_reserved, XA_FLAGS_LOCK_IRQ);
+static DEFINE_MUTEX(tag_blocks_lock);
 
 static int __init tag_storage_of_flat_get_range(unsigned long node, const __be32 *reg,
 						int reg_len, struct range *range)
@@ -368,3 +399,213 @@ out_disabled:
 	return ret;
 }
 arch_initcall(mte_tag_storage_activate_regions);
+
+static void page_set_tag_storage_reserved(struct page *page, int order)
+{
+	int i;
+
+	for (i = 0; i < (1 << order); i++)
+		set_bit(PG_tag_storage_reserved, &(page + i)->flags);
+}
+
+static void block_ref_add(unsigned long block, struct tag_region *region, int order)
+{
+	int count;
+
+	count = min(1u << order, 32 * region->block_size);
+	page_ref_add(pfn_to_page(block), count);
+}
+
+static int block_ref_sub_return(unsigned long block, struct tag_region *region, int order)
+{
+	int count;
+
+	count = min(1u << order, 32 * region->block_size);
+	return page_ref_sub_return(pfn_to_page(block), count);
+}
+
+static bool tag_storage_block_is_reserved(unsigned long block)
+{
+	return xa_load(&tag_blocks_reserved, block) != NULL;
+}
+
+static int tag_storage_reserve_block(unsigned long block, struct tag_region *region, int order)
+{
+	int ret;
+
+	ret = xa_err(xa_store(&tag_blocks_reserved, block, pfn_to_page(block), GFP_KERNEL));
+	if (!ret)
+		block_ref_add(block, region, order);
+
+	return ret;
+}
+
+static int order_to_num_blocks(int order)
+{
+	return max((1 << order) / 32, 1);
+}
+
+static int tag_storage_find_block_in_region(struct page *page, unsigned long *blockp,
+					    struct tag_region *region)
+{
+	struct range *tag_range = &region->tag_range;
+	struct range *mem_range = &region->mem_range;
+	u64 page_pfn = page_to_pfn(page);
+	u64 block, block_offset;
+
+	if (!(mem_range->start <= page_pfn && page_pfn <= mem_range->end))
+		return -ERANGE;
+
+	block_offset = (page_pfn - mem_range->start) / 32;
+	block = tag_range->start + rounddown(block_offset, region->block_size);
+
+	if (block + region->block_size - 1 > tag_range->end) {
+		pr_err("Block 0x%llx-0x%llx is outside tag region 0x%llx-0x%llx\n",
+			PFN_PHYS(block), PFN_PHYS(block + region->block_size),
+			PFN_PHYS(tag_range->start), PFN_PHYS(tag_range->end));
+		return -ERANGE;
+	}
+	*blockp = block;
+
+	return 0;
+
+}
+
+static int tag_storage_find_block(struct page *page, unsigned long *block,
+				  struct tag_region **region)
+{
+	int i, ret;
+
+	for (i = 0; i < num_tag_regions; i++) {
+		ret = tag_storage_find_block_in_region(page, block, &tag_regions[i]);
+		if (ret == 0) {
+			*region = &tag_regions[i];
+			return 0;
+		}
+	}
+
+	return -EINVAL;
+}
+
+bool page_tag_storage_reserved(struct page *page)
+{
+	return test_bit(PG_tag_storage_reserved, &page->flags);
+}
+
+int reserve_tag_storage(struct page *page, int order, gfp_t gfp)
+{
+	unsigned long start_block, end_block;
+	struct tag_region *region;
+	unsigned long block;
+	unsigned long flags;
+	unsigned int tries;
+	int ret = 0;
+
+	VM_WARN_ON_ONCE(!preemptible());
+
+	if (page_tag_storage_reserved(page))
+		return 0;
+
+	/*
+	 * __alloc_contig_migrate_range() ignores gfp when allocating the
+	 * destination page for migration. Regardless, massage gfp flags and
+	 * remove __GFP_TAGGED to avoid recursion in case gfp stops being
+	 * ignored.
+	 */
+	gfp &= ~__GFP_TAGGED;
+	if (!(gfp & __GFP_NORETRY))
+		gfp |= __GFP_RETRY_MAYFAIL;
+
+	ret = tag_storage_find_block(page, &start_block, &region);
+	if (WARN_ONCE(ret, "Missing tag storage block for pfn 0x%lx", page_to_pfn(page)))
+		return 0;
+	end_block = start_block + order_to_num_blocks(order) * region->block_size;
+
+	mutex_lock(&tag_blocks_lock);
+
+	/* Check again, this time with the lock held. */
+	if (page_tag_storage_reserved(page))
+		goto out_unlock;
+
+	/* Make sure existing entries are not freed from out under out feet. */
+	xa_lock_irqsave(&tag_blocks_reserved, flags);
+	for (block = start_block; block < end_block; block += region->block_size) {
+		if (tag_storage_block_is_reserved(block))
+			block_ref_add(block, region, order);
+	}
+	xa_unlock_irqrestore(&tag_blocks_reserved, flags);
+
+	for (block = start_block; block < end_block; block += region->block_size) {
+		/* Refcount incremented above. */
+		if (tag_storage_block_is_reserved(block))
+			continue;
+
+		tries = 3;
+		while (tries--) {
+			ret = alloc_contig_range(block, block + region->block_size, MIGRATE_CMA, gfp);
+			if (ret == 0 || ret != -EBUSY)
+				break;
+		}
+
+		if (ret)
+			goto out_error;
+
+		ret = tag_storage_reserve_block(block, region, order);
+		if (ret) {
+			free_contig_range(block, region->block_size);
+			goto out_error;
+		}
+
+		count_vm_events(CMA_ALLOC_SUCCESS, region->block_size);
+	}
+
+	page_set_tag_storage_reserved(page, order);
+out_unlock:
+	mutex_unlock(&tag_blocks_lock);
+
+	return 0;
+
+out_error:
+	xa_lock_irqsave(&tag_blocks_reserved, flags);
+	for (block = start_block; block < end_block; block += region->block_size) {
+		if (tag_storage_block_is_reserved(block) &&
+		    block_ref_sub_return(block, region, order) == 1) {
+			__xa_erase(&tag_blocks_reserved, block);
+			free_contig_range(block, region->block_size);
+		}
+	}
+	xa_unlock_irqrestore(&tag_blocks_reserved, flags);
+
+	mutex_unlock(&tag_blocks_lock);
+
+	count_vm_events(CMA_ALLOC_FAIL, region->block_size);
+
+	return ret;
+}
+
+void free_tag_storage(struct page *page, int order)
+{
+	unsigned long block, start_block, end_block;
+	struct tag_region *region;
+	unsigned long flags;
+	int ret;
+
+	ret = tag_storage_find_block(page, &start_block, &region);
+	if (WARN_ONCE(ret, "Missing tag storage block for pfn 0x%lx", page_to_pfn(page)))
+		return;
+
+	end_block = start_block + order_to_num_blocks(order) * region->block_size;
+
+	xa_lock_irqsave(&tag_blocks_reserved, flags);
+	for (block = start_block; block < end_block; block += region->block_size) {
+		if (WARN_ONCE(!tag_storage_block_is_reserved(block),
+		    "Block 0x%lx is not reserved for pfn 0x%lx", block, page_to_pfn(page)))
+			continue;
+
+		if (block_ref_sub_return(block, region, order) == 1) {
+			__xa_erase(&tag_blocks_reserved, block);
+			free_contig_range(block, region->block_size);
+		}
+	}
+	xa_unlock_irqrestore(&tag_blocks_reserved, flags);
+}

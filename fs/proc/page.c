@@ -221,6 +221,7 @@ u64 stable_page_flags(struct page *page)
 #ifdef CONFIG_ARCH_USES_PG_ARCH_X
 	u |= kpf_copy_bit(k, KPF_ARCH_2,	PG_arch_2);
 	u |= kpf_copy_bit(k, KPF_ARCH_3,	PG_arch_3);
+	u |= kpf_copy_bit(k, KPF_ARCH_4,	PG_arch_4);
 #endif
 
 	return u;

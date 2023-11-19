@@ -40,12 +40,24 @@ void mte_free_tag_buf(void *buf);
 #ifdef CONFIG_ARM64_MTE
 
 /* track which pages have valid allocation tags */
-#define PG_mte_tagged	PG_arch_2
+#define PG_mte_tagged		PG_arch_2
 /* simple lock to avoid multiple threads tagging the same page */
-#define PG_mte_lock	PG_arch_3
+#define PG_mte_lock		PG_arch_3
+/* Track if a tagged page has tag storage reserved */
+#define PG_tag_storage_reserved	PG_arch_4
+
+#ifdef CONFIG_ARM64_MTE_TAG_STORAGE
+DECLARE_STATIC_KEY_FALSE(tag_storage_enabled_key);
+extern bool page_tag_storage_reserved(struct page *page);
+#endif
 
 static inline void set_page_mte_tagged(struct page *page)
 {
+#ifdef CONFIG_ARM64_MTE_TAG_STORAGE
+	/* Open code mte_tag_storage_enabled() */
+	WARN_ON_ONCE(static_branch_likely(&tag_storage_enabled_key) &&
+		     !page_tag_storage_reserved(page));
+#endif
 	/*
 	 * Ensure that the tags written prior to this function are visible
 	 * before the page flags update.

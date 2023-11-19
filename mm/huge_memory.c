@@ -2474,6 +2474,7 @@ static void __split_huge_page_tail(struct folio *folio, int tail,
 #ifdef CONFIG_ARCH_USES_PG_ARCH_X
 			 (1L << PG_arch_2) |
 			 (1L << PG_arch_3) |
+			 (1L << PG_arch_4) |
 #endif
 			 (1L << PG_dirty) |
 			 LRU_GEN_MASK | LRU_REFS_MASK));

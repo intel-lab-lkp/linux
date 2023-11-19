@@ -19,5 +19,6 @@
 #define KPF_SOFTDIRTY		40
 #define KPF_ARCH_2		41
 #define KPF_ARCH_3		42
+#define KPF_ARCH_4		43
 
 #endif /* LINUX_KERNEL_PAGE_FLAGS_H */

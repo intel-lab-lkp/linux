@@ -135,6 +135,7 @@ enum pageflags {
 #ifdef CONFIG_ARCH_USES_PG_ARCH_X
 	PG_arch_2,
 	PG_arch_3,
+	PG_arch_4,
 #endif
 	__NR_PAGEFLAGS,
 

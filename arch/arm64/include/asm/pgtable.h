@@ -10,6 +10,7 @@
 
 #include <asm/memory.h>
 #include <asm/mte.h>
+#include <asm/mte_tag_storage.h>
 #include <asm/pgtable-hwdef.h>
 #include <asm/pgtable-prot.h>
 #include <asm/tlbflush.h>
@@ -1063,6 +1064,32 @@ static inline void arch_swap_restore(swp_entry_t entry, struct folio *folio)
 		mte_restore_page_tags_by_swp_entry(entry, &folio->page);
 }
 
+#ifdef CONFIG_ARM64_MTE_TAG_STORAGE
+
+#define __HAVE_ARCH_PREP_NEW_PAGE
+static inline int arch_prep_new_page(struct page *page, int order, gfp_t gfp)
+{
+	if (tag_storage_enabled() && alloc_requires_tag_storage(gfp))
+		return reserve_tag_storage(page, order, gfp);
+	return 0;
+}
+
+#define __HAVE_ARCH_FREE_PAGES_PREPARE
+static inline void arch_free_pages_prepare(struct page *page, int order)
+{
+	if (tag_storage_enabled() && page_mte_tagged(page))
+		free_tag_storage(page, order);
+}
+
+#define __HAVE_ARCH_ALLOC_CMA
+static inline bool arch_alloc_cma(gfp_t gfp_mask)
+{
+	if (tag_storage_enabled() && alloc_requires_tag_storage(gfp_mask))
+		return false;
+	return true;
+}
+
+#endif /* CONFIG_ARM64_MTE_TAG_STORAGE */
 #endif /* CONFIG_ARM64_MTE */
 
 #define __HAVE_ARCH_CALC_VMA_GFP
