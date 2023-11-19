@@ -336,41 +336,39 @@ static inline bool swap_use_vma_readahead(struct swap_info_struct *si)
  */
 struct folio *swap_cache_get_folio(swp_entry_t entry, struct vm_fault *vmf)
 {
+	bool vma_ra, readahead;
 	struct folio *folio;
 
 	folio = filemap_get_folio(swap_address_space(entry), swp_offset(entry));
-	if (!IS_ERR(folio)) {
-		bool vma_ra = swap_use_vma_readahead(swp_swap_info(entry));
-		bool readahead;
+	if (IS_ERR(folio))
+		return NULL;
 
-		/*
-		 * At the moment, we don't support PG_readahead for anon THP
-		 * so let's bail out rather than confusing the readahead stat.
-		 */
-		if (unlikely(folio_test_large(folio)))
-			return folio;
+	/*
+	 * At the moment, we don't support PG_readahead for anon THP
+	 * so let's bail out rather than confusing the readahead stat.
+	 */
+	if (unlikely(folio_test_large(folio)))
+		return folio;
 
-		readahead = folio_test_clear_readahead(folio);
-		if (vmf && vma_ra) {
-			unsigned long ra_val;
-			int win, hits;
+	vma_ra = swap_use_vma_readahead(swp_swap_info(entry));
+	readahead = folio_test_clear_readahead(folio);
+	if (vmf && vma_ra) {
+		unsigned long ra_val;
+		int win, hits;
 
-			ra_val = GET_SWAP_RA_VAL(vmf->vma);
-			win = SWAP_RA_WIN(ra_val);
-			hits = SWAP_RA_HITS(ra_val);
-			if (readahead)
-				hits = min_t(int, hits + 1, SWAP_RA_HITS_MAX);
-			atomic_long_set(&vmf->vma->swap_readahead_info,
-					SWAP_RA_VAL(vmf->address, win, hits));
-		}
+		ra_val = GET_SWAP_RA_VAL(vmf->vma);
+		win = SWAP_RA_WIN(ra_val);
+		hits = SWAP_RA_HITS(ra_val);
+		if (readahead)
+			hits = min_t(int, hits + 1, SWAP_RA_HITS_MAX);
+		atomic_long_set(&vmf->vma->swap_readahead_info,
+				SWAP_RA_VAL(vmf->address, win, hits));
+	}
 
-		if (readahead) {
-			count_vm_event(SWAP_RA_HIT);
-			if (!vmf || !vma_ra)
-				atomic_inc(&swapin_readahead_hits);
-		}
-	} else {
-		folio = NULL;
+	if (readahead) {
+		count_vm_event(SWAP_RA_HIT);
+		if (!vmf || !vma_ra)
+			atomic_inc(&swapin_readahead_hits);
 	}
 
 	return folio;
