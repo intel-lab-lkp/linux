@@ -13835,6 +13835,14 @@ L:	virtualization@lists.linux-foundation.org
 S:	Supported
 F:	drivers/vdpa/mlx5/
 
+MELLANOX MLX5 ConnectX Diag DRIVER
+M:	Saeed Mahameed <saeedm@nvidia.com>
+R:	Itay Avraham <itayavr@nvidia.com>
+L:	linux-kernel@vger.kernel.org
+S:	Supported
+F:	drivers/misc/mlx5ctl/
+F:	include/uapi/misc/mlx5ctl.h
+
 MELLANOX MLXCPLD I2C AND MUX DRIVER
 M:	Vadim Pasternak <vadimp@nvidia.com>
 M:	Michael Shych <michaelsh@nvidia.com>
