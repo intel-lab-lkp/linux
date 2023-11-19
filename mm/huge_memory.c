@@ -1406,8 +1406,8 @@ fallback:
 	return VM_FAULT_FALLBACK;
 }
 
-static inline bool can_change_pmd_writable(struct vm_area_struct *vma,
-					   unsigned long addr, pmd_t pmd)
+inline bool can_change_pmd_writable(struct vm_area_struct *vma,
+				    unsigned long addr, pmd_t pmd)
 {
 	struct page *page;
 

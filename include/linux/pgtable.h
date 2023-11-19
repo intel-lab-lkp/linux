@@ -1473,6 +1473,11 @@ static inline vm_fault_t arch_do_page_fault_on_access(struct vm_fault *vmf)
 {
 	return VM_FAULT_SIGBUS;
 }
+
+static inline vm_fault_t arch_do_huge_page_fault_on_access(struct vm_fault *vmf)
+{
+	return VM_FAULT_SIGBUS;
+}
 #endif
 
 #endif /* CONFIG_MMU */

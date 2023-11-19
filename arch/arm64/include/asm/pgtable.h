@@ -477,6 +477,13 @@ static inline vm_fault_t arch_do_page_fault_on_access(struct vm_fault *vmf)
 		return handle_page_missing_tag_storage(vmf);
 	return VM_FAULT_SIGBUS;
 }
+
+static inline vm_fault_t arch_do_huge_page_fault_on_access(struct vm_fault *vmf)
+{
+	if (tag_storage_enabled())
+		return handle_huge_page_missing_tag_storage(vmf);
+	return VM_FAULT_SIGBUS;
+}
 #endif /* CONFIG_ARCH_HAS_FAULT_ON_ACCESS */
 
 #define pmd_present_invalid(pmd)     (!!(pmd_val(pmd) & PMD_PRESENT_INVALID))

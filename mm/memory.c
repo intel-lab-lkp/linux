@@ -5168,6 +5168,9 @@ retry_pud:
 			return 0;
 		}
 		if (pmd_trans_huge(vmf.orig_pmd) || pmd_devmap(vmf.orig_pmd)) {
+			if (fault_on_access_pmd(vmf.orig_pmd) && vma_is_accessible(vma))
+				return arch_do_huge_page_fault_on_access(&vmf);
+
 			if (pmd_protnone(vmf.orig_pmd) && vma_is_accessible(vma))
 				return do_huge_pmd_numa_page(&vmf);
 

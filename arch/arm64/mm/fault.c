@@ -1053,4 +1053,85 @@ out_retry:
 	}
 	return err;
 }
+
+vm_fault_t handle_huge_page_missing_tag_storage(struct vm_fault *vmf)
+{
+	unsigned long haddr = vmf->address & HPAGE_PMD_MASK;
+	struct vm_area_struct *vma = vmf->vma;
+	pmd_t old_pmd, new_pmd;
+	bool writable = false;
+	struct page *page;
+	vm_fault_t err;
+	int ret;
+
+	vmf->ptl = pmd_lock(vma->vm_mm, vmf->pmd);
+	if (unlikely(!pmd_same(vmf->orig_pmd, *vmf->pmd))) {
+		spin_unlock(vmf->ptl);
+		return 0;
+	}
+
+	old_pmd = vmf->orig_pmd;
+	new_pmd = pmd_modify(old_pmd, vma->vm_page_prot);
+
+	/*
+	 * Detect now whether the PMD could be writable; this information
+	 * is only valid while holding the PT lock.
+	 */
+	writable = pmd_write(new_pmd);
+	if (!writable && vma_wants_manual_pte_write_upgrade(vma) &&
+	    can_change_pmd_writable(vma, vmf->address, new_pmd))
+		writable = true;
+
+	page = vm_normal_page_pmd(vma, haddr, new_pmd);
+	if (!page)
+		goto out_map;
+
+	if (!(vma->vm_flags & VM_MTE))
+		goto out_map;
+
+	get_page(page);
+	vma_set_access_pid_bit(vma);
+
+	spin_unlock(vmf->ptl);
+	writable = false;
+
+	if (unlikely(is_migrate_isolate_page(page)))
+		goto out_retry;
+
+	ret = reserve_tag_storage(page, HPAGE_PMD_ORDER, GFP_HIGHUSER_MOVABLE);
+	if (ret)
+		goto out_retry;
+
+	put_page(page);
+
+	vmf->ptl = pmd_lock(vma->vm_mm, vmf->pmd);
+	if (unlikely(!pmd_same(old_pmd, *vmf->pmd))) {
+		spin_unlock(vmf->ptl);
+		return 0;
+	}
+
+out_map:
+	/* Restore the PMD */
+	new_pmd = pmd_modify(old_pmd, vma->vm_page_prot);
+	new_pmd = pmd_mkyoung(new_pmd);
+	if (writable)
+		new_pmd = pmd_mkwrite(new_pmd, vma);
+	set_pmd_at(vma->vm_mm, haddr, vmf->pmd, new_pmd);
+	update_mmu_cache_pmd(vma, vmf->address, vmf->pmd);
+	spin_unlock(vmf->ptl);
+
+	return 0;
+
+out_retry:
+	put_page(page);
+	if (vmf->flags & FAULT_FLAG_VMA_LOCK)
+		vma_end_read(vma);
+	if (fault_flag_allow_retry_first(vmf->flags)) {
+		err = VM_FAULT_RETRY;
+	} else {
+		/* Replay the fault. */
+		err = 0;
+	}
+	return err;
+}
 #endif
