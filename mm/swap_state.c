@@ -334,15 +334,14 @@ static inline bool swap_use_vma_readahead(struct swap_info_struct *si)
  *
  * Caller must lock the swap device or hold a reference to keep it valid.
  */
-struct folio *swap_cache_get_folio(swp_entry_t entry, struct vm_fault *vmf, void **shadowp)
+static struct folio *swap_cache_get_folio(swp_entry_t entry, struct vm_fault *vmf, void **shadowp)
 {
 	bool vma_ra, readahead;
 	struct folio *folio;
 
 	folio = filemap_get_entry(swap_address_space(entry), swp_offset(entry));
 	if (xa_is_value(folio)) {
-		if (shadowp)
-			*shadowp = folio;
+		*shadowp = folio;
 		return NULL;
 	}
 
