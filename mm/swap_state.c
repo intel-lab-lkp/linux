@@ -458,6 +458,8 @@ struct page *__read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 						mpol, ilx, numa_node_id());
 		if (!folio)
                         goto fail_put_swap;
+		if (mem_cgroup_swapin_charge_folio(folio, NULL, gfp_mask, entry))
+			goto fail_put_folio;
 
 		/*
 		 * Swap entry may have been freed since our caller observed it.
@@ -483,12 +485,8 @@ struct page *__read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 	/*
 	 * The swap entry is ours to swap in. Prepare the new page.
 	 */
-
 	__folio_set_locked(folio);
 	__folio_set_swapbacked(folio);
-
-	if (mem_cgroup_swapin_charge_folio(folio, NULL, gfp_mask, entry))
-		goto fail_unlock;
 
 	/* May fail (-ENOMEM) if XArray node allocation failed. */
 	if (add_to_swap_cache(folio, entry, gfp_mask & GFP_RECLAIM_MASK, &shadow))
@@ -510,6 +508,7 @@ got_page:
 fail_unlock:
 	put_swap_folio(folio, entry);
 	folio_unlock(folio);
+fail_put_folio:
 	folio_put(folio);
 fail_put_swap:
 	put_swap_device(si);
@@ -873,16 +872,15 @@ struct page *swapin_no_readahead(swp_entry_t entry, gfp_t gfp_mask,
 	folio = vma_alloc_folio(GFP_HIGHUSER_MOVABLE, 0,
 				vma, vmf->address, false);
 	if (folio) {
-		__folio_set_locked(folio);
-		__folio_set_swapbacked(folio);
-
-		if (mem_cgroup_swapin_charge_folio(folio,
-					vma->vm_mm, GFP_KERNEL,
-					entry)) {
-			folio_unlock(folio);
+		if (mem_cgroup_swapin_charge_folio(folio, vma->vm_mm,
+						   GFP_KERNEL, entry)) {
 			folio_put(folio);
 			return NULL;
 		}
+
+		__folio_set_locked(folio);
+		__folio_set_swapbacked(folio);
+
 		mem_cgroup_swapin_uncharge_swap(entry);
 
 		shadow = get_shadow_from_swap_cache(entry);
