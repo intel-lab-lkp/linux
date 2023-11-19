@@ -3846,9 +3846,21 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 
 	page = swapin_readahead(entry, GFP_HIGHUSER_MOVABLE,
 				vmf, &cache_result);
-	if (PTR_ERR(page) == -EBUSY) {
-		goto out;
-	} else if (page) {
+	if (IS_ERR_OR_NULL(page)) {
+		/*
+		 * Back out if somebody else faulted in this pte
+		 * while we released the pte lock.
+		 */
+		vmf->pte = pte_offset_map_lock(vma->vm_mm, vmf->pmd,
+				vmf->address, &vmf->ptl);
+		if (likely(vmf->pte && pte_same(ptep_get(vmf->pte), vmf->orig_pte))) {
+			if (!page)
+				ret = VM_FAULT_OOM;
+			else
+				ret = VM_FAULT_RETRY;
+		}
+		goto unlock;
+	} else {
 		folio = page_folio(page);
 		if (cache_result != SWAP_CACHE_HIT) {
 			/* Had to read the page from swap area: Major fault */
@@ -3866,17 +3878,6 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 			ret = VM_FAULT_HWPOISON;
 			goto out_release;
 		}
-	} else {
-		/*
-		 * Back out if somebody else faulted in this pte
-		 * while we released the pte lock.
-		 */
-		vmf->pte = pte_offset_map_lock(vma->vm_mm, vmf->pmd,
-				vmf->address, &vmf->ptl);
-		if (likely(vmf->pte &&
-			   pte_same(ptep_get(vmf->pte), vmf->orig_pte)))
-			ret = VM_FAULT_OOM;
-		goto unlock;
 	}
 
 	ret |= folio_lock_or_retry(folio, vmf);
