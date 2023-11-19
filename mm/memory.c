@@ -3861,7 +3861,6 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 			/* skip swapcache */
 			folio = vma_alloc_folio(GFP_HIGHUSER_MOVABLE, 0,
 						vma, vmf->address, false);
-			page = &folio->page;
 			if (folio) {
 				__folio_set_locked(folio);
 				__folio_set_swapbacked(folio);
@@ -3879,6 +3878,7 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 					workingset_refault(folio, shadow);
 
 				folio_add_lru(folio);
+				page = &folio->page;
 
 				/* To provide entry to swap_readpage() */
 				folio->swap = entry;
