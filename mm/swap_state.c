@@ -321,9 +321,9 @@ static inline bool swap_use_no_readahead(struct swap_info_struct *si, swp_entry_
 	return data_race(si->flags & SWP_SYNCHRONOUS_IO) && __swap_count(entry) == 1;
 }
 
-static inline bool swap_use_vma_readahead(void)
+static inline bool swap_use_vma_readahead(struct swap_info_struct *si)
 {
-	return READ_ONCE(enable_vma_readahead) && !atomic_read(&nr_rotate_swap);
+	return data_race(si->flags & SWP_SOLIDSTATE) && READ_ONCE(enable_vma_readahead);
 }
 
 /*
@@ -341,7 +341,7 @@ struct folio *swap_cache_get_folio(swp_entry_t entry,
 
 	folio = filemap_get_folio(swap_address_space(entry), swp_offset(entry));
 	if (!IS_ERR(folio)) {
-		bool vma_ra = swap_use_vma_readahead();
+		bool vma_ra = swap_use_vma_readahead(swp_swap_info(entry));
 		bool readahead;
 
 		/*
@@ -920,16 +920,18 @@ static struct page *swapin_no_readahead(swp_entry_t entry, gfp_t gfp_mask,
 struct page *swapin_readahead(swp_entry_t entry, gfp_t gfp_mask,
 			      struct vm_fault *vmf, bool *swapcached)
 {
+	struct swap_info_struct *si;
 	struct mempolicy *mpol;
 	struct page *page;
 	pgoff_t ilx;
 	bool cached;
 
+	si = swp_swap_info(entry);
 	mpol = get_vma_policy(vmf->vma, vmf->address, 0, &ilx);
-	if (swap_use_no_readahead(swp_swap_info(entry), entry)) {
+	if (swap_use_no_readahead(si, entry)) {
 		page = swapin_no_readahead(entry, gfp_mask, mpol, ilx, vmf->vma->vm_mm);
 		cached = false;
-	} else if (swap_use_vma_readahead()) {
+	} else if (swap_use_vma_readahead(si)) {
 		page = swap_vma_readahead(entry, gfp_mask, mpol, ilx, vmf);
 		cached = true;
 	} else {
