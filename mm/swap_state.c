@@ -922,6 +922,11 @@ struct page *swapin_readahead(swp_entry_t entry, gfp_t gfp_mask,
 	struct page *page;
 	pgoff_t ilx;
 
+	/* Prevent swapoff from happening to us */
+	si = get_swap_device(entry);
+	if (unlikely(!si))
+		return ERR_PTR(-EBUSY);
+
 	folio = swap_cache_get_folio(entry, vmf, &shadow);
 	if (folio) {
 		page = folio_file_page(folio, swp_offset(entry));
@@ -929,7 +934,6 @@ struct page *swapin_readahead(swp_entry_t entry, gfp_t gfp_mask,
 		goto done;
 	}
 
-	si = swp_swap_info(entry);
 	mpol = get_vma_policy(vmf->vma, vmf->address, 0, &ilx);
 	if (swap_use_no_readahead(si, swp_offset(entry))) {
 		page = swapin_no_readahead(entry, gfp_mask, mpol, ilx, vmf->vma->vm_mm);
@@ -944,8 +948,8 @@ struct page *swapin_readahead(swp_entry_t entry, gfp_t gfp_mask,
 		cache_result = SWAP_CACHE_MISS;
 	}
 	mpol_cond_put(mpol);
-
 done:
+	put_swap_device(si);
 	if (result)
 		*result = cache_result;
 

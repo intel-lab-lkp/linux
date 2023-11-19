@@ -3789,7 +3789,6 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 	struct folio *swapcache = NULL, *folio = NULL;
 	enum swap_cache_result cache_result;
 	struct page *page;
-	struct swap_info_struct *si = NULL;
 	rmap_t rmap_flags = RMAP_NONE;
 	bool exclusive = false;
 	swp_entry_t entry;
@@ -3845,14 +3844,11 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 		goto out;
 	}
 
-	/* Prevent swapoff from happening to us. */
-	si = get_swap_device(entry);
-	if (unlikely(!si))
-		goto out;
-
 	page = swapin_readahead(entry, GFP_HIGHUSER_MOVABLE,
 				vmf, &cache_result);
-	if (page) {
+	if (PTR_ERR(page) == -EBUSY) {
+		goto out;
+	} else if (page) {
 		folio = page_folio(page);
 		if (cache_result != SWAP_CACHE_HIT) {
 			/* Had to read the page from swap area: Major fault */
@@ -3964,7 +3960,7 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 			 */
 			exclusive = true;
 		} else if (exclusive && folio_test_writeback(folio) &&
-			  data_race(si->flags & SWP_STABLE_WRITES)) {
+			   (swp_swap_info(entry)->flags & SWP_STABLE_WRITES)) {
 			/*
 			 * This is tricky: not all swap backends support
 			 * concurrent page modifications while under writeback.
@@ -4068,8 +4064,6 @@ unlock:
 	if (vmf->pte)
 		pte_unmap_unlock(vmf->pte, vmf->ptl);
 out:
-	if (si)
-		put_swap_device(si);
 	return ret;
 out_nomap:
 	if (vmf->pte)
@@ -4082,8 +4076,6 @@ out_release:
 		folio_unlock(swapcache);
 		folio_put(swapcache);
 	}
-	if (si)
-		put_swap_device(si);
 	return ret;
 }
 

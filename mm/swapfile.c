@@ -1857,7 +1857,9 @@ static int unuse_pte_range(struct vm_area_struct *vma, pmd_t *pmd,
 		pte = NULL;
 		page = swapin_readahead(entry, GFP_HIGHUSER_MOVABLE,
 					&vmf, NULL);
-		if (page)
+		if (IS_ERR(page))
+			return PTR_ERR(page);
+		else if (page)
 			folio = page_folio(page);
 		if (!folio) {
 			/*
