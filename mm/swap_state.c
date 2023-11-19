@@ -872,7 +872,6 @@ static struct page *swapin_no_readahead(swp_entry_t entry, gfp_t gfp_mask,
 {
 	struct folio *folio;
 	struct page *page;
-	void *shadow = NULL;
 
 	page = alloc_pages_mpol(gfp_mask, 0, mpol, ilx, numa_node_id());
 	folio = (struct folio *)page;
@@ -887,10 +886,6 @@ static struct page *swapin_no_readahead(swp_entry_t entry, gfp_t gfp_mask,
 		__folio_set_swapbacked(folio);
 
 		mem_cgroup_swapin_uncharge_swap(entry);
-
-		shadow = get_shadow_from_swap_cache(entry);
-		if (shadow)
-			workingset_refault(folio, shadow);
 
 		folio_add_lru(folio);
 
@@ -922,11 +917,12 @@ struct page *swapin_readahead(swp_entry_t entry, gfp_t gfp_mask,
 	enum swap_cache_result cache_result;
 	struct swap_info_struct *si;
 	struct mempolicy *mpol;
+	void *shadow = NULL;
 	struct folio *folio;
 	struct page *page;
 	pgoff_t ilx;
 
-	folio = swap_cache_get_folio(entry, vmf, NULL);
+	folio = swap_cache_get_folio(entry, vmf, &shadow);
 	if (folio) {
 		page = folio_file_page(folio, swp_offset(entry));
 		cache_result = SWAP_CACHE_HIT;
@@ -938,6 +934,8 @@ struct page *swapin_readahead(swp_entry_t entry, gfp_t gfp_mask,
 	if (swap_use_no_readahead(si, swp_offset(entry))) {
 		page = swapin_no_readahead(entry, gfp_mask, mpol, ilx, vmf->vma->vm_mm);
 		cache_result = SWAP_CACHE_BYPASS;
+		if (shadow)
+			workingset_refault(page_folio(page), shadow);
 	} else if (swap_use_vma_readahead(si)) {
 		page = swap_vma_readahead(entry, gfp_mask, mpol, ilx, vmf);
 		cache_result = SWAP_CACHE_MISS;
