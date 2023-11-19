@@ -1039,7 +1039,7 @@ static inline pmd_t pmdp_establish(struct vm_area_struct *vma,
 static inline int arch_prepare_to_swap(struct page *page)
 {
 	if (system_supports_mte())
-		return mte_save_tags(page);
+		return mte_save_page_tags_by_swp_entry(page);
 	return 0;
 }
 
@@ -1047,20 +1047,20 @@ static inline int arch_prepare_to_swap(struct page *page)
 static inline void arch_swap_invalidate_page(int type, pgoff_t offset)
 {
 	if (system_supports_mte())
-		mte_invalidate_tags(type, offset);
+		mte_invalidate_tags_by_swp_entry(type, offset);
 }
 
 static inline void arch_swap_invalidate_area(int type)
 {
 	if (system_supports_mte())
-		mte_invalidate_tags_area(type);
+		mte_invalidate_tags_area_by_swp_entry(type);
 }
 
 #define __HAVE_ARCH_SWAP_RESTORE
 static inline void arch_swap_restore(swp_entry_t entry, struct folio *folio)
 {
 	if (system_supports_mte())
-		mte_restore_tags(entry, &folio->page);
+		mte_restore_page_tags_by_swp_entry(entry, &folio->page);
 }
 
 #endif /* CONFIG_ARM64_MTE */

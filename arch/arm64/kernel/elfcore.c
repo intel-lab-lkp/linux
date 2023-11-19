@@ -17,7 +17,7 @@
 
 static unsigned long mte_vma_tag_dump_size(struct core_vma_metadata *m)
 {
-	return (m->dump_size >> PAGE_SHIFT) * MTE_PAGE_TAG_STORAGE;
+	return (m->dump_size >> PAGE_SHIFT) * MTE_PAGE_TAG_STORAGE_SIZE;
 }
 
 /* Derived from dump_user_range(); start/end must be page-aligned */
@@ -38,7 +38,7 @@ static int mte_dump_tag_range(struct coredump_params *cprm,
 		 * have been all zeros.
 		 */
 		if (!page) {
-			dump_skip(cprm, MTE_PAGE_TAG_STORAGE);
+			dump_skip(cprm, MTE_PAGE_TAG_STORAGE_SIZE);
 			continue;
 		}
 
@@ -48,12 +48,12 @@ static int mte_dump_tag_range(struct coredump_params *cprm,
 		 */
 		if (!page_mte_tagged(page)) {
 			put_page(page);
-			dump_skip(cprm, MTE_PAGE_TAG_STORAGE);
+			dump_skip(cprm, MTE_PAGE_TAG_STORAGE_SIZE);
 			continue;
 		}
 
 		if (!tags) {
-			tags = mte_allocate_tag_storage();
+			tags = mte_allocate_tag_buf();
 			if (!tags) {
 				put_page(page);
 				ret = 0;
@@ -61,16 +61,16 @@ static int mte_dump_tag_range(struct coredump_params *cprm,
 			}
 		}
 
-		mte_save_page_tags(page_address(page), tags);
+		mte_copy_page_tags_to_buf(page_address(page), tags);
 		put_page(page);
-		if (!dump_emit(cprm, tags, MTE_PAGE_TAG_STORAGE)) {
+		if (!dump_emit(cprm, tags, MTE_PAGE_TAG_STORAGE_SIZE)) {
 			ret = 0;
 			break;
 		}
 	}
 
 	if (tags)
-		mte_free_tag_storage(tags);
+		mte_free_tag_buf(tags);
 
 	return ret;
 }

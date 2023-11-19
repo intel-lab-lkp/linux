@@ -215,41 +215,41 @@ static int create_safe_exec_page(void *src_start, size_t length,
 
 #ifdef CONFIG_ARM64_MTE
 
-static DEFINE_XARRAY(mte_pages);
+static DEFINE_XARRAY(tags_by_pfn);
 
-static int save_tags(struct page *page, unsigned long pfn)
+static int save_page_tags_by_pfn(struct page *page, unsigned long pfn)
 {
-	void *tag_storage, *ret;
+	void *tags, *ret;
 
-	tag_storage = mte_allocate_tag_storage();
-	if (!tag_storage)
+	tags = mte_allocate_tag_buf();
+	if (!tags)
 		return -ENOMEM;
 
-	mte_save_page_tags(page_address(page), tag_storage);
+	mte_copy_page_tags_to_buf(page_address(page), tags);
 
-	ret = xa_store(&mte_pages, pfn, tag_storage, GFP_KERNEL);
+	ret = xa_store(&tags_by_pfn, pfn, tags, GFP_KERNEL);
 	if (WARN(xa_is_err(ret), "Failed to store MTE tags")) {
-		mte_free_tag_storage(tag_storage);
+		mte_free_tag_buf(tags);
 		return xa_err(ret);
 	} else if (WARN(ret, "swsusp: %s: Duplicate entry", __func__)) {
-		mte_free_tag_storage(ret);
+		mte_free_tag_buf(ret);
 	}
 
 	return 0;
 }
 
-static void swsusp_mte_free_storage(void)
+static void swsusp_mte_free_tags(void)
 {
-	XA_STATE(xa_state, &mte_pages, 0);
+	XA_STATE(xa_state, &tags_by_pfn, 0);
 	void *tags;
 
-	xa_lock(&mte_pages);
+	xa_lock(&tags_by_pfn);
 	xas_for_each(&xa_state, tags, ULONG_MAX) {
-		mte_free_tag_storage(tags);
+		mte_free_tag_buf(tags);
 	}
-	xa_unlock(&mte_pages);
+	xa_unlock(&tags_by_pfn);
 
-	xa_destroy(&mte_pages);
+	xa_destroy(&tags_by_pfn);
 }
 
 static int swsusp_mte_save_tags(void)
@@ -273,9 +273,9 @@ static int swsusp_mte_save_tags(void)
 			if (!page_mte_tagged(page))
 				continue;
 
-			ret = save_tags(page, pfn);
+			ret = save_page_tags_by_pfn(page, pfn);
 			if (ret) {
-				swsusp_mte_free_storage();
+				swsusp_mte_free_tags();
 				goto out;
 			}
 
@@ -290,25 +290,25 @@ out:
 
 static void swsusp_mte_restore_tags(void)
 {
-	XA_STATE(xa_state, &mte_pages, 0);
+	XA_STATE(xa_state, &tags_by_pfn, 0);
 	int n = 0;
 	void *tags;
 
-	xa_lock(&mte_pages);
+	xa_lock(&tags_by_pfn);
 	xas_for_each(&xa_state, tags, ULONG_MAX) {
 		unsigned long pfn = xa_state.xa_index;
 		struct page *page = pfn_to_online_page(pfn);
 
-		mte_restore_page_tags(page_address(page), tags);
+		mte_copy_page_tags_from_buf(page_address(page), tags);
 
-		mte_free_tag_storage(tags);
+		mte_free_tag_buf(tags);
 		n++;
 	}
-	xa_unlock(&mte_pages);
+	xa_unlock(&tags_by_pfn);
 
 	pr_info("Restored %d MTE pages\n", n);
 
-	xa_destroy(&mte_pages);
+	xa_destroy(&tags_by_pfn);
 }
 
 #else	/* CONFIG_ARM64_MTE */

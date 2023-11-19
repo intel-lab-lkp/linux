@@ -18,19 +18,24 @@
 
 #include <asm/pgtable-types.h>
 
-void mte_clear_page_tags(void *addr);
+void mte_clear_page_tags(void *page_addr);
+
 unsigned long mte_copy_tags_from_user(void *to, const void __user *from,
 				      unsigned long n);
 unsigned long mte_copy_tags_to_user(void __user *to, void *from,
 				    unsigned long n);
-int mte_save_tags(struct page *page);
-void mte_save_page_tags(const void *page_addr, void *tag_storage);
-void mte_restore_tags(swp_entry_t entry, struct page *page);
-void mte_restore_page_tags(void *page_addr, const void *tag_storage);
-void mte_invalidate_tags(int type, pgoff_t offset);
-void mte_invalidate_tags_area(int type);
-void *mte_allocate_tag_storage(void);
-void mte_free_tag_storage(char *storage);
+
+int mte_save_page_tags_by_swp_entry(struct page *page);
+void mte_restore_page_tags_by_swp_entry(swp_entry_t entry, struct page *page);
+
+void mte_copy_page_tags_to_buf(const void *page_addr, void *to);
+void mte_copy_page_tags_from_buf(void *page_addr, const void *from);
+
+void mte_invalidate_tags_by_swp_entry(int type, pgoff_t offset);
+void mte_invalidate_tags_area_by_swp_entry(int type);
+
+void *mte_allocate_tag_buf(void);
+void mte_free_tag_buf(void *buf);
 
 #ifdef CONFIG_ARM64_MTE
 
