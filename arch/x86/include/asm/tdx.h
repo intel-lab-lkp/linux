@@ -63,6 +63,10 @@ u64 tdx_hcall_get_quote(u8 *buf, size_t size);
 
 bool tdx_allowed_port(int port);
 
+u64 tdx_mcall_verify_report(u8 *reportmac);
+
+int tdx_mcall_extend_rtmr(u8 *data, u8 index);
+
 #else
 
 static inline void tdx_early_init(void) { };
