@@ -393,6 +393,8 @@ static int __init mte_tag_storage_activate_regions(void)
 		totalcma_pages += range_len(tag_range);
 	}
 
+	reserve_tag_storage(ZERO_PAGE(0), 0, GFP_HIGHUSER_MOVABLE);
+
 	return 0;
 
 out_disabled:
