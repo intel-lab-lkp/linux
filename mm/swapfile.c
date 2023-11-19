@@ -1746,6 +1746,7 @@ static int unuse_pte(struct vm_area_struct *vma, pmd_t *pmd,
 	spinlock_t *ptl;
 	pte_t *pte, new_pte, old_pte;
 	bool hwpoisoned = PageHWPoison(page);
+	vm_fault_t err;
 	int ret = 1;
 
 	swapcache = page;
@@ -1777,6 +1778,12 @@ static int unuse_pte(struct vm_area_struct *vma, pmd_t *pmd,
 		new_pte = swp_entry_to_pte(swp_entry);
 		ret = 0;
 		goto setpte;
+	}
+
+	err = arch_swap_prepare_to_restore(entry, page_folio(page));
+	if (err) {
+		ret = -EINVAL;
+		goto out;
 	}
 
 	/*

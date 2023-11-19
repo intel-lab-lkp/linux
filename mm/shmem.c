@@ -1840,6 +1840,7 @@ static int shmem_swapin_folio(struct inode *inode, pgoff_t index,
 	struct swap_info_struct *si;
 	struct folio *folio = NULL;
 	swp_entry_t swap;
+	vm_fault_t ret;
 	int error;
 
 	VM_BUG_ON(!*foliop || !xa_is_value(*foliop));
@@ -1887,6 +1888,14 @@ static int shmem_swapin_folio(struct inode *inode, pgoff_t index,
 		goto failed;
 	}
 	folio_wait_writeback(folio);
+
+	ret = arch_swap_prepare_to_restore(swap, folio);
+	if (ret) {
+		if (fault_type)
+			*fault_type = ret;
+		error = -EINVAL;
+		goto unlock;
+	}
 
 	/*
 	 * Some architectures may have to restore extra metadata to the
