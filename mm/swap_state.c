@@ -867,17 +867,17 @@ skip:
  * in.
  */
 static struct page *swapin_no_readahead(swp_entry_t entry, gfp_t gfp_mask,
-					struct vm_fault *vmf)
+					struct mempolicy *mpol, pgoff_t ilx,
+					struct mm_struct *mm)
 {
-	struct vm_area_struct *vma = vmf->vma;
-	struct page *page = NULL;
 	struct folio *folio;
+	struct page *page;
 	void *shadow = NULL;
 
-	folio = vma_alloc_folio(GFP_HIGHUSER_MOVABLE, 0,
-				vma, vmf->address, false);
+	page = alloc_pages_mpol(gfp_mask, 0, mpol, ilx, numa_node_id());
+	folio = (struct folio *)page;
 	if (folio) {
-		if (mem_cgroup_swapin_charge_folio(folio, vma->vm_mm,
+		if (mem_cgroup_swapin_charge_folio(folio, mm,
 						   GFP_KERNEL, entry)) {
 			folio_put(folio);
 			return NULL;
@@ -896,7 +896,6 @@ static struct page *swapin_no_readahead(swp_entry_t entry, gfp_t gfp_mask,
 
 		/* To provide entry to swap_readpage() */
 		folio->swap = entry;
-		page = &folio->page;
 		swap_readpage(page, true, NULL);
 		folio->private = NULL;
 	}
@@ -928,7 +927,7 @@ struct page *swapin_readahead(swp_entry_t entry, gfp_t gfp_mask,
 
 	mpol = get_vma_policy(vmf->vma, vmf->address, 0, &ilx);
 	if (swap_use_no_readahead(swp_swap_info(entry), entry)) {
-		page = swapin_no_readahead(entry, gfp_mask, vmf);
+		page = swapin_no_readahead(entry, gfp_mask, mpol, ilx, vmf->vma->vm_mm);
 		cached = false;
 	} else if (swap_use_vma_readahead()) {
 		page = swap_vma_readahead(entry, gfp_mask, mpol, ilx, vmf);
