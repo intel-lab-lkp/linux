@@ -1822,20 +1822,15 @@ static int unuse_pte_range(struct vm_area_struct *vma, pmd_t *pmd,
 
 	si = swap_info[type];
 	do {
-		struct page *page;
-		unsigned long offset;
-		unsigned char swp_count;
-		struct folio *folio = NULL;
-		swp_entry_t entry;
 		int ret;
 		pte_t ptent;
-
-		struct vm_fault vmf = {
-			.vma = vma,
-			.address = addr,
-			.real_address = addr,
-			.pmd = pmd,
-		};
+		pgoff_t ilx;
+		swp_entry_t entry;
+		struct page *page;
+		unsigned long offset;
+		struct mempolicy *mpol;
+		unsigned char swp_count;
+		struct folio *folio = NULL;
 
 		if (!pte++) {
 			pte = pte_offset_map(pmd, addr);
@@ -1855,8 +1850,12 @@ static int unuse_pte_range(struct vm_area_struct *vma, pmd_t *pmd,
 		offset = swp_offset(entry);
 		pte_unmap(pte);
 		pte = NULL;
-		page = swapin_readahead(entry, GFP_HIGHUSER_MOVABLE,
-					&vmf, NULL);
+
+		mpol = get_vma_policy(vma, addr, 0, &ilx);
+		page = swapin_page_non_fault(entry, GFP_HIGHUSER_MOVABLE,
+					     mpol, ilx, vma->vm_mm, NULL);
+		mpol_cond_put(mpol);
+
 		if (IS_ERR(page))
 			return PTR_ERR(page);
 		else if (page)

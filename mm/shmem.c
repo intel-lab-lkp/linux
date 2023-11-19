@@ -1565,22 +1565,6 @@ static inline struct mempolicy *shmem_get_sbmpol(struct shmem_sb_info *sbinfo)
 static struct mempolicy *shmem_get_pgoff_policy(struct shmem_inode_info *info,
 			pgoff_t index, unsigned int order, pgoff_t *ilx);
 
-static struct folio *shmem_swapin_cluster(swp_entry_t swap, gfp_t gfp,
-			struct shmem_inode_info *info, pgoff_t index)
-{
-	struct mempolicy *mpol;
-	pgoff_t ilx;
-	struct page *page;
-
-	mpol = shmem_get_pgoff_policy(info, index, 0, &ilx);
-	page = swap_cluster_readahead(swap, gfp, mpol, ilx);
-	mpol_cond_put(mpol);
-
-	if (!page)
-		return NULL;
-	return page_folio(page);
-}
-
 /*
  * Make sure huge_gfp is always more limited than limit_gfp.
  * Some of the flags set permissions, while others set limitations.
@@ -1854,9 +1838,12 @@ static int shmem_swapin_folio(struct inode *inode, pgoff_t index,
 {
 	struct address_space *mapping = inode->i_mapping;
 	struct shmem_inode_info *info = SHMEM_I(inode);
-	struct swap_info_struct *si;
+	enum swap_cache_result result;
 	struct folio *folio = NULL;
+	struct mempolicy *mpol;
+	struct page *page;
 	swp_entry_t swap;
+	pgoff_t ilx;
 	int error;
 
 	VM_BUG_ON(!*foliop || !xa_is_value(*foliop));
@@ -1866,34 +1853,30 @@ static int shmem_swapin_folio(struct inode *inode, pgoff_t index,
 	if (is_poisoned_swp_entry(swap))
 		return -EIO;
 
-	si = get_swap_device(swap);
-	if (!si) {
+	mpol = shmem_get_pgoff_policy(info, index, 0, &ilx);
+	page = swapin_page_non_fault(swap, gfp, mpol, ilx, fault_mm, &result);
+	mpol_cond_put(mpol);
+
+	if (PTR_ERR(page) == -EBUSY) {
 		if (!shmem_confirm_swap(mapping, index, swap))
 			return -EEXIST;
 		else
 			return -EINVAL;
-	}
-
-	/* Look it up and read it in.. */
-	folio = swap_cache_get_folio(swap, NULL, NULL);
-	if (!folio) {
-		/* Or update major stats only when swapin succeeds?? */
-		if (fault_type) {
+	} else if (!page) {
+		error = -ENOMEM;
+		goto failed;
+	} else {
+		folio = page_folio(page);
+		if (fault_type && result != SWAP_CACHE_HIT) {
 			*fault_type |= VM_FAULT_MAJOR;
 			count_vm_event(PGMAJFAULT);
 			count_memcg_event_mm(fault_mm, PGMAJFAULT);
-		}
-		/* Here we actually start the io */
-		folio = shmem_swapin_cluster(swap, gfp, info, index);
-		if (!folio) {
-			error = -ENOMEM;
-			goto failed;
 		}
 	}
 
 	/* We have to do this with folio locked to prevent races */
 	folio_lock(folio);
-	if (!folio_test_swapcache(folio) ||
+	if ((result != SWAP_CACHE_BYPASS && !folio_test_swapcache(folio)) ||
 	    folio->swap.val != swap.val ||
 	    !shmem_confirm_swap(mapping, index, swap)) {
 		error = -EEXIST;
@@ -1930,7 +1913,6 @@ static int shmem_swapin_folio(struct inode *inode, pgoff_t index,
 	delete_from_swap_cache(folio);
 	folio_mark_dirty(folio);
 	swap_free(swap);
-	put_swap_device(si);
 
 	*foliop = folio;
 	return 0;
@@ -1944,7 +1926,6 @@ unlock:
 		folio_unlock(folio);
 		folio_put(folio);
 	}
-	put_swap_device(si);
 
 	return error;
 }

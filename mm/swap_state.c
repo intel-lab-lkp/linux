@@ -956,6 +956,44 @@ done:
 	return page;
 }
 
+struct page *swapin_page_non_fault(swp_entry_t entry, gfp_t gfp_mask,
+				   struct mempolicy *mpol, pgoff_t ilx,
+				   struct mm_struct *mm, enum swap_cache_result *result)
+{
+	enum swap_cache_result cache_result;
+	struct swap_info_struct *si;
+	void *shadow = NULL;
+	struct folio *folio;
+	struct page *page;
+
+	/* Prevent swapoff from happening to us */
+	si = get_swap_device(entry);
+	if (unlikely(!si))
+		return ERR_PTR(-EBUSY);
+
+	folio = swap_cache_get_folio(entry, NULL, &shadow);
+	if (folio) {
+		page = folio_file_page(folio, swp_offset(entry));
+		cache_result = SWAP_CACHE_HIT;
+		goto done;
+	}
+
+	if (swap_use_no_readahead(si, swp_offset(entry))) {
+		page = swapin_no_readahead(entry, gfp_mask, mpol, ilx, mm);
+		if (shadow)
+			workingset_refault(page_folio(page), shadow);
+		cache_result = SWAP_CACHE_BYPASS;
+	} else {
+		page = swap_cluster_readahead(entry, gfp_mask, mpol, ilx);
+		cache_result = SWAP_CACHE_MISS;
+	}
+done:
+	put_swap_device(si);
+	if (result)
+		*result = cache_result;
+	return page;
+}
+
 #ifdef CONFIG_SYSFS
 static ssize_t vma_ra_enabled_show(struct kobject *kobj,
 				     struct kobj_attribute *attr, char *buf)
