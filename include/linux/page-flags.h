@@ -576,11 +576,22 @@ TESTSCFLAG(HWPoison, hwpoison, PF_ANY)
 #define MAGIC_HWPOISON	0x48575053U	/* HWPS */
 extern void SetPageHWPoisonTakenOff(struct page *page);
 extern void ClearPageHWPoisonTakenOff(struct page *page);
-extern bool take_page_off_buddy(struct page *page);
-extern bool put_page_back_buddy(struct page *page);
+extern bool PageHWPoisonTakenOff(struct page *page);
 #else
 PAGEFLAG_FALSE(HWPoison, hwpoison)
+TESTSCFLAG_FALSE(HWPoison, hwpoison)
 #define __PG_HWPOISON 0
+static inline void SetPageHWPoisonTakenOff(struct page *page) { }
+static inline void ClearPageHWPoisonTakenOff(struct page *page) { }
+static inline bool PageHWPoisonTakenOff(struct page *page)
+{
+	return false;
+}
+#endif
+
+#ifdef CONFIG_WANTS_TAKE_PAGE_OFF_BUDDY
+extern bool take_page_off_buddy(struct page *page, bool poison);
+extern bool put_page_back_buddy(struct page *page, bool unpoison);
 #endif
 
 #if defined(CONFIG_PAGE_IDLE_FLAG) && defined(CONFIG_64BIT)

@@ -773,6 +773,7 @@ config MEMORY_FAILURE
 	depends on MMU
 	depends on ARCH_SUPPORTS_MEMORY_FAILURE
 	bool "Enable recovery from hardware memory errors"
+	select WANTS_TAKE_PAGE_OFF_BUDDY
 	select MEMORY_ISOLATION
 	select RAS
 	help
@@ -1020,6 +1021,9 @@ config ARCH_HAS_CACHE_LINE_SIZE
 	bool
 
 config ARCH_HAS_FAULT_ON_ACCESS
+	bool
+
+config WANTS_TAKE_PAGE_OFF_BUDDY
 	bool
 
 config ARCH_HAS_CURRENT_STACK_POINTER

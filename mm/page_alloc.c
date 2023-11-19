@@ -6700,7 +6700,7 @@ bool is_free_buddy_page(struct page *page)
 }
 EXPORT_SYMBOL(is_free_buddy_page);
 
-#ifdef CONFIG_MEMORY_FAILURE
+#ifdef CONFIG_WANTS_TAKE_PAGE_OFF_BUDDY
 /*
  * Break down a higher-order page in sub-pages, and keep our target out of
  * buddy allocator.
@@ -6730,11 +6730,10 @@ static void break_down_buddy_pages(struct zone *zone, struct page *page,
 		set_buddy_order(current_buddy, high);
 	}
 }
-
 /*
- * Take a page that will be marked as poisoned off the buddy allocator.
+ * Take a page off the buddy allocator, and optionally mark it as poisoned.
  */
-bool take_page_off_buddy(struct page *page)
+bool take_page_off_buddy(struct page *page, bool poison)
 {
 	struct zone *zone = page_zone(page);
 	unsigned long pfn = page_to_pfn(page);
@@ -6755,7 +6754,8 @@ bool take_page_off_buddy(struct page *page)
 			del_page_from_free_list(page_head, zone, page_order);
 			break_down_buddy_pages(zone, page_head, page, 0,
 						page_order, migratetype);
-			SetPageHWPoisonTakenOff(page);
+			if (poison)
+				SetPageHWPoisonTakenOff(page);
 			if (!is_migrate_isolate(migratetype))
 				__mod_zone_freepage_state(zone, -1, migratetype);
 			ret = true;
@@ -6769,9 +6769,10 @@ bool take_page_off_buddy(struct page *page)
 }
 
 /*
- * Cancel takeoff done by take_page_off_buddy().
+ * Cancel takeoff done by take_page_off_buddy(), and optionally unpoison the
+ * page.
  */
-bool put_page_back_buddy(struct page *page)
+bool put_page_back_buddy(struct page *page, bool unpoison)
 {
 	struct zone *zone = page_zone(page);
 	unsigned long pfn = page_to_pfn(page);
@@ -6781,9 +6782,11 @@ bool put_page_back_buddy(struct page *page)
 
 	spin_lock_irqsave(&zone->lock, flags);
 	if (put_page_testzero(page)) {
-		ClearPageHWPoisonTakenOff(page);
+		VM_WARN_ON_ONCE(PageHWPoisonTakenOff(page) && !unpoison);
+		if (unpoison)
+			ClearPageHWPoisonTakenOff(page);
 		__free_one_page(page, pfn, zone, 0, migratetype, FPI_NONE);
-		if (TestClearPageHWPoison(page)) {
+		if (!unpoison || (unpoison && TestClearPageHWPoison(page))) {
 			ret = true;
 		}
 	}

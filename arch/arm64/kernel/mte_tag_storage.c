@@ -522,6 +522,7 @@ int reserve_tag_storage(struct page *page, int order, gfp_t gfp)
 	unsigned long block;
 	unsigned long flags;
 	unsigned int tries;
+	bool success;
 	int ret = 0;
 
 	VM_WARN_ON_ONCE(!preemptible());
@@ -565,6 +566,19 @@ int reserve_tag_storage(struct page *page, int order, gfp_t gfp)
 		if (tag_storage_block_is_reserved(block))
 			continue;
 
+		if (region->block_size == 1 && is_free_buddy_page(pfn_to_page(block))) {
+			success = take_page_off_buddy(pfn_to_page(block), false);
+			if (success) {
+				ret = tag_storage_reserve_block(block, region, order);
+				if (ret) {
+					put_page_back_buddy(pfn_to_page(block), false);
+					goto out_error;
+				}
+				page_ref_inc(pfn_to_page(block));
+				goto success_next;
+			}
+		}
+
 		tries = 3;
 		while (tries--) {
 			ret = alloc_contig_range(block, block + region->block_size, MIGRATE_CMA, gfp);
@@ -598,6 +612,7 @@ int reserve_tag_storage(struct page *page, int order, gfp_t gfp)
 			goto out_error;
 		}
 
+success_next:
 		count_vm_events(CMA_ALLOC_SUCCESS, region->block_size);
 	}
 

@@ -157,7 +157,7 @@ static int __page_handle_poison(struct page *page)
 	zone_pcp_disable(page_zone(page));
 	ret = dissolve_free_huge_page(page);
 	if (!ret)
-		ret = take_page_off_buddy(page);
+		ret = take_page_off_buddy(page, true);
 	zone_pcp_enable(page_zone(page));
 
 	return ret;
@@ -1348,7 +1348,7 @@ static int page_action(struct page_state *ps, struct page *p,
 	return action_result(pfn, ps->type, result);
 }
 
-static inline bool PageHWPoisonTakenOff(struct page *page)
+bool PageHWPoisonTakenOff(struct page *page)
 {
 	return PageHWPoison(page) && page_private(page) == MAGIC_HWPOISON;
 }
@@ -2236,7 +2236,7 @@ try_again:
 		res = get_hwpoison_page(p, flags);
 		if (!res) {
 			if (is_free_buddy_page(p)) {
-				if (take_page_off_buddy(p)) {
+				if (take_page_off_buddy(p, true)) {
 					page_ref_inc(p);
 					res = MF_RECOVERED;
 				} else {
@@ -2567,7 +2567,7 @@ int unpoison_memory(unsigned long pfn)
 		ret = folio_test_clear_hwpoison(folio) ? 0 : -EBUSY;
 	} else if (ghp < 0) {
 		if (ghp == -EHWPOISON) {
-			ret = put_page_back_buddy(p) ? 0 : -EBUSY;
+			ret = put_page_back_buddy(p, true) ? 0 : -EBUSY;
 		} else {
 			ret = ghp;
 			unpoison_pr_info("Unpoison: failed to grab page %#lx\n",
