@@ -3794,7 +3794,6 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 	swp_entry_t entry;
 	pte_t pte;
 	vm_fault_t ret = 0;
-	void *shadow = NULL;
 
 	if (!pte_unmap_same(vmf))
 		goto out;
@@ -3858,33 +3857,11 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 	if (!folio) {
 		if (data_race(si->flags & SWP_SYNCHRONOUS_IO) &&
 		    __swap_count(entry) == 1) {
-			/* skip swapcache */
-			folio = vma_alloc_folio(GFP_HIGHUSER_MOVABLE, 0,
-						vma, vmf->address, false);
-			if (folio) {
-				__folio_set_locked(folio);
-				__folio_set_swapbacked(folio);
-
-				if (mem_cgroup_swapin_charge_folio(folio,
-							vma->vm_mm, GFP_KERNEL,
-							entry)) {
-					ret = VM_FAULT_OOM;
-					goto out_page;
-				}
-				mem_cgroup_swapin_uncharge_swap(entry);
-
-				shadow = get_shadow_from_swap_cache(entry);
-				if (shadow)
-					workingset_refault(folio, shadow);
-
-				folio_add_lru(folio);
-				page = &folio->page;
-
-				/* To provide entry to swap_readpage() */
-				folio->swap = entry;
-				swap_readpage(page, true, NULL);
-				folio->private = NULL;
-			}
+			/* skip swapcache and readahead */
+			page = swapin_no_readahead(entry, GFP_HIGHUSER_MOVABLE,
+						vmf);
+			if (page)
+				folio = page_folio(page);
 		} else {
 			page = swapin_readahead(entry, GFP_HIGHUSER_MOVABLE,
 						vmf);
