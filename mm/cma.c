@@ -517,10 +517,10 @@ struct page *cma_alloc(struct cma *cma, unsigned long count,
 	pr_debug("%s(): returned %p\n", __func__, page);
 out:
 	if (page) {
-		count_vm_event(CMA_ALLOC_SUCCESS);
+		count_vm_events(CMA_ALLOC_SUCCESS, count);
 		cma_sysfs_account_success_pages(cma, count);
 	} else {
-		count_vm_event(CMA_ALLOC_FAIL);
+		count_vm_events(CMA_ALLOC_FAIL, count);
 		if (cma)
 			cma_sysfs_account_fail_pages(cma, count);
 	}
