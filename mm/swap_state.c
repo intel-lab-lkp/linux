@@ -627,8 +627,8 @@ static unsigned long swapin_nr_pages(unsigned long offset)
  * are used for every page of the readahead: neighbouring pages on swap
  * are fairly likely to have been swapped out from the same node.
  */
-struct page *swap_cluster_readahead(swp_entry_t entry, gfp_t gfp_mask,
-				    struct mempolicy *mpol, pgoff_t ilx)
+static struct page *swap_cluster_readahead(swp_entry_t entry, gfp_t gfp_mask,
+					   struct mempolicy *mpol, pgoff_t ilx)
 {
 	struct page *page;
 	unsigned long entry_offset = swp_offset(entry);

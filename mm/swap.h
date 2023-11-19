@@ -56,8 +56,6 @@ struct page *read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 struct page *__read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 				     struct mempolicy *mpol, pgoff_t ilx,
 				     bool *new_page_allocated);
-struct page *swap_cluster_readahead(swp_entry_t entry, gfp_t flag,
-				    struct mempolicy *mpol, pgoff_t ilx);
 struct page *swapin_readahead(swp_entry_t entry, gfp_t flag,
 			      struct vm_fault *vmf, enum swap_cache_result *result);
 struct page *swapin_page_non_fault(swp_entry_t entry, gfp_t gfp_mask,
@@ -91,12 +89,6 @@ static inline struct address_space *swap_address_space(swp_entry_t entry)
 
 static inline void show_swap_cache_info(void)
 {
-}
-
-static inline struct page *swap_cluster_readahead(swp_entry_t entry,
-			gfp_t gfp_mask, struct mempolicy *mpol, pgoff_t ilx)
-{
-	return NULL;
 }
 
 static inline struct page *swapin_readahead(swp_entry_t swp, gfp_t gfp_mask,
