@@ -1570,7 +1570,7 @@ static struct folio *shmem_swapin_cluster(swp_entry_t swap, gfp_t gfp,
  */
 static gfp_t limit_gfp_mask(gfp_t huge_gfp, gfp_t limit_gfp)
 {
-	gfp_t allowflags = __GFP_IO | __GFP_FS | __GFP_RECLAIM;
+	gfp_t allowflags = __GFP_IO | __GFP_FS | __GFP_RECLAIM | __GFP_TAGGED;
 	gfp_t denyflags = __GFP_NOWARN | __GFP_NORETRY;
 	gfp_t zoneflags = limit_gfp & GFP_ZONEMASK;
 	gfp_t result = huge_gfp & ~(allowflags | GFP_ZONEMASK);
@@ -2023,6 +2023,7 @@ repeat:
 		gfp_t huge_gfp;
 
 		huge_gfp = vma_thp_gfp_mask(vma);
+		huge_gfp |= arch_calc_vma_gfp(vma, huge_gfp);
 		huge_gfp = limit_gfp_mask(huge_gfp, gfp);
 		folio = shmem_alloc_and_add_folio(huge_gfp,
 				inode, index, fault_mm, true);
@@ -2198,6 +2199,8 @@ static vm_fault_t shmem_fault(struct vm_fault *vmf)
 	struct folio *folio = NULL;
 	vm_fault_t ret = 0;
 	int err;
+
+	gfp |= arch_calc_vma_gfp(vmf->vma, gfp);
 
 	/*
 	 * Trinity finds that probing a hole which tmpfs is punching can

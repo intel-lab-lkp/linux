@@ -2170,6 +2170,7 @@ struct folio *vma_alloc_folio(gfp_t gfp, int order, struct vm_area_struct *vma,
 	pgoff_t ilx;
 	struct page *page;
 
+	gfp |= arch_calc_vma_gfp(vma, gfp);
 	pol = get_vma_policy(vma, addr, order, &ilx);
 	page = alloc_pages_mpol(gfp | __GFP_COMP, order,
 				pol, ilx, numa_node_id());

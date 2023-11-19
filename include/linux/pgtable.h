@@ -873,6 +873,13 @@ static inline void arch_do_swap_page(struct mm_struct *mm,
 }
 #endif
 
+#ifndef __HAVE_ARCH_CALC_VMA_GFP
+static inline gfp_t arch_calc_vma_gfp(struct vm_area_struct *vma, gfp_t gfp)
+{
+	return 0;
+}
+#endif
+
 #ifndef __HAVE_ARCH_PREP_NEW_PAGE
 static inline int arch_prep_new_page(struct page *page, int order, gfp_t gfp)
 {

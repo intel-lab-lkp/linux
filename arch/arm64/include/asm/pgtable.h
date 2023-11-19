@@ -1065,6 +1065,9 @@ static inline void arch_swap_restore(swp_entry_t entry, struct folio *folio)
 
 #endif /* CONFIG_ARM64_MTE */
 
+#define __HAVE_ARCH_CALC_VMA_GFP
+gfp_t arch_calc_vma_gfp(struct vm_area_struct *vma, gfp_t gfp);
+
 /*
  * On AArch64, the cache coherency is handled via the set_pte_at() function.
  */

@@ -935,22 +935,15 @@ void do_debug_exception(unsigned long addr_if_watchpoint, unsigned long esr,
 NOKPROBE_SYMBOL(do_debug_exception);
 
 /*
- * Used during anonymous page fault handling.
+ * If this is called during anonymous page fault handling, and the page is
+ * mapped with PROT_MTE, initialise the tags at the point of tag zeroing as this
+ * is usually faster than separate DC ZVA and STGM.
  */
-struct folio *vma_alloc_zeroed_movable_folio(struct vm_area_struct *vma,
-						unsigned long vaddr)
+gfp_t arch_calc_vma_gfp(struct vm_area_struct *vma, gfp_t gfp)
 {
-	gfp_t flags = GFP_HIGHUSER_MOVABLE | __GFP_ZERO;
-
-	/*
-	 * If the page is mapped with PROT_MTE, initialise the tags at the
-	 * point of allocation and page zeroing as this is usually faster than
-	 * separate DC ZVA and STGM.
-	 */
 	if (vma->vm_flags & VM_MTE)
-		flags |= __GFP_TAGGED;
-
-	return vma_alloc_folio(flags, 0, vma, vaddr, false);
+		return __GFP_TAGGED;
+	return 0;
 }
 
 void tag_clear_highpage(struct page *page)
