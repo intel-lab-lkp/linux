@@ -29,6 +29,7 @@
 #include <linux/uaccess.h>
 #include <asm/ptrace.h>
 #include <asm/mman.h>
+#include <asm/mte_tag_storage.h>
 #include <asm/tlbflush.h>
 #include <asm/cacheflush.h>
 #include <asm/cpufeature.h>
@@ -86,7 +87,8 @@ int kvm_vm_ioctl_enable_cap(struct kvm *kvm,
 		break;
 	case KVM_CAP_ARM_MTE:
 		mutex_lock(&kvm->lock);
-		if (!system_supports_mte() || kvm->created_vcpus) {
+		if (!system_supports_mte() || tag_storage_enabled() ||
+		    kvm->created_vcpus) {
 			r = -EINVAL;
 		} else {
 			r = 0;
@@ -279,7 +281,7 @@ int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 		r = 1;
 		break;
 	case KVM_CAP_ARM_MTE:
-		r = system_supports_mte();
+		r = system_supports_mte() && !tag_storage_enabled();
 		break;
 	case KVM_CAP_STEAL_TIME:
 		r = kvm_arm_pvtime_supported();
