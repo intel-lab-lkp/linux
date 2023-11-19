@@ -30,6 +30,12 @@ extern struct address_space *swapper_spaces[];
 	(&swapper_spaces[swp_type(entry)][swp_offset(entry) \
 		>> SWAP_ADDRESS_SPACE_SHIFT])
 
+enum swap_cache_result {
+	SWAP_CACHE_HIT,
+	SWAP_CACHE_MISS,
+	SWAP_CACHE_BYPASS,
+};
+
 void show_swap_cache_info(void);
 bool add_to_swap(struct folio *folio);
 void *get_shadow_from_swap_cache(swp_entry_t entry);
@@ -55,7 +61,7 @@ struct page *__read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 struct page *swap_cluster_readahead(swp_entry_t entry, gfp_t flag,
 				    struct mempolicy *mpol, pgoff_t ilx);
 struct page *swapin_readahead(swp_entry_t entry, gfp_t flag,
-			      struct vm_fault *vmf, bool *swapcached);
+			      struct vm_fault *vmf, enum swap_cache_result *result);
 
 static inline unsigned int folio_swap_flags(struct folio *folio)
 {
@@ -92,7 +98,7 @@ static inline struct page *swap_cluster_readahead(swp_entry_t entry,
 }
 
 static inline struct page *swapin_readahead(swp_entry_t swp, gfp_t gfp_mask,
-			struct vm_fault *vmf, bool *swapcached)
+			struct vm_fault *vmf, enum swap_cache_result *result)
 {
 	return NULL;
 }

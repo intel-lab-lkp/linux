@@ -1822,12 +1822,20 @@ static int unuse_pte_range(struct vm_area_struct *vma, pmd_t *pmd,
 
 	si = swap_info[type];
 	do {
-		struct folio *folio;
+		struct page *page;
 		unsigned long offset;
 		unsigned char swp_count;
+		struct folio *folio = NULL;
 		swp_entry_t entry;
 		int ret;
 		pte_t ptent;
+
+		struct vm_fault vmf = {
+			.vma = vma,
+			.address = addr,
+			.real_address = addr,
+			.pmd = pmd,
+		};
 
 		if (!pte++) {
 			pte = pte_offset_map(pmd, addr);
@@ -1847,22 +1855,10 @@ static int unuse_pte_range(struct vm_area_struct *vma, pmd_t *pmd,
 		offset = swp_offset(entry);
 		pte_unmap(pte);
 		pte = NULL;
-
-		folio = swap_cache_get_folio(entry, vma, addr);
-		if (!folio) {
-			struct page *page;
-			struct vm_fault vmf = {
-				.vma = vma,
-				.address = addr,
-				.real_address = addr,
-				.pmd = pmd,
-			};
-
-			page = swapin_readahead(entry, GFP_HIGHUSER_MOVABLE,
-						&vmf, NULL);
-			if (page)
-				folio = page_folio(page);
-		}
+		page = swapin_readahead(entry, GFP_HIGHUSER_MOVABLE,
+					&vmf, NULL);
+		if (page)
+			folio = page_folio(page);
 		if (!folio) {
 			/*
 			 * The entry could have been freed, and will not

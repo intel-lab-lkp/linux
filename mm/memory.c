@@ -3786,13 +3786,13 @@ static vm_fault_t handle_pte_marker(struct vm_fault *vmf)
 vm_fault_t do_swap_page(struct vm_fault *vmf)
 {
 	struct vm_area_struct *vma = vmf->vma;
-	struct folio *swapcache, *folio = NULL;
+	struct folio *swapcache = NULL, *folio = NULL;
+	enum swap_cache_result cache_result;
 	struct page *page;
 	struct swap_info_struct *si = NULL;
 	rmap_t rmap_flags = RMAP_NONE;
 	bool exclusive = false;
 	swp_entry_t entry;
-	bool swapcached;
 	pte_t pte;
 	vm_fault_t ret = 0;
 
@@ -3850,42 +3850,37 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 	if (unlikely(!si))
 		goto out;
 
-	folio = swap_cache_get_folio(entry, vma, vmf->address);
-	if (folio)
-		page = folio_file_page(folio, swp_offset(entry));
-	swapcache = folio;
-
-	if (!folio) {
-		page = swapin_readahead(entry, GFP_HIGHUSER_MOVABLE,
-					vmf, &swapcached);
-		if (page) {
-			folio = page_folio(page);
-			if (swapcached)
-				swapcache = folio;
-		} else {
-			/*
-			 * Back out if somebody else faulted in this pte
-			 * while we released the pte lock.
-			 */
-			vmf->pte = pte_offset_map_lock(vma->vm_mm, vmf->pmd,
-					vmf->address, &vmf->ptl);
-			if (likely(vmf->pte &&
-				   pte_same(ptep_get(vmf->pte), vmf->orig_pte)))
-				ret = VM_FAULT_OOM;
-			goto unlock;
+	page = swapin_readahead(entry, GFP_HIGHUSER_MOVABLE,
+				vmf, &cache_result);
+	if (page) {
+		folio = page_folio(page);
+		if (cache_result != SWAP_CACHE_HIT) {
+			/* Had to read the page from swap area: Major fault */
+			ret = VM_FAULT_MAJOR;
+			count_vm_event(PGMAJFAULT);
+			count_memcg_event_mm(vma->vm_mm, PGMAJFAULT);
 		}
-
-		/* Had to read the page from swap area: Major fault */
-		ret = VM_FAULT_MAJOR;
-		count_vm_event(PGMAJFAULT);
-		count_memcg_event_mm(vma->vm_mm, PGMAJFAULT);
-	} else if (PageHWPoison(page)) {
+		if (cache_result != SWAP_CACHE_BYPASS)
+			swapcache = folio;
+		if (PageHWPoison(page)) {
+			/*
+			 * hwpoisoned dirty swapcache pages are kept for killing
+			 * owner processes (which may be unknown at hwpoison time)
+			 */
+			ret = VM_FAULT_HWPOISON;
+			goto out_release;
+		}
+	} else {
 		/*
-		 * hwpoisoned dirty swapcache pages are kept for killing
-		 * owner processes (which may be unknown at hwpoison time)
+		 * Back out if somebody else faulted in this pte
+		 * while we released the pte lock.
 		 */
-		ret = VM_FAULT_HWPOISON;
-		goto out_release;
+		vmf->pte = pte_offset_map_lock(vma->vm_mm, vmf->pmd,
+				vmf->address, &vmf->ptl);
+		if (likely(vmf->pte &&
+			   pte_same(ptep_get(vmf->pte), vmf->orig_pte)))
+			ret = VM_FAULT_OOM;
+		goto unlock;
 	}
 
 	ret |= folio_lock_or_retry(folio, vmf);
