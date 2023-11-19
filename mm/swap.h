@@ -61,6 +61,11 @@ static inline unsigned int folio_swap_flags(struct folio *folio)
 {
 	return page_swap_info(&folio->page)->flags;
 }
+
+static inline unsigned char swap_count(unsigned char ent)
+{
+	return ent & ~SWAP_HAS_CACHE; /* may include COUNT_CONTINUED flag */
+}
 #else /* CONFIG_SWAP */
 struct swap_iocb;
 static inline void swap_readpage(struct page *page, bool do_poll,
