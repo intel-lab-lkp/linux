@@ -22,14 +22,6 @@ void dw_pcie_ep_linkup(struct dw_pcie_ep *ep)
 }
 EXPORT_SYMBOL_GPL(dw_pcie_ep_linkup);
 
-void dw_pcie_ep_init_notify(struct dw_pcie_ep *ep)
-{
-	struct pci_epc *epc = ep->epc;
-
-	pci_epc_init_notify(epc);
-}
-EXPORT_SYMBOL_GPL(dw_pcie_ep_init_notify);
-
 struct dw_pcie_ep_func *
 dw_pcie_ep_get_func_from_ep(struct dw_pcie_ep *ep, u8 func_no)
 {
@@ -783,6 +775,8 @@ int dw_pcie_ep_init_complete(struct dw_pcie_ep *ep)
 	ret = dw_pcie_ep_late_init(ep);
 	if (ret)
 		goto err_cleanup;
+
+	pci_epc_init_notify(epc);
 
 	return 0;
 
