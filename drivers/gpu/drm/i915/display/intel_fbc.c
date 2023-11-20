@@ -608,6 +608,7 @@ static u32 ivb_dpfc_ctl(struct intel_fbc *fbc)
 static void ivb_fbc_activate(struct intel_fbc *fbc)
 {
 	struct drm_i915_private *i915 = fbc->i915;
+	u32 dpfc_ctl;
 
 	if (DISPLAY_VER(i915) >= 10)
 		glk_fbc_program_cfb_stride(fbc);
@@ -617,8 +618,13 @@ static void ivb_fbc_activate(struct intel_fbc *fbc)
 	if (intel_gt_support_legacy_fencing(to_gt(i915)))
 		snb_fbc_program_fence(fbc);
 
+	/* wa_14019417088 Alternative WA*/
+	dpfc_ctl = ivb_dpfc_ctl(fbc);
+	if (DISPLAY_VER(i915) >= 20)
+		intel_de_write(i915, ILK_DPFC_CONTROL(fbc->id), dpfc_ctl);
+
 	intel_de_write(i915, ILK_DPFC_CONTROL(fbc->id),
-		       DPFC_CTL_EN | ivb_dpfc_ctl(fbc));
+		       DPFC_CTL_EN | dpfc_ctl);
 }
 
 static bool ivb_fbc_is_compressing(struct intel_fbc *fbc)
@@ -1174,7 +1180,7 @@ static int intel_fbc_check_plane(struct intel_atomic_state *state,
 		return 0;
 	}
 
-	if (!i915->params.enable_fbc) {
+	if (!i915->display.params.enable_fbc) {
 		plane_state->no_fbc_reason = "disabled per module param or by default";
 		return 0;
 	}
@@ -1751,8 +1757,8 @@ void intel_fbc_handle_fifo_underrun_irq(struct drm_i915_private *i915)
  */
 static int intel_sanitize_fbc_option(struct drm_i915_private *i915)
 {
-	if (i915->params.enable_fbc >= 0)
-		return !!i915->params.enable_fbc;
+	if (i915->display.params.enable_fbc >= 0)
+		return !!i915->display.params.enable_fbc;
 
 	if (!HAS_FBC(i915))
 		return 0;
@@ -1824,9 +1830,9 @@ void intel_fbc_init(struct drm_i915_private *i915)
 	if (need_fbc_vtd_wa(i915))
 		DISPLAY_RUNTIME_INFO(i915)->fbc_mask = 0;
 
-	i915->params.enable_fbc = intel_sanitize_fbc_option(i915);
+	i915->display.params.enable_fbc = intel_sanitize_fbc_option(i915);
 	drm_dbg_kms(&i915->drm, "Sanitized enable_fbc value: %d\n",
-		    i915->params.enable_fbc);
+		    i915->display.params.enable_fbc);
 
 	for_each_fbc_id(i915, fbc_id)
 		i915->display.fbc[fbc_id] = intel_fbc_create(i915, fbc_id);
