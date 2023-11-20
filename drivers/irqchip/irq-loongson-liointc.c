@@ -330,6 +330,7 @@ static int __init liointc_of_init(struct device_node *node,
 	bool have_parent = FALSE;
 	int sz, i, index, revision, err = 0;
 	struct resource res;
+	const char *prop_name = "loongson,parent-int-map";
 
 	if (!of_device_is_compatible(node, "loongson,liointc-2.0")) {
 		index = 0;
@@ -350,8 +351,12 @@ static int __init liointc_of_init(struct device_node *node,
 	if (!have_parent)
 		return -ENODEV;
 
+	if (!of_find_property(node, prop_name, &i))
+		/* Fallback to 'loongson,parent_int_map'. */
+		prop_name = "loongson,parent_int_map";
+
 	sz = of_property_read_variable_u32_array(node,
-						"loongson,parent_int_map",
+						prop_name,
 						&parent_int_map[0],
 						LIOINTC_NUM_PARENT,
 						LIOINTC_NUM_PARENT);
