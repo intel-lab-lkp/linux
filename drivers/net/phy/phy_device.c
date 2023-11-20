@@ -25,6 +25,7 @@
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/of_net.h>
 #include <linux/netdevice.h>
 #include <linux/phy.h>
 #include <linux/phylib_stubs.h>
@@ -1225,7 +1226,16 @@ static int phy_poll_reset(struct phy_device *phydev)
 
 int phy_init_hw(struct phy_device *phydev)
 {
+	phy_interface_t package_interface;
 	int ret = 0;
+
+	/* Validate we are requesting consistent mode if we
+	 * are in a PHY package and the PHY package requires a
+	 * specific mode.
+	 */
+	ret = phy_package_get_mode(phydev, &package_interface);
+	if (!ret && phydev->interface != package_interface)
+		return -EINVAL;
 
 	/* Deassert the reset signal */
 	phy_device_reset(phydev, 0);
@@ -1776,6 +1786,32 @@ void phy_package_leave(struct phy_device *phydev)
 	phydev->shared = NULL;
 }
 EXPORT_SYMBOL_GPL(phy_package_leave);
+
+/**
+ * phy_package_get_mode - get PHY interface mode for PHY package
+ * @phydev: target phy_device struct
+ * @interface: phy_interface_t pointer where to save the PHY package mode
+ *
+ * Gets PHY interface mode for the shared data of the PHY package.
+ * Returns 0 and updates @interface with the PHY package value, or -ENODEV
+ * if PHY is not in PHY package or -EINVAL if a PHY package interface mode
+ * is not set.
+ */
+int phy_package_get_mode(struct phy_device *phydev, phy_interface_t *interface)
+{
+	struct phy_package_shared *shared = phydev->shared;
+
+	if (!shared)
+		return -ENODEV;
+
+	if (shared->package_interface == PHY_INTERFACE_MODE_NA)
+		return -EINVAL;
+
+	*interface = shared->package_interface;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(phy_package_get_mode);
 
 static void devm_phy_package_leave(struct device *dev, void *res)
 {
@@ -3271,6 +3307,7 @@ static int of_phy_package(struct phy_device *phydev)
 		goto exit;
 
 	phydev->shared->np = package_node;
+	of_get_phy_mode(package_node, &phydev->shared->package_interface);
 
 exit:
 	kfree(global_phy_addrs);

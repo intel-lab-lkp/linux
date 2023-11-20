@@ -341,6 +341,11 @@ struct mdio_bus_stats {
 struct phy_package_shared {
 	/* With PHY package defined in DT this points to the PHY package node */
 	struct device_node *np;
+	/* PHY package interface
+	 * If defined, each PHY of the package MUST have the interface
+	 * set to the PHY package.
+	 */
+	phy_interface_t package_interface;
 	/* addrs list pointer */
 	/* note that this pointer is shared between different phydevs.
 	 * It is allocated and freed automatically by phy_package_join() and
@@ -2016,6 +2021,7 @@ int phy_ethtool_nway_reset(struct net_device *ndev);
 int phy_package_join(struct phy_device *phydev, int *addrs, size_t addrs_num,
 		     size_t priv_size);
 void phy_package_leave(struct phy_device *phydev);
+int phy_package_get_mode(struct phy_device *phydev, phy_interface_t *interface);
 int devm_phy_package_join(struct device *dev, struct phy_device *phydev,
 			  int *addrs, size_t addrs_num, size_t priv_size);
 
