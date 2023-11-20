@@ -1699,12 +1699,18 @@ static int genl_bind(struct net *net, int group)
 	return ret;
 }
 
+static void genl_release(struct sock *sk, unsigned long *groups)
+{
+	kfree(sk->sk_user_data);
+}
+
 static int __net_init genl_pernet_init(struct net *net)
 {
 	struct netlink_kernel_cfg cfg = {
 		.input		= genl_rcv,
 		.flags		= NL_CFG_F_NONROOT_RECV,
 		.bind		= genl_bind,
+		.release	= genl_release,
 	};
 
 	/* we'll bump the group number right afterwards */
