@@ -1044,6 +1044,7 @@ struct ravb_hw_info {
 	unsigned magic_pkt:1;		/* E-MAC supports magic packet detection */
 	unsigned half_duplex:1;		/* E-MAC supports half duplex mode */
 	unsigned refclk_in_pd:1;	/* Reference clock is part of a power domain. */
+	unsigned rpm:1;			/* Runtime PM available. */
 };
 
 struct ravb_private {

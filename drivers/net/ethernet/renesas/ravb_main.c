@@ -145,12 +145,41 @@ static void ravb_read_mac_address(struct device_node *np,
 	}
 }
 
+static int ravb_pm_runtime_get(struct ravb_private *priv)
+{
+	const struct ravb_hw_info *info = priv->info;
+
+	if (!info->rpm)
+		return 0;
+
+	return pm_runtime_resume_and_get(&priv->pdev->dev);
+}
+
+static void ravb_pm_runtime_put(struct ravb_private *priv)
+{
+	const struct ravb_hw_info *info = priv->info;
+	struct device *dev = &priv->pdev->dev;
+
+	if (!info->rpm)
+		return;
+
+	pm_runtime_mark_last_busy(dev);
+	pm_runtime_put_autosuspend(dev);
+}
+
 static void ravb_mdio_ctrl(struct mdiobb_ctrl *ctrl, u32 mask, int set)
 {
 	struct ravb_private *priv = container_of(ctrl, struct ravb_private,
 						 mdiobb);
+	int ret;
+
+	ret = ravb_pm_runtime_get(priv);
+	if (ret < 0)
+		return;
 
 	ravb_modify(priv->ndev, PIR, mask, set ? mask : 0);
+
+	ravb_pm_runtime_put(priv);
 }
 
 /* MDC pin control */
@@ -176,8 +205,17 @@ static int ravb_get_mdio_data(struct mdiobb_ctrl *ctrl)
 {
 	struct ravb_private *priv = container_of(ctrl, struct ravb_private,
 						 mdiobb);
+	int ret;
 
-	return (ravb_read(priv->ndev, PIR) & PIR_MDI) != 0;
+	ret = ravb_pm_runtime_get(priv);
+	if (ret < 0)
+		return ret;
+
+	ret = (ravb_read(priv->ndev, PIR) & PIR_MDI) != 0;
+
+	ravb_pm_runtime_put(priv);
+
+	return ret;
 }
 
 /* MDIO bus control struct */
@@ -1796,10 +1834,14 @@ static int ravb_open(struct net_device *ndev)
 		}
 	}
 
+	error = ravb_pm_runtime_get(priv);
+	if (error < 0)
+		return error;
+
 	/* Device init */
 	error = ravb_dmac_init(ndev);
 	if (error)
-		goto out_free_irq_mgmta;
+		goto pm_runtime_put;
 	ravb_emac_init(ndev);
 
 	/* Initialise PTP Clock driver */
@@ -1820,7 +1862,8 @@ out_ptp_stop:
 	if (info->gptp)
 		ravb_ptp_stop(ndev);
 	ravb_stop_dma(ndev);
-out_free_irq_mgmta:
+pm_runtime_put:
+	ravb_pm_runtime_put(priv);
 	if (!info->multi_irqs)
 		goto out_free_irq;
 	if (info->err_mgmt_irqs)
@@ -2064,6 +2107,11 @@ static struct net_device_stats *ravb_get_stats(struct net_device *ndev)
 	struct ravb_private *priv = netdev_priv(ndev);
 	const struct ravb_hw_info *info = priv->info;
 	struct net_device_stats *nstats, *stats0, *stats1;
+	int ret;
+
+	ret = ravb_pm_runtime_get(priv);
+	if (ret < 0)
+		return NULL;
 
 	nstats = &ndev->stats;
 	stats0 = &priv->stats[RAVB_BE];
@@ -2107,6 +2155,8 @@ static struct net_device_stats *ravb_get_stats(struct net_device *ndev)
 		nstats->rx_over_errors += stats1->rx_over_errors;
 	}
 
+	ravb_pm_runtime_put(priv);
+
 	return nstats;
 }
 
@@ -2115,11 +2165,18 @@ static void ravb_set_rx_mode(struct net_device *ndev)
 {
 	struct ravb_private *priv = netdev_priv(ndev);
 	unsigned long flags;
+	int ret;
+
+	ret = ravb_pm_runtime_get(priv);
+	if (ret < 0)
+		return;
 
 	spin_lock_irqsave(&priv->lock, flags);
 	ravb_modify(ndev, ECMR, ECMR_PRM,
 		    ndev->flags & IFF_PROMISC ? ECMR_PRM : 0);
 	spin_unlock_irqrestore(&priv->lock, flags);
+
+	ravb_pm_runtime_put(priv);
 }
 
 /* Device close function for Ethernet AVB */
@@ -2186,6 +2243,11 @@ static int ravb_close(struct net_device *ndev)
 	ravb_ring_free(ndev, RAVB_BE);
 	if (info->nc_queues)
 		ravb_ring_free(ndev, RAVB_NC);
+
+	/* Note that if RPM is enabled on plaforms with ccc_gac=1 this needs to be skipped and
+	 * added to suspend function after PTP is stopped.
+	 */
+	ravb_pm_runtime_put(priv);
 
 	return 0;
 }
@@ -2503,6 +2565,7 @@ static const struct ravb_hw_info gbeth_hw_info = {
 	.carrier_counters = 1,
 	.half_duplex = 1,
 	.refclk_in_pd = 1,
+	.rpm = 1,
 };
 
 static const struct of_device_id ravb_match_table[] = {
@@ -2636,6 +2699,12 @@ static int ravb_probe(struct platform_device *pdev)
 	if (error)
 		return error;
 
+	info = of_device_get_match_data(&pdev->dev);
+
+	if (info->rpm) {
+		pm_runtime_set_autosuspend_delay(&pdev->dev, 100);
+		pm_runtime_use_autosuspend(&pdev->dev);
+	}
 	pm_runtime_enable(&pdev->dev);
 	error = pm_runtime_resume_and_get(&pdev->dev);
 	if (error < 0)
@@ -2647,7 +2716,6 @@ static int ravb_probe(struct platform_device *pdev)
 		error = -ENOMEM;
 		goto pm_runtime_put;
 	}
-	info = of_device_get_match_data(&pdev->dev);
 
 	ndev->features = info->net_features;
 	ndev->hw_features = info->net_hw_features;
@@ -2856,6 +2924,8 @@ static int ravb_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, ndev);
 
+	ravb_pm_runtime_put(priv);
+
 	return 0;
 
 out_napi_del:
@@ -2880,6 +2950,8 @@ pm_runtime_put:
 	pm_runtime_put(&pdev->dev);
 pm_runtime_disable:
 	pm_runtime_disable(&pdev->dev);
+	if (info->rpm)
+		pm_runtime_dont_use_autosuspend(&pdev->dev);
 	reset_control_assert(rstc);
 	return error;
 }
@@ -2889,6 +2961,11 @@ static void ravb_remove(struct platform_device *pdev)
 	struct net_device *ndev = platform_get_drvdata(pdev);
 	struct ravb_private *priv = netdev_priv(ndev);
 	const struct ravb_hw_info *info = priv->info;
+	int error;
+
+	error = ravb_pm_runtime_get(priv);
+	if (error < 0)
+		return;
 
 	/* Stop PTP Clock driver */
 	if (info->ccc_gac)
@@ -2908,6 +2985,8 @@ static void ravb_remove(struct platform_device *pdev)
 			  priv->desc_bat_dma);
 	pm_runtime_put_sync(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
+	if (info->rpm)
+		pm_runtime_dont_use_autosuspend(&pdev->dev);
 	reset_control_assert(priv->rstc);
 	free_netdev(ndev);
 	platform_set_drvdata(pdev, NULL);
@@ -2989,6 +3068,10 @@ static int ravb_resume(struct device *dev)
 	if (ret)
 		return ret;
 
+	ret = ravb_pm_runtime_get(priv);
+	if (ret < 0)
+		return ret;
+
 	/* If WoL is enabled set reset mode to rearm the WoL logic */
 	if (priv->wol_enabled)
 		ravb_write(ndev, CCC_OPC_RESET, CCC);
@@ -3005,7 +3088,7 @@ static int ravb_resume(struct device *dev)
 		/* Set GTI value */
 		ret = ravb_set_gti(ndev);
 		if (ret)
-			return ret;
+			goto pm_runtime_put;
 
 		/* Request GTI loading */
 		ravb_modify(ndev, GCCR, GCCR_LTI, GCCR_LTI);
@@ -3024,15 +3107,17 @@ static int ravb_resume(struct device *dev)
 		if (priv->wol_enabled) {
 			ret = ravb_wol_restore(ndev);
 			if (ret)
-				return ret;
+				goto pm_runtime_put;
 		}
 		ret = ravb_open(ndev);
 		if (ret < 0)
-			return ret;
+			goto pm_runtime_put;
 		ravb_set_rx_mode(ndev);
 		netif_device_attach(ndev);
 	}
 
+pm_runtime_put:
+	ravb_pm_runtime_put(priv);
 	return ret;
 }
 
