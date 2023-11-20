@@ -951,12 +951,28 @@ static struct sched_entity *__pick_eevdf(struct cfs_rq *cfs_rq)
 	return NULL;
 }
 
+/* Just simply choose the se with the smallest vruntime */
+static struct sched_entity *__pick_cfs(struct cfs_rq *cfs_rq)
+{
+	struct sched_entity *curr = cfs_rq->curr;
+	struct sched_entity *left = __pick_first_entity(cfs_rq);
+
+	/*
+	 * If curr is set we have to see if its left of the leftmost entity
+	 * still in the tree, provided there was anything in the tree at all.
+	 */
+	if (!left || (curr && entity_before(curr, left)))
+		left = curr;
+
+	return left;
+}
+
 static struct sched_entity *pick_eevdf(struct cfs_rq *cfs_rq)
 {
 	struct sched_entity *se = __pick_eevdf(cfs_rq);
 
 	if (!se) {
-		struct sched_entity *left = __pick_first_entity(cfs_rq);
+		struct sched_entity *left = __pick_cfs(cfs_rq);
 		if (left) {
 			pr_err("EEVDF scheduling fail, picking leftmost\n");
 			return left;
