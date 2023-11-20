@@ -32,6 +32,7 @@ void f2fs_mark_inode_dirty_sync(struct inode *inode, bool sync)
 	if (f2fs_inode_dirtied(inode, sync))
 		return;
 
+	inode_inc_iversion(inode);
 	mark_inode_dirty_sync(inode);
 }
 

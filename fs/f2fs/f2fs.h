@@ -28,6 +28,7 @@
 
 #include <linux/fscrypt.h>
 #include <linux/fsverity.h>
+#include <linux/iversion.h>
 
 struct pagevec;
 
