@@ -877,14 +877,14 @@ static int set_pmksa(struct wiphy *wiphy, struct net_device *netdev,
 	u8 flag = 0;
 
 	for (i = 0; i < priv->pmkid_list.numpmkid; i++)	{
-		if (!memcmp(pmksa->bssid, priv->pmkid_list.pmkidlist[i].bssid,
-			    ETH_ALEN)) {
+		if (!memcmp(pmksa->peer_addr,
+			    priv->pmkid_list.pmkidlist[i].bssid, ETH_ALEN)) {
 			flag = PMKID_FOUND;
 			break;
 		}
 	}
 	if (i < WILC_MAX_NUM_PMKIDS) {
-		memcpy(priv->pmkid_list.pmkidlist[i].bssid, pmksa->bssid,
+		memcpy(priv->pmkid_list.pmkidlist[i].bssid, pmksa->peer_addr,
 		       ETH_ALEN);
 		memcpy(priv->pmkid_list.pmkidlist[i].pmkid, pmksa->pmkid,
 		       WLAN_PMKID_LEN);
@@ -909,8 +909,8 @@ static int del_pmksa(struct wiphy *wiphy, struct net_device *netdev,
 	struct wilc_priv *priv = &vif->priv;
 
 	for (i = 0; i < priv->pmkid_list.numpmkid; i++)	{
-		if (!memcmp(pmksa->bssid, priv->pmkid_list.pmkidlist[i].bssid,
-			    ETH_ALEN)) {
+		if (!memcmp(pmksa->peer_addr,
+			    priv->pmkid_list.pmkidlist[i].bssid, ETH_ALEN)) {
 			memset(&priv->pmkid_list.pmkidlist[i], 0,
 			       sizeof(struct wilc_pmkid));
 			break;

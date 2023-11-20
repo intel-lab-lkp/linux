@@ -3345,7 +3345,8 @@ enum wiphy_params_flags {
  * This structure is passed to the set/del_pmksa() method for PMKSA
  * caching.
  *
- * @bssid: The AP's BSSID (may be %NULL).
+ * @peer_addr: The AP's BSSID (may be %NULL) in case of Station mode. The STA's
+ *      mac address (may be %NULL) in case of AP mode.
  * @pmkid: The identifier to refer a PMKSA.
  * @pmk: The PMK for the PMKSA identified by @pmkid. This is used for key
  *	derivation by a FILS STA. Otherwise, %NULL.
@@ -3370,7 +3371,7 @@ enum wiphy_params_flags {
  *	threshold to generate a new PMK before the current one expires.
  */
 struct cfg80211_pmksa {
-	const u8 *bssid;
+	const u8 *peer_addr;
 	const u8 *pmkid;
 	const u8 *pmk;
 	size_t pmk_len;

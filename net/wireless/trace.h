@@ -1925,7 +1925,7 @@ DECLARE_EVENT_CLASS(rdev_pmksa,
 	TP_fast_assign(
 		WIPHY_ASSIGN;
 		NETDEV_ASSIGN;
-		MAC_ASSIGN(bssid, pmksa->bssid);
+		MAC_ASSIGN(bssid, pmksa->peer_addr);
 	),
 	TP_printk(WIPHY_PR_FMT ", " NETDEV_PR_FMT ", bssid: %pM",
 		  WIPHY_PR_ARG, NETDEV_PR_ARG, __entry->bssid)

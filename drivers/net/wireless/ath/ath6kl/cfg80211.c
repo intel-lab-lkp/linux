@@ -1877,8 +1877,8 @@ static int ath6kl_set_pmksa(struct wiphy *wiphy, struct net_device *netdev,
 	struct ath6kl *ar = ath6kl_priv(netdev);
 	struct ath6kl_vif *vif = netdev_priv(netdev);
 
-	return ath6kl_wmi_setpmkid_cmd(ar->wmi, vif->fw_vif_idx, pmksa->bssid,
-				       pmksa->pmkid, true);
+	return ath6kl_wmi_setpmkid_cmd(ar->wmi, vif->fw_vif_idx,
+				       pmksa->peer_addr, pmksa->pmkid, true);
 }
 
 static int ath6kl_del_pmksa(struct wiphy *wiphy, struct net_device *netdev,
@@ -1887,8 +1887,8 @@ static int ath6kl_del_pmksa(struct wiphy *wiphy, struct net_device *netdev,
 	struct ath6kl *ar = ath6kl_priv(netdev);
 	struct ath6kl_vif *vif = netdev_priv(netdev);
 
-	return ath6kl_wmi_setpmkid_cmd(ar->wmi, vif->fw_vif_idx, pmksa->bssid,
-				       pmksa->pmkid, false);
+	return ath6kl_wmi_setpmkid_cmd(ar->wmi, vif->fw_vif_idx,
+				       pmksa->peer_addr, pmksa->pmkid, false);
 }
 
 static int ath6kl_flush_pmksa(struct wiphy *wiphy, struct net_device *netdev)
