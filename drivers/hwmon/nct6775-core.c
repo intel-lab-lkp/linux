@@ -844,6 +844,9 @@ static const u16 NCT6116_REG_FAN_PULSES[] = { 0xf6, 0xf6, 0xf6, 0xf6, 0xf5 };
 static const u16 NCT6116_FAN_PULSE_SHIFT[] = { 0, 2, 4, 6, 6 };
 
 static const u16 NCT6116_REG_PWM[] = { 0x119, 0x129, 0x139, 0x199, 0x1a9 };
+static const u8 NCT6116_REG_PWM_MODE[] = { 0xf3, 0xf3, 0xf3, 0xf3, 0xf3 };
+static const u8 NCT6116_PWM_MODE_MASK[] = { 0x01, 0x02, 0x04, 0x04, 0x04 };
+static const u16 NCT6116_REG_PWM_READ[] = { 0x4a, 0x4b, 0x4c, 0xd8, 0xd9 };
 static const u16 NCT6116_REG_FAN_MODE[] = { 0x113, 0x123, 0x133, 0x193, 0x1a3 };
 static const u16 NCT6116_REG_TEMP_SEL[] = { 0x110, 0x120, 0x130, 0x190, 0x1a0 };
 static const u16 NCT6116_REG_TEMP_SOURCE[] = {
@@ -3595,7 +3598,7 @@ int nct6775_probe(struct device *dev, struct nct6775_data *data,
 		break;
 	case nct6116:
 		data->in_num = 9;
-		data->pwm_num = 3;
+		data->pwm_num = 5;
 		data->auto_pwm_num = 4;
 		data->temp_fixed_num = 3;
 		data->num_temp_alarms = 3;
@@ -3629,9 +3632,9 @@ int nct6775_probe(struct device *dev, struct nct6775_data *data,
 		data->REG_PWM[2] = NCT6116_REG_FAN_STOP_OUTPUT;
 		data->REG_PWM[5] = NCT6106_REG_WEIGHT_DUTY_STEP;
 		data->REG_PWM[6] = NCT6106_REG_WEIGHT_DUTY_BASE;
-		data->REG_PWM_READ = NCT6106_REG_PWM_READ;
-		data->REG_PWM_MODE = NCT6106_REG_PWM_MODE;
-		data->PWM_MODE_MASK = NCT6106_PWM_MODE_MASK;
+		data->REG_PWM_READ = NCT6116_REG_PWM_READ;
+		data->REG_PWM_MODE = NCT6116_REG_PWM_MODE;
+		data->PWM_MODE_MASK = NCT6116_PWM_MODE_MASK;
 		data->REG_AUTO_TEMP = NCT6116_REG_AUTO_TEMP;
 		data->REG_AUTO_PWM = NCT6116_REG_AUTO_PWM;
 		data->REG_CRITICAL_TEMP = NCT6116_REG_CRITICAL_TEMP;
