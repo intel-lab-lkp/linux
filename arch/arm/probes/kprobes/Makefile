@@ -8,6 +8,7 @@ test-kprobes-objs		:= test-core.o
 
 ifdef CONFIG_THUMB2_KERNEL
 obj-$(CONFIG_KPROBES)		+= actions-thumb.o checkers-thumb.o
+CFLAGS_actions-thumb.o		+= -fno-omit-frame-pointer
 test-kprobes-objs		+= test-thumb.o
 else
 obj-$(CONFIG_KPROBES)		+= actions-arm.o checkers-arm.o
