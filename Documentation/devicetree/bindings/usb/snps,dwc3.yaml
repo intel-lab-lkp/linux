@@ -459,6 +459,13 @@ properties:
     description:
       Enable USB remote wakeup.
 
+  xhci-sg-trb-cache-size-quirk:
+    description:
+      When set, fixes the SNPS xHC hang issue when the data is scattered across
+      small buffers which does not make at least MPS size for given controller
+      TRB cache size.
+    type: boolean
+
 unevaluatedProperties: false
 
 required:
