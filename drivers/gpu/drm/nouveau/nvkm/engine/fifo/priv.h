@@ -17,6 +17,8 @@ struct nvkm_fifo_func {
 
 	int (*chid_nr)(struct nvkm_fifo *);
 	int (*chid_ctor)(struct nvkm_fifo *, int nr);
+
+	int (*chid_total)(struct nvkm_fifo *);
 	int (*runq_nr)(struct nvkm_fifo *);
 	int (*runl_ctor)(struct nvkm_fifo *);
 

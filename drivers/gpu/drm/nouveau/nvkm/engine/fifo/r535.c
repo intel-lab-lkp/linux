@@ -641,6 +641,12 @@ r535_fifo_dtor(struct nvkm_fifo *fifo)
 	kfree(fifo->func);
 }
 
+static int
+r535_fifo_chid_total(struct nvkm_fifo *fifo)
+{
+	return fifo->chid->nr * CHID_PER_USERD;
+}
+
 int
 r535_fifo_new(const struct nvkm_fifo_func *hw, struct nvkm_device *device,
 	      enum nvkm_subdev_type type, int inst, struct nvkm_fifo **pfifo)
@@ -652,6 +658,7 @@ r535_fifo_new(const struct nvkm_fifo_func *hw, struct nvkm_device *device,
 
 	rm->dtor = r535_fifo_dtor;
 	rm->runl_ctor = r535_fifo_runl_ctor;
+	rm->chid_total = r535_fifo_chid_total;
 	rm->runl = &r535_runl;
 	rm->cgrp = hw->cgrp;
 	rm->cgrp.func = &r535_cgrp;

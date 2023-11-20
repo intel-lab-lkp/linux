@@ -178,7 +178,12 @@ nvkm_fifo_info(struct nvkm_engine *engine, u64 mthd, u64 *data)
 		return ret;
 
 	switch (mthd) {
-	case NV_DEVICE_HOST_CHANNELS: *data = fifo->chid ? fifo->chid->nr : 0; return 0;
+	case NV_DEVICE_HOST_CHANNELS:
+		if (fifo->func->chid_total)
+			*data = fifo->func->chid_total(fifo);
+		else
+			*data = fifo->chid ? fifo->chid->nr : 0;
+		return 0;
 	case NV_DEVICE_HOST_RUNLISTS:
 		*data = 0;
 		nvkm_runl_foreach(runl, fifo)
