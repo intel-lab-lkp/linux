@@ -3535,7 +3535,8 @@ static u32 virtnet_get_rxfh_indir_size(struct net_device *dev)
 	return ((struct virtnet_info *)netdev_priv(dev))->rss_indir_table_size;
 }
 
-static int virtnet_get_rxfh(struct net_device *dev, u32 *indir, u8 *key, u8 *hfunc)
+static int virtnet_get_rxfh(struct net_device *dev, struct ethtool_rxfh *rxfh,
+			    u32 *indir, u8 *key)
 {
 	struct virtnet_info *vi = netdev_priv(dev);
 	int i;
@@ -3548,18 +3549,20 @@ static int virtnet_get_rxfh(struct net_device *dev, u32 *indir, u8 *key, u8 *hfu
 	if (key)
 		memcpy(key, vi->ctrl->rss.key, vi->rss_key_size);
 
-	if (hfunc)
-		*hfunc = ETH_RSS_HASH_TOP;
+	if (rxfh)
+		rxfh->hfunc = ETH_RSS_HASH_TOP;
 
 	return 0;
 }
 
-static int virtnet_set_rxfh(struct net_device *dev, const u32 *indir, const u8 *key, const u8 hfunc)
+static int virtnet_set_rxfh(struct net_device *dev, struct ethtool_rxfh *rxfh,
+			    const u32 *indir, const u8 *key)
 {
 	struct virtnet_info *vi = netdev_priv(dev);
 	int i;
 
-	if (hfunc != ETH_RSS_HASH_NO_CHANGE && hfunc != ETH_RSS_HASH_TOP)
+	if (rxfh->hfunc != ETH_RSS_HASH_NO_CHANGE &&
+	    rxfh->hfunc != ETH_RSS_HASH_TOP)
 		return -EOPNOTSUPP;
 
 	if (indir) {

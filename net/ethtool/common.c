@@ -604,7 +604,7 @@ int ethtool_get_max_rxfh_channel(struct net_device *dev, u32 *max)
 	if (!indir)
 		return -ENOMEM;
 
-	ret = dev->ethtool_ops->get_rxfh(dev, indir, NULL, NULL);
+	ret = dev->ethtool_ops->get_rxfh(dev, NULL, indir, NULL);
 	if (ret)
 		goto out;
 

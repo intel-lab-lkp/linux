@@ -522,8 +522,8 @@ static u32 xgbe_get_rxfh_indir_size(struct net_device *netdev)
 	return ARRAY_SIZE(pdata->rss_table);
 }
 
-static int xgbe_get_rxfh(struct net_device *netdev, u32 *indir, u8 *key,
-			 u8 *hfunc)
+static int xgbe_get_rxfh(struct net_device *netdev, struct ethtool_rxfh *rxfh,
+			 u32 *indir, u8 *key)
 {
 	struct xgbe_prv_data *pdata = netdev_priv(netdev);
 	unsigned int i;
@@ -537,20 +537,21 @@ static int xgbe_get_rxfh(struct net_device *netdev, u32 *indir, u8 *key,
 	if (key)
 		memcpy(key, pdata->rss_key, sizeof(pdata->rss_key));
 
-	if (hfunc)
-		*hfunc = ETH_RSS_HASH_TOP;
+	if (rxfh)
+		rxfh->hfunc = ETH_RSS_HASH_TOP;
 
 	return 0;
 }
 
-static int xgbe_set_rxfh(struct net_device *netdev, const u32 *indir,
-			 const u8 *key, const u8 hfunc)
+static int xgbe_set_rxfh(struct net_device *netdev, struct ethtool_rxfh *rxfh,
+			 const u32 *indir, const u8 *key)
 {
 	struct xgbe_prv_data *pdata = netdev_priv(netdev);
 	struct xgbe_hw_if *hw_if = &pdata->hw_if;
 	unsigned int ret;
 
-	if (hfunc != ETH_RSS_HASH_NO_CHANGE && hfunc != ETH_RSS_HASH_TOP) {
+	if (rxfh->hfunc != ETH_RSS_HASH_NO_CHANGE &&
+	    rxfh->hfunc != ETH_RSS_HASH_TOP) {
 		netdev_err(netdev, "unsupported hash function\n");
 		return -EOPNOTSUPP;
 	}

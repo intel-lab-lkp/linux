@@ -897,14 +897,15 @@ static u32 ixgbevf_get_rxfh_key_size(struct net_device *netdev)
 	return IXGBEVF_RSS_HASH_KEY_SIZE;
 }
 
-static int ixgbevf_get_rxfh(struct net_device *netdev, u32 *indir, u8 *key,
-			    u8 *hfunc)
+static int ixgbevf_get_rxfh(struct net_device *netdev,
+			    struct ethtool_rxfh *rxfh,
+			    u32 *indir, u8 *key)
 {
 	struct ixgbevf_adapter *adapter = netdev_priv(netdev);
 	int err = 0;
 
-	if (hfunc)
-		*hfunc = ETH_RSS_HASH_TOP;
+	if (rxfh)
+		rxfh->hfunc = ETH_RSS_HASH_TOP;
 
 	if (adapter->hw.mac.type >= ixgbe_mac_X550_vf) {
 		if (key)

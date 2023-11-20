@@ -1057,14 +1057,14 @@ static u32 fm10k_get_rssrk_size(struct net_device __always_unused *netdev)
 	return FM10K_RSSRK_SIZE * FM10K_RSSRK_ENTRIES_PER_REG;
 }
 
-static int fm10k_get_rssh(struct net_device *netdev, u32 *indir, u8 *key,
-			  u8 *hfunc)
+static int fm10k_get_rssh(struct net_device *netdev, struct ethtool_rxfh *rxfh,
+			  u32 *indir, u8 *key)
 {
 	struct fm10k_intfc *interface = netdev_priv(netdev);
 	int i, err;
 
-	if (hfunc)
-		*hfunc = ETH_RSS_HASH_TOP;
+	if (rxfh)
+		rxfh->hfunc = ETH_RSS_HASH_TOP;
 
 	err = fm10k_get_reta(netdev, indir);
 	if (err || !key)
@@ -1076,15 +1076,16 @@ static int fm10k_get_rssh(struct net_device *netdev, u32 *indir, u8 *key,
 	return 0;
 }
 
-static int fm10k_set_rssh(struct net_device *netdev, const u32 *indir,
-			  const u8 *key, const u8 hfunc)
+static int fm10k_set_rssh(struct net_device *netdev, struct ethtool_rxfh *rxfh,
+			  const u32 *indir, const u8 *key)
 {
 	struct fm10k_intfc *interface = netdev_priv(netdev);
 	struct fm10k_hw *hw = &interface->hw;
 	int i, err;
 
 	/* We do not allow change in unsupported parameters */
-	if (hfunc != ETH_RSS_HASH_NO_CHANGE && hfunc != ETH_RSS_HASH_TOP)
+	if (rxfh->hfunc != ETH_RSS_HASH_NO_CHANGE &&
+	    rxfh->hfunc != ETH_RSS_HASH_TOP)
 		return -EOPNOTSUPP;
 
 	err = fm10k_set_reta(netdev, indir);

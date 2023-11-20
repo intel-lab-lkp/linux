@@ -917,21 +917,23 @@ static int otx2_get_rxfh_context(struct net_device *dev, u32 *indir,
 }
 
 /* Get RSS configuration */
-static int otx2_get_rxfh(struct net_device *dev, u32 *indir,
-			 u8 *hkey, u8 *hfunc)
+static int otx2_get_rxfh(struct net_device *dev, struct ethtool_rxfh *rxfh,
+			 u32 *indir, u8 *hkey)
 {
-	return otx2_get_rxfh_context(dev, indir, hkey, hfunc,
+	return otx2_get_rxfh_context(dev, indir, hkey,
+				     (rxfh) ? &rxfh->hfunc : NULL,
 				     DEFAULT_RSS_CONTEXT_GROUP);
 }
 
 /* Configure RSS table and hash key */
-static int otx2_set_rxfh(struct net_device *dev, const u32 *indir,
-			 const u8 *hkey, const u8 hfunc)
+static int otx2_set_rxfh(struct net_device *dev, struct ethtool_rxfh *rxfh,
+			 const u32 *indir, const u8 *hkey)
 {
 
 	u32 rss_context = DEFAULT_RSS_CONTEXT_GROUP;
 
-	return otx2_set_rxfh_context(dev, indir, hkey, hfunc, &rss_context, 0);
+	return otx2_set_rxfh_context(dev, indir, hkey,
+				     rxfh->hfunc, &rss_context, 0);
 }
 
 static u32 otx2_get_msglevel(struct net_device *netdev)

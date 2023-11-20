@@ -1588,13 +1588,14 @@ static u32 get_rss_table_size(struct net_device *dev)
 	return pi->rss_size;
 }
 
-static int get_rss_table(struct net_device *dev, u32 *p, u8 *key, u8 *hfunc)
+static int get_rss_table(struct net_device *dev, struct ethtool_rxfh *rxfh,
+			 u32 *p, u8 *key)
 {
 	const struct port_info *pi = netdev_priv(dev);
 	unsigned int n = pi->rss_size;
 
-	if (hfunc)
-		*hfunc = ETH_RSS_HASH_TOP;
+	if (rxfh)
+		rxfh->hfunc = ETH_RSS_HASH_TOP;
 	if (!p)
 		return 0;
 	while (n--)
@@ -1602,8 +1603,8 @@ static int get_rss_table(struct net_device *dev, u32 *p, u8 *key, u8 *hfunc)
 	return 0;
 }
 
-static int set_rss_table(struct net_device *dev, const u32 *p, const u8 *key,
-			 const u8 hfunc)
+static int set_rss_table(struct net_device *dev, struct ethtool_rxfh *rxfh,
+			 const u32 *p, const u8 *key)
 {
 	unsigned int i;
 	struct port_info *pi = netdev_priv(dev);
@@ -1612,7 +1613,8 @@ static int set_rss_table(struct net_device *dev, const u32 *p, const u8 *key,
 	 * change in any of the unsupported parameters
 	 */
 	if (key ||
-	    (hfunc != ETH_RSS_HASH_NO_CHANGE && hfunc != ETH_RSS_HASH_TOP))
+	    (rxfh->hfunc != ETH_RSS_HASH_NO_CHANGE &&
+	     rxfh->hfunc != ETH_RSS_HASH_TOP))
 		return -EOPNOTSUPP;
 	if (!p)
 		return 0;

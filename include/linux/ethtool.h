@@ -844,10 +844,10 @@ struct ethtool_ops {
 	int	(*reset)(struct net_device *, u32 *);
 	u32	(*get_rxfh_key_size)(struct net_device *);
 	u32	(*get_rxfh_indir_size)(struct net_device *);
-	int	(*get_rxfh)(struct net_device *, u32 *indir, u8 *key,
-			    u8 *hfunc);
-	int	(*set_rxfh)(struct net_device *, const u32 *indir,
-			    const u8 *key, const u8 hfunc);
+	int	(*get_rxfh)(struct net_device *, struct ethtool_rxfh *,
+			    u32 *indir, u8 *key);
+	int	(*set_rxfh)(struct net_device *, struct ethtool_rxfh *,
+			    const u32 *indir, const u8 *key);
 	int	(*get_rxfh_context)(struct net_device *, u32 *indir, u8 *key,
 				    u8 *hfunc, u32 rss_context);
 	int	(*set_rxfh_context)(struct net_device *, const u32 *indir,

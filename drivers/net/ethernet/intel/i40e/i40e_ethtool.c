@@ -5122,15 +5122,15 @@ static u32 i40e_get_rxfh_indir_size(struct net_device *netdev)
 /**
  * i40e_get_rxfh - get the rx flow hash indirection table
  * @netdev: network interface device structure
+ * @rxfh: ethtool_rxfh buffer to fill
  * @indir: indirection table
  * @key: hash key
- * @hfunc: hash function
  *
  * Reads the indirection table directly from the hardware. Returns 0 on
  * success.
  **/
-static int i40e_get_rxfh(struct net_device *netdev, u32 *indir, u8 *key,
-			 u8 *hfunc)
+static int i40e_get_rxfh(struct net_device *netdev, struct ethtool_rxfh *rxfh,
+			 u32 *indir, u8 *key)
 {
 	struct i40e_netdev_priv *np = netdev_priv(netdev);
 	struct i40e_vsi *vsi = np->vsi;
@@ -5138,8 +5138,8 @@ static int i40e_get_rxfh(struct net_device *netdev, u32 *indir, u8 *key,
 	int ret;
 	u16 i;
 
-	if (hfunc)
-		*hfunc = ETH_RSS_HASH_TOP;
+	if (rxfh)
+		rxfh->hfunc = ETH_RSS_HASH_TOP;
 
 	if (!indir)
 		return 0;
@@ -5163,15 +5163,15 @@ out:
 /**
  * i40e_set_rxfh - set the rx flow hash indirection table
  * @netdev: network interface device structure
+ * @rxfh: ethtool_rxfh data
  * @indir: indirection table
  * @key: hash key
- * @hfunc: hash function to use
  *
  * Returns -EINVAL if the table specifies an invalid queue id, otherwise
  * returns 0 after programming the table.
  **/
-static int i40e_set_rxfh(struct net_device *netdev, const u32 *indir,
-			 const u8 *key, const u8 hfunc)
+static int i40e_set_rxfh(struct net_device *netdev, struct ethtool_rxfh *rxfh,
+			 const u32 *indir, const u8 *key)
 {
 	struct i40e_netdev_priv *np = netdev_priv(netdev);
 	struct i40e_vsi *vsi = np->vsi;
@@ -5179,7 +5179,8 @@ static int i40e_set_rxfh(struct net_device *netdev, const u32 *indir,
 	u8 *seed = NULL;
 	u16 i;
 
-	if (hfunc != ETH_RSS_HASH_NO_CHANGE && hfunc != ETH_RSS_HASH_TOP)
+	if (rxfh->hfunc != ETH_RSS_HASH_NO_CHANGE &&
+	    rxfh->hfunc != ETH_RSS_HASH_TOP)
 		return -EOPNOTSUPP;
 
 	if (key) {

@@ -3268,31 +3268,33 @@ out:
 /**
  * ice_get_rxfh - get the Rx flow hash indirection table
  * @netdev: network interface device structure
+ * @rxfh: ethtool_rxfh buffer to fill
  * @indir: indirection table
  * @key: hash key
- * @hfunc: hash function
  *
  * Reads the indirection table directly from the hardware.
  */
 static int
-ice_get_rxfh(struct net_device *netdev, u32 *indir, u8 *key, u8 *hfunc)
+ice_get_rxfh(struct net_device *netdev, struct ethtool_rxfh *rxfh,
+	     u32 *indir, u8 *key)
 {
-	return ice_get_rxfh_context(netdev, indir, key, hfunc, 0);
+	return ice_get_rxfh_context(netdev, indir, key,
+				    (rxfh) ? &rxfh->hfunc : NULL, 0);
 }
 
 /**
  * ice_set_rxfh - set the Rx flow hash indirection table
  * @netdev: network interface device structure
+ * @rxfh: ethtool_rxfh data
  * @indir: indirection table
  * @key: hash key
- * @hfunc: hash function
  *
  * Returns -EINVAL if the table specifies an invalid queue ID, otherwise
  * returns 0 after programming the table.
  */
 static int
-ice_set_rxfh(struct net_device *netdev, const u32 *indir, const u8 *key,
-	     const u8 hfunc)
+ice_set_rxfh(struct net_device *netdev, struct ethtool_rxfh *rxfh,
+	     const u32 *indir, const u8 *key)
 {
 	struct ice_netdev_priv *np = netdev_priv(netdev);
 	struct ice_vsi *vsi = np->vsi;
@@ -3301,7 +3303,8 @@ ice_set_rxfh(struct net_device *netdev, const u32 *indir, const u8 *key,
 	int err;
 
 	dev = ice_pf_to_dev(pf);
-	if (hfunc != ETH_RSS_HASH_NO_CHANGE && hfunc != ETH_RSS_HASH_TOP)
+	if (rxfh->hfunc != ETH_RSS_HASH_NO_CHANGE &&
+	    rxfh->hfunc != ETH_RSS_HASH_TOP)
 		return -EOPNOTSUPP;
 
 	if (!test_bit(ICE_FLAG_RSS_ENA, pf->flags)) {

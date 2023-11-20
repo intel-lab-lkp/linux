@@ -1303,16 +1303,18 @@ unlock:
 	return err;
 }
 
-int mlx5e_get_rxfh(struct net_device *netdev, u32 *indir, u8 *key,
-		   u8 *hfunc)
+int mlx5e_get_rxfh(struct net_device *netdev, struct ethtool_rxfh *rxfh,
+		   u32 *indir, u8 *key)
 {
-	return mlx5e_get_rxfh_context(netdev, indir, key, hfunc, 0);
+	return mlx5e_get_rxfh_context(netdev, indir, key,
+				      (rxfh) ? &rxfh->hfunc : NULL, 0);
 }
 
-int mlx5e_set_rxfh(struct net_device *dev, const u32 *indir,
-		   const u8 *key, const u8 hfunc)
+int mlx5e_set_rxfh(struct net_device *dev, struct ethtool_rxfh *rxfh,
+		   const u32 *indir, const u8 *key)
 {
 	struct mlx5e_priv *priv = netdev_priv(dev);
+	const u8 hfunc = rxfh->hfunc;
 	int err;
 
 	mutex_lock(&priv->state_lock);

@@ -1136,8 +1136,8 @@ static int hinic_set_rxnfc(struct net_device *netdev, struct ethtool_rxnfc *cmd)
 	return err;
 }
 
-static int hinic_get_rxfh(struct net_device *netdev,
-			  u32 *indir, u8 *key, u8 *hfunc)
+static int hinic_get_rxfh(struct net_device *netdev, struct ethtool_rxfh *rxfh,
+			  u32 *indir, u8 *key)
 {
 	struct hinic_dev *nic_dev = netdev_priv(netdev);
 	u8 hash_engine_type = 0;
@@ -1146,14 +1146,15 @@ static int hinic_get_rxfh(struct net_device *netdev,
 	if (!(nic_dev->flags & HINIC_RSS_ENABLE))
 		return -EOPNOTSUPP;
 
-	if (hfunc) {
+	if (rxfh) {
 		err = hinic_rss_get_hash_engine(nic_dev,
 						nic_dev->rss_tmpl_idx,
 						&hash_engine_type);
 		if (err)
 			return -EFAULT;
 
-		*hfunc = hash_engine_type ? ETH_RSS_HASH_TOP : ETH_RSS_HASH_XOR;
+		rxfh->hfunc = hash_engine_type ?
+			      ETH_RSS_HASH_TOP : ETH_RSS_HASH_XOR;
 	}
 
 	if (indir) {
@@ -1170,8 +1171,8 @@ static int hinic_get_rxfh(struct net_device *netdev,
 	return err;
 }
 
-static int hinic_set_rxfh(struct net_device *netdev, const u32 *indir,
-			  const u8 *key, const u8 hfunc)
+static int hinic_set_rxfh(struct net_device *netdev, struct ethtool_rxfh *rxfh,
+			  const u32 *indir, const u8 *key)
 {
 	struct hinic_dev *nic_dev = netdev_priv(netdev);
 	int err = 0;
@@ -1179,11 +1180,12 @@ static int hinic_set_rxfh(struct net_device *netdev, const u32 *indir,
 	if (!(nic_dev->flags & HINIC_RSS_ENABLE))
 		return -EOPNOTSUPP;
 
-	if (hfunc != ETH_RSS_HASH_NO_CHANGE) {
-		if (hfunc != ETH_RSS_HASH_TOP && hfunc != ETH_RSS_HASH_XOR)
+	if (rxfh->hfunc != ETH_RSS_HASH_NO_CHANGE) {
+		if (rxfh->hfunc != ETH_RSS_HASH_TOP &&
+		    rxfh->hfunc != ETH_RSS_HASH_XOR)
 			return -EOPNOTSUPP;
 
-		nic_dev->rss_hash_engine = (hfunc == ETH_RSS_HASH_XOR) ?
+		nic_dev->rss_hash_engine = (rxfh->hfunc == ETH_RSS_HASH_XOR) ?
 			HINIC_RSS_HASH_ENGINE_TYPE_XOR :
 			HINIC_RSS_HASH_ENGINE_TYPE_TOEP;
 		err = hinic_rss_set_hash_engine

@@ -977,8 +977,8 @@ static u32 fun_get_rxfh_key_size(struct net_device *netdev)
 	return sizeof(fp->rss_key);
 }
 
-static int fun_get_rxfh(struct net_device *netdev, u32 *indir, u8 *key,
-			u8 *hfunc)
+static int fun_get_rxfh(struct net_device *netdev, struct ethtool_rxfh *rxfh,
+			u32 *indir, u8 *key)
 {
 	const struct funeth_priv *fp = netdev_priv(netdev);
 
@@ -992,15 +992,15 @@ static int fun_get_rxfh(struct net_device *netdev, u32 *indir, u8 *key,
 	if (key)
 		memcpy(key, fp->rss_key, sizeof(fp->rss_key));
 
-	if (hfunc)
-		*hfunc = fp->hash_algo == FUN_ETH_RSS_ALG_TOEPLITZ ?
+	if (rxfh)
+		rxfh->hfunc = fp->hash_algo == FUN_ETH_RSS_ALG_TOEPLITZ ?
 				ETH_RSS_HASH_TOP : ETH_RSS_HASH_CRC32;
 
 	return 0;
 }
 
-static int fun_set_rxfh(struct net_device *netdev, const u32 *indir,
-			const u8 *key, const u8 hfunc)
+static int fun_set_rxfh(struct net_device *netdev, struct ethtool_rxfh *rxfh,
+			const u32 *indir, const u8 *key)
 {
 	struct funeth_priv *fp = netdev_priv(netdev);
 	const u32 *rss_indir = indir ? indir : fp->indir_table;
@@ -1010,11 +1010,11 @@ static int fun_set_rxfh(struct net_device *netdev, const u32 *indir,
 	if (!fp->rss_cfg)
 		return -EOPNOTSUPP;
 
-	if (hfunc == ETH_RSS_HASH_NO_CHANGE)
+	if (rxfh->hfunc == ETH_RSS_HASH_NO_CHANGE)
 		algo = fp->hash_algo;
-	else if (hfunc == ETH_RSS_HASH_CRC32)
+	else if (rxfh->hfunc == ETH_RSS_HASH_CRC32)
 		algo = FUN_ETH_RSS_ALG_CRC32;
-	else if (hfunc == ETH_RSS_HASH_TOP)
+	else if (rxfh->hfunc == ETH_RSS_HASH_TOP)
 		algo = FUN_ETH_RSS_ALG_TOEPLITZ;
 	else
 		return -EINVAL;

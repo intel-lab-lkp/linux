@@ -1418,8 +1418,9 @@ static u32 nfp_net_get_rxfh_key_size(struct net_device *netdev)
 	return nfp_net_rss_key_sz(nn);
 }
 
-static int nfp_net_get_rxfh(struct net_device *netdev, u32 *indir, u8 *key,
-			    u8 *hfunc)
+static int nfp_net_get_rxfh(struct net_device *netdev,
+			    struct ethtool_rxfh *rxfh,
+			    u32 *indir, u8 *key)
 {
 	struct nfp_net *nn = netdev_priv(netdev);
 	int i;
@@ -1432,24 +1433,24 @@ static int nfp_net_get_rxfh(struct net_device *netdev, u32 *indir, u8 *key,
 			indir[i] = nn->rss_itbl[i];
 	if (key)
 		memcpy(key, nn->rss_key, nfp_net_rss_key_sz(nn));
-	if (hfunc) {
-		*hfunc = nn->rss_hfunc;
-		if (*hfunc >= 1 << ETH_RSS_HASH_FUNCS_COUNT)
-			*hfunc = ETH_RSS_HASH_UNKNOWN;
+	if (rxfh) {
+		rxfh->hfunc = nn->rss_hfunc;
+		if (rxfh->hfunc >= 1 << ETH_RSS_HASH_FUNCS_COUNT)
+			rxfh->hfunc = ETH_RSS_HASH_UNKNOWN;
 	}
-
 	return 0;
 }
 
 static int nfp_net_set_rxfh(struct net_device *netdev,
-			    const u32 *indir, const u8 *key,
-			    const u8 hfunc)
+			    struct ethtool_rxfh *rxfh,
+			    const u32 *indir, const u8 *key)
 {
 	struct nfp_net *nn = netdev_priv(netdev);
 	int i;
 
 	if (!(nn->cap & NFP_NET_CFG_CTRL_RSS_ANY) ||
-	    !(hfunc == ETH_RSS_HASH_NO_CHANGE || hfunc == nn->rss_hfunc))
+	    !(rxfh->hfunc == ETH_RSS_HASH_NO_CHANGE ||
+	      rxfh->hfunc == nn->rss_hfunc))
 		return -EOPNOTSUPP;
 
 	if (!key && !indir)

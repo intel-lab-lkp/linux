@@ -1089,7 +1089,7 @@ static noinline_for_stack int ethtool_get_rxfh_indir(struct net_device *dev,
 	if (!indir)
 		return -ENOMEM;
 
-	ret = dev->ethtool_ops->get_rxfh(dev, indir, NULL, NULL);
+	ret = dev->ethtool_ops->get_rxfh(dev, NULL, indir, NULL);
 	if (ret)
 		goto out;
 
@@ -1108,6 +1108,7 @@ static noinline_for_stack int ethtool_set_rxfh_indir(struct net_device *dev,
 {
 	struct ethtool_rxnfc rx_rings;
 	u32 user_size, dev_size, i;
+	struct ethtool_rxfh rxfh;
 	u32 *indir;
 	const struct ethtool_ops *ops = dev->ethtool_ops;
 	int ret;
@@ -1150,7 +1151,8 @@ static noinline_for_stack int ethtool_set_rxfh_indir(struct net_device *dev,
 			goto out;
 	}
 
-	ret = ops->set_rxfh(dev, indir, NULL, ETH_RSS_HASH_NO_CHANGE);
+	rxfh.hfunc = ETH_RSS_HASH_NO_CHANGE;
+	ret = ops->set_rxfh(dev, &rxfh, indir, NULL);
 	if (ret)
 		goto out;
 
@@ -1176,7 +1178,6 @@ static noinline_for_stack int ethtool_get_rxfh(struct net_device *dev,
 	u32 total_size;
 	u32 indir_bytes;
 	u32 *indir = NULL;
-	u8 dev_hfunc = 0;
 	u8 *hkey = NULL;
 	u8 *rss_config;
 
@@ -1200,14 +1201,12 @@ static noinline_for_stack int ethtool_get_rxfh(struct net_device *dev,
 	if (rxfh.rss_context && !ops->get_rxfh_context)
 		return -EOPNOTSUPP;
 
-	rxfh.indir_size = dev_indir_size;
-	rxfh.key_size = dev_key_size;
-	if (copy_to_user(useraddr, &rxfh, sizeof(rxfh)))
-		return -EFAULT;
-
 	if ((user_indir_size && (user_indir_size != dev_indir_size)) ||
 	    (user_key_size && (user_key_size != dev_key_size)))
 		return -EINVAL;
+
+	rxfh.indir_size = dev_indir_size;
+	rxfh.key_size = dev_key_size;
 
 	indir_bytes = user_indir_size * sizeof(indir[0]);
 	total_size = indir_bytes + user_key_size;
@@ -1223,15 +1222,14 @@ static noinline_for_stack int ethtool_get_rxfh(struct net_device *dev,
 
 	if (rxfh.rss_context)
 		ret = dev->ethtool_ops->get_rxfh_context(dev, indir, hkey,
-							 &dev_hfunc,
+							 &rxfh.hfunc,
 							 rxfh.rss_context);
 	else
-		ret = dev->ethtool_ops->get_rxfh(dev, indir, hkey, &dev_hfunc);
+		ret = dev->ethtool_ops->get_rxfh(dev, &rxfh, indir, hkey);
 	if (ret)
 		goto out;
 
-	if (copy_to_user(useraddr + offsetof(struct ethtool_rxfh, hfunc),
-			 &dev_hfunc, sizeof(rxfh.hfunc))) {
+	if (copy_to_user(useraddr, &rxfh, sizeof(rxfh))) {
 		ret = -EFAULT;
 	} else if (copy_to_user(useraddr +
 			      offsetof(struct ethtool_rxfh, rss_config[0]),
@@ -1336,7 +1334,7 @@ static noinline_for_stack int ethtool_set_rxfh(struct net_device *dev,
 		ret = ops->set_rxfh_context(dev, indir, hkey, rxfh.hfunc,
 					    &rxfh.rss_context, delete);
 	else
-		ret = ops->set_rxfh(dev, indir, hkey, rxfh.hfunc);
+		ret = ops->set_rxfh(dev, &rxfh, indir, hkey);
 	if (ret)
 		goto out;
 

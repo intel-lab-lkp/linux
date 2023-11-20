@@ -50,7 +50,7 @@ rss_prepare_data(const struct ethnl_req_info *req_base,
 	struct net_device *dev = reply_base->dev;
 	const struct ethtool_ops *ops;
 	u32 total_size, indir_bytes;
-	u8 dev_hfunc = 0;
+	struct ethtool_rxfh rxfh;
 	u8 *rss_config;
 	int ret;
 
@@ -89,15 +89,14 @@ rss_prepare_data(const struct ethnl_req_info *req_base,
 
 	if (request->rss_context)
 		ret = ops->get_rxfh_context(dev, data->indir_table, data->hkey,
-					    &dev_hfunc, request->rss_context);
+					    &rxfh.hfunc, request->rss_context);
 	else
-		ret = ops->get_rxfh(dev, data->indir_table, data->hkey,
-				    &dev_hfunc);
+		ret = ops->get_rxfh(dev, &rxfh, data->indir_table, data->hkey);
 
 	if (ret)
 		goto out_ops;
 
-	data->hfunc = dev_hfunc;
+	data->hfunc = rxfh.hfunc;
 out_ops:
 	ethnl_ops_complete(dev);
 	return ret;

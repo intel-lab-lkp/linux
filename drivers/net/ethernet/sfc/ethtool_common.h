@@ -44,10 +44,10 @@ int efx_ethtool_set_rxnfc(struct net_device *net_dev,
 			  struct ethtool_rxnfc *info);
 u32 efx_ethtool_get_rxfh_indir_size(struct net_device *net_dev);
 u32 efx_ethtool_get_rxfh_key_size(struct net_device *net_dev);
-int efx_ethtool_get_rxfh(struct net_device *net_dev, u32 *indir, u8 *key,
-			 u8 *hfunc);
-int efx_ethtool_set_rxfh(struct net_device *net_dev,
-			 const u32 *indir, const u8 *key, const u8 hfunc);
+int efx_ethtool_get_rxfh(struct net_device *net_dev, struct ethtool_rxfh *rxfh,
+			 u32 *indir, u8 *key);
+int efx_ethtool_set_rxfh(struct net_device *net_dev, struct ethtool_rxfh *rxfh,
+			 const u32 *indir, const u8 *key);
 int efx_ethtool_get_rxfh_context(struct net_device *net_dev, u32 *indir,
 				 u8 *key, u8 *hfunc, u32 rss_context);
 int efx_ethtool_set_rxfh_context(struct net_device *net_dev,

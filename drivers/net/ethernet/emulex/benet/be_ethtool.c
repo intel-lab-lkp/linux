@@ -1271,8 +1271,8 @@ static u32 be_get_rxfh_key_size(struct net_device *netdev)
 	return RSS_HASH_KEY_LEN;
 }
 
-static int be_get_rxfh(struct net_device *netdev, u32 *indir, u8 *hkey,
-		       u8 *hfunc)
+static int be_get_rxfh(struct net_device *netdev, struct ethtool_rxfh *rxfh,
+		       u32 *indir, u8 *hkey)
 {
 	struct be_adapter *adapter = netdev_priv(netdev);
 	int i;
@@ -1286,21 +1286,22 @@ static int be_get_rxfh(struct net_device *netdev, u32 *indir, u8 *hkey,
 	if (hkey)
 		memcpy(hkey, rss->rss_hkey, RSS_HASH_KEY_LEN);
 
-	if (hfunc)
-		*hfunc = ETH_RSS_HASH_TOP;
+	if (rxfh)
+		rxfh->hfunc = ETH_RSS_HASH_TOP;
 
 	return 0;
 }
 
-static int be_set_rxfh(struct net_device *netdev, const u32 *indir,
-		       const u8 *hkey, const u8 hfunc)
+static int be_set_rxfh(struct net_device *netdev, struct ethtool_rxfh *rxfh,
+		       const u32 *indir, const u8 *hkey)
 {
 	int rc = 0, i, j;
 	struct be_adapter *adapter = netdev_priv(netdev);
 	u8 rsstable[RSS_INDIR_TABLE_LEN];
 
 	/* We do not allow change in unsupported parameters */
-	if (hfunc != ETH_RSS_HASH_NO_CHANGE && hfunc != ETH_RSS_HASH_TOP)
+	if (rxfh->hfunc != ETH_RSS_HASH_NO_CHANGE &&
+	    rxfh->hfunc != ETH_RSS_HASH_TOP)
 		return -EOPNOTSUPP;
 
 	if (indir) {
