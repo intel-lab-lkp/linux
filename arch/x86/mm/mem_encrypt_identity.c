@@ -346,9 +346,7 @@ void __init sme_encrypt_kernel(struct boot_params *bp)
 	 * We're running identity mapped, so we must obtain the address to the
 	 * SME encryption workarea using rip-relative addressing.
 	 */
-	asm ("lea sme_workarea(%%rip), %0"
-	     : "=r" (workarea_start)
-	     : "p" (sme_workarea));
+	asm ("lea %a1, %0" : "=r" (workarea_start) : "i" (sme_workarea));
 
 	/*
 	 * Calculate required number of workarea bytes needed:
@@ -582,15 +580,9 @@ void __init sme_enable(struct boot_params *bp)
 	 * identity mapped, so we must obtain the address to the SME command
 	 * line argument data using rip-relative addressing.
 	 */
-	asm ("lea sme_cmdline_arg(%%rip), %0"
-	     : "=r" (cmdline_arg)
-	     : "p" (sme_cmdline_arg));
-	asm ("lea sme_cmdline_on(%%rip), %0"
-	     : "=r" (cmdline_on)
-	     : "p" (sme_cmdline_on));
-	asm ("lea sme_cmdline_off(%%rip), %0"
-	     : "=r" (cmdline_off)
-	     : "p" (sme_cmdline_off));
+	asm ("lea %a1, %0" : "=r" (cmdline_arg) : "i" (sme_cmdline_arg));
+	asm ("lea %a1, %0" : "=r" (cmdline_on) : "i" (sme_cmdline_on));
+	asm ("lea %a1, %0" : "=r" (cmdline_off) : "i" (sme_cmdline_off));
 
 	if (IS_ENABLED(CONFIG_AMD_MEM_ENCRYPT_ACTIVE_BY_DEFAULT))
 		active_by_default = true;
