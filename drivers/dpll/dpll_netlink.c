@@ -1093,9 +1093,10 @@ int dpll_nl_pin_id_get_doit(struct sk_buff *skb, struct genl_info *info)
 		return -ENOMEM;
 	hdr = genlmsg_put_reply(msg, info, &dpll_nl_family, 0,
 				DPLL_CMD_PIN_ID_GET);
-	if (!hdr)
+	if (!hdr) {
+		nlmsg_free(msg);
 		return -EMSGSIZE;
-
+	}
 	pin = dpll_pin_find_from_nlattr(info);
 	if (!IS_ERR(pin)) {
 		ret = dpll_msg_add_pin_handle(msg, pin);
