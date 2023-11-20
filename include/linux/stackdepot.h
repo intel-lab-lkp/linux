@@ -146,6 +146,8 @@ void stack_depot_dec_count(depot_stack_handle_t handle);
 depot_stack_handle_t stack_depot_save(unsigned long *entries,
 				      unsigned int nr_entries, gfp_t gfp_flags);
 
+struct stack_record *stack_depot_get_next_stack(unsigned long *table,
+						struct stack_record *curr_stack);
 /**
  * stack_depot_fetch - Fetch a stack trace from stack depot
  *

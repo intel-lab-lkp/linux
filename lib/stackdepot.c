@@ -452,6 +452,35 @@ static struct stack_record *stack_depot_getstack(depot_stack_handle_t handle)
 	return stack;
 }
 
+struct stack_record *stack_depot_get_next_stack(unsigned long *table,
+						struct stack_record *curr_stack)
+{
+	unsigned long nr_table = *table;
+	struct stack_record *next = NULL, **stacks;
+	unsigned long stack_table_entries = stack_hash_mask + 1;
+
+	if (!curr_stack) {
+		if (nr_table) {
+new_table:
+			nr_table++;
+			if (nr_table >= stack_table_entries)
+				goto out;
+		}
+	stacks = &stack_table[nr_table];
+	curr_stack = (struct stack_record *)stacks;
+	next = curr_stack;
+	} else {
+		next = curr_stack->next;
+	}
+
+	if (!next)
+		goto new_table;
+
+out:
+	*table = nr_table;
+	return next;
+}
+
 unsigned int stack_depot_fetch(depot_stack_handle_t handle,
 			       unsigned long **entries)
 {
