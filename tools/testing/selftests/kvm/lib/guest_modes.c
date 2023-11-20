@@ -4,7 +4,11 @@
  */
 #include "guest_modes.h"
 
-#ifdef __aarch64__
+#if defined(__powerpc__)
+#include <unistd.h>
+#endif
+
+#if defined(__aarch64__) || defined(__powerpc__)
 #include "processor.h"
 enum vm_guest_mode vm_mode_default;
 #endif
@@ -13,9 +17,7 @@ struct guest_mode guest_modes[NUM_VM_MODES];
 
 void guest_modes_append_default(void)
 {
-#ifndef __aarch64__
-	guest_mode_append(VM_MODE_DEFAULT, true, true);
-#else
+#ifdef __aarch64__
 	{
 		unsigned int limit = kvm_check_cap(KVM_CAP_ARM_VM_IPA_SIZE);
 		bool ps4k, ps16k, ps64k;
@@ -70,6 +72,8 @@ void guest_modes_append_default(void)
 				    KVM_S390_VM_CPU_PROCESSOR, &info);
 		close(vm_fd);
 		close(kvm_fd);
+
+		guest_mode_append(VM_MODE_DEFAULT, true, true);
 		/* Starting with z13 we have 47bits of physical address */
 		if (info.ibc >= 0x30)
 			guest_mode_append(VM_MODE_P47V64_4K, true, true);
@@ -79,10 +83,25 @@ void guest_modes_append_default(void)
 	{
 		unsigned int sz = kvm_check_cap(KVM_CAP_VM_GPA_BITS);
 
+		guest_mode_append(VM_MODE_DEFAULT, true, true);
 		if (sz >= 52)
 			guest_mode_append(VM_MODE_P52V48_4K, true, true);
 		if (sz >= 48)
 			guest_mode_append(VM_MODE_P48V48_4K, true, true);
+	}
+#endif
+#ifdef __powerpc__
+	{
+		TEST_ASSERT(kvm_check_cap(KVM_CAP_PPC_MMU_RADIX),
+			    "Radix MMU not available, KVM selftests "
+			    "does not support Hash MMU!");
+		/* Radix guest EA and RA are 52-bit on POWER9 and POWER10 */
+		if (sysconf(_SC_PAGESIZE) == 4096)
+			vm_mode_default = VM_MODE_P52V52_4K;
+		else
+			vm_mode_default = VM_MODE_P52V52_64K;
+		guest_mode_append(VM_MODE_P52V52_4K, true, true);
+		guest_mode_append(VM_MODE_P52V52_64K, true, true);
 	}
 #endif
 }

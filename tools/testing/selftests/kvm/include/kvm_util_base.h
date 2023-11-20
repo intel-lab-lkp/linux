@@ -87,6 +87,12 @@ enum kvm_mem_region_type {
 	NR_MEM_REGIONS,
 };
 
+/* Page table fragment cache for guest page table < page size */
+struct vm_pt_frag_cache {
+	vm_paddr_t page;
+	size_t page_nr_used;
+};
+
 struct kvm_vm {
 	int mode;
 	unsigned long type;
@@ -106,6 +112,10 @@ struct kvm_vm {
 	bool pgd_created;
 	vm_paddr_t ucall_mmio_addr;
 	vm_paddr_t pgd;
+#if defined(__powerpc64__)
+	vm_paddr_t prtb; // process table
+	struct vm_pt_frag_cache pt_frag_cache[2]; // 256B and 4KB PT caches
+#endif
 	vm_vaddr_t gdt;
 	vm_vaddr_t tss;
 	vm_vaddr_t idt;
@@ -181,6 +191,8 @@ enum vm_guest_mode {
 	VM_MODE_PXXV48_4K,	/* For 48bits VA but ANY bits PA */
 	VM_MODE_P47V64_4K,
 	VM_MODE_P44V64_4K,
+	VM_MODE_P52V52_4K,
+	VM_MODE_P52V52_64K,
 	VM_MODE_P36V48_4K,
 	VM_MODE_P36V48_16K,
 	VM_MODE_P36V48_64K,
@@ -217,6 +229,18 @@ extern enum vm_guest_mode vm_mode_default;
 #define VM_MODE_DEFAULT			VM_MODE_P40V48_4K
 #define MIN_PAGE_SHIFT			12U
 #define ptes_per_page(page_size)	((page_size) / 8)
+
+#elif defined(__powerpc64__)
+
+extern enum vm_guest_mode vm_mode_default;
+
+#define VM_MODE_DEFAULT			vm_mode_default
+#define MIN_PAGE_SHIFT			12U
+#define ptes_per_page(page_size)	((page_size) / 8)
+
+#else
+
+#error "KVM selftests not implemented for architecture"
 
 #endif
 
