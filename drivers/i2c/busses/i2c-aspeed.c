@@ -337,6 +337,12 @@ static u32 aspeed_i2c_slave_irq(struct aspeed_i2c_bus *bus, u32 irq_status)
 		break;
 	}
 
+	/* Ack Tx ack */
+	if (irq_handled & ASPEED_I2CD_INTR_TX_ACK) {
+		writel(ASPEED_I2CD_INTR_TX_ACK, bus->base + ASPEED_I2C_INTR_STS_REG);
+		readl(bus->base + ASPEED_I2C_INTR_STS_REG);
+	}
+
 	return irq_handled;
 }
 #endif /* CONFIG_I2C_SLAVE */
@@ -602,13 +608,18 @@ out_no_complete:
 static irqreturn_t aspeed_i2c_bus_irq(int irq, void *dev_id)
 {
 	struct aspeed_i2c_bus *bus = dev_id;
-	u32 irq_received, irq_remaining, irq_handled;
+	u32 irq_received, irq_remaining, irq_handled, irq_acked;
 
 	spin_lock(&bus->lock);
 	irq_received = readl(bus->base + ASPEED_I2C_INTR_STS_REG);
 	/* Ack all interrupts except for Rx done */
-	writel(irq_received & ~ASPEED_I2CD_INTR_RX_DONE,
-	       bus->base + ASPEED_I2C_INTR_STS_REG);
+	irq_acked = irq_received & ~ASPEED_I2CD_INTR_RX_DONE;
+#if IS_ENABLED(CONFIG_I2C_SLAVE)
+	/* shouldn't ack Slave Tx Ack before it's handled */
+	if (bus->slave_state == ASPEED_I2C_SLAVE_READ_PROCESSED)
+		irq_acked &= ~ASPEED_I2CD_INTR_TX_ACK;
+#endif
+	writel(irq_acked, bus->base + ASPEED_I2C_INTR_STS_REG);
 	readl(bus->base + ASPEED_I2C_INTR_STS_REG);
 	irq_received &= ASPEED_I2CD_INTR_RECV_MASK;
 	irq_remaining = irq_received;
