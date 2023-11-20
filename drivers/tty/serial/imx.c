@@ -707,25 +707,19 @@ static void imx_uart_start_tx(struct uart_port *port)
 		    || sport->tx_state == WAIT_AFTER_RTS) {
 
 			hrtimer_try_to_cancel(&sport->trigger_stop_tx);
-
-			/*
-			 * Enable transmitter and shifter empty irq only if DMA
-			 * is off.  In the DMA case this is done in the
-			 * tx-callback.
-			 */
-			if (!sport->dma_is_enabled) {
-				u32 ucr4 = imx_uart_readl(sport, UCR4);
-				ucr4 |= UCR4_TCEN;
-				imx_uart_writel(sport, ucr4, UCR4);
-			}
-
-			sport->tx_state = SEND;
 		}
-	} else {
-		sport->tx_state = SEND;
 	}
 
+	sport->tx_state = SEND;
+
+	/*
+	 * Enable transmitter and shifter empty irq only if DMA is
+	 * off.  In the DMA case this is done in the tx-callback.
+	 */
 	if (!sport->dma_is_enabled) {
+		u32 ucr4 = imx_uart_readl(sport, UCR4);
+		ucr4 |= UCR4_TCEN;
+		imx_uart_writel(sport, ucr4, UCR4);
 		ucr1 = imx_uart_readl(sport, UCR1);
 		imx_uart_writel(sport, ucr1 | UCR1_TRDYEN, UCR1);
 	}
