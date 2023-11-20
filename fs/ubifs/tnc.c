@@ -1478,11 +1478,10 @@ static int maybe_leb_gced(struct ubifs_info *c, int lnum, int gc_seq1)
 int ubifs_tnc_locate(struct ubifs_info *c, const union ubifs_key *key,
 		     void *node, int *lnum, int *offs)
 {
-	int found, n, err, safely = 0, gc_seq1;
+	int found, n, err;
 	struct ubifs_znode *znode;
-	struct ubifs_zbranch zbr, *zt;
+	struct ubifs_zbranch *zt;
 
-again:
 	mutex_lock(&c->tnc_mutex);
 	found = ubifs_lookup_level0(c, key, &znode, &n);
 	if (!found) {
@@ -1505,31 +1504,7 @@ again:
 		err = tnc_read_hashed_node(c, zt, node);
 		goto out;
 	}
-	if (safely) {
-		err = ubifs_tnc_read_node(c, zt, node);
-		goto out;
-	}
-	/* Drop the TNC mutex prematurely and race with garbage collection */
-	zbr = znode->zbranch[n];
-	gc_seq1 = c->gc_seq;
-	mutex_unlock(&c->tnc_mutex);
-
-	if (ubifs_get_wbuf(c, zbr.lnum)) {
-		/* We do not GC journal heads */
-		err = ubifs_tnc_read_node(c, &zbr, node);
-		return err;
-	}
-
-	err = fallible_read_node(c, key, &zbr, node);
-	if (err <= 0 || maybe_leb_gced(c, zbr.lnum, gc_seq1)) {
-		/*
-		 * The node may have been GC'ed out from under us so try again
-		 * while keeping the TNC mutex locked.
-		 */
-		safely = 1;
-		goto again;
-	}
-	return 0;
+	err = ubifs_tnc_read_node(c, zt, node);
 
 out:
 	mutex_unlock(&c->tnc_mutex);
