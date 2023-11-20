@@ -528,6 +528,12 @@ S:	Maintained
 F:	Documentation/scsi/advansys.rst
 F:	drivers/scsi/advansys.c
 
+ADVANTECH PCIE-1761H DRIVER
+M:	Christian Seiler <c.seiler@luxflux.de>
+L:	linux-gpio@vger.kernel.org
+S:	Maintained
+F:	drivers/gpio/gpio-adv-pcie-1761h.c
+
 ADVANTECH SWBTN DRIVER
 M:	Andrea Ho <Andrea.Ho@advantech.com.tw>
 L:	platform-driver-x86@vger.kernel.org

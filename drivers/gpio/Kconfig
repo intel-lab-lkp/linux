@@ -138,6 +138,18 @@ config GPIO_74XX_MMIO
 	    8 bits:	74244 (Input), 74273 (Output)
 	    16 bits:	741624 (Input), 7416374 (Output)
 
+config GPIO_ADVANTECH_PCIE_1761H
+	tristate "Advantech PCIe-1761H GPIO"
+	select GPIOLIB_IRQCHIP
+	help
+	  Say Y or M here to build support for the Advantech PCIe-1761H
+	  industrial GPIO device.
+
+	  This driver does NOT support the older Advantech PCI-1761H. (PCI
+	  vs. PCI Express.)
+
+	  If driver is built as a module it will be called gpio-adv-pcie-1761h.
+
 config GPIO_ALTERA
 	tristate "Altera GPIO"
 	depends on OF_GPIO
