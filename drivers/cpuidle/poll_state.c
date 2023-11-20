@@ -26,12 +26,16 @@ static int __cpuidle poll_idle(struct cpuidle_device *dev,
 
 		limit = cpuidle_poll_time(drv, dev);
 
-		while (!need_resched()) {
-			cpu_relax();
-			if (loop_count++ < POLL_IDLE_RELAX_COUNT)
-				continue;
-
+		for (;;) {
 			loop_count = 0;
+
+			smp_cond_load_relaxed(&current_thread_info()->flags,
+					      (VAL & _TIF_NEED_RESCHED) ||
+					      (loop_count++ >= POLL_IDLE_RELAX_COUNT));
+
+			if (loop_count < POLL_IDLE_RELAX_COUNT)
+				break;
+
 			if (local_clock_noinstr() - time_start > limit) {
 				dev->poll_time_limit = true;
 				break;
