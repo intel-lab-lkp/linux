@@ -34,6 +34,9 @@ config PCI_DOMAINS_GENERIC
 config PCI_SYSCALL
 	bool
 
+config GENERIC_PCI_IOMAP
+	bool
+
 source "drivers/pci/pcie/Kconfig"
 
 config PCI_MSI
