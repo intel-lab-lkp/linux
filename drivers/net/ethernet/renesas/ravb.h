@@ -1043,6 +1043,7 @@ struct ravb_hw_info {
 	unsigned nc_queues:1;		/* AVB-DMAC has RX and TX NC queues */
 	unsigned magic_pkt:1;		/* E-MAC supports magic packet detection */
 	unsigned half_duplex:1;		/* E-MAC supports half duplex mode */
+	unsigned refclk_in_pd:1;	/* Reference clock is part of a power domain. */
 };
 
 struct ravb_private {

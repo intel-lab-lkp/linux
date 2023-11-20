@@ -2502,6 +2502,7 @@ static const struct ravb_hw_info gbeth_hw_info = {
 	.tx_counters = 1,
 	.carrier_counters = 1,
 	.half_duplex = 1,
+	.refclk_in_pd = 1,
 };
 
 static const struct of_device_id ravb_match_table[] = {
@@ -2749,12 +2750,14 @@ static int ravb_probe(struct platform_device *pdev)
 		goto out_release;
 	}
 
-	priv->refclk = devm_clk_get_optional(&pdev->dev, "refclk");
-	if (IS_ERR(priv->refclk)) {
-		error = PTR_ERR(priv->refclk);
-		goto out_release;
+	if (!info->refclk_in_pd) {
+		priv->refclk = devm_clk_get_optional(&pdev->dev, "refclk");
+		if (IS_ERR(priv->refclk)) {
+			error = PTR_ERR(priv->refclk);
+			goto out_release;
+		}
+		clk_prepare_enable(priv->refclk);
 	}
-	clk_prepare_enable(priv->refclk);
 
 	if (info->gptp_ref_clk) {
 		priv->gptp_clk = devm_clk_get(&pdev->dev, "gptp");
@@ -2869,7 +2872,8 @@ out_dma_free:
 	if (info->ccc_gac)
 		ravb_ptp_stop(ndev);
 out_disable_refclk:
-	clk_disable_unprepare(priv->refclk);
+	if (!info->refclk_in_pd)
+		clk_disable_unprepare(priv->refclk);
 out_release:
 	free_netdev(ndev);
 pm_runtime_put:
@@ -2890,7 +2894,8 @@ static void ravb_remove(struct platform_device *pdev)
 	if (info->ccc_gac)
 		ravb_ptp_stop(ndev);
 
-	clk_disable_unprepare(priv->refclk);
+	if (!info->refclk_in_pd)
+		clk_disable_unprepare(priv->refclk);
 
 	/* Set reset mode */
 	ravb_write(ndev, CCC_OPC_RESET, CCC);
