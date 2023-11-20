@@ -541,7 +541,7 @@ void irdma_cleanup_pending_cqp_op(struct irdma_pci_f *rf)
 	for (i = 0; i < pending_work; i++) {
 		cqp_request = (struct irdma_cqp_request *)(unsigned long)
 				      cqp->scratch_array[wqe_idx];
-		if (cqp_request)
+		if (cqp_request && cqp_request != (struct irdma_cqp_request *)&cqp->sc_cqp)
 			irdma_free_pending_cqp_request(cqp, cqp_request);
 		wqe_idx = (wqe_idx + 1) % IRDMA_RING_SIZE(cqp->sc_cqp.sq_ring);
 	}
