@@ -744,10 +744,6 @@ static int uncore_pmu_event_init(struct perf_event *event)
 	if (pmu->func_id < 0)
 		return -ENOENT;
 
-	/* Sampling not supported yet */
-	if (hwc->sample_period)
-		return -EINVAL;
-
 	/*
 	 * Place all uncore events for a particular physical package
 	 * onto a single cpu
@@ -919,7 +915,12 @@ static int uncore_pmu_register(struct intel_uncore_pmu *pmu)
 			.stop		= uncore_pmu_event_stop,
 			.read		= uncore_pmu_event_read,
 			.module		= THIS_MODULE,
-			.capabilities	= PERF_PMU_CAP_NO_EXCLUDE,
+			/*
+			 * It doesn't allow sampling for uncore events, let's
+			 * treat the PMU has no interrupts to skip them in the
+			 * perf_adjust_freq_unthr_context().
+			 */
+			.capabilities	= PERF_PMU_CAP_NO_EXCLUDE | PERF_PMU_CAP_NO_INTERRUPT,
 			.attr_update	= pmu->type->attr_update,
 		};
 	} else {
