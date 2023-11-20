@@ -128,6 +128,12 @@
 #define BCM54140_DEFAULT_DOWNSHIFT 5
 #define BCM54140_MAX_DOWNSHIFT 9
 
+enum bcm54140_global_phy {
+	BCM54140_BASE_ADDR = 0,
+
+	__BCM54140_GLOBAL_PHY_MAX,
+};
+
 struct bcm54140_priv {
 	int port;
 	int base_addr;
@@ -429,11 +435,13 @@ static int bcm54140_base_read_rdb(struct phy_device *phydev, u16 rdb)
 	int ret;
 
 	phy_lock_mdio_bus(phydev);
-	ret = __phy_package_write(phydev, MII_BCM54XX_RDB_ADDR, rdb);
+	ret = __phy_package_write(phydev, BCM54140_BASE_ADDR,
+				  MII_BCM54XX_RDB_ADDR, rdb);
 	if (ret < 0)
 		goto out;
 
-	ret = __phy_package_read(phydev, MII_BCM54XX_RDB_DATA);
+	ret = __phy_package_read(phydev, BCM54140_BASE_ADDR,
+				 MII_BCM54XX_RDB_DATA);
 
 out:
 	phy_unlock_mdio_bus(phydev);
@@ -446,11 +454,13 @@ static int bcm54140_base_write_rdb(struct phy_device *phydev,
 	int ret;
 
 	phy_lock_mdio_bus(phydev);
-	ret = __phy_package_write(phydev, MII_BCM54XX_RDB_ADDR, rdb);
+	ret = __phy_package_write(phydev, BCM54140_BASE_ADDR,
+				  MII_BCM54XX_RDB_ADDR, rdb);
 	if (ret < 0)
 		goto out;
 
-	ret = __phy_package_write(phydev, MII_BCM54XX_RDB_DATA, val);
+	ret = __phy_package_write(phydev, BCM54140_BASE_ADDR,
+				  MII_BCM54XX_RDB_DATA, val);
 
 out:
 	phy_unlock_mdio_bus(phydev);
@@ -570,6 +580,7 @@ static int bcm54140_get_base_addr_and_port(struct phy_device *phydev)
 
 static int bcm54140_probe(struct phy_device *phydev)
 {
+	int addrs[__BCM54140_GLOBAL_PHY_MAX];
 	struct bcm54140_priv *priv;
 	int ret;
 
@@ -583,7 +594,9 @@ static int bcm54140_probe(struct phy_device *phydev)
 	if (ret)
 		return ret;
 
-	devm_phy_package_join(&phydev->mdio.dev, phydev, priv->base_addr, 0);
+	addrs[BCM54140_BASE_ADDR] = priv->base_addr;
+	devm_phy_package_join(&phydev->mdio.dev, phydev, addrs,
+			      ARRAY_SIZE(addrs), 0);
 
 #if IS_ENABLED(CONFIG_HWMON)
 	mutex_init(&priv->alarm_lock);

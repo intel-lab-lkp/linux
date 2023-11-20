@@ -298,6 +298,12 @@ struct mtk_socphy_priv {
 	unsigned long		led_state;
 };
 
+enum mtk_global_phy {
+	MTK_BASE_ADDR = 0,
+
+	__MTK_GLOBAL_PHY_MAX
+};
+
 struct mtk_socphy_shared {
 	u32			boottrap;
 	struct mtk_socphy_priv	priv[4];
@@ -1431,13 +1437,16 @@ static void mt798x_phy_leds_state_init(struct phy_device *phydev)
 static int mt7988_phy_probe(struct phy_device *phydev)
 {
 	struct mtk_socphy_shared *shared;
+	int addrs[__MTK_GLOBAL_PHY_MAX];
 	struct mtk_socphy_priv *priv;
 	int err;
 
 	if (phydev->mdio.addr > 3)
 		return -EINVAL;
 
-	err = devm_phy_package_join(&phydev->mdio.dev, phydev, 0,
+	addrs[MTK_BASE_ADDR] = 0;
+	err = devm_phy_package_join(&phydev->mdio.dev, phydev,
+				    addrs, ARRAY_SIZE(addrs),
 				    sizeof(struct mtk_socphy_shared));
 	if (err)
 		return err;
