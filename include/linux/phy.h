@@ -896,6 +896,8 @@ struct phy_led {
  *   for PHY package global init. If defined, list is compared
  *   with DT values to match correct PHY phandle order. List
  *   last element MUST BE an empty string.
+ * @phy_package_priv_data_size: Size of the priv data to alloc
+ *   for shared struct of PHY package.
  *
  * All functions are optional. If config_aneg or read_status
  * are not implemented, the phy core uses the genphy versions.
@@ -915,6 +917,7 @@ struct phy_driver {
 	const void *driver_data;
 	unsigned int phy_package_global_phy_num;
 	const char * const *phy_package_global_phy_names;
+	unsigned int phy_package_priv_data_size;
 
 	/**
 	 * @soft_reset: Called to issue a PHY software reset
