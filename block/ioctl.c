@@ -394,7 +394,7 @@ static int blkdev_roset(struct block_device *bdev, unsigned cmd,
 		if (ret)
 			return ret;
 	}
-	bdev->bd_read_only = n;
+	set_bit(BD_FLAG_READ_ONLY, &bdev->flags);
 	return 0;
 }
 

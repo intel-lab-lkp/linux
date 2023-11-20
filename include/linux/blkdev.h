@@ -743,13 +743,14 @@ void disk_uevent(struct gendisk *disk, enum kobject_action action);
 
 static inline int get_disk_ro(struct gendisk *disk)
 {
-	return disk->part0->bd_read_only ||
+	return test_bit(BD_FLAG_READ_ONLY, &disk->part0->flags) ||
 		test_bit(GD_READ_ONLY, &disk->state);
 }
 
 static inline int bdev_read_only(struct block_device *bdev)
 {
-	return bdev->bd_read_only || get_disk_ro(bdev->bd_disk);
+	return test_bit(BD_FLAG_READ_ONLY, &bdev->flags) ||
+		get_disk_ro(bdev->bd_disk);
 }
 
 bool set_capacity_and_notify(struct gendisk *disk, sector_t size);

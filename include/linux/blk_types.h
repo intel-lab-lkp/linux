@@ -37,17 +37,20 @@ struct bio_crypt_ctx;
 #define PAGE_SECTORS		(1 << PAGE_SECTORS_SHIFT)
 #define SECTOR_MASK		(PAGE_SECTORS - 1)
 
+#define BD_FLAG_READ_ONLY	0 /* read-only-policy */
+#define BD_FLAG_WRITE_HOLDER	1
+#define BD_FLAG_HAS_SUBMIT_BIO	2
+#define BD_FLAG_MAKE_IT_FAIL	3
+
 struct block_device {
 	sector_t		bd_start_sect;
 	sector_t		bd_nr_sectors;
 	struct gendisk *	bd_disk;
 	struct request_queue *	bd_queue;
 	struct disk_stats __percpu *bd_stats;
+	unsigned long		flags;
 	unsigned long		bd_stamp;
-	bool			bd_read_only;	/* read-only policy */
 	u8			bd_partno;
-	bool			bd_write_holder;
-	bool			bd_has_submit_bio;
 	dev_t			bd_dev;
 	atomic_t		bd_openers;
 	spinlock_t		bd_size_lock; /* for bd_inode->i_size updates */
@@ -63,9 +66,6 @@ struct block_device {
 	struct mutex		bd_fsfreeze_mutex; /* serialize freeze/thaw */
 
 	struct partition_meta_info *bd_meta_info;
-#ifdef CONFIG_FAIL_MAKE_REQUEST
-	bool			bd_make_it_fail;
-#endif
 	int			bd_writers;
 	/*
 	 * keep this out-of-line as it's both big and not needed in the fast
