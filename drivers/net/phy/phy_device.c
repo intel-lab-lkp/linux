@@ -3199,6 +3199,7 @@ static int of_phy_package(struct phy_device *phydev)
 	struct device_node *node = phydev->mdio.dev.of_node;
 	struct of_phandle_args phy_phandle;
 	struct device_node *package_node;
+	const char *global_phy_name;
 	int i, global_phys_num, ret;
 	int *global_phy_addrs;
 
@@ -3236,6 +3237,18 @@ static int of_phy_package(struct phy_device *phydev)
 		ret = of_property_read_u32(phy_phandle.np, "reg", &addr);
 		if (ret)
 			goto exit;
+
+		ret = of_property_read_string_index(package_node, "global-phy-names",
+						    i, &global_phy_name);
+		if (!ret && phydev->drv->phy_package_global_phy_names) {
+			const char *name;
+
+			name = phydev->drv->phy_package_global_phy_names[i];
+			if (strcmp(global_phy_name, name)) {
+				ret = -EINVAL;
+				goto exit;
+			}
+		}
 
 		global_phy_addrs[i] = addr;
 	}

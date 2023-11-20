@@ -892,6 +892,10 @@ struct phy_led {
  * @driver_data: Static driver data
  * @phy_package_global_phy_num: Num of the required global phy
  *   for PHY package global configuration.
+ * @phy_package_global_phy_names: List of global PHY names used
+ *   for PHY package global init. If defined, list is compared
+ *   with DT values to match correct PHY phandle order. List
+ *   last element MUST BE an empty string.
  *
  * All functions are optional. If config_aneg or read_status
  * are not implemented, the phy core uses the genphy versions.
@@ -910,6 +914,7 @@ struct phy_driver {
 	u32 flags;
 	const void *driver_data;
 	unsigned int phy_package_global_phy_num;
+	const char * const *phy_package_global_phy_names;
 
 	/**
 	 * @soft_reset: Called to issue a PHY software reset
@@ -1154,7 +1159,6 @@ struct phy_driver {
 	 */
 	int (*led_hw_control_get)(struct phy_device *dev, u8 index,
 				  unsigned long *rules);
-
 };
 #define to_phy_driver(d) container_of(to_mdio_common_driver(d),		\
 				      struct phy_driver, mdiodrv)
