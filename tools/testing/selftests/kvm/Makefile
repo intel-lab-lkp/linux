@@ -211,6 +211,7 @@ TEST_GEN_PROGS_powerpc += dirty_log_test
 TEST_GEN_PROGS_powerpc += dirty_log_perf_test
 TEST_GEN_PROGS_powerpc += guest_print_test
 TEST_GEN_PROGS_powerpc += hardware_disable_test
+TEST_GEN_PROGS_powerpc += kvm_create_max_vcpus
 TEST_GEN_PROGS_powerpc += kvm_page_table_test
 TEST_GEN_PROGS_powerpc += max_guest_memory_test
 TEST_GEN_PROGS_powerpc += memslot_modification_stress_test
