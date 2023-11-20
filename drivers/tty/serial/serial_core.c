@@ -1402,14 +1402,20 @@ static void uart_set_rs485_termination(struct uart_port *port,
 				 !!(rs485->flags & SER_RS485_TERMINATE_BUS));
 }
 
+static void uart_set_rs485_mux(struct uart_port *port, const struct serial_rs485 *rs485)
+{
+	gpiod_set_value_cansleep(port->rs485_mux_gpio,
+				 !!(rs485->flags & SER_RS485_ENABLED));
+}
+
 static int uart_rs485_config(struct uart_port *port)
 {
 	struct serial_rs485 *rs485 = &port->rs485;
 	unsigned long flags;
-	int ret;
+	int ret = 0;
 
 	if (!(rs485->flags & SER_RS485_ENABLED))
-		return 0;
+		goto out;
 
 	uart_sanitize_serial_rs485(port, rs485);
 	uart_set_rs485_termination(port, rs485);
@@ -1419,6 +1425,9 @@ static int uart_rs485_config(struct uart_port *port)
 	uart_port_unlock_irqrestore(port, flags);
 	if (ret)
 		memset(rs485, 0, sizeof(*rs485));
+
+out:
+	uart_set_rs485_mux(port, rs485);
 
 	return ret;
 }
@@ -1457,6 +1466,14 @@ static int uart_set_rs485_config(struct tty_struct *tty, struct uart_port *port,
 		return ret;
 	uart_sanitize_serial_rs485(port, &rs485);
 	uart_set_rs485_termination(port, &rs485);
+	/*
+	 * To avoid glitches on the transmit enable pin, the mux must
+	 * be set before calling the driver's ->rs485_config when
+	 * disabling rs485 mode, but after when enabling rs485
+	 * mode.
+	 */
+	if (!(rs485.flags & SER_RS485_ENABLED))
+		uart_set_rs485_mux(port, &rs485);
 
 	uart_port_lock_irqsave(port, &flags);
 	ret = port->rs485_config(port, &tty->termios, &rs485);
@@ -1468,6 +1485,13 @@ static int uart_set_rs485_config(struct tty_struct *tty, struct uart_port *port,
 			port->ops->set_mctrl(port, port->mctrl);
 	}
 	uart_port_unlock_irqrestore(port, flags);
+
+	/*
+	 * The ->rs485_config might have failed. Regardless, set the
+	 * mux according to the port's effective rs485 config.
+	 */
+	uart_set_rs485_mux(port, &port->rs485);
+
 	if (ret)
 		return ret;
 
@@ -3620,6 +3644,13 @@ int uart_get_rs485_mode(struct uart_port *port)
 	if (IS_ERR(desc))
 		return dev_err_probe(dev, PTR_ERR(desc), "Cannot get rs485-rx-during-tx-gpios\n");
 	port->rs485_rx_during_tx_gpio = desc;
+
+	dflags = (rs485conf->flags & SER_RS485_ENABLED) ? GPIOD_OUT_HIGH : GPIOD_OUT_LOW;
+	desc = devm_gpiod_get_optional(dev, "rs485-mux", dflags);
+	if (IS_ERR(desc))
+		return dev_err_probe(dev, PTR_ERR(port->rs485_mux_gpio),
+				     "Cannot get rs485-mux-gpios\n");
+	port->rs485_mux_gpio = desc;
 
 	return 0;
 }
