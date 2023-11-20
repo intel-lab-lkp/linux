@@ -419,8 +419,17 @@ EXPORT_SYMBOL(ioport_unmap);
 #endif /* CONFIG_HAS_IOPORT_MAP */
 
 #ifdef CONFIG_PCI
-/* Hide the details if this is a MMIO or PIO address space and just do what
- * you expect in the correct way. */
+/*
+ * Hide the details if this is a MMIO or PIO address space and just do what
+ * you expect in the correct way.
+ *
+ * pci_iounmap() somewhat illogically comes from lib/iomap.c for the
+ * CONFIG_GENERIC_IOMAP case, because that's the code that knows about
+ * the different IOMAP ranges.
+ *
+ * For more details see also the pci_iounmap() implementation in
+ * drivers/pci/iomap.c
+ */
 void pci_iounmap(struct pci_dev *dev, void __iomem * addr)
 {
 	IO_COND(addr, /* nothing */, iounmap(addr));
