@@ -46,6 +46,19 @@ static void * __ref __earlyonly_bootmem_alloc(int node,
 					       MEMBLOCK_ALLOC_ACCESSIBLE, node);
 }
 
+unsigned long vmem_altmap_offset(struct vmem_altmap *altmap)
+{
+	/* number of pfns from base where pfn_to_page() is valid */
+	if (altmap)
+		return altmap->reserve + altmap->free;
+	return 0;
+}
+
+void vmem_altmap_free(struct vmem_altmap *altmap, unsigned long nr_pfns)
+{
+	altmap->alloc -= nr_pfns;
+}
+
 void * __meminit vmemmap_alloc_block(unsigned long size, int node)
 {
 	/* If the main allocator is up use that, fallback to bootmem. */
