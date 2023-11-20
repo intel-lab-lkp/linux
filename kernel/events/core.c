@@ -4121,10 +4121,15 @@ static void perf_adjust_freq_unthr_events(struct list_head *event_list)
 		if (hwc->interrupts == MAX_INTERRUPTS) {
 			hwc->interrupts = 0;
 			perf_log_throttle(event, 1);
-			event->pmu->start(event, 0);
-		}
 
-		if (!event->attr.freq || !event->attr.sample_freq)
+			if (!event->attr.freq || !event->attr.sample_freq) {
+				delta = 0;
+				goto next;
+			}
+
+			if (event->hw.state & PERF_HES_STOPPED)
+				goto adjust;
+		} else if (!event->attr.freq || !event->attr.sample_freq)
 			continue;
 
 		/*
@@ -4132,6 +4137,7 @@ static void perf_adjust_freq_unthr_events(struct list_head *event_list)
 		 */
 		event->pmu->stop(event, PERF_EF_UPDATE);
 
+adjust:
 		now = local64_read(&event->count);
 		delta = now - hwc->freq_count_stamp;
 		hwc->freq_count_stamp = now;
@@ -4146,6 +4152,7 @@ static void perf_adjust_freq_unthr_events(struct list_head *event_list)
 		if (delta > 0)
 			perf_adjust_period(event, period, delta, false);
 
+next:
 		event->pmu->start(event, delta > 0 ? PERF_EF_RELOAD : 0);
 	}
 }
