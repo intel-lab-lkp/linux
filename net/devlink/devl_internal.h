@@ -181,6 +181,8 @@ static inline bool devlink_nl_notify_need(struct devlink *devlink)
 struct devlink_obj_desc {
 	const char *bus_name;
 	const char *dev_name;
+	unsigned int port_index;
+	bool port_index_valid;
 	long data[];
 };
 
@@ -190,6 +192,13 @@ static inline void devlink_nl_obj_desc_init(struct devlink_obj_desc *desc,
 	memset(desc, 0, sizeof(*desc));
 	desc->bus_name = devlink->dev->bus->name;
 	desc->dev_name = dev_name(devlink->dev);
+}
+
+static inline void devlink_nl_obj_desc_port_set(struct devlink_obj_desc *desc,
+						struct devlink_port *devlink_port)
+{
+	desc->port_index = devlink_port->index;
+	desc->port_index_valid = true;
 }
 
 int devlink_nl_notify_filter(struct sock *dsk, struct sk_buff *skb, void *data);
