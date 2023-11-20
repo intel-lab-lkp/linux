@@ -1,0 +1,132 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/net/ethernet-phy-mode-types.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Ethernet PHY Common Mode Types
+
+maintainers:
+  - David S. Miller <davem@davemloft.net>
+
+definitions:
+  phy-connection-type:
+    # const: "internal"
+    allOf:
+      - $ref: /schemas/types.yaml#/definitions/string
+      - oneOf:
+        # There is not a standard bus between the MAC and the PHY,
+        # something proprietary is being used to embed the PHY in the
+        # MAC.
+        - items:
+            - type: string
+              const: internal
+        - items:
+            - type: string
+              const: mii
+        - items:
+            - type: string
+              const: gmii
+        - items:
+            - type: string
+              const: sgmii
+        - items:
+            - type: string
+              const: psgmii
+        - items:
+            - type: string
+              const: qsgmii
+        - items:
+            - type: string
+              const: qusgmii
+        - items:
+            - type: string
+              const: tbi
+        - items:
+            - type: string
+              const: rev-mii
+        - items:
+            - type: string
+              const: rmii
+        - items:
+            - type: string
+              const: rev-rmii
+        - items:
+            - type: string
+              const: moca
+
+        # RX and TX delays are added by the MAC when required
+        - items:
+            - type: string
+              const: rgmii
+
+        # RGMII with internal RX and TX delays provided by the PHY,
+        # the MAC should not add the RX or TX delays in this case
+        - items:
+            - type: string
+              const: rgmii-id
+
+        # RGMII with internal RX delay provided by the PHY, the MAC
+        # should not add an RX delay in this case
+        - items:
+            - type: string
+              const: rgmii-rxid
+
+        # RGMII with internal TX delay provided by the PHY, the MAC
+        # should not add an TX delay in this case
+        - items:
+            - type: string
+              const: rgmii-txid
+
+        - items:
+            - type: string
+              const: rtbi
+
+        - items:
+            - type: string
+              const: smii
+
+        - items:
+            - type: string
+              const: xgmii
+
+        - items:
+            - type: string
+              const: trgmii
+
+        - items:
+            - type: string
+              const: 1000base-x
+
+        - items:
+            - type: string
+              const: 2500base-x
+
+        - items:
+            - type: string
+              const: 5gbase-r
+
+        - items:
+            - type: string
+              const: rxaui
+
+        - items:
+            - type: string
+              const: xaui
+
+        # 10GBASE-KR, XFI, SFI
+        - items:
+            - type: string
+              const: 10gbase-kr
+
+        - items:
+            - type: string
+              const: usxgmii
+
+        - items:
+            - type: string
+              const: 10gbase-r
+
+        - items:
+            - type: string
+              const: 25gbase-r
