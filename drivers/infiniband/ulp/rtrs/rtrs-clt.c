@@ -1391,9 +1391,9 @@ static int alloc_path_reqs(struct rtrs_clt_path *clt_path)
 				      clt_path->max_pages_per_mr);
 		if (IS_ERR(req->mr)) {
 			err = PTR_ERR(req->mr);
+			pr_err("Failed to alloc clt_path->max_pages_per_mr %d: %pe\n",
+			       clt_path->max_pages_per_mr, req->mr);
 			req->mr = NULL;
-			pr_err("Failed to alloc clt_path->max_pages_per_mr %d\n",
-			       clt_path->max_pages_per_mr);
 			goto out;
 		}
 
@@ -2059,7 +2059,7 @@ static int create_cm(struct rtrs_clt_con *con)
 			       RDMA_PS_IB : RDMA_PS_TCP, IB_QPT_RC);
 	if (IS_ERR(cm_id)) {
 		err = PTR_ERR(cm_id);
-		rtrs_err(s, "Failed to create CM ID, err: %d\n", err);
+		rtrs_err(s, "Failed to create CM ID, err: %pe\n", cm_id);
 
 		return err;
 	}
