@@ -247,7 +247,6 @@ int pinconf_generic_parse_dt_config(struct device_node *np,
 {
 	unsigned long *cfg;
 	unsigned int max_cfg, ncfg = 0;
-	int ret;
 
 	if (!np)
 		return -EINVAL;
@@ -256,7 +255,7 @@ int pinconf_generic_parse_dt_config(struct device_node *np,
 	max_cfg = ARRAY_SIZE(dt_params);
 	if (pctldev)
 		max_cfg += pctldev->desc->num_custom_params;
-	cfg = kcalloc(max_cfg, sizeof(*cfg), GFP_KERNEL);
+	cfg = kmalloc_array(max_cfg, sizeof(*cfg), GFP_KERNEL);
 	if (!cfg)
 		return -ENOMEM;
 
@@ -266,30 +265,22 @@ int pinconf_generic_parse_dt_config(struct device_node *np,
 		parse_dt_cfg(np, pctldev->desc->custom_params,
 			     pctldev->desc->num_custom_params, cfg, &ncfg);
 
-	ret = 0;
-
 	/* no configs found at all */
 	if (ncfg == 0) {
+		kfree(cfg);
 		*configs = NULL;
 		*nconfigs = 0;
-		goto out;
+		return 0;
 	}
 
-	/*
-	 * Now limit the number of configs to the real number of
-	 * found properties.
-	 */
-	*configs = kmemdup(cfg, ncfg * sizeof(unsigned long), GFP_KERNEL);
-	if (!*configs) {
-		ret = -ENOMEM;
-		goto out;
-	}
+	/* Now resize the array to store the real number of found properties. */
+	*configs = krealloc_array(cfg, ncfg, sizeof(unsigned long), GFP_KERNEL);
+	if (!*configs)
+		return -ENOMEM;
 
 	*nconfigs = ncfg;
 
-out:
-	kfree(cfg);
-	return ret;
+	return 0;
 }
 EXPORT_SYMBOL_GPL(pinconf_generic_parse_dt_config);
 
