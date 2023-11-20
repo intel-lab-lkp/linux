@@ -324,6 +324,8 @@ enum bip_flags {
 	BIP_CTRL_NOCHECK	= 1 << 2, /* disable HBA integrity checking */
 	BIP_DISK_NOCHECK	= 1 << 3, /* disable disk integrity checking */
 	BIP_IP_CHECKSUM		= 1 << 4, /* IP checksum */
+	BIP_INTEGRITY_USER	= 1 << 5, /* Integrity payload is user address */
+	BIP_COPY_USER		= 1 << 6, /* Kernel bounce buffer in use */
 };
 
 /*
@@ -714,12 +716,16 @@ static inline bool bioset_initialized(struct bio_set *bs)
 #define bip_for_each_vec(bvl, bip, iter)				\
 	for_each_bvec(bvl, (bip)->bip_vec, iter, (bip)->bip_iter)
 
+#define bip_for_each_mp_vec(bvl, bip, iter)				\
+	for_each_mp_bvec(bvl, (bip)->bip_vec, iter, (bip)->bip_iter)
+
 #define bio_for_each_integrity_vec(_bvl, _bio, _iter)			\
 	for_each_bio(_bio)						\
 		bip_for_each_vec(_bvl, _bio->bi_integrity, _iter)
 
 extern struct bio_integrity_payload *bio_integrity_alloc(struct bio *, gfp_t, unsigned int);
 extern int bio_integrity_add_page(struct bio *, struct page *, unsigned int, unsigned int);
+extern int bio_integrity_map_user(struct bio *, void __user *, ssize_t, u32);
 extern bool bio_integrity_prep(struct bio *);
 extern void bio_integrity_advance(struct bio *, unsigned int);
 extern void bio_integrity_trim(struct bio *);
@@ -787,6 +793,12 @@ static inline int bio_integrity_add_page(struct bio *bio, struct page *page,
 					unsigned int len, unsigned int offset)
 {
 	return 0;
+}
+
+static inline int bio_integrity_map_user(struct bio *bio, void __user *ubuf,
+					 ssize_t len, u32 seed)
+{
+	return -EINVAL;
 }
 
 #endif /* CONFIG_BLK_DEV_INTEGRITY */
