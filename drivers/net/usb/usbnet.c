@@ -61,9 +61,6 @@
 
 /*-------------------------------------------------------------------------*/
 
-// randomly generated ethernet address
-static u8	node_id [ETH_ALEN];
-
 /* use ethtool to change the level for any given device */
 static int msg_level = -1;
 module_param (msg_level, int, 0);
@@ -1672,6 +1669,7 @@ usbnet_probe (struct usb_interface *udev, const struct usb_device_id *prod)
 	struct usb_device		*xdev;
 	int				status;
 	const char			*name;
+	u8				initialaddr[ETH_ALEN];
 	struct usb_driver 	*driver = to_usb_driver(udev->dev.driver);
 
 	/* usbnet already took usb runtime pm, so have to enable the feature
@@ -1683,6 +1681,7 @@ usbnet_probe (struct usb_interface *udev, const struct usb_device_id *prod)
 		pm_runtime_enable(&udev->dev);
 	}
 
+	eth_random_addr(initialaddr);
 	name = udev->dev.driver->name;
 	info = (const struct driver_info *) prod->driver_info;
 	if (!info) {
@@ -1731,7 +1730,7 @@ usbnet_probe (struct usb_interface *udev, const struct usb_device_id *prod)
 
 	dev->net = net;
 	strscpy(net->name, "usb%d", sizeof(net->name));
-	eth_hw_addr_set(net, node_id);
+	eth_hw_addr_set(net, initialaddr);
 
 	/* rx and tx sides can use different message sizes;
 	 * bind() should set rx_urb_size in that case.
@@ -1805,8 +1804,13 @@ usbnet_probe (struct usb_interface *udev, const struct usb_device_id *prod)
 		goto out4;
 	}
 
-	/* let userspace know we have a random address */
-	if (ether_addr_equal(net->dev_addr, node_id))
+	/* we assign a random MAC before we call bind
+	 * because we need to have the local assignment bit set
+	 * Before we mess around with temporary stuff we can
+	 * just as well generate a real random MAC
+	 * That means we need to set the flag if necessary
+	 */
+	if (ether_addr_equal(net->dev_addr, initialaddr))
 		net->addr_assign_type = NET_ADDR_RANDOM;
 
 	if ((dev->driver_info->flags & FLAG_WLAN) != 0)
@@ -2217,7 +2221,6 @@ static int __init usbnet_init(void)
 	BUILD_BUG_ON(
 		sizeof_field(struct sk_buff, cb) < sizeof(struct skb_data));
 
-	eth_random_addr(node_id);
 	return 0;
 }
 module_init(usbnet_init);
