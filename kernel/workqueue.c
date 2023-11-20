@@ -1106,6 +1106,7 @@ static bool kick_pool(struct worker_pool *pool)
 {
 	struct worker *worker = first_idle_worker(pool);
 	struct task_struct *p;
+	int cpu;
 
 	lockdep_assert_held(&pool->lock);
 
@@ -1133,10 +1134,13 @@ static bool kick_pool(struct worker_pool *pool)
 	 */
 	if (!pool->attrs->affn_strict &&
 	    !cpumask_test_cpu(p->wake_cpu, pool->attrs->__pod_cpumask)) {
-		struct work_struct *work = list_first_entry(&pool->worklist,
-						struct work_struct, entry);
-		p->wake_cpu = cpumask_any_distribute(pool->attrs->__pod_cpumask);
-		get_work_pwq(work)->stats[PWQ_STAT_REPATRIATED]++;
+		cpu = cpumask_any_distribute(pool->attrs->__pod_cpumask);
+		if (cpu < nr_cpu_ids) {
+			struct work_struct *work = list_first_entry(&pool->worklist,
+							struct work_struct, entry);
+			p->wake_cpu = cpu;
+			get_work_pwq(work)->stats[PWQ_STAT_REPATRIATED]++;
+		}
 	}
 #endif
 	wake_up_process(p);
