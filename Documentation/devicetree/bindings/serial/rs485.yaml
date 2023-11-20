@@ -61,6 +61,11 @@ properties:
       the active state enables RX during TX.
     maxItems: 1
 
+  rs485-mux-gpios:
+    description: GPIO pin to control muxing of the SOC signals to the RS485
+      transceiver.
+    maxItems: 1
+
 additionalProperties: true
 
 ...
