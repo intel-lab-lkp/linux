@@ -310,7 +310,7 @@ static int write_head(struct ubifs_info *c, int jhead, void *buf, int len,
  */
 static int make_reservation(struct ubifs_info *c, int jhead, int len)
 {
-	int err, cmt_retries = 0, nospc_retries = 0;
+	int err, cmt_retries = 0;
 
 again:
 	down_read(&c->commit_sem);
@@ -323,21 +323,14 @@ again:
 	if (err == -ENOSPC) {
 		/*
 		 * GC could not make any progress. We should try to commit
-		 * once because it could make some dirty space and GC would
-		 * make progress, so make the error -EAGAIN so that the below
-		 * will commit and re-try.
+		 * because it could make some dirty space and GC would make
+		 * progress, so that the below will commit and re-try. This
+		 * process could repeat many times(cmt_retries < 128),
+		 * journal heads in other threads could grab the dirty lebs,
+		 * which fails finding dirty LEBs of GC in current thread.
 		 */
-		if (nospc_retries++ < 2) {
-			dbg_jnl("no space, retry");
-			err = -EAGAIN;
-		}
-
-		/*
-		 * This means that the budgeting is incorrect. We always have
-		 * to be able to write to the media, because all operations are
-		 * budgeted. Deletions are not budgeted, though, but we reserve
-		 * an extra LEB for them.
-		 */
+		dbg_jnl("no space, retry");
+		err = -EAGAIN;
 	}
 
 	if (err != -EAGAIN)
@@ -350,7 +343,8 @@ again:
 	if (cmt_retries > 128) {
 		/*
 		 * This should not happen unless the journal size limitations
-		 * are too tough.
+		 * are too tough, or the racing between GC and journal heads
+		 * switching is too frequent when space is nearly run out.
 		 */
 		ubifs_err(c, "stuck in space allocation");
 		err = -ENOSPC;
