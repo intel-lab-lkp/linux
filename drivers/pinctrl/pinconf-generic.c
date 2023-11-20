@@ -265,14 +265,6 @@ int pinconf_generic_parse_dt_config(struct device_node *np,
 		parse_dt_cfg(np, pctldev->desc->custom_params,
 			     pctldev->desc->num_custom_params, cfg, &ncfg);
 
-	/* no configs found at all */
-	if (ncfg == 0) {
-		kfree(cfg);
-		*configs = NULL;
-		*nconfigs = 0;
-		return 0;
-	}
-
 	/* Now resize the array to store the real number of found properties. */
 	*configs = krealloc_array(cfg, ncfg, sizeof(unsigned long), GFP_KERNEL);
 	if (!*configs)
