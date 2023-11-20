@@ -252,7 +252,7 @@ static ssize_t ext2_dio_write_iter(struct kiocb *iocb, struct iov_iter *from)
 
 		iocb->ki_flags &= ~IOCB_DIRECT;
 		pos = iocb->ki_pos;
-		status = generic_perform_write(iocb, from);
+		status = iomap_file_buffered_write(iocb, from, &ext2_iomap_ops);
 		if (unlikely(status < 0)) {
 			ret = status;
 			goto out_unlock;
@@ -278,6 +278,22 @@ out_unlock:
 	return ret;
 }
 
+static ssize_t ext2_buffered_write_iter(struct kiocb *iocb,
+					struct iov_iter *from)
+{
+	ssize_t ret = 0;
+	struct inode *inode = file_inode(iocb->ki_filp);
+
+	inode_lock(inode);
+	ret = generic_write_checks(iocb, from);
+	if (ret > 0)
+		ret = iomap_file_buffered_write(iocb, from, &ext2_iomap_ops);
+	inode_unlock(inode);
+	if (ret > 0)
+		ret = generic_write_sync(iocb, ret);
+	return ret;
+}
+
 static ssize_t ext2_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 {
 #ifdef CONFIG_FS_DAX
@@ -299,7 +315,7 @@ static ssize_t ext2_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	if (iocb->ki_flags & IOCB_DIRECT)
 		return ext2_dio_write_iter(iocb, from);
 
-	return generic_file_write_iter(iocb, from);
+	return ext2_buffered_write_iter(iocb, from);
 }
 
 const struct file_operations ext2_file_operations = {

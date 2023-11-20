@@ -879,10 +879,14 @@ ext2_iomap_end(struct inode *inode, loff_t offset, loff_t length,
 	if ((flags & IOMAP_DIRECT) && (flags & IOMAP_WRITE) && written == 0)
 		return -ENOTBLK;
 
-	if (iomap->type == IOMAP_MAPPED &&
-	    written < length &&
-	    (flags & IOMAP_WRITE))
+	if (iomap->type == IOMAP_MAPPED && written < length &&
+	   (flags & IOMAP_WRITE)) {
 		ext2_write_failed(inode->i_mapping, offset + length);
+		return 0;
+	}
+
+	if (iomap->flags & IOMAP_F_SIZE_CHANGED)
+		mark_inode_dirty(inode);
 	return 0;
 }
 
@@ -914,6 +918,16 @@ static void ext2_readahead(struct readahead_control *rac)
 	mpage_readahead(rac, ext2_get_block);
 }
 
+static int ext2_file_read_folio(struct file *file, struct folio *folio)
+{
+	return iomap_read_folio(folio, &ext2_iomap_ops);
+}
+
+static void ext2_file_readahead(struct readahead_control *rac)
+{
+	return iomap_readahead(rac, &ext2_iomap_ops);
+}
+
 static int
 ext2_write_begin(struct file *file, struct address_space *mapping,
 		loff_t pos, unsigned len, struct page **pagep, void **fsdata)
@@ -943,10 +957,38 @@ static sector_t ext2_bmap(struct address_space *mapping, sector_t block)
 	return generic_block_bmap(mapping,block,ext2_get_block);
 }
 
+static sector_t ext2_file_bmap(struct address_space *mapping, sector_t block)
+{
+	return iomap_bmap(mapping, block, &ext2_iomap_ops);
+}
+
 static int
 ext2_writepages(struct address_space *mapping, struct writeback_control *wbc)
 {
 	return mpage_writepages(mapping, wbc, ext2_get_block);
+}
+
+static int ext2_write_map_blocks(struct iomap_writepage_ctx *wpc,
+				 struct inode *inode, loff_t offset)
+{
+	if (offset >= wpc->iomap.offset &&
+	    offset < wpc->iomap.offset + wpc->iomap.length)
+		return 0;
+
+	return ext2_iomap_begin(inode, offset, inode->i_sb->s_blocksize,
+				IOMAP_WRITE, &wpc->iomap, NULL);
+}
+
+static const struct iomap_writeback_ops ext2_writeback_ops = {
+	.map_blocks		= ext2_write_map_blocks,
+};
+
+static int ext2_file_writepages(struct address_space *mapping,
+				struct writeback_control *wbc)
+{
+	struct iomap_writepage_ctx wpc = { };
+
+	return iomap_writepages(mapping, wbc, &wpc, &ext2_writeback_ops);
 }
 
 static int
@@ -956,6 +998,20 @@ ext2_dax_writepages(struct address_space *mapping, struct writeback_control *wbc
 
 	return dax_writeback_mapping_range(mapping, sbi->s_daxdev, wbc);
 }
+
+const struct address_space_operations ext2_file_aops = {
+	.dirty_folio		= iomap_dirty_folio,
+	.release_folio		= iomap_release_folio,
+	.invalidate_folio	= iomap_invalidate_folio,
+	.read_folio		= ext2_file_read_folio,
+	.readahead		= ext2_file_readahead,
+	.bmap			= ext2_file_bmap,
+	.direct_IO		= noop_direct_IO,
+	.writepages		= ext2_file_writepages,
+	.migrate_folio		= filemap_migrate_folio,
+	.is_partially_uptodate	= iomap_is_partially_uptodate,
+	.error_remove_page	= generic_error_remove_page,
+};
 
 const struct address_space_operations ext2_aops = {
 	.dirty_folio		= block_dirty_folio,
@@ -1281,8 +1337,8 @@ static int ext2_setsize(struct inode *inode, loff_t newsize)
 		error = dax_truncate_page(inode, newsize, NULL,
 					  &ext2_iomap_ops);
 	else
-		error = block_truncate_page(inode->i_mapping,
-				newsize, ext2_get_block);
+		error = iomap_truncate_page(inode, newsize, NULL,
+					    &ext2_iomap_ops);
 	if (error)
 		return error;
 
@@ -1372,7 +1428,7 @@ void ext2_set_file_ops(struct inode *inode)
 	if (IS_DAX(inode))
 		inode->i_mapping->a_ops = &ext2_dax_aops;
 	else
-		inode->i_mapping->a_ops = &ext2_aops;
+		inode->i_mapping->a_ops = &ext2_file_aops;
 }
 
 struct inode *ext2_iget (struct super_block *sb, unsigned long ino)
