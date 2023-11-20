@@ -1425,10 +1425,12 @@ void ext2_set_file_ops(struct inode *inode)
 {
 	inode->i_op = &ext2_file_inode_operations;
 	inode->i_fop = &ext2_file_operations;
-	if (IS_DAX(inode))
+	if (IS_DAX(inode)) {
 		inode->i_mapping->a_ops = &ext2_dax_aops;
-	else
+	} else {
 		inode->i_mapping->a_ops = &ext2_file_aops;
+		mapping_set_large_folios(inode->i_mapping);
+	}
 }
 
 struct inode *ext2_iget (struct super_block *sb, unsigned long ino)
