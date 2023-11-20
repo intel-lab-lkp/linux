@@ -2635,24 +2635,25 @@ static int ravb_probe(struct platform_device *pdev)
 		return dev_err_probe(&pdev->dev, PTR_ERR(rstc),
 				     "failed to get cpg reset\n");
 
+	error = reset_control_deassert(rstc);
+	if (error)
+		return error;
+
+	pm_runtime_enable(&pdev->dev);
+	error = pm_runtime_resume_and_get(&pdev->dev);
+	if (error < 0)
+		goto pm_runtime_disable;
+
 	ndev = alloc_etherdev_mqs(sizeof(struct ravb_private),
 				  NUM_TX_QUEUE, NUM_RX_QUEUE);
-	if (!ndev)
-		return -ENOMEM;
-
+	if (!ndev) {
+		error = -ENOMEM;
+		goto pm_runtime_put;
+	}
 	info = of_device_get_match_data(&pdev->dev);
 
 	ndev->features = info->net_features;
 	ndev->hw_features = info->net_hw_features;
-
-	error = reset_control_deassert(rstc);
-	if (error) {
-		free_netdev(ndev);
-		return error;
-	}
-
-	pm_runtime_enable(&pdev->dev);
-	pm_runtime_get_sync(&pdev->dev);
 
 	if (info->multi_irqs) {
 		if (info->err_mgmt_irqs)
@@ -2878,8 +2879,9 @@ out_disable_refclk:
 	clk_disable_unprepare(priv->refclk);
 out_release:
 	free_netdev(ndev);
-
+pm_runtime_put:
 	pm_runtime_put(&pdev->dev);
+pm_runtime_disable:
 	pm_runtime_disable(&pdev->dev);
 	reset_control_assert(rstc);
 	return error;
