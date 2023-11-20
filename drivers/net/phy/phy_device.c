@@ -3194,6 +3194,65 @@ static int of_phy_leds(struct phy_device *phydev)
 	return 0;
 }
 
+static int of_phy_package(struct phy_device *phydev)
+{
+	struct device_node *node = phydev->mdio.dev.of_node;
+	struct of_phandle_args phy_phandle;
+	struct device_node *package_node;
+	int i, global_phys_num, ret;
+	int *global_phy_addrs;
+
+	if (!node)
+		return 0;
+
+	package_node = of_get_parent(node);
+	if (!package_node)
+		return 0;
+
+	if (!of_device_is_compatible(package_node, "ethernet-phy-package"))
+		return 0;
+
+	ret = of_count_phandle_with_args(package_node, "global-phys", NULL);
+	if (ret < 0)
+		return 0;
+	global_phys_num = ret;
+
+	if (global_phys_num != phydev->drv->phy_package_global_phy_num)
+		return -EINVAL;
+
+	global_phy_addrs = kmalloc_array(global_phys_num, sizeof(*global_phy_addrs),
+					 GFP_KERNEL);
+	if (!global_phy_addrs)
+		return -ENOMEM;
+
+	for (i = 0; i < global_phys_num; i++) {
+		int addr;
+
+		ret = of_parse_phandle_with_args(package_node, "global-phys",
+						 NULL, i, &phy_phandle);
+		if (ret)
+			goto exit;
+
+		ret = of_property_read_u32(phy_phandle.np, "reg", &addr);
+		if (ret)
+			goto exit;
+
+		global_phy_addrs[i] = addr;
+	}
+
+	ret = devm_phy_package_join(&phydev->mdio.dev, phydev, global_phy_addrs,
+				    global_phys_num, 0);
+	if (ret)
+		goto exit;
+
+	phydev->shared->np = package_node;
+
+exit:
+	kfree(global_phy_addrs);
+
+	return ret;
+}
+
 /**
  * fwnode_mdio_find_device - Given a fwnode, find the mdio_device
  * @fwnode: pointer to the mdio_device's fwnode
@@ -3301,6 +3360,11 @@ static int phy_probe(struct device *dev)
 
 	if (phydrv->flags & PHY_IS_INTERNAL)
 		phydev->is_internal = true;
+
+	/* Parse DT to detect PHY package and join them */
+	err = of_phy_package(phydev);
+	if (err)
+		goto out;
 
 	/* Deassert the reset signal */
 	phy_device_reset(phydev, 0);
