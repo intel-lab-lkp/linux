@@ -292,6 +292,7 @@ config ADI_AXI_ADC
 	select IIO_BUFFER
 	select IIO_BUFFER_HW_CONSUMER
 	select IIO_BUFFER_DMAENGINE
+	select IIO_BACKEND
 	depends on HAS_IOMEM
 	depends on OF
 	help
