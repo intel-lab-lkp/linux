@@ -507,6 +507,10 @@ int ufshcd_mcq_sq_cleanup(struct ufs_hba *hba, int task_tag)
 	if (hba->quirks & UFSHCD_QUIRK_MCQ_BROKEN_RTC)
 		return -ETIMEDOUT;
 
+	if (!ufshcd_cmd_inflight(cmd) ||
+	    test_bit(SCMD_STATE_COMPLETE, &cmd->state))
+		return 0;
+
 	if (task_tag != hba->nutrs - UFSHCD_NUM_RESERVED) {
 		if (!cmd)
 			return -EINVAL;
