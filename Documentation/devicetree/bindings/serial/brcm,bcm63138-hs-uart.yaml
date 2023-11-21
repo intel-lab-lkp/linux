@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/serial/brcm,bcm63138-hs-uart.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Broadcom's BCM63138 High Speed UART
+
+description:
+  High speed serial port controller that was designed to handle Bluetooth
+  devices communication. It supports sending custom frames that need to be
+  processed by a host system.
+
+maintainers:
+  - Rafał Miłecki <rafal@milecki.pl>
+
+allOf:
+  - $ref: serial.yaml#
+
+properties:
+  compatible:
+    const: brcm,bcm63138-hs-uart
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+required:
+  - reg
+  - interrupts
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+
+    serial@fffec400 {
+        compatible = "brcm,bcm63138-hs-uart";
+        reg = <0xfffec400 0x1e0>;
+        interrupts = <GIC_SPI 34 IRQ_TYPE_LEVEL_HIGH>;
+    };
