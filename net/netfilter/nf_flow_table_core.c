@@ -599,11 +599,11 @@ void nf_flow_table_cleanup(struct net_device *dev)
 }
 EXPORT_SYMBOL_GPL(nf_flow_table_cleanup);
 
-void nf_flow_table_free(struct nf_flowtable *flow_table)
+static void nf_flow_table_free_rwork(struct work_struct *work)
 {
-	mutex_lock(&flowtable_lock);
-	list_del(&flow_table->list);
-	mutex_unlock(&flowtable_lock);
+	struct nf_flowtable *flow_table;
+
+	flow_table = container_of(to_rcu_work(work), struct nf_flowtable, rwork);
 
 	cancel_delayed_work_sync(&flow_table->gc_work);
 	nf_flow_table_offload_flush(flow_table);
@@ -614,6 +614,16 @@ void nf_flow_table_free(struct nf_flowtable *flow_table)
 	rhashtable_destroy(&flow_table->rhashtable);
 	module_put(flow_table->type->owner);
 	kfree(flow_table);
+}
+
+void nf_flow_table_free(struct nf_flowtable *flow_table)
+{
+	mutex_lock(&flowtable_lock);
+	list_del(&flow_table->list);
+	mutex_unlock(&flowtable_lock);
+
+	INIT_RCU_WORK(&flow_table->rwork, nf_flow_table_free_rwork);
+	queue_rcu_work(system_power_efficient_wq, &flow_table->rwork);
 }
 EXPORT_SYMBOL_GPL(nf_flow_table_free);
 
