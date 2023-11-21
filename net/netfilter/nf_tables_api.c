@@ -8288,6 +8288,15 @@ static void nft_hooks_destroy(struct list_head *hook_list)
 	}
 }
 
+static bool nft_flowtable_flag_changes(const struct nf_flowtable *ft,
+				       unsigned int new_flags, enum nft_flowtable_flags flag)
+{
+	if ((ft->flags & flag) ^ (new_flags & flag))
+		return true;
+
+	return false;
+}
+
 static int nft_flowtable_update(struct nft_ctx *ctx, const struct nlmsghdr *nlh,
 				struct nft_flowtable *flowtable,
 				struct netlink_ext_ack *extack)
@@ -8318,8 +8327,9 @@ static int nft_flowtable_update(struct nft_ctx *ctx, const struct nlmsghdr *nlh,
 			err = -EOPNOTSUPP;
 			goto err_flowtable_update_hook;
 		}
-		if ((flowtable->ft->flags & NFT_FLOWTABLE_HW_OFFLOAD) ^
-		    (flags & NFT_FLOWTABLE_HW_OFFLOAD)) {
+
+		if (nft_flowtable_flag_changes(flowtable->ft, flags, NFT_FLOWTABLE_HW_OFFLOAD) ||
+		    nft_flowtable_flag_changes(flowtable->ft, flags, NFT_FLOWTABLE_XDP_OFFLOAD)) {
 			err = -EOPNOTSUPP;
 			goto err_flowtable_update_hook;
 		}
