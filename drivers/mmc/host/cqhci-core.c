@@ -474,8 +474,7 @@ static int cqhci_dma_map(struct mmc_host *host, struct mmc_request *mrq)
 	return sg_count;
 }
 
-static void cqhci_set_tran_desc(u8 *desc, dma_addr_t addr, int len, bool end,
-				bool dma64)
+void cqhci_set_tran_desc(u8 *desc, dma_addr_t addr, int len, bool end, bool dma64)
 {
 	__le32 *attr = (__le32 __force *)desc;
 
@@ -495,9 +494,10 @@ static void cqhci_set_tran_desc(u8 *desc, dma_addr_t addr, int len, bool end,
 		dataddr[0] = cpu_to_le32(addr);
 	}
 }
+EXPORT_SYMBOL_GPL(cqhci_set_tran_desc);
 
 static int cqhci_prep_tran_desc(struct mmc_request *mrq,
-			       struct cqhci_host *cq_host, int tag)
+				struct cqhci_host *cq_host, int tag)
 {
 	struct mmc_data *data = mrq->data;
 	int i, sg_count, len;
@@ -515,6 +515,13 @@ static int cqhci_prep_tran_desc(struct mmc_request *mrq,
 	}
 
 	desc = get_trans_desc(cq_host, tag);
+
+#ifdef CONFIG_MMC_DW_CQE
+	if (cq_host->ops->setup_tran_desc) {
+		cq_host->ops->setup_tran_desc(data, cq_host, desc, sg_count);
+		return 0;
+	}
+#endif
 
 	for_each_sg(data->sg, sg, sg_count, i) {
 		addr = sg_dma_address(sg);
