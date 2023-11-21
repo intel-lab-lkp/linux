@@ -45,7 +45,11 @@ char * __init xbc_get_embedded_bootconfig(size_t *size)
  * node (for array).
  */
 
+#ifdef CONFIG_BOOT_CONFIG_EMBED
+static struct xbc_node xbc_nodes[XBC_NODE_MAX];
+#else
 static struct xbc_node *xbc_nodes __initdata;
+#endif
 static int xbc_node_num __initdata;
 static char *xbc_data __initdata;
 static bool xbc_data_allocated __initdata;
@@ -914,8 +918,12 @@ void __init xbc_exit(void)
 	xbc_data_size = 0;
 	xbc_data_allocated = 0;
 	xbc_node_num = 0;
+#ifdef CONFIG_BOOT_CONFIG_EMBED
+	memset(xbc_nodes, 0, sizeof(xbc_nodes));
+#else
 	xbc_free_mem(xbc_nodes, sizeof(struct xbc_node) * XBC_NODE_MAX);
 	xbc_nodes = NULL;
+#endif
 	brace_index = 0;
 }
 
@@ -973,6 +981,7 @@ int __init xbc_init(char *data, size_t size, const char **emsg, int *epos)
 		return -ERANGE;
 	}
 
+#ifndef CONFIG_BOOT_CONFIG_EMBED
 	xbc_nodes = xbc_alloc_mem(sizeof(struct xbc_node) * XBC_NODE_MAX);
 	if (!xbc_nodes) {
 		if (emsg)
@@ -980,7 +989,7 @@ int __init xbc_init(char *data, size_t size, const char **emsg, int *epos)
 		return -ENOMEM;
 	}
 	memset(xbc_nodes, 0, sizeof(struct xbc_node) * XBC_NODE_MAX);
-
+#endif
 	if (!data)
 		return 0;
 	xbc_data = data;
@@ -999,6 +1008,7 @@ int __init xbc_append(const char *data, size_t size, const char **emsg, int *epo
 {
 	size_t new_size, parse_start;
 	char *new_data;
+	int ret;
 
 	new_size = xbc_data_size + size;
 	if (new_size > XBC_DATA_MAX) {
@@ -1024,8 +1034,8 @@ int __init xbc_append(const char *data, size_t size, const char **emsg, int *epo
 
 	if (xbc_data_size) {
 		memcpy(new_data, xbc_data, xbc_data_size - 1);
-		new_data[xbc_data_size - 1] = '\n';
 		parse_start = xbc_data_size - 1;
+		new_data[parse_start] = '\n';
 	} else {
 		parse_start = 0;
 	}
@@ -1039,6 +1049,8 @@ int __init xbc_append(const char *data, size_t size, const char **emsg, int *epo
 
 	if (!data)
 		return 0;
-
-	return xbc_parse_and_verify_tree(parse_start, epos, emsg);
+	ret = xbc_parse_and_verify_tree(parse_start, epos, emsg);
+	if (ret && epos)
+		*epos -= parse_start;
+	return ret;
 }

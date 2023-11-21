@@ -161,6 +161,9 @@ Boot Kernel With a Boot Config
 There are two options to boot the kernel with bootconfig: attaching the
 bootconfig to the initrd image or embedding it in the kernel itself.
 
+Early options may be specified only in the embedded bootconfig, because
+they are processed before the initrd.
+
 Attaching a Boot Config to Initrd
 ---------------------------------
 

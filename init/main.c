@@ -158,6 +158,9 @@ static size_t initargs_offs;
 static char *execute_command;
 static char *ramdisk_execute_command = "/init";
 
+static int __init do_early_param(char *param, char *val,
+				 const char *unused, void *arg);
+
 /*
  * Used to generate warnings if static_key manipulation functions are used
  * before jump_label_init is called.
@@ -406,63 +409,134 @@ static int __init warn_bootconfig(char *str)
 	return 0;
 }
 
-static void __init setup_boot_config(void)
+static void __init boot_config_pr_err(const char *msg, int pos, const char *src)
+{
+	if (pos < 0)
+		pr_err("Failed to init bootconfig: %s.\n", msg);
+	else
+		pr_err("Failed to parse %s bootconfig: %s at %d.\n",
+				src, msg, pos);
+}
+
+static int __init setup_boot_config_early(void)
 {
 	static char tmp_cmdline[COMMAND_LINE_SIZE] __initdata;
-	const char *msg, *initrd_data;
-	int pos, ret;
-	size_t initrd_size, embeded_size = 0;
-	char *err, *embeded_data = NULL;
+	static int prev_rtn __initdata;
+	struct xbc_node *root, *knode, *vnode;
+	char *embeded_data, *err;
+	const char *val, *msg;
+	size_t embeded_size;
+	int ret, pos;
 
-	/* Cut out the bootconfig data even if we have no bootconfig option */
-	initrd_data = get_boot_config_from_initrd(&initrd_size);
-	/* If there is no bootconfig in initrd, try embedded one. */
-	if (!initrd_data || IS_ENABLED(CONFIG_BOOT_CONFIG_EMBED_APPEND_INITRD))
-		embeded_data = xbc_get_embedded_bootconfig(&embeded_size);
+	if (prev_rtn)
+		return prev_rtn;
 
+	embeded_data = xbc_get_embedded_bootconfig(&embeded_size);
 	strscpy(tmp_cmdline, boot_command_line, COMMAND_LINE_SIZE);
 	err = parse_args("bootconfig", tmp_cmdline, NULL, 0, 0, 0, NULL,
 			 bootconfig_params);
-
-	if (IS_ERR(err) || !(bootconfig_found || IS_ENABLED(CONFIG_BOOT_CONFIG_FORCE)))
-		return;
-
+	if (IS_ERR(err) || !(bootconfig_found || IS_ENABLED(CONFIG_BOOT_CONFIG_FORCE))) {
+		prev_rtn = embeded_data ? -ENOMSG : -ENODATA;
+		return prev_rtn;
+	}
 	/* parse_args() stops at the next param of '--' and returns an address */
 	if (err)
 		initargs_offs = err - tmp_cmdline;
 
-	if (!initrd_data && !embeded_data) {
-		/* If user intended to use bootconfig, show an error level message */
-		if (bootconfig_found)
-			pr_err("'bootconfig' found on command line, but no bootconfig found\n");
-		else
-			pr_info("No bootconfig data provided, so skipping bootconfig");
-		return;
+	if (!embeded_data) {
+		prev_rtn = -ENOPROTOOPT;
+		return prev_rtn;
 	}
 
 	ret = xbc_init(embeded_data, embeded_size, &msg, &pos);
-	if (ret < 0)
-		goto err0;
+	if (ret < 0) {
+		boot_config_pr_err(msg, pos, "embedded");
+		prev_rtn = ret;
+		return prev_rtn;
+	}
+	prev_rtn = 1;
+
+	/* Process early options */
+	root = xbc_find_node("kernel");
+	if (!root)
+		goto out;
+
+	xbc_node_for_each_key_value(root, knode, val) {
+		ret = xbc_node_compose_key_after(root, knode,
+				xbc_namebuf, XBC_KEYLEN_MAX);
+		if (ret < 0)
+			continue;
+
+		vnode = xbc_node_get_child(knode);
+		if (!vnode) {
+			do_early_param(xbc_namebuf, NULL, NULL, NULL);
+			continue;
+		}
+
+		xbc_array_for_each_value(vnode, val) {
+			if (strscpy(tmp_cmdline, val, sizeof(tmp_cmdline)) < 1) {
+				pr_err("Value for '%s' too long\n", xbc_namebuf);
+				break;
+			}
+			do_early_param(xbc_namebuf, tmp_cmdline, NULL, NULL);
+		}
+	}
+
+out:	return embeded_data ? 1 : 0;
+}
+
+static void __init setup_boot_config(void)
+{
+	const char *msg, *initrd_data;
+	int pos, ret;
+	size_t initrd_size, s;
+
+	/* Cut out the bootconfig data even if we have no bootconfig option */
+	initrd_data = get_boot_config_from_initrd(&initrd_size);
+
+	ret = setup_boot_config_early();
+	if (ret == -ENOMSG || (ret == -ENODATA && initrd_data)) {
+		pr_info("Bootconfig data present, but handling is disabled\n");
+		return;
+	} else if (ret == -ENODATA) {
+		/* Bootconfig disabled and bootconfig data are not present */
+		return;
+	} else if (ret == -ENOPROTOOPT) {
+		/* Embedded bootconfig not found */
+		if (!initrd_data) {
+			pr_err("'bootconfig' found on command line, but no bootconfig data found\n");
+			return;
+		}
+		ret = xbc_init(NULL, 0, &msg, &pos);
+		if (ret)
+			goto err0;
+	} else if (ret < 0) {
+		/* Other error, should be logged already */
+		return;
+	} else if (initrd_data && !IS_ENABLED(CONFIG_BOOT_CONFIG_EMBED_APPEND_INITRD)) {
+		/* Embedded bootconfig handled, but we should not append to it */
+		xbc_get_info(&ret, &s);
+		pr_info("Replacing embedded bootconfig of %d nodes and %zu bytes.\n", ret, s);
+		xbc_exit();
+		ret = xbc_init(NULL, 0, &msg, &pos);
+		if (ret)
+			goto err0;
+	}
 
 	/* Call append even if no data are there as embedded bootconfig is in .init */
 	ret = xbc_append(initrd_data, initrd_size, &msg, &pos);
 	if (ret < 0)
 		goto err0;
 
-	xbc_get_info(&ret, NULL);
-	pr_info("Load bootconfig: %ld bytes %d nodes\n", (long)(embeded_size + initrd_size), ret);
+	xbc_get_info(&ret, &s);
+	pr_info("Load bootconfig: %d nodes %zu bytes.\n", ret, s);
 	/* keys starting with "kernel." are passed via cmdline */
 	extra_command_line = xbc_make_cmdline("kernel");
 	/* Also, "init." keys are init arguments */
 	extra_init_args = xbc_make_cmdline("init");
 	return;
 
-err0:	if (pos < 0)
-		pr_err("Failed to init bootconfig: %s.\n", msg);
-	else
-		pr_err("Failed to parse %s bootconfig: %s at %zu.\n",
-				pos < embeded_size ? "embedded" : "initrd",
-				msg, pos < embeded_size ? pos : pos - embeded_size);
+err0:	boot_config_pr_err(msg, pos, "initrd");
 }
 
 static void __init exit_boot_config(void)
@@ -769,6 +843,11 @@ void __init parse_early_param(void)
 
 	if (done)
 		return;
+
+#ifdef CONFIG_BOOT_CONFIG_EMBED
+	/* Process early options from boot config */
+	setup_boot_config_early();
+#endif
 
 	/* All fall through to do_early_param. */
 	strscpy(tmp_cmdline, boot_command_line, COMMAND_LINE_SIZE);
