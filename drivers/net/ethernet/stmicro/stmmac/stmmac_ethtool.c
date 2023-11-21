@@ -749,23 +749,24 @@ static void stmmac_get_strings(struct net_device *dev, u32 stringset, u8 *data)
 				if (!stmmac_safety_feat_dump(priv,
 							&priv->sstats, i,
 							NULL, &desc)) {
-					memcpy(p, desc, ETH_GSTRING_LEN);
+					strscpy(p, desc, ETH_GSTRING_LEN);
 					p += ETH_GSTRING_LEN;
 				}
 			}
 		}
 		if (priv->dma_cap.rmon)
 			for (i = 0; i < STMMAC_MMC_STATS_LEN; i++) {
-				memcpy(p, stmmac_mmc[i].stat_string,
-				       ETH_GSTRING_LEN);
+				strscpy(p, stmmac_mmc[i].stat_string,
+					ETH_GSTRING_LEN);
 				p += ETH_GSTRING_LEN;
 			}
 		for (i = 0; i < STMMAC_STATS_LEN; i++) {
-			memcpy(p, stmmac_gstrings_stats[i].stat_string, ETH_GSTRING_LEN);
+			strscpy(p, stmmac_gstrings_stats[i].stat_string,
+				ETH_GSTRING_LEN);
 			p += ETH_GSTRING_LEN;
 		}
 		for (i = 0; i < STMMAC_QSTATS; i++) {
-			memcpy(p, stmmac_qstats_string[i], ETH_GSTRING_LEN);
+			strscpy(p, stmmac_qstats_string[i], ETH_GSTRING_LEN);
 			p += ETH_GSTRING_LEN;
 		}
 		stmmac_get_qstats_string(priv, p);
