@@ -352,6 +352,8 @@ enum rw_hint {
  * unrelated IO (like cache flushing, new IO generation, etc).
  */
 #define IOCB_DIO_CALLER_COMP	(1 << 22)
+/* file_start_write() was called */
+#define IOCB_WRITE_STARTED	(1 << 23)
 
 /* for use in trace events */
 #define TRACE_IOCB_STRINGS \
@@ -366,7 +368,8 @@ enum rw_hint {
 	{ IOCB_WAITQ,		"WAITQ" }, \
 	{ IOCB_NOIO,		"NOIO" }, \
 	{ IOCB_ALLOC_CACHE,	"ALLOC_CACHE" }, \
-	{ IOCB_DIO_CALLER_COMP,	"CALLER_COMP" }
+	{ IOCB_DIO_CALLER_COMP,	"CALLER_COMP" }, \
+	{ IOCB_WRITE_STARTED,	"WRITE_STARTED" }
 
 struct kiocb {
 	struct file		*ki_filp;
@@ -2199,12 +2202,15 @@ static inline void init_sync_kiocb(struct kiocb *kiocb, struct file *filp)
 	};
 }
 
+/* IOCB flags associated with ki_filp state must not be cloned */
+#define IOCB_CLONE_FLAGS_MASK	(~IOCB_WRITE_STARTED)
+
 static inline void kiocb_clone(struct kiocb *kiocb, struct kiocb *kiocb_src,
 			       struct file *filp)
 {
 	*kiocb = (struct kiocb) {
 		.ki_filp = filp,
-		.ki_flags = kiocb_src->ki_flags,
+		.ki_flags = kiocb_src->ki_flags & IOCB_CLONE_FLAGS_MASK,
 		.ki_ioprio = kiocb_src->ki_ioprio,
 		.ki_pos = kiocb_src->ki_pos,
 	};
@@ -2760,12 +2766,16 @@ static inline void kiocb_start_write(struct kiocb *iocb)
 {
 	struct inode *inode = file_inode(iocb->ki_filp);
 
+	if (WARN_ON_ONCE(iocb->ki_flags & IOCB_WRITE_STARTED))
+		return;
+
 	sb_start_write(inode->i_sb);
 	/*
 	 * Fool lockdep by telling it the lock got released so that it
 	 * doesn't complain about the held lock when we return to userspace.
 	 */
 	__sb_writers_release(inode->i_sb, SB_FREEZE_WRITE);
+	iocb->ki_flags |= IOCB_WRITE_STARTED;
 }
 
 /**
@@ -2778,11 +2788,15 @@ static inline void kiocb_end_write(struct kiocb *iocb)
 {
 	struct inode *inode = file_inode(iocb->ki_filp);
 
+	if (!(iocb->ki_flags & IOCB_WRITE_STARTED))
+		return;
+
 	/*
 	 * Tell lockdep we inherited freeze protection from submission thread.
 	 */
 	__sb_writers_acquired(inode->i_sb, SB_FREEZE_WRITE);
 	sb_end_write(inode->i_sb);
+	iocb->ki_flags &= ~IOCB_WRITE_STARTED;
 }
 
 /*
