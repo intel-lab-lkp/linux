@@ -612,6 +612,8 @@ void nf_flow_table_free(struct nf_flowtable *flow_table)
 	nf_flow_table_gc_run(flow_table);
 	nf_flow_table_offload_flush_cleanup(flow_table);
 	rhashtable_destroy(&flow_table->rhashtable);
+	module_put(flow_table->type->owner);
+	kfree(flow_table);
 }
 EXPORT_SYMBOL_GPL(nf_flow_table_free);
 

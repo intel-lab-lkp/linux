@@ -321,6 +321,7 @@ static int tcf_ct_flow_table_get(struct net *net, struct tcf_ct_params *params)
 	ct_ft->nf_ft->flags |= NF_FLOWTABLE_HW_OFFLOAD |
 			       NF_FLOWTABLE_COUNTER;
 
+	/* released via nf_flow_table_free() */
 	__module_get(THIS_MODULE);
 out_unlock:
 	params->ct_ft = ct_ft;
@@ -347,7 +348,6 @@ static void tcf_ct_flow_table_cleanup_work(struct work_struct *work)
 
 	ct_ft = container_of(to_rcu_work(work), struct tcf_ct_flow_table,
 			     rwork);
-	nf_flow_table_free(ct_ft->nf_ft);
 
 	/* Remove any remaining callbacks before cleanup */
 	block = &ct_ft->nf_ft->flow_block;
@@ -357,10 +357,8 @@ static void tcf_ct_flow_table_cleanup_work(struct work_struct *work)
 		flow_block_cb_free(block_cb);
 	}
 	up_write(&ct_ft->nf_ft->flow_block_lock);
-	kfree(ct_ft->nf_ft);
+	nf_flow_table_free(ct_ft->nf_ft);
 	kfree(ct_ft);
-
-	module_put(THIS_MODULE);
 }
 
 static void tcf_ct_flow_table_put(struct tcf_ct_flow_table *ct_ft)
