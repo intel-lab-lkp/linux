@@ -410,26 +410,25 @@ static struct dma_buf *export_and_register_object(struct drm_device *dev,
 }
 
 /**
- * drm_gem_prime_handle_to_fd - PRIME export function for GEM drivers
+ * drm_gem_prime_handle_to_dmabuf - PRIME export function for GEM drivers
  * @dev: dev to export the buffer from
  * @file_priv: drm file-private structure
  * @handle: buffer handle to export
  * @flags: flags like DRM_CLOEXEC
- * @prime_fd: pointer to storage for the fd id of the create dma-buf
+ * @dma_buf: pointer to storage for the dma-buf reference
  *
  * This is the PRIME export function which must be used mandatorily by GEM
  * drivers to ensure correct lifetime management of the underlying GEM object.
  * The actual exporting from GEM object to a dma-buf is done through the
  * &drm_gem_object_funcs.export callback.
  */
-int drm_gem_prime_handle_to_fd(struct drm_device *dev,
-			       struct drm_file *file_priv, uint32_t handle,
-			       uint32_t flags,
-			       int *prime_fd)
+struct dma_buf *drm_gem_prime_handle_to_dmabuf(struct drm_device *dev,
+					       struct drm_file *file_priv,
+					       uint32_t handle, uint32_t flags)
 {
 	struct drm_gem_object *obj;
 	int ret = 0;
-	struct dma_buf *dmabuf;
+	struct dma_buf *dmabuf = NULL;
 
 	mutex_lock(&file_priv->prime.lock);
 	obj = drm_gem_object_lookup(file_priv, handle);
@@ -441,7 +440,7 @@ int drm_gem_prime_handle_to_fd(struct drm_device *dev,
 	dmabuf = drm_prime_lookup_buf_by_handle(&file_priv->prime, handle);
 	if (dmabuf) {
 		get_dma_buf(dmabuf);
-		goto out_have_handle;
+		goto out;
 	}
 
 	mutex_lock(&dev->object_name_lock);
@@ -479,40 +478,22 @@ out_have_obj:
 				       dmabuf, handle);
 	mutex_unlock(&dev->object_name_lock);
 	if (ret)
-		goto fail_put_dmabuf;
-
-out_have_handle:
-	ret = dma_buf_fd(dmabuf, flags);
-	/*
-	 * We must _not_ remove the buffer from the handle cache since the newly
-	 * created dma buf is already linked in the global obj->dma_buf pointer,
-	 * and that is invariant as long as a userspace gem handle exists.
-	 * Closing the handle will clean out the cache anyway, so we don't leak.
-	 */
-	if (ret < 0) {
-		goto fail_put_dmabuf;
-	} else {
-		*prime_fd = ret;
-		ret = 0;
-	}
-
-	goto out;
-
-fail_put_dmabuf:
-	dma_buf_put(dmabuf);
+		dma_buf_put(dmabuf);
 out:
 	drm_gem_object_put(obj);
 out_unlock:
 	mutex_unlock(&file_priv->prime.lock);
 
-	return ret;
+	return ret ? ERR_PTR(ret) : dmabuf;
 }
-EXPORT_SYMBOL(drm_gem_prime_handle_to_fd);
+EXPORT_SYMBOL(drm_gem_prime_handle_to_dmabuf);
 
 int drm_prime_handle_to_fd_ioctl(struct drm_device *dev, void *data,
 				 struct drm_file *file_priv)
 {
 	struct drm_prime_handle *args = data;
+	struct dma_buf *dmabuf;
+	int ret;
 
 	/* check flags are valid */
 	if (args->flags & ~(DRM_CLOEXEC | DRM_RDWR))
@@ -523,8 +504,24 @@ int drm_prime_handle_to_fd_ioctl(struct drm_device *dev, void *data,
 						       args->handle, args->flags,
 						       &args->fd);
 	}
-	return drm_gem_prime_handle_to_fd(dev, file_priv, args->handle,
-					  args->flags, &args->fd);
+	dmabuf = drm_gem_prime_handle_to_dmabuf(dev, file_priv, args->handle,
+						args->flags);
+	if (IS_ERR(dmabuf))
+		return PTR_ERR(dmabuf);
+	ret = dma_buf_fd(dmabuf, args->flags);
+	/*
+	 * We must _not_ remove the buffer from the handle cache since the newly
+	 * created dma buf is already linked in the global obj->dma_buf pointer,
+	 * and that is invariant as long as a userspace gem handle exists.
+	 * Closing the handle will clean out the cache anyway, so we don't leak.
+	 */
+	if (ret < 0) {
+		dma_buf_put(dmabuf);
+	} else {
+		args->fd = ret;
+		ret = 0;
+	}
+	return ret;
 }
 
 /**
