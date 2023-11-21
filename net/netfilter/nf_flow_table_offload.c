@@ -17,6 +17,92 @@ static struct workqueue_struct *nf_flow_offload_add_wq;
 static struct workqueue_struct *nf_flow_offload_del_wq;
 static struct workqueue_struct *nf_flow_offload_stats_wq;
 
+struct flow_offload_xdp {
+	struct hlist_node hnode;
+
+	unsigned long net_device_addr;
+	struct nf_flowtable *ft;
+
+	struct rcu_head	rcuhead;
+};
+
+#define NF_XDP_HT_BITS	4
+static DEFINE_HASHTABLE(nf_xdp_hashtable, NF_XDP_HT_BITS);
+static DEFINE_MUTEX(nf_xdp_hashtable_lock);
+
+/* caller must hold rcu read lock */
+struct nf_flowtable *nf_flowtable_by_dev(const struct net_device *dev)
+{
+	unsigned long key = (unsigned long)dev;
+	const struct flow_offload_xdp *cur;
+
+	hash_for_each_possible_rcu(nf_xdp_hashtable, cur, hnode, key) {
+		if (key == cur->net_device_addr)
+			return cur->ft;
+	}
+
+	return NULL;
+}
+
+static int nf_flowtable_by_dev_insert(struct nf_flowtable *ft,
+				      const struct net_device *dev)
+{
+	unsigned long key = (unsigned long)dev;
+	struct flow_offload_xdp *cur;
+	int err = 0;
+
+	mutex_lock(&nf_xdp_hashtable_lock);
+	hash_for_each_possible(nf_xdp_hashtable, cur, hnode, key) {
+		if (key != cur->net_device_addr)
+			continue;
+		err = -EEXIST;
+		break;
+	}
+
+	if (err == 0) {
+		struct flow_offload_xdp *new;
+
+		new = kzalloc(sizeof(*new), GFP_KERNEL_ACCOUNT);
+		if (new) {
+			new->net_device_addr = key;
+			new->ft = ft;
+
+			hash_add_rcu(nf_xdp_hashtable, &new->hnode, key);
+		} else {
+			err = -ENOMEM;
+		}
+	}
+
+	mutex_unlock(&nf_xdp_hashtable_lock);
+
+	DEBUG_NET_WARN_ON_ONCE(err == 0 && nf_flowtable_by_dev(dev) != ft);
+
+	return err;
+}
+
+static void nf_flowtable_by_dev_remove(const struct net_device *dev)
+{
+	unsigned long key = (unsigned long)dev;
+	struct flow_offload_xdp *cur;
+	bool found = false;
+
+	mutex_lock(&nf_xdp_hashtable_lock);
+
+	hash_for_each_possible(nf_xdp_hashtable, cur, hnode, key) {
+		if (key != cur->net_device_addr)
+			continue;
+
+		hash_del_rcu(&cur->hnode);
+		kfree_rcu(cur, rcuhead);
+		found = true;
+		break;
+	}
+
+	mutex_unlock(&nf_xdp_hashtable_lock);
+
+	WARN_ON_ONCE(!found);
+}
+
 struct flow_offload_work {
 	struct list_head	list;
 	enum flow_cls_command	cmd;
@@ -1183,6 +1269,44 @@ static int nf_flow_table_offload_cmd(struct flow_block_offload *bo,
 	return 0;
 }
 
+static int nf_flow_offload_xdp_setup(struct nf_flowtable *flowtable,
+				     struct net_device *dev,
+				     enum flow_block_command cmd)
+{
+	if (!nf_flowtable_xdp_offload(flowtable))
+		return 0;
+
+	switch (cmd) {
+	case FLOW_BLOCK_BIND:
+		return nf_flowtable_by_dev_insert(flowtable, dev);
+	case FLOW_BLOCK_UNBIND:
+		nf_flowtable_by_dev_remove(dev);
+		return 0;
+	}
+
+	WARN_ON_ONCE(1);
+	return 0;
+}
+
+static void nf_flow_offload_xdp_cancel(struct nf_flowtable *flowtable,
+				       struct net_device *dev,
+				       enum flow_block_command cmd)
+{
+	if (!nf_flowtable_xdp_offload(flowtable))
+		return;
+
+	switch (cmd) {
+	case FLOW_BLOCK_BIND:
+		nf_flowtable_by_dev_remove(dev);
+		return;
+	case FLOW_BLOCK_UNBIND:
+		/* We do not re-bind in case hw offload would report error
+		 * on *unregister*.
+		 */
+		break;
+	}
+}
+
 int nf_flow_table_offload_setup(struct nf_flowtable *flowtable,
 				struct net_device *dev,
 				enum flow_block_command cmd)
@@ -1190,6 +1314,9 @@ int nf_flow_table_offload_setup(struct nf_flowtable *flowtable,
 	struct netlink_ext_ack extack = {};
 	struct flow_block_offload bo;
 	int err;
+
+	if (nf_flow_offload_xdp_setup(flowtable, dev, cmd))
+		return -EBUSY;
 
 	if (!nf_flowtable_hw_offload(flowtable))
 		return 0;
@@ -1200,8 +1327,10 @@ int nf_flow_table_offload_setup(struct nf_flowtable *flowtable,
 	else
 		err = nf_flow_table_indr_offload_cmd(&bo, flowtable, dev, cmd,
 						     &extack);
-	if (err < 0)
+	if (err < 0) {
+		nf_flow_offload_xdp_cancel(flowtable, dev, cmd);
 		return err;
+	}
 
 	return nf_flow_table_block_setup(flowtable, &bo, cmd);
 }

@@ -8198,7 +8198,8 @@ static bool nft_flowtable_offload_clash(struct net *net,
 	const struct nft_table *table;
 
 	/* No offload requested, no need to validate */
-	if (!nf_flowtable_hw_offload(flowtable->ft))
+	if (!nf_flowtable_hw_offload(flowtable->ft) &&
+	    !nf_flowtable_xdp_offload(flowtable->ft))
 		return false;
 
 	nft_net = nft_pernet(net);

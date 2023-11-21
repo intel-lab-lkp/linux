@@ -92,6 +92,11 @@ static inline bool nf_flowtable_hw_offload(struct nf_flowtable *flowtable)
 	return flowtable->flags & NF_FLOWTABLE_HW_OFFLOAD;
 }
 
+static inline bool nf_flowtable_xdp_offload(struct nf_flowtable *flowtable)
+{
+	return flowtable->flags & NF_FLOWTABLE_XDP_OFFLOAD;
+}
+
 enum flow_offload_tuple_dir {
 	FLOW_OFFLOAD_DIR_ORIGINAL = IP_CT_DIR_ORIGINAL,
 	FLOW_OFFLOAD_DIR_REPLY = IP_CT_DIR_REPLY,
@@ -297,6 +302,8 @@ void nf_flow_dnat_port(const struct flow_offload *flow,
 struct flow_ports {
 	__be16 source, dest;
 };
+
+struct nf_flowtable *nf_flowtable_by_dev(const struct net_device *dev);
 
 unsigned int nf_flow_offload_ip_hook(void *priv, struct sk_buff *skb,
 				     const struct nf_hook_state *state);
