@@ -262,6 +262,7 @@ struct s2255_dev {
 	int                     chn_ready;
 	/* dsp firmware version (f2255usb.bin) */
 	int                     dsp_fw_ver;
+	int                     usb_fw_ver;
 	u16                     pid; /* product id */
 #define S2255_CMDBUF_SIZE 512
 	__le32                  *cmdbuf;
@@ -323,6 +324,9 @@ struct s2255_buffer {
 #define S2255_V4L2_YC_ON  1
 #define S2255_V4L2_YC_OFF 0
 #define V4L2_CID_S2255_COLORFILTER (V4L2_CID_USER_S2255_BASE + 0)
+#define V4L2_CID_S2255_DEVICEID (V4L2_CID_USER_S2255_BASE + 1)
+#define V4L2_CID_S2255_DSPFWVER (V4L2_CID_USER_S2255_BASE + 2)
+#define V4L2_CID_S2255_USBFWVER (V4L2_CID_USER_S2255_BASE + 3)
 
 /* frame prefix size (sent once every frame) */
 #define PREFIX_SIZE		512
@@ -1232,6 +1236,56 @@ static int s2255_s_ctrl(struct v4l2_ctrl *ctrl)
 	return 0;
 }
 
+static int s2255_read_reg_burst(struct s2255_dev *dev, u8 dev_addr,
+				u16 reg_addr, u8 *data, u8 datalen)
+{
+	int rc;
+
+	rc = s2255_vendor_req(dev, 0x22, reg_addr, dev_addr >> 1, data, datalen, 0);
+	return rc;
+}
+
+static int s2255_g_volatile_ctrl(struct v4l2_ctrl *ctrl)
+{
+	u8 *outbuf;
+	int rc;
+	struct s2255_vc *vc =
+		container_of(ctrl->handler, struct s2255_vc, hdl);
+	struct s2255_dev *dev = vc->dev;
+
+	if (ctrl->id == V4L2_CID_S2255_DSPFWVER) {
+		ctrl->val = dev->dsp_fw_ver;
+		return 0;
+	}
+	if (ctrl->id == V4L2_CID_S2255_USBFWVER) {
+		ctrl->val = dev->usb_fw_ver;
+		return 0;
+	}
+	if (ctrl->id != V4L2_CID_S2255_DEVICEID)
+		return -EINVAL;
+	if (dev == NULL)
+		return -EINVAL;
+#define S2255_I2C_SIZE     16
+	outbuf = kzalloc(S2255_I2C_SIZE * sizeof(u8), GFP_KERNEL);
+	if (outbuf == NULL)
+		return -ENOMEM;
+#define S2255_I2C_SNDEV    0xa2
+#define S2255_I2C_SNOFFSET 0x1ff0
+	rc = s2255_read_reg_burst(dev, S2255_I2C_SNDEV, S2255_I2C_SNOFFSET, outbuf, S2255_I2C_SIZE);
+	if (rc < 0) {
+		kfree(outbuf);
+		return rc;
+	}
+	// verify marker code
+	if (*(unsigned int *)outbuf != 0xddccbbaa) {
+		kfree(outbuf);
+		return -EFAULT;
+	}
+	ctrl->val = (outbuf[12] << 24) + (outbuf[13] << 16) + (outbuf[14] << 8) + outbuf[15];
+	kfree(outbuf);
+	return 0;
+}
+
 static int vidioc_g_jpegcomp(struct file *file, void *priv,
 			 struct v4l2_jpegcompression *jc)
 {
@@ -1569,6 +1623,7 @@ static const struct video_device template = {
 
 static const struct v4l2_ctrl_ops s2255_ctrl_ops = {
 	.s_ctrl = s2255_s_ctrl,
+	.g_volatile_ctrl = s2255_g_volatile_ctrl,
 };
 
 static const struct v4l2_ctrl_config color_filter_ctrl = {
@@ -1579,6 +1634,42 @@ static const struct v4l2_ctrl_config color_filter_ctrl = {
 	.max = 1,
 	.step = 1,
 	.def = 1,
+};
+
+static const struct v4l2_ctrl_config v4l2_ctrl_deviceid = {
+	.ops = &s2255_ctrl_ops,
+	.name = "Device ID",
+	.id = V4L2_CID_S2255_DEVICEID,
+	.type = V4L2_CTRL_TYPE_INTEGER,
+	.max = 0xffffffff,
+	.min = 0,
+	.step = 1,
+	.def = 0,
+	.flags = V4L2_CTRL_FLAG_VOLATILE | V4L2_CTRL_FLAG_READ_ONLY,
+};
+
+static const struct v4l2_ctrl_config v4l2_ctrl_dspfwver = {
+	.ops = &s2255_ctrl_ops,
+	.name = "DSP Firmware",
+	.id = V4L2_CID_S2255_DSPFWVER,
+	.type = V4L2_CTRL_TYPE_INTEGER,
+	.max = 0xffffffff,
+	.min = 0,
+	.step = 1,
+	.def = 0,
+	.flags = V4L2_CTRL_FLAG_VOLATILE | V4L2_CTRL_FLAG_READ_ONLY,
+};
+
+static const struct v4l2_ctrl_config v4l2_ctrl_usbfwver = {
+	.ops = &s2255_ctrl_ops,
+	.name = "USB Firmware",
+	.id = V4L2_CID_S2255_USBFWVER,
+	.type = V4L2_CTRL_TYPE_INTEGER,
+	.max = 0xffffffff,
+	.min = 0,
+	.step = 1,
+	.def = 0,
+	.flags = V4L2_CTRL_FLAG_VOLATILE | V4L2_CTRL_FLAG_READ_ONLY,
 };
 
 static int s2255_probe_v4l(struct s2255_dev *dev)
@@ -1615,6 +1706,12 @@ static int s2255_probe_v4l(struct s2255_dev *dev)
 		    (dev->pid != 0x2257 || vc->idx <= 1))
 			v4l2_ctrl_new_custom(&vc->hdl, &color_filter_ctrl,
 					     NULL);
+		v4l2_ctrl_new_custom(&vc->hdl, &v4l2_ctrl_deviceid,
+				NULL);
+		v4l2_ctrl_new_custom(&vc->hdl, &v4l2_ctrl_usbfwver,
+				NULL);
+		v4l2_ctrl_new_custom(&vc->hdl, &v4l2_ctrl_dspfwver,
+				NULL);
 		if (vc->hdl.error) {
 			ret = vc->hdl.error;
 			v4l2_ctrl_handler_free(&vc->hdl);
@@ -1983,6 +2080,7 @@ static int s2255_board_init(struct s2255_dev *dev)
 	}
 	/* query the firmware */
 	fw_ver = s2255_get_fx2fw(dev);
+	dev->usb_fw_ver = fw_ver;
 
 	pr_info("s2255: usb firmware version %d.%d\n",
 		(fw_ver >> 8) & 0xff,
