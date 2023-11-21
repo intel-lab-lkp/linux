@@ -125,6 +125,14 @@ attribute-sets:
         type: uint
         doc: |
           Amount of memory held by inflight pages.
+      -
+        name: destroyed
+        type: uint
+        doc: |
+          Seconds in CLOCK_BOOTTIME of when Page Pool was destroyed.
+          Page Pools wait for all the memory allocated from them to be freed
+          before truly disappearing.
+          Absent if Page Pool hasn't been destroyed.
 
 operations:
   list:
@@ -176,6 +184,7 @@ operations:
             - napi-id
             - inflight
             - inflight-mem
+            - destroyed
       dump:
         reply: *pp-reply
       config-cond: page-pool
