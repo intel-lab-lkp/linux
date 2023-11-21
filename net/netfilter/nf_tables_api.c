@@ -8100,11 +8100,11 @@ static int nft_flowtable_parse_hook(const struct nft_ctx *ctx,
 
 		if (tb[NFTA_FLOWTABLE_HOOK_PRIORITY]) {
 			priority = ntohl(nla_get_be32(tb[NFTA_FLOWTABLE_HOOK_PRIORITY]));
-			if (priority != flowtable->data.priority)
+			if (priority != flowtable->ft->priority)
 				return -EOPNOTSUPP;
 		}
 
-		flowtable_hook->priority	= flowtable->data.priority;
+		flowtable_hook->priority	= flowtable->ft->priority;
 		flowtable_hook->num		= flowtable->hooknum;
 	}
 
@@ -8121,8 +8121,8 @@ static int nft_flowtable_parse_hook(const struct nft_ctx *ctx,
 		hook->ops.pf		= NFPROTO_NETDEV;
 		hook->ops.hooknum	= flowtable_hook->num;
 		hook->ops.priority	= flowtable_hook->priority;
-		hook->ops.priv		= &flowtable->data;
-		hook->ops.hook		= flowtable->data.type->hook;
+		hook->ops.priv		= flowtable->ft;
+		hook->ops.hook		= flowtable->ft->type->hook;
 	}
 
 	return err;
@@ -8164,8 +8164,8 @@ static void nft_unregister_flowtable_hook(struct net *net,
 					  struct nft_hook *hook)
 {
 	nf_unregister_net_hook(net, &hook->ops);
-	flowtable->data.type->setup(&flowtable->data, hook->ops.dev,
-				    FLOW_BLOCK_UNBIND);
+	flowtable->ft->type->setup(flowtable->ft, hook->ops.dev,
+				   FLOW_BLOCK_UNBIND);
 }
 
 static void __nft_unregister_flowtable_net_hooks(struct net *net,
@@ -8212,17 +8212,15 @@ static int nft_register_flowtable_net_hooks(struct net *net,
 			}
 		}
 
-		err = flowtable->data.type->setup(&flowtable->data,
-						  hook->ops.dev,
-						  FLOW_BLOCK_BIND);
+		err = flowtable->ft->type->setup(flowtable->ft, hook->ops.dev,
+						 FLOW_BLOCK_BIND);
 		if (err < 0)
 			goto err_unregister_net_hooks;
 
 		err = nf_register_net_hook(net, &hook->ops);
 		if (err < 0) {
-			flowtable->data.type->setup(&flowtable->data,
-						    hook->ops.dev,
-						    FLOW_BLOCK_UNBIND);
+			flowtable->ft->type->setup(flowtable->ft, hook->ops.dev,
+						   FLOW_BLOCK_UNBIND);
 			goto err_unregister_net_hooks;
 		}
 
@@ -8284,13 +8282,13 @@ static int nft_flowtable_update(struct nft_ctx *ctx, const struct nlmsghdr *nlh,
 			err = -EOPNOTSUPP;
 			goto err_flowtable_update_hook;
 		}
-		if ((flowtable->data.flags & NFT_FLOWTABLE_HW_OFFLOAD) ^
+		if ((flowtable->ft->flags & NFT_FLOWTABLE_HW_OFFLOAD) ^
 		    (flags & NFT_FLOWTABLE_HW_OFFLOAD)) {
 			err = -EOPNOTSUPP;
 			goto err_flowtable_update_hook;
 		}
 	} else {
-		flags = flowtable->data.flags;
+		flags = flowtable->ft->flags;
 	}
 
 	err = nft_register_flowtable_net_hooks(ctx->net, ctx->table,
@@ -8402,18 +8400,24 @@ static int nf_tables_newflowtable(struct sk_buff *skb,
 		goto err2;
 	}
 
+	flowtable->ft = kzalloc(sizeof(*flowtable->ft), GFP_KERNEL_ACCOUNT);
+	if (!flowtable->ft) {
+		err = -ENOMEM;
+		goto err3;
+	}
+
 	if (nla[NFTA_FLOWTABLE_FLAGS]) {
-		flowtable->data.flags =
+		flowtable->ft->flags =
 			ntohl(nla_get_be32(nla[NFTA_FLOWTABLE_FLAGS]));
-		if (flowtable->data.flags & ~NFT_FLOWTABLE_MASK) {
+		if (flowtable->ft->flags & ~NFT_FLOWTABLE_MASK) {
 			err = -EOPNOTSUPP;
 			goto err3;
 		}
 	}
 
-	write_pnet(&flowtable->data.net, net);
-	flowtable->data.type = type;
-	err = type->init(&flowtable->data);
+	write_pnet(&flowtable->ft->net, net);
+	flowtable->ft->type = type;
+	err = type->init(flowtable->ft);
 	if (err < 0)
 		goto err3;
 
@@ -8423,7 +8427,7 @@ static int nf_tables_newflowtable(struct sk_buff *skb,
 		goto err4;
 
 	list_splice(&flowtable_hook.list, &flowtable->hook_list);
-	flowtable->data.priority = flowtable_hook.priority;
+	flowtable->ft->priority = flowtable_hook.priority;
 	flowtable->hooknum = flowtable_hook.num;
 
 	err = nft_register_flowtable_net_hooks(ctx.net, table,
@@ -8448,8 +8452,9 @@ err5:
 		kfree_rcu(hook, rcu);
 	}
 err4:
-	flowtable->data.type->free(&flowtable->data);
+	flowtable->ft->type->free(flowtable->ft);
 err3:
+	kfree(flowtable->ft);
 	module_put(type->owner);
 err2:
 	kfree(flowtable->name);
@@ -8603,14 +8608,14 @@ static int nf_tables_fill_flowtable_info(struct sk_buff *skb, struct net *net,
 	}
 
 	if (nla_put_be32(skb, NFTA_FLOWTABLE_USE, htonl(flowtable->use)) ||
-	    nla_put_be32(skb, NFTA_FLOWTABLE_FLAGS, htonl(flowtable->data.flags)))
+	    nla_put_be32(skb, NFTA_FLOWTABLE_FLAGS, htonl(flowtable->ft->flags)))
 		goto nla_put_failure;
 
 	nest = nla_nest_start_noflag(skb, NFTA_FLOWTABLE_HOOK);
 	if (!nest)
 		goto nla_put_failure;
 	if (nla_put_be32(skb, NFTA_FLOWTABLE_HOOK_NUM, htonl(flowtable->hooknum)) ||
-	    nla_put_be32(skb, NFTA_FLOWTABLE_HOOK_PRIORITY, htonl(flowtable->data.priority)))
+	    nla_put_be32(skb, NFTA_FLOWTABLE_HOOK_PRIORITY, htonl(flowtable->ft->priority)))
 		goto nla_put_failure;
 
 	nest_devs = nla_nest_start_noflag(skb, NFTA_FLOWTABLE_HOOK_DEVS);
@@ -8825,15 +8830,16 @@ static void nf_tables_flowtable_destroy(struct nft_flowtable *flowtable)
 {
 	struct nft_hook *hook, *next;
 
-	flowtable->data.type->free(&flowtable->data);
+	flowtable->ft->type->free(flowtable->ft);
 	list_for_each_entry_safe(hook, next, &flowtable->hook_list, list) {
-		flowtable->data.type->setup(&flowtable->data, hook->ops.dev,
-					    FLOW_BLOCK_UNBIND);
+		flowtable->ft->type->setup(flowtable->ft, hook->ops.dev,
+					   FLOW_BLOCK_UNBIND);
 		list_del_rcu(&hook->list);
 		kfree(hook);
 	}
 	kfree(flowtable->name);
-	module_put(flowtable->data.type->owner);
+	module_put(flowtable->ft->type->owner);
+	kfree(flowtable->ft);
 	kfree(flowtable);
 }
 
@@ -10164,7 +10170,7 @@ static int nf_tables_commit(struct net *net, struct sk_buff *skb)
 			break;
 		case NFT_MSG_NEWFLOWTABLE:
 			if (nft_trans_flowtable_update(trans)) {
-				nft_trans_flowtable(trans)->data.flags =
+				nft_trans_flowtable(trans)->ft->flags =
 					nft_trans_flowtable_flags(trans);
 				nf_tables_flowtable_notify(&trans->ctx,
 							   nft_trans_flowtable(trans),

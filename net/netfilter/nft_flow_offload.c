@@ -196,7 +196,7 @@ static void nft_dev_forward_path(struct nf_flow_route *route,
 	int i;
 
 	if (nft_dev_fill_forward_path(route, dst, ct, dir, ha, &stack) >= 0)
-		nft_dev_path_info(&stack, &info, ha, &ft->data);
+		nft_dev_path_info(&stack, &info, ha, ft->ft);
 
 	if (!info.indev || !nft_flowtable_find_dev(info.indev, ft))
 		return;
@@ -293,7 +293,7 @@ static void nft_flow_offload_eval(const struct nft_expr *expr,
 				  const struct nft_pktinfo *pkt)
 {
 	struct nft_flow_offload *priv = nft_expr_priv(expr);
-	struct nf_flowtable *flowtable = &priv->flowtable->data;
+	struct nf_flowtable *flowtable = priv->flowtable->ft;
 	struct tcphdr _tcph, *tcph = NULL;
 	struct nf_flow_route route = {};
 	enum ip_conntrack_info ctinfo;
