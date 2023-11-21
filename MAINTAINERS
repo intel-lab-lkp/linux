@@ -21725,6 +21725,7 @@ T:	git git://git.kernel.org/pub/scm/linux/kernel/git/brgl/linux.git
 F:	Documentation/devicetree/bindings/i2c/i2c-davinci.txt
 F:	arch/arm/boot/dts/ti/davinci/
 F:	arch/arm/mach-davinci/
+F:	drivers/bus/da8xx-mstpri.c
 F:	drivers/i2c/busses/i2c-davinci.c
 
 TI DAVINCI SERIES CLOCK DRIVER
