@@ -403,6 +403,7 @@ int folio_migrate_mapping(struct address_space *mapping,
 	XA_STATE(xas, &mapping->i_pages, folio_index(folio));
 	struct zone *oldzone, *newzone;
 	int dirty;
+	void *entry;
 	int expected_count = folio_expected_refs(mapping, folio) + extra_count;
 	long nr = folio_nr_pages(folio);
 
@@ -454,6 +455,16 @@ int folio_migrate_mapping(struct address_space *mapping,
 	}
 
 	xas_store(&xas, newfolio);
+	entry = xas_next(&xas);
+
+	if (nr > 1 && !xa_is_sibling(entry)) {
+		int i;
+
+		for (i = 1; i < nr; ++i) {
+			xas_store(&xas, newfolio);
+			xas_next(&xas);
+		}
+	}
 
 	/*
 	 * Drop cache reference from old page by unfreezing
