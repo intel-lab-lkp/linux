@@ -136,6 +136,9 @@ struct scan_control {
 	/* Always discard instead of demoting to lower tier memory */
 	unsigned int no_demotion:1;
 
+	/* Swap space is exhausted, only reclaim swapcache for anon LRU */
+	unsigned int swapcache_only:1;
+
 	/* Allocation order */
 	s8 order;
 
@@ -308,10 +311,36 @@ static bool can_demote(int nid, struct scan_control *sc)
 	return true;
 }
 
+#ifdef CONFIG_SWAP
+static bool can_reclaim_swapcache(struct mem_cgroup *memcg, int nid)
+{
+	struct pglist_data *pgdat = NODE_DATA(nid);
+	unsigned long nr_swapcache;
+
+	if (!memcg) {
+		nr_swapcache = node_page_state(pgdat, NR_SWAPCACHE);
+	} else {
+		struct lruvec *lruvec = mem_cgroup_lruvec(memcg, pgdat);
+
+		nr_swapcache = lruvec_page_state_local(lruvec, NR_SWAPCACHE);
+	}
+
+	return nr_swapcache > 0;
+}
+#else
+static bool can_reclaim_swapcache(struct mem_cgroup *memcg, int nid)
+{
+	return false;
+}
+#endif
+
 static inline bool can_reclaim_anon_pages(struct mem_cgroup *memcg,
 					  int nid,
 					  struct scan_control *sc)
 {
+	if (sc)
+		sc->swapcache_only = 0;
+
 	if (memcg == NULL) {
 		/*
 		 * For non-memcg reclaim, is there
@@ -330,7 +359,17 @@ static inline bool can_reclaim_anon_pages(struct mem_cgroup *memcg,
 	 *
 	 * Can it be reclaimed from this node via demotion?
 	 */
-	return can_demote(nid, sc);
+	if (can_demote(nid, sc))
+		return true;
+
+	/* Is there any swapcache pages to reclaim in this node? */
+	if (can_reclaim_swapcache(memcg, nid)) {
+		if (sc)
+			sc->swapcache_only = 1;
+		return true;
+	}
+
+	return false;
 }
 
 /*
@@ -1641,6 +1680,15 @@ static unsigned long isolate_lru_folios(unsigned long nr_to_scan,
 		 * Account all pages in a folio.
 		 */
 		scan += nr_pages;
+
+		/*
+		 * Count non-swapcache too because the swapcache pages may
+		 * be rare and it takes too much times here if not count
+		 * the non-swapcache pages.
+		 */
+		if (unlikely(sc->swapcache_only && !is_file_lru(lru) &&
+		    !folio_test_swapcache(folio)))
+			goto move;
 
 		if (!folio_test_lru(folio))
 			goto move;
