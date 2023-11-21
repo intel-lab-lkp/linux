@@ -2275,9 +2275,8 @@ static ext4_lblk_t ext4_ext_determine_hole(struct inode *inode,
  * calculate boundaries of the gap that the requested block fits into
  * and cache this gap
  */
-static void
-ext4_ext_put_gap_in_cache(struct inode *inode, ext4_lblk_t hole_start,
-			  ext4_lblk_t hole_len)
+void ext4_ext_put_gap_in_cache(struct inode *inode, ext4_lblk_t hole_start,
+			       ext4_lblk_t hole_len)
 {
 	struct extent_status es;
 
