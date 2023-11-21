@@ -130,6 +130,10 @@ The format as returned by :ref:`VIDIOC_TRY_FMT <VIDIOC_G_FMT>` must be identical
       - ``meta``
       - Definition of a metadata format, see :ref:`meta-formats`, used by
 	metadata capture devices.
+    * - struct :c:type:`v4l2_audio_format`
+      - ``audio``
+      - Definition of a audio data format, see :ref:`audiomem2mem`, used by
+        audio memory-to-memory devices
     * - __u8
       - ``raw_data``\ [200]
       - Place holder for future extensions.
