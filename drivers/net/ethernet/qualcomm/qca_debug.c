@@ -252,9 +252,7 @@ qcaspi_get_ringparam(struct net_device *dev, struct ethtool_ringparam *ring,
 {
 	struct qcaspi *qca = netdev_priv(dev);
 
-	ring->rx_max_pending = 4;
 	ring->tx_max_pending = TX_RING_MAX_LEN;
-	ring->rx_pending = 4;
 	ring->tx_pending = qca->txr.count;
 }
 
