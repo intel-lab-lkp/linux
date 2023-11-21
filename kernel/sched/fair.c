@@ -6667,6 +6667,36 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	struct sched_entity *se = &p->se;
 	int idle_h_nr_running = task_has_idle_policy(p);
 	int task_new = !(flags & ENQUEUE_WAKEUP);
+	u64 last_dequeue = p->last_dequeue_time;
+
+	if ((flags & ENQUEUE_WAKEUP) && last_dequeue &&
+	    cpu_online(p->last_dequeue_cpu)) {
+		/*
+		 * The enqueue task_cpu(p) has already been assigned
+		 * with a new one. Need to calculate the task's sleeping
+		 * time based on its previous running CPU.
+		 */
+		u64 now = sched_clock_cpu(p->last_dequeue_cpu);
+
+		/*
+		 * Record the task's short sleep time. This sleep time
+		 * indicates how soon this task might be woken up again.
+		 * The task's previous running CPU is regarded as cache-hot
+		 * in the sleep time. So, define the average sleep time of
+		 * the task as its cache-hot duration. The SIS could leverage
+		 * the cache-hot duration for better idle CPU selection.
+		 * This improves cache locality for short-sleeping tasks.
+		 *
+		 * If the sleep time is longer than sysctl_sched_migration_cost,
+		 * give the cache hot duration a penalty by cutting it to half.
+		 */
+		if (now > last_dequeue) {
+			if (now - last_dequeue < sysctl_sched_migration_cost)
+				update_avg(&p->avg_hot_dur, now - last_dequeue);
+			else
+				p->avg_hot_dur >>= 1;
+		}
+	}
 
 	/*
 	 * The code below (indirectly) updates schedutil which looks at
@@ -6821,6 +6851,15 @@ static void dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 
 dequeue_throttle:
 	util_est_update(&rq->cfs, p, task_sleep);
+
+	if (task_sleep) {
+		p->last_dequeue_time = sched_clock_cpu(cpu_of(rq));
+		p->last_dequeue_cpu = cpu_of(rq);
+	} else {
+		/* 0 indicates the dequeue is not caused by sleep */
+		p->last_dequeue_time = 0;
+	}
+
 	hrtick_update(rq);
 }
 
