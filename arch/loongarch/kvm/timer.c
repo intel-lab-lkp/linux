@@ -70,6 +70,7 @@ void kvm_init_timer(struct kvm_vcpu *vcpu, unsigned long timer_hz)
 void kvm_restore_timer(struct kvm_vcpu *vcpu)
 {
 	unsigned long cfg, delta, period;
+	unsigned long ticks, estat;
 	ktime_t expire, now;
 	struct loongarch_csrs *csr = vcpu->arch.csr;
 
@@ -91,19 +92,45 @@ void kvm_restore_timer(struct kvm_vcpu *vcpu)
 	hrtimer_cancel(&vcpu->arch.swtimer);
 
 	/*
+	 * From LoongArch Reference Manual Volume 1 Chapter 7.6.2
+	 * If oneshot timer is fired, CSR TVAL will be -1, there are two
+	 * conditions:
+	 *  1) timer is fired during exiting to host
+	 *  2) timer is fired and vm is doing timer irq, and then exiting to
+	 *     host. Host should not inject timer irq to avoid spurious
+	 *     timer interrupt again
+	 */
+	ticks = kvm_read_sw_gcsr(csr, LOONGARCH_CSR_TVAL);
+	estat = kvm_read_sw_gcsr(csr, LOONGARCH_CSR_ESTAT);
+	if (!(cfg & CSR_TCFG_PERIOD) && (ticks > cfg)) {
+		/*
+		 * Writing 0 to LOONGARCH_CSR_TVAL will inject timer irq
+		 * and set CSR TVAL with -1
+		 *
+		 * Writing ticks to LOONGARCH_CSR_TVAL will not inject timer
+		 * irq, HW CSR TVAL will go down from value ticks, it avoids
+		 * spurious timer interrupt
+		 */
+		if (estat & INT_TI)
+			write_gcsr_timertick(0);
+		else
+			kvm_restore_hw_gcsr(csr, LOONGARCH_CSR_TVAL);
+		return;
+	}
+
+	/*
 	 * Set remainder tick value if not expired
 	 */
 	now = ktime_get();
 	expire = vcpu->arch.expire;
+	delta = 0;
 	if (ktime_before(now, expire))
 		delta = ktime_to_tick(vcpu, ktime_sub(expire, now));
-	else {
-		if (cfg & CSR_TCFG_PERIOD) {
-			period = cfg & CSR_TCFG_VAL;
-			delta = ktime_to_tick(vcpu, ktime_sub(now, expire));
-			delta = period - (delta % period);
-		} else
-			delta = 0;
+	else if (cfg & CSR_TCFG_PERIOD) {
+		period = cfg & CSR_TCFG_VAL;
+		delta = ktime_to_tick(vcpu, ktime_sub(now, expire));
+		delta = period - (delta % period);
+
 		/*
 		 * Inject timer here though sw timer should inject timer
 		 * interrupt async already, since sw timer may be cancelled
@@ -122,15 +149,25 @@ void kvm_restore_timer(struct kvm_vcpu *vcpu)
  */
 static void _kvm_save_timer(struct kvm_vcpu *vcpu)
 {
-	unsigned long ticks, delta;
+	unsigned long ticks, delta, cfg;
 	ktime_t expire;
 	struct loongarch_csrs *csr = vcpu->arch.csr;
 
 	ticks = kvm_read_sw_gcsr(csr, LOONGARCH_CSR_TVAL);
-	delta = tick_to_ns(vcpu, ticks);
-	expire = ktime_add_ns(ktime_get(), delta);
-	vcpu->arch.expire = expire;
-	if (ticks) {
+	cfg = kvm_read_sw_gcsr(csr, LOONGARCH_CSR_TCFG);
+
+	/*
+	 * From LoongArch Reference Manual Volume 1 Chapter 7.6.2
+	 * If period timer is fired, CSR TVAL will be reloaded from CSR TCFG
+	 * If oneshot timer is fired, CSR TVAL will be -1
+	 * Here judge one shot timer fired by checking whether TVAL is larger
+	 * than TCFG
+	 */
+	if (ticks < cfg) {
+		delta = tick_to_ns(vcpu, ticks);
+		expire = ktime_add_ns(ktime_get(), delta);
+		vcpu->arch.expire = expire;
+
 		/*
 		 * HRTIMER_MODE_PINNED is suggested since vcpu may run in
 		 * the same physical cpu in next time
