@@ -142,6 +142,8 @@ static const u16 srstclr_for_gen4[] = {
  * @reset_clear_regs:  Pointer to reset clearing registers array
  * @smstpcr_saved: [].mask: Mask of SMSTPCR[] bits under our control
  *                 [].val: Saved values of SMSTPCR[]
+ * @reserved_ids: Temporary used, reserved id list
+ * @num_reserved_ids: Temporary used, number of reserved id list
  * @clks: Array containing all Core and Module Clocks
  */
 struct cpg_mssr_priv {
@@ -167,6 +169,9 @@ struct cpg_mssr_priv {
 		u32 mask;
 		u32 val;
 	} smstpcr_saved[ARRAY_SIZE(mstpsr_for_gen4)];
+
+	unsigned int *reserved_ids;
+	unsigned int num_reserved_ids;
 
 	struct clk *clks[];
 };
@@ -452,6 +457,19 @@ static void __init cpg_mssr_register_mod_clk(const struct mssr_mod_clk *mod,
 			init.flags |= CLK_IS_CRITICAL;
 			break;
 		}
+
+	/*
+	 * Ignore reserved device.
+	 * see
+	 *	cpg_mssr_reserved_init()
+	 */
+	for (i = 0; i < priv->num_reserved_ids; i++) {
+		if (id == priv->reserved_ids[i]) {
+			dev_info(dev, "Ignore Linux non-assigned mod (%s)\n", mod->name);
+			init.flags |= CLK_IGNORE_UNUSED;
+			break;
+		}
+	}
 
 	clk = clk_register(NULL, &clock->hw);
 	if (IS_ERR(clk))
@@ -949,6 +967,75 @@ static const struct dev_pm_ops cpg_mssr_pm = {
 #define DEV_PM_OPS	NULL
 #endif /* CONFIG_PM_SLEEP && CONFIG_ARM_PSCI_FW */
 
+static void __init cpg_mssr_reserved_exit(struct cpg_mssr_priv *priv)
+{
+	kfree(priv->reserved_ids);
+}
+
+static int __init cpg_mssr_reserved_init(struct cpg_mssr_priv *priv,
+					 const struct cpg_mssr_info *info)
+{
+	struct device_node *root = of_find_node_by_path("/soc");
+	struct device_node *node = NULL;
+	struct of_phandle_args clkspec;
+	unsigned int *ids = NULL;
+	unsigned int num = 0;
+
+	/*
+	 * Because cpg_mssr_info has .num_hw_mod_clks which indicates number of all Module Clocks,
+	 * and clk_disable_unused() will disable all unused clocks, the device which is assigned to
+	 * non-Linux system will be disabled when Linux was booted.
+	 *
+	 * To avoid such situation, renesas-cpg-mssr assumes the device which has
+	 * status = "reserved" is assigned to non-Linux system, and add CLK_IGNORE_UNUSED flag
+	 * to its clocks if it was CPG_MOD.
+	 * see also
+	 *	cpg_mssr_register_mod_clk()
+	 *
+	 *	scif5: serial@e6f30000 {
+	 *		...
+	 * =>		clocks = <&cpg CPG_MOD 202>,
+	 *			 <&cpg CPG_CORE R8A7795_CLK_S3D1>,
+	 *			 <&scif_clk>;
+	 *			 ...
+	 *		 status = "reserved";
+	 *	};
+	 */
+	for_each_reserved_child_of_node(root, node) {
+		unsigned int i = 0;
+
+		while (!of_parse_phandle_with_args(node, "clocks", "#clock-cells", i++, &clkspec)) {
+
+			of_node_put(clkspec.np);
+
+			if (clkspec.np == priv->dev->of_node &&
+			    clkspec.args[0] == CPG_MOD) {
+
+				ids = krealloc_array(ids, (num + 1), sizeof(*ids), GFP_KERNEL);
+				if (!ids)
+					return -ENOMEM;
+
+				ids[num] = info->num_total_core_clks +
+						MOD_CLK_PACK(clkspec.args[1]);
+
+				num++;
+			}
+		}
+	}
+
+	priv->num_reserved_ids	= num;
+	priv->reserved_ids	= ids;
+
+	return 0;
+}
+
+static void __init cpg_mssr_common_exit(struct cpg_mssr_priv *priv)
+{
+	if (priv->base)
+		iounmap(priv->base);
+	kfree(priv);
+}
+
 static int __init cpg_mssr_common_init(struct device *dev,
 				       struct device_node *np,
 				       const struct cpg_mssr_info *info)
@@ -1012,9 +1099,7 @@ static int __init cpg_mssr_common_init(struct device *dev,
 	return 0;
 
 out_err:
-	if (priv->base)
-		iounmap(priv->base);
-	kfree(priv);
+	cpg_mssr_common_exit(priv);
 
 	return error;
 }
@@ -1029,6 +1114,10 @@ void __init cpg_mssr_early_init(struct device_node *np,
 	if (error)
 		return;
 
+	error = cpg_mssr_reserved_init(cpg_mssr_priv, info);
+	if (error)
+		goto err;
+
 	for (i = 0; i < info->num_early_core_clks; i++)
 		cpg_mssr_register_core_clk(&info->early_core_clks[i], info,
 					   cpg_mssr_priv);
@@ -1037,6 +1126,12 @@ void __init cpg_mssr_early_init(struct device_node *np,
 		cpg_mssr_register_mod_clk(&info->early_mod_clks[i], info,
 					  cpg_mssr_priv);
 
+	cpg_mssr_reserved_exit(cpg_mssr_priv);
+
+	return;
+
+err:
+	cpg_mssr_common_exit(cpg_mssr_priv);
 }
 
 static int __init cpg_mssr_probe(struct platform_device *pdev)
@@ -1060,6 +1155,10 @@ static int __init cpg_mssr_probe(struct platform_device *pdev)
 	priv->dev = dev;
 	dev_set_drvdata(dev, priv);
 
+	error = cpg_mssr_reserved_init(priv, info);
+	if (error)
+		return error;
+
 	for (i = 0; i < info->num_core_clks; i++)
 		cpg_mssr_register_core_clk(&info->core_clks[i], info, priv);
 
@@ -1070,22 +1169,23 @@ static int __init cpg_mssr_probe(struct platform_device *pdev)
 					 cpg_mssr_del_clk_provider,
 					 np);
 	if (error)
-		return error;
+		goto reserve_err;
 
 	error = cpg_mssr_add_clk_domain(dev, info->core_pm_clks,
 					info->num_core_pm_clks);
 	if (error)
-		return error;
+		goto reserve_err;
 
 	/* Reset Controller not supported for Standby Control SoCs */
 	if (priv->reg_layout == CLK_REG_LAYOUT_RZ_A)
-		return 0;
+		goto reserve_err;
 
 	error = cpg_mssr_reset_controller_register(priv);
-	if (error)
-		return error;
 
-	return 0;
+reserve_err:
+	cpg_mssr_reserved_exit(priv);
+
+	return error;
 }
 
 static struct platform_driver cpg_mssr_driver = {
