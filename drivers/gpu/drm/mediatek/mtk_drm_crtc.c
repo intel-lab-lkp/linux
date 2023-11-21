@@ -4,6 +4,7 @@
  */
 
 #include <linux/clk.h>
+#include <linux/dma-buf.h>
 #include <linux/dma-mapping.h>
 #include <linux/mailbox_controller.h>
 #include <linux/of.h>
@@ -283,6 +284,23 @@ struct mtk_ddp_comp *mtk_drm_ddp_comp_for_plane(struct drm_crtc *crtc,
 	return NULL;
 }
 
+static void mtk_drm_dma_buf_put(struct mtk_drm_crtc *mtk_crtc)
+{
+	unsigned int i;
+
+	for (i = 0; i < mtk_crtc->layer_nr; i++) {
+		struct drm_plane *plane = &mtk_crtc->planes[i];
+		struct mtk_plane_state *plane_state;
+
+		plane_state = to_mtk_plane_state(plane->state);
+
+		if (plane_state && plane_state->pending.dma_buf) {
+			dma_buf_put(plane_state->pending.dma_buf);
+			plane_state->pending.dma_buf = NULL;
+		}
+	}
+}
+
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
 static void ddp_cmdq_cb(struct mbox_client *cl, void *mssg)
 {
@@ -322,6 +340,8 @@ static void ddp_cmdq_cb(struct mbox_client *cl, void *mssg)
 		}
 		mtk_crtc->pending_async_planes = false;
 	}
+
+	mtk_drm_dma_buf_put(mtk_crtc);
 
 	mtk_crtc->cmdq_vblank_cnt = 0;
 	wake_up(&mtk_crtc->cb_blocking_queue);
@@ -627,9 +647,14 @@ static void mtk_crtc_ddp_irq(void *data)
 	else if (mtk_crtc->cmdq_vblank_cnt > 0 && --mtk_crtc->cmdq_vblank_cnt == 0)
 		DRM_ERROR("mtk_crtc %d CMDQ execute command timeout!\n",
 			  drm_crtc_index(&mtk_crtc->base));
+
+	if (!mtk_crtc->cmdq_client.chan)
+		mtk_drm_dma_buf_put(mtk_crtc);
 #else
 	if (!priv->data->shadow_register)
 		mtk_crtc_ddp_config(crtc, NULL);
+
+	mtk_drm_dma_buf_put(mtk_crtc);
 #endif
 	mtk_drm_finish_page_flip(mtk_crtc);
 }
