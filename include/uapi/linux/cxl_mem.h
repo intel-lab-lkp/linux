@@ -48,6 +48,7 @@
 	___DEPRECATED(GET_SCAN_MEDIA, "Get Scan Media Results"),          \
 	___C(GET_SUPPORTED_FEATURES, "Get Supported Features"),           \
 	___C(GET_FEATURE, "Get Feature"),                                 \
+	___C(SET_FEATURE, "Set Feature"),                                 \
 	___C(MAX, "invalid / last command")
 
 #define ___C(a, b) CXL_MEM_COMMAND_ID_##a
