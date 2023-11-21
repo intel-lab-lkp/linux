@@ -2,6 +2,10 @@
 #ifndef _CONSOLE_CMDLINE_H
 #define _CONSOLE_CMDLINE_H
 
+#define MAX_CMDLINECONSOLES 8
+
+int console_opt_save(char *str);
+
 struct console_cmdline
 {
 	char	name[16];			/* Name of the driver	    */

@@ -360,9 +360,6 @@ static int console_locked;
 /*
  *	Array of consoles built from command line options (console=)
  */
-
-#define MAX_CMDLINECONSOLES 8
-
 static struct console_cmdline console_cmdline[MAX_CMDLINECONSOLES];
 
 static int preferred_console = -1;
@@ -2444,6 +2441,14 @@ static int __init console_setup(char *str)
 	char buf[sizeof(console_cmdline[0].name) + 4]; /* 4 for "ttyS" */
 	char *s, *options, *brl_options = NULL;
 	int idx;
+
+	/*
+	 * Save the console for possible driver subsystem use. Bail out early
+	 * for DEVICE:0.0 style console names as the character device name is
+	 * be unknown at this point.
+	 */
+	if (!console_opt_save(str) && strchr(str, ':'))
+		return 1;
 
 	/*
 	 * console="" or console=null have been suggested as a way to
