@@ -49,13 +49,14 @@ static int nf_flowtable_by_dev_insert(struct nf_flowtable *ft,
 {
 	unsigned long key = (unsigned long)dev;
 	struct flow_offload_xdp *cur;
+	bool duplicate = false;
 	int err = 0;
 
 	mutex_lock(&nf_xdp_hashtable_lock);
 	hash_for_each_possible(nf_xdp_hashtable, cur, hnode, key) {
 		if (key != cur->net_device_addr)
 			continue;
-		err = -EEXIST;
+		duplicate = true;
 		break;
 	}
 
@@ -67,7 +68,20 @@ static int nf_flowtable_by_dev_insert(struct nf_flowtable *ft,
 			new->net_device_addr = key;
 			new->ft = ft;
 
-			hash_add_rcu(nf_xdp_hashtable, &new->hnode, key);
+			if (duplicate) {
+				u32 index = hash_min(key, HASH_BITS(nf_xdp_hashtable));
+
+				/* nf_tables_api.c makes sure that only a single flowtable
+				 * has this device.
+				 *
+				 * Only exception: the flowtable is about to be removed.
+				 * Thus we tolerate the duplicated entry, the 'old' entry
+				 * will be unhashed after the transaction completes.
+				 */
+				hlist_add_tail_rcu(&new->hnode, &nf_xdp_hashtable[index]);
+			} else {
+				hash_add_rcu(nf_xdp_hashtable, &new->hnode, key);
+			}
 		} else {
 			err = -ENOMEM;
 		}
@@ -80,7 +94,8 @@ static int nf_flowtable_by_dev_insert(struct nf_flowtable *ft,
 	return err;
 }
 
-static void nf_flowtable_by_dev_remove(const struct net_device *dev)
+static void nf_flowtable_by_dev_remove(const struct nf_flowtable *ft,
+				       const struct net_device *dev)
 {
 	unsigned long key = (unsigned long)dev;
 	struct flow_offload_xdp *cur;
@@ -90,6 +105,17 @@ static void nf_flowtable_by_dev_remove(const struct net_device *dev)
 
 	hash_for_each_possible(nf_xdp_hashtable, cur, hnode, key) {
 		if (key != cur->net_device_addr)
+			continue;
+
+		/* duplicate entry, happens when current transaction
+		 * removes flowtable f1 and adds flowtable f2, where both
+		 * have *dev assigned to them.
+		 *
+		 * nf_tables_api.c makes sure that at most one
+		 * flowtable,dev pair with 'xdp' flag enabled can exist
+		 * in the same generation.
+		 */
+		if (cur->ft != ft)
 			continue;
 
 		hash_del_rcu(&cur->hnode);
@@ -1280,7 +1306,7 @@ static int nf_flow_offload_xdp_setup(struct nf_flowtable *flowtable,
 	case FLOW_BLOCK_BIND:
 		return nf_flowtable_by_dev_insert(flowtable, dev);
 	case FLOW_BLOCK_UNBIND:
-		nf_flowtable_by_dev_remove(dev);
+		nf_flowtable_by_dev_remove(flowtable, dev);
 		return 0;
 	}
 
@@ -1297,7 +1323,7 @@ static void nf_flow_offload_xdp_cancel(struct nf_flowtable *flowtable,
 
 	switch (cmd) {
 	case FLOW_BLOCK_BIND:
-		nf_flowtable_by_dev_remove(dev);
+		nf_flowtable_by_dev_remove(flowtable, dev);
 		return;
 	case FLOW_BLOCK_UNBIND:
 		/* We do not re-bind in case hw offload would report error
