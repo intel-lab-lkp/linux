@@ -731,16 +731,25 @@ static int ksz8_r_phy_bmcr(struct ksz_device *dev, int port, u16 *val)
 	if (ret)
 		return ret;
 
-	if (restart & PORT_PHY_LOOPBACK)
-		*val |= BMCR_LOOPBACK;
-
 	if (ctrl & PORT_FORCE_100_MBIT)
 		*val |= BMCR_SPEED100;
 
 	if (ksz_is_ksz88x3(dev)) {
+		if (restart & KSZ8873_PORT_PHY_LOOPBACK)
+			*val |= BMCR_LOOPBACK;
+
 		if ((ctrl & PORT_AUTO_NEG_ENABLE))
 			*val |= BMCR_ANENABLE;
 	} else {
+		u8 stat3;
+
+		ret = ksz_pread8(dev, port, REG_PORT_STATUS_3, &stat3);
+		if (ret)
+			return ret;
+
+		if (stat3 & PORT_PHY_LOOPBACK)
+			*val |= BMCR_LOOPBACK;
+
 		if (!(ctrl & PORT_AUTO_NEG_DISABLE))
 			*val |= BMCR_ANENABLE;
 	}
@@ -994,8 +1003,7 @@ static int ksz8_w_phy_bmcr(struct ksz_device *dev, int port, u16 val)
 
 	restart = 0;
 	restart_mask = PORT_LED_OFF | PORT_TX_DISABLE | PORT_AUTO_NEG_RESTART |
-		PORT_POWER_DOWN | PORT_AUTO_MDIX_DISABLE | PORT_FORCE_MDIX |
-		PORT_PHY_LOOPBACK;
+		PORT_POWER_DOWN | PORT_AUTO_MDIX_DISABLE | PORT_FORCE_MDIX;
 	if (val & KSZ886X_BMCR_DISABLE_LED)
 		restart |= PORT_LED_OFF;
 	if (val & KSZ886X_BMCR_DISABLE_TRANSMIT)
@@ -1008,8 +1016,23 @@ static int ksz8_w_phy_bmcr(struct ksz_device *dev, int port, u16 val)
 		restart |= PORT_AUTO_MDIX_DISABLE;
 	if (val & KSZ886X_BMCR_FORCE_MDI)
 		restart |= PORT_FORCE_MDIX;
-	if (val & BMCR_LOOPBACK)
-		restart |= PORT_PHY_LOOPBACK;
+
+	if (ksz_is_ksz88x3(dev)) {
+		restart_mask |= KSZ8873_PORT_PHY_LOOPBACK;
+
+		if (val & BMCR_LOOPBACK)
+			restart |= KSZ8873_PORT_PHY_LOOPBACK;
+	} else {
+		u8 stat3 = 0;
+
+		if (val & BMCR_LOOPBACK)
+			stat3 |= PORT_PHY_LOOPBACK;
+
+		ret = ksz_prmw8(dev, port, REG_PORT_STATUS_3, PORT_PHY_LOOPBACK,
+				stat3);
+		if (ret)
+			return ret;
+	}
 
 	return ksz_prmw8(dev, port, regs[P_NEG_RESTART_CTRL], restart_mask,
 			 restart);
@@ -1029,8 +1052,6 @@ int ksz8_w_phy(struct ksz_device *dev, u16 phy, u16 reg, u16 val)
 		ret = ksz8_w_phy_bmcr(dev, p, val);
 		if (ret)
 			return ret;
-
-
 		break;
 	case MII_ADVERTISE:
 		ret = ksz_pread8(dev, p, regs[P_LOCAL_CTRL], &ctrl);
