@@ -1044,6 +1044,8 @@ static bool igmp_heard_query(struct in_device *in_dev, struct sk_buff *skb,
 	for_each_pmc_rcu(in_dev, im) {
 		int changed;
 
+		if (!netif_running(im->interface->dev))
+			continue;
 		if (group && group != im->multiaddr)
 			continue;
 		if (im->multiaddr == IGMP_ALL_HOSTS)
