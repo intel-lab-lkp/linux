@@ -531,9 +531,13 @@ void nf_flow_dnat_port(const struct flow_offload *flow, struct sk_buff *skb,
 }
 EXPORT_SYMBOL_GPL(nf_flow_dnat_port);
 
-int nf_flow_table_init(struct nf_flowtable *flowtable)
+struct nf_flowtable *nf_flow_table_create(struct net *net, const struct nf_flowtable_type *type)
 {
+	struct nf_flowtable *flowtable = kzalloc(sizeof(*flowtable), GFP_KERNEL_ACCOUNT);
 	int err;
+
+	if (!flowtable)
+		return NULL;
 
 	INIT_DELAYED_WORK(&flowtable->gc_work, nf_flow_offload_work_gc);
 	flow_block_init(&flowtable->flow_block);
@@ -541,19 +545,24 @@ int nf_flow_table_init(struct nf_flowtable *flowtable)
 
 	err = rhashtable_init(&flowtable->rhashtable,
 			      &nf_flow_offload_rhash_params);
-	if (err < 0)
-		return err;
+	if (err < 0) {
+		kfree(flowtable);
+		return NULL;
+	}
 
 	queue_delayed_work(system_power_efficient_wq,
 			   &flowtable->gc_work, HZ);
+
+	write_pnet(&flowtable->net, net);
+	flowtable->type = type;
 
 	mutex_lock(&flowtable_lock);
 	list_add(&flowtable->list, &flowtables);
 	mutex_unlock(&flowtable_lock);
 
-	return 0;
+	return flowtable;
 }
-EXPORT_SYMBOL_GPL(nf_flow_table_init);
+EXPORT_SYMBOL_GPL(nf_flow_table_create);
 
 static void nf_flow_table_do_cleanup(struct nf_flowtable *flow_table,
 				     struct flow_offload *flow, void *data)

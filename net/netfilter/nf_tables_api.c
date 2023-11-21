@@ -8400,7 +8400,7 @@ static int nf_tables_newflowtable(struct sk_buff *skb,
 		goto err2;
 	}
 
-	flowtable->ft = kzalloc(sizeof(*flowtable->ft), GFP_KERNEL_ACCOUNT);
+	flowtable->ft = type->create(net, type);
 	if (!flowtable->ft) {
 		err = -ENOMEM;
 		goto err3;
@@ -8414,12 +8414,6 @@ static int nf_tables_newflowtable(struct sk_buff *skb,
 			goto err3;
 		}
 	}
-
-	write_pnet(&flowtable->ft->net, net);
-	flowtable->ft->type = type;
-	err = type->init(flowtable->ft);
-	if (err < 0)
-		goto err3;
 
 	err = nft_flowtable_parse_hook(&ctx, nla, &flowtable_hook, flowtable,
 				       extack, true);

@@ -63,7 +63,7 @@ static int nf_flow_rule_route_inet(struct net *net,
 
 static struct nf_flowtable_type flowtable_inet = {
 	.family		= NFPROTO_INET,
-	.init		= nf_flow_table_init,
+	.create		= nf_flow_table_create,
 	.setup		= nf_flow_table_offload_setup,
 	.action		= nf_flow_rule_route_inet,
 	.free		= nf_flow_table_free,
@@ -73,7 +73,7 @@ static struct nf_flowtable_type flowtable_inet = {
 
 static struct nf_flowtable_type flowtable_ipv4 = {
 	.family		= NFPROTO_IPV4,
-	.init		= nf_flow_table_init,
+	.create		= nf_flow_table_create,
 	.setup		= nf_flow_table_offload_setup,
 	.action		= nf_flow_rule_route_ipv4,
 	.free		= nf_flow_table_free,
@@ -83,7 +83,7 @@ static struct nf_flowtable_type flowtable_ipv4 = {
 
 static struct nf_flowtable_type flowtable_ipv6 = {
 	.family		= NFPROTO_IPV6,
-	.init		= nf_flow_table_init,
+	.create		= nf_flow_table_create,
 	.setup		= nf_flow_table_offload_setup,
 	.action		= nf_flow_rule_route_ipv6,
 	.free		= nf_flow_table_free,

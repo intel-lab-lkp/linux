@@ -52,7 +52,8 @@ struct nf_flow_rule {
 struct nf_flowtable_type {
 	struct list_head		list;
 	int				family;
-	int				(*init)(struct nf_flowtable *ft);
+	struct nf_flowtable *		(*create)(struct net *net,
+						  const struct nf_flowtable_type *type);
 	bool				(*gc)(const struct flow_offload *flow);
 	int				(*setup)(struct nf_flowtable *ft,
 						 struct net_device *dev,
@@ -278,7 +279,7 @@ void nf_flow_table_gc_cleanup(struct nf_flowtable *flowtable,
 			      struct net_device *dev);
 void nf_flow_table_cleanup(struct net_device *dev);
 
-int nf_flow_table_init(struct nf_flowtable *flow_table);
+struct nf_flowtable *nf_flow_table_create(struct net *net, const struct nf_flowtable_type *type);
 void nf_flow_table_free(struct nf_flowtable *flow_table);
 
 void flow_offload_teardown(struct flow_offload *flow);

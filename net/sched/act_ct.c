@@ -313,17 +313,13 @@ static int tcf_ct_flow_table_get(struct net *net, struct tcf_ct_params *params)
 	if (err)
 		goto err_insert;
 
-	ct_ft->nf_ft = kzalloc(sizeof(*ct_ft->nf_ft), GFP_KERNEL);
-	if (!ct_ft->nf_ft)
-		goto err_alloc;
-
 	ct_ft->nf_ft->type = &flowtable_ct;
+	ct_ft->nf_ft = nf_flow_table_create(net, &flowtable_ct);
+	if (!ct_ft->nf_ft)
+		goto err_create;
+
 	ct_ft->nf_ft->flags |= NF_FLOWTABLE_HW_OFFLOAD |
 			       NF_FLOWTABLE_COUNTER;
-	err = nf_flow_table_init(ct_ft->nf_ft);
-	if (err)
-		goto err_init;
-	write_pnet(&ct_ft->nf_ft->net, net);
 
 	__module_get(THIS_MODULE);
 out_unlock:
@@ -333,7 +329,7 @@ out_unlock:
 
 	return 0;
 
-err_init:
+err_create:
 	rhashtable_remove_fast(&zones_ht, &ct_ft->node, zones_params);
 	kfree(ct_ft->nf_ft);
 err_insert:
