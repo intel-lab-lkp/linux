@@ -80,7 +80,6 @@ struct rmi_function_handler {
 	int (*probe)(struct rmi_function *fn);
 	void (*remove)(struct rmi_function *fn);
 	int (*config)(struct rmi_function *fn);
-	int (*reset)(struct rmi_function *fn);
 	irqreturn_t (*attention)(int irq, void *ctx);
 	int (*suspend)(struct rmi_function *fn);
 	int (*resume)(struct rmi_function *fn);

@@ -57,25 +57,6 @@ void rmi_free_function_list(struct rmi_device *rmi_dev)
 	data->f34_container = NULL;
 }
 
-static int reset_one_function(struct rmi_function *fn)
-{
-	struct rmi_function_handler *fh;
-	int retval = 0;
-
-	if (!fn || !fn->dev.driver)
-		return 0;
-
-	fh = to_rmi_function_handler(fn->dev.driver);
-	if (fh->reset) {
-		retval = fh->reset(fn);
-		if (retval < 0)
-			dev_err(&fn->dev, "Reset failed with code %d.\n",
-				retval);
-	}
-
-	return retval;
-}
-
 static int configure_one_function(struct rmi_function *fn)
 {
 	struct rmi_function_handler *fh;
@@ -93,21 +74,6 @@ static int configure_one_function(struct rmi_function *fn)
 	}
 
 	return retval;
-}
-
-static int rmi_driver_process_reset_requests(struct rmi_device *rmi_dev)
-{
-	struct rmi_driver_data *data = dev_get_drvdata(&rmi_dev->dev);
-	struct rmi_function *entry;
-	int retval;
-
-	list_for_each_entry(entry, &data->function_list, node) {
-		retval = reset_one_function(entry);
-		if (retval < 0)
-			return retval;
-	}
-
-	return 0;
 }
 
 static int rmi_driver_process_config_requests(struct rmi_device *rmi_dev)
@@ -444,10 +410,6 @@ static int rmi_driver_reset_handler(struct rmi_device *rmi_dev)
 			__func__);
 		return error;
 	}
-
-	error = rmi_driver_process_reset_requests(rmi_dev);
-	if (error < 0)
-		return error;
 
 	error = rmi_driver_process_config_requests(rmi_dev);
 	if (error < 0)
