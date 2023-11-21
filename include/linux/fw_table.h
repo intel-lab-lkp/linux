@@ -26,7 +26,6 @@ struct acpi_subtable_proc {
 };
 
 #include <linux/acpi.h>
-#include <acpi/acpi.h>
 
 union acpi_subtable_headers {
 	struct acpi_subtable_header common;
