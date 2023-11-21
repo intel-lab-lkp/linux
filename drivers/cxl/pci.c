@@ -881,6 +881,12 @@ static int cxl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (rc)
 		return rc;
 
+	/*
+	 * Initialize optional CXL scrub features
+	 */
+	if (cxl_mem_patrol_scrub_init(cxlmd))
+		dev_dbg(&pdev->dev, "cxl_mem_patrol_scrub_init failed\n");
+
 	rc = devm_cxl_sanitize_setup_notifier(&pdev->dev, cxlmd);
 	if (rc)
 		return rc;
