@@ -345,4 +345,13 @@ static inline void *kmsan_get_metadata(void *addr, bool is_origin)
 
 #endif
 
+/**
+ * memset_no_sanitize_memory() - memset() without the KMSAN instrumentation.
+ */
+__no_sanitize_memory
+static inline void *memset_no_sanitize_memory(void *s, int c, size_t n)
+{
+	return memset(s, c, n);
+}
+
 #endif /* _LINUX_KMSAN_H */
