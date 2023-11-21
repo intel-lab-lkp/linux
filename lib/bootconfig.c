@@ -15,13 +15,13 @@
 
 #ifdef CONFIG_BOOT_CONFIG_EMBED
 /* embedded_bootconfig_data is defined in bootconfig-data.S */
-extern __visible const char embedded_bootconfig_data[];
-extern __visible const char embedded_bootconfig_data_end[];
+extern __visible char embedded_bootconfig_data[];
+extern __visible char embedded_bootconfig_data_end[];
 
-const char * __init xbc_get_embedded_bootconfig(size_t *size)
+char * __init xbc_get_embedded_bootconfig(size_t *size)
 {
 	*size = embedded_bootconfig_data_end - embedded_bootconfig_data;
-	return (*size) ? embedded_bootconfig_data : NULL;
+	return *size ? embedded_bootconfig_data : NULL;
 }
 #endif
 
@@ -48,6 +48,7 @@ const char * __init xbc_get_embedded_bootconfig(size_t *size)
 static struct xbc_node *xbc_nodes __initdata;
 static int xbc_node_num __initdata;
 static char *xbc_data __initdata;
+static bool xbc_data_allocated __initdata;
 static size_t xbc_data_size __initdata;
 static struct xbc_node *last_parent __initdata;
 static const char *xbc_err_msg __initdata;
@@ -846,13 +847,14 @@ static int __init xbc_verify_tree(void)
 }
 
 /* Need to setup xbc_data and xbc_nodes before call this. */
-static int __init xbc_parse_tree(void)
+static int __init xbc_parse_tree(int offset)
 {
 	char *p, *q;
 	int ret = 0, c;
 
-	last_parent = NULL;
-	p = xbc_data;
+	if (!offset)
+		last_parent = NULL;
+	p = xbc_data + offset;
 	do {
 		q = strpbrk(p, "{}=+;:\n#");
 		if (!q) {
@@ -906,18 +908,42 @@ static int __init xbc_parse_tree(void)
  */
 void __init xbc_exit(void)
 {
-	xbc_free_mem(xbc_data, xbc_data_size);
+	if (xbc_data_allocated)
+		xbc_free_mem(xbc_data, xbc_data_size);
 	xbc_data = NULL;
 	xbc_data_size = 0;
+	xbc_data_allocated = 0;
 	xbc_node_num = 0;
 	xbc_free_mem(xbc_nodes, sizeof(struct xbc_node) * XBC_NODE_MAX);
 	xbc_nodes = NULL;
 	brace_index = 0;
 }
 
+static int xbc_parse_and_verify_tree(int offset, int *epos, const char **emsg)
+{
+	int ret;
+
+	ret = xbc_parse_tree(offset);
+	if (!ret) {
+		ret = xbc_verify_tree();
+		if (!ret)
+			return xbc_node_num;
+	}
+
+	if (epos)
+		*epos = xbc_err_pos;
+	if (emsg)
+		*emsg = xbc_err_msg;
+
+	xbc_exit();
+	return ret;
+}
+
 /**
  * xbc_init() - Parse given XBC file and build XBC internal tree
- * @data: The boot config text original data
+ * @data: Null terminated boot config data, that can be directly
+ *        modified by the parser and will exist till xbc_exit()
+ *        or xbc_append() is called.
  * @size: The size of @data
  * @emsg: A pointer of const char * to store the error message
  * @epos: A pointer of int to store the error position
@@ -930,10 +956,8 @@ void __init xbc_exit(void)
  * @epos will be updated with the error position which is the byte offset
  * of @buf. If the error is not a parser error, @epos will be -1.
  */
-int __init xbc_init(const char *data, size_t size, const char **emsg, int *epos)
+int __init xbc_init(char *data, size_t size, const char **emsg, int *epos)
 {
-	int ret;
-
 	if (epos)
 		*epos = -1;
 
@@ -942,44 +966,79 @@ int __init xbc_init(const char *data, size_t size, const char **emsg, int *epos)
 			*emsg = "Bootconfig is already initialized";
 		return -EBUSY;
 	}
-	if (size > XBC_DATA_MAX || size == 0) {
+	if (size > XBC_DATA_MAX || (size == 0 && data != NULL)) {
 		if (emsg)
 			*emsg = size ? "Config data is too big" :
 				"Config data is empty";
 		return -ERANGE;
 	}
 
-	xbc_data = xbc_alloc_mem(size + 1);
-	if (!xbc_data) {
-		if (emsg)
-			*emsg = "Failed to allocate bootconfig data";
-		return -ENOMEM;
-	}
-	memcpy(xbc_data, data, size);
-	xbc_data[size] = '\0';
-	xbc_data_size = size + 1;
-
 	xbc_nodes = xbc_alloc_mem(sizeof(struct xbc_node) * XBC_NODE_MAX);
 	if (!xbc_nodes) {
 		if (emsg)
 			*emsg = "Failed to allocate bootconfig nodes";
-		xbc_exit();
 		return -ENOMEM;
 	}
 	memset(xbc_nodes, 0, sizeof(struct xbc_node) * XBC_NODE_MAX);
 
-	ret = xbc_parse_tree();
-	if (!ret)
-		ret = xbc_verify_tree();
+	if (!data)
+		return 0;
+	xbc_data = data;
+	xbc_data_size = size;
+	return xbc_parse_and_verify_tree(0, epos, emsg);
+}
 
-	if (ret < 0) {
-		if (epos)
-			*epos = xbc_err_pos;
+/**
+ * xbc_append() - Append data to already existing XBC tree
+ * @data: Boot config data, which are copied by the function.
+ * @size: The size of @data
+ * @emsg: A pointer of const char * to store the error message
+ * @epos: A pointer of int to store the error position
+ */
+int __init xbc_append(const char *data, size_t size, const char **emsg, int *epos)
+{
+	size_t new_size, parse_start;
+	char *new_data;
+
+	new_size = xbc_data_size + size;
+	if (new_size > XBC_DATA_MAX) {
 		if (emsg)
-			*emsg = xbc_err_msg;
-		xbc_exit();
-	} else
-		ret = xbc_node_num;
+			*emsg = "Merged config data is too big";
+		return -ERANGE;
+	}
+	if (new_size == 0) {
+		if (data) {
+			if (emsg)
+				*emsg = "Appended data is empty";
+			return -ERANGE;
+		}
+		return 0;
+	}
 
-	return ret;
+	new_data = xbc_alloc_mem(new_size);
+	if (!new_data) {
+		if (emsg)
+			*emsg = "Failed to allocate bootconfig data";
+		return -ENOMEM;
+	}
+
+	if (xbc_data_size) {
+		memcpy(new_data, xbc_data, xbc_data_size - 1);
+		new_data[xbc_data_size - 1] = '\n';
+		parse_start = xbc_data_size - 1;
+	} else {
+		parse_start = 0;
+	}
+	memcpy(new_data + xbc_data_size, data, size);
+	new_data[new_size - 1] = 0;
+	if (xbc_data_allocated)
+		xbc_free_mem(xbc_data, xbc_data_size);
+	xbc_data_allocated = 1;
+	xbc_data = new_data;
+	xbc_data_size = new_size;
+
+	if (!data)
+		return 0;
+
+	return xbc_parse_and_verify_tree(parse_start, epos, emsg);
 }

@@ -1339,6 +1339,15 @@ config BOOT_CONFIG_EMBED
 
 	  If unsure, say N.
 
+config BOOT_CONFIG_EMBED_APPEND_INITRD
+	bool "Append initrd bootconfig to the embedded one"
+	depends on BOOT_CONFIG_EMBED && BLK_DEV_INITRD
+	default n
+	help
+	  By default if both embedded bootconfig and initrd bootconfig are
+	  found, initrd bootconfig is preferred. If this option is set, initrd
+	  bootconfig gets appended to the embedded one.
+
 config BOOT_CONFIG_EMBED_FILE
 	string "Embedded bootconfig file path"
 	depends on BOOT_CONFIG_EMBED

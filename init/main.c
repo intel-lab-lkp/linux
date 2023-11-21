@@ -267,6 +267,9 @@ static void * __init get_boot_config_from_initrd(size_t *_size)
 	u32 *hdr;
 	int i;
 
+	if (_size)
+		*_size = 0;
+
 	if (!initrd_end)
 		return NULL;
 
@@ -309,6 +312,8 @@ found:
 #else
 static void * __init get_boot_config_from_initrd(size_t *_size)
 {
+	if (_size)
+		*_size = 0;
 	return NULL;
 }
 #endif
@@ -404,16 +409,16 @@ static int __init warn_bootconfig(char *str)
 static void __init setup_boot_config(void)
 {
 	static char tmp_cmdline[COMMAND_LINE_SIZE] __initdata;
-	const char *msg, *data;
+	const char *msg, *initrd_data;
 	int pos, ret;
-	size_t size;
-	char *err;
+	size_t initrd_size, embeded_size = 0;
+	char *err, *embeded_data = NULL;
 
 	/* Cut out the bootconfig data even if we have no bootconfig option */
-	data = get_boot_config_from_initrd(&size);
+	initrd_data = get_boot_config_from_initrd(&initrd_size);
 	/* If there is no bootconfig in initrd, try embedded one. */
-	if (!data)
-		data = xbc_get_embedded_bootconfig(&size);
+	if (!initrd_data || IS_ENABLED(CONFIG_BOOT_CONFIG_EMBED_APPEND_INITRD))
+		embeded_data = xbc_get_embedded_bootconfig(&embeded_size);
 
 	strscpy(tmp_cmdline, boot_command_line, COMMAND_LINE_SIZE);
 	err = parse_args("bootconfig", tmp_cmdline, NULL, 0, 0, 0, NULL,
@@ -426,7 +431,7 @@ static void __init setup_boot_config(void)
 	if (err)
 		initargs_offs = err - tmp_cmdline;
 
-	if (!data) {
+	if (!initrd_data && !embeded_data) {
 		/* If user intended to use bootconfig, show an error level message */
 		if (bootconfig_found)
 			pr_err("'bootconfig' found on command line, but no bootconfig found\n");
@@ -435,28 +440,29 @@ static void __init setup_boot_config(void)
 		return;
 	}
 
-	if (size >= XBC_DATA_MAX) {
-		pr_err("bootconfig size %ld greater than max size %d\n",
-			(long)size, XBC_DATA_MAX);
-		return;
-	}
+	ret = xbc_init(embeded_data, embeded_size, &msg, &pos);
+	if (ret < 0)
+		goto err0;
 
-	ret = xbc_init(data, size, &msg, &pos);
-	if (ret < 0) {
-		if (pos < 0)
-			pr_err("Failed to init bootconfig: %s.\n", msg);
-		else
-			pr_err("Failed to parse bootconfig: %s at %d.\n",
-				msg, pos);
-	} else {
-		xbc_get_info(&ret, NULL);
-		pr_info("Load bootconfig: %ld bytes %d nodes\n", (long)size, ret);
-		/* keys starting with "kernel." are passed via cmdline */
-		extra_command_line = xbc_make_cmdline("kernel");
-		/* Also, "init." keys are init arguments */
-		extra_init_args = xbc_make_cmdline("init");
-	}
+	/* Call append even if no data are there as embedded bootconfig is in .init */
+	ret = xbc_append(initrd_data, initrd_size, &msg, &pos);
+	if (ret < 0)
+		goto err0;
+
+	xbc_get_info(&ret, NULL);
+	pr_info("Load bootconfig: %ld bytes %d nodes\n", (long)(embeded_size + initrd_size), ret);
+	/* keys starting with "kernel." are passed via cmdline */
+	extra_command_line = xbc_make_cmdline("kernel");
+	/* Also, "init." keys are init arguments */
+	extra_init_args = xbc_make_cmdline("init");
 	return;
+
+err0:	if (pos < 0)
+		pr_err("Failed to init bootconfig: %s.\n", msg);
+	else
+		pr_err("Failed to parse %s bootconfig: %s at %zu.\n",
+				pos < embeded_size ? "embedded" : "initrd",
+				msg, pos < embeded_size ? pos : pos - embeded_size);
 }
 
 static void __init exit_boot_config(void)

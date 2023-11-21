@@ -281,7 +281,10 @@ static inline int __init xbc_node_compose_key(struct xbc_node *node,
 }
 
 /* XBC node initializer */
-int __init xbc_init(const char *buf, size_t size, const char **emsg, int *epos);
+int __init xbc_init(char *buf, size_t size, const char **emsg, int *epos);
+
+/* Append XBC data */
+int __init xbc_append(const char *data, size_t size, const char **emsg, int *epos);
 
 /* XBC node and size information */
 int __init xbc_get_info(int *node_size, size_t *data_size);
@@ -291,10 +294,11 @@ void __init xbc_exit(void);
 
 /* XBC embedded bootconfig data in kernel */
 #ifdef CONFIG_BOOT_CONFIG_EMBED
-const char * __init xbc_get_embedded_bootconfig(size_t *size);
+char * __init xbc_get_embedded_bootconfig(size_t *size);
 #else
-static inline const char *xbc_get_embedded_bootconfig(size_t *size)
+static inline char *xbc_get_embedded_bootconfig(size_t *size)
 {
+	*size = 0;
 	return NULL;
 }
 #endif
