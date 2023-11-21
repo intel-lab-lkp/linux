@@ -217,6 +217,7 @@ static pid_t spawn_sealing_thread(void)
 		abort();
 	}
 
+	free(stack);
 	return pid;
 }
 
