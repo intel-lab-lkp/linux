@@ -6853,8 +6853,17 @@ dequeue_throttle:
 	util_est_update(&rq->cfs, p, task_sleep);
 
 	if (task_sleep) {
-		p->last_dequeue_time = sched_clock_cpu(cpu_of(rq));
+		u64 now = sched_clock_cpu(cpu_of(rq));
+
+		p->last_dequeue_time = now;
 		p->last_dequeue_cpu = cpu_of(rq);
+
+#ifdef CONFIG_SMP
+		/* this rq becomes idle, update its cache hot timeout */
+		if (sched_feat(SIS_CACHE) && !rq->nr_running &&
+		    p->avg_hot_dur)
+			rq->cache_hot_timeout = max(rq->cache_hot_timeout, now + p->avg_hot_dur);
+#endif
 	} else {
 		/* 0 indicates the dequeue is not caused by sleep */
 		p->last_dequeue_time = 0;
@@ -7346,6 +7355,25 @@ static inline int select_idle_smt(struct task_struct *p, int target)
 }
 
 #endif /* CONFIG_SCHED_SMT */
+
+/*
+ * Return true if the idle CPU is cache-hot for someone,
+ * return false otherwise.
+ */
+static __maybe_unused bool cache_hot_cpu(int cpu, int *hot_cpu)
+{
+	if (!sched_feat(SIS_CACHE))
+		return false;
+
+	if (sched_clock_cpu(cpu) >= cpu_rq(cpu)->cache_hot_timeout)
+		return false;
+
+	/* record the first cache hot idle cpu as the backup */
+	if (*hot_cpu == -1)
+		*hot_cpu = cpu;
+
+	return true;
+}
 
 /*
  * Scan the LLC domain for idle CPUs; this is dynamically regulated by

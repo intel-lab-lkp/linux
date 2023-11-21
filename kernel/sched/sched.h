@@ -1083,6 +1083,7 @@ struct rq {
 #endif
 	u64			idle_stamp;
 	u64			avg_idle;
+	u64			cache_hot_timeout;
 
 	/* This is used to determine avg_idle's max value */
 	u64			max_idle_balance_cost;
