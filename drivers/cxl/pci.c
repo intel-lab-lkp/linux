@@ -886,6 +886,8 @@ static int cxl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	 */
 	if (cxl_mem_patrol_scrub_init(cxlmd))
 		dev_dbg(&pdev->dev, "cxl_mem_patrol_scrub_init failed\n");
+	if (cxl_mem_ddr5_ecs_init(cxlmd))
+		dev_dbg(&pdev->dev, "cxl_mem_ddr5_ecs_init failed\n");
 
 	rc = devm_cxl_sanitize_setup_notifier(&pdev->dev, cxlmd);
 	if (rc)

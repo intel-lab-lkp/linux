@@ -986,8 +986,11 @@ int cxl_clear_poison(struct cxl_memdev *cxlmd, u64 dpa);
 /* cxl memory scrub functions */
 #ifdef CONFIG_CXL_SCRUB
 int cxl_mem_patrol_scrub_init(struct cxl_memdev *cxlmd);
+int cxl_mem_ddr5_ecs_init(struct cxl_memdev *cxlmd);
 #else
 static inline int cxl_mem_patrol_scrub_init(struct cxl_memdev *cxlmd)
+{ return -ENOTSUPP; }
+static inline int cxl_mem_ddr5_ecs_init(struct cxl_memdev *cxlmd)
 { return -ENOTSUPP; }
 #endif
 
