@@ -4095,6 +4095,7 @@ ice_aq_sff_eeprom(struct ice_hw *hw, u16 lport, u8 bus_addr,
 {
 	struct ice_aqc_sff_eeprom *cmd;
 	struct ice_aq_desc desc;
+	u16 i2c_bus_addr;
 	int status;
 
 	if (!data || (mem_addr & 0xff00))
@@ -4105,11 +4106,9 @@ ice_aq_sff_eeprom(struct ice_hw *hw, u16 lport, u8 bus_addr,
 	desc.flags = cpu_to_le16(ICE_AQ_FLAG_RD);
 	cmd->lport_num = (u8)(lport & 0xff);
 	cmd->lport_num_valid = (u8)((lport >> 8) & 0x01);
-	cmd->i2c_bus_addr = cpu_to_le16(((bus_addr >> 1) &
-					 ICE_AQC_SFF_I2CBUS_7BIT_M) |
-					((set_page <<
-					  ICE_AQC_SFF_SET_EEPROM_PAGE_S) &
-					 ICE_AQC_SFF_SET_EEPROM_PAGE_M));
+	i2c_bus_addr = ((bus_addr >> 1) & ICE_AQC_SFF_I2CBUS_7BIT_M) |
+		       FIELD_PREP(ICE_AQC_SFF_SET_EEPROM_PAGE_M, set_page);
+	cmd->i2c_bus_addr = cpu_to_le16(i2c_bus_addr);
 	cmd->i2c_mem_addr = cpu_to_le16(mem_addr & 0xff);
 	cmd->eeprom_page = cpu_to_le16((u16)page << ICE_AQC_SFF_EEPROM_PAGE_S);
 	if (write)
@@ -4368,6 +4367,7 @@ ice_aq_dis_lan_txq(struct ice_hw *hw, u8 num_qgrps,
 	struct ice_aqc_dis_txq_item *item;
 	struct ice_aqc_dis_txqs *cmd;
 	struct ice_aq_desc desc;
+	u16 vmvf_and_timeout;
 	u16 i, sz = 0;
 	int status;
 
@@ -4383,26 +4383,25 @@ ice_aq_dis_lan_txq(struct ice_hw *hw, u8 num_qgrps,
 
 	cmd->num_entries = num_qgrps;
 
-	cmd->vmvf_and_timeout = cpu_to_le16((5 << ICE_AQC_Q_DIS_TIMEOUT_S) &
-					    ICE_AQC_Q_DIS_TIMEOUT_M);
+	vmvf_and_timeout = FIELD_PREP(ICE_AQC_Q_DIS_TIMEOUT_M, 5);
 
 	switch (rst_src) {
 	case ICE_VM_RESET:
 		cmd->cmd_type = ICE_AQC_Q_DIS_CMD_VM_RESET;
-		cmd->vmvf_and_timeout |=
-			cpu_to_le16(vmvf_num & ICE_AQC_Q_DIS_VMVF_NUM_M);
+		vmvf_and_timeout |= vmvf_num & ICE_AQC_Q_DIS_VMVF_NUM_M;
 		break;
 	case ICE_VF_RESET:
 		cmd->cmd_type = ICE_AQC_Q_DIS_CMD_VF_RESET;
 		/* In this case, FW expects vmvf_num to be absolute VF ID */
-		cmd->vmvf_and_timeout |=
-			cpu_to_le16((vmvf_num + hw->func_caps.vf_base_id) &
-				    ICE_AQC_Q_DIS_VMVF_NUM_M);
+		vmvf_and_timeout |= (vmvf_num + hw->func_caps.vf_base_id) &
+				    ICE_AQC_Q_DIS_VMVF_NUM_M;
 		break;
 	case ICE_NO_RESET:
 	default:
 		break;
 	}
+
+	cmd->vmvf_and_timeout = cpu_to_le16(vmvf_and_timeout);
 
 	/* flush pipe on time out */
 	cmd->cmd_type |= ICE_AQC_Q_DIS_CMD_FLUSH_PIPE;
