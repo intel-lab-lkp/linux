@@ -7,6 +7,7 @@
  *  Copyright (C) 2023 Intel Corp.
  */
 #include <linux/errno.h>
+#include <linux/acpi.h>
 #include <linux/fw_table.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
