@@ -1052,6 +1052,20 @@ static int tcp_ao_cache_traffic_keys(const struct sock *sk,
 	return ret;
 }
 
+void tcp_ao_listen(struct sock *sk)
+{
+	struct tcp_sock *tp = tcp_sk(sk);
+	struct tcp_ao_info *ao_info;
+
+	ao_info = rcu_dereference_protected(tp->ao_info,
+					    lockdep_sock_is_held(sk));
+	if (!ao_info)
+		return;
+
+	WRITE_ONCE(ao_info->current_key, NULL);
+	WRITE_ONCE(ao_info->rnext_key, NULL);
+}
+
 void tcp_ao_connect_init(struct sock *sk)
 {
 	struct tcp_sock *tp = tcp_sk(sk);

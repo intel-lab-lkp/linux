@@ -270,6 +270,7 @@ int tcp_v6_ao_synack_hash(char *ao_hash, struct tcp_ao_key *ao_key,
 void tcp_ao_established(struct sock *sk);
 void tcp_ao_finish_connect(struct sock *sk, struct sk_buff *skb);
 void tcp_ao_connect_init(struct sock *sk);
+void tcp_ao_listen(struct sock *sk);
 void tcp_ao_syncookie(struct sock *sk, const struct sk_buff *skb,
 		      struct tcp_request_sock *treq,
 		      unsigned short int family, int l3index);
@@ -327,6 +328,10 @@ static inline void tcp_ao_time_wait(struct tcp_timewait_sock *tcptw,
 }
 
 static inline void tcp_ao_connect_init(struct sock *sk)
+{
+}
+
+static inline void tcp_ao_listen(struct sock *sk)
 {
 }
 

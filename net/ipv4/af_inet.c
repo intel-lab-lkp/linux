@@ -200,6 +200,7 @@ int __inet_listen_sk(struct sock *sk, int backlog)
 	 * we can only allow the backlog to be adjusted.
 	 */
 	if (old_state != TCP_LISTEN) {
+		tcp_ao_listen(sk);
 		/* Enable TFO w/o requiring TCP_FASTOPEN socket option.
 		 * Note that only TCP sockets (SOCK_STREAM) will reach here.
 		 * Also fastopen backlog may already been set via the option
