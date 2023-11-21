@@ -1103,6 +1103,16 @@ config RTC_DRV_DS2404
 	  This driver can also be built as a module. If so, the module
 	  will be called rtc-ds2404.
 
+config RTC_DRV_CV1800B
+	tristate "Sophgo CV1800B RTC"
+	depends on ARCH_SOPHGO || COMPILE_TEST
+	help
+	  If you say yes here you will get support for the
+	  RTC of the Sophgo CV1800B SOC.
+
+	  This depend on ARCH_SOPHGO and COMPILE_TEST. Please
+	  first config that.
+
 config RTC_DRV_DA9052
 	tristate "Dialog DA9052/DA9053 RTC"
 	depends on PMIC_DA9052
