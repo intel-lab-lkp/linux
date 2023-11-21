@@ -267,7 +267,16 @@ See also the examples in :ref:`control`.
       - The size of each dimension. The first ``nr_of_dims`` elements of
 	this array must be non-zero, all remaining elements must be zero.
     * - __u32
-      - ``reserved``\ [32]
+      - ``fraction_bits``
+      - The number of least significant bits of the control value that
+        form the fraction of the fixed point value. This is 0 if the value
+	is a regular integer. This can be used with all integer control types
+	(``INTEGER``, ``INTEGER64``, ``U8``, ``U16`` and ``U32``).
+	For the signed types the signed two's complement representation is used.
+	This field applies to the control value as well as the ``minimum``,
+	``maximum``, ``step`` and ``default_value`` fields.
+    * - __u32
+      - ``reserved``\ [31]
       - Reserved for future extensions. Applications and drivers must set
 	the array to zero.
 
