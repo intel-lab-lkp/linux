@@ -12,6 +12,8 @@
 #include <linux/atomic.h>
 #include <linux/refcount.h>
 
+#include "umem.h"
+
 MODULE_DESCRIPTION("mlx5 ConnectX control misc driver");
 MODULE_AUTHOR("Saeed Mahameed <saeedm@nvidia.com>");
 MODULE_LICENSE("Dual BSD/GPL");
@@ -30,6 +32,8 @@ struct mlx5ctl_fd {
 	u16 uctx_uid;
 	u32 uctx_cap;
 	u32 ucap; /* user cap */
+
+	struct mlx5ctl_umem_db *umem_db;
 	struct mlx5ctl_dev *mcdev;
 	struct list_head list;
 };
@@ -115,6 +119,12 @@ static int mlx5ctl_open_mfd(struct mlx5ctl_fd *mfd)
 	if (uid < 0)
 		return uid;
 
+	mfd->umem_db = mlx5ctl_umem_db_create(mdev, uid);
+	if (IS_ERR(mfd->umem_db)) {
+		mlx5ctl_release_uid(mcdev, uid);
+		return PTR_ERR(mfd->umem_db);
+	}
+
 	mfd->uctx_uid = uid;
 	mfd->uctx_cap = cap;
 	mfd->ucap = ucap;
@@ -129,6 +139,7 @@ static void mlx5ctl_release_mfd(struct mlx5ctl_fd *mfd)
 {
 	struct mlx5ctl_dev *mcdev = mfd->mcdev;
 
+	mlx5ctl_umem_db_destroy(mfd->umem_db);
 	mlx5ctl_release_uid(mcdev,  mfd->uctx_uid);
 }
 
@@ -323,6 +334,86 @@ out:
 	return err;
 }
 
+static int mlx5ctl_ioctl_umem_reg(struct file *file,
+				  struct mlx5ctl_umem_reg __user *arg,
+				  size_t usize)
+{
+	struct mlx5ctl_fd *mfd = file->private_data;
+	struct mlx5ctl_umem_reg *umem_reg;
+	int umem_id, err = 0;
+	size_t ksize = 0;
+
+	ksize = max(sizeof(struct mlx5ctl_umem_reg), usize);
+	umem_reg = kzalloc(ksize, GFP_KERNEL_ACCOUNT);
+	if (!umem_reg)
+		return -ENOMEM;
+
+	umem_reg->size = sizeof(struct mlx5ctl_umem_reg);
+
+	if (copy_from_user(umem_reg, arg, usize)) {
+		err = -EFAULT;
+		goto out;
+	}
+
+	if (umem_reg->flags || umem_reg->reserved1 || umem_reg->reserved2) {
+		err = -EOPNOTSUPP;
+		goto out;
+	}
+
+	umem_id = mlx5ctl_umem_reg(mfd->umem_db,
+				   (unsigned long)umem_reg->addr,
+				   umem_reg->len);
+	if (umem_id < 0) {
+		err = umem_id;
+		goto out;
+	}
+
+	umem_reg->umem_id = umem_id;
+
+	if (copy_to_user(arg, umem_reg, usize)) {
+		mlx5ctl_umem_unreg(mfd->umem_db, umem_id);
+		err = -EFAULT;
+	}
+out:
+	kfree(umem_reg);
+	return err;
+}
+
+static int mlx5ctl_ioctl_umem_unreg(struct file *file,
+				    struct mlx5ctl_umem_unreg __user *arg,
+				    size_t usize)
+{
+	struct mlx5ctl_fd *mfd = file->private_data;
+	struct mlx5ctl_umem_unreg *umem_unreg;
+	size_t ksize = 0;
+	int err = 0;
+
+	ksize = max(sizeof(struct mlx5ctl_umem_unreg), usize);
+	umem_unreg = kzalloc(ksize, GFP_KERNEL_ACCOUNT);
+	if (!umem_unreg)
+		return -ENOMEM;
+
+	umem_unreg->size = sizeof(struct mlx5ctl_umem_unreg);
+
+	if (copy_from_user(umem_unreg, arg, usize)) {
+		err = -EFAULT;
+		goto out;
+	}
+
+	if (umem_unreg->flags) {
+		err = -EOPNOTSUPP;
+		goto out;
+	}
+
+	err = mlx5ctl_umem_unreg(mfd->umem_db, umem_unreg->umem_id);
+
+	if (!err && copy_to_user(arg, umem_unreg, usize))
+		err = -EFAULT;
+out:
+	kfree(umem_unreg);
+	return err;
+}
+
 static long mlx5ctl_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	struct mlx5ctl_fd *mfd = file->private_data;
@@ -350,6 +441,14 @@ static long mlx5ctl_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 
 	case MLX5CTL_IOCTL_CMDRPC:
 		err = mlx5ctl_cmdrpc_ioctl(file, argp, size);
+		break;
+
+	case MLX5CTL_IOCTL_UMEM_REG:
+		err = mlx5ctl_ioctl_umem_reg(file, argp, size);
+		break;
+
+	case MLX5CTL_IOCTL_UMEM_UNREG:
+		err = mlx5ctl_ioctl_umem_unreg(file, argp, size);
 		break;
 
 	default:
