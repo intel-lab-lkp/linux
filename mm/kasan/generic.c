@@ -361,6 +361,8 @@ void kasan_cache_create(struct kmem_cache *cache, unsigned int *size,
 {
 	unsigned int ok_size;
 	unsigned int optimal_size;
+	unsigned int rem_free_meta_size;
+	unsigned int orig_alloc_meta_offset;
 
 	if (!kasan_requires_meta())
 		return;
@@ -394,6 +396,9 @@ void kasan_cache_create(struct kmem_cache *cache, unsigned int *size,
 		/* Continue, since free meta might still fit. */
 	}
 
+	ok_size = *size;
+	orig_alloc_meta_offset = cache->kasan_info.alloc_meta_offset;
+
 	/*
 	 * Add free meta into redzone when it's not possible to store
 	 * it in the object. This is the case when:
@@ -401,21 +406,26 @@ void kasan_cache_create(struct kmem_cache *cache, unsigned int *size,
 	 *    be touched after it was freed, or
 	 * 2. Object has a constructor, which means it's expected to
 	 *    retain its content until the next allocation, or
-	 * 3. Object is too small.
 	 * Otherwise cache->kasan_info.free_meta_offset = 0 is implied.
+	 * Even if the object is smaller than free meta, it is still
+	 * possible to store part of the free meta in the object.
 	 */
-	if ((cache->flags & SLAB_TYPESAFE_BY_RCU) || cache->ctor ||
-	    cache->object_size < sizeof(struct kasan_free_meta)) {
-		ok_size = *size;
-
+	if ((cache->flags & SLAB_TYPESAFE_BY_RCU) || cache->ctor) {
 		cache->kasan_info.free_meta_offset = *size;
 		*size += sizeof(struct kasan_free_meta);
+	} else if (cache->object_size < sizeof(struct kasan_free_meta)) {
+		rem_free_meta_size = sizeof(struct kasan_free_meta) -
+								cache->object_size;
+		*size += rem_free_meta_size;
+		if (cache->kasan_info.alloc_meta_offset != 0)
+			cache->kasan_info.alloc_meta_offset += rem_free_meta_size;
+	}
 
-		/* If free meta doesn't fit, don't add it. */
-		if (*size > KMALLOC_MAX_SIZE) {
-			cache->kasan_info.free_meta_offset = KASAN_NO_FREE_META;
-			*size = ok_size;
-		}
+	/* If free meta doesn't fit, don't add it. */
+	if (*size > KMALLOC_MAX_SIZE) {
+		cache->kasan_info.free_meta_offset = KASAN_NO_FREE_META;
+		cache->kasan_info.alloc_meta_offset = orig_alloc_meta_offset;
+		*size = ok_size;
 	}
 
 	/* Calculate size with optimal redzone. */
@@ -464,12 +474,20 @@ size_t kasan_metadata_size(struct kmem_cache *cache, bool in_object)
 	if (in_object)
 		return (info->free_meta_offset ?
 			0 : sizeof(struct kasan_free_meta));
-	else
-		return (info->alloc_meta_offset ?
-			sizeof(struct kasan_alloc_meta) : 0) +
-			((info->free_meta_offset &&
-			info->free_meta_offset != KASAN_NO_FREE_META) ?
-			sizeof(struct kasan_free_meta) : 0);
+	else {
+		size_t alloc_meta_size = info->alloc_meta_offset ?
+								sizeof(struct kasan_alloc_meta) : 0;
+		size_t free_meta_size = 0;
+
+		if (info->free_meta_offset != KASAN_NO_FREE_META) {
+			if (info->free_meta_offset)
+				free_meta_size = sizeof(struct kasan_free_meta);
+			else if (cache->object_size < sizeof(struct kasan_free_meta))
+				free_meta_size = sizeof(struct kasan_free_meta) -
+									cache->object_size;
+		}
+		return alloc_meta_size + free_meta_size;
+	}
 }
 
 static void __kasan_record_aux_stack(void *addr, bool can_alloc)
