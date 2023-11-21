@@ -2243,28 +2243,39 @@ error_commit:
 	return ret;
 }
 
+static void uvc_video_halt(struct uvc_streaming *stream)
+{
+	unsigned int epnum;
+	unsigned int pipe;
+	unsigned int dir;
+
+	if (stream->intf->num_altsetting > 1) {
+		usb_set_interface(stream->dev->udev, stream->intfnum, 0);
+		return;
+	}
+
+	/*
+	 * UVC doesn't specify how to inform a bulk-based device
+	 * when the video stream is stopped. Windows sends a
+	 * CLEAR_FEATURE(HALT) request to the video streaming
+	 * bulk endpoint, mimic the same behaviour.
+	 */
+	epnum = stream->header.bEndpointAddress & USB_ENDPOINT_NUMBER_MASK;
+	dir = stream->header.bEndpointAddress & USB_ENDPOINT_DIR_MASK;
+	pipe = usb_sndbulkpipe(stream->dev->udev, epnum) | dir;
+	usb_clear_halt(stream->dev->udev, pipe);
+}
+
 void uvc_video_stop_streaming(struct uvc_streaming *stream)
 {
 	uvc_video_stop_transfer(stream, 1);
 
-	if (stream->intf->num_altsetting > 1) {
-		usb_set_interface(stream->dev->udev, stream->intfnum, 0);
-	} else {
-		/*
-		 * UVC doesn't specify how to inform a bulk-based device
-		 * when the video stream is stopped. Windows sends a
-		 * CLEAR_FEATURE(HALT) request to the video streaming
-		 * bulk endpoint, mimic the same behaviour.
-		 */
-		unsigned int epnum = stream->header.bEndpointAddress
-				   & USB_ENDPOINT_NUMBER_MASK;
-		unsigned int dir = stream->header.bEndpointAddress
-				 & USB_ENDPOINT_DIR_MASK;
-		unsigned int pipe;
-
-		pipe = usb_sndbulkpipe(stream->dev->udev, epnum) | dir;
-		usb_clear_halt(stream->dev->udev, pipe);
-	}
+	/*
+	 * Barrier needed to synchronize with uvc_disconnect().
+	 * We cannot call usb_* functions on a disconnected USB device.
+	 */
+	if (!smp_load_acquire(&stream->dev->disconnected))
+		uvc_video_halt(stream);
 
 	uvc_video_clock_cleanup(stream);
 }
