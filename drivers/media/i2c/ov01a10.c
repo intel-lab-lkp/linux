@@ -905,16 +905,19 @@ static int ov01a10_probe(struct i2c_client *client)
 		goto err_media_entity_cleanup;
 	}
 
-	ret = v4l2_async_register_subdev_sensor(&ov01a10->sd);
-	if (ret < 0) {
-		dev_err(dev, "Failed to register subdev: %d\n", ret);
-		goto err_media_entity_cleanup;
-	}
-
 	pm_runtime_enable(dev);
 	pm_runtime_idle(dev);
 
+	ret = v4l2_async_register_subdev_sensor(&ov01a10->sd);
+	if (ret < 0) {
+		dev_err(dev, "Failed to register subdev: %d\n", ret);
+		goto err_pm_disable;
+	}
+
 	return 0;
+
+err_pm_disable:
+	pm_runtime_disable(dev);
 
 err_media_entity_cleanup:
 	media_entity_cleanup(&ov01a10->sd.entity);
