@@ -1623,6 +1623,97 @@ static void kvm_xen_check_poller(struct kvm_vcpu *vcpu, int port)
 	}
 }
 
+static int set_shinfo_evtchn_pending(struct kvm_vcpu *vcpu, u32 port, u32 *port_word_bit)
+{
+	struct kvm *kvm = vcpu->kvm;
+	struct gfn_to_pfn_cache *gpc = &kvm->arch.xen.shinfo_cache;
+	unsigned long *pending_bits, *mask_bits;
+	unsigned long flags;
+	int rc = -EWOULDBLOCK;
+
+	read_lock_irqsave(&gpc->lock, flags);
+	if (!kvm_gpc_check(gpc, PAGE_SIZE))
+		goto out;
+
+	if (IS_ENABLED(CONFIG_64BIT) && kvm->arch.xen.long_mode) {
+		struct shared_info *shinfo = gpc->khva;
+		pending_bits = (unsigned long *)&shinfo->evtchn_pending;
+		mask_bits = (unsigned long *)&shinfo->evtchn_mask;
+		*port_word_bit = port / 64;
+	} else {
+		struct compat_shared_info *shinfo = gpc->khva;
+		pending_bits = (unsigned long *)&shinfo->evtchn_pending;
+		mask_bits = (unsigned long *)&shinfo->evtchn_mask;
+		*port_word_bit = port / 32;
+	}
+
+	/*
+	 * If this port wasn't already set, and if it isn't masked, then
+	 * we try to set the corresponding bit in the in-kernel shadow of
+	 * evtchn_pending_sel for the target vCPU. And if *that* wasn't
+	 * already set, then we kick the vCPU in question to write to the
+	 * *real* evtchn_pending_sel in its own guest vcpu_info struct.
+	 */
+	if (test_and_set_bit(port, pending_bits)) {
+		rc = 0; /* It was already raised */
+	} else if (test_bit(port, mask_bits)) {
+		rc = -ENOTCONN; /* It is masked */
+		kvm_xen_check_poller(vcpu, port);
+	} else {
+		rc = 1; /* It is newly raised */
+	}
+
+ out:
+	read_unlock_irqrestore(&gpc->lock, flags);
+	return rc;
+}
+
+static bool set_vcpu_info_evtchn_pending(struct kvm_vcpu *vcpu, u32 port_word_bit)
+{
+	struct kvm *kvm = vcpu->kvm;
+	struct gfn_to_pfn_cache *gpc = &vcpu->arch.xen.vcpu_info_cache;
+	unsigned long flags;
+	bool kick_vcpu = false;
+
+	read_lock_irqsave(&gpc->lock, flags);
+	if (!kvm_gpc_check(gpc, sizeof(struct vcpu_info))) {
+		/*
+		 * Could not access the vcpu_info. Set the bit in-kernel
+		 * and prod the vCPU to deliver it for itself.
+		 */
+		if (!test_and_set_bit(port_word_bit, &vcpu->arch.xen.evtchn_pending_sel))
+			kick_vcpu = true;
+		goto out;
+	}
+
+	if (IS_ENABLED(CONFIG_64BIT) && kvm->arch.xen.long_mode) {
+		struct vcpu_info *vcpu_info = gpc->khva;
+
+		if (!test_and_set_bit(port_word_bit, &vcpu_info->evtchn_pending_sel)) {
+			WRITE_ONCE(vcpu_info->evtchn_upcall_pending, 1);
+			kick_vcpu = true;
+		}
+	} else {
+		struct compat_vcpu_info *vcpu_info = gpc->khva;
+
+		if (!test_and_set_bit(port_word_bit,
+				      (unsigned long *)&vcpu_info->evtchn_pending_sel)) {
+			WRITE_ONCE(vcpu_info->evtchn_upcall_pending, 1);
+			kick_vcpu = true;
+		}
+	}
+
+	/* For the per-vCPU lapic vector, deliver it as MSI. */
+	if (kick_vcpu && vcpu->arch.xen.upcall_vector) {
+		kvm_xen_inject_vcpu_vector(vcpu);
+		kick_vcpu = false;
+	}
+
+ out:
+	read_unlock_irqrestore(&gpc->lock, flags);
+	return kick_vcpu;
+}
+
 /*
  * The return value from this function is propagated to kvm_set_irq() API,
  * so it returns:
@@ -1631,15 +1722,13 @@ static void kvm_xen_check_poller(struct kvm_vcpu *vcpu, int port)
  *  > 0   Number of CPUs interrupt was delivered to
  *
  * It is also called directly from kvm_arch_set_irq_inatomic(), where the
- * only check on its return value is a comparison with -EWOULDBLOCK'.
+ * only check on its return value is a comparison with -EWOULDBLOCK
+ * (which may be returned by set_shinfo_evtchn_pending()).
  */
 int kvm_xen_set_evtchn_fast(struct kvm_xen_evtchn *xe, struct kvm *kvm)
 {
-	struct gfn_to_pfn_cache *gpc = &kvm->arch.xen.shinfo_cache;
 	struct kvm_vcpu *vcpu;
-	unsigned long *pending_bits, *mask_bits;
-	unsigned long flags;
-	int port_word_bit;
+	u32 port_word_bit;
 	bool kick_vcpu = false;
 	int vcpu_idx, idx, rc;
 
@@ -1659,79 +1748,12 @@ int kvm_xen_set_evtchn_fast(struct kvm_xen_evtchn *xe, struct kvm *kvm)
 	if (xe->port >= max_evtchn_port(kvm))
 		return -EINVAL;
 
-	rc = -EWOULDBLOCK;
-
 	idx = srcu_read_lock(&kvm->srcu);
 
-	read_lock_irqsave(&gpc->lock, flags);
-	if (!kvm_gpc_check(gpc, PAGE_SIZE))
-		goto out_rcu;
+	rc = set_shinfo_evtchn_pending(vcpu, xe->port, &port_word_bit);
+	if (rc == 1) /* Delivered to the bitmap in shared_info. */
+		kick_vcpu = set_vcpu_info_evtchn_pending(vcpu, port_word_bit);
 
-	if (IS_ENABLED(CONFIG_64BIT) && kvm->arch.xen.long_mode) {
-		struct shared_info *shinfo = gpc->khva;
-		pending_bits = (unsigned long *)&shinfo->evtchn_pending;
-		mask_bits = (unsigned long *)&shinfo->evtchn_mask;
-		port_word_bit = xe->port / 64;
-	} else {
-		struct compat_shared_info *shinfo = gpc->khva;
-		pending_bits = (unsigned long *)&shinfo->evtchn_pending;
-		mask_bits = (unsigned long *)&shinfo->evtchn_mask;
-		port_word_bit = xe->port / 32;
-	}
-
-	/*
-	 * If this port wasn't already set, and if it isn't masked, then
-	 * we try to set the corresponding bit in the in-kernel shadow of
-	 * evtchn_pending_sel for the target vCPU. And if *that* wasn't
-	 * already set, then we kick the vCPU in question to write to the
-	 * *real* evtchn_pending_sel in its own guest vcpu_info struct.
-	 */
-	if (test_and_set_bit(xe->port, pending_bits)) {
-		rc = 0; /* It was already raised */
-	} else if (test_bit(xe->port, mask_bits)) {
-		rc = -ENOTCONN; /* Masked */
-		kvm_xen_check_poller(vcpu, xe->port);
-	} else {
-		rc = 1; /* Delivered to the bitmap in shared_info. */
-		/* Now switch to the vCPU's vcpu_info to set the index and pending_sel */
-		read_unlock_irqrestore(&gpc->lock, flags);
-		gpc = &vcpu->arch.xen.vcpu_info_cache;
-
-		read_lock_irqsave(&gpc->lock, flags);
-		if (!kvm_gpc_check(gpc, sizeof(struct vcpu_info))) {
-			/*
-			 * Could not access the vcpu_info. Set the bit in-kernel
-			 * and prod the vCPU to deliver it for itself.
-			 */
-			if (!test_and_set_bit(port_word_bit, &vcpu->arch.xen.evtchn_pending_sel))
-				kick_vcpu = true;
-			goto out_rcu;
-		}
-
-		if (IS_ENABLED(CONFIG_64BIT) && kvm->arch.xen.long_mode) {
-			struct vcpu_info *vcpu_info = gpc->khva;
-			if (!test_and_set_bit(port_word_bit, &vcpu_info->evtchn_pending_sel)) {
-				WRITE_ONCE(vcpu_info->evtchn_upcall_pending, 1);
-				kick_vcpu = true;
-			}
-		} else {
-			struct compat_vcpu_info *vcpu_info = gpc->khva;
-			if (!test_and_set_bit(port_word_bit,
-					      (unsigned long *)&vcpu_info->evtchn_pending_sel)) {
-				WRITE_ONCE(vcpu_info->evtchn_upcall_pending, 1);
-				kick_vcpu = true;
-			}
-		}
-
-		/* For the per-vCPU lapic vector, deliver it as MSI. */
-		if (kick_vcpu && vcpu->arch.xen.upcall_vector) {
-			kvm_xen_inject_vcpu_vector(vcpu);
-			kick_vcpu = false;
-		}
-	}
-
- out_rcu:
-	read_unlock_irqrestore(&gpc->lock, flags);
 	srcu_read_unlock(&kvm->srcu, idx);
 
 	if (kick_vcpu) {
