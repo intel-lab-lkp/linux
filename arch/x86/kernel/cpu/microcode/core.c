@@ -24,6 +24,7 @@
 #include <linux/capability.h>
 #include <linux/firmware.h>
 #include <linux/cpumask.h>
+#include <linux/elfnote.h>
 #include <linux/kernel.h>
 #include <linux/delay.h>
 #include <linux/mutex.h>
@@ -31,6 +32,8 @@
 #include <linux/nmi.h>
 #include <linux/fs.h>
 #include <linux/mm.h>
+
+#include <uapi/elfnote.h>
 
 #include <asm/apic.h>
 #include <asm/cpu_device_id.h>
@@ -856,3 +859,5 @@ static int __init microcode_init(void)
 
 }
 late_initcall(microcode_init);
+
+ELFNOTE32("x86", X86_ELFNOTE_MICROCODE, CONFIG_MICROCODE);
