@@ -2282,7 +2282,7 @@ static int uvc_suspend(struct usb_interface *intf, pm_message_t message)
 	    UVC_SC_VIDEOCONTROL) {
 		mutex_lock(&dev->lock);
 		if (dev->users)
-			uvc_status_stop(dev);
+			uvc_status_stop(dev, true);
 		mutex_unlock(&dev->lock);
 		return 0;
 	}
