@@ -900,9 +900,9 @@ static long do_get_mempolicy(int *policy, nodemask_t *nmask,
 			     unsigned long addr, unsigned long flags)
 {
 	int err;
-	struct mm_struct *mm = current->mm;
+	struct mm_struct *mm;
 	struct vm_area_struct *vma = NULL;
-	struct mempolicy *pol = current->mempolicy, *pol_refcount = NULL;
+	struct mempolicy *pol = NULL, *pol_refcount = NULL;
 
 	if (flags &
 		~(unsigned long)(MPOL_F_NODE|MPOL_F_ADDR|MPOL_F_MEMS_ALLOWED))
@@ -925,29 +925,38 @@ static long do_get_mempolicy(int *policy, nodemask_t *nmask,
 		 * vma/shared policy at addr is NULL.  We
 		 * want to return MPOL_DEFAULT in this case.
 		 */
+		mm = current->mm;
 		mmap_read_lock(mm);
 		vma = vma_lookup(mm, addr);
 		if (!vma) {
 			mmap_read_unlock(mm);
 			return -EFAULT;
 		}
-		pol = __get_vma_policy(vma, addr, &ilx);
+		/*
+		 * __get_vma_policy can refcount if a shared policy is
+		 * referenced.  We'll need to do a cond_put on the way
+		 * out, but we need to reference this policy either way
+		 * because we may drop the mmap read lock.
+		 */
+		pol = pol_refcount = __get_vma_policy(vma, addr, &ilx);
+		mpol_get(pol);
 	} else if (addr)
 		return -EINVAL;
+	else {
+		/* take a reference of the task policy now */
+		pol = current->mempolicy;
+		mpol_get(pol);
+	}
 
-	if (!pol)
+	if (!pol) {
 		pol = &default_policy;	/* indicates default behavior */
+		mpol_get(pol);
+	}
+	/* we now have at least one reference on the policy */
 
 	if (flags & MPOL_F_NODE) {
 		if (flags & MPOL_F_ADDR) {
-			/*
-			 * Take a refcount on the mpol, because we are about to
-			 * drop the mmap_lock, after which only "pol" remains
-			 * valid, "vma" is stale.
-			 */
-			pol_refcount = pol;
 			vma = NULL;
-			mpol_get(pol);
 			mmap_read_unlock(mm);
 			err = lookup_node(mm, addr);
 			if (err < 0)
@@ -982,11 +991,11 @@ static long do_get_mempolicy(int *policy, nodemask_t *nmask,
 	}
 
  out:
-	mpol_cond_put(pol);
+	mpol_put(pol);
 	if (vma)
 		mmap_read_unlock(mm);
 	if (pol_refcount)
-		mpol_put(pol_refcount);
+		mpol_cond_put(pol_refcount);
 	return err;
 }
 
