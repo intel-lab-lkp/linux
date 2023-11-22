@@ -8,6 +8,13 @@ config ARCH_ACTIONS
 	help
 	  This enables support for the Actions Semiconductor S900 SoC family.
 
+config ARCH_AMPEREONE
+	bool "AmpereOne Platforms"
+	help
+	  This enables support for the ARMv8 based AmpereOne chipsets.
+	  AmpereOne is the next generation of Cloud Native Processors from
+	  Ampere.
+
 config ARCH_SUNXI
 	bool "Allwinner sunxi 64-bit SoC Family"
 	select ARCH_HAS_RESET_CONTROLLER

@@ -41,6 +41,18 @@
 	b.ne	.Ltail63
 .endm
 
+#if defined(CONFIG_ARCH_AMPEREONE) && defined(CONFIG_ARM64_4K_PAGES)
+.macro add_prefetch
+	/*
+	 * Add prefetch two cache lines by prfm to optimize the
+	 * performance. The 2K offset is the best offset which
+	 * we get from the tests.
+	 */
+	prfm	pldl2keep, [src, #2048]
+	prfm	pldl2keep, [src, #2112]
+.endm
+#endif
+
 /*
  * Copy a buffer from src to dest (alignment handled by the hardware)
  *
@@ -156,6 +168,13 @@ D_h	.req	x14
 	b	.Lexitfunc
 
 .Lcpy_over64:
+#if defined(CONFIG_ARCH_AMPEREONE) && defined(CONFIG_ARM64_4K_PAGES)
+alternative_if  ARM64_WORKAROUND_AMPERE_AC03_PREFETCH
+	cmp	count, #PAGE_SIZE
+	b.ge	.Lcpy_over_pagesize
+alternative_else_nop_endif
+#endif
+
 	subs	count, count, #128
 	b.ge	.Lcpy_body_large
 	/*
@@ -182,4 +201,16 @@ D_h	.req	x14
 	.p2align	L1_CACHE_SHIFT
 .Lcpy_body_large:
 	loop_for_copy_128_bytes
+
+#if defined(CONFIG_ARCH_AMPEREONE) && defined(CONFIG_ARM64_4K_PAGES)
+	b	.Lexitfunc
+
+	.p2align        L1_CACHE_SHIFT
+.Lcpy_over_pagesize:
+alternative_if  ARM64_WORKAROUND_AMPERE_AC03_PREFETCH
+	subs	count, count, #128
+	loop_for_copy_128_bytes add_prefetch
+alternative_else_nop_endif
+#endif
+
 .Lexitfunc:

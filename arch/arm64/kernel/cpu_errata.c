@@ -720,6 +720,15 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		ERRATA_MIDR_ALL_VERSIONS(MIDR_AMPERE1),
 	},
 #endif
+#if defined(CONFIG_ARCH_AMPEREONE) && defined(CONFIG_ARM64_4K_PAGES)
+	{
+		.desc = "Optimization for AmpereOne chip",
+		.capability = ARM64_WORKAROUND_AMPERE_AC03_PREFETCH,
+		.type = ARM64_CPUCAP_SYSTEM_FEATURE,
+		.matches = is_affected_midr_range,
+		.midr_range = MIDR_ALL_VERSIONS(MIDR_AMPERE1)
+	},
+#endif
 	{
 	}
 };
