@@ -85,7 +85,6 @@ config SND_SOC_ALL_CODECS
 	imply SND_SOC_CS42L73
 	imply SND_SOC_CS4234
 	imply SND_SOC_CS4265
-	imply SND_SOC_CS4270
 	imply SND_SOC_CS4271_I2C
 	imply SND_SOC_CS4271_SPI
 	imply SND_SOC_CS42XX8_I2C
@@ -893,19 +892,6 @@ config SND_SOC_CS4265
 	tristate "Cirrus Logic CS4265 CODEC"
 	depends on I2C
 	select REGMAP_I2C
-
-# Cirrus Logic CS4270 Codec
-config SND_SOC_CS4270
-	tristate "Cirrus Logic CS4270 CODEC"
-	depends on I2C
-
-# Cirrus Logic CS4270 Codec VD = 3.3V Errata
-# Select if you are affected by the errata where the part will not function
-# if MCLK divide-by-1.5 is selected and VD is set to 3.3V.  The driver will
-# not select any sample rates that require MCLK to be divided by 1.5.
-config SND_SOC_CS4270_VD33_ERRATA
-	bool
-	depends on SND_SOC_CS4270
 
 config SND_SOC_CS4271
 	tristate
