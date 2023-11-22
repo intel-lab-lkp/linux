@@ -830,10 +830,8 @@ static void if_usb_prog_firmware(struct lbs_private *priv, int ret,
 	}
 
 	cardp->fw = fw;
-	if (check_fwfile_format(cardp->fw->data, cardp->fw->size)) {
-		ret = -EINVAL;
+	if (check_fwfile_format(cardp->fw->data, cardp->fw->size))
 		goto done;
-	}
 
 	/* Cancel any pending usb business */
 	usb_kill_urb(cardp->rx_urb);
@@ -848,7 +846,6 @@ static void if_usb_prog_firmware(struct lbs_private *priv, int ret,
 restart:
 	if (if_usb_submit_rx_urb_fwload(cardp) < 0) {
 		lbs_deb_usbd(&cardp->udev->dev, "URB submission is failed\n");
-		ret = -EIO;
 		goto done;
 	}
 
@@ -866,18 +863,15 @@ restart:
 
 	if (cardp->bootcmdresp == BOOT_CMD_RESP_NOT_SUPPORTED) {
 		/* Return to normal operation */
-		ret = -EOPNOTSUPP;
 		usb_kill_urb(cardp->rx_urb);
 		usb_kill_urb(cardp->tx_urb);
-		if (if_usb_submit_rx_urb(cardp) < 0)
-			ret = -EIO;
+		if_usb_submit_rx_urb(cardp);
 		goto done;
 	} else if (cardp->bootcmdresp <= 0) {
 		if (--reset_count >= 0) {
 			if_usb_reset_device(cardp);
 			goto restart;
 		}
-		ret = -EIO;
 		goto done;
 	}
 
@@ -908,7 +902,6 @@ restart:
 		}
 
 		pr_info("FW download failure, time = %d ms\n", i * 100);
-		ret = -EIO;
 		goto done;
 	}
 
