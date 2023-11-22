@@ -658,7 +658,7 @@ reread:
 	return 0;
 }
 
-int __bch2_read_super(const char *path, struct bch_opts *opts,
+static int __bch2_read_super(const char *path, struct bch_opts *opts,
 		    struct bch_sb_handle *sb, bool ignore_notbchfs_msg)
 {
 	u64 offset = opt_get(*opts, sb);
