@@ -335,6 +335,7 @@ void drain_local_pages(struct zone *zone);
 
 void page_alloc_init_late(void);
 void setup_pcp_cacheinfo(void);
+void mem_init_print_info(void);
 
 /*
  * gfp_allowed_mask is set to GFP_BOOT_MASK during early boot to restrict what

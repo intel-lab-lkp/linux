@@ -1547,6 +1547,7 @@ static noinline void __init kernel_init_freeable(void)
 	workqueue_init_topology();
 	padata_init();
 	page_alloc_init_late();
+	mem_init_print_info();
 
 	do_basic_setup();
 
