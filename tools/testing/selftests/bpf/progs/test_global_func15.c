@@ -22,3 +22,32 @@ int global_func15(struct __sk_buff *skb)
 
 	return v;
 }
+
+SEC("cgroup_skb/ingress")
+__failure __msg("At program exit the register R0 has ")
+__log_level(2) __flag(BPF_F_TEST_STATE_FREQ)
+__naked int global_func15_tricky_pruning(void)
+{
+	asm volatile (
+		"r0 = 1;"
+		"*(u64 *)(r10 -8) = r0;"
+		"call %[bpf_get_prandom_u32];"
+		"if r0 > 1000 goto 1f;"
+		"r0 = 1;"
+	"1:"
+		"goto +0;" /* checkpoint */
+		/* cgroup_skb/ingress program is expected to return [0, 1]
+		 * values, so branch above makes sure that in a fallthrough
+		 * case we have a valid 1 stored in R0 register, but in
+		 * a branch case we assign some random value to R0.  So if
+		 * there is something wrong with precision tracking for R0 at
+		 * program exit, we might erronenously prune branch case,
+		 * because R0 in fallthrough case is imprecise (and thus any
+		 * value is valid from POV of verifier is_state_equal() logic)
+		 */
+		"exit;"
+		:
+		: __imm(bpf_get_prandom_u32)
+		: __clobber_common
+	);
+}
