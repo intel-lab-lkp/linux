@@ -737,15 +737,15 @@ int tpm2_auto_startup(struct tpm_chip *chip)
 	if (rc)
 		goto out;
 
+	rc = tpm2_startup(chip);
+	if (rc && rc != TPM2_RC_INITIALIZE)
+		goto out;
+
 	rc = tpm2_do_selftest(chip);
 	if (rc && rc != TPM2_RC_INITIALIZE)
 		goto out;
 
 	if (rc == TPM2_RC_INITIALIZE) {
-		rc = tpm2_startup(chip);
-		if (rc)
-			goto out;
-
 		rc = tpm2_do_selftest(chip);
 		if (rc)
 			goto out;
