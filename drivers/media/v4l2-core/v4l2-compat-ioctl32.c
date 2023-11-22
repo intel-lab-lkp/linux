@@ -101,6 +101,7 @@ struct v4l2_format32 {
 		struct v4l2_sliced_vbi_format	sliced;
 		struct v4l2_sdr_format	sdr;
 		struct v4l2_meta_format	meta;
+		struct v4l2_audio_format	audio;
 		__u8	raw_data[200];        /* user-defined */
 	} fmt;
 };
@@ -162,6 +163,10 @@ static int get_v4l2_format32(struct v4l2_format *p64,
 	case V4L2_BUF_TYPE_META_OUTPUT:
 		return copy_from_user(&p64->fmt.meta, &p32->fmt.meta,
 				      sizeof(p64->fmt.meta)) ? -EFAULT : 0;
+	case V4L2_BUF_TYPE_AUDIO_CAPTURE:
+	case V4L2_BUF_TYPE_AUDIO_OUTPUT:
+		return copy_from_user(&p64->fmt.audio, &p32->fmt.audio,
+				      sizeof(p64->fmt.audio)) ? -EFAULT : 0;
 	default:
 		return -EINVAL;
 	}
@@ -209,6 +214,10 @@ static int put_v4l2_format32(struct v4l2_format *p64,
 	case V4L2_BUF_TYPE_META_OUTPUT:
 		return copy_to_user(&p32->fmt.meta, &p64->fmt.meta,
 				    sizeof(p64->fmt.meta)) ? -EFAULT : 0;
+	case V4L2_BUF_TYPE_AUDIO_CAPTURE:
+	case V4L2_BUF_TYPE_AUDIO_OUTPUT:
+		return copy_to_user(&p32->fmt.audio, &p64->fmt.audio,
+				    sizeof(p64->fmt.audio)) ? -EFAULT : 0;
 	default:
 		return -EINVAL;
 	}
