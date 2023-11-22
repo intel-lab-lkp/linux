@@ -1,0 +1,60 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/serial/brcm,bcmbca-hs-uart.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Broadcom Broadband SoC High Speed UART
+
+description:
+  High speed serial port controller that was designed to handle Bluetooth
+  devices communication. It supports sending custom frames that need to be
+  processed by a host system.
+
+maintainers:
+  - Rafał Miłecki <rafal@milecki.pl>
+
+allOf:
+  - $ref: serial.yaml#
+
+properties:
+  compatible:
+    items:
+      - enum:
+          - brcm,bcm4908-hs-uart
+          - brcm,bcm4912-hs-uart
+          - brcm,bcm6756-hs-uart
+          - brcm,bcm6813-hs-uart
+          - brcm,bcm6846-hs-uart
+          - brcm,bcm6855-hs-uart
+          - brcm,bcm6856-hs-uart
+          - brcm,bcm6858-hs-uart
+          - brcm,bcm6878-hs-uart
+          - brcm,bcm47622-hs-uart
+          - brcm,bcm63138-hs-uart
+          - brcm,bcm63146-hs-uart
+          - brcm,bcm63158-hs-uart
+          - brcm,bcm63178-hs-uart
+      - const: brcm,bcmbca-hs-uart
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+required:
+  - reg
+  - interrupts
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+
+    serial@fffec400 {
+        compatible = "brcm,bcm63138-hs-uart", "brcm,bcmbca-hs-uart";
+        reg = <0xfffec400 0x1e0>;
+        interrupts = <GIC_SPI 34 IRQ_TYPE_LEVEL_HIGH>;
+    };
