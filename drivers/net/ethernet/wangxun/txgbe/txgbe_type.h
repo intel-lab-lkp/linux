@@ -98,6 +98,7 @@
 
 #define TXGBE_MAX_MSIX_VECTORS          64
 #define TXGBE_MAX_FDIR_INDICES          63
+#define TXGBE_MAX_RSS_INDICES           63
 
 #define TXGBE_MAX_RX_QUEUES   (TXGBE_MAX_FDIR_INDICES + 1)
 #define TXGBE_MAX_TX_QUEUES   (TXGBE_MAX_FDIR_INDICES + 1)
@@ -131,6 +132,7 @@ extern char txgbe_driver_name[];
 
 void txgbe_down(struct wx *wx);
 void txgbe_up(struct wx *wx);
+int txgbe_setup_tc(struct net_device *dev, u8 tc);
 
 static inline struct txgbe *netdev_to_txgbe(struct net_device *netdev)
 {
