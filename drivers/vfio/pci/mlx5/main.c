@@ -1284,16 +1284,16 @@ mlx5vf_pci_step_device_state_locked(struct mlx5vf_pci_core_device *mvdev,
 void mlx5vf_state_mutex_unlock(struct mlx5vf_pci_core_device *mvdev)
 {
 again:
-	spin_lock(&mvdev->reset_lock);
+	mutex_lock(&mvdev->reset_mutex);
 	if (mvdev->deferred_reset) {
 		mvdev->deferred_reset = false;
-		spin_unlock(&mvdev->reset_lock);
+		mutex_unlock(&mvdev->reset_mutex);
 		mvdev->mig_state = VFIO_DEVICE_STATE_RUNNING;
 		mlx5vf_disable_fds(mvdev);
 		goto again;
 	}
 	mutex_unlock(&mvdev->state_mutex);
-	spin_unlock(&mvdev->reset_lock);
+	mutex_unlock(&mvdev->reset_mutex);
 }
 
 static struct file *
@@ -1372,13 +1372,13 @@ static void mlx5vf_pci_aer_reset_done(struct pci_dev *pdev)
 	 * In case the state_mutex was taken already we defer the cleanup work
 	 * to the unlock flow of the other running context.
 	 */
-	spin_lock(&mvdev->reset_lock);
+	mutex_lock(&mvdev->reset_mutex);
 	mvdev->deferred_reset = true;
 	if (!mutex_trylock(&mvdev->state_mutex)) {
-		spin_unlock(&mvdev->reset_lock);
+		mutex_unlock(&mvdev->reset_mutex);
 		return;
 	}
-	spin_unlock(&mvdev->reset_lock);
+	mutex_unlock(&mvdev->reset_mutex);
 	mlx5vf_state_mutex_unlock(mvdev);
 }
 

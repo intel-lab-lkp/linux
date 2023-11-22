@@ -202,6 +202,7 @@ void mlx5vf_cmd_remove_migratable(struct mlx5vf_pci_core_device *mvdev)
 	mlx5_sriov_blocking_notifier_unregister(mvdev->mdev, mvdev->vf_id,
 						&mvdev->nb);
 	destroy_workqueue(mvdev->cb_wq);
+	mutex_destroy(&mvdev->reset_mutex);
 }
 
 void mlx5vf_cmd_set_migratable(struct mlx5vf_pci_core_device *mvdev,
@@ -238,7 +239,7 @@ void mlx5vf_cmd_set_migratable(struct mlx5vf_pci_core_device *mvdev,
 		goto end;
 
 	mutex_init(&mvdev->state_mutex);
-	spin_lock_init(&mvdev->reset_lock);
+	mutex_init(&mvdev->reset_mutex);
 	mvdev->nb.notifier_call = mlx5fv_vf_event;
 	ret = mlx5_sriov_blocking_notifier_register(mvdev->mdev, mvdev->vf_id,
 						    &mvdev->nb);
