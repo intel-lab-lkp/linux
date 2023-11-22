@@ -1116,4 +1116,12 @@ config SM_VIDEOCC_8450
 	  SM8450 devices.
 	  Say Y if you want to support video devices and functionality such as
 	  video encode/decode.
+
+config X1E_TCSRCC_80100
+	tristate "X1E80100 TCSR Clock Controller"
+	depends on ARM64 || COMPILE_TEST
+	select QCOM_GDSC
+	help
+	  Support for the TCSR clock controller on X1E80100 devices.
+	  Say Y if you want to use peripheral devices such as SD/UFS.
 endif
