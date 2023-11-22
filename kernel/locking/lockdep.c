@@ -1145,7 +1145,7 @@ static bool __check_data_structures(void)
 	return true;
 }
 
-int check_consistency = 0;
+static int check_consistency = 0;
 module_param(check_consistency, int, 0644);
 
 static void check_data_structures(void)
