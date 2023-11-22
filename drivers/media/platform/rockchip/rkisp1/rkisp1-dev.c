@@ -617,6 +617,7 @@ err_unreg_media_dev:
 	media_device_unregister(&rkisp1->media_dev);
 err_unreg_v4l2_dev:
 	v4l2_device_unregister(&rkisp1->v4l2_dev);
+	media_device_cleanup(&rkisp1->media_dev);
 err_pm_runtime_disable:
 	pm_runtime_disable(&pdev->dev);
 	return ret;
@@ -636,6 +637,8 @@ static void rkisp1_remove(struct platform_device *pdev)
 
 	media_device_unregister(&rkisp1->media_dev);
 	v4l2_device_unregister(&rkisp1->v4l2_dev);
+
+	media_device_cleanup(&rkisp1->media_dev);
 
 	pm_runtime_disable(&pdev->dev);
 }
