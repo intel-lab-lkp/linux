@@ -866,14 +866,16 @@ int perf_event__synthesize_thread_map(struct perf_tool *tool,
 
 	err = 0;
 	for (thread = 0; thread < threads->nr; ++thread) {
+		/*
+		 * We may race with exiting thread, so don't stop just because
+		 * one thread couldn't be synthesized.
+		 */
 		if (__event__synthesize_thread(comm_event, mmap_event,
 					       fork_event, namespaces_event,
 					       perf_thread_map__pid(threads, thread), 0,
 					       process, tool, machine,
-					       needs_mmap, mmap_data)) {
-			err = -1;
-			break;
-		}
+					       needs_mmap, mmap_data))
+			continue;
 
 		/*
 		 * comm.pid is set to thread group id by
