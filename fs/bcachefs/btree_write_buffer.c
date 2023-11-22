@@ -282,7 +282,7 @@ static int bch2_btree_write_buffer_flush_locked(struct btree_trans *trans)
 			struct btree_write_buffered_key *n = &wb->flushing.keys.data[i[1].idx];
 
 			skipped++;
-			n->journal_seq = min_t(u64, n->journal_seq, k->journal_seq);;
+			n->journal_seq = min_t(u64, n->journal_seq, k->journal_seq);
 			k->journal_seq = 0;
 			continue;
 		}
