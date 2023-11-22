@@ -21,6 +21,7 @@ struct iommufd_ctx {
 	struct file *file;
 	struct xarray objects;
 	struct xarray groups;
+	wait_queue_head_t destroy_wait;
 
 	u8 account_mode;
 	/* Compatibility with VFIO no iommu */
@@ -135,7 +136,7 @@ enum iommufd_object_type {
 
 /* Base struct for all objects with a userspace ID handle. */
 struct iommufd_object {
-	struct rw_semaphore destroy_rwsem;
+	refcount_t shortterm_users;
 	refcount_t users;
 	enum iommufd_object_type type;
 	unsigned int id;
@@ -143,10 +144,15 @@ struct iommufd_object {
 
 static inline bool iommufd_lock_obj(struct iommufd_object *obj)
 {
-	if (!down_read_trylock(&obj->destroy_rwsem))
+	if (!refcount_inc_not_zero(&obj->users))
 		return false;
-	if (!refcount_inc_not_zero(&obj->users)) {
-		up_read(&obj->destroy_rwsem);
+	if (!refcount_inc_not_zero(&obj->shortterm_users)) {
+		/*
+		 * If the caller doesn't already have a ref on obj this must be
+		 * called under the xa_lock. Otherwise the caller is holding a
+		 * ref on users so this cannot make it zero.
+		 */
+		refcount_dec(&obj->users);
 		return false;
 	}
 	return true;
@@ -157,8 +163,13 @@ struct iommufd_object *iommufd_get_object(struct iommufd_ctx *ictx, u32 id,
 static inline void iommufd_put_object(struct iommufd_ctx *ictx,
 				      struct iommufd_object *obj)
 {
+	/*
+	 * Users first, then shortterm so that REMOVE_WAIT_SHORTTERM never sees
+	 * a spurious !0 users with a 0 shortterm_users.
+	 */
 	refcount_dec(&obj->users);
-	up_read(&obj->destroy_rwsem);
+	if (refcount_dec_and_test(&obj->shortterm_users))
+		wake_up_interruptible_all(&ictx->destroy_wait);
 }
 
 void iommufd_object_abort(struct iommufd_ctx *ictx, struct iommufd_object *obj);
@@ -166,17 +177,41 @@ void iommufd_object_abort_and_destroy(struct iommufd_ctx *ictx,
 				      struct iommufd_object *obj);
 void iommufd_object_finalize(struct iommufd_ctx *ictx,
 			     struct iommufd_object *obj);
-void __iommufd_object_destroy_user(struct iommufd_ctx *ictx,
-				   struct iommufd_object *obj, bool allow_fail);
+
+enum {
+	REMOVE_WAIT_SHORTTERM = 1,
+};
+int iommufd_object_remove(struct iommufd_ctx *ictx,
+			  struct iommufd_object *to_destroy, u32 id,
+			  unsigned int flags);
+
+/*
+ * The caller holds a users refcount and wants to destroy the object. In all
+ * cases the caller no longer has a users reference on obj. At this point
+ * the xarray will be holding a shortterm_users reference.
+ */
 static inline void iommufd_object_destroy_user(struct iommufd_ctx *ictx,
 					       struct iommufd_object *obj)
 {
-	__iommufd_object_destroy_user(ictx, obj, false);
+	int ret;
+
+	ret = iommufd_object_remove(ictx, obj, obj->id, REMOVE_WAIT_SHORTTERM);
+
+	/*
+	 * If there is a bug and we couldn't destroy the object then we did put
+	 * back the caller's refcount and will eventually try to free it again
+	 * during close.
+	 */
+	WARN_ON(ret);
 }
+
+/*
+ * Used by autodomains to clean up the hwpt object if it was not used manually.
+ */
 static inline void iommufd_object_deref_user(struct iommufd_ctx *ictx,
 					     struct iommufd_object *obj)
 {
-	__iommufd_object_destroy_user(ictx, obj, true);
+	iommufd_object_remove(ictx, obj, obj->id, 0);
 }
 
 struct iommufd_object *_iommufd_object_alloc(struct iommufd_ctx *ictx,
