@@ -816,6 +816,10 @@ asmlinkage long sys_mbind(unsigned long start, unsigned long len,
 				const unsigned long __user *nmask,
 				unsigned long maxnode,
 				unsigned flags);
+asmlinkage long sys_process_mbind(int pidfd, const struct iovec __user *vec,
+				size_t vlen, unsigned long mode,
+				const unsigned long __user *nmask,
+				unsigned flags);
 asmlinkage long sys_get_mempolicy(int __user *policy,
 				unsigned long __user *nmask,
 				unsigned long maxnode,

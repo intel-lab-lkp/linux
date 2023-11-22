@@ -1215,11 +1215,10 @@ static struct folio *alloc_migration_target_by_mpol(struct folio *src,
 }
 #endif
 
-static long do_mbind(unsigned long start, unsigned long len,
+static long do_mbind(struct mm_struct *mm, unsigned long start, unsigned long len,
 		     unsigned short mode, unsigned short mode_flags,
 		     nodemask_t *nmask, unsigned long flags)
 {
-	struct mm_struct *mm = current->mm;
 	struct vm_area_struct *vma, *prev;
 	struct vma_iterator vmi;
 	struct migration_mpol mmpol;
@@ -1465,10 +1464,84 @@ static inline int sanitize_mpol_flags(int *mode, unsigned short *flags)
 	return 0;
 }
 
+static long kernel_mbind_process(int pidfd, const struct iovec __user *vec,
+		size_t vlen, unsigned long mode,
+		const unsigned long __user *nmask, unsigned int flags)
+{
+	ssize_t ret;
+	struct iovec iovstack[UIO_FASTIOV];
+	struct iovec *iov = iovstack;
+	struct iov_iter iter;
+	struct task_struct *task;
+	struct mm_struct *mm;
+	unsigned int f_flags;
+	unsigned short mode_flags;
+	int lmode = mode;
+	unsigned long maxnode = MAX_NUMNODES;
+	int err;
+	nodemask_t nodes;
+
+	err = sanitize_mpol_flags(&lmode, &mode_flags);
+	if (err)
+		goto out;
+
+	err = get_nodes(&nodes, nmask, maxnode);
+	if (err)
+		goto out;
+
+	ret = import_iovec(ITER_DEST, vec, vlen, ARRAY_SIZE(iovstack),
+			&iov, &iter);
+	if (ret < 0)
+		goto out;
+
+	task = pidfd_get_task(pidfd, &f_flags);
+	if (IS_ERR(task)) {
+		ret = PTR_ERR(task);
+		goto free_iov;
+	}
+
+	/* From process_madvise: Require PTRACE_MODE_READ
+	 * to avoid leaking ASLR metadata. */
+	mm = mm_access(task, PTRACE_MODE_READ_FSCREDS);
+	if (IS_ERR_OR_NULL(mm)) {
+		ret = IS_ERR(mm) ? PTR_ERR(mm) : -ESRCH;
+		goto release_task;
+	}
+
+	/* From process_madvise: Require CAP_SYS_NICE for
+	 * influencing process performance. */
+	if (!capable(CAP_SYS_NICE)) {
+		ret = -EPERM;
+		goto release_mm;
+	}
+
+	while (iov_iter_count(&iter)) {
+		unsigned long start = untagged_addr(
+				(unsigned long)iter_iov_addr(&iter));
+		unsigned long len = iter_iov_len(&iter);
+
+		ret = do_mbind(mm, start, len, lmode, mode_flags,
+				&nodes, flags);
+		if (ret < 0)
+			break;
+		iov_iter_advance(&iter, iter_iov_len(&iter));
+	}
+
+release_mm:
+	mmput(mm);
+release_task:
+	put_task_struct(task);
+free_iov:
+	kfree(iov);
+out:
+	return ret;
+}
+
 static long kernel_mbind(unsigned long start, unsigned long len,
 			 unsigned long mode, const unsigned long __user *nmask,
 			 unsigned long maxnode, unsigned int flags)
 {
+	struct mm_struct *mm = current->mm;
 	unsigned short mode_flags;
 	nodemask_t nodes;
 	int lmode = mode;
@@ -1483,7 +1556,7 @@ static long kernel_mbind(unsigned long start, unsigned long len,
 	if (err)
 		return err;
 
-	return do_mbind(start, len, lmode, mode_flags, &nodes, flags);
+	return do_mbind(mm, start, len, lmode, mode_flags, &nodes, flags);
 }
 
 SYSCALL_DEFINE4(set_mempolicy_home_node, unsigned long, start, unsigned long, len,
@@ -1551,6 +1624,13 @@ SYSCALL_DEFINE4(set_mempolicy_home_node, unsigned long, start, unsigned long, le
 	}
 	mmap_write_unlock(mm);
 	return err;
+}
+
+SYSCALL_DEFINE6(process_mbind, int, pidfd, const struct iovec __user *, vec,
+		size_t, vlen, unsigned long, mode,
+		const unsigned long __user *, nmask, unsigned int, flags)
+{
+	return kernel_mbind_process(pidfd, vec, vlen, mode, nmask, flags);
 }
 
 SYSCALL_DEFINE6(mbind, unsigned long, start, unsigned long, len,
