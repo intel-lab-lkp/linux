@@ -240,10 +240,6 @@ struct meson_sm_firmware *meson_sm_get(struct device_node *sm_node)
 }
 EXPORT_SYMBOL_GPL(meson_sm_get);
 
-#define SM_CHIP_ID_LENGTH	119
-#define SM_CHIP_ID_OFFSET	4
-#define SM_CHIP_ID_SIZE		12
-
 static ssize_t serial_show(struct device *dev, struct device_attribute *attr,
 			 char *buf)
 {

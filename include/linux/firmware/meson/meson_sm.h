@@ -7,6 +7,10 @@
 #ifndef _MESON_SM_FW_H_
 #define _MESON_SM_FW_H_
 
+#define SM_CHIP_ID_LENGTH	119
+#define SM_CHIP_ID_OFFSET	4
+#define SM_CHIP_ID_SIZE		12
+
 enum {
 	SM_EFUSE_READ,
 	SM_EFUSE_WRITE,
