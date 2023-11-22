@@ -8,6 +8,7 @@
 #include <linux/export.h>
 #include <linux/io.h>
 #include <asm/coco.h>
+#include <asm/hyperv-tlfs.h>
 #include <asm/tdx.h>
 #include <asm/vmx.h>
 #include <asm/insn.h>
@@ -36,6 +37,8 @@
 #define TDCALL_INVALID_OPERAND	0xc0000100
 
 #define TDREPORT_SUBTYPE_0	0
+
+bool tdx_partitioning_active;
 
 /* Called from __tdx_hypercall() for unrecoverable failure */
 noinstr void __tdx_hypercall_failed(void)
@@ -757,19 +760,38 @@ static bool tdx_enc_status_change_finish(unsigned long vaddr, int numpages,
 	return true;
 }
 
+
+static bool early_is_hv_tdx_partitioning(void)
+{
+	u32 eax, ebx, ecx, edx;
+	cpuid(HYPERV_CPUID_ISOLATION_CONFIG, &eax, &ebx, &ecx, &edx);
+	return eax & HV_PARAVISOR_PRESENT &&
+	       (ebx & HV_ISOLATION_TYPE) == HV_ISOLATION_TYPE_TDX;
+}
+
 void __init tdx_early_init(void)
 {
 	u64 cc_mask;
 	u32 eax, sig[3];
 
 	cpuid_count(TDX_CPUID_LEAF_ID, 0, &eax, &sig[0], &sig[2],  &sig[1]);
-
-	if (memcmp(TDX_IDENT, sig, sizeof(sig)))
-		return;
+	if (memcmp(TDX_IDENT, sig, sizeof(sig))) {
+		tdx_partitioning_active = early_is_hv_tdx_partitioning();
+		if (!tdx_partitioning_active)
+			return;
+	}
 
 	setup_force_cpu_cap(X86_FEATURE_TDX_GUEST);
 
 	cc_vendor = CC_VENDOR_INTEL;
+
+	/*
+	 * Need to defer cc_mask and page visibility callback initializations
+	 * to a TD-partitioning aware implementation.
+	 */
+	if (tdx_partitioning_active)
+		goto exit;
+
 	tdx_parse_tdinfo(&cc_mask);
 	cc_set_mask(cc_mask);
 
@@ -820,5 +842,6 @@ void __init tdx_early_init(void)
 	 */
 	x86_cpuinit.parallel_bringup = false;
 
+exit:
 	pr_info("Guest detected\n");
 }

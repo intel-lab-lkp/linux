@@ -52,6 +52,7 @@ bool tdx_early_handle_ve(struct pt_regs *regs);
 
 int tdx_mcall_get_report0(u8 *reportdata, u8 *tdreport);
 
+extern bool tdx_partitioning_active;
 #else
 
 static inline void tdx_early_init(void) { };
@@ -71,6 +72,8 @@ static inline long tdx_kvm_hypercall(unsigned int nr, unsigned long p1,
 {
 	return -ENODEV;
 }
+
+#define tdx_partitioning_active false
 #endif /* CONFIG_INTEL_TDX_GUEST && CONFIG_KVM_GUEST */
 #endif /* !__ASSEMBLY__ */
 #endif /* _ASM_X86_TDX_H */
