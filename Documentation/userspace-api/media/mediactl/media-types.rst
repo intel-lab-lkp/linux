@@ -265,6 +265,7 @@ Types and flags used to represent the media graph elements
 .. _MEDIA-INTF-T-V4L-SUBDEV:
 .. _MEDIA-INTF-T-V4L-SWRADIO:
 .. _MEDIA-INTF-T-V4L-TOUCH:
+.. _MEDIA-INTF-T-V4L-AUDIO:
 .. _MEDIA-INTF-T-ALSA-PCM-CAPTURE:
 .. _MEDIA-INTF-T-ALSA-PCM-PLAYBACK:
 .. _MEDIA-INTF-T-ALSA-CONTROL:
@@ -321,6 +322,10 @@ Types and flags used to represent the media graph elements
     *  -  ``MEDIA_INTF_T_V4L_TOUCH``
        -  Device node interface for Touch device (V4L)
        -  typically, /dev/v4l-touch?
+
+    *  -  ``MEDIA_INTF_T_V4L_AUDIO``
+       -  Device node interface for Audio device (V4L)
+       -  typically, /dev/v4l-audio?
 
     *  -  ``MEDIA_INTF_T_ALSA_PCM_CAPTURE``
        -  Device node interface for ALSA PCM Capture
