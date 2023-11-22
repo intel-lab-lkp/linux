@@ -4127,6 +4127,10 @@ D: Minix V2 file-system
 D: Misc fixes
 S: The Netherlands
 
+N: Manohar Vanga
+E: manohar.vanga@gmail.com
+D: VME staging drivers maintainer
+
 N: Lars Wirzenius
 E: liw@iki.fi
 D: Linux System Administrator's Guide, author, former maintainer
