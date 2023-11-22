@@ -292,7 +292,7 @@ int uvc_status_init(struct uvc_device *dev)
 
 void uvc_status_unregister(struct uvc_device *dev)
 {
-	uvc_status_stop(dev);
+	uvc_status_stop(dev, false);
 	uvc_input_unregister(dev);
 }
 
@@ -310,7 +310,7 @@ int uvc_status_start(struct uvc_device *dev, gfp_t flags)
 	return usb_submit_urb(dev->int_urb, flags);
 }
 
-void uvc_status_stop(struct uvc_device *dev)
+void uvc_status_stop(struct uvc_device *dev, bool run_async_work)
 {
 	struct uvc_ctrl_work *w = &dev->async_ctrl;
 
@@ -326,7 +326,7 @@ void uvc_status_stop(struct uvc_device *dev)
 	 * Cancel any pending asynchronous work. If any status event was queued,
 	 * process it synchronously.
 	 */
-	if (cancel_work_sync(&w->work))
+	if (cancel_work_sync(&w->work) && run_async_work)
 		uvc_ctrl_status_event(w->chain, w->ctrl, w->data);
 
 	/* Kill the urb. */
@@ -338,7 +338,7 @@ void uvc_status_stop(struct uvc_device *dev)
 	 * cancelled before returning or it could then race with a future
 	 * uvc_status_start() call.
 	 */
-	if (cancel_work_sync(&w->work))
+	if (cancel_work_sync(&w->work) && run_async_work)
 		uvc_ctrl_status_event(w->chain, w->ctrl, w->data);
 
 	/*

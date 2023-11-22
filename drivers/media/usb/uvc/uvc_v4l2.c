@@ -672,7 +672,7 @@ static int uvc_v4l2_release(struct file *file)
 
 	mutex_lock(&stream->dev->lock);
 	if (--stream->dev->users == 0)
-		uvc_status_stop(stream->dev);
+		uvc_status_stop(stream->dev, false);
 	mutex_unlock(&stream->dev->lock);
 
 	usb_autopm_put_interface(stream->dev->intf);
