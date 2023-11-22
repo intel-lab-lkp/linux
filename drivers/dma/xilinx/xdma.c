@@ -809,15 +809,16 @@ static irqreturn_t xdma_channel_isr(int irq, void *dev_id)
 
 	desc->completed_desc_num += complete_desc_num;
 
+	/* clear-on-read the status register */
+	ret = regmap_read(xdev->rmap, xchan->base + XDMA_CHAN_STATUS_RC,
+			  &st);
+	if (ret)
+		goto out;
+
 	if (desc->cyclic) {
-		ret = regmap_read(xdev->rmap, xchan->base + XDMA_CHAN_STATUS,
-				  &st);
-		if (ret)
-			goto out;
-
-		regmap_write(xdev->rmap, xchan->base + XDMA_CHAN_STATUS, st);
-
-		vchan_cyclic_callback(vd);
+		st &= XDMA_CHAN_STATUS_MASK;
+		if (st & CHAN_CTRL_IE_DESC_COMPLETED)
+			vchan_cyclic_callback(vd);
 		goto out;
 	}
 
