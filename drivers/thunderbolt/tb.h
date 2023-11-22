@@ -23,6 +23,8 @@
 #define QUIRK_FORCE_POWER_LINK_CONTROLLER		BIT(0)
 /* Disable CLx if not supported */
 #define QUIRK_NO_CLX					BIT(1)
+/* Reset Down Stream Port */
+#define QUIRK_DPR					BIT(2)
 
 /**
  * struct tb_nvm - Structure holding NVM information

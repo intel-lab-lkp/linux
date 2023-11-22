@@ -1547,6 +1547,23 @@ static void tb_dump_switch(const struct tb *tb, const struct tb_switch *sw)
 	       regs->__unknown1, regs->__unknown4);
 }
 
+static int tb_switch_reset_downstream_port(struct tb_switch *sw)
+{
+	struct tb_port *port;
+	uint32_t val = 0;
+	int ret = -1;
+
+	tb_switch_for_each_port(sw, port) {
+		if (port->config.type == TB_TYPE_PORT) {
+			val = val | PORT_CS_19_DPR;
+			ret = tb_port_write(port, &val, TB_CFG_PORT,
+					port->cap_usb4 + PORT_CS_19, 1);
+			break;
+		}
+	}
+	return ret;
+}
+
 /**
  * tb_switch_reset() - reconfigure route, enable and send TB_CFG_PKG_RESET
  * @sw: Switch to reset
@@ -3197,6 +3214,17 @@ int tb_switch_add(struct tb_switch *sw)
 			return ret;
 
 		ret = tb_switch_tmu_init(sw);
+		if (ret)
+			return ret;
+	}
+
+	/*
+	 * PCIe resource allocated by boot firmware is not utilizing all the
+	 * available buses, So perform reset of topology to avoid failure in
+	 * extending daisy chain.
+	 */
+	if (sw->quirks & QUIRK_DPR) {
+		ret = tb_switch_reset_downstream_port(sw);
 		if (ret)
 			return ret;
 	}

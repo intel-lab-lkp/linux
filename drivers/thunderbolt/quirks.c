@@ -27,6 +27,12 @@ static void quirk_clx_disable(struct tb_switch *sw)
 	tb_sw_dbg(sw, "disabling CL states\n");
 }
 
+static void quirk_amd_downstream_port_reset(struct tb_switch *sw)
+{
+	sw->quirks |= QUIRK_DPR;
+	tb_sw_dbg(sw, "Resetting Down Stream Port\n");
+}
+
 static void quirk_usb3_maximum_bandwidth(struct tb_switch *sw)
 {
 	struct tb_port *port;
@@ -93,6 +99,14 @@ static const struct tb_quirk tb_quirks[] = {
 	{ 0x0438, 0x0209, 0x0000, 0x0000, quirk_clx_disable },
 	{ 0x0438, 0x020a, 0x0000, 0x0000, quirk_clx_disable },
 	{ 0x0438, 0x020b, 0x0000, 0x0000, quirk_clx_disable },
+	/*
+	 * Reset Down Stream Ports on AMD USB4 Yellow Carp and
+	 * Pink Sardine platforms.
+	 */
+	{ 0x0438, 0x0208, 0x0000, 0x0000, quirk_amd_downstream_port_reset },
+	{ 0x0438, 0x0209, 0x0000, 0x0000, quirk_amd_downstream_port_reset },
+	{ 0x0438, 0x020a, 0x0000, 0x0000, quirk_amd_downstream_port_reset },
+	{ 0x0438, 0x020b, 0x0000, 0x0000, quirk_amd_downstream_port_reset },
 };
 
 /**
