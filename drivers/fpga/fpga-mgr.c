@@ -21,6 +21,8 @@
 static DEFINE_IDA(fpga_mgr_ida);
 static const struct class fpga_mgr_class;
 
+static DEFINE_MUTEX(mgr_lock);
+
 struct fpga_mgr_devres {
 	struct fpga_manager *mgr;
 };
@@ -667,17 +669,15 @@ ATTRIBUTE_GROUPS(fpga_mgr);
 static struct fpga_manager *__fpga_mgr_get(struct device *dev)
 {
 	struct fpga_manager *mgr;
+	struct module *owner;
 
 	mgr = to_fpga_manager(dev);
+	owner = mgr->owner;
 
-	if (!try_module_get(dev->parent->driver->owner))
-		goto err_dev;
+	if (owner && !try_module_get(owner))
+		mgr = ERR_PTR(-ENODEV);
 
 	return mgr;
-
-err_dev:
-	put_device(dev);
-	return ERR_PTR(-ENODEV);
 }
 
 static int fpga_mgr_dev_match(struct device *dev, const void *data)
@@ -693,12 +693,22 @@ static int fpga_mgr_dev_match(struct device *dev, const void *data)
  */
 struct fpga_manager *fpga_mgr_get(struct device *dev)
 {
-	struct device *mgr_dev = class_find_device(&fpga_mgr_class, NULL, dev,
-						   fpga_mgr_dev_match);
-	if (!mgr_dev)
-		return ERR_PTR(-ENODEV);
+	struct fpga_manager *mgr = ERR_PTR(-ENODEV);
+	struct device *mgr_dev;
 
-	return __fpga_mgr_get(mgr_dev);
+	mutex_lock(&mgr_lock);
+
+	mgr_dev = class_find_device(&fpga_mgr_class, NULL, dev, fpga_mgr_dev_match);
+	if (!mgr_dev)
+		goto out;
+
+	mgr = __fpga_mgr_get(mgr_dev);
+	if (IS_ERR(mgr))
+		put_device(mgr_dev);
+
+out:
+	mutex_unlock(&mgr_lock);
+	return mgr;
 }
 EXPORT_SYMBOL_GPL(fpga_mgr_get);
 
@@ -711,13 +721,22 @@ EXPORT_SYMBOL_GPL(fpga_mgr_get);
  */
 struct fpga_manager *of_fpga_mgr_get(struct device_node *node)
 {
-	struct device *dev;
+	struct fpga_manager *mgr = ERR_PTR(-ENODEV);
+	struct device *mgr_dev;
 
-	dev = class_find_device_by_of_node(&fpga_mgr_class, node);
-	if (!dev)
-		return ERR_PTR(-ENODEV);
+	mutex_lock(&mgr_lock);
 
-	return __fpga_mgr_get(dev);
+	mgr_dev = class_find_device_by_of_node(&fpga_mgr_class, node);
+	if (!mgr_dev)
+		goto out;
+
+	mgr = __fpga_mgr_get(mgr_dev);
+	if (IS_ERR(mgr))
+		put_device(mgr_dev);
+
+out:
+	mutex_unlock(&mgr_lock);
+	return mgr;
 }
 EXPORT_SYMBOL_GPL(of_fpga_mgr_get);
 
@@ -727,8 +746,12 @@ EXPORT_SYMBOL_GPL(of_fpga_mgr_get);
  */
 void fpga_mgr_put(struct fpga_manager *mgr)
 {
-	module_put(mgr->dev.parent->driver->owner);
+	mutex_lock(&mgr_lock);
+
+	module_put(mgr->owner);
 	put_device(&mgr->dev);
+
+	mutex_unlock(&mgr_lock);
 }
 EXPORT_SYMBOL_GPL(fpga_mgr_put);
 
@@ -806,6 +829,7 @@ fpga_mgr_register_full(struct device *parent, const struct fpga_manager_info *in
 
 	mgr->name = info->name;
 	mgr->mops = info->mops;
+	mgr->owner = info->mops->owner;
 	mgr->priv = info->priv;
 	mgr->compat_id = info->compat_id;
 
