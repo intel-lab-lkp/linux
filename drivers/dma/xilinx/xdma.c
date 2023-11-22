@@ -633,6 +633,59 @@ failed:
 }
 
 /**
+ * xdma_terminate_all - Halt the DMA channel
+ * @chan: DMA channel
+ */
+static int xdma_terminate_all(struct dma_chan *chan)
+{
+	int ret;
+	u32 val;
+	unsigned long flags;
+	struct xdma_chan *xchan = to_xdma_chan(chan);
+	struct xdma_device *xdev = xchan->xdev_hdl;
+	struct virt_dma_desc *vd;
+	LIST_HEAD(head);
+
+	/* Clear the RUN bit to stop the transfer */
+	ret = regmap_write(xdev->rmap, xchan->base + XDMA_CHAN_CONTROL_W1C,
+							CHAN_CTRL_RUN_STOP);
+	if (ret)
+		return ret;
+
+	/* Clear the channel status register */
+	ret = regmap_read(xdev->rmap, xchan->base + XDMA_CHAN_STATUS_RC, &val);
+	if (ret)
+		return ret;
+
+	spin_lock_irqsave(&xchan->vchan.lock, flags);
+
+	/* Don't care if there were no descriptors issued */
+	vd = vchan_next_desc(&xchan->vchan);
+	if (vd) {
+		list_del(&vd->node);
+		vchan_terminate_vdesc(vd);
+	}
+	vchan_get_all_descriptors(&xchan->vchan, &head);
+	list_splice_tail_init(&head, &xchan->vchan.desc_terminated);
+
+	xchan->busy = false;
+	spin_unlock_irqrestore(&xchan->vchan.lock, flags);
+
+	return 0;
+}
+
+/**
+ * xdma_synchronize - Synchronize current execution context to the DMA channel
+ * @chan: DMA channel
+ */
+static void xdma_synchronize(struct dma_chan *chan)
+{
+	struct xdma_chan *xchan = to_xdma_chan(chan);
+
+	vchan_synchronize(&xchan->vchan);
+}
+
+/**
  * xdma_device_config - Configure the DMA channel
  * @chan: DMA channel
  * @cfg: channel configuration
@@ -1093,6 +1146,8 @@ static int xdma_probe(struct platform_device *pdev)
 	xdev->dma_dev.filter.mapcnt = pdata->device_map_cnt;
 	xdev->dma_dev.filter.fn = xdma_filter_fn;
 	xdev->dma_dev.device_prep_dma_cyclic = xdma_prep_dma_cyclic;
+	xdev->dma_dev.device_terminate_all = xdma_terminate_all;
+	xdev->dma_dev.device_synchronize = xdma_synchronize;
 
 	ret = dma_async_device_register(&xdev->dma_dev);
 	if (ret) {
