@@ -423,6 +423,8 @@ void calipso_doi_free(struct calipso_doi *doi_def)
 
 	if (ops)
 		ops->doi_free(doi_def);
+	else
+		kfree(doi_def);
 }
 
 /**
