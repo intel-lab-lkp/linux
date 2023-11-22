@@ -15,6 +15,8 @@ search_extable(const struct exception_table_entry *base,
 void sort_extable(struct exception_table_entry *start,
 		  struct exception_table_entry *finish);
 void sort_main_extable(void);
+void __sort_main_extable(void);
+
 void trim_init_extable(struct module *m);
 
 /* Given an address, look for it in the exception tables */

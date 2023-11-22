@@ -32,13 +32,19 @@ extern struct exception_table_entry __stop___ex_table[];
 /* Cleared by build time tools if the table is already sorted. */
 u32 __initdata __visible main_extable_sort_needed = 1;
 
+void __sort_main_extable(void)
+{
+	if (&__stop___ex_table > &__start___ex_table)
+		sort_extable(__start___ex_table, __stop___ex_table);
+}
+
 /* Sort the kernel's built-in exception table */
 void __init sort_main_extable(void)
 {
 	if (main_extable_sort_needed &&
 	    &__stop___ex_table > &__start___ex_table) {
 		pr_notice("Sorting __ex_table...\n");
-		sort_extable(__start___ex_table, __stop___ex_table);
+		__sort_main_extable();
 	}
 }
 
