@@ -40,7 +40,7 @@
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-event.h>
 
-#define S2255_VERSION		"1.25.1"
+#define S2255_VERSION		"1.26.1"
 #define FIRMWARE_FILE_NAME "f2255usb.bin"
 
 /* default JPEG quality */
@@ -60,6 +60,7 @@
 #define S2255_MIN_BUFS          2
 #define S2255_SETMODE_TIMEOUT   500
 #define S2255_VIDSTATUS_TIMEOUT 350
+#define S2255_MARKER_FIRMWARE	cpu_to_le32(0xDDCCBBAAL)
 #define S2255_MARKER_FRAME	cpu_to_le32(0x2255DA4AL)
 #define S2255_MARKER_RESPONSE	cpu_to_le32(0x2255ACACL)
 #define S2255_RESPONSE_SETMODE  cpu_to_le32(0x01)
@@ -323,6 +324,7 @@ struct s2255_buffer {
 #define S2255_V4L2_YC_ON  1
 #define S2255_V4L2_YC_OFF 0
 #define V4L2_CID_S2255_COLORFILTER (V4L2_CID_USER_S2255_BASE + 0)
+#define V4L2_CID_S2255_DEVICEID (V4L2_CID_USER_S2255_BASE + 1)
 
 /* frame prefix size (sent once every frame) */
 #define PREFIX_SIZE		512
@@ -1232,6 +1234,37 @@ static int s2255_s_ctrl(struct v4l2_ctrl *ctrl)
 	return 0;
 }
 
+/* deviceid/serial number is not used in usb device descriptors.
+ * returns device-id/serial number from device, 0 if none found.
+ */
+#define S2255_DEVICEID_NONE 0
+static int s2255_g_deviceid(struct s2255_dev *dev)
+{
+	u8 *outbuf;
+	int rc;
+	int deviceid = S2255_DEVICEID_NONE;
+#define S2255_I2C_SIZE     16
+	outbuf = kzalloc(S2255_I2C_SIZE * sizeof(u8), GFP_KERNEL);
+	if (outbuf == NULL)
+		return deviceid;
+#define S2255_I2C_SNDEV    0xa2
+#define S2255_I2C_SNOFFSET 0x1ff0
+#define S2255_USBVENDOR_READREG 0x22
+	rc = s2255_vendor_req(dev, S2255_USBVENDOR_READREG, S2255_I2C_SNOFFSET,
+			S2255_I2C_SNDEV >> 1, outbuf, S2255_I2C_SIZE, 0);
+	if (rc < 0)
+		goto exit_g_deviceid;
+
+	/* verify marker code */
+	if (*(__le32 *)outbuf != S2255_MARKER_FIRMWARE)
+		goto exit_g_deviceid;
+
+	deviceid = (outbuf[12] << 24) + (outbuf[13] << 16) + (outbuf[14] << 8) + outbuf[15];
+exit_g_deviceid:
+	kfree(outbuf);
+	return deviceid;
+}
+
 static int vidioc_g_jpegcomp(struct file *file, void *priv,
 			 struct v4l2_jpegcompression *jc)
 {
@@ -1581,6 +1614,17 @@ static const struct v4l2_ctrl_config color_filter_ctrl = {
 	.def = 1,
 };
 
+static struct v4l2_ctrl_config v4l2_ctrl_deviceid = {
+	.ops = &s2255_ctrl_ops,
+	.name = "Device ID",
+	.id = V4L2_CID_S2255_DEVICEID,
+	.type = V4L2_CTRL_TYPE_INTEGER,
+	.max = 0xffffffff,
+	.min = 0,
+	.step = 1,
+	.flags = V4L2_CTRL_FLAG_READ_ONLY,
+};
+
 static int s2255_probe_v4l(struct s2255_dev *dev)
 {
 	int ret;
@@ -1615,6 +1659,9 @@ static int s2255_probe_v4l(struct s2255_dev *dev)
 		    (dev->pid != 0x2257 || vc->idx <= 1))
 			v4l2_ctrl_new_custom(&vc->hdl, &color_filter_ctrl,
 					     NULL);
+		v4l2_ctrl_deviceid.def = s2255_g_deviceid(dev);
+		v4l2_ctrl_new_custom(&vc->hdl, &v4l2_ctrl_deviceid,
+					NULL);
 		if (vc->hdl.error) {
 			ret = vc->hdl.error;
 			v4l2_ctrl_handler_free(&vc->hdl);
