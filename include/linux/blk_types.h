@@ -37,6 +37,11 @@ struct bio_crypt_ctx;
 #define PAGE_SECTORS		(1 << PAGE_SECTORS_SHIFT)
 #define SECTOR_MASK		(PAGE_SECTORS - 1)
 
+#define BD_FLAG_READ_ONLY	0 /* read-only-policy */
+#define BD_FLAG_WRITE_HOLDER	1
+#define BD_FLAG_HAS_SUBMIT_BIO	2
+#define BD_FLAG_MAKE_IT_FAIL	3
+
 struct block_device {
 	sector_t		bd_start_sect;
 	sector_t		bd_nr_sectors;
@@ -44,10 +49,8 @@ struct block_device {
 	struct request_queue *	bd_queue;
 	struct disk_stats __percpu *bd_stats;
 	unsigned long		bd_stamp;
-	bool			bd_read_only;	/* read-only policy */
+	unsigned short		bd_flags;
 	u8			bd_partno;
-	bool			bd_write_holder;
-	bool			bd_has_submit_bio;
 	dev_t			bd_dev;
 	struct inode		*bd_inode;	/* will die */
 
@@ -67,9 +70,6 @@ struct block_device {
 	struct super_block	*bd_fsfreeze_sb;
 
 	struct partition_meta_info *bd_meta_info;
-#ifdef CONFIG_FAIL_MAKE_REQUEST
-	bool			bd_make_it_fail;
-#endif
 	/*
 	 * keep this out-of-line as it's both big and not needed in the fast
 	 * path
@@ -85,6 +85,21 @@ struct block_device {
 
 #define bdev_kobj(_bdev) \
 	(&((_bdev)->bd_device.kobj))
+
+static inline bool bdev_flagged(struct block_device *bdev, unsigned int bit)
+{
+	return bdev->bd_flags & (1U << bit);
+}
+
+static inline void bdev_set_flag(struct block_device *bdev, unsigned int bit)
+{
+	bdev->bd_flags |= (1U << bit);
+}
+
+static inline void bdev_clear_flag(struct block_device *bdev, unsigned int bit)
+{
+	bdev->bd_flags &= ~(1U << bit);
+}
 
 /*
  * Block error status values.  See block/blk-core:blk_errors for the details.
