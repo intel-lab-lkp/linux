@@ -1,0 +1,264 @@
+What:		/sys/devices/platform/silicom-platform/uc_version
+Date:		November 2023
+KernelVersion:	6.7
+Contact:	Henry Shi <henrys@silicom-usa.com>
+Description:
+		This file allows to read microcontroller firmware
+		version of current platform.
+
+What:		/sys/devices/platform/silicom-platform/power_cycle
+Date:		November 2023
+KernelVersion:	6.7
+Contact:	Henry Shi <henrys@silicom-usa.com>
+		This file allow user to power cycle the platform.
+		Default value is 0; when set to 1, it powers down
+		the platform, waits 5 seconds, then powers on the
+		device. It returns to default value after power cycle.
+
+		0 - default value.
+
+What:		/sys/devices/platform/silicom-platform/efuse_status
+Date:		November 2023
+KernelVersion:	6.7
+Contact:	Henry Shi <henrys@silicom-usa.com>
+Description:
+		This file is read only. It returns the current
+		OTP status:
+
+		0 - not programmed.
+		1 - programmed.
+
+What:		/sys/devices/platform/silicom-platform/hwmon/hwmon1/temp1_input
+Date:		November 2023
+KernelVersion:	6.7
+Contact:	Henry Shi <henrys@silicom-usa.com>
+Description:
+		This file is read only. It returns the temperature
+		of device in the scale of 1000 * Degree Celsius.
+
+What:		/sys/devices/platform/silicom-platform/hwmon/hwmon1/temp1_label
+Date:		November 2023
+KernelVersion:	6.7
+Contact:	Henry Shi <henrys@silicom-usa.com>
+Description:
+		This file is read only. It returns "Silicom_platform:
+		Thermostat Sensor".
+
+What:		/sys/devices/platform/silicom-platform/hwmon/hwmon1/fan1_input
+Date:		November 2023
+KernelVersion:	6.7
+Contact:	Henry Shi <henrys@silicom-usa.com>
+Description:
+		This file is read only. It returns current fan
+		speed (RPM).
+
+What:		/sys/devices/platform/silicom-platform/hwmon/hwmon1/fan1_label
+Date:		November 2023
+KernelVersion:	6.7
+Contact:	Henry Shi <henrys@silicom-usa.com>
+Description:
+		This file is read only. It returns "Silicom_platform:
+		Fan Speed".
+
+What:		/sys/class/leds/multicolor:sys/brightness
+Date:		November 2023
+KernelVersion:	6.7
+Contact:	Henry Shi <henrys@silicom-usa.com>
+Description:
+		This is a read/write file. It is used to read/set current
+		status of system LED brightness:
+
+		0 - to turn off the LED
+		1 - to turn on the LED
+
+What:		/sys/class/leds/multicolor:sys/multi_index
+Date:		November 2023
+KernelVersion:	6.7
+Contact:	Henry Shi <henrys@silicom-usa.com>
+Description:
+		This is a read only  file. It returns:
+
+		white amber red
+
+What:		/sys/class/leds/multicolor:sys/multi_intensity
+Date:		November 2023
+KernelVersion:	6.7
+Contact:	Henry Shi <henrys@silicom-usa.com>
+Description:
+		This is a read/write file. It is used to read/set current
+		multi-color intensity of system LED: First value for
+		color white, second value for color amber and third value
+		for color red:
+
+		0 - The color is turned off.
+		1 - the color is turned on.
+
+What:		/sys/class/leds/multicolor:wan/brightness
+Date:		November 2023
+KernelVersion:	6.7
+Contact:	Henry Shi <henrys@silicom-usa.com>
+Description:
+		This is a read/write file. It is used to read/set current
+		status of WAN LED brightness:
+
+		0 - to turn off the LED
+		1 - to turn on the LED
+
+What:		/sys/class/leds/multicolor:wan/multi_index
+Date:		November 2023
+KernelVersion:	6.7
+Contact:	Henry Shi <henrys@silicom-usa.com>
+Description:
+		This is a read only file. It returns:
+
+		white yellow red
+
+What:		/sys/class/leds/multicolor:wan/multi_intensity
+Date:		November 2023
+KernelVersion:	6.7
+Contact:	Henry Shi <henrys@silicom-usa.com>
+Description:
+		This is a read/write file. It is used to read/set current
+		multi-color intensity of WAN LED: First value for
+		color white, second value for color yellow and third value
+		for color red:
+
+		0 - The color is turned off.
+		1 - the color is turned on.
+
+What:		/sys/class/leds/multicolor:stat%d/brightness
+Date:		November 2023
+KernelVersion:	6.7
+Contact:	Henry Shi <henrys@silicom-usa.com>
+Description:
+		This is a read/write file. It is used to read/set current
+		status of device status LED (number %d) brightness:
+
+		0 - to turn off the LED
+		1 - to turn on the LED
+
+What:		/sys/class/leds/multicolor:stat%d/multi_index
+Date:		November 2023
+KernelVersion:	6.7
+Contact:	Henry Shi <henrys@silicom-usa.com>
+Description:
+		This is a read only file. It returns:
+
+		red green blue yellow
+
+What:		/sys/class/leds/multicolor:stat%d/multi_intensity
+Date:		November 2023
+KernelVersion:	6.7
+Contact:	Henry Shi <henrys@silicom-usa.com>
+Description:
+		This is a read/write file. It is used to read/set current
+		multi-color intensity of device status LED (number %d):
+		First value for color red, second value for color green,
+		third value for color blue and fourth value for color
+		yellow.
+
+		0 - The color is turned off.
+		1 - the color is turned on.
+
+What:		/sys/class/leds/multicolor:fp_left/brightness
+Date:		November 2023
+KernelVersion:	6.7
+Contact:	Henry Shi <henrys@silicom-usa.com>
+Description:
+		This is a read/write file. It is used to read/set current
+		status of left LED brightness:
+
+		0 - to turn off the LED
+		1 - to turn on the LED
+
+What:		/sys/class/leds/multicolor:fp_left/multi_index
+Date:		November 2023
+KernelVersion:	6.7
+Contact:	Henry Shi <henrys@silicom-usa.com>
+Description:
+		This is a read only file. It returns:
+
+		red green blue amber
+
+What:		/sys/class/leds/multicolor:fp_left/multi_intensity
+Date:		November 2023
+KernelVersion:	6.7
+Contact:	Henry Shi <henrys@silicom-usa.com>
+Description:
+		This is a read/write file. It is used to read/set current
+		multi-color intensity of left LED: First value for
+		color red; Second value for color green; Third value for
+		color blue and fourth value for color amber.
+		for color red:
+
+		0 - The color is turned off.
+		1 - the color is turned on.
+
+What:		/sys/class/leds/multicolor:fp_center/brightness
+Date:		November 2023
+KernelVersion:	6.7
+Contact:	Henry Shi <henrys@silicom-usa.com>
+Description:
+		This is a read/write file. It is used to read/set current
+		status of left LED brightness:
+
+		0 - to turn off the LED
+		1 - to turn on the LED
+
+What:		/sys/class/leds/multicolor:fp_center/multi_index
+Date:		November 2023
+KernelVersion:	6.7
+Contact:	Henry Shi <henrys@silicom-usa.com>
+Description:
+		This is a read only  file. It returns:
+
+		red green blue amber
+
+What:		/sys/class/leds/multicolor:fp_center/multi_intensity
+Date:		November 2023
+KernelVersion:	6.7
+Contact:	Henry Shi <henrys@silicom-usa.com>
+Description:
+		This is a read/write file. It is used to read/set current
+		multi-color intensity of left LED: First value for
+		color red; Second value for color green; Third value for
+		color blue and fourth value for color amber.
+		for color red:
+
+		0 - The color is turned off.
+		1 - the color is turned on.
+
+What:		/sys/class/leds/multicolor:fp_right/brightness
+Date:		November 2023
+KernelVersion:	6.7
+Contact:	Henry Shi <henrys@silicom-usa.com>
+Description:
+		This is a read/write file. It is used to read/set current
+		status of left LED brightness:
+
+		0 - to turn off the LED
+		1 - to turn on the LED
+
+What:		/sys/class/leds/multicolor:fp_right/multi_index
+Date:		November 2023
+KernelVersion:	6.7
+Contact:	Henry Shi <henrys@silicom-usa.com>
+Description:
+		This is a read only  file. It returns:
+
+		red green blue amber
+
+What:		/sys/class/leds/multicolor:fp_right/multi_intensity
+Date:		November 2023
+KernelVersion:	6.7
+Contact:	Henry Shi <henrys@silicom-usa.com>
+Description:
+		This is a read/write file. It is used to read/set current
+		multi-color intensity of left LED: First value for
+		color red; Second value for color green; Third value for
+		color blue and fourth value for color amber.
+		for color red:
+
+		0 - The color is turned off.
+		1 - the color is turned on.
+
