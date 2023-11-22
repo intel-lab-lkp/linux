@@ -104,7 +104,7 @@ static int dwc3_get_dr_mode(struct dwc3 *dwc)
 	return 0;
 }
 
-void dwc3_set_prtcap(struct dwc3 *dwc, u32 mode)
+static void __dwc3_set_prtcap(struct dwc3 *dwc, u32 mode)
 {
 	u32 reg;
 
@@ -112,7 +112,11 @@ void dwc3_set_prtcap(struct dwc3 *dwc, u32 mode)
 	reg &= ~(DWC3_GCTL_PRTCAPDIR(DWC3_GCTL_PRTCAP_OTG));
 	reg |= DWC3_GCTL_PRTCAPDIR(mode);
 	dwc3_writel(dwc->regs, DWC3_GCTL, reg);
+}
 
+void dwc3_set_prtcap(struct dwc3 *dwc, u32 mode)
+{
+	__dwc3_set_prtcap(dwc, mode);
 	dwc->current_dr_role = mode;
 }
 
@@ -2128,6 +2132,7 @@ static int dwc3_suspend_common(struct dwc3 *dwc, pm_message_t msg)
 			break;
 		dwc3_gadget_suspend(dwc);
 		synchronize_irq(dwc->irq_gadget);
+		__dwc3_set_prtcap(dwc, DWC3_GCTL_PRTCAP_HOST);
 		dwc3_core_exit(dwc);
 		break;
 	case DWC3_GCTL_PRTCAP_HOST:
