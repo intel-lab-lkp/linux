@@ -132,6 +132,18 @@ const char *devlink_port_fn_attr_cap_str(enum devlink_port_fn_attr_cap value)
 	return devlink_port_fn_attr_cap_strmap[value];
 }
 
+static const char * const devlink_rate_type_strmap[] = {
+	[0] = "leaf",
+	[1] = "node",
+};
+
+const char *devlink_rate_type_str(enum devlink_rate_type value)
+{
+	if (value < 0 || value >= (int)MNL_ARRAY_SIZE(devlink_rate_type_strmap))
+		return NULL;
+	return devlink_rate_type_strmap[value];
+}
+
 static const char * const devlink_sb_threshold_type_strmap[] = {
 	[0] = "static",
 	[1] = "dynamic",
@@ -182,6 +194,19 @@ devlink_eswitch_encap_mode_str(enum devlink_eswitch_encap_mode value)
 	if (value < 0 || value >= (int)MNL_ARRAY_SIZE(devlink_eswitch_encap_mode_strmap))
 		return NULL;
 	return devlink_eswitch_encap_mode_strmap[value];
+}
+
+static const char * const devlink_dpipe_header_id_strmap[] = {
+	[0] = "ethernet",
+	[1] = "ipv4",
+	[2] = "ipv6",
+};
+
+const char *devlink_dpipe_header_id_str(enum devlink_dpipe_header_id value)
+{
+	if (value < 0 || value >= (int)MNL_ARRAY_SIZE(devlink_dpipe_header_id_strmap))
+		return NULL;
+	return devlink_dpipe_header_id_strmap[value];
 }
 
 static const char * const devlink_dpipe_match_type_strmap[] = {
@@ -280,6 +305,19 @@ const char *devlink_trap_action_str(enum devlink_trap_action value)
 	return devlink_trap_action_strmap[value];
 }
 
+static const char * const devlink_trap_type_strmap[] = {
+	[0] = "drop",
+	[1] = "exception",
+	[2] = "control",
+};
+
+const char *devlink_trap_type_str(enum devlink_trap_type value)
+{
+	if (value < 0 || value >= (int)MNL_ARRAY_SIZE(devlink_trap_type_strmap))
+		return NULL;
+	return devlink_trap_type_strmap[value];
+}
+
 /* Policies */
 struct ynl_policy_attr devlink_dl_dpipe_match_policy[DEVLINK_ATTR_MAX + 1] = {
 	[DEVLINK_ATTR_DPIPE_MATCH_TYPE] = { .name = "dpipe-match-type", .type = YNL_PT_U32, },
@@ -361,6 +399,45 @@ struct ynl_policy_nest devlink_dl_resource_nest = {
 	.table = devlink_dl_resource_policy,
 };
 
+struct ynl_policy_attr devlink_dl_param_value_list_policy[DEVLINK_ATTR_MAX + 1] = {
+	[DEVLINK_ATTR_PARAM_VALUE_CMODE] = { .name = "param-value-cmode", .type = YNL_PT_U8, },
+	[DEVLINK_ATTR_PARAM_VALUE_DATA] = { .name = "param-value-data", .type = YNL_PT_NUL_STR, },
+};
+
+struct ynl_policy_nest devlink_dl_param_value_list_nest = {
+	.max_attr = DEVLINK_ATTR_MAX,
+	.table = devlink_dl_param_value_list_policy,
+};
+
+struct ynl_policy_attr devlink_dl_param_value_policy[DEVLINK_ATTR_MAX + 1] = {
+	[DEVLINK_ATTR_PARAM_VALUE_CMODE] = { .name = "param-value-cmode", .type = YNL_PT_U8, },
+	[DEVLINK_ATTR_PARAM_VALUE_DATA] = { .name = "param-value-data", .type = YNL_PT_NUL_STR, },
+};
+
+struct ynl_policy_nest devlink_dl_param_value_nest = {
+	.max_attr = DEVLINK_ATTR_MAX,
+	.table = devlink_dl_param_value_policy,
+};
+
+struct ynl_policy_attr devlink_dl_region_snapshot_policy[DEVLINK_ATTR_MAX + 1] = {
+	[DEVLINK_ATTR_REGION_SNAPSHOT_ID] = { .name = "region-snapshot-id", .type = YNL_PT_U32, },
+};
+
+struct ynl_policy_nest devlink_dl_region_snapshot_nest = {
+	.max_attr = DEVLINK_ATTR_MAX,
+	.table = devlink_dl_region_snapshot_policy,
+};
+
+struct ynl_policy_attr devlink_dl_region_chunk_policy[DEVLINK_ATTR_MAX + 1] = {
+	[DEVLINK_ATTR_REGION_CHUNK_DATA] = { .name = "region-chunk-data", .type = YNL_PT_BINARY,},
+	[DEVLINK_ATTR_REGION_CHUNK_ADDR] = { .name = "region-chunk-addr", .type = YNL_PT_U64, },
+};
+
+struct ynl_policy_nest devlink_dl_region_chunk_nest = {
+	.max_attr = DEVLINK_ATTR_MAX,
+	.table = devlink_dl_region_chunk_policy,
+};
+
 struct ynl_policy_attr devlink_dl_info_version_policy[DEVLINK_ATTR_MAX + 1] = {
 	[DEVLINK_ATTR_INFO_VERSION_NAME] = { .name = "info-version-name", .type = YNL_PT_NUL_STR, },
 	[DEVLINK_ATTR_INFO_VERSION_VALUE] = { .name = "info-version-value", .type = YNL_PT_NUL_STR, },
@@ -382,6 +459,44 @@ struct ynl_policy_attr devlink_dl_fmsg_policy[DEVLINK_ATTR_MAX + 1] = {
 struct ynl_policy_nest devlink_dl_fmsg_nest = {
 	.max_attr = DEVLINK_ATTR_MAX,
 	.table = devlink_dl_fmsg_policy,
+};
+
+struct ynl_policy_attr devlink_dl_health_reporter_policy[DEVLINK_ATTR_MAX + 1] = {
+	[DEVLINK_ATTR_HEALTH_REPORTER_NAME] = { .name = "health-reporter-name", .type = YNL_PT_NUL_STR, },
+	[DEVLINK_ATTR_HEALTH_REPORTER_STATE] = { .name = "health-reporter-state", .type = YNL_PT_U8, },
+	[DEVLINK_ATTR_HEALTH_REPORTER_ERR_COUNT] = { .name = "health-reporter-err-count", .type = YNL_PT_U64, },
+	[DEVLINK_ATTR_HEALTH_REPORTER_RECOVER_COUNT] = { .name = "health-reporter-recover-count", .type = YNL_PT_U64, },
+	[DEVLINK_ATTR_HEALTH_REPORTER_GRACEFUL_PERIOD] = { .name = "health-reporter-graceful-period", .type = YNL_PT_U64, },
+	[DEVLINK_ATTR_HEALTH_REPORTER_AUTO_RECOVER] = { .name = "health-reporter-auto-recover", .type = YNL_PT_U8, },
+	[DEVLINK_ATTR_HEALTH_REPORTER_DUMP_TS] = { .name = "health-reporter-dump-ts", .type = YNL_PT_U64, },
+	[DEVLINK_ATTR_HEALTH_REPORTER_DUMP_TS_NS] = { .name = "health-reporter-dump-ts-ns", .type = YNL_PT_U64, },
+	[DEVLINK_ATTR_HEALTH_REPORTER_AUTO_DUMP] = { .name = "health-reporter-auto-dump", .type = YNL_PT_U8, },
+};
+
+struct ynl_policy_nest devlink_dl_health_reporter_nest = {
+	.max_attr = DEVLINK_ATTR_MAX,
+	.table = devlink_dl_health_reporter_policy,
+};
+
+struct ynl_policy_attr devlink_dl_attr_stats_policy[DEVLINK_A_DL_ATTR_STATS_MAX + 1] = {
+	[DEVLINK_A_DL_ATTR_STATS_RX_PACKETS] = { .name = "rx-packets", .type = YNL_PT_U64, },
+	[DEVLINK_A_DL_ATTR_STATS_RX_BYTES] = { .name = "rx-bytes", .type = YNL_PT_U64, },
+	[DEVLINK_A_DL_ATTR_STATS_RX_DROPPED] = { .name = "rx-dropped", .type = YNL_PT_U64, },
+};
+
+struct ynl_policy_nest devlink_dl_attr_stats_nest = {
+	.max_attr = DEVLINK_A_DL_ATTR_STATS_MAX,
+	.table = devlink_dl_attr_stats_policy,
+};
+
+struct ynl_policy_attr devlink_dl_trap_metadata_policy[DEVLINK_A_DL_TRAP_METADATA_MAX + 1] = {
+	[DEVLINK_A_DL_TRAP_METADATA_METADATA_TYPE_IN_PORT] = { .name = "metadata-type-in-port", .type = YNL_PT_FLAG, },
+	[DEVLINK_A_DL_TRAP_METADATA_METADATA_TYPE_FA_COOKIE] = { .name = "metadata-type-fa-cookie", .type = YNL_PT_FLAG, },
+};
+
+struct ynl_policy_nest devlink_dl_trap_metadata_nest = {
+	.max_attr = DEVLINK_A_DL_TRAP_METADATA_MAX,
+	.table = devlink_dl_trap_metadata_policy,
 };
 
 struct ynl_policy_attr devlink_dl_port_function_policy[DEVLINK_PORT_FUNCTION_ATTR_MAX + 1] = {
@@ -413,6 +528,26 @@ struct ynl_policy_attr devlink_dl_reload_act_stats_policy[DEVLINK_ATTR_MAX + 1] 
 struct ynl_policy_nest devlink_dl_reload_act_stats_nest = {
 	.max_attr = DEVLINK_ATTR_MAX,
 	.table = devlink_dl_reload_act_stats_policy,
+};
+
+struct ynl_policy_attr devlink_dl_linecard_supported_types_policy[DEVLINK_ATTR_MAX + 1] = {
+	[DEVLINK_ATTR_LINECARD_TYPE] = { .name = "linecard-type", .type = YNL_PT_NUL_STR, },
+};
+
+struct ynl_policy_nest devlink_dl_linecard_supported_types_nest = {
+	.max_attr = DEVLINK_ATTR_MAX,
+	.table = devlink_dl_linecard_supported_types_policy,
+};
+
+struct ynl_policy_attr devlink_dl_nested_devlink_policy[DEVLINK_A_DL_NESTED_DEVLINK_MAX + 1] = {
+	[DEVLINK_A_DL_NESTED_DEVLINK_INDEX] = { .name = "index", .type = YNL_PT_U32, },
+	[DEVLINK_A_DL_NESTED_DEVLINK_RELOAD_FAILED] = { .name = "reload-failed", .type = YNL_PT_U8, },
+	[DEVLINK_A_DL_NESTED_DEVLINK_REFCOUNT] = { .name = "refcount", .type = YNL_PT_UINT, },
+};
+
+struct ynl_policy_nest devlink_dl_nested_devlink_nest = {
+	.max_attr = DEVLINK_A_DL_NESTED_DEVLINK_MAX,
+	.table = devlink_dl_nested_devlink_policy,
 };
 
 struct ynl_policy_attr devlink_dl_selftest_id_policy[DEVLINK_ATTR_SELFTEST_ID_MAX + 1] = {
@@ -476,6 +611,36 @@ struct ynl_policy_attr devlink_dl_resource_list_policy[DEVLINK_ATTR_MAX + 1] = {
 struct ynl_policy_nest devlink_dl_resource_list_nest = {
 	.max_attr = DEVLINK_ATTR_MAX,
 	.table = devlink_dl_resource_list_policy,
+};
+
+struct ynl_policy_attr devlink_dl_param_policy[DEVLINK_ATTR_MAX + 1] = {
+	[DEVLINK_ATTR_PARAM_NAME] = { .name = "param-name", .type = YNL_PT_NUL_STR, },
+	[DEVLINK_ATTR_PARAM_GENERIC] = { .name = "param-generic", .type = YNL_PT_FLAG, },
+	[DEVLINK_ATTR_PARAM_TYPE] = { .name = "param-type", .type = YNL_PT_U8, },
+	[DEVLINK_ATTR_PARAM_VALUE_LIST] = { .name = "param-value-list", .type = YNL_PT_NEST, .nest = &devlink_dl_param_value_list_nest, },
+};
+
+struct ynl_policy_nest devlink_dl_param_nest = {
+	.max_attr = DEVLINK_ATTR_MAX,
+	.table = devlink_dl_param_policy,
+};
+
+struct ynl_policy_attr devlink_dl_region_snapshots_policy[DEVLINK_ATTR_MAX + 1] = {
+	[DEVLINK_ATTR_REGION_SNAPSHOT] = { .name = "region-snapshot", .type = YNL_PT_NEST, .nest = &devlink_dl_region_snapshot_nest, },
+};
+
+struct ynl_policy_nest devlink_dl_region_snapshots_nest = {
+	.max_attr = DEVLINK_ATTR_MAX,
+	.table = devlink_dl_region_snapshots_policy,
+};
+
+struct ynl_policy_attr devlink_dl_region_chunks_policy[DEVLINK_ATTR_MAX + 1] = {
+	[DEVLINK_ATTR_REGION_CHUNK] = { .name = "region-chunk", .type = YNL_PT_NEST, .nest = &devlink_dl_region_chunk_nest, },
+};
+
+struct ynl_policy_nest devlink_dl_region_chunks_nest = {
+	.max_attr = DEVLINK_ATTR_MAX,
+	.table = devlink_dl_region_chunks_policy,
 };
 
 struct ynl_policy_attr devlink_dl_reload_act_info_policy[DEVLINK_ATTR_MAX + 1] = {
@@ -578,14 +743,26 @@ struct ynl_policy_attr devlink_policy[DEVLINK_ATTR_MAX + 1] = {
 	[DEVLINK_ATTR_DEV_NAME] = { .name = "dev-name", .type = YNL_PT_NUL_STR, },
 	[DEVLINK_ATTR_PORT_INDEX] = { .name = "port-index", .type = YNL_PT_U32, },
 	[DEVLINK_ATTR_PORT_TYPE] = { .name = "port-type", .type = YNL_PT_U16, },
+	[DEVLINK_ATTR_PORT_DESIRED_TYPE] = { .name = "port-desired-type", .type = YNL_PT_U16, },
+	[DEVLINK_ATTR_PORT_NETDEV_IFINDEX] = { .name = "port-netdev-ifindex", .type = YNL_PT_U32, },
+	[DEVLINK_ATTR_PORT_NETDEV_NAME] = { .name = "port-netdev-name", .type = YNL_PT_NUL_STR, },
+	[DEVLINK_ATTR_PORT_IBDEV_NAME] = { .name = "port-ibdev-name", .type = YNL_PT_NUL_STR, },
 	[DEVLINK_ATTR_PORT_SPLIT_COUNT] = { .name = "port-split-count", .type = YNL_PT_U32, },
+	[DEVLINK_ATTR_PORT_SPLIT_GROUP] = { .name = "port-split-group", .type = YNL_PT_U32, },
 	[DEVLINK_ATTR_SB_INDEX] = { .name = "sb-index", .type = YNL_PT_U32, },
+	[DEVLINK_ATTR_SB_SIZE] = { .name = "sb-size", .type = YNL_PT_U32, },
+	[DEVLINK_ATTR_SB_INGRESS_POOL_COUNT] = { .name = "sb-ingress-pool-count", .type = YNL_PT_U16, },
+	[DEVLINK_ATTR_SB_EGRESS_POOL_COUNT] = { .name = "sb-egress-pool-count", .type = YNL_PT_U16, },
+	[DEVLINK_ATTR_SB_INGRESS_TC_COUNT] = { .name = "sb-ingress-tc-count", .type = YNL_PT_U16, },
+	[DEVLINK_ATTR_SB_EGRESS_TC_COUNT] = { .name = "sb-egress-tc-count", .type = YNL_PT_U16, },
 	[DEVLINK_ATTR_SB_POOL_INDEX] = { .name = "sb-pool-index", .type = YNL_PT_U16, },
 	[DEVLINK_ATTR_SB_POOL_TYPE] = { .name = "sb-pool-type", .type = YNL_PT_U8, },
 	[DEVLINK_ATTR_SB_POOL_SIZE] = { .name = "sb-pool-size", .type = YNL_PT_U32, },
 	[DEVLINK_ATTR_SB_POOL_THRESHOLD_TYPE] = { .name = "sb-pool-threshold-type", .type = YNL_PT_U8, },
 	[DEVLINK_ATTR_SB_THRESHOLD] = { .name = "sb-threshold", .type = YNL_PT_U32, },
 	[DEVLINK_ATTR_SB_TC_INDEX] = { .name = "sb-tc-index", .type = YNL_PT_U16, },
+	[DEVLINK_ATTR_SB_OCC_CUR] = { .name = "sb-occ-cur", .type = YNL_PT_U32, },
+	[DEVLINK_ATTR_SB_OCC_MAX] = { .name = "sb-occ-max", .type = YNL_PT_U32, },
 	[DEVLINK_ATTR_ESWITCH_MODE] = { .name = "eswitch-mode", .type = YNL_PT_U16, },
 	[DEVLINK_ATTR_ESWITCH_INLINE_MODE] = { .name = "eswitch-inline-mode", .type = YNL_PT_U16, },
 	[DEVLINK_ATTR_DPIPE_TABLES] = { .name = "dpipe-tables", .type = YNL_PT_NEST, .nest = &devlink_dl_dpipe_tables_nest, },
@@ -639,11 +816,24 @@ struct ynl_policy_attr devlink_policy[DEVLINK_ATTR_MAX + 1] = {
 	[DEVLINK_ATTR_DPIPE_TABLE_RESOURCE_ID] = { .name = "dpipe-table-resource-id", .type = YNL_PT_U64, },
 	[DEVLINK_ATTR_DPIPE_TABLE_RESOURCE_UNITS] = { .name = "dpipe-table-resource-units", .type = YNL_PT_U64, },
 	[DEVLINK_ATTR_PORT_FLAVOUR] = { .name = "port-flavour", .type = YNL_PT_U16, },
+	[DEVLINK_ATTR_PORT_NUMBER] = { .name = "port-number", .type = YNL_PT_U32, },
+	[DEVLINK_ATTR_PORT_SPLIT_SUPPORT_NUMBER] = { .name = "port-split-support-number", .type = YNL_PT_U32, },
+	[DEVLINK_ATTR_PARAM] = { .name = "param", .type = YNL_PT_NEST, .nest = &devlink_dl_param_nest, },
 	[DEVLINK_ATTR_PARAM_NAME] = { .name = "param-name", .type = YNL_PT_NUL_STR, },
+	[DEVLINK_ATTR_PARAM_GENERIC] = { .name = "param-generic", .type = YNL_PT_FLAG, },
 	[DEVLINK_ATTR_PARAM_TYPE] = { .name = "param-type", .type = YNL_PT_U8, },
+	[DEVLINK_ATTR_PARAM_VALUE_LIST] = { .name = "param-value-list", .type = YNL_PT_NEST, .nest = &devlink_dl_param_value_list_nest, },
+	[DEVLINK_ATTR_PARAM_VALUE] = { .name = "param-value", .type = YNL_PT_NEST, .nest = &devlink_dl_param_value_nest, },
+	[DEVLINK_ATTR_PARAM_VALUE_DATA] = { .name = "param-value-data", .type = YNL_PT_NUL_STR, },
 	[DEVLINK_ATTR_PARAM_VALUE_CMODE] = { .name = "param-value-cmode", .type = YNL_PT_U8, },
 	[DEVLINK_ATTR_REGION_NAME] = { .name = "region-name", .type = YNL_PT_NUL_STR, },
+	[DEVLINK_ATTR_REGION_SIZE] = { .name = "region-size", .type = YNL_PT_U64, },
+	[DEVLINK_ATTR_REGION_SNAPSHOTS] = { .name = "region-snapshots", .type = YNL_PT_NEST, .nest = &devlink_dl_region_snapshots_nest, },
+	[DEVLINK_ATTR_REGION_SNAPSHOT] = { .name = "region-snapshot", .type = YNL_PT_NEST, .nest = &devlink_dl_region_snapshot_nest, },
 	[DEVLINK_ATTR_REGION_SNAPSHOT_ID] = { .name = "region-snapshot-id", .type = YNL_PT_U32, },
+	[DEVLINK_ATTR_REGION_CHUNKS] = { .name = "region-chunks", .type = YNL_PT_NEST, .nest = &devlink_dl_region_chunks_nest, },
+	[DEVLINK_ATTR_REGION_CHUNK] = { .name = "region-chunk", .type = YNL_PT_NEST, .nest = &devlink_dl_region_chunk_nest, },
+	[DEVLINK_ATTR_REGION_CHUNK_DATA] = { .name = "region-chunk-data", .type = YNL_PT_BINARY,},
 	[DEVLINK_ATTR_REGION_CHUNK_ADDR] = { .name = "region-chunk-addr", .type = YNL_PT_U64, },
 	[DEVLINK_ATTR_REGION_CHUNK_LEN] = { .name = "region-chunk-len", .type = YNL_PT_U64, },
 	[DEVLINK_ATTR_INFO_DRIVER_NAME] = { .name = "info-driver-name", .type = YNL_PT_NUL_STR, },
@@ -653,22 +843,39 @@ struct ynl_policy_attr devlink_policy[DEVLINK_ATTR_MAX + 1] = {
 	[DEVLINK_ATTR_INFO_VERSION_STORED] = { .name = "info-version-stored", .type = YNL_PT_NEST, .nest = &devlink_dl_info_version_nest, },
 	[DEVLINK_ATTR_INFO_VERSION_NAME] = { .name = "info-version-name", .type = YNL_PT_NUL_STR, },
 	[DEVLINK_ATTR_INFO_VERSION_VALUE] = { .name = "info-version-value", .type = YNL_PT_NUL_STR, },
+	[DEVLINK_ATTR_SB_POOL_CELL_SIZE] = { .name = "sb-pool-cell-size", .type = YNL_PT_U32, },
 	[DEVLINK_ATTR_FMSG] = { .name = "fmsg", .type = YNL_PT_NEST, .nest = &devlink_dl_fmsg_nest, },
 	[DEVLINK_ATTR_FMSG_OBJ_NEST_START] = { .name = "fmsg-obj-nest-start", .type = YNL_PT_FLAG, },
 	[DEVLINK_ATTR_FMSG_PAIR_NEST_START] = { .name = "fmsg-pair-nest-start", .type = YNL_PT_FLAG, },
 	[DEVLINK_ATTR_FMSG_ARR_NEST_START] = { .name = "fmsg-arr-nest-start", .type = YNL_PT_FLAG, },
 	[DEVLINK_ATTR_FMSG_NEST_END] = { .name = "fmsg-nest-end", .type = YNL_PT_FLAG, },
 	[DEVLINK_ATTR_FMSG_OBJ_NAME] = { .name = "fmsg-obj-name", .type = YNL_PT_NUL_STR, },
+	[DEVLINK_ATTR_FMS_OBJ_VALUE_TYPE] = { .name = "fms-obj-value-type", .type = YNL_PT_U8, },
+	[DEVLINK_ATTR_FMS_OBJ_VALUE_DATA] = { .name = "fms-obj-value-data", .type = YNL_PT_U64, },
+	[DEVLINK_ATTR_HEALTH_REPORTER] = { .name = "health-reporter", .type = YNL_PT_NEST, .nest = &devlink_dl_health_reporter_nest, },
 	[DEVLINK_ATTR_HEALTH_REPORTER_NAME] = { .name = "health-reporter-name", .type = YNL_PT_NUL_STR, },
+	[DEVLINK_ATTR_HEALTH_REPORTER_STATE] = { .name = "health-reporter-state", .type = YNL_PT_U8, },
+	[DEVLINK_ATTR_HEALTH_REPORTER_ERR_COUNT] = { .name = "health-reporter-err-count", .type = YNL_PT_U64, },
+	[DEVLINK_ATTR_HEALTH_REPORTER_RECOVER_COUNT] = { .name = "health-reporter-recover-count", .type = YNL_PT_U64, },
+	[DEVLINK_ATTR_HEALTH_REPORTER_DUMP_TS] = { .name = "health-reporter-dump-ts", .type = YNL_PT_U64, },
 	[DEVLINK_ATTR_HEALTH_REPORTER_GRACEFUL_PERIOD] = { .name = "health-reporter-graceful-period", .type = YNL_PT_U64, },
 	[DEVLINK_ATTR_HEALTH_REPORTER_AUTO_RECOVER] = { .name = "health-reporter-auto-recover", .type = YNL_PT_U8, },
 	[DEVLINK_ATTR_FLASH_UPDATE_FILE_NAME] = { .name = "flash-update-file-name", .type = YNL_PT_NUL_STR, },
 	[DEVLINK_ATTR_FLASH_UPDATE_COMPONENT] = { .name = "flash-update-component", .type = YNL_PT_NUL_STR, },
+	[DEVLINK_ATTR_FLASH_UPDATE_STATUS_MSG] = { .name = "flash-update-status-msg", .type = YNL_PT_NUL_STR, },
+	[DEVLINK_ATTR_FLASH_UPDATE_STATUS_DONE] = { .name = "flash-update-status-done", .type = YNL_PT_U64, },
+	[DEVLINK_ATTR_FLASH_UPDATE_STATUS_TOTAL] = { .name = "flash-update-status-total", .type = YNL_PT_U64, },
 	[DEVLINK_ATTR_PORT_PCI_PF_NUMBER] = { .name = "port-pci-pf-number", .type = YNL_PT_U16, },
+	[DEVLINK_ATTR_PORT_PCI_VF_NUMBER] = { .name = "port-pci-vf-number", .type = YNL_PT_U16, },
+	[DEVLINK_ATTR_ATTR_STATS] = { .name = "attr-stats", .type = YNL_PT_NEST, .nest = &devlink_dl_attr_stats_nest, },
 	[DEVLINK_ATTR_TRAP_NAME] = { .name = "trap-name", .type = YNL_PT_NUL_STR, },
 	[DEVLINK_ATTR_TRAP_ACTION] = { .name = "trap-action", .type = YNL_PT_U8, },
+	[DEVLINK_ATTR_TRAP_TYPE] = { .name = "trap-type", .type = YNL_PT_U8, },
+	[DEVLINK_ATTR_TRAP_GENERIC] = { .name = "trap-generic", .type = YNL_PT_FLAG, },
+	[DEVLINK_ATTR_TRAP_METADATA] = { .name = "trap-metadata", .type = YNL_PT_NEST, .nest = &devlink_dl_trap_metadata_nest, },
 	[DEVLINK_ATTR_TRAP_GROUP_NAME] = { .name = "trap-group-name", .type = YNL_PT_NUL_STR, },
 	[DEVLINK_ATTR_RELOAD_FAILED] = { .name = "reload-failed", .type = YNL_PT_U8, },
+	[DEVLINK_ATTR_HEALTH_REPORTER_DUMP_TS_NS] = { .name = "health-reporter-dump-ts-ns", .type = YNL_PT_U64, },
 	[DEVLINK_ATTR_NETNS_FD] = { .name = "netns-fd", .type = YNL_PT_U32, },
 	[DEVLINK_ATTR_NETNS_PID] = { .name = "netns-pid", .type = YNL_PT_U32, },
 	[DEVLINK_ATTR_NETNS_ID] = { .name = "netns-id", .type = YNL_PT_U32, },
@@ -677,7 +884,12 @@ struct ynl_policy_attr devlink_policy[DEVLINK_ATTR_MAX + 1] = {
 	[DEVLINK_ATTR_TRAP_POLICER_RATE] = { .name = "trap-policer-rate", .type = YNL_PT_U64, },
 	[DEVLINK_ATTR_TRAP_POLICER_BURST] = { .name = "trap-policer-burst", .type = YNL_PT_U64, },
 	[DEVLINK_ATTR_PORT_FUNCTION] = { .name = "port-function", .type = YNL_PT_NEST, .nest = &devlink_dl_port_function_nest, },
+	[DEVLINK_ATTR_BOARD_SERIAL_NUMBER] = { .name = "board-serial-number", .type = YNL_PT_NUL_STR, },
+	[DEVLINK_ATTR_PORT_LANES] = { .name = "port-lanes", .type = YNL_PT_U32, },
+	[DEVLINK_ATTR_PORT_SPLITTABLE] = { .name = "port-splittable", .type = YNL_PT_U8, },
+	[DEVLINK_ATTR_PORT_EXTERNAL] = { .name = "port-external", .type = YNL_PT_U8, },
 	[DEVLINK_ATTR_PORT_CONTROLLER_NUMBER] = { .name = "port-controller-number", .type = YNL_PT_U32, },
+	[DEVLINK_ATTR_FLASH_UPDATE_STATUS_TIMEOUT] = { .name = "flash-update-status-timeout", .type = YNL_PT_U64, },
 	[DEVLINK_ATTR_FLASH_UPDATE_OVERWRITE_MASK] = { .name = "flash-update-overwrite-mask", .type = YNL_PT_BITFIELD32, },
 	[DEVLINK_ATTR_RELOAD_ACTION] = { .name = "reload-action", .type = YNL_PT_U8, },
 	[DEVLINK_ATTR_RELOAD_ACTIONS_PERFORMED] = { .name = "reload-actions-performed", .type = YNL_PT_BITFIELD32, },
@@ -691,12 +903,17 @@ struct ynl_policy_attr devlink_policy[DEVLINK_ATTR_MAX + 1] = {
 	[DEVLINK_ATTR_RELOAD_ACTION_INFO] = { .name = "reload-action-info", .type = YNL_PT_NEST, .nest = &devlink_dl_reload_act_info_nest, },
 	[DEVLINK_ATTR_RELOAD_ACTION_STATS] = { .name = "reload-action-stats", .type = YNL_PT_NEST, .nest = &devlink_dl_reload_act_stats_nest, },
 	[DEVLINK_ATTR_PORT_PCI_SF_NUMBER] = { .name = "port-pci-sf-number", .type = YNL_PT_U32, },
+	[DEVLINK_ATTR_RATE_TYPE] = { .name = "rate-type", .type = YNL_PT_U16, },
 	[DEVLINK_ATTR_RATE_TX_SHARE] = { .name = "rate-tx-share", .type = YNL_PT_U64, },
 	[DEVLINK_ATTR_RATE_TX_MAX] = { .name = "rate-tx-max", .type = YNL_PT_U64, },
 	[DEVLINK_ATTR_RATE_NODE_NAME] = { .name = "rate-node-name", .type = YNL_PT_NUL_STR, },
 	[DEVLINK_ATTR_RATE_PARENT_NODE_NAME] = { .name = "rate-parent-node-name", .type = YNL_PT_NUL_STR, },
+	[DEVLINK_ATTR_REGION_MAX_SNPSHOTS] = { .name = "region-max-snpshots", .type = YNL_PT_U32, },
 	[DEVLINK_ATTR_LINECARD_INDEX] = { .name = "linecard-index", .type = YNL_PT_U32, },
+	[DEVLINK_ATTR_LINECARD_STATE] = { .name = "linecard-state", .type = YNL_PT_U8, },
 	[DEVLINK_ATTR_LINECARD_TYPE] = { .name = "linecard-type", .type = YNL_PT_NUL_STR, },
+	[DEVLINK_ATTR_LINECARD_SUPPORTED_TYPES] = { .name = "linecard-supported-types", .type = YNL_PT_NEST, .nest = &devlink_dl_linecard_supported_types_nest, },
+	[DEVLINK_ATTR_NESTED_DEVLINK] = { .name = "nested-devlink", .type = YNL_PT_NEST, .nest = &devlink_dl_nested_devlink_nest, },
 	[DEVLINK_ATTR_SELFTESTS] = { .name = "selftests", .type = YNL_PT_NEST, .nest = &devlink_dl_selftest_id_nest, },
 	[DEVLINK_ATTR_RATE_TX_PRIORITY] = { .name = "rate-tx-priority", .type = YNL_PT_U32, },
 	[DEVLINK_ATTR_RATE_TX_WEIGHT] = { .name = "rate-tx-weight", .type = YNL_PT_U32, },
@@ -1073,6 +1290,25 @@ int devlink_dl_resource_parse(struct ynl_parse_arg *yarg,
 	return 0;
 }
 
+void devlink_dl_param_value_list_free(struct devlink_dl_param_value_list *obj)
+{
+	free(obj->param_value_data);
+}
+
+void devlink_dl_param_value_free(struct devlink_dl_param_value *obj)
+{
+	free(obj->param_value_data);
+}
+
+void devlink_dl_region_snapshot_free(struct devlink_dl_region_snapshot *obj)
+{
+}
+
+void devlink_dl_region_chunk_free(struct devlink_dl_region_chunk *obj)
+{
+	free(obj->region_chunk_data);
+}
+
 void devlink_dl_info_version_free(struct devlink_dl_info_version *obj)
 {
 	free(obj->info_version_name);
@@ -1161,6 +1397,19 @@ int devlink_dl_fmsg_parse(struct ynl_parse_arg *yarg,
 	}
 
 	return 0;
+}
+
+void devlink_dl_health_reporter_free(struct devlink_dl_health_reporter *obj)
+{
+	free(obj->health_reporter_name);
+}
+
+void devlink_dl_attr_stats_free(struct devlink_dl_attr_stats *obj)
+{
+}
+
+void devlink_dl_trap_metadata_free(struct devlink_dl_trap_metadata *obj)
+{
 }
 
 void devlink_dl_port_function_free(struct devlink_dl_port_function *obj)
@@ -1264,6 +1513,16 @@ int devlink_dl_reload_act_stats_parse(struct ynl_parse_arg *yarg,
 	}
 
 	return 0;
+}
+
+void
+devlink_dl_linecard_supported_types_free(struct devlink_dl_linecard_supported_types *obj)
+{
+	free(obj->linecard_type);
+}
+
+void devlink_dl_nested_devlink_free(struct devlink_dl_nested_devlink *obj)
+{
 }
 
 void devlink_dl_selftest_id_free(struct devlink_dl_selftest_id *obj)
@@ -1580,6 +1839,22 @@ int devlink_dl_resource_list_parse(struct ynl_parse_arg *yarg,
 	}
 
 	return 0;
+}
+
+void devlink_dl_param_free(struct devlink_dl_param *obj)
+{
+	free(obj->param_name);
+	devlink_dl_param_value_list_free(&obj->param_value_list);
+}
+
+void devlink_dl_region_snapshots_free(struct devlink_dl_region_snapshots *obj)
+{
+	devlink_dl_region_snapshot_free(&obj->region_snapshot);
+}
+
+void devlink_dl_region_chunks_free(struct devlink_dl_region_chunks *obj)
+{
+	devlink_dl_region_chunk_free(&obj->region_chunk);
 }
 
 void devlink_dl_reload_act_info_free(struct devlink_dl_reload_act_info *obj)

@@ -24,6 +24,7 @@ const char *devlink_port_flavour_str(enum devlink_port_flavour value);
 const char *devlink_port_fn_state_str(enum devlink_port_fn_state value);
 const char *devlink_port_fn_opstate_str(enum devlink_port_fn_opstate value);
 const char *devlink_port_fn_attr_cap_str(enum devlink_port_fn_attr_cap value);
+const char *devlink_rate_type_str(enum devlink_rate_type value);
 const char *
 devlink_sb_threshold_type_str(enum devlink_sb_threshold_type value);
 const char *devlink_eswitch_mode_str(enum devlink_eswitch_mode value);
@@ -31,6 +32,7 @@ const char *
 devlink_eswitch_inline_mode_str(enum devlink_eswitch_inline_mode value);
 const char *
 devlink_eswitch_encap_mode_str(enum devlink_eswitch_encap_mode value);
+const char *devlink_dpipe_header_id_str(enum devlink_dpipe_header_id value);
 const char *devlink_dpipe_match_type_str(enum devlink_dpipe_match_type value);
 const char *
 devlink_dpipe_action_type_str(enum devlink_dpipe_action_type value);
@@ -41,6 +43,7 @@ const char *devlink_reload_action_str(enum devlink_reload_action value);
 const char *devlink_param_cmode_str(enum devlink_param_cmode value);
 const char *devlink_flash_overwrite_str(enum devlink_flash_overwrite value);
 const char *devlink_trap_action_str(enum devlink_trap_action value);
+const char *devlink_trap_type_str(enum devlink_trap_type value);
 
 /* Common nested types */
 struct devlink_dl_dpipe_match {
@@ -53,7 +56,7 @@ struct devlink_dl_dpipe_match {
 	} _present;
 
 	enum devlink_dpipe_match_type dpipe_match_type;
-	__u32 dpipe_header_id;
+	enum devlink_dpipe_header_id dpipe_header_id;
 	__u8 dpipe_header_global;
 	__u32 dpipe_header_index;
 	__u32 dpipe_field_id;
@@ -83,7 +86,7 @@ struct devlink_dl_dpipe_action {
 	} _present;
 
 	enum devlink_dpipe_action_type dpipe_action_type;
-	__u32 dpipe_header_id;
+	enum devlink_dpipe_header_id dpipe_header_id;
 	__u8 dpipe_header_global;
 	__u32 dpipe_header_index;
 	__u32 dpipe_field_id;
@@ -143,6 +146,44 @@ struct devlink_dl_resource {
 	__u64 resource_occ;
 };
 
+struct devlink_dl_param_value_list {
+	struct {
+		__u32 param_value_cmode:1;
+		__u32 param_value_data_len;
+	} _present;
+
+	enum devlink_param_cmode param_value_cmode;
+	char *param_value_data;
+};
+
+struct devlink_dl_param_value {
+	struct {
+		__u32 param_value_cmode:1;
+		__u32 param_value_data_len;
+	} _present;
+
+	enum devlink_param_cmode param_value_cmode;
+	char *param_value_data;
+};
+
+struct devlink_dl_region_snapshot {
+	struct {
+		__u32 region_snapshot_id:1;
+	} _present;
+
+	__u32 region_snapshot_id;
+};
+
+struct devlink_dl_region_chunk {
+	struct {
+		__u32 region_chunk_data_len;
+		__u32 region_chunk_addr:1;
+	} _present;
+
+	void *region_chunk_data;
+	__u64 region_chunk_addr;
+};
+
 struct devlink_dl_info_version {
 	struct {
 		__u32 info_version_name_len;
@@ -163,6 +204,49 @@ struct devlink_dl_fmsg {
 	} _present;
 
 	char *fmsg_obj_name;
+};
+
+struct devlink_dl_health_reporter {
+	struct {
+		__u32 health_reporter_name_len;
+		__u32 health_reporter_state:1;
+		__u32 health_reporter_err_count:1;
+		__u32 health_reporter_recover_count:1;
+		__u32 health_reporter_graceful_period:1;
+		__u32 health_reporter_auto_recover:1;
+		__u32 health_reporter_dump_ts:1;
+		__u32 health_reporter_dump_ts_ns:1;
+		__u32 health_reporter_auto_dump:1;
+	} _present;
+
+	char *health_reporter_name;
+	__u8 health_reporter_state;
+	__u64 health_reporter_err_count;
+	__u64 health_reporter_recover_count;
+	__u64 health_reporter_graceful_period;
+	__u8 health_reporter_auto_recover;
+	__u64 health_reporter_dump_ts;
+	__u64 health_reporter_dump_ts_ns;
+	__u8 health_reporter_auto_dump;
+};
+
+struct devlink_dl_attr_stats {
+	struct {
+		__u32 rx_packets:1;
+		__u32 rx_bytes:1;
+		__u32 rx_dropped:1;
+	} _present;
+
+	__u64 rx_packets;
+	__u64 rx_bytes;
+	__u64 rx_dropped;
+};
+
+struct devlink_dl_trap_metadata {
+	struct {
+		__u32 metadata_type_in_port:1;
+		__u32 metadata_type_fa_cookie:1;
+	} _present;
 };
 
 struct devlink_dl_port_function {
@@ -192,6 +276,26 @@ struct devlink_dl_reload_stats_entry {
 struct devlink_dl_reload_act_stats {
 	unsigned int n_reload_stats_entry;
 	struct devlink_dl_reload_stats_entry *reload_stats_entry;
+};
+
+struct devlink_dl_linecard_supported_types {
+	struct {
+		__u32 linecard_type_len;
+	} _present;
+
+	char *linecard_type;
+};
+
+struct devlink_dl_nested_devlink {
+	struct {
+		__u32 index:1;
+		__u32 reload_failed:1;
+		__u32 refcount:1;
+	} _present;
+
+	__u32 index;
+	__u8 reload_failed;
+	__s64 refcount;
 };
 
 struct devlink_dl_selftest_id {
@@ -228,6 +332,35 @@ struct devlink_dl_dpipe_header_fields {
 struct devlink_dl_resource_list {
 	unsigned int n_resource;
 	struct devlink_dl_resource *resource;
+};
+
+struct devlink_dl_param {
+	struct {
+		__u32 param_name_len;
+		__u32 param_generic:1;
+		__u32 param_type:1;
+		__u32 param_value_list:1;
+	} _present;
+
+	char *param_name;
+	__u8 param_type;
+	struct devlink_dl_param_value_list param_value_list;
+};
+
+struct devlink_dl_region_snapshots {
+	struct {
+		__u32 region_snapshot:1;
+	} _present;
+
+	struct devlink_dl_region_snapshot region_snapshot;
+};
+
+struct devlink_dl_region_chunks {
+	struct {
+		__u32 region_chunk:1;
+	} _present;
+
+	struct devlink_dl_region_chunk region_chunk;
 };
 
 struct devlink_dl_reload_act_info {
@@ -283,7 +416,7 @@ struct devlink_dl_dpipe_header {
 	} _present;
 
 	char *dpipe_header_name;
-	__u32 dpipe_header_id;
+	enum devlink_dpipe_header_id dpipe_header_id;
 	__u8 dpipe_header_global;
 	struct devlink_dl_dpipe_header_fields dpipe_header_fields;
 };

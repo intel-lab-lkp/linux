@@ -77,6 +77,14 @@ definitions:
         name: ipsec-packet-bit
   -
     type: enum
+    name: rate-type
+    entries:
+      -
+        name: leaf
+      -
+        name: node
+  -
+    type: enum
     name: sb-threshold-type
     entries:
       -
@@ -111,6 +119,16 @@ definitions:
         name: none
       -
         name: basic
+  -
+    type: enum
+    name: dpipe-header-id
+    entries:
+      -
+        name: ethernet
+      -
+        name: ipv4
+      -
+        name: ipv6
   -
     type: enum
     name: dpipe-match-type
@@ -174,6 +192,16 @@ definitions:
         name: trap
       -
         name: mirror
+  -
+    type: enum
+    name: trap-type
+    entries:
+      -
+        name: drop
+      -
+        name: exception
+      -
+        name: control
 
 attribute-sets:
   -
@@ -194,23 +222,44 @@ attribute-sets:
         name: port-type
         type: u16
         enum: port-type
-
-      # TODO: fill in the attributes in between
-
+      -
+        name: port-desired-type
+        type: u16
+      -
+        name: port-netdev-ifindex
+        type: u32
+      -
+        name: port-netdev-name
+        type: string
+      -
+        name: port-ibdev-name
+        type: string
       -
         name: port-split-count
         type: u32
         value: 9
-
-      # TODO: fill in the attributes in between
-
+      -
+        name: port-split-group
+        type: u32
       -
         name: sb-index
         type: u32
         value: 11
-
-      # TODO: fill in the attributes in between
-
+      -
+        name: sb-size
+        type: u32
+      -
+        name: sb-ingress-pool-count
+        type: u16
+      -
+        name: sb-egress-pool-count
+        type: u16
+      -
+        name: sb-ingress-tc-count
+        type: u16
+      -
+        name: sb-egress-tc-count
+        type: u16
       -
         name: sb-pool-index
         type: u16
@@ -233,15 +282,17 @@ attribute-sets:
         name: sb-tc-index
         type: u16
         value: 22
-
-      # TODO: fill in the attributes in between
-
+      -
+        name: sb-occ-cur
+        type: u32
+      -
+        name: sb-occ-max
+        type: u32
       -
         name: eswitch-mode
         type: u16
         value: 25
         enum: eswitch-mode
-
       -
         name: eswitch-inline-mode
         type: u16
@@ -347,6 +398,7 @@ attribute-sets:
       -
         name: dpipe-header-id
         type: u32
+        enum: dpipe-header-id
       -
         name: dpipe-header-fields
         type: nest
@@ -433,23 +485,40 @@ attribute-sets:
         name: port-flavour
         type: u16
         enum: port-flavour
-
-      # TODO: fill in the attributes in between
-
+      -
+        name: port-number
+        type: u32
+      -
+        name: port-split-support-number
+        type: u32
+      -
+        name: param
+        type: nest
+        nested-attributes: dl-param
       -
         name: param-name
         type: string
         value: 81
-
-      # TODO: fill in the attributes in between
-
+      -
+        name: param-generic
+        type: flag
       -
         name: param-type
         type: u8
         value: 83
-
-      # TODO: fill in the attributes in between
-
+      -
+        name: param-value-list
+        type: nest
+        nested-attributes: dl-param-value-list
+      -
+        name: param-value
+        type: nest
+        nested-attributes: dl-param-value
+      -
+        name: param-value-data
+        # param-value-data can be of any type e.g. u8 or u32 or string etc.
+        # hence make it string to cover for all types
+        type: string
       -
         name: param-value-cmode
         type: u8
@@ -458,16 +527,32 @@ attribute-sets:
       -
         name: region-name
         type: string
-
-      # TODO: fill in the attributes in between
-
+      -
+        name: region-size
+        type: u64
+      -
+        name: region-snapshots
+        type: nest
+        nested-attributes: dl-region-snapshots
+      -
+        name: region-snapshot
+        type: nest
+        nested-attributes: dl-region-snapshot
       -
         name: region-snapshot-id
         type: u32
         value: 92
-
-      # TODO: fill in the attributes in between
-
+      -
+        name: region-chunks
+        type: nest
+        nested-attributes: dl-region-chunks
+      -
+        name: region-chunk
+        type: nest
+        nested-attributes: dl-region-chunk
+      -
+        name: region-chunk-data
+        type: binary
       -
         name: region-chunk-addr
         type: u64
@@ -502,9 +587,9 @@ attribute-sets:
       -
         name: info-version-value
         type: string
-
-      # TODO: fill in the attributes in between
-
+      -
+        name: sb-pool-cell-size
+        type: u32
       -
         name: fmsg
         type: nest
@@ -525,15 +610,33 @@ attribute-sets:
       -
         name: fmsg-obj-name
         type: string
-
-      # TODO: fill in the attributes in between
+      -
+        name: fms-obj-value-type
+        type: u8
+      -
+        name: fms-obj-value-data
+        type: u64
+      -
+        name: health-reporter
+        type: nest
+        nested-attributes: dl-health-reporter
 
       -
         name: health-reporter-name
         type: string
         value: 115
-
-      # TODO: fill in the attributes in between
+      -
+        name: health-reporter-state
+        type: u8
+      -
+        name: health-reporter-err-count
+        type: u64
+      -
+        name: health-reporter-recover-count
+        type: u64
+      -
+        name: health-reporter-dump-ts
+        type: u64
 
       -
         name: health-reporter-graceful-period
@@ -548,15 +651,27 @@ attribute-sets:
       -
         name: flash-update-component
         type: string
-
-      # TODO: fill in the attributes in between
+      -
+        name: flash-update-status-msg
+        type: string
+      -
+        name: flash-update-status-done
+        type: u64
+      -
+        name: flash-update-status-total
+        type: u64
 
       -
         name: port-pci-pf-number
         type: u16
         value: 127
-
-      # TODO: fill in the attributes in between
+      -
+        name: port-pci-vf-number
+        type: u16
+      -
+        name: attr-stats
+        type: nest
+        nested-attributes: dl-attr-stats
 
       -
         name: trap-name
@@ -566,8 +681,17 @@ attribute-sets:
         name: trap-action
         type: u8
         enum: trap-action
-
-      # TODO: fill in the attributes in between
+      -
+        name: trap-type
+        type: u8
+        enum: trap-type
+      -
+        name: trap-generic
+        type: flag
+      -
+        name: trap-metadata
+        type: nest
+        nested-attributes: dl-trap-metadata
 
       -
         name: trap-group-name
@@ -577,8 +701,9 @@ attribute-sets:
       -
         name: reload-failed
         type: u8
-
-      # TODO: fill in the attributes in between
+      -
+        name: health-reporter-dump-ts-ns
+        type: u64
 
       -
         name: netns-fd
@@ -590,8 +715,6 @@ attribute-sets:
       -
         name: netns-id
         type: u32
-
-      # TODO: fill in the attributes in between
 
       -
         name: health-reporter-auto-dump
@@ -610,15 +733,26 @@ attribute-sets:
         name: port-function
         type: nest
         nested-attributes: dl-port-function
-
-      # TODO: fill in the attributes in between
+      -
+        name: board-serial-number
+        type: string
+      -
+        name: port-lanes
+        type: u32
+      -
+        name: port-splittable
+        type: u8
+      -
+        name: port-external
+        type: u8
 
       -
         name: port-controller-number
         type: u32
         value: 150
-
-      # TODO: fill in the attributes in between
+      -
+        name: flash-update-status-timeout
+        type: u64
 
       -
         name: flash-update-overwrite-mask
@@ -674,14 +808,14 @@ attribute-sets:
         multi-attr: true
         nested-attributes: dl-reload-act-stats
 
-      # TODO: fill in the attributes in between
-
       -
         name: port-pci-sf-number
         type: u32
         value: 164
-
-      # TODO: fill in the attributes in between
+      -
+        name: rate-type
+        type: u16
+        enum: rate-type
 
       -
         name: rate-tx-share
@@ -697,21 +831,31 @@ attribute-sets:
         name: rate-parent-node-name
         type: string
 
-      # TODO: fill in the attributes in between
+      -
+         name: region-max-snpshots
+         type: u32
 
       -
         name: linecard-index
         type: u32
         value: 171
 
-      # TODO: fill in the attributes in between
+      -
+         name: linecard-state
+         type: u8
 
       -
         name: linecard-type
         type: string
         value: 173
-
-      # TODO: fill in the attributes in between
+      -
+        name: linecard-supported-types
+        type: nest
+        nested-attributes: dl-linecard-supported-types
+      -
+        name: nested-devlink
+        type: nest
+        nested-attributes: dl-nested-devlink
 
       -
         name: selftests
@@ -1004,7 +1148,60 @@ attribute-sets:
     attributes:
       -
         name: resource
-
+  -
+    name: dl-param
+    subset-of: devlink
+    attributes:
+      -
+        name: param-name
+      -
+        name: param-generic
+      -
+        name: param-type
+      -
+        name: param-value-list
+  -
+    name: dl-param-value-list
+    subset-of: devlink
+    attributes:
+      -
+        name: param-value-cmode
+      -
+        name: param-value-data
+  -
+    name: dl-param-value
+    subset-of: devlink
+    attributes:
+      -
+        name: param-value-cmode
+      -
+        name: param-value-data
+  -
+    name: dl-region-snapshots
+    subset-of: devlink
+    attributes:
+      -
+        name: region-snapshot
+  -
+    name: dl-region-snapshot
+    subset-of: devlink
+    attributes:
+      -
+        name: region-snapshot-id
+  -
+    name: dl-region-chunks
+    subset-of: devlink
+    attributes:
+      -
+        name: region-chunk
+  -
+    name: dl-region-chunk
+    subset-of: devlink
+    attributes:
+      -
+        name: region-chunk-data
+      -
+        name: region-chunk-addr
   -
     name: dl-fmsg
     subset-of: devlink
@@ -1019,7 +1216,63 @@ attribute-sets:
         name: fmsg-nest-end
       -
         name: fmsg-obj-name
-
+  -
+    name: dl-health-reporter
+    subset-of: devlink
+    attributes:
+      -
+        name: health-reporter-name
+      -
+        name: health-reporter-state
+      -
+        name: health-reporter-err-count
+      -
+        name: health-reporter-recover-count
+      -
+        name: health-reporter-graceful-period
+      -
+        name: health-reporter-auto-recover
+      -
+        name: health-reporter-dump-ts
+      -
+        name: health-reporter-dump-ts-ns
+      -
+        name: health-reporter-auto-dump
+  -
+    name: dl-attr-stats
+    attributes:
+      - name: rx-packets
+        type: u64
+        value: 0
+      - name: rx-bytes
+        type: u64
+      - name: rx-dropped
+        type: u64
+  -
+    name: dl-trap-metadata
+    attributes:
+      -
+        name: metadata-type-in-port
+        type: flag
+        value: 0
+      -
+        name: metadata-type-fa-cookie
+        type: flag
+  -
+    name: dl-linecard-supported-types
+    subset-of: devlink
+    attributes:
+      -
+        name: linecard-type
+  -
+    name: dl-nested-devlink
+    attributes:
+      - name: index
+        type: u32
+      - name: reload-failed
+        type: u8
+      - name: refcount
+        type: sint
   -
     name: dl-selftest-id
     name-prefix: devlink-attr-selftest-id-
