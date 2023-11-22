@@ -41,6 +41,7 @@ struct bio_crypt_ctx;
 #define BD_FLAG_WRITE_HOLDER	1
 #define BD_FLAG_HAS_SUBMIT_BIO	2
 #define BD_FLAG_MAKE_IT_FAIL	3
+#define BD_FLAG_RO_WARNED	4
 
 struct block_device {
 	sector_t		bd_start_sect;
