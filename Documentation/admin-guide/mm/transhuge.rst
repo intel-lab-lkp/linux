@@ -45,10 +45,23 @@ components:
    the two is using hugepages just because of the fact the TLB miss is
    going to run faster.
 
+As well as PMD-sized THP described above, it is also possible to
+configure the system to allocate "small-sized THP" to back anonymous
+memory (for example 16K, 32K, 64K, etc). These THPs continue to be
+PTE-mapped, but in many cases can still provide similar benefits to
+those outlined above: Page faults are significantly reduced (by a
+factor of e.g. 4, 8, 16, etc), but latency spikes are much less
+prominent because the size of each page isn't as huge as the PMD-sized
+variant and there is less memory to clear in each page fault. Some
+architectures also employ TLB compression mechanisms to squeeze more
+entries in when a set of PTEs are virtually and physically contiguous
+and approporiately aligned. In this case, TLB misses will occur less
+often.
+
 THP can be enabled system wide or restricted to certain tasks or even
 memory ranges inside task's address space. Unless THP is completely
 disabled, there is ``khugepaged`` daemon that scans memory and
-collapses sequences of basic pages into huge pages.
+collapses sequences of basic pages into PMD-sized huge pages.
 
 The THP behaviour is controlled via :ref:`sysfs <thp_sysfs>`
 interface and using madvise(2) and prctl(2) system calls.
@@ -95,11 +108,28 @@ Global THP controls
 Transparent Hugepage Support for anonymous memory can be entirely disabled
 (mostly for debugging purposes) or only enabled inside MADV_HUGEPAGE
 regions (to avoid the risk of consuming more memory resources) or enabled
-system wide. This can be achieved with one of::
+system wide. This can be achieved per-supported-THP-size with one of::
+
+	echo always >/sys/kernel/mm/transparent_hugepage/hugepages-<size>kB/enabled
+	echo madvise >/sys/kernel/mm/transparent_hugepage/hugepages-<size>kB/enabled
+	echo never >/sys/kernel/mm/transparent_hugepage/hugepages-<size>kB/enabled
+
+where <size> is the hugepage size being addressed, the available sizes
+for which vary by system. Alternatively it is possible to specify that
+a given hugepage size will inherrit the global enabled setting::
+
+	echo global >/sys/kernel/mm/transparent_hugepage/hugepages-<size>kB/enabled
+
+The global (legacy) enabled setting can be set as follows::
 
 	echo always >/sys/kernel/mm/transparent_hugepage/enabled
 	echo madvise >/sys/kernel/mm/transparent_hugepage/enabled
 	echo never >/sys/kernel/mm/transparent_hugepage/enabled
+
+By default, PMD-sized hugepages have enabled="global" and all other
+hugepage sizes have enabled="never". If enabling multiple hugepage
+sizes, the kernel will select the most appropriate enabled size for a
+given allocation.
 
 It's also possible to limit defrag efforts in the VM to generate
 anonymous hugepages in case they're not immediately free to madvise
@@ -146,24 +176,33 @@ madvise
 never
 	should be self-explanatory.
 
-By default kernel tries to use huge zero page on read page fault to
-anonymous mapping. It's possible to disable huge zero page by writing 0
-or enable it back by writing 1::
+By default kernel tries to use huge, PMD-mappable zero page on read
+page fault to anonymous mapping. It's possible to disable huge zero
+page by writing 0 or enable it back by writing 1::
 
 	echo 0 >/sys/kernel/mm/transparent_hugepage/use_zero_page
 	echo 1 >/sys/kernel/mm/transparent_hugepage/use_zero_page
 
-Some userspace (such as a test program, or an optimized memory allocation
-library) may want to know the size (in bytes) of a transparent hugepage::
+Some userspace (such as a test program, or an optimized memory
+allocation library) may want to know the size (in bytes) of a
+PMD-mappable transparent hugepage::
 
 	cat /sys/kernel/mm/transparent_hugepage/hpage_pmd_size
 
-khugepaged will be automatically started when
-transparent_hugepage/enabled is set to "always" or "madvise, and it'll
-be automatically shutdown if it's set to "never".
+khugepaged will be automatically started when one or more hugepage
+sizes are enabled (either by directly setting "always" or "madvise",
+or by setting "global" while the global enabled is set to "always" or
+"madvise"), and it'll be automatically shutdown when the last hugepage
+size is disabled (either by directly setting "never", or by setting
+"global" while the global enabled is set to "never").
 
 Khugepaged controls
 -------------------
+
+.. note::
+   khugepaged currently only searches for opportunities to collapse to
+   PMD-sized THP and no attempt is made to collapse to small-sized
+   THP.
 
 khugepaged runs usually at low frequency so while one may not want to
 invoke defrag algorithms synchronously during the page faults, it
@@ -282,10 +321,11 @@ force
 Need of application restart
 ===========================
 
-The transparent_hugepage/enabled values and tmpfs mount option only affect
-future behavior. So to make them effective you need to restart any
-application that could have been using hugepages. This also applies to the
-regions registered in khugepaged.
+The transparent_hugepage/enabled and
+transparent_hugepage/hugepages-<size>kB/enabled values and tmpfs mount
+option only affect future behavior. So to make them effective you need
+to restart any application that could have been using hugepages. This
+also applies to the regions registered in khugepaged.
 
 Monitoring usage
 ================
@@ -307,6 +347,10 @@ frequently will incur overhead.
 
 There are a number of counters in ``/proc/vmstat`` that may be used to
 monitor how successfully the system is providing huge pages for use.
+
+.. note::
+   Currently the below counters only record events relating to
+   PMD-sized THP. Events relating to small-sized THP are not included.
 
 thp_fault_alloc
 	is incremented every time a huge page is successfully
@@ -413,7 +457,7 @@ for huge pages.
 Optimizing the applications
 ===========================
 
-To be guaranteed that the kernel will map a 2M page immediately in any
+To be guaranteed that the kernel will map a THP immediately in any
 memory region, the mmap region has to be hugepage naturally
 aligned. posix_memalign() can provide that guarantee.
 
