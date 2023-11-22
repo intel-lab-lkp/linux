@@ -90,6 +90,14 @@ enum cc_attr {
 	 * Examples include TDX Guest.
 	 */
 	CC_ATTR_HOTPLUG_DISABLED,
+
+	/**
+	 * @CC_ATTR_TDX_MODULE_CALLS: TDX module calls are available.
+	 *
+	 * The platform supports issuing calls directly to the TDX module.
+	 * This is not a given when TD partitioning is active.
+	 */
+	CC_ATTR_TDX_MODULE_CALLS,
 };
 
 #ifdef CONFIG_ARCH_HAS_CC_PLATFORM

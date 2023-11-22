@@ -87,6 +87,9 @@ static int __init tdx_guest_init(void)
 	if (!x86_match_cpu(tdx_guest_ids))
 		return -ENODEV;
 
+	if (!cc_platform_has(CC_ATTR_TDX_MODULE_CALLS))
+		return -ENODEV;
+
 	return misc_register(&tdx_misc_dev);
 }
 module_init(tdx_guest_init);
