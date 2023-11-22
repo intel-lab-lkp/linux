@@ -467,6 +467,7 @@
 	}								\
 									\
 	/* PCI quirks */						\
+	. = ALIGN(8);							\
 	.pci_fixup        : AT(ADDR(.pci_fixup) - LOAD_OFFSET) {	\
 		BOUNDED_SECTION_PRE_LABEL(.pci_fixup_early,  _pci_fixups_early,  __start, __end) \
 		BOUNDED_SECTION_PRE_LABEL(.pci_fixup_header, _pci_fixups_header, __start, __end) \
@@ -484,6 +485,7 @@
 	PRINTK_INDEX							\
 									\
 	/* Kernel symbol table: Normal symbols */			\
+	. = ALIGN(8);							\
 	__ksymtab         : AT(ADDR(__ksymtab) - LOAD_OFFSET) {		\
 		__start___ksymtab = .;					\
 		KEEP(*(SORT(___ksymtab+*)))				\
@@ -491,6 +493,7 @@
 	}								\
 									\
 	/* Kernel symbol table: GPL-only symbols */			\
+	. = ALIGN(8);							\
 	__ksymtab_gpl     : AT(ADDR(__ksymtab_gpl) - LOAD_OFFSET) {	\
 		__start___ksymtab_gpl = .;				\
 		KEEP(*(SORT(___ksymtab_gpl+*)))				\
@@ -498,6 +501,7 @@
 	}								\
 									\
 	/* Kernel symbol table: Normal symbols */			\
+	. = ALIGN(4);							\
 	__kcrctab         : AT(ADDR(__kcrctab) - LOAD_OFFSET) {		\
 		__start___kcrctab = .;					\
 		KEEP(*(SORT(___kcrctab+*)))				\
@@ -505,6 +509,7 @@
 	}								\
 									\
 	/* Kernel symbol table: GPL-only symbols */			\
+	. = ALIGN(4);							\
 	__kcrctab_gpl     : AT(ADDR(__kcrctab_gpl) - LOAD_OFFSET) {	\
 		__start___kcrctab_gpl = .;				\
 		KEEP(*(SORT(___kcrctab_gpl+*)))				\
