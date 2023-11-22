@@ -126,7 +126,6 @@ enum uic_link_state {
 	((h)->curr_dev_pwr_mode == UFS_POWERDOWN_PWR_MODE)
 #define ufshcd_is_ufs_dev_deepsleep(h) \
 	((h)->curr_dev_pwr_mode == UFS_DEEPSLEEP_PWR_MODE)
-
 /*
  * UFS Power management levels.
  * Each level is in increasing order of power savings, except DeepSleep
@@ -1406,6 +1405,13 @@ static inline int ufshcd_vops_phy_initialization(struct ufs_hba *hba)
 		return hba->vops->phy_initialization(hba);
 
 	return 0;
+}
+
+static inline bool ufshcd_is_ufs_dev_busy(struct ufs_hba *hba)
+{
+	return (hba->clk_gating.active_reqs || hba->ufshcd_state != UFSHCD_STATE_OPERATIONAL ||
+		hba->outstanding_reqs || hba->outstanding_tasks || hba->active_uic_cmd ||
+		hba->uic_async_done);
 }
 
 extern const struct ufs_pm_lvl_states ufs_pm_lvl_states[];
