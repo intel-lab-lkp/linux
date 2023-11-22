@@ -20,6 +20,7 @@
 	interrupt-parent = <&gic>;
 
 	aliases {
+		ethernet0 = &gmac;
 		i2c0 = &i2c0;
 		i2c2 = &i2c2;
 		serial0 = &uart0;
