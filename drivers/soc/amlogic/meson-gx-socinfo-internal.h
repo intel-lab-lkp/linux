@@ -95,5 +95,8 @@ static inline unsigned int socinfo_to_misc(u32 socinfo)
 	return FIELD_GET(SOCINFO_MISC, socinfo);
 }
 
+int meson_gx_socinfo_prepare_soc_driver_attr(struct soc_device_attribute *soc_dev_attr,
+					     unsigned int socattr);
+
 #endif /* _MESON_GX_SOCINFO_INTERNAL_H_ */
 

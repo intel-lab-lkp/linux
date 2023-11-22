@@ -47,6 +47,22 @@ static const char *socinfo_to_soc_id(u32 socinfo)
 	return "Unknown";
 }
 
+int meson_gx_socinfo_prepare_soc_driver_attr(struct soc_device_attribute *soc_dev_attr,
+					     unsigned int socattr)
+{
+	soc_dev_attr->family = "Amlogic Meson";
+	soc_dev_attr->revision = kasprintf(GFP_KERNEL, "%x:%x - %x:%x",
+					   socinfo_to_major(socattr),
+					   socinfo_to_minor(socattr),
+					   socinfo_to_pack(socattr),
+					   socinfo_to_misc(socattr));
+	soc_dev_attr->soc_id = kasprintf(GFP_KERNEL, "%s (%s)",
+					 socinfo_to_soc_id(socattr),
+					 socinfo_to_package_id(socattr));
+	return 0;
+}
+EXPORT_SYMBOL(meson_gx_socinfo_prepare_soc_driver_attr);
+
 static int __init meson_gx_socinfo_init(void)
 {
 	struct soc_device_attribute *soc_dev_attr;
@@ -95,15 +111,7 @@ static int __init meson_gx_socinfo_init(void)
 	if (!soc_dev_attr)
 		return -ENODEV;
 
-	soc_dev_attr->family = "Amlogic Meson";
-	soc_dev_attr->revision = kasprintf(GFP_KERNEL, "%x:%x - %x:%x",
-					   socinfo_to_major(socinfo),
-					   socinfo_to_minor(socinfo),
-					   socinfo_to_pack(socinfo),
-					   socinfo_to_misc(socinfo));
-	soc_dev_attr->soc_id = kasprintf(GFP_KERNEL, "%s (%s)",
-					 socinfo_to_soc_id(socinfo),
-					 socinfo_to_package_id(socinfo));
+	meson_gx_socinfo_prepare_soc_driver_attr(soc_dev_attr, socinfo);
 
 	soc_dev = soc_device_register(soc_dev_attr);
 	if (IS_ERR(soc_dev)) {
