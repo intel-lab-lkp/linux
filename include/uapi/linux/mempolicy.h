@@ -26,6 +26,16 @@ enum {
 	MPOL_MAX,	/* always last member of enum */
 };
 
+struct mbind_args {
+	pid_t pid;
+	unsigned long start;
+	unsigned long len;
+	unsigned long mode;
+	unsigned long *nmask;
+	unsigned long maxnode;
+	unsigned int flags;
+};
+
 /* Flags for set_mempolicy */
 #define MPOL_F_STATIC_NODES	(1 << 15)
 #define MPOL_F_RELATIVE_NODES	(1 << 14)

@@ -1654,11 +1654,79 @@ SYSCALL_DEFINE4(set_mempolicy_home_node, unsigned long, start, unsigned long, le
 	return __set_mempolicy_home_node(current, start, len, home_node, flags);
 }
 
+SYSCALL_DEFINE5(set_task_mempolicy_home_node, pid_t, pid, unsigned long, start,
+		unsigned long, len, unsigned long, home_node,
+		unsigned long, flags)
+{
+	struct task_struct *task;
+	int err;
+
+	if (pid && !capable(CAP_SYS_NICE))
+		return -EPERM;
+
+	rcu_read_lock();
+	task = pid ? find_task_by_vpid(pid) : current;
+	if (!task) {
+		rcu_read_unlock();
+		err = -ESRCH;
+		goto out;
+	}
+	get_task_struct(task);
+	rcu_read_unlock();
+
+	err = __set_mempolicy_home_node(task, start, len, home_node, flags);
+	put_task_struct(task);
+out:
+	return err;
+}
+
 SYSCALL_DEFINE6(mbind, unsigned long, start, unsigned long, len,
 		unsigned long, mode, const unsigned long __user *, nmask,
 		unsigned long, maxnode, unsigned int, flags)
 {
 	return kernel_mbind(current, start, len, mode, nmask, maxnode, flags);
+}
+
+static long kernel_task_mbind(const struct mbind_args __user *uargs,
+			      size_t usize)
+{
+	struct mbind_args kargs;
+	struct task_struct *task;
+	int err;
+
+	if (usize < sizeof(kargs))
+		return -EINVAL;
+
+	err = copy_struct_from_user(&kargs, sizeof(kargs), uargs, usize);
+	if (err)
+		return err;
+
+
+	if (kargs.pid && !capable(CAP_SYS_NICE))
+		return -EPERM;
+
+	rcu_read_lock();
+	task = kargs.pid ? find_task_by_vpid(kargs.pid) : current;
+	if (!task) {
+		rcu_read_unlock();
+		err = -ESRCH;
+		goto out;
+	}
+	get_task_struct(task);
+	rcu_read_unlock();
+
+	err = kernel_mbind(task, kargs.start, kargs.len, kargs.mode,
+			   kargs.nmask, kargs.maxnode, kargs.flags);
+
+	put_task_struct(task);
+out:
+	return err;
+}
+
+SYSCALL_DEFINE2(task_mbind, const struct mbind_args __user *, args,
+		size_t, size)
+{
+	return kernel_task_mbind(args, size);
 }
 
 /* Set the process memory policy */
@@ -1686,6 +1754,31 @@ SYSCALL_DEFINE3(set_mempolicy, int, mode, const unsigned long __user *, nmask,
 		unsigned long, maxnode)
 {
 	return kernel_set_mempolicy(current, mode, nmask, maxnode);
+}
+
+SYSCALL_DEFINE4(set_task_mempolicy, pid_t, pid, int, mode,
+		const unsigned long __user *, nmask, unsigned long, maxnode)
+{
+	struct task_struct *task;
+	int err;
+
+	if (pid && !capable(CAP_SYS_NICE))
+		return -EPERM;
+
+	rcu_read_lock();
+	task = pid ? find_task_by_vpid(pid) : current;
+	if (!task) {
+		rcu_read_unlock();
+		err = -ESRCH;
+		goto out;
+	}
+	get_task_struct(task);
+	rcu_read_unlock();
+
+	err = kernel_set_mempolicy(task, mode, nmask, maxnode);
+	put_task_struct(task);
+out:
+	return err;
 }
 
 static int kernel_migrate_pages(pid_t pid, unsigned long maxnode,
@@ -1819,6 +1912,32 @@ SYSCALL_DEFINE5(get_mempolicy, int __user *, policy,
 {
 	return kernel_get_mempolicy(current, policy, nmask, maxnode, addr,
 				    flags);
+}
+
+SYSCALL_DEFINE6(get_task_mempolicy, pid_t, pid, int __user *, policy,
+		unsigned long __user *, nmask, unsigned long, maxnode,
+		unsigned long, addr, unsigned long, flags)
+{
+	struct task_struct *task;
+	int err;
+
+	if (pid && !capable(CAP_SYS_NICE))
+		return -EPERM;
+
+	rcu_read_lock();
+	task = pid ? find_task_by_vpid(pid) : current;
+	if (!task) {
+		rcu_read_unlock();
+		err = -ESRCH;
+		goto out;
+	}
+	get_task_struct(task);
+	rcu_read_unlock();
+
+	err = kernel_get_mempolicy(task, policy, nmask, maxnode, addr, flags);
+	put_task_struct(task);
+out:
+	return err;
 }
 
 bool vma_migratable(struct vm_area_struct *vma)

@@ -461,3 +461,7 @@
 454	i386	futex_wake		sys_futex_wake
 455	i386	futex_wait		sys_futex_wait
 456	i386	futex_requeue		sys_futex_requeue
+457	i386	set_task_mempolicy	sys_set_task_mempolicy
+458	i386	get_task_mempolicy	sys_get_task_mempolicy
+459	i386	set_task_mempolicy_home_node	sys_set_task_mempolicy_home_node
+460	i386	task_mbind		sys_task_mbind
