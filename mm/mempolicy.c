@@ -815,9 +815,8 @@ static int mbind_range(struct vma_iterator *vmi, struct vm_area_struct *vma,
 }
 
 /* Attempt to replace mempolicy, release the old one if successful */
-static long replace_mempolicy(struct task_struct *task,
-			      struct mempolicy *new,
-			      nodemask_t *nodes)
+long replace_mempolicy(struct task_struct *task, struct mempolicy *new,
+		       nodemask_t *nodes)
 {
 	struct mempolicy *old = NULL;
 	NODEMASK_SCRATCH(scratch);

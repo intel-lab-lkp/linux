@@ -177,6 +177,8 @@ static inline bool mpol_is_preferred_many(struct mempolicy *pol)
 
 extern bool apply_policy_zone(struct mempolicy *policy, enum zone_type zone);
 
+extern long replace_mempolicy(struct task_struct *task, struct mempolicy *new,
+			      nodemask_t *nodes);
 #else
 
 struct mempolicy {};
@@ -295,6 +297,13 @@ static inline void mpol_put_task_policy(struct task_struct *task)
 static inline bool mpol_is_preferred_many(struct mempolicy *pol)
 {
 	return  false;
+}
+
+static inline long replace_mempolicy(struct task_struct *task,
+				     struct mempolicy *new,
+				     nodemask_t *nodes)
+{
+	return -ENODEV;
 }
 
 #endif /* CONFIG_NUMA */
