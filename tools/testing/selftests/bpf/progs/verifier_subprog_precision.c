@@ -143,7 +143,7 @@ SEC("?raw_tp")
 __failure __log_level(2)
 __flag(BPF_F_TEST_STATE_FREQ)
 __msg("from 10 to 12: frame1: R0=scalar(umin=1001) R10=fp0 cb")
-__msg("At callback return the register R0 has unknown scalar value should have been in (0x0; 0x1)")
+__msg("At callback return the register R0 has umin=1001 should have been in [0, 1]")
 __naked int callback_precise_return_fail(void)
 {
 	asm volatile (

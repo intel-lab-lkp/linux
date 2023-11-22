@@ -352,20 +352,29 @@ __printf(2, 3) static void verbose(void *private_data, const char *fmt, ...)
 
 static void verbose_invalid_scalar(struct bpf_verifier_env *env,
 				   struct bpf_reg_state *reg,
-				   struct tnum *range, const char *ctx,
+				   struct bpf_retval_range range, const char *ctx,
 				   const char *reg_name)
 {
 	char tn_buf[48];
+	bool unknown = true;
 
-	verbose(env, "At %s the register %s ", ctx, reg_name);
+	verbose(env, "At %s the register %s has", ctx, reg_name);
+	if (reg->umin_value > 0) {
+		verbose(env, " umin=%llu", reg->umin_value);
+		unknown = false;
+	}
+	if (reg->umax_value < U64_MAX) {
+		verbose(env, " umax=%llu", reg->umax_value);
+		unknown = false;
+	}
 	if (!tnum_is_unknown(reg->var_off)) {
 		tnum_strn(tn_buf, sizeof(tn_buf), reg->var_off);
-		verbose(env, "has value %s", tn_buf);
-	} else {
-		verbose(env, "has unknown scalar value");
+		verbose(env, " var_off=%s", tn_buf);
+		unknown = false;
 	}
-	tnum_strn(tn_buf, sizeof(tn_buf), *range);
-	verbose(env, " should have been in %s\n", tn_buf);
+	if (unknown)
+		verbose(env, " unknown scalar value");
+	verbose(env, " should have been in [%u, %u]\n", range.minval, range.maxval);
 }
 
 static bool type_may_be_null(u32 type)
@@ -9522,9 +9531,8 @@ static int prepare_func_exit(struct bpf_verifier_env *env, int *insn_idx)
 
 		/* enforce R0 return value range */
 		if (!retval_range_within(callee->callback_ret_range, r0)) {
-			struct tnum range = retval_range_as_tnum(callee->callback_ret_range);
-
-			verbose_invalid_scalar(env, r0, &range, "callback return", "R0");
+			verbose_invalid_scalar(env, r0, callee->callback_ret_range,
+					       "callback return", "R0");
 			return -EINVAL;
 		}
 	} else {
@@ -14853,7 +14861,8 @@ static int check_return_code(struct bpf_verifier_env *env, int regno, const char
 	struct tnum enforce_attach_type_range = tnum_unknown;
 	const struct bpf_prog *prog = env->prog;
 	struct bpf_reg_state *reg;
-	struct tnum range = tnum_range(0, 1), const_0 = tnum_const(0);
+	struct bpf_retval_range range = retval_range(0, 1);
+	struct bpf_retval_range const_0 = retval_range(0, 0);
 	enum bpf_prog_type prog_type = resolve_prog_type(env->prog);
 	int err;
 	struct bpf_func_state *frame = env->cur_state->frame[0];
@@ -14901,8 +14910,8 @@ static int check_return_code(struct bpf_verifier_env *env, int regno, const char
 			return -EINVAL;
 		}
 
-		if (!tnum_in(const_0, reg->var_off)) {
-			verbose_invalid_scalar(env, reg, &const_0, "async callback", reg_name);
+		if (!retval_range_within(const_0, reg)) {
+			verbose_invalid_scalar(env, reg, const_0, "async callback", reg_name);
 			return -EINVAL;
 		}
 		return 0;
@@ -14928,14 +14937,14 @@ static int check_return_code(struct bpf_verifier_env *env, int regno, const char
 		    env->prog->expected_attach_type == BPF_CGROUP_INET4_GETSOCKNAME ||
 		    env->prog->expected_attach_type == BPF_CGROUP_INET6_GETSOCKNAME ||
 		    env->prog->expected_attach_type == BPF_CGROUP_UNIX_GETSOCKNAME)
-			range = tnum_range(1, 1);
+			range = retval_range(1, 1);
 		if (env->prog->expected_attach_type == BPF_CGROUP_INET4_BIND ||
 		    env->prog->expected_attach_type == BPF_CGROUP_INET6_BIND)
-			range = tnum_range(0, 3);
+			range = retval_range(0, 3);
 		break;
 	case BPF_PROG_TYPE_CGROUP_SKB:
 		if (env->prog->expected_attach_type == BPF_CGROUP_INET_EGRESS) {
-			range = tnum_range(0, 3);
+			range = retval_range(0, 3);
 			enforce_attach_type_range = tnum_range(2, 3);
 		}
 		break;
@@ -14948,13 +14957,13 @@ static int check_return_code(struct bpf_verifier_env *env, int regno, const char
 	case BPF_PROG_TYPE_RAW_TRACEPOINT:
 		if (!env->prog->aux->attach_btf_id)
 			return 0;
-		range = tnum_const(0);
+		range = retval_range(0, 0);
 		break;
 	case BPF_PROG_TYPE_TRACING:
 		switch (env->prog->expected_attach_type) {
 		case BPF_TRACE_FENTRY:
 		case BPF_TRACE_FEXIT:
-			range = tnum_const(0);
+			range = retval_range(0, 0);
 			break;
 		case BPF_TRACE_RAW_TP:
 		case BPF_MODIFY_RETURN:
@@ -14966,7 +14975,7 @@ static int check_return_code(struct bpf_verifier_env *env, int regno, const char
 		}
 		break;
 	case BPF_PROG_TYPE_SK_LOOKUP:
-		range = tnum_range(SK_DROP, SK_PASS);
+		range = retval_range(SK_DROP, SK_PASS);
 		break;
 
 	case BPF_PROG_TYPE_LSM:
@@ -14980,12 +14989,12 @@ static int check_return_code(struct bpf_verifier_env *env, int regno, const char
 			/* Make sure programs that attach to void
 			 * hooks don't try to modify return value.
 			 */
-			range = tnum_range(1, 1);
+			range = retval_range(1, 1);
 		}
 		break;
 
 	case BPF_PROG_TYPE_NETFILTER:
-		range = tnum_range(NF_DROP, NF_ACCEPT);
+		range = retval_range(NF_DROP, NF_ACCEPT);
 		break;
 	case BPF_PROG_TYPE_EXT:
 		/* freplace program can return anything as its return value
@@ -15001,8 +15010,8 @@ static int check_return_code(struct bpf_verifier_env *env, int regno, const char
 		return -EINVAL;
 	}
 
-	if (!tnum_in(range, reg->var_off)) {
-		verbose_invalid_scalar(env, reg, &range, "program exit", reg_name);
+	if (!retval_range_within(range, reg)) {
+		verbose_invalid_scalar(env, reg, range, "program exit", reg_name);
 		if (prog->expected_attach_type == BPF_LSM_CGROUP &&
 		    prog_type == BPF_PROG_TYPE_LSM &&
 		    !prog->aux->attach_func_proto->type)

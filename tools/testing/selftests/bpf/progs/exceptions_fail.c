@@ -306,7 +306,7 @@ int reject_set_exception_cb_bad_ret1(void *ctx)
 }
 
 SEC("?fentry/bpf_check")
-__failure __msg("At program exit the register R1 has value (0x40; 0x0) should")
+__failure __msg("At program exit the register R1 has umin=64 umax=64 var_off=(0x40; 0x0) should")
 int reject_set_exception_cb_bad_ret2(void *ctx)
 {
 	bpf_throw(64);
