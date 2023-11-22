@@ -15,15 +15,43 @@
 /* Constant Definitions */
 #define IXR_FPGA_DONE_MASK	BIT(3)
 
+#define ENCRYPTED_KEY_LEN	64
+#define AES_MATCH_STR_LEN	5
+
 /**
  * struct zynqmp_fpga_priv - Private data structure
+ * @aes_key:	Pointer Aes key buffer
  * @dev:	Device data structure
  * @flags:	flags which is used to identify the bitfile type
  */
 struct zynqmp_fpga_priv {
+	const char *aes_key;
 	struct device *dev;
 	u32 flags;
 };
+
+static int zynqmp_fpga_parse_aes_key(struct fpga_manager *mgr,
+				     struct fpga_image_info *info,
+				     const char *buf, size_t size)
+{
+	struct zynqmp_fpga_priv *priv = mgr->priv;
+	const char *str = "Key 0";
+
+	for (int i = 0; i < size; i++) {
+		if (!strncmp(str, &buf[i], AES_MATCH_STR_LEN)) {
+			buf += AES_MATCH_STR_LEN + 1;
+			while (buf[i] == ' ')
+				i++;
+			if (size - i < ENCRYPTED_KEY_LEN)
+				return -EINVAL;
+			priv->aes_key = &buf[i];
+
+			return 0;
+		}
+	}
+
+	return -EINVAL;
+}
 
 static int zynqmp_fpga_ops_write_init(struct fpga_manager *mgr,
 				      struct fpga_image_info *info,
@@ -43,25 +71,43 @@ static int zynqmp_fpga_ops_write(struct fpga_manager *mgr,
 	struct zynqmp_fpga_priv *priv;
 	dma_addr_t dma_addr;
 	u32 eemi_flags = 0;
+	size_t dma_size;
 	char *kbuf;
 	int ret;
 
 	priv = mgr->priv;
 
-	kbuf = dma_alloc_coherent(priv->dev, size, &dma_addr, GFP_KERNEL);
+	if (priv->flags & FPGA_MGR_USRKEY_ENCRYPTED_BITSTREAM)
+		dma_size = size + ENCRYPTED_KEY_LEN;
+	else
+		dma_size = size;
+
+	kbuf = dma_alloc_coherent(priv->dev, dma_size, &dma_addr, GFP_KERNEL);
 	if (!kbuf)
 		return -ENOMEM;
 
 	memcpy(kbuf, buf, size);
+
+	if (priv->flags & FPGA_MGR_USRKEY_ENCRYPTED_BITSTREAM) {
+		eemi_flags |= XILINX_ZYNQMP_PM_FPGA_ENCRYPTION_USERKEY;
+		memcpy(kbuf + size, priv->aes_key, ENCRYPTED_KEY_LEN);
+	}
 
 	wmb(); /* ensure all writes are done before initiate FW call */
 
 	if (priv->flags & FPGA_MGR_PARTIAL_RECONFIG)
 		eemi_flags |= XILINX_ZYNQMP_PM_FPGA_PARTIAL;
 
-	ret = zynqmp_pm_fpga_load(dma_addr, size, eemi_flags);
+	if (priv->flags & FPGA_MGR_ENCRYPTED_BITSTREAM)
+		eemi_flags |= XILINX_ZYNQMP_PM_FPGA_ENCRYPTION_DEVKEY;
 
-	dma_free_coherent(priv->dev, size, kbuf, dma_addr);
+	if (priv->flags & FPGA_MGR_USRKEY_ENCRYPTED_BITSTREAM)
+		ret = zynqmp_pm_fpga_load(dma_addr, dma_addr + size,
+					  eemi_flags);
+	else
+		ret = zynqmp_pm_fpga_load(dma_addr, size, eemi_flags);
+
+	dma_free_coherent(priv->dev, dma_size, kbuf, dma_addr);
 
 	return ret;
 }
@@ -99,6 +145,7 @@ ATTRIBUTE_GROUPS(zynqmp_fpga);
 
 static const struct fpga_manager_ops zynqmp_fpga_ops = {
 	.state = zynqmp_fpga_ops_state,
+	.parse_aes_key = zynqmp_fpga_parse_aes_key,
 	.write_init = zynqmp_fpga_ops_write_init,
 	.write = zynqmp_fpga_ops_write,
 };
