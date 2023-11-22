@@ -33,6 +33,22 @@ static int txgbe_set_link_ksettings(struct net_device *netdev,
 	return phylink_ethtool_ksettings_set(txgbe->phylink, cmd);
 }
 
+static void txgbe_get_pauseparam(struct net_device *netdev,
+				 struct ethtool_pauseparam *pause)
+{
+	struct txgbe *txgbe = netdev_to_txgbe(netdev);
+
+	phylink_ethtool_get_pauseparam(txgbe->phylink, pause);
+}
+
+static int txgbe_set_pauseparam(struct net_device *netdev,
+				struct ethtool_pauseparam *pause)
+{
+	struct txgbe *txgbe = netdev_to_txgbe(netdev);
+
+	return phylink_ethtool_set_pauseparam(txgbe->phylink, pause);
+}
+
 static const struct ethtool_ops txgbe_ethtool_ops = {
 	.get_drvinfo		= wx_get_drvinfo,
 	.nway_reset		= txgbe_nway_reset,
@@ -44,6 +60,8 @@ static const struct ethtool_ops txgbe_ethtool_ops = {
 	.get_ethtool_stats	= wx_get_ethtool_stats,
 	.get_eth_mac_stats	= wx_get_mac_stats,
 	.get_pause_stats	= wx_get_pause_stats,
+	.get_pauseparam		= txgbe_get_pauseparam,
+	.set_pauseparam		= txgbe_set_pauseparam,
 };
 
 void txgbe_set_ethtool_ops(struct net_device *netdev)

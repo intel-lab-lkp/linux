@@ -62,6 +62,8 @@ static void ngbe_handle_link_change(struct net_device *dev)
 	struct phy_device *phydev;
 	u32 lan_speed, reg;
 
+	wx_fc_enable(wx);
+
 	phydev = wx->phydev;
 	if (!(wx->link != phydev->link ||
 	      wx->speed != phydev->speed ||

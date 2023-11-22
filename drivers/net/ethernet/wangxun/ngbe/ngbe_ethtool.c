@@ -41,6 +41,36 @@ static int ngbe_set_wol(struct net_device *netdev,
 	return 0;
 }
 
+static void ngbe_get_pauseparam(struct net_device *netdev,
+				struct ethtool_pauseparam *pause)
+{
+	struct wx *wx = netdev_priv(netdev);
+
+	pause->autoneg = !wx->fc.disable_fc_autoneg;
+	pause->tx_pause = wx->fc.tx_pause;
+	pause->rx_pause = wx->fc.rx_pause;
+}
+
+static int ngbe_set_pauseparam(struct net_device *netdev,
+			       struct ethtool_pauseparam *pause)
+{
+	struct wx *wx = netdev_priv(netdev);
+
+	if (!wx->phydev)
+		return -ENODEV;
+
+	if (!phy_validate_pause(wx->phydev, pause))
+		return -EINVAL;
+
+	wx->fc.disable_fc_autoneg = !pause->autoneg;
+	wx->fc.tx_pause = pause->tx_pause;
+	wx->fc.rx_pause = pause->rx_pause;
+
+	phy_set_asym_pause(wx->phydev, pause->rx_pause, pause->tx_pause);
+
+	return 0;
+}
+
 static const struct ethtool_ops ngbe_ethtool_ops = {
 	.get_drvinfo		= wx_get_drvinfo,
 	.get_link		= ethtool_op_get_link,
@@ -54,6 +84,8 @@ static const struct ethtool_ops ngbe_ethtool_ops = {
 	.get_ethtool_stats	= wx_get_ethtool_stats,
 	.get_eth_mac_stats	= wx_get_mac_stats,
 	.get_pause_stats	= wx_get_pause_stats,
+	.get_pauseparam		= ngbe_get_pauseparam,
+	.set_pauseparam		= ngbe_set_pauseparam,
 };
 
 void ngbe_set_ethtool_ops(struct net_device *netdev)
