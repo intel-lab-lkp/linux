@@ -165,6 +165,18 @@ struct ptp_sys_offset_precise {
 	unsigned int rsv[4];    /* Reserved for future use. */
 };
 
+#define PTP_MAX_CLOCKS 20 /* Maximum number of clocks */
+
+struct ptp_multi_clock_get {
+	unsigned int n_clocks; /* Desired number of clocks. */
+	unsigned int n_samples; /* Desired number of measurements per clock. */
+	clockid_t  clkid_arr[PTP_MAX_CLOCKS]; /* list of clock IDs */
+	/*
+	 * Array of list of n_clocks clocks time samples n_samples times.
+	 */
+	struct ptp_clock_time ts[PTP_MAX_SAMPLES][PTP_MAX_CLOCKS];
+};
+
 enum ptp_pin_function {
 	PTP_PF_NONE,
 	PTP_PF_EXTTS,
@@ -226,6 +238,7 @@ struct ptp_pin_desc {
 	_IOWR(PTP_CLK_MAGIC, 18, struct ptp_sys_offset_extended)
 #define PTP_MASK_CLEAR_ALL  _IO(PTP_CLK_MAGIC, 19)
 #define PTP_MASK_EN_SINGLE  _IOW(PTP_CLK_MAGIC, 20, unsigned int)
+#define PTP_MULTI_CLOCK_GET _IOWR(PTP_CLK_MAGIC, 21, struct ptp_multi_clock_get)
 
 struct ptp_extts_event {
 	struct ptp_clock_time t; /* Time event occured. */

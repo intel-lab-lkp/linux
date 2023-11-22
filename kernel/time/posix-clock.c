@@ -284,6 +284,12 @@ static int pc_clock_gettime(clockid_t id, struct timespec64 *ts)
 	return err;
 }
 
+int pc_clock_gettime_wrapper(clockid_t id, struct timespec64 *ts)
+{
+	return pc_clock_gettime(id, ts);
+}
+EXPORT_SYMBOL_GPL(pc_clock_gettime_wrapper);
+
 static int pc_clock_getres(clockid_t id, struct timespec64 *ts)
 {
 	struct posix_clock_desc cd;

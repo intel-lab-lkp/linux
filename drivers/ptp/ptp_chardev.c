@@ -170,7 +170,9 @@ long ptp_ioctl(struct posix_clock_context *pccontext, unsigned int cmd,
 	struct ptp_clock_request req;
 	struct ptp_clock_caps caps;
 	struct ptp_clock_time *pct;
-	unsigned int i, pin_index;
+	struct ptp_multi_clock_get *multi_clk_get = NULL;
+
+	unsigned int i, pin_index, j;
 	struct ptp_pin_desc pd;
 	struct timespec64 ts;
 	int enable, err = 0;
@@ -491,6 +493,40 @@ long ptp_ioctl(struct posix_clock_context *pccontext, unsigned int cmd,
 		set_bit(i, tsevq->mask);
 		break;
 
+	case PTP_MULTI_CLOCK_GET:
+		multi_clk_get = memdup_user((void __user *)arg, sizeof(*multi_clk_get));
+		if (IS_ERR(multi_clk_get)) {
+			err = PTR_ERR(multi_clk_get);
+			multi_clk_get = NULL;
+			break;
+		}
+		if (multi_clk_get->n_samples > PTP_MAX_SAMPLES) {
+			err = -EINVAL;
+			break;
+		}
+		if (multi_clk_get->n_clocks > PTP_MAX_CLOCKS) {
+			err = -EINVAL;
+			break;
+		}
+		for (j = 0; j < multi_clk_get->n_samples; j++) {
+			for (i = 0; i < multi_clk_get->n_clocks; i++) {
+				if (multi_clk_get->clkid_arr[i] == CLOCK_REALTIME) {
+					ktime_get_real_ts64(&ts);
+				} else {
+					err = pc_clock_gettime_wrapper(multi_clk_get->clkid_arr[i],
+								       &ts);
+					if (err)
+						goto out;
+				}
+				multi_clk_get->ts[j][i].sec = ts.tv_sec;
+				multi_clk_get->ts[j][i].nsec = ts.tv_nsec;
+			}
+		}
+		if (copy_to_user((void __user *)arg, multi_clk_get,
+				 sizeof(*multi_clk_get)))
+			err = -EFAULT;
+
+		break;
 	default:
 		err = -ENOTTY;
 		break;

@@ -135,4 +135,14 @@ int posix_clock_register(struct posix_clock *clk, struct device *dev);
  */
 void posix_clock_unregister(struct posix_clock *clk);
 
+/**
+ * pc_clock_gettime_warrper() - retrieve time of a clock specified by clock ID
+ * @id: Clock ID.
+ * @ts: clock time stamp.
+ *
+ * Returns the current time of a clock specified by clock ID, errno in case of
+ * error
+ */
+int pc_clock_gettime_wrapper(clockid_t id, struct timespec64 *ts);
+
 #endif
