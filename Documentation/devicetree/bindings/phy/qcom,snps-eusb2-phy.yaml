@@ -21,6 +21,7 @@ properties:
               - qcom,sm8650-snps-eusb2-phy
           - const: qcom,sm8550-snps-eusb2-phy
       - const: qcom,sm8550-snps-eusb2-phy
+      - const: qcom,x1e80100-snps-eusb2-phy
 
   reg:
     maxItems: 1
