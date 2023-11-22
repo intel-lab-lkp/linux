@@ -297,16 +297,16 @@ struct bpf_func_state {
 	 * void foo(void) { bpf_timer_set_callback(,foo); }
 	 */
 	u32 async_entry_cnt;
-	bool in_callback_fn;
 	struct tnum callback_ret_range;
+	bool in_callback_fn;
 	bool in_async_callback_fn;
 	bool in_exception_callback_fn;
 
 	/* The following fields should be last. See copy_func_state() */
 	int acquired_refs;
 	struct bpf_reference_state *refs;
-	int allocated_stack;
 	struct bpf_stack_state *stack;
+	int allocated_stack;
 };
 
 struct bpf_idx_pair {
