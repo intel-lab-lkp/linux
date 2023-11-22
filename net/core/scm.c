@@ -35,6 +35,7 @@
 #include <net/compat.h>
 #include <net/scm.h>
 #include <net/cls_cgroup.h>
+#include <net/af_unix.h>
 
 
 /*
@@ -105,6 +106,8 @@ static int scm_fp_copy(struct cmsghdr *cmsg, struct scm_fp_list **fplp)
 			return -EBADF;
 		*fpp++ = file;
 		fpl->count++;
+		if (unix_get_socket(file))
+			fpl->count_unix++;
 	}
 
 	if (!fpl->user)

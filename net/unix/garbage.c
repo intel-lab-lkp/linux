@@ -184,8 +184,9 @@ static void inc_inflight_move_tail(struct unix_sock *u)
 }
 
 #define UNIX_INFLIGHT_TRIGGER_GC 16000
+#define UNIX_INFLIGHT_SANE_USER 32
 
-void wait_for_unix_gc(void)
+void wait_for_unix_gc(struct scm_fp_list *fpl)
 {
 	/* If number of inflight sockets is insane, kick a
 	 * garbage collect right now.
@@ -195,7 +196,12 @@ void wait_for_unix_gc(void)
 	if (READ_ONCE(unix_tot_inflight) > UNIX_INFLIGHT_TRIGGER_GC)
 		queue_work(system_unbound_wq, &unix_gc_work);
 
-	flush_work(&unix_gc_work);
+	/* Penalise users who want to send AF_UNIX sockets
+	 * but whose sockets have not been received yet.
+	 */
+	if (fpl && fpl->count_unix &&
+	    READ_ONCE(fpl->user->unix_inflight) > UNIX_INFLIGHT_SANE_USER)
+		flush_work(&unix_gc_work);
 }
 
 static void __unix_gc(struct work_struct *work)
