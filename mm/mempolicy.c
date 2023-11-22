@@ -3159,12 +3159,7 @@ int mpol_parse_str(char *str, struct mempolicy **mpol)
 		 * nodelist (or nodes) cannot be empty.
 		 */
 		if (nodelist) {
-			char *rest = nodelist;
-			while (isdigit(*rest))
-				rest++;
-			if (*rest)
-				goto out;
-			if (nodes_empty(nodes))
+			if (nodes_weight(nodes) != 1)
 				goto out;
 		}
 		break;
