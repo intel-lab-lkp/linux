@@ -203,6 +203,7 @@ void mlx5vf_cmd_remove_migratable(struct mlx5vf_pci_core_device *mvdev)
 						&mvdev->nb);
 	destroy_workqueue(mvdev->cb_wq);
 	mutex_destroy(&mvdev->reset_mutex);
+	mutex_destroy(&mvdev->state_mutex);
 }
 
 void mlx5vf_cmd_set_migratable(struct mlx5vf_pci_core_device *mvdev,
