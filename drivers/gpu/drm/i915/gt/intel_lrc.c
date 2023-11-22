@@ -863,11 +863,13 @@ static bool ctx_needs_runalone(const struct intel_context *ce)
 	bool ctx_is_protected = false;
 
 	/*
-	 * On MTL and newer platforms, protected contexts require setting
-	 * the LRC run-alone bit or else the encryption will not happen.
+	 * Wa_14019159160 - Case 2: mtl
+	 * On some platforms, protected contexts require setting
+	 * the LRC run-alone bit or else the encryption/decryption will not happen.
+	 * NOTE: Case 2 only applies to PXP use-case of said workaround.
 	 */
-	if (GRAPHICS_VER_FULL(ce->engine->i915) >= IP_VER(12, 70) &&
-	    (ce->engine->class == COMPUTE_CLASS || ce->engine->class == RENDER_CLASS)) {
+	if (IS_METEORLAKE(ce->engine->i915) && (ce->engine->class == COMPUTE_CLASS ||
+						ce->engine->class == RENDER_CLASS)) {
 		rcu_read_lock();
 		gem_ctx = rcu_dereference(ce->gem_context);
 		if (gem_ctx)
