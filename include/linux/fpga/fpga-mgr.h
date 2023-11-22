@@ -9,6 +9,7 @@
 #define _LINUX_FPGA_MGR_H
 
 #include <linux/mutex.h>
+#include <linux/miscdevice.h>
 #include <linux/platform_device.h>
 
 struct fpga_manager;
@@ -77,6 +78,7 @@ enum fpga_mgr_states {
 #define FPGA_MGR_ENCRYPTED_BITSTREAM	BIT(2)
 #define FPGA_MGR_BITSTREAM_LSB_FIRST	BIT(3)
 #define FPGA_MGR_COMPRESSED_BITSTREAM	BIT(4)
+#define FPGA_MGR_CONFIG_DMA_BUF		BIT(5)
 
 /**
  * struct fpga_image_info - information specific to an FPGA image
@@ -197,7 +199,10 @@ struct fpga_manager_ops {
  * struct fpga_manager - fpga manager structure
  * @name: name of low level fpga manager
  * @dev: fpga manager device
+ * @flags: flags determines the type of Bitstream
+ * @dmabuf: shared dma buffer
  * @ref_mutex: only allows one reference to fpga manager
+ * @miscdev: information about character device node
  * @state: state of fpga manager
  * @compat_id: FPGA manager id for compatibility check.
  * @mops: pointer to struct of fpga manager ops
@@ -206,7 +211,10 @@ struct fpga_manager_ops {
 struct fpga_manager {
 	const char *name;
 	struct device dev;
+	unsigned long flags;
+	struct dma_buf *dmabuf;
 	struct mutex ref_mutex;
+	struct miscdevice miscdev;
 	enum fpga_mgr_states state;
 	struct fpga_compat_id *compat_id;
 	const struct fpga_manager_ops *mops;
@@ -243,5 +251,7 @@ devm_fpga_mgr_register_full(struct device *parent, const struct fpga_manager_inf
 struct fpga_manager *
 devm_fpga_mgr_register(struct device *parent, const char *name,
 		       const struct fpga_manager_ops *mops, void *priv);
+
+#define FPGA_IOCTL_LOAD_DMA_BUFF	_IOWR('R', 1, __u32)
 
 #endif /*_LINUX_FPGA_MGR_H */
