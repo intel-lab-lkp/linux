@@ -110,6 +110,7 @@ struct ksz_port {
 	bool remove_tag;		/* Remove Tag flag set, for ksz8795 only */
 	bool learning;
 	int stp_state;
+	u32 mrp_ring_id;
 	struct phy_device phydev;
 
 	u32 fiber:1;			/* port is fiber */

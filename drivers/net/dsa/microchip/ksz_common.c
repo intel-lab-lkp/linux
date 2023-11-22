@@ -3566,6 +3566,57 @@ static int ksz_set_wol(struct dsa_switch *ds, int port,
 	return -EOPNOTSUPP;
 }
 
+static int ksz_port_mrp_add(struct dsa_switch *ds, int port,
+			    const struct switchdev_obj_mrp *mrp)
+{
+	struct dsa_port *dp = dsa_to_port(ds, port);
+	struct ksz_device *dev = ds->priv;
+
+	/* port different from requested mrp ports */
+	if (mrp->p_port != dp->user && mrp->s_port != dp->user)
+		return -EOPNOTSUPP;
+
+	/* save ring id */
+	dev->ports[port].mrp_ring_id = mrp->ring_id;
+	return 0;
+}
+
+static int ksz_port_mrp_del(struct dsa_switch *ds, int port,
+			    const struct switchdev_obj_mrp *mrp)
+{
+	struct ksz_device *dev = ds->priv;
+
+	/* check if port not part of ring id */
+	if (mrp->ring_id != dev->ports[port].mrp_ring_id)
+		return -EOPNOTSUPP;
+
+	/* clear ring id */
+	dev->ports[port].mrp_ring_id = 0;
+	return 0;
+}
+
+static int ksz_port_mrp_add_ring_role(struct dsa_switch *ds, int port,
+				      const struct switchdev_obj_ring_role_mrp *mrp)
+{
+	struct ksz_device *dev = ds->priv;
+
+	if (mrp->sw_backup && dev->ports[port].mrp_ring_id == mrp->ring_id)
+		return 0;
+
+	return -EOPNOTSUPP;
+}
+
+static int ksz_port_mrp_del_ring_role(struct dsa_switch *ds, int port,
+				      const struct switchdev_obj_ring_role_mrp *mrp)
+{
+	struct ksz_device *dev = ds->priv;
+
+	if (mrp->sw_backup && dev->ports[port].mrp_ring_id == mrp->ring_id)
+		return 0;
+
+	return -EOPNOTSUPP;
+}
+
 static int ksz_port_set_mac_address(struct dsa_switch *ds, int port,
 				    const unsigned char *addr)
 {
@@ -3799,6 +3850,10 @@ static const struct dsa_switch_ops ksz_switch_ops = {
 	.port_fdb_del		= ksz_port_fdb_del,
 	.port_mdb_add           = ksz_port_mdb_add,
 	.port_mdb_del           = ksz_port_mdb_del,
+	.port_mrp_add		= ksz_port_mrp_add,
+	.port_mrp_del		= ksz_port_mrp_del,
+	.port_mrp_add_ring_role	= ksz_port_mrp_add_ring_role,
+	.port_mrp_del_ring_role	= ksz_port_mrp_del_ring_role,
 	.port_mirror_add	= ksz_port_mirror_add,
 	.port_mirror_del	= ksz_port_mirror_del,
 	.get_stats64		= ksz_get_stats64,
