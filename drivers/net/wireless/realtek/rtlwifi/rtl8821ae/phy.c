@@ -106,7 +106,7 @@ u32 rtl8821ae_phy_query_bb_reg(struct ieee80211_hw *hw, u32 regaddr,
 		regaddr, bitmask);
 	originalvalue = rtl_read_dword(rtlpriv, regaddr);
 	bitshift = _rtl8821ae_phy_calculate_bit_shift(bitmask);
-	returnvalue = (originalvalue & bitmask) >> bitshift;
+	returnvalue = (u64)(originalvalue & bitmask) >> bitshift;
 
 	rtl_dbg(rtlpriv, COMP_RF, DBG_TRACE,
 		"BBR MASK=0x%x Addr[0x%x]=0x%x\n",
@@ -128,7 +128,7 @@ void rtl8821ae_phy_set_bb_reg(struct ieee80211_hw *hw,
 		originalvalue = rtl_read_dword(rtlpriv, regaddr);
 		bitshift = _rtl8821ae_phy_calculate_bit_shift(bitmask);
 		data = ((originalvalue & (~bitmask)) |
-			((data << bitshift) & bitmask));
+			(((u64)data << bitshift) & bitmask));
 	}
 
 	rtl_write_dword(rtlpriv, regaddr, data);
@@ -153,7 +153,7 @@ u32 rtl8821ae_phy_query_rf_reg(struct ieee80211_hw *hw,
 
 	original_value = _rtl8821ae_phy_rf_serial_read(hw, rfpath, regaddr);
 	bitshift = _rtl8821ae_phy_calculate_bit_shift(bitmask);
-	readback_value = (original_value & bitmask) >> bitshift;
+	readback_value = (u64)(original_value & bitmask) >> bitshift;
 
 	spin_unlock(&rtlpriv->locks.rf_lock);
 
@@ -181,7 +181,7 @@ void rtl8821ae_phy_set_rf_reg(struct ieee80211_hw *hw,
 		original_value =
 		   _rtl8821ae_phy_rf_serial_read(hw, rfpath, regaddr);
 		bitshift = _rtl8821ae_phy_calculate_bit_shift(bitmask);
-		data = ((original_value & (~bitmask)) | (data << bitshift));
+		data = ((original_value & (~bitmask)) | ((u64)data << bitshift));
 	}
 
 	_rtl8821ae_phy_rf_serial_write(hw, rfpath, regaddr, data);
