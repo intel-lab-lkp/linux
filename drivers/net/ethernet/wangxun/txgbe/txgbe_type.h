@@ -129,6 +129,9 @@
 
 extern char txgbe_driver_name[];
 
+void txgbe_down(struct wx *wx);
+void txgbe_up(struct wx *wx);
+
 static inline struct txgbe *netdev_to_txgbe(struct net_device *netdev)
 {
 	struct wx *wx = netdev_priv(netdev);
