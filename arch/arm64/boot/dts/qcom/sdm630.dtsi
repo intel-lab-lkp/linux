@@ -1303,9 +1303,14 @@
 			assigned-clock-rates = <19200000>, <120000000>,
 					       <19200000>;
 
-			interrupts = <GIC_SPI 347 IRQ_TYPE_LEVEL_HIGH>,
+			interrupts = <GIC_SPI 133 IRQ_TYPE_LEVEL_HIGH>,
+				     <GIC_SPI 180 IRQ_TYPE_LEVEL_HIGH>,
+				     <GIC_SPI 347 IRQ_TYPE_LEVEL_HIGH>,
 				     <GIC_SPI 243 IRQ_TYPE_LEVEL_HIGH>;
-			interrupt-names = "hs_phy_irq", "ss_phy_irq";
+			interrupt-names = "hs_phy_irq",
+					  "pwr_event",
+					  "qusb2_phy",
+					  "ss_phy_irq";
 
 			power-domains = <&gcc USB_30_GDSC>;
 			qcom,select-utmi-as-pipe-clk;
@@ -1467,7 +1472,7 @@
 		};
 
 		usb2: usb@c2f8800 {
-			compatible = "qcom,sdm660-dwc3", "qcom,dwc3";
+			compatible = "qcom,sdm660-dwc3-sec", "qcom,dwc3";
 			reg = <0x0c2f8800 0x400>;
 			status = "disabled";
 			#address-cells = <1>;
@@ -1485,8 +1490,12 @@
 					  <&gcc GCC_USB20_MASTER_CLK>;
 			assigned-clock-rates = <19200000>, <60000000>;
 
-			interrupts = <GIC_SPI 348 IRQ_TYPE_LEVEL_HIGH>;
-			interrupt-names = "hs_phy_irq";
+			interrupts = <GIC_SPI 139 IRQ_TYPE_LEVEL_HIGH>,
+				     <GIC_SPI 144 IRQ_TYPE_LEVEL_HIGH>,
+				     <GIC_SPI 348 IRQ_TYPE_LEVEL_HIGH>;
+			interrupt-names = "hs_phy_irq",
+					  "pwr_event",
+					  "qusb2_phy";
 
 			qcom,select-utmi-as-pipe-clk;
 
