@@ -71,12 +71,15 @@ enum fpga_mgr_states {
  * %FPGA_MGR_BITSTREAM_LSB_FIRST: SPI bitstream bit order is LSB first
  *
  * %FPGA_MGR_COMPRESSED_BITSTREAM: FPGA bitstream is compressed
+ *
+ * %FPGA_MGR_USRKEY_ENCRYPTED_BITSTREAM: indicates bitstream is encrypted with user-key
  */
 #define FPGA_MGR_PARTIAL_RECONFIG	BIT(0)
 #define FPGA_MGR_EXTERNAL_CONFIG	BIT(1)
 #define FPGA_MGR_ENCRYPTED_BITSTREAM	BIT(2)
 #define FPGA_MGR_BITSTREAM_LSB_FIRST	BIT(3)
 #define FPGA_MGR_COMPRESSED_BITSTREAM	BIT(4)
+#define FPGA_MGR_USRKEY_ENCRYPTED_BITSTREAM	BIT(5)
 
 /**
  * struct fpga_image_info - information specific to an FPGA image
@@ -86,6 +89,7 @@ enum fpga_mgr_states {
  * @config_complete_timeout_us: maximum time for FPGA to switch to operating
  *	   status in the write_complete op.
  * @firmware_name: name of FPGA image firmware file
+ * @encrypted_key_name: name of the FPGA image encrypted user-key file
  * @sgt: scatter/gather table containing FPGA image
  * @buf: contiguous buffer containing FPGA image
  * @count: size of buf
@@ -102,6 +106,7 @@ struct fpga_image_info {
 	u32 disable_timeout_us;
 	u32 config_complete_timeout_us;
 	char *firmware_name;
+	char *encrypted_key_name;
 	struct sg_table *sgt;
 	const char *buf;
 	size_t count;
@@ -172,6 +177,9 @@ struct fpga_manager_ops {
 	bool skip_header;
 	enum fpga_mgr_states (*state)(struct fpga_manager *mgr);
 	u64 (*status)(struct fpga_manager *mgr);
+	int (*parse_aes_key)(struct fpga_manager *mgr,
+			     struct fpga_image_info *info,
+			     const char *buf, size_t count);
 	int (*parse_header)(struct fpga_manager *mgr,
 			    struct fpga_image_info *info,
 			    const char *buf, size_t count);

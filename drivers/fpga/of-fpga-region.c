@@ -196,6 +196,7 @@ of_fpga_region_parse_ov(struct fpga_region *region,
 			struct device_node *overlay)
 {
 	struct device *dev = &region->dev;
+	const char *encrypted_key_name;
 	struct fpga_image_info *info;
 	const char *firmware_name;
 	int ret;
@@ -235,6 +236,15 @@ of_fpga_region_parse_ov(struct fpga_region *region,
 		info->firmware_name = devm_kstrdup(dev, firmware_name,
 						   GFP_KERNEL);
 		if (!info->firmware_name)
+			return ERR_PTR(-ENOMEM);
+	}
+
+	if (!of_property_read_string(overlay, "encrypted-key-name",
+				     &encrypted_key_name)) {
+		info->encrypted_key_name = devm_kstrdup(dev,
+							encrypted_key_name,
+							GFP_KERNEL);
+		if (!info->encrypted_key_name)
 			return ERR_PTR(-ENOMEM);
 	}
 

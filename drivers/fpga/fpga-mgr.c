@@ -83,6 +83,15 @@ static inline int fpga_mgr_parse_header(struct fpga_manager *mgr,
 	return 0;
 }
 
+static inline int fpga_mgr_parse_aes_key(struct fpga_manager *mgr,
+					 struct fpga_image_info *info,
+					 const char *buf, size_t count)
+{
+	if (mgr->mops->parse_aes_key)
+		return mgr->mops->parse_aes_key(mgr, info, buf, count);
+	return 0;
+}
+
 static inline int fpga_mgr_write_init(struct fpga_manager *mgr,
 				      struct fpga_image_info *info,
 				      const char *buf, size_t count)
@@ -560,6 +569,43 @@ static int fpga_mgr_firmware_load(struct fpga_manager *mgr,
 }
 
 /**
+ * fpga_mgr_get_aes_key - request aes key form the firmware class
+ * @mgr:        fpga manager
+ * @info:       fpga image specific information
+ * @image_name: name of image file on the aes key firmware search path
+ *
+ *
+ * Request an aes key image using the firmware class, then Step the low level
+ * fpga manager through the device-specific steps. Update the state before each
+ * step to provide info on what step failed if there is a failure.
+ *
+ * Return: 0 on success, negative error code otherwise.
+ */
+static int fpga_mgr_get_aes_key(struct fpga_manager *mgr,
+				struct fpga_image_info *info,
+				const char *image_name,
+				const struct firmware *fw)
+{
+	struct device *dev = &mgr->dev;
+	int ret;
+
+	dev_info(dev, "Get Aes-key: %s to %s\n", image_name, mgr->name);
+
+	mgr->state = FPGA_MGR_STATE_FIRMWARE_REQ;
+
+	ret = request_firmware(&fw, image_name, dev);
+	if (ret) {
+		mgr->state = FPGA_MGR_STATE_FIRMWARE_REQ_ERR;
+		dev_err(dev, "Error requesting firmware %s\n", image_name);
+		return ret;
+	}
+
+	ret = fpga_mgr_parse_aes_key(mgr, info, fw->data, fw->size);
+
+	return ret;
+}
+
+/**
  * fpga_mgr_load - load FPGA from scatter/gather table, buffer, or firmware
  * @mgr:	fpga manager
  * @info:	fpga image information.
@@ -571,15 +617,41 @@ static int fpga_mgr_firmware_load(struct fpga_manager *mgr,
  */
 int fpga_mgr_load(struct fpga_manager *mgr, struct fpga_image_info *info)
 {
+	const struct firmware *fw;
+	int ret;
+
 	info->header_size = mgr->mops->initial_header_size;
 
-	if (info->sgt)
-		return fpga_mgr_buf_load_sg(mgr, info, info->sgt);
-	if (info->buf && info->count)
-		return fpga_mgr_buf_load(mgr, info, info->buf, info->count);
-	if (info->firmware_name)
-		return fpga_mgr_firmware_load(mgr, info, info->firmware_name);
-	return -EINVAL;
+	if (info->encrypted_key_name) {
+		ret = fpga_mgr_get_aes_key(mgr, info,
+					   info->encrypted_key_name, fw);
+		if (ret)
+			return ret;
+
+		info->flags |= FPGA_MGR_USRKEY_ENCRYPTED_BITSTREAM;
+	}
+
+	if (info->sgt) {
+		ret = fpga_mgr_buf_load_sg(mgr, info, info->sgt);
+		if (ret)
+			goto free_fw;
+	} else if (info->buf && info->count) {
+		ret = fpga_mgr_buf_load(mgr, info, info->buf, info->count);
+		if (ret)
+			goto free_fw;
+	} else if (info->firmware_name) {
+		ret = fpga_mgr_firmware_load(mgr, info, info->firmware_name);
+		if (ret)
+			goto free_fw;
+	} else {
+		ret = -EINVAL;
+	}
+
+free_fw:
+	if (info->encrypted_key_name)
+		release_firmware(fw);
+
+	return ret;
 }
 EXPORT_SYMBOL_GPL(fpga_mgr_load);
 
