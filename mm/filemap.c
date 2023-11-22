@@ -3226,6 +3226,20 @@ vm_fault_t filemap_fault(struct vm_fault *vmf)
 			mapping_locked = true;
 		}
 	} else {
+		pte_t *ptep = pte_offset_map_lock(vmf->vma->vm_mm, vmf->pmd,
+						  vmf->address, &vmf->ptl);
+		if (ptep) {
+			/*
+			 * Recheck pte with ptl locked as the pte can be cleared
+			 * temporarily during a read/modify/write update.
+			 */
+			if (unlikely(!pte_none(ptep_get(ptep))))
+				ret = VM_FAULT_NOPAGE;
+			pte_unmap_unlock(ptep, vmf->ptl);
+			if (unlikely(ret))
+				return ret;
+		}
+
 		/* No page in the page cache at all */
 		count_vm_event(PGMAJFAULT);
 		count_memcg_event_mm(vmf->vma->vm_mm, PGMAJFAULT);
