@@ -740,6 +740,17 @@ static int enetc_set_rxfh(struct net_device *ndev, const u32 *indir,
 	return err;
 }
 
+static void enetc_get_channels(struct net_device *ndev,
+			       struct ethtool_channels *ch)
+{
+	struct enetc_ndev_priv *priv = netdev_priv(ndev);
+
+	ch->max_rx = priv->num_rx_rings;
+	ch->max_tx = priv->num_tx_rings;
+	ch->rx_count = priv->num_rx_rings;
+	ch->tx_count = priv->num_tx_rings;
+}
+
 static void enetc_get_ringparam(struct net_device *ndev,
 				struct ethtool_ringparam *ring,
 				struct kernel_ethtool_ringparam *kernel_ring,
@@ -1196,6 +1207,7 @@ static const struct ethtool_ops enetc_pf_ethtool_ops = {
 	.get_rxfh_indir_size = enetc_get_rxfh_indir_size,
 	.get_rxfh = enetc_get_rxfh,
 	.set_rxfh = enetc_set_rxfh,
+	.get_channels = enetc_get_channels,
 	.get_ringparam = enetc_get_ringparam,
 	.get_coalesce = enetc_get_coalesce,
 	.set_coalesce = enetc_set_coalesce,
@@ -1226,6 +1238,7 @@ static const struct ethtool_ops enetc_vf_ethtool_ops = {
 	.get_rxfh_indir_size = enetc_get_rxfh_indir_size,
 	.get_rxfh = enetc_get_rxfh,
 	.set_rxfh = enetc_set_rxfh,
+	.get_channels = enetc_get_channels,
 	.get_ringparam = enetc_get_ringparam,
 	.get_coalesce = enetc_get_coalesce,
 	.set_coalesce = enetc_set_coalesce,
