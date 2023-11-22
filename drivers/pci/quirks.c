@@ -5079,39 +5079,39 @@ static const struct pci_dev_acs_enabled {
 	{ PCI_VENDOR_ID_ZHAOXIN, 0x3038, pci_quirk_mf_endpoint_acs },
 	{ PCI_VENDOR_ID_ZHAOXIN, 0x3104, pci_quirk_mf_endpoint_acs },
 	{ PCI_VENDOR_ID_ZHAOXIN, 0x9083, pci_quirk_mf_endpoint_acs },
-	/* NXP root ports, xx=16, 12, or 08 cores */
+	/* Freescale/NXP root ports, xx=16, 12, or 08 cores */
 	/* LX2xx0A : without security features + CAN-FD */
-	{ PCI_VENDOR_ID_NXP, 0x8d81, pci_quirk_nxp_rp_acs },
-	{ PCI_VENDOR_ID_NXP, 0x8da1, pci_quirk_nxp_rp_acs },
-	{ PCI_VENDOR_ID_NXP, 0x8d83, pci_quirk_nxp_rp_acs },
+	{ PCI_VENDOR_ID_FREESCALE, 0x8d81, pci_quirk_nxp_rp_acs },
+	{ PCI_VENDOR_ID_FREESCALE, 0x8da1, pci_quirk_nxp_rp_acs },
+	{ PCI_VENDOR_ID_FREESCALE, 0x8d83, pci_quirk_nxp_rp_acs },
 	/* LX2xx0C : security features + CAN-FD */
-	{ PCI_VENDOR_ID_NXP, 0x8d80, pci_quirk_nxp_rp_acs },
-	{ PCI_VENDOR_ID_NXP, 0x8da0, pci_quirk_nxp_rp_acs },
-	{ PCI_VENDOR_ID_NXP, 0x8d82, pci_quirk_nxp_rp_acs },
+	{ PCI_VENDOR_ID_FREESCALE, 0x8d80, pci_quirk_nxp_rp_acs },
+	{ PCI_VENDOR_ID_FREESCALE, 0x8da0, pci_quirk_nxp_rp_acs },
+	{ PCI_VENDOR_ID_FREESCALE, 0x8d82, pci_quirk_nxp_rp_acs },
 	/* LX2xx0E : security features + CAN */
-	{ PCI_VENDOR_ID_NXP, 0x8d90, pci_quirk_nxp_rp_acs },
-	{ PCI_VENDOR_ID_NXP, 0x8db0, pci_quirk_nxp_rp_acs },
-	{ PCI_VENDOR_ID_NXP, 0x8d92, pci_quirk_nxp_rp_acs },
+	{ PCI_VENDOR_ID_FREESCALE, 0x8d90, pci_quirk_nxp_rp_acs },
+	{ PCI_VENDOR_ID_FREESCALE, 0x8db0, pci_quirk_nxp_rp_acs },
+	{ PCI_VENDOR_ID_FREESCALE, 0x8d92, pci_quirk_nxp_rp_acs },
 	/* LX2xx0N : without security features + CAN */
-	{ PCI_VENDOR_ID_NXP, 0x8d91, pci_quirk_nxp_rp_acs },
-	{ PCI_VENDOR_ID_NXP, 0x8db1, pci_quirk_nxp_rp_acs },
-	{ PCI_VENDOR_ID_NXP, 0x8d93, pci_quirk_nxp_rp_acs },
+	{ PCI_VENDOR_ID_FREESCALE, 0x8d91, pci_quirk_nxp_rp_acs },
+	{ PCI_VENDOR_ID_FREESCALE, 0x8db1, pci_quirk_nxp_rp_acs },
+	{ PCI_VENDOR_ID_FREESCALE, 0x8d93, pci_quirk_nxp_rp_acs },
 	/* LX2xx2A : without security features + CAN-FD */
-	{ PCI_VENDOR_ID_NXP, 0x8d89, pci_quirk_nxp_rp_acs },
-	{ PCI_VENDOR_ID_NXP, 0x8da9, pci_quirk_nxp_rp_acs },
-	{ PCI_VENDOR_ID_NXP, 0x8d8b, pci_quirk_nxp_rp_acs },
+	{ PCI_VENDOR_ID_FREESCALE, 0x8d89, pci_quirk_nxp_rp_acs },
+	{ PCI_VENDOR_ID_FREESCALE, 0x8da9, pci_quirk_nxp_rp_acs },
+	{ PCI_VENDOR_ID_FREESCALE, 0x8d8b, pci_quirk_nxp_rp_acs },
 	/* LX2xx2C : security features + CAN-FD */
-	{ PCI_VENDOR_ID_NXP, 0x8d88, pci_quirk_nxp_rp_acs },
-	{ PCI_VENDOR_ID_NXP, 0x8da8, pci_quirk_nxp_rp_acs },
-	{ PCI_VENDOR_ID_NXP, 0x8d8a, pci_quirk_nxp_rp_acs },
+	{ PCI_VENDOR_ID_FREESCALE, 0x8d88, pci_quirk_nxp_rp_acs },
+	{ PCI_VENDOR_ID_FREESCALE, 0x8da8, pci_quirk_nxp_rp_acs },
+	{ PCI_VENDOR_ID_FREESCALE, 0x8d8a, pci_quirk_nxp_rp_acs },
 	/* LX2xx2E : security features + CAN */
-	{ PCI_VENDOR_ID_NXP, 0x8d98, pci_quirk_nxp_rp_acs },
-	{ PCI_VENDOR_ID_NXP, 0x8db8, pci_quirk_nxp_rp_acs },
-	{ PCI_VENDOR_ID_NXP, 0x8d9a, pci_quirk_nxp_rp_acs },
+	{ PCI_VENDOR_ID_FREESCALE, 0x8d98, pci_quirk_nxp_rp_acs },
+	{ PCI_VENDOR_ID_FREESCALE, 0x8db8, pci_quirk_nxp_rp_acs },
+	{ PCI_VENDOR_ID_FREESCALE, 0x8d9a, pci_quirk_nxp_rp_acs },
 	/* LX2xx2N : without security features + CAN */
-	{ PCI_VENDOR_ID_NXP, 0x8d99, pci_quirk_nxp_rp_acs },
-	{ PCI_VENDOR_ID_NXP, 0x8db9, pci_quirk_nxp_rp_acs },
-	{ PCI_VENDOR_ID_NXP, 0x8d9b, pci_quirk_nxp_rp_acs },
+	{ PCI_VENDOR_ID_FREESCALE, 0x8d99, pci_quirk_nxp_rp_acs },
+	{ PCI_VENDOR_ID_FREESCALE, 0x8db9, pci_quirk_nxp_rp_acs },
+	{ PCI_VENDOR_ID_FREESCALE, 0x8d9b, pci_quirk_nxp_rp_acs },
 	/* Zhaoxin Root/Downstream Ports */
 	{ PCI_VENDOR_ID_ZHAOXIN, PCI_ANY_ID, pci_quirk_zhaoxin_pcie_ports_acs },
 	/* Wangxun nics */
