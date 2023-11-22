@@ -19,6 +19,7 @@
 #include <asm/sections.h>
 #include <asm/vdso.h>
 #include <linux/stop_machine.h>
+#include <linux/extable.h>
 
 #define __ALT_PTR(a, f)		((void *)&(a)->f + (a)->f)
 #define ALT_ORIG_PTR(a)		__ALT_PTR(a, orig_offset)
@@ -101,6 +102,22 @@ static __always_inline u32 get_alt_insn(struct alt_instr *alt, __le32 *insnptr, 
 	return insn;
 }
 
+/* Check the kernel exception table */
+static void check_extable(__le32 *origptr, __le32 *updptr, __le32 *replptr)
+{
+	struct exception_table_entry *e;
+	unsigned long addr = (unsigned long)replptr;
+
+	e = (struct exception_table_entry *)search_kernel_exception_table(addr);
+	if (e) {
+		/* Modify the @insn to the right address */
+		e->insn = cpu_to_le32((int)((long)(origptr) - (long)(&e->insn)));
+
+		/* Sort the kernel exception table */
+		__sort_main_extable();
+	}
+}
+
 static noinstr void patch_alternative(struct alt_instr *alt,
 			      __le32 *origptr, __le32 *updptr, int nr_inst)
 {
@@ -112,6 +129,7 @@ static noinstr void patch_alternative(struct alt_instr *alt,
 		u32 insn;
 
 		insn = get_alt_insn(alt, origptr + i, replptr + i);
+		check_extable(origptr + i, updptr + i, replptr + i);
 		updptr[i] = cpu_to_le32(insn);
 	}
 }
