@@ -117,6 +117,51 @@ __naked int global_subprog_result_precise(void)
 	);
 }
 
+__naked __noinline __used
+static unsigned long loop_callback_bad()
+{
+	/* bpf_loop() callback that can return values outside of [0, 1] range */
+	asm volatile (
+		"call %[bpf_get_prandom_u32];"
+		"if r0 > 1000 goto 1f;"
+		"r0 = 0;"
+	"1:"
+		"goto +0;" /* checkpoint */
+		/* bpf_loop() expects [0, 1] values, so branch above skipping
+		 * r0 = 0; should lead to a failure, but if exit instruction
+		 * doesn't enforce r0's precision, this callback will be
+		 * successfully verified
+		 */
+		"exit;"
+		:
+		: __imm(bpf_get_prandom_u32)
+		: __clobber_common
+	);
+}
+
+SEC("?raw_tp")
+__failure __log_level(2)
+__flag(BPF_F_TEST_STATE_FREQ)
+__msg("from 10 to 12: frame1: R0=scalar(umin=1001) R10=fp0 cb")
+__msg("At callback return the register R0 has unknown scalar value should have been in (0x0; 0x1)")
+__naked int callback_precise_return_fail(void)
+{
+	asm volatile (
+		"r1 = 1;"			/* nr_loops */
+		"r2 = %[loop_callback_bad];"	/* callback_fn */
+		"r3 = 0;"			/* callback_ctx */
+		"r4 = 0;"			/* flags */
+		"call %[bpf_loop];"
+
+		"r0 = 0;"
+		"exit;"
+		:
+		: __imm_ptr(loop_callback_bad),
+		  __imm(bpf_loop)
+		: __clobber_common
+	);
+}
+
 SEC("?raw_tp")
 __success __log_level(2)
 __msg("14: (0f) r1 += r6")
