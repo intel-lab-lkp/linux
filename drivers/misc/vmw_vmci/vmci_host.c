@@ -139,7 +139,7 @@ static int vmci_host_close(struct inode *inode, struct file *filp)
 {
 	struct vmci_host_dev *vmci_host_dev = filp->private_data;
 
-	if (vmci_host_dev->ct_type == VMCIOBJ_CONTEXT) {
+	if (smp_load_acquire(&vmci_host_dev->ct_type) == VMCIOBJ_CONTEXT) {
 		vmci_ctx_destroy(vmci_host_dev->context);
 		vmci_host_dev->context = NULL;
 
@@ -168,7 +168,7 @@ static __poll_t vmci_host_poll(struct file *filp, poll_table *wait)
 	struct vmci_ctx *context;
 	__poll_t mask = 0;
 
-	if (vmci_host_dev->ct_type == VMCIOBJ_CONTEXT) {
+	if (smp_load_acquire(&vmci_host_dev->ct_type) == VMCIOBJ_CONTEXT) {
 		/*
 		 * Read context only if ct_type == VMCIOBJ_CONTEXT to make
 		 * sure that context is initialized
@@ -309,7 +309,7 @@ static int vmci_host_do_init_context(struct vmci_host_dev *vmci_host_dev,
 
 	mutex_lock(&vmci_host_dev->lock);
 
-	if (vmci_host_dev->ct_type != VMCIOBJ_NOT_SET) {
+	if (smp_load_acquire(&vmci_host_dev->ct_type) != VMCIOBJ_NOT_SET) {
 		vmci_ioctl_err("received VMCI init on initialized handle\n");
 		retval = -EINVAL;
 		goto out;
@@ -346,7 +346,13 @@ static int vmci_host_do_init_context(struct vmci_host_dev *vmci_host_dev,
 		goto out;
 	}
 
-	vmci_host_dev->ct_type = VMCIOBJ_CONTEXT;
+	/*
+	 * Make sure that ct_type is written after
+	 * vmci_host_dev->context is initialized.
+	 *
+	 * This pairs with smp_load_acquire() in vmci_host_XXX.
+	 */
+	smp_store_release(&vmci_host_dev->ct_type, VMCIOBJ_CONTEXT);
 	atomic_inc(&vmci_host_active_users);
 
 	vmci_call_vsock_callback(true);
@@ -366,7 +372,7 @@ static int vmci_host_do_send_datagram(struct vmci_host_dev *vmci_host_dev,
 	struct vmci_datagram *dg = NULL;
 	u32 cid;
 
-	if (vmci_host_dev->ct_type != VMCIOBJ_CONTEXT) {
+	if (smp_load_acquire(&vmci_host_dev->ct_type) != VMCIOBJ_CONTEXT) {
 		vmci_ioctl_err("only valid for contexts\n");
 		return -EINVAL;
 	}
@@ -422,7 +428,7 @@ static int vmci_host_do_receive_datagram(struct vmci_host_dev *vmci_host_dev,
 	int retval;
 	size_t size;
 
-	if (vmci_host_dev->ct_type != VMCIOBJ_CONTEXT) {
+	if (smp_load_acquire(&vmci_host_dev->ct_type) != VMCIOBJ_CONTEXT) {
 		vmci_ioctl_err("only valid for contexts\n");
 		return -EINVAL;
 	}
@@ -453,7 +459,7 @@ static int vmci_host_do_alloc_queuepair(struct vmci_host_dev *vmci_host_dev,
 	int vmci_status;
 	int __user *retptr;
 
-	if (vmci_host_dev->ct_type != VMCIOBJ_CONTEXT) {
+	if (smp_load_acquire(&vmci_host_dev->ct_type) != VMCIOBJ_CONTEXT) {
 		vmci_ioctl_err("only valid for contexts\n");
 		return -EINVAL;
 	}
@@ -522,7 +528,7 @@ static int vmci_host_do_queuepair_setva(struct vmci_host_dev *vmci_host_dev,
 	struct vmci_qp_set_va_info __user *info = uptr;
 	s32 result;
 
-	if (vmci_host_dev->ct_type != VMCIOBJ_CONTEXT) {
+	if (smp_load_acquire(&vmci_host_dev->ct_type) != VMCIOBJ_CONTEXT) {
 		vmci_ioctl_err("only valid for contexts\n");
 		return -EINVAL;
 	}
@@ -570,7 +576,7 @@ static int vmci_host_do_queuepair_setpf(struct vmci_host_dev *vmci_host_dev,
 		return -EINVAL;
 	}
 
-	if (vmci_host_dev->ct_type != VMCIOBJ_CONTEXT) {
+	if (smp_load_acquire(&vmci_host_dev->ct_type) != VMCIOBJ_CONTEXT) {
 		vmci_ioctl_err("only valid for contexts\n");
 		return -EINVAL;
 	}
@@ -641,7 +647,7 @@ static int vmci_host_do_qp_detach(struct vmci_host_dev *vmci_host_dev,
 	struct vmci_qp_dtch_info __user *info = uptr;
 	s32 result;
 
-	if (vmci_host_dev->ct_type != VMCIOBJ_CONTEXT) {
+	if (smp_load_acquire(&vmci_host_dev->ct_type) != VMCIOBJ_CONTEXT) {
 		vmci_ioctl_err("only valid for contexts\n");
 		return -EINVAL;
 	}
@@ -668,7 +674,7 @@ static int vmci_host_do_ctx_add_notify(struct vmci_host_dev *vmci_host_dev,
 	s32 result;
 	u32 cid;
 
-	if (vmci_host_dev->ct_type != VMCIOBJ_CONTEXT) {
+	if (smp_load_acquire(&vmci_host_dev->ct_type) != VMCIOBJ_CONTEXT) {
 		vmci_ioctl_err("only valid for contexts\n");
 		return -EINVAL;
 	}
@@ -691,7 +697,7 @@ static int vmci_host_do_ctx_remove_notify(struct vmci_host_dev *vmci_host_dev,
 	u32 cid;
 	int result;
 
-	if (vmci_host_dev->ct_type != VMCIOBJ_CONTEXT) {
+	if (smp_load_acquire(&vmci_host_dev->ct_type) != VMCIOBJ_CONTEXT) {
 		vmci_ioctl_err("only valid for contexts\n");
 		return -EINVAL;
 	}
@@ -715,7 +721,7 @@ static int vmci_host_do_ctx_get_cpt_state(struct vmci_host_dev *vmci_host_dev,
 	void *cpt_buf;
 	int retval;
 
-	if (vmci_host_dev->ct_type != VMCIOBJ_CONTEXT) {
+	if (smp_load_acquire(&vmci_host_dev->ct_type) != VMCIOBJ_CONTEXT) {
 		vmci_ioctl_err("only valid for contexts\n");
 		return -EINVAL;
 	}
@@ -747,7 +753,7 @@ static int vmci_host_do_ctx_set_cpt_state(struct vmci_host_dev *vmci_host_dev,
 	void *cpt_buf;
 	int retval;
 
-	if (vmci_host_dev->ct_type != VMCIOBJ_CONTEXT) {
+	if (smp_load_acquire(&vmci_host_dev->ct_type) != VMCIOBJ_CONTEXT) {
 		vmci_ioctl_err("only valid for contexts\n");
 		return -EINVAL;
 	}
@@ -785,7 +791,7 @@ static int vmci_host_do_set_notify(struct vmci_host_dev *vmci_host_dev,
 {
 	struct vmci_set_notify_info notify_info;
 
-	if (vmci_host_dev->ct_type != VMCIOBJ_CONTEXT) {
+	if (smp_load_acquire(&vmci_host_dev->ct_type) != VMCIOBJ_CONTEXT) {
 		vmci_ioctl_err("only valid for contexts\n");
 		return -EINVAL;
 	}
@@ -818,7 +824,7 @@ static int vmci_host_do_notify_resource(struct vmci_host_dev *vmci_host_dev,
 		return -EINVAL;
 	}
 
-	if (vmci_host_dev->ct_type != VMCIOBJ_CONTEXT) {
+	if (smp_load_acquire(&vmci_host_dev->ct_type) != VMCIOBJ_CONTEXT) {
 		vmci_ioctl_err("only valid for contexts\n");
 		return -EINVAL;
 	}
@@ -867,7 +873,7 @@ static int vmci_host_do_recv_notifications(struct vmci_host_dev *vmci_host_dev,
 	u32 cid;
 	int retval = 0;
 
-	if (vmci_host_dev->ct_type != VMCIOBJ_CONTEXT) {
+	if (smp_load_acquire(&vmci_host_dev->ct_type) != VMCIOBJ_CONTEXT) {
 		vmci_ioctl_err("only valid for contexts\n");
 		return -EINVAL;
 	}
