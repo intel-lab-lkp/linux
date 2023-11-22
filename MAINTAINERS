@@ -14480,6 +14480,19 @@ F:	arch/mips/
 F:	drivers/platform/mips/
 F:	include/dt-bindings/mips/
 
+MIPS BAIKAL-T1 SOC DRIVERS
+M:	Serge Semin <Sergey.Semin@baikalelectronics.ru>
+S:	Maintained
+F:	Documentation/hwmon/bt1-pvt.rst
+F:	drivers/ata/ahci_dwc.c
+F:	drivers/bus/bt1-*.c
+F:	drivers/clk/baikal-t1/
+F:	drivers/hwmon/bt1-pvt.[ch]
+F:	drivers/memory/bt1-l2-ctl.c
+F:	drivers/mtd/maps/physmap-bt1-rom.[ch]
+F:	drivers/pci/controller/dwc/pcie-bt1.c
+F:	drivers/spi/spi-dw-bt1.c
+
 MIPS BOSTON DEVELOPMENT BOARD
 M:	Paul Burton <paulburton@kernel.org>
 L:	linux-mips@vger.kernel.org
