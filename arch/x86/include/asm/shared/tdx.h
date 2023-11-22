@@ -91,7 +91,11 @@ struct tdx_module_output {
 u64 __tdx_module_call(u64 fn, u64 rcx, u64 rdx, u64 r8, u64 r9,
 		      struct tdx_module_output *out);
 
+#ifdef CONFIG_INTEL_TDX_GUEST
 bool tdx_accept_memory(phys_addr_t start, phys_addr_t end);
+#else
+static inline bool tdx_accept_memory(phys_addr_t start, phys_addr_t end) { return false; }
+#endif
 
 /*
  * The TDG.VP.VMCALL-Instruction-execution sub-functions are defined
