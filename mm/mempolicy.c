@@ -3115,7 +3115,6 @@ static const char * const policy_modes[] =
 	[MPOL_PREFERRED_MANY]  = "prefer (many)",
 };
 
-#ifdef CONFIG_TMPFS
 /**
  * mpol_parse_str - parse string to mempolicy, for tmpfs mpol mount option.
  * @str:  string containing mempolicy to parse
@@ -3248,7 +3247,6 @@ out:
 		*mpol = new;
 	return err;
 }
-#endif /* CONFIG_TMPFS */
 
 /**
  * mpol_to_str - format a mempolicy structure for printing

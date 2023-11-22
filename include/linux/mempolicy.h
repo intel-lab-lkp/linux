@@ -158,9 +158,7 @@ int do_migrate_pages(struct mm_struct *mm, const nodemask_t *from,
 		     const nodemask_t *to, int flags);
 
 
-#ifdef CONFIG_TMPFS
 extern int mpol_parse_str(char *str, struct mempolicy **mpol);
-#endif
 
 extern void mpol_to_str(char *buffer, int maxlen, struct mempolicy *pol);
 
@@ -276,12 +274,10 @@ static inline void check_highest_zone(int k)
 {
 }
 
-#ifdef CONFIG_TMPFS
 static inline int mpol_parse_str(char *str, struct mempolicy **mpol)
 {
 	return 1;	/* error */
 }
-#endif
 
 static inline int mpol_misplaced(struct folio *folio,
 				 struct vm_area_struct *vma,
