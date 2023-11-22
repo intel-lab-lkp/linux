@@ -238,7 +238,7 @@ void dwc3_ep0_stall_and_restart(struct dwc3 *dwc)
 		struct dwc3_request	*req;
 
 		req = next_request(&dep->pending_list);
-		dwc3_gadget_giveback(dep, req, -ECONNRESET);
+		dwc3_gadget_giveback(dep, req, -ESHUTDOWN);
 	}
 
 	dwc->eps[0]->trb_enqueue = 0;
