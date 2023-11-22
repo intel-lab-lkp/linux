@@ -177,6 +177,9 @@ Optional properties:
 	it indicates that the FPGA has already been programmed with this image.
 	If this property is in an overlay targeting an FPGA region, it is a
 	request to program the FPGA with that image.
+- encrypted-key-name : should contain the name of an encrypted key file located
+	on the firmware search path. It will be used to decrypt the FPGA image
+	file with user-key.
 - fpga-bridges : should contain a list of phandles to FPGA Bridges that must be
 	controlled during FPGA programming along with the parent FPGA bridge.
 	This property is optional if the FPGA Manager handles the bridges.
@@ -448,6 +451,35 @@ programming is the FPGA based bridge of fpga_region1.
 
 	firmware-name = "soc_image2.rbf";
 	partial-fpga-config;
+
+	gpio@10040 {
+		compatible = "altr,pio-1.0";
+		reg = <0x10040 0x20>;
+		clocks = <0x2>;
+		altr,ngpio = <0x4>;
+		#gpio-cells = <0x2>;
+		gpio-controller;
+	};
+};
+
+Device Tree Example: Configure/Reconfigure Encrypted Image With User Key
+========================================================================
+
+Users can encrypt FPGA configuration Images with their own key. While decrypting
+the configuration Image the user needs to provide the same key.
+"encrypted-key-name" Specifies the name of the FPGA image encrypted key file on
+the firmware search path. The search path is described in the firmware class
+documentation.
+
+/dts-v1/;
+/plugin/;
+
+&fpga_region0 {
+	#address-cells = <1>;
+	#size-cells = <1>;
+
+	firmware-name = "soc_image2.rbf";
+	encrypted-key-name = "key.nky";
 
 	gpio@10040 {
 		compatible = "altr,pio-1.0";
