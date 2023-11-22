@@ -425,6 +425,7 @@ static int qcom_snps_eusb2_hsphy_probe(struct platform_device *pdev)
 
 static const struct of_device_id qcom_snps_eusb2_hsphy_of_match_table[] = {
 	{ .compatible = "qcom,sm8550-snps-eusb2-phy", },
+	{ .compatible = "qcom,x1e80100-snps-eusb2-phy", },
 	{ },
 };
 MODULE_DEVICE_TABLE(of, qcom_snps_eusb2_hsphy_of_match_table);
