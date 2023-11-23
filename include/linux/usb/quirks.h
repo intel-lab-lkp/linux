@@ -72,4 +72,9 @@
 /* device has endpoints that should be ignored */
 #define USB_QUIRK_ENDPOINT_IGNORE		BIT(15)
 
+/*
+ * Limits the bInterval value to 9 instead of default value 16
+ */
+#define USB_QUIRK_REDUCE_FRAME_INTR_BINTERVAL	BIT(16)
+
 #endif /* __LINUX_USB_QUIRKS_H */

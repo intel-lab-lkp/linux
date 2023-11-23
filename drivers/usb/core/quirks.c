@@ -138,6 +138,9 @@ static int quirks_param_set(const char *value, const struct kernel_param *kp)
 			case 'o':
 				flags |= USB_QUIRK_HUB_SLOW_RESET;
 				break;
+			case 'p':
+				flags |= USB_QUIRK_REDUCE_FRAME_INTR_BINTERVAL;
+				break;
 			/* Ignore unrecognized flag characters */
 			}
 		}
@@ -210,6 +213,14 @@ static const struct usb_device_id usb_quirk_list[] = {
 
 	/* USB3503 */
 	{ USB_DEVICE(0x0424, 0x3503), .driver_info = USB_QUIRK_RESET_RESUME },
+
+	/* USB491x hubs need 32ms instead of 256ms bInterval */
+	{ USB_DEVICE(0x0424, 0x4913), .driver_info =
+			USB_QUIRK_REDUCE_FRAME_INTR_BINTERVAL},
+	{ USB_DEVICE(0x0424, 0x4914), .driver_info =
+			USB_QUIRK_REDUCE_FRAME_INTR_BINTERVAL},
+	{ USB_DEVICE(0x0424, 0x4915), .driver_info =
+			USB_QUIRK_REDUCE_FRAME_INTR_BINTERVAL},
 
 	/* Microsoft Wireless Laser Mouse 6000 Receiver */
 	{ USB_DEVICE(0x045e, 0x00e1), .driver_info = USB_QUIRK_RESET_RESUME },
