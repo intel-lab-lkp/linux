@@ -99,6 +99,12 @@ static int mana_ib_probe(struct auxiliary_device *adev,
 		goto free_error_eq;
 	}
 
+	ret = mana_ib_query_adapter_caps(dev);
+	if (ret) {
+		ibdev_dbg(&dev->ib_dev, "Failed to get device caps");
+		goto destroy_adapter;
+	}
+
 	ret = ib_register_device(&dev->ib_dev, "mana_%d",
 				 mdev->gdma_context->dev);
 	if (ret)
