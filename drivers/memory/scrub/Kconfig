@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# Memory scrub driver configurations
+#
+
+config SCRUB
+	bool "Memory scrub driver"
+	help
+	  This option selects the memory scrub subsystem, supports
+	  configuring the parameters of underlying scrubbers in the
+	  system for the DRAM memories.
