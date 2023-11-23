@@ -105,7 +105,14 @@ static const char *const modes[] = {
 
 struct tps6598x;
 
+enum tipd_type {
+	TIPD_TYPE_TI_TPS6598X,
+	TIPD_TYPE_APPLE_CD321X,
+	TIPD_TYPE_TI_TPS25750X,
+};
+
 struct tipd_data {
+	enum tipd_type type;
 	irq_handler_t irq_handler;
 	int (*register_port)(struct tps6598x *tps, struct fwnode_handle *node);
 	void (*trace_power_status)(u16 status);
@@ -1175,7 +1182,6 @@ tps25750_register_port(struct tps6598x *tps, struct fwnode_handle *fwnode)
 
 static int tps6598x_probe(struct i2c_client *client)
 {
-	struct device_node *np = client->dev.of_node;
 	struct tps6598x *tps;
 	struct fwnode_handle *fwnode;
 	u32 status;
@@ -1191,11 +1197,19 @@ static int tps6598x_probe(struct i2c_client *client)
 	mutex_init(&tps->lock);
 	tps->dev = &client->dev;
 
+	if (dev_fwnode(tps->dev))
+		tps->data = device_get_match_data(tps->dev);
+	else
+		tps->data = i2c_get_match_data(client);
+
+	if (!tps->data)
+		return -EINVAL;
+
 	tps->regmap = devm_regmap_init_i2c(client, &tps6598x_regmap_config);
 	if (IS_ERR(tps->regmap))
 		return PTR_ERR(tps->regmap);
 
-	is_tps25750 = device_is_compatible(tps->dev, "ti,tps25750");
+	is_tps25750 = (tps->data->type == TIPD_TYPE_TI_TPS25750X);
 	if (!is_tps25750) {
 		ret = tps6598x_read32(tps, TPS_REG_VID, &vid);
 		if (ret < 0 || !vid)
@@ -1209,7 +1223,7 @@ static int tps6598x_probe(struct i2c_client *client)
 	if (i2c_check_functionality(client->adapter, I2C_FUNC_I2C))
 		tps->i2c_protocol = true;
 
-	if (np && of_device_is_compatible(np, "apple,cd321x")) {
+	if (tps->data->type == TIPD_TYPE_APPLE_CD321X) {
 		/* Switch CD321X chips to the correct system power state */
 		ret = cd321x_switch_power_state(tps, TPS_SYSTEM_POWER_STATE_S0);
 		if (ret)
@@ -1226,13 +1240,6 @@ static int tps6598x_probe(struct i2c_client *client)
 			TPS_REG_INT_DATA_STATUS_UPDATE |
 			TPS_REG_INT_PLUG_EVENT;
 	}
-
-	if (dev_fwnode(tps->dev))
-		tps->data = device_get_match_data(tps->dev);
-	else
-		tps->data = i2c_get_match_data(client);
-	if (!tps->data)
-		return -EINVAL;
 
 	/* Make sure the controller has application firmware running */
 	ret = tps6598x_check_mode(tps);
@@ -1346,7 +1353,7 @@ static void tps6598x_remove(struct i2c_client *client)
 	usb_role_switch_put(tps->role_sw);
 
 	/* Reset PD controller to remove any applied patch */
-	if (device_is_compatible(tps->dev, "ti,tps25750"))
+	if (tps->data->type == TIPD_TYPE_TI_TPS25750X)
 		tps6598x_exec_cmd_tmo(tps, "GAID", 0, NULL, 0, NULL, 2000, 0);
 }
 
@@ -1376,7 +1383,7 @@ static int __maybe_unused tps6598x_resume(struct device *dev)
 	if (ret < 0)
 		return ret;
 
-	if (device_is_compatible(tps->dev, "ti,tps25750") && ret == TPS_MODE_PTCH) {
+	if (tps->data->type == TIPD_TYPE_TI_TPS25750X && ret == TPS_MODE_PTCH) {
 		ret = tps25750_init(tps);
 		if (ret)
 			return ret;
@@ -1399,6 +1406,7 @@ static const struct dev_pm_ops tps6598x_pm_ops = {
 };
 
 static const struct tipd_data cd321x_data = {
+	.type = TIPD_TYPE_APPLE_CD321X,
 	.irq_handler = cd321x_interrupt,
 	.register_port = tps6598x_register_port,
 	.trace_power_status = trace_tps6598x_power_status,
@@ -1406,6 +1414,7 @@ static const struct tipd_data cd321x_data = {
 };
 
 static const struct tipd_data tps6598x_data = {
+	.type = TIPD_TYPE_TI_TPS6598X,
 	.irq_handler = tps6598x_interrupt,
 	.register_port = tps6598x_register_port,
 	.trace_power_status = trace_tps6598x_power_status,
@@ -1413,6 +1422,7 @@ static const struct tipd_data tps6598x_data = {
 };
 
 static const struct tipd_data tps25750_data = {
+	.type = TIPD_TYPE_TI_TPS25750X,
 	.irq_handler = tps25750_interrupt,
 	.register_port = tps25750_register_port,
 	.trace_power_status = trace_tps25750_power_status,
