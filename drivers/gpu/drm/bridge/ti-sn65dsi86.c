@@ -221,13 +221,13 @@ static const struct regmap_config ti_sn65dsi86_regmap_config = {
 	.max_register = 0xFF,
 };
 
-static int __maybe_unused ti_sn65dsi86_read_u16(struct ti_sn65dsi86 *pdata,
+static int __maybe_unused ti_sn65dsi86_read_u16(struct regmap *regmap,
 						unsigned int reg, u16 *val)
 {
 	u8 buf[2];
 	int ret;
 
-	ret = regmap_bulk_read(pdata->regmap, reg, buf, ARRAY_SIZE(buf));
+	ret = regmap_bulk_read(regmap, reg, buf, ARRAY_SIZE(buf));
 	if (ret)
 		return ret;
 
@@ -236,12 +236,12 @@ static int __maybe_unused ti_sn65dsi86_read_u16(struct ti_sn65dsi86 *pdata,
 	return 0;
 }
 
-static void ti_sn65dsi86_write_u16(struct ti_sn65dsi86 *pdata,
+static void ti_sn65dsi86_write_u16(struct regmap *regmap,
 				   unsigned int reg, u16 val)
 {
 	u8 buf[2] = { val & 0xff, val >> 8 };
 
-	regmap_bulk_write(pdata->regmap, reg, buf, ARRAY_SIZE(buf));
+	regmap_bulk_write(regmap, reg, buf, ARRAY_SIZE(buf));
 }
 
 static u32 ti_sn_bridge_get_dsi_freq(struct ti_sn65dsi86 *pdata)
@@ -968,9 +968,9 @@ static void ti_sn_bridge_set_video_timings(struct ti_sn65dsi86 *pdata)
 	if (mode->flags & DRM_MODE_FLAG_NVSYNC)
 		vsync_polarity = CHA_VSYNC_POLARITY;
 
-	ti_sn65dsi86_write_u16(pdata, SN_CHA_ACTIVE_LINE_LENGTH_LOW_REG,
+	ti_sn65dsi86_write_u16(pdata->regmap, SN_CHA_ACTIVE_LINE_LENGTH_LOW_REG,
 			       mode->hdisplay);
-	ti_sn65dsi86_write_u16(pdata, SN_CHA_VERTICAL_DISPLAY_SIZE_LOW_REG,
+	ti_sn65dsi86_write_u16(pdata->regmap, SN_CHA_VERTICAL_DISPLAY_SIZE_LOW_REG,
 			       mode->vdisplay);
 	regmap_write(pdata->regmap, SN_CHA_HSYNC_PULSE_WIDTH_LOW_REG,
 		     (mode->hsync_end - mode->hsync_start) & 0xFF);
@@ -1509,8 +1509,8 @@ static int ti_sn_pwm_apply(struct pwm_chip *chip, struct pwm_device *pwm,
 			goto out;
 		}
 
-		ti_sn65dsi86_write_u16(pdata, SN_BACKLIGHT_SCALE_REG, scale);
-		ti_sn65dsi86_write_u16(pdata, SN_BACKLIGHT_REG, backlight);
+		ti_sn65dsi86_write_u16(pdata->regmap, SN_BACKLIGHT_SCALE_REG, scale);
+		ti_sn65dsi86_write_u16(pdata->regmap, SN_BACKLIGHT_REG, backlight);
 	}
 
 	pwm_en_inv = FIELD_PREP(SN_PWM_EN_MASK, state->enabled) |
@@ -1544,11 +1544,11 @@ static int ti_sn_pwm_get_state(struct pwm_chip *chip, struct pwm_device *pwm,
 	if (ret)
 		return ret;
 
-	ret = ti_sn65dsi86_read_u16(pdata, SN_BACKLIGHT_SCALE_REG, &scale);
+	ret = ti_sn65dsi86_read_u16(pdata->regmap, SN_BACKLIGHT_SCALE_REG, &scale);
 	if (ret)
 		return ret;
 
-	ret = ti_sn65dsi86_read_u16(pdata, SN_BACKLIGHT_REG, &backlight);
+	ret = ti_sn65dsi86_read_u16(pdata->regmap, SN_BACKLIGHT_REG, &backlight);
 	if (ret)
 		return ret;
 
