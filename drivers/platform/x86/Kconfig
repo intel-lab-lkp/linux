@@ -177,7 +177,8 @@ config ACER_WMI
 	depends on INPUT
 	depends on RFKILL || RFKILL = n
 	depends on ACPI_WMI
-	select ACPI_VIDEO
+	depends on HWMON
+	depends on ACPI_VIDEO
 	select INPUT_SPARSEKMAP
 	select LEDS_CLASS
 	select NEW_LEDS
