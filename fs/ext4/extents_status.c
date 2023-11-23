@@ -2043,19 +2043,21 @@ bool ext4_is_pending(struct inode *inode, ext4_lblk_t lblk)
 }
 
 /*
- * ext4_es_insert_delayed_block - adds a delayed block to the extents status
- *                                tree, adding a pending reservation where
- *                                needed
+ * ext4_es_insert_delayed_extent - adds delayed blocks to the extents status
+ *                                 tree, adding a pending reservation where
+ *                                 needed
  *
  * @inode - file containing the newly added block
- * @lblk - logical block to be added
+ * @lblk - first logical block to be added
+ * @len - length of blocks to be added
  * @allocated - indicates whether a physical cluster has been allocated for
  *              the logical cluster that contains the block
  */
-void ext4_es_insert_delayed_block(struct inode *inode, ext4_lblk_t lblk,
-				  bool allocated)
+void ext4_es_insert_delayed_extent(struct inode *inode, ext4_lblk_t lblk,
+				   unsigned int len, bool allocated)
 {
 	struct extent_status newes;
+	ext4_lblk_t end = lblk + len - 1;
 	int err1 = 0;
 	int err2 = 0;
 	struct extent_status *es1 = NULL;
@@ -2068,9 +2070,9 @@ void ext4_es_insert_delayed_block(struct inode *inode, ext4_lblk_t lblk,
 		 lblk, inode->i_ino);
 
 	newes.es_lblk = lblk;
-	newes.es_len = 1;
+	newes.es_len = len;
 	ext4_es_store_pblock_status(&newes, ~0, EXTENT_STATUS_DELAYED);
-	trace_ext4_es_insert_delayed_block(inode, &newes, allocated);
+	trace_ext4_es_insert_delayed_extent(inode, &newes, allocated);
 
 	ext4_es_insert_extent_check(inode, &newes);
 
@@ -2081,7 +2083,7 @@ retry:
 		es2 = __es_alloc_extent(true);
 	write_lock(&EXT4_I(inode)->i_es_lock);
 
-	err1 = __es_remove_extent(inode, lblk, lblk, NULL, es1);
+	err1 = __es_remove_extent(inode, lblk, end, NULL, es1);
 	if (err1 != 0)
 		goto error;
 	/* Free preallocated extent if it didn't get used. */

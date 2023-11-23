@@ -1462,7 +1462,7 @@ static int ext4_journalled_write_end(struct file *file,
 /*
  * Reserve space for a single cluster
  */
-static int ext4_da_reserve_space(struct inode *inode)
+static int ext4_da_reserve_space(struct inode *inode, unsigned int len)
 {
 	struct ext4_sb_info *sbi = EXT4_SB(inode->i_sb);
 	struct ext4_inode_info *ei = EXT4_I(inode);
@@ -1473,18 +1473,18 @@ static int ext4_da_reserve_space(struct inode *inode)
 	 * us from metadata over-estimation, though we may go over by
 	 * a small amount in the end.  Here we just reserve for data.
 	 */
-	ret = dquot_reserve_block(inode, EXT4_C2B(sbi, 1));
+	ret = dquot_reserve_block(inode, EXT4_C2B(sbi, len));
 	if (ret)
 		return ret;
 
 	spin_lock(&ei->i_block_reservation_lock);
-	if (ext4_claim_free_clusters(sbi, 1, 0)) {
+	if (ext4_claim_free_clusters(sbi, len, 0)) {
 		spin_unlock(&ei->i_block_reservation_lock);
-		dquot_release_reservation_block(inode, EXT4_C2B(sbi, 1));
+		dquot_release_reservation_block(inode, EXT4_C2B(sbi, len));
 		return -ENOSPC;
 	}
-	ei->i_reserved_data_blocks++;
-	trace_ext4_da_reserve_space(inode);
+	ei->i_reserved_data_blocks += len;
+	trace_ext4_da_reserve_space(inode, len);
 	spin_unlock(&ei->i_block_reservation_lock);
 
 	return 0;       /* success */
@@ -1630,6 +1630,37 @@ static void ext4_print_free_blocks(struct inode *inode)
 	return;
 }
 
+
+/*
+ * ext4_insert_delayed_blocks - adds multi-delayed blocks to the extents
+ *                              status tree, incrementing the reserved
+ *                              cluster/block count or making a pending
+ *                              reservation where needed.
+ *
+ * @inode - file containing the newly added block
+ * @lblk - start logical block to be added
+ * @len - length of blocks to be added
+ *
+ * Returns 0 on success, negative error code on failure.
+ */
+static int ext4_insert_delayed_blocks(struct inode *inode, ext4_lblk_t lblk,
+				      ext4_lblk_t len)
+{
+	struct ext4_sb_info *sbi = EXT4_SB(inode->i_sb);
+	int ret;
+
+	/* TODO: support bigalloc and replace ext4_insert_delayed_block(). */
+	if (sbi->s_cluster_ratio != 1)
+		return -EOPNOTSUPP;
+
+	ret = ext4_da_reserve_space(inode, len);
+	if (ret)   /* ENOSPC */
+		return ret;
+
+	ext4_es_insert_delayed_extent(inode, lblk, len, false);
+	return 0;
+}
+
 /*
  * ext4_insert_delayed_block - adds a delayed block to the extents status
  *                             tree, incrementing the reserved cluster/block
@@ -1647,10 +1678,13 @@ static int ext4_insert_delayed_block(struct inode *inode, ext4_lblk_t lblk)
 	int ret;
 	bool allocated = false;
 
+	if (sbi->s_cluster_ratio == 1)
+		return ext4_insert_delayed_blocks(inode, lblk, 1);
+
 	/*
-	 * If the cluster containing lblk is shared with a delayed,
-	 * written, or unwritten extent in a bigalloc file system, it's
-	 * already been accounted for and does not need to be reserved.
+	 * For bigalloc, if the cluster containing lblk is shared with a
+	 * delayed, written, or unwritten extent in a bigalloc file system,
+	 * it's already been accounted for and does not need to be reserved.
 	 * A pending reservation must be made for the cluster if it's
 	 * shared with a written or unwritten extent and doesn't already
 	 * have one.  Written and unwritten extents can be purged from the
@@ -1658,32 +1692,24 @@ static int ext4_insert_delayed_block(struct inode *inode, ext4_lblk_t lblk)
 	 * it's necessary to examine the extent tree if a search of the
 	 * extents status tree doesn't get a match.
 	 */
-	if (sbi->s_cluster_ratio == 1) {
-		ret = ext4_da_reserve_space(inode);
-		if (ret != 0)   /* ENOSPC */
-			return ret;
-	} else {   /* bigalloc */
-		if (!ext4_es_scan_clu(inode, &ext4_es_is_delonly, lblk)) {
-			if (!ext4_es_scan_clu(inode,
-					      &ext4_es_is_mapped, lblk)) {
-				ret = ext4_clu_mapped(inode,
-						      EXT4_B2C(sbi, lblk));
-				if (ret < 0)
+	if (!ext4_es_scan_clu(inode, &ext4_es_is_delonly, lblk)) {
+		if (!ext4_es_scan_clu(inode, &ext4_es_is_mapped, lblk)) {
+			ret = ext4_clu_mapped(inode, EXT4_B2C(sbi, lblk));
+			if (ret < 0)
+				return ret;
+			if (ret == 0) {
+				ret = ext4_da_reserve_space(inode, 1);
+				if (ret != 0)   /* ENOSPC */
 					return ret;
-				if (ret == 0) {
-					ret = ext4_da_reserve_space(inode);
-					if (ret != 0)   /* ENOSPC */
-						return ret;
-				} else {
-					allocated = true;
-				}
 			} else {
 				allocated = true;
 			}
+		} else {
+			allocated = true;
 		}
 	}
 
-	ext4_es_insert_delayed_block(inode, lblk, allocated);
+	ext4_es_insert_delayed_extent(inode, lblk, 1, allocated);
 	return 0;
 }
 
