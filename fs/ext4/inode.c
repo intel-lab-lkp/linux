@@ -3748,6 +3748,10 @@ const struct iomap_ops ext4_iomap_read_ops = {
 	.iomap_begin = ext4_iomap_buffered_io_begin,
 };
 
+const struct iomap_ops ext4_iomap_page_mkwrite_ops = {
+	.iomap_begin = ext4_iomap_buffered_io_begin,
+};
+
 static int ext4_iomap_read_folio(struct file *file, struct folio *folio)
 {
 	return iomap_read_folio(folio, &ext4_iomap_read_ops);
@@ -6697,4 +6701,24 @@ out_error:
 	folio_unlock(folio);
 	ext4_journal_stop(handle);
 	goto out;
+}
+
+vm_fault_t ext4_iomap_page_mkwrite(struct vm_fault *vmf)
+{
+	struct inode *inode = file_inode(vmf->vma->vm_file);
+	struct address_space *mapping = inode->i_mapping;
+	vm_fault_t ret;
+
+	if (unlikely(IS_IMMUTABLE(inode)))
+		return VM_FAULT_SIGBUS;
+
+	sb_start_pagefault(inode->i_sb);
+	file_update_time(vmf->vma->vm_file);
+
+	filemap_invalidate_lock_shared(mapping);
+	ret = iomap_page_mkwrite(vmf, &ext4_iomap_page_mkwrite_ops);
+	filemap_invalidate_unlock_shared(mapping);
+
+	sb_end_pagefault(inode->i_sb);
+	return ret;
 }
