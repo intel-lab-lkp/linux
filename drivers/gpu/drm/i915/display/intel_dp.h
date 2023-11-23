@@ -184,5 +184,7 @@ intel_dp_compute_config_link_bpp_limits(struct intel_dp *intel_dp,
 					struct link_config_limits *limits);
 
 void intel_dp_get_dsc_sink_cap(u8 dpcd_rev, struct intel_connector *connector);
+u8 intel_dp_dsc_max_src_input_bpc(struct drm_i915_private *i915);
+u8 intel_dp_dsc_min_src_input_bpc(struct drm_i915_private *i915);
 
 #endif /* __INTEL_DP_H__ */
