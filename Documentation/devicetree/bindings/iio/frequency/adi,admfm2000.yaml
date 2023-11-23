@@ -1,0 +1,154 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+# Copyright 2023 Analog Devices Inc.
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/iio/frequency/adi,admfm2000.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: ADMFM2000 Dual Microwave Down Converter
+
+maintainers:
+  - Kim Seer Paller <kimseer.paller@analog.com>
+
+description:
+  Dual microwave down converter module with input RF and LO frequency ranges
+  from 0.5 to 32 GHz and an output IF frequency range from 0.1 to 8 GHz.
+  It consists of a LNA, mixer, IF filter, DSA, and IF amplifier for each down
+  conversion path.
+
+properties:
+  compatible:
+    enum:
+      - adi,admfm2000
+
+  switch1-gpios:
+    items:
+      - description: B15 GPIO, when high (and B16 low) channel 1 is in
+          Direct IF mode.
+      - description: B16 GPIO, when high (and B15 low) channel 1 is in
+          Mixer mode.
+
+  switch2-gpios:
+    items:
+      - description: K14 GPIO, when high (and L14 low) channel 2 is in
+          Mixer mode.
+      - description: L14 GPIO, when high (and K14 low) channel 2 is in
+          Direct IF mode.
+
+  attenuation1-gpios:
+    description: |
+      Choice of attenuation:
+      D15 D14 C16 C15 C14
+      1   1   1   1   1   0 dB
+      1   1   1   1   0   -1 dB
+      1   1   1   0   1   -2 dB
+      1   1   0   1   1   -4 dB
+      1   0   1   1   1   -8 dB
+      0   1   1   1   1   -16 dB
+      0   0   0   0   0   -31 dB
+
+    items:
+      - description: C14 GPIO
+      - description: C15 GPIO
+      - description: C16 GPIO
+      - description: D14 GPIO
+      - description: D15 GPIO
+
+  attenuation2-gpios:
+    description: |
+      Choice of attenuation:
+      M16 M15 M14 L16 L15
+      1   1   1   1   1   0 dB
+      1   1   1   1   0   -1 dB
+      1   1   1   0   1   -2 dB
+      1   1   0   1   1   -4 dB
+      1   0   1   1   1   -8 dB
+      0   1   1   1   1   -16 dB
+      0   0   0   0   0   -31 dB
+
+    items:
+      - description: L15 GPIO
+      - description: L16 GPIO
+      - description: M14 GPIO
+      - description: M15 GPIO
+      - description: M16 GPIO
+
+  '#address-cells':
+    const: 1
+
+  '#size-cells':
+    const: 0
+
+patternProperties:
+  "^channel@[0-1]$":
+    type: object
+    description: Represents a channel of the device.
+
+    additionalProperties: false
+
+    properties:
+      reg:
+        description:
+          The channel number.
+        minimum: 0
+        maximum: 1
+
+      adi,mode:
+        description:
+          RF path selected for the channel.
+            0 - Direct IF mode
+            1 - Mixer mode
+        $ref: /schemas/types.yaml#/definitions/uint32
+        enum: [0, 1]
+
+    required:
+      - reg
+      - adi,mode
+
+required:
+  - compatible
+  - switch1-gpios
+  - switch2-gpios
+  - attenuation1-gpios
+  - attenuation2-gpios
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+    converter {
+      compatible = "adi,admfm2000";
+
+      switch1-gpios = <&gpio 1 GPIO_ACTIVE_LOW>,
+                      <&gpio 2 GPIO_ACTIVE_HIGH>;
+
+      switch2-gpios = <&gpio 3 GPIO_ACTIVE_LOW>,
+                      <&gpio 4 GPIO_ACTIVE_HIGH>;
+
+      attenuation1-gpios = <&gpio 17 GPIO_ACTIVE_LOW>,
+                           <&gpio 22 GPIO_ACTIVE_LOW>,
+                           <&gpio 23 GPIO_ACTIVE_LOW>,
+                           <&gpio 24 GPIO_ACTIVE_LOW>,
+                           <&gpio 25 GPIO_ACTIVE_LOW>;
+
+      attenuation2-gpios = <&gpio 0 GPIO_ACTIVE_LOW>,
+                           <&gpio 5 GPIO_ACTIVE_LOW>,
+                           <&gpio 6 GPIO_ACTIVE_LOW>,
+                           <&gpio 16 GPIO_ACTIVE_LOW>,
+                           <&gpio 26 GPIO_ACTIVE_LOW>;
+
+      #address-cells = <1>;
+      #size-cells = <0>;
+
+      channel@0 {
+        reg = <0>;
+        adi,mode = <1>;
+      };
+
+      channel@1 {
+        reg = <1>;
+        adi,mode = <1>;
+      };
+    };
+...
