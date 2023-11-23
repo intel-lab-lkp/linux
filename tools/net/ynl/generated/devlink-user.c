@@ -6830,6 +6830,37 @@ int devlink_selftests_run(struct ynl_sock *ys,
 	return 0;
 }
 
+/* ============== DEVLINK_CMD_NOTIFY_FILTER_SET ============== */
+/* DEVLINK_CMD_NOTIFY_FILTER_SET - do */
+void
+devlink_notify_filter_set_req_free(struct devlink_notify_filter_set_req *req)
+{
+	free(req->bus_name);
+	free(req->dev_name);
+	free(req);
+}
+
+int devlink_notify_filter_set(struct ynl_sock *ys,
+			      struct devlink_notify_filter_set_req *req)
+{
+	struct nlmsghdr *nlh;
+	int err;
+
+	nlh = ynl_gemsg_start_req(ys, ys->family_id, DEVLINK_CMD_NOTIFY_FILTER_SET, 1);
+	ys->req_policy = &devlink_nest;
+
+	if (req->_present.bus_name_len)
+		mnl_attr_put_strz(nlh, DEVLINK_ATTR_BUS_NAME, req->bus_name);
+	if (req->_present.dev_name_len)
+		mnl_attr_put_strz(nlh, DEVLINK_ATTR_DEV_NAME, req->dev_name);
+
+	err = ynl_exec(ys, nlh, NULL);
+	if (err < 0)
+		return -1;
+
+	return 0;
+}
+
 const struct ynl_family ynl_devlink_family =  {
 	.name		= "devlink",
 };

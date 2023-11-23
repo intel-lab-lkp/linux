@@ -5252,4 +5252,51 @@ devlink_selftests_run_req_set_selftests_flash(struct devlink_selftests_run_req *
 int devlink_selftests_run(struct ynl_sock *ys,
 			  struct devlink_selftests_run_req *req);
 
+/* ============== DEVLINK_CMD_NOTIFY_FILTER_SET ============== */
+/* DEVLINK_CMD_NOTIFY_FILTER_SET - do */
+struct devlink_notify_filter_set_req {
+	struct {
+		__u32 bus_name_len;
+		__u32 dev_name_len;
+	} _present;
+
+	char *bus_name;
+	char *dev_name;
+};
+
+static inline struct devlink_notify_filter_set_req *
+devlink_notify_filter_set_req_alloc(void)
+{
+	return calloc(1, sizeof(struct devlink_notify_filter_set_req));
+}
+void
+devlink_notify_filter_set_req_free(struct devlink_notify_filter_set_req *req);
+
+static inline void
+devlink_notify_filter_set_req_set_bus_name(struct devlink_notify_filter_set_req *req,
+					   const char *bus_name)
+{
+	free(req->bus_name);
+	req->_present.bus_name_len = strlen(bus_name);
+	req->bus_name = malloc(req->_present.bus_name_len + 1);
+	memcpy(req->bus_name, bus_name, req->_present.bus_name_len);
+	req->bus_name[req->_present.bus_name_len] = 0;
+}
+static inline void
+devlink_notify_filter_set_req_set_dev_name(struct devlink_notify_filter_set_req *req,
+					   const char *dev_name)
+{
+	free(req->dev_name);
+	req->_present.dev_name_len = strlen(dev_name);
+	req->dev_name = malloc(req->_present.dev_name_len + 1);
+	memcpy(req->dev_name, dev_name, req->_present.dev_name_len);
+	req->dev_name[req->_present.dev_name_len] = 0;
+}
+
+/*
+ * Set notification messages socket filter.
+ */
+int devlink_notify_filter_set(struct ynl_sock *ys,
+			      struct devlink_notify_filter_set_req *req);
+
 #endif /* _LINUX_DEVLINK_GEN_H */
