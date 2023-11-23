@@ -529,7 +529,13 @@
 
 #define GEN8_RC6_CTX_INFO			_MMIO(0x8504)
 
+/*
+ * TODO: Change GEN12_SQCNT1 to MTL_MEDIA_SQCNT1 or something
+ * equivalent and also at all the places this reg is currently
+ * being used.
+ */
 #define GEN12_SQCNT1				_MMIO(0x8718)
+#define GEN12_GT_SQCNT1 			MCR_REG(0x8718)
 #define   GEN12_SQCNT1_PMON_ENABLE		REG_BIT(30)
 #define   GEN12_SQCNT1_OABPC			REG_BIT(29)
 #define   GEN12_STRICT_RAR_ENABLE		REG_BIT(23)
