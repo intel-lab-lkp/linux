@@ -5,6 +5,7 @@
  * Copyright (c) 2022, Google LLC
  */
 
+#include <linux/clk.h>
 #include <linux/device.h>
 #include <linux/export.h>
 #include <linux/gpio/consumer.h>
@@ -60,11 +61,18 @@ struct onboard_hub {
 	bool going_away;
 	struct list_head udev_list;
 	struct mutex lock;
+	struct clk *clk;
 };
 
 static int onboard_hub_power_on(struct onboard_hub *hub)
 {
 	int err;
+
+	err = clk_prepare_enable(hub->clk);
+	if (err) {
+		dev_err(hub->dev, "failed to enable clock: %d\n", err);
+		return err;
+	}
 
 	err = regulator_bulk_enable(hub->pdata->num_supplies, hub->supplies);
 	if (err) {
@@ -91,6 +99,8 @@ static int onboard_hub_power_off(struct onboard_hub *hub)
 		dev_err(hub->dev, "failed to disable supplies: %d\n", err);
 		return err;
 	}
+
+	clk_disable_unprepare(hub->clk);
 
 	hub->is_powered_on = false;
 
@@ -265,6 +275,10 @@ static int onboard_hub_probe(struct platform_device *pdev)
 		dev_err(dev, "Failed to get regulator supplies: %d\n", err);
 		return err;
 	}
+
+	hub->clk = devm_clk_get_optional(dev, NULL);
+	if (IS_ERR(hub->clk))
+		return dev_err_probe(dev, PTR_ERR(hub->clk), "failed to get clock\n");
 
 	hub->reset_gpio = devm_gpiod_get_optional(dev, "reset",
 						  GPIOD_OUT_HIGH);
