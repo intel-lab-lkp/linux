@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * mac80211 - channel management
- * Copyright 2020 - 2022 Intel Corporation
+ * Copyright 2020 - 2023 Intel Corporation
  */
 
 #include <linux/nl80211.h>
@@ -382,7 +382,7 @@ _ieee80211_recalc_chanctx_min_def(struct ieee80211_local *local,
 	/* downgrade chandef up to max_bw */
 	min_def = ctx->conf.def;
 	while (min_def.width > max_bw)
-		ieee80211_chandef_downgrade(&min_def);
+		ieee80211_chandef_downgrade(&min_def, NULL);
 
 	if (cfg80211_chandef_identical(&ctx->conf.min_def, &min_def))
 		return 0;
