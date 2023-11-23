@@ -12079,7 +12079,10 @@ fail_free_mce_banks:
 	kfree(vcpu->arch.mci_ctl2_banks);
 	free_page((unsigned long)vcpu->arch.pio_data);
 fail_free_lapic:
-	kvm_free_lapic(vcpu);
+	if (lapic_in_kernel(vcpu))
+		kvm_free_lapic(vcpu);
+	else
+		static_branch_dec(&kvm_has_noapic_vcpu);
 fail_mmu_destroy:
 	kvm_mmu_destroy(vcpu);
 	return r;
@@ -12122,14 +12125,17 @@ void kvm_arch_vcpu_destroy(struct kvm_vcpu *vcpu)
 	kvm_pmu_destroy(vcpu);
 	kfree(vcpu->arch.mce_banks);
 	kfree(vcpu->arch.mci_ctl2_banks);
-	kvm_free_lapic(vcpu);
+
+	if (lapic_in_kernel(vcpu))
+		kvm_free_lapic(vcpu);
+	else
+		static_branch_dec(&kvm_has_noapic_vcpu);
+
 	idx = srcu_read_lock(&vcpu->kvm->srcu);
 	kvm_mmu_destroy(vcpu);
 	srcu_read_unlock(&vcpu->kvm->srcu, idx);
 	free_page((unsigned long)vcpu->arch.pio_data);
 	kvfree(vcpu->arch.cpuid_entries);
-	if (!lapic_in_kernel(vcpu))
-		static_branch_dec(&kvm_has_noapic_vcpu);
 }
 
 void kvm_vcpu_reset(struct kvm_vcpu *vcpu, bool init_event)
