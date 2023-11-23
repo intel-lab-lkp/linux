@@ -21,7 +21,7 @@ config UNIX_SCM
 	depends on UNIX
 	default y
 
-config	AF_UNIX_OOB
+config AF_UNIX_OOB
 	bool
 	depends on UNIX
 	default y

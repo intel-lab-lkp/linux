@@ -26,7 +26,7 @@ menuconfig IP_VS
 
 if IP_VS
 
-config	IP_VS_IPV6
+config IP_VS_IPV6
 	bool "IPv6 support for IPVS"
 	depends on IPV6 = y || IP_VS = IPV6
 	select NF_DEFRAG_IPV6
@@ -35,14 +35,14 @@ config	IP_VS_IPV6
 
 	  Say Y if unsure.
 
-config	IP_VS_DEBUG
+config IP_VS_DEBUG
 	bool "IP virtual server debugging"
 	help
 	  Say Y here if you want to get additional messages useful in
 	  debugging the IP virtual server code. You can change the debug
 	  level in /proc/sys/net/ipv4/vs/debug_level
 
-config	IP_VS_TAB_BITS
+config IP_VS_TAB_BITS
 	int "IPVS connection table size (the Nth power of 2)"
 	range 8 20 if !64BIT
 	range 8 27 if 64BIT
@@ -76,34 +76,34 @@ config	IP_VS_TAB_BITS
 
 comment "IPVS transport protocol load balancing support"
 
-config	IP_VS_PROTO_TCP
+config IP_VS_PROTO_TCP
 	bool "TCP load balancing support"
 	help
 	  This option enables support for load balancing TCP transport
 	  protocol. Say Y if unsure.
 
-config	IP_VS_PROTO_UDP
+config IP_VS_PROTO_UDP
 	bool "UDP load balancing support"
 	help
 	  This option enables support for load balancing UDP transport
 	  protocol. Say Y if unsure.
 
-config	IP_VS_PROTO_AH_ESP
+config IP_VS_PROTO_AH_ESP
 	def_bool IP_VS_PROTO_ESP || IP_VS_PROTO_AH
 
-config	IP_VS_PROTO_ESP
+config IP_VS_PROTO_ESP
 	bool "ESP load balancing support"
 	help
 	  This option enables support for load balancing ESP (Encapsulation
 	  Security Payload) transport protocol. Say Y if unsure.
 
-config	IP_VS_PROTO_AH
+config IP_VS_PROTO_AH
 	bool "AH load balancing support"
 	help
 	  This option enables support for load balancing AH (Authentication
 	  Header) transport protocol. Say Y if unsure.
 
-config  IP_VS_PROTO_SCTP
+config IP_VS_PROTO_SCTP
 	bool "SCTP load balancing support"
 	select LIBCRC32C
 	help
@@ -112,7 +112,7 @@ config  IP_VS_PROTO_SCTP
 
 comment "IPVS scheduler"
 
-config	IP_VS_RR
+config IP_VS_RR
 	tristate "round-robin scheduling"
 	help
 	  The robin-robin scheduling algorithm simply directs network
@@ -121,7 +121,7 @@ config	IP_VS_RR
 	  If you want to compile it in kernel, say Y. To compile it as a
 	  module, choose M here. If unsure, say N.
  
-config	IP_VS_WRR
+config IP_VS_WRR
 	tristate "weighted round-robin scheduling"
 	help
 	  The weighted robin-robin scheduling algorithm directs network
@@ -134,7 +134,7 @@ config	IP_VS_WRR
 	  If you want to compile it in kernel, say Y. To compile it as a
 	  module, choose M here. If unsure, say N.
 
-config	IP_VS_LC
+config IP_VS_LC
 	tristate "least-connection scheduling"
 	help
 	  The least-connection scheduling algorithm directs network
@@ -144,7 +144,7 @@ config	IP_VS_LC
 	  If you want to compile it in kernel, say Y. To compile it as a
 	  module, choose M here. If unsure, say N.
 
-config	IP_VS_WLC
+config IP_VS_WLC
 	tristate "weighted least-connection scheduling"
 	help
 	  The weighted least-connection scheduling algorithm directs network
@@ -154,8 +154,8 @@ config	IP_VS_WLC
 	  If you want to compile it in kernel, say Y. To compile it as a
 	  module, choose M here. If unsure, say N.
 
-config  IP_VS_FO
-		tristate "weighted failover scheduling"
+config IP_VS_FO
+	tristate "weighted failover scheduling"
 	help
 	  The weighted failover scheduling algorithm directs network
 	  connections to the server with the highest weight that is
@@ -164,7 +164,7 @@ config  IP_VS_FO
 	  If you want to compile it in kernel, say Y. To compile it as a
 	  module, choose M here. If unsure, say N.
 
-config  IP_VS_OVF
+config IP_VS_OVF
 	tristate "weighted overflow scheduling"
 	help
 	  The weighted overflow scheduling algorithm directs network
@@ -175,7 +175,7 @@ config  IP_VS_OVF
 	  If you want to compile it in kernel, say Y. To compile it as a
 	  module, choose M here. If unsure, say N.
 
-config	IP_VS_LBLC
+config IP_VS_LBLC
 	tristate "locality-based least-connection scheduling"
 	help
 	  The locality-based least-connection scheduling algorithm is for
@@ -189,7 +189,7 @@ config	IP_VS_LBLC
 	  If you want to compile it in kernel, say Y. To compile it as a
 	  module, choose M here. If unsure, say N.
 
-config  IP_VS_LBLCR
+config IP_VS_LBLCR
 	tristate "locality-based least-connection with replication scheduling"
 	help
 	  The locality-based least-connection with replication scheduling
@@ -207,7 +207,7 @@ config  IP_VS_LBLCR
 	  If you want to compile it in kernel, say Y. To compile it as a
 	  module, choose M here. If unsure, say N.
 
-config	IP_VS_DH
+config IP_VS_DH
 	tristate "destination hashing scheduling"
 	help
 	  The destination hashing scheduling algorithm assigns network
@@ -217,7 +217,7 @@ config	IP_VS_DH
 	  If you want to compile it in kernel, say Y. To compile it as a
 	  module, choose M here. If unsure, say N.
 
-config	IP_VS_SH
+config IP_VS_SH
 	tristate "source hashing scheduling"
 	help
 	  The source hashing scheduling algorithm assigns network
@@ -227,7 +227,7 @@ config	IP_VS_SH
 	  If you want to compile it in kernel, say Y. To compile it as a
 	  module, choose M here. If unsure, say N.
 
-config	IP_VS_MH
+config IP_VS_MH
 	tristate "maglev hashing scheduling"
 	help
 	  The maglev consistent hashing scheduling algorithm provides the
@@ -246,7 +246,7 @@ config	IP_VS_MH
 	  If you want to compile it in kernel, say Y. To compile it as a
 	  module, choose M here. If unsure, say N.
 
-config	IP_VS_SED
+config IP_VS_SED
 	tristate "shortest expected delay scheduling"
 	help
 	  The shortest expected delay scheduling algorithm assigns network
@@ -259,7 +259,7 @@ config	IP_VS_SED
 	  If you want to compile it in kernel, say Y. To compile it as a
 	  module, choose M here. If unsure, say N.
 
-config	IP_VS_NQ
+config IP_VS_NQ
 	tristate "never queue scheduling"
 	help
 	  The never queue scheduling algorithm adopts a two-speed model.
@@ -272,7 +272,7 @@ config	IP_VS_NQ
 	  If you want to compile it in kernel, say Y. To compile it as a
 	  module, choose M here. If unsure, say N.
 
-config	IP_VS_TWOS
+config IP_VS_TWOS
 	tristate "weighted random twos choice least-connection scheduling"
 	help
 	  The weighted random twos choice least-connection scheduling
@@ -318,7 +318,7 @@ config IP_VS_MH_TAB_INDEX
 
 comment 'IPVS application helper'
 
-config	IP_VS_FTP
+config IP_VS_FTP
 	tristate "FTP protocol helper"
 	depends on IP_VS_PROTO_TCP && NF_CONNTRACK && NF_NAT && \
 		NF_CONNTRACK_FTP
@@ -334,7 +334,7 @@ config	IP_VS_FTP
 	  If you want to compile it in kernel, say Y. To compile it as a
 	  module, choose M here. If unsure, say N.
 
-config	IP_VS_NFCT
+config IP_VS_NFCT
 	bool "Netfilter connection tracking"
 	depends on NF_CONNTRACK
 	help
@@ -342,7 +342,7 @@ config	IP_VS_NFCT
 	  connection state to be exported to the Netfilter framework
 	  for filtering purposes.
 
-config	IP_VS_PE_SIP
+config IP_VS_PE_SIP
 	tristate "SIP persistence engine"
 	depends on IP_VS_PROTO_UDP
 	depends on NF_CONNTRACK_SIP

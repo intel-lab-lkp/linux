@@ -32,7 +32,7 @@ config THUNDER_NIC_VF
 	help
 	  This driver supports Thunder's NIC virtual function
 
-config	THUNDER_NIC_BGX
+config THUNDER_NIC_BGX
 	tristate "Thunder MAC interface driver (BGX)"
 	depends on 64BIT && PCI
 	select PHYLIB
@@ -42,7 +42,7 @@ config	THUNDER_NIC_BGX
 	  This driver supports programming and controlling of MAC
 	  interface from NIC physical function driver.
 
-config	THUNDER_NIC_RGX
+config THUNDER_NIC_RGX
 	tristate "Thunder MAC interface driver (RGX)"
 	depends on 64BIT && PCI
 	select PHYLIB

@@ -22,7 +22,7 @@ menuconfig CAIF
 	See Documentation/networking/caif for a further explanation on how to
 	use and configure CAIF.
 
-config  CAIF_DEBUG
+config CAIF_DEBUG
 	bool "Enable Debug"
 	depends on CAIF
 	default n
