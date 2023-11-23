@@ -139,6 +139,8 @@ extern void ext4_es_find_extent_range(struct inode *inode,
 				      int (*match_fn)(struct extent_status *es),
 				      ext4_lblk_t lblk, ext4_lblk_t end,
 				      struct extent_status *es);
+ext4_lblk_t ext4_es_skip_hole_extent(struct inode *inode, ext4_lblk_t lblk,
+				     ext4_lblk_t len);
 extern int ext4_es_lookup_extent(struct inode *inode, ext4_lblk_t lblk,
 				 ext4_lblk_t *next_lblk,
 				 struct extent_status *es);

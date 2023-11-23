@@ -945,6 +945,38 @@ void ext4_es_cache_extent(struct inode *inode, ext4_lblk_t lblk,
 }
 
 /*
+ * ext4_es_skip_hole_extent() skip hole extents and loops up the next
+ * delayed/unwritten/mapped extent in extent status tree from lblk to
+ * end.
+ */
+ext4_lblk_t ext4_es_skip_hole_extent(struct inode *inode, ext4_lblk_t lblk,
+				     ext4_lblk_t len)
+{
+	struct extent_status *es = NULL;
+	ext4_lblk_t next_lblk;
+	struct rb_node *node;
+
+	read_lock(&EXT4_I(inode)->i_es_lock);
+	es = __es_tree_search(&EXT4_I(inode)->i_es_tree.root, lblk);
+
+	while (es && es->es_lblk < lblk + len) {
+		if (!ext4_es_is_hole(es))
+			break;
+		node = rb_next(&es->rb_node);
+		es = rb_entry(node, struct extent_status, rb_node);
+	}
+	if (!es || es->es_lblk >= lblk + len)
+		next_lblk = lblk + len;
+	else
+		next_lblk = es->es_lblk;
+
+	trace_ext4_es_skip_hole_extent(inode, lblk, len, next_lblk);
+	read_unlock(&EXT4_I(inode)->i_es_lock);
+
+	return next_lblk;
+}
+
+/*
  * ext4_es_lookup_extent() looks up an extent in extent status tree.
  *
  * ext4_es_lookup_extent is called by ext4_map_blocks/ext4_da_map_blocks.
