@@ -1676,6 +1676,7 @@ iomap_alloc_ioend(struct inode *inode, struct iomap_writepage_ctx *wpc,
 	ioend->io_offset = offset;
 	ioend->io_bio = bio;
 	ioend->io_sector = sector;
+	ioend->io_private = NULL;
 	return ioend;
 }
 
