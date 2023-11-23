@@ -300,6 +300,9 @@ int genl_register_family(struct genl_family *family);
 int genl_unregister_family(const struct genl_family *family);
 void genl_notify(const struct genl_family *family, struct sk_buff *skb,
 		 struct genl_info *info, u32 group, gfp_t flags);
+void *genl_sk_priv_get(struct sock *sk, struct genl_family *family);
+void *genl_sk_priv_store(struct sock *sk, struct genl_family *family,
+			 void *priv);
 
 void *genlmsg_put(struct sk_buff *skb, u32 portid, u32 seq,
 		  const struct genl_family *family, int flags, u8 cmd);

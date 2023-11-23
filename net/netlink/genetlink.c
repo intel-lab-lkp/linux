@@ -21,6 +21,7 @@
 #include <linux/idr.h>
 #include <net/sock.h>
 #include <net/genetlink.h>
+#include "af_netlink.h"
 
 static DEFINE_MUTEX(genl_mutex); /* serialization of message processing */
 static DECLARE_RWSEM(cb_lock);
@@ -1699,12 +1700,109 @@ static int genl_bind(struct net *net, int group)
 	return ret;
 }
 
+struct genl_sk_ctx {
+	struct xarray family_privs;
+};
+
+static struct genl_sk_ctx *genl_sk_ctx_alloc(void)
+{
+	struct genl_sk_ctx *ctx;
+
+	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
+	if (!ctx)
+		return NULL;
+	xa_init_flags(&ctx->family_privs, XA_FLAGS_ALLOC);
+	return ctx;
+}
+
+static void genl_sk_ctx_free(struct genl_sk_ctx *ctx)
+{
+	unsigned long family_id;
+	void *priv;
+
+	xa_for_each(&ctx->family_privs, family_id, priv) {
+		xa_erase(&ctx->family_privs, family_id);
+		kfree(priv);
+	}
+	xa_destroy(&ctx->family_privs);
+	kfree(ctx);
+}
+
+/**
+ * genl_sk_priv_get - Get per-socket private pointer for family
+ *
+ * @sk: socket
+ * @family: family
+ *
+ * Lookup a private pointer stored per-socket by a specified
+ * Generic netlink family.
+ *
+ * Caller should make sure this is called in RCU read locked section.
+ *
+ * Returns: valid pointer on success, otherwise NULL.
+ */
+void *genl_sk_priv_get(struct sock *sk, struct genl_family *family)
+{
+	struct genl_sk_ctx *ctx;
+
+	ctx = rcu_dereference(nlk_sk(sk)->priv);
+	if (!ctx)
+		return NULL;
+	return xa_load(&ctx->family_privs, family->id);
+}
+
+/**
+ * genl_sk_priv_store - Store per-socket private pointer for family
+ *
+ * @sk: socket
+ * @family: family
+ * @priv: private pointer
+ *
+ * Store a private pointer per-socket for a specified
+ * Generic netlink family.
+ *
+ * Caller has to make sure this is not called in parallel multiple times
+ * for the same sock and also in parallel to genl_release() for the same sock.
+ *
+ * Returns: previously stored private pointer for the family (could be NULL)
+ * on success, otherwise negative error value encoded by ERR_PTR().
+ */
+void *genl_sk_priv_store(struct sock *sk, struct genl_family *family,
+			 void *priv)
+{
+	struct genl_sk_ctx *ctx;
+	void *old_priv;
+
+	ctx = rcu_dereference_raw(nlk_sk(sk)->priv);
+	if (!ctx) {
+		ctx = genl_sk_ctx_alloc();
+		if (!ctx)
+			return ERR_PTR(-ENOMEM);
+		rcu_assign_pointer(nlk_sk(sk)->priv, ctx);
+	}
+
+	old_priv = xa_store(&ctx->family_privs, family->id, priv, GFP_KERNEL);
+	if (xa_is_err(old_priv))
+		return ERR_PTR(xa_err(old_priv));
+	return old_priv;
+}
+
+static void genl_release(struct sock *sk, unsigned long *groups)
+{
+	struct genl_sk_ctx *ctx;
+
+	ctx = rcu_dereference_raw(nlk_sk(sk)->priv);
+	if (ctx)
+		genl_sk_ctx_free(ctx);
+}
+
 static int __net_init genl_pernet_init(struct net *net)
 {
 	struct netlink_kernel_cfg cfg = {
 		.input		= genl_rcv,
 		.flags		= NL_CFG_F_NONROOT_RECV,
 		.bind		= genl_bind,
+		.release	= genl_release,
 	};
 
 	/* we'll bump the group number right afterwards */
