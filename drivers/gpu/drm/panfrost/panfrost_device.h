@@ -94,6 +94,7 @@ struct panfrost_device {
 	struct device *dev;
 	struct drm_device *ddev;
 	struct platform_device *pdev;
+	int gpu_irq;
 
 	void __iomem *iomem;
 	struct clk *clock;
