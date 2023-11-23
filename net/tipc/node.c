@@ -2154,14 +2154,15 @@ rcv:
 	/* Receive packet directly if conditions permit */
 	tipc_node_read_lock(n);
 	if (likely((n->state == SELF_UP_PEER_UP) && (usr != TUNNEL_PROTOCOL))) {
+		tipc_node_read_unlock(n);
 		spin_lock_bh(&le->lock);
 		if (le->link) {
 			rc = tipc_link_rcv(le->link, skb, &xmitq);
 			skb = NULL;
 		}
 		spin_unlock_bh(&le->lock);
-	}
-	tipc_node_read_unlock(n);
+	} else
+		tipc_node_read_unlock(n);
 
 	/* Check/update node state before receiving */
 	if (unlikely(skb)) {
@@ -2169,12 +2170,13 @@ rcv:
 			goto out_node_put;
 		tipc_node_write_lock(n);
 		if (tipc_node_check_state(n, skb, bearer_id, &xmitq)) {
+			tipc_node_write_unlock(n);
 			if (le->link) {
 				rc = tipc_link_rcv(le->link, skb, &xmitq);
 				skb = NULL;
 			}
-		}
-		tipc_node_write_unlock(n);
+		} else
+			tipc_node_write_unlock(n);
 	}
 
 	if (unlikely(rc & TIPC_LINK_UP_EVT))
