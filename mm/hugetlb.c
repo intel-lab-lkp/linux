@@ -3509,6 +3509,55 @@ static void __init hugetlb_hstate_alloc_pages_report(unsigned long allocated, st
 	}
 }
 
+struct hugetlb_work {
+	struct work_struct work;
+	struct hstate *h;
+	int num;
+	int nid;
+};
+
+static atomic_t hugetlb_hstate_alloc_n_undone __initdata;
+static __initdata DECLARE_COMPLETION(hugetlb_hstate_alloc_comp);
+
+static void __init hugetlb_alloc_node(struct work_struct *w)
+{
+	struct hugetlb_work *hw = container_of(w, struct hugetlb_work, work);
+	struct hstate *h = hw->h;
+	int i, num = hw->num;
+	nodemask_t node_alloc_noretry;
+	unsigned long flags;
+
+	/* Bit mask controlling how hard we retry per-node allocations.*/
+	nodes_clear(node_alloc_noretry);
+
+	for (i = 0; i < num; ++i) {
+		struct folio *folio = alloc_pool_huge_folio(h, &node_states[N_MEMORY],
+						&node_alloc_noretry);
+		if (!folio)
+			break;
+		spin_lock_irqsave(&hugetlb_lock, flags);
+		__prep_account_new_huge_page(h, folio_nid(folio));
+		enqueue_hugetlb_folio(h, folio);
+		spin_unlock_irqrestore(&hugetlb_lock, flags);
+		cond_resched();
+	}
+
+	if (atomic_dec_and_test(&hugetlb_hstate_alloc_n_undone))
+		complete(&hugetlb_hstate_alloc_comp);
+}
+
+static void __init hugetlb_vmemmap_optimize_node(struct work_struct *w)
+{
+	struct hugetlb_work *hw = container_of(w, struct hugetlb_work, work);
+	struct hstate *h = hw->h;
+	int nid = hw->nid;
+
+	hugetlb_vmemmap_optimize_folios(h, &h->hugepage_freelists[nid]);
+
+	if (atomic_dec_and_test(&hugetlb_hstate_alloc_n_undone))
+		complete(&hugetlb_hstate_alloc_comp);
+}
+
 static unsigned long __init hugetlb_hstate_alloc_pages_gigantic(struct hstate *h)
 {
 	unsigned long i;
@@ -3528,26 +3577,36 @@ static unsigned long __init hugetlb_hstate_alloc_pages_gigantic(struct hstate *h
 
 static unsigned long __init hugetlb_hstate_alloc_pages_non_gigantic(struct hstate *h)
 {
-	unsigned long i;
-	struct folio *folio;
-	LIST_HEAD(folio_list);
-	nodemask_t node_alloc_noretry;
+	int nid;
+	struct hugetlb_work *works;
 
-	/* Bit mask controlling how hard we retry per-node allocations.*/
-	nodes_clear(node_alloc_noretry);
-
-	for (i = 0; i < h->max_huge_pages; ++i) {
-		folio = alloc_pool_huge_folio(h, &node_states[N_MEMORY],
-						&node_alloc_noretry);
-		if (!folio)
-			break;
-		list_add(&folio->lru, &folio_list);
-		cond_resched();
+	works = kcalloc(num_node_state(N_MEMORY), sizeof(*works), GFP_KERNEL);
+	if (works == NULL) {
+		pr_warn("HugeTLB: allocating struct hugetlb_work failed.\n");
+		return 0;
 	}
 
-	prep_and_add_allocated_folios(h, &folio_list);
+	atomic_set(&hugetlb_hstate_alloc_n_undone, num_node_state(N_MEMORY));
+	for_each_node_state(nid, N_MEMORY) {
+		works[nid].h = h;
+		works[nid].num = h->max_huge_pages/num_node_state(N_MEMORY);
+		if (nid == 0)
+			works[nid].num += h->max_huge_pages % num_node_state(N_MEMORY);
+		INIT_WORK(&works[nid].work, hugetlb_alloc_node);
+		queue_work_node(nid, system_unbound_wq, &works[nid].work);
+	}
+	wait_for_completion(&hugetlb_hstate_alloc_comp);
 
-	return i;
+	atomic_set(&hugetlb_hstate_alloc_n_undone, num_node_state(N_MEMORY));
+	for_each_node_state(nid, N_MEMORY) {
+		works[nid].nid = nid;
+		INIT_WORK(&works[nid].work, hugetlb_vmemmap_optimize_node);
+		queue_work_node(nid, system_unbound_wq, &works[nid].work);
+	}
+	wait_for_completion(&hugetlb_hstate_alloc_comp);
+
+	kfree(works);
+	return h->nr_huge_pages;
 }
 
 /*
