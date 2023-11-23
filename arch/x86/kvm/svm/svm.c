@@ -4314,9 +4314,12 @@ static void svm_vcpu_after_set_cpuid(struct kvm_vcpu *vcpu)
 	 * whether it's advertised to the guest so that KVM context switches
 	 * XSS on VM-Enter/VM-Exit.  Failure to do so would effectively give
 	 * the guest read/write access to the host's XSS.
+	 *
+	 * Make sure to check for XSAVES in KVM CPU capabilities, since the
+	 * boot CPU feature bit might be disabled due to Erratum 1386.
 	 */
 	if (boot_cpu_has(X86_FEATURE_XSAVE) &&
-	    boot_cpu_has(X86_FEATURE_XSAVES) &&
+	    kvm_cpu_cap_has(X86_FEATURE_XSAVES) &&
 	    guest_cpuid_has(vcpu, X86_FEATURE_XSAVE))
 		kvm_governed_feature_set(vcpu, X86_FEATURE_XSAVES);
 

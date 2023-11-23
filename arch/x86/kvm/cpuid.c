@@ -679,6 +679,22 @@ void kvm_set_cpu_caps(void)
 		F(AMX_COMPLEX)
 	);
 
+	/*
+	 * It is possible that CPU supports XSAVES but the host kernel decided
+	 * not to use it, for example due to AMD Erratum 1386, and cleared the
+	 * relevant CPU feature bit.
+	 *
+	 * In such case let the guest decide on it own whether to make use of
+	 * this feature.
+	 */
+	if (boot_cpu_data.cpuid_level >= XSTATE_CPUID) {
+		unsigned int eax, ebx, ecx, edx;
+
+		cpuid_count(XSTATE_CPUID, 1, &eax, &ebx, &ecx, &edx);
+		if (eax & F(XSAVES))
+			kvm_cpu_cap_set(X86_FEATURE_XSAVES);
+	}
+
 	kvm_cpu_cap_mask(CPUID_D_1_EAX,
 		F(XSAVEOPT) | F(XSAVEC) | F(XGETBV1) | F(XSAVES) | f_xfd
 	);
