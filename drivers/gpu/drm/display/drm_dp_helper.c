@@ -2917,6 +2917,21 @@ void drm_dp_vsc_sdp_log(const char *level, struct device *dev,
 }
 EXPORT_SYMBOL(drm_dp_vsc_sdp_log);
 
+void drm_dp_as_sdp_log(const char *level, struct device *dev,
+		       const struct drm_dp_as_sdp *async)
+{
+#define DP_SDP_LOG(fmt, ...) dev_printk(level, dev, fmt, ##__VA_ARGS__)
+	DP_SDP_LOG("DP SDP: %s, revision %u, length %u\n", "VSC",
+		   async->revision, async->length);
+	DP_SDP_LOG("	vmin: %d vmax: %d\n", async->vmin, async->vmax);
+	DP_SDP_LOG("    target_rr: %s\n", async->target_rr);
+	DP_SDP_LOG("    duration_incr_ms: %u\n", async->duration_incr_ms);
+	DP_SDP_LOG("    duration_decr_ms: %u\n", async->duration_decr_ms);
+	DP_SDP_LOG("    operation_mode: %u\n", async->operation_mode);
+#undef DP_SDP_LOG
+}
+EXPORT_SYMBOL(drm_dp_as_sdp_log);
+
 /**
  * drm_dp_get_pcon_max_frl_bw() - maximum frl supported by PCON
  * @dpcd: DisplayPort configuration data
