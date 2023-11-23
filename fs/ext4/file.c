@@ -296,7 +296,11 @@ static ssize_t ext4_buffered_write_iter(struct kiocb *iocb,
 	if (ret <= 0)
 		goto out;
 
-	ret = generic_perform_write(iocb, from);
+	if (ext4_test_inode_state(inode, EXT4_STATE_BUFFERED_IOMAP))
+		ret = iomap_file_buffered_write(iocb, from,
+						&ext4_iomap_buffered_write_ops);
+	else
+		ret = generic_perform_write(iocb, from);
 
 out:
 	inode_unlock(inode);
@@ -823,6 +827,8 @@ static int ext4_file_mmap(struct file *file, struct vm_area_struct *vma)
 	if (IS_DAX(file_inode(file))) {
 		vma->vm_ops = &ext4_dax_vm_ops;
 		vm_flags_set(vma, VM_HUGEPAGE);
+	} else if (ext4_test_inode_state(inode, EXT4_STATE_BUFFERED_IOMAP)) {
+		vma->vm_ops = &ext4_iomap_file_vm_ops;
 	} else {
 		vma->vm_ops = &ext4_file_vm_ops;
 	}
