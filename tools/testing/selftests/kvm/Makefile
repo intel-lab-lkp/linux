@@ -57,6 +57,7 @@ LIBKVM_aarch64 += lib/aarch64/processor.c
 LIBKVM_aarch64 += lib/aarch64/spinlock.c
 LIBKVM_aarch64 += lib/aarch64/ucall.c
 LIBKVM_aarch64 += lib/aarch64/vgic.c
+LIBKVM_aarch64 += lib/aarch64/vpmu.c
 
 LIBKVM_s390x += lib/s390x/diag318_test_handler.c
 LIBKVM_s390x += lib/s390x/processor.c
