@@ -6,14 +6,19 @@
  *
  *  - Provides functions to configure patrol scrub
  *    and DDR5 ECS features of the CXL memory devices.
+ *  - Registers with the scrub driver to expose
+ *    the sysfs attributes to the user for configuring
+ *    the memory patrol scrub and DDR5 ECS features.
  */
 
 #define pr_fmt(fmt)	"CXL_MEM_SCRUB: " fmt
 
 #include <cxlmem.h>
+#include <memory/memory-scrub.h>
 
 /* CXL memory scrub feature common definitions */
 #define CXL_SCRUB_MAX_ATTRB_RANGE_LENGTH	128
+#define CXL_MEMDEV_MAX_NAME_LENGTH	128
 
 static int cxl_mem_get_supported_feature_entry(struct cxl_memdev *cxlmd, const uuid_t *feat_uuid,
 					       struct cxl_mbox_supp_feat_entry *feat_entry_out)
@@ -62,6 +67,16 @@ static int cxl_mem_get_supported_feature_entry(struct cxl_memdev *cxlmd, const u
 /* CXL memory patrol scrub control definitions */
 #define CXL_MEMDEV_PS_GET_FEAT_VERSION	0x01
 #define CXL_MEMDEV_PS_SET_FEAT_VERSION	0x01
+
+#define CXL_PATROL_SCRUB	"cxl_patrol_scrub"
+
+/* The default number of regions for CXL memory device patrol scrubber
+ * Patrol scrub is a feature where the device controller scrubs the
+ * memory at a regular interval accroding to the CXL specification.
+ * Hence the number of memory regions to scrub assosiated to the patrol
+ * scrub is 1.
+ */
+#define CXL_MEMDEV_PATROL_SCRUB_NUM_REGIONS	1
 
 static const uuid_t cxl_patrol_scrub_uuid =
 	UUID_INIT(0x96dad7d6, 0xfde8, 0x482b, 0xa7, 0x33, 0x75, 0x77, 0x4e,     \
@@ -159,9 +174,8 @@ static int cxl_mem_ps_get_attrbs(struct device *dev,
 	return 0;
 }
 
-static int __maybe_unused
-cxl_mem_ps_set_attrbs(struct device *dev, struct cxl_memdev_ps_params *params,
-		      u8 param_type)
+static int cxl_mem_ps_set_attrbs(struct device *dev,
+				 struct cxl_memdev_ps_params *params, u8 param_type)
 {
 	struct cxl_memdev_ps_set_feat_pi set_pi = {
 		.pi.uuid = cxl_patrol_scrub_uuid,
@@ -232,11 +246,180 @@ cxl_mem_ps_set_attrbs(struct device *dev, struct cxl_memdev_ps_params *params,
 	return 0;
 }
 
+static int cxl_mem_ps_enable_write(struct device *dev, long val)
+{
+	struct cxl_memdev_ps_params params;
+	int ret;
+
+	params.enable = val;
+	ret = cxl_mem_ps_set_attrbs(dev, &params, CXL_MEMDEV_PS_PARAM_ENABLE);
+	if (ret) {
+		dev_err(dev, "CXL patrol scrub enable fail, enable=%d ret=%d\n",
+		       params.enable, ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+static int cxl_mem_ps_speed_read(struct device *dev, u64 *val)
+{
+	struct cxl_memdev_ps_params params;
+	int ret;
+
+	ret = cxl_mem_ps_get_attrbs(dev, &params);
+	if (ret) {
+		dev_err(dev, "Get CXL patrol scrub params fail ret=%d\n",
+			ret);
+		return ret;
+	}
+	*val = params.speed;
+
+	return 0;
+}
+
+static int cxl_mem_ps_speed_write(struct device *dev, long val)
+{
+	struct cxl_memdev_ps_params params;
+	int ret;
+
+	params.speed = val;
+	ret = cxl_mem_ps_set_attrbs(dev, &params, CXL_MEMDEV_PS_PARAM_SPEED);
+	if (ret) {
+		dev_err(dev, "Set CXL patrol scrub params for speed fail ret=%d\n",
+			ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+static int cxl_mem_ps_speed_available_read(struct device *dev, char *buf)
+{
+	struct cxl_memdev_ps_params params;
+	int ret;
+
+	ret = cxl_mem_ps_get_attrbs(dev, &params);
+	if (ret) {
+		dev_err(dev, "Get CXL patrol scrub params fail ret=%d\n",
+			ret);
+		return ret;
+	}
+
+	sysfs_emit(buf, "%s\n", params.speed_avail);
+
+	return 0;
+}
+
+/**
+ * cxl_mem_patrol_scrub_is_visible() - Callback to return attribute visibility
+ * @drv_data: Pointer to driver-private data structure passed
+ *	      as argument to devm_scrub_device_register().
+ * @attr: Scrub attribute
+ * @region_id: ID of the memory region
+ *
+ * Returns: 0 on success, an error otherwise
+ */
+static umode_t cxl_mem_patrol_scrub_is_visible(const void *drv_data,
+					       u32 attr, int region_id)
+{
+	const struct cxl_patrol_scrub_context *cxl_ps_ctx = drv_data;
+
+	if (attr == scrub_speed_available ||
+	    attr == scrub_speed) {
+		if (!cxl_ps_ctx->scrub_cycle_changeable)
+			return 0;
+	}
+
+	switch (attr) {
+	case scrub_speed_available:
+		return 0444;
+	case scrub_enable:
+		return 0200;
+	case scrub_speed:
+		return 0644;
+	default:
+		return 0;
+	}
+}
+
+/**
+ * cxl_mem_patrol_scrub_read() - Read callback for data attributes
+ * @dev: Pointer to scrub device
+ * @attr: Scrub attribute
+ * @region_id: ID of the memory region
+ * @val: Pointer to the returned data
+ *
+ * Returns: 0 on success, an error otherwise
+ */
+static int cxl_mem_patrol_scrub_read(struct device *dev, u32 attr,
+				     int region_id, u64 *val)
+{
+
+	switch (attr) {
+	case scrub_speed:
+		return cxl_mem_ps_speed_read(dev->parent, val);
+	default:
+		return -ENOTSUPP;
+	}
+}
+
+/**
+ * cxl_mem_patrol_scrub_write() - Write callback for data attributes
+ * @dev: Pointer to scrub device
+ * @attr: Scrub attribute
+ * @region_id: ID of the memory region
+ * @val: Value to write
+ *
+ * Returns: 0 on success, an error otherwise
+ */
+static int cxl_mem_patrol_scrub_write(struct device *dev, u32 attr,
+				      int region_id, u64 val)
+{
+	switch (attr) {
+	case scrub_enable:
+		return cxl_mem_ps_enable_write(dev->parent, val);
+	case scrub_speed:
+		return cxl_mem_ps_speed_write(dev->parent, val);
+	default:
+		return -ENOTSUPP;
+	}
+}
+
+/**
+ * cxl_mem_patrol_scrub_read_strings() - Read callback for string attributes
+ * @dev: Pointer to scrub device
+ * @attr: Scrub attribute
+ * @region_id: ID of the memory region
+ * @buf: Pointer to the buffer for copying returned string
+ *
+ * Returns: 0 on success, an error otherwise
+ */
+static int cxl_mem_patrol_scrub_read_strings(struct device *dev, u32 attr,
+					     int region_id, char *buf)
+{
+	switch (attr) {
+	case scrub_speed_available:
+		return cxl_mem_ps_speed_available_read(dev->parent, buf);
+	default:
+		return -ENOTSUPP;
+	}
+}
+
+static const struct scrub_ops cxl_ps_scrub_ops = {
+	.is_visible = cxl_mem_patrol_scrub_is_visible,
+	.read = cxl_mem_patrol_scrub_read,
+	.write = cxl_mem_patrol_scrub_write,
+	.read_string = cxl_mem_patrol_scrub_read_strings,
+};
+
 int cxl_mem_patrol_scrub_init(struct cxl_memdev *cxlmd)
 {
+	char scrub_name[CXL_MEMDEV_MAX_NAME_LENGTH];
 	struct cxl_patrol_scrub_context *cxl_ps_ctx;
 	struct cxl_mbox_supp_feat_entry feat_entry;
 	struct cxl_memdev_ps_params params;
+	struct device *cxl_scrub_dev;
 	int ret;
 
 	ret = cxl_mem_get_supported_feature_entry(cxlmd, &cxl_patrol_scrub_uuid,
@@ -260,6 +443,14 @@ int cxl_mem_patrol_scrub_init(struct cxl_memdev *cxlmd)
 		return ret;
 	}
 	cxl_ps_ctx->scrub_cycle_changeable =  params.scrub_cycle_changeable;
+
+	snprintf(scrub_name, sizeof(scrub_name), "%s_%s",
+		 CXL_PATROL_SCRUB, dev_name(&cxlmd->dev));
+	cxl_scrub_dev = devm_scrub_device_register(&cxlmd->dev, scrub_name,
+						   cxl_ps_ctx, &cxl_ps_scrub_ops,
+						   CXL_MEMDEV_PATROL_SCRUB_NUM_REGIONS);
+	if (IS_ERR(cxl_scrub_dev))
+		return PTR_ERR(cxl_scrub_dev);
 
 	return 0;
 }
