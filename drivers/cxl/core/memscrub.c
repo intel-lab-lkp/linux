@@ -460,6 +460,11 @@ EXPORT_SYMBOL_NS_GPL(cxl_mem_patrol_scrub_init, CXL);
 #define CXL_MEMDEV_ECS_GET_FEAT_VERSION	0x01
 #define CXL_MEMDEV_ECS_SET_FEAT_VERSION	0x01
 
+#define CXL_DDR5_ECS	"cxl_ecs"
+
+/* The default number of regions for CXL memory device ECS */
+#define CXL_MEMDEV_ECS_NUM_REGIONS	1
+
 static const uuid_t cxl_ecs_uuid =
 	UUID_INIT(0xe5b13f22, 0x2328, 0x4a14, 0xb8, 0xba, 0xb9, 0x69, 0x1e,     \
 		  0x89, 0x33, 0x86);
@@ -577,9 +582,8 @@ static int cxl_mem_ecs_get_attrbs(struct device *dev, int fru_id,
 	return 0;
 }
 
-static int __maybe_unused
-cxl_mem_ecs_set_attrbs(struct device *dev, int fru_id,
-		       struct cxl_memdev_ecs_params *params, u8 param_type)
+static int cxl_mem_ecs_set_attrbs(struct device *dev, int fru_id,
+				  struct cxl_memdev_ecs_params *params, u8 param_type)
 {
 	struct cxl_memdev_ecs_feat_read_attrbs *rd_attrbs __free(kvfree) = NULL;
 	struct cxl_memdev_ecs_set_feat_pi *set_pi __free(kvfree) = NULL;
@@ -726,10 +730,231 @@ cxl_mem_ecs_set_attrbs(struct device *dev, int fru_id,
 	return 0;
 }
 
+static int cxl_mem_ecs_log_entry_type_write(struct device *dev, int region_id, long val)
+{
+	struct cxl_memdev_ecs_params params;
+	int ret;
+
+	params.log_entry_type = val;
+	ret = cxl_mem_ecs_set_attrbs(dev, region_id, &params,
+				     CXL_MEMDEV_ECS_PARAM_LOG_ENTRY_TYPE);
+	if (ret) {
+		dev_err(dev->parent, "Set CXL ECS params for log entry type fail ret=%d\n",
+			ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+static int cxl_mem_ecs_threshold_write(struct device *dev, int region_id, long val)
+{
+	struct cxl_memdev_ecs_params params;
+	int ret;
+
+	params.threshold = val;
+	ret = cxl_mem_ecs_set_attrbs(dev, region_id, &params,
+				     CXL_MEMDEV_ECS_PARAM_THRESHOLD);
+	if (ret) {
+		dev_err(dev->parent, "Set CXL ECS params for threshold fail ret=%d\n",
+			ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+static int cxl_mem_ecs_mode_write(struct device *dev, int region_id, long val)
+{
+	struct cxl_memdev_ecs_params params;
+	int ret;
+
+	params.mode = val;
+	ret = cxl_mem_ecs_set_attrbs(dev, region_id, &params,
+				     CXL_MEMDEV_ECS_PARAM_MODE);
+	if (ret) {
+		dev_err(dev->parent, "Set CXL ECS params for mode fail ret=%d\n",
+			ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+static int cxl_mem_ecs_reset_counter_write(struct device *dev, int region_id, long val)
+{
+	struct cxl_memdev_ecs_params params;
+	int ret;
+
+	params.reset_counter = val;
+	ret = cxl_mem_ecs_set_attrbs(dev, region_id, &params,
+				     CXL_MEMDEV_ECS_PARAM_RESET_COUNTER);
+	if (ret) {
+		dev_err(dev->parent, "Set CXL ECS params for reset ECC counter fail ret=%d\n",
+			ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+/**
+ * cxl_mem_ecs_is_visible() - Callback to return attribute visibility
+ * @drv_data: Pointer to driver-private data structure passed
+ *	      as argument to devm_scrub_device_register().
+ * @attr: Scrub attribute
+ * @region_id: ID of the memory region
+ *
+ * Returns: 0 on success, an error otherwise
+ */
+static umode_t cxl_mem_ecs_is_visible(const void *drv_data, u32 attr, int region_id)
+{
+	switch (attr) {
+	case scrub_reset_counter:
+		return 0200;
+	case scrub_ecs_log_entry_type_per_dram:
+	case scrub_ecs_log_entry_type_per_memory_media:
+	case scrub_mode_counts_rows:
+	case scrub_mode_counts_codewords:
+	case scrub_threshold_available:
+		return 0444;
+	case scrub_ecs_log_entry_type:
+	case scrub_mode:
+	case scrub_threshold:
+		return 0644;
+	default:
+		return 0;
+	}
+}
+
+/**
+ * cxl_mem_ecs_read() - Read callback for data attributes
+ * @dev: Pointer to scrub device
+ * @attr: Scrub attribute
+ * @region_id: ID of the memory region
+ * @val: Pointer to the returned data
+ *
+ * Returns: 0 on success, an error otherwise
+ */
+static int cxl_mem_ecs_read(struct device *dev, u32 attr, int region_id, u64 *val)
+{
+	struct cxl_memdev_ecs_params params;
+	int ret;
+
+	if (attr == scrub_ecs_log_entry_type ||
+	    attr == scrub_ecs_log_entry_type_per_dram ||
+	    attr == scrub_ecs_log_entry_type_per_memory_media ||
+	    attr == scrub_mode ||
+	    attr == scrub_mode_counts_rows ||
+	    attr == scrub_mode_counts_codewords ||
+	    attr == scrub_threshold) {
+		ret = cxl_mem_ecs_get_attrbs(dev, region_id, &params);
+		if (ret) {
+			dev_err(dev->parent, "Get CXL ECS params fail ret=%d\n", ret);
+			return ret;
+		}
+	}
+
+	switch (attr) {
+	case scrub_ecs_log_entry_type:
+		*val = params.log_entry_type;
+		break;
+	case scrub_ecs_log_entry_type_per_dram:
+		if (params.log_entry_type == ECS_LOG_ENTRY_TYPE_DRAM)
+			*val = 1;
+		else
+			*val = 0;
+		break;
+	case scrub_ecs_log_entry_type_per_memory_media:
+		if (params.log_entry_type == ECS_LOG_ENTRY_TYPE_MEM_MEDIA_FRU)
+			*val = 1;
+		else
+			*val = 0;
+		break;
+	case scrub_mode:
+		*val = params.mode;
+		break;
+	case scrub_mode_counts_rows:
+		if (params.mode == ECS_MODE_COUNTS_ROWS)
+			*val = 1;
+		else
+			*val = 0;
+		break;
+	case scrub_mode_counts_codewords:
+		if (params.mode == ECS_MODE_COUNTS_CODEWORDS)
+			*val = 1;
+		else
+			*val = 0;
+		break;
+	case scrub_threshold:
+		*val = params.threshold;
+		break;
+	default:
+		return -ENOTSUPP;
+	}
+
+	return 0;
+}
+
+/**
+ * cxl_mem_ecs_write() - Write callback for data attributes
+ * @dev: Pointer to scrub device
+ * @attr: Scrub attribute
+ * @region_id: ID of the memory region
+ * @val: Value to write
+ *
+ * Returns: 0 on success, an error otherwise
+ */
+static int cxl_mem_ecs_write(struct device *dev, u32 attr, int region_id, u64 val)
+{
+	switch (attr) {
+	case scrub_ecs_log_entry_type:
+		return cxl_mem_ecs_log_entry_type_write(dev, region_id, val);
+	case scrub_mode:
+		return cxl_mem_ecs_mode_write(dev, region_id, val);
+	case scrub_reset_counter:
+		return cxl_mem_ecs_reset_counter_write(dev, region_id, val);
+	case scrub_threshold:
+		return cxl_mem_ecs_threshold_write(dev, region_id, val);
+	default:
+		return -ENOTSUPP;
+	}
+}
+
+/**
+ * cxl_mem_ecs_read_strings() - Read callback for DDR5 ECS string attributes
+ * @dev: Pointer to ECS scrub device
+ * @attr: ECS scrub attribute
+ * @region_id: ID of the memory media FRU.
+ * @buf: Pointer to the buffer for copying returned string
+ *
+ * Returns: 0 on success, an error otherwise
+ */
+static int cxl_mem_ecs_read_strings(struct device *dev, u32 attr,
+				    int region_id, char *buf)
+{
+
+	switch (attr) {
+	case scrub_threshold_available:
+		return sysfs_emit(buf, "256,1024,4096\n");
+	default:
+		return -ENOTSUPP;
+	}
+}
+
+static const struct scrub_ops cxl_ecs_ops = {
+	.is_visible = cxl_mem_ecs_is_visible,
+	.read = cxl_mem_ecs_read,
+	.write = cxl_mem_ecs_write,
+	.read_string = cxl_mem_ecs_read_strings,
+};
+
 int cxl_mem_ddr5_ecs_init(struct cxl_memdev *cxlmd)
 {
+	char scrub_name[CXL_MEMDEV_MAX_NAME_LENGTH];
 	struct cxl_mbox_supp_feat_entry feat_entry;
 	struct cxl_ecs_context *cxl_ecs_ctx;
+	struct device *cxl_scrub_dev;
 	int nmedia_frus;
 	int ret;
 
@@ -749,6 +974,14 @@ int cxl_mem_ddr5_ecs_init(struct cxl_memdev *cxlmd)
 		cxl_ecs_ctx->nregions = nmedia_frus;
 		cxl_ecs_ctx->get_feat_size = feat_entry.get_feat_size;
 		cxl_ecs_ctx->set_feat_size = feat_entry.set_feat_size;
+
+		snprintf(scrub_name, sizeof(scrub_name), "%s_%s",
+			 CXL_DDR5_ECS, dev_name(&cxlmd->dev));
+		cxl_scrub_dev = devm_scrub_device_register(&cxlmd->dev, scrub_name,
+							  cxl_ecs_ctx, &cxl_ecs_ops,
+							  cxl_ecs_ctx->nregions);
+		if (IS_ERR(cxl_scrub_dev))
+			return PTR_ERR(cxl_scrub_dev);
 	}
 
 	return 0;
