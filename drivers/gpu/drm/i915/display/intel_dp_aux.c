@@ -67,7 +67,7 @@ intel_dp_aux_wait_done(struct intel_dp *intel_dp)
 	if (ret == -ETIMEDOUT)
 		drm_err(&i915->drm,
 			"%s: did not complete or timeout within %ums (status 0x%08x)\n",
-			intel_dp->aux.name, timeout_ms, status);
+			intel_dp->aux.name ? intel_dp->aux.name : "", timeout_ms, status);
 
 	return status;
 }
@@ -302,7 +302,7 @@ intel_dp_aux_xfer(struct intel_dp *intel_dp,
 		if (status != intel_dp->aux_busy_last_status) {
 			drm_WARN(&i915->drm, 1,
 				 "%s: not started (status 0x%08x)\n",
-				 intel_dp->aux.name, status);
+				 intel_dp->aux.name ? intel_dp->aux.name : "", status);
 			intel_dp->aux_busy_last_status = status;
 		}
 
@@ -362,7 +362,7 @@ intel_dp_aux_xfer(struct intel_dp *intel_dp,
 
 	if ((status & DP_AUX_CH_CTL_DONE) == 0) {
 		drm_err(&i915->drm, "%s: not done (status 0x%08x)\n",
-			intel_dp->aux.name, status);
+			intel_dp->aux.name ? intel_dp->aux.name : "", status);
 		ret = -EBUSY;
 		goto out;
 	}
@@ -374,7 +374,7 @@ done:
 	 */
 	if (status & DP_AUX_CH_CTL_RECEIVE_ERROR) {
 		drm_err(&i915->drm, "%s: receive error (status 0x%08x)\n",
-			intel_dp->aux.name, status);
+			intel_dp->aux.name ? intel_dp->aux.name : "", status);
 		ret = -EIO;
 		goto out;
 	}
@@ -385,7 +385,7 @@ done:
 	 */
 	if (status & DP_AUX_CH_CTL_TIME_OUT_ERROR) {
 		drm_dbg_kms(&i915->drm, "%s: timeout (status 0x%08x)\n",
-			    intel_dp->aux.name, status);
+			    intel_dp->aux.name ? intel_dp->aux.name : "", status);
 		ret = -ETIMEDOUT;
 		goto out;
 	}
@@ -401,7 +401,7 @@ done:
 	if (recv_bytes == 0 || recv_bytes > 20) {
 		drm_dbg_kms(&i915->drm,
 			    "%s: Forbidden recv_bytes = %d on aux transaction\n",
-			    intel_dp->aux.name, recv_bytes);
+			    intel_dp->aux.name ? intel_dp->aux.name : "", recv_bytes);
 		ret = -EBUSY;
 		goto out;
 	}
