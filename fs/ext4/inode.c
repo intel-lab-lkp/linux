@@ -43,6 +43,7 @@
 #include <linux/iversion.h>
 
 #include "ext4_jbd2.h"
+#include "ext4_extents.h"
 #include "xattr.h"
 #include "acl.h"
 #include "truncate.h"
@@ -2172,10 +2173,10 @@ out:
 	return err;
 }
 
-static int mpage_map_one_extent(handle_t *handle, struct mpage_da_data *mpd)
+static int mpage_map_one_extent(handle_t *handle, struct inode *inode,
+				struct ext4_map_blocks *map,
+				struct ext4_io_submit *io)
 {
-	struct inode *inode = mpd->inode;
-	struct ext4_map_blocks *map = &mpd->map;
 	int get_blocks_flags;
 	int err, dioread_nolock;
 
@@ -2207,13 +2208,13 @@ static int mpage_map_one_extent(handle_t *handle, struct mpage_da_data *mpd)
 	err = ext4_map_blocks(handle, inode, map, get_blocks_flags);
 	if (err < 0)
 		return err;
-	if (dioread_nolock && (map->m_flags & EXT4_MAP_UNWRITTEN)) {
-		if (!mpd->io_submit.io_end->handle &&
+	if (io && dioread_nolock && (map->m_flags & EXT4_MAP_UNWRITTEN)) {
+		if (!io->io_end->handle &&
 		    ext4_handle_valid(handle)) {
-			mpd->io_submit.io_end->handle = handle->h_rsv_handle;
+			io->io_end->handle = handle->h_rsv_handle;
 			handle->h_rsv_handle = NULL;
 		}
-		ext4_set_io_unwritten_flag(inode, mpd->io_submit.io_end);
+		ext4_set_io_unwritten_flag(inode, io->io_end);
 	}
 
 	BUG_ON(map->m_len == 0);
@@ -2257,7 +2258,7 @@ static int mpage_map_and_submit_extent(handle_t *handle,
 		return PTR_ERR(io_end_vec);
 	io_end_vec->offset = ((loff_t)map->m_lblk) << inode->i_blkbits;
 	do {
-		err = mpage_map_one_extent(handle, mpd);
+		err = mpage_map_one_extent(handle, inode, map, &mpd->io_submit);
 		if (err < 0) {
 			struct super_block *sb = inode->i_sb;
 
@@ -2820,22 +2821,6 @@ static int ext4_writepages(struct address_space *mapping,
 	ext4_writepages_up_read(sb, alloc_ctx);
 
 	return ret;
-}
-
-int ext4_normal_submit_inode_data_buffers(struct jbd2_inode *jinode)
-{
-	struct writeback_control wbc = {
-		.sync_mode = WB_SYNC_ALL,
-		.nr_to_write = LONG_MAX,
-		.range_start = jinode->i_dirty_start,
-		.range_end = jinode->i_dirty_end,
-	};
-	struct mpage_da_data mpd = {
-		.inode = jinode->i_vfs_inode,
-		.wbc = &wbc,
-		.can_map = 0,
-	};
-	return ext4_do_writepages(&mpd);
 }
 
 static int ext4_dax_writepages(struct address_space *mapping,
@@ -3773,10 +3758,237 @@ static void ext4_iomap_readahead(struct readahead_control *rac)
 	iomap_readahead(rac, &ext4_iomap_read_ops);
 }
 
+struct ext4_writeback_ctx {
+	struct iomap_writepage_ctx ctx;
+	struct writeback_control *wbc;
+	unsigned int can_map:1;	/* Can writepages call map blocks? */
+};
+
+static int ext4_iomap_map_blocks(struct iomap_writepage_ctx *wpc,
+				 struct inode *inode, loff_t offset)
+{
+	struct ext4_writeback_ctx *ewpc =
+			container_of(wpc, struct ext4_writeback_ctx, ctx);
+	struct super_block *sb = inode->i_sb;
+	struct journal_s *journal = EXT4_SB(sb)->s_journal;
+	int needed_blocks;
+	struct ext4_map_blocks map;
+	handle_t *handle = NULL;
+	unsigned int blkbits = inode->i_blkbits;
+	unsigned int index = offset >> blkbits;
+	unsigned int end = ewpc->wbc->range_end >> blkbits;
+	unsigned int len = end - index + 1 ? : UINT_MAX;
+	loff_t new_disksize;
+	bool allocated = false;
+	int ret = 0;
+
+	if (unlikely(ext4_forced_shutdown(inode->i_sb)))
+		return -EIO;
+
+	/* Check validity of the cached writeback mapping. */
+	if (offset >= wpc->iomap.offset &&
+	    offset < wpc->iomap.offset + wpc->iomap.length)
+		return 0;
+
+	needed_blocks = ext4_da_writepages_trans_blocks(inode);
+
+retry:
+	map.m_lblk = index;
+	map.m_len = min_t(unsigned int, EXT_UNWRITTEN_MAX_LEN, len);
+	ret = ext4_map_blocks(NULL, inode, &map, 0);
+	if (ret < 0)
+		return ret;
+	ret = 0;
+
+	if (!ewpc->can_map &&
+	    (map.m_len == 0 || map.m_flags != EXT4_MAP_MAPPED)) {
+		/*
+		 * We cannot reach here when we do a journal commit via
+		 * journal_submit_data_buffers(), we must write mapped
+		 * blocks to achieve data=ordered mode guarantees.
+		 */
+		WARN_ON_ONCE(1);
+		return -EIO;
+	}
+
+	allocated = (map.m_flags & EXT4_MAP_MAPPED) ||
+		    ((map.m_flags & EXT4_MAP_UNWRITTEN) &&
+				ext4_should_dioread_nolock(inode));
+	if (allocated) {
+		new_disksize = offset + (map.m_len << blkbits);
+		if (new_disksize <= READ_ONCE(EXT4_I(inode)->i_disksize))
+			goto out;
+	}
+
+	handle = ext4_journal_start(inode, EXT4_HT_WRITE_PAGE, needed_blocks);
+	if (IS_ERR(handle)) {
+		ret = PTR_ERR(handle);
+		return ret;
+	}
+
+	if (!allocated) {
+		ret = mpage_map_one_extent(handle, inode, &map, NULL);
+		if (ret < 0) {
+			if (ext4_forced_shutdown(sb))
+				goto out_journal;
+
+			/*
+			 * Retry transient ENOSPC errors, if
+			 * ext4_count_free_blocks() is non-zero, a commit
+			 * should free up blocks.
+			 */
+			if (ret == -ENOSPC && ext4_count_free_clusters(sb)) {
+				ext4_journal_stop(handle);
+				jbd2_journal_force_commit_nested(journal);
+				goto retry;
+			}
+
+			ext4_msg(sb, KERN_CRIT,
+				 "Delayed block allocation failed for "
+				 "inode %lu at logical offset %llu with "
+				 "max blocks %u with error %d",
+				 inode->i_ino, (unsigned long long)map.m_lblk,
+				 (unsigned int)map.m_len, -ret);
+			ext4_msg(sb, KERN_CRIT,
+				 "This should not happen!! Data will "
+				 "be lost\n");
+			if (ret == -ENOSPC)
+				ext4_print_free_blocks(inode);
+			goto out_journal;
+		}
+	}
+
+	/*
+	 * Update on-disk size after IO is submitted.  Races with
+	 * truncate are avoided by checking i_size under i_data_sem.
+	 */
+	new_disksize = offset + (map.m_len << blkbits);
+	if (new_disksize > READ_ONCE(EXT4_I(inode)->i_disksize)) {
+		loff_t i_size;
+
+		down_write(&EXT4_I(inode)->i_data_sem);
+		i_size = i_size_read(inode);
+		if (new_disksize > i_size)
+			new_disksize = i_size;
+		if (new_disksize > EXT4_I(inode)->i_disksize)
+			EXT4_I(inode)->i_disksize = new_disksize;
+		up_write(&EXT4_I(inode)->i_data_sem);
+		ret = ext4_mark_inode_dirty(handle, inode);
+		if (ret)
+			EXT4_ERROR_INODE_ERR(inode, -ret,
+					     "Failed to mark inode dirty");
+	}
+out_journal:
+	ext4_journal_stop(handle);
+out:
+	if (!ret)
+		ext4_set_iomap(inode, &wpc->iomap, &map, offset,
+			       map.m_len << blkbits, 0);
+	return 0;
+}
+
+static int ext4_iomap_prepare_ioend(struct iomap_ioend *ioend, int status)
+{
+	handle_t *handle = NULL;
+	struct inode *inode = ioend->io_inode;
+	int rsv_blocks;
+	int ret;
+
+	if (ioend->io_type != IOMAP_UNWRITTEN)
+		return status;
+
+	ioend->io_bio->bi_end_io = ext4_iomap_end_bio;
+
+	/*
+	 * Reserve enough transaction credits for unwritten extent
+	 * convert processing in end IO.
+	 */
+	rsv_blocks = 1 + ext4_chunk_trans_blocks(inode,
+				ioend->io_size >> inode->i_blkbits);
+	handle = ext4_journal_start_with_reserve(inode,
+				EXT4_HT_WRITE_PAGE, 0, rsv_blocks);
+	if (IS_ERR(handle)) {
+		ret = PTR_ERR(handle);
+		ext4_msg(inode->i_sb, KERN_CRIT,
+			 "%s: jbd2_start: %ld blocks, ino %lu; err %d\n",
+			 __func__, ioend->io_size >> inode->i_blkbits,
+			 inode->i_ino, ret);
+		return status ? status : ret;
+	}
+	if (ext4_handle_valid(handle)) {
+		ioend->io_private = handle->h_rsv_handle;
+		handle->h_rsv_handle = NULL;
+	}
+	ext4_journal_stop(handle);
+
+	return status;
+}
+
+static const struct iomap_writeback_ops ext4_iomap_writeback_ops = {
+	.map_blocks = ext4_iomap_map_blocks,
+	.prepare_ioend = ext4_iomap_prepare_ioend,
+};
+
+static int ext4_iomap_do_writepages(struct address_space *mapping,
+				    struct writeback_control *wbc,
+				    struct ext4_writeback_ctx *ewpc)
+{
+	struct inode *inode = mapping->host;
+	long nr_to_write = wbc->nr_to_write;
+	int ret;
+
+	trace_ext4_writepages(inode, wbc);
+	ret = iomap_writepages(mapping, wbc, &ewpc->ctx,
+			       &ext4_iomap_writeback_ops);
+	trace_ext4_writepages_result(inode, wbc, ret,
+				     nr_to_write - wbc->nr_to_write);
+	return ret;
+}
+
 static int ext4_iomap_writepages(struct address_space *mapping,
 				 struct writeback_control *wbc)
 {
-	return 0;
+	struct ext4_writeback_ctx ewpc = {
+		.wbc = wbc,
+		.can_map = 1,
+	};
+	struct super_block *sb = mapping->host->i_sb;
+	int alloc_ctx, ret;
+
+	if (unlikely(ext4_forced_shutdown(sb)))
+		return -EIO;
+
+	alloc_ctx = ext4_writepages_down_read(sb);
+	ret = ext4_iomap_do_writepages(mapping, wbc, &ewpc);
+	ext4_writepages_up_read(sb, alloc_ctx);
+
+	return ret;
+}
+
+int ext4_normal_submit_inode_data_buffers(struct jbd2_inode *jinode)
+{
+	struct inode *inode = jinode->i_vfs_inode;
+	struct writeback_control wbc = {
+		.sync_mode = WB_SYNC_ALL,
+		.nr_to_write = LONG_MAX,
+		.range_start = jinode->i_dirty_start,
+		.range_end = jinode->i_dirty_end,
+	};
+	struct mpage_da_data mpd = {
+		.inode = inode,
+		.wbc = &wbc,
+		.can_map = 0,
+	};
+	struct ext4_writeback_ctx ewpc = {
+		.wbc = &wbc,
+		.can_map = 0,
+	};
+
+	if (ext4_test_inode_state(inode, EXT4_STATE_BUFFERED_IOMAP))
+		return ext4_iomap_do_writepages(jinode->i_vfs_inode->i_mapping,
+						&wbc, &ewpc);
+
+	return ext4_do_writepages(&mpd);
 }
 
 /*
