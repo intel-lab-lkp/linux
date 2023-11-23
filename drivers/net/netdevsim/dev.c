@@ -342,6 +342,17 @@ static int nsim_dev_debugfs_init(struct nsim_dev *nsim_dev)
 	debugfs_create_file("max_vfs", 0600, nsim_dev->ddir,
 			    nsim_dev, &nsim_dev_max_vfs_fops);
 
+	debugfs_create_u64("dpll_clock_id", 0600,
+			   nsim_dev->ddir, &nsim_dev->dpll.dpll_e_pd.clock_id);
+	debugfs_create_u32("dpll_e_status", 0600, nsim_dev->ddir,
+			   &nsim_dev->dpll.dpll_e_pd.status);
+	debugfs_create_u32("dpll_p_status", 0600, nsim_dev->ddir,
+			   &nsim_dev->dpll.dpll_p_pd.status);
+	debugfs_create_u32("dpll_e_temp", 0600, nsim_dev->ddir,
+			   &nsim_dev->dpll.dpll_e_pd.temperature);
+	debugfs_create_u32("dpll_p_temp", 0600, nsim_dev->ddir,
+			   &nsim_dev->dpll.dpll_p_pd.temperature);
+
 	nsim_dev->nodes_ddir = debugfs_create_dir("rate_nodes", nsim_dev->ddir);
 	if (IS_ERR(nsim_dev->nodes_ddir)) {
 		err = PTR_ERR(nsim_dev->nodes_ddir);
@@ -1601,14 +1612,21 @@ int nsim_drv_probe(struct nsim_bus_dev *nsim_bus_dev)
 	if (err)
 		goto err_psample_exit;
 
-	err = nsim_dev_port_add_all(nsim_dev, nsim_bus_dev->port_count);
+	err = nsim_dpll_init_owner(&nsim_dev->dpll, nsim_bus_dev->port_count);
 	if (err)
 		goto err_hwstats_exit;
 
+	err = nsim_dev_port_add_all(nsim_dev, nsim_bus_dev->port_count);
+	if (err)
+		goto err_teardown_dpll;
+
 	nsim_dev->esw_mode = DEVLINK_ESWITCH_MODE_LEGACY;
 	devl_unlock(devlink);
+
 	return 0;
 
+err_teardown_dpll:
+	nsim_dpll_free_owner(&nsim_dev->dpll);
 err_hwstats_exit:
 	nsim_dev_hwstats_exit(nsim_dev);
 err_psample_exit:
@@ -1656,6 +1674,7 @@ static void nsim_dev_reload_destroy(struct nsim_dev *nsim_dev)
 	}
 
 	nsim_dev_port_del_all(nsim_dev);
+	nsim_dpll_free_owner(&nsim_dev->dpll);
 	nsim_dev_hwstats_exit(nsim_dev);
 	nsim_dev_psample_exit(nsim_dev);
 	nsim_dev_health_exit(nsim_dev);

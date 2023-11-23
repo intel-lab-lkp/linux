@@ -25,6 +25,8 @@
 #include <net/udp_tunnel.h>
 #include <net/xdp.h>
 #include <net/macsec.h>
+#include <linux/dpll.h>
+#include <linux/random.h>
 
 #define DRV_NAME	"netdevsim"
 
@@ -88,6 +90,42 @@ struct nsim_ethtool {
 	struct ethtool_coalesce coalesce;
 	struct ethtool_ringparam ring;
 	struct ethtool_fecparam fec;
+};
+
+struct nsim_dpll_priv_data {
+	enum dpll_mode mode;
+	int temperature;
+	u64 clock_id;
+	enum dpll_lock_status status;
+};
+
+struct nsim_pin_priv_data {
+	u64 frequency;
+	enum dpll_pin_direction direction;
+	enum dpll_pin_state state_pin;
+	enum dpll_pin_state state_dpll;
+	u32 prio;
+};
+
+struct nsim_dpll {
+	bool owner;
+
+	struct dpll_device *dpll_e;
+	struct nsim_dpll_priv_data dpll_e_pd;
+	struct dpll_device *dpll_p;
+	struct nsim_dpll_priv_data dpll_p_pd;
+
+	struct dpll_pin_properties pp_gnss;
+	struct dpll_pin *p_gnss;
+	struct nsim_pin_priv_data p_gnss_pd;
+
+	struct dpll_pin_properties pp_pps;
+	struct dpll_pin *p_pps;
+	struct nsim_pin_priv_data p_pps_pd;
+
+	struct dpll_pin_properties *pp_rclk;
+	struct dpll_pin **p_rclk;
+	struct nsim_pin_priv_data *p_rclk_pd;
 };
 
 struct netdevsim {
@@ -323,6 +361,7 @@ struct nsim_dev {
 	} udp_ports;
 	struct nsim_dev_psample *psample;
 	u16 esw_mode;
+	struct nsim_dpll dpll;
 };
 
 static inline bool nsim_esw_mode_is_legacy(struct nsim_dev *nsim_dev)
@@ -414,6 +453,11 @@ struct nsim_bus_dev {
 	unsigned int num_vfs;
 	bool init;
 };
+
+int nsim_dpll_init_owner(struct nsim_dpll *dpll, unsigned int ports_count);
+void nsim_dpll_free_owner(struct nsim_dpll *dpll);
+int nsim_rclk_init(struct netdevsim *ns);
+void nsim_rclk_free(struct netdevsim *ns);
 
 int nsim_bus_init(void);
 void nsim_bus_exit(void);
