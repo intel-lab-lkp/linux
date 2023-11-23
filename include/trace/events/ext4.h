@@ -2291,6 +2291,34 @@ TRACE_EVENT(ext4_es_find_extent_range_exit,
 		  __entry->pblk, show_extent_status(__entry->status))
 );
 
+TRACE_EVENT(ext4_es_skip_hole_extent,
+	TP_PROTO(struct inode *inode, ext4_lblk_t lblk,
+		 ext4_lblk_t len, ext4_lblk_t next_lblk),
+
+	TP_ARGS(inode, lblk, len, next_lblk),
+
+	TP_STRUCT__entry(
+		__field(	dev_t,		dev		)
+		__field(	ino_t,		ino		)
+		__field(	ext4_lblk_t,	lblk		)
+		__field(	ext4_lblk_t,	len		)
+		__field(	ext4_lblk_t,	next		)
+	),
+
+	TP_fast_assign(
+		__entry->dev	= inode->i_sb->s_dev;
+		__entry->ino	= inode->i_ino;
+		__entry->lblk	= lblk;
+		__entry->len	= len;
+		__entry->next	= next_lblk;
+	),
+
+	TP_printk("dev %d,%d ino %lu [%u/%u) next_lblk %u",
+		  MAJOR(__entry->dev), MINOR(__entry->dev),
+		  (unsigned long) __entry->ino, __entry->lblk,
+		  __entry->len, __entry->next)
+);
+
 TRACE_EVENT(ext4_es_lookup_extent_enter,
 	TP_PROTO(struct inode *inode, ext4_lblk_t lblk),
 
