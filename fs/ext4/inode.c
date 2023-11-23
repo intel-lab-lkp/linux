@@ -3525,13 +3525,154 @@ const struct iomap_ops ext4_iomap_report_ops = {
 	.iomap_begin = ext4_iomap_begin_report,
 };
 
+static int ext4_iomap_da_map_blocks(struct inode *inode,
+				    struct ext4_map_blocks *map)
+{
+	struct extent_status es;
+	unsigned int status;
+	ext4_lblk_t next;
+	int mapped_len;
+	int ret = 0;
+#ifdef ES_AGGRESSIVE_TEST
+	struct ext4_map_blocks orig_map;
+
+	memcpy(&orig_map, map, sizeof(*map));
+#endif
+
+	map->m_flags = 0;
+	ext_debug(inode, "max_blocks %u, logical block %llu\n", map->m_len,
+		  (unsigned long long)map->m_lblk);
+
+	/* Lookup extent status tree firstly */
+	if (ext4_es_lookup_extent(inode, map->m_lblk, NULL, &es)) {
+		int es_len = es.es_len - (map->m_lblk - es.es_lblk);
+
+		map->m_len = min_t(unsigned int, map->m_len, es_len);
+		if (ext4_es_is_delonly(&es)) {
+			map->m_pblk = 0;
+			map->m_flags |= EXT4_MAP_DELAYED;
+			return 0;
+		}
+		if (ext4_es_is_hole(&es)) {
+			down_read(&EXT4_I(inode)->i_data_sem);
+			goto add_delayed;
+		}
+
+		map->m_pblk = ext4_es_pblock(&es) + map->m_lblk - es.es_lblk;
+		if (ext4_es_is_written(&es))
+			map->m_flags |= EXT4_MAP_MAPPED;
+		else if (ext4_es_is_unwritten(&es))
+			map->m_flags |= EXT4_MAP_UNWRITTEN;
+		else
+			BUG();
+
+#ifdef ES_AGGRESSIVE_TEST
+		ext4_map_blocks_es_recheck(NULL, inode, map, &orig_map, 0);
+#endif
+		/* Already delayed */
+		if (ext4_es_is_delayed(&es))
+			return 0;
+
+		down_read(&EXT4_I(inode)->i_data_sem);
+		goto insert_extent;
+	}
+
+	/*
+	 * Not found cached extents, adjust the length if it has been
+	 * partially allocated.
+	 */
+	if (es.es_lblk > map->m_lblk &&
+	    es.es_lblk < map->m_lblk + map->m_len) {
+		next = es.es_lblk;
+		if (ext4_es_is_hole(&es))
+			next = ext4_es_skip_hole_extent(inode, map->m_lblk,
+							map->m_len);
+		map->m_len = next - map->m_lblk;
+	}
+
+	/*
+	 * Try to see if we can get blocks without requesting new file
+	 * system blocks.
+	 */
+	down_read(&EXT4_I(inode)->i_data_sem);
+	if (ext4_test_inode_flag(inode, EXT4_INODE_EXTENTS))
+		mapped_len = ext4_ext_map_blocks(NULL, inode, map, 0);
+	else
+		mapped_len = ext4_ind_map_blocks(NULL, inode, map, 0);
+	if (mapped_len < 0) {
+		ret = mapped_len;
+		goto out_unlock;
+	}
+	if (mapped_len == 0)
+		goto add_delayed;
+
+	if (unlikely(mapped_len != map->m_len)) {
+		ext4_warning(inode->i_sb,
+			     "ES len assertion failed for inode %lu: "
+			     "retval %d != map->m_len %d",
+			     inode->i_ino, mapped_len, map->m_len);
+		WARN_ON(1);
+	}
+
+insert_extent:
+	status = map->m_flags & EXT4_MAP_UNWRITTEN ?
+			EXTENT_STATUS_UNWRITTEN : EXTENT_STATUS_WRITTEN;
+	if (status == EXTENT_STATUS_UNWRITTEN)
+		status |= EXTENT_STATUS_DELAYED;
+	ext4_es_insert_extent(inode, map->m_lblk, map->m_len,
+			      map->m_pblk, status);
+	goto out_unlock;
+add_delayed:
+	ret = ext4_insert_delayed_blocks(inode, map->m_lblk, map->m_len);
+out_unlock:
+	up_read((&EXT4_I(inode)->i_data_sem));
+	return ret;
+}
+
+static int ext4_iomap_noda_map_blocks(struct inode *inode,
+				      struct ext4_map_blocks *map)
+{
+	handle_t *handle;
+	int ret, needed_blocks;
+	int flags;
+
+	/*
+	 * Reserve one block more for addition to orphan list in case
+	 * we allocate blocks but write fails for some reason.
+	 */
+	needed_blocks = ext4_writepage_trans_blocks(inode) + 1;
+	handle = ext4_journal_start(inode, EXT4_HT_WRITE_PAGE, needed_blocks);
+	if (IS_ERR(handle))
+		return PTR_ERR(handle);
+
+	if (ext4_should_dioread_nolock(inode))
+		flags = EXT4_GET_BLOCKS_CREATE_UNWRIT_EXT;
+	else
+		flags = EXT4_GET_BLOCKS_CREATE;
+
+	ret = ext4_map_blocks(handle, inode, map, flags);
+	if (ret < 0) {
+		ext4_journal_stop(handle);
+		return ret;
+	}
+
+	return 0;
+}
+
+#define IOMAP_F_EXT4_NONDELALLOC IOMAP_F_PRIVATE
+
 static int ext4_iomap_buffered_io_begin(struct inode *inode, loff_t offset,
 				loff_t length, unsigned int flags,
 				struct iomap *iomap, struct iomap *srcmap)
 {
-	int ret;
+	int ret, retries = 0;
 	struct ext4_map_blocks map;
 	u8 blkbits = inode->i_blkbits;
+	bool no_delalloc = false;
+
+	if ((flags & IOMAP_WRITE) &&
+	    unlikely(ext4_forced_shutdown(inode->i_sb)))
+		return -EIO;
 
 	if ((offset >> blkbits) > EXT4_MAX_LOGICAL_BLOCK)
 		return -EINVAL;
@@ -3539,6 +3680,7 @@ static int ext4_iomap_buffered_io_begin(struct inode *inode, loff_t offset,
 	if (WARN_ON_ONCE(ext4_has_inline_data(inode)))
 		return -ERANGE;
 
+retry:
 	/*
 	 * Calculate the first and last logical blocks respectively.
 	 */
@@ -3546,13 +3688,76 @@ static int ext4_iomap_buffered_io_begin(struct inode *inode, loff_t offset,
 	map.m_len = min_t(loff_t, (offset + length - 1) >> blkbits,
 			  EXT4_MAX_LOGICAL_BLOCK) - map.m_lblk + 1;
 
-	ret = ext4_map_blocks(NULL, inode, &map, 0);
+	if (flags & IOMAP_WRITE) {
+		if (test_opt(inode->i_sb, DELALLOC) &&
+		    !ext4_nonda_switch(inode->i_sb)) {
+			ret = ext4_iomap_da_map_blocks(inode, &map);
+		} else {
+			ret = ext4_iomap_noda_map_blocks(inode, &map);
+			no_delalloc = true;
+		}
+		if (ret == -ENOSPC &&
+		    ext4_should_retry_alloc(inode->i_sb, &retries))
+			goto retry;
+	} else {
+		ret = ext4_map_blocks(NULL, inode, &map, 0);
+	}
 	if (ret < 0)
 		return ret;
 
 	ext4_set_iomap(inode, iomap, &map, offset, length, flags);
+	if (no_delalloc)
+		iomap->flags |= IOMAP_F_EXT4_NONDELALLOC;
+
 	return 0;
 }
+
+static int ext4_iomap_buffered_write_end(struct inode *inode, loff_t offset,
+					 loff_t length, ssize_t written,
+					 unsigned flags, struct iomap *iomap)
+{
+	handle_t *handle;
+	int ret = 0, ret2;
+
+	if (!(flags & IOMAP_WRITE))
+		return 0;
+	if (!(iomap->flags & IOMAP_F_EXT4_NONDELALLOC))
+		return 0;
+
+	handle = ext4_journal_current_handle();
+	if (iomap->flags & IOMAP_F_SIZE_CHANGED) {
+		ext4_update_i_disksize(inode, inode->i_size);
+		ret = ext4_mark_inode_dirty(handle, inode);
+	}
+
+	/*
+	 * If we have allocated more blocks and copied less.
+	 * We will have blocks allocated outside inode->i_size,
+	 * so truncate them.
+	 */
+	if (offset + length > inode->i_size)
+		ext4_orphan_add(handle, inode);
+
+	ret2 = ext4_journal_stop(handle);
+	ret = ret ? ret : ret2;
+
+	if (offset + length > inode->i_size) {
+		ext4_truncate_failed_write(inode);
+		/*
+		 * If truncate failed early the inode might still be
+		 * on the orphan list; we need to make sure the inode
+		 * is removed from the orphan list in that case.
+		 */
+		if (inode->i_nlink)
+			ext4_orphan_del(NULL, inode);
+	}
+	return ret;
+}
+
+const struct iomap_ops ext4_iomap_buffered_write_ops = {
+	.iomap_begin = ext4_iomap_buffered_io_begin,
+	.iomap_end = ext4_iomap_buffered_write_end,
+};
 
 const struct iomap_ops ext4_iomap_read_ops = {
 	.iomap_begin = ext4_iomap_buffered_io_begin,
