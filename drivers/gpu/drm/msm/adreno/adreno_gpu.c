@@ -144,6 +144,10 @@ static int zap_shader_load_mdt(struct msm_gpu *gpu, const char *fwname,
 		char *newname;
 
 		newname = kasprintf(GFP_KERNEL, "qcom/%s", fwname);
+		if (!newname) {
+			ret = -ENOMEM;
+			goto out;
+		}
 
 		ret = qcom_mdt_load(dev, fw, newname, pasid,
 				mem_region, mem_phys, mem_size, NULL);
