@@ -353,6 +353,67 @@ err_unlock:
 
 	return ret;
 }
+
+COMPAT_SYSCALL_DEFINE5(futex_waitv, struct futex_waitv __user *, waiters,
+		unsigned int, nr_futexes, unsigned int, flags,
+		struct old_timespec32 __user *, timeout, clockid_t, clockid)
+{
+	struct hrtimer_sleeper to;
+	struct futex_vector *futexv;
+	struct timespec64 ts;
+	ktime_t time;
+	int ret;
+
+	/* This syscall supports no flags for now */
+	if (flags)
+		return -EINVAL;
+
+	if (!nr_futexes || nr_futexes > FUTEX_WAITV_MAX || !waiters)
+		return -EINVAL;
+
+	if (timeout) {
+		int flag_clkid = 0, flag_init = 0;
+
+		if (clockid == CLOCK_REALTIME) {
+			flag_clkid = FLAGS_CLOCKRT;
+			flag_init = FUTEX_CLOCK_REALTIME;
+		}
+
+		if (clockid != CLOCK_REALTIME && clockid != CLOCK_MONOTONIC)
+			return -EINVAL;
+
+		if (get_old_timespec32(&ts, timeout))
+			return -EFAULT;
+
+		/*
+		 * Since there's no opcode for futex_waitv, use
+		 * FUTEX_WAIT_BITSET that uses absolute timeout as well
+		 */
+		ret = futex_init_timeout(FUTEX_WAIT_BITSET, flag_init, &ts, &time);
+		if (ret)
+			return ret;
+
+		futex_setup_timer(&time, &to, flag_clkid, 0);
+	}
+
+	futexv = kcalloc(nr_futexes, sizeof(*futexv), GFP_KERNEL);
+	if (!futexv) {
+		ret = -ENOMEM;
+		goto destroy_timer;
+	}
+
+	ret = futex_parse_waitv(futexv, waiters, nr_futexes, futex_wake_mark,
+				NULL);
+	if (!ret)
+		ret = futex_wait_multiple(futexv, nr_futexes, timeout ? &to : NULL);
+
+	kfree(futexv);
+
+destroy_timer:
+	if (timeout)
+		futex2_destroy_timeout(&to);
+	return ret;
+}
 #endif /* CONFIG_COMPAT */
 
 #ifdef CONFIG_COMPAT_32BIT_TIME
