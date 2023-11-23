@@ -282,6 +282,10 @@ int sof_pci_probe(struct pci_dev *pci, const struct pci_device_id *pci_id)
 			devm_kasprintf(dev, GFP_KERNEL, "%s/%s",
 				       sof_pdata->desc->default_fw_path[sof_pdata->ipc_type],
 				       "community");
+		if (!sof_pdata->fw_filename_prefix) {
+			ret = -ENOMEM;	
+			goto out;
+		}
 
 		dev_dbg(dev,
 			"Platform uses community key, changed fw path to %s\n",
@@ -303,6 +307,10 @@ int sof_pci_probe(struct pci_dev *pci, const struct pci_device_id *pci_id)
 				devm_kasprintf(dev, GFP_KERNEL, "%s/%s",
 					sof_pdata->desc->default_lib_path[sof_pdata->ipc_type],
 					"community");
+			if (!sof_pdata->fw_lib_prefix) {
+				ret = -ENOMEM;
+				goto out;
+			}
 
 			dev_dbg(dev,
 				"Platform uses community key, changed fw_lib path to %s\n",
