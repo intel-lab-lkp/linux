@@ -597,6 +597,14 @@ ext4_move_extents(struct file *o_filp, struct file *d_filp, __u64 orig_blk,
 		return -EOPNOTSUPP;
 	}
 
+	/* TODO: not supported since block getting function is not switched */
+	if (ext4_test_inode_state(orig_inode, EXT4_STATE_BUFFERED_IOMAP) ||
+	    ext4_test_inode_state(donor_inode, EXT4_STATE_BUFFERED_IOMAP)) {
+		ext4_msg(orig_inode->i_sb, KERN_ERR,
+			 "Online defrag not supported with buffered iomap");
+		return -EOPNOTSUPP;
+	}
+
 	if (IS_ENCRYPTED(orig_inode) || IS_ENCRYPTED(donor_inode)) {
 		ext4_msg(orig_inode->i_sb, KERN_ERR,
 			 "Online defrag not supported for encrypted files");
