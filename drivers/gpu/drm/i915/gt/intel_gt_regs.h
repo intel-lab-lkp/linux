@@ -529,7 +529,9 @@
 
 #define GEN8_RC6_CTX_INFO			_MMIO(0x8504)
 
+/* TODO: Evaluate MCR usage for both Media and GT instances of SQCNT1 register. */
 #define GEN12_SQCNT1				_MMIO(0x8718)
+#define GEN12_GT_SQCNT1				MCR_REG(0x8718)
 #define   GEN12_SQCNT1_PMON_ENABLE		REG_BIT(30)
 #define   GEN12_SQCNT1_OABPC			REG_BIT(29)
 #define   GEN12_STRICT_RAR_ENABLE		REG_BIT(23)
