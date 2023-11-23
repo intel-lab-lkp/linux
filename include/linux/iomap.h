@@ -300,6 +300,7 @@ struct iomap_ioend {
 	sector_t		io_sector;	/* start sector of ioend */
 	struct bio		*io_bio;	/* bio being built */
 	struct bio		io_inline_bio;	/* MUST BE LAST! */
+	void			*io_private;	/* fs private pointer */
 };
 
 struct iomap_writeback_ops {
