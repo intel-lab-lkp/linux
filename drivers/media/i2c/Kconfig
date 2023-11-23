@@ -1451,6 +1451,20 @@ config VIDEO_THS7303
 	  To compile this driver as a module, choose M here: the
 	  module will be called ths7303.
 
+config VIDEO_GC08A3
+	tristate "GalaxyCore gc08a3 sensor support"
+	depends on GPIOLIB && I2C && VIDEO_DEV
+	select V4L2_FWNODE
+	select MEDIA_CONTROLLER
+	select VIDEO_V4L2_SUBDEV_API
+	select REGMAP_I2C
+	help
+	  This is a Video4Linux2 sensor driver for the GalaxyCore gc08a3
+	  camera.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called gc08a3.
+
 endmenu
 
 #
