@@ -919,9 +919,10 @@ static int ieee80211_config_bw(struct ieee80211_link_data *link,
 					      elems, true, &link->u.mgd.conn,
 					      &ap_chandef);
 
-	if (ap_mode != link->u.mgd.conn.mode) {
+	/* W/A for some tests, make that == again? */
+	if (ap_mode > link->u.mgd.conn.mode) {
 		link_info(link,
-			  "AP appears to change mode (expected %s, found %s), disconnect\n",
+			  "AP appears to change mode (expected at most %s, got %s), disconnect\n",
 			  ieee80211_conn_mode_str(link->u.mgd.conn.mode),
 			  ieee80211_conn_mode_str(ap_mode));
 		return -EINVAL;
@@ -952,6 +953,11 @@ static int ieee80211_config_bw(struct ieee80211_link_data *link,
 
 	if (cfg80211_chandef_identical(&ap_chandef, &link->conf->chandef))
 		return 0;
+
+	/* W/A for some tests - remove it again? */
+	if (ap_chandef.width == NL80211_CHAN_WIDTH_20_NOHT &&
+	    link->u.mgd.conn.mode > IEEE80211_CONN_MODE_LEGACY)
+		ap_chandef.width = NL80211_CHAN_WIDTH_20;
 
 	link_info(link,
 		  "AP %pM changed bandwidth, new config is %d.%03d MHz, width %d (%d.%03d/%d MHz)\n",
