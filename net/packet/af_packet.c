@@ -2092,15 +2092,23 @@ static unsigned int run_filter(struct sk_buff *skb,
 }
 
 static int packet_rcv_vnet(struct msghdr *msg, const struct sk_buff *skb,
-			   size_t *len, int vnet_hdr_sz)
+			   size_t *len, int vnet_hdr_sz,
+			   const struct sock *sk)
 {
 	struct virtio_net_hdr_mrg_rxbuf vnet_hdr = { .num_buffers = 0 };
+	int vlan_hlen;
 
 	if (*len < vnet_hdr_sz)
 		return -EINVAL;
 	*len -= vnet_hdr_sz;
 
-	if (virtio_net_hdr_from_skb(skb, (struct virtio_net_hdr *)&vnet_hdr, vio_le(), true, 0))
+	if (sk->sk_type == SOCK_RAW && skb_vlan_tag_present(skb))
+		vlan_hlen = VLAN_HLEN;
+	else
+		vlan_hlen = 0;
+
+	if (virtio_net_hdr_from_skb(skb, (struct virtio_net_hdr *)&vnet_hdr,
+				    vio_le(), true, vlan_hlen))
 		return -EINVAL;
 
 	return memcpy_to_msg(msg, (void *)&vnet_hdr, vnet_hdr_sz);
@@ -2368,13 +2376,21 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev,
 		__set_bit(slot_id, po->rx_ring.rx_owner_map);
 	}
 
-	if (vnet_hdr_sz &&
-	    virtio_net_hdr_from_skb(skb, h.raw + macoff -
-				    sizeof(struct virtio_net_hdr),
-				    vio_le(), true, 0)) {
-		if (po->tp_version == TPACKET_V3)
-			prb_clear_blk_fill_status(&po->rx_ring);
-		goto drop_n_account;
+	if (vnet_hdr_sz) {
+		int vlan_hlen;
+
+		if (sk->sk_type == SOCK_RAW && skb_vlan_tag_present(skb))
+			vlan_hlen = VLAN_HLEN;
+		else
+			vlan_hlen = 0;
+
+		if (virtio_net_hdr_from_skb(skb, h.raw + macoff -
+					    sizeof(struct virtio_net_hdr),
+					    vio_le(), true, vlan_hlen)) {
+			if (po->tp_version == TPACKET_V3)
+				prb_clear_blk_fill_status(&po->rx_ring);
+			goto drop_n_account;
+		}
 	}
 
 	if (po->tp_version <= TPACKET_V2) {
@@ -3464,7 +3480,7 @@ static int packet_recvmsg(struct socket *sock, struct msghdr *msg, size_t len,
 	packet_rcv_try_clear_pressure(pkt_sk(sk));
 
 	if (vnet_hdr_len) {
-		err = packet_rcv_vnet(msg, skb, &len, vnet_hdr_len);
+		err = packet_rcv_vnet(msg, skb, &len, vnet_hdr_len, sk);
 		if (err)
 			goto out_free;
 	}
