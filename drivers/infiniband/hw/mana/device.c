@@ -93,9 +93,10 @@ static int mana_ib_probe(struct auxiliary_device *adev,
 		goto deregister_device;
 	}
 
+	ret = mana_ib_create_adapter(dev);
 	if (ret) {
-		ib_dealloc_device(&dev->ib_dev);
-		return ret;
+		ibdev_err(&dev->ib_dev, "Failed to create adapter");
+		goto free_error_eq;
 	}
 
 	ret = ib_register_device(&dev->ib_dev, "mana_%d",
@@ -108,8 +109,10 @@ static int mana_ib_probe(struct auxiliary_device *adev,
 	return 0;
 
 destroy_adapter:
-	mana_gd_destroy_queue(dev->gdma_dev->gdma_context, dev->fatal_err_eq);
+	mana_ib_destroy_adapter(dev);
+free_error_eq:
 	xa_destroy(&dev->rq_to_qp_lookup_table);
+	mana_gd_destroy_queue(dev->gdma_dev->gdma_context, dev->fatal_err_eq);
 deregister_device:
 	mana_gd_deregister_device(dev->gdma_dev);
 free_ib_device:
@@ -123,6 +126,7 @@ static void mana_ib_remove(struct auxiliary_device *adev)
 
 	ib_unregister_device(&dev->ib_dev);
 
+	mana_ib_destroy_adapter(dev);
 	mana_gd_destroy_queue(dev->gdma_dev->gdma_context, dev->fatal_err_eq);
 	xa_destroy(&dev->rq_to_qp_lookup_table);
 	mana_gd_deregister_device(dev->gdma_dev);
