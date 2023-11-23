@@ -1012,19 +1012,9 @@ int ext4_es_lookup_extent(struct inode *inode, ext4_lblk_t lblk,
 		goto out;
 	}
 
-	node = tree->root.rb_node;
-	while (node) {
-		es1 = rb_entry(node, struct extent_status, rb_node);
-		if (lblk < es1->es_lblk)
-			node = node->rb_left;
-		else if (lblk > ext4_es_end(es1))
-			node = node->rb_right;
-		else {
-			found = 1;
-			break;
-		}
-	}
-
+	es1 = __es_tree_search(&tree->root, lblk);
+	if (es1 && in_range(lblk, es1->es_lblk, es1->es_len))
+		found = 1;
 out:
 	stats = &EXT4_SB(inode->i_sb)->s_es_stats;
 	if (found) {
@@ -1045,6 +1035,11 @@ out:
 				*next_lblk = 0;
 		}
 	} else {
+		if (es1) {
+			es->es_lblk = es1->es_lblk;
+			es->es_len = es1->es_len;
+			es->es_pblk = es1->es_pblk;
+		}
 		percpu_counter_inc(&stats->es_stats_cache_misses);
 	}
 
