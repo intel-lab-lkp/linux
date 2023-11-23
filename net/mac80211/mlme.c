@@ -687,7 +687,7 @@ static struct ieee802_11_elems *
 ieee80211_determine_chan_mode(struct ieee80211_sub_if_data *sdata,
 			      struct ieee80211_conn_settings *conn,
 			      struct cfg80211_bss *cbss, int link_id,
-			      struct cfg80211_chan_def *chandef)
+			      struct ieee80211_chan_req *chanreq)
 {
 	const struct cfg80211_bss_ies *ies = rcu_dereference(cbss->ies);
 	struct ieee80211_bss *bss = (void *)cbss->priv;
@@ -774,25 +774,31 @@ again:
 	}
 
 	conn->mode = ap_mode;
-	*chandef = ap_chandef;
+	chanreq->oper = ap_chandef;
 
-	while (!cfg80211_chandef_usable(sdata->local->hw.wiphy, chandef,
+	/* wider-bandwidth OFDMA is only done in EHT */
+	if (conn->mode >= IEEE80211_CONN_MODE_EHT)
+		chanreq->ap = ap_chandef;
+	else
+		chanreq->ap.chan = NULL;
+
+	while (!cfg80211_chandef_usable(sdata->local->hw.wiphy, &chanreq->oper,
 					IEEE80211_CHAN_DISABLED)) {
-		if (WARN_ON(chandef->width == NL80211_CHAN_WIDTH_20_NOHT)) {
+		if (WARN_ON(chanreq->oper.width == NL80211_CHAN_WIDTH_20_NOHT)) {
 			ret = -EINVAL;
 			goto free;
 		}
 
-		ieee80211_chandef_downgrade(chandef, conn);
+		ieee80211_chanreq_downgrade(chanreq, conn);
 	}
 
 	if (conn->mode >= IEEE80211_CONN_MODE_HE &&
-	    !cfg80211_chandef_usable(sdata->wdev.wiphy, chandef,
+	    !cfg80211_chandef_usable(sdata->wdev.wiphy, &chanreq->oper,
 				     IEEE80211_CHAN_NO_HE))
 		conn->mode = IEEE80211_CONN_MODE_VHT;
 
 	if (conn->mode >= IEEE80211_CONN_MODE_EHT &&
-	    !cfg80211_chandef_usable(sdata->wdev.wiphy, chandef,
+	    !cfg80211_chandef_usable(sdata->wdev.wiphy, &chanreq->oper,
 				     IEEE80211_CHAN_NO_EHT)) {
 		conn->mode = IEEE80211_CONN_MODE_HE;
 		conn->bw_limit = min_t(enum ieee80211_conn_bw_limit,
@@ -800,7 +806,7 @@ again:
 				       IEEE80211_CONN_BW_LIMIT_160);
 	}
 
-	if (chandef->width != ap_chandef.width || ap_mode != conn->mode)
+	if (chanreq->oper.width != ap_chandef.width || ap_mode != conn->mode)
 		sdata_info(sdata,
 			   "regulatory prevented using AP config, downgraded\n");
 
@@ -863,7 +869,7 @@ again:
 			 ieee80211_conn_mode_str(conn->mode),
 			 20 * (1 << conn->bw_limit));
 
-	if (WARN_ON_ONCE(!cfg80211_chandef_valid(chandef))) {
+	if (WARN_ON_ONCE(!cfg80211_chandef_valid(&chanreq->oper))) {
 		ret = -EINVAL;
 		goto free;
 	}
@@ -903,7 +909,6 @@ static int ieee80211_config_bw(struct ieee80211_link_data *link,
 	struct ieee80211_channel *channel = link->conf->chanreq.oper.chan;
 	struct ieee80211_sub_if_data *sdata = link->sdata;
 	struct ieee80211_chan_req chanreq = {};
-	struct cfg80211_chan_def ap_chandef;
 	enum ieee80211_conn_mode ap_mode;
 	u32 vht_cap_info = 0;
 	u16 ht_opmode;
@@ -918,7 +923,7 @@ static int ieee80211_config_bw(struct ieee80211_link_data *link,
 
 	ap_mode = ieee80211_determine_ap_chan(sdata, channel, vht_cap_info,
 					      elems, true, &link->u.mgd.conn,
-					      &ap_chandef);
+					      &chanreq.ap);
 
 	/* W/A for some tests, make that == again? */
 	if (ap_mode > link->u.mgd.conn.mode) {
@@ -928,6 +933,10 @@ static int ieee80211_config_bw(struct ieee80211_link_data *link,
 			  ieee80211_conn_mode_str(ap_mode));
 		return -EINVAL;
 	}
+
+	chanreq.oper = chanreq.ap;
+	if (link->u.mgd.conn.mode < IEEE80211_CONN_MODE_EHT)
+		chanreq.ap.chan = NULL;
 
 	/*
 	 * if HT operation mode changed store the new one -
@@ -949,25 +958,25 @@ static int ieee80211_config_bw(struct ieee80211_link_data *link,
 	 * won't do us any good -- we couldn't use it with the AP.
 	 */
 	while (link->u.mgd.conn.bw_limit <
-			ieee80211_min_bw_limit_from_chandef(&ap_chandef))
-		ieee80211_chandef_downgrade(&ap_chandef, NULL);
+			ieee80211_min_bw_limit_from_chandef(&chanreq.oper))
+		ieee80211_chandef_downgrade(&chanreq.oper, NULL);
 
-	if (cfg80211_chandef_identical(&ap_chandef, &link->conf->chanreq.oper))
+	if (ieee80211_chanreq_identical(&chanreq, &link->conf->chanreq))
 		return 0;
 
 	/* W/A for some tests - remove it again? */
-	if (ap_chandef.width == NL80211_CHAN_WIDTH_20_NOHT &&
+	if (chanreq.oper.width == NL80211_CHAN_WIDTH_20_NOHT &&
 	    link->u.mgd.conn.mode > IEEE80211_CONN_MODE_LEGACY)
-		ap_chandef.width = NL80211_CHAN_WIDTH_20;
+		chanreq.oper.width = NL80211_CHAN_WIDTH_20;
 
 	link_info(link,
-		  "AP %pM changed bandwidth, new config is %d.%03d MHz, width %d (%d.%03d/%d MHz)\n",
-		  link->u.mgd.bssid, ap_chandef.chan->center_freq,
-		  ap_chandef.chan->freq_offset, ap_chandef.width,
-		  ap_chandef.center_freq1, ap_chandef.freq1_offset,
-		  ap_chandef.center_freq2);
+		  "AP %pM changed bandwidth, new used config is %d.%03d MHz, width %d (%d.%03d/%d MHz)\n",
+		  link->u.mgd.bssid, chanreq.oper.chan->center_freq,
+		  chanreq.oper.chan->freq_offset, chanreq.oper.width,
+		  chanreq.oper.center_freq1, chanreq.oper.freq1_offset,
+		  chanreq.oper.center_freq2);
 
-	if (!cfg80211_chandef_valid(&ap_chandef)) {
+	if (!cfg80211_chandef_valid(&chanreq.oper)) {
 		sdata_info(sdata,
 			   "AP %pM changed caps/bw in a way we can't support - disconnect\n",
 			   link->u.mgd.bssid);
@@ -990,7 +999,6 @@ static int ieee80211_config_bw(struct ieee80211_link_data *link,
 	 * bandwidth changes where a this could happen, but those cases are
 	 * less common and wouldn't completely prevent using the AP.
 	 */
-	chanreq.oper = ap_chandef;
 
 	ret = ieee80211_link_change_chanreq(link, &chanreq, changed);
 	if (ret) {
@@ -2104,8 +2112,8 @@ static void ieee80211_chswitch_work(struct wiphy *wiphy,
 		return;
 	}
 
-	if (!cfg80211_chandef_identical(&link->conf->chanreq.oper,
-					&link->csa_chanreq.oper)) {
+	if (!ieee80211_chanreq_identical(&link->conf->chanreq,
+					 &link->csa_chanreq)) {
 		sdata_info(sdata,
 			   "failed to finalize channel switch, disconnecting\n");
 		wiphy_work_queue(sdata->local->hw.wiphy,
@@ -5115,7 +5123,7 @@ static int ieee80211_prep_channel(struct ieee80211_sub_if_data *sdata,
 
 	rcu_read_lock();
 	elems = ieee80211_determine_chan_mode(sdata, conn, cbss, link_id,
-					      &chanreq.oper);
+					      &chanreq);
 
 	if (IS_ERR(elems)) {
 		rcu_read_unlock();
@@ -5180,7 +5188,7 @@ static int ieee80211_prep_channel(struct ieee80211_sub_if_data *sdata,
 		return ret;
 
 	while (ret && chanreq.oper.width != NL80211_CHAN_WIDTH_20_NOHT) {
-		ieee80211_chandef_downgrade(&chanreq.oper, conn);
+		ieee80211_chanreq_downgrade(&chanreq, conn);
 
 		ret = ieee80211_link_use_channel(link, &chanreq,
 						 IEEE80211_CHANCTX_SHARED);
