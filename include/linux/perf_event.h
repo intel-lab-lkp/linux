@@ -540,6 +540,12 @@ struct pmu {
 	 * Check period value for PERF_EVENT_IOC_PERIOD ioctl.
 	 */
 	int (*check_period)		(struct perf_event *event, u64 value); /* optional */
+
+	/*
+	 * Pause or resume tracing. Used for AUX area tracing. event->aux_paused
+	 * indicates whether tracing should be paused, or otherwise resumed.
+	 */
+	void (*pause_resume)		(struct perf_event *event); /* optional */
 };
 
 enum perf_addr_filter_action_t {
@@ -796,6 +802,9 @@ struct perf_event {
 
 	/* for aux_output events */
 	struct perf_event		*aux_event;
+
+	/* for AUX area events */
+	unsigned int			aux_paused;
 
 	void (*destroy)(struct perf_event *);
 	struct rcu_head			rcu_head;

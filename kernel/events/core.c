@@ -2060,7 +2060,13 @@ static void perf_put_aux_event(struct perf_event *event)
 
 static bool perf_need_aux_event(struct perf_event *event)
 {
-	return !!event->attr.aux_output || !!event->attr.aux_sample_size;
+	return event->attr.aux_output || event->attr.aux_output_cfg ||
+	       event->attr.aux_sample_size;
+}
+
+static bool has_aux_pause_resume(struct perf_event *event)
+{
+	return has_aux(event) && event->pmu->pause_resume;
 }
 
 static int perf_get_aux_event(struct perf_event *event,
@@ -2083,6 +2089,10 @@ static int perf_get_aux_event(struct perf_event *event,
 
 	if (event->attr.aux_output &&
 	    !perf_aux_output_match(event, group_leader))
+		return 0;
+
+	if ((event->attr.aux_pause || event->attr.aux_resume) &&
+	    !has_aux_pause_resume(group_leader))
 		return 0;
 
 	if (event->attr.aux_sample_size && !group_leader->pmu->snapshot_aux)
@@ -7773,6 +7783,36 @@ void perf_prepare_header(struct perf_event_header *header,
 	WARN_ON_ONCE(header->size & 7);
 }
 
+static void perf_event_aux_pause(struct perf_event *event, bool pause)
+{
+	struct perf_buffer *rb;
+	unsigned long flags;
+
+	if (WARN_ON_ONCE(!event))
+		return;
+
+	if ((pause && event->aux_paused) || (!pause && !event->aux_paused))
+		return;
+
+	rb = ring_buffer_get(event);
+	if (!rb)
+		return;
+
+	local_irq_save(flags);
+	/* Guard against NMI, NMI loses here */
+	if (READ_ONCE(rb->aux_in_pause_resume))
+		goto out_restore;
+	WRITE_ONCE(rb->aux_in_pause_resume, 1);
+	barrier();
+	event->aux_paused = pause;
+	event->pmu->pause_resume(event);
+	barrier();
+	WRITE_ONCE(rb->aux_in_pause_resume, 0);
+out_restore:
+	local_irq_restore(flags);
+	ring_buffer_put(rb);
+}
+
 static __always_inline int
 __perf_event_output(struct perf_event *event,
 		    struct perf_sample_data *data,
@@ -7785,6 +7825,9 @@ __perf_event_output(struct perf_event *event,
 	struct perf_output_handle handle;
 	struct perf_event_header header;
 	int err;
+
+	if (event->attr.aux_pause)
+		perf_event_aux_pause(event->aux_event, true);
 
 	/* protect the callchain buffers */
 	rcu_read_lock();
@@ -7802,6 +7845,10 @@ __perf_event_output(struct perf_event *event,
 
 exit:
 	rcu_read_unlock();
+
+	if (event->attr.aux_resume)
+		perf_event_aux_pause(event->aux_event, false);
+
 	return err;
 }
 
@@ -11941,10 +11988,22 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 	}
 
 	if (event->attr.aux_output &&
-	    !(pmu->capabilities & PERF_PMU_CAP_AUX_OUTPUT)) {
+	    (!(pmu->capabilities & PERF_PMU_CAP_AUX_OUTPUT) ||
+	     event->attr.aux_pause || event->attr.aux_resume)) {
 		err = -EOPNOTSUPP;
 		goto err_pmu;
 	}
+
+	if (event->attr.aux_pause && event->attr.aux_resume) {
+		err = -EINVAL;
+		goto err_pmu;
+	}
+
+	if (event->attr.aux_start_paused && !has_aux_pause_resume(event)) {
+		err = -EOPNOTSUPP;
+		goto err_pmu;
+	}
+	event->aux_paused = event->attr.aux_start_paused;
 
 	if (cgroup_fd != -1) {
 		err = perf_cgroup_connect(cgroup_fd, event, attr, group_leader);
@@ -12741,7 +12800,7 @@ perf_event_create_kernel_counter(struct perf_event_attr *attr, int cpu,
 	 * Grouping is not supported for kernel events, neither is 'AUX',
 	 * make sure the caller's intentions are adjusted.
 	 */
-	if (attr->aux_output)
+	if (attr->aux_output || attr->aux_output_cfg)
 		return ERR_PTR(-EINVAL);
 
 	event = perf_event_alloc(attr, cpu, task, NULL, NULL,
