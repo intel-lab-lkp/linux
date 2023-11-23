@@ -5258,10 +5258,12 @@ struct devlink_notify_filter_set_req {
 	struct {
 		__u32 bus_name_len;
 		__u32 dev_name_len;
+		__u32 port_index:1;
 	} _present;
 
 	char *bus_name;
 	char *dev_name;
+	__u32 port_index;
 };
 
 static inline struct devlink_notify_filter_set_req *
@@ -5291,6 +5293,13 @@ devlink_notify_filter_set_req_set_dev_name(struct devlink_notify_filter_set_req 
 	req->dev_name = malloc(req->_present.dev_name_len + 1);
 	memcpy(req->dev_name, dev_name, req->_present.dev_name_len);
 	req->dev_name[req->_present.dev_name_len] = 0;
+}
+static inline void
+devlink_notify_filter_set_req_set_port_index(struct devlink_notify_filter_set_req *req,
+					     __u32 port_index)
+{
+	req->_present.port_index = 1;
+	req->port_index = port_index;
 }
 
 /*
