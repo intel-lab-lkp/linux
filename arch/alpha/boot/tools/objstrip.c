@@ -21,17 +21,12 @@
 
 #include <sys/fcntl.h>
 #include <sys/stat.h>
-#include <sys/types.h>
 
-#include <linux/a.out.h>
-#include <linux/coff.h>
-#include <linux/param.h>
-#ifdef __ELF__
-# include <linux/elf.h>
-# define elfhdr elf64_hdr
-# define elf_phdr elf64_phdr
-# define elf_check_arch(x) ((x)->e_machine == EM_ALPHA)
-#endif
+#include <linux/elf.h>
+#define elfhdr elf64_hdr
+#define elf_phdr elf64_phdr
+#define elf_check_arch(x) ((x)->e_machine == EM_ALPHA)
+
 
 /* bootfile size must be multiple of BLOCK_SIZE: */
 #define BLOCK_SIZE	512
@@ -55,13 +50,10 @@ main (int argc, char *argv[])
     size_t nwritten, tocopy, n, mem_size, fil_size, pad = 0;
     int fd, ofd, i, j, verbose = 0, primary = 0;
     char buf[8192], *inname;
-    struct exec * aout;		/* includes file & aout header */
     long offset;
-#ifdef __ELF__
     struct elfhdr *elf;
     struct elf_phdr *elf_phdr;	/* program header */
     unsigned long long e_entry;
-#endif
 
     prog_name = argv[0];
 
@@ -145,7 +137,6 @@ main (int argc, char *argv[])
 	exit(1);
     }
 
-#ifdef __ELF__
     elf = (struct elfhdr *) buf;
 
     if (memcmp(&elf->e_ident[EI_MAG0], ELFMAG, SELFMAG) == 0) {
@@ -191,37 +182,6 @@ main (int argc, char *argv[])
 	    fprintf(stderr, "%s: extracting %#016lx-%#016lx (at %lx)\n",
 		    prog_name, (long) elf_phdr->p_vaddr,
 		    elf_phdr->p_vaddr + fil_size, offset);
-	}
-    } else
-#endif
-    {
-	aout = (struct exec *) buf;
-
-	if (!(aout->fh.f_flags & COFF_F_EXEC)) {
-	    fprintf(stderr, "%s: %s is not in executable format\n",
-		    prog_name, inname);
-	    exit(1);
-	}
-
-	if (aout->fh.f_opthdr != sizeof(aout->ah)) {
-	    fprintf(stderr, "%s: %s has unexpected optional header size\n",
-		    prog_name, inname);
-	    exit(1);
-	}
-
-	if (N_MAGIC(*aout) != OMAGIC) {
-	    fprintf(stderr, "%s: %s is not an OMAGIC file\n",
-		    prog_name, inname);
-	    exit(1);
-	}
-	offset = N_TXTOFF(*aout);
-	fil_size = aout->ah.tsize + aout->ah.dsize;
-	mem_size = fil_size + aout->ah.bsize;
-
-	if (verbose) {
-	    fprintf(stderr, "%s: extracting %#016lx-%#016lx (at %lx)\n",
-		    prog_name, aout->ah.text_start,
-		    aout->ah.text_start + fil_size, offset);
 	}
     }
 
