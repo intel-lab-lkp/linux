@@ -1694,6 +1694,11 @@ static struct rk_priv_data *rk_gmac_setup(struct platform_device *pdev,
 	dev_info(dev, "integrated PHY? (%s).\n",
 		 bsp_priv->integrated_phy ? "yes" : "no");
 
+	if (of_property_read_bool(dev->of_node, "rockchip,phy-wol"))
+		plat->flags |= STMMAC_FLAG_USE_PHY_WOL;
+	else
+		plat->flags &= ~STMMAC_FLAG_USE_PHY_WOL;
+
 	bsp_priv->pdev = pdev;
 
 	return bsp_priv;
