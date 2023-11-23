@@ -379,12 +379,10 @@ u64 ntp_tick_length(void)
  */
 ktime_t ntp_get_next_leap(void)
 {
-	ktime_t ret;
-
 	if ((time_state == TIME_INS) && (time_status & STA_INS))
 		return ktime_set(ntp_next_leap_sec, 0);
-	ret = KTIME_MAX;
-	return ret;
+
+	return KTIME_MAX;
 }
 
 /*
