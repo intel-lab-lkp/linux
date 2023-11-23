@@ -852,13 +852,13 @@ static size_t iomap_write_end(struct iomap_iter *iter, loff_t pos, size_t len,
 	 * cache.  It's up to the file system to write the updated size to disk,
 	 * preferably after I/O completion so that no stale data is exposed.
 	 */
-	if (pos + ret > old_size) {
+	if ((iter->flags & IOMAP_WRITE) && pos + ret > old_size) {
 		i_size_write(iter->inode, pos + ret);
 		iter->iomap.flags |= IOMAP_F_SIZE_CHANGED;
 	}
 	__iomap_put_folio(iter, pos, ret, folio);
 
-	if (old_size < pos)
+	if ((iter->flags & IOMAP_WRITE) && old_size < pos)
 		pagecache_isize_extended(iter->inode, old_size, pos);
 	if (ret < len)
 		iomap_write_failed(iter->inode, pos + ret, len - ret);
