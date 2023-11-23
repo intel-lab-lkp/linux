@@ -8,6 +8,7 @@
 #define __ASM_GENERIC_IO_H
 
 #include <asm/page.h> /* I/O is all done through memory accesses */
+#include <linux/cleanup.h>
 #include <linux/string.h> /* for memset() and memcpy() */
 #include <linux/types.h>
 #include <linux/instruction_pointer.h>
@@ -1065,6 +1066,10 @@ static inline void __iomem *ioremap(phys_addr_t addr, size_t size)
 #endif
 #endif /* !CONFIG_MMU || CONFIG_GENERIC_IOREMAP */
 
+#ifdef iounmap
+DEFINE_FREE(iounmap, void __iomem *, iounmap(_T));
+#endif
+
 #ifndef ioremap_wc
 #define ioremap_wc ioremap
 #endif
@@ -1127,6 +1132,7 @@ static inline void ioport_unmap(void __iomem *p)
 extern void __iomem *ioport_map(unsigned long port, unsigned int nr);
 extern void ioport_unmap(void __iomem *p);
 #endif /* CONFIG_GENERIC_IOMAP */
+DEFINE_FREE(ioport_unmap, void __iomem *, ioport_unmap(_T));
 #endif /* CONFIG_HAS_IOPORT_MAP */
 
 #ifndef CONFIG_GENERIC_IOMAP
