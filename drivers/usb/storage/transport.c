@@ -1049,10 +1049,10 @@ int usb_stor_CB_transport(struct scsi_cmnd *srb, struct us_data *us)
 
 	/* The second byte & 0x0F should be 0x0 for good, otherwise error */
 	switch (us->iobuf[1] & 0x0F) {
-		case 0x00: 
-			return USB_STOR_TRANSPORT_GOOD;
-		case 0x01: 
-			goto Failed;
+	case 0x00:
+		return USB_STOR_TRANSPORT_GOOD;
+	case 0x01:
+		goto Failed;
 	}
 	return USB_STOR_TRANSPORT_ERROR;
 
@@ -1302,28 +1302,28 @@ int usb_stor_Bulk_transport(struct scsi_cmnd *srb, struct us_data *us)
 
 	/* based on the status code, we report good or bad */
 	switch (bcs->Status) {
-		case US_BULK_STAT_OK:
-			/* device babbled -- return fake sense data */
-			if (fake_sense) {
-				memcpy(srb->sense_buffer, 
-				       usb_stor_sense_invalidCDB, 
-				       sizeof(usb_stor_sense_invalidCDB));
-				return USB_STOR_TRANSPORT_NO_SENSE;
-			}
+	case US_BULK_STAT_OK:
+		/* device babbled -- return fake sense data */
+		if (fake_sense) {
+			memcpy(srb->sense_buffer,
+			       usb_stor_sense_invalidCDB,
+			       sizeof(usb_stor_sense_invalidCDB));
+			return USB_STOR_TRANSPORT_NO_SENSE;
+		}
 
-			/* command good -- note that data could be short */
-			return USB_STOR_TRANSPORT_GOOD;
+		/* command good -- note that data could be short */
+		return USB_STOR_TRANSPORT_GOOD;
 
-		case US_BULK_STAT_FAIL:
-			/* command failed */
-			return USB_STOR_TRANSPORT_FAILED;
+	case US_BULK_STAT_FAIL:
+		/* command failed */
+		return USB_STOR_TRANSPORT_FAILED;
 
-		case US_BULK_STAT_PHASE:
-			/*
-			 * phase error -- note that a transport reset will be
-			 * invoked by the invoke_transport() function
-			 */
-			return USB_STOR_TRANSPORT_ERROR;
+	case US_BULK_STAT_PHASE:
+		/*
+		 * phase error -- note that a transport reset will be
+		 * invoked by the invoke_transport() function
+		 */
+		return USB_STOR_TRANSPORT_ERROR;
 	}
 
 	/* we should never get here, but if we do, we're in trouble */
