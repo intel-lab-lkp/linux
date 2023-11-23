@@ -479,6 +479,7 @@ int ext4_map_blocks(handle_t *handle, struct inode *inode,
 		    struct ext4_map_blocks *map, int flags)
 {
 	struct extent_status es;
+	ext4_lblk_t next;
 	int retval;
 	int ret = 0;
 #ifdef ES_AGGRESSIVE_TEST
@@ -502,8 +503,10 @@ int ext4_map_blocks(handle_t *handle, struct inode *inode,
 		return -EFSCORRUPTED;
 
 	/* Lookup extent status tree firstly */
-	if (!(EXT4_SB(inode->i_sb)->s_mount_state & EXT4_FC_REPLAY) &&
-	    ext4_es_lookup_extent(inode, map->m_lblk, NULL, &es)) {
+	if (EXT4_SB(inode->i_sb)->s_mount_state & EXT4_FC_REPLAY)
+		goto uncached;
+
+	if (ext4_es_lookup_extent(inode, map->m_lblk, NULL, &es)) {
 		if (ext4_es_is_written(&es) || ext4_es_is_unwritten(&es)) {
 			map->m_pblk = ext4_es_pblock(&es) +
 					map->m_lblk - es.es_lblk;
@@ -532,6 +535,23 @@ int ext4_map_blocks(handle_t *handle, struct inode *inode,
 #endif
 		goto found;
 	}
+	/*
+	 * Not found, maybe a hole, need to adjust the map length before
+	 * seraching the real extent path. It can prevent incorrect hole
+	 * length returned if the following entries have delayed only
+	 * ones.
+	 */
+	if (!(flags & EXT4_GET_BLOCKS_CREATE) && es.es_lblk > map->m_lblk) {
+		next = es.es_lblk;
+		if (ext4_es_is_hole(&es))
+			next = ext4_es_skip_hole_extent(inode, map->m_lblk,
+							map->m_len);
+		retval = next - map->m_lblk;
+		if (map->m_len > retval)
+			map->m_len = retval;
+	}
+
+uncached:
 	/*
 	 * In the query cache no-wait mode, nothing we can do more if we
 	 * cannot find extent in the cache.
