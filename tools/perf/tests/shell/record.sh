@@ -8,10 +8,16 @@ shelldir=$(dirname "$0")
 # shellcheck source=lib/waiting.sh
 . "${shelldir}"/lib/waiting.sh
 
+# shellcheck source=lib/perf_has_symbol.sh
+. "${shelldir}"/lib/perf_has_symbol.sh
+
+testsym="test_loop"
+
+skip_test_missing_symbol ${testsym}
+
 err=0
 perfdata=$(mktemp /tmp/__perf_test.perf.data.XXXXX)
 testprog="perf test -w thloop"
-testsym="test_loop"
 
 cleanup() {
   rm -rf "${perfdata}"
