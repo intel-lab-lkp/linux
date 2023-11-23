@@ -197,26 +197,56 @@ enum drrs_type intel_panel_drrs_type(struct intel_connector *connector)
 	return connector->panel.vbt.drrs_type;
 }
 
+static int
+mode_vrefresh_k(const struct drm_display_mode *mode)
+{
+	unsigned int num, den;
+
+	if (mode->htotal == 0 || mode->vtotal == 0)
+		return 0;
+
+	num = mode->clock;
+	den = mode->htotal * mode->vtotal;
+
+	if (mode->flags & DRM_MODE_FLAG_INTERLACE)
+		num *= 2;
+	if (mode->flags & DRM_MODE_FLAG_DBLSCAN)
+		den *= 2;
+	if (mode->vscan > 1)
+		den *= mode->vscan;
+
+	return mul_u64_u64_div_u64(num,
+							   1000 * FIXED_POINT_PRECISION,
+							   den);
+}
+
 int intel_panel_compute_config(struct intel_connector *connector,
 			       struct drm_display_mode *adjusted_mode)
 {
 	const struct drm_display_mode *fixed_mode =
 		intel_panel_fixed_mode(connector, adjusted_mode);
-	int vrefresh, fixed_mode_vrefresh;
+	int vrefresh_int, vrefresh_fraction;
+	int fixed_mode_vrefresh_int;
+	int vrefresh_k = mode_vrefresh_k(adjusted_mode);
+	int fixed_mode_vrefresh_k = mode_vrefresh_k(fixed_mode);
 	bool is_vrr;
 
 	if (!fixed_mode)
 		return 0;
 
-	vrefresh = drm_mode_vrefresh(adjusted_mode);
-	fixed_mode_vrefresh = drm_mode_vrefresh(fixed_mode);
+	vrefresh_int = vrefresh_k / FIXED_POINT_PRECISION;
+	vrefresh_fraction = do_div(vrefresh_k, FIXED_POINT_PRECISION);
+	fixed_mode_vrefresh_int = fixed_mode_vrefresh_k / FIXED_POINT_PRECISION;
 
 	/*
 	 * Assume that we shouldn't muck about with the
 	 * timings if they don't land in the VRR range.
 	 */
-	is_vrr = intel_vrr_is_in_range(connector, vrefresh) &&
-		intel_vrr_is_in_range(connector, fixed_mode_vrefresh);
+	is_vrr =
+		intel_vrr_is_in_range(connector,
+				      drm_mode_vrefresh(adjusted_mode)) &&
+		intel_vrr_is_in_range(connector,
+				      drm_mode_vrefresh(fixed_mode));
 
 	if (!is_vrr) {
 		/*
@@ -225,11 +255,12 @@ int intel_panel_compute_config(struct intel_connector *connector,
 		 * for Xorg since it likes to automagically cook up modes with slightly
 		 * off refresh rates.
 		 */
-		if (abs(vrefresh - fixed_mode_vrefresh) > 1) {
+		if (abs(vrefresh_int - fixed_mode_vrefresh_int) > 1) {
 			drm_dbg_kms(connector->base.dev,
 				    "[CONNECTOR:%d:%s] Requested mode vrefresh (%d Hz) does not match fixed mode vrefresh (%d Hz)\n",
 				    connector->base.base.id, connector->base.name,
-				    vrefresh, fixed_mode_vrefresh);
+				    DIV_ROUND_UP(vrefresh_k, 1000),
+					DIV_ROUND_UP(fixed_mode_vrefresh_k, 1000));
 
 			return -EINVAL;
 		}
@@ -237,10 +268,12 @@ int intel_panel_compute_config(struct intel_connector *connector,
 
 	drm_mode_copy(adjusted_mode, fixed_mode);
 
-	if (is_vrr && fixed_mode_vrefresh != vrefresh)
+	if (is_vrr && fixed_mode_vrefresh_k != vrefresh_k)
 		adjusted_mode->vtotal =
-			DIV_ROUND_CLOSEST(adjusted_mode->clock * 1000,
-					  adjusted_mode->htotal * vrefresh);
+			mul_u64_u32_div(adjusted_mode->clock * 1000,
+					FIXED_POINT_PRECISION,
+					adjusted_mode->htotal *
+					(vrefresh_int * FIXED_POINT_PRECISION + vrefresh_fraction));
 
 	drm_mode_set_crtcinfo(adjusted_mode, 0);
 

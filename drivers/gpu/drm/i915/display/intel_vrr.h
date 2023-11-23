@@ -13,6 +13,8 @@ struct intel_atomic_state;
 struct intel_connector;
 struct intel_crtc_state;
 
+#define FIXED_POINT_PRECISION	100
+
 bool intel_vrr_is_capable(struct intel_connector *connector);
 bool intel_vrr_is_in_range(struct intel_connector *connector, int vrefresh);
 void intel_vrr_check_modeset(struct intel_atomic_state *state);
