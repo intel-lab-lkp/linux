@@ -2445,7 +2445,7 @@ static int fec_enet_mii_init(struct platform_device *pdev)
 			mii_cnt++;
 			return 0;
 		}
-		return -ENOENT;
+		return -EPROBE_DEFER;
 	}
 
 	bus_freq = 2500000; /* 2.5MHz by default */
