@@ -1,8 +1,4 @@
 # SPDX-License-Identifier: GPL-2.0
-ifeq ($(wildcard $(srctree)/arch/$(SRCARCH)/include/uapi/asm/a.out.h),)
-no-export-headers += linux/a.out.h
-endif
-
 ifeq ($(wildcard $(srctree)/arch/$(SRCARCH)/include/uapi/asm/kvm.h),)
 no-export-headers += linux/kvm.h
 endif
