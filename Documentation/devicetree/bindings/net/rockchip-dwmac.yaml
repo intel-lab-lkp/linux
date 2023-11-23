@@ -91,6 +91,12 @@ properties:
       The phandle of the syscon node for the peripheral general register file.
     $ref: /schemas/types.yaml#/definitions/phandle
 
+  rockchip,phy-wol:
+    type: boolean
+    description:
+      If present, indicates that PHY WOL is preferred. MAC WOL is preferred
+      otherwise.
+
   tx_delay:
     description: Delay value for TXD timing.
     $ref: /schemas/types.yaml#/definitions/uint32
