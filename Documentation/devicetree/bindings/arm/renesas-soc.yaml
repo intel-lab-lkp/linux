@@ -1,0 +1,85 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/arm/renesas-soc.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Renesas SoC compatibles naming convention
+
+maintainers:
+  - Geert Uytterhoeven <geert+renesas@glider.be>
+  - Niklas Söderlund <niklas.soderlund@ragnatech.se>
+
+description: |
+  Guidelines for new compatibles for SoC blocks/components.
+  When adding new compatibles in new bindings, use the format::
+    renesas,SoC-IP
+
+  For example::
+   renesas,r8a77965-csi2
+
+  When adding new compatibles to existing bindings, use the format in the
+  existing binding, even if it contradicts the above.
+
+select:
+  properties:
+    compatible:
+      pattern: "^renesas,.*$"
+  required:
+    - compatible
+
+properties:
+  compatible:
+    oneOf:
+      # Preferred naming style for compatibles of SoC components:
+      - pattern: "^renesas,emev2-[a-z0-9-]+$"
+      - pattern: "^renesas,r7s[0-9]+-[a-z0-9-]+$"
+      - pattern: "^renesas,r8a[a-z0-9]+-[a-z0-9-]+$"
+      - pattern: "^renesas,r9a[0-9]+g[0-9]+-[a-z0-9-]+$"
+      - pattern: "^renesas,rzn1-[a-z0-9-]+$"
+      - pattern: "^renesas,rzv2m-[a-z0-9-]+$"
+      - pattern: "^renesas,sh73a0-[a-z0-9-]+$"
+
+      # SoC agnostic compatibles - new compatibles are OK:
+      - enum:
+          - renesas,bsid
+          - renesas,fcpf
+          - renesas,fcpv
+          - renesas,fdp1
+          - renesas,prr
+          - renesas,smp-sram
+          - renesas,vsp1
+          - renesas,vsp2
+
+      # Legacy namings - variations of existing patterns/compatibles are OK,
+      # but do not add completely new entries to these:
+      - pattern: "^renesas,du-[a-z0-9]+$"
+      - pattern: "^renesas,ether-[a-z0-9]+$"
+      - pattern: "^renesas,gether-[a-z0-9]+$"
+      - pattern: "^renesas,ipmmu-[a-z0-9]+$"
+      - pattern: "^renesas,pfc-[a-z0-9]+$"
+      - pattern: "^renesas,sata-[a-z0-9]+$"
+      - pattern: "^renesas,scif-[a-z0-9]+$"
+      - pattern: "^renesas,sdhi-[a-z0-9]+$"
+      - pattern: "^renesas,thermal-[a-z0-9]+$"
+      - pattern: "^renesas,usb2-phy-[a-z0-9]+$"
+      - pattern: "^renesas,vin-[a-z0-9]+$"
+
+      # Legacy compatibles - list cannot grow with new bindings:
+      - enum:
+          - renesas,dbsc-r8a73a4
+          - renesas,dbsc3-r8a7740
+          - renesas,em-gio
+          - renesas,em-sti
+          - renesas,em-uart
+          - renesas,iic-emev2
+          - renesas,sbsc-sh73a0
+          - renesas,sdhi-mmc-r8a77470
+
+      # None SoC related compatibles - new compatibles are OK:
+      - enum:
+          - renesas,5p35023
+          - renesas,r2a11302ft
+          - renesas,raa215300
+
+additionalProperties: true
