@@ -25,6 +25,9 @@ enum evsel_term_type {
 	EVSEL__CONFIG_TERM_BRANCH,
 	EVSEL__CONFIG_TERM_PERCORE,
 	EVSEL__CONFIG_TERM_AUX_OUTPUT,
+	EVSEL__CONFIG_TERM_AUX_PAUSE,
+	EVSEL__CONFIG_TERM_AUX_RESUME,
+	EVSEL__CONFIG_TERM_AUX_START_PAUSED,
 	EVSEL__CONFIG_TERM_AUX_SAMPLE_SIZE,
 	EVSEL__CONFIG_TERM_CFG_CHG,
 };
@@ -44,6 +47,9 @@ struct evsel_config_term {
 		unsigned long max_events;
 		bool	      percore;
 		bool	      aux_output;
+		bool	      aux_pause;
+		bool	      aux_resume;
+		bool	      aux_start_paused;
 		u32	      aux_sample_size;
 		u64	      cfg_chg;
 		char	      *str;

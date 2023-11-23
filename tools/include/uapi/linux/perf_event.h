@@ -460,7 +460,8 @@ struct perf_event_attr {
 				inherit_thread :  1, /* children only inherit if cloned with CLONE_THREAD */
 				remove_on_exec :  1, /* event is removed from task on exec */
 				sigtrap        :  1, /* send synchronous SIGTRAP on event */
-				__reserved_1   : 26;
+				aux_start_paused :  1, /* start AUX area tracing paused */
+				__reserved_1   : 25;
 
 	union {
 		__u32		wakeup_events;	  /* wakeup every n events */
@@ -511,7 +512,15 @@ struct perf_event_attr {
 	__u16	sample_max_stack;
 	__u16	__reserved_2;
 	__u32	aux_sample_size;
-	__u32	__reserved_3;
+
+	union {
+		__u32	aux_output_cfg;
+		struct {
+			__u64	aux_pause      :  1, /* on overflow, pause AUX area tracing */
+				aux_resume     :  1, /* on overflow, resume AUX area tracing */
+				__reserved_3   : 30;
+		};
+	};
 
 	/*
 	 * User provided data if sigtrap=1, passed back to user via

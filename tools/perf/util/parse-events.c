@@ -768,6 +768,9 @@ static const char *config_term_name(enum parse_events__term_type term_type)
 		[PARSE_EVENTS__TERM_TYPE_DRV_CFG]		= "driver-config",
 		[PARSE_EVENTS__TERM_TYPE_PERCORE]		= "percore",
 		[PARSE_EVENTS__TERM_TYPE_AUX_OUTPUT]		= "aux-output",
+		[PARSE_EVENTS__TERM_TYPE_AUX_PAUSE]		= "aux-pause",
+		[PARSE_EVENTS__TERM_TYPE_AUX_RESUME]		= "aux-resume",
+		[PARSE_EVENTS__TERM_TYPE_AUX_START_PAUSED]	= "aux-start-paused",
 		[PARSE_EVENTS__TERM_TYPE_AUX_SAMPLE_SIZE]	= "aux-sample-size",
 		[PARSE_EVENTS__TERM_TYPE_METRIC_ID]		= "metric-id",
 		[PARSE_EVENTS__TERM_TYPE_RAW]                   = "raw",
@@ -817,6 +820,9 @@ config_term_avail(enum parse_events__term_type term_type, struct parse_events_er
 	case PARSE_EVENTS__TERM_TYPE_OVERWRITE:
 	case PARSE_EVENTS__TERM_TYPE_DRV_CFG:
 	case PARSE_EVENTS__TERM_TYPE_AUX_OUTPUT:
+	case PARSE_EVENTS__TERM_TYPE_AUX_PAUSE:
+	case PARSE_EVENTS__TERM_TYPE_AUX_RESUME:
+	case PARSE_EVENTS__TERM_TYPE_AUX_START_PAUSED:
 	case PARSE_EVENTS__TERM_TYPE_AUX_SAMPLE_SIZE:
 	case PARSE_EVENTS__TERM_TYPE_RAW:
 	case PARSE_EVENTS__TERM_TYPE_LEGACY_CACHE:
@@ -936,6 +942,15 @@ do {									   \
 	case PARSE_EVENTS__TERM_TYPE_AUX_OUTPUT:
 		CHECK_TYPE_VAL(NUM);
 		break;
+	case PARSE_EVENTS__TERM_TYPE_AUX_PAUSE:
+		CHECK_TYPE_VAL(NUM);
+		break;
+	case PARSE_EVENTS__TERM_TYPE_AUX_RESUME:
+		CHECK_TYPE_VAL(NUM);
+		break;
+	case PARSE_EVENTS__TERM_TYPE_AUX_START_PAUSED:
+		CHECK_TYPE_VAL(NUM);
+		break;
 	case PARSE_EVENTS__TERM_TYPE_AUX_SAMPLE_SIZE:
 		CHECK_TYPE_VAL(NUM);
 		if (term->val.num > UINT_MAX) {
@@ -1036,6 +1051,9 @@ static int config_term_tracepoint(struct perf_event_attr *attr,
 	case PARSE_EVENTS__TERM_TYPE_OVERWRITE:
 	case PARSE_EVENTS__TERM_TYPE_NOOVERWRITE:
 	case PARSE_EVENTS__TERM_TYPE_AUX_OUTPUT:
+	case PARSE_EVENTS__TERM_TYPE_AUX_PAUSE:
+	case PARSE_EVENTS__TERM_TYPE_AUX_RESUME:
+	case PARSE_EVENTS__TERM_TYPE_AUX_START_PAUSED:
 	case PARSE_EVENTS__TERM_TYPE_AUX_SAMPLE_SIZE:
 		return config_term_common(attr, term, err);
 	case PARSE_EVENTS__TERM_TYPE_USER:
@@ -1170,6 +1188,18 @@ do {								\
 			ADD_CONFIG_TERM_VAL(AUX_OUTPUT, aux_output,
 					    term->val.num ? 1 : 0, term->weak);
 			break;
+		case PARSE_EVENTS__TERM_TYPE_AUX_PAUSE:
+			ADD_CONFIG_TERM_VAL(AUX_PAUSE, aux_pause,
+					    term->val.num ? 1 : 0, term->weak);
+			break;
+		case PARSE_EVENTS__TERM_TYPE_AUX_RESUME:
+			ADD_CONFIG_TERM_VAL(AUX_RESUME, aux_resume,
+					    term->val.num ? 1 : 0, term->weak);
+			break;
+		case PARSE_EVENTS__TERM_TYPE_AUX_START_PAUSED:
+			ADD_CONFIG_TERM_VAL(AUX_START_PAUSED, aux_start_paused,
+					    term->val.num ? 1 : 0, term->weak);
+			break;
 		case PARSE_EVENTS__TERM_TYPE_AUX_SAMPLE_SIZE:
 			ADD_CONFIG_TERM_VAL(AUX_SAMPLE_SIZE, aux_sample_size,
 					    term->val.num, term->weak);
@@ -1232,6 +1262,9 @@ static int get_config_chgs(struct perf_pmu *pmu, struct parse_events_terms *head
 		case PARSE_EVENTS__TERM_TYPE_DRV_CFG:
 		case PARSE_EVENTS__TERM_TYPE_PERCORE:
 		case PARSE_EVENTS__TERM_TYPE_AUX_OUTPUT:
+		case PARSE_EVENTS__TERM_TYPE_AUX_PAUSE:
+		case PARSE_EVENTS__TERM_TYPE_AUX_RESUME:
+		case PARSE_EVENTS__TERM_TYPE_AUX_START_PAUSED:
 		case PARSE_EVENTS__TERM_TYPE_AUX_SAMPLE_SIZE:
 		case PARSE_EVENTS__TERM_TYPE_METRIC_ID:
 		case PARSE_EVENTS__TERM_TYPE_RAW:

@@ -1001,6 +1001,15 @@ static void evsel__apply_config_terms(struct evsel *evsel,
 		case EVSEL__CONFIG_TERM_AUX_OUTPUT:
 			attr->aux_output = term->val.aux_output ? 1 : 0;
 			break;
+		case EVSEL__CONFIG_TERM_AUX_PAUSE:
+			attr->aux_pause = term->val.aux_pause ? 1 : 0;
+			break;
+		case EVSEL__CONFIG_TERM_AUX_RESUME:
+			attr->aux_resume = term->val.aux_resume ? 1 : 0;
+			break;
+		case EVSEL__CONFIG_TERM_AUX_START_PAUSED:
+			attr->aux_start_paused = term->val.aux_start_paused ? 1 : 0;
+			break;
 		case EVSEL__CONFIG_TERM_AUX_SAMPLE_SIZE:
 			/* Already applied by auxtrace */
 			break;

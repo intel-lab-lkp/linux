@@ -814,6 +814,10 @@ void auxtrace_regroup_aux_output(struct evlist *evlist)
 		if (evsel__is_aux_event(evsel))
 			aux_evsel = evsel;
 		term = evsel__get_config_term(evsel, AUX_OUTPUT);
+		if (!term)
+			term = evsel__get_config_term(evsel, AUX_PAUSE);
+		if (!term)
+			term = evsel__get_config_term(evsel, AUX_RESUME);
 		/* If possible, group with the AUX event */
 		if (term && aux_evsel)
 			evlist__regroup(evlist, aux_evsel, evsel);
