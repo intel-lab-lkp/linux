@@ -2629,6 +2629,26 @@ static void intel_dp_compute_vsc_sdp(struct intel_dp *intel_dp,
 					 &crtc_state->infoframes.vsc);
 }
 
+static void intel_dp_compute_as_sdp(struct intel_dp *intel_dp,
+				    struct intel_crtc_state *crtc_state,
+				     const struct drm_connector_state *conn_state)
+{
+	struct drm_dp_as_sdp *async = &crtc_state->infoframes.async;
+	struct intel_connector *connector = intel_dp->attached_connector;
+	int vrefresh = drm_mode_vrefresh(&crtc_state->hw.adjusted_mode);
+
+	if (intel_vrr_is_in_range(connector, vrefresh))
+		return;
+
+	crtc_state->infoframes.enable |= intel_hdmi_infoframe_enable(DP_SDP_ADAPTIVE_SYNC);
+	async->sdp_type = DP_SDP_ADAPTIVE_SYNC;
+	async->length = 0x9;
+	async->vmin = crtc_state->vrr.vmin;
+	async->vmax = crtc_state->vrr.vmax;
+	async->target_rr = 0;
+	async->operation_mode = 0x0;
+}
+
 void intel_dp_compute_psr_vsc_sdp(struct intel_dp *intel_dp,
 				  const struct intel_crtc_state *crtc_state,
 				  const struct drm_connector_state *conn_state,
@@ -2965,6 +2985,7 @@ intel_dp_compute_config(struct intel_encoder *encoder,
 	intel_psr_compute_config(intel_dp, pipe_config, conn_state);
 	intel_dp_drrs_compute_config(connector, pipe_config, link_bpp_x16);
 	intel_dp_compute_vsc_sdp(intel_dp, pipe_config, conn_state);
+	intel_dp_compute_as_sdp(intel_dp, pipe_config, conn_state);
 	intel_dp_compute_hdr_metadata_infoframe_sdp(intel_dp, pipe_config, conn_state);
 
 	return 0;
