@@ -521,3 +521,55 @@ int mana_ib_query_gid(struct ib_device *ibdev, u32 port, int index,
 void mana_ib_disassociate_ucontext(struct ib_ucontext *ibcontext)
 {
 }
+
+static void mana_ib_critical_event_handler(void *ctx, struct gdma_queue *queue,
+				      struct gdma_event *event)
+{
+	struct mana_ib_dev *dev = (struct mana_ib_dev *)ctx;
+	struct ib_event mib_event;
+	struct mana_ib_qp *qp;
+	u64 rq_id;
+
+	switch (event->type) {
+	case GDMA_EQE_SOC_EVENT_NOTIFICATION:
+		rq_id = event->details[0] & 0xFFFFFF;
+		qp = xa_load(&dev->rq_to_qp_lookup_table, rq_id);
+		mib_event.event = IB_EVENT_QP_FATAL;
+		mib_event.device = &dev->ib_dev;
+		if (qp && qp->ibqp.event_handler)
+			qp->ibqp.event_handler(&mib_event, qp->ibqp.qp_context);
+		else
+			ibdev_dbg(&dev->ib_dev, "found no qp or event handler");
+		ibdev_dbg(&dev->ib_dev, "Received critical notification");
+		break;
+	default:
+		ibdev_dbg(&dev->ib_dev, "Received unsolicited evt %d",
+			  event->type);
+	}
+}
+
+int mana_ib_create_error_eq(struct mana_ib_dev *dev)
+{
+	struct gdma_queue_spec spec = {};
+	int err;
+
+	spec.type = GDMA_EQ;
+	spec.monitor_avl_buf = false;
+	spec.queue_size = EQ_SIZE;
+	spec.eq.callback = mana_ib_critical_event_handler;
+	spec.eq.context = dev;
+	spec.eq.log2_throttle_limit = LOG2_EQ_THROTTLE;
+	spec.eq.msix_allocated = true;
+	spec.eq.msix_index = 0;
+	spec.doorbell = dev->gdma_dev->doorbell;
+	spec.pdid = dev->gdma_dev->pdid;
+
+	err = mana_gd_create_mana_eq(dev->gdma_dev, &spec,
+				     &dev->fatal_err_eq);
+	if (err)
+		return err;
+
+	dev->fatal_err_eq->eq.disable_needed = true;
+
+	return 0;
+}

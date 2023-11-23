@@ -85,6 +85,14 @@ static int mana_ib_probe(struct auxiliary_device *adev,
 	}
 	dev->gdma_dev = &mdev->gdma_context->mana_ib;
 
+	xa_init(&dev->rq_to_qp_lookup_table);
+
+	ret = mana_ib_create_error_eq(dev);
+	if (ret) {
+		ibdev_err(&dev->ib_dev, "Failed to allocate err eq");
+		goto deregister_device;
+	}
+
 	if (ret) {
 		ib_dealloc_device(&dev->ib_dev);
 		return ret;
@@ -100,6 +108,9 @@ static int mana_ib_probe(struct auxiliary_device *adev,
 	return 0;
 
 destroy_adapter:
+	mana_gd_destroy_queue(dev->gdma_dev->gdma_context, dev->fatal_err_eq);
+	xa_destroy(&dev->rq_to_qp_lookup_table);
+deregister_device:
 	mana_gd_deregister_device(dev->gdma_dev);
 free_ib_device:
 	ib_dealloc_device(&dev->ib_dev);
@@ -112,6 +123,8 @@ static void mana_ib_remove(struct auxiliary_device *adev)
 
 	ib_unregister_device(&dev->ib_dev);
 
+	mana_gd_destroy_queue(dev->gdma_dev->gdma_context, dev->fatal_err_eq);
+	xa_destroy(&dev->rq_to_qp_lookup_table);
 	mana_gd_deregister_device(dev->gdma_dev);
 
 	ib_dealloc_device(&dev->ib_dev);

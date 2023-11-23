@@ -30,6 +30,8 @@
 struct mana_ib_dev {
 	struct ib_device ib_dev;
 	struct gdma_dev *gdma_dev;
+	struct gdma_queue *fatal_err_eq;
+	struct xarray rq_to_qp_lookup_table;
 };
 
 struct mana_ib_wq {
@@ -158,5 +160,7 @@ int mana_ib_query_gid(struct ib_device *ibdev, u32 port, int index,
 		      union ib_gid *gid);
 
 void mana_ib_disassociate_ucontext(struct ib_ucontext *ibcontext);
+
+int mana_ib_create_error_eq(struct mana_ib_dev *mdev);
 
 #endif

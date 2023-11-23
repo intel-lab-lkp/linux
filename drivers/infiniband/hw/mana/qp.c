@@ -211,6 +211,11 @@ static int mana_ib_create_qp_rss(struct ib_qp *ibqp, struct ib_pd *pd,
 		wq->id = wq_spec.queue_index;
 		cq->id = cq_spec.queue_index;
 
+		ret = xa_err(xa_store(&mdev->rq_to_qp_lookup_table,
+				      wq->id, qp, GFP_KERNEL));
+		if (ret)
+			goto fail;
+
 		ibdev_dbg(&mdev->ib_dev,
 			  "ret %d rx_object 0x%llx wq id %llu cq id %llu\n",
 			  ret, wq->rx_object, wq->id, cq->id);
@@ -246,6 +251,7 @@ fail:
 	while (i-- > 0) {
 		ibwq = ind_tbl->ind_tbl[i];
 		wq = container_of(ibwq, struct mana_ib_wq, ibwq);
+		xa_erase(&mdev->rq_to_qp_lookup_table, wq->id);
 		mana_destroy_wq_obj(mpc, GDMA_RQ, wq->rx_object);
 	}
 
@@ -372,6 +378,11 @@ static int mana_ib_create_qp_raw(struct ib_qp *ibqp, struct ib_pd *ibpd,
 	qp->sq_id = wq_spec.queue_index;
 	send_cq->id = cq_spec.queue_index;
 
+	err = xa_err(xa_store(&mdev->rq_to_qp_lookup_table,
+			      qp->sq_id, qp, GFP_KERNEL));
+	if (err)
+		goto err_destroy_wq_obj;
+
 	ibdev_dbg(&mdev->ib_dev,
 		  "ret %d qp->tx_object 0x%llx sq id %llu cq id %llu\n", err,
 		  qp->tx_object, qp->sq_id, send_cq->id);
@@ -388,9 +399,11 @@ static int mana_ib_create_qp_raw(struct ib_qp *ibqp, struct ib_pd *ibpd,
 		goto err_destroy_wq_obj;
 	}
 
+
 	return 0;
 
 err_destroy_wq_obj:
+	xa_erase(&mdev->rq_to_qp_lookup_table, qp->sq_id);
 	mana_destroy_wq_obj(mpc, GDMA_SQ, qp->tx_object);
 
 err_destroy_dma_region:
@@ -455,6 +468,7 @@ static int mana_ib_destroy_qp_rss(struct mana_ib_qp *qp,
 		wq = container_of(ibwq, struct mana_ib_wq, ibwq);
 		ibdev_dbg(&mdev->ib_dev, "destroying wq->rx_object %llu\n",
 			  wq->rx_object);
+		xa_erase(&mdev->rq_to_qp_lookup_table, wq->id);
 		mana_destroy_wq_obj(mpc, GDMA_RQ, wq->rx_object);
 	}
 
@@ -477,6 +491,7 @@ static int mana_ib_destroy_qp_raw(struct mana_ib_qp *qp, struct ib_udata *udata)
 	mpc = netdev_priv(ndev);
 	pd = container_of(ibpd, struct mana_ib_pd, ibpd);
 
+	xa_erase(&mdev->rq_to_qp_lookup_table, qp->sq_id);
 	mana_destroy_wq_obj(mpc, GDMA_SQ, qp->tx_object);
 
 	if (qp->sq_umem) {
