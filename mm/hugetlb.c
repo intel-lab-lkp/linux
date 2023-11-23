@@ -3563,7 +3563,7 @@ static unsigned long __init hugetlb_hstate_alloc_pages_non_gigantic(struct hstat
  */
 static void __init hugetlb_hstate_alloc_pages(struct hstate *h)
 {
-	unsigned long allocated;
+	unsigned long allocated, start;
 
 	/* skip gigantic hugepages allocation if hugetlb_cma enabled */
 	if (hstate_is_gigantic(h) && hugetlb_cma_size) {
@@ -3576,11 +3576,13 @@ static void __init hugetlb_hstate_alloc_pages(struct hstate *h)
 		return;
 
 	/* below will do all node balanced alloc */
+	start = jiffies;
 	if (!hstate_is_gigantic(h)) {
 		allocated = hugetlb_hstate_alloc_pages_non_gigantic(h);
 	} else {
 		allocated = hugetlb_hstate_alloc_pages_gigantic(h);
 	}
+	pr_info("HugeTLB: Allocation takes %u ms\n", jiffies_to_msecs(jiffies - start));
 
 	hugetlb_hstate_alloc_pages_report(allocated, h);
 }
