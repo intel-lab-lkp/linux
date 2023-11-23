@@ -418,6 +418,9 @@ static void pt_config_start(struct perf_event *event)
 	struct pt *pt = this_cpu_ptr(&pt_ctx);
 	u64 ctl = event->hw.config;
 
+	if (event->aux_paused)
+		return;
+
 	ctl |= RTIT_CTL_TRACEEN;
 	if (READ_ONCE(pt->vmx_on))
 		perf_aux_output_flag(&pt->handle, PERF_AUX_FLAG_PARTIAL);
@@ -1563,6 +1566,14 @@ EXPORT_SYMBOL_GPL(intel_pt_handle_vmx);
  * PMU callbacks
  */
 
+static void pt_event_pause_resume(struct perf_event *event)
+{
+	if (event->aux_paused)
+		pt_config_stop(event);
+	else if (!event->hw.state)
+		pt_config_start(event);
+}
+
 static void pt_event_start(struct perf_event *event, int mode)
 {
 	struct hw_perf_event *hwc = &event->hw;
@@ -1798,6 +1809,7 @@ static __init int pt_init(void)
 	pt_pmu.pmu.del			 = pt_event_del;
 	pt_pmu.pmu.start		 = pt_event_start;
 	pt_pmu.pmu.stop			 = pt_event_stop;
+	pt_pmu.pmu.pause_resume		 = pt_event_pause_resume;
 	pt_pmu.pmu.snapshot_aux		 = pt_event_snapshot_aux;
 	pt_pmu.pmu.read			 = pt_event_read;
 	pt_pmu.pmu.setup_aux		 = pt_buffer_setup_aux;
