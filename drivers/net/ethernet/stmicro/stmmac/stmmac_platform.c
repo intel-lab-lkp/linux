@@ -690,9 +690,25 @@ devm_stmmac_probe_config_dt(struct platform_device *pdev, u8 *mac)
 #endif /* CONFIG_OF */
 EXPORT_SYMBOL_GPL(devm_stmmac_probe_config_dt);
 
+int stmmac_get_fault_intr_config(struct platform_device *pdev, struct stmmac_resources *res)
+{
+	int ret = 0;
+
+	res->safety_common_intr = platform_get_irq_byname(pdev, "safety");
+
+	if (res->safety_common_intr < 0) {
+		if (res->safety_common_intr != -EPROBE_DEFER)
+			dev_err(&pdev->dev, "safety IRQ configuration information not found\n");
+		ret = 1;
+	}
+
+	return ret;
+}
+
 int stmmac_get_platform_resources(struct platform_device *pdev,
 				  struct stmmac_resources *stmmac_res)
 {
+	int ret = 0;
 	memset(stmmac_res, 0, sizeof(*stmmac_res));
 
 	/* Get IRQ information early to have an ability to ask for deferred
@@ -701,6 +717,10 @@ int stmmac_get_platform_resources(struct platform_device *pdev,
 	stmmac_res->irq = platform_get_irq_byname(pdev, "macirq");
 	if (stmmac_res->irq < 0)
 		return stmmac_res->irq;
+
+	ret = stmmac_get_fault_intr_config(pdev, stmmac_res);
+	if (ret)
+		dev_err(&pdev->dev, "Fault interrupt not present\n");
 
 	/* On some platforms e.g. SPEAr the wake up irq differs from the mac irq
 	 * The external wake up irq can be passed through the platform code

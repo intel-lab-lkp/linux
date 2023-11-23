@@ -3530,6 +3530,10 @@ static void stmmac_free_irq(struct net_device *dev,
 		if (priv->wol_irq > 0 && priv->wol_irq != dev->irq)
 			free_irq(priv->wol_irq, dev);
 		fallthrough;
+	case REQ_IRQ_ERR_SAFETY:
+		if (priv->safety_common_intr > 0 && priv->safety_common_intr != dev->irq)
+			free_irq(priv->safety_common_intr, dev);
+		fallthrough;
 	case REQ_IRQ_ERR_WOL:
 		free_irq(dev->irq, dev);
 		fallthrough;
@@ -3732,6 +3736,18 @@ static int stmmac_request_irq_single(struct net_device *dev)
 				   "%s: ERROR: allocating the LPI IRQ %d (%d)\n",
 				   __func__, priv->lpi_irq, ret);
 			irq_err = REQ_IRQ_ERR_LPI;
+			goto irq_error;
+		}
+	}
+
+	if (priv->safety_common_intr > 0 && priv->safety_common_intr != dev->irq) {
+		ret = request_irq(priv->safety_common_intr, stmmac_safety_interrupt,
+				  0, "safety", dev);
+		if (unlikely(ret < 0)) {
+			netdev_err(priv->dev,
+				   "%s: alloc safety failed %d (error: %d)\n",
+				   __func__, priv->safety_common_intr, ret);
+			irq_err = REQ_IRQ_ERR_SAFETY;
 			goto irq_error;
 		}
 	}
@@ -7398,6 +7414,8 @@ int stmmac_dvr_probe(struct device *device,
 	priv->lpi_irq = res->lpi_irq;
 	priv->sfty_ce_irq = res->sfty_ce_irq;
 	priv->sfty_ue_irq = res->sfty_ue_irq;
+	priv->safety_common_intr = res->safety_common_intr;
+
 	for (i = 0; i < MTL_MAX_RX_QUEUES; i++)
 		priv->rx_irq[i] = res->rx_irq[i];
 	for (i = 0; i < MTL_MAX_TX_QUEUES; i++)
