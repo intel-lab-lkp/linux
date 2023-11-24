@@ -322,6 +322,69 @@ void __folio_add_large_rmap_val(struct folio *folio, int count,
 	}
 }
 
+bool __folio_has_large_matching_rmap_val(struct folio *folio, int count,
+		 struct mm_struct *mm)
+{
+	const unsigned int order = folio_order(folio);
+	unsigned long diff = 0;
+
+	switch (order) {
+#if MAX_ORDER >= RMAP_SUBID_6_MIN_ORDER
+	case RMAP_SUBID_6_MIN_ORDER .. RMAP_SUBID_6_MAX_ORDER:
+		diff |= atomic_long_read(&folio->_rmap_val0) ^ (get_rmap_subid_6(mm, 0) * count);
+		diff |= atomic_long_read(&folio->_rmap_val1) ^ (get_rmap_subid_6(mm, 1) * count);
+		diff |= atomic_long_read(&folio->_rmap_val2) ^ (get_rmap_subid_6(mm, 2) * count);
+		diff |= atomic_long_read(&folio->_rmap_val3) ^ (get_rmap_subid_6(mm, 3) * count);
+		diff |= atomic_long_read(&folio->_rmap_val4) ^ (get_rmap_subid_6(mm, 4) * count);
+		diff |= atomic_long_read(&folio->_rmap_val5) ^ (get_rmap_subid_6(mm, 5) * count);
+		break;
+#endif
+#if MAX_ORDER >= RMAP_SUBID_5_MIN_ORDER
+	case RMAP_SUBID_5_MIN_ORDER .. RMAP_SUBID_5_MAX_ORDER:
+		diff |= atomic_long_read(&folio->_rmap_val0) ^ (get_rmap_subid_5(mm, 0) * count);
+		diff |= atomic_long_read(&folio->_rmap_val1) ^ (get_rmap_subid_5(mm, 1) * count);
+		diff |= atomic_long_read(&folio->_rmap_val2) ^ (get_rmap_subid_5(mm, 2) * count);
+		diff |= atomic_long_read(&folio->_rmap_val3) ^ (get_rmap_subid_5(mm, 3) * count);
+		diff |= atomic_long_read(&folio->_rmap_val4) ^ (get_rmap_subid_5(mm, 4) * count);
+		break;
+#endif
+	default:
+		diff |= atomic_long_read(&folio->_rmap_val0) ^ (get_rmap_subid_4(mm, 0) * count);
+		diff |= atomic_long_read(&folio->_rmap_val1) ^ (get_rmap_subid_4(mm, 1) * count);
+		diff |= atomic_long_read(&folio->_rmap_val2) ^ (get_rmap_subid_4(mm, 2) * count);
+		diff |= atomic_long_read(&folio->_rmap_val3) ^ (get_rmap_subid_4(mm, 3) * count);
+		break;
+	}
+	return !diff;
+}
+
+bool __folio_large_mapped_shared(struct folio *folio, struct mm_struct *mm)
+{
+	unsigned long start;
+	bool exclusive;
+	int mapcount;
+
+	VM_WARN_ON_ONCE(!folio_test_large_rmappable(folio));
+	VM_WARN_ON_ONCE(folio_test_hugetlb(folio));
+
+	/*
+	 * Livelocking here is unlikely, as the caller already handles the
+	 * "obviously shared" cases. If ever an issue and there is too much
+	 * concurrent (un)mapping happening (using different page tables), we
+	 * could stop earlier and just return "shared".
+	 */
+	do {
+		start = raw_read_atomic_seqcount_begin(&folio->_rmap_atomic_seqcount);
+		mapcount = folio_mapcount(folio);
+		if (unlikely(mapcount > folio_nr_pages(folio)))
+			return true;
+		exclusive = __folio_has_large_matching_rmap_val(folio, mapcount, mm);
+	} while (raw_read_atomic_seqcount_retry(&folio->_rmap_atomic_seqcount,
+						start));
+
+	return !exclusive;
+}
+
 int alloc_rmap_id(void)
 {
 	int id;

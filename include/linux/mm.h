@@ -2113,6 +2113,17 @@ static inline size_t folio_size(struct folio *folio)
 	return PAGE_SIZE << folio_order(folio);
 }
 
+#ifdef CONFIG_RMAP_ID
+bool __folio_large_mapped_shared(struct folio *folio, struct mm_struct *mm);
+#else
+static inline bool __folio_large_mapped_shared(struct folio *folio,
+		struct mm_struct *mm)
+{
+	/* ... guess based on the mapcount of the first page of the folio. */
+	return atomic_read(&folio->page._mapcount) > 0;
+}
+#endif
+
 /**
  * folio_mapped_shared - Report if a folio is certainly mapped by
  *			 multiple entities in their page tables
@@ -2141,8 +2152,11 @@ static inline size_t folio_size(struct folio *folio)
  * PMD-mapped PMD-sized THP), the result will be exactly correct.
  *
  * For all other (partially-mappable) folios, such as PTE-mapped THP, the
- * return value is partially fuzzy: true is not fuzzy, because it means
- * "certainly mapped shared", but false means "maybe mapped exclusively".
+ * return value is partially fuzzy without CONFIG_RMAP_ID: true is not fuzzy,
+ * because it means "certainly mapped shared", but false means
+ * "maybe mapped exclusively".
+ *
+ * With CONFIG_RMAP_ID, the result will be exactly correct.
  *
  * Note that this function only considers *current* page table mappings
  * tracked via rmap -- that properly adjusts the folio mapcount(s) -- and
@@ -2177,8 +2191,7 @@ static inline bool folio_mapped_shared(struct folio *folio,
 	 */
 	if (total_mapcount > folio_nr_pages(folio))
 		return true;
-	/* ... guess based on the mapcount of the first page of the folio. */
-	return atomic_read(&folio->page._mapcount) > 0;
+	return __folio_large_mapped_shared(folio, mm);
 }
 
 #ifndef HAVE_ARCH_MAKE_PAGE_ACCESSIBLE

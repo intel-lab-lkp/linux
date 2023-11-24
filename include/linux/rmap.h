@@ -253,6 +253,8 @@ void __folio_set_large_rmap_val(struct folio *folio, int count,
 		struct mm_struct *mm);
 void __folio_add_large_rmap_val(struct folio *folio, int count,
 		struct mm_struct *mm);
+bool __folio_has_large_matching_rmap_val(struct folio *folio, int count,
+		struct mm_struct *mm);
 #else
 static inline void __folio_prep_large_rmap(struct folio *folio)
 {
