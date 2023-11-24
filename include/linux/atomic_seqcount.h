@@ -42,9 +42,10 @@ typedef struct raw_atomic_seqcount {
 #define ATOMIC_SEQCOUNT_SHARED_WRITERS_MAX		0x0000000000008000ul
 #define ATOMIC_SEQCOUNT_SHARED_WRITERS_MASK		0x000000000000fffful
 #define ATOMIC_SEQCOUNT_EXCLUSIVE_WRITER		0x0000000000010000ul
-#define ATOMIC_SEQCOUNT_WRITERS_MASK			0x000000000001fffful
-/* We have 48bit for the actual sequence. */
-#define ATOMIC_SEQCOUNT_SEQUENCE_STEP			0x0000000000020000ul
+#define ATOMIC_SEQCOUNT_EXCLUSIVE_WRITERS_MASK		0x00000000ffff0000ul
+#define ATOMIC_SEQCOUNT_WRITERS_MASK			0x00000000fffffffful
+/* We have 32bit for the actual sequence. */
+#define ATOMIC_SEQCOUNT_SEQUENCE_STEP			0x0000000100000000ul
 
 #else /* CONFIG_64BIT */
 
@@ -53,6 +54,7 @@ typedef struct raw_atomic_seqcount {
 #define ATOMIC_SEQCOUNT_SHARED_WRITERS_MAX		0x00000040ul
 #define ATOMIC_SEQCOUNT_SHARED_WRITERS_MASK		0x0000007ful
 #define ATOMIC_SEQCOUNT_EXCLUSIVE_WRITER		0x00000080ul
+#define ATOMIC_SEQCOUNT_EXCLUSIVE_WRITERS_MASK		0x00000080ul
 #define ATOMIC_SEQCOUNT_WRITERS_MASK			0x000000fful
 /* We have 24bit for the actual sequence. */
 #define ATOMIC_SEQCOUNT_SEQUENCE_STEP			0x00000100ul
@@ -144,7 +146,7 @@ static inline bool raw_read_atomic_seqcount_retry(raw_atomic_seqcount_t *s,
 static inline bool raw_write_atomic_seqcount_begin(raw_atomic_seqcount_t *s,
 						   bool try_exclusive)
 {
-	unsigned long seqcount, seqcount_new;
+	unsigned long __maybe_unused seqcount, seqcount_new;
 
 	BUILD_BUG_ON(IS_ENABLED(CONFIG_PREEMPT_RT));
 #ifdef CONFIG_DEBUG_ATOMIC_SEQCOUNT
@@ -160,6 +162,32 @@ static inline bool raw_write_atomic_seqcount_begin(raw_atomic_seqcount_t *s,
 	if (unlikely(seqcount & ATOMIC_SEQCOUNT_WRITERS_MASK))
 		goto shared;
 
+#ifdef CONFIG_64BIT
+	BUILD_BUG_ON(__builtin_popcount(ATOMIC_SEQCOUNT_EXCLUSIVE_WRITERS_MASK) !=
+		     __builtin_popcount(ATOMIC_SEQCOUNT_SHARED_WRITERS_MASK));
+
+	/* See comment for atomic_long_try_cmpxchg() below. */
+	seqcount = atomic_long_add_return(ATOMIC_SEQCOUNT_EXCLUSIVE_WRITER,
+					  &s->sequence);
+	if (likely((seqcount & ATOMIC_SEQCOUNT_WRITERS_MASK) ==
+		    ATOMIC_SEQCOUNT_EXCLUSIVE_WRITER))
+		return true;
+
+	/*
+	 * Whoops, we raced with another writer. Back off, converting ourselves
+	 * to a shared writer and wait for any exclusive writers.
+	 */
+	atomic_long_add(ATOMIC_SEQCOUNT_SHARED_WRITER - ATOMIC_SEQCOUNT_EXCLUSIVE_WRITER,
+			&s->sequence);
+	/*
+	 * No need for __smp_mb__after_atomic(): the reader side already
+	 * realizes that it has to retry and the memory barrier from
+	 * atomic_long_add_return() is sufficient for that.
+	 */
+	while (atomic_long_read(&s->sequence) & ATOMIC_SEQCOUNT_EXCLUSIVE_WRITERS_MASK)
+		cpu_relax();
+	return false;
+#else
 	seqcount_new = seqcount | ATOMIC_SEQCOUNT_EXCLUSIVE_WRITER;
 	/*
 	 * Store the sequence before any store in the critical section. Further,
@@ -168,6 +196,7 @@ static inline bool raw_write_atomic_seqcount_begin(raw_atomic_seqcount_t *s,
 	 */
 	if (atomic_long_try_cmpxchg(&s->sequence, &seqcount, seqcount_new))
 		return true;
+#endif
 shared:
 	/*
 	 * Indicate that there is a shared writer, and spin until the exclusive
@@ -185,10 +214,10 @@ shared:
 	DEBUG_LOCKS_WARN_ON((seqcount & ATOMIC_SEQCOUNT_SHARED_WRITERS_MASK) >
 			    ATOMIC_SEQCOUNT_SHARED_WRITERS_MAX);
 #endif /* CONFIG_DEBUG_ATOMIC_SEQCOUNT */
-	if (likely(!(seqcount & ATOMIC_SEQCOUNT_EXCLUSIVE_WRITER)))
+	if (likely(!(seqcount & ATOMIC_SEQCOUNT_EXCLUSIVE_WRITERS_MASK)))
 		return false;
 
-	while (atomic_long_read(&s->sequence) & ATOMIC_SEQCOUNT_EXCLUSIVE_WRITER)
+	while (atomic_long_read(&s->sequence) & ATOMIC_SEQCOUNT_EXCLUSIVE_WRITERS_MASK)
 		cpu_relax();
 	return false;
 }
@@ -209,7 +238,7 @@ static inline void raw_write_atomic_seqcount_end(raw_atomic_seqcount_t *s,
 	if (likely(exclusive)) {
 #ifdef CONFIG_DEBUG_ATOMIC_SEQCOUNT
 		DEBUG_LOCKS_WARN_ON(!(atomic_long_read(&s->sequence) &
-				      ATOMIC_SEQCOUNT_EXCLUSIVE_WRITER));
+				      ATOMIC_SEQCOUNT_EXCLUSIVE_WRITERS_MASK));
 #endif /* CONFIG_DEBUG_ATOMIC_SEQCOUNT */
 		val -= ATOMIC_SEQCOUNT_EXCLUSIVE_WRITER;
 	} else {
