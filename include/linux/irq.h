@@ -659,6 +659,7 @@ extern void handle_percpu_irq(struct irq_desc *desc);
 extern void handle_percpu_devid_irq(struct irq_desc *desc);
 extern void handle_bad_irq(struct irq_desc *desc);
 extern void handle_nested_irq(unsigned int irq);
+extern void unmask_irq(struct irq_desc *desc);
 
 extern void handle_fasteoi_nmi(struct irq_desc *desc);
 extern void handle_percpu_devid_fasteoi_nmi(struct irq_desc *desc);

@@ -439,6 +439,7 @@ void unmask_irq(struct irq_desc *desc)
 		irq_state_clr_masked(desc);
 	}
 }
+EXPORT_SYMBOL_GPL(unmask_irq);
 
 void unmask_threaded_irq(struct irq_desc *desc)
 {

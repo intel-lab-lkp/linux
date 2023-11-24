@@ -357,6 +357,7 @@ static int pcistub_match(struct pci_dev *dev)
 static int pcistub_init_device(struct pci_dev *dev)
 {
 	struct xen_pcibk_dev_data *dev_data;
+	struct irq_desc *desc = NULL;
 	int err = 0;
 
 	dev_dbg(&dev->dev, "initializing...\n");
@@ -398,6 +399,12 @@ static int pcistub_init_device(struct pci_dev *dev)
 	err = pci_enable_device(dev);
 	if (err)
 		goto config_release;
+
+	if (xen_initial_domain() && xen_pvh_domain()) {
+		if (dev->irq <= 0 || !(desc = irq_to_desc(dev->irq)))
+			goto config_release;
+		unmask_irq(desc);
+	}
 
 	if (dev->msix_cap) {
 		struct physdev_pci_device ppdev = {
