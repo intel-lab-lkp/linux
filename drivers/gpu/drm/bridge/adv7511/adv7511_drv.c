@@ -542,6 +542,36 @@ static int adv7511_get_edid_block(void *data, u8 *buf, unsigned int block,
 	return 0;
 }
 
+static struct edid *__adv7511_get_edid(struct adv7511 *adv7511,
+				       struct drm_connector *connector)
+{
+	struct edid *edid;
+
+	/* Reading the EDID only works if the device is powered */
+	if (!adv7511->powered) {
+		unsigned int edid_i2c_addr =
+					(adv7511->i2c_edid->addr << 1);
+
+		__adv7511_power_on(adv7511);
+
+		/* Reset the EDID_I2C_ADDR register as it might be cleared */
+		regmap_write(adv7511->regmap, ADV7511_REG_EDID_I2C_ADDR,
+			     edid_i2c_addr);
+	}
+
+	edid = drm_do_get_edid(connector, adv7511_get_edid_block, adv7511);
+
+	if (!adv7511->powered)
+		__adv7511_power_off(adv7511);
+
+	adv7511_set_config_csc(adv7511, connector, adv7511->rgb,
+			       drm_detect_hdmi_monitor(edid));
+
+	cec_s_phys_addr_from_edid(adv7511->cec_adap, edid);
+
+	return edid;
+}
+
 /* -----------------------------------------------------------------------------
  * Hotplug handling
  */
@@ -595,8 +625,24 @@ static void adv7511_hpd_work(struct work_struct *work)
 		adv7511->connector.status = status;
 
 		if (adv7511->connector.dev) {
-			if (status == connector_status_disconnected)
+			if (status == connector_status_disconnected) {
 				cec_phys_addr_invalidate(adv7511->cec_adap);
+			} else {
+				struct edid *edid;
+
+				/*
+				 * Get the updated EDID so that the CEC
+				 * subsystem gets informed of any change in CEC
+				 * address. The helper returns a newly allocated
+				 * edid structure, so free it to prevent
+				 * leakage.
+				 */
+				edid = __adv7511_get_edid(adv7511,
+							  &adv7511->connector);
+				if (edid)
+					kfree(edid);
+			}
+
 			drm_kms_helper_hotplug_event(adv7511->connector.dev);
 		} else {
 			drm_bridge_hpd_notify(&adv7511->bridge, status);
@@ -611,31 +657,7 @@ static void adv7511_hpd_work(struct work_struct *work)
 static struct edid *adv7511_get_edid(struct adv7511 *adv7511,
 				     struct drm_connector *connector)
 {
-	struct edid *edid;
-
-	/* Reading the EDID only works if the device is powered */
-	if (!adv7511->powered) {
-		unsigned int edid_i2c_addr =
-					(adv7511->i2c_edid->addr << 1);
-
-		__adv7511_power_on(adv7511);
-
-		/* Reset the EDID_I2C_ADDR register as it might be cleared */
-		regmap_write(adv7511->regmap, ADV7511_REG_EDID_I2C_ADDR,
-			     edid_i2c_addr);
-	}
-
-	edid = drm_do_get_edid(connector, adv7511_get_edid_block, adv7511);
-
-	if (!adv7511->powered)
-		__adv7511_power_off(adv7511);
-
-	adv7511_set_config_csc(adv7511, connector, adv7511->rgb,
-			       drm_detect_hdmi_monitor(edid));
-
-	cec_s_phys_addr_from_edid(adv7511->cec_adap, edid);
-
-	return edid;
+	return __adv7511_get_edid(adv7511, connector);
 }
 
 static int adv7511_get_modes(struct adv7511 *adv7511,
