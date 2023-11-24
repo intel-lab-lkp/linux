@@ -28,7 +28,7 @@ typedef void (*rethook_handler_t) (struct rethook_node *, void *, unsigned long,
  */
 struct rethook {
 	void			*data;
-	rethook_handler_t	handler;
+	rethook_handler_t __rcu handler;
 	struct objpool_head	pool;
 	struct rcu_head		rcu;
 };
