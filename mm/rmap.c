@@ -1240,25 +1240,29 @@ static void __page_check_anon_rmap(struct folio *folio, struct page *page,
 }
 
 /**
- * page_add_anon_rmap - add pte mapping to an anonymous page
- * @page:	the page to add the mapping to
- * @vma:	the vm area in which the mapping is added
- * @address:	the user virtual address mapped
- * @flags:	the rmap flags
+ * folio_add_anon_rmap_range - add mappings to a page range of an anon folio
+ * @folio:	The folio to add the mapping to
+ * @page:	The first page to add
+ * @nr_pages:	The number of pages which will be mapped
+ * @vma:	The vm area in which the mapping is added
+ * @address:	The user virtual address of the first page to map
+ * @flags:	The rmap flags
+ *
+ * The page range of folio is defined by [first_page, first_page + nr_pages)
  *
  * The caller needs to hold the pte lock, and the page must be locked in
  * the anon_vma case: to serialize mapping,index checking after setting,
- * and to ensure that PageAnon is not being upgraded racily to PageKsm
- * (but PageKsm is never downgraded to PageAnon).
+ * and to ensure that an anon folio is not being upgraded racily to a KSM folio
+ * (but KSM folios are never downgraded).
  */
-void page_add_anon_rmap(struct page *page, struct vm_area_struct *vma,
+void folio_add_anon_rmap_range(struct folio *folio, struct page *page,
+		unsigned int nr_pages, struct vm_area_struct *vma,
 		unsigned long address, rmap_t flags)
 {
-	struct folio *folio = page_folio(page);
-	unsigned int nr, nr_pmdmapped = 0;
+	unsigned int i, nr, nr_pmdmapped = 0;
 	bool compound = flags & RMAP_COMPOUND;
 
-	nr = __folio_add_rmap_range(folio, page, 1, vma, compound,
+	nr = __folio_add_rmap_range(folio, page, nr_pages, vma, compound,
 				    &nr_pmdmapped);
 	if (nr_pmdmapped)
 		__lruvec_stat_mod_folio(folio, NR_ANON_THPS, nr_pmdmapped);
@@ -1279,12 +1283,20 @@ void page_add_anon_rmap(struct page *page, struct vm_area_struct *vma,
 	} else if (likely(!folio_test_ksm(folio))) {
 		__page_check_anon_rmap(folio, page, vma, address);
 	}
-	if (flags & RMAP_EXCLUSIVE)
-		SetPageAnonExclusive(page);
-	/* While PTE-mapping a THP we have a PMD and a PTE mapping. */
-	VM_WARN_ON_FOLIO((atomic_read(&page->_mapcount) > 0 ||
-			  (folio_test_large(folio) && folio_entire_mapcount(folio) > 1)) &&
-			 PageAnonExclusive(page), folio);
+
+	if (flags & RMAP_EXCLUSIVE) {
+		for (i = 0; i < nr_pages; i++)
+			SetPageAnonExclusive(page + i);
+	}
+	for (i = 0; i < nr_pages; i++) {
+		struct page *cur_page = page + i;
+
+		/* While PTE-mapping a THP we have a PMD and a PTE mapping. */
+		VM_WARN_ON_FOLIO((atomic_read(&cur_page->_mapcount) > 0 ||
+				  (folio_test_large(folio) &&
+				   folio_entire_mapcount(folio) > 1)) &&
+				 PageAnonExclusive(cur_page), folio);
+	}
 
 	/*
 	 * For large folio, only mlock it if it's fully mapped to VMA. It's
@@ -1294,6 +1306,29 @@ void page_add_anon_rmap(struct page *page, struct vm_area_struct *vma,
 	 */
 	if (!folio_test_large(folio))
 		mlock_vma_folio(folio, vma);
+}
+
+/**
+ * page_add_anon_rmap - add mappings to an anonymous page
+ * @page:	The page to add the mapping to
+ * @vma:	The vm area in which the mapping is added
+ * @address:	The user virtual address of the page to map
+ * @flags:	The rmap flags
+ *
+ * See folio_add_anon_rmap_range().
+ */
+void page_add_anon_rmap(struct page *page, struct vm_area_struct *vma,
+		unsigned long address, rmap_t flags)
+{
+	struct folio *folio = page_folio(page);
+	unsigned int nr_pages;
+
+	if (likely(!(flags & RMAP_COMPOUND)))
+		nr_pages = 1;
+	else
+		nr_pages = folio_nr_pages(folio);
+
+	folio_add_anon_rmap_range(folio, page, nr_pages, vma, address, flags);
 }
 
 /**

@@ -393,6 +393,9 @@ typedef int __bitwise rmap_t;
  * rmap interfaces called when adding or removing pte of page
  */
 void folio_move_anon_rmap(struct folio *, struct vm_area_struct *);
+void folio_add_anon_rmap_range(struct folio *, struct page *,
+		unsigned int nr_pages, struct vm_area_struct *,
+		unsigned long address, rmap_t flags);
 void page_add_anon_rmap(struct page *, struct vm_area_struct *,
 		unsigned long address, rmap_t flags);
 void page_add_new_anon_rmap(struct page *, struct vm_area_struct *,
