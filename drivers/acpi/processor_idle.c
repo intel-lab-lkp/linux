@@ -814,6 +814,9 @@ static int acpi_processor_setup_cstates(struct acpi_processor *pr)
 			if (cx->type != ACPI_STATE_C3)
 				drv->safe_state_index = count;
 		}
+
+		if (cx->entry_method == ACPI_CSTATE_FFH)
+			state->flags |= CPUIDLE_FLAG_POLLING_HARD;
 		/*
 		 * Halt-induced C1 is not good for ->enter_s2idle, because it
 		 * re-enables interrupts on exit.  Moreover, C1 is generally not
