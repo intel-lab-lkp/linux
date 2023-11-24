@@ -49,6 +49,16 @@ int pfn_is_map_memory(unsigned long pfn);
 
 #define VM_DATA_DEFAULT_FLAGS	(VM_DATA_FLAGS_TSK_EXEC | VM_MTE_ALLOWED)
 
+#if defined(CONFIG_ARCH_HAS_PKEYS)
+/* A protection key is a 3-bit value */
+# define VM_PKEY_SHIFT	VM_HIGH_ARCH_BIT_2
+# define VM_PKEY_BIT0	VM_HIGH_ARCH_2
+# define VM_PKEY_BIT1	VM_HIGH_ARCH_3
+# define VM_PKEY_BIT2	VM_HIGH_ARCH_4
+# define VM_PKEY_BIT3	0
+# define VM_PKEY_BIT4	0
+#endif
+
 #include <asm-generic/getorder.h>
 
 #endif
