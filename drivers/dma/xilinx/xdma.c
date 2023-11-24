@@ -754,7 +754,7 @@ static irqreturn_t xdma_channel_isr(int irq, void *dev_id)
 	if (ret)
 		goto out;
 
-	desc->completed_desc_num += complete_desc_num;
+	desc->completed_desc_num = complete_desc_num;
 
 	if (desc->cyclic) {
 		ret = regmap_read(xdev->rmap, xchan->base + XDMA_CHAN_STATUS,
