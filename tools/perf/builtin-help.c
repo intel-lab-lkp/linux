@@ -196,6 +196,9 @@ static void add_man_viewer(const char *name)
 	while (*p)
 		p = &((*p)->next);
 	*p = zalloc(sizeof(**p) + len + 1);
+	if(!*p)
+		return NULL;
+
 	strcpy((*p)->name, name);
 }
 
@@ -211,6 +214,8 @@ static void do_add_man_viewer_info(const char *name,
 				   const char *value)
 {
 	struct man_viewer_info_list *new = zalloc(sizeof(*new) + len + 1);
+	if(!new)
+		return NULL;
 
 	strncpy(new->name, name, len);
 	new->info = strdup(value);
