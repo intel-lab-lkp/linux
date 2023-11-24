@@ -629,6 +629,10 @@ void btrfs_submit_compressed_read(struct btrfs_bio *bbio)
 	return;
 
 out_free_compressed_pages:
+	for (int i = 0; i < cb->nr_pages; i++) {
+		if (cb->compressed_pages[i])
+			__free_page(cb->compressed_pages[i]);
+	}
 	kfree(cb->compressed_pages);
 out_free_bio:
 	bio_put(&cb->bbio.bio);
