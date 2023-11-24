@@ -1358,6 +1358,9 @@ static void ksz8795_cpu_interface_select(struct ksz_device *dev, int port)
 {
 	struct ksz_port *p = &dev->ports[port];
 
+	if (!ksz_is_ksz87xx(dev))
+		return;
+
 	if (!p->interface && dev->compat_interface) {
 		dev_warn(dev->dev,
 			 "Using legacy switch \"phy-mode\" property, because it is missing on port %d node. "
@@ -1391,16 +1394,53 @@ void ksz8_port_setup(struct ksz_device *dev, int port, bool cpu_port)
 	/* enable 802.1p priority */
 	ksz_port_cfg(dev, port, P_PRIO_CTRL, PORT_802_1P_ENABLE, true);
 
-	if (cpu_port) {
-		if (!ksz_is_ksz88x3(dev))
-			ksz8795_cpu_interface_select(dev, port);
-
+	if (cpu_port)
 		member = dsa_user_ports(ds);
-	} else {
+	else
 		member = BIT(dsa_upstream_port(ds, port));
-	}
 
 	ksz8_cfg_port_member(dev, port, member);
+}
+
+static int ksz88x3_config_rmii_clk(struct ksz_device *dev, int cpu_port)
+{
+	struct device_node *ports, *port, *cpu_node;
+	bool rmii_clk_internal;
+
+	if (!ksz_is_ksz88x3(dev))
+		return 0;
+
+	cpu_node = NULL;
+
+	ports = of_get_child_by_name(dev->dev->of_node, "ports");
+	if (!ports)
+		ports = of_get_child_by_name(dev->dev->of_node,
+					     "ethernet-ports");
+	if (!ports)
+		return -ENODEV;
+
+	for_each_available_child_of_node(ports, port) {
+		u32 index;
+
+		if (of_property_read_u32(port, "reg", &index) < 0)
+			return -ENODEV;
+
+		if (index == cpu_port) {
+			cpu_node = port;
+			break;
+		}
+	}
+
+	if (!cpu_node)
+		return -ENODEV;
+
+	rmii_clk_internal = of_property_read_bool(cpu_node,
+						  "microchip,rmii-clk-internal");
+
+	ksz_cfg(dev, KSZ88X3_REG_FVID_AND_HOST_MODE,
+		KSZ88X3_PORT3_RMII_CLK_INTERNAL, rmii_clk_internal);
+
+	return 0;
 }
 
 void ksz8_config_cpu_port(struct dsa_switch *ds)
@@ -1418,6 +1458,10 @@ void ksz8_config_cpu_port(struct dsa_switch *ds)
 	ksz_cfg(dev, regs[S_TAIL_TAG_CTRL], masks[SW_TAIL_TAG_ENABLE], true);
 
 	ksz8_port_setup(dev, dev->cpu_port, true);
+
+	ksz8795_cpu_interface_select(dev, dev->cpu_port);
+	if (ksz88x3_config_rmii_clk(dev, dev->cpu_port))
+		dev_err(dev->dev, "Failed to set rmii reference clock source mode");
 
 	for (i = 0; i < dev->phy_port_cnt; i++) {
 		ksz_port_stp_state_set(ds, i, BR_STATE_DISABLED);
