@@ -12634,6 +12634,8 @@ M:	Nuno Sa <nuno.sa@analog.com>
 L:	linux-hwmon@vger.kernel.org
 S:	Supported
 F:	Documentation/devicetree/bindings/hwmon/adi,ltc4282.yaml
+F:	Documentation/hwmon/ltc4282.rst
+F:	drivers/hwmon/ltc4282.c
 
 LTC4306 I2C MULTIPLEXER DRIVER
 M:	Michael Hennerich <michael.hennerich@analog.com>
