@@ -25,6 +25,7 @@ Usage: $0 [OPTIONS]
   -c | --collection COLLECTION	Run all tests from COLLECTION
   -l | --list			List the available collection:test entries
   -d | --dry-run		Don't actually run any tests
+  -n | --netns			Run each test in namespace
   -h | --help			Show this usage info
   -o | --override-timeout	Number of seconds after which we timeout
 EOF
@@ -52,6 +53,9 @@ while true; do
 			exit 0 ;;
 		-d | --dry-run)
 			dryrun="echo"
+			shift ;;
+		-n | --netns)
+			RUN_IN_NETNS=1
 			shift ;;
 		-o | --override-timeout)
 			kselftest_override_timeout="$2"
