@@ -291,22 +291,35 @@ static inline void __folio_undo_large_rmap(struct folio *folio)
 #endif
 }
 
-static inline void __folio_write_large_rmap_begin(struct folio *folio)
+static inline bool __folio_write_large_rmap_begin(struct folio *folio)
 {
+	bool exclusive;
+
 	VM_WARN_ON_FOLIO(!folio_test_large_rmappable(folio), folio);
 	VM_WARN_ON_FOLIO(folio_test_hugetlb(folio), folio);
-	raw_write_atomic_seqcount_begin(&folio->_rmap_atomic_seqcount,
-					false);
+
+	exclusive = raw_write_atomic_seqcount_begin(&folio->_rmap_atomic_seqcount,
+						    true);
+	if (likely(exclusive)) {
+		prefetchw(&folio->_rmap_val0);
+		if (unlikely(folio_order(folio) > RMAP_SUBID_4_MAX_ORDER))
+			prefetchw(&folio->_rmap_val4);
+	}
+	return exclusive;
 }
 
-static inline void __folio_write_large_rmap_end(struct folio *folio)
+static inline void __folio_write_large_rmap_end(struct folio *folio,
+		bool exclusive)
 {
-	raw_write_atomic_seqcount_end(&folio->_rmap_atomic_seqcount, false);
+	raw_write_atomic_seqcount_end(&folio->_rmap_atomic_seqcount,
+				      exclusive);
 }
 
 void __folio_set_large_rmap_val(struct folio *folio, int count,
 		struct mm_struct *mm);
 void __folio_add_large_rmap_val(struct folio *folio, int count,
+		struct mm_struct *mm);
+void __folio_add_large_rmap_val_exclusive(struct folio *folio, int count,
 		struct mm_struct *mm);
 bool __folio_has_large_matching_rmap_val(struct folio *folio, int count,
 		struct mm_struct *mm);
@@ -317,12 +330,14 @@ static inline void __folio_prep_large_rmap(struct folio *folio)
 static inline void __folio_undo_large_rmap(struct folio *folio)
 {
 }
-static inline void __folio_write_large_rmap_begin(struct folio *folio)
+static inline bool __folio_write_large_rmap_begin(struct folio *folio)
 {
 	VM_WARN_ON_FOLIO(!folio_test_large_rmappable(folio), folio);
 	VM_WARN_ON_FOLIO(folio_test_hugetlb(folio), folio);
+	return false;
 }
-static inline void __folio_write_large_rmap_end(struct folio *folio)
+static inline void __folio_write_large_rmap_end(struct folio *folio,
+		bool exclusive)
 {
 }
 static inline void __folio_set_large_rmap_val(struct folio *folio, int count,
@@ -331,6 +346,10 @@ static inline void __folio_set_large_rmap_val(struct folio *folio, int count,
 }
 static inline void __folio_add_large_rmap_val(struct folio *folio, int count,
 		struct mm_struct *mm)
+{
+}
+static inline void __folio_add_large_rmap_val_exclusive(struct folio *folio,
+		int count, struct mm_struct *mm)
 {
 }
 #endif /* CONFIG_RMAP_ID */
@@ -348,28 +367,52 @@ static inline void folio_set_large_mapcount(struct folio *folio,
 static inline void folio_inc_large_mapcount(struct folio *folio,
 		struct vm_area_struct *vma)
 {
-	__folio_write_large_rmap_begin(folio);
-	atomic_inc(&folio->_total_mapcount);
-	__folio_add_large_rmap_val(folio, 1, vma->vm_mm);
-	__folio_write_large_rmap_end(folio);
+	bool exclusive;
+
+	exclusive = __folio_write_large_rmap_begin(folio);
+	if (likely(exclusive)) {
+		atomic_set(&folio->_total_mapcount,
+			   atomic_read(&folio->_total_mapcount) + 1);
+		__folio_add_large_rmap_val_exclusive(folio, 1, vma->vm_mm);
+	} else {
+		atomic_inc(&folio->_total_mapcount);
+		__folio_add_large_rmap_val(folio, 1, vma->vm_mm);
+	}
+	__folio_write_large_rmap_end(folio, exclusive);
 }
 
 static inline void folio_add_large_mapcount(struct folio *folio,
 		int count, struct vm_area_struct *vma)
 {
-	__folio_write_large_rmap_begin(folio);
-	atomic_add(count, &folio->_total_mapcount);
-	__folio_add_large_rmap_val(folio, count, vma->vm_mm);
-	__folio_write_large_rmap_end(folio);
+	bool exclusive;
+
+	exclusive = __folio_write_large_rmap_begin(folio);
+	if (likely(exclusive)) {
+		atomic_set(&folio->_total_mapcount,
+			   atomic_read(&folio->_total_mapcount) + count);
+		__folio_add_large_rmap_val_exclusive(folio, count, vma->vm_mm);
+	} else {
+		atomic_add(count, &folio->_total_mapcount);
+		__folio_add_large_rmap_val(folio, count, vma->vm_mm);
+	}
+	__folio_write_large_rmap_end(folio, exclusive);
 }
 
 static inline void folio_dec_large_mapcount(struct folio *folio,
 		struct vm_area_struct *vma)
 {
-	__folio_write_large_rmap_begin(folio);
-	atomic_dec(&folio->_total_mapcount);
-	__folio_add_large_rmap_val(folio, -1, vma->vm_mm);
-	__folio_write_large_rmap_end(folio);
+	bool exclusive;
+
+	exclusive = __folio_write_large_rmap_begin(folio);
+	if (likely(exclusive)) {
+		atomic_set(&folio->_total_mapcount,
+			   atomic_read(&folio->_total_mapcount) - 1);
+		__folio_add_large_rmap_val_exclusive(folio, -1, vma->vm_mm);
+	} else {
+		atomic_dec(&folio->_total_mapcount);
+		__folio_add_large_rmap_val(folio, -1, vma->vm_mm);
+	}
+	__folio_write_large_rmap_end(folio, exclusive);
 }
 
 /* RMAP flags, currently only relevant for some anon rmap operations. */

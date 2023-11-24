@@ -379,6 +379,58 @@ void __folio_add_large_rmap_val(struct folio *folio, int count,
 	}
 }
 
+void __folio_add_large_rmap_val_exclusive(struct folio *folio, int count,
+		struct mm_struct *mm)
+{
+	const unsigned int order = folio_order(folio);
+
+	/*
+	 * Concurrent rmap value modifications are impossible. We don't care
+	 * about store tearing because readers will realize the concurrent
+	 * updates using the seqcount and simply retry. So adjust the bare
+	 * atomic counter instead.
+	 */
+	switch (order) {
+#if MAX_ORDER >= RMAP_SUBID_6_MIN_ORDER
+	case RMAP_SUBID_6_MIN_ORDER ... RMAP_SUBID_6_MAX_ORDER:
+		folio->_rmap_val0.counter += get_rmap_subid_6(mm, 0) * count;
+		folio->_rmap_val1.counter += get_rmap_subid_6(mm, 1) * count;
+		folio->_rmap_val2.counter += get_rmap_subid_6(mm, 2) * count;
+		folio->_rmap_val3.counter += get_rmap_subid_6(mm, 3) * count;
+		folio->_rmap_val4.counter += get_rmap_subid_6(mm, 4) * count;
+		folio->_rmap_val5.counter += get_rmap_subid_6(mm, 5) * count;
+		break;
+#endif
+#if MAX_ORDER >= RMAP_SUBID_5_MIN_ORDER
+	case RMAP_SUBID_5_MIN_ORDER ... RMAP_SUBID_5_MAX_ORDER:
+		folio->_rmap_val0.counter += get_rmap_subid_5(mm, 0) * count;
+		folio->_rmap_val1.counter += get_rmap_subid_5(mm, 1) * count;
+		folio->_rmap_val2.counter += get_rmap_subid_5(mm, 2) * count;
+		folio->_rmap_val3.counter += get_rmap_subid_5(mm, 3) * count;
+		folio->_rmap_val4.counter += get_rmap_subid_5(mm, 4) * count;
+		break;
+#endif
+	case RMAP_SUBID_4_MIN_ORDER ... RMAP_SUBID_4_MAX_ORDER:
+		folio->_rmap_val0.counter += get_rmap_subid_4(mm, 0) * count;
+		folio->_rmap_val1.counter += get_rmap_subid_4(mm, 1) * count;
+		folio->_rmap_val2.counter += get_rmap_subid_4(mm, 2) * count;
+		folio->_rmap_val3.counter += get_rmap_subid_4(mm, 3) * count;
+		break;
+	case RMAP_SUBID_3_MIN_ORDER ... RMAP_SUBID_3_MAX_ORDER:
+		folio->_rmap_val0.counter += get_rmap_subid_3(mm, 0) * count;
+		folio->_rmap_val1.counter += get_rmap_subid_3(mm, 1) * count;
+		folio->_rmap_val2.counter += get_rmap_subid_3(mm, 2) * count;
+		break;
+	case RMAP_SUBID_2_MIN_ORDER ... RMAP_SUBID_2_MAX_ORDER:
+		folio->_rmap_val0.counter += get_rmap_subid_2(mm, 0) * count;
+		folio->_rmap_val1.counter += get_rmap_subid_2(mm, 1) * count;
+		break;
+	default:
+		folio->_rmap_val0.counter += get_rmap_subid_1(mm);
+		break;
+	}
+}
+
 bool __folio_has_large_matching_rmap_val(struct folio *folio, int count,
 		 struct mm_struct *mm)
 {
