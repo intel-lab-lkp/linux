@@ -276,19 +276,21 @@ struct dpll_info {
 	 */
 	enum intel_display_power_domain power_domain;
 
-#define INTEL_DPLL_ALWAYS_ON	(1 << 0)
-#define INTEL_DPLL_HAS_ALT_PORT_DPLL	(1 << 1)
 	/**
-	 * @flags:
+	 * @always_on:
 	 *
-	 * INTEL_DPLL_ALWAYS_ON
-	 *     Inform the state checker that the DPLL is kept enabled even if
-	 *     not in use by any CRTC.
-	 * INTEL_DPLL_HAS_ALT_PORT_DPLL
-	 *     Inform the state checker that the CRTC will have two port DPLLs
-	 *     referenced simultanously (for TC->TBT fallback).
+	 * Inform the state checker that the DPLL is kept enabled even if
+	 * not in use by any CRTC.
 	 */
-	u32 flags;
+	bool always_on;
+
+	/**
+	 * @has_alt_port_dpll:
+	 *
+	 * Inform the state checker that the CRTC will have two port DPLLs
+	 * referenced simultanously (for TC->TBT fallback).
+	 */
+	bool has_alt_port_dpll;
 };
 
 /**

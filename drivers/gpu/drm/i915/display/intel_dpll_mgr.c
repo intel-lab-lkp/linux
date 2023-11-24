@@ -1263,11 +1263,11 @@ static const struct dpll_info hsw_plls[] = {
 	{ .name = "WRPLL 2", .funcs = &hsw_ddi_wrpll_funcs, .id = DPLL_ID_WRPLL2, },
 	{ .name = "SPLL", .funcs = &hsw_ddi_spll_funcs, .id = DPLL_ID_SPLL, },
 	{ .name = "LCPLL 810", .funcs = &hsw_ddi_lcpll_funcs, .id = DPLL_ID_LCPLL_810,
-	  .flags = INTEL_DPLL_ALWAYS_ON, },
+	  .always_on = true, },
 	{ .name = "LCPLL 1350", .funcs = &hsw_ddi_lcpll_funcs, .id = DPLL_ID_LCPLL_1350,
-	  .flags = INTEL_DPLL_ALWAYS_ON, },
+	  .always_on = true, },
 	{ .name = "LCPLL 2700", .funcs = &hsw_ddi_lcpll_funcs, .id = DPLL_ID_LCPLL_2700,
-	  .flags = INTEL_DPLL_ALWAYS_ON, },
+	  .always_on = true, },
 	{}
 };
 
@@ -1945,7 +1945,7 @@ static const struct intel_shared_dpll_funcs skl_ddi_dpll0_funcs = {
 
 static const struct dpll_info skl_plls[] = {
 	{ .name = "DPLL 0", .funcs = &skl_ddi_dpll0_funcs, .id = DPLL_ID_SKL_DPLL0,
-	  .flags = INTEL_DPLL_ALWAYS_ON, },
+	  .always_on = true, },
 	{ .name = "DPLL 1", .funcs = &skl_ddi_pll_funcs, .id = DPLL_ID_SKL_DPLL1, },
 	{ .name = "DPLL 2", .funcs = &skl_ddi_pll_funcs, .id = DPLL_ID_SKL_DPLL2, },
 	{ .name = "DPLL 3", .funcs = &skl_ddi_pll_funcs, .id = DPLL_ID_SKL_DPLL3, },
@@ -4024,15 +4024,15 @@ static const struct dpll_info icl_plls[] = {
 	{ .name = "DPLL 0", .funcs = &combo_pll_funcs, .id = DPLL_ID_ICL_DPLL0, },
 	{ .name = "DPLL 1", .funcs = &combo_pll_funcs, .id = DPLL_ID_ICL_DPLL1, },
 	{ .name = "TBT PLL", .funcs = &tbt_pll_funcs, .id = DPLL_ID_ICL_TBTPLL,
-	  .flags = INTEL_DPLL_HAS_ALT_PORT_DPLL, },
+	  .has_alt_port_dpll = true, },
 	{ .name = "MG PLL 1", .funcs = &mg_pll_funcs, .id = DPLL_ID_ICL_MGPLL1,
-	  .flags = INTEL_DPLL_HAS_ALT_PORT_DPLL, },
+	  .has_alt_port_dpll = true, },
 	{ .name = "MG PLL 2", .funcs = &mg_pll_funcs, .id = DPLL_ID_ICL_MGPLL2,
-	  .flags = INTEL_DPLL_HAS_ALT_PORT_DPLL, },
+	  .has_alt_port_dpll = true, },
 	{ .name = "MG PLL 3", .funcs = &mg_pll_funcs, .id = DPLL_ID_ICL_MGPLL3,
-	  .flags = INTEL_DPLL_HAS_ALT_PORT_DPLL, },
+	  .has_alt_port_dpll = true, },
 	{ .name = "MG PLL 4", .funcs = &mg_pll_funcs, .id = DPLL_ID_ICL_MGPLL4,
-	  .flags = INTEL_DPLL_HAS_ALT_PORT_DPLL, },
+	  .has_alt_port_dpll = true, },
 	{}
 };
 
@@ -4074,19 +4074,19 @@ static const struct dpll_info tgl_plls[] = {
 	{ .name = "DPLL 0", .funcs = &combo_pll_funcs, .id = DPLL_ID_ICL_DPLL0, },
 	{ .name = "DPLL 1", .funcs = &combo_pll_funcs, .id = DPLL_ID_ICL_DPLL1, },
 	{ .name = "TBT PLL", .funcs = &tbt_pll_funcs, .id = DPLL_ID_ICL_TBTPLL,
-	  .flags = INTEL_DPLL_HAS_ALT_PORT_DPLL, },
+	  .has_alt_port_dpll = true, },
 	{ .name = "TC PLL 1", .funcs = &dkl_pll_funcs, .id = DPLL_ID_ICL_MGPLL1,
-	  .flags = INTEL_DPLL_HAS_ALT_PORT_DPLL, },
+	  .has_alt_port_dpll = true, },
 	{ .name = "TC PLL 2", .funcs = &dkl_pll_funcs, .id = DPLL_ID_ICL_MGPLL2,
-	  .flags = INTEL_DPLL_HAS_ALT_PORT_DPLL, },
+	  .has_alt_port_dpll = true, },
 	{ .name = "TC PLL 3", .funcs = &dkl_pll_funcs, .id = DPLL_ID_ICL_MGPLL3,
-	  .flags = INTEL_DPLL_HAS_ALT_PORT_DPLL, },
+	  .has_alt_port_dpll = true, },
 	{ .name = "TC PLL 4", .funcs = &dkl_pll_funcs, .id = DPLL_ID_ICL_MGPLL4,
-	  .flags = INTEL_DPLL_HAS_ALT_PORT_DPLL, },
+	  .has_alt_port_dpll = true, },
 	{ .name = "TC PLL 5", .funcs = &dkl_pll_funcs, .id = DPLL_ID_TGL_MGPLL5,
-	  .flags = INTEL_DPLL_HAS_ALT_PORT_DPLL, },
+	  .has_alt_port_dpll = true, },
 	{ .name = "TC PLL 6", .funcs = &dkl_pll_funcs, .id = DPLL_ID_TGL_MGPLL6,
-	  .flags = INTEL_DPLL_HAS_ALT_PORT_DPLL, },
+	  .has_alt_port_dpll = true, },
 	{}
 };
 
@@ -4154,15 +4154,15 @@ static const struct dpll_info adlp_plls[] = {
 	{ .name = "DPLL 0", .funcs = &combo_pll_funcs, .id = DPLL_ID_ICL_DPLL0, },
 	{ .name = "DPLL 1", .funcs = &combo_pll_funcs, .id = DPLL_ID_ICL_DPLL1, },
 	{ .name = "TBT PLL", .funcs = &tbt_pll_funcs, .id = DPLL_ID_ICL_TBTPLL,
-	  .flags = INTEL_DPLL_HAS_ALT_PORT_DPLL, },
+	  .has_alt_port_dpll = true, },
 	{ .name = "TC PLL 1", .funcs = &dkl_pll_funcs, .id = DPLL_ID_ICL_MGPLL1,
-	  .flags = INTEL_DPLL_HAS_ALT_PORT_DPLL, },
+	  .has_alt_port_dpll = true, },
 	{ .name = "TC PLL 2", .funcs = &dkl_pll_funcs, .id = DPLL_ID_ICL_MGPLL2,
-	  .flags = INTEL_DPLL_HAS_ALT_PORT_DPLL, },
+	  .has_alt_port_dpll = true, },
 	{ .name = "TC PLL 3", .funcs = &dkl_pll_funcs, .id = DPLL_ID_ICL_MGPLL3,
-	  .flags = INTEL_DPLL_HAS_ALT_PORT_DPLL, },
+	  .has_alt_port_dpll = true, },
 	{ .name = "TC PLL 4", .funcs = &dkl_pll_funcs, .id = DPLL_ID_ICL_MGPLL4,
-	  .flags = INTEL_DPLL_HAS_ALT_PORT_DPLL, },
+	  .has_alt_port_dpll = true, },
 	{}
 };
 
@@ -4488,7 +4488,7 @@ verify_single_dpll_state(struct drm_i915_private *i915,
 
 	active = intel_dpll_get_hw_state(i915, pll, &dpll_hw_state);
 
-	if (!(pll->info->flags & INTEL_DPLL_ALWAYS_ON)) {
+	if (!pll->info->always_on) {
 		I915_STATE_WARN(i915, !pll->on && pll->active_mask,
 				"%s: pll in active use but not on in sw tracking\n",
 				pll->info->name);
@@ -4554,7 +4554,7 @@ void intel_shared_dpll_state_verify(struct intel_atomic_state *state,
 				pll->info->name, pipe_name(crtc->pipe), pll->active_mask);
 
 		/* TC ports have both MG/TC and TBT PLL referenced simultaneously */
-		I915_STATE_WARN(i915, !(pll->info->flags & INTEL_DPLL_HAS_ALT_PORT_DPLL) &&
+		I915_STATE_WARN(i915, !pll->info->has_alt_port_dpll &&
 				pll->state.pipe_mask & pipe_mask,
 				"%s: pll enabled crtcs mismatch (found pipe %c in enabled mask (0x%x))\n",
 				pll->info->name, pipe_name(crtc->pipe), pll->state.pipe_mask);
