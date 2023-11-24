@@ -114,6 +114,21 @@ static int acpi_register_gsi_xen_hvm(struct device *dev, u32 gsi,
 				 false /* no mapping of GSI to PIRQ */);
 }
 
+static int acpi_register_gsi_xen_pvh(struct device *dev, u32 gsi,
+				    int trigger, int polarity)
+{
+	int irq;
+
+	irq = acpi_register_gsi_ioapic(dev, gsi, trigger, polarity);
+	if (irq < 0)
+		return irq;
+
+	if (xen_pvh_add_gsi_irq_map(gsi, irq) == -EEXIST)
+		printk(KERN_INFO "Already map the GSI :%u and IRQ: %d\n", gsi, irq);
+
+	return irq;
+}
+
 #ifdef CONFIG_XEN_PV_DOM0
 static int xen_register_gsi(u32 gsi, int triggering, int polarity)
 {
@@ -555,6 +570,12 @@ int __init pci_xen_hvm_init(void)
 	 */
 	x86_platform.apic_post_init = xen_hvm_msi_init;
 #endif
+	return 0;
+}
+
+int __init pci_xen_pvh_init(void)
+{
+	__acpi_register_gsi = acpi_register_gsi_xen_pvh;
 	return 0;
 }
 

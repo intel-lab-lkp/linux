@@ -739,7 +739,7 @@ static int acpi_register_gsi_pic(struct device *dev, u32 gsi,
 }
 
 #ifdef CONFIG_X86_LOCAL_APIC
-static int acpi_register_gsi_ioapic(struct device *dev, u32 gsi,
+int acpi_register_gsi_ioapic(struct device *dev, u32 gsi,
 				    int trigger, int polarity)
 {
 	int irq = gsi;

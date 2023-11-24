@@ -131,6 +131,11 @@ int xen_pirq_from_irq(unsigned irq);
 /* Return the irq allocated to the gsi */
 int xen_irq_from_gsi(unsigned gsi);
 
+/* Return the gsi from irq */
+int xen_gsi_from_irq(unsigned irq);
+
+int xen_pvh_add_gsi_irq_map(unsigned gsi, unsigned irq);
+
 /* Determine whether to ignore this IRQ if it is passed to a guest. */
 int xen_test_irq_shared(int irq);
 

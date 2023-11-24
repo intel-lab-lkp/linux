@@ -45,6 +45,7 @@
 #include <xen/page.h>
 #include <xen/xen-ops.h>
 #include <xen/balloon.h>
+#include <xen/events.h>
 
 #include "privcmd.h"
 
@@ -842,6 +843,21 @@ out:
 	return rc;
 }
 
+static long privcmd_ioctl_gsi_from_irq(struct file *file, void __user *udata)
+{
+	struct privcmd_gsi_from_irq kdata;
+
+	if (copy_from_user(&kdata, udata, sizeof(kdata)))
+		return -EFAULT;
+
+	kdata.gsi = xen_gsi_from_irq(kdata.irq);
+
+	if (copy_to_user(udata, &kdata, sizeof(kdata)))
+		return -EFAULT;
+
+	return 0;
+}
+
 #ifdef CONFIG_XEN_PRIVCMD_EVENTFD
 /* Irqfd support */
 static struct workqueue_struct *irqfd_cleanup_wq;
@@ -1532,6 +1548,10 @@ static long privcmd_ioctl(struct file *file,
 
 	case IOCTL_PRIVCMD_IOEVENTFD:
 		ret = privcmd_ioctl_ioeventfd(file, udata);
+		break;
+
+	case IOCTL_PRIVCMD_GSI_FROM_IRQ:
+		ret = privcmd_ioctl_gsi_from_irq(file, udata);
 		break;
 
 	default:

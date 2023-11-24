@@ -957,6 +957,43 @@ int xen_irq_from_gsi(unsigned gsi)
 }
 EXPORT_SYMBOL_GPL(xen_irq_from_gsi);
 
+int xen_gsi_from_irq(unsigned irq)
+{
+	struct irq_info *info;
+
+	list_for_each_entry(info, &xen_irq_list_head, list) {
+		if (info->type != IRQT_PIRQ)
+			continue;
+
+		if (info->irq == irq)
+			return info->u.pirq.gsi;
+	}
+
+	return -1;
+}
+EXPORT_SYMBOL_GPL(xen_gsi_from_irq);
+
+int xen_pvh_add_gsi_irq_map(unsigned gsi, unsigned irq)
+{
+	int tmp_irq;
+	struct irq_info *info;
+
+	tmp_irq = xen_irq_from_gsi(gsi);
+	if (tmp_irq != -1)
+		return -EEXIST;
+
+	info = kzalloc(sizeof(*info), GFP_KERNEL);
+	if (info == NULL)
+		panic("Unable to allocate metadata for GSI%d\n", gsi);
+
+	info->type = IRQT_PIRQ;
+	info->irq = irq;
+	info->u.pirq.gsi = gsi;
+	list_add_tail(&info->list, &xen_irq_list_head);
+
+	return 0;
+}
+
 static void __unbind_from_irq(unsigned int irq)
 {
 	evtchn_port_t evtchn = evtchn_from_irq(irq);
@@ -2303,6 +2340,8 @@ void __init xen_init_IRQ(void)
 	xen_init_setup_upcall_vector();
 	xen_alloc_callback_vector();
 
+	if (xen_pvh_domain())
+		pci_xen_pvh_init();
 
 	if (xen_hvm_domain()) {
 		native_init_IRQ();
