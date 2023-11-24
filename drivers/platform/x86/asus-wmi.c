@@ -16,6 +16,7 @@
 #include <linux/acpi.h>
 #include <linux/backlight.h>
 #include <linux/debugfs.h>
+#include <linux/delay.h>
 #include <linux/dmi.h>
 #include <linux/fb.h>
 #include <linux/hwmon.h>
@@ -131,6 +132,9 @@ module_param(fnlock_default, bool, 0444);
 #define ASUS_SCREENPAD_BRIGHT_MIN 20
 #define ASUS_SCREENPAD_BRIGHT_MAX 255
 #define ASUS_SCREENPAD_BRIGHT_DEFAULT 60
+
+/* Controls the power state of the USB0 hub on ROG Ally which input is on */
+#define ASUS_USB0_PWR_SB_PCI0_SBRG_EC0_CSEE "\\_SB.PCI0.SBRG.EC0.CSEE"
 
 static const char * const ashs_ids[] = { "ATK4001", "ATK4002", NULL };
 
@@ -299,6 +303,9 @@ struct asus_wmi {
 	struct work_struct hotplug_work;
 
 	bool fnlock_locked;
+
+	/* The ROG Ally device requires the USB hub to be disabled before suspend */
+	bool pre_suspend_ec0_csee_disable;
 
 	struct asus_wmi_debug debug;
 
@@ -4488,6 +4495,8 @@ static int asus_wmi_add(struct platform_device *pdev)
 	asus->nv_temp_tgt_available = asus_wmi_dev_is_present(asus, ASUS_WMI_DEVID_NV_THERM_TARGET);
 	asus->panel_overdrive_available = asus_wmi_dev_is_present(asus, ASUS_WMI_DEVID_PANEL_OD);
 	asus->mini_led_mode_available = asus_wmi_dev_is_present(asus, ASUS_WMI_DEVID_MINI_LED_MODE);
+	asus->pre_suspend_ec0_csee_disable = acpi_has_method(NULL, ASUS_USB0_PWR_SB_PCI0_SBRG_EC0_CSEE)
+						&& dmi_match(DMI_BOARD_NAME, "RC71L");
 
 	err = fan_boost_mode_check_present(asus);
 	if (err)
@@ -4654,6 +4663,38 @@ static int asus_hotk_resume(struct device *device)
 		asus_wmi_fnlock_update(asus);
 
 	asus_wmi_tablet_mode_get_state(asus);
+
+	return 0;
+}
+
+static int asus_hotk_resume_early(struct device *device)
+{
+	struct asus_wmi *asus = dev_get_drvdata(device);
+	acpi_status status;
+
+	if (asus->pre_suspend_ec0_csee_disable) {
+		status = acpi_execute_simple_method(NULL, ASUS_USB0_PWR_SB_PCI0_SBRG_EC0_CSEE, 0xB8);
+		if (ACPI_FAILURE(status)) {
+			pr_warn("failed to set USB hub power on\n");
+			return 1;
+		}
+	}
+	return 0;
+}
+
+static int asus_hotk_prepare(struct device *device)
+{
+	struct asus_wmi *asus = dev_get_drvdata(device);
+	acpi_status status;
+
+	if (asus->pre_suspend_ec0_csee_disable) {
+		status = acpi_execute_simple_method(NULL, ASUS_USB0_PWR_SB_PCI0_SBRG_EC0_CSEE, 0xB7);
+		msleep(500); /* sleep required to ensure n-key is disabled before sleep continues */
+		if (ACPI_FAILURE(status)) {
+			pr_warn("failed to set USB hub power off\n");
+			// return 1;
+		}
+	}
 	return 0;
 }
 
@@ -4701,6 +4742,8 @@ static const struct dev_pm_ops asus_pm_ops = {
 	.thaw = asus_hotk_thaw,
 	.restore = asus_hotk_restore,
 	.resume = asus_hotk_resume,
+	.resume_early = asus_hotk_resume_early,
+	.prepare = asus_hotk_prepare,
 };
 
 /* Registration ***************************************************************/
