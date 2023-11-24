@@ -1155,6 +1155,57 @@ static unsigned int __folio_add_rmap_range(struct folio *folio,
 	return nr;
 }
 
+static unsigned int __folio_remove_rmap_range(struct folio *folio,
+		struct page *page, unsigned int nr_pages,
+		struct vm_area_struct *vma, bool compound, int *nr_pmdmapped)
+{
+	atomic_t *mapped = &folio->_nr_pages_mapped;
+	int last, count, nr = 0;
+
+	VM_WARN_ON_FOLIO(compound && page != &folio->page, folio);
+	VM_WARN_ON_FOLIO(compound && !folio_test_pmd_mappable(folio), folio);
+	VM_WARN_ON_FOLIO(compound && nr_pages != folio_nr_pages(folio), folio);
+	VM_WARN_ON_FOLIO(!folio_test_large(folio) && nr_pages != 1, folio);
+
+	if (likely(!folio_test_large(folio)))
+		return atomic_add_negative(-1, &page->_mapcount);
+
+	/* Is page being unmapped by PTE? Is this its last map to be removed? */
+	if (!compound) {
+		folio_add_large_mapcount(folio, -nr_pages, vma);
+		count = nr_pages;
+		do {
+			last = atomic_add_negative(-1, &page->_mapcount);
+			if (last) {
+				last = atomic_dec_return_relaxed(mapped);
+				if (last < COMPOUND_MAPPED)
+					nr++;
+			}
+		} while (page++, --count > 0);
+	} else if (folio_test_pmd_mappable(folio)) {
+		/* That test is redundant: it's for safety or to optimize out */
+
+		folio_dec_large_mapcount(folio, vma);
+		last = atomic_add_negative(-1, &folio->_entire_mapcount);
+		if (last) {
+			nr = atomic_sub_return_relaxed(COMPOUND_MAPPED, mapped);
+			if (likely(nr < COMPOUND_MAPPED)) {
+				*nr_pmdmapped = folio_nr_pages(folio);
+				nr = *nr_pmdmapped - (nr & FOLIO_PAGES_MAPPED);
+				/* Raced ahead of another remove and an add? */
+				if (unlikely(nr < 0))
+					nr = 0;
+			} else {
+				/* An add of COMPOUND_MAPPED raced ahead */
+				nr = 0;
+			}
+		}
+	} else {
+		VM_WARN_ON_ONCE_FOLIO(true, folio);
+	}
+	return nr;
+}
+
 /**
  * folio_move_anon_rmap - move a folio to our anon_vma
  * @folio:	The folio to move to our anon_vma
@@ -1439,12 +1490,9 @@ void page_remove_rmap(struct page *page, struct vm_area_struct *vma,
 		bool compound)
 {
 	struct folio *folio = page_folio(page);
-	atomic_t *mapped = &folio->_nr_pages_mapped;
-	int nr = 0, nr_pmdmapped = 0;
-	bool last;
+	unsigned long nr_pages = compound ? folio_nr_pages(folio) : 1;
+	unsigned int nr, nr_pmdmapped = 0;
 	enum node_stat_item idx;
-
-	VM_BUG_ON_PAGE(compound && !PageHead(page), page);
 
 	/* Hugetlb pages are not counted in NR_*MAPPED */
 	if (unlikely(folio_test_hugetlb(folio))) {
@@ -1454,36 +1502,8 @@ void page_remove_rmap(struct page *page, struct vm_area_struct *vma,
 		return;
 	}
 
-	if (folio_test_large(folio))
-		folio_dec_large_mapcount(folio, vma);
-
-	/* Is page being unmapped by PTE? Is this its last map to be removed? */
-	if (likely(!compound)) {
-		last = atomic_add_negative(-1, &page->_mapcount);
-		nr = last;
-		if (last && folio_test_large(folio)) {
-			nr = atomic_dec_return_relaxed(mapped);
-			nr = (nr < COMPOUND_MAPPED);
-		}
-	} else if (folio_test_pmd_mappable(folio)) {
-		/* That test is redundant: it's for safety or to optimize out */
-
-		last = atomic_add_negative(-1, &folio->_entire_mapcount);
-		if (last) {
-			nr = atomic_sub_return_relaxed(COMPOUND_MAPPED, mapped);
-			if (likely(nr < COMPOUND_MAPPED)) {
-				nr_pmdmapped = folio_nr_pages(folio);
-				nr = nr_pmdmapped - (nr & FOLIO_PAGES_MAPPED);
-				/* Raced ahead of another remove and an add? */
-				if (unlikely(nr < 0))
-					nr = 0;
-			} else {
-				/* An add of COMPOUND_MAPPED raced ahead */
-				nr = 0;
-			}
-		}
-	}
-
+	nr = __folio_remove_rmap_range(folio, page, nr_pages, vma, compound,
+				       &nr_pmdmapped);
 	if (nr_pmdmapped) {
 		if (folio_test_anon(folio))
 			idx = NR_ANON_THPS;
