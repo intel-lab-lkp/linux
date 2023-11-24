@@ -255,6 +255,7 @@
 #define ARMV8_PMU_BUS_SLOTS_MASK 0xff
 #define ARMV8_PMU_BUS_WIDTH_SHIFT 16
 #define ARMV8_PMU_BUS_WIDTH_MASK 0xf
+#define ARMV8_PMU_THWIDTH GENMASK(23, 20)
 
 /*
  * This code is really good
