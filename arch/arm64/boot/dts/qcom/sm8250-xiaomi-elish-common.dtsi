@@ -657,6 +657,22 @@
 	gpio-reserved-ranges = <40 4>;
 };
 
+&ufs_mem_hc {
+	vcc-supply = <&vreg_l17a_3p0>;
+	vcc-max-microamp = <800000>;
+	vccq-supply = <&vreg_l6a_1p2>;
+	vccq-max-microamp = <800000>;
+	vccq2-supply = <&vreg_s4a_1p8>;
+	vccq2-max-microamp = <800000>;
+	status = "okay";
+};
+
+&ufs_mem_phy {
+	vdda-phy-supply = <&vreg_l5a_0p88>;
+	vdda-pll-supply = <&vreg_l9a_1p2>;
+	status = "okay";
+};
+
 &usb_1 {
 	/* USB 2.0 only */
 	qcom,select-utmi-as-pipe-clk;
@@ -675,22 +691,6 @@
 	vdda-pll-supply = <&vreg_l5a_0p88>;
 	vdda18-supply = <&vreg_l12a_1p8>;
 	vdda33-supply = <&vreg_l2a_3p1>;
-	status = "okay";
-};
-
-&ufs_mem_hc {
-	vcc-supply = <&vreg_l17a_3p0>;
-	vcc-max-microamp = <800000>;
-	vccq-supply = <&vreg_l6a_1p2>;
-	vccq-max-microamp = <800000>;
-	vccq2-supply = <&vreg_s4a_1p8>;
-	vccq2-max-microamp = <800000>;
-	status = "okay";
-};
-
-&ufs_mem_phy {
-	vdda-phy-supply = <&vreg_l5a_0p88>;
-	vdda-pll-supply = <&vreg_l9a_1p2>;
 	status = "okay";
 };
 
