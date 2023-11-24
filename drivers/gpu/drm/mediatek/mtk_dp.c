@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (c) 2019-2022 MediaTek Inc.
+ * Copyright (c) 2019-2023 MediaTek Inc.
  * Copyright (c) 2022 BayLibre
  */
 
@@ -33,7 +33,12 @@
 #include <sound/hdmi-codec.h>
 #include <video/videomode.h>
 
+#include "mtk_dp.h"
 #include "mtk_dp_reg.h"
+#include "mtk_dp_hdcp.h"
+#include "mtk_dp_hdcp1x.h"
+#include "mtk_dp_hdcp2.h"
+#include "ca/tlcDpHdcp.h"
 
 #define MTK_DP_SIP_CONTROL_AARCH32	MTK_SIP_SMC_CMD(0x523)
 #define MTK_DP_SIP_ATF_EDP_VIDEO_UNMUTE	(BIT(0) | BIT(5))
@@ -120,6 +125,9 @@ struct mtk_dp {
 	const struct mtk_dp_data *data;
 	struct mtk_dp_info info;
 	struct mtk_dp_train_info train_info;
+	struct mtk_hdcp_info hdcp_info;
+	struct work_struct hdcp_work;
+	struct workqueue_struct *hdcp_workqueue;
 
 	struct platform_device *phy_dev;
 	struct phy *phy;
@@ -324,19 +332,23 @@ static struct mtk_dp *mtk_dp_from_bridge(struct drm_bridge *b)
 	return container_of(b, struct mtk_dp, bridge);
 }
 
-static u32 mtk_dp_read(struct mtk_dp *mtk_dp, u32 offset)
+u32 mtk_dp_reg_read(struct regmap *regs, u32 offset)
 {
 	u32 read_val;
 	int ret;
 
-	ret = regmap_read(mtk_dp->regs, offset, &read_val);
+	ret = regmap_read(regs, offset, &read_val);
 	if (ret) {
-		dev_err(mtk_dp->dev, "Failed to read register 0x%x: %d\n",
-			offset, ret);
+		pr_err("Failed to read register 0x%x: %d\n", offset, ret);
 		return 0;
 	}
 
 	return read_val;
+}
+
+u32 mtk_dp_read(struct mtk_dp *mtk_dp, u32 offset)
+{
+	return mtk_dp_reg_read(mtk_dp->regs, offset);
 }
 
 static int mtk_dp_write(struct mtk_dp *mtk_dp, u32 offset, u32 val)
@@ -350,16 +362,21 @@ static int mtk_dp_write(struct mtk_dp *mtk_dp, u32 offset, u32 val)
 	return ret;
 }
 
-static int mtk_dp_update_bits(struct mtk_dp *mtk_dp, u32 offset,
-			      u32 val, u32 mask)
+int mtk_dp_reg_update_bits(struct regmap *regs, u32 offset,
+			   u32 val, u32 mask)
 {
-	int ret = regmap_update_bits(mtk_dp->regs, offset, mask, val);
+	int ret = regmap_update_bits(regs, offset, mask, val);
 
 	if (ret)
-		dev_err(mtk_dp->dev,
-			"Failed to update register 0x%x with value 0x%x, mask 0x%x\n",
-			offset, val, mask);
+		pr_err("Failed to update register 0x%x with value 0x%x, mask 0x%x\n",
+		       offset, val, mask);
 	return ret;
+}
+
+int mtk_dp_update_bits(struct mtk_dp *mtk_dp, u32 offset,
+		       u32 val, u32 mask)
+{
+	return mtk_dp_reg_update_bits(mtk_dp->regs, offset, val, mask);
 }
 
 static void mtk_dp_bulk_16bit_write(struct mtk_dp *mtk_dp, u32 offset, u8 *buf,
@@ -1865,6 +1882,40 @@ static void mtk_dp_init_port(struct mtk_dp *mtk_dp)
 	mtk_dp_digital_sw_reset(mtk_dp);
 }
 
+static void mtk_dp_check_sink_esi(struct mtk_dp *mtk_dp)
+{
+	u8 clear_cp_irq = BIT(2);
+
+	if (mtk_dp->hdcp_info.hdcp2_info.enable) {
+		mdrv_dp_tx_hdcp2_irq(&mtk_dp->hdcp_info);
+		drm_dp_dpcd_write(mtk_dp->hdcp_info.aux,
+				  DP_DEVICE_SERVICE_IRQ_VECTOR, &clear_cp_irq, 0x1);
+	}
+	/*hdcp 1.x do not need irq*/
+}
+
+static void mtk_dp_hpd_sink_event(struct mtk_dp *mtk_dp)
+{
+	ssize_t ret;
+	u8 sink_count;
+	u8 sink_count_200;
+
+	ret = drm_dp_dpcd_readb(&mtk_dp->aux, DP_SINK_COUNT_ESI, &sink_count);
+	if (ret < 0) {
+		drm_info(mtk_dp->drm_dev, "Read sink count failed: %ld\n", ret);
+		return;
+	}
+
+	ret = drm_dp_dpcd_readb(&mtk_dp->aux, DP_SINK_COUNT, &sink_count_200);
+	if (ret < 0) {
+		drm_info(mtk_dp->drm_dev,
+			 "Read DP_SINK_COUNT_ESI failed: %ld\n", ret);
+		return;
+	}
+
+	mtk_dp_check_sink_esi(mtk_dp);
+}
+
 static irqreturn_t mtk_dp_hpd_event_thread(int hpd, void *dev)
 {
 	struct mtk_dp *mtk_dp = dev;
@@ -1894,9 +1945,11 @@ static irqreturn_t mtk_dp_hpd_event_thread(int hpd, void *dev)
 		}
 	}
 
-	if (status & MTK_DP_THREAD_HPD_EVENT)
+	if (status & MTK_DP_THREAD_HPD_EVENT) {
 		dev_dbg(mtk_dp->dev, "Receive IRQ from sink devices\n");
-
+		/*check if need clear hpd irq*/
+		mtk_dp_hpd_sink_event(mtk_dp);
+	}
 	return IRQ_HANDLED;
 }
 
@@ -2271,7 +2324,7 @@ static void mtk_dp_bridge_atomic_enable(struct drm_bridge *bridge,
 
 	mtk_dp->enabled = true;
 	mtk_dp_update_plugged_status(mtk_dp);
-
+	mtk_dp_re_authentication(&mtk_dp->hdcp_info);
 	return;
 power_off_aux:
 	mtk_dp_update_bits(mtk_dp, MTK_DP_TOP_PWR_STATE,
@@ -2283,6 +2336,11 @@ static void mtk_dp_bridge_atomic_disable(struct drm_bridge *bridge,
 					 struct drm_bridge_state *old_state)
 {
 	struct mtk_dp *mtk_dp = mtk_dp_from_bridge(bridge);
+
+	if (mtk_dp->hdcp_info.hdcp2_info.enable)
+		mdrv_dp_tx_hdcp2_set_start_auth(&mtk_dp->hdcp_info, false);
+	else if (mtk_dp->hdcp_info.hdcp1x_info.enable)
+		mdrv_dp_tx_hdcp1x_set_start_auth(&mtk_dp->hdcp_info, false);
 
 	mtk_dp->enabled = false;
 	mtk_dp_update_plugged_status(mtk_dp);
@@ -2589,6 +2647,69 @@ static int mtk_dp_edp_link_panel(struct drm_dp_aux *mtk_aux)
 	return 0;
 }
 
+void mtk_dp_re_authentication(struct mtk_hdcp_info *hdcp_info)
+{
+	struct mtk_dp *mtk_dp = container_of(hdcp_info, struct mtk_dp, hdcp_info);
+
+	if (!mtk_dp->train_info.cable_plugged_in)
+		return;
+
+	hdcp_info->auth_status = AUTH_PREPARE;
+
+	dev_info(mtk_dp->dev, "dp start HDCP work");
+	queue_work(mtk_dp->hdcp_workqueue, &mtk_dp->hdcp_work);
+}
+
+void mtk_dp_check_hdcp_version(struct mtk_dp *mtk_dp, bool only_hdcp1x)
+{
+	if (!only_hdcp1x && mdrv_dp_tx_hdcp2_support(&mtk_dp->hdcp_info))
+		return;
+
+	if (mdrv_dp_tx_hdcp1x_support(&mtk_dp->hdcp_info))
+		return;
+
+	if (tee_add_device(&mtk_dp->hdcp_info, HDCP_NONE) != RET_SUCCESS)
+		mtk_dp->hdcp_info.auth_status = AUTH_FAIL;
+}
+
+static void mtk_dp_hdcp_handle(struct work_struct *data)
+{
+	struct mtk_dp *mtk_dp = container_of(data, struct mtk_dp, hdcp_work);
+
+	if (!mtk_dp->train_info.cable_plugged_in)
+		return;
+
+	if (mtk_dp->hdcp_info.auth_status == AUTH_PREPARE) {
+		mtk_dp_check_hdcp_version(mtk_dp, false);
+		if (mtk_dp->hdcp_info.hdcp2_info.enable)
+			mdrv_dp_tx_hdcp2_set_start_auth(&mtk_dp->hdcp_info, true);
+		else if (mtk_dp->hdcp_info.hdcp1x_info.enable)
+			mdrv_dp_tx_hdcp1x_set_start_auth(&mtk_dp->hdcp_info, true);
+		else
+			mtk_dp->hdcp_info.auth_status = AUTH_ZERO;
+	}
+
+	while ((mtk_dp->hdcp_info.hdcp1x_info.enable ||
+		mtk_dp->hdcp_info.hdcp2_info.enable) &&
+			mtk_dp->hdcp_info.auth_status != AUTH_FAIL &&
+			mtk_dp->hdcp_info.auth_status != AUTH_PASS) {
+		if (mtk_dp->hdcp_info.hdcp2_info.enable) {
+			mdrv_dp_tx_hdcp2_fsm(&mtk_dp->hdcp_info);
+			if (mtk_dp->hdcp_info.auth_status == AUTH_FAIL) {
+				tee_remove_device(&mtk_dp->hdcp_info);
+				mtk_dp_check_hdcp_version(mtk_dp, true);
+				if (mtk_dp->hdcp_info.hdcp1x_info.enable) {
+					mtk_dp->hdcp_info.hdcp2_info.enable = false;
+					mdrv_dp_tx_hdcp1x_set_start_auth(&mtk_dp->hdcp_info, true);
+				}
+			}
+		}
+
+		if (mtk_dp->hdcp_info.hdcp1x_info.enable)
+			mdrv_dp_tx_hdcp1x_fsm(&mtk_dp->hdcp_info);
+	}
+}
+
 static int mtk_dp_probe(struct platform_device *pdev)
 {
 	struct mtk_dp *mtk_dp;
@@ -2656,6 +2777,16 @@ static int mtk_dp_probe(struct platform_device *pdev)
 	ret = mtk_dp_register_phy(mtk_dp);
 	if (ret)
 		return ret;
+
+	INIT_WORK(&mtk_dp->hdcp_work, mtk_dp_hdcp_handle);
+	mtk_dp->hdcp_workqueue = create_workqueue("mtk_dp_hdcp_work");
+	if (!mtk_dp->hdcp_workqueue) {
+		dev_err(mtk_dp->dev, "failed to create hdcp work queue");
+		return -ENOMEM;
+	}
+
+	mtk_dp->hdcp_info.aux = &mtk_dp->aux;
+	mtk_dp->hdcp_info.regs = mtk_dp->regs;
 
 	mtk_dp->bridge.funcs = &mtk_dp_bridge_funcs;
 	mtk_dp->bridge.of_node = dev->of_node;
