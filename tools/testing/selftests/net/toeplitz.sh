@@ -12,6 +12,7 @@
 # [(-rss -irq_prefix <irq-pattern-prefix>)|(-rps <rps_map>)]
 
 source setup_loopback.sh
+source lib.sh
 readonly SERVER_IP4="192.168.1.200/24"
 readonly SERVER_IP6="fda8::1/64"
 readonly SERVER_MAC="aa:00:00:00:00:02"
@@ -146,15 +147,16 @@ parse_opts() {
 setup() {
 	setup_loopback_environment "${DEV}"
 
+	setup_ns server_ns client_ns
 	# Set up server_ns namespace and client_ns namespace
-	setup_macvlan_ns "${DEV}" server_ns server \
+	setup_macvlan_ns "${DEV}" $server_ns server \
 	"${SERVER_MAC}" "${SERVER_IP}"
-	setup_macvlan_ns "${DEV}" client_ns client \
+	setup_macvlan_ns "${DEV}" $client_ns client \
 	"${CLIENT_MAC}" "${CLIENT_IP}"
 }
 
 cleanup() {
-	cleanup_macvlan_ns server_ns server client_ns client
+	cleanup_macvlan_ns $server_ns server $client_ns client
 	cleanup_loopback "${DEV}"
 }
 
@@ -170,22 +172,22 @@ if [[ "${TEST_RSS}" = true ]]; then
 	# RPS/RFS must be disabled because they move packets between cpus,
 	# which breaks the PACKET_FANOUT_CPU identification of RSS decisions.
 	eval "$(get_disable_rfs_cmd) $(get_disable_rps_cmd)" \
-	  ip netns exec server_ns ./toeplitz "${IP_FLAG}" "${PROTO_FLAG}" \
+	  ip netns exec $server_ns ./toeplitz "${IP_FLAG}" "${PROTO_FLAG}" \
 	  -d "${PORT}" -i "${DEV}" -k "${KEY}" -T 1000 \
 	  -C "$(get_rx_irq_cpus)" -s -v &
 elif [[ ! -z "${RPS_MAP}" ]]; then
 	eval "$(get_disable_rfs_cmd) $(get_set_rps_bitmaps_cmd ${RPS_MAP})" \
-	  ip netns exec server_ns ./toeplitz "${IP_FLAG}" "${PROTO_FLAG}" \
+	  ip netns exec $server_ns ./toeplitz "${IP_FLAG}" "${PROTO_FLAG}" \
 	  -d "${PORT}" -i "${DEV}" -k "${KEY}" -T 1000 \
 	  -r "0x${RPS_MAP}" -s -v &
 else
-	ip netns exec server_ns ./toeplitz "${IP_FLAG}" "${PROTO_FLAG}" \
+	ip netns exec $server_ns ./toeplitz "${IP_FLAG}" "${PROTO_FLAG}" \
 	  -d "${PORT}" -i "${DEV}" -k "${KEY}" -T 1000 -s -v &
 fi
 
 server_pid=$!
 
-ip netns exec client_ns ./toeplitz_client.sh "${PROTO_FLAG}" \
+ip netns exec $client_ns ./toeplitz_client.sh "${PROTO_FLAG}" \
   "${IP_FLAG}" "${SERVER_IP%%/*}" "${PORT}" &
 
 client_pid=$!
