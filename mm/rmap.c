@@ -1109,7 +1109,8 @@ static unsigned int __folio_add_rmap_range(struct folio *folio,
 		struct vm_area_struct *vma, bool compound, int *nr_pmdmapped)
 {
 	atomic_t *mapped = &folio->_nr_pages_mapped;
-	int first, count, nr = 0;
+	int first, val, count, nr = 0;
+	bool exclusive;
 
 	VM_WARN_ON_FOLIO(compound && page != &folio->page, folio);
 	VM_WARN_ON_FOLIO(compound && !folio_test_pmd_mappable(folio), folio);
@@ -1119,8 +1120,23 @@ static unsigned int __folio_add_rmap_range(struct folio *folio,
 	if (likely(!folio_test_large(folio)))
 		return atomic_inc_and_test(&page->_mapcount);
 
+	exclusive = __folio_write_large_rmap_begin(folio);
+
 	/* Is page being mapped by PTE? Is this its first map to be added? */
-	if (!compound) {
+	if (likely(exclusive) && !compound) {
+		count = nr_pages;
+		do {
+			val = atomic_read(&page->_mapcount) + 1;
+			atomic_set(&page->_mapcount, val);
+			if (!val) {
+				val = atomic_read(mapped) + 1;
+				atomic_set(mapped, val);
+				if (val < COMPOUND_MAPPED)
+					nr++;
+			}
+		} while (page++, --count > 0);
+		folio_add_large_mapcount_exclusive(folio, nr_pages, vma);
+	} else if (!compound) {
 		count = nr_pages;
 		do {
 			first = atomic_inc_and_test(&page->_mapcount);
@@ -1131,6 +1147,26 @@ static unsigned int __folio_add_rmap_range(struct folio *folio,
 			}
 		} while (page++, --count > 0);
 		folio_add_large_mapcount(folio, nr_pages, vma);
+	} else if (likely(exclusive) && folio_test_pmd_mappable(folio)) {
+		/* That test is redundant: it's for safety or to optimize out */
+
+		val = atomic_read(&folio->_entire_mapcount) + 1;
+		atomic_set(&folio->_entire_mapcount, val);
+		if (!val) {
+			nr = atomic_read(mapped) + COMPOUND_MAPPED;
+			atomic_set(mapped, nr);
+			if (likely(nr < COMPOUND_MAPPED + COMPOUND_MAPPED)) {
+				*nr_pmdmapped = folio_nr_pages(folio);
+				nr = *nr_pmdmapped - (nr & FOLIO_PAGES_MAPPED);
+				/* Raced ahead of a remove and another add? */
+				if (unlikely(nr < 0))
+					nr = 0;
+			} else {
+				/* Raced ahead of a remove of COMPOUND_MAPPED */
+				nr = 0;
+			}
+		}
+		folio_inc_large_mapcount_exclusive(folio, vma);
 	} else if (folio_test_pmd_mappable(folio)) {
 		/* That test is redundant: it's for safety or to optimize out */
 
@@ -1152,6 +1188,8 @@ static unsigned int __folio_add_rmap_range(struct folio *folio,
 	} else {
 		VM_WARN_ON_ONCE_FOLIO(true, folio);
 	}
+
+	__folio_write_large_rmap_end(folio, exclusive);
 	return nr;
 }
 
@@ -1160,7 +1198,8 @@ static unsigned int __folio_remove_rmap_range(struct folio *folio,
 		struct vm_area_struct *vma, bool compound, int *nr_pmdmapped)
 {
 	atomic_t *mapped = &folio->_nr_pages_mapped;
-	int last, count, nr = 0;
+	int last, val, count, nr = 0;
+	bool exclusive;
 
 	VM_WARN_ON_FOLIO(compound && page != &folio->page, folio);
 	VM_WARN_ON_FOLIO(compound && !folio_test_pmd_mappable(folio), folio);
@@ -1170,8 +1209,23 @@ static unsigned int __folio_remove_rmap_range(struct folio *folio,
 	if (likely(!folio_test_large(folio)))
 		return atomic_add_negative(-1, &page->_mapcount);
 
+	exclusive = __folio_write_large_rmap_begin(folio);
+
 	/* Is page being unmapped by PTE? Is this its last map to be removed? */
-	if (!compound) {
+	if (likely(exclusive) && !compound) {
+		folio_add_large_mapcount_exclusive(folio, -nr_pages, vma);
+		count = nr_pages;
+		do {
+			val = atomic_read(&page->_mapcount) - 1;
+			atomic_set(&page->_mapcount, val);
+			if (val < 0) {
+				val = atomic_read(mapped) - 1;
+				atomic_set(mapped, val);
+				if (val < COMPOUND_MAPPED)
+					nr++;
+			}
+		} while (page++, --count > 0);
+	} else if (!compound) {
 		folio_add_large_mapcount(folio, -nr_pages, vma);
 		count = nr_pages;
 		do {
@@ -1182,6 +1236,26 @@ static unsigned int __folio_remove_rmap_range(struct folio *folio,
 					nr++;
 			}
 		} while (page++, --count > 0);
+	} else if (likely(exclusive) && folio_test_pmd_mappable(folio)) {
+		/* That test is redundant: it's for safety or to optimize out */
+
+		folio_dec_large_mapcount_exclusive(folio, vma);
+		val = atomic_read(&folio->_entire_mapcount) - 1;
+		atomic_set(&folio->_entire_mapcount, val);
+		if (val < 0) {
+			nr = atomic_read(mapped) - COMPOUND_MAPPED;
+			atomic_set(mapped, nr);
+			if (likely(nr < COMPOUND_MAPPED)) {
+				*nr_pmdmapped = folio_nr_pages(folio);
+				nr = *nr_pmdmapped - (nr & FOLIO_PAGES_MAPPED);
+				/* Raced ahead of another remove and an add? */
+				if (unlikely(nr < 0))
+					nr = 0;
+			} else {
+				/* An add of COMPOUND_MAPPED raced ahead */
+				nr = 0;
+			}
+		}
 	} else if (folio_test_pmd_mappable(folio)) {
 		/* That test is redundant: it's for safety or to optimize out */
 
@@ -1203,6 +1277,8 @@ static unsigned int __folio_remove_rmap_range(struct folio *folio,
 	} else {
 		VM_WARN_ON_ONCE_FOLIO(true, folio);
 	}
+
+	__folio_write_large_rmap_end(folio, exclusive);
 	return nr;
 }
 
