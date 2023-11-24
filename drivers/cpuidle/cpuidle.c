@@ -213,10 +213,10 @@ noinstr int cpuidle_enter_state(struct cpuidle_device *dev,
 				 int index)
 {
 	int entered_state;
-
 	struct cpuidle_state *target_state = &drv->states[index];
 	bool broadcast = !!(target_state->flags & CPUIDLE_FLAG_TIMER_STOP);
 	ktime_t time_start, time_end;
+	bool polling;
 
 	instrumentation_begin();
 
@@ -235,6 +235,23 @@ noinstr int cpuidle_enter_state(struct cpuidle_device *dev,
 		target_state = &drv->states[index];
 		broadcast = false;
 	}
+
+	polling = target_state->flags & CPUIDLE_FLAG_POLLING_HARD;
+
+	/*
+	 * If the target state doesn't poll on need_resched(), this is
+	 * the last check after which further TIF_NEED_RESCHED remote setting
+	 * will involve an IPI.
+	 */
+	if (!polling && current_clr_polling_and_test()) {
+		if (broadcast)
+			tick_broadcast_exit();
+		dev->last_residency_ns = 0;
+		local_irq_enable();
+		instrumentation_end();
+		return -EBUSY;
+	}
+
 
 	if (target_state->flags & CPUIDLE_FLAG_TLB_FLUSHED)
 		leave_mm(dev->cpu);
@@ -334,6 +351,9 @@ noinstr int cpuidle_enter_state(struct cpuidle_device *dev,
 		dev->last_residency_ns = 0;
 		dev->states_usage[index].rejected++;
 	}
+
+	if (!polling)
+		__current_set_polling();
 
 	instrumentation_end();
 

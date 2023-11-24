@@ -94,11 +94,12 @@ void __cpuidle default_idle_call(void)
 		stop_critical_timings();
 
 		ct_cpuidle_enter();
-		arch_cpu_idle();
+		arch_cpu_idle(); // XXX assumes !polling
 		ct_cpuidle_exit();
 
 		start_critical_timings();
 		trace_cpu_idle(PWR_EVENT_EXIT, smp_processor_id());
+		__current_set_polling();
 	}
 	local_irq_enable();
 	instrumentation_end();
@@ -107,31 +108,14 @@ void __cpuidle default_idle_call(void)
 static int call_cpuidle_s2idle(struct cpuidle_driver *drv,
 			       struct cpuidle_device *dev)
 {
+	int ret;
+
 	if (current_clr_polling_and_test())
 		return -EBUSY;
 
-	return cpuidle_enter_s2idle(drv, dev);
-}
-
-static int call_cpuidle(struct cpuidle_driver *drv, struct cpuidle_device *dev,
-		      int next_state)
-{
-	/*
-	 * The idle task must be scheduled, it is pointless to go to idle, just
-	 * update no idle residency and return.
-	 */
-	if (current_clr_polling_and_test()) {
-		dev->last_residency_ns = 0;
-		local_irq_enable();
-		return -EBUSY;
-	}
-
-	/*
-	 * Enter the idle state previously returned by the governor decision.
-	 * This function will block until an interrupt occurs and will take
-	 * care of re-enabling the local interrupts
-	 */
-	return cpuidle_enter(drv, dev, next_state);
+	ret = cpuidle_enter_s2idle(drv, dev);
+	__current_set_polling();
+	return ret;
 }
 
 /**
@@ -198,7 +182,7 @@ static void cpuidle_idle_call(void)
 		tick_nohz_idle_stop_tick();
 
 		next_state = cpuidle_find_deepest_state(drv, dev, max_latency_ns);
-		call_cpuidle(drv, dev, next_state);
+		cpuidle_enter(drv, dev, next_state);
 	} else {
 		bool stop_tick = true;
 
@@ -212,7 +196,12 @@ static void cpuidle_idle_call(void)
 		else
 			tick_nohz_idle_retain_tick();
 
-		entered_state = call_cpuidle(drv, dev, next_state);
+		/*
+		 * Enter the idle state previously returned by the governor decision.
+		 * This function will block until an interrupt occurs and will take
+		 * care of re-enabling the local interrupts.
+		 */
+		entered_state = cpuidle_enter(drv, dev, next_state);
 		/*
 		 * Give the governor an opportunity to reflect on the outcome
 		 */
@@ -220,7 +209,6 @@ static void cpuidle_idle_call(void)
 	}
 
 exit_idle:
-	__current_set_polling();
 
 	/*
 	 * It is up to the idle functions to reenable local interrupts

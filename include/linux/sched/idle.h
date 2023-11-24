@@ -68,6 +68,8 @@ static __always_inline bool __must_check current_set_polling_and_test(void)
 
 static __always_inline bool __must_check current_clr_polling_and_test(void)
 {
+	bool ret;
+
 	__current_clr_polling();
 
 	/*
@@ -76,7 +78,10 @@ static __always_inline bool __must_check current_clr_polling_and_test(void)
 	 */
 	smp_mb__after_atomic();
 
-	return unlikely(tif_need_resched());
+	ret = unlikely(tif_need_resched());
+	if (ret)
+		__current_set_polling();
+	return ret;
 }
 
 #else
