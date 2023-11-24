@@ -3554,9 +3554,13 @@ int device_add(struct device *dev)
 	if (kobj)
 		dev->kobj.parent = kobj;
 
-	/* use parent numa_node */
-	if (parent && (dev_to_node(dev) == NUMA_NO_NODE))
-		set_dev_node(dev, dev_to_node(parent));
+	if (parent) {
+		/* use parent numa_node */
+		if (dev_to_node(dev) == NUMA_NO_NODE)
+			set_dev_node(dev, dev_to_node(parent));
+
+		dev_inherit_shutdown_priority(dev, parent);
+	}
 
 	/* first, register with generic layer. */
 	/* we require the name to be set before, and pass NULL */
@@ -4553,6 +4557,8 @@ int device_move(struct device *dev, struct device *new_parent,
 		klist_add_tail(&dev->p->knode_parent,
 			       &new_parent->p->klist_children);
 		set_dev_node(dev, dev_to_node(new_parent));
+
+		dev_inherit_shutdown_priority(dev, new_parent);
 	}
 
 	if (dev->class) {
@@ -4568,6 +4574,8 @@ int device_move(struct device *dev, struct device *new_parent,
 					klist_add_tail(&dev->p->knode_parent,
 						       &old_parent->p->klist_children);
 					set_dev_node(dev, dev_to_node(old_parent));
+
+					dev_inherit_shutdown_priority(dev, old_parent);
 				}
 			}
 			cleanup_glue_dir(dev, new_parent_kobj);
@@ -4781,28 +4789,53 @@ static void device_shutdown_one_locked(struct device *dev)
 }
 
 /**
- * device_shutdown - call ->shutdown() on each device to shutdown.
+ * prioritized_device_shutdown - shut down devices in reverse and priority order
+ *
+ * This function is designed to shut down devices in a manner that mirrors the
+ * reverse order of system construction. It iterates over the devices in
+ * reverse, ensuring that the system is torn down in a similar order to how it
+ * was set up. Importantly, within this reverse order, the function also employs
+ * a device shutdown priority mechanism. This prioritization ensures that
+ * critical devices are shut down in an orderly and safe manner before less
+ * critical devices.
+ *
+ * This prioritized and reverse order shutdown is particularly crucial in
+ * emergency scenarios where there is a limited time window for shutdown, such
+ * as in the event of a power drop backed by limited energy source like
+ * capacitors. It ensures that essential systems and data are secured first,
+ * reducing the risk of data loss and system instability.
  */
-void device_shutdown(void)
+void prioritized_device_shutdown(void)
 {
-	struct device *dev;
+	enum device_shutdown_priority current_prio = DEVICE_SHUTDOWN_PRIO_MAX;
 
 	wait_for_device_probe();
 	device_block_probing();
 
 	cpufreq_suspend();
 
-	spin_lock(&devices_kset->list_lock);
 	/*
 	 * Walk the devices list backward, shutting down each in turn.
 	 * Beware that device unplug events may also start pulling
 	 * devices offline, even as the system is shutting down.
 	 */
+	spin_lock(&devices_kset->list_lock);
 	while (!list_empty(&devices_kset->list)) {
-		dev = list_entry(devices_kset->list.prev, struct device,
-				kobj.entry);
+		struct device *dev, *n;
+		enum device_shutdown_priority next_prio = 0;
 
-		device_shutdown_one_locked(dev);
+		list_for_each_entry_safe_reverse(dev, n, &devices_kset->list,
+						 kobj.entry) {
+			enum device_shutdown_priority dev_prio;
+
+			dev_prio = dev_get_shutdown_priority(dev);
+			if (dev_prio >= current_prio)
+				device_shutdown_one_locked(dev);
+			else if (dev_prio > next_prio)
+				next_prio = dev_prio;
+		}
+
+		current_prio = next_prio;
 	}
 	spin_unlock(&devices_kset->list_lock);
 }

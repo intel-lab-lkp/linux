@@ -581,6 +581,33 @@ enum device_physical_location_horizontal_position {
 };
 
 /**
+ * enum device_shutdown_priority - Defines device shutdown priorities
+ *
+ * This enum defines different priority levels for device shutdown
+ * during a system power-off sequence. The priorities ensure that critical
+ * devices are shut down in an orderly and safe manner before less critical
+ * devices. Each device in the system is assigned a priority level, which
+ * determines the order in which it is shut down.
+ *
+ * @DEVICE_SHUTDOWN_PRIO_DEFAULT: The default shutdown priority for devices
+ * that do not require special handling or have no specific shutdown order.
+ * This is the lowest priority level.
+ *
+ * @DEVICE_SHUTDOWN_PRIO_STORAGE: Priority level for storage devices such as
+ * hard drives, SSDs, and SD cards. These devices often need to be shut down
+ * early to ensure data integrity and prevent corruption.
+ *
+ * @DEVICE_SHUTDOWN_PRIO_MAX: Represents the highest possible priority level
+ * for device shutdown. This is used as an upper bound for the priority range
+ * and typically not assigned to actual devices.
+ */
+enum device_shutdown_priority {
+	DEVICE_SHUTDOWN_PRIO_DEFAULT = 0,
+	DEVICE_SHUTDOWN_PRIO_STORAGE,
+	DEVICE_SHUTDOWN_PRIO_MAX,
+};
+
+/**
  * struct device_physical_location - Device data related to physical location
  * of the device connection point.
  * @panel: Panel surface of the system's housing that the device connection
@@ -693,6 +720,8 @@ struct device_physical_location {
  *		and optionall (if the coherent mask is large enough) also
  *		for dma allocations.  This flag is managed by the dma ops
  *		instance from ->dma_supported.
+ * @shutdown_priority: Shutdown ordering priority for the device.
+ * @inher_shutdown_priority: Inherited shutdown ordering priority from parent.
  *
  * At the lowest level, every device in a Linux system is represented by an
  * instance of struct device. The device structure contains the information
@@ -805,6 +834,8 @@ struct device {
 #ifdef CONFIG_DMA_OPS_BYPASS
 	bool			dma_ops_bypass : 1;
 #endif
+	enum device_shutdown_priority	shutdown_priority;
+	enum device_shutdown_priority	inher_shutdown_priority;
 };
 
 /**
@@ -1046,6 +1077,24 @@ static inline bool dev_removable_is_valid(struct device *dev)
 	return dev->removable != DEVICE_REMOVABLE_NOT_SUPPORTED;
 }
 
+static inline void dev_set_shutdown_priority(struct device *dev,
+					enum device_shutdown_priority priority)
+{
+	dev->shutdown_priority = priority;
+}
+
+static inline enum device_shutdown_priority
+dev_get_shutdown_priority(struct device *dev)
+{
+	return max(dev->shutdown_priority, dev->inher_shutdown_priority);
+}
+
+static inline void dev_inherit_shutdown_priority(struct device *dev,
+						 struct device *parent)
+{
+	dev->inher_shutdown_priority = dev_get_shutdown_priority(parent);
+}
+
 /*
  * High level routines for use by the bus drivers
  */
@@ -1236,7 +1285,7 @@ static inline int devtmpfs_mount(void) { return 0; }
 #endif
 
 /* drivers/base/power/shutdown.c */
-void device_shutdown(void);
+void prioritized_device_shutdown(void);
 
 /* debugging and troubleshooting/diagnostic helpers. */
 const char *dev_driver_string(const struct device *dev);
