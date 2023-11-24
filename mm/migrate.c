@@ -2559,7 +2559,7 @@ int migrate_misplaced_folio(struct folio *folio, struct vm_area_struct *vma,
 	 * every page is mapped to the same process. Doing that is very
 	 * expensive, so check the estimated mapcount of the folio instead.
 	 */
-	if (folio_mapped_shared(folio) && folio_is_file_lru(folio) &&
+	if (folio_mapped_shared(folio, vma->vm_mm) && folio_is_file_lru(folio) &&
 	    (vma->vm_flags & VM_EXEC))
 		goto out;
 

@@ -2117,6 +2117,7 @@ static inline size_t folio_size(struct folio *folio)
  * folio_mapped_shared - Report if a folio is certainly mapped by
  *			 multiple entities in their page tables
  * @folio: The folio.
+ * @mm: The mm the folio is mapped into.
  *
  * This function checks if a folio is certainly *currently* mapped by
  * multiple entities in their page table ("mapped shared") or if the folio
@@ -2153,7 +2154,8 @@ static inline size_t folio_size(struct folio *folio)
  *
  * Return: Whether the folio is certainly mapped by multiple entities.
  */
-static inline bool folio_mapped_shared(struct folio *folio)
+static inline bool folio_mapped_shared(struct folio *folio,
+		struct mm_struct *mm)
 {
 	unsigned int total_mapcount;
 

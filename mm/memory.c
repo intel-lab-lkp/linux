@@ -4848,7 +4848,7 @@ static vm_fault_t do_numa_page(struct vm_fault *vmf)
 	 * Flag if the folio is shared between multiple address spaces. This
 	 * is later used when determining whether to group tasks together
 	 */
-	if (folio_mapped_shared(folio) && (vma->vm_flags & VM_SHARED))
+	if (folio_mapped_shared(folio, vma->vm_mm) && (vma->vm_flags & VM_SHARED))
 		flags |= TNF_SHARED;
 
 	nid = folio_nid(folio);
