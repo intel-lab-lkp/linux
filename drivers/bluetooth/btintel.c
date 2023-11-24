@@ -2536,7 +2536,7 @@ static void btintel_set_dsm_reset_method(struct hci_dev *hdev,
 
 		if (!acpi_check_dsm(handle, &btintel_guid_dsm, 0,
 				    BIT(DSM_SET_WDISABLE2_DELAY))) {
-			bt_dev_err(hdev, "No dsm support to set reset delay");
+			bt_dev_info(hdev, "No dsm support to set reset delay");
 			return;
 		}
 		argv4.integer.type = ACPI_TYPE_INTEGER;
