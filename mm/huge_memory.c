@@ -2230,7 +2230,7 @@ static void __split_huge_pmd_locked(struct vm_area_struct *vma, pmd_t *pmd,
 		if (!freeze) {
 			rmap_t rmap_flags = RMAP_NONE;
 
-			folio_ref_add(folio, HPAGE_PMD_NR - 1);
+			folio_ref_add(folio, HPAGE_PMD_NR);
 			if (anon_exclusive)
 				rmap_flags = RMAP_EXCLUSIVE;
 			folio_add_anon_rmap_range(folio, page, HPAGE_PMD_NR,
@@ -2294,10 +2294,10 @@ static void __split_huge_pmd_locked(struct vm_area_struct *vma, pmd_t *pmd,
 	}
 	pte_unmap(pte - 1);
 
-	if (!pmd_migration)
+	if (!pmd_migration) {
 		page_remove_rmap(page, vma, true);
-	if (freeze)
 		put_page(page);
+	}
 
 	smp_wmb(); /* make pte visible before pmd */
 	pmd_populate(mm, pmd, pgtable);
