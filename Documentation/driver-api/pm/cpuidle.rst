@@ -192,7 +192,7 @@ governors for computations related to idle state selection:
 
 :c:member:`flags`
 	Flags representing idle state properties.  Currently, governors only use
-	the ``CPUIDLE_FLAG_POLLING`` flag which is set if the given object
+	the ``CPUIDLE_FLAG_POLLING_SOFT`` flag which is set if the given object
 	does not represent a real idle state, but an interface to a software
 	"loop" that can be used in order to avoid asking the processor to enter
 	any idle state at all.  [There are other flags used by the ``CPUIdle``

@@ -320,7 +320,7 @@ static int menu_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 		 * it right away and keep the tick running if state[0] is a
 		 * polling one.
 		 */
-		*stop_tick = !(drv->states[0].flags & CPUIDLE_FLAG_POLLING);
+		*stop_tick = !(drv->states[0].flags & CPUIDLE_FLAG_POLLING_SOFT);
 		return 0;
 	}
 
@@ -365,7 +365,7 @@ static int menu_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 			 * Use a physical idle state, not busy polling, unless
 			 * a timer is going to trigger soon enough.
 			 */
-			if ((drv->states[idx].flags & CPUIDLE_FLAG_POLLING) &&
+			if ((drv->states[idx].flags & CPUIDLE_FLAG_POLLING_SOFT) &&
 			    s->exit_latency_ns <= latency_req &&
 			    s->target_residency_ns <= data->next_timer_ns) {
 				predicted_ns = s->target_residency_ns;
@@ -411,7 +411,7 @@ static int menu_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 	 * Don't stop the tick if the selected state is a polling one or if the
 	 * expected idle duration is shorter than the tick period length.
 	 */
-	if (((drv->states[idx].flags & CPUIDLE_FLAG_POLLING) ||
+	if (((drv->states[idx].flags & CPUIDLE_FLAG_POLLING_SOFT) ||
 	     predicted_ns < TICK_NSEC) && !tick_nohz_tick_stopped()) {
 		*stop_tick = false;
 
@@ -492,7 +492,7 @@ static void menu_update(struct cpuidle_driver *drv, struct cpuidle_device *dev)
 		 * duration predictor do a better job next time.
 		 */
 		measured_ns = 9 * MAX_INTERESTING / 10;
-	} else if ((drv->states[last_idx].flags & CPUIDLE_FLAG_POLLING) &&
+	} else if ((drv->states[last_idx].flags & CPUIDLE_FLAG_POLLING_SOFT) &&
 		   dev->poll_time_limit) {
 		/*
 		 * The CPU exited the "polling" state due to a time limit, so

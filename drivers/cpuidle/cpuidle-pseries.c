@@ -271,7 +271,7 @@ static struct cpuidle_state dedicated_states[NR_DEDICATED_STATES] = {
 		.exit_latency = 0,
 		.target_residency = 0,
 		.enter = &snooze_loop,
-		.flags = CPUIDLE_FLAG_POLLING },
+		.flags = CPUIDLE_FLAG_POLLING_SOFT },
 	{ /* CEDE */
 		.name = "CEDE",
 		.desc = "CEDE",
@@ -290,7 +290,7 @@ static struct cpuidle_state shared_states[] = {
 		.exit_latency = 0,
 		.target_residency = 0,
 		.enter = &snooze_loop,
-		.flags = CPUIDLE_FLAG_POLLING },
+		.flags = CPUIDLE_FLAG_POLLING_SOFT },
 	{ /* Shared Cede */
 		.name = "Shared Cede",
 		.desc = "Shared Cede",

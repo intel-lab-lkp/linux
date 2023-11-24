@@ -354,7 +354,7 @@ static int teo_find_shallower_state(struct cpuidle_driver *drv,
 
 	for (i = state_idx - 1; i >= 0; i--) {
 		if (dev->states_usage[i].disable ||
-				(no_poll && drv->states[i].flags & CPUIDLE_FLAG_POLLING))
+				(no_poll && drv->states[i].flags & CPUIDLE_FLAG_POLLING_SOFT))
 			continue;
 
 		state_idx = i;
@@ -426,7 +426,7 @@ static int teo_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 		 * all.  If state 1 is disabled, though, state 0 must be used
 		 * anyway.
 		 */
-		if ((!idx && !(drv->states[0].flags & CPUIDLE_FLAG_POLLING) &&
+		if ((!idx && !(drv->states[0].flags & CPUIDLE_FLAG_POLLING_SOFT) &&
 		    teo_state_ok(0, drv)) || dev->states_usage[1].disable) {
 			idx = 0;
 			goto out_tick;
@@ -584,7 +584,7 @@ static int teo_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 	 * the current candidate state is low enough and skip the timers
 	 * check in that case too.
 	 */
-	if ((drv->states[0].flags & CPUIDLE_FLAG_POLLING) &&
+	if ((drv->states[0].flags & CPUIDLE_FLAG_POLLING_SOFT) &&
 	    drv->states[idx].target_residency_ns < RESIDENCY_THRESHOLD_NS)
 		goto out_tick;
 
@@ -616,7 +616,7 @@ end:
 	 * one or the expected idle duration is shorter than the tick period
 	 * length.
 	 */
-	if ((!(drv->states[idx].flags & CPUIDLE_FLAG_POLLING) &&
+	if ((!(drv->states[idx].flags & CPUIDLE_FLAG_POLLING_SOFT) &&
 	    duration_ns >= TICK_NSEC) || tick_nohz_tick_stopped())
 		return idx;
 
