@@ -1712,7 +1712,8 @@ void nfsd4_revoke_states(struct net *net, struct super_block *sb)
 	unsigned int idhashval;
 	unsigned int sc_types;
 
-	sc_types = NFS4_OPEN_STID | NFS4_LOCK_STID | NFS4_DELEG_STID;
+	sc_types = (NFS4_OPEN_STID | NFS4_LOCK_STID |
+		    NFS4_DELEG_STID | NFS4_LAYOUT_STID);
 
 	spin_lock(&nn->client_lock);
 	for (idhashval = 0; idhashval < CLIENT_HASH_MASK; idhashval++) {
@@ -1725,6 +1726,7 @@ void nfsd4_revoke_states(struct net *net, struct super_block *sb)
 			if (stid) {
 				struct nfs4_ol_stateid *stp;
 				struct nfs4_delegation *dp;
+				struct nfs4_layout_stateid *ls;
 
 				spin_unlock(&nn->client_lock);
 				switch (stid->sc_type) {
@@ -1779,6 +1781,10 @@ void nfsd4_revoke_states(struct net *net, struct super_block *sb)
 					spin_unlock(&state_lock);
 					if (dp)
 						revoke_delegation(dp);
+					break;
+				case NFS4_LAYOUT_STID:
+					ls = layoutstateid(stid);
+					nfsd4_close_layout(ls);
 					break;
 				}
 				nfs4_put_stid(stid);
@@ -2859,17 +2865,25 @@ static int nfs4_show_layout(struct seq_file *s, struct nfs4_stid *st)
 	struct nfsd_file *file;
 
 	ls = container_of(st, struct nfs4_layout_stateid, ls_stid);
-	file = ls->ls_file;
+	rcu_read_lock();
+	file = nfsd_file_get(ls->ls_file);
+	rcu_read_unlock();
 
 	seq_printf(s, "- ");
 	nfs4_show_stateid(s, &st->sc_stateid);
-	seq_printf(s, ": { type: layout, ");
+	seq_printf(s, ": { type: layout");
 
 	/* XXX: What else would be useful? */
 
-	nfs4_show_superblock(s, file);
-	seq_printf(s, ", ");
-	nfs4_show_fname(s, file);
+	if (file) {
+		seq_printf(s, ", ");
+		nfs4_show_superblock(s, file);
+		seq_printf(s, ", ");
+		nfs4_show_fname(s, file);
+		nfsd_file_put(file);
+	}
+	if (st->sc_status & NFS4_STID_ADMIN_REVOKED)
+		seq_puts(s, ", admin-revoked");
 	seq_printf(s, " }\n");
 
 	return 0;
