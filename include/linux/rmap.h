@@ -295,12 +295,13 @@ static inline void __folio_write_large_rmap_begin(struct folio *folio)
 {
 	VM_WARN_ON_FOLIO(!folio_test_large_rmappable(folio), folio);
 	VM_WARN_ON_FOLIO(folio_test_hugetlb(folio), folio);
-	raw_write_atomic_seqcount_begin(&folio->_rmap_atomic_seqcount);
+	raw_write_atomic_seqcount_begin(&folio->_rmap_atomic_seqcount,
+					false);
 }
 
 static inline void __folio_write_large_rmap_end(struct folio *folio)
 {
-	raw_write_atomic_seqcount_end(&folio->_rmap_atomic_seqcount);
+	raw_write_atomic_seqcount_end(&folio->_rmap_atomic_seqcount, false);
 }
 
 void __folio_set_large_rmap_val(struct folio *folio, int count,

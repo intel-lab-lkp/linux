@@ -8,8 +8,11 @@
 
 /*
  * raw_atomic_seqcount_t -- a reader-writer consistency mechanism with
- * lockless readers (read-only retry loops), and lockless writers.
- * The writers must use atomic RMW operations in the critical section.
+ * lockless readers (read-only retry loops), and (almost) lockless writers.
+ * Shared writers must use atomic RMW operations in the critical section,
+ * a single exclusive writer can avoid atomic RMW operations in the critical
+ * section. Shared writers will always have to wait for at most one exclusive
+ * writer to finish in order to make progress.
  *
  * This locking mechanism is applicable when all individual operations
  * performed by writers can be expressed using atomic RMW operations
@@ -38,9 +41,10 @@ typedef struct raw_atomic_seqcount {
 /* 65536 CPUs */
 #define ATOMIC_SEQCOUNT_SHARED_WRITERS_MAX		0x0000000000008000ul
 #define ATOMIC_SEQCOUNT_SHARED_WRITERS_MASK		0x000000000000fffful
-#define ATOMIC_SEQCOUNT_WRITERS_MASK			0x000000000000fffful
+#define ATOMIC_SEQCOUNT_EXCLUSIVE_WRITER		0x0000000000010000ul
+#define ATOMIC_SEQCOUNT_WRITERS_MASK			0x000000000001fffful
 /* We have 48bit for the actual sequence. */
-#define ATOMIC_SEQCOUNT_SEQUENCE_STEP			0x0000000000010000ul
+#define ATOMIC_SEQCOUNT_SEQUENCE_STEP			0x0000000000020000ul
 
 #else /* CONFIG_64BIT */
 
@@ -48,9 +52,10 @@ typedef struct raw_atomic_seqcount {
 /* 64 CPUs */
 #define ATOMIC_SEQCOUNT_SHARED_WRITERS_MAX		0x00000040ul
 #define ATOMIC_SEQCOUNT_SHARED_WRITERS_MASK		0x0000007ful
-#define ATOMIC_SEQCOUNT_WRITERS_MASK			0x0000007ful
-/* We have 25bit for the actual sequence. */
-#define ATOMIC_SEQCOUNT_SEQUENCE_STEP			0x00000080ul
+#define ATOMIC_SEQCOUNT_EXCLUSIVE_WRITER		0x00000080ul
+#define ATOMIC_SEQCOUNT_WRITERS_MASK			0x000000fful
+/* We have 24bit for the actual sequence. */
+#define ATOMIC_SEQCOUNT_SEQUENCE_STEP			0x00000100ul
 
 #endif /* CONFIG_64BIT */
 
@@ -126,44 +131,102 @@ static inline bool raw_read_atomic_seqcount_retry(raw_atomic_seqcount_t *s,
 /**
  * raw_write_seqcount_begin() - start a raw_seqcount_t write critical section
  * @s: Pointer to the raw_atomic_seqcount_t
+ * @try_exclusive: Whether to try becoming the exclusive writer.
  *
  * raw_write_seqcount_begin() opens the write critical section of the
  * given raw_seqcount_t. This function must not be used in interrupt context.
+ *
+ * Return: "true" when we are the exclusive writer and can avoid atomic RMW
+ *         operations in the critical section. Otherwise, we are a shared
+ *         writer and have to use atomic RMW operations in the critical
+ *         section. Will always return "false" if @try_exclusive is not "true".
  */
-static inline void raw_write_atomic_seqcount_begin(raw_atomic_seqcount_t *s)
+static inline bool raw_write_atomic_seqcount_begin(raw_atomic_seqcount_t *s,
+						   bool try_exclusive)
 {
+	unsigned long seqcount, seqcount_new;
+
 	BUILD_BUG_ON(IS_ENABLED(CONFIG_PREEMPT_RT));
 #ifdef CONFIG_DEBUG_ATOMIC_SEQCOUNT
 	DEBUG_LOCKS_WARN_ON(in_interrupt());
 #endif /* CONFIG_DEBUG_ATOMIC_SEQCOUNT */
 	preempt_disable();
-	atomic_long_add(ATOMIC_SEQCOUNT_SHARED_WRITER, &s->sequence);
-	/* Store the sequence before any store in the critical section. */
-	smp_mb__after_atomic();
+
+	/* If requested, can we just become the exclusive writer? */
+	if (!try_exclusive)
+		goto shared;
+
+	seqcount = atomic_long_read(&s->sequence);
+	if (unlikely(seqcount & ATOMIC_SEQCOUNT_WRITERS_MASK))
+		goto shared;
+
+	seqcount_new = seqcount | ATOMIC_SEQCOUNT_EXCLUSIVE_WRITER;
+	/*
+	 * Store the sequence before any store in the critical section. Further,
+	 * this implies an acquire so loads within the critical section are
+	 * not reordered to be outside the critical section.
+	 */
+	if (atomic_long_try_cmpxchg(&s->sequence, &seqcount, seqcount_new))
+		return true;
+shared:
+	/*
+	 * Indicate that there is a shared writer, and spin until the exclusive
+	 * writer is done. This avoids writer starvation, because we'll always
+	 * have to wait for at most one writer.
+	 *
+	 * We spin with preemption disabled to not reschedule to a reader that
+	 * cannot make any progress either way.
+	 *
+	 * Store the sequence before any store in the critical section.
+	 */
+	seqcount = atomic_long_add_return(ATOMIC_SEQCOUNT_SHARED_WRITER,
+					  &s->sequence);
 #ifdef CONFIG_DEBUG_ATOMIC_SEQCOUNT
-	DEBUG_LOCKS_WARN_ON((atomic_long_read(&s->sequence) &
-			     ATOMIC_SEQCOUNT_SHARED_WRITERS_MASK) >
+	DEBUG_LOCKS_WARN_ON((seqcount & ATOMIC_SEQCOUNT_SHARED_WRITERS_MASK) >
 			    ATOMIC_SEQCOUNT_SHARED_WRITERS_MAX);
 #endif /* CONFIG_DEBUG_ATOMIC_SEQCOUNT */
+	if (likely(!(seqcount & ATOMIC_SEQCOUNT_EXCLUSIVE_WRITER)))
+		return false;
+
+	while (atomic_long_read(&s->sequence) & ATOMIC_SEQCOUNT_EXCLUSIVE_WRITER)
+		cpu_relax();
+	return false;
 }
 
 /**
  * raw_write_seqcount_end() - end a raw_seqcount_t write critical section
  * @s: Pointer to the raw_atomic_seqcount_t
+ * @exclusive: Return value of raw_write_atomic_seqcount_begin().
  *
  * raw_write_seqcount_end() closes the write critical section of the
  * given raw_seqcount_t.
  */
-static inline void raw_write_atomic_seqcount_end(raw_atomic_seqcount_t *s)
+static inline void raw_write_atomic_seqcount_end(raw_atomic_seqcount_t *s,
+						 bool exclusive)
 {
+	unsigned long val = ATOMIC_SEQCOUNT_SEQUENCE_STEP;
+
+	if (likely(exclusive)) {
 #ifdef CONFIG_DEBUG_ATOMIC_SEQCOUNT
-	DEBUG_LOCKS_WARN_ON(!(atomic_long_read(&s->sequence) &
-			      ATOMIC_SEQCOUNT_SHARED_WRITERS_MASK));
+		DEBUG_LOCKS_WARN_ON(!(atomic_long_read(&s->sequence) &
+				      ATOMIC_SEQCOUNT_EXCLUSIVE_WRITER));
 #endif /* CONFIG_DEBUG_ATOMIC_SEQCOUNT */
-	/* Store the sequence after any store in the critical section. */
+		val -= ATOMIC_SEQCOUNT_EXCLUSIVE_WRITER;
+	} else {
+#ifdef CONFIG_DEBUG_ATOMIC_SEQCOUNT
+		DEBUG_LOCKS_WARN_ON(!(atomic_long_read(&s->sequence) &
+				      ATOMIC_SEQCOUNT_SHARED_WRITERS_MASK));
+#endif /* CONFIG_DEBUG_ATOMIC_SEQCOUNT */
+		val -= ATOMIC_SEQCOUNT_SHARED_WRITER;
+	}
+	/*
+	 * Store the sequence after any store in the critical section. For
+	 * the exclusive path, this further implies a release, so loads
+	 * within the critical section are not reordered to be outside the
+	 * cricial section.
+	 */
 	smp_mb__before_atomic();
-	atomic_long_add(ATOMIC_SEQCOUNT_SEQUENCE_STEP -
-			ATOMIC_SEQCOUNT_SHARED_WRITER, &s->sequence);
+	atomic_long_add(val, &s->sequence);
 	preempt_enable();
 }
 
