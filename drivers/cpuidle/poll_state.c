@@ -13,34 +13,28 @@
 static int __cpuidle poll_idle(struct cpuidle_device *dev,
 			       struct cpuidle_driver *drv, int index)
 {
-	u64 time_start;
-
-	time_start = local_clock_noinstr();
+	u64 time_start = local_clock_noinstr();
+	unsigned int loop_count = 0;
+	u64 limit;
 
 	dev->poll_time_limit = false;
 
 	raw_local_irq_enable();
-	if (!current_set_polling_and_test()) {
-		unsigned int loop_count = 0;
-		u64 limit;
 
-		limit = cpuidle_poll_time(drv, dev);
+	limit = cpuidle_poll_time(drv, dev);
 
-		while (!need_resched()) {
-			cpu_relax();
-			if (loop_count++ < POLL_IDLE_RELAX_COUNT)
-				continue;
+	while (!need_resched()) {
+		cpu_relax();
+		if (loop_count++ < POLL_IDLE_RELAX_COUNT)
+			continue;
 
-			loop_count = 0;
-			if (local_clock_noinstr() - time_start > limit) {
-				dev->poll_time_limit = true;
-				break;
-			}
+		loop_count = 0;
+		if (local_clock_noinstr() - time_start > limit) {
+			dev->poll_time_limit = true;
+			break;
 		}
 	}
 	raw_local_irq_disable();
-
-	current_clr_polling();
 
 	return index;
 }

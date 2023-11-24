@@ -236,8 +236,8 @@ noinstr int cpuidle_enter_state(struct cpuidle_device *dev,
 		broadcast = false;
 	}
 
-	polling = target_state->flags & CPUIDLE_FLAG_POLLING_HARD;
-
+	polling = (target_state->flags & (CPUIDLE_FLAG_POLLING_SOFT |
+					  CPUIDLE_FLAG_POLLING_HARD));
 	/*
 	 * If the target state doesn't poll on need_resched(), this is
 	 * the last check after which further TIF_NEED_RESCHED remote setting

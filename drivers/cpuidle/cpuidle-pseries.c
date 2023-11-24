@@ -39,8 +39,6 @@ int snooze_loop(struct cpuidle_device *dev, struct cpuidle_driver *drv,
 {
 	u64 snooze_exit_time;
 
-	set_thread_flag(TIF_POLLING_NRFLAG);
-
 	pseries_idle_prolog();
 	raw_local_irq_enable();
 	snooze_exit_time = get_tb() + snooze_timeout;
@@ -50,21 +48,12 @@ int snooze_loop(struct cpuidle_device *dev, struct cpuidle_driver *drv,
 		HMT_low();
 		HMT_very_low();
 		if (likely(snooze_timeout_en) && get_tb() > snooze_exit_time) {
-			/*
-			 * Task has not woken up but we are exiting the polling
-			 * loop anyway. Require a barrier after polling is
-			 * cleared to order subsequent test of need_resched().
-			 */
 			dev->poll_time_limit = true;
-			clear_thread_flag(TIF_POLLING_NRFLAG);
-			smp_mb();
 			break;
 		}
 	}
 
 	HMT_medium();
-	clear_thread_flag(TIF_POLLING_NRFLAG);
-
 	raw_local_irq_disable();
 
 	pseries_idle_epilog();
