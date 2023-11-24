@@ -460,7 +460,10 @@ raw_atomic_read_acquire(const atomic_t *v)
 #if defined(arch_atomic_read_acquire)
 	return arch_atomic_read_acquire(v);
 #elif defined(arch_atomic_read)
-	return arch_atomic_read(v);
+	int ret;
+	ret = arch_atomic_read(v);
+	__atomic_acquire_fence();
+	return ret;
 #else
 	int ret;
 
@@ -509,6 +512,7 @@ raw_atomic_set_release(atomic_t *v, int i)
 #if defined(arch_atomic_set_release)
 	arch_atomic_set_release(v, i);
 #elif defined(arch_atomic_set)
+	__atomic_release_fence();
 	arch_atomic_set(v, i);
 #else
 	if (__native_word(atomic_t)) {
@@ -2576,7 +2580,10 @@ raw_atomic64_read_acquire(const atomic64_t *v)
 #if defined(arch_atomic64_read_acquire)
 	return arch_atomic64_read_acquire(v);
 #elif defined(arch_atomic64_read)
-	return arch_atomic64_read(v);
+	s64 ret;
+	ret = arch_atomic64_read(v);
+	__atomic_acquire_fence();
+	return ret;
 #else
 	s64 ret;
 
@@ -2625,6 +2632,7 @@ raw_atomic64_set_release(atomic64_t *v, s64 i)
 #if defined(arch_atomic64_set_release)
 	arch_atomic64_set_release(v, i);
 #elif defined(arch_atomic64_set)
+	__atomic_release_fence();
 	arch_atomic64_set(v, i);
 #else
 	if (__native_word(atomic64_t)) {
@@ -4657,4 +4665,4 @@ raw_atomic64_dec_if_positive(atomic64_t *v)
 }
 
 #endif /* _LINUX_ATOMIC_FALLBACK_H */
-// 202b45c7db600ce36198eb1f1fc2c2d5268ace2d
+// 3135f55051cf62b76664e528bf04337c44a14e72
