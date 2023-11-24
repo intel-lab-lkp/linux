@@ -269,13 +269,13 @@ nfsd4_preprocess_layout_stateid(struct svc_rqst *rqstp,
 {
 	struct nfs4_layout_stateid *ls;
 	struct nfs4_stid *stid;
-	unsigned char typemask = NFS4_LAYOUT_STID;
+	unsigned short typemask = NFS4_LAYOUT_STID;
 	__be32 status;
 
 	if (create)
 		typemask |= (NFS4_OPEN_STID | NFS4_LOCK_STID | NFS4_DELEG_STID);
 
-	status = nfsd4_lookup_stateid(cstate, stateid, typemask, &stid,
+	status = nfsd4_lookup_stateid(cstate, stateid, typemask, 0, &stid,
 			net_generic(SVC_NET(rqstp), nfsd_net_id));
 	if (status)
 		goto out;
@@ -518,7 +518,7 @@ nfsd4_return_file_layouts(struct svc_rqst *rqstp,
 		lrp->lrs_present = true;
 	} else {
 		trace_nfsd_layoutstate_unhash(&ls->ls_stid.sc_stateid);
-		nfs4_unhash_stid(&ls->ls_stid);
+		ls->ls_stid.sc_status |= NFS4_STID_CLOSED;
 		lrp->lrs_present = false;
 	}
 	spin_unlock(&ls->ls_lock);
