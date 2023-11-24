@@ -1340,9 +1340,12 @@ unhash_delegation_locked(struct nfs4_delegation *dp, unsigned short statusmask)
 	if (!delegation_hashed(dp))
 		return false;
 
-	if (dp->dl_stid.sc_client->cl_minorversion == 0)
+	if (statusmask == NFS4_STID_REVOKED &&
+	    dp->dl_stid.sc_client->cl_minorversion == 0)
 		statusmask = NFS4_STID_CLOSED;
 	dp->dl_stid.sc_status |= statusmask;
+	if (statusmask & NFS4_STID_ADMIN_REVOKED)
+		atomic_inc(&dp->dl_stid.sc_client->cl_admin_revoked);
 
 	/* Ensure that deleg break won't try to requeue it */
 	++dp->dl_time;
@@ -1373,7 +1376,8 @@ static void revoke_delegation(struct nfs4_delegation *dp)
 
 	trace_nfsd_stid_revoke(&dp->dl_stid);
 
-	if (dp->dl_stid.sc_status & NFS4_STID_REVOKED) {
+	if (dp->dl_stid.sc_status &
+	    (NFS4_STID_REVOKED | NFS4_STID_ADMIN_REVOKED)) {
 		spin_lock(&clp->cl_lock);
 		refcount_inc(&dp->dl_stid.sc_count);
 		list_add(&dp->dl_recall_lru, &clp->cl_revoked);
@@ -1708,7 +1712,7 @@ void nfsd4_revoke_states(struct net *net, struct super_block *sb)
 	unsigned int idhashval;
 	unsigned int sc_types;
 
-	sc_types = NFS4_OPEN_STID | NFS4_LOCK_STID;
+	sc_types = NFS4_OPEN_STID | NFS4_LOCK_STID | NFS4_DELEG_STID;
 
 	spin_lock(&nn->client_lock);
 	for (idhashval = 0; idhashval < CLIENT_HASH_MASK; idhashval++) {
@@ -1720,6 +1724,7 @@ void nfsd4_revoke_states(struct net *net, struct super_block *sb)
 								  sc_types);
 			if (stid) {
 				struct nfs4_ol_stateid *stp;
+				struct nfs4_delegation *dp;
 
 				spin_unlock(&nn->client_lock);
 				switch (stid->sc_type) {
@@ -1764,6 +1769,16 @@ void nfsd4_revoke_states(struct net *net, struct super_block *sb)
 					} else
 						spin_unlock(&clp->cl_lock);
 					mutex_unlock(&stp->st_mutex);
+					break;
+				case NFS4_DELEG_STID:
+					dp = delegstateid(stid);
+					spin_lock(&state_lock);
+					if (!unhash_delegation_locked(
+						    dp, NFS4_STID_ADMIN_REVOKED))
+						dp = NULL;
+					spin_unlock(&state_lock);
+					if (dp)
+						revoke_delegation(dp);
 					break;
 				}
 				nfs4_put_stid(stid);
@@ -4705,6 +4720,7 @@ static void nfsd_drop_revoked_stid(struct nfs4_stid *s)
 	struct nfs4_client *cl = s->sc_client;
 	LIST_HEAD(reaplist);
 	struct nfs4_ol_stateid *stp;
+	struct nfs4_delegation *dp;
 	bool unhashed;
 
 	switch (s->sc_type) {
@@ -4721,6 +4737,12 @@ static void nfsd_drop_revoked_stid(struct nfs4_stid *s)
 		spin_unlock(&cl->cl_lock);
 		if (unhashed)
 			nfs4_put_stid(s);
+		break;
+	case NFS4_DELEG_STID:
+		dp = delegstateid(s);
+		list_del_init(&dp->dl_recall_lru);
+		spin_unlock(&cl->cl_lock);
+		nfs4_put_stid(s);
 		break;
 	default:
 		spin_unlock(&cl->cl_lock);
