@@ -481,3 +481,29 @@ void free_rmap_id(int id)
 	ida_free(&rmap_ida, id);
 	spin_unlock(&rmap_id_lock);
 }
+
+#ifdef CONFIG_DEBUG_VM
+static int __init rmap_id_init(void)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(rmap_subids_4); i++)
+		WARN_ON_ONCE(calc_rmap_subid(1u << RMAP_SUBID_4_MAX_ORDER, i) !=
+			     rmap_subids_4[i]);
+
+#if MAX_ORDER >= RMAP_SUBID_5_MIN_ORDER
+	for (i = 0; i < ARRAY_SIZE(rmap_subids_5); i++)
+		WARN_ON_ONCE(calc_rmap_subid(1u << RMAP_SUBID_5_MAX_ORDER, i) !=
+			     rmap_subids_5[i]);
+#endif
+
+#if MAX_ORDER >= RMAP_SUBID_6_MIN_ORDER
+	for (i = 0; i < ARRAY_SIZE(rmap_subids_6); i++)
+		WARN_ON_ONCE(calc_rmap_subid(1u << RMAP_SUBID_6_MAX_ORDER, i) !=
+			     rmap_subids_6[i]);
+#endif
+
+	return 0;
+}
+module_init(rmap_id_init)
+#endif /* CONFIG_DEBUG_VM */
