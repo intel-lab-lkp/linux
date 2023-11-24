@@ -7981,8 +7981,8 @@ static void *i40e_fwd_add(struct net_device *netdev, struct net_device *vdev)
 		netdev_info(netdev, "Macvlans are not supported when HW TC offload is on\n");
 		return ERR_PTR(-EINVAL);
 	}
-	if (pf->num_lan_msix < I40E_MIN_MACVLAN_VECTORS) {
-		netdev_info(netdev, "Not enough vectors available to support macvlans\n");
+	if (vsi->num_queue_pairs < I40E_MIN_MACVLAN_VECTORS) {
+		netdev_info(netdev, "Not enough queues to support macvlans\n");
 		return ERR_PTR(-EINVAL);
 	}
 
@@ -8000,7 +8000,7 @@ static void *i40e_fwd_add(struct net_device *netdev, struct net_device *vdev)
 		 * reserve 3/4th of max vectors, then half, then quarter and
 		 * calculate Qs per macvlan as you go
 		 */
-		vectors = pf->num_lan_msix;
+		vectors = vsi->num_queue_pairs;
 		if (vectors <= I40E_MAX_MACVLANS && vectors > 64) {
 			/* allocate 4 Qs per macvlan and 32 Qs to the PF*/
 			q_per_macvlan = 4;
