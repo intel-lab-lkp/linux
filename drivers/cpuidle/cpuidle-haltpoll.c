@@ -28,11 +28,8 @@ static enum cpuhp_state haltpoll_hp_state;
 static int default_enter_idle(struct cpuidle_device *dev,
 			      struct cpuidle_driver *drv, int index)
 {
-	if (current_clr_polling_and_test()) {
-		local_irq_enable();
-		return index;
-	}
 	arch_cpu_idle();
+
 	return index;
 }
 
