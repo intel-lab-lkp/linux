@@ -168,6 +168,39 @@ static inline void anon_vma_merge(struct vm_area_struct *vma,
 
 struct anon_vma *folio_get_anon_vma(struct folio *folio);
 
+static inline void folio_set_large_mapcount(struct folio *folio,
+		int count, struct vm_area_struct *vma)
+{
+	VM_WARN_ON_FOLIO(!folio_test_large_rmappable(folio), folio);
+	VM_WARN_ON_FOLIO(folio_test_hugetlb(folio), folio);
+	/* increment count (starts at -1) */
+	atomic_set(&folio->_total_mapcount, count - 1);
+}
+
+static inline void folio_inc_large_mapcount(struct folio *folio,
+		struct vm_area_struct *vma)
+{
+	VM_WARN_ON_FOLIO(!folio_test_large_rmappable(folio), folio);
+	VM_WARN_ON_FOLIO(folio_test_hugetlb(folio), folio);
+	atomic_inc(&folio->_total_mapcount);
+}
+
+static inline void folio_add_large_mapcount(struct folio *folio,
+		int count, struct vm_area_struct *vma)
+{
+	VM_WARN_ON_FOLIO(!folio_test_large_rmappable(folio), folio);
+	VM_WARN_ON_FOLIO(folio_test_hugetlb(folio), folio);
+	atomic_add(count, &folio->_total_mapcount);
+}
+
+static inline void folio_dec_large_mapcount(struct folio *folio,
+		struct vm_area_struct *vma)
+{
+	VM_WARN_ON_FOLIO(!folio_test_large_rmappable(folio), folio);
+	VM_WARN_ON_FOLIO(folio_test_hugetlb(folio), folio);
+	atomic_dec(&folio->_total_mapcount);
+}
+
 /* RMAP flags, currently only relevant for some anon rmap operations. */
 typedef int __bitwise rmap_t;
 
@@ -219,11 +252,17 @@ static inline void __page_dup_rmap(struct page *page,
 		return;
 	}
 
+	if (unlikely(folio_test_hugetlb(folio))) {
+		atomic_inc(&folio->_entire_mapcount);
+		atomic_inc(&folio->_total_mapcount);
+		return;
+	}
+
 	if (compound)
 		atomic_inc(&folio->_entire_mapcount);
 	else
 		atomic_inc(&page->_mapcount);
-	atomic_inc(&folio->_total_mapcount);
+	folio_inc_large_mapcount(folio, dst_vma);
 }
 
 static inline void page_dup_file_rmap(struct page *page,

@@ -1105,8 +1105,8 @@ int pfn_mkclean_range(unsigned long pfn, unsigned long nr_pages, pgoff_t pgoff,
 }
 
 static unsigned int __folio_add_rmap_range(struct folio *folio,
-		struct page *page, unsigned int nr_pages, bool compound,
-		int *nr_pmdmapped)
+		struct page *page, unsigned int nr_pages,
+		struct vm_area_struct *vma, bool compound, int *nr_pmdmapped)
 {
 	atomic_t *mapped = &folio->_nr_pages_mapped;
 	int first, count, nr = 0;
@@ -1130,7 +1130,7 @@ static unsigned int __folio_add_rmap_range(struct folio *folio,
 					nr++;
 			}
 		} while (page++, --count > 0);
-		atomic_add(nr_pages, &folio->_total_mapcount);
+		folio_add_large_mapcount(folio, nr_pages, vma);
 	} else if (folio_test_pmd_mappable(folio)) {
 		/* That test is redundant: it's for safety or to optimize out */
 
@@ -1148,7 +1148,7 @@ static unsigned int __folio_add_rmap_range(struct folio *folio,
 				nr = 0;
 			}
 		}
-		atomic_inc(&folio->_total_mapcount);
+		folio_inc_large_mapcount(folio, vma);
 	} else {
 		VM_WARN_ON_ONCE_FOLIO(true, folio);
 	}
@@ -1258,7 +1258,8 @@ void page_add_anon_rmap(struct page *page, struct vm_area_struct *vma,
 	unsigned int nr, nr_pmdmapped = 0;
 	bool compound = flags & RMAP_COMPOUND;
 
-	nr = __folio_add_rmap_range(folio, page, 1, compound, &nr_pmdmapped);
+	nr = __folio_add_rmap_range(folio, page, 1, vma, compound,
+				    &nr_pmdmapped);
 	if (nr_pmdmapped)
 		__lruvec_stat_mod_folio(folio, NR_ANON_THPS, nr_pmdmapped);
 	if (nr)
@@ -1329,8 +1330,7 @@ void folio_add_new_anon_rmap(struct folio *folio, struct vm_area_struct *vma,
 	}
 
 	if (folio_test_large(folio))
-		/* increment count (starts at -1) */
-		atomic_set(&folio->_total_mapcount, 0);
+		folio_set_large_mapcount(folio, 1, vma);
 
 	__lruvec_stat_mod_folio(folio, NR_ANON_MAPPED, nr);
 	__folio_set_anon(folio, vma, address, true);
@@ -1355,7 +1355,7 @@ void folio_add_file_rmap_range(struct folio *folio, struct page *page,
 {
 	unsigned int nr, nr_pmdmapped = 0;
 
-	nr = __folio_add_rmap_range(folio, page, nr_pages, compound,
+	nr = __folio_add_rmap_range(folio, page, nr_pages, vma, compound,
 				    &nr_pmdmapped);
 	if (nr_pmdmapped)
 		__lruvec_stat_mod_folio(folio, folio_test_swapbacked(folio) ?
@@ -1411,15 +1411,16 @@ void page_remove_rmap(struct page *page, struct vm_area_struct *vma,
 
 	VM_BUG_ON_PAGE(compound && !PageHead(page), page);
 
-	if (folio_test_large(folio))
-		atomic_dec(&folio->_total_mapcount);
-
 	/* Hugetlb pages are not counted in NR_*MAPPED */
 	if (unlikely(folio_test_hugetlb(folio))) {
 		/* hugetlb pages are always mapped with pmds */
 		atomic_dec(&folio->_entire_mapcount);
+		atomic_dec(&folio->_total_mapcount);
 		return;
 	}
+
+	if (folio_test_large(folio))
+		folio_dec_large_mapcount(folio, vma);
 
 	/* Is page being unmapped by PTE? Is this its last map to be removed? */
 	if (likely(!compound)) {
