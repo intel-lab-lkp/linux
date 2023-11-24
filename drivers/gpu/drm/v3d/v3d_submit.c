@@ -136,6 +136,21 @@ void v3d_job_put(struct v3d_job *job)
 }
 
 static int
+v3d_job_allocate(void **container, size_t size)
+{
+	if (*container)
+		return 0;
+
+	*container = kcalloc(1, size, GFP_KERNEL);
+	if (!*container) {
+		DRM_ERROR("Cannot allocate memory for V3D job.\n");
+		return -ENOMEM;
+	}
+
+	return 0;
+}
+
+static int
 v3d_job_init(struct v3d_dev *v3d, struct drm_file *file_priv,
 	     void **container, size_t size, void (*free)(struct kref *ref),
 	     u32 in_sync, struct v3d_submit_ext *se, enum v3d_queue queue)
@@ -145,11 +160,9 @@ v3d_job_init(struct v3d_dev *v3d, struct drm_file *file_priv,
 	bool has_multisync = se && (se->flags & DRM_V3D_EXT_ID_MULTI_SYNC);
 	int ret, i;
 
-	*container = kcalloc(1, size, GFP_KERNEL);
-	if (!*container) {
-		DRM_ERROR("Cannot allocate memory for v3d job.");
-		return -ENOMEM;
-	}
+	ret = v3d_job_allocate(container, size);
+	if (ret)
+		return ret;
 
 	job = *container;
 	job->v3d = v3d;
