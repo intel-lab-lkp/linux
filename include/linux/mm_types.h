@@ -264,7 +264,8 @@ typedef struct {
  * @virtual: Virtual address in the kernel direct map.
  * @_last_cpupid: IDs of last CPU and last process that accessed the folio.
  * @_entire_mapcount: Do not use directly, call folio_entire_mapcount().
- * @_nr_pages_mapped: Do not use directly, call folio_mapcount().
+ * @_total_mapcount: Do not use directly, call folio_mapcount().
+ * @_nr_pages_mapped: Do not use outside of rmap code.
  * @_pincount: Do not use directly, call folio_maybe_dma_pinned().
  * @_folio_nr_pages: Do not use directly, call folio_nr_pages().
  * @_hugetlb_subpool: Do not use directly, use accessor in hugetlb.h.
@@ -323,8 +324,8 @@ struct folio {
 		struct {
 			unsigned long _flags_1;
 			unsigned long _head_1;
-			unsigned long _folio_avail;
 	/* public: */
+			atomic_t _total_mapcount;
 			atomic_t _entire_mapcount;
 			atomic_t _nr_pages_mapped;
 			atomic_t _pincount;

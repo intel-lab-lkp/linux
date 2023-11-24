@@ -1104,35 +1104,12 @@ int pfn_mkclean_range(unsigned long pfn, unsigned long nr_pages, pgoff_t pgoff,
 	return page_vma_mkclean_one(&pvmw);
 }
 
-int folio_total_mapcount(struct folio *folio)
-{
-	int mapcount = folio_entire_mapcount(folio);
-	int nr_pages;
-	int i;
-
-	/* In the common case, avoid the loop when no pages mapped by PTE */
-	if (folio_nr_pages_mapped(folio) == 0)
-		return mapcount;
-	/*
-	 * Add all the PTE mappings of those pages mapped by PTE.
-	 * Limit the loop to folio_nr_pages_mapped()?
-	 * Perhaps: given all the raciness, that may be a good or a bad idea.
-	 */
-	nr_pages = folio_nr_pages(folio);
-	for (i = 0; i < nr_pages; i++)
-		mapcount += atomic_read(&folio_page(folio, i)->_mapcount);
-
-	/* But each of those _mapcounts was based on -1 */
-	mapcount += nr_pages;
-	return mapcount;
-}
-
 static unsigned int __folio_add_rmap_range(struct folio *folio,
 		struct page *page, unsigned int nr_pages, bool compound,
 		int *nr_pmdmapped)
 {
 	atomic_t *mapped = &folio->_nr_pages_mapped;
-	int first, nr = 0;
+	int first, count, nr = 0;
 
 	VM_WARN_ON_FOLIO(compound && page != &folio->page, folio);
 	VM_WARN_ON_FOLIO(compound && !folio_test_pmd_mappable(folio), folio);
@@ -1144,6 +1121,7 @@ static unsigned int __folio_add_rmap_range(struct folio *folio,
 
 	/* Is page being mapped by PTE? Is this its first map to be added? */
 	if (!compound) {
+		count = nr_pages;
 		do {
 			first = atomic_inc_and_test(&page->_mapcount);
 			if (first) {
@@ -1151,7 +1129,8 @@ static unsigned int __folio_add_rmap_range(struct folio *folio,
 				if (first < COMPOUND_MAPPED)
 					nr++;
 			}
-		} while (page++, --nr_pages > 0);
+		} while (page++, --count > 0);
+		atomic_add(nr_pages, &folio->_total_mapcount);
 	} else if (folio_test_pmd_mappable(folio)) {
 		/* That test is redundant: it's for safety or to optimize out */
 
@@ -1169,6 +1148,7 @@ static unsigned int __folio_add_rmap_range(struct folio *folio,
 				nr = 0;
 			}
 		}
+		atomic_inc(&folio->_total_mapcount);
 	} else {
 		VM_WARN_ON_ONCE_FOLIO(true, folio);
 	}
@@ -1348,6 +1328,10 @@ void folio_add_new_anon_rmap(struct folio *folio, struct vm_area_struct *vma,
 		__lruvec_stat_mod_folio(folio, NR_ANON_THPS, nr);
 	}
 
+	if (folio_test_large(folio))
+		/* increment count (starts at -1) */
+		atomic_set(&folio->_total_mapcount, 0);
+
 	__lruvec_stat_mod_folio(folio, NR_ANON_MAPPED, nr);
 	__folio_set_anon(folio, vma, address, true);
 	SetPageAnonExclusive(&folio->page);
@@ -1426,6 +1410,9 @@ void page_remove_rmap(struct page *page, struct vm_area_struct *vma,
 	enum node_stat_item idx;
 
 	VM_BUG_ON_PAGE(compound && !PageHead(page), page);
+
+	if (folio_test_large(folio))
+		atomic_dec(&folio->_total_mapcount);
 
 	/* Hugetlb pages are not counted in NR_*MAPPED */
 	if (unlikely(folio_test_hugetlb(folio))) {
@@ -2576,6 +2563,7 @@ void hugepage_add_anon_rmap(struct folio *folio, struct vm_area_struct *vma,
 	VM_WARN_ON_FOLIO(!folio_test_anon(folio), folio);
 
 	atomic_inc(&folio->_entire_mapcount);
+	atomic_inc(&folio->_total_mapcount);
 	if (flags & RMAP_EXCLUSIVE)
 		SetPageAnonExclusive(&folio->page);
 	VM_WARN_ON_FOLIO(folio_entire_mapcount(folio) > 1 &&
@@ -2588,6 +2576,7 @@ void hugepage_add_new_anon_rmap(struct folio *folio,
 	BUG_ON(address < vma->vm_start || address >= vma->vm_end);
 	/* increment count (starts at -1) */
 	atomic_set(&folio->_entire_mapcount, 0);
+	atomic_set(&folio->_total_mapcount, 0);
 	folio_clear_hugetlb_restore_reserve(folio);
 	__folio_set_anon(folio, vma, address, true);
 	SetPageAnonExclusive(&folio->page);

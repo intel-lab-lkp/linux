@@ -1509,7 +1509,7 @@ static void __destroy_compound_gigantic_folio(struct folio *folio,
 	struct page *p;
 
 	atomic_set(&folio->_entire_mapcount, 0);
-	atomic_set(&folio->_nr_pages_mapped, 0);
+	atomic_set(&folio->_total_mapcount, 0);
 	atomic_set(&folio->_pincount, 0);
 
 	for (i = 1; i < nr_pages; i++) {
@@ -2119,7 +2119,7 @@ static bool __prep_compound_gigantic_folio(struct folio *folio,
 	/* we rely on prep_new_hugetlb_folio to set the destructor */
 	folio_set_order(folio, order);
 	atomic_set(&folio->_entire_mapcount, -1);
-	atomic_set(&folio->_nr_pages_mapped, 0);
+	atomic_set(&folio->_total_mapcount, -1);
 	atomic_set(&folio->_pincount, 0);
 	return true;
 

@@ -67,15 +67,6 @@ void page_writeback_init(void);
  */
 #define SHOW_MEM_FILTER_NODES		(0x0001u)	/* disallowed nodes */
 
-/*
- * How many individual pages have an elevated _mapcount.  Excludes
- * the folio's entire_mapcount.
- */
-static inline int folio_nr_pages_mapped(struct folio *folio)
-{
-	return atomic_read(&folio->_nr_pages_mapped) & FOLIO_PAGES_MAPPED;
-}
-
 static inline void *folio_raw_mapping(struct folio *folio)
 {
 	unsigned long mapping = (unsigned long)folio->mapping;
@@ -429,6 +420,7 @@ static inline void prep_compound_head(struct page *page, unsigned int order)
 	struct folio *folio = (struct folio *)page;
 
 	folio_set_order(folio, order);
+	atomic_set(&folio->_total_mapcount, -1);
 	atomic_set(&folio->_entire_mapcount, -1);
 	atomic_set(&folio->_nr_pages_mapped, 0);
 	atomic_set(&folio->_pincount, 0);
