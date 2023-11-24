@@ -2784,6 +2784,17 @@ void drm_atomic_helper_commit_planes(struct drm_device *dev,
 
 		funcs->atomic_flush(crtc, old_state);
 	}
+
+	/*
+	 * Signal end of framebuffer access here before hw_done. After hw_done,
+	 * a later commit might have already released the plane state.
+	 */
+	for_each_oldnew_plane_in_state(old_state, plane, old_plane_state, new_plane_state, i) {
+		const struct drm_plane_helper_funcs *funcs = plane->helper_private;
+
+		if (funcs->end_fb_access)
+			funcs->end_fb_access(plane, new_plane_state);
+	}
 }
 EXPORT_SYMBOL(drm_atomic_helper_commit_planes);
 
@@ -2923,6 +2934,12 @@ void drm_atomic_helper_cleanup_planes(struct drm_device *dev,
 
 	for_each_oldnew_plane_in_state(old_state, plane, old_plane_state, new_plane_state, i) {
 		const struct drm_plane_helper_funcs *funcs = plane->helper_private;
+
+		/*
+		 * Only clean up here if we're aborting the commit.
+		 */
+		if (new_plane_state == plane->state)
+			continue;
 
 		if (funcs->end_fb_access)
 			funcs->end_fb_access(plane, new_plane_state);
