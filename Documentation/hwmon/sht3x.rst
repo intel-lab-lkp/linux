@@ -85,4 +85,6 @@ repeatability:      write or read repeatability, higher repeatability means
                         - 0: low repeatability
                         - 1: medium repeatability
                         - 2: high repeatability
+serial_number:      unique serial number of the sensor in decimal, 0 if
+                    unavailable
 =================== ============================================================

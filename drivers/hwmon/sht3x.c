@@ -41,6 +41,7 @@ static const unsigned char sht3x_cmd_heater_off[]              = { 0x30, 0x66 };
 /* other commands */
 static const unsigned char sht3x_cmd_read_status_reg[]         = { 0xf3, 0x2d };
 static const unsigned char sht3x_cmd_clear_status_reg[]        = { 0x30, 0x41 };
+static const unsigned char sht3x_cmd_read_serial_number[]      = { 0x37, 0x80 };
 
 /* delays for single-shot mode i2c commands, both in us */
 #define SHT3X_SINGLE_WAIT_TIME_HPM  15000
@@ -169,6 +170,7 @@ struct sht3x_data {
 	u32 wait_time;			/* in us*/
 	unsigned long last_update;	/* last update in periodic mode*/
 	enum sht3x_repeatability repeatability;
+	u32 serial_number;
 
 	/*
 	 * cached values for temperature and humidity and limits
@@ -606,6 +608,33 @@ out:
 	return 0;
 }
 
+static int serial_number_read(struct sht3x_data *data)
+{
+	int ret;
+	char buffer[SHT3X_RESPONSE_LENGTH];
+	struct i2c_client *client = data->client;
+
+	ret = sht3x_read_from_command(client, data,
+				      sht3x_cmd_read_serial_number,
+				      buffer,
+				      SHT3X_RESPONSE_LENGTH, 0);
+	if (ret)
+		return ret;
+
+	data->serial_number = (buffer[0] << 24) | (buffer[1] << 16) |
+			      (buffer[3] << 8) | buffer[4];
+	return ret;
+}
+
+static ssize_t serial_number_show(struct device *dev,
+				  struct device_attribute *attr,
+				  char *buf)
+{
+	struct sht3x_data *data = dev_get_drvdata(dev);
+
+	return sysfs_emit(buf, "%d\n", data->serial_number);
+}
+
 static ssize_t repeatability_show(struct device *dev,
 				  struct device_attribute *attr,
 				  char *buf)
@@ -639,10 +668,12 @@ static ssize_t repeatability_store(struct device *dev,
 
 static SENSOR_DEVICE_ATTR_RW(heater_enable, heater_enable, 0);
 static SENSOR_DEVICE_ATTR_RW(repeatability, repeatability, 0);
+static SENSOR_DEVICE_ATTR_RO(serial_number, serial_number, 0);
 
 static struct attribute *sht3x_attrs[] = {
 	&sensor_dev_attr_heater_enable.dev_attr.attr,
 	&sensor_dev_attr_repeatability.dev_attr.attr,
+	&sensor_dev_attr_serial_number.dev_attr.attr,
 	NULL
 };
 
@@ -898,6 +929,14 @@ static int sht3x_probe(struct i2c_client *client)
 	ret = limits_update(data);
 	if (ret)
 		return ret;
+
+	/*
+	 * Serial number readout is not documented for the whole
+	 * STS3x/SHT3x series, so we don't return on error here.
+	 */
+	ret = serial_number_read(data);
+	if (ret)
+		data->serial_number = 0;
 
 	hwmon_dev = devm_hwmon_device_register_with_info(dev,
 							 client->name,
