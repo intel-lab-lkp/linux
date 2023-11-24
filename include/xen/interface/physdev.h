@@ -263,6 +263,8 @@ struct physdev_pci_device {
     uint8_t devfn;
 };
 
+#define PHYSDEVOP_pci_device_state_reset     32
+
 #define PHYSDEVOP_DBGP_RESET_PREPARE    1
 #define PHYSDEVOP_DBGP_RESET_DONE       2
 
