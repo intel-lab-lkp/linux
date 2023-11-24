@@ -22,7 +22,9 @@ description: |+
 
 properties:
   compatible:
-    const: raspberrypi,7inch-touchscreen-panel
+    enum:
+      - raspberrypi,7inch-touchscreen-panel
+      - waveshare,7inch-touchscreen-panel
 
   reg:
     const: 0x45
