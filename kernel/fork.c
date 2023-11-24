@@ -814,6 +814,26 @@ static int dup_mmap(struct mm_struct *mm, struct mm_struct *oldmm)
 #define mm_free_pgd(mm)
 #endif /* CONFIG_MMU */
 
+#ifdef CONFIG_RMAP_ID
+static inline int mm_alloc_rmap_id(struct mm_struct *mm)
+{
+	int id = alloc_rmap_id();
+
+	if (id < 0)
+		return id;
+	mm->mm_rmap_id = id;
+	return 0;
+}
+
+static inline void mm_free_rmap_id(struct mm_struct *mm)
+{
+	free_rmap_id(mm->mm_rmap_id);
+}
+#else
+#define mm_alloc_rmap_id(mm)	(0)
+#define mm_free_rmap_id(mm)
+#endif /* CONFIG_RMAP_ID */
+
 static void check_mm(struct mm_struct *mm)
 {
 	int i;
@@ -917,6 +937,7 @@ void __mmdrop(struct mm_struct *mm)
 
 	WARN_ON_ONCE(mm == current->active_mm);
 	mm_free_pgd(mm);
+	mm_free_rmap_id(mm);
 	destroy_context(mm);
 	mmu_notifier_subscriptions_destroy(mm);
 	check_mm(mm);
@@ -1298,6 +1319,9 @@ static struct mm_struct *mm_init(struct mm_struct *mm, struct task_struct *p,
 	if (mm_alloc_pgd(mm))
 		goto fail_nopgd;
 
+	if (mm_alloc_rmap_id(mm))
+		goto fail_normapid;
+
 	if (init_new_context(p, mm))
 		goto fail_nocontext;
 
@@ -1317,6 +1341,8 @@ fail_pcpu:
 fail_cid:
 	destroy_context(mm);
 fail_nocontext:
+	mm_free_rmap_id(mm);
+fail_normapid:
 	mm_free_pgd(mm);
 fail_nopgd:
 	free_mm(mm);

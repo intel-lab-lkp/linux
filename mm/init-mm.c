@@ -7,6 +7,7 @@
 #include <linux/cpumask.h>
 #include <linux/mman.h>
 #include <linux/pgtable.h>
+#include <linux/rmap.h>
 
 #include <linux/atomic.h>
 #include <linux/user_namespace.h>
@@ -46,6 +47,9 @@ struct mm_struct init_mm = {
 	.cpu_bitmap	= CPU_BITS_NONE,
 #ifdef CONFIG_IOMMU_SVA
 	.pasid		= IOMMU_PASID_INVALID,
+#endif
+#ifdef CONFIG_RMAP_ID
+	.mm_rmap_id	= RMAP_ID_DUMMY,
 #endif
 	INIT_MM_CONTEXT(init_mm)
 };

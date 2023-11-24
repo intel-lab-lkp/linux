@@ -18,6 +18,7 @@
 #include <linux/page-flags-layout.h>
 #include <linux/workqueue.h>
 #include <linux/seqlock.h>
+#include <linux/atomic_seqcount.h>
 #include <linux/percpu_counter.h>
 
 #include <asm/mmu.h>
@@ -273,6 +274,14 @@ typedef struct {
  * @_hugetlb_cgroup_rsvd: Do not use directly, use accessor in hugetlb_cgroup.h.
  * @_hugetlb_hwpoison: Do not use directly, call raw_hwp_list_head().
  * @_deferred_list: Folios to be split under memory pressure.
+ * @_rmap_atomic_seqcount: Seqcount protecting _total_mapcount and _rmapX.
+ *     Does not apply to hugetlb.
+ * @_rmap_val0 Do not use outside of rmap code. Does not apply to hugetlb.
+ * @_rmap_val1 Do not use outside of rmap code. Does not apply to hugetlb.
+ * @_rmap_val2 Do not use outside of rmap code. Does not apply to hugetlb.
+ * @_rmap_val3 Do not use outside of rmap code. Does not apply to hugetlb.
+ * @_rmap_val4 Do not use outside of rmap code. Does not apply to hugetlb.
+ * @_rmap_val5 Do not use outside of rmap code. Does not apply to hugetlb.
  *
  * A folio is a physically, virtually and logically contiguous set
  * of bytes.  It is a power-of-two in size, and it is aligned to that
@@ -331,6 +340,9 @@ struct folio {
 			atomic_t _pincount;
 #ifdef CONFIG_64BIT
 			unsigned int _folio_nr_pages;
+#ifdef CONFIG_RMAP_ID
+			raw_atomic_seqcount_t _rmap_atomic_seqcount;
+#endif /* CONFIG_RMAP_ID */
 #endif
 	/* private: the union with struct page is transitional */
 		};
@@ -355,6 +367,34 @@ struct folio {
 	/* private: the union with struct page is transitional */
 		};
 		struct page __page_2;
+	};
+	union {
+		struct {
+			unsigned long _flags_3;
+			unsigned long _head_3;
+	/* public: */
+#ifdef CONFIG_RMAP_ID
+			atomic_long_t _rmap_val0;
+			atomic_long_t _rmap_val1;
+			atomic_long_t _rmap_val2;
+			atomic_long_t _rmap_val3;
+#endif /* CONFIG_RMAP_ID */
+	/* private: the union with struct page is transitional */
+		};
+		struct page __page_3;
+	};
+	union {
+		struct {
+			unsigned long _flags_4;
+			unsigned long _head_4;
+	/* public: */
+#ifdef CONFIG_RMAP_ID
+			atomic_long_t _rmap_val4;
+			atomic_long_t _rmap_val5;
+#endif /* CONFIG_RMAP_ID */
+	/* private: the union with struct page is transitional */
+		};
+		struct page __page_4;
 	};
 };
 
@@ -392,6 +432,20 @@ FOLIO_MATCH(compound_head, _head_2);
 FOLIO_MATCH(flags, _flags_2a);
 FOLIO_MATCH(compound_head, _head_2a);
 #undef FOLIO_MATCH
+#define FOLIO_MATCH(pg, fl)						\
+	static_assert(offsetof(struct folio, fl) ==			\
+			offsetof(struct page, pg) + 3 * sizeof(struct page))
+FOLIO_MATCH(flags, _flags_3);
+FOLIO_MATCH(compound_head, _head_3);
+#undef FOLIO_MATCH
+#undef FOLIO_MATCH
+#define FOLIO_MATCH(pg, fl)						\
+	static_assert(offsetof(struct folio, fl) ==			\
+			offsetof(struct page, pg) + 4 * sizeof(struct page))
+FOLIO_MATCH(flags, _flags_4);
+FOLIO_MATCH(compound_head, _head_4);
+#undef FOLIO_MATCH
+
 
 /**
  * struct ptdesc -    Memory descriptor for page tables.
@@ -975,6 +1029,10 @@ struct mm_struct {
 #endif
 		} lru_gen;
 #endif /* CONFIG_LRU_GEN */
+
+#ifdef CONFIG_RMAP_ID
+		int mm_rmap_id;
+#endif /* CONFIG_RMAP_ID */
 	} __randomize_layout;
 
 	/*

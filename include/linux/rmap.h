@@ -168,6 +168,116 @@ static inline void anon_vma_merge(struct vm_area_struct *vma,
 
 struct anon_vma *folio_get_anon_vma(struct folio *folio);
 
+#ifdef CONFIG_RMAP_ID
+/*
+ * For init_mm and friends, we don't actually expect to ever rmap pages. So
+ * we use a reserved dummy ID that we'll never hand out the normal way.
+ */
+#define RMAP_ID_DUMMY		0
+#define RMAP_ID_MIN	(RMAP_ID_DUMMY + 1)
+#define RMAP_ID_MAX	(16 * 1024 * 1024u - 1)
+
+void free_rmap_id(int id);
+int alloc_rmap_id(void);
+
+#define RMAP_SUBID_4_MAX_ORDER		10
+#define RMAP_SUBID_5_MIN_ORDER		11
+#define RMAP_SUBID_5_MAX_ORDER		12
+#define RMAP_SUBID_6_MIN_ORDER		13
+#define RMAP_SUBID_6_MAX_ORDER		15
+
+static inline void __folio_prep_large_rmap(struct folio *folio)
+{
+	const unsigned int order = folio_order(folio);
+
+	raw_seqcount_init(&folio->_rmap_atomic_seqcount);
+	switch (order) {
+#if MAX_ORDER >= RMAP_SUBID_6_MIN_ORDER
+	case RMAP_SUBID_6_MIN_ORDER ... RMAP_SUBID_6_MAX_ORDER:
+		atomic_long_set(&folio->_rmap_val5, 0);
+		fallthrough;
+#endif
+#if MAX_ORDER >= RMAP_SUBID_5_MIN_ORDER
+	case RMAP_SUBID_5_MIN_ORDER ... RMAP_SUBID_5_MAX_ORDER:
+		atomic_long_set(&folio->_rmap_val4, 0);
+		fallthrough;
+#endif
+	default:
+		atomic_long_set(&folio->_rmap_val3, 0);
+		atomic_long_set(&folio->_rmap_val2, 0);
+		atomic_long_set(&folio->_rmap_val1, 0);
+		atomic_long_set(&folio->_rmap_val0, 0);
+		break;
+	}
+}
+
+static inline void __folio_undo_large_rmap(struct folio *folio)
+{
+#ifdef CONFIG_DEBUG_VM
+	const unsigned int order = folio_order(folio);
+
+	switch (order) {
+#if MAX_ORDER >= RMAP_SUBID_6_MIN_ORDER
+	case RMAP_SUBID_6_MIN_ORDER ... RMAP_SUBID_6_MAX_ORDER:
+		VM_WARN_ON_ONCE(atomic_long_read(&folio->_rmap_val5));
+		fallthrough;
+#endif
+#if MAX_ORDER >= RMAP_SUBID_5_MIN_ORDER
+	case RMAP_SUBID_5_MIN_ORDER ... RMAP_SUBID_5_MAX_ORDER:
+		VM_WARN_ON_ONCE(atomic_long_read(&folio->_rmap_val4));
+		fallthrough;
+#endif
+	default:
+		VM_WARN_ON_ONCE(atomic_long_read(&folio->_rmap_val3));
+		VM_WARN_ON_ONCE(atomic_long_read(&folio->_rmap_val2));
+		VM_WARN_ON_ONCE(atomic_long_read(&folio->_rmap_val1));
+		VM_WARN_ON_ONCE(atomic_long_read(&folio->_rmap_val0));
+		break;
+	}
+#endif
+}
+
+static inline void __folio_write_large_rmap_begin(struct folio *folio)
+{
+	VM_WARN_ON_FOLIO(!folio_test_large_rmappable(folio), folio);
+	VM_WARN_ON_FOLIO(folio_test_hugetlb(folio), folio);
+	raw_write_atomic_seqcount_begin(&folio->_rmap_atomic_seqcount);
+}
+
+static inline void __folio_write_large_rmap_end(struct folio *folio)
+{
+	raw_write_atomic_seqcount_end(&folio->_rmap_atomic_seqcount);
+}
+
+void __folio_set_large_rmap_val(struct folio *folio, int count,
+		struct mm_struct *mm);
+void __folio_add_large_rmap_val(struct folio *folio, int count,
+		struct mm_struct *mm);
+#else
+static inline void __folio_prep_large_rmap(struct folio *folio)
+{
+}
+static inline void __folio_undo_large_rmap(struct folio *folio)
+{
+}
+static inline void __folio_write_large_rmap_begin(struct folio *folio)
+{
+	VM_WARN_ON_FOLIO(!folio_test_large_rmappable(folio), folio);
+	VM_WARN_ON_FOLIO(folio_test_hugetlb(folio), folio);
+}
+static inline void __folio_write_large_rmap_end(struct folio *folio)
+{
+}
+static inline void __folio_set_large_rmap_val(struct folio *folio, int count,
+		struct mm_struct *mm)
+{
+}
+static inline void __folio_add_large_rmap_val(struct folio *folio, int count,
+		struct mm_struct *mm)
+{
+}
+#endif /* CONFIG_RMAP_ID */
+
 static inline void folio_set_large_mapcount(struct folio *folio,
 		int count, struct vm_area_struct *vma)
 {
@@ -175,30 +285,34 @@ static inline void folio_set_large_mapcount(struct folio *folio,
 	VM_WARN_ON_FOLIO(folio_test_hugetlb(folio), folio);
 	/* increment count (starts at -1) */
 	atomic_set(&folio->_total_mapcount, count - 1);
+	__folio_set_large_rmap_val(folio, count, vma->vm_mm);
 }
 
 static inline void folio_inc_large_mapcount(struct folio *folio,
 		struct vm_area_struct *vma)
 {
-	VM_WARN_ON_FOLIO(!folio_test_large_rmappable(folio), folio);
-	VM_WARN_ON_FOLIO(folio_test_hugetlb(folio), folio);
+	__folio_write_large_rmap_begin(folio);
 	atomic_inc(&folio->_total_mapcount);
+	__folio_add_large_rmap_val(folio, 1, vma->vm_mm);
+	__folio_write_large_rmap_end(folio);
 }
 
 static inline void folio_add_large_mapcount(struct folio *folio,
 		int count, struct vm_area_struct *vma)
 {
-	VM_WARN_ON_FOLIO(!folio_test_large_rmappable(folio), folio);
-	VM_WARN_ON_FOLIO(folio_test_hugetlb(folio), folio);
+	__folio_write_large_rmap_begin(folio);
 	atomic_add(count, &folio->_total_mapcount);
+	__folio_add_large_rmap_val(folio, count, vma->vm_mm);
+	__folio_write_large_rmap_end(folio);
 }
 
 static inline void folio_dec_large_mapcount(struct folio *folio,
 		struct vm_area_struct *vma)
 {
-	VM_WARN_ON_FOLIO(!folio_test_large_rmappable(folio), folio);
-	VM_WARN_ON_FOLIO(folio_test_hugetlb(folio), folio);
+	__folio_write_large_rmap_begin(folio);
 	atomic_dec(&folio->_total_mapcount);
+	__folio_add_large_rmap_val(folio, -1, vma->vm_mm);
+	__folio_write_large_rmap_end(folio);
 }
 
 /* RMAP flags, currently only relevant for some anon rmap operations. */

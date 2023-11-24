@@ -614,6 +614,7 @@ void folio_prep_large_rmappable(struct folio *folio)
 {
 	VM_BUG_ON_FOLIO(folio_order(folio) < 2, folio);
 	INIT_LIST_HEAD(&folio->_deferred_list);
+	__folio_prep_large_rmap(folio);
 	folio_set_large_rmappable(folio);
 }
 
@@ -2478,8 +2479,8 @@ static void __split_huge_page_tail(struct folio *folio, int tail,
 			 (1L << PG_dirty) |
 			 LRU_GEN_MASK | LRU_REFS_MASK));
 
-	/* ->mapping in first and second tail page is replaced by other uses */
-	VM_BUG_ON_PAGE(tail > 2 && page_tail->mapping != TAIL_MAPPING,
+	/* ->mapping in some tail page is replaced by other uses */
+	VM_BUG_ON_PAGE(tail > 4 && page_tail->mapping != TAIL_MAPPING,
 			page_tail);
 	page_tail->mapping = head->mapping;
 	page_tail->index = head->index + tail;
@@ -2549,6 +2550,16 @@ static void __split_huge_page(struct page *page, struct list_head *list,
 	lruvec = folio_lruvec_lock(folio);
 
 	ClearPageHasHWPoisoned(head);
+
+#ifdef CONFIG_RMAP_ID
+	/*
+	 * Make sure folio->_rmap_atomic_seqcount, which overlays
+	 * tail->private, is 0. All other folio->_rmap_valX should be 0
+	 * after unmapping the folio.
+	 */
+	if (likely(nr >= 4))
+		raw_seqcount_init(&folio->_rmap_atomic_seqcount);
+#endif /* CONFIG_RMAP_ID */
 
 	for (i = nr - 1; i >= 1; i--) {
 		__split_huge_page_tail(folio, i, lruvec, list);
@@ -2809,6 +2820,7 @@ void folio_undo_large_rmappable(struct folio *folio)
 	struct deferred_split *ds_queue;
 	unsigned long flags;
 
+	__folio_undo_large_rmap(folio);
 	/*
 	 * At this point, there is no one trying to add the folio to
 	 * deferred_list. If folio is not in deferred_list, it's safe

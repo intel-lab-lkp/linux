@@ -861,6 +861,27 @@ choice
 	  benefit.
 endchoice
 
+menuconfig RMAP_ID
+	bool "Rmap ID tracking (EXPERIMENTAL)"
+	depends on TRANSPARENT_HUGEPAGE && 64BIT
+	help
+	  Use per-MM rmap IDs and the unleashed power of math to track
+	  whether partially-mappable hugepages (i.e., THPs for now) are
+	  "mapped shared" or "mapped exclusively".
+
+	  This tracking allow for efficiently and precisely detecting
+	  whether a PTE-mapped THP is mapped by a single process
+	  ("mapped exclusively") or mapped by multiple ones ("mapped
+	  shared"), with the cost of additional tracking when (un)mapping
+	  (parts of) such a THP.
+
+	  If this configuration is not enabled, an heuristic is used
+	  instead that might result in false "mapped exclusively"
+	  detection; some features relying on this information might
+	  operate slightly imprecise (e.g., MADV_PAGEOUT succeeds although
+	  it should fail) or might not be available at all (e.g.,
+	  Copy-on-Write reuse support).
+
 config THP_SWAP
 	def_bool y
 	depends on TRANSPARENT_HUGEPAGE && ARCH_WANTS_THP_SWAP && SWAP && 64BIT

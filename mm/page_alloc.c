@@ -1007,6 +1007,15 @@ static int free_tail_page_prepare(struct page *head_page, struct page *page)
 		 * deferred_list.next -- ignore value.
 		 */
 		break;
+#ifdef CONFIG_RMAP_ID
+	case 3:
+	case 4:
+		/*
+		 * the third and fourth tail page: ->mapping may be
+		 * used to store RMAP values for RMAP ID tracking.
+		 */
+		break;
+#endif /* CONFIG_RMAP_ID */
 	default:
 		if (page->mapping != TAIL_MAPPING) {
 			bad_page(page, "corrupted mapping in tail page");
