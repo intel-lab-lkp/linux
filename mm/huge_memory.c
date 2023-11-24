@@ -1166,7 +1166,7 @@ int copy_huge_pmd(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 	VM_BUG_ON_PAGE(!PageHead(src_page), src_page);
 
 	get_page(src_page);
-	if (unlikely(page_try_dup_anon_rmap(src_page, true, src_vma))) {
+	if (unlikely(page_try_dup_anon_rmap(src_page, dst_vma, src_vma, true))) {
 		/* Page maybe pinned: split and retry the fault on PTEs. */
 		put_page(src_page);
 		pte_free(dst_mm, pgtable);

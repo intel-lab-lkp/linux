@@ -208,7 +208,8 @@ void hugepage_add_anon_rmap(struct folio *, struct vm_area_struct *,
 void hugepage_add_new_anon_rmap(struct folio *, struct vm_area_struct *,
 		unsigned long address);
 
-static inline void __page_dup_rmap(struct page *page, bool compound)
+static inline void __page_dup_rmap(struct page *page,
+		struct vm_area_struct *dst_vma, bool compound)
 {
 	struct folio *folio = page_folio(page);
 
@@ -225,17 +226,19 @@ static inline void __page_dup_rmap(struct page *page, bool compound)
 	atomic_inc(&folio->_total_mapcount);
 }
 
-static inline void page_dup_file_rmap(struct page *page, bool compound)
+static inline void page_dup_file_rmap(struct page *page,
+		struct vm_area_struct *dst_vma, bool compound)
 {
-	__page_dup_rmap(page, compound);
+	__page_dup_rmap(page, dst_vma, compound);
 }
 
 /**
  * page_try_dup_anon_rmap - try duplicating a mapping of an already mapped
  *			    anonymous page
  * @page: the page to duplicate the mapping for
+ * @dst_vma: the destination vma
+ * @src_vma: the source vma
  * @compound: the page is mapped as compound or as a small page
- * @vma: the source vma
  *
  * The caller needs to hold the PT lock and the vma->vma_mm->write_protect_seq.
  *
@@ -247,8 +250,10 @@ static inline void page_dup_file_rmap(struct page *page, bool compound)
  *
  * Returns 0 if duplicating the mapping succeeded. Returns -EBUSY otherwise.
  */
-static inline int page_try_dup_anon_rmap(struct page *page, bool compound,
-					 struct vm_area_struct *vma)
+static inline int page_try_dup_anon_rmap(struct page *page,
+					 struct vm_area_struct *dst_vma,
+					 struct vm_area_struct *src_vma,
+					 bool compound)
 {
 	VM_BUG_ON_PAGE(!PageAnon(page), page);
 
@@ -267,7 +272,7 @@ static inline int page_try_dup_anon_rmap(struct page *page, bool compound,
 	 * future on write faults.
 	 */
 	if (likely(!is_device_private_page(page) &&
-	    unlikely(page_needs_cow_for_dma(vma, page))))
+	    unlikely(page_needs_cow_for_dma(src_vma, page))))
 		return -EBUSY;
 
 	ClearPageAnonExclusive(page);
@@ -276,7 +281,7 @@ static inline int page_try_dup_anon_rmap(struct page *page, bool compound,
 	 * the page R/O into both processes.
 	 */
 dup:
-	__page_dup_rmap(page, compound);
+	__page_dup_rmap(page, dst_vma, compound);
 	return 0;
 }
 

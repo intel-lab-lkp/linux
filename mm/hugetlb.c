@@ -5401,9 +5401,10 @@ again:
 			 * sleep during the process.
 			 */
 			if (!folio_test_anon(pte_folio)) {
-				page_dup_file_rmap(&pte_folio->page, true);
+				page_dup_file_rmap(&pte_folio->page, dst_vma,
+						   true);
 			} else if (page_try_dup_anon_rmap(&pte_folio->page,
-							  true, src_vma)) {
+							  dst_vma, src_vma, true)) {
 				pte_t src_pte_old = entry;
 				struct folio *new_folio;
 
@@ -6272,7 +6273,7 @@ static vm_fault_t hugetlb_no_page(struct mm_struct *mm,
 	if (anon_rmap)
 		hugepage_add_new_anon_rmap(folio, vma, haddr);
 	else
-		page_dup_file_rmap(&folio->page, true);
+		page_dup_file_rmap(&folio->page, vma, true);
 	new_pte = make_huge_pte(vma, &folio->page, ((vma->vm_flags & VM_WRITE)
 				&& (vma->vm_flags & VM_SHARED)));
 	/*
@@ -6723,7 +6724,7 @@ int hugetlb_mfill_atomic_pte(pte_t *dst_pte,
 		goto out_release_unlock;
 
 	if (folio_in_pagecache)
-		page_dup_file_rmap(&folio->page, true);
+		page_dup_file_rmap(&folio->page, dst_vma, true);
 	else
 		hugepage_add_new_anon_rmap(folio, dst_vma, dst_addr);
 

@@ -252,7 +252,7 @@ static bool remove_migration_pte(struct folio *folio,
 				hugepage_add_anon_rmap(folio, vma, pvmw.address,
 						       rmap_flags);
 			else
-				page_dup_file_rmap(new, true);
+				page_dup_file_rmap(new, vma, true);
 			set_huge_pte_at(vma->vm_mm, pvmw.address, pvmw.pte, pte,
 					psize);
 		} else
